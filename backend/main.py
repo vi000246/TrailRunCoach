@@ -1,0 +1,38 @@
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.db.database import init_db
+from backend.api import workouts, pmc, expr, dashboard, scan, sync, auth, athletes
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="WKO5 Coach", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(workouts.router)
+app.include_router(pmc.router)
+app.include_router(expr.router)
+app.include_router(dashboard.router)
+app.include_router(scan.router)
+app.include_router(sync.router)
+app.include_router(auth.router)
+app.include_router(athletes.router)
+
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
