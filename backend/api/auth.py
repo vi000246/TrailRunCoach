@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from backend.db.database import get_db
 from backend.sync.tp_client import get_auth_url, exchange_code, login_password, fetch_tp_settings
+from backend.sync import coros_client
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -60,6 +61,59 @@ async def tp_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
         state.tp_access_token = None
         state.tp_refresh_token = None
         state.tp_token_expires = None
+        await db.commit()
+    return {"logged_out": True}
+
+
+class CorosLoginRequest(BaseModel):
+    email: str
+    password: str
+    athlete_id: int = 1
+
+
+@router.post("/coros/login")
+async def coros_login(body: CorosLoginRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await coros_client.login(body.email, body.password, db, body.athlete_id)
+        return result
+    except Exception as e:
+        detail = str(e)
+        if "401" in detail or "login failed" in detail.lower():
+            raise HTTPException(401, f"COROS_LOGIN_FAILED: {detail}")
+        raise HTTPException(502, f"COROS_LOGIN_ERROR: {detail}")
+
+
+@router.get("/coros/status")
+async def coros_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import select
+    from backend.db.models import SyncState
+    from datetime import datetime, timezone
+    state_result = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
+    state = state_result.scalar_one_or_none()
+    if not state or not state.coros_access_token:
+        return {"authenticated": False, "email": None}
+    expired = (
+        state.coros_token_expires is not None
+        and datetime.now(timezone.utc) >= state.coros_token_expires
+    )
+    return {
+        "authenticated": not expired,
+        "email": state.coros_email,
+        "token_expires": state.coros_token_expires.isoformat() if state.coros_token_expires else None,
+        "last_sync": state.coros_last_sync_at.isoformat() if state.coros_last_sync_at else None,
+    }
+
+
+@router.post("/coros/logout")
+async def coros_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import select
+    from backend.db.models import SyncState
+    state_result = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
+    state = state_result.scalar_one_or_none()
+    if state:
+        state.coros_access_token = None
+        state.coros_token_expires = None
+        state.coros_email = None
         await db.commit()
     return {"logged_out": True}
 

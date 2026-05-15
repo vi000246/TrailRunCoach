@@ -59,6 +59,7 @@ async def _import_one_file(
     path: Path,
     source: str = "local",
     tp_workout_id: Optional[int] = None,
+    coros_activity_id: Optional[str] = None,
 ) -> Optional[WorkoutFile]:
     """Parse one file, compute metrics, persist to DB."""
     fmt = path.suffix.lower().lstrip(".")
@@ -92,6 +93,7 @@ async def _import_one_file(
         total_distance_m=total_distance_m,
         source=source,
         tp_workout_id=tp_workout_id,
+        coros_activity_id=coros_activity_id,
     )
     db.add(wf)
     await db.flush()

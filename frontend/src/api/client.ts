@@ -28,3 +28,23 @@ export interface WorkoutList {
   per_page: number
   items: WorkoutSummary[]
 }
+
+export interface CorosLoginRequest {
+  email: string
+  password: string
+  athlete_id?: number
+}
+
+export interface CorosLoginResponse {
+  authenticated: boolean
+  coros_user_id: string
+  email: string
+  token_expires: string | null
+}
+
+export interface CorosStatus {
+  authenticated: boolean
+  email: string | null
+  token_expires: string | null
+  last_sync: string | null
+}

@@ -43,6 +43,8 @@ class WorkoutFile(Base):
     total_distance_m: Mapped[Optional[float]]
     source: Mapped[str] = mapped_column(String(20), default="local")
     tp_workout_id: Mapped[Optional[int]]
+    coros_activity_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
+    coros_sport_type: Mapped[Optional[int]]
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     athlete: Mapped["Athlete"] = relationship(back_populates="workouts")
     metrics: Mapped[list["WorkoutMetric"]] = relationship(back_populates="workout", cascade="all, delete-orphan")
@@ -92,6 +94,12 @@ class SyncState(Base):
     tp_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_sync_cursor: Mapped[Optional[str]] = mapped_column(String(50))
+    coros_access_token: Mapped[Optional[str]] = mapped_column(Text)
+    coros_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    coros_last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    coros_email: Mapped[Optional[str]] = mapped_column(String(200))
+    coros_base_url: Mapped[Optional[str]] = mapped_column(String(100))
+    coros_user_id: Mapped[Optional[str]] = mapped_column(String(50))
 
 
 class DashboardConfig(Base):

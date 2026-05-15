@@ -1,4 +1,4 @@
-# SRS: WKO5 Web Clone — Full Algorithm Engine + Custom Dashboard + TrainingPeaks Sync
+# SRS: Personal Training AI — Full Algorithm Engine + Custom Dashboard + Coros Sync
 
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md` (partial context)
@@ -6,34 +6,33 @@
 - **Owner**: vi000246
 - **Status**: DRAFT
 - **Generated**: 2026-05-14
+- **Updated**: 2026-05-15 — 改為 Coros-first，獨立 fits 資料夾，移除 WKO5 目錄依賴
 - **Supersedes**: `docs/spec/wko5-milestone1-fit-mmp.spec.md` (Milestone 1 becomes a sub-component)
+- **See also**: `docs/spec/wko5-coros-sync.spec.md` (Coros sync 詳細 SRS)
 
 ---
 
 ## Summary
 
-設計一個本機執行的 Web 應用，完整複製 WKO5 的訓練分析功能：讀取 `~/WKO5/{Athlete}/{YEAR}/` 目錄下的 `.wko4` 和 `.fit` 檔案，在 Python FastAPI 後端執行所有逆向取得的 PKExpressionParser 算法（MMP、FTP、CTL/ATL/TSB、iLevels 等），並在 React 前端提供可自訂 Dashboard。TrainingPeaks OAuth2 整合自動同步 FIT 檔案到現有 WKO5 目錄。
+設計一個本機執行的 Web 應用，完整實作訓練分析功能：讀取 `~/.wko5coach/fits/{Athlete}/{YEAR}/` 獨立目錄下的 `.fit` 檔案，在 Python FastAPI 後端執行逆向取得的 PKExpressionParser 算法（MMP、FTP、CTL/ATL/TSB、iLevels 等），並在 React 前端提供可自訂 Dashboard。Coros 非官方 API 自動同步 FIT 檔案（詳見 `wko5-coros-sync.spec.md`）。本系統完全獨立於 WKO5 和 TrainingPeaks，兩者可各自運作互不干擾。
 
 ---
 
 ## 逆向工程發現（架構輸入）
 
-### WKO5 目錄結構
+### 資料儲存目錄結構（獨立，不依賴 WKO5）
+
 ```
-~/WKO5/
-├── WKO4.wko5home                        # home database
-├── {AthleteDir}/                        # e.g., Athlete
-│   ├── {Name}.wko5athlete               # athlete profile (binary)
-│   ├── {Name}.wko5athlete.1             # backup
-│   ├── {YEAR}/                          # e.g., 2022
-│   │   └── {Name}_{YYYY}_{MM}_{DD}_{HH}_{MM}.wko4   # workout (binary)
-│   └── Cache5/                          # WKO5 computed cache
-├── Chart History/Charts.wko5cache
-├── Smart Segments/Smart Segments.wko5cache
-└── Views/Charts.wko5cache
+~/.wko5coach/
+├── wko5coach.db              # SQLite DB
+└── fits/                     # 獨立 FIT 儲存（Coros sync 下載位置）
+    └── {AthleteDir}/         # e.g., Athlete
+        └── {YEAR}/           # e.g., 2026
+            └── {coros_id}_{YYYY-MM-DD}_{sport}.fit
 ```
 
-**現有資料**: Athlete 運動員，1,011 份 `.wko4` 檔案（2020–2026）
+**注意**: `~/WKO5/` 目錄繼續由 WKO5 app 獨立管理，本系統不讀寫該目錄。
+**現有資料**: 手動匯入的 .fit 已在 DB 中，後續由 Coros sync 自動補充。
 
 ### WKO4 Binary Format
 - Magic header: `wko4` (4 bytes)
@@ -41,7 +40,11 @@
 - 包含：sport name、ISO 8601 timestamp、sensor channels（二進制壓縮）
 - GoldenCheetah 有 `WkoRideFile` 開源解析器可作為參考
 
-### TrainingPeaks API（從 PowerKitOSX strings + nm 提取，已實作驗證 2026-05-15）
+### TrainingPeaks API（可選功能，非主要資料源，2026-05-15）
+
+**主要資料源已改為 Coros 非官方 API**（詳見 `wko5-coros-sync.spec.md`）。TP API 保留為 Milestone 6 可選整合。
+
+#### 重要發現（從 PowerKitOSX binary 提取）
 
 #### OAuth 認證流程
 
@@ -139,39 +142,40 @@ groundcontrol/v1/elevations
 ### Scope & Boundaries
 
 - **In scope**:
-  - WKO4 binary parser (GoldenCheetah 參考實作)
   - FIT file parser (現有 `src/fit_parser.py` 升級)
   - 完整 PKExpressionParser 算法引擎（Python 實作）
-  - SQLite 計算快取（取代 JSON，支援 1011+ 筆高效查詢）
+  - SQLite 計算快取（取代 JSON，支援 1000+ 筆高效查詢）
   - FastAPI REST API（本機 127.0.0.1:8000）
   - React + TypeScript 前端（可自訂 Dashboard）
-  - TrainingPeaks OAuth2 + FIT 檔自動同步
+  - Coros 非官方 API 同步（詳見 `wko5-coros-sync.spec.md`）
   - 所有 7 種 Training Level 系統
+  - 獨立 FIT 儲存 `~/.wko5coach/fits/`
 
 - **Out of scope**:
   - 多用戶帳號系統
-  - 雲端部署（本機運行）
+  - 雲端部署（本機 / Docker 運行）
   - WKO5 UI 精確複製（設計自由）
-  - `.wko5athlete` / `.wko5home` 格式解析（使用 TP API 替代運動員設定）
+  - WKO4 binary parser（不讀 ~/WKO5/）
+  - `.wko5athlete` / `.wko5home` 格式解析
   - 訓練計劃（Workout Builder）
-  - Garmin Connect / Coros 直接整合（透過 TP 取得）
+  - TrainingPeaks 作為主要資料源（可選 Milestone 6）
   - 公開 API
 
 ### Actors
 
 | Actor | Type | Interaction |
 |-------|------|-------------|
-| 個人運動員 | Human — Browser | 查看 Dashboard、設定 widgets、觸發 TP 同步 |
-| TrainingPeaks API | External Service | 提供 FIT 檔 + 運動員 metadata |
-| WKO5 App | Coexisting App | 同一目錄讀寫 .wko4（只讀共存，不修改） |
+| 個人運動員 | Human — Browser | 查看 Dashboard、設定 widgets、觸發 Coros 同步 |
+| Coros Training Hub API | External Service | 提供 FIT 檔 + 活動 metadata（詳見 coros-sync.spec.md）|
+| TrainingPeaks API | External Service（可選）| Milestone 6：補充歷史資料 |
 
 ### External Dependencies
 
 | Dependency | Purpose | Failure Mode |
 |------------|---------|--------------|
-| TrainingPeaks OAuth | 身份驗證 + FIT 下載 | 降級：手動匯入 .fit |
-| `tpapi.trainingpeaks.com` | 工作資料同步 | 降級：讀本地快取 |
-| GoldenCheetah WkoRideFile | .wko4 解析參考 | fallback：僅讀 .fit |
+| `teamcnapi.coros.com` | 身份驗證 + FIT 下載 | 降級：手動匯入 .fit |
+| Coros S3 presigned URL | FIT 實際下載 | 重試 3 次，記錄失敗 |
+| `tpapi.trainingpeaks.com` | 可選歷史同步（Milestone 6）| 功能不可用，不影響核心 |
 
 ---
 
@@ -199,15 +203,14 @@ Browser (React + TypeScript)
                          │  SQLite (SQLAlchemy)  │   │
                          ├──────────────────────┤   │
                          │  File Service        │   │
-                         │  .wko4 + .fit reader │   │
+                         │  .fit reader         │   │
                          ├──────────────────────┤   │
-                         │  TP Sync Service     │   │
-                         │  OAuth2 + download   │   │
+                         │  Coros Sync Service  │   │
+                         │  unofficial API      │   │
                          └──────────┬───────────┘
                                     │
-              ~/WKO5/{Athlete}/{YEAR}/
-              ├── *.wko4  (WKO5 files — read-only)
-              └── *.fit   (新下載 — 我們寫入)
+              ~/.wko5coach/fits/{Athlete}/{YEAR}/
+              └── *.fit   (Coros sync 下載或手動匯入)
 ```
 
 ### Components
@@ -220,10 +223,10 @@ Browser (React + TypeScript)
 | `engine/training_levels.py` | 7 種 zone 計算系統 | `calculate_levels(system, ftp, mmp) → Levels` |
 | `db/models.py` | SQLAlchemy ORM | SQLite via aiosqlite |
 | `db/cache.py` | 計算結果快取讀寫 | `get_cached / invalidate` |
-| `files/wko4_reader.py` | .wko4 binary parser | `parse_wko4(path) → RawWorkout` |
 | `files/fit_reader.py` | .fit parser (升級現有) | `parse_fit(path) → RawWorkout` |
 | `files/file_service.py` | 目錄掃描、檔案路由 | `scan_directory() → list[WorkoutFile]` |
-| `sync/tp_client.py` | TrainingPeaks OAuth2 + REST | `sync_workouts(since) → list[SyncResult]` |
+| `sync/coros_client.py` | Coros 非官方 API 客戶端 | `sync_workouts(since) → AsyncIterator[SyncResult]` |
+| `sync/tp_client.py` | TrainingPeaks OAuth2（可選 M6）| `sync_workouts(since) → AsyncIterator[SyncResult]` |
 | `frontend/` | React 18 + Vite + TypeScript | SPA on port 5173 (dev) / served by FastAPI (prod) |
 
 ### Data Flow
@@ -238,14 +241,15 @@ Browser → GET /api/v1/workouts/{id}/metrics?expr=meanmax(power)
 → response: {curve: {1: 850, 5: 620, ...}}
 ```
 
-**同步流程**（TP Sync）:
+**同步流程**（Coros Sync，主要）:
 ```
-Browser → POST /api/v1/sync/trainingpeaks
-→ tp_client: GET fitness/v2/athletes/{id}/workouts/changed
-→ for each new workout:
-    GET fitness/v6/athletes/{id}/workouts/{wid}/filedata/{fn}
-    save to ~/WKO5/{Athlete}/{YEAR}/{Name}_{datetime}.fit
-    file_service: register new file
+Browser → POST /api/v1/sync/coros/start?since=YYYY-MM-DD
+→ coros_client: POST /account/login (MD5 password)
+→ coros_client: GET /activity/query (paged)
+→ for each new activity:
+    GET <fitUrl>  (presigned S3 URL)
+    save to ~/.wko5coach/fits/{Athlete}/{YEAR}/{id}_{date}_{sport}.fit
+    file_service: register new file (source="coros")
     trigger background compute task
 → SSE stream: sync progress updates → Browser
 ```
@@ -302,11 +306,12 @@ Browser          API              DB              FileService      Engine
 -- SQLite via SQLAlchemy
 
 CREATE TABLE athletes (
-    id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    tp_athlete_id INTEGER,
-    data_dir    TEXT NOT NULL,  -- ~/WKO5/Athlete
-    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    id            INTEGER PRIMARY KEY,
+    name          TEXT NOT NULL,
+    coros_user_id TEXT,        -- Coros userId（登入後取得）
+    tp_athlete_id INTEGER,     -- optional，Milestone 6 TP 整合用
+    data_dir      TEXT NOT NULL,  -- ~/.wko5coach/fits/Athlete
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE athlete_settings (
@@ -328,8 +333,9 @@ CREATE TABLE workout_files (
     workout_date DATE NOT NULL,
     sport       TEXT,
     duration_s  REAL,
-    source      TEXT,                  -- 'local' | 'trainingpeaks'
-    tp_workout_id INTEGER,
+    source      TEXT,                  -- 'local' | 'coros' | 'trainingpeaks'
+    coros_activity_id TEXT,            -- Coros labelId，去重用
+    tp_workout_id INTEGER,             -- optional，Milestone 6
     imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -362,11 +368,17 @@ CREATE TABLE pmc_cache (
 
 CREATE TABLE sync_state (
     athlete_id  INTEGER PRIMARY KEY REFERENCES athletes(id),
+    -- Coros sync（主要）
+    coros_access_token  TEXT,
+    coros_token_expires DATETIME,
+    coros_email         TEXT,
+    coros_last_sync_at  DATETIME,
+    -- TrainingPeaks sync（可選 Milestone 6）
     tp_access_token  TEXT,
     tp_refresh_token TEXT,
     tp_token_expires DATETIME,
-    last_sync_at     DATETIME,
-    last_sync_cursor TEXT   -- last workout date synced
+    tp_last_sync_at  DATETIME,
+    last_sync_cursor TEXT   -- last activity date synced
 );
 
 CREATE TABLE dashboard_configs (
@@ -423,9 +435,9 @@ CREATE TABLE dashboard_configs (
 
 ### Migration Strategy
 - **Forward**: `alembic upgrade head` — 單次建立所有表
-- **Backward**: `alembic downgrade base` — 清除 DB（不影響 .wko4/.fit 檔案）
-- **Backfill**: 首次啟動執行 `scan_and_import` — 掃描 ~/WKO5 目錄，批次計算所有指標並填入 SQLite
-- **Coexistence**: WKO5 app 繼續讀寫 .wko4；本系統只讀 .wko4，只寫 .fit
+- **Backward**: `alembic downgrade base` — 清除 DB（不影響 .fit 檔案）
+- **Backfill**: 首次啟動執行 `scan_and_import` — 掃描 `~/.wko5coach/fits/` 目錄，批次計算所有指標並填入 SQLite
+- **Independence**: WKO5 app 繼續讀寫 `~/WKO5/`；本系統完全不接觸該目錄，各自獨立
 
 ---
 
@@ -481,18 +493,21 @@ class EvalContext:
 | PUT | `/api/v1/athletes/{id}/settings` | Set FTP/weight | none |
 | GET | `/api/v1/workouts` | Paginated list with filters | none |
 | GET | `/api/v1/workouts/{id}` | Workout detail + metrics | none |
-| GET | `/api/v1/workouts/{id}/channels` | Raw channel data | none |
-| GET | `/api/v1/workouts/{id}/mmp` | MMP curve | none |
-| GET | `/api/v1/workouts/{id}/levels` | Training zones | none |
+| GET | `/api/v1/workouts/{id}/channels` | Raw channel data (time series) | none |
+| GET | `/api/v1/workouts/{id}/mmp` | MMP curve for this workout | none |
+| GET | `/api/v1/workouts/{id}/levels` | Time in zones (iLevels / HR) | none |
+| GET | `/api/v1/workouts/{id}/tis` | Training Impact Score (aerobic/anaerobic) | none |
+| GET | `/api/v1/workouts/{id}/summary` | Avg/Max per channel + NP/TSS/IF | none |
 | POST | `/api/v1/expr/evaluate` | Evaluate WKO5 expression | none |
 | GET | `/api/v1/pmc` | CTL/ATL/TSB time series | none |
 | GET | `/api/v1/dashboard/{id}` | Load dashboard config | none |
 | PUT | `/api/v1/dashboard/{id}` | Save dashboard config | none |
-| POST | `/api/v1/sync/start` | Trigger TP sync | none |
-| GET | `/api/v1/sync/status` | SSE stream of sync progress | none |
-| GET | `/api/v1/auth/tp/login` | Redirect to TP OAuth | none |
-| GET | `/api/v1/auth/tp/callback` | OAuth callback | none |
-| POST | `/api/v1/scan` | Re-scan ~/WKO5 directory | none |
+| POST | `/api/v1/sync/coros/start` | Trigger Coros sync（SSE） | none |
+| POST | `/api/v1/auth/coros/login` | Coros 登入 | none |
+| GET | `/api/v1/auth/coros/status` | Coros 登入狀態 | none |
+| POST | `/api/v1/sync/start` | Trigger TP sync（可選 M6） | none |
+| GET | `/api/v1/auth/tp/login` | TP OAuth redirect（可選 M6）| none |
+| POST | `/api/v1/scan` | Re-scan ~/.wko5coach/fits/ | none |
 
 ### Key Response Shapes
 
@@ -623,11 +638,11 @@ body: grant_type=refresh_token&refresh_token={t}&client_id=WKO5&client_secret=
 
 **Premium 限制**：download 需要 premium 或 coach 帳號，`can_download` 欄位表示。
 
-### WKO5 File Coexistence
+### 獨立儲存（與 WKO5 完全分離）
 
-- 本系統：`~/WKO5/{Name}/{YEAR}/{Name}_{YYYY}_{MM}_{DD}_{HH}_{MM}.fit`（TP 下載）
-- WKO5：`~/WKO5/{Name}/{YEAR}/{Name}_{YYYY}_{MM}_{DD}_{HH}_{MM}.wko4`（既有）
-- 命名規則相容，同目錄無衝突；WKO5 不識別 .fit 副檔名，會忽略
+- 本系統：`~/.wko5coach/fits/{Name}/{YEAR}/{coros_id}_{YYYY-MM-DD}_{sport}.fit`
+- WKO5：`~/WKO5/{Name}/{YEAR}/...`（完全獨立，本系統不接觸）
+- 兩個工具各自獨立管理自己的資料目錄，不共享檔案
 
 ---
 
@@ -752,3 +767,113 @@ WKO5reverse/
 | File download format | JSON `{"data": base64(gzip(fit_bytes))}` |
 | HTTP library | libcurl + libz（macOS system）|
 | Premium gate | Binary 字串：`"Download is allowed only from premium and coach accounts."` |
+
+---
+
+## Activity Detail 頁面規格
+
+> **Source**: `~/WKO5/Views/Workout/WKO5 Workout View.wko5chart`（逆向分析取得，2026-05-15）
+> **位置**: URL `/workouts/{id}` — 與 Workout List 頁面獨立的頁面區塊
+
+### 頁面佈局
+
+```
+┌────────────────────────────────────────────────────────┐
+│  [← 返回]  2026-05-14  Cycling  3:00:12  210W NP 235W │
+│  TSS 98.5  IF 0.94  Distance 80.2km                    │
+├──────────────────────────┬─────────────────────────────┤
+│  Power Time Series       │  Workout MMP Curve          │
+│  (raw + 30s smoothed)    │  (今日 vs 90日最佳)          │
+├──────────────────────────┼─────────────────────────────┤
+│  Heart Rate Time Series  │  Time in iLevels            │
+├──────────────────────────┼─────────────────────────────┤
+│  Cadence Time Series     │  Time in HR Zones           │
+├──────────────────────────┼─────────────────────────────┤
+│  Speed / Pace            │  Aerobic TIS / Anaerobic TIS│
+├──────────────────────────┴─────────────────────────────┤
+│  Elevation over Distance (gradient color-coded)        │
+└────────────────────────────────────────────────────────┘
+```
+
+### Chart 規格（對應 WKO5 Workout View.wko5chart）
+
+#### 必要圖表（Must）
+
+| Chart | WKO5 表達式 | 說明 |
+|-------|------------|------|
+| Power 時間序列 | `power` | 原始功率（1s）+ 30s smoothed 疊加 |
+| Workout MMP | `meanmax(power)` | 當次 MMP vs 90 日最佳 MMP |
+| Summary Stats | `avg(power)`, `max(power)`, NP, TSS, IF | 頁面頂端 header bar |
+
+#### 應有圖表（Should）
+
+| Chart | WKO5 表達式 | 說明 |
+|-------|------------|------|
+| Heart Rate 時間序列 | `heartrate` | 原始 HR |
+| Avg HR vs Max HR | `{avg(heartrate),max(heartrate)}` | Summary 統計 |
+| Cadence 時間序列 | `cadence` | 原始踏頻 |
+| Avg Cadence vs Max | `{avg(nozero(cadence)),max(cadence)}` | 排除零值平均 |
+| Time in iLevels | `levelcount(...)` per level | 每個 iLevel 的時間分佈（bar chart） |
+| Time in HR Zones | `levelcount(...)` per HR zone | HR Zone 時間分佈 |
+| Elevation over Distance | `elevation` vs `distance` | 坡度 gradient 上色（0–16% = 不同顏色） |
+| Aerobic TIS | `Aerobic Training Impact Score` | 有氧訓練影響分數 |
+| Anaerobic TIS | `Anaerobic Training Impact Score` | 無氧訓練影響分數 |
+
+#### 可選圖表（Could，sport=run 時顯示）
+
+| Chart | WKO5 表達式 | 說明 |
+|-------|------------|------|
+| Running Dynamics | `groundcontacttime`, `verticaloscillation`, `striderating` | 跑步動態（需 Coros Stryd 或 Garmin Running Dynamics）|
+| Running Effectiveness | RE Form/Hill/Wind Effect | 跑步效率分析（需額外感測器）|
+| Hilly Run Summary | Palladino algorithm | 爬坡/下坡功率分佈 |
+
+### API Endpoints（Activity Detail 專用）
+
+```
+GET /api/v1/workouts/{id}/channels
+→ { "power": [280,285,...], "heartrate": [142,...], "cadence": [90,...],
+    "speed": [8.2,...], "elevation": [120,...], "distance": [0,8,...],
+    "timestamps": [...], "duration_s": 10812 }
+
+GET /api/v1/workouts/{id}/mmp
+→ { "current": {1:850, 5:620, 30:485, 300:360, 1800:280, 3600:255},
+    "best_90d": {1:920, 5:680, ...} }
+
+GET /api/v1/workouts/{id}/summary
+→ { "avg_power": 210, "max_power": 920, "np": 235, "tss": 98.5, "if": 0.94,
+    "avg_hr": 155, "max_hr": 182, "avg_cadence": 88, "distance_km": 80.2,
+    "duration_s": 10812, "elevation_gain_m": 650 }
+
+GET /api/v1/workouts/{id}/levels
+→ { "ilevels": [{"level":1,"name":"Recovery","seconds":420,"pct":3.9}, ...],
+    "hr_zones": [{"zone":1,"name":"Z1","seconds":600,"pct":5.6}, ...] }
+
+GET /api/v1/workouts/{id}/tis
+→ { "aerobic_tis": 3.2, "anaerobic_tis": 1.8,
+    "aerobic_label": "Aerobic", "anaerobic_label": "Anaerobic TIS" }
+```
+
+### 前端技術規格
+
+| 元件 | Library | 說明 |
+|------|---------|------|
+| 時間序列圖 | Recharts `<ComposedChart>` | 支援多 series 疊加、brush 縮放 |
+| MMP Curve | Recharts `<LineChart>` | log-scale X 軸（1s–3600s）|
+| Time in Zones | Recharts `<BarChart>` horizontal | 每個 zone 的時間 + % |
+| Elevation over Distance | Recharts area chart + gradient fill | 依坡度上色 |
+| TIS | 簡單數字 + badge | 不需圖表 |
+
+### 表達式實作優先順序（對應 Algorithm Engine P2）
+
+以下表達式需在後端 `engine/algorithms/` 實作後，Activity Detail 才能完整運作：
+
+| 表達式 | Phase | 用途 |
+|--------|-------|------|
+| `meanmax(power)` | P1 ✅ | Workout MMP |
+| `avg(power)`, `max(power)` | P1 ✅ | Summary stats |
+| `nozero(cadence)` | P1 ✅ | 踏頻排零值 |
+| `levelcount(...)` | P2 | Time in Zones |
+| `tss(power,ftp)` | P2 | Training Stress Score |
+| `isef(...)` | P2 | 指數平滑（smoothed power） |
+| Aerobic/Anaerobic TIS | P3 | 訓練影響分數（需 ewma + zone logic） |
+

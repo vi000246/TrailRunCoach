@@ -1,4 +1,5 @@
 from pathlib import Path
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from backend.db.models import Base
 
@@ -15,6 +16,29 @@ async def get_db():
         yield session
 
 
+async def _migrate_schema():
+    """Add columns introduced after the initial schema without dropping data."""
+    new_cols = [
+        ("workout_files", "coros_activity_id", "TEXT"),
+        ("workout_files", "coros_sport_type", "INTEGER"),
+        ("sync_state", "coros_access_token", "TEXT"),
+        ("sync_state", "coros_token_expires", "DATETIME"),
+        ("sync_state", "coros_last_sync_at", "DATETIME"),
+        ("sync_state", "coros_email", "TEXT"),
+        ("sync_state", "coros_base_url", "TEXT"),
+        ("sync_state", "coros_user_id", "TEXT"),
+    ]
+    async with engine.begin() as conn:
+        for table, col, col_type in new_cols:
+            result = await conn.execute(text(f"PRAGMA table_info({table})"))
+            existing = {row[1] for row in result.fetchall()}
+            if col not in existing:
+                await conn.execute(
+                    text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+                )
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await _migrate_schema()

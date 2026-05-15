@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from datetime import date, timedelta
 from typing import Optional
 
 from backend.db.database import get_db
-from backend.db.models import WorkoutMetric, WorkoutFile
+from backend.db.models import WorkoutMetric, WorkoutFile, AthleteSettings
 from backend.engine.algorithms.metrics import compute_pmc
 
 router = APIRouter(prefix="/api/v1/pmc", tags=["pmc"])
@@ -45,3 +45,46 @@ async def get_pmc(
 
     filtered = [p for p in pmc_data if date_from.isoformat() <= p["date"] <= date_to.isoformat()]
     return {"series": filtered, "athlete_id": athlete_id}
+
+
+@router.post("/recompute")
+async def recompute_tss(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Recompute TSS for all workouts using current FTP (for workouts that have NP)."""
+    # Get current FTP
+    settings_q = await db.execute(
+        select(AthleteSettings)
+        .where(AthleteSettings.athlete_id == athlete_id)
+        .order_by(AthleteSettings.effective_date.desc())
+    )
+    settings = settings_q.scalars().first()
+    ftp = settings.ftp_w if settings else None
+    if not ftp:
+        return {"error": "No FTP set", "updated": 0}
+
+    # Get all workouts for this athlete with NP but no TSS
+    wf_q = await db.execute(
+        select(WorkoutFile).where(WorkoutFile.athlete_id == athlete_id)
+    )
+    workouts = wf_q.scalars().all()
+
+    updated = 0
+    for wf in workouts:
+        # Load existing metrics for this workout
+        metrics_q = await db.execute(
+            select(WorkoutMetric).where(WorkoutMetric.workout_id == wf.id)
+        )
+        metrics = {m.metric_key: m.value for m in metrics_q.scalars().all()}
+
+        if "tss" in metrics:
+            continue
+        np = metrics.get("normalized_power_w") or metrics.get("avg_power_w")
+        dur = metrics.get("duration_s") or wf.duration_s
+        if not np or not dur:
+            continue
+
+        tss = (np / ftp) ** 2 * (dur / 3600) * 100
+        db.add(WorkoutMetric(workout_id=wf.id, metric_key="tss", value=round(tss, 1)))
+        updated += 1
+
+    await db.commit()
+    return {"updated": updated, "ftp_w": ftp}
