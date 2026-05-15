@@ -1,6 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
-import type { WorkoutList, PmcPoint, MmpCurve, CorosLoginRequest, CorosLoginResponse, CorosStatus, AthleteSettingsResponse, SettingsUpdatePayload } from './client'
+import type {
+  WorkoutList, WorkoutSummary, PmcPoint, MmpCurve,
+  CorosLoginRequest, CorosLoginResponse, CorosStatus,
+  AthleteSettingsResponse, SettingsUpdatePayload,
+  TimeseriesResponse, ZonesResponse, WeeklyResponse,
+} from './client'
 
 export function useWorkouts(params?: Record<string, unknown>) {
   return useQuery<WorkoutList>({
@@ -95,5 +100,44 @@ export function useUpdateSettings(athleteId = 1) {
   return useMutation<{ saved: boolean }, Error, SettingsUpdatePayload>({
     mutationFn: (body) => api.put(`/athletes/${athleteId}/settings`, body).then(r => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['athlete_settings', athleteId] }),
+  })
+}
+
+export function useWorkout(workoutId: number) {
+  return useQuery<WorkoutSummary>({
+    queryKey: ['workout', workoutId],
+    queryFn: () => api.get(`/workouts/${workoutId}`).then(r => r.data),
+    staleTime: Infinity,
+  })
+}
+
+export function useTimeseries(workoutId: number) {
+  return useQuery<TimeseriesResponse>({
+    queryKey: ['timeseries', workoutId],
+    queryFn: () => api.get(`/workouts/${workoutId}/timeseries`).then(r => r.data),
+    staleTime: Infinity,
+  })
+}
+
+export function useZones(workoutId: number) {
+  return useQuery<ZonesResponse>({
+    queryKey: ['zones', workoutId],
+    queryFn: () => api.get(`/workouts/${workoutId}/zones`).then(r => r.data),
+    staleTime: Infinity,
+  })
+}
+
+export function useWeeklyLoad(params?: { date_from?: string; date_to?: string }) {
+  return useQuery<WeeklyResponse>({
+    queryKey: ['weekly', params],
+    queryFn: () => api.get('/analytics/weekly', { params }).then(r => r.data),
+  })
+}
+
+export function useRecomputePmc() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/pmc/recompute').then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['pmc'] }),
   })
 }
