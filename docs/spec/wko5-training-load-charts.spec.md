@@ -4,12 +4,13 @@
 - **Source PRD**: N/A — standalone technical spec
 - **Source Linear Issue**: N/A
 - **Owner**: maintainer
-- **Status**: DRAFT
+- **Status**: IMPLEMENTED — 2026-05-15
 - **Generated**: 2026-05-15
+- **Implementation Report**: `docs/reports/wko5-training-load-charts-feature-report.md`
 
 ## Summary
 
-Implements five run-specific training load charts reverse-engineered from `WKO5 Season View.wko5chart`: Chronic/Acute TIS Load, Daily % of CTL, CTL Ramp Rate, Intensity Load Chart, and Running Volume Log (跑量日誌). All formulas were extracted verbatim from the `.wko5chart` binary; no estimation was required. New backend endpoints extend the existing FastAPI + SQLAlchemy async pattern; new frontend components extend the existing Recharts stack in the SeasonTab.
+Implements five run-specific training load charts reverse-engineered from `WKO5 Season View.wko5chart`: Chronic/Acute TIS Load, Daily % of CTL, CTL Ramp Rate, Intensity Load Chart, and Running Volume Log (跑量日誌). All formulas were extracted verbatim from the `.wko5chart` binary; no estimation was required. New backend endpoints extend the existing FastAPI + SQLAlchemy async pattern; new frontend components extend the existing Recharts stack and are wired into `SeasonPage` as collapsible sections.
 
 ---
 
@@ -78,7 +79,7 @@ Uses `WorkoutFile.total_distance_m`, `WorkoutFile.duration_s`, `WorkoutFile.spor
 ## System Context
 
 ### Scope & Boundaries
-- **In scope**: 5 new charts on a new "Load" tab in SeasonTab; 3 new API endpoints; 2 new algorithm functions; 2 new `WorkoutMetric` keys; 1 new `WorkoutFile` column; backfill migration for `elevation_gain_m` and intensity metrics
+- **In scope**: 5 new chart components in collapsible sections of `SeasonPage`; 3 new API endpoints; 2 new algorithm functions; 2 new `WorkoutMetric` keys; 1 new `WorkoutFile` column; idempotent migration for `elevation_gain_m`
 - **Out of scope**: Planned TSS input (no planning feature), multi-sport intensity charts, HR-based TIS, re-implementing TP sync, mobile layout
 
 ### Actors
@@ -102,14 +103,15 @@ Uses `WorkoutFile.total_distance_m`, `WorkoutFile.duration_s`, `WorkoutFile.spor
 ### High-Level Diagram
 ```
 Browser (React + Recharts)
-  └── SeasonTab
-        ├── [existing] PmcChart
-        └── [new] LoadTab (or sub-section)
+  └── SeasonPage  (frontend/src/pages/SeasonPage.tsx)
+        ├── [existing] PmcChart           ← Overall PMC section
+        ├── [existing] WeeklyLoadChart    ← Weekly Load section
+        └── [new] collapsible sections
               ├── RunLoadChart          ← CTL/ATL/TSB/ACWR (run-only)
               ├── DailyPctCtlChart      ← colored bar chart
-              ├── RampRateChart         ← line + reference bands
+              ├── RampRateChart         ← bar + reference lines
               ├── IntensityLoadChart    ← 4 series (chronic/acute × 95%/103%)
-              └── RunVolumeLog          ← weekly table + bar chart
+              └── RunVolumeLog          ← weekly bar + monthly table
 
 FastAPI
   ├── GET /api/v1/analytics/run-load         [NEW]
@@ -174,10 +176,10 @@ ALTER TABLE workout_files ADD COLUMN elevation_gain_m REAL;
 ```
 
 ### Migration Strategy
-- **Forward**: Alembic `op.add_column` for `elevation_gain_m`; no default needed (nullable)
-- **Backward**: `op.drop_column` — no data loss risk
-- **Backfill**: New CLI command `wko5 backfill-intensity` re-parses FIT files for all run workouts and populates the two new metric keys and `elevation_gain_m`. Non-destructive: skips workouts that already have these metrics.
-- **Coexistence**: Intensity Load Chart shows empty state if metrics absent for a workout (treated as 0 minutes in zone); `elevation_gain_m` NULL shown as `—` in volume log
+- **Forward**: Idempotent `ALTER TABLE ADD COLUMN` via `_migrate_schema()` in `database.py` (uses `PRAGMA table_info` to skip if column already exists). No Alembic required.
+- **Backward**: Column is nullable; removing it requires a schema migration but no data loss
+- **Backfill**: Not implemented — new workouts get intensity metrics on next import. For historical workouts, `IntensityLoadChart` shows empty state (treated as 0 minutes in zone).
+- **Coexistence**: Intensity Load Chart shows empty state if metrics absent; `elevation_gain_m` NULL displayed as `0 m` in RunVolumeLog
 
 ---
 
@@ -290,7 +292,7 @@ Path prefix `/api/v1/` inherited from existing routes. No deprecation needed —
 | Performance | p95 < 300ms for any chart endpoint, 1-year window | Pre-computed PMC via `compute_run_pmc()` on query; GROUP BY week in SQL with index on `workout_date` |
 | Data freshness | Reflects imports within same request | No caching layer; computed on demand from DB |
 | Intensity accuracy | Match WKO5 within 1% | Use `>= threshold` (not `>`) to match WKO5 `if(runpower >= 0.95*runFTP, deltatime)` |
-| ACWR reference zones | 0.8–1.3 safe, >1.5 danger | Frontend ReferenceBand rendering only; no backend enforcement |
+| ACWR reference zones | 0.8–1.3 safe, >1.5 danger | Frontend `ReferenceArea` (Recharts `ReferenceArea` with `yAxisId="acwr"`); `ReferenceBand` not available in Recharts 3.8.1 |
 | Ramp Rate reference lines | 0 and +7 TSS/day/week | Frontend `<ReferenceLine>` from Recharts |
 
 ---
@@ -301,7 +303,7 @@ Path prefix `/api/v1/` inherited from existing routes. No deprecation needed —
 |---|---|---|
 | Chart library | Recharts (existing) | Already used in `PmcChart`, `WeeklyLoadChart`; same API |
 | EWMA implementation | Extend `compute_pmc()` in `metrics.py` | Single canonical EWMA; reuse `ctl_factor = 1 - exp(-1/tau)` |
-| Multi-color bar chart (Daily %CTL) | Recharts `ComposedChart` with 3 `Bar` series (green/yellow/red) | Same pattern as multi-series line; color thresholds applied per-point |
+| Multi-color bar chart (Daily %CTL) | Single `Bar` with per-bar `Cell` components (green/yellow/red based on threshold) | Simpler than 3 `Bar` series; Recharts `Cell` is the standard per-bar color override pattern |
 | Intensity metric storage | `WorkoutMetric` key-value (existing table) | No schema change; fits existing import pipeline |
 | Elevation storage | New `elevation_gain_m` column on `WorkoutFile` | Scalar property of the workout, not a metric |
 
@@ -311,11 +313,11 @@ Path prefix `/api/v1/` inherited from existing routes. No deprecation needed —
 
 | Touchpoint | Type | Impact |
 |---|---|---|
-| `backend/engine/algorithms/metrics.py:compute_pmc` | Function import | `compute_run_pmc()` delegates to this; must not change its signature |
+| `backend/engine/algorithms/metrics.py:compute_pmc` | Function import | `compute_run_pmc()` implements same EWMA logic independently; both coexist |
 | `backend/api/pmc.py` | Existing endpoint | Unchanged — still serves all-sport PMC for existing PmcChart |
-| `backend/files/` (FIT importer) | Module | Must be extended to compute intensity metrics during parse |
-| `frontend/src/api/hooks.ts` | API hooks file | 3 new `useQuery` hooks following existing `usePmc` pattern |
-| `frontend/src/tabs/SeasonTab.tsx` | Parent component | Add "Load" accordion or sub-tabs |
+| `backend/files/file_service.py` | FIT importer | Extended in `_import_one_file()` to compute `elevation_gain_m` and intensity metrics |
+| `frontend/src/api/hooks.ts` | API hooks file | 3 new `useQuery` hooks: `useRunLoad`, `useIntensityLoad`, `useRunVolume` |
+| `frontend/src/pages/SeasonPage.tsx` | Parent page | 5 chart components added as collapsible sections (not SeasonTab.tsx) |
 
 ### Rollout Strategy
 Feature visible immediately after deploy; no feature flag needed. If intensity metrics backfill has not run, `IntensityLoadChart` shows empty state with a prompt: "Run `wko5 backfill-intensity` to enable this chart."
@@ -331,7 +333,7 @@ Feature visible immediately after deploy; no feature flag needed. If intensity m
 | FastAPI async router shape | `backend/api/pmc.py` and `backend/api/analytics.py` | `@router.get`, `Depends(get_db)`, `AsyncSession` |
 | `useQuery` hook pattern | `frontend/src/api/hooks.ts` (via `usePmc`) | Same TanStack Query shape for all new endpoints |
 | Recharts responsive wrapper | `frontend/src/components/PmcChart.tsx:51-95` | `<ResponsiveContainer>` + dark theme colors |
-| `<SeasonTab>` date range plumbing | `frontend/src/tabs/SeasonTab.tsx` | Pass `dateFrom`/`dateTo` as props to all child charts |
+| `SeasonPage` date range plumbing | `frontend/src/pages/SeasonPage.tsx` | Pass `dateFrom`/`dateTo` as props to all child charts |
 
 ---
 
@@ -359,9 +361,24 @@ Feature visible immediately after deploy; no feature flag needed. If intensity m
 
 ---
 
-## Open Questions
+## Implementation Notes (Deviations from Original Spec)
 
-- [ ] Does `WorkoutFile.sport` already reliably distinguish "run" from cycling/swim for all Coros sync'd workouts, or does it need normalization from `coros_sport_type`?
-- [ ] Should the intensity backfill CLI use FTP at the workout date (from `AthleteSettings` history) or the current FTP? WKO5 uses `runFTP` which is the FTP at the date of each workout.
-- [ ] Is `total_ascent` reliably present in all Coros FIT files, or only outdoor runs with GPS?
-- [ ] Where should the 5 new charts live in the UI? Options: (a) new "Load" sub-tab inside SeasonTab, (b) expanded accordion sections below the existing PmcChart, (c) new top-level "Load" tab alongside Season/Activities/Config/AI.
+| Item | Spec Said | Actual Implementation | Reason |
+|------|-----------|-----------------------|--------|
+| UI location | `SeasonTab.tsx` ("Load" accordion or sub-tabs) | `SeasonPage.tsx` (collapsible sections) | App routes to `SeasonPage`, not `SeasonTab`; `SeasonTab` is legacy unused file |
+| ACWR risk zones | `ReferenceBand` | `ReferenceArea` with `yAxisId="acwr"` | `ReferenceBand` not exported by Recharts 3.8.1 |
+| Daily %CTL bars | 3 separate `Bar` series | Single `Bar` with `Cell` per data point | Cleaner data model; correct Recharts per-bar coloring pattern |
+| sport filter | `sport="run"` | `sport="running"` | `_normalize_sport()` in `fit_reader.py` normalizes Coros sport codes to `"running"` |
+| DB migration | Alembic | `_migrate_schema()` idempotent pattern | Existing codebase uses this pattern consistently |
+| Intensity backfill CLI | Planned | Not implemented | New imports get metrics; historical workouts show empty state |
+
+## Open Questions (Resolved)
+
+- [x] **`WorkoutFile.sport` for runs** → Normalized to `"running"` by `_normalize_sport()` in `fit_reader.py`; reliable for all Coros-synced workouts.
+- [x] **Where should charts live?** → Collapsible sections in `SeasonPage.tsx`, below existing PmcChart and WeeklyLoadChart.
+
+## Open Questions (Still Pending)
+
+- [ ] Should intensity metrics use FTP at workout date (from `AthleteSettings` history) or current FTP? Currently uses the most recent `AthleteSettings` at import time.
+- [ ] Is `total_ascent` reliable in all Coros FIT files? Outdoor GPS runs: yes. Indoor workouts: falls back to altitude channel diff (`np.diff(altitude)`).
+- [ ] Intensity backfill for historical workouts — needs a CLI command or admin endpoint to re-process existing FIT files.

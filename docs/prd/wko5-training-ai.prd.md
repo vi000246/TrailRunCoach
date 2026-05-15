@@ -85,6 +85,7 @@ When 完成一次訓練或想規劃下次訓練，I want to 快速理解訓練�
 | Should | Claude AI 對話介面 | 訓練問答 |
 | Should | iLevels / Training Levels 計算 | 個人化功率區間 |
 | Should | Activity Detail 頁面 | 單次訓練圖表（參考 WKO5 Workout View.wko5chart）|
+| Should ✅ | Run 跑步訓練負荷圖表（Run PMC、Daily %CTL、Ramp Rate、Intensity Load、Volume Log）| 跑步專項訓練分析（對標 WKO5 Season View）|
 | Could | 訓練列表 Dashboard（Web UI）| 覽概訓練趨勢 |
 | Could | TrainingPeaks API 整合（可選）| 補充歷史資料 |
 | Won't | WKO5 .wko4 格式讀寫 | 兩者獨立，不互動 |
@@ -120,8 +121,9 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統手動觸發 sync
 | 2 | AI 對話介面 | 用中文問「本週訓練強度」獲得數據驅動回答 | pending | 1 | - | - |
 | 3 | FTP 估算 + CTL/ATL/TSB | 自動算出訓練區間 + 疲勞狀態 | complete | 1 | - | - |
 | 4 | Coros 自動同步 + PMC Web UI | 訓練後手動 sync，FIT 自動下載，PMC 圖表顯示 | **complete** | 1,3 | wko5-coros-sync.spec.md | coros-sync-pmc-mvp.plan.md |
-| 4.5 | FTP/LTHR 設定頁面 | 手動設定或覆蓋 FTP、LTHR、TSS 公式 | **pending** | 4 | - | - |
-| 5 | Activity Detail 頁面 | 點開單次活動，看到功率曲線、心率、區間分佈等圖表 | pending | 1,3 | wko5-web-full-clone.spec.md | - |
+| 4.5 | FTP/LTHR 設定頁面 | 手動設定或覆蓋 FTP、LTHR | **complete** | 4 | wko5-frontend-redesign.spec.md | wko5-mvp-tab-nav-config-season.plan.md |
+| 4.6 | Run 跑步訓練負荷圖表 | Season 頁面新增 5 個跑步圖表（Run PMC、Daily %CTL、Ramp Rate、Intensity Load、Volume Log）| **complete** | 4,4.5 | wko5-training-load-charts.spec.md | docs/plans/completed/wko5-training-load-charts.plan.md |
+| 5 | Activity Detail 頁面 | 點開單次活動，看到功率曲線、心率、區間分佈等圖表 | complete | 1,3 | wko5-web-full-clone.spec.md | - |
 | 6 | iLevels / Training Levels | 個人化功率區間（對標 WKO5 iLevels） | pending | 3 | - | - |
 | 7 | TrainingPeaks 整合（可選） | 從 TP 帳號補充歷史資料 | pending | 1 | - | - |
 

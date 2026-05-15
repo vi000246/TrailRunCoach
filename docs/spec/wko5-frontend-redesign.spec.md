@@ -98,10 +98,15 @@ frontend/src/
 │   └── AiPage.tsx         ← 新
 ├── components/
 │   ├── charts/
-│   │   ├── PmcChart.tsx   ← 重構（套用 chart theme）
-│   │   ├── WeeklyLoadChart.tsx ← 新
-│   │   ├── TimeseriesChart.tsx ← 新（Activity Detail）
-│   │   └── MmpCurveChart.tsx  ← 重構（整合現有 MmpCurveWidget）
+│   │   ├── PmcChart.tsx         ← 重構（套用 chart theme）
+│   │   ├── WeeklyLoadChart.tsx  ← 新
+│   │   ├── TimeseriesChart.tsx  ← 新（Activity Detail）
+│   │   ├── MmpCurveChart.tsx    ← 重構（整合現有 MmpCurveWidget）
+│   │   ├── RunLoadChart.tsx     ← 新（Run PMC: CTL/ATL/TSB/ACWR）
+│   │   ├── DailyPctCtlChart.tsx ← 新（Daily % of CTL，色碼 bar）
+│   │   ├── RampRateChart.tsx    ← 新（CTL Ramp Rate）
+│   │   ├── IntensityLoadChart.tsx ← 新（Chronic/Acute ≥95%/≥103% FTP）
+│   │   └── RunVolumeLog.tsx     ← 新（Running Volume Log：週 bar + 月 table）
 │   ├── ui/                ← shadcn/ui 元件（copypaste）
 │   │   ├── button.tsx
 │   │   ├── card.tsx
