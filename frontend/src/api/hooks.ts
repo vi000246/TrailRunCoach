@@ -5,6 +5,7 @@ import type {
   CorosLoginRequest, CorosLoginResponse, CorosStatus,
   AthleteSettingsResponse, SettingsUpdatePayload,
   TimeseriesResponse, ZonesResponse, WeeklyResponse,
+  RunLoadPoint, IntensityLoadPoint, RunVolumeResponse,
 } from './client'
 
 export function useWorkouts(params?: Record<string, unknown>) {
@@ -139,5 +140,26 @@ export function useRecomputePmc() {
   return useMutation({
     mutationFn: () => api.post('/pmc/recompute').then(r => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['pmc'] }),
+  })
+}
+
+export function useRunLoad(params?: { date_from?: string; date_to?: string }) {
+  return useQuery<{ series: RunLoadPoint[] }>({
+    queryKey: ['run_load', params],
+    queryFn: () => api.get('/analytics/run-load', { params }).then(r => r.data),
+  })
+}
+
+export function useIntensityLoad(params?: { date_from?: string; date_to?: string }) {
+  return useQuery<{ series: IntensityLoadPoint[] }>({
+    queryKey: ['intensity_load', params],
+    queryFn: () => api.get('/analytics/intensity-load', { params }).then(r => r.data),
+  })
+}
+
+export function useRunVolume(params?: { date_from?: string; date_to?: string }) {
+  return useQuery<RunVolumeResponse>({
+    queryKey: ['run_volume', params],
+    queryFn: () => api.get('/analytics/run-volume', { params }).then(r => r.data),
   })
 }

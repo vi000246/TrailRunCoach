@@ -121,3 +121,46 @@ export interface WeeklyEntry {
 export interface WeeklyResponse {
   weeks: WeeklyEntry[]
 }
+
+export interface RunLoadPoint {
+  date: string
+  ctl: number
+  atl: number
+  tsb: number
+  tss: number
+  acwr: number | null
+  daily_pct_ctl: number | null
+  ramp_rate: number | null
+  ramp_pct_ctl: number | null
+}
+
+export interface IntensityLoadPoint {
+  date: string
+  chronic_95pct_min: number
+  acute_95pct_min: number
+  chronic_103pct_min: number
+  acute_103pct_min: number
+}
+
+export interface RunVolumeWeek {
+  week_start: string
+  distance_km: number
+  hours: number
+  elevation_m: number
+  tss: number
+  count: number
+}
+
+export interface RunVolumeMonth {
+  month: string
+  distance_km: number
+  hours: number
+  elevation_m: number
+  count: number
+}
+
+export interface RunVolumeResponse {
+  weeks: RunVolumeWeek[]
+  months: RunVolumeMonth[]
+  athlete_id: number
+}
