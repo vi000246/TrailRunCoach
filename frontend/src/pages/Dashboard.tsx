@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useDashboard, useScan, useCorosStatus, useCorosLogin, useCorosSync } from '../api/hooks'
 import { DashboardGrid } from '../components/DashboardGrid'
-import { PmcChart } from '../components/PmcChart'
+import { TabNav } from '../components/TabNav'
+import { SeasonTab } from '../tabs/SeasonTab'
+import { ConfigTab } from '../tabs/ConfigTab'
+import { useTabStore } from '../store/tabStore'
 
 function CorosPanel() {
   const { data: status, isLoading } = useCorosStatus()
@@ -108,6 +111,7 @@ function CorosPanel() {
 export function Dashboard() {
   const { data: dashboard, isLoading } = useDashboard()
   const scan = useScan()
+  const activeTab = useTabStore(s => s.activeTab)
 
   if (isLoading) {
     return (
@@ -129,12 +133,28 @@ export function Dashboard() {
           {scan.isPending ? 'Scanning...' : '⟳ Scan Files'}
         </button>
       </header>
+      <TabNav />
       <main className="p-4">
-        <CorosPanel />
-        <PmcChart />
-        {dashboard?.layout?.widgets && (
-          <div className="mt-4">
-            <DashboardGrid widgets={dashboard.layout.widgets} />
+        {activeTab === 'season' && (
+          <>
+            <CorosPanel />
+            <SeasonTab />
+            {dashboard?.layout?.widgets && (
+              <div className="mt-4">
+                <DashboardGrid widgets={dashboard.layout.widgets} />
+              </div>
+            )}
+          </>
+        )}
+        {activeTab === 'config' && <ConfigTab />}
+        {activeTab === 'activities' && (
+          <div className="flex items-center justify-center h-64 text-gray-600 text-sm">
+            Activities — coming soon
+          </div>
+        )}
+        {activeTab === 'ai' && (
+          <div className="flex items-center justify-center h-64 text-gray-600 text-sm">
+            AI — coming soon
           </div>
         )}
       </main>

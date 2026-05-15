@@ -1,5 +1,5 @@
 from pathlib import Path
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -45,8 +45,60 @@ async def bootstrap_athletes(db: AsyncSession = Depends(get_db)):
     return {"created": created}
 
 
+@router.get("/{athlete_id}/settings")
+async def get_settings(athlete_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(AthleteSettings)
+        .where(AthleteSettings.athlete_id == athlete_id)
+        .order_by(AthleteSettings.effective_date.desc())
+    )
+    s = result.scalars().first()
+    if s is None:
+        raise HTTPException(status_code=404, detail="NO_SETTINGS")
+
+    ftp = s.ftp_w
+    lthr = s.lthr
+
+    power_zones = []
+    if ftp:
+        # Coggan 7-zone collapsed to 5: breakpoints at 55/75/90/105 % FTP
+        breakpoints = [int(ftp * p) for p in (0.55, 0.75, 0.90, 1.05)]
+        labels = ["Recovery", "Endurance", "Tempo", "Threshold", "VO2max+"]
+        for i in range(5):
+            power_zones.append({
+                "zone": i + 1,
+                "label": labels[i],
+                "min_w": breakpoints[i - 1] if i > 0 else 0,
+                "max_w": breakpoints[i] - 1 if i < 4 else None,
+            })
+
+    hr_zones = []
+    if lthr:
+        # Friel 7-zone collapsed to 5: breakpoints at 85/90/95/100 % LTHR
+        breakpoints = [int(lthr * p) for p in (0.85, 0.90, 0.95, 1.00)]
+        labels = ["Recovery", "Aerobic", "Tempo", "Threshold", "Anaerobic"]
+        for i in range(5):
+            hr_zones.append({
+                "zone": i + 1,
+                "label": labels[i],
+                "min_bpm": breakpoints[i - 1] if i > 0 else 0,
+                "max_bpm": breakpoints[i] - 1 if i < 4 else None,
+            })
+
+    return {
+        "athlete_id": athlete_id,
+        "effective_date": s.effective_date.isoformat(),
+        "ftp_w": ftp,
+        "lthr": lthr,
+        "weight_kg": s.weight_kg,
+        "power_zones": power_zones,
+        "hr_zones": hr_zones,
+    }
+
+
 class SettingsUpdate(BaseModel):
     ftp_w: Optional[float] = None
+    lthr: Optional[int] = None
     weight_kg: Optional[float] = None
     effective_date: Optional[date] = None
 
@@ -64,12 +116,14 @@ async def update_settings(athlete_id: int, body: SettingsUpdate, db: AsyncSessio
     if s:
         if body.ftp_w is not None:
             s.ftp_w = body.ftp_w
+        if body.lthr is not None:
+            s.lthr = body.lthr
         if body.weight_kg is not None:
             s.weight_kg = body.weight_kg
     else:
         s = AthleteSettings(
             athlete_id=athlete_id, effective_date=eff_date,
-            ftp_w=body.ftp_w, weight_kg=body.weight_kg,
+            ftp_w=body.ftp_w, lthr=body.lthr, weight_kg=body.weight_kg,
         )
         db.add(s)
     await db.commit()

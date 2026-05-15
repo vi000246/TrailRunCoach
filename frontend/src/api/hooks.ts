@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
-import type { WorkoutList, PmcPoint, MmpCurve, CorosLoginRequest, CorosLoginResponse, CorosStatus } from './client'
+import type { WorkoutList, PmcPoint, MmpCurve, CorosLoginRequest, CorosLoginResponse, CorosStatus, AthleteSettingsResponse, SettingsUpdatePayload } from './client'
 
 export function useWorkouts(params?: Record<string, unknown>) {
   return useQuery<WorkoutList>({
@@ -79,5 +79,21 @@ export function useCorosSync(athleteId = 1) {
       qc.invalidateQueries({ queryKey: ['pmc'] })
       qc.invalidateQueries({ queryKey: ['coros_status'] })
     },
+  })
+}
+
+export function useAthleteSettings(athleteId = 1) {
+  return useQuery<AthleteSettingsResponse>({
+    queryKey: ['athlete_settings', athleteId],
+    queryFn: () => api.get(`/athletes/${athleteId}/settings`).then(r => r.data),
+    retry: false,
+  })
+}
+
+export function useUpdateSettings(athleteId = 1) {
+  const qc = useQueryClient()
+  return useMutation<{ saved: boolean }, Error, SettingsUpdatePayload>({
+    mutationFn: (body) => api.put(`/athletes/${athleteId}/settings`, body).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['athlete_settings', athleteId] }),
   })
 }

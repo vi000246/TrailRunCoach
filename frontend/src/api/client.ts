@@ -48,3 +48,33 @@ export interface CorosStatus {
   token_expires: string | null
   last_sync: string | null
 }
+
+export interface PowerZone {
+  zone: number
+  label: string
+  min_w: number
+  max_w: number | null
+}
+
+export interface HrZone {
+  zone: number
+  label: string
+  min_bpm: number
+  max_bpm: number | null
+}
+
+export interface AthleteSettingsResponse {
+  athlete_id: number
+  effective_date: string
+  ftp_w: number | null
+  lthr: number | null
+  weight_kg: number | null
+  power_zones: PowerZone[]
+  hr_zones: HrZone[]
+}
+
+export interface SettingsUpdatePayload {
+  ftp_w?: number
+  lthr?: number
+  weight_kg?: number
+}

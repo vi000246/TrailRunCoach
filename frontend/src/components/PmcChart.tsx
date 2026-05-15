@@ -10,8 +10,16 @@ import {
 } from 'recharts'
 import { usePmc } from '../api/hooks'
 
-export function PmcChart() {
-  const { data, isLoading, isError } = usePmc()
+interface Props {
+  dateFrom?: string
+  dateTo?: string
+}
+
+export function PmcChart({ dateFrom, dateTo }: Props = {}) {
+  const params = dateFrom || dateTo
+    ? { date_from: dateFrom, date_to: dateTo }
+    : undefined
+  const { data, isLoading, isError } = usePmc(params)
 
   if (isLoading) {
     return (
