@@ -10,18 +10,19 @@ WKO5 桌面版提供深度功率分析，但需要付費訂閱、僅能在桌面
 
 - Coros 無公開 API；第三方同步需透過 TrainingPeaks，但 TP FIT 下載需 premium 帳號
 - WKO5 分析功能依賴本機安裝，無法在手機或非本機環境存取
-- 社群已逆向 Coros Training Hub API（`xballoy/coros-api`、`cygnusb/coros-mcp` 等多個開源實作，截至 2026-02）
+- 社群已逆向 Coros Training Hub API（`xballoy/coros-api`、`cygnusb/coros-mcp` 等多個開源實作）
 - Coros 非官方 API 支援 FIT 檔案下載，但文件不公開，可能隨時變更
+- **已驗證（2026-05-15）**：帳密登入 + FIT 下載 + 1088 筆活動匯入成功，PMC 圖表正常顯示
 
 ## Proposed Solution
 
-直接串接 Coros 非官方 API 下載 .fit 檔案到獨立資料夾（`~/.wko5coach/fits/`），在此專案內實作所有訓練分析算法（MMP、TSS、CTL/ATL/TSB、FTP），並搭配 Claude AI 對話介面。
+直接串接 Coros 非官方 API 下載 .fit 檔案到獨立資料夾（`~/.wko5coach/fits/`），在此專案內實作所有訓練分析算法（MMP、TSS、CTL/ATL/TSB、FTP），並搭配 Web UI 視覺化與 Claude AI 對話介面。
 本系統完全獨立，不依賴 WKO5 資料夾或 TrainingPeaks 帳號；使用者仍可獨立使用 WKO5，兩者互不干擾。
 
 ## Key Hypothesis
 
 We believe 從 Coros 直接同步 .fit 並在本機計算訓練指標，will 讓個人運動員不依賴任何訂閱服務即可查詢訓練狀況，for 個人使用。
-We'll know we're right when 訓練結束後 1 小時內，資料自動出現在系統中，且能透過 AI 問答得到基於真實功率資料的具體回答。
+We'll know we're right when 訓練結束後 1 小時內，資料自動出現在系統中，且能透過 Web UI 查看 PMC 圖表並透過 AI 問答得到基於真實功率資料的具體回答。
 
 ## What We're NOT Building
 
@@ -36,7 +37,7 @@ We'll know we're right when 訓練結束後 1 小時內，資料自動出現在�
 
 | Metric | Target | How Measured |
 |--------|--------|--------------|
-| Coros 同步成功率 | ≥95% 連續 10 次 | 每次訓練後自動觸發並記錄 |
+| Coros 同步成功率 | ≥95% 連續 10 次 | 每次訓練後手動觸發並記錄 |
 | 同步延遲 | <1 小時（手動觸發立即） | 訓練結束到 DB 可查詢的時間 |
 | MMP 曲線誤差 | ±1% vs WKO5 | 用同一份 .fit 對照 WKO5 輸出 |
 | AI 問答相關度 | 主觀 ≥4/5 | 個人評分 10 個問題 |
@@ -44,20 +45,22 @@ We'll know we're right when 訓練結束後 1 小時內，資料自動出現在�
 
 ## Open Questions
 
-- [ ] Coros API 是否需要裝置 ID 或 token 綁定，導致多設備登入受限？
-- [ ] 非官方 API `teamcnapi.coros.com` 的穩定性如何，是否有備用 endpoint？
-- [ ] FIT 下載是否有速率限制（rate limit）？
+- [x] ~~Coros API 是否需要裝置 ID 或 token 綁定~~ → 不需要裝置 ID；token 對特定 region server 有效
+- [x] ~~`teamcnapi.coros.com` 的穩定性~~ → 台灣帳號實際使用 EU server（`teameuapi.coros.com`），資料 API 用 `teamapi.coros.com`；需動態偵測
+- [ ] FIT 下載是否有速率限制（rate limit）？長時間同步後偶見 token invalid
 - [ ] iLevels 算法的確切輸入格式（需逆向或對照 GoldenCheetah）
+- [ ] TSS 應使用 WKO5 BikeScore 公式，還是標準 Coggan TSS？目前用 (NP/FTP)²×dur/3600×100
+- [ ] FTP config 頁面：應允許手動覆蓋 Coros 自動匯入的 FTP 值
 
 ---
 
 ## Users & Context
 
 **Primary User**
-- **Who**: 個人運動員（使用者本人），使用 Coros 手錶記錄訓練，具備技術能力
+- **Who**: 個人運動員（使用者本人），使用 Coros APEX 2 Pro 手錶記錄訓練，具備技術能力
 - **Current behavior**: 用 WKO5 桌面版手動查看，或用 Coros app 看基礎統計
 - **Trigger**: 完成訓練後想了解訓練品質，或定期回顧訓練趨勢
-- **Success state**: 開啟 web UI 或問 AI「本週訓練量如何」，得到基於真實功率數據的具體回答
+- **Success state**: 開啟 web UI 看到 PMC 圖表 + 問 AI「本週訓練量如何」，得到基於真實功率數據的具體回答
 
 **Job to Be Done**
 When 完成一次訓練或想規劃下次訓練，I want to 快速理解訓練資料顯示的狀況，so I can 做出有根據的訓練調整決策。
@@ -74,39 +77,38 @@ When 完成一次訓練或想規劃下次訓練，I want to 快速理解訓練�
 | Priority | Capability | Rationale |
 |----------|------------|-----------|
 | Must | FIT 檔案解析（Coros/Garmin）| 所有分析的資料基礎 |
-| Must | Coros 非官方 API 同步 | 主要資料來源，取代 TP |
+| Must | Coros 非官方 API 同步 | 主要資料來源 |
 | Must | Mean Maximal Power (MMP) 曲線計算 | 訓練分析核心指標 |
-| Must | Claude AI 對話介面（問訓練狀況）| 主要使用情境 |
-| Should | FTP 自動估算 | 個人化訓練區間依賴此值 |
-| Should | CTL / ATL / TSB 追蹤（PMC） | 長期訓練狀態 |
+| Must | PMC 圖表（CTL/ATL/TSB）| 長期訓練狀態視覺化 |
+| Should | FTP / LTHR 設定頁面 | 手動覆蓋 Coros 自動匯入值 |
+| Should | TSS 精確計算（WKO5 BikeScore or Coggan）| PMC 數值正確性 |
+| Should | Claude AI 對話介面 | 訓練問答 |
 | Should | iLevels / Training Levels 計算 | 個人化功率區間 |
-| Should | Activity Detail 頁面 | 單次訓練的圖表分析（參考 WKO5 Workout View.wko5chart）|
-| Could | 訓練列表 Dashboard（Web UI） | 輔助 AI 問答，覽概訓練趨勢 |
-| Could | TrainingPeaks API 整合（可選） | 補充歷史資料 |
+| Should | Activity Detail 頁面 | 單次訓練圖表（參考 WKO5 Workout View.wko5chart）|
+| Could | 訓練列表 Dashboard（Web UI）| 覽概訓練趨勢 |
+| Could | TrainingPeaks API 整合（可選）| 補充歷史資料 |
 | Won't | WKO5 .wko4 格式讀寫 | 兩者獨立，不互動 |
 | Won't | 公開 API 或多用戶 | 超出個人工具範疇 |
 
-### MVP Scope
+### MVP Scope（已完成）
 
 1. Coros API 登入 + 活動列表 + FIT 下載到 `~/.wko5coach/fits/`
-2. 計算 MMP 曲線（1s–60min）
-3. Claude AI 對話介面：能回答「本週訓練量」、「最大功率」等基礎問題
+2. PMC 圖表（CTL/ATL/TSB）顯示在 Web UI
+3. FTP/LTHR 從 Coros 登入回應自動匯入
 
 ### User Flow
 
 ```
-Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統 API sync 觸發
-  → 下載 .fit → ~/.wko5coach/fits/ → 解析 → DB → MMP 計算
-  → 問 AI「本週怎樣？」→ 基於真實數據的回答
+Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統手動觸發 sync
+  → 下載 .fit → ~/.wko5coach/fits/ → 解析 → DB → TSS/MMP 計算
+  → Web UI 顯示 PMC → 問 AI「本週怎樣？」→ 基於真實數據的回答
 ```
 
 ---
 
 ## Feasibility
 
-**Verdict**: MEDIUM — Coros 非官方 API 有多個社群實作可參考（`xballoy/coros-api`、`cygnusb/coros-mcp`），FIT 解析和算法已有現成基礎；主要風險在 API 穩定性（unofficial）。
-
-> 架構、資料模型、API 合約、技術選型及詳細技術風險屬於 SRS。執行 `/prp-srs docs/prd/wko5-training-ai.prd.md` 產出下一步。
+**Verdict**: HIGH — Coros 非官方 API 已完整實作並驗證（1088 筆活動匯入成功）；主要風險在 API 穩定性。
 
 ---
 
@@ -116,8 +118,9 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統 API sync 觸發
 |---|-----------|--------------------|--------|---------|-----|------|
 | 1 | FIT 解析 + MMP 計算 | 匯入 FIT 並看到 MMP 曲線數值 | complete | - | wko5-milestone1-fit-mmp.spec.md | - |
 | 2 | AI 對話介面 | 用中文問「本週訓練強度」獲得數據驅動回答 | pending | 1 | - | - |
-| 3 | FTP 估算 + CTL/ATL/TSB | 自動算出訓練區間 + 疲勞狀態 | pending | 1 | - | - |
-| 4 | Coros 自動同步 | 訓練後資料自動進系統，無需手動匯入 | **in progress** | 1 | wko5-coros-sync.spec.md | - |
+| 3 | FTP 估算 + CTL/ATL/TSB | 自動算出訓練區間 + 疲勞狀態 | complete | 1 | - | - |
+| 4 | Coros 自動同步 + PMC Web UI | 訓練後手動 sync，FIT 自動下載，PMC 圖表顯示 | **complete** | 1,3 | wko5-coros-sync.spec.md | coros-sync-pmc-mvp.plan.md |
+| 4.5 | FTP/LTHR 設定頁面 | 手動設定或覆蓋 FTP、LTHR、TSS 公式 | **pending** | 4 | - | - |
 | 5 | Activity Detail 頁面 | 點開單次活動，看到功率曲線、心率、區間分佈等圖表 | pending | 1,3 | wko5-web-full-clone.spec.md | - |
 | 6 | iLevels / Training Levels | 個人化功率區間（對標 WKO5 iLevels） | pending | 3 | - | - |
 | 7 | TrainingPeaks 整合（可選） | 從 TP 帳號補充歷史資料 | pending | 1 | - | - |
@@ -134,31 +137,32 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統 API sync 觸發
 - **Success signal**: 連續 10 個問題，8 個以上有意義回答
 - **Out of scope**: iLevels、自動同步
 
-**Milestone 3: FTP 估算 + CTL/ATL/TSB**
-- **User can now**: 系統自動計算個人化訓練區間與疲勞狀態（PMC 圖）
-- **Success signal**: FTP 估算值與 WKO5 誤差 ±5W 以內
-- **Out of scope**: Coros 自動同步
+**Milestone 3: FTP 估算 + CTL/ATL/TSB** ✅
+- **User can now**: 系統從 Coros 登入自動帶入 FTP/LTHR，計算 TSS，顯示 PMC
+- **Success signal**: FTP 數值與 Coros app 顯示一致；PMC 圖表有資料
 
-**Milestone 4: Coros 自動同步**
-- **User can now**: 訓練結束後按一下 sync，FIT 自動下載到 `~/.wko5coach/fits/`
-- **Success signal**: 連續 5 次訓練均自動同步成功
+**Milestone 4: Coros 同步 + PMC Web UI** ✅
+- **User can now**: 登入 Coros、按 Sync、FIT 自動下載，PMC 圖表即時更新
+- **Verified**: 1088 筆活動成功匯入；PMC 有 157 個資料點（2025-12 ~ 2026-05）
+- **Out of scope**: iLevels
+
+**Milestone 4.5: FTP/LTHR 設定頁面**
+- **User can now**: 在 UI 上手動設定或覆蓋 FTP、LTHR，選擇 TSS 計算公式（Coggan / WKO5 BikeScore / hrTSS）
+- **Success signal**: 修改 FTP 後，PMC 圖表自動重新計算
 - **Out of scope**: iLevels
 
 **Milestone 5: Activity Detail 頁面**
-- **User can now**: 點開任一活動，看到功率時間序列、當次 MMP 曲線、Time in Zones、心率、配速、訓練影響分數等圖表
-- **Success signal**: 所有核心圖表與 WKO5「WKO5 Workout View」view 對應圖表數值一致
+- **User can now**: 點開任一活動，看到功率時間序列、當次 MMP 曲線、Time in Zones、心率、配速等圖表
 - **Source reference**: `~/WKO5/Views/Workout/WKO5 Workout View.wko5chart`（逆向取得圖表定義）
-- **Out of scope**: iLevels（Milestone 6 才計算）；跑步動態（Running Dynamics）列為 Could
+- **Out of scope**: iLevels
 
 **Milestone 6: iLevels / Training Levels**
 - **User can now**: 個人化功率區間自動計算，不需手動設定
 - **Success signal**: 與 WKO5 iLevels 結果一致（對照同一份資料）
-- **Out of scope**: N/A
 
 **Milestone 7: TrainingPeaks 整合（可選）**
 - **User can now**: 從 TP 帳號一鍵匯入歷史訓練資料（需 premium）
 - **Success signal**: 成功匯入 TP 歷史資料
-- **Out of scope**: N/A
 
 ---
 
@@ -172,32 +176,46 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統 API sync 觸發
 | AI 介面 | 對話式（Claude API） | 靜態報告 | 使用者明確偏好 |
 | 算法參考來源 | 逆向 PowerKitOSX + GoldenCheetah | 純自研 | GoldenCheetah 有開源實作可交叉驗證 |
 | WKO5 依賴 | 完全獨立 | 讀 ~/WKO5/ | 分開操作，各自獨立，不互動 |
+| TSS 公式 | (NP/FTP)²×dur/3600×100（Coggan） | WKO5 BikeScore、hrTSS | 暫用標準公式；待 Milestone 4.5 改為可設定 |
+| FTP 來源 | Coros 登入回應自動匯入 + 可手動覆蓋 | 純手動 | Coros profile 有 FTP 值，自動帶入減少摩擦 |
 | 不公開 | 個人工具 | 開源 | 法律考量（逆向商業軟體） |
 
 ---
 
 ## Research Summary
 
-**Coros 非官方 API 現況（2026-05-15）**
-- API base: `https://teamcnapi.coros.com`（Training Hub），`https://apieu.coros.com`（mobile）
-- 認證：email + MD5(password)
-- 活動列表：支援分頁、日期篩選
-- FIT 下載：有社群確認，`xballoy/coros-api` 已實作 bulk export
-- 開源參考：`xballoy/coros-api`（TypeScript/NestJS）、`cygnusb/coros-mcp`（Python）、`CuberL/coros-mcp`（Python）
-- 風險：非官方 API，可能隨時變更；建議追蹤社群更新
+**Coros 非官方 API（已驗證，2026-05-15）**
 
-**TrainingPeaks API（已逆向，2026-05-15）**
+| 面向 | 詳情 |
+|------|------|
+| 認證 endpoint | `POST https://teameuapi.coros.com/account/login` |
+| 認證 payload | `{"account": email, "accountType": 2, "pwd": md5(password)}` |
+| 成功判斷 | `result == "0000"`（非 `apiCode`） |
+| Token 位置 | `data.accessToken`（非 `result.accessToken`） |
+| Token TTL | 約 24 小時（登入回應無 tokenExpiry，固定加 24h） |
+| Region 偵測 | 台灣帳號：EU server 登入成功，資料 API 用 US server（`teamapi.coros.com`）；需動態偵測 |
+| API header | 所有資料請求需帶 `accessToken` + `yfheader: {"userId": "..."}` |
+| 活動列表 | `GET /activity/query?size=20&pageNumber=N&startDay=YYYYMMDD&endDay=YYYYMMDD` |
+| 活動列表結構 | `data.dataList`（非 `result.dataList`）；date 欄位為 YYYYMMDD 8 位整數 |
+| FIT 下載 | `POST /activity/detail/download?labelId=...&sportType=...&fileType=4` |
+| FTP/LTHR | 登入回應 `data.zoneData.ftp`、`data.zoneData.lthr`、`data.weight` |
+| 運動類型 | 100=cycling, 102=trail run, 105=hiking, 200=run, 300=swim, 400=triathlon, 402=strength, 9904=custom |
+
+**TrainingPeaks API（已逆向，保留可選）**
 - Password grant 不含 `client_id`（僅 refresh token 帶 `client_id=WKO5`）
 - FIT 下載需 premium/coach 帳號（目前帳號不符）
-- 保留為 Milestone 6 可選功能
+- 保留為 Milestone 7 可選功能
 
-**技術基礎現況**
-- FIT 解析：`fit_tool` 已整合，掃描 1011+ 筆可用
+**技術基礎現況（2026-05-15）**
+- FIT 解析：`fitparse` 已整合，解析 1088+ 筆
 - MMP 計算：算法已驗證
+- TSS：(NP/FTP)²×dur/3600×100，59 筆有功率資料的活動已計算
+- PMC：157 個資料點（2025-12-09 ~ 2026-05-14），CTL/ATL/TSB 正常
 - FastAPI + SQLite：已部署於 Docker（localhost:8000）
 
 ---
 
 *Generated: 2026-05-15*
-*Status: ACTIVE*
+*Last updated: 2026-05-15*
+*Status: ACTIVE — M4 complete, M4.5 next*
 *Source Linear Issue: N/A — standalone*
