@@ -2,6 +2,7 @@ import asyncio
 from pathlib import Path
 from typing import Optional
 
+import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -98,6 +99,15 @@ async def _import_one_file(
     db.add(wf)
     await db.flush()
 
+    if raw is not None:
+        # Elevation gain from altitude channel (sum of positive ascents)
+        if len(raw.altitude_m) > 1:
+            diffs = np.diff(raw.altitude_m)
+            elevation_gain = float(np.sum(diffs[diffs > 0]))
+            wf.elevation_gain_m = round(elevation_gain, 1)
+        elif "total_ascent" in raw.session:
+            wf.elevation_gain_m = float(raw.session["total_ascent"])
+
     if raw is not None and raw.has_power:
         # Get FTP from athlete settings if available
         from sqlalchemy import select as sel
@@ -124,5 +134,15 @@ async def _import_one_file(
         for dur, val in mmp.items():
             if val > 0:
                 db.add(MmpCache(workout_id=wf.id, channel="power", duration_s=dur, value=val))
+
+        # Intensity metrics for running workouts (seconds at or above FTP thresholds)
+        if raw.sport == "running" and ftp_w and ftp_w > 0:
+            power_arr = raw.power_w
+            hi_95 = float(np.sum(power_arr >= 0.95 * ftp_w))
+            hi_103 = float(np.sum(power_arr >= 1.03 * ftp_w))
+            if hi_95 > 0:
+                db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_95pct_s", value=hi_95))
+            if hi_103 > 0:
+                db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_103pct_s", value=hi_103))
 
     return wf
