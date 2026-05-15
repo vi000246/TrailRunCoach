@@ -1,0 +1,16 @@
+.git
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.venv
+venv
+frontend/node_modules
+frontend/dist
+node_modules
+.env
+*.db
+docs
+.claude
+start.sh

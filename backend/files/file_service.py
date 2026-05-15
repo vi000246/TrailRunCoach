@@ -53,7 +53,13 @@ async def scan_and_import(db: AsyncSession, athlete_id: int, athlete_dir: str) -
     return {"new": new_count, "skipped": skip_count, "errors": error_count, "total": len(files)}
 
 
-async def _import_one_file(db: AsyncSession, athlete_id: int, path: Path) -> Optional[WorkoutFile]:
+async def _import_one_file(
+    db: AsyncSession,
+    athlete_id: int,
+    path: Path,
+    source: str = "local",
+    tp_workout_id: Optional[int] = None,
+) -> Optional[WorkoutFile]:
     """Parse one file, compute metrics, persist to DB."""
     fmt = path.suffix.lower().lstrip(".")
 
@@ -84,7 +90,8 @@ async def _import_one_file(db: AsyncSession, athlete_id: int, path: Path) -> Opt
         sport=sport,
         duration_s=duration_s,
         total_distance_m=total_distance_m,
-        source="local",
+        source=source,
+        tp_workout_id=tp_workout_id,
     )
     db.add(wf)
     await db.flush()

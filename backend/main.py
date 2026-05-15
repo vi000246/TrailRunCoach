@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -17,9 +18,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WKO5 Coach", lifespan=lifespan)
 
+_cors_origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://localhost:8000",
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
