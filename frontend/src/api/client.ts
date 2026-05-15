@@ -78,3 +78,46 @@ export interface SettingsUpdatePayload {
   lthr?: number
   weight_kg?: number
 }
+
+export interface TimeseriesPoint {
+  t: number
+  power?: number
+  hr?: number
+  cadence?: number
+}
+
+export interface TimeseriesResponse {
+  workout_id: number
+  duration_s: number
+  sample_rate_s: number
+  series: TimeseriesPoint[]
+}
+
+export interface ZoneEntry {
+  zone: number
+  name: string
+  min_w?: number
+  max_w?: number | null
+  min_bpm?: number
+  max_bpm?: number | null
+  time_s: number
+}
+
+export interface ZonesResponse {
+  workout_id: number
+  ftp: number
+  lthr: number
+  power_zones: ZoneEntry[]
+  hr_zones: ZoneEntry[]
+}
+
+export interface WeeklyEntry {
+  week_start: string
+  tss: number
+  hours: number
+  count: number
+}
+
+export interface WeeklyResponse {
+  weeks: WeeklyEntry[]
+}

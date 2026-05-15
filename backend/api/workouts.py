@@ -6,11 +6,39 @@ from datetime import date
 from typing import Optional
 
 from backend.db.database import get_db
-from backend.db.models import WorkoutFile, WorkoutMetric, MmpCache
+from backend.db.models import WorkoutFile, WorkoutMetric, MmpCache, AthleteSettings
 from backend.engine.algorithms.mmp import compute_mmp
 from backend.files.fit_reader import parse_fit
 
 router = APIRouter(prefix="/api/v1/workouts", tags=["workouts"])
+
+POWER_ZONES_DEF = [
+    (1, "Recovery",      0.00, 0.55),
+    (2, "Endurance",     0.55, 0.75),
+    (3, "Tempo",         0.75, 0.90),
+    (4, "Threshold",     0.90, 1.05),
+    (5, "VO2max",        1.05, 1.20),
+    (6, "Anaerobic",     1.20, 1.50),
+    (7, "Neuromuscular", 1.50, 99.0),
+]
+
+HR_ZONES_DEF = [
+    (1, "Recovery",  0.00, 0.85),
+    (2, "Aerobic",   0.85, 0.90),
+    (3, "Tempo",     0.90, 0.95),
+    (4, "Threshold", 0.95, 1.00),
+    (5, "VO2max",    1.00, 99.0),
+]
+
+
+async def _get_workout_or_404(workout_id: int, db: AsyncSession) -> WorkoutFile:
+    result = await db.execute(
+        select(WorkoutFile).where(WorkoutFile.id == workout_id).options(selectinload(WorkoutFile.metrics))
+    )
+    w = result.scalar_one_or_none()
+    if not w:
+        raise HTTPException(404, "WORKOUT_NOT_FOUND")
+    return w
 
 
 @router.get("")
@@ -87,6 +115,109 @@ async def get_workout_mmp(workout_id: int, channel: str = "power", db: AsyncSess
 
     curve = {str(d): v for d, v in mmp.items() if v > 0}
     return {"workout_id": workout_id, "channel": channel, "curve": curve, "cached": False}
+
+
+@router.get("/{workout_id}/timeseries")
+async def get_workout_timeseries(workout_id: int, db: AsyncSession = Depends(get_db)):
+    w = await _get_workout_or_404(workout_id, db)
+    if w.file_format != "fit":
+        raise HTTPException(422, "NO_FIT_FILE")
+    try:
+        raw = parse_fit(w.file_path)
+    except Exception as e:
+        raise HTTPException(422, f"PARSE_ERROR: {e}")
+
+    time_s = raw.time_s if raw.time_s is not None and len(raw.time_s) > 0 else []
+    power_w = raw.power_w if raw.power_w is not None else []
+    hr_bpm = raw.heart_rate_bpm if raw.heart_rate_bpm is not None else []
+    cadence = raw.cadence_rpm if raw.cadence_rpm is not None else []
+
+    n = len(time_s)
+    if n == 0:
+        return {"workout_id": workout_id, "duration_s": 0, "sample_rate_s": 1, "series": []}
+
+    step = max(1, n // 1800)
+    series = []
+    for i in range(0, n, step):
+        point: dict = {"t": int(time_s[i])}
+        if i < len(power_w) and power_w[i] is not None:
+            point["power"] = round(float(power_w[i]))
+        if i < len(hr_bpm) and hr_bpm[i] is not None:
+            point["hr"] = round(float(hr_bpm[i]))
+        if i < len(cadence) and cadence[i] is not None:
+            point["cadence"] = round(float(cadence[i]))
+        series.append(point)
+
+    return {
+        "workout_id": workout_id,
+        "duration_s": int(time_s[-1]) if len(time_s) > 0 else 0,
+        "sample_rate_s": step,
+        "series": series,
+    }
+
+
+@router.get("/{workout_id}/zones")
+async def get_workout_zones(workout_id: int, db: AsyncSession = Depends(get_db)):
+    w = await _get_workout_or_404(workout_id, db)
+
+    settings_result = await db.execute(
+        select(AthleteSettings)
+        .where(AthleteSettings.athlete_id == w.athlete_id)
+        .order_by(AthleteSettings.effective_date.desc())
+    )
+    settings = settings_result.scalars().first()
+    ftp = float(settings.ftp_w) if settings and settings.ftp_w else 200.0
+    lthr = int(settings.lthr) if settings and settings.lthr else 165
+
+    if w.file_format != "fit":
+        return {"workout_id": workout_id, "ftp": ftp, "lthr": lthr, "power_zones": [], "hr_zones": []}
+
+    try:
+        raw = parse_fit(w.file_path)
+    except Exception as e:
+        raise HTTPException(422, f"PARSE_ERROR: {e}")
+
+    power_w = list(raw.power_w) if raw.power_w is not None else []
+    hr_bpm = list(raw.heart_rate_bpm) if raw.heart_rate_bpm is not None else []
+
+    def count_zones(values: list, zones: list, threshold: float) -> dict:
+        counts: dict[int, int] = {z[0]: 0 for z in zones}
+        for v in values:
+            if v is None or (isinstance(v, float) and v != v):  # skip None/NaN
+                continue
+            ratio = float(v) / threshold
+            for z_id, _, lo, hi in zones:
+                if lo <= ratio < hi:
+                    counts[z_id] += 1
+                    break
+        return counts
+
+    pw_counts = count_zones(power_w, POWER_ZONES_DEF, ftp)
+    hr_counts = count_zones(hr_bpm, HR_ZONES_DEF, float(lthr))
+
+    return {
+        "workout_id": workout_id,
+        "ftp": ftp,
+        "lthr": lthr,
+        "power_zones": [
+            {
+                "zone": z, "name": n,
+                "min_w": round(lo * ftp),
+                "max_w": round(hi * ftp) if hi < 10 else None,
+                "time_s": pw_counts[z],
+            }
+            for z, n, lo, hi in POWER_ZONES_DEF
+        ],
+        "hr_zones": [
+            {
+                "zone": z, "name": n,
+                "min_bpm": round(lo * lthr),
+                "max_bpm": round(hi * lthr) if hi < 10 else None,
+                "time_s": hr_counts[z],
+            }
+            for z, n, lo, hi in HR_ZONES_DEF
+        ],
+    }
 
 
 def _workout_summary(w: WorkoutFile) -> dict:
