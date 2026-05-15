@@ -41,14 +41,69 @@
 - 包含：sport name、ISO 8601 timestamp、sensor channels（二進制壓縮）
 - GoldenCheetah 有 `WkoRideFile` 開源解析器可作為參考
 
-### TrainingPeaks API（從 PowerKitOSX strings 提取）
-- OAuth token: `https://oauth.trainingpeaks.com/oauth/token`
-- Base: `https://tpapi.trainingpeaks.com/`
-- `GET fitness/v1/athletes/{id}/settings`
-- `GET fitness/v2/athletes/{id}/workouts/changed?date={date}&searchDirection=After&pageSize={n}&page={n}`
-- `GET fitness/v6/athletes/{id}/workouts/{id}/detaildata`
-- `GET fitness/v6/athletes/{id}/workouts/{id}/filedata/{filename}` ← FIT 檔下載
-- `GET metrics/v2/athletes/{id}/timedmetrics/{from}/{to}`
+### TrainingPeaks API（從 PowerKitOSX strings + nm 提取，已實作驗證 2026-05-15）
+
+#### OAuth 認證流程
+
+**密碼授權（初次登入）** — 完整 body 字串取自 binary 字串常數：
+```
+POST https://oauth.trainingpeaks.com/oauth/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&username={u}&password={p}&scope=fitness+baseactivity+users+metrics+software+groundcontrol
+```
+重要：**password grant 不含 client_id / client_secret**（binary 中 `&client_id=` 只出現在 refresh flow）。
+Scope 使用 `+` 作為分隔符（literal，不是 %20-encoded 空格）。
+
+**Token 刷新** — binary 中的完整 format string：
+```
+grant_type=refresh_token&refresh_token={t}&client_id=WKO5&client_secret=
+```
+client_secret 為空字串（`=` 後無值）。
+
+**Premium 限制** — binary 字串：`"Download is allowed only from premium and coach accounts."`
+只有 premium 或 coach 帳號可以下載 FIT 檔。
+
+#### REST Endpoints（format strings from binary）
+
+```
+https://tpapi.trainingpeaks.com/                                           ← Base URL
+users/v3/user                                                               ← 取得用戶資料 + athletes
+fitness/v1/athletes/{id}/settings                                           ← FTP, weight, LTHR
+fitness/v2/athletes/{id}/workouts/changed?date={YYYY-MM-DD}&searchDirection=After&pageSize={n}&page={n}
+fitness/v6/athletes/{id}/workouts/{wid}/detaildata                          ← 含 workoutDeviceFileInfos
+fitness/v6/athletes/{id}/workouts/{wid}/filedata/{fileName}                 ← FIT 下載（base64+gzip）
+metrics/v2/athletes/{id}/timedmetrics/{YYYY-MM-DD}/{YYYY-MM-DD}
+software/v1/trial | activate | deactivate | activations/validate | activations
+groundcontrol/v1/elevations
+```
+
+#### JSON 回應結構（從 binary string literals 確認）
+
+**users/v3/user**：
+```json
+{ "user": { "userId": int, "userName": str, "userType": str,
+            "athletes": [{ "id": int }], "premium": bool,
+            "firstName": str, "lastName": str } }
+```
+
+**workouts/changed**（workoutDay / startTime / workoutId）：
+```json
+[{ "workoutId": 12345, "workoutDay": "2026-05-14", "startTime": "..." }]
+```
+
+**workouts/{wid}/detaildata**（關鍵欄位：`workoutDeviceFileInfos` 非 `files`）：
+```json
+{ "workoutId": int, "athleteId": int,
+  "workoutDeviceFileInfos": [{ "fileName": "Device.fit", "fileSystemId": int }] }
+```
+
+**workouts/{wid}/filedata/{fileName}**（base64-of-gzip，需 inflate）：
+```json
+{ "data": "<base64-encoded-gzip-compressed-FIT-bytes>" }
+```
+解碼流程（對應 binary symbol `b64decode` + `Error inflating device file %s`）：
+`JSON.data` → base64 decode → zlib/gzip inflate → raw `.fit` bytes
 
 ### 完整算法目錄（從 PKExpressionParser nm 提取，~100 個函式）
 
@@ -544,21 +599,29 @@ data: {"new_workouts": 23, "errors": 0, "duration_s": 12.4}
 
 ## Integration Points
 
-### TrainingPeaks OAuth2 Flow
+### TrainingPeaks OAuth2 Flow（已實作 — ROPC + 自動刷新）
+
+WKO5 使用 **ROPC (Resource Owner Password Credentials)** flow，不做 redirect：
 
 ```
-User → GET /api/v1/auth/tp/login
-     → redirect to https://oauth.trainingpeaks.com/oauth/authorize
-           ?client_id={}&response_type=code&scope=ATHLETE_READ WORKOUT_READ
-     → TP login page
-     → redirect to /api/v1/auth/tp/callback?code={}
-     → POST https://oauth.trainingpeaks.com/oauth/token
-           {grant_type: authorization_code, code: {}, redirect_uri: {}}
-     → store {access_token, refresh_token, expires_in} in sync_state table
-     → redirect to frontend /?sync=authenticated
+User → POST /api/v1/auth/tp/login { username, password, athlete_id }
+     → backend: POST https://oauth.trainingpeaks.com/oauth/token
+           body: grant_type=password&username={}&password={}
+                 &scope=fitness+baseactivity+users+metrics+software+groundcontrol
+           (no client_id — matches WKO5 binary exactly)
+     → GET https://tpapi.trainingpeaks.com/users/v3/user (Bearer token)
+     → extract user.athletes[0].id → store as tp_athlete_id
+     → persist {access_token, refresh_token, expires_at} to sync_state (SQLite)
+     → return { authenticated, tp_athlete_id, athletes, user_type, premium, can_download }
 ```
 
-Token 自動刷新：每次 TP API 呼叫前檢查 `tp_token_expires`，過期則使用 `refresh_token` 取新 token。
+Token 刷新（每次 API 呼叫前自動執行，提前 5 分鐘刷新）：
+```
+POST https://oauth.trainingpeaks.com/oauth/token
+body: grant_type=refresh_token&refresh_token={t}&client_id=WKO5&client_secret=
+```
+
+**Premium 限制**：download 需要 premium 或 coach 帳號，`can_download` 欄位表示。
 
 ### WKO5 File Coexistence
 
@@ -662,7 +725,30 @@ WKO5reverse/
 ## Open Questions
 
 - [ ] `.wko4` 中是否包含完整 1-second power channel，還是只有 lap/summary data？（影響是否可以不下載 FIT）
-- [ ] TrainingPeaks `fitness/v6` 的 FIT filedata endpoint 需要特殊 scope 嗎？（需實際測試 OAuth）
+- [x] ~~TrainingPeaks `fitness/v6` 的 FIT filedata endpoint 需要特殊 scope 嗎？~~ **已解決**：scope=`fitness+baseactivity+users+metrics+software+groundcontrol`（從 binary 逆向確認）；filedata 回應為 `{"data": "<base64-gzip>"}` 格式
+- [x] ~~OAuth 的 client_id 和 grant_type 細節？~~ **已解決**：password grant **不含** client_id；refresh grant 用 `client_id=WKO5&client_secret=`
+- [x] ~~filedata endpoint 回傳原始 bytes 還是編碼格式？~~ **已解決**：JSON `{"data": base64(gzip(fit))}` — 需 base64 decode 再 zlib inflate
+- [x] ~~users/v3/user 回應結構？~~ **已解決**：`{"user": {"userId", "userType", "athletes":[{"id"}], "premium"}}`
+- [x] ~~`workoutDeviceFileInfos` vs `files`？~~ **已解決**：binary 用 `workoutDeviceFileInfos`（含 `fileName` + `fileSystemId`）
 - [ ] iLevels（PKCogganOptimizedPowerLevels）的 Dmax 計算是否在 GoldenCheetah 有開源實作？
 - [ ] WKO5 的 `sport()` expression function 如何解析多運動類型 athlete（cycling+running）？
 - [ ] `react-grid-layout` 的 breakpoint 在小螢幕（13" MacBook）是否需要調整 col count？
+- [ ] TP premium 帳號驗證：若帳號不是 premium/coach，`can_download: false`，前端應顯示升級提示
+
+## TP Sync 已知行為（從逆向 + 實作確認，2026-05-15）
+
+| 項目 | 確認值 |
+|------|--------|
+| OAuth URL | `https://oauth.trainingpeaks.com/oauth/token` |
+| API Base | `https://tpapi.trainingpeaks.com/` |
+| Password grant client_id | **無**（password grant 不含此欄位）|
+| Refresh grant client_id | `WKO5` |
+| Refresh grant client_secret | `""` (空字串) |
+| Scope（literal）| `fitness+baseactivity+users+metrics+software+groundcontrol` |
+| User endpoint | `users/v3/user` |
+| Athletes list | `user.athletes[*].id` |
+| Workouts list | `fitness/v2/.../workouts/changed?...&searchDirection=After&pageSize=20` |
+| Detail JSON key | `workoutDeviceFileInfos[*].fileName`（非 `files`）|
+| File download format | JSON `{"data": base64(gzip(fit_bytes))}` |
+| HTTP library | libcurl + libz（macOS system）|
+| Premium gate | Binary 字串：`"Download is allowed only from premium and coach accounts."` |

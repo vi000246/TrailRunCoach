@@ -18,17 +18,21 @@ class LoginRequest(BaseModel):
 @router.post("/tp/login")
 async def tp_login_password(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     """
-    Authenticate with TrainingPeaks using username/password.
-    Uses WKO5's OAuth2 ROPC flow (client_id=WKO5, grant_type=password).
-    Credentials are not stored — only the resulting access/refresh tokens.
+    Authenticate with TrainingPeaks using WKO5's exact OAuth2 ROPC flow:
+      grant_type=password (no client_id) → users/v3/user → persist tokens only.
+    Credentials are NEVER stored.
+    Returns: { authenticated, tp_athlete_id, athletes, user_type, premium, can_download }
+    Note: download requires premium or coach account.
     """
     try:
         result = await login_password(body.username, body.password, db, body.athlete_id)
         return result
     except Exception as e:
         detail = str(e)
-        if "401" in detail or "Unauthorized" in detail:
-            raise HTTPException(401, "TP_LOGIN_FAILED: Invalid username or password")
+        if "invalid_grant" in detail or "401" in detail or "Unauthorized" in detail:
+            raise HTTPException(401, f"TP_LOGIN_FAILED: {detail}")
+        if "400" in detail:
+            raise HTTPException(400, f"TP_LOGIN_BAD_REQUEST: {detail}")
         raise HTTPException(502, f"TP_LOGIN_ERROR: {detail}")
 
 

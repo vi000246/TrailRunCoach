@@ -1,0 +1,27 @@
+services:
+  wko5coach:
+    build: .
+    container_name: wko5coach
+    ports:
+      - "8000:8000"
+    environment:
+      # Keep HOME matching the host so Path.home() resolves the same paths that are stored in SQLite
+      - HOME=${HOME}
+    volumes:
+      - ${HOME}/.wko5coach:${HOME}/.wko5coach
+      - ${HOME}/WKO5:${HOME}/WKO5
+    restart: unless-stopped
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: unless-stopped
+
+volumes:
+  portainer_data:

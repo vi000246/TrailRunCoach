@@ -114,7 +114,7 @@ FIT 檔 → 解析 → 計算 MMP → 存入本機 DB → 問 AI「本週訓練�
 | 2 | AI 對話介面 | 能用中文問「本週訓練強度」並獲得數據驅動的回答 | pending | 1 | - | - |
 | 3 | FTP 估算 + iLevels | 能自動算出訓練區間，不需手動設定 | pending | 1 | - | - |
 | 4 | Coros 自動同步 | 訓練後資料自動進系統，無需手動匯入 | pending | 1 | - | - |
-| 5 | TrainingPeaks API 整合 | 歷史資料可從 TP 帳號匯入 | pending | 1 | - | - |
+| 5 | TrainingPeaks API 整合 | 歷史資料可從 TP 帳號匯入 | **in progress** | 1 | wko5-web-full-clone.spec.md | - |
 
 ### Milestone Details
 
@@ -170,9 +170,17 @@ FIT 檔 → 解析 → 計算 MMP → 存入本機 DB → 問 AI「本週訓練�
 - python-fitparse / fit_tool：FIT 解析開源工具
 - Intervals.icu：雲端平台，有部分公開 API
 
+**TrainingPeaks API 逆向完成（2026-05-15）**
+
+strings + nm 靜態分析 PowerKitOSX.framework 已完整提取 TP sync 機制，無需 mitmproxy：
+- OAuth ROPC flow：`grant_type=password`（**不含** client_id），scope = `fitness+baseactivity+users+metrics+software+groundcontrol`（使用 `+` 分隔符）
+- Refresh：`grant_type=refresh_token&client_id=WKO5&client_secret=`（empty secret）
+- FIT 下載：`fitness/v6/athletes/{id}/workouts/{wid}/filedata/{fileName}` → JSON `{"data": base64(gzip(fit))}` → base64 → zlib inflate → 原始 FIT
+- 關鍵發現：`workoutDeviceFileInfos`（非 `files`）；premium/coach 帳號限制
+- 實作位置：`backend/sync/tp_client.py`（已完整實作並語法驗證）
+
 **技術待確認**
 - Coros API：社群有非官方逆向，需進一步研究
-- TrainingPeaks API：需流量攔截（mitmproxy + SSL pinning bypass）分析
 
 ---
 
