@@ -9,6 +9,7 @@ from sqlalchemy import select
 from backend.db.database import get_db
 from backend.db.models import SyncState
 from backend.sync.tp_client import sync_workouts, fetch_tp_settings
+from backend.sync import coros_client
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
 
@@ -29,6 +30,19 @@ async def start_sync(
     """
     async def generate():
         async for event in sync_workouts(db, athlete_id, since=since, page_size=page_size):
+            yield {"event": "sync_progress", "data": json.dumps(event)}
+    return EventSourceResponse(generate())
+
+
+@router.post("/coros/start")
+async def start_coros_sync(
+    athlete_id: int = 1,
+    since: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger Coros sync. Streams progress events via Server-Sent Events."""
+    async def generate():
+        async for event in coros_client.sync_workouts(db, athlete_id, since=since):
             yield {"event": "sync_progress", "data": json.dumps(event)}
     return EventSourceResponse(generate())
 
