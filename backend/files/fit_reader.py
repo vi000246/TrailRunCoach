@@ -1,9 +1,10 @@
 """
 FIT file parser for Coros and Garmin devices.
 
-Uses python-fitparse to decode binary FIT Protocol 2.0 files.
-Extracts standard channels: power, time, heart_rate, cadence, distance, altitude.
-Developer fields (Coros extensions) are parsed if present.
+Primary: python-fitparse (strict FIT standard compliance).
+Fallback: fitdecode with ErrorHandling.IGNORE — handles Coros 'other' sport FIT files
+that use a non-standard uint32 field size of 1 byte instead of 4 bytes. This is a
+systematic Coros firmware bug affecting all running workouts saved as 'other' type.
 """
 
 import os
@@ -69,25 +70,31 @@ def parse_fit(path: str) -> RawWorkout:
     """
     Parse a .fit file and return a RawWorkout.
 
-    Raises:
-        ImportError: if fitparse is not installed
-        FileNotFoundError: if path does not exist
-        ValueError: if file is not valid FIT format
-    """
-    try:
-        import fitparse
-    except ImportError:
-        raise ImportError(
-            "fitparse not installed. Run: pip install fitparse"
-        )
+    Tries fitparse first; falls back to fitdecode (lenient) for Coros 'other'
+    sport files that have a non-standard uint32 field size.
 
+    Raises:
+        FileNotFoundError: if path does not exist
+        ValueError: if file cannot be parsed by either library
+    """
     if not os.path.exists(path):
         raise FileNotFoundError(f"FIT file not found: {path}")
 
     try:
-        fit = fitparse.FitFile(path)
+        return _parse_fit_fitparse(path)
+    except Exception:
+        pass
+
+    try:
+        return _parse_fit_fitdecode(path)
     except Exception as e:
-        raise ValueError(f"Invalid FIT file: {e}")
+        raise ValueError(f"Cannot parse FIT file (tried fitparse + fitdecode): {e}")
+
+
+def _parse_fit_fitparse(path: str) -> RawWorkout:
+    import fitparse
+
+    fit = fitparse.FitFile(path)
 
     records: list[dict] = []
     laps: list[dict] = []
@@ -121,6 +128,95 @@ def parse_fit(path: str) -> RawWorkout:
             for f in msg.fields:
                 if f.name == "time_created" and f.value:
                     start_time = start_time or f.value
+
+    if not records:
+        return RawWorkout(
+            source_file=path,
+            sport=sport,
+            start_time=start_time,
+            device=device_name,
+            session=session,
+            laps=laps,
+        )
+
+    return _build_raw_workout(
+        records=records,
+        source_file=path,
+        sport=sport,
+        start_time=start_time,
+        device=device_name,
+        laps=laps,
+        session=session,
+    )
+
+
+def _parse_fit_fitdecode(path: str) -> RawWorkout:
+    """Lenient fallback parser for Coros non-standard FIT files."""
+    import fitdecode
+
+    records: list[dict] = []
+    laps: list[dict] = []
+    session: dict = {}
+    device_name: Optional[str] = None
+    sport = "unknown"
+    start_time: Optional[datetime] = None
+
+    def _get(frame, field_name):
+        try:
+            if frame.has_field(field_name):
+                return frame.get_value(field_name)
+        except Exception:
+            pass
+        return None
+
+    with fitdecode.FitReader(path, error_handling=fitdecode.ErrorHandling.IGNORE) as fit:
+        for frame in fit:
+            if not isinstance(frame, fitdecode.FitDataMessage):
+                continue
+            name = frame.name
+
+            if name == "record":
+                ts = _get(frame, "timestamp")
+                if ts is None:
+                    continue
+                rec = {"timestamp": ts}
+                for field_name in ("power", "heart_rate", "cadence", "distance", "altitude", "speed"):
+                    v = _get(frame, field_name)
+                    if v is not None:
+                        rec[field_name] = float(v)
+                records.append(rec)
+
+            elif name == "lap":
+                lap = {}
+                for fd in frame:
+                    if fd.value is not None:
+                        lap[fd.name] = fd.value
+                laps.append(lap)
+
+            elif name == "session":
+                for fd in frame:
+                    if fd.value is not None:
+                        session[fd.name] = fd.value
+                if "sport" in session:
+                    sport = _normalize_sport(str(session["sport"]))
+                if "start_time" in session and session["start_time"]:
+                    start_time = session["start_time"]
+
+            elif name == "sport":
+                sp = _get(frame, "sport")
+                if sp and sport == "unknown":
+                    sport = _normalize_sport(str(sp))
+
+            elif name == "device_info":
+                mfr = _get(frame, "manufacturer") or ""
+                prod = _get(frame, "product_name") or _get(frame, "product") or ""
+                if mfr or prod:
+                    device_name = device_name or f"{mfr} {prod}".strip()
+
+            elif name == "file_id":
+                tc = _get(frame, "time_created")
+                if tc:
+                    start_time = start_time or tc
 
     if not records:
         return RawWorkout(

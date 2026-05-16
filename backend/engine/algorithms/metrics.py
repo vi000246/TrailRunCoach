@@ -13,6 +13,29 @@ from datetime import date, timedelta
 from typing import Optional
 
 
+def compute_run_ftp_from_mmp(mmp_points: dict[int, float]) -> Optional[float]:
+    """
+    Estimate running FTP (Critical Power) from MMP curve using a 2-parameter CP model.
+
+    WKO5 formula: athleterange(date-89, date, ftp(meanmax(runpower)))
+
+    Model: P(t) = CP + W'/t  →  fit to MMP points between 3–30 minutes.
+    Returns CP (watts), which is the running FTP estimate.
+    """
+    # Use durations in the 3–30 min range for a reliable fit
+    fit_durations = [d for d in sorted(mmp_points) if 180 <= d <= 1800 and mmp_points[d] > 0]
+    if len(fit_durations) < 2:
+        return None
+
+    # P(t) = CP + W'/t  →  P(t) × t = CP × t + W'
+    # This is linear in (t, 1): [t, 1] @ [CP, W'] = P(t)*t
+    A = np.array([[d, 1.0] for d in fit_durations])
+    b = np.array([mmp_points[d] * d for d in fit_durations])
+    result = np.linalg.lstsq(A, b, rcond=None)
+    cp, _ = result[0]
+    return round(float(cp), 1) if cp > 0 else None
+
+
 def normalized_power(power: np.ndarray, sample_rate_s: float = 1.0) -> float:
     """
     Normalized Power (NP).
@@ -179,6 +202,8 @@ def compute_run_pmc(
     ctl_tau: float = 42.0,
     atl_tau: float = 7.0,
     ramp_days: int = 7,
+    initial_ctl: float = 0.0,
+    initial_atl: float = 0.0,
 ) -> list[dict]:
     """
     Run-specific PMC.
@@ -192,8 +217,10 @@ def compute_run_pmc(
     tss_dict = {d: t for d, t in run_tss_series}
     start_date = min(d for d, _ in run_tss_series)
     end_date = max(d for d, _ in run_tss_series)
-    ctl = atl = 0.0
-    prev_ctl = prev_atl = 0.0
+    ctl = initial_ctl
+    atl = initial_atl
+    prev_ctl = initial_ctl
+    prev_atl = initial_atl
     history: list[dict] = []
     current = start_date
     while current <= end_date:
@@ -222,6 +249,26 @@ def compute_run_pmc(
         })
         current += timedelta(days=1)
     return history
+
+
+def pace_rtss(
+    distance_m: Optional[float],
+    duration_s: Optional[float],
+    threshold_pace_s_per_m: Optional[float],
+) -> float:
+    """
+    Simplified pace-based running TSS (no elevation correction).
+    IF = threshold_pace_s_per_m / avg_pace_s_per_m
+    rTSS = (duration_s / 3600) * IF^2 * 100
+    """
+    if not distance_m or not duration_s or not threshold_pace_s_per_m:
+        return 0.0
+    if distance_m <= 0 or duration_s <= 0 or threshold_pace_s_per_m <= 0:
+        return 0.0
+    avg_pace_s_per_m = duration_s / distance_m
+    intensity_factor = threshold_pace_s_per_m / avg_pace_s_per_m
+    rtss = (duration_s / 3600.0) * (intensity_factor ** 2) * 100.0
+    return round(rtss, 1)
 
 
 def compute_intensity_load_series(

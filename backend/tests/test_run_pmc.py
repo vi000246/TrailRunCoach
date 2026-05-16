@@ -1,9 +1,9 @@
-import sys, os
+import sys, os, math
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 from datetime import date, timedelta
 import numpy as np
 import pytest
-from backend.engine.algorithms.metrics import compute_run_pmc, compute_intensity_load_series
+from backend.engine.algorithms.metrics import compute_run_pmc, compute_intensity_load_series, pace_rtss
 
 
 def _days(start: date, n: int, tss: float) -> list[tuple[date, float]]:
@@ -66,6 +66,57 @@ def test_endpoint_response_shapes():
     assert all(k in pmc[0] for k in ["date", "ctl", "atl", "tsb", "tss", "acwr", "daily_pct_ctl", "ramp_rate"])
     intensity = compute_intensity_load_series(series, tau=42)
     assert all(k in intensity[0] for k in ["date", "value"])
+
+
+def test_run_pmc_seeded_initial_ctl():
+    """compute_run_pmc with initial_ctl=50 starts CTL above the unseeded value on day 1."""
+    start = date(2025, 1, 1)
+    series = _days(start, 30, 50.0)
+    unseeded = compute_run_pmc(series)
+    seeded = compute_run_pmc(series, initial_ctl=50.0, initial_atl=30.0)
+    assert seeded[0]["ctl"] > unseeded[0]["ctl"]
+    # Day-1 CTL with seed=50: 50 + factor*(50-50) = 50 (no change since TSS=CTL)
+    ctl_factor = 1 - math.exp(-1 / 42.0)
+    expected_day1 = 50.0 + ctl_factor * (50.0 - 50.0)
+    assert seeded[0]["ctl"] == pytest.approx(expected_day1, rel=0.01)
+
+
+def test_run_pmc_seed_zero_is_backwards_compatible():
+    """Default seed=0 must produce same result as original behavior."""
+    start = date(2025, 1, 1)
+    series = _days(start, 30, 50.0)
+    new_result = compute_run_pmc(series, initial_ctl=0.0, initial_atl=0.0)
+    old_result = compute_run_pmc(series)
+    assert new_result == old_result
+
+
+def test_pace_rtss_basic():
+    """Run at exactly threshold pace → IF=1.0 → rTSS = duration_hours * 100."""
+    threshold_pace_s_per_m = 5.0
+    distance_m = 10_000.0
+    duration_s = 50_000.0  # 5.0 s/m = exactly threshold
+    result = pace_rtss(distance_m, duration_s, threshold_pace_s_per_m)
+    expected = (50_000.0 / 3600.0) * (1.0 ** 2) * 100.0
+    assert result == pytest.approx(expected, rel=0.01)
+
+
+def test_pace_rtss_faster_than_threshold():
+    """Faster pace → IF > 1.0 → rTSS uses IF^2 scaling."""
+    threshold_pace_s_per_m = 5.0
+    distance_m = 10_000.0
+    duration_s = 40_000.0  # 4.0 s/m — faster than threshold
+    result = pace_rtss(distance_m, duration_s, threshold_pace_s_per_m)
+    if_val = 5.0 / 4.0
+    expected = (40_000.0 / 3600.0) * (if_val ** 2) * 100.0
+    assert result == pytest.approx(expected, rel=0.01)
+
+
+def test_pace_rtss_zero_guard():
+    """pace_rtss returns 0.0 for any zero or None input."""
+    assert pace_rtss(0.0, 3600.0, 5.0) == 0.0
+    assert pace_rtss(1000.0, 0.0, 5.0) == 0.0
+    assert pace_rtss(1000.0, 3600.0, 0.0) == 0.0
+    assert pace_rtss(None, 3600.0, 5.0) == 0.0
 
 
 def test_intensity_time_calculation():

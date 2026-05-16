@@ -69,6 +69,9 @@ export interface AthleteSettingsResponse {
   ftp_w: number | null
   lthr: number | null
   weight_kg: number | null
+  threshold_pace_s_per_km: number | null
+  initial_ctl_run: number | null
+  initial_atl_run: number | null
   power_zones: PowerZone[]
   hr_zones: HrZone[]
 }
@@ -77,6 +80,17 @@ export interface SettingsUpdatePayload {
   ftp_w?: number
   lthr?: number
   weight_kg?: number
+  threshold_pace_s_per_km?: number
+  initial_ctl_run?: number
+  initial_atl_run?: number
+  effective_date?: string
+}
+
+export interface BackfillResult {
+  recomputed_power_tss: number
+  computed_rtss_pace: number
+  skipped_no_data: number
+  skipped_already_has_tss: number
 }
 
 export interface TimeseriesPoint {

@@ -28,6 +28,10 @@ class AthleteSettings(Base):
     ftp_w: Mapped[Optional[float]]
     weight_kg: Mapped[Optional[float]]
     lthr: Mapped[Optional[int]]
+    threshold_pace_s_per_km: Mapped[Optional[float]] = mapped_column(nullable=True)
+    run_ftp_w: Mapped[Optional[float]] = mapped_column(nullable=True)
+    initial_ctl_run: Mapped[Optional[float]] = mapped_column(nullable=True)
+    initial_atl_run: Mapped[Optional[float]] = mapped_column(nullable=True)
     athlete: Mapped["Athlete"] = relationship(back_populates="settings")
 
 

@@ -302,11 +302,27 @@ async def sync_workouts(
             dest.write_bytes(fit_bytes)
 
             try:
-                await _import_one_file(
+                wf = await _import_one_file(
                     db, athlete_id, dest,
                     source="coros",
                     coros_activity_id=label_id,
                 )
+                if wf is None:
+                    # FIT file is corrupt/unreadable — store a stub so we don't
+                    # re-download it on the next sync (coros_activity_id dup check).
+                    stub = WorkoutFile(
+                        athlete_id=athlete_id,
+                        file_path=str(dest),
+                        file_format="corrupt",
+                        source="coros",
+                        coros_activity_id=label_id,
+                        workout_date=act_date,
+                    )
+                    db.add(stub)
+                    await db.commit()
+                    log.warning("Corrupt FIT, stub recorded: %s", filename)
+                    yield {"status": "error", "activity_id": label_id, "error": "corrupt_fit"}
+                    continue
                 await db.commit()
                 total_downloaded += 1
                 yield {

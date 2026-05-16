@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAthleteSettings, useUpdateSettings, useRecomputePmc } from '../api/hooks'
+import { useAthleteSettings, useUpdateSettings, useRecomputePmc, useBackfillTss } from '../api/hooks'
 import type { PowerZone, HrZone } from '../api/client'
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Input } from '../components/ui/input'
@@ -57,7 +57,9 @@ export function ConfigPage() {
   const { data: settings, isLoading } = useAthleteSettings()
   const update = useUpdateSettings()
   const recompute = useRecomputePmc()
+  const backfill = useBackfillTss()
   const [toast, setToast] = useState<string | null>(null)
+  const [backfillResult, setBackfillResult] = useState<string | null>(null)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -84,6 +86,37 @@ export function ConfigPage() {
         onError: () => showToast('Save failed'),
       },
     )
+  }
+
+  const handleRunLoadSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const paceVal = fd.get('threshold_pace') as string
+    const ctlVal = fd.get('initial_ctl') as string
+    const atlVal = fd.get('initial_atl') as string
+    update.mutate(
+      {
+        threshold_pace_s_per_km: paceVal ? parseFloat(paceVal) : undefined,
+        initial_ctl_run: ctlVal ? parseFloat(ctlVal) : undefined,
+        initial_atl_run: atlVal ? parseFloat(atlVal) : undefined,
+      },
+      {
+        onSuccess: () => showToast('Run load settings saved'),
+        onError: () => showToast('Save failed'),
+      },
+    )
+  }
+
+  const handleBackfill = () => {
+    setBackfillResult(null)
+    backfill.mutate(undefined, {
+      onSuccess: (r) => {
+        setBackfillResult(
+          `完成：power TSS ${r.recomputed_power_tss} 筆，pace rTSS ${r.computed_rtss_pace} 筆，跳過 ${r.skipped_no_data} 筆（無資料），${r.skipped_already_has_tss} 筆已有 TSS`
+        )
+      },
+      onError: () => setBackfillResult('Backfill 失敗'),
+    })
   }
 
   return (
@@ -178,6 +211,88 @@ export function ConfigPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Run Training Load Settings</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <form key={`run-load-${settings?.effective_date ?? 'empty'}`} onSubmit={handleRunLoadSubmit} className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="threshold_pace">閾值配速 (s/km)</Label>
+                <Input
+                  id="threshold_pace"
+                  name="threshold_pace"
+                  type="number"
+                  step="0.1"
+                  min={120}
+                  max={600}
+                  defaultValue={settings?.threshold_pace_s_per_km ?? ''}
+                  placeholder="e.g. 285"
+                  className="w-full"
+                />
+                <p className="text-[10px] text-[#3e4e63]">用於計算無功率計跑步的 rTSS</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="initial_ctl">初始 CTL（長期負荷）</Label>
+                <Input
+                  id="initial_ctl"
+                  name="initial_ctl"
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={300}
+                  defaultValue={settings?.initial_ctl_run ?? ''}
+                  placeholder="e.g. 65.0"
+                  className="w-full"
+                />
+                <p className="text-[10px] text-[#3e4e63]">從 WKO5 複製以對齊歷史數據</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="initial_atl">初始 ATL（短期負荷）</Label>
+                <Input
+                  id="initial_atl"
+                  name="initial_atl"
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={300}
+                  defaultValue={settings?.initial_atl_run ?? ''}
+                  placeholder="e.g. 72.0"
+                  className="w-full"
+                />
+                <p className="text-[10px] text-[#3e4e63]">從 WKO5 複製以對齊歷史數據</p>
+              </div>
+            </div>
+            <Button type="submit" disabled={update.isPending} size="sm">
+              {update.isPending ? 'Saving...' : 'Save Run Load Settings'}
+            </Button>
+          </form>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="text-[10px] font-medium text-[#3e4e63] uppercase tracking-wide">補算歷史 TSS</div>
+            <p className="text-xs text-[#7d8fa6]">
+              補算所有缺少 TSS 的跑步活動：有功率計的用 power TSS，僅 GPS 的用 pace rTSS。
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleBackfill}
+                disabled={backfill.isPending}
+              >
+                {backfill.isPending ? '計算中...' : 'Backfill TSS'}
+              </Button>
+              {backfillResult && (
+                <span className="text-xs text-[#22c55e]">{backfillResult}</span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
