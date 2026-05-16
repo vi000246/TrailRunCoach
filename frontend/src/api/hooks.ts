@@ -3,7 +3,7 @@ import { api } from './client'
 import type {
   WorkoutList, WorkoutSummary, PmcPoint, MmpCurve,
   CorosLoginRequest, CorosLoginResponse, CorosStatus,
-  AthleteSettingsResponse, SettingsUpdatePayload,
+  AthleteSettingsResponse, SettingsUpdatePayload, BackfillResult,
   TimeseriesResponse, ZonesResponse, WeeklyResponse,
   RunLoadPoint, IntensityLoadPoint, RunVolumeResponse,
 } from './client'
@@ -161,5 +161,17 @@ export function useRunVolume(params?: { date_from?: string; date_to?: string }) 
   return useQuery<RunVolumeResponse>({
     queryKey: ['run_volume', params],
     queryFn: () => api.get('/analytics/run-volume', { params }).then(r => r.data),
+  })
+}
+
+export function useBackfillTss(athleteId = 1) {
+  const qc = useQueryClient()
+  return useMutation<BackfillResult, Error>({
+    mutationFn: () => api.post(`/athletes/${athleteId}/backfill-tss`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['run_load'] })
+      qc.invalidateQueries({ queryKey: ['run_volume'] })
+      qc.invalidateQueries({ queryKey: ['intensity_load'] })
+    },
   })
 }

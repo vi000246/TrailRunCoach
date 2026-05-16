@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Optional
 
 from backend.db.database import get_db
-from backend.db.models import WorkoutFile, WorkoutMetric
+from backend.db.models import WorkoutFile, WorkoutMetric, AthleteSettings
 from backend.engine.algorithms.metrics import compute_run_pmc, compute_intensity_load_series
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -70,6 +70,16 @@ async def run_load(
     if date_from is None:
         date_from = date_to - timedelta(days=365)
 
+    # Fetch seed values from latest settings
+    settings_q = await db.execute(
+        select(AthleteSettings)
+        .where(AthleteSettings.athlete_id == athlete_id)
+        .order_by(AthleteSettings.effective_date.desc())
+    )
+    settings = settings_q.scalars().first()
+    initial_ctl = (settings.initial_ctl_run or 0.0) if settings else 0.0
+    initial_atl = (settings.initial_atl_run or 0.0) if settings else 0.0
+
     q = (
         select(WorkoutFile.workout_date, WorkoutMetric.value)
         .join(WorkoutMetric, WorkoutMetric.workout_id == WorkoutFile.id)
@@ -88,9 +98,14 @@ async def run_load(
             tss_by_date[d] = tss_by_date.get(d, 0.0) + v
 
     run_series = sorted(tss_by_date.items())
-    pmc_data = compute_run_pmc(run_series)
+    pmc_data = compute_run_pmc(run_series, initial_ctl=initial_ctl, initial_atl=initial_atl)
     filtered = [p for p in pmc_data if date_from.isoformat() <= p["date"] <= date_to.isoformat()]
-    return {"series": filtered, "athlete_id": athlete_id}
+    return {
+        "series": filtered,
+        "athlete_id": athlete_id,
+        "seeded": initial_ctl > 0.0,
+        "initial_ctl_used": initial_ctl if initial_ctl > 0.0 else None,
+    }
 
 
 @router.get("/intensity-load")

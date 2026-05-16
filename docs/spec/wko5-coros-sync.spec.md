@@ -381,14 +381,24 @@ TSS = (NP / FTP)² × (duration_s / 3600) × 100
 
 此為 `POST /api/v1/pmc/recompute` 使用的公式，對既有無 TSS 的活動批次計算。
 
-### 待改進（Milestone 4.5）
+### 已實作（2026-05-16 更新）
 
-| 運動類型 | 目標公式 |
-|----------|----------|
-| Cycling（有功率） | WKO5 BikeScore 或 Coggan TSS |
-| Running（Coros 估算 running power） | rTSS（by pace vs LTSP）或 power-based TSS |
-| HR-only | hrTSS（by LTHR） |
-| 其他（strength, custom）| 0 或不計入 PMC |
+**Running TSS** 使用 power-based TSS，FTP 為 runFTP（從 90 天跑步 MMP 曲線動態計算）：
+```python
+runFTP = compute_run_ftp_from_mmp(mmp_90day)   # CP model: P=CP+W'/t
+TSS = (duration × NP × IF) / (runFTP × 3600) × 100
+# WKO5 formula: tl(if(sport="run", tss), ctlconstant)
+```
+`get_run_ftp(db, athlete_id, as_of_date)` 在 `backend/files/file_service.py` 計算，先查 `athlete_settings.run_ftp_w`（手動設定），無則從 MMP 自動算。
+
+**重新計算端點**：`POST /api/v1/athletes/{id}/recalculate-running-metrics` — 重算所有跑步 FIT 活動的 TSS、intensity 指標。
+
+| 運動類型 | 目標公式 | 狀態 |
+|----------|----------|------|
+| Cycling（有功率） | WKO5 TSS（cycling ftp_w） | ✅ 已實作 |
+| Running（Coros 跑步功率） | power-based TSS（runFTP） | ✅ 已修正 |
+| HR-only | hrTSS（by LTHR） | ⬜ 待實作 |
+| 其他（strength, custom）| 0 或不計入 PMC | ✅ 不計入 |
 
 ---
 
@@ -421,10 +431,13 @@ TSS = (NP / FTP)² × (duration_s / 3600) × 100
 
 1. **Token mid-sync 失效**：長時間 sync（>200 筆）偶見 "Access token is invalid"，原因未知（可能 Coros server-side invalidation）。重新登入後繼續 sync 可恢復。
 2. **無功率資料活動的 TSS**：hiking、table tennis 等活動無 power 也無 HR zones，TSS=0，不計入 PMC。
-3. **PMC 起始點**：最早資料為 FIT 下載成功的最舊活動日期；更早的歷史資料需從 Coros app 手動匯入或等 since 設到更早。
+3. **PMC 起始點（歷史資料缺口）**：完整 Coros 歷史資料（2020-11 起）現已匯入（667 筆 Coros 活動，321 筆跑步）。但 WKO5 本機 `.wko4` 二進位格式的跑步活動（2023–2025/11）仍無法解析 power/HR channel，貢獻 0 TSS。這導致 ATL 與 WKO5 顯示值有差異——WKO5 能讀取 wko4 跑步功率，我們不能。
+4. **檔名 sport 標籤不準確**：`SPORT_NAMES` 映射（e.g., `200="run"`）只影響 FIT 檔名，不影響 DB 中的 `sport` 欄位。`sport` 由 `fit_reader.py` 解析 FIT session 內的實際運動類型後正規化（`"running"`）。
+5. **損壞的 FIT 檔案**：部分 Coros FIT 檔案無效（e.g., `476897474257125477_2026-04-19_other.fit`，FitParseError: Invalid field size）。已修正：`coros_client.py` 現在對無法解析的 FIT 建立 `file_format="corrupt"` 的 stub DB 記錄，避免每次 sync 重複下載。
+6. **Coros 功率尖峰**：跑步功率由 Coros 手錶從加速度計/GPS 估算，偶有短暫尖峰（e.g., 2026-04-26 有 4 個樣本達 400–432W）。對 3-30 分鐘 MMP 的 CP 模型計算（runFTP）無影響，但會污染 1–3 秒 MMP 顯示值。
 
 ---
 
 *Generated: 2026-05-15*
-*Last updated: 2026-05-15*
-*Status: IMPLEMENTED — M4 complete*
+*Last updated: 2026-05-16*
+*Status: IMPLEMENTED — M4 + runFTP bug fix + corrupt FIT handling + historical data expansion*

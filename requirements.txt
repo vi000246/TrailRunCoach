@@ -1,4 +1,5 @@
 fitparse>=1.2.0
+fitdecode>=0.10.0
 numpy>=1.24.0
 click>=8.1.0
 fastapi>=0.115.0

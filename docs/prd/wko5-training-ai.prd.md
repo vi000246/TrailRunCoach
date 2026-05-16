@@ -123,6 +123,7 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統手動觸發 sync
 | 4 | Coros 自動同步 + PMC Web UI | 訓練後手動 sync，FIT 自動下載，PMC 圖表顯示 | **complete** | 1,3 | wko5-coros-sync.spec.md | coros-sync-pmc-mvp.plan.md |
 | 4.5 | FTP/LTHR 設定頁面 | 手動設定或覆蓋 FTP、LTHR | **complete** | 4 | wko5-frontend-redesign.spec.md | wko5-mvp-tab-nav-config-season.plan.md |
 | 4.6 | Run 跑步訓練負荷圖表 | Season 頁面新增 5 個跑步圖表（Run PMC、Daily %CTL、Ramp Rate、Intensity Load、Volume Log）| **complete** | 4,4.5 | wko5-training-load-charts.spec.md | docs/plans/completed/wko5-training-load-charts.plan.md |
+| 4.7 | 資料準確度修正 + 日期範圍 Presets | 圖表資料修正（CTL 種子值、歷史 rTSS 回填）+ DateRangePicker 行事曆 Preset | **complete** | 4.6 | wko5-data-accuracy-date-presets.spec.md | docs/plans/completed/wko5-data-accuracy-date-presets.plan.md |
 | 5 | Activity Detail 頁面 | 點開單次活動，看到功率曲線、心率、區間分佈等圖表 | complete | 1,3 | wko5-web-full-clone.spec.md | - |
 | 6 | iLevels / Training Levels | 個人化功率區間（對標 WKO5 iLevels） | pending | 3 | - | - |
 | 7 | TrainingPeaks 整合（可選） | 從 TP 帳號補充歷史資料 | pending | 1 | - | - |

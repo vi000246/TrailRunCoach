@@ -1,4 +1,5 @@
 import asyncio
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -10,7 +11,7 @@ from backend.db.models import Athlete, WorkoutFile, WorkoutMetric, MmpCache
 from backend.files.wko4_reader import parse_wko4_metadata
 from backend.files.fit_reader import parse_fit
 from backend.engine.algorithms.mmp import compute_mmp
-from backend.engine.algorithms.metrics import compute_all_metrics
+from backend.engine.algorithms.metrics import compute_all_metrics, compute_run_ftp_from_mmp
 
 WKO5_ROOT = Path.home() / "WKO5"
 
@@ -54,6 +55,55 @@ async def scan_and_import(db: AsyncSession, athlete_id: int, athlete_dir: str) -
     return {"new": new_count, "skipped": skip_count, "errors": error_count, "total": len(files)}
 
 
+async def get_run_ftp(db: AsyncSession, athlete_id: int, as_of_date: Optional[date] = None) -> Optional[float]:
+    """
+    Compute runFTP for an athlete as of a given date.
+
+    WKO5 formula: athleterange(date-89, date, ftp(meanmax(runpower)))
+    Uses a 2-parameter Critical Power model fit to running MMP data from the
+    preceding 90-day window. Falls back to manually set run_ftp_w if no MMP data.
+    """
+    from backend.db.models import AthleteSettings
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    # Check for a manually set run_ftp_w first
+    settings_q = await db.execute(
+        select(AthleteSettings)
+        .where(AthleteSettings.athlete_id == athlete_id)
+        .order_by(AthleteSettings.effective_date.desc())
+    )
+    settings = settings_q.scalars().first()
+    if settings and settings.run_ftp_w and settings.run_ftp_w > 0:
+        return settings.run_ftp_w
+
+    # Compute from 90-day running MMP window
+    window_start = as_of_date - timedelta(days=89)
+    mmp_q = await db.execute(
+        select(MmpCache.duration_s, MmpCache.value)
+        .join(WorkoutFile, MmpCache.workout_id == WorkoutFile.id)
+        .where(
+            WorkoutFile.athlete_id == athlete_id,
+            WorkoutFile.sport == "running",
+            WorkoutFile.workout_date >= window_start,
+            WorkoutFile.workout_date <= as_of_date,
+            MmpCache.channel == "power",
+            MmpCache.value > 0,
+        )
+    )
+    rows = mmp_q.fetchall()
+    if not rows:
+        return None
+
+    # Aggregate: for each duration, take the max across all workouts in window
+    by_duration: dict[int, float] = {}
+    for dur, val in rows:
+        if val and (dur not in by_duration or val > by_duration[dur]):
+            by_duration[dur] = val
+
+    return compute_run_ftp_from_mmp(by_duration)
+
+
 async def _import_one_file(
     db: AsyncSession,
     athlete_id: int,
@@ -66,12 +116,16 @@ async def _import_one_file(
     fmt = path.suffix.lower().lstrip(".")
 
     if fmt == "wko4":
+        # wko4 is WKO5's proprietary binary format. We can read metadata (sport,
+        # date) from the header but cannot decode the exercise channel data.
+        # These workouts represent pre-Coros historical data; metrics cannot be
+        # computed until the format is reverse-engineered further.
         meta = parse_wko4_metadata(str(path))
         raw = None
         start_time = meta.start_time
         sport = meta.sport
-        duration_s = None
-        total_distance_m = None
+        duration_s = meta.duration_s
+        total_distance_m = meta.total_distance_m
     elif fmt == "fit":
         try:
             raw = parse_fit(str(path))
@@ -99,50 +153,62 @@ async def _import_one_file(
     db.add(wf)
     await db.flush()
 
-    if raw is not None:
-        # Elevation gain from altitude channel (sum of positive ascents)
-        if len(raw.altitude_m) > 1:
-            diffs = np.diff(raw.altitude_m)
-            elevation_gain = float(np.sum(diffs[diffs > 0]))
-            wf.elevation_gain_m = round(elevation_gain, 1)
-        elif "total_ascent" in raw.session:
-            wf.elevation_gain_m = float(raw.session["total_ascent"])
+    if raw is None:
+        return wf
 
-    if raw is not None and raw.has_power:
-        # Get FTP from athlete settings if available
-        from sqlalchemy import select as sel
+    # Elevation gain from altitude channel (sum of positive ascents)
+    if len(raw.altitude_m) > 1:
+        diffs = np.diff(raw.altitude_m)
+        elevation_gain = float(np.sum(diffs[diffs > 0]))
+        wf.elevation_gain_m = round(elevation_gain, 1)
+    elif "total_ascent" in raw.session:
+        wf.elevation_gain_m = float(raw.session["total_ascent"])
+
+    if not raw.has_power:
+        return wf
+
+    # Determine the correct FTP for this sport:
+    # - running → runFTP (computed from 90-day running MMP, or manually set run_ftp_w)
+    # - all others → ftp_w (cycling/generic FTP from athlete settings)
+    is_running = (raw.sport == "running")
+    workout_date = start_time.date() if start_time else date.today()
+
+    if is_running:
+        ftp_w = await get_run_ftp(db, athlete_id, as_of_date=workout_date)
+    else:
         from backend.db.models import AthleteSettings
-        from datetime import date
         settings_q = await db.execute(
-            sel(AthleteSettings)
+            select(AthleteSettings)
             .where(AthleteSettings.athlete_id == athlete_id)
             .order_by(AthleteSettings.effective_date.desc())
         )
         latest_settings = settings_q.scalars().first()
         ftp_w = latest_settings.ftp_w if latest_settings else None
 
-        metrics_dict = compute_all_metrics(
-            raw.power_w, ftp_w=ftp_w, duration_s=raw.duration_s,
-            hr=raw.heart_rate_bpm if raw.has_hr else None,
-            cadence=raw.cadence_rpm if raw.has_cadence else None,
-        )
-        for key, val in metrics_dict.items():
-            if isinstance(val, (float, int)) and val is not None:
-                db.add(WorkoutMetric(workout_id=wf.id, metric_key=key, value=float(val)))
+    metrics_dict = compute_all_metrics(
+        raw.power_w, ftp_w=ftp_w, duration_s=raw.duration_s,
+        hr=raw.heart_rate_bpm if raw.has_hr else None,
+        cadence=raw.cadence_rpm if raw.has_cadence else None,
+    )
+    for key, val in metrics_dict.items():
+        if isinstance(val, (float, int)) and val is not None:
+            db.add(WorkoutMetric(workout_id=wf.id, metric_key=key, value=float(val)))
 
-        mmp = compute_mmp(raw.power_w, raw.time_s)
-        for dur, val in mmp.items():
-            if val > 0:
-                db.add(MmpCache(workout_id=wf.id, channel="power", duration_s=dur, value=val))
+    mmp = compute_mmp(raw.power_w, raw.time_s)
+    for dur, val in mmp.items():
+        if val > 0:
+            db.add(MmpCache(workout_id=wf.id, channel="power", duration_s=dur, value=val))
 
-        # Intensity metrics for running workouts (seconds at or above FTP thresholds)
-        if raw.sport == "running" and ftp_w and ftp_w > 0:
-            power_arr = raw.power_w
-            hi_95 = float(np.sum(power_arr >= 0.95 * ftp_w))
-            hi_103 = float(np.sum(power_arr >= 1.03 * ftp_w))
-            if hi_95 > 0:
-                db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_95pct_s", value=hi_95))
-            if hi_103 > 0:
-                db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_103pct_s", value=hi_103))
+    # Intensity metrics for running: seconds at or above runFTP thresholds
+    # WKO5: sum(if(runpower >= runFTP * 0.95, deltatime, 0))
+    #        sum(if(runpower >= runFTP * 1.03, deltatime, 0))
+    if is_running and ftp_w and ftp_w > 0:
+        power_arr = raw.power_w
+        hi_95 = float(np.sum(power_arr >= 0.95 * ftp_w))
+        hi_103 = float(np.sum(power_arr >= 1.03 * ftp_w))
+        if hi_95 > 0:
+            db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_95pct_s", value=hi_95))
+        if hi_103 > 0:
+            db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_103pct_s", value=hi_103))
 
     return wf

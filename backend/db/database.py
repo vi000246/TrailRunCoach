@@ -28,6 +28,10 @@ async def _migrate_schema():
         ("sync_state", "coros_email", "TEXT"),
         ("sync_state", "coros_base_url", "TEXT"),
         ("sync_state", "coros_user_id", "TEXT"),
+        ("athlete_settings", "threshold_pace_s_per_km", "REAL"),
+        ("athlete_settings", "run_ftp_w", "REAL"),
+        ("athlete_settings", "initial_ctl_run", "REAL"),
+        ("athlete_settings", "initial_atl_run", "REAL"),
     ]
     async with engine.begin() as conn:
         for table, col, col_type in new_cols:
