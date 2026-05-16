@@ -18,6 +18,8 @@ So that 我能在 5 分鐘內理解自己的訓練狀態並做出有依據的訓
 目標：AI Chat in-app + Smart Dashboard 5 卡片 + Trail 4 圖表（爬坡自動偵測）。
 
 ## Metadata
+- **Module**: ai-coach
+- **Parent Plan**: N/A
 - **Source PRD**: `docs/prd/ai-coach-training-analysis.prd.md`
 - **Source SRS**: `docs/spec/ai-coach-training-analysis.spec.md`
 - **Source Linear Issue**: N/A

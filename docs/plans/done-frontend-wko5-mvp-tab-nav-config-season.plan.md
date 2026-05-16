@@ -16,6 +16,8 @@ Single flat dashboard with no navigation and no settings UI → 4-tab layout wit
 
 ## Metadata
 
+- **Module**: frontend
+- **Parent Plan**: N/A
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`
 - **Source SRS**: `docs/spec/wko5-frontend-enhancement.spec.md`
 - **Source Linear Issue**: N/A

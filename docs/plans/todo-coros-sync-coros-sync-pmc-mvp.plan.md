@@ -17,6 +17,8 @@ As 個人運動員，I want 按一個按鈕就從 Coros 下載最新訓練並在
 
 ## Metadata
 
+- **Module**: coros-sync
+- **Parent Plan**: N/A
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md` — Milestone 4 + 5
 - **Source SRS**: `docs/spec/wko5-coros-sync.spec.md`
 - **Source Linear Issue**: N/A

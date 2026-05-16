@@ -16,6 +16,8 @@ As an athlete, I want to seed the Run PMC from my WKO5 CTL value and backfill hi
 
 ## Metadata
 
+- **Module**: data
+- **Parent Plan**: N/A
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`
 - **Source SRS**: `docs/spec/wko5-data-accuracy-date-presets.spec.md`
 - **Source Linear Issue**: N/A

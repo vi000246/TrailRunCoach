@@ -13,6 +13,8 @@ As an athlete, I want to see run-specific training load, ramp rate, intensity zo
 Currently the dashboard shows all-sport combined CTL/ATL/TSB only. → Add run-filtered versions of every load metric with color-coded risk zones matching WKO5's `WKO5 Season View`.
 
 ## Metadata
+- **Module**: training-load
+- **Parent Plan**: N/A
 - **Source PRD**: N/A
 - **Source SRS**: `docs/spec/wko5-training-load-charts.spec.md`
 - **Source Linear Issue**: N/A

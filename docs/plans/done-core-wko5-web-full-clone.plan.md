@@ -14,6 +14,8 @@ I want 在瀏覽器中看到 WKO5 等級的訓練分析 Dashboard,
 So that 我可以不用開啟 WKO5 桌面版、直接用網頁查詢訓練狀況。
 
 ## Metadata
+- **Module**: core
+- **Parent Plan**: N/A
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`
 - **Source SRS**: `docs/spec/wko5-web-full-clone.spec.md`
 - **Source Linear Issue**: N/A

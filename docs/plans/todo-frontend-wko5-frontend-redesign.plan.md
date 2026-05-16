@@ -2,6 +2,8 @@
 
 ## Metadata
 ```yaml
+Module: frontend
+ParentPlan: N/A
 Type: feature
 Size: Large
 Source PRD: docs/prd/wko5-frontend-redesign.prd.md
