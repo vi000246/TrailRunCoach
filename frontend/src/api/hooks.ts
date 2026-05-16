@@ -6,6 +6,7 @@ import type {
   AthleteSettingsResponse, SettingsUpdatePayload, BackfillResult,
   TimeseriesResponse, ZonesResponse, WeeklyResponse,
   RunLoadPoint, IntensityLoadPoint, RunVolumeResponse,
+  AiStatusResponse, AiModelsResponse, DashboardSummary, TrailAnalysisResponse,
 } from './client'
 
 export function useWorkouts(params?: Record<string, unknown>) {
@@ -173,5 +174,38 @@ export function useBackfillTss(athleteId = 1) {
       qc.invalidateQueries({ queryKey: ['run_volume'] })
       qc.invalidateQueries({ queryKey: ['intensity_load'] })
     },
+  })
+}
+
+export function useAiStatus(athleteId = 1) {
+  return useQuery<AiStatusResponse>({
+    queryKey: ['ai_status', athleteId],
+    queryFn: () => api.get(`/ai/status/${athleteId}`).then(r => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useAiModels() {
+  return useQuery<AiModelsResponse>({
+    queryKey: ['ai_models'],
+    queryFn: () => api.get('/ai/models').then(r => r.data),
+    staleTime: Infinity,
+  })
+}
+
+export function useDashboardSummary(athleteId = 1) {
+  return useQuery<DashboardSummary>({
+    queryKey: ['dashboard_summary', athleteId],
+    queryFn: () => api.get('/analytics/dashboard-summary', { params: { athlete_id: athleteId } }).then(r => r.data),
+    staleTime: 60_000,
+  })
+}
+
+export function useTrailAnalysis(workoutId: number) {
+  return useQuery<TrailAnalysisResponse>({
+    queryKey: ['trail', workoutId],
+    queryFn: () => api.get(`/workouts/${workoutId}/trail`).then(r => r.data),
+    staleTime: Infinity,
+    retry: false,
   })
 }

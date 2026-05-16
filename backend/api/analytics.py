@@ -5,10 +5,89 @@ from datetime import date, timedelta
 from typing import Optional
 
 from backend.db.database import get_db
-from backend.db.models import WorkoutFile, WorkoutMetric, AthleteSettings
+from backend.db.models import WorkoutFile, WorkoutMetric, AthleteSettings, PmcCache
 from backend.engine.algorithms.metrics import compute_run_pmc, compute_intensity_load_series
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+
+
+@router.get("/dashboard-summary")
+async def dashboard_summary(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    today = date.today()
+    week_start = today - timedelta(days=7)
+
+    # Latest PMC row
+    pmc_result = await db.execute(
+        select(PmcCache)
+        .where(PmcCache.athlete_id == athlete_id)
+        .order_by(PmcCache.date.desc())
+        .limit(2)
+    )
+    pmc_rows = pmc_result.scalars().all()
+    latest_pmc = pmc_rows[0] if pmc_rows else None
+    prev_pmc = pmc_rows[1] if len(pmc_rows) > 1 else None
+
+    tsb_state = None
+    ctl_trend = None
+    if latest_pmc:
+        tsb = latest_pmc.tsb or 0.0
+        if tsb > 5:
+            tsb_state = "fresh"
+        elif tsb > -10:
+            tsb_state = "optimal"
+        elif tsb > -25:
+            tsb_state = "tired"
+        else:
+            tsb_state = "overreached"
+
+        if prev_pmc and prev_pmc.ctl is not None and latest_pmc.ctl is not None:
+            ctl_trend = round(latest_pmc.ctl - prev_pmc.ctl, 1)
+
+    # Weekly TSS + hours
+    tss_subq = (
+        select(func.coalesce(func.sum(WorkoutMetric.value), 0))
+        .where(WorkoutMetric.workout_id == WorkoutFile.id)
+        .where(WorkoutMetric.metric_key == "tss")
+        .correlate(WorkoutFile)
+        .scalar_subquery()
+    )
+    week_q = await db.execute(
+        select(
+            func.sum(tss_subq).label("tss"),
+            (func.sum(WorkoutFile.duration_s) / 3600.0).label("hours"),
+            func.count(WorkoutFile.id).label("count"),
+        )
+        .where(
+            WorkoutFile.athlete_id == athlete_id,
+            WorkoutFile.workout_date >= week_start,
+        )
+    )
+    week_row = week_q.first()
+
+    # Last workout
+    last_q = await db.execute(
+        select(WorkoutFile)
+        .where(WorkoutFile.athlete_id == athlete_id)
+        .order_by(WorkoutFile.workout_date.desc())
+        .limit(1)
+    )
+    last_wo = last_q.scalars().first()
+
+    return {
+        "tsb": round(latest_pmc.tsb, 1) if latest_pmc and latest_pmc.tsb is not None else None,
+        "tsb_state": tsb_state,
+        "ctl": round(latest_pmc.ctl, 1) if latest_pmc and latest_pmc.ctl is not None else None,
+        "ctl_trend": ctl_trend,
+        "weekly_tss": round(float(week_row.tss or 0)) if week_row else 0,
+        "weekly_hours": round(float(week_row.hours or 0), 1) if week_row else 0.0,
+        "weekly_count": week_row.count if week_row else 0,
+        "last_workout": {
+            "id": last_wo.id,
+            "date": last_wo.workout_date.isoformat() if last_wo.workout_date else None,
+            "sport": last_wo.sport,
+            "duration_s": last_wo.duration_s,
+        } if last_wo else None,
+    }
 
 
 @router.get("/weekly")

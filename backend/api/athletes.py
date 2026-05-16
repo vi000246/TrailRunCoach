@@ -95,6 +95,8 @@ async def get_settings(athlete_id: int, db: AsyncSession = Depends(get_db)):
         "threshold_pace_s_per_km": s.threshold_pace_s_per_km,
         "initial_ctl_run": s.initial_ctl_run,
         "initial_atl_run": s.initial_atl_run,
+        "ai_provider": s.ai_provider,
+        "ai_model": s.ai_model,
         "power_zones": power_zones,
         "hr_zones": hr_zones,
     }
@@ -109,6 +111,9 @@ class SettingsUpdate(BaseModel):
     threshold_pace_s_per_km: Optional[float] = None
     initial_ctl_run: Optional[float] = None
     initial_atl_run: Optional[float] = None
+    ai_provider: Optional[str] = None
+    ai_api_key:  Optional[str] = None
+    ai_model:    Optional[str] = None
 
 
 @router.put("/{athlete_id}/settings")
@@ -136,6 +141,12 @@ async def update_settings(athlete_id: int, body: SettingsUpdate, db: AsyncSessio
             s.initial_ctl_run = body.initial_ctl_run
         if body.initial_atl_run is not None:
             s.initial_atl_run = body.initial_atl_run
+        if body.ai_provider is not None:
+            s.ai_provider = body.ai_provider
+        if body.ai_api_key is not None:
+            s.ai_api_key = body.ai_api_key
+        if body.ai_model is not None:
+            s.ai_model = body.ai_model
     else:
         s = AthleteSettings(
             athlete_id=athlete_id, effective_date=eff_date,
@@ -144,6 +155,9 @@ async def update_settings(athlete_id: int, body: SettingsUpdate, db: AsyncSessio
             threshold_pace_s_per_km=body.threshold_pace_s_per_km,
             initial_ctl_run=body.initial_ctl_run,
             initial_atl_run=body.initial_atl_run,
+            ai_provider=body.ai_provider,
+            ai_model=body.ai_model,
+            ai_api_key=body.ai_api_key,
         )
         db.add(s)
     await db.commit()
