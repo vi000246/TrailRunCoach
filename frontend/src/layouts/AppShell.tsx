@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { to: '/activities', label: 'Activities' },
   { to: '/config',     label: 'Config' },
   { to: '/ai',         label: 'AI' },
+  { to: '/coros',      label: 'Coros' },
 ]
 
 export function AppShell() {
