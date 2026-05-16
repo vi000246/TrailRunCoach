@@ -63,27 +63,18 @@ export interface HrZone {
   max_bpm: number | null
 }
 
-export interface AthleteSettingsResponse {
-  athlete_id: number
-  effective_date: string
-  ftp_w: number | null
-  lthr: number | null
-  weight_kg: number | null
-  threshold_pace_s_per_km: number | null
-  initial_ctl_run: number | null
-  initial_atl_run: number | null
-  power_zones: PowerZone[]
-  hr_zones: HrZone[]
-}
-
 export interface SettingsUpdatePayload {
   ftp_w?: number
+  run_ftp_w?: number
   lthr?: number
   weight_kg?: number
   threshold_pace_s_per_km?: number
   initial_ctl_run?: number
   initial_atl_run?: number
   effective_date?: string
+  ai_provider?: string
+  ai_api_key?: string
+  ai_model?: string
 }
 
 export interface BackfillResult {
@@ -177,4 +168,102 @@ export interface RunVolumeResponse {
   weeks: RunVolumeWeek[]
   months: RunVolumeMonth[]
   athlete_id: number
+}
+
+// ---- AI Coach ----
+
+export interface AiStatusResponse {
+  configured: boolean
+  provider?: string
+  model?: string
+}
+
+export interface AiModelsResponse {
+  claude: string[]
+  openai: string[]
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+// ---- Dashboard Summary ----
+
+export interface DashboardSummary {
+  tsb: number | null
+  tsb_state: 'fresh' | 'optimal' | 'tired' | 'overreached' | null
+  ctl: number | null
+  ctl_trend: number | null
+  weekly_tss: number
+  weekly_hours: number
+  weekly_count: number
+  last_workout: {
+    id: number
+    date: string
+    sport: string
+    duration_s: number
+  } | null
+}
+
+// ---- Trail Analysis ----
+
+export interface TrailSeriesPoint {
+  t: number
+  dist_m: number
+  alt_m: number
+  grade_pct: number
+  pace_s_km: number
+  gap_s_km: number
+  hr?: number
+  cadence?: number
+}
+
+export interface ClimbSegment {
+  start_m: number
+  end_m: number
+  gain_m: number
+  distance_m: number
+  grade_pct: number
+  duration_s: number
+  vam: number
+}
+
+export interface HrDrift {
+  hr_first_half: number
+  hr_second_half: number
+  gap_first_half_s_per_km: number
+  gap_second_half_s_per_km: number
+  decoupling_pct: number
+}
+
+export interface GradeCadencePoint {
+  grade_pct: number
+  cadence: number
+}
+
+export interface TrailAnalysisResponse {
+  workout_id: number
+  is_trail: boolean
+  series: TrailSeriesPoint[]
+  climb_segments: ClimbSegment[]
+  hr_drift: HrDrift | null
+  grade_cadence: GradeCadencePoint[]
+  total_gain_m: number
+}
+
+export interface AthleteSettingsResponse {
+  athlete_id: number
+  effective_date: string
+  ftp_w: number | null
+  run_ftp_w: number | null
+  lthr: number | null
+  weight_kg: number | null
+  threshold_pace_s_per_km: number | null
+  initial_ctl_run: number | null
+  initial_atl_run: number | null
+  ai_provider: string | null
+  ai_model: string | null
+  power_zones: PowerZone[]
+  hr_zones: HrZone[]
 }

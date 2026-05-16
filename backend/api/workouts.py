@@ -5,9 +5,14 @@ from sqlalchemy.orm import selectinload
 from datetime import date
 from typing import Optional
 
+import numpy as np
+
 from backend.db.database import get_db
 from backend.db.models import WorkoutFile, WorkoutMetric, MmpCache, AthleteSettings
 from backend.engine.algorithms.mmp import compute_mmp
+from backend.engine.algorithms.trail import (
+    compute_grade, compute_gap, segment_climbs, compute_vam, compute_hr_drift,
+)
 from backend.files.fit_reader import parse_fit
 
 router = APIRouter(prefix="/api/v1/workouts", tags=["workouts"])
@@ -217,6 +222,90 @@ async def get_workout_zones(workout_id: int, db: AsyncSession = Depends(get_db))
             }
             for z, n, lo, hi in HR_ZONES_DEF
         ],
+    }
+
+
+@router.get("/{workout_id}/trail")
+async def get_workout_trail(workout_id: int, db: AsyncSession = Depends(get_db)):
+    w = await _get_workout_or_404(workout_id, db)
+    if w.file_format != "fit":
+        raise HTTPException(422, "NO_FIT_FILE")
+    try:
+        raw = parse_fit(w.file_path)
+    except Exception as e:
+        raise HTTPException(422, f"PARSE_ERROR: {e}")
+
+    has_altitude = len(raw.altitude_m) > 0 and np.any(raw.altitude_m > 0)
+    has_distance = len(raw.distance_m) > 0 and np.any(raw.distance_m > 0)
+    if not has_altitude or not has_distance:
+        raise HTTPException(422, "NO_TRAIL_DATA")
+
+    alt = raw.altitude_m
+    dist = raw.distance_m
+    time_s = raw.time_s
+    n = len(alt)
+    step = max(1, n // 1800)
+
+    grade = compute_grade(alt, dist)
+
+    # pace s/m from speed (m/s) or distance diff
+    if len(raw.speed_ms) == n and np.any(raw.speed_ms > 0):
+        speed = np.where(raw.speed_ms > 0.1, raw.speed_ms, 0.1)
+        pace_s_per_m = 1.0 / speed
+    else:
+        dd = np.diff(dist, prepend=dist[0])
+        dt = np.diff(time_s, prepend=time_s[0]) if len(time_s) == n else np.ones(n)
+        dd = np.where(dd < 0.1, 0.1, dd)
+        pace_s_per_m = dt / dd
+
+    gap_s_per_m = compute_gap(pace_s_per_m, grade)
+
+    # Downsampled timeseries for charts
+    series = []
+    for i in range(0, n, step):
+        point: dict = {
+            "t": int(time_s[i]) if len(time_s) > i else i,
+            "dist_m": round(float(dist[i]), 1),
+            "alt_m": round(float(alt[i]), 1),
+            "grade_pct": round(float(grade[i]), 1),
+            "pace_s_km": round(float(pace_s_per_m[i]) * 1000, 1),
+            "gap_s_km": round(float(gap_s_per_m[i]) * 1000, 1),
+        }
+        if len(raw.heart_rate_bpm) == n:
+            point["hr"] = round(float(raw.heart_rate_bpm[i]))
+        if len(raw.cadence_rpm) == n:
+            point["cadence"] = round(float(raw.cadence_rpm[i]))
+        series.append(point)
+
+    # Climb segments with VAM
+    segs = segment_climbs(alt, dist)
+    segs_with_vam = compute_vam(segs, time_s) if len(time_s) == n else segs
+
+    # HR drift
+    hr_drift = None
+    if len(raw.heart_rate_bpm) == n:
+        hr_drift = compute_hr_drift(raw.heart_rate_bpm, gap_s_per_m)
+
+    # Grade vs cadence scatter (downsampled further)
+    gc_step = max(1, n // 500)
+    grade_cadence = []
+    if len(raw.cadence_rpm) == n:
+        for i in range(0, n, gc_step):
+            cad = float(raw.cadence_rpm[i])
+            if cad > 0:
+                grade_cadence.append({
+                    "grade_pct": round(float(grade[i]), 1),
+                    "cadence": round(cad),
+                })
+
+    return {
+        "workout_id": workout_id,
+        "is_trail": True,
+        "series": series,
+        "climb_segments": segs_with_vam,
+        "hr_drift": hr_drift,
+        "grade_cadence": grade_cadence,
+        "total_gain_m": round(float(np.sum(np.diff(alt, prepend=alt[0]).clip(min=0))), 1),
     }
 
 

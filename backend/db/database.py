@@ -32,6 +32,9 @@ async def _migrate_schema():
         ("athlete_settings", "run_ftp_w", "REAL"),
         ("athlete_settings", "initial_ctl_run", "REAL"),
         ("athlete_settings", "initial_atl_run", "REAL"),
+        ("athlete_settings", "ai_provider", "TEXT"),
+        ("athlete_settings", "ai_api_key",  "TEXT"),
+        ("athlete_settings", "ai_model",    "TEXT"),
     ]
     async with engine.begin() as conn:
         for table, col, col_type in new_cols:

@@ -7,6 +7,7 @@ import { DailyPctCtlChart } from '../components/charts/DailyPctCtlChart'
 import { RampRateChart } from '../components/charts/RampRateChart'
 import { IntensityLoadChart } from '../components/charts/IntensityLoadChart'
 import { RunVolumeLog } from '../components/charts/RunVolumeLog'
+import { SmartDashboardSection } from '../components/charts/SmartDashboardSection'
 
 const toIso = (d: Date) => d.toISOString().slice(0, 10)
 const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return toIso(d) }
@@ -45,6 +46,8 @@ export function SeasonPage() {
         <h1 className="text-sm font-semibold text-[#7d8fa6] uppercase tracking-wide">Season Overview</h1>
         <DateRangePicker value={range} onChange={setRange} />
       </div>
+
+      <SmartDashboardSection />
 
       <CollapsibleSection title="Performance Management Chart">
         <PmcChart dateFrom={range.from} dateTo={range.to} />

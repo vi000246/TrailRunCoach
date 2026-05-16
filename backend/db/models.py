@@ -32,6 +32,9 @@ class AthleteSettings(Base):
     run_ftp_w: Mapped[Optional[float]] = mapped_column(nullable=True)
     initial_ctl_run: Mapped[Optional[float]] = mapped_column(nullable=True)
     initial_atl_run: Mapped[Optional[float]] = mapped_column(nullable=True)
+    ai_provider: Mapped[Optional[str]] = mapped_column(nullable=True)
+    ai_api_key:  Mapped[Optional[str]] = mapped_column(nullable=True)
+    ai_model:    Mapped[Optional[str]] = mapped_column(nullable=True)
     athlete: Mapped["Athlete"] = relationship(back_populates="settings")
 
 

@@ -4,6 +4,7 @@ import { useWorkout, useTimeseries, useZones, useWorkoutMmp } from '../api/hooks
 import { MetricCard } from '../components/MetricCard'
 import { TimeseriesChart } from '../components/charts/TimeseriesChart'
 import { MmpCurveChart } from '../components/charts/MmpCurveChart'
+import { TrailAnalysisSection } from '../components/charts/TrailAnalysisSection'
 import { ZoneTable } from '../components/ZoneTable'
 import { Button } from '../components/ui/button'
 
@@ -34,9 +35,10 @@ export function ActivityDetailPage() {
   }
 
   const metrics = workout.metrics || {}
-  const np = metrics.np || metrics.avg_power
+  const np = metrics.normalized_power_w || metrics.avg_power_w
   const tss = metrics.tss
   const avgHr = metrics.avg_hr
+  const isTrail = (workout.metrics?.elevation_gain_m ?? 0) > 100 || workout.sport === 'trail_running'
 
   return (
     <div className="p-5 max-w-6xl mx-auto space-y-4">
@@ -69,6 +71,8 @@ export function ActivityDetailPage() {
           <ZoneTable powerZones={zones.power_zones} hrZones={zones.hr_zones} />
         )}
       </div>
+
+      {isTrail && <TrailAnalysisSection workoutId={workoutId} />}
     </div>
   )
 }
