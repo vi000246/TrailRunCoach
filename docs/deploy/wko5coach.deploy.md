@@ -33,7 +33,7 @@
 ### Step 1 — 建構並啟動容器
 
 ```bash
-cd /Users/<user>/Projects/WKO5reverse
+cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
 ./deploy.sh
 ```
 
@@ -133,7 +133,7 @@ docker compose down
 ## 更新部署
 
 ```bash
-cd /Users/<user>/Projects/WKO5reverse
+cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
 git pull           # 若有版本控制
 ./deploy.sh        # rebuild + restart
 ```
