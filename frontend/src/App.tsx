@@ -3,6 +3,7 @@ import { AppShell } from './layouts/AppShell'
 import { OverviewPage } from './pages/OverviewPage'
 import { RunningPage } from './pages/RunningPage'
 import { TrailPage } from './pages/TrailPage'
+import { AchievementsPage } from './pages/AchievementsPage'
 import { ActivityListPage } from './pages/ActivityListPage'
 import { ActivityDetailPage } from './pages/ActivityDetailPage'
 import { ConfigPage } from './pages/ConfigPage'
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="overview" element={<OverviewPage />} />
           <Route path="running" element={<RunningPage />} />
           <Route path="trail" element={<TrailPage />} />
+          <Route path="achievements" element={<AchievementsPage />} />
           {/* legacy redirect */}
           <Route path="season" element={<Navigate to="/overview" replace />} />
           <Route path="activities" element={<ActivityListPage />} />

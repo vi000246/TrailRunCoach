@@ -48,6 +48,25 @@ export interface ChartInterpretation {
   chart?: string
 }
 
+export interface AchievementItem {
+  id: number
+  date: string | null
+  sport: string | null
+  sport_label: string
+  distance_km: number
+  elevation_m: number
+  duration_s: number
+  duration_str: string
+  load: number
+  summary: string
+}
+export interface AchievementsResponse {
+  athlete_id: number
+  date_from: string
+  date_to: string
+  items: AchievementItem[]
+}
+
 export interface SyncInventory {
   total: number
   by_source: Record<string, number>
