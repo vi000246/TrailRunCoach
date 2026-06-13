@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { DateRangePicker, type DateRange } from '../components/DateRangePicker'
 import { ChartCard } from '../components/ChartCard'
 import { SportFilter } from '../components/SportFilter'
@@ -14,15 +14,12 @@ export function OverviewPage() {
   const [range, setRange] = useState<DateRange>({ from: daysAgo(365), to: toIso(new Date()) })
 
   // Sport filter state is local to this page only (does not leak to other pages).
-  // null = not yet initialised; once facets load we default to all sports selected.
+  // null = "not yet touched" → treated as all sports selected (derived during
+  // render from facets, so no setState-in-effect is needed).
   const { data: facets } = useSportsFacets(1)
   const [selected, setSelected] = useState<string[] | null>(null)
-  useEffect(() => {
-    if (selected === null && facets?.sports?.length) {
-      setSelected(facets.sports.map(s => s.key))
-    }
-  }, [facets, selected])
-
+  const allKeys = facets?.sports.map(s => s.key) ?? []
+  const effectiveSelected = selected ?? allKeys
   const sports = selected ?? undefined
 
   return (
@@ -36,7 +33,7 @@ export function OverviewPage() {
 
       <div className="border border-[#1c2333] rounded-lg p-3">
         <div className="text-xs font-semibold text-[#7d8fa6] uppercase tracking-wide mb-2">運動篩選</div>
-        <SportFilter selected={selected ?? []} onChange={setSelected} />
+        <SportFilter selected={effectiveSelected} onChange={setSelected} />
       </div>
 
       <ChartCard title="體能管理圖 (所有運動)" chart="pmc">
