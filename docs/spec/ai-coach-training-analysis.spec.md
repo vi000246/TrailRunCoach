@@ -1,11 +1,21 @@
 # SRS: AI Coach — 訓練分析與圖表理解
 
 ## Metadata
-- **Source PRD**: `docs/prd/ai-coach-training-analysis.prd.md`
+- **Source PRDs**:
+  - `docs/prd/ai-coach-training-analysis.prd.md` — initial（chat/dashboard/trail analysis）
+  - `docs/prd/wko5-trail-multipage-sync-coach.prd.md` — Milestone 4（知識驅動處方）
 - **Source Linear Issue**: N/A
 - **Owner**: solo / self
-- **Status**: DRAFT — needs architectural review
+- **Status**: DRAFT — needs architectural review（M4 delta 進行中）
 - **Generated**: 2026-05-16
+- **Last Updated**: 2026-06-13
+
+## Change History
+
+| Date | Source PRD | Feature SRS | Summary |
+|------|------------|-------------|---------|
+| 2026-05-16 | `ai-coach-training-analysis.prd.md` | (initial) | Created — In-app AI chat、Smart Dashboard、Trail Analysis |
+| 2026-06-13 | `wko5-trail-multipage-sync-coach.prd.md` | `docs/srs/ai-coach-knowledge-driven-prescription.srs.md` | 知識驅動處方：curated 知識模組 + zone 計算 + 處方導向 system prompt + `/ai/zones` 端點 |
 
 ## Summary
 
