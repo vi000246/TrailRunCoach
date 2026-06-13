@@ -7,7 +7,7 @@ import { ActivityListPage } from './pages/ActivityListPage'
 import { ActivityDetailPage } from './pages/ActivityDetailPage'
 import { ConfigPage } from './pages/ConfigPage'
 import { AiPage } from './pages/AiPage'
-import { CorosPage } from './pages/CorosPage'
+import { SyncPage } from './pages/SyncPage'
 
 export default function App() {
   return (
@@ -24,7 +24,9 @@ export default function App() {
           <Route path="activities/:id" element={<ActivityDetailPage />} />
           <Route path="config" element={<ConfigPage />} />
           <Route path="ai" element={<AiPage />} />
-          <Route path="coros" element={<CorosPage />} />
+          <Route path="sync" element={<SyncPage />} />
+          {/* legacy redirect */}
+          <Route path="coros" element={<Navigate to="/sync" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>
