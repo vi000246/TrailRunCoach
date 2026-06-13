@@ -23,7 +23,11 @@ def _sport_clause(sports: Optional[list[str]]):
 
 
 @router.get("/dashboard-summary")
-async def dashboard_summary(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+async def dashboard_summary(
+    athlete_id: int = 1,
+    sports: Optional[list[str]] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
     today = date.today()
     week_start = today - timedelta(days=7)
 
@@ -71,14 +75,15 @@ async def dashboard_summary(athlete_id: int = 1, db: AsyncSession = Depends(get_
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.workout_date >= week_start,
+            _sport_clause(sports),
         )
     )
     week_row = week_q.first()
 
-    # Last workout
+    # Last workout (within the selected sports)
     last_q = await db.execute(
         select(WorkoutFile)
-        .where(WorkoutFile.athlete_id == athlete_id)
+        .where(WorkoutFile.athlete_id == athlete_id, _sport_clause(sports))
         .order_by(WorkoutFile.workout_date.desc())
         .limit(1)
     )
