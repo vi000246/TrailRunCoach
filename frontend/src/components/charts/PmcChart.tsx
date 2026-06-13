@@ -9,10 +9,13 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card'
 interface Props {
   dateFrom?: string
   dateTo?: string
+  sports?: string[]
 }
 
-export function PmcChart({ dateFrom, dateTo }: Props = {}) {
-  const params = dateFrom || dateTo ? { date_from: dateFrom, date_to: dateTo } : undefined
+export function PmcChart({ dateFrom, dateTo, sports }: Props = {}) {
+  const params = dateFrom || dateTo || sports
+    ? { date_from: dateFrom, date_to: dateTo, sports }
+    : undefined
   const { data, isLoading, isError } = usePmc(params)
 
   if (isLoading) {
