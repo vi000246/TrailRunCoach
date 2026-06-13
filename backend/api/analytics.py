@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, true
 from datetime import date, timedelta
 from typing import Optional
 
@@ -9,6 +9,17 @@ from backend.db.models import WorkoutFile, WorkoutMetric, AthleteSettings, PmcCa
 from backend.engine.algorithms.metrics import compute_run_pmc, compute_intensity_load_series
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+
+
+def _sport_clause(sports: Optional[list[str]]):
+    """Filter predicate for an optional list of sports.
+
+    ``None`` (or empty) means "all sports" — returns a tautology so callers can
+    always ``.where(_sport_clause(sports))`` without branching.
+    """
+    if not sports:
+        return true()
+    return WorkoutFile.sport.in_(sports)
 
 
 @router.get("/dashboard-summary")
@@ -95,6 +106,7 @@ async def weekly_load(
     athlete_id: int = 1,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    sports: Optional[list[str]] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     tss_subq = (
@@ -113,7 +125,7 @@ async def weekly_load(
             (func.sum(WorkoutFile.duration_s) / 3600.0).label("hours"),
             func.count(WorkoutFile.id).label("count"),
         )
-        .where(WorkoutFile.athlete_id == athlete_id)
+        .where(WorkoutFile.athlete_id == athlete_id, _sport_clause(sports))
     )
     if date_from:
         q = q.where(WorkoutFile.workout_date >= date_from)
@@ -142,12 +154,16 @@ async def run_load(
     athlete_id: int = 1,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    sports: Optional[list[str]] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
         date_to = date.today()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
+
+    # Backward-compatible default: callers that don't pass sports get running only.
+    sports = sports or ["running"]
 
     # Fetch seed values from latest settings
     settings_q = await db.execute(
@@ -165,7 +181,7 @@ async def run_load(
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutMetric.metric_key == "tss",
-            WorkoutFile.sport == "running",
+            _sport_clause(sports),
             WorkoutFile.workout_date.isnot(None),
         )
     )
@@ -187,17 +203,154 @@ async def run_load(
     }
 
 
+@router.get("/trail-load")
+async def trail_load(
+    athlete_id: int = 1,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trail-running PMC driven by hrTSS (primary load), with rTSS alongside.
+
+    Only activities classified as ``trail`` are included — pace-based rTSS is
+    shown for reference because it under-credits technical terrain.
+    """
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=365)
+
+    async def _metric_by_date(metric_key: str) -> dict[date, float]:
+        q = (
+            select(WorkoutFile.workout_date, WorkoutMetric.value)
+            .join(WorkoutMetric, WorkoutMetric.workout_id == WorkoutFile.id)
+            .where(
+                WorkoutFile.athlete_id == athlete_id,
+                WorkoutMetric.metric_key == metric_key,
+                WorkoutFile.trail_classification == "trail",
+                WorkoutFile.workout_date.isnot(None),
+            )
+        )
+        rows = (await db.execute(q)).all()
+        by_date: dict[date, float] = {}
+        for d, v in rows:
+            if v and d:
+                by_date[d] = by_date.get(d, 0.0) + v
+        return by_date
+
+    hr_by_date = await _metric_by_date("hr_tss")
+    rtss_by_date = await _metric_by_date("r_tss")
+
+    hr_series = sorted(hr_by_date.items())
+    pmc_data = compute_run_pmc(hr_series)
+    filtered = []
+    for p in pmc_data:
+        if not (date_from.isoformat() <= p["date"] <= date_to.isoformat()):
+            continue
+        d = date.fromisoformat(p["date"])
+        filtered.append({
+            "date": p["date"],
+            "ctl": p["ctl"],
+            "atl": p["atl"],
+            "tsb": p["tsb"],
+            "hr_tss": round(hr_by_date.get(d, 0.0), 1),
+            "r_tss": round(rtss_by_date[d], 1) if d in rtss_by_date else None,
+        })
+    return {"series": filtered, "athlete_id": athlete_id, "primary_load": "hr_tss"}
+
+
+@router.get("/chart-interpretation")
+async def chart_interpretation(
+    chart: str = "pmc",
+    athlete_id: int = 1,
+    db: AsyncSession = Depends(get_db),
+):
+    """Rule-based plain-language reading + status signal for a chart.
+
+    Currently TSB-driven (status of latest PMC row); other charts fall back to
+    the same signal until chart-specific rules are added.
+    """
+    from backend.engine.algorithms.interpret import interpret_tsb
+
+    latest = (await db.execute(
+        select(PmcCache)
+        .where(PmcCache.athlete_id == athlete_id)
+        .order_by(PmcCache.date.desc())
+        .limit(1)
+    )).scalars().first()
+    tsb = latest.tsb if latest else None
+    result = interpret_tsb(tsb)
+    result["chart"] = chart
+    return result
+
+
+@router.get("/trail-summary")
+async def trail_summary(
+    athlete_id: int = 1,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate trail-running stats: total climb, activity count, recent climbs/VAM."""
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=365)
+
+    q = (
+        select(
+            WorkoutFile.workout_date,
+            WorkoutFile.elevation_gain_m,
+            WorkoutFile.duration_s,
+            WorkoutFile.total_distance_m,
+        )
+        .where(
+            WorkoutFile.athlete_id == athlete_id,
+            WorkoutFile.trail_classification == "trail",
+            WorkoutFile.workout_date.isnot(None),
+            WorkoutFile.workout_date >= date_from,
+            WorkoutFile.workout_date <= date_to,
+        )
+        .order_by(WorkoutFile.workout_date.desc())
+    )
+    rows = (await db.execute(q)).all()
+
+    total_gain = 0.0
+    recent = []
+    for d, gain, dur, dist in rows:
+        gain = gain or 0.0
+        total_gain += gain
+        # VAM (vertical ascent metres/hour)
+        vam = round(gain * 3600.0 / dur, 0) if dur and dur > 0 else None
+        recent.append({
+            "date": d.isoformat() if d else None,
+            "gain_m": round(gain, 0),
+            "distance_km": round((dist or 0.0) / 1000.0, 2),
+            "vam": vam,
+        })
+
+    return {
+        "athlete_id": athlete_id,
+        "total_gain_m": round(total_gain, 0),
+        "activity_count": len(rows),
+        "recent": recent,
+    }
+
+
 @router.get("/intensity-load")
 async def intensity_load(
     athlete_id: int = 1,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    sports: Optional[list[str]] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
         date_to = date.today()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
+
+    sports = sports or ["running"]
 
     async def _get_series(metric_key: str) -> list[tuple[date, float]]:
         q = (
@@ -206,7 +359,7 @@ async def intensity_load(
             .where(
                 WorkoutFile.athlete_id == athlete_id,
                 WorkoutMetric.metric_key == metric_key,
-                WorkoutFile.sport == "running",
+                _sport_clause(sports),
                 WorkoutFile.workout_date.isnot(None),
             )
         )
@@ -245,12 +398,15 @@ async def run_volume(
     athlete_id: int = 1,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    sports: Optional[list[str]] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
         date_to = date.today()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
+
+    sports = sports or ["running"]
 
     tss_subq = (
         select(func.coalesce(func.sum(WorkoutMetric.value), 0))
@@ -272,7 +428,7 @@ async def run_volume(
         )
         .where(
             WorkoutFile.athlete_id == athlete_id,
-            WorkoutFile.sport == "running",
+            _sport_clause(sports),
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
         )
@@ -291,7 +447,7 @@ async def run_volume(
         )
         .where(
             WorkoutFile.athlete_id == athlete_id,
-            WorkoutFile.sport == "running",
+            _sport_clause(sports),
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
         )

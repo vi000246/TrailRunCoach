@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from datetime import date, timedelta
@@ -7,6 +7,7 @@ from typing import Optional
 from backend.db.database import get_db
 from backend.db.models import WorkoutMetric, WorkoutFile, AthleteSettings
 from backend.engine.algorithms.metrics import compute_pmc
+from backend.api.analytics import _sport_clause
 
 router = APIRouter(prefix="/api/v1/pmc", tags=["pmc"])
 
@@ -16,6 +17,7 @@ async def get_pmc(
     athlete_id: int = 1,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    sports: Optional[list[str]] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
@@ -29,6 +31,7 @@ async def get_pmc(
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutMetric.metric_key == "tss",
+            _sport_clause(sports),
             WorkoutFile.workout_date.isnot(None),
         )
     )

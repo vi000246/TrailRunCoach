@@ -53,6 +53,8 @@ class WorkoutFile(Base):
     coros_activity_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
     coros_sport_type: Mapped[Optional[int]]
     elevation_gain_m: Mapped[Optional[float]] = mapped_column(nullable=True)
+    trail_classification: Mapped[Optional[str]] = mapped_column(String(20), default="unknown")
+    classification_overridden: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     athlete: Mapped["Athlete"] = relationship(back_populates="workouts")
     metrics: Mapped[list["WorkoutMetric"]] = relationship(back_populates="workout", cascade="all, delete-orphan")
