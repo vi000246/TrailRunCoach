@@ -259,6 +259,31 @@ async def trail_load(
     return {"series": filtered, "athlete_id": athlete_id, "primary_load": "hr_tss"}
 
 
+@router.get("/chart-interpretation")
+async def chart_interpretation(
+    chart: str = "pmc",
+    athlete_id: int = 1,
+    db: AsyncSession = Depends(get_db),
+):
+    """Rule-based plain-language reading + status signal for a chart.
+
+    Currently TSB-driven (status of latest PMC row); other charts fall back to
+    the same signal until chart-specific rules are added.
+    """
+    from backend.engine.algorithms.interpret import interpret_tsb
+
+    latest = (await db.execute(
+        select(PmcCache)
+        .where(PmcCache.athlete_id == athlete_id)
+        .order_by(PmcCache.date.desc())
+        .limit(1)
+    )).scalars().first()
+    tsb = latest.tsb if latest else None
+    result = interpret_tsb(tsb)
+    result["chart"] = chart
+    return result
+
+
 @router.get("/trail-summary")
 async def trail_summary(
     athlete_id: int = 1,
