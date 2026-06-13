@@ -23,7 +23,11 @@ def _sport_clause(sports: Optional[list[str]]):
 
 
 @router.get("/dashboard-summary")
-async def dashboard_summary(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+async def dashboard_summary(
+    athlete_id: int = 1,
+    sports: Optional[list[str]] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
     today = date.today()
     week_start = today - timedelta(days=7)
 
@@ -71,14 +75,15 @@ async def dashboard_summary(athlete_id: int = 1, db: AsyncSession = Depends(get_
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.workout_date >= week_start,
+            _sport_clause(sports),
         )
     )
     week_row = week_q.first()
 
-    # Last workout
+    # Last workout (within the selected sports)
     last_q = await db.execute(
         select(WorkoutFile)
-        .where(WorkoutFile.athlete_id == athlete_id)
+        .where(WorkoutFile.athlete_id == athlete_id, _sport_clause(sports))
         .order_by(WorkoutFile.workout_date.desc())
         .limit(1)
     )
@@ -257,6 +262,95 @@ async def trail_load(
             "r_tss": round(rtss_by_date[d], 1) if d in rtss_by_date else None,
         })
     return {"series": filtered, "athlete_id": athlete_id, "primary_load": "hr_tss"}
+
+
+SPORT_LABELS_ZH = {
+    "running": "跑步", "cycling": "單車", "swimming": "游泳", "walking": "健走",
+}
+
+
+def _fmt_duration(s) -> str:
+    s = int(s or 0)
+    h, m = divmod(s // 60, 60)
+    return f"{h}h{m:02d}m" if h else f"{m}m"
+
+
+@router.get("/achievements")
+async def achievements(
+    athlete_id: int = 1,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
+):
+    """Highest-load activities in a date range — for sharing your fitness at a glance.
+
+    Load = best available of TSS / hrTSS per activity. Each item carries a derived
+    text summary (sport · distance · climb · time) suitable for screenshots.
+    """
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=90)
+
+    load_subq = (
+        select(func.max(WorkoutMetric.value))
+        .where(
+            WorkoutMetric.workout_id == WorkoutFile.id,
+            WorkoutMetric.metric_key.in_(["tss", "hr_tss"]),
+        )
+        .correlate(WorkoutFile)
+        .scalar_subquery()
+    )
+
+    q = (
+        select(
+            WorkoutFile.id, WorkoutFile.workout_date, WorkoutFile.sport,
+            WorkoutFile.trail_classification, WorkoutFile.total_distance_m,
+            WorkoutFile.elevation_gain_m, WorkoutFile.duration_s,
+            func.coalesce(load_subq, 0.0).label("load"),
+        )
+        .where(
+            WorkoutFile.athlete_id == athlete_id,
+            WorkoutFile.workout_date >= date_from,
+            WorkoutFile.workout_date <= date_to,
+        )
+        .order_by(func.coalesce(load_subq, 0.0).desc())
+        .limit(max(1, min(limit, 50)))
+    )
+    rows = (await db.execute(q)).all()
+
+    items = []
+    for r in rows:
+        dist_km = round((r.total_distance_m or 0) / 1000.0, 2)
+        elev = round(r.elevation_gain_m or 0)
+        dur = _fmt_duration(r.duration_s)
+        is_trail = r.trail_classification == "trail"
+        sport_label = "越野跑" if is_trail else SPORT_LABELS_ZH.get(r.sport, r.sport or "運動")
+        parts = [sport_label]
+        if dist_km:
+            parts.append(f"{dist_km}km")
+        if elev:
+            parts.append(f"爬升{elev}m")
+        parts.append(dur)
+        items.append({
+            "id": r.id,
+            "date": r.workout_date.isoformat() if r.workout_date else None,
+            "sport": r.sport,
+            "sport_label": sport_label,
+            "distance_km": dist_km,
+            "elevation_m": elev,
+            "duration_s": int(r.duration_s or 0),
+            "duration_str": dur,
+            "load": round(float(r.load or 0), 1),
+            "summary": " · ".join(parts),
+        })
+    return {
+        "athlete_id": athlete_id,
+        "date_from": date_from.isoformat(),
+        "date_to": date_to.isoformat(),
+        "items": items,
+    }
 
 
 @router.get("/chart-interpretation")

@@ -29,14 +29,14 @@ export function OverviewPage() {
         <DateRangePicker value={range} onChange={setRange} />
       </div>
 
-      <SmartDashboardSection />
-
       <div className="border border-[#1c2333] rounded-lg p-3">
-        <div className="text-xs font-semibold text-[#7d8fa6] uppercase tracking-wide mb-2">運動篩選</div>
+        <div className="text-xs font-semibold text-[#7d8fa6] uppercase tracking-wide mb-2">運動篩選（影響本頁所有圖表）</div>
         <SportFilter selected={effectiveSelected} onChange={setSelected} />
       </div>
 
-      <ChartCard title="體能管理圖 (所有運動)" chart="pmc">
+      <SmartDashboardSection sports={sports} />
+
+      <ChartCard title="體能管理圖" chart="pmc">
         <PmcChart dateFrom={range.from} dateTo={range.to} sports={sports} />
       </ChartCard>
 
