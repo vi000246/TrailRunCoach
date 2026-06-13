@@ -234,6 +234,7 @@ export interface AiStatusResponse {
 export interface AiModelsResponse {
   claude: string[]
   openai: string[]
+  gemini?: string[]
 }
 
 export interface ChatMessage {
