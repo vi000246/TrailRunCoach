@@ -1,12 +1,21 @@
 # SRS: Coros Sync — 非官方 API 自動下載 FIT
 
 ## Metadata
-- **Source PRD**: `docs/prd/wko5-training-ai.prd.md` — Milestone 4
+- **Source PRDs**:
+  - `docs/prd/wko5-training-ai.prd.md` — Milestone 4（initial: Coros 非官方 API）
+  - `docs/prd/wko5-trail-multipage-sync-coach.prd.md` — Milestone 3（統一同步頁 + 已載入資料盤點 + TP 接 UI）
 - **Source Linear Issue**: N/A — standalone
 - **Owner**: vi000246
-- **Status**: IMPLEMENTED
+- **Status**: IMPLEMENTED（M3 delta 進行中）
 - **Generated**: 2026-05-15
-- **Last updated**: 2026-05-15
+- **Last updated**: 2026-06-13
+
+## Change History
+
+| Date | Source PRD | Feature SRS | Summary |
+|------|------------|-------------|---------|
+| 2026-05-15 | `wko5-training-ai.prd.md` | (initial) | Created — Coros 非官方 API 自動下載 FIT，已驗證 1088 筆 |
+| 2026-06-13 | `wko5-trail-multipage-sync-coach.prd.md` | `docs/srs/coros-sync-unified-sync-page-data-inventory.srs.md` | 統一同步頁：TP 下載接上 UI、新增 `/sync/inventory` 盤點端點、CorosPage→SyncPage |
 
 ---
 
@@ -306,6 +315,17 @@ ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
 | POST | `/api/v1/auth/coros/logout` | 清除 token |
 | POST | `/api/v1/sync/coros/start` | 觸發同步（SSE stream） |
 | POST | `/api/v1/pmc/recompute` | 用當前 FTP 重新計算所有 TSS |
+
+### M3 新增 Endpoints（2026-06-13，統一同步頁）
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/sync/inventory` | 已載入資料盤點：依 source/sport 筆數、日期範圍、各來源 last-sync |
+| POST | `/api/v1/sync/tp/start` | 觸發 TrainingPeaks 下載同步（SSE stream，接既有 `tp_client.sync_workouts`） |
+| POST | `/api/v1/auth/tp/login` | TP 帳密登入取 OAuth token（`tp_client.login_password` 已驗證） |
+| GET | `/api/v1/auth/tp/status` | TP 連線狀態 |
+
+> TP client（`backend/sync/tp_client.py`，649 行）已於 2026-05-15 對 live TP OAuth 驗證：password grant → athlete download → `filedata` 端點回 base64-gzip FIT → decode/inflate。M3 主要是把它接到 UI 並加盤點，不需重新逆向格式。
 
 ### Request / Response
 

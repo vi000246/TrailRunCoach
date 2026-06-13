@@ -25,4 +25,5 @@
 
 | Date | Module | Feature SRS | One-line Summary |
 |------|--------|-------------|-----------------|
-| 2026-06-13 | sport-pages | [multi-sport-views-trail-analytics.srs.md](../srs/sport-pages-multi-sport-views-trail-analytics.srs.md) | 三頁面分流、越野跑專屬圖表、trail 分類持久化、圖表白話化、公式驗證工具 |
+| 2026-06-13 | coros-sync | [unified-sync-page-data-inventory.srs.md](../srs/coros-sync-unified-sync-page-data-inventory.srs.md) | 統一同步頁：TP 下載接 UI、已載入資料盤點端點 |
+| 2026-06-13 | sport-pages | [multi-sport-views-trail-analytics.srs.md](../srs/completed/sport-pages-multi-sport-views-trail-analytics.srs.md) | 三頁面分流、越野跑專屬圖表、trail 分類持久化、圖表白話化、公式驗證工具 |

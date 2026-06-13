@@ -48,6 +48,15 @@ export interface ChartInterpretation {
   chart?: string
 }
 
+export interface SyncInventory {
+  total: number
+  by_source: Record<string, number>
+  by_sport: Record<string, number>
+  date_min: string | null
+  date_max: string | null
+  last_sync: { coros: string | null; tp: string | null }
+}
+
 export interface PmcPoint {
   date: string
   ctl: number
