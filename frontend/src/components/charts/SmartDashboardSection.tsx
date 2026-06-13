@@ -40,11 +40,12 @@ function StatCard({ label, value, sub }: StatCardProps) {
 
 interface Props {
   athleteId?: number
+  sports?: string[]
 }
 
-export function SmartDashboardSection({ athleteId = 1 }: Props) {
+export function SmartDashboardSection({ athleteId = 1, sports }: Props) {
   const navigate = useNavigate()
-  const { data, isLoading } = useDashboardSummary(athleteId)
+  const { data, isLoading } = useDashboardSummary(athleteId, sports)
 
   if (isLoading) {
     return <div className="text-xs text-gray-600 py-2">Loading summary...</div>

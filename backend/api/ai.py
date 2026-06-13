@@ -7,7 +7,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from backend.db.database import get_db
 from backend.db.models import AthleteSettings
-from backend.engine.ai.client import get_ai_client, CLAUDE_MODELS, OPENAI_MODELS
+from backend.engine.ai.client import get_ai_client, CLAUDE_MODELS, OPENAI_MODELS, GEMINI_MODELS
 from backend.engine.ai.context import build_context, SYSTEM_PROMPT
 from backend.engine.ai.zones import compute_zones
 
@@ -22,7 +22,7 @@ class ChatRequest(BaseModel):
 
 @router.get("/models")
 async def list_models():
-    return {"claude": CLAUDE_MODELS, "openai": OPENAI_MODELS}
+    return {"claude": CLAUDE_MODELS, "openai": OPENAI_MODELS, "gemini": GEMINI_MODELS}
 
 
 @router.get("/status/{athlete_id}")

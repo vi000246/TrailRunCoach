@@ -6,6 +6,7 @@ const NAV_ITEMS = [
   { to: '/overview',   label: '總體' },
   { to: '/running',    label: '跑步' },
   { to: '/trail',      label: '越野跑' },
+  { to: '/achievements', label: '運動成就' },
   { to: '/activities', label: '活動' },
   { to: '/ai',         label: 'AI 教練' },
   { to: '/sync',       label: '同步' },

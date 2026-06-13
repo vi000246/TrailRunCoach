@@ -8,7 +8,7 @@ import type {
   RunLoadPoint, IntensityLoadPoint, RunVolumeResponse,
   AiStatusResponse, AiModelsResponse, DashboardSummary, TrailAnalysisResponse,
   SportsFacetsResponse, TrailLoadPoint, TrailSummaryResponse, ChartInterpretation,
-  SyncInventory,
+  SyncInventory, AchievementsResponse,
 } from './client'
 
 // Shared param shape for sport-filterable analytics hooks.
@@ -248,10 +248,12 @@ export function useAiModels() {
   })
 }
 
-export function useDashboardSummary(athleteId = 1) {
+export function useDashboardSummary(athleteId = 1, sports?: string[]) {
   return useQuery<DashboardSummary>({
-    queryKey: ['dashboard_summary', athleteId],
-    queryFn: () => api.get('/analytics/dashboard-summary', { params: { athlete_id: athleteId } }).then(r => r.data),
+    queryKey: ['dashboard_summary', athleteId, sports],
+    queryFn: () => api.get('/analytics/dashboard-summary', {
+      params: { athlete_id: athleteId, sports },
+    }).then(r => r.data),
     staleTime: 60_000,
   })
 }
@@ -262,6 +264,13 @@ export function useTrailAnalysis(workoutId: number) {
     queryFn: () => api.get(`/workouts/${workoutId}/trail`).then(r => r.data),
     staleTime: Infinity,
     retry: false,
+  })
+}
+
+export function useAchievements(params?: { date_from?: string; date_to?: string; limit?: number }) {
+  return useQuery<AchievementsResponse>({
+    queryKey: ['achievements', params],
+    queryFn: () => api.get('/analytics/achievements', { params }).then(r => r.data),
   })
 }
 

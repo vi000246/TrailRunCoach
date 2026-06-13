@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAthleteSettings, useUpdateSettings, useRecomputePmc, useBackfillTss } from '../api/hooks'
+import { useAthleteSettings, useUpdateSettings, useRecomputePmc, useBackfillTss, useAiModels, useAiStatus } from '../api/hooks'
 import type { PowerZone, HrZone } from '../api/client'
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Input } from '../components/ui/input'
@@ -58,8 +58,36 @@ export function ConfigPage() {
   const update = useUpdateSettings()
   const recompute = useRecomputePmc()
   const backfill = useBackfillTss()
+  const { data: aiModels } = useAiModels()
+  const { data: aiStatus } = useAiStatus()
   const [toast, setToast] = useState<string | null>(null)
   const [backfillResult, setBackfillResult] = useState<string | null>(null)
+  const [aiProvider, setAiProvider] = useState<string>('gemini')
+
+  const providerModels: Record<string, string[]> = {
+    claude: aiModels?.claude ?? [],
+    openai: aiModels?.openai ?? [],
+    gemini: aiModels?.gemini ?? [],
+  }
+
+  const handleAiSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const fd = new FormData(e.currentTarget)
+    const provider = fd.get('ai_provider') as string
+    const apiKey = fd.get('ai_api_key') as string
+    const model = fd.get('ai_model') as string
+    update.mutate(
+      {
+        ai_provider: provider || undefined,
+        ai_api_key: apiKey || undefined,
+        ai_model: model || undefined,
+      },
+      {
+        onSuccess: () => showToast('AI 設定已儲存'),
+        onError: () => showToast('儲存失敗'),
+      },
+    )
+  }
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -122,7 +150,7 @@ export function ConfigPage() {
   return (
     <div className="p-5 max-w-2xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-sm font-semibold text-[#7d8fa6] uppercase tracking-wide">Config</h1>
+        <h1 className="text-sm font-semibold text-[#7d8fa6] uppercase tracking-wide">設定</h1>
         {toast && <span className="text-xs text-[#22c55e]">{toast}</span>}
       </div>
 
@@ -135,7 +163,7 @@ export function ConfigPage() {
             <div className="text-[#3e4e63] text-sm">Loading...</div>
           ) : (
             <form key={settings?.effective_date ?? 'empty'} onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="ftp">FTP (W)</Label>
                   <Input
@@ -291,6 +319,68 @@ export function ConfigPage() {
               )}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI 教練設定</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleAiSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="ai_provider">Provider</Label>
+                <select
+                  id="ai_provider"
+                  name="ai_provider"
+                  value={aiProvider}
+                  onChange={e => setAiProvider(e.target.value)}
+                  className="w-full h-9 px-3 text-sm bg-[#0e1117] border border-[#1c2333] rounded text-[#e8edf5] focus:outline-none focus:border-[#7c3aed]"
+                >
+                  <option value="gemini">Gemini (Google)</option>
+                  <option value="claude">Claude (Anthropic)</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ai_model">Model</Label>
+                <select
+                  id="ai_model"
+                  name="ai_model"
+                  defaultValue={aiStatus?.model ?? ''}
+                  className="w-full h-9 px-3 text-sm bg-[#0e1117] border border-[#1c2333] rounded text-[#e8edf5] focus:outline-none focus:border-[#7c3aed]"
+                >
+                  {(providerModels[aiProvider] ?? []).map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ai_api_key">API Key</Label>
+                <Input
+                  id="ai_api_key"
+                  name="ai_api_key"
+                  type="password"
+                  placeholder={aiStatus?.configured ? '已設定（留空不變）' : 'AIza... / sk-...'}
+                  className="w-full"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={update.isPending} size="sm">
+                {update.isPending ? 'Saving...' : '儲存 AI 設定'}
+              </Button>
+              {aiStatus?.configured && (
+                <span className="text-xs text-[#22c55e]">
+                  ● 已設定：{aiStatus.provider} / {aiStatus.model}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-[#3e4e63]">
+              Gemini key 從 Google AI Studio 取得。儲存後即可在「AI 教練」頁使用。
+            </p>
+          </form>
         </CardContent>
       </Card>
     </div>
