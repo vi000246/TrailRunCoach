@@ -5,6 +5,13 @@
 - **Owner**: vi000246
 - **Status**: DRAFT
 - **Generated**: 2026-05-15
+- **Last Updated**: 2026-06-13
+
+## Change History
+
+| Date | Type | Feature SRS | Summary |
+|------|------|-------------|---------|
+| 2026-06-13 | hotfix | N/A | Menu Bar 美化 — AppShell.tsx 導覽列重設計（品牌 accent、圓角 pill active、backdrop blur、中文統一標籤） |
 
 ---
 
