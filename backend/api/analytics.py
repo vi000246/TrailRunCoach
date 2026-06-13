@@ -203,6 +203,62 @@ async def run_load(
     }
 
 
+@router.get("/trail-load")
+async def trail_load(
+    athlete_id: int = 1,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trail-running PMC driven by hrTSS (primary load), with rTSS alongside.
+
+    Only activities classified as ``trail`` are included — pace-based rTSS is
+    shown for reference because it under-credits technical terrain.
+    """
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=365)
+
+    async def _metric_by_date(metric_key: str) -> dict[date, float]:
+        q = (
+            select(WorkoutFile.workout_date, WorkoutMetric.value)
+            .join(WorkoutMetric, WorkoutMetric.workout_id == WorkoutFile.id)
+            .where(
+                WorkoutFile.athlete_id == athlete_id,
+                WorkoutMetric.metric_key == metric_key,
+                WorkoutFile.trail_classification == "trail",
+                WorkoutFile.workout_date.isnot(None),
+            )
+        )
+        rows = (await db.execute(q)).all()
+        by_date: dict[date, float] = {}
+        for d, v in rows:
+            if v and d:
+                by_date[d] = by_date.get(d, 0.0) + v
+        return by_date
+
+    hr_by_date = await _metric_by_date("hr_tss")
+    rtss_by_date = await _metric_by_date("r_tss")
+
+    hr_series = sorted(hr_by_date.items())
+    pmc_data = compute_run_pmc(hr_series)
+    filtered = []
+    for p in pmc_data:
+        if not (date_from.isoformat() <= p["date"] <= date_to.isoformat()):
+            continue
+        d = date.fromisoformat(p["date"])
+        filtered.append({
+            "date": p["date"],
+            "ctl": p["ctl"],
+            "atl": p["atl"],
+            "tsb": p["tsb"],
+            "hr_tss": round(hr_by_date.get(d, 0.0), 1),
+            "r_tss": round(rtss_by_date[d], 1) if d in rtss_by_date else None,
+        })
+    return {"series": filtered, "athlete_id": athlete_id, "primary_load": "hr_tss"}
+
+
 @router.get("/intensity-load")
 async def intensity_load(
     athlete_id: int = 1,

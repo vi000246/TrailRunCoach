@@ -11,7 +11,9 @@ from backend.db.models import Athlete, WorkoutFile, WorkoutMetric, MmpCache
 from backend.files.wko4_reader import parse_wko4_metadata
 from backend.files.fit_reader import parse_fit
 from backend.engine.algorithms.mmp import compute_mmp
-from backend.engine.algorithms.metrics import compute_all_metrics, compute_run_ftp_from_mmp
+from backend.engine.algorithms.metrics import (
+    compute_all_metrics, compute_run_ftp_from_mmp, compute_load_metrics,
+)
 from backend.engine.algorithms.classify import classify_trail
 
 WKO5_ROOT = Path.home() / "WKO5"
@@ -226,5 +228,24 @@ async def _import_one_file(
             db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_95pct_s", value=hi_95))
         if hi_103 > 0:
             db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_103pct_s", value=hi_103))
+
+    # Trail/run load metrics (hrTSS primary, rTSS alongside) — running only
+    if is_running:
+        from backend.db.models import AthleteSettings
+        load_settings_q = await db.execute(
+            select(AthleteSettings)
+            .where(AthleteSettings.athlete_id == athlete_id)
+            .order_by(AthleteSettings.effective_date.desc())
+        )
+        load_settings = load_settings_q.scalars().first()
+        load_metrics = compute_load_metrics(
+            hr=raw.heart_rate_bpm if raw.has_hr else None,
+            duration_s=raw.duration_s,
+            distance_m=raw.total_distance_m,
+            lthr=load_settings.lthr if load_settings else None,
+            threshold_pace_s_per_km=load_settings.threshold_pace_s_per_km if load_settings else None,
+        )
+        for key, val in load_metrics.items():
+            db.add(WorkoutMetric(workout_id=wf.id, metric_key=key, value=float(val)))
 
     return wf
