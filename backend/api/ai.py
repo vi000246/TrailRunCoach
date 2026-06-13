@@ -9,6 +9,7 @@ from backend.db.database import get_db
 from backend.db.models import AthleteSettings
 from backend.engine.ai.client import get_ai_client, CLAUDE_MODELS, OPENAI_MODELS
 from backend.engine.ai.context import build_context, SYSTEM_PROMPT
+from backend.engine.ai.zones import compute_zones
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
 
@@ -39,6 +40,19 @@ async def ai_status(athlete_id: int, db: AsyncSession = Depends(get_db)):
         "provider": s.ai_provider,
         "model": s.ai_model,
     }
+
+
+@router.get("/zones")
+async def ai_zones(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Power/HR training zone boundaries computed from the athlete's settings."""
+    s = (await db.execute(
+        select(AthleteSettings)
+        .where(AthleteSettings.athlete_id == athlete_id)
+        .order_by(AthleteSettings.effective_date.desc())
+    )).scalars().first()
+    ftp = (s.run_ftp_w or s.ftp_w) if s else None
+    lthr = s.lthr if s else None
+    return {"athlete_id": athlete_id, "run_ftp_w": ftp, "lthr": lthr, **compute_zones(ftp, lthr)}
 
 
 @router.post("/chat")
