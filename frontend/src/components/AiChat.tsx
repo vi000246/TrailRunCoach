@@ -18,8 +18,10 @@ export function AiChat({ athleteId = 1, initialMessage }: AiChatProps) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const send = async () => {
-    const msg = input.trim()
+  const QUICK_PROMPTS = ['今天該練什麼？', '我的間歇怎麼排？', '現在該做 zone 幾？']
+
+  const send = async (override?: string) => {
+    const msg = (override ?? input).trim()
     if (!msg || isStreaming) return
     setInput('')
     addUserMessage(msg)
@@ -104,7 +106,21 @@ export function AiChat({ athleteId = 1, initialMessage }: AiChatProps) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="border-t border-gray-800 p-3 flex gap-2">
+      <div className="border-t border-gray-800 px-3 pt-2 flex flex-wrap gap-2">
+        {QUICK_PROMPTS.map(q => (
+          <button
+            key={q}
+            type="button"
+            onClick={() => send(q)}
+            disabled={isStreaming}
+            className="text-xs px-2 py-1 rounded border border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-500 transition disabled:opacity-40"
+          >
+            {q}
+          </button>
+        ))}
+      </div>
+
+      <div className="px-3 pb-3 pt-2 flex gap-2">
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -115,7 +131,7 @@ export function AiChat({ athleteId = 1, initialMessage }: AiChatProps) {
           disabled={isStreaming}
         />
         <button
-          onClick={send}
+          onClick={() => send()}
           disabled={isStreaming || !input.trim()}
           className="px-4 py-2 bg-blue-700 hover:bg-blue-600 rounded text-sm disabled:opacity-40 transition self-end"
         >
