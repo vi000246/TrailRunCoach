@@ -25,5 +25,6 @@
 
 | Date | Module | Feature SRS | One-line Summary |
 |------|--------|-------------|-----------------|
-| 2026-06-13 | coros-sync | [unified-sync-page-data-inventory.srs.md](../srs/coros-sync-unified-sync-page-data-inventory.srs.md) | 統一同步頁：TP 下載接 UI、已載入資料盤點端點 |
+| 2026-06-13 | ai-coach | [knowledge-driven-prescription.srs.md](../srs/ai-coach-knowledge-driven-prescription.srs.md) | 知識驅動處方：curated 知識 + zone 計算 + 處方 prompt |
+| 2026-06-13 | coros-sync | [unified-sync-page-data-inventory.srs.md](../srs/completed/coros-sync-unified-sync-page-data-inventory.srs.md) | 統一同步頁：TP 下載接 UI、已載入資料盤點端點 |
 | 2026-06-13 | sport-pages | [multi-sport-views-trail-analytics.srs.md](../srs/completed/sport-pages-multi-sport-views-trail-analytics.srs.md) | 三頁面分流、越野跑專屬圖表、trail 分類持久化、圖表白話化、公式驗證工具 |

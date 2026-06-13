@@ -119,7 +119,7 @@ M1 先交付使用者最痛的兩件：**越野跑頁面 + 圖表公式/篩選�
 | 1 | 圖表驗證 + 越野跑頁面 | 使用者有一個數字可信、看得懂、含爬升視角的越野跑分析頁面 | complete | - | `docs/srs/completed/sport-pages-multi-sport-views-trail-analytics.srs.md` | `docs/plans/completed/sport-pages-*.plan.md` |
 | 2 | 三頁面分流 + 總體篩選 | 使用者能在總體/跑步/越野跑三個獨立頁面間切換，總體頁可用 checkbox 多選運動 | complete | 1 | 同上 | 同上 |
 | 3 | 資料同步頁面 | 使用者能一鍵同步並看到哪些資料已載入網站圖表 | complete | - | `docs/srs/completed/coros-sync-unified-sync-page-data-inventory.srs.md` | `docs/plans/completed/coros-sync-unified-sync-page-data-inventory.plan.md` |
-| 4 | AI 教練處方強化 | 使用者能得到依其筆記知識判讀的訓練狀態與 zone/間歇處方 | pending | 1 | - | - |
+| 4 | AI 教練處方強化 | 使用者能得到依其筆記知識判讀的訓練狀態與 zone/間歇處方 | complete | 1 | `docs/srs/completed/ai-coach-knowledge-driven-prescription.srs.md` | `docs/plans/completed/ai-coach-knowledge-driven-prescription.plan.md` |
 
 ### Milestone Details
 
