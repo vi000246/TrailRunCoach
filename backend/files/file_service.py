@@ -12,8 +12,22 @@ from backend.files.wko4_reader import parse_wko4_metadata
 from backend.files.fit_reader import parse_fit
 from backend.engine.algorithms.mmp import compute_mmp
 from backend.engine.algorithms.metrics import compute_all_metrics, compute_run_ftp_from_mmp
+from backend.engine.algorithms.classify import classify_trail
 
 WKO5_ROOT = Path.home() / "WKO5"
+
+
+def _apply_classification(wf: WorkoutFile) -> None:
+    """Set trail/road classification from sport + distance + elevation.
+
+    Skips activities the user has manually overridden so re-imports never
+    clobber a deliberate choice.
+    """
+    if getattr(wf, "classification_overridden", False):
+        return
+    wf.trail_classification = classify_trail(
+        wf.sport, wf.total_distance_m, wf.elevation_gain_m
+    )
 
 
 def discover_workout_files(athlete_dir: Path) -> list[Path]:
@@ -163,6 +177,8 @@ async def _import_one_file(
         wf.elevation_gain_m = round(elevation_gain, 1)
     elif "total_ascent" in raw.session:
         wf.elevation_gain_m = float(raw.session["total_ascent"])
+
+    _apply_classification(wf)
 
     if not raw.has_power:
         return wf
