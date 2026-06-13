@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import { AppShell } from './layouts/AppShell'
-import { SeasonPage } from './pages/SeasonPage'
+import { OverviewPage } from './pages/OverviewPage'
+import { RunningPage } from './pages/RunningPage'
+import { TrailPage } from './pages/TrailPage'
 import { ActivityListPage } from './pages/ActivityListPage'
 import { ActivityDetailPage } from './pages/ActivityDetailPage'
 import { ConfigPage } from './pages/ConfigPage'
@@ -12,8 +14,12 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<AppShell />}>
-          <Route index element={<Navigate to="/season" replace />} />
-          <Route path="season" element={<SeasonPage />} />
+          <Route index element={<Navigate to="/overview" replace />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="running" element={<RunningPage />} />
+          <Route path="trail" element={<TrailPage />} />
+          {/* legacy redirect */}
+          <Route path="season" element={<Navigate to="/overview" replace />} />
           <Route path="activities" element={<ActivityListPage />} />
           <Route path="activities/:id" element={<ActivityDetailPage />} />
           <Route path="config" element={<ConfigPage />} />
