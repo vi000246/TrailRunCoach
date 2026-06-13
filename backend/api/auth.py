@@ -92,10 +92,12 @@ async def coros_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_
     state = state_result.scalar_one_or_none()
     if not state or not state.coros_access_token:
         return {"authenticated": False, "email": None}
-    expired = (
-        state.coros_token_expires is not None
-        and datetime.now(timezone.utc) >= state.coros_token_expires
-    )
+    # SQLite returns naive datetimes; treat a naive expiry as UTC so the
+    # comparison against an aware "now" doesn't raise TypeError.
+    expiry = state.coros_token_expires
+    if expiry is not None and expiry.tzinfo is None:
+        expiry = expiry.replace(tzinfo=timezone.utc)
+    expired = expiry is not None and datetime.now(timezone.utc) >= expiry
     return {
         "authenticated": not expired,
         "email": state.coros_email,
