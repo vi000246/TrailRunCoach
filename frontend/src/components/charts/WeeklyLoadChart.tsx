@@ -9,10 +9,13 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card'
 interface Props {
   dateFrom?: string
   dateTo?: string
+  sports?: string[]
 }
 
-export function WeeklyLoadChart({ dateFrom, dateTo }: Props = {}) {
-  const params = dateFrom || dateTo ? { date_from: dateFrom, date_to: dateTo } : undefined
+export function WeeklyLoadChart({ dateFrom, dateTo, sports }: Props = {}) {
+  const params = dateFrom || dateTo || sports
+    ? { date_from: dateFrom, date_to: dateTo, sports }
+    : undefined
   const { data, isLoading } = useWeeklyLoad(params)
 
   if (isLoading) {
