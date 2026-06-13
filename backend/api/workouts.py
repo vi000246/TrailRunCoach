@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from datetime import date
 from typing import Optional
+from pydantic import BaseModel
 
 import numpy as np
 
@@ -44,6 +45,36 @@ async def _get_workout_or_404(workout_id: int, db: AsyncSession) -> WorkoutFile:
     if not w:
         raise HTTPException(404, "WORKOUT_NOT_FOUND")
     return w
+
+
+VALID_CLASSIFICATIONS = ("road", "trail", "unknown")
+
+
+class ClassificationUpdate(BaseModel):
+    trail_classification: str
+
+
+@router.patch("/{workout_id}/classification")
+async def update_classification(
+    workout_id: int,
+    body: ClassificationUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    if body.trail_classification not in VALID_CLASSIFICATIONS:
+        raise HTTPException(400, "INVALID_CLASSIFICATION")
+    wf = (await db.execute(
+        select(WorkoutFile).where(WorkoutFile.id == workout_id)
+    )).scalar_one_or_none()
+    if not wf:
+        raise HTTPException(404, "WORKOUT_NOT_FOUND")
+    wf.trail_classification = body.trail_classification
+    wf.classification_overridden = True
+    await db.commit()
+    return {
+        "id": wf.id,
+        "trail_classification": wf.trail_classification,
+        "classification_overridden": True,
+    }
 
 
 @router.get("")
