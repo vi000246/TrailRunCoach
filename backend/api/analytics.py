@@ -259,6 +259,59 @@ async def trail_load(
     return {"series": filtered, "athlete_id": athlete_id, "primary_load": "hr_tss"}
 
 
+@router.get("/trail-summary")
+async def trail_summary(
+    athlete_id: int = 1,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate trail-running stats: total climb, activity count, recent climbs/VAM."""
+    if date_to is None:
+        date_to = date.today()
+    if date_from is None:
+        date_from = date_to - timedelta(days=365)
+
+    q = (
+        select(
+            WorkoutFile.workout_date,
+            WorkoutFile.elevation_gain_m,
+            WorkoutFile.duration_s,
+            WorkoutFile.total_distance_m,
+        )
+        .where(
+            WorkoutFile.athlete_id == athlete_id,
+            WorkoutFile.trail_classification == "trail",
+            WorkoutFile.workout_date.isnot(None),
+            WorkoutFile.workout_date >= date_from,
+            WorkoutFile.workout_date <= date_to,
+        )
+        .order_by(WorkoutFile.workout_date.desc())
+    )
+    rows = (await db.execute(q)).all()
+
+    total_gain = 0.0
+    recent = []
+    for d, gain, dur, dist in rows:
+        gain = gain or 0.0
+        total_gain += gain
+        # VAM (vertical ascent metres/hour)
+        vam = round(gain * 3600.0 / dur, 0) if dur and dur > 0 else None
+        recent.append({
+            "date": d.isoformat() if d else None,
+            "gain_m": round(gain, 0),
+            "distance_km": round((dist or 0.0) / 1000.0, 2),
+            "vam": vam,
+        })
+
+    return {
+        "athlete_id": athlete_id,
+        "total_gain_m": round(total_gain, 0),
+        "activity_count": len(rows),
+        "recent": recent,
+    }
+
+
 @router.get("/intensity-load")
 async def intensity_load(
     athlete_id: int = 1,
