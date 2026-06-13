@@ -8,6 +8,7 @@ import type {
   RunLoadPoint, IntensityLoadPoint, RunVolumeResponse,
   AiStatusResponse, AiModelsResponse, DashboardSummary, TrailAnalysisResponse,
   SportsFacetsResponse, TrailLoadPoint, TrailSummaryResponse, ChartInterpretation,
+  SyncInventory,
 } from './client'
 
 // Shared param shape for sport-filterable analytics hooks.
@@ -261,5 +262,27 @@ export function useTrailAnalysis(workoutId: number) {
     queryFn: () => api.get(`/workouts/${workoutId}/trail`).then(r => r.data),
     staleTime: Infinity,
     retry: false,
+  })
+}
+
+export function useSyncInventory(athleteId = 1) {
+  return useQuery<SyncInventory>({
+    queryKey: ['sync_inventory', athleteId],
+    queryFn: () => api.get('/sync/inventory', { params: { athlete_id: athleteId } }).then(r => r.data),
+  })
+}
+
+export function useTpStatus(athleteId = 1) {
+  return useQuery<{ authenticated: boolean; last_sync?: string | null; token_expires?: string | null }>({
+    queryKey: ['tp_status', athleteId],
+    queryFn: () => api.get(`/auth/tp/status?athlete_id=${athleteId}`).then(r => r.data),
+  })
+}
+
+export function useTpLogin() {
+  const qc = useQueryClient()
+  return useMutation<unknown, Error, { username: string; password: string }>({
+    mutationFn: (body) => api.post('/auth/tp/login', body).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tp_status'] }),
   })
 }
