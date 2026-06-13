@@ -271,6 +271,55 @@ def pace_rtss(
     return round(rtss, 1)
 
 
+def compute_hr_tss(
+    hr_series,
+    lthr,
+    duration_s,
+) -> float:
+    """TRIMP-style heart-rate TSS.
+
+    Uses HR relative to lactate-threshold HR (LTHR) as the intensity signal:
+      IF = HR / LTHR   (per sample)
+      hrTSS = (duration_s / 3600) * mean(IF^2) * 100
+    One hour exactly at LTHR yields ~100. Preferred over rTSS for technical
+    trail terrain where pace-based load under-credits the effort.
+    """
+    if hr_series is None or not lthr or lthr <= 0 or not duration_s or duration_s <= 0:
+        return 0.0
+    hr = np.asarray(hr_series, dtype=np.float64)
+    hr = hr[hr > 0]
+    if hr.size == 0:
+        return 0.0
+    intensity = hr / float(lthr)
+    avg_if_sq = float(np.mean(intensity ** 2))
+    return round((duration_s / 3600.0) * avg_if_sq * 100.0, 1)
+
+
+def compute_load_metrics(
+    hr,
+    duration_s,
+    distance_m,
+    lthr,
+    threshold_pace_s_per_km,
+) -> dict:
+    """Compute trail/run load metrics (hrTSS, rTSS) when inputs allow.
+
+    Only includes a key when its inputs are present and the result is positive,
+    so callers can persist the dict directly without writing zero/None rows.
+    """
+    out: dict = {}
+    hr_tss = compute_hr_tss(hr, lthr, duration_s)
+    if hr_tss > 0:
+        out["hr_tss"] = hr_tss
+    threshold_pace_s_per_m = (
+        threshold_pace_s_per_km / 1000.0 if threshold_pace_s_per_km else None
+    )
+    r_tss = pace_rtss(distance_m, duration_s, threshold_pace_s_per_m)
+    if r_tss > 0:
+        out["r_tss"] = r_tss
+    return out
+
+
 def compute_intensity_load_series(
     intensity_by_date: list[tuple[date, float]],
     tau: float,

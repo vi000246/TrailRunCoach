@@ -1,8 +1,52 @@
 import axios from 'axios'
 
-export const api = axios.create({ baseURL: '/api/v1' })
+// indexes:null → array params serialize as repeated keys (sports=a&sports=b),
+// which is what FastAPI's `Query(None)` list params expect (no `[]` brackets).
+export const api = axios.create({
+  baseURL: '/api/v1',
+  paramsSerializer: { indexes: null },
+})
 
 export type MmpCurve = Record<string, number>
+
+export interface SportFacet {
+  key: string
+  count: number
+  label: string
+}
+export interface SportsFacetsResponse {
+  sports: SportFacet[]
+}
+
+export interface TrailLoadPoint {
+  date: string
+  ctl: number
+  atl: number
+  tsb: number
+  hr_tss: number
+  r_tss: number | null
+}
+
+export interface TrailSummaryRecent {
+  date: string | null
+  gain_m: number
+  distance_km: number
+  vam: number | null
+}
+export interface TrailSummaryResponse {
+  athlete_id: number
+  total_gain_m: number
+  activity_count: number
+  recent: TrailSummaryRecent[]
+}
+
+export interface ChartInterpretation {
+  status: string
+  label: string
+  color: string
+  summary: string
+  chart?: string
+}
 
 export interface PmcPoint {
   date: string

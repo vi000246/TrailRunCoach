@@ -7,7 +7,11 @@ import type {
   TimeseriesResponse, ZonesResponse, WeeklyResponse,
   RunLoadPoint, IntensityLoadPoint, RunVolumeResponse,
   AiStatusResponse, AiModelsResponse, DashboardSummary, TrailAnalysisResponse,
+  SportsFacetsResponse, TrailLoadPoint, TrailSummaryResponse, ChartInterpretation,
 } from './client'
+
+// Shared param shape for sport-filterable analytics hooks.
+type LoadParams = { date_from?: string; date_to?: string; sports?: string[] }
 
 export function useWorkouts(params?: Record<string, unknown>) {
   return useQuery<WorkoutList>({
@@ -25,7 +29,7 @@ export function useWorkoutMmp(workoutId: number | null) {
   })
 }
 
-export function usePmc(params?: { date_from?: string; date_to?: string }) {
+export function usePmc(params?: LoadParams) {
   return useQuery<{ series: PmcPoint[] }>({
     queryKey: ['pmc', params],
     queryFn: () => api.get('/pmc', { params }).then(r => r.data),
@@ -129,7 +133,7 @@ export function useZones(workoutId: number) {
   })
 }
 
-export function useWeeklyLoad(params?: { date_from?: string; date_to?: string }) {
+export function useWeeklyLoad(params?: LoadParams) {
   return useQuery<WeeklyResponse>({
     queryKey: ['weekly', params],
     queryFn: () => api.get('/analytics/weekly', { params }).then(r => r.data),
@@ -144,24 +148,74 @@ export function useRecomputePmc() {
   })
 }
 
-export function useRunLoad(params?: { date_from?: string; date_to?: string }) {
+export function useRunLoad(params?: LoadParams) {
   return useQuery<{ series: RunLoadPoint[] }>({
     queryKey: ['run_load', params],
     queryFn: () => api.get('/analytics/run-load', { params }).then(r => r.data),
   })
 }
 
-export function useIntensityLoad(params?: { date_from?: string; date_to?: string }) {
+export function useIntensityLoad(params?: LoadParams) {
   return useQuery<{ series: IntensityLoadPoint[] }>({
     queryKey: ['intensity_load', params],
     queryFn: () => api.get('/analytics/intensity-load', { params }).then(r => r.data),
   })
 }
 
-export function useRunVolume(params?: { date_from?: string; date_to?: string }) {
+export function useRunVolume(params?: LoadParams) {
   return useQuery<RunVolumeResponse>({
     queryKey: ['run_volume', params],
     queryFn: () => api.get('/analytics/run-volume', { params }).then(r => r.data),
+  })
+}
+
+export function useSportsFacets(athleteId = 1) {
+  return useQuery<SportsFacetsResponse>({
+    queryKey: ['sports_facets', athleteId],
+    queryFn: () => api.get('/sports/facets', { params: { athlete_id: athleteId } }).then(r => r.data),
+  })
+}
+
+export function useTrailLoad(params?: { date_from?: string; date_to?: string; athlete_id?: number }) {
+  return useQuery<{ series: TrailLoadPoint[] }>({
+    queryKey: ['trail_load', params],
+    queryFn: () => api.get('/analytics/trail-load', { params }).then(r => r.data),
+  })
+}
+
+export function useTrailSummary(params?: { date_from?: string; date_to?: string; athlete_id?: number }) {
+  return useQuery<TrailSummaryResponse>({
+    queryKey: ['trail_summary', params],
+    queryFn: () => api.get('/analytics/trail-summary', { params }).then(r => r.data),
+  })
+}
+
+export function useInterpretation(chart: string, athleteId = 1) {
+  return useQuery<ChartInterpretation>({
+    queryKey: ['interpretation', chart, athleteId],
+    queryFn: () => api.get('/analytics/chart-interpretation', {
+      params: { chart, athlete_id: athleteId },
+    }).then(r => r.data),
+    enabled: !!chart,
+    staleTime: 60_000,
+  })
+}
+
+export function useUpdateClassification() {
+  const qc = useQueryClient()
+  return useMutation<
+    { id: number; trail_classification: string; classification_overridden: boolean },
+    Error,
+    { id: number; trail_classification: string }
+  >({
+    mutationFn: (v) => api.patch(`/workouts/${v.id}/classification`, {
+      trail_classification: v.trail_classification,
+    }).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workouts'] })
+      qc.invalidateQueries({ queryKey: ['trail_load'] })
+      qc.invalidateQueries({ queryKey: ['trail_summary'] })
+    },
   })
 }
 

@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db.database import init_db
 from backend.api import workouts, pmc, expr, dashboard, scan, sync, auth, athletes, analytics
-from backend.api import ai
+from backend.api import ai, sports
 
 
 @asynccontextmanager
@@ -41,6 +41,7 @@ app.include_router(auth.router)
 app.include_router(athletes.router)
 app.include_router(analytics.router)
 app.include_router(ai.router)
+app.include_router(sports.router)
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

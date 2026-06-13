@@ -2,7 +2,9 @@ import { NavLink, Outlet } from 'react-router'
 import { CorosSyncButton } from '../components/CorosSyncButton'
 
 const NAV_ITEMS = [
-  { to: '/season',     label: 'Season' },
+  { to: '/overview',   label: '總體' },
+  { to: '/running',    label: '跑步' },
+  { to: '/trail',      label: '越野跑' },
   { to: '/activities', label: 'Activities' },
   { to: '/config',     label: 'Config' },
   { to: '/ai',         label: 'AI' },
