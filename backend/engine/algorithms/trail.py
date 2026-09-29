@@ -84,9 +84,19 @@ def compute_hr_drift(
     gap_s_per_m: np.ndarray,
 ) -> Optional[dict]:
     """
-    HR drift: compare HR/GAP ratio between first and second half.
-    Higher ratio in second half indicates cardiac drift (decoupling).
-    Returns decoupling_pct or None if data insufficient.
+    Aerobic decoupling (Pa:HR), the TrainingPeaks / Uphill Athlete convention.
+
+    The efficiency ratio is output per heartbeat — speed / HR — compared
+    between the first and second half:
+
+        decoupling % = (ratio_first - ratio_second) / ratio_first * 100
+
+    POSITIVE means drift: the second half cost more heartbeats per unit of
+    speed (you slowed at the same HR, or held pace at a higher HR). Uphill
+    Athlete's aerobic-threshold test treats under 5% as a pass.
+
+    `gap_s_per_m` is pace, so speed is its reciprocal. Returns None when there
+    is not enough data.
     """
     n = len(hr)
     if n < 60:
@@ -98,12 +108,12 @@ def compute_hr_drift(
     gap1 = float(np.mean(gap_s_per_m[:mid]))
     gap2 = float(np.mean(gap_s_per_m[mid:]))
 
-    if gap1 <= 0 or gap2 <= 0 or hr1 <= 0:
+    if gap1 <= 0 or gap2 <= 0 or hr1 <= 0 or hr2 <= 0:
         return None
 
-    ratio1 = hr1 / gap1
-    ratio2 = hr2 / gap2
-    decoupling_pct = ((ratio2 - ratio1) / ratio1) * 100.0
+    ratio1 = (1.0 / gap1) / hr1          # speed per heartbeat
+    ratio2 = (1.0 / gap2) / hr2
+    decoupling_pct = ((ratio1 - ratio2) / ratio1) * 100.0
 
     return {
         "hr_first_half": round(hr1, 1),

@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WKO5 View Check</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --accent-soft: #e8efff; --ok: #15803d; --warn: #b45309; --err: #b91c1c; --code: #f1f3f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --accent-soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --code: #1f252d;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --accent-soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171; --code: #1f252d;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 8px 16px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+h1 { font-size: 15px; margin: 0 12px 0 0; }
+.mode button, .tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
+.mode button.on, .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tabs { margin-top: 8px; gap: 4px; }
+select, input { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 6px; }
+.meta { color: var(--muted); font-size: 12px; }
+.wrap { flex: 1; display: flex; min-height: 0; }
+main { flex: 1; min-width: 0; overflow: auto; padding: 12px 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 12px; align-content: start; }
+aside { width: 320px; flex: none; background: var(--panel); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0; }
+aside section { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+aside h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.presets button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); border-radius: 4px; padding: 2px 6px; cursor: pointer; }
+.sports label { display: inline-flex; gap: 4px; align-items: center; margin: 2px 8px 2px 0; }
+.acts { flex: 1; overflow: auto; }
+.act { padding: 6px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.act:hover { background: var(--accent-soft); }
+.act.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.act .t { display: flex; justify-content: space-between; gap: 8px; }
+.act .s { color: var(--muted); font-size: 11px; }
+@media (max-width: 900px) {
+  .wrap { flex-direction: column; }
+  aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; }
+  main { grid-template-columns: 1fr; }
+}
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.card.wide { grid-column: 1 / -1; }
+.card h2 { font-size: 13px; margin: 0 0 4px; }
+.desc { color: var(--muted); font-size: 11px; margin: 0 0 6px; max-height: 3em; overflow: hidden; }
+.plot { width: 100%; height: 300px; }
+.gauge { display: flex; gap: 14px; flex-wrap: wrap; padding: 6px 0; }
+.gauge .g { flex: 1; min-width: 140px; }
+.big { font-size: 24px; font-weight: 600; }
+.bar { height: 7px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 5px; }
+.bar > i { display: block; height: 100%; background: var(--accent); }
+details { margin-top: 6px; }
+summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 4px; }
+th, td { text-align: left; border-top: 1px solid var(--line); padding: 3px 6px; vertical-align: top; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td code { background: var(--code); padding: 1px 4px; border-radius: 4px; word-break: break-all;
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; }
+.st-ok { color: var(--ok); } .st-err { color: var(--err); } .st-none { color: var(--muted); }
+.badge { display: inline-block; font-size: 10.5px; padding: 0 6px; border-radius: 10px; border: 1px solid var(--warn); color: var(--warn); }
+.loading { color: var(--muted); padding: 30px 0; text-align: center; }
+.empty { grid-column: 1 / -1; color: var(--muted); padding: 40px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>WKO5 View Check</h1>
+    <a href="/api/v1/plan/page" style="font-size:13px">賽事周期</a>
+    <a href="/api/v1/achievements/page" style="font-size:13px">成就</a>
+    <div class="row mode"><button id="m-season" class="on">Season 總覽</button><button id="m-workout">Workout 單次活動</button></div>
+    <select id="view"></select>
+    <label id="paritylbl" title="開啟：完全比照 WKO5，用來驗證資料算得對不對。關閉：套用你自己調整的算式（移動時間 hrTSS、爬升加成、資料校正）">
+      <input type="checkbox" id="parity" checked> <b>WKO5 對照模式</b>
+    </label>
+    <span class="meta" id="meta"></span>
+  </div>
+  <div class="row tabs" id="tabs"></div>
+</header>
+<div class="wrap">
+  <main id="grid"><div class="empty">載入中…</div></main>
+  <aside>
+    <section>
+      <h3>日期範圍</h3>
+      <div class="row"><input type="date" id="begin"> → <input type="date" id="end"></div>
+      <div class="row presets" style="margin-top:6px">
+        <button data-d="7">7天</button><button data-d="42">42天</button><button data-d="90">90天</button>
+        <button data-d="365">1年</button><button data-d="ytd">今年</button><button data-d="all">全部</button>
+      </div>
+    </section>
+    <section>
+      <h3>運動類型</h3>
+      <div class="sports" id="sports"></div>
+    </section>
+    <section id="cfgsec" hidden>
+      <h3>自訂算式 <span class="meta" id="cfgstate"></span></h3>
+      <div id="cfgbody"></div>
+    </section>
+    <section id="fixsec">
+      <h3>資料校正</h3>
+      <div class="row"><button id="scanbtn" class="preset">掃描壞點</button>
+        <button id="fixbtn" class="primary" disabled>套用勾選的修正</button></div>
+      <div id="fixlist" class="meta" style="margin-top:6px">尚未掃描</div>
+    </section>
+    <section style="padding-bottom:6px"><h3 id="acts-h">活動</h3></section>
+    <div class="acts" id="acts"></div>
+  </aside>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+const API = "/api/v1/wko5";
+const S = { mode: "season", views: [], sports: [], athlete: null, workout: null, dash: { season: 0, workout: 0 }, view: {} };
+const charts = [];
+let loadToken = 0;
+
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const iso = (d) => d.toISOString().slice(0, 10);
+const fmtNum = (v, d = 2) => v == null ? "na" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (+v).toFixed(d));
+const hms = (s) => { if (s == null) return "na"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
+async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${await r.text()}`); return r.json(); }
+function save() { try { localStorage.setItem("wko5viewer", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
+  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout })); } catch {} }
+function restore() { try { return JSON.parse(localStorage.getItem("wko5viewer") || "{}"); } catch { return {}; } }
+
+function viewKind(v) {
+  const kinds = v.dashboards.flatMap((d) => d.charts.map((c) => c.kind));
+  return kinds.filter((k) => k === "workout").length > kinds.filter((k) => k === "athlete").length ? "workout" : "season";
+}
+const viewsOf = (mode) => S.views.filter((v) => viewKind(v) === mode && !v.error);
+const SOURCE_LABEL = { custom: "我的圖表", wko5: "WKO5（對照用）" };
+const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || viewsOf(S.mode)[0];
+function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
+function sportsParam() { const s = selectedSports(); return s.length === S.sports.length ? "" : s.join(","); }
+function tpParam() { return `parity=${$("parity").checked}`; }
+
+async function init0() {
+  const ath = await j(`${API}/athlete?${tpParam()}`);
+  S.athlete = ath;
+  const snap = ath.wko5_pmc_snapshot || {};
+  $("meta").textContent = `${ath.name} · ${ath.workouts} 筆活動 · WKO5 快照 CTL ${fmtNum(snap.ctl)} ATL ${fmtNum(snap.atl)} TSB ${fmtNum(snap.tsb)}`;
+}
+
+async function init() {
+  const [views, sports] = await Promise.all([j(`${API}/views`), j(`${API}/sports`)]);
+  S.views = views; S.sports = sports;
+  await init0();
+  const ath = S.athlete;
+  const r = restore();
+  const today = new Date();
+  $("end").value = r.end || iso(today);
+  $("begin").value = r.begin || iso(new Date(today - 365 * 864e5));
+  $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!r.sports || r.sports.includes(s.sport) ? "checked" : ""}>${esc(s.sport)} <span class="meta">${s.count}</span></label>`).join("");
+  S.dash = r.dash || S.dash; S.view = r.view || {}; S.workout = r.workout ?? null;
+  $("m-season").onclick = () => setMode("season");
+  $("m-workout").onclick = () => setMode("workout");
+  $("view").onchange = () => { S.view[S.mode] = $("view").value; S.dash[S.mode] = 0; renderTabs(); load(); };
+  $("begin").onchange = $("end").onchange = () => { loadActs(); if (S.mode === "season") load(); };
+  $("parity").onchange = () => { renderConfig(); init0(); loadActs(); load(); };
+  $("fixbtn").onclick = approveFixes;
+  $("scanbtn").onclick = () => loadProposals(true);
+  await renderConfig();
+  $("sports").onchange = () => { loadActs(); if (S.mode === "season") load(); };
+  document.querySelectorAll(".presets button").forEach((b) => b.onclick = () => preset(b.dataset.d));
+  setMode(r.mode === "workout" && S.workout != null ? "workout" : "season");
+  loadActs();
+}
+
+function preset(d) {
+  const end = new Date($("end").value || iso(new Date()));
+  let begin;
+  if (d === "ytd") begin = new Date(end.getFullYear(), 0, 1);
+  else if (d === "all") begin = new Date((S.athlete.first || "2000-01-01").slice(0, 10));
+  else begin = new Date(end - (+d - 1) * 864e5);
+  $("begin").value = iso(begin);
+  loadActs(); if (S.mode === "season") load();
+}
+
+function setMode(mode) {
+  S.mode = mode;
+  $("m-season").classList.toggle("on", mode === "season");
+  $("m-workout").classList.toggle("on", mode === "workout");
+  const vs = viewsOf(mode);
+  const cur = curView()?.name;
+  // group by source so WKO5 parity views stay visibly separate from your own
+  $("view").innerHTML = ["custom", "wko5"].map((src) => {
+    const group = vs.filter((v) => (v.source || "wko5") === src);
+    if (!group.length) return "";
+    return `<optgroup label="${SOURCE_LABEL[src]}">` + group.map((v) =>
+      `<option ${v.name === cur ? "selected" : ""}>${esc(v.name)}</option>`).join("") + `</optgroup>`;
+  }).join("");
+  const broken = S.views.filter((v) => v.error);
+  if (broken.length) console.warn("view files with errors:", broken.map((v) => `${v.path}: ${v.error}`));
+  renderTabs(); load();
+}
+
+function renderTabs() {
+  const v = curView();
+  if (!v) { $("tabs").innerHTML = ""; return; }
+  if (S.dash[S.mode] >= v.dashboards.length) S.dash[S.mode] = 0;
+  $("tabs").innerHTML = v.dashboards.map((d, i) => `<button class="${i === S.dash[S.mode] ? "on" : ""}" data-i="${i}">${esc(d.title)}</button>`).join("");
+  $("tabs").querySelectorAll("button").forEach((b) => b.onclick = () => { S.dash[S.mode] = +b.dataset.i; renderTabs(); load(); });
+}
+
+const CFG_FIELDS = [
+  ["use_tp_tss", "採用 TrainingPeaks 的 TSS", "checkbox"],
+  ["hr_tss_moving_only", "hrTSS 只計移動時間", "checkbox"],
+  ["elevation_tss_per_1000ft", "每爬升 1000 ft 加 TSS", "number"],
+  ["pack_weight_pct", "背負重量（體重 %）", "number"],
+];
+
+async function renderConfig() {
+  const parity = $("parity").checked;
+  const { config } = await j(`${API}/config`);
+  S.config = config;
+  // The custom formulas are a fixed, researched preset — not knobs to fiddle
+  // with. The panel stays hidden; unhide #cfgsec to expose it for debugging.
+  $("cfgstate").textContent = parity ? "（對照模式中，以下設定不生效）" : "生效中";
+  $("cfgsec").style.opacity = parity ? 0.45 : 1;
+  $("fixsec").style.opacity = parity ? 0.45 : 1;
+  $("paritylbl").nextElementSibling?.remove?.();
+  $("paritylbl").insertAdjacentHTML("afterend",
+    `<span class="meta">${parity ? "比照 WKO5" : "我的算式（移動時間 hrTSS ＋ 爬升加成 ＋ 資料校正）"}</span>`);
+  $("cfgbody").innerHTML = CFG_FIELDS.map(([k, label, type]) =>
+    type === "checkbox"
+      ? `<label style="display:block"><input type="checkbox" data-k="${k}" ${config[k] ? "checked" : ""} ${parity ? "disabled" : ""}> ${label}</label>`
+      : `<label style="display:block;margin-top:4px">${label} <input type="number" step="0.5" style="width:70px" data-k="${k}" value="${config[k]}" ${parity ? "disabled" : ""}></label>`
+  ).join("") + `<button class="preset" id="presetbtn" style="margin-top:6px" ${parity ? "disabled" : ""}>套用登山預設</button>`;
+  $("cfgbody").querySelectorAll("[data-k]").forEach((el) => el.onchange = async () => {
+    const v = el.type === "checkbox" ? el.checked : +el.value;
+    await fetch(`${API}/config`, { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [el.dataset.k]: v }) });
+    loadActs(); load();
+  });
+  const pb = document.getElementById("presetbtn");
+  if (pb) pb.onclick = async () => {
+    const { mountain_preset } = await j(`${API}/config`);
+    const body = { ...mountain_preset, parity: false };
+    await fetch(`${API}/config`, { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body) });
+    await renderConfig(); loadActs(); load();
+  };
+}
+
+async function loadProposals(scan) {
+  if (!scan) return;
+  $("fixlist").textContent = "掃描中…";
+  try {
+    const { proposals } = await j(`${API}/corrections/proposals`);
+    S.proposals = proposals;
+    if (!proposals.length) { $("fixlist").textContent = "沒有偵測到壞點"; $("fixbtn").disabled = true; return; }
+    $("fixlist").innerHTML = proposals.map((p, i) =>
+      `<label style="display:block;margin-bottom:4px"><input type="checkbox" data-i="${i}" checked>
+       ${esc(p.start.slice(0, 10))} ${esc(p.sport)}<br>
+       <span style="margin-left:18px">${p.samples} 筆 · 峰值 ${fmtNum(p.peak, 0)}W → ${fmtNum(p.peak_after, 0)}W</span></label>`).join("");
+    $("fixbtn").disabled = false;
+  } catch (e) { $("fixlist").textContent = "錯誤: " + e.message; }
+}
+
+async function approveFixes() {
+  const picked = [...$("fixlist").querySelectorAll("input:checked")].map((el) => S.proposals[+el.dataset.i]);
+  if (!picked.length) return;
+  if (!confirm(`要套用 ${picked.length} 筆修正嗎？（不會改到你的 .wko4 原始檔，隨時可以取消）`)) return;
+  $("fixbtn").disabled = true;
+  const r = await fetch(`${API}/corrections/approve`, { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proposals: picked }) });
+  const res = await r.json();
+  $("fixlist").textContent = `已套用 ${res.added.length} 筆（共 ${res.total} 筆生效中）`;
+  loadActs(); load();
+}
+
+async function loadActs() {
+  const q = `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}&${tpParam()}`;
+  const acts = await j(`${API}/workouts?${q}`);
+  $("acts-h").textContent = `活動 (${acts.length})`;
+  $("acts").innerHTML = acts.map((a) => `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
+    <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="TSS 來源">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
+  $("acts").querySelectorAll(".act").forEach((el) => el.onclick = () => {
+    S.workout = +el.dataset.i;
+    $("acts").querySelectorAll(".act").forEach((x) => x.classList.toggle("on", x === el));
+    setMode("workout");
+  });
+}
+
+async function load() {
+  save();
+  const token = ++loadToken;
+  charts.splice(0).forEach((c) => c.dispose());
+  const grid = $("grid"), v = curView();
+  grid.innerHTML = "";
+  if (!v) { grid.innerHTML = `<div class="empty">沒有 ${S.mode} view</div>`; return; }
+  if (S.mode === "workout" && S.workout == null) { grid.innerHTML = `<div class="empty">從右側活動列表選一筆活動</div>`; return; }
+  const di = S.dash[S.mode], d = v.dashboards[di];
+  const q = (S.mode === "workout" ? `workout=${S.workout}`
+    : `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}`)
+    + "&" + tpParam();
+  // render sequentially-ish (4 at a time) so heavy charts don't block the rest
+  const queue = d.charts.map((c) => {
+    const card = document.createElement("section");
+    card.className = "card";
+    card.innerHTML = `<h2>${esc(c.title || c.kind)}</h2><div class="loading">計算中…</div>`;
+    grid.appendChild(card);
+    return { c, card };
+  });
+  const worker = async () => {
+    while (queue.length) {
+      const { c, card } = queue.shift();
+      if (token !== loadToken) return;
+      if (c.kind !== "athlete" && c.kind !== "workout") { card.querySelector(".loading").textContent = "地圖 / 其他面板尚未支援"; continue; }
+      try {
+        const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`);
+        if (token === loadToken) draw(card, res);
+      } catch (e) {
+        console.error(c.title, e);
+        card.querySelector(".loading")?.remove();
+        card.insertAdjacentHTML("beforeend", `<div class="loading st-err">錯誤: ${esc(e.message)}</div>`);
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+
+function lastVal(data) {
+  if (data.kind === "points") { for (let i = data.points.length - 1; i >= 0; i--) if (data.points[i][1] != null) return data.points[i]; return null; }
+  if (data.kind === "hline") return ["", data.y];
+  if (data.kind === "value") return ["", data.value];
+  if (data.kind === "values") return ["", data.values.map((x) => fmtNum(x, 3)).join(" / ")];
+  if (data.kind === "band") return ["", data.range.join(" ~ ")];
+  return null;
+}
+
+function draw(card, res) {
+  card.querySelector(".loading")?.remove();
+  if (res.description) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
+  const S_ = res.series;
+  const gauges = S_.filter((s) => s.type === "gauge" && ["values", "value"].includes(s.data.kind));
+  if (gauges.length) drawGauges(card, gauges);
+  const plotted = S_.filter((s) => ["points", "hline", "band"].includes(s.data.kind) && s.type !== "gauge");
+  if (plotted.some((s) => s.data.kind === "points")) drawPlot(card, res, plotted);
+  const values = S_.filter((s) => s.data.kind === "value" && s.type !== "gauge");
+  if (values.length) {
+    if (values.length > 8) card.classList.add("wide");
+    card.insertAdjacentHTML("beforeend", `<table>${values.map((s) =>
+      `<tr><td>${esc(s.name)}</td><td class="num">${fmtNum(s.data.value, 3)}</td><td class="meta">${esc((s.y_axis || "").replace(/^CUSTOM/, ""))}</td></tr>`).join("")}</table>`);
+  }
+  const rows = S_.map((s) => {
+    const st = s.data.kind === "error" ? `<span class="st-err">✗ ${esc(s.data.message)}</span>`
+      : s.data.kind === "none" ? `<span class="st-none">—</span>` : `<span class="st-ok">✓ ${s.data.kind}</span>`;
+    const lv = lastVal(s.data);
+    const n = s.data.kind === "points" ? s.data.points.filter((p) => p[1] != null).length : "";
+    return `<tr><td>${esc(s.name || s.id)}</td><td>${st}</td><td class="num">${n}</td>
+      <td class="num">${lv ? esc(lv[0]) + " " + (typeof lv[1] === "number" ? fmtNum(lv[1], 4) : esc(lv[1])) : ""}</td>
+      <td><code>${esc(s.expression || "")}</code></td></tr>`;
+  }).join("");
+  const unsup = res.unsupported.length ? ` <span class="badge">未驗證/不支援: ${esc(res.unsupported.join(", "))}</span>` : "";
+  card.insertAdjacentHTML("beforeend", `<details><summary>數值與公式 (${S_.length})${unsup}</summary>
+    <table><thead><tr><th>Series</th><th>狀態</th><th>點數</th><th>最後值</th><th>公式</th></tr></thead><tbody>${rows}</tbody></table></details>`);
+}
+
+function drawGauges(card, gauges) {
+  const box = document.createElement("div");
+  box.className = "gauge";
+  for (const s of gauges) {
+    const vals = s.data.kind === "values" ? s.data.values : [s.data.value];
+    const [cur, target] = vals;
+    const pct = target ? Math.max(0, Math.min(1, (cur || 0) / target)) : null;
+    const f = (x) => (s.y_axis || "").startsWith("HH") ? hms(x) : fmtNum(x);
+    box.insertAdjacentHTML("beforeend", `<div class="g"><div class="desc">${esc(s.name)}</div>
+      <div class="big">${f(cur)}${target != null ? ` <span class="desc">/ ${f(target)}</span>` : ""}</div>
+      ${pct != null ? `<div class="bar"><i style="width:${(pct * 100).toFixed(1)}%;background:${s.color || css("--accent")}"></i></div>` : ""}</div>`);
+  }
+  card.appendChild(box);
+}
+
+function drawPlot(card, res, series) {
+  const el = document.createElement("div");
+  el.className = "plot";
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const isWorkout = res.workout != null;
+  const axisIds = [...new Set(series.map((s) => s.y_axis || "NONE"))];
+  const axisCfg = Object.fromEntries((res.axes || []).map((a) => [a.id, a]));
+  const text = css("--text"), muted = css("--muted"), line = css("--line");
+  const yAxis = axisIds.map((id, i) => ({
+    type: "value", name: id === "NONE" ? "" : id.replace(/^CUSTOM/, ""), scale: true,
+    position: i === 0 ? "left" : "right", offset: i > 1 ? (i - 1) * 46 : 0,
+    min: axisCfg[id]?.min ?? null, max: axisCfg[id]?.max ?? null,
+    axisLabel: { color: muted, fontSize: 10 }, nameTextStyle: { color: muted, fontSize: 10 },
+    splitLine: { show: i === 0, lineStyle: { color: line } },
+  }));
+  const out = [];
+  for (const s of series) {
+    const yi = axisIds.indexOf(s.y_axis || "NONE");
+    const color = s.color || undefined;
+    const lineType = s.line_style === "dot" ? "dotted" : s.line_style === "dash" ? "dashed" : "solid";
+    const width = s.line_width === "thin" ? 1 : s.line_width === "thick" ? 3 : 1.5;
+    if (s.data.kind === "hline") {
+      out.push({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
+        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ yAxis: s.data.y }] } });
+      continue;
+    }
+    if (s.data.kind === "band") {
+      const [lo, hi] = s.data.range;
+      out.push({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
+        markArea: { silent: true, itemStyle: { color, opacity: 0.12 }, data: [[{ yAxis: lo }, { yAxis: hi }]] } });
+      continue;
+    }
+    const perWorkout = s.data.x === "datetime";
+    const base = { name: s.name, yAxisIndex: yi, data: s.data.points, color, connectNulls: false, sampling: "lttb" };
+    if (s.type === "bar" || s.type === "stackedbar") {
+      out.push({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 });
+    } else {
+      out.push({ ...base, type: "line", step: s.type === "squareline" ? "end" : false,
+        showSymbol: perWorkout, symbolSize: 4, lineStyle: { type: lineType, width: perWorkout ? 0 : width },
+        areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined });
+    }
+  }
+  chart.setOption({
+    animation: false,
+    grid: { left: 46, right: 20 + Math.max(0, axisIds.length - 1) * 46, top: 24, bottom: 54 },
+    tooltip: { trigger: "axis", valueFormatter: (v) => fmtNum(v, 3) },
+    legend: { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } },
+    xAxis: isWorkout
+      ? { type: "value", axisLabel: { color: muted, fontSize: 10, formatter: hms }, axisLine: { lineStyle: { color: line } } }
+      : { type: "time", min: res.begin, max: res.end, axisLabel: { color: muted, fontSize: 10 }, axisLine: { lineStyle: { color: line } } },
+    yAxis, series: out,
+    dataZoom: [{ type: "inside" }],
+  });
+  new ResizeObserver(() => chart.resize()).observe(el);
+}
+
+if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin",
+  `<div style="padding:8px 16px;background:var(--err);color:#fff">ECharts 載入失敗，圖表無法繪製</div>`);
+init().catch((e) => { $("grid").innerHTML = `<div class="empty">初始化失敗: ${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>
