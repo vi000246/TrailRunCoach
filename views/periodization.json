@@ -1,0 +1,223 @@
+{
+  "name": "周期化訓練",
+  "dashboards": [
+    {
+      "title": "① 轉換期",
+      "description": "目標：恢復、重建習慣、打肌力底子（Uphill Athlete：2–4 週）。要看的不是體能有沒有進步，而是有沒有真的恢復。成功的樣子：疲勞 ATL 下降、TSB 回到正值、每週時數低但穩定、有固定肌力訓練。",
+      "charts": [
+        {
+          "title": "每週訓練時數（應該低而穩定）",
+          "description": "轉換期不追量。深色線是 4 週平滑後的每週時數，看得出整體是否在低檔。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "每週時數", "type": "bar", "y_axis": "HHMMSS", "color": "#0891b2",
+             "expression": "sum(duration, startofweek(date))"},
+            {"name": "4 週平滑", "type": "line", "y_axis": "HHMMSS", "color": "#e2e8f0",
+             "expression": "tl(duration, 28)*7"}
+          ]
+        },
+        {
+          "title": "疲勞與狀況（應該往恢復走）",
+          "description": "ATL 往下、TSB 爬回正值 = 恢復中。如果 TSB 還是很負，代表還沒休息夠。",
+          "axes": [{"id": "TSSPERDAY"}],
+          "series": [
+            {"name": "疲勞 ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#dc2626",
+             "expression": "tl(tss, atlconstant)"},
+            {"name": "狀況 TSB", "type": "bar", "y_axis": "TSSPERDAY", "color": "#94a3b8",
+             "expression": "tsb"},
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#64748b", "line_style": "dash",
+             "expression": "(,0)"}
+          ]
+        },
+        {
+          "title": "每週肌力訓練次數",
+          "description": "Uphill Athlete 的轉換期每週兩次核心與肌力訓練。這是為基礎期打底。",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "肌力次數", "type": "bar", "y_axis": "NONE", "color": "#64748b",
+             "expression": "count(if(sport=\"strength\", duration), startofweek(date))"},
+            {"name": "目標 2 次", "type": "line", "y_axis": "NONE", "color": "#16a34a", "line_style": "dash",
+             "expression": "(,2)"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "② 基礎期",
+      "description": "目標：練有氧引擎，佔全年最大比例（Uphill Athlete：基礎期是訓練年的主體）。成功的樣子：同樣心率跑更快（EF 上升）、長時間輕鬆跑心率不飄（< 5%）、訓練量穩定成長、大部分時間在低強度。",
+      "charts": [
+        {
+          "title": "強度分配：低強度時間佔比",
+          "description": "Seiler 的研究：頂尖耐力選手約 75–80% 時間在低強度。長條 = 每週合計，圓點 = 每次活動。低強度 = 心率低於有氧閾值（在「賽事周期」頁填了 AeT 測試就用實測值，沒填就用 WKO5 Friel 心率區間的 Aerobic 上限 0.89 × LTHR）。",
+          "axes": [{"id": "PERCENT", "min": 0, "max": 1}],
+          "series": [
+            {"name": "每週", "type": "bar", "y_axis": "PERCENT", "color": "#16a34a",
+             "expression": "sum(sum(if(heartrate < aethr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
+            {"name": "每次活動", "type": "line", "y_axis": "PERCENT", "color": "#86efac",
+             "expression": "sum(if(heartrate < aethr, deltatime)) / sum(if(heartrate > 0, deltatime))"},
+            {"name": "80% 目標", "type": "line", "y_axis": "PERCENT", "color": "#e2e8f0", "line_style": "dash",
+             "expression": "(,0.8)"}
+          ]
+        },
+        {
+          "title": "每週強度分布（時數）",
+          "description": "低 / 中 / 高三區間的時數（低 < 有氧閾值、中 = 有氧閾值到 LTHR、高 ≥ LTHR，對應 WKO5 Friel 心率區間 Z1–2 / Z3–4 / Z5）。基礎期應該幾乎都是綠色。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "低", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#16a34a",
+             "expression": "sum(sum(if(heartrate > 0 and heartrate < aethr, deltatime)), startofweek(date))"},
+            {"name": "中", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#f59e0b",
+             "expression": "sum(sum(if(heartrate >= aethr and heartrate < lthr, deltatime)), startofweek(date))"},
+            {"name": "高", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#dc2626",
+             "expression": "sum(sum(if(heartrate >= lthr, deltatime)), startofweek(date))"}
+          ]
+        },
+        {
+          "title": "有氧效率 EF（輕鬆路跑）",
+          "description": "每下心跳換到的速度。往上走 = 有氧引擎變強。基礎期最重要的一張圖。只看輕鬆跑（IF < 0.8）才公平。",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "EF", "type": "line", "y_axis": "NONE", "color": "#2563eb",
+             "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and if < 0.8, avg(speed)/avg(heartrate)*1000/60)"}
+          ]
+        },
+        {
+          "title": "長時間輕鬆跑的心率飄移",
+          "description": "Uphill Athlete 的有氧閾值測試：40–60 分鐘穩定跑，飄移 < 5% 代表在有氧閾值以下。長期壓在 5% 以下代表有氧基礎穩固。",
+          "axes": [{"id": "PERCENT"}],
+          "series": [
+            {"name": "飄移", "type": "line", "y_axis": "PERCENT", "color": "#dc2626",
+             "expression": "if(sport=\"run\" and duration > 2400 and if < 0.85, pahr)"},
+            {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash",
+             "expression": "(,0.05)"}
+          ]
+        },
+        {
+          "title": "訓練量週增幅",
+          "description": "本週時數比上週多多少。Uphill Athlete：平均每週增加超過 10%，大約 8 週就會出問題。只看趨勢，不當受傷預測（ACWR 預測受傷的說法已被推翻）。",
+          "axes": [{"id": "PERCENT"}],
+          "series": [
+            {"name": "週增幅", "type": "bar", "y_axis": "PERCENT", "color": "#0891b2",
+             "expression": "(sum(duration, startofweek(date)) - shift(sum(duration, startofweek(date)), 7)) / shift(sum(duration, startofweek(date)), 7)"},
+            {"name": "+10%", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "line_style": "dash",
+             "expression": "(,0.10)"},
+            {"name": "0", "type": "line", "y_axis": "PERCENT", "color": "#64748b", "line_style": "dash",
+             "expression": "(,0)"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "③ 專項期",
+      "description": "目標：練目標賽事需要的能力（Koop：越接近比賽，訓練越像比賽）。越野與百岳就是爬坡能力、長時間耐久、背對背長天。成功的樣子：同樣心率爬得更快、爬升密度接近比賽、最長訓練接近比賽時間、長時間後段不掉速。",
+      "charts": [
+        {
+          "title": "爬坡速度 VAM（越野 + 登山合併）",
+          "description": "越野與百岳都是爬坡能力，合在一起看資料才夠。固定心率下 VAM 上升 = 爬坡進步。",
+          "axes": [{"id": "METERSPERHOUR", "min": 0}],
+          "series": [
+            {"name": "越野", "type": "line", "y_axis": "METERSPERHOUR", "color": "#16a34a",
+             "expression": "if(hastag(\"runningtrail\") and climbing > 200, vam)"},
+            {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#a16207",
+             "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and climbing > 200, vam)"}
+          ]
+        },
+        {
+          "title": "爬升密度 vs 目標賽事",
+          "description": "Koop：拿每公里爬升對照比賽，而不是追求週總爬升（總量本身沒有劑量反應）。紅虛線 = 「賽事周期」頁裡接下來 A / B 賽事中最陡的一場。",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "每公里爬升", "type": "line", "y_axis": "NONE", "color": "#a16207",
+             "expression": "if((hastag(\"runningtrail\") or hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 3, climbing/distance)"},
+            {"name": "目標賽事", "type": "line", "y_axis": "NONE", "color": "#dc2626", "line_style": "dash",
+             "expression": "goalclimbperkm"}
+          ]
+        },
+        {
+          "title": "最長單次訓練",
+          "description": "Koop：訓練周期的最後，要跑得比比賽前任何時候都長、都慢。最長一次應該逐步逼近比賽預估時間。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "越野/登山時長", "type": "bar", "y_axis": "HHMMSS", "color": "#16a34a",
+             "expression": "if(hastag(\"runningtrail\") or hastag(\"hiking\") or hastag(\"mountaineering\"), movingduration)"},
+            {"name": "目標賽事預估時間", "type": "line", "y_axis": "HHMMSS", "color": "#dc2626", "line_style": "dash",
+             "expression": "goalhours*3600"}
+          ]
+        },
+        {
+          "title": "耐久度：長時間後段心率飄移",
+          "description": "超過 2 小時的活動，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。",
+          "axes": [{"id": "PERCENT"}],
+          "series": [
+            {"name": "飄移", "type": "line", "y_axis": "PERCENT", "color": "#dc2626",
+             "expression": "if((hastag(\"runningtrail\") or hastag(\"hiking\") or hastag(\"mountaineering\")) and duration > 7200, pahr)"},
+            {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash",
+             "expression": "(,0.05)"}
+          ]
+        },
+        {
+          "title": "體能成長速度（CTL 每週增加）",
+          "description": "每週 CTL 增加多少。專項期可以比基礎期快，但太快代表負荷堆太急。",
+          "axes": [{"id": "TSSPERDAY"}],
+          "series": [
+            {"name": "CTL 週變化", "type": "bar", "y_axis": "TSSPERDAY", "color": "#2563eb",
+             "expression": "tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7)"},
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#64748b", "line_style": "dash",
+             "expression": "(,0)"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "④ 減量期",
+      "description": "目標：比賽前恢復新鮮度、保住體能。Bosquet 2007 統合分析（27 篇研究）：減量 2 週，訓練量逐步減少 41–60%、強度與頻率維持，平均進步 2.2%。成功的樣子：時數落在減量帶內、高強度還在、TSB 回到正值。",
+      "charts": [
+        {
+          "title": "每週時數 vs 減量目標帶",
+          "description": "綠色帶是減量後的目標（平常訓練量的 40–59%）。注意：平常訓練量用 6 週平滑估算，減量期間基準會跟著緩慢下降。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "每週時數", "type": "bar", "y_axis": "HHMMSS", "color": "#0891b2",
+             "expression": "sum(duration, startofweek(date))"},
+            {"name": "平常訓練量", "type": "line", "y_axis": "HHMMSS", "color": "#e2e8f0",
+             "expression": "tl(duration, 42)*7"},
+            {"name": "減量上限 (59%)", "type": "line", "y_axis": "HHMMSS", "color": "#16a34a", "line_style": "dash",
+             "expression": "tl(duration, 42)*7*0.59"},
+            {"name": "減量下限 (40%)", "type": "line", "y_axis": "HHMMSS", "color": "#16a34a", "line_style": "dash",
+             "expression": "tl(duration, 42)*7*0.40"}
+          ]
+        },
+        {
+          "title": "高強度仍要保留",
+          "description": "減量是減「量」不是減「強度」。每週高強度（> LTHR）時數不該歸零。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "高強度時數", "type": "bar", "y_axis": "HHMMSS", "color": "#dc2626",
+             "expression": "sum(sum(if(heartrate >= lthr, deltatime)), startofweek(date))"}
+          ]
+        },
+        {
+          "title": "新鮮度 TSB",
+          "description": "比賽前 TSB 應該爬回正值。注意：沒有任何登山越野賽事公開過經驗證的「最佳 TSB 區間」，只當方向參考。",
+          "axes": [{"id": "TSSPERDAY"}],
+          "series": [
+            {"name": "TSB", "type": "bar", "y_axis": "TSSPERDAY", "color": "#94a3b8", "expression": "tsb"},
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#64748b", "line_style": "dash",
+             "expression": "(,0)"}
+          ]
+        },
+        {
+          "title": "體能保留 CTL",
+          "description": "減量期間 CTL 會小幅下降，這是正常的；只要不掉太多，新鮮度的好處大於體能的小損失。",
+          "axes": [{"id": "TSSPERDAY", "min": 0}],
+          "series": [
+            {"name": "CTL", "type": "line", "y_axis": "TSSPERDAY", "color": "#2563eb",
+             "expression": "tl(tss, ctlconstant)"},
+            {"name": "ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#f59e0b",
+             "expression": "tl(tss, atlconstant)"}
+          ]
+        }
+      ]
+    }
+  ]
+}

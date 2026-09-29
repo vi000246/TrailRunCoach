@@ -1,0 +1,120 @@
+"""
+Custom views — charts the athlete designs, as editable JSON.
+
+WKO5 views come from `.wko5chart` binaries: read-only, kept for parity
+checking. Custom views are plain JSON with the same shape, so both render
+through the same engine and can use the same expression language plus this
+project's own metrics.
+
+A view file looks like:
+
+    {
+      "name": "百岳與越野",
+      "dashboards": [
+        {
+          "title": "垂直負荷",
+          "description": "optional",
+          "charts": [
+            {
+              "title": "每週爬升",
+              "description": "optional",
+              "axes": [{"id": "METERS", "min": 0}],
+              "series": [
+                {"name": "爬升", "type": "bar", "y_axis": "METERS",
+                 "color": "#2563eb",
+                 "expression": "athleterange(startofweek(today)-364, today, sum(climbing))"}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+
+Everything except `name`, `title` and `expression` is optional. `kind` defaults
+to "athlete" (season-level); set "workout" for per-activity charts.
+
+Files are read from, in order: the repo's `views/` directory, then
+~/.wko5coach/views/. A later file with the same `name` replaces an earlier one,
+so you can override a bundled view without editing the repo.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Iterable, Optional
+
+REPO_VIEWS = Path(__file__).resolve().parents[3] / "views"
+USER_VIEWS = Path.home() / ".wko5coach" / "views"
+
+SERIES_DEFAULTS = {
+    "id": None, "name": None, "type": "line", "expression": "", "color": None,
+    "y_axis": "NONE", "x_axis": "DATE", "line_style": "solid", "line_width": "medium",
+    "label_position": None,
+}
+
+
+class CustomViewError(ValueError):
+    pass
+
+
+def _series(raw: dict, where: str) -> dict:
+    if not isinstance(raw, dict):
+        raise CustomViewError(f"{where}: series must be an object")
+    out = {**SERIES_DEFAULTS, **{k: v for k, v in raw.items() if k in SERIES_DEFAULTS}}
+    if out["expression"] is None:
+        out["expression"] = ""
+    return out
+
+
+def _chart(raw: dict, where: str) -> dict:
+    if "title" not in raw:
+        raise CustomViewError(f"{where}: chart needs a title")
+    kind = raw.get("kind", "athlete")
+    if kind not in ("athlete", "workout"):
+        raise CustomViewError(f"{where}: kind must be 'athlete' or 'workout'")
+    return {
+        "title": raw["title"],
+        "description": raw.get("description"),
+        "kind": kind,
+        "axes": raw.get("axes") or [],
+        "series": [_series(s, f"{where}/{raw['title']}") for s in raw.get("series", [])],
+    }
+
+
+def parse_view(data: dict, source_path: Optional[Path] = None) -> dict:
+    where = str(source_path or "<dict>")
+    if not isinstance(data, dict) or "name" not in data:
+        raise CustomViewError(f"{where}: view needs a name")
+    dashboards = []
+    for d in data.get("dashboards", []):
+        if "title" not in d:
+            raise CustomViewError(f"{where}: dashboard needs a title")
+        dashboards.append({
+            "title": d["title"],
+            "description": d.get("description"),
+            "class": "CustomDashboard",
+            "charts": [_chart(c, f"{where}/{d['title']}") for c in d.get("charts", [])],
+        })
+    return {"view": data["name"], "dashboards": dashboards,
+            "source": "custom", "path": str(source_path) if source_path else None}
+
+
+def view_dirs() -> list[Path]:
+    return [p for p in (REPO_VIEWS, USER_VIEWS) if p.is_dir()]
+
+
+def load_custom_views(dirs: Optional[Iterable[Path]] = None) -> dict[str, dict]:
+    """{view name -> view}. Later directories override earlier ones."""
+    out: dict[str, dict] = {}
+    for d in (list(dirs) if dirs is not None else view_dirs()):
+        for p in sorted(Path(d).glob("*.json")):
+            try:
+                view = parse_view(json.loads(p.read_text("utf-8")), p)
+            except (OSError, ValueError) as e:
+                out[f"!error:{p.name}"] = {
+                    "view": p.stem, "dashboards": [], "source": "custom",
+                    "path": str(p), "error": str(e),
+                }
+                continue
+            out[view["view"]] = view
+    return out

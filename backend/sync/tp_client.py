@@ -56,6 +56,14 @@ log = logging.getLogger(__name__)
 TP_OAUTH_URL = "https://oauth.trainingpeaks.com/oauth/token"
 TP_API_BASE = "https://tpapi.trainingpeaks.com/"
 
+# Headers WKO5 sends on every request (PAEasyWeb in WKO5.exe 5.0.587):
+#   User-Agent "WKO5/PC/%s", "Accept: */*", "Accept-Encoding: gzip".
+TP_HEADERS = {
+    "User-Agent": "WKO5/PC/5.0.587",
+    "Accept": "*/*",
+    "Accept-Encoding": "gzip",
+}
+
 # Refresh grant: client_id=WKO5 with empty client_secret (literal from binary).
 TP_CLIENT_ID = "WKO5"
 TP_CLIENT_SECRET = ""
@@ -92,7 +100,7 @@ async def login_password(
         resp = await client.post(
             TP_OAUTH_URL,
             content=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
         )
     if resp.status_code != 200:
         body = resp.text[:400]
@@ -148,7 +156,7 @@ async def login_password(
 
 async def _fetch_user(access_token: str) -> dict:
     """GET users/v3/user — returns user profile + accessible athletes."""
-    headers = {"Authorization": f"Bearer {access_token}"}
+    headers = {**TP_HEADERS, "Authorization": f"Bearer {access_token}"}
     async with httpx.AsyncClient(
         base_url=TP_API_BASE, headers=headers, timeout=10
     ) as client:
@@ -162,47 +170,63 @@ async def _fetch_user(access_token: str) -> dict:
 
 def _extract_athlete_id(user_info: dict) -> tuple[Optional[int], list[dict], str, bool]:
     """
-    Parse users/v3/user response. Possible shapes from the binary strings:
-      { "user": { "userId":int, "userName":str, "userType":str,
-                  "athletes": [{...}], "premium": bool } }
-    OR the top-level might already be the user object.
-    For a self-coached athlete, userId IS the athleteId (no separate athletes list).
+    Parse users/v3/user response. Field names from the WKO5.exe (Windows 5.0.587)
+    string table, grouped together in PKTrainingPeaks.cpp:
+      { "user": { "userId", "userName", "isCoach",
+                  "athletes": [ { "athleteId", "athleteType": "basic"|"premium", ... } ] } }
+    The premium gate is per-athlete `athleteType` ("basic" / "premium"), or the
+    user being a coach — NOT a top-level `premium` flag.
+    For a self-coached athlete, userId IS the athleteId.
     """
     log.debug("_extract_athlete_id raw: %s", user_info)
-    # Unwrap "user" envelope if present
     root = user_info.get("user") if isinstance(user_info.get("user"), dict) else user_info
-    user_type = root.get("userType", "")
-    premium = bool(root.get("premium", False))
+    is_coach = bool(root.get("isCoach")) or "coach" in str(root.get("userType", "")).lower()
     athletes = root.get("athletes") or []
 
-    # Build a clean athletes list for display
     clean_athletes = []
-    if athletes:
-        for a in athletes:
-            aid = a.get("id") or a.get("athleteId") or a.get("userId")
-            if aid:
-                clean_athletes.append({"id": aid, "name": a.get("name", "")})
+    for a in athletes:
+        aid = a.get("athleteId") or a.get("id") or a.get("userId")
+        if aid:
+            clean_athletes.append({
+                "id": aid,
+                "name": a.get("userName") or a.get("name") or "",
+                "athlete_type": a.get("athleteType", ""),
+            })
 
-    # Find the primary athlete ID
     if clean_athletes:
-        return clean_athletes[0]["id"], clean_athletes, user_type, premium
+        primary = clean_athletes[0]
+        premium = str(primary["athlete_type"]).lower() == "premium"
+        user_type = "coach" if is_coach else primary["athlete_type"]
+        return primary["id"], clean_athletes, user_type, premium
 
-    # Fall back: athleteId or userId on the root object
     aid = root.get("athleteId") or root.get("userId")
+    premium = str(root.get("athleteType", "")).lower() == "premium" or bool(root.get("premium"))
+    user_type = "coach" if is_coach else root.get("athleteType", "")
     if aid:
         return aid, [{"id": aid, "self": True}], user_type, premium
-
-    return None, [], user_type, premium
-
     return None, [], user_type, premium
 
 
 def _can_download(user_type: str, premium: bool) -> bool:
-    """Binary: 'Download is allowed only from premium and coach accounts.'"""
+    """Binary: 'Download is allowed only from premium and coach accounts.'
+    This is a WKO5 client-side check; the server may or may not enforce it."""
     if premium:
         return True
-    ut = (user_type or "").lower()
-    return "coach" in ut or "premium" in ut
+    return "coach" in (user_type or "").lower()
+
+
+def _parse_changed(body) -> tuple[list[dict], list]:
+    """workouts/changed returns {"modified": [...], "deleted": [...]}
+    (binary log: "Received list of %u deleted workouts, and %u changed or new
+    workouts."). Also tolerate a bare list / legacy "workouts" key."""
+    if isinstance(body, list):
+        return body, []
+    if not isinstance(body, dict):
+        return [], []
+    modified = body.get("modified")
+    if modified is None:
+        modified = body.get("workouts") or []
+    return modified or [], body.get("deleted") or []
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +250,7 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
         resp = await client.post(
             TP_OAUTH_URL,
             content=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
         )
     if resp.status_code != 200:
         log.warning("TP refresh failed (%d): %s", resp.status_code, resp.text[:200])
@@ -297,7 +321,8 @@ async def sync_workouts(
     state = state_result.scalar_one_or_none()
     cursor = since or (state.last_sync_cursor if state else None) or "2010-01-01"
 
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {**TP_HEADERS, "Authorization": f"Bearer {token}"}
+    sync_started = datetime.now(timezone.utc)
     page = 1
     total_downloaded = 0
     total_checked = 0
@@ -326,9 +351,14 @@ async def sync_workouts(
                     "body": resp.text[:200],
                 }
                 return
-            body = resp.json()
-            page_items = body if isinstance(body, list) else body.get("workouts", [])
-            if not page_items:
+            page_items, deleted = _parse_changed(resp.json())
+            if page == 1:
+                yield {
+                    "status": "changed_list",
+                    "modified": len(page_items),
+                    "deleted": len(deleted),
+                }
+            if not page_items and not deleted:
                 break
 
             for wo in page_items:
@@ -407,12 +437,14 @@ async def sync_workouts(
                 }
 
             page += 1
-            if len(page_items) < page_size:
+            if len(page_items) < page_size and len(deleted) < page_size:
                 break
 
-    if state:
+    # Only advance the cursor when this run actually got through cleanly —
+    # otherwise a failed/empty run would silently skip history on the next sync.
+    if state and not errors:
         state.last_sync_at = datetime.now(timezone.utc)
-        state.last_sync_cursor = date.today().isoformat()
+        state.last_sync_cursor = sync_started.date().isoformat()
         await db.commit()
 
     yield {
@@ -458,6 +490,8 @@ async def _download_workout_fit(
     if not files:
         return None
 
+    # WKO5 skips TP's auto-merged PWX ("Skipping auto merged PWX file %s").
+    files = [f for f in files if "auto_merged" not in str(f.get("fileName", ""))] or files
     # Prefer .fit, fall back to first listed file.
     fit_info = next(
         (f for f in files if str(f.get("fileName", "")).lower().endswith(".fit")),
@@ -575,7 +609,7 @@ async def fetch_tp_settings(db: AsyncSession, athlete_id: int) -> Optional[dict]
         return None
     async with httpx.AsyncClient(
         base_url=TP_API_BASE,
-        headers={"Authorization": f"Bearer {token}"},
+        headers={**TP_HEADERS, "Authorization": f"Bearer {token}"},
         timeout=10,
     ) as client:
         resp = await client.get(f"fitness/v1/athletes/{athlete.tp_athlete_id}/settings")
@@ -608,7 +642,7 @@ async def exchange_code(code: str, db: AsyncSession, athlete_id: int) -> dict:
         resp = await client.post(
             TP_OAUTH_URL,
             content=body,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
         )
         resp.raise_for_status()
         token = resp.json()

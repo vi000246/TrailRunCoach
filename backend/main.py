@@ -8,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db.database import init_db
 from backend.api import workouts, pmc, expr, dashboard, scan, sync, auth, athletes, analytics
-from backend.api import ai, sports
+from backend.api import ai, sports, wko5views
+from backend.api import achievements as achievements_api
+from backend.api import plan as plan_api
 
 
 @asynccontextmanager
@@ -42,6 +44,9 @@ app.include_router(athletes.router)
 app.include_router(analytics.router)
 app.include_router(ai.router)
 app.include_router(sports.router)
+app.include_router(wko5views.router)
+app.include_router(achievements_api.router)
+app.include_router(plan_api.router)
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

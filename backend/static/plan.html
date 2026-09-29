@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>賽事周期</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --soft: #e8efff; --warn: #b45309; --bad: #dc2626;
+  --p-transition: #94a3b8; --p-recovery: #94a3b8; --p-base: #16a34a; --p-specific: #d97706;
+  --p-taper: #2563eb; --p-event: #dc2626;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --soft: #1c2a40; --warn: #f59e0b; --bad: #f87171;
+    --p-base: #22c55e; --p-specific: #f59e0b; --p-taper: #60a5fa; --p-event: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --soft: #1c2a40; --warn: #f59e0b; --bad: #f87171;
+  --p-base: #22c55e; --p-specific: #f59e0b; --p-taper: #60a5fa; --p-event: #f87171;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px;
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+h1 { font-size: 17px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+header a, a { color: var(--accent); text-decoration: none; font-size: 13px; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.warn { color: var(--warn); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.card .k { color: var(--muted); font-size: 12px; }
+.card .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.card .s { color: var(--muted); font-size: 12px; }
+/* timeline */
+.tl { position: relative; height: 54px; margin: 18px 0 26px; }
+.tl .seg { position: absolute; top: 14px; height: 22px; border-radius: 3px; opacity: .85;
+  font-size: 11px; color: #fff; overflow: hidden; white-space: nowrap; padding: 2px 4px; }
+.tl .ev { position: absolute; top: 0; width: 2px; height: 50px; background: var(--text); }
+.tl .ev span { position: absolute; top: -16px; left: 4px; font-size: 11.5px; white-space: nowrap; }
+.tl .ev.B { opacity: .6; } .tl .ev.C { opacity: .35; }
+.tl .today { position: absolute; top: 8px; width: 0; height: 36px; border-left: 2px dashed var(--accent); }
+.tl .today span { position: absolute; top: 36px; left: -12px; font-size: 11px; color: var(--accent); }
+.tl .mini { position: absolute; top: 38px; height: 4px; background: var(--muted); opacity: .6; }
+.tl .month { position: absolute; top: 40px; font-size: 10.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; font-size: 12px; }
+.legend i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+/* tables and forms */
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+input, select, button, textarea { font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+input[type=number] { width: 84px; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.link { border: 0; background: none; color: var(--accent); padding: 0 4px; }
+.form { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin-top: 10px; }
+.form label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }
+.pri { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; }
+.pri.A { background: var(--bad); color: #fff; } .pri.B { background: var(--warn); color: #fff; } .pri.C { background: var(--line); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.guide { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.guide div { border-left: 4px solid var(--line); padding: 4px 10px; }
+.guide b { display: block; margin-bottom: 2px; }
+.guide ul { margin: 2px 0 0; padding-left: 18px; font-size: 13px; }
+.toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg);
+  padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
+.toast.on { opacity: .92; }
+</style>
+</head>
+<body>
+<header>
+  <h1>賽事周期</h1>
+  <a href="/api/v1/wko5/viewer">← 圖表</a>
+  <a href="/api/v1/achievements/page">成就</a>
+  <span class="meta" id="todayinfo"></span>
+</header>
+<main>
+  <section>
+    <h2>現在</h2>
+    <div class="cards" id="now"></div>
+  </section>
+
+  <section>
+    <h2>周期時間軸</h2>
+    <div class="legend" id="legend"></div>
+    <div class="tl" id="tl"></div>
+    <div class="meta" id="tlnote"></div>
+  </section>
+
+  <section>
+    <h2>綜合目標</h2>
+    <p class="meta">接下來半年內的 A / B 賽事（至少算到下一場 A 賽事），每一項取最難的那場。你要練到能應付最難的要求。
+      「周期化訓練」圖表的紅色虛線就是這些數字。</p>
+    <div class="cards" id="goals"></div>
+  </section>
+
+  <section>
+    <h2>目標賽事 / 百岳</h2>
+    <p class="meta">A = 主要目標（周期從它往回排）；B = 次要（前 5 天小減量、後 3 天恢復，不改周期）；C = 當訓練。</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>日期</th><th>名稱</th><th>類型</th><th class="num">天數</th><th class="num">距離 km</th>
+        <th class="num">爬升 m</th><th class="num">m/km</th><th class="num">預估時間 h</th><th class="num">倒數</th><th>備註</th><th></th></tr></thead>
+      <tbody id="events"></tbody>
+    </table></div>
+    <form class="form" id="evform">
+      <input type="hidden" name="id">
+      <label>名稱<input name="name" required placeholder="例：玉山前峰～主峰"></label>
+      <label>日期<input type="date" name="date" required></label>
+      <label>類型<select name="kind" id="kindsel"></select></label>
+      <label>優先<select name="priority"><option>A</option><option>B</option><option>C</option></select></label>
+      <label>天數<input type="number" name="days" min="1" value="1"></label>
+      <label>距離 km<input type="number" name="distance_km" step="0.1" min="0"></label>
+      <label>爬升 m<input type="number" name="climbing_m" step="10" min="0"></label>
+      <label>預估移動時間 h<input type="number" name="est_hours" step="0.5" min="0"></label>
+      <label>備註<input name="note"></label>
+      <button class="primary" type="submit" id="evsubmit">新增</button>
+      <button type="button" id="evcancel" hidden>取消編輯</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>周期</h2>
+    <p class="meta" id="phasemode"></p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>周期</th><th>開始</th><th>結束</th><th class="num">天數</th><th>對應賽事</th><th></th></tr></thead>
+      <tbody id="phases"></tbody>
+    </table></div>
+    <div class="form">
+      <button id="tomanual">改成手動調整</button>
+      <button id="addphase" hidden>＋ 加一段</button>
+      <button class="primary" id="savephases" hidden>儲存周期</button>
+      <button id="toauto" hidden>恢復自動排程</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>心率門檻</h2>
+    <div id="thrstatus"></div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>測試日期</th><th class="num">LTHR 乳酸閾值心率</th><th class="num">AeT 有氧閾值心率</th>
+        <th class="num">最大心率</th><th class="num">CP 跑步臨界功率 W</th><th>備註（測試方式）</th><th></th></tr></thead>
+      <tbody id="thr"></tbody>
+    </table></div>
+    <div class="form">
+      <button id="addthr">＋ 新增一次測試</button>
+      <button class="primary" id="savethr">儲存心率門檻</button>
+    </div>
+    <p class="meta">每次測試記一筆，圖表會依日期套用當時的數值（跟 WKO5 的做法一樣）。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。
+      <br>AeT 測試（Uphill Athlete）：熱身後在平路或跑步機用固定配速/心率跑 60 分鐘，前後半段的 Pa:HR 飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。
+      <br>LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。
+      <br>CP 測試（你筆記裡的 3'/12' 流程）：先 3 分鐘再 12 分鐘全力，中間至少恢復 30 分鐘；每 4–6 週或賽前 10–21 天做一次。沒填的話用 WKO5 的 mFTP。</p>
+  </section>
+
+  <section>
+    <h2>各周期看什麼</h2>
+    <div class="guide" id="guide"></div>
+    <p class="meta">圖表在「圖表 → 我的圖表 → 周期化訓練」，依據與來源見 docs/research/periodization-phase-metrics.md。</p>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = "/api/v1/plan";
+let S = null, manual = null;   // manual = editable phase rows while in manual mode
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (v, d = 0) => v == null ? "–" : Number(v).toLocaleString("zh-TW", { maximumFractionDigits: d, minimumFractionDigits: 0 });
+const day = (s) => new Date(s + "T00:00:00");
+const ddiff = (a, b) => Math.round((day(b) - day(a)) / 86400000);
+const PCOL = (k) => `var(--p-${k})`;
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 1800); }
+async function call(method, path, body) {
+  const r = await fetch(API + path, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) { const t = await r.text(); toast("失敗：" + t.slice(0, 120)); throw new Error(t); }
+  return r.json();
+}
+async function load() { S = await call("GET", ""); manual = null; render(); }
+
+const GUIDE = {
+  recovery: ["轉換 / 恢復期", ["ATL 下降、TSB 回正", "每週時數低而穩定", "每週 2 次肌力"]],
+  base: ["基礎期", ["低強度時間佔比 ≥ 75–80%", "EF（同心率的速度）往上", "長時間輕鬆跑飄移 < 5%", "每週量增幅 ≲ 10%"]],
+  specific: ["專項期", ["VAM（同心率爬更快）", "每公里爬升接近目標", "最長單次逼近目標時間", "長時間後段飄移變小"]],
+  taper: ["減量期", ["每週時數降到平常的 40–60%", "高強度時數保留", "TSB 回到正值、CTL 只小降"]],
+};
+
+function render() {
+  $("#todayinfo").textContent = "今天 " + S.today;
+  renderNow(); renderTimeline(); renderGoals(); renderEvents(); renderPhases(); renderThr(); renderGuide();
+}
+
+function renderNow() {
+  const c = S.current_phase, g = S.goals, next = S.events.find((e) => e.id === g.next_a);
+  const cards = [];
+  cards.push(`<div class="card"><div class="k">目前周期</div><div class="v" style="color:${c ? PCOL(c.kind) : "inherit"}">${c ? esc(c.label) : "未設定"}</div>
+    <div class="s">${c ? `${c.start} ～ ${c.end}，還有 ${c.days_left} 天` : "新增一場 A 賽事就會自動排周期"}</div></div>`);
+  cards.push(`<div class="card"><div class="k">下一場 A 賽事</div><div class="v">${next ? esc(next.name) : "–"}</div>
+    <div class="s">${next ? `${next.date}，倒數 ${next.days_to} 天` : ""}</div></div>`);
+  if (c && c.dashboard) cards.push(`<div class="card"><div class="k">現在該看的圖</div><div class="v" style="font-size:16px">${esc(c.dashboard)}</div>
+    <div class="s"><a href="/api/v1/wko5/viewer">圖表 → 我的圖表 → 周期化訓練</a></div></div>`);
+  const t = S.effective_thresholds;
+  cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(t.aethr.value)} / LTHR ${fmt(t.lthr.value)} / CP ${fmt(t.cp.value)} W</div>
+    <div class="s ${t.lthr.wko5_default ? "warn" : ""}">${t.lthr.wko5_default ? "⚠ LTHR 是 WKO5 預設值，請到下方填測試結果" : t.lthr.source === "plan" ? "心率來自你的測試紀錄" : "心率來自 WKO5 設定"}；CP ${t.cp.source === "plan" ? "來自你的測試" : "＝WKO5 的 mFTP"}</div></div>`);
+  $("#now").innerHTML = cards.join("");
+}
+
+function renderTimeline() {
+  const b = S.begin, e = S.end, span = ddiff(b, e) + 1;
+  const pos = (d) => Math.max(0, Math.min(100, ddiff(b, d) / span * 100));
+  const phases = manual || S.phases;
+  let h = "";
+  for (const p of phases) {
+    const l = pos(p.start), w = Math.max(0.3, pos(p.end) + 100 / span - l);
+    h += `<div class="seg" style="left:${l}%;width:${w}%;background:${PCOL(p.kind)}" title="${esc(S.phase_labels[p.kind])} ${p.start}～${p.end}">${w > 6 ? esc(S.phase_labels[p.kind]) : ""}</div>`;
+  }
+  for (const w of S.b_windows) {
+    const l = pos(w.start), wd = pos(w.end) + 100 / span - l;
+    h += `<div class="mini" style="left:${l}%;width:${wd}%" title="${w.kind === "mini_taper" ? "B 賽事小減量" : "B 賽事恢復"}"></div>`;
+  }
+  const d0 = day(b);
+  for (let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m <= day(e); m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+    const iso = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}-01`;
+    h += `<div class="month" style="left:${pos(iso)}%">${m.getMonth() === 0 ? m.getFullYear() + "/" : ""}${m.getMonth() + 1}月</div>`;
+  }
+  for (const ev of S.events) if (ev.date >= b && ev.date <= e)
+    h += `<div class="ev ${ev.priority}" style="left:${pos(ev.date)}%"><span>${esc(ev.priority)} ${esc(ev.name)}</span></div>`;
+  h += `<div class="today" style="left:${pos(S.today)}%"><span>今天</span></div>`;
+  $("#tl").innerHTML = h;
+  $("#legend").innerHTML = ["recovery", "base", "specific", "taper", "event"].map((k) =>
+    `<span><i style="background:${PCOL(k)}"></i>${S.phase_labels[k]}</span>`).join("") +
+    `<span><i style="background:var(--muted);height:4px"></i>B 賽事小減量 / 恢復</span>`;
+  const r = S.rules;
+  $("#tlnote").textContent = S.manual_phases ? "手動周期。" :
+    `自動排程：每場 A 賽事前 ${r.taper_days} 天減量、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週（預估 ≥ ${r.long_event_hours} 小時或多日行程則 2 週）。`;
+}
+
+function renderGoals() {
+  const T = S.goals.targets;
+  const unit = { distance_km: ["km", 1], climbing_m: ["m", 0], climb_per_km: ["m/km", 0], est_hours: ["小時", 1], days: ["天", 0] };
+  const cards = Object.entries(unit).map(([k, [u, d]]) => {
+    const g = T[k];
+    const label = { distance_km: "最長距離", climbing_m: "最多爬升", climb_per_km: "最陡（每公里爬升）", est_hours: "最長時間", days: "最多天數" }[k];
+    return `<div class="card"><div class="k">${label}</div><div class="v">${g ? fmt(g.value, d) + " " + u : "–"}</div>
+      <div class="s">${g ? "來自 " + esc(g.event) : "還沒填"}</div></div>`;
+  });
+  $("#goals").innerHTML = S.goals.events.length ? cards.join("") : `<p class="meta">還沒有接下來的 A / B 賽事。</p>`;
+}
+
+function renderEvents() {
+  const kinds = S.kinds;
+  $("#kindsel").innerHTML = Object.entries(kinds).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+  $("#events").innerHTML = S.events.map((e) => `<tr style="${e.days_to < 0 ? "opacity:.55" : ""}">
+    <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? "～" + e.end.slice(5) : ""}</td>
+    <td>${esc(e.name)}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
+    <td class="num">${fmt(e.distance_km, 1)}</td><td class="num">${fmt(e.climbing_m)}</td><td class="num">${fmt(e.climb_per_km)}</td>
+    <td class="num">${fmt(e.est_hours, 1)}</td><td class="num">${e.days_to >= 0 ? e.days_to + " 天" : "已過"}</td>
+    <td class="meta">${esc(e.note)}</td>
+    <td><button class="link" data-edit="${e.id}">編輯</button><button class="link" data-del="${e.id}">刪除</button></td></tr>`).join("")
+    || `<tr><td colspan="12" class="meta">還沒有賽事。在下面填一場。</td></tr>`;
+}
+
+function renderPhases() {
+  const rows = manual || S.phases;
+  const evName = (id) => (S.events.find((e) => e.id === id) || {}).name || "";
+  const opts = (sel) => Object.entries(S.phase_labels).map(([k, v]) => `<option value="${k}" ${k === sel ? "selected" : ""}>${esc(v)}</option>`).join("");
+  $("#phases").innerHTML = rows.map((p, i) => manual ? `<tr>
+      <td><select data-i="${i}" data-f="kind">${opts(p.kind)}</select></td>
+      <td><input type="date" data-i="${i}" data-f="start" value="${p.start}"></td>
+      <td><input type="date" data-i="${i}" data-f="end" value="${p.end}"></td>
+      <td class="num">${ddiff(p.start, p.end) + 1}</td><td>${esc(evName(p.event_id))}</td>
+      <td><button class="link" data-rm="${i}">移除</button></td></tr>` : `<tr>
+      <td><span class="dot" style="background:${PCOL(p.kind)}"></span>${esc(p.label)}</td><td>${p.start}</td><td>${p.end}</td>
+      <td class="num">${p.days}</td><td>${esc(evName(p.event_id))}</td><td></td></tr>`).join("");
+  $("#phasemode").textContent = manual ? "手動編輯中：改完按「儲存周期」。儲存後就不再自動排程，直到按「恢復自動排程」。"
+    : S.manual_phases ? "目前是手動周期。" : "目前是自動排程（從 A 賽事往回推）。";
+  $("#tomanual").hidden = !!manual;
+  $("#addphase").hidden = $("#savephases").hidden = !manual;
+  $("#toauto").hidden = !(S.manual_phases || manual);
+}
+
+function renderThr() {
+  const w = S.wko5_settings.runthr, m = S.wko5_settings.runmhr;
+  $("#thrstatus").innerHTML = `<p class="meta">WKO5 裡的設定：跑步 LTHR ${fmt(w && w.value)}、最大心率 ${fmt(m && m.value)}
+    ${w && w.is_default ? `<span class="warn">— 這是 WKO5 的出廠預設值（日期 ${w.date}，代表從沒填過）。WKO5 的心率區間 = 區間表 × LTHR，所以用預設值算出來的區間也不準。</span>` : ""}</p>`;
+  const rows = S.thresholds.length ? S.thresholds : [];
+  $("#thr").innerHTML = rows.map((t, i) => `<tr>
+    <td><input type="date" data-t="${i}" data-f="date" value="${t.date}"></td>
+    <td class="num"><input type="number" data-t="${i}" data-f="lthr" value="${t.lthr ?? ""}"></td>
+    <td class="num"><input type="number" data-t="${i}" data-f="aethr" value="${t.aethr ?? ""}"></td>
+    <td class="num"><input type="number" data-t="${i}" data-f="mhr" value="${t.mhr ?? ""}"></td>
+    <td class="num"><input type="number" data-t="${i}" data-f="cp" value="${t.cp ?? ""}"></td>
+    <td><input data-t="${i}" data-f="note" value="${esc(t.note)}" style="width:260px"></td>
+    <td><button class="link" data-trm="${i}">移除</button></td></tr>`).join("")
+    || `<tr><td colspan="7" class="meta">還沒有測試紀錄。</td></tr>`;
+}
+
+function renderGuide() {
+  const cur = S.current_phase && (S.current_phase.kind === "event" ? "taper" : S.current_phase.kind === "transition" ? "recovery" : S.current_phase.kind);
+  $("#guide").innerHTML = Object.entries(GUIDE).map(([k, [t, items]]) =>
+    `<div style="border-left-color:${PCOL(k)};${k === cur ? "background:var(--soft)" : ""}"><b>${t}${k === cur ? "（現在）" : ""}</b><ul>${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("");
+}
+
+// ---- events ----
+$("#evform").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = new FormData(ev.target), body = {};
+  for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
+  for (const k of ["days", "distance_km", "climbing_m", "est_hours"]) if (body[k] != null) body[k] = Number(body[k]);
+  body.days = body.days || 1; body.note = body.note || "";
+  await call("PUT", "/events", body);
+  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true;
+  toast("已儲存"); load();
+});
+$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; };
+$("#events").addEventListener("click", async (ev) => {
+  const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
+  if (ed) {
+    const e = S.events.find((x) => x.id === ed), f = $("#evform");
+    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "note"]) f[k].value = e[k] ?? "";
+    $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  if (del && confirm("刪除這場賽事？")) { await call("DELETE", "/events/" + del); toast("已刪除"); load(); }
+});
+
+// ---- phases ----
+$("#tomanual").onclick = () => { manual = S.phases.map((p) => ({ kind: p.kind, start: p.start, end: p.end, event_id: p.event_id })); renderPhases(); };
+$("#addphase").onclick = () => {
+  const last = manual[manual.length - 1];
+  const s = last ? new Date(day(last.end).getTime() + 86400000).toISOString().slice(0, 10) : S.today;
+  manual.push({ kind: "base", start: s, end: s, event_id: null }); renderPhases(); renderTimeline();
+};
+$("#phases").addEventListener("change", (ev) => {
+  const i = ev.target.dataset.i; if (i == null) return;
+  manual[i][ev.target.dataset.f] = ev.target.value; renderPhases(); renderTimeline();
+});
+$("#phases").addEventListener("click", (ev) => {
+  const i = ev.target.dataset.rm; if (i == null) return;
+  manual.splice(Number(i), 1); renderPhases(); renderTimeline();
+});
+$("#savephases").onclick = async () => { await call("PUT", "/phases", manual); toast("周期已儲存"); load(); };
+$("#toauto").onclick = async () => { if (!confirm("清掉手動周期，改回自動排程？")) return; await call("PUT", "/phases", []); toast("已恢復自動"); load(); };
+
+// ---- thresholds ----
+$("#addthr").onclick = () => { S.thresholds.push({ date: S.today, lthr: null, aethr: null, mhr: null, cp: null, note: "" }); renderThr(); };
+$("#thr").addEventListener("change", (ev) => {
+  const i = ev.target.dataset.t; if (i == null) return;
+  const f = ev.target.dataset.f, v = ev.target.value;
+  S.thresholds[i][f] = ["lthr", "aethr", "mhr", "cp"].includes(f) ? (v === "" ? null : Number(v)) : v;
+});
+$("#thr").addEventListener("click", (ev) => { const i = ev.target.dataset.trm; if (i == null) return; S.thresholds.splice(Number(i), 1); renderThr(); });
+$("#savethr").onclick = async () => {
+  await call("PUT", "/thresholds", S.thresholds);
+  toast("心率門檻已儲存，圖表會重新計算"); load();
+};
+
+load();
+</script>
+</body>
+</html>
