@@ -19,6 +19,21 @@
   - 各圖的 x 可能是時間或距離，要先換算成同一個樣本索引。
   - x 軸不是時間或距離的圖（散點、區間表）不參與同步。
 - **放大檢視**：放大的單張圖也要參與同步，地圖可以一起放大。
+- **底圖可切換，預設圖層在設定頁選**（使用者 2026-09-30 追加）。照 peak-list
+  `v2/app/src/map/basemaps.ts` 的清單：
+  | id | 名稱 | 圖磚網址 | maxzoom | 備註 |
+  |---|---|---|---|---|
+  | rudy | 魯地圖 | `https://tile.happyman.idv.tw/map/rudy/{z}/{x}/{y}.png` | 18 | 官方主機常不回應，another-project 走自己的 `/api/tiles` 代理；這裡沒有代理，失敗時要提示換底圖 |
+  | google-terrain | Google 地形 | `https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}` | 15 | 非官方端點，可能隨時失效；z16 以上等高線會消失，所以 maxzoom 設 15 |
+  | nlsc-emap | NLSC 電子地圖 | `https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}` | 19 | 注意是 `{z}/{y}/{x}` |
+  | nlsc-photo | 正射影像 | `https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}` | 19 | 同上 |
+  | osm | OSM | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | 19 | |
+  - 疊圖（可開關）：
+    - 等高線 `https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png`（不透明度 0.8）
+    - Google 道路 `lyrs=h`（0.9）
+    - NLSC 道路 `EMAP2` `{z}/{y}/{x}`（0.9）
+  - 設定頁：新增「預設底圖」和「預設疊圖」，存在設定裡；地圖上也能臨時切換。
+  - 地圖上要標示各圖資的來源（attribution）。
 - **要改的檔案**：
   - `backend/static/wko5_viewer.html`
   - workout 圖表 JSON 需要附上樣本的時間、距離、經緯度對照表，由後端提供，可能放在 `wko5views.py` 的 workout 端點。
