@@ -5,7 +5,6 @@ as plain text to paste into a hiking-group sign-up.
 from __future__ import annotations
 
 import datetime as dt
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional

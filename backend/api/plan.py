@@ -5,7 +5,6 @@ thresholds. Data lives in ~/.wko5coach/plan.json (backend/engine/planning.py).
 from __future__ import annotations
 
 import datetime as dt
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
