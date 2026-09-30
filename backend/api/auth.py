@@ -30,6 +30,13 @@ async def tp_login_password(body: LoginRequest, db: AsyncSession = Depends(get_d
         return result
     except Exception as e:
         detail = str(e)
+        # codes from tp_client.TpLoginError (website login fallback)
+        if detail.startswith(("TP_LOGIN_CAPTCHA", "TP_LOGIN_MFA")):
+            raise HTTPException(403, detail)
+        if detail.startswith("TP_LOGIN_FAILED"):
+            raise HTTPException(401, detail)
+        if detail.startswith("TP_LOGIN_ERROR"):
+            raise HTTPException(502, detail)
         if "invalid_grant" in detail or "401" in detail or "Unauthorized" in detail:
             raise HTTPException(401, f"TP_LOGIN_FAILED: {detail}")
         if "400" in detail:
@@ -60,6 +67,7 @@ async def tp_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     if state:
         state.tp_access_token = None
         state.tp_refresh_token = None
+        state.tp_web_cookie = None
         state.tp_token_expires = None
         await db.commit()
     return {"logged_out": True}
