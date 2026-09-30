@@ -145,6 +145,8 @@ class ThresholdIn(BaseModel):
     mhr: Optional[float] = None
     cp: Optional[float] = None
     note: str = ""
+    wprime: Optional[float] = None       # carried through so an edit keeps what apply-cp wrote
+    cp_method: Optional[str] = None
 
 
 @router.put("/thresholds")
@@ -296,6 +298,53 @@ def apply_estimate(body: ApplyEstimate):
     if body.aethr is not None:
         row.aethr = round(body.aethr)
     row.note = (row.note + "；" if row.note else "") + (body.note or "由活動資料自動估算")
+    plan.save()
+    _notify(True)
+    return {"threshold": row.__dict__}
+
+
+class ApplyCP(BaseModel):
+    date: str                           # the test day (not today)
+    cp: float
+    cp_method: str
+    wprime: Optional[float] = None      # J; only a measured (two-point) W′
+    activity_index: Optional[int] = None
+    note: str = ""
+
+
+@router.post("/thresholds/apply-cp")
+def apply_cp(body: ApplyCP):
+    """「套用這次的 CP」: write the CP-test result (engine/cp_protocols.py) as a
+    threshold row dated the test day, so the testing indicator's age and the
+    90-day freshness are right. Merges into an existing row of that day."""
+    from backend.engine import cp_protocols as CPP
+    try:
+        d = P._d(body.date)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, f"bad date: {e}")
+    if d is None or d > dt.date.today():
+        raise HTTPException(400, "測試日期不能在未來")
+    if body.cp_method not in CPP.METHOD_LABEL:
+        raise HTTPException(400, f"cp_method must be one of {tuple(CPP.METHOD_LABEL)}")
+    if not 50 <= body.cp <= 700:
+        raise HTTPException(400, f"CP {body.cp} W 不合理")
+    if body.wprime is not None and not 0 < body.wprime <= 60000:
+        raise HTTPException(400, f"W′ {body.wprime} J 不合理")
+    if body.wprime is not None and body.cp_method != "2pt":
+        raise HTTPException(400, "W′ 只在兩點測試量得到")
+    plan = P.Plan.load()
+    iso = d.isoformat()
+    row = next((t for t in plan.thresholds if t.date == iso), None)
+    if row is None:
+        row = P.Threshold(iso)
+        plan.thresholds.append(row)
+    row.cp = round(body.cp)
+    row.wprime = None if body.wprime is None else round(body.wprime)
+    row.cp_method = body.cp_method
+    note = body.note or f"CP 測試（{CPP.METHOD_LABEL[body.cp_method]}）"
+    if body.activity_index is not None:
+        note += f"；活動 #{body.activity_index}"
+    row.note = (row.note + "；" if row.note else "") + note
     plan.save()
     _notify(True)
     return {"threshold": row.__dict__}
