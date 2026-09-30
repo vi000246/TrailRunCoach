@@ -275,7 +275,7 @@ def _coros_act(label, start, **kw):
 
 
 def test_coros_login_list_download_import_and_incremental_cursor(tmp_path, monkeypatch):
-    monkeypatch.setattr(coros_client, "COROS_FITS_ROOT", tmp_path / "fits")
+    pass  # FIT folders are redirected to a temp dir by conftest
 
     async def go():
         s = await make_session(tmp_path)
@@ -303,7 +303,7 @@ def test_coros_login_list_download_import_and_incremental_cursor(tmp_path, monke
 
 
 def test_coros_download_error_keeps_cursor(tmp_path, monkeypatch):
-    monkeypatch.setattr(coros_client, "COROS_FITS_ROOT", tmp_path / "fits")
+    pass  # FIT folders are redirected to a temp dir by conftest
 
     async def go():
         s = await make_session(tmp_path)
@@ -334,7 +334,7 @@ def test_coros_expired_token_is_a_clear_event(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_same_activity_from_both_sources_counts_once(tmp_path, monkeypatch):
-    monkeypatch.setattr(coros_client, "COROS_FITS_ROOT", tmp_path / "fits")
+    pass  # FIT folders are redirected to a temp dir by conftest
     from backend.api.pmc import get_pmc
 
     async def go():

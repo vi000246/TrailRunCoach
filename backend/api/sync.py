@@ -1,4 +1,5 @@
 import json
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,7 +12,7 @@ from backend.db.database import get_db
 from backend.db.models import SyncState, WorkoutFile
 from backend.settings.repository import SettingsRepository
 from backend.sync.tp_client import sync_workouts, fetch_tp_settings
-from backend.sync import coros_client, dedup
+from backend.sync import coros_client, dedup, purge, runner, storage
 
 
 async def _disabled(db: AsyncSession, athlete_id: int, source: str) -> bool:
@@ -71,14 +72,22 @@ async def start_sync(
       - since: ISO date "YYYY-MM-DD" (default: last_sync_cursor or 2010-01-01)
       - page_size: TP pagination size (1..100, default 20 — matches WKO5)
     """
-    disabled = await _disabled(db, athlete_id, "trainingpeaks")
+    return await _sse_sync(db, "tp", athlete_id, since)
+
+
+async def _sse_sync(db: AsyncSession, source: str, athlete_id: int, since: Optional[str]):
+    """SSE stream of one run through the shared runner (per-source lock).
+    409 SYNC_BUSY when that source is already running."""
+    if runner.is_busy(source):
+        raise HTTPException(409, "SYNC_BUSY")
+    disabled = await _disabled(db, athlete_id, runner.SETTING_NAME[source])
 
     async def generate():
         if disabled:
             yield {"event": "sync_progress", "data": json.dumps(
-                {"error": "SYNC_DISABLED", "source": "trainingpeaks"})}
+                {"status": "error", "error": "SYNC_DISABLED", "source": source})}
             return
-        async for event in sync_workouts(db, athlete_id, since=since, page_size=page_size):
+        async for event in runner.stream(db, source, athlete_id, since=since, trigger="manual"):
             yield {"event": "sync_progress", "data": json.dumps(event)}
     return EventSourceResponse(generate())
 
@@ -90,15 +99,69 @@ async def start_coros_sync(
     db: AsyncSession = Depends(get_db),
 ):
     """Trigger Coros sync. Streams progress events via Server-Sent Events."""
-    disabled = await _disabled(db, athlete_id, "coros")
+    return await _sse_sync(db, "coros", athlete_id, since)
 
-    async def generate():
-        if disabled:
-            yield {"event": "sync_progress", "data": json.dumps({"error": "SYNC_DISABLED", "source": "coros"})}
-            return
-        async for event in coros_client.sync_workouts(db, athlete_id, since=since):
-            yield {"event": "sync_progress", "data": json.dumps(event)}
-    return EventSourceResponse(generate())
+
+@router.get("/sources")
+async def sync_sources(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Everything the settings page shows per source: login state, enabled,
+    busy, last sync / result, files on disk, DB rows, date span."""
+    repo = SettingsRepository(db, athlete_id)
+    out = {}
+    for src in runner.SOURCES:
+        name = runner.SETTING_NAME[src]
+        last = await runner.last_sync_at(db, src, athlete_id)
+        out[src] = {
+            "logged_in": await runner.logged_in(db, src, athlete_id),
+            "enabled": await repo.get(f"sync.{name}.enabled"),
+            "busy": runner.is_busy(src),
+            "last_sync_at": last.isoformat() if last else None,
+            "last_result": await repo.get(f"sync.{name}.last_result"),
+            "stats": await purge.source_stats(db, src, athlete_id),
+        }
+    return out
+
+
+@router.post("/auto")
+async def auto_sync(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Page-open trigger: starts a background sync for every enabled,
+    logged-in, idle source whose last sync is older than
+    sync.auto_on_open.hours. A no-op when fresh, busy or switched off.
+    Returns immediately."""
+    repo = SettingsRepository(db, athlete_id)
+    if not await repo.get("sync.auto_on_open.enabled"):
+        return {"started": [], "skipped": {s: "auto_off" for s in runner.SOURCES}}
+    hours = float(await repo.get("sync.auto_on_open.hours"))
+    now = datetime.now(timezone.utc)
+    started, skipped = [], {}
+    for src, state in (await runner.ready_sources(db, athlete_id)).items():
+        if state != "ready":
+            skipped[src] = state
+            continue
+        last = await runner.last_sync_at(db, src, athlete_id)
+        if last and (now - last).total_seconds() < hours * 3600:
+            skipped[src] = "fresh"
+            continue
+        if runner.start_background(src, athlete_id, trigger="open") is None:
+            skipped[src] = "busy"
+        else:
+            started.append(src)
+    return {"started": started, "skipped": skipped, "threshold_hours": hours}
+
+
+@router.delete("/{source}/files")
+async def delete_source_files(source: str, athlete_id: int = 1,
+                              date_from: Optional[date] = None, date_to: Optional[date] = None,
+                              db: AsyncSession = Depends(get_db)):
+    """Delete one source's synced FIT files + DB rows (confined to
+    ~/.wko5coach/fit/<source>/), rebuild de-dup, reset the cursor.
+    source ∈ {coros, tp}; 409 SYNC_BUSY while that source syncs."""
+    if source not in storage.SOURCES:
+        raise HTTPException(400, "source must be coros or tp")
+    try:
+        return await purge.delete_source_files(db, source, athlete_id, date_from, date_to)
+    except runner.SyncBusy:
+        raise HTTPException(409, "SYNC_BUSY")
 
 
 @router.get("/status")
@@ -120,12 +183,20 @@ class SyncSettingsBody(BaseModel):
     coros_enabled: Optional[bool] = None
     trainingpeaks_enabled: Optional[bool] = None
     tp_use_wko5_client: Optional[bool] = None     # null = auto (on when creds configured)
+    daily_sync_time: Optional[str] = None         # "HH:MM" or null (off)
+    auto_on_open: Optional[bool] = None
+    auto_on_open_hours: Optional[float] = None
+    chart_data_source: Optional[str] = None       # wko5 | coros | tp
 
 
 _SETTING_KEYS = {"primary_source": "sync.primary_source", "timezone": "athlete.timezone",
                  "coros_enabled": "sync.coros.enabled",
                  "trainingpeaks_enabled": "sync.trainingpeaks.enabled",
-                 "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client"}
+                 "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client",
+                 "daily_sync_time": "sync.schedule.daily_time",
+                 "auto_on_open": "sync.auto_on_open.enabled",
+                 "auto_on_open_hours": "sync.auto_on_open.hours",
+                 "chart_data_source": "charts.data_source"}
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:
