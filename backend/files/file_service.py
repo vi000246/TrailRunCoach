@@ -46,31 +46,87 @@ def discover_workout_files(athlete_dir: Path) -> list[Path]:
     return files
 
 
+def _sync_ids(source: str, path: Path) -> dict:
+    """Provider ids encoded in the sync file names (coros_client / tp_client):
+    COROS "<labelId>_<YYYY-MM-DD>_<sport>.fit", TP "tp_<YYYY_MM_DD>_<workoutId>.fit"."""
+    stem = path.name.split(".")[0]
+    if source == "coros":
+        head = stem.split("_", 1)[0]
+        return {"coros_activity_id": head} if head.isdigit() else {}
+    if source == "trainingpeaks":
+        tail = stem.rsplit("_", 1)[-1]
+        return {"tp_workout_id": int(tail)} if tail.isdigit() else {}
+    return {}
+
+
+def discover_tagged_files(athlete_dir: Path) -> list[tuple[Path, str]]:
+    """(file, source) pairs. A folder laid out like the sync storage root
+    (<dir>/coros/<year>/, <dir>/tp/<year>/) is walked per source and each file
+    tagged with that source; any other folder is the classic
+    <dir>/<year>/*.wko4|.fit layout, tagged "local"."""
+    from backend.sync import storage
+    out: list[tuple[Path, str]] = []
+    per_source = [(athlete_dir / folder, db_src) for folder, db_src in storage.SOURCES.items()
+                  if (athlete_dir / folder).is_dir()]
+    for d, db_src in per_source:
+        out += [(f, db_src) for f in discover_workout_files(d) if not f.is_symlink()]
+    out += [(f, "local") for f in discover_workout_files(athlete_dir)]
+    return out
+
+
+async def _already_imported(db: AsyncSession, athlete_id: int, path: Path, ids: dict) -> bool:
+    """Same file (by path, however it was spelled) or the same provider activity."""
+    cands = {str(path)}
+    try:
+        cands.add(str(path.resolve()))
+    except OSError:
+        pass
+    q = select(WorkoutFile.id).where(WorkoutFile.file_path.in_(cands))
+    if (await db.execute(q)).first():
+        return True
+    if ids.get("coros_activity_id"):
+        q = select(WorkoutFile.id).where(WorkoutFile.coros_activity_id == ids["coros_activity_id"])
+        if (await db.execute(q)).first():
+            return True
+    if ids.get("tp_workout_id"):
+        q = select(WorkoutFile.id).where(WorkoutFile.athlete_id == athlete_id,
+                                         WorkoutFile.tp_workout_id == ids["tp_workout_id"])
+        if (await db.execute(q)).first():
+            return True
+    return False
+
+
 async def scan_and_import(db: AsyncSession, athlete_id: int, athlete_dir: str) -> dict:
-    """Scan directory and import all new workout files. Returns summary."""
-    files = discover_workout_files(Path(athlete_dir))
+    """Scan a folder and import every workout file not in the DB yet. Works on
+    the sync storage root (~/.wko5coach/fit with coros/ and tp/ below it —
+    files are tagged with their source and provider id, so a file the sync
+    already recorded is never imported twice) and on a classic year-folder
+    layout. De-dup / canonical rules apply through _import_one_file."""
+    files = discover_tagged_files(Path(athlete_dir))
     new_count = 0
     skip_count = 0
     error_count = 0
+    by_source: dict[str, int] = {}
 
-    for f in files:
-        path_str = str(f)
-        existing = await db.execute(select(WorkoutFile).where(WorkoutFile.file_path == path_str))
-        if existing.scalar_one_or_none():
+    for f, source in files:
+        ids = _sync_ids(source, f)
+        if await _already_imported(db, athlete_id, f, ids):
             skip_count += 1
             continue
         try:
             # savepoint per file: a failure leaves no half-written rows
             async with db.begin_nested():
-                wf = await _import_one_file(db, athlete_id, f)
+                wf = await _import_one_file(db, athlete_id, f, source=source, **ids)
             if wf:
                 new_count += 1
+                by_source[source] = by_source.get(source, 0) + 1
         except Exception:
             error_count += 1
         await asyncio.sleep(0)
 
     await db.commit()
-    return {"new": new_count, "skipped": skip_count, "errors": error_count, "total": len(files)}
+    return {"new": new_count, "skipped": skip_count, "errors": error_count, "total": len(files),
+            "new_by_source": by_source}
 
 
 async def get_run_ftp(db: AsyncSession, athlete_id: int, as_of_date: Optional[date] = None) -> Optional[float]:

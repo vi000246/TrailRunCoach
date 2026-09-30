@@ -28,24 +28,38 @@ def _db_path() -> Optional[Path]:
         return None
 
 
-def current_source(user_id: int = 1) -> str:
+def read_setting(key: str, default=None, user_id: int = 1):
+    """Synchronous, read-only lookup in the settings store (user_settings);
+    `default` when the DB, table or row is missing."""
     db = _db_path()
     if db is None or not db.exists():
-        return "wko5"
+        return default
     try:
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
         try:
             row = con.execute("SELECT value_json FROM user_settings WHERE user_id=? AND key=?",
-                              (user_id, "charts.data_source")).fetchone()
+                              (user_id, key)).fetchone()
         finally:
             con.close()
     except sqlite3.Error:
-        return "wko5"
+        return default
+    if not row:
+        return default
     try:
-        v = json.loads(row[0]) if row else "wko5"
+        return json.loads(row[0])
     except ValueError:
-        return "wko5"
+        return default
+
+
+def current_source(user_id: int = 1) -> str:
+    v = read_setting("charts.data_source", "wko5", user_id)
     return v if v in SOURCES else "wko5"
+
+
+def athlete_tz(user_id: int = 1):
+    """athlete.timezone setting -> WKO5COACH_TZ -> system zone (as the sync uses)."""
+    from backend.settings.repository import resolve_tz
+    return resolve_tz(read_setting("athlete.timezone", None, user_id))
 
 
 def source_stamp(source: str, wko5_dir: Path) -> str:

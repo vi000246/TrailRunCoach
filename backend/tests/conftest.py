@@ -12,6 +12,8 @@ def _test_secret_key(monkeypatch):
     # never look at the repo's real sealed blob or the user's DB
     monkeypatch.setattr(secrets, "SEALED_FILES", [])
     monkeypatch.setattr(secrets, "_db_path", lambda: None)
+    from backend.engine.wko5expr import datasource
+    monkeypatch.setattr(datasource, "_db_path", lambda: None)
     secrets.reset_cache()
     yield
     secrets.reset_cache()
