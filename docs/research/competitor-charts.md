@@ -333,7 +333,7 @@
 | 7 | **Monotony 與 Strain** | 負荷 PMC（或 ④ 以外各周期） | TSS（也可換成時數） | 運算式應可行，但很冗長：`@d:=tl(tss,1)`，均值 = (@d + shift(@d,1) + … + shift(@d,6))/7，SD 用同樣 7 個 shift 手算平方和。athlete 層級的 @變數沒實測過；太慢就改成後端每日序列。門檻：Foster 版 1.5 / 2.0；Runalyze 2025 新版 0.6 / 0.67 | M |
 | 8 | **上坡／下坡效率比**（Runalyze） | 單次活動「爬坡與地形」，趨勢放能力 | speed、HR、rgrade；有 Stryd 時用功率 | 運算式可行：`avg(if(rgrade>5, speed)) / avg(if(rgrade>5, heartrate))` 除以平路（\|rgrade\| < 2）的同一比值。上坡最好用 GAP 或功率，否則每段坡度不同會混淆 | S–M |
 | 9 | **本週課表 compliance 色** | 總覽「本週該做什麼」 | 課表的計畫時間或 TSS，對照實際 | **要寫後端與前端**：`overview.py` 已有 done 與 done_by，再加一個比值；顏色照 intervals（80–120% 綠、50–150% 橘、其他紅）或 TP 的五色 | S–M |
-| 10 | **Polarization Index 趨勢** | 強度（放「強度分配」下面） | HR（三區 AeT／LTHR） | 運算式可行：先用現有強度分配的三區每週占比 z1、z2、z3，再算 `if(z3>0 and z1>=z3, if(z2>0, log10(z1/z2*z3*100), log10(z1/z3*100)))`，並加 `(,2)` 門檻線。注意我們的三區是 AeT／LTHR，跟 Treff 的 VT1／VT2 接近但不相同 | S |
+| 10 | **Polarization Index 趨勢** | 強度（放「強度分配」下面） | HR（三區 AeT／LTHR） | 運算式可行：先用現有強度分配的三區每週占比 z1、z2、z3，（z 是 0–1 的小數，不是百分比；用百分比會讓 PI 整體 +2），再算 `if(z3>0 and z1>=z3, if(z2>0, log10(z1/z2*z3*100), log10(z1/z3*100)))`，並加 `(,2)` 門檻線。注意我們的三區是 AeT／LTHR，跟 Treff 的 VT1／VT2 接近但不相同 | S |
 
 **落選但接近的：**
 - 功率曲線依資料新舊上色加兩段期間疊圖（前端 M）。
