@@ -378,6 +378,59 @@ def undo_correction(correction_id: str):
     return {"removed": correction_id, "total": len(store.items)}
 
 
+# ---------------------------------------------------------------------------
+# workout samples — one shared index for the route map and synced hover
+# ---------------------------------------------------------------------------
+
+@router.get("/workouts/{idx}/samples")
+def workout_samples(idx: int, parity: Optional[bool] = None):
+    """Per-sample elapsed time (s), distance (km), lat/lng, elevation (m),
+    HR, power and grade (%) of one workout, downsampled once. Every array has
+    the same length and the same step as the workout charts' points
+    (render._downsample), so the viewer maps a chart's x (time or distance)
+    and a map position to one sample index. NaN / no GPS -> null."""
+    import math
+    import numpy as np
+    from backend.engine.wko5expr.evaluator import Evaluator
+    from backend.engine.wko5expr.render import MAX_POINTS, _f
+
+    ds = _dataset(parity)
+    if not 0 <= idx < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    w = ds.workouts[idx]
+    t = ds.channel(idx, "elapsedtime")
+    n = 0 if t is None else len(t)
+    step = max(1, int(math.ceil(n / MAX_POINTS))) if n else 1
+
+    def col(a, nd: int):
+        if a is None or len(a) != n:
+            return None
+        out = [_f(v) for v in a[::step]]
+        return [None if v is None else round(v, nd) for v in out]
+
+    grade = None
+    if n:
+        try:
+            g = Evaluator(ds, w.day, w.day).evaluate("rgrade", workout=w)
+            if isinstance(g, np.ndarray):
+                grade = g * 100.0
+        except Exception:   # noqa: BLE001 — grade is optional colouring data
+            grade = None
+    lat, lng = col(ds.channel(idx, "latitude"), 6), col(ds.channel(idx, "longitude"), 6)
+    if lat is not None and lng is not None:
+        # (0, 0) is a device's "no fix", not a position
+        for i, (a, b) in enumerate(zip(lat, lng)):
+            if a is None or b is None or (a == 0 and b == 0):
+                lat[i] = lng[i] = None
+    return {
+        "workout": idx, "step": step, "n": len(range(0, n, step)) if n else 0,
+        "t": col(t, 1) or [], "d": col(ds.channel(idx, "elapseddistance"), 4),
+        "lat": lat, "lng": lng, "elev": col(ds.channel(idx, "elevation"), 1),
+        "hr": col(ds.channel(idx, "heartrate"), 0), "power": col(ds.channel(idx, "power"), 0),
+        "grade": col(grade, 1),
+    }
+
+
 @router.get("/viewer", include_in_schema=False)
 def viewer():
     return FileResponse(Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html")
