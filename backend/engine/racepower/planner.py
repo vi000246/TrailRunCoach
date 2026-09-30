@@ -77,6 +77,18 @@ def stryd_table_power(p10: float, km: float) -> Optional[float]:
     return p10 * float(np.interp(math.log(km), xs, ys)) / 100.0
 
 
+def altitude_note(segs: list[dict], accl: str) -> Optional[str]:
+    """Above 2800 m (Wehrlin's measured range) the altitude factor is an
+    extrapolation; quote Bassett 1999's two curves at the top as a
+    cross-check (their own range is 0–4000 m, 推估 above 3000 m)."""
+    zs = [s.get("z_mean") for s in segs if s.get("z_mean") is not None]
+    if not zs or max(zs) <= 2800:
+        return None
+    top = max(s.get("z_max") or s["z_mean"] for s in segs)
+    return (f"最高約 {top:.0f} m：超過 2800 m 的海拔修正是外插（推估）。對照：Bassett 1999 在這個高度"
+            f"已適應 {ENV.bassett_pct(top, True):.1f}%、未適應 {ENV.bassett_pct(top, False):.1f}% 的海平面有氧能力")
+
+
 def solve_whole(d_m: float, re: float, weight: float, f_target: float, m: float, psus) -> float:
     """Whole-race mode C on one RE: t = D / (RE·f*·M·P_sus(t)/W), solved by
     bisection on log t (the right side increases slowly with t). With f* = 1
@@ -217,6 +229,21 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         return PC.solve_power_mode(p_whole, segs, model, alpha=a, **kw)
 
     res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp, w_prime, alpha)
+    if mode == "auto" and not v2_primary and gpx:
+        # the whole-race M must be the one the effort uses (time-weighted
+        # Σ(Pᵢ/Mᵢ)tᵢ, not the distance-weighted mean): a couple of fixed-point
+        # passes make f come out at f* exactly
+        for _ in range(6):
+            sc = _scale(res, t_whole)
+            pt = sum(r["P"] / s["M"] * r["t"] for r, s in zip(sc["rows"], segs)) / sc["T"]
+            m_eff = p_whole / pt
+            t_new = solve_whole(d_eff_m, re_v1, weight, f_target, m_eff, psus)
+            done = abs(t_new - t_whole) < 0.05
+            t_whole, t_c = t_new, t_new
+            p_whole = p_c = d_eff_m / t_new / re_v1 * weight
+            res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp, w_prime, alpha)
+            if done:
+                break
     if alpha_used < alpha - 1e-9:
         warnings.append(f"上坡彈性從 +{alpha:.0%} 縮到 +{alpha_used:.1%}：否則有坡段超過 CP 太久（W′ 用超過 75 %）")
     if not v2_primary:
@@ -236,9 +263,15 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     over_idx = {i for c in runs if c["over"] for i in range(c["from"], c["to"] + 1)}
     wb = None
     wmodel = opts.get("wbal")
-    if wmodel in ("wko5", "skiba") and w_prime:
-        wb = {"model": wmodel, "values": (PC.wbal_wko5 if wmodel == "wko5" else PC.wbal_skiba)(rows, segs, cp, w_prime),
-              "badge": "WKO5 算法" if wmodel == "wko5" else "推估", "w_prime": w_prime}
+    if wmodel in ("wko5", "skiba", "skiba_run") and w_prime:
+        if wmodel == "wko5":
+            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "WKO5 算法（70 % τ 300 s + 30 % τ 25 s）"
+        elif wmodel == "skiba":
+            vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "cycling"), "Skiba τ = 546·e^(−0.01·D) + 316（自行車）"
+        else:
+            vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "running"), "τ = 372·e^(−0.02·D) + 102（跑步擬合）"
+        wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",
+              "w_prime": w_prime}
     zs = zones_json(cp)
     out_segs = []
     cum = 0.0
@@ -287,6 +320,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         warnings.append("分段目標是推估：回測通過前，整場時間照 v1 方法算，分段只負責分配")
     if any(not s["trusted"] for s in out_segs):
         warnings.append("有坡度超過 8 % 的段，你在這個坡度的資料不足：該段目標是外插")
+    an = altitude_note(segs, accl) if gpx else None
+    if an:
+        warnings.append(an)
     tstar = t_whole if mode == "time" else None
     target = None
     if tstar:
@@ -430,6 +466,9 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         cross["langmuir_s"] = HK.langmuir_h(segs) * 3600.0
     if accl == "partial":
         warnings.append("部分適應是推估：取已適應與未適應兩條海拔曲線的中間，沒有定量研究")
+    an = altitude_note(segs, accl) if gpx else None
+    if an:
+        warnings.append(an)
     if gpx and not v2_primary:
         warnings.append("分段時間是推估：回測通過前，整趟移動時間照 v1 EP/h 模型算，分段只負責分配")
     warnings.append(f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）")
