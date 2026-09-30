@@ -172,6 +172,9 @@ class PlanSession(Base):
     terrain: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     distance_km: Mapped[Optional[float]] = mapped_column(nullable=True)
     climb_m: Mapped[Optional[float]] = mapped_column(nullable=True)
+    # CP-test protocol of a kind "test" session (engine/cp_protocols.py:
+    # quick / standard / race); None = legacy row (read from the title)
+    protocol: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

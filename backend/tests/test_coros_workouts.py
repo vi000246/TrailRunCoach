@@ -209,13 +209,62 @@ def test_hill_repeats_and_taper_percent():
     assert (ex[2]["intensityValue"], ex[2]["intensityValueExtend"]) == (294, 306)
 
 
-def test_cp_test_structure():
+def _cp_sess(protocol):
+    from backend.engine import cp_protocols as CPP
+    t = CPP.session_for(protocol)
+    return {**sess("test", "test", t["title"], t["minutes"], "2026-10-01", target=t["target"], detail=t["detail"]),
+            "protocol": protocol}
+
+
+def test_cp_test_structure_legacy_title_keeps_its_order():
+    # a stored pre-protocol row: 3′ first, the all-out bouts now open (no power range)
     s = sess("test", "test", "CP 測試 3 分 + 12 分", 60, "2026-10-01",
              target="兩段都全力、配速平均；中間休 30 分鐘", detail="平路或跑步機，暖身 15 分鐘")
     ex = _flat(CW.session_workout(s, TH).payload)
     assert [e["targetValue"] for e in ex] == [900, 180, 1800, 720, 600]
-    assert ex[1]["intensityType"] == CW.INT_POWER and ex[3]["intensityType"] == CW.INT_POWER
-    assert ex[1]["intensityValue"] > 300 and ex[3]["intensityValue"] < 300 < ex[3]["intensityValueExtend"]
+    assert ex[1]["intensityType"] == CW.INT_NONE and ex[3]["intensityType"] == CW.INT_NONE
+    assert ex[1]["name"] == "3 分全力" and ex[3]["name"] == "12 分全力"
+
+
+def test_cp_test_structure_quick():
+    ex = _flat(CW.session_workout(_cp_sess("quick"), TH).payload)
+    assert [e["exerciseType"] for e in ex] == [CW.EX_WARMUP, CW.EX_TRAIN, CW.EX_COOLDOWN]
+    assert [e["targetValue"] for e in ex] == [12 * 60, 20 * 60, 5 * 60]         # 37 min, as the session says
+    work = ex[1]
+    assert work["name"] == "20 分全力" and work["intensityType"] == CW.INT_NONE   # open target
+    assert work["targetType"] == CW.TARGET_TIME
+    assert ex[0]["intensityType"] == CW.INT_HR and ex[2]["intensityType"] == CW.INT_HR
+    assert CW.session_workout(_cp_sess("quick"), TH).payload["estimatedTime"] == 37 * 60
+
+
+def test_cp_test_structure_standard_long_bout_first():
+    ex = _flat(CW.session_workout(_cp_sess("standard"), TH).payload)
+    assert [e["exerciseType"] for e in ex] == [CW.EX_WARMUP, CW.EX_TRAIN, CW.EX_REST, CW.EX_TRAIN, CW.EX_COOLDOWN]
+    assert [e["targetValue"] for e in ex] == [900, 720, 1800, 180, 600]         # 12′ → 30′ → 3′; 70 min
+    assert ex[1]["name"] == "12 分全力" and ex[3]["name"] == "3 分全力"
+    assert ex[1]["intensityType"] == CW.INT_NONE and ex[3]["intensityType"] == CW.INT_NONE
+    assert ex[2]["intensityType"] == CW.INT_HR                                  # rest ≤ AeT
+    assert CW.session_workout(_cp_sess("standard"), TH).payload["estimatedTime"] == 70 * 60
+
+
+def test_cp_test_race_is_not_pushed():
+    s = {**sess("test", "test", "CP 測試：5–10 K 比賽或計時跑", 45, "2026-10-01"), "protocol": "race"}
+    with pytest.raises(CW.Unsupported, match="比賽"):
+        CW.session_workout(s, TH)
+
+
+def test_push_quick_cp_test_to_the_fake_hub():
+    """The quick test through push_sessions against the mocked Training Hub:
+    one program, 37 min, the 20′ bout open."""
+    db = run(make_db())
+    fake = FakeHub()
+    res = _push(db, plan([_cp_sess("quick")]), fake)
+    assert [r["status"] for r in res["sessions"]] == ["pushed"]
+    (e,) = fake.entities
+    prog = fake.programs[e["program"]["id"]]
+    assert prog["estimatedTime"] == 37 * 60 and prog["name"].startswith("TRC CP 測試 20 分全力")
+    work = [x for x in prog["exercises"] if x["exerciseType"] == CW.EX_TRAIN]
+    assert len(work) == 1 and work[0]["intensityType"] == CW.INT_NONE and work[0]["targetValue"] == 1200
 
 
 def test_strides_repeat():
