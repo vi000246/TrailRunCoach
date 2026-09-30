@@ -21,11 +21,25 @@
           ]
         },
         {
-          "title": "每日 TSS",
-          "axes": [{"id": "TSS", "min": 0}],
-          "period": "day",
+          "title": "每日 TSS（跟體能比）",
+          "description": "長條 = 每天的 TSS，顏色是跟前一天的 CTL（你目前每天平均吃得下的負荷）比：灰 = 低於 CTL（這天體能會小降，恢復日正常）；綠 = CTL 到 CTL+30（推進體能的有效負荷）；黃 = CTL+30 到 +60（大負荷日）；紅 = 超過 CTL+60（很重，後面要安排恢復）。依據 Couzens：加量期每天大約 CTL+30。藍線 = CTL（體能），橘線 = ATL（近 7 天的疲勞）：橘線高過藍線代表這陣子練得比平常多。y 軸最高 150：多日百岳那幾天（幾百 TSS）的紅色長條會頂到最上面，實際數字看 hover。",
+          "axes": [{"id": "TSS", "min": 0, "max": 150}],
           "series": [
-            {"name": "TSS", "type": "bar", "y_axis": "TSS", "color": "#8a8984", "expression": "sum(tss, trunc(date))"}
+            {"name": "低於 CTL", "type": "stackedbar", "y_axis": "TSS", "color": "#8a8984", "expression": "if(sum(tss, trunc(date)) > 0 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1), sum(tss, trunc(date)))"},
+            {"name": "推進 CTL～+30", "type": "stackedbar", "y_axis": "TSS", "color": "#1baf7a", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 30, sum(tss, trunc(date)))"},
+            {"name": "大負荷 +30～+60", "type": "stackedbar", "y_axis": "TSS", "color": "#eda100", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 30 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)))"},
+            {"name": "很重 > +60", "type": "stackedbar", "y_axis": "TSS", "color": "#e34948", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)))"},
+            {"name": "CTL 體能", "type": "line", "y_axis": "TSS", "color": "#2a78d6", "line_width": "thick", "expression": "tl(tss, ctlconstant)"},
+            {"name": "ATL 疲勞", "type": "line", "y_axis": "TSS", "color": "#eb6834", "expression": "tl(tss, atlconstant)"}
+          ]
+        },
+        {
+          "title": "TSS 合計",
+          "description": "每一期的 TSS 總和，切換日／週／月／季／年看總負荷的變化。",
+          "axes": [{"id": "TSS", "min": 0}],
+          "period": "week",
+          "series": [
+            {"name": "TSS", "type": "bar", "y_axis": "TSS", "color": "#2a78d6", "expression": "sum(tss, startofweek(date))"}
           ]
         },
         {
