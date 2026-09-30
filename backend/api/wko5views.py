@@ -32,6 +32,7 @@ from backend.engine.wko5expr.customviews import (
     REPO_VIEWS, USER_VIEWS, load_custom_views, view_dirs,
 )
 from backend.engine.wko5expr.dataset import Dataset, date_to_day
+from backend.engine.wko5expr import periods as PD
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
@@ -202,12 +203,44 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
+    pinfo = None
+    if ch.get("kind") == "athlete":
+        ch, b, pinfo = _apply_period(ch, b, e, request.query_params.get("period"),
+                                     custom=v.get("source") == "custom")
     params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "params": params, "workout_file": ds.workouts[workout].entry.file if needs_workout else None}
     key = chart_key(ch, req, data_fingerprint(ds))
-    return RENDER_CACHE.get_or_compute(
-        key, lambda: _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None))
+
+    def compute():
+        res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None)
+        return {**res, **pinfo} if pinfo else res
+    return RENDER_CACHE.get_or_compute(key, compute)
+
+
+def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bool):
+    """Period-total charts (periods.py). Returns (chart, begin, extra JSON):
+    the chart re-bucketed when the viewer asked for another period (custom
+    views only, and not on week-locked charts), begin moved back to the
+    period's look-back floor and to a bucket start, and what the viewer needs
+    for the category axis + toggle."""
+    default = PD.chart_period(ch)
+    if default is None:
+        return ch, b, None
+    toggle = custom and not PD.period_locked(ch)
+    chosen = asked if toggle and asked in PD.PERIODS else default
+    note = None
+    if custom:
+        floor = PD.min_days(ch, chosen)
+        if floor and e - b + 1 < floor:
+            b = e - floor + 1
+            note = {365: "顯示近 12 個月", 730: "顯示近 24 個月", 1825: "顯示近 5 年"}.get(
+                floor, f"顯示近 {floor} 天")
+        b = PD.bucket_start(b, chosen)       # the first bucket is a whole one
+    if chosen != default:
+        ch = PD.with_period(ch, chosen)
+    return ch, b, {"x_period": chosen, "period_default": default, "period_toggle": toggle,
+                   "buckets": PD.buckets(b, e, chosen), "range_note": note}
 
 
 def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:

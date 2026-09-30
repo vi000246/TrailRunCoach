@@ -1526,6 +1526,11 @@ class Evaluator:
         """January 1st of the year (DOC)."""
         return self._date_fn(n, ctx, _start_of_year)
 
+    def fn_startofquarter(self, n, ctx):
+        """First day of the calendar quarter: Jan / Apr / Jul / Oct 1. Not a
+        WKO5 function — the chart page's 季 period bucket."""
+        return self._date_fn(n, ctx, _start_of_quarter)
+
     def fn_weekval(self, n, ctx):
         """Fractional weeks: weekval(2015-11-08) = 5993.857, trunc -> the
         Monday 2015-11-02 (DOC, Reference example reproduced exactly)."""
@@ -2387,12 +2392,17 @@ def _start_of_year(d: float) -> float:
     return date_to_day(day_to_date(d).replace(month=1, day=1))
 
 
+def _start_of_quarter(d: float) -> float:
+    x = day_to_date(d)
+    return date_to_day(x.replace(month=(x.month - 1) // 3 * 3 + 1, day=1))
+
+
 def _first_of_next_month(x: dt.date) -> dt.date:
     return dt.date(x.year + (x.month == 12), x.month % 12 + 1, 1)
 
 
 PERIOD_START = {"day": lambda d: float(math.floor(d)), "week": _start_of_week,
-                "month": _start_of_month, "year": _start_of_year}
+                "month": _start_of_month, "quarter": _start_of_quarter, "year": _start_of_year}
 
 
 def _period_keymap(node) -> Optional[Callable[[float], float]]:
