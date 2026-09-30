@@ -1702,6 +1702,12 @@ class Evaluator:
             return Curve([], [])
         if node.name == "bikepower" and w.sport != "bike":
             return Curve([], [])
+        # WKO5's cache holds the curve of the raw samples: once the athlete has
+        # approved a correction for this file (a blanked power spike), it would
+        # bring the spike right back, so build the curve from corrected samples.
+        corr_sig = getattr(self.ds, "_corr_sig", None)
+        if corr_sig is not None and corr_sig(w.entry.file):
+            return None
         hit = self.ds.curve_cache(expr).get(w.entry.file)
         return None if hit is None else Curve(list(hit[0]), list(hit[1]))
 

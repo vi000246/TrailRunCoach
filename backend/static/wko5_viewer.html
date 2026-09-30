@@ -92,6 +92,10 @@ main { flex: 1; min-width: 0; overflow: auto; padding: 12px 16px 24px;
 .vw ul { list-style: none; margin: 0 0 4px; padding: 0; }
 .vw:not(.open) ul { display: none; }
 .tree .db { padding-left: 30px; }
+.grp.flat { padding-top: 6px; }
+.grp.flat ul { list-style: none; margin: 0; padding: 0; }
+.grp.flat .db { padding-left: 14px; }
+.grp.flat ul + ul { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
 .tree .db.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
 .tree .hit { display: block; padding: 6px 14px; }
 .tree .hit .w { display: block; color: var(--muted); font-size: 11px; }
@@ -176,6 +180,8 @@ table.zt th.num { text-align: right; }
 .zbar i { position: absolute; left: 0; top: 0; bottom: 0; opacity: .75; }
 .zbar span { position: relative; font-size: 10.5px; padding-left: 5px; line-height: 16px; }
 .loading { color: var(--muted); padding: 30px 0; text-align: center; }
+.nodata { color: var(--muted); background: var(--code); border-radius: 6px; padding: 14px 12px; margin: 6px 0; text-align: center; }
+.nodata.small { padding: 6px 10px; font-size: 11.5px; text-align: left; }
 .empty { grid-column: 1 / -1; color: var(--muted); padding: 40px; text-align: center; }
 </style>
 </head>
@@ -313,7 +319,20 @@ function axisName(u) {
 const DUR_TICKS = [1, 5, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800];
 const DUR_TICKS_SPARSE = [1, 5, 30, 60, 300, 1200, 3600, 10800, 36000, 86400, 172800];
 const durTick = (s) => s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${+(s / 3600).toFixed(1)}h`;
-async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${await r.text()}`); return r.json(); }
+// GET JSON; a dropped connection or a 5xx (server busy / reloading) is retried once
+async function j(url, retry = 1) {
+  let r;
+  try { r = await fetch(url); }
+  catch (e) {
+    if (retry > 0) { await new Promise((ok) => setTimeout(ok, 1200)); return j(url, retry - 1); }
+    throw new Error(`連不上伺服器（${e.message}）`);
+  }
+  if (!r.ok) {
+    if (r.status >= 500 && retry > 0) { await new Promise((ok) => setTimeout(ok, 1200)); return j(url, retry - 1); }
+    throw new Error(`${r.status} ${(await r.text()).slice(0, 300)}`);
+  }
+  return r.json();
+}
 function save() { try { localStorage.setItem("wko5viewer", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
   begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel })); } catch {} }
 function restore() { try { return JSON.parse(localStorage.getItem("wko5viewer") || "{}"); } catch { return {}; } }
@@ -324,6 +343,7 @@ function viewKind(v) {
 }
 const viewsOf = (mode) => S.views.filter((v) => viewKind(v) === mode && !v.error);
 const SOURCE_LABEL = { custom: "我的圖表", wko5: "WKO5 對照" };
+const CUSTOM_ORDER = ["我的訓練", "周期化訓練"];  // flat tab list order (views/*.json names)
 const MODE_LABEL = { season: "趨勢", workout: "單次活動" };
 const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || viewsOf(S.mode)[0];
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
@@ -426,6 +446,17 @@ function renderTree() {
   $("tree").innerHTML = ["custom", "wko5"].map((src) => {
     const group = vs.filter((x) => (x.source || "wko5") === src);
     if (!group.length) return "";
+    if (src === "custom") {
+      // the athlete's own views: one flat list of tabs, no view level (我的訓練 first:
+      // load / volume / intensity / ability, then the periodization phases)
+      const rank = (x) => (CUSTOM_ORDER.indexOf(x.name) + 1 || 99);
+      return `<div class="grp flat">` + [...group].sort((a, b) => rank(a) - rank(b)).map((view) =>
+        `<ul class="vw open" data-v="${esc(view.name)}">${view.dashboards.map((d, i) => {
+          const on = view === v && i === S.dash[S.mode];
+          return `<li><button class="db ${on ? "on" : ""}" data-i="${i}" title="${esc(d.title)}" ${on ? 'aria-current="page"' : ""}>
+            <span class="nm">${esc(d.title)}</span><span class="n" title="${d.charts.length} 張圖">${d.charts.length}</span></button></li>`;
+        }).join("")}</ul>`).join("") + `</div>`;
+    }
     return `<div class="grp"><div class="grp-h">${SOURCE_LABEL[src]}${src === "wko5"
       ? `<span class="tag" title="從 WKO5 匯入的原始 view，用來對照數字">匯入</span>` : ""}</div>` +
       group.map((view) => {
@@ -438,13 +469,14 @@ function renderTree() {
   }).join("") || `<div class="none">沒有${MODE_LABEL[S.mode]}的 view</div>`;
   $("tree").querySelectorAll(".vw").forEach((el) => {
     const name = el.dataset.v;
+    el.querySelectorAll(".db").forEach((b) => b.onclick = () => pick(S.mode, name, +b.dataset.i));
+    if (!el.querySelector(".vw-h")) return;  // flat custom list has no view header
     el.querySelector(".vw-h").onclick = () => {
       const open = !el.classList.contains("open");
       el.classList.toggle("open", open);
       el.querySelector(".vw-h").setAttribute("aria-expanded", String(open));
       saveUi({ tree: { ...(uiState().tree || {}), [name]: open } });
     };
-    el.querySelectorAll(".db").forEach((b) => b.onclick = () => pick(S.mode, name, +b.dataset.i));
   });
 }
 function markHit(s, q) {
@@ -599,7 +631,7 @@ async function load() {
     const card = document.createElement("section");
     card.className = "card";
     card.dataset.ci = c.index;
-    card.innerHTML = `<h2>${esc(c.title || c.kind)}</h2><div class="loading">計算中…</div>`;
+    card.innerHTML = `<h2>${esc(c.title || (c.kind === "map" ? "地圖" : c.kind))}</h2><div class="loading">計算中…</div>`;
     grid.appendChild(card);
     return { c, card };
   });
@@ -615,12 +647,14 @@ async function load() {
     while (queue.length) {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
-      if (!["athlete", "workout", "zones", "targets"].includes(c.kind)) { card.querySelector(".loading").textContent = "地圖 / 其他面板尚未支援"; continue; }
+      if (!["athlete", "workout", "zones", "targets", "map"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
+      if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
       try {
         const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`);
         if (token !== loadToken) continue;
         if (res.kind === "zones") drawZones(card, res);
         else if (res.kind === "targets") drawTargets(card, res);
+        else if (res.kind === "map") drawMap(card, res);
         else draw(card, res);
       } catch (e) {
         console.error(c.title, e);
@@ -651,6 +685,7 @@ function lastVal(s) {
     return null;
   }
   if (data.kind === "hline") return ["", fmtU(data.y, u)];
+  if (data.kind === "vline") return ["x", fmtU(data.x, s.x_unit)];
   if (data.kind === "value") return ["", fmtU(data.value, u)];
   if (data.kind === "values") return ["", data.values.map((x) => fmtU(x, u, { label: false })).join(" / ") + (u?.label && !["duration", "pace", "percent"].includes(u.kind) ? " " + u.label : "")];
   if (data.kind === "band") return ["", data.range.map((x) => fmtU(x, u, { label: false })).join(" ~ ")];
@@ -662,34 +697,35 @@ function draw(card, res) {
   if (res.fixes && res.fixes.length) card.querySelector("h2")?.insertAdjacentHTML("beforeend",
     ` <span class="badge fix" title="${esc(res.fixes.join("\n"))}">已修正單位</span>`);
   if (res.description) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
+  // nothing to draw: say why (no power in this workout, no activity this week, PD fit failed…)
+  if (res.empty) card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`);
+  // drew something, but some series are blank for a known reason (PD model not fitted)
+  else if (res.notice) card.insertAdjacentHTML("beforeend", `<p class="nodata small">${esc(res.notice)}</p>`);
   const S_ = res.series;
-  const gauges = S_.filter((s) => s.type === "gauge" && ["values", "value"].includes(s.data.kind));
-  if (gauges.length) drawGauges(card, gauges);
-  const plotted = S_.filter((s) => ["points", "hline", "band"].includes(s.data.kind) && s.type !== "gauge");
-  if (plotted.some((s) => s.data.kind === "points")) drawPlot(card, res, plotted);
+  // a gauge of one number comes back as an hline (athlete charts) or a value (workout charts)
+  const gauges = S_.filter((s) => s.type === "gauge" && ["values", "value", "hline", "none"].includes(s.data.kind)
+    && (s.expression || "").trim());
+  if (gauges.length && !res.empty) drawGauges(card, gauges);
+  const plotted = S_.filter((s) => ["points", "hline", "vline", "band"].includes(s.data.kind) && s.type !== "gauge");
+  const hasPoints = plotted.some((s) => s.data.kind === "points");
+  if (hasPoints && !res.empty) drawPlot(card, res, plotted);
   // WKO5 table charts: every series evaluates to a list -> one column per series, one row per index
   const cols = S_.filter((s) => s.data.kind === "values" && s.type !== "gauge");
-  if (cols.length) drawValuesTable(card, cols);
-  const values = S_.filter((s) => s.data.kind === "value" && s.type !== "gauge");
+  if (cols.length && !res.empty) drawValuesTable(card, cols);
+  // single numbers; a chart of only constant-per-range lines (MMP Peaks and Clusters Report)
+  // has nothing to plot them against, so they are listed here too
+  const values = res.empty ? [] : S_.filter((s) => s.type !== "gauge" && (s.data.kind === "value"
+    || (!hasPoints && s.data.kind === "hline" && s.data.y != null)));
   if (values.length) {
     if (values.length > 8) card.classList.add("wide");
+    const v1 = (s) => s.data.kind === "hline" ? s.data.y : s.data.value;
     card.insertAdjacentHTML("beforeend", `<table>${values.map((s) =>
-      `<tr><td>${esc(s.name)}</td><td class="num">${esc(fmtU(s.data.value, s.unit, { label: false }))}</td><td class="meta">${esc(unitText(s.unit))}</td></tr>`).join("")}</table>`);
+      `<tr><td>${esc(s.name)}</td><td class="num">${esc(fmtU(v1(s), s.unit, { label: false }))}</td><td class="meta">${esc(unitText(s.unit))}</td></tr>`).join("")}</table>`);
   }
-  const rows = S_.map((s) => {
-    const st = s.data.kind === "error" ? `<span class="st-err">✗ ${esc(s.data.message)}</span>`
-      : s.data.kind === "none" ? `<span class="st-none">—</span>` : `<span class="st-ok">✓ ${s.data.kind}</span>`;
-    const lv = lastVal(s);
-    const n = s.data.kind === "points" ? s.data.points.filter((p) => p[1] != null).length : "";
-    return `<tr><td>${esc(s.name || s.id)}</td><td>${st}</td><td class="num">${n}</td>
-      <td class="num">${lv ? (lv[0] ? `<span class="meta">${esc(lv[0])}</span> ` : "") + esc(lv[1]) : ""}</td>
-      <td class="meta" title="${esc(s.unit?.id || "")}">${esc(s.unit?.label || "")}</td>
-      <td><code>${esc(s.expression || "")}</code></td></tr>`;
-  }).join("");
-  const unsup = res.unsupported.length ? ` <span class="badge">未驗證/不支援: ${esc(res.unsupported.join(", "))}</span>` : "";
-  const fixes = res.fixes && res.fixes.length ? `<p class="desc" style="max-height:none">已修正：${res.fixes.map(esc).join("；")}</p>` : "";
-  card.insertAdjacentHTML("beforeend", `<details><summary>數值與公式 (${S_.length})${unsup}</summary>${fixes}
-    <table><thead><tr><th>Series</th><th>狀態</th><th>點數</th><th>最後值</th><th>單位</th><th>公式</th></tr></thead><tbody>${rows}</tbody></table></details>`);
+  // The per-series table (status, point count, last value, unit, expression) is not shown:
+  // it is for debugging and AI use. The same data is in the chart JSON from
+  // GET /api/v1/wko5/views/{view}/dashboards/{d}/charts/{c} (series[].expression / data / unit,
+  // unsupported, fixes).
 }
 
 // WKO5-style zone table: boundaries + time in zone over the last N days
@@ -727,6 +763,52 @@ function drawTargets(card, res) {
       <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
 }
 
+// WKO5 map panel: the GPS track, coloured by elevation (no map tiles — the shape of the route)
+function drawMap(card, res) {
+  card.querySelector(".loading")?.remove();
+  if (res.empty || !res.track?.length) {
+    card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty || "這筆活動沒有 GPS 資料。")}</p>`);
+    return;
+  }
+  const el = document.createElement("div");
+  el.className = "plot";
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const muted = css("--muted"), line = css("--line");
+  const T = res.track;
+  const lons = T.map((p) => p[0]), lats = T.map((p) => p[1]);
+  const lo0 = Math.min(...lons), lo1 = Math.max(...lons), la0 = Math.min(...lats), la1 = Math.max(...lats);
+  // equal ground scale: a degree of longitude is cos(lat) of a degree of latitude
+  const k = Math.cos((la0 + la1) / 2 * Math.PI / 180);
+  const w = el.clientWidth - 70 || 400, h = el.clientHeight - 40 || 260;
+  let dx = (lo1 - lo0) * k || 1e-3, dy = (la1 - la0) || 1e-3;
+  if (dx / dy > w / h) dy = dx * h / w; else dx = dy * w / h;
+  const cx = (lo0 + lo1) / 2, cy = (la0 + la1) / 2, pad = 1.06;
+  const elev = T.map((p) => p[2]).filter((v) => v != null);
+  const hasElev = elev.length > 1;
+  chart.setOption({
+    animation: false,
+    grid: { left: 60, right: hasElev ? 60 : 16, top: 16, bottom: 26 },
+    tooltip: { trigger: "item", confine: true, formatter: (p) => {
+      const d = T[p.dataIndex] || [];
+      return `${d[3] != null ? fmtDur(d[3]) + "<br>" : ""}${d[2] != null ? Math.round(d[2]) + " m" : ""}`; } },
+    xAxis: { type: "value", min: cx - dx / k / 2 * pad, max: cx + dx / k / 2 * pad, splitLine: { show: false },
+      axisLine: { lineStyle: { color: line } }, axisLabel: { color: muted, fontSize: 10, formatter: (v) => v.toFixed(3) } },
+    yAxis: { type: "value", min: cy - dy / 2 * pad, max: cy + dy / 2 * pad, splitLine: { lineStyle: { color: line } },
+      axisLabel: { color: muted, fontSize: 10, formatter: (v) => v.toFixed(3) } },
+    visualMap: hasElev ? { type: "continuous", dimension: 2, min: Math.min(...elev), max: Math.max(...elev), calculable: false,
+      right: 0, top: "middle", itemHeight: 120, text: ["m", ""], textStyle: { color: muted, fontSize: 10 },
+      inRange: { color: ["#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"] } } : undefined,
+    series: [{ type: "line", data: T, showSymbol: false, symbolSize: 2, lineStyle: { width: 2.5 },
+      color: hasElev ? undefined : css("--accent") },
+      { type: "scatter", data: [T[0], T[T.length - 1]], symbolSize: 9, itemStyle: { borderColor: "#fff", borderWidth: 1.5 },
+        label: { show: true, position: "top", color: muted, fontSize: 10, formatter: (p) => p.dataIndex ? "終點" : "起點" } }],
+  });
+  card.insertAdjacentHTML("beforeend", `<p class="desc" style="margin-top:4px">GPS 軌跡（${T.length} 點，依海拔上色；沒有底圖）</p>`);
+  new ResizeObserver(() => chart.resize()).observe(el);
+}
+
 function drawValuesTable(card, cols) {
   const n = Math.max(...cols.map((s) => s.data.values.length));
   // a column is numeric when it holds numbers; string columns (e.g. "125 to 162") ignore the axis unit
@@ -748,7 +830,8 @@ function drawGauges(card, gauges) {
   const box = document.createElement("div");
   box.className = "gauge";
   for (const s of gauges) {
-    const vals = s.data.kind === "values" ? s.data.values : [s.data.value];
+    const vals = s.data.kind === "values" ? s.data.values : s.data.kind === "hline" ? [s.data.y]
+      : s.data.kind === "value" ? [s.data.value] : [null];
     const [cur, target] = vals;
     const pct = target ? Math.max(0, Math.min(1, (cur || 0) / target)) : null;
     const u = s.unit || UNONE;
@@ -756,7 +839,8 @@ function drawGauges(card, gauges) {
     const lab = unitText(u);
     box.insertAdjacentHTML("beforeend", `<div class="g"><div class="desc">${esc(s.name)}</div>
       <div class="big">${f(cur)}${lab && !["duration", "percent"].includes(u.kind) ? ` <span class="desc">${esc(lab)}</span>` : ""}${target != null ? ` <span class="desc">/ ${f(target)}</span>` : ""}</div>
-      ${pct != null ? `<div class="bar"><i style="width:${(pct * 100).toFixed(1)}%;background:${s.color || css("--accent")}"></i></div>` : ""}</div>`);
+      ${pct != null ? `<div class="bar"><i style="width:${(pct * 100).toFixed(1)}%;background:${s.color || css("--accent")}"></i></div>` : ""}
+      ${cur == null ? `<div class="meta">${/startofweek\s*\(\s*today/i.test(s.expression || "") ? "本週還沒有活動" : "這段期間沒有資料"}</div>` : ""}</div>`);
   }
   card.appendChild(box);
 }
@@ -774,7 +858,9 @@ function drawPlot(card, res, series) {
   const xKind = firstPts?.data.x || (res.workout != null ? "seconds" : "date");
   const xUnit = firstPts?.x_unit || UNONE;
   series = series.filter((s) => s.data.kind !== "points" || (s.data.x || xKind) === xKind);
-  const axisIds = [...new Set(series.map((s) => s.y_axis || "NONE"))];
+  // a vertical line (WKO5's (x,) pair) lives on the x axis; it doesn't get a y axis of its own
+  const axisIds = [...new Set(series.filter((s) => s.data.kind !== "vline").map((s) => s.y_axis || "NONE"))];
+  if (!axisIds.length) axisIds.push("NONE");
   const axisCfg = Object.fromEntries((res.axes || []).map((a) => [a.id, a]));
   const unitOf = (id) => series.find((s) => (s.y_axis || "NONE") === id)?.unit || axisCfg[id]?.unit || UNONE;
   const yExtent = (id) => {
@@ -807,10 +893,16 @@ function drawPlot(card, res, series) {
   });
   const out = [];
   for (const s of series) {
-    const yi = axisIds.indexOf(s.y_axis || "NONE");
+    const yi = Math.max(0, axisIds.indexOf(s.y_axis || "NONE"));
     const color = s.color || undefined;
     const lineType = s.line_style === "dot" ? "dotted" : s.line_style === "dash" ? "dashed" : "solid";
     const width = s.line_width === "thin" ? 1 : s.line_width === "thick" ? 3 : 1.5;
+    if (s.data.kind === "vline") {
+      if (s.data.x == null || (xKind === "duration" && !(s.data.x > 0))) continue;
+      out.push({ name: s.name, type: "line", yAxisIndex: 0, data: [], color,
+        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ xAxis: s.data.x }] } });
+      continue;
+    }
     if (s.data.kind === "hline") {
       out.push({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
         markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ yAxis: s.data.y }] } });
@@ -827,6 +919,11 @@ function drawPlot(card, res, series) {
     const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false, sampling: "lttb" };
     if (s.type === "bar" || s.type === "stackedbar") {
       out.push({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 });
+    } else if (s.line_style === "none" && s.type !== "area") {
+      // WKO5 "no line" = markers only: an x-y scatter (HR vs power, LSS vs grade) or event markers
+      out.push({ name: s.name, yAxisIndex: yi, data: pts.filter((p) => p[1] != null && p[0] != null), color,
+        type: "scatter", symbolSize: perWorkout || pts.length < 400 ? 5 : 3, large: pts.length > 2000,
+        itemStyle: { opacity: pts.length > 400 ? 0.55 : 0.9 } });
     } else {
       out.push({ ...base, type: "line", step: s.type === "squareline" ? "end" : false,
         showSymbol: perWorkout, symbolSize: 4, lineStyle: { type: lineType, width: perWorkout ? 0 : width },
