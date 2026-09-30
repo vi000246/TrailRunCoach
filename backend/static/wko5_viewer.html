@@ -185,6 +185,12 @@ table.zt th.num { text-align: right; }
 .nodata { color: var(--muted); background: var(--code); border-radius: 6px; padding: 14px 12px; margin: 6px 0; text-align: center; }
 .nodata.small { padding: 6px 10px; font-size: 11.5px; text-align: left; }
 .card h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.qtip { position: relative; display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; margin: 0 2px 0 6px;
+  border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif;
+  cursor: help; vertical-align: 2px; }
+.qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
+  background: var(--panel, #fff); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
 .seg.period { margin-left: auto; padding: 1px; font-size: 11.5px; }
 .seg.period button { padding: 1px 8px; font-weight: 500; }
 .range-note { margin: -2px 0 4px; font-size: 11px; }
@@ -707,6 +713,30 @@ async function load() {
 }
 
 // ---- one chart card: fetch (with the remembered period) and draw; re-run by the period toggle
+// chart-description ? icons: hover shows the text; tap/click pins it (touch has no hover).
+// The popup is a fixed element on <body> so a card's overflow never clips it.
+const QTIP = { el: null, pinned: null };
+function qtipShow(btn) {
+  qtipHide();
+  const d = document.createElement("div");
+  d.className = "qtip-pop";
+  d.textContent = btn.dataset.tip;
+  document.body.appendChild(d);
+  const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  const left = Math.max(12, Math.min(r.left - 8, innerWidth - w - 12));
+  const top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+  d.style.left = `${left}px`; d.style.top = `${top}px`;
+  QTIP.el = d;
+}
+function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QTIP.pinned) qtipShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".qtip");
+  if (t && QTIP.pinned !== t) { QTIP.pinned = t; qtipShow(t); e.stopPropagation(); return; }
+  QTIP.pinned = null; qtipHide();
+});
+addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(QTIP.pinned); }, { passive: true, capture: true });
 const PERIOD_KEY = "wko5viewer.period";
 const PERIOD_LABELS = [["day", "日"], ["week", "週"], ["month", "月"], ["quarter", "季"], ["year", "年"]];
 function periodPrefs() { try { return JSON.parse(localStorage.getItem(PERIOD_KEY) || "{}"); } catch { return {}; } }
@@ -873,7 +903,17 @@ function draw(card, res) {
     if (seg) seg.insertAdjacentHTML("beforebegin", badge);
     else card.querySelector("h2")?.insertAdjacentHTML("beforeend", badge);
   }
-  if (res.description) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
+  // the description sits behind a ? icon (hover / tap) to keep cards clean; the enlarge
+  // overlay has room, so it shows the text in full
+  if (res.description) {
+    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
+    else {
+      const h2 = card.querySelector("h2");
+      const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
+      const zb = h2?.querySelector(".zbtn");
+      if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);
+    }
+  }
   // nothing to draw: say why (no power in this workout, no activity this week, PD fit failed…)
   if (res.empty) card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`);
   // drew something, but some series are blank for a known reason (PD model not fitted)

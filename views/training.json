@@ -29,15 +29,15 @@
           ]
         },
         {
-          "title": "體能成長速度（CTL 每週增加）",
-          "description": "每週 CTL 增加多少。專項期可以比基礎期快，但太快代表負荷堆太急。",
+          "title": "Ramp rate（CTL 每週變化）",
+          "description": "每天的 CTL 減掉 7 天前的 CTL，也就是體能一週長了多少（TrainingPeaks / intervals.icu 的算法）。長條顏色 = 風險：綠 < 5 安全、黃 5–7 只能撐一兩週、紅 ≥ 7 受傷與生病風險（TrainingPeaks 對 CTL ≤ 45 的建議；Friel：5–8 撐幾週就要恢復週）；灰 = 下降，恢復週本來就會這樣。藍線 = 近 4 週平均每週增加：這才是長期能不能維持的速度，Couzens 建議長期 3–5。",
           "axes": [{"id": "TSSPERDAYPERWEEK"}],
           "series": [
-            {"name": "CTL 週變化", "type": "bar", "y_axis": "TSSPERDAYPERWEEK", "color": "#2a78d6", "expression": "tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7)"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"},
-            {"name": "+3 可長期", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#1baf7a", "line_style": "dash", "expression": "(,3)"},
-            {"name": "+5 只撐一兩週", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#eda100", "line_style": "dash", "expression": "(,5)"},
-            {"name": "+7 受傷風險", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#e34948", "line_style": "dash", "expression": "(,7)"}
+            {"name": "下降（恢復）", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#8a8984", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) < 0, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "安全 < 5", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#1baf7a", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) >= 0 and tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) < 5, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "偏快 5–7", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#eda100", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) >= 5 and tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) < 7, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "風險 ≥ 7", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#e34948", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) >= 7, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "近 4 週平均", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#2a78d6", "line_width": "thick", "expression": "(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 28)) / 4"}
           ]
         }
       ]
