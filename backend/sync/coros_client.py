@@ -262,7 +262,7 @@ async def sync_workouts(
     try:
         token, base, user_id = await _get_token_and_base(db, athlete_id)
     except ValueError as e:
-        yield {"error": "COROS_AUTH_REQUIRED", "detail": str(e),
+        yield {"status": "error", "error": "COROS_AUTH_REQUIRED", "detail": str(e),
                "hint": "POST /api/v1/auth/coros/login with {email, password}"}
         return
 
@@ -293,7 +293,7 @@ async def sync_workouts(
         try:
             activities = await _list_page(token, base, user_id, since_day, end_day, page, PAGE_SIZE)
         except Exception as e:
-            yield {"error": "COROS_API_ERROR", "detail": str(e)}
+            yield {"status": "error", "error": "COROS_API_ERROR", "detail": str(e)}
             return
         if not activities:
             break
