@@ -235,10 +235,18 @@ def predict(body: PredictIn):
         raise HTTPException(400, "沒有 CP：請手動輸入")
     used["cp"] = _src(cp, cp_src, id="manual" if body.cp else sid)
     acts = d["cp"]["activities"] or {}
-    w_prime = body.w_prime or (srcs.get(sid) or {}).get("w_prime") or acts.get("w_prime")
-    used["w_prime"] = _src(w_prime, "手動" if body.w_prime else "活動擬合")
-    tte = body.tte or d["tte"]["value"]
-    used["tte"] = _src(tte, "手動" if body.tte else d["tte"]["source"])
+    s_ = {} if body.cp else (srcs.get(sid) or {})
+    w_src = "手動" if body.w_prime else (s_.get("short_label") if s_.get("w_prime") and s_.get("short_label") else
+                                        "來源自帶" if s_.get("w_prime") else "活動擬合")
+    w_prime = body.w_prime or s_.get("w_prime") or acts.get("w_prime")
+    used["w_prime"] = _src(w_prime, w_src)
+    tte = body.tte or s_.get("tte") or d["tte"]["value"]
+    used["tte"] = _src(tte, "手動" if body.tte else ("PD 模型重算的 TTE" if s_.get("fit") or s_.get("base") == "pdmodel"
+                                                    else "來源自帶" if s_.get("tte") else d["tte"]["source"]))
+    # the short-range (F2) CP of a two-anchor source (PD model mFTP + test CP)
+    used["cp2"] = _src(s_.get("cp2"), s_.get("short_label"))
+    if d["cp"].get("lower_bound_message") and not body.cp:
+        warnings.append(d["cp"]["lower_bound_message"])
 
     # effort distance & RE
     trail = body.type == "trail"
@@ -269,7 +277,9 @@ def predict(body: PredictIn):
     if prior is None and d.get("auto_prior"):
         a = d["auto_prior"]
         prior = {"distance_km": a["km"], "time_s": a["time_s"], "power": a["avg_power"],
-                 "label": f"{a['label']}（自動：一年內最快的標準距離跑步，未必是比賽）"}
+                 "label": f"{a['label']}（自動：一年內心率判定為比賽強度的標準距離跑步）"}
+    elif prior is None:
+        warnings.append("沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）")
     tk = R.table_k(target_m, prior["distance_km"] * 1000.0, prior["time_s"]) if prior else None
     pr = d.get("riegel") or {}
     ksrc = body.k_source or ("manual" if body.k is not None else None)
@@ -288,6 +298,15 @@ def predict(body: PredictIn):
     else:
         k, k_label, ksrc = DEFAULT_K, "預設 −0.07", "manual"
     used["k"] = _src(k, k_label, kind=ksrc)
+    if not body.cp:
+        # never predict below a power the athlete already held: the bound for THIS k
+        from backend.engine.racepower.athlete import enforce_lower_bound
+        cp_eff, lb_k = enforce_lower_bound(d, cp, w_prime, tte, k, (used.get("cp2") or {}).get("value"))
+        if cp_eff > cp:
+            warnings.append(f"k {k:+.2f} 下，CP {cp:.0f} W 撐不住你 {lb_k['t_s'] / 60:.0f} 分鐘 {lb_k['p']:.0f} W 的紀錄："
+                            f"提高到 {cp_eff:.0f} W")
+            cp = cp_eff
+            used["cp"] = _src(cp, f"{used['cp']['source']}；依 k {k:+.2f} 提高到下限", id=used["cp"].get("id"))
     if tk and tk.get("warning"):
         warnings.append("查表 k：" + tk["warning"])
 
@@ -319,14 +338,17 @@ def predict(body: PredictIn):
 
 
 def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: dict, warnings: list):
+    from backend.engine.racepower import hike as HK
     h = d["hiking"]
     if body.eph:
         eph, src = body.eph, "手動"
     elif h.get("eph"):
         eph = h["eph"]["median"]
-        src = f"你的登山日 EP/h 中位數（{h['eph']['n']} 天，爬升 ≥ 600 m 的日子權重 3 倍）"
+        src = f"你自己走的登山日 EP/h 中位數（{h['eph']['n']} 天，爬升 ≥ 600 m 的日子權重 3 倍）"
     else:
-        raise HTTPException(400, "沒有登山紀錄可推 EP/h：請手動輸入")
+        eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
+        src = "推估：Tobler 步行函數在這條路線的 EP/h（" + (h.get("note") or "百岳多為跟團") + "）"
+        warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；用 Tobler 步行函數")
     used["eph"] = _src(eph, src)
     days = max(1, body.days or 1)
     pack = body.pack_kg if body.pack_kg is not None else (12.0 if days >= 2 else 6.0)
@@ -432,11 +454,19 @@ def _grade_models() -> dict:
         hit = _cache.get("grade")
         if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
             return hit[2]
+    from backend.engine.racepower import backtest as BT
     road = (inputs()["re"]["road"] or {}).get("median")
     gm = A.grade_models(ds, today, re_flat=road)
+    # the race-like class's own RE(g) only when the back-test showed it clearly better
+    gm["race_model"] = BT.class_model_flag()
+    if gm["race_model"]:
+        gm["grade_re"] = A.grade_models(ds, today, re_flat=road, classes=gm.get("classes"),
+                                        only_classes={"race"}, hikes=False)["grade_re"]
+    solo = A.solo_hikes()
     try:
+        # the clock ETA's moving ratio: group hikes rest on the group's schedule
         gm["moving_rows"] = [{"moving_s": a.moving_s, "elapsed_s": a.elapsed_s} for a in build_achievements(ds)
-                             if a.kind == KIND_HIKE and not a.days]
+                             if a.kind == KIND_HIKE and not a.days and a.id in solo]
     except Exception:                       # noqa: BLE001
         gm["moving_rows"] = []
     with _lock:
@@ -447,7 +477,30 @@ def _grade_models() -> dict:
 @router.get("/grade-model")
 def grade_model():
     gm = _grade_models()
-    return _py({"grade_re": gm["grade_re"].to_json(), "hike_speed": gm["hike_speed"].to_json()})
+    return _py({"grade_re": gm["grade_re"].to_json(), "hike_speed": gm["hike_speed"].to_json(),
+                "hike_hr": gm.get("hike_hr"), "hike_basis": gm.get("hike_basis"), "race_model": gm.get("race_model")})
+
+
+class SoloHikesIn(BaseModel):
+    files: list[str] = []
+
+
+@router.get("/solo-hikes")
+def get_solo_hikes():
+    """Hikes opted in as solo (the athlete's own pace): only these calibrate
+    EP/h, the walking model and the hike back-test."""
+    from backend.engine.racepower import athlete as A
+    return {"files": sorted(A.solo_hikes()), "note": A.GROUP_HIKE_NOTE}
+
+
+@router.post("/solo-hikes")
+def post_solo_hikes(body: SoloHikesIn):
+    from backend.engine.racepower import athlete as A
+    s = A.set_solo_hikes(body.files)
+    with _lock:
+        _cache.pop("inputs", None)
+        _cache.pop("grade", None)
+    return {"files": sorted(s), "note": A.GROUP_HIKE_NOTE}
 
 
 class CourseRef(BaseModel):
@@ -558,9 +611,16 @@ def make_plan(body: PlanIn) -> dict:
             gre = gm["grade_re"]
             if body.type == "road":
                 # RE(0) is the CVI-adjusted road RE v1 uses
-                gre = dataclasses.replace(gre, re_flat=v1["used"]["re"]["value"])
+                gre = gre.with_flat(v1["used"]["re"]["value"]) if hasattr(gre, "with_flat") else \
+                    dataclasses.replace(gre, re_flat=v1["used"]["re"]["value"])
+            inp = inputs()
+            cpd = inp.get("cp") or {}
+            capacity = {"spread": cpd.get("spread"), "lower_bound": cpd.get("lower_bound"),
+                        "message": cpd.get("lower_bound_message"),
+                        "lthr": (inp.get("aet") or {}).get("lthr"), "aet": (inp.get("aet") or {}).get("aet")}
             out = PL.plan_run(v1=v1, course=course, grade_re=gre, opts=opts, validated=validated,
-                              effort_validated=effort_ok, longest_s=(inputs().get("riegel") or {}).get("longest_s"))
+                              effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
+                              capacity=capacity)
     except ValueError as e:
         raise HTTPException(400, str(e))
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),

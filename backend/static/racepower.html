@@ -902,7 +902,12 @@ function renderCP() {
     <h3>有效性檢查</h3><ul style="padding-left:18px;margin:0;font-size:12.5px">${a.checks.map((c) => `<li class="${c.ok ? "ok" : c.level === "warn" ? "wn" : "no"}">${c.ok ? "✓" : c.level === "warn" ? "!" : "✕"} ${esc(c.text)}</li>`).join("")}</ul>
     ${INP.cp.dropped_365.length ? `<div class="note">排除功率異常的活動：${INP.cp.dropped_365.map((d) => esc(d.label)).join("、")}（NP ≥ 1.5 × CP 或 5 分鐘 > 2 × CP）</div>` : ""}
     <h3>CP 來源比較</h3><div class="tablewrap"><table><tbody>${sources}</tbody></table></div>
-    <div class="note">包絡線來自日常訓練；若最近沒有真正的 3 分 / 12 分全力測試，CP 會偏低。在「賽季計畫」記一筆 CP 測試（90 天內）就會優先採用。</div>`;
+    ${INP.cp.lower_bound_message ? `<div class="err">${esc(INP.cp.lower_bound_message)}</div>` : ""}
+    ${INP.cp.lower_bound ? `<div class="note">下限：你在 ${dur(INP.cp.lower_bound.t_s)} 撐過 ${W(INP.cp.lower_bound.p)}（${esc(INP.cp.lower_bound.who?.label || "")}），
+      依 k ${k3(INP.cp.lower_bound.k)}、TTE ${dur(INP.cp.lower_bound.tte)} 換算 CP 至少 ${W(INP.cp.lower_bound.cp_min)}。模型不會預測比你已經撐過的還低的功率。</div>` : ""}
+    ${(INP.cp.tests || []).map((t) => `<div class="note">偵測到 CP 測試 ${esc(t.date)}：${esc(t.estimate.label)} → CP ${W(t.estimate.cp)}（${t.estimate.cp_range ? W(t.estimate.cp_range[0]) + "–" + W(t.estimate.cp_range[1]) : ""}）。
+      ${t.bouts.filter((b) => !b.maximal).map((b) => esc(`${b.nominal_s / 60}′ 不是全力：${b.why}`)).join("；")}。這只是建議，要到「賽季計畫」自己套用。</div>`).join("")}
+    <div class="note">預設：PD 模型（WKO5 的模型，用近 90 天 mean-max 含同步的 FIT 重算）的 mFTP / TTE 當長時間的錨點，20 分鐘以內用 CP 測試的 CP + W′；低於下限時提高到下限。</div>`;
 }
 function renderRiegel() {
   const r = INP.riegel, env = INP.envelope;
@@ -957,11 +962,13 @@ function renderHike() {
   const h = INP.hiking;
   if (!h.days.length) { $("hike-detail").innerHTML = `<div class="meta">沒有登山紀錄。${esc(h.error || "")}</div>`; return; }
   const e = h.eph;
-  $("hike-detail").innerHTML = `<div class="kv"><span>EP/h 中位 <b>${e.median.toFixed(2)}</b>（IQR ${e.q1.toFixed(2)}–${e.q3.toFixed(2)}，${e.n} 天）</span>
+  $("hike-detail").innerHTML = `<div class="note"><b>${esc(h.note || "百岳多為跟團，速度不代表個人能力，不列入目標時間推算")}</b>。
+    只有標記為「自己走」的登山日會算 EP/h（目前 ${h.solo_n || 0} 天，跟團 ${h.group_n || 0} 天）；沒有時 百岳 ETA 用 Tobler 步行函數（推估）。</div>
+    <div class="kv">${e ? `<span>自己走的 EP/h 中位 <b>${e.median.toFixed(2)}</b>（IQR ${e.q1.toFixed(2)}–${e.q3.toFixed(2)}，${e.n} 天）</span>` : `<span>EP/h <b>推估（Tobler）</b></span>`}
     <span class="faint">爬升 ≥ 600 m 的日子權重 3 倍；多日行程逐日計算；移動 ≥ 1 h 才算</span></div>
-    <div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">EP</th><th class="n">移動</th><th class="n">EP/h</th><th class="n">最高點</th></tr></thead><tbody>${h.days.slice().reverse().map((d) =>
+    <div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">EP</th><th class="n">移動</th><th class="n">EP/h</th><th class="n">最高點</th><th>計入</th></tr></thead><tbody>${h.days.slice().reverse().map((d) =>
       `<tr><td>${esc(d.date)}</td><td>${esc(d.name)}${d.day ? `（第 ${d.day}/${d.days} 天）` : ""}</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td>
-      <td class="n">${f1(d.ep)}</td><td class="n">${hrs(d.moving_h)}</td><td class="n">${d.ep_per_h.toFixed(2)}</td><td class="n">${d.top_m ? n0(d.top_m) + " m" : "–"}</td></tr>`).join("")}</tbody></table></div>`;
+      <td class="n">${f1(d.ep)}</td><td class="n">${hrs(d.moving_h)}</td><td class="n">${d.ep_per_h.toFixed(2)}</td><td class="n">${d.top_m ? n0(d.top_m) + " m" : "–"}</td><td>${d.solo ? "自己走" : '<span class="faint">跟團，不計</span>'}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function renderZones() {
   const z = PLAN?.zones || LAST?.zones; if (!z || !z.length || !PLAN || PLAN.type === "baiyue") { $("zones").innerHTML = ""; return; }
@@ -1000,31 +1007,64 @@ async function renderBacktest() {
   const R = r.result;
   $("bt-body").classList.remove("loading");
   if (!R) { $("bt-body").innerHTML = `<div class="meta">還沒有回測結果，按「重新回測」。</div>`; return; }
-  const S_ = R.summary;
-  let h = `<div class="note">每一場：用那天以前、不含這一場的資料建模型；路線用那一次自己的 GPS 軌跡；餵進實際平均功率（登山用你平常的速度），比較預估與實際的移動時間。通過門檻（且至少 ${R.min_n} 場）的類別，頁面上的「推估」會自動拿掉，改用分段加總當整場結果。</div>`;
-  h += `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">場數</th><th class="n">時間誤差中位數</th><th class="n">有正負號</th><th class="n">舊方法（v1）</th><th class="n">下坡段偏差</th><th class="n">門檻</th><th>結果</th></tr></thead><tbody>`;
-  for (const cat of ["road", "trail", "hike"]) {
-    const s = S_[cat];
-    h += `<tr><td>${esc(s.label)}</td><td class="n">${s.n}</td><td class="n">${pct1(s.v2_median_abs_err)}</td><td class="n">${spct(s.v2_median_err)}</td>
-      <td class="n">${pct1(s.v1_median_abs_err)}</td><td class="n">${spct(s.downhill_bias)}</td><td class="n">≤ ${Math.round(s.threshold * 100)}%</td>
-      <td class="wrap ${s.passed ? "ok" : "no"}">${s.passed ? "✓ 通過" : "✕ " + esc(s.reasons.join("；"))}</td></tr>`;
+  if (R.version !== 2) { $("bt-body").innerHTML = `<div class="meta">回測格式已更新，按「重新回測」。</div>`; return; }
+  const CZ = { easy: "輕鬆", steady: "穩定", race: "比賽強度" };
+  const st4 = (s) => `<td class="n">${s.n}</td><td class="n">${pct1(s.median_abs)}</td><td class="n">${spct(s.bias)}</td><td class="n faint">${spct(s.p10)}…${spct(s.p90)}</td>`;
+  const hd4 = `<th class="n">n</th><th class="n">|誤差| 中位</th><th class="n">偏差（中位）</th><th class="n">10–90 %</th>`;
+  const C = R.capacity, T = R.terrain;
+  let h = `<div class="note"><b>百岳多為跟團，速度不代表個人能力，不列入目標時間推算。</b>只有你標記為「自己走」的登山才算（目前 ${R.hike_basis?.solo_hikes ?? 0} 次）。
+    每一場都只用那天以前、不含這一場的資料；強度用每次活動當天的 LTHR / AeT 判定：輕鬆（多數時間 &lt; AeT，Seiler 三區）、穩定（AeT–LTHR）、比賽強度（多數時間 ≥ 0.95 × LTHR，Friel Z4；功率也要夠）。
+    這一年：${Object.entries(R.intensity_counts).map(([k, v]) => `${CZ[k]} ${v}`).join("、")} 次。</div>`;
+  // 1. capacity
+  h += `<h3>比賽預測回測（能力模型）</h3>`;
+  if (C.message) h += `<div class="err">${esc(C.message)}</div>`;
+  h += `<div class="tablewrap"><table><thead><tr><th>類別</th>${hd4}<th class="n">功率誤差</th><th class="n">努力度中位</th><th>結果</th></tr></thead><tbody>`;
+  for (const cat of ["road", "trail"]) {
+    const c = C.categories[cat];
+    h += `<tr><td>${esc(c.label)}</td>${st4(c.time)}<td class="n">${spct(c.power.bias)}</td><td class="n">${pct(c.f_median)}</td>
+      <td class="wrap ${c.passed ? "ok" : "no"}">${c.passed ? "✓ 通過" : "✕ " + esc(c.reasons.join("；"))}</td></tr>`;
   }
-  const E = S_.effort;
-  h += `</tbody></table></div><div class="note">努力度條切點：${E.passed ? '<span class="ok">✓ 通過</span>' : '<span class="no">✕ ' + esc(E.reasons.join("；")) + "</span>"}（需要至少 ${R.min_n} 場賽季計畫 A 級比賽，實際努力度中位數落在 97–103%）。長距離訓練的努力度中位數 ${pct(E.long_run_median_f)}：${Object.entries(E.long_run_labels).map(([k, v]) => `${esc(k)} ${v}`).join("、")}。</div>`;
-  h += `<h3>分段速度誤差（依坡度類別）</h3><div class="tablewrap"><table><thead><tr><th>類別</th>${["steep_down", "down", "flat", "up", "steep_up"].map((c) => `<th class="n"><span class="dot" style="background:${segColor(c)}"></span>${{ steep_down: "陡下", down: "下坡", flat: "平", up: "上坡", steep_up: "陡上" }[c]}</th>`).join("")}</tr></thead><tbody>`;
-  for (const cat of ["road", "trail", "hike"]) {
-    const s = S_[cat];
-    h += `<tr><td>${esc(s.label)}</td>${["steep_down", "down", "flat", "up", "steep_up"].map((c) => { const x = s.classes[c]; return `<td class="n">${x.n ? `${spct(x.median_err)} <span class="faint">(${x.n})</span>` : "–"}</td>`; }).join("")}</tr>`;
+  h += `</tbody></table></div><div class="note">用那天以前的 CP / W′ / TTE / k 算這個時長可持續的功率，再在那次自己的路線上推整場時間（模式 C），和實際比。
+    只有接近全力的努力能檢驗能力：心率判定的比賽強度、賽季計畫比賽、正式 CP 測試的全力段（${C.tests.n} 段，功率誤差 ${spct(C.tests.power.bias)}）。
+    努力度條切點：${C.effort.passed ? '<span class="ok">✓ 通過</span>' : '<span class="no">✕ ' + esc(C.effort.reasons.join("；")) + "</span>"}（≥ ${R.min_n} 次、中位數 97–103 %）。</div>`;
+  const LB = C.lower_bound;
+  h += `<div class="note">下限檢查：${LB.n} 次跑步中 ${LB.violations} 次的功率高於模型當時算的可持續功率${LB.violations ? "：" + LB.worst.slice(0, 3).map((x) => `${esc(x.label)} ${hm(x.t_s)} ${W(x.p_train)}（模型 ${W(x.p_sus)}）`).join("、") : ""}。</div>`;
+  // 2. terrain
+  h += `<h3>地形模型回測（給實際功率，看各坡度的速度）</h3><div class="tablewrap"><table><thead><tr><th>類別</th>${hd4}<th class="n">舊方法 |誤差|</th><th class="n">下坡偏差</th></tr></thead><tbody>`;
+  for (const cat of ["road", "trail"]) {
+    const c = T.categories[cat];
+    h += `<tr><td>${esc(c.label)}</td>${st4(c.time)}<td class="n">${pct1(c.time_v1.median_abs)}</td><td class="n">${spct(c.downhill.bias)}</td></tr>`;
+    for (const g of Object.values(c.groups || {})) h += `<tr><td class="faint">　${esc(g.label)}</td>${st4(g)}<td></td><td></td></tr>`;
   }
-  h += `</tbody></table></div><div class="note">正值 = 預估比實際快。分段誤差用該段的實際功率算，只檢驗「功率 → 速度」這一段。</div>`;
-  const tr = S_.trail;
-  if (tr.up_over_flat || tr.second_over_first) h += `<div class="note">你過去越野的實際配速習慣：上坡功率是平路的 ${f1(tr.up_over_flat * 100)}%，後半功率是前半的 ${f1(tr.second_over_first * 100)}%。</div>`;
-  h += `<details><summary>每一場（${R.rows.length}）</summary><div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>活動</th><th class="n">km</th><th class="n">爬升</th><th class="n">實際移動</th><th class="n">預估</th><th class="n">誤差</th><th class="n">v1 誤差</th><th class="n">努力度</th></tr></thead><tbody>` +
-    R.rows.map((x) => x.error ? `<tr><td>${esc(x.date)}</td><td>${esc(x.category)}</td><td>${esc(x.label)}</td><td colspan="7" class="meta">${esc(x.error)}</td></tr>` :
-      `<tr><td>${esc(x.date)}</td><td>${esc({ road: "路跑", trail: "越野", hike: "登山" }[x.category])}${x.priority_a ? " A" : ""}</td><td>${esc(x.label)}${x.day ? ` 第${x.day}天` : ""}</td>
-      <td class="n">${f1(x.km)}</td><td class="n">${n0(x.gain_m)}</td><td class="n">${hm(x.t_act)}</td><td class="n">${hm(x.t_v2)}</td>
-      <td class="n ${Math.abs(x.err_v2) <= (R.thresholds[x.category] || 0.1) ? "ok" : "wn"}">${spct(x.err_v2)}</td><td class="n">${spct(x.err_v1)}</td>
-      <td class="n">${x.effort ? `${pct(x.effort.f)} ${esc(x.effort.label)}` : ""}</td></tr>`).join("") + `</tbody></table></div></details>`;
+  h += `</tbody></table></div>`;
+  h += `<div class="tablewrap"><table><thead><tr><th>強度</th><th class="n">活動</th>${hd4}<th class="n">分段 |誤差|</th><th class="n">分強度擬合後</th></tr></thead><tbody>`;
+  for (const k of ["easy", "steady", "race"]) {
+    const c = T.classes[k];
+    h += `<tr><td>${CZ[k]}</td><td class="n">${c.activities}</td>${st4(c.time)}<td class="n">${pct1(c.segments.median_abs)}</td><td class="n">${pct1(c.segments_class_model.median_abs)}</td></tr>`;
+  }
+  h += `</tbody></table></div><h3>分段速度誤差：強度 × 坡度</h3><div class="tablewrap"><table><thead><tr><th>強度</th>${R.grade_bins.map((b) => `<th class="n">${esc(b)}</th>`).join("")}</tr></thead><tbody>`;
+  for (const k of ["easy", "steady", "race", "all"]) {
+    h += `<tr><td>${k === "all" ? "全部" : CZ[k]}</td>${R.grade_bins.map((b) => { const x = T.grid[k][b]; return `<td class="n">${x.n ? `${spct(x.bias)} <span class="faint">(${x.n})</span>` : "–"}</td>`; }).join("")}</tr>`;
+  }
+  const cd = T.class_differs;
+  h += `</tbody></table></div><div class="note">正值 = 預估比實際快。這一段只檢驗「功率 → 速度」（坡度 RE、走跑分開、下坡上限、越野技術係數），不是預測準確度。
+    強度之間的分段誤差差 ${pct1(cd.spread)}${cd.clear ? "（明顯）" : ""}；分強度擬合比合併擬合好的強度：${Object.entries(cd.class_model_better).filter(([, v]) => v).map(([k]) => CZ[k]).join("、") || "無"}。
+    走跑分開前後的時間 |誤差|：${pct1(T.models.no_gait.median_abs)} → ${pct1(T.models.gait.median_abs)}。</div>`;
+  // hike HR windows
+  const HH = R.hike_hr;
+  if (HH && HH.uses) {
+    const u = HH.uses;
+    h += `<h3>百岳的心率陡坡窗</h3><div class="note">跟團的總時間不用，但心率 ≥ AeT、速度 &gt; 1.5 km/h、連續 ≥ 300 m、坡度 ≥ 10 % 的爬升是你自己的努力：${HH.n} 個 100 m 窗（${HH.days} 天）。</div>
+      <ul class="meta"><li>VAM × 心率帶：n ${u.vam.n}（${esc(u.vam.evidence)}）</li>
+      <li>個人海拔係數：${u.altitude.enough ? `${spct(u.altitude.pct_per_km / 100)} / 1000 m（Wehrlin ${u.altitude.wehrlin_pct_per_km} %）` : "資料不足"}，n ${u.altitude.n}（${esc(u.altitude.evidence)}）</li>
+      <li>多日疲勞（同 VAM 的心率，第 n 天 − 第 1 天）：${(u.fatigue.days || []).map((d) => `第 ${d.day} 天 ${d.hr_shift_bpm >= 0 ? "+" : ""}${d.hr_shift_bpm.toFixed(1)} bpm（${d.trips} 趟）`).join("、") || "資料不足"}（${esc(u.fatigue.evidence)}）</li>
+      <li>步行模型的陡坡分箱：n ${u.walking.n}（${esc(u.walking.evidence)}）</li></ul>`;
+  }
+  h += `<details><summary>每一場（${R.rows.length}）</summary><div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>強度</th><th>活動</th><th class="n">實際移動</th><th class="n">地形誤差</th><th class="n">能力（模式 C）誤差</th><th class="n">努力度</th></tr></thead><tbody>` +
+    R.rows.map((x) => x.error ? `<tr><td>${esc(x.date)}</td><td>${esc(x.category)}</td><td></td><td>${esc(x.label)}</td><td colspan="4" class="meta">${esc(x.error)}</td></tr>` :
+      `<tr><td>${esc(x.date)}</td><td>${esc({ road: "路跑", trail: "越野", hike: "登山", test: "CP 測試" }[x.category])}${x.priority_a ? " A" : ""}${x.walk_heavy ? " 走" : ""}</td>
+      <td title="${esc(x.intensity_reason || "")}">${esc(CZ[x.intensity] || "–")}</td><td>${esc(x.label)}</td><td class="n">${hm(x.t_act)}</td>
+      <td class="n">${spct(x.err_v2)}</td><td class="n">${spct(x.err_c)}</td><td class="n">${x.f ? pct(x.f) : ""}</td></tr>`).join("") + `</tbody></table></div></details>`;
   h += warnList(R.notes);
   $("bt-body").innerHTML = h;
 }

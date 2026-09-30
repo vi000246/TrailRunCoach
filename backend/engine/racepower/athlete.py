@@ -16,6 +16,7 @@ import numpy as np
 
 from backend.engine.algorithms.effort import SIMPLE_FORMULAS
 from backend.engine.racepower import cp as CP
+from backend.engine.racepower import difficulty as DF
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
@@ -28,6 +29,8 @@ PLAN_CP_MAX_AGE_DAYS = 90
 DEFAULT_TTE_S = 3000.0
 TRAIL_MIN_CLIMB_M, TRAIL_MIN_MOVING_S = 150.0, 45 * 60
 ROAD_MAX_CVI, ROAD_MIN_MOVING_S = 25.0, 20 * 60
+ROAD_MAX_CVI_ADJ = 51.0         # 自組: CVI-adjust road runs up to 小丘 (category ≤ 3), no further extrapolation
+DEFAULT_K = -0.07               # ≈ Stryd's race-power table (k −0.069, V-F1)
 HIKE_MIN_MOVING_S = 3600.0
 HIKE_HEAVY_GAIN_M, HIKE_HEAVY_WEIGHT = 600.0, 3.0
 FALLBACK_TRAINING = {"altitude_m": 100.0, "temp_c": 25.0, "rh_pct": 75.0}
@@ -181,14 +184,43 @@ def _plan_cp(ds, today: dt.date) -> Optional[dict]:
     return {"cp": float(t.cp), "date": t.date[:10], "age_days": age, "fresh": age <= PLAN_CP_MAX_AGE_DAYS}
 
 
-def hiking_days(ds, today: dt.date) -> list[dict]:
+SOLO_HIKES = WX.HOME / "racepower_solo_hikes.json"
+GROUP_HIKE_NOTE = "百岳多為跟團，速度不代表個人能力，不列入目標時間推算"
+HIKE_SPORTS = ("hiking", "mountaineering")
+HIKE_TAGS = {"hiking", "mountaineering"}
+
+
+def is_hike(w) -> bool:
+    return w.sport_type in HIKE_SPORTS or bool(HIKE_TAGS & set(w.tags))
+
+
+def solo_hikes(path=None) -> set[str]:
+    """Hikes the user opted in as solo (paced by the athlete): their .wko4
+    file names. Everything else tagged hiking / mountaineering is treated as
+    group-paced and kept out of every target-time calibration."""
+    try:
+        return set(json.loads((path or SOLO_HIKES).read_text("utf-8")).get("files") or [])
+    except (OSError, ValueError):
+        return set()
+
+
+def set_solo_hikes(files, path=None) -> set[str]:
+    p = path or SOLO_HIKES
+    p.parent.mkdir(parents=True, exist_ok=True)
+    s = sorted({str(f) for f in files if f})
+    p.write_text(json.dumps({"files": s}, ensure_ascii=False), "utf-8")
+    return set(s)
+
+
+def hiking_days(ds, today: dt.date, solo: Optional[set] = None) -> list[dict]:
     """One row per hiking / mountaineering day (multi-day trips split by
-    calendar day, as achievements.py does)."""
+    calendar day, as achievements.py does); `solo` marks the opted-in ones."""
     from backend.engine.achievements import KIND_HIKE, build_achievements
     lo = (today - dt.timedelta(days=HIKE_WINDOW_DAYS)).isoformat()
+    solo = solo_hikes() if solo is None else solo
     rows = []
     for a in build_achievements(ds):
-        if a.kind != KIND_HIKE or a.start[:10] < lo:
+        if a.kind != KIND_HIKE or a.start[:10] < lo or a.start[:10] > today.isoformat():
             continue
         name = a.auto_name
         parts = a.days or [{"date": a.start[:10], "distance_km": a.distance_km,
@@ -202,7 +234,7 @@ def hiking_days(ds, today: dt.date) -> list[dict]:
                          "day": i + 1 if a.days else None, "days": len(a.days) or 1,
                          "km": km, "gain_m": gain, "moving_h": mv / 3600.0, "ep": ep,
                          "ep_per_h": ep / (mv / 3600.0), "top_m": d.get("top_m", a.top_m),
-                         "peaks": [p["name"] for p in a.peaks]})
+                         "peaks": [p["name"] for p in a.peaks], "file": a.id, "solo": a.id in solo})
     return sorted(rows, key=lambda r: r["date"])
 
 
@@ -267,9 +299,241 @@ def _aet(ds, today: dt.date) -> dict:
         return {"aet": None, "source": f"無法估算（{str(e)[:60]}）", "lthr": None}
 
 
+# ---- thresholds and intensity as of a date (no future values) ------------------
+
+INTENSITY_KEY = "racepower_intensity_v1"
+_est_memo: dict = {}
+
+
+def _estimate(ds, day: dt.date) -> dict:
+    key = (id(ds), day)
+    if key not in _est_memo:
+        from backend.engine.thresholds import estimate
+        try:
+            _est_memo[key] = estimate(ds, day)
+        except Exception:                   # noqa: BLE001
+            _est_memo[key] = {}
+    return _est_memo[key]
+
+
+def _plan_last(ds, name: str, day: dt.date):
+    rows = sorted((t.date[:10], getattr(t, name)) for t in ds.plan.thresholds
+                  if getattr(t, name, None) is not None and t.date[:10] <= day.isoformat())
+    return rows[-1] if rows else None
+
+
+def thresholds_as_of(ds, day: dt.date) -> dict:
+    """LTHR / AeT / CP in effect on `day` using only what existed then: a plan
+    test dated on or before `day` (planning.threshold_on would return the
+    earliest test for any earlier day — a leak for a back-test), else the
+    estimate from the runs before `day` (thresholds.estimate), else WKO5's
+    dated setting; AeT falls back to 0.89 × LTHR (Friel Z2 top). CP only from
+    a dated plan test (else None: the HR decides the class). Known residual
+    leak: thresholds.estimate filters runs with ds.cp — the plan CP test
+    applied to earlier dates by planning.threshold_on, or WKO5's current
+    mFTP when the plan has none."""
+    from backend.engine.racepower import intensity as I
+    out = {"day": day.isoformat()}
+    lt = _plan_last(ds, "lthr", day)
+    est = _estimate(ds, day)
+    if lt:
+        out.update(lthr=float(lt[1]), lthr_source=f"測試 {lt[0]}")
+    elif (est.get("lthr") or {}).get("value"):
+        out.update(lthr=float(est["lthr"]["value"]), lthr_source="自動估算（當天以前的跑步）")
+    else:
+        v = ds.athlete.setting_on("runthr", day)
+        hist = ds.athlete.settings.get("runthr") or []
+        default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
+        out.update(lthr=v, lthr_source="WKO5 預設值（未設定）" if default else "WKO5 設定")
+    ae = _plan_last(ds, "aethr", day)
+    if ae:
+        out.update(aet=float(ae[1]), aet_source=f"測試 {ae[0]}")
+    elif (est.get("aethr") or {}).get("value"):
+        out.update(aet=float(est["aethr"]["value"]), aet_source="自動估算（當天以前的跑步）")
+    else:
+        out.update(aet=None if not out["lthr"] else I.INTENSITY["aet_frac_lthr"] * out["lthr"],
+                   aet_source="0.89 × LTHR（Friel Z2 上限）")
+    c = _plan_last(ds, "cp", day)
+    out.update(cp=float(c[1]) if c else None, cp_source=f"測試 {c[0]}" if c else None)
+    return out
+
+
+def _intensity_stats(ds, w) -> Optional[dict]:
+    from backend.engine.racepower import intensity as I
+    t = ds.channel(w.idx, "elapsedtime")
+    if t is None:
+        return None
+    return I.stats(t, ds.channel(w.idx, "heartrate"), ds.channel(w.idx, "power"), ds.channel(w.idx, "speed"),
+                   ds.channel(w.idx, "cadence"), min_kmh=RUN_MOVING_KMH if w.sport == "run" else HIKE_REST_MS * 3.6)
+
+
+def intensity_stats(ds, w) -> Optional[dict]:
+    return ds.cached_series(INTENSITY_KEY, w, lambda: _intensity_stats(ds, w))
+
+
+def race_dates(ds) -> set[str]:
+    """Season-plan race days (every kind but 百岳 / other, all priorities)."""
+    out = set()
+    for e in ds.plan.events:
+        if e.kind in ("baiyue", "other"):
+            continue
+        d0 = e.start
+        for i in range(max(1, int(e.days or 1))):
+            out.add((d0 + dt.timedelta(days=i)).isoformat())
+    return out
+
+
+def _cp_req(ds, w) -> Optional[float]:
+    """The CP this run alone proves: max over its mean-max points ≥ 20 min of
+    p·(TTE/t)^k (difficulty.cp_lower_bound with k −0.07, TTE 3000 s, no W′)."""
+    c = _curve(ds, w)
+    if not c or not c[0]:
+        return None
+    best = None
+    for x, y in zip(c[0], c[1]):
+        if y is None or x is None or x < DF.SHORT_MAX_S or not y > 0:
+            continue
+        v = y * (DEFAULT_TTE_S / x) ** DEFAULT_K
+        best = v if best is None or v > best else best
+    return best
+
+
+def cp_floor_by_date(ds, runs) -> dict[int, Optional[float]]:
+    """{idx: the CP lower bound from the runs of the 365 days BEFORE that
+    run} — a CP every later model must meet. Used only to read the power
+    side of the intensity class: IF against a lower bound overstates IF, so
+    "below 80 % even against the floor" is solid evidence of an easy run."""
+    reqs = sorted(((w.day, _cp_req(ds, w)) for w in ds.workouts if w.sport == "run"), key=lambda x: x[0])
+    out = {}
+    for w in runs:
+        vs = [v for d, v in reqs if v and w.day - RIEGEL_WINDOW_DAYS < d < math.floor(w.day)]
+        out[w.idx] = max(vs) if vs else None
+    return out
+
+
+def classify_runs(ds, runs, cp_of: Optional[dict] = None) -> dict[int, dict]:
+    """{idx: intensity.classify(...)} with each activity's own-date
+    thresholds (thresholds_as_of) — never later values. CP: a dated plan
+    test, else the lower bound from the earlier runs (cp_floor_by_date)."""
+    from backend.engine.racepower import intensity as I
+    races = race_dates(ds)
+    floor = cp_floor_by_date(ds, runs) if cp_of is None else {}
+    out = {}
+    for w in runs:
+        d = w.entry.start.date()
+        th = thresholds_as_of(ds, d)
+        cp = (cp_of or {}).get(w.idx) or th["cp"]
+        is_floor = cp is None and floor.get(w.idx) is not None
+        cp = cp or floor.get(w.idx)
+        c = I.classify(intensity_stats(ds, w), th["lthr"], th["aet"], cp, d.isoformat() in races, is_floor)
+        c.update(lthr_source=th["lthr_source"], aet_source=th["aet_source"],
+                 cp_source=th["cp_source"] or ("之前跑步的 CP 下限" if cp else None))
+        out[w.idx] = c
+    ds.flush_series()
+    return out
+
+
+def enforce_lower_bound(d: dict, cp: float, w_prime: Optional[float], tte: float, k: float,
+                        cp2: Optional[float] = None) -> tuple[float, Optional[dict]]:
+    """The CP actually used must cover the envelope for the k actually used
+    (derive's bound is for its default k; a steeper table k needs a higher
+    anchor). Returns (cp to use, the bound)."""
+    pts = (d.get("cp") or {}).get("lb_points") or []
+    b = DF.cp_lower_bound(pts, w_prime, tte, k, cp2=cp2,
+                          min_s=max(DF.SHORT_MAX_S, tte) if cp2 else DF.SHORT_MAX_S)
+    if b and cp < b["cp_min"] - 0.5:
+        return b["cp_min"], b
+    return cp, b
+
+
+def cptest_prior(weight: float, sex: str) -> dict:
+    from backend.engine.racepower import cptest as T
+    return T.w_prime_prior(weight, sex)
+
+
+def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float]) -> Optional[dict]:
+    """WKO5's default PD model (algorithms/wko5_pdmodel, reproduces WKO5's own
+    mFTP 175.7 vs snapshot 175.6 W; docs/research/cp-test-protocols.md §1B.2)
+    refitted on the raw 90-day mean-max of the runs (implausible power
+    dropped) plus the synced running FIT files not yet in WKO5 (cptest.curves),
+    as of `today`. Returns mFTP, TTE, FRC and the curve's source."""
+    from backend.engine.algorithms import wko5_pdmodel as PDM
+    from backend.engine.racepower import cptest as T
+    # WKO5's own duration grid (the PD fit is sensitive to point spacing; on
+    # this grid the port reproduces WKO5's mFTP): the longest cached curve's xs
+    curves_ = []
+    for w in runs_90:
+        c = _curve(ds, w)
+        if c and c[0]:
+            xs = np.array(c[0], float)
+            ys = np.array([np.nan if v is None else v for v in c[1]], float)
+            ok_ = np.isfinite(ys)
+            if ok_.sum() >= 2 and not implausible(w, xs[ok_], ys[ok_], ref_cp):
+                curves_.append((xs[ok_], ys[ok_]))
+    if not curves_:
+        return None
+    grid = max((c[0] for c in curves_), key=len)
+    best = np.full(len(grid), np.nan)
+    for xs, ys in curves_:
+        m = grid <= xs[-1]
+        vals = np.interp(grid[m], xs, ys)
+        cur = best[m]
+        best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
+    extra = []
+    try:
+        extra = T.curves(WX.HOME, today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today)
+    except Exception:                       # noqa: BLE001
+        extra = []
+    for c in extra:
+        xs, ys = np.array(c["xs"]), np.array(c["ys"])
+        if len(xs) < 2:
+            continue
+        if ref_cp and ((xs[-1] >= 300 and np.interp(300.0, xs, ys) > 2.0 * ref_cp)):
+            continue
+        m = grid <= xs[-1]
+        vals = np.interp(grid[m], xs, ys)
+        cur = best[m]
+        best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
+    ok = np.isfinite(best)
+    pts = [(float(x), float(y)) for x, y in zip(grid[ok], best[ok])]
+    try:
+        f = PDM.fit(pts)
+    except Exception:                       # noqa: BLE001
+        f = None
+    if not f or not f.get("valid"):
+        return None
+    # "tte" = where the model falls to mFTP (tte_solve) — the value WKO5 shows
+    # and stores (1895 vs the snapshot's 1897 s on WKO5's data alone)
+    return {"mftp": float(f["FTP"]), "tte": float(f["tte"]), "frc": float(f["FRC"]), "pmax": float(f["Pmax"]),
+            "d": float(f["D"]), "fit_files": [c["path"] for c in extra], "n_points": len(pts),
+            "source": "wko5_pdmodel（WKO5 5.0.587 PD 模型的移植，已對 WKO5 快照驗證）"}
+
+
+def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
+    """3′/12′ tests in the synced FIT files dated within 365 days up to today,
+    each with its estimate (cptest.estimate). Suggestions only."""
+    from backend.engine.racepower import cptest as T
+    try:
+        found = T.scan(WX.HOME, today - dt.timedelta(days=RIEGEL_WINDOW_DAYS), today)
+    except Exception:                       # noqa: BLE001
+        return []
+    out = []
+    for t in found:
+        e = T.estimate(t, weight, sex)
+        if e.get("cp"):
+            age = (today - dt.date.fromisoformat(t["date"])).days
+            out.append({**t, "estimate": e, "age_days": age, "fresh": age <= PLAN_CP_MAX_AGE_DAYS})
+    return out
+
+
 def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
-           exclude: Optional[set] = None) -> dict:
-    """`exclude` = workout idx never used (racepower v2 back-test, leave-one-out)."""
+           exclude: Optional[set] = None, strict_as_of: bool = False,
+           classes: Optional[dict] = None, hiking: bool = True) -> dict:
+    """`exclude` = workout idx never used (racepower v2 back-test,
+    leave-one-out). `strict_as_of` (back-test): nothing that only exists
+    today — no WKO5 snapshot values (mFTP / TTE; the PD model is refitted on
+    the data up to `today` instead), plan tests only up to `today`.
+    `classes` = precomputed classify_runs()."""
     from backend.engine.wko5expr.dataset import date_to_day
     from backend.files.wko5_athlete import pd_snapshot
     today = today or dt.date.today()
@@ -284,10 +548,17 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     metrics = run_metrics(ds, runs_365, weight)
     by_idx = {w.idx: w for w in ds.workouts}
 
+    # ---- intensity classes (own-date thresholds) -------------------------------
+    cls = classes if classes is not None else classify_runs(ds, runs_365)
+    race_idx = {i for i, c in cls.items() if c.get("cls") == "race"}
+
     # ---- CP sources ----------------------------------------------------------
-    pd = pd_snapshot(ds.athlete.root)
+    pd = {} if strict_as_of else pd_snapshot(ds.athlete.root)
+    sex = prof.get("sex") or "male"
     plan_cp = _plan_cp(ds, today)
-    ref_cp = (plan_cp or {}).get("cp") or pd.get(("mftp", "Run"))
+    tests = cp_tests(ds, today, weight, sex)
+    test = tests[-1] if tests else None
+    ref_cp = (plan_cp or {}).get("cp") or (test or {}).get("estimate", {}).get("cp") or pd.get(("mftp", "Run"))
     training = _training_conditions(ds, runs_90, metrics, today, fetch_weather)
     dropped: list = []
     env90 = envelope(ds, [w for w in runs_90 if w.idx in metrics], ref_cp, dropped, training, metrics)
@@ -295,50 +566,140 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     pts = CP.envelope_points(table)
     fit = CP.fit_cp([(p["t"], p["p"]) for p in pts])
     wind_any = any(m.get("air_any") for m in metrics.values())
-    sex = prof.get("sex") or "male"
     acts = None
     if fit:
-        acts = {**fit, "points": pts, "checks": CP.validity(pts, envelope=True),
+        checks = CP.validity(pts, envelope=True)
+        acts = {**fit, "points": pts, "checks": checks,
                 "rating": CP.rwc_rating(fit["w_prime"], weight, sex, wind_any),
-                "window_days": CP_WINDOW_DAYS}
-    sources = []
-    if plan_cp:
-        sources.append({"id": "plan", "label": f"賽季計畫 CP 測試（{plan_cp['date']}）", "cp": plan_cp["cp"],
-                        "date": plan_cp["date"], "fresh": plan_cp["fresh"]})
-    if acts:
-        sources.append({"id": "activities", "label": f"近 {CP_WINDOW_DAYS} 天活動（3–20 分鐘最佳功率擬合）",
-                        "cp": acts["cp"], "w_prime": acts["w_prime"]})
-    if pd.get(("mftp", "Run")):
-        sources.append({"id": "wko5", "label": "WKO5 模型 mFTP", "cp": pd[("mftp", "Run")],
-                        "tte": pd.get(("tte", "Run")), "frc": pd.get(("frc", "Run"))})
-    default_cp = ("plan" if plan_cp and plan_cp["fresh"] else "activities" if acts else
-                  "wko5" if pd.get(("mftp", "Run")) else None)
+                "window_days": CP_WINDOW_DAYS,
+                "dates_ok": all(c["ok"] for c in checks if c["id"] == "dates"),
+                "errors_ok": all(c["ok"] for c in checks if c["level"] == "error")}
     tte = pd.get(("tte", "Run"))
-    tte_src = "WKO5 模型 TTE" if tte else "預設 50 分鐘（試算表預設）"
+    tte_src = "WKO5 模型 TTE" if tte else (
+        "回測：預設 50 分鐘（不用今天的 WKO5 TTE，沒有當時的 TTE 測試）" if strict_as_of else "預設 50 分鐘（試算表預設）")
+    tte_v = tte or DEFAULT_TTE_S
 
     # ---- Riegel -------------------------------------------------------------
     dropped365: list = []
     env365 = envelope(ds, [w for w in runs_365 if w.idx in metrics], ref_cp, dropped365, training, metrics)
-    pk = R.personal_k(env365["xs"], env365["ys"], tte or DEFAULT_TTE_S)
-    raw = R.personal_k(env365["xs"], env365["ys"], tte or DEFAULT_TTE_S, keep_frac=None)
+    raw = R.personal_k(env365["xs"], env365["ys"], tte_v, keep_frac=None)
+    # personal k only from near-maximal efforts: the race-like class
+    env_race = envelope(ds, [w for w in runs_365 if w.idx in metrics and w.idx in race_idx], ref_cp, None,
+                        training, metrics)
+    pk = R.personal_k(env_race["xs"], env_race["ys"], tte_v)
     riegel = None
-    if pk:
-        lo, hi = pk["t_min"], pk["t_max"]
-        span_who = sorted({i for x, i in zip(env365["xs"], env365["who"]) if lo <= x <= hi})
+    if pk or raw:
         why = []
-        if not R.is_reasonable_k(pk["k"]):
-            why.append("k 不在 −0.25…−0.01 的合理範圍")
-        if pk["n"] < 5:
-            why.append("擬合點少於 5 個")
-        if pk["r2"] < 0.8:
-            why.append("R² < 0.8")
+        span_who = []
+        if pk:
+            lo, hi = pk["t_min"], pk["t_max"]
+            span_who = sorted({i for x, i in zip(env_race["xs"], env_race["who"]) if lo <= x <= hi})
+            if not R.is_reasonable_k(pk["k"]):
+                why.append("k 不在 −0.25…−0.01 的合理範圍")
+            if pk["n"] < 5:
+                why.append("擬合點少於 5 個")
+            if pk["r2"] < 0.8:
+                why.append("R² < 0.8")
         if len(span_who) < 3:
-            why.append(f"擬合區間只由 {len(span_who)} 次活動構成（單一次穩定長跑的衰退不等於最大努力曲線）")
-        riegel = {**pk, "valid": not why, "invalid_reasons": why, "n_activities": len(span_who),
-                  "longest_s": hi, "envelope_longest_s": env365["xs"][-1] if env365["xs"] else None,
+            why.append(f"比賽強度（心率判定）的長時間努力只有 {len(span_who)} 次，至少要 3 次")
+        base = pk or {"k": None, "r2": None, "n": 0, "t_min": None, "t_max": None}
+        riegel = {**base, "valid": not why, "invalid_reasons": why, "n_activities": len(span_who),
+                  "longest_s": base.get("t_max") or (env365["xs"][-1] if env365["xs"] else None),
+                  "envelope_longest_s": env365["xs"][-1] if env365["xs"] else None,
                   "uncut": None if raw is None else {k_: raw[k_] for k_ in ("k", "r2", "n", "t_max")},
                   "activities": [act_ref(by_idx[i]) for i in span_who][:40],
-                  "window_days": RIEGEL_WINDOW_DAYS}
+                  "basis": "只用心率判定為比賽強度的活動", "window_days": RIEGEL_WINDOW_DAYS}
+    k0 = riegel["k"] if riegel and riegel["valid"] else DEFAULT_K
+    k0_src = "個人擬合" if riegel and riegel["valid"] else "預設 −0.07（≈ Stryd 表的 k −0.069）"
+
+    # ---- WKO5 PD model recomputed on today's data (incl. synced FIT files) ----
+    pdm = pd_model(ds, today, runs_90, ref_cp)
+    # the short-range (F2) pair: a CP test (plan, else detected) with its W′
+    if plan_cp and plan_cp["fresh"]:
+        short = {"cp2": plan_cp["cp"], "w_prime": (test or {}).get("estimate", {}).get("w_prime") or
+                 cptest_prior(weight, sex)["mid"], "label": f"計畫 CP 測試 {plan_cp['date']}"}
+    elif test and test["fresh"]:
+        e = test["estimate"]
+        short = {"cp2": e["cp"], "w_prime": e["w_prime"], "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}）"}
+    elif pdm:
+        short = {"cp2": pdm["mftp"], "w_prime": pdm["frc"], "label": "PD 模型 mFTP + FRC"}
+    else:
+        short = None
+
+    # ---- lower bound: CP must cover what the athlete already held -----------
+    env_pts = [(x, y, i) for x, y, i in zip(env365["xs"], env365["ys"], env365["who"])]
+
+    def bound(w_, tte_, cp2_=None):
+        # two anchors: the bound applies to the F1 anchor only where F1 alone
+        # decides (t ≥ TTE); between 20 min and TTE the bridge also depends on
+        # the short-range pair, and a low pair would inflate the requirement
+        b = DF.cp_lower_bound(env_pts, w_, tte_, k0, cp2=cp2_,
+                              min_s=max(DF.SHORT_MAX_S, tte_) if cp2_ else DF.SHORT_MAX_S)
+        if b:
+            b["who"] = act_ref(by_idx[b["who"]]) if b.get("who") in by_idx else None
+            for r_ in b["rows"]:
+                r_["who"] = act_ref(by_idx[r_["who"]]) if r_.get("who") in by_idx else None
+            b.update(k_source=k0_src)
+        return b
+
+    sources = []
+    if pdm:
+        sources.append({"id": "pdmodel", "label": f"PD 模型重算（近 {CP_WINDOW_DAYS} 天 mean-max，含同步的 FIT）：mFTP "
+                        f"{pdm['mftp']:.0f} W、TTE {pdm['tte'] / 60:.0f} 分", "cp": pdm["mftp"], "tte": pdm["tte"],
+                        "cp2": (short or {}).get("cp2"), "w_prime": (short or {}).get("w_prime"),
+                        "short_label": (short or {}).get("label"), "frc": pdm["frc"], "fit": pdm})
+    if plan_cp:
+        sources.append({"id": "plan", "label": f"賽季計畫 CP 測試（{plan_cp['date']}）", "cp": plan_cp["cp"],
+                        "date": plan_cp["date"], "fresh": plan_cp["fresh"]})
+    if test:
+        e = test["estimate"]
+        sources.append({"id": "cptest", "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}；尚未套用）",
+                        "cp": e["cp"], "w_prime": e["w_prime"], "cp_range": e.get("cp_range"),
+                        "date": test["date"], "fresh": test["fresh"], "suggestion": True})
+    if pd.get(("mftp", "Run")):
+        sources.append({"id": "wko5", "label": "WKO5 模型 mFTP（WKO5 存的快照）", "cp": pd[("mftp", "Run")],
+                        "tte": pd.get(("tte", "Run")), "frc": pd.get(("frc", "Run")), "w_prime": pd.get(("frc", "Run"))})
+    if acts:
+        sources.append({"id": "activities", "label": f"近 {CP_WINDOW_DAYS} 天活動（3–20 分鐘最佳功率擬合）",
+                        "cp": acts["cp"], "w_prime": acts["w_prime"], "dates_ok": acts["dates_ok"]})
+    for s in sources:
+        s["lower_bound"] = bound(s.get("w_prime") or (acts or {}).get("w_prime"), s.get("tte") or tte_v, s.get("cp2"))
+        s["meets_lower_bound"] = s["lower_bound"] is None or s["cp"] >= s["lower_bound"]["cp_min"] - 0.5
+    by_id = {s["id"]: s for s in sources}
+    # PD model (mFTP / TTE anchor + test pair; raised to the lower bound when
+    # below it). Without a PD fit: plan test → detected test → WKO5 snapshot →
+    # activities (its 14-day check passing), each only when it covers the
+    # lower bound; else the preferred source raised to its bound
+    order = [("pdmodel", lambda s: True), ("plan", lambda s: s["fresh"]), ("cptest", lambda s: s["fresh"]),
+             ("wko5", lambda s: True), ("activities", lambda s: s["dates_ok"])]
+    pref = next((by_id[sid] for sid, cond in order if sid in by_id and cond(by_id[sid])), sources[0] if sources else None)
+    if pref and pref["id"] == "pdmodel":
+        # the mFTP / TTE anchor stays the model; below the bound it is raised to it
+        default_cp = "pdmodel" if pref["meets_lower_bound"] else None
+    else:
+        default_cp = next((sid for sid, cond in order if sid in by_id and cond(by_id[sid])
+                           and by_id[sid]["meets_lower_bound"]), None)
+    lb = (pref or {}).get("lower_bound")
+    lb_msg = None
+    if pref and not pref["meets_lower_bound"] and lb:
+        lb_msg = (f"模型 CP 低於你實際撐過的功率（{lb['t_s'] / 60:.0f} 分鐘 {lb['p']:.0f} W）："
+                  f"CP 至少 ≥ {lb['cp_min']:.0f} W，請重測")
+    if default_cp is None and pref and lb:
+        sources.append({**{k_: v for k_, v in pref.items() if k_ not in ("id", "label", "fit")},
+                        "id": "lower_bound", "cp": lb["cp_min"], "meets_lower_bound": True, "base": pref["id"],
+                        # a short-range CP that only mirrors mFTP follows the raised anchor
+                        **({"cp2": lb["cp_min"]} if pref.get("cp2") and pdm and short and
+                           short.get("label", "").startswith("PD 模型") and pref["cp2"] < lb["cp_min"] else {}),
+                        "label": f"下限：{pref['label'].split('（')[0]} 提高到你撐過的功率所需的最低值"
+                                 f"（{lb['t_s'] / 60:.0f} 分鐘 {lb['p']:.0f} W，k {k0:+.2f}）"})
+        default_cp = "lower_bound"
+    if default_cp is None and sources:
+        default_cp = sources[0]["id"]
+    dsrc = next((s for s in sources if s["id"] == default_cp), None)
+    if dsrc and dsrc.get("tte"):
+        tte_v = dsrc["tte"]
+        tte_src = "PD 模型重算的 TTE" if dsrc.get("fit") or dsrc.get("base") == "pdmodel" else "WKO5 模型 TTE"
+    lb = (dsrc or {}).get("lower_bound") or lb
     # thin the envelope for charts: log-spaced points only
     chart_env = [{"t": x, "p": y, "idx": i} for x, y, i in zip(env365["xs"], env365["ys"], env365["who"])
                  if x >= 60]
@@ -353,31 +714,41 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         c = RE.cvi(climb, km)
         row = {**act_ref(w), "km": km, "climb_m": climb, "cvi": c, "moving_s": m["moving_s"],
                "avg_power": m["avg_power"], "re": m["re"], "air_pct": m["air_pct"],
-               "form_pct": m["form_pct"], "lss_kg": m["lss_kg"], "trail": "runningtrail" in w.tags}
+               "form_pct": m["form_pct"], "lss_kg": m["lss_kg"], "trail": "runningtrail" in w.tags,
+               "intensity": (cls.get(w.idx) or {}).get("cls")}
         if row["trail"]:
             if (climb or 0) >= TRAIL_MIN_CLIMB_M and m["moving_s"] >= TRAIL_MIN_MOVING_S and km:
                 row["re_trail"] = {f: RE.trail_re(km, climb, m["moving_s"], m["avg_power"], weight,
                                                   SIMPLE_FORMULAS[f][0]) for f in ("fitted_run", "itra", "scarf")}
                 trail_rows.append(row)
-        elif c is not None and c < ROAD_MAX_CVI and m["moving_s"] >= ROAD_MIN_MOVING_S \
-                and w.sport_type != "indoor running":
+        elif c is not None and c < ROAD_MAX_CVI_ADJ and m["moving_s"] >= ROAD_MIN_MOVING_S \
+                and w.sport_type != "indoor running" and "runningtreadmill" not in w.tags:
+            # the workbook's CVI adjustment (+0.01 RE per category) brings every
+            # road run to flat, so the flat RE rests on the whole year instead
+            # of the few runs under 25 ft/mi
+            row["cvi_adj"] = RE.cvi_adjust(c, 0.0)
+            row["re_flat"] = m["re"] + row["cvi_adj"]
             road_rows.append(row)
-    road = RE.summary([r["re"] for r in road_rows])
-    road_cvi = RE.summary([r["cvi"] for r in road_rows])
+    road = RE.summary([r["re_flat"] for r in road_rows])
+    if road:
+        road["basis"] = f"{len(road_rows)} 次路跑（CVI < {ROAD_MAX_CVI_ADJ:g}），各自用 CVI 調整到平路"
+    road_cvi = {"median": 0.0, "n": len(road_rows), "note": "RE 已調到平路（CVI 0）"} if road_rows else None
     trail = {f: RE.summary([r["re_trail"][f] for r in trail_rows]) for f in ("fitted_run", "itra", "scarf")}
     train_cvi = RE.summary([RE.cvi(w.metrics.get("climbing"), w.metrics.get("distance"))
                             for w in runs_90 if w.metrics.get("distance")])
 
     # ---- hiking ---------------------------------------------------------------
     try:
-        hdays = hiking_days(ds, today)
+        hdays = hiking_days(ds, today) if hiking else []
     except Exception as e:                  # noqa: BLE001
         hdays, hike_err = [], str(e)[:120]
     else:
         hike_err = None
-    eph = RE.summary([d["ep_per_h"] for d in hdays],
-                     [HIKE_HEAVY_WEIGHT if d["gain_m"] >= HIKE_HEAVY_GAIN_M else 1.0 for d in hdays]) \
-        if hdays else None
+    # group hikes are paced by the group: only opted-in solo days calibrate EP/h
+    solo_days = [d for d in hdays if d.get("solo")]
+    eph = RE.summary([d["ep_per_h"] for d in solo_days],
+                     [HIKE_HEAVY_WEIGHT if d["gain_m"] >= HIKE_HEAVY_GAIN_M else 1.0 for d in solo_days]) \
+        if solo_days else None
     biggest = max(hdays, key=lambda d: d["ep"]) if hdays else None
 
     # ---- prior-race candidates (standard distances) -----------------------------
@@ -388,11 +759,15 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
             continue
         cat = R.distance_category(km * 1000.0)
         if cat:
+            c_ = cls.get(w.idx) or {}
             priors.append({**act_ref(w), "km": km, "category": cat, "time_s": w.metrics.get("movingduration") or m["moving_s"],
-                           "avg_power": m["avg_power"]})
+                           "avg_power": m["avg_power"], "intensity": c_.get("cls"), "race": c_.get("cls") == "race"})
     priors.sort(key=lambda r: r["date"], reverse=True)
-    # default prior for the Riegel table: the fastest standard-distance run of the year
-    auto_prior = max(priors, key=lambda r: r["km"] * 1000.0 / r["time_s"]) if priors else None
+    # the Riegel table encodes "slower racers fade more": only a real race
+    # (season-plan race or an HR race-like effort) may be the table prior —
+    # a training run would be circular. None → the API uses k −0.07.
+    races_ = [p for p in priors if p["race"]]
+    auto_prior = max(races_, key=lambda r: r["km"] * 1000.0 / r["time_s"]) if races_ else None
 
     events = []
     for e in sorted(ds.plan.events, key=lambda e: e.date):
@@ -410,8 +785,15 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                     "power_meter": prof.get("power_meter") or "stryd", "wind": wind_any,
                     "wind_source": "資料中有 Stryd air power" if wind_any else "資料中沒有 air power"},
         "cp": {"sources": sources, "default": default_cp, "activities": acts, "plan": plan_cp,
-               "dropped": dropped, "dropped_365": dropped365, "ref_cp": ref_cp},
-        "tte": {"value": tte or DEFAULT_TTE_S, "source": tte_src},
+               "dropped": dropped, "dropped_365": dropped365, "ref_cp": ref_cp,
+               "lower_bound": lb, "lower_bound_message": lb_msg, "tests": tests, "pd_model": pdm, "short": short,
+               "lb_points": [[x, y, i] for x, y, i in env_pts if x >= DF.SHORT_MAX_S],
+               "spread": sorted({round(s["cp"], 1) for s in sources if s.get("cp")} |
+                                ({round(lb["cp_min"], 1)} if lb else set()))},
+        "tte": {"value": tte_v, "source": tte_src},
+        "k_default": {"value": k0, "source": k0_src},
+        "intensity": {"counts": {c: sum(1 for x in cls.values() if x.get("cls") == c) for c in ("easy", "steady", "race")},
+                      "unknown": sum(1 for x in cls.values() if not x.get("cls"))},
         "wko5": {"mftp": pd.get(("mftp", "Run")), "tte": tte, "frc": pd.get(("frc", "Run")),
                  "pmax": pd.get(("pmax", "Run")), "stamina": pd.get(("stamina", "Run"))},
         "riegel": riegel, "envelope": chart_env,
@@ -419,7 +801,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                "road_runs": road_rows[-60:], "trail_runs": trail_rows,
                "window_days": RE_WINDOW_DAYS},
         "hiking": {"eph": eph, "days": hdays, "biggest": biggest, "error": hike_err,
-                   "window_days": HIKE_WINDOW_DAYS},
+                   "window_days": HIKE_WINDOW_DAYS, "solo_n": len(solo_days),
+                   "group_n": len(hdays) - len(solo_days), "note": GROUP_HIKE_NOTE},
         "priors": priors[:40], "auto_prior": auto_prior,
         "training_conditions": training,
         "altitude_normalised": True,
@@ -431,8 +814,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
 
 # ---- racepower v2: per-activity samples (docs/research/racepower-v2.md §10.1) ----
 
-GRADE_KEY = "racepower_v2_grade"
-HIKE_KEY = "racepower_v2_hike"
+GRADE_KEY = "racepower_v2_grade_hr"      # rows [g, v, p, z, hr, running share]
+HIKE_KEY = "racepower_v2_hike_hr"        # rows [g, v, z, hr, window index, day]
 RUN_MOVING_KMH = 1.0
 HIKE_REST_MS = 0.3
 
@@ -471,18 +854,35 @@ def activity_arrays(ds, w) -> Optional[dict]:
     p = fit(ds.channel(w.idx, "power"))
     kmh = fit(s) if s is not None else np.gradient(dm, t) * 3.6
     return {"t": np.asarray(t, float), "d": dm, "z": fit(z), "lat": fit(ds.channel(w.idx, "latitude")),
-            "lon": fit(ds.channel(w.idx, "longitude")), "p": p, "kmh": kmh}
+            "lon": fit(ds.channel(w.idx, "longitude")), "p": p, "kmh": kmh,
+            "hr": fit(ds.channel(w.idx, "heartrate")), "cad": fit(ds.channel(w.idx, "cadence"))}
+
+
+def _r(x, n):
+    return None if x is None else round(x, n)
 
 
 def _grade_windows(ds, w) -> Optional[list]:
     from backend.engine.racepower import grade_model as GM
+    from backend.engine.racepower import intensity as I
     a = activity_arrays(ds, w)
     if a is None or a["p"] is None or not np.any(np.nan_to_num(a["p"]) > 0):
         return None
     mv = (np.nan_to_num(a["p"]) > 0) & (np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH)
-    rows = GM.windows(a["t"], a["d"], a["z"], a["p"], mv)
-    return [[round(r["g"], 4), round(r["v"], 3), round(r["p"], 1), round(r["z"], 1)] for r in rows
-            if r.get("p") and r["p"] > 0]
+    rows = GM.windows(a["t"], a["d"], a["z"], a["p"], mv, hr=a["hr"], cadence=a["cad"],
+                      run_cadence=I.INTENSITY["run_cadence"])
+    return [[round(r["g"], 4), round(r["v"], 3), round(r["p"], 1), round(r["z"], 1), _r(r.get("hr"), 1),
+             _r(r.get("run"), 3)] for r in rows if r.get("p") and r["p"] > 0]
+
+
+def _day_slices(w, a) -> list[tuple[int, np.ndarray]]:
+    """Sample masks per calendar day (multi-day trips), day numbers from 1."""
+    start = w.entry.start
+    t = a["t"]
+    days = np.array([(start + dt.timedelta(seconds=float(x))).date().toordinal() if np.isfinite(x) else -1
+                     for x in t])
+    uniq = [x for x in sorted(set(days.tolist())) if x > 0]
+    return [(n, days == x) for n, x in enumerate(uniq, 1)]
 
 
 def _hike_windows(ds, w) -> Optional[list]:
@@ -490,9 +890,16 @@ def _hike_windows(ds, w) -> Optional[list]:
     a = activity_arrays(ds, w)
     if a is None:
         return None
-    mv = np.nan_to_num(a["kmh"]) > HIKE_REST_MS * 3.6
-    rows = GM.windows(a["t"], a["d"], a["z"], None, mv)
-    return [[round(r["g"], 4), round(r["v"], 3), round(r["z"], 1)] for r in rows if r["v"] >= HIKE_REST_MS]
+    out = []
+    for day, m in _day_slices(w, a):
+        sub = {k: (v[m] if isinstance(v, np.ndarray) else v) for k, v in a.items()}
+        if len(sub["t"]) < 10:
+            continue
+        mv = np.nan_to_num(sub["kmh"]) > HIKE_REST_MS * 3.6
+        rows = GM.windows(sub["t"], sub["d"], sub["z"], None, mv, hr=sub["hr"])
+        out += [[round(r["g"], 4), round(r["v"], 3), round(r["z"], 1), _r(r.get("hr"), 1), r["k"], day]
+                for r in rows if r["v"] >= HIKE_REST_MS]
+    return out
 
 
 def grade_samples(ds, runs, exclude: Optional[set] = None) -> list[dict]:
@@ -510,8 +917,10 @@ def grade_samples(ds, runs, exclude: Optional[set] = None) -> list[dict]:
         if not rows:
             continue
         wt = ds.setting("weight", w.day)
-        for g, v, p, z in rows:
-            out.append({"g": g, "v": v, "p": p, "z": z, "re": v / (p / wt) if wt and p else None, "a": w.idx})
+        trail = "runningtrail" in w.tags or w.sport_type == "trail running"
+        for g, v, p, z, hr, run in rows:
+            out.append({"g": g, "v": v, "p": p, "z": z, "re": v / (p / wt) if wt and p else None, "a": w.idx,
+                        "hr": hr, "run": run, "trail": trail})
     ds.flush_series()
     return out
 
@@ -519,36 +928,83 @@ def grade_samples(ds, runs, exclude: Optional[set] = None) -> list[dict]:
 def hike_workouts(ds, today: dt.date) -> list:
     from backend.engine.wko5expr.dataset import date_to_day
     tday = date_to_day(today)
-    return [w for w in ds.workouts if w.sport_type in ("hiking", "mountaineering")
-            and tday - HIKE_WINDOW_DAYS < w.day <= tday + 1]
+    return [w for w in ds.workouts if is_hike(w) and w.sport != "run" and tday - HIKE_WINDOW_DAYS < w.day <= tday + 1]
 
 
 def hike_samples(ds, hikes, exclude: Optional[set] = None) -> list[dict]:
+    """Every moving 100 m window of the given hikes: g, v, z, hr, k (window
+    index in the day), day (1…), a (workout idx)."""
     exclude = exclude or set()
     out = []
     for w in hikes:
         if w.idx in exclude:
             continue
         rows = ds.cached_series(HIKE_KEY, w, lambda w=w: _hike_windows(ds, w))
-        for g, v, z in rows or []:
-            out.append({"g": g, "v": v, "z": z, "a": w.idx})
+        for g, v, z, hr, k, day in rows or []:
+            out.append({"g": g, "v": v, "z": z, "hr": hr, "k": k, "day": day, "a": w.idx})
     ds.flush_series()
     return out
 
 
+def hike_hr_windows(ds, hikes, exclude: Optional[set] = None) -> tuple[list[dict], dict]:
+    """hikehr.filter_windows over every hiking day with that day's AeT
+    (thresholds_as_of the trip date). Returns (windows, per-trip thresholds)."""
+    from backend.engine.racepower import hikehr as HH
+    exclude = exclude or set()
+    wins, th_of = [], {}
+    for w in hikes:
+        if w.idx in exclude:
+            continue
+        th = thresholds_as_of(ds, w.entry.start.date())
+        th_of[w.idx] = th
+        if not th.get("aet"):
+            continue
+        rows = hike_samples(ds, [w])
+        for day in sorted({r["day"] for r in rows}):
+            ds_ = sorted((r for r in rows if r["day"] == day), key=lambda r: r["k"])
+            for x in HH.filter_windows(ds_, th["aet"]):
+                wins.append({**x, "trip": w.idx, "lthr": th["lthr"], "aet": th["aet"]})
+    return wins, th_of
+
+
 def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] = None,
-                 exclude: Optional[set] = None, runs: Optional[list] = None) -> dict:
-    """GradeRE from the 365-day runs and HikeSpeed from the 3-year hikes
-    before `today` (both leave `exclude` out)."""
+                 exclude: Optional[set] = None, runs: Optional[list] = None,
+                 classes: Optional[dict] = None, only_classes: Optional[set] = None,
+                 hikes: bool = True) -> dict:
+    """Gait-aware RE(g) (GaitRE) from the 365-day runs, and the walking
+    model HikeSpeed from solo hikes + the HR-filtered steep windows of every
+    hike (group hikes contribute only those), all before `today` and without
+    `exclude`. `only_classes` restricts the runs to those intensity classes
+    (per-class fit); `classes` = classify_runs()."""
     from backend.engine.racepower import grade_model as GM
+    from backend.engine.racepower import hikehr as HH
     from backend.engine.wko5expr.dataset import date_to_day
     today = today or dt.date.today()
     tday = date_to_day(today)
     if runs is None:
         runs = [w for w in ds.workouts if w.sport == "run" and tday - RE_WINDOW_DAYS < w.day <= tday + 1]
+    if classes is None:
+        classes = classify_runs(ds, runs)
+    cmap = {i: c.get("cls") for i, c in classes.items()}
+    if only_classes:
+        runs = [w for w in runs if cmap.get(w.idx) in only_classes]
     gs = grade_samples(ds, runs, exclude)
     if re_flat is None:
-        flat = [s["re"] for s in gs if s["re"] and abs(s["g"]) <= 0.01]
+        flat = [s["re"] for s in gs if s["re"] and abs(s["g"]) <= 0.01 and (s["run"] is None or s["run"] >= 0.5)]
         re_flat = float(median(flat)) if flat else 1.0
-    hs = hike_samples(ds, hike_workouts(ds, today), exclude)
-    return {"grade_re": GM.fit_grade_re(gs, re_flat), "hike_speed": GM.fit_hike_speed(hs)}
+    if not hikes:
+        return {"grade_re": GM.fit_gait_re(gs, re_flat, cmap), "classes": cmap}
+    hikes = hike_workouts(ds, today)
+    solo = solo_hikes()
+    solo_w = [w for w in hikes if w.entry.file in solo]
+    hs_solo = hike_samples(ds, solo_w, exclude)
+    hr_wins, _ = hike_hr_windows(ds, hikes, exclude)
+    solo_idx = {w.idx for w in solo_w}
+    steep = [{"g": x["g"], "v": x["v"], "z": x["z"], "a": x["trip"]} for x in hr_wins if x["trip"] not in solo_idx]
+    th = thresholds_as_of(ds, today)
+    n_days = len({(x["trip"], x["day"]) for x in hr_wins})
+    return {"grade_re": GM.fit_gait_re(gs, re_flat, cmap), "hike_speed": GM.fit_hike_speed(hs_solo + steep),
+            "hike_hr": HH.summary(hr_wins, th.get("aet"), th.get("lthr"), n_days),
+            "hike_basis": {"solo_hikes": len(solo_w), "solo_windows": len(hs_solo), "steep_hr_windows": len(steep),
+                           "group_hikes": len(hikes) - len(solo_w), "note": GROUP_HIKE_NOTE},
+            "classes": cmap}
