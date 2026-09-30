@@ -181,8 +181,39 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int) -> None:
                 free.remove(cands[0])
 
 
-def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0) -> list[dict]:
-    """Weeks after cur['week'] (a week_plan() result) up to `until` (≤ MAX_WEEKS)."""
+def _gate_inputs(cur: dict) -> dict:
+    """week_plan()'s quality-gate inputs (levels + drift streak). A `cur`
+    without them (built before week_plan returned them) falls back to reading
+    this week's sessions: a quality session, a non-base phase or a recovery /
+    rest week (none by design) -> allowed. A CP-test session says nothing
+    (week_plan puts the test in place of the quality session)."""
+    g = cur.get("quality_gate")
+    if g is not None:
+        return {"levels": dict(g.get("levels") or {}), "streak_ok": bool(g.get("streak_ok"))}
+    ok = (any(s["kind"] == "quality" for s in cur.get("sessions") or []) or cur.get("phase") != "base"
+          or cur.get("mode") not in ("base", "specific"))
+    return {"levels": {"intensity": "good" if ok else "na", "drift": "na"}, "streak_ok": ok}
+
+
+def allow_quality(kind: str, gate: dict, base_q: Optional[dict] = None) -> bool:
+    """week_plan()'s rule, evaluated for one projected week's phase: the gate
+    (intensity / drift not bad; in base also the drift streak), then in base
+    either the unlocked 閾值下 session this week carried (`base_q`) or the
+    intensity indicator good for 閾值 3×10. Not copied from this week, so a
+    CP-test week or the base drift gate doesn't leak into later weeks."""
+    from backend.engine import workout_review as WR
+    levels = gate.get("levels") or {}
+    if not WR.quality_gate(kind, levels, bool(gate.get("streak_ok"))):
+        return False
+    if kind == "base":
+        return bool(base_q) or levels.get("intensity") == "good"
+    return True
+
+
+def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
+                  atlconstant: float = 7.0) -> list[dict]:
+    """Weeks after cur['week'] (a week_plan() result) up to `until` (≤ MAX_WEEKS).
+    `ctlconstant` / `atlconstant`: the athlete's (ds.athlete), as for the PMC."""
     monday = _d(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=MAX_WEEKS + 1) - dt.timedelta(days=1)
     until = min(until, cap)
@@ -194,10 +225,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     long_s = next((s for s in cur_s if s["kind"] == "long"), None)
     longest = float(long_s["minutes"]) if long_s else 60.0
     mountain = bool(long_s and "山路" in long_s["title"])
-    # this week's quality session tells whether the indicators allow one; a
-    # recovery / rest week has none by design, so it says nothing -> allow
-    allow_quality = (any(s["kind"] in ("quality", "test") for s in cur_s) or cur.get("phase") != "base"
-                     or cur.get("mode") not in ("base", "specific"))
+    gate = _gate_inputs(cur)
     base_q = next((s for s in cur_s if s["kind"] == "quality" and s["title"].startswith("閾值下")), None) \
         if cur.get("phase") == "base" else None
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
@@ -208,7 +236,6 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         build[i] = hist[i] >= 0.95 * hist[i - 1] and hist[i] > 0.5
     ctl = float((cur.get("load") or {}).get("ctl_end") or 0.0)
     atl = float((cur.get("load") or {}).get("atl_end") or 0.0)
-    ac = 7.0
     out = []
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
@@ -217,14 +244,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         days_to = (ev - week).days if ev else None
         hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to)
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
-                           allow_quality, strength_tss, th.get("aet"), base_q)
-        ss = [s for s in ss if _d(s["day"]) <= until] if ss else ss
+                           allow_quality(kind, gate, base_q), strength_tss, th.get("aet"), base_q)
+        # a session _place() found no day for has day None: keep it out of the date test
+        ss = [s for s in ss if not s["day"] or _d(s["day"]) <= until] if ss else ss
         by_day = {}
         for s in ss:
             if s["day"]:
                 by_day[s["day"]] = by_day.get(s["day"], 0.0) + s["tss"]
         planned = [by_day.get((week + dt.timedelta(days=i)).isoformat(), 0.0) for i in range(7)]
-        proj = O.project(ctl, atl, planned, ctlconstant, ac)
+        proj = O.project(ctl, atl, planned, ctlconstant, atlconstant)
         ctl0 = ctl
         ctl, atl = proj[-1]["ctl"], proj[-1]["atl"]
         out.append({"start": week.isoformat(), "phase": kind, "mode": mode,
