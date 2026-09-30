@@ -477,7 +477,8 @@ def compare(x: Optional[float], b: dict) -> Optional[str]:
 def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
                  plan_test: Optional[dict] = None, cp_detected: bool = False,
                  aet_steady: bool = False, long_target_s: Optional[float] = None,
-                 hard_power_s: Optional[float] = None, n_efforts: Optional[int] = None) -> str:
+                 hard_power_s: Optional[float] = None, n_efforts: Optional[int] = None,
+                 easy_hr: bool = False) -> str:
     """The plan's order: category → test_cp → test_aet → quality → long → easy.
 
     quality = ≥ HARD_SESSION_S at/above threshold (overview.HARD_EXPRS). With a
@@ -492,7 +493,9 @@ def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
     if plan_test.get("aethr") is not None or (aet_steady and moving_s >= TEST_AET_MIN_S):
         return "test_aet"
     need = _hard_session_s()
-    runs = category in ("road", "trail")        # a hike above LTHR is a steep hill, not a workout
+    # a hike above LTHR is a steep hill, not a workout; a run whose average HR
+    # stayed ≤ AeT+3 was an easy run even if short rises spiked the power
+    runs = category in ("road", "trail") and not easy_hr
     if runs and hard_power_s is not None and hard_power_s >= need:
         return "quality"
     if runs and hard_s >= need and (n_efforts is None or n_efforts >= 1):
@@ -722,9 +725,11 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     typ = session_type(cat, m.get("moving_s") or 0.0, m.get("hard_s") or 0.0, _title(w),
                        _plan_test(ds, day), looks_like_cp_test(m.get("cp_test"), m.get("cp")), aet_steady,
                        hard_power_s=m.get("hard_power_s"),
-                       n_efforts=len(m.get("efforts") or []) if m.get("hard_power_s") is not None else None)
+                       n_efforts=len(m.get("efforts") or []) if m.get("hard_power_s") is not None else None,
+                       easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN))
     terrain = cat if cat in TERRAIN_LABEL else None
-    return {"type": typ, "type_label": TYPE_LABEL.get(typ, typ), "terrain": terrain,
+    label = "輕鬆健行" if typ == "easy" and cat == "hike" else TYPE_LABEL.get(typ, typ)
+    return {"type": typ, "type_label": label, "terrain": terrain,
             "terrain_label": TERRAIN_LABEL.get(terrain, ""), "category": cat,
             "phase": phase, "phase_label": PHASE_LABEL.get(phase, "未設定周期"),
             "date": day.isoformat()}
@@ -864,7 +869,8 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None) -> list[str]:
         lines.append(f"心率超過 AeT+3 的時間佔 {over / tot * 100:.0f}%（> 10%）：下次放慢")
     dr = m.get("drift") or {}
     if not dr.get("ok"):
-        lines.append(dr.get("reason") or "飄移數字不採用")
+        if m.get("category") in ("road", "trail"):
+            lines.append(dr.get("reason") or "飄移數字不採用")
         return lines[:3]
     d = dr["drift"]
     if typ == "test_aet":
@@ -873,7 +879,10 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None) -> list[str]:
         else:
             lines.append(f"飄移 {_pct(d)} ≥ 5%：AeT 低於前半段心率 {dr['hr1']:.0f} bpm，下次放慢 5 bpm 再測")
         return lines[:3]
-    if d < DRIFT_GOOD:
+    aet, hr = m.get("aet"), m.get("avg_hr")
+    if d < DRIFT_GOOD and aet and hr and hr > aet + AET_MARGIN:
+        lines.append(f"飄移 {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3，不算進連續次數")
+    elif d < DRIFT_GOOD:
         s = f"（連續 {streak} 次）" if streak else ""
         lines.append(f"飄移 {_pct(d)} < 5%：有氧基礎穩{s}")
         if streak is not None and streak >= STREAK_NEED:

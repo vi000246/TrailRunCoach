@@ -388,27 +388,37 @@ class Status:
                          {"recent": r, "before": b, "change": chg, "n": len(pts)})
 
     def i_drift(self) -> Indicator:
-        pts = []
-        for w in self.since(56):
-            if not self.is_road(w) or (self.m(w, "duration") or 0) < 2400:
-                continue
-            d = self.m(w, "pahr")
-            if d is None:
-                continue
-            pts.append((math.floor(w.day), d))
-        spark = [[self._iso(d), round(v, 4)] for d, v in pts]
-        if len(pts) < 2:
-            return Indicator("drift", "心率飄移", NA, "–", "8 週內 > 40 分鐘的路跑不到 2 次", spark=spark, source=SRC_UA)
-        med = _median([v for _, v in pts])
+        # The same per-run drift the 單次活動 review card shows (workout_review:
+        # road, ≥ 40 min, avg HR ≤ AeT+3; hilly / stopped / unsteady runs refused),
+        # so the card's 「連續 N 次」 and this 「還差 N 次」 agree.
+        from backend.engine import workout_review as WR
+        st = WR.drift_streak(self.ds, self.today)
+        fair = [p for p in st["points"] if p["drift"] is not None]
+        spark = [[p["date"], round(p["drift"], 4)] for p in fair]
+        n, ok = st["streak"], st["streak_ok"]
+        left = max(0, WR.STREAK_NEED - n)
+        extra = {"streak": n, "streak_ok": ok, "runs": len(st["points"]), "fair": len(fair)}
+        go = "飄移已連續 3 次 < 5%，本週可以加一次閾值下間歇"
+        more = f"還差 {left} 次：輕鬆路跑（≥ 40 分鐘、平均心率 ≤ AeT+3、不停、不爬坡）飄移 < 5%，才加閾值下間歇"
+        if len(fair) < 2:
+            base = self.kind in (None, "base")
+            return Indicator("drift", "心率飄移", WATCH if base else NA, "–",
+                             f"8 週內可判讀的輕鬆路跑不到 2 次（{len(st['points'])} 次符合條件）",
+                             "只算路跑、≥ 40 分鐘、平均心率 ≤ AeT+3；有坡、有停頓、功率起伏大的不採用",
+                             more if base else "", SRC_UA, spark=spark, extra=extra)
+        med = _median([p["drift"] for p in fair])
         txt = _pct(med, 1)
-        why = f"8 週內 {len(pts)} 次 > 40 分鐘路跑，Pa:HR 中位數 {_pct(med, 1)}"
+        why = f"8 週內 {len(fair)} 次可判讀的輕鬆路跑，Pa:HR 中位數 {_pct(med, 1)}；最近連續 {n} 次 < 5%"
         if med < DRIFT_GOOD:
-            lvl, v, act = GOOD, "< 5%：有氧基礎穩", ""
+            lvl, v, act = GOOD, "< 5%：有氧基礎穩", go if ok else ""
+            if not ok and self.kind in (None, "base"):
+                lvl, v, act = WATCH, f"< 5%，但最近只連續 {n} 次", more
         elif med < DRIFT_WATCH:
-            lvl, v, act = WATCH, "5–10%：長跑後段心率往上跑", "長跑再放慢一點，或先做一次 AeT 測試校正"
+            lvl, v, act = WATCH, "5–10%：長跑後段心率往上跑", (go if ok else more) if self.kind in (None, "base") \
+                else "長跑再放慢一點，或先做一次 AeT 測試校正"
         else:
             lvl, v, act = BAD, "> 10%：有氧基礎不足或跑太快", "所有輕鬆跑壓在 AeT 以下；暫緩間歇（徐國峰：90 分鐘 E 跑飄移 < 10% 才練間歇）"
-        return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_UA, med, spark)
+        return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_UA, med, spark, extra)
 
     def i_climb(self) -> Indicator:
         pts = [(math.floor(w.day), self.m(w, "vam")) for w in self.between(182, 0)
@@ -554,7 +564,23 @@ class Status:
                 act = "賽前 10 天內不要測，賽後再測"
                 worst = WATCH
         v = "門檻是新的" if worst == GOOD else "門檻過期或沒測，區間和 TSS 都會跟著不準"
-        return Indicator("testing", "測試", worst, txt, v, why, act, SRC_NOTES)
+        # the latest 3'/12' CP test in the data (workout_review) vs the CP in effect
+        extra = {}
+        try:
+            from backend.engine import workout_review as WR
+            ct = WR.latest_cp_test(self.ds, self.today)
+        except Exception:
+            ct = None
+        if ct and ct.get("delta") is not None:
+            extra["cp_test"] = ct
+            applied = cp is not None and cp >= dt.date.fromisoformat(ct["date"])
+            if abs(ct["delta"]) > WR.CP_DELTA and not applied:
+                worst = WATCH if worst == GOOD else worst
+                txt = "要更新"
+                v = f"{ct['date']} 的 CP 測試 {ct['cp']:.0f} W，和目前 {ct['cp_now']:.0f} W 差 {ct['delta'] * 100:+.1f}%"
+                act = f"套用這次的 CP（{ct['cp']:.0f} W，到「賽事周期」頁的門檻測試填上）" + (f"；{act}" if act else "")
+            why += f"；最近一次 CP 測試 {ct['date']}：{ct['cp']:.0f} W（{ct['delta'] * 100:+.1f}%）"
+        return Indicator("testing", "測試", worst, txt, v, why, act, SRC_NOTES, extra=extra)
 
     def i_data(self) -> Indicator:
         ath = self.ds.athlete
