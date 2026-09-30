@@ -1,6 +1,6 @@
 # Module Spec: route-progress
 
-> Last Updated: 2026-09-30 · Status: implemented (feat/route-progress)
+> Last Updated: 2026-09-30 · Status: implemented (feat/route-progress, feat/routes-weather-hr)
 
 ## Overview
 
@@ -27,14 +27,23 @@ User request: 「同一條路線的進步追蹤能自動產出嗎，例如判斷
 The existing `algorithms/routes.py` (100 m cell Jaccard, used by the
 achievements page) is unchanged.
 
-### Storage (`~/.wko5coach/routes/`, root injectable via `RouteStore(root)`)
+### Storage (the `routes/` folder in the app's home data folder; root injectable via `RouteStore(root)` or the `WKO5COACH_ROUTES_DIR` environment variable)
 
 | File | Content |
 |---|---|
 | `tracks/<file>.json` | tier A: one compact track per activity |
 | `manifest.json` | `[size, mtime, ALGO_VERSION]` per workout file, and whether it has GPS |
-| `index.json` | tier B: segments, routes, pending references, efforts with metrics |
+| `index.json` | tier B: segments, routes, pending references, efforts with metrics and weather, the build's weather call counts |
 | `names.json` | renames, keyed by segment / route id |
+| `weather/<lat>_<lon>_<date>.json` | one Open-Meteo archive day per 0.25° cell, every effort point in it (see Weather) |
+
+`ALGO_VERSION` 3 (per-interval peaks) makes every tier-A stamp stale, so the
+first build after upgrading parses every file again; kept points, climbs and
+therefore segment ids are unchanged by it.
+
+A second server on the same machine (e.g. a worktree) must set
+`WKO5COACH_ROUTES_DIR`: two builds of different versions sharing one index
+would each find the other's version and rebuild it.
 
 ## Compact track (tier A)
 
@@ -54,6 +63,11 @@ speed):
   dt = t_k − t_(previous valid): moving seconds; Σhr·dt and Σdt over moving
   samples with HR; the same for power; Σtemperature·dt over all samples with
   temperature; Σ hrTSS rate·dt over all samples with HR.
+- **Per-interval peaks** (`interval_peaks`) at each kept point k, over raw
+  samples idx[k−1]+1 .. idx[k] (the slice the sums use): `mhr` max HR;
+  `mp30` max trailing 30 s power ending in the interval; and for an effort that
+  starts at k, `p30k` / `p30h` (where its first whole 30 s window can end, and
+  the max from there to that interval's end). Power only when the file has it.
 - **Moving** = speed > the sport's threshold (`wko5_time.MOVING_SPEED_KMH`,
   1 mph on foot) and the sample does not follow a gap > 60 s — the
   `achievements.moving_mask` rule.
@@ -157,7 +171,11 @@ matches `climbs._measure` on the same sample range (tested).
 | `hr_per_100m` | Σhr·dt ÷ 60 ÷ gain × 100 (climbs.py) |
 | `hr_vam`, `power_vam` | avg HR (W) ÷ VAM × 1000, up segments only |
 | `hrtss`, `hrtss_share` | WKO5 hrTSS (`wko5_hr.hr_tss`, verified 1030/1030 against WKO5) on the slice ÷ the same over the whole activity. LTHR is `Dataset.sport_setting("thr")` of the engine config in use — outside parity mode that is the plan's own test value (e.g. 155 vs WKO5's 160), so the totals differ from WKO5's stored hrTSS while the share uses one LTHR on both sides |
-| `temp_c` | watch temperature sensor, time-weighted |
+| `max_hr` | max HR over raw samples idx[i0]+1 .. idx[i1], all samples with HR (moving or not) = max of the kept points' `mhr` over i0+1 .. i1 — exact, not a sampled max |
+| `max_p30` | max 30 s power over windows lying wholly in the effort: for each end sample e the window starts after s = the latest sample with t ≤ t_e − 30 s, and counts when s ≥ idx[i0] and power covers ≥ 80 % of it; mean = Σp·dt ÷ Σdt over samples with power. = max(`p30h`[i0], `mp30`[p30k[i0]+1 .. i1]) |
+| `raw_i0`, `raw_i1` | the effort's first / last raw sample index (for independent checks) |
+| `temp_c` | watch temperature sensor, time-weighted — shown as 錶溫, secondary to `wx` |
+| `wx` | historical weather (next section), or null |
 | `phase` | plan phase on the effort's date (`planning.phases`), at serve time |
 | `overlap`, `frechet_m` | match quality |
 
@@ -169,10 +187,54 @@ moving time. Route efforts are whole activities: no VAM (a loop's net gain is
 
 - **Power TSS share** — power TSS uses NP (30 s rolling, 4th power), which is not
   additive over a slice; only hrTSS is.
-- **Historical weather** — only the watch's temperature sensor is used. The
-  Open-Meteo archive would mean one network call per activity during the build;
-  not shipped.
-- **Max HR per effort** — the compact track carries sums, not per-sample peaks.
+
+## Weather (`backend/engine/route_weather.py`)
+
+Air temperature, humidity and dew point for every effort from the Open-Meteo
+historical archive (`archive-api.open-meteo.com/v1/archive`, hourly
+`temperature_2m, relative_humidity_2m, dew_point_2m`, `timezone=auto`), shown
+with the attribution *Weather data by Open-Meteo.com (CC BY 4.0)*. It reuses
+`racepower/weather.py` (client `_http_get`, `OM_ARCHIVE`, `activities_conditions`,
+`ATTRIBUTION`) and `racepower/env.py` (`dew_point`, `heat_penalty_pct`)
+without changing them.
+
+- **Where / when**: the effort's point = the mean position of its kept points
+  to 0.01° (~1 km) and their mean elevation to 10 m, passed as `elevation` so
+  Open-Meteo downscales T and dew point to the effort's height (DEM height when
+  the file has no elevation); the window = activity start (local clock) +
+  t(i0) .. + t(i1).
+- **Batching**: efforts are grouped by (local day, 0.25° cell of the point).
+  Each group is one archive call for that single day carrying all of the
+  group's points (comma-separated coordinates and elevations; the API returns
+  one result per point; > 50 points split into more calls). Every day within
+  30 min of the window is needed (an effort near midnight takes two). The
+  cache holds one file per (cell, day) with its points; a full build makes one
+  call per (day, cell) not yet cached, a new point in a cached group one call
+  for the new points, a rebuild none.
+- **Why the effort's own point, not the cell centre**: the first version asked
+  for the cell centre and corrected T by −6.5 °C/km to the effort's elevation.
+  On 小油坑 → 七星山主峰 (997 m) that gave 24.3 °C where the archive at the
+  climb itself (downscaled to 970 m) says 21.7 °C — the cell centre's model
+  cell is the warm basin. Asking for each point in the same call costs no
+  extra calls.
+- **Values**: T and RH = the mean of the hourly rows within ±30 min of the
+  window (`activities_conditions`); dew point = Magnus of that T and RH
+  (`env.dew_point`, the input `heat_penalty_pct` uses). `archive_elev_m` is the
+  elevation the archive answered for.
+- **Heat**: 熱 = Hadley sum = T °F + dew point °F (`env.heat_penalty_pct`'s x);
+  `heat_pct` = its pace penalty; `hot` when the sum > 150 (≥ 4.5 % slower, Hadley's 151–160 band; > 130
+  flagged 75 % of the real efforts, Taiwan's ordinary summer evening). The
+  table flags hot efforts; the trend chart colours points by T (diverging blue
+  ↔ gray ↔ red around 18 °C, toggle 依氣溫上色, remembered) and rings hot ones.
+- **Degrading**: the index is saved before the weather phase, so a slow or
+  failed fetch never holds back the efforts. A failed call is not cached; after
+  5 consecutive failures the rest are skipped (counted); an empty day within 10
+  days of today (the archive lags) is not cached either. A later build with no
+  file changes retries what is missing. `idx.weather` = {needed, calls,
+  cache_hits, failed, skipped, empty, recent, efforts, with_weather, errors,
+  attribution}; the page shows the counts under the table.
+- `Builder(store, weather_get=None)` has no weather (tests); the API passes the
+  archive client unless `WKO5COACH_ROUTES_WEATHER=0`.
 
 ## Comparison (`GET /{id}/compare?a=&b=`)
 
@@ -229,7 +291,18 @@ in-order projection vs a reversed loop; metrics equal to `climbs._measure` and
 `wko5_hr.hr_tss`; descents; climb + descent clustering; endpoint jitter
 clustering; route direction; flat stretches; containment pruning; incremental
 == full with stable ids; incremental reference on the older track; the API
-compare gap and rename.
+compare gap and rename; max HR and max 30 s power equal a brute force over
+raw samples on 43 effort ranges (with a stop, a surge, a power dropout and an
+HR spike); per-effort weather and max HR served by the API equal the plain
+recomputation of `backend/scripts/verify_route_weather_hr.py` (direct archive
+query written out again, raw-sample max) with the network mocked, including an
+effort past midnight; one call per (day, cell) and none on a full rebuild from
+the cache; an offline build finishes, stops after the failure limit and a
+later no-change build fills the gaps; a new point in a cached day costs one
+call for that point only; the Hadley sum and hot flag; after a version bump
+the old index's ids are carried over (renames kept); detection gives the same
+result under three hash seeds (a guard only: the synthetic set does not show
+the old seed dependence, which was found and checked on the real tracks, below).
 
 Real-data verification (2026-09-30): per-effort metrics of 小油坑 → 七星山主峰
 (13 efforts) recomputed from raw samples by an independent plain-loop script
@@ -239,6 +312,28 @@ loop) ends with gap = the elapsed difference; 14 segments / routes drawn with ev
 effort's own path (≈ 720 efforts) showed no effort off the reference path; for
 5 climbs every activity passing within 60 m of the start and later the end was
 matched (0 missed).
+
+Real-data verification of weather and peaks (2026-09-30, v3, built into a
+separate `WKO5COACH_ROUTES_DIR`): the first build asked for 512 (day, cell)
+groups (1,141 effort points) in 512 archive calls (0 failed, ~6 min with the
+track parse) and gave weather to 1,654 / 1,654 efforts; a full rebuild after
+that made 0 calls (512 / 512 from the cache). For
+小油坑 → 七星山主峰 (13 efforts) `backend/scripts/verify_route_weather_hr.py`
+recomputed max HR from the raw `.wko4` samples: 13/13 equal; max 30 s power by
+brute force: 12/12 equal (the first run had 11/12 — a double rounding of the
+stored peaks, fixed); the 2026-08-22 effort's weather by a direct single-point
+archive query: T 21.7 °C, RH 91 %, dew 20.1 °C, Hadley 139, equal to the API;
+querying the unrounded raw-sample mean point instead gives the same T (Δ 0.00 °C).
+Monthly mean effort temperature runs 15.6 °C (Jan) to 27.9 °C (Jul / Aug); the
+watch sensor reads 1.8 °C above the archive on average (409 efforts with both).
+46 % of efforts are hot (Hadley > 150). Across the version bump 186 / 187 ids
+and the one rename survived.
+
+While checking, two full builds from identical tracks gave different stretches
+(1,473 vs 1,505 efforts): `detect` iterated sets of file names, whose order
+follows Python's per-process hash seed. The candidate loops are now sorted
+(by activity start, then file); two builds with different `PYTHONHASHSEED`
+are identical.
 
 ## Domain Model
 
@@ -272,3 +367,4 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-09-30 | feature | — | Initial: automatic segments / routes, effort metrics, 路線 page, viewer card |
+| 2026-09-30 | feature | — | Per-effort historical weather (Open-Meteo archive, batched per day × 0.25° cell, cached), Hadley heat flag, trend coloured by temperature; max HR and max 30 s power per effort (ALGO_VERSION 3); deterministic detection; ids carried over across a version bump; independent verification script |
