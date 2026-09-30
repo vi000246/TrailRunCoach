@@ -127,7 +127,7 @@ class CorosPlanPush(Base):
     __table_args__ = (UniqueConstraint("athlete_id", "session_key"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
-    session_key: Mapped[str] = mapped_column(String(80))        # "<week start>/<session id>"
+    session_key: Mapped[str] = mapped_column(String(80))        # the stored plan session's uid (plan_store.push_dict)
     week_start: Mapped[str] = mapped_column(String(10), index=True)
     session_id: Mapped[str] = mapped_column(String(40))
     day: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)   # ISO date on the calendar
