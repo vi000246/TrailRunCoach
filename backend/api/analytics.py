@@ -1,25 +1,28 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, true
+from sqlalchemy import select, func, and_
 from datetime import date, timedelta
 from typing import Optional
 
 from backend.db.database import get_db
 from backend.db.models import WorkoutFile, WorkoutMetric, AthleteSettings, PmcCache
+from backend.sync.dedup import canonical_clause
 from backend.engine.algorithms.metrics import compute_run_pmc, compute_intensity_load_series
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
 
 def _sport_clause(sports: Optional[list[str]]):
-    """Filter predicate for an optional list of sports.
+    """Filter predicate for an optional list of sports, restricted to
+    canonical rows (the same activity synced from a second source is skipped,
+    see backend/sync/dedup.py).
 
-    ``None`` (or empty) means "all sports" — returns a tautology so callers can
-    always ``.where(_sport_clause(sports))`` without branching.
+    ``None`` (or empty) means "all sports", so callers can always
+    ``.where(_sport_clause(sports))`` without branching.
     """
     if not sports:
-        return true()
-    return WorkoutFile.sport.in_(sports)
+        return canonical_clause()
+    return and_(canonical_clause(), WorkoutFile.sport.in_(sports))
 
 
 @router.get("/dashboard-summary")
@@ -233,6 +236,7 @@ async def trail_load(
                 WorkoutFile.athlete_id == athlete_id,
                 WorkoutMetric.metric_key == metric_key,
                 WorkoutFile.trail_classification == "trail",
+                canonical_clause(),
                 WorkoutFile.workout_date.isnot(None),
             )
         )
@@ -314,6 +318,7 @@ async def achievements(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
+            canonical_clause(),
         )
         .order_by(func.coalesce(load_subq, 0.0).desc())
         .limit(max(1, min(limit, 50)))
@@ -402,6 +407,7 @@ async def trail_summary(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.trail_classification == "trail",
             WorkoutFile.workout_date.isnot(None),
+            canonical_clause(),
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
         )

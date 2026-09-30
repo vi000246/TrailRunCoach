@@ -17,9 +17,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile, AthleteSettings
-from backend.files.file_service import _import_one_file
+from backend.files.file_service import _import_one_file, record_corrupt
+from backend.sync import http
+from backend.sync.http import as_utc
+from backend.settings.secrets import SecretError, seal, unseal
 
 log = logging.getLogger(__name__)
+
+FIRST_SYNC_DAY = "20200101"
+# re-list a few days before the last sync: activities uploaded late (watch
+# synced the next day) would otherwise fall behind the cursor
+CURSOR_OVERLAP_DAYS = 3
+PAGE_SIZE = 20
 
 COROS_BASES = {
     "eu": "https://teameuapi.coros.com",
@@ -70,10 +79,13 @@ def _headers(token: Optional[str] = None, user_id: Optional[str] = None) -> dict
 
 async def _detect_data_base(token: str, user_id: str) -> str:
     """After login, find which base URL accepts the token for activity queries."""
-    params = {"size": 1, "pageNumber": 1, "startDay": "20250101", "endDay": "20260101"}
+    today = datetime.now(timezone.utc).date()
+    params = {"size": 1, "pageNumber": 1,
+              "startDay": (today - timedelta(days=30)).strftime("%Y%m%d"),
+              "endDay": today.strftime("%Y%m%d")}
     for base in COROS_BASES.values():
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with http.client(timeout=10) as client:
                 resp = await client.get(
                     f"{base}/activity/query",
                     headers=_headers(token, user_id),
@@ -95,7 +107,7 @@ async def login(email: str, password: str, db: AsyncSession, athlete_id: int = 1
     last_error = None
     for region, base in COROS_BASES.items():
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with http.client(timeout=30) as client:
                 resp = await client.post(
                     f"{base}/account/login",
                     json=payload,
@@ -122,7 +134,7 @@ async def login(email: str, password: str, db: AsyncSession, athlete_id: int = 1
             if not state:
                 state = SyncState(athlete_id=athlete_id)
                 db.add(state)
-            state.coros_access_token = token
+            state.coros_access_token = seal(token)
             state.coros_token_expires = expires_at
             state.coros_email = email
             state.coros_base_url = data_base
@@ -178,22 +190,24 @@ async def _get_token_and_base(db: AsyncSession, athlete_id: int = 1) -> tuple[st
     state = res.scalar_one_or_none()
     if not state or not state.coros_access_token:
         raise ValueError("COROS_AUTH_REQUIRED: not logged in")
-    if state.coros_token_expires:
-        exp = state.coros_token_expires
-        if exp.tzinfo is None:
-            exp = exp.replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) >= exp:
-            raise ValueError("COROS_AUTH_REQUIRED: token expired, please login again")
+    exp = as_utc(state.coros_token_expires)
+    if exp and datetime.now(timezone.utc) >= exp:
+        # COROS tokens last 24 h and there is no refresh grant: log in again
+        raise ValueError("COROS_AUTH_REQUIRED: token expired, please login again")
     base = state.coros_base_url or COROS_BASES["us"]
     user_id = state.coros_user_id or ""
-    return state.coros_access_token, base, user_id
+    try:
+        token = unseal(state.coros_access_token)
+    except SecretError as e:
+        raise ValueError(f"COROS_AUTH_REQUIRED: {e}")
+    return token, base, user_id
 
 
 async def _list_page(
     token: str, base: str, user_id: str, start_day: str, end_day: str, page: int, size: int = 20
 ) -> list:
     params = {"size": size, "pageNumber": page, "startDay": start_day, "endDay": end_day}
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with http.client(timeout=30) as client:
         resp = await client.get(
             f"{base}/activity/query", headers=_headers(token, user_id), params=params
         )
@@ -210,7 +224,7 @@ async def _download_fit(token: str, base: str, user_id: str, activity: dict) -> 
     """Download FIT bytes: try fitUrl first, then POST /activity/detail/download."""
     fit_url = activity.get("fitUrl")
     if fit_url:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+        async with http.client(timeout=60, follow_redirects=True) as client:
             resp = await client.get(fit_url)
             if resp.status_code == 200 and resp.content:
                 return resp.content
@@ -219,7 +233,7 @@ async def _download_fit(token: str, base: str, user_id: str, activity: dict) -> 
     sport_type = activity.get("sportType", 0)
     # fileType=4 is FIT format per xballoy/coros-api
     params = {"labelId": label_id, "sportType": str(sport_type), "fileType": "4"}
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with http.client(timeout=30) as client:
         url_resp = await client.post(
             f"{base}/activity/detail/download",
             params=params,
@@ -233,7 +247,7 @@ async def _download_fit(token: str, base: str, user_id: str, activity: dict) -> 
     download_url = (url_data.get("data") or {}).get("fileUrl", "")
     if not download_url:
         raise ValueError("detail/download: no fileUrl in response")
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+    async with http.client(timeout=60, follow_redirects=True) as client:
         resp = await client.get(download_url)
     if resp.status_code != 200:
         raise ValueError(f"FIT download HTTP {resp.status_code}")
@@ -245,24 +259,47 @@ async def sync_workouts(
     athlete_id: int = 1,
     since: Optional[str] = None,
 ) -> AsyncIterator[dict]:
-    """List Coros activities → skip known → download .fit → import → yield SSE events."""
-    token, base, user_id = await _get_token_and_base(db, athlete_id)
+    """List Coros activities → skip known → download .fit → import → yield SSE events.
+
+    Incremental: without `since`, lists from the last clean sync minus
+    CURSOR_OVERLAP_DAYS (first sync: FIRST_SYNC_DAY). The cursor only moves
+    when the run had no download / import errors, so failures are retried."""
+    try:
+        token, base, user_id = await _get_token_and_base(db, athlete_id)
+    except ValueError as e:
+        yield {"status": "error", "error": "COROS_AUTH_REQUIRED", "detail": str(e),
+               "hint": "POST /api/v1/auth/coros/login with {email, password}"}
+        return
 
     ath_res = await db.execute(select(Athlete).where(Athlete.id == athlete_id))
     athlete = ath_res.scalar_one_or_none()
     athlete_name = athlete.name if athlete else "default"
 
-    since_day = (since or "20200101").replace("-", "")
+    state_res = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
+    state = state_res.scalar_one_or_none()
+    last = as_utc(state.coros_last_sync_at) if state else None
+    if since:
+        since_day = since.replace("-", "")
+    elif last:
+        since_day = (last.date() - timedelta(days=CURSOR_OVERLAP_DAYS)).strftime("%Y%m%d")
+    else:
+        since_day = FIRST_SYNC_DAY
     end_day = datetime.now().strftime("%Y%m%d")
+    sync_started = datetime.now(timezone.utc)
 
     yield {"status": "started", "since": since_day, "until": end_day}
 
     page = 1
     total_checked = 0
     total_downloaded = 0
+    errors: list[str] = []
 
     while True:
-        activities = await _list_page(token, base, user_id, since_day, end_day, page)
+        try:
+            activities = await _list_page(token, base, user_id, since_day, end_day, page, PAGE_SIZE)
+        except Exception as e:
+            yield {"status": "error", "error": "COROS_API_ERROR", "detail": str(e)}
+            return
         if not activities:
             break
 
@@ -290,6 +327,7 @@ async def sync_workouts(
                 fit_bytes = await _download_fit(token, base, user_id, act)
             except Exception as e:
                 log.warning("Coros FIT download failed %s: %s", label_id, e)
+                errors.append(f"{label_id}: {e}")
                 yield {"status": "error", "activity_id": label_id, "error": str(e)}
                 continue
 
@@ -310,15 +348,9 @@ async def sync_workouts(
                 if wf is None:
                     # FIT file is corrupt/unreadable — store a stub so we don't
                     # re-download it on the next sync (coros_activity_id dup check).
-                    stub = WorkoutFile(
-                        athlete_id=athlete_id,
-                        file_path=str(dest),
-                        file_format="corrupt",
-                        source="coros",
-                        coros_activity_id=label_id,
-                        workout_date=act_date,
-                    )
-                    db.add(stub)
+                    await db.rollback()
+                    await record_corrupt(db, athlete_id, dest, source="coros",
+                                         workout_date=act_date, coros_activity_id=label_id)
                     await db.commit()
                     log.warning("Corrupt FIT, stub recorded: %s", filename)
                     yield {"status": "error", "activity_id": label_id, "error": "corrupt_fit"}
@@ -332,17 +364,21 @@ async def sync_workouts(
                     "sport": sport_name,
                 }
             except Exception as e:
+                # nothing half-written survives; the cursor stays so it's retried
+                await db.rollback()
                 log.warning("Import failed for %s: %s", filename, e)
+                errors.append(f"{label_id}: import_failed: {e}")
                 yield {"status": "error", "activity_id": label_id, "error": f"import_failed: {e}"}
 
-        if len(activities) < 20:
+        if len(activities) < PAGE_SIZE:
             break
         page += 1
 
     state_res = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
     state = state_res.scalar_one_or_none()
-    if state:
-        state.coros_last_sync_at = datetime.now(timezone.utc)
+    if state and not errors:
+        state.coros_last_sync_at = sync_started
         await db.commit()
 
-    yield {"status": "complete", "total_downloaded": total_downloaded, "total_checked": total_checked}
+    yield {"status": "complete", "total_downloaded": total_downloaded,
+           "total_checked": total_checked, "errors": errors}
