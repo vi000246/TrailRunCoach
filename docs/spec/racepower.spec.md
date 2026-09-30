@@ -1,6 +1,6 @@
 # Module Spec: racepower
 
-> **Last Updated**: 2026-09-30
+> **Last Updated**: 2026-10-01
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -100,8 +100,10 @@ decisions on the workbook's ambiguities (D1–D10) are in
 - **Hiking EP/h**: per calendar day from `achievements.build_achievements`, the same rules as
   before, but only over hikes the user opted in as solo (`racepower_solo_hikes.json`,
   `GET/POST /solo-hikes`, `backend/engine/racepower/athlete.py:197`). 「百岳多為跟團，速度不代表個人能力，不列入目標時間推算」:
-  without solo days the 百岳 v1 time uses Tobler's EP/h on the course (`hike.tobler_eph`,
-  two-segment approximation, 推估). The group days are still listed, marked 跟團，不計.
+  without solo days the 百岳 v1 time uses the walking-capacity model's EP/h on the course
+  (`capacity.course_eph`, the same two-segment split as `hike.tobler_eph`, at the v1 reference
+  pack; 推估). Tobler's EP/h is only used when no capacity model can be fitted. The group days are
+  still listed, marked 跟團，不計.
 - **Intensity class** of every run (`backend/engine/racepower/athlete.py:413`) uses the thresholds
   as of that run's date (`thresholds_as_of`, `backend/engine/racepower/athlete.py:325`). LTHR /
   AeT come from a plan test dated on or before that day, else `thresholds.estimate` on the runs
@@ -274,10 +276,103 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
     `heat_profile` places each forecast hour at the km the plan reaches then, for the chart.
   - Forecast temperatures are used as given at the forecast point, not lapse-corrected per
     segment. 百岳 keeps one heat value: racepower-v2.md §8 limits Hadley to running segments.
-- **百岳** (`backend/engine/racepower/planner.py:549`): tᵢ = dᵢ/(λ_h·v_h·pack·Aᵢ·f_day/η); pack =
-  v1 linear factor; Pandolf (`backend/engine/racepower/hike.py:28`) is implemented for G ≥ 0 only
-  and not used for the times; multi-day fatigue F17 (`backend/engine/racepower/hike.py:66`) needs
-  ≥ 3 trips; clock ETA = moving ÷ the personal moving ratio + aid stops.
+- **百岳** (`planner.plan_hike`): the walking-capacity model below. The old HikeSpeed path
+  (tᵢ = dᵢ/(λ_h·v_h·pack·Aᵢ·f_day/η), `planner._plan_hike_v1`) only runs when no capacity model
+  can be fitted.
+
+### 百岳 walking capacity (`backend/engine/racepower/capacity.py`)
+
+Design: `docs/research/baiyue-from-running.md`. User decisions 2026-09-30: pack 9 kg on day 1
+(multi-day; single-day history keeps the doc's 6 kg), −0.7 kg/day food (自組, labelled), 3-day
+trips, 跟團 as the default trip kind, altitude width from the literature, solo detection as a
+suggestion.
+
+- **Windows** (caches v3: `racepower_v3_grade_hr_kt`, `racepower_v3_hike_hr_t`): every 100 m window
+  carries k, cumulative moving seconds t and the HR read 60 s later (`grade_model.windows(hr_lag_s)`,
+  自組). Trail walk windows: trail runs, running share < 0.5, grade ≥ 10 %, ≥ 3 consecutive, first
+  window dropped, 300 m centred grade, VAM ≤ 2000 m/h. 百岳 windows: `hikehr`'s HR ≥ AeT windows,
+  re-cut the same way. Pack per trip: `racepower_hike_meta.json` (`GET/POST /hike-meta`); none
+  recorded → 9 kg multi-day / 6 kg single-day (預設背負). Solo trips are no longer excluded.
+- **B1** Ė_AeT = W(1.5 + 3.6·v_run,AeT); v_run,AeT = median flat (|g| ≤ 2 %) road running windows
+  with HR within AeT ± 3 bpm (as-of AeT), 90 days; falls back to ± 5 bpm, then 365 days (自組).
+- **B2** v₀ = Pandolf⁻¹(Ė; W, L, 100g, η) by bisection; **B3** pack ratio Pandolf⁻¹(L)/Pandolf⁻¹(L₀)
+  uphill, (W+L₀)/(W+L) downhill (B3', 自組).
+- **B4** ln v = ln v₀ + δ(g) + α·Δz + γ·h: δ(g) = δ̄ + n/(n+30)·(bin mean − δ̄) — a personal level δ̄
+  over every window plus each 2 % bin's shrunk deviation (自組; shrinking bins straight to 0 pulled
+  the held-out trail segments +7.7 % slow). β (HR band) fitted at the run level inside grade-bin
+  cells, fixed at 0 unless |β/SE| ≥ 2. γ fitted on the trail windows (activity × bin cells), shrunk
+  to 0 with τ_γ 0.03/h. f_day = 1.0 (β unreliable), warned.
+- **B7 altitude**: α = the athlete's trip-fixed-effect slope (cluster-bootstrap SE by trip) shrunk
+  to Wehrlin −6.3 %/1000 m by precision weighting. τ = √(1.02² + 1.25²) = 1.61 points: Wehrlin's 8
+  athletes span 4.6–7.5 (range ÷ 2.847 = 1.02; the n = 8 range-to-SD step is ours) plus half the
+  Wehrlin–Coffman gap (VO2max vs fixed-HR speed, 1.25; 自組). A(z) = exp(b/100·max(0, z−300)/1000);
+  acclimatised × Bassett acclimatised ÷ unacclimatised (推估). Partial acclimatisation is treated as
+  unacclimatised, warned.
+- **Flat / descent** (§3.4): v_flat = min(median walked flat speed of trail runs × p(L), Pandolf⁻¹
+  at g); uphill never faster than flat; v_down = personal walked descent windows shrunk to
+  c_cap·Tobler, × (W+2)/(W+L) ÷ η, capped at c_cap·Tobler(g), c_cap = p75 of speed ÷ Tobler over
+  walked trail and hike windows ≤ −10 %.
+- **B8** per segment v = cap.v(g, L_day, η, z, h, n) × Hᵢ; Hᵢ = 1 − scale·Hadley(Tᵢ, RH)/100 with
+  Tᵢ = T₀ − 0.0065·(zᵢ − z₀) (`env.segment_temp`, `env.heat_term`); z₀ = `heat_ref_alt_m`, else the
+  race-day altitude, else the training altitude when no race-day temperature was given; scale =
+  1 − a·S. 能力上限 band = exp(p75 − mean of the residuals) (自組, ≤ 3 h).
+- **Group time** = EP ÷ past group days' EP/h (p25 / p50 / p75, ≥ 3 days); clock time uses the group
+  or solo moving ratio by trip kind; `summary.main` = group (跟團, default) or capacity.
+- **Band** (§3.8): σ² = σ_LOO² + σ_pack² + σ_alt² + σ_time² + σ_day² (time-weighted per component,
+  independence 自組); σ_LOO = the stored back-test's segment log-error SD; shares are shown.
+- **Solo suggestion** (`classify_day`, §2.6, 自組): own ≥ 60 %, limited ≤ 15 % (stops per km not
+  computed yet); applies only after ≥ 5 manually marked days per class with ≥ 80 % agreement
+  (`classifier_validation`); the 登山紀錄 table shows the suggestion and a confirm button.
+- **Gate** `validated["hike_capacity"]` (`backtest.capacity_backtest`, `store_capacity`; script
+  `python -m backend.scripts.baiyue_capacity_backtest`): A (trail walk segments ≥ 300 m,
+  leave-one-activity-out) and B (百岳 segments, leave-one-trip-out) each need median |time err|
+  ≤ 10 %, |bias| ≤ 5 %, n ≥ 30 segments and ≥ 10 activities / ≥ 5 trips.
+
+Result 2026-10-01 (isolated copy of the data):
+
+| Test | n | median \|err\| | bias | p10…p90 | pass |
+|---|---|---|---|---|---|
+| A trail walk, LOO activity | 50 segments / 30 activities | 7.5 % | −3.9 % | −11.8…+22.5 % | yes |
+| B 百岳 HR, LOO trip | 16 segments / 8 trips | 16.4 % | +4.7 % | −13.3…+50.1 % | no (n, error) |
+| B-high z ≥ 2500 m | 4 / 1 trip | 18.9 % | +18.9 % | −5.6…+22.8 % | no (bias) |
+| B-high: personal α −11.0 / shrunk / Wehrlin | 4 | 38.8 / 18.9 / 19.0 % | | | shrunk not worst |
+| C prior order (A + B) | 66 | full 7.7 % ≤ prior 21.9 % ≤ Tobler 51.1 % | | | yes |
+| D whole group days: capacity ÷ actual moving | 16 days | 56 % in 0.60–1.00 | | | no (< 80 %) |
+
+`hike_capacity` is not validated: every 百岳 capacity time is 推估. Diagnostics (§2.4): 88 百岳
+windows after re-cutting (157 before), 10 trips, elevation p10 / p50 / p90 223 / 775 / 3356 m, 28
+windows ≥ 2500 m from 2 trips. Altitude slope: grade × HR cells −11.0 %/1000 m (SE 8.9); trip fixed
+effects +31.8 (SE 124); day 1 only +146 (SE 147); first 2 h +54 (SE 117) — no within-trip
+leverage, so α_post = −6.29 (personal weight 0.02 %). β = 0.0004 ± 0.0008 per bpm → 0. γ = +0.011
+± 0.081 /h → +0.001. v_run,AeT 2.03 m/s (227 windows, AeT 142) → Ė 8.8 W/kg; level δ̄ +26.5 %;
+c_cap 1.35; σ_LOO 0.18. D: the model is slower than the group on short steep days and steep
+segments (≥ +15 %: capacity 2.7 vs actual 4.1 km/h), so group-day times sit near or below it.
+
+### Heat acclimation (`backend/engine/heat.py`, `heat_data.py`)
+
+Design: `docs/research/heat-acclimation.md`.
+- Per-activity exposure: `route_weather.fill_activities` (Open-Meteo archive at each GPS activity's
+  mean point, same batching and cache as the efforts; `activity_weather.json` next to the route
+  index; the app's routes builder runs it). hot_min = moving minutes per archive hour × weight
+  (Hadley ≥ 150 → 1, 130–150 linear, 自組).
+- S: dose = min(1, hot_min/60) (+1 for a ticked heat_passive session); S += 0.214·dose·(1 − S),
+  else × (1 − 0.025) (Pandolf 1998 calibration, Daanen 2018); projection with three sets (a 1.0 /
+  2.3 %, 0.75 / 2.5 %, 0.35 / "1 day lost per 2 days off"). Levels 0.75 / 0.35 (自組).
+- M: `env.multiplier` / `segment_factors(heat_s=(S_from, S_to), a)` scale each side's Hadley
+  penalty by (1 − a·S); S_from = mean S over the 90-day training window; None = v1 bit for bit.
+- Calculator: `#heat-accl` (自動 / 未適應 / 部分 0.5 / 已適應 0.9 / 自訂), `heat_acclimatisation` in
+  /plan, `GET /heat-status?date=`; road / trail show 熱影響 raw → after, the range and the
+  finish-time range; segments carry `heat_eff_pct`. 百岳 applies H per segment via the lapse rate.
+- HRC (`heat.hr_cost`, `heat_data.steady_segments`) is an observation only.
+
+Heat back-test (`python -m backend.scripts.heat_backtest`, route efforts with weather, isolated
+copy, 2026-10-01): 271 running route efforts ≥ 20 min with power; 611 activities with exposure.
+HR ~ route FE + power + moving min + time of day + β·(Hadley − 120): β = 0.224 ± 0.036 bpm per
+Hadley unit. By season: early summer (May–Jun) 0.149 ± 0.054, late summer (Aug–Sep) 0.260 ±
+0.045, so late − early = +0.111 ± 0.070 (the wrong sign for acclimation); summer 0.219 ± 0.039 vs
+winter 0.304 ± 0.126 (−0.085 ± 0.132, not significant). β·(1 − a_hr·S): best a_hr = 0 (ΔAIC 0).
+The athlete's data do not support the acclimation effect; S, H_eff and the heat sessions stay 推估
+(mean S: winter 0.24, late summer 0.87).
 
 ### Modes and the validation gate (`backend/engine/racepower/planner.py:258`)
 
@@ -574,4 +669,5 @@ when set, but nothing fills it from the routes module yet.
 | 2026-09-30 | code-sync | N/A | Created from brownfield analysis — SuperPower Calculator port on the athlete's data, trail and 百岳 extensions, CWA / Open-Meteo race-day weather; D2 altitude normalisation added and the CVI cross-check source clarified during sync |
 | 2026-09-30 | feature | docs/research/racepower-v2.md | v2: three modes, five-level effort bar (80/90/97/100), pacing strategies, GPX / manual courses with per-segment allocation and profile, per-segment altitude with acclimatisation switch (百岳 default unacclimatised, partial = 推估), hill elasticity +5/−10 %, aid stops in the ETA, 「看 30 秒平均功率」, COROS export (mocked push), leave-one-out back-test + 準確度 tab gating the 推估 labels (nothing validated yet); §3C applied: Skiba τ labelled, Pandolf uphill only, altitude polynomial not attributed to Bassett, Stryd percentages are of 10 km power |
 | 2026-09-30 | feature | user feedback + capacity review + docs/research/cp-test-protocols.md | Back-test v2: HR / power intensity classes (Seiler / Friel / Palladino constants, own-date thresholds); two back-tests (比賽預測 capacity on race-like + CP-test bouts with the lower-bound test on every run; 地形模型 by class × grade bin, trail running vs walking-heavy); group hikes out of every target-time calibration (solo opt-in list, Tobler EP/h fallback, equivalence 登山 → EP 推估), HR-filtered steep hike windows kept for VAM / altitude factor / fatigue / walking bins; capacity: PD-model refit (incl. synced FIT) as the mFTP/TTE anchor + CP-test pair for F2, CP lower bound (k-consistent in /predict), detected CP tests as suggestions (non-maximal bout → single bout with Ruiz-Alias W′ prior), `workout_review.cp_test` non-overlapping windows; k only from race-like priors at the case distance; road RE CVI-adjusted over the year; gait-aware RE(g) + trail technicality; effort band from the CP spread; HR-first note on steep trail courses |
+| 2026-10-01 | feature | docs/research/baiyue-from-running.md, docs/research/heat-acclimation.md | 百岳 walking capacity (capacity.py B1–B8, window caches v3, pack per trip, group vs capacity time, band, solo suggestion, `validated["hike_capacity"]` back-test — not passed) replaces the Tobler fallback; heat acclimation S, H_eff on both sides of M, `#heat-accl`, per-activity exposure, heat back-test (does not support acclimation), Event.heat, /heat-status, /hike-meta |
 | 2026-09-30 | feature | user request | CSV export (`POST /export/csv`, `csvplan.py`, UTF-8 BOM, header block + one row per segment, 「匯出 CSV」 button); per-segment, time-of-day heat (road / trail): /weather returns hourly rows, the plan maps each segment's ETA to the forecast hour and applies Hadley there (自組, 推估), iterating to max |Δ cumulative time| < 1 s; falls back to the single value with a warning; °C axis on the profile, 熱 column in the table |

@@ -48,7 +48,9 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 
 /* kind + phase palettes */
 .k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); }
-.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); }
+.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); }
+.heat-tag { display: inline-block; margin-right: 3px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px;
+  background: color-mix(in srgb, var(--hi) 25%, transparent); color: var(--hi); font-weight: 700; }
 .ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); }
 .ph-event { --ph: var(--hi); } .ph-recovery { --ph: var(--s3); } .ph-transition { --ph: var(--s7); } .ph-none { --ph: var(--line); }
 
@@ -506,6 +508,14 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="standard"><span><b>標準：12 分＋休 30 分＋3 分</b><span class="meta">約 70 分；兩點 CP＋W′，最準，休息不能縮短</span></span></label>
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="race"><span><b>用比賽：5–10 K 比賽或計時跑</b><span class="meta">不另外排；Riegel 換算（外插），不測 W′</span></span></label>
     </fieldset>
+    <fieldset class="pf-sec" id="pf-heat"><legend>熱適應 <span class="badge watch">推估</span></legend>
+      <div class="pf-row"><span class="lbl">熱適應課</span><label class="rb"><input type="radio" name="heat" value="auto">自動（只在 30 天內有熱天 A / B 賽時）</label><label class="rb"><input type="radio" name="heat" value="off">不排</label></div>
+      <div class="pf-row"><label class="il"><span>方式</span><select name="heat_method">
+        <option value="run">熱天輕鬆跑（60 分、心率 ≤ AeT）</option><option value="overdress">多穿衣服跑（涼爽天）</option>
+        <option value="bath">跑後熱水浴 40 °C ≤ 40 分</option><option value="sauna">跑後桑拿約 30 分</option><option value="mixed">跑步與熱水浴輪流</option></select></label></div>
+      <div class="meta" id="pf-heat-s"></div>
+      <div class="meta">比賽前 21–8 天誘導（5–10 天）、前 7–3 天每 4 天維持一次；熱適應跑需要 ≥ 60 分鐘（Racinais 2015），不受單次上限；上限設「絕對不超過」時改成跑 40 分＋熱水浴（Zurawlew 2016）。熱水浴 / 桑拿不推到 COROS，做完請在課表打勾。</div>
+    </fieldset>
     <div class="pf-sum" id="pf-sum" aria-live="polite"></div>
     <div class="err" id="pf-err" role="alert"></div>
     <div class="btns">
@@ -595,8 +605,10 @@ async function sj(method, url, body) {
   return b;
 }
 
-const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
-const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "健行／登山", strength: "肌力" };
+const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength", "heat_passive"];
+const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "健行／登山", strength: "肌力", heat_passive: "被動熱適應" };
+// 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
+const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
 const SYNC = { pushed: ["ok", "已推送到 COROS"], updated: ["ok", "已推送到 COROS"], outdated: ["warn", "需更新：課表改過，再同步一次會更新 COROS"],
   failed: ["bad", "推送失敗"], not_pushed: ["none", "未推送"] };
 const SY_SVG = {
@@ -648,7 +660,7 @@ function chipHtml(s, big) {
   const lbl = `${KINDS[s.kind] || ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + (SYNC[c.status] || [])[1] : ""}`;
   return `<button type="button" class="chip k-${esc(s.kind)} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
       ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
-    <span class="c-t">${esc(s.title)}</span><span class="c-r">${icon}</span>
+    <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${icon}</span>
     <span class="c-m">${meta}</span>
     ${line ? `<span class="c-x">${line}</span>` : ""}${big && s.detail && s.state !== "done" ? `<span class="c-d">${esc(s.detail)}</span>` : ""}</button>`;
 }
@@ -1194,7 +1206,7 @@ function openDlg(s, day) {
   $("sd-save").hidden = !!ro;
   $("sd-cancel").textContent = ro ? "關閉" : "取消";
   const del = $("sd-del"); del.hidden = !s || ro; del.classList.remove("armed"); del.textContent = "刪除";
-  $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength";
+  $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
   dlg.titleTouched = false;
   eqInit(s);
   tgtHint();
@@ -1332,7 +1344,16 @@ function pfFill(p) {
   (PFF.querySelector(`input[name="cp_test_protocol"][value="${p.cp_test_protocol || "quick"}"]`) || {}).checked = true;
   gateRender(p.quality_gate || "auto");
   PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
+  (PFF.querySelector(`input[name="heat"][value="${p.heat || "auto"}"]`) || {}).checked = true;
+  PFF.elements.heat_method.value = p.heat_method || "run";
+  pfHeatLine();
   pfSync();
+}
+async function pfHeatLine() {                 // current S and race-day S (racepower /heat-status)
+  try {
+    const h = await sj("GET", `/api/v1/racepower/heat-status`);
+    $("pf-heat-s").textContent = `目前熱適應 S ${Math.round(h.s * 100)} %（${h.level?.label || ""}）· ${h.source || ""}${h.warning ? " · " + h.warning : ""}`;
+  } catch { $("pf-heat-s").textContent = ""; }
 }
 function pfRead() {
   const E = PFF.elements;
@@ -1343,7 +1364,8 @@ function pfRead() {
     weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
     terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
     interval_target: radioVal("interval_target"), cp_test_protocol: radioVal("cp_test_protocol") || "quick",
-    quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8 };
+    quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
+    heat: radioVal("heat") || "auto", heat_method: E.heat_method.value || "run" };
 }
 function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
   const n = p.days.filter(Boolean).length;
@@ -1373,6 +1395,8 @@ function pfSync() {
   if (p.weekly_hours) parts.push(`每週最多 <b>${p.weekly_hours}</b> 小時`);
   if (p.quality_gate !== "auto") parts.push(`間歇門檻：<b>${esc((PF_GATE[p.quality_gate] || {}).label || p.quality_gate)}</b>` +
     (p.quality_gate === "weeks" ? `（基礎期滿 ${p.quality_gate_weeks} 週）` : ""));
+  if (p.heat === "off") parts.push("不排熱適應課");
+  else if (p.heat_method !== "run") parts.push(`熱適應方式：<b>${esc(PFF.elements.heat_method.selectedOptions[0]?.textContent || p.heat_method)}</b>`);
   $("pf-sum").innerHTML = parts.join("；");
   $("pf-err").textContent = pfError(p);
 }
