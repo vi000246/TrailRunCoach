@@ -13,7 +13,9 @@ drift_of
     runs where the number means nothing: hilly (≥ 20 m climbed per km, or a
     trail run), stopped (> 5 % of the time standing), too short (< 40 min),
     unsteady (30-s power CV > 15 %, steady_drift's rule) or too hard
-    (> 90 % CP, steady_drift's rule).
+    (> 90 % CP, steady_drift's rule). Pw:HR (power / HR) comes out of the
+    same call, with the same rules and halves; the aerobic card shows the
+    basis the viewer's 配速／功率 toggle picked.
 detect_efforts
     Work bouts in the power stream (30-s power over max(0.85 CP, 1.12 ×
     the session median)), with duration, power, %CP, HR and the HR drop in
@@ -49,13 +51,13 @@ import numpy as np
 from backend.engine.algorithms.classify import TRAIL_CLIMB_RATE_M_PER_KM
 from backend.engine.algorithms.climbs import detect_climbs
 from backend.engine.algorithms.threshold_estimate import (
-    AET_MAX_OF_CP, AET_MAX_POWER_CV, WARMUP_S, steady_drift,
+    AET_MAX_OF_CP, AET_MAX_POWER_CV, WARMUP_S,
 )
 from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 
 # cached_series keys on the file and the thresholds, not on this code: bump the
 # version whenever _measure's output changes
-CACHE_KEY = "workout_review_v5"      # v5: cp_test windows never overlap; single-bout fallback
+CACHE_KEY = "workout_review_v6"      # v6: Pw:HR on drift_of's own halves (pw_drift / pw_ok / p1 / p2)
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -221,13 +223,36 @@ def _best_window(p: np.ndarray, n: int) -> tuple[Optional[float], Optional[int]]
 # pure analyses (arrays in, numbers out) — unit-tested on synthetic data
 # ---------------------------------------------------------------------------
 
+def _halves_drift(h: np.ndarray, x: np.ndarray, d: np.ndarray, m: np.ndarray) -> Optional[tuple]:
+    """(drift, hr1, hr2, x1, x2) with r = x / HR over the two halves of the
+    time in mask `m`; None when < 600 s usable or a half is empty."""
+    m = m & np.isfinite(h) & (h > 0) & np.isfinite(x) & (x > 0)
+    if d[m].sum() < 600:
+        return None
+    cum = np.cumsum(np.where(m, d, 0.0))
+    half = cum[-1] / 2.0
+    a, b = m & (cum <= half), m & (cum > half)
+    h1, h2 = _wmean(h, d, a), _wmean(h, d, b)
+    x1, x2 = _wmean(x, d, a), _wmean(x, d, b)
+    if not all((h1, h2, x1, x2)):
+        return None
+    r1, r2 = x1 / h1, x2 / h2
+    return float((r1 - r2) / r1), h1, h2, x1, x2
+
+
 def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
              climb_m_per_km: Optional[float] = None, trail: bool = False) -> dict:
     """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
     moving time after a 10-minute warm-up). Positive = HR drifted up for the
-    same pace. `ok` False (with `reason`) when the run is not a fair test."""
+    same pace. `ok` False (with `reason`) when the run is not a fair test.
+
+    Pw:HR is the same measurement with power in place of speed — same
+    fairness rules, same warm-up, same moving-time halves (`pw_drift`, `p1`,
+    `p2`, `pw_hr1`, `pw_hr2`; `pw_reason` 「這次沒有功率」 without a power
+    channel)."""
     out = {"drift": None, "ok": False, "reason": "", "hr1": None, "hr2": None,
-           "v1": None, "v2": None, "pw_drift": None}
+           "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_reason": "",
+           "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None}
     if hr is None or speed is None or not _has(hr) or not _has(speed):
         out["reason"] = "沒有心率或速度"
         return out
@@ -250,7 +275,8 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     if span > 0 and stopped / span > MAX_STOPPED_SHARE:
         out["reason"] = f"中途停了 {_hms(stopped)}（> 5%），飄移數字不採用"
         return out
-    if power is not None and _has(power):
+    has_power = power is not None and _has(power)
+    if has_power:
         _, p1 = _grid1(t, power)
         if p1 is not None:
             p = p1[WARMUP_S:]
@@ -263,23 +289,30 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
                 if cp and p.mean() > AET_MAX_OF_CP * cp:
                     out["reason"] = f"強度 {p.mean() / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
                     return out
-        dp = steady_drift(list(t), list(h), list(_arr(power, n)), cp)
-        out["pw_drift"] = None if dp is None else dp.drift
-    m = after & mov & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
-    if d[m].sum() < 600:
+    r = _halves_drift(h, s, d, after & mov)
+    if r is None:
         out["reason"] = "有效資料不夠"
         return out
-    cum = np.cumsum(np.where(m, d, 0.0))
-    half = cum[-1] / 2.0
-    a, b = m & (cum <= half), m & (cum > half)
-    h1, h2 = _wmean(h, d, a), _wmean(h, d, b)
-    v1, v2 = _wmean(s, d, a), _wmean(s, d, b)
-    if not all((h1, h2, v1, v2)):
-        out["reason"] = "有效資料不夠"
+    out.update(drift=r[0], ok=True, hr1=r[1], hr2=r[2], v1=r[3], v2=r[4])
+    if not has_power:
+        out["pw_reason"] = "這次沒有功率"
         return out
-    r1, r2 = v1 / h1, v2 / h2
-    out.update(drift=float((r1 - r2) / r1), ok=True, hr1=h1, hr2=h2, v1=v1, v2=v2)
+    rp = _halves_drift(h, _arr(power, n), d, after & mov)
+    if rp is None:
+        out["pw_reason"] = "功率資料不夠"
+        return out
+    out.update(pw_drift=rp[0], pw_ok=True, pw_hr1=rp[1], pw_hr2=rp[2], p1=rp[3], p2=rp[4])
     return out
+
+
+def basis_drift(dr: dict, basis: str = "pace") -> tuple[Optional[float], str]:
+    """(drift, reason) of a drift_of result for the chosen basis; drift None
+    when refused (the run was unfair, or there is no power in power mode)."""
+    if not dr.get("ok"):
+        return None, dr.get("reason") or "飄移數字不採用"
+    if basis == "power":
+        return (dr["pw_drift"], "") if dr.get("pw_ok") else (None, dr.get("pw_reason") or "這次沒有功率")
+    return dr["drift"], ""
 
 
 def band_of(pct_cp: Optional[float]) -> Optional[tuple[str, float, float]]:
@@ -907,26 +940,42 @@ def latest_cp_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
 # verdicts
 # ---------------------------------------------------------------------------
 
-def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None) -> list[str]:
+def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = "pace") -> list[str]:
+    """Verdict lines for the drift on the chosen basis. The streak (and the
+    interval it unlocks) is counted on Pa:HR only (drift_streak), so power
+    mode never mentions it."""
     lines = []
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0 and over / tot > OVER_AET_SHARE and typ in ("easy", "long"):
         lines.append(f"心率超過 AeT+3 的時間佔 {over / tot * 100:.0f}%（> 10%）：下次放慢")
     dr = m.get("drift") or {}
-    if not dr.get("ok"):
-        if m.get("category") in ("road", "trail"):
-            lines.append(dr.get("reason") or "飄移數字不採用")
+    d, why = basis_drift(dr, basis)
+    if d is None:
+        # a fair run without power: the card's Pw:HR row already says 這次沒有功率
+        if m.get("category") in ("road", "trail") and not (basis == "power" and dr.get("ok")):
+            lines.append(why)
         return lines[:3]
-    d = dr["drift"]
+    power = basis == "power"
+    name = "Pw:HR 飄移" if power else "飄移"
+    hr1 = dr["pw_hr1"] if power else dr["hr1"]
     if typ == "test_aet":
         if d < DRIFT_GOOD:
-            lines.append(f"飄移 {_pct(d)} < 5%：前半段心率 {dr['hr1']:.0f} bpm 可以設成 AeT")
+            lines.append(f"{name} {_pct(d)} < 5%：前半段心率 {hr1:.0f} bpm 可以設成 AeT")
         else:
-            lines.append(f"飄移 {_pct(d)} ≥ 5%：AeT 低於前半段心率 {dr['hr1']:.0f} bpm，下次放慢 5 bpm 再測")
+            lines.append(f"{name} {_pct(d)} ≥ 5%：AeT 低於前半段心率 {hr1:.0f} bpm，下次放慢 5 bpm 再測")
         return lines[:3]
+    if power:
+        streak = None
     aet, hr = m.get("aet"), m.get("avg_hr")
     if d < DRIFT_GOOD and aet and hr and hr > aet + AET_MARGIN:
-        lines.append(f"飄移 {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3，不算進連續次數")
+        lines.append(f"{name} {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3"
+                     + ("" if power else "，不算進連續次數"))
+    elif power and d < DRIFT_GOOD:
+        lines.append(f"{name} {_pct(d)} < 5%：有氧基礎穩（連續次數看配速 Pa:HR）")
+    elif power and d < DRIFT_WATCH:
+        lines.append(f"{name} {_pct(d)}（5–10%）：暫時不加間歇")
+    elif power:
+        lines.append(f"{name} {_pct(d)} > 10%：有氧基礎不足")
     elif d < DRIFT_GOOD:
         s = f"（連續 {streak} 次）" if streak else ""
         lines.append(f"飄移 {_pct(d)} < 5%：有氧基礎穩{s}")
@@ -999,12 +1048,13 @@ def _base_text(b: dict, fmt: Callable[[float], str]) -> str:
     return f"中位 {fmt(b['median'])}（IQR {fmt(b['q1'])}～{fmt(b['q3'])}，{b['n']} 次／{b.get('weeks')} 週）"
 
 
-def review(ds, w, section: str = "summary") -> dict:
-    """The card JSON for one section of views/workout.json."""
+def review(ds, w, section: str = "summary", basis: str = "pace") -> dict:
+    """The card JSON for one section of views/workout.json. `basis` (pace /
+    power, the chart's 配速／功率 toggle) only changes the aerobic card."""
     m = measure(ds, w)
     _flush(ds)
     base = {"kind": "review", "section": section, "workout": w.idx, "axes": [], "series": [],
-            "empty": None, "description": None}
+            "empty": None, "description": None, "basis": basis if basis == "power" else "pace"}
     if not m:
         return {**base, "empty": "這筆活動沒有逐秒資料"}
     c = classify(ds, w, m)
@@ -1058,24 +1108,32 @@ def _summary(ds, w, m, c, base):
 
 def _aerobic(ds, w, m, c, base):
     dr = m.get("drift") or {}
+    basis = base.get("basis") or "pace"
+    power = basis == "power"
+    d, why = basis_drift(dr, basis)
     rows = []
-    if dr.get("ok"):
-        rows += [_row("Pa:HR 飄移", f"{_pct(dr['drift'])}（前 10 分鐘不算）"),
+    if d is not None and power:
+        rows += [_row("Pw:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）"),
+                 _row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
+                 _row("前半／後半功率", f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
+    elif d is not None:
+        rows += [_row("Pa:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）"),
                  _row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
                  _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
-        if dr.get("pw_drift") is not None:
-            rows.append(_row("Pw:HR 飄移", _pct(dr["pw_drift"])))
+    elif power and (dr.get("ok") or m.get("avg_power") is None):
+        # nothing to show on this basis (no power, or too little): say so, not 0 %
+        rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0:
         rows.append(_row("超過 AeT+3", f"{_hms(over)}（{over / tot * 100:.0f}%）"))
-    if c["type"] in ("easy", "long", "test_aet") and dr.get("ok"):
-        b = baseline_for(ds, w, lambda pm: (pm.get("drift") or {}).get("drift")
-                         if (pm.get("drift") or {}).get("ok") else None)
+    if c["type"] in ("easy", "long", "test_aet") and d is not None:
+        b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis)[0])
         rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x))))
     if c["type"] not in ("easy", "long", "test_aet"):
         lines = [f"這次是{c['type_label']}，飄移只在輕鬆跑、長跑、AeT 測試判讀"]
     else:
-        lines = aerobic_lines(c["type"], m, _streak_for(ds, w) if c["type"] != "test_aet" else None)
+        streak = _streak_for(ds, w) if c["type"] != "test_aet" and not power else None
+        lines = aerobic_lines(c["type"], m, streak, basis)
     return {**base, "series": rows + _verdict_rows(lines)}
 
 

@@ -54,6 +54,8 @@ SERIES_DEFAULTS = {
     "label_position": None,
     # "recent_gain": computed for the chart's note (recentbests.py), not drawn
     "role": None,
+    # "pace" / "power": drawn only in that mode of the chart's basis toggle (basis.py)
+    "basis": None,
 }
 
 
@@ -105,6 +107,21 @@ def _chart(raw: dict, where: str) -> dict:
         if default not in choices or any(c < 1 for c in choices):
             raise CustomViewError(f"{where}/{raw['title']}: window default must be one of its choices")
         out["window"] = {"default": default, "choices": choices}
+    if raw.get("basis") is not None:
+        # 配速／功率 (basis.py): {"default": "pace", "choices": ["pace", "power"]};
+        # series tagged "basis": "pace" / "power" are drawn only in that mode
+        from backend.engine.wko5expr.basis import BASES
+        bs = raw["basis"]
+        choices = bs.get("choices") if isinstance(bs, dict) else None
+        if not isinstance(choices, list) or not choices or any(c not in BASES for c in choices) \
+                or bs.get("default") not in choices:
+            raise CustomViewError(f"{where}/{raw['title']}: basis needs a default and choices from {list(BASES)}")
+        out["basis"] = {"default": bs["default"], "choices": list(choices)}
+        if bs.get("power_note"):
+            out["basis"]["power_note"] = str(bs["power_note"])
+    for s in out["series"]:
+        if s["basis"] is not None and s["basis"] not in out.get("basis", {}).get("choices", ()):
+            raise CustomViewError(f"{where}/{raw['title']}/{s['name']}: series basis needs a chart basis that lists it")
     if kind == "review":
         # a single-activity 判讀卡 (backend/engine/workout_review.py):
         # {"kind": "review", "section": "summary"}
