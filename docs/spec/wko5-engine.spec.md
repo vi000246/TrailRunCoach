@@ -330,6 +330,7 @@ Not in WKO5; grounded in `docs/research/`.
 | `minetti.py` | Energy cost of running/walking by gradient; grade-adjusted speed with a downhill floor | Minetti et al. 2002, R² 0.999, ±45% |
 | `effort.py` | Equivalent flat distance by integrating Minetti over the elevation stream | Same |
 | `trail.py` `compute_hr_drift` | Aerobic decoupling Pa:HR | TrainingPeaks / Uphill Athlete convention |
+| `chart_metrics.py` | Reference implementations of the competitor-derived charts in `views/training.json` / `views/workout.json`: Form% zones, ATL/CTL ratio, Foster monotony/strain, Treff PI, コース定数, ITRA km-effort/category, up/downhill m/h, downhill impact load (own composite; `DOWNHILL_EXPR` is shared with the 總覽 `descent` card) | Friel; Gabbett 2016 via Runalyze; Foster 1998; Treff 2019; 山本正嘉; ITRA; Gottschall & Kram 2005 + Keller 1996 — sources, formulas and check results in `docs/research/competitor-charts.md` §7, tested in `test_chart_metrics.py` |
 
 WKO5's ACSM grade factor `(0.19v + 0.9vg)/0.19` under-counts steep running
 against Minetti by 22% at +20% grade, 31% at +30%, and goes negative below
@@ -419,3 +420,4 @@ concurrency cap.
 |------|--------|-----|--------|
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |
 | 2026-09-30 | code-sync | N/A | Period toggle (periods.py, `period` / `min_days`), render cache, viewer (flat custom tabs, &chart= deep link, enlarge overlay, 數值與公式 table removed, Leaflet route map with basemaps / overlays / tile-error hint, samples endpoint and synced hover), regrouped custom views, refreshed API table |
+| 2026-09-30 | feat/competitor-charts | N/A | `chart_metrics.py` reference implementations + charts (Form% bands, ATL/CTL, monotony/strain, PI, downhill impact load and 7:28 ratio, up/downhill m/h, コース定数 / ITRA); 總覽 `descent` indicator |
