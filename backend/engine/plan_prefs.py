@@ -1,0 +1,470 @@
+"""
+課表偏好 — the athlete's training-plan preferences, applied to the generated
+week (overview.week_plan) and the projected weeks (projection.project_weeks).
+
+Stored as user_settings keys `plan.prefs.*` (settings/repository.py DEFAULTS
+and validation). Every default reproduces the planner's own behaviour:
+`Prefs()` is inactive and the callers keep their original code path, so an
+athlete who never opens the panel gets exactly today's plan.
+
+Order of application (both callers):
+
+  1. The volume target is computed as before (CTL ramp, <= 10 % step, 3:1).
+     A custom weekly-hours cap only lowers it.
+  2. The caller builds its usual session template (long, quality / test,
+     strength, easy fill). `shape()` then applies the preferences to it:
+       * terrain -> title, target, TSS rate (trail easy = HR-only target
+         <= AeT: pace and power are unreliable on trail; a hike long day is
+         time-based);
+       * interval target power / HR;
+       * quality count 0 / 1 / 2 (the base-phase drift gate still decides
+         whether there is any quality at all — `allow_quality` from the caller);
+       * strength count;
+       * the week's minutes distributed over the allowed run count, each
+         session <= its cap. When the target does not fit (target > count x
+         cap): hard -> the week is capped with a note; soft -> the excess goes
+         on the long day first and weekday sessions stay within the cap.
+  3. `place()` puts the sessions on allowed days (unchecked days are rest
+     days), the long session on the chosen long day, strength on the chosen
+     days or with easy runs.
+
+Caps and hard sessions: a quality session over the weekday cap is shortened —
+warm-up 15 -> 10 min, cool-down 10 -> 5 min, then one rep fewer (never below
+2) — and its detail text is rewritten so the COROS step builder still parses
+it. The CP test protocol (3' + 30' + 12') is fixed: it is exempt from the cap,
+with a note.
+
+User-edited sessions are never touched: preferences only change what the
+generator produces, and reconcile keeps edited / custom sessions (rule 3).
+"""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import math
+import re
+from dataclasses import asdict, dataclass, field, fields
+from typing import Optional
+
+KEY_FIELDS = {                       # user_settings key -> Prefs field
+    "plan.prefs.days": "days",
+    "plan.prefs.long_day": "long_day",
+    "plan.prefs.cap_weekday": "cap_weekday",
+    "plan.prefs.cap_long": "cap_long",
+    "plan.prefs.cap_mode": "cap_mode",
+    "plan.prefs.runs_per_week": "runs",
+    "plan.prefs.quality_per_week": "quality",
+    "plan.prefs.strength_per_week": "strength",
+    "plan.prefs.strength_days": "strength_days",
+    "plan.prefs.weekly_hours": "weekly_hours",
+    "plan.prefs.terrain_easy": "terrain_easy",
+    "plan.prefs.terrain_long": "terrain_long",
+    "plan.prefs.terrain_quality": "terrain_quality",
+    "plan.prefs.interval_target": "interval_target",
+}
+LONG_WD = {"sat": 5, "sun": 6}
+MIN_EASY = 20                        # never generate an easy session shorter than this
+TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
+
+NOTE_HARD = "受限於你的偏好，本週少 {h} 小時；想補量可以多排一天或放寬長跑日上限"
+NOTE_SOFT = "單次上限 {cap} 分：多出的 {m} 分鐘放在長跑日（盡量不超過）"
+NOTE_TEST = "CP 測試的流程固定（3 分 + 休 30 分 + 12 分），不受單次時間上限"
+
+
+@dataclass(frozen=True)
+class Prefs:
+    days: tuple = (True,) * 7
+    long_day: str = "auto"
+    cap_weekday: Optional[int] = None
+    cap_long: Optional[int] = None
+    cap_mode: str = "soft"
+    runs: Optional[int] = None
+    quality: Optional[int] = None
+    strength: Optional[int] = None
+    strength_days: tuple = ()
+    weekly_hours: Optional[float] = None
+    terrain_easy: str = "any"
+    terrain_long: str = "auto"
+    terrain_quality: str = "any"
+    interval_target: str = "power"
+
+    @property
+    def active(self) -> bool:
+        return self != Prefs()
+
+    @property
+    def long_cap(self) -> Optional[int]:
+        """長跑日上限; None (同平日) = the weekday cap."""
+        return self.cap_long if self.cap_long is not None else self.cap_weekday
+
+    def allowed(self, d: dt.date) -> bool:
+        return bool(self.days[d.weekday()])
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["days"], d["strength_days"] = list(self.days), list(self.strength_days)
+        return d
+
+    def stamp(self) -> str:
+        return json.dumps(self.to_dict(), sort_keys=True)
+
+    def settings(self) -> dict:
+        """As user_settings keys (days None when every day is allowed)."""
+        d = self.to_dict()
+        out = {k: d[f] for k, f in KEY_FIELDS.items()}
+        if all(self.days):
+            out["plan.prefs.days"] = None
+        return out
+
+
+def from_settings(values: dict) -> Prefs:
+    """Prefs from {user_settings key: value}; missing / None -> the default."""
+    kw = {}
+    for k, f in KEY_FIELDS.items():
+        v = values.get(k)
+        if v is None:
+            continue
+        if f in ("days", "strength_days"):
+            v = tuple(v)
+        if f == "weekly_hours":
+            v = float(v)
+        kw[f] = v
+    return Prefs(**kw)
+
+
+def from_body(body: dict) -> Prefs:
+    """Prefs from the API body (field names); unknown fields are rejected."""
+    names = {f.name for f in fields(Prefs)}
+    bad = set(body) - names
+    if bad:
+        raise ValueError(f"unknown preference(s): {sorted(bad)}")
+    return from_settings({k: body.get(f) for k, f in KEY_FIELDS.items()})
+
+
+def check(p: Prefs) -> None:
+    """Cross-field rules the per-key validation can't see."""
+    n_days = sum(bool(x) for x in p.days)
+    if p.runs is not None and p.runs > n_days:
+        raise ValueError(f"每週跑步次數 {p.runs} 比可練日（{n_days} 天）多")
+    if p.runs is not None and p.quality is not None and p.quality >= p.runs:
+        raise ValueError("品質課次數要比每週跑步次數少（至少留一次輕鬆或長跑）")
+    if p.cap_long is not None and p.cap_weekday is not None and p.cap_long < p.cap_weekday:
+        raise ValueError("長跑日上限不能比平日上限短")
+
+
+def load(user_id: int = 1) -> Prefs:
+    """Synchronous read of the stored preferences (read-only sqlite, like
+    wko5expr.datasource) — the planner runs in a worker thread."""
+    from backend.engine.wko5expr.datasource import read_setting
+    vals = {k: read_setting(k, None, user_id) for k in KEY_FIELDS}
+    try:
+        return from_settings(vals)
+    except (TypeError, ValueError):
+        return Prefs()
+
+
+# ---------------------------------------------------------------------------
+# shaping the session template
+# ---------------------------------------------------------------------------
+
+def _r5(x: float) -> int:
+    return int(round(x / 5.0) * 5)
+
+
+def _hr_part(target: str) -> str:
+    parts = [p.strip() for p in (target or "").split("·")]
+    hr = [p for p in parts if p.startswith("心率")]
+    return " · ".join(hr) if hr else (target or "")
+
+
+def easy_hr_text(aet: Optional[float]) -> str:
+    return f"心率 ≤ AeT {aet:.0f} bpm" if aet else "心率 ≤ AeT"
+
+
+def trim_quality(s: dict, cap: int) -> bool:
+    """Shorten a quality session to `cap` minutes (warm-up, cool-down, then
+    reps); rewrite title / detail so the COROS step builder parses the new
+    structure. True when it now fits."""
+    m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*分", s["title"])
+    if not m or s["minutes"] <= cap:
+        return s["minutes"] <= cap
+    reps, work = int(m.group(1)), int(m.group(2))
+    det = s.get("detail") or ""
+    rest = re.search(r"休\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", det)
+    rest = int(rest.group(1)) if rest else work
+    warm = re.search(r"暖身\s*(\d+)\s*分", det)
+    cool = re.search(r"緩和\s*(\d+)\s*分", det)
+    warm_v, cool_v = (int(warm.group(1)) if warm else 15), (int(cool.group(1)) if cool else 10)
+    old = s["minutes"]
+    over = old - cap
+    cut_w = min(over, max(0, warm_v - TRIM_WARM))
+    warm_v -= cut_w
+    over -= cut_w
+    cut_c = min(over, max(0, cool_v - TRIM_COOL))
+    cool_v -= cut_c
+    over -= cut_c
+    new_reps = reps
+    while over > 0 and new_reps > MIN_REPS:
+        new_reps -= 1
+        over -= work + rest
+    minutes = old - cut_w - cut_c - (reps - new_reps) * (work + rest)
+    if new_reps != reps:
+        s["title"] = s["title"][:m.start()] + f"{new_reps}×{work} 分" + s["title"][m.end():]
+    if warm:
+        det = det[:warm.start()] + f"暖身 {warm_v} 分" + det[warm.end():]
+    cool = re.search(r"緩和\s*(\d+)\s*分", det)
+    if cool:
+        det = det[:cool.start()] + f"緩和 {cool_v} 分" + det[cool.end():]
+    if not warm and not cool:
+        det = (det + "；" if det else "") + f"暖身 {warm_v} 分、緩和 {cool_v} 分"
+    s["minutes"] = int(minutes)
+    s["detail"] = det
+    if old:
+        s["tss"] = float(s.get("tss") or 0.0) * s["minutes"] / old
+    return s["minutes"] <= cap
+
+
+@dataclass
+class Ctx:
+    """What shape() needs from the caller."""
+    kind: str                         # phase kind (base / specific / taper / …)
+    mode: str                         # week mode (… / recovery_week)
+    allow_quality: bool               # the caller's quality gate (drift streak in base)
+    rates: dict                       # TSS per hour: road / trail / hike / strength
+    aet: Optional[float] = None
+    slots: int = 7                    # allowed days for main sessions
+    notes: list = field(default_factory=list)
+
+    def rate(self, cat: str) -> float:
+        return float(self.rates.get(cat) or self.rates.get("road") or 50.0)
+
+
+def _terrain_long(s: dict, p: Prefs, c: Ctx) -> None:
+    t = p.terrain_long
+    if t == "auto":
+        return
+    aet_txt = f" {c.aet:.0f} bpm" if c.aet else ""
+    s["terrain"] = t
+    if t == "road":
+        s["title"] = "長時間輕鬆（路跑）"
+        s["detail"] = f"平路或緩坡；全程心率壓在 AeT{aet_txt} 以下"
+    elif t == "trail":
+        s["title"] = "長時間輕鬆（山路越野）"
+        s["target"] = easy_hr_text(c.aet)
+        s["detail"] = f"山路越野，陡坡用走的；只看心率（≤ AeT{aet_txt}），山路的配速和功率不準"
+    else:
+        s["kind"] = "hike"
+        s["title"] = "登山健行（長時間）"
+        s["target"] = easy_hr_text(c.aet)
+        s["detail"] = f"以時間為主：走滿 {s['minutes']} 分鐘，不看配速；上坡慢慢走，心率 ≤ AeT{aet_txt}"
+
+
+def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) -> dict:
+    base = dict(template) if template else {
+        "kind": "easy", "title": "輕鬆跑", "target": "", "detail": "心率不超過 AeT", "source": "Uphill Athlete",
+        "day": None, "done": False, "done_by": None}
+    strides = i == 0 and "衝刺" in (template or {}).get("title", "")
+    s = {**base, "id": f"easy{i + 1}", "kind": "easy", "minutes": _r5(minutes), "day": None,
+         "done": False, "done_by": None}
+    if not strides:
+        s["title"] = "輕鬆跑"
+        s["detail"] = "心率不超過 AeT"
+    t = p.terrain_easy
+    if t == "trail":
+        s["terrain"] = "trail"
+        s["title"] = "輕鬆越野跑" + ("＋坡道衝刺 8×10 秒" if strides else "")
+        s["target"] = easy_hr_text(c.aet)
+        s["detail"] = "山路或步道；只看心率 ≤ AeT，配速和功率在山路不準" + \
+            ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else "")
+        cat = "trail"
+    else:
+        if t == "road":
+            s["terrain"] = "road"
+            s["title"] = s["title"].replace("輕鬆跑", "輕鬆跑（路跑）", 1)
+        cat = "road"
+    s["tss"] = s["minutes"] / 60.0 * c.rate(cat)
+    return s
+
+
+def _quality_terrain(s: dict, p: Prefs) -> None:
+    t = p.terrain_quality
+    if t == "any" or s["kind"] != "quality":
+        return
+    if s["title"].endswith(("（平路）", "（坡道）")):          # carried over from this week: already shaped
+        s["terrain"] = "road" if s["title"].endswith("（平路）") else "trail"
+        return
+    uphill = "爬坡" in s["title"]
+    if t == "flat" and uphill:
+        s["title"] = s["title"].replace("爬坡間歇", "間歇") + "（平路）"
+        s["detail"] = re.sub(r"上坡 (\d+) 分鐘（[^）]*），慢跑或走下來恢復", r"平路 \1 分鐘，慢跑 \1 分鐘恢復",
+                             s.get("detail") or "")
+        s["terrain"] = "road"
+    elif t == "flat":
+        s["title"] += "（平路）"
+        s["detail"] = "平路或跑步機；" + (s.get("detail") or "")
+        s["terrain"] = "road"
+    elif t == "hill" and not uphill:
+        s["title"] += "（坡道）"
+        s["detail"] = "找 4–8% 的長坡，上坡跑、下坡慢跑回來；" + (s.get("detail") or "")
+        s["terrain"] = "trail"
+    else:
+        s["terrain"] = "trail"
+
+
+def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
+    """Apply the preferences to a session template (dicts with id / kind /
+    title / minutes / target / detail / source / tss). Returns the new list;
+    notes go to `c.notes`."""
+    ss = [dict(s) for s in ss]
+    easy_t = next((s for s in ss if s["kind"] == "easy"), None)
+    strength_t = next((s for s in ss if s["kind"] == "strength"), None)
+    long_s = next((s for s in ss if s["id"] == "long"), None)
+    hard = [s for s in ss if s["kind"] in ("quality", "test")]
+    rest = [s for s in ss if s["kind"] not in ("easy", "strength", "quality", "test") and s["id"] != "long"]
+    long_rate = (float(long_s.get("tss") or 0.0) / long_s["minutes"] * 60.0
+                 if long_s is not None and long_s.get("minutes") else c.rate("road"))
+
+    # ---- quality count + terrain + interval target ------------------------
+    if p.quality == 0 and hard:
+        if any(s["kind"] == "test" for s in hard):
+            c.notes.append({"level": "info", "src": "prefs", "text": "偏好每週 0 次品質課：CP 測試也先不排"})
+        hard = []
+    q = [s for s in hard if s["kind"] == "quality"]
+    if p.quality == 2 and c.allow_quality and q and c.mode != "recovery_week":
+        hard.append({**q[0], "id": "quality2"})
+    for s in hard:
+        _quality_terrain(s, p)
+        if p.interval_target == "hr" and s["kind"] == "quality":
+            s["target"] = _hr_part(s.get("target", ""))
+    if p.cap_weekday is not None:
+        for s in hard:
+            if s["kind"] == "test" and s["minutes"] > p.cap_weekday:
+                c.notes.append({"level": "info", "src": "prefs", "text": NOTE_TEST})
+            elif s["kind"] == "quality":
+                trim_quality(s, p.cap_weekday)
+
+    # ---- long --------------------------------------------------------------
+    long_cap = p.long_cap
+    if long_s is not None and long_cap is not None and long_s["minutes"] > long_cap:
+        long_s["minutes"] = long_cap
+
+    # ---- strength ----------------------------------------------------------
+    strength = [s for s in ss if s["kind"] == "strength"]
+    if p.strength is not None:
+        tpl = strength_t or {"kind": "strength", "title": "肌力（下肢單腳＋核心）", "minutes": 35, "target": "",
+                             "detail": "膝主導＋臀中肌；安排在輕鬆日或跑完後", "source": "Uphill Athlete",
+                             "tss": 35 / 60 * c.rate("strength"), "day": None, "done": False, "done_by": None}
+        strength = [{**tpl, "id": f"strength{i + 1}", "day": None} for i in range(p.strength)]
+
+    # ---- easy fill, counts and caps -----------------------------------------
+    n_fixed = len(hard) + (1 if long_s is not None else 0) + len(rest)
+    used = sum(s["minutes"] for s in hard + rest) + (long_s["minutes"] if long_s is not None else 0)
+    left = max(0.0, total_min - used)
+    cap = p.cap_weekday
+    room = max(0, min(c.slots, p.runs if p.runs is not None else 7) - n_fixed)
+    if p.runs is not None:
+        n_e = min(room, int(left // MIN_EASY))
+    else:
+        n_e = 0 if left < 25 else max(1, min(5, int(round(left / 50.0))))
+        if cap is not None and left >= 25:
+            n_e = max(n_e, math.ceil(left / cap))
+        n_e = min(n_e, room)
+    per = left / n_e if n_e else 0.0
+    excess = 0.0
+    if cap is not None and per > cap:
+        excess, per = (per - cap) * n_e, float(cap)
+    elif n_e == 0 and left >= 25 and (p.runs is not None or cap is not None or c.slots < 7):
+        excess = left                                        # no slot left for it
+    easies = [_easy(easy_t, i, per, p, c) for i in range(n_e)]
+
+    # ---- excess: long day first; soft may exceed its cap, hard drops it -----
+    if excess >= 5:
+        target = long_s
+        if target is None and p.cap_mode == "soft" and easies:
+            target = easies[0]
+            target["long_day"] = True                        # place() puts it on the long weekday
+        if target is not None:
+            lim = long_cap if target is long_s else cap
+            fit = excess if lim is None else max(0.0, min(excess, lim - target["minutes"]))
+            target["minutes"] = _r5(target["minutes"] + fit)
+            excess -= fit
+            if excess >= 5 and p.cap_mode == "soft":
+                target["minutes"] = _r5(target["minutes"] + excess)
+                c.notes.append({"level": "info", "src": "prefs", "text": NOTE_SOFT.format(cap=cap if cap is not None else long_cap,
+                                                                          m=_r5(excess))})
+                excess = 0.0
+        if excess >= 5:
+            c.notes.append({"level": "watch", "src": "prefs", "text": NOTE_HARD.format(h=f"{excess / 60.0:.1f}")})
+
+    # ---- terrain and TSS of the long session ----------------------------------
+    if long_s is not None:
+        _terrain_long(long_s, p, c)
+        cat = {"trail": "trail", "hike": "hike", "road": "road"}.get(long_s.get("terrain"))
+        long_s["tss"] = long_s["minutes"] / 60.0 * (c.rate(cat) if cat else long_rate)
+        if long_s["kind"] == "hike":
+            long_s["detail"] = re.sub(r"走滿 \d+ 分鐘", f"走滿 {long_s['minutes']} 分鐘", long_s["detail"])
+    return ([long_s] if long_s is not None else []) + hard + rest + strength + easies
+
+
+# ---------------------------------------------------------------------------
+# placement
+# ---------------------------------------------------------------------------
+
+QUALITY_ORDER = (1, 2, 3, 0, 4, 5, 6)          # Tue, Wed, Thu, Mon, Fri, Sat, Sun
+
+
+def long_weekday(p: Prefs, auto_wd: int) -> int:
+    return LONG_WD.get(p.long_day, auto_wd)
+
+
+def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs) -> list[dict]:
+    """Put `ss` (not done, day None) on `free` days. Main sessions only on
+    allowed days, one per day; strength on the chosen weekdays, else with an
+    easy run / on an allowed day, never the day before the long session.
+    Returns the sessions that found no day."""
+    avail = [d for d in free if p.allowed(d)]
+    main = [s for s in ss if s["kind"] != "strength"]
+    long_day = None
+
+    def pick_near(wd: int) -> Optional[dt.date]:
+        if not avail:
+            return None
+        exact = [d for d in avail if d.weekday() == wd]
+        # like week_plan(): the long weekday, else the last allowed day left
+        return exact[0] if exact else avail[-1]
+
+    order = {"long": 0, "test": 1, "quality": 1}
+    for s in sorted(main, key=lambda s: (0 if s["id"] == "long" else order.get(s["kind"], 3 if not s.get("long_day") else 2))):
+        if not avail:
+            break
+        if s["id"] == "long" or s.get("long_day"):
+            pick = pick_near(long_wd)
+            if s["id"] == "long":
+                long_day = pick
+        elif s["kind"] in ("quality", "test"):
+            hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
+            ok = lambda d: (long_day is None or abs((d - long_day).days) >= 2) and \
+                all(abs((d - h).days) >= 2 for h in hard_days)
+            cands = sorted(avail, key=lambda d: QUALITY_ORDER.index(d.weekday()))
+            pick = next((d for d in cands if ok(d)), None) or next(
+                (d for d in cands if long_day is None or abs((d - long_day).days) >= 1), cands[0])
+        else:
+            pick = avail[0]
+        s["day"] = pick.isoformat()
+        avail.remove(pick)
+    easy_days = [dt.date.fromisoformat(s["day"]) for s in main if s["kind"] == "easy" and s["day"]]
+    taken: set = set()
+    for s in [s for s in ss if s["kind"] == "strength"]:
+        if p.strength_days:
+            cands = [d for d in free if d.weekday() in p.strength_days and d not in taken]
+        else:
+            cands = sorted(d for d in easy_days + avail
+                           if (long_day is None or d != long_day - dt.timedelta(days=1)) and d not in taken)
+        if cands:
+            s["day"] = cands[0].isoformat()
+            taken.add(cands[0])
+            if cands[0] in avail:
+                avail.remove(cands[0])
+    for s in ss:
+        s.pop("long_day", None)
+    return [s for s in main if not s["day"]]
