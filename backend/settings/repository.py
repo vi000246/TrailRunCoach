@@ -48,7 +48,13 @@ DEFAULTS: dict[str, Any] = {
     "sync.auto_on_open.hours": 6,
     # which data the charts / overview / race power read: wko5 | coros | tp
     "charts.data_source": "wko5",
+    # workout route map (viewer 單次活動): default basemap id and overlay ids;
+    # the map can switch them temporarily (remembered per browser)
+    "charts.map.basemap": "rudy",
+    "charts.map.overlays": [],
 }
+MAP_BASEMAPS = ("rudy", "google-terrain", "nlsc-emap", "nlsc-photo", "osm")
+MAP_OVERLAYS = ("contour", "google-roads", "nlsc-roads")
 
 
 class UnknownSetting(KeyError):
@@ -104,6 +110,12 @@ def validate(key: str, value: Any) -> None:
         raise ValueError("auto-sync threshold must be 1-168 hours")
     if key == "charts.data_source" and value not in ("wko5", "coros", "tp"):
         raise ValueError("chart data source must be wko5, coros or tp")
+    if key == "charts.map.basemap" and value not in MAP_BASEMAPS:
+        raise ValueError(f"map basemap must be one of {MAP_BASEMAPS}")
+    if key == "charts.map.overlays" and not (
+            isinstance(value, list) and all(v in MAP_OVERLAYS for v in value)
+            and len(set(value)) == len(value)):
+        raise ValueError(f"map overlays must be a list of distinct {MAP_OVERLAYS}")
     if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
         raise ValueError(f"{key} must be true/false/null")
     if key.endswith(".enabled") and not isinstance(value, bool):

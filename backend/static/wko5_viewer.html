@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WKO5 View Check</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
@@ -202,6 +204,20 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 #zoom .zb .plot { flex: 1; min-height: 360px; height: auto; }
 @media (max-width: 700px) { dialog#zoom { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; margin: 0; } }
 .empty { grid-column: 1 / -1; color: var(--muted); padding: 40px; text-align: center; }
+/* workout route map (Leaflet) */
+.plot.lmap { height: 380px; border-radius: 6px; overflow: hidden; background: var(--code); z-index: 0; }
+.maptb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 6px; font-size: 11.5px; }
+.maptb .seg { padding: 1px; }
+.maptb .seg button { padding: 1px 8px; font-weight: 500; }
+.maptb .seg button:disabled { opacity: .4; cursor: default; }
+.maplegend { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.maplegend i { display: inline-block; width: 90px; height: 8px; border-radius: 4px; }
+.maphint { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; font-size: 11.5px; color: var(--warn);
+  border: 1px solid var(--warn); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.maphint[hidden] { display: none; }
+.maphint button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  border-radius: 4px; padding: 1px 8px; cursor: pointer; }
+.lmap .leaflet-tooltip.hovtip { font-size: 11px; line-height: 1.35; padding: 3px 6px; }
 </style>
 </head>
 <body class="aside-closed" data-mode="season">
@@ -385,8 +401,12 @@ async function init0() {
 }
 
 async function init() {
-  const [views, sports, cfg] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`)]);
+  const [views, sports, cfg, us] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
+    j("/api/v1/sync/settings").catch(() => ({}))]);
   S.views = views; S.sports = sports;
+  // workout map defaults (settings page); the map's own switch overrides them per browser
+  S.mapDefault = { base: BASE_BY_ID[us.map_basemap] ? us.map_basemap : "rudy",
+    overlays: (us.map_overlays || []).filter((id) => OVL_BY_ID[id]) };
   S.parity = !!cfg.config.parity;   // switched on the settings page
   const pill = $("modepill");
   pill.innerHTML = `<svg class="i"><use href="#i-calc"/></svg><span>算式：${S.parity ? "比照 WKO5" : "我的"}</span>`;
@@ -637,6 +657,7 @@ async function load() {
   if (ZOOM.card) closeZoom(false);
   const token = ++loadToken;
   charts.splice(0).forEach((c) => c.dispose());
+  $("grid").querySelectorAll(".lmap").forEach((el) => el._lmap?.remove());
   const grid = $("grid"), v = curView();
   grid.innerHTML = "";
   if (!v) { grid.innerHTML = `<div class="empty">沒有${MODE_LABEL[S.mode]}的 view</div>`; return; }
@@ -692,6 +713,7 @@ function periodPrefs() { try { return JSON.parse(localStorage.getItem(PERIOD_KEY
 function savePeriod(k, p) { try { localStorage.setItem(PERIOD_KEY, JSON.stringify({ ...periodPrefs(), [k]: p })); } catch {} }
 function disposeCardCharts(card) {
   for (const el of card.querySelectorAll(".plot")) {
+    if (el._lmap) { el._lmap.remove(); el._lmap = null; continue; }
     const inst = echarts.getInstanceByDom(el);
     if (!inst) continue;
     const i = charts.indexOf(inst);
@@ -917,50 +939,287 @@ function drawTargets(card, res) {
       <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
 }
 
-// WKO5 map panel: the GPS track, coloured by elevation (no map tiles — the shape of the route)
-function drawMap(card, res) {
-  card.querySelector(".loading")?.remove();
-  if (res.empty || !res.track?.length) {
-    card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty || "這筆活動沒有 GPS 資料。")}</p>`);
-    return;
+// ---- workout samples: one downsampled index shared by the map and every time / distance chart
+// (GET /workouts/{i}/samples; same step as the chart points, so chart x -> index is exact)
+const SAMPLES = new Map();
+function samplesFor(wi) {
+  const k = `${wi}|${S.parity}`;
+  if (!SAMPLES.has(k)) {
+    if (SAMPLES.size >= 4) SAMPLES.delete(SAMPLES.keys().next().value);
+    SAMPLES.set(k, j(`${API}/workouts/${wi}/samples?${tpParam()}`).then(prepSamples)
+      .catch((e) => { SAMPLES.delete(k); throw e; }));
   }
-  const el = document.createElement("div");
-  el.className = "plot";
-  card.appendChild(el);
-  const chart = echarts.init(el);
-  charts.push(chart);
-  const muted = css("--muted"), line = css("--line");
-  const T = res.track;
-  const lons = T.map((p) => p[0]), lats = T.map((p) => p[1]);
-  const lo0 = Math.min(...lons), lo1 = Math.max(...lons), la0 = Math.min(...lats), la1 = Math.max(...lats);
-  // equal ground scale: a degree of longitude is cos(lat) of a degree of latitude
-  const k = Math.cos((la0 + la1) / 2 * Math.PI / 180);
-  const w = el.clientWidth - 70 || 400, h = el.clientHeight - 40 || 260;
-  let dx = (lo1 - lo0) * k || 1e-3, dy = (la1 - la0) || 1e-3;
-  if (dx / dy > w / h) dy = dx * h / w; else dx = dy * w / h;
-  const cx = (lo0 + lo1) / 2, cy = (la0 + la1) / 2, pad = 1.06;
-  const elev = T.map((p) => p[2]).filter((v) => v != null);
-  const hasElev = elev.length > 1;
-  chart.setOption({
-    animation: false,
-    grid: { left: 60, right: hasElev ? 60 : 16, top: 16, bottom: 26 },
-    tooltip: { trigger: "item", confine: true, formatter: (p) => {
-      const d = T[p.dataIndex] || [];
-      return `${d[3] != null ? fmtDur(d[3]) + "<br>" : ""}${d[2] != null ? Math.round(d[2]) + " m" : ""}`; } },
-    xAxis: { type: "value", min: cx - dx / k / 2 * pad, max: cx + dx / k / 2 * pad, splitLine: { show: false },
-      axisLine: { lineStyle: { color: line } }, axisLabel: { color: muted, fontSize: 10, formatter: (v) => v.toFixed(3) } },
-    yAxis: { type: "value", min: cy - dy / 2 * pad, max: cy + dy / 2 * pad, splitLine: { lineStyle: { color: line } },
-      axisLabel: { color: muted, fontSize: 10, formatter: (v) => v.toFixed(3) } },
-    visualMap: hasElev ? { type: "continuous", dimension: 2, min: Math.min(...elev), max: Math.max(...elev), calculable: false,
-      right: 0, top: "middle", itemHeight: 120, text: ["m", ""], textStyle: { color: muted, fontSize: 10 },
-      inRange: { color: ["#2c7bb6", "#abd9e9", "#fdae61", "#d7191c"] } } : undefined,
-    series: [{ type: "line", data: T, showSymbol: false, symbolSize: 2, lineStyle: { width: 2.5 },
-      color: hasElev ? undefined : css("--accent") },
-      { type: "scatter", data: [T[0], T[T.length - 1]], symbolSize: 9, itemStyle: { borderColor: "#fff", borderWidth: 1.5 },
-        label: { show: true, position: "top", color: muted, fontSize: 10, formatter: (p) => p.dataIndex ? "終點" : "起點" } }],
+  return SAMPLES.get(k);
+}
+function prepSamples(s) {
+  // sorted (x, index) lookups without the nulls, for time and distance
+  const lookup = (a) => { if (!a) return null; const xs = [], is = [];
+    a.forEach((x, i) => { if (x != null && (!xs.length || x >= xs[xs.length - 1])) { xs.push(x); is.push(i); } });
+    return xs.length ? { xs, is } : null; };
+  s.byT = lookup(s.t); s.byD = lookup(s.d);
+  s.gps = s.lat ? s.lat.map((v, i) => v != null ? i : -1).filter((i) => i >= 0) : [];
+  return s;
+}
+function nearestIn(lk, x) {
+  const { xs, is } = lk; let lo = 0, hi = xs.length - 1;
+  if (x <= xs[0]) return is[0];
+  if (x >= xs[hi]) return is[hi];
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xs[m] <= x) lo = m; else hi = m; }
+  return x - xs[lo] <= xs[hi] - x ? is[lo] : is[hi];
+}
+// nearest sample that has a GPS fix (the first seconds often have none)
+function nearestGps(s, i) {
+  if (s.lat?.[i] != null) return i;
+  const g = s.gps; if (!g.length) return -1;
+  let lo = 0, hi = g.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (g[m] <= i) lo = m; else hi = m; }
+  return Math.abs(g[lo] - i) <= Math.abs(g[hi] - i) ? g[lo] : g[hi];
+}
+
+// ---- synced hover: every member shows the same sample index; one flush per animation frame
+const HOVER = { members: new Set(), pending: null, raf: 0 };
+function hoverEmit(src, idx) {        // idx: a sample index, null (hide) or a function computing one
+  HOVER.pending = { src, idx };
+  if (!HOVER.raf) HOVER.raf = requestAnimationFrame(hoverFlush);
+}
+function hoverFlush() {
+  HOVER.raf = 0;
+  const p = HOVER.pending; HOVER.pending = null;
+  if (!p) return;
+  const i = typeof p.idx === "function" ? p.idx() : p.idx;
+  for (const m of [...HOVER.members]) {
+    if (m.dead()) { HOVER.members.delete(m); continue; }
+    if (m.workout !== p.src.workout || (m === p.src && !m.selfShow)) continue;
+    if (i == null) m.hide(); else m.show(i);
+  }
+}
+function gridRect(chart) {
+  try { return chart.getModel().getComponent("grid", 0).coordinateSystem.getRect(); }
+  catch { return { x: 0, y: 0, width: chart.getWidth(), height: chart.getHeight() }; }
+}
+// a time-x (axis "t", seconds) or distance-x (axis "d", km × f) workout chart joins the hover group
+function hoverChart(chart, s, axis, f = 1) {
+  const lk = axis === "t" ? s.byT : s.byD, arr = axis === "t" ? s.t : s.d;
+  if (!lk) return;
+  const m = {
+    workout: s.workout, on: false, dead: () => chart.isDisposed(),
+    show(i) {
+      const x = arr[i], g = gridRect(chart);
+      const px = x == null ? NaN : chart.convertToPixel({ xAxisIndex: 0 }, x * f);
+      if (!isFinite(px) || px < g.x - 0.5 || px > g.x + g.width + 0.5) return this.hide();
+      chart.dispatchAction({ type: "showTip", x: px, y: g.y + g.height / 2 });
+      this.on = true;
+    },
+    hide() { if (this.on) { chart.dispatchAction({ type: "hideTip" }); this.on = false; } },
+  };
+  const zr = chart.getZr();
+  zr.on("mousemove", (e) => {
+    const px = e.offsetX, py = e.offsetY;
+    hoverEmit(m, () => {
+      if (chart.isDisposed()) return null;
+      const g = gridRect(chart);
+      if (px < g.x || px > g.x + g.width || py < g.y || py > g.y + g.height) return null;
+      const x = chart.convertFromPixel({ xAxisIndex: 0 }, px);
+      return isFinite(x) ? nearestIn(lk, x / f) : null;
+    });
   });
-  card.insertAdjacentHTML("beforeend", `<p class="desc" style="margin-top:4px">GPS 軌跡（${T.length} 點，依海拔上色；沒有底圖）</p>`);
-  new ResizeObserver(() => chart.resize()).observe(el);
+  zr.on("globalout", () => hoverEmit(m, null));
+  HOVER.members.add(m);
+}
+// distance units a value x-axis can carry -> factor from km
+const DIST_X = { KM: 1, MI: 1 / 1.609344, METERS: 1000 };
+
+// ---- route map: Leaflet, switchable basemaps / overlays (settings page picks the defaults)
+const NLSC_ATTR = '© <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>';
+const BASEMAPS = [
+  { id: "rudy", name: "魯地圖", url: "https://tile.happyman.idv.tw/map/rudy/{z}/{x}/{y}.png", maxZoom: 18,
+    attr: '<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
+  { id: "google-terrain", name: "Google 地形", url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", maxZoom: 15,
+    attr: "地圖資料 © Google" },
+  { id: "nlsc-emap", name: "NLSC 電子地圖", url: "https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}",
+    maxZoom: 19, attr: NLSC_ATTR },
+  { id: "nlsc-photo", name: "正射影像", url: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}",
+    maxZoom: 19, attr: NLSC_ATTR },
+  { id: "osm", name: "OSM", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19,
+    attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
+];
+const OVERLAYS = [
+  { id: "contour", name: "等高線", url: "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png", opacity: 0.8, maxZoom: 18,
+    attr: '等高線：<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a>' },
+  { id: "google-roads", name: "Google 道路", url: "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}", opacity: 0.9, maxZoom: 19,
+    attr: "道路 © Google" },
+  { id: "nlsc-roads", name: "NLSC 道路", url: "https://wmts.nlsc.gov.tw/wmts/EMAP2/default/GoogleMapsCompatible/{z}/{y}/{x}",
+    opacity: 0.9, maxZoom: 19, attr: NLSC_ATTR },
+];
+const BASE_BY_ID = Object.fromEntries(BASEMAPS.map((b) => [b.id, b]));
+const OVL_BY_ID = Object.fromEntries(OVERLAYS.map((o) => [o.id, o]));
+// per-browser switch, kept only while the settings-page default it was made against is unchanged
+const MAP_KEY = "wko5viewer.map";
+function mapPrefs() {
+  const d = S.mapDefault || { base: "rudy", overlays: [] };
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem(MAP_KEY) || "null"); } catch {}
+  const same = o && o.against === JSON.stringify(d);
+  return { base: same && BASE_BY_ID[o.base] ? o.base : d.base,
+    overlays: same && Array.isArray(o.overlays) ? o.overlays.filter((id) => OVL_BY_ID[id]) : d.overlays,
+    color: o?.color || "hr" };
+}
+function saveMapPrefs(patch) {
+  try { localStorage.setItem(MAP_KEY, JSON.stringify({ ...mapPrefs(), ...patch, against: JSON.stringify(S.mapDefault || { base: "rudy", overlays: [] }) })); } catch {}
+}
+const ROUTE_COLOR = [["hr", "心率", "bpm"], ["power", "功率", "W"], ["grade", "坡度", "%"], ["none", "單色", ""]];
+const RAMP = ["#2c7bb6", "#abd9e9", "#ffffbf", "#fdae61", "#d7191c"];
+function rampAt(f) {
+  f = Math.max(0, Math.min(1, f)) * (RAMP.length - 1);
+  const k = Math.min(RAMP.length - 2, Math.floor(f)), t = f - k;
+  const a = RAMP[k].match(/\w\w/g).map((h) => parseInt(h, 16)), b = RAMP[k + 1].match(/\w\w/g).map((h) => parseInt(h, 16));
+  return "#" + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, "0")).join("");
+}
+function pctl(vals, p) { const v = [...vals].sort((a, b) => a - b); return v[Math.min(v.length - 1, Math.max(0, Math.round(p * (v.length - 1))))]; }
+
+async function drawMap(card, res) {
+  card.querySelector(".loading")?.remove();
+  const nodata = (t) => card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(t)}</p>`);
+  if (res.empty) return nodata(res.empty);
+  if (typeof L === "undefined") return nodata("地圖元件（Leaflet）載入失敗，無法顯示路線。");
+  const tb = document.createElement("div");
+  tb.className = "maptb";
+  const el = document.createElement("div");
+  el.className = "plot lmap";
+  card.append(tb, el);
+  let s;
+  try { s = await samplesFor(res.workout); }
+  catch (e) { el.remove(); tb.remove(); return nodata(`讀不到這筆活動的 GPS 樣本：${e.message}`); }
+  if (!el.isConnected) return;            // the card was redrawn meanwhile
+  if (!s.gps.length) { el.remove(); tb.remove(); return nodata("這筆活動沒有 GPS 資料（室內或裝置沒有記錄位置）。"); }
+
+  const pref = mapPrefs();
+  const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5 });
+  el._lmap = map;
+  const bases = {}, ovls = {};
+  let active = null;
+  const hint = document.createElement("div");
+  hint.className = "maphint"; hint.hidden = true;
+  card.appendChild(hint);
+  for (const b of BASEMAPS) {
+    const layer = L.tileLayer(b.url, { maxZoom: b.maxZoom, attribution: b.attr });
+    layer._def = b; layer._err = 0; layer._ok = 0;
+    layer.on("tileload", () => { layer._ok++; if (layer === active) hint.hidden = true; });
+    layer.on("tileerror", () => {
+      layer._err++;
+      if (layer !== active || layer._ok > 0 || layer._err < 3 || !hint.hidden) return;
+      // the host isn't answering (魯地圖's own host often doesn't): offer another basemap
+      const alt = BASEMAPS.filter((x) => x.id !== b.id && x.id !== "google-terrain").slice(0, 3);
+      hint.innerHTML = `「${esc(b.name)}」的圖磚載入失敗（主機可能沒有回應），換個底圖：`
+        + alt.map((x) => `<button data-b="${x.id}">${esc(x.name)}</button>`).join("");
+      hint.hidden = false;
+    });
+    bases[b.name] = layer;
+  }
+  hint.onclick = (e) => {
+    const id = e.target.closest("button[data-b]")?.dataset.b; if (!id) return;
+    const next = bases[BASE_BY_ID[id].name];
+    if (active) map.removeLayer(active);
+    next.addTo(map);          // fires baselayerchange through the layer control
+  };
+  for (const o of OVERLAYS) ovls[o.name] = L.tileLayer(o.url, { maxZoom: o.maxZoom, opacity: o.opacity, attribution: o.attr, zIndex: 5 });
+  const setBase = (layer) => { active = layer; map.setMaxZoom(layer._def.maxZoom); hint.hidden = true; layer._err = layer._ok = 0; };
+  const first = bases[BASE_BY_ID[pref.base].name];
+  first.addTo(map); setBase(first);
+  for (const id of pref.overlays) ovls[OVL_BY_ID[id].name].addTo(map);
+  L.control.layers(bases, ovls, { collapsed: true }).addTo(map);
+  L.control.scale({ imperial: false }).addTo(map);
+  map.on("baselayerchange", (e) => { setBase(e.layer); saveMapPrefs({ base: e.layer._def.id }); });
+  const saveOvl = () => saveMapPrefs({ overlays: OVERLAYS.filter((o) => map.hasLayer(ovls[o.name])).map((o) => o.id) });
+  map.on("overlayadd overlayremove", saveOvl);
+
+  const ll = (i) => [s.lat[i], s.lng[i]];
+  const latlngs = s.gps.map(ll);
+  map.fitBounds(L.latLngBounds(latlngs), { padding: [16, 16] });
+  const route = L.layerGroup().addTo(map);
+  const legend = document.createElement("span");
+  legend.className = "maplegend";
+  function drawRoute(color) {
+    route.clearLayers();
+    L.polyline(latlngs, { color: "#fff", weight: 7, opacity: 0.75, interactive: false }).addTo(route);
+    const vals = color === "none" ? null : s[color];
+    const good = vals ? s.gps.map((i) => vals[i]).filter((v) => v != null) : [];
+    if (good.length < 2) {
+      L.polyline(latlngs, { color: css("--accent") || "#2563eb", weight: 4, interactive: false }).addTo(route);
+      legend.innerHTML = "";
+    } else {
+      let lo = pctl(good, 0.05), hi = pctl(good, 0.95);
+      if (color === "grade") { const m = Math.min(40, Math.max(Math.abs(lo), Math.abs(hi), 1)); lo = -m; hi = m; }
+      if (hi <= lo) hi = lo + 1;
+      // ~12 colour bins, each one multi-segment polyline (cheap to draw, cheap to hover over)
+      const NB = 12, bins = Array.from({ length: NB + 1 }, () => []);
+      for (let k = 1; k < s.gps.length; k++) {
+        const a = s.gps[k - 1], b = s.gps[k], v = vals[b] ?? vals[a];
+        const bi = v == null ? NB : Math.max(0, Math.min(NB - 1, Math.floor((v - lo) / (hi - lo) * NB)));
+        bins[bi].push([ll(a), ll(b)]);
+      }
+      bins.forEach((segs, bi) => segs.length && L.polyline(segs, { color: bi === NB ? "#9aa3ad" : rampAt((bi + 0.5) / NB),
+        weight: 4, opacity: 0.95, interactive: false }).addTo(route));
+      const unit = ROUTE_COLOR.find((r) => r[0] === color)[2];
+      legend.innerHTML = `${Math.round(lo)}<i style="background:linear-gradient(90deg,${RAMP.join(",")})"></i>${Math.round(hi)} ${esc(unit)}`;
+    }
+    L.circleMarker(latlngs[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1, interactive: false })
+      .bindTooltip("起點").addTo(route);
+    L.circleMarker(latlngs[latlngs.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#dc2626", fillOpacity: 1, interactive: false })
+      .bindTooltip("終點").addTo(route);
+  }
+  // colour toggle: 心率 / 功率 / 坡度 / 單色 (remembered per browser)
+  const has = (k) => k === "none" || (s[k] && s.gps.some((i) => s[k][i] != null));
+  let color = has(pref.color) ? pref.color : ["hr", "power", "grade"].find(has) || "none";
+  tb.innerHTML = `<span class="meta">路線顏色</span><div class="seg" role="group" aria-label="路線顏色">${ROUTE_COLOR.map(([k, t]) =>
+    `<button data-c="${k}" class="${k === color ? "on" : ""}" aria-pressed="${k === color}" ${has(k) ? "" : "disabled"}>${t}</button>`).join("")}</div>`;
+  tb.appendChild(legend);
+  tb.onclick = (e) => {
+    const b = e.target.closest("button[data-c]"); if (!b || b.disabled || b.dataset.c === color) return;
+    color = b.dataset.c; saveMapPrefs({ color });
+    tb.querySelectorAll("button[data-c]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+    drawRoute(color);
+  };
+  drawRoute(color);
+
+  // hover: a marker at the shared sample; hovering the route drives the charts
+  const marker = L.circleMarker([0, 0], { radius: 7, color: "#fff", weight: 2.5, fillColor: "#111827", fillOpacity: 0.9, interactive: false });
+  marker.bindTooltip("", { permanent: true, direction: "top", offset: [0, -8], className: "hovtip" });
+  const readout = (i) => [s.t[i] != null ? fmtDur(s.t[i]) : null, s.d?.[i] != null ? s.d[i].toFixed(2) + " km" : null,
+    s.hr?.[i] != null ? s.hr[i] + " bpm" : null, s.power?.[i] != null ? s.power[i] + " W" : null,
+    s.elev?.[i] != null ? Math.round(s.elev[i]) + " m" : null, s.grade?.[i] != null ? s.grade[i].toFixed(1) + "%" : null]
+    .filter(Boolean).join(" · ");
+  const m = {
+    workout: s.workout, selfShow: true, dead: () => !el.isConnected || !el._lmap,
+    show(i) {
+      const g = nearestGps(s, i); if (g < 0) return this.hide();
+      marker.setLatLng(ll(g));
+      if (!map.hasLayer(marker)) marker.addTo(map);
+      marker.setTooltipContent(readout(i));
+    },
+    hide() { if (map.hasLayer(marker)) map.removeLayer(marker); },
+  };
+  let pts = null;   // route points in layer pixels, recomputed after zoom
+  map.on("zoomend viewreset", () => { pts = null; });
+  map.on("mousemove", (e) => {
+    const p = e.layerPoint;
+    hoverEmit(m, () => {
+      if (!el._lmap) return null;
+      pts ||= s.gps.map((i) => map.latLngToLayerPoint(ll(i)));
+      let best = -1, bd = 24 * 24;           // within 24 px of the route
+      for (let k = 0; k < pts.length; k++) {
+        const dx = pts[k].x - p.x, dy = pts[k].y - p.y, d2 = dx * dx + dy * dy;
+        if (d2 < bd) { bd = d2; best = k; }
+      }
+      return best < 0 ? null : s.gps[best];
+    });
+  });
+  map.on("mouseout", () => hoverEmit(m, null));
+  el.addEventListener("mouseleave", () => hoverEmit(m, null));
+  HOVER.members.add(m);
+  const n = s.gps.length;
+  card.insertAdjacentHTML("beforeend", `<p class="desc" style="margin-top:4px">GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · 滑鼠移到路線上，其他圖表會同步標出同一時間</p>`);
+  new ResizeObserver(() => { if (el._lmap) map.invalidateSize(); }).observe(el);
 }
 
 function drawValuesTable(card, cols) {
@@ -1099,7 +1358,10 @@ function drawPlot(card, res, series) {
       continue;
     }
     const pts = xKind === "duration" ? s.data.points.filter((p) => p[0] > 0) : s.data.points;
-    const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false, sampling: "lttb" };
+    // hover-synced workout charts keep every point, so each chart's tooltip lands on the same sample
+    // (lttb would snap them to different kept points); they are already downsampled to ≤3000
+    const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false,
+      sampling: res.workout != null && xKind === "seconds" ? undefined : "lttb" };
     if (s.type === "bar" || s.type === "stackedbar") {
       out.push({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 });
     } else if (s.line_style === "none" && s.type !== "area") {
@@ -1174,6 +1436,12 @@ function drawPlot(card, res, series) {
       : [{ type: "inside" }],
   });
   new ResizeObserver(() => chart.resize()).observe(el);
+  // workout charts over time (or distance) join the synced hover with the map and each other;
+  // x-y scatters (HR vs power, LSS vs grade) and tables don't
+  const hx = res.workout == null || cat ? null
+    : xKind === "seconds" ? "t" : xKind === "value" && DIST_X[xUnit.id] ? "d" : null;
+  if (hx) samplesFor(res.workout).then((s) => { if (!chart.isDisposed()) hoverChart(chart, s, hx, DIST_X[xUnit.id] || 1); })
+    .catch((e) => console.warn("hover sync off:", e.message));
 }
 
 if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin",

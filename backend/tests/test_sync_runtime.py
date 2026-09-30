@@ -293,6 +293,12 @@ def test_sources_endpoint_and_new_settings(tmp_path, _fit_root_in_tmp):
         assert r["tp_client_file_exists"] is False
         with pytest.raises(HTTPException):
             await put_sync_settings(SyncSettingsBody(chart_data_source="garmin"), 1, s)
+        # workout map defaults
+        assert r["map_basemap"] == "rudy" and r["map_overlays"] == []
+        r = await put_sync_settings(SyncSettingsBody(map_basemap="nlsc-emap", map_overlays=["contour"]), 1, s)
+        assert r["map_basemap"] == "nlsc-emap" and r["map_overlays"] == ["contour"]
+        with pytest.raises(HTTPException):
+            await put_sync_settings(SyncSettingsBody(map_overlays=["bing"]), 1, s)
     run(go())
 
 

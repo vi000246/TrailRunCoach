@@ -201,6 +201,24 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     <p class="meta" id="profwko5"></p>
   </section>
 
+  <section id="map">
+    <h2>地圖</h2>
+    <p class="meta">單次活動的路線地圖一開始用的底圖和疊圖。在地圖右上角可以臨時切換，這台瀏覽器會記住；這裡的預設改了之後，會回到新的預設。</p>
+    <div class="row">
+      <label>預設底圖 <select id="m-base">
+        <option value="rudy">魯地圖</option><option value="google-terrain">Google 地形</option>
+        <option value="nlsc-emap">NLSC 電子地圖</option><option value="nlsc-photo">正射影像</option>
+        <option value="osm">OSM</option></select></label>
+    </div>
+    <div class="row">預設疊圖
+      <label><input type="checkbox" name="m-ovl" value="contour"> 等高線</label>
+      <label><input type="checkbox" name="m-ovl" value="google-roads"> Google 道路</label>
+      <label><input type="checkbox" name="m-ovl" value="nlsc-roads"> NLSC 道路</label>
+      <button class="primary" id="m-save">儲存地圖設定</button>
+    </div>
+    <p class="meta">魯地圖和等高線的主機有時不回應，地圖載不出來時換個底圖就好。</p>
+  </section>
+
   <section>
     <h2>資料校正</h2>
     <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。只在「我的算式」模式生效。</p>
@@ -330,6 +348,8 @@ async function loadSyncSettings() {
   $("s-open-h").value = SS.auto_on_open_hours ?? 6;
   $("s-primary").value = SS.primary_source || "";
   $("s-chart").value = SS.chart_data_source || "wko5";
+  $("m-base").value = SS.map_basemap || "rudy";
+  document.querySelectorAll('input[name="m-ovl"]').forEach((c) => c.checked = (SS.map_overlays || []).includes(c.value));
   f("tp", "secretsrc").textContent = SRC_LABEL[SS.tp_client_credentials_source] || SS.tp_client_credentials_source;
   f("tp", "secretfile").textContent = SS.tp_client_file_exists ? "存在（內容不顯示）" : "不存在";
   f("tp", "usewko5").checked = SS.tp_use_wko5_client !== false && SS.tp_client_credentials_configured;
@@ -374,6 +394,13 @@ $("s-save").onclick = async () => {
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast("已儲存同步設定"); loadSyncSettings(); }
+  catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+};
+
+$("m-save").onclick = async () => {
+  const body = { map_basemap: $("m-base").value,
+    map_overlays: [...document.querySelectorAll('input[name="m-ovl"]:checked')].map((c) => c.value) };
+  try { await putSetting(body); toast("已儲存地圖設定"); loadSyncSettings(); }
   catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 };
 

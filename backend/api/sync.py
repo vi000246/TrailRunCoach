@@ -200,6 +200,8 @@ class SyncSettingsBody(BaseModel):
     auto_on_open: Optional[bool] = None
     auto_on_open_hours: Optional[float] = None
     chart_data_source: Optional[str] = None       # wko5 | coros | tp
+    map_basemap: Optional[str] = None             # workout map default basemap id
+    map_overlays: Optional[list[str]] = None      # workout map default overlay ids
 
 
 _SETTING_KEYS = {"primary_source": "sync.primary_source", "timezone": "athlete.timezone",
@@ -209,7 +211,8 @@ _SETTING_KEYS = {"primary_source": "sync.primary_source", "timezone": "athlete.t
                  "daily_sync_time": "sync.schedule.daily_time",
                  "auto_on_open": "sync.auto_on_open.enabled",
                  "auto_on_open_hours": "sync.auto_on_open.hours",
-                 "chart_data_source": "charts.data_source"}
+                 "chart_data_source": "charts.data_source",
+                 "map_basemap": "charts.map.basemap", "map_overlays": "charts.map.overlays"}
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:
