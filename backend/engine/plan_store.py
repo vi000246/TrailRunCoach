@@ -139,6 +139,15 @@ def _clean(patch: dict, today: str) -> dict:
             if k == "title" and not v:
                 raise PlanError("標題不能空白")
         out[k] = v
+    if patch.get("tss") is not None:
+        # the estimate the 課表 dialog shows (minutes × the kind's TSS per hour)
+        try:
+            t = float(patch["tss"])
+        except (TypeError, ValueError):
+            raise PlanError("TSS 要是數字")
+        if not 0 <= t <= 2000:
+            raise PlanError("TSS 要在 0–2000")
+        out["tss"] = round(t, 1)
     return out
 
 

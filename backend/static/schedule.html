@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>課表</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+  --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
+  --cell: #ffffff; --out: #f7f7f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+    --cell: #1a1a19; --out: #151514;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+  --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+  --cell: #1a1a19; --out: #151514;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+.num { font-variant-numeric: tabular-nums; }
+.err { color: var(--bad); }
+.ok { color: var(--good); }
+main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+
+/* kind + phase palettes */
+.k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); }
+.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); }
+.ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); }
+.ph-event { --ph: var(--hi); } .ph-recovery { --ph: var(--s3); } .ph-transition { --ph: var(--s7); } .ph-none { --ph: var(--line); }
+
+/* ---- buttons ---- */
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px;
+  padding: 5px 12px; cursor: pointer; font-size: 13px; line-height: 1.3; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn:hover { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.btn:focus-visible, .chip:focus-visible, .dnum:focus-visible, .add:focus-visible, .menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn.danger { color: var(--bad); }
+.btn.danger.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.icon { padding: 5px 9px; }
+.btn small { font-weight: 400; opacity: .85; font-size: 11.5px; }
+.seg { display: inline-flex; }
+.seg button { border: 1px solid var(--line); background: var(--panel); padding: 4px 12px; cursor: pointer; margin-left: -1px; font-size: 13px; }
+.seg button:first-child { border-radius: 7px 0 0 7px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 7px 7px 0; }
+.seg button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); }
+
+/* ---- header: title + calendar navigation ---- */
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.calnav h1 { font-size: 19px; margin: 0 6px 0 0; font-weight: 700; letter-spacing: .01em; }
+.calnav .navbtns { display: inline-flex; gap: 4px; }
+.spacer { flex: 1; }
+
+/* ---- sync toolbar ---- */
+.sync { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; display: grid; gap: 6px; }
+.sync .bar { gap: 8px; }
+.split { display: inline-flex; position: relative; }
+.split > .btn:first-child { border-radius: 7px 0 0 7px; }
+.split > .caret { border-radius: 0 7px 7px 0; border-left: 1px solid color-mix(in srgb, #fff 35%, var(--accent)); padding: 5px 8px; }
+.menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 230px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 5px; display: grid; }
+.menu.right { left: auto; right: 0; }
+.menu[hidden] { display: none; }
+.menu button { border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  display: flex; justify-content: space-between; gap: 16px; font-size: 13px; }
+.menu button:hover:not([disabled]), .menu button:focus-visible { background: var(--soft); }
+.menu button[disabled] { color: var(--faint); cursor: default; }
+.menu button .meta { font-size: 12px; }
+.menu .menu-h { font-size: 11.5px; color: var(--faint); padding: 6px 10px 2px; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
+.more { position: relative; }
+.status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
+.status b { color: var(--text); font-weight: 600; }
+.status .warn b { color: var(--watch); } .status .bad b { color: var(--bad); }
+#sync-msg { font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+#sync-msg:empty { display: none; }
+#sync-msg ul { margin: 2px 0 0; padding-left: 18px; width: 100%; }
+.spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: sp .8s linear infinite; display: inline-block; }
+@keyframes sp { to { transform: rotate(360deg); } }
+.login { color: var(--watch); border-color: color-mix(in srgb, var(--watch) 45%, var(--line)); }
+
+/* ---- calendar (month + week) ---- */
+.calwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; position: relative; }
+.calwrap.loading::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--panel) 45%, transparent); }
+.cal { --sumw: 150px; display: grid; }
+.cal-head, .wk { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) var(--sumw); }
+.cal-head div { font-size: 12px; color: var(--muted); padding: 7px 8px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.cal-head div.we { color: var(--faint); }
+.cal-head div:last-child { border-left: 1px solid var(--line); }
+.wk { border-bottom: 1px solid var(--line); position: relative; }
+.wk:last-child { border-bottom: 0; }
+.wk::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--ph); z-index: 1; }
+.wk.prov .cell { background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--line) 45%, transparent) 9px 10px); }
+.cell { background: var(--cell); min-height: 118px; padding: 4px 5px 6px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px;
+  position: relative; min-width: 0; cursor: default; }
+.cell:first-child { border-left: 0; padding-left: 9px; }
+.cell.can { cursor: copy; }
+.cell.out { background: var(--out); }
+.cell.out .dnum { color: var(--faint); }
+.cell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.cell.drop { background: color-mix(in srgb, var(--accent) 12%, var(--cell)); outline: 2px dashed var(--accent); outline-offset: -3px; }
+.cell-top { display: flex; align-items: center; gap: 4px; min-height: 22px; }
+.dnum { border: 0; background: none; padding: 0 5px; min-width: 24px; height: 22px; border-radius: 11px; font-size: 12.5px; font-weight: 600;
+  color: var(--text); cursor: pointer; font-variant-numeric: tabular-nums; }
+.dnum:hover { background: var(--soft); }
+.cell.today .dnum { background: var(--accent); color: #fff; }
+.cell .phl { font-size: 10.5px; color: var(--ph); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.add { margin-left: auto; border: 1px solid transparent; background: none; width: 22px; height: 22px; border-radius: 6px; color: var(--faint);
+  cursor: pointer; font-size: 15px; line-height: 1; opacity: 0; }
+.cell:hover .add, .add:focus-visible, .ag-day .add { opacity: 1; }
+.add:hover { color: var(--accent); border-color: var(--line); background: var(--panel); }
+@media (hover: none) { .add { opacity: 1; } }
+.chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+
+.chip { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 4px; align-items: center; text-align: left;
+  width: 100%; border: 0; border-left: 3px solid var(--k); border-radius: 5px; padding: 2px 5px 3px 6px; cursor: pointer;
+  background: color-mix(in srgb, var(--k) 13%, var(--cell)); color: var(--text); font-size: 11.5px; line-height: 1.3; min-width: 0; }
+.chip:hover { background: color-mix(in srgb, var(--k) 22%, var(--cell)); }
+.chip .c-t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .c-r { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; }
+.chip .c-m { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .c-x { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip[draggable="true"] { cursor: grab; }
+.chip.dragging { opacity: .4; }
+.chip.st-done { background: color-mix(in srgb, var(--k) 24%, var(--cell)); }
+.chip.st-done .c-t::before { content: "✓ "; color: var(--cpc, var(--k)); font-weight: 800; }
+/* compliance: green ±20 %, yellow 20–50 %, red > 50 % or wrong type (engine/compliance.py) */
+.cp-green { --cpc: var(--good); } .cp-yellow { --cpc: var(--watch); } .cp-red { --cpc: var(--bad); }
+.chip.st-done[class*="cp-"] { background: color-mix(in srgb, var(--cpc) 15%, var(--cell)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cpc) 45%, transparent); }
+.chip.st-done[class*="cp-"]:hover { background: color-mix(in srgb, var(--cpc) 24%, var(--cell)); }
+.cpw { font-weight: 700; color: var(--cpc, var(--text)); }
+.chip.st-missed { background: none; border-left-color: color-mix(in srgb, var(--k) 40%, var(--line)); color: var(--faint); }
+.chip.st-missed .c-t { text-decoration: line-through; font-weight: 500; }
+.chip.st-missed .c-r::before { content: "未完成"; color: var(--bad); text-decoration: none; font-size: 10px; }
+.chip.prov { background: color-mix(in srgb, var(--k) 6%, var(--cell)); border-left-style: dashed; }
+.chip.prov .c-t { font-weight: 500; }
+.chip.act { --k: var(--bar); cursor: default; background: none; border: 1px solid var(--line); border-left: 3px solid var(--k); }
+.chip.act .c-t { font-weight: 500; }
+.chip.act .c-t::before { content: "● "; color: var(--k); }
+
+/* COROS sync state icon on a chip */
+.sy { display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; flex: none; }
+.sy svg { width: 13px; height: 13px; }
+.sy-ok { color: var(--good); } .sy-warn { color: var(--watch); } .sy-bad { color: var(--bad); } .sy-none { color: var(--faint); }
+
+/* week summary column */
+.sum { border-left: 1px solid var(--line); padding: 6px 9px; display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; background: color-mix(in srgb, var(--ph) 5%, var(--panel)); min-width: 0; }
+.php { align-self: flex-start; font-size: 11px; font-weight: 700; color: var(--ph); border: 1px solid color-mix(in srgb, var(--ph) 45%, transparent);
+  background: color-mix(in srgb, var(--ph) 10%, transparent); border-radius: 9px; padding: 0 7px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.sum .r { display: flex; justify-content: space-between; gap: 4px; color: var(--muted); }
+.sum .r b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.trk { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.trk i { display: block; height: 100%; background: var(--ph); border-radius: 3px; }
+.sum .tag { font-size: 10.5px; color: var(--faint); }
+
+/* week view: same grid, one tall row with more detail */
+.cal.week .cell { min-height: 420px; }
+.cal.week .chip { padding: 5px 6px 6px 8px; font-size: 12.5px; }
+.cal.week .chip .c-t { white-space: normal; }
+.cal.week .chip .c-x { white-space: normal; font-size: 11.5px; }
+.cal.week .chip .c-m, .ag-day .chip .c-m { font-size: 11.5px; }
+.cal.week .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 11px; margin-top: 2px; white-space: normal; }
+
+/* agenda (phones) */
+.agenda { display: grid; }
+.ag-sum { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ph) 6%, var(--panel)); font-size: 12.5px; border-left: 4px solid var(--ph); }
+.ag-sum b { font-variant-numeric: tabular-nums; }
+.ag-day { display: grid; grid-template-columns: 52px minmax(0, 1fr) 36px; gap: 8px; padding: 9px 10px 9px 12px; border-bottom: 1px solid var(--line); align-items: start; }
+.ag-day:last-child { border-bottom: 0; }
+.ag-day .d { font-size: 12px; color: var(--muted); line-height: 1.25; }
+.ag-day .d b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
+.ag-day.today .d b { color: var(--accent); }
+.ag-day.sel { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.ag-day.drop { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.ag-day .chip { font-size: 13px; padding: 5px 8px 6px; }
+.ag-day .chip .c-x { font-size: 12px; white-space: normal; }
+.ag-day .rest { color: var(--faint); font-size: 12.5px; padding-top: 4px; }
+.ag-day .add { opacity: 1; width: 32px; height: 32px; border-color: var(--line); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
+.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--k); margin-right: 5px; vertical-align: -1px; }
+.legend .sy { vertical-align: -2px; margin-right: 3px; }
+
+/* glossary hover (AeT / CP) */
+.term { position: relative; border-bottom: 1px dotted currentColor; cursor: help; }
+.term:hover::after, .term.open::after, .term:focus::after { content: attr(data-tip); position: absolute; top: 1.5em; left: 0; z-index: 50; width: max-content;
+  max-width: min(320px, 80vw); white-space: pre-line; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; font-weight: 400; line-height: 1.5; box-shadow: 0 6px 18px rgba(0,0,0,.18); text-decoration: none; }
+
+/* ---- dialogs ---- */
+dialog.sd { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); padding: 0; width: min(460px, 94vw);
+  box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+dialog.sd::backdrop { background: rgba(0,0,0,.35); }
+dialog.sd form { padding: 14px 16px 14px; display: grid; gap: 9px; }
+dialog.sd .dh { display: flex; align-items: flex-start; gap: 8px; }
+dialog.sd h3 { margin: 0; font-size: 16px; }
+dialog.sd .dh .meta { display: block; font-size: 12px; }
+dialog.sd .x { margin-left: auto; border: 0; background: none; font-size: 18px; line-height: 1; color: var(--faint); cursor: pointer; padding: 2px 4px; border-radius: 5px; }
+dialog.sd .x:hover { color: var(--text); }
+dialog.sd label { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
+dialog.sd input, dialog.sd select, dialog.sd textarea { font-size: 14px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; width: 100%; }
+dialog.sd input:focus, dialog.sd textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 0; }
+dialog.sd input:disabled, dialog.sd textarea:disabled { opacity: .75; }
+dialog.sd .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+dialog.sd .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; align-items: center; }
+dialog.sd .err { font-size: 12.5px; }
+dialog.sd .err:empty { display: none; }
+.kinds { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.kinds legend { font-size: 12.5px; color: var(--muted); padding: 0; margin-bottom: 3px; }
+.kinds label { display: inline-flex !important; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 14px; padding: 3px 10px 3px 8px;
+  cursor: pointer; font-size: 13px !important; color: var(--text) !important; }
+.kinds label::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--k); }
+.kinds input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+.kinds label:has(input:checked) { border-color: var(--k); background: color-mix(in srgb, var(--k) 15%, transparent); font-weight: 600; }
+.kinds label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kinds label:has(input:disabled) { cursor: default; }
+.hint { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.hint button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
+.done-box { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
+.chg { margin: 0; padding-left: 18px; font-size: 13px; max-height: 50vh; overflow: auto; display: grid; gap: 3px; }
+.chg .add-c { color: var(--good); } .chg .rm-c { color: var(--bad); } .chg .ch-c { color: var(--watch); }
+.cf-body { font-size: 13.5px; display: grid; gap: 6px; }
+.cf-body .big { font-size: 15px; }
+
+/* ---- phones: agenda list, stacked toolbar ---- */
+@media (max-width: 699px) {
+  main { padding: 10px 10px 24px; gap: 8px; }
+  .calnav h1 { font-size: 17px; }
+  #view-seg { display: none; }
+  .sync { padding: 8px 10px; }
+  #phase-now { display: none; }
+  .calnav .navbtns { margin-left: auto; }
+  .split, #login-link { flex: 1 1 auto; min-width: 0; }
+  .split > .btn:first-child { flex: 1; justify-content: center; min-width: 0; overflow: hidden; }
+  #login-link { justify-content: center; white-space: normal; }
+  .status { flex-basis: 100%; }
+  .calwrap, .sync { max-width: 100%; }
+  #rec-btn .lbl-long { display: none; }
+  .menu { min-width: min(260px, 88vw); }
+  .legend { font-size: 11.5px; }
+  dialog.sd { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 14px 14px 0 0; max-height: 92vh; }
+}
+@media (min-width: 700px) { #rec-btn .lbl-short { display: none; } }
+@media (max-width: 1000px) and (min-width: 700px) { .cal { --sumw: 112px; } .cell { min-height: 104px; } .chip .c-x { display: none; } }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="schedule"></script>
+<main>
+  <div class="bar calnav">
+    <h1 id="cal-label">課表</h1>
+    <span class="navbtns">
+      <button class="btn icon" id="prev" type="button" aria-label="上個月">‹</button>
+      <button class="btn" id="go-today" type="button">今天</button>
+      <button class="btn icon" id="next" type="button" aria-label="下個月">›</button>
+    </span>
+    <span class="spacer"></span>
+    <span class="meta" id="phase-now"></span>
+    <div class="seg" id="view-seg" role="group" aria-label="檢視">
+      <button type="button" data-view="month" aria-pressed="true">月</button><button type="button" data-view="week" aria-pressed="false">週</button>
+    </div>
+  </div>
+
+  <section class="sync" aria-label="同步到 COROS">
+    <div class="bar main">
+      <div class="split" id="push-split">
+        <button class="btn primary" id="push-main" type="button">同步到 COROS <small id="push-main-sub"></small></button>
+        <button class="btn primary caret" id="push-caret" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="push-menu" aria-label="選擇同步範圍">▾</button>
+        <div class="menu" id="push-menu" role="menu" aria-label="同步範圍" hidden>
+          <button type="button" role="menuitem" data-scope="day">這一天 <span class="meta" id="pm-day">先點選日曆上的一天</span></button>
+          <button type="button" role="menuitem" data-scope="week">這一週 <span class="meta" id="pm-week"></span></button>
+          <button type="button" role="menuitem" data-scope="phase">整個周期 <span class="meta" id="pm-phase"></span></button>
+        </div>
+      </div>
+      <a class="btn login" id="login-link" href="/api/v1/wko5/settings" hidden>COROS 未登入 · 到設定頁登入 →</a>
+      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成未完成，之後的課重排（你改過的保留）">
+        <span class="lbl-long">依實際進度重排</span><span class="lbl-short">重排</span></button>
+      <div class="more">
+        <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
+        <div class="menu right" id="more-menu" role="menu" aria-label="更多" hidden>
+          <div class="menu-h">從 COROS 移除（只動這裡推送過的）</div>
+          <button type="button" role="menuitem" data-unpush="day">這一天 <span class="meta" id="um-day"></span></button>
+          <button type="button" role="menuitem" data-unpush="week">這一週 <span class="meta" id="um-week"></span></button>
+          <button type="button" role="menuitem" data-unpush="phase">整個周期 <span class="meta" id="um-phase"></span></button>
+          <hr>
+          <button type="button" role="menuitem" data-act="refresh">重新整理</button>
+        </div>
+      </div>
+      <span class="status" id="sync-status" aria-live="polite"></span>
+    </div>
+    <div id="sync-msg" role="status" aria-live="polite"></div>
+  </section>
+
+  <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
+  <div class="legend" id="legend"></div>
+</main>
+
+<dialog class="sd" id="sd" aria-labelledby="sd-h">
+  <form id="sd-form" novalidate>
+    <div class="dh"><div><h3 id="sd-h">新增課表</h3><span class="meta" id="sd-sub"></span></div>
+      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="done-box" id="sd-done" hidden></div>
+    <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
+    <div class="row2">
+      <label>日期<input type="date" name="day" required></label>
+      <label>分鐘<input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
+    </div>
+    <div class="hint" id="sd-tss" aria-live="polite"></div>
+    <label>標題<input name="title" required maxlength="200" autocomplete="off"></label>
+    <label>目標<input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; AeT"></label>
+    <div class="hint" id="sd-tgt"></div>
+    <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
+    <div class="hint" id="sd-gl"></div>
+    <p class="meta faint" style="margin:0" id="sd-q">強度課的標題寫成「3×10 分」這種格式，推送到 COROS 才會有間歇結構</p>
+    <div class="err" id="sd-err" role="alert"></div>
+    <div class="btns">
+      <button class="btn danger" type="button" id="sd-del">刪除</button>
+      <button class="btn" type="button" id="sd-push">推送這天到 COROS</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close id="sd-cancel">取消</button>
+      <button class="btn primary" type="submit" id="sd-save">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sd" id="cf" aria-labelledby="cf-h">
+  <form method="dialog">
+    <div class="dh"><h3 id="cf-h"></h3><button class="x" value="cancel" aria-label="關閉">✕</button></div>
+    <div class="cf-body" id="cf-body"></div>
+    <div class="btns"><span class="spacer"></span><button class="btn" value="cancel" id="cf-no">取消</button><button class="btn primary" value="ok" id="cf-ok">確定</button></div>
+  </form>
+</dialog>
+
+<script>
+const PAPI = "/api/v1/overview/plan";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// glossary: AeT / CP terms get a hover (tap on touch) explanation — same text as the overview page
+const GLOSS = {
+  "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
+    "怎麼測（心率飄移測試）：\n" +
+    "1. 平路或跑步機，先熱身 15 分鐘\n" +
+    "2. 用你猜的 AeT 心率，穩定跑 60 分鐘，配速固定、不要喝咖啡因\n" +
+    "3. 比較前 30 分與後 30 分的「配速÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 就是這個心率；> 5% → 設太高\n" +
+    "4. 結果填到「賽事周期」頁的門檻（沒填時用 0.89 × LTHR 估）",
+  "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
+    "怎麼測（3 分 + 12 分）：\n" +
+    "1. 平路或田徑場，熱身 15–20 分鐘，含 3–4 趟加速跑\n" +
+    "2. 3 分鐘全力、配速平均（不要一開始衝死）\n" +
+    "3. 走路／慢跑恢復 30 分鐘\n" +
+    "4. 12 分鐘全力、配速平均\n" +
+    "5. CP = (12 分平均功率×720 − 3 分平均功率×180) ÷ 540；W′ = (3 分功率 − CP) × 180\n" +
+    "6. 結果填到「賽事周期」頁的門檻；每 4–6 週測一次，賽前 10 天內不要測",
+};
+const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
+const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
+const hasGl = (s) => { GLOSS_RE.lastIndex = 0; const r = GLOSS_RE.test(String(s || "")); GLOSS_RE.lastIndex = 0; return r; };
+const ls = { get(k, d) { try { const v = localStorage.getItem("schedule." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("schedule." + k, JSON.stringify(v)); } catch {} } };
+
+// ---- dates ----
+const WD = "一二三四五六日";
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dOf = (iso) => new Date(iso + "T00:00:00");
+const addDays = (iso, n) => { const d = dOf(iso); d.setDate(d.getDate() + n); return isoOf(d); };
+const mondayOf = (iso) => addDays(iso, -((dOf(iso).getDay() + 6) % 7));
+const md = (iso) => { const d = dOf(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const wd = (iso) => WD[(dOf(iso).getDay() + 6) % 7];
+const rangeTxt = (a, b) => a === b ? `${md(a)}（週${wd(a)}）` : `${md(a)}–${md(b)}`;
+const hm = (s) => { if (s == null) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+const h1 = (h) => (h || 0) >= 10 ? (h || 0).toFixed(0) : (h || 0).toFixed(1);
+const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
+const localTime = (s) => { if (!s) return null; const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + "Z");
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+async function sj(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  const b = await r.json().catch(() => ({}));
+  if (r.status === 401) { const e = new Error("COROS 未登入或登入過期"); e.auth = true; throw e; }
+  if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
+  return b;
+}
+
+const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
+const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "健行／登山", strength: "肌力" };
+const SYNC = { pushed: ["ok", "已推送到 COROS"], updated: ["ok", "已推送到 COROS"], outdated: ["warn", "需更新：課表改過，再同步一次會更新 COROS"],
+  failed: ["bad", "推送失敗"], not_pushed: ["none", "未推送"] };
+const SY_SVG = {
+  ok: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="m4.8 8.2 2.2 2.2 4.2-4.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M11 6.2A3.3 3.3 0 0 0 5 7M5 9.8A3.3 3.3 0 0 0 11 9" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M11.4 4.2v2.3H9.1M4.6 11.8V9.5h2.3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  bad: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 4.3v4.6" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/><circle cx="8" cy="11.6" r="1.1" fill="#fff"/></svg>',
+  none: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.4 2"/></svg>',
+};
+const syIcon = (st, extra = "") => { const [cls, label] = SYNC[st] || []; if (!cls) return "";
+  return `<span class="sy sy-${cls}" role="img" aria-label="${esc(label)}" title="${esc(label + (extra ? "\n" + extra : ""))}">${SY_SVG[cls]}</span>`; };
+
+const S = { view: ls.get("view", "month"), anchor: null, sel: null, data: null, narrow: matchMedia("(max-width: 699px)").matches, busy: false };
+let D = null;                                      // last /calendar payload
+
+// ---------------- range + load ----------------
+function range() {
+  if (S.narrow || S.view === "week") { const a = mondayOf(S.anchor); return [a, addDays(a, 6)]; }
+  const d = dOf(S.anchor), first = isoOf(new Date(d.getFullYear(), d.getMonth(), 1)), last = isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  return [mondayOf(first), addDays(mondayOf(last), 6)];
+}
+async function load() {
+  const [a, b] = range();
+  $("calwrap").classList.add("loading");
+  try {
+    D = await sj("GET", `${PAPI}/calendar?start=${a}&end=${b}`);
+    if (!S.anchor) S.anchor = D.today;
+    render();
+  } catch (e) {
+    $("cal").innerHTML = `<p class="err" style="padding:20px">載入失敗：${esc(e.message)}</p>`;
+  } finally { $("calwrap").classList.remove("loading"); }
+}
+
+// ---------------- rendering ----------------
+const findS = (uid) => D.sessions.find((s) => s.uid === uid);
+const editable = (s) => s.state === "active" && s.day >= D.today;
+function chipHtml(s, big) {
+  const live = editable(s);
+  const c = s.coros || {};
+  const done = s.state === "done" && s.done_by;
+  const est = s.tss_est ?? s.tss;
+  // "45′ · TSS 35" (planned) — "TSS 35 → 41" once done (planned → actual)
+  const tss = `TSS ${n0(est)}${done && s.done_by.tss != null ? ` → ${n0(s.done_by.tss)}` : ""}`;
+  const meta = [s.minutes ? s.minutes + "′" : "", tss].filter(Boolean).join(" · ");
+  const line = done ? `${esc(s.done_by.category_label || "完成")} ${hm(s.done_by.moving_s)}` : esc(s.target || "");
+  const cp = s.compliance;
+  const cpTip = cp ? `\n${compTip(cp)}` : "";
+  const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
+  const lbl = `${KINDS[s.kind] || ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + (SYNC[c.status] || [])[1] : ""}`;
+  return `<button type="button" class="chip k-${esc(s.kind)} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
+      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
+    <span class="c-t">${esc(s.title)}</span><span class="c-r">${icon}</span>
+    <span class="c-m">${meta}</span>
+    ${line ? `<span class="c-x">${line}</span>` : ""}${big && s.detail && s.state !== "done" ? `<span class="c-d">${esc(s.detail)}</span>` : ""}</button>`;
+}
+const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s4", bike: "--s7", strength: "--s5", walk: "--s6", other: "--bar" };
+function actHtml(a) {
+  return `<div class="chip act" style="--k:var(${CAT_VAR[a.category] || "--bar"})" title="${esc(`${a.category_label} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}`)}">
+    <span class="c-t">${esc(a.category_label)}</span><span class="c-r">${hm(a.moving_s)}</span>
+    ${a.tss != null ? `<span class="c-x">TSS ${n0(a.tss)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}</span>` : ""}</div>`;
+}
+function byDay() {
+  const ss = {}, acts = {};
+  for (const s of D.sessions) (ss[s.day] ||= []).push(s);
+  const used = new Set(D.sessions.filter((s) => s.state === "done" && s.done_by).map((s) => s.done_by.index));
+  for (const a of D.activities) if (!used.has(a.index)) (acts[a.date] ||= []).push(a);
+  const order = (s) => (s.state === "missed" ? 1 : 0) * 10 + (s.kind === "strength" ? 1 : 0);
+  for (const k in ss) ss[k].sort((x, y) => order(x) - order(y));
+  return { ss, acts };
+}
+const estOf = (s) => s.tss_est ?? s.tss ?? 0;
+// plan compliance (engine/compliance.py decides the level; thresholds live there)
+function compTip(cp) {
+  if (!cp) return "";
+  if (cp.level === "missed") return "未完成";
+  const parts = [cp.tss_pct != null ? `TSS ${cp.tss_pct}%` : "", cp.duration_pct != null ? `時間 ${cp.duration_pct}%` : ""].filter(Boolean).join(" · ");
+  return `完成度 ${cp.pct != null ? cp.pct + "%" : "–"}（${cp.label}${parts ? "；" + parts : ""}）`;
+}
+function dayTip(d, ss) {
+  const list = (ss || []).filter((s) => ["active", "done", "missed"].includes(s.state));
+  const t = list.reduce((a, s) => a + estOf(s), 0);
+  const done = list.filter((s) => s.state === "done" && s.done_by && s.done_by.tss != null).reduce((a, s) => a + s.done_by.tss, 0);
+  return `${md(d)}（週${wd(d)}）` + (list.length ? `　計畫 TSS ${n0(t)}${done ? ` · 完成 ${n0(done)}` : ""}` : "　沒有排課") + (d >= D.today ? "\n點空白處新增" : "");
+}
+const phaseOf = (iso) => (D.phases || []).find((p) => p.start <= iso && iso <= p.end);
+const weekRow = (ws) => (D.week_rows || []).find((w) => w.start === ws) || {};
+function sumHtml(w) {
+  const future = w.start > D.today, cur = w.start <= D.today && D.today <= w.end;
+  const ph = w.phase_label || w.mode_label;
+  if (!future && !w.planned_hours && !w.planned_tss)          // before the stored plan existed
+    return `${ph ? `<span class="php">${esc(ph)}</span>` : ""}<div class="r"><span>完成</span><b>${h1(w.done_hours)} h</b></div>
+      <div class="r"><span>TSS</span><b>${n0(w.done_tss)}</b></div><span class="tag">沒有排課</span>`;
+  const pct = (a, b) => b > 0 ? Math.min(100, a / b * 100) : 0;
+  return `${ph ? `<span class="php" title="${esc(w.mode_label && w.mode_label !== ph ? `${ph} · ${w.mode_label}` : ph)}">${esc(ph)}</span>` : ""}
+    <div class="r"><span>時間</span><span>${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span></div>
+    ${future ? "" : `<div class="trk" role="img" aria-label="完成 ${h1(w.done_hours)} / 計畫 ${h1(w.planned_hours)} 小時"><i style="width:${pct(w.done_hours, w.planned_hours).toFixed(0)}%"></i></div>`}
+    <div class="r"><span>TSS</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
+    ${future ? "" : `<div class="trk" role="img" aria-label="TSS 完成 ${n0(w.done_tss)} / 計畫 ${n0(w.planned_tss)}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}
+    ${compW(w)}
+    ${w.provisional ? `<span class="tag">暫定（重排時會依進度調整）</span>` : cur ? `<span class="tag">本週</span>` : ""}`;
+}
+const compW = (w) => w.compliance ? `<div class="r cp-${esc(w.compliance.level)}" title="到${w.end < D.today ? "週日" : "昨天（今天完成的也算）"}為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）"><span>完成度</span><span class="cpw">${w.compliance.pct} %</span></div>` : "";
+function render() {
+  const [a, b] = range();
+  const { ss, acts } = byDay();
+  const month = dOf(S.anchor).getMonth();
+  const week = S.narrow || S.view === "week";
+  $("cal-label").textContent = week ? `${dOf(a).getFullYear()} · ${md(a)}–${md(b)}` : `${dOf(S.anchor).getFullYear()} 年 ${month + 1} 月`;
+  $("prev").setAttribute("aria-label", week ? "上一週" : "上個月");
+  $("next").setAttribute("aria-label", week ? "下一週" : "下個月");
+  document.querySelectorAll("#view-seg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.view === S.view)));
+  const pn = phaseOf(D.today);
+  $("phase-now").innerHTML = pn ? `目前 <b class="ph-${esc(pn.kind)}" style="color:var(--ph)">${esc(pn.label)}</b> ${md(pn.start)}–${md(pn.end)}` : "";
+  if (S.narrow) $("cal").innerHTML = agendaHtml(a, ss, acts);
+  else {
+    const rows = [];
+    let prevPh = null;
+    for (let ws = a; ws <= b; ws = addDays(ws, 7)) {
+      const w = weekRow(ws);
+      const cells = [];
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(ws, i), p = phaseOf(d);
+        const phl = p && p.kind !== prevPh && (i === 0 || p.start === d) ? `<span class="phl ph-${esc(p.kind)}">${esc(p.label)}</span>` : "";
+        if (p) prevPh = p.kind;
+        const can = d >= D.today;
+        const out = !week && dOf(d).getMonth() !== month;
+        const items = (ss[d] || []).map((s) => chipHtml(s, week)).join("") + (acts[d] || []).map(actHtml).join("");
+        cells.push(`<div class="cell ${out ? "out" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""}" role="gridcell" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
+          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}
+          ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
+          <div class="chips">${items}</div></div>`);
+      }
+      const ph = phaseOf(addDays(ws, 3)) || {};
+      rows.push(`<div class="wk ph-${esc(w.phase || ph.kind || "none")} ${w.provisional ? "prov" : ""}" role="row" data-week="${ws}">${cells.join("")}<div class="sum" role="gridcell" aria-label="週統計">${sumHtml(w)}</div></div>`);
+    }
+    $("cal").innerHTML = `<div class="cal ${week ? "week" : ""}" role="grid" aria-label="${esc($("cal-label").textContent)} 課表">
+      <div class="cal-head" role="row">${[...WD].map((x, i) => `<div role="columnheader" class="${i > 4 ? "we" : ""}">週${x}${week ? ` ${md(addDays(a, i))}` : ""}</div>`).join("")}<div role="columnheader">週統計</div></div>
+      ${rows.join("")}</div>`;
+  }
+  renderToolbar();
+}
+function agendaHtml(a, ss, acts) {
+  const w = weekRow(a), ph = phaseOf(addDays(a, 3));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(a, i), can = d >= D.today;
+    const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
+    days.push(`<div class="ag-day ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
+      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}</div>
+      <div class="chips">${items || `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`}</div>
+      ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
+  }
+  const future = a > D.today;
+  return `<div class="agenda"><div class="ag-sum ph-${esc(w.phase || (ph && ph.kind) || "none")}">
+      ${w.phase_label || w.mode_label ? `<span class="php">${esc(w.phase_label || w.mode_label)}</span>` : ""}
+      <span>時間 ${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span>
+      <span>TSS ${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span>
+      ${w.compliance ? `<span class="cp-${esc(w.compliance.level)}">完成度 <span class="cpw">${w.compliance.pct} %</span></span>` : ""}
+      ${w.provisional ? `<span class="faint">暫定</span>` : ""}</div>${days.join("")}</div>`;
+}
+function renderLegend() {
+  $("legend").innerHTML = KIND_ORDER.map((k) => `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
+    `<span class="faint">｜</span><span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ 完成：<b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><s class="faint">未完成</s></span><span>虛線＝暫定</span><span class="faint">｜</span>` +
+    ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${({ pushed: "已推送", outdated: "需更新", failed: "失敗", not_pushed: "未推送" })[k]}</span>`).join("");
+}
+
+// ---------------- toolbar ----------------
+function scopeRange(scope, day) {
+  const t = D.today;
+  if (scope === "day") return [day, day];
+  if (scope === "week") { const m = mondayOf(day || t); const e = addDays(m, 6); return [m > t ? m : t, e]; }
+  return [t, D.phase_push_end];
+}
+const weekDay = () => { const [a, b] = range(); if (S.sel) return S.sel; return D.today >= a && D.today <= b ? D.today : (S.narrow || S.view === "week" ? a : D.today); };
+function renderToolbar() {
+  const C = D.coros || {};
+  $("push-split").hidden = !C.authenticated;
+  $("login-link").hidden = !!C.authenticated;
+  const wkd = weekDay(), [wa, wb] = scopeRange("week", wkd);
+  const weekPast = wb < D.today;
+  $("push-main-sub").textContent = weekPast ? "" : `這一週 ${rangeTxt(wa, wb)}`;
+  $("push-main").disabled = weekPast || S.busy;
+  $("push-caret").disabled = S.busy;
+  const dayOk = S.sel && S.sel >= D.today;
+  const bd = $("push-menu").querySelector('[data-scope="day"]');
+  bd.disabled = !dayOk; $("pm-day").textContent = S.sel ? (dayOk ? rangeTxt(S.sel, S.sel) : "過去的日子不能推送") : "先點選日曆上的一天";
+  $("push-menu").querySelector('[data-scope="week"]').disabled = weekPast;
+  $("pm-week").textContent = weekPast ? "這週已經過去" : rangeTxt(wa, wb);
+  $("pm-phase").textContent = `${md(D.today)}–${md(D.phase_push_end)}${D.phase && D.phase_push_end < D.phase.end ? `（最多 ${D.max_weeks} 週）` : ""}`;
+  $("um-day").textContent = S.sel ? rangeTxt(S.sel, S.sel) : "先點選一天";
+  $("more-menu").querySelector('[data-unpush="day"]').disabled = !S.sel || !C.authenticated;
+  $("more-menu").querySelector('[data-unpush="week"]').disabled = weekPast || !C.authenticated;
+  $("more-menu").querySelector('[data-unpush="phase"]').disabled = !C.authenticated;
+  $("um-week").textContent = weekPast ? "" : rangeTxt(wa, wb);
+  $("um-phase").textContent = `到 ${md(D.phase_push_end)}`;
+  $("rec-btn").disabled = S.busy;
+  const parts = [];
+  if (C.authenticated) {
+    parts.push(`<span>上次推送 <b>${esc(localTime(C.last_pushed_at) || "還沒推送過")}</b></span>`);
+    if (C.outdated) parts.push(`<span class="warn" title="課表改過、COROS 上還是舊的">需更新 <b>${C.outdated}</b> 堂</span>`);
+    if (C.failed) parts.push(`<span class="bad">失敗 <b>${C.failed}</b> 堂</span>`);
+    if (C.pushed) parts.push(`<span>已推送 <b>${C.pushed}</b> 堂</span>`);
+  } else parts.push(`<span>登入 COROS 後才能把課表送到手錶</span>`);
+  $("sync-status").innerHTML = parts.join("");
+}
+function msg(html, cls = "") { $("sync-msg").innerHTML = html ? `<span class="${cls}">${html}</span>` : ""; }
+function errMsg(what, e) {
+  if (e.auth) { msg(`${esc(what)}失敗：COROS 未登入或登入過期 · <a href="/api/v1/wko5/settings">到設定頁重新登入 →</a>`, "err"); if (D) { D.coros.authenticated = false; renderToolbar(); } }
+  else msg(`${esc(what)}失敗：${esc(e.message)}`, "err");
+}
+
+// ---- menus (split + overflow): click, Esc, arrow keys ----
+function menu(btnId, menuId) {
+  const btn = $(btnId), m = $(menuId);
+  const items = () => [...m.querySelectorAll("button:not([disabled])")];
+  const close = (focus) => { m.hidden = true; btn.setAttribute("aria-expanded", "false"); if (focus) btn.focus(); };
+  const open = () => { closeMenus(); m.hidden = false; btn.setAttribute("aria-expanded", "true"); items()[0]?.focus(); };
+  btn.addEventListener("click", (e) => { e.stopPropagation(); m.hidden ? open() : close(); });
+  btn.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); open(); } });
+  m.addEventListener("keydown", (e) => {
+    const it = items(), i = it.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); close(true); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); it[(i + 1) % it.length]?.focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); it[(i - 1 + it.length) % it.length]?.focus(); }
+    else if (e.key === "Tab") close();
+  });
+  m.addEventListener("click", (e) => { if (e.target.closest("button:not([disabled])")) close(); });
+  menus.push(close);
+}
+const menus = [];
+const closeMenus = () => menus.forEach((c) => c());
+document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) closeMenus(); });
+
+// ---- confirm dialog (returns a promise) ----
+function ask(title, html, ok = "確定", { cancel = "取消", danger = false } = {}) {
+  const dlg = $("cf");
+  $("cf-h").textContent = title; $("cf-body").innerHTML = html;
+  $("cf-ok").textContent = ok; $("cf-ok").hidden = !ok; $("cf-no").textContent = cancel;
+  $("cf-ok").classList.toggle("danger", danger); $("cf-ok").classList.toggle("primary", !danger);
+  dlg.returnValue = "";
+  dlg.showModal();
+  (ok ? $("cf-ok") : $("cf-no")).focus();
+  return new Promise((res) => dlg.addEventListener("close", () => res(dlg.returnValue === "ok"), { once: true }));
+}
+
+// ---- reconcile ----
+const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["✕ 未完成", "rm-c"], done: ["✓ 完成", "add-c"] };
+function changesHtml(byDay) {
+  const days = Object.keys(byDay || {});
+  if (!days.length) return `<p class="meta" style="margin:0">課表已經是最新的，沒有要變動的。</p>`;
+  const bf = (c) => c.before ? `（原本 ${Object.entries(c.before).map(([k, v]) => k === "day" ? md(v) : k === "minutes" ? v + " 分" : esc(v)).join("、")}）` : "";
+  return `<ul class="chg">${days.map((d) => `<li><b>${d === "—" ? "—" : `週${wd(d)} ${md(d)}`}</b>：${byDay[d].map((c) =>
+    `<span class="${ACT[c.action][1]}">${ACT[c.action][0]}</span> ${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}`).join("；")}</li>`).join("")}</ul>`;
+}
+async function reconcile() {
+  if (S.busy) return;
+  msg(`<span class="spin"></span> 依實際進度計算中…`);
+  let p;
+  try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
+  msg("");
+  const n = (p.changes || []).length;
+  const ok = await ask("依實際進度重排", `<p class="meta" style="margin:0">錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。</p>${changesHtml(p.by_day)}`,
+    n ? `套用 ${n} 項變動` : "", { cancel: n ? "取消" : "關閉" });
+  if (!ok) return;
+  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> 套用中…`);
+  try { await sj("POST", `${PAPI}/reconcile`); msg(`已重排：${n} 項變動`, "ok"); await load(); }
+  catch (e) { errMsg("重排", e); }
+  finally { S.busy = false; renderToolbar(); }
+}
+
+// ---- push / unpush ----
+const scopeQs = (scope, day) => `scope=${scope}${day ? `&day=${encodeURIComponent(day)}` : ""}`;
+const SCOPE_NAME = { day: "這一天", week: "這一週", phase: "整個周期" };
+async function push(scope, day) {
+  if (S.busy || !D) return;
+  day = scope === "phase" ? null : (day || (scope === "day" ? S.sel : weekDay()));
+  S.busy = true; renderToolbar();
+  msg(`<span class="spin"></span> 準備推送（${SCOPE_NAME[scope]}）…`);
+  try {
+    const p = await sj("GET", `${PAPI}/push-coros/preview?${scopeQs(scope, day)}`);
+    msg("");
+    const recN = (p.changes || []).filter((c) => c.action !== "done").length;
+    const rng = rangeTxt(p.start, p.end);
+    if (!p.count && !p.missed_to_remove && !recN) { msg(`${esc(rng)} 沒有可以推送的課`); return; }
+    const html = `<p class="big" style="margin:0">把 <b>${esc(rng)}</b> 的 <b>${p.count}</b> 堂課推送到 COROS 行事曆？</p>
+      <p class="meta" style="margin:0">新送出或更新 <b>${p.to_send}</b> 堂，${p.unchanged} 堂已經是最新的不會重送；會同步到手錶。</p>
+      ${p.skipped.length ? `<p class="meta" style="margin:0">${p.skipped.length} 堂（肌力等）不推送。</p>` : ""}
+      ${p.missed_to_remove ? `<p class="meta" style="margin:0">${p.missed_to_remove} 堂錯過的課會從 COROS 移除。</p>` : ""}
+      ${scope === "phase" ? `<p class="meta" style="margin:0">最遠排到 ${md(p.end)}（最多 ${p.max_weeks} 週）。</p>` : ""}
+      ${recN ? `<div><b style="font-size:13px">推送前會先依實際進度重排（${recN} 項）</b>${changesHtml(p.by_day)}</div>` : ""}`;
+    if (!(await ask(`同步到 COROS · ${SCOPE_NAME[scope]}`, html, `推送 ${p.count} 堂`))) return;
+    msg(`<span class="spin"></span> 推送 ${esc(rng)} 的 ${p.to_send} 堂課到 COROS…`);
+    const res = await sj("POST", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
+    const k = (st) => res.sessions.filter((r) => r.status === st);
+    const nNew = k("pushed").filter((r) => r.changed).length, fails = k("failed");
+    const rm = (res.removed || []).filter((r) => r.status === "removed").length;
+    await load();
+    msg(`${fails.length ? "" : "✓ "}推送完成（${esc(rng)}）：新推送 ${nNew} · 更新 ${k("updated").length}${rm ? ` · 移除 ${rm}` : ""}${fails.length ? ` · <b class="err">失敗 ${fails.length}</b>` : ""}` +
+      (fails.length ? `<ul>${fails.map((f) => `<li class="err">${md(f.day)} ${esc(f.title)}：${esc(f.error || "")}</li>`).join("")}</ul>` : ""), fails.length ? "" : "ok");
+  } catch (e) { errMsg("推送", e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+async function unpush(scope) {
+  if (S.busy || !D) return;
+  const day = scope === "phase" ? null : scope === "day" ? S.sel : weekDay();
+  const [a, b] = scope === "day" ? [day, day] : scopeRange(scope, day);
+  S.busy = true; renderToolbar();
+  try {
+    const all = (await sj("GET", `${PAPI}/sessions?start=${a}&end=${b}`)).sessions;
+    const n = all.filter((s) => s.coros && (s.coros.coros_program_id || s.coros.coros_id_in_plan)).length;
+    if (!n) { msg(`${esc(rangeTxt(a, b))} 沒有推送過的課`); return; }
+    if (!(await ask("從 COROS 移除", `<p style="margin:0">把 <b>${esc(rangeTxt(a, b))}</b> 推送過的 <b>${n}</b> 堂課從 COROS 行事曆和課表庫移除？</p>
+      <p class="meta" style="margin:0">只會動這裡推送過的；已經在手錶上完成的不會刪。課表本身不變，之後可以再推送。</p>`, `移除 ${n} 堂`, { danger: true }))) return;
+    msg(`<span class="spin"></span> 從 COROS 移除 ${n} 堂…`);
+    const r = await sj("DELETE", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
+    await load();
+    msg(`已從 COROS 移除 ${r.removed.filter((x) => x.status === "removed").length} 堂（${esc(rangeTxt(r.start, r.end))}）`, "ok");
+  } catch (e) { errMsg("移除", e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+
+// ---------------- session dialog ----------------
+let dlg = { uid: null, targetTouched: false };
+$("sd-kinds").insertAdjacentHTML("beforeend", KIND_ORDER.map((k) =>
+  `<label class="k-${k}"><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
+const F = $("sd-form");
+const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).value || "easy";
+// estimated TSS: an existing session keeps its own rate (the generator's) while the
+// kind is unchanged; otherwise minutes × the kind's TSS per hour (tss_rates, same
+// per-category medians / fixed hard-session rates week_plan() uses)
+const rateOf = (k) => (D.tss_rates || {})[k] || D.tss_per_hour || 50;
+function estDialog() {
+  const k = kindVal(), m = +F.minutes.value || 0, o = dlg.orig;
+  if (o && o.kind === k && o.minutes > 0 && (o.tss || 0) > 0) return { tss: o.tss * m / o.minutes, rate: o.tss / o.minutes * 60 };
+  return { tss: m / 60 * rateOf(k), rate: rateOf(k) };
+}
+function tssHint() {
+  const o = dlg.orig;
+  if (dlg.ro) {
+    const act = o && o.state === "done" && o.done_by && o.done_by.tss != null ? ` → 實際 <b>${n0(o.done_by.tss)}</b>` : "";
+    $("sd-tss").innerHTML = o ? `計畫 TSS <b>${n0(estOf(o))}</b>${act}` : "";
+    return;
+  }
+  const e = estDialog();
+  $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} TSS/小時 × ${+F.minutes.value || 0} 分</span>`;
+}
+function tgtHint() {
+  tssHint();
+  const t = (D.targets || {})[kindVal()] || "";
+  $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `依門檻建議：${gl(t)} <button type="button" id="sd-tgt-use">套用</button>` : "";
+  const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
+  $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
+  $("sd-q").hidden = kindVal() !== "quality";
+}
+function openDlg(s, day) {
+  closeMenus();
+  const ro = s && !editable(s);
+  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null };
+  $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
+  const d = s ? s.day : day;
+  $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
+  const db = $("sd-done");
+  db.hidden = !(s && (s.state === "done" || s.state === "missed"));
+  if (s && s.state === "done") db.innerHTML = `<b class="ok">✓ 已完成</b>${s.done_by ? `：${esc(s.done_by.category_label || "")} ${hm(s.done_by.moving_s)}${s.done_by.tss != null ? ` · TSS ${n0(s.done_by.tss)}` : ""}` : ""}` +
+    (s.compliance ? `<br><span class="cp-${esc(s.compliance.level)}"><span class="cpw">${esc(compTip(s.compliance))}</span></span>` : "");
+  else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}`;
+  F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
+  F.day.value = d;
+  (F.querySelector(`input[name="kind"][value="${s ? s.kind : "easy"}"]`) || {}).checked = true;
+  F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
+  F.minutes.value = s ? s.minutes : 45;
+  F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";
+  F.detail.value = s ? s.detail || "" : "";
+  F.querySelectorAll("input, textarea").forEach((x) => { x.disabled = !!ro; });
+  $("sd-err").textContent = "";
+  $("sd-save").hidden = !!ro;
+  $("sd-cancel").textContent = ro ? "關閉" : "取消";
+  const del = $("sd-del"); del.hidden = !s || ro; del.classList.remove("armed"); del.textContent = "刪除";
+  $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength";
+  tgtHint();
+  $("sd").showModal();
+  (ro ? $("sd-cancel") : F.title).focus();
+}
+F.addEventListener("change", (e) => {
+  if (e.target.name !== "kind" || dlg.uid) return tgtHint();
+  const k = kindVal();
+  const defs = D.default_titles || {};
+  if (!F.title.value || Object.values(defs).includes(F.title.value)) F.title.value = defs[k] || KINDS[k];
+  if (!dlg.targetTouched) F.target.value = (D.targets || {})[k] || "";
+  if (k === "strength" && +F.minutes.value === 45) F.minutes.value = 35;
+  tgtHint();
+});
+F.target.addEventListener("input", () => { dlg.targetTouched = true; tgtHint(); });
+F.title.addEventListener("input", tgtHint);
+F.minutes.addEventListener("input", tssHint);
+F.detail.addEventListener("input", tgtHint);
+$("sd").addEventListener("click", (e) => {
+  if (e.target.closest("[data-close]")) $("sd").close();
+  else if (e.target.id === "sd-tgt-use") { F.target.value = D.targets[kindVal()]; dlg.targetTouched = true; tgtHint(); }
+  else if (e.target === $("sd")) $("sd").close();                  // backdrop click
+});
+F.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (dlg.ro) return;
+  if (!F.title.value.trim()) { $("sd-err").textContent = "標題不能空白"; F.title.focus(); return; }
+  if (!F.day.value || F.day.value < D.today) { $("sd-err").textContent = "不能排到過去的日子"; F.day.focus(); return; }
+  const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+    tss: Math.round(estDialog().tss * 10) / 10 };
+  $("sd-save").disabled = true;
+  try {
+    await sj(dlg.uid ? "PATCH" : "POST", dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, body);
+    $("sd").close();
+    S.sel = body.day;
+    await load();
+    msg(dlg.uid ? `已更新「${esc(body.title)}」` : `已新增「${esc(body.title)}」到 ${md(body.day)}`, "ok");
+  } catch (err) { $("sd-err").textContent = err.message; }
+  finally { $("sd-save").disabled = false; }
+});
+$("sd-del").addEventListener("click", async () => {
+  const b = $("sd-del"), s = findS(dlg.uid);
+  if (!s) return;
+  if (!b.classList.contains("armed")) {
+    b.classList.add("armed");
+    const pushed = s.coros && ["pushed", "updated", "outdated"].includes(s.coros.status);
+    b.textContent = pushed ? "確定刪除（下次同步時也會從 COROS 移除）" : "確定刪除？";
+    return;
+  }
+  try {
+    await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`);
+    $("sd").close(); await load(); msg(`已刪除「${esc(s.title)}」（${md(s.day)}）`, "ok");
+  } catch (err) { $("sd-err").textContent = err.message; }
+});
+$("sd-push").addEventListener("click", () => { const s = findS(dlg.uid); if (!s) return; $("sd").close(); S.sel = s.day; render(); push("day", s.day); });
+
+// ---------------- calendar interaction ----------------
+function select(d) { S.sel = S.sel === d ? S.sel : d; render(); }
+$("cal").addEventListener("click", (e) => {
+  if (e.target.closest(".term")) return;
+  const add = e.target.closest("[data-add]"), sel = e.target.closest("[data-sel]"), chip = e.target.closest(".chip[data-uid]");
+  if (add) { S.sel = add.dataset.add; render(); return openDlg(null, add.dataset.add); }
+  if (chip) { const s = findS(chip.dataset.uid); if (s) { S.sel = s.day; render(); openDlg(findS(chip.dataset.uid)); } return; }
+  if (sel) return select(sel.dataset.sel);
+  const cell = e.target.closest("[data-day]");
+  if (!cell || e.target.closest(".chip")) return;
+  const d = cell.dataset.day;
+  S.sel = d; render();
+  if (d >= D.today) openDlg(null, d);
+});
+// arrow keys move between days (on the date buttons)
+$("cal").addEventListener("keydown", (e) => {
+  const b = e.target.closest(".dnum"); if (!b) return;
+  const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: S.narrow ? -1 : -7, ArrowDown: S.narrow ? 1 : 7 }[e.key];
+  if (!step) return;
+  e.preventDefault();
+  const d = addDays(b.dataset.sel, step);
+  const t = $("cal").querySelector(`.dnum[data-sel="${d}"]`);
+  if (t) t.focus();
+  else { S.anchor = d; load().then(() => $("cal").querySelector(`.dnum[data-sel="${d}"]`)?.focus()); }
+});
+// drag a chip onto another day
+$("cal").addEventListener("dragstart", (e) => {
+  const el = e.target.closest(".chip[draggable]"); if (!el) return;
+  e.dataTransfer.setData("text/plain", el.dataset.uid); e.dataTransfer.effectAllowed = "move"; el.classList.add("dragging");
+});
+$("cal").addEventListener("dragend", (e) => { e.target.closest?.(".chip")?.classList.remove("dragging"); document.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop")); });
+$("cal").addEventListener("dragover", (e) => {
+  const d = e.target.closest("[data-day]"); if (!d || d.dataset.day < D.today) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".drop").forEach((x) => x !== d && x.classList.remove("drop")); d.classList.add("drop");
+});
+$("cal").addEventListener("dragleave", (e) => { const d = e.target.closest("[data-day]"); if (d && !d.contains(e.relatedTarget)) d.classList.remove("drop"); });
+$("cal").addEventListener("drop", async (e) => {
+  const d = e.target.closest("[data-day]"); if (!d) return;
+  e.preventDefault(); d.classList.remove("drop");
+  const uid = e.dataTransfer.getData("text/plain"), s = findS(uid), day = d.dataset.day;
+  if (!s || s.day === day || day < D.today) return;
+  try { await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }); S.sel = day; await load(); msg(`「${esc(s.title)}」移到 ${md(day)}（週${wd(day)}）`, "ok"); }
+  catch (err) { errMsg("移動", err); }
+});
+
+// ---------------- wiring ----------------
+function shift(dir) {
+  if (S.narrow || S.view === "week") S.anchor = addDays(mondayOf(S.anchor), 7 * dir);
+  else { const d = dOf(S.anchor); S.anchor = isoOf(new Date(d.getFullYear(), d.getMonth() + dir, 1)); }
+  load();
+}
+$("prev").onclick = () => shift(-1);
+$("next").onclick = () => shift(1);
+$("go-today").onclick = () => { S.anchor = D ? D.today : null; S.sel = D ? D.today : null; load(); };
+document.querySelectorAll("#view-seg button").forEach((b) => b.onclick = () => {
+  S.view = b.dataset.view; ls.set("view", S.view);
+  if (S.view === "week" && S.sel) S.anchor = S.sel;
+  load();
+});
+menu("push-caret", "push-menu");
+menu("more-btn", "more-menu");
+$("push-main").onclick = () => push("week");
+$("push-menu").addEventListener("click", (e) => { const b = e.target.closest("[data-scope]:not([disabled])"); if (b) push(b.dataset.scope); });
+$("more-menu").addEventListener("click", (e) => {
+  const b = e.target.closest("button:not([disabled])"); if (!b) return;
+  if (b.dataset.unpush) unpush(b.dataset.unpush);
+  else if (b.dataset.act === "refresh") { msg(""); load(); }
+});
+$("rec-btn").onclick = reconcile;
+matchMedia("(max-width: 699px)").addEventListener("change", (e) => { S.narrow = e.matches; if (D) load(); });
+// tap-to-pin glossary on touch
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".term");
+  document.querySelectorAll(".term.open").forEach((x) => x !== t && x.classList.remove("open"));
+  if (t) t.classList.toggle("open");
+});
+renderLegend();
+(async () => {
+  const q = new URLSearchParams(location.search).get("day");
+  S.anchor = q && /^\d{4}-\d\d-\d\d$/.test(q) ? q : isoOf(new Date());
+  await load();
+  if (D && !q && S.anchor !== D.today) { S.anchor = D.today; await load(); }
+})();
+</script>
+</body>
+</html>

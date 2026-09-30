@@ -288,3 +288,160 @@ async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSessio
             return {"scope": scope, "start": a, "end": b, "removed": await CW.remove_keys(db, keys)}
         except CW.CorosAuthError as e:
             raise _auth(e)
+
+
+# ---------------------------------------------------------------------------
+# 課表 page (static/schedule.html): a month / week calendar over the stored plan
+#
+#   GET /api/v1/overview/plan/calendar?start=&end=   sessions + activities + phases
+#                                                    + week summaries + COROS state
+#   GET /api/v1/overview/plan/schedule/page          the page
+# ---------------------------------------------------------------------------
+
+MAX_CAL_DAYS = 120
+KIND_TARGET = {"easy": "z2", "long": "long", "hike": "long", "quality": "threshold"}
+
+
+def _range_extras(start: str, end: str) -> dict:
+    """Completed activities and training phases in [start, end] (reads the dataset;
+    tests replace this)."""
+    from backend.api.overview import _dataset, _status
+    from backend.engine import overview as O
+    from backend.engine import planning
+    ds = _dataset()
+    today = O.day_to_date(ds.today)
+    a, b = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
+    acts = [O.activity_row(w) for w in O.workouts_between(ds, a, b + dt.timedelta(days=1))]
+    st = _status(ds, today)
+    lo, hi = min(a, today) - dt.timedelta(days=400), max(b, today) + dt.timedelta(days=400)
+    phases = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end}
+              for p in planning.phases(st.plan, lo, hi) if p.end >= start and p.start <= end]
+    return {"activities": acts, "phases": phases, "tph": O._tss_per_hour(ds, today)}
+
+
+# TSS per hour of a planned session by kind: week_plan() / projection use the
+# athlete's median TSS/h per category (road for easy / long, hike, strength) and
+# fixed rates for the hard sessions (quality ≈ 70, test 75).
+KIND_CATEGORY = {"easy": "road", "long": "road", "hike": "hike", "strength": "strength"}
+HARD_RATE = {"quality": 70.0, "test": 75.0}
+
+
+def tss_rates(tph: Optional[dict], sessions: list[dict], fallback: float = 50.0) -> dict[str, float]:
+    """TSS per hour per session kind. The generator's own rate (tss / minutes of
+    the unedited auto sessions of that kind, median) wins, so an estimate for an
+    edited or added session matches what the plan would have given it."""
+    import statistics
+    from backend.engine.overview import TSS_PER_HOUR_DEFAULT
+    tph = {**TSS_PER_HOUR_DEFAULT, **(tph or {})}
+    out = {k: float(tph.get(KIND_CATEGORY.get(k, ""), 0.0) or HARD_RATE.get(k, fallback)) for k in PS.KINDS}
+    seen: dict[str, list[float]] = {}
+    for s in sessions:
+        if s.get("origin") == "auto" and not s.get("edited") and (s.get("minutes") or 0) > 0 and (s.get("tss") or 0) > 0:
+            seen.setdefault(s["kind"], []).append(float(s["tss"]) / s["minutes"] * 60.0)
+    for k, v in seen.items():
+        if k in out:
+            out[k] = round(statistics.median(v), 1)
+    return out
+
+
+def est_tss(s: dict, rates: dict) -> float:
+    return float(s.get("tss") or 0.0) or (s.get("minutes") or 0) / 60.0 * rates.get(s.get("kind"), 50.0)
+
+
+def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], phases: list[dict],
+               proj: list[dict], rates: dict, today: Optional[str] = None) -> list[dict]:
+    """Per Monday in range: planned (active + done + missed, strength time excluded
+    like week_plan()) vs done (the activities), the phase of the week, and the
+    week's 完成度 over the days up to today (engine/compliance.py)."""
+    from backend.engine import compliance as C
+    by_start = {w["start"]: w for w in proj}
+    out = []
+    d = dt.date.fromisoformat(R.monday_of(start))
+    last = dt.date.fromisoformat(end)
+    while d <= last:
+        a, b = d.isoformat(), (d + dt.timedelta(days=6)).isoformat()
+        ss = [s for s in sessions if s.get("day") and a <= s["day"] <= b and s["state"] in ("active", "done", "missed")]
+        mins = sum(s["minutes"] or 0 for s in ss if s["kind"] != "strength")
+        tss = sum(est_tss(s, rates) for s in ss)
+        aa = [x for x in acts if a <= (x.get("date") or "") <= b]
+        mid = (d + dt.timedelta(days=3)).isoformat()
+        ph = next((p for p in phases if p["start"] <= mid <= p["end"]), None) \
+            or next((p for p in phases if p["start"] <= b and p["end"] >= a), None)
+        w = by_start.get(a) or {}
+        comp = None
+        if today and a <= today:
+            upto = min(b, today)
+            # today counts once it's done (the day isn't over yet)
+            sp = [s for s in ss if s["day"] < today or (s["day"] <= upto and s["state"] == "done")]
+            ap = [x for x in aa if x["date"] <= upto]
+            comp = C.week_compliance(sum(est_tss(s, rates) for s in sp), sum(float(x.get("tss") or 0) for x in ap),
+                                     sum(s["minutes"] or 0 for s in sp if s["kind"] != "strength") / 60.0,
+                                     sum(float(x.get("moving_s") or 0) for x in ap) / 3600.0) if sp else None
+        out.append({"start": a, "end": b, "compliance": comp,
+                    "planned_hours": mins / 60.0, "planned_tss": tss,
+                    "done_hours": sum(float(x.get("moving_s") or 0) for x in aa) / 3600.0,
+                    "done_tss": sum(float(x.get("tss") or 0) for x in aa),
+                    "phase": ph["kind"] if ph else w.get("phase"), "phase_label": ph["label"] if ph else None,
+                    "mode_label": w.get("mode_label"), "provisional": bool(w.get("provisional"))})
+        d += dt.timedelta(days=7)
+    return out
+
+
+async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
+    from sqlalchemy import select
+    from backend.db.models import SyncState
+    st = (await db.execute(select(SyncState).where(SyncState.athlete_id == 1))).scalar_one_or_none()
+    authed = bool(st and st.coros_access_token)
+    exp = getattr(st, "coros_token_expires", None) if st else None
+    if authed and exp is not None:
+        exp = exp if exp.tzinfo else exp.replace(tzinfo=dt.timezone.utc)
+        authed = dt.datetime.now(dt.timezone.utc) < exp
+    rows = await CW.all_rows(db)
+    last = max((r.pushed_at for r in rows.values() if r.pushed_at), default=None)
+    n = lambda k: sum(1 for s in views if s["state"] == "active" and (s.get("coros") or {}).get("status") == k)
+    return {"authenticated": authed, "last_pushed_at": last.isoformat() if last else None,
+            "outdated": n("outdated"), "failed": n("failed"), "pushed": n("pushed") + n("updated"),
+            "not_pushed": n("not_pushed")}
+
+
+@router.get("/calendar")
+async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
+    """Everything the 課表 calendar needs for [start, end] (≤ 120 days)."""
+    try:
+        a, b = dt.date.fromisoformat(start[:10]), dt.date.fromisoformat(end[:10])
+    except ValueError:
+        raise HTTPException(400, "start / end must be YYYY-MM-DD")
+    if b < a:
+        raise HTTPException(400, "end before start")
+    if (b - a).days > MAX_CAL_DAYS:
+        raise HTTPException(400, f"at most {MAX_CAL_DAYS} days")
+    start, end = a.isoformat(), b.isoformat()
+    body = await sessions(start=None, end=None, db=db)      # reconciles on first visit, like the week view
+    every = body["sessions"]
+    inp = await _inputs()
+    extras = await run_in_threadpool(_range_extras, start, end)
+    tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
+    rates = tss_rates(extras.get("tph"), every, tph)
+    from backend.engine import compliance as C
+    ss = []
+    for s in every:
+        if s.get("day") and start <= s["day"] <= end:
+            est = est_tss(s, rates)
+            ss.append({**s, "tss_est": round(est, 1), "compliance": C.session_compliance(s, est)})
+    tt = P.target_texts(inp["thresholds"] or {})
+    return {**{k: v for k, v in body.items() if k != "sessions"}, "start": start, "end": end,
+            "sessions": ss, "activities": extras["activities"], "phases": extras["phases"],
+            "week_rows": _week_rows(start, end, ss, extras["activities"], extras["phases"], inp["weeks"], rates,
+                                    body["today"]),
+            "compliance_levels": C.COMPLIANCE,
+            "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
+            "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
+            "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES,
+            "coros": await _coros_state(db, every)}
+
+
+@router.get("/schedule/page", include_in_schema=False)
+def schedule_page():
+    from fastapi.responses import FileResponse
+    from backend.api.overview import STATIC
+    return FileResponse(STATIC / "schedule.html")
