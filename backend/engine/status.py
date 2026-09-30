@@ -234,7 +234,7 @@ class Status:
                     level, verdict, action = WATCH, "減量期 CTL 還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
             else:
                 if ramp >= RAMP["short"]:
-                    level, verdict, action = BAD, f"每週 +{ramp:.1f}，Palladino：≥7 是受傷與生病的風險區", "本週維持或減量，不要再加"
+                    level, verdict, action = BAD, f"每週 +{ramp:.1f}，≥7 是受傷與生病的風險區", "本週維持或減量，不要再加"
                 elif ramp >= RAMP["elite"]:
                     level, verdict, action = WATCH, f"每週 +{ramp:.1f}，只能撐一兩週的增幅", "下週安排恢復週"
                 elif ramp >= 1:
@@ -498,7 +498,7 @@ class Status:
         if per_wk >= STRENGTH_PER_WEEK:
             lvl, v, act = GOOD, "每週 2 次，達標", ""
         elif per_wk >= 1:
-            lvl, v, act = WATCH, "每週不到 2 次", "補到每週 2 次（下肢單腳、核心；你的筆記：膝主導＋臀中肌）"
+            lvl, v, act = WATCH, "每週不到 2 次", "補到每週 2 次（下肢單腳、核心；膝主導＋臀中肌）"
         else:
             lvl, v, act = (BAD if self.kind in ("transition", "recovery", "base") else WATCH), \
                 "幾乎沒有肌力訓練", "每週 2 次 30–40 分鐘；轉換期／基礎期是打底的時候"
@@ -520,7 +520,7 @@ class Status:
         if med < DRIFT_GOOD:
             lvl, v, act = GOOD, "後段撐得住", ""
         elif med < 0.15:
-            lvl, v, act = WATCH, "後段明顯掉", "長天中段加補給（每小時 30–60 g 碳水，你的筆記），並在長天後段練「累了還能維持配速」"
+            lvl, v, act = WATCH, "後段明顯掉", "長天中段加補給（每小時 30–60 g 碳水），並在長天後段練「累了還能維持配速」"
         else:
             lvl, v, act = BAD, "後段掉很多", "拉長時間前先把長天配速放慢；檢查補給與水分"
         return Indicator("durability", "耐久度", lvl, txt, v, why, act, SRC_KOOP, med, spark)
@@ -669,10 +669,10 @@ PHASE_PRIORITY = {
 PHASE_FOCUS = {
     "transition": ("轉換期重點", "每週 2 次肌力、量低而穩定，等 TSB 回正再進基礎期", SRC_UA),
     "recovery": ("恢復期重點", "先休；TSB 回正、想練了再開始", SRC_UA),
-    "base": ("基礎期重點", "每週一次 60–90 分鐘輕鬆長跑（心率 < {aet}），其餘輕鬆跑也壓在 AeT 以下；每週一次 8–15 秒坡衝刺（Palladino 基礎中期）", SRC_UA),
+    "base": ("基礎期重點", "每週一次 60–90 分鐘輕鬆長跑（心率 < {aet}），其餘輕鬆跑也壓在 AeT 以下；每週一次 8–15 秒坡衝刺", SRC_UA),
     "specific": ("專項期重點", "每週一次山路長跑，每公里爬升往 {goal_d} 靠；每 2 週一次長天往 {goal_h} 的七成靠；週中一次爬坡課", SRC_KOOP),
     "taper": ("減量期重點", "時數減到平常的 40–60%，次數不變，保留一次短強度；最後 3 天只做 30–40 分鐘輕鬆跑", SRC_BOSQUET),
-    "event": ("比賽週", "前 2 天各 20–30 分鐘輕鬆跑＋幾趟加速；補給照你的筆記：每小時 30–60 g 碳水、每 15 分鐘 200 ml", SRC_NOTES),
+    "event": ("比賽週", "前 2 天各 20–30 分鐘輕鬆跑＋幾趟加速；補給：每小時 30–60 g 碳水、每 15 分鐘 200 ml", SRC_NOTES),
 }
 
 

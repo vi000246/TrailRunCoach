@@ -50,6 +50,10 @@ header h1 { font-size: 16px; margin: 0 4px 0 0; }
 .tip.open::after { content: attr(title); position: absolute; top: 22px; left: -10px; z-index: 20; width: max-content; max-width: min(280px, 80vw);
   white-space: pre-line; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
   padding: 7px 10px; font-size: 12px; font-weight: 400; line-height: 1.5; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+.term { position: relative; border-bottom: 1px dotted currentColor; cursor: help; }
+.term:hover::after, .term.open::after { content: attr(data-tip); position: absolute; top: 1.5em; left: 0; z-index: 20; width: max-content;
+  max-width: min(320px, 80vw); white-space: pre-line; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; font-weight: 400; line-height: 1.5; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
 details.src { margin-top: 3px; }
 details.src summary { font-size: 11.5px; color: var(--faint); }
 details.src p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
@@ -143,7 +147,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 <body>
 <script src="/api/v1/static/shell.js" data-page="home"></script>
 <header>
-  <h1>首頁</h1>
+  <h1>總覽</h1>
   <nav class="jump" id="jump" aria-label="本頁段落">
     <a href="#s-status">狀況</a><a href="#s-week">本週</a><a href="#s-pmc">PMC</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a>
   </nav>
@@ -211,6 +215,25 @@ const API = "/api/v1/overview";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// glossary: terms in engine text get a hover (tap on touch) explanation
+const GLOSS = {
+  "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
+    "怎麼測（心率飄移測試）：\n" +
+    "1. 平路或跑步機，先熱身 15 分鐘\n" +
+    "2. 用你猜的 AeT 心率，穩定跑 60 分鐘，配速固定、不要喝咖啡因\n" +
+    "3. 比較前 30 分與後 30 分的「配速÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 就是這個心率；> 5% → 設太高\n" +
+    "4. 結果填到「賽事周期」頁的門檻（沒填時用 0.89 × LTHR 估）",
+  "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
+    "怎麼測（3 分 + 12 分）：\n" +
+    "1. 平路或田徑場，熱身 15–20 分鐘，含 3–4 趟加速跑\n" +
+    "2. 3 分鐘全力、配速平均（不要一開始衝死）\n" +
+    "3. 走路／慢跑恢復 30 分鐘\n" +
+    "4. 12 分鐘全力、配速平均\n" +
+    "5. CP = (12 分平均功率×720 − 3 分平均功率×180) ÷ 540；W′ = (3 分功率 − CP) × 180\n" +
+    "6. 結果填到「賽事周期」頁的門檻；每 4–6 週測一次，賽前 10 天內不要測",
+};
+const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
+const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
 async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`); return r.json(); }
 const ls = { get(k, d) { try { const v = localStorage.getItem("overview." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("overview." + k, JSON.stringify(v)); } catch {} } };
@@ -250,7 +273,7 @@ async function loadStatus() {
     <span class="chip"><span class="lvl bad ico bad">${c.bad}</span><span class="lvl watch ico watch">${c.watch}</span><span class="lvl good ico good">${c.good}</span></span>
   </div>${p ? `<div class="meta" style="margin-top:6px">這個周期的目標：${esc(p.goal)}</div>` : ""}`;
   $("actions").innerHTML = s.actions.length ? `<ol class="actions">${s.actions.map((a) =>
-    `<li><b>${esc(a.title)}</b><span>${esc(a.detail)}</span><span class="meta">${esc(a.source)}</span></li>`).join("")}</ol>`
+    `<li><b>${gl(a.title)}</b><span>${gl(a.detail)}</span></li>`).join("")}</ol>`
     : `<p class="meta">沒有需要處理的項目。</p>`;
   const order = { bad: 0, watch: 1, good: 2, info: 3, na: 4 };
   const inds = [...s.indicators].sort((a, b) => order[a.level] - order[b.level]);
@@ -258,10 +281,10 @@ async function loadStatus() {
   $("ind").innerHTML = inds.map((i) => `<div class="card ${i.level}">
     <div class="top"><span>${esc(i.title)}</span><span class="lvl ${i.level} ico ${i.level}" style="font-size:12px">${LEVEL[i.level]}</span></div>
     <div class="v">${esc(i.text)}</div>
-    <div class="verdict">${esc(i.verdict)}</div>
+    <div class="verdict">${gl(i.verdict)}</div>
     ${i.spark && i.spark.filter((p) => p[1] != null).length > 2 ? spark(i.spark, i.level) : ""}
-    ${i.why ? `<div class="why">${esc(i.why)}</div>` : ""}
-    ${i.action ? `<div class="act">→ ${esc(i.action)}</div>` : ""}
+    ${i.why ? `<div class="why">${gl(i.why)}</div>` : ""}
+    ${i.action ? `<div class="act">→ ${gl(i.action)}</div>` : ""}
     ${i.source ? `<details class="src"><summary>來源</summary><p>${esc(i.source)}</p></details>` : ""}
   </div>`).join("");
 }
@@ -295,10 +318,10 @@ async function loadWeek() {
     const past = iso < w.week.today;
     const extra = acts.filter((a) => !ss.some((s) => s.done_by && s.done_by.index === a.index));
     days.push(`<div class="day ${iso === w.week.today ? "today" : ""}"><div class="d">週${WD[i]} ${md(iso)}${iso === w.week.today ? "<br>今天" : ""}</div><div>
-      ${ss.map((s) => `<div class="sess ${s.done ? "done" : ""}"><span class="t">${esc(s.title)}</span>
+      ${ss.map((s) => `<div class="sess ${s.done ? "done" : ""}"><span class="t">${gl(s.title)}</span>
         <span class="x">${s.done ? `${esc(s.done_by.category_label)} ${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` :
-          `${s.minutes ? s.minutes + " 分鐘" : ""}${s.target ? " · " + esc(s.target) : ""}`}</span>
-        ${!s.done && s.detail ? `<div class="x">${esc(s.detail)}</div>` : ""}</div>`).join("")}
+          `${s.minutes ? s.minutes + " 分鐘" : ""}${s.target ? " · " + gl(s.target) : ""}`}</span>
+        ${!s.done && s.detail ? `<div class="x">${gl(s.detail)}</div>` : ""}</div>`).join("")}
       ${extra.map((a) => `<div class="sess done"><span class="t">${esc(a.category_label)}</span> <span class="x">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></div>`).join("")}
       ${!ss.length && !extra.length ? `<span class="rest">${past ? "沒有活動" : "休息"}</span>` : ""}
     </div></div>`);
@@ -308,16 +331,18 @@ async function loadWeek() {
       ${bar("移動時間", D.hours, T.hours, hrs)}
       ${bar("TSS", D.tss, T.tss, n0)}
     </div>
-    <ul class="why">${w.why.map((x) => `<li>${esc(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
+    <ul class="why">${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
     <div class="days">${days.join("")}</div>
     <div class="loadbox">
       <span>CTL <b>${n0(L.ctl_week_start)}</b> → 週日 <b>${n0(L.ctl_end)}</b>（${sgn(L.ramp, (v) => v.toFixed(1))}/週）</span>
       <span>下週一 TSB <b>${sgn(L.tsb_next)}</b></span>
-      <span class="meta">門檻：CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· AeT ${n0(w.thresholds.aet)} bpm（${esc(w.thresholds.aet_source)}）</span>
+      <span class="meta">門檻：CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ${gl("AeT")} ${n0(w.thresholds.aet)} bpm（${esc(w.thresholds.aet_source)}）</span>
     </div>
-    ${w.notes.length ? `<ul class="notes">${w.notes.map((n) => `<li class="lvl ${n.level}" style="font-weight:400">${esc(n.text)}</li>`).join("")}</ul>` : ""}
-    <details style="margin-top:8px"><summary>依據</summary><ul class="why">${w.rules.map((r) => `<li>${esc(r)}</li>`).join("")}
-      <li>長時間的那天排在你平常最常做長課的星期${esc(w.long_weekday)}（近 12 週），不能的話排最後一天</li></ul></details>`;
+    ${w.notes.length ? `<ul class="notes">${w.notes.map((n) => `<li class="lvl ${n.level}" style="font-weight:400">${gl(n.text)}</li>`).join("")}</ul>` : ""}`;
+  // Not shown (sources live in backend/engine/overview.py SRC_*; w.rules still carries them):
+  // week targets follow the Palladino CTL ramp (+1–3/week sustainable, 3–5 elite), Uphill Athlete's
+  // ≤ 10 % weekly volume step and a 3:1 build/recovery cycle; the long day goes on the weekday the
+  // athlete most often did long sessions in the last 12 weeks (w.long_weekday), else the last day.
 }
 
 // ---------------- PMC ----------------
@@ -482,8 +507,8 @@ $("now").onclick = () => { PS.anchor = null; loadPeriod(); };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { loadPmc(); loadPeriod(); });
 // ⓘ tips: hover shows the title; tap/click pins it (touch has no hover)
 document.addEventListener("click", (e) => {
-  const t = e.target.closest(".tip");
-  document.querySelectorAll(".tip.open").forEach((x) => x !== t && x.classList.remove("open"));
+  const t = e.target.closest(".tip, .term");
+  document.querySelectorAll(".tip.open, .term.open").forEach((x) => x !== t && x.classList.remove("open"));
   if (t) t.classList.toggle("open");
 });
 // in-page nav: highlight the section being read

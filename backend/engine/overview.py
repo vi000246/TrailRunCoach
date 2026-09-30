@@ -548,7 +548,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
             source="你的筆記")
     for i in range(strength_n):
         add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
-            detail="膝主導＋臀中肌（你的筆記）；安排在輕鬆日或跑完後", source=SRC_UA,
+            detail="膝主導＋臀中肌；安排在輕鬆日或跑完後", source=SRC_UA,
             tss=35 / 60 * tph["strength"])
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)

@@ -12,7 +12,7 @@
 (() => {
   const I = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
   const PAGES = [
-    { id: "home", href: "/api/v1/overview/page", name: "首頁／本週", short: "首頁", purpose: "狀況・待辦・本週課表",
+    { id: "home", href: "/api/v1/overview/page", name: "總覽", short: "總覽", purpose: "狀況・待辦・本週課表",
       icon: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>') },
     { id: "charts", href: "/api/v1/wko5/viewer", name: "圖表分析", short: "圖表", purpose: "趨勢與單次活動圖表",
       icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
@@ -94,4 +94,10 @@
   if (document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
   if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · 訓練教練`;
   window.AppShell = { pages: PAGES, current: cur };
+
+  // auto-sync on site open (COROS / TP, per the settings page; throttled inside autosync.js)
+  const as = document.createElement("script");
+  as.src = "/api/v1/static/autosync.js";
+  as.defer = true;
+  document.head.appendChild(as);
 })();
