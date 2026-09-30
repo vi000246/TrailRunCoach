@@ -301,6 +301,80 @@ def parse_open_meteo(js: dict, dates: set[dt.date], hours=DAY_HOURS) -> Optional
             "pressure_hpa": mean(press) if press else None}
 
 
+# ---------------------------------------------------------------------------
+# hourly rows (per-segment, time-of-day heat)
+# ---------------------------------------------------------------------------
+
+HOURLY_EDGE_H = 1.5       # a clock this far past the first / last row still takes that row
+
+
+def _local_key(t: str) -> Optional[str]:
+    """Any feed timestamp → naive local 'YYYY-MM-DDTHH:MM' (UTC+8)."""
+    try:
+        ts = dt.datetime.fromisoformat(t)
+    except (TypeError, ValueError):
+        return None
+    if ts.tzinfo:
+        ts = ts.astimezone(TZ).replace(tzinfo=None)
+    return ts.strftime("%Y-%m-%dT%H:%M")
+
+
+def _hour_row(t, temp, rh, dew) -> Optional[dict]:
+    key = _local_key(t)
+    if key is None or temp is None or (rh is None and dew is None):
+        return None
+    if dew is None:
+        dew = dew_point(temp, rh)["dew_c"]
+    if rh is None:
+        rh = rh_from_dew_point(temp, dew)
+    return {"t": key, "temp_c": float(temp), "rh_pct": float(rh), "dew_c": float(dew)}
+
+
+def _in_window(rows: list[dict], dates: set[dt.date]) -> list[dict]:
+    """Rows on the event days plus the day after (a race can run past midnight)."""
+    keep = dates | {max(dates) + dt.timedelta(days=1)}
+    out = [r for r in rows if r and dt.date.fromisoformat(r["t"][:10]) in keep]
+    return sorted(out, key=lambda r: r["t"])
+
+
+def cwa_hourly_rows(loc: dict, dates: set[dt.date]) -> list[dict]:
+    return _in_window([_hour_row(r.get("t"), r.get("temp"), r.get("rh"), r.get("dew"))
+                       for r in loc.get("hourly") or []], dates)
+
+
+def open_meteo_hourly_rows(js: dict, dates: set[dt.date]) -> list[dict]:
+    h = js.get("hourly") or {}
+
+    def at(key, i):
+        v = h.get(key) or []
+        return float(v[i]) if i < len(v) and v[i] is not None else None
+    return _in_window([_hour_row(t, at("temperature_2m", i), at("relative_humidity_2m", i), at("dew_point_2m", i))
+                       for i, t in enumerate(h.get("time") or [])], dates)
+
+
+def hourly_at(rows: list[dict], when: dt.datetime) -> Optional[dict]:
+    """Conditions at a local clock time: linear between the two bracketing
+    rows (CWA's day-2/3 rows are 3-hourly), temperature and dew point
+    interpolated and RH rebuilt from them (the exact Magnus inverse). Up to
+    HOURLY_EDGE_H past either end the edge row is used; beyond → None."""
+    if not rows:
+        return None
+    pts = [(dt.datetime.fromisoformat(r["t"]), r) for r in rows]
+    edge = dt.timedelta(hours=HOURLY_EDGE_H)
+    if when <= pts[0][0]:
+        return dict(pts[0][1]) if pts[0][0] - when <= edge else None
+    if when >= pts[-1][0]:
+        return dict(pts[-1][1]) if when - pts[-1][0] <= edge else None
+    for (t0, a), (t1, b) in zip(pts, pts[1:]):
+        if t0 <= when <= t1:
+            w = (when - t0).total_seconds() / max(1.0, (t1 - t0).total_seconds())
+            temp = a["temp_c"] + w * (b["temp_c"] - a["temp_c"])
+            dew = a["dew_c"] + w * (b["dew_c"] - a["dew_c"])
+            return {"t": when.strftime("%Y-%m-%dT%H:%M"), "temp_c": temp, "dew_c": dew,
+                    "rh_pct": rh_from_dew_point(temp, dew)}
+    return None
+
+
 def lapse(temp_c: float, from_m: Optional[float], to_m: Optional[float]) -> float:
     if from_m is None or to_m is None:
         return temp_c
@@ -380,11 +454,16 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
     loc = {"name": name, "lat": lat, "lon": lon, "elevation_m": elevation_m}
     now = dt.datetime.now(TZ).isoformat(timespec="seconds")
 
-    def done(provider, values, extra=None):
+    want = _dates(date, days)
+
+    def done(provider, values, extra=None, hourly=None):
         v = {"altitude_m": elevation_m, "temp_c": values["temp_c"], "rh_pct": values["rh_pct"],
              "dew_c": values.get("dew_c", dew_point(values["temp_c"], values["rh_pct"])["dew_c"])}
+        # hourly rows only from a real hourly forecast (CWA 3-day, Open-Meteo);
+        # weekly blocks and climatology have none → the plan uses one heat value
         return {"provider": provider, "label": PROVIDER_LABEL[provider], "values": v, "tried": tried,
-                "location": loc, "fetched_at": now, "detail": extra or {}, "lead_days": lead}
+                "location": loc, "fetched_at": now, "detail": extra or {}, "lead_days": lead,
+                "hourly": hourly or None}
 
     # 1. CWA
     if not use_cwa:
@@ -414,28 +493,32 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     now = doc.get("fetched_at", now)
                     return done(prov, c, {"cwa_location": m["name"], "cwa_id": m.get("id"),
                                           "match": m["match"], "distance_km": m["distance_km"],
-                                          "issued": doc.get("issued"), "cache": doc.get("cache")})
+                                          "issued": doc.get("issued"), "cache": doc.get("cache")},
+                                cwa_hourly_rows(m, want) if c.get("product") == "hourly" else None)
                 except Exception as e:          # noqa: BLE001 — fall through to the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     if lat is None or lon is None:
         tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
         return {"provider": "manual", "label": PROVIDER_LABEL["manual"], "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead}
-    want = _dates(date, days)
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None}
     end = date + dt.timedelta(days=max(1, days) - 1)
     # 2. Open-Meteo forecast
     if 0 <= lead and (end - today).days < OM_HORIZON_DAYS:
         try:
+            # one extra day when the horizon allows: the hourly rows for a race
+            # that runs past midnight (the daytime mean still uses `want` only)
+            q_end = end + dt.timedelta(days=1) if (end - today).days + 1 < OM_HORIZON_DAYS else end
             params = {"latitude": lat, "longitude": lon,
                       "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure",
-                      "timezone": "Asia/Taipei", "start_date": date.isoformat(), "end_date": end.isoformat()}
+                      "timezone": "Asia/Taipei", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
             if elevation_m is not None:
                 params["elevation"] = elevation_m
-            c = parse_open_meteo(get(OM_FORECAST, params, 10.0), want)
+            js = get(OM_FORECAST, params, 10.0)
+            c = parse_open_meteo(js, want)
             if c:
                 tried.append({"provider": "open_meteo", "ok": True})
                 return done("open_meteo", c, {"grid_elevation_m": c.get("grid_elevation_m"),
-                                              "attribution": ATTRIBUTION})
+                                              "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want))
             tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
         except Exception as e:               # noqa: BLE001
             tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
@@ -465,7 +548,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                                        "lapse_corrected": c["lapse_corrected"], "attribution": ATTRIBUTION})
     tried.append({"provider": "climatology", "ok": False, "reason": "; ".join(errs) or "沒有資料"})
     return {"provider": "manual", "label": PROVIDER_LABEL["manual"], "values": None, "tried": tried,
-            "location": loc, "fetched_at": None, "lead_days": lead}
+            "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None}
 
 
 def activities_conditions(js: dict, windows: list[tuple[dt.datetime, dt.datetime]]) -> Optional[dict]:

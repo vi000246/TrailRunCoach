@@ -29,6 +29,7 @@ from backend.engine.racepower import hike as HK
 from backend.engine.racepower import pacing as PC
 from backend.engine.racepower import predict as PR
 from backend.engine.racepower import riegel as R
+from backend.engine.racepower import weather as WX
 from backend.engine.zones import zones_json
 
 MODES = ("time", "power", "auto")
@@ -145,6 +146,112 @@ def coros_steps(segments: list[dict], band: float = 0.03) -> list:
 
 
 # ---------------------------------------------------------------------------
+# per-segment, time-of-day heat
+#
+# The heat penalty itself is Hadley's (env.heat_penalty_pct, ported from the
+# SuperPower workbook's `v4 Calcs`, docs/research/superpower-calculator.md
+# §1.1). Feeding it the forecast at each segment's predicted clock time is our
+# own composition (自組; racepower-v2.md §8 proposes it for long events) —
+# segment outputs carry 推估. The clock depends on the segment times and the
+# times on Mᵢ, so the planner iterates to a fixed point (max |Δ cumulative
+# time| < HEAT_TOL_S). Forecast temperatures are used as given at the
+# forecast point (no lapse to each segment's elevation).
+# ---------------------------------------------------------------------------
+
+HEAT_MAX_PASSES = 8
+HEAT_TOL_S = 1.0
+HEAT_WINDOW_H = 48.0
+
+
+def _start_datetime(date: Optional[str], start: Optional[str]) -> Optional[dt.datetime]:
+    if not date or not start:
+        return None
+    try:
+        d = dt.date.fromisoformat(str(date)[:10])
+        h, m = (int(x) for x in str(start).split(":")[:2])
+        return dt.datetime(d.year, d.month, d.day, h, m)
+    except ValueError:
+        return None
+
+
+def _heat_context(opts: dict) -> tuple[Optional[list], Optional[dt.datetime], Optional[str]]:
+    """(hourly rows, start clock, None) when per-segment heat applies, else
+    (None, None, the reason the single value is used)."""
+    if opts.get("hourly_heat") is False:
+        return None, None, "逐時熱修正已關閉"
+    rows = []
+    for r in opts.get("hourly") or []:
+        x = WX._hour_row(r.get("t"), r.get("temp_c"), r.get("rh_pct"), r.get("dew_c"))
+        if x:
+            rows.append(x)
+    rows.sort(key=lambda r: r["t"])
+    if not rows:
+        return None, None, "沒有逐時預報：比賽日超出預報範圍、離線，或還沒取得比賽日天氣"
+    start = _start_datetime(opts.get("date"), opts.get("start_time"))
+    if start is None:
+        return None, None, "逐時熱修正需要比賽日期與起跑時間"
+    lo = start - dt.timedelta(hours=WX.HOURLY_EDGE_H)
+    hi = start + dt.timedelta(hours=HEAT_WINDOW_H)
+    if not any(lo <= dt.datetime.fromisoformat(r["t"]) <= hi for r in rows):
+        return None, None, "逐時預報沒有涵蓋比賽時間"
+    return rows, start, None
+
+
+def _cum_times(rows) -> list[float]:
+    out, c = [], 0.0
+    for r in rows:
+        c += r["t"]
+        out.append(c)
+    return out
+
+
+def _segment_heat(hourly: list, start: dt.datetime, segs: list, rows: list, stops) -> list:
+    """Conditions at each segment's midpoint clock (start + time before it +
+    aid stops up to its start + half its own time); None outside the rows."""
+    out, before = [], 0.0
+    for s, r in zip(segs, rows):
+        when = start + dt.timedelta(seconds=before + 0.5 * r["t"] + _stops_before(stops, s["start_km"]))
+        h = WX.hourly_at(hourly, when)
+        if h is not None:
+            h["clock"] = when.strftime("%H:%M")
+        out.append(h)
+        before += r["t"]
+    return out
+
+
+def _heat_fields(h: Optional[dict], to_side: dict) -> dict:
+    if h is None:
+        return {"temp_c": to_side["temp_c"], "dew_c": to_side.get("dew_c"), "rh_pct": to_side["rh_pct"],
+                "heat_pct": to_side.get("heat_penalty_pct", ENV.heat_penalty_pct(to_side["temp_c"], to_side["rh_pct"])),
+                "heat_clock": None, "heat_src": "single"}
+    return {"temp_c": h["temp_c"], "dew_c": h["dew_c"], "rh_pct": h["rh_pct"],
+            "heat_pct": ENV.heat_penalty_pct(h["temp_c"], h["rh_pct"]), "heat_clock": h.get("clock"),
+            "heat_src": "hourly"}
+
+
+def _heat_profile(hourly: list, start: dt.datetime, out_segs: list, stops) -> list[dict]:
+    """The forecast rows inside the race window, each placed at the km the
+    plan reaches at that clock (for the profile chart)."""
+    xs, ys, before = [], [], 0.0
+    for s in out_segs:
+        dep = before + _stops_before(stops, s["start_km"])
+        xs += [dep, dep + s["t"]]
+        ys += [s["start_km"], s["end_km"]]
+        before += s["t"]
+    if not xs:
+        return []
+    out = []
+    for r in hourly:
+        sec = (dt.datetime.fromisoformat(r["t"]) - start).total_seconds()
+        if sec < 0 or sec > xs[-1]:
+            continue
+        out.append({"t": r["t"], "clock": r["t"][11:16], "km": float(np.interp(sec, xs, ys)),
+                    "temp_c": r["temp_c"], "dew_c": r["dew_c"], "rh_pct": r["rh_pct"],
+                    "heat_pct": ENV.heat_penalty_pct(r["temp_c"], r["rh_pct"])})
+    return out
+
+
+# ---------------------------------------------------------------------------
 # road / trail
 # ---------------------------------------------------------------------------
 
@@ -171,14 +278,16 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     accl = opts.get("acclimatisation") or "acclimatised"
     frm = {x: env["from"][x] for x in ("altitude_m", "temp_c", "rh_pct")}
     to = {x: env["to"][x] for x in ("altitude_m", "temp_c", "rh_pct")}
-    if gpx:
-        ms = ENV.segment_factors([s["z_mean"] for s in segs], frm, to, accl)
-    else:
-        ms = [env["M"] if accl == "acclimatised" else ENV.segment_factors([to["altitude_m"]], frm, to, accl)[0]] * len(segs)
-    for s, m in zip(segs, ms):
-        s["M"] = m
+    zs = [s["z_mean"] for s in segs] if gpx else [to["altitude_m"]] * len(segs)
+
+    def factors(heat=None):
+        """Mᵢ per segment; `heat` = one (temp_c, rh_pct) per segment or None
+        (the single race-day value, exactly as before)."""
+        if gpx or heat is not None:
+            return ENV.segment_factors(zs, frm, to, accl, heat)
+        return [env["M"] if accl == "acclimatised" else ENV.segment_factors([to["altitude_m"]], frm, to, accl)[0]] * len(segs)
+
     dsum = sum(s["dist_m"] for s in segs)
-    mbar = sum(s["M"] * s["dist_m"] for s in segs) / dsum
 
     def psus(t):
         return DF.p_sus(t, cp, w_prime, tte, k, cp2=cp2)
@@ -206,59 +315,100 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     v2_primary = bool(validated.get(cat)) and gpx
     f_target = float(opts.get("effort_target") or 1.0)
 
-    # ---- whole race by the v1 method (always computed: baseline + 對照) ------
-    t_c = solve_whole(d_eff_m, re_v1, weight, f_target, mbar, psus)
-    p_c = d_eff_m / t_c / re_v1 * weight
-    if mode == "time":
-        t_star = opts.get("target_time_s")
-        if not t_star and opts.get("target_pace_s_per_km"):
-            t_star = opts["target_pace_s_per_km"] * course["totals"]["km"]
-        if not t_star:
-            raise ValueError("模式「目標時間」需要時間或配速")
-        t_whole, p_whole = float(t_star), d_eff_m / float(t_star) / re_v1 * weight
-    elif mode == "power":
-        p_star = opts.get("target_power")
-        if not p_star and opts.get("target_pct_cp"):
-            p_star = opts["target_pct_cp"] * cp
-        if not p_star:
-            raise ValueError("模式「目標功率」需要功率或 %CP")
-        p_star = float(p_star) * (mbar if opts.get("power_is_training") else 1.0)
-        t_whole, p_whole = d_eff_m * weight / (re_v1 * p_star), p_star
-    else:
-        t_whole, p_whole = t_c, p_c
-
     kw = {"beta": beta, "sigma": sigma, "locks": locks}
-
-    def solver(a):
-        if v2_primary:
-            if mode == "time":
-                return PC.solve_time_mode(t_whole, segs, model, cp, alpha=a, **kw)
-            if mode == "power":
-                return PC.solve_power_mode(p_whole, segs, model, alpha=a, **kw)
-            return PC.solve_auto_mode(f_target, psus, segs, model, cp, alpha=a, **kw)
-        return PC.solve_power_mode(p_whole, segs, model, alpha=a, **kw)
-
     cp_w = cp2 or cp                # the W′ budget runs above the short-range CP
-    res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp_w, w_prime, alpha)
-    if mode == "auto" and not v2_primary and gpx:
-        # the whole-race M must be the one the effort uses (time-weighted
-        # Σ(Pᵢ/Mᵢ)tᵢ, not the distance-weighted mean): a couple of fixed-point
-        # passes make f come out at f* exactly
-        for _ in range(6):
-            sc = _scale(res, t_whole)
-            pt = sum(r["P"] / s["M"] * r["t"] for r, s in zip(sc["rows"], segs)) / sc["T"]
-            m_eff = p_whole / pt
-            t_new = solve_whole(d_eff_m, re_v1, weight, f_target, m_eff, psus)
-            done = abs(t_new - t_whole) < 0.05
-            t_whole, t_c = t_new, t_new
-            p_whole = p_c = d_eff_m / t_new / re_v1 * weight
-            res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp_w, w_prime, alpha)
-            if done:
+
+    def solve_all(ms: list[float]) -> dict:
+        """Everything that depends on the segment Mᵢ: the whole-race v1 time,
+        the allocation, the W′ budget, the auto-mode M fixed point, scaling."""
+        for s, m in zip(segs, ms):
+            s["M"] = m
+        mbar = sum(s["M"] * s["dist_m"] for s in segs) / dsum
+        # ---- whole race by the v1 method (always computed: baseline + 對照) --
+        t_c = solve_whole(d_eff_m, re_v1, weight, f_target, mbar, psus)
+        p_c = d_eff_m / t_c / re_v1 * weight
+        if mode == "time":
+            t_star = opts.get("target_time_s")
+            if not t_star and opts.get("target_pace_s_per_km"):
+                t_star = opts["target_pace_s_per_km"] * course["totals"]["km"]
+            if not t_star:
+                raise ValueError("模式「目標時間」需要時間或配速")
+            t_whole, p_whole = float(t_star), d_eff_m / float(t_star) / re_v1 * weight
+        elif mode == "power":
+            p_star = opts.get("target_power")
+            if not p_star and opts.get("target_pct_cp"):
+                p_star = opts["target_pct_cp"] * cp
+            if not p_star:
+                raise ValueError("模式「目標功率」需要功率或 %CP")
+            p_star = float(p_star) * (mbar if opts.get("power_is_training") else 1.0)
+            t_whole, p_whole = d_eff_m * weight / (re_v1 * p_star), p_star
+        else:
+            t_whole, p_whole = t_c, p_c
+        tgt = {"t": t_whole, "p": p_whole}
+
+        def solver(a):
+            if v2_primary:
+                if mode == "time":
+                    return PC.solve_time_mode(tgt["t"], segs, model, cp, alpha=a, **kw)
+                if mode == "power":
+                    return PC.solve_power_mode(tgt["p"], segs, model, alpha=a, **kw)
+                return PC.solve_auto_mode(f_target, psus, segs, model, cp, alpha=a, **kw)
+            return PC.solve_power_mode(tgt["p"], segs, model, alpha=a, **kw)
+
+        res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp_w, w_prime, alpha)
+        varied = max(ms) - min(ms) > 1e-12
+        if mode == "auto" and not v2_primary and (gpx or varied):
+            # the whole-race M must be the one the effort uses (time-weighted
+            # Σ(Pᵢ/Mᵢ)tᵢ, not the distance-weighted mean): a couple of fixed-point
+            # passes make f come out at f* exactly
+            for _ in range(6):
+                sc = _scale(res, t_whole)
+                pt = sum(r["P"] / s["M"] * r["t"] for r, s in zip(sc["rows"], segs)) / sc["T"]
+                m_eff = p_whole / pt
+                t_new = solve_whole(d_eff_m, re_v1, weight, f_target, m_eff, psus)
+                done = abs(t_new - t_whole) < 0.05
+                t_whole, t_c = t_new, t_new
+                p_whole = p_c = d_eff_m / t_new / re_v1 * weight
+                tgt.update(t=t_whole, p=p_whole)
+                res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp_w, w_prime, alpha)
+                if done:
+                    break
+        if not v2_primary:
+            res = _scale(res, t_whole)
+        return {"res": res, "alpha_used": alpha_used, "runs": runs, "t_whole": t_whole, "p_whole": p_whole,
+                "t_c": t_c, "p_c": p_c, "mbar": mbar}
+
+    # ---- per-segment, time-of-day heat (自組, 推估) ----------------------------
+    stops = opts.get("stops") or []
+    heat_rows, start_dt, heat_reason = _heat_context(opts)
+    st = solve_all(factors())
+    seg_heat = None
+    heat_info = {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
+                 "reason": heat_reason, "badge": None}
+    if heat_rows:
+        prev = _cum_times(st["res"]["rows"])
+        for n in range(1, HEAT_MAX_PASSES + 1):
+            seg_heat = _segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops)
+            st = solve_all(factors([(h["temp_c"], h["rh_pct"]) if h else (to["temp_c"], to["rh_pct"])
+                                    for h in seg_heat]))
+            cur = _cum_times(st["res"]["rows"])
+            delta = max(abs(a - b) for a, b in zip(cur, prev))
+            prev = cur
+            heat_info.update(passes=n, delta_s=delta, converged=delta < HEAT_TOL_S)
+            if delta < HEAT_TOL_S:
                 break
+        out_n = sum(1 for h in seg_heat if h is None)
+        heat_info.update(mode="hourly", outside=out_n, badge="推估")
+        if not heat_info["converged"]:
+            warnings.append(f"逐時熱修正沒有收斂（{HEAT_MAX_PASSES} 次後 ETA 仍差 {heat_info['delta_s']:.1f} 秒）：分段溫度是近似值")
+        if out_n:
+            warnings.append(f"{out_n} 段的 ETA 超出逐時預報範圍：這些段用單一溫度 {to['temp_c']:.1f} °C")
+    elif heat_reason and opts.get("hourly_heat", True):
+        warnings.append(f"熱修正用單一溫度 {to['temp_c']:.1f} °C / 濕度 {to['rh_pct']:.0f} %（{heat_reason}）")
+    res, alpha_used, runs = st["res"], st["alpha_used"], st["runs"]
+    t_whole, p_whole, t_c, p_c, mbar = st["t_whole"], st["p_whole"], st["t_c"], st["p_c"], st["mbar"]
     if alpha_used < alpha - 1e-9:
         warnings.append(f"上坡彈性從 +{alpha:.0%} 縮到 +{alpha_used:.1%}：否則有坡段超過 CP 太久（W′ 用超過 75 %）")
-    if not v2_primary:
-        res = _scale(res, t_whole)
     T = res["T"]
     rows = res["rows"]
     p_bar = sum(r["P"] * r["t"] for r in rows) / T
@@ -317,6 +467,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             "t": r["t"], "cum_s": cum, "eta": _clock(opts.get("start_time"), cum + _stops_before(stops, s["end_km"])),
             "capped": r["capped"], "locked": r.get("locked", False), "notes": notes,
             "badge": None if (v2_primary and trusted) else "推估", "trusted": trusted, "hint": HINT_30S,
+            **_heat_fields(seg_heat[i] if seg_heat else None, env["to"]),
         })
     if wb:
         for sg, val in zip(out_segs, wb["values"]):
@@ -372,8 +523,11 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "finish_eta": _clock(opts.get("start_time"), T + _stops_before(stops, km + 1)),
                "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
                "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg, "hr_first": hr_first,
-               "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None}
+               "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None,
+               "strategy": skind, "strategy_amount": amount, "alpha": alpha, "heat": heat_info}
+    heat_profile = _heat_profile(heat_rows, start_dt, out_segs, stops) if heat_info["mode"] == "hourly" else None
     return {"type": kind, "summary": summary, "effort": eff, "segments": out_segs, "target": target,
+            "heat_profile": heat_profile,
             "compare": ctrl, "crosscheck": crosscheck, "wbal": wb, "wprime_runs": runs,
             "profile": course.get("profile"), "climbs": course.get("climbs"), "wpts": course.get("wpts"),
             "course_totals": course["totals"], "course_warnings": course.get("warnings") or [],
@@ -509,7 +663,10 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                "eph_personal": eph, "ep_per_h": (km + gain / 100.0) / (T / 3600.0), "kcal": kcal,
                "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "v2" if v2_primary else "v1", "category": "hike", "mode": mode,
-               "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else "推估"}
+               "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else "推估",
+               # racepower-v2.md §8: Hadley only on running segments → 百岳 keeps one heat value
+               "heat": {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
+                        "reason": "百岳用單一溫度（逐時熱修正只用在跑步）", "badge": None}}
     return {"type": "baiyue", "summary": summary, "effort": he, "segments": out, "days": days,
             "crosscheck": cross, "fatigue": fat, "profile": course.get("profile"), "wpts": course.get("wpts"),
             "course_totals": course["totals"], "course_warnings": course.get("warnings") or [],
