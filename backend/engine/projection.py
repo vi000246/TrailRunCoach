@@ -99,13 +99,14 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   tgt: dict, long_wd: int, longest: float, mountain: bool,
                   allow_quality: bool, strength_tss: float, aet: Optional[float],
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
-                  notes: Optional[list] = None) -> list[dict]:
+                  notes: Optional[list] = None, blocked=frozenset()) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `base_quality`: this week's base-phase quality session (week_plan picks
     閾值下 N×8 分 when the drift streak first unlocks intervals or the last one
     faded); projected base weeks repeat it instead of 閾值 3×10.
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
-    `rates` = TSS / h per category for it, `notes` collects its notes."""
+    `rates` = TSS / h per category for it, `notes` collects its notes.
+    `blocked`: ISO days of 不排課日期 (engine/blackouts.py) — never a candidate day."""
     total = hours * 60.0
     ss: list[dict] = []
 
@@ -152,18 +153,20 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     if prefs is not None and prefs.active:
         from backend.engine import plan_prefs as PP
         r = {"road": tph, "trail": tph, "hike": tph, "strength": strength_tss / 35 * 60, **(rates or {})}
+        days = [d for d in (monday + dt.timedelta(days=i) for i in range(7)) if d.isoformat() not in blocked]
+        n_lost = sum(1 for i in range(7) if prefs.days[i] and (monday + dt.timedelta(days=i)).isoformat() in blocked)
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=r, aet=aet,
-                     slots=sum(bool(x) for x in prefs.days), notes=notes if notes is not None else [])
+                     slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [])
         ss = PP.shape(ss, total, prefs, ctx)
-        PP.place(ss, [monday + dt.timedelta(days=i) for i in range(7)], PP.long_weekday(prefs, long_wd), prefs)
+        PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs)
         return ss
-    _place(ss, monday, long_wd)
+    _place(ss, monday, long_wd, blocked)
     return ss
 
 
-def _place(ss: list[dict], monday: dt.date, long_wd: int) -> None:
+def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset()) -> None:
     days = [monday + dt.timedelta(days=i) for i in range(7)]
-    free = list(days)
+    free = [d for d in days if d.isoformat() not in blocked]
     main = [s for s in ss if s["kind"] != "strength"]
     long_day = None
     for s in sorted(main, key=lambda s: {"long": 0, "quality": 1, "test": 1}.get(s["kind"], 2)):
@@ -222,11 +225,16 @@ def allow_quality(kind: str, gate: dict, base_q: Optional[dict] = None) -> bool:
 
 
 def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
-                  atlconstant: float = 7.0, prefs=None) -> list[dict]:
+                  atlconstant: float = 7.0, prefs=None, blackouts=None) -> list[dict]:
     """Weeks after cur['week'] (a week_plan() result) up to `until` (≤ MAX_WEEKS).
     `ctlconstant` / `atlconstant`: the athlete's (ds.athlete), as for the PMC.
-    `prefs`: the 課表偏好 week_plan() used (None / defaults = the original rules)."""
+    `prefs`: the 課表偏好 week_plan() used (None / defaults = the original rules).
+    `blackouts`: the 不排課日期 ranges week_plan() used (engine/blackouts.py)."""
+    from backend.engine import blackouts as BL
     PR = prefs if prefs is not None and prefs.active else None
+    bmap = BL.blocked(blackouts or ())
+    allowed_fn = PR.allowed if PR is not None else None
+    prev_lost = [_d(x) for x in cur.get("blackout_days") or []]
     monday = _d(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=MAX_WEEKS + 1) - dt.timedelta(days=1)
     until = min(until, cap)
@@ -261,9 +269,29 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
             hours = PR.weekly_hours
             why = why + [f"你的每週時數上限 {PR.weekly_hours:g} h"]
+        lost: list[dt.date] = []
+        if bmap:
+            # 不排課日期: the step after a short week starts from that week's volume
+            if prev_lost and hist:
+                cap_b = BL.step_cap(hist[-1])
+                if hours > cap_b + 1e-9:
+                    hours = cap_b
+                    why = why + [f"上週不排課、只排 {hist[-1]:.1f} h：本週從那個量 +10%（至少 +0.5 h）→ {cap_b:.1f} h"]
+                    notes.append(BL.step_note(prev_lost, hist[-1], cap_b))
+            lost = BL.lost_days(bmap, week, allowed_fn)
+            if lost:
+                f = BL.factor(week, lost, allowed_fn)
+                lost_h = hours * (1.0 - f)
+                hours *= f
+                why = why + [f"不排課 {BL.range_text(lost)}：少 {len(lost)} 個可練日，週量 × {f:.0%}"]
+                notes.append(BL.week_note(bmap, lost, lost_h))
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            allow_quality(kind, gate, base_q), strength_tss, th.get("aet"), base_q,
-                           prefs=PR, rates=rates, notes=notes)
+                           prefs=PR, rates=rates, notes=notes, blocked=set(bmap))
+        prev_lost = lost
+        drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
+        if drop:
+            notes.append({"level": "info", "src": "blackout", "text": f"剩下的日子排不下 {len(drop)} 堂課（約 {sum(s['minutes'] for s in drop)} 分鐘）——不用補"})
         # a session _place() found no day for has day None: keep it out of the date test
         ss = [s for s in ss if not s["day"] or _d(s["day"]) <= until] if ss else ss
         by_day = {}
@@ -278,12 +306,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "mode_label": MODE_LABELS.get(mode, mode), "hours": hours,
                     "tss": sum(planned), "ctl_start": ctl0, "ctl_end": ctl,
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
-                    "sessions": [s for s in ss if s["day"]], **({"notes": notes} if PR is not None else {})})
+                    "sessions": [s for s in ss if s["day"]],
+                    **({"notes": notes} if PR is not None or bmap else {}),
+                    **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None)
         if long_n:
             longest = float(long_n["minutes"])
-        if PR is not None:
-            # what the preferences actually let through (a hard cap can leave less)
+        if PR is not None or lost:
+            # what the preferences / 不排課日期 actually let through (a hard cap or
+            # too few days can leave less)
             hours = sum(s["minutes"] for s in ss if s["kind"] != "strength" and s["day"]) / 60.0
         build.append(mode in ("base", "specific") and hours >= 0.95 * hist[-1] and hours > 0.5)
         hist.append(hours)

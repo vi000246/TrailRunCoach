@@ -88,12 +88,23 @@ def gen_weeks(inputs: dict) -> list[dict]:
                        "sessions": w["sessions"]} for w in inputs.get("weeks", [])]
 
 
-async def plan_reconcile(db: AsyncSession, inputs: dict, apply: bool, athlete_id: int = 1):
+def blocked_map(inputs: dict) -> dict:
+    """ISO day -> label of the 不排課日期 in `inputs` (list of {start, end, label})."""
+    from backend.engine import blackouts as BL
+    return {d: b.label for d, b in BL.blocked(BL.from_list(inputs.get("blackouts") or [])).items()}
+
+
+async def plan_reconcile(db: AsyncSession, inputs: dict, apply: bool, athlete_id: int = 1,
+                         decisions: Optional[dict] = None):
     """(new sessions, changes). `inputs`: cur (week_plan()), weeks (projection),
-    activities, today, horizon_end."""
+    activities, today, horizon_end, blackouts (不排課日期), prefs.
+    `decisions`: {uid: move | delete} for edited sessions on a blocked day."""
     stored = await load(db, athlete_id)
+    prefs = inputs.get("prefs") or {}
+    days = prefs.get("days") if prefs and not all(prefs.get("days") or [True]) else None
     new, changes = R.reconcile(stored, gen_weeks(inputs), inputs.get("activities") or [],
-                               inputs["today"], inputs.get("horizon_end"), covered=inputs.get("covered"))
+                               inputs["today"], inputs.get("horizon_end"), covered=inputs.get("covered"),
+                               blocked=blocked_map(inputs), allowed_days=days, decisions=decisions)
     if apply:
         await save(db, new, athlete_id)
     return new, changes
@@ -167,7 +178,15 @@ def _clean(patch: dict, today: str) -> dict:
     return out
 
 
-async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: int = 1) -> dict:
+def _not_blocked(day: str, blocked: Optional[dict]) -> None:
+    if blocked and day in blocked:
+        lb = blocked[day]
+        raise PlanError(f"{int(day[5:7])}/{int(day[8:10])} 是不排課日期{f'（{lb}）' if lb else ''}，不能排課")
+
+
+async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: int = 1,
+               blocked: Optional[dict] = None) -> dict:
+    """`blocked`: ISO day -> label of the 不排課日期; moving onto one is refused."""
     rows = await _rows(db, athlete_id)
     r = rows.get(uid)
     if r is None or r.state != "active":
@@ -176,6 +195,8 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
     ch = _clean(patch, today)
     if not ch:
         return d
+    if "day" in ch and ch["day"] != d["day"]:
+        _not_blocked(ch["day"], blocked)
     new_week = R.monday_of(ch["day"]) if "day" in ch else d["week_start"]
     if new_week != d["week_start"] and d["origin"] == "auto":
         # moved to another week: leave a tombstone so that week isn't regenerated
@@ -192,13 +213,15 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
     return d
 
 
-async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1) -> dict:
+async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
+              blocked: Optional[dict] = None) -> dict:
     data = dict(data)
     data.setdefault("kind", "easy")
     data.setdefault("title", DEFAULT_TITLES.get(data.get("kind"), "自訂"))
     if "day" not in data:
         raise PlanError("要選日期")
     ch = _clean(data, today)
+    _not_blocked(ch["day"], blocked)
     d = {"uid": R.new_uid(), "week_start": R.monday_of(ch["day"]), "gen_key": None, "origin": "custom",
          "edited": True, "provisional": False, "state": "active", "done_by": None, "note": None,
          "source": "", "tss": 0.0, "target": "", "detail": "", "minutes": 45, **ch}

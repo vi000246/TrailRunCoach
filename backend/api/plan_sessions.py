@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import functools
 import threading
 from typing import Optional
 
@@ -36,23 +37,27 @@ _lock = threading.Lock()
 _cache: dict = {}
 
 
-def _compute_inputs() -> dict:
+def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     """week_plan() for this week, the projection to the horizon, activities
-    of the last few weeks (for done / missed) and the current phase."""
+    of the last few weeks (for done / missed) and the current phase.
+    `blackouts`: a candidate 不排課日期 list (preview before saving); None = the stored one."""
     from backend.api.overview import _dataset, _plan_stamp, _status
+    from backend.engine import blackouts as BL
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine import planning
     ds = _dataset()
     today = O.day_to_date(ds.today)
     prefs = PP.load()
-    key = (id(ds), today, _plan_stamp(), prefs.stamp())       # saving 課表偏好 regenerates
+    bos = BL.load() if blackouts is None else BL.from_list(blackouts)
+    # saving 課表偏好 or 不排課日期 regenerates
+    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos))
     with _lock:
         hit = _cache.get(key)
     if hit is not None:
         return hit
     st = _status(ds, today)
-    cur = O.week_plan(ds, st, today, prefs=prefs)
+    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos)
     monday = dt.date.fromisoformat(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=P.MAX_WEEKS, days=6)
     ph = st.phase
@@ -60,7 +65,8 @@ def _compute_inputs() -> dict:
     horizon = min(cap, max(phase_end, monday + dt.timedelta(days=13)))
     phases = [{"kind": p.kind, "start": p.start, "end": p.end}
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
-    weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs)
+    weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
+                            blackouts=bos)
     since = monday - dt.timedelta(weeks=4)
     acts = [O.activity_row(w) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
@@ -69,9 +75,11 @@ def _compute_inputs() -> dict:
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
-           "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant, "prefs": prefs.to_dict()}
+           "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant, "prefs": prefs.to_dict(),
+           "blackouts": [b.to_dict() for b in bos]}
     with _lock:
-        _cache.clear()
+        while len(_cache) >= 3:                 # the stored plan + a preview or two
+            _cache.pop(next(iter(_cache)))
         _cache[key] = out
     return out
 
@@ -89,8 +97,11 @@ async def _covered(db: AsyncSession, last_activity: Optional[str]) -> Optional[s
     return max(days) if days else None
 
 
-async def _inputs(db: Optional[AsyncSession] = None) -> dict:
-    inp = await run_in_threadpool(_compute_inputs)
+async def _inputs(db: Optional[AsyncSession] = None, blackouts: Optional[list] = None) -> dict:
+    if blackouts is None:
+        inp = await run_in_threadpool(_compute_inputs)
+    else:
+        inp = await run_in_threadpool(functools.partial(_compute_inputs, blackouts))
     if db is not None:
         inp = {**inp, "covered": await _covered(db, inp.get("last_activity"))}
     return inp
@@ -155,6 +166,7 @@ def _view(s: dict, inp: dict, rows: dict, today: str) -> dict:
 def _meta(inp: dict) -> dict:
     return {"today": _today(inp), "week": inp["cur"]["week"], "horizon_end": inp["horizon_end"],
             "phase": inp["phase"], "phase_push_end": inp["phase_push_end"], "max_weeks": inp["max_weeks"],
+            "blackouts": inp.get("blackouts") or [],
             "weeks": [{k: w[k] for k in ("start", "phase", "mode", "mode_label", "hours", "tss", "provisional")}
                       for w in inp["weeks"]]}
 
@@ -192,7 +204,7 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
     inp = await _inputs()
     try:
         async with _wlock():
-            return await PS.add(db, data, _today(inp))
+            return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
 
@@ -202,7 +214,7 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
     inp = await _inputs()
     try:
         async with _wlock():
-            return await PS.edit(db, uid, patch, _today(inp))
+            return await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
 
@@ -225,17 +237,29 @@ async def reconcile_preview(db: AsyncSession = Depends(get_db)):
     return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes)}
 
 
+def _decisions(body: Optional[dict]) -> dict:
+    """{uid: move | delete} for edited sessions on a 不排課日期 (reconcile rule 6)."""
+    d = (body or {}).get("decisions") or {}
+    if not isinstance(d, dict) or any(v not in ("move", "delete") for v in d.values()):
+        raise HTTPException(400, "decisions must be {uid: move | delete}")
+    return {str(k): v for k, v in d.items()}
+
+
 @router.post("/reconcile")
-async def reconcile_apply(db: AsyncSession = Depends(get_db)):
+async def reconcile_apply(body: Optional[dict] = Body(None), db: AsyncSession = Depends(get_db)):
+    dec = _decisions(body)
     inp = await _inputs(db)
     async with _wlock():
         await _ensure(db, inp)
-        _, changes = await PS.plan_reconcile(db, inp, apply=True)
+        _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
     return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes)}
 
 
-def _in_range(ss: list[dict], a: str, b: str) -> list[dict]:
-    return [s for s in ss if s["state"] == "active" and s.get("day") and a <= s["day"] <= b]
+def _in_range(ss: list[dict], a: str, b: str, blocked: Optional[dict] = None) -> list[dict]:
+    """Active sessions in [a, b]; never one on a 不排課日期 (an edited session left
+    there until the user decides isn't pushed, and a pushed copy is removed)."""
+    return [s for s in ss if s["state"] == "active" and s.get("day") and a <= s["day"] <= b
+            and s["day"] not in (blocked or {})]
 
 
 @router.get("/push-coros/preview")
@@ -247,14 +271,21 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
         await _ensure(db, inp)
         new, changes = await PS.plan_reconcile(db, inp, apply=False)
     rows = await CW.all_rows(db)
-    todo = [_view(s, inp, rows, today) for s in _in_range(new, a, b)]
+    bl = PS.blocked_map(inp)
+    todo = [_view(s, inp, rows, today) for s in _in_range(new, a, b, bl)]
     pushable = [s for s in todo if s["coros"]["status"] not in ("skipped", "done")]
     will = [s for s in pushable if s["coros"]["status"] != "pushed"]
     missed = [s for s in new if s["state"] == "missed" and s["uid"] in rows]
+    on_bl = [s for s in _on_blocked(new, bl, today) if s["uid"] in rows]
     return {**_meta(inp), "scope": scope, "start": a, "end": b, "sessions": todo,
             "count": len(pushable), "to_send": len(will), "unchanged": len(pushable) - len(will),
             "skipped": [s for s in todo if s["coros"]["status"] == "skipped"],
-            "missed_to_remove": len(missed), "changes": changes, "by_day": R.by_day(changes)}
+            "missed_to_remove": len(missed), "blackout_to_remove": len(on_bl),
+            "changes": changes, "by_day": R.by_day(changes)}
+
+
+def _on_blocked(ss: list[dict], blocked: dict, today: str) -> list[dict]:
+    return [s for s in ss if s["state"] == "active" and s.get("day") and s["day"] >= today and s["day"] in blocked]
 
 
 def _auth(e: CW.CorosAuthError):
@@ -274,9 +305,12 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         # pushed sessions gone from the plan (deleted / superseded / regenerated away);
         # past-day ones stay, see push_sessions. Missed ones are removed separately.
         stale = [k for k in rows if k not in live]
+        bl = PS.blocked_map(inp)
+        # an edited session still on a 不排課日期 (no decision yet) comes off COROS
+        stale += [s["uid"] for s in _on_blocked(new, bl, today) if s["uid"] in rows]
         missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
         try:
-            res = await CW.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b)], inp["thresholds"],
+            res = await CW.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
                                          today, stale_keys=stale, missed_keys=missed)
         except CW.CorosAuthError as e:
             raise _auth(e)
@@ -335,6 +369,62 @@ async def put_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, str(e))
     await db.commit()
     return _prefs_body(p)
+
+
+# ---------------------------------------------------------------------------
+# 不排課日期 (engine/blackouts.py)
+#
+#   GET  /api/v1/overview/plan/blackouts           the stored ranges
+#   POST /api/v1/overview/plan/blackouts/preview   {blackouts} -> the reconcile preview
+#                                                  with that list, nothing saved
+#   PUT  /api/v1/overview/plan/blackouts           {blackouts, decisions} -> save, then
+#                                                  reconcile with the user's move / delete
+#                                                  choices for edited sessions on those days
+# ---------------------------------------------------------------------------
+
+def _bl_body(body) -> list[dict]:
+    from backend.engine import blackouts as BL
+    try:
+        return BL.normalize((body or {}).get("blackouts"))
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/blackouts")
+async def get_blackouts(db: AsyncSession = Depends(get_db)):
+    from backend.engine import blackouts as BL
+    from backend.settings.repository import SettingsRepository
+    return {"blackouts": await SettingsRepository(db).get(BL.KEY)}
+
+
+@router.post("/blackouts/preview")
+async def preview_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    cand = _bl_body(body)
+    saved = await _inputs(db)
+    inp = {**(await _inputs(blackouts=cand)), "covered": saved.get("covered")}
+    async with _wlock():
+        await _ensure(db, saved)                  # first visit: generate with what is stored
+        _, changes = await PS.plan_reconcile(db, inp, apply=False)
+    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+
+
+@router.put("/blackouts")
+async def put_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import blackouts as BL
+    from backend.settings.repository import SettingsRepository
+    cand = _bl_body(body)
+    dec = _decisions(body)
+    try:
+        await SettingsRepository(db).set(BL.KEY, cand)
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(400, str(e))
+    await db.commit()
+    inp = await _inputs(db, blackouts=cand)       # = what was just stored (same cache key)
+    async with _wlock():
+        await _ensure(db, inp)
+        _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
+    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
 
 
 _eq_lock = threading.Lock()
@@ -501,7 +591,8 @@ async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
 
 def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
     """The generator's notes for the weeks in view (課表偏好: capped weeks, CP test
-    exempt, soft-cap excess), each with its week start."""
+    exempt, soft-cap excess; 不排課日期: hours lost, the step after it), each with
+    its week start."""
     cur = inp.get("cur") or {}
     weeks = [((cur.get("week") or {}).get("start"), cur.get("notes") or [])] + \
         [(w.get("start"), w.get("notes") or []) for w in inp.get("weeks") or []]
@@ -512,7 +603,7 @@ def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
         we = (dt.date.fromisoformat(ws) + dt.timedelta(days=6)).isoformat()
         if we < start or ws > end:
             continue
-        out += [{"week_start": ws, **n} for n in notes if n.get("src") == "prefs"]
+        out += [{"week_start": ws, **n} for n in notes if n.get("src") in ("prefs", "blackout")]
     return out
 
 

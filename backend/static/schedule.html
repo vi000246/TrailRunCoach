@@ -129,6 +129,25 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 .cell.out .dnum { color: var(--faint); }
 .cell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
 .cell.drop { background: color-mix(in srgb, var(--accent) 12%, var(--cell)); outline: 2px dashed var(--accent); outline-offset: -3px; }
+/* 不排課日期: a faint diagonal hatch (45°, so it reads apart from the 135° provisional hatch) + a label chip, no ＋ */
+.wk .cell.bo, .ag-day.bo { background-color: color-mix(in srgb, var(--out) 55%, var(--cell));
+  background-image: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--faint) 22%, transparent) 6px 7px); }
+.wk.prov .cell.bo { background-image: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--faint) 22%, transparent) 6px 7px),
+  repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--line) 45%, transparent) 9px 10px); }
+.cell.bo .dnum, .ag-day.bo .d { color: var(--faint); }
+.bo-chip { margin-left: auto; min-width: 0; max-width: 100%; border: 1px solid color-mix(in srgb, var(--faint) 45%, transparent); background: var(--panel);
+  color: var(--muted); border-radius: 9px; padding: 0 7px; font-size: 10.5px; line-height: 17px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bo-chip:hover { color: var(--text); border-color: var(--faint); }
+.bo-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ag-day .bo-chip { margin: 0 0 3px; align-self: flex-start; font-size: 12px; line-height: 20px; }
+.cell.rng, .ag-day.rng { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent);
+  background-color: color-mix(in srgb, var(--accent) 9%, var(--cell)); }
+.cal { user-select: none; -webkit-user-select: none; }
+.legend .bo-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--line);
+  background: repeating-linear-gradient(45deg, var(--cell) 0 3px, color-mix(in srgb, var(--faint) 45%, var(--cell)) 3px 4px); }
+.chg .dec { display: inline-flex; flex-wrap: wrap; gap: 2px 10px; margin-left: 4px; }
+.chg .dec label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); }
+.chg .dec input { width: auto; margin: 0; }
 .cell-top { display: flex; align-items: center; gap: 4px; min-height: 22px; }
 .dnum { border: 0; background: none; padding: 0 5px; min-width: 24px; height: 22px; border-radius: 11px; font-size: 12.5px; font-weight: 600;
   color: var(--text); cursor: pointer; font-variant-numeric: tabular-nums; }
@@ -364,6 +383,8 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="more">
         <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
         <div class="menu right" id="more-menu" role="menu" aria-label="更多" hidden>
+          <button type="button" role="menuitem" data-act="blackout">🏖 設定不排課日期 <span class="meta">連假、出遊</span></button>
+          <hr>
           <div class="menu-h">從 COROS 移除（只動這裡推送過的）</div>
           <button type="button" role="menuitem" data-unpush="day">這一天 <span class="meta" id="um-day"></span></button>
           <button type="button" role="menuitem" data-unpush="week">這一週 <span class="meta" id="um-week"></span></button>
@@ -464,6 +485,27 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <span class="spacer"></span>
       <button class="btn" type="button" data-close>取消</button>
       <button class="btn primary" type="submit" id="pf-save">儲存並預覽重排</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sd" id="bo" aria-labelledby="bo-h">
+  <form id="bo-form" novalidate>
+    <div class="dh"><div><h3 id="bo-h">🏖 設定不排課日期</h3><span class="meta">這幾天不排任何課，本週目標時數跟著減少；套用前會先預覽哪些課會移動或取消</span></div>
+      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="row2">
+      <label>開始<input type="date" name="start" required></label>
+      <label>結束<input type="date" name="end" required></label>
+    </div>
+    <label>說明（選填）<input name="label" maxlength="30" autocomplete="off" placeholder="例：連假出遊"></label>
+    <div class="hint" id="bo-sum" aria-live="polite"></div>
+    <p class="meta faint" style="margin:0">小技巧：在日曆上拖曳選取幾天，或點一天再按住 Shift 點另一天，也能直接設定</p>
+    <div class="err" id="bo-err" role="alert"></div>
+    <div class="btns">
+      <button class="btn danger" type="button" id="bo-del">移除這段</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn primary" type="submit" id="bo-save">預覽變動</button>
     </div>
   </form>
 </dialog>
@@ -610,8 +652,15 @@ function dayTip(d, ss) {
   const list = (ss || []).filter((s) => ["active", "done", "missed"].includes(s.state));
   const t = list.reduce((a, s) => a + estOf(s), 0);
   const done = list.filter((s) => s.state === "done" && s.done_by && s.done_by.tss != null).reduce((a, s) => a + s.done_by.tss, 0);
-  return `${md(d)}（週${wd(d)}）` + (list.length ? `　計畫 TSS ${n0(t)}${done ? ` · 完成 ${n0(done)}` : ""}` : "　沒有排課") + (d >= D.today ? "\n點空白處新增" : "");
+  const b = boOf(d);
+  if (b) return `${md(d)}（週${wd(d)}）　不排課${b.label ? `（${b.label}）` : ""}\n點標籤修改或移除`;
+  return `${md(d)}（週${wd(d)}）` + (list.length ? `　計畫 TSS ${n0(t)}${done ? ` · 完成 ${n0(done)}` : ""}` : "　沒有排課") + (d >= D.today ? "\n點空白處新增；拖曳或 Shift＋點選可設定不排課日期" : "");
 }
+// 不排課日期 (engine/blackouts.py): one-off ranges, from the calendar payload
+const BOS = () => (D && D.blackouts) || [];
+const boOf = (iso) => BOS().find((b) => b.start <= iso && iso <= b.end);
+const boChip = (b) => `<button type="button" class="bo-chip" data-bo="${esc(b.id)}" aria-label="不排課 ${esc(rangeTxt(b.start, b.end))}${b.label ? "：" + esc(b.label) : ""}，修改或移除"
+  title="${esc(`不排課 ${rangeTxt(b.start, b.end)}${b.label ? "（" + b.label + "）" : ""}\n點一下修改或移除`)}">🏖 ${esc(b.label || "不排課")}</button>`;
 const phaseOf = (iso) => (D.phases || []).find((p) => p.start <= iso && iso <= p.end);
 const weekRow = (ws) => (D.week_rows || []).find((w) => w.start === ws) || {};
 function sumHtml(w) {
@@ -652,11 +701,13 @@ function render() {
         const d = addDays(ws, i), p = phaseOf(d);
         const phl = p && p.kind !== prevPh && (i === 0 || p.start === d) ? `<span class="phl ph-${esc(p.kind)}">${esc(p.label)}</span>` : "";
         if (p) prevPh = p.kind;
-        const can = d >= D.today;
+        const bo = boOf(d);
+        const can = d >= D.today && !bo;
         const out = !week && dOf(d).getMonth() !== month;
         const items = (ss[d] || []).map((s) => chipHtml(s, week)).join("") + (acts[d] || []).map(actHtml).join("");
-        cells.push(`<div class="cell ${out ? "out" : ""} ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""}" role="gridcell" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}
+        cells.push(`<div class="cell ${out ? "out" : ""} ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""}" role="gridcell" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
+          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}
+          ${bo && (d === bo.start || i === 0) ? boChip(bo) : ""}
           ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
           <div class="chips">${items}</div></div>`);
       }
@@ -673,19 +724,19 @@ function render() {
 function renderNotes() {
   const ns = (D.plan_notes || []).filter((n, i, all) => all.findIndex((x) => x.week_start === n.week_start && x.text === n.text) === i);
   $("pnotes").hidden = !ns.length;
-  $("pnotes").innerHTML = ns.map((n) => `<li class="${esc(n.level)}"><span class="wk-l">${md(n.week_start)} 那週</span>${esc(n.text)}</li>`).join("") +
-    (ns.length ? `<li style="list-style:none;margin-left:-16px"><button type="button" data-open-prefs>調整課表偏好 →</button></li>` : "");
+  $("pnotes").innerHTML = ns.map((n) => `<li class="${esc(n.level)}"><span class="wk-l">${md(n.week_start)} 那週</span>${n.src === "blackout" ? "🏖 " : ""}${esc(n.text)}</li>`).join("") +
+    (ns.some((n) => n.src === "prefs") ? `<li style="list-style:none;margin-left:-16px"><button type="button" data-open-prefs>調整課表偏好 →</button></li>` : "");
 }
 $("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
 function agendaHtml(a, ss, acts) {
   const w = weekRow(a), ph = phaseOf(addDays(a, 3));
   const days = [];
   for (let i = 0; i < 7; i++) {
-    const d = addDays(a, i), can = d >= D.today;
+    const d = addDays(a, i), bo = boOf(d), can = d >= D.today && !bo;
     const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
-    days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}</div>
-      <div class="chips">${items || `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`}</div>
+    days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
+      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}</div>
+      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}</div>
       ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
   }
   const future = a > D.today;
@@ -698,7 +749,7 @@ function agendaHtml(a, ss, acts) {
 }
 function renderLegend() {
   $("legend").innerHTML = KIND_ORDER.map((k) => `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
-    `<span class="faint">｜</span><span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ 完成：<b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><s class="faint">未完成</s></span><span>虛線＝暫定</span><span class="faint">｜</span>` +
+    `<span class="faint">｜</span><span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ 完成：<b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><s class="faint">未完成</s></span><span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span class="faint">｜</span>` +
     ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${({ pushed: "已推送", outdated: "需更新", failed: "失敗", not_pushed: "未推送" })[k]}</span>`).join("");
 }
 
@@ -782,14 +833,28 @@ function ask(title, html, ok = "確定", { cancel = "取消", danger = false } =
 }
 
 // ---- reconcile ----
-const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["✕ 未完成", "rm-c"], done: ["✓ 完成", "add-c"] };
-function changesHtml(byDay) {
+const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["✕ 未完成", "rm-c"], done: ["✓ 完成", "add-c"],
+  conflict: ["⚠ 在不排課日期內", "ch-c"] };
+// `decide`: edited sessions on a 不排課日期 get a move / delete / keep choice (read by decisions())
+function changesHtml(byDay, decide = false) {
   const days = Object.keys(byDay || {});
   if (!days.length) return `<p class="meta" style="margin:0">課表已經是最新的，沒有要變動的。</p>`;
-  const bf = (c) => c.before ? `（原本 ${Object.entries(c.before).map(([k, v]) => k === "day" ? md(v) : k === "minutes" ? v + " 分" : k === "terrain" ? (TER[v] || "未指定地形") : esc(v)).join("、")}）` : "";
+  const bf = (c) => c.before && Object.keys(c.before).length ? `（原本 ${Object.entries(c.before).map(([k, v]) => k === "day" ? md(v) : k === "minutes" ? v + " 分" : k === "terrain" ? (TER[v] || "未指定地形") : esc(v)).join("、")}）` : "";
+  const dec = (c) => {
+    if (c.action !== "conflict") return "";
+    if (!decide) return ` <span class="faint">（你改過的課：到「依實際進度重排」選擇移動或刪除；在那之前不會推送到 COROS）</span>`;
+    const to = c.conflict && c.conflict.move_to, nm = `dec-${esc(c.uid)}`;
+    return `<span class="dec" role="radiogroup" aria-label="${esc(c.title)} 怎麼處理">` +
+      (to ? `<label><input type="radio" name="${nm}" data-dec="${esc(c.uid)}" value="move" checked>移到週${wd(to)} ${md(to)}</label>` : "") +
+      `<label><input type="radio" name="${nm}" data-dec="${esc(c.uid)}" value="delete">刪除</label>` +
+      `<label><input type="radio" name="${nm}" data-dec="${esc(c.uid)}" value="keep" ${to ? "" : "checked"}>先留著</label></span>`;
+  };
   return `<ul class="chg">${days.map((d) => `<li><b>${d === "—" ? "—" : `週${wd(d)} ${md(d)}`}</b>：${byDay[d].map((c) =>
-    `<span class="${ACT[c.action][1]}">${ACT[c.action][0]}</span> ${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}`).join("；")}</li>`).join("")}</ul>`;
+    `<span class="${(ACT[c.action] || ACT.changed)[1]}">${(ACT[c.action] || ACT.changed)[0]}</span> ${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}${dec(c)}`).join("；")}</li>`).join("")}</ul>`;
 }
+// the user's choices in the open preview: {uid: move | delete} ("keep" = no decision)
+const decisions = () => Object.fromEntries([...$("cf-body").querySelectorAll("input[data-dec]:checked")]
+  .filter((x) => x.value !== "keep").map((x) => [x.dataset.dec, x.value]));
 async function reconcile(opts = {}) {
   if (S.busy) return;
   msg(`<span class="spin"></span> 依實際進度計算中…`);
@@ -797,11 +862,12 @@ async function reconcile(opts = {}) {
   try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
   msg("");
   const n = (p.changes || []).length;
-  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day)}`,
+  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day, true)}`,
     n ? `套用 ${n} 項變動` : "", { cancel: n ? "取消" : "關閉" });
   if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : "偏好已儲存；課表不需要變動", n ? "" : "ok"); return; }
+  const dec = decisions();
   S.busy = true; renderToolbar(); msg(`<span class="spin"></span> 套用中…`);
-  try { await sj("POST", `${PAPI}/reconcile`); msg(`已重排：${n} 項變動`, "ok"); await load(); }
+  try { await sj("POST", `${PAPI}/reconcile`, { decisions: dec }); msg(`已重排：${n} 項變動`, "ok"); await load(); }
   catch (e) { errMsg("重排", e); }
   finally { S.busy = false; renderToolbar(); }
 }
@@ -819,11 +885,12 @@ async function push(scope, day) {
     msg("");
     const recN = (p.changes || []).filter((c) => c.action !== "done").length;
     const rng = rangeTxt(p.start, p.end);
-    if (!p.count && !p.missed_to_remove && !recN) { msg(`${esc(rng)} 沒有可以推送的課`); return; }
+    if (!p.count && !p.missed_to_remove && !p.blackout_to_remove && !recN) { msg(`${esc(rng)} 沒有可以推送的課`); return; }
     const html = `<p class="big" style="margin:0">把 <b>${esc(rng)}</b> 的 <b>${p.count}</b> 堂課推送到 COROS 行事曆？</p>
       <p class="meta" style="margin:0">新送出或更新 <b>${p.to_send}</b> 堂，${p.unchanged} 堂已經是最新的不會重送；會同步到手錶。</p>
       ${p.skipped.length ? `<p class="meta" style="margin:0">${p.skipped.length} 堂（肌力等）不推送。</p>` : ""}
       ${p.missed_to_remove ? `<p class="meta" style="margin:0">${p.missed_to_remove} 堂錯過的課會從 COROS 移除。</p>` : ""}
+      ${p.blackout_to_remove ? `<p class="meta" style="margin:0">🏖 ${p.blackout_to_remove} 堂在不排課日期內的課會從 COROS 移除（課表裡保留，等你決定移動或刪除）。</p>` : ""}
       ${scope === "phase" ? `<p class="meta" style="margin:0">最遠排到 ${md(p.end)}（最多 ${p.max_weeks} 週）。</p>` : ""}
       ${recN ? `<div><b style="font-size:13px">推送前會先依實際進度重排（${recN} 項）</b>${changesHtml(p.by_day)}</div>` : ""}`;
     if (!(await ask(`同步到 COROS · ${SCOPE_NAME[scope]}`, html, `推送 ${p.count} 堂`))) return;
@@ -1259,10 +1326,98 @@ PFF.addEventListener("submit", async (e) => {
 });
 $("pf-btn").onclick = openPrefs;
 
+// ---------------- 不排課日期 (engine/blackouts.py) ----------------
+const BOF = $("bo-form");
+let boEdit = null;                                   // the range being edited (null = new)
+const spanDays = (a, b) => Math.round((dOf(b) - dOf(a)) / 864e5) + 1;
+function openBo(b, start, end) {
+  closeMenus();
+  if (!D) return;
+  boEdit = b || null;
+  $("bo-h").textContent = b ? "🏖 修改不排課日期" : "🏖 設定不排課日期";
+  const a = b ? b.start : start || S.sel || D.today;
+  BOF.start.value = a;
+  BOF.end.value = b ? b.end : end || a;
+  BOF.label.value = b ? b.label || "" : "";
+  $("bo-del").hidden = !b;
+  $("bo-err").textContent = "";
+  boSync();
+  $("bo").showModal();
+  (b ? BOF.label : end ? BOF.label : BOF.start).focus();
+}
+function boError() {
+  const a = BOF.start.value, b = BOF.end.value;
+  if (!a || !b) return "要選開始和結束日期";
+  if (b < a) return "結束日不能早於開始日";
+  if (spanDays(a, b) > 62) return "一段最多 62 天";
+  const hit = BOS().find((x) => x !== boEdit && !(b < x.start || a > x.end));
+  if (hit) return `和另一段不排課日期重疊（${rangeTxt(hit.start, hit.end)}${hit.label ? " " + hit.label : ""}）`;
+  return "";
+}
+function boSync() {
+  const a = BOF.start.value, b = BOF.end.value;
+  if (a && b && b >= a) {
+    const n = (D.sessions || []).filter((s) => s.state === "active" && s.day >= a && s.day <= b && s.day >= D.today).length;
+    $("bo-sum").innerHTML = `${esc(rangeTxt(a, b))}，共 <b>${spanDays(a, b)}</b> 天` +
+      (n ? `；目前有 <b>${n}</b> 堂課在這幾天，會移到同一週的其他天或取消` : "；這幾天目前沒有排課") +
+      (b < D.today ? `<br><span class="faint">過去的日子：只做紀錄，不改課表</span>` : "");
+  } else $("bo-sum").textContent = "";
+  $("bo-err").textContent = boError();
+}
+BOF.addEventListener("input", () => { if (BOF.end.value && BOF.start.value > BOF.end.value && document.activeElement === BOF.start) BOF.end.value = BOF.start.value; boSync(); });
+$("bo").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("bo")) $("bo").close(); });
+// preview first (nothing saved), then save + reconcile with the choices made in the preview
+async function applyBlackouts(list, title, done, removing = false) {
+  if (S.busy) return;
+  msg(`<span class="spin"></span> 計算不排課後的課表…`);
+  let p;
+  try { p = await sj("POST", `${PAPI}/blackouts/preview`, { blackouts: list }); } catch (e) { return errMsg(title, e); }
+  msg("");
+  const n = (p.changes || []).length;
+  const intro = removing ? "移除後這幾天恢復照常排課；之後還沒做、你沒改過的課依目前狀況重排，你改過或自己加的課不會動。"
+    : "這些日子不排課；之後還沒做、你沒改過的課會移到同一週的其他天，排不下的取消（長跑優先），本週目標時數跟著減少。你改過或自己加的課由你決定。";
+  const ok = await ask(title, `<p class="meta" style="margin:0">${intro}</p>${changesHtml(p.by_day, true)}`,
+    n ? `套用（${n} 項變動）` : "儲存", { cancel: "取消" });
+  if (!ok) { msg("不排課日期沒有變更"); return; }
+  const dec = decisions();
+  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> 套用中…`);
+  try {
+    const r = await sj("PUT", `${PAPI}/blackouts`, { blackouts: list, decisions: dec });
+    await load();
+    msg(`${done}${(r.changes || []).length ? `：${r.changes.length} 項變動` : ""}`, "ok");
+  } catch (e) { errMsg(title, e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+BOF.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const err = boError();
+  if (err) { $("bo-err").textContent = err; return; }
+  const r = { id: boEdit ? boEdit.id : null, start: BOF.start.value, end: BOF.end.value, label: BOF.label.value.trim() };
+  const list = BOS().filter((x) => x !== boEdit).concat([r]);
+  $("bo").close();
+  const t = rangeTxt(r.start, r.end) + (r.label ? `（${r.label}）` : "");
+  applyBlackouts(list, boEdit ? "修改不排課日期" : "設定不排課日期", `已設定 ${t} 不排課`);
+});
+$("bo-del").addEventListener("click", () => {
+  if (!boEdit) return;
+  const b = boEdit, list = BOS().filter((x) => x !== b);
+  $("bo").close();
+  applyBlackouts(list, "移除不排課日期", `已移除 ${rangeTxt(b.start, b.end)} 的不排課`, true);
+});
+
 // ---------------- calendar interaction ----------------
 function select(d) { S.sel = S.sel === d ? S.sel : d; render(); }
 $("cal").addEventListener("click", (e) => {
   if (e.target.closest(".term")) return;
+  if (performance.now() < RG.quietUntil) return;             // the click that ends a range drag
+  const boc = e.target.closest("[data-bo]");
+  if (boc) { const b = BOS().find((x) => x.id === boc.dataset.bo); if (b) openBo(b); return; }
+  const day = e.target.closest("[data-day]");
+  if (e.shiftKey && day && !e.target.closest(".chip")) {    // shift-click: a range from the selected day
+    const d = day.dataset.day;
+    if (S.sel && S.sel !== d) { const [a, b] = S.sel < d ? [S.sel, d] : [d, S.sel]; return openBo(null, a, b); }
+    return select(d);
+  }
   const add = e.target.closest("[data-add]"), sel = e.target.closest("[data-sel]"), chip = e.target.closest(".chip[data-uid]");
   if (add) { S.sel = add.dataset.add; render(); return openDlg(null, add.dataset.add); }
   if (chip) { const s = findS(chip.dataset.uid); if (s) { S.sel = s.day; render(); openDlg(findS(chip.dataset.uid)); } return; }
@@ -1271,7 +1426,37 @@ $("cal").addEventListener("click", (e) => {
   if (!cell || e.target.closest(".chip")) return;
   const d = cell.dataset.day;
   S.sel = d; render();
-  if (d >= D.today) openDlg(null, d);
+  if (d >= D.today && !boOf(d)) openDlg(null, d);
+});
+// drag across days (mouse / pen): select a range for 不排課日期
+const RG = { a: null, b: null, x: 0, y: 0, on: false, quietUntil: 0 };
+function paintRange(a, b) {
+  const [lo, hi] = a < b ? [a, b] : [b, a];
+  $("cal").querySelectorAll("[data-day]").forEach((el) => el.classList.toggle("rng", el.dataset.day >= lo && el.dataset.day <= hi));
+}
+$("cal").addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || e.pointerType === "touch" || e.shiftKey) return;
+  const c = e.target.closest("[data-day]");
+  if (!c || e.target.closest(".chip, .add, .bo-chip, .term")) return;
+  Object.assign(RG, { a: c.dataset.day, b: c.dataset.day, x: e.clientX, y: e.clientY, on: false });
+});
+document.addEventListener("pointermove", (e) => {
+  if (!RG.a) return;
+  if (!RG.on && Math.hypot(e.clientX - RG.x, e.clientY - RG.y) < 8) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("#cal [data-day]");
+  RG.on = true;
+  if (el) RG.b = el.dataset.day;
+  paintRange(RG.a, RG.b);
+});
+document.addEventListener("pointerup", () => {
+  if (!RG.a) return;
+  const { a, b, on } = RG;
+  RG.a = null;
+  if (!on) return;
+  RG.quietUntil = performance.now() + 350;
+  $("cal").querySelectorAll(".rng").forEach((el) => el.classList.remove("rng"));
+  if (a === b) return;
+  openBo(null, a < b ? a : b, a < b ? b : a);
 });
 // arrow keys move between days (on the date buttons)
 $("cal").addEventListener("keydown", (e) => {
@@ -1291,7 +1476,7 @@ $("cal").addEventListener("dragstart", (e) => {
 });
 $("cal").addEventListener("dragend", (e) => { e.target.closest?.(".chip")?.classList.remove("dragging"); document.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop")); });
 $("cal").addEventListener("dragover", (e) => {
-  const d = e.target.closest("[data-day]"); if (!d || d.dataset.day < D.today) return;
+  const d = e.target.closest("[data-day]"); if (!d || d.dataset.day < D.today || boOf(d.dataset.day)) return;
   e.preventDefault(); e.dataTransfer.dropEffect = "move";
   document.querySelectorAll(".drop").forEach((x) => x !== d && x.classList.remove("drop")); d.classList.add("drop");
 });
@@ -1300,7 +1485,7 @@ $("cal").addEventListener("drop", async (e) => {
   const d = e.target.closest("[data-day]"); if (!d) return;
   e.preventDefault(); d.classList.remove("drop");
   const uid = e.dataTransfer.getData("text/plain"), s = findS(uid), day = d.dataset.day;
-  if (!s || s.day === day || day < D.today) return;
+  if (!s || s.day === day || day < D.today || boOf(day)) return;
   try { await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }); S.sel = day; await load(); msg(`「${esc(s.title)}」移到 ${md(day)}（週${wd(day)}）`, "ok"); }
   catch (err) { errMsg("移動", err); }
 });
@@ -1327,6 +1512,7 @@ $("more-menu").addEventListener("click", (e) => {
   const b = e.target.closest("button:not([disabled])"); if (!b) return;
   if (b.dataset.unpush) unpush(b.dataset.unpush);
   else if (b.dataset.act === "refresh") { msg(""); load(); }
+  else if (b.dataset.act === "blackout") openBo(null);
 });
 $("rec-btn").onclick = reconcile;
 matchMedia("(max-width: 699px)").addEventListener("change", (e) => { S.narrow = e.matches; if (D) load(); });
