@@ -100,6 +100,37 @@ ol.actions .meta { display: block; }
 .cb.pushed, .cb.updated { color: var(--good); } .cb.outdated { color: var(--watch); } .cb.failed { color: var(--bad); cursor: pointer; }
 #coros-bar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: -4px 0 8px; }
 #coros-bar:empty { display: none; }
+.cb.skipped { color: var(--faint); }
+.sess.missed .t { color: var(--faint); text-decoration: line-through; }
+.sess.missed .t::after { content: " 未完成"; color: var(--bad); font-weight: 400; font-size: 12px; text-decoration: none; display: inline-block; margin-left: 4px; }
+.sess[draggable="true"] { cursor: grab; }
+.sess.dragging { opacity: .45; }
+.day.drop { background: var(--soft); border-radius: 6px; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; margin-left: 6px; white-space: nowrap; }
+.tag.prov { border-style: dashed; }
+.ib { font: inherit; font-size: 12px; line-height: 1; border: 1px solid transparent; background: none; color: var(--faint);
+  cursor: pointer; padding: 2px 5px; border-radius: 5px; }
+.ib:hover, .ib:focus-visible { color: var(--text); border-color: var(--line); }
+.sess .acts { margin-left: 4px; white-space: nowrap; }
+.day { position: relative; }
+.day .add { visibility: hidden; position: absolute; right: 0; top: 5px; }
+.day:hover .add, .day .add:focus-visible { visibility: visible; }
+@media (hover: none) { .day .add { visibility: visible; } }
+.later { margin-top: 10px; }
+.later h3 { font-size: 13px; margin: 12px 0 2px; font-weight: 600; }
+.later h3 .meta { font-weight: 400; }
+.preview { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; font-size: 13px; }
+.preview ul { margin: 4px 0; padding-left: 18px; }
+.preview .add-c { color: var(--good); } .preview .rm-c { color: var(--bad); } .preview .ch-c { color: var(--watch); }
+dialog.sd { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); padding: 14px 16px; width: min(420px, 92vw); }
+dialog.sd::backdrop { background: rgba(0,0,0,.35); }
+dialog.sd h3 { margin: 0 0 10px; font-size: 15px; }
+dialog.sd label { display: grid; gap: 2px; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+dialog.sd input, dialog.sd select, dialog.sd textarea { font: inherit; font-size: 13.5px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+dialog.sd .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+dialog.sd .btns { display: flex; gap: 8px; margin-top: 6px; }
+dialog.sd .err { font-size: 12.5px; min-height: 1em; }
 .loadbox { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; margin-top: 10px; }
 .loadbox b { font-variant-numeric: tabular-nums; }
 .notes { margin: 10px 0 0; padding-left: 18px; font-size: 12.5px; }
@@ -169,9 +200,17 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
       <div id="actions"><div class="loading">…</div></div>
     </section>
     <section data-sec id="s-week">
-      <h2>本週該做什麼 <span class="meta" id="wk-sub"></span>
-        <span style="flex:1"></span><button class="btn" id="coros-push" hidden>推送到 COROS</button></h2>
+      <h2>本週該做什麼 <span class="meta" id="wk-sub"></span></h2>
+      <div class="toolbar" id="plan-tools" hidden>
+        <button class="btn" id="plan-add" type="button">＋ 新增</button>
+        <button class="btn" id="plan-rec" type="button" title="依實際完成狀況重算：錯過的標成未完成，之後的課重排（你改過的保留）">重新計算</button>
+        <span style="flex:1"></span>
+        <select class="btn" id="push-scope" aria-label="推送範圍"><option value="day">單日</option><option value="week" selected>本週</option><option value="phase">整個周期</option></select>
+        <input class="btn" type="date" id="push-day" aria-label="推送哪一天" hidden>
+        <button class="btn" id="coros-push" type="button">推送到 COROS</button>
+      </div>
       <div id="coros-bar" class="meta" aria-live="polite"></div>
+      <div id="plan-preview"></div>
       <div id="week"><div class="loading">排本週課表中…</div></div>
     </section>
   </div>
@@ -217,6 +256,27 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
     <div class="ind" id="ind"><div class="loading">…</div></div>
   </section>
 </main>
+<dialog class="sd" id="sess-dlg" aria-labelledby="sd-h">
+  <form method="dialog" id="sd-form">
+    <h3 id="sd-h">編輯課表</h3>
+    <div class="row2">
+      <label>日期<input type="date" name="day" required></label>
+      <label>類型<select name="kind">
+        <option value="easy">輕鬆跑</option><option value="long">長時間</option><option value="quality">強度課</option>
+        <option value="test">測試</option><option value="hike">健行／登山</option><option value="strength">肌力</option></select></label>
+    </div>
+    <label>標題<input name="title" required maxlength="200"></label>
+    <div class="row2">
+      <label>分鐘<input type="number" name="minutes" min="0" max="1440" step="1"></label>
+      <label>目標<input name="target" maxlength="200" placeholder="心率 &lt; 140 bpm"></label>
+    </div>
+    <label>說明<textarea name="detail" rows="2" maxlength="500"></textarea></label>
+    <p class="meta faint" style="margin:0 0 6px">強度課的標題寫成「3×10 分」這種格式，推送到 COROS 才會有間歇結構</p>
+    <div class="err" id="sd-err" role="alert"></div>
+    <div class="btns"><button class="btn" value="save" id="sd-save">儲存</button><button class="btn" value="cancel" formnovalidate>取消</button>
+      <span style="flex:1"></span><button class="btn" value="delete" id="sd-del" formnovalidate style="color:var(--bad)">刪除</button></div>
+  </form>
+</dialog>
 <script>
 const API = "/api/v1/overview";
 const $ = (id) => document.getElementById(id);
@@ -314,32 +374,16 @@ async function loadWeek() {
   const bar = (label, done, tgt, fmt) => `<div class="row"><span>${label}</span>
     <div class="track" role="img" aria-label="${label} ${fmt(done)} / ${fmt(tgt)}"><i style="width:${Math.min(100, tgt > 0 ? done / tgt * 100 : 0).toFixed(1)}%"></i></div>
     <span class="num">${fmt(done)} / ${fmt(tgt)}</span></div>`;
-  const byDay = {};
-  for (const s of w.sessions) if (s.day) (byDay[s.day] ||= []).push(s);
-  const days = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(w.week.start + "T00:00:00"); d.setDate(d.getDate() + i);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    const acts = D.activities.filter((a) => a.date === iso);
-    const ss = byDay[iso] || [];
-    const past = iso < w.week.today;
-    const extra = acts.filter((a) => !ss.some((s) => s.done_by && s.done_by.index === a.index));
-    days.push(`<div class="day ${iso === w.week.today ? "today" : ""}"><div class="d">週${WD[i]} ${md(iso)}${iso === w.week.today ? "<br>今天" : ""}</div><div>
-      ${ss.map((s) => `<div class="sess ${s.done ? "done" : ""}" data-sid="${esc(s.id)}"><span class="t">${gl(s.title)}</span>
-        <span class="x">${s.done ? `${esc(s.done_by.category_label)} ${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` :
-          `${s.minutes ? s.minutes + " 分鐘" : ""}${s.target ? " · " + gl(s.target) : ""}`}</span>
-        ${!s.done && s.detail ? `<div class="x">${gl(s.detail)}</div>` : ""}</div>`).join("")}
-      ${extra.map((a) => `<div class="sess done"><span class="t">${esc(a.category_label)}</span> <span class="x">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></div>`).join("")}
-      ${!ss.length && !extra.length ? `<span class="rest">${past ? "沒有活動" : "休息"}</span>` : ""}
-    </div></div>`);
-  }
+  // the day list comes from the stored, editable plan (loadPlan below)
+  const days = [`<div class="loading">…</div>`];
   const L = w.load;
   $("week").innerHTML = `<div class="prog">
       ${bar("移動時間", D.hours, T.hours, hrs)}
       ${bar("TSS", D.tss, T.tss, n0)}
     </div>
     <ul class="why">${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
-    <div class="days">${days.join("")}</div>
+    <div class="days" id="wk-days">${days.join("")}</div>
+    <div class="later" id="later"></div>
     <div class="loadbox">
       <span>CTL <b>${n0(L.ctl_week_start)}</b> → 週日 <b>${n0(L.ctl_end)}</b>（${sgn(L.ramp, (v) => v.toFixed(1))}/週）</span>
       <span>下週一 TSB <b>${sgn(L.tsb_next)}</b></span>
@@ -507,47 +551,200 @@ function shift(dir) {
 
 // ---------------- this week → COROS ----------------
 const CB = { pushed: "已推送", updated: "已更新", outdated: "需更新", failed: "失敗" };
-let COROS = null;
-async function cj(method, url) {
-  const r = await fetch(url, { method });
+// ---------------- stored, editable plan ----------------
+const PAPI = `${API}/plan`;
+let SP = null;                    // GET /plan/sessions payload
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return isoOf(d); };
+async function sj(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
   const b = await r.json().catch(() => ({}));
   if (r.status === 401) throw new Error("COROS 未登入或登入過期，請到設定頁重新登入");
-  if (!r.ok) throw new Error(`${r.status} ${typeof b.detail === "string" ? b.detail : JSON.stringify(b.detail || b).slice(0, 200)}`);
+  if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
   return b;
 }
-function paintCoros(rows) {
-  const by = Object.fromEntries(rows.map((r) => [r.id, r]));
-  document.querySelectorAll("#week .sess[data-sid]").forEach((el) => {
-    el.querySelector(".cb")?.remove();
-    const r = by[el.dataset.sid];
-    if (!r || !CB[r.status]) return;
-    const tip = r.status === "failed" ? `${r.error || ""}\n點一下重試` : r.status === "outdated" ? (r.reason || "課表改過，再推送一次會更新 COROS") : (r.name || "");
-    el.querySelector(".t").insertAdjacentHTML("afterend",
-      `<button type="button" class="cb ${r.status}" title="${esc(tip)}" ${r.status === "failed" ? `data-retry="${esc(r.id)}"` : "disabled"}>${CB[r.status]}</button>`);
-  });
+function corosBadge(s) {
+  const c = s.coros;
+  if (!c) return "";
+  if (c.status === "skipped") return `<span class="cb skipped" title="${esc(c.reason || "")}">不推送</span>`;
+  if (!CB[c.status]) return "";
+  const tip = c.status === "failed" ? `${c.error || ""}\n點一下重試這天` : c.status === "outdated" ? (c.reason || "課表改過，再推送一次會更新 COROS") : (c.name || "");
+  return `<button type="button" class="cb ${c.status}" title="${esc(tip)}" ${c.status === "failed" ? `data-retry="${esc(s.day)}"` : "disabled"}>${CB[c.status]}</button>`;
 }
-async function loadCoros() {
-  const st = COROS = await cj("GET", `${API}/weekplan/coros`);
-  const btn = $("coros-push");
-  const pushable = st.sessions.filter((s) => !["done", "skipped"].includes(s.status));
-  btn.hidden = !pushable.length && !st.orphans.length;
-  const n = (k) => st.sessions.filter((s) => s.status === k).length;
+function sessHtml(s, today) {
+  const done = s.state === "done", missed = s.state === "missed";
+  const live = s.state === "active" && s.day >= today;
+  const tag = s.origin === "custom" ? `<span class="tag">自訂</span>` : s.edited ? `<span class="tag">已修改</span>` : "";
+  const info = done && s.done_by ? `${esc(s.done_by.category_label || "")} ${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}`
+    : `${s.minutes ? s.minutes + " 分鐘" : ""}${s.target ? " · " + gl(s.target) : ""}`;
+  return `<div class="sess ${done ? "done" : ""} ${missed ? "missed" : ""}" data-uid="${esc(s.uid)}" ${live ? `draggable="true"` : ""}>
+    <span class="t">${gl(s.title)}</span>${tag}${live || done ? corosBadge(s) : ""}
+    <span class="x">${info}</span>${live ? `<span class="acts"><button type="button" class="ib" data-edit="${esc(s.uid)}" aria-label="編輯 ${esc(s.title)}">✎</button><button type="button" class="ib" data-del="${esc(s.uid)}" aria-label="刪除 ${esc(s.title)}">✕</button></span>` : ""}
+    ${live && s.detail ? `<div class="x">${gl(s.detail)}</div>` : ""}</div>`;
+}
+function dayHtml(iso, ss, extra, today, label) {
+  const past = iso < today;
+  return `<div class="day ${iso === today ? "today" : ""}" data-day="${iso}"><div class="d">${label}${past ? "" : `<button type="button" class="ib add" data-add="${iso}" aria-label="在 ${md(iso)} 新增" title="在這天新增">＋</button>`}${iso === today ? "<br>今天" : ""}</div><div>
+    ${ss.map((s) => sessHtml(s, today)).join("")}
+    ${extra.map((a) => `<div class="sess done"><span class="t">${esc(a.category_label)}</span> <span class="x">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></div>`).join("")}
+    ${!ss.length && !extra.length ? `<span class="rest">${past ? "沒有活動" : "休息"}</span>` : ""}
+  </div></div>`;
+}
+function renderPlan() {
+  if (!SP || !PLAN) return;
+  const today = SP.today, ws = PLAN.week.start;
+  const by = {};
+  for (const s of SP.sessions) if (s.day) (by[s.day] ||= []).push(s);
+  const used = new Set(SP.sessions.filter((s) => s.done_by).map((s) => s.done_by.index));
+  const rows = [];
+  for (let i = 0; i < 7; i++) {
+    const iso = addDays(ws, i);
+    const extra = PLAN.done.activities.filter((a) => a.date === iso && !used.has(a.index));
+    rows.push(dayHtml(iso, by[iso] || [], extra, today, `週${WD[i]} ${md(iso)}`));
+  }
+  $("wk-days").innerHTML = rows.join("");
+  const weeks = SP.weeks || [];
+  $("later").innerHTML = weeks.length ? `<details ${ls.get("laterOpen", false) ? "open" : ""} id="later-d"><summary>接下來 ${weeks.length} 週（排到 ${md(SP.horizon_end)}，最多 ${SP.max_weeks} 週；第 2 週起是暫定，重新計算時會依實際進度調整）</summary>
+    ${weeks.map((w) => {
+      const days = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(w.start, i)).filter((d) => d <= SP.horizon_end);
+      return `<h3>${md(w.start)} 起 <span class="meta">${esc(w.mode_label)} · ${hrs(w.hours)} · TSS ${n0(w.tss)}</span>${w.provisional ? `<span class="tag prov">暫定</span>` : ""}</h3>
+        <div class="days">${days.map((d) => dayHtml(d, by[d] || [], [], today, `週${WD[(new Date(d + "T00:00:00").getDay() + 6) % 7]} ${md(d)}`)).join("")}</div>`;
+    }).join("")}</details>` : "";
+  $("later-d")?.addEventListener("toggle", (e) => ls.set("laterOpen", e.target.open));
+  const act = SP.sessions.filter((s) => s.state === "active" && s.coros);
+  const n = (k) => act.filter((s) => s.coros.status === k).length;
   const pushed = n("pushed") + n("updated");
   $("coros-bar").innerHTML = pushed || n("failed") || n("outdated") ? `<span>COROS：已推送 ${pushed}${n("outdated") ? ` · 需更新 ${n("outdated")}` : ""}${n("failed") ? ` · 失敗 ${n("failed")}` : ""}</span>
-    ${pushed ? `<button class="btn" id="coros-del" type="button">從 COROS 移除</button>` : ""}` : "";
+    ${pushed ? `<button class="btn" id="coros-del" type="button">從 COROS 移除（依上面的範圍）</button>` : ""}` : "";
   if ($("coros-del")) $("coros-del").onclick = unpushCoros;
-  paintCoros(st.sessions);
+  $("plan-tools").hidden = false;
+  const ph = SP.phase;
+  $("push-scope").querySelector('[value="phase"]').textContent = `整個周期（到 ${md(SP.phase_push_end)}${ph && SP.phase_push_end < ph.end ? `，最多 ${SP.max_weeks} 週` : ""}）`;
+  const pd = $("push-day"); pd.min = today; pd.max = SP.horizon_end; if (!pd.value) pd.value = today;
 }
-async function pushCoros(session) {
-  const btn = $("coros-push");
-  const todo = COROS ? COROS.sessions.filter((s) => ["not_pushed", "outdated", "failed"].includes(s.status)) : [];
-  if (!session && todo.length && !confirm(`把本週 ${todo.length} 堂課排到 COROS 行事曆（會同步到手錶）？\n已推送且沒改過的不會重複建立。`)) return;
-  btn.disabled = true; btn.textContent = "推送中…";
+async function loadPlan() {
+  SP = await sj("GET", `${PAPI}/sessions`);
+  renderPlan();
+}
+const findS = (uid) => SP.sessions.find((s) => s.uid === uid);
+
+// ---- edit dialog ----
+let dlgUid = null;
+function openDlg(s, day) {
+  const f = $("sd-form"), dlg = $("sess-dlg");
+  dlgUid = s ? s.uid : null;
+  $("sd-h").textContent = s ? "編輯課表" : "新增一堂課";
+  $("sd-del").hidden = !s;
+  $("sd-err").textContent = "";
+  f.day.min = SP.today; f.day.max = SP.horizon_end;
+  f.day.value = s ? s.day : day || SP.today;
+  f.kind.value = s ? s.kind : "easy";
+  f.title.value = s ? s.title : "輕鬆跑";
+  f.minutes.value = s ? s.minutes : 45;
+  f.target.value = s ? s.target || "" : "";
+  f.detail.value = s ? s.detail || "" : "";
+  dlg.showModal();
+}
+$("sd-form").kind.addEventListener("change", (e) => {
+  const f = $("sd-form"), def = { easy: "輕鬆跑", long: "長時間輕鬆", quality: "閾值 3×10 分", test: "CP 測試 3 分 + 12 分", hike: "健行", strength: "肌力（下肢單腳＋核心）" };
+  if (!dlgUid) f.title.value = def[e.target.value] || f.title.value;
+});
+$("sess-dlg").addEventListener("close", async () => {
+  const dlg = $("sess-dlg"), f = $("sd-form"), v = dlg.returnValue;
+  if (v === "delete" && dlgUid) return delSess(dlgUid);
+  if (v !== "save") return;
+  const body = { day: f.day.value, kind: f.kind.value, title: f.title.value, minutes: +f.minutes.value || 0,
+    target: f.target.value, detail: f.detail.value };
   try {
-    const res = await cj("POST", `${API}/weekplan/push-coros${session ? `?session=${encodeURIComponent(session)}` : ""}`);
+    await sj(dlgUid ? "PATCH" : "POST", dlgUid ? `${PAPI}/sessions/${encodeURIComponent(dlgUid)}` : `${PAPI}/sessions`, body);
+    await loadPlan();
+  } catch (e) { $("sd-err").textContent = e.message; dlg.showModal(); }
+});
+async function delSess(uid) {
+  const s = findS(uid);
+  if (!s || !confirm(`刪除「${s.title}」（${md(s.day)}）？${s.coros && ["pushed", "updated", "outdated"].includes(s.coros.status) ? "\n下次推送時也會從 COROS 移除。" : ""}`)) return;
+  try { await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(uid)}`); await loadPlan(); }
+  catch (e) { $("coros-bar").innerHTML = `<span class="err">刪除失敗：${esc(e.message)}</span>`; }
+}
+async function moveSess(uid, day) {
+  const s = findS(uid);
+  if (!s || s.day === day) return;
+  try { await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }); await loadPlan(); }
+  catch (e) { $("coros-bar").innerHTML = `<span class="err">移動失敗：${esc(e.message)}</span>`; }
+}
+$("week").addEventListener("click", (e) => {
+  const t = e.target.closest("[data-edit],[data-del],[data-add],.cb[data-retry]");
+  if (!t) return;
+  if (t.dataset.edit) openDlg(findS(t.dataset.edit));
+  else if (t.dataset.del) delSess(t.dataset.del);
+  else if (t.dataset.add) openDlg(null, t.dataset.add);
+  else if (t.dataset.retry) pushCoros("day", t.dataset.retry);
+});
+$("plan-add").onclick = () => openDlg(null);
+// drag a session onto another day
+$("week").addEventListener("dragstart", (e) => {
+  const el = e.target.closest(".sess[draggable]"); if (!el) return;
+  e.dataTransfer.setData("text/plain", el.dataset.uid); e.dataTransfer.effectAllowed = "move"; el.classList.add("dragging");
+});
+$("week").addEventListener("dragend", (e) => { e.target.closest?.(".sess")?.classList.remove("dragging"); });
+$("week").addEventListener("dragover", (e) => {
+  const d = e.target.closest(".day[data-day]"); if (!d || d.dataset.day < SP.today) return;
+  e.preventDefault(); document.querySelectorAll(".day.drop").forEach((x) => x !== d && x.classList.remove("drop")); d.classList.add("drop");
+});
+$("week").addEventListener("dragleave", (e) => { const d = e.target.closest(".day"); if (d && !d.contains(e.relatedTarget)) d.classList.remove("drop"); });
+$("week").addEventListener("drop", (e) => {
+  const d = e.target.closest(".day[data-day]"); if (!d) return;
+  e.preventDefault(); d.classList.remove("drop");
+  moveSess(e.dataTransfer.getData("text/plain"), d.dataset.day);
+});
+
+// ---- reconcile preview ----
+const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["✕ 未完成", "rm-c"], done: ["✓ 完成", "add-c"] };
+function changesHtml(byDay) {
+  const days = Object.keys(byDay);
+  if (!days.length) return `<p class="meta" style="margin:2px 0">沒有要變動的。</p>`;
+  const bf = (c) => c.before ? `（原本 ${Object.entries(c.before).map(([k, v]) => k === "day" ? md(v) : k === "minutes" ? v + " 分" : esc(v)).join("、")}）` : "";
+  return `<ul>${days.map((d) => `<li><b>${d === "—" ? "—" : `週${wd(d)} ${md(d)}`}</b>：${byDay[d].map((c) =>
+    `<span class="${ACT[c.action][1]}">${ACT[c.action][0]}</span> ${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}`).join("；")}</li>`).join("")}</ul>`;
+}
+async function reconcilePreview() {
+  const p = await sj("GET", `${PAPI}/reconcile`);
+  $("plan-preview").innerHTML = `<div class="preview"><b>重新計算會這樣改</b>${changesHtml(p.by_day)}
+    <div class="toolbar" style="margin:4px 0 0">${p.changes.length ? `<button class="btn" type="button" id="rec-ok">套用</button>` : ""}<button class="btn" type="button" id="rec-no">${p.changes.length ? "取消" : "關閉"}</button></div></div>`;
+  $("rec-no").onclick = () => { $("plan-preview").innerHTML = ""; };
+  if ($("rec-ok")) $("rec-ok").onclick = async () => {
+    try { await sj("POST", `${PAPI}/reconcile`); $("plan-preview").innerHTML = ""; await loadPlan(); }
+    catch (e) { $("plan-preview").innerHTML = `<p class="err">重新計算失敗：${esc(e.message)}</p>`; }
+  };
+}
+$("plan-rec").onclick = () => reconcilePreview().catch((e) => { $("plan-preview").innerHTML = `<p class="err">${esc(e.message)}</p>`; });
+
+// ---- push ----
+$("push-scope").onchange = (e) => { $("push-day").hidden = e.target.value !== "day"; };
+function scopeQs(scope, day) { return `scope=${scope}${scope === "day" ? `&day=${encodeURIComponent(day)}` : ""}`; }
+async function pushCoros(scope, day) {
+  scope = scope || $("push-scope").value; day = day || $("push-day").value || SP.today;
+  const btn = $("coros-push");
+  btn.disabled = true;
+  try {
+    const p = await sj("GET", `${PAPI}/push-coros/preview?${scopeQs(scope, day)}`);
+    const range = p.start === p.end ? md(p.start) : `${md(p.start)}–${md(p.end)}`;
+    const recN = p.changes.filter((c) => c.action !== "done").length;
+    const msg = `推送 ${range} 的 ${p.count} 堂課到 COROS 行事曆（會同步到手錶）？\n` +
+      `新送出或更新 ${p.to_send} 堂，${p.unchanged} 堂已經是最新的不會重送。` +
+      (p.skipped.length ? `\n${p.skipped.length} 堂（肌力等）不推送。` : "") +
+      (recN ? `\n推送前會先重新計算，變動 ${recN} 項（見下方預覽）。` : "") +
+      (p.missed_to_remove ? `\n${p.missed_to_remove} 堂錯過的課會從 COROS 移除。` : "") +
+      (scope === "phase" ? `\n最遠排到 ${md(p.end)}（最多 ${p.max_weeks} 週）。` : "");
+    if (recN) $("plan-preview").innerHTML = `<div class="preview"><b>推送前的重新計算</b>${changesHtml(p.by_day)}</div>`;
+    if (!p.count && !p.missed_to_remove && !recN) { $("coros-bar").innerHTML = `<span>${range} 沒有可以推送的課</span>`; return; }
+    if (!confirm(msg)) { $("plan-preview").innerHTML = ""; return; }
+    btn.textContent = "推送中…";
+    const res = await sj("POST", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
     const k = (s) => res.sessions.filter((r) => r.status === s).length;
-    await loadCoros();
-    $("coros-bar").insertAdjacentHTML("beforeend", `<span class="faint">這次：新推送 ${res.sessions.filter((r) => r.status === "pushed" && r.changed).length} · 更新 ${k("updated")} · 失敗 ${k("failed")}${res.removed.length ? ` · 移除 ${res.removed.length}` : ""}</span>`);
+    $("plan-preview").innerHTML = "";
+    await loadPlan();
+    $("coros-bar").insertAdjacentHTML("beforeend", `<span class="faint">這次（${range}）：新推送 ${res.sessions.filter((r) => r.status === "pushed" && r.changed).length} · 更新 ${k("updated")} · 失敗 ${k("failed")}${res.removed.length ? ` · 移除 ${res.removed.filter((r) => r.status === "removed").length}` : ""}</span>`);
   } catch (e) {
     $("coros-bar").innerHTML = `<span class="err">推送失敗：${esc(e.message)}</span>`;
   } finally {
@@ -555,12 +752,12 @@ async function pushCoros(session) {
   }
 }
 async function unpushCoros() {
-  if (!confirm("把本週推送到 COROS 的課從行事曆和課表庫移除？（只會動這裡推送過的）")) return;
-  try { await cj("DELETE", `${API}/weekplan/push-coros`); await loadCoros(); }
+  const scope = $("push-scope").value, day = $("push-day").value || SP.today;
+  if (!confirm("把這個範圍推送到 COROS 的課從行事曆和課表庫移除？（只會動這裡推送過的）")) return;
+  try { await sj("DELETE", `${PAPI}/push-coros?${scopeQs(scope, day)}`); await loadPlan(); }
   catch (e) { $("coros-bar").innerHTML = `<span class="err">移除失敗：${esc(e.message)}</span>`; }
 }
 $("coros-push").onclick = () => pushCoros();
-$("week").addEventListener("click", (e) => { const b = e.target.closest(".cb[data-retry]"); if (b) pushCoros(b.dataset.retry); });
 
 // ---------------- wiring ----------------
 document.querySelectorAll("#unit button").forEach((b) => b.onclick = () => { PS.unit = b.dataset.u; PS.anchor = null; ls.set("unit", PS.unit); loadPeriod(); });
@@ -595,7 +792,7 @@ const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：$
 (async () => {
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   await loadStatus().catch(fail("hero"));
-  await Promise.all([loadWeek().then(() => loadCoros().catch(() => {})).catch(fail("week")), loadPeriod().catch(fail("period"))]);
+  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
   loadPmc().catch(fail("pmc"));
 })();
 </script>
