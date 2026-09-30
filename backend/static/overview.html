@@ -91,6 +91,11 @@ ol.actions .meta { display: block; }
 .sess.done .t::before { content: "✓ "; }
 .sess .x { font-size: 12.5px; color: var(--muted); }
 .rest { color: var(--faint); font-size: 12.5px; }
+.cb { font: inherit; font-size: 11.5px; border: 1px solid currentColor; border-radius: 10px; padding: 0 7px; margin-left: 6px;
+  white-space: nowrap; background: none; vertical-align: 1px; color: var(--muted); }
+.cb.pushed, .cb.updated { color: var(--good); } .cb.outdated { color: var(--watch); } .cb.failed { color: var(--bad); cursor: pointer; }
+#coros-bar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: -4px 0 8px; }
+#coros-bar:empty { display: none; }
 .loadbox { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; margin-top: 10px; }
 .loadbox b { font-variant-numeric: tabular-nums; }
 .notes { margin: 10px 0 0; padding-left: 18px; font-size: 12.5px; }
@@ -160,7 +165,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
       <div id="actions"><div class="loading">…</div></div>
     </section>
     <section data-sec id="s-week">
-      <h2>本週該做什麼 <span class="meta" id="wk-sub"></span></h2>
+      <h2>本週該做什麼 <span class="meta" id="wk-sub"></span>
+        <span style="flex:1"></span><button class="btn" id="coros-push" hidden>推送到 COROS</button></h2>
+      <div id="coros-bar" class="meta" aria-live="polite"></div>
       <div id="week"><div class="loading">排本週課表中…</div></div>
     </section>
   </div>
@@ -295,7 +302,7 @@ async function loadWeek() {
     const past = iso < w.week.today;
     const extra = acts.filter((a) => !ss.some((s) => s.done_by && s.done_by.index === a.index));
     days.push(`<div class="day ${iso === w.week.today ? "today" : ""}"><div class="d">週${WD[i]} ${md(iso)}${iso === w.week.today ? "<br>今天" : ""}</div><div>
-      ${ss.map((s) => `<div class="sess ${s.done ? "done" : ""}"><span class="t">${esc(s.title)}</span>
+      ${ss.map((s) => `<div class="sess ${s.done ? "done" : ""}" data-sid="${esc(s.id)}"><span class="t">${esc(s.title)}</span>
         <span class="x">${s.done ? `${esc(s.done_by.category_label)} ${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` :
           `${s.minutes ? s.minutes + " 分鐘" : ""}${s.target ? " · " + esc(s.target) : ""}`}</span>
         ${!s.done && s.detail ? `<div class="x">${esc(s.detail)}</div>` : ""}</div>`).join("")}
@@ -473,6 +480,63 @@ function shift(dir) {
   loadPeriod();
 }
 
+// ---------------- this week → COROS ----------------
+const CB = { pushed: "已推送", updated: "已更新", outdated: "需更新", failed: "失敗" };
+let COROS = null;
+async function cj(method, url) {
+  const r = await fetch(url, { method });
+  const b = await r.json().catch(() => ({}));
+  if (r.status === 401) throw new Error("COROS 未登入或登入過期，請到設定頁重新登入");
+  if (!r.ok) throw new Error(`${r.status} ${typeof b.detail === "string" ? b.detail : JSON.stringify(b.detail || b).slice(0, 200)}`);
+  return b;
+}
+function paintCoros(rows) {
+  const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+  document.querySelectorAll("#week .sess[data-sid]").forEach((el) => {
+    el.querySelector(".cb")?.remove();
+    const r = by[el.dataset.sid];
+    if (!r || !CB[r.status]) return;
+    const tip = r.status === "failed" ? `${r.error || ""}\n點一下重試` : r.status === "outdated" ? (r.reason || "課表改過，再推送一次會更新 COROS") : (r.name || "");
+    el.querySelector(".t").insertAdjacentHTML("afterend",
+      `<button type="button" class="cb ${r.status}" title="${esc(tip)}" ${r.status === "failed" ? `data-retry="${esc(r.id)}"` : "disabled"}>${CB[r.status]}</button>`);
+  });
+}
+async function loadCoros() {
+  const st = COROS = await cj("GET", `${API}/weekplan/coros`);
+  const btn = $("coros-push");
+  const pushable = st.sessions.filter((s) => !["done", "skipped"].includes(s.status));
+  btn.hidden = !pushable.length && !st.orphans.length;
+  const n = (k) => st.sessions.filter((s) => s.status === k).length;
+  const pushed = n("pushed") + n("updated");
+  $("coros-bar").innerHTML = pushed || n("failed") || n("outdated") ? `<span>COROS：已推送 ${pushed}${n("outdated") ? ` · 需更新 ${n("outdated")}` : ""}${n("failed") ? ` · 失敗 ${n("failed")}` : ""}</span>
+    ${pushed ? `<button class="btn" id="coros-del" type="button">從 COROS 移除</button>` : ""}` : "";
+  if ($("coros-del")) $("coros-del").onclick = unpushCoros;
+  paintCoros(st.sessions);
+}
+async function pushCoros(session) {
+  const btn = $("coros-push");
+  const todo = COROS ? COROS.sessions.filter((s) => ["not_pushed", "outdated", "failed"].includes(s.status)) : [];
+  if (!session && todo.length && !confirm(`把本週 ${todo.length} 堂課排到 COROS 行事曆（會同步到手錶）？\n已推送且沒改過的不會重複建立。`)) return;
+  btn.disabled = true; btn.textContent = "推送中…";
+  try {
+    const res = await cj("POST", `${API}/weekplan/push-coros${session ? `?session=${encodeURIComponent(session)}` : ""}`);
+    const k = (s) => res.sessions.filter((r) => r.status === s).length;
+    await loadCoros();
+    $("coros-bar").insertAdjacentHTML("beforeend", `<span class="faint">這次：新推送 ${res.sessions.filter((r) => r.status === "pushed" && r.changed).length} · 更新 ${k("updated")} · 失敗 ${k("failed")}${res.removed.length ? ` · 移除 ${res.removed.length}` : ""}</span>`);
+  } catch (e) {
+    $("coros-bar").innerHTML = `<span class="err">推送失敗：${esc(e.message)}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "推送到 COROS";
+  }
+}
+async function unpushCoros() {
+  if (!confirm("把本週推送到 COROS 的課從行事曆和課表庫移除？（只會動這裡推送過的）")) return;
+  try { await cj("DELETE", `${API}/weekplan/push-coros`); await loadCoros(); }
+  catch (e) { $("coros-bar").innerHTML = `<span class="err">移除失敗：${esc(e.message)}</span>`; }
+}
+$("coros-push").onclick = () => pushCoros();
+$("week").addEventListener("click", (e) => { const b = e.target.closest(".cb[data-retry]"); if (b) pushCoros(b.dataset.retry); });
+
 // ---------------- wiring ----------------
 document.querySelectorAll("#unit button").forEach((b) => b.onclick = () => { PS.unit = b.dataset.u; PS.anchor = null; ls.set("unit", PS.unit); loadPeriod(); });
 document.querySelectorAll("#pmc-range button").forEach((b) => b.onclick = () => { ls.set("pmcDays", +b.dataset.d); loadPmc(); });
@@ -506,7 +570,7 @@ const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：$
 (async () => {
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   await loadStatus().catch(fail("hero"));
-  await Promise.all([loadWeek().catch(fail("week")), loadPeriod().catch(fail("period"))]);
+  await Promise.all([loadWeek().then(() => loadCoros().catch(() => {})).catch(fail("week")), loadPeriod().catch(fail("period"))]);
   loadPmc().catch(fail("pmc"));
 })();
 </script>
