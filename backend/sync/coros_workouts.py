@@ -517,9 +517,31 @@ async def week_status(db: AsyncSession, plan: dict, athlete_id: int = 1) -> dict
                         for k, r in rows.items() if k not in ids]}
 
 
-async def _push_one(db, hub: TrainingHub, athlete_id: int, week_start: str, s: dict,
+def _monday(day: Optional[str], default: Optional[str]) -> Optional[str]:
+    if not day:
+        return default
+    d = dt.date.fromisoformat(day)
+    return (d - dt.timedelta(days=d.weekday())).isoformat()
+
+
+async def rows_by_key(db: AsyncSession, athlete_id: int, keys) -> dict[str, CorosPlanPush]:
+    keys = list(keys)
+    if not keys:
+        return {}
+    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id,
+                                                       CorosPlanPush.session_key.in_(keys)))
+    return {r.session_key: r for r in res.scalars().all()}
+
+
+async def all_rows(db: AsyncSession, athlete_id: int = 1) -> dict[str, CorosPlanPush]:
+    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id))
+    return {r.session_key: r for r in res.scalars().all()}
+
+
+async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
                     thresholds: Optional[dict], row: Optional[CorosPlanPush],
                     today: Optional[str] = None) -> dict:
+    """Push one session; `s["key"]` identifies it in coros_plan_push."""
     out = {"id": s["id"], "title": s.get("title"), "day": s.get("day")}
     try:
         spec = session_workout(s, thresholds, today)
@@ -547,12 +569,13 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, week_start: str, s: d
             await db.commit()
             return {**out, "status": "failed", "name": spec.name, "error": row.error, **_row_view(row)}
     if row is None:
-        row = CorosPlanPush(athlete_id=athlete_id, session_key=session_key(week_start, s["id"]),
-                            week_start=week_start, session_id=s["id"])
+        row = CorosPlanPush(athlete_id=athlete_id, session_key=s["key"],
+                            week_start=_monday(spec.day, s.get("week_start")), session_id=s["id"])
         db.add(row)
     row.title, row.fingerprint, row.status, row.error = s.get("title"), spec.fingerprint, "failed", None
     try:
         row.day = spec.day
+        row.week_start = _monday(spec.day, row.week_start)
         row.program_id = await hub.add_program(spec.payload)
         await db.commit()                         # the id is safe even if scheduling fails
         detail = await hub.program_detail(row.program_id)
@@ -580,26 +603,55 @@ async def push_week(db: AsyncSession, plan: dict, only: Optional[str] = None,
     alone, changed ones replaced, and (whole-week push) sessions no longer in
     the plan are removed from COROS."""
     week_start = plan["week"]["start"]
-    sessions = plan["sessions"]
+    sessions = [{**s, "key": session_key(week_start, s["id"]), "week_start": week_start}
+                for s in plan["sessions"]]
+    stale: list[str] = []
     if only is not None:
         sessions = [s for s in sessions if s["id"] == only]
         if not sessions:
             raise KeyError(only)
-    today = plan_today(plan)
+    else:
+        live = {s["key"] for s in sessions}
+        stale = [r.session_key for r in (await _rows(db, athlete_id, week_start)).values()
+                 if r.session_key not in live]
+    res = await push_sessions(db, sessions, plan.get("thresholds"), plan_today(plan),
+                              stale_keys=stale, athlete_id=athlete_id, hub=hub)
+    return {"week_start": week_start, **res}
+
+
+async def push_sessions(db: AsyncSession, sessions: list[dict], thresholds: Optional[dict], today: str,
+                        *, stale_keys=(), missed_keys=(), athlete_id: int = 1,
+                        hub: Optional[TrainingHub] = None) -> dict:
+    """Push `sessions` (each with a unique "key"). Idempotent per key.
+    `stale_keys`: pushed sessions no longer in the plan — removed unless on a
+    past day. `missed_keys`: sessions the athlete missed — removed from the
+    calendar (still never an entry COROS shows as done)."""
     async with _push_lock:
         hub = hub or await TrainingHub.from_db(db, athlete_id)
-        rows = await _rows(db, athlete_id, week_start)
+        keys = {s["key"] for s in sessions}
+        rows = await rows_by_key(db, athlete_id, keys | set(stale_keys) | set(missed_keys))
         results = []
         for s in sessions:
-            results.append(await _push_one(db, hub, athlete_id, week_start, s,
-                                           plan.get("thresholds"), rows.get(s["id"]), today))
+            results.append(await _push_one(db, hub, athlete_id, s, thresholds, rows.get(s["key"]), today))
         removed = []
-        if only is None:
-            live = {s["id"] for s in plan["sessions"]}
-            for sid, r in rows.items():
-                if sid not in live:
-                    removed.append(await _remove_row(db, hub, r, today))
-        return {"week_start": week_start, "sessions": results, "removed": removed}
+        for k in stale_keys:
+            if k in rows and k not in keys:
+                removed.append(await _remove_row(db, hub, rows[k], today))
+        for k in missed_keys:
+            if k in rows and k not in keys:
+                removed.append({**(await _remove_row(db, hub, rows[k])), "missed": True})
+        return {"sessions": results, "removed": removed}
+
+
+async def remove_keys(db: AsyncSession, keys, athlete_id: int = 1,
+                      hub: Optional[TrainingHub] = None) -> list[dict]:
+    """Remove these pushed sessions from COROS (explicit user action)."""
+    async with _push_lock:
+        rows = await rows_by_key(db, athlete_id, keys)
+        if not rows:
+            return []
+        hub = hub or await TrainingHub.from_db(db, athlete_id)
+        return [await _remove_row(db, hub, r) for r in rows.values()]
 
 
 def real_today() -> dt.date:
