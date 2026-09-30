@@ -43,6 +43,10 @@ def test_period_detection_and_rewrite():
     assert m["series"][0]["expression"] == "sum(movingduration, startofmonth(date))"
     assert m["title"] == "每月移動時間" and m["period"] == "month"
     assert PD.with_period(ch, "quarter")["title"] == "每季移動時間"
+    ch3 = _chart("每週爬升", "sum(climbing, startofweek(date))", period="week")
+    ch3["series"][0]["name"] = "週爬升"
+    assert PD.with_period(ch3, "month")["series"][0]["name"] == "月爬升"
+    assert PD.rename("每週", "week", "year") == "每年" and PD.rename("路跑", "week", "year") == "路跑"
     assert ch["series"][0]["expression"].endswith("startofweek(date))")          # original untouched
     # nested aggregate and count: only the group-by bucket moves; other trunc(date) stays
     e = "sum(sum(if(heartrate < aethr, deltatime)), startofweek(date))"
