@@ -44,7 +44,13 @@ class WorkoutFile(Base):
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
     file_path: Mapped[str] = mapped_column(String(500), unique=True)
     file_format: Mapped[str] = mapped_column(String(10))
-    workout_date: Mapped[Optional[date]] = mapped_column(Date, index=True)
+    workout_date: Mapped[Optional[date]] = mapped_column(Date, index=True)   # athlete-local date
+    # activity start in UTC (naive, as SQLite stores it); used to match the
+    # same activity across sources
+    start_time_utc: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True, nullable=True)
+    # set when this row is the same activity as another row from a
+    # non-primary source; totals (PMC, analytics) skip such rows
+    duplicate_of: Mapped[Optional[int]] = mapped_column(ForeignKey("workout_files.id"), nullable=True, index=True)
     sport: Mapped[Optional[str]] = mapped_column(String(50))
     duration_s: Mapped[Optional[float]]
     total_distance_m: Mapped[Optional[float]]
@@ -110,6 +116,17 @@ class SyncState(Base):
     coros_email: Mapped[Optional[str]] = mapped_column(String(200))
     coros_base_url: Mapped[Optional[str]] = mapped_column(String(100))
     coros_user_id: Mapped[Optional[str]] = mapped_column(String(50))
+
+
+class UserSetting(Base):
+    """Per-user key/value settings (backend/settings/repository.py)."""
+    __tablename__ = "user_settings"
+    __table_args__ = (UniqueConstraint("user_id", "key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    key: Mapped[str] = mapped_column(String(100))
+    value_json: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class DashboardConfig(Base):

@@ -13,5 +13,6 @@ sse-starlette>=2.1.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 greenlet>=3.0.0
+tzdata>=2024.1          # IANA zones for zoneinfo on Windows
 anthropic>=0.40.0
 openai>=1.30.0
