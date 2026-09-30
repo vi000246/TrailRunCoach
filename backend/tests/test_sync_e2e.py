@@ -307,7 +307,7 @@ def test_coros_expired_token_is_a_clear_event(tmp_path):
                         coros_token_expires=datetime.utcnow() - timedelta(minutes=1)))
         await s.commit()
         ev = await collect(coros_client.sync_workouts(s, 1))
-        assert ev == [ev[0]] and ev[0]["error"] == "COROS_AUTH_REQUIRED"
+        assert len(ev) == 1 and ev[0]["error"] == "COROS_AUTH_REQUIRED" and ev[0]["status"] == "error"
     run(go())
 
 
