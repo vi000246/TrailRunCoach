@@ -39,6 +39,8 @@ Tokens are persisted in SQLite (sync_state). Credentials are NEVER stored.
 """
 import base64
 import gzip
+import json
+import os
 import zlib
 import re
 import logging
@@ -46,6 +48,7 @@ import httpx
 from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
 from typing import Optional, AsyncIterator
+from urllib.parse import urlencode
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -73,13 +76,50 @@ TP_HEADERS = {
     "Accept-Encoding": "gzip",
 }
 
-# Refresh grant: client_id=WKO5 with empty client_secret (literal from binary).
-TP_CLIENT_ID = "WKO5"
-TP_CLIENT_SECRET = ""
+# OAuth client credentials are NOT in the code. They are loaded at runtime
+# from TP_CLIENT_ID / TP_CLIENT_SECRET, else ~/.wko5coach/tp_client.json
+# ({"client_id", "client_secret"}). Without them the OAuth path is skipped and
+# the website login is used. See docs/deploy/tp-oauth-client.md (ToS risk).
+TP_CLIENT_FILE = Path.home() / ".wko5coach" / "tp_client.json"
 
-# Scope string is concatenated literally in the binary with '+' separators
-# (NOT URL-encoded spaces). The OAuth server treats '+' as the scope delimiter.
-TP_SCOPE = "fitness+baseactivity+users+metrics+software+groundcontrol"
+# Space-separated, i.e. '+' once form-urlencoded (as WKO5 sends it).
+TP_SCOPE = "fitness baseactivity users metrics software groundcontrol"
+
+
+def load_client_creds() -> Optional[tuple[str, str]]:
+    """(client_id, client_secret) or None. Never logged."""
+    cid, sec = os.getenv("TP_CLIENT_ID"), os.getenv("TP_CLIENT_SECRET")
+    if cid and sec:
+        return cid, sec
+    try:
+        d = json.loads(TP_CLIENT_FILE.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if isinstance(d, dict) and d.get("client_id") and d.get("client_secret"):
+        return str(d["client_id"]), str(d["client_secret"])
+    return None
+
+
+async def oauth_enabled(db: AsyncSession, athlete_id: int) -> Optional[tuple[str, str]]:
+    """Client creds when the WKO5-client OAuth path may be used: the setting
+    sync.trainingpeaks.use_wko5_client is true, or unset (auto) and creds exist."""
+    creds = load_client_creds()
+    if creds is None:
+        return None
+    from backend.settings.repository import SettingsRepository
+    flag = await SettingsRepository(db, athlete_id).get("sync.trainingpeaks.use_wko5_client")
+    return creds if flag is None or flag else None
+
+
+def _form(fields: dict) -> str:
+    return urlencode(fields)          # quote_plus: spaces -> '+'
+
+
+async def _token_post(fields: dict) -> httpx.Response:
+    async with http.client(timeout=15) as client:
+        return await client.post(
+            TP_OAUTH_URL, content=_form(fields),
+            headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"})
 
 
 # ---------------------------------------------------------------------------
@@ -98,30 +138,16 @@ class TpLoginError(ValueError):
     TP_LOGIN_ERROR (anything else)."""
 
 
-async def _password_grant(username: str, password: str) -> dict:
+async def _password_grant(username: str, password: str, creds: tuple[str, str]) -> dict:
     """
-    Password grant — format VERIFIED against the live TP OAuth server 2026-05-15:
-      grant_type=password&username={u}&password={p}
-      &scope=fitness+baseactivity+...&client_id=WKO5
-
-    As of 2026-09-30 TP answers a correct password for a normal account with
-    400 invalid_grant ("Invalid resource owner password credential."), so the
-    grant is effectively dead for us; it is still tried first because it is
-    one request and gives a refresh token when it works.
+    Password grant as WKO5 sends it: form-urlencoded grant_type=password,
+    username, password, scope (space-separated), client_id, client_secret,
+    User-Agent WKO5/PC/5.0.587. Without the real client secret TP answers
+    invalid_client / invalid_grant — then the website login is used.
     """
-    body = (
-        f"grant_type=password"
-        f"&username={_urlquote(username)}"
-        f"&password={_urlquote(password)}"
-        f"&scope={TP_SCOPE}"
-        f"&client_id={TP_CLIENT_ID}"
-    )
-    async with http.client(timeout=15) as client:
-        resp = await client.post(
-            TP_OAUTH_URL,
-            content=body,
-            headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-        )
+    resp = await _token_post({
+        "grant_type": "password", "username": username, "password": password,
+        "scope": TP_SCOPE, "client_id": creds[0], "client_secret": creds[1]})
     if resp.status_code != 200:
         raise TpGrantRejected(resp.status_code, resp.text[:200])
     try:
@@ -284,11 +310,23 @@ async def login_password(
     token exchange. Credentials are never stored or logged; the access token,
     refresh token and session cookie are stored sealed (secrets.py)."""
     cookie = None
-    try:
-        token = await _password_grant(username, password)
-        method = "oauth"
-    except TpGrantRejected as e:
-        log.info("TP password grant rejected (HTTP %d); trying the website login", e.status)
+    token = None
+    creds = await oauth_enabled(db, athlete_id)
+    if creds is not None:
+        try:
+            token = await _password_grant(username, password, creds)
+            method = "oauth"
+        except TpGrantRejected as e:
+            err = ""
+            try:
+                err = str(json.loads(e.body or "null").get("error", ""))
+            except (ValueError, AttributeError):
+                pass
+            log.warning("TP login step=oauth status=%d error=%s; using the website login",
+                        e.status, err or "-")
+    else:
+        log.warning("TP login step=oauth skipped (no client credentials / disabled)")
+    if token is None:
         cookie = await _web_login(username, password)
         token = await _token_from_cookie(cookie)
         if token is None:
@@ -433,7 +471,19 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
         cookie = unseal(state.tp_web_cookie)
     except SecretError:
         return False
-    if not refresh and cookie:
+    creds = load_client_creds()
+    if refresh and creds:
+        resp = await _token_post({"grant_type": "refresh_token", "refresh_token": refresh,
+                                  "client_id": creds[0], "client_secret": creds[1]})
+        if resp.status_code == 200:
+            token = resp.json()
+            state.tp_access_token = seal(token["access_token"])
+            state.tp_refresh_token = seal(token.get("refresh_token")) or state.tp_refresh_token
+            state.tp_token_expires = _expiry(token)
+            await db.commit()
+            return True
+        log.warning("TP login step=refresh status=%d; trying the session cookie", resp.status_code)
+    if cookie:
         # website-login session: a fresh access token from the cookie
         tok = await _token_from_cookie(cookie)
         if tok is None:
@@ -442,31 +492,7 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
         state.tp_token_expires = _expiry(tok)
         await db.commit()
         return True
-    if not refresh:
-        return False
-    body = (
-        f"grant_type=refresh_token"
-        f"&refresh_token={_urlquote(refresh)}"
-        f"&client_id={TP_CLIENT_ID}"
-        f"&client_secret={TP_CLIENT_SECRET}"
-    )
-    async with http.client(timeout=15) as client:
-        resp = await client.post(
-            TP_OAUTH_URL,
-            content=body,
-            headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-        )
-    if resp.status_code != 200:
-        log.warning("TP refresh failed (%d): %s", resp.status_code, resp.text[:200])
-        return False
-    token = resp.json()
-    state.tp_access_token = seal(token["access_token"])
-    state.tp_refresh_token = seal(token.get("refresh_token")) or state.tp_refresh_token
-    state.tp_token_expires = datetime.now(timezone.utc) + timedelta(
-        seconds=token.get("expires_in", 3600)
-    )
-    await db.commit()
-    return True
+    return False
 
 
 async def _get_valid_token(db: AsyncSession, athlete_id: int) -> Optional[str]:
@@ -888,33 +914,30 @@ async def fetch_tp_settings(db: AsyncSession, athlete_id: int) -> Optional[dict]
     return None
 
 
+def _require_creds() -> tuple[str, str]:
+    creds = load_client_creds()
+    if creds is None:
+        raise ValueError("TP OAuth client credentials not configured "
+                         "(TP_CLIENT_ID / TP_CLIENT_SECRET or ~/.wko5coach/tp_client.json)")
+    return creds
+
+
 async def get_auth_url() -> str:
     """OAuth authorization-code redirect URL (kept for completeness)."""
-    return (
-        "https://oauth.trainingpeaks.com/OAuth/Authorize"
-        f"?response_type=code&client_id={TP_CLIENT_ID}"
-        f"&redirect_uri=http://localhost:8000/api/v1/auth/tp/callback"
-        f"&scope={TP_SCOPE}"
-    )
+    return ("https://oauth.trainingpeaks.com/OAuth/Authorize?" + urlencode({
+        "response_type": "code", "client_id": _require_creds()[0],
+        "redirect_uri": "http://localhost:8000/api/v1/auth/tp/callback", "scope": TP_SCOPE}))
 
 
 async def exchange_code(code: str, db: AsyncSession, athlete_id: int) -> dict:
     """Authorization-code exchange (kept for future use if needed)."""
-    body = (
-        f"grant_type=authorization_code"
-        f"&code={_urlquote(code)}"
-        f"&client_id={TP_CLIENT_ID}"
-        f"&client_secret={TP_CLIENT_SECRET}"
-        f"&redirect_uri=http://localhost:8000/api/v1/auth/tp/callback"
-    )
-    async with http.client(timeout=15) as client:
-        resp = await client.post(
-            TP_OAUTH_URL,
-            content=body,
-            headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
-        )
-        resp.raise_for_status()
-        token = resp.json()
+    cid, sec = _require_creds()
+    resp = await _token_post({
+        "grant_type": "authorization_code", "code": code, "client_id": cid,
+        "client_secret": sec, "redirect_uri": "http://localhost:8000/api/v1/auth/tp/callback"})
+    if resp.status_code != 200:
+        raise ValueError(f"TP code exchange failed (HTTP {resp.status_code})")
+    token = resp.json()
 
     user_info = await _fetch_user(token["access_token"])
     tp_athlete_id, _, _, _ = _extract_athlete_id(user_info)

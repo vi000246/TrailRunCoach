@@ -119,15 +119,20 @@ class SyncSettingsBody(BaseModel):
     timezone: Optional[str] = None
     coros_enabled: Optional[bool] = None
     trainingpeaks_enabled: Optional[bool] = None
+    tp_use_wko5_client: Optional[bool] = None     # null = auto (on when creds configured)
 
 
 _SETTING_KEYS = {"primary_source": "sync.primary_source", "timezone": "athlete.timezone",
                  "coros_enabled": "sync.coros.enabled",
-                 "trainingpeaks_enabled": "sync.trainingpeaks.enabled"}
+                 "trainingpeaks_enabled": "sync.trainingpeaks.enabled",
+                 "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client"}
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:
-    return {k: await repo.get(v) for k, v in _SETTING_KEYS.items()}
+    from backend.sync.tp_client import load_client_creds
+    out = {k: await repo.get(v) for k, v in _SETTING_KEYS.items()}
+    out["tp_client_credentials_configured"] = load_client_creds() is not None   # never the values
+    return out
 
 
 @router.get("/settings")

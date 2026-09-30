@@ -38,7 +38,7 @@ def test_generated_key_file_when_no_env(monkeypatch, tmp_path):
     assert S.unseal(v) == "x"                       # same key read back
 
 
-def test_tokens_are_not_stored_in_plaintext(tmp_path):
+def test_tokens_are_not_stored_in_plaintext(tmp_path, tp_creds):
     async def go():
         s = await make_session(tmp_path)
         with http.use_transport(httpx.MockTransport(FakeCoros([]))):
