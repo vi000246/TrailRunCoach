@@ -1,0 +1,1240 @@
+"""
+Single-activity review — the 判讀卡 on each 單次活動 dashboard
+(views/workout.json, chart kind "review"; docs/plans/todo-workout-review.plan.md).
+
+What one expression can't do lives here:
+
+classify
+    The session type (easy / long / quality / test_cp / test_aet, or the
+    category for strength / bike / walk), the terrain, and the training phase
+    on the activity date.
+drift_of
+    Pa:HR decoupling of a steady run, first 10 minutes excluded. Refuses
+    runs where the number means nothing: hilly (≥ 20 m climbed per km, or a
+    trail run), stopped (> 5 % of the time standing), too short (< 40 min),
+    unsteady (30-s power CV > 15 %, steady_drift's rule) or too hard
+    (> 90 % CP, steady_drift's rule).
+detect_efforts
+    Work bouts in the power stream (30-s power over max(0.85 CP, 1.12 ×
+    the session median)), with duration, power, %CP, HR and the HR drop in
+    the 60 s after each one.
+form_drift
+    First ⅓ vs last ⅓ of the moving time for ILR, LSS, kleg, GCT, cadence,
+    VO and impact G — the knee / form card, which is a reference only.
+baseline
+    The same session type over the previous 8 weeks (12 when 8 has fewer
+    than 5): median and IQR. Fewer than 5 samples: no comparison.
+review(ds, w, section)
+    The JSON the viewer's draw() already renders: `value` rows (strings),
+    `values` columns (a table), `points` (the durability curve), `empty`.
+
+Per-workout measurements are memoised on disk with Dataset.cached_series; the
+phase, classification, baselines and verdicts are recomputed on each call
+(they depend on the plan and on other workouts).
+
+The verdicts follow the plan's rules (Uphill Athlete AeT / drift, Palladino
+power bands, 徐國峰 drift < 10 % before intervals). They are coaching
+heuristics, not medical advice — the knee / form card always says 參考.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import math
+import re
+import statistics
+from typing import Callable, Optional, Sequence
+
+import numpy as np
+
+from backend.engine.algorithms.classify import TRAIL_CLIMB_RATE_M_PER_KM
+from backend.engine.algorithms.climbs import detect_climbs
+from backend.engine.algorithms.threshold_estimate import (
+    AET_MAX_OF_CP, AET_MAX_POWER_CV, WARMUP_S, steady_drift,
+)
+from backend.engine.panels.workout import MAX_DT, durability, grade_bins
+
+# cached_series keys on the file and the thresholds, not on this code: bump the
+# version whenever _measure's output changes
+CACHE_KEY = "workout_review_v3"
+
+DRIFT_MIN_S = 2400            # the plan's i_drift floor: ≥ 40 min
+DRIFT_GOOD = 0.05
+DRIFT_WATCH = 0.10
+STREAK_NEED = 3               # 3 consecutive < 5 % → an interval may be added
+STOP_KMH = 1.6                # WKO5's moving threshold (1 mph)
+MAX_STOPPED_SHARE = 0.05
+AET_MARGIN = 3.0              # "easy" = avg HR ≤ AeT + 3
+OVER_AET_SHARE = 0.10
+LONG_MIN_S = 75 * 60
+TEST_AET_MIN_S = 55 * 60
+EFFORT_MIN_S = 60
+EFFORT_GAP_S = 30
+FADE = 0.05
+HR_DROP_MIN = 20.0
+CP_DELTA = 0.03
+CLIMB_BETTER = 0.05
+LAST20_MIN = 0.90
+STEEP_DOWN = -0.10
+STEEP_DOWN_SHARE = 0.30
+BASE_MIN_N = 5
+BASE_WEEKS = (8, 12)
+
+# Palladino / Friel run power bands (×CP); sub-threshold is the rung below
+# threshold (zones.WORKOUT_TARGETS has threshold 0.95–1.01, supra 1.01–1.06,
+# VO2max 1.06–1.16).
+BANDS = (("閾值下", 0.88, 0.95), ("閾值", 0.95, 1.01), ("超閾值", 1.01, 1.06),
+         ("VO2max", 1.06, 1.16), ("無氧", 1.16, 9.0))
+
+TYPE_LABEL = {"easy": "輕鬆跑", "long": "長時間", "quality": "品質課（間歇）",
+              "test_cp": "CP 測試", "test_aet": "AeT 飄移測試", "strength": "肌力",
+              "bike": "騎車", "walk": "走路", "other": "其他"}
+TERRAIN_LABEL = {"road": "路跑", "trail": "越野", "hike": "登山健行"}
+PHASE_LABEL = {"transition": "轉換期", "recovery": "恢復期", "base": "基礎期",
+               "specific": "專項期", "taper": "減量期", "event": "比賽週"}
+
+# dashboard order in views/workout.json
+SECTIONS = ("summary", "aerobic", "intervals", "climbs", "durability", "form")
+EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test")
+SUGGESTED = {"easy": 1, "long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
+
+
+# ---------------------------------------------------------------------------
+# small helpers
+# ---------------------------------------------------------------------------
+
+def _f(v) -> Optional[float]:
+    if v is None:
+        return None
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(x) or math.isinf(x) else x
+
+
+def _nan_free(x):
+    if isinstance(x, float) and (math.isnan(x) or math.isinf(x)):
+        return None
+    if isinstance(x, (np.floating,)):
+        return _nan_free(float(x))
+    if isinstance(x, (np.integer,)):
+        return int(x)
+    if isinstance(x, dict):
+        return {k: _nan_free(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_nan_free(v) for v in x]
+    return x
+
+
+def _hms(s) -> str:
+    s = _f(s)
+    if s is None:
+        return "–"
+    s = int(round(s))
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
+
+
+def _pace(s_per_km) -> str:
+    s = _f(s_per_km)
+    if s is None or s <= 0 or s > 3600:
+        return "–"
+    s = int(round(s))
+    return f"{s // 60}:{s % 60:02d}"
+
+
+def _pct(x, d=1, sign=False) -> str:
+    x = _f(x)
+    if x is None:
+        return "–"
+    return f"{x * 100:+.{d}f}%" if sign else f"{x * 100:.{d}f}%"
+
+
+def _num(x, d=0) -> str:
+    x = _f(x)
+    return "–" if x is None else f"{x:.{d}f}"
+
+
+def _arr(a, n: int) -> np.ndarray:
+    if a is None:
+        return np.full(n, np.nan)
+    a = np.asarray(a, dtype=float)
+    if len(a) >= n:
+        return a[:n]
+    return np.concatenate([a, np.full(n - len(a), np.nan)])
+
+
+def _has(a) -> bool:
+    return a is not None and bool(np.isfinite(np.asarray(a, dtype=float)).any()) and \
+        bool((np.nan_to_num(np.asarray(a, dtype=float)) != 0).any())
+
+
+def _dt(t: np.ndarray) -> np.ndarray:
+    d = np.diff(t, prepend=t[0] if len(t) else 0.0)
+    return np.where(np.isfinite(d) & (d > 0), d, 0.0)
+
+
+def moving_mask(t, speed=None) -> np.ndarray:
+    """Moving samples: a normal sample interval (≤ 30 s) and, when there is a
+    speed channel, above WKO5's 1 mph."""
+    t = np.asarray(t, dtype=float)
+    d = np.diff(t, prepend=t[0] if len(t) else 0.0)
+    ok = np.isfinite(d) & (d > 0) & (d <= MAX_DT)
+    if speed is not None:
+        s = _arr(speed, len(t))
+        ok &= ~(np.isfinite(s) & (s <= STOP_KMH))
+    return ok
+
+
+def _wmean(v: np.ndarray, w: np.ndarray, m: np.ndarray) -> Optional[float]:
+    ok = m & np.isfinite(v) & (v > 0)
+    tw = w[ok].sum()
+    return float((v[ok] * w[ok]).sum() / tw) if tw > 0 else None
+
+
+def _grid1(t, x) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    """x on a 1-s grid (linear), NaN where the source has a gap > 30 s."""
+    t = np.asarray(t, dtype=float)
+    x = _arr(x, len(t))
+    ok = np.isfinite(t) & np.isfinite(x)
+    if ok.sum() < 2:
+        return None, None
+    tt, xx = t[ok], x[ok]
+    grid = np.arange(tt[0], tt[-1] + 1.0)
+    y = np.interp(grid, tt, xx)
+    j = np.clip(np.searchsorted(tt, grid), 1, len(tt) - 1)
+    y[(tt[j] - tt[j - 1]) > MAX_DT] = np.nan
+    return grid, y
+
+
+def _best_window(p: np.ndarray, n: int) -> tuple[Optional[float], Optional[int]]:
+    if p is None or len(p) < n:
+        return None, None
+    c = np.convolve(np.nan_to_num(p), np.ones(n) / n, "valid")
+    i = int(np.argmax(c))
+    return float(c[i]), i
+
+
+# ---------------------------------------------------------------------------
+# pure analyses (arrays in, numbers out) — unit-tested on synthetic data
+# ---------------------------------------------------------------------------
+
+def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
+             climb_m_per_km: Optional[float] = None, trail: bool = False) -> dict:
+    """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
+    moving time after a 10-minute warm-up). Positive = HR drifted up for the
+    same pace. `ok` False (with `reason`) when the run is not a fair test."""
+    out = {"drift": None, "ok": False, "reason": "", "hr1": None, "hr2": None,
+           "v1": None, "v2": None, "pw_drift": None}
+    if hr is None or speed is None or not _has(hr) or not _has(speed):
+        out["reason"] = "沒有心率或速度"
+        return out
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    h, s = _arr(hr, n), _arr(speed, n)
+    d = _dt(t)
+    t0 = t[np.isfinite(t)][0]
+    elapsed = float(np.nanmax(t) - t0)
+    if elapsed < DRIFT_MIN_S:
+        out["reason"] = f"不到 {DRIFT_MIN_S // 60} 分鐘，飄移不採用"
+        return out
+    if trail or (climb_m_per_km is not None and climb_m_per_km >= TRAIL_CLIMB_RATE_M_PER_KM):
+        out["reason"] = "有坡（越野或每公里爬升 ≥ 20 m），飄移數字不採用"
+        return out
+    after = (t - t0) >= WARMUP_S
+    mov = moving_mask(t, s)
+    span = float(d[after].sum())
+    stopped = float(d[after & ~mov].sum())       # standing still + recording gaps
+    if span > 0 and stopped / span > MAX_STOPPED_SHARE:
+        out["reason"] = f"中途停了 {_hms(stopped)}（> 5%），飄移數字不採用"
+        return out
+    if power is not None and _has(power):
+        _, p1 = _grid1(t, power)
+        if p1 is not None:
+            p = p1[WARMUP_S:]
+            p = p[np.isfinite(p)]
+            if len(p) > 60:
+                p30 = np.convolve(p, np.ones(30) / 30, "valid")
+                if p30.mean() > 0 and p30.std() / p30.mean() > AET_MAX_POWER_CV:
+                    out["reason"] = f"功率起伏大（變異 {p30.std() / p30.mean() * 100:.0f}% > 15%），不是穩定跑，飄移不採用"
+                    return out
+                if cp and p.mean() > AET_MAX_OF_CP * cp:
+                    out["reason"] = f"強度 {p.mean() / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
+                    return out
+        dp = steady_drift(list(t), list(h), list(_arr(power, n)), cp)
+        out["pw_drift"] = None if dp is None else dp.drift
+    m = after & mov & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
+    if d[m].sum() < 600:
+        out["reason"] = "有效資料不夠"
+        return out
+    cum = np.cumsum(np.where(m, d, 0.0))
+    half = cum[-1] / 2.0
+    a, b = m & (cum <= half), m & (cum > half)
+    h1, h2 = _wmean(h, d, a), _wmean(h, d, b)
+    v1, v2 = _wmean(s, d, a), _wmean(s, d, b)
+    if not all((h1, h2, v1, v2)):
+        out["reason"] = "有效資料不夠"
+        return out
+    r1, r2 = v1 / h1, v2 / h2
+    out.update(drift=float((r1 - r2) / r1), ok=True, hr1=h1, hr2=h2, v1=v1, v2=v2)
+    return out
+
+
+def band_of(pct_cp: Optional[float]) -> Optional[tuple[str, float, float]]:
+    if pct_cp is None:
+        return None
+    for b in BANDS:
+        if b[1] <= pct_cp < b[2]:
+            return b
+    return None
+
+
+def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
+                   min_s: int = EFFORT_MIN_S, gap_s: int = EFFORT_GAP_S) -> list[dict]:
+    """Work bouts: 30-s power ≥ max(0.85 CP, 1.12 × session median) for at
+    least `min_s`, gaps < `gap_s` bridged. Seconds are from the workout start."""
+    if power is None or not _has(power):
+        return []
+    grid, p = _grid1(t, power)
+    if grid is None or len(grid) < min_s * 2:
+        return []
+    h = _grid1(t, hr)[1] if hr is not None and _has(hr) else None
+    pz = np.nan_to_num(p)
+    p30 = np.convolve(pz, np.ones(30) / 30, "same")
+    moving = pz[pz > 0]
+    if not len(moving):
+        return []
+    med = float(np.median(moving))
+    thr = max(0.85 * cp, 1.12 * med) if cp else 1.15 * med
+    on = p30 >= thr
+    # runs of True
+    edges = np.diff(np.concatenate([[0], on.astype(int), [0]]))
+    starts, ends = list(np.where(edges == 1)[0]), list(np.where(edges == -1)[0])
+    segs: list[list[int]] = []
+    for a, b in zip(starts, ends):
+        if segs and a - segs[-1][1] < gap_s:
+            segs[-1][1] = b
+        else:
+            segs.append([a, b])
+    out = []
+    for k, (a, b) in enumerate(segs):
+        if b - a < min_s:
+            continue
+        pa = pz[a:b]
+        avg = float(pa.mean())
+        e = {"start_s": float(grid[a] - grid[0]), "duration_s": float(b - a), "power": avg,
+             "pct_cp": (avg / cp) if cp else None, "hr": None, "hr_max": None, "hr_drop60": None}
+        if h is not None:
+            hh = h[a:b]
+            if np.isfinite(hh).any():
+                e["hr"] = float(np.nanmean(hh))
+                e["hr_max"] = float(np.nanmax(hh))
+            # HR lags the effort: the peak is at the end or a few seconds after
+            nxt = next((s for s, _ in segs[k + 1:] if s - a >= min_s), None)
+            if b + 60 < len(h) and (nxt is None or nxt >= b + 60):
+                win = h[max(a, b - 10):b + 15]
+                peak = np.nanmax(win) if np.isfinite(win).any() else np.nan
+                if np.isfinite(peak) and np.isfinite(h[b + 60]):
+                    e["hr_drop60"] = float(peak - h[b + 60])
+        out.append(e)
+    return out
+
+
+def interval_summary(efforts: list[dict]) -> dict:
+    """Band of the set (median %CP), reps inside it, fade (last vs first)."""
+    reps = [e for e in efforts if e.get("pct_cp") is not None]
+    if not reps:
+        return {"n": len(efforts), "band": None, "in_band": 0, "fade": None}
+    med = statistics.median(e["pct_cp"] for e in reps)
+    b = band_of(med)
+    inb = sum(1 for e in reps if b and b[1] - 0.01 <= e["pct_cp"] < b[2] + 0.01)
+    fade = (reps[-1]["power"] / reps[0]["power"] - 1.0) if len(reps) >= 2 and reps[0]["power"] else None
+    drops = [e["hr_drop60"] for e in efforts if e.get("hr_drop60") is not None]
+    return {"n": len(efforts), "band": None if b is None else list(b), "in_band": inb, "fade": fade,
+            "median_pct": med, "hr_drop60": statistics.median(drops) if drops else None,
+            "rep_s": statistics.median(e["duration_s"] for e in efforts),
+            "hr": statistics.median(e["hr"] for e in efforts if e.get("hr") is not None)
+            if any(e.get("hr") is not None for e in efforts) else None}
+
+
+def cp_test(t, power) -> Optional[dict]:
+    """3'/12' result: CP = (P12·720 − P3·180) / 540, W′ = (P3 − CP)·180."""
+    if power is None or not _has(power):
+        return None
+    _, p = _grid1(t, power)
+    if p is None:
+        return None
+    p3, i3 = _best_window(p, 180)
+    p12, i12 = _best_window(p, 720)
+    if p3 is None or p12 is None or p3 <= p12:
+        return None
+    cp = (p12 * 720 - p3 * 180) / 540.0
+    return {"p3": p3, "p12": p12, "cp": cp, "wprime": (p3 - cp) * 180.0,
+            "separate": bool(i3 + 180 <= i12 or i12 + 720 <= i3)}
+
+
+def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
+    """Two separate all-out efforts: 3' ≥ 115 % and 12' ≥ 98 % of the current CP
+    (an all-out 3' is typically 115–135 % CP; a hard tempo run tops out below)."""
+    if not res or not cp_now or not res.get("separate"):
+        return False
+    return res["p3"] >= 1.15 * cp_now and res["p12"] >= 0.98 * cp_now
+
+
+RUN_CADENCE = 65.0            # strides/min (130 spm): below that you're walking
+
+
+def form_drift(t, speed, chans: dict, cadence=None) -> dict:
+    """{name: {first, last, change}} over the first ⅓ vs the last ⅓ of the
+    moving time. With `cadence` (strides/min) only running steps count —
+    walking a steep climb would otherwise read as a collapse in stiffness."""
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    d = _dt(t)
+    mov = moving_mask(t, speed)
+    if cadence is not None and _has(cadence):
+        c = _arr(cadence, n)
+        mov &= np.isfinite(c) & (c >= RUN_CADENCE)
+    cum = np.cumsum(np.where(mov, d, 0.0))
+    if not len(cum) or cum[-1] <= 0:
+        return {}
+    a, b = mov & (cum <= cum[-1] / 3), mov & (cum > cum[-1] * 2 / 3)
+    out = {}
+    for name, x in chans.items():
+        if x is None or not _has(x):
+            continue
+        v = _arr(x, n)
+        f, l = _wmean(v, d, a), _wmean(v, d, b)
+        out[name] = {"first": f, "last": l, "change": (l / f - 1.0) if f and l else None}
+    return out
+
+
+def downhill_share(t, grade, dist_km=None, ilr=None) -> Optional[dict]:
+    """Steep downhill (grade < −10 %): share of time, distance and impact (ILR·dt)."""
+    if grade is None or not np.isfinite(np.asarray(grade, dtype=float)).any():
+        return None
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    g = _arr(grade, n)
+    d = np.where(moving_mask(t), _dt(t), 0.0)
+    steep = np.isfinite(g) & (g < STEEP_DOWN)
+    out = {"time_s": float(d[steep].sum()),
+           "time_share": float(d[steep].sum() / d.sum()) if d.sum() > 0 else None,
+           "dist_share": None, "impact_share": None}
+    if dist_km is not None:
+        x = _arr(dist_km, n)
+        step = np.diff(x, prepend=x[0])
+        step = np.where(np.isfinite(step) & (step >= 0) & (step < 1), step, 0.0)
+        out["dist_km"] = float(step[steep].sum())
+        out["dist_share"] = float(step[steep].sum() / step.sum()) if step.sum() > 0 else None
+    if ilr is not None and _has(ilr):
+        i = np.nan_to_num(_arr(ilr, n)) * d
+        out["impact_share"] = float(i[steep].sum() / i.sum()) if i.sum() > 0 else None
+    return out
+
+
+def pacing_deciles(t, dist_km, hr=None, power=None, speed=None) -> list[dict]:
+    """Moving pace / HR / power per 10 % of the distance."""
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    x = _arr(dist_km, n)
+    if not np.isfinite(x).any():
+        return []
+    total = float(np.nanmax(x))
+    if total < 0.5:
+        return []
+    d = np.where(moving_mask(t, speed), _dt(t), 0.0)
+    h, p = _arr(hr, n), _arr(power, n)
+    rows = []
+    for k in range(10):
+        m = np.isfinite(x) & (x >= total * k / 10) & ((x < total * (k + 1) / 10) if k < 9 else (x <= total))
+        secs = float(d[m].sum())
+        rows.append({"k": k, "from_km": total * k / 10, "pace_s_per_km": secs / (total / 10) if secs else None,
+                     "hr": _wmean(h, d, m), "power": _wmean(p, d, m)})
+    return rows
+
+
+def baseline(values: Sequence[Optional[float]], min_n: int = BASE_MIN_N) -> dict:
+    """Median and IQR; `ok` False under `min_n` samples (no comparison)."""
+    v = sorted(x for x in (_f(x) for x in values) if x is not None)
+    if len(v) < min_n:
+        return {"n": len(v), "ok": False, "median": None, "q1": None, "q3": None}
+    q1, med, q3 = (float(q) for q in np.percentile(v, [25, 50, 75]))
+    return {"n": len(v), "ok": True, "median": med, "q1": q1, "q3": q3}
+
+
+def compare(x: Optional[float], b: dict) -> Optional[str]:
+    """'high' above Q3, 'low' below Q1, 'within' inside the IQR, None if no comparison."""
+    x = _f(x)
+    if x is None or not b.get("ok"):
+        return None
+    if x > b["q3"]:
+        return "high"
+    if x < b["q1"]:
+        return "low"
+    return "within"
+
+
+def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
+                 plan_test: Optional[dict] = None, cp_detected: bool = False,
+                 aet_steady: bool = False, long_target_s: Optional[float] = None,
+                 hard_power_s: Optional[float] = None, n_efforts: Optional[int] = None,
+                 easy_hr: bool = False) -> str:
+    """The plan's order: category → test_cp → test_aet → quality → long → easy.
+
+    quality = ≥ HARD_SESSION_S at/above threshold (overview.HARD_EXPRS). With a
+    power stream, time above LTHR alone isn't enough: an easy run whose HR
+    drifted over LTHR has no work bouts, so it also needs one detected effort
+    (or the time at ≥ 95 % CP). `hard_s` = max(HR, power) seconds."""
+    if category in ("strength", "bike", "walk", "other"):
+        return category
+    plan_test = plan_test or {}
+    if plan_test.get("cp") is not None or re.search(r"\bCP\b|測試", title or "") or cp_detected:
+        return "test_cp"
+    if plan_test.get("aethr") is not None or (aet_steady and moving_s >= TEST_AET_MIN_S):
+        return "test_aet"
+    need = _hard_session_s()
+    # a hike above LTHR is a steep hill, not a workout; a run whose average HR
+    # stayed ≤ AeT+3 was an easy run even if short rises spiked the power
+    runs = category in ("road", "trail") and not easy_hr
+    if runs and hard_power_s is not None and hard_power_s >= need:
+        return "quality"
+    if runs and hard_s >= need and (n_efforts is None or n_efforts >= 1):
+        return "quality"
+    if moving_s >= LONG_MIN_S or (long_target_s and moving_s >= 0.8 * long_target_s):
+        return "long"
+    return "easy"
+
+
+def streak_of(drifts: Sequence[Optional[float]], good: float = DRIFT_GOOD) -> int:
+    """Consecutive most-recent fair drifts below `good` (None = refused, skipped)."""
+    n = 0
+    for d in reversed([x for x in drifts if x is not None]):
+        if d < good:
+            n += 1
+        else:
+            break
+    return n
+
+
+def quality_gate(kind: Optional[str], levels: dict, streak_ok: bool) -> bool:
+    """week_plan's allow_quality: intensity and drift not bad; in base phase the
+    drift streak (≥ 3 consecutive < 5 %) must also be there."""
+    ok = levels.get("intensity") != "bad" and levels.get("drift") != "bad"
+    if (kind or "base") == "base":
+        ok = ok and bool(streak_ok)
+    return ok
+
+
+def next_quality(last: Optional[dict]) -> tuple[int, int]:
+    """(reps, minutes) of the base-phase sub-threshold session: 3×8 the first
+    time; one rep fewer (not below 2) when the last one faded."""
+    if last and last.get("faded"):
+        return max(2, int(last.get("reps") or 3) - 1), 8
+    return 3, 8
+
+
+def _hard_session_s() -> float:
+    from backend.engine.overview import HARD_SESSION_S
+    return HARD_SESSION_S
+
+
+# ---------------------------------------------------------------------------
+# dataset adapters
+# ---------------------------------------------------------------------------
+
+def _thresholds(ds, w) -> tuple[Optional[float], Optional[float], Optional[float]]:
+    """(AeT, LTHR, CP) in effect on the workout date."""
+    lthr = _f(ds.sport_setting("thr", w)) if hasattr(ds, "sport_setting") else None
+    aet = _f(ds.aethr(w)) if hasattr(ds, "aethr") else (None if lthr is None else 0.89 * lthr)
+    if hasattr(ds, "cp"):
+        cp = _f(ds.cp(w))
+    else:
+        cp = _f(ds.sport_setting("ftp", w)) if hasattr(ds, "sport_setting") else None
+    return aet, lthr, cp
+
+
+def _title(w) -> str:
+    e = w.entry
+    t = getattr(e, "title", None)
+    if t:
+        return str(t)
+    rec = getattr(e, "record", None)
+    if rec is not None:
+        try:
+            from backend.files.wko5_athlete import text_field
+            return text_field(rec.get(3213)) or ""
+        except Exception:
+            return ""
+    return ""
+
+
+def _wdate(w) -> dt.date:
+    from backend.engine.wko5expr.dataset import day_to_date
+    return day_to_date(w.day)
+
+
+def _eval(ds, w, expr: str) -> Optional[np.ndarray]:
+    """A derived channel (rgrade, kleg, fmax…) through the expression engine."""
+    try:
+        from backend.engine.wko5expr.evaluator import Evaluator
+        d = math.floor(w.day)
+        r = Evaluator(ds, d, d).evaluate(expr, w)
+    except Exception:
+        return None
+    return np.asarray(r, dtype=float) if isinstance(r, np.ndarray) else None
+
+
+def _samples(ds, w) -> Optional[dict]:
+    t = ds.channel(w.idx, "elapsedtime")
+    if t is None or not np.isfinite(t).any():
+        return None
+    ch = lambda name: ds.channel(w.idx, name)
+    out = {"t": t, "hr": ch("heartrate"), "speed": ch("speed"), "power": ch("power"),
+           "dist": ch("elapseddistance"), "cadence": ch("cadence")}
+    out["elev"] = ch("_elevation")
+    if out["elev"] is None:
+        out["elev"] = ch("elevation")
+    for k, name in (("gct", "stancetime"), ("vo", "verticaloscillation"),
+                    ("ilr", "@impact_loading_rate"), ("lss", "@leg_spring_stiffness")):
+        out[k] = ch(name)
+    for k in list(out):
+        if out[k] is not None and not _has(out[k]) and k != "t":
+            out[k] = None
+    return out
+
+
+def _none_list(a) -> list:
+    return [None if not np.isfinite(x) else float(x) for x in np.asarray(a, dtype=float)]
+
+
+def _measure(ds, w) -> Optional[dict]:
+    """Per-workout raw measurements (JSON; disk-memoised by `measure`)."""
+    s = _samples(ds, w)
+    if s is None:
+        return None
+    from backend.engine.overview import category
+    t = s["t"]
+    n = len(t)
+    d = _dt(t)
+    aet, lthr, cp = _thresholds(ds, w)
+    mov = moving_mask(t, s["speed"])
+    h = _arr(s["hr"], n)
+    p = _arr(s["power"], n)
+    m = w.metrics or {}
+    dist, climb = _f(m.get("distance")), _f(m.get("climbing"))
+    cat = category(w)
+    out = {"category": cat, "moving_s": float(d[mov].sum()), "elapsed_s": float(np.nanmax(t) - np.nanmin(t)),
+           "avg_hr": _wmean(h, d, mov), "avg_power": _wmean(p, d, mov), "aet": aet, "lthr": lthr, "cp": cp}
+    hm = mov & np.isfinite(h) & (h > 0)
+    out["hr_s"] = float(d[hm].sum())
+    out["over_aet_s"] = float(d[hm & (h > (aet or 1e9) + AET_MARGIN)].sum()) if aet else None
+    out["zones"] = None if not (aet and lthr) else {
+        "low": float(d[hm & (h < aet)].sum()), "mid": float(d[hm & (h >= aet) & (h < lthr)].sum()),
+        "high": float(d[hm & (h >= lthr)].sum())}
+    hard_hr = float(d[np.isfinite(h) & (h >= lthr)].sum()) if lthr else 0.0
+    hard_p = 0.0
+    if cp and w.sport == "run" and _has(s["power"]):
+        # 30-s power: Stryd's second-by-second spikes on every short rise
+        # would otherwise make each easy run a "quality" session
+        _, p1 = _grid1(t, s["power"])
+        if p1 is not None and len(p1) > 30:
+            p30 = np.convolve(np.nan_to_num(p1), np.ones(30) / 30, "same")
+            hard_p = float((p30 >= 0.95 * cp).sum())
+    out["hard_s"] = max(hard_hr, hard_p)
+    out["hard_power_s"] = hard_p if cp and _has(s["power"]) and w.sport == "run" else None
+    cpm = (climb / dist) if dist and dist > 0.5 and climb is not None else None
+    out["climb_m_per_km"] = cpm
+    if w.sport == "run" or cat in ("road", "trail"):
+        out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail")
+    else:
+        out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
+    efforts = detect_efforts(t, s["power"], s["hr"], cp) if w.sport == "run" else []
+    out["efforts"] = efforts[:40]
+    out["intervals"] = interval_summary(efforts)
+    out["cp_test"] = cp_test(t, s["power"]) if w.sport == "run" else None
+    climbs = []
+    if s["elev"] is not None and s["dist"] is not None:
+        try:
+            cl = detect_climbs(_none_list(t), _none_list(s["dist"]), _none_list(s["elev"]),
+                               _none_list(h) if s["hr"] is not None else None, moving=list(mov))
+            climbs = [{"t_start": c.t_start, "duration_s": c.duration_s, "distance_km": c.distance_km,
+                       "gain_m": c.gain_m, "grade": c.grade, "vam": c.vam_m_per_h, "avg_hr": c.avg_hr,
+                       "hr_per_100m": c.hr_per_100m} for c in cl]
+        except Exception:
+            climbs = []
+    out["climbs"] = climbs
+    hp = [c["hr_per_100m"] for c in climbs if c.get("hr_per_100m")]
+    out["hr_per_100m"] = statistics.median(hp) if hp else None
+    stryd = s["ilr"] is not None or s["lss"] is not None
+    out["stryd"] = stryd
+    fchans = {"ilr": s["ilr"], "lss": s["lss"],
+              "gct": None if s["gct"] is None else s["gct"] * 1000.0,
+              "cadence": None if s["cadence"] is None else s["cadence"] * 2.0,
+              "vo": None if s["vo"] is None else s["vo"] * 100.0}
+    if w.sport == "run" and s["gct"] is not None:
+        fchans["kleg"] = _eval(ds, w, "kleg")
+        fchans["impact_g"] = _eval(ds, w, "fmax/(metric(weight)*g)")
+    out["form"] = form_drift(t, s["speed"], fchans, s["cadence"]) if w.sport == "run" else {}
+    return out
+
+
+def measure(ds, w) -> Optional[dict]:
+    cache = getattr(ds, "cached_series", None)
+    if cache is None:
+        return _nan_free(_measure(ds, w))
+    return cache(CACHE_KEY, w, lambda: _nan_free(_measure(ds, w)))
+
+
+def _flush(ds) -> None:
+    f = getattr(ds, "flush_series", None)
+    if f is not None:
+        try:
+            f()
+        except Exception:
+            pass
+
+
+def _plan_test(ds, day: dt.date) -> dict:
+    plan = getattr(ds, "plan", None)
+    out = {}
+    for t in getattr(plan, "thresholds", None) or []:
+        if t.date == day.isoformat():
+            for k in ("cp", "aethr", "lthr"):
+                if getattr(t, k, None) is not None:
+                    out[k] = getattr(t, k)
+    return out
+
+
+def classify(ds, w, m: Optional[dict] = None) -> dict:
+    """Session type, terrain and phase on the activity date."""
+    from backend.engine.overview import category
+    m = m if m is not None else (measure(ds, w) or {})
+    day = _wdate(w)
+    cat = category(w)
+    phase = None
+    plan = getattr(ds, "plan", None)
+    if plan is not None:
+        try:
+            from backend.engine.planning import phase_on
+            p = phase_on(plan, day)
+            phase = p.kind if p else None
+        except Exception:
+            phase = None
+    drift = m.get("drift") or {}
+    aet_steady = bool(drift.get("ok")) and cat == "road"
+    typ = session_type(cat, m.get("moving_s") or 0.0, m.get("hard_s") or 0.0, _title(w),
+                       _plan_test(ds, day), looks_like_cp_test(m.get("cp_test"), m.get("cp")), aet_steady,
+                       hard_power_s=m.get("hard_power_s"),
+                       n_efforts=len(m.get("efforts") or []) if m.get("hard_power_s") is not None else None,
+                       easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN))
+    terrain = cat if cat in TERRAIN_LABEL else None
+    label = "輕鬆健行" if typ == "easy" and cat == "hike" else TYPE_LABEL.get(typ, typ)
+    return {"type": typ, "type_label": label, "terrain": terrain,
+            "terrain_label": TERRAIN_LABEL.get(terrain, ""), "category": cat,
+            "phase": phase, "phase_label": PHASE_LABEL.get(phase, "未設定周期"),
+            "date": day.isoformat()}
+
+
+def peers(ds, w, weeks: int, same_type: bool = True) -> list[tuple]:
+    """(workout, measure, class) of the same category (and session type) in the
+    `weeks` before `w`."""
+    from backend.engine.overview import category
+    cat = category(w)
+    me = classify(ds, w)["type"] if same_type else None
+    hi, lo = math.floor(w.day), math.floor(w.day) - 7 * weeks
+    out = []
+    for p in ds.workouts:
+        if p.idx == w.idx or not (lo <= math.floor(p.day) <= hi) or p.day >= w.day or category(p) != cat:
+            continue
+        pm = measure(ds, p)
+        if not pm:
+            continue
+        pc = classify(ds, p, pm)
+        if same_type and pc["type"] != me:
+            continue
+        out.append((p, pm, pc))
+    return out
+
+
+def baseline_for(ds, w, get: Callable[[dict], Optional[float]], same_type: bool = True) -> dict:
+    """baseline() over the previous 8 weeks, widened to 12 when 8 has < 5."""
+    b = {"n": 0, "ok": False}
+    for weeks in BASE_WEEKS:
+        vals = [get(pm) for _, pm, _ in peers(ds, w, weeks, same_type)]
+        b = {**baseline(vals), "weeks": weeks}
+        if b["ok"]:
+            break
+    _flush(ds)
+    return b
+
+
+def _easy_road(ds, w, m) -> bool:
+    from backend.engine.overview import category
+    if category(w) != "road" or (m.get("elapsed_s") or 0) < DRIFT_MIN_S:
+        return False
+    aet, hr = m.get("aet"), m.get("avg_hr")
+    return aet is not None and hr is not None and hr <= aet + AET_MARGIN
+
+
+def drift_series(ds, today: dt.date, days: int = 56, upto_idx: Optional[int] = None) -> list[dict]:
+    """The i_drift runs: road, ≥ 40 min, avg HR ≤ AeT+3 in the `days` up to
+    `today` — oldest first, with the review's drift (refused ones kept with
+    drift None)."""
+    from backend.engine.wko5expr.dataset import date_to_day
+    tday = math.floor(date_to_day(today))
+    out = []
+    for w in ds.workouts:
+        d = math.floor(w.day)
+        if not (tday - days < d <= tday) or (upto_idx is not None and w.idx > upto_idx):
+            continue
+        if w.sport != "run" or "runningtrail" in w.tags:
+            continue
+        if (_f(w.metrics.get("duration")) or 0) < DRIFT_MIN_S:
+            continue
+        m = measure(ds, w)
+        if not m or not _easy_road(ds, w, m):
+            continue
+        dr = m.get("drift") or {}
+        out.append({"idx": w.idx, "date": _wdate(w).isoformat(),
+                    "drift": dr.get("drift") if dr.get("ok") else None, "reason": dr.get("reason")})
+    _flush(ds)
+    return out
+
+
+def drift_streak(ds, today: dt.date, upto_idx: Optional[int] = None) -> dict:
+    pts = drift_series(ds, today, upto_idx=upto_idx)
+    n = streak_of([p["drift"] for p in pts])
+    return {"points": pts, "streak": n, "streak_ok": n >= STREAK_NEED}
+
+
+def last_quality(ds, today: dt.date, days: int = 28) -> Optional[dict]:
+    """The latest quality session in the `days` before `today`:
+    {"idx", "date", "reps", "faded"}; None when there was none."""
+    from backend.engine.wko5expr.dataset import date_to_day
+    tday = math.floor(date_to_day(today))
+    best = None
+    for w in ds.workouts:
+        d = math.floor(w.day)
+        if not (tday - days <= d < tday) or w.sport != "run":
+            continue
+        if (_f(w.metrics.get("duration")) or 0) < 1200:
+            continue
+        m = measure(ds, w)
+        if not m or (m.get("hard_s") or 0) < _hard_session_s():
+            continue
+        c = classify(ds, w, m)
+        if c["type"] != "quality":
+            continue
+        iv = m.get("intervals") or {}
+        fade = iv.get("fade")
+        best = {"idx": w.idx, "date": _wdate(w).isoformat(), "reps": iv.get("n") or 0,
+                "faded": fade is not None and fade < -FADE}
+    _flush(ds)
+    return best
+
+
+def latest_cp_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
+    """The latest run classified test_cp: its 3'/12' CP vs the CP in effect."""
+    from backend.engine.wko5expr.dataset import date_to_day
+    tday = math.floor(date_to_day(today))
+    found = None
+    for w in ds.workouts:
+        d = math.floor(w.day)
+        if not (tday - days < d <= tday) or w.sport != "run":
+            continue
+        if (_f(w.metrics.get("duration")) or 0) < 1500:
+            continue
+        m = measure(ds, w)
+        if not m or not m.get("cp_test"):
+            continue
+        c = classify(ds, w, m)
+        if c["type"] != "test_cp":
+            continue
+        r = m["cp_test"]
+        cp_now = m.get("cp")
+        found = {"idx": w.idx, "date": _wdate(w).isoformat(), "cp": r["cp"], "wprime": r["wprime"],
+                 "cp_now": cp_now, "delta": (r["cp"] / cp_now - 1.0) if cp_now else None}
+    _flush(ds)
+    return found
+
+
+# ---------------------------------------------------------------------------
+# verdicts
+# ---------------------------------------------------------------------------
+
+def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None) -> list[str]:
+    lines = []
+    over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
+    if over is not None and tot > 0 and over / tot > OVER_AET_SHARE and typ in ("easy", "long"):
+        lines.append(f"心率超過 AeT+3 的時間佔 {over / tot * 100:.0f}%（> 10%）：下次放慢")
+    dr = m.get("drift") or {}
+    if not dr.get("ok"):
+        if m.get("category") in ("road", "trail"):
+            lines.append(dr.get("reason") or "飄移數字不採用")
+        return lines[:3]
+    d = dr["drift"]
+    if typ == "test_aet":
+        if d < DRIFT_GOOD:
+            lines.append(f"飄移 {_pct(d)} < 5%：前半段心率 {dr['hr1']:.0f} bpm 可以設成 AeT")
+        else:
+            lines.append(f"飄移 {_pct(d)} ≥ 5%：AeT 低於前半段心率 {dr['hr1']:.0f} bpm，下次放慢 5 bpm 再測")
+        return lines[:3]
+    aet, hr = m.get("aet"), m.get("avg_hr")
+    if d < DRIFT_GOOD and aet and hr and hr > aet + AET_MARGIN:
+        lines.append(f"飄移 {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3，不算進連續次數")
+    elif d < DRIFT_GOOD:
+        s = f"（連續 {streak} 次）" if streak else ""
+        lines.append(f"飄移 {_pct(d)} < 5%：有氧基礎穩{s}")
+        if streak is not None and streak >= STREAK_NEED:
+            lines.append("已連續 3 次 < 5%：可以加一次閾值下間歇")
+    elif d < DRIFT_WATCH:
+        lines.append(f"飄移 {_pct(d)}（5–10%）：暫時不加間歇")
+    else:
+        lines.append(f"飄移 {_pct(d)} > 10%：有氧基礎不足")
+    return lines[:3]
+
+
+def interval_lines(m: dict) -> list[str]:
+    iv = m.get("intervals") or {}
+    n = iv.get("n") or 0
+    if not n:
+        return ["沒有偵測到 ≥ 1 分鐘的用力段"]
+    lines = []
+    b = iv.get("band")
+    if b:
+        lines.append(f"{n} 組中 {iv['in_band']} 組落在 {b[0]} 帶（{b[1] * 100:.0f}–{min(b[2], 2) * 100:.0f}% CP）")
+    else:
+        lines.append(f"{n} 組（沒有 CP，無法判斷目標帶）")
+    fade = iv.get("fade")
+    if fade is not None and fade < -FADE:
+        lines.append(f"最後一組比第一組低 {-fade * 100:.0f}%：下次組數減 1 或多休")
+    drop = iv.get("hr_drop60")
+    if drop is not None and drop < HR_DROP_MIN:
+        lines.append(f"休息 60 秒心率降幅中位 {drop:.0f} bpm（< 20）：休息拉長")
+    aet, lthr, hr = m.get("aet"), m.get("lthr"), iv.get("hr")
+    if len(lines) < 3 and b and b[0] in ("閾值下", "閾值") and aet and lthr and hr and aet <= hr < lthr:
+        lines.append(f"功率有到、心率 {hr:.0f} 在 AeT–LTHR 之間：屬於閾值下")
+    return lines[:3]
+
+
+def cp_lines(m: dict) -> list[str]:
+    r = m.get("cp_test")
+    if not r:
+        return ["沒有功率，算不出 CP"]
+    cp_now = m.get("cp")
+    lines = [f"3 分 {r['p3']:.0f} W、12 分 {r['p12']:.0f} W → CP {r['cp']:.0f} W，W′ {r['wprime'] / 1000:.1f} kJ"]
+    if cp_now:
+        dlt = r["cp"] / cp_now - 1
+        if abs(dlt) > CP_DELTA:
+            lines.append(f"和目前 CP {cp_now:.0f} W 差 {dlt * 100:+.1f}%（> 3%）：建議更新")
+        else:
+            lines.append(f"和目前 CP {cp_now:.0f} W 差 {dlt * 100:+.1f}%：不用改")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# review JSON
+# ---------------------------------------------------------------------------
+
+def _row(name: str, text: str) -> dict:
+    return {"name": name, "type": "line", "expression": "", "data": {"kind": "value", "value": text}}
+
+
+def _col(name: str, vals: list) -> dict:
+    return {"name": name, "type": "line", "expression": "", "data": {"kind": "values", "values": vals}}
+
+
+def _verdict_rows(lines: list[str], label: str = "判讀") -> list[dict]:
+    return [_row(label if i == 0 else "", ln) for i, ln in enumerate(lines[:3])]
+
+
+def _base_text(b: dict, fmt: Callable[[float], str]) -> str:
+    if not b.get("ok"):
+        return f"樣本 {b.get('n', 0)} 次（< 5），不比較"
+    return f"中位 {fmt(b['median'])}（IQR {fmt(b['q1'])}～{fmt(b['q3'])}，{b['n']} 次／{b.get('weeks')} 週）"
+
+
+def review(ds, w, section: str = "summary") -> dict:
+    """The card JSON for one section of views/workout.json."""
+    m = measure(ds, w)
+    _flush(ds)
+    base = {"kind": "review", "section": section, "workout": w.idx, "axes": [], "series": [],
+            "empty": None, "description": None}
+    if not m:
+        return {**base, "empty": "這筆活動沒有逐秒資料"}
+    c = classify(ds, w, m)
+    base["classification"] = c
+    base["suggested_dashboard"] = (2 if c["type"] == "test_cp" else 3 if c["terrain"] in ("trail", "hike")
+                                   else SUGGESTED.get(c["type"], 0))
+    fn = _SECTIONS.get(section)
+    if fn is None:
+        return {**base, "empty": f"沒有這個判讀：{section}"}
+    return fn(ds, w, m, c, base)
+
+
+def _streak_for(ds, w) -> Optional[int]:
+    try:
+        return drift_streak(ds, _wdate(w), upto_idx=w.idx)["streak"]
+    except Exception:
+        return None
+
+
+def _summary(ds, w, m, c, base):
+    typ = c["type"]
+    rows = [_row("課表", f"{c['type_label']}" + (f" · {c['terrain_label']}" if c["terrain_label"] else "")
+                 + f" · {c['phase_label']}"),
+            _row("時間", f"移動 {_hms(m.get('moving_s'))} ／ 全程 {_hms(m.get('elapsed_s'))}")]
+    aet, lthr, cp = m.get("aet"), m.get("lthr"), m.get("cp")
+    if m.get("avg_hr"):
+        rows.append(_row("心率", f"平均 {m['avg_hr']:.0f} bpm（AeT {_num(aet)}、LTHR {_num(lthr)}）"))
+    z = m.get("zones")
+    if z and sum(z.values()) > 0:
+        tot = sum(z.values())
+        rows.append(_row("三區", f"< AeT {z['low'] / tot * 100:.0f}% · AeT–LTHR {z['mid'] / tot * 100:.0f}% · "
+                                 f"≥ LTHR {z['high'] / tot * 100:.0f}%"))
+    if typ in ("strength", "bike", "walk", "other"):
+        return {**base, "series": rows + _verdict_rows([f"{c['type_label']}：只看時間與心率，沒有其他判讀"])}
+    if typ in ("easy", "long", "test_aet"):
+        lines = aerobic_lines(typ, m, _streak_for(ds, w) if typ != "test_aet" else None)
+    elif typ == "quality":
+        lines = interval_lines(m)
+    else:
+        lines = cp_lines(m)
+    if c["terrain"] in ("trail", "hike"):
+        cl = m.get("climbs") or []
+        if cl:
+            rows.append(_row("爬坡", f"{len(cl)} 段、共 {sum(x['gain_m'] for x in cl):.0f} m；"
+                                     f"每 100 m 心跳 {_num(m.get('hr_per_100m'))} 下"))
+        lines = (_trail_lines(ds, w, m) + lines)[:3]
+    rows.append(_row("建議分頁", ["本次重點", "有氧／心率飄移", "間歇", "爬坡與地形", "配速與耐久",
+                                "跑姿與膝蓋負荷（參考）"][base["suggested_dashboard"]]))
+    return {**base, "series": rows + _verdict_rows(lines)}
+
+
+def _aerobic(ds, w, m, c, base):
+    dr = m.get("drift") or {}
+    rows = []
+    if dr.get("ok"):
+        rows += [_row("Pa:HR 飄移", f"{_pct(dr['drift'])}（前 10 分鐘不算）"),
+                 _row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
+                 _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
+        if dr.get("pw_drift") is not None:
+            rows.append(_row("Pw:HR 飄移", _pct(dr["pw_drift"])))
+    over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
+    if over is not None and tot > 0:
+        rows.append(_row("超過 AeT+3", f"{_hms(over)}（{over / tot * 100:.0f}%）"))
+    if c["type"] in ("easy", "long", "test_aet") and dr.get("ok"):
+        b = baseline_for(ds, w, lambda pm: (pm.get("drift") or {}).get("drift")
+                         if (pm.get("drift") or {}).get("ok") else None)
+        rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x))))
+    if c["type"] not in ("easy", "long", "test_aet"):
+        lines = [f"這次是{c['type_label']}，飄移只在輕鬆跑、長跑、AeT 測試判讀"]
+    else:
+        lines = aerobic_lines(c["type"], m, _streak_for(ds, w) if c["type"] != "test_aet" else None)
+    return {**base, "series": rows + _verdict_rows(lines)}
+
+
+def _intervals(ds, w, m, c, base):
+    eff = m.get("efforts") or []
+    if not eff:
+        return {**base, "empty": "沒有偵測到 ≥ 1 分鐘的用力段（需要功率）"
+                if c["type"] in ("quality", "test_cp") else f"這次是{c['type_label']}，不是間歇課"}
+    cols = [_col("組", [str(i + 1) for i in range(len(eff))]),
+            _col("開始", [_hms(e["start_s"]) for e in eff]),
+            _col("時長", [_hms(e["duration_s"]) for e in eff]),
+            _col("功率 W", [_num(e["power"]) for e in eff]),
+            _col("%CP", [_pct(e["pct_cp"], 0) if e.get("pct_cp") is not None else "–" for e in eff]),
+            _col("心率", [_num(e.get("hr")) for e in eff]),
+            _col("最高心率", [_num(e.get("hr_max")) for e in eff]),
+            _col("休 60 秒降", [_num(e.get("hr_drop60")) for e in eff])]
+    lines = cp_lines(m) if c["type"] == "test_cp" else interval_lines(m)
+    if c["type"] not in ("quality", "test_cp"):
+        lines = [f"這次是{c['type_label']}，下表只是偵測到的用力段"] + lines[:2]
+    return {**base, "series": cols + _verdict_rows(lines)}
+
+
+def _trail_lines(ds, w, m) -> list[str]:
+    lines = []
+    hp = m.get("hr_per_100m")
+    if hp:
+        b = baseline_for(ds, w, lambda pm: pm.get("hr_per_100m"), same_type=False)
+        if b.get("ok"):
+            chg = hp / b["median"] - 1
+            if chg < -CLIMB_BETTER:
+                lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳，比近 {b['weeks']} 週中位 {b['median']:.0f} 低 {-chg * 100:.0f}%：爬坡經濟性變好")
+            elif chg > CLIMB_BETTER:
+                lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳，比近 {b['weeks']} 週中位 {b['median']:.0f} 高 {chg * 100:.0f}%")
+            else:
+                lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳，和近 {b['weeks']} 週差不多")
+        else:
+            lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳（近期爬坡樣本 {b.get('n', 0)} 次，不比較）")
+    last = _last20(ds, w)
+    if last is not None and last < LAST20_MIN:
+        lines.append(f"最後 20% 耐久 {last * 100:.0f}%（< 90%）：補給、配速要調整")
+    return lines
+
+
+def _climbs(ds, w, m, c, base):
+    cl = m.get("climbs") or []
+    if not cl:
+        return {**base, "empty": "這次沒有 ≥ 80 m、坡度 ≥ 3% 的連續爬坡"}
+    cols = [_col("開始", [_hms(x["t_start"]) for x in cl]),
+            _col("爬升 m", [_num(x["gain_m"]) for x in cl]),
+            _col("距離 km", [_num(x["distance_km"], 2) for x in cl]),
+            _col("坡度", [_pct(x["grade"], 0) for x in cl]),
+            _col("VAM m/h", [_num(x["vam"]) for x in cl]),
+            _col("平均心率", [_num(x.get("avg_hr")) for x in cl]),
+            _col("每 100 m 心跳", [_num(x.get("hr_per_100m")) for x in cl])]
+    return {**base, "series": cols + _verdict_rows(_trail_lines(ds, w, m) or ["（沒有心率，無法比較爬坡經濟性）"])}
+
+
+def _grades(ds, w, m, c, base):
+    s = _samples(ds, w)
+    g = _eval(ds, w, "rgrade")
+    if s is None or g is None or s["dist"] is None:
+        return {**base, "empty": "沒有距離或海拔，算不出坡度"}
+    rows = grade_bins(_dt(s["t"]), g, s["dist"], s["power"], s["hr"], s["cadence"])
+    if not rows:
+        return {**base, "empty": "沒有坡度資料"}
+    cols = [_col("坡度", [r["label"] for r in rows]),
+            _col("時間", [_hms(r["time_s"]) for r in rows]),
+            _col("佔比", [f"{r['time_pct']:.0f}%" for r in rows]),
+            _col("距離 km", [_num(r["distance_km"], 2) for r in rows]),
+            _col("配速 /km", [_pace(r["pace_s_per_km"]) for r in rows]),
+            _col("心率", [_num(r["hr"]) for r in rows]),
+            _col("功率 W", [_num(r["power"]) for r in rows])]
+    return {**base, "series": cols}
+
+
+def _durability_pts(ds, w) -> Optional[dict]:
+    s = _samples(ds, w)
+    if s is None or s["hr"] is None:
+        return None
+    out = s["power"] if s["power"] is not None else s["speed"]
+    if out is None:
+        return None
+    return durability(s["t"], out, s["hr"])
+
+
+def _last20(ds, w) -> Optional[float]:
+    r = _durability_pts(ds, w)
+    if not r or not r["points"]:
+        return None
+    xs = [p[0] for p in r["points"]]
+    cut = xs[0] + 0.8 * (xs[-1] - xs[0])
+    tail = [p[1] for p in r["points"] if p[0] >= cut]
+    return statistics.mean(tail) / 100.0 if tail else None
+
+
+def _durability(ds, w, m, c, base):
+    rows = [_row("移動／停留", f"移動 {_hms(m.get('moving_s'))}，停留 "
+                            f"{_hms(max(0.0, (m.get('elapsed_s') or 0) - (m.get('moving_s') or 0)))}")]
+    last = _last20(ds, w)
+    lines = []
+    if last is None:
+        rows.append(_row("耐久", "資料不夠（要有心率、功率或速度，且 ≥ 20 分鐘）"))
+    else:
+        rows.append(_row("最後 20% 耐久", f"{last * 100:.0f}%（輸出／心率，和前段相比）"))
+        if last < LAST20_MIN:
+            lines.append(f"最後 20% 耐久 {last * 100:.0f}%（< 90%）：補給、配速要調整")
+        else:
+            lines.append(f"最後 20% 耐久 {last * 100:.0f}%：後段撐得住")
+    rows.append(_row("補給", "沒有補給紀錄"))
+    return {**base, "series": rows + _verdict_rows(lines)}
+
+
+def _durability_curve(ds, w, m, c, base):
+    r = _durability_pts(ds, w)
+    if not r or not r["points"]:
+        return {**base, "empty": "資料不夠：要有心率和功率（或速度），且超過 20 分鐘"}
+    from backend.engine.wko5expr import units as U
+    pct = U.meta("PERCENT")
+    xu = {"id": "HOURS", "label": "h", "kind": "number", "dec": [[0, 1]]}
+    pts = [[round(x, 4), round(y / 100.0, 4)] for x, y in r["points"]]
+    s = [{"name": "耐久（輸出／心率）", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct,
+          "x_unit": xu, "color": "#2a78d6", "data": {"kind": "points", "x": "value", "points": pts}},
+         {"name": "90%", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "x_unit": xu,
+          "color": "#8a8984", "line_style": "dash", "data": {"kind": "hline", "y": 0.9}}]
+    return {**base, "axes": [{"id": "PERCENT", "unit": pct}], "series": s}
+
+
+def _pacing(ds, w, m, c, base):
+    s = _samples(ds, w)
+    if s is None or s["dist"] is None:
+        return {**base, "empty": "沒有距離資料"}
+    rows = pacing_deciles(s["t"], s["dist"], s["hr"], s["power"], s["speed"])
+    if not rows:
+        return {**base, "empty": "距離太短"}
+    cols = [_col("段", [f"{r['k'] * 10}–{r['k'] * 10 + 10}%" for r in rows]),
+            _col("從 km", [_num(r["from_km"], 1) for r in rows]),
+            _col("配速 /km", [_pace(r["pace_s_per_km"]) for r in rows]),
+            _col("心率", [_num(r["hr"]) for r in rows]),
+            _col("功率 W", [_num(r["power"]) for r in rows])]
+    return {**base, "series": cols}
+
+
+FORM_ROWS = (("ilr", "衝擊負荷 ILR", 1), ("lss", "腿部剛性 LSS kN/m", 1), ("kleg", "kleg kN/m", 1),
+             ("gct", "觸地時間 ms", 0), ("cadence", "步頻 spm", 0), ("vo", "垂直振幅 cm", 1),
+             ("impact_g", "衝擊 G（fmax／體重）", 2))
+
+
+def _form(ds, w, m, c, base):
+    f = m.get("form") or {}
+    if w.sport != "run" or not f:
+        return {**base, "empty": "參考：只有跑步、而且有跑步動態資料時才有這一頁"}
+    names, first, last, chg, basecol = [], [], [], [], []
+    for k, label, d in FORM_ROWS:
+        v = f.get(k)
+        if not v or v.get("first") is None:
+            continue
+        if k in ("ilr", "lss") and not m.get("stryd"):
+            continue
+        b = baseline_for(ds, w, lambda pm, k=k: ((pm.get("form") or {}).get(k) or {}).get("change"))
+        names.append(label)
+        first.append(_num(v["first"], d))
+        last.append(_num(v["last"], d))
+        chg.append(_pct(v.get("change"), 1, sign=True))
+        basecol.append(_base_text(b, lambda x: _pct(x, 1, sign=True)))
+    cols = [_col("指標（參考）", names), _col("前 ⅓", first), _col("後 ⅓", last),
+            _col("變化", chg), _col("同類課表變化基準", basecol)]
+    s = _samples(ds, w)
+    g = _eval(ds, w, "rgrade")
+    dh = downhill_share(s["t"], g, s["dist"], s["ilr"]) if s is not None else None
+    rows = []
+    if dh and dh.get("time_s"):
+        rows.append(_row("陡下坡（< −10%）", f"{_hms(dh['time_s'])}（時間 {_pct(dh['time_share'], 0)}"
+                                           f"、距離 {_pct(dh.get('dist_share'), 0)}"
+                                           + (f"、衝擊量 {_pct(dh['impact_share'], 0)}" if dh.get("impact_share") is not None else "")
+                                           + "）"))
+    if not m.get("stryd"):
+        rows.append(_row("說明", "沒有 Stryd：只看步頻、觸地、振幅、kleg、衝擊 G，無法判讀衝擊與剛性"))
+    lines = []
+    ilr = f.get("ilr") or {}
+    if m.get("stryd") and ilr.get("change") is not None:
+        b = baseline_for(ds, w, lambda pm: ((pm.get("form") or {}).get("ilr") or {}).get("change"))
+        share = (dh or {}).get("impact_share")
+        share = share if share is not None else (dh or {}).get("time_share")
+        if compare(ilr["change"], b) == "high" and share is not None and share > STEEP_DOWN_SHARE:
+            lines.append("參考：後段 ILR 升幅超出自己的 IQR，且陡下坡佔 > 30%：留意膝蓋，下坡放慢或縮步")
+    lss, gct = (f.get("lss") or {}).get("change"), (f.get("gct") or {}).get("change")
+    if lss is not None and gct is not None and lss < -0.02 and gct > 0.02:
+        lines.append(f"參考：LSS {lss * 100:+.1f}%、觸地 {gct * 100:+.1f}%：疲勞跡象")
+    if not lines:
+        lines.append("參考：沒有明顯的跑姿／膝蓋負荷變化")
+    return {**base, "series": cols + rows + _verdict_rows(lines, "判讀（參考）")}
+
+
+def _cp(ds, w, m, c, base):
+    if c["type"] != "test_cp":
+        return {**base, "empty": "這次不是 CP 測試（3 分＋12 分全力）"}
+    r = m.get("cp_test")
+    if not r:
+        return {**base, "empty": "沒有功率，算不出 CP"}
+    rows = [_row("3 分", f"{r['p3']:.0f} W"), _row("12 分", f"{r['p12']:.0f} W"),
+            _row("CP", f"{r['cp']:.0f} W"), _row("W′", f"{r['wprime'] / 1000:.1f} kJ")]
+    return {**base, "series": rows + _verdict_rows(cp_lines(m))}
+
+
+_SECTIONS = {"summary": _summary, "aerobic": _aerobic, "intervals": _intervals, "climbs": _climbs,
+             "durability": _durability, "form": _form, "grades": _grades, "pacing": _pacing,
+             "durability_curve": _durability_curve, "cp_test": _cp}
