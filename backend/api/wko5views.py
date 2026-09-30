@@ -17,7 +17,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -32,7 +32,8 @@ from backend.engine.wko5expr.customviews import (
     REPO_VIEWS, USER_VIEWS, load_custom_views, view_dirs,
 )
 from backend.engine.wko5expr.dataset import Dataset, date_to_day
-from backend.engine.wko5expr.render import render_chart
+from backend.engine.wko5expr.render import render_chart, render_map
+from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,10 +48,20 @@ _LIVE: "weakref.WeakSet[Dataset]" = weakref.WeakSet()
 
 
 @lru_cache(maxsize=4)
-def _dataset_cfg(cfg_json: str) -> Dataset:
+def _dataset_cfg(cfg_json: str, athlete_stamp: str = "") -> Dataset:
     ds = Dataset(ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
     _LIVE.add(ds)
     return ds
+
+
+def _athlete_stamp() -> str:
+    """WKO5 rewrites the .wko5athlete index when workouts are added or
+    removed (sync, file delete) — a new stamp means a fresh Dataset."""
+    try:
+        return ";".join(f"{p.name}:{p.stat().st_size}:{p.stat().st_mtime_ns}"
+                        for p in sorted(ATHLETE_DIR.glob("*.wko5athlete")))
+    except OSError:
+        return ""
 
 
 def plan_changed(thresholds: bool) -> None:
@@ -72,7 +83,7 @@ def _dataset(parity: Optional[bool] = None) -> Dataset:
     cfg = EngineConfig.load()
     if parity is not None and parity != cfg.parity:
         cfg = cfg.replace(parity=parity)
-    return _dataset_cfg(json.dumps(cfg.to_dict(), sort_keys=True))
+    return _dataset_cfg(json.dumps(cfg.to_dict(), sort_keys=True), _athlete_stamp())
 
 
 @lru_cache(maxsize=1)
@@ -129,6 +140,14 @@ def _view(name: str, parity: Optional[bool] = None) -> dict:
     return v
 
 
+MAP_PANEL = "PKMapPanelConfig"
+
+
+def _panel_kind(c: dict) -> Optional[str]:
+    """WKO5's map panel has no series; it is a workout's GPS track ("map")."""
+    return "map" if c.get("kind") == "other" and c.get("class") == MAP_PANEL else c.get("kind")
+
+
 @router.get("/views")
 def list_views():
     return [
@@ -136,7 +155,7 @@ def list_views():
          "error": v.get("error"),
          "dashboards": [
             {"index": i, "title": d["title"], "description": d.get("description"),
-             "charts": [{"index": j, "title": c.get("title"), "kind": c.get("kind"),
+             "charts": [{"index": j, "title": c.get("title"), "kind": _panel_kind(c),
                          "series": len(c.get("series", []))} for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
         for name, v in _views().items()
@@ -163,9 +182,14 @@ def _range(ds: Dataset, begin: Optional[str], end: Optional[str]) -> tuple[float
 
 
 @router.get("/views/{view}/dashboards/{d}/charts/{c}")
-def chart(view: str, d: int, c: int, begin: Optional[str] = None, end: Optional[str] = None,
-          sports: Optional[str] = None, workout: Optional[int] = None, parity: Optional[bool] = None):
-    """Athlete charts use begin/end/sports (the RHE); workout charts need `workout`."""
+def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = None,
+          end: Optional[str] = None, sports: Optional[str] = None, workout: Optional[int] = None,
+          parity: Optional[bool] = None):
+    """Athlete charts use begin/end/sports (the RHE); workout charts need `workout`.
+
+    Served from the render cache (render_cache.py): the key covers the chart
+    definition, every query parameter (so a future `source` / `period` param
+    is part of it automatically), the data fingerprint and the code version."""
     ds = _dataset(parity)
     v = _view(view, ds.config.parity)
     try:
@@ -173,10 +197,24 @@ def chart(view: str, d: int, c: int, begin: Optional[str] = None, end: Optional[
     except IndexError:
         raise HTTPException(404, "chart not found")
     b, e = _range(ds, begin, end)
+    needs_workout = ch.get("kind") == "workout" or _panel_kind(ch) == "map"
+    if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
+        raise HTTPException(400, "workout charts need ?workout=<index>")
+    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets"):
+        raise HTTPException(400, f"unsupported panel {ch.get('class')}")
+    params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
+    req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
+           "params": params, "workout_file": ds.workouts[workout].entry.file if needs_workout else None}
+    key = chart_key(ch, req, data_fingerprint(ds))
+    return RENDER_CACHE.get_or_compute(
+        key, lambda: _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None))
+
+
+def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:
     if ch.get("kind") == "workout":
-        if workout is None or not 0 <= workout < len(ds.workouts):
-            raise HTTPException(400, "workout charts need ?workout=<index>")
-        return render_chart(ch, ds, b, e, workout=ds.workouts[workout])
+        return render_chart(ch, ds, b, e, workout=w)
+    if _panel_kind(ch) == "map":
+        return render_map(ch, ds, w)
     if ch.get("kind") in ("zones", "targets"):
         import math
         from backend.engine.zones import training_targets, zone_table
