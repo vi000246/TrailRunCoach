@@ -285,6 +285,39 @@ def test_T13_pandolf():
     assert HK.pack_factor(70, 5, 12) == approx(75 / 82)
 
 
+def test_V_F12_pandolf_recomputation_and_no_downhill():
+    """racepower-v2.md §3C.2 independent recomputation: W 70, L 20, V 1.34,
+    G 5, η 1 → 573.15 W; W 70, L 0, V 1.34, G 0 → 293.54 W. Santee's downhill
+    correction is single-source, so G < 0 is refused."""
+    assert HK.pandolf(70, 20, 1.34, 5) == approx(573.15, abs=0.01)
+    assert HK.pandolf(70, 0, 1.34, 0) == approx(293.54, abs=0.01)
+    with pytest.raises(ValueError):
+        HK.pandolf(70, 10, 1.2, -5)
+
+
+def test_V_F14b_bassett_curves():
+    """Bassett 1999 via TrainingPeaks / Simmons: 2000 m → 91.62 (acclimatised),
+    87.564 (unacclimatised); clamped to 0–4000 m."""
+    assert ENV.bassett_pct(2000, True) == approx(91.62)
+    assert ENV.bassett_pct(2000, False) == approx(87.564)
+    assert ENV.bassett_pct(6000, False) == ENV.bassett_pct(4000, False)
+    # the acclimatised curve corroborates env.py's polynomial within 1 point (§3C.3 table, 15 °C lapse)
+    for alt in (500, 1500, 2500, 3500):
+        t = 15.0 - 6.5 * alt / 1000.0
+        a = ENV.altitude_factor(ENV.pressure_torr(alt, t)) / ENV.altitude_factor(ENV.pressure_torr(0, 15.0)) * 100
+        assert abs(a - ENV.bassett_pct(alt, True)) <= 1.05
+
+
+def test_V_F11_skiba_tau_values():
+    """§3C.1: D_CP 0 → 862 s, 100 W → 516.86 s, 219 W → 377.1 s (Jones &
+    Vanhatalo 2017's 377 s); Vassallo 2020's running refit 372·e^(−0.02D) + 102."""
+    assert PC.skiba_tau(0) == approx(862.0)
+    assert PC.skiba_tau(100) == approx(516.86, abs=0.01)
+    assert PC.skiba_tau(219) == approx(377.1, abs=0.05)
+    assert PC.skiba_tau(0, "running") == approx(474.0)
+    assert PC.skiba_tau(50, "running") == approx(372 * math.exp(-1) + 102)
+
+
 def test_V_HE_hike_effort_quantiles():
     cuts = DF.hike_cuts(2.4, 3.0, 3.45, 3.9)
     assert cuts == approx([0.8, 1.0, 1.15, 1.3])
@@ -482,7 +515,13 @@ def test_planner_modes_on_a_gpx_course_and_the_validation_gate():
     # v1 total (effort km × trail RE, at the course's mean M from the GPX elevations), v2 allocation
     ref = PR.solve_riegel_re(v1["result"]["effort_km"] * 1000.0, CP, TTE, K, RE0, W, deg["summary"]["M"])
     assert deg["summary"]["M"] < 1.0
+    # the effort at the auto time is exactly f* (whole-race M = the effort's time-weighted M)
+    assert deg["effort"]["f"] == approx(1.0, abs=1e-4) and deg["effort"]["key"] == "max"
+    ref = PR.solve_riegel_re(v1["result"]["effort_km"] * 1000.0, CP, TTE, K, RE0, W,
+                             deg["summary"]["power"] / deg["summary"]["power_train"])
     assert deg["summary"]["time_s"] == approx(ref["time_s"], abs=0.5)
+    hard = PL.plan_run(opts={"mode": "auto", "effort_target": 0.95}, validated={}, **common)
+    assert hard["effort"]["f"] == approx(0.95, abs=1e-4) and hard["summary"]["time_s"] > deg["summary"]["time_s"]
     ok = PL.plan_run(opts={"mode": "auto"}, validated={"trail": True}, **common)
     assert ok["summary"]["total_method"] == "v2"
     assert all(x["badge"] is None for x in ok["segments"] if x["trusted"])

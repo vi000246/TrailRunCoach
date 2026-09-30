@@ -489,7 +489,7 @@ class PlanIn(PredictIn):
     stops: list[StopIn] = []
     day_splits_km: list[float] = []
     terrain: dict = {}
-    wbal: Optional[Literal["wko5", "skiba"]] = None
+    wbal: Optional[Literal["wko5", "skiba", "skiba_run"]] = None
 
 
 def _resolve_course(body: PlanIn) -> dict:

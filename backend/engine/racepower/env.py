@@ -126,6 +126,24 @@ def altitude_factor_linear(alt_m: float) -> float:
     return 1.0 - WEHRLIN_PER_1000M * max(0.0, float(alt_m) - WEHRLIN_START_M) / 1000.0
 
 
+BASSETT_MAX_M = 4000.0
+BASSETT_TRUSTED_M = 3000.0
+
+
+def bassett_pct(alt_m: float, acclimatized: bool) -> float:
+    """Bassett, Kyle, Passfield, Broker & Burke 1999 (MSSE 31:1665–1676), x in
+    km, % of sea-level aerobic power: acclimatised −1.12x² − 1.90x + 99.9,
+    unacclimatised (1–7 days) 0.178x³ − 1.43x² − 4.07x + 100. The rounded
+    coefficients as TrainingPeaks (Rytlewski 2024) and Simmons 2014 print them
+    — 已驗證 second-hand (racepower-v2.md §3C.3; V-F14b: 2000 m → 91.62 /
+    87.564). Clamped to 0–4000 m; above 3000 m the page says 推估. Used as a
+    cross-check of the acclimatised curve, not in the multiplier."""
+    x = max(0.0, min(BASSETT_MAX_M, float(alt_m))) / 1000.0
+    if acclimatized:
+        return -1.12 * x * x - 1.90 * x + 99.9
+    return 0.178 * x ** 3 - 1.43 * x * x - 4.07 * x + 100.0
+
+
 def _alt_factor(alt_m: float, temp_c: float, mode: str) -> float:
     curve = altitude_factor(pressure_torr(alt_m, temp_c))
     if mode == "acclimatised":
@@ -141,11 +159,13 @@ def segment_factors(zs, frm, to, mode: str = "acclimatised") -> list[float]:
     M = 1 − (A_from − A_to) − (H_to − H_from)/100 with the race-day altitude
     replaced by each segment's mean elevation zᵢ; heat stays one value.
 
-    mode: "acclimatised" = env.py curve (v1; Bassett 1999 as the presumed source,
-    coefficients 待驗證 against the original, values corroborated by Wehrlin within
-    3.2 points up to 3500 m), "unacclimatised" = Wehrlin linear (已驗證 ≤ 2800 m),
-    "partial" = the midpoint of the two — our own choice with no quantitative
-    study behind it (自組, labelled 推估).
+    mode: "acclimatised" = this module's pressure polynomial (v1; the same
+    coefficients as the SuperPower workbook and GoldenCheetah's aPower, which
+    credits Péronnet, Thibault & Cousineau 1991 — that attribution is single-
+    source, 待驗證; numerically it stays within 1 point of Bassett et al. 1999's
+    acclimatised curve over 0–4000 m, see `bassett_pct`), "unacclimatised" =
+    Wehrlin linear (已驗證 ≤ 2800 m), "partial" = the midpoint of the two — our
+    own choice with no quantitative study behind it (自組, labelled 推估).
     With every zᵢ equal to the race altitude and mode "acclimatised" each Mᵢ is
     exactly v1's single M (T14)."""
     a, b = resolve(frm, to)

@@ -15,6 +15,10 @@ import math
 from statistics import median
 from typing import Optional, Sequence
 
+# Terrain speed divisors, user-chosen per segment (經驗法則 / 外插): Soule &
+# Goldman 1972's η is light brush 1.2, heavy brush 1.5 (箭竹 sits between),
+# loose sand 2.1; 碎石 1.3 is our own pick; 無路 1.67 = Tobler's off-path 3/5.
+# Snow η and other single-source values are not offered.
 TERRAIN_ETA = {"normal": 1.0, "gravel": 1.3, "bamboo": 1.35, "offpath": 1.67}
 TERRAIN_LABEL = {"normal": "一般", "gravel": "碎石", "bamboo": "箭竹", "offpath": "無路"}
 MIN_TRIPS = 3
@@ -24,9 +28,14 @@ DEFAULT_MOVING_RATIO = 0.8
 def pandolf(weight: float, load: float, v: float, grade_pct: float, eta: float = 1.0) -> float:
     """F12 Pandolf, Givoni & Goldman 1977 (J Appl Physiol 43:577–581):
     M = 1.5W + 2.0(W+L)(L/W)² + η(W+L)(1.5V² + 0.35·V·G) watts (W, L kg;
-    V m/s; G %). The formula is taken from a secondary source (Wikipedia via
-    effort-distance-formulas.md §7), not the paper — 待驗證. Not used for the
-    primary times: the v1 linear pack factor stays until it is checked."""
+    V m/s; G %). 已驗證 second-hand for G ≥ 0 (Potter et al. 2015 eq. 4;
+    Weyand et al. 2021 table 1; Wikipedia — racepower-v2.md §3C.2; V-F12:
+    70 kg, 20 kg, 1.34 m/s, 5 % → 573.15 W). Downhill is refused: Santee
+    2003's correction has a single source (待驗證). The speed range of the
+    original data is unverified, and it under-predicts heavy modern loads
+    (Looney 2022), so the page still uses the v1 linear pack factor."""
+    if grade_pct < 0:
+        raise ValueError("Pandolf 只適用上坡與平地（下坡修正未驗證）")
     return 1.5 * weight + 2.0 * (weight + load) * (load / weight) ** 2 + \
         eta * (weight + load) * (1.5 * v * v + 0.35 * v * grade_pct)
 
@@ -34,7 +43,7 @@ def pandolf(weight: float, load: float, v: float, grade_pct: float, eta: float =
 def pandolf_speed(weight: float, load0: float, load: float, v0: float, grade_pct: float,
                   eta: float = 1.0) -> float:
     """Speed with `load` at the same metabolic rate as v0 with load0 (F12
-    inverse, bisection). 待驗證 like `pandolf`; uphill / level only."""
+    inverse, bisection); uphill / level only, like `pandolf`."""
     target = pandolf(weight, load0, v0, grade_pct, eta)
     lo, hi = 0.0, max(v0 * 3, 3.0)
     if pandolf(weight, load, lo, grade_pct, eta) >= target:

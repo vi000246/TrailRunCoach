@@ -16,8 +16,9 @@ Every allocation rule here is our own combination (自組) and 待驗證 until t
 targets 推估 until then. The W′ budget (F11b) is plain algebra of the CP model
 and 已驗證. The optional W′ curve defaults to WKO5's own dfrc (a port, so it
 matches the app's other charts); Skiba's W′bal (F11) is the literature
-alternative, display-only because its τ coefficients are quoted from memory
-(待驗證).
+alternative with a labelled τ (Skiba 2012 cycling, or Vassallo 2020's running
+refit) — τ verified second-hand, but display-only: cycling-validated and
+under-predicting running time to exhaustion.
 """
 from __future__ import annotations
 
@@ -203,13 +204,32 @@ def solve_with_budget(solve: Callable[[float], dict], segs, cp: float, w_prime: 
     return res, a, runs
 
 
-def wbal_skiba(rows: Sequence[dict], segs: Sequence[dict], cp: float, w_prime: float) -> list[float]:
-    """F11 Skiba et al. 2012 (MSSE 44:1526–1532) W′bal at each segment end:
-    expenditure above CP, exponential recovery below with
-    τ = 546·e^(−0.01·D_CP) + 316, D_CP = CP − P. The τ coefficients are quoted
-    from memory — the abstract does not list them — so this is 待驗證 and
-    display-only (never a constraint); developed on cycling, used for running
-    as an extrapolation."""
+SKIBA_TAU = {
+    # Skiba et al. 2012 (MSSE 44:1526–1532): τ = 546·e^(−0.01·D_CP) + 316 s —
+    # 已驗證 second-hand (six independent open sources, racepower-v2.md
+    # §3C.1); validated on cycling ergometry only.
+    "cycling": (546.0, 0.01, 316.0),
+    # Vassallo et al. 2020 (Eur J Appl Physiol 120:219–230): running refit
+    # τ = 372·e^(−0.02·D_CP) + 102 (r² 0.52) — the only running validation
+    # found; there the 2012 τ under-predicted time to exhaustion by 12 %.
+    "running": (372.0, 0.02, 102.0),
+}
+
+
+def skiba_tau(d_cp: float, which: str = "cycling") -> float:
+    a, b, c = SKIBA_TAU[which]
+    return a * math.exp(-b * d_cp) + c
+
+
+def wbal_skiba(rows: Sequence[dict], segs: Sequence[dict], cp: float, w_prime: float,
+               which: str = "cycling") -> list[float]:
+    """F11 Skiba W′bal at each segment end: expenditure (P − CP)·t above CP,
+    exponential recovery below with τ = skiba_tau(CP − P, which) (the
+    segment-level form of the integral model). τ coefficients 已驗證
+    (second-hand); the model itself is established for cycling and an
+    extrapolation for running (Stryd power untested), with large individual
+    τ differences — so it is an optional display, never a constraint (F11b
+    is). `which` names the τ shown on the page."""
     bal = w_prime
     out = []
     for r, s in zip(rows, segs):
@@ -217,7 +237,7 @@ def wbal_skiba(rows: Sequence[dict], segs: Sequence[dict], cp: float, w_prime: f
         if r["P"] > cpm:
             bal -= (r["P"] - cpm) * r["t"]
         else:
-            tau = 546.0 * math.exp(-0.01 * (cpm - r["P"])) + 316.0
+            tau = skiba_tau(cpm - r["P"], which)
             bal = w_prime - (w_prime - bal) * math.exp(-r["t"] / tau)
         out.append(bal)
     return out
