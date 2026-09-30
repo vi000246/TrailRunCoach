@@ -81,6 +81,16 @@ def _chart(raw: dict, where: str) -> dict:
         "axes": raw.get("axes") or [],
         "series": [_series(s, f"{where}/{raw['title']}") for s in raw.get("series", [])],
     }
+    if raw.get("min_days") is not None:
+        # long-term charts (monthly / yearly buckets) look back at least this far,
+        # whatever shorter range the viewer has selected
+        out["min_days"] = int(raw["min_days"])
+    if raw.get("period") is not None:
+        # default date bucket for period totals (the viewer's 日/週/月/季/年 toggle
+        # starts here); expressions write it as startofweek(date) etc.
+        if raw["period"] not in ("day", "week", "month", "quarter", "year"):
+            raise CustomViewError(f"{where}/{raw['title']}: period must be day, week, month, quarter or year")
+        out["period"] = raw["period"]
     if kind == "zones":
         # a WKO5-style zone table: {"kind": "zones", "system": "frielhr", "days": 30}
         from backend.engine.zones import SYSTEMS
