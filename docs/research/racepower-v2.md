@@ -293,7 +293,8 @@ v1 的缺口（v2 要補）：
 
   → **v1 的海拔修正站得住**：3500 m 以內和量測值差 ≤ 3.2 個百分點。它在 1500–3000 m 比
   Wehrlin 樂觀 2–3 %。Wehrlin 是急性暴露（未適應），所以這個差距**方向上**符合「已適應 vs
-  未適應」，但**沒有定量證據**。3952 m 超出 Wehrlin 的量測上限（2800 m），兩者都是外插。
+  未適應」。§3C.3 用 Bassett 1999 的兩條曲線補上定量比較（2000 m：已適應 91.6 %、Wehrlin 89.3 %、
+  未適應 87.6 %）。3952 m 超出 Wehrlin 的量測上限（2800 m），兩者都是外插。
 - **海拔用在步行**：Wehrlin 發現能量成本不隨海拔改變，改變的是容量。把 M 乘在 EP/h 上，只在
   「運動員依相對強度配速」時成立，例如心率壓在 AeT。v1 百岳本來就給 AeT 心率上限，所以前提
   成立；v2 要把這個假設寫明（§7）。
@@ -1297,9 +1298,9 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
 - Péronnet F, Thibault G, Cousineau DL (1991). A theoretical analysis of the effect of altitude on
   running performance. *J Appl Physiol* 70:399–404. PMID 2010398. https://doi.org/10.1152/jappl.1991.70.1.399
   （摘要；GoldenCheetah 把 env.py 的 torr 多項式標為出自此篇，單一來源，§3C.3）
-- Péronnet F, Bouissou P, Perrault H, Ricci J (1991). A comparison of cyclists' time records
-  according to altitude and materials used. *Can J Sport Sci*（依 Simmons 2014 與 TrainingPeaks
-  轉述；`−0.003x³ + 0.0081x² − 0.0381x + 1` 的來源；未抓取）
+- Péronnet F, Bouissou P, Perrault H, Ricci J（1989，依 Simmons 2014；TrainingPeaks 寫 1991；
+  年份與期刊都未核對）. A comparison of cyclists' time records according to altitude and materials
+  used. `−0.003x³ + 0.0081x² − 0.0381x + 1` 的來源（依 Simmons 2014 轉述；未抓取）。
 - Potter AW, Gonzalez JA et al. (2015). Biophysical assessment and predicted
   thermophysiologic effects of body armor. *PLoS One* 10:e0132698.
   https://pmc.ncbi.nlm.nih.gov/articles/PMC4511810/ （全文；Pandolf 式 4）
