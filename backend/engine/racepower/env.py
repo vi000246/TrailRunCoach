@@ -107,3 +107,49 @@ def multiplier(frm=None, to=None) -> dict:
     pct = alt_pct + heat_pct
     return {"from": sa, "to": sb, "altitude_pct": alt_pct, "heat_pct": heat_pct,
             "pct": pct, "M": 1.0 + pct}
+
+
+# ---- v2: per-segment altitude (docs/research/racepower-v2.md F14, §8) --------
+
+WEHRLIN_START_M = 300.0
+WEHRLIN_PER_1000M = 0.063
+ACCLIMATISATION = ("acclimatised", "partial", "unacclimatised")
+
+
+def altitude_factor_linear(alt_m: float) -> float:
+    """Fraction of sea-level VO2max at `alt_m`, unacclimatised.
+
+    Source: Wehrlin & Hallén 2006, Eur J Appl Physiol 96:404–412 — VO2max falls
+    linearly by 6.3 % per 1000 m from about 300 m (acute exposure, 300–2800 m).
+    Status: 已驗證 up to 2800 m (V-F14: 1300 m → 0.937); above 2800 m it is
+    extrapolation and the page labels the segment 推估."""
+    return 1.0 - WEHRLIN_PER_1000M * max(0.0, float(alt_m) - WEHRLIN_START_M) / 1000.0
+
+
+def _alt_factor(alt_m: float, temp_c: float, mode: str) -> float:
+    curve = altitude_factor(pressure_torr(alt_m, temp_c))
+    if mode == "acclimatised":
+        return curve
+    lin = altitude_factor_linear(alt_m)
+    if mode == "unacclimatised":
+        return lin
+    return 0.5 * (curve + lin)
+
+
+def segment_factors(zs, frm, to, mode: str = "acclimatised") -> list[float]:
+    """Per-segment environment multiplier Mᵢ (F14): the v1 formula
+    M = 1 − (A_from − A_to) − (H_to − H_from)/100 with the race-day altitude
+    replaced by each segment's mean elevation zᵢ; heat stays one value.
+
+    mode: "acclimatised" = env.py curve (v1; Bassett 1999 as the presumed source,
+    coefficients 待驗證 against the original, values corroborated by Wehrlin within
+    3.2 points up to 3500 m), "unacclimatised" = Wehrlin linear (已驗證 ≤ 2800 m),
+    "partial" = the midpoint of the two — our own choice with no quantitative
+    study behind it (自組, labelled 推估).
+    With every zᵢ equal to the race altitude and mode "acclimatised" each Mᵢ is
+    exactly v1's single M (T14)."""
+    a, b = resolve(frm, to)
+    sa, sb = side(a), side(b)
+    heat = -(sb["heat_penalty_pct"] - sa["heat_penalty_pct"]) / 100.0
+    a_from = _alt_factor(a.altitude_m, a.temp_c, mode)
+    return [1.0 - (a_from - _alt_factor(z, b.temp_c, mode)) + heat for z in zs]
