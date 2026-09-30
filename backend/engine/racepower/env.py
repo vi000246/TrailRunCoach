@@ -107,3 +107,69 @@ def multiplier(frm=None, to=None) -> dict:
     pct = alt_pct + heat_pct
     return {"from": sa, "to": sb, "altitude_pct": alt_pct, "heat_pct": heat_pct,
             "pct": pct, "M": 1.0 + pct}
+
+
+# ---- v2: per-segment altitude (docs/research/racepower-v2.md F14, §8) --------
+
+WEHRLIN_START_M = 300.0
+WEHRLIN_PER_1000M = 0.063
+ACCLIMATISATION = ("acclimatised", "partial", "unacclimatised")
+
+
+def altitude_factor_linear(alt_m: float) -> float:
+    """Fraction of sea-level VO2max at `alt_m`, unacclimatised.
+
+    Source: Wehrlin & Hallén 2006, Eur J Appl Physiol 96:404–412 — VO2max falls
+    linearly by 6.3 % per 1000 m from about 300 m (acute exposure, 300–2800 m).
+    Status: 已驗證 up to 2800 m (V-F14: 1300 m → 0.937); above 2800 m it is
+    extrapolation and the page labels the segment 推估."""
+    return 1.0 - WEHRLIN_PER_1000M * max(0.0, float(alt_m) - WEHRLIN_START_M) / 1000.0
+
+
+BASSETT_MAX_M = 4000.0
+BASSETT_TRUSTED_M = 3000.0
+
+
+def bassett_pct(alt_m: float, acclimatized: bool) -> float:
+    """Bassett, Kyle, Passfield, Broker & Burke 1999 (MSSE 31:1665–1676), x in
+    km, % of sea-level aerobic power: acclimatised −1.12x² − 1.90x + 99.9,
+    unacclimatised (1–7 days) 0.178x³ − 1.43x² − 4.07x + 100. The rounded
+    coefficients as TrainingPeaks (Rytlewski 2024) and Simmons 2014 print them
+    — 已驗證 second-hand (racepower-v2.md §3C.3; V-F14b: 2000 m → 91.62 /
+    87.564). Clamped to 0–4000 m; above 3000 m the page says 推估. Used as a
+    cross-check of the acclimatised curve, not in the multiplier."""
+    x = max(0.0, min(BASSETT_MAX_M, float(alt_m))) / 1000.0
+    if acclimatized:
+        return -1.12 * x * x - 1.90 * x + 99.9
+    return 0.178 * x ** 3 - 1.43 * x * x - 4.07 * x + 100.0
+
+
+def _alt_factor(alt_m: float, temp_c: float, mode: str) -> float:
+    curve = altitude_factor(pressure_torr(alt_m, temp_c))
+    if mode == "acclimatised":
+        return curve
+    lin = altitude_factor_linear(alt_m)
+    if mode == "unacclimatised":
+        return lin
+    return 0.5 * (curve + lin)
+
+
+def segment_factors(zs, frm, to, mode: str = "acclimatised") -> list[float]:
+    """Per-segment environment multiplier Mᵢ (F14): the v1 formula
+    M = 1 − (A_from − A_to) − (H_to − H_from)/100 with the race-day altitude
+    replaced by each segment's mean elevation zᵢ; heat stays one value.
+
+    mode: "acclimatised" = this module's pressure polynomial (v1; the same
+    coefficients as the SuperPower workbook and GoldenCheetah's aPower, which
+    credits Péronnet, Thibault & Cousineau 1991 — that attribution is single-
+    source, 待驗證; numerically it stays within 1 point of Bassett et al. 1999's
+    acclimatised curve over 0–4000 m, see `bassett_pct`), "unacclimatised" =
+    Wehrlin linear (已驗證 ≤ 2800 m), "partial" = the midpoint of the two — our
+    own choice with no quantitative study behind it (自組, labelled 推估).
+    With every zᵢ equal to the race altitude and mode "acclimatised" each Mᵢ is
+    exactly v1's single M (T14)."""
+    a, b = resolve(frm, to)
+    sa, sb = side(a), side(b)
+    heat = -(sb["heat_penalty_pct"] - sa["heat_penalty_pct"]) / 100.0
+    a_from = _alt_factor(a.altitude_m, a.temp_c, mode)
+    return [1.0 - (a_from - _alt_factor(z, b.temp_c, mode)) + heat for z in zs]
