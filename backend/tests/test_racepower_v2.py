@@ -570,3 +570,189 @@ def test_gpx_write_round_trip_and_camp_waypoint():
     assert len(back) == len(tr) and back.ele[-1] == approx(tr.ele[-1], abs=0.05)
     c = CO.build_course(back)
     assert c["wpts"][0]["camp"] and c["wpts"][0]["km"] == approx(1.5, abs=0.02)
+
+
+def test_device_distance_is_the_ruler_when_given():
+    tr = synthetic_track({"len": 2000, "z": lambda x: 100.0})
+    tr.dist = [i * 11.0 for i in range(len(tr))]          # the footpod says 10 % longer
+    td = CO.track_distance(tr)
+    assert td["d"][-1] == approx(11.0 * (len(tr) - 1))
+
+
+# ---- V-BT: the back-test harness ------------------------------------------------
+
+from backend.engine.racepower import backtest as BT   # noqa: E402
+
+
+def test_V_BT_leave_one_out_excludes_the_case_and_time_travels():
+    import datetime as dt
+    cases = [{"idx": i, "date": f"2026-0{i}-15", "category": "trail", "label": str(i)} for i in (3, 5, 7)]
+    seen = []
+
+    def context(c):
+        seen.append((c["idx"], set(c["exclude"]), c["as_of"]))
+        return {}
+    rows = BT.run_harness(cases, context, lambda c, ctx: {"err_v2": 0.0, "segments": []})
+    assert len(rows) == 3
+    for (idx, exc, as_of), c in zip(seen, cases):
+        assert exc == {c["idx"]} and idx == c["idx"]
+        assert as_of == dt.date.fromisoformat(c["date"]) - dt.timedelta(days=1)
+
+
+def _synthetic_run_arrays(n=4000, v=3.0, p=250.0, grade=0.0):
+    t = np.arange(n, dtype=float)
+    d = t * v
+    z = 100 + d * grade
+    lat = 24.0 + d / (math.pi / 180 * CO.EARTH_R)
+    return {"t": t, "d": d, "z": z, "lat": lat, "lon": np.full(n, 121.0), "p": np.full(n, p), "kmh": np.full(n, v * 3.6)}
+
+
+def test_V_BT_evaluate_run_is_exact_when_the_model_is_the_truth():
+    """A synthetic run at RE 1.0 exactly (v = RE·P/W): the model with
+    RE(g) = 1.0 predicts the actual time → error ≈ 0."""
+    arr = _synthetic_run_arrays(v=250.0 / W)
+    inp = {"weight": {"value": W}, "training_conditions": {"altitude_m": 100.0, "temp_c": 15.0, "rh_pct": 60.0},
+           "re": {"road": {"median": 1.0}, "trail": {}},
+           "cp": {"sources": [{"id": "x", "cp": 280.0}], "default": "x", "activities": {"w_prime": 15000.0}},
+           "tte": {"value": 3000.0}, "riegel": {"k": -0.07, "valid": True}, "auto_prior": None}
+    r = BT.evaluate_run({"category": "road"}, {"arrays": arr, "inputs": inp, "grade_re": GM.GradeRE(1.0)})
+    assert abs(r["err_v2"]) < 0.002 and abs(r["err_v1"]) < 0.002
+    assert r["effort"]["f"] == approx(250.0 / DF.p_sus(r["t_act"], 280.0, 15000.0, 3000.0, -0.07), rel=1e-3)
+    assert all(abs(s["err"]) < 0.002 for s in r["segments"] if s["err"] is not None)
+
+
+def test_V_BT_summary_pass_rule():
+    def row(cat, err, seg_err=0.0):
+        return {"category": cat, "err_v2": err, "err_v1": err, "segments": [{"cls": "down", "err": seg_err}]}
+    few = BT.summarise([row("trail", 0.01)] * 3)
+    assert not few["trail"]["passed"] and any("樣本" in x for x in few["trail"]["reasons"])
+    ok = BT.summarise([row("trail", 0.01)] * 6)
+    assert ok["trail"]["passed"]
+    slow = BT.summarise([row("trail", 0.08)] * 6)
+    assert not slow["trail"]["passed"]
+    fastdown = BT.summarise([row("trail", 0.01, 0.07)] * 6)
+    assert not fastdown["trail"]["passed"]
+    assert not ok["effort"]["passed"]           # no A races
+    a = BT.summarise([{**row("road", 0.01), "priority_a": True, "effort": {"f": 1.0, "label": "極限"}}] * 5)
+    assert a["effort"]["passed"] and a["road"]["passed"]
+
+
+def test_V_BT_flags_follow_the_stored_result(tmp_path):
+    p = tmp_path / "bt.json"
+    assert BT.flags(p) == ({"road": False, "trail": False, "hike": False}, False)
+    BT.save({"validated": {"road": True, "trail": False, "hike": False}, "effort_validated": False}, p)
+    assert BT.flags(p) == ({"road": True, "trail": False, "hike": False}, False)
+
+
+# ---- T15: API -----------------------------------------------------------------------
+
+def fake_inputs():
+    return {
+        "today": "2026-09-30",
+        "weight": {"value": W, "source": "測試"},
+        "training_conditions": {"altitude_m": 100.0, "temp_c": 15.0, "rh_pct": 60.0},
+        "cp": {"sources": [{"id": "activities", "label": "活動", "cp": CP, "w_prime": WP}],
+               "default": "activities", "activities": {"w_prime": WP}},
+        "tte": {"value": TTE, "source": "預設"},
+        "re": {"road": {"median": RE0, "n": 10}, "road_cvi": {"median": 0.0},
+               "trail": {"fitted_run": {"median": 0.9, "n": 6}, "itra": {"median": 0.85, "n": 6},
+                         "scarf": {"median": 0.87, "n": 6}}},
+        "auto_prior": None, "priors": [],
+        "riegel": {"k": K, "valid": True, "longest_s": 4 * 3600, "invalid_reasons": []},
+        "hiking": {"eph": {"median": 3.0, "n": 8},
+                   "days": [{"ep_per_h": x, "days": 1, "gain_m": 800} for x in (2.4, 2.8, 3.0, 3.1, 3.4, 3.8)],
+                   "biggest": None},
+        "aet": {"aet": 150.0, "source": "測試"},
+    }
+
+
+@pytest.fixture()
+def client(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.api import racepower as RP
+    monkeypatch.setattr(RP, "inputs", lambda refresh=False: fake_inputs())
+    monkeypatch.setattr(RP, "_grade_models", lambda: {"grade_re": GM.GradeRE(RE0), "hike_speed": GM.fit_hike_speed([]),
+                                                      "moving_rows": []})
+    monkeypatch.setattr(BT, "flags", lambda path=None: ({"road": False, "trail": False, "hike": False}, False))
+    RP._courses.clear()
+    app = FastAPI()
+    app.include_router(RP.router)
+    return TestClient(app)
+
+
+def test_T15_predict_v1_is_unchanged(client):
+    r = client.post("/api/v1/racepower/predict", json={"type": "road", "distance_km": 42.195})
+    assert r.status_code == 200
+    res = r.json()["result"]
+    assert res["time_s"] == approx(10766.75, abs=0.05) and res["power"] == approx(274.330, abs=0.001)
+    assert set(r.json()) == {"type", "used", "env", "result", "tasks", "zones", "warnings"}
+
+
+def test_T15_plan_manual_road_auto_matches_v1(client):
+    r = client.post("/api/v1/racepower/plan", json={"type": "road", "distance_km": 42.195, "mode": "auto"})
+    assert r.status_code == 200, r.text
+    s = r.json()["summary"]
+    assert s["time_s"] == approx(10766.75, abs=0.5) and s["total_method"] == "v1"
+    assert r.json()["effort"]["badge"] == "推估"
+
+
+def test_T15_course_upload_then_plan_and_410(client):
+    tr = synthetic_track({"len": 12000, "z": lambda x: 300 + (x * 0.06 if x < 6000 else (12000 - x) * 0.06)})
+    data = GPX.write_gpx(tr).encode("utf-8")
+    up = client.post("/api/v1/racepower/course", files={"file": ("t.gpx", data, "application/gpx+xml")})
+    assert up.status_code == 200, up.text
+    cid = up.json()["course_id"]
+    assert len(up.json()["segments"]) == 2 and len(up.json()["profile"]["km"]) <= 1500
+    for mode, extra in (("auto", {}), ("time", {"target_time_s": 5400}), ("power", {"target_power": 250})):
+        r = client.post("/api/v1/racepower/plan", json={"type": "trail", "mode": mode, "course": {"course_id": cid},
+                                                        "strategy": {"kind": "positive", "amount": 0.02}, **extra})
+        assert r.status_code == 200, r.text
+        assert all(sg["badge"] == "推估" for sg in r.json()["segments"])
+    km = client.post("/api/v1/racepower/plan", json={"type": "trail", "course": {"course_id": cid, "split": "km"}})
+    assert len(km.json()["segments"]) == 12
+    gone = client.post("/api/v1/racepower/plan", json={"type": "trail", "course": {"course_id": "deadbeef"}})
+    assert gone.status_code == 410
+    bad = client.post("/api/v1/racepower/course", files={"file": ("x.gpx", b"<!DOCTYPE x><gpx/>", "text/xml")})
+    assert bad.status_code == 400
+
+
+def test_T15_hike_plan_and_coros_preview(client):
+    tr = synthetic_track({"len": 16000, "z": lambda x: 2600 + (x * 0.1 if x < 8000 else (16000 - x) * 0.1)})
+    cid = client.post("/api/v1/racepower/course",
+                      files={"file": ("h.gpx", GPX.write_gpx(tr).encode(), "application/gpx+xml")}).json()["course_id"]
+    r = client.post("/api/v1/racepower/plan", json={"type": "baiyue", "course": {"course_id": cid},
+                                                    "day_splits_km": [8], "acclimatisation": "partial",
+                                                    "start_time": "05:30"})
+    assert r.status_code == 200, r.text
+    j = r.json()
+    assert len(j["days"]) == 2 and j["summary"]["acclimatisation"] == "partial"
+    assert any("部分適應" in w for w in j["warnings"])
+    ex = client.post("/api/v1/racepower/export/coros", json={"type": "trail", "course": {"course_id": cid}})
+    assert ex.status_code == 200, ex.text
+    exs = ex.json()["payload"]["exercises"]
+    assert ex.json()["pushed"] is None and len(exs) >= 2
+    assert all(e["intensityType"] == 6 and e["targetType"] == 2 for e in exs)
+    assert "30 秒" in ex.json()["payload"]["overview"]
+
+
+def test_coros_push_is_mocked_and_schedules_future_dates():
+    """Never touches the network: the existing Training Hub client against
+    test_coros_workouts' FakeHub through httpx.MockTransport."""
+    import httpx
+    from backend.api import racepower as RP
+    from backend.sync import http
+    from backend.tests.test_coros_workouts import FakeHub, make_db, run
+    from backend.sync import coros_workouts as CW
+    steps = [CW.Step(CW.EX_TRAIN, 600, ("power", 240, 260), "0.0-2.0k 平")]
+    payload = CW.build_program("TRC 比賽配速", steps, CW.Thresholds(cp=300))
+    db = run(make_db())
+    fake = FakeHub()
+    with http.use_transport(httpx.MockTransport(fake)):
+        out = run(RP.push_to_coros(db, payload, "2099-01-01"))
+    assert out["program_id"] in fake.programs and out["scheduled"]
+    assert fake.adds() == 1 and [e["happenDay"] for e in fake.entities] == [20990101]
+    fake2 = FakeHub()
+    with http.use_transport(httpx.MockTransport(fake2)):
+        out2 = run(RP.push_to_coros(run(make_db()), payload, "2000-01-01"))
+    assert out2["scheduled"] is None and fake2.entities == [] and fake2.adds() == 1
