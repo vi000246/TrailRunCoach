@@ -20,6 +20,10 @@ class FakeWorkout:
     tags: list = field(default_factory=list)
     metrics: dict = field(default_factory=dict)
     channels: dict = field(default_factory=dict)  # name -> list of values (incl. elapsedtime)
+    title: str = ""
+    description: str = ""
+    notes: str = ""
+    sport_type: Optional[str] = None               # e.g. "Trail Running"; default = sport
 
 
 class FakeDataset:
@@ -37,12 +41,14 @@ class FakeDataset:
         self._files: dict[int, Wko4File] = {}
         self.workouts: list[Workout] = []
         for i, fw in enumerate(sorted(workouts, key=lambda w: w.start)):
-            entry = SimpleNamespace(start=fw.start, file=f"fake/{i}.wko4", ftp=None, metrics={}, record=None)
+            entry = SimpleNamespace(start=fw.start, file=f"fake/{i}.wko4", ftp=None, metrics={}, record=None,
+                                    sport=fw.sport_type, title=fw.title,
+                                    description=fw.description, notes=fw.notes)
             m = {"tss": None, "if": None, "distance": None, "climbing": None, "duration": None,
                  "movingduration": None, "plannedtss": None}
             m.update(fw.metrics)
             w = Workout(idx=i, entry=entry, day=date_to_day(fw.start), sport=fw.sport,
-                        sport_type=fw.sport, tags=[t.lower() for t in fw.tags], metrics=m)
+                        sport_type=(fw.sport_type or fw.sport).lower(), tags=[t.lower() for t in fw.tags], metrics=m)
             self.workouts.append(w)
             if fw.channels:
                 chans = {name: Channel(name, list(vals), 1.0) for name, vals in fw.channels.items()}

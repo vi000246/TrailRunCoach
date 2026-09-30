@@ -62,12 +62,17 @@ def activity_kind(w) -> Optional[str]:
 # peaks
 # ---------------------------------------------------------------------------
 
-def load_peaks(path: Path = PEAKS_PATH) -> list[dict]:
+def load_peaks(path: Path = PEAKS_PATH, baiyue_only: bool = True) -> list[dict]:
+    """Peaks with coordinates from baiyue.json (built by
+    backend/scripts/build_baiyue.py). Summit detection uses the 百岳 only —
+    the page lists them as 已登百岳; the file also carries 小百岳
+    (`baiyue: false`) for callers that want them."""
     try:
         data = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError):
         return []
-    return [p for p in data.get("peaks", []) if p.get("lat") is not None and p.get("lon") is not None]
+    return [p for p in data.get("peaks", []) if p.get("lat") is not None and p.get("lon") is not None
+            and (not baiyue_only or p.get("baiyue", True))]
 
 
 def _metres(lat1, lon1, lat2, lon2) -> float:

@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>訓練總覽</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+  --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+  --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line); padding: 7px 16px;
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; position: sticky; top: var(--shell-top, 0); z-index: 10; }
+header h1 { font-size: 16px; margin: 0 4px 0 0; }
+.jump { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.jump a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 3px 11px; border-radius: 14px; white-space: nowrap; }
+.jump a:hover { background: var(--soft); color: var(--text); }
+.jump a.on { background: var(--text); color: var(--bg); }
+[data-sec] { scroll-margin-top: calc(var(--shell-top, 0px) + 56px); }
+.tip { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
+  font-size: 11px; font-weight: 600; color: var(--muted); cursor: help; font-style: normal; vertical-align: 1px; }
+.tip { position: relative; }
+.tip.open::after { content: attr(title); position: absolute; top: 22px; left: -10px; z-index: 20; width: max-content; max-width: min(280px, 80vw);
+  white-space: pre-line; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 10px; font-size: 12px; font-weight: 400; line-height: 1.5; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
+details.src { margin-top: 3px; }
+details.src summary { font-size: 11.5px; color: var(--faint); }
+details.src p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+@media (max-width: 699px) { header { padding: 7px 10px; } header h1 { display: none; } #asof { display: none; }
+  main { padding: 10px 10px 30px; } section { padding: 12px; } }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+main { max-width: 1240px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+h2 { font-size: 15px; margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+h2 .meta { font-weight: 400; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 14px; }
+@media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+.hero { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; }
+.hero .headline { font-size: 17px; font-weight: 600; flex: 1 1 380px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; border: 1px solid var(--line);
+  border-radius: 14px; padding: 2px 10px; color: var(--muted); white-space: nowrap; }
+.lvl { font-weight: 600; }
+.lvl.good { color: var(--good); } .lvl.watch { color: var(--watch); } .lvl.bad { color: var(--bad); } .lvl.info, .lvl.na { color: var(--info); }
+.ico::before { font-weight: 700; margin-right: 4px; }
+.ico.good::before { content: "✓"; } .ico.watch::before { content: "!"; } .ico.bad::before { content: "✕"; }
+.ico.info::before { content: "i"; } .ico.na::before { content: "–"; }
+ol.actions { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+ol.actions b { display: block; }
+ol.actions .meta { display: block; }
+.prog { display: grid; gap: 8px; margin: 6px 0 12px; }
+.prog .row { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
+.track { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; position: relative; }
+.track i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 5px; }
+.num { font-variant-numeric: tabular-nums; }
+.why { margin: 0 0 10px; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.days { display: grid; gap: 6px; }
+.day { display: grid; grid-template-columns: 58px 1fr; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+.day .d { font-size: 12.5px; color: var(--muted); }
+.day.today .d { color: var(--accent); font-weight: 600; }
+.sess { padding: 2px 0; }
+.sess .t { font-weight: 600; }
+.sess.done .t { color: var(--good); }
+.sess.done .t::before { content: "✓ "; }
+.sess .x { font-size: 12.5px; color: var(--muted); }
+.rest { color: var(--faint); font-size: 12.5px; }
+.loadbox { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13px; margin-top: 10px; }
+.loadbox b { font-variant-numeric: tabular-nums; }
+.notes { margin: 10px 0 0; padding-left: 18px; font-size: 12.5px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.seg { display: inline-flex; }
+.seg button, .btn { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  padding: 3px 10px; cursor: pointer; }
+.seg button { margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn { border-radius: 6px; }
+.plot { width: 100%; height: 320px; }
+.plot.small { height: 150px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); margin: 2px 0 6px; }
+.legend i { display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.legend i.ln { height: 3px; vertical-align: 3px; }
+.legend i.dash { height: 0; border-top: 2px dashed; background: none !important; vertical-align: 3px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 10px 0; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .s { font-size: 11.5px; color: var(--muted); }
+.up { color: var(--good); } .down { color: var(--bad); }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.split { display: flex; height: 18px; border-radius: 5px; overflow: hidden; gap: 2px; margin: 6px 0 4px; background: var(--panel); }
+.split i { display: block; height: 100%; }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin: 8px 0; }
+.keys div { font-size: 13px; }
+.ind { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; border-left-width: 4px; }
+.card.good { border-left-color: var(--good); } .card.watch { border-left-color: var(--watch); }
+.card.bad { border-left-color: var(--bad); } .card.info, .card.na { border-left-color: var(--line); }
+.card .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .v { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.card .verdict { font-size: 13px; margin-top: 2px; }
+.card .why, .card .src { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.card .act { font-size: 12.5px; margin-top: 4px; }
+.card svg { display: block; width: 100%; height: 34px; margin-top: 4px; }
+.loading { color: var(--muted); padding: 24px 0; text-align: center; }
+.err { color: var(--bad); }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="home"></script>
+<header>
+  <h1>首頁</h1>
+  <nav class="jump" id="jump" aria-label="本頁段落">
+    <a href="#s-status">狀況</a><a href="#s-week">本週</a><a href="#s-pmc">PMC</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a>
+  </nav>
+  <span class="spacer" style="flex:1"></span>
+  <span class="meta" id="asof"></span>
+</header>
+<main>
+  <div data-sec id="s-status" style="display:grid;gap:14px">
+  <section id="hero"><div class="loading">計算訓練狀況中…</div></section>
+
+  <div class="two">
+    <section>
+      <h2>還缺什麼 <span class="meta">依周期排優先順序</span></h2>
+      <div id="actions"><div class="loading">…</div></div>
+    </section>
+    <section data-sec id="s-week">
+      <h2>本週該做什麼 <span class="meta" id="wk-sub"></span></h2>
+      <div id="week"><div class="loading">排本週課表中…</div></div>
+    </section>
+  </div>
+  </div>
+
+  <section data-sec id="s-pmc">
+    <h2>PMC 體能・疲勞・狀況 <span class="meta">全部運動合計</span>
+      <i class="tip" title="CTL = 42 天平均負荷（體能）&#10;ATL = 7 天（疲勞）&#10;TSB = 昨天的 CTL − ATL（狀況）&#10;虛線 = 照本週課表的預估">i</i></h2>
+    <div class="toolbar">
+      <div class="seg" id="pmc-range">
+        <button data-d="90">90 天</button><button data-d="180">半年</button><button data-d="365">1 年</button><button data-d="730">2 年</button>
+      </div>
+    </div>
+    <div class="legend" id="pmc-legend"></div>
+    <div class="plot" id="pmc"></div>
+    <div class="meta" style="margin:6px 0 2px">每日 TSS</div>
+    <div class="plot small" id="pmc-tss"></div>
+    <details><summary>怎麼看</summary>
+      <p class="meta">CTL = 42 天平均負荷（體能），ATL = 7 天（疲勞），TSB = 昨天的 CTL − ATL（狀況）。虛線 = 照本週課表的預估。</p>
+      <p class="meta">TSB：−30～−10：有效訓練區；−10～+5：維持；+5～+25：新鮮（賽前 A 賽 +10～+20）；&lt; −30：過度訓練風險；&gt; +25：體能在流失（TrainingPeaks / Friel；Palladino 的 A/B/C 賽 TSB）。沒有任何登山越野賽公開過「最佳 TSB」，只當方向參考。</p>
+    </details>
+  </section>
+
+  <section data-sec id="s-log">
+    <h2>做了什麼 <span class="meta" id="per-sub"></span></h2>
+    <div class="toolbar">
+      <div class="seg" id="unit"><button data-u="week">週</button><button data-u="month">月</button><button data-u="year">年</button></div>
+      <button class="btn" id="prev" aria-label="上一期">◀</button>
+      <b id="per-label" class="num"></b>
+      <button class="btn" id="next" aria-label="下一期">▶</button>
+      <button class="btn" id="now">回到現在</button>
+      <span class="meta faint">點長條切換期間</span>
+    </div>
+    <div class="legend" id="cat-legend"></div>
+    <div class="plot" id="trend"></div>
+    <div class="meta" style="margin:6px 0 2px">爬升（m）</div>
+    <div class="plot small" id="trend-climb"></div>
+    <div id="period"><div class="loading">…</div></div>
+  </section>
+
+  <section data-sec id="s-ind">
+    <h2>指標 <span class="meta" id="ind-sub"></span></h2>
+    <div class="ind" id="ind"><div class="loading">…</div></div>
+  </section>
+</main>
+<script>
+const API = "/api/v1/overview";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`); return r.json(); }
+const ls = { get(k, d) { try { const v = localStorage.getItem("overview." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("overview." + k, JSON.stringify(v)); } catch {} } };
+
+// ---- formatting (units: h:mm, km 1 dec, m 0 dec, TSS 0 dec) ----
+const hm = (s) => { if (s == null) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+const hrs = (h) => h == null ? "–" : (h >= 10 ? h.toFixed(0) : h.toFixed(1)) + " h";
+const km = (v) => v == null ? "–" : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(1)) + " km";
+const m0 = (v) => v == null ? "–" : Math.round(v).toLocaleString() + " m";
+const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
+const sgn = (v, f = n0) => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "±") + f(Math.abs(v));
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
+const WD = "一二三四五六日";
+const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const wd = (iso) => WD[(new Date(iso + "T00:00:00").getDay() + 6) % 7];
+const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s3", bike: "--s4", strength: "--s5", walk: "--s6", other: "--s7" };
+const catColor = (k) => css(CAT_VAR[k] || "--s7");
+const LEVEL = { good: "良好", watch: "注意", bad: "要處理", info: "參考", na: "資料不足" };
+
+const charts = {};
+function chart(id) { if (!charts[id]) { charts[id] = echarts.init($(id)); new ResizeObserver(() => charts[id].resize()).observe($(id)); } return charts[id]; }
+const axisStyle = () => ({ axisLabel: { color: css("--muted"), fontSize: 11 }, axisLine: { lineStyle: { color: css("--line") } },
+  splitLine: { lineStyle: { color: css("--line") } }, axisTick: { show: false } });
+
+let STATUS = null, PLAN = null;
+
+// ---------------- status: hero, actions, indicators ----------------
+async function loadStatus() {
+  const s = STATUS = await j(`${API}/status`);
+  $("asof").textContent = `資料到 ${s.today}`;
+  const p = s.phase, g = s.goals;
+  const c = s.counts;
+  $("hero").innerHTML = `<div class="hero">
+    <div class="headline">${esc(s.headline)}</div>
+    <span class="chip">周期 <b>${esc(p ? p.label : "未設定")}</b>${p ? `<span class="faint">${md(p.start)}–${md(p.end)}</span>` : ""}</span>
+    <span class="chip">${g.next_a ? `下一場 A 賽事倒數 <b>${g.days_to_next_a}</b> 天` : `還沒有目標賽事 · <a href="/api/v1/plan/page">去新增</a>`}</span>
+    <span class="chip"><span class="lvl bad ico bad">${c.bad}</span><span class="lvl watch ico watch">${c.watch}</span><span class="lvl good ico good">${c.good}</span></span>
+  </div>${p ? `<div class="meta" style="margin-top:6px">這個周期的目標：${esc(p.goal)}</div>` : ""}`;
+  $("actions").innerHTML = s.actions.length ? `<ol class="actions">${s.actions.map((a) =>
+    `<li><b>${esc(a.title)}</b><span>${esc(a.detail)}</span><span class="meta">${esc(a.source)}</span></li>`).join("")}</ol>`
+    : `<p class="meta">沒有需要處理的項目。</p>`;
+  const order = { bad: 0, watch: 1, good: 2, info: 3, na: 4 };
+  const inds = [...s.indicators].sort((a, b) => order[a.level] - order[b.level]);
+  $("ind-sub").textContent = `${inds.length} 項指標，全部運動一起算`;
+  $("ind").innerHTML = inds.map((i) => `<div class="card ${i.level}">
+    <div class="top"><span>${esc(i.title)}</span><span class="lvl ${i.level} ico ${i.level}" style="font-size:12px">${LEVEL[i.level]}</span></div>
+    <div class="v">${esc(i.text)}</div>
+    <div class="verdict">${esc(i.verdict)}</div>
+    ${i.spark && i.spark.filter((p) => p[1] != null).length > 2 ? spark(i.spark, i.level) : ""}
+    ${i.why ? `<div class="why">${esc(i.why)}</div>` : ""}
+    ${i.action ? `<div class="act">→ ${esc(i.action)}</div>` : ""}
+    ${i.source ? `<details class="src"><summary>來源</summary><p>${esc(i.source)}</p></details>` : ""}
+  </div>`).join("");
+}
+
+function spark(pts, level) {
+  const P = pts.filter((p) => p[1] != null);
+  const xs = P.map((p) => new Date(p[0]).getTime()), ys = P.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const X = (x) => x1 === x0 ? 0 : (x - x0) / (x1 - x0) * 196 + 2, Y = (y) => y1 === y0 ? 17 : 32 - (y - y0) / (y1 - y0) * 30;
+  const col = level === "bad" ? "var(--bad)" : level === "watch" ? "var(--watch)" : level === "good" ? "var(--good)" : "var(--faint)";
+  return `<svg viewBox="0 0 200 34" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="${col}" stroke-width="1.6"
+    vector-effect="non-scaling-stroke" points="${P.map((p, i) => `${X(xs[i]).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join(" ")}"/></svg>`;
+}
+
+// ---------------- this week ----------------
+async function loadWeek() {
+  const w = PLAN = await j(`${API}/weekplan`);
+  $("wk-sub").textContent = `${md(w.week.start)}–${md(w.week.end)} · ${w.mode_label}`;
+  const T = w.target, D = w.done;
+  const bar = (label, done, tgt, fmt) => `<div class="row"><span>${label}</span>
+    <div class="track" role="img" aria-label="${label} ${fmt(done)} / ${fmt(tgt)}"><i style="width:${Math.min(100, tgt > 0 ? done / tgt * 100 : 0).toFixed(1)}%"></i></div>
+    <span class="num">${fmt(done)} / ${fmt(tgt)}</span></div>`;
+  const byDay = {};
+  for (const s of w.sessions) if (s.day) (byDay[s.day] ||= []).push(s);
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(w.week.start + "T00:00:00"); d.setDate(d.getDate() + i);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const acts = D.activities.filter((a) => a.date === iso);
+    const ss = byDay[iso] || [];
+    const past = iso < w.week.today;
+    const extra = acts.filter((a) => !ss.some((s) => s.done_by && s.done_by.index === a.index));
+    days.push(`<div class="day ${iso === w.week.today ? "today" : ""}"><div class="d">週${WD[i]} ${md(iso)}${iso === w.week.today ? "<br>今天" : ""}</div><div>
+      ${ss.map((s) => `<div class="sess ${s.done ? "done" : ""}"><span class="t">${esc(s.title)}</span>
+        <span class="x">${s.done ? `${esc(s.done_by.category_label)} ${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` :
+          `${s.minutes ? s.minutes + " 分鐘" : ""}${s.target ? " · " + esc(s.target) : ""}`}</span>
+        ${!s.done && s.detail ? `<div class="x">${esc(s.detail)}</div>` : ""}</div>`).join("")}
+      ${extra.map((a) => `<div class="sess done"><span class="t">${esc(a.category_label)}</span> <span class="x">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></div>`).join("")}
+      ${!ss.length && !extra.length ? `<span class="rest">${past ? "沒有活動" : "休息"}</span>` : ""}
+    </div></div>`);
+  }
+  const L = w.load;
+  $("week").innerHTML = `<div class="prog">
+      ${bar("移動時間", D.hours, T.hours, hrs)}
+      ${bar("TSS", D.tss, T.tss, n0)}
+    </div>
+    <ul class="why">${w.why.map((x) => `<li>${esc(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
+    <div class="days">${days.join("")}</div>
+    <div class="loadbox">
+      <span>CTL <b>${n0(L.ctl_week_start)}</b> → 週日 <b>${n0(L.ctl_end)}</b>（${sgn(L.ramp, (v) => v.toFixed(1))}/週）</span>
+      <span>下週一 TSB <b>${sgn(L.tsb_next)}</b></span>
+      <span class="meta">門檻：CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· AeT ${n0(w.thresholds.aet)} bpm（${esc(w.thresholds.aet_source)}）</span>
+    </div>
+    ${w.notes.length ? `<ul class="notes">${w.notes.map((n) => `<li class="lvl ${n.level}" style="font-weight:400">${esc(n.text)}</li>`).join("")}</ul>` : ""}
+    <details style="margin-top:8px"><summary>依據</summary><ul class="why">${w.rules.map((r) => `<li>${esc(r)}</li>`).join("")}
+      <li>長時間的那天排在你平常最常做長課的星期${esc(w.long_weekday)}（近 12 週），不能的話排最後一天</li></ul></details>`;
+}
+
+// ---------------- PMC ----------------
+async function loadPmc() {
+  const days = ls.get("pmcDays", 180);
+  document.querySelectorAll("#pmc-range button").forEach((b) => b.classList.toggle("on", +b.dataset.d === days));
+  const end = STATUS ? STATUS.today : new Date().toISOString().slice(0, 10);
+  const b = new Date(end + "T00:00:00"); b.setDate(b.getDate() - days + 1);
+  const res = await j(`${API}/pmc?begin=${b.toISOString().slice(0, 10)}&end=${end}`);
+  const S = res.series;
+  const proj = PLAN ? PLAN.projection : [];
+  const last = S[S.length - 1];
+  const P = (k) => proj.length ? [[last.date, last[k]], ...proj.map((p) => [p.date, p[k]])] : [];
+  const col = { ctl: css("--s1"), atl: css("--s2"), tsb: css("--s3") };
+  $("pmc-legend").innerHTML = `<span><i class="ln" style="background:${col.ctl}"></i>CTL 體能 ${n0(last.ctl)}</span>
+    <span><i class="ln" style="background:${col.atl}"></i>ATL 疲勞 ${n0(last.atl)}</span>
+    <span><i class="ln" style="background:${col.tsb}"></i>TSB 狀況 ${sgn(last.tsb)}</span>
+    ${proj.length ? `<span><i class="dash" style="border-color:${css("--muted")}"></i>本週課表預估</span>` : ""}`;
+  const line = (name, k, width) => ({ name, type: "line", data: S.map((r) => [r.date, r[k]]), showSymbol: false,
+    lineStyle: { width, color: col[k] }, itemStyle: { color: col[k] }, emphasis: { disabled: true } });
+  const dash = (name, k) => ({ name: name + "（預估）", type: "line", data: P(k), showSymbol: false,
+    lineStyle: { width: 2, type: "dashed", color: col[k] }, itemStyle: { color: col[k] } });
+  const xmax = proj.length ? proj[proj.length - 1].date : end;
+  const band = (lo, hi, c) => [{ yAxis: lo, itemStyle: { color: c } }, { yAxis: hi }];
+  const tip = { trigger: "axis", backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 },
+    axisPointer: { type: "line", lineStyle: { color: css("--faint") } } };
+  chart("pmc").setOption({
+    animation: false, grid: { left: 44, right: 16, top: 12, bottom: 24 },
+    tooltip: { ...tip, formatter: (ps) => {
+      const d = ps[0].axisValueLabel.slice(0, 10), row = S.find((r) => r.date === d) || proj.find((r) => r.date === d);
+      if (!row) return d;
+      const isP = !S.find((r) => r.date === d);
+      return `<b>${d}${isP ? "（預估）" : ""}</b><br>CTL ${n0(row.ctl)}　ATL ${n0(row.atl)}　TSB ${sgn(row.tsb)}<br>當天 TSS ${n0(row.tss)}`; } },
+    xAxis: { type: "time", max: xmax, ...axisStyle(), splitLine: { show: false } },
+    yAxis: { type: "value", name: "TSS/天", nameTextStyle: { color: css("--muted"), fontSize: 11 }, ...axisStyle(),
+      axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v) } },
+    series: [
+      { ...line("TSB", "tsb", 1.5), markArea: { silent: true, data: [band(-30, -10, "rgba(27,175,122,.08)"), band(5, 25, "rgba(42,120,214,.07)")] },
+        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: css("--faint"), width: 1 }, data: [{ yAxis: 0 }] } },
+      line("ATL", "atl", 1.5), line("CTL", "ctl", 2.5),
+      dash("TSB", "tsb"), dash("ATL", "atl"), dash("CTL", "ctl"),
+    ],
+  }, true);
+  chart("pmc-tss").setOption({
+    animation: false, grid: { left: 44, right: 16, top: 8, bottom: 22 },
+    tooltip: { ...tip, formatter: (ps) => `<b>${ps[0].axisValueLabel.slice(0, 10)}</b><br>TSS ${n0(ps[0].value[1])}` },
+    xAxis: { type: "time", max: xmax, ...axisStyle(), splitLine: { show: false } },
+    yAxis: { type: "value", min: 0, ...axisStyle(), splitNumber: 2, axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v) } },
+    series: [{ type: "bar", data: S.filter((r) => r.tss > 0).map((r) => [r.date, r.tss]), barMaxWidth: 4, itemStyle: { color: css("--bar"), borderRadius: [2, 2, 0, 0] } },
+      { type: "bar", data: proj.filter((r) => r.tss > 0).map((r) => [r.date, r.tss]), barMaxWidth: 4,
+        itemStyle: { color: "transparent", borderColor: css("--muted"), borderType: "dashed", borderWidth: 1 } }],
+  }, true);
+}
+
+// ---------------- periods ----------------
+const PS = { unit: ls.get("unit", "week"), anchor: null, data: null };
+const N = { week: 16, month: 12, year: 6 };
+async function loadPeriod() {
+  document.querySelectorAll("#unit button").forEach((b) => b.classList.toggle("on", b.dataset.u === PS.unit));
+  const q = `unit=${PS.unit}&n=${N[PS.unit]}${PS.anchor ? "&anchor=" + PS.anchor : ""}`;
+  $("period").innerHTML = `<div class="loading">計算中…</div>`;
+  const R = PS.data = await j(`${API}/summary?${q}`);
+  const B = R.buckets, C = R.current;
+  $("per-label").textContent = C.label;
+  const cats = Object.keys(R.categories).filter((k) => B.some((b) => b.by_category[k]));
+  $("cat-legend").innerHTML = cats.map((k) => `<span><i style="background:${catColor(k)}"></i>${esc(R.categories[k].label)}</span>`).join("");
+  const sel = B.length - 1;
+  const hourSeries = cats.map((k) => ({
+    name: R.categories[k].label, type: "bar", stack: "h", barMaxWidth: 28,
+    data: B.map((b, i) => ({ value: (b.by_category[k]?.moving_s || 0) / 3600, itemStyle: { opacity: i === sel ? 1 : 0.55 } })),
+    itemStyle: { color: catColor(k), borderColor: css("--panel"), borderWidth: 1 },
+  }));
+  const tip = { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 } };
+  chart("trend").setOption({
+    animation: false, grid: { left: 44, right: 12, top: 12, bottom: 24 },
+    tooltip: { ...tip, formatter: (ps) => { const b = B[ps[0].dataIndex];
+      return `<b>${b.label}</b>　${hrs(b.moving_s / 3600)} · ${b.sessions} 次<br>` +
+        ps.filter((p) => p.value > 0).map((p) => `${p.marker}${p.seriesName} ${hrs(p.value)}`).join("<br>"); } },
+    xAxis: { type: "category", data: B.map((b) => b.label), ...axisStyle(), splitLine: { show: false } },
+    yAxis: { type: "value", name: "移動時間", nameTextStyle: { color: css("--muted"), fontSize: 11 }, ...axisStyle(),
+      axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => v + " h" } },
+    series: hourSeries,
+  }, true);
+  chart("trend-climb").setOption({
+    animation: false, grid: { left: 44, right: 12, top: 8, bottom: 22 },
+    tooltip: { ...tip, formatter: (ps) => `<b>${B[ps[0].dataIndex].label}</b><br>爬升 ${m0(ps[0].value)}` },
+    xAxis: { type: "category", data: B.map((b) => b.label), ...axisStyle(), splitLine: { show: false } },
+    yAxis: { type: "value", min: 0, splitNumber: 2, ...axisStyle(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v) } },
+    series: [{ type: "bar", barMaxWidth: 28, data: B.map((b, i) => ({ value: b.climbing_m, itemStyle: { opacity: i === sel ? 1 : 0.55 } })),
+      itemStyle: { color: css("--s3"), borderRadius: [3, 3, 0, 0] } }],
+  }, true);
+  for (const id of ["trend", "trend-climb"]) {
+    chart(id).off("click");
+    chart(id).on("click", (e) => { PS.anchor = B[e.dataIndex].start; loadPeriod(); });
+  }
+  renderPeriod(R);
+}
+
+function delta(cur, ref, fmt) {
+  if (ref == null) return "";
+  const d = cur - ref;
+  if (Math.abs(d) < 1e-9) return `<span class="faint">持平</span>`;
+  return `<span class="${d > 0 ? "up" : "down"}">${sgn(d, fmt)}</span>`;
+}
+
+function renderPeriod(R) {
+  const C = R.current, P = C.vs_prev, T = C.typical, unitWord = { week: "週", month: "月", year: "年" }[R.unit];
+  $("per-sub").textContent = `${C.start} ～ ${C.end}${C.elapsed_share != null ? `（進行中，已過 ${pct(C.elapsed_share)}）` : ""}`;
+  const tile = (k, v, key, fmt) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>
+    <div class="s">${P ? `比上${unitWord} ${delta(C[key], C[key] - P[key], fmt)}` : ""}${T ? `　平常 ${fmt(T[key])}` : ""}</div></div>`;
+  const I = C.intensity;
+  const cats = Object.entries(C.by_category).sort((a, b) => b[1].moving_s - a[1].moving_s);
+  const k = (r, label, val) => r ? `<div><span class="meta">${label}</span><br><b>${esc(r.date)}</b> ${esc(r.category_label)} · ${val}</div>` : "";
+  $("period").innerHTML = `
+    <div class="tiles">
+      ${tile("移動時間", hrs(C.moving_s / 3600), "moving_s", (v) => hrs(v / 3600))}
+      ${tile("次數", C.sessions, "sessions", (v) => Math.round(v * 10) / 10 + " 次")}
+      ${tile("距離", km(C.distance_km), "distance_km", km)}
+      ${tile("爬升", m0(C.climbing_m), "climbing_m", m0)}
+      ${tile("TSS", n0(C.tss), "tss", n0)}
+      <div class="tile"><div class="k">努力距離 EP</div><div class="v">${km(C.ep_km)}</div><div class="s">km + 爬升/100（跑步、登山）</div></div>
+      <div class="tile"><div class="k">有練的天數</div><div class="v">${C.days}</div><div class="s">下降 ${m0(C.descending_m)}</div></div>
+    </div>
+    ${I.total > 0 ? `<div><b style="font-size:13px">強度分配</b> <span class="meta">目標：低 ≥ 75–80%</span>
+      <i class="tip" title="耐力活動的移動時間，依心率：低 < AeT、中 AeT–LTHR、高 ≥ LTHR（目標：低 ≥ 75–80%，Seiler）">i</i>
+      <div class="split" role="img" aria-label="低 ${pct(I.low / I.total)}，中 ${pct(I.mid / I.total)}，高 ${pct(I.high / I.total)}">
+        <i style="width:${I.low / I.total * 100}%;background:var(--lo)"></i><i style="width:${I.mid / I.total * 100}%;background:var(--mid)"></i><i style="width:${I.high / I.total * 100}%;background:var(--hi)"></i></div>
+      <div class="legend"><span><i style="background:var(--lo)"></i>低 ${pct(I.low / I.total)} · ${hm(I.low)}</span>
+        <span><i style="background:var(--mid)"></i>中 ${pct(I.mid / I.total)} · ${hm(I.mid)}</span>
+        <span><i style="background:var(--hi)"></i>高 ${pct(I.high / I.total)} · ${hm(I.high)}</span></div></div>` : ""}
+    <div class="keys">
+      ${k(C.longest, "最長一次", hm(C.longest?.moving_s))}
+      ${k(C.biggest_climb, "爬最多", m0(C.biggest_climb?.climbing_m))}
+      ${k(C.hardest, "負荷最大", "TSS " + n0(C.hardest?.tss))}
+    </div>
+    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">次數</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">TSS</th></tr></thead>
+      <tbody>${cats.map(([key, v]) => `<tr><td><span class="dot" style="background:${catColor(key)}"></span>${esc(R.categories[key].label)}</td>
+        <td class="n">${v.sessions}</td><td class="n">${hm(v.moving_s)}</td><td class="n">${km(v.distance_km)}</td><td class="n">${m0(v.climbing_m)}</td><td class="n">${n0(v.tss)}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="meta">這段期間沒有活動。</p>`}
+    ${C.activities.length ? `<details style="margin-top:10px" ${R.unit === "week" ? "open" : ""}><summary>活動列表（${C.activities.length}）</summary>
+      <div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>類型</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">TSS</th></tr></thead>
+      <tbody>${C.activities.map((a) => `<tr><td>${esc(a.start.slice(0, 16).replace("T", " "))}</td><td><span class="dot" style="background:${catColor(a.category)}"></span>${esc(a.category_label)}</td>
+        <td class="meta">${esc(a.sport_type)}</td><td class="n">${hm(a.moving_s)}</td><td class="n">${a.distance_km ? km(a.distance_km) : "–"}</td>
+        <td class="n">${a.climbing_m ? m0(a.climbing_m) : "–"}</td><td class="n">${n0(a.tss)}</td></tr>`).join("")}</tbody></table></div></details>` : ""}`;
+}
+
+function shift(dir) {
+  const cur = new Date((PS.data?.current.start || STATUS.today) + "T00:00:00");
+  if (PS.unit === "week") cur.setDate(cur.getDate() + 7 * dir);
+  else if (PS.unit === "month") cur.setMonth(cur.getMonth() + dir);
+  else cur.setFullYear(cur.getFullYear() + dir);
+  PS.anchor = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+  loadPeriod();
+}
+
+// ---------------- wiring ----------------
+document.querySelectorAll("#unit button").forEach((b) => b.onclick = () => { PS.unit = b.dataset.u; PS.anchor = null; ls.set("unit", PS.unit); loadPeriod(); });
+document.querySelectorAll("#pmc-range button").forEach((b) => b.onclick = () => { ls.set("pmcDays", +b.dataset.d); loadPmc(); });
+$("prev").onclick = () => shift(-1);
+$("next").onclick = () => shift(1);
+$("now").onclick = () => { PS.anchor = null; loadPeriod(); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { loadPmc(); loadPeriod(); });
+// ⓘ tips: hover shows the title; tap/click pins it (touch has no hover)
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".tip");
+  document.querySelectorAll(".tip.open").forEach((x) => x !== t && x.classList.remove("open"));
+  if (t) t.classList.toggle("open");
+});
+// in-page nav: highlight the section being read
+(() => {
+  const links = [...document.querySelectorAll("#jump a")];
+  const secs = links.map((a) => document.querySelector(a.getAttribute("href")));
+  const mark = () => {
+    const top = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--shell-top")) || 0) + 70;
+    let k = 0;
+    secs.forEach((s, i) => { if (s && s.getBoundingClientRect().top <= top) k = i; });
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) k = secs.length - 1;
+    links.forEach((a, i) => a.classList.toggle("on", i === k));
+  };
+  addEventListener("scroll", mark, { passive: true });
+  addEventListener("resize", mark);
+  mark();
+})();
+
+const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：${esc(e.message)}</p>`; };
+(async () => {
+  if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
+  await loadStatus().catch(fail("hero"));
+  await Promise.all([loadWeek().catch(fail("week")), loadPeriod().catch(fail("period"))]);
+  loadPmc().catch(fail("pmc"));
+})();
+</script>
+</body>
+</html>

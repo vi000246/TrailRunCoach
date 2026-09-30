@@ -166,14 +166,16 @@ class Status:
         return {k: float(v) for k, v in r.items() if _n(v) is not None}
 
     def weekly_hours(self, weeks: int) -> list[tuple[dt.date, float]]:
-        """[(monday, hours)] for the last `weeks` weeks incl. the current one."""
+        """[(monday, moving hours)] for the last `weeks` weeks incl. the current
+        one. Moving time, not recorded time: a multi-day 百岳 file records the
+        nights too (one 51 h trip had about 7 h of walking)."""
         monday = self.today - dt.timedelta(days=self.today.weekday())
         out = []
         for i in range(weeks - 1, -1, -1):
             s = monday - dt.timedelta(weeks=i)
             e = s + dt.timedelta(days=6)
             lo, hi = date_to_day(s), date_to_day(e)
-            h = sum((self.m(w, "duration") or 0) for w in self.ds.workouts
+            h = sum((self.m(w, "movingduration") or self.m(w, "duration") or 0) for w in self.ds.workouts
                     if lo <= math.floor(w.day) <= hi) / 3600
             out.append((s, h))
         return out

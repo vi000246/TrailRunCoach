@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from dataclasses import asdict
 
+from backend.engine.wko5expr.chartfixes import FIXES_PATH, apply_fixes, load_fixes
 from backend.engine.wko5expr.config import CONFIG_PATH, MOUNTAIN_PRESET, EngineConfig
 from backend.engine.wko5expr.corrections import (
     CorrectionStore, detect_spikes, proposals_to_corrections,
@@ -74,9 +75,9 @@ def _dataset(parity: Optional[bool] = None) -> Dataset:
     return _dataset_cfg(json.dumps(cfg.to_dict(), sort_keys=True))
 
 
-@lru_cache(maxsize=8)
-def _wko5_views() -> dict[str, dict]:
-    """Views imported from WKO5 `.wko5chart` binaries — read-only, for parity."""
+@lru_cache(maxsize=1)
+def _wko5_views_raw() -> dict[str, dict]:
+    """Views imported from WKO5 `.wko5chart` binaries, exactly as WKO5 has them."""
     out = {}
     for p in sorted(VIEWS_DIR.rglob("*.wko5chart")):
         if ".venv" in p.parts or "node_modules" in p.parts:
@@ -87,14 +88,40 @@ def _wko5_views() -> dict[str, dict]:
     return out
 
 
-def _views() -> dict[str, dict]:
+@lru_cache(maxsize=4)
+def _wko5_views_fixed(fixes_mtime: float) -> dict[str, dict]:
+    """WKO5 views with views/wko5_fixes.json applied (keyed on the file's
+    mtime, so editing the fixes and reloading picks them up)."""
+    try:
+        fixes = load_fixes()
+    except (OSError, ValueError) as e:
+        print(f"[wko5views] ignoring {FIXES_PATH}: {e}")
+        return _wko5_views_raw()
+    return apply_fixes(_wko5_views_raw(), fixes)
+
+
+def _wko5_views(parity: bool = True) -> dict[str, dict]:
+    """Parity mode shows WKO5's charts untouched (side-by-side verification);
+    otherwise the chart-design fixes are applied."""
+    if parity:
+        return _wko5_views_raw()
+    try:
+        mtime = FIXES_PATH.stat().st_mtime
+    except OSError:
+        return _wko5_views_raw()
+    return _wko5_views_fixed(mtime)
+
+
+def _views(parity: Optional[bool] = None) -> dict[str, dict]:
     """WKO5 views plus the athlete's own JSON views. Custom views are NOT
     cached, so editing a file and reloading the page picks it up."""
-    return {**_wko5_views(), **load_custom_views()}
+    if parity is None:
+        parity = EngineConfig.load().parity
+    return {**_wko5_views(parity), **load_custom_views()}
 
 
-def _view(name: str) -> dict:
-    v = _views().get(name)
+def _view(name: str, parity: Optional[bool] = None) -> dict:
+    v = _views(parity).get(name)
     if v is None:
         raise HTTPException(404, f"view {name!r} not found")
     if v.get("error"):
@@ -139,17 +166,28 @@ def _range(ds: Dataset, begin: Optional[str], end: Optional[str]) -> tuple[float
 def chart(view: str, d: int, c: int, begin: Optional[str] = None, end: Optional[str] = None,
           sports: Optional[str] = None, workout: Optional[int] = None, parity: Optional[bool] = None):
     """Athlete charts use begin/end/sports (the RHE); workout charts need `workout`."""
-    v = _view(view)
+    ds = _dataset(parity)
+    v = _view(view, ds.config.parity)
     try:
         ch = v["dashboards"][d]["charts"][c]
     except IndexError:
         raise HTTPException(404, "chart not found")
-    ds = _dataset(parity)
     b, e = _range(ds, begin, end)
     if ch.get("kind") == "workout":
         if workout is None or not 0 <= workout < len(ds.workouts):
             raise HTTPException(400, "workout charts need ?workout=<index>")
         return render_chart(ch, ds, b, e, workout=ds.workouts[workout])
+    if ch.get("kind") in ("zones", "targets"):
+        import math
+        from backend.engine.zones import training_targets, zone_table
+        end_day = int(math.floor(e))
+        base = {"title": ch.get("title"), "description": ch.get("description"), "kind": ch["kind"]}
+        if ch["kind"] == "zones":
+            return {**base, "zones": zone_table(ds, ch["system"], end_day, ch.get("days", 30))}
+        from backend.engine.thresholds import estimate
+        est = estimate(ds, dt.date.today()) if not ds.config.parity else {}
+        return {**base, "targets": training_targets(
+            ds, end_day, (est.get("lthr") or {}).get("value"), (est.get("aethr") or {}).get("value"))}
     if ch.get("kind") != "athlete":
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     return render_chart(ch, ds, b, e, sports=_sports(sports))
@@ -272,3 +310,8 @@ def undo_correction(correction_id: str):
 @router.get("/viewer", include_in_schema=False)
 def viewer():
     return FileResponse(Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html")
+
+
+@router.get("/settings", include_in_schema=False)
+def settings_page():
+    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "settings.html")
