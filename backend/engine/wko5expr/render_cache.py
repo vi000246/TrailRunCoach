@@ -6,8 +6,9 @@ so editing the fixes or a custom view changes the key by itself), the request
 (date range, sports, workout, parity, data source), the data (the WKO5 athlete
 file that sync rewrites, the season plan / thresholds, approved corrections,
 the engine settings), today's date (charts use `today`) and the code that
-computes it (CACHE_VERSION plus the mtimes of the wko5expr / algorithms
-modules, so a code change never serves stale numbers).
+computes it (CACHE_VERSION plus the mtimes of the engine, file-reader and
+api/wko5views modules, _ENGINE_GLOBS, so a code change never serves stale
+numbers).
 
 All of that goes into one sha1 key, so there is nothing to invalidate
 explicitly: changed inputs simply miss. Entries live in memory (small LRU) and
@@ -37,10 +38,17 @@ MAX_DISK_BYTES = 300 * 1024 * 1024
 MAX_MEMORY_ENTRIES = 400
 MAX_CONCURRENT = 2
 
-# wko5expr/, algorithms/, and engine/*.py (zones, thresholds, planning feed the
-# zones / targets panels and the plan-driven series)
+# Everything that shapes a chart's JSON: wko5expr/, algorithms/, engine/*.py
+# (zones, thresholds, planning, workout_review feed the zones / targets / review
+# panels and the plan-driven series), panels/ (workout_review uses them), files/
+# (the WKO4 / WKO5 / FIT readers that turn files into channels) and
+# api/wko5views.py (the endpoint that assembles the dataset and the chart
+# JSON around render_chart).
 _ENGINE = Path(__file__).resolve().parents[1]
-_ENGINE_GLOBS = [(_ENGINE / "wko5expr", "*.py"), (_ENGINE / "algorithms", "*.py"), (_ENGINE, "*.py")]
+_BACKEND = _ENGINE.parent
+_ENGINE_GLOBS = [(_ENGINE / "wko5expr", "*.py"), (_ENGINE / "algorithms", "*.py"), (_ENGINE, "*.py"),
+                 (_ENGINE / "panels", "*.py"), (_BACKEND / "files", "*.py"),
+                 (_BACKEND / "api", "wko5views.py")]
 
 
 def _stamp(p: Path) -> list:
