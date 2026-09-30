@@ -68,6 +68,9 @@ DEFAULTS: dict[str, Any] = {
     "plan.prefs.terrain_long": "auto",        # road | trail | hike | auto
     "plan.prefs.terrain_quality": "any",      # flat | hill | any
     "plan.prefs.interval_target": "power",    # power | hr
+    # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
+    # on which nothing is planned; separate from the weekly plan.prefs.days
+    "plan.blackouts": [],
 }
 MAP_BASEMAPS = ("rudy", "google-terrain", "nlsc-emap", "nlsc-photo", "osm")
 MAP_OVERLAYS = ("contour", "google-roads", "nlsc-roads")
@@ -153,6 +156,9 @@ def validate(key: str, value: Any) -> None:
         raise ValueError(f"{key} must be true/false")
     if key.startswith("plan.prefs."):
         _validate_pref(key, value)
+    if key == "plan.blackouts":
+        from backend.engine.blackouts import validate as validate_blackouts
+        validate_blackouts(value)
 
 
 def _validate_pref(key: str, value: Any) -> None:
