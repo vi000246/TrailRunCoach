@@ -42,7 +42,7 @@ ENDURANCE = {"road", "trail", "hike", "bike"}
 REST_MODES = {"recovery_week", "recovery", "taper", "event", "transition"}
 HARD_KINDS = {"long", "quality", "test"}
 FIELDS = ("day", "kind", "title", "minutes", "target", "detail", "source", "tss", "terrain", "distance_km",
-          "climb_m")
+          "climb_m", "protocol")
 SHOWN = ("day", "kind", "title", "minutes", "target", "detail", "terrain")
 
 
