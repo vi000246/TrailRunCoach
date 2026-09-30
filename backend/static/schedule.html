@@ -301,6 +301,7 @@ dialog.sd label.chk { display: flex; align-items: center; gap: 6px; color: var(-
 .eq-sum .up { color: var(--watch); } .eq-sum .down { color: var(--accent); } .eq-sum .same { color: var(--good); }
 .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 7px; border: 1px solid currentColor; vertical-align: 1px; }
 .badge.est { color: var(--watch); } .badge.fit { color: var(--good); }
+dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .warn { color: var(--watch); font-size: 12.5px; }
 .warn:empty { display: none; }
 
@@ -938,20 +939,23 @@ function eqRecalc(changed, exactD) {
   let { min, km, gain, tss } = eqF();
   let d = changed === "d" ? (exactD ?? +$("eq-d").value) : EQS.d;
   if (changed === "km" || changed === "gain") d = km > 0 ? gain / km : 0;
+  // the locked field is the anchor: editing it re-anchors, editing anything else keeps it
+  if (changed === "tss" && !free) min = tss / r * 60;
+  if (lock === "tss" && (changed === "tss" || changed === "minutes")) EQS.tssFix = min / 60 * r;
   if (free) {                                            // nothing fixed: only TSS follows the time
     if (changed === "d") gain = km * d;
     if (changed === "tss") min = tss / r * 60;
   } else if (lock === "dist") {                          // km fixed
-    if (changed === "minutes") { d = bisect((x) => eqH(mode, km, km * x) - min / 60, 0, 300); gain = km * d; }
+    if (changed === "minutes" || changed === "tss") { d = bisect((x) => eqH(mode, km, km * x) - min / 60, 0, 300); gain = km * d; }
     else { if (changed !== "gain") gain = km * d; min = eqH(mode, km, gain) * 60; }
   } else {                                               // time (or TSS → time) fixed
-    if (lock === "tss") min = EQS.tssFix / r * 60;
+    if (lock === "tss" && changed !== "minutes" && changed !== "tss") min = EQS.tssFix / r * 60;
     const T = min / 60;
     if (changed === "km") { d = bisect((x) => eqH(mode, km, km * x) - T, 0, 300); gain = km * d; }
     else if (changed === "gain") { km = bisect((x) => eqH(mode, x, gain) - T, 0.05, 300); d = km > 0 ? gain / km : 0; }
     else { km = T / eqH(mode, 1, d); gain = km * d; }
   }
-  if (!(changed === "tss" && (free || lock === "tss"))) tss = min / 60 * r;
+  if (changed !== "tss") tss = min / 60 * r;
   EQS.d = d;
   eqSet({ min: changed === "minutes" ? null : min, km: changed === "km" ? null : km, gain: changed === "gain" ? null : gain,
     d, tss: changed === "tss" ? null : tss });
@@ -971,10 +975,10 @@ function eqRender() {
   if (!eqOn()) return;
   const free = $("eq-free").checked, lock = $("eq-lock").value, ro = !!dlg.ro;
   $("eq-lock").disabled = ro || free;
-  F.minutes.disabled = ro || (!free && (lock === "time" || lock === "tss"));
-  $("eq-km").disabled = ro || (!free && lock === "dist");
-  $("eq-tss").disabled = ro || !(free || lock === "tss");
-  $("eq-gain").disabled = $("eq-d").disabled = ro;
+  // nothing is disabled: the locked field is the anchor (editing it re-anchors)
+  F.minutes.disabled = $("eq-km").disabled = $("eq-tss").disabled = $("eq-gain").disabled = $("eq-d").disabled = ro;
+  const anchor = free ? null : { time: F.minutes, tss: $("eq-tss"), dist: $("eq-km") }[lock];
+  [F.minutes, $("eq-tss"), $("eq-km")].forEach((x) => x.classList.toggle("anchor", x === anchor));
   const g = D.goal_climb_per_km;
   $("eq-goal-row").hidden = !g || terVal() === "road" || ro;
   if (g) $("eq-goal").textContent = `套用目標賽事的爬升比例 ${Math.round(g)} m/km`;

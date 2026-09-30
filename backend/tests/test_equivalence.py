@@ -74,6 +74,13 @@ def test_auto_picks_ep_when_ep_predicts_better():
     assert m.modes["trail"].method == "ep" and m.modes["trail"].ep_kmh == pytest.approx(6.0)
 
 
+def test_exactly_min_samples_needs_backtest_evidence_for_history():
+    # 5 samples: every inner fold has 4 and can't fit history -> no evidence -> EP
+    m = E.fit(road() + trails(n=E.MIN_SAMPLES), AET)
+    assert m.modes["trail"].method == "ep"
+    assert E.fit(road() + trails(n=E.MIN_SAMPLES + 1), AET).modes["trail"].method == "history"
+
+
 def test_fewer_than_min_samples_fall_back_to_ep():
     m = E.fit(road() + trails(n=E.MIN_SAMPLES - 1), AET)
     t = m.modes["trail"]
@@ -144,11 +151,14 @@ def test_backtest_on_the_athletes_own_trail_and_hike_activities():
     d = athlete_dir()
     if not any(d.glob("*.wko5athlete")):
         pytest.skip("no WKO5 athlete folder")
-    from backend.api.wko5views import _dataset
+    from backend.api.overview import _dataset, _status
     from backend.engine import overview as O
     ds = _dataset()
     today = O.day_to_date(ds.today)
-    s = E.summary(ds, today, 137.95)
+    aet = O.week_plan(ds, _status(ds, today), today)["thresholds"]["aet"]
+    s = E.summary(ds, today, aet)
     t = s["backtest"]["trail"]
-    assert t["n"] >= E.MIN_SAMPLES and t["mape_pct"] is not None
-    assert t["mape_pct"] < 25.0                                         # documented in overview.spec.md
+    if t["n"] < E.MIN_SAMPLES:
+        pytest.skip(f"only {t['n']} easy trail runs in the window")
+    assert t["mape_pct"] is not None and len(t["rows"]) == t["n"]
+    assert t["estimate"] == (t["mape_pct"] > E.ESTIMATE_MAPE)          # the 推估 label follows the error

@@ -261,7 +261,8 @@ def fit(samples: list[Sample], aet: Optional[float], grade_cost: Optional[Callab
         if hist is not None and method == "history":
             mm = hist
         elif hist is not None:
-            e_h = _stats(_loo_rows(samples, mode, aet, "history"))["mape_pct"]
+            # only folds that could fit history count (at n = MIN_SAMPLES every fold falls back to EP)
+            e_h = _stats([r for r in _loo_rows(samples, mode, aet, "history") if r["method"] == "history"])["mape_pct"]
             e_e = _stats(_loo_rows(samples, mode, aet, "ep"))["mape_pct"]
             if e_h is not None and (e_e is None or e_h <= e_e):
                 mm = hist
