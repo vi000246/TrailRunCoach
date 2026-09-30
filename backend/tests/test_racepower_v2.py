@@ -660,27 +660,45 @@ def test_V_BT_evaluate_run_is_exact_when_the_model_is_the_truth():
     assert all(abs(s["err"]) < 0.002 for s in r["segments"] if s["err"] is not None)
 
 
-def test_V_BT_summary_pass_rule():
-    def row(cat, err, seg_err=0.0):
-        return {"category": cat, "err_v2": err, "err_v1": err, "segments": [{"cls": "down", "err": seg_err}]}
-    few = BT.summarise([row("trail", 0.01)] * 3)
-    assert not few["trail"]["passed"] and any("樣本" in x for x in few["trail"]["reasons"])
-    ok = BT.summarise([row("trail", 0.01)] * 6)
-    assert ok["trail"]["passed"]
-    slow = BT.summarise([row("trail", 0.08)] * 6)
-    assert not slow["trail"]["passed"]
-    fastdown = BT.summarise([row("trail", 0.01, 0.07)] * 6)
-    assert not fastdown["trail"]["passed"]
-    assert not ok["effort"]["passed"]           # no A races
-    a = BT.summarise([{**row("road", 0.01), "priority_a": True, "effort": {"f": 1.0, "label": "極限"}}] * 5)
-    assert a["effort"]["passed"] and a["road"]["passed"]
+def _bt_row(cat, err, seg_err=0.0, cls="race", f=1.0, err_c=None):
+    return {"category": cat, "err_v2": err, "err_v1": err, "intensity": cls, "f": f,
+            "err_c": err if err_c is None else err_c, "err_p": 0.0,
+            "segments": [{"cls": "down", "bin": "−8…−2%", "err": seg_err, "err_cls": seg_err}]}
+
+
+def test_V_BT_capacity_pass_rule():
+    few = BT.summarise_capacity([_bt_row("trail", 0.01)] * 3, [])
+    assert not few["categories"]["trail"]["passed"] and few["message"] == BT.NO_CAPACITY_MSG
+    ok = BT.summarise_capacity([_bt_row("trail", 0.01)] * 6, [])
+    assert ok["categories"]["trail"]["passed"] and ok["effort"]["passed"] and ok["message"] is None
+    slow = BT.summarise_capacity([_bt_row("trail", 0.01, err_c=0.08)] * 6, [])
+    assert not slow["categories"]["trail"]["passed"]
+    # one run above the model's sustainable power fails the category
+    lb = [{"category": "trail", "f": 1.05, "date": "2026-01-01"}]
+    viol = BT.summarise_capacity([_bt_row("trail", 0.01)] * 6, lb)
+    assert not viol["categories"]["trail"]["passed"] and viol["lower_bound"]["violations"] == 1
+    easy = BT.summarise_capacity([_bt_row("road", 0.01, f=0.8)] * 6, [])
+    assert not easy["effort"]["passed"]                       # median f 0.80 is not 0.97–1.03
+
+
+def test_V_BT_terrain_summary_and_flags():
+    rows = [_bt_row("trail", 0.01)] * 6
+    te = BT.summarise_terrain(rows)
+    assert te["classes"]["race"]["activities"] == 6 and te["grid"]["race"]["−8…−2%"]["n"] == 6
+    cap = BT.summarise_capacity(rows, [])
+    assert BT.validated_flags(te, cap, rows)["trail"]
+    fast_down = [_bt_row("trail", 0.01, 0.07)] * 6
+    assert not BT.validated_flags(BT.summarise_terrain(fast_down), cap, fast_down)["trail"]
+    assert BT.grade_bin(-0.2) == "≤ −15%" and BT.grade_bin(0.0) == "±2%" and BT.grade_bin(0.2) == "≥ +15%"
 
 
 def test_V_BT_flags_follow_the_stored_result(tmp_path):
     p = tmp_path / "bt.json"
     assert BT.flags(p) == ({"road": False, "trail": False, "hike": False}, False)
-    BT.save({"validated": {"road": True, "trail": False, "hike": False}, "effort_validated": False}, p)
+    BT.save({"version": 2, "validated": {"road": True, "trail": False, "hike": False}, "effort_validated": False}, p)
     assert BT.flags(p) == ({"road": True, "trail": False, "hike": False}, False)
+    BT.save({"validated": {"road": True}}, p)                  # an old-format result validates nothing
+    assert BT.flags(p)[0]["road"] is False
 
 
 # ---- T15: API -----------------------------------------------------------------------

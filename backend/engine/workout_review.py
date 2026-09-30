@@ -55,7 +55,7 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 
 # cached_series keys on the file and the thresholds, not on this code: bump the
 # version whenever _measure's output changes
-CACHE_KEY = "workout_review_v4"
+CACHE_KEY = "workout_review_v5"      # v5: cp_test windows never overlap; single-bout fallback
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -360,20 +360,48 @@ def interval_summary(efforts: list[dict]) -> dict:
             if any(e.get("hr") is not None for e in efforts) else None}
 
 
+# W′ prior for a single-bout estimate: Ruiz-Alias et al. 2025 (EJSS,
+# PMC11770271), amateur men's Stryd 9/3 two-point W′ 13.1 ± 4.0 kJ
+CP_TEST_WPRIME_PRIOR = (13100.0, 4000.0)
+CP_TEST_GAP_S = 600           # the 3′ window starts ≥ 10 min away from the 12′ bout
+
+
 def cp_test(t, power) -> Optional[dict]:
-    """3'/12' result: CP = (P12·720 − P3·180) / 540, W′ = (P3 − CP)·180."""
+    """3'/12' result: CP = (P12·720 − P3·180) / 540, W′ = (P3 − CP)·180.
+
+    The two windows must not overlap: the best 720 s first, then the best
+    180 s at least CP_TEST_GAP_S away from it (a 3′ window inside the 12′
+    bout gives a meaningless "CP 219 W, W′ 2.1 kJ"). When the 3′ bout is not
+    above the 12′ power (not all-out) the two-point fit is invalid and CP
+    comes from the 12′ bout alone, CP = P12 − W′/720 with the W′ prior above
+    (range ± 1 SD), method "1pt_prior"."""
     if power is None or not _has(power):
         return None
     _, p = _grid1(t, power)
     if p is None:
         return None
-    p3, i3 = _best_window(p, 180)
     p12, i12 = _best_window(p, 720)
-    if p3 is None or p12 is None or p3 <= p12:
+    if p12 is None:
         return None
-    cp = (p12 * 720 - p3 * 180) / 540.0
-    return {"p3": p3, "p12": p12, "cp": cp, "wprime": (p3 - cp) * 180.0,
-            "separate": bool(i3 + 180 <= i12 or i12 + 720 <= i3)}
+    pz = np.nan_to_num(p).copy()
+    lo, hi = max(0, i12 - 180 - CP_TEST_GAP_S + 1), min(len(pz), i12 + 720 + CP_TEST_GAP_S)
+    c = np.convolve(pz, np.ones(180) / 180, "valid") if len(pz) >= 180 else None
+    if c is None:
+        return None
+    ok = np.ones(len(c), bool)
+    ok[max(0, lo):min(len(c), hi)] = False
+    if not ok.any():
+        return None
+    i3 = int(np.argmax(np.where(ok, c, -np.inf)))
+    p3 = float(c[i3])
+    if p3 > p12:
+        cp = (p12 * 720 - p3 * 180) / 540.0
+        return {"p3": p3, "p12": p12, "cp": cp, "wprime": (p3 - cp) * 180.0, "separate": True,
+                "method": "2pt", "cp_range": [cp, cp]}
+    w, sd = CP_TEST_WPRIME_PRIOR
+    return {"p3": p3, "p12": p12, "cp": p12 - w / 720.0, "wprime": w, "separate": True, "method": "1pt_prior",
+            "cp_range": [p12 - (w + sd) / 720.0, p12 - (w - sd) / 720.0],
+            "note": f"3 分段 {p3:.0f} W 不高於 12 分段 {p12:.0f} W（不是全力）：只用 12 分段，W′ 用先驗 13.1 kJ"}
 
 
 def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
@@ -381,7 +409,12 @@ def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
     (an all-out 3' is typically 115–135 % CP; a hard tempo run tops out below)."""
     if not res or not cp_now or not res.get("separate"):
         return False
-    return res["p3"] >= 1.15 * cp_now and res["p12"] >= 0.98 * cp_now
+    if res["p12"] < 0.98 * cp_now:
+        return False
+    # a 3′ that was not all-out (single-bout fallback) still makes the session
+    # a test when it is a separate bout at ≥ 98 % CP (自組; the 2026-09-30 test:
+    # 3′ 218 W below the 12′ 222 W, 16 min apart)
+    return res["p3"] >= 1.15 * cp_now or (res.get("method") == "1pt_prior" and res["p3"] >= 0.98 * cp_now)
 
 
 RUN_CADENCE = 65.0            # strides/min (130 spm): below that you're walking

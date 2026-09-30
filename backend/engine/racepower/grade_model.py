@@ -31,7 +31,7 @@ def _bin_of(g: float) -> int:
     return int(round(max(G_MIN, min(G_MAX, g)) / BIN))
 
 
-def re_prior(g: float, re_flat: float) -> float:
+def re_prior(g: float, re_flat: float, walking: bool = False) -> float:
     """F8: RE₀(g) = RE_flat · Cr(0)/Cr(g), with Cr(g)/Cr(0) ≥ 0.9 downhill.
 
     Source: Minetti et al. 2002 (J Appl Physiol 93:1039–1046) running cost
@@ -39,7 +39,17 @@ def re_prior(g: float, re_flat: float) -> float:
     (test_minetti). Using it for Stryd power assumes Stryd ∝ metabolic power:
     已驗證 for 0–8 % (van Rassel et al. 2026, IJSPP 21:597–603), 待驗證 above
     8 % — those segments rely on the personal bins (F7) or are labelled 推估.
-    The 0.9 downhill floor (≈ +11 % speed at most) is our choice (自組)."""
+    The 0.9 downhill floor (≈ +11 % speed at most) is our choice (自組).
+
+    walking=True: the walking prior RE_flat · Cr(0)/Cw(g) with Minetti's
+    walking cost Cw(i) = 280.5i⁵ − 58.7i⁴ − 76.8i³ + 51.9i² + 19.6i + 2.5 (same
+    paper, 已驗證 test_minetti). That Stryd power follows walking metabolic
+    cost is 待驗證, so walked bins lean on the personal data."""
+    if walking:
+        c = minetti.cost_of_transport(g, walking=True)
+        if g < 0:
+            c = max(c, DOWNHILL_FLOOR * minetti.FLAT_WALK)
+        return re_flat * minetti.FLAT_RUN / c
     return re_flat / minetti.grade_factor(g, downhill_floor=DOWNHILL_FLOOR)
 
 
@@ -54,9 +64,10 @@ class GradeRE:
     bins: dict = field(default_factory=dict)       # bin -> {"n", "re", "v90"}
     n_samples: int = 0
     n_activities: int = 0
+    walking: bool = False
 
     def _shrunk(self, b: int, g: float) -> float:
-        prior = re_prior(g, self.re_flat)
+        prior = re_prior(g, self.re_flat, self.walking)
         s = self.bins.get(b)
         if not s or not s["n"]:
             return prior
@@ -105,13 +116,13 @@ class GradeRE:
             g = b * BIN
             s = self.bins.get(b) or {}
             rows.append({"grade": g, "n": int(s.get("n", 0)), "median_re": s.get("re"),
-                         "prior_re": re_prior(g, self.re_flat), "re": self._shrunk(b, g),
+                         "prior_re": re_prior(g, self.re_flat, self.walking), "re": self._shrunk(b, g),
                          "v90": s.get("v90"), "v_max": self.v_max(g)})
         return {"re_flat": self.re_flat, "n_samples": self.n_samples, "n_activities": self.n_activities,
                 "bins": rows, "shrink_n": SHRINK_N}
 
 
-def fit_grade_re(samples: Sequence[dict], re_flat: float) -> GradeRE:
+def fit_grade_re(samples: Sequence[dict], re_flat: float, walking: bool = False) -> GradeRE:
     """samples = [{"g", "re", "v", "a"(activity idx)}] → GradeRE."""
     by: dict[int, list] = {}
     acts = set()
@@ -125,7 +136,131 @@ def fit_grade_re(samples: Sequence[dict], re_flat: float) -> GradeRE:
         res = np.array([s["re"] for s in ss])
         vs = np.array([s["v"] for s in ss])
         bins[b] = {"n": len(ss), "re": float(np.median(res)), "v90": float(np.percentile(vs, 90))}
-    return GradeRE(re_flat, bins, sum(len(v) for v in by.values()), len(acts))
+    return GradeRE(re_flat, bins, sum(len(v) for v in by.values()), len(acts), walking)
+
+
+# ---- gait-aware RE(g) + trail technicality ------------------------------------
+
+WALK_MAJORITY = 0.5            # 自組: a window / bin is walked when ≥ half its moving time is < 130 spm
+TECH_MIN_N = 30                # windows for a per-class technicality factor (= SHRINK_N)
+TECH_BOUNDS = (0.6, 1.2)       # 自組 sanity range for the factor
+
+
+@dataclass
+class GaitRE:
+    """RE(g) per gait. Running windows (cadence ≥ 130 spm for ≥ half the
+    window, workout_review.RUN_CADENCE) fit `run` (Minetti running prior);
+    walked windows fit `walk` (Minetti walking prior). For each 2 % bin the
+    athlete's own majority gait decides which curve predicts that grade
+    (自組; Minetti's running cost does not describe walking — Minetti 2002,
+    Giovanelli 2016 on the walk/run crossover). `tech` is the trail
+    technicality factor on flats and descents (g ≤ +2 %): median of actual ÷
+    predicted RE over the athlete's own trail running windows there (自組,
+    per intensity class when ≥ 30 windows), applied only with `trail=True`.
+    Duck-compatible with GradeRE for the planner and the back-test."""
+    run: GradeRE
+    walk: GradeRE
+    walk_bins: dict = field(default_factory=dict)      # bin -> [n_walked, n_total]
+    tech: dict = field(default_factory=dict)           # class|"all" -> {"f", "n"}
+    trail: bool = False
+    tech_class: Optional[str] = None
+
+    @property
+    def re_flat(self) -> float:
+        return self.run.re_flat
+
+    @property
+    def bins(self) -> dict:
+        return self.run.bins
+
+    @property
+    def n_samples(self) -> int:
+        return self.run.n_samples + self.walk.n_samples
+
+    @property
+    def n_activities(self) -> int:
+        return self.run.n_activities
+
+    def walked(self, g: float) -> bool:
+        wb = self.walk_bins.get(_bin_of(g))
+        return bool(wb and wb[1] >= VMAX_MIN_N and wb[0] / wb[1] >= WALK_MAJORITY and self.walk.data_n(g) > 0)
+
+    def tech_factor(self) -> tuple[float, str]:
+        t = self.tech.get(self.tech_class) if self.tech_class else None
+        if t and t["n"] >= TECH_MIN_N:
+            return t["f"], self.tech_class
+        t = self.tech.get("all")
+        if t and t["n"] >= TECH_MIN_N:
+            return t["f"], "all"
+        return 1.0, "none"
+
+    def re(self, g: float) -> float:
+        v = self.walk.re(g) if self.walked(g) else self.run.re(g)
+        if self.trail and g <= 0.02:
+            v *= self.tech_factor()[0]
+        return v
+
+    def v_max(self, g: float) -> Optional[float]:
+        return self.run.v_max(g)
+
+    def trusted(self, g: float) -> bool:
+        m = self.walk if self.walked(g) else self.run
+        return abs(g) <= STRYD_VALID_GRADE or m.data_n(g) >= SHRINK_N
+
+    def data_n(self, g: float) -> int:
+        return (self.walk if self.walked(g) else self.run).data_n(g)
+
+    def with_flat(self, re_flat: float) -> "GaitRE":
+        from dataclasses import replace
+        return replace(self, run=replace(self.run, re_flat=re_flat), walk=replace(self.walk, re_flat=re_flat))
+
+    def for_trail(self, cls: Optional[str] = None) -> "GaitRE":
+        from dataclasses import replace
+        return replace(self, trail=True, tech_class=cls)
+
+    def to_json(self) -> dict:
+        j = self.run.to_json()
+        wj = self.walk.to_json()
+        for r, w in zip(j["bins"], wj["bins"]):
+            wb = self.walk_bins.get(_bin_of(r["grade"])) or [0, 0]
+            r.update(walk_n=w["n"], walk_re=w["re"], walk_median_re=w["median_re"], walk_prior_re=w["prior_re"],
+                     walk_share=(wb[0] / wb[1]) if wb[1] else None, gait="walk" if self.walked(r["grade"]) else "run")
+        f, which = self.tech_factor()
+        j.update(walk_samples=self.walk.n_samples, tech=self.tech, tech_used={"f": f, "class": which})
+        return j
+
+
+def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict] = None) -> GaitRE:
+    """samples = [{"g", "re", "v", "a", "run" (running share of the window),
+    "trail"}]; classes = {activity idx: intensity class} for the per-class
+    technicality factor."""
+    run_s = [s for s in samples if s.get("run") is None or s["run"] >= WALK_MAJORITY]
+    walk_s = [s for s in samples if s.get("run") is not None and s["run"] < WALK_MAJORITY]
+    run = fit_grade_re(run_s, re_flat)
+    walk = fit_grade_re(walk_s, re_flat, walking=True)
+    wb: dict = {}
+    for s in samples:
+        if s.get("run") is None:
+            continue
+        b = _bin_of(s["g"])
+        x = wb.setdefault(b, [0, 0])
+        x[1] += 1
+        if s["run"] < WALK_MAJORITY:
+            x[0] += 1
+    tech: dict = {}
+    ratios: dict = {}
+    for s in run_s:
+        if not s.get("trail") or s["g"] > 0.02 or not s.get("re"):
+            continue
+        r = s["re"] / run.re(s["g"])
+        ratios.setdefault("all", []).append(r)
+        c = (classes or {}).get(s.get("a"))
+        if c:
+            ratios.setdefault(c, []).append(r)
+    for c, rs in ratios.items():
+        f = float(np.median(rs))
+        tech[c] = {"f": min(TECH_BOUNDS[1], max(TECH_BOUNDS[0], f)), "raw": f, "n": len(rs)}
+    return GaitRE(run, walk, wb, tech)
 
 
 def tobler_kmh(g: float) -> float:
@@ -190,10 +325,13 @@ def fit_hike_speed(samples: Sequence[dict]) -> HikeSpeed:
 # ---- window sampling (shared by athlete.py and the back-test) -----------------
 
 def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarray],
-            moving: np.ndarray, win_m: float = 100.0) -> list[dict]:
+            moving: np.ndarray, win_m: float = 100.0, hr: Optional[np.ndarray] = None,
+            cadence: Optional[np.ndarray] = None, run_cadence: float = 65.0) -> list[dict]:
     """100 m windows along the distance, using moving samples only: grade,
-    speed (m/s) and time-weighted power. Arrays are sample-aligned; d_m is
-    cumulative metres. Returns [{"g", "v", "p", "z"}]."""
+    speed (m/s) and time-weighted power; with `hr` the time-weighted HR, with
+    `cadence` (strides/min) the running share of the moving time (cadence ≥
+    run_cadence). Arrays are sample-aligned; d_m is cumulative metres.
+    Returns [{"g", "v", "p", "z", "hr"?, "run"?}]."""
     n = len(t)
     if n < 10:
         return []
@@ -205,6 +343,18 @@ def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarra
     if p is not None:
         pp = np.nan_to_num(p)
         ce = np.cumsum(np.where(mv, pp * dt_, 0.0))
+    ch = chn = None
+    if hr is not None:
+        hv = np.asarray(hr, float)[:n]
+        okh = mv & np.isfinite(hv) & (hv > 40)
+        ch = np.cumsum(np.where(okh, hv * dt_, 0.0))
+        chn = np.cumsum(np.where(okh, dt_, 0.0))
+    cr = crn = None
+    if cadence is not None:
+        cv = np.asarray(cadence, float)[:n]
+        okc = mv & np.isfinite(cv) & (cv > 0)
+        cr = np.cumsum(np.where(okc & (cv >= run_cadence), dt_, 0.0))
+        crn = np.cumsum(np.where(okc, dt_, 0.0))
     d = np.maximum.accumulate(np.nan_to_num(d_m))
     ok = np.isfinite(z)
     if ok.sum() < 10 or d[-1] < 2 * win_m:
@@ -217,7 +367,7 @@ def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarra
     j = np.searchsorted(d, edges)
     j = np.clip(j, 0, n - 1)
     out = []
-    for a, b in zip(j[:-1], j[1:]):
+    for k_, (a, b) in enumerate(zip(j[:-1], j[1:])):
         if b <= a:
             continue
         tm = ct[b] - ct[a]
@@ -225,8 +375,12 @@ def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarra
         if tm <= 0 or dd <= 0.5 * win_m:
             continue
         v = dd / tm
-        row = {"g": float((zf[b] - zf[a]) / dd), "v": float(v), "z": float(zf[a])}
+        row = {"g": float((zf[b] - zf[a]) / dd), "v": float(v), "z": float(zf[a]), "k": k_}
         if ce is not None:
             row["p"] = float((ce[b] - ce[a]) / tm)
+        if ch is not None and chn[b] - chn[a] > 0.5 * tm:
+            row["hr"] = float((ch[b] - ch[a]) / (chn[b] - chn[a]))
+        if cr is not None and crn[b] - crn[a] > 0.5 * tm:
+            row["run"] = float((cr[b] - cr[a]) / (crn[b] - crn[a]))
         out.append(row)
     return out
