@@ -19,9 +19,9 @@ from backend.engine.achievements import (
 )
 from backend.engine.wko5expr.config import EngineConfig
 from backend.engine.wko5expr.dataset import Dataset
+from backend.settings.paths import athlete_dir
 
-ATHLETE_DIR = Path(os.getenv(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+ATHLETE_DIR = athlete_dir()
 
 router = APIRouter(prefix="/api/v1/achievements", tags=["achievements"])
 

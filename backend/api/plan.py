@@ -17,9 +17,9 @@ from pydantic import BaseModel
 from backend.engine import planning as P
 from backend.engine.zones import SOURCE, zones_json
 from backend.files.wko5_athlete import pd_snapshot, read_athlete
+from backend.settings.paths import athlete_dir
 
-ATHLETE_DIR = Path(os.getenv(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+ATHLETE_DIR = athlete_dir()
 STATIC = Path(__file__).resolve().parents[1] / "static"
 
 router = APIRouter(prefix="/api/v1/plan", tags=["plan"])
