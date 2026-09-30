@@ -1,6 +1,8 @@
 # 單次活動：路線地圖＋跨圖同步 hover — 待辦
 
-> Status: 需求已記錄，尚未開始（2026-09-30）
+> Status: 已實作（2026-09-30，feat/workout-map）。Leaflet 地圖取代原本沒有底圖的 ECharts 軌跡；
+> 後端 `GET /api/v1/wko5/workouts/{i}/samples` 給同一步長的 t / d / lat / lng / elev / hr / power / grade；
+> 預設底圖、疊圖存在 user_settings（`charts.map.basemap` / `charts.map.overlays`，經 `/api/v1/sync/settings`）。
 
 ## 使用者需求
 - 圖表分析的「單次活動」模式加一張路線地圖，用 GPS 軌跡畫出這次的路線。
