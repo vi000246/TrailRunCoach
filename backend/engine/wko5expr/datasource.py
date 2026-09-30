@@ -70,7 +70,11 @@ def source_stamp(source: str, wko5_dir: Path) -> str:
             return f"{source}:empty"
         files = [p for p in root.rglob("*.fit*") if p.is_file() and not p.is_symlink()]
         latest = max((p.stat().st_mtime_ns for p in files), default=0)
-        return f"{source}:{len(files)}:{latest}"
+        # a rename (migrate_coros_sport_names) keeps count and mtimes: the
+        # names are in the stamp too, so the Dataset doesn't keep stale paths
+        import hashlib
+        names = hashlib.sha1("\n".join(sorted(str(p.relative_to(root)) for p in files)).encode()).hexdigest()[:12]
+        return f"{source}:{len(files)}:{latest}:{names}"
     try:
         return "wko5:" + ";".join(f"{p.name}:{p.stat().st_size}:{p.stat().st_mtime_ns}"
                                   for p in sorted(Path(wko5_dir).glob("*.wko5athlete")))

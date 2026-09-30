@@ -19,6 +19,7 @@ from sqlalchemy import select
 from backend.db.models import SyncState, Athlete, WorkoutFile, AthleteSettings
 from backend.files.file_service import _import_one_file, record_corrupt
 from backend.sync import http, storage
+from backend.sync.coros_sport import COROS_SPORT_TYPES, fit_session_sport, sport_token
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, seal, unseal
 
@@ -43,14 +44,10 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 )
 
-SPORT_NAMES: dict[int, str] = {
-    100: "cycling",
-    200: "run",
-    300: "swim",
-    400: "triathlon",
-    19: "indoor_cycling",
-    20: "treadmill",
-}
+# COROS sportType -> file-name word (fallback only: the FIT session sport
+# names the file, sync/coros_sport.py). The old map had 100 = "cycling", which
+# named every COROS run *_cycling.fit.
+SPORT_NAMES: dict[int, str] = COROS_SPORT_TYPES
 
 
 def _md5(s: str) -> str:
@@ -310,7 +307,6 @@ async def sync_workouts(
             label_id = str(act.get("labelId", ""))
             act_date = _parse_coros_date(act.get("date") or act.get("startTime", 0))
             sport_type = act.get("sportType", 0)
-            sport_name = SPORT_NAMES.get(sport_type, "other")
             total_checked += 1
 
             yield {
@@ -337,9 +333,15 @@ async def sync_workouts(
             year = act_date.year if act_date else "unknown"
             dest_dir = storage.year_dir("coros", year)      # ~/.wko5coach/fit/coros/<year>/
             date_str = act_date.isoformat() if act_date else "unknown"
+            # the name's sport word comes from the FIT session (sport +
+            # sub_sport); the COROS code only when the FIT can't say
+            tmp = dest_dir / f".{label_id}.download"
+            tmp.write_bytes(fit_bytes)
+            fit_sport, fit_sub = fit_session_sport(tmp)
+            sport_name = sport_token(fit_sport, fit_sub, sport_type)
             filename = f"{label_id}_{date_str}_{sport_name}.fit"
             dest = dest_dir / filename
-            dest.write_bytes(fit_bytes)
+            tmp.replace(dest)
 
             try:
                 wf = await _import_one_file(
@@ -347,6 +349,11 @@ async def sync_workouts(
                     source="coros",
                     coros_activity_id=label_id,
                 )
+                if wf is not None:
+                    try:
+                        wf.coros_sport_type = int(sport_type)
+                    except (TypeError, ValueError):
+                        pass
                 if wf is None:
                     # FIT file is corrupt/unreadable — store a stub so we don't
                     # re-download it on the next sync (coros_activity_id dup check).
