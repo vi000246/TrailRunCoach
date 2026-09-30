@@ -70,7 +70,8 @@ decisions on the workbook's ambiguities (D1–D10) are in
     suggestion and never written to the plan), `wko5` (the snapshot), and `activities` (the
     180–1200 s envelope fit, with its 14-day check).
   - **Lower bound** (`backend/engine/racepower/difficulty.py:162`): every 365-day envelope point
-    t ≥ 20 min (t ≥ TTE for a two-anchor source) requires p_sus(t) ≥ the power held. The binding
+    and every run's moving-time average power (both altitude-normalised), with t ≥ 20 min (t ≥ TTE
+    for a two-anchor source), requires p_sus(t) ≥ the power held. The binding
     point, cp_min and a message 「模型 CP 低於你實際撐過的功率（…）：CP 至少 ≥ X W，請重測」 are
     exposed. A PD model below its bound becomes the `lower_bound` source (anchor raised to
     cp_min). Without a PD fit the order is plan → cptest → WKO5 → activities, each only when it
@@ -351,15 +352,15 @@ easy 20, steady 142, race-like 14. Plus one CP-test bout. Hikes: 0 solo.
 
 | Category | n | median \|time err\| | bias | 10–90 % | power err (bias) | median f | pass |
 |---|---|---|---|---|---|---|---|
-| 路跑 | 14 | 15.1 % | −15.1 % | −21.2…−7.8 % | +11.0 % | 0.90 | no |
+| 路跑 | 14 | 16.5 % | −16.5 % | −21.2…−9.0 % | +13.3 % | 0.88 | no |
 | 越野 | 0 | – | – | – | – | – | no (n < 5) |
-| CP test 12′ (2026-09-30, as of 09-29) | 1 | – | – | – | P_sus 206.7 vs 220.9 W (−6.4 %) | – | – |
+| CP test 12′ (2026-09-30, as of 09-29) | 1 | – | – | – | P_sus 212.9 vs 220.9 W (−3.6 %) | – | – |
 
 The lower bound is violated by 1 of 176 runs: 2025-12-21 路跑 20.5 km, 141 min at 184 W, against
 the as-of model's 170 W. The model before that day had no run to show it. Effort bar: n 15,
-median f 0.91, not validated. The road race-like runs are short hard training runs (≈ 5 km at
-HR ≥ 0.95 LTHR), not maximal. The model's P_sus is 11 % above what they held, so the mode C
-times are 15 % fast. Capacity cannot be validated until there are ≥ 5 tests or races.
+median f 0.88, not validated. The road race-like runs are short hard training runs (≈ 5 km at
+HR ≥ 0.95 LTHR), not maximal. The model's P_sus is 13 % above what they held, so the mode C
+times are 16.5 % fast. Capacity cannot be validated until there are ≥ 5 tests or races.
 
 地形模型回測（給實際功率）:
 
@@ -395,11 +396,13 @@ Findings:
 - Nothing is validated.
 
 Capacity before / after on the same data:
-- 21.1 km road: before (activities CP 174, WKO5 TTE, k −0.10, flat RE 0.908) 3:00:00 at 146 W;
-  after (PD mFTP 191.5 raised to the k −0.10 bound 207.7, TTE 1884, plan CP 204 + W′ 13.1 kJ,
-  RE 0.871) 2:35:12 at 177 W.
-- The 2025-12-21 run (2.36 h, 184.2 W moving): f 1.23 → 1.03. The bound uses the elapsed
-  mean-max, 178.8 W after the altitude normalisation, not the moving average.
+- 21.1 km road: before (activities CP 174, WKO5 TTE, k −0.10, flat RE 0.908) 3:00:00 at 146 W.
+  After: PD mFTP 191.5 raised to the bound (204.8 at k −0.07, 214.3 at the table k −0.10), TTE
+  1884, plan CP 204 + W′ 13.1 kJ, RE 0.871. That gives 2:29:48 at 183 W (k −0.10) or 2:29:36 at
+  184 W (k −0.07).
+- The 2025-12-21 run (2.36 h, 184.2 W moving): f 1.23 → 1.00.
+- The bound includes each run's moving-time average (altitude-normalised) beside the elapsed
+  mean-max envelope. The elapsed mean-max of that run was only 178.8 W.
 
 ### Page
 
@@ -496,7 +499,8 @@ the version-2 store.
   - an LTHR of 152–156 looks low next to the 12′ test (HR 155 → 171), so many daily runs read
     HR-high and are demoted only by the power check.
 - The PD refit gives 191.5 W against the research script's 196.1 W with the same FIT file (curve
-  sampling). The route-specific technicality calibration (routes module) is a hook only.
+  sampling). Route-specific technicality: `GaitRE.route_tech` overrides the per-class factor
+when set, but nothing fills it from the routes module yet.
 - CSV export and saving a GPX course onto a season-plan event are not done.
 
 ## Change History
