@@ -6,6 +6,7 @@ Scope 由使用者決定：
 - 不做儀表板編輯（沒有編輯按鈕、拖拉、CRUD）。
 - 做三個規劃好的儀表板 + 一組分析圖。
 - 不做 HRV 和安靜心率。
+- 不做路線完賽時間預測、功率預測、天氣。main tree 的 SuperPower Calculator / 賽事功率頁（`backend/engine/racepower/`、`backend/api/racepower.py`、`racepower.html`）已經在做這些。儀表板需要賽事預測時，等它 commit 後連結或呼叫它的 API，這裡不重做。
 
 ## 架構：沿用 custom view，特殊圖表用 panel
 
@@ -29,7 +30,6 @@ Scope 由使用者決定：
 | `panels/workout.py` | 單次活動：時間區間分布（HR / 功率 / GAP）、坡度分箱表（每個坡度桶的配速 / 功率 / HR / 步頻 / 時間；WKO5 workout-view「坡度」那張的分箱）、耐力曲線（滾動 10 分 GAP/HR 或 功率/HR 對累積 kJ 或時間）、TIS 儀表。 |
 | `panels/trends.py` | EF + 解耦趨勢（>60 分輕鬆跑，5% 參考線）、門檻趨勢（CP/mFTP、LTHR、門檻配速）、MMP/PD 曲線今昔對比。 |
 | `panels/trail.py` | 每次爬坡的 VAM vs 坡度散佈（`climbs.detect_climbs`）+ 90 天擬合線；每週下坡量與下坡負荷（坡度 < -10% 的時間 / 距離 / 下降）。 |
-| `panels/predict.py` | 路線完賽時間預測：GPX → EFD（`effort.equivalent_flat_distance`，Minetti）。平地速度 v(T) 取自自己的 MMP 配速曲線（沒有配速曲線時改用功率 PD 曲線 + running effectiveness），乘上耐力折減，迭代 T = EFD / v(T)。 |
 | `panels/effortpace.py` | 個人化坡度配速：擬合自己「坡度 → 在某 HR 下的配速」曲線。L，最後做。 |
 
 ## 儀表板 1：總覽（view `總覽`）
@@ -86,6 +86,5 @@ Scope 由使用者決定：
 4. fatigue、loadfocus、recommend → 總覽
 5. workout panels
 6. trends、trail → 賽季回顧
-7. 週期化
-8. predict
-9. effortpace
+7. 週期化（賽事預測直接連到 racepower 頁）
+8. effortpace
