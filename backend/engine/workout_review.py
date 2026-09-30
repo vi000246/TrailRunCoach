@@ -67,7 +67,7 @@ QUALITY_CATEGORIES = ("road", "trail", "hike")
 DRIFT_MIN_S = 2400            # the plan's i_drift floor: ≥ 40 min
 DRIFT_GOOD = 0.05
 DRIFT_WATCH = 0.10
-STREAK_NEED = 3               # 3 consecutive < 5 % → an interval may be added
+STREAK_NEED = 3               # legacy only: the old unsourced 「連續 3 次」 rule (gate: engine/quality_gate.py)
 STOP_KMH = 1.6                # WKO5's moving threshold (1 mph)
 MAX_STOPPED_SHARE = 0.05
 AET_MARGIN = 3.0              # "easy" = avg HR ≤ AeT + 3
@@ -560,6 +560,8 @@ def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
     if category in ("strength", "bike", "walk", "other"):
         return category
     plan_test = plan_test or {}
+    if re.search(r"(?<![A-Za-z])AeT(?![A-Za-z])", title or "") and not cp_detected:
+        return "test_aet"                  # 「AeT 飄移測試」 (engine/aet_test.py), not a CP test
     if plan_test.get("cp") is not None or re.search(r"\bCP\b|測試", title or "") or cp_detected:
         return "test_cp"
     if plan_test.get("aethr") is not None or (aet_steady and moving_s >= TEST_AET_MIN_S):
@@ -589,13 +591,14 @@ def streak_of(drifts: Sequence[Optional[float]], good: float = DRIFT_GOOD) -> in
     return n
 
 
-def quality_gate(kind: Optional[str], levels: dict, streak_ok: bool) -> bool:
-    """week_plan's allow_quality: intensity and drift not bad; in base phase the
-    drift streak (≥ 3 consecutive < 5 %) must also be there."""
-    ok = levels.get("intensity") != "bad" and levels.get("drift") != "bad"
-    if (kind or "base") == "base":
-        ok = ok and bool(streak_ok)
-    return ok
+def quality_gate(kind: Optional[str], levels: dict, gate=None) -> bool:
+    """allow_quality for a week: engine/quality_gate.week_decision with `gate`
+    (the dict status.i_gate returns). Outside base: intensity and drift not
+    bad. A legacy bool / None `gate` = no method (the drift streak is gone)."""
+    from backend.engine import quality_gate as QG
+    g = gate if isinstance(gate, dict) and not QG.legacy(gate) else {
+        "state": "none", "guard": {"block": levels.get("intensity") == "bad", "rule": "intensity"}}
+    return QG.week_decision({**g, "levels": levels}, kind or "base", kind or "base")["allow"]
 
 
 def next_quality(last: Optional[dict]) -> tuple[int, int]:
@@ -1061,9 +1064,9 @@ def latest_cp_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = "pace") -> list[str]:
-    """Verdict lines for the drift on the chosen basis. The streak (and the
-    interval it unlocks) is counted on Pa:HR only (drift_streak), so power
-    mode never mentions it."""
+    """Verdict lines for the drift on the chosen basis. Informational: the
+    interval gate is engine/quality_gate.py (the old drift streak is gone);
+    `streak` is accepted and ignored."""
     lines = []
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0 and over / tot > OVER_AET_SHARE and typ in ("easy", "long"):
@@ -1079,32 +1082,24 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
     name = "Pw:HR 飄移" if power else "飄移"
     hr1 = dr["pw_hr1"] if power else dr["hr1"]
     if typ == "test_aet":
-        if d < DRIFT_GOOD:
-            lines.append(f"{name} {_pct(d)} < 5%：前半段心率 {hr1:.0f} bpm 可以設成 AeT")
+        # Uphill Athlete's three bands (engine/aet_test.py has the full analysis)
+        if d < 0.035:
+            lines.append(f"{name} {_pct(d)} < 3.5%：前半段心率 {hr1:.0f} bpm 還在 AeT 以下，下次 +5 bpm 再測")
+        elif d <= DRIFT_GOOD:
+            lines.append(f"{name} {_pct(d)}（3.5–5%）：前半段心率 {hr1:.0f} bpm 就是 AeT")
         else:
-            lines.append(f"{name} {_pct(d)} ≥ 5%：AeT 低於前半段心率 {hr1:.0f} bpm，下次放慢 5 bpm 再測")
+            lines.append(f"{name} {_pct(d)} > 5%：AeT 低於前半段心率 {hr1:.0f} bpm，下次放慢 5 bpm 再測")
         return lines[:3]
-    if power:
-        streak = None
+    # informational: the interval gate is engine/quality_gate.py, not this drift
     aet, hr = m.get("aet"), m.get("avg_hr")
     if d < DRIFT_GOOD and aet and hr and hr > aet + AET_MARGIN:
-        lines.append(f"{name} {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3"
-                     + ("" if power else "，不算進連續次數"))
-    elif power and d < DRIFT_GOOD:
-        lines.append(f"{name} {_pct(d)} < 5%：有氧基礎穩（連續次數看配速 Pa:HR）")
-    elif power and d < DRIFT_WATCH:
-        lines.append(f"{name} {_pct(d)}（5–10%）：暫時不加間歇")
-    elif power:
-        lines.append(f"{name} {_pct(d)} > 10%：有氧基礎不足")
+        lines.append(f"{name} {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3，不是輕鬆跑")
     elif d < DRIFT_GOOD:
-        s = f"（連續 {streak} 次）" if streak else ""
-        lines.append(f"飄移 {_pct(d)} < 5%：有氧基礎穩{s}")
-        if streak is not None and streak >= STREAK_NEED:
-            lines.append("已連續 3 次 < 5%：可以加一次閾值下間歇")
+        lines.append(f"{name} {_pct(d)} < 5%：有氧基礎穩")
     elif d < DRIFT_WATCH:
-        lines.append(f"飄移 {_pct(d)}（5–10%）：暫時不加間歇")
+        lines.append(f"{name} {_pct(d)}（5–10%）：後段心率往上跑")
     else:
-        lines.append(f"飄移 {_pct(d)} > 10%：有氧基礎不足")
+        lines.append(f"{name} {_pct(d)} > 10%：有氧基礎不足或跑太快")
     return lines[:3]
 
 
@@ -1233,8 +1228,10 @@ def _summary(ds, w, m, c, base):
                                  f"≥ LTHR {z['high'] / tot * 100:.0f}%"))
     if typ in ("strength", "bike", "walk", "other"):
         return {**base, "series": rows + _verdict_rows([f"{c['type_label']}：只看時間與心率，沒有其他判讀"])}
-    if typ in ("easy", "long", "test_aet"):
-        lines = aerobic_lines(typ, m, _streak_for(ds, w) if typ != "test_aet" else None)
+    if typ == "test_aet":
+        lines = _aet_test_lines(ds, w, m, base) or aerobic_lines(typ, m)
+    elif typ in ("easy", "long"):
+        lines = aerobic_lines(typ, m)
     elif typ == "quality":
         lines = interval_lines(m)
     else:
@@ -1278,10 +1275,36 @@ def _aerobic(ds, w, m, c, base):
         rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x))))
     if c["type"] not in ("easy", "long", "test_aet"):
         lines = [f"這次是{c['type_label']}，飄移只在輕鬆跑、長跑、AeT 測試判讀"]
+    elif c["type"] == "test_aet":
+        lines = _aet_test_lines(ds, w, m, base) or aerobic_lines("test_aet", m)
     else:
-        streak = _streak_for(ds, w) if c["type"] != "test_aet" and not power else None
-        lines = aerobic_lines(c["type"], m, streak, basis)
+        lines = aerobic_lines(c["type"], m, None, basis)
     return {**base, "series": rows + _verdict_rows(lines)}
+
+
+def _aet_test_lines(ds, w, m, base: dict) -> Optional[list[str]]:
+    """AeT test card: UA's three bands on the block after the 15′ warm-up
+    (engine/aet_test.py) and, in band "at", the 「套用這次的 AeT」 button
+    (`base["action"]`, the viewer's drawAction). None when it isn't a fair test."""
+    from backend.engine import aet_test as AT
+    try:
+        r = AT.analyze_workout(ds, w, m)
+    except Exception:
+        return None
+    if r is None:
+        return None
+    if not r.get("ok"):
+        return AT.lines(r)
+    t = {"date": _wdate(w).isoformat(), "drift": r["drift"], "basis": r["basis"],
+         "aethr_suggest": round(r["hr1"]) if r["band"] == "at" else None}
+    body = AT.apply_body(t)
+    plan = getattr(ds, "plan", None)
+    if body and not AT.applied(plan, t):
+        base["action"] = {"kind": "apply_aet", "label": f"套用這次的 AeT（{body['aethr']} bpm）", "method": "POST",
+                          "url": "/api/v1/plan/thresholds/apply-estimate", "body": body,
+                          "done": f"已套用：{body['date']} AeT {body['aethr']} bpm",
+                          "confirm": f"把 {body['date']} 的 AeT 設成 {body['aethr']} bpm？區間和間歇門檻會重新計算"}
+    return AT.lines(r, m.get("aet"))
 
 
 def _intervals(ds, w, m, c, base):

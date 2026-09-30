@@ -1017,7 +1017,8 @@ function draw(card, res) {
   // unsupported, fixes).
 }
 
-// a review card's action button (workout_review: 「套用這次的 CP」 -> POST apply-cp)
+// a review card's action button (workout_review: 「套用這次的 CP」 -> POST apply-cp;
+// 「套用這次的 AeT」 -> POST apply-estimate with the test date)
 function drawAction(card, a) {
   const wrap = document.createElement("p");
   wrap.className = "card-action";
