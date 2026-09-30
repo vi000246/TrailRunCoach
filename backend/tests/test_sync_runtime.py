@@ -272,6 +272,50 @@ def test_delete_date_range_only(tmp_path, _fit_root_in_tmp):
     run(go())
 
 
+# ---- settings / sources API -------------------------------------------------------
+
+def test_sources_endpoint_and_new_settings(tmp_path, _fit_root_in_tmp):
+    from backend.api.sync import SyncSettingsBody, put_sync_settings, sync_sources
+
+    async def go():
+        s = await make_session(tmp_path)
+        await _coros_synced(s, [_coros_act("A1", START)])
+        out = await sync_sources(1, s)
+        c = out["coros"]
+        assert c["logged_in"] and c["enabled"] and not c["busy"]
+        assert c["stats"]["files"] == 1 and c["stats"]["rows"] == 1 and c["stats"]["date_from"] == "2026-09-02"
+        assert c["last_result"]["downloaded"] == 1 and c["last_sync_at"]
+        assert out["tp"]["logged_in"] is False and out["tp"]["stats"]["files"] == 0
+        r = await put_sync_settings(SyncSettingsBody(daily_sync_time="05:45", auto_on_open=False,
+                                                     auto_on_open_hours=12, chart_data_source="coros"), 1, s)
+        assert r["daily_sync_time"] == "05:45" and r["auto_on_open"] is False
+        assert r["auto_on_open_hours"] == 12 and r["chart_data_source"] == "coros"
+        assert r["tp_client_file_exists"] is False
+        with pytest.raises(HTTPException):
+            await put_sync_settings(SyncSettingsBody(chart_data_source="garmin"), 1, s)
+    run(go())
+
+
+def test_tp_login_method_preference(tmp_path, tp_creds):
+    from backend.sync import tp_client
+    from backend.tests.test_tp_oauth import OAuthFake
+
+    async def go():
+        s = await make_session(tmp_path)
+        fake = OAuthFake()
+        with http.use_transport(httpx.MockTransport(fake)):
+            r = await tp_client.login_password("u@example.com", "pw", s, 1, prefer="web")
+            assert r["method"] == "web" and fake.token_bodies == []
+            r = await tp_client.login_password("u@example.com", "pw", s, 1, prefer="oauth")
+            assert r["method"] == "oauth" and fake.posted is not None
+        fake2 = OAuthFake(grant=401)
+        with http.use_transport(httpx.MockTransport(fake2)):
+            with pytest.raises(tp_client.TpLoginError):
+                await tp_client.login_password("u@example.com", "pw", s, 1, prefer="oauth")
+            assert fake2.posted is None                      # no silent web fallback
+    run(go())
+
+
 # ---- migration ------------------------------------------------------------------
 
 def test_migrate_fit_folders_dry_run_apply_idempotent(tmp_path, _fit_root_in_tmp):
