@@ -332,12 +332,18 @@ def fit_hike_speed(samples: Sequence[dict]) -> HikeSpeed:
 
 def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarray],
             moving: np.ndarray, win_m: float = 100.0, hr: Optional[np.ndarray] = None,
-            cadence: Optional[np.ndarray] = None, run_cadence: float = 65.0) -> list[dict]:
+            cadence: Optional[np.ndarray] = None, run_cadence: float = 65.0,
+            hr_lag_s: float = 0.0) -> list[dict]:
     """100 m windows along the distance, using moving samples only: grade,
     speed (m/s) and time-weighted power; with `hr` the time-weighted HR, with
     `cadence` (strides/min) the running share of the moving time (cadence ≥
     run_cadence). Arrays are sample-aligned; d_m is cumulative metres.
-    Returns [{"g", "v", "p", "z", "hr"?, "run"?}]."""
+    Every row carries `k` (window index) and `t` (cumulative moving seconds
+    at the window start). With `hr_lag_s` > 0 each row also carries `hr_lag`:
+    the time-weighted HR of the same window read `hr_lag_s` seconds later on
+    the elapsed clock (HR responds 1–2 min after a pace change;
+    baiyue-from-running.md §2.2 finding 1 — the 60 s shift is 自組).
+    Returns [{"g", "v", "p", "z", "k", "t", "hr"?, "hr_lag"?, "run"?}]."""
     n = len(t)
     if n < 10:
         return []
@@ -349,12 +355,18 @@ def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarra
     if p is not None:
         pp = np.nan_to_num(p)
         ce = np.cumsum(np.where(mv, pp * dt_, 0.0))
-    ch = chn = None
+    ch = chn = cl = None
     if hr is not None:
         hv = np.asarray(hr, float)[:n]
         okh = mv & np.isfinite(hv) & (hv > 40)
         ch = np.cumsum(np.where(okh, hv * dt_, 0.0))
         chn = np.cumsum(np.where(okh, dt_, 0.0))
+        if hr_lag_s > 0:
+            tt = np.asarray(t, float)
+            okt = np.isfinite(tt) & np.isfinite(hv) & (hv > 40)
+            if okt.sum() >= 2:
+                lag = np.interp(tt + hr_lag_s, tt[okt], hv[okt])
+                cl = np.cumsum(np.where(okh, lag * dt_, 0.0))
     cr = crn = None
     if cadence is not None:
         cv = np.asarray(cadence, float)[:n]
@@ -381,11 +393,13 @@ def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarra
         if tm <= 0 or dd <= 0.5 * win_m:
             continue
         v = dd / tm
-        row = {"g": float((zf[b] - zf[a]) / dd), "v": float(v), "z": float(zf[a]), "k": k_}
+        row = {"g": float((zf[b] - zf[a]) / dd), "v": float(v), "z": float(zf[a]), "k": k_, "t": float(ct[a])}
         if ce is not None:
             row["p"] = float((ce[b] - ce[a]) / tm)
         if ch is not None and chn[b] - chn[a] > 0.5 * tm:
             row["hr"] = float((ch[b] - ch[a]) / (chn[b] - chn[a]))
+            if cl is not None:
+                row["hr_lag"] = float((cl[b] - cl[a]) / (chn[b] - chn[a]))
         if cr is not None and crn[b] - crn[a] > 0.5 * tm:
             row["run"] = float((cr[b] - cr[a]) / (crn[b] - crn[a]))
         out.append(row)

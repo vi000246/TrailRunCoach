@@ -239,6 +239,25 @@ defaults reproduce today's plan exactly.
 | 間歇目標 | `plan.prefs.interval_target` | `power` / `hr` (`power`) |
 | 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:72`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:491`, `backend/static/schedule.html:1274`, `backend/static/schedule.html:1292`) |
 | CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`, the athlete's choice). **Not part of `active`**: it only changes the test session (`backend/engine/plan_prefs.py:103`). Panel: three radio options with a time / accuracy line (`backend/static/schedule.html:487`) |
+| 熱適應 | `plan.prefs.heat`, `plan.prefs.heat_method` | `auto` / `off` (`auto`); `run` / `overdress` / `bath` / `sauna` / `mixed` (`run`). **Not part of `active`** (`NOT_SHAPING`): they only add heat sessions before a hot A/B race (`engine/heat_plan.py`). Panel: radio + select with the current S and the rules (`#pf-heat`) |
+
+**熱適應課** (`engine/heat_plan.py`, heat-acclimation.md §5.4, 自組 from §3.4; applied after
+placement in `week_plan` and per projected week in `project_weeks(events, heat_acts)`, which
+carries the planned heat days into the next week's S): only when `heat` ≠ off, an A/B event within
+30 days is hot (`Event.heat` hot, or auto → `heat_data.event_is_hot`: 百岳 cool, else the median
+Hadley of the athlete's activities ±15 days in earlier years > 150), and the projected race-day S
+(centre) < 0.75; never within 2 days of the race or in a recovery week. Induction race − 21 → − 8:
+every placed easy run and the long run (a hot long run is the exposure; cap rule 1); maintenance
+race − 7 → − 3 every 4 days. An easy heat run becomes 「熱適應輕鬆跑」 ≥ 60 min, HR ≤ AeT, TSS scaled;
+over the weekday cap it is exempt with `NOTE_HEAT` (like the CP test); with `cap_mode` hard (cap <
+60) or method bath / sauna it stays ≤ 40 min and a `kind="heat_passive"` session (TSS 0, same day)
+is added. Fewer than 5 induction days in the week → `NOTE_SHORT`. `week_plan.heat` = {active,
+event, s_now, s_race_before / after / band, days, sessions}. heat_passive: never a main day
+(`blackouts.move_to`, `reconcile.SIDE_KINDS`), never matched to an activity (the user ticks it;
+a ticked one is a full dose), never pushed (`coros_workouts.session_steps` → 「被動熱適應不推」),
+rate 0 TSS/h. COROS: an easy heat run (flag or 熱適應 in the title) is warm-up 10 / main / walk
+cool-down 5 min, HR ≤ AeT, with the safety text in the description. 課表 page: a 熱 tag on heat
+chips, `heat_passive` in the legend, no push button for it.
 
 **Application order** (`shape()`, `backend/engine/plan_prefs.py:314`, then `place()`,
 `backend/engine/plan_prefs.py:420`), in `week_plan` and every projected week:
@@ -579,6 +598,15 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   road runs, ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. `extra` is
   `{fair, median}`; > 10 % → bad (輕鬆跑太快), otherwise info; the text says 「飄移是 AeT 測試用的，
   不是間歇門檻」. Source Friel (< 5 %) and 徐國峰 (90′ < 10 %), not Uphill Athlete.
+- **`i_heat`** 「熱適應」 (`Status.i_heat`; design `docs/research/heat-acclimation.md` §5.3): the
+  heat-acclimation index S (`engine/heat.py`) from the per-activity exposure
+  (`heat_data.exposures`, route_weather `activity_weather.json`) plus ticked heat_passive sessions
+  (`heat_data.completed_passive_dates`). Text 「72 %（部分）」; level acclimatised ≥ 0.75 good,
+  partial ≥ 0.35 watch, else info; bad only when a hot A/B race is within 30 days
+  (`heat_plan.hot_race`) and its projected S < 0.75, with the action to start the heat block at
+  race − 21 days. `spark` = S over 120 days; `extra` = s_race, doses (bars), HRC trend
+  (`heat.hr_cost` on steady flat stretches, 「觀測不支持模型」 when S rises and HRC does not fall),
+  a, badge 推估. Without exposure data the verdict asks for a weather-enabled routes build.
 - **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:419`): `quality_gate.evaluate` +
   `indicator` (`backend/engine/quality_gate.py:661`) with the status' 課表偏好 (`Status(prefs=…)`;
   the API's status cache keys on `prefs.stamp()`, `backend/api/overview.py:49`). Second in
@@ -764,4 +792,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-09-30 | feature | N/A | 課表偏好 (plan_prefs.py, `plan.prefs.*`, /plan/prefs, ⚙ panel + reconcile preview, notes on the 課表 page) applied in week_plan / projection / COROS HR intervals; same-load terrain conversion (equivalence.py, /plan/equivalence, dialog slider / locks) with LOO backtest; plan_sessions terrain / distance_km / climb_m; stale overview.html anchors refreshed |
 | 2026-10-01 | feature | N/A | 間歇門檻 (quality_gate.py, `plan.prefs.quality_gate` / `_weeks`; design docs/research/aerobic-base-readiness.md): 7 modes, guardrails, the 6-week dose table, recovery-week fartlek, forced-mode fallback (自訂), i_gate / informational i_drift, per-week projection; AeT drift test (aet_test.py: due cadence, session, COROS steps, UA bands, 「套用這次的 AeT」 on the review card and 測試 card, apply-estimate `date`); prefs chips with fixed-position `?` hover; the 「連續 3 次」 rule and UA misattributions removed |
 | 2026-10-01 | feature | N/A | CP 測試方式 (`plan.prefs.cp_test_protocol`, quick default / standard / race; cp_protocols.py): per-protocol test session with `protocol` (column + migration, reconcile field), race = a 還缺什麼 note instead of a session, protocol-specific cap note and COROS steps (all-out bouts open), same-method comparison in i_testing, 測試 card apply button |
+| 2026-10-01 | feature | docs/research/heat-acclimation.md | 熱適應: `i_heat` (S, doses, HRC, race-day S), 熱適應課 in week_plan / project_weeks (heat_plan.py: induction / maintenance, ≥ 60 min cap exemption `NOTE_HEAT`, hard cap → 40 min + bath, methods), `heat_passive` (side kind, TSS 0, never pushed, ticked = a dose), `plan.prefs.heat` / `heat_method` (not shaping), COROS heat-run steps, Event.heat, 課表 page 熱 tag + prefs block, 總覽 heat card |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |

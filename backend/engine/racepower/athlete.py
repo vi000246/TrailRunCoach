@@ -823,10 +823,14 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
 
 # ---- racepower v2: per-activity samples (docs/research/racepower-v2.md §10.1) ----
 
-GRADE_KEY = "racepower_v2_grade_hr"      # rows [g, v, p, z, hr, running share]
-HIKE_KEY = "racepower_v2_hike_hr"        # rows [g, v, z, hr, window index, day]
+# v3 (2026-10-01, baiyue-from-running.md §5.1): + window index k, cumulative
+# moving seconds t and the HR read HR_LAG_S later (the consecutive-window rule,
+# the hour-of-day term and the HR-lag handling need them)
+GRADE_KEY = "racepower_v3_grade_hr_kt"   # rows [g, v, p, z, hr, running share, k, t, hr_lag]
+HIKE_KEY = "racepower_v3_hike_hr_t"      # rows [g, v, z, hr, window index, day, t, hr_lag]
 RUN_MOVING_KMH = 1.0
 HIKE_REST_MS = 0.3
+HR_LAG_S = 60.0                          # 自組 (baiyue-from-running.md §2.2 finding 1)
 
 
 def activity_arrays(ds, w) -> Optional[dict]:
@@ -879,9 +883,10 @@ def _grade_windows(ds, w) -> Optional[list]:
         return None
     mv = (np.nan_to_num(a["p"]) > 0) & (np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH)
     rows = GM.windows(a["t"], a["d"], a["z"], a["p"], mv, hr=a["hr"], cadence=a["cad"],
-                      run_cadence=I.INTENSITY["run_cadence"])
+                      run_cadence=I.INTENSITY["run_cadence"], hr_lag_s=HR_LAG_S)
     return [[round(r["g"], 4), round(r["v"], 3), round(r["p"], 1), round(r["z"], 1), _r(r.get("hr"), 1),
-             _r(r.get("run"), 3)] for r in rows if r.get("p") and r["p"] > 0]
+             _r(r.get("run"), 3), r["k"], round(r["t"], 1), _r(r.get("hr_lag"), 1)]
+            for r in rows if r.get("p") and r["p"] > 0]
 
 
 def _day_slices(w, a) -> list[tuple[int, np.ndarray]]:
@@ -905,8 +910,9 @@ def _hike_windows(ds, w) -> Optional[list]:
         if len(sub["t"]) < 10:
             continue
         mv = np.nan_to_num(sub["kmh"]) > HIKE_REST_MS * 3.6
-        rows = GM.windows(sub["t"], sub["d"], sub["z"], None, mv, hr=sub["hr"])
-        out += [[round(r["g"], 4), round(r["v"], 3), round(r["z"], 1), _r(r.get("hr"), 1), r["k"], day]
+        rows = GM.windows(sub["t"], sub["d"], sub["z"], None, mv, hr=sub["hr"], hr_lag_s=HR_LAG_S)
+        out += [[round(r["g"], 4), round(r["v"], 3), round(r["z"], 1), _r(r.get("hr"), 1), r["k"], day,
+                 round(r["t"], 1), _r(r.get("hr_lag"), 1)]
                 for r in rows if r["v"] >= HIKE_REST_MS]
     return out
 
@@ -927,9 +933,10 @@ def grade_samples(ds, runs, exclude: Optional[set] = None) -> list[dict]:
             continue
         wt = ds.setting("weight", w.day)
         trail = "runningtrail" in w.tags or w.sport_type == "trail running"
-        for g, v, p, z, hr, run in rows:
+        for g, v, p, z, hr, run, k, t, hr_lag in rows:
             out.append({"g": g, "v": v, "p": p, "z": z, "re": v / (p / wt) if wt and p else None, "a": w.idx,
-                        "hr": hr, "run": run, "trail": trail})
+                        "hr": hr, "run": run, "trail": trail, "k": k, "t": t, "hr_lag": hr_lag,
+                        "date": w.entry.start.date().isoformat()})
     ds.flush_series()
     return out
 
@@ -949,8 +956,8 @@ def hike_samples(ds, hikes, exclude: Optional[set] = None) -> list[dict]:
         if w.idx in exclude:
             continue
         rows = ds.cached_series(HIKE_KEY, w, lambda w=w: _hike_windows(ds, w))
-        for g, v, z, hr, k, day in rows or []:
-            out.append({"g": g, "v": v, "z": z, "hr": hr, "k": k, "day": day, "a": w.idx})
+        for g, v, z, hr, k, day, t, hr_lag in rows or []:
+            out.append({"g": g, "v": v, "z": z, "hr": hr, "k": k, "day": day, "a": w.idx, "t": t, "hr_lag": hr_lag})
     ds.flush_series()
     return out
 
@@ -974,6 +981,97 @@ def hike_hr_windows(ds, hikes, exclude: Optional[set] = None) -> tuple[list[dict
             for x in HH.filter_windows(ds_, th["aet"]):
                 wins.append({**x, "trip": w.idx, "lthr": th["lthr"], "aet": th["aet"]})
     return wins, th_of
+
+
+HIKE_META = WX.HOME / "racepower_hike_meta.json"
+
+
+def hike_meta(path=None) -> dict:
+    """Per-trip records ({.wko4 file: {"pack_kg": float}}): the pack the
+    athlete carried (baiyue-from-running.md §5.1 point 3)."""
+    try:
+        d = json.loads((path or HIKE_META).read_text("utf-8"))
+        return {str(k): v for k, v in (d.get("trips") or {}).items() if isinstance(v, dict)}
+    except (OSError, ValueError):
+        return {}
+
+
+def set_hike_meta(file: str, pack_kg: Optional[float], path=None) -> dict:
+    p = path or HIKE_META
+    trips = hike_meta(p)
+    if pack_kg is None:
+        trips.pop(str(file), None)
+    else:
+        if not 0 <= float(pack_kg) <= 40:
+            raise ValueError("背負要在 0–40 kg")
+        trips[str(file)] = {**trips.get(str(file), {}), "pack_kg": float(pack_kg)}
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"trips": trips}, ensure_ascii=False), "utf-8")
+    return trips
+
+
+def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs: Optional[list] = None,
+                         hikes: Optional[list] = None) -> dict:
+    """Every window the capacity model (racepower/capacity.py) is fitted on,
+    before `today` and without `exclude`: trail walk windows, flat / descent
+    walk windows, hike HR windows (with each trip's pack), hike descent
+    windows, v_run at AeT, and the per-activity AeT."""
+    from backend.engine.racepower import capacity as CAP
+    from backend.engine.wko5expr.dataset import date_to_day
+    exclude = exclude or set()
+    tday = date_to_day(today)
+    if runs is None:
+        runs = [w for w in ds.workouts if w.sport == "run" and tday - RE_WINDOW_DAYS < w.day <= tday + 1]
+    runs = [w for w in runs if w.day < tday + 1]
+    gs = grade_samples(ds, runs, exclude)
+    aet = {}
+    for w in runs:
+        aet[w.idx] = thresholds_as_of(ds, w.entry.start.date()).get("aet")
+    hikes = hike_workouts(ds, today) if hikes is None else hikes
+    hikes = [w for w in hikes if w.idx not in exclude and w.day < tday + 1]
+    hr_wins, th_of = hike_hr_windows(ds, hikes, exclude)
+    for w in hikes:
+        aet[w.idx] = (th_of.get(w.idx) or {}).get("aet")
+    meta = hike_meta()
+    by_idx = {w.idx: w for w in hikes}
+    days_of: dict = {}
+    for x in hr_wins:
+        days_of[x["trip"]] = max(days_of.get(x["trip"], 1), x.get("day") or 1)
+    all_h = hike_samples(ds, hikes, exclude)
+    for x in all_h:
+        days_of[x["a"]] = max(days_of.get(x["a"], 1), x.get("day") or 1)
+
+    def pack_of(trip):
+        w = by_idx.get(trip)
+        rec = meta.get(w.entry.file) if w is not None else None
+        if rec and rec.get("pack_kg") is not None:
+            return float(rec["pack_kg"])
+        return CAP.PACK_DEFAULT_MULTI if days_of.get(trip, 1) > 1 else CAP.PACK_DEFAULT_SINGLE
+    lo = (today - dt.timedelta(days=CAP_AET_DAYS)).isoformat()
+    vr = CAP.run_speed_at_aet(gs, aet.get, lo)
+    packs = {w.idx: pack_of(w.idx) for w in hikes}
+    recorded = {w.idx for w in hikes if (meta.get(w.entry.file) or {}).get("pack_kg") is not None}
+    return {"trail": CAP.trail_walk_windows(gs), "flat": CAP.flat_walk_windows(gs),
+            "hike": CAP.hike_steep_windows(hr_wins), "hike_all": all_h,
+            "hike_down": [x for x in all_h if x["g"] <= CAP.DOWN_CAP_G], "v_run": vr, "aet": aet,
+            "pack_of": pack_of, "packs": packs, "packs_recorded": recorded, "hr_wins": hr_wins,
+            "weight": ds.setting("weight", tday)}
+
+
+CAP_AET_DAYS = 90
+
+
+def walk_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = None, tech: float = 1.0,
+                  inputs: Optional[dict] = None, boot_reps: int = 400, sigma_loo=None):
+    from backend.engine.racepower import capacity as CAP
+    today = today or dt.date.today()
+    x = inputs or walk_capacity_inputs(ds, today, exclude)
+    cap = CAP.fit_walk_capacity(weight=x["weight"], v_run=x["v_run"], trail=x["trail"], hike=x["hike"],
+                                flat=x["flat"], hike_down=x["hike_down"], aet_of=x["aet"].get,
+                                pack_of=x["pack_of"], tech=tech, boot_reps=boot_reps, sigma_loo=sigma_loo)
+    cap.basis.update(packs_recorded=len(x["packs_recorded"]), packs_default=len(x["packs"]) - len(x["packs_recorded"]),
+                     pack_default_rule=f"沒填的趟：多日 {CAP.PACK_DEFAULT_MULTI:g} kg、單日 {CAP.PACK_DEFAULT_SINGLE:g} kg（預設背負）")
+    return cap
 
 
 def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] = None,
@@ -1012,7 +1110,14 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
     steep = [{"g": x["g"], "v": x["v"], "z": x["z"], "a": x["trip"]} for x in hr_wins if x["trip"] not in solo_idx]
     th = thresholds_as_of(ds, today)
     n_days = len({(x["trip"], x["day"]) for x in hr_wins})
+    try:
+        cap = walk_capacity(ds, today, exclude)
+    except Exception:                       # noqa: BLE001 — the planner falls back to HikeSpeed
+        import traceback
+        traceback.print_exc()
+        cap = None
     return {"grade_re": GM.fit_gait_re(gs, re_flat, cmap), "hike_speed": GM.fit_hike_speed(hs_solo + steep),
+            "walk_capacity": cap,
             "hike_hr": HH.summary(hr_wins, th.get("aet"), th.get("lthr"), n_days),
             "hike_basis": {"solo_hikes": len(solo_w), "solo_windows": len(hs_solo), "steep_hr_windows": len(steep),
                            "group_hikes": len(hikes) - len(solo_w), "note": GROUP_HIKE_NOTE},

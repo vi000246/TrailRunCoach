@@ -113,6 +113,7 @@ class EventIn(BaseModel):
     climbing_m: Optional[float] = None
     est_hours: Optional[float] = None
     note: str = ""
+    heat: str = "auto"                      # auto | hot | cool (heat-acclimation.md §5.4)
 
 
 @router.put("/events")

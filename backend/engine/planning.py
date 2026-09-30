@@ -43,6 +43,7 @@ PHASES = {
 }
 KINDS = {"race": "越野賽", "baiyue": "百岳", "road": "路跑賽", "other": "其他"}
 PRIORITIES = ("A", "B", "C")
+EVENT_HEAT = ("auto", "hot", "cool")      # Event.heat (heat-acclimation.md §5.4)
 
 
 def _d(s) -> Optional[dt.date]:
@@ -63,6 +64,9 @@ class Event:
     climbing_m: Optional[float] = None
     est_hours: Optional[float] = None   # expected moving time
     note: str = ""
+    # is this a hot race? auto = the race-day forecast / climatology decides
+    # (Hadley > 150, heat.race_is_hot); hot / cool = the user says so
+    heat: str = "auto"
 
     @property
     def start(self) -> dt.date:
@@ -184,6 +188,8 @@ class Plan:
             data["priority"] = "A"
         if data.get("kind") not in KINDS:
             data["kind"] = "other"
+        if data.get("heat") not in EVENT_HEAT:
+            data["heat"] = "auto"
         _d(data["date"])  # validate
         eid = data.get("id") or uuid.uuid4().hex[:8]
         ev = Event(**{**data, "id": eid})
