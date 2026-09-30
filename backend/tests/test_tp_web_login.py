@@ -135,6 +135,64 @@ def test_login_page_outcomes_map_to_clear_errors(tmp_path, outcome, code, status
     run(go())
 
 
+def test_trace_logs_steps_and_keys_but_no_secrets(tmp_path, caplog):
+    import logging
+
+    async def go():
+        s = await make_session(tmp_path)
+        with caplog.at_level(logging.INFO, logger="backend.sync.tp_client"):
+            with http.use_transport(httpx.MockTransport(FakeTPWeb())):
+                await tp_client.login_password("u@example.com", "s3cretPW", s, 1)
+        out = caplog.text
+        for step in ("step=login_page", "step=login_post", "step=token", "step=user", "step=done"):
+            assert step in out
+        assert "keys=accountStatus,user" in out
+        for secret in ("s3cretPW", "u@example.com", "cookieVAL", "web-at-", "csrf123"):
+            assert secret not in out
+    run(go())
+
+
+def test_token_step_named_in_error(tmp_path):
+    from backend.api.auth import LoginRequest, tp_login_password
+
+    async def go():
+        s = await make_session(tmp_path)
+        with http.use_transport(httpx.MockTransport(FakeTPWeb(token_ok=False))):
+            with pytest.raises(HTTPException) as ei:
+                await tp_login_password(LoginRequest(username="u@example.com", password="pw"), s)
+        assert ei.value.status_code == 502 and ei.value.detail.startswith("TP_LOGIN_ERROR[token]")
+    run(go())
+
+
+def test_live_shape_numeric_types_and_athlete_id_fallback(tmp_path):
+    """users/v3/user without athletes / userId -> id from users/v3/user/athletes."""
+    class LiveShape(FakeTPWeb):
+        def __call__(self, req):
+            if req.url.host == "tpapi.trainingpeaks.com" and req.url.path == "/users/v3/user":
+                return httpx.Response(200, json={"user": {"userName": "x", "userType": 1,
+                                                          "athleteType": 2, "isPremium": True},
+                                                 "accountStatus": {"isLocked": False}})
+            if req.url.host == "tpapi.trainingpeaks.com" and req.url.path == "/users/v3/user/athletes":
+                return httpx.Response(200, json=[{"athleteId": 4242}])
+            return super().__call__(req)
+
+    async def go():
+        s = await make_session(tmp_path)
+        with http.use_transport(httpx.MockTransport(LiveShape())):
+            r = await tp_client.login_password("u@example.com", "pw", s, 1)
+        assert r["tp_athlete_id"] == 4242 and r["premium"] and r["can_download"]
+        from backend.db.models import Athlete
+        assert (await s.get(Athlete, 1)).tp_athlete_id == 4242
+    run(go())
+
+
+def test_extract_accepts_numeric_athlete_type():
+    aid, athletes, user_type, premium = tp_client._extract_athlete_id(
+        {"user": {"userId": 9, "athletes": [{"athleteId": 9, "athleteType": 2, "isPremium": True}]}})
+    assert aid == 9 and premium and user_type == "2"
+    assert tp_client._can_download(user_type, False) is False
+
+
 def test_successful_grant_still_used_first(tmp_path):
     class Grant(FakeTPWeb):
         def __call__(self, req):

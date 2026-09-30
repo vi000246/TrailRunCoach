@@ -147,6 +147,24 @@ TP_AUTH_COOKIE = "Production_tpAuth"
 BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/130.0 Safari/537.36")
 
+def _keys(resp: httpx.Response) -> str:
+    """Top-level JSON keys only (never values) for the diagnostic trace."""
+    try:
+        body = resp.json()
+    except Exception:
+        return "-"
+    if isinstance(body, dict):
+        return ",".join(sorted(body.keys()))
+    return type(body).__name__
+
+
+def _trace(step: str, resp: httpx.Response) -> None:
+    """Sanitised login trace: step, status, host+path, JSON keys. No query
+    strings, bodies, cookies, tokens or credentials."""
+    log.warning("TP login step=%s status=%s url=%s%s keys=%s", step, resp.status_code,
+             resp.url.host, resp.url.path, _keys(resp))
+
+
 _RE_CSRF = re.compile(r'name="__RequestVerificationToken"[^>]*value="([^"]+)"')
 _RE_ACTION = re.compile(r'<form[^>]*action="([^"]*)"', re.I)
 _RE_ERROR = re.compile(r'(?:validation-summary-errors|field-validation-error)[^>]*>(.{0,400})', re.S)
@@ -190,9 +208,13 @@ async def _web_login(username: str, password: str) -> str:
     """Website form login; returns the Production_tpAuth cookie value."""
     async with http.client(timeout=30, follow_redirects=True,
                            headers={"User-Agent": BROWSER_UA}) as c:
-        page = await c.get(TP_WEB_LOGIN_URL)
+        try:
+            page = await c.get(TP_WEB_LOGIN_URL)
+        except httpx.HTTPError as e:
+            raise TpLoginError(f"TP_LOGIN_ERROR[login_page]: {type(e).__name__}")
+        _trace("login_page", page)
         if page.status_code != 200:
-            raise TpLoginError(f"TP_LOGIN_ERROR: login page HTTP {page.status_code}")
+            raise TpLoginError(f"TP_LOGIN_ERROR[login_page]: HTTP {page.status_code}")
         form = {"Username": username, "Password": password}
         m = _RE_CSRF.search(page.text)
         if m:
@@ -203,8 +225,16 @@ async def _web_login(username: str, password: str) -> str:
                 form[hidden] = v
         a = _RE_ACTION.search(page.text)
         url = page.url.join(a.group(1)) if a and a.group(1) else page.url
-        resp = await c.post(url, data=form)
+        try:
+            resp = await c.post(url, data=form)
+        except httpx.HTTPError as e:
+            raise TpLoginError(f"TP_LOGIN_ERROR[login_post]: {type(e).__name__}")
+        for h in resp.history:
+            _trace("login_post_redirect", h)
+        _trace("login_post", resp)
         cookie = _cookie(c.cookies, TP_AUTH_COOKIE)
+        log.warning("TP login step=login_post auth_cookie=%s form_fields=%s", bool(cookie),
+                 ",".join(sorted(k for k in form if k not in ("Username", "Password"))))
         if cookie:
             return cookie
         raise classify_login_page(str(resp.url), resp.text)
@@ -216,14 +246,17 @@ async def _token_from_cookie(cookie: str) -> Optional[dict]:
     async with http.client(timeout=15, headers={"User-Agent": BROWSER_UA,
                                                 "Cookie": f"{TP_AUTH_COOKIE}={cookie}"}) as c:
         resp = await c.get(TP_WEB_TOKEN_URL)
+    _trace("token", resp)
     if resp.status_code != 200:
-        log.warning("TP users/v3/token HTTP %d", resp.status_code)
         return None
     try:
         body = resp.json()
     except Exception:
         return None
+    if not isinstance(body, dict):
+        return None
     tok = body.get("token") if isinstance(body.get("token"), dict) else body
+    log.warning("TP login step=token token_keys=%s", ",".join(sorted(tok.keys())))
     if body.get("success") is False or not tok.get("access_token"):
         return None
     return tok
@@ -259,7 +292,7 @@ async def login_password(
         cookie = await _web_login(username, password)
         token = await _token_from_cookie(cookie)
         if token is None:
-            raise TpLoginError("TP_LOGIN_ERROR: logged in, but users/v3/token refused the session")
+            raise TpLoginError("TP_LOGIN_ERROR[token]: logged in, but users/v3/token refused the session")
         method = "web"
 
     # users/v3/user returns the authenticated user and accessible athletes.
@@ -267,8 +300,14 @@ async def login_password(
         user_info = await _fetch_user(token["access_token"])
         tp_athlete_id, athletes_list, user_type, premium = _extract_athlete_id(user_info)
     except Exception as e:
-        log.warning("users/v3/user failed (non-fatal): %s", e)
-        tp_athlete_id, athletes_list, user_type, premium = None, [], "", False
+        log.warning("TP login step=user failed (non-fatal): %s", type(e).__name__)
+        user_info, tp_athlete_id, athletes_list, user_type, premium = {}, None, [], "", False
+    if not tp_athlete_id:
+        tp_athlete_id = await _athlete_id_fallback(token["access_token"], user_info)
+        if tp_athlete_id:
+            athletes_list = athletes_list or [{"id": tp_athlete_id, "self": True}]
+    log.warning("TP login step=done method=%s athlete_id_found=%s premium=%s",
+             method, bool(tp_athlete_id), premium)
 
     state_result = await db.execute(
         select(SyncState).where(SyncState.athlete_id == athlete_id)
@@ -283,12 +322,7 @@ async def login_password(
     state.tp_token_expires = _expiry(token)
 
     if tp_athlete_id:
-        athlete_result = await db.execute(
-            select(Athlete).where(Athlete.id == athlete_id)
-        )
-        athlete = athlete_result.scalar_one_or_none()
-        if athlete:
-            athlete.tp_athlete_id = tp_athlete_id
+        await _ensure_athlete(db, athlete_id, tp_athlete_id)
 
     await db.commit()
 
@@ -310,6 +344,12 @@ async def _fetch_user(access_token: str) -> dict:
         base_url=TP_API_BASE, headers=headers, timeout=10
     ) as client:
         resp = await client.get("users/v3/user")
+        _trace("user", resp)
+        if resp.status_code == 200:
+            body = resp.json()
+            root = body.get("user") if isinstance(body, dict) and isinstance(body.get("user"), dict) else None
+            if root is not None:
+                log.warning("TP login step=user user_keys=%s", ",".join(sorted(root.keys())))
         if resp.status_code != 200:
             raise ValueError(
                 f"users/v3/user failed ({resp.status_code}): {resp.text[:200]}"
@@ -327,10 +367,13 @@ def _extract_athlete_id(user_info: dict) -> tuple[Optional[int], list[dict], str
     user being a coach — NOT a top-level `premium` flag.
     For a self-coached athlete, userId IS the athleteId.
     """
-    log.debug("_extract_athlete_id raw: %s", user_info)
     root = user_info.get("user") if isinstance(user_info.get("user"), dict) else user_info
-    is_coach = bool(root.get("isCoach")) or "coach" in str(root.get("userType", "")).lower()
-    athletes = root.get("athletes") or []
+    # The live API (2026-09-30) returns numeric userType / athleteType / coachType
+    # and explicit booleans isPremium / isCoached — not the "basic"/"premium"
+    # strings the WKO5 string table suggested. Accept both.
+    is_coach = (bool(root.get("isCoach")) or (root.get("coachType") or 0) > 0
+                or "coach" in str(root.get("userType", "")).lower())
+    athletes = root.get("athletes") or user_info.get("athletes") or []
 
     clean_athletes = []
     for a in athletes:
@@ -339,21 +382,68 @@ def _extract_athlete_id(user_info: dict) -> tuple[Optional[int], list[dict], str
             clean_athletes.append({
                 "id": aid,
                 "name": a.get("userName") or a.get("name") or "",
-                "athlete_type": a.get("athleteType", ""),
+                "athlete_type": str(a.get("athleteType", "")),
+                "premium": bool(a.get("isPremium")),
             })
 
+    root_premium = bool(root.get("isPremium")) or bool(root.get("premium"))
     if clean_athletes:
         primary = clean_athletes[0]
-        premium = str(primary["athlete_type"]).lower() == "premium"
+        premium = root_premium or primary["premium"] or primary["athlete_type"].lower() == "premium"
         user_type = "coach" if is_coach else primary["athlete_type"]
         return primary["id"], clean_athletes, user_type, premium
 
-    aid = root.get("athleteId") or root.get("userId")
-    premium = str(root.get("athleteType", "")).lower() == "premium" or bool(root.get("premium"))
-    user_type = "coach" if is_coach else root.get("athleteType", "")
+    aid = root.get("athleteId") or root.get("userId") or root.get("personId") or root.get("id")
+    premium = root_premium or str(root.get("athleteType", "")).lower() == "premium"
+    user_type = "coach" if is_coach else str(root.get("athleteType", ""))
     if aid:
         return aid, [{"id": aid, "self": True}], user_type, premium
     return None, [], user_type, premium
+
+
+def _first_id(obj) -> Optional[int]:
+    """athleteId / userId / personId / id from a dict, or the first element
+    of a list of such dicts."""
+    if isinstance(obj, list):
+        obj = obj[0] if obj else None
+    if not isinstance(obj, dict):
+        return None
+    for k in ("athleteId", "userId", "personId", "id"):
+        v = obj.get(k)
+        if isinstance(v, int) or (isinstance(v, str) and v.isdigit()):
+            return int(v)
+    return None
+
+
+# Tried in order when users/v3/user didn't yield an athlete id. Each answers
+# JSON for the logged-in user; only ids are read from it.
+ATHLETE_ID_FALLBACKS = ("users/v3/user/athletes", "fitness/v1/athletes")
+
+
+async def _athlete_id_fallback(access_token: str, user_info: dict) -> Optional[int]:
+    for key in ("accountStatus", "athlete", "person"):
+        aid = _first_id(user_info.get(key)) if isinstance(user_info, dict) else None
+        if aid:
+            log.warning("TP login step=athlete_id source=user.%s", key)
+            return aid
+    headers = {**TP_HEADERS, "Authorization": f"Bearer {access_token}"}
+    async with http.client(base_url=TP_API_BASE, headers=headers, timeout=10) as client:
+        for path in ATHLETE_ID_FALLBACKS:
+            try:
+                resp = await client.get(path)
+            except httpx.HTTPError:
+                continue
+            _trace("athlete_id", resp)
+            if resp.status_code != 200:
+                continue
+            try:
+                body = resp.json()
+            except Exception:
+                continue
+            aid = _first_id(body.get("athletes") if isinstance(body, dict) and "athletes" in body else body)
+            if aid:
+                return aid
+    return None
 
 
 def _can_download(user_type: str, premium: bool) -> bool:
@@ -361,7 +451,7 @@ def _can_download(user_type: str, premium: bool) -> bool:
     This is a WKO5 client-side check; the server may or may not enforce it."""
     if premium:
         return True
-    return "coach" in (user_type or "").lower()
+    return "coach" in str(user_type or "").lower()
 
 
 def _parse_changed(body) -> tuple[list[dict], list]:
@@ -844,14 +934,21 @@ async def exchange_code(code: str, db: AsyncSession, athlete_id: int) -> dict:
         seconds=token.get("expires_in", 3600)
     )
     if tp_athlete_id:
-        athlete_result = await db.execute(
-            select(Athlete).where(Athlete.id == athlete_id)
-        )
-        athlete = athlete_result.scalar_one_or_none()
-        if athlete:
-            athlete.tp_athlete_id = tp_athlete_id
+        await _ensure_athlete(db, athlete_id, tp_athlete_id)
     await db.commit()
     return token
+
+
+async def _ensure_athlete(db: AsyncSession, athlete_id: int, tp_athlete_id: int) -> None:
+    """Record the TP athlete id, creating the local athlete row on a fresh DB
+    (sync needs it: it stores tp_athlete_id and the FIT download folder)."""
+    athlete = (await db.execute(select(Athlete).where(Athlete.id == athlete_id))).scalar_one_or_none()
+    if athlete is None:
+        folder = Path.home() / ".wko5coach" / "fit" / f"athlete_{athlete_id}"
+        folder.mkdir(parents=True, exist_ok=True)
+        athlete = Athlete(id=athlete_id, name=f"athlete_{athlete_id}", data_dir=str(folder))
+        db.add(athlete)
+    athlete.tp_athlete_id = tp_athlete_id
 
 
 def _iso_date(s: Optional[str]) -> Optional[date]:
