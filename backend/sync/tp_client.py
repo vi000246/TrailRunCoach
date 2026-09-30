@@ -301,11 +301,7 @@ async def login_password(
         tp_athlete_id, athletes_list, user_type, premium = _extract_athlete_id(user_info)
     except Exception as e:
         log.warning("TP login step=user failed (non-fatal): %s", type(e).__name__)
-        user_info, tp_athlete_id, athletes_list, user_type, premium = {}, None, [], "", False
-    if not tp_athlete_id:
-        tp_athlete_id = await _athlete_id_fallback(token["access_token"], user_info)
-        if tp_athlete_id:
-            athletes_list = athletes_list or [{"id": tp_athlete_id, "self": True}]
+        tp_athlete_id, athletes_list, user_type, premium = None, [], "", False
     log.warning("TP login step=done method=%s athlete_id_found=%s premium=%s",
              method, bool(tp_athlete_id), premium)
 
@@ -393,57 +389,12 @@ def _extract_athlete_id(user_info: dict) -> tuple[Optional[int], list[dict], str
         user_type = "coach" if is_coach else primary["athlete_type"]
         return primary["id"], clean_athletes, user_type, premium
 
-    aid = root.get("athleteId") or root.get("userId") or root.get("personId") or root.get("id")
+    aid = root.get("athleteId") or root.get("userId")
     premium = root_premium or str(root.get("athleteType", "")).lower() == "premium"
     user_type = "coach" if is_coach else str(root.get("athleteType", ""))
     if aid:
         return aid, [{"id": aid, "self": True}], user_type, premium
     return None, [], user_type, premium
-
-
-def _first_id(obj) -> Optional[int]:
-    """athleteId / userId / personId / id from a dict, or the first element
-    of a list of such dicts."""
-    if isinstance(obj, list):
-        obj = obj[0] if obj else None
-    if not isinstance(obj, dict):
-        return None
-    for k in ("athleteId", "userId", "personId", "id"):
-        v = obj.get(k)
-        if isinstance(v, int) or (isinstance(v, str) and v.isdigit()):
-            return int(v)
-    return None
-
-
-# Tried in order when users/v3/user didn't yield an athlete id. Each answers
-# JSON for the logged-in user; only ids are read from it.
-ATHLETE_ID_FALLBACKS = ("users/v3/user/athletes", "fitness/v1/athletes")
-
-
-async def _athlete_id_fallback(access_token: str, user_info: dict) -> Optional[int]:
-    for key in ("accountStatus", "athlete", "person"):
-        aid = _first_id(user_info.get(key)) if isinstance(user_info, dict) else None
-        if aid:
-            log.warning("TP login step=athlete_id source=user.%s", key)
-            return aid
-    headers = {**TP_HEADERS, "Authorization": f"Bearer {access_token}"}
-    async with http.client(base_url=TP_API_BASE, headers=headers, timeout=10) as client:
-        for path in ATHLETE_ID_FALLBACKS:
-            try:
-                resp = await client.get(path)
-            except httpx.HTTPError:
-                continue
-            _trace("athlete_id", resp)
-            if resp.status_code != 200:
-                continue
-            try:
-                body = resp.json()
-            except Exception:
-                continue
-            aid = _first_id(body.get("athletes") if isinstance(body, dict) and "athletes" in body else body)
-            if aid:
-                return aid
-    return None
 
 
 def _can_download(user_type: str, premium: bool) -> bool:
