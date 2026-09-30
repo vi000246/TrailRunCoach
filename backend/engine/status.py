@@ -186,7 +186,7 @@ class Status:
         self.actions = []
         for fn in (self.i_phase, self.i_fitness, self.i_form, self.i_volume, self.i_intensity,
                    self.i_efficiency, self.i_drift, self.i_climb, self.i_long, self.i_density,
-                   self.i_strength, self.i_durability, self.i_testing, self.i_data):
+                   self.i_descent, self.i_strength, self.i_durability, self.i_testing, self.i_data):
             try:
                 ind = fn()
             except Exception as e:  # one broken indicator must not hide the rest
@@ -496,6 +496,36 @@ class Status:
             why = f"4 週內最陡一次 {top:.0f} m/km，平均 {_mean(dens):.0f}"
             lvl, v, act = INFO, "沒有目標賽事", ""
         return Indicator("density", "爬升密度", lvl, txt, v, why, act, SRC_KOOP, top, spark)
+
+    def i_descent(self) -> Indicator:
+        # Downhill impact load, 7-day vs 28-day daily mean — the same per-workout
+        # sum as 訓練量 →「每週下坡衝擊負荷」(chart_metrics.DOWNHILL_EXPR). Our own
+        # composite with no validated thresholds, so it only ever says INFO or
+        # WATCH (a jump ≥ 1.5×, borrowed from the ACWR bands).
+        from backend.engine.algorithms import chart_metrics as CM
+        loads = self.ws(f"athleterange(today-83, today, {CM.DOWNHILL_EXPR})")
+        per_day: dict[int, float] = {}
+        for i, v in loads.items():
+            w = self.ds.workouts[i]
+            if w.sport in ("run", "walk") or self.is_hike(w):
+                d = int(math.floor(w.day))
+                per_day[d] = per_day.get(d, 0.0) + v
+        daily = [per_day.get(d, 0.0) for d in range(self.tday - 27, self.tday + 1)]
+        spark = [[d.isoformat(), round(sum(per_day.get(int(date_to_day(d)) + k, 0.0) for k in range(7)), 2)]
+                 for d, _ in self.weekly_hours(12)]
+        ratio = CM.acute_chronic(daily)
+        a7 = sum(daily[-7:])
+        src = "自訂指標（依 Gottschall & Kram 2005、Keller 1996）"
+        if ratio is None:
+            return Indicator("descent", "下坡負荷", NA, "–", "近 4 週沒有下坡路段", spark=spark, source=src)
+        txt = f"{ratio:.1f}×"
+        why = f"近 7 天 {a7:.1f} 等效 km，近 28 天每週平均 {sum(daily) / 4:.1f}（參考指標，沒有驗證過的門檻）"
+        if ratio >= 1.5 and a7 >= 3:
+            lvl, v, act = WATCH, "這週下坡比最近一個月多很多", "接下來幾天避開長下坡，或下坡放慢；股四頭肌痠痛消了再加"
+        else:
+            lvl, v, act = INFO, "下坡量跟最近一個月差不多" if ratio >= 0.8 else "這週下坡比平常少", ""
+        return Indicator("descent", "下坡負荷", lvl, txt, v, why, act, src, ratio, spark,
+                         {"acute_7d": a7, "chronic_28d": sum(daily)})
 
     def i_strength(self) -> Indicator:
         n = len(self.since(28, {"strength"}))
