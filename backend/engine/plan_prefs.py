@@ -64,7 +64,12 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.terrain_quality": "terrain_quality",
     "plan.prefs.interval_target": "interval_target",
     "plan.prefs.cp_test_protocol": "cp_test_protocol",
+    "plan.prefs.heat": "heat",
+    "plan.prefs.heat_method": "heat_method",
 }
+# fields that only add sessions for a specific reason and never reshape the
+# week: they are not part of `active` (the default plan stays untouched)
+NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method")
 LONG_WD = {"sat": 5, "sun": 6}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
@@ -101,10 +106,14 @@ class Prefs:
     # CP 測試方式 (engine/cp_protocols.py). Not part of `active`: choosing a
     # protocol only changes the test session, not the shaping of the week.
     cp_test_protocol: str = "quick"
+    # 熱適應課 (engine/heat_plan.py, heat-acclimation.md §5.4): auto adds heat
+    # sessions only before a hot A/B race; off never. Not part of `active`.
+    heat: str = "auto"
+    heat_method: str = "run"
 
     @property
     def active(self) -> bool:
-        return replace(self, cp_test_protocol=Prefs.cp_test_protocol) != Prefs()
+        return replace(self, **{f: getattr(Prefs, f) for f in NOT_SHAPING}) != Prefs()
 
     @property
     def long_cap(self) -> Optional[int]:

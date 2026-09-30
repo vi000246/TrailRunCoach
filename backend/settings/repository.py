@@ -71,6 +71,9 @@ DEFAULTS: dict[str, Any] = {
     # CP 測試方式 (engine/cp_protocols.py): quick 20 min all-out | standard 12′ +
     # 30′ + 3′ | race (a 5–10 K race instead). The athlete chose quick as the default.
     "plan.prefs.cp_test_protocol": "quick",
+    # 熱適應課 (engine/heat_plan.py): auto = only before a hot A/B race; off = never
+    "plan.prefs.heat": "auto",
+    "plan.prefs.heat_method": "run",          # run | overdress | bath | sauna | mixed
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
@@ -85,6 +88,8 @@ PREF_ENUMS = {
     "plan.prefs.terrain_quality": ("flat", "hill", "any"),
     "plan.prefs.interval_target": ("power", "hr"),
     "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
+    "plan.prefs.heat": ("auto", "off"),
+    "plan.prefs.heat_method": ("run", "overdress", "bath", "sauna", "mixed"),
 }
 PREF_INTS = {                                 # key -> (lo, hi); None always allowed
     "plan.prefs.cap_weekday": (20, 300),

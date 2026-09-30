@@ -327,6 +327,7 @@ class Session:
     distance_km: Optional[float] = None
     climb_m: Optional[float] = None
     protocol: Optional[str] = None      # CP-test protocol (engine/cp_protocols.py); tests only
+    heat: bool = False                  # 熱適應課 (engine/heat_plan.py); kind easy / long / heat_passive
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -715,6 +716,18 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if not keep_rest and free:
         notes.append({"level": "info", "text": "剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息"})
 
+    # ---- 熱適應課 (engine/heat_plan.py): only before a hot A/B race ---------
+    heat_info = {"active": False}
+    try:
+        from backend.engine import heat_plan as HP
+        sd = [asdict(s) for s in sessions]
+        heat_info = HP.apply(sd, events=status.plan.events, today=today, prefs=prefs, aet=aet, mode=mode,
+                             kind=kind, notes=notes)
+        if heat_info.get("active"):
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in sd]
+    except Exception as e:                  # noqa: BLE001 — heat sessions never break the plan
+        heat_info = {"active": False, "reason": f"熱適應資料讀取失敗（{type(e).__name__}）"}
+
     # ---- projection to Sunday -------------------------------------------
     planned_by_day = {}
     for s in sessions:
@@ -768,4 +781,5 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "tss_per_category": tph,
         "prefs": PR.to_dict() if PR is not None else None,
         "blackout_days": [d.isoformat() for d in lost],
+        "heat": heat_info,
     }

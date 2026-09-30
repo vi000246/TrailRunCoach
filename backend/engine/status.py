@@ -186,7 +186,7 @@ class Status:
         self.actions = []
         for fn in (self.i_phase, self.i_fitness, self.i_form, self.i_volume, self.i_intensity,
                    self.i_efficiency, self.i_drift, self.i_climb, self.i_long, self.i_density,
-                   self.i_descent, self.i_strength, self.i_durability, self.i_testing, self.i_data):
+                   self.i_descent, self.i_strength, self.i_durability, self.i_heat, self.i_testing, self.i_data):
             try:
                 ind = fn()
             except Exception as e:  # one broken indicator must not hide the rest
@@ -195,6 +195,65 @@ class Status:
                 self.indicators.append(ind)
         self._recommend()
         return self
+
+    def i_heat(self) -> Indicator:
+        """熱適應 (docs/research/heat-acclimation.md §5.3): the index S from
+        the per-activity heat exposure (engine/heat.py, heat_data.py). Level:
+        acclimatised good, partial watch, none info; bad only when a hot A/B
+        race is within 30 days and its projected S < 0.75 (自組)."""
+        from backend.engine import heat as HT
+        from backend.engine import heat_data as HD
+        from backend.engine import heat_plan as HP
+        acts, meta = HD.exposures()
+        passive = HD.completed_passive_dates()
+        acts = acts + [{"date": d, "hot_min": HT.MIN_DOSE_MIN} for d in passive]
+        cur = HT.current(acts, self.today)
+        s = cur["s"]
+        lv = cur["level"]
+        level = {"acclimatised": GOOD, "partial": WATCH}.get(lv["id"], INFO)
+        hr = HP.hot_race(self.plan.events, self.today, acts)
+        s_race, action = None, ""
+        if hr:
+            e = hr["event"]
+            pj = HT.project(s, self.today, e.start)
+            s_race = {"center": pj["center"], "low": pj["low"], "high": pj["high"], "event": e.name, "date": e.date}
+            if pj["center"] < HT.LEVELS[0][1]:
+                level = BAD
+                start = e.start - dt.timedelta(days=HP.INDUCT[0])
+                action = (f"{e.name}（{e.date}）預估是熱天，比賽日預估 S {pj['center']:.0%}：建議 "
+                          f"{start.month}/{start.day} 起排 5–10 天熱適應課（課表會自動排，見排課頁）")
+        verdict = (f"近 14 天有 {cur['days_14']} 天熱暴露" +
+                   (f"，最後一次 {cur['since_last_d']} 天前" if cur["since_last_d"] is not None else "，沒有熱暴露紀錄"))
+        if meta.get("missing"):
+            verdict = "還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0"
+            level = INFO if level != BAD else level
+        # HRC observation (§2.3): does the HR cost of heat fall as S rises?
+        hrc = None
+        try:
+            if acts:
+                rows = HT.hr_cost(HD.steady_segments(self.ds, self.today, acts))
+                tr = HT.hrc_trend(rows["rows"], self.today)
+                s28 = HT.mean_s(cur["series"], self.today - dt.timedelta(days=55), self.today - dt.timedelta(days=28))
+                disagree = (tr["recent"] is not None and tr["before"] is not None and s28 is not None
+                            and s > s28 + 0.05 and tr["recent"] >= tr["before"])
+                hrc = {**tr, "noise_bpm": rows["noise_bpm"], "rows": rows["rows"][-40:], "disagrees": disagree}
+                if disagree:
+                    verdict += "；觀測不支持模型（S 在升、熱天心率成本沒降）"
+        except Exception:                   # noqa: BLE001
+            hrc = None
+        spark = [[d.isoformat(), round(v, 3)] for d, v in cur["series"][-120:]]
+        doses = [[d.isoformat(), round(v, 2)] for d, v in sorted(cur["doses"].items())
+                 if d >= self.today - dt.timedelta(days=119)]
+        return Indicator("heat", "熱適應", level, f"{s:.0%}（{lv['label']}）", verdict,
+                         f"每天 Hadley ≥ {HT.HOT_HADLEY:.0f} 的移動分鐘（130–150 部分計入），≥ {HT.MIN_DOSE_MIN:.0f} 分 = 滿劑量；"
+                         f"有暴露 S += {HT.K_IN:.3f}·劑量·(1 − S)，沒有 S × (1 − {HT.DECAY})（Daanen 2018 每天 2.3–2.6 %）。"
+                         "S 的模型是自組、推估；你的心率資料目前不支持「夏末熱懲罰比初夏小」",
+                         action, source="Pandolf 1998；Racinais 2015 共識；Daanen 2018；模型 [自組]", value=s,
+                         spark=spark,
+                         extra={"s_race": s_race, "hrc": hrc, "a": HT.A_RECOVER, "a_range": list(HT.A_RANGE), "doses": doses,
+                                "badge": "推估", "source": meta.get("attribution"), "passive": passive[-20:],
+                                "hot_race": ({"name": hr["event"].name, "date": hr["event"].date,
+                                              "source": hr["source"]} if hr else None)})
 
     def i_phase(self) -> Indicator:
         p = self.phase

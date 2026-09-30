@@ -205,6 +205,8 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
         raise Unsupported("比賽 / 休息不推")
     if kind == "strength":
         raise Unsupported("COROS 肌力課要從動作庫挑動作，先不推")
+    if kind == "heat_passive":
+        raise Unsupported("被動熱適應不推")
     if kind in ("quality",):
         return _quality_steps(s, th)
     if kind == "test":
@@ -213,6 +215,11 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
         raise Unsupported("沒有時間長度")
     if kind in ("long", "mountain", "hike"):
         return [Step(EX_TRAIN, secs, easy_hr(th), "心率 ≤ AeT")]
+    if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
+        # heat-acclimation.md §5.4: warm-up 10 / main / cool-down 5 (walk), HR ≤ AeT
+        return [Step(EX_WARMUP, 10 * 60, easy_hr(th), "熱適應：慢慢進入"),
+                Step(EX_TRAIN, secs - 15 * 60, easy_hr(th), "熱適應：照心率、配速放慢"),
+                Step(EX_COOLDOWN, 5 * 60, None, "走路降溫")]
     if kind == "easy":
         m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*秒", s.get("title", ""))
         if m:

@@ -62,7 +62,12 @@ def session_from_gen(g: dict, week_start: str, provisional: bool, uid: Optional[
             **{k: g.get(k) for k in FIELDS}}
 
 
+SIDE_KINDS = ("strength", "heat_passive")     # never hold a main day (heat_passive: engine/heat_plan.py)
+
+
 def _matches(s: dict, a: dict) -> bool:
+    if s["kind"] == "heat_passive":
+        return False                              # a bath / sauna has no FIT: the user ticks it
     if s["kind"] == "strength":
         return a.get("category") == "strength"
     return a.get("category") in ENDURANCE
@@ -273,11 +278,11 @@ def _blackout_reasons(changes: list[dict], blocked: dict) -> None:
 def _resolve_collisions(out: list[dict], ws: str, today: str, changes: list[dict],
                         blocked: Optional[dict] = None) -> None:
     week = [s for s in out if s["week_start"] == ws and s["state"] == "active" and s.get("day")]
-    kept = [s for s in week if (s["origin"] == "custom" or s["edited"]) and s["kind"] != "strength"]
+    kept = [s for s in week if (s["origin"] == "custom" or s["edited"]) and s["kind"] not in SIDE_KINDS]
     kept_days = {s["day"] for s in kept}
-    autos = [s for s in week if s["origin"] == "auto" and not s["edited"] and s["kind"] != "strength"
+    autos = [s for s in week if s["origin"] == "auto" and not s["edited"] and s["kind"] not in SIDE_KINDS
              and s["day"] >= today]
-    main_days = {s["day"] for s in week if s["kind"] != "strength"}
+    main_days = {s["day"] for s in week if s["kind"] not in SIDE_KINDS}
     start = dt.date.fromisoformat(ws)
     for s in autos:
         if s["day"] not in kept_days:

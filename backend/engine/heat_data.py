@@ -31,6 +31,27 @@ def exposures(root: Optional[Path] = None) -> tuple[list[dict], dict]:
                   "missing": not doc}
 
 
+def completed_passive_dates(athlete_id: int = 1) -> list[str]:
+    """Days of heat_passive sessions (hot bath / sauna) the user ticked done
+    in the stored plan — a full heat dose each (heat.day_dose). Read-only
+    sqlite, like wko5expr.datasource.read_setting; [] without the DB."""
+    import sqlite3
+    from backend.engine.wko5expr import datasource
+    db = datasource._db_path()
+    if db is None or not db.exists():
+        return []
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            rows = con.execute("SELECT day FROM plan_sessions WHERE athlete_id=? AND kind='heat_passive' "
+                               "AND state='done' AND day IS NOT NULL", (athlete_id,)).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+    return sorted({r[0] for r in rows if r[0]})
+
+
 def status(today: Optional[dt.date] = None, race_day: Optional[dt.date] = None,
            planned: Optional[dict] = None, passive_dates: Iterable = (), root: Optional[Path] = None,
            acts: Optional[list] = None) -> dict:
@@ -41,6 +62,11 @@ def status(today: Optional[dt.date] = None, race_day: Optional[dt.date] = None,
     meta = {"missing": False}
     if acts is None:
         acts, meta = exposures(root)
+    if not passive_dates:
+        try:
+            passive_dates = completed_passive_dates()
+        except Exception:                   # noqa: BLE001
+            passive_dates = ()
     cur = HT.current(acts, today, passive_dates)
     s_from = HT.mean_s(cur["series"], today - dt.timedelta(days=FROM_WINDOW_DAYS), today)
     out = {"today": today.isoformat(), "s": cur["s"], "level": cur["level"], "days_14": cur["days_14"],
@@ -60,6 +86,49 @@ def status(today: Optional[dt.date] = None, race_day: Optional[dt.date] = None,
         out["source"] = f"近 14 天 {cur['days_14']} 天熱暴露"
     if meta.get("missing"):
         out["warning"] = "還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0"
+    return out
+
+
+HRC_DAYS = 84
+HRC_FLAT_G, HRC_MIN_S, HRC_SKIP_S, HRC_CV = 0.03, 600.0, 600.0, 0.10
+
+
+def steady_segments(ds, today: dt.date, acts: list[dict]) -> list[dict]:
+    """heat.hr_cost input (§2.3): per run of the last 84 days, stretches of
+    consecutive flat (|g| < 3 %) running windows after the first 10 minutes,
+    ≥ 10 min moving with power CV < 10 % [自組]; each with the activity's
+    Hadley (activity_weather)."""
+    import numpy as np
+    from backend.engine.racepower import athlete as A
+    from backend.engine.wko5expr.dataset import date_to_day
+    had = {a.get("file"): a.get("hadley") for a in acts}
+    tday = date_to_day(today)
+    runs = [w for w in ds.workouts if w.sport == "run" and tday - HRC_DAYS < w.day <= tday + 1
+            and had.get(w.entry.file) is not None]
+    out = []
+    for w in runs:
+        ws = [x for x in A.grade_samples(ds, [w]) if x.get("k") is not None]
+        ws.sort(key=lambda x: x["k"])
+        cur: list = []
+
+        def flush():
+            if not cur:
+                return
+            t = sum(100.0 / x["v"] for x in cur)
+            ps = [x["p"] for x in cur]
+            hrs = [x["hr"] for x in cur if x.get("hr")]
+            if t >= HRC_MIN_S and hrs and np.std(ps) / max(1e-9, np.mean(ps)) < HRC_CV:
+                out.append({"date": w.entry.start.date().isoformat(), "p": float(np.mean(ps)),
+                            "hr": float(np.mean(hrs)), "hadley": had[w.entry.file]})
+        for x in ws:
+            ok = abs(x["g"]) < HRC_FLAT_G and (x.get("run") is None or x["run"] >= 0.5) and (x.get("t") or 0) >= HRC_SKIP_S \
+                and x.get("p")
+            if ok and cur and x["k"] == cur[-1]["k"] + 1:
+                cur.append(x)
+            else:
+                flush()
+                cur = [x] if ok else []
+        flush()
     return out
 
 

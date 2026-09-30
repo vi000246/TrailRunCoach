@@ -518,8 +518,7 @@ def heat_status_for(date: Optional[str]) -> dict:
         except ValueError:
             rd = None
     try:
-        from backend.engine.plan_store import completed_passive_dates   # Phase B hook (may be absent)
-        passive = completed_passive_dates()
+        passive = HD.completed_passive_dates()
     except Exception:                       # noqa: BLE001
         passive = []
     return HD.status(dt.date.today(), rd, passive_dates=passive)
