@@ -8,7 +8,7 @@
 - **Owner**: vi000246
 - **Status**: IMPLEMENTED（M3 delta 進行中）
 - **Generated**: 2026-05-15
-- **Last updated**: 2026-06-13
+- **Last updated**: 2026-09-30
 
 ## Change History
 
@@ -18,12 +18,13 @@
 | 2026-06-13 | `wko5-trail-multipage-sync-coach.prd.md` | `docs/srs/coros-sync-unified-sync-page-data-inventory.srs.md` | 統一同步頁：TP 下載接上 UI、新增 `/sync/inventory` 盤點端點、CorosPage→SyncPage |
 | 2026-09-30 | code-sync | — | 同步強化：增量 cursor、錯誤不推進 cursor、失敗 rollback、跨來源去重（`duplicate_of`）、本地日期（`start_time_utc`）、token 以 Fernet 加密。TP 改走網站登入 / WKO5-client OAuth，檔案改用 `details` + `rawfiledata` 下載 |
 | 2026-09-30 | code-sync | — | 設定頁「資料同步」區塊、每來源互斥鎖（409 `SYNC_BUSY`）、每日排程（lifespan task）、`POST /sync/auto` + `autosync.js`、每來源獨立 FIT 資料夾與遷移腳本、刪除單一來源檔案、`FitFolderDataset` 與 `/sync/compare` |
+| 2026-09-30 | code-sync | N/A | 掃描改走 `fit/<source>/` 並標 source + provider id、`FitFolderDataset` 時區取 `athlete.timezone`、`charts.map.basemap` / `charts.map.overlays` 設定鍵、COROS 課表推送改指向 overview.spec.md；路徑改寫成使用者資料夾相對形式 |
 
 ---
 
 ## Summary
 
-實作 Coros 非官方 API 客戶端，讓使用者以 Coros Training Hub 帳密登入，自動下載 .fit 檔案到 `~/.wko5coach/fits/{athlete}/{year}/`，完全不依賴 WKO5 資料夾或 TrainingPeaks 帳號。下載完成後觸發 FIT 解析、指標計算、TSS/PMC 流程。
+實作 Coros 非官方 API 客戶端，讓使用者以 Coros Training Hub 帳密登入，自動下載 .fit 檔案到使用者資料夾的 `.wko5coach/fit/coros/{year}/`（`backend/sync/storage.py:19`），完全不依賴 WKO5 資料夾或 TrainingPeaks 帳號。下載完成後觸發 FIT 解析、指標計算、TSS/PMC 流程。
 
 **已驗證（2026-05-15）**：1088 筆活動匯入成功，PMC 圖表（CTL/ATL/TSB）正常顯示。
 
@@ -170,7 +171,7 @@ Token 約 24h 過期，需重新 POST `/account/login`。無 refresh token 流�
 - Coros 帳密登入（MD5 password，`pwd` 欄位）
 - Region 自動偵測（EU/US/CN 依序測試）
 - 活動列表分頁拉取（含日期篩選）
-- .fit 檔案下載到 `~/.wko5coach/fits/{athlete_name}/{year}/`
+- .fit 檔案下載到使用者資料夾的 `.wko5coach/fit/coros/{year}/`
 - 新活動自動觸發 FIT 解析 + TSS/MMP 計算
 - 重複活動跳過（依 `coros_activity_id` 去重）
 - SSE 串流同步進度
@@ -182,7 +183,7 @@ Token 約 24h 過期，需重新 POST `/account/login`。無 refresh token 流�
 - WKO5 資料夾讀寫（完全獨立）
 - TrainingPeaks 作為主要資料源
 - 心跳同步 / WebSocket push
-- Coros Training Plans / Structured Workouts 解析
+- Coros Training Plans / Structured Workouts 解析（反方向的「把本專案課表推送到 COROS」已實作，見下方指標）
 - 多運動員帳號切換
 
 ---
@@ -195,7 +196,7 @@ Token 約 24h 過期，需重新 POST `/account/login`。無 refresh token 流�
 |-------|------|-------------|
 | 個人運動員 | Human — Browser | 觸發 sync、查看 PMC、設定 FTP |
 | Coros Training Hub API | External Service | 提供活動列表 + FIT 下載 URL |
-| 本機 FileSystem | Storage | `~/.wko5coach/fits/` 儲存 .fit |
+| 本機 FileSystem | Storage | 使用者資料夾的 `.wko5coach/fit/<source>/` 儲存 .fit |
 
 ### External Dependencies
 
@@ -241,16 +242,27 @@ frontend/
 ### FIT 儲存路徑
 
 ```
-~/.wko5coach/
+<home>/.wko5coach/
 ├── wko5coach.db           # SQLite DB
 └── fit/                   # backend/sync/storage.py（2026-09-30 起每個來源分開）
     ├── coros/{year}/{coros_id}_{YYYY-MM-DD}_{sport}.fit
     └── tp/{year}/tp_{YYYY_MM_DD}_{workout_id}.fit
 ```
 
-舊位置是 `~/.wko5coach/fits/{athlete}/…`（COROS）和 `~/.wko5coach/fit/athlete_1/…`（TP）。用 `python -m backend.scripts.migrate_fit_folders` 遷移：預設 dry run，加 `--apply` 才執行，可重複執行。它會搬移檔案、更新 DB 路徑、刪掉清空的舊資料夾。2026-09-30 在這台機器上實際執行：COROS 17 個、TP 17 個。
+舊位置是 `.wko5coach/fits/{athlete}/…`（COROS）和 `.wko5coach/fit/athlete_1/…`（TP），都在使用者資料夾底下。用 `python -m backend.scripts.migrate_fit_folders` 遷移：預設 dry run，加 `--apply` 才執行，可重複執行。它會搬移檔案、更新 DB 路徑、刪掉清空的舊資料夾。2026-09-30 在這台機器上實際執行：COROS 17 個、TP 17 個。
 
 所有刪除都經過 `storage.confined()`：路徑先 resolve、拒絕 symlink，超出 `fit/<source>/` 一律拒絕。
+
+### 資料夾掃描（`POST /api/v1/scan`）
+
+`backend/api/scan.py:13` 呼叫 `scan_and_import`（`backend/files/file_service.py:99`），對 athlete 的 `data_dir` 掃描：
+
+- `discover_tagged_files`（`backend/files/file_service.py:62`）：資料夾底下若有 `storage.SOURCES`（`backend/sync/storage.py:20`）列的 `coros/`、`tp/` 子資料夾，就逐一走 `<source>/<year>/`，檔案標上 DB source（`coros` / `trainingpeaks`）；同一資料夾的傳統 `<year>/*.wko4|.fit` 版面照舊標 `local`。symlink 跳過。
+- `_sync_ids`（`backend/files/file_service.py:49`）：從同步寫出的檔名反推 provider id——COROS `<labelId>_<日期>_<sport>.fit` → `coros_activity_id`，TP `tp_<日期>_<workoutId>.fit` → `tp_workout_id`。
+- `_already_imported`（`backend/files/file_service.py:75`）：路徑（原樣與 resolve 後）、`coros_activity_id` 或 `tp_workout_id` 任一已在 DB 就跳過，所以同步已記錄的檔案不會被掃描重複匯入；可重複執行。
+- 每個檔案一個 savepoint（`backend/files/file_service.py:118`），失敗不留半筆資料；回傳 `new` / `skipped` / `errors` / `total` / `new_by_source`。
+
+測試：`backend/tests/test_scan_and_tz.py:31`（per-source 版面、冪等）、`backend/tests/test_scan_and_tz.py:47`（跳過同步已記錄者）、`backend/tests/test_scan_and_tz.py:62`（傳統版面仍為 local）。
 
 ### 同步流程
 
@@ -267,7 +279,7 @@ for each activity:
     1. try fitUrl (presigned S3, if present)
     2. POST /activity/detail/download?labelId=...&sportType=...&fileType=4
     3. GET presigned URL → bytes
-  save to ~/.wko5coach/fits/{athlete}/{year}/{filename}.fit
+  save to <home>/.wko5coach/fit/coros/{year}/{labelId}_{date}_{sport}.fit
   _import_one_file(db, athlete_id, dest, source="coros", coros_activity_id=id)
     → parse FIT, compute metrics (TSS if FTP available, MMP, HR zones)
   SSE: downloaded / error
@@ -335,7 +347,7 @@ ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/v1/sync/sources` | 每個來源的登入狀態、是否啟用、是否同步中、上次同步時間與結果、檔案數 / 大小 / 活動期間 |
-| GET/PUT | `/api/v1/sync/settings` | 主要來源、各來源開關、時區、`daily_sync_time`（每日同步時間）、`auto_on_open`（開網站時自動同步）+ 門檻小時數、`chart_data_source`（圖表資料來源）、TP OAuth 開關；另回傳 secret 來源與金鑰狀態，都只給標籤、不給值 |
+| GET/PUT | `/api/v1/sync/settings` | 主要來源、各來源開關、時區、`daily_sync_time`（每日同步時間）、`auto_on_open`（開網站時自動同步）+ 門檻小時數、`chart_data_source`（圖表資料來源）、`map_basemap` / `map_overlays`（單次活動路線圖的預設底圖與疊加層）、TP OAuth 開關；另回傳 secret 來源與金鑰狀態，都只給標籤、不給值 |
 | POST | `/api/v1/sync/start`、`/api/v1/sync/coros/start` | 走共用 runner：同一來源已在同步時回 409 `SYNC_BUSY`，結果寫進 `sync.<src>.last_result` |
 | POST | `/api/v1/sync/auto` | 開網站時呼叫。對「已啟用、已登入、閒置、且超過 N 小時」的來源在背景啟動同步，立刻回傳；新鮮、忙碌或關閉時什麼都不做 |
 | DELETE | `/api/v1/sync/{coros\|tp}/files[?date_from&date_to]` | 刪掉該來源的 FIT 與 DB 紀錄，重建去重、重設 cursor，並拿該來源的鎖（同步中回 409）。若它正是圖表資料來源，會改回 WKO5 |
@@ -352,7 +364,13 @@ ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
 
 **圖表資料來源**（`charts.data_source`）：`backend/engine/wko5expr/fitdataset.py` 用 FIT 資料夾建 `FitFolderDataset`，每筆活動的指標用本專案自己的公式計算，門檻取自 WKO5 athlete 檔。`datasource.current_source()` / `source_stamp()` 提供 Dataset 工廠。9 月 17 筆活動實測對照 WKO5：時長、距離相同，NP ±0.5%，TSS ±0.2，爬升 1–4%。
 
-> 尚未接上：`api/wko5views.py` 的 `_dataset_cfg` 要改呼叫 `dataset_for_source(current_source(), ATHLETE_DIR, cfg)`，並把 `source_stamp()` 加進 cache key；`wko5_viewer.html` 要加上 `sourcechip.js` 的晶片。這兩個檔案正由 chart-sweep 在修改。
+**時區**：`FitFolderDataset` 把 FIT 的 UTC 起始時間換成運動員當地時間再取日期（`backend/engine/wko5expr/fitdataset.py:162`、`backend/engine/wko5expr/fitdataset.py:192-194`；naive 時間視為 UTC），時區來源與同步一致：`athlete.timezone` 設定 → `WKO5COACH_TZ` → 系統時區（`backend/engine/wko5expr/datasource.py:59`）。測試：`backend/tests/test_scan_and_tz.py:90`、`backend/tests/test_scan_and_tz.py:99`、`backend/tests/test_scan_and_tz.py:105`。
+
+**路線圖設定**（`charts.map.basemap` / `charts.map.overlays`，`backend/settings/repository.py:53-54`）：預設底圖 `rudy`、無疊加層。底圖限 `MAP_BASEMAPS`、疊加層須為 `MAP_OVERLAYS` 內不重複的清單（`backend/settings/repository.py:56-57`、`backend/settings/repository.py:113-118`），不合法時 `PUT /sync/settings` 回 400。API 欄位對應在 `backend/api/sync.py:203-215`。地圖本身屬 viewer，見 wko5-engine.spec.md。
+
+> 尚未接上：`backend/api/wko5views.py:52` 的 `_dataset_cfg` 仍固定建 WKO5 `Dataset`，沒有呼叫 `dataset_for_source(current_source(), …)`；`wko5_viewer.html` 也還沒載入 `sourcechip.js`。render cache 已會把 dataset 的 `source` / `source_stamp` 放進 key（`backend/engine/wko5expr/render_cache.py:88`），所以接上後換來源或同步新檔案會自動失效。
+
+**COROS 課表推送**（`backend/sync/coros_workouts.py`，把本專案的計畫課表依日 / 週 / 期推到 COROS 並記錄在 `coros_plan_push` 表）：屬於計畫功能，規格見 overview.spec.md。
 
 > TP client（`backend/sync/tp_client.py`，649 行）已於 2026-05-15 對 live TP OAuth 驗證：password grant → athlete download → `filedata` 端點回 base64-gzip FIT → decode/inflate。M3 主要是把它接到 UI 並加盤點，不需重新逆向格式。
 
@@ -488,5 +506,5 @@ TSS = (duration × NP × IF) / (runFTP × 3600) × 100
 ---
 
 *Generated: 2026-05-15*
-*Last updated: 2026-05-16*
+*Last updated: 2026-09-30*
 *Status: IMPLEMENTED — M4 + runFTP bug fix + corrupt FIT handling + historical data expansion*

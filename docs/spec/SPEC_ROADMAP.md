@@ -8,14 +8,15 @@
 
 | Module | Spec | Domain Layer | Description | Sub-modules |
 |--------|------|--------------|-------------|-------------|
-| wko5-engine | [wko5-engine.spec.md](./wko5-engine.spec.md) | Core Domain | 直接讀 WKO5 二進位檔、逐位元驗證的指標演算法、WKO5 表達式引擎、parity/自有算式雙模式、核准制資料校正、自訂圖表 | — |
+| wko5-engine | [wko5-engine.spec.md](./wko5-engine.spec.md) | Core Domain | 直接讀 WKO5 二進位檔、逐位元驗證的指標演算法、WKO5 表達式引擎、parity/自有算式雙模式、核准制資料校正、自訂圖表；圖表頁：日/週/月/季/年切換、render cache、放大與 &chart= 連結、Leaflet 路線地圖與同步 hover | — |
 | sport-pages | [sport-pages.spec.md](./sport-pages.spec.md) | Core Domain | 把單一 SeasonPage 拆成總體/跑步/越野跑三頁、持久化 trail 分類、越野跑專屬圖表與圖表白話化層 | — |
-| coros-sync | [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md) | Supporting | Coros 非官方 API 自動下載 FIT，免依賴 WKO5/TrainingPeaks | — |
+| coros-sync | [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md) | Supporting | COROS / TrainingPeaks 同步：每來源 FIT 資料夾、增量 cursor、跨來源去重、排程與開站自動同步、資料夾掃描、同步設定（含圖表資料來源、路線圖預設） | — |
 | ai-coach | [ai-coach-training-analysis.spec.md](./ai-coach-training-analysis.spec.md) | Core Domain | In-app AI Coach chat、Smart Dashboard、Trail Analysis | — |
 | training-load-charts | [wko5-training-load-charts.spec.md](./wko5-training-load-charts.spec.md) | Core Domain | 逆向 WKO5 的五張 run-specific 訓練負荷圖表 | — |
-| overview | [overview.spec.md](./overview.spec.md) | Core Domain | 首頁：全部運動合計的訓練狀況、週/月/年紀錄、整合 PMC 與預估、本週課表 | — |
+| overview | [overview.spec.md](./overview.spec.md) | Core Domain | 首頁「總覽」：全部運動合計的訓練狀況、週/月/年紀錄、整合 PMC；可編輯的儲存課表（reconcile、多週預估），可依日/週/周期推送到 COROS | — |
 | racepower | [racepower.spec.md](./racepower.spec.md) | Core Domain | 賽事功率：SuperPower 計算機移植到自己的活動資料，含越野／百岳模型與賽日天氣 | — |
-| wko5-chart-units | [wko5-chart-units.spec.md](./wko5-chart-units.spec.md) | Supporting | 圖表單位登錄表、公制顯示、WKO5 圖表設計修正（views/wko5_fixes.json） | — |
+| wko5-chart-units | [wko5-chart-units.spec.md](./wko5-chart-units.spec.md) | Supporting | 圖表單位登錄表、公制顯示、WKO5 圖表設計修正（views/wko5_fixes.json）、週期切換後的標題/圖例/分桶軸顯示 | — |
+| workout-review | [workout-review.spec.md](./workout-review.spec.md) | Core Domain | 單次活動判讀：依課表類型自動判讀（飄移、間歇、爬坡、耐久、跑姿參考）、8–12 週自身基準、飄移連續次數與 CP 測試回饋進度決策 | — |
 
 ## Loading Guide
 
@@ -29,6 +30,7 @@
 
 | Date | Module | Feature SRS | One-line Summary |
 |------|--------|-------------|-----------------|
+| 2026-09-30 | workout-review | — | code-sync 建立：單次活動判讀卡（課表類型、Pa:HR 飄移、努力段、爬坡、耐久、跑姿）、單次活動判讀 view、飄移連續次數與 CP 測試回饋 status／本週課表 |
 | 2026-09-30 | overview | — | code-sync 建立：全部運動合計的首頁、週/月/年彙總、PMC 預估、規則式本週課表 |
 | 2026-09-30 | racepower | — | code-sync 建立：SuperPower 計算機移植、越野努力距離＋個人 RE、百岳 EP/h 模型、CWA／Open-Meteo 天氣 |
 | 2026-09-30 | wko5-chart-units | — | code-sync 建立：單位登錄表、非對照模式公制化、50 筆 WKO5 圖表修正 |

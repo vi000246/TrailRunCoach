@@ -1,6 +1,6 @@
 # Module Spec: wko5-engine
 
-> **Last Updated**: 2026-09-29
+> **Last Updated**: 2026-09-30
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -39,7 +39,7 @@ Five layers, each depending only on the ones below it:
 | Algorithms | Pure functions, one metric each, verified against WKO5 | `backend/engine/algorithms/wko5_power.py` and siblings |
 | Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections | `backend/engine/wko5expr/dataset.py:221` |
 | Expression engine | Parse and evaluate WKO5's expression language | `backend/engine/wko5expr/evaluator.py:305` |
-| API + viewer | Serve views, charts, config, corrections | `backend/api/wko5views.py:86` |
+| API + viewer | Serve views, charts (through the render cache), workout samples, config, corrections; the viewer page | `backend/api/wko5views.py:155`, `backend/static/wko5_viewer.html` |
 
 ## File formats
 
@@ -177,16 +177,149 @@ Two kinds, one renderer:
 | `custom` | `views/*.json` in the repo, then `USER_VIEWS` in the user data directory | yes | The athlete's own charts |
 
 Custom views use the same shape as parsed WKO5 views (`customviews.py`); a
-later file with the same `name` overrides an earlier one. The viewer groups
-the dropdown into 「我的圖表」 and 「WKO5（對照用）」.
+later file with the same `name` overrides an earlier one
+(`backend/engine/wko5expr/customviews.py:133`). A chart's `kind` is `athlete`
+(default), `workout`, `zones`, `targets` or `review`
+(`backend/engine/wko5expr/customviews.py:75`); `review` needs a `section`
+and renders a single-activity card — see
+[workout-review.spec.md](./workout-review.spec.md). Two optional chart keys
+drive the period toggle: `period` (day / week / month / quarter / year, the
+default bucket) and `min_days` (look-back floor for that default bucket)
+(`backend/engine/wko5expr/customviews.py:84`).
 
-`views/training.json` is the designed set: 總覽 plus 跑步 / 越野跑 / 百岳 / 騎車,
-41 series, grounded in `docs/research/coaching-dashboards-mountain.md`.
+The bundled custom views (regrouped in commit 4f75cfe; the old 每月・每年
+dashboard was dropped in favour of the period toggle):
+
+| File | View | Dashboards |
+|---|---|---|
+| `views/training.json` | 我的訓練 | 負荷 PMC (PMC, 每日 TSS, CTL 每週增加); 訓練量 (每週移動時間 stacked by category, 本週 − 上週, 每週跑量 and 每週努力距離 EP stacked 路跑 / 越野跑 / 登山健行, 每週爬升／下降 in one chart, 肌力訓練日曆 as a day calendar); 強度 (HR distribution, low-intensity share, Palladino power zones); 能力 (EF, Pa:HR, VAM, 每公里爬升, per-session moving time, durability) |
+| `views/periodization.json` | 周期化訓練 | ① 轉換期, ② 基礎期, ③ 專項期, ④ 減量期, 區間與課表強度 (zone / target tables last) |
+| `views/workout.json` | 單次活動判讀 | 本次重點, 有氧／心率飄移, 間歇, 爬坡與地形, 配速與耐久, 跑姿與膝蓋負荷（參考） — see [workout-review.spec.md](./workout-review.spec.md) |
+
+Most season charts in 訓練量 / 強度 and the phase dashboards carry a `period`
+key; no bundled chart sets `min_days` at present.
 
 **Sport identification trap.** Tags are FIT sport + subsport concatenated:
 trail runs carry both `running` and `runningtrail`, road cycling carries
 `cycling` and `cyclingroad`. So `hastag("running")` matches trail runs too;
 road running is `sport="run" and !hastag("runningtrail")`.
+
+## Period-total charts
+
+`backend/engine/wko5expr/periods.py` re-buckets charts like
+`sum(x, startofweek(date))` into 日／週／月／季／年.
+
+- **Detect** (`backend/engine/wko5expr/periods.py:50`): the chart's `period`
+  key, else the single bucket call in its expressions — `trunc` /
+  `startofweek` / `startofmonth` / `startofquarter` / `startofyear(date)` as the
+  group-by argument, or WKO5's named form `sum(tss, "week")`. Mixed buckets →
+  not a period chart.
+- **Lock** (`backend/engine/wko5expr/periods.py:62`): a chart with `shift(`
+  (week-over-week) or `tl(…)*7` (weekly reference lines) keeps its default
+  bucket.
+- **Rewrite** (`backend/engine/wko5expr/periods.py:89`): only the group-by
+  position is swapped (an `if(trunc(date) <= …)` stays); the title and legend
+  names follow (display details in
+  [wko5-chart-units.spec.md](./wko5-chart-units.spec.md)).
+- **Look-back floor** (`backend/engine/wko5expr/periods.py:101`): month 365,
+  quarter 730, year 1825 days; the chart's `min_days` applies only to its
+  default bucket. Begin is also moved to a bucket start so the first bucket is
+  whole (`backend/engine/wko5expr/periods.py:108`).
+- **Buckets** (`backend/engine/wko5expr/periods.py:131`): every bucket start in
+  the range (capped at 5000), so empty buckets still get an x category.
+
+The chart endpoint applies it for `athlete` charts
+(`backend/api/wko5views.py:224`): the `period` query parameter is honoured only
+for custom views and unlocked charts; the floor and bucket alignment apply to
+custom views only. The response adds `x_period`, `period_default`,
+`period_toggle`, `buckets` and `range_note`
+(`backend/api/wko5views.py:245`).
+
+## Render cache
+
+`backend/engine/wko5expr/render_cache.py`, used by the chart endpoint
+(`backend/api/wko5views.py:216`).
+
+- **Key** (`backend/engine/wko5expr/render_cache.py:105`): sha1 of the chart
+  definition (after fixes and period rewrite), the request (view, dashboard,
+  chart, begin/end after the floor, parity, every other query parameter, the
+  workout's file), the data fingerprint and the code signature. Nothing is
+  invalidated explicitly; changed inputs miss.
+- **Data fingerprint** (`backend/engine/wko5expr/render_cache.py:73`): the
+  `.wko5athlete` stamps, plan and corrections file stamps, engine config,
+  workout list hash, today, and the chart data source with its FIT-folder stamp
+  (`backend/engine/wko5expr/render_cache.py:86`).
+- **Code signature** (`backend/engine/wko5expr/render_cache.py:54`):
+  `CACHE_VERSION` plus size/mtime of every `*.py` in `wko5expr/`,
+  `algorithms/` and `backend/engine/`, taken once at import so a process that
+  has not reloaded never stores old-code results under a new signature.
+- **Storage**: in-memory LRU of 400 entries plus JSON files under the user
+  data directory's `cache/render/`, pruned to 300 MB least-recently-used every
+  50 writes (`backend/engine/wko5expr/render_cache.py:169`).
+- **Concurrency** (`backend/engine/wko5expr/render_cache.py:195`): identical
+  in-flight requests are coalesced; at most 2 renders run at once so other
+  endpoints keep threadpool time. Errors are raised to every waiter and not
+  cached.
+
+## Viewer
+
+`backend/static/wko5_viewer.html`, served at `/api/v1/wko5/viewer`.
+
+- **Chart directory** (`backend/static/wko5_viewer.html:486`): custom views are
+  one flat list of dashboard tabs with no view level, ordered by
+  `CUSTOM_ORDER` = 我的訓練, 周期化訓練, then the rest
+  (`backend/static/wko5_viewer.html:386`); imported WKO5 views stay grouped per
+  view with a 匯入 tag and collapsible headers.
+- **Deep link** (`backend/static/wko5_viewer.html:425`): `?view=<name>&dash=<index
+  or title>`, plus `&chart=<index>` to load that chart first and open it
+  enlarged. The query string is then cleared.
+- **Period toggle** (`backend/static/wko5_viewer.html:742`): when the response
+  says `period_toggle`, the card header gets 日／週／月／季／年; the choice is
+  remembered per chart in local storage (`wko5viewer.period`) and re-fetches
+  that card only. A chart with a `calendar` series (a day calendar such as
+  肌力訓練日曆, `backend/static/wko5_viewer.html:1232`) never gets the toggle.
+- **Enlarge** (`backend/static/wko5_viewer.html:780`): 「⤢ 放大」 opens a
+  `<dialog>` redrawn from the card's JSON (no refetch) with the full legend and
+  a zoom slider; it pushes a history entry with `&chart=`, so Back, Esc, the
+  close button or a backdrop click closes it
+  (`backend/static/wko5_viewer.html:807`). A period toggle inside the overlay
+  re-renders both card and overlay.
+- **No 數值與公式 table.** The per-series debug table (status, points, last
+  value, unit, expression) is no longer drawn; the same data stays in the chart
+  JSON (`backend/static/wko5_viewer.html:906`).
+- **Stack total.** A stacked chart's tooltip adds a 合計 row over the
+  categories currently shown in the legend (hidden ones drop out); skipped for
+  percent shares (`backend/static/wko5_viewer.html:1458`).
+- **Route map** (`backend/static/wko5_viewer.html:1085`): WKO5's map panel
+  (`PKMapPanelConfig`, `backend/api/wko5views.py:147`) is drawn with Leaflet
+  from the workout samples. Basemaps 魯地圖 (default), Google 地形, NLSC 電子地圖,
+  正射影像, OSM; overlays 等高線, Google 道路, NLSC 道路
+  (`backend/static/wko5_viewer.html:1039`). The defaults come from the settings
+  keys `charts.map.basemap` / `charts.map.overlays`
+  (`backend/settings/repository.py:53`), read as `map_basemap` / `map_overlays`
+  from `GET /api/v1/sync/settings` (`backend/api/sync.py:215`,
+  `backend/static/wko5_viewer.html:408`; storage side in
+  [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)); a per-browser switch is kept only
+  while that default is unchanged (`backend/static/wko5_viewer.html:1063`).
+  The route is coloured by 心率 / 功率 / 坡度 / 單色 (5–95th percentile ramp,
+  12 bins) with start / end markers.
+- **Tile-error hint** (`backend/static/wko5_viewer.html:1113`): if the active
+  basemap has 3 tile errors and no tile loaded, a hint offers up to three other
+  basemaps (not Google 地形) as buttons.
+- **Synced hover** (`backend/static/wko5_viewer.html:984`): the map and every
+  workout chart whose x is elapsed time or a distance unit join one hover
+  group per workout; hovering any member shows the same sample index on all of
+  them (tooltip on charts, a marker with a time / distance / HR / power /
+  elevation / grade readout on the map), one flush per animation frame. Hovering
+  within 24 px of the route drives the charts
+  (`backend/static/wko5_viewer.html:1209`). Time-x workout series skip `lttb`
+  sampling so every chart's tooltip lands on the same point
+  (`backend/static/wko5_viewer.html:1400`).
+- **Samples** (`backend/api/wko5views.py:411`): per-sample `t`, `d` (km),
+  `lat` / `lng`, `elev`, `hr`, `power`, `grade` (%), downsampled with the same
+  step as the workout charts (`MAX_POINTS` 3000, `backend/engine/wko5expr/render.py:55`),
+  so chart x maps exactly to a sample index; NaN and (0, 0) GPS become null. The
+  viewer keeps the last 4 workouts' samples (`backend/static/wko5_viewer.html:950`).
 
 ## Mountain metrics (own formulas)
 
@@ -214,18 +347,21 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 
 | Method | Path | Line | Purpose |
 |---|---|---|---|
-| GET | `/views` | 86 | Both view kinds, with source |
-| GET | `/views/dirs` | 100 | Where custom view files live |
-| GET | `/views/{view}/dashboards/{d}/charts/{c}` | 119 | Render one chart (`parity`, `begin`, `end`, `sports`, `workout`) |
-| GET | `/workouts` | 139 | RHE activity list, with TSS source |
-| GET | `/sports` | 166 | Sport groups and counts |
-| GET | `/athlete` | 175 | Settings history, WKO5's PMC snapshot |
-| GET / PUT | `/config` | 194, 201 | Engine config |
-| GET | `/corrections` | 214 | Applied corrections |
-| GET | `/corrections/proposals` | 220 | Detect only — changes nothing |
-| POST | `/corrections/approve` | 235 | Apply the proposals sent |
-| DELETE | `/corrections/{id}` | 244 | Undo one |
-| GET | `/viewer` | 253 | The verification viewer page |
+| GET | `/views` | 155 | Both view kinds, with source; map panels report kind `map`, review cards kind `workout` |
+| GET | `/views/dirs` | 169 | Where custom view files live |
+| GET | `/views/{view}/dashboards/{d}/charts/{c}` | 188 | Render one chart through the render cache (`parity`, `begin`, `end`, `sports`, `workout`, `period`) |
+| GET | `/workouts` | 274 | RHE activity list, with TSS source |
+| GET | `/workouts/{i}/review` | 301 | Single-activity review cards — see [workout-review.spec.md](./workout-review.spec.md) |
+| GET | `/sports` | 320 | Sport groups and counts |
+| GET | `/athlete` | 329 | Settings history, WKO5's PMC snapshot |
+| GET / PUT | `/config` | 348, 355 | Engine config |
+| GET | `/corrections` | 368 | Applied corrections |
+| GET | `/corrections/proposals` | 374 | Detect only — changes nothing |
+| POST | `/corrections/approve` | 389 | Apply the proposals sent |
+| DELETE | `/corrections/{id}` | 398 | Undo one |
+| GET | `/workouts/{idx}/samples` | 411 | Downsampled per-sample arrays for the route map and synced hover |
+| GET | `/viewer` | 460 | The viewer page |
+| GET | `/settings` | 465 | The settings page |
 
 ## Testing
 
@@ -240,6 +376,12 @@ Golden tests skip automatically when `WKO5_ATHLETE_DIR` is absent. The
 end-to-end golden test (`backend/tests/test_wko5_pipeline_golden.py`) goes
 FIT → channels → NP/hrTSS → TSS → CTL and checks each against WKO5, including
 the athlete-bar snapshot.
+
+`backend/tests/test_periods.py` covers period detection, rewrite, legend
+renaming, locks, floors and bucket lists (including `_apply_period`);
+`backend/tests/test_render_cache.py` covers key changes (chart, request, data,
+code), disk persistence, error non-caching, size eviction, coalescing and the
+concurrency cap.
 
 ## Domain Model
 
@@ -262,9 +404,18 @@ the athlete-bar snapshot.
 | Custom view | A view the athlete defines as JSON |
 | Equivalent flat distance | Flat distance that would cost the same energy (Minetti) |
 | RHE | WKO5's right-hand explorer: the date range and sport filter |
+| Period chart | A chart totalling by a date bucket; the viewer can re-bucket it (日／週／月／季／年) |
+| Period lock | A period chart tied to a week scale that keeps its default bucket |
+| Look-back floor | Minimum days a period chart shows for its bucket (`min_days`) |
+| Render cache key | sha1 of chart + request + data fingerprint + code signature |
+| Data fingerprint | Stamp of every data input a chart depends on |
+| Samples | One workout's downsampled per-sample arrays, shared by the map and hover |
+| Synced hover | All time/distance charts and the map of one workout showing the same sample |
+| Basemap / overlay | The map's switchable tile layers; defaults from settings |
 
 ## Change History
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |
+| 2026-09-30 | code-sync | N/A | Period toggle (periods.py, `period` / `min_days`), render cache, viewer (flat custom tabs, &chart= deep link, enlarge overlay, 數值與公式 table removed, Leaflet route map with basemaps / overlays / tile-error hint, samples endpoint and synced hover), regrouped custom views, refreshed API table |
