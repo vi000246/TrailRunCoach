@@ -108,6 +108,8 @@ class SyncState(Base):
     tp_access_token: Mapped[Optional[str]] = mapped_column(Text)
     tp_refresh_token: Mapped[Optional[str]] = mapped_column(Text)
     tp_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    # website-login session cookie (sealed); re-issues access tokens
+    tp_web_cookie: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_sync_cursor: Mapped[Optional[str]] = mapped_column(String(50))
     coros_access_token: Mapped[Optional[str]] = mapped_column(Text)

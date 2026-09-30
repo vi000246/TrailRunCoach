@@ -27,6 +27,7 @@ async def _migrate_schema():
         ("workout_files", "start_time_utc", "DATETIME"),
         ("workout_files", "duplicate_of", "INTEGER"),
         ("sync_state", "coros_access_token", "TEXT"),
+        ("sync_state", "tp_web_cookie", "TEXT"),
         ("sync_state", "coros_token_expires", "DATETIME"),
         ("sync_state", "coros_last_sync_at", "DATETIME"),
         ("sync_state", "coros_email", "TEXT"),

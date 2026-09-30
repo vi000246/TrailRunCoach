@@ -40,6 +40,7 @@ Tokens are persisted in SQLite (sync_state). Credentials are NEVER stored.
 import base64
 import gzip
 import zlib
+import re
 import logging
 import httpx
 from datetime import datetime, timezone, timedelta, date
@@ -85,17 +86,28 @@ TP_SCOPE = "fitness+baseactivity+users+metrics+software+groundcontrol"
 # Auth
 # ---------------------------------------------------------------------------
 
-async def login_password(
-    username: str, password: str, db: AsyncSession, athlete_id: int
-) -> dict:
+class TpGrantRejected(Exception):
+    def __init__(self, status: int, body: str):
+        super().__init__(f"HTTP {status}")
+        self.status, self.body = status, body
+
+
+class TpLoginError(ValueError):
+    """Message starts with a code the API maps to a status:
+    TP_LOGIN_FAILED (bad credentials), TP_LOGIN_CAPTCHA, TP_LOGIN_MFA,
+    TP_LOGIN_ERROR (anything else)."""
+
+
+async def _password_grant(username: str, password: str) -> dict:
     """
-    Password grant — VERIFIED format against live TP OAuth server 2026-05-15:
+    Password grant — format VERIFIED against the live TP OAuth server 2026-05-15:
       grant_type=password&username={u}&password={p}
       &scope=fitness+baseactivity+...&client_id=WKO5
 
-    client_id=WKO5 IS required even in the password grant (binary string
-    constants showed it only in refresh, but live test: without it → empty 400,
-    with it → proper invalid_grant = server accepts the format).
+    As of 2026-09-30 TP answers a correct password for a normal account with
+    400 invalid_grant ("Invalid resource owner password credential."), so the
+    grant is effectively dead for us; it is still tried first because it is
+    one request and gives a refresh token when it works.
     """
     body = (
         f"grant_type=password"
@@ -111,25 +123,152 @@ async def login_password(
             headers={**TP_HEADERS, "Content-Type": "application/x-www-form-urlencoded"},
         )
     if resp.status_code != 200:
-        body = resp.text[:400]
-        raise ValueError(f"TP login failed (HTTP {resp.status_code}): {body!r}")
+        raise TpGrantRejected(resp.status_code, resp.text[:200])
     try:
-        token = resp.json()
+        return resp.json()
     except Exception:
-        raise ValueError(f"TP login: response is not JSON: {resp.text[:200]!r}")
+        raise TpGrantRejected(resp.status_code, "response is not JSON")
+
+
+# ---- website login (cookie) ------------------------------------------------
+#
+# Verified end-to-end 2026-09-30 with a real account:
+#   GET  home.trainingpeaks.com/login            -> form with __RequestVerificationToken
+#   POST same URL (Username, Password, token)    -> redirects to app.trainingpeaks.com,
+#                                                    sets cookie Production_tpAuth
+#   GET  tpapi.trainingpeaks.com/users/v3/token  (cookie) -> {success, token{access_token}}
+# The access token then works for every tpapi endpoint this client uses. It
+# expires (about an hour); a new one is fetched with the same cookie, so the
+# cookie plays the role of the refresh token and is stored sealed.
+
+TP_WEB_LOGIN_URL = "https://home.trainingpeaks.com/login"
+TP_WEB_TOKEN_URL = TP_API_BASE + "users/v3/token"
+TP_AUTH_COOKIE = "Production_tpAuth"
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/130.0 Safari/537.36")
+
+_RE_CSRF = re.compile(r'name="__RequestVerificationToken"[^>]*value="([^"]+)"')
+_RE_ACTION = re.compile(r'<form[^>]*action="([^"]*)"', re.I)
+_RE_ERROR = re.compile(r'(?:validation-summary-errors|field-validation-error)[^>]*>(.{0,400})', re.S)
+_RE_CAPTCHA_ON = re.compile(r'name="CaptchaHidden"[^>]*value="(?:true|1|True)"'
+                            r'|value="(?:true|1|True)"[^>]*name="CaptchaHidden"')
+
+
+def _input_value(html: str, name: str) -> Optional[str]:
+    m = re.search(rf'<input[^>]*name="{re.escape(name)}"[^>]*>', html)
+    if not m:
+        return None
+    v = re.search(r'value="([^"]*)"', m.group(0))
+    return v.group(1) if v else ""
+
+
+def _cookie(jar: httpx.Cookies, name: str) -> Optional[str]:
+    for c in jar.jar:
+        if c.name == name and c.value:
+            return c.value
+    return None
+
+
+def classify_login_page(url: str, html: str) -> TpLoginError:
+    """Why a login POST didn't produce the auth cookie."""
+    text = re.sub(r"<[^>]+>", " ", html)
+    err = _RE_ERROR.search(html)
+    msg = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", err.group(1))).strip()[:160] if err else ""
+    low = (msg + " " + url).lower()
+    if (re.search(r"mfa|two-?factor|verification code|authenticator", url, re.I)
+            or re.search(r"(enter|send)[^.]{0,40}(verification|security) code|two-factor|multi-factor",
+                         text, re.I)):
+        return TpLoginError("TP_LOGIN_MFA: TrainingPeaks asks for a second-factor code. "
+                            "Log in once at trainingpeaks.com in a browser, or turn MFA off, then retry.")
+    if "captcha" in low or "robot" in low or _RE_CAPTCHA_ON.search(html):
+        return TpLoginError("TP_LOGIN_CAPTCHA: TrainingPeaks wants a CAPTCHA (usually after several "
+                            "failed attempts). Log in once at trainingpeaks.com in a browser, then retry.")
+    return TpLoginError(f"TP_LOGIN_FAILED: {msg or 'website login did not set the session cookie'}")
+
+
+async def _web_login(username: str, password: str) -> str:
+    """Website form login; returns the Production_tpAuth cookie value."""
+    async with http.client(timeout=30, follow_redirects=True,
+                           headers={"User-Agent": BROWSER_UA}) as c:
+        page = await c.get(TP_WEB_LOGIN_URL)
+        if page.status_code != 200:
+            raise TpLoginError(f"TP_LOGIN_ERROR: login page HTTP {page.status_code}")
+        form = {"Username": username, "Password": password}
+        m = _RE_CSRF.search(page.text)
+        if m:
+            form["__RequestVerificationToken"] = m.group(1)
+        for hidden in ("CaptchaHidden", "CaptchaToken", "Attempts", "SelectedMfaMethod"):
+            v = _input_value(page.text, hidden)
+            if v is not None:
+                form[hidden] = v
+        a = _RE_ACTION.search(page.text)
+        url = page.url.join(a.group(1)) if a and a.group(1) else page.url
+        resp = await c.post(url, data=form)
+        cookie = _cookie(c.cookies, TP_AUTH_COOKIE)
+        if cookie:
+            return cookie
+        raise classify_login_page(str(resp.url), resp.text)
+
+
+async def _token_from_cookie(cookie: str) -> Optional[dict]:
+    """users/v3/token with the session cookie -> token dict, or None if the
+    cookie is no longer accepted."""
+    async with http.client(timeout=15, headers={"User-Agent": BROWSER_UA,
+                                                "Cookie": f"{TP_AUTH_COOKIE}={cookie}"}) as c:
+        resp = await c.get(TP_WEB_TOKEN_URL)
+    if resp.status_code != 200:
+        log.warning("TP users/v3/token HTTP %d", resp.status_code)
+        return None
+    try:
+        body = resp.json()
+    except Exception:
+        return None
+    tok = body.get("token") if isinstance(body.get("token"), dict) else body
+    if body.get("success") is False or not tok.get("access_token"):
+        return None
+    return tok
+
+
+def _expiry(tok: dict) -> datetime:
+    now = datetime.now(timezone.utc)
+    if tok.get("expires_in"):
+        return now + timedelta(seconds=float(tok["expires_in"]))
+    for k in ("expires", "expiresAt", "expires_at"):
+        v = tok.get(k)
+        if isinstance(v, str):
+            try:
+                t = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+    return now + timedelta(hours=1)
+
+
+async def login_password(
+    username: str, password: str, db: AsyncSession, athlete_id: int
+) -> dict:
+    """OAuth password grant first; on rejection, the website login + cookie
+    token exchange. Credentials are never stored or logged; the access token,
+    refresh token and session cookie are stored sealed (secrets.py)."""
+    cookie = None
+    try:
+        token = await _password_grant(username, password)
+        method = "oauth"
+    except TpGrantRejected as e:
+        log.info("TP password grant rejected (HTTP %d); trying the website login", e.status)
+        cookie = await _web_login(username, password)
+        token = await _token_from_cookie(cookie)
+        if token is None:
+            raise TpLoginError("TP_LOGIN_ERROR: logged in, but users/v3/token refused the session")
+        method = "web"
 
     # users/v3/user returns the authenticated user and accessible athletes.
     try:
         user_info = await _fetch_user(token["access_token"])
         tp_athlete_id, athletes_list, user_type, premium = _extract_athlete_id(user_info)
-        log.info("TP user info raw: %s", user_info)
     except Exception as e:
         log.warning("users/v3/user failed (non-fatal): %s", e)
         tp_athlete_id, athletes_list, user_type, premium = None, [], "", False
-
-    expires_at = datetime.now(timezone.utc) + timedelta(
-        seconds=token.get("expires_in", 3600)
-    )
 
     state_result = await db.execute(
         select(SyncState).where(SyncState.athlete_id == athlete_id)
@@ -140,7 +279,8 @@ async def login_password(
         db.add(state)
     state.tp_access_token = seal(token["access_token"])
     state.tp_refresh_token = seal(token.get("refresh_token"))
-    state.tp_token_expires = expires_at
+    state.tp_web_cookie = seal(cookie)
+    state.tp_token_expires = _expiry(token)
 
     if tp_athlete_id:
         athlete_result = await db.execute(
@@ -159,6 +299,7 @@ async def login_password(
         "user_type": user_type,
         "premium": premium,
         "can_download": _can_download(user_type, premium),
+        "method": method,          # "oauth" (password grant) or "web" (website login)
     }
 
 
@@ -248,8 +389,18 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
     """
     try:
         refresh = unseal(state.tp_refresh_token)
+        cookie = unseal(state.tp_web_cookie)
     except SecretError:
         return False
+    if not refresh and cookie:
+        # website-login session: a fresh access token from the cookie
+        tok = await _token_from_cookie(cookie)
+        if tok is None:
+            return False          # cookie rejected -> TP_AUTH_REQUIRED
+        state.tp_access_token = seal(tok["access_token"])
+        state.tp_token_expires = _expiry(tok)
+        await db.commit()
+        return True
     if not refresh:
         return False
     body = (
