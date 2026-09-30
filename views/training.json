@@ -53,6 +53,40 @@
             {"name": "風險 ≥ 7", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#e34948", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) >= 7, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
             {"name": "近 4 週平均", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#2a78d6", "line_width": "thick", "expression": "(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 28)) / 4"}
           ]
+        },
+        {
+          "title": "狀況 Form%（TSB ÷ CTL）",
+          "description": "TSB 除以 CTL，換成體能的百分比，CTL 低的時候也能用同一組區間。底色：紅 < −30% 高風險、綠 −30～−10% 有效訓練、灰 −10～+5% 維持、藍 +5～+25% 新鮮（比賽）、黃 > +25% 休太久、體能在掉。區間是經驗法則，不是科學定論；登山越野賽沒有公開過最佳值，只當方向看。多日百岳後會掉到圖外，數字看 hover。",
+          "axes": [{"id": "PERCENT", "min": -0.6, "max": 0.4}],
+          "series": [
+            {"name": "高風險 < −30%", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "{-0.6:-0.3}"},
+            {"name": "有效訓練 −30～−10%", "type": "line", "y_axis": "PERCENT", "color": "#1baf7a", "expression": "{-0.3:-0.1}"},
+            {"name": "維持 −10～+5%", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "expression": "{-0.1:0.05}"},
+            {"name": "新鮮 +5～+25%", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "{0.05:0.25}"},
+            {"name": "休太久 > +25%", "type": "line", "y_axis": "PERCENT", "color": "#eda100", "expression": "{0.25:0.4}"},
+            {"name": "Form%", "type": "line", "y_axis": "PERCENT", "color": "#1baf7a", "line_width": "thick", "expression": "tsb / shift(ctl, 1)"}
+          ]
+        },
+        {
+          "title": "負荷比 ATL ÷ CTL（7:42）",
+          "description": "近 7 天的疲勞除以 42 天的體能：1 = 跟平常一樣，大於 1 = 最近練得比平常多。底色：灰 < 0.8 量偏少、綠 0.8–1.3、黃 1.3–1.5 偏多、紅 > 1.5 突然加很多。只看方向，不是受傷預測：這類比值能不能預測受傷，研究結論是不行。多日百岳那幾天會衝很高，屬正常。",
+          "axes": [{"id": "NONE", "min": 0, "max": 2.5}],
+          "series": [
+            {"name": "偏少 < 0.8", "type": "line", "y_axis": "NONE", "color": "#8a8984", "expression": "{0:0.8}"},
+            {"name": "0.8–1.3", "type": "line", "y_axis": "NONE", "color": "#1baf7a", "expression": "{0.8:1.3}"},
+            {"name": "偏多 1.3–1.5", "type": "line", "y_axis": "NONE", "color": "#eda100", "expression": "{1.3:1.5}"},
+            {"name": "突然加很多 > 1.5", "type": "line", "y_axis": "NONE", "color": "#e34948", "expression": "{1.5:2.5}"},
+            {"name": "ATL ÷ CTL", "type": "line", "y_axis": "NONE", "color": "#eb6834", "line_width": "thick", "expression": "atl / ctl"}
+          ]
+        },
+        {
+          "title": "單調度與訓練壓力（Monotony・Strain）",
+          "description": "每天看近 7 天（沒練的日子算 0）。單調度 = 每日 TSS 的平均 ÷ 標準差：每天都練差不多的量會變高，大小日分明會變低。訓練壓力 = 7 天 TSS 合計 × 單調度，量大又天天一樣時最高。原作者認為門檻因人而異，看自己的高點：生病或很累的那幾週落在哪裡。",
+          "axes": [{"id": "NONE", "min": 0}, {"id": "TSS", "min": 0}],
+          "series": [
+            {"name": "訓練壓力 Strain", "type": "bar", "y_axis": "TSS", "color": "#eb6834", "expression": "@d:=tl(tss, 1), @s:=cumsum(@d) - shift(cumsum(@d), 7), @q:=cumsum(@d * @d) - shift(cumsum(@d * @d), 7), @s * (@s / 7) / sqrt(@q / 7 - (@s / 7) * (@s / 7))"},
+            {"name": "單調度 Monotony", "type": "line", "y_axis": "NONE", "color": "#2a78d6", "line_width": "thick", "expression": "@d:=tl(tss, 1), @s:=cumsum(@d) - shift(cumsum(@d), 7), @q:=cumsum(@d * @d) - shift(cumsum(@d * @d), 7), (@s / 7) / sqrt(@q / 7 - (@s / 7) * (@s / 7))"}
+          ]
         }
       ]
     },
@@ -116,6 +150,26 @@
           ]
         },
         {
+          "title": "每週下坡衝擊負荷（參考・自訂指標）",
+          "description": "參考（自訂指標），沒有公開的標準公式。把下坡路段的距離加權：坡越陡、速度越快，每公里算越多。1 = 在平路用 3 m/s（約 5:33/km）跑 1 公里的衝擊；最陡、最快時一公里約算 2.4。只算坡度陡於 −3% 的路段，平路和上坡不算。用來看下山的膝蓋、股四頭肌負荷有沒有突然變多，心率看不出這個。點圖例可以只看某一類。",
+          "axes": [{"id": "CUSTOM等效 km", "min": 0}],
+          "period": "week",
+          "series": [
+            {"name": "路跑", "type": "stackedbar", "y_axis": "CUSTOM等效 km", "color": "#2a78d6", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), startofweek(date))"},
+            {"name": "越野跑", "type": "stackedbar", "y_axis": "CUSTOM等效 km", "color": "#eb6834", "expression": "sum(if(hastag(\"runningtrail\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), startofweek(date))"},
+            {"name": "登山健行", "type": "stackedbar", "y_axis": "CUSTOM等效 km", "color": "#1baf7a", "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), startofweek(date))"}
+          ]
+        },
+        {
+          "title": "下坡負荷 近 7 天 ÷ 近 28 天（參考・自訂指標）",
+          "description": "參考（自訂指標）。近 7 天的每日平均下坡衝擊負荷，除以近 28 天的每日平均：1 = 跟最近一個月一樣，2 = 這週下坡是平常的兩倍。沒有經過驗證的門檻，只看有沒有突然跳上去；比賽或百岳前後幾週最值得看。跑步、越野、登山合在一起算，騎車不算。",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "7 天 ÷ 28 天", "type": "line", "y_axis": "NONE", "color": "#eb6834", "line_width": "thick", "expression": "@x:=tl(sum(if(sport = \"run\" or sport = \"walk\" or hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), trunc(date)), 1), ((cumsum(@x) - shift(cumsum(@x), 7)) / 7) / ((cumsum(@x) - shift(cumsum(@x), 28)) / 28)"},
+            {"name": "1 = 跟平常一樣", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,1)"}
+          ]
+        },
+        {
           "title": "肌力訓練日曆",
           "description": "有練肌力的日子會上色。基礎期目標每週 2 次。",
           "axes": [{"id": "CUSTOM次", "min": 0}],
@@ -150,6 +204,16 @@
             {"name": "中強度", "type": "stackedbar", "y_axis": "PERCENT", "color": "#eda100", "expression": "sum(sum(if(heartrate >= aethr and heartrate < lthr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
             {"name": "高強度", "type": "stackedbar", "y_axis": "PERCENT", "color": "#e34948", "expression": "sum(sum(if(heartrate >= lthr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
             {"name": "目標：綠色 ≥ 75%", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.75)"}
+          ]
+        },
+        {
+          "title": "極化指數 PI",
+          "description": "把上一張圖的三段比例濃縮成一個數：低強度和高強度都多、中強度少時變高。> 2 = 極化（兩頭多、中間少）；1–2 大致是金字塔型。高強度比低強度還多的那週不算（空白），完全沒有高強度的那週是 0。只算有心率、而且當週至少 1 小時的資料。這裡的三區用 AeT／LTHR 切，跟研究用的換氣閾值接近但不相同。",
+          "axes": [{"id": "NONE", "min": 0}],
+          "period": "week",
+          "series": [
+            {"name": "PI", "type": "bar", "y_axis": "NONE", "color": "#2a78d6", "expression": "@t:=sum(sum(if(heartrate > 0, deltatime)), startofweek(date)), @z1:=sum(sum(if(heartrate > 0 and heartrate < aethr, deltatime)), startofweek(date)) / @t, @z2:=sum(sum(if(heartrate >= aethr and heartrate < lthr, deltatime)), startofweek(date)) / @t, @z3:=sum(sum(if(heartrate >= lthr, deltatime)), startofweek(date)) / @t, if(@t >= 3600 and @z3 <= @z1, if(@z3 > 0, if(@z2 > 0, log10(@z1 / @z2 * @z3 * 100), if(@z3 > 0.01, log10(@z1 / 0.01 * (@z3 - 0.01) * 100), 0)), 0))"},
+            {"name": "2 = 極化門檻", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,2)"}
           ]
         },
         {
@@ -197,6 +261,35 @@
           "series": [
             {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and climbing > 200, vam)"},
             {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and climbing > 200, vam)"}
+          ]
+        },
+        {
+          "title": "上坡腳程（每小時爬升，心率 < LTHR）",
+          "description": "只算坡度 ≥ 5% 而且在移動的時間，每小時爬了多少公尺，拿來推算百岳每段要走多久（上坡時間 ≈ 爬升 ÷ 腳程）。心率 ≥ LTHR 的時間不算，避免比賽或衝刺拉高數字；沒有心率的活動全部算。上坡時間少於 10 分鐘的活動不畫。參考：傳統的登山估算用每小時 600 m。",
+          "axes": [{"id": "METERSPERHOUR", "min": 0}],
+          "series": [
+            {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) >= 600, sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), delta(_elevation))) / sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) * 3600)"},
+            {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) >= 600, sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), delta(_elevation))) / sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) * 3600)"}
+          ]
+        },
+        {
+          "title": "下坡腳程（每小時下降）",
+          "description": "只算坡度陡於 −5% 而且在移動的時間，每小時下降多少公尺。下坡通常卡在腿和技術，不是心肺，所以不用心率過濾。拿來推算下山時間（下坡時間 ≈ 下降 ÷ 腳程）；變快代表下坡技術或腿力進步。下坡時間少於 10 分鐘的活動不畫。",
+          "axes": [{"id": "METERSPERHOUR", "min": 0}],
+          "series": [
+            {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) >= 600, -sum(if(rgrade <= -0.05 and speed > 0.5, delta(_elevation))) / sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) * 3600)"},
+            {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) >= 600, -sum(if(rgrade <= -0.05 and speed > 0.5, delta(_elevation))) / sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) * 3600)"}
+          ]
+        },
+        {
+          "title": "每次路線難度（コース定数）",
+          "description": "每次越野、登山的コース定数：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。用實際移動時間代入，走得比標準路線時間快時會偏低。拿來對照目標行程：要走的百岳算出來是多少，訓練裡有沒有做到相近的日子。",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "越野跑", "type": "line", "y_axis": "NONE", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
+            {"name": "登山健行", "type": "line", "y_axis": "NONE", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
+            {"name": "20 一般", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,20)"},
+            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#e34948", "line_style": "dash", "expression": "(,40)"}
           ]
         },
         {

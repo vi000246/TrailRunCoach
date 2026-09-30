@@ -25,6 +25,15 @@
            {"name": "區間", "type": "line", "expression": "{\"< AeT\",\"AeT–LTHR\",\"≥ LTHR\"}"},
            {"name": "時間", "type": "line", "y_axis": "HHMMSS", "expression": "bin(heartrate,{aethr,lthr})"}
          ]},
+        {"title": "路線難度",
+         "kind": "workout",
+         "description": "コース定数（日本登山界的路線難度，把時間、距離、爬升、下降換成體力消耗）：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。原本要代入地圖上的標準路線時間，這裡代入你實際的移動時間，所以走得比標準快時數字會偏低。km-effort = 距離 km + 爬升 m ÷ 100，分級照越野賽的 XXS < 25、XS 25–44、S 45–74、M 75–114、L 115–154、XL 155–209、XXL ≥ 210。",
+         "axes": [{"id": "NONE"}],
+         "series": [
+           {"name": "コース定数", "type": "line", "y_axis": "NONE", "expression": "1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000"},
+           {"name": "km-effort", "type": "line", "y_axis": "NONE", "expression": "distance + climbing / 100"},
+           {"name": "越野賽分級", "type": "line", "expression": "@ep:=distance + climbing / 100, if(@ep < 25, \"XXS\", if(@ep < 45, \"XS\", if(@ep < 75, \"S\", if(@ep < 115, \"M\", if(@ep < 155, \"L\", if(@ep < 210, \"XL\", \"XXL\"))))))"}
+         ]},
         {"title": "CP 測試結果（3 分／12 分）", "kind": "review", "section": "cp_test",
          "description": "CP = (P12·720 − P3·180) / 540，W′ = (P3 − CP)·180。和目前 CP 差 > 3% 建議更新。不是測試課時留白。"}
       ]
