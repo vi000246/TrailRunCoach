@@ -167,7 +167,7 @@ def test_report_of_single_values_is_not_empty():
 
 # ---- map panel ----------------------------------------------------------------
 
-def test_map_panel_kind_and_track():
+def test_map_panel_kind_and_gps_check():
     assert _panel_kind({"kind": "other", "class": "PKMapPanelConfig"}) == "map"
     assert _panel_kind({"kind": "workout"}) == "workout"
     fw = _run(TODAY, secs=10)
@@ -175,10 +175,15 @@ def test_map_panel_kind_and_track():
                        longitude=[121.5] * 10, elevation=[100.0 + i for i in range(10)])
     ds = FakeDataset([fw, _run(TODAY - dt.timedelta(days=1))], TODAY)
     js = render_map({"kind": "other"}, ds, ds.workouts[1])
-    assert js["kind"] == "map" and len(js["track"]) == 10 and js["empty"] is None
-    assert js["track"][0] == [121.5, 25.0, 100.0, 1.0]
+    assert js["kind"] == "map" and js["empty"] is None and js["workout"] == ds.workouts[1].idx
+    # the Leaflet map draws from /samples; the panel no longer ships a track of its own
+    assert "track" not in js
     none = render_map({"kind": "other"}, ds, ds.workouts[0])
-    assert none["track"] == [] and "GPS" in none["empty"]
+    assert "GPS" in none["empty"] and "track" not in none
+    zero = _run(TODAY + dt.timedelta(days=1), secs=5)
+    zero.channels.update(latitude=[0.0] * 5, longitude=[0.0] * 5)
+    ds2 = FakeDataset([zero], TODAY)
+    assert "GPS" in render_map({"kind": "other"}, ds2, ds2.workouts[0])["empty"]
 
 
 # ---- viewer --------------------------------------------------------------------

@@ -5,6 +5,7 @@ WKO5 itself.
 
 Env:
     WKO5_ATHLETE_DIR  folder containing <Name>.wko5athlete and year/*.wko4
+                      (unset: backend/settings/paths.py looks under ~/WKO5)
     WKO5_VIEWS_DIR    folder searched (recursively) for *.wko5chart
 """
 from __future__ import annotations
@@ -32,14 +33,16 @@ from backend.engine.wko5expr.customviews import (
     REPO_VIEWS, USER_VIEWS, load_custom_views, view_dirs,
 )
 from backend.engine.wko5expr.dataset import Dataset, date_to_day
+from backend.engine.wko5expr import datasource as DSRC
+from backend.engine.wko5expr.fitdataset import dataset_for_source
 from backend.engine.wko5expr import periods as PD
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
+from backend.settings.paths import athlete_dir
 
 ROOT = Path(__file__).resolve().parents[2]
-ATHLETE_DIR = Path(os.getenv(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+ATHLETE_DIR = athlete_dir()     # WKO5_ATHLETE_DIR, else found under ~/WKO5 (settings/paths.py)
 VIEWS_DIR = Path(os.getenv("WKO5_VIEWS_DIR", str(ROOT)))
 
 router = APIRouter(prefix="/api/v1/wko5", tags=["wko5-views"])
@@ -49,20 +52,14 @@ _LIVE: "weakref.WeakSet[Dataset]" = weakref.WeakSet()
 
 
 @lru_cache(maxsize=4)
-def _dataset_cfg(cfg_json: str, athlete_stamp: str = "") -> Dataset:
-    ds = Dataset(ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
+def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "") -> Dataset:
+    """The Dataset for charts.data_source: the WKO5 athlete folder, or the
+    COROS / TP FIT folder (FitFolderDataset, thresholds from the WKO5 athlete
+    file). `stamp` = datasource.source_stamp: a sync that adds FITs or WKO5
+    rewriting its index gives a new stamp, so a fresh Dataset."""
+    ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
     _LIVE.add(ds)
     return ds
-
-
-def _athlete_stamp() -> str:
-    """WKO5 rewrites the .wko5athlete index when workouts are added or
-    removed (sync, file delete) — a new stamp means a fresh Dataset."""
-    try:
-        return ";".join(f"{p.name}:{p.stat().st_size}:{p.stat().st_mtime_ns}"
-                        for p in sorted(ATHLETE_DIR.glob("*.wko5athlete")))
-    except OSError:
-        return ""
 
 
 def plan_changed(thresholds: bool) -> None:
@@ -78,13 +75,17 @@ def plan_changed(thresholds: bool) -> None:
             ds.plan = Plan.load()   # per-workout memo doesn't depend on events
 
 
-def _dataset(parity: Optional[bool] = None) -> Dataset:
+def _dataset(parity: Optional[bool] = None, source: Optional[str] = None) -> Dataset:
     """parity=True reproduces WKO5 exactly (verification mode); False applies
-    the athlete's own adjusted formulas from ~/.wko5coach/engine.json."""
+    the athlete's own adjusted formulas from ~/.wko5coach/engine.json.
+    `source` (default: the charts.data_source setting): wko5 | coros | tp.
+    The chart page, overview (api/overview.py) and race power
+    (api/racepower.py) all come through here."""
     cfg = EngineConfig.load()
     if parity is not None and parity != cfg.parity:
         cfg = cfg.replace(parity=parity)
-    return _dataset_cfg(json.dumps(cfg.to_dict(), sort_keys=True), _athlete_stamp())
+    src = source if source in DSRC.SOURCES else DSRC.current_source()
+    return _dataset_cfg(json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, ATHLETE_DIR))
 
 
 @lru_cache(maxsize=1)
@@ -211,7 +212,9 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         ch, b, pinfo = _apply_period(ch, b, e, request.query_params.get("period"),
                                      custom=v.get("source") == "custom")
     params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
+    # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
+           "source": getattr(ds, "source", None) or "wko5",
            "params": params, "workout_file": ds.workouts[workout].entry.file if needs_workout else None}
     key = chart_key(ch, req, data_fingerprint(ds))
 

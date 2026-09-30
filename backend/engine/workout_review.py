@@ -1,6 +1,6 @@
 """
 Single-activity review — the 判讀卡 on each 單次活動 dashboard
-(views/workout.json, chart kind "review"; docs/plans/todo-workout-review.plan.md).
+(views/workout.json, chart kind "review"; docs/plans/done-workout-review.plan.md).
 
 What one expression can't do lives here:
 
@@ -55,7 +55,10 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 
 # cached_series keys on the file and the thresholds, not on this code: bump the
 # version whenever _measure's output changes
-CACHE_KEY = "workout_review_v3"
+CACHE_KEY = "workout_review_v4"
+
+# categories that can be a quality session (session_type's `runs`)
+QUALITY_CATEGORIES = ("road", "trail", "hike")
 
 DRIFT_MIN_S = 2400            # the plan's i_drift floor: ≥ 40 min
 DRIFT_GOOD = 0.05
@@ -329,7 +332,8 @@ def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
                 e["hr"] = float(np.nanmean(hh))
                 e["hr_max"] = float(np.nanmax(hh))
             # HR lags the effort: the peak is at the end or a few seconds after
-            nxt = next((s for s, _ in segs[k + 1:] if s - a >= min_s), None)
+            # the next bout that is itself an effort (≥ min_s; shorter ones are skipped above)
+            nxt = next((s for s, e_ in segs[k + 1:] if e_ - s >= min_s), None)
             if b + 60 < len(h) and (nxt is None or nxt >= b + 60):
                 win = h[max(a, b - 10):b + 15]
                 peak = np.nanmax(win) if np.isfinite(win).any() else np.nan
@@ -496,7 +500,7 @@ def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
     # hikes count too (the athlete's call, 2026-09-30): a sustained climb above
     # threshold is a quality stimulus for 百岳. A session whose average HR stayed
     # ≤ AeT+3 was easy even if short rises spiked HR or power.
-    runs = category in ("road", "trail", "hike") and not easy_hr
+    runs = category in QUALITY_CATEGORIES and not easy_hr
     if runs and hard_power_s is not None and hard_power_s >= need:
         return "quality"
     if runs and hard_s >= need and (n_efforts is None or n_efforts >= 1):
@@ -632,9 +636,13 @@ def _measure(ds, w) -> Optional[dict]:
     out["zones"] = None if not (aet and lthr) else {
         "low": float(d[hm & (h < aet)].sum()), "mid": float(d[hm & (h >= aet) & (h < lthr)].sum()),
         "high": float(d[hm & (h >= lthr)].sum())}
-    hard_hr = float(d[np.isfinite(h) & (h >= lthr)].sum()) if lthr else 0.0
+    # a recording gap (> MAX_DT between samples) is not time at threshold,
+    # even when the samples on both sides of it are
+    hard_hr = float(d[(d <= MAX_DT) & np.isfinite(h) & (h >= lthr)].sum()) if lthr else 0.0
     hard_p = 0.0
-    if cp and w.sport == "run" and _has(s["power"]):
+    # runs and hikes reach quality the same way: HR ≥ LTHR or power ≥ 95 % CP
+    power_q = bool(cp) and (w.sport == "run" or cat in QUALITY_CATEGORIES) and _has(s["power"])
+    if power_q:
         # 30-s power: Stryd's second-by-second spikes on every short rise
         # would otherwise make each easy run a "quality" session
         _, p1 = _grid1(t, s["power"])
@@ -642,14 +650,15 @@ def _measure(ds, w) -> Optional[dict]:
             p30 = np.convolve(np.nan_to_num(p1), np.ones(30) / 30, "same")
             hard_p = float((p30 >= 0.95 * cp).sum())
     out["hard_s"] = max(hard_hr, hard_p)
-    out["hard_power_s"] = hard_p if cp and _has(s["power"]) and w.sport == "run" else None
+    out["hard_power_s"] = hard_p if power_q else None
     cpm = (climb / dist) if dist and dist > 0.5 and climb is not None else None
     out["climb_m_per_km"] = cpm
     if w.sport == "run" or cat in ("road", "trail"):
         out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail")
     else:
         out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
-    efforts = detect_efforts(t, s["power"], s["hr"], cp) if w.sport == "run" else []
+    # hikes too: session_type needs a detected effort next to hard_power_s
+    efforts = detect_efforts(t, s["power"], s["hr"], cp) if (w.sport == "run" or power_q) else []
     out["efforts"] = efforts[:40]
     out["intervals"] = interval_summary(efforts)
     out["cp_test"] = cp_test(t, s["power"]) if w.sport == "run" else None
@@ -810,13 +819,15 @@ def drift_streak(ds, today: dt.date, upto_idx: Optional[int] = None) -> dict:
 
 def last_quality(ds, today: dt.date, days: int = 28) -> Optional[dict]:
     """The latest quality session in the `days` before `today`:
-    {"idx", "date", "reps", "faded"}; None when there was none."""
+    {"idx", "date", "reps", "faded"}; None when there was none. Runs and hikes
+    (QUALITY_CATEGORIES), whatever order ds.workouts is in."""
+    from backend.engine.overview import category
     from backend.engine.wko5expr.dataset import date_to_day
     tday = math.floor(date_to_day(today))
     best = None
-    for w in ds.workouts:
+    for w in sorted(ds.workouts, key=lambda x: x.day):
         d = math.floor(w.day)
-        if not (tday - days <= d < tday) or w.sport != "run":
+        if not (tday - days <= d < tday) or category(w) not in QUALITY_CATEGORIES:
             continue
         if (_f(w.metrics.get("duration")) or 0) < 1200:
             continue
