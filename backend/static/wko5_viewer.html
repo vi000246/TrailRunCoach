@@ -738,7 +738,8 @@ async function renderCard(card, v, di, c, q, token) {
     zb.textContent = "⤢ 放大";
     zb.onclick = () => openZoom(card, zb);
     card.querySelector("h2").appendChild(zb);
-    if (res.period_toggle) {
+    // a day calendar is always per day: no re-bucketing toggle
+    if (res.period_toggle && !(res.series || []).some((s) => s.type === "calendar")) {
       // 日／週／月／季／年: re-bucket this chart (remembered per chart)
       const seg = document.createElement("div");
       seg.className = "seg period";
@@ -882,7 +883,11 @@ function draw(card, res) {
   const gauges = S_.filter((s) => s.type === "gauge" && ["values", "value", "hline", "none"].includes(s.data.kind)
     && (s.expression || "").trim());
   if (gauges.length && !res.empty) drawGauges(card, gauges);
-  const plotted = S_.filter((s) => ["points", "hline", "vline", "band"].includes(s.data.kind) && s.type !== "gauge");
+  // "calendar" series: one cell per day (e.g. strength sessions: done / not done)
+  const cal = S_.filter((s) => s.type === "calendar" && s.data.kind === "points");
+  if (cal.length && !res.empty) drawCalendar(card, cal[0]);
+  const plotted = S_.filter((s) => ["points", "hline", "vline", "band"].includes(s.data.kind) && s.type !== "gauge"
+    && s.type !== "calendar");
   const hasPoints = plotted.some((s) => s.data.kind === "points");
   if (hasPoints && !res.empty) drawPlot(card, res, plotted);
   // WKO5 table charts: every series evaluates to a list -> one column per series, one row per index
@@ -1220,6 +1225,40 @@ async function drawMap(card, res) {
   const n = s.gps.length;
   card.insertAdjacentHTML("beforeend", `<p class="desc" style="margin-top:4px">GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · 滑鼠移到路線上，其他圖表會同步標出同一時間</p>`);
   new ResizeObserver(() => { if (el._lmap) map.invalidateSize(); }).observe(el);
+}
+
+// Day calendar for a daily count series ([iso date, n] points): a filled cell = done that day,
+// plus the counts that matter (this week, the last 4 weeks, the whole range).
+function drawCalendar(card, s) {
+  const pts = s.data.points.filter((p) => p[1] != null && p[1] > 0);
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const end = new Date(($("end").value || iso(new Date())) + "T00:00:00");
+  const begin = new Date(($("begin").value || iso(new Date(end.getTime() - 364 * 864e5))) + "T00:00:00");
+  const mon = new Date(end); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+  const d28 = new Date(end); d28.setDate(d28.getDate() - 27);
+  const n = (from) => pts.filter((p) => p[0] >= iso(from) && p[0] <= iso(end)).length;
+  const weeks = Math.max(1, (end - begin) / (7 * 864e5));
+  card.insertAdjacentHTML("beforeend", `<p class="meta cal-sum">本週 <b>${n(mon)}</b> 次 · 近 4 週 <b>${n(d28)}</b> 次
+    · 這段期間 <b>${pts.length}</b> 次（平均每週 ${(pts.length / weeks).toFixed(1)} 次）</p>`);
+  const months = (end.getFullYear() - begin.getFullYear()) * 12 + end.getMonth() - begin.getMonth() + 1;
+  const box = document.createElement("div");
+  box.className = "plot";
+  box.style.height = `${months > 7 ? 190 : 170}px`;
+  card.appendChild(box);
+  const css = (v) => getComputedStyle(document.body).getPropertyValue(v).trim();
+  const ch = echarts.init(box);
+  ch.setOption({
+    tooltip: { formatter: (p) => `${p.value[0]}：${p.value[1] > 0 ? "有練" : "沒練"}` },
+    visualMap: { show: false, min: 0, max: 1, inRange: { color: [css("--line") || "#e5e5e5", s.color || "#e87ba4"] } },
+    calendar: { range: [iso(begin), iso(end)], top: 24, left: 34, right: 12, cellSize: ["auto", 14],
+      splitLine: { show: false },
+      itemStyle: { color: css("--line") || "#e5e5e5", borderColor: css("--panel") || "#fff", borderWidth: 2 },
+      dayLabel: { firstDay: 1, nameMap: ["日", "一", "二", "三", "四", "五", "六"], color: css("--muted"), fontSize: 10 },
+      monthLabel: { nameMap: "cn", color: css("--muted"), fontSize: 10 }, yearLabel: { show: false } },
+    series: [{ type: "heatmap", coordinateSystem: "calendar",
+      data: s.data.points.filter((p) => p[1] != null).map((p) => [p[0], p[1] > 0 ? 1 : 0]) }],
+  });
+  new ResizeObserver(() => ch.resize()).observe(box);
 }
 
 function drawValuesTable(card, cols) {
