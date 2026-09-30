@@ -169,17 +169,32 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
 
 
 def _test_steps(s: dict, th: Thresholds) -> list[StepLike]:
-    # "CP 測試 3 分 + 12 分": all-out 3' and 12', 30' easy between
-    title = s.get("title", "")
-    a = _num(r"(\d+)\s*分\s*\+", title, 3)
-    b = _num(r"\+\s*(\d+)\s*分", title, 12)
-    gap = _num(r"休\s*(\d+)\s*分", s.get("target", "") + s.get("detail", ""), 30)
-    warm = _num(r"暖身\s*(\d+)\s*分", s.get("detail", ""), 15)
+    """CP test by protocol (engine/cp_protocols.py; legacy rows from the title).
+    The all-out bouts have an open target (no power range: a range reads as
+    the goal, and the old 12′ range topped out below the athlete's real
+    12′ power); warm-up / rest / cool-down are HR ≤ AeT, lengths from detail."""
+    from backend.engine import cp_protocols as CPP
+    proto = CPP.protocol_of(s) or "standard"
+    if proto == "race":
+        raise Unsupported("用比賽代替 CP 測試：比賽不推")
+    t = CPP.TABLE[proto]
+    title, detail = s.get("title", ""), s.get("detail", "")
+    warm = _num(r"暖身\s*(\d+)\s*分", detail, t["warm"])
+    cool = _num(r"緩和\s*(\d+)\s*分", detail, t["cool"])
+    if proto == "quick":
+        work = _num(r"(\d+)\s*分全力", title, 20)
+        return [Step(EX_WARMUP, warm * 60, easy_hr(th)),
+                Step(EX_TRAIN, work * 60, None, f"{work} 分全力"),
+                Step(EX_COOLDOWN, cool * 60, easy_hr(th))]
+    # "CP 測試 12 分 + 3 分" (long first); a legacy "3 分 + 12 分" keeps its order
+    a = _num(r"(\d+)\s*分\s*\+", title, 12)
+    b = _num(r"\+\s*(\d+)\s*分", title, 3)
+    gap = _num(r"休\s*(\d+)\s*分", s.get("target", "") + detail, t["rest"])
     return [Step(EX_WARMUP, warm * 60, easy_hr(th)),
-            Step(EX_TRAIN, a * 60, power(th, 1.10, 1.30), f"{a} 分全力"),
+            Step(EX_TRAIN, a * 60, None, f"{a} 分全力"),
             Step(EX_REST, gap * 60, easy_hr(th), "恢復"),
-            Step(EX_TRAIN, b * 60, power(th, 0.98, 1.08), f"{b} 分全力"),
-            Step(EX_COOLDOWN, 10 * 60, easy_hr(th))]
+            Step(EX_TRAIN, b * 60, None, f"{b} 分全力"),
+            Step(EX_COOLDOWN, cool * 60, easy_hr(th))]
 
 
 def session_steps(s: dict, th: Thresholds) -> list[StepLike]:

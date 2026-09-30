@@ -170,7 +170,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <div class="tablewrap"><table><thead><tr><th>區間</th><th>名稱</th><th class="num">% CP</th><th class="num">W</th></tr></thead>
       <tbody id="pzones"></tbody></table></div>
       <p class="meta" id="pzsrc"></p></details>
-    <p class="meta">CP 測試（你筆記裡的 3'/12' 流程）：先 3 分鐘再 12 分鐘全力，中間至少恢復 30 分鐘；每 4–6 週或賽前 10–21 天做一次。沒填的話用 WKO5 的 mFTP。</p>
+    <p class="meta">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。測完在活動判讀卡按「套用這次的 CP」，會寫成測試那天的一列。沒填的話用 WKO5 的 mFTP（30–60 分鐘的功率，通常比兩點 CP 低 5–10%）。</p>
   </section>
 
   <section>
@@ -404,6 +404,8 @@ $("#thr").addEventListener("change", (ev) => {
   const i = ev.target.dataset.t; if (i == null) return;
   const f = ev.target.dataset.f, v = ev.target.value;
   S.thresholds[i][f] = ["lthr", "aethr", "mhr", "cp"].includes(f) ? (v === "" ? null : Number(v)) : v;
+  // a CP typed by hand is no longer the test's result (套用這次的 CP stores how it was measured)
+  if (f === "cp") { S.thresholds[i].cp_method = null; S.thresholds[i].wprime = null; }
 });
 $("#thr").addEventListener("click", (ev) => { const i = ev.target.dataset.trm; if (i == null) return; S.thresholds.splice(Number(i), 1); renderThr(); });
 $("#savethr").onclick = async () => {
