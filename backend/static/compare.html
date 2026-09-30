@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>資料來源比對</title>
+<style>
+:root { --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --warn: #b45309; --flag: #fff4e5; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae;
+    --line: #2a313a; --accent: #60a5fa; --warn: #fbbf24; --flag: #3a2a10; }
+}
+:root[data-theme="dark"] { --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae;
+  --line: #2a313a; --accent: #60a5fa; --warn: #fbbf24; --flag: #3a2a10; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+h1 { font-size: 16px; margin: 0; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+select, input, button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 8px; }
+button { cursor: pointer; } button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.flag { background: var(--flag); color: var(--warn); font-weight: 600; }
+.sum { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="settings"></script>
+<header><h1>資料來源比對</h1></header>
+<main>
+  <section>
+    <div class="row">
+      <label>A <select id="a"><option value="wko5">WKO5 資料夾</option><option value="coros">COROS</option><option value="tp">TrainingPeaks</option></select></label>
+      <label>B <select id="b"><option value="coros">COROS</option><option value="tp">TrainingPeaks</option><option value="wko5">WKO5 資料夾</option></select></label>
+      <label>從 <input type="date" id="since"></label>
+      <button class="primary" id="go">比對</button>
+      <span class="meta" id="msg"></span>
+    </div>
+    <p class="meta">同一筆活動以開始時間 ±2 分鐘配對。儲存格標色＝差異超過容差（時長 / 距離 2%、爬升 10%、NP 3%、TSS 5%）。每格顯示 A / B。</p>
+  </section>
+  <section><div class="sum" id="sum"></div></section>
+  <section class="wrap"><table><thead><tr><th>開始</th><th>運動</th><th>時長</th><th>距離 km</th><th>爬升 m</th><th>NP W</th><th>TSS</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="7" class="meta">選好兩個來源後按「比對」。</td></tr></tbody></table></section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const F = ["duration", "distance", "climbing", "np", "tss"];
+const NAME = { duration: "時長", distance: "距離", climbing: "爬升", np: "NP", tss: "TSS" };
+function fmt(f, v) {
+  if (v == null) return "–";
+  if (f === "duration") { const s = Math.round(v); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
+  return f === "distance" ? v.toFixed(2) : v.toFixed(1);
+}
+$("go").onclick = async () => {
+  const a = $("a").value, b = $("b").value;
+  if (a === b) { $("msg").textContent = "請選兩個不同的來源"; return; }
+  const q = new URLSearchParams({ a, b }); if ($("since").value) q.set("since", $("since").value);
+  $("msg").textContent = "計算中…（WKO5 資料夾第一次會比較久）"; $("go").disabled = true;
+  try {
+    const r = await fetch(`/api/v1/sync/compare?${q}`);
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    const d = await r.json();
+    $("sum").innerHTML = `<span>配對 <b>${d.matched}</b></span><span>只有 A：<b>${d.only_a}</b></span><span>只有 B：<b>${d.only_b}</b></span>`
+      + F.map((f) => `<span>${NAME[f]} 平均差 <b>${d.mean_rel[f] == null ? "–" : (d.mean_rel[f] * 100).toFixed(1) + "%"}</b></span>`).join("");
+    $("rows").innerHTML = d.rows.map((row) => `<tr><td>${esc(row.start.replace("T", " "))}</td><td>${esc(row.sport)}</td>`
+      + F.map((f) => { const c = row.metrics[f];
+        return `<td class="${row.flags.includes(f) ? "flag" : ""}">${fmt(f, c.a)} / ${fmt(f, c.b)}</td>`; }).join("") + "</tr>").join("")
+      || `<tr><td colspan="7" class="meta">沒有配對到的活動。</td></tr>`;
+    $("msg").textContent = "";
+  } catch (e) { $("msg").textContent = "失敗：" + e.message.slice(0, 120); }
+  $("go").disabled = false;
+};
+</script>
+</body>
+</html>

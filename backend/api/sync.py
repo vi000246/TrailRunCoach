@@ -149,6 +149,19 @@ async def auto_sync(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     return {"started": started, "skipped": skipped, "threshold_hours": hours}
 
 
+@router.get("/compare")
+async def compare_sources_api(a: str = "wko5", b: str = "coros", since: Optional[date] = None):
+    """Same activities from two chart data sources (wko5 | coros | tp),
+    paired by start time ±2 min: per-activity duration / distance / climbing /
+    NP / TSS and relative differences (flagged beyond tolerance)."""
+    import asyncio
+    from backend.api.wko5views import ATHLETE_DIR
+    from backend.engine.wko5expr.sourcecompare import compare
+    if a not in ("wko5", "coros", "tp") or b not in ("wko5", "coros", "tp") or a == b:
+        raise HTTPException(400, "a and b must be two different sources of wko5, coros, tp")
+    return await asyncio.to_thread(compare, a, b, ATHLETE_DIR, since)
+
+
 @router.delete("/{source}/files")
 async def delete_source_files(source: str, athlete_id: int = 1,
                               date_from: Optional[date] = None, date_to: Optional[date] = None,
