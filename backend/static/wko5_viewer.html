@@ -750,6 +750,10 @@ function savePeriod(k, p) { try { localStorage.setItem(PERIOD_KEY, JSON.stringif
 const WINDOW_KEY = "wko5viewer.window";
 function windowPrefs() { try { return JSON.parse(localStorage.getItem(WINDOW_KEY) || "{}"); } catch { return {}; } }
 function saveWindow(k, w) { try { localStorage.setItem(WINDOW_KEY, JSON.stringify({ ...windowPrefs(), [k]: w })); } catch {} }
+// 配速／功率 drift charts (views "basis"): Pa:HR or Pw:HR, remembered per chart
+const BASIS_KEY = "wko5viewer.basis";
+function basisPrefs() { try { return JSON.parse(localStorage.getItem(BASIS_KEY) || "{}"); } catch { return {}; } }
+function saveBasis(k, b) { try { localStorage.setItem(BASIS_KEY, JSON.stringify({ ...basisPrefs(), [k]: b })); } catch {} }
 function disposeCardCharts(card) {
   for (const el of card.querySelectorAll(".plot")) {
     if (el._lmap) { el._lmap.remove(); el._lmap = null; continue; }
@@ -764,10 +768,12 @@ async function renderCard(card, v, di, c, q, token) {
   const pkey = `${v.name}|${di}|${c.index}`;
   const period = periodPrefs()[pkey];
   const win = windowPrefs()[pkey];
+  const basis = basisPrefs()[pkey];
   try {
     const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
-      + (win && c.kind === "athlete" ? `&window=${win}` : ""));
+      + (win && c.kind === "athlete" ? `&window=${win}` : "")
+      + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : ""));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -818,6 +824,25 @@ async function renderCard(card, v, di, c, q, token) {
       };
       card.querySelector("h2").appendChild(seg);
     }
+    if (res.basis_toggle && res.basis_choices?.length) {
+      // 配速／功率: Pa:HR or Pw:HR (remembered per chart)
+      const seg = document.createElement("div");
+      seg.className = "seg period";
+      seg.dataset.kind = "basis";
+      seg.setAttribute("role", "group");
+      seg.setAttribute("aria-label", "飄移用配速或功率");
+      seg.innerHTML = res.basis_choices.map((b) => `<button data-p="${esc(b)}" class="${b === res.basis ? "on" : ""}"
+        aria-pressed="${b === res.basis}">${esc(res.basis_labels?.[b] || b)}</button>`).join("");
+      seg.onclick = async (e) => {
+        const b = e.target.closest("button[data-p]");
+        if (!b || b.dataset.p === card._res?.basis) return;
+        saveBasis(pkey, b.dataset.p);
+        card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+        await renderCard(card, v, di, c, q, loadToken);
+        if (ZOOM.card === card) fillZoom();
+      };
+      card.querySelector("h2").appendChild(seg);
+    }
     drawInto(card, res);
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
   } catch (e) {
@@ -829,6 +854,7 @@ async function renderCard(card, v, di, c, q, token) {
 
 function drawInto(box, res) {
   if (res.range_note) box.insertAdjacentHTML("beforeend", `<p class="meta range-note">${esc(res.range_note)}</p>`);
+  if (res.basis_note) box.insertAdjacentHTML("beforeend", `<p class="meta basis-note">${esc(res.basis_note)}</p>`);
   const rb = res.recent_bests;
   if (rb?.note) {
     // 「近 7 天新高：12 分鐘 +18 W、…」 or why there is none
