@@ -508,7 +508,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
     sessions: list[Session] = []
     from backend.engine import workout_review as WR   # local: workout_review imports this module
     streak_ok = bool((getattr(by.get("drift"), "extra", None) or {}).get("streak_ok"))
-    allow_quality = WR.quality_gate(kind, {i: lvl(i) for i in ("intensity", "drift")}, streak_ok)
+    gate_levels = {i: lvl(i) for i in ("intensity", "drift")}
+    allow_quality = WR.quality_gate(kind, gate_levels, streak_ok)
     test_due = lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10)
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 
@@ -695,4 +696,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
                        "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": tt.get("aet_source")},
         "notes": notes,
+        # the quality gate's inputs, so projection.project_weeks can re-evaluate
+        # it for each projected week's phase instead of copying this week's answer
+        "quality_gate": {"levels": gate_levels, "streak_ok": streak_ok, "allowed": allow_quality},
     }
