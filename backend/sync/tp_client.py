@@ -50,8 +50,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile
+from backend.sync import http
+from backend.sync.http import as_utc
 
 log = logging.getLogger(__name__)
+
+
+class TpDownloadError(Exception):
+    """detaildata / filedata failed (auth, premium gate, not found, server).
+    Unlike "the workout has no device file", this must not advance the cursor."""
 
 TP_OAUTH_URL = "https://oauth.trainingpeaks.com/oauth/token"
 TP_API_BASE = "https://tpapi.trainingpeaks.com/"
@@ -96,7 +103,7 @@ async def login_password(
         f"&scope={TP_SCOPE}"
         f"&client_id={TP_CLIENT_ID}"
     )
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with http.client(timeout=15) as client:
         resp = await client.post(
             TP_OAUTH_URL,
             content=body,
@@ -157,7 +164,7 @@ async def login_password(
 async def _fetch_user(access_token: str) -> dict:
     """GET users/v3/user — returns user profile + accessible athletes."""
     headers = {**TP_HEADERS, "Authorization": f"Bearer {access_token}"}
-    async with httpx.AsyncClient(
+    async with http.client(
         base_url=TP_API_BASE, headers=headers, timeout=10
     ) as client:
         resp = await client.get("users/v3/user")
@@ -246,7 +253,7 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
         f"&client_id={TP_CLIENT_ID}"
         f"&client_secret={TP_CLIENT_SECRET}"
     )
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with http.client(timeout=15) as client:
         resp = await client.post(
             TP_OAUTH_URL,
             content=body,
@@ -272,10 +279,10 @@ async def _get_valid_token(db: AsyncSession, athlete_id: int) -> Optional[str]:
     state = result.scalar_one_or_none()
     if not state or not state.tp_access_token:
         return None
-    # Refresh if within 5 minutes of expiry.
-    if state.tp_token_expires and datetime.now(timezone.utc) >= (
-        state.tp_token_expires - timedelta(minutes=5)
-    ):
+    # Refresh if within 5 minutes of expiry. SQLite returns the stored expiry
+    # naive (it was written as UTC), so normalise before comparing.
+    expires = as_utc(state.tp_token_expires)
+    if expires and datetime.now(timezone.utc) >= expires - timedelta(minutes=5):
         ok = await _refresh_token(state, db)
         if not ok:
             return None
@@ -328,7 +335,7 @@ async def sync_workouts(
     total_checked = 0
     errors: list[str] = []
 
-    async with httpx.AsyncClient(
+    async with http.client(
         base_url=TP_API_BASE, headers=headers, timeout=60
     ) as client:
         while True:
@@ -363,8 +370,11 @@ async def sync_workouts(
 
             for wo in page_items:
                 wo_id = wo.get("workoutId") or wo.get("id")
-                wo_day = wo.get("workoutDay") or (wo.get("startTime") or "")[:10]
+                wo_day = (wo.get("workoutDay") or wo.get("startTime") or "")[:10]
                 if not wo_id:
+                    continue
+                if wo_day and wo_day > date.today().isoformat():
+                    # planned (future) workout: nothing recorded yet
                     continue
                 total_checked += 1
                 yield {
@@ -413,20 +423,33 @@ async def sync_workouts(
                     }
                     continue
 
-                # Register + parse via existing import pipeline.
-                from backend.files.file_service import _import_one_file
+                # Register + parse via the shared import pipeline. A failed
+                # import is rolled back (no half-written rows) and reported;
+                # the cursor then stays put so the next sync retries it.
+                from backend.files.file_service import _import_one_file, record_corrupt
                 try:
                     record = await _import_one_file(
                         db, athlete_id, fit_path, source="trainingpeaks",
                         tp_workout_id=wo_id,
                     )
-                except TypeError:
-                    # Backward-compat: older signature without source/tp_workout_id.
-                    record = await _import_one_file(db, athlete_id, fit_path)
-                    if record is not None:
-                        record.source = "trainingpeaks"
-                        record.tp_workout_id = wo_id
-                await db.commit()
+                    if record is None:
+                        # unreadable FIT: remember it so it isn't re-downloaded
+                        await db.rollback()
+                        await record_corrupt(db, athlete_id, fit_path, source="trainingpeaks",
+                                             workout_date=_iso_date(wo_day), tp_workout_id=wo_id)
+                        await db.commit()
+                        yield {"status": "error", "workout_id": wo_id,
+                               "workout_date": wo_day, "detail": "corrupt_fit"}
+                        continue
+                    await db.commit()
+                except Exception as e:
+                    await db.rollback()
+                    msg = f"workout {wo_id}: import_failed: {e}"
+                    log.warning(msg)
+                    errors.append(msg)
+                    yield {"status": "error", "workout_id": wo_id,
+                           "workout_date": wo_day, "detail": f"import_failed: {e}"}
+                    continue
                 total_downloaded += 1
                 yield {
                     "status": "downloaded",
@@ -471,10 +494,10 @@ async def _download_workout_fit(
     )
     resp = await client.get(detail_url)
     if resp.status_code != 200:
-        log.debug(
-            "detaildata %s -> %d: %s", workout_id, resp.status_code, resp.text[:120]
-        )
-        return None
+        # 401 token / 403 premium gate / 404 / 5xx: an error, not "no file" —
+        # returning None here used to advance the cursor past the workout.
+        raise TpDownloadError(
+            f"detaildata HTTP {resp.status_code}: {resp.text[:120]!r}")
 
     detail = resp.json()
 
@@ -507,10 +530,8 @@ async def _download_workout_fit(
     )
     fresp = await client.get(fdata_url)
     if fresp.status_code != 200:
-        log.debug(
-            "filedata %s/%s -> %d", workout_id, file_name, fresp.status_code
-        )
-        return None
+        raise TpDownloadError(
+            f"filedata {file_name} HTTP {fresp.status_code}: {fresp.text[:120]!r}")
 
     # The body can be:
     #   (a) JSON with `{ "data": "<base64-of-gzip-fit>" }` (observed via binary
@@ -607,7 +628,7 @@ async def fetch_tp_settings(db: AsyncSession, athlete_id: int) -> Optional[dict]
     athlete = result.scalar_one_or_none()
     if not athlete or not athlete.tp_athlete_id:
         return None
-    async with httpx.AsyncClient(
+    async with http.client(
         base_url=TP_API_BASE,
         headers={**TP_HEADERS, "Authorization": f"Bearer {token}"},
         timeout=10,
@@ -638,7 +659,7 @@ async def exchange_code(code: str, db: AsyncSession, athlete_id: int) -> dict:
         f"&client_secret={TP_CLIENT_SECRET}"
         f"&redirect_uri=http://localhost:8000/api/v1/auth/tp/callback"
     )
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with http.client(timeout=15) as client:
         resp = await client.post(
             TP_OAUTH_URL,
             content=body,
@@ -671,6 +692,13 @@ async def exchange_code(code: str, db: AsyncSession, athlete_id: int) -> dict:
             athlete.tp_athlete_id = tp_athlete_id
     await db.commit()
     return token
+
+
+def _iso_date(s: Optional[str]) -> Optional[date]:
+    try:
+        return date.fromisoformat((s or "")[:10])
+    except ValueError:
+        return None
 
 
 def _urlquote(s: str) -> str:
