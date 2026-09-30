@@ -58,7 +58,7 @@ def _compute_inputs() -> dict:
     horizon = min(cap, max(phase_end, monday + dt.timedelta(days=13)))
     phases = [{"kind": p.kind, "start": p.start, "end": p.end}
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
-    weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant)
+    weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant)
     since = monday - dt.timedelta(weeks=4)
     acts = [O.activity_row(w) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
@@ -133,6 +133,10 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
     if scope == "week":
         a = R.monday_of(d)
         b = (dt.date.fromisoformat(a) + dt.timedelta(days=6)).isoformat()
+        if b < today:
+            # max(a, today) > b would be an empty range: preview / push / unpush
+            # would silently do nothing
+            raise HTTPException(400, f"{a}–{b} 這週已經過去（今天 {today}），不能推送或移除")
         return max(a, today), b
     return today, inp["phase_push_end"]
 
