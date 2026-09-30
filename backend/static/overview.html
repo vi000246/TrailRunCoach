@@ -185,7 +185,7 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 <header>
   <h1>總覽</h1>
   <nav class="jump" id="jump" aria-label="本頁段落">
-    <a href="#s-status">狀況</a><a href="#s-week">本週</a><a href="#s-pmc">PMC</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a>
+    <a href="#s-status">狀況</a><a href="#s-week">本週</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a>
   </nav>
   <span class="spacer" style="flex:1"></span>
   <span class="meta" id="asof"></span>
@@ -215,24 +215,6 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
     </section>
   </div>
   </div>
-
-  <section data-sec id="s-pmc">
-    <h2>PMC 體能・疲勞・狀況 <span class="meta">全部運動合計</span>
-      <i class="tip" title="CTL = 42 天平均負荷（體能）&#10;ATL = 7 天（疲勞）&#10;TSB = 昨天的 CTL − ATL（狀況）&#10;虛線 = 照本週課表的預估">i</i></h2>
-    <div class="toolbar">
-      <div class="seg" id="pmc-range">
-        <button data-d="90">90 天</button><button data-d="180">半年</button><button data-d="365">1 年</button><button data-d="730">2 年</button>
-      </div>
-    </div>
-    <div class="legend" id="pmc-legend"></div>
-    <div class="plot" id="pmc"></div>
-    <div class="meta" style="margin:6px 0 2px">每日 TSS</div>
-    <div class="plot small" id="pmc-tss"></div>
-    <details><summary>怎麼看</summary>
-      <p class="meta">CTL = 42 天平均負荷（體能），ATL = 7 天（疲勞），TSB = 昨天的 CTL − ATL（狀況）。虛線 = 照本週課表的預估。</p>
-      <p class="meta">TSB：−30～−10：有效訓練區；−10～+5：維持；+5～+25：新鮮（賽前 A 賽 +10～+20）；&lt; −30：過度訓練風險；&gt; +25：體能在流失（TrainingPeaks / Friel；Palladino 的 A/B/C 賽 TSB）。沒有任何登山越野賽公開過「最佳 TSB」，只當方向參考。</p>
-    </details>
-  </section>
 
   <section data-sec id="s-log">
     <h2>做了什麼 <span class="meta" id="per-sub"></span></h2>
@@ -381,7 +363,6 @@ function paintPlanLoad() {
   $("wk-tsb").innerHTML = `下週一 TSB <b>${sgn(S.tsb_next)}</b>`;
   const changed = JSON.stringify(PLAN.projection) !== JSON.stringify(S.projection);
   PLAN.projection = S.projection;
-  if (changed && charts.pmc) loadPmc().catch(() => {});
 }
 async function loadWeek() {
   const w = PLAN = await j(`${API}/weekplan`);
@@ -407,57 +388,7 @@ async function loadWeek() {
   // athlete most often did long sessions in the last 12 weeks (w.long_weekday), else the last day.
 }
 
-// ---------------- PMC ----------------
-async function loadPmc() {
-  const days = ls.get("pmcDays", 180);
-  document.querySelectorAll("#pmc-range button").forEach((b) => b.classList.toggle("on", +b.dataset.d === days));
-  const end = STATUS ? STATUS.today : new Date().toISOString().slice(0, 10);
-  const b = new Date(end + "T00:00:00"); b.setDate(b.getDate() - days + 1);
-  const res = await j(`${API}/pmc?begin=${b.toISOString().slice(0, 10)}&end=${end}`);
-  const S = res.series;
-  const proj = PLAN ? PLAN.projection : [];
-  const last = S[S.length - 1];
-  const P = (k) => proj.length ? [[last.date, last[k]], ...proj.map((p) => [p.date, p[k]])] : [];
-  const col = { ctl: css("--s1"), atl: css("--s2"), tsb: css("--s3") };
-  $("pmc-legend").innerHTML = `<span><i class="ln" style="background:${col.ctl}"></i>CTL 體能 ${n0(last.ctl)}</span>
-    <span><i class="ln" style="background:${col.atl}"></i>ATL 疲勞 ${n0(last.atl)}</span>
-    <span><i class="ln" style="background:${col.tsb}"></i>TSB 狀況 ${sgn(last.tsb)}</span>
-    ${proj.length ? `<span><i class="dash" style="border-color:${css("--muted")}"></i>照課表預估</span>` : ""}`;
-  const line = (name, k, width) => ({ name, type: "line", data: S.map((r) => [r.date, r[k]]), showSymbol: false,
-    lineStyle: { width, color: col[k] }, itemStyle: { color: col[k] }, emphasis: { disabled: true } });
-  const dash = (name, k) => ({ name: name + "（預估）", type: "line", data: P(k), showSymbol: false,
-    lineStyle: { width: 2, type: "dashed", color: col[k] }, itemStyle: { color: col[k] } });
-  const xmax = proj.length ? proj[proj.length - 1].date : end;
-  const band = (lo, hi, c) => [{ yAxis: lo, itemStyle: { color: c } }, { yAxis: hi }];
-  const tip = { trigger: "axis", backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 },
-    axisPointer: { type: "line", lineStyle: { color: css("--faint") } } };
-  chart("pmc").setOption({
-    animation: false, grid: { left: 44, right: 16, top: 12, bottom: 24 },
-    tooltip: { ...tip, formatter: (ps) => {
-      const d = ps[0].axisValueLabel.slice(0, 10), row = S.find((r) => r.date === d) || proj.find((r) => r.date === d);
-      if (!row) return d;
-      const isP = !S.find((r) => r.date === d);
-      return `<b>${d}${isP ? "（預估）" : ""}</b><br>CTL ${n0(row.ctl)}　ATL ${n0(row.atl)}　TSB ${sgn(row.tsb)}<br>當天 TSS ${n0(row.tss)}`; } },
-    xAxis: { type: "time", max: xmax, ...axisStyle(), splitLine: { show: false } },
-    yAxis: { type: "value", name: "TSS/天", nameTextStyle: { color: css("--muted"), fontSize: 11 }, ...axisStyle(),
-      axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v) } },
-    series: [
-      { ...line("TSB", "tsb", 1.5), markArea: { silent: true, data: [band(-30, -10, "rgba(27,175,122,.08)"), band(5, 25, "rgba(42,120,214,.07)")] },
-        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color: css("--faint"), width: 1 }, data: [{ yAxis: 0 }] } },
-      line("ATL", "atl", 1.5), line("CTL", "ctl", 2.5),
-      dash("TSB", "tsb"), dash("ATL", "atl"), dash("CTL", "ctl"),
-    ],
-  }, true);
-  chart("pmc-tss").setOption({
-    animation: false, grid: { left: 44, right: 16, top: 8, bottom: 22 },
-    tooltip: { ...tip, formatter: (ps) => `<b>${ps[0].axisValueLabel.slice(0, 10)}</b><br>TSS ${n0(ps[0].value[1])}` },
-    xAxis: { type: "time", max: xmax, ...axisStyle(), splitLine: { show: false } },
-    yAxis: { type: "value", min: 0, ...axisStyle(), splitNumber: 2, axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v) } },
-    series: [{ type: "bar", data: S.filter((r) => r.tss > 0).map((r) => [r.date, r.tss]), barMaxWidth: 4, itemStyle: { color: css("--bar"), borderRadius: [2, 2, 0, 0] } },
-      { type: "bar", data: proj.filter((r) => r.tss > 0).map((r) => [r.date, r.tss]), barMaxWidth: 4,
-        itemStyle: { color: "transparent", borderColor: css("--muted"), borderType: "dashed", borderWidth: 1 } }],
-  }, true);
-}
+// PMC: shown in 圖表分析 → 負荷 PMC, not on this page.
 
 // ---------------- periods ----------------
 const PS = { unit: ls.get("unit", "week"), anchor: null, data: null };
@@ -773,11 +704,10 @@ $("coros-push").onclick = () => pushCoros();
 
 // ---------------- wiring ----------------
 document.querySelectorAll("#unit button").forEach((b) => b.onclick = () => { PS.unit = b.dataset.u; PS.anchor = null; ls.set("unit", PS.unit); loadPeriod(); });
-document.querySelectorAll("#pmc-range button").forEach((b) => b.onclick = () => { ls.set("pmcDays", +b.dataset.d); loadPmc(); });
 $("prev").onclick = () => shift(-1);
 $("next").onclick = () => shift(1);
 $("now").onclick = () => { PS.anchor = null; loadPeriod(); };
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { loadPmc(); loadPeriod(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { loadPeriod(); });
 // ⓘ tips: hover shows the title; tap/click pins it (touch has no hover)
 document.addEventListener("click", (e) => {
   const t = e.target.closest(".tip, .term");
@@ -805,7 +735,6 @@ const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：$
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   await loadStatus().catch(fail("hero"));
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
-  loadPmc().catch(fail("pmc"));
 })();
 </script>
 </body>
