@@ -431,8 +431,9 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 | GET | `/settings` | 468 | The settings page |
 
 The WKO5 athlete folder is `WKO5_ATHLETE_DIR` (or `WKO5COACH_ATHLETE_DIR`), else the first
-folder holding a `*.wko5athlete` under the home directory's `WKO5` or
-`Projects/TrailRunCoach/WKO5` (`default_roots`, `athlete_dir`, `backend/settings/paths.py:45`); the chart, achievements and plan APIs share it.
+folder holding a `*.wko5athlete` under the home directory's `WKO5` (`default_roots`,
+`athlete_dir`, `backend/settings/paths.py:46`); the chart, achievements and plan APIs share it.
+The library moved there on 2026-10-01, when `Projects/TrailRunCoach` became the repo.
 
 ## Testing
 

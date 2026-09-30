@@ -220,7 +220,7 @@ def test_bundled_drift_charts_have_the_toggle():
 # ---------------------------------------------------------------------------
 
 ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 needs_data = pytest.mark.skipif(not ATHLETE_DIR.exists(), reason="no WKO5 athlete folder")
 # road runs ≥ 40 min with Stryd power that drift_of accepts
 RUNS = {"2026/Athlete_2026_09_15_20_40.wko4", "2026/Athlete_2026_08_28_20_35.wko4",

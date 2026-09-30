@@ -181,7 +181,7 @@ def parse_fit_course(data: bytes) -> Track:
 
 def write_gpx(track: Track, name: str = "", start: Optional[dt.datetime] = None) -> str:
     """Track → GPX 1.1 text (trk/trkseg/trkpt with ele and, when known, time)."""
-    root = ET.Element("gpx", {"version": "1.1", "creator": "wko5_coach",
+    root = ET.Element("gpx", {"version": "1.1", "creator": "TrailRunCoach",
                               "xmlns": "http://www.topografix.com/GPX/1/1"})
     for w in track.wpts:
         we = ET.SubElement(root, "wpt", {"lat": f"{w['lat']:.7f}", "lon": f"{w['lon']:.7f}"})

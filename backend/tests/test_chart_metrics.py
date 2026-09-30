@@ -130,7 +130,7 @@ def test_climb_rate():
 # ---- the real athlete: view expressions vs independent recomputation --------------
 
 ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 TODAY = dt.date(2026, 9, 29)
 needs_data = pytest.mark.skipif(not ATHLETE_DIR.exists(), reason="no WKO5 athlete folder")
 

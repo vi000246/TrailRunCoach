@@ -11,7 +11,7 @@ import pytest
 from backend.files.wko4_file import read_wko4, workout_average, window_average
 
 ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 VERIFIED = ("heartrate", "speed", "cadence", "elevation", "latitude",
             "longitude", "temperature", "power")
 

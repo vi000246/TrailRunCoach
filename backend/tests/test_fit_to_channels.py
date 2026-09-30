@@ -152,7 +152,7 @@ def test_quantize_half_away_from_zero():
 # --- parity against WKO5 ------------------------------------------------------
 
 ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 wko4_files = sorted(ATHLETE_DIR.rglob("*.wko4")) if ATHLETE_DIR.exists() else []
 PARITY_STRIDE = int(os.environ.get("WKO5_PARITY_STRIDE", "8"))   # 1 = every file
 

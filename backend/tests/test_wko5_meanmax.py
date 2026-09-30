@@ -8,7 +8,7 @@ import pytest
 from backend.engine.algorithms.wko5_meanmax import duration_grid, meanmax_time
 
 ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 CACHE = ATHLETE_DIR / "Cache5"
 
 

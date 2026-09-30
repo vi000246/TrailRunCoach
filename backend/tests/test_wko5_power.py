@@ -8,7 +8,7 @@ import pytest
 from backend.engine.algorithms.wko5_power import normalized_power, power_tss, rapower
 
 ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 
 
 def test_constant_power_np_equals_power_and_counts_seconds():

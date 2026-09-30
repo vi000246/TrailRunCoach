@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 ROOT = Path(__file__).resolve().parents[2]
 SEASON = ROOT / "WKO5 Season View" / "WKO5 Season View.wko5chart"
 TODAY = dt.date(2026, 9, 29)
