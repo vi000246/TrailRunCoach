@@ -485,7 +485,10 @@ def test_week_plan_builds_the_test_by_protocol(proto):
     st2.kind = "base"
     st2.goals = {**st.goals, "days_to_next_a": None}
     act = f"{CPP.NOTE_RACE}（課表偏好：用比賽）" if proto == "race" else "排一次 CP 測試"
-    st2.indicators = [replace(i, level=ST.BAD, action=act) if i.id == "testing" else i for i in st.indicators]
+    # CP overdue: the level and i_testing's cp_due (week_plan schedules the CP test on
+    # cp_due since the 間歇門檻 change — a missing AeT / LTHR alone doesn't)
+    st2.indicators = [replace(i, level=ST.BAD, action=act, extra={**i.extra, "cp_due": True}) if i.id == "testing"
+                      else i for i in st.indicators]
     wp = O.week_plan(ds, st2, today, prefs=PP.Prefs(cp_test_protocol=proto))
     if wp["mode"] == "recovery_week":
         pytest.skip("a recovery week has no test")

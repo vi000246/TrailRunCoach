@@ -560,7 +560,7 @@ def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
     if category in ("strength", "bike", "walk", "other"):
         return category
     plan_test = plan_test or {}
-    if re.search(r"AeT", title or "", re.I) and not cp_detected:
+    if re.search(r"(?<![A-Za-z])AeT(?![A-Za-z])", title or "") and not cp_detected:
         return "test_aet"                  # 「AeT 飄移測試」 (engine/aet_test.py), not a CP test
     if plan_test.get("cp") is not None or re.search(r"\bCP\b|測試", title or "") or cp_detected:
         return "test_cp"
