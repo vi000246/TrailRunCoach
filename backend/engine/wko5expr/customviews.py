@@ -72,8 +72,8 @@ def _chart(raw: dict, where: str) -> dict:
     if "title" not in raw:
         raise CustomViewError(f"{where}: chart needs a title")
     kind = raw.get("kind", "athlete")
-    if kind not in ("athlete", "workout", "zones", "targets"):
-        raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones' or 'targets'")
+    if kind not in ("athlete", "workout", "zones", "targets", "review"):
+        raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets' or 'review'")
     out = {
         "title": raw["title"],
         "description": raw.get("description"),
@@ -91,6 +91,13 @@ def _chart(raw: dict, where: str) -> dict:
         if raw["period"] not in ("day", "week", "month", "quarter", "year"):
             raise CustomViewError(f"{where}/{raw['title']}: period must be day, week, month, quarter or year")
         out["period"] = raw["period"]
+    if kind == "review":
+        # a single-activity 判讀卡 (backend/engine/workout_review.py):
+        # {"kind": "review", "section": "summary"}
+        from backend.engine.workout_review import EXTRA_SECTIONS, SECTIONS
+        if raw.get("section") not in SECTIONS + EXTRA_SECTIONS:
+            raise CustomViewError(f"{where}/{raw['title']}: section must be one of {list(SECTIONS + EXTRA_SECTIONS)}")
+        out["section"] = raw["section"]
     if kind == "zones":
         # a WKO5-style zone table: {"kind": "zones", "system": "frielhr", "days": 30}
         from backend.engine.zones import SYSTEMS

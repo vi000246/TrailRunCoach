@@ -1,0 +1,135 @@
+{
+  "name": "單次活動判讀",
+  "dashboards": [
+    {
+      "title": "本次重點",
+      "description": "這次是什麼課、有沒有照目的練到。判讀卡依課表類型（輕鬆跑／長跑／間歇／測試／越野）自動選規則，並指出該看哪個分頁。肌力、騎車只有這一頁。原始圖表在 WKO5 匯入的「WKO5 Workout View」→ Workout（Power chart、Heart Rate、Workout Graph）。",
+      "charts": [
+        {"title": "判讀", "kind": "review", "section": "summary",
+         "description": "課表類型用活動當天的周期、plan 的測試紀錄、標題與功率判斷；每頁最多 3 行結論。"},
+        {"title": "心率與功率（AeT／LTHR／95% CP）",
+         "kind": "workout",
+         "axes": [{"id": "BPM"}, {"id": "WATTS", "min": 0}],
+         "series": [
+           {"name": "心率", "type": "line", "y_axis": "BPM", "x_axis": "HHMMSS", "color": "#eb6834", "expression": "heartrate"},
+           {"name": "功率（30 秒）", "type": "line", "y_axis": "WATTS", "x_axis": "HHMMSS", "color": "#2a78d6", "line_width": "thin", "expression": "ewma(power,30)"},
+           {"name": "AeT", "type": "line", "y_axis": "BPM", "color": "#1baf7a", "line_style": "dash", "expression": "(,aethr)"},
+           {"name": "LTHR", "type": "line", "y_axis": "BPM", "color": "#d7191c", "line_style": "dash", "expression": "(,lthr)"},
+           {"name": "95% CP", "type": "line", "y_axis": "WATTS", "color": "#4a3aa7", "line_style": "dot", "expression": "(,0.95*cp)"}
+         ]},
+        {"title": "三區時間（AeT／LTHR）",
+         "kind": "workout",
+         "description": "< AeT 是低強度，AeT–LTHR 是中強度（灰色地帶），≥ LTHR 是高強度。只算有心率的時間。",
+         "axes": [{"id": "HHMMSS"}],
+         "series": [
+           {"name": "區間", "type": "line", "expression": "{\"< AeT\",\"AeT–LTHR\",\"≥ LTHR\"}"},
+           {"name": "時間", "type": "line", "y_axis": "HHMMSS", "expression": "bin(heartrate,{aethr,lthr})"}
+         ]},
+        {"title": "CP 測試結果（3 分／12 分）", "kind": "review", "section": "cp_test",
+         "description": "CP = (P12·720 − P3·180) / 540，W′ = (P3 − CP)·180。和目前 CP 差 > 3% 建議更新。不是測試課時留白。"}
+      ]
+    },
+    {
+      "title": "有氧／心率飄移",
+      "description": "有沒有壓在 AeT 以下、Pa:HR 飄移多少。適用輕鬆跑、長跑、AeT 測試；基礎期最重要：飄移連續 3 次 < 5% 才加閾值下間歇。WKO5 版本：「WKO5 Workout View」→ Zone & Variation →「Heart Rate vs. Power by % of work」，以及 Workout →「PWHR 心飄移」。",
+      "charts": [
+        {"title": "飄移判讀", "kind": "review", "section": "aerobic",
+         "description": "Pa:HR = 速度／心率，前 10 分鐘不算，比較前後半。有坡（越野、每公里爬升 ≥ 20 m）、停頓 > 5%、功率起伏 > 15%、強度 > 90% CP 的跑步不採用。"},
+        {"title": "心率 vs AeT",
+         "kind": "workout",
+         "axes": [{"id": "BPM"}],
+         "series": [
+           {"name": "心率", "type": "line", "y_axis": "BPM", "x_axis": "HHMMSS", "color": "#eb6834", "expression": "heartrate"},
+           {"name": "AeT", "type": "line", "y_axis": "BPM", "color": "#1baf7a", "line_style": "dash", "expression": "(,aethr)"},
+           {"name": "AeT+3", "type": "line", "y_axis": "BPM", "color": "#8a8984", "line_style": "dot", "expression": "(,aethr+3)"}
+         ]},
+        {"title": "滾動有氧效率 EF（5 分鐘）",
+         "kind": "workout",
+         "description": "每下心跳換到的速度（m/min per bpm）。後段往下掉 = 心率飄移。",
+         "axes": [{"id": "NONE"}],
+         "series": [
+           {"name": "EF", "type": "line", "y_axis": "NONE", "x_axis": "HHMMSS", "color": "#2a78d6", "expression": "ewma(speed,300)/ewma(heartrate,300)*1000/60"}
+         ]},
+        {"title": "每公里心率",
+         "kind": "workout",
+         "axes": [{"id": "BPM"}],
+         "series": [
+           {"name": "平均心率", "type": "bar", "y_axis": "BPM", "x_axis": "KM", "color": "#eb6834", "expression": "avg(heartrate, floor(elapseddistance))"},
+           {"name": "AeT", "type": "line", "y_axis": "BPM", "color": "#1baf7a", "line_style": "dash", "expression": "(,aethr)"}
+         ]}
+      ]
+    },
+    {
+      "title": "間歇",
+      "description": "每組有沒有達標、有沒有掉、恢復時心率有沒有降。適用品質課與 CP 測試。WKO5 版本：「WKO5 Workout View」→ 間歇（dFRC Run、Marking VO2max Intervals V3&V4）與 訓練效果（Today's Mean Max Power vs. 90 Day Best - Run）。",
+      "charts": [
+        {"title": "每組", "kind": "review", "section": "intervals",
+         "description": "用力段 = 30 秒功率 ≥ max(85% CP, 1.12 × 這次中位功率) 且 ≥ 1 分鐘。目標帶取各組 %CP 的中位（閾值下 88–95%、閾值 95–101%、超閾值 101–106%、VO2max 106–116%）。"},
+        {"title": "功率與目標帶",
+         "kind": "workout",
+         "axes": [{"id": "WATTS", "min": 0}],
+         "series": [
+           {"name": "功率（30 秒）", "type": "line", "y_axis": "WATTS", "x_axis": "HHMMSS", "color": "#2a78d6", "expression": "ewma(power,30)"},
+           {"name": "88% CP", "type": "line", "y_axis": "WATTS", "color": "#1baf7a", "line_style": "dot", "expression": "(,0.88*cp)"},
+           {"name": "95% CP", "type": "line", "y_axis": "WATTS", "color": "#eda100", "line_style": "dash", "expression": "(,0.95*cp)"},
+           {"name": "101% CP", "type": "line", "y_axis": "WATTS", "color": "#d7191c", "line_style": "dash", "expression": "(,1.01*cp)"}
+         ]}
+      ]
+    },
+    {
+      "title": "爬坡與地形",
+      "description": "爬坡段、每 100 m 爬升的心跳數、坡度對心率／功率。越野、登山；專項期最重要。WKO5 版本：「WKO5 Workout View」→ Workout「Elevation over Distance Colored Gradient」、爬坡分析「VAM Analysis」「Hilly Run Summary」「Elevation Corrected Power」、Zone & Variation「Heart Rate vs. Power by grade」。",
+      "charts": [
+        {"title": "爬坡段", "kind": "review", "section": "climbs",
+         "description": "連續爬升 ≥ 80 m、坡度 ≥ 3%（小起伏併入）。每 100 m 心跳數越低越經濟；和近 8 週的爬坡中位數比，低 > 5% = 變好。"},
+        {"title": "坡度分組", "kind": "review", "section": "grades",
+         "description": "每個坡度區間的時間、距離、配速、心率、功率（停頓不算）。"},
+        {"title": "坡度對心率",
+         "kind": "workout",
+         "axes": [{"id": "BPM"}],
+         "series": [
+           {"name": "心率", "type": "scatter", "y_axis": "BPM", "x_axis": "PERCENT", "color": "#eb6834", "expression": "(rgrade, heartrate)"}
+         ]},
+        {"title": "坡度對功率",
+         "kind": "workout",
+         "axes": [{"id": "WATTS", "min": 0}],
+         "series": [
+           {"name": "功率", "type": "scatter", "y_axis": "WATTS", "x_axis": "PERCENT", "color": "#2a78d6", "expression": "(rgrade, ewma(power,30))"}
+         ]}
+      ]
+    },
+    {
+      "title": "配速與耐久",
+      "description": "後段有沒有掉、移動與停留時間、補給。長跑、越野、登山。",
+      "charts": [
+        {"title": "耐久判讀", "kind": "review", "section": "durability",
+         "description": "耐久 = 10 分鐘滾動（功率或速度）／心率，和暖身後第一個 10 分鐘相比。最後 20% < 90% 代表補給或配速要調整。"},
+        {"title": "耐久曲線", "kind": "review", "section": "durability_curve",
+         "description": "橫軸是經過時間（小時），100% = 暖身後的起點。"},
+        {"title": "每 10% 距離的配速與心率", "kind": "review", "section": "pacing",
+         "description": "移動配速（停頓不算）。"}
+      ]
+    },
+    {
+      "title": "跑姿與膝蓋負荷（參考）",
+      "description": "參考用，不是傷害預測：衝擊與剛性在跑步中的漂移、陡下坡佔比、和自己同類課表的基準比。沒有 Stryd 的活動只看步頻、觸地、振幅、kleg、衝擊 G。WKO5 版本：「WKO5 Workout View」→ 爬坡分析「LSS and LIS- Stryd」「LSS飄移率 by坡度」「步頻 vs 垂直比」、訓練效果「Running Dynamics」。",
+      "charts": [
+        {"title": "前 ⅓ 對後 ⅓（參考）", "kind": "review", "section": "form",
+         "description": "只算跑步步頻（≥ 130 spm）的時間。基準 = 同類課表 8–12 週的變化 median 與 IQR，少於 5 次不比較。左右平衡：目前沒有這個通道。"},
+        {"title": "衝擊負荷 ILR 對坡度（參考）",
+         "kind": "workout",
+         "axes": [{"id": "NONE"}],
+         "series": [
+           {"name": "ILR", "type": "scatter", "y_axis": "NONE", "x_axis": "PERCENT", "color": "#eb6834", "expression": "(rgrade, if(@impact_loading_rate>0, @impact_loading_rate))"}
+         ]},
+        {"title": "衝擊 G 對坡度（參考）",
+         "kind": "workout",
+         "description": "Impact G = fmax ／（體重 × g），fmax 用 WKO5 的 Maximum Force（Morin 2005）。",
+         "axes": [{"id": "NONE"}],
+         "series": [
+           {"name": "衝擊 G", "type": "scatter", "y_axis": "NONE", "x_axis": "PERCENT", "color": "#4a3aa7", "expression": "(rgrade, if(stancetime>0, fmax/(metric(weight)*g)))"}
+         ]}
+      ]
+    }
+  ]
+}

@@ -145,7 +145,10 @@ MAP_PANEL = "PKMapPanelConfig"
 
 
 def _panel_kind(c: dict) -> Optional[str]:
-    """WKO5's map panel has no series; it is a workout's GPS track ("map")."""
+    """WKO5's map panel has no series; it is a workout's GPS track ("map").
+    A review card (workout_review.py) is a workout chart to the viewer."""
+    if c.get("kind") == "review":
+        return "workout"
     return "map" if c.get("kind") == "other" and c.get("class") == MAP_PANEL else c.get("kind")
 
 
@@ -198,7 +201,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     except IndexError:
         raise HTTPException(404, "chart not found")
     b, e = _range(ds, begin, end)
-    needs_workout = ch.get("kind") == "workout" or _panel_kind(ch) == "map"
+    needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets"):
@@ -244,6 +247,10 @@ def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bo
 
 
 def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:
+    if ch.get("kind") == "review":
+        from backend.engine.workout_review import review
+        return {**review(ds, w, ch.get("section") or "summary"), "title": ch.get("title"),
+                "description": ch.get("description")}
     if ch.get("kind") == "workout":
         return render_chart(ch, ds, b, e, workout=w)
     if _panel_kind(ch) == "map":
@@ -289,6 +296,25 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
                            else "hrtss" if m.get("tss") is not None else None),
         })
     return out
+
+
+@router.get("/workouts/{i}/review")
+def workout_review(i: int, section: Optional[str] = None, parity: Optional[bool] = None):
+    """Single-activity review (backend/engine/workout_review.py): one section's
+    card, or all six dashboards' cards plus the classification."""
+    from backend.engine import workout_review as WR
+    ds = _dataset(parity)
+    if not 0 <= i < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    w = ds.workouts[i]
+    if section:
+        if section not in WR.SECTIONS + WR.EXTRA_SECTIONS:
+            raise HTTPException(400, f"section must be one of {list(WR.SECTIONS + WR.EXTRA_SECTIONS)}")
+        return WR.review(ds, w, section)
+    cards = {s: WR.review(ds, w, s) for s in WR.SECTIONS}
+    head = cards["summary"]
+    return {"workout": i, "classification": head.get("classification"),
+            "suggested_dashboard": head.get("suggested_dashboard"), "sections": cards}
 
 
 @router.get("/sports")

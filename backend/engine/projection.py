@@ -97,8 +97,12 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
 
 def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: float,
                   tgt: dict, long_wd: int, longest: float, mountain: bool,
-                  allow_quality: bool, strength_tss: float, aet: Optional[float]) -> list[dict]:
-    """The week_plan() session template for a projected week, placed on days."""
+                  allow_quality: bool, strength_tss: float, aet: Optional[float],
+                  base_quality: Optional[dict] = None) -> list[dict]:
+    """The week_plan() session template for a projected week, placed on days.
+    `base_quality`: this week's base-phase quality session (week_plan picks
+    閾值下 N×8 分 when the drift streak first unlocks intervals or the last one
+    faded); projected base weeks repeat it instead of 閾值 3×10."""
     total = hours * 60.0
     ss: list[dict] = []
 
@@ -118,6 +122,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60, target=tgt.get("supra", ""),
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=O.SRC_PALLADINO + "（Supra-threshold）", tss=75.0)
+        elif allow_quality and kind == "base" and base_quality:
+            add(id="quality", kind="quality", title=base_quality["title"], minutes=base_quality["minutes"],
+                target=base_quality.get("target", ""), detail=base_quality.get("detail", ""),
+                source=base_quality.get("source", ""), tss=float(base_quality.get("tss") or 65.0))
         elif allow_quality:
             add(id="quality", kind="quality", title="閾值 3×10 分", minutes=60, target=tgt.get("threshold", ""),
                 detail="休 2–3 分鐘；暖身 15 分、緩和 10 分", source=O.SRC_PALLADINO + "（3B）", tss=70.0)
@@ -190,6 +198,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     # recovery / rest week has none by design, so it says nothing -> allow
     allow_quality = (any(s["kind"] in ("quality", "test") for s in cur_s) or cur.get("phase") != "base"
                      or cur.get("mode") not in ("base", "specific"))
+    base_q = next((s for s in cur_s if s["kind"] == "quality" and s["title"].startswith("閾值下")), None) \
+        if cur.get("phase") == "base" else None
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
     strength_tss = float(st["tss"]) if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]
@@ -207,7 +217,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         days_to = (ev - week).days if ev else None
         hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to)
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
-                           allow_quality, strength_tss, th.get("aet"))
+                           allow_quality, strength_tss, th.get("aet"), base_q)
         ss = [s for s in ss if _d(s["day"]) <= until] if ss else ss
         by_day = {}
         for s in ss:

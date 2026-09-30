@@ -506,7 +506,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
                      if category(w) in ENDURANCE), default=0.0) / 60.0
     minutes_total = hours * 60.0
     sessions: list[Session] = []
-    allow_quality = lvl("intensity") != "bad" and lvl("drift") != "bad"
+    from backend.engine import workout_review as WR   # local: workout_review imports this module
+    streak_ok = bool((getattr(by.get("drift"), "extra", None) or {}).get("streak_ok"))
+    allow_quality = WR.quality_gate(kind, {i: lvl(i) for i in ("intensity", "drift")}, streak_ok)
     test_due = lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10)
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 
@@ -535,6 +537,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
                 target=tgt.get("supra", ""), detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
+        elif allow_quality and kind == "base" and (
+                (last_q := WR.last_quality(ds, today)) is None or last_q.get("faded")):
+            # first interval once the drift streak unlocks it, or the last one faded
+            reps, mins = WR.next_quality(last_q)
+            cp_ = tt.get("cp")
+            lthr_ = tt.get("lthr")
+            parts = ([f"功率 {0.88 * cp_:.0f}–{0.95 * cp_:.0f} W"] if cp_ else []) + \
+                ([f"心率 {aet:.0f}–{lthr_:.0f} bpm"] if aet and lthr_ else [])
+            add(id="quality", kind="quality", title=f"閾值下 {reps}×{mins} 分", minutes=15 + reps * (mins + 2) + 10,
+                target=" · ".join(parts),
+                detail=("上次間歇後段掉了：少一組；" if last_q and last_q.get("faded") else
+                        "飄移已連續 3 次 < 5%：第一次加間歇，") + "休 2 分鐘；暖身 15 分、緩和 10 分",
+                source=SRC_PALLADINO + "（88–95% CP）；徐國峰：飄移穩定後才加間歇", tss=60 / 60 * 65)
         elif allow_quality and lvl("intensity") == "good":
             add(id="quality", kind="quality", title="閾值 3×10 分", minutes=60,
                 target=tgt.get("threshold", ""), detail="休 2–3 分鐘；暖身 15 分、緩和 10 分",
