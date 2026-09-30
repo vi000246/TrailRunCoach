@@ -367,26 +367,37 @@ function spark(pts, level) {
 }
 
 // ---------------- this week ----------------
+const bar = (label, done, tgt, fmt) => `<div class="row"><span>${label}</span>
+    <div class="track" role="img" aria-label="${label} ${fmt(done)} / ${fmt(tgt)}"><i style="width:${Math.min(100, tgt > 0 ? done / tgt * 100 : 0).toFixed(1)}%"></i></div>
+    <span class="num">${fmt(done)} / ${fmt(tgt)}</span></div>`;
+const progHtml = (D, hours, tss) => `${bar("移動時間", D.hours, hours, hrs)}${bar("TSS", D.tss, tss, n0)}`;
+const ctlHtml = (c0, c1) => `CTL <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
+// targets / projection from the stored plan, so the user's edits show in the bars and the PMC
+function paintPlanLoad() {
+  const S = SP && SP.summary;
+  if (!S || !PLAN) return;
+  $("wk-prog").innerHTML = progHtml(PLAN.done, S.hours, S.tss);
+  $("wk-ctl").innerHTML = ctlHtml(PLAN.load.ctl_week_start, S.ctl_end);
+  $("wk-tsb").innerHTML = `下週一 TSB <b>${sgn(S.tsb_next)}</b>`;
+  const changed = JSON.stringify(PLAN.projection) !== JSON.stringify(S.projection);
+  PLAN.projection = S.projection;
+  if (changed && charts.pmc) loadPmc().catch(() => {});
+}
 async function loadWeek() {
   const w = PLAN = await j(`${API}/weekplan`);
   $("wk-sub").textContent = `${md(w.week.start)}–${md(w.week.end)} · ${w.mode_label}`;
   const T = w.target, D = w.done;
-  const bar = (label, done, tgt, fmt) => `<div class="row"><span>${label}</span>
-    <div class="track" role="img" aria-label="${label} ${fmt(done)} / ${fmt(tgt)}"><i style="width:${Math.min(100, tgt > 0 ? done / tgt * 100 : 0).toFixed(1)}%"></i></div>
-    <span class="num">${fmt(done)} / ${fmt(tgt)}</span></div>`;
-  // the day list comes from the stored, editable plan (loadPlan below)
+  // the day list, the bars' targets and the CTL projection come from the stored,
+  // editable plan once loadPlan() has it (renderPlan -> paintPlanLoad)
   const days = [`<div class="loading">…</div>`];
   const L = w.load;
-  $("week").innerHTML = `<div class="prog">
-      ${bar("移動時間", D.hours, T.hours, hrs)}
-      ${bar("TSS", D.tss, T.tss, n0)}
-    </div>
+  $("week").innerHTML = `<div class="prog" id="wk-prog">${progHtml(D, T.hours, T.tss)}</div>
     <ul class="why">${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
     <div class="days" id="wk-days">${days.join("")}</div>
     <div class="later" id="later"></div>
     <div class="loadbox">
-      <span>CTL <b>${n0(L.ctl_week_start)}</b> → 週日 <b>${n0(L.ctl_end)}</b>（${sgn(L.ramp, (v) => v.toFixed(1))}/週）</span>
-      <span>下週一 TSB <b>${sgn(L.tsb_next)}</b></span>
+      <span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span>
+      <span id="wk-tsb">下週一 TSB <b>${sgn(L.tsb_next)}</b></span>
       <span class="meta">門檻：CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ${gl("AeT")} ${n0(w.thresholds.aet)} bpm（${esc(w.thresholds.aet_source)}）</span>
     </div>
     ${w.notes.length ? `<ul class="notes">${w.notes.map((n) => `<li class="lvl ${n.level}" style="font-weight:400">${gl(n.text)}</li>`).join("")}</ul>` : ""}`;
@@ -411,7 +422,7 @@ async function loadPmc() {
   $("pmc-legend").innerHTML = `<span><i class="ln" style="background:${col.ctl}"></i>CTL 體能 ${n0(last.ctl)}</span>
     <span><i class="ln" style="background:${col.atl}"></i>ATL 疲勞 ${n0(last.atl)}</span>
     <span><i class="ln" style="background:${col.tsb}"></i>TSB 狀況 ${sgn(last.tsb)}</span>
-    ${proj.length ? `<span><i class="dash" style="border-color:${css("--muted")}"></i>本週課表預估</span>` : ""}`;
+    ${proj.length ? `<span><i class="dash" style="border-color:${css("--muted")}"></i>照課表預估</span>` : ""}`;
   const line = (name, k, width) => ({ name, type: "line", data: S.map((r) => [r.date, r[k]]), showSymbol: false,
     lineStyle: { width, color: col[k] }, itemStyle: { color: col[k] }, emphasis: { disabled: true } });
   const dash = (name, k) => ({ name: name + "（預估）", type: "line", data: P(k), showSymbol: false,
@@ -618,6 +629,7 @@ function renderPlan() {
     ${pushed ? `<button class="btn" id="coros-del" type="button">從 COROS 移除（依上面的範圍）</button>` : ""}` : "";
   if ($("coros-del")) $("coros-del").onclick = unpushCoros;
   $("plan-tools").hidden = false;
+  paintPlanLoad();
   const ph = SP.phase;
   $("push-scope").querySelector('[value="phase"]').textContent = `整個周期（到 ${md(SP.phase_push_end)}${ph && SP.phase_push_end < ph.end ? `，最多 ${SP.max_weeks} 週` : ""}）`;
   const pd = $("push-day"); pd.min = today; pd.max = SP.horizon_end; if (!pd.value) pd.value = today;
