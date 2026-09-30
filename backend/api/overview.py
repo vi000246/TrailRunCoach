@@ -91,8 +91,10 @@ def pmc(begin: Optional[str] = None, end: Optional[str] = None):
 def weekplan():
     ds = _dataset()
     today = O.day_to_date(ds.today)
+    from backend.engine import blackouts as BL
     from backend.engine import plan_prefs as PP
-    return O.week_plan(ds, _status(ds, today), today, prefs=PP.load())   # same 課表偏好 as the 課表 page
+    # same 課表偏好 and 不排課日期 as the 課表 page
+    return O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load())
 
 
 @router.get("/page", include_in_schema=False)

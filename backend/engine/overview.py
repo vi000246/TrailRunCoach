@@ -405,14 +405,18 @@ def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int) -> dict[int, f
     return best
 
 
-def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) -> dict:
+def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
 
     `status` is a computed `backend.engine.status.Status` (phase, goals and the
     indicators steer the plan). `prefs`: engine.plan_prefs.Prefs (課表偏好);
-    None or the defaults keep the original rules untouched."""
+    None or the defaults keep the original rules untouched. `blackouts`:
+    engine.blackouts ranges (不排課日期); None / empty = none."""
+    from backend.engine import blackouts as BL
     from backend.engine import plan_prefs as PP
     PR = prefs if prefs is not None and prefs.active else None
+    bmap = BL.blocked(blackouts or ())
+    allowed_fn = PR.allowed if PR is not None else None
     today = today or day_to_date(ds.today)
     monday = period_start(today, "week")
     sunday = monday + dt.timedelta(days=6)
@@ -482,6 +486,27 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) 
     if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
         hours = PR.weekly_hours
         why.append(f"你的每週時數上限 {PR.weekly_hours:g} h")
+    lost: list[dt.date] = []
+    if bmap:
+        # 不排課日期 (engine/blackouts.py): after a week that lost days, the <= 10 %
+        # step is taken from what was actually done; this week's lost days shrink it
+        def trained(m: dt.date) -> set:
+            return {wdate(w) for w in workouts_between(ds, m, m + dt.timedelta(days=7))}
+        prev_m = monday - dt.timedelta(days=7)
+        prev_lost = BL.lost_days(bmap, prev_m, allowed_fn, trained(prev_m))
+        if prev_lost:
+            cap_b = BL.step_cap(last_h)
+            if hours > cap_b + 1e-9:
+                hours = cap_b
+                why.append(f"上週 {BL.range_text(prev_lost)} 不排課、實際 {last_h:.1f} h：本週從實際量 +10%（至少 +0.5 h）→ {cap_b:.1f} h")
+                notes.append(BL.step_note(prev_lost, last_h, cap_b))
+        lost = BL.lost_days(bmap, monday, allowed_fn, trained(monday))
+        if lost:
+            f = BL.factor(monday, lost, allowed_fn)
+            lost_h = hours * (1.0 - f)
+            hours *= f
+            why.append(f"不排課 {BL.range_text(lost)}：少 {len(lost)} 個可練日，週量 × {f:.0%}")
+            notes.append(BL.week_note(bmap, lost, lost_h))
     tss_target = hours * r_all
 
     # ---- what is done already -------------------------------------------
@@ -588,7 +613,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) 
     if PR is not None:
         # 課表偏好: counts, caps, terrain, interval target (engine/plan_prefs.py)
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet,
-                     slots=sum(bool(x) for x in PR.days), notes=notes)
+                     slots=max(1, sum(bool(x) for x in PR.days) - len(lost)), notes=notes)
         shaped = PP.shape([asdict(s) for s in sessions], minutes_total, PR, ctx)
         sessions = []
         for d in shaped:
@@ -626,6 +651,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) 
     done_today = any(wdate(w) == today for w in week_ws)
     first = today + dt.timedelta(days=1) if done_today else today
     free = [first + dt.timedelta(days=i) for i in range((sunday - first).days + 1)] if first <= sunday else []
+    free = [d for d in free if d.isoformat() not in bmap]          # 不排課日期: never placed there
     todo = [s for s in sessions if not s.done and s.kind not in ("race",)]
     main_todo = [s for s in todo if s.kind != "strength"]
     long_wd = _long_weekday(ds, today)
@@ -659,6 +685,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) 
         elif s.kind in ("quality", "test"):
             long_day = next((dt.date.fromisoformat(x.day) for x in sessions if x.kind == "long" and x.day), None)
             cands = [d for d in avail if long_day is None or abs((d - long_day).days) >= 2]
+            if not cands and lost and any(abs((d - long_day).days) <= 1 for d in avail):
+                continue          # 不排課日期 left no room: drop it rather than stack two hard days
             pick = (cands or avail)[0]
         else:
             pick = avail[0]
@@ -667,7 +695,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) 
     unplaced = [s for s in main_todo if s.day is None]
     if unplaced:
         drop_min = sum(s.minutes for s in unplaced)
-        notes.append({"level": "info", "text": f"本週只剩 {len(free)} 天，{len(unplaced)} 次輕鬆跑（約 {drop_min} 分鐘）排不進去——不用補，下週照常"})
+        what = "次輕鬆跑" if all(s.kind == "easy" for s in unplaced) else "堂課"
+        notes.append({"level": "info", **({"src": "blackout"} if lost else {}),
+                      "text": f"本週只剩 {len(free)} 天，{len(unplaced)} {what}（約 {drop_min} 分鐘）排不進去——不用補，下週照常"})
     # strength on easy days (or free days), never the day before the long session
     easy_days = [dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "easy" and s.day]
     long_day = next((dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "long" and s.day), None)
@@ -734,4 +764,5 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) 
         # per-category TSS / h (projection shapes projected weeks with the same rates)
         "tss_per_category": tph,
         "prefs": PR.to_dict() if PR is not None else None,
+        "blackout_days": [d.isoformat() for d in lost],
     }
