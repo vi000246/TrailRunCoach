@@ -15,9 +15,10 @@
 | 檢查的圖（含每筆活動） | 270 | 270 |
 | 什麼都沒畫／只有座標軸 | 24 | 0 |
 | 顯示「尚未支援」的面板（地圖） | 3 | 0 |
-| 空卡片但會說明原因（資料確實不存在） | 0 | 22 |
-| 有畫出東西但部分 series 因資料壞掉而缺，且卡片會說明 | 0 | 6 |
+| 空卡片但會說明原因（資料確實不存在） | 0 | 22（使用者核准尖峰校正後剩 19） |
 | 首頁、賽事功率頁的壞圖 | 0 | 0 |
+
+「修正後」是 2026-09-30 當天在未核准校正時的掃描。之後使用者到設定頁核准了三筆功率尖峰校正（見第 4 節），加上修正 1，Stamina、Run Interval Targeting FRC、Aerobic and Anaerobic Contribution 三張 PD 圖就正常畫出來了，不再是空卡片。
 
 ## 修正（依根因分類）
 
@@ -50,15 +51,15 @@
 | #1073：Cadence、Cadence Summary、Cadence Variation and Trend、步頻 vs 垂直比（4 張） | 沒有步頻 | 這筆活動沒有步頻資料（裝置沒有記錄）。 |
 | This Week Climbing／Run Distance／Run Duration／Run TSS（4 張） | 本週（9/28 起）還沒有活動；最後一筆是 9/24 | 本週還沒有活動，這段期間沒有資料。 |
 | 本周目標runTSS、本周EP v.s 目標EP | 同上（目標值有畫，本週值是 —） | gauge 下方顯示「本週還沒有活動」 |
-| Stamina、Run Interval Targeting FRC、Aerobic and Anaerobic Contribution to Power Run（3 張） | **PD 模型擬合失敗**，原因是功率資料壞掉，見下 | 說明＋到「設定 › 資料校正」核准的指引 |
+| Stamina、Run Interval Targeting FRC、Aerobic and Anaerobic Contribution to Power Run（3 張） | **PD 模型擬合失敗**，原因是功率資料壞掉，見下 | 說明＋到「設定 › 資料校正」核准的指引（核准後已正常畫出） |
 
-Donny's Optimized Interval Targeting、PD Curve with Metrics、Best Times for Informal Testing、PD Curve Profile、VLamax、MMP Peaks and Clusters Chart 有畫出 mean-max，但 PD 線是空的 → 卡片上方顯示同一段 `notice`。
+只有部分 PD series 空白、其他線有畫的圖（例如用一整年範圍的 PD Curve with Metrics、Best Times for Informal Testing、PD Curve Profile、VLamax），卡片上方會顯示同一段 `notice`。Donny's Optimized Interval Targeting 只看最近 90 天，不含尖峰，所以本來就畫得出 PD 曲線，不會顯示 notice。
 
-**PD 模型為什麼擬合失敗**：2025-12-14 的路跑（#929）有 520 個 >905 W 的樣本，10 分鐘平均 908 W；2025-10-26 越野跑（#895）有 1594 W 的尖峰（另外還有 2024-06-29 #600）。所以一年的 run-power 包絡線 5 分鐘 1173 W、20 分鐘 193 W，Gauss-Newton 在 FTP 撞到下限後矩陣奇異。`/corrections/proposals` 已經列出這三筆，但使用者還沒核准。依照資料校正的設計（「只列建議，按下套用才生效」），我沒有替使用者核准；核准後（加上修正 1）這些圖就會畫出來。MMP Peaks Report 的 1449 W／1319 W 也是同樣的尖峰。
+**PD 模型為什麼擬合失敗**：2025-12-14 的路跑（#929）有 520 個 >905 W 的樣本，10 分鐘平均 908 W；2025-10-26 越野跑（#895）有 1594 W 的尖峰（另外還有 2024-06-29 #600）。所以一年的 run-power 包絡線 5 分鐘 1173 W、20 分鐘 193 W，Gauss-Newton 在 FTP 撞到下限後矩陣奇異。`/corrections/proposals` 已經列出這三筆。依照資料校正的設計（「只列建議，按下套用才生效」），我沒有替使用者核准；使用者之後自己核准了三筆（`/corrections` 的 applied 清單），加上修正 1，PD 模型可以擬合（在拋棄式校正檔上驗證的結果：mFTP 185 W，valid）。MMP Peaks Report 在核准前顯示的 1449 W／1319 W 也是同樣的尖峰。
 
 ## 資料確實不存在、只有部分 series 空白的（沒有動）
 
-卡片其他 series 有畫，空的那條在「數值與公式」表裡顯示 —：
+卡片其他 series 有畫，只是那一條沒有線（圖表 JSON 裡該 series 的點全是 null）：
 
 - `if(hastag("race"), …)` 的 Races 標記：這段期間沒有任何活動標 race。
 - Daily Training Log 的 Notes／Description：所有活動的 notes、desc 都是空的。
@@ -75,6 +76,34 @@ Donny's Optimized Interval Targeting、PD Curve with Metrics、Best Times for In
 ## 首頁、賽事功率頁
 
 首頁（PMC、每日 TSS、做了什麼 週／月／年／上一期、爬升、指標）和賽事功率頁（CP、Riegel；路跑／越野／百岳）的每個 ECharts 都有畫出資料，沒有錯誤文字，也沒有 console error。賽事功率頁本來就排除了 2025-12-14 的異常活動。
+
+## 後續：render cache（圖表分析頁太慢、重新整理會 Failed to fetch）
+
+`backend/engine/wko5expr/render_cache.py`，接在 `GET /views/{view}/dashboards/{d}/charts/{c}`：
+
+- key = sha1(圖表定義（套用 wko5_fixes 之後，所以改 fixes／自訂 view 自動失效）＋所有 query 參數（`source`、`period` 自動包含）＋資料指紋（.wko5athlete 檔、plan.json、corrections.json、引擎設定、活動清單、今天日期、資料來源）＋程式簽章（CACHE_VERSION 與 engine 模組 mtime，**在 import 時取一次**，避免還沒 reload 的行程用舊程式寫進新簽章）)。
+- 記憶體 LRU 400 筆＋磁碟 `~/.wko5coach/cache/render/`（重啟後還在），300 MB 上限，最久沒用的先刪。
+- 相同 key 的同時請求只算一次（重新整理時不再疊加同樣的運算）；同時最多 2 張圖在算，總覽、設定等其他 API 仍有 threadpool 可用。
+- `_dataset()` 另外以 .wko5athlete 的 stamp 當 key，同步新增／刪除活動後會重建 Dataset。
+- 檢視器的 fetch 失敗（連線中斷或 5xx）會重試一次，失敗只在那張卡片顯示一行錯誤。
+
+量測（自己的 :8010，無 --reload；Season View 72 張圖、4 個並行請求，同檢視器）：
+
+| 情境 | 無 cache | 有 cache |
+|---|---:|---:|
+| 冷啟動第一次載入 Season View | 228.6 s | 204–713 s（cache miss，一樣慢） |
+| 同一行程再載入 Season View | 12.0 s | 0.6 s |
+| 同一行程再載入 Workout #1097（53 張） | 3.1 s | 0.8 s |
+| 重啟後載入 Season View | 228.6 s（全部重算） | 15.2 s（第一個請求要建 Dataset，約 11 s） |
+| 重啟後單張 PMC with Insights | 50.0 s | 1.4 s |
+| 載入期間 `/config` 最慢回應 | 0.9 s | 1.3–1.9 s（冷載入時） |
+
+冷載入沒有變快：cache 只省重複的請求，每次同步（資料指紋變）或改程式（簽章變）後第一次載入仍要全部重算，最重的 PMC with Insights 單張 50–200 s。要改善這部分得在同步後背景預熱，或加速 PMC 那一類跨全歷史的算式；這次沒有做。
+
+## 後續：週期切換與放大
+
+- 期間總計圖（`sum(x, startofmonth(date))` 等）改用類別 x 軸，一個 bucket 一格；自訂 view 有 `period` 的圖加上 日／週／月／季／年 切換（`backend/engine/wko5expr/periods.py`），標題的 每日／每週… 跟著改，月／季／年會把範圍至少拉到 365／730／1825 天並顯示「顯示近 12 個月」等；`shift(...)`、`tl(...)*7` 這類綁定週的圖不顯示切換。WKO5 匯入的 `sum(x, "week")` 圖只修軸，不給切換。
+- 每張卡片的 ⤢ 放大：用卡片已有的 JSON 在 `<dialog>` 重畫，完整圖例、dataZoom 滑桿、說明、已修正單位的說明、週期切換；`&chart=<index>` 深連結，上一頁關閉，手機全螢幕。
 
 ## 測試
 
