@@ -694,9 +694,12 @@ def test_V_BT_terrain_summary_and_flags():
 
 def test_V_BT_flags_follow_the_stored_result(tmp_path):
     p = tmp_path / "bt.json"
-    assert BT.flags(p) == ({"road": False, "trail": False, "hike": False}, False)
+    none = {"road": False, "trail": False, "hike": False, "hike_capacity": False}
+    assert BT.flags(p) == (none, False)
     BT.save({"version": 2, "validated": {"road": True, "trail": False, "hike": False}, "effort_validated": False}, p)
-    assert BT.flags(p) == ({"road": True, "trail": False, "hike": False}, False)
+    assert BT.flags(p) == ({**none, "road": True}, False)
+    BT.store_capacity({"passed": True}, p)                     # the 百岳 capacity gate merges into the same file
+    assert BT.flags(p) == ({**none, "road": True, "hike_capacity": True}, False)
     BT.save({"validated": {"road": True}}, p)                  # an old-format result validates nothing
     assert BT.flags(p)[0]["road"] is False
 

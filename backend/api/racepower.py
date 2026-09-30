@@ -347,9 +347,23 @@ def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: di
         eph = h["eph"]["median"]
         src = f"你自己走的登山日 EP/h 中位數（{h['eph']['n']} 天，爬升 ≥ 600 m 的日子權重 3 倍）"
     else:
-        eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
-        src = "推估：Tobler 步行函數在這條路線的 EP/h（" + (h.get("note") or "百岳多為跟團") + "）"
-        warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；用 Tobler 步行函數")
+        cap = None
+        try:
+            cap = _grade_models().get("walk_capacity")
+        except Exception:                   # noqa: BLE001
+            cap = None
+        if cap is not None:
+            from backend.engine.racepower import capacity as CAP
+            # at the v1 reference pack: predict_baiyue then applies its own
+            # pack factor (W + hist)/(W + pack) and the altitude M
+            eph = CAP.course_eph(cap, body.distance_km, body.gain_m, body.loss_m, body.hist_pack_kg)
+            src = ("推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；" +
+                   (h.get("note") or "百岳多為跟團") + "）")
+            warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；用你的步行能力模型（待回測）")
+        else:
+            eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
+            src = "推估：Tobler 步行函數在這條路線的 EP/h（" + (h.get("note") or "百岳多為跟團") + "）"
+            warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；沒有跑步資料可建能力模型，用 Tobler 步行函數")
     used["eph"] = _src(eph, src)
     days = max(1, body.days or 1)
     pack = body.pack_kg if body.pack_kg is not None else (12.0 if days >= 2 else 6.0)
@@ -465,11 +479,21 @@ def _grade_models() -> dict:
                                         only_classes={"race"}, hikes=False)["grade_re"]
     solo = A.solo_hikes()
     try:
-        # the clock ETA's moving ratio: group hikes rest on the group's schedule
-        gm["moving_rows"] = [{"moving_s": a.moving_s, "elapsed_s": a.elapsed_s} for a in build_achievements(ds)
-                             if a.kind == KIND_HIKE and not a.days and a.id in solo]
+        # the clock ETA's moving ratio, per trip kind: group hikes rest on the
+        # group's schedule, solo ones on the athlete's (baiyue §2.6)
+        rows = [(a.id in solo, {"moving_s": a.moving_s, "elapsed_s": a.elapsed_s}) for a in build_achievements(ds)
+                if a.kind == KIND_HIKE and not a.days]
+        gm["moving_rows"] = [r for s, r in rows if s]
+        gm["moving_rows_group"] = [r for s, r in rows if not s]
     except Exception:                       # noqa: BLE001
-        gm["moving_rows"] = []
+        gm["moving_rows"], gm["moving_rows_group"] = [], []
+    cap = gm.get("walk_capacity")
+    hc = (BT.load() or {}).get("hike_capacity") or {}
+    if cap is not None and hc.get("sigma_loo"):
+        # the back-test's held-out segment log-error SD (segment level: wider
+        # than a whole day's, so conservative)
+        cap.sigma_loo = float(hc["sigma_loo"])
+        cap.sigma_loo_src = f"回測：留一的段時間對數誤差 SD（{hc.get('today')}）"
     with _lock:
         _cache["grade"] = (key, time.time(), gm)
     return gm
@@ -478,8 +502,90 @@ def _grade_models() -> dict:
 @router.get("/grade-model")
 def grade_model():
     gm = _grade_models()
+    cap = gm.get("walk_capacity")
     return _py({"grade_re": gm["grade_re"].to_json(), "hike_speed": gm["hike_speed"].to_json(),
+                "walk_capacity": cap.to_json() if cap is not None else None,
                 "hike_hr": gm.get("hike_hr"), "hike_basis": gm.get("hike_basis"), "race_model": gm.get("race_model")})
+
+
+def heat_status_for(date: Optional[str]) -> dict:
+    """engine/heat_data.status for today, projected to `date` (the race day)."""
+    from backend.engine import heat_data as HD
+    rd = None
+    if date:
+        try:
+            rd = dt.date.fromisoformat(str(date)[:10])
+        except ValueError:
+            rd = None
+    try:
+        passive = HD.completed_passive_dates()
+    except Exception:                       # noqa: BLE001
+        passive = []
+    return HD.status(dt.date.today(), rd, passive_dates=passive)
+
+
+@router.get("/heat-status")
+def heat_status(date: Optional[str] = None):
+    """The heat-acclimation index S (engine/heat.py): today, its last 120
+    days, and the race-day projection for `date` (推估)."""
+    return _py(heat_status_for(date))
+
+
+class HikeMetaIn(BaseModel):
+    file: str
+    pack_kg: Optional[float] = None
+
+
+def _hike_rows() -> list[dict]:
+    """Every hiking day with its pack (recorded or default) and the solo /
+    group suggestion (capacity.classify_day; baiyue-from-running.md §2.6)."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import capacity as CAP
+    ds = _dataset()
+    today = dt.date.today()
+    gm = _grade_models()
+    cap = gm.get("walk_capacity")
+    meta = A.hike_meta()
+    solo = A.solo_hikes()
+    hikes = {w.entry.file: w for w in A.hike_workouts(ds, today)}
+    days = inputs().get("hiking", {}).get("days") or []
+    out = []
+    for d in days:
+        w = hikes.get(d["file"])
+        rec = meta.get(d["file"]) or {}
+        default = CAP.PACK_DEFAULT_MULTI if (d.get("days") or 1) > 1 else CAP.PACK_DEFAULT_SINGLE
+        sug = None
+        if w is not None:
+            th = A.thresholds_as_of(ds, w.entry.start.date())
+            wins = [x for x in A.hike_samples(ds, [w]) if x["day"] == (d.get("day") or 1)]
+            L = CAP.day_pack(rec.get("pack_kg", default), d.get("day") or 1)
+            sug = CAP.classify_day(wins, th.get("aet"), cap, L)
+        out.append({**{k: d.get(k) for k in ("date", "trip", "name", "day", "days", "km", "gain_m", "moving_h",
+                                             "ep_per_h", "file", "peaks")},
+                    "solo": d["file"] in solo, "pack_kg": rec.get("pack_kg"), "pack_default": default,
+                    "suggest": sug})
+    marked = [{"marked": "solo" if r["solo"] else "group", "suggest": (r["suggest"] or {}).get("suggest")}
+              for r in out]
+    return out, CAP.classifier_validation(marked)
+
+
+@router.get("/hike-meta")
+def get_hike_meta():
+    rows, val = _hike_rows()
+    return _py({"days": rows, "validation": val,
+                "note": "「看起來是自己走」只是建議；確認後才寫進自己走的清單"})
+
+
+@router.post("/hike-meta")
+def post_hike_meta(body: HikeMetaIn):
+    from backend.engine.racepower import athlete as A
+    try:
+        trips = A.set_hike_meta(body.file, body.pack_kg)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with _lock:
+        _cache.pop("grade", None)
+    return {"trips": trips}
 
 
 class SoloHikesIn(BaseModel):
@@ -555,6 +661,13 @@ class PlanIn(PredictIn):
     # Open-Meteo); none, or no date / start time → the single To value
     hourly: Optional[list[HourIn]] = None
     hourly_heat: bool = True
+    # heat acclimation (heat-acclimation.md §5.5): {"mode": auto|none|partial|acclimatised|custom, "s"}
+    heat_acclimatisation: Optional[dict] = None
+    # 百岳 capacity (baiyue-from-running.md §6.1)
+    trip_kind: Optional[Literal["group", "solo"]] = None
+    hr_band: Optional[Literal["aet", "cap"]] = None
+    pack_kg_by_day: list[float] = []
+    heat_ref_alt_m: Optional[float] = None  # the elevation the race-day temperature refers to
 
 
 def _resolve_course(body: PlanIn) -> dict:
@@ -608,6 +721,10 @@ def make_plan(body: PlanIn) -> dict:
     from backend.engine.racepower import backtest as BT
     from backend.engine.racepower import planner as PL
     course = _resolve_course(body)
+    if body.type == "baiyue" and course.get("source") == "gpx" and not body.day_splits_km and (body.days or 1) > 1:
+        # a multi-day trip without split points: cut the course into equal-km days
+        km = course["totals"]["km"]
+        body = body.model_copy(update={"day_splits_km": [km * i / body.days for i in range(1, body.days)]})
     v1 = _v1_for(body, course)
     validated, effort_ok = BT.flags()
     gm = _grade_models()
@@ -615,11 +732,18 @@ def make_plan(body: PlanIn) -> dict:
     opts["locks"] = [x.model_dump() for x in body.locks]
     opts["stops"] = [x.model_dump() for x in body.stops]
     opts["hourly"] = [x.model_dump() for x in body.hourly or []]
+    if body.heat_acclimatisation:
+        opts["heat_status"] = heat_status_for(body.date)
+    if body.type == "baiyue" and body.heat_ref_alt_m is None and (body.env_to is None or body.env_to.temp_c is None):
+        # no race-day temperature: env.resolve copied the training one, which
+        # belongs to the training altitude — lapse from there, not from the peak
+        opts["heat_ref_alt_m"] = v1["env"]["from"]["altitude_m"]
     try:
         if body.type == "baiyue":
             opts["moving_rows"] = gm.get("moving_rows") or []
+            opts["moving_rows_group"] = gm.get("moving_rows_group") or []
             out = PL.plan_hike(v1=v1, course=course, hike_speed=gm["hike_speed"], inp=inputs(), opts=opts,
-                               validated=validated)
+                               validated=validated, capacity=gm.get("walk_capacity"))
         else:
             gre = gm["grade_re"]
             if body.type == "road":

@@ -17,7 +17,7 @@ from backend.db.models import PlanSession
 from backend.engine import reconcile as R
 
 KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test": "測試",
-         "hike": "健行／登山", "strength": "肌力"}
+         "hike": "健行／登山", "strength": "肌力", "heat_passive": "被動熱適應"}
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m")
 TERRAINS = ("road", "trail", "hike")
 DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",

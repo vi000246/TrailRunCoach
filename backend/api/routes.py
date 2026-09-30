@@ -36,7 +36,7 @@ def _weather_client():
 
 
 STORE = R.RouteStore()
-BUILDER = R.Builder(STORE, weather_get=_weather_client())
+BUILDER = R.Builder(STORE, weather_get=_weather_client(), activity_weather=True)
 _CHECKED = {"at": 0.0}
 RECHECK_S = 60.0
 

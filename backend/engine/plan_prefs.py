@@ -64,12 +64,17 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.terrain_quality": "terrain_quality",
     "plan.prefs.interval_target": "interval_target",
     "plan.prefs.cp_test_protocol": "cp_test_protocol",
+    "plan.prefs.heat": "heat",
+    "plan.prefs.heat_method": "heat_method",
     "plan.prefs.quality_gate": "quality_gate",
     "plan.prefs.quality_gate_weeks": "quality_gate_weeks",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
 GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
+# fields that only add sessions for a specific reason and never reshape the
+# week: they are not part of `active` (the default plan stays untouched)
+NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method") + GATE_FIELDS
 LONG_WD = {"sat": 5, "sun": 6}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
@@ -107,6 +112,10 @@ class Prefs:
     # CP 測試方式 (engine/cp_protocols.py). Not part of `active`: choosing a
     # protocol only changes the test session, not the shaping of the week.
     cp_test_protocol: str = "quick"
+    # 熱適應課 (engine/heat_plan.py, heat-acclimation.md §5.4): auto adds heat
+    # sessions only before a hot A/B race; off never. Not part of `active`.
+    heat: str = "auto"
+    heat_method: str = "run"
     # 間歇門檻 (engine/quality_gate.py): not part of `active` either (GATE_FIELDS)
     quality_gate: str = "auto"
     quality_gate_weeks: int = 8
@@ -114,9 +123,8 @@ class Prefs:
     @property
     def active(self) -> bool:
         """Anything that shapes sessions differs from the defaults (the CP-test
-        protocol and the 間歇門檻 fields don't shape the week)."""
-        return replace(self, cp_test_protocol=Prefs.cp_test_protocol,
-                       **{f: getattr(Prefs, f) for f in GATE_FIELDS}) != Prefs()
+        protocol, the heat and the 間歇門檻 fields don't shape the week)."""
+        return replace(self, **{f: getattr(Prefs, f) for f in NOT_SHAPING}) != Prefs()
 
     @property
     def long_cap(self) -> Optional[int]:
