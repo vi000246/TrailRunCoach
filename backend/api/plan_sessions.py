@@ -347,7 +347,23 @@ async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSessio
 
 def _prefs_body(p) -> dict:
     from backend.engine import plan_prefs as PP
-    return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active}
+    from backend.engine import quality_gate as QG
+    # gate_options: the 間歇門檻 hover texts (the page adds "usable with your data"
+    # from GET /prefs/gate, which needs the dataset)
+    return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
+            "gate_options": QG.option_texts()}
+
+
+@router.get("/prefs/gate")
+def get_prefs_gate():
+    """間歇門檻 availability per mode on the athlete's data (status.i_gate's extra.options)."""
+    from backend.api.overview import _dataset, _status
+    from backend.engine import overview as O
+    ds = _dataset()
+    st = _status(ds, O.day_to_date(ds.today))
+    g = next((i.extra for i in st.indicators if i.id == "gate"), None) or {}
+    return {"options": g.get("options") or {}, "mode": g.get("mode"), "resolved": g.get("resolved"),
+            "state": g.get("state"), "verdict": next((i.verdict for i in st.indicators if i.id == "gate"), "")}
 
 
 @router.get("/prefs")

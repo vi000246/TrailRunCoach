@@ -43,7 +43,8 @@ TSB_STALE = 25.0
 LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # Seiler / Palladino
 VOLUME_STEP_WATCH = 0.10                                    # UA: >10%/week
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
-DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # UA (<5%), 徐國峰 (90' E <10%)
+DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # Friel (<5%), 徐國峰 (90' E <10%)
+SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）"
 EF_TREND = 0.02                                             # ±2% = meaningful (heuristic)
 VAM_TREND = 0.03
 SPECIFIC_SHARE = 0.70                                       # 江晏慶: 專項期練到比賽的七成
@@ -113,8 +114,9 @@ def _mean(xs):
 class Status:
     """Compute everything once for `today`; `.to_dict()` is the API payload."""
 
-    def __init__(self, ds: Dataset, plan: Optional[Plan] = None, today: Optional[dt.date] = None):
+    def __init__(self, ds: Dataset, plan: Optional[Plan] = None, today: Optional[dt.date] = None, prefs=None):
         self.ds = ds
+        self.prefs = prefs                  # 課表偏好 (間歇門檻); None = plan_prefs.load()
         self.plan = plan if plan is not None else ds.plan
         self.today = today or day_to_date(ds.today)
         self.tday = int(math.floor(date_to_day(self.today)))
@@ -185,7 +187,7 @@ class Status:
         self.indicators = []
         self.actions = []
         for fn in (self.i_phase, self.i_fitness, self.i_form, self.i_volume, self.i_intensity,
-                   self.i_efficiency, self.i_drift, self.i_climb, self.i_long, self.i_density,
+                   self.i_efficiency, self.i_drift, self.i_gate, self.i_climb, self.i_long, self.i_density,
                    self.i_descent, self.i_strength, self.i_durability, self.i_heat, self.i_testing, self.i_data):
             try:
                 ind = fn()
@@ -447,37 +449,44 @@ class Status:
                          {"recent": r, "before": b, "change": chg, "n": len(pts)})
 
     def i_drift(self) -> Indicator:
-        # The same per-run drift the 單次活動 review card shows (workout_review:
-        # road, ≥ 40 min, avg HR ≤ AeT+3; hilly / stopped / unsteady runs refused),
-        # so the card's 「連續 N 次」 and this 「還差 N 次」 agree.
+        # Informational (docs/research/aerobic-base-readiness.md §4.3): the same
+        # per-run drift the 單次活動 review card shows (workout_review: road, ≥ 40
+        # min, avg HR ≤ AeT+3; hilly / stopped / unsteady runs refused). It is not
+        # the interval gate any more — that is i_gate (engine/quality_gate.py).
         from backend.engine import workout_review as WR
-        st = WR.drift_streak(self.ds, self.today)
-        fair = [p for p in st["points"] if p["drift"] is not None]
+        pts = WR.drift_series(self.ds, self.today)
+        fair = [p for p in pts if p["drift"] is not None]
         spark = [[p["date"], round(p["drift"], 4)] for p in fair]
-        n, ok = st["streak"], st["streak_ok"]
-        left = max(0, WR.STREAK_NEED - n)
-        extra = {"streak": n, "streak_ok": ok, "runs": len(st["points"]), "fair": len(fair)}
-        go = "飄移已連續 3 次 < 5%，本週可以加一次閾值下間歇"
-        more = f"還差 {left} 次：輕鬆路跑（≥ 40 分鐘、平均心率 ≤ AeT+3、不停、不爬坡）飄移 < 5%，才加閾值下間歇"
+        note = "飄移是 AeT 測試用的，不是間歇門檻"
         if len(fair) < 2:
-            base = self.kind in (None, "base")
-            return Indicator("drift", "心率飄移", WATCH if base else NA, "–",
-                             f"8 週內可判讀的輕鬆路跑不到 2 次（{len(st['points'])} 次符合條件）",
+            return Indicator("drift", "心率飄移", NA, "–",
+                             f"8 週內可判讀的輕鬆路跑不到 2 次（{len(pts)} 次符合條件）",
                              "只算路跑、≥ 40 分鐘、平均心率 ≤ AeT+3；有坡、有停頓、功率起伏大的不採用",
-                             more if base else "", SRC_UA, spark=spark, extra=extra)
+                             "", SRC_FRIEL, spark=spark, extra={"fair": len(fair), "median": None})
         med = _median([p["drift"] for p in fair])
         txt = _pct(med, 1)
-        why = f"8 週內 {len(fair)} 次可判讀的輕鬆路跑，Pa:HR 中位數 {_pct(med, 1)}；最近連續 {n} 次 < 5%"
+        why = f"8 週內 {len(fair)} 次可判讀的輕鬆路跑，Pa:HR 中位數 {_pct(med, 1)}；{note}"
         if med < DRIFT_GOOD:
-            lvl, v, act = GOOD, "< 5%：有氧基礎穩", go if ok else ""
-            if not ok and self.kind in (None, "base"):
-                lvl, v, act = WATCH, f"< 5%，但最近只連續 {n} 次", more
+            lvl, v, act = INFO, "< 5%：輕鬆跑後段心率穩", ""
         elif med < DRIFT_WATCH:
-            lvl, v, act = WATCH, "5–10%：長跑後段心率往上跑", (go if ok else more) if self.kind in (None, "base") \
-                else "長跑再放慢一點，或先做一次 AeT 測試校正"
+            lvl, v, act = INFO, "5–10%：長跑後段心率往上跑", ""
         else:
-            lvl, v, act = BAD, "> 10%：有氧基礎不足或跑太快", "所有輕鬆跑壓在 AeT 以下；暫緩間歇（徐國峰：90 分鐘 E 跑飄移 < 10% 才練間歇）"
-        return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_UA, med, spark, extra)
+            lvl, v, act = BAD, "> 10%：輕鬆跑太快（或太熱、沒補給）", "所有輕鬆跑壓在 AeT 以下"
+        return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_FRIEL, med, spark,
+                         {"fair": len(fair), "median": med})
+
+    def i_gate(self) -> Indicator:
+        # 間歇門檻 (engine/quality_gate.py; docs/research/aerobic-base-readiness.md §4)
+        from backend.engine import quality_gate as QG
+        prefs = self.prefs
+        if prefs is None:
+            from backend.engine import plan_prefs as PP
+            prefs = PP.load()
+        by = {i.id: i for i in self.indicators}
+        g = QG.evaluate(self.ds, self.plan, self.today, prefs, by, self.phase)   # no phase = base
+        t = QG.indicator(g)
+        return Indicator("gate", "間歇門檻", t["level"], t["text"], t["verdict"], t["why"], t["action"],
+                         t["source"], extra=g)
 
     def i_climb(self) -> Indicator:
         pts = [(math.floor(w.day), self.m(w, "vam")) for w in self.between(182, 0)
@@ -657,12 +666,15 @@ class Status:
         why = "；".join(parts)
         days_to = self.goals["days_to_next_a"]
         act = ""
+        # which test week_plan should schedule: the CP test measures CP only; the
+        # AeT test (engine/aet_test.py) has its own cadence
+        cp_due = cp is None or (self.today - cp).days > TEST_DAYS_WATCH
         from backend.engine import cp_protocols as CPP
         proto = self._cp_protocol()
         if worst != GOOD:
             act = (f"{CPP.NOTE_RACE}（課表偏好：用比賽）" if proto == "race" else
                    f"排一次 CP 測試（{CPP.TABLE[proto]['label']}，{CPP.TABLE[proto]['hint'].split('；')[0]}）") + \
-                "＋ 60 分鐘 AeT 飄移測試；每 4–6 週一次"
+                "＋ 45–60 分鐘 AeT 飄移測試；每 4–6 週一次"
             if days_to is not None and 10 <= days_to <= 21:
                 act += f"——賽前 {days_to} 天正好是測試的時機（賽前 10–21 天）"
             elif days_to is not None and days_to < 10:
@@ -696,6 +708,37 @@ class Status:
                 act = f"套用這次的 CP（{ct['cp']:.0f} W）" + (f"；{act}" if act else "")
             why += f"；最近一次 CP 測試 {ct['date']}：{ct['cp']:.0f} W" + \
                 (f"（{dlt * 100:+.1f}%）" if dlt is not None else "")
+        # the latest AeT drift test (engine/aet_test.py): UA's three bands
+        try:
+            from backend.engine import aet_test as AT
+            at = AT.latest_aet_test(self.ds, self.today)
+        except Exception:
+            at = None
+        if at:
+            done = AT.applied(self.plan, at)
+            extra["aet_test"] = {**at, "applied": done, "apply": None if done else AT.apply_body(at)}
+            if at.get("ok") and not done:
+                now = f"（目前 {at['aethr_now']:.0f}）" if at.get("aethr_now") else ""
+                if at["band"] == "at":
+                    worst = WATCH if worst == GOOD else worst
+                    txt = "要更新"
+                    v = f"{at['date']} 的 AeT 測試：飄移 {at['drift'] * 100:.1f}%，AeT = {at['aethr_suggest']} bpm{now}"
+                    act = f"套用這次的 AeT（{at['aethr_suggest']} bpm）" + (f"；{act}" if act else "")
+                else:
+                    step = "+5" if at["band"] == "below" else "−5"
+                    act = (f"{at['date']} 的 AeT 測試飄移 {at['drift'] * 100:.1f}%（{AT.BAND_LABEL[at['band']]}）："
+                           f"下次起始心率 {step} bpm 再測一次") + (f"；{act}" if act else "")
+            why += f"；最近一次 AeT 測試 {at['date']}：" + (f"飄移 {at['drift'] * 100:.1f}%" if at.get("ok")
+                                                          else at.get("reason") or "不採用")
+        gate = next((i.extra for i in getattr(self, "indicators", []) if i.id == "gate"), None) or {}
+        if gate.get("stale_aet") and not (at and at.get("band") == "at" and not extra["aet_test"]["applied"]):
+            wk = ((gate.get("aet") or {}).get("age_days") or 0) // 7
+            worst = WATCH if worst == GOOD else worst
+            v = f"AeT 已經 {wk} 週沒測，門檻改用不設門檻模式"
+            act = "重測 AeT" + (f"；{act}" if act else "")
+        extra["cp_due"] = cp_due
+        extra["aet_date"] = ae.isoformat() if ae else None
+        extra["aet_last_test"] = at["date"] if at else None
         return Indicator("testing", "測試", worst, txt, v, why, act, SRC_NOTES, extra=extra)
 
     def i_data(self) -> Indicator:
@@ -730,7 +773,12 @@ class Status:
             lvl = WATCH if lvl == GOOD else lvl
         txt = "OK" if not issues else f"{len(issues)} 項"
         why = "；".join(issues) if issues else f"CP 來源：{cp_src}；4 週 {with_hr}/{len(recent)} 筆有心率"
-        act = "到「賽事周期」頁填 LTHR／AeT 測試結果" if (thr_default or aet_missing) else ""
+        acts = []
+        if thr_default:
+            acts.append("到「賽事周期」頁填 LTHR 測試結果")
+        if aet_missing:
+            acts.append("排一次 AeT 飄移測試（15 分暖身＋45–60 分固定功率，平路）；測了可以改用有氧基礎門檻")
+        act = "；".join(acts)
         if pend:
             act = (act + "；" if act else "") + "到圖表頁「資料校正」核准壞點修正"
         return Indicator("data", "資料品質", lvl, txt, "資料可信" if not issues else "有幾項會影響判讀", why, act, "",
@@ -791,7 +839,7 @@ class Status:
 PHASE_GOAL = {
     "transition": "恢復、重建習慣、肌力打底",
     "recovery": "恢復——不追體能，等 TSB 回正",
-    "base": "練有氧引擎：大量低強度、EF 往上、飄移 < 5%",
+    "base": "練有氧引擎：大量低強度、EF 往上",
     "specific": "練比賽需要的能力：爬坡、長時間、爬升密度接近賽事",
     "taper": "量減 40–60%、強度保留、TSB 回正",
     "event": "比賽週：短、輕鬆，補給與睡眠",
@@ -801,7 +849,7 @@ PHASE_GOAL = {
 PHASE_PRIORITY = {
     "transition": ["form", "volume", "strength", "data", "testing"],
     "recovery": ["form", "volume", "strength", "data", "testing"],
-    "base": ["intensity", "drift", "volume", "efficiency", "fitness", "strength", "testing", "data"],
+    "base": ["intensity", "gate", "volume", "efficiency", "fitness", "strength", "testing", "data", "drift"],
     "specific": ["long", "density", "climb", "durability", "fitness", "intensity", "testing", "data"],
     "taper": ["volume", "intensity", "form", "long", "testing"],
     "event": ["form", "volume", "intensity"],
@@ -811,7 +859,9 @@ PHASE_PRIORITY = {
 PHASE_FOCUS = {
     "transition": ("轉換期重點", "每週 2 次肌力、量低而穩定，等 TSB 回正再進基礎期", SRC_UA),
     "recovery": ("恢復期重點", "先休；TSB 回正、想練了再開始", SRC_UA),
-    "base": ("基礎期重點", "每週一次 60–90 分鐘輕鬆長跑（心率 < {aet}），其餘輕鬆跑也壓在 AeT 以下；每週一次 8–15 秒坡衝刺", SRC_UA),
+    # the long run / AeT cap is UA's; 8–15 s hill sprints are Palladino's (UA: 8–10 s)
+    "base": ("基礎期重點", "每週一次 60–90 分鐘輕鬆長跑（心率 < {aet}），其餘輕鬆跑也壓在 AeT 以下；每週一次 8–15 秒坡衝刺",
+             SRC_UA + "（輕鬆長跑、AeT 以下）；Palladino 基礎中期坡衝刺 8–15 秒"),
     "specific": ("專項期重點", "每週一次山路長跑，每公里爬升往 {goal_d} 靠；每 2 週一次長天往 {goal_h} 的七成靠；週中一次爬坡課", SRC_KOOP),
     "taper": ("減量期重點", "時數減到平常的 40–60%，次數不變，保留一次短強度；最後 3 天只做 30–40 分鐘輕鬆跑", SRC_BOSQUET),
     "event": ("比賽週", "前 2 天各 20–30 分鐘輕鬆跑＋幾趟加速；補給：每小時 30–60 g 碳水、每 15 分鐘 200 ml", SRC_NOTES),
