@@ -799,7 +799,8 @@ function renderProfile() {
   chart("profile").setOption({
     animation: false, grid: { left: 48, right: 48, top: 26, bottom: narrow ? 30 : 56 },
     tooltip: { trigger: "axis", confine: true, formatter: (ps) => { const km = ps[0].axisValue ?? ps[0].value[0]; const s = segAt(km); return s ? segCard(s, true) : ""; } },
-    xAxis: { type: "value", name: "km", min: 0, max: P.summary.km, ...axisStyle(), splitNumber: narrow ? 4 : 8 },
+    xAxis: { type: "value", name: "km", min: 0, max: P.summary.km, ...axisStyle(), splitNumber: narrow ? 4 : 8,
+      axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => +v.toFixed(1), showMaxLabel: false } },
     yAxis: pr ? [{ type: "value", name: "m", scale: true, ...axisStyle() }, y2] : [y2],
     dataZoom: narrow ? [{ type: "inside" }] : [{ type: "inside" }, { type: "slider", height: 16, bottom: 6 }],
     series,
@@ -807,7 +808,8 @@ function renderProfile() {
   const c = chart("profile");
   c.getZr().off("click");
   c.getZr().on("click", (ev) => {
-    const p = c.convertFromPixel({ xAxisIndex: 0 }, [ev.offsetX, ev.offsetY]); if (!p) return;
+    if (!c.containPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY])) return;
+    const p = c.convertFromPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY]); if (!p) return;
     const km = p[0]; if (!(km >= 0 && km <= P.summary.km)) return;
     if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +km.toFixed(2)].sort((a, b) => a - b); schedule(); return; }
     const s = segAt(km); if (s) { HL = s.i; renderProfile(); renderSegments(); const row = document.querySelector(`[data-seg="${s.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
@@ -996,6 +998,7 @@ async function renderBacktest() {
     st.error ? `上次失敗：${st.error}` : r.result ? `上次回測 ${r.result.computed_at.slice(0, 16).replace("T", " ")}（${r.result.seconds} 秒）` : "";
   if (st.running) setTimeout(renderBacktest, 3000);
   const R = r.result;
+  $("bt-body").classList.remove("loading");
   if (!R) { $("bt-body").innerHTML = `<div class="meta">還沒有回測結果，按「重新回測」。</div>`; return; }
   const S_ = R.summary;
   let h = `<div class="note">每一場：用那天以前、不含這一場的資料建模型；路線用那一次自己的 GPS 軌跡；餵進實際平均功率（登山用你平常的速度），比較預估與實際的移動時間。通過門檻（且至少 ${R.min_n} 場）的類別，頁面上的「推估」會自動拿掉，改用分段加總當整場結果。</div>`;
