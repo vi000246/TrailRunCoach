@@ -19,6 +19,7 @@
 | 2026-09-30 | code-sync | — | 同步強化：增量 cursor、錯誤不推進 cursor、失敗 rollback、跨來源去重（`duplicate_of`）、本地日期（`start_time_utc`）、token 以 Fernet 加密。TP 改走網站登入 / WKO5-client OAuth，檔案改用 `details` + `rawfiledata` 下載 |
 | 2026-09-30 | code-sync | — | 設定頁「資料同步」區塊、每來源互斥鎖（409 `SYNC_BUSY`）、每日排程（lifespan task）、`POST /sync/auto` + `autosync.js`、每來源獨立 FIT 資料夾與遷移腳本、刪除單一來源檔案、`FitFolderDataset` 與 `/sync/compare` |
 | 2026-09-30 | code-sync | N/A | 掃描改走 `fit/<source>/` 並標 source + provider id、`FitFolderDataset` 時區取 `athlete.timezone`、`charts.map.basemap` / `charts.map.overlays` 設定鍵、COROS 課表推送改指向 overview.spec.md；路徑改寫成使用者資料夾相對形式 |
+| 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
 
 ---
 
@@ -255,12 +256,12 @@ frontend/
 
 ### 資料夾掃描（`POST /api/v1/scan`）
 
-`backend/api/scan.py:13` 呼叫 `scan_and_import`（`backend/files/file_service.py:99`），對 athlete 的 `data_dir` 掃描：
+`backend/api/scan.py:13` 呼叫 `scan_and_import`（`backend/files/file_service.py:104`），對 athlete 的 `data_dir` 掃描：
 
-- `discover_tagged_files`（`backend/files/file_service.py:62`）：資料夾底下若有 `storage.SOURCES`（`backend/sync/storage.py:20`）列的 `coros/`、`tp/` 子資料夾，就逐一走 `<source>/<year>/`，檔案標上 DB source（`coros` / `trainingpeaks`）；同一資料夾的傳統 `<year>/*.wko4|.fit` 版面照舊標 `local`。symlink 跳過。
-- `_sync_ids`（`backend/files/file_service.py:49`）：從同步寫出的檔名反推 provider id——COROS `<labelId>_<日期>_<sport>.fit` → `coros_activity_id`，TP `tp_<日期>_<workoutId>.fit` → `tp_workout_id`。
-- `_already_imported`（`backend/files/file_service.py:75`）：路徑（原樣與 resolve 後）、`coros_activity_id` 或 `tp_workout_id` 任一已在 DB 就跳過，所以同步已記錄的檔案不會被掃描重複匯入；可重複執行。
-- 每個檔案一個 savepoint（`backend/files/file_service.py:118`），失敗不留半筆資料；回傳 `new` / `skipped` / `errors` / `total` / `new_by_source`。
+- `discover_tagged_files`（`backend/files/file_service.py:66`）：資料夾底下若有 `storage.SOURCES`（`backend/sync/storage.py:20`）列的 `coros/`、`tp/` 子資料夾，就逐一走 `<source>/<year>/`，檔案標上 DB source（`coros` / `trainingpeaks`）；同一資料夾的傳統 `<year>/*.wko4|.fit` 版面照舊標 `local`。symlink 跳過。
+- `_sync_ids`（`backend/files/file_service.py:49`）：從同步寫出的檔名反推 provider id——COROS `<labelId>_<日期>_<sport>.fit` → `coros_activity_id`，TP `tp_<日期>_<workoutId>.fit` → `tp_workout_id`。`source` 收 DB 名稱（`coros` / `trainingpeaks`）也收資料夾 / API 名稱（`tp`），經 `storage.SOURCES` 對應。
+- `_already_imported`（`backend/files/file_service.py:81`）：路徑（原樣與 resolve 後）、同一 athlete 的 `coros_activity_id` 或 `tp_workout_id` 任一已在 DB 就跳過（兩種 provider id 都限定 athlete，`backend/files/file_service.py:92`、`backend/files/file_service.py:97`），所以同步已記錄的檔案不會被掃描重複匯入；可重複執行。
+- 每個檔案一個 savepoint（`backend/files/file_service.py:123`），失敗不留半筆資料；回傳 `new` / `skipped` / `errors` / `total` / `new_by_source`。
 
 測試：`backend/tests/test_scan_and_tz.py:31`（per-source 版面、冪等）、`backend/tests/test_scan_and_tz.py:47`（跳過同步已記錄者）、`backend/tests/test_scan_and_tz.py:62`（傳統版面仍為 local）。
 
@@ -368,7 +369,7 @@ ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
 
 **路線圖設定**（`charts.map.basemap` / `charts.map.overlays`，`backend/settings/repository.py:53-54`）：預設底圖 `rudy`、無疊加層。底圖限 `MAP_BASEMAPS`、疊加層須為 `MAP_OVERLAYS` 內不重複的清單（`backend/settings/repository.py:56-57`、`backend/settings/repository.py:113-118`），不合法時 `PUT /sync/settings` 回 400。API 欄位對應在 `backend/api/sync.py:203-215`。地圖本身屬 viewer，見 wko5-engine.spec.md。
 
-> 尚未接上：`backend/api/wko5views.py:52` 的 `_dataset_cfg` 仍固定建 WKO5 `Dataset`，沒有呼叫 `dataset_for_source(current_source(), …)`；`wko5_viewer.html` 也還沒載入 `sourcechip.js`。render cache 已會把 dataset 的 `source` / `source_stamp` 放進 key（`backend/engine/wko5expr/render_cache.py:88`），所以接上後換來源或同步新檔案會自動失效。
+**接線**：`_dataset()`（`backend/api/wko5views.py:78`）讀 `current_source()`，以 `source_stamp()` 當 `_dataset_cfg` 的快取 key（`backend/api/wko5views.py:87`），`_dataset_cfg`（`backend/api/wko5views.py:55`）呼叫 `dataset_for_source(source, ATHLETE_DIR, config)`：`coros` / `tp` 建 `FitFolderDataset`，`wko5` 照舊是 WKO5 `Dataset`。總覽（`backend/api/overview.py:27`）與功率計算機（`backend/api/racepower.py:41`）都走同一個 `_dataset()`。render cache 把 dataset 的 `source` / `source_stamp` 放進 key（`backend/engine/wko5expr/render_cache.py:96`），圖表請求本身也帶 `source`，所以換來源或同步新檔案都不會拿到舊圖。圖表頁右上角有資料來源切換（`#source-chip` + `sourcechip.js`，`backend/static/wko5_viewer.html:251`），設定頁的說明也改成已生效（`backend/static/settings.html:126`）。實測（2026-09-30，本機資料）：`coros` 17 筆活動，5 個 view 共 186 張圖 0 錯誤；`wko5` 預設的輸出與改動前相同（只少了地圖面板不再使用的 `track`）。
 
 **COROS 課表推送**（`backend/sync/coros_workouts.py`，把本專案的計畫課表依日 / 週 / 期推到 COROS 並記錄在 `coros_plan_push` 表）：屬於計畫功能，規格見 overview.spec.md。
 

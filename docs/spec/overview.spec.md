@@ -44,10 +44,10 @@ the nights too (one 51 h trip held about 7 h of walking).
 | Periods | Week (Monday) / month / year buckets and totals | `backend/engine/overview.py:207` |
 | PMC | Same `tl()` recurrence as the chart expressions `ctl` / `atl` / `tsb` | `backend/engine/overview.py:269` |
 | Week plan | Volume target, session template, done-matching, day placement, projection | `backend/engine/overview.py:405` |
-| Multi-week projection | Rolls the week-plan rules forward to the horizon | `backend/engine/projection.py:184` |
+| Multi-week projection | Rolls the week-plan rules forward to the horizon | `backend/engine/projection.py:213` |
 | Reconcile | Pure rules: stored plan vs regenerated weeks vs activities | `backend/engine/reconcile.py:74` |
 | Plan store | Table I/O, edits, tombstones, stored-plan summary | `backend/engine/plan_store.py:89` |
-| COROS push | Session → structured COROS workout, idempotent push / remove | `backend/sync/coros_workouts.py:622` |
+| COROS push | Session → structured COROS workout, idempotent push / remove | `backend/sync/coros_workouts.py:580` |
 | API | Memoised Status, the endpoints, the page | `backend/api/overview.py:40`, `backend/api/plan_sessions.py:32` |
 
 The dataset is the chart pages' shared instance (`backend/api/wko5views.py` `_dataset()`), so the
@@ -111,21 +111,22 @@ moving hours / TSS, today's CTL / ATL / TSB (`backend/engine/overview.py:405`).
 - Base / specific (not a recovery week): one long easy session (30 % of the week, ≥ 60 min,
   ≤ 1.15 × the longest of the last 28 days; specific: toward 70 % of the goal event's hours,
   ≥ 90 min), terrain from the goal's climb density; then one of, in this order
-  (`backend/engine/overview.py:531`):
+  (`backend/engine/overview.py:532`):
   1. **CP test 3'/12'** when the `testing` indicator is bad / watch and the A event is > 10
      days away (independent of the quality gate);
   2. specific → uphill intervals 5×4';
-  3. base, when the last quality run of the past 28 days is missing or faded → **閾值下 N×8'**
-     at 88–95 % CP, 3×8 the first time, one rep fewer (not below 2) after a faded one
-     (`backend/engine/overview.py:540`, `backend/engine/workout_review.py:529`,
-     `backend/engine/workout_review.py:811`);
-  4. a good `intensity` indicator → threshold 3×10' (`backend/engine/overview.py:553`).
-- **Quality gate** (`workout_review.quality_gate`, `backend/engine/workout_review.py:520`,
-  called at `backend/engine/overview.py:511`): no quality session when `intensity` or `drift`
+  3. base, when the last quality session (run or hike, date-sorted) of the past 28 days is
+     missing or faded → **閾值下 N×8'** at 88–95 % CP, 3×8 the first time, one rep fewer (not
+     below 2) after a faded one (`backend/engine/overview.py:541`,
+     `backend/engine/workout_review.py:533`, `backend/engine/workout_review.py:820`);
+  4. a good `intensity` indicator → threshold 3×10' (`backend/engine/overview.py:554`).
+- **Quality gate** (`workout_review.quality_gate`, `backend/engine/workout_review.py:524`,
+  called at `backend/engine/overview.py:512`): no quality session when `intensity` or `drift`
   is bad; in base phase (or no phase) the drift streak — ≥ 3 consecutive fair easy road runs
-  with drift < 5 % (`STREAK_NEED`, `backend/engine/workout_review.py:63`) — must also be
+  with drift < 5 % (`STREAK_NEED`, `backend/engine/workout_review.py:66`) — must also be
   there. The streak comes from the `drift` indicator's `extra.streak_ok`
-  (`backend/engine/overview.py:510`).
+  (`backend/engine/overview.py:510`). The gate's inputs are returned as `quality_gate`
+  (`levels`, `streak_ok`, `allowed`) for the projection (`backend/engine/overview.py:701`).
 - Taper: one short intensity 4×3'. Event week: the race.
 - Strength ×2 in base / transition / recovery or when the `strength` indicator is bad / watch,
   else ×1 (not counted in the hours).
@@ -147,11 +148,11 @@ Sessions that don't fit are reported as a note, not squeezed in.
 **Output**: target / done / remaining (hours, TSS), the reasons (`why`), the rules cited,
 8-week history, load now and at Sunday (CTL, ATL, next-Monday TSB, weekly ramp), the daily
 projection, sessions with day / done state, thresholds and their sources, and notes (data /
-testing to-dos from the indicators) (`backend/engine/overview.py:678`).
+testing to-dos from the indicators) (`backend/engine/overview.py:679`).
 
 ## Multi-week projection (`projection.py`)
 
-`project_weeks(cur, phases, until, ctlconstant)` (`backend/engine/projection.py:184`) starts
+`project_weeks(cur, phases, until, ctlconstant, atlconstant)` (`backend/engine/projection.py:213`) starts
 from this week's `week_plan()` output and rolls the same rules forward week by week, never
 more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:30`):
 
@@ -162,8 +163,16 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:30`):
 - Sessions (`week_sessions`, `backend/engine/projection.py:98`): the same template (long, one
   quality, strength, easy fill) placed by `_place` (`backend/engine/projection.py:153`).
   Projected base weeks repeat this week's 閾值下 session when there is one.
-- Whether projected weeks get a quality session is decided once from the current week
-  (`backend/engine/projection.py:199`).
+- Whether a projected week gets a quality session is decided per week, for that week's phase
+  (`allow_quality`, `backend/engine/projection.py:198`, called at
+  `backend/engine/projection.py:247`): week_plan's gate (`quality_gate` with this week's
+  indicator levels and drift streak), then in base either the carried 閾值下 session or a good
+  `intensity`. A CP-test week or the base drift gate no longer carries into later weeks; a
+  `cur` without `quality_gate` falls back to reading this week's sessions
+  (`backend/engine/projection.py:184`).
+- CTL / ATL roll forward with the athlete's constants (`ds.athlete.ctlconstant` /
+  `atlconstant`, `backend/engine/projection.py:255`); a session `_place` left without a day is
+  kept out of the date filter.
 - Each projected week carries `mode`, hours, TSS, CTL start / end, `why`, and `provisional`
   (true beyond next week).
 
@@ -230,40 +239,46 @@ the same week twice.
 
 Pushes stored sessions to COROS Training Hub as structured, scheduled workouts through the
 unofficial Training Hub API (same host and token as the COROS sync client; endpoints listed at
-`backend/sync/coros_workouts.py:5`).
+`backend/sync/coros_workouts.py:6`).
 
 - **Scope** (`_range`, `backend/api/plan_sessions.py:122`): `day` = that day; `week` = the
   Monday–Sunday week of `day`, from today on; `phase` = today to the phase end, capped at
   `MAX_WEEKS`. `day` defaults to today; the plan's "today" is never earlier than the real date
-  (`backend/api/plan_sessions.py:110`).
+  (`backend/api/plan_sessions.py:110`). A `week` entirely before today is a 400 for preview,
+  push and unpush instead of an empty range (`backend/api/plan_sessions.py:136`); a past `day`
+  scope is not guarded.
 - **Every push reconciles first** and applies the result, then pushes the active sessions in
-  range (`backend/api/plan_sessions.py:258`).
-- **Session → steps** (`session_steps`, `backend/sync/coros_workouts.py:178`): long / hike /
+  range (`backend/api/plan_sessions.py:262`).
+- **Session → steps** (`session_steps`, `backend/sync/coros_workouts.py:180`): long / hike /
   easy are one time step at HR ≤ AeT; an easy session whose title has `N×S 秒` gets a strides
   repeat when ≥ 10 min remain; quality and test sessions get their own step builders. Strength,
   race and rest are not pushed (skipped, with a reason). Done, unplaced and past-day sessions
-  are not pushed (`backend/sync/coros_workouts.py:291`).
-- **Program** (`build_program`, `backend/sync/coros_workouts.py:237`): run sport; HR targets as
+  are not pushed (`backend/sync/coros_workouts.py:293`).
+- **Program** (`build_program`, `backend/sync/coros_workouts.py:239`): run sport; HR targets as
   absolute bpm with the LTHR zone scheme; names `TRC <title> <m>/<d>`, ≤ 30 chars
-  (`backend/sync/coros_workouts.py:286`).
-- **Idempotency** (`_push_one`, `backend/sync/coros_workouts.py:541`): each push is recorded in
+  (`backend/sync/coros_workouts.py:288`).
+- **Idempotency** (`_push_one`, `backend/sync/coros_workouts.py:521`): each push is recorded in
   `coros_plan_push` (`backend/db/models.py:123`) with the COROS program / plan / schedule ids
   and a SHA-256 fingerprint of day + payload. Same fingerprint → left alone; changed → the old
   COROS entry is removed and a new one created; an entry already executed on the watch is kept
-  as done. The stored-plan push keys rows by session `uid`.
-- **Clean-up** (`push_sessions`, `backend/sync/coros_workouts.py:622`): pushed sessions that
+  as done. The stored-plan push keys rows by session `uid` (`session_key`,
+  `backend/db/models.py:130`).
+- **Clean-up** (`push_sessions`, `backend/sync/coros_workouts.py:580`): pushed sessions that
   left the plan (deleted / superseded / regenerated away) are removed unless on a past day;
   missed sessions are removed from the calendar. Only entries recorded in `coros_plan_push` are
-  ever deleted (`_remove_row`, `backend/sync/coros_workouts.py:666`).
-- **Unpush** (`DELETE /push-coros`, `backend/api/plan_sessions.py:280`) removes every recorded
-  entry whose day falls in the range.
-- **Status per session** (`status_of`, `backend/sync/coros_workouts.py:486`): done / skipped /
+  ever deleted (`_remove_row`, `backend/sync/coros_workouts.py:619`).
+- **Unpush** (`DELETE /push-coros`, `backend/api/plan_sessions.py:284`) removes every recorded
+  entry whose day falls in the range (`remove_keys`, `backend/sync/coros_workouts.py:604`).
+- **Status per session** (`status_of`, `backend/sync/coros_workouts.py:478`): done / skipped /
   not_pushed / pushed / outdated / failed; sessions no longer active but still recorded show
-  `pushed_<state>` (`backend/api/plan_sessions.py:140`).
+  `pushed_<state>` (`backend/api/plan_sessions.py:144`).
+- The old week-keyed helpers (`push_week` / `remove_week` / `week_status`, keys
+  `<week start>/<session id>`) were only used by tests and are gone; the tests drive
+  `push_sessions` / `remove_keys` / `status_of` directly.
 - Pushes and removals are serialized by a module-level lock
-  (`backend/sync/coros_workouts.py:72`). An expired COROS login returns 401
+  (`backend/sync/coros_workouts.py:74`). An expired COROS login returns 401
   `COROS_AUTH_REQUIRED` with a hint to log in again on the settings page
-  (`backend/api/plan_sessions.py:254`).
+  (`backend/api/plan_sessions.py:258`).
 
 ## Page (`backend/static/overview.html`)
 
@@ -290,16 +305,16 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   time (`backend/engine/status.py:168`), so the volume indicators aren't inflated by multi-day
   trips.
 - **`i_drift`** (`backend/engine/status.py:390`) uses the same per-run drift as the single-activity
-  review (`workout_review.drift_streak`, `backend/engine/workout_review.py:805`): road runs,
+  review (`workout_review.drift_streak`, `backend/engine/workout_review.py:814`): road runs,
   ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. It reports the streak of
   consecutive runs < 5 % in `extra` (`streak`, `streak_ok`, `runs`, `fair`). In base phase (or
   no phase) a good median without the streak is only **watch**, with a "還差 N 次" action; with
   fewer than 2 fair runs it is watch instead of n/a (`backend/engine/status.py:403`,
   `backend/engine/status.py:414`). `streak_ok` is what gates the base-phase quality session.
 - **`i_testing`** (`backend/engine/status.py:538`) also reads the latest 3'/12' CP test found in
-  the data (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:837`).
+  the data (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:848`).
   When its CP differs from the CP in effect by more than `CP_DELTA` = 3 %
-  (`backend/engine/workout_review.py:74`) and no CP threshold dated on or after the test exists,
+  (`backend/engine/workout_review.py:77`) and no CP threshold dated on or after the test exists,
   the indicator becomes at least watch with text 要更新 and an action to apply the new CP
   (`backend/engine/status.py:574`). The test is always appended to `why` and returned in
   `extra.cp_test`.
@@ -314,15 +329,15 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
 | GET | `/api/v1/overview/pmc?begin=&end=` | daily tss / ctl / atl / tsb; default the last 180 days (`backend/api/overview.py:79`) |
 | GET | `/api/v1/overview/weekplan` | the generated week plan (`backend/api/overview.py:90`) |
 | GET | `/api/v1/overview/page` | `backend/static/overview.html` (`backend/api/overview.py:97`) |
-| GET | `/api/v1/overview/plan/sessions?start=&end=` | reconcile-if-needed, then stored sessions (not deleted / superseded) with COROS status, week meta, projected weeks and `summary` (`backend/api/plan_sessions.py:156`) |
-| POST | `/api/v1/overview/plan/sessions` | add a custom session; 400 on a bad field (`backend/api/plan_sessions.py:184`) |
-| PATCH | `/api/v1/overview/plan/sessions/{uid}` | edit day / kind / minutes / title / target / detail; 400 on a bad field (`backend/api/plan_sessions.py:194`) |
-| DELETE | `/api/v1/overview/plan/sessions/{uid}` | tombstone (auto) or remove (custom); 404 when unknown (`backend/api/plan_sessions.py:204`) |
-| GET | `/api/v1/overview/plan/reconcile` | preview: changes and changes by day (`backend/api/plan_sessions.py:213`) |
-| POST | `/api/v1/overview/plan/reconcile` | apply the same (`backend/api/plan_sessions.py:222`) |
-| GET | `/api/v1/overview/plan/push-coros/preview?scope=day\|week\|phase&day=` | sessions in range with COROS status, counts to send / unchanged / skipped, missed to remove, pending changes (`backend/api/plan_sessions.py:235`) |
-| POST | `/api/v1/overview/plan/push-coros?scope=&day=` | reconcile, push the range, clean up; 401 `COROS_AUTH_REQUIRED` (`backend/api/plan_sessions.py:258`) |
-| DELETE | `/api/v1/overview/plan/push-coros?scope=&day=` | remove what was pushed in the range (`backend/api/plan_sessions.py:280`) |
+| GET | `/api/v1/overview/plan/sessions?start=&end=` | reconcile-if-needed, then stored sessions (not deleted / superseded) with COROS status, week meta, projected weeks and `summary` (`backend/api/plan_sessions.py:160`) |
+| POST | `/api/v1/overview/plan/sessions` | add a custom session; 400 on a bad field (`backend/api/plan_sessions.py:188`) |
+| PATCH | `/api/v1/overview/plan/sessions/{uid}` | edit day / kind / minutes / title / target / detail; 400 on a bad field (`backend/api/plan_sessions.py:198`) |
+| DELETE | `/api/v1/overview/plan/sessions/{uid}` | tombstone (auto) or remove (custom); 404 when unknown (`backend/api/plan_sessions.py:208`) |
+| GET | `/api/v1/overview/plan/reconcile` | preview: changes and changes by day (`backend/api/plan_sessions.py:217`) |
+| POST | `/api/v1/overview/plan/reconcile` | apply the same (`backend/api/plan_sessions.py:226`) |
+| GET | `/api/v1/overview/plan/push-coros/preview?scope=day\|week\|phase&day=` | sessions in range with COROS status, counts to send / unchanged / skipped, missed to remove, pending changes; 400 for a past week (`backend/api/plan_sessions.py:239`) |
+| POST | `/api/v1/overview/plan/push-coros?scope=&day=` | reconcile, push the range, clean up; 401 `COROS_AUTH_REQUIRED`; 400 for a past week (`backend/api/plan_sessions.py:262`) |
+| DELETE | `/api/v1/overview/plan/push-coros?scope=&day=` | remove what was pushed in the range; 400 for a past week (`backend/api/plan_sessions.py:284`) |
 | GET | `/` | redirects to the overview page when no `frontend/dist` build exists (`backend/main.py:79`) |
 
 `Status` is memoised per (dataset, day, `plan.json` mtime) (`backend/api/overview.py:40`); the
@@ -388,3 +403,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 |------|--------|-------------|---------|
 | 2026-09-30 | code-sync | N/A | Created from brownfield analysis — all-sport home page: status, week/month/year totals, combined PMC with projection, rule-based weekly plan |
 | 2026-09-30 | code-sync | N/A | Stored editable plan (plan_store / reconcile / projection, /plan/* endpoints), COROS push by day/week/phase via coros_plan_push, bars + PMC projection from the stored plan, 總覽 page with AeT/CP glossary and sources removed, drift-streak quality gate and CP-test delta in status |
+| 2026-09-30 | bugfix | N/A | Spec-sync fixes: projection quality gate per projected week (week_plan returns `quality_gate`), athlete ATL constant, sessions without a day; past-week push scope is a 400; test-only push_week / remove_week / week_status removed; last_quality includes hikes |
