@@ -8,6 +8,7 @@ cursor, rollback on import failure, corrupt-FIT stubs, COROS incremental
 cursor, athlete-local workout dates, hrTSS without power, date-effective FTP.
 """
 import asyncio
+import re
 import base64
 import gzip
 import json
@@ -57,6 +58,13 @@ async def collect(gen):
     return [e async for e in gen]
 
 
+def dev(name="480567774272323786.fit.gz", fid=111):
+    """details response with one device file, as the live API returns it."""
+    return {"workoutDeviceFileInfos": [{"fileId": fid, "fileSystemId": "x", "fileName": name,
+                                       "dateUploaded": "2026-09-02T00:00:00"}],
+            "attachmentFileInfos": []}
+
+
 def fit_payload(fit: bytes) -> dict:
     return {"data": base64.b64encode(gzip.compress(fit)).decode()}
 
@@ -71,6 +79,7 @@ class FakeTP:
     def __init__(self, workouts, detail, files):
         self.workouts, self.detail, self.files = workouts, detail, files
         self.calls = []
+        self.ranges = []
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -82,10 +91,19 @@ class FakeTP:
             page = int(parse_qs(urlparse(str(request.url)).query)["page"][0])
             items = self.workouts if page == 1 else []
             return httpx.Response(200, json={"modified": items, "deleted": []})
-        if path.endswith("/detaildata"):
+        m = re.search(r"/workouts/(\d{4}-\d\d-\d\d)/(\d{4}-\d\d-\d\d)$", path)
+        if m:
+            self.ranges.append((m.group(1), m.group(2)))
+            return httpx.Response(200, json=[w for w in self.workouts
+                                             if m.group(1) <= w["workoutDay"] <= m.group(2)])
+        if path.endswith("/details"):
             wid = int(path.split("/")[-2])
             status, body = self.detail[wid]
             return httpx.Response(status, json=body)
+        if "/rawfiledata/" in path:
+            wid = int(path.split("/")[-3])
+            status, body = self.files[wid]
+            return httpx.Response(status, content=body, headers={"content-type": "application/gzip"})
         if "/filedata/" in path:
             wid = int(path.split("/")[-3])
             status, body = self.files[wid]
@@ -127,11 +145,11 @@ def _tp_fixture(detail2=(403, {"message": "premium only"})):
         workouts=[{"workoutId": 1, "workoutDay": "2026-09-02"},
                   {"workoutId": 2, "workoutDay": "2026-09-03"},
                   {"workoutId": 3, "workoutDay": "2026-09-04"}],
-        detail={1: (200, {"workoutDeviceFileInfos": [{"fileName": "a.fit"}]}),
-                2: detail2 if detail2[0] != 200 else (200, {"workoutDeviceFileInfos": [{"fileName": "b.fit"}]}),
-                3: (200, {"workoutDeviceFileInfos": []})},
-        files={1: (200, fit_payload(fit)),
-               2: (200, fit_payload(build_run(START + timedelta(days=2), seconds=300)))},
+        detail={1: (200, dev(fid=1)),
+                2: detail2 if detail2[0] != 200 else (200, dev(fid=2)),
+                3: (200, {"workoutDeviceFileInfos": [], "attachmentFileInfos": []})},
+        files={1: (200, gzip.compress(fit)),
+               2: (200, gzip.compress(build_run(START + timedelta(days=2), seconds=300)))},
     )
 
 
@@ -197,8 +215,8 @@ def test_tp_corrupt_fit_gets_a_stub_and_is_not_redownloaded(tmp_path):
         s = await make_session(tmp_path)
         await _tp_state(s, datetime.utcnow() + timedelta(hours=2))
         fake = FakeTP([{"workoutId": 9, "workoutDay": "2026-09-02"}],
-                      {9: (200, {"workoutDeviceFileInfos": [{"fileName": "x.fit"}]})},
-                      {9: (200, fit_payload(b"\x0e\x20not a fit file at all......"))})
+                      {9: (200, dev(fid=9))},
+                      {9: (200, gzip.compress(b"\x0e\x20not a fit file at all......"))})
         with http.use_transport(httpx.MockTransport(fake)):
             ev1 = await collect(tp_client.sync_workouts(s, 1))
             ev2 = await collect(tp_client.sync_workouts(s, 1, since="2026-01-01"))
@@ -328,8 +346,8 @@ def test_same_activity_from_both_sources_counts_once(tmp_path, monkeypatch):
         # the same run via TP, recorded 30 s later by the other device clock
         await _tp_state_update(s)
         fake = FakeTP([{"workoutId": 1, "workoutDay": "2026-09-02"}],
-                      {1: (200, {"workoutDeviceFileInfos": [{"fileName": "a.fit"}]})},
-                      {1: (200, fit_payload(build_run(START + timedelta(seconds=30), power=250)))})
+                      {1: (200, dev(fid=1))},
+                      {1: (200, gzip.compress(build_run(START + timedelta(seconds=30), power=250)))})
         with http.use_transport(httpx.MockTransport(fake)):
             await collect(tp_client.sync_workouts(s, 1))
         rows = (await s.execute(select(WorkoutFile).order_by(WorkoutFile.id))).scalars().all()

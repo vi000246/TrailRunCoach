@@ -494,6 +494,68 @@ async def _get_valid_token(db: AsyncSession, athlete_id: int) -> Optional[str]:
 # Workout sync
 # ---------------------------------------------------------------------------
 
+DEFAULT_FIRST_SYNC_DAY = "2010-01-01"
+RANGE_CHUNK_DAYS = 90
+
+
+def date_chunks(start: str, end: str, days: int = RANGE_CHUNK_DAYS) -> list[tuple[str, str]]:
+    """Inclusive [start, end] split into ranges of at most `days` days."""
+    a, b = date.fromisoformat(start[:10]), date.fromisoformat(end[:10])
+    out = []
+    while a <= b:
+        e = min(b, a + timedelta(days=days - 1))
+        out.append((a.isoformat(), e.isoformat()))
+        a = e + timedelta(days=1)
+    return out
+
+
+async def _iter_date_range(client: httpx.AsyncClient, aid: int, start: str, end: str):
+    """GET fitness/v6/athletes/{aid}/workouts/{start}/{end} per chunk (verified
+    live 2026-09-30: a JSON list of workout objects with workoutId,
+    workoutDay, startTime). Yields (items, info-event)."""
+    first = True
+    for a, b in date_chunks(start, end):
+        try:
+            resp = await client.get(f"fitness/v6/athletes/{aid}/workouts/{a}/{b}")
+        except httpx.HTTPError as e:
+            yield [], {"error": "TP_API_ERROR", "detail": str(e)}
+            return
+        if resp.status_code != 200:
+            yield [], {"error": "TP_API_ERROR", "status": resp.status_code, "body": resp.text[:200]}
+            return
+        body = resp.json()
+        items = body if isinstance(body, list) else (body.get("workouts") or [] if isinstance(body, dict) else [])
+        yield items, {"status": "range_list", "from": a, "to": b, "count": len(items),
+                      **({"mode": "date_range"} if first else {})}
+        first = False
+
+
+async def _iter_changed(client: httpx.AsyncClient, aid: int, cursor: str, page_size: int):
+    """Incremental: workouts/changed (modification date after the cursor)."""
+    page = 1
+    while True:
+        # format string from the WKO5 binary:
+        #   fitness/v2/athletes/%d/workouts/changed?date=%s&searchDirection=After&pageSize=%u&page=%u
+        url = (f"fitness/v2/athletes/{aid}/workouts/changed"
+               f"?date={cursor}&searchDirection=After&pageSize={page_size}&page={page}")
+        try:
+            resp = await client.get(url)
+        except httpx.HTTPError as e:
+            yield [], {"error": "TP_API_ERROR", "detail": str(e)}
+            return
+        if resp.status_code != 200:
+            yield [], {"error": "TP_API_ERROR", "status": resp.status_code, "body": resp.text[:200]}
+            return
+        items, deleted = _parse_changed(resp.json())
+        yield items, ({"status": "changed_list", "mode": "changed", "modified": len(items),
+                       "deleted": len(deleted)} if page == 1 else {})
+        if not items and not deleted:
+            return
+        if len(items) < page_size and len(deleted) < page_size:
+            return
+        page += 1
+
+
 async def sync_workouts(
     db: AsyncSession,
     athlete_id: int,
@@ -502,10 +564,10 @@ async def sync_workouts(
 ) -> AsyncIterator[dict]:
     """
     Yield SSE-friendly progress dicts as workouts are downloaded.
-    Mirrors WKO5's PKTrainingPeaksDownload flow:
-      1. workouts/changed (paged)
-      2. For each new workout → detaildata → list of fileName
-      3. For each .fit fileName → filedata/{name} → base64 → inflate → write
+      1. list: date range (first sync / since=) or workouts/changed (incremental)
+      2. per workout: details → workoutDeviceFileInfos / attachmentFileInfos
+      3. rawfiledata/{fileId} → gzip → FIT → import
+    The premium flag is informational only; basic accounts download too.
     """
     token = await _get_valid_token(db, athlete_id)
     if not token:
@@ -531,44 +593,27 @@ async def sync_workouts(
 
     headers = {**TP_HEADERS, "Authorization": f"Bearer {token}"}
     sync_started = datetime.now(timezone.utc)
-    page = 1
     total_downloaded = 0
     total_checked = 0
     errors: list[str] = []
+    # First sync, or an explicit since=: list by workout date (date range).
+    # Later syncs: workouts/changed, which filters on *modification* date.
+    incremental = since is None and bool(state and state.last_sync_cursor)
+    list_from = since or DEFAULT_FIRST_SYNC_DAY
 
     async with http.client(
         base_url=TP_API_BASE, headers=headers, timeout=60
     ) as client:
-        while True:
-            # workouts/changed format string from binary:
-            #   fitness/v2/athletes/%d/workouts/changed?date=%s&searchDirection=After&pageSize=%u&page=%u
-            url = (
-                f"fitness/v2/athletes/{athlete.tp_athlete_id}/workouts/changed"
-                f"?date={cursor}&searchDirection=After"
-                f"&pageSize={page_size}&page={page}"
-            )
-            try:
-                resp = await client.get(url)
-            except httpx.HTTPError as e:
-                yield {"error": "TP_API_ERROR", "detail": str(e)}
+        if incremental:
+            pages = _iter_changed(client, athlete.tp_athlete_id, cursor, page_size)
+        else:
+            pages = _iter_date_range(client, athlete.tp_athlete_id, list_from, date.today().isoformat())
+        async for page_items, info in pages:
+            if "error" in info:
+                yield info
                 return
-            if resp.status_code != 200:
-                yield {
-                    "error": "TP_API_ERROR",
-                    "status": resp.status_code,
-                    "body": resp.text[:200],
-                }
-                return
-            page_items, deleted = _parse_changed(resp.json())
-            if page == 1:
-                yield {
-                    "status": "changed_list",
-                    "modified": len(page_items),
-                    "deleted": len(deleted),
-                }
-            if not page_items and not deleted:
-                break
-
+            if info:
+                yield info
             for wo in page_items:
                 wo_id = wo.get("workoutId") or wo.get("id")
                 wo_day = (wo.get("workoutDay") or wo.get("startTime") or "")[:10]
@@ -660,9 +705,6 @@ async def sync_workouts(
                     "total_downloaded": total_downloaded,
                 }
 
-            page += 1
-            if len(page_items) < page_size and len(deleted) < page_size:
-                break
 
     # Only advance the cursor when this run actually got through cleanly —
     # otherwise a failed/empty run would silently skip history on the next sync.
@@ -679,77 +721,82 @@ async def sync_workouts(
     }
 
 
+FIT_NAME = re.compile(r"\.fit(\.gz)?$", re.I)
+GZIP_MAGIC = bytes([0x1F, 0x8B])
+
+
+def pick_fit_file(details: dict) -> Optional[dict]:
+    """The device FIT (.fit / .fit.gz) from a details response, else a FIT
+    attachment. TP's auto-merged files are skipped (as WKO5 does)."""
+    for key in ("workoutDeviceFileInfos", "attachmentFileInfos"):
+        infos = details.get(key) or []
+        fits = [f for f in infos if isinstance(f, dict)
+                and FIT_NAME.search(str(f.get("fileName", "")))
+                and "auto_merged" not in str(f.get("fileName", ""))]
+        if fits:
+            return {**fits[0], "_kind": "device" if key.startswith("workout") else "attachment"}
+    return None
+
+
+def fit_bytes(blob: bytes) -> bytes:
+    """Gunzip when the gzip magic is present (names are not trusted)."""
+    if blob[:2] == GZIP_MAGIC:
+        try:
+            return gzip.decompress(blob)
+        except OSError as e:
+            log.warning("TP file gunzip failed: %s", e)
+            return blob
+    return blob
+
+
+def is_fit(raw: bytes) -> bool:
+    # header: size(1) protocol(1) profile(2) data_size(4) ".FIT" crc(2)
+    return len(raw) >= 14 and raw[8:12] == b".FIT"
+
+
 async def _download_workout_fit(
     client: httpx.AsyncClient, athlete: Athlete, workout_id: int, workout_day: str
 ) -> Optional[Path]:
     """
-    Two-step download as in PKTrainingPeaksDownload:
-      1. GET fitness/v6/athletes/{aid}/workouts/{wid}/detaildata
-         → JSON with `workoutDeviceFileInfos: [ { fileName, ... } ]`
-      2. GET fitness/v6/athletes/{aid}/workouts/{wid}/filedata/{fileName}
-         → JSON with `data: <base64-gzip-of-fit-bytes>`
-      3. base64 decode → zlib inflate → write to ~/WKO5/{name}/{year}/
+    Verified live 2026-09-30 (the WKO5-era detaildata / filedata calls no
+    longer list or serve files):
+      1. GET fitness/v6/athletes/{aid}/workouts/{wid}/details
+         -> workoutDeviceFileInfos / attachmentFileInfos: [{fileId, fileName: "….fit.gz", …}]
+      2. GET fitness/v6/athletes/{aid}/workouts/{wid}/rawfiledata/{fileId}
+         -> 200 application/gzip, raw gzip bytes of the FIT
+    Fallback when a file has no fileId: the old filedata/{fileName} (JSON
+    base64). Returns None only when the workout has no FIT at all; HTTP
+    failures raise TpDownloadError (cursor kept). A blob that isn't a FIT is
+    still written, so the import marks it corrupt (stub) instead of retrying
+    forever.
     """
-    detail_url = (
-        f"fitness/v6/athletes/{athlete.tp_athlete_id}/workouts/{workout_id}/detaildata"
-    )
-    resp = await client.get(detail_url)
+    base = f"fitness/v6/athletes/{athlete.tp_athlete_id}/workouts/{workout_id}"
+    resp = await client.get(f"{base}/details")
     if resp.status_code != 200:
-        # 401 token / 403 premium gate / 404 / 5xx: an error, not "no file" —
-        # returning None here used to advance the cursor past the workout.
-        raise TpDownloadError(
-            f"detaildata HTTP {resp.status_code}: {resp.text[:120]!r}")
-
-    detail = resp.json()
-
-    # The detaildata JSON also confirms athleteId — binary asserts match.
-    returned_aid = detail.get("athleteId")
-    if returned_aid and returned_aid != athlete.tp_athlete_id:
-        log.warning(
-            "TP detaildata athleteId mismatch: expected %s got %s",
-            athlete.tp_athlete_id, returned_aid,
-        )
-
-    files = detail.get("workoutDeviceFileInfos") or detail.get("files") or []
-    if not files:
+        raise TpDownloadError(f"details HTTP {resp.status_code}: {resp.text[:120]!r}")
+    details = resp.json()
+    if not isinstance(details, dict):
+        raise TpDownloadError("details: unexpected response shape")
+    info = pick_fit_file(details)
+    if info is None:
         return None
 
-    # WKO5 skips TP's auto-merged PWX ("Skipping auto merged PWX file %s").
-    files = [f for f in files if "auto_merged" not in str(f.get("fileName", ""))] or files
-    # Prefer .fit, fall back to first listed file.
-    fit_info = next(
-        (f for f in files if str(f.get("fileName", "")).lower().endswith(".fit")),
-        files[0],
-    )
-    file_name = fit_info.get("fileName")
-    if not file_name:
-        return None
-
-    fdata_url = (
-        f"fitness/v6/athletes/{athlete.tp_athlete_id}/workouts/{workout_id}"
-        f"/filedata/{file_name}"
-    )
-    fresp = await client.get(fdata_url)
-    if fresp.status_code != 200:
-        raise TpDownloadError(
-            f"filedata {file_name} HTTP {fresp.status_code}: {fresp.text[:120]!r}")
-
-    # The body can be:
-    #   (a) JSON with `{ "data": "<base64-of-gzip-fit>" }` (observed via binary
-    #       symbols b64decode + 'Error inflating device file'), or
-    #   (b) Raw FIT bytes if `Accept: application/octet-stream` is requested.
-    # We handle both for robustness.
-    raw = _decode_filedata_response(fresp)
-    if not raw or len(raw) < 14:  # minimal FIT header is 14 bytes
-        return None
-
-    # FIT files start with: <header_size:1> <protocol_ver:1> <profile_ver:2>
-    #                       <data_size:4> ".FIT" <crc:2>
-    if raw[8:12] != b".FIT":
-        log.warning(
-            "downloaded blob for workout %s does not look like a FIT file (got %r)",
-            workout_id, raw[:16],
-        )
+    file_id = info.get("fileId")
+    if file_id:
+        fresp = await client.get(f"{base}/rawfiledata/{file_id}")
+        if fresp.status_code != 200:
+            raise TpDownloadError(f"rawfiledata HTTP {fresp.status_code}: {fresp.text[:120]!r}")
+        ctype = fresp.headers.get("content-type", "").lower()
+        raw = _decode_filedata_response(fresp) if "json" in ctype else fit_bytes(fresp.content)
+    else:
+        fresp = await client.get(f"{base}/filedata/{info.get('fileName')}")
+        if fresp.status_code != 200:
+            raise TpDownloadError(f"filedata HTTP {fresp.status_code}: {fresp.text[:120]!r}")
+        raw = _decode_filedata_response(fresp)
+    raw = fit_bytes(raw or b"")
+    if not is_fit(raw):
+        log.warning("TP workout %s: downloaded %s file is not a FIT (%d bytes)",
+                    workout_id, info["_kind"], len(raw))
 
     year = (workout_day or "2000-01-01")[:4]
     save_dir = Path(athlete.data_dir) / year
