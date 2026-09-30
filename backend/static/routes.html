@@ -13,18 +13,20 @@
   --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
   --accent: #2563eb; --soft: #e8efff; --a: #2563eb; --b: #d9480f; --up: #b45309; --down: #0f766e; --flat: #64748b;
   --ok: #15803d; --warn: #b45309;
+  /* temperature: diverging blue <-> gray <-> red (dataviz reference ramps) */
+  --cold: #256abf; --mild: #9a9994; --hot: #e34948;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
     --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --up: #f59e0b; --down: #2dd4bf; --flat: #94a3b8;
-    --ok: #4ade80; --warn: #fbbf24;
+    --ok: #4ade80; --warn: #fbbf24; --cold: #5598e7; --mild: #8a8984; --hot: #e66767;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
   --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --up: #f59e0b; --down: #2dd4bf; --flat: #94a3b8;
-  --ok: #4ade80; --warn: #fbbf24;
+  --ok: #4ade80; --warn: #fbbf24; --cold: #5598e7; --mild: #8a8984; --hot: #e66767;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
@@ -93,6 +95,10 @@ a.act:hover { text-decoration: underline; }
 .cmpbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
 .cmpbar b { font-variant-numeric: tabular-nums; }
 .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.hotdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--hot); margin-right: 4px; vertical-align: 0; }
+td.sec { color: var(--muted); }
+.tog { font-size: 12px; padding: 2px 8px; }
+.tog.on { background: var(--soft); color: var(--accent); border-color: var(--accent); }
 @media (max-width: 900px) {
   .wrap { grid-template-columns: 1fr; padding: 10px; }
   .list { max-height: none; }
@@ -133,7 +139,7 @@ const API = "/api/v1/routes";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const S = { kind: "", dir: "", sport: "", rows: [], cur: null, detail: null, a: null, b: null, charts: [], map: null, polled: false };
+const S = { kind: "", dir: "", sport: "", colorTemp: true, rows: [], cur: null, detail: null, a: null, b: null, charts: [], map: null, polled: false };
 
 function hms(s) {
   if (s == null) return "—";
@@ -218,7 +224,7 @@ function bindSeg(id, key) {
     savePrefs(); loadList();
   });
 }
-function savePrefs() { try { localStorage.setItem("routes.page", JSON.stringify({ kind: S.kind, dir: S.dir, sport: S.sport })); } catch {} }
+function savePrefs() { try { localStorage.setItem("routes.page", JSON.stringify({ kind: S.kind, dir: S.dir, sport: S.sport, colorTemp: S.colorTemp })); } catch {} }
 function loadPrefs() {
   try { Object.assign(S, JSON.parse(localStorage.getItem("routes.page") || "{}")); } catch {}
   for (const [id, key] of [["f-kind", "kind"], ["f-dir", "dir"]])
@@ -252,7 +258,11 @@ function renderDetail() {
   const best = d.efforts.find((e) => e.rank === 1);
   const last = d.efforts[d.efforts.length - 1];
   const hasPw = d.efforts.some((e) => e.avg_power != null);
+  const hasWx = d.efforts.some((e) => e.wx);
   const timeName = tk === "elapsed_s" ? "經過時間" : "移動時間";
+  const w = d.weather;
+  const wxNote = w && w.attribution ? `氣溫、濕度、露點：${esc(w.attribution)}，每次在當時、當地（這段的平均位置與平均海拔，由 Open-Meteo 換算到該海拔）的逐時歷史資料；熱 = Hadley 氣溫 °F + 露點 °F，> 150 標紅點（Hadley 表配速約慢 4.5% 以上）。` +
+    `本次更新查了 ${w.needed ?? 0} 個「日 × 格點」：呼叫 ${w.calls ?? 0} 次、快取 ${w.cache_hits ?? 0}` + (w.failed ? `、失敗 ${w.failed}` : "") + (w.skipped ? `、略過 ${w.skipped}（離線？下次更新再補）` : "") + "。" : "";
   $("detail").innerHTML = `
   <div class="panel dh">
     <button class="back" id="back">← 清單</button>
@@ -265,6 +275,7 @@ function renderDetail() {
   <div class="panel card"><div id="map"></div>
     <div class="note">藍線：這個${d.kind === "route" ? "路線（第一次跑的軌跡）" : "路段（第一次經過的軌跡）"}，<span style="color:var(--ok)">●</span> 起點、<span style="color:var(--err,#b91c1c)">●</span> 終點。比較圖上移動游標，地圖上的點跟著走。</div></div>
   <div class="panel card"><h3>趨勢 <span class="seg" id="tmode"><button data-v="time" class="on">${timeName}</button>${up ? '<button data-v="vam">VAM</button>' : ""}${d.kind === "route" ? "" : '<button data-v="pace">配速</button>'}</span>
+    ${hasWx ? `<button class="tog ${S.colorTemp ? "on" : ""}" id="ctemp" title="點的顏色 = 當時氣溫（Open-Meteo 歷史資料）；外圈 = 熱（Hadley > 150）">依氣溫上色</button>` : ""}
     <span class="meta">${up ? "下圖：同樣爬升速度下的心率（HR ÷ VAM，越低越省力）" : "下圖：平均心率"}</span></h3>
     <div class="chart tall" id="trend"></div></div>
   <div class="panel card" id="cmpcard"><h3>兩次比較 <span class="seg" id="cmode"><button data-v="pace" class="on">配速</button><button data-v="hr">心率</button>${hasPw ? '<button data-v="power">功率</button>' : ""}<button data-v="elev">海拔</button></span>
@@ -274,13 +285,18 @@ function renderDetail() {
   <div class="panel card"><h3>每次成績 <span class="meta">勾 A / B 兩次來比較；排名依${timeName}</span></h3>
     <div class="tablewrap"><table id="etab"></table></div>
     <div id="more"></div>
-    <div class="note">${up ? "VAM = 淨爬升 ÷ 移動時間；" : down ? "下降率 = 淨下降 ÷ 移動時間；" : ""}⚠ = 移動時間不到經過時間一半，VAM 可能偏高；心率、功率為移動中的時間加權平均；hrTSS 占比 = 這段的 hrTSS ÷ 整個活動的 hrTSS（WKO5 hrTSS 算法）；溫度為手錶感測器。</div></div>`;
+    <div class="note">${up ? "VAM = 淨爬升 ÷ 移動時間；" : down ? "下降率 = 淨下降 ÷ 移動時間；" : ""}⚠ = 移動時間不到經過時間一半，VAM 可能偏高；心率、功率為移動中的時間加權平均；最高心率 = 這段原始取樣的最大值；30 s 功率 = 完全落在這段內的 30 秒平均最大值；hrTSS 占比 = 這段的 hrTSS ÷ 整個活動的 hrTSS（WKO5 hrTSS 算法）；錶溫為手錶感測器（受體溫、日照影響，僅供參考）。</div>
+    ${wxNote ? `<div class="note">${wxNote}</div>` : ""}</div>`;
   $("back").onclick = () => { document.body.classList.remove("has-detail"); history.pushState({}, "", location.pathname); };
   $("dname").onclick = rename;
   drawMap();
-  drawTrend("time");
+  S.tmode = "time";
+  drawTrend(S.tmode);
   $("tmode").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    $("tmode").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); drawTrend(b.dataset.v); });
+    $("tmode").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); S.tmode = b.dataset.v; drawTrend(S.tmode); });
+  if ($("ctemp")) $("ctemp").onclick = () => {
+    S.colorTemp = !S.colorTemp; savePrefs();
+    $("ctemp").classList.toggle("on", S.colorTemp); drawTrend(S.tmode); };
   drawTable();
   S.cmode = "pace";
   $("cmode").querySelectorAll("button").forEach((b) => b.onclick = () => {
@@ -327,28 +343,48 @@ function drawTrend(mode) {
   const el = $("trend");
   echarts.getInstanceByDom(el)?.dispose();
   const c = baseChart(el);
+  const byTemp = S.colorTemp && d.efforts.some((e) => e.wx);
   const pts = d.efforts.map((e) => {
     const y = mode === "vam" ? e.vam : mode === "pace" ? e.pace_min_km : e[d.time_key];
-    return { value: [e.start.slice(0, 10), y], e };
+    const p = { value: [e.start.slice(0, 10), y, e.wx ? e.wx.temp_c : null], e };
+    if (byTemp) {
+      // no weather: hollow gray; hot (Hadley > 150): a ring in ink around the fill
+      p.itemStyle = !e.wx ? { color: css("--panel"), borderColor: css("--mild"), borderWidth: 1.5 }
+        : e.wx.hot ? { borderColor: css("--text"), borderWidth: 2 } : { borderColor: css("--panel"), borderWidth: 1 };
+      if (e.wx?.hot) p.symbolSize = 11;
+    }
+    return p;
   }).filter((p) => p.value[1] != null);
+  // diverging around 18 °C (comfortable running): blue colder, red warmer, symmetric arms
+  const temps = pts.map((p) => p.value[2]).filter((v) => v != null);
+  const arm = temps.length ? Math.max(6, ...temps.map((v) => Math.abs(v - 18))) : 10;
+  const visualMap = byTemp ? [{ type: "continuous", seriesIndex: 0, dimension: 2, min: Math.floor(18 - arm), max: Math.ceil(18 + arm),
+    inRange: { color: [css("--cold"), css("--mild"), css("--hot")] }, outOfRange: { color: css("--mild") },
+    orient: "horizontal", right: 16, top: 0, itemWidth: 10, itemHeight: 120, calculable: false, precision: 0,
+    text: ["°C", ""], textStyle: { color: css("--muted"), fontSize: 11 } }] : undefined;
   const eff = d.efforts.map((e) => ({ value: [e.start.slice(0, 10), up ? e.hr_vam : e.avg_hr], e })).filter((p) => p.value[1] != null);
   const fmtY = mode === "vam" ? (v) => Math.round(v) : mode === "pace" ? pace : hms;
   const ax = axisStyle();
   c.setOption({
     animation: false, textStyle: { color: css("--text") },
-    grid: [{ left: 58, right: 16, top: 16, height: "46%" }, { left: 58, right: 16, top: "66%", bottom: 28 }],
+    grid: [{ left: 58, right: 16, top: byTemp ? 30 : 16, height: byTemp ? "42%" : "46%" }, { left: 58, right: 16, top: "66%", bottom: 28 }],
+    visualMap,
     tooltip: { trigger: "item", formatter: (p) => {
       const e = p.data.e;
       return `${e.start.slice(0, 16).replace("T", " ")} ${esc(e.sport_type || "")}<br>${d.time_key === "elapsed_s" ? "經過" : "移動"} ${hms(e[d.time_key])}（第 ${e.rank ?? "—"}）` +
         (e.vam != null ? `<br>VAM ${Math.round(e.vam)} m/h` : "") + (e.avg_hr != null ? `<br>心率 ${num(e.avg_hr)} bpm` : "") +
-        (e.hr_vam != null ? ` · HR÷VAM ${num(e.hr_vam, 0)}` : "") + (e.phase ? `<br>${esc(e.phase)}` : ""); } },
+        (e.max_hr != null ? `（最高 ${num(e.max_hr)}）` : "") +
+        (e.hr_vam != null ? ` · HR÷VAM ${num(e.hr_vam, 0)}` : "") +
+        (e.wx ? `<br>氣溫 ${num(e.wx.temp_c, 1)}° · 露點 ${num(e.wx.dew_c, 1)}° · 濕度 ${num(e.wx.rh_pct)}% · 熱 ${num(e.wx.hadley)}${e.wx.hot ? `（熱，配速約慢 ${num(e.wx.heat_pct, 1)}%）` : ""}` : "") +
+        (e.phase ? `<br>${esc(e.phase)}` : ""); } },
     xAxis: [{ type: "time", gridIndex: 0, ...ax, axisLabel: { show: false }, splitLine: { show: false } },
       { type: "time", gridIndex: 1, ...ax, splitLine: { show: false } }],
     yAxis: [{ type: "value", gridIndex: 0, scale: true, inverse: mode !== "vam", ...ax, nameLocation: mode !== "vam" ? "start" : "end",
       name: mode === "vam" ? "VAM m/h" : mode === "pace" ? "min/km" : "時間", axisLabel: { color: css("--muted"), formatter: fmtY } },
       { type: "value", gridIndex: 1, scale: true, ...ax, name: up ? "HR÷VAM" : "bpm" }],
     series: [
-      { type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts, symbolSize: 7, lineStyle: { width: 1, opacity: .45 },
+      { type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts, symbolSize: byTemp ? 9 : 7, symbol: byTemp ? "circle" : "emptyCircle",
+        lineStyle: { width: 1, opacity: .45, color: byTemp ? css("--mild") : css("--accent") },
         itemStyle: { color: css("--accent") },
         markPoint: pts.length ? { symbol: "circle", symbolSize: 11, itemStyle: { color: css("--ok") }, label: { show: false },
           data: [{ coord: (mode === "vam" ? pts.reduce((a, b) => (b.value[1] > a.value[1] ? b : a)) : pts.reduce((a, b) => (b.value[1] < a.value[1] ? b : a))).value }] } : undefined },
@@ -374,6 +410,10 @@ function drawTable() {
   const f2i = (e) => e.workout;
   const hasPw = d.efforts.some((e) => e.avg_power != null);
   const hasT = d.efforts.some((e) => e.temp_c != null);
+  const hasWx = d.efforts.some((e) => e.wx);
+  const hasMax = d.efforts.some((e) => e.max_hr != null);
+  const hasP30 = d.efforts.some((e) => e.max_p30 != null);
+  const heat = (w) => !w ? "—" : `${w.hot ? `<i class="hotdot" aria-label="熱"></i>` : ""}${num(w.hadley)}`;
   const all = [...d.efforts].reverse();
   // newest 20, plus A / B and the best when older; "顯示全部" lists every one
   const rows = S.showAll ? all : all.filter((e, i) => i < 20 || e.id === S.a || e.id === S.b || e.rank === 1);
@@ -382,19 +422,24 @@ function drawTable() {
   if ($("moreb")) $("moreb").onclick = () => { S.showAll = !S.showAll; drawTable(); };
   $("etab").innerHTML = `<thead><tr><th class="l">日期</th><th>比較</th><th>名次</th><th>${tk === "elapsed_s" ? "經過" : "移動"}</th><th>與最佳差</th>
     ${tk === "elapsed_s" ? "<th>移動</th>" : ""}<th>配速</th>${up ? "<th>VAM</th>" : down ? "<th>下降率</th>" : ""}<th>心率</th>
+    ${hasMax ? "<th title='這段原始取樣的最高心率'>最高心率</th>" : ""}
     ${up ? "<th title='HR ÷ VAM × 1000'>HR÷VAM</th><th title='心跳次數 / 每爬 100 m'>心跳/100m</th>" : ""}
-    ${hasPw ? `<th>功率</th>${up ? "<th title='W ÷ VAM × 1000'>W÷VAM</th>" : ""}` : ""}<th title="這段占整個活動 hrTSS 的比例">hrTSS 占比</th>
-    ${hasT ? "<th>溫度</th>" : ""}<th class="l">周期</th><th class="l">運動</th></tr></thead><tbody>` +
+    ${hasPw ? `<th>功率</th>${hasP30 ? "<th title='完全落在這段內的 30 秒平均功率最大值'>30 s 最大</th>" : ""}${up ? "<th title='W ÷ VAM × 1000'>W÷VAM</th>" : ""}` : ""}<th title="這段占整個活動 hrTSS 的比例">hrTSS 占比</th>
+    ${hasWx ? "<th title='Open-Meteo 歷史資料，當時當地，依海拔修正'>氣溫</th><th>露點</th><th>濕度</th><th title='Hadley：氣溫 °F + 露點 °F；> 150 標紅點（配速約慢 4.5% 以上）'>熱</th>" : ""}
+    ${hasT ? "<th title='手錶溫度感測器（受體溫、日照影響）'>錶溫</th>" : ""}<th class="l">周期</th><th class="l">運動</th></tr></thead><tbody>` +
     rows.map((e) => `<tr class="${e.rank === 1 ? "best" : ""}">
       <td class="l">${f2i(e) != null ? `<a class="act" href="#" data-w="${f2i(e)}" title="在圖表分析打開這個活動">${e.start.slice(0, 10)}</a>` : e.start.slice(0, 10)}</td>
       <td class="pick"><label><input type="radio" name="pa" value="${e.id}" ${e.id === S.a ? "checked" : ""}>A</label><label><input type="radio" name="pb" value="${e.id}" ${e.id === S.b ? "checked" : ""}>B</label></td>
       <td>${e.rank ?? "—"}</td><td>${hms(e[tk])}</td><td>${dhms(e.delta_best_s)}</td>
       ${tk === "elapsed_s" ? `<td>${hms(e.moving_s)}</td>` : ""}<td>${pace(e.pace_min_km)}</td>
       ${up ? `<td>${num(e.vam)}${lowMov(e)}</td>` : down ? `<td>${num(e.descent_rate)}${lowMov(e)}</td>` : ""}<td>${num(e.avg_hr)}</td>
+      ${hasMax ? `<td>${num(e.max_hr)}</td>` : ""}
       ${up ? `<td>${num(e.hr_vam)}</td><td>${num(e.hr_per_100m)}</td>` : ""}
-      ${hasPw ? `<td>${num(e.avg_power)}</td>${up ? `<td>${num(e.power_vam)}</td>` : ""}` : ""}
+      ${hasPw ? `<td>${num(e.avg_power)}</td>${hasP30 ? `<td>${num(e.max_p30)}</td>` : ""}${up ? `<td>${num(e.power_vam)}</td>` : ""}` : ""}
       <td>${e.hrtss_share != null ? (e.hrtss_share * 100).toFixed(0) + "%" : "—"}</td>
-      ${hasT ? `<td>${e.temp_c != null ? num(e.temp_c, 1) + "°" : "—"}</td>` : ""}
+      ${hasWx ? `<td>${e.wx ? num(e.wx.temp_c, 1) + "°" : "—"}</td><td>${e.wx ? num(e.wx.dew_c, 1) + "°" : "—"}</td><td>${e.wx ? num(e.wx.rh_pct) + "%" : "—"}</td>
+        <td title="${e.wx ? `Hadley ${num(e.wx.hadley)}；配速約慢 ${num(e.wx.heat_pct, 1)}%` : "沒有天氣資料"}">${heat(e.wx)}</td>` : ""}
+      ${hasT ? `<td class="sec">${e.temp_c != null ? num(e.temp_c, 1) + "°" : "—"}</td>` : ""}
       <td class="l">${esc(e.phase || "—")}</td><td class="l">${esc(e.sport_type || e.sport || "")}${e.frechet_m != null && e.frechet_m > 60 ? ` <span class="meta" title="和參考軌跡的最大偏差（離散 Fréchet 距離）">偏 ${Math.round(e.frechet_m)} m</span>` : ""}</td></tr>`).join("") + "</tbody>";
   $("etab").querySelectorAll("input[name=pa]").forEach((i) => i.onchange = () => { S.a = i.value; loadCompare(); });
   $("etab").querySelectorAll("input[name=pb]").forEach((i) => i.onchange = () => { S.b = i.value; loadCompare(); });
@@ -420,8 +465,9 @@ async function loadCompare() {
   const ea = c.a.effort, eb = c.b.effort, tk = d.time_key;
   const fin = c.gap_s.filter((g) => g != null);
   const endGap = fin.length ? fin[fin.length - 1] : null;
-  $("cmpbar").innerHTML = `<span><i class="a-dot"></i>A ${ea.start.slice(0, 10)} <b>${hms(ea[tk])}</b></span>
-    <span><i class="b-dot"></i>B ${eb.start.slice(0, 10)} <b>${hms(eb[tk])}</b></span>
+  const wxs = (e) => e.wx ? ` <span class="meta">${num(e.wx.temp_c, 1)}°／露點 ${num(e.wx.dew_c, 1)}°${e.wx.hot ? " 熱" : ""}</span>` : "";
+  $("cmpbar").innerHTML = `<span><i class="a-dot"></i>A ${ea.start.slice(0, 10)} <b>${hms(ea[tk])}</b>${wxs(ea)}</span>
+    <span><i class="b-dot"></i>B ${eb.start.slice(0, 10)} <b>${hms(eb[tk])}</b>${wxs(eb)}</span>
     <span>終點差 <b>${endGap == null ? "—" : (endGap > 0 ? "B 慢 " : "B 快 ") + hms(Math.abs(endGap))}</b></span>`;
   drawCompare();
 }

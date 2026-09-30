@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -26,8 +27,16 @@ from backend.engine.algorithms import route_match as RM
 router = APIRouter(prefix="/api/v1/routes", tags=["routes"])
 workout_router = APIRouter(prefix="/api/v1/wko5", tags=["routes"])
 
+def _weather_client():
+    """Open-Meteo archive client (racepower/weather.py); WKO5COACH_ROUTES_WEATHER=0 turns it off."""
+    if os.getenv("WKO5COACH_ROUTES_WEATHER", "1") == "0":
+        return None
+    from backend.engine.racepower import weather as WX
+    return WX._http_get
+
+
 STORE = R.RouteStore()
-BUILDER = R.Builder(STORE)
+BUILDER = R.Builder(STORE, weather_get=_weather_client())
 _CHECKED = {"at": 0.0}
 RECHECK_S = 60.0
 
@@ -108,7 +117,14 @@ def _materialise(idx: dict) -> dict:
     for r in idx["routes"]:
         efforts = [{"id": eid(e["file"], e["i0"]), **e} for e in r["efforts"]]
         items[r["id"]] = _item(r, efforts, key="moving_s")
-    return {"built_at": idx.get("built_at"), "items": items}
+    return {"built_at": idx.get("built_at"), "items": items, "weather": _weather_summary(idx.get("weather"))}
+
+
+def _weather_summary(w: Optional[dict]) -> Optional[dict]:
+    if not w:
+        return None
+    return {k: w.get(k) for k in ("needed", "points", "calls", "cache_hits", "failed", "skipped", "empty", "recent",
+                                  "efforts", "with_weather", "errors", "attribution", "at", "cell_deg", "error")}
 
 
 def _item(s: dict, efforts: list[dict], key: str) -> dict:
@@ -185,7 +201,7 @@ def list_routes(kind: Optional[str] = None, direction: Optional[str] = None,
     total = len(rows)
     return {"status": _status(), "built_at": view["built_at"], "total": total,
             "rows": rows[:limit] if limit else rows, "sports": sorted(all_sports),
-            "counts": _counts(view)}
+            "counts": _counts(view), "weather": view.get("weather")}
 
 
 def _counts(view) -> dict:
@@ -261,6 +277,7 @@ def detail(rid: str):
     out["renamed"] = rid in names
     out["efforts"] = efforts
     out["status"] = _status()
+    out["weather"] = _index().get("weather")
     return out
 
 
@@ -318,7 +335,7 @@ def compare(rid: str, a: str, b: str, step: float = 25.0):
 
 def _brief(e: dict) -> dict:
     return {k: e.get(k) for k in ("id", "start", "sport_type", "elapsed_s", "moving_s", "avg_hr",
-                                  "avg_power", "vam", "rank")}
+                                  "avg_power", "vam", "rank", "max_hr", "max_p30", "wx")}
 
 
 def _along_series(tr, i0: int, i1: int, ref: np.ndarray, grid: np.ndarray, lat0, lon0,

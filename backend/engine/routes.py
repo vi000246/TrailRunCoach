@@ -37,6 +37,7 @@ import datetime as dt
 import hashlib
 import json
 import math
+import os
 import threading
 import time
 import traceback
@@ -52,8 +53,13 @@ from backend.engine.algorithms.routes import cells as coarse_cells
 from backend.engine.algorithms.wko5_hr import HR_LEVELS
 from backend.engine.algorithms.wko5_time import MOVING_SPEED_KMH
 
-ALGO_VERSION = 2          # 2: elevation gaps filled from the previous sample
-HOME = Path.home() / ".wko5coach" / "routes"
+ALGO_VERSION = 3          # 2: elevation gaps filled from the previous sample
+                          # 3: per-interval peaks (max HR, max 30 s power)
+# WKO5COACH_ROUTES_DIR: another store root (a second server on the same
+# machine must not share the live index — two versions would rebuild it in turn)
+HOME = Path(os.getenv("WKO5COACH_ROUTES_DIR") or (Path.home() / ".wko5coach" / "routes"))
+P30_S = 30.0                     # max-power window
+P30_MIN_COVER = 0.8              # share of the window with power samples
 PEAKS_PATH = Path(__file__).resolve().parents[1] / "data" / "baiyue.json"
 
 MIN_STRETCH_M = 500.0
@@ -113,6 +119,104 @@ def _hr_rate(h: float, lthr: float) -> float:
     return 0.0
 
 
+def trailing_power(t: list, power: list, window_s: float = P30_S) -> list:
+    """Trailing mean power ending at each raw sample e: over the samples
+    s(e)+1 .. e, where s(e) is the latest sample with t <= t_e − window_s
+    (the shortest sample-aligned span of >= window_s). Mean = Σp·dt ÷ Σdt over
+    the samples with power (dt = t − previous valid t); None when there is no
+    such s(e) or power covers < 80 % of the span."""
+    n = len(t)
+    cp = [0.0] * n                # Σ p·dt over samples 0..i with power
+    cs = [0.0] * n                # Σ dt of those
+    tv = [None] * n               # t of each sample, carried over gaps for the pointer
+    acc_p = acc_s = 0.0
+    prev = None
+    for i in range(n):
+        ti = t[i]
+        if ti is not None:
+            if prev is not None and ti > prev and power[i] is not None:
+                dt_ = ti - prev
+                acc_p += power[i] * dt_
+                acc_s += dt_
+            prev = ti
+        cp[i], cs[i], tv[i] = acc_p, acc_s, ti
+    out: list = [None] * n
+    s = -1                        # latest sample with t <= t_e − window
+    valid = [i for i in range(n) if tv[i] is not None]
+    k = -1                        # position in `valid` of s
+    for e in valid:
+        lim = tv[e] - window_s
+        while k + 1 < len(valid) and tv[valid[k + 1]] <= lim:
+            k += 1
+        if k < 0:
+            continue
+        s = valid[k]
+        span = tv[e] - tv[s]
+        dp, ds = cp[e] - cp[s], cs[e] - cs[s]
+        if ds > 0 and ds >= P30_MIN_COVER * span:
+            out[e] = dp / ds
+    return out
+
+
+def interval_peaks(t: list, hr: list, p30: Optional[list], idx: list[int],
+                   window_s: float = P30_S) -> dict:
+    """Per kept point k, peaks over raw samples idx[k-1]+1 .. idx[k] (k = 0:
+    0 .. idx[0]) — the same slice the cumulative sums use, so an effort
+    i0..i1 takes the max over kept points i0+1 .. i1, exactly the max over
+    its raw samples idx[i0]+1 .. idx[i1].
+
+      mhr   max HR over the interval
+      mp30  max trailing 30 s power (`trailing_power`) ending in the interval
+      p30k, p30h  for an effort STARTING at kept point k, whose windows must
+            begin at or after raw sample a = idx[k]: the first valid end is
+            e* = the first sample with t >= t_a + 30 s. p30k = the kept point
+            whose interval holds e*, p30h = the max from e* to that interval's
+            end. An effort's max 30 s power = max(p30h[i0], mp30[p30k[i0]+1 .. i1]).
+    """
+    n_k = len(idx)
+    mhr: list = [None] * n_k
+    mp30: list = [None] * n_k
+    lo = 0
+    for k, r in enumerate(idx):
+        best_h = best_p = None
+        for i in range(lo, r + 1):
+            h = hr[i]
+            if h is not None and (best_h is None or h > best_h):
+                best_h = h
+            if p30 is not None:
+                p = p30[i]
+                if p is not None and (best_p is None or p > best_p):
+                    best_p = p
+        mhr[k], mp30[k] = best_h, best_p
+        lo = r + 1
+    p30k: list = [None] * n_k
+    p30h: list = [None] * n_k
+    if p30 is not None:
+        n = len(t)
+        e = 0
+        kk = 0
+        for k, a in enumerate(idx):
+            ta = t[a]
+            if ta is None:
+                continue
+            e = max(e, a + 1)
+            while e < n and (t[e] is None or t[e] < ta + window_s):
+                e += 1
+            if e >= n:
+                break
+            while kk < n_k and idx[kk] < e:
+                kk += 1
+            if kk >= n_k:
+                break
+            best = None
+            for i in range(e, idx[kk] + 1):
+                p = p30[i]
+                if p is not None and (best is None or p > best):
+                    best = p
+            p30k[k], p30h[k] = kk, best
+    return {"mhr": mhr, "mp30": mp30, "p30k": p30k, "p30h": p30h}
+
+
 def extract_track(meta: dict, t, lat, lon, dist_km=None, elev=None, hr=None, power=None,
                   speed=None, temp=None, lthr: Optional[float] = None,
                   step_m: float = RM.STEP_M) -> Optional[dict]:
@@ -127,6 +231,7 @@ def extract_track(meta: dict, t, lat, lon, dist_km=None, elev=None, hr=None, pow
       cpw   Σ power·dt over moving samples with power; cpws
       ctm   Σ temperature·dt over samples with temperature; ctms
       ctss  Σ hrTSS rate·dt over samples with HR (wko5_hr.hr_tss, WKO5 form)
+    and per-interval peaks (`interval_peaks`): max HR, max 30 s power.
     """
     n = len(t)
     t = [_num(v) for v in t]
@@ -218,6 +323,10 @@ def extract_track(meta: dict, t, lat, lon, dist_km=None, elev=None, hr=None, pow
     def pickf(a, nd):
         return [round(float(a[i]), nd) for i in idx]
 
+    has_pw = any(v is not None for v in power)
+    pk = interval_peaks(t, hr, trailing_power(t, power) if has_pw else None, idx)
+    rnd = lambda a, nd: [None if v is None else round(v, nd) for v in a]
+
     return {
         "v": ALGO_VERSION, **meta,
         "raw_n": n, "idx": idx,
@@ -226,6 +335,9 @@ def extract_track(meta: dict, t, lat, lon, dist_km=None, elev=None, hr=None, pow
         "cm": pickf(cm, 1), "chr": pickf(chr_, 1), "chrs": pickf(chrs, 1),
         "cpw": pickf(cpw, 1), "cpws": pickf(cpws, 1), "ctm": pickf(ctm, 1), "ctms": pickf(ctms, 1),
         "ctss": pickf(ctss, 4),
+        # power peaks at 6 decimals: rounding them to 1 and the effort's value
+        # to 0 again turned e.g. 246.54 W into 246.5, then 246 (half to even) — a double rounding
+        "mhr": rnd(pk["mhr"], 1), "mp30": rnd(pk["mp30"], 6), "p30k": pk["p30k"], "p30h": rnd(pk["p30h"], 6),
         "moving_total": round(float(cm[-1]), 1), "hrtss_total": round(float(ctss[-1]), 4) if lthr else None,
         "elapsed_total": next((v for v in reversed(t) if v is not None), None),
         "lthr": lthr, "has_hr": bool(chrs[-1] > 0), "has_power": bool(cpws[-1] > 0),
@@ -250,6 +362,9 @@ class Track:
         self.t, self.d, self.e = f("t"), f("d"), f("e")
         self.cols = {k: np.asarray(d[k], dtype=float) for k in
                      ("cm", "chr", "chrs", "cpw", "cpws", "ctm", "ctms", "ctss")}
+        n = len(self.lat)
+        self.peaks = {k: f(k) if k in d else np.full(n, np.nan) for k in ("mhr", "mp30", "p30h")}
+        self.p30k = [None if v is None else int(v) for v in d.get("p30k", [None] * n)]
         self.cells = coarse_cells(d["lat"], d["lon"])
 
     def __len__(self):
@@ -299,7 +414,26 @@ def effort_metrics(tr: Track, i0: int, i1: int, direction: str) -> dict:
         "hrtss": _r(hrtss, 2),
         "hrtss_share": _r(hrtss / total, 4) if (hrtss is not None and total) else None,
         "temp_c": _r(temp, 1),
+        **effort_peaks(tr, i0, i1),
     }
+
+
+def _nanmax(a: np.ndarray) -> Optional[float]:
+    a = a[np.isfinite(a)]
+    return float(a.max()) if len(a) else None
+
+
+def effort_peaks(tr: Track, i0: int, i1: int) -> dict:
+    """Max HR over raw samples idx[i0]+1 .. idx[i1] (all samples with HR,
+    moving or not); max 30 s power over the trailing windows lying wholly in
+    that range (`interval_peaks`)."""
+    pk = tr.peaks
+    max_hr = _nanmax(pk["mhr"][i0 + 1:i1 + 1])
+    p30 = None
+    k = tr.p30k[i0] if i0 < len(tr.p30k) else None
+    if k is not None and k <= i1:
+        p30 = _nanmax(np.concatenate(([pk["p30h"][i0]], pk["mp30"][k + 1:i1 + 1])))
+    return {"max_hr": _r(max_hr, 0), "max_p30": _r(p30, 0)}
 
 
 def _f(v) -> Optional[float]:
@@ -419,6 +553,7 @@ class RouteStore:
         self.index_path = self.root / "index.json"
         self.names_path = self.root / "names.json"
         self.manifest_path = self.root / "manifest.json"
+        self.weather_dir = self.root / "weather"
 
     # tier A
     def _track_path(self, file: str) -> Path:
@@ -475,7 +610,14 @@ def _write(p: Path, d, indent=None) -> None:
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(d, ensure_ascii=False, indent=indent, separators=None if indent else (",", ":")),
                    "utf-8")
-    tmp.replace(p)
+    for attempt in range(5):
+        try:
+            tmp.replace(p)
+            return
+        except PermissionError:      # Windows: a reader / scanner holds the target for a moment
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 # ---------------------------------------------------------------------------
@@ -543,7 +685,9 @@ class _State:
     def segments_near(self, tr: Track) -> list[Segment]:
         keys = {(int(a // 0.01), int(b // 0.01)) for a, b in zip(tr.lat, tr.lon)}
         out, seen = [], set()
-        for ky, kx in keys:
+        # sorted: set order changes between processes (hash seed), and the
+        # order segments are matched in decides which one covers a candidate
+        for ky, kx in sorted(keys):
             for k in ((ky + dy, kx + dx) for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
                 for s in self.seg_cells.get(k, ()):
                     if s.id not in seen:
@@ -578,7 +722,7 @@ class _State:
         for a in (key[0] - 1, key[0], key[0] + 1):
             for b in (key[1] - 1, key[1], key[1] + 1):
                 near |= self.cell_index.get((a, b), set())
-        for f in near:
+        for f in sorted(near, key=lambda f: (self.tracks[f].start, f)):
             self.add_efforts(s, self.tracks[f])
         return s
 
@@ -666,7 +810,7 @@ def detect(tracks: dict[str, Track], prev: Optional[dict] = None, new_files: Opt
                 for f in st.cell_index.get(c, ()):
                     counts[f] = counts.get(f, 0) + 1
             xa = tr.xy(tr.lat[p0], tr.lon[p0])[p0:p1 + 1]
-            for f, k in counts.items():
+            for f, k in sorted(counts.items(), key=lambda fk: (tracks[fk[0]].start, fk[0])):
                 o = tracks[f]
                 if k < MIN_PAIR_CELLS or f == tr.file or o.family != tr.family:
                     continue
@@ -869,8 +1013,11 @@ def _stamp(p: Path) -> list:
 class Builder:
     """One background build at a time. `status` is what the page polls."""
 
-    def __init__(self, store: RouteStore):
+    def __init__(self, store: RouteStore, weather_get: Optional[Callable] = None):
+        """weather_get: the archive client (route_weather / weather._http_get);
+        None = no historical weather (tests, offline use)."""
         self.store = store
+        self.weather_get = weather_get
         self.lock = threading.Lock()
         self.thread: Optional[threading.Thread] = None
         self.status = {"state": "idle", "phase": None, "done": 0, "total": 0,
@@ -972,17 +1119,36 @@ class Builder:
             tracks[f] = d
         self._tracks = tracks
         if prev is not None and not changed:
+            if self.weather_get is not None and _weather_retry(prev):
+                self._weather(prev, tracks)
             return prev
         new_files = set(tracks) if prev is None else {f for f in changed if f in tracks} | \
             {f for f in changed if f not in tracks}
-        old = self.store.load_index() if full else None
+        # the previous index of ANY version: after a version bump prev is None,
+        # and carrying ids over is what keeps renames and links
+        old = _read(self.store.index_path) if (full or prev is None) else None
         idx = detect(tracks, prev=prev, new_files=new_files, progress=self._progress)
         if old:
             carry_over(old, idx, self.store)
         self._progress("計算每次成績", 0, 1)
         enrich(idx, tracks)
         self.store.save_index(idx)
+        if self.weather_get is not None:
+            self._weather(idx, tracks)
         return idx
+
+    def _weather(self, idx: dict, tracks: dict) -> None:
+        """Historical weather on every effort, after the index is saved: the
+        page already has the efforts while this runs, and any failure leaves
+        them without weather instead of failing the build."""
+        from backend.engine import route_weather as RW
+        self._progress("歷史天氣", 0, 1)
+        try:
+            RW.fill(idx, tracks, self.store.weather_dir, self.weather_get, progress=self._progress)
+        except Exception as e:     # noqa: BLE001 — weather is context, never a build failure
+            idx["weather"] = {"error": f"{type(e).__name__}: {e}"[:200]}
+            traceback.print_exc()
+        self.store.save_index(idx)
 
     def tracks(self) -> dict[str, Track]:
         return self._tracks
@@ -997,6 +1163,11 @@ class Builder:
         return tr
 
 
+def _weather_retry(idx: dict) -> bool:
+    from backend.engine import route_weather as RW
+    return RW.retry_wanted(idx)
+
+
 def enrich(idx: dict, tracks: dict[str, Track]) -> None:
     """Metrics on every effort and the auto name on every segment / route,
     stored in the index so serving it needs no tracks."""
@@ -1005,6 +1176,7 @@ def enrich(idx: dict, tracks: dict[str, Track]) -> None:
         for e in s["efforts"]:
             tr = tracks[e["file"]]
             e.update(start=tr.start, sport=tr.sport, sport_type=tr.sport_type,
+                     raw_i0=tr.raw["idx"][e["i0"]], raw_i1=tr.raw["idx"][e["i1"]],
                      **effort_metrics(tr, e["i0"], e["i1"], seg.direction))
         s["direction"] = seg.direction
         s["auto_name"] = auto_name(s["kind"], s["lat"], s["lon"], s["length_m"], s["gain_m"])
@@ -1017,6 +1189,7 @@ def enrich(idx: dict, tracks: dict[str, Track]) -> None:
             tr = tracks[f]
             r["efforts"].append({"file": f, "i0": 0, "i1": len(tr) - 1, "start": tr.start,
                                  "sport": tr.sport, "sport_type": tr.sport_type,
+                                 "raw_i0": tr.raw["idx"][0], "raw_i1": tr.raw["idx"][-1],
                                  **effort_metrics(tr, 0, len(tr) - 1, direction),
                                  "climbing_m": _r(tr.raw.get("climbing"), 0)})
         ref = tracks[r["ref_file"]]
