@@ -18,8 +18,20 @@ from backend.api import racepower as racepower_api
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
+    from backend.sync import scheduler
     await init_db()
-    yield
+    # daily auto-sync (sync.schedule.daily_time); WKO5COACH_NO_SCHEDULER=1 disables
+    task = None if os.getenv("WKO5COACH_NO_SCHEDULER") else asyncio.create_task(scheduler.loop())
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="WKO5 Coach", lifespan=lifespan)

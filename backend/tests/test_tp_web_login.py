@@ -236,7 +236,8 @@ def test_ensure_athlete_on_fresh_db_is_idempotent(tmp_path, monkeypatch, path, t
                     await tp_client.login_password("u@example.com", "pw", s, 1)
         rows = (await s.execute(text("SELECT id, tp_athlete_id, data_dir FROM athletes"))).all()
         assert len(rows) == 1 and rows[0][0] == 1 and rows[0][1] == 4242
-        assert Path(rows[0][2]).is_dir() and str(tmp_path) in rows[0][2]
+        from backend.sync import storage
+        assert Path(rows[0][2]).is_dir() and Path(rows[0][2]) == storage.FIT_ROOT
     run(go())
 
 

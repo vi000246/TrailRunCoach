@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile
-from backend.sync import http
+from backend.sync import http, storage
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, seal, unseal
 
@@ -869,11 +869,10 @@ async def _download_workout_fit(
                     workout_id, info["_kind"], len(raw))
 
     year = (workout_day or "2000-01-01")[:4]
-    save_dir = Path(athlete.data_dir) / year
-    save_dir.mkdir(parents=True, exist_ok=True)
+    save_dir = storage.year_dir("tp", year)          # ~/.wko5coach/fit/tp/<year>/
 
     safe_day = (workout_day or "unknown").replace("-", "_")
-    save_path = save_dir / f"{Path(athlete.data_dir).name}_{safe_day}_{workout_id}.fit"
+    save_path = save_dir / f"tp_{safe_day}_{workout_id}.fit"
     save_path.write_bytes(raw)
     return save_path
 
@@ -1009,7 +1008,7 @@ async def _ensure_athlete(db: AsyncSession, athlete_id: int, tp_athlete_id: int)
     (sync needs it: it stores tp_athlete_id and the FIT download folder)."""
     athlete = (await db.execute(select(Athlete).where(Athlete.id == athlete_id))).scalar_one_or_none()
     if athlete is None:
-        folder = Path.home() / ".wko5coach" / "fit" / f"athlete_{athlete_id}"
+        folder = storage.FIT_ROOT          # synced FITs live in per-source folders below it
         folder.mkdir(parents=True, exist_ok=True)
         athlete = Athlete(id=athlete_id, name=f"athlete_{athlete_id}", data_dir=str(folder))
         db.add(athlete)

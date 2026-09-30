@@ -29,6 +29,15 @@ def _no_real_tp_client(monkeypatch, tmp_path_factory):
     monkeypatch.setenv(tp_client.WKO5_EXE_ENV, str(d / "missing_WKO5.exe"))
 
 
+@pytest.fixture(autouse=True)
+def _fit_root_in_tmp(monkeypatch, tmp_path_factory):
+    """Synced FITs go to a temp folder, never ~/.wko5coach/fit."""
+    from backend.sync import storage
+    root = tmp_path_factory.mktemp("fitroot")
+    monkeypatch.setattr(storage, "FIT_ROOT", root)
+    return root
+
+
 @pytest.fixture
 def tp_creds(monkeypatch):
     """Obviously fake OAuth client credentials via env."""

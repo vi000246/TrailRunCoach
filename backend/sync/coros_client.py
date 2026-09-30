@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile, AthleteSettings
 from backend.files.file_service import _import_one_file, record_corrupt
-from backend.sync import http
+from backend.sync import http, storage
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, seal, unseal
 
@@ -35,7 +35,8 @@ COROS_BASES = {
     "us": "https://teamapi.coros.com",
     "cn": "https://teamcnapi.coros.com",
 }
-COROS_FITS_ROOT = Path.home() / ".wko5coach" / "fits"
+# legacy location (before per-source folders); see scripts/migrate_fit_folders.py
+LEGACY_COROS_FITS_ROOT = Path.home() / ".wko5coach" / "fits"
 
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -334,8 +335,7 @@ async def sync_workouts(
                 continue
 
             year = act_date.year if act_date else "unknown"
-            dest_dir = COROS_FITS_ROOT / athlete_name / str(year)
-            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_dir = storage.year_dir("coros", year)      # ~/.wko5coach/fit/coros/<year>/
             date_str = act_date.isoformat() if act_date else "unknown"
             filename = f"{label_id}_{date_str}_{sport_name}.fit"
             dest = dest_dir / filename

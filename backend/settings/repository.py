@@ -37,6 +37,17 @@ DEFAULTS: dict[str, Any] = {
     # docs/deploy/tp-oauth-client.md). None = auto: on only when the
     # credentials are configured on this machine; False = website login only.
     "sync.trainingpeaks.use_wko5_client": None,
+    # outcome of the last run: {at, trigger, status, downloaded, checked, errors, error}
+    "sync.coros.last_result": None,
+    "sync.trainingpeaks.last_result": None,
+    # daily automatic sync: "HH:MM" local time, None = off
+    "sync.schedule.daily_time": None,
+    "sync.schedule.last_run": None,          # local ISO date of the last scheduled run
+    # sync when a page is opened and the last sync is older than N hours
+    "sync.auto_on_open.enabled": True,
+    "sync.auto_on_open.hours": 6,
+    # which data the charts / overview / race power read: wko5 | coros | tp
+    "charts.data_source": "wko5",
 }
 
 
@@ -85,6 +96,14 @@ def validate(key: str, value: Any) -> None:
         resolve_tz(value, strict=True)
     if key == "sync.primary_source" and value not in (None, *SOURCES):
         raise ValueError(f"primary source must be one of {SOURCES}")
+    if key == "sync.schedule.daily_time" and value is not None:
+        import re
+        if not (isinstance(value, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value)):
+            raise ValueError("daily sync time must be HH:MM (24 h) or null")
+    if key == "sync.auto_on_open.hours" and not (isinstance(value, (int, float)) and 0 < value <= 168):
+        raise ValueError("auto-sync threshold must be 1-168 hours")
+    if key == "charts.data_source" and value not in ("wko5", "coros", "tp"):
+        raise ValueError("chart data source must be wko5, coros or tp")
     if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
         raise ValueError(f"{key} must be true/false/null")
     if key.endswith(".enabled") and not isinstance(value, bool):
