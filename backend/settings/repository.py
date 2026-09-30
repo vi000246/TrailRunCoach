@@ -52,9 +52,40 @@ DEFAULTS: dict[str, Any] = {
     # the map can switch them temporarily (remembered per browser)
     "charts.map.basemap": "rudy",
     "charts.map.overlays": [],
+    # 課表偏好 (engine/plan_prefs.py). Every default reproduces the planner's
+    # own behaviour, so an athlete who never opens the panel gets today's plan.
+    "plan.prefs.days": None,                  # 7 bools Mon..Sun (False = rest day); None = every day
+    "plan.prefs.long_day": "auto",            # sat | sun | auto (the athlete's usual long day)
+    "plan.prefs.cap_weekday": None,           # minutes per session; None = no cap
+    "plan.prefs.cap_long": None,              # minutes for the long day; None = same as weekday
+    "plan.prefs.cap_mode": "soft",            # soft (盡量不超過) | hard (絕對不超過)
+    "plan.prefs.runs_per_week": None,         # 3-7; None = auto
+    "plan.prefs.quality_per_week": None,      # 0-2; None = auto (at most 1, gated)
+    "plan.prefs.strength_per_week": None,     # 0-3; None = auto
+    "plan.prefs.strength_days": [],           # weekdays 0-6 for strength; [] = with easy runs
+    "plan.prefs.weekly_hours": None,          # custom weekly cap (h); None = CTL ramp rules
+    "plan.prefs.terrain_easy": "any",         # road | trail | any
+    "plan.prefs.terrain_long": "auto",        # road | trail | hike | auto
+    "plan.prefs.terrain_quality": "any",      # flat | hill | any
+    "plan.prefs.interval_target": "power",    # power | hr
 }
 MAP_BASEMAPS = ("rudy", "google-terrain", "nlsc-emap", "nlsc-photo", "osm")
 MAP_OVERLAYS = ("contour", "google-roads", "nlsc-roads")
+PREF_ENUMS = {
+    "plan.prefs.long_day": ("sat", "sun", "auto"),
+    "plan.prefs.cap_mode": ("soft", "hard"),
+    "plan.prefs.terrain_easy": ("road", "trail", "any"),
+    "plan.prefs.terrain_long": ("road", "trail", "hike", "auto"),
+    "plan.prefs.terrain_quality": ("flat", "hill", "any"),
+    "plan.prefs.interval_target": ("power", "hr"),
+}
+PREF_INTS = {                                 # key -> (lo, hi); None always allowed
+    "plan.prefs.cap_weekday": (20, 300),
+    "plan.prefs.cap_long": (20, 600),
+    "plan.prefs.runs_per_week": (3, 7),
+    "plan.prefs.quality_per_week": (0, 2),
+    "plan.prefs.strength_per_week": (0, 3),
+}
 
 
 class UnknownSetting(KeyError):
@@ -120,6 +151,29 @@ def validate(key: str, value: Any) -> None:
         raise ValueError(f"{key} must be true/false/null")
     if key.endswith(".enabled") and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
+    if key.startswith("plan.prefs."):
+        _validate_pref(key, value)
+
+
+def _validate_pref(key: str, value: Any) -> None:
+    if key in PREF_ENUMS and value not in PREF_ENUMS[key]:
+        raise ValueError(f"{key} must be one of {PREF_ENUMS[key]}")
+    if key in PREF_INTS and value is not None:
+        lo, hi = PREF_INTS[key]
+        if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+            raise ValueError(f"{key} must be an integer {lo}-{hi} or null")
+    if key == "plan.prefs.days" and value is not None:
+        if not (isinstance(value, list) and len(value) == 7 and all(isinstance(v, bool) for v in value)):
+            raise ValueError("plan.prefs.days must be 7 true/false (Mon..Sun) or null")
+        if not any(value):
+            raise ValueError("至少要有一天可以練")
+    if key == "plan.prefs.strength_days" and not (
+            isinstance(value, list) and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 6
+                                            for v in value) and len(set(value)) == len(value)):
+        raise ValueError("plan.prefs.strength_days must be distinct weekdays 0-6")
+    if key == "plan.prefs.weekly_hours" and value is not None and (
+            isinstance(value, bool) or not isinstance(value, (int, float)) or not 1 <= value <= 40):
+        raise ValueError("plan.prefs.weekly_hours must be 1-40 hours or null")
 
 
 def resolve_tz(name: Optional[str], strict: bool = False) -> tzinfo:

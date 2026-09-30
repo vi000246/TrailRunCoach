@@ -157,8 +157,13 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
     pm = re.search(r"(\d+)\s*[–-]\s*(\d+)\s*%\s*CP", detail + " " + target)
     if pm:
         plo, phi = int(pm.group(1)) / 100.0, int(pm.group(2)) / 100.0
+    work_int = power(th, plo, phi)
+    # 課表偏好 間歇目標 = 心率 (engine/plan_prefs.py): the target carries only a heart-rate range
+    hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", target)
+    if hm and "功率" not in target:
+        work_int = ("hr", int(hm.group(1)), int(hm.group(2)))
     return [Step(EX_WARMUP, warm * 60, easy_hr(th)),
-            Repeat(reps, [Step(EX_TRAIN, work * 60, power(th, plo, phi), f"{work} 分"),
+            Repeat(reps, [Step(EX_TRAIN, work * 60, work_int, f"{work} 分"),
                           Step(EX_REST, rest * 60, None)], f"{reps}×{work} 分"),
             Step(EX_COOLDOWN, cool * 60, easy_hr(th))]
 
