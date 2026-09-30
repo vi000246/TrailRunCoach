@@ -277,15 +277,24 @@ class ApplyEstimate(BaseModel):
     lthr: Optional[float] = None
     aethr: Optional[float] = None
     note: str = ""
+    date: Optional[str] = None      # the test day (「套用這次的 AeT」); None = today
 
 
 @router.post("/thresholds/apply-estimate")
 def apply_estimate(body: ApplyEstimate):
-    """The approval step: add today's dated row with the accepted estimate(s)."""
+    """The approval step: add a dated row (today, or the test's `date`) with the accepted estimate(s)."""
     if body.lthr is None and body.aethr is None:
         raise HTTPException(400, "nothing to apply")
     plan = P.Plan.load()
     today = dt.date.today().isoformat()
+    if body.date:
+        try:
+            d = dt.date.fromisoformat(body.date[:10]).isoformat()
+        except ValueError:
+            raise HTTPException(400, f"bad date {body.date!r}")
+        if d > today:
+            raise HTTPException(400, "date is in the future")
+        today = d
     row = next((t for t in plan.thresholds if t.date == today), None)
     if row is None:
         row = P.Threshold(today)

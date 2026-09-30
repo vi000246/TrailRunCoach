@@ -298,6 +298,21 @@ dialog.sd .daychk label { display: inline-grid; place-items: center; width: 34px
 .daychk input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
 dialog.sd .daychk label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
 .daychk label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* 間歇門檻 options: a chip per mode, the explanation behind its ? (engine/quality_gate.py) */
+.gopts { display: inline-flex; flex-wrap: wrap; gap: 5px 4px; min-width: 0; }
+.gopt { display: inline-flex; align-items: center; }
+dialog.sd .gopt label { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 14px; padding: 3px 9px;
+  cursor: pointer; font-size: 12.5px; color: var(--text); position: relative; }
+.gopt input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+dialog.sd .gopt label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.gopt label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gopt.off label { color: var(--muted); border-style: dashed; }
+/* ? hover (tap on touch): a fixed popup so the dialog's scroll box never clips it (ported from the viewer) */
+.qtip { display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0; margin: 0 2px 0 3px; border-radius: 50%;
+  border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; flex: none; }
+.qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
 .pf-sum { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 7px 10px; }
 .pf-sum b { color: var(--text); }
 
@@ -467,7 +482,9 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <fieldset class="pf-sec"><legend>每週次數與量</legend>
       <div class="pf-row"><label class="il"><span>每週跑步次數</span><select name="runs"><option value="">自動</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label></div>
       <div class="pf-row"><label class="il"><span>每週品質課</span><select name="quality"><option value="">自動（最多 1）</option><option>0</option><option>1</option><option>2</option></select></label>
-        <span class="meta">基礎期仍要先過心率飄移門檻（連 3 次 &lt; 5%）才會排</span></div>
+        <span class="meta">基礎期依下面的間歇門檻</span></div>
+      <div class="pf-row"><span class="lbl" id="pf-gate-l">間歇門檻</span><span class="gopts" id="pf-gate" role="radiogroup" aria-labelledby="pf-gate-l"></span></div>
+      <div class="pf-row" id="pf-gw-row"><label class="il"><span>週數法：基礎期滿</span><input type="number" name="quality_gate_weeks" min="2" max="16" step="1" inputmode="numeric"> 週</label></div>
       <div class="pf-row"><label class="il"><span>每週肌力</span><select name="strength"><option value="">自動</option><option>0</option><option>1</option><option>2</option><option>3</option></select></label></div>
       <div class="pf-row"><span class="lbl" id="pf-sdays-l">肌力排在</span><span class="daychk" id="pf-sdays" role="group" aria-labelledby="pf-sdays-l"></span><span class="meta">都不選＝跟輕鬆跑同一天</span></div>
       <div class="pf-row"><label class="il"><span>每週時數</span><select name="wh_mode"><option value="auto">自動（CTL 爬升規則）</option><option value="custom">自訂上限</option></select></label>
@@ -527,10 +544,10 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const GLOSS = {
   "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
     "怎麼測（心率飄移測試）：\n" +
-    "1. 平路或跑步機，先熱身 15 分鐘\n" +
-    "2. 用你猜的 AeT 心率，穩定跑 60 分鐘，配速固定、不要喝咖啡因\n" +
-    "3. 比較前 30 分與後 30 分的「配速÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 就是這個心率；> 5% → 設太高\n" +
-    "4. 結果填到「賽事周期」頁的門檻（沒填時用 0.89 × LTHR 估）",
+    "1. 平路環線或跑步機 2–3%（不要山路），< 25 °C，先暖身 15 分鐘\n" +
+    "2. 從你猜的 AeT 心率起跑，固定功率跑 60 分鐘（至少 45 分），中途不停、不加速；補給和咖啡因照平常\n" +
+    "3. 比較前半與後半的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
+    "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
   "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
     "怎麼測（3 分 + 12 分）：\n" +
     "1. 平路或田徑場，熱身 15–20 分鐘，含 3–4 趟加速跑\n" +
@@ -1240,6 +1257,51 @@ const dayBoxes = (id, name) => { $(id).innerHTML = [...WD].map((x, i) =>
   `<label title="週${x}"><input type="checkbox" name="${name}" value="${i}" aria-label="週${x}">${x}</label>`).join(""); };
 dayBoxes("pf-days", "pf-day");
 dayBoxes("pf-sdays", "pf-sday");
+// ---- 間歇門檻 (engine/quality_gate.py): chips; each ? says what the method is, how it is
+// computed, what to do, and whether it runs on your data now (GET /prefs/gate)
+const GATE_MODES = [["auto", "自動"], ["ua_gap", "UA 差距"], ["friel_drift", "Friel 飄移"], ["xu_drift", "徐國峰 90′"],
+  ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
+let PF_GATE = {}, PF_AVAIL = null;
+function gateTip(m) {
+  const base = (PF_GATE[m] || {}).tip || "";
+  const a = PF_AVAIL && PF_AVAIL[m];
+  const now = !PF_AVAIL ? "你現在的資料：讀取中…" : !a ? "你現在的資料：算不出來" :
+    `你現在的資料：${a.usable ? "✓ 可以用" : "✗ 還不能用"}——${a.why}`;
+  return `${base}\n\n${now}`;
+}
+function gateRender(sel) {
+  $("pf-gate").innerHTML = GATE_MODES.map(([m, lb]) => {
+    const a = PF_AVAIL && PF_AVAIL[m];
+    return `<span class="gopt ${a && !a.usable ? "off" : ""}"><label><input type="radio" name="quality_gate" value="${m}"${m === sel ? " checked" : ""}>${lb}</label>` +
+      `<button type="button" class="qtip" aria-label="${esc(lb)} 的說明" data-tip="${esc(gateTip(m))}">?</button></span>`;
+  }).join("");
+}
+async function gateAvail() {
+  try { PF_AVAIL = (await sj("GET", `${PAPI}/prefs/gate`)).options || {}; } catch { PF_AVAIL = {}; }
+  gateRender(radioVal("quality_gate") || "auto");
+}
+const QTIP = { el: null, pinned: null };
+function qtipShow(btn) {
+  qtipHide();
+  const d = document.createElement("div");
+  d.className = "qtip-pop";
+  d.textContent = btn.dataset.tip;
+  // inside a modal <dialog> the popup must live in the dialog (top layer), not on <body>
+  (btn.closest("dialog[open]") || document.body).appendChild(d);
+  const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  QTIP.el = d;
+}
+function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QTIP.pinned) qtipShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".qtip");
+  if (t && QTIP.pinned !== t) { QTIP.pinned = t; qtipShow(t); return; }
+  QTIP.pinned = null; qtipHide();
+}, true);
+addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(QTIP.pinned); }, { passive: true, capture: true });
 const numOrNull = (v) => v === "" || v == null ? null : +v;
 const radioVal = (name) => (PFF.querySelector(`input[name="${name}"]:checked`) || {}).value;
 function pfFill(p) {
@@ -1258,6 +1320,8 @@ function pfFill(p) {
   PFF.elements.terrain_long.value = p.terrain_long;
   PFF.elements.terrain_quality.value = p.terrain_quality;
   PFF.querySelector(`input[name="interval_target"][value="${p.interval_target}"]`).checked = true;
+  gateRender(p.quality_gate || "auto");
+  PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
   pfSync();
 }
 function pfRead() {
@@ -1268,7 +1332,8 @@ function pfRead() {
     strength_days: [...PFF.querySelectorAll('input[name="pf-sday"]:checked')].map((b) => +b.value),
     weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
     terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
-    interval_target: radioVal("interval_target") };
+    interval_target: radioVal("interval_target"), quality_gate: radioVal("quality_gate") || "auto",
+    quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8 };
 }
 function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
   const n = p.days.filter(Boolean).length;
@@ -1279,12 +1344,14 @@ function pfError(p) {                     // mirrors plan_prefs.check + the per-
   if (p.cap_long != null && !(p.cap_long >= 20 && p.cap_long <= 600)) return "長跑日上限要在 20–600 分";
   if (p.cap_weekday != null && p.cap_long != null && p.cap_long < p.cap_weekday) return "長跑日上限不能比平日上限短";
   if (PFF.elements.wh_mode.value === "custom" && !(p.weekly_hours >= 1 && p.weekly_hours <= 40)) return "每週時數上限要在 1–40 小時";
+  if (!(Number.isInteger(p.quality_gate_weeks) && p.quality_gate_weeks >= 2 && p.quality_gate_weeks <= 16)) return "週數法的週數要在 2–16 週";
   return "";
 }
 function pfSync() {
   const E = PFF.elements;
   E.weekly_hours.disabled = E.wh_mode.value !== "custom";
   E.cap_long.placeholder = E.cap_weekday.value ? `同 ${E.cap_weekday.value}` : "同平日";
+  $("pf-gw-row").hidden = radioVal("quality_gate") !== "weeks";
   const p = pfRead(), rest = [...WD].filter((_, i) => !p.days[i]);
   const parts = [`一週 <b>${7 - rest.length}</b> 天可練${rest.length ? `（休息：${rest.map((x) => "週" + x).join("、")}）` : ""}`,
     p.runs ? `跑 <b>${p.runs}</b> 次` : "次數自動"];
@@ -1294,6 +1361,8 @@ function pfSync() {
       `（${p.cap_mode === "hard" ? "絕對不超過：放不下的量這週就少練，會提醒你" : "盡量不超過：放不下的量先加在長跑日"}）`);
   }
   if (p.weekly_hours) parts.push(`每週最多 <b>${p.weekly_hours}</b> 小時`);
+  if (p.quality_gate !== "auto") parts.push(`間歇門檻：<b>${esc((PF_GATE[p.quality_gate] || {}).label || p.quality_gate)}</b>` +
+    (p.quality_gate === "weeks" ? `（基礎期滿 ${p.quality_gate_weeks} 週）` : ""));
   $("pf-sum").innerHTML = parts.join("；");
   $("pf-err").textContent = pfError(p);
 }
@@ -1305,8 +1374,10 @@ async function openPrefs() {
   let b;
   try { b = await sj("GET", `${PAPI}/prefs`); } catch (e) { return errMsg("讀取課表偏好", e); }
   PF_DEF = b.defaults;
+  PF_GATE = b.gate_options || {};
   pfFill(b.prefs);
   $("pf").showModal();
+  if (PF_AVAIL == null) gateAvail();          // needs the dataset: filled in when it arrives
   PFF.querySelector('input[name="pf-day"]').focus();
 }
 $("pf").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("pf")) $("pf").close(); });
@@ -1320,6 +1391,7 @@ PFF.addEventListener("submit", async (e) => {
   catch (x) { $("pf-err").textContent = x.message; return; }
   finally { $("pf-save").disabled = false; }
   $("pf").close();
+  PF_AVAIL = null;                                   // the gate's state depends on the mode
   if (D) D.prefs = p;
   await reconcile({ title: "依新的課表偏好重排",
     intro: "偏好已儲存。下面是之後還沒做、你沒改過的自動課會怎麼變；你改過或自己加的課不會動。",

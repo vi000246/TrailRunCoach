@@ -405,6 +405,19 @@ def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int) -> dict[int, f
     return best
 
 
+def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float]) -> dict:
+    """The base-phase interval for the gate's decision (engine/quality_gate.py)."""
+    from backend.engine import quality_gate as QG
+    spec = dec["spec"]
+    pre = "" if spec is QG.RECOVERY else QG.prefix(gate)
+    if (gate.get("dose") or {}).get("faded") and spec not in (QG.RECOVERY, QG.SUB):
+        pre = "上次間歇後段掉了：退一步；" + pre
+    s = QG.session(spec, {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}, pre, hours,
+                   bool((gate.get("lthr") or {}).get("default")))
+    s["source"] = QG.source(gate, spec)
+    return s
+
+
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
 
@@ -540,11 +553,24 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                      if category(w) in ENDURANCE), default=0.0) / 60.0
     minutes_total = hours * 60.0
     sessions: list[Session] = []
-    from backend.engine import workout_review as WR   # local: workout_review imports this module
-    streak_ok = bool((getattr(by.get("drift"), "extra", None) or {}).get("streak_ok"))
-    gate_levels = {i: lvl(i) for i in ("intensity", "drift")}
-    allow_quality = WR.quality_gate(kind, gate_levels, streak_ok)
-    test_due = lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10)
+    # 間歇門檻 (engine/quality_gate.py): status.i_gate's result; the method, this
+    # week's guardrails and the dose step
+    from backend.engine import aet_test as AT
+    from backend.engine import quality_gate as QG
+    gate = dict(getattr(by.get("gate"), "extra", None) or {})
+    if not gate:                          # a status without i_gate: no method, guardrails only
+        gate = {"state": "none", "mode": "auto", "resolved": "none", "levels": {i: lvl(i) for i in ("intensity", "drift")},
+                "guard": QG.guard(), "dose": {"done": 0, "step": 0, "faded": False}}
+    gate["levels"] = {i: lvl(i) for i in ("intensity", "drift")}
+    gate_levels = gate["levels"]
+    dec = QG.week_decision(gate, kind, mode, monday)
+    allow_quality = dec["allow"]
+    tx = getattr(by.get("testing"), "extra", None) or {}
+    cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch"))
+    test_due = cp_due and lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10)
+    # the AeT drift test: base phase, no (fresh) measured AeT, never the CP-test week
+    aet_due = not test_due and (days_to is None or days_to > 10) and AT.due(
+        today, kind, gate.get("base_start"), tx.get("aet_date"), tx.get("aet_last_test"))
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 
     def add(**kw):
@@ -568,27 +594,20 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 target="兩段都全力、配速平均；中間休 30 分鐘",
                 detail="門檻過期或沒測過：區間、TSS、賽事功率都靠它。平路或跑步機，暖身 15 分鐘",
                 source="你的筆記：3'/12' CP 測試，每 4–6 週", tss=60 / 60 * 75)
+        elif aet_due and kind == "base":
+            # AeT drift test in place of this week's interval (engine/aet_test.py)
+            add(**AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
+                             AT.start_power(tt.get("cp"))))
         elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
                 target=tgt.get("supra", ""), detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
-        elif allow_quality and kind == "base" and (
-                (last_q := WR.last_quality(ds, today)) is None or last_q.get("faded")):
-            # first interval once the drift streak unlocks it, or the last one faded
-            reps, mins = WR.next_quality(last_q)
-            cp_ = tt.get("cp")
-            lthr_ = tt.get("lthr")
-            parts = ([f"功率 {0.88 * cp_:.0f}–{0.95 * cp_:.0f} W"] if cp_ else []) + \
-                ([f"心率 {aet:.0f}–{lthr_:.0f} bpm"] if aet and lthr_ else [])
-            add(id="quality", kind="quality", title=f"閾值下 {reps}×{mins} 分", minutes=15 + reps * (mins + 2) + 10,
-                target=" · ".join(parts),
-                detail=("上次間歇後段掉了：少一組；" if last_q and last_q.get("faded") else
-                        "飄移已連續 3 次 < 5%：第一次加間歇，") + "休 2 分鐘；暖身 15 分、緩和 10 分",
-                source=SRC_PALLADINO + "（88–95% CP）；徐國峰：飄移穩定後才加間歇", tss=60 / 60 * 65)
-        elif allow_quality and lvl("intensity") == "good":
-            add(id="quality", kind="quality", title="閾值 3×10 分", minutes=60,
-                target=tgt.get("threshold", ""), detail="休 2–3 分鐘；暖身 15 分、緩和 10 分",
-                source=SRC_PALLADINO + "（3B）", tss=60 / 60 * 70)
+        elif allow_quality and kind == "base" and dec["spec"] is not None:
+            # the gate's dose step (engine/quality_gate.py §4.5)
+            add(**_gate_session(gate, dec, tt, hours))
+    elif kind == "base" and mode == "recovery_week" and allow_quality and dec["spec"] is not None:
+        # 3:1 recovery week: a short fartlek instead of intervals (Palladino)
+        add(**_gate_session(gate, dec, tt, hours))
     elif kind == "taper":
         add(id="quality", kind="quality", title="短強度 4×3 分", minutes=45,
             target=tgt.get("threshold", ""), detail="保留強度、不累積疲勞（98–102% CP）", source=SRC_BOSQUET,
@@ -613,7 +632,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if PR is not None:
         # 課表偏好: counts, caps, terrain, interval target (engine/plan_prefs.py)
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet,
-                     slots=max(1, sum(bool(x) for x in PR.days) - len(lost)), notes=notes)
+                     slots=max(1, sum(bool(x) for x in PR.days) - len(lost)), notes=notes,
+                     quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None)
         shaped = PP.shape([asdict(s) for s in sessions], minutes_total, PR, ctx)
         sessions = []
         for d in shaped:
@@ -638,8 +658,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             w = take(lambda w: category(w) == "strength")
         elif s.id == "long":                      # kind long, or hike (課表偏好 登山)
             w = take(lambda w: category(w) in ENDURANCE and moving_s(w) / 60 >= 0.8 * s.minutes)
+        elif s.id == "test_aet":                  # a steady ≥ 45-min road run
+            w = take(lambda w: category(w) == "road" and moving_s(w) >= AT.WARM_S + AT.MAIN_MIN_S - 5 * 60)
         elif s.kind in ("quality", "test"):
-            w = take(lambda w: hard.get(w.idx, 0) >= HARD_SESSION_S)
+            need = QG.hard_need(s.title, HARD_SESSION_S)       # 5×1′ never reaches 10 min at threshold
+            w = take(lambda w: hard.get(w.idx, 0) >= need)
         elif s.kind == "easy":
             w = take(lambda w: category(w) in ENDURANCE)
         if w is not None:
@@ -758,9 +781,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
                        "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": tt.get("aet_source")},
         "notes": notes,
-        # the quality gate's inputs, so projection.project_weeks can re-evaluate
-        # it for each projected week's phase instead of copying this week's answer
-        "quality_gate": {"levels": gate_levels, "streak_ok": streak_ok, "allowed": allow_quality},
+        # the quality gate (engine/quality_gate.py), so projection.project_weeks can
+        # re-evaluate it for each projected week instead of copying this week's answer
+        "quality_gate": {**gate, "levels": gate_levels, "allowed": allow_quality,
+                         "this_week": dec["spec"][1] if allow_quality and dec["spec"] and kind == "base"
+                         and not (test_due or aet_due) else None,
+                         # a suggested test counts as the last one, so the projection waits ≥ 4 weeks
+                         "aet_test": {"due": aet_due, "last": today.isoformat() if aet_due else tx.get("aet_last_test")}},
         # per-category TSS / h (projection shapes projected weeks with the same rates)
         "tss_per_category": tph,
         "prefs": PR.to_dict() if PR is not None else None,

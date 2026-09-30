@@ -39,11 +39,13 @@ def _plan_stamp() -> float:
 
 def _status(ds, today: dt.date) -> Status:
     """Status is the slow part (it reads samples); memoise per dataset / day / plan edit."""
-    key = (id(ds), today, _plan_stamp())
+    from backend.engine import plan_prefs as PP
+    prefs = PP.load()                     # 間歇門檻 (status.i_gate) reads the 課表偏好
+    key = (id(ds), today, _plan_stamp(), prefs.stamp())
     with _lock:
         hit = _status_cache.get(key)
     if hit is None:
-        hit = Status(ds, today=today).compute()
+        hit = Status(ds, today=today, prefs=prefs).compute()
         with _lock:
             _status_cache.clear()
             _status_cache[key] = hit
