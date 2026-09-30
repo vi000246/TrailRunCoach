@@ -1010,10 +1010,31 @@ function draw(card, res) {
     card.insertAdjacentHTML("beforeend", `<table>${values.map((s) =>
       `<tr><td>${esc(s.name)}</td><td class="num">${esc(fmtU(v1(s), s.unit, { label: false }))}</td><td class="meta">${esc(unitText(s.unit))}</td></tr>`).join("")}</table>`);
   }
+  if (res.action && !res.empty) drawAction(card, res.action);
   // The per-series table (status, point count, last value, unit, expression) is not shown:
   // it is for debugging and AI use. The same data is in the chart JSON from
   // GET /api/v1/wko5/views/{view}/dashboards/{d}/charts/{c} (series[].expression / data / unit,
   // unsupported, fixes).
+}
+
+// a review card's action button (workout_review: 「套用這次的 CP」 -> POST apply-cp)
+function drawAction(card, a) {
+  const wrap = document.createElement("p");
+  wrap.className = "card-action";
+  wrap.style.margin = "8px 0 0";
+  wrap.innerHTML = `<button type="button" class="chip go">${esc(a.label)}</button> <span class="meta" role="status"></span>`;
+  const [btn, msg] = [wrap.querySelector("button"), wrap.querySelector("span")];
+  btn.onclick = async () => {
+    if (a.confirm && !confirm(a.confirm)) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(a.url, { method: a.method || "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a.body) });
+      if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+      btn.remove();
+      msg.textContent = a.done || "已套用";
+    } catch (e) { btn.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+  };
+  card.appendChild(wrap);
 }
 
 // WKO5-style zone table: boundaries + time in zone over the last N days

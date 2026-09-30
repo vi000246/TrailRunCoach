@@ -105,10 +105,18 @@ class Threshold:
     lthr: Optional[float] = None    # lactate-threshold HR (WKO5 `thr`)
     aethr: Optional[float] = None   # aerobic-threshold HR (Uphill Athlete AeT test)
     mhr: Optional[float] = None
-    cp: Optional[float] = None      # running critical power, W (3'/12' test)
+    cp: Optional[float] = None      # running critical power, W (a CP test, engine/cp_protocols.py)
     note: str = ""
+    # how `cp` was measured (cp_protocols.METHOD_LABEL): 2pt / 1pt_prior / tt20 /
+    # race; None = entered by hand or a legacy 3'/12' row. `wprime` J, only
+    # when measured (two-point) — a prior is not the athlete's W′.
+    wprime: Optional[float] = None
+    cp_method: Optional[str] = None
 
     THRESHOLD_FIELDS = ("lthr", "aethr", "mhr", "cp")
+
+
+_THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "cp", "note", "wprime", "cp_method")
 
 
 @dataclass
@@ -150,7 +158,8 @@ class Plan:
         return cls(
             events=[Event(**e) for e in raw.get("events", [])],
             phases=[Phase(**{**p, "auto": False}) for p in raw.get("phases", [])],
-            thresholds=[Threshold(**t) for t in raw.get("thresholds", [])],
+            thresholds=[Threshold(**{k: v for k, v in t.items() if k in _THRESHOLD_KEYS})
+                        for t in raw.get("thresholds", [])],
             weights=[Weight(**w) for w in raw.get("weights", [])],
             profile=dict(raw.get("profile", {})),
         )

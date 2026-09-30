@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-09-30
+> **Last Updated**: 2026-10-01
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -128,8 +128,16 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
   ≤ 1.15 × the longest of the last 28 days; specific: toward 70 % of the goal event's hours,
   ≥ 90 min), terrain from the goal's climb density; then one of, in this order
   (`backend/engine/overview.py:566`):
-  1. **CP test 3'/12'** when the `testing` indicator is bad / watch and the A event is > 10
-     days away (independent of the quality gate);
+  1. **CP test** when the `testing` indicator is bad / watch and the A event is > 10
+     days away (independent of the quality gate), built by `cp_protocols.session_for` from the
+     課表偏好 CP 測試方式 — read from `prefs` even when the other preferences are the defaults
+     (`backend/engine/overview.py:553`, `backend/engine/cp_protocols.py:93`):
+     `quick` 「CP 測試 20 分全力」 37 min, TSS 45 (warm-up 12 → 20′ all-out → cool-down 5);
+     `standard` 「CP 測試 12 分 + 3 分」 70 min, TSS 65 (15 → 12′ → rest 30 → 3′ → 10, long
+     bout first); `race` → **no session**: the quality branches below run instead and the
+     testing action 「用 5–10 K 比賽或計時跑代替 CP 測試」 goes to 還缺什麼 and the week notes.
+     The session carries `protocol` (Session field, `plan_sessions.protocol` column + migration,
+     `reconcile.FIELDS`, `plan_store.to_dict` / `push_dict`);
   2. specific → uphill intervals 5×4';
   3. base, when the last quality session (run or hike, date-sorted) of the past 28 days is
      missing or faded → **閾值下 N×8'** at 88–95 % CP, 3×8 the first time, one rep fewer (not
@@ -198,6 +206,7 @@ defaults reproduce today's plan exactly.
 | 每週時數 | `plan.prefs.weekly_hours` | 1–40 h cap (`null` = CTL ramp rules) |
 | 地形偏好 | `plan.prefs.terrain_easy` / `_long` / `_quality` | easy `road`/`trail`/`any`; long `road`/`trail`/`hike`/`auto`; quality `flat`/`hill`/`any` |
 | 間歇目標 | `plan.prefs.interval_target` | `power` / `hr` (`power`) |
+| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`, the athlete's choice). **Not part of `active`**: it only changes the test session (`backend/engine/plan_prefs.py:103`). Panel: three radio options with a time / accuracy line (`backend/static/schedule.html:487`) |
 
 **Application order** (`shape()`, `backend/engine/plan_prefs.py:314`, then `place()`,
 `backend/engine/plan_prefs.py:420`), in `week_plan` and every projected week:
@@ -211,8 +220,8 @@ defaults reproduce today's plan exactly.
    session over the weekday cap is shortened — warm-up 15 → 10, cool-down 10 → 5 min, then one
    rep fewer (never below 2) — with title / detail rewritten so the COROS step builder still
    parses it (`trim_quality`, `backend/engine/plan_prefs.py:184`). The **CP test is exempt**
-   (its 3' + 30' + 12' protocol is fixed) with note `NOTE_TEST`
-   (`backend/engine/plan_prefs.py:71`).
+   (its protocol is fixed) with the protocol's note `note_test(protocol)`
+   (`backend/engine/plan_prefs.py:76`); the 37-min quick test rarely hits a cap.
 4. **Distribution**: the remaining minutes go to easy runs. Count = runs − (long + hard) when
    set, else the original count raised to ⌈minutes / cap⌉ so every run fits the cap; never
    more than the allowed days. When the target still does not fit (target > count × cap):
@@ -537,13 +546,19 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   no phase) a good median without the streak is only **watch**, with a "還差 N 次" action; with
   fewer than 2 fair runs it is watch instead of n/a (`backend/engine/status.py:403`,
   `backend/engine/status.py:414`). `streak_ok` is what gates the base-phase quality session.
-- **`i_testing`** (`backend/engine/status.py:538`) also reads the latest 3'/12' CP test found in
-  the data (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:848`).
-  When its CP differs from the CP in effect by more than `CP_DELTA` = 3 %
-  (`backend/engine/workout_review.py:77`) and no CP threshold dated on or after the test exists,
-  the indicator becomes at least watch with text 要更新 and an action to apply the new CP
-  (`backend/engine/status.py:574`). The test is always appended to `why` and returned in
-  `extra.cp_test`.
+- **`i_testing`** (`backend/engine/status.py:580`) — timing rules unchanged: a CP / LTHR / AeT
+  row older than 42 days → watch, 90 → bad (`backend/engine/status.py:51`); 10–21 days before
+  the A event is named the right time; < 10 days → 「賽前 10 天內不要測，賽後再測」, watch. The
+  action names the 課表偏好 protocol (`_cp_protocol`, `backend/engine/status.py:568`); `race` →
+  「用 5–10 K 比賽或計時跑代替 CP 測試」. It also reads the latest CP test in the data
+  (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:996`), whose
+  `delta` is against the **previous result of the same method** (`cp_protocols.reference`;
+  across methods converted two-point ≈ 1.05 × a 30-min CP, 外插), so rotating quick / standard
+  doesn't keep flagging. Not applied (no CP row dated on / after the test), an `apply` payload
+  (not 不採用) and |delta| > `CP_DELTA` 3 % → at least watch, 要更新, action 「套用這次的 CP」.
+  `extra.cp_test` carries method, quality, `ref`, `apply`, `applied`; the 總覽 測試 card draws
+  the apply button from it (`applyCpBtn`, `backend/static/overview.html:289`), POSTing
+  `/api/v1/plan/thresholds/apply-cp` (see `workout-review.spec.md`).
 - Inline source names were removed from engine text (e.g. the ramp verdict, phase focus).
 
 ## API
@@ -574,7 +589,8 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
 | GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload, now with `prefs`, `goal_climb_per_km` (`backend/api/plan_sessions.py:503`) and `plan_notes` (`backend/api/plan_sessions.py:610`) |
 | GET | `/` | redirects to the overview page when no `frontend/dist` build exists (`backend/main.py:79`) |
 
-`Status` is memoised per (dataset, day, `plan.json` mtime) (`backend/api/overview.py:40`); the
+`Status` is memoised per (dataset, day, `plan.json` mtime, CP-test protocol, stored test
+sessions) (`backend/api/overview.py:40`); the
 plan endpoints memoise their generator inputs on the same key plus the preference and blackout stamps
 (`backend/api/plan_sessions.py:54`). Bad scope or day → 400 (`backend/api/plan_sessions.py:135`).
 
@@ -668,4 +684,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-09-30 | code-sync | N/A | Stored editable plan (plan_store / reconcile / projection, /plan/* endpoints), COROS push by day/week/phase via coros_plan_push, bars + PMC projection from the stored plan, 總覽 page with AeT/CP glossary and sources removed, drift-streak quality gate and CP-test delta in status |
 | 2026-09-30 | bugfix | N/A | Spec-sync fixes: projection quality gate per projected week (week_plan returns `quality_gate`), athlete ATL constant, sessions without a day; past-week push scope is a 400; test-only push_week / remove_week / week_status removed; last_quality includes hikes |
 | 2026-09-30 | feature | N/A | 課表偏好 (plan_prefs.py, `plan.prefs.*`, /plan/prefs, ⚙ panel + reconcile preview, notes on the 課表 page) applied in week_plan / projection / COROS HR intervals; same-load terrain conversion (equivalence.py, /plan/equivalence, dialog slider / locks) with LOO backtest; plan_sessions terrain / distance_km / climb_m; stale overview.html anchors refreshed |
+| 2026-10-01 | feature | N/A | CP 測試方式 (`plan.prefs.cp_test_protocol`, quick default / standard / race; cp_protocols.py): per-protocol test session with `protocol` (column + migration, reconcile field), race = a 還缺什麼 note instead of a session, protocol-specific cap note and COROS steps (all-out bouts open), same-method comparison in i_testing, 測試 card apply button |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |

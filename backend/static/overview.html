@@ -220,13 +220,12 @@ const GLOSS = {
     "3. 比較前 30 分與後 30 分的「配速÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 就是這個心率；> 5% → 設太高\n" +
     "4. 結果填到「賽事周期」頁的門檻（沒填時用 0.89 × LTHR 估）",
   "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
-    "怎麼測（3 分 + 12 分）：\n" +
-    "1. 平路或田徑場，熱身 15–20 分鐘，含 3–4 趟加速跑\n" +
-    "2. 3 分鐘全力、配速平均（不要一開始衝死）\n" +
-    "3. 走路／慢跑恢復 30 分鐘\n" +
-    "4. 12 分鐘全力、配速平均\n" +
-    "5. CP = (12 分平均功率×720 − 3 分平均功率×180) ÷ 540；W′ = (3 分功率 − CP) × 180\n" +
-    "6. 結果填到「賽事周期」頁的門檻；每 4–6 週測一次，賽前 10 天內不要測",
+    "怎麼測（課表偏好選一種）：\n" +
+    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分；CP ≈ 0.95 × 20 分平均功率\n" +
+    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分；" +
+    "CP = (12 分功率×720 − 3 分功率×180) ÷ 540，W′ = (3 分功率 − CP) × 180\n" +
+    "• 用比賽：5–10 K 比賽或計時跑，以 30 分為錨點換算\n" +
+    "測完在活動判讀卡按「套用這次的 CP」；每 4–6 週測一次，賽前 10 天內不要測",
 };
 const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
 const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
@@ -281,9 +280,34 @@ async function loadStatus() {
     ${i.spark && i.spark.filter((p) => p[1] != null).length > 2 ? spark(i.spark, i.level) : ""}
     ${i.why ? `<div class="why">${gl(i.why)}</div>` : ""}
     ${i.action ? `<div class="act">→ ${gl(i.action)}</div>` : ""}
+    ${applyCpBtn(i)}
     ${i.source ? `<details class="src"><summary>來源</summary><p>${esc(i.source)}</p></details>` : ""}
   </div>`).join("");
 }
+
+// 測試 indicator: 「套用這次的 CP」 (status.i_testing extra.cp_test.apply -> POST /api/v1/plan/thresholds/apply-cp)
+function applyCpBtn(i) {
+  const ct = i.id === "testing" && i.extra && i.extra.cp_test;
+  if (!ct || !ct.apply) return "";
+  return `<div class="act"><button type="button" class="btn" data-apply-cp="${esc(ct.idx)}">${esc(ct.apply.label)}</button>
+    <span class="meta" data-apply-msg>${esc(ct.date)} · ${esc(ct.method_label || "")} · 品質 ${esc(ct.quality || "")}</span></div>`;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-apply-cp]");
+  if (!b || !STATUS) return;
+  const ct = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).cp_test;
+  if (!ct || !ct.apply) return;
+  const a = ct.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
+  if (!confirm(`把 ${a.date} 的 CP 設成 ${a.cp} W（${ct.method_label}，品質 ${ct.quality}）？區間和 TSS 會重新計算`)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch("/api/v1/plan/thresholds/apply-cp", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: a.date, cp: a.cp, wprime: a.wprime, cp_method: a.cp_method, activity_index: a.activity_index, note: a.note }) });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+    b.remove();
+    msg.textContent = `已套用：${a.date} CP ${a.cp} W`;
+  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+});
 
 function spark(pts, level) {
   const P = pts.filter((p) => p[1] != null);

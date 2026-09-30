@@ -43,6 +43,7 @@ async def _migrate_schema():
         ("plan_sessions", "terrain", "TEXT"),
         ("plan_sessions", "distance_km", "REAL"),
         ("plan_sessions", "climb_m", "REAL"),
+        ("plan_sessions", "protocol", "TEXT"),
     ]
     async with engine.begin() as conn:
         for table, col, col_type in new_cols:
