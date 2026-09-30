@@ -16,6 +16,8 @@
 |------|------------|-------------|---------|
 | 2026-05-15 | `wko5-training-ai.prd.md` | (initial) | Created — Coros 非官方 API 自動下載 FIT，已驗證 1088 筆 |
 | 2026-06-13 | `wko5-trail-multipage-sync-coach.prd.md` | `docs/srs/coros-sync-unified-sync-page-data-inventory.srs.md` | 統一同步頁：TP 下載接上 UI、新增 `/sync/inventory` 盤點端點、CorosPage→SyncPage |
+| 2026-09-30 | code-sync | — | 同步強化：增量 cursor、錯誤不推進 cursor、失敗 rollback、跨來源去重（`duplicate_of`）、本地日期（`start_time_utc`）、token 以 Fernet 加密。TP 改走網站登入 / WKO5-client OAuth，檔案改用 `details` + `rawfiledata` 下載 |
+| 2026-09-30 | code-sync | — | 設定頁「資料同步」區塊、每來源互斥鎖（409 `SYNC_BUSY`）、每日排程（lifespan task）、`POST /sync/auto` + `autosync.js`、每來源獨立 FIT 資料夾與遷移腳本、刪除單一來源檔案、`FitFolderDataset` 與 `/sync/compare` |
 
 ---
 
@@ -241,11 +243,14 @@ frontend/
 ```
 ~/.wko5coach/
 ├── wko5coach.db           # SQLite DB
-└── fits/
-    └── {athlete_name}/
-        └── {year}/
-            └── {coros_id}_{YYYY-MM-DD}_{sport}.fit
+└── fit/                   # backend/sync/storage.py（2026-09-30 起每個來源分開）
+    ├── coros/{year}/{coros_id}_{YYYY-MM-DD}_{sport}.fit
+    └── tp/{year}/tp_{YYYY_MM_DD}_{workout_id}.fit
 ```
+
+舊位置是 `~/.wko5coach/fits/{athlete}/…`（COROS）和 `~/.wko5coach/fit/athlete_1/…`（TP）。用 `python -m backend.scripts.migrate_fit_folders` 遷移：預設 dry run，加 `--apply` 才執行，可重複執行。它會搬移檔案、更新 DB 路徑、刪掉清空的舊資料夾。2026-09-30 在這台機器上實際執行：COROS 17 個、TP 17 個。
+
+所有刪除都經過 `storage.confined()`：路徑先 resolve、拒絕 symlink，超出 `fit/<source>/` 一律拒絕。
 
 ### 同步流程
 
@@ -324,6 +329,30 @@ ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
 | POST | `/api/v1/sync/tp/start` | 觸發 TrainingPeaks 下載同步（SSE stream，接既有 `tp_client.sync_workouts`） |
 | POST | `/api/v1/auth/tp/login` | TP 帳密登入取 OAuth token（`tp_client.login_password` 已驗證） |
 | GET | `/api/v1/auth/tp/status` | TP 連線狀態 |
+
+### 2026-09-30 新增 Endpoints（設定頁「資料同步」）
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/v1/sync/sources` | 每個來源的登入狀態、是否啟用、是否同步中、上次同步時間與結果、檔案數 / 大小 / 活動期間 |
+| GET/PUT | `/api/v1/sync/settings` | 主要來源、各來源開關、時區、`daily_sync_time`（每日同步時間）、`auto_on_open`（開網站時自動同步）+ 門檻小時數、`chart_data_source`（圖表資料來源）、TP OAuth 開關；另回傳 secret 來源與金鑰狀態，都只給標籤、不給值 |
+| POST | `/api/v1/sync/start`、`/api/v1/sync/coros/start` | 走共用 runner：同一來源已在同步時回 409 `SYNC_BUSY`，結果寫進 `sync.<src>.last_result` |
+| POST | `/api/v1/sync/auto` | 開網站時呼叫。對「已啟用、已登入、閒置、且超過 N 小時」的來源在背景啟動同步，立刻回傳；新鮮、忙碌或關閉時什麼都不做 |
+| DELETE | `/api/v1/sync/{coros\|tp}/files[?date_from&date_to]` | 刪掉該來源的 FIT 與 DB 紀錄，重建去重、重設 cursor，並拿該來源的鎖（同步中回 409）。若它正是圖表資料來源，會改回 WKO5 |
+| GET | `/api/v1/sync/compare?a=&b=&since=` | 兩個資料來源逐筆活動比對：時長、距離、爬升、NP、TSS。頁面是 `/api/v1/static/compare.html` |
+| POST | `/api/v1/auth/tp/login` | 新增 `method` 參數：`auto`（預設）/ `web` / `oauth` |
+
+**每日排程**：`backend/sync/scheduler.py`，在 app lifespan 啟動。每分鐘檢查一次，每個本地日期到了 `daily_sync_time` 之後執行一次。設 `WKO5COACH_NO_SCHEDULER=1` 可關閉。
+
+**開網站自動同步**：`backend/static/autosync.js` 可獨立使用。shell.js 只要加一行：
+
+    (function(){var s=document.createElement("script");s.src="/api/v1/static/autosync.js";s.defer=true;document.head.appendChild(s);})();
+
+也可以在頁面裡放 `<script src="/api/v1/static/autosync.js" defer></script>`。它每個瀏覽器每 10 分鐘最多呼叫一次，狀態顯示在 `#nav-sync-status`（沒有這個元素就在右上角加一個小徽章）。
+
+**圖表資料來源**（`charts.data_source`）：`backend/engine/wko5expr/fitdataset.py` 用 FIT 資料夾建 `FitFolderDataset`，每筆活動的指標用本專案自己的公式計算，門檻取自 WKO5 athlete 檔。`datasource.current_source()` / `source_stamp()` 提供 Dataset 工廠。9 月 17 筆活動實測對照 WKO5：時長、距離相同，NP ±0.5%，TSS ±0.2，爬升 1–4%。
+
+> 尚未接上：`api/wko5views.py` 的 `_dataset_cfg` 要改呼叫 `dataset_for_source(current_source(), ATHLETE_DIR, cfg)`，並把 `source_stamp()` 加進 cache key；`wko5_viewer.html` 要加上 `sourcechip.js` 的晶片。這兩個檔案正由 chart-sweep 在修改。
 
 > TP client（`backend/sync/tp_client.py`，649 行）已於 2026-05-15 對 live TP OAuth 驗證：password grant → athlete download → `filedata` 端點回 base64-gzip FIT → decode/inflate。M3 主要是把它接到 UI 並加盤點，不需重新逆向格式。
 
