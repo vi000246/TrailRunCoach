@@ -1,41 +1,28 @@
 """
-TrainingPeaks sync client — reverse-engineered byte-for-byte from
-WKO5 PowerKitOSX.framework (Build 590, arm64+x86_64).
+TrainingPeaks sync client.
 
-Strings extracted from the binary:
+Login (see docs/deploy/tp-oauth-client.md):
+  1. OAuth password grant as WKO5 sends it, only when client credentials are
+     configured at runtime (TP_CLIENT_ID / TP_CLIENT_SECRET or
+     ~/.wko5coach/tp_client.json) and not disabled by the
+     sync.trainingpeaks.use_wko5_client setting. Nothing secret is in code.
+  2. Otherwise / on any rejection: the website form login -> Production_tpAuth
+     cookie -> tpapi users/v3/token.
+  Refresh: refresh_token grant with the same client credentials, then the
+  cookie, then TP_AUTH_REQUIRED.
 
-  Password grant body — VERIFIED 2026-05-15 against live TP OAuth server:
-    grant_type=password&username=<u>&password=<p>
-    &scope=fitness+baseactivity+users+metrics+software+groundcontrol
-    &client_id=WKO5
-  (Binary string constants didn't show client_id adjacent to grant_type=password,
-  but live API test confirmed: without client_id → empty 400; with client_id=WKO5
-  → proper "invalid_grant" error for wrong creds = format is accepted.)
-
-  Refresh grant body (client_secret has empty value):
-    grant_type=refresh_token&refresh_token=<t>&client_id=WKO5&client_secret=
-
-  Endpoints (format strings — %s = base, %d = athlete id, %lld = workout id):
-    https://oauth.trainingpeaks.com/oauth/token
-    https://tpapi.trainingpeaks.com/
+Endpoints in use (verified live 2026-09-30):
     users/v3/user
-    fitness/v1/athletes/%d/settings
-    fitness/v2/athletes/%d/workouts/changed?date=%s&searchDirection=After&pageSize=%u&page=%u
-    fitness/v6/athletes/%d/workouts/%lld/detaildata
-    fitness/v6/athletes/%d/workouts/%lld/filedata/%s
-    metrics/v2/athletes/%d/timedmetrics/%04u-%02u-%02u/%04u-%02u-%02u
+    fitness/v6/athletes/{aid}/workouts/{start}/{end}          first sync / since=
+    fitness/v2/athletes/{aid}/workouts/changed?date=...       incremental
+    fitness/v6/athletes/{aid}/workouts/{wid}/details          file list
+    fitness/v6/athletes/{aid}/workouts/{wid}/rawfiledata/{id} gzip FIT
+The WKO5-era detaildata / filedata calls no longer list or serve files;
+filedata is only a fallback for a file without an id. The premium flag is
+informational; basic accounts download.
 
-  JSON field names (from binary):
-    user.userId, user.userName, user.userType, user.athletes[*]
-    workoutId, workoutDay, startTime, athleteId, workoutDeviceFileInfos[*].fileName
-    Response of filedata endpoint: {"data": "<base64-of-gzip-compressed-FIT>"}
-    (PowerKit decodes via b64decode → zlib inflate, logging
-     "Error inflating device file %s" on failure)
-
-  Premium gate (binary string): "Download is allowed only from premium
-  and coach accounts." — TP returns 403 otherwise.
-
-Tokens are persisted in SQLite (sync_state). Credentials are NEVER stored.
+Tokens, refresh token and cookie are stored sealed in SQLite (sync_state).
+Credentials are never stored or logged.
 """
 import base64
 import gzip
