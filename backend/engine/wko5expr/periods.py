@@ -69,6 +69,17 @@ def retitle(title: Optional[str], period: str) -> Optional[str]:
     return _TITLE_RE.sub("每" + PERIOD_ZH[period], title, count=1)
 
 
+def rename(name: Optional[str], old: Optional[str], period: str) -> Optional[str]:
+    """Legend names follow too: 每週 → 每月, 週爬升 → 月爬升 (only a leading
+    character naming the chart's default period, so 年齡 etc. stay)."""
+    if not name or not old:
+        return name
+    if _TITLE_RE.match(name):
+        return retitle(name, period)
+    lead = {"week": "週周", "day": "日", "month": "月", "quarter": "季", "year": "年"}[old]
+    return PERIOD_ZH[period] + name[1:] if name[0] in lead and len(name) > 1 else name
+
+
 def rewrite(expr: str, period: str) -> str:
     """Swap the group-by bucket of every grouping aggregate. Only the
     `sum(x, <bucket>)` position is touched — `if(trunc(date) <= ...)` stays."""
@@ -78,8 +89,10 @@ def rewrite(expr: str, period: str) -> str:
 def with_period(chart: dict, period: str) -> dict:
     """A copy of `chart` bucketed by `period` (the caller checks the lock)."""
     out = copy.deepcopy(chart)
+    old = chart_period(chart)
     for s in out.get("series", []):
         s["expression"] = rewrite(s.get("expression") or "", period)
+        s["name"] = rename(s.get("name"), old, period)
     out["title"] = retitle(chart.get("title"), period)
     out["period"] = period
     return out
