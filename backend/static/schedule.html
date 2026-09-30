@@ -254,6 +254,57 @@ dialog.sd .err:empty { display: none; }
 .cf-body { font-size: 13.5px; display: grid; gap: 6px; }
 .cf-body .big { font-size: 15px; }
 
+.pnotes { margin: 0; padding: 7px 12px 7px 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; display: grid; gap: 2px; }
+.pnotes li.watch { color: var(--watch); }
+.pnotes .wk-l { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.pnotes button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
+
+/* ---- 課表偏好 dialog ---- */
+dialog.sd.wide { width: min(580px, 96vw); }
+dialog.sd form { max-height: calc(100vh - 40px); overflow: auto; }
+.pf-sec { border: 1px solid var(--line); border-radius: 9px; padding: 6px 11px 10px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+.pf-sec > legend { font-size: 12.5px; font-weight: 700; color: var(--text); padding: 0 5px; }
+.pf-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; min-width: 0; }
+.pf-row .lbl { min-width: 7.5em; color: var(--muted); font-size: 12.5px; }
+dialog.sd .pf-row label.il { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--muted); }
+dialog.sd .pf-row label.il > span:first-child { min-width: 7.5em; }
+dialog.sd .pf-row select, dialog.sd .pf-row input[type="number"], dialog.sd .eq select { width: auto; max-width: 100%; padding: 4px 8px; }
+dialog.sd .pf-row input[type="number"] { width: 6.5em; }
+dialog.sd input[type="checkbox"], dialog.sd input[type="radio"] { width: auto; }
+dialog.sd label.rb { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-size: 13px; cursor: pointer; }
+.daychk { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+dialog.sd .daychk label { display: inline-grid; place-items: center; width: 34px; height: 30px; border: 1px solid var(--line); border-radius: 7px;
+  cursor: pointer; font-size: 13px; color: var(--muted); position: relative; }
+.daychk input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+dialog.sd .daychk label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.daychk label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pf-sum { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 7px 10px; }
+.pf-sum b { color: var(--text); }
+
+/* ---- same-load conversion (session dialog) ---- */
+.eq { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 9px; padding: 6px 11px 10px; margin: 0;
+  display: grid; gap: 8px; background: color-mix(in srgb, var(--accent) 4%, var(--panel)); min-width: 0; }
+.eq > legend { font-size: 12.5px; font-weight: 700; padding: 0 5px; }
+.tseg { display: flex; }
+.tseg label { flex: 1; display: flex !important; justify-content: center; align-items: center; border: 1px solid var(--line); margin-left: -1px;
+  padding: 5px 8px; cursor: pointer; font-size: 13px !important; color: var(--text) !important; position: relative; background: var(--panel); }
+.tseg label:first-child { border-radius: 7px 0 0 7px; margin-left: 0; }
+.tseg label:last-child { border-radius: 0 7px 7px 0; }
+.tseg input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+.tseg label:has(input:checked) { background: var(--text); color: var(--bg) !important; border-color: var(--text); font-weight: 600; }
+.tseg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 1; }
+dialog.sd input[type="range"] { padding: 0; border: 0; background: none; accent-color: var(--accent); height: 22px; }
+dialog.sd .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+dialog.sd label.chk { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; align-self: end; padding-bottom: 7px; cursor: pointer; }
+.eq-sum { font-size: 13.5px; font-weight: 600; }
+.eq-sum .d { font-weight: 700; }
+.eq-sum .up { color: var(--watch); } .eq-sum .down { color: var(--accent); } .eq-sum .same { color: var(--good); }
+.badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 7px; border: 1px solid currentColor; vertical-align: 1px; }
+.badge.est { color: var(--watch); } .badge.fit { color: var(--good); }
+dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.warn { color: var(--watch); font-size: 12.5px; }
+.warn:empty { display: none; }
+
 /* ---- phones: agenda list, stacked toolbar ---- */
 @media (max-width: 699px) {
   main { padding: 10px 10px 24px; gap: 8px; }
@@ -267,7 +318,9 @@ dialog.sd .err:empty { display: none; }
   #login-link { justify-content: center; white-space: normal; }
   .status { flex-basis: 100%; }
   .calwrap, .sync { max-width: 100%; }
-  #rec-btn .lbl-long { display: none; }
+  #rec-btn .lbl-long, #pf-btn .lbl-long { display: none; }
+  dialog.sd form { max-height: 92vh; }
+  dialog.sd .row3 { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .menu { min-width: min(260px, 88vw); }
   .legend { font-size: 11.5px; }
   dialog.sd { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 14px 14px 0 0; max-height: 92vh; }
@@ -307,6 +360,7 @@ dialog.sd .err:empty { display: none; }
       <a class="btn login" id="login-link" href="/api/v1/wko5/settings" hidden>COROS 未登入 · 到設定頁登入 →</a>
       <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成未完成，之後的課重排（你改過的保留）">
         <span class="lbl-long">依實際進度重排</span><span class="lbl-short">重排</span></button>
+      <button class="btn" id="pf-btn" type="button" title="課表偏好：可練日、單次時間上限、次數、地形" aria-haspopup="dialog">⚙<span class="lbl-long"> 課表偏好</span></button>
       <div class="more">
         <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
         <div class="menu right" id="more-menu" role="menu" aria-label="更多" hidden>
@@ -323,6 +377,7 @@ dialog.sd .err:empty { display: none; }
     <div id="sync-msg" role="status" aria-live="polite"></div>
   </section>
 
+  <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
   <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
   <div class="legend" id="legend"></div>
 </main>
@@ -338,6 +393,27 @@ dialog.sd .err:empty { display: none; }
       <label>分鐘<input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
     </div>
     <div class="hint" id="sd-tss" aria-live="polite"></div>
+    <fieldset class="eq" id="sd-eq" hidden>
+      <legend>地形與同負荷換算</legend>
+      <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形">
+        <label><input type="radio" name="terrain" value="road">路跑</label><label><input type="radio" name="terrain" value="trail">越野</label><label><input type="radio" name="terrain" value="hike">登山</label>
+      </div>
+      <label>爬升比例 <span><b id="eq-d-v" class="num">0</b> m/km</span>
+        <input type="range" id="eq-d" min="0" max="150" step="5" value="0" aria-describedby="eq-sum"></label>
+      <div class="hint" id="eq-goal-row"><button type="button" id="eq-goal"></button></div>
+      <div class="row3">
+        <label>距離 km<input type="number" id="eq-km" min="0" max="500" step="0.1" inputmode="decimal"></label>
+        <label>爬升 m<input type="number" id="eq-gain" min="0" max="20000" step="10" inputmode="numeric"></label>
+        <label>TSS<input type="number" id="eq-tss" min="0" max="2000" step="1" inputmode="numeric"></label>
+      </div>
+      <div class="row2">
+        <label>改其他欄位時固定<select id="eq-lock"><option value="time">鎖時間</option><option value="tss">鎖 TSS</option><option value="dist">鎖距離</option></select></label>
+        <label class="chk"><input type="checkbox" id="eq-free">完全自由調整</label>
+      </div>
+      <div class="eq-sum" id="eq-sum" aria-live="polite"></div>
+      <div class="warn" id="eq-warn" role="status"></div>
+      <div class="hint" id="eq-note"></div>
+    </fieldset>
     <label>標題<input name="title" required maxlength="200" autocomplete="off"></label>
     <label>目標<input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; AeT"></label>
     <div class="hint" id="sd-tgt"></div>
@@ -351,6 +427,43 @@ dialog.sd .err:empty { display: none; }
       <span class="spacer"></span>
       <button class="btn" type="button" data-close id="sd-cancel">取消</button>
       <button class="btn primary" type="submit" id="sd-save">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sd wide" id="pf" aria-labelledby="pf-h">
+  <form id="pf-form" novalidate>
+    <div class="dh"><div><h3 id="pf-h">⚙ 課表偏好</h3><span class="meta">只改自動產生、還沒做、你沒改過的課；存檔後先預覽變動再套用</span></div>
+      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <fieldset class="pf-sec"><legend>哪幾天、多久</legend>
+      <div class="pf-row"><span class="lbl" id="pf-days-l">可練日</span><span class="daychk" id="pf-days" role="group" aria-labelledby="pf-days-l"></span></div>
+      <div class="pf-row"><label class="il"><span>長跑日</span><select name="long_day"><option value="auto">自動（你最常長跑的那天）</option><option value="sat">週六</option><option value="sun">週日</option></select></label></div>
+      <div class="pf-row"><label class="il"><span>單次時間上限（平日）</span><input type="number" name="cap_weekday" min="20" max="300" step="5" placeholder="不限" inputmode="numeric"> 分</label></div>
+      <div class="pf-row"><label class="il"><span>長跑日上限</span><input type="number" name="cap_long" min="20" max="600" step="5" placeholder="同平日" inputmode="numeric"> 分</label></div>
+      <div class="pf-row"><span class="lbl">上限模式</span><label class="rb"><input type="radio" name="cap_mode" value="soft">盡量不超過</label><label class="rb"><input type="radio" name="cap_mode" value="hard">絕對不超過</label></div>
+    </fieldset>
+    <fieldset class="pf-sec"><legend>每週次數與量</legend>
+      <div class="pf-row"><label class="il"><span>每週跑步次數</span><select name="runs"><option value="">自動</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label></div>
+      <div class="pf-row"><label class="il"><span>每週品質課</span><select name="quality"><option value="">自動（最多 1）</option><option>0</option><option>1</option><option>2</option></select></label>
+        <span class="meta">基礎期仍要先過心率飄移門檻（連 3 次 &lt; 5%）才會排</span></div>
+      <div class="pf-row"><label class="il"><span>每週肌力</span><select name="strength"><option value="">自動</option><option>0</option><option>1</option><option>2</option><option>3</option></select></label></div>
+      <div class="pf-row"><span class="lbl" id="pf-sdays-l">肌力排在</span><span class="daychk" id="pf-sdays" role="group" aria-labelledby="pf-sdays-l"></span><span class="meta">都不選＝跟輕鬆跑同一天</span></div>
+      <div class="pf-row"><label class="il"><span>每週時數</span><select name="wh_mode"><option value="auto">自動（CTL 爬升規則）</option><option value="custom">自訂上限</option></select></label>
+        <label class="il"><input type="number" name="weekly_hours" min="1" max="40" step="0.5" inputmode="decimal"> 小時</label></div>
+    </fieldset>
+    <fieldset class="pf-sec"><legend>地形與目標</legend>
+      <div class="pf-row"><label class="il"><span>輕鬆跑</span><select name="terrain_easy"><option value="any">都可</option><option value="road">路跑</option><option value="trail">越野（只看心率）</option></select></label></div>
+      <div class="pf-row"><label class="il"><span>長跑</span><select name="terrain_long"><option value="auto">自動（依目標賽事）</option><option value="road">路跑</option><option value="trail">山路越野</option><option value="hike">登山（以時間為主）</option></select></label></div>
+      <div class="pf-row"><label class="il"><span>品質課</span><select name="terrain_quality"><option value="any">都可</option><option value="flat">平路間歇</option><option value="hill">爬坡間歇</option></select></label></div>
+      <div class="pf-row"><span class="lbl">間歇目標</span><label class="rb"><input type="radio" name="interval_target" value="power">功率</label><label class="rb"><input type="radio" name="interval_target" value="hr">心率</label></div>
+    </fieldset>
+    <div class="pf-sum" id="pf-sum" aria-live="polite"></div>
+    <div class="err" id="pf-err" role="alert"></div>
+    <div class="btns">
+      <button class="btn" type="button" id="pf-reset">恢復預設</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn primary" type="submit" id="pf-save">儲存並預覽重排</button>
     </div>
   </form>
 </dialog>
@@ -457,7 +570,8 @@ function chipHtml(s, big) {
   const est = s.tss_est ?? s.tss;
   // "45′ · TSS 35" (planned) — "TSS 35 → 41" once done (planned → actual)
   const tss = `TSS ${n0(est)}${done && s.done_by.tss != null ? ` → ${n0(s.done_by.tss)}` : ""}`;
-  const meta = [s.minutes ? s.minutes + "′" : "", tss].filter(Boolean).join(" · ");
+  const dist = s.distance_km ? `${(+s.distance_km).toFixed(1)} km${s.climb_m ? ` ↑${Math.round(s.climb_m)} m` : ""}` : "";
+  const meta = [s.minutes ? s.minutes + "′" : "", dist, tss].filter(Boolean).join(" · ");
   const line = done ? `${esc(s.done_by.category_label || "完成")} ${hm(s.done_by.moving_s)}` : esc(s.target || "");
   const cp = s.compliance;
   const cpTip = cp ? `\n${compTip(cp)}` : "";
@@ -554,7 +668,15 @@ function render() {
       ${rows.join("")}</div>`;
   }
   renderToolbar();
+  renderNotes();
 }
+function renderNotes() {
+  const ns = (D.plan_notes || []).filter((n, i, all) => all.findIndex((x) => x.week_start === n.week_start && x.text === n.text) === i);
+  $("pnotes").hidden = !ns.length;
+  $("pnotes").innerHTML = ns.map((n) => `<li class="${esc(n.level)}"><span class="wk-l">${md(n.week_start)} 那週</span>${esc(n.text)}</li>`).join("") +
+    (ns.length ? `<li style="list-style:none;margin-left:-16px"><button type="button" data-open-prefs>調整課表偏好 →</button></li>` : "");
+}
+$("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
 function agendaHtml(a, ss, acts) {
   const w = weekRow(a), ph = phaseOf(addDays(a, 3));
   const days = [];
@@ -664,20 +786,20 @@ const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], r
 function changesHtml(byDay) {
   const days = Object.keys(byDay || {});
   if (!days.length) return `<p class="meta" style="margin:0">課表已經是最新的，沒有要變動的。</p>`;
-  const bf = (c) => c.before ? `（原本 ${Object.entries(c.before).map(([k, v]) => k === "day" ? md(v) : k === "minutes" ? v + " 分" : esc(v)).join("、")}）` : "";
+  const bf = (c) => c.before ? `（原本 ${Object.entries(c.before).map(([k, v]) => k === "day" ? md(v) : k === "minutes" ? v + " 分" : k === "terrain" ? (TER[v] || "未指定地形") : esc(v)).join("、")}）` : "";
   return `<ul class="chg">${days.map((d) => `<li><b>${d === "—" ? "—" : `週${wd(d)} ${md(d)}`}</b>：${byDay[d].map((c) =>
     `<span class="${ACT[c.action][1]}">${ACT[c.action][0]}</span> ${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}`).join("；")}</li>`).join("")}</ul>`;
 }
-async function reconcile() {
+async function reconcile(opts = {}) {
   if (S.busy) return;
   msg(`<span class="spin"></span> 依實際進度計算中…`);
   let p;
   try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
   msg("");
   const n = (p.changes || []).length;
-  const ok = await ask("依實際進度重排", `<p class="meta" style="margin:0">錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。</p>${changesHtml(p.by_day)}`,
+  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day)}`,
     n ? `套用 ${n} 項變動` : "", { cancel: n ? "取消" : "關閉" });
-  if (!ok) return;
+  if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : "偏好已儲存；課表不需要變動", n ? "" : "ok"); return; }
   S.busy = true; renderToolbar(); msg(`<span class="spin"></span> 套用中…`);
   try { await sj("POST", `${PAPI}/reconcile`); msg(`已重排：${n} 項變動`, "ok"); await load(); }
   catch (e) { errMsg("重排", e); }
@@ -747,6 +869,8 @@ const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).valu
 const rateOf = (k) => (D.tss_rates || {})[k] || D.tss_per_hour || 50;
 function estDialog() {
   const k = kindVal(), m = +F.minutes.value || 0, o = dlg.orig;
+  // terrain / same-load panel: same intensity (≤ AeT) → the original session's TSS per hour
+  if (eqOn()) return { tss: $("eq-tss").value !== "" ? +$("eq-tss").value : m / 60 * EQS.rate, rate: EQS.rate };
   if (o && o.kind === k && o.minutes > 0 && (o.tss || 0) > 0) return { tss: o.tss * m / o.minutes, rate: o.tss / o.minutes * 60 };
   return { tss: m / 60 * rateOf(k), rate: rateOf(k) };
 }
@@ -758,11 +882,195 @@ function tssHint() {
     return;
   }
   const e = estDialog();
-  $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} TSS/小時 × ${+F.minutes.value || 0} 分</span>`;
+  $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} TSS/小時 × ${+F.minutes.value || 0} 分${eqOn() ? "（同強度 ≤ AeT：沿用原本每小時的 TSS）" : ""}</span>`;
 }
+
+// ---------------- terrain + same-load conversion (engine/equivalence.py) ----------------
+const TER = { road: "路跑", trail: "越野", hike: "登山" };
+const EQ_KINDS = new Set(["easy", "long", "hike"]);
+const AUTO_TITLE = { easy: { road: "輕鬆跑", trail: "輕鬆越野跑" }, long: { road: "長時間輕鬆（路跑）", trail: "長時間輕鬆（山路越野）" },
+  hike: { hike: "登山健行" } };
+const AUTO_TITLE_RE = /^(輕鬆跑|輕鬆跑（路跑）|輕鬆越野跑|長時間輕鬆(（[^）]*）)?|登山健行(（長時間）)?|健行)$/;
+let EQ = null, eqReq = null;
+const loadEq = () => eqReq ||= sj("GET", `${PAPI}/equivalence`).then((b) => (EQ = b)).catch(() => { eqReq = null; return null; });
+const EQS = { rate: 50, tss0: 0, tssFix: 0, d: 0, needFill: false };
+const terVal = () => (F.querySelector('input[name="terrain"]:checked') || {}).value || "road";
+const eqOn = () => !$("sd-eq").hidden;
+const terOf = (s) => !s ? "road" : s.terrain || (s.kind === "hike" ? "hike" : /越野|山路/.test(s.title || "") ? "trail" : "road");
+const defaultD = () => Math.round(D.goal_climb_per_km || 80);
+const aetText = () => { const a = (D.thresholds || {}).aet; return a ? `心率 ≤ AeT ${Math.round(a)} bpm` : "心率 ≤ AeT"; };
+function capFor(kind) {
+  const p = D.prefs || {};
+  return kind === "long" || kind === "hike" ? (p.cap_long ?? p.cap_weekday) : kind === "easy" ? p.cap_weekday : null;
+}
+// Langmuir descent + the model: the same formulas as equivalence.descent_hours / predict_hours
+function eqDesc(km, gain, loss) {
+  const M = EQ.model;
+  if (km <= 0 || loss <= 0) return 0;
+  const deg = Math.atan((gain + loss) / (km * 1000)) * 180 / Math.PI;
+  if (deg < M.gentle_deg) return 0;
+  return (deg <= M.steep_deg ? -1 : 1) * loss * M.langmuir_h_per_m;
+}
+function eqH(mode, km, gain) {
+  const M = EQ.model, mm = M.modes[mode];
+  if (mode === "road" || !mm) return (km + gain / M.ep_m_per_km) / M.v_flat_kmh;
+  if (mm.method === "ep") return (km + gain / M.ep_m_per_km) / mm.ep_kmh;
+  return km / mm.v_flat_kmh + gain / mm.vam_mh + eqDesc(km, gain, gain);
+}
+function bisect(f, lo, hi) {                       // f increasing: the x in [lo, hi] where f(x) ≈ 0
+  if (f(lo) >= 0) return lo;
+  if (f(hi) <= 0) return hi;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (f(m) > 0) hi = m; else lo = m; }
+  return (lo + hi) / 2;
+}
+const eqF = () => ({ min: +F.minutes.value || 0, km: +$("eq-km").value || 0, gain: +$("eq-gain").value || 0, tss: +$("eq-tss").value || 0 });
+function eqSet({ min, km, gain, d, tss }) {
+  if (min != null) F.minutes.value = Math.max(0, Math.round(min));
+  if (km != null) $("eq-km").value = km > 0 ? km.toFixed(1) : "0";
+  if (gain != null) $("eq-gain").value = Math.max(0, Math.round(gain));
+  if (d != null) { $("eq-d").value = Math.max(0, Math.min(150, Math.round(d / 5) * 5)); $("eq-d-v").textContent = Math.round(d); }
+  if (tss != null) $("eq-tss").value = Math.max(0, Math.round(tss));
+}
+// `changed`: the field the user just edited; the lock decides what stays fixed
+function eqRecalc(changed, exactD) {
+  if (!eqOn()) return;
+  if (!EQ) return eqRender();
+  const mode = terVal(), free = $("eq-free").checked, lock = $("eq-lock").value, r = EQS.rate || 1;
+  let { min, km, gain, tss } = eqF();
+  let d = changed === "d" ? (exactD ?? +$("eq-d").value) : EQS.d;
+  if (changed === "km" || changed === "gain") d = km > 0 ? gain / km : 0;
+  // the locked field is the anchor: editing it re-anchors, editing anything else keeps it
+  if (changed === "tss" && !free) min = tss / r * 60;
+  if (lock === "tss" && (changed === "tss" || changed === "minutes")) EQS.tssFix = min / 60 * r;
+  if (free) {                                            // nothing fixed: only TSS follows the time
+    if (changed === "d") gain = km * d;
+    if (changed === "tss") min = tss / r * 60;
+  } else if (lock === "dist") {                          // km fixed
+    if (changed === "minutes" || changed === "tss") { d = bisect((x) => eqH(mode, km, km * x) - min / 60, 0, 300); gain = km * d; }
+    else { if (changed !== "gain") gain = km * d; min = eqH(mode, km, gain) * 60; }
+  } else {                                               // time (or TSS → time) fixed
+    if (lock === "tss" && changed !== "minutes" && changed !== "tss") min = EQS.tssFix / r * 60;
+    const T = min / 60;
+    if (changed === "km") { d = bisect((x) => eqH(mode, km, km * x) - T, 0, 300); gain = km * d; }
+    else if (changed === "gain") { km = bisect((x) => eqH(mode, x, gain) - T, 0.05, 300); d = km > 0 ? gain / km : 0; }
+    else { km = T / eqH(mode, 1, d); gain = km * d; }
+  }
+  if (changed !== "tss") tss = min / 60 * r;
+  EQS.d = d;
+  eqSet({ min: changed === "minutes" ? null : min, km: changed === "km" ? null : km, gain: changed === "gain" ? null : gain,
+    d, tss: changed === "tss" ? null : tss });
+  eqRender();
+  tssHint();
+}
+function eqNote(mode) {
+  const M = EQ.model;
+  if (mode === "road") return `路跑：平路 ${M.v_flat_kmh.toFixed(1)} km/h（${esc(M.v_flat_source)}）；有坡時用努力距離 km + 爬升/100`;
+  const bt = (EQ.backtest || {})[mode] || {}, mm = M.modes[mode] || {}, est = (EQ.estimate || {})[mode];
+  const how = mm.method === "ep" ? `努力距離 EP = km + 爬升/100 × 你的 EP 速度 ${(mm.ep_kmh || 0).toFixed(1)} km/h`
+    : `平地 ${(mm.v_flat_kmh || 0).toFixed(1)} km/h＋上坡 ${Math.round(mm.vam_mh || 0)} m/h＋下坡修正（Naismith／Langmuir）`;
+  const err = bt.n ? `用你 ${bt.n} 次${TER[mode]}留一法回測：平均差 ${bt.mae_min} 分（${bt.mape_pct} %）` : `你的${TER[mode]}紀錄不夠，還不能回測`;
+  return `<span class="badge ${est ? "est" : "fit"}">${est ? "推估" : "依你的紀錄"}</span> ${how}；${err}`;
+}
+function eqRender() {
+  if (!eqOn()) return;
+  const free = $("eq-free").checked, lock = $("eq-lock").value, ro = !!dlg.ro;
+  $("eq-lock").disabled = ro || free;
+  // nothing is disabled: the locked field is the anchor (editing it re-anchors)
+  F.minutes.disabled = $("eq-km").disabled = $("eq-tss").disabled = $("eq-gain").disabled = $("eq-d").disabled = ro;
+  const anchor = free ? null : { time: F.minutes, tss: $("eq-tss"), dist: $("eq-km") }[lock];
+  [F.minutes, $("eq-tss"), $("eq-km")].forEach((x) => x.classList.toggle("anchor", x === anchor));
+  const g = D.goal_climb_per_km;
+  $("eq-goal-row").hidden = !g || terVal() === "road" || ro;
+  if (g) $("eq-goal").textContent = `套用目標賽事的爬升比例 ${Math.round(g)} m/km`;
+  if (!EQ) { $("eq-sum").textContent = "載入你的速度模型中…"; $("eq-warn").textContent = ""; $("eq-note").textContent = ""; return; }
+  const mode = terVal(), f = eqF();
+  const pct = EQS.tss0 > 0 ? (f.tss / EQS.tss0 - 1) * 100 : 0;
+  const diff = Math.abs(pct) < 1 ? `<span class="same">和原本一樣</span>` : `<span class="${pct > 0 ? "up" : "down"}">比原本${pct > 0 ? "多" : "少"} ${Math.abs(Math.round(pct))} %</span>`;
+  $("eq-sum").innerHTML = `${TER[mode]} <span class="d num">${f.km.toFixed(1)} km</span>${f.gain ? `、爬升 <span class="d num">${Math.round(f.gain)} m</span>` : ""}、約 <span class="d num">${f.min} 分</span> · 預估 TSS <b class="num">${n0(f.tss)}</b>（${diff}）`;
+  const warns = [];
+  const cap = capFor(kindVal());
+  if (cap && f.min > cap) warns.push(`⚠ 超過你設定的單次上限 ${cap} 分（課表偏好）`);
+  const pred = f.km > 0 ? eqH(mode, f.km, f.gain) * 60 : 0;
+  if (f.km > 0 && Math.abs(pred - f.min) > Math.max(3, 0.05 * f.min)) warns.push(`依你的紀錄，${f.km.toFixed(1)} km／爬升 ${Math.round(f.gain)} m 約要 ${Math.round(pred)} 分`);
+  const mm = EQ.model.modes[mode];
+  if (mode !== "road" && mm && mm.density_range && (EQS.d < mm.density_range[0] - 10 || EQS.d > mm.density_range[1] + 10))
+    warns.push(`爬升比例 ${Math.round(EQS.d)} m/km 在你的${TER[mode]}紀錄（${mm.density_range[0]}–${mm.density_range[1]} m/km）之外，誤差可能較大`);
+  $("eq-warn").innerHTML = warns.map(esc).join("<br>");
+  $("eq-note").innerHTML = eqNote(mode);
+}
+function eqInit(s) {
+  const k = s ? s.kind : kindVal();
+  $("sd-eq").hidden = !EQ_KINDS.has(k) || !!dlg.ro;
+  const ter = terOf(s || { kind: k });
+  F.querySelector(`input[name="terrain"][value="${ter}"]`).checked = true;
+  const min = +F.minutes.value || 0;
+  EQS.rate = s && s.minutes > 0 && estOf(s) > 0 ? estOf(s) / s.minutes * 60 : rateOf(k);
+  EQS.tss0 = min / 60 * EQS.rate;
+  EQS.tssFix = EQS.tss0;
+  $("eq-free").checked = false;
+  $("eq-lock").value = "time";
+  $("eq-tss").value = Math.round(EQS.tss0);
+  if (s && s.distance_km) {
+    EQS.d = (s.climb_m || 0) / s.distance_km;
+    eqSet({ km: +s.distance_km, gain: s.climb_m || 0, d: EQS.d });
+    EQS.needFill = false;
+  } else {
+    EQS.d = ter === "road" ? 0 : defaultD();
+    eqSet({ d: EQS.d });
+    $("eq-km").value = ""; $("eq-gain").value = "";
+    EQS.needFill = true;                                // estimate km / climb once the model is loaded
+  }
+  eqRender();
+  if (eqOn()) eqFillLater();
+}
+function eqFillLater() {
+  loadEq().then(() => { if (!$("sd").open || !eqOn()) return; if (EQS.needFill && EQ) { EQS.needFill = false; eqRecalc("terrain"); } else eqRender(); });
+}
+function autoText() {
+  const t = terVal(), k = kindVal();
+  if (!dlg.titleTouched && AUTO_TITLE_RE.test(F.title.value.trim()) && (AUTO_TITLE[k] || {})[t]) F.title.value = AUTO_TITLE[k][t];
+  const hr = aetText();
+  if (t !== "road" && (!F.target.value || /功率/.test(F.target.value))) F.target.value = hr;
+  if (t === "road" && F.target.value === hr) F.target.value = (D.targets || {})[k] || "";
+}
+function onTerrain() {
+  const t = terVal(), k = kindVal();
+  if (t === "hike" && k !== "hike") F.querySelector('input[name="kind"][value="hike"]').checked = true;
+  if (t !== "hike" && k === "hike") {
+    const back = dlg.orig && dlg.orig.kind !== "hike" && EQ_KINDS.has(dlg.orig.kind) ? dlg.orig.kind : "long";
+    F.querySelector(`input[name="kind"][value="${back}"]`).checked = true;
+  }
+  if (t === "road") EQS.d = 0; else if (EQS.d === 0) EQS.d = defaultD();
+  eqSet({ d: EQS.d });
+  autoText();
+  eqFillLater();
+  eqRecalc("terrain", EQS.d);
+  tgtHint();
+}
+function onKind() {
+  const k = kindVal(), show = EQ_KINDS.has(k) && !dlg.ro, was = eqOn();
+  $("sd-eq").hidden = !show;
+  if (!show) { F.minutes.disabled = !!dlg.ro; return; }
+  if (!(dlg.orig && EQ_KINDS.has(dlg.orig.kind))) EQS.rate = rateOf(k);    // a different intensity class
+  if (!was) { EQS.tss0 = (+F.minutes.value || 0) / 60 * EQS.rate; EQS.tssFix = EQS.tss0; }
+  if (k === "hike") F.querySelector('input[name="terrain"][value="hike"]').checked = true;
+  else if (terVal() === "hike") F.querySelector('input[name="terrain"][value="trail"]').checked = true;
+  autoText();
+  eqFillLater();
+  eqRecalc("terrain", EQS.d);
+}
+$("eq-d").addEventListener("input", () => { $("eq-d-v").textContent = $("eq-d").value; eqRecalc("d"); });
+$("eq-km").addEventListener("input", () => eqRecalc("km"));
+$("eq-gain").addEventListener("input", () => eqRecalc("gain"));
+$("eq-tss").addEventListener("input", () => { EQS.tssFix = +$("eq-tss").value || 0; eqRecalc("tss"); });
+$("eq-lock").addEventListener("change", () => { EQS.tssFix = +$("eq-tss").value || EQS.tssFix; eqRender(); });
+$("eq-free").addEventListener("change", () => { EQS.tssFix = +$("eq-tss").value || EQS.tssFix; eqRender(); });
+$("eq-goal").addEventListener("click", () => { const g = D.goal_climb_per_km; if (g) eqRecalc("d", g); });
 function tgtHint() {
   tssHint();
-  const t = (D.targets || {})[kindVal()] || "";
+  // trail / hike: heart rate only (pace and power are unreliable off-road)
+  const t = eqOn() && terVal() !== "road" ? aetText() : (D.targets || {})[kindVal()] || "";
+  dlg.sugg = t;
   $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `依門檻建議：${gl(t)} <button type="button" id="sd-tgt-use">套用</button>` : "";
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
   $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
@@ -793,26 +1101,31 @@ function openDlg(s, day) {
   $("sd-cancel").textContent = ro ? "關閉" : "取消";
   const del = $("sd-del"); del.hidden = !s || ro; del.classList.remove("armed"); del.textContent = "刪除";
   $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength";
+  dlg.titleTouched = false;
+  eqInit(s);
   tgtHint();
   $("sd").showModal();
   (ro ? $("sd-cancel") : F.title).focus();
 }
 F.addEventListener("change", (e) => {
+  if (e.target.name === "terrain") return onTerrain();
+  if (e.target.name === "kind") onKind();
   if (e.target.name !== "kind" || dlg.uid) return tgtHint();
   const k = kindVal();
   const defs = D.default_titles || {};
   if (!F.title.value || Object.values(defs).includes(F.title.value)) F.title.value = defs[k] || KINDS[k];
   if (!dlg.targetTouched) F.target.value = (D.targets || {})[k] || "";
   if (k === "strength" && +F.minutes.value === 45) F.minutes.value = 35;
+  if (eqOn()) autoText();
   tgtHint();
 });
 F.target.addEventListener("input", () => { dlg.targetTouched = true; tgtHint(); });
-F.title.addEventListener("input", tgtHint);
-F.minutes.addEventListener("input", tssHint);
+F.title.addEventListener("input", () => { dlg.titleTouched = true; tgtHint(); });
+F.minutes.addEventListener("input", () => { if (eqOn()) eqRecalc("minutes"); tssHint(); });
 F.detail.addEventListener("input", tgtHint);
 $("sd").addEventListener("click", (e) => {
   if (e.target.closest("[data-close]")) $("sd").close();
-  else if (e.target.id === "sd-tgt-use") { F.target.value = D.targets[kindVal()]; dlg.targetTouched = true; tgtHint(); }
+  else if (e.target.id === "sd-tgt-use") { F.target.value = dlg.sugg || D.targets[kindVal()]; dlg.targetTouched = true; tgtHint(); }
   else if (e.target === $("sd")) $("sd").close();                  // backdrop click
 });
 F.addEventListener("submit", async (e) => {
@@ -822,6 +1135,10 @@ F.addEventListener("submit", async (e) => {
   if (!F.day.value || F.day.value < D.today) { $("sd-err").textContent = "不能排到過去的日子"; F.day.focus(); return; }
   const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
     tss: Math.round(estDialog().tss * 10) / 10 };
+  if (eqOn()) {
+    const f = eqF();
+    Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });
+  }
   $("sd-save").disabled = true;
   try {
     await sj(dlg.uid ? "PATCH" : "POST", dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, body);
@@ -847,6 +1164,100 @@ $("sd-del").addEventListener("click", async () => {
   } catch (err) { $("sd-err").textContent = err.message; }
 });
 $("sd-push").addEventListener("click", () => { const s = findS(dlg.uid); if (!s) return; $("sd").close(); S.sel = s.day; render(); push("day", s.day); });
+
+// ---------------- 課表偏好 (engine/plan_prefs.py) ----------------
+const PFF = $("pf-form");
+let PF_DEF = null;
+const dayBoxes = (id, name) => { $(id).innerHTML = [...WD].map((x, i) =>
+  `<label title="週${x}"><input type="checkbox" name="${name}" value="${i}" aria-label="週${x}">${x}</label>`).join(""); };
+dayBoxes("pf-days", "pf-day");
+dayBoxes("pf-sdays", "pf-sday");
+const numOrNull = (v) => v === "" || v == null ? null : +v;
+const radioVal = (name) => (PFF.querySelector(`input[name="${name}"]:checked`) || {}).value;
+function pfFill(p) {
+  PFF.querySelectorAll('input[name="pf-day"]').forEach((b) => { b.checked = !!(p.days || [])[+b.value]; });
+  PFF.querySelectorAll('input[name="pf-sday"]').forEach((b) => { b.checked = (p.strength_days || []).includes(+b.value); });
+  PFF.elements.long_day.value = p.long_day;
+  PFF.elements.cap_weekday.value = p.cap_weekday ?? "";
+  PFF.elements.cap_long.value = p.cap_long ?? "";
+  PFF.querySelector(`input[name="cap_mode"][value="${p.cap_mode}"]`).checked = true;
+  PFF.elements.runs.value = p.runs ?? "";
+  PFF.elements.quality.value = p.quality ?? "";
+  PFF.elements.strength.value = p.strength ?? "";
+  PFF.elements.wh_mode.value = p.weekly_hours == null ? "auto" : "custom";
+  PFF.elements.weekly_hours.value = p.weekly_hours ?? "";
+  PFF.elements.terrain_easy.value = p.terrain_easy;
+  PFF.elements.terrain_long.value = p.terrain_long;
+  PFF.elements.terrain_quality.value = p.terrain_quality;
+  PFF.querySelector(`input[name="interval_target"][value="${p.interval_target}"]`).checked = true;
+  pfSync();
+}
+function pfRead() {
+  const E = PFF.elements;
+  return { days: [...PFF.querySelectorAll('input[name="pf-day"]')].map((b) => b.checked), long_day: E.long_day.value,
+    cap_weekday: numOrNull(E.cap_weekday.value), cap_long: numOrNull(E.cap_long.value), cap_mode: radioVal("cap_mode"),
+    runs: numOrNull(E.runs.value), quality: numOrNull(E.quality.value), strength: numOrNull(E.strength.value),
+    strength_days: [...PFF.querySelectorAll('input[name="pf-sday"]:checked')].map((b) => +b.value),
+    weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
+    terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
+    interval_target: radioVal("interval_target") };
+}
+function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
+  const n = p.days.filter(Boolean).length;
+  if (!n) return "至少要有一天可以練";
+  if (p.runs && p.runs > n) return `每週跑步次數 ${p.runs} 比可練日（${n} 天）多`;
+  if (p.runs && p.quality != null && p.quality >= p.runs) return "品質課次數要比每週跑步次數少";
+  if (p.cap_weekday != null && !(p.cap_weekday >= 20 && p.cap_weekday <= 300)) return "單次時間上限要在 20–300 分";
+  if (p.cap_long != null && !(p.cap_long >= 20 && p.cap_long <= 600)) return "長跑日上限要在 20–600 分";
+  if (p.cap_weekday != null && p.cap_long != null && p.cap_long < p.cap_weekday) return "長跑日上限不能比平日上限短";
+  if (PFF.elements.wh_mode.value === "custom" && !(p.weekly_hours >= 1 && p.weekly_hours <= 40)) return "每週時數上限要在 1–40 小時";
+  return "";
+}
+function pfSync() {
+  const E = PFF.elements;
+  E.weekly_hours.disabled = E.wh_mode.value !== "custom";
+  E.cap_long.placeholder = E.cap_weekday.value ? `同 ${E.cap_weekday.value}` : "同平日";
+  const p = pfRead(), rest = [...WD].filter((_, i) => !p.days[i]);
+  const parts = [`一週 <b>${7 - rest.length}</b> 天可練${rest.length ? `（休息：${rest.map((x) => "週" + x).join("、")}）` : ""}`,
+    p.runs ? `跑 <b>${p.runs}</b> 次` : "次數自動"];
+  if (p.cap_weekday || p.cap_long) {
+    const lc = p.cap_long ?? p.cap_weekday;
+    parts.push(`${p.cap_weekday ? `平日每次 ≤ <b>${p.cap_weekday}</b> 分` : "平日不限"}、長跑日 ≤ <b>${lc ?? "不限"}</b>${lc ? " 分" : ""}` +
+      `（${p.cap_mode === "hard" ? "絕對不超過：放不下的量這週就少練，會提醒你" : "盡量不超過：放不下的量先加在長跑日"}）`);
+  }
+  if (p.weekly_hours) parts.push(`每週最多 <b>${p.weekly_hours}</b> 小時`);
+  $("pf-sum").innerHTML = parts.join("；");
+  $("pf-err").textContent = pfError(p);
+}
+PFF.addEventListener("input", pfSync);
+PFF.addEventListener("change", pfSync);
+async function openPrefs() {
+  closeMenus();
+  $("pf-err").textContent = "";
+  let b;
+  try { b = await sj("GET", `${PAPI}/prefs`); } catch (e) { return errMsg("讀取課表偏好", e); }
+  PF_DEF = b.defaults;
+  pfFill(b.prefs);
+  $("pf").showModal();
+  PFF.querySelector('input[name="pf-day"]').focus();
+}
+$("pf").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("pf")) $("pf").close(); });
+$("pf-reset").onclick = () => { if (PF_DEF) pfFill(PF_DEF); };
+PFF.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const p = pfRead(), err = pfError(p);
+  if (err) { $("pf-err").textContent = err; return; }
+  $("pf-save").disabled = true;
+  try { await sj("PUT", `${PAPI}/prefs`, p); }
+  catch (x) { $("pf-err").textContent = x.message; return; }
+  finally { $("pf-save").disabled = false; }
+  $("pf").close();
+  if (D) D.prefs = p;
+  await reconcile({ title: "依新的課表偏好重排",
+    intro: "偏好已儲存。下面是之後還沒做、你沒改過的自動課會怎麼變；你改過或自己加的課不會動。",
+    cancelMsg: "偏好已儲存，課表還沒重排——之後按「依實際進度重排」就會套用" });
+});
+$("pf-btn").onclick = openPrefs;
 
 // ---------------- calendar interaction ----------------
 function select(d) { S.sel = S.sel === d ? S.sel : d; render(); }

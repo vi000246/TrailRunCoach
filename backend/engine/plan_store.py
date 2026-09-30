@@ -18,7 +18,8 @@ from backend.engine import reconcile as R
 
 KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test": "測試",
          "hike": "健行／登山", "strength": "肌力"}
-EDITABLE = ("day", "kind", "title", "minutes", "target", "detail")
+EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m")
+TERRAINS = ("road", "trail", "hike")
 DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 3 分 + 12 分",
                   "hike": "健行", "strength": "肌力（下肢單腳＋核心）"}
 
@@ -37,12 +38,13 @@ def to_dict(r: PlanSession) -> dict:
     return {"uid": r.uid, "week_start": r.week_start, "gen_key": r.gen_key, "day": r.day, "kind": r.kind,
             "title": r.title, "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
             "source": r.source or "", "tss": r.tss or 0.0, "origin": r.origin, "edited": bool(r.edited),
-            "provisional": bool(r.provisional), "state": r.state, "done_by": done_by, "note": r.note}
+            "provisional": bool(r.provisional), "state": r.state, "done_by": done_by, "note": r.note,
+            "terrain": r.terrain, "distance_km": r.distance_km, "climb_m": r.climb_m}
 
 
 def _fill(r: PlanSession, d: dict) -> None:
     for k in ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
-              "tss", "origin", "edited", "provisional", "state", "note"):
+              "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m"):
         setattr(r, k, d.get(k))
     r.minutes = int(d.get("minutes") or 0)
     r.done_by = json.dumps(d["done_by"], ensure_ascii=False) if d.get("done_by") else None
@@ -134,6 +136,20 @@ def _clean(patch: dict, today: str) -> dict:
                 raise PlanError("分鐘要是數字")
             if not 0 <= v <= 1440:
                 raise PlanError("分鐘要在 0–1440")
+        elif k == "terrain":
+            v = v or None
+            if v is not None and v not in TERRAINS:
+                raise PlanError(f"不支援的地形：{v!r}")
+        elif k in ("distance_km", "climb_m"):
+            if v is not None and v != "":
+                try:
+                    v = round(float(v), 2 if k == "distance_km" else 0)
+                except (TypeError, ValueError):
+                    raise PlanError("距離／爬升要是數字")
+                if not 0 <= v <= (500 if k == "distance_km" else 20000):
+                    raise PlanError("距離要在 0–500 km、爬升 0–20000 m")
+            else:
+                v = None
         else:
             v = str(v or "").strip()[:500]
             if k == "title" and not v:

@@ -98,11 +98,14 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
 def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: float,
                   tgt: dict, long_wd: int, longest: float, mountain: bool,
                   allow_quality: bool, strength_tss: float, aet: Optional[float],
-                  base_quality: Optional[dict] = None) -> list[dict]:
+                  base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
+                  notes: Optional[list] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `base_quality`: this week's base-phase quality session (week_plan picks
     閾值下 N×8 分 when the drift streak first unlocks intervals or the last one
-    faded); projected base weeks repeat it instead of 閾值 3×10."""
+    faded); projected base weeks repeat it instead of 閾值 3×10.
+    `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
+    `rates` = TSS / h per category for it, `notes` collects its notes."""
     total = hours * 60.0
     ss: list[dict] = []
 
@@ -146,6 +149,14 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail="心率不超過 AeT" + ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else ""),
             source=O.SRC_UA, tss=m / 60.0 * tph)
+    if prefs is not None and prefs.active:
+        from backend.engine import plan_prefs as PP
+        r = {"road": tph, "trail": tph, "hike": tph, "strength": strength_tss / 35 * 60, **(rates or {})}
+        ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=r, aet=aet,
+                     slots=sum(bool(x) for x in prefs.days), notes=notes if notes is not None else [])
+        ss = PP.shape(ss, total, prefs, ctx)
+        PP.place(ss, [monday + dt.timedelta(days=i) for i in range(7)], PP.long_weekday(prefs, long_wd), prefs)
+        return ss
     _place(ss, monday, long_wd)
     return ss
 
@@ -211,9 +222,11 @@ def allow_quality(kind: str, gate: dict, base_q: Optional[dict] = None) -> bool:
 
 
 def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
-                  atlconstant: float = 7.0) -> list[dict]:
+                  atlconstant: float = 7.0, prefs=None) -> list[dict]:
     """Weeks after cur['week'] (a week_plan() result) up to `until` (≤ MAX_WEEKS).
-    `ctlconstant` / `atlconstant`: the athlete's (ds.athlete), as for the PMC."""
+    `ctlconstant` / `atlconstant`: the athlete's (ds.athlete), as for the PMC.
+    `prefs`: the 課表偏好 week_plan() used (None / defaults = the original rules)."""
+    PR = prefs if prefs is not None and prefs.active else None
     monday = _d(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=MAX_WEEKS + 1) - dt.timedelta(days=1)
     until = min(until, cap)
@@ -222,9 +235,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     tgt = target_texts(th)
     long_wd = O.WEEKDAYS.index(cur.get("long_weekday") or "六")
     cur_s = cur.get("sessions") or []
-    long_s = next((s for s in cur_s if s["kind"] == "long"), None)
+    long_s = next((s for s in cur_s if s.get("id", s.get("gen_key")) == "long" or s["kind"] == "long"), None)
     longest = float(long_s["minutes"]) if long_s else 60.0
     mountain = bool(long_s and "山路" in long_s["title"])
+    rates = cur.get("tss_per_category") if PR is not None else None
     gate = _gate_inputs(cur)
     base_q = next((s for s in cur_s if s["kind"] == "quality" and s["title"].startswith("閾值下")), None) \
         if cur.get("phase") == "base" else None
@@ -243,8 +257,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ev = _next_event_start(phases, week)
         days_to = (ev - week).days if ev else None
         hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to)
+        notes: list = []
+        if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
+            hours = PR.weekly_hours
+            why = why + [f"你的每週時數上限 {PR.weekly_hours:g} h"]
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
-                           allow_quality(kind, gate, base_q), strength_tss, th.get("aet"), base_q)
+                           allow_quality(kind, gate, base_q), strength_tss, th.get("aet"), base_q,
+                           prefs=PR, rates=rates, notes=notes)
         # a session _place() found no day for has day None: keep it out of the date test
         ss = [s for s in ss if not s["day"] or _d(s["day"]) <= until] if ss else ss
         by_day = {}
@@ -259,10 +278,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "mode_label": MODE_LABELS.get(mode, mode), "hours": hours,
                     "tss": sum(planned), "ctl_start": ctl0, "ctl_end": ctl,
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
-                    "sessions": [s for s in ss if s["day"]]})
-        long_n = next((s for s in ss if s["kind"] == "long"), None)
+                    "sessions": [s for s in ss if s["day"]], **({"notes": notes} if PR is not None else {})})
+        long_n = next((s for s in ss if s["id"] == "long"), None)
         if long_n:
             longest = float(long_n["minutes"])
+        if PR is not None:
+            # what the preferences actually let through (a hard cap can leave less)
+            hours = sum(s["minutes"] for s in ss if s["kind"] != "strength" and s["day"]) / 60.0
         build.append(mode in ("base", "specific") and hours >= 0.95 * hist[-1] and hours > 0.5)
         hist.append(hours)
         week += dt.timedelta(weeks=1)

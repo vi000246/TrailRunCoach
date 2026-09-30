@@ -167,6 +167,11 @@ class PlanSession(Base):
     state: Mapped[str] = mapped_column(String(12), default="active")    # active/done/missed/deleted/superseded
     done_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON activity row
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # terrain (road / trail / hike) and the designed distance / climb (課表偏好,
+    # engine/equivalence.py same-load conversion); None = unspecified
+    terrain: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    distance_km: Mapped[Optional[float]] = mapped_column(nullable=True)
+    climb_m: Mapped[Optional[float]] = mapped_column(nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

@@ -323,6 +323,9 @@ class Session:
     day: Optional[str] = None     # ISO date suggested
     done: bool = False
     done_by: Optional[dict] = None
+    terrain: Optional[str] = None       # road / trail / hike (課表偏好); None = unspecified
+    distance_km: Optional[float] = None
+    climb_m: Optional[float] = None
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -402,11 +405,14 @@ def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int) -> dict[int, f
     return best
 
 
-def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
+def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
 
     `status` is a computed `backend.engine.status.Status` (phase, goals and the
-    indicators steer the plan)."""
+    indicators steer the plan). `prefs`: engine.plan_prefs.Prefs (課表偏好);
+    None or the defaults keep the original rules untouched."""
+    from backend.engine import plan_prefs as PP
+    PR = prefs if prefs is not None and prefs.active else None
     today = today or day_to_date(ds.today)
     monday = period_start(today, "week")
     sunday = monday + dt.timedelta(days=6)
@@ -473,6 +479,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
         hours = (0.5 if kind == "recovery" else 0.65) * base4
         why.append(f"{'恢復' if kind == 'recovery' else '轉換'}期：近 4 週的 {0.5 if kind == 'recovery' else 0.65:.0%}")
     hours = max(hours, 0.0)
+    if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
+        hours = PR.weekly_hours
+        why.append(f"你的每週時數上限 {PR.weekly_hours:g} h")
     tss_target = hours * r_all
 
     # ---- what is done already -------------------------------------------
@@ -576,6 +585,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail="心率不超過 AeT" + ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else ""),
             source=SRC_UA + ("；Palladino 基礎中期坡衝刺" if strides else ""), tss=m / 60.0 * tph["road"])
+    if PR is not None:
+        # 課表偏好: counts, caps, terrain, interval target (engine/plan_prefs.py)
+        ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet,
+                     slots=sum(bool(x) for x in PR.days), notes=notes)
+        shaped = PP.shape([asdict(s) for s in sessions], minutes_total, PR, ctx)
+        sessions = []
+        for d in shaped:
+            flag = d.pop("long_day", False)
+            sessions.append(Session(**d))
+            sessions[-1]._long_day = flag          # soft cap: this easy run carries the excess
 
     # ---- mark what is done ----------------------------------------------
     pool = sorted(week_ws, key=lambda w: w.day)
@@ -592,7 +611,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
         w = None
         if s.kind == "strength":
             w = take(lambda w: category(w) == "strength")
-        elif s.kind == "long":
+        elif s.id == "long":                      # kind long, or hike (課表偏好 登山)
             w = take(lambda w: category(w) in ENDURANCE and moving_s(w) / 60 >= 0.8 * s.minutes)
         elif s.kind in ("quality", "test"):
             w = take(lambda w: hard.get(w.idx, 0) >= HARD_SESSION_S)
@@ -616,9 +635,22 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
         s.day = d.isoformat()
         plan_days.setdefault(s.day, []).append(s.id)
 
-    avail = list(free)
-    # keep one rest day when there is room
-    keep_rest = len(avail) > len(main_todo) + 0
+    if PR is not None:
+        long_wd = PP.long_weekday(PR, long_wd)
+        ds_ = [{**asdict(s), "long_day": getattr(s, "_long_day", False)} for s in todo]
+        left_out = PP.place(ds_, free, long_wd, PR)
+        for s, d in zip(todo, ds_):
+            if d["day"]:
+                put(s, dt.date.fromisoformat(d["day"]))
+        if left_out:
+            drop_min = sum(s["minutes"] for s in left_out)
+            n_ok = len([d for d in free if PR.allowed(d)])
+            notes.append({"level": "info", "src": "prefs", "text": f"本週可練的日子只剩 {n_ok} 天，{len(left_out)} 堂課（約 {drop_min} 分鐘）排不進去——不用補，下週照常"})
+        avail, keep_rest, main_todo = [], True, []
+    else:
+        avail = list(free)
+        # keep one rest day when there is room
+        keep_rest = len(avail) > len(main_todo) + 0
     for s in sorted(main_todo, key=lambda s: {"long": 0, "test": 1, "quality": 1}.get(s.kind, 2)):
         if not avail:
             break
@@ -699,4 +731,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None) -> dict:
         # the quality gate's inputs, so projection.project_weeks can re-evaluate
         # it for each projected week's phase instead of copying this week's answer
         "quality_gate": {"levels": gate_levels, "streak_ok": streak_ok, "allowed": allow_quality},
+        # per-category TSS / h (projection shapes projected weeks with the same rates)
+        "tss_per_category": tph,
+        "prefs": PR.to_dict() if PR is not None else None,
     }
