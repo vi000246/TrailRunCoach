@@ -320,6 +320,17 @@
             {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "15% 掉很多", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.15)"}
           ]
+        },
+        {
+          "title": "跑步功率曲線：近 7 天新高",
+          "description": "所選範圍的最大平均功率曲線（MMP，每個時長的最佳平均功率）。紅色區塊 = 最近 N 天（含今天）跑出比範圍內更早的紀錄還高的時長，也就是「最近進步的地方」；下方列出進步的時長和多了幾瓦。和 WKO5 PDC 耐力模型的「New Bests」同一個算法（最近 = 今天往回 N 天，更早 = 範圍開始到今天 −N 天），可切換 7／14／28 天。",
+          "window": {"default": 7, "choices": [7, 14, 28]},
+          "axes": [{"id": "WATTS", "min": 0}],
+          "series": [
+            {"name": "MMP 曲線", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#c9a227", "line_width": "medium", "expression": "meanmax(runpower)"},
+            {"name": "近 7 天新高", "type": "area", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#e8431c", "line_width": "medium", "expression": "@win := 7, @historic := athleterange(min({begindate,today-@win}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent)"},
+            {"name": "進步幅度", "role": "recent_gain", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "expression": "@win := 7, @historic := athleterange(min({begindate,today-@win}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent - @historic)"}
+          ]
         }
       ]
     }

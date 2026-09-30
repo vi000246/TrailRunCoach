@@ -99,6 +99,10 @@ class Curve:
     ys: list
     fit: Optional[dict] = None       # cached wko5_pdmodel.fit() result
     xkind: str = "duration"
+    # display only: where if() dropped points inside the curve, as
+    # (index of the first point after the hole, x of the first dropped point);
+    # the renderer draws a break there instead of bridging the hole
+    gaps: Optional[list] = None
 
     def at(self, x: float) -> float:
         """Linear interpolation, clamped to the ends (WKO5's li())."""
@@ -2289,16 +2293,23 @@ def _where(cond, a, b):
         base = next(v for v in (a, cond, b) if isinstance(v, Curve))
         C, A = _curve_operand(cond, base), _curve_operand(a, base)
         B = _curve_operand(b, base) if b is not None else None
-        xs, ys = [], []
+        xs, ys, gaps, hole = [], [], [], None
         for i, x in enumerate(base.xs):
             if not math.isnan(C[i]) and C[i] != 0:
                 ys.append(float(A[i]))
             elif B is not None:
                 ys.append(float(B[i]))
             else:
+                if xs and hole is None:
+                    hole = x
                 continue
+            if hole is not None:
+                gaps.append((len(xs), hole))
+                hole = None
             xs.append(x)
-        return Curve(xs, ys, xkind=base.xkind)
+        # a partial curve (`if(@recent > @historic, @recent)`): the dropped
+        # stretches are remembered so the chart shows separate segments
+        return Curve(xs, ys, xkind=base.xkind, gaps=gaps or None)
     if isinstance(cond, ListV) and not isinstance(a, (np.ndarray, WS, Daily)):
         out = []
         for i, c in enumerate(cond.items):

@@ -47,10 +47,17 @@ def _ts(t: datetime) -> int:
 
 def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0,
               speed_m_s: float = 3.0, climb_m_per_s: float = 0.0, total_ascent: int | None = None,
-              sport: int = 1) -> bytes:
-    """A 1 Hz run starting at `start` (aware UTC). power=0 → no power channel."""
+              sport: int = 1, sub_sport: int | None = None) -> bytes:
+    """A 1 Hz run starting at `start` (aware UTC). power=0 → no power channel;
+    a list gives the power of each second (its length sets the duration).
+    FIT enums: sport 1 running, 2 cycling, 10 training; sub_sport 0 generic,
+    1 treadmill, 3 trail, 20 strength_training."""
     if start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
+    watts = None
+    if isinstance(power, (list, tuple)):
+        watts, seconds = list(power), len(power)
+        power = 1
     body = b""
     fid = [(0, ENUM), (1, UINT16), (4, UINT32)]
     body += _definition(0, 0, fid) + _data(0, fid, [4, 255, _ts(start)])
@@ -64,14 +71,17 @@ def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0
         vals = [_ts(start + timedelta(seconds=i)), hr, int(speed_m_s * i * 100),
                 int((alt + 500) * 5), int(speed_m_s * 1000)]
         if power:
-            vals.append(power)
+            vals.append(int(watts[i]) if watts is not None else power)
         body += _data(1, rec, vals)
 
     ses = [(253, UINT32), (2, UINT32), (5, ENUM), (7, UINT32), (8, UINT32), (9, UINT32), (22, UINT16)]
     ascent = total_ascent if total_ascent is not None else int(climb_m_per_s * seconds)
-    body += _definition(2, 18, ses) + _data(2, ses, [
-        _ts(start + timedelta(seconds=seconds)), _ts(start), sport,
-        seconds * 1000, seconds * 1000, int(speed_m_s * seconds * 100), ascent])
+    ses_vals = [_ts(start + timedelta(seconds=seconds)), _ts(start), sport,
+                seconds * 1000, seconds * 1000, int(speed_m_s * seconds * 100), ascent]
+    if sub_sport is not None:
+        ses.append((6, ENUM))
+        ses_vals.append(sub_sport)
+    body += _definition(2, 18, ses) + _data(2, ses, ses_vals)
 
     header = struct.pack("<BBHI4s", 14, 0x20, 2132, len(body), b".FIT")
     header += struct.pack("<H", _crc(header))
