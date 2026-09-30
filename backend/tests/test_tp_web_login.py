@@ -213,7 +213,7 @@ async def _session_without_athlete(tmp_path):
 
 
 @pytest.mark.parametrize("path", ["web", "oauth", "code"])
-def test_ensure_athlete_on_fresh_db_is_idempotent(tmp_path, monkeypatch, path):
+def test_ensure_athlete_on_fresh_db_is_idempotent(tmp_path, monkeypatch, path, tp_creds):
     from pathlib import Path
     from backend.db.models import Athlete
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
@@ -247,7 +247,7 @@ def test_extract_accepts_numeric_athlete_type():
     assert tp_client._can_download(user_type, False) is False
 
 
-def test_successful_grant_still_used_first(tmp_path):
+def test_successful_grant_still_used_first(tmp_path, tp_creds):
     class Grant(FakeTPWeb):
         def __call__(self, req):
             if req.url.host == "oauth.trainingpeaks.com":

@@ -130,7 +130,7 @@ def test_tp_naive_future_expiry_is_valid_without_network(tmp_path):
     run(go())
 
 
-def test_tp_naive_past_expiry_refreshes(tmp_path):
+def test_tp_naive_past_expiry_refreshes(tmp_path, tp_creds):
     async def go():
         s = await make_session(tmp_path)
         await _tp_state(s, datetime.utcnow() - timedelta(hours=2))

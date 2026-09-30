@@ -33,6 +33,10 @@ DEFAULTS: dict[str, Any] = {
     "sync.primary_source": None,
     "sync.coros.enabled": True,
     "sync.trainingpeaks.enabled": True,
+    # log in with WKO5's OAuth client credentials (ToS risk, see
+    # docs/deploy/tp-oauth-client.md). None = auto: on only when the
+    # credentials are configured on this machine; False = website login only.
+    "sync.trainingpeaks.use_wko5_client": None,
 }
 
 
@@ -81,6 +85,8 @@ def validate(key: str, value: Any) -> None:
         resolve_tz(value, strict=True)
     if key == "sync.primary_source" and value not in (None, *SOURCES):
         raise ValueError(f"primary source must be one of {SOURCES}")
+    if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
+        raise ValueError(f"{key} must be true/false/null")
     if key.endswith(".enabled") and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
 
