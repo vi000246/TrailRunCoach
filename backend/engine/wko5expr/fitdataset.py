@@ -150,11 +150,16 @@ class FitFolderDataset(Dataset):
 
     def __init__(self, fit_dir: str | Path, settings_dir: Optional[str | Path] = None,
                  today: Optional[dt.date] = None, config: Optional[EngineConfig] = None,
-                 corrections: Optional[CorrectionStore] = None, source: str = "fit"):
+                 corrections: Optional[CorrectionStore] = None, source: str = "fit",
+                 tz: Optional[dt.tzinfo] = None):
         from backend.engine.planning import Plan
+        from backend.engine.wko5expr.datasource import athlete_tz
         from backend.files.fit_to_channels import fit_to_channels
         self.dir = Path(fit_dir)
         self.source = source
+        # same zone as the sync's local workout dates: athlete.timezone setting
+        # -> WKO5COACH_TZ -> system
+        self.tz = tz or athlete_tz()
         self.config = config or EngineConfig()
         self.corrections = None if self.config.parity else (corrections or CorrectionStore())
         self.plan = Plan() if self.config.parity else Plan.load()
@@ -183,9 +188,10 @@ class FitFolderDataset(Dataset):
             start = fc.start_time
             if start is None or not fc.elapsedtime:
                 continue
-            if getattr(start, "tzinfo", None) is not None:
-                from backend.settings.repository import resolve_tz
-                start = start.astimezone(resolve_tz(None)).replace(tzinfo=None)   # WKO5 = local wall clock
+            # FIT times are UTC; WKO5 dates are the athlete's local wall clock
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=dt.timezone.utc)
+            start = start.astimezone(self.tz).replace(tzinfo=None)
             entries.append((start, p, fc))
         entries.sort(key=lambda x: x[0])
         for start, p, fc in entries:
