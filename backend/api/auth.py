@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from backend.db.database import get_db
 from backend.sync.tp_client import get_auth_url, exchange_code, login_password, fetch_tp_settings
 from backend.sync import coros_client
+from backend.settings.secrets import SecretKeyMissing
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -28,6 +29,8 @@ async def tp_login_password(body: LoginRequest, db: AsyncSession = Depends(get_d
     try:
         result = await login_password(body.username, body.password, db, body.athlete_id)
         return result
+    except SecretKeyMissing as e:
+        raise HTTPException(503, str(e))
     except Exception as e:
         detail = str(e)
         # codes from tp_client.TpLoginError (website login fallback)
@@ -84,6 +87,8 @@ async def coros_login(body: CorosLoginRequest, db: AsyncSession = Depends(get_db
     try:
         result = await coros_client.login(body.email, body.password, db, body.athlete_id)
         return result
+    except SecretKeyMissing as e:
+        raise HTTPException(503, str(e))
     except Exception as e:
         detail = str(e)
         if "401" in detail or "login failed" in detail.lower():
