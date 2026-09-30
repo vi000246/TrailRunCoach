@@ -362,6 +362,22 @@ _courses: "OrderedDict[str, object]" = OrderedDict()
 _courses_lock = threading.Lock()
 
 
+def _py(o):
+    """numpy scalars → Python, recursively (FastAPI cannot encode np.bool_)."""
+    import math
+
+    import numpy as np
+    if isinstance(o, dict):
+        return {k: _py(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_py(v) for v in o]
+    if isinstance(o, np.generic):
+        o = o.item()
+    if isinstance(o, float) and not math.isfinite(o):
+        return None
+    return o
+
+
 def _course_opts(c: dict) -> dict:
     out = {}
     for k in ("sigma_m", "eps_m", "min_len_m", "flat_pct", "official_gain_m"):
@@ -402,7 +418,7 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
             _courses.popitem(last=False)
     c = _build(track, _course_opts({"sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m,
                                     "flat_pct": flat_pct, "split": split, "official_gain_m": official_gain_m}))
-    return {"course_id": cid, "name": track.name or file.filename, **c}
+    return _py({"course_id": cid, "name": track.name or file.filename, **c})
 
 
 def _grade_models() -> dict:
@@ -431,7 +447,7 @@ def _grade_models() -> dict:
 @router.get("/grade-model")
 def grade_model():
     gm = _grade_models()
-    return {"grade_re": gm["grade_re"].to_json(), "hike_speed": gm["hike_speed"].to_json()}
+    return _py({"grade_re": gm["grade_re"].to_json(), "hike_speed": gm["hike_speed"].to_json()})
 
 
 class CourseRef(BaseModel):
@@ -554,7 +570,7 @@ def make_plan(body: PlanIn) -> dict:
 
 @router.post("/plan")
 def plan(body: PlanIn):
-    return make_plan(body)
+    return _py(make_plan(body))
 
 
 @router.get("/backtest")
@@ -618,6 +634,7 @@ async def export_coros(body: ExportIn, db=Depends(_db)):
     from backend.sync import coros_workouts as CW
     p = make_plan(body)
     payload = coros_payload(body, p)
+    payload = _py(payload)
     out = {"payload": payload, "steps": len(payload["exercises"]), "pushed": None}
     if body.push:
         try:
