@@ -45,6 +45,8 @@ MAX_COROS_STEPS = 50
 # deliberately absent here.
 STRYD_TABLE = ((10.0, 100.0), (21.1, 94.6), (42.2, 89.9))
 HINT_30S = "看 30 秒平均功率"
+STEEP_POWER_GRADE = 0.08       # Stryd ≈ metabolic power validated to 8 % (van Rassel 2026)
+HR_FIRST_SHARE = 0.30          # 自組: above this share of steep distance, HR targets come first
 
 
 def _pace(v: float) -> Optional[float]:
@@ -147,12 +149,20 @@ def coros_steps(segments: list[dict], band: float = 0.03) -> list:
 # ---------------------------------------------------------------------------
 
 def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
-             effort_validated: bool, longest_s: Optional[float] = None) -> dict:
+             effort_validated: bool, longest_s: Optional[float] = None,
+             capacity: Optional[dict] = None) -> dict:
     """v1 = the /predict response for the same inputs (used values, env, v1
-    result = the cross-check and the degraded baseline)."""
+    result = the cross-check and the degraded baseline). `capacity` =
+    {spread, lower_bound, message, lthr, aet} from the inputs (effort band,
+    the lower-bound warning, HR-first trail targets)."""
     used, env, r1 = v1["used"], v1["env"], v1["result"]
     kind = v1["type"]
+    capacity = capacity or {}
     cp, w_prime, tte, k = used["cp"]["value"], used["w_prime"]["value"], used["tte"]["value"], used["k"]["value"]
+    cp2 = (used.get("cp2") or {}).get("value")
+    if kind == "trail" and hasattr(grade_re, "for_trail"):
+        # trail technicality on flats / descents, race-like class
+        grade_re = grade_re.for_trail("race")
     weight, re_v1 = used["weight"]["value"], used["re"]["value"]
     mode = opts.get("mode") or "auto"
     warnings: list[str] = []
@@ -171,7 +181,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     mbar = sum(s["M"] * s["dist_m"] for s in segs) / dsum
 
     def psus(t):
-        return DF.p_sus(t, cp, w_prime, tte, k)
+        return DF.p_sus(t, cp, w_prime, tte, k, cp2=cp2)
 
     # hill / strategy settings
     trail = kind == "trail"
@@ -228,7 +238,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             return PC.solve_auto_mode(f_target, psus, segs, model, cp, alpha=a, **kw)
         return PC.solve_power_mode(p_whole, segs, model, alpha=a, **kw)
 
-    res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp, w_prime, alpha)
+    cp_w = cp2 or cp                # the W′ budget runs above the short-range CP
+    res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp_w, w_prime, alpha)
     if mode == "auto" and not v2_primary and gpx:
         # the whole-race M must be the one the effort uses (time-weighted
         # Σ(Pᵢ/Mᵢ)tᵢ, not the distance-weighted mean): a couple of fixed-point
@@ -241,7 +252,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             done = abs(t_new - t_whole) < 0.05
             t_whole, t_c = t_new, t_new
             p_whole = p_c = d_eff_m / t_new / re_v1 * weight
-            res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp, w_prime, alpha)
+            res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp_w, w_prime, alpha)
             if done:
                 break
     if alpha_used < alpha - 1e-9:
@@ -258,8 +269,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     if (mode == "power" or not v2_primary) and abs(p_bar - p_whole) > 0.5:
         warnings.append(f"平均功率只能到 {p_bar:.0f} W（目標 {p_whole:.0f} W）：鎖定的分段或下坡上限限制了配置")
     p_train = sum(r["P"] / s["M"] * r["t"] for r, s in zip(rows, segs)) / T
-    eff = DF.effort(p_train, T, cp, w_prime, tte, k)
+    eff = DF.effort(p_train, T, cp, w_prime, tte, k, cp_spread=capacity.get("spread"),
+                    lower_bound=(capacity.get("lower_bound") or {}).get("cp_min"), cp2=cp2)
     eff["badge"] = None if effort_validated else "推估"
+    if eff.get("inconsistent"):
+        eff["warning"] = capacity.get("message") or "模型 CP 低於你實際撐過的功率，請重測"
+        warnings.append(eff["warning"])
     over_idx = {i for c in runs if c["over"] for i in range(c["from"], c["to"] + 1)}
     wb = None
     wmodel = opts.get("wbal")
@@ -283,10 +298,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             notes.append(s["walk"])
         if r["capped"]:
             notes.append("下坡上限")
-        if i in over_idx or r["P"] > cp * s["M"] * 1.0001:
+        if i in over_idx or r["P"] > cp_w * s["M"] * 1.0001:
             notes.append("超 CP")
         if r.get("locked"):
             notes.append("已鎖定")
+        if gpx and getattr(grade_re, "walked", None) and grade_re.walked(s["grade"]):
+            notes.append("走（你在這個坡度多半走）")
         gf = minetti.grade_factor(s["grade"])
         v = r["v"]
         trusted = grade_re.trusted(s["grade"]) if gpx else True
@@ -311,7 +328,16 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         warnings.append(f"努力度 {eff['f']:.0%} 超出模型可持續範圍：這個平均功率大約只撐得了 {tl / 3600:.1f} h")
     if longest_s and T > EXTRAP_FACTOR * longest_s and mode == "auto" and f_target > 0.95:
         warnings.append(f"預估時間超過你最長有效紀錄的 {EXTRAP_FACTOR} 倍：建議把努力目標降到 95 %（吃力）")
-    dmg = PC.damage_index(rows, lambda p: DF.t_lim(p / mbar, cp, w_prime, tte, k))
+    dmg = PC.damage_index(rows, lambda p: DF.t_lim(p / mbar, cp, w_prime, tte, k, cp2=cp2))
+    hr_first = None
+    if trail and gpx:
+        steep = sum(s["dist_m"] for s in segs if abs(s["grade"]) > STEEP_POWER_GRADE)
+        share = steep / dsum if dsum else 0.0
+        if share > HR_FIRST_SHARE:
+            hr_first = {"steep_share": share, "lthr": capacity.get("lthr"), "aet": capacity.get("aet")}
+            cap_txt = f"上限 LTHR {capacity['lthr']:.0f} bpm" if capacity.get("lthr") else "上限 LTHR"
+            warnings.append(f"{share:.0%} 的路段坡度超過 8 %（Stryd 功率驗證的範圍外）：以心率為主（{cap_txt}，"
+                            f"長距離壓在 AeT 附近），功率為輔（推估）")
     if dmg > DAMAGE_NOTE:
         warnings.append(f"逐段耗損指數 {dmg:.2f} > {DAMAGE_NOTE}：這只是診斷數字，短時間的起伏會被高估")
     if not gpx:
@@ -345,7 +371,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "category": cat, "mode": mode, "effort_target": f_target if mode == "auto" else None,
                "finish_eta": _clock(opts.get("start_time"), T + _stops_before(stops, km + 1)),
                "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
-               "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg}
+               "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg, "hr_first": hr_first,
+               "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None}
     return {"type": kind, "summary": summary, "effort": eff, "segments": out_segs, "target": target,
             "compare": ctrl, "crosscheck": crosscheck, "wbal": wb, "wprime_runs": runs,
             "profile": course.get("profile"), "climbs": course.get("climbs"), "wpts": course.get("wpts"),
@@ -471,6 +498,10 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         warnings.append(an)
     if gpx and not v2_primary:
         warnings.append("分段時間是推估：回測通過前，整趟移動時間照 v1 EP/h 模型算，分段只負責分配")
+    hk = inp.get("hiking") or {}
+    if not hk.get("solo_n"):
+        warnings.append((hk.get("note") or "百岳多為跟團，速度不代表個人能力，不列入目標時間推算") +
+                        "：步行速度用 Tobler 先驗加上你心率 ≥ AeT 的陡坡爬升窗（推估）")
     warnings.append(f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）")
     warnings.append("背負係數是 v1 的線性假設（(體重 + 5 kg) ÷ (體重 + 背負)）；Pandolf 公式尚未對過原文")
     summary = {"time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1), "speed_factor": lam, "km": km,

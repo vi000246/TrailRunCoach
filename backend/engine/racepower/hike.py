@@ -124,6 +124,26 @@ def langmuir_h(segs: Sequence[dict]) -> float:
     return h
 
 
+def tobler_eph(km: float, gain_m: float, loss_m: Optional[float] = None) -> float:
+    """EP/h (EP = km + gain/100) that Tobler's hiking function implies on a
+    course known only by its totals: the distance split into an up and a
+    down part in proportion to gain and loss, both at the mean grade
+    (gain + loss) / distance (a two-segment approximation, 自組; Tobler 1993
+    W = 6·e^(−3.5·|S + 0.05|) km/h, grade_model.tobler_kmh). The 百岳
+    fallback when there are no solo hikes — group hikes are not the
+    athlete's pace. Labelled 推估."""
+    from backend.engine.racepower.grade_model import tobler_kmh
+    loss_m = gain_m if loss_m is None else loss_m
+    if km <= 0:
+        return tobler_kmh(0.0)
+    if gain_m + loss_m <= 0:
+        return tobler_kmh(0.0)
+    g = (gain_m + loss_m) / (km * 1000.0)
+    d_up = km * gain_m / (gain_m + loss_m)
+    h = d_up / tobler_kmh(g) + (km - d_up) / tobler_kmh(-g)
+    return (km + gain_m / 100.0) / h
+
+
 def moving_ratio(achievements_rows: Sequence[dict]) -> tuple[float, str]:
     """Moving ÷ elapsed time over single-day hikes, for the clock ETA."""
     rs = [r["moving_s"] / r["elapsed_s"] for r in achievements_rows
