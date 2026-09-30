@@ -91,7 +91,7 @@ async def plan_reconcile(db: AsyncSession, inputs: dict, apply: bool, athlete_id
     activities, today, horizon_end."""
     stored = await load(db, athlete_id)
     new, changes = R.reconcile(stored, gen_weeks(inputs), inputs.get("activities") or [],
-                               inputs["today"], inputs.get("horizon_end"))
+                               inputs["today"], inputs.get("horizon_end"), covered=inputs.get("covered"))
     if apply:
         await save(db, new, athlete_id)
     return new, changes
@@ -100,6 +100,14 @@ async def plan_reconcile(db: AsyncSession, inputs: dict, apply: bool, athlete_id
 async def initialized(db: AsyncSession, week_start: str, athlete_id: int = 1) -> bool:
     res = await db.execute(select(PlanSession.id).where(PlanSession.athlete_id == athlete_id,
                                                         PlanSession.week_start == week_start).limit(1))
+    return res.first() is not None
+
+
+async def has_leftovers(db: AsyncSession, before: str, athlete_id: int = 1) -> bool:
+    """Active sessions on days before `before` (e.g. last week's, on a Monday)."""
+    res = await db.execute(select(PlanSession.id).where(PlanSession.athlete_id == athlete_id,
+                                                        PlanSession.state == "active",
+                                                        PlanSession.day < before).limit(1))
     return res.first() is not None
 
 

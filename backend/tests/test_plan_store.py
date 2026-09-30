@@ -196,6 +196,53 @@ def test_missed_and_recalculated():
     assert ("missed", "2026-10-01") in acts and ("added", "2026-10-03") in acts
 
 
+def _two_days_later_quality_moved():
+    return cur_plan(today="2026-10-02", sessions=[
+        g("easy2", "easy", "輕鬆跑", 40, "2026-09-29", done=True, done_by=ACT_929),
+        g("quality", "quality", "閾值 3×10 分", 60, "2026-10-03"),
+        g("strength1", "strength", "肌力", 35, "2026-10-02"),
+        g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
+        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+
+
+def test_late_sync_turns_missed_into_done():
+    new, _ = rec([], inputs())
+    new2, _ = rec(new, inputs(today="2026-10-02", cur=_two_days_later_quality_moved()))
+    assert [s["gen_key"] for s in new2 if s["state"] == "missed"] == ["quality"]
+    # the 10/1 workout syncs a day late: the generator now reports quality done
+    act = {"index": 13, "date": "2026-10-01", "category": "road", "category_label": "路跑"}
+    cur = cur_plan(today="2026-10-02", sessions=[
+        g("easy2", "easy", "輕鬆跑", 40, "2026-09-29", done=True, done_by=ACT_929),
+        g("quality", "quality", "閾值 3×10 分", 60, "2026-10-01", done=True, done_by=act),
+        g("strength1", "strength", "肌力", 35, "2026-10-02"),
+        g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
+        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+    new3, ch = rec(new2, inputs(today="2026-10-02", cur=cur, acts=[ACT_929, act]))
+    q = [s for s in new3 if s.get("gen_key") == "quality" and s["state"] in ("active", "done", "missed")]
+    assert [(s["state"], s["day"]) for s in q] == [("done", "2026-10-01")]     # no leftover re-placed row
+    assert not [c for c in ch if c["action"] == "added"]
+    assert {c["action"] for c in ch} == {"done", "removed"}
+
+
+def test_not_missed_before_the_data_covers_the_day():
+    new, _ = rec([], inputs())
+    inp = inputs(today="2026-10-02", cur=_two_days_later_quality_moved())
+    new2, ch = R.reconcile(new, PS.gen_weeks(inp), inp["activities"], inp["today"], inp["horizon_end"],
+                           covered="2026-09-30")                          # last sync covers up to 9/30
+    q1 = next(s for s in new2 if s.get("gen_key") == "quality" and s["day"] == "2026-10-01")
+    assert q1["state"] == "active" and not [c for c in ch if c["action"] == "missed"]
+    # a past, still-open session is never pushed (and so never re-scheduled)
+    with pytest.raises(CW.Unsupported, match="已過"):
+        CW.session_workout(PS.push_dict(q1), TH, "2026-10-02")
+
+
+def test_projection_from_a_recovery_week_still_has_quality():
+    cur = cur_plan(mode="recovery_week", hours=3.0, sessions=[g("easy1", "easy", "輕鬆跑", 45, "2026-10-01")])
+    cur["history"] = [{"start": "x", "hours": h, "tss": 0} for h in (4.0, 3.0, 4.0, 3.0, 4.0, 3.0, 4.0, 3.0)]
+    weeks = P.project_weeks(cur, PHASES, date(2026, 10, 11))
+    assert weeks[0]["mode"] == "base" and any(s["kind"] == "quality" for s in weeks[0]["sessions"])
+
+
 def test_custom_session_done_by_same_day_activity():
     new, _ = rec([], inputs())
     new.append({"uid": "c1", "week_start": "2026-09-28", "gen_key": None, "day": "2026-09-30", "kind": "hike",
@@ -406,6 +453,33 @@ def test_missed_session_is_removed_from_coros(monkeypatch):
         assert any(s["state"] == "missed" and s["day"] == "2026-10-01" for s in ss)   # visible as 未完成
         # and a missed entry that COROS shows as executed is left alone
         # (covered by coros_workouts Executed tests)
+
+
+def test_new_week_page_load_closes_last_week(monkeypatch):
+    """Next week already exists (projected); opening the page on Monday still
+    reconciles, because last week's sessions are left open."""
+    with Env(monkeypatch) as e:
+        e.c.get(f"{API}/sessions")
+        monkeypatch.setattr(CW, "real_today", lambda: date(2026, 10, 5))
+        cur = cur_plan(today="2026-10-05", sessions=[])
+        cur["week"] = {"start": "2026-10-05", "end": "2026-10-11", "today": "2026-10-05", "days_left": 7}
+        cur["sessions"] = next_week()["sessions"]
+        e.inp = inputs(today="2026-10-05", cur=cur, weeks=[], horizon="2026-10-11")
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        last = [s for s in ss if s["week_start"] == "2026-09-28"]
+        assert last and all(s["state"] in ("missed", "done") for s in last)
+
+
+def test_concurrent_first_loads_do_not_duplicate(monkeypatch):
+    import asyncio as aio
+    from backend.api import plan_sessions
+    with Env(monkeypatch) as e:
+        async def both():
+            return await aio.gather(plan_sessions.sessions(db=e.db), plan_sessions.sessions(db=e.db))
+        run(both())
+        rows = run(e.db.execute(select(PlanSession))).scalars().all()
+        keys = [(r.week_start, r.gen_key) for r in rows if r.state == "active"]
+        assert len(keys) == len(set(keys))
 
 
 def test_push_needs_login(monkeypatch):
