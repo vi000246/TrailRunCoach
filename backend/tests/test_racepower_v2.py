@@ -445,6 +445,88 @@ def test_manual_course_and_day_cuts():
     assert sum(s["dist_m"] for s in cut) == approx(5000)
 
 
+# ---- planner (the /plan payload) ----------------------------------------------
+
+def fake_v1(kind="road", km=42.195, gain=0.0, re=RE0, m=1.0, alt=100.0):
+    d_eff = km + gain / 153.0 if kind == "trail" else km
+    sol = PR.solve_riegel_re(d_eff * 1000.0, CP, TTE, K, re, W, m)
+    side = {"altitude_m": alt, "temp_c": 12.0, "rh_pct": 70.0}
+    res = {"time_s": sol["time_s"], "power": sol["power"], "distance_km": km,
+           "effort_km": d_eff if kind == "trail" else None}
+    return {"type": kind, "env": {"M": m, "from": dict(side), "to": dict(side)},
+            "used": {"cp": {"value": CP}, "w_prime": {"value": WP}, "tte": {"value": TTE}, "k": {"value": K},
+                     "weight": {"value": W}, "re": {"value": re}},
+            "result": res, "warnings": []}
+
+
+def test_planner_T1_manual_flat_auto_equals_v1():
+    v1 = fake_v1()
+    ref = PR.solve_riegel_re(MARATHON, CP, TTE, K, RE0, W)
+    p = PL.plan_run(v1=v1, course=CO.manual_course(42.195, 0.0, 0.0, "km"), grade_re=GM.GradeRE(RE0),
+                    opts={"mode": "auto"}, validated={}, effort_validated=False)
+    s = p["summary"]
+    assert abs(s["time_s"] - ref["time_s"]) < 0.5 and abs(s["power"] - ref["power"]) < 0.1
+    assert s["total_method"] == "v1" and p["effort"]["f"] == approx(1.0, abs=1e-4)
+    assert p["effort"]["badge"] == "推估" and all(x["badge"] == "推估" for x in p["segments"])
+    assert len(p["segments"]) == 43 and all(x["hint"] == "看 30 秒平均功率" for x in p["segments"])
+
+
+def test_planner_modes_on_a_gpx_course_and_the_validation_gate():
+    tr = synthetic_track({"len": 12000, "z": lambda x: 200 + (x * 0.05 if x < 6000 else (12000 - x) * 0.05)})
+    c = CO.build_course(tr)
+    gre = GM.GradeRE(RE0)
+    v1 = fake_v1("trail", 12.0, c["totals"]["gain_m"])
+    common = dict(v1=v1, course=c, grade_re=gre, effort_validated=False)
+    deg = PL.plan_run(opts={"mode": "auto"}, validated={}, **common)
+    assert deg["summary"]["total_method"] == "v1"
+    # v1 total (effort km × trail RE, at the course's mean M from the GPX elevations), v2 allocation
+    ref = PR.solve_riegel_re(v1["result"]["effort_km"] * 1000.0, CP, TTE, K, RE0, W, deg["summary"]["M"])
+    assert deg["summary"]["M"] < 1.0
+    assert deg["summary"]["time_s"] == approx(ref["time_s"], abs=0.5)
+    ok = PL.plan_run(opts={"mode": "auto"}, validated={"trail": True}, **common)
+    assert ok["summary"]["total_method"] == "v2"
+    assert all(x["badge"] is None for x in ok["segments"] if x["trusted"])
+    assert ok["effort"]["f"] == approx(1.0, abs=1e-3)
+    a = PL.plan_run(opts={"mode": "time", "target_time_s": 5400}, validated={"trail": True}, **common)
+    assert a["summary"]["time_s"] == approx(5400, abs=1)
+    b = PL.plan_run(opts={"mode": "power", "target_power": a["summary"]["power"]}, validated={"trail": True}, **common)
+    assert b["summary"]["time_s"] == approx(5400, abs=1)
+    lock = PL.plan_run(opts={"mode": "power", "target_power": 250, "locks": [{"seg": 1, "power": 400}]},
+                       validated={"trail": True}, **common)
+    assert lock["segments"][0]["power"] == approx(400) and lock["segments"][0]["locked"]
+    assert lock["summary"]["power"] == approx(250, abs=0.1)
+    up = [x for x in ok["segments"] if x["cls"] == "up"]
+    down = [x for x in ok["segments"] if x["cls"] == "down"]
+    assert up[0]["power"] > down[0]["power"]
+    steps = PL.coros_steps(ok["segments"])
+    assert len(steps) == len(ok["segments"]) and steps[0].intensity[0] == "power"
+
+
+def test_planner_hike_three_modes_and_days():
+    tr = synthetic_track({"len": 16000, "z": lambda x: 2600 + (x * 0.1 if x < 8000 else (16000 - x) * 0.1)})
+    c = CO.build_course(tr)
+    v1 = {"type": "baiyue", "env": {"M": 0.93, "from": {"altitude_m": 100, "temp_c": 20, "rh_pct": 70},
+                                    "to": {"altitude_m": 3400, "temp_c": 10, "rh_pct": 70}},
+          "used": {"weight": {"value": 70}, "eph": {"value": 3.0}, "aet": {"value": 145}},
+          "result": {"pack_factor": 0.9, "pack_kg": 12, "M": 0.93, "time_s": 20000,
+                     "days": [{"day": 1, "km": 16, "gain_m": 800, "loss_m": 800, "moving_h": 5.5, "kcal": 3000,
+                               "water_ml": [2100, 2400]}]}, "warnings": []}
+    hs = GM.fit_hike_speed([])
+    inp = {"hiking": {"days": [{"ep_per_h": x, "days": 1} for x in (2.4, 2.8, 3.0, 3.2, 3.5, 3.9)]}}
+    base = dict(v1=v1, course=c, hike_speed=hs, inp=inp, validated={})
+    auto = PL.plan_hike(opts={"mode": "auto", "day_splits_km": [8.0], "terrain": {"1": "bamboo"}}, **base)
+    assert [d["day"] for d in auto["days"]] == [1, 2]
+    assert auto["segments"][0]["terrain"] == "bamboo" and auto["segments"][0]["eta_factor"] == 1.35
+    t1 = auto["summary"]["time_s"]
+    a = PL.plan_hike(opts={"mode": "time", "target_time_s": t1 / 1.1}, **base)
+    assert a["summary"]["speed_factor"] == approx(1.1)
+    b = PL.plan_hike(opts={"mode": "power", "speed_factor": 0.9}, **base)
+    assert b["summary"]["time_s"] == approx(t1 / 0.9, rel=1e-9)
+    assert auto["effort"]["key"] == "steady" and auto["summary"]["total_method"] == "v1"
+    manual = PL.plan_hike(opts={"mode": "auto"}, **{**base, "course": CO.manual_course(16, 800)})
+    assert manual["summary"]["time_s"] > 0 and manual["days"]
+
+
 GPX11 = """<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="t" xmlns="http://www.topografix.com/GPX/1/1">
 <metadata><name>demo</name></metadata>

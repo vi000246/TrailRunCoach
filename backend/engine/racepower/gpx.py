@@ -32,6 +32,10 @@ class Track:
     time: Optional[list[Optional[float]]] = None     # s from the first point
     wpts: list[dict] = field(default_factory=list)   # {name, lat, lon}
     name: str = ""
+    # device cumulative distance (m) at each point — set for the athlete's own
+    # activities so the course uses the same ruler as the grade model's
+    # samples (footpod / watch distance, not raw-GPS haversine)
+    dist: Optional[list[float]] = None
 
     def __len__(self) -> int:
         return len(self.lat)

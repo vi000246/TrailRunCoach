@@ -7,16 +7,26 @@ Race-power API — the 賽事功率 page (docs/research/superpower-calculator.md
     GET  /weather/key   CWA key status (masked);  POST /weather/key  save it
     POST /predict       road / trail / 百岳 prediction; every input overridable
     GET  /page          the HTML page
+
+v2 (docs/research/racepower-v2.md §10.2):
+    POST /course        upload .gpx / .fit → course_id + segments + profile
+    POST /plan          three modes on a course; segments, effort bar, cross-checks
+    GET  /grade-model   personal RE(g), v_max(g), v_h(g)
+    GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
+    POST /export/coros  plan → COROS structured workout (preview, or push=true)
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
+import hashlib
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -340,3 +350,280 @@ def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: di
 @router.get("/page", include_in_schema=False)
 def page():
     return FileResponse(STATIC / "racepower.html")
+
+
+# ---------------------------------------------------------------------------
+# v2: course upload, plan, grade model, back-test, COROS export.
+# /predict above is kept unchanged (v1); /plan calls it for the baseline.
+# ---------------------------------------------------------------------------
+
+COURSE_CACHE_MAX = 20
+_courses: "OrderedDict[str, object]" = OrderedDict()
+_courses_lock = threading.Lock()
+
+
+def _course_opts(c: dict) -> dict:
+    out = {}
+    for k in ("sigma_m", "eps_m", "min_len_m", "flat_pct", "official_gain_m"):
+        v = c.get(k)
+        if v is not None and v != "":
+            out[k] = float(v)
+    if c.get("split") in ("grade", "km", "none"):
+        out["split"] = c["split"]
+    return out
+
+
+def _build(track, opts: dict) -> dict:
+    from backend.engine.racepower import course as CO
+    try:
+        return CO.build_course(track, **opts)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.post("/course")
+async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] = Form(None),
+                        eps_m: Optional[float] = Form(None), min_len_m: Optional[float] = Form(None),
+                        flat_pct: Optional[float] = Form(None), split: Optional[str] = Form(None),
+                        official_gain_m: Optional[float] = Form(None)):
+    """Parse a .gpx / .fit once and cache the Track (LRU 20, by content sha1);
+    later plans send only the course_id and re-segment with their options."""
+    from backend.engine.racepower import gpx as GPX
+    data = await file.read(GPX.MAX_BYTES + 1)
+    try:
+        track = GPX.parse(data, file.filename or "")
+    except GPX.GpxError as e:
+        raise HTTPException(400, str(e))
+    cid = hashlib.sha1(data).hexdigest()
+    with _courses_lock:
+        _courses[cid] = track
+        _courses.move_to_end(cid)
+        while len(_courses) > COURSE_CACHE_MAX:
+            _courses.popitem(last=False)
+    c = _build(track, _course_opts({"sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m,
+                                    "flat_pct": flat_pct, "split": split, "official_gain_m": official_gain_m}))
+    return {"course_id": cid, "name": track.name or file.filename, **c}
+
+
+def _grade_models() -> dict:
+    """GradeRE + HikeSpeed + the hike moving-ratio rows, memoised like /inputs."""
+    from backend.engine.achievements import KIND_HIKE, build_achievements
+    from backend.engine.racepower import athlete as A
+    ds = _dataset()
+    today = dt.date.today()
+    key = (id(ds), today)
+    with _lock:
+        hit = _cache.get("grade")
+        if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
+            return hit[2]
+    road = (inputs()["re"]["road"] or {}).get("median")
+    gm = A.grade_models(ds, today, re_flat=road)
+    try:
+        gm["moving_rows"] = [{"moving_s": a.moving_s, "elapsed_s": a.elapsed_s} for a in build_achievements(ds)
+                             if a.kind == KIND_HIKE and not a.days]
+    except Exception:                       # noqa: BLE001
+        gm["moving_rows"] = []
+    with _lock:
+        _cache["grade"] = (key, time.time(), gm)
+    return gm
+
+
+@router.get("/grade-model")
+def grade_model():
+    gm = _grade_models()
+    return {"grade_re": gm["grade_re"].to_json(), "hike_speed": gm["hike_speed"].to_json()}
+
+
+class CourseRef(BaseModel):
+    course_id: Optional[str] = None
+    split: Optional[Literal["grade", "km", "none"]] = None
+    sigma_m: Optional[float] = None
+    eps_m: Optional[float] = None
+    min_len_m: Optional[float] = None
+    flat_pct: Optional[float] = None
+    official_gain_m: Optional[float] = None
+    manual: Optional[dict] = None           # {km, gain, loss, split}
+
+
+class LockIn(BaseModel):
+    seg: int
+    power: float
+
+
+class StopIn(BaseModel):
+    km: float
+    minutes: float = 0.0
+
+
+class PlanIn(PredictIn):
+    distance_km: Optional[float] = None
+    mode: Literal["time", "power", "auto"] = "auto"
+    target_pace_s_per_km: Optional[float] = None
+    target_power: Optional[float] = None
+    target_pct_cp: Optional[float] = None
+    power_is_training: bool = False
+    effort_target: float = 1.0
+    speed_factor: Optional[float] = None
+    course: Optional[CourseRef] = None
+    strategy: Optional[dict] = None         # {kind: even|negative|positive, amount}
+    hills: Optional[dict] = None            # {up, down}
+    acclimatisation: Optional[Literal["acclimatised", "partial", "unacclimatised"]] = None
+    locks: list[LockIn] = []
+    start_time: Optional[str] = None
+    stops: list[StopIn] = []
+    day_splits_km: list[float] = []
+    terrain: dict = {}
+    wbal: Optional[Literal["wko5", "skiba"]] = None
+
+
+def _resolve_course(body: PlanIn) -> dict:
+    from backend.engine.racepower import course as CO
+    c = body.course
+    if c and c.course_id:
+        with _courses_lock:
+            track = _courses.get(c.course_id)
+        if track is None:
+            raise HTTPException(410, "路線已過期（伺服器重啟過），請重新上傳 GPX")
+        return _build(track, _course_opts(c.model_dump()))
+    man = (c.manual if c and c.manual else None) or {}
+    km = float(man.get("km") or body.distance_km or 0)
+    if km <= 0:
+        raise HTTPException(400, "需要距離或 GPX 路線")
+    gain = float(man.get("gain") if man.get("gain") is not None else body.gain_m or 0)
+    loss = man.get("loss") if man.get("loss") is not None else body.loss_m
+    split = man.get("split") or (c.split if c and c.split else "none")
+    alt = body.env_to.altitude_m if body.env_to else None
+    return CO.manual_course(km, gain, loss, "km" if split == "km" else "none", alt)
+
+
+def _v1_for(body: PlanIn, course: dict) -> dict:
+    """The v1 /predict response for the same inputs (baseline + cross-check).
+    With a GPX course and no race-day altitude, the altitude is the course's
+    (百岳: the top, as v1 uses the peak; runs: the distance-weighted mean)."""
+    t = course["totals"]
+    data = {k: v for k, v in body.model_dump().items() if k in PredictIn.model_fields}
+    data.update(distance_km=t["km"], gain_m=t["gain_m"], loss_m=t.get("loss_m"))
+    gpx = course.get("source") == "gpx"
+    to = dict(data.get("env_to") or {})
+    if gpx and to.get("altitude_m") is None:
+        segs = course["segments"]
+        to["altitude_m"] = t["z_max"] if body.type == "baiyue" else \
+            sum(s["z_mean"] * s["dist_m"] for s in segs) / sum(s["dist_m"] for s in segs)
+        data["env_to"] = to
+    if body.type == "baiyue" and gpx:
+        from backend.engine.racepower import course as CO
+        pieces = CO.cut_at(course["segments"], body.day_splits_km)
+        days = sorted({p["day"] for p in pieces})
+        data["days"] = len(days)
+        data["day_plan"] = [{"km": sum(p["dist_m"] for p in pieces if p["day"] == n) / 1000.0,
+                             "gain_m": sum(p["gain_m"] for p in pieces if p["day"] == n),
+                             "loss_m": sum(p["loss_m"] for p in pieces if p["day"] == n)} for n in days]
+    if body.mode != "time":
+        data["target_time_s"] = None
+    return predict(PredictIn(**data))
+
+
+def make_plan(body: PlanIn) -> dict:
+    from backend.engine.racepower import backtest as BT
+    from backend.engine.racepower import planner as PL
+    course = _resolve_course(body)
+    v1 = _v1_for(body, course)
+    validated, effort_ok = BT.flags()
+    gm = _grade_models()
+    opts = body.model_dump()
+    opts["locks"] = [x.model_dump() for x in body.locks]
+    opts["stops"] = [x.model_dump() for x in body.stops]
+    try:
+        if body.type == "baiyue":
+            opts["moving_rows"] = gm.get("moving_rows") or []
+            out = PL.plan_hike(v1=v1, course=course, hike_speed=gm["hike_speed"], inp=inputs(), opts=opts,
+                               validated=validated)
+        else:
+            gre = gm["grade_re"]
+            if body.type == "road":
+                # RE(0) is the CVI-adjusted road RE v1 uses
+                gre = dataclasses.replace(gre, re_flat=v1["used"]["re"]["value"])
+            out = PL.plan_run(v1=v1, course=course, grade_re=gre, opts=opts, validated=validated,
+                              effort_validated=effort_ok, longest_s=(inputs().get("riegel") or {}).get("longest_s"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
+               course_id=body.course.course_id if body.course else None)
+    return out
+
+
+@router.post("/plan")
+def plan(body: PlanIn):
+    return make_plan(body)
+
+
+@router.get("/backtest")
+def backtest_result():
+    from backend.engine.racepower import backtest as BT
+    return {"state": BT.state(), "result": BT.load()}
+
+
+@router.post("/backtest/run")
+def backtest_run():
+    from backend.engine.racepower import backtest as BT
+    return {"started": BT.start_background(_dataset), "state": BT.state()}
+
+
+class ExportIn(PlanIn):
+    push: bool = False
+    name: Optional[str] = None
+
+
+def coros_payload(body: ExportIn, p: dict) -> dict:
+    """Plan → COROS program through the existing mapping (coros_workouts
+    Step / build_program): one time-based step per segment, power ± 3 %
+    (百岳: heart rate ≤ AeT)."""
+    from backend.engine.racepower import planner as PL
+    from backend.sync import coros_workouts as CW
+    th = CW.Thresholds(cp=(p["used"].get("cp") or {}).get("value"),
+                       aet=(p["used"].get("aet") or {}).get("value"))
+    if p["type"] == "baiyue":
+        hr = CW.easy_hr(th)
+        steps = [CW.Step(CW.EX_TRAIN, max(1, int(round(s["t"]))), hr,
+                         f"{s['start_km']:.1f}-{s['end_km']:.1f}k {s['cls_label']}") for s in p["segments"]] \
+            or [CW.Step(CW.EX_TRAIN, int(p["summary"]["time_s"]), hr, "心率 ≤ AeT")]
+    else:
+        steps = PL.coros_steps(p["segments"])
+    badge = "（推估）" if p["summary"].get("badge") else ""
+    name = body.name or f"{CW.NAME_PREFIX} 比賽配速 {p['summary']['km']:.0f}k"
+    return CW.build_program(name, steps, th, f"{PL.HINT_30S}；分段目標{badge}")
+
+
+async def push_to_coros(db, payload: dict, day: Optional[str]) -> dict:
+    """Add the workout to the COROS library and, for a date not in the past,
+    put it on that day (the existing Training Hub client)."""
+    from backend.sync import coros_workouts as CW
+    hub = await CW.TrainingHub.from_db(db)
+    pid = await hub.add_program(payload)
+    out = {"program_id": pid, "scheduled": None}
+    if day and day[:10] >= dt.date.today().isoformat():
+        detail = await hub.program_detail(pid)
+        out["scheduled"] = await hub.schedule(detail, day[:10])
+    return out
+
+
+async def _db():
+    from backend.db.database import get_db
+    async for s in get_db():
+        yield s
+
+
+@router.post("/export/coros")
+async def export_coros(body: ExportIn, db=Depends(_db)):
+    from backend.sync import coros_workouts as CW
+    p = make_plan(body)
+    payload = coros_payload(body, p)
+    out = {"payload": payload, "steps": len(payload["exercises"]), "pushed": None}
+    if body.push:
+        try:
+            out["pushed"] = await push_to_coros(db, payload, body.date)
+        except CW.CorosAuthError as e:
+            raise HTTPException(401, f"COROS 未登入：{e}")
+        except CW.CorosError as e:
+            raise HTTPException(502, f"COROS 回應錯誤：{e}")
+    return out
