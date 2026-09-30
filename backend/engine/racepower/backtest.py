@@ -56,7 +56,7 @@ from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
 
-THRESHOLDS = {"road": 0.03, "trail": 0.06, "hike": 0.10}
+THRESHOLDS = {"road": 0.03, "trail": 0.06, "hike": 0.10, "hike_capacity": 0.10}
 MIN_N = 5
 DOWNHILL_BIAS_MAX = 0.05
 A_RACE_F = (0.97, 1.03)
@@ -599,12 +599,17 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
     terrain = summarise_terrain(run_rows)
     capacity = summarise_capacity(cap_rows, lb_rows)
     validated = validated_flags(terrain, capacity, [r for r in run_rows if r.get("intensity") == "race"])
+    try:
+        hike_cap = capacity_backtest(ds, today, progress)
+    except Exception as e:                  # noqa: BLE001
+        hike_cap = {"error": f"{type(e).__name__}: {str(e)[:160]}", "passed": False}
+    validated["hike_capacity"] = bool(hike_cap.get("passed"))
     gm_now = A.grade_models(ds, today, classes=classes)
     counts = {k: sum(1 for r in run_rows if r.get("intensity") == k) for k in CLASSES}
     leaks = sum(1 for r in ok if (r.get("capacity") or {}).get("cp_source") == "wko5")
     return {"computed_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"), "today": today.isoformat(),
             "seconds": round(time.time() - t0, 1), "version": 2, "rows": rows,
-            "terrain": terrain, "capacity": capacity, "validated": validated,
+            "terrain": terrain, "capacity": capacity, "validated": validated, "hike_capacity": hike_cap,
             "effort_validated": bool(capacity["effort"]["passed"]), "thresholds": THRESHOLDS, "min_n": MIN_N,
             "intensity_counts": counts, "grade_bins": BIN_LABELS, "hike_hr": gm_now["hike_hr"],
             "hike_basis": gm_now["hike_basis"], "leaks_wko5_cp": leaks,
@@ -616,6 +621,193 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
                       "殘留洩漏：LTHR 自動估算篩選跑步時用 ds.cp（計畫的 CP 測試會被套到更早的日期，或 WKO5 目前的 mFTP）",
                       "地形模型回測餵實際功率，只檢驗「功率 → 速度」（坡度-RE、走跑、下坡上限、技術係數），不是預測準確度",
                       "能力模型只能用接近全力的努力檢驗：心率判定的比賽強度、賽季計畫比賽、正式 CP 測試的全力段"]}
+
+
+# ---------------------------------------------------------------------------
+# 百岳 walking capacity (docs/research/baiyue-from-running.md §7.1)
+# ---------------------------------------------------------------------------
+
+CAP_MIN_SEG_WINDOWS = 3        # a scored segment is ≥ 300 m (after the first window is dropped)
+CAP_MIN = {"trail": {"segs": 30, "groups": 10}, "hike": {"segs": 30, "groups": 5}}
+CAP_BIAS_MAX = 0.05
+HIGH_Z = 2500.0
+SANITY_BAND = (0.60, 1.00)     # capacity moving ÷ actual group moving time (自組, §7.1 D)
+SANITY_SHARE = 0.80
+
+
+def _segments(wins: list[dict]) -> list[list[dict]]:
+    by: dict = {}
+    for w in wins:
+        by.setdefault(w["seg"], []).append(w)
+    return [sorted(v, key=lambda w: w["k"]) for v in by.values() if len(v) >= CAP_MIN_SEG_WINDOWS]
+
+
+def _seg_time(ws, vf) -> float:
+    return sum(100.0 / max(1e-6, vf(w)) for w in ws)
+
+
+def score_segments(cap, segs: list[list[dict]], load_of, alt_pct: Optional[float] = None) -> list[dict]:
+    """Predicted ÷ actual time of each held-out segment: full model, the
+    physiological prior alone (no δ, no altitude), and Tobler."""
+    from dataclasses import replace
+    from backend.engine.racepower.grade_model import tobler_kmh
+    model = cap if alt_pct is None else replace(cap, alpha={**cap.alpha, "post": alt_pct})
+    out = []
+    for ws in segs:
+        L = load_of(ws[0])
+        t_act = sum(100.0 / w["v"] for w in ws)
+        z = float(np.mean([w["z"] for w in ws]))
+        h = (ws[0].get("t") or 0.0) / 3600.0
+        t_full = _seg_time(ws, lambda w: model.v(w["g"], L, z=w["z"], h=(w.get("t") or 0.0) / 3600.0))
+        t_prior = _seg_time(ws, lambda w: cap.prior_only(w["g"], L))
+        t_tob = _seg_time(ws, lambda w: tobler_kmh(w["g"]) / 3.6)
+        out.append({"a": ws[0].get("a"), "src": ws[0].get("src"), "z": z, "h": h, "n": len(ws), "L": L,
+                    "g": float(np.mean([w["g"] for w in ws])), "t_act": t_act,
+                    "err": t_full / t_act - 1.0, "err_prior": t_prior / t_act - 1.0, "err_tobler": t_tob / t_act - 1.0,
+                    "log_err": math.log(t_full / t_act)})
+    return out
+
+
+def _cap_summary(rows: list[dict], kind: str) -> dict:
+    s = stats(r["err"] for r in rows)
+    groups = len({r["a"] for r in rows})
+    need = CAP_MIN[kind]
+    reasons = []
+    if s["n"] < need["segs"] or groups < need["groups"]:
+        reasons.append(f"段數 {s['n']}（需 ≥ {need['segs']}）、{'活動' if kind == 'trail' else '趟'} {groups}（需 ≥ {need['groups']}）")
+    if s["median_abs"] is not None and s["median_abs"] > THRESHOLDS["hike_capacity"]:
+        reasons.append(f"時間誤差中位數 {s['median_abs']:.1%} > {THRESHOLDS['hike_capacity']:.0%}")
+    if s["bias"] is not None and abs(s["bias"]) > CAP_BIAS_MAX:
+        reasons.append(f"偏差 {s['bias']:+.1%} 超過 ±{CAP_BIAS_MAX:.0%}")
+    return {"time": s, "groups": groups, "prior": stats(r["err_prior"] for r in rows),
+            "tobler": stats(r["err_tobler"] for r in rows), "passed": not reasons, "reasons": reasons,
+            "log_sd": float(np.std([r["log_err"] for r in rows])) if len(rows) >= 5 else None}
+
+
+def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: bool = True,
+                      boot_reps: int = 200) -> dict:
+    """§7.1 A–D, G: leave-one-activity-out on the walked trail windows,
+    leave-one-trip-out on the HR-filtered 百岳 windows (z ≥ 2500 m reported
+    separately, with the personal / shrunk / Wehrlin altitude slopes), the
+    prior comparison, the whole-day sanity band on the group days, and the
+    altitude diagnostics. Cheap: every fold refits the windows only."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import capacity as CAP
+    today = today or dt.date.today()
+    t0 = time.time()
+    x = A.walk_capacity_inputs(ds, today)
+
+    def fit_without(a):
+        keep = lambda ws: [w for w in ws if w.get("a") != a]
+        return CAP.fit_walk_capacity(weight=x["weight"], v_run=x["v_run"], trail=keep(x["trail"]),
+                                     hike=keep(x["hike"]), flat=keep(x["flat"]), hike_down=keep(x["hike_down"]),
+                                     aet_of=x["aet"].get, pack_of=x["pack_of"], boot_reps=boot_reps)
+    rows_a, rows_b, rows_bh = [], [], []
+    trail_segs = _segments(x["trail"])
+    hike_segs = _segments(x["hike"])
+    groups = sorted({s[0].get("a") for s in trail_segs} | {s[0].get("a") for s in hike_segs}, key=str)
+    for i, a in enumerate(groups):
+        if progress:
+            progress(i, len(groups), {"label": f"百岳能力回測 {i + 1}/{len(groups)}"})
+        cap = fit_without(a)
+        ta = [s for s in trail_segs if s[0].get("a") == a]
+        hb = [s for s in hike_segs if s[0].get("a") == a]
+        rows_a += score_segments(cap, ta, lambda w: CAP.L_TRAIL)
+        if hb:
+            rb = score_segments(cap, hb, lambda w: x["pack_of"](w.get("a")))
+            cur = (cap.alpha.get("diagnostics") or {}).get("versions", {}).get("current")
+            for pct, key in ((cur["pct_per_km"] if cur else None, "err_personal"), (CAP.ALT_PRIOR_PCT, "err_wehrlin")):
+                if pct is None:
+                    continue
+                alt = score_segments(cap, hb, lambda w: x["pack_of"](w.get("a")), alt_pct=pct)
+                for r, r2 in zip(rb, alt):
+                    r[key] = r2["err"]
+            rows_b += rb
+    rows_bh = [r for r in rows_b if r["z"] >= HIGH_Z]
+    A_ = _cap_summary(rows_a, "trail")
+    B_ = _cap_summary(rows_b, "hike")
+    high = {"time": stats(r["err"] for r in rows_bh), "trips": len({r["a"] for r in rows_bh}),
+            "personal": stats(r.get("err_personal") for r in rows_bh),
+            "shrunk": stats(r["err"] for r in rows_bh), "wehrlin": stats(r.get("err_wehrlin") for r in rows_bh)}
+    worst = max((v["median_abs"] for v in (high["personal"], high["wehrlin"]) if v["median_abs"] is not None), default=None)
+    high["shrunk_not_worst"] = None if worst is None or high["shrunk"]["median_abs"] is None else \
+        high["shrunk"]["median_abs"] <= worst + 1e-9
+    high["passed"] = bool(high["time"]["bias"] is not None and abs(high["time"]["bias"]) <= CAP_BIAS_MAX)
+    full = A.walk_capacity(ds, today, inputs=x, boot_reps=400)
+    both = rows_a + rows_b
+    c_order = None
+    if both:
+        m = {k: stats(r[k] for r in both)["median_abs"] for k in ("err", "err_prior", "err_tobler")}
+        c_order = {**m, "ok": m["err"] <= m["err_prior"] <= m["err_tobler"]}
+    out = {"version": 1, "computed_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"),
+           "today": today.isoformat(), "trail": A_, "hike": B_, "high": high, "prior_order": c_order,
+           "passed": bool(A_["passed"] and B_["passed"]), "threshold": THRESHOLDS["hike_capacity"],
+           "sigma_loo": float(np.std([r["log_err"] for r in both])) if len(both) >= 10 else None,
+           "altitude": full.alpha.get("diagnostics"), "alpha": {k: v for k, v in full.alpha.items() if k != "diagnostics"},
+           "beta": full.beta, "gamma": full.gamma_info, "basis": full.basis, "v_run": full.v_run_info,
+           "rows": {"trail": rows_a, "hike": rows_b}}
+    if days:
+        out["days"] = capacity_days(ds, today, full, x)
+    out["seconds"] = round(time.time() - t0, 1)
+    return out
+
+
+def capacity_days(ds, today: dt.date, cap, x: dict) -> dict:
+    """§7.1 D: every hiking day (group-paced): capacity moving time on the
+    day's own track ÷ the actual moving time. A sanity band, not accuracy:
+    ≥ 80 % of the days should fall in 0.60–1.00 (never slower than the
+    group, never absurdly fast)."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import capacity as CAP
+    solo = A.solo_hikes()
+    rows = []
+    for w in A.hike_workouts(ds, today):
+        arr = A.activity_arrays(ds, w)
+        if arr is None:
+            continue
+        for n, part in _hike_days(arr, w.entry.start):
+            tk = track_of(part)
+            if tk is None:
+                continue
+            track, idx = tk
+            try:
+                course = CO.build_course(track)
+            except Exception:              # noqa: BLE001
+                continue
+            segs = course["segments"]
+            d = _dt(part["t"])
+            moving = (np.nan_to_num(part["kmh"]) > 0.3 * 3.6) & (d > 0)
+            act = actual_segments(part, idx, track, segs, moving)
+            t_act = sum(a["t"] for a in act)
+            if t_act < HIKE_MIN_MOVING_S:
+                continue
+            L = CAP.day_pack(x["pack_of"](w.idx), n)
+            h, t_cap = 0.0, 0.0
+            for s in segs:
+                v = cap.v(s["grade"], L, z=s["z_mean"], h=h, n_day=n)
+                t_cap += s["dist_m"] / v
+                h = t_cap / 3600.0
+            r = t_cap / t_act
+            rows.append({"date": (w.entry.start + dt.timedelta(seconds=float(np.nanmin(part["t"])))).date().isoformat(),
+                         "label": A.label(w), "day": n, "t_act": t_act, "t_cap": t_cap, "ratio": r,
+                         "in_band": SANITY_BAND[0] <= r <= SANITY_BAND[1], "solo": w.entry.file in solo,
+                         "pack_kg": L, "km": course["totals"]["km"], "gain_m": course["totals"]["gain_m"]})
+    grp = [r for r in rows if not r["solo"]]
+    share = sum(r["in_band"] for r in grp) / len(grp) if grp else None
+    return {"rows": rows, "n": len(grp), "share_in_band": share, "band": list(SANITY_BAND),
+            "passed": share is not None and share >= SANITY_SHARE,
+            "ratio": stats(r["ratio"] for r in grp)}
+
+
+def store_capacity(res: dict, path=None) -> dict:
+    """Merge a capacity back-test into the stored version-2 result (creating
+    a minimal one when none exists) and set validated["hike_capacity"]."""
+    cur = load(path) or {"version": 2, "validated": {k: False for k in THRESHOLDS}, "effort_validated": False,
+                         "rows": [], "notes": []}
+    cur["hike_capacity"] = res
+    cur.setdefault("validated", {})["hike_capacity"] = bool(res.get("passed"))
+    save(cur, path)
+    return cur
 
 
 # ---------------------------------------------------------------------------

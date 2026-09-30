@@ -248,6 +248,21 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <span class="help" tabindex="0">?<span class="tip">取得比賽日天氣後，如果有逐時預報（中央氣象署三天預報或 Open-Meteo），每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時預報（日期太遠、離線）或沒填起跑時間時，全程用同一個溫度。</span></span>
       <span class="meta" id="heat-line"></span>
     </div>
+    <div class="row"><span class="lbl">熱適應</span>
+      <div class="seg" id="heat-accl"><button data-h="auto">自動</button><button data-h="none">未適應</button><button data-h="partial">部分</button><button data-h="acclimatised">已適應</button><button data-h="custom">自訂 %</button></div>
+      <input id="heat-s" type="number" min="0" max="100" step="5" style="width:64px" class="hidden" placeholder="S %">
+      <span class="badge watch">推估</span>
+      <span class="help" tabindex="0">?<span class="tip">熱適應指數 S（0–100 %）：近期每天在 Hadley ≥ 150（例如 28 °C / 75 %）的移動分鐘，每天 ≥ 60 分算滿劑量，連續 5 天約 70 %（Pandolf 1998），停止後每天掉約 2.5 %（Daanen 2018）。比賽的熱懲罰乘上 (1 − 0.75 × S)（Racinais 2015 兩週拿回約 77 %；0.75 是自組）。自動 = 從你的紀錄推算到比賽日。部分 = 50 %、已適應 = 90 % 是自組的固定值。你自己的心率資料目前不支持「夏末熱懲罰比較小」，所以一律標推估。</span></span>
+      <span class="meta" id="heat-accl-line"></span>
+    </div>
+    <div class="row bf"><span class="lbl">行程</span>
+      <div class="seg" id="tripkind"><button data-k="group">跟團</button><button data-k="solo">自己走</button></div>
+      <div class="seg" id="hrband"><button data-b="aet">AeT（多日建議）</button><button data-b="cap">能力上限（≤ 3 h）</button></div>
+      <label class="meta">天數 <input id="tripdays" type="number" min="1" max="10" step="1" value="3" style="width:52px"></label>
+      <label class="meta">每天背負 kg <input id="packdays" placeholder="例 9, 8.3, 7.6" style="width:120px"></label>
+      <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
+      <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，自組）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
+    </div>
     <div class="row rf"><span class="lbl">顯示</span>
       <div class="seg" id="unit"><button data-u="power">功率</button><button data-u="pace">配速</button></div>
       <label class="meta">W′ 曲線 <select id="wbal" style="width:auto"><option value="">不顯示</option><option value="wko5">WKO5 算法</option><option value="skiba">Skiba τ 自行車（推估）</option><option value="skiba_run">Skiba τ 跑步擬合（推估）</option></select></label>
@@ -386,7 +401,10 @@ let INP = null, PEAKS = [], LAST = null, PLAN = null, WX = null, GM = null;
 const ovr = {};          // user overrides of "your numbers": {cp, w_prime, tte, k, re, weight, eph, cp_source, k_source}
 let type = ls.get("type", "road");
 const S = Object.assign({ mode: "auto", tunit: "time", punit: "w", effort: 1, csrc: "manual", split: "grade", strategy: "even",
-  amount: null, unit: "power", accl: null, hup: 5, hdown: 10 }, ls.get("ui", {}));
+  amount: null, unit: "power", accl: null, hup: 5, hdown: 10, heatAccl: { mode: "auto", s: null }, trip: "group", hrband: "aet" },
+  ls.get("ui", {}));
+let HEAT = null;                          // /heat-status for the race date
+let HIKEMETA = null;                      // /hike-meta rows
 let COURSE = ls.get("course", null);      // {course_id, name, km, gain_m} — the file itself is not stored
 let LOCKS = {};                           // seg index -> power
 let SPLITS = [];                          // day split km (百岳)
@@ -414,6 +432,8 @@ function setType(t) {
   ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
   $("hike-sec").classList.toggle("hidden", !hike);
   if (!S.accl) segOn("accl", "a", hike ? "unacclimatised" : "acclimatised");
+  // user decision 2026-09-30: a 百岳 trip defaults to 3 days
+  if (hike && !S.daysInit) { if ((Number($("days").value) || 1) === 1) $("days").value = 3; $("tripdays").value = $("tripdays").value || 3; S.daysInit = true; saveUI(); }
   renderDayPlan(); syncForm();
 }
 function accl() { return S.accl || (type === "baiyue" ? "unacclimatised" : "acclimatised"); }
@@ -421,6 +441,10 @@ function syncForm() {
   segOn("mode", "m", S.mode); segOn("tunit", "u", S.tunit); segOn("punit", "u", S.punit); segOn("effort", "e", S.effort);
   segOn("csrc", "c", S.csrc); segOn("split", "s", S.split); segOn("strategy", "k", S.strategy); segOn("unit", "u", S.unit);
   segOn("accl", "a", accl());
+  segOn("heat-accl", "h", S.heatAccl?.mode || "auto"); segOn("tripkind", "k", S.trip); segOn("hrband", "b", S.hrband);
+  $("heat-s").classList.toggle("hidden", S.heatAccl?.mode !== "custom");
+  if (S.heatAccl?.s != null && $("heat-s").value === "") $("heat-s").value = Math.round(S.heatAccl.s * 100);
+  heatAcclLabel();
   $("mode-time").classList.toggle("hidden", S.mode !== "time");
   $("mode-power").classList.toggle("hidden", S.mode !== "power");
   $("mode-auto").classList.toggle("hidden", S.mode !== "auto");
@@ -439,6 +463,26 @@ function syncForm() {
   const fixed = [1, 0.95, 0.85].includes(Number(S.effort));
   $("effort-custom").textContent = fixed ? "" : `自訂 ${Math.round(S.effort * 100)}%（拖動努力度條設定）`;
   courseLine();
+}
+function heatAcclLabel() {
+  const b = document.querySelector('#heat-accl button[data-h="auto"]');
+  const s = HEAT?.s_race?.center ?? HEAT?.s;
+  if (b) b.textContent = ok(s) ? `自動（${Math.round(s * 100)} %）` : "自動";
+  let t = "";
+  if (HEAT) {
+    t = `今天 S ${Math.round(HEAT.s * 100)} %（${esc(HEAT.level?.label || "")}）· ${esc(HEAT.source || "")}`;
+    if (HEAT.s_race) t += ` · 比賽日 ${Math.round(HEAT.s_race.low * 100)}–${Math.round(HEAT.s_race.high * 100)} %`;
+    if (HEAT.warning) t += ` · ${esc(HEAT.warning)}`;
+  }
+  $("heat-accl-line").innerHTML = t;
+}
+async function loadHeat() {
+  try { HEAT = await j(`${API}/heat-status?${new URLSearchParams({ date: $("date").value || "" })}`); } catch { HEAT = null; }
+  heatAcclLabel();
+}
+function heatAcclBody() {
+  const m = S.heatAccl?.mode || "auto";
+  return m === "custom" ? { mode: m, s: Math.max(0, Math.min(100, num("heat-s") ?? 0)) / 100 } : { mode: m };
 }
 function courseLine() {
   if (S.csrc === "gpx" && COURSE) $("course-line").textContent = `${COURSE.name || "GPX"} · ${f1(COURSE.km)} km ↑${n0(COURSE.gain_m)} m · ${COURSE.segments ?? "?"} 段`;
@@ -466,7 +510,8 @@ function readDayPlan(raw) {
   const full = rows.length && rows.every((r) => r && r.km != null);
   return full ? rows.map((r) => ({ km: r.km, gain_m: r.gain_m || 0, loss_m: r.loss_m ?? null })) : null;
 }
-const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"];
+const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct",
+  "tripdays", "packdays", "heatz", "heat-s"];
 function saveForm() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.wbal = $("wbal").value; o.hourlyheat = $("hourlyheat").checked; ls.set("form", o); }
 function loadForm() { const o = ls.get("form", null); if (!o) return false; FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("wbal").value = o.wbal || ""; $("hourlyheat").checked = o.hourlyheat !== false; return true; }
 // hourly rows go with the plan only when the race-day temperature / humidity are the fetched ones
@@ -622,7 +667,13 @@ function planBody(extra = {}) {
     effort_target: Number(S.effort), wbal: $("wbal").value || null,
     locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power })), day_splits_km: SPLITS,
     terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
-    hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null, ...extra };
+    hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null,
+    heat_acclimatisation: heatAcclBody(), ...extra };
+  if (type === "baiyue") {
+    body.trip_kind = S.trip; body.hr_band = S.hrband;
+    body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
+    if (num("heatz") != null) body.heat_ref_alt_m = num("heatz");
+  }
   if (S.mode === "time") {
     if (type !== "baiyue" && S.tunit === "pace") body.target_pace_s_per_km = parseMs($("tpace").value);
     else body.target_time_s = parseHms($("target").value);
@@ -633,8 +684,10 @@ function planBody(extra = {}) {
     else body.target_power = num("tpower");
     body.power_is_training = $("ptrain").checked;
   }
-  if (S.csrc === "gpx" && COURSE) body.course = { course_id: COURSE.course_id, split: S.split, ...Object.fromEntries(courseOpts(false)) };
-  else {
+  if (S.csrc === "gpx" && COURSE) {
+    body.course = { course_id: COURSE.course_id, split: S.split, ...Object.fromEntries(courseOpts(false)) };
+    if (type === "baiyue") body.days = Math.max(1, num("tripdays") || 1);
+  } else {
     body.distance_km = num("dist"); body.gain_m = num("gain") || 0; body.loss_m = num("loss");
     body.days = Math.max(1, num("days") || 1); body.day_plan = type === "baiyue" ? readDayPlan() : null;
     body.course = { manual: { km: num("dist"), gain: num("gain") || 0, loss: num("loss"), split: S.split === "km" ? "km" : "none" } };
@@ -718,6 +771,13 @@ function renderResults() {
   h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} 可持續功率`);
   h += tile("環境係數 M", s.M.toFixed(3), P.course_source === "gpx" ? "逐段海拔的平均" : "功率 × M");
   h += `</div>`;
+  const ha = s.heat_accl;
+  if (ha) {
+    const bd = ha.band;
+    h += `<div class="note">熱影響（對訓練條件）：未適應 ${spct(-bd.raw_penalty_pct / 100)} → 適應後 <b>${spct(-bd.center.penalty_pct / 100)}</b>
+      （範圍 ${spct(-bd.high.penalty_pct / 100)} ~ ${spct(-bd.low.penalty_pct / 100)}；完賽 ${hms(ha.time_s.high)}–${hms(ha.time_s.low)}）
+      · S ${Math.round(ha.s * 100)} %（${esc(ha.source)}）、訓練期 S ${Math.round((ha.s_from || 0) * 100)} %、a ${ha.a} <span class="badge watch">推估</span></div>`;
+  }
   // effort bar
   const mult = e.multiple, tl = e.t_lim_s;
   h += `<h3>努力度${badge(e.badge)}${help("把這個平均功率和「你能撐這麼久的功率」比。淡色帶是 CP ±3% 與 Riegel k ±0.01 的不確定範圍。拖動指針可以改努力目標（會切到「通通幫我算」）。")}</h3>`;
@@ -767,8 +827,9 @@ function wireEffortBar() {
 }
 
 function renderBaiyue() {
+  if (PLAN.capacity) return renderBaiyueCapacity();
   const P = PLAN, s = P.summary, e = P.effort;
-  let h = `<h2>預估結果 <span class="meta">百岳步行模型 · ${{ time: "目標時間", power: "目標速度", auto: "你平常的速度" }[s.mode]}${s.total_method === "v1" ? " · 整趟用 EP/h 模型，分段是推估" : ""}</span></h2><div class="tiles">`;
+  let h =`<h2>預估結果 <span class="meta">百岳步行模型 · ${{ time: "目標時間", power: "目標速度", auto: "你平常的速度" }[s.mode]}${s.total_method === "v1" ? " · 整趟用 EP/h 模型，分段是推估" : ""}</span></h2><div class="tiles">`;
   h += tile("總移動時間", hm(s.time_s), `${P.days.length} 天，不含休息`, true);
   h += tile("時鐘時間", hm(s.clock_s), `移動 ÷ ${s.moving_ratio.toFixed(2)}${s.clock_s > s.time_s / s.moving_ratio + 1 ? " + 補給" : ""}`);
   h += tile("速度倍率", pct(s.speed_factor), "100% = 你平常的速度", true);
@@ -789,6 +850,56 @@ function renderBaiyue() {
     <li>v1 EP/h 模型：${hm(c.v1?.time_s)}</li><li>Naismith（5 km/h + 每 600 m 爬升 1 h）：${hm(c.naismith_s)}</li>
     ${c.langmuir_s ? `<li>Naismith + Langmuir 下坡修正：${hm(c.langmuir_s)}</li>` : ""}<li>健行筆記 EP：${f1(c.ep)}</li></ul></details>`;
   $("results").innerHTML = h;
+}
+
+const SIGMA_ZH = { model: "模型（回測）", pack: "背負", alt: "海拔", time: "日內", day: "多日" };
+function renderBaiyueCapacity() {
+  const P = PLAN, s = P.summary, e = P.effort, c = P.capacity, b = s.band, g = s.group_time_s;
+  const grpMain = s.main === "group";
+  let h = `<h2>預估結果 <span class="meta">百岳 · ${s.trip_kind === "group" ? "跟團" : "自己走"} · ${s.hr_band === "cap" ? "能力上限" : "AeT"}${s.badge ? ' · <span class="badge watch">推估</span>' : ""}</span></h2><div class="tiles">`;
+  const capTile = tile(`能力時間（你的能力，${s.hr_band === "cap" ? "上限" : "AeT"}）${badge(s.badge)}`, hm(s.capacity_time_s),
+    `p10–p90 ${hm(b.p10_s)}–${hm(b.p90_s)} · 時鐘 ${hm(s.clock_s)}`, !grpMain);
+  const grpTile = g ? tile("跟團時間（過去跟團日，不是能力）", hm(g.p50), `p25–p75 ${hm(g.p25)}–${hm(g.p75)} · ${g.n} 天 · EP/h ${g.eph[1].toFixed(2)}`, grpMain)
+    : tile("跟團時間", "–", "需要 ≥ 3 天跟團紀錄");
+  h += grpMain ? grpTile + capTile : capTile + grpTile;
+  h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? "（預設）" : ""}`);
+  h += tile("熱量", n0(s.kcal) + " kcal", "Yamamoto");
+  h += tile("飲水", `${(s.water_ml[0] / 1000).toFixed(1)}–${(s.water_ml[1] / 1000).toFixed(1)} L`, "0.7–0.8 ml / kcal");
+  h += tile("心率上限", ok(s.hr_cap) ? n0(s.hr_cap) + " bpm" : "–", "AeT，爬坡時壓住");
+  h += `</div>`;
+  // uncertainty decomposition
+  const sh = b.shares || {};
+  h += `<h3>不確定帶 ±${pct1(Math.exp(1.2816 * b.sigma) - 1)}（p10–p90）${help("對數尺度相加（假設彼此獨立，自組）。模型 = 回測的留一誤差；背負只在超出你資料的背負範圍時加 8 %（Looney 2022、Weyand 2021）；海拔 = 海拔斜率的不確定 × 路線平均高度差；日內 = 0.05 × 小時 ÷ 1.5（Nuuttila 2025 量級）；多日 = 每多一天 3 %（沒有來源）。")}</h3>`;
+  h += `<div class="zbar" title="σ 各分量占比">${Object.entries(sh).filter(([, v]) => v > 0.001).map(([k, v], i) =>
+    `<div style="width:${(v * 100).toFixed(1)}%;background:${css(["--s1", "--s2", "--s4", "--s5", "--s7"][i % 5])}" title="${SIGMA_ZH[k] || k} ${pct(v)}"></div>`).join("")}</div>`;
+  h += `<div class="meta">${Object.entries(sh).filter(([, v]) => v > 0.001).map(([k, v]) => `${SIGMA_ZH[k] || k} ${pct(v)}（σ ${f2(b.components[k])}）`).join(" · ")}</div>`;
+  // data source card + altitude
+  const bs = c.basis || {}, al = c.alpha || {}, dg = { current: c.alt_current };
+  h += `<div class="two"><div class="note"><b>資料來源</b><br>越野跑走路窗 ${bs.trail_windows} 窗 / ${bs.trail_activities} 次活動（${bs.trail_segments} 段）<br>
+    百岳心率窗 ${bs.hike_windows} 窗 / ${bs.hike_trips} 趟（${bs.hike_segments} 段）<br>
+    先驗：平路跑步在 AeT 的速度 ${f2(c.v_run)} m/s（${esc(c.v_run_info?.source || "")}，${c.v_run_info?.n ?? 0} 窗）→ Ė ${f1(c.e_aet_w_per_kg)} W/kg<br>
+    個人水準 δ̄ ${spct(Math.exp(c.level ?? 0) - 1)} · 下坡上限 ${f2(c.c_cap)} × Tobler · 模型誤差 σ ${f2(c.sigma_loo)}（${esc(c.sigma_loo_src || "")}）<br>
+    ${esc(bs.pack_default_rule || "")}（已填 ${bs.packs_recorded ?? 0} 趟）</div>
+    <div class="note"><b>海拔</b>（每 1000 m，300 m 起）<br>收縮後 <b>${f1(al.post)} %</b>（個人權重 ${pct(al.w)}，先驗 Wehrlin −6.3 %，寬度 τ ${f2(al.tau)}）<br>
+    個人：${ok(dg.current) ? `跨趟 ${f1(dg.current)} %（這裡混了趟次差異）` : ""} · 趟內（趟次固定效果）${ok(al.personal) ? f1(al.personal) + " % ± " + f1(al.se) : "無法估"}<br>
+    Coffman 2020 固定心率負重：−3.8 %（換算）</div></div>`;
+  h += `<h3>難度${badge(e.badge)}</h3>` + effortBar(e, true) + `<div class="eline">需要能力速度的 <b>${pct(e.r)}</b> → ${esc(e.label)}</div>`;
+  h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">背負</th><th class="n">能力移動</th><th class="n">時鐘</th><th class="n">跟團移動</th><th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
+    P.days.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td><td class="n">${n0(d.loss_m)} m</td><td class="n">${f1(d.pack_kg)} kg</td>
+      <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${d.group_h ? hrs(d.group_h) : "–"}</td><td class="n">${n0(d.kcal)}</td>
+      <td class="n">${(d.water_ml[0] / 1000).toFixed(1)}–${(d.water_ml[1] / 1000).toFixed(1)} L</td></tr>`).join("") + `</tbody></table></div>`;
+  const cc = P.crosscheck || {};
+  h += warnList(P.warnings.concat(P.course_warnings || []));
+  h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
+    <li>v1 EP/h 模型：${hm(cc.v1?.time_s)}</li><li>Tobler（通用步行函數）：${hm(cc.tobler_s)}</li><li>Naismith：${hm(cc.naismith_s)}</li>
+    ${cc.langmuir_s ? `<li>Naismith + Langmuir：${hm(cc.langmuir_s)}</li>` : ""}${cc.solo_eph_s ? `<li>自己走的 EP/h：${hm(cc.solo_eph_s)}</li>` : ""}<li>健行筆記 EP：${f1(cc.ep)}</li></ul></details>`;
+  $("results").innerHTML = h;
+}
+function f2(x) { return ok(x) ? Number(x).toFixed(2) : "–"; }
+
+async function loadHikeMeta() {
+  try { HIKEMETA = await j(`${API}/hike-meta`); } catch { HIKEMETA = null; }
+  if (INP) renderHike();
 }
 
 // ---------------- profile + segments ----------------
@@ -812,6 +923,13 @@ function renderProfile() {
     markLine: SPLITS.length ? { symbol: "none", silent: true, lineStyle: { color: css("--accent"), type: "dashed" }, label: { formatter: "分日", color: css("--accent") }, data: SPLITS.map((x) => ({ xAxis: x })) } : undefined });
   series.push({ name: hike ? "速度" : paceMode ? "配速" : "目標功率", type: "line", yAxisIndex: pr ? 1 : 0, data: step, symbol: "none", step: false,
     lineStyle: { color: css("--accent"), width: 2 } });
+  if (hike && P.capacity) {
+    // p10–p90 of each segment's speed (its own σ), light
+    for (const [nm, sg] of [["p90 速度", -1], ["p10 速度", 1]]) {
+      const d = []; P.segments.forEach((s) => { const y = s.speed_kmh * Math.exp(-sg * 1.2816 * (s.sigma || 0)); d.push([s.start_km, y], [s.end_km, y]); });
+      series.push({ name: nm, type: "line", yAxisIndex: pr ? 1 : 0, data: d, symbol: "none", lineStyle: { color: css("--accent"), width: 1, opacity: 0.35, type: "dashed" } });
+    }
+  }
   if (P.wbal && !hike) series.push({ name: "W′bal", type: "line", yAxisIndex: pr ? 1 : 0, data: P.segments.map((s) => [s.end_km, s.wbal_j / P.wbal.w_prime * (P.summary.power)]),
     symbol: "circle", symbolSize: 4, lineStyle: { color: css("--s5"), width: 1, type: "dotted" } });
   const narrow = window.innerWidth < 700;
@@ -865,7 +983,8 @@ function renderSegments() {
   const P = PLAN, hike = P.type === "baiyue", trail = P.type === "trail", paceMode = S.unit === "pace";
   if (!P.segments.length) { $("segtable").innerHTML = ""; $("segcards").innerHTML = ""; return; }
   let h = `<table><thead><tr><th>#</th>${hike ? "<th>天</th>" : ""}<th>類別</th><th class="n">km</th><th class="n">距離</th><th class="n">↑ / ↓</th><th class="n">坡度</th>`;
-  h += hike ? `<th>地形</th><th class="n">速度</th><th class="n">垂直</th>` :
+  const capx = hike && !!P.capacity;
+  h += hike ? `<th>地形</th><th class="n">速度</th><th class="n">垂直</th>${capx ? `<th class="n" title="遞減率推算的氣溫 / 熱懲罰（適應後）">溫度</th><th class="n" title="海拔係數 A">A</th><th class="n" title="日內衰減 f_time">f時</th><th class="n" title="該段 σ（對數）">σ</th><th>資料</th>` : ""}` :
     `<th class="n">目標功率</th><th class="n">% CP</th><th>區</th><th class="n">配速</th><th class="n">${trail ? "GAP / 垂直" : ""}</th>`;
   const hourly = P.summary.heat?.mode === "hourly";
   h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
@@ -875,18 +994,20 @@ function renderSegments() {
       <td class="n">${n0(s.gain_m)} / ${n0(s.loss_m)}</td><td class="n">${f1(s.grade * 100)}%</td>`;
     if (hike) {
       h += `<td><select class="terr" data-terr="${s.i}">${TERRAIN_OPTS.map(([k, n]) => `<option value="${k}" ${s.terrain === k ? "selected" : ""}>${n}</option>`).join("")}</select></td>
-        <td class="n">${f1(s.speed_kmh)} km/h</td><td class="n">${s.vert_m_per_h ? n0(s.vert_m_per_h) + " m/h" : ""}</td>`;
+        <td class="n">${f1(s.speed_kmh)} km/h</td><td class="n">${s.vert_m_per_h ? n0(s.vert_m_per_h) + " m/h" : ""}</td>` +
+        (capx ? `<td class="n">${f1(s.temp_c)}°${s.heat_eff_pct > 0.05 ? ` <span class="wn">−${s.heat_eff_pct.toFixed(1)}%</span>` : ""}</td><td class="n">${f2(s.A)}</td>
+        <td class="n">${f2(s.f_time)}</td><td class="n">${f2(s.sigma)}</td><td class="wrap">${(s.extrapolated || []).length ? '<span class="wn">外插：' + esc(s.extrapolated.join("、")) + "</span>" : '<span class="faint">資料內</span>'}</td>` : "");
     } else {
       h += `<td class="n"><input class="lock ${s.locked ? "ovr" : ""}" data-lock="${s.i}" type="number" step="1" value="${Math.round(s.power)}" title="改這一段的功率會鎖定它，其他段重新分配"></td>
         <td class="n">${pct(s.pct_cp)}</td><td>${esc(s.zone)}</td><td class="n">${pace(s.pace_s_per_km)}</td>
         <td class="n">${s.vert_m_per_h ? "↑" + n0(s.vert_m_per_h) + " m/h" : trail ? pace(s.gap_pace_s_per_km) : ""}</td>`;
     }
     h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>
-      <td class="n" title="${esc(heatText(s).replace(/<[^>]+>/g, ""))}">${f1(s.temp_c)}°${s.heat_pct > 0 ? ` <span class="wn">−${s.heat_pct.toFixed(1)}%</span>` : ""}</td>`}
+      <td class="n" title="${esc(heatText(s).replace(/<[^>]+>/g, ""))}">${f1(s.temp_c)}°${s.heat_pct > 0 ? ` <span class="wn">−${s.heat_pct.toFixed(1)}%</span>` : ""}${ok(s.heat_eff_pct) && s.heat_pct > 0 ? ` <span class="faint" title="適應後 H_eff">→ −${s.heat_eff_pct.toFixed(1)}%</span>` : ""}</td>`}
       <td class="wrap">${esc(segNote(s))}${s.badge ? ' <span class="badge watch">推估</span>' : ""}</td></tr>`;
   }
   const tot = P.summary;
-  h += `<tr class="center"><td colspan="${hike ? 7 : 6}">合計</td>${hike ? `<td></td><td class="n">${f1(tot.km / (tot.time_s / 3600))} km/h</td><td></td>` :
+  h += `<tr class="center"><td colspan="${hike ? 7 : 6}">合計</td>${hike ? `<td></td><td class="n">${f1(tot.km / (tot.time_s / 3600))} km/h</td><td></td>${capx ? "<td></td><td></td><td></td><td></td><td></td>" : ""}` :
     `<td class="n">${W(tot.power)}</td><td class="n">${pct(tot.pct_cp)}</td><td></td><td class="n">${pace(tot.pace_s_per_km)}</td><td></td>`}
     <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${hike ? "" : "<td></td><td></td>"}<td></td></tr></tbody></table>`;
   h += `<div class="note">${hike ? "速度已含背負、海拔、地形與多日修正。" : `目標功率請${esc(PLAN.hint || "看 30 秒平均功率")}，不要看瞬間值（上坡起點讀數常會衝高）。在功率欄改數字會鎖定該段，其他段重新分配、平均不變。`}</div>`;
@@ -1015,6 +1136,7 @@ function renderRE() {
 function renderHike() {
   const h = INP.hiking;
   if (!h.days.length) { $("hike-detail").innerHTML = `<div class="meta">沒有登山紀錄。${esc(h.error || "")}</div>`; return; }
+  if (HIKEMETA) return renderHikeMeta();
   const e = h.eph;
   $("hike-detail").innerHTML = `<div class="note"><b>${esc(h.note || "百岳多為跟團，速度不代表個人能力，不列入目標時間推算")}</b>。
     只有標記為「自己走」的登山日會算 EP/h（目前 ${h.solo_n || 0} 天，跟團 ${h.group_n || 0} 天）；沒有時 百岳 ETA 用 Tobler 步行函數（推估）。</div>
@@ -1023,6 +1145,31 @@ function renderHike() {
     <div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">EP</th><th class="n">移動</th><th class="n">EP/h</th><th class="n">最高點</th><th>計入</th></tr></thead><tbody>${h.days.slice().reverse().map((d) =>
       `<tr><td>${esc(d.date)}</td><td>${esc(d.name)}${d.day ? `（第 ${d.day}/${d.days} 天）` : ""}</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td>
       <td class="n">${f1(d.ep)}</td><td class="n">${hrs(d.moving_h)}</td><td class="n">${d.ep_per_h.toFixed(2)}</td><td class="n">${d.top_m ? n0(d.top_m) + " m" : "–"}</td><td>${d.solo ? "自己走" : '<span class="faint">跟團，不計</span>'}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function renderHikeMeta() {
+  const H = HIKEMETA, v = H.validation || {};
+  const rows = H.days.slice().reverse();
+  let t = `<div class="note">跟團的速度不代表你的能力：百岳時間改用<b>你的步行能力模型</b>（越野跑走路窗 + 百岳心率 ≥ AeT 的爬升窗）。
+    「看起來是自己走」是自動判斷的<b>建議</b>（自組規則：自己走的段 ≥ 60 %、被限制的段 ≤ 15 %），要你按「確認」才會寫進自己走的清單。
+    ${esc(v.rule || "")}：目前手動標記 自己走 ${v.n_solo ?? 0} 天、跟團 ${v.n_group ?? 0} 天${v.agreement != null ? `，符合率 ${pct(v.agreement)}` : ""}，${v.validated ? "已可自動套用" : "還只是建議"}。
+    背負填了才準；沒填用預設（多日 9 kg、單日 6 kg）。</div>`;
+  t += `<div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">移動</th><th class="n">EP/h</th><th>背負 kg</th><th>建議</th><th>目前</th></tr></thead><tbody>` +
+    rows.map((d) => { const sg = d.suggest || {};
+      const sug = sg.suggest ? `${sg.suggest === "solo" ? "看起來是自己走" : "看起來是跟團"}（${pct(sg.own_share)}）` : '<span class="faint">–</span>';
+      return `<tr><td>${esc(d.date)}</td><td>${esc(d.name)}${d.day ? `（第 ${d.day}/${d.days} 天）` : ""}</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td>
+      <td class="n">${hrs(d.moving_h)}</td><td class="n">${f2(d.ep_per_h)}</td>
+      <td><input class="packin" data-file="${esc(d.file)}" type="number" step="0.5" min="0" max="40" style="width:64px" value="${d.pack_kg ?? ""}" placeholder="${f1(d.pack_default)}"></td>
+      <td class="wrap" title="${esc(sg.reason || "")}">${sug}</td>
+      <td>${d.solo ? '自己走 <button class="btn" data-unsolo="' + esc(d.file) + '">改跟團</button>' : '<span class="faint">跟團</span> <button class="btn" data-solo="' + esc(d.file) + '">確認自己走</button>'}</td></tr>`; }).join("") +
+    `</tbody></table></div>`;
+  $("hike-detail").innerHTML = t;
+  const soloSet = async (file, on) => {
+    const cur = new Set((await j(`${API}/solo-hikes`)).files); on ? cur.add(file) : cur.delete(file);
+    await post(`${API}/solo-hikes`, { files: [...cur] }); INP = await j(`${API}/inputs?refresh=true`); await loadHikeMeta(); schedule(); };
+  $("hike-detail").querySelectorAll("[data-solo]").forEach((b) => b.onclick = () => soloSet(b.dataset.solo, true));
+  $("hike-detail").querySelectorAll("[data-unsolo]").forEach((b) => b.onclick = () => soloSet(b.dataset.unsolo, false));
+  $("hike-detail").querySelectorAll(".packin").forEach((e) => e.addEventListener("change", async () => {
+    await post(`${API}/hike-meta`, { file: e.dataset.file, pack_kg: e.value === "" ? null : Number(e.value) }); schedule(); }));
 }
 function renderZones() {
   const z = PLAN?.zones || LAST?.zones; if (!z || !z.length || !PLAN || PLAN.type === "baiyue") { $("zones").innerHTML = ""; return; }
@@ -1158,6 +1305,14 @@ bindSeg("mode", "m", "mode"); bindSeg("tunit", "u", "tunit"); bindSeg("punit", "
 bindSeg("csrc", "c", "csrc", (x) => x, () => { LOCKS = {}; }); bindSeg("split", "s", "split", (x) => x, () => { LOCKS = {}; });
 bindSeg("strategy", "k", "strategy", (x) => x, () => { S.amount = null; }); bindSeg("unit", "u", "unit");
 bindSeg("accl", "a", "accl");
+bindSeg("tripkind", "k", "trip"); bindSeg("hrband", "b", "hrband");
+document.querySelectorAll("#heat-accl button").forEach((b) => b.onclick = () => {
+  S.heatAccl = { mode: b.dataset.h, s: b.dataset.h === "custom" ? (num("heat-s") ?? 50) / 100 : null };
+  if (b.dataset.h === "custom" && $("heat-s").value === "") $("heat-s").value = 50;
+  syncForm(); schedule(); });
+$("heat-s").addEventListener("input", () => { S.heatAccl = { mode: "custom", s: (num("heat-s") ?? 0) / 100 }; schedule(); });
+["tripdays", "packdays", "heatz"].forEach((id) => $(id).addEventListener("input", schedule));
+$("date").addEventListener("change", loadHeat);
 $("amount").addEventListener("input", () => { S.amount = Number($("amount").value); syncForm(); schedule(); });
 ["hup", "hdown"].forEach((id) => $(id).addEventListener("input", () => { S[id] = num(id) ?? S[id]; schedule(); }));
 ["dist", "gain", "loss", "date", "target", "tpace", "tpower", "tspeed", "pack", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"].forEach((id) => $(id).addEventListener("input", schedule));
@@ -1195,6 +1350,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   $("asof").textContent = `資料到 ${INP.today}`;
   $("attrib").textContent = INP.training_conditions.attribution || "";
   renderEvents(); renderCP(); renderHike(); renderRE();
+  loadHeat(); loadHikeMeta();
   await run();
   if (type === "baiyue") renderRiegel();
 })();

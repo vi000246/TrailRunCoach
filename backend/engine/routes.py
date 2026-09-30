@@ -1013,11 +1013,15 @@ def _stamp(p: Path) -> list:
 class Builder:
     """One background build at a time. `status` is what the page polls."""
 
-    def __init__(self, store: RouteStore, weather_get: Optional[Callable] = None):
+    def __init__(self, store: RouteStore, weather_get: Optional[Callable] = None,
+                 activity_weather: bool = False):
         """weather_get: the archive client (route_weather / weather._http_get);
-        None = no historical weather (tests, offline use)."""
+        None = no historical weather (tests, offline use). activity_weather:
+        also the per-activity heat exposure (route_weather.fill_activities)
+        for the heat-acclimation index — the app's builder turns it on."""
         self.store = store
         self.weather_get = weather_get
+        self.activity_weather = activity_weather
         self.lock = threading.Lock()
         self.thread: Optional[threading.Thread] = None
         self.status = {"state": "idle", "phase": None, "done": 0, "total": 0,
@@ -1119,7 +1123,8 @@ class Builder:
             tracks[f] = d
         self._tracks = tracks
         if prev is not None and not changed:
-            if self.weather_get is not None and _weather_retry(prev):
+            if self.weather_get is not None and (_weather_retry(prev) or
+                                                 (self.activity_weather and _activity_weather_missing(self.store))):
                 self._weather(prev, tracks)
             return prev
         new_files = set(tracks) if prev is None else {f for f in changed if f in tracks} | \
@@ -1149,6 +1154,13 @@ class Builder:
             idx["weather"] = {"error": f"{type(e).__name__}: {e}"[:200]}
             traceback.print_exc()
         self.store.save_index(idx)
+        if not self.activity_weather or (idx.get("weather") or {}).get("failed"):
+            return                 # an offline archive is not asked again for the activities
+        try:
+            # per-activity heat exposure for the heat-acclimation index (engine/heat.py)
+            RW.fill_activities(tracks, self.store.root, self.weather_get, progress=self._progress)
+        except Exception:          # noqa: BLE001
+            traceback.print_exc()
 
     def tracks(self) -> dict[str, Track]:
         return self._tracks
@@ -1166,6 +1178,11 @@ class Builder:
 def _weather_retry(idx: dict) -> bool:
     from backend.engine import route_weather as RW
     return RW.retry_wanted(idx)
+
+
+def _activity_weather_missing(store) -> bool:
+    from backend.engine import route_weather as RW
+    return not RW.load_activity_weather(store.root)
 
 
 def enrich(idx: dict, tracks: dict[str, Track]) -> None:

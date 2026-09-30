@@ -97,16 +97,55 @@ def side(c: Conditions) -> dict:
             "heat_penalty_pct": heat_penalty_pct(c.temp_c, c.rh_pct)}
 
 
-def multiplier(frm=None, to=None) -> dict:
+def _heat_eff(h_pct: float, s: Optional[float], a: float) -> float:
+    """heat-acclimation.md §4.3: H_eff = H·(1 − a·S) (engine/heat.py
+    effective_heat; 自組). S None = the v1 penalty unchanged."""
+    if s is None:
+        return h_pct
+    s = min(1.0, max(0.0, float(s)))
+    return max(0.0, h_pct * (1.0 - a * s))
+
+
+A_RECOVER = 0.75                 # engine/heat.A_RECOVER (Racinais et al. 2015 MSSE, 77 % in 2 weeks; 自組 use)
+
+
+def multiplier(frm=None, to=None, heat_s=None, a: float = A_RECOVER) -> dict:
     """M from `frm` (where the power numbers were measured) to `to` (race day),
-    with every intermediate for display."""
-    a, b = resolve(frm, to)
-    sa, sb = side(a), side(b)
+    with every intermediate for display. `heat_s` = (S_from, S_to), the heat
+    acclimation index on each side (heat-acclimation.md §4.3): each side's
+    Hadley penalty becomes H·(1 − a·S). None (or S = 0) = v1 exactly."""
+    a_, b = resolve(frm, to)
+    sa, sb = side(a_), side(b)
+    s_from, s_to = heat_s if heat_s is not None else (None, None)
+    hf, ht = _heat_eff(sa["heat_penalty_pct"], s_from, a), _heat_eff(sb["heat_penalty_pct"], s_to, a)
+    if heat_s is not None:
+        sa["heat_penalty_eff_pct"], sb["heat_penalty_eff_pct"] = hf, ht
     alt_pct = -(sa["altitude_factor"] - sb["altitude_factor"])
-    heat_pct = -(sb["heat_penalty_pct"] - sa["heat_penalty_pct"]) / 100.0
+    heat_pct = -(ht - hf) / 100.0
     pct = alt_pct + heat_pct
     return {"from": sa, "to": sb, "altitude_pct": alt_pct, "heat_pct": heat_pct,
             "pct": pct, "M": 1.0 + pct}
+
+
+LAPSE_K_PER_M = 0.0065           # ICAO standard atmosphere (pressure_torr uses the same)
+
+
+def segment_temp(t0: float, z0: Optional[float], z: Optional[float]) -> float:
+    """baiyue-from-running.md §8.1: t0 − 0.0065·(z − z0) (standard lapse
+    rate; t0 is the temperature at z0)."""
+    if z0 is None or z is None:
+        return t0
+    return t0 - LAPSE_K_PER_M * (z - z0)
+
+
+def heat_term(temp_c: float, rh_pct: float, status: Optional[dict]) -> dict:
+    """§8.1 interface: the per-segment walking / running speed multiplier
+    H = 1 − s·Hadley%/100, s = status["scale"] (the share of the
+    unacclimatised penalty that remains; None → 1, v1 behaviour)."""
+    pen = heat_penalty_pct(temp_c, rh_pct)
+    s = 1.0 if not status or status.get("scale") is None else min(1.0, max(0.0, float(status["scale"])))
+    return {"H": 1.0 - s * pen / 100.0, "penalty_pct": pen, "penalty_eff_pct": s * pen, "s": s,
+            "badge": (status or {}).get("badge")}
 
 
 # ---- v2: per-segment altitude (docs/research/racepower-v2.md F14, §8) --------
@@ -154,7 +193,8 @@ def _alt_factor(alt_m: float, temp_c: float, mode: str) -> float:
     return 0.5 * (curve + lin)
 
 
-def segment_factors(zs, frm, to, mode: str = "acclimatised", heat=None) -> list[float]:
+def segment_factors(zs, frm, to, mode: str = "acclimatised", heat=None, heat_s=None,
+                    a: float = A_RECOVER) -> list[float]:
     """Per-segment environment multiplier Mᵢ (F14): the v1 formula
     M = 1 − (A_from − A_to) − (H_to − H_from)/100 with the race-day altitude
     replaced by each segment's mean elevation zᵢ.
@@ -176,10 +216,13 @@ def segment_factors(zs, frm, to, mode: str = "acclimatised", heat=None) -> list[
     Wehrlin linear (已驗證 ≤ 2800 m), "partial" = the midpoint of the two — our
     own choice with no quantitative study behind it (自組, labelled 推估).
     With every zᵢ equal to the race altitude and mode "acclimatised" each Mᵢ is
-    exactly v1's single M (T14)."""
-    a, b = resolve(frm, to)
-    sa, sb = side(a), side(b)
-    a_from = _alt_factor(a.altitude_m, a.temp_c, mode)
+    exactly v1's single M (T14).
+
+    heat_s = (S_from, S_to): heat acclimation on each side, every Hᵢ and H_from
+    become H·(1 − a·S) (heat-acclimation.md §4.3, 自組). None = unchanged."""
+    fa, b = resolve(frm, to)
+    sa, sb = side(fa), side(b)
+    a_from = _alt_factor(fa.altitude_m, fa.temp_c, mode)
     zs = list(zs)
     if heat is None:
         hs = [sb["heat_penalty_pct"]] * len(zs)
@@ -187,5 +230,7 @@ def segment_factors(zs, frm, to, mode: str = "acclimatised", heat=None) -> list[
         if len(heat) != len(zs):
             raise ValueError("heat needs one (temp_c, rh_pct) per segment")
         hs = [heat_penalty_pct(t, rh) for t, rh in heat]
-    return [1.0 - (a_from - _alt_factor(z, b.temp_c, mode)) - (h - sa["heat_penalty_pct"]) / 100.0
+    s_from, s_to = heat_s if heat_s is not None else (None, None)
+    h_from = _heat_eff(sa["heat_penalty_pct"], s_from, a)
+    return [1.0 - (a_from - _alt_factor(z, b.temp_c, mode)) - (_heat_eff(h, s_to, a) - h_from) / 100.0
             for z, h in zip(zs, hs)]

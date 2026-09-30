@@ -278,6 +278,120 @@ def fill(idx: dict, tracks: dict, root: Path, get: Callable = WX._http_get,
     return stats
 
 
+# ---------------------------------------------------------------------------
+# per-activity heat exposure (heat-acclimation.md §2.4 "資料來源", §5.2)
+# ---------------------------------------------------------------------------
+
+ACTIVITY_WX_FILE = "activity_weather.json"
+ACTIVITY_WX_VERSION = 1
+
+
+def _hours(days_js: list[dict]) -> list[tuple[dt.datetime, float, float]]:
+    out = []
+    for js in days_js:
+        h = js.get("hourly") or {}
+        T, RH = h.get("temperature_2m") or [], h.get("relative_humidity_2m") or []
+        for i, t in enumerate(h.get("time") or []):
+            if i < len(T) and i < len(RH) and T[i] is not None and RH[i] is not None:
+                out.append((dt.datetime.fromisoformat(t), float(T[i]), float(RH[i])))
+    return out
+
+
+def activity_exposure(tr, days_js: list[dict]) -> Optional[dict]:
+    """One activity's heat exposure from the archive hours of its point:
+    every hour row covers [hour − 30 min, hour + 30 min]; the moving minutes
+    of the track inside that span (cumulative moving time `cm` interpolated
+    on the elapsed clock) × heat.minute_weight(Hadley of that hour) sum to
+    `hot_min`. Also the moving-weighted mean T / RH / Hadley and the max."""
+    from backend.engine import heat as HT
+    rows = _hours(days_js)
+    t = tr.t
+    ok = np.isfinite(t)
+    if not rows or ok.sum() < 2:
+        return None
+    t, cm = t[ok], tr.cols["cm"][ok]
+    s = dt.datetime.fromisoformat(tr.start)
+    if s.tzinfo:
+        s = s.replace(tzinfo=None)
+    t0, t1 = float(t[0]), float(t[-1])
+    hot = mv = 0.0
+    acc_t = acc_rh = acc_h = 0.0
+    hmax = None
+    for when, T, RH in rows:
+        a = (when - s).total_seconds() - 1800.0
+        b = a + 3600.0
+        lo, hi = max(a, t0), min(b, t1)
+        if hi <= lo:
+            continue
+        m = float(np.interp(hi, t, cm) - np.interp(lo, t, cm)) / 60.0
+        if m <= 0:
+            continue
+        hs = T * 1.8 + 32.0 + dew_point(T, RH)["dew_f"]
+        hot += m * HT.minute_weight(hs)
+        mv += m
+        acc_t += m * T
+        acc_rh += m * RH
+        acc_h += m * hs
+        hmax = hs if hmax is None or hs > hmax else hmax
+    if mv <= 0:
+        return None
+    return {"date": (s + dt.timedelta(seconds=t0)).date().isoformat(), "moving_min": round(mv, 1),
+            "hot_min": round(hot, 1), "temp_c": round(acc_t / mv, 1), "rh_pct": round(acc_rh / mv, 0),
+            "hadley": round(acc_h / mv, 1), "hadley_max": round(hmax, 1), "src": "open_meteo"}
+
+
+def fill_activities(tracks: dict, root: Path, get: Callable = WX._http_get,
+                    progress: Callable = lambda *_: None, today: Optional[dt.date] = None,
+                    since: Optional[dt.date] = None) -> dict:
+    """Heat exposure of every GPS activity (one point per activity: its mean
+    position and elevation, the same (day, 0.25° cell) batching and disk
+    cache as the efforts) → {file: activity_exposure()}; saved next to the
+    route index as activity_weather.json."""
+    need: dict = {}
+    todo = []
+    for f, tr in tracks.items():
+        if tr is None or len(tr) < 2:
+            continue
+        t = tr.t[np.isfinite(tr.t)]
+        if not len(t):
+            continue
+        a, b = effort_window(tr.start, t[0], t[-1])
+        if since and b.date() < since:
+            continue
+        pl = place(tr, 0, len(tr) - 1)
+        if pl is None:
+            continue
+        cell = cell_of(pl["lat"], pl["lon"])
+        pt = point_of(pl["lat"], pl["lon"], pl["elev_m"])
+        keys = [(cell, d) for d in window_days(a, b)]
+        for k in keys:
+            need.setdefault(k, set()).add(pt)
+        todo.append((f, tr, pt, keys))
+    fch = Fetcher(Path(root) / "weather", get, today)
+    got = fch.fetch_all(need, progress)
+    out = {}
+    for f, tr, pt, keys in todo:
+        days = [got[(*k, pt)] for k in keys if (*k, pt) in got]
+        out[f] = activity_exposure(tr, days) if len(days) == len(keys) else None
+    doc = {"version": ACTIVITY_WX_VERSION, "at": dt.datetime.now().isoformat(timespec="seconds"),
+           "stats": {**fch.stats, "activities": len(todo), "with_weather": sum(1 for v in out.values() if v),
+                     "errors": fch.errors}, "attribution": WX.ATTRIBUTION, "activities": out}
+    p = Path(root) / ACTIVITY_WX_FILE
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    tmp.replace(p)
+    return doc
+
+
+def load_activity_weather(root: Path) -> dict:
+    try:
+        d = json.loads((Path(root) / ACTIVITY_WX_FILE).read_text("utf-8"))
+        return d if d.get("version") == ACTIVITY_WX_VERSION else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def retry_wanted(idx: dict) -> bool:
     """A no-change build still fills weather when the last pass left gaps it can close."""
     w = idx.get("weather")
