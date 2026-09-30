@@ -24,6 +24,8 @@ async def _migrate_schema():
         ("workout_files", "elevation_gain_m", "REAL"),
         ("workout_files", "trail_classification", "TEXT"),
         ("workout_files", "classification_overridden", "INTEGER"),
+        ("workout_files", "start_time_utc", "DATETIME"),
+        ("workout_files", "duplicate_of", "INTEGER"),
         ("sync_state", "coros_access_token", "TEXT"),
         ("sync_state", "coros_token_expires", "DATETIME"),
         ("sync_state", "coros_last_sync_at", "DATETIME"),
