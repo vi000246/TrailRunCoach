@@ -21,6 +21,9 @@ Date: 2026-09-30. 範圍：研究與設計，**不改程式碼**。v1 的現況�
 每條公式另有**驗證狀態**（§3A）。使用者的要求是「公式一定要驗證過，不能隨便用一個公式算出來」：
 
 - **已驗證**：原始出處的原式已經對過，而且有一個出處的算例或獨立重算，寫成測試。
+- **已驗證（二手核對）**：原文全文讀不到，但至少 2 個彼此獨立的開放來源（後續論文、官方實作、
+  廠商文件）逐字寫出同一組係數，而且和原文摘要一致。等同「已驗證」，可以產生主要目標；
+  出處見 §3C。
 - **待驗證**：原式或係數還沒和原文核對，或者是自組公式、還沒用運動員自己的比賽資料回測（§3B）。
   待驗證的公式**不能用來產生頁面上的主要目標**：只能當交叉檢查或提示，不然就要先完成驗證。
 - **不採用**：驗證失敗，或無法驗證、也沒有替代依據。
@@ -32,15 +35,19 @@ Date: 2026-09-30. 範圍：研究與設計，**不改程式碼**。v1 的現況�
   `https://doi.org/<doi>`。
 - **PubMed 網頁**回 cookie 牆，讀不到內容。
 - **Bassett et al. 1999 全文**（MSSE）回 HTTP 402。v1 `env.py` 的海拔多項式
-  `(−174.1448622 + 1.0899959p − 1.5119e−3 p² + 0.72674e−6 p³)/100` **推定**出自這篇
-  （試算表社群一向這樣說），但**係數沒有和原文核對過**。我們也沒辦法確認它是 Bassett 的哪一條
-  曲線（已適應或未適應）。用 Europe PMC 搜尋係數字串，零筆命中。
+  `(−174.1448622 + 1.0899959p − 1.5119e−3 p² + 0.72674e−6 p³)/100` 原本推定出自這篇。
+  **§3C 核對後推翻**：Bassett 的兩條曲線是以海拔 km 為變數的二次式與三次式，不是氣壓 torr 的
+  三次式。這條 torr 多項式唯一有標出處的開放來源是 GoldenCheetah，標的是 Péronnet et al. 1991
+  （經 Wilber 的教科書）。
 - **Palladino 本人的上坡／下坡功率建議沒有取得**：palladinopowerproject.com 的 DNS 解析失敗；
   TrainingPeaks 上猜測的網址回 404。他的文字多數在 Facebook 社團，抓不到。本文件的坡道功率配置
   所以改以 Stryd 說明頁、Swain 1997、Liedl 1999、Townshend 2010 為依據（§2.1.4、§6.3）。
 - **Strava GAP 工程部落格**（medium.com）回 403。下坡加成上限約 10 % 的說法沿用
   `backend/engine/algorithms/minetti.py` 註解裡的既有描述，本次未重新驗證。
 - Stryd 說明中心 `help.stryd.com` 可以讀（§2.1）。
+- **2026-09-30 第二輪（§3C）**：改用 PMC 網頁（`pmc.ncbi.nlm.nih.gov` 可讀）、Europe PMC 全文
+  XML、NCBI E-utilities（PubMed 摘要）、GitHub 上有引用論文的開源實作、廠商文章。沒用任何盜版站。
+  DTIC 與 ERDC 的美軍技術報告回 403 或憑證錯誤，讀不到。Europe PMC 搜尋服務時常回 503。
 
 ---
 
@@ -48,7 +55,7 @@ Date: 2026-09-30. 範圍：研究與設計，**不改程式碼**。v1 的現況�
 
 | 零件 | 位置 | v2 用法 |
 |---|---|---|
-| 環境係數 M（Bassett 海拔多項式 + Hadley 熱） | `env.py` | 保留；改成**逐段**海拔（§8） |
+| 環境係數 M（torr 海拔多項式〔GoldenCheetah 標 Péronnet 1991，不是 Bassett，§3C.3〕 + Hadley 熱） | `env.py` | 保留；改成**逐段**海拔（§8） |
 | Riegel `P = CP·(t/TTE)^k`、個人／查表 k | `riegel.py` | 努力度條的「可持續功率曲線」核心 |
 | CP / W′ 擬合、RWC 評等 | `cp.py` | W′ 用在短賽與 W′bal 檢查 |
 | RE、CVI、effort km、越野 RE | `re.py` | 手動路線沿用；GPX 路線改用「個人坡度-RE 曲線」 |
@@ -154,9 +161,11 @@ v1 的缺口（v2 要補）：
 - **CP 以下**：CP 模型說理論上「可以很久」，實際受糖原、體溫、肌肉損傷等限制。改用 Riegel
   反解 `t_lim = TTE·(P/CP)^(1/k)` **[確立的冪次律，長時間是外插]**。
 - **W′bal**（Skiba et al. 2012）：W′ 在 CP 以上消耗、以下按指數恢復，
-  `τ = 546·e^(−0.01·D_CP) + 316`（D_CP = CP − 恢復功率；**這組係數依記憶，摘要沒有列出，
-  待驗證**）。Skiba et al. 2014 修正了恢復的
-  時間常數。**[確立於自行車；用在跑步是外插]**：兩篇都是自行車測功儀。
+  `τ = 546·e^(−0.01·D_CP) + 316`（τ 秒；D_CP = CP − 恢復功率，W）。係數**已驗證（二手核對）**，
+  5 篇開放論文與 GoldenCheetah 一致（§3C.1）。Skiba 2014 驗證了不同工作／恢復長度；Skiba 2015
+  提出微分形式（τ = W′/D_CP）。**[確立於自行車；用在跑步是外插]**：Skiba 的研究都是自行車
+  測功儀。唯一的跑步驗證（Vassallo 2020，團隊運動員、平地 GPS 功率）發現積分式**低估**
+  力竭時間 12 %。
 - Stryd 公開的「race power ranges」只有 §2.1.1 那條線性式；沒找到依時長的區間表。
 - **Palladino 區間**（`zones.py` 的 `PALLADINO_POWER_ZONES`，1A–7）是 %CP 的**訓練**區間，
   不是依比賽時長的難度。v2 把它當第二條細條（絕對強度），不當主條（§5）。
@@ -245,7 +254,8 @@ v1 的缺口（v2 要補）：
     https://utmb.world/sports-system）。
 - **背負**：
   - Pandolf, Givoni & Goldman 1977 **[確立：步行、軍人、多為平地到中等坡]**：
-    `M = 1.5W + 2.0(W+L)(L/W)² + η(W+L)(1.5V² + 0.35VG)`（W 瓦；V m/s；G 坡度 %）。
+    `M = 1.5W + 2.0(W+L)(L/W)² + η(W+L)(1.5V² + 0.35VG)`（M 瓦；W、L kg；V m/s；G 坡度 %）。
+    原式與 η **已驗證（二手核對）**（§3C.2）。
   - Coffman et al. 2020 **[確立]**：負重 30 % 體重時，海平面 5 km 時間慢 36 %（43 vs 32 分）。
     也做了海拔 × 負重的速度列線圖（2000 m、3000 m）。
   - v1 的 `(W + L_hist)/(W + L)` 只是 Pandolf 的線性近似；v2 改用 Pandolf 反解速度（§3 F12）。
@@ -255,8 +265,9 @@ v1 的缺口（v2 要補）：
     **次最大 VO2（固定速度的能量成本）不隨海拔改變**，但心率上升。
   - Péronnet, Thibault & Cousineau 1991 **[確立，理論模型]**：800 m 到全馬都隨海拔變慢；
     短跑因空氣阻力降低反而變快。
-  - Bassett et al. 1999：用已發表的精英運動員資料估海拔對最大有氧功率的影響（推定是
-    `env.py` 多項式的來源，見 §0.2）。
+  - Bassett et al. 1999：兩條以海拔 km 為變數的曲線，已適應 `−1.12x² − 1.90x + 99.9`、
+    未適應 `0.178x³ − 1.43x² − 4.07x + 100`（y 為海平面有氧功率的 %）。**已驗證（二手核對）**。
+    它**不是** `env.py` 多項式的來源（§3C.3）。
   - 適應：
     - Foss et al. 2017（2500 m 模擬）：抵達後 2 h 比 14 h 開賽，表現沒有差異。
     - Chapman et al. 2016：居住海拔影響在高地表現隨時間的變化（本次只看了題名）。
@@ -316,10 +327,10 @@ v1 的缺口（v2 要補）：
 | F8 | 先驗 `RE₀(g) = RE_flat · Cr(0)/Cr(g)`，下坡 `Cr(g)/Cr(0) ≥ 0.9` | 確立 \|g\| ≤ 8 %（Stryd ≈ 代謝）；8–45 % 外插 | Stryd 功率 ∝ 代謝功率 | Minetti 2002；van Rassel 2026 |
 | F9 | 下坡速度上限 `vᵢ ≤ v_max(gᵢ)`，個人該坡度 60 s 窗 p90 速度 | 自組 | 技術地形與離心負荷 | Vernillo 2017；Townshend 2010 |
 | F10 | 坡道功率配置 `h(g)`（§6.3） | 自組 | ±5 % 無額外生理成本；幅度 ≤ 10–12 % | Liedl 1999；Swain 1997；Townshend 2010 |
-| F11 | W′bal（Skiba 2012），逐段積分 | 自行車確立；跑步外插 | 只當檢查，不當主模型 | Skiba 2012、2014 |
-| F12 | 背負：Pandolf 反解，`M(V, L) = M(V₀, L₀)` 解 V | 確立（步行）；陡坡外插 | η 地形係數；下坡 Pandolf 不適用 → 下坡只用 Tobler 形狀 | Pandolf 1977 |
+| F11 | W′bal（Skiba 2012），逐段積分：`W′bal(t) = W′ − ∫₀ᵗ W′exp(u)·e^(−(t−u)/τ) du`，`τ = 546·e^(−0.01·D_CP) + 316` | 自行車確立；跑步外插（Vassallo 2020：跑步時低估 T_lim 12 %） | 只當檢查，不當主模型；τ 個體差大 | Skiba 2012、2014、2015；Skiba & Clarke 2021（§3C.1） |
+| F12 | 背負：Pandolf 反解，`M(V, L) = M(V₀, L₀)` 解 V | 確立（步行）；陡坡外插 | η 地形係數；下坡 Pandolf 不適用 → 下坡只用 Tobler 形狀（Santee 下坡修正係數只有單一來源，§3C.2） | Pandolf 1977 |
 | F13 | 個人步行速度 `v_h(g) = v₀·e^(−c·\|g + g₀\|)`，以 Tobler（6, 3.5, 0.05）為先驗向個人資料收縮 | Tobler 經驗法則；個人擬合為自組 | 已經過濾休息的移動樣本 | Tobler 1993 |
-| F14 | 分段海拔係數 `Aᵢ = A(zᵢ)/A(z_train)`；熱係數 H 全程一個值（或依 ETA 逐時） | 確立到 2800 m，以上外插 | 已適應曲線；可切到 Wehrlin 線性（未適應） | Bassett 1999（推定）；Wehrlin 2006 |
+| F14 | 分段海拔係數 `Aᵢ = A(zᵢ)/A(z_train)`；熱係數 H 全程一個值（或依 ETA 逐時） | 確立到 2800 m，以上外插 | 已適應曲線；可切到 Wehrlin 線性（未適應） | env.py torr 曲線（GoldenCheetah 標 Péronnet 1991）；數值對照 Bassett 1999 已適應；Wehrlin 2006（§3C.3） |
 | F15 | 分段策略斜坡 `s(τ) = 1 + σ·(1 − 2τ)`，τ = 分段中點的累計時間比例 | 自組 | σ > 0 前快後慢，σ < 0 前慢後快；\|σ\| ≤ 5 % | Abbiss 2008；Díaz 2018（證據偏向小變化） |
 | F16 | 均功率守恆：選 λ 使 `Σ λ·uᵢ·tᵢ(λuᵢ) / Σtᵢ = P̄_target`，uᵢ = h·a·s | 自組 | 以時間加權平均功率當「總負荷」 | Liedl 1999（同平均、±5 % 無差） |
 | F17 | 多日疲勞 `f_day(n)`：個人第 n 天 EP/h ÷ 第 1 天的中位數 | 無來源 | 至少 3 趟多日行程才啟用，否則 1.0 並警告 | — |
@@ -356,11 +367,11 @@ v1 的缺口（v2 要補）：
 | F8 Minetti Cr | Minetti 2002 原式（全文鏡像，見 `effort-distance-formulas.md` §4g）：`Cr = 155.4i⁵ − 30.4i⁴ − 43.3i³ + 46.3i² + 19.5i + 3.6` | 平地 3.6 J/kg/m（原文常數）；最低點約 −20 % | `test_minetti.py`（已有：`test_flat_cost_matches_the_published_constants` 等） | Cr 本身**已驗證**。「Stryd 功率 ∝ 代謝功率」：0–8 % **已驗證**（van Rassel 2026 摘要），> 8 % **待驗證** → > 8 % 的段只能用 F7 的個人資料；資料不足時該段目標標「推估」 |
 | F9 下坡速度上限 | 自組（個人 p90）。依據：Townshend 2010「下坡只快 13.8 %」；Vernillo 2017（題名） | 無外部算例 | **V-F9** 合成資料 | **待驗證**：§3B 下坡段速度誤差 |
 | F10 坡道彈性 h(g) | 自組。依據各自的原話：Liedl 1999「alternating ±5 % … every 5 min」生理指標無差；Swain 1997「10 % variation, 10 % grade … 22:47.2 vs 24:20.3」；Townshend 2010「VO2 100.4 % VT uphill, 89.3 % level, 78.9 % downhill」 | 用 Townshend 數字獨立重算：上坡／平路 = 100.4/89.3 = **1.124**、下坡／平路 = 78.9/89.3 = **0.884** → 自發幅度約 +12 % / −12 %，所以 α ≤ 0.12、β ≈ 0.10 在觀察範圍內 | **V-F10**：α = β = 0 時 h ≡ 1；邊界值 | **待驗證**：證據都是自行車或 VO2，不是 Stryd 功率。α = 0.05 只證明「沒有額外成本」，沒證明「比較快」。回測：比較運動員自己過去比賽的上坡／平路功率比（§3B） |
-| F11 Skiba W′bal | Skiba 2012 摘要：指數恢復，時間常數與 (CP − 恢復功率) 呈指數關係（r = 0.77）。**τ = 546·e^(−0.01·D_CP) + 316 的係數依記憶，摘要沒有列出** | 未完成 | — | **待驗證**（要對全文）；只當可選顯示，不參與約束 |
+| F11 Skiba W′bal | Skiba 2012 摘要：指數恢復，時間常數與 (CP − 恢復功率) 呈指數關係（r = 0.77）。`τ = 546·e^(−0.01·D_CP) + 316`（τ s、D_CP W）：Jones & Vanhatalo 2017、Vassallo 2020、Chorley 2022 等 5 篇開放論文與 GoldenCheetah 逐字一致（§3C.1） | ①Jones & Vanhatalo 2017：恢復 20 W 時 τ ≈ 377 s、中強度 ≈ 452 s、高強度 ≈ 580 s；②獨立重算：D_CP = 0 → 862 s；100 W → 516.86 s；∞ → 316 s | **V-F11**：τ(0) = 862.0、τ(100) = 516.86、τ(219) ≈ 377；恆定 P > CP 時 W′bal 線性下降 `(P − CP)t` | 係數：**已驗證（二手核對）**。用途：自行車確立、跑步外插（Vassallo 2020 跑步 T_lim 低估 12 %），τ 個體差大，所以仍只當可選顯示，不參與約束（約束用 F11b） |
 | F11b W′ 預算 | F2 的代數：CP 以上消耗 W′ = Σ(P − CP)t | 恆定 310 W、CP 285、600 s → 15000 J | **V-F11b** | **已驗證**（數學、保守） |
-| F12 Pandolf | Pandolf 1977；原式取自 `effort-distance-formulas.md` §7，當時的來源是 Wikipedia（**二手**）：`M = 1.5W + 2.0(W+L)(L/W)² + η(W+L)(1.5V² + 0.35VG)` | 未對原文；沒有出處算例 | — | **待驗證**。完成前百岳仍用 v1 線性背負係數（標「假設」） |
+| F12 Pandolf | Pandolf 1977：`M = 1.5W + 2.0(W+L)(L/W)² + η(W+L)(1.5V² + 0.35VG)`（M W；W、L kg；V m/s；G %）。Potter 2015（PLoS One）、Weyand 2021（J Appl Physiol 表 1）、Wikipedia 三者逐字一致；η 1.0 / 1.2 / 1.5 / 2.1 另見 Kowalsky 2021（§3C.2） | 出處沒有可重現的算例；獨立重算：W 70、L 20、V 1.34、G 5、η 1 → 105 + 14.69 + 453.46 = **573.15 W**；L = 0、G = 0 → 105 + 70·1.5·1.7956 = **293.5 W** | **V-F12**：上面兩個數值；L = 0 時第二項為 0；M 對 V 單調遞增（反解唯一） | 原式與 η：**已驗證（二手核對）**，限 G ≥ 0。Santee 下坡修正：只有 Weyand 2021 一個來源寫出係數 → **待驗證**，下坡仍用線性係數。誤差：Looney 2022 對 0–66 % 體重背負偏低 0.44 ± 0.74 W/kg；Weyand 2021 野外高估 13–17 % |
 | F13 Tobler / 個人步行速度 | Tobler 1993（NCGIA 報告，經 Wikipedia 轉述）：`W = 6·exp(−3.5·\|S + 0.05\|)` km/h | 獨立重算：S = −0.05 → 6.00 km/h（最大值）；S = 0 → 5.04 km/h（Wikipedia 說平地約 5 km/h，一致） | **V-F13** 兩個點 | Tobler 形狀：**已驗證（二手）**。個人擬合：**待驗證**，§3B 登山日回測 |
-| F14 海拔 | ①env.py 多項式：推定 Bassett 1999，**係數未對原文**；②Wehrlin & Hallén 2006：「6.3 % decrease per 1,000 m」（全文鏡像，`effort-distance-formulas.md` §6） | 獨立比較（§2.6 表）：3500 m 以內兩者差 ≤ 3.2 點 | `test_racepower.py`（已有：環境鏈對試算表快取值）；**V-F14**：`altitude_factor_linear(1300) = 0.937` | Wehrlin 線性：**已驗證**（≤ 2800 m）。env.py 曲線：出處**待驗證**，數值有 Wehrlin 佐證，為了和 v1、試算表一致而保留。> 2800 m 兩者都是外插，頁面標「推估」 |
+| F14 海拔 | ①env.py 多項式：**不是** Bassett 1999（§3C.3）；係數和 GoldenCheetah `RideFile.cpp` 的 aPower 逐位一致，那裡標 Péronnet, Thibault & Cousineau 1991（經 Wilber 教科書），只有這一個來源；③Bassett 1999 km 多項式（已適應／未適應）：TrainingPeaks、Simmons 2014、sauce4strava 等一致，**已驗證（二手核對）**；②Wehrlin & Hallén 2006：「6.3 % decrease per 1,000 m」（全文鏡像，`effort-distance-formulas.md` §6） | 獨立比較（§2.6 表）：3500 m 以內兩者差 ≤ 3.2 點 | `test_racepower.py`（已有：環境鏈對試算表快取值）；**V-F14**：`altitude_factor_linear(1300) = 0.937` | Wehrlin 線性：**已驗證**（≤ 2800 m）。Bassett 已適應／未適應：**已驗證（二手核對）**。env.py 曲線：出處改標 Péronnet 1991（單一來源，**待驗證**）；數值和 Bassett 已適應在 0–4000 m 內差 ≤ 1.0 點（站點溫度照 −6.5 °C/km 遞減；§3C.3 表），所以保留，但 docstring 不得再寫 Bassett。> 2800 m 都是外插，頁面標「推估」 |
 | F15 時間斜坡 | 定義式（自組） | 數學：`∫₀¹ s(τ)dτ = 1` | **V-F15** | 數學**已驗證**；幅度建議（2 %）**待驗證**：比較運動員過去比賽的前後半功率比（§3B） |
 | F16 均功率守恆 | 自組。依據：Liedl 1999（同平均功率、±5 % → 生理指標相同，自行車 1 h） | 由定義 | **V-F16**：守恆誤差 < 0.1 W | **待驗證**：§3B 時間誤差 |
 | F17 多日疲勞 | 無來源 | — | **V-F17**：趟數 < 3 → 1.0 | **待驗證**（純個人資料）；趟數不足時不採用 |
@@ -406,6 +417,359 @@ v1 的缺口（v2 要補）：
 9. **工具**：
    - `backend/scripts/racepower_backtest.py`：輸出每場的表與彙總，存進 `docs/research/` 的回測報告。
    - 單元測試 **V-BT** 用合成的 dataset fixture，確認留一法真的把該活動排除了。
+
+---
+
+## 3C. 論文公式核對（開放來源）
+
+2026-09-30 核對 F11（Skiba τ）、F12（Pandolf）、F14（Bassett 海拔多項式）。三篇原文全文都在付費牆後，
+所以改找開放來源（取用方式見 §0.2）。
+
+規則：
+
+- 至少 2 個**彼此獨立**的開放來源逐字寫出同一組係數，才標「已驗證（二手核對）」。
+- 同一份試算表的多個複本（例如數個 Garmin Connect IQ app）只算一個來源。
+- 使用者轉貼的 Gemini 摘要**只當線索**，不算來源；逐條結果見 §3C.4。
+
+### 3C.1 Skiba W′bal（F11）
+
+**積分式（Skiba 2012）**：
+
+- `W′bal(t) = W′ − ∫₀ᵗ W′exp(u) · e^(−(t−u)/τ) du`
+  - W′exp 是 CP 以上的消耗：每秒 `P − CP`（P > CP 時），單位 J。
+  - 也就是說，CP 以上的每一筆消耗從發生那一刻起，就按 τ 指數恢復。
+- `τ = 546 · e^(−0.01 · D_CP) + 316`
+  - τ 單位秒；D_CP = CP − 恢復功率，單位 W。
+  - 546、0.01、316 是非線性回歸得到的常數。316 是 D_CP 很大時 τ 的漸近值（秒）。
+  - GoldenCheetah 的實作裡，D_CP = CP − 整份檔案中所有低於 CP 的樣本的平均功率。所以一份檔案
+    只算一個 τ。
+
+逐字一致的開放來源（互相獨立）：
+
+1. Jones & Vanhatalo 2017, *Sports Med* 47(S1):65–78，式 3。
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC5371646/
+2. Vassallo et al. 2020, *Eur J Appl Physiol* 120:219–230，式 5。
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC6969867/
+3. Chorley, Bott, Marwood, Lamb 2022, *Eur J Appl Physiol*，式 4。
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC8854279/
+4. *Sports (Basel)* 2020 8(9):123 的 CP / W′ 敘事型回顧，式 6。
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC7552657/
+5. Welburn et al. 2026, *Eur J Appl Physiol*，式 5（命名為「Skiba 1」）。
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC12948861/
+6. GoldenCheetah `src/Metrics/WPrime.cpp`：`TAU = 546.00f * exp(-0.01*(CP - avgBelowCP)) + 316.00f`。
+   檔頭感謝 Skiba 本人協助。
+   https://github.com/GoldenCheetah/GoldenCheetah/blob/master/src/Metrics/WPrime.cpp
+
+**原文驗證的是什麼**（Skiba 2012 摘要，PMID 22382171）：
+
+- 7 位受試者，自行車測功儀。
+- 協定：60 s 嚴重強度、30 s 低強度恢復，反覆到力竭；4 種恢復功率。
+- τ 的求法：反覆調整，直到力竭那一刻模型的 W′bal = 0。
+- 結果：
+  - τ 與 D_CP 的指數關係 r = 0.77。
+  - W′bal 與 VO2 上升的相關 r = 0.82–0.96。
+  - 另外用一位競賽車手的公路賽資料，示範模型預測到力竭。
+- Chorley 2022 與 PMC7552657 都說原始受試者是**未受訓**者。
+
+**誤差與後續驗證**：
+
+- Skiba et al. 2014 *MSSE* 46:1433（11 人，工作／恢復長度改變）：模型預測與實測 W′ 平均差
+  −1.6 ± 1.1 kJ（PubMed 摘要）。
+- Skiba et al. 2014 *IJSPP* 9:900（8 位鐵人三項選手，野外功率計資料）：
+  - 自述力竭時的 W′bal 為 0.5 ± 1.3 kJ。
+  - ROC 曲線下面積 0.914。
+- Bartram et al. 2018 *IJSPP* 13:724（4 位精英車手）：
+  - 實際恢復比模型快，τ 偏差 −112 s。
+  - 他們改用 `τ = 2287.2 · D_CP^(−0.688)`（R² = 0.433），2021 年有勘誤。
+  - PubMed 摘要與 Welburn 2026 式 8 一致。
+- Chorley 2022：τ 的個體差異很大，多篇研究建議個人化 τ。
+
+**微分式（Skiba 2015 提出；Skiba & Clarke 2021 回顧比較兩種形式的假設）**：
+
+- CP 以上：`W′bal` 每秒減少 `P − CP`。
+- CP 以下：`W′bal(t) = W′ − (W′ − W′bal(u)) · e^(−D_CP·(t−u)/W′)`，等於 `τ = W′ / D_CP`。
+- 開放來源：
+  - Vassallo 2020 式 6–7；
+  - Welburn 2026 式 6（「Skiba 2」：`τ = W′/D_CP`）；
+  - GoldenCheetah 每秒的歐拉形式 `W += (CP − P)·(W′ − W)/W′`（註解寫「Froncioni / Clarke」）。
+
+**來源之間的出入（引用時要注意）**：
+
+- PMC7552657 說「D_CP 超過 316 W 後就沒有額外好處」。這是誤讀：316 是 τ 的漸近值，單位秒。
+  Vassallo 2020 的說法才正確。
+- PMC7552657 的微分式（式 8）把指數印成 `(D_CP − t/τ)`，是排版錯誤。以 Vassallo、Welburn、
+  GoldenCheetah 的 `e^(−D_CP·t/W′)` 為準。
+- 命名不一致：Bartram 2018 把 τ 指數式叫「SKIBA 2」，Welburn 2026 叫「Skiba 1」。引用時要寫
+  式子本身，不要只寫名稱。
+
+**算例**：
+
+- Jones & Vanhatalo 2017：
+  - 恢復功率 20 W 時 τ ≈ 377 s；
+  - 中強度恢復時 ≈ 452 s；高強度恢復時 ≈ 580 s；
+  - 恢復功率仍高於 CP 時 ≈ 7056 s（不合生理，只代表 W′ 消耗變慢）。
+- 獨立重算：
+  - D_CP = 0 → τ = 862.00 s；
+  - D_CP = 100 W → τ = 546·e^(−1) + 316 = **516.86 s**；
+  - D_CP = 219 W → 377.1 s，和 Jones 2017 的 377 s 對得上（對應該研究約 219 W 的 D_CP）。
+
+**跑步**：
+
+- Vassallo 2020 是唯一找到的跑步驗證：
+  - 受試者：9 位男性團隊運動員。
+  - 方式：平地戶外間歇跑到力竭，功率由 GPS 推算，不是 Stryd。
+  - 積分式預測的力竭時間為 848 ± 91 s，實際 968 ± 117 s（P = 0.001，**低估 12 %**）。
+  - 微分式 938 ± 84 s，差異不顯著。
+  - 他們擬合出跑步用的 `τ = 372·e^(−0.02·D_CP) + 102`（r² = 0.52）。
+- Stryd：說明中心沒找到 W′bal 的公開文章。它的搜尋是前端渲染，所以這一點只能算「沒找到」，
+  不能算「沒有」。
+- 沒找到用 Stryd 功率或越野跑驗證 W′bal 的研究。
+
+**第三種模型：WKO5 的 `dfrc`（出處是反組譯，不是論文）**：
+
+- WKO5.exe 5.0.587 的二進位檔裡，沒有「Skiba」「W'bal」「reconstitution」字串（ASCII 與 UTF-16
+  都查過）。
+- 類似 W′ 餘額的函式是 `dfrc`（0x6d7ae0，見 `docs/wko5-internals/functions.md` 約第 474 行）。
+- 它的模型**不是** Skiba 的 τ 式：
+  - 消耗：`(p − FTP)·dt`。用的是 FTP，不是 CP。
+  - 恢復：固定的雙指數 `R = (1 − e^(−t/300))·0.7·D + (1 − e^(−t/25))·0.3·D`。每次出力，時鐘就
+    歸零。
+- 這只記錄 WKO5 的行為，**不算** Skiba 的來源。
+
+**適用範圍**：
+
+- 自行車測功儀，間歇嚴重強度，恢復功率低於 CP。
+- 原始族群未受訓；精英車手恢復得較快（Bartram）。
+- 用在跑步是外插，而且已知會低估跑步的力竭時間。
+
+**狀態**：
+
+- τ 係數與積分式：**已驗證（二手核對）**。
+- 用途維持「只當可選顯示」：自行車以外是外插，τ 個體差也大。
+- 約束仍用 F11b。
+
+### 3C.2 Pandolf（F12）
+
+**原式（Pandolf, Givoni & Goldman 1977）**：
+
+- `M = 1.5W + 2.0(W + L)(L/W)² + η(W + L)(1.5V² + 0.35VG)`
+- 單位：M 為代謝率（W）；W 體重、L 負重（kg）；V 速度（m/s）；G 坡度（%，例如 5 代表 5 %）；
+  η 為地形係數（無單位）。
+- 三項依序是：無負重站立、帶負重站立、隨速度增加的步行項。
+
+逐字一致的開放來源：
+
+1. Potter et al. 2015, *PLoS One* 10(7):e0132698，式 4（單位寫法與上面相同）。
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC4511810/
+2. Weyand, Ludlow, Nollkamper, Buller 2021, *J Appl Physiol* 131:1272，表 1。
+   - 表內是氧耗單位：`V̇O2 (mL/kg/min) = 2.985/W × M`，換算採每 mL O2 約 20.1 J（Blaxter）。
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC8560389/
+3. Wikipedia「Pandolf equation」。
+   https://en.wikipedia.org/wiki/Pandolf_equation
+
+**地形係數 η（Soule & Goldman 1972）**：
+
+| 地面 | η | 來源 |
+|---|---|---|
+| 柏油路或跑步機 | 1.0 | Wikipedia；Kowalsky 2021 |
+| 泥土路 | 1.1 | Wikipedia（單一來源） |
+| 輕灌叢 light brush | 1.2 | Wikipedia；Kowalsky 2021 |
+| 濃灌叢 heavy brush | 1.5 | Wikipedia；Kowalsky 2021 |
+| 沼澤 | 1.8 | Wikipedia（單一來源） |
+| 鬆沙 | 2.1 | Wikipedia；Kowalsky 2021 |
+| 軟雪 15 / 25 / 35 cm | 2.5 / 3.3 / 4.1 | Wikipedia（單一來源） |
+
+- Kowalsky, Rebula, Ojeda, Adamczyk, Kuo 2021, *PLoS One* 16:e0228682，引用 Soule & Goldman。
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC7806134/
+- Weyand 2021 自己量到：草地 1.08。
+- Richmond et al. 對 Santee 式量到：泥土路、1.55 m/s、8 kg 負重時為 1.11（PMC12832177 轉述）。
+
+**Santee et al. 2003 的下坡修正（G < 0）**：
+
+- 只有 Weyand 2021 表 1 寫出完整係數。在他們的寫法裡，G < 0 時 `0.35VG` 那一項換成修正項：
+  `M = 1.5W + 2.0(W + L)(L/W)² + η(W + L)(1.5V²) + η[G(W + L)V/3.5 − (W + L)(G + 6)²/W + (25 − V²)]`
+- 其他來源（PMC12832177、PMC6046468、PMC7661058）只說有這個修正，沒寫係數。
+- Santee 2003 原文是 USARIEM 技術報告（DTIC ADA415788），DTIC 回 403，讀不到。
+- → **待驗證**（單一來源）。v2 的下坡段不用它。
+
+**LCDA 步行式（Looney et al. 2019, *MSSE* 51:1954，PMID 30973477）**：
+
+- 摘要：
+  - 資料來自 11 篇研究、95 人。
+  - 速度最高 1.96 m/s，坡度 −40 % 到 +45 %。
+  - 坡道預測偏差 0.09 ± 0.40 W/kg，SEE 0.42 W/kg。
+- 式子（Weyand 2021 表 1；W/kg；S m/s；G %）：
+  `M = 1.44 + η(1.94·S^0.43 + 0.24·S^4 + 0.34·S·G·(1 − 1.05^(1 − 1.1^(G + 32))))`
+- 坡道項另外兩篇用小數坡度寫成 `34·S·G·(1 − 1.05^(1 − 1.1^(100G + 32)))`，代數上相同：
+  - Looney 2022, *MSSE* 54，式 3（https://pmc.ncbi.nlm.nih.gov/articles/PMC8919998/）；
+  - Looney 2025, *MSSE*，式 1（https://pmc.ncbi.nlm.nih.gov/articles/PMC12129380/）。
+- 平地項隨版本改變：
+  - 2019 版：`1.44 + 1.94·S^0.43 + 0.24·S^4`（只有 Weyand 2021 一個來源）。
+  - 2022 背負版：`M_rest + 0.19 + 1.78·S^0.58 + 0.27·S^4`，乘上負重項 `(1 + 1.96·L_Bp^1.36)`
+    （L_Bp = 背包重 / 體重）。括號位置從 XML 文字看不出來，要看原文排版。
+  - 2025 無負重版：`M_rest + 0.21 + 1.78·S^0.58 + 0.27·S^4`。
+- → 坡道項**已驗證（二手核對）**（3 個來源）。平地項與常數因版本而異，**要指定版本才能用**；
+  v2 目前不用 LCDA。
+
+**誤差與適用範圍**：
+
+- Pandolf 1977 題名就寫「站立或非常慢地走」。原始資料的速度與坡度範圍，開放來源都沒寫清楚。
+  → **範圍未核對**。
+- Looney 2022（30 人，背包 0–66 % 體重，0.45–1.97 m/s）：
+  - Pandolf 偏低 −0.44 ± 0.74 W/kg（CCC 0.908）；
+  - 在 7 組外部資料上偏低 −0.46 ± 0.67 W/kg（CCC 0.863）。
+- Weyand 2021（7 人，野外 6.4 km，坡度 −3 % 到 +5 %，柏油與草地）：
+  - 無負重總能耗高估 +17 %；
+  - 負重為體重 30 %（1.30 × W_b）時高估 +13 %。
+- Drain et al. 2017, *J Sci Med Sport*，題名：「Pandolf 低估現代軍事負重的代謝率」（只讀到題名，
+  經 Wikipedia 參考文獻）。
+- 所以方向是「重負重時低估」，但 Gemini 說的「> 30–40 kg」門檻**沒有來源**。
+
+**算例**：出處裡沒有可以重現的代入算例。改用獨立重算，寫成 V-F12：
+
+- W 70、L 20、V 1.34、G 5、η 1：
+  `105 + 180·(20/70)² + 90·(1.5·1.7956 + 0.35·1.34·5) = 105 + 14.69 + 453.46 =` **573.15 W**
+- W 70、L 0、V 1.34、G 0：`105 + 70·1.5·1.7956 =` **293.54 W**
+
+**狀態**：
+
+- 原式、η 1.0 / 1.2 / 1.5 / 2.1：**已驗證（二手核對）**，限 G ≥ 0。
+- η 1.1、1.8、雪地：單一來源，當使用者可選的倍率，標「經驗法則」。
+- Santee 下坡：待驗證。
+
+### 3C.3 Bassett 海拔多項式與 `env.py`（F14）
+
+**Bassett et al. 1999**（x = 海拔 km；y = 海平面有氧功率的 %）：
+
+- 未適應（在高地 1–7 天）：`y = 0.178x³ − 1.43x² − 4.07x + 100`，R² = 0.974
+- 已適應（在高地數週）：`y = −1.12x² − 1.90x + 99.9`，R² = 0.973
+
+逐字一致的開放來源：
+
+1. TrainingPeaks，Jake Rytlewski，〈The Effect of Racing at Altitude〉（2024-09-24 更新）：
+   上面兩式與 R²，以及哪條是已適應、哪條是未適應。
+   https://www.trainingpeaks.com/blog/the-effect-of-racing-at-altitude/
+2. Alex Simmons 2014，〈W/m², Altitude and the Hour Record. Part II〉：
+   - 寫成比例形式：已適應 `−0.0112x² − 0.0190x + 1`、未適應 `0.00178x³ − 0.0143x² − 0.0407x + 1`；
+   - R² 相同，適應定義相同。
+   https://alex-cycle.blogspot.com/2014/12/wm2-altitude-and-hour-record-part-ii.html
+3. 較精確係數的實作：
+   - sauce4strava `src/common/lib.js`：
+     - 已適應 `−1.1219x² − 1.8991x + 99.921`（R² 0.9729）；
+     - 未適應 `0.1781x³ − 1.434x² − 4.0726x + 100.35`（R² 0.9739）。
+   - JNuss71/adaptive-calculator `docs/MATH.md`：
+     `0.1781h³ − 1.434h² − 4.073h + 100.352` 與 `−1.122h² − 1.8991h + 99.921`。
+4. intervals.icu（2022-07-22 公告）：用 Bassett 的已適應／未適應兩式畫海拔校正功率，沒列係數。
+   https://forum.intervals.icu/t/16483
+
+**來源之間的出入**：
+
+- 精確版與四捨五入版的截距不同：100.35 或 100.352 對 100；99.921 對 99.9。Simmons 把兩條都正規化
+  成海平面 = 1。
+  - v2 用 `A(z)/A(z_train)` 的比值，截距的影響很小。
+  - 建議用四捨五入版：它有 TrainingPeaks、Simmons 兩個獨立來源一致；精確版的兩個實作在最後
+    一位上互相不一致。
+- Gemini 說的 `−1.4336x²`、`−4.0826x` **沒有任何來源**。來源寫的是 −1.434 與 −4.0726；四捨五入後
+  −4.07 也對得上 4.0726，對不上 4.0826。
+- 任務說明裡「常被引用的」`y = −0.003x³ + 0.0081x² − 0.0381x + 1` **不是 Bassett**：
+  - TrainingPeaks 標它為 Péronnet et al. 1991；
+  - Simmons 標它為 Péronnet, Bouissou, Perrault & Ricci，〈A comparison of cyclists' time records
+    according to altitude and materials used〉，是用一小時紀錄擬合的。
+- 擬合用的資料：沒有開放來源寫。
+  - Haarchive 的程式註解說，Bassett 自己在 Wattage 論壇 FAQ 寫過：這條曲線改編自更早的四組
+    精英跑者研究，不是從他論文裡的自行車資料擬合的。
+  - 這只是程式註解，**未核對**。
+- 有效範圍：
+  - 開放來源沒寫。
+  - Simmons 的圖畫到 3000 m。
+  - 未適應的三次式在約 6.5 km 有極小值，之後反而上升（Haarchive 註解；我們重算一致）。
+  - → 限 0–4000 m，> 3000 m 標「推估」。
+
+**`env.py` 用的其實是什麼**：
+
+- 式子：`A(p) = (−174.1448622 + 1.0899959p − 1.5119×10⁻³p² + 0.72674×10⁻⁶p³)/100`，p 單位 torr；
+  A(760) = 1.0000。
+- GoldenCheetah `src/FileIO/RideFile.cpp` 的 aPower：
+  - a0–a3 與 env.py 逐位相同；
+  - 註解的出處是 Wilber《Altitude Training and Athletic Performance》與 Péronnet, Thibault &
+    Cousineau 1991（*J Appl Physiol* 70:399）；
+  - 它用 `pbar = 760·e^(−alt/7000)` 估氣壓。註解寫 mbar，但數值其實是 mmHg。
+- 數個 Garmin Connect IQ app（TnPowerDF、JoopVerdoorn DR 系列）也用同一組係數，加上同樣的氣壓、
+  Magnus、Hadley 公式。它們是 SuperPower 試算表的複本，不算獨立來源。
+- Péronnet 1991 的摘要（PMID 2010398）沒列係數。
+- → 出處「Péronnet 1991」**只有 GoldenCheetah 一個來源**，標待驗證。「出自 Bassett」這個說法
+  **推翻**：沒有任何開放來源這樣標，而且 Bassett 的式子根本是以 km 為變數。
+- env.py 的算例（`superpower-calculator.md` 的試算表快取值）：1500 m、25 °C → torr 638.1478、
+  A 0.94599896。本次重算一致。
+
+**數值比較**（海平面有氧功率的 %）：
+
+- env.py 欄的站點溫度 = 15 °C − 6.5 °C/km，和 §2.6 相同。
+- 如果站點溫度一律填 15 °C，env.py 在 4000 m 會比表中高約 4 點。
+
+| 海拔 m | env.py（Péronnet torr） | Bassett 已適應 | Bassett 未適應 | Péronnet 自行車 km 式 | Wehrlin 線性 |
+|---|---|---|---|---|---|
+| 0 | 100.0 | 99.9 | 100.0 | 100.0 | 100.0 |
+| 500 | 97.9 | 98.7 | 97.6 | 98.3 | 98.7 |
+| 1000 | 96.1 | 96.9 | 94.7 | 96.7 | 95.6 |
+| 1500 | 94.2 | 94.5 | 91.3 | 95.1 | 92.4 |
+| 2000 | 91.9 | 91.6 | 87.6 | 93.2 | 89.3 |
+| 2500 | 88.9 | 88.2 | 83.7 | 90.8 | 86.1 |
+| 3000 | 85.1 | 84.1 | 79.7 | 87.8 | 83.0 |
+| 3500 | 80.3 | 79.5 | 75.9 | 83.7 | 79.8 |
+| 3952（玉山） | 75.1 | 74.9 | 72.6 | 79.1 | 77.0 |
+
+- env.py 和 Bassett 已適應在 0–4000 m 內差 ≤ 1.0 點。所以 v1 把 env.py 當「已適應」曲線，**數值上
+  站得住**，只是出處標錯。
+- Wehrlin & Hallén 2006（急性暴露、300–2800 m 實測）落在 Bassett 已適應與未適應之間。例如 2000 m：
+  已適應 91.6、Wehrlin 89.3、未適應 87.6。
+  - 這符合「急性暴露比已適應差」；
+  - 但 Wehrlin 比 Bassett 未適應平緩。後者是 1–7 天的族群平均，而且擬合資料不明。
+
+**給 feat/racepower-v2 的修改**（本文件不改 `env.py`）：
+
+1. **係數不用改**。env.py 的四個係數和它真正的來源（試算表、GoldenCheetah）逐位一致，沒有抄錯。
+2. **出處要改**：v2 的程式註解、spec、頁面說明不可以把這條曲線寫成 Bassett。建議寫：
+   「海拔係數：Péronnet et al. 1991 的氣壓多項式（與 SuperPower 試算表、GoldenCheetah aPower
+   相同）；數值與 Bassett 1999 已適應曲線相差 ≤ 1 點（0–4000 m）」。
+   env.py 目前的 docstring 沒提 Bassett，不用動。
+3. **F14 的「未適應」選項**：維持 Wehrlin 線性為預設，因為它有全文、有實測範圍。另外可以提供
+   Bassett 未適應當較保守的選項：
+   ```python
+   def bassett_pct(alt_m: float, acclimatized: bool) -> float:
+       """Bassett et al. 1999 via TrainingPeaks / Simmons (x in km, returns % of sea level)."""
+       x = alt_m / 1000.0
+       if acclimatized:
+           return -1.12 * x * x - 1.90 * x + 99.9
+       return 0.178 * x ** 3 - 1.43 * x * x - 4.07 * x + 100.0
+   ```
+   - 用法：`Aᵢ = bassett_pct(zᵢ)/bassett_pct(z_train)`；
+   - 限 0 ≤ alt_m ≤ 4000，超過就截斷並標「推估」。
+   - 測試 **V-F14b**：`bassett_pct(2000, True) = 91.62`、`bassett_pct(2000, False) = 87.564`。
+
+**狀態**：
+
+- Bassett 1999 兩式（四捨五入版）：**已驗證（二手核對）**。
+- env.py 曲線：係數正確，出處改為 Péronnet 1991（單一來源，待驗證）。數值由 Bassett 已適應佐證。
+
+### 3C.4 使用者轉貼的 Gemini 摘要：逐條核對
+
+| 說法 | 結果 | 來源 |
+|---|---|---|
+| W′bal 積分式與 `τ = 546·e^(−0.01·D_CP) + 316`，D_CP = CP − 恢復功率 | **確認** | §3C.1 的 6 個來源 |
+| Bartram 2018：`τ = 2287.2·D_CP^(−0.688)` | **確認** | PubMed 摘要（PMID 29035607）；Welburn 2026 式 8 |
+| 微分式：CP 以上減 `(P − CP)dt`；CP 以下 `W′ − (W′ − W′bal_prev)·e^(−dt/τ)` | **確認**，τ = W′/D_CP | Vassallo 2020；Welburn 2026；GoldenCheetah |
+| Pandolf 原式，V m/s、G %、M W | **確認** | Potter 2015；Weyand 2021；Wikipedia |
+| η：柏油 1.0、泥土路 1.1、輕灌叢 1.2、濃灌叢 1.5、沼澤 1.8、鬆沙 2.1 | 1.0 / 1.2 / 1.5 / 2.1 **確認**；1.1、1.8 只有 Wikipedia | Kowalsky 2021；Wikipedia |
+| 軟雪 `η = 1.30 + 0.082·D`（D cm） | **未確認**（沒找到這個式子）。它算出的 2.53 / 3.35 / 4.17 和 Wikipedia 的 2.5 / 3.3 / 4.1 接近 | — |
+| 負重 > 30–40 kg 時 Pandolf 低估（Drain 2017） | 方向**確認**；門檻**未確認** | Looney 2022；Drain 2017 題名 |
+| Weyand 2017 Minimum Mechanics 模型 | 存在**確認**（Looney 2022 拿它比較，偏差 −1.06 W/kg）；係數未核對 | Looney 2022；Weyand 2021 表 1 |
+| Santee 2003 下坡修正 | 存在**確認**；係數只有單一來源 | Weyand 2021 表 1 |
+| Bassett 已適應 `−1.12x² − 1.90x + 99.9`（R² 0.973）；未適應 `0.178x³ − 1.43x² − 4.07x + 100`（R² 0.974） | **確認** | TrainingPeaks；Simmons 2014 |
+| 精確係數 `−1.122x² − 1.8991x + 99.921`、`0.1781x³ − 1.4336x² − 4.0826x + 100` | 已適應**確認**（−1.1219 或 −1.122）；未適應**不對**，來源是 −1.434、−4.0726，截距 100.35 | sauce4strava；adaptive-calculator |
+| Stryd 比賽功率：全馬 89.9 %、半馬 94.6 %、5K 103.8 %、1 英里 116 % | 數字**確認**，但基準是 **10K 功率**，不是 CP | Stryd 6879547 的表（0.8 km 128.5 … 42.2 km 89.9） |
+| 2.26 kg 水袋 → 目標功率 × 97.3 % | **未確認**。v1 的線性背負係數 `W/(W + L)` 在 W ≈ 81.5 kg 時剛好得 0.973，可能是某個體重下的算例 | — |
+| Palladino 的上下坡功率規則 | **沒有開放來源**（同 §0.2）。摘要本身也只說「維持固定 %CP」 | — |
 
 ---
 
@@ -545,7 +909,8 @@ v1 的缺口（v2 要補）：
 4. W′ 檢查：
    - 用**已驗證的 F11b**：每段連續超過 `CP·Mᵢ` 的區間，消耗不得超過 0.75 W′。超過就把那幾段的 α
      按比例縮小，並標「此坡超過 CP 太久」。
-   - Skiba W′bal（F11）的 τ 公式還沒對原文（待驗證），所以只當**可選顯示的曲線**，不參與約束。
+   - Skiba W′bal（F11）的 τ 係數已核對（§3C.1），但它是自行車的模型，用在跑步已知會低估力竭時間，
+     τ 的個體差也大。所以仍只當**可選顯示的曲線**，不參與約束。
 5. F16 正規化 → 回到 §4 的求解。
 
 「每公里」模式也跑同一套流程，只是分段邊界是每 1 km。每公里的坡度是那 1 km 的平均坡度。
@@ -610,12 +975,13 @@ v1 的缺口（v2 要補）：
    - 資料來自登山日的移動樣本：100 m 窗，已排除休息（速度 < 0.3 m/s 的樣本）。
    - 先驗 Tobler（6 km/h, 3.5, 0.05），收縮權重 n/(n + 30)，n = 該坡度區間的窗數 **[自組]**。
 2. **背負**：
-   - **F12 Pandolf 目前待驗證**（原式是二手）。在對過原文之前，沿用 v1 的線性背負係數
-     `(W + L₀)/(W + L)`，頁面標「假設」。
-   - 驗證通過後的做法：在個人平時背負 L₀（預設 5 kg）與個人速度下算出 Pandolf 代謝率 M₀，再在
-     目標背負 L 下反解 V。Pandolf 只適用上坡與平地步行；下坡段仍用線性係數；陡坡（> 25 %）標外插。
+   - **F12 Pandolf 已驗證（二手核對）**（§3C.2），限平地與上坡。
+   - 做法：在個人平時背負 L₀（預設 5 kg）與個人速度下算出 Pandolf 代謝率 M₀，再在目標背負 L 下
+     反解 V。
+   - 下坡段仍用 v1 的線性背負係數 `(W + L₀)/(W + L)`，因為 Santee 下坡修正還是單一來源。
+   - 陡坡（> 25 %）標外插。重負重時 Pandolf 已知偏低（Looney 2022），頁面註明。
 3. **海拔**：F14。預設「未適應」＝ Wehrlin 線性（300 m 起每 1000 m −6.3 %）；可切到「已適應」
-   ＝ env.py 曲線。
+   ＝ env.py 曲線（Péronnet torr 式，數值 ≈ Bassett 已適應，§3C.3）。
    - 前提寫明：步行靠心率上限（AeT）配速時，速度才會跟著 VO2max 下降。Wehrlin 發現固定速度的
      能量成本不變、心率上升。
 4. **多日**：F17。從 `hiking_days()`（已有 day index）取出多日行程，算第 n 天 EP/h 相對第 1 天的
@@ -637,7 +1003,7 @@ v1 的缺口（v2 要補）：
 
 1. **逐段海拔**（F14）：路線從 1000 m 爬到 3000 m 時，一個 M 會系統性錯估。v2 每段用
    `A(zᵢ)`，熱仍用全程一個值。
-2. **適應狀態開關**：已適應（env.py）或未適應（Wehrlin 線性）。
+2. **適應狀態開關**：已適應（env.py，數值 ≈ Bassett 已適應）或未適應（Wehrlin 線性；可選 Bassett 未適應）。
    - 百岳預設未適應；平地居民的路跑、越野預設已適應，因為 < 1500 m 時兩者差 < 2 %。
 3. **熱**：
    - 保留 Hadley，因為它是試算表與 Stryd 社群的慣例，v1 測試已鎖定數值。
@@ -698,7 +1064,7 @@ v1 的缺口（v2 要補）：
 3. **剖面圖**（ECharts）：
    - x 軸距離；左軸海拔，用面積圖，依分段類別著色；
    - 右軸是目標功率的階梯線，切「配速」時換成配速階梯；
-   - 可選 W′bal 細線（F11 待驗證期間預設關閉，開啟時標「推估」）；
+   - 可選 W′bal 細線（F11 係數已核對，但跑步是外插：預設關閉，開啟時標「推估」）；
    - 待驗證公式算出的分段目標，在圖和表上都帶「推估」徽章，直到 §3B 回測通過；
    - 滑鼠移過顯示該段卡片；點段 ↔ 表格列同步高亮；可框選縮放。
 4. **分段表**：
@@ -802,9 +1168,10 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
 - T6 坡道：α = β = 0 時 h ≡ 1；下坡上限生效時該段功率下降、平均仍守恆；W′bal 最低值 < 25 % 時
   α 被縮小。
 - T7 W′ 預算（F11b）：CP 以下不消耗；恆定 P > CP 時消耗等於 `(P − CP)t`；超過 0.75 W′ 時 α 被
-  縮小。Skiba W′bal 的測試要等 τ 係數對過原文之後才寫。
+  縮小。Skiba W′bal：V-F11（τ(0) = 862.00、τ(100) = 516.86；恆定 P > CP 時 W′bal 以 `P − CP`
+  線性下降）。
 - §3A 表中所有 **V-編號**的測試（V-F1 Stryd 表重算、V-F2、V-F4、V-F6、V-F10、V-F11b、V-F13、
-  V-F14、V-F15、V-F16、V-F17、V-F18、V-DP、V-SM、V-CL、V-HE、V-BT）都放在同一個檔案，並在
+  V-F11、V-F12、V-F14、V-F14b、V-F15、V-F16、V-F17、V-F18、V-DP、V-SM、V-CL、V-HE、V-BT）都放在同一個檔案，並在
   docstring 寫明算例的出處。
 - T8 GPX 解析：GPX 1.0 與 1.1 namespace、trk 與 rte、多 trkseg、缺 ele 報錯、DOCTYPE 被拒、
   超過大小被拒；wpt 名稱讀得到。
@@ -815,7 +1182,8 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
   每公里分段的距離總和 = 全長；類別門檻 ±2 / ±15 / 28 %。
 - T12 GradeRE：沒有樣本時等於 Minetti 先驗（F8，含下坡 0.9 下限）；樣本很多時趨近分箱中位數；
   單調性不強制，但輸出有限。
-- T13 百岳：Pandolf 數值例（L = 0 時等於無負重）；背負反解的速度隨 L 遞減；
+- T13 百岳：Pandolf 數值例 V-F12（70 kg、20 kg、1.34 m/s、5 % → 573.15 W；L = 0、G = 0 →
+  293.54 W）；背負反解的速度隨 L 遞減；V-F14b（Bassett 2000 m：91.62 / 87.564）；
   `altitude_factor_linear(300) = 1`、`(1300) = 0.937`；多日趟數 < 3 時 f_day = 1 並有警告。
 - T14 逐段海拔：全段同海拔時，逐段 M 等於 v1 的單一 M。
 - T15 API：`/course` 回 `course_id`，`/plan` 接受它；未知 id 回 410；v1 `/predict` 回應不變
@@ -832,7 +1200,8 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
    把 > 100 % 併進「極限」並顯示紅字？
 4. **策略預設幅度**：負分段、正分段預設 2 %、上限 5 %，可以嗎？越野的「均勻努力」要不要也
    允許時間斜坡？
-5. **百岳海拔預設**：預設「未適應」（Wehrlin 線性，較保守）？若前一晚住山屋（如排雲），
+5. **百岳海拔預設**：預設「未適應」（Wehrlin 線性，較保守）？要不要另外提供 Bassett 未適應
+   （更保守，§3C.3）？若前一晚住山屋（如排雲），
    要不要算「部分適應」？沒有定量研究可依。
 6. **Palladino 的上下坡建議**：你手上有沒有他的原文（Facebook 社團貼文、講義）？有的話，
    可以用它取代 §2.1.4 的自組建議。
@@ -848,8 +1217,11 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
 13. **回測通過門檻**（§3B）：路跑 ≤ 3 %、越野 ≤ 6 %、登山 ≤ 10 %、A 級比賽 f 在 0.97–1.03、
     至少 5 場。這些門檻可以嗎？回測沒通過前，頁面上自組公式的結果一律標「推估」，可以接受嗎？
     還是在通過前，乾脆**不顯示**逐段目標，只顯示整場預估？
-14. **待驗證的原文**：Skiba 2012（τ 係數）、Pandolf 1977（原式）、Bassett 1999（海拔多項式）的
-    全文我們讀不到（付費牆、cookie 牆）。你能取得 PDF 嗎？有了就能把三條從「待驗證」升級。
+14. **原文 PDF**：Skiba 2012 的 τ、Pandolf 1977 原式、Bassett 1999 兩式，已用開放來源二手核對
+    （§3C）。還沒解決的有三項：Santee 2003 下坡修正（單一來源）、Pandolf 原始的速度與坡度範圍、
+    env.py torr 多項式出自 Péronnet 1991（單一來源）。
+    - 你能取得 Santee 2003（USARIEM TN）或 Péronnet 1991 的 PDF 嗎？
+    - 你記得的 SuperPower 試算表有沒有寫海拔公式的出處？
 15. **哪些活動算「A 級比賽」**：用賽季計畫的 priority A 賽事，還是要在活動上另外標記？
 
 ---
@@ -862,7 +1234,13 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
   competition. *Sports Med* 38:239–252. PMID 18278984. https://doi.org/10.2165/00007256-200838030-00004 （摘要）
 - Bassett DR, Kyle CR, Passfield L, Broker JP, Burke ER (1999). Comparing cycling world hour
   records, 1967–1996: modeling with empirical data. *Med Sci Sports Exerc* 31:1665–1676.
-  https://doi.org/10.1097/00005768-199911000-00025 （摘要；全文 402，多項式係數未核對）
+  https://doi.org/10.1097/00005768-199911000-00025 （全文 402；兩條 km 多項式經 TrainingPeaks、
+  Simmons 2014 二手核對，§3C.3；**不是** env.py torr 式的來源）
+- Bartram JC, Thewlis D, Martin DT, Norton KI (2018). Accuracy of W′ recovery kinetics in high
+  performance cyclists — modeling intermittent work capacity. *IJSPP* 13:724–728. PMID 29035607.
+  https://doi.org/10.1123/ijspp.2017-0034 （摘要；2021 勘誤）
+- Chorley A, Bott RP, Marwood S, Lamb KL (2022). Bi-exponential modelling of W′ reconstitution
+  kinetics in trained cyclists. *Eur J Appl Physiol*. https://pmc.ncbi.nlm.nih.gov/articles/PMC8854279/ （全文）
 - Breiner TJ, Ortiz ALR, Kram R (2019). Level, uphill and downhill running economy values are
   strongly inter-correlated. *Eur J Appl Physiol*. https://doi.org/10.1007/s00421-018-4021-x （題名）
 - Burnley M, Jones AM (2018). Power–duration relationship: physiology, fatigue, and the limits of
@@ -893,10 +1271,20 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
   *Int J Exerc Sci*. https://doi.org/10.70252/rhgb2099 （題名）
 - Jones AM, Vanhatalo A (2017). The 'Critical Power' concept: applications to sports performance
   with a focus on intermittent high-intensity exercise. *Sports Med* 47:65–78.
-  https://doi.org/10.1007/s40279-017-0688-0 （摘要）
+  https://doi.org/10.1007/s40279-017-0688-0 （全文 PMC5371646：W′bal 積分式與 τ 式 3、τ 算例）
+- Kowalsky DB, Rebula JR, Ojeda LV, Adamczyk PG, Kuo AD (2021). Human walking in the real world:
+  interactions between terrain type, gait parameters, and energy expenditure. *PLoS One*
+  16:e0228682. https://pmc.ncbi.nlm.nih.gov/articles/PMC7806134/ （全文；η 1.0 / 1.2 / 1.5 / 2.1）
 - Liedl MA, Swain DP, Branch JD (1999). Physiological effects of constant versus variable power
   during endurance cycling. *Med Sci Sports Exerc* 31:1472–1477.
   https://doi.org/10.1097/00005768-199910000-00018 （摘要）
+- Looney DP, Santee WR, Hansen EO, Bonventre PJ, Chalmers CR, Potter AW (2019). Estimating energy
+  expenditure during level, uphill, and downhill walking. *Med Sci Sports Exerc* 51:1954–1960.
+  PMID 30973477. https://doi.org/10.1249/MSS.0000000000002002 （摘要；式子經 Weyand 2021 轉述）
+- Looney DP et al. (2022). Modeling the metabolic costs of heavy military backpacking. *Med Sci
+  Sports Exerc* 54. https://pmc.ncbi.nlm.nih.gov/articles/PMC8919998/ （全文；LCDA 背負式、Pandolf 偏差）
+- Looney DP, Schafer EA, Chapman CL et al. (2025). Graded walking energetics under cold strain.
+  *Med Sci Sports Exerc*. https://pmc.ncbi.nlm.nih.gov/articles/PMC12129380/ （全文；LCDA 坡道項）
 - March DS, Vanderburgh PM, Titlebaum PJ, Hoops ML (2011). Age, sex, and finish time as
   determinants of pacing in the marathon. *J Strength Cond Res*. https://doi.org/10.1519/jsc.0b013e3181bffd0f （題名）
 - Minetti AE, Moia C, Roi GS, Susta D, Ferretti G (2002). Energy cost of walking and running at
@@ -905,17 +1293,32 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
 - Ortiz ALR, Giovanelli N, Kram R (2017). The metabolic costs of walking and running up a 30-degree
   incline. *Eur J Appl Physiol* 117:1869–1876. https://doi.org/10.1007/s00421-017-3677-y （摘要）
 - Pandolf KB, Givoni B, Goldman RF (1977). Predicting energy expenditure with loads while standing
-  or walking very slowly. *J Appl Physiol* 43:577–581. https://doi.org/10.1152/jappl.1977.43.4.577 （題名；公式見 effort-distance-formulas.md §7）
+  or walking very slowly. *J Appl Physiol* 43:577–581. https://doi.org/10.1152/jappl.1977.43.4.577 （全文 403；原式經 Potter 2015、Weyand 2021、Wikipedia 二手核對，§3C.2）
 - Péronnet F, Thibault G, Cousineau DL (1991). A theoretical analysis of the effect of altitude on
-  running performance. *J Appl Physiol* 70:399–404. https://doi.org/10.1152/jappl.1991.70.1.399 （摘要）
+  running performance. *J Appl Physiol* 70:399–404. PMID 2010398. https://doi.org/10.1152/jappl.1991.70.1.399
+  （摘要；GoldenCheetah 把 env.py 的 torr 多項式標為出自此篇，單一來源，§3C.3）
+- Péronnet F, Bouissou P, Perrault H, Ricci J (1991). A comparison of cyclists' time records
+  according to altitude and materials used. *Can J Sport Sci*（依 Simmons 2014 與 TrainingPeaks
+  轉述；`−0.003x³ + 0.0081x² − 0.0381x + 1` 的來源；未抓取）
+- Potter AW, Gonzalez JA et al. (2015). Biophysical assessment and predicted
+  thermophysiologic effects of body armor. *PLoS One* 10:e0132698.
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC4511810/ （全文；Pandolf 式 4）
 - Santos-Lozano A et al. (2014). Influence of sex and level on marathon pacing strategy. Insights
   from the New York City race. *Int J Sports Med* 35:933–938. https://doi.org/10.1055/s-0034-1367048 （摘要）
 - Skiba PF, Chidnok W, Vanhatalo A, Jones AM (2012). Modeling the expenditure and reconstitution
   of work capacity above critical power. *Med Sci Sports Exerc* 44:1526–1532.
-  https://doi.org/10.1249/mss.0b013e3182517a80 （摘要；τ 公式依記憶，實作前要對原文）
+  PMID 22382171. https://doi.org/10.1249/mss.0b013e3182517a80 （摘要；τ 式經 5 篇開放論文與
+  GoldenCheetah 二手核對，§3C.1）
 - Skiba PF, Jackman S, Clarke D, Vanhatalo A, Jones AM (2014). Effect of work and recovery
-  durations on W′ reconstitution during intermittent exercise. *Med Sci Sports Exerc*.
-  https://doi.org/10.1249/mss.0000000000000226 （題名）
+  durations on W′ reconstitution during intermittent exercise. *Med Sci Sports Exerc* 46:1433–1440.
+  PMID 24492634. https://doi.org/10.1249/mss.0000000000000226 （摘要）
+- Skiba PF, Clarke D, Vanhatalo A, Jones AM (2014). Validation of a novel intermittent W′ model for
+  cycling using field data. *IJSPP* 9:900–904. PMID 24509723. https://doi.org/10.1123/ijspp.2013-0471 （摘要）
+- Skiba PF, Fulford J, Clarke DC, Vanhatalo A, Jones AM (2015). Intramuscular determinants of the
+  ability to recover work capacity above critical power. *Eur J Appl Physiol* 115:703–713.
+  PMID 25425258. https://doi.org/10.1007/s00421-014-3050-3 （摘要；微分式）
+- Skiba PF, Clarke DC (2021). The W′ balance model: mathematical and methodological considerations.
+  *IJSPP* 16:1561–1572. PMID 34686611. https://doi.org/10.1123/ijspp.2021-0205 （摘要）
 - Smyth B, Muniz-Pumares D (2020). Calculation of critical speed from raw training data in
   recreational marathon runners. *Med Sci Sports Exerc* 52:2637–2645.
   https://doi.org/10.1249/mss.0000000000002412 （摘要）
@@ -936,6 +1339,15 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
 - Vandewalle H (2018). Modelling of running performances: comparisons of power-law, hyperbolic,
   logarithmic, and exponential models in elite endurance runners. *Biomed Res Int*.
   https://doi.org/10.1155/2018/8203062 （摘要）
+- Vassallo C, Gray A, Cummins C, Murphy A, Waldron M (2020). Exercise tolerance during flat
+  over-ground intermittent running: modelling the expenditure and reconstitution kinetics of work
+  done above critical power. *Eur J Appl Physiol* 120:219–230.
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC6969867/ （全文；W′bal 的跑步驗證）
+- Welburn et al. (2026). W′ reconstitution modelling during intermittent exercise performed to task
+  failure. *Eur J Appl Physiol*. https://pmc.ncbi.nlm.nih.gov/articles/PMC12948861/ （全文）
+- Weyand PG, Ludlow LW, Nollkamper JJ, Buller MJ (2021). Real-world walking economy: can laboratory
+  equations predict field energy expenditure? *J Appl Physiol* 131:1272.
+  https://pmc.ncbi.nlm.nih.gov/articles/PMC8560389/ （全文；表 1：Pandolf、Santee、LCDA 式）
 - Vernillo G et al. (2017). Biomechanics and physiology of uphill and downhill running.
   *Sports Med*. https://doi.org/10.1007/s40279-016-0605-y （題名）
 - Wehrlin JP, Hallén J (2006). Linear decrease in VO2max and performance with increasing altitude
@@ -956,4 +1368,12 @@ PlanIn ─► env.multiplier + env.segment_factors ─► Mᵢ
   §1–§8（例：https://en.wikipedia.org/wiki/Tobler's_hiking_function 、
   https://en.wikipedia.org/wiki/Naismith's_rule 、https://utmb.world/sports-system ）。
 - Hadley 熱規則：跑者社群計算器，本次沒有取得原始出處；v1 從 SuperPower 試算表移植。
+- 海拔、W′bal 的開源實作與廠商文章（§3C）：
+  - GoldenCheetah `src/Metrics/WPrime.cpp`、`src/FileIO/RideFile.cpp` — https://github.com/GoldenCheetah/GoldenCheetah
+  - sauce4strava `src/common/lib.js` — https://github.com/SauceLLC/sauce4strava
+  - TrainingPeaks：The Effect of Racing at Altitude — https://www.trainingpeaks.com/blog/the-effect-of-racing-at-altitude/
+  - Simmons A (2014)：W/m², Altitude and the Hour Record, Part II — https://alex-cycle.blogspot.com/2014/12/wm2-altitude-and-hour-record-part-ii.html
+  - intervals.icu 海拔校正功率公告 — https://forum.intervals.icu/t/16483
+  - Wikipedia：Pandolf equation — https://en.wikipedia.org/wiki/Pandolf_equation
+- WKO5 `dfrc`：反組譯（`docs/wko5-internals/functions.md`），不是論文。
 - Strava 改良 GAP：https://medium.com/strava-engineering/an-improved-gap-model-8b07ae8886c3 （403，未讀）。
