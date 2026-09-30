@@ -20,6 +20,7 @@ from backend.db.models import SyncState, Athlete, WorkoutFile, AthleteSettings
 from backend.files.file_service import _import_one_file, record_corrupt
 from backend.sync import http
 from backend.sync.http import as_utc
+from backend.settings.secrets import SecretError, seal, unseal
 
 log = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ async def login(email: str, password: str, db: AsyncSession, athlete_id: int = 1
             if not state:
                 state = SyncState(athlete_id=athlete_id)
                 db.add(state)
-            state.coros_access_token = token
+            state.coros_access_token = seal(token)
             state.coros_token_expires = expires_at
             state.coros_email = email
             state.coros_base_url = data_base
@@ -195,7 +196,11 @@ async def _get_token_and_base(db: AsyncSession, athlete_id: int = 1) -> tuple[st
         raise ValueError("COROS_AUTH_REQUIRED: token expired, please login again")
     base = state.coros_base_url or COROS_BASES["us"]
     user_id = state.coros_user_id or ""
-    return state.coros_access_token, base, user_id
+    try:
+        token = unseal(state.coros_access_token)
+    except SecretError as e:
+        raise ValueError(f"COROS_AUTH_REQUIRED: {e}")
+    return token, base, user_id
 
 
 async def _list_page(

@@ -52,6 +52,7 @@ from sqlalchemy import select
 from backend.db.models import SyncState, Athlete, WorkoutFile
 from backend.sync import http
 from backend.sync.http import as_utc
+from backend.settings.secrets import SecretError, seal, unseal
 
 log = logging.getLogger(__name__)
 
@@ -137,8 +138,8 @@ async def login_password(
     if not state:
         state = SyncState(athlete_id=athlete_id)
         db.add(state)
-    state.tp_access_token = token["access_token"]
-    state.tp_refresh_token = token.get("refresh_token")
+    state.tp_access_token = seal(token["access_token"])
+    state.tp_refresh_token = seal(token.get("refresh_token"))
     state.tp_token_expires = expires_at
 
     if tp_athlete_id:
@@ -245,11 +246,15 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
     Refresh flow — body matches binary literally:
       grant_type=refresh_token&refresh_token={t}&client_id=WKO5&client_secret=
     """
-    if not state.tp_refresh_token:
+    try:
+        refresh = unseal(state.tp_refresh_token)
+    except SecretError:
+        return False
+    if not refresh:
         return False
     body = (
         f"grant_type=refresh_token"
-        f"&refresh_token={_urlquote(state.tp_refresh_token)}"
+        f"&refresh_token={_urlquote(refresh)}"
         f"&client_id={TP_CLIENT_ID}"
         f"&client_secret={TP_CLIENT_SECRET}"
     )
@@ -263,8 +268,8 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
         log.warning("TP refresh failed (%d): %s", resp.status_code, resp.text[:200])
         return False
     token = resp.json()
-    state.tp_access_token = token["access_token"]
-    state.tp_refresh_token = token.get("refresh_token", state.tp_refresh_token)
+    state.tp_access_token = seal(token["access_token"])
+    state.tp_refresh_token = seal(token.get("refresh_token")) or state.tp_refresh_token
     state.tp_token_expires = datetime.now(timezone.utc) + timedelta(
         seconds=token.get("expires_in", 3600)
     )
@@ -286,7 +291,11 @@ async def _get_valid_token(db: AsyncSession, athlete_id: int) -> Optional[str]:
         ok = await _refresh_token(state, db)
         if not ok:
             return None
-    return state.tp_access_token
+    try:
+        return unseal(state.tp_access_token)
+    except SecretError as e:
+        log.warning("TP token unreadable: %s", e)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -678,8 +687,8 @@ async def exchange_code(code: str, db: AsyncSession, athlete_id: int) -> dict:
     if not state:
         state = SyncState(athlete_id=athlete_id)
         db.add(state)
-    state.tp_access_token = token["access_token"]
-    state.tp_refresh_token = token.get("refresh_token")
+    state.tp_access_token = seal(token["access_token"])
+    state.tp_refresh_token = seal(token.get("refresh_token"))
     state.tp_token_expires = datetime.now(timezone.utc) + timedelta(
         seconds=token.get("expires_in", 3600)
     )
