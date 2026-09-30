@@ -13,7 +13,11 @@
             {"name": "CTL 體能", "type": "line", "y_axis": "TSSPERDAY", "color": "#2a78d6", "line_width": "thick", "expression": "ctl"},
             {"name": "ATL 疲勞", "type": "line", "y_axis": "TSSPERDAY", "color": "#eb6834", "expression": "atl"},
             {"name": "TSB 狀況", "type": "line", "y_axis": "TSSPERDAY", "color": "#1baf7a", "expression": "tsb"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"}
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"},
+            {"name": "TSB −30 過度訓練", "type": "line", "y_axis": "TSSPERDAY", "color": "#e34948", "line_style": "dash", "expression": "(,-30)"},
+            {"name": "TSB −10 有效訓練上緣", "type": "line", "y_axis": "TSSPERDAY", "color": "#8a8984", "line_style": "dash", "expression": "(,-10)"},
+            {"name": "TSB +10 A 賽", "type": "line", "y_axis": "TSSPERDAY", "color": "#1baf7a", "line_style": "dash", "expression": "(,10)"},
+            {"name": "TSB +20 A 賽", "type": "line", "y_axis": "TSSPERDAY", "color": "#1baf7a", "line_style": "dash", "expression": "(,20)"}
           ]
         },
         {
@@ -30,7 +34,10 @@
           "axes": [{"id": "TSSPERDAYPERWEEK"}],
           "series": [
             {"name": "CTL 週變化", "type": "bar", "y_axis": "TSSPERDAYPERWEEK", "color": "#2a78d6", "expression": "tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7)"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"}
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"},
+            {"name": "+3 可長期", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#1baf7a", "line_style": "dash", "expression": "(,3)"},
+            {"name": "+5 只撐一兩週", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#eda100", "line_style": "dash", "expression": "(,5)"},
+            {"name": "+7 受傷風險", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#e34948", "line_style": "dash", "expression": "(,7)"}
           ]
         }
       ]
@@ -86,7 +93,7 @@
           "axes": [{"id": "CUSTOM次", "min": 0}],
           "period": "week",
           "series": [
-            {"name": "肌力", "type": "bar", "y_axis": "CUSTOM次", "color": "#e87ba4", "expression": "count(if(sport=\"strength\", movingduration), startofweek(date))"},
+            {"name": "肌力", "type": "bar", "y_axis": "CUSTOM次", "color": "#e87ba4", "expression": "count(if(sport=\"strength\", duration), startofweek(date))"},
             {"name": "目標 2 次", "type": "line", "y_axis": "CUSTOM次", "color": "#8a8984", "line_style": "dash", "expression": "(,2)"}
           ]
         }
@@ -115,7 +122,8 @@
           "series": [
             {"name": "每週", "type": "bar", "y_axis": "PERCENT", "color": "#1baf7a", "expression": "sum(sum(if(heartrate < aethr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
             {"name": "每次活動", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "sum(if(heartrate < aethr, deltatime)) / sum(if(heartrate > 0, deltatime))"},
-            {"name": "80% 目標", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.8)"}
+            {"name": "75% 目標", "type": "line", "y_axis": "PERCENT", "color": "#1baf7a", "line_style": "dash", "expression": "(,0.75)"},
+            {"name": "65% 注意", "type": "line", "y_axis": "PERCENT", "color": "#eda100", "line_style": "dash", "expression": "(,0.65)"}
           ]
         },
         {
@@ -139,10 +147,10 @@
       "charts": [
         {
           "title": "有氧效率 EF（輕鬆路跑）",
-          "description": "每下心跳換到的速度（m/min per bpm）。往上走 = 有氧引擎變強。只取 IF < 0.8 的路跑才能公平比較。",
+          "description": "每下心跳換到的速度（m/min per bpm）。往上走 = 有氧引擎變強。只取 ≥ 30 分鐘、平均心率 ≤ AeT + 3 的路跑才能公平比較（和總覽「有氧效率」指標同一個條件）。",
           "axes": [{"id": "CUSTOMm/min/bpm", "min": 0}],
           "series": [
-            {"name": "EF", "type": "line", "y_axis": "CUSTOMm/min/bpm", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and if < 0.8, avg(speed)/avg(heartrate)*1000/60)"}
+            {"name": "EF", "type": "line", "y_axis": "CUSTOMm/min/bpm", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 1800 and avg(heartrate) <= aethr + 3, avg(speed)/avg(heartrate)*1000/60)"}
           ]
         },
         {
@@ -150,9 +158,10 @@
           "description": "後半段每單位速度多用多少心跳。< 5% = 在有氧閾值以下（Uphill Athlete）。",
           "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "路跑", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration > 2400, pahr)"},
+            {"name": "路跑", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 2400, pahr)"},
             {"name": "越野跑", "type": "line", "y_axis": "PERCENT", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and duration > 2400 and abs(pahr) < 0.3, pahr)"},
-            {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"}
+            {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
+            {"name": "10% 注意", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.10)"}
           ]
         },
         {
@@ -185,11 +194,12 @@
         },
         {
           "title": "耐久度：長時間後段心率飄移",
-          "description": "超過 2 小時的活動，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。",
+          "description": "超過 90 分鐘的越野跑，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。登山的 Pa:HR 混了休息時間、會亂跳，所以不算；|飄移| > 30% 當成壞資料（和總覽「耐久度」指標同一個條件）。",
           "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "飄移", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "if((hastag(\"runningtrail\") or hastag(\"hiking\") or hastag(\"mountaineering\")) and duration > 7200, pahr)"},
-            {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"}
+            {"name": "飄移", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pahr) <= 0.3, pahr)"},
+            {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
+            {"name": "15% 掉很多", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.15)"}
           ]
         }
       ]
