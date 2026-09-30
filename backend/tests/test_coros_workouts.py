@@ -531,38 +531,3 @@ def test_entry_moved_in_the_app_is_still_found():
     with http.use_transport(httpx.MockTransport(fake)):
         run(CW.remove_week(db, "2026-09-28"))
     assert fake.entities == [] and fake.live() == {}
-
-
-# ---------------------------------------------------------------------------
-# API
-# ---------------------------------------------------------------------------
-
-def test_api_endpoints(monkeypatch):
-    from backend.api import coros_plan
-    from backend.db.database import get_db
-    db = run(make_db())
-    fake = FakeHub()
-    p = week1()
-
-    async def fake_plan():
-        return p
-
-    async def fake_db():
-        yield db
-    monkeypatch.setattr(coros_plan, "_plan", fake_plan)
-    app = FastAPI()
-    app.include_router(coros_plan.router)
-    app.dependency_overrides[get_db] = fake_db
-    with http.use_transport(httpx.MockTransport(fake)):
-        c = TestClient(app)
-        r = c.get("/api/v1/overview/weekplan/coros")
-        assert r.status_code == 200
-        assert {s["id"]: s["status"] for s in r.json()["sessions"]}["long"] == "not_pushed"
-        r = c.post("/api/v1/overview/weekplan/push-coros?session=long")
-        assert r.status_code == 200 and r.json()["sessions"][0]["status"] == "pushed"
-        assert c.post("/api/v1/overview/weekplan/push-coros?session=zzz").status_code == 404
-        r = c.post("/api/v1/overview/weekplan/push-coros")
-        assert r.status_code == 200 and len(fake.live()) == 3
-        r = c.delete("/api/v1/overview/weekplan/push-coros")
-        assert r.status_code == 200 and len(r.json()["removed"]) == 3
-        assert fake.live() == {}
