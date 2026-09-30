@@ -44,7 +44,7 @@ ELEV_STEP_M = 10.0
 HOURLY = "temperature_2m,relative_humidity_2m,dew_point_2m"
 TIMEZONE = "auto"                # local wall-clock time at the point = the activity's start clock
 # Hadley sum (°F + °F) above which pace suffers >= ~4.5 % (Hadley's 151–160
-# band). 130 (~2 %) flagged 78 % of the real efforts — Taiwan's usual summer
+# band). 130 (~2 %) flagged 75 % of the real efforts — Taiwan's usual summer
 # evening — and so explained nothing.
 HOT_HADLEY = 150.0
 MAX_CONSEC_FAIL = 5
