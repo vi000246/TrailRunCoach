@@ -348,15 +348,34 @@ def _expiry(tok: dict) -> datetime:
 
 
 async def login_password(
-    username: str, password: str, db: AsyncSession, athlete_id: int
+    username: str, password: str, db: AsyncSession, athlete_id: int,
+    prefer: Optional[str] = None,
 ) -> dict:
     """OAuth password grant first; on rejection, the website login + cookie
     token exchange. Credentials are never stored or logged; the access token,
-    refresh token and session cookie are stored sealed (secrets.py)."""
+    refresh token and session cookie are stored sealed (secrets.py).
+
+    prefer="web": website login only. prefer="oauth": the WKO5-client grant
+    only (no fallback; needs configured credentials)."""
     cookie = None
     token = None
-    creds = await oauth_enabled(db, athlete_id)
-    if creds is not None:
+    if prefer not in (None, "auto", "web", "oauth"):
+        raise TpLoginError("TP_LOGIN_ERROR: method must be auto, web or oauth")
+    if prefer == "oauth":
+        creds = load_client_creds()
+        if creds is None:
+            raise TpLoginError("TP_LOGIN_ERROR[oauth]: no TP client credentials configured")
+        try:
+            token = await _password_grant(username, password, creds)
+        except TpGrantRejected as e:
+            raise TpLoginError(f"TP_LOGIN_FAILED[oauth]: HTTP {e.status}")
+        method = "oauth"
+        creds = None
+    else:
+        creds = None if prefer == "web" else await oauth_enabled(db, athlete_id)
+    if token is not None:
+        pass
+    elif creds is not None:
         try:
             token = await _password_grant(username, password, creds)
             method = "oauth"

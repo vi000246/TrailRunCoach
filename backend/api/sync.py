@@ -205,6 +205,8 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     creds, source = lookup_client_creds()
     out["tp_client_credentials_configured"] = creds is not None      # never the values
     out["tp_client_credentials_source"] = source                     # env|file|sealed|wko5_exe|none
+    from backend.sync.tp_client import TP_CLIENT_FILE
+    out["tp_client_file_exists"] = TP_CLIENT_FILE.exists()           # existence only, never read here
     from backend.settings.secrets import KEY_DOC, key_status
     out["secret_key_status"] = key_status()      # env|file|missing|none
     if out["secret_key_status"] == "missing":

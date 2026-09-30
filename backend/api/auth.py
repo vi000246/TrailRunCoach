@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +17,7 @@ class LoginRequest(BaseModel):
     username: str
     password: str
     athlete_id: int = 1
+    method: Optional[str] = None      # TP only: auto (default) | web | oauth
 
 
 @router.post("/tp/login")
@@ -27,7 +30,8 @@ async def tp_login_password(body: LoginRequest, db: AsyncSession = Depends(get_d
     Note: download requires premium or coach account.
     """
     try:
-        result = await login_password(body.username, body.password, db, body.athlete_id)
+        result = await login_password(body.username, body.password, db, body.athlete_id,
+                                      prefer=body.method)
         return result
     except SecretKeyMissing as e:
         raise HTTPException(503, str(e))
@@ -58,6 +62,9 @@ async def tp_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
     return {
         "authenticated": bool(state and state.tp_access_token),
         "tp_athlete_id": athlete.tp_athlete_id if athlete else None,
+        # how the stored session was obtained (no values)
+        "method": (None if not (state and state.tp_access_token)
+                   else "web" if state.tp_web_cookie else "oauth" if state.tp_refresh_token else "token"),
     }
 
 

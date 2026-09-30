@@ -50,6 +50,26 @@ table.wt th, table.wt td { padding: 4px 8px; border-bottom: 1px solid var(--line
 table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .list label { display: block; padding: 6px 0; border-top: 1px solid var(--line); }
 .list .x { float: right; }
+.src { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.src h3 { font-size: 14px; margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pill { font-size: 11.5px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.err { color: var(--err); border-color: var(--err); }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 13px; margin-top: 8px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; }
+.sub { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
+.sub b { font-size: 13px; }
+progress { width: 220px; height: 10px; }
+.log { max-height: 150px; overflow: auto; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-top: 6px; display: none; }
+.log.on { display: block; }
+.log .e { color: var(--err); } .log .d { color: var(--ok); }
+button.danger { color: var(--err); border-color: var(--err); }
+button.danger.primary { background: var(--err); color: #fff; }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); max-width: 440px; }
+dialog::backdrop { background: rgba(0,0,0,.35); }
 .toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
 .toast.on { opacity: .92; }
@@ -84,6 +104,79 @@ table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
       </button>
     </div>
   </section>
+
+  <section id="sync">
+    <h2>資料同步</h2>
+    <p class="meta">帳號密碼只在登入時送出一次、不會保存；保存的只有加密過的登入憑證（token / cookie）。<span id="keystat"></span></p>
+    <div class="row">
+      <label>每日自動同步 <input type="time" id="s-daily"> <label><input type="checkbox" id="s-daily-on"> 啟用</label></label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="s-open"> 開啟網站時自動同步，距離上次超過</label>
+      <input type="number" id="s-open-h" min="1" max="168" step="1" style="width:64px"> <label>小時</label>
+    </div>
+    <div class="row">
+      <label>同一筆活動兩邊都有時以 <select id="s-primary"><option value="">先匯入的</option><option value="coros">COROS</option>
+        <option value="trainingpeaks">TrainingPeaks</option></select> 為準</label>
+      <label>圖表資料來源 <select id="s-chart"><option value="wko5">WKO5 資料夾（預設）</option><option value="coros">COROS</option>
+        <option value="tp">TrainingPeaks</option></select></label>
+      <button class="primary" id="s-save">儲存同步設定</button>
+    </div>
+
+    <div class="src" id="src-coros">
+      <h3>COROS <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden>同步中</span>
+        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> 啟用</label></h3>
+      <div class="row" data-f="loginform">
+        <input type="email" placeholder="COROS 帳號（email）" data-f="user" autocomplete="off">
+        <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
+        <button data-act="login">登入</button>
+      </div>
+      <div class="row"><button data-act="logout">登出</button></div>
+      <dl class="kv" data-f="kv"></dl>
+      <div class="row">
+        <label>第一次同步從 <input type="date" data-f="since"></label>
+        <button class="primary" data-act="sync">立即同步</button>
+        <progress data-f="prog" hidden></progress><span class="meta" data-f="progtxt"></span>
+      </div>
+      <div class="log" data-f="log"></div>
+      <div class="row"><button class="danger" data-act="purge">刪除這個來源的同步檔案</button></div>
+    </div>
+
+    <div class="src" id="src-tp">
+      <h3>TrainingPeaks <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden>同步中</span>
+        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> 啟用</label></h3>
+      <div class="row" data-f="loginform">
+        <input type="text" placeholder="TP 帳號" data-f="user" autocomplete="off">
+        <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
+      </div>
+      <div class="sub"><b>網站登入</b> <span class="meta">（TrainingPeaks 網站的表單登入，一般帳號都能用）</span>
+        <div class="row"><button data-act="login" data-method="web">用網站登入</button></div></div>
+      <div class="sub"><b>OAuth（WKO5 client）</b>
+        <span class="meta">沿用 WKO5 的 client 憑證登入（有違反服務條款的風險，只限本機使用）。</span>
+        <dl class="kv"><dt>secret 來源</dt><dd data-f="secretsrc">…</dd>
+          <dt>~/.wko5coach/tp_client.json</dt><dd data-f="secretfile">…</dd></dl>
+        <div class="row"><label><input type="checkbox" data-f="usewko5"> 登入時先試 OAuth</label>
+          <button data-act="login" data-method="oauth">用 OAuth 登入</button></div></div>
+      <div class="row"><button data-act="logout">登出</button></div>
+      <dl class="kv" data-f="kv"></dl>
+      <div class="row">
+        <label>第一次同步從 <input type="date" data-f="since"></label>
+        <button class="primary" data-act="sync">立即同步</button>
+        <progress data-f="prog" hidden></progress><span class="meta" data-f="progtxt"></span>
+      </div>
+      <div class="log" data-f="log"></div>
+      <div class="row"><button class="danger" data-act="purge">刪除這個來源的同步檔案</button></div>
+    </div>
+  </section>
+
+  <dialog id="purge-dlg">
+    <h2 id="pd-title">刪除同步檔案</h2>
+    <p id="pd-body" class="meta"></p>
+    <div class="row"><label>只刪這段期間（可留空＝全部）<input type="date" id="pd-from"> ~ <input type="date" id="pd-to"></label></div>
+    <p class="meta">請輸入 <b id="pd-word"></b> 或 <b>刪除</b> 以確認：</p>
+    <div class="row"><input type="text" id="pd-input" autocomplete="off">
+      <button class="danger primary" id="pd-ok" disabled>確認刪除</button><button id="pd-cancel">取消</button></div>
+  </dialog>
 
   <section>
     <h2>個人資料</h2>
@@ -214,7 +307,184 @@ $("saveprof").onclick = async () => {
   } catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 };
 
+// ---- 資料同步 -------------------------------------------------------------
+const SYNC = "/api/v1/sync";
+const SRC_NAME = { coros: "COROS", tp: "TrainingPeaks" };
+const SRC_LABEL = { env: "環境變數", file: "~/.wko5coach/tp_client.json", sealed: "repo 內加密檔（tp_client.enc）",
+  wko5_exe: "本機 WKO5.exe", none: "未設定（只能用網站登入）" };
+const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("zh-TW", { hour12: false }) : "–";
+const box = (src) => $(`src-${src}`);
+const f = (src, name) => box(src).querySelector(`[data-f="${name}"]`);
+let SS = null, SOURCES = null;
+
+async function loadSyncSettings() {
+  SS = await j(`${SYNC}/settings`);
+  $("s-daily").value = SS.daily_sync_time || "06:00";
+  $("s-daily-on").checked = !!SS.daily_sync_time;
+  $("s-open").checked = !!SS.auto_on_open;
+  $("s-open-h").value = SS.auto_on_open_hours ?? 6;
+  $("s-primary").value = SS.primary_source || "";
+  $("s-chart").value = SS.chart_data_source || "wko5";
+  f("tp", "secretsrc").textContent = SRC_LABEL[SS.tp_client_credentials_source] || SS.tp_client_credentials_source;
+  f("tp", "secretfile").textContent = SS.tp_client_file_exists ? "存在（內容不顯示）" : "不存在";
+  f("tp", "usewko5").checked = SS.tp_use_wko5_client !== false && SS.tp_client_credentials_configured;
+  f("tp", "usewko5").disabled = !SS.tp_client_credentials_configured;
+  box("tp").querySelector('[data-method="oauth"]').disabled = !SS.tp_client_credentials_configured;
+  f("coros", "enabled").checked = SS.coros_enabled; f("tp", "enabled").checked = SS.trainingpeaks_enabled;
+  $("keystat").innerHTML = SS.secret_key_status === "missing"
+    ? ` <span class="pill err">找不到加密金鑰</span> ${esc(SS.secret_key_hint || "")}` : "";
+}
+
+async function loadSources() {
+  SOURCES = await j(`${SYNC}/sources`);
+  const tp = await j("/api/v1/auth/tp/status").catch(() => ({}));
+  const co = await j("/api/v1/auth/coros/status").catch(() => ({}));
+  for (const src of ["coros", "tp"]) {
+    const s = SOURCES[src], st = s.stats, r = s.last_result;
+    const auth = src === "coros" ? co : tp;
+    const pill = f(src, "login");
+    pill.className = "pill " + (auth.authenticated ? "ok" : "warn");
+    pill.textContent = auth.authenticated
+      ? (src === "coros" ? `已登入 ${auth.email || ""}` : `已登入（${({ web: "網站", oauth: "OAuth", token: "token" })[auth.method] || ""}）`)
+      : "未登入";
+    f(src, "loginform").hidden = !!auth.authenticated;
+    box(src).querySelectorAll('[data-act="login"]').forEach((b) => b.hidden = !!auth.authenticated);
+    box(src).querySelector('[data-act="logout"]').hidden = !auth.authenticated;
+    f(src, "busy").hidden = !s.busy;
+    const res = r ? `${({ ok: "成功", partial: "部分失敗", failed: "失敗", aborted: "中斷" })[r.status] || r.status}：`
+      + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}` : "–";
+    f(src, "kv").innerHTML = `<dt>上次同步</dt><dd>${fmtTime(s.last_sync_at)}</dd>
+      <dt>上次結果</dt><dd>${res}</dd>
+      <dt>同步檔案</dt><dd>${st.files} 個、${esc(st.size)}（${esc(st.folder)}）</dd>
+      <dt>活動期間</dt><dd>${st.date_from ? `${st.date_from} ~ ${st.date_to}（${st.rows} 筆）` : "–"}</dd>`;
+    box(src).querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
+  }
+}
+
+$("s-save").onclick = async () => {
+  const body = {
+    daily_sync_time: $("s-daily-on").checked ? $("s-daily").value : null,
+    auto_on_open: $("s-open").checked, auto_on_open_hours: Number($("s-open-h").value) || 6,
+    primary_source: $("s-primary").value || null, chart_data_source: $("s-chart").value,
+  };
+  try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast("已儲存同步設定"); loadSyncSettings(); }
+  catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+};
+
+async function putSetting(body) {
+  await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+}
+f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast("已更新"));
+f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast("已更新"));
+f("tp", "usewko5").onchange = (e) => putSetting({ tp_use_wko5_client: e.target.checked }).then(() => toast("已更新"));
+
+async function login(src, method) {
+  const user = f(src, "user").value.trim(), pass = f(src, "pass").value;
+  if (!user || !pass) { toast("請輸入帳號與密碼"); return; }
+  const url = src === "coros" ? "/api/v1/auth/coros/login" : "/api/v1/auth/tp/login";
+  const body = src === "coros" ? { email: user, password: pass } : { username: user, password: pass, method };
+  try {
+    const r = await j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast(src === "tp" ? `登入成功（${r.method === "oauth" ? "OAuth" : "網站"}）` : "登入成功");
+  } catch (e) { toast("登入失敗：" + e.message.slice(0, 120)); }
+  f(src, "pass").value = "";                 // never kept in the page
+  loadSources();
+}
+async function logout(src) {
+  await j(`/api/v1/auth/${src === "coros" ? "coros" : "tp"}/logout`, { method: "POST" });
+  toast("已登出"); loadSources();
+}
+
+function logLine(src, text, cls) {
+  const el = f(src, "log"); el.classList.add("on");
+  const d = document.createElement("div"); if (cls) d.className = cls; d.textContent = text;
+  el.appendChild(d); el.scrollTop = el.scrollHeight;
+}
+async function syncNow(src) {
+  const since = f(src, "since").value;
+  const url = `${SYNC}/${src === "coros" ? "coros/start" : "start"}` + (since ? `?since=${since}` : "");
+  const prog = f(src, "prog"), txt = f(src, "progtxt"), btn = box(src).querySelector('[data-act="sync"]');
+  f(src, "log").innerHTML = ""; prog.hidden = false; prog.removeAttribute("value"); btn.disabled = true;
+  let total = 0, checked = 0, down = 0, errs = 0;
+  try {
+    const r = await fetch(url, { method: "POST" });
+    if (r.status === 409) { toast("這個來源正在同步中"); return; }
+    if (!r.ok) throw new Error(`${r.status}`);
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0 || (i = buf.indexOf("\r\n\r\n")) >= 0) {
+        const chunk = buf.slice(0, i); buf = buf.slice(i + (buf[i] === "\r" ? 4 : 2));
+        const data = chunk.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+        if (!data) continue;
+        let ev; try { ev = JSON.parse(data); } catch { continue; }
+        if (ev.status === "range_list") total += ev.count || 0;
+        if (ev.status === "changed_list") total += ev.modified || 0;
+        if (ev.status === "checking") checked++;
+        const id = ev.workout_id || ev.activity_id || "";
+        const day = ev.workout_date || ev.date || "";
+        if (ev.status === "downloaded") { down++; logLine(src, `✓ ${day} ${id} 已下載`, "d"); }
+        else if (ev.status === "skipped") logLine(src, `· ${day} ${id} 已存在`);
+        else if (ev.status === "no_file") logLine(src, `· ${day} ${id} 沒有 FIT 檔`);
+        else if (ev.status === "error" || ev.error) { errs++; logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e"); }
+        else if (ev.status === "complete") logLine(src, `完成：下載 ${ev.total_downloaded}、檢查 ${ev.total_checked}、錯誤 ${(ev.errors || []).length}`, "d");
+        if (total) { prog.max = total; prog.value = Math.min(checked, total); }
+        txt.textContent = `檢查 ${checked}${total ? " / " + total : ""} · 下載 ${down} · 錯誤 ${errs}`;
+      }
+    }
+  } catch (e) { logLine(src, "連線失敗：" + e.message, "e"); }
+  finally { btn.disabled = false; prog.hidden = true; loadSources(); }
+}
+
+// delete dialog: names the source, count and size; typed confirmation
+let PURGE_SRC = null;
+function openPurge(src) {
+  PURGE_SRC = src;
+  const st = SOURCES[src].stats, name = SRC_NAME[src];
+  $("pd-title").textContent = `刪除 ${name} 的同步檔案`;
+  $("pd-body").innerHTML = `會刪除 <b>${esc(name)}</b> 的 <b>${st.files}</b> 個 FIT 檔（<b>${esc(st.size)}</b>，${esc(st.folder)}），`
+    + `以及資料庫裡的 ${st.rows} 筆活動紀錄，並重設同步進度（之後重新同步會重新下載）。`
+    + `WKO5 資料夾和另一個來源的檔案不受影響。`
+    + (SS.chart_data_source === src ? `<br><b>圖表目前使用這個來源，刪除後會改回 WKO5 資料夾。</b>` : "");
+  $("pd-word").textContent = name; $("pd-input").value = ""; $("pd-from").value = ""; $("pd-to").value = "";
+  $("pd-ok").disabled = true; $("purge-dlg").showModal();
+}
+$("pd-input").oninput = (e) => {
+  const v = e.target.value.trim();
+  $("pd-ok").disabled = !(v === "刪除" || v.toLowerCase() === SRC_NAME[PURGE_SRC].toLowerCase());
+};
+$("pd-cancel").onclick = () => $("purge-dlg").close();
+$("pd-ok").onclick = async () => {
+  const q = new URLSearchParams();
+  if ($("pd-from").value) q.set("date_from", $("pd-from").value);
+  if ($("pd-to").value) q.set("date_to", $("pd-to").value);
+  try {
+    const r = await fetch(`${SYNC}/${PURGE_SRC}/files?${q}`, { method: "DELETE" });
+    if (r.status === 409) { toast("這個來源正在同步中，請稍後再刪"); return; }
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+    const res = await r.json();
+    toast(`已刪除 ${res.files_deleted} 個檔案、${res.rows_deleted} 筆紀錄`
+      + (res.chart_source_switched_to_wko5 ? "；圖表已改回 WKO5 資料夾" : ""));
+    $("purge-dlg").close(); loadSyncSettings(); loadSources();
+  } catch (e) { toast("刪除失敗：" + e.message.slice(0, 100)); }
+};
+
+for (const src of ["coros", "tp"]) {
+  box(src).addEventListener("click", (e) => {
+    const act = e.target.dataset.act; if (!act) return;
+    if (act === "login") login(src, e.target.dataset.method);
+    if (act === "logout") logout(src);
+    if (act === "sync") syncNow(src);
+    if (act === "purge") openPurge(src);
+  });
+}
+
 loadMode(); loadApplied(); loadProfile();
+loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>
 </html>
