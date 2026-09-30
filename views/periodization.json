@@ -61,14 +61,14 @@
         },
         {
           "title": "強度分配：低強度時間佔比",
-          "description": "Seiler 的研究：頂尖耐力選手約 75–80% 時間在低強度。長條 = 每週合計，圓點 = 每次活動。低強度 = 心率低於有氧閾值（在「賽事周期」頁填了 AeT 測試就用實測值，沒填就用 WKO5 Friel 心率區間的 Aerobic 上限 0.89 × LTHR）。",
+          "description": "每根長條 = 那一週有心率的時間，分成三段：綠 = 低強度（心率 < AeT）、黃 = 中強度（AeT–LTHR）、紅 = 高強度（≥ LTHR）。虛線是目標：綠色要長到虛線以上，也就是至少 75% 的時間是輕鬆的（頂尖耐力選手約 75–80%）。綠色掉到 65% 以下時，總覽會提醒「太多時間在中強度」。",
           "axes": [{"id": "PERCENT", "min": 0, "max": 1}],
           "period": "week",
           "series": [
-            {"name": "每週", "type": "bar", "y_axis": "PERCENT", "color": "#16a34a", "expression": "sum(sum(if(heartrate < aethr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
-            {"name": "每次活動", "type": "line", "y_axis": "PERCENT", "color": "#86efac", "expression": "sum(if(heartrate < aethr, deltatime)) / sum(if(heartrate > 0, deltatime))"},
-            {"name": "75% 目標", "type": "line", "y_axis": "PERCENT", "color": "#16a34a", "line_style": "dash", "expression": "(,0.75)"},
-            {"name": "65% 注意", "type": "line", "y_axis": "PERCENT", "color": "#f59e0b", "line_style": "dash", "expression": "(,0.65)"}
+            {"name": "低強度", "type": "stackedbar", "y_axis": "PERCENT", "color": "#16a34a", "expression": "sum(sum(if(heartrate > 0 and heartrate < aethr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
+            {"name": "中強度", "type": "stackedbar", "y_axis": "PERCENT", "color": "#f59e0b", "expression": "sum(sum(if(heartrate >= aethr and heartrate < lthr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
+            {"name": "高強度", "type": "stackedbar", "y_axis": "PERCENT", "color": "#dc2626", "expression": "sum(sum(if(heartrate >= lthr, deltatime)), startofweek(date)) / sum(sum(if(heartrate > 0, deltatime)), startofweek(date))"},
+            {"name": "目標：綠色 ≥ 75%", "type": "line", "y_axis": "PERCENT", "color": "#64748b", "line_style": "dash", "expression": "(,0.75)"}
           ]
         },
         {

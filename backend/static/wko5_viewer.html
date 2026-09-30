@@ -1465,6 +1465,7 @@ function drawPlot(card, res, series) {
     for (const g of Object.values(stacks)) {
       if (g.length < 2) continue;
       const u = series[g[0].seriesIndex]?.unit || unitByName[g[0].seriesName];
+      if (u?.kind === "percent") continue;  // shares of one whole: the total is always 100%
       const tot = g.reduce((a, p) => a + +yOf(p), 0);
       rows.push(`<span style="display:block;border-top:1px solid rgba(128,128,128,.35);margin-top:3px;padding-top:2px">合計 <b style="float:right;margin-left:12px">${esc(fmtU(tot, u))}</b></span>`);
     }
