@@ -52,6 +52,8 @@ SERIES_DEFAULTS = {
     "id": None, "name": None, "type": "line", "expression": "", "color": None,
     "y_axis": "NONE", "x_axis": "DATE", "line_style": "solid", "line_width": "medium",
     "label_position": None,
+    # "recent_gain": computed for the chart's note (recentbests.py), not drawn
+    "role": None,
 }
 
 
@@ -91,6 +93,18 @@ def _chart(raw: dict, where: str) -> dict:
         if raw["period"] not in ("day", "week", "month", "quarter", "year"):
             raise CustomViewError(f"{where}/{raw['title']}: period must be day, week, month, quarter or year")
         out["period"] = raw["period"]
+    if raw.get("window") is not None:
+        # 近 N 天新高 (recentbests.py): {"default": 7, "choices": [7, 14, 28]};
+        # expressions start with `@win := <default>, …`
+        w = raw["window"]
+        try:
+            choices = [int(c) for c in w["choices"]]
+            default = int(w["default"])
+        except (TypeError, KeyError, ValueError):
+            raise CustomViewError(f"{where}/{raw['title']}: window needs a default and choices (days)")
+        if default not in choices or any(c < 1 for c in choices):
+            raise CustomViewError(f"{where}/{raw['title']}: window default must be one of its choices")
+        out["window"] = {"default": default, "choices": choices}
     if kind == "review":
         # a single-activity 判讀卡 (backend/engine/workout_review.py):
         # {"kind": "review", "section": "summary"}

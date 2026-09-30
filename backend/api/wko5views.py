@@ -36,6 +36,7 @@ from backend.engine.wko5expr.dataset import Dataset, date_to_day
 from backend.engine.wko5expr import datasource as DSRC
 from backend.engine.wko5expr.fitdataset import dataset_for_source
 from backend.engine.wko5expr import periods as PD
+from backend.engine.wko5expr import recentbests as RB
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
@@ -207,10 +208,13 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
-    pinfo = None
+    pinfo = winfo = None
     if ch.get("kind") == "athlete":
         ch, b, pinfo = _apply_period(ch, b, e, request.query_params.get("period"),
                                      custom=v.get("source") == "custom")
+        if v.get("source") == "custom" and RB.window_spec(ch):
+            # 近 7／14／28 天新高 (recentbests.py): ?window=14
+            ch, winfo = RB.apply_window(ch, request.query_params.get("window"))
     params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
     # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
@@ -220,6 +224,9 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
 
     def compute():
         res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None)
+        if winfo:
+            rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
+            res = {**res, **winfo, "recent_bests": rb}
         return {**res, **pinfo} if pinfo else res
     return RENDER_CACHE.get_or_compute(key, compute)
 

@@ -154,7 +154,16 @@ def _curve_json(r) -> dict:
         pts = [[_day_iso(x), _f(y)] for x, y in zip(r.xs, r.ys)
                if _f(y) is not None and _f(x) is not None]
     else:
-        pts = [[_f(x), _f(y)] for x, y in zip(r.xs, r.ys) if _f(y) is not None]
+        # a hole that if() cut into the curve becomes one [x, null] point, so
+        # the viewer (connectNulls: false) breaks the line / area there
+        # instead of bridging it
+        holes = dict(getattr(r, "gaps", None) or [])
+        pts = []
+        for i, (x, y) in enumerate(zip(r.xs, r.ys)):
+            if i in holes and pts:
+                pts.append([_f(holes[i]), None])
+            if _f(y) is not None:
+                pts.append([_f(x), _f(y)])
     out = {"kind": "points", "x": xkind, "points": pts}
     if r.fit:
         out["fit"] = {k: _f(v) for k, v in r.fit.items()
@@ -335,6 +344,8 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
         t0 = time.perf_counter()
         entry = {k: s.get(k) for k in ("id", "name", "type", "color", "y_axis", "x_axis",
                                        "line_style", "line_width")}
+        if s.get("role"):
+            entry["role"] = s["role"]          # e.g. recent_gain: data for a note, not drawn
         entry["expression"] = expr
         if not expr or not expr.strip():
             entry["data"] = {"kind": "none"}

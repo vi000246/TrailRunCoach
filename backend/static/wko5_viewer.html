@@ -194,6 +194,8 @@ table.zt th.num { text-align: right; }
 .seg.period { margin-left: auto; padding: 1px; font-size: 11.5px; }
 .seg.period button { padding: 1px 8px; font-weight: 500; }
 .range-note { margin: -2px 0 4px; font-size: 11px; }
+.recent-note { margin: 2px 0 4px; font-size: 12px; }
+.recent-note b { color: #e8431c; font-weight: 600; }
 .zbtn { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; border-radius: 4px;
   font: inherit; font-size: 13px; line-height: 1.4; }
 .zbtn:hover { color: var(--accent); background: var(--accent-soft); }
@@ -744,6 +746,10 @@ const PERIOD_KEY = "wko5viewer.period";
 const PERIOD_LABELS = [["day", "日"], ["week", "週"], ["month", "月"], ["quarter", "季"], ["year", "年"]];
 function periodPrefs() { try { return JSON.parse(localStorage.getItem(PERIOD_KEY) || "{}"); } catch { return {}; } }
 function savePeriod(k, p) { try { localStorage.setItem(PERIOD_KEY, JSON.stringify({ ...periodPrefs(), [k]: p })); } catch {} }
+// 近 7／14／28 天新高 charts (views "window"): the window, remembered per chart like the period
+const WINDOW_KEY = "wko5viewer.window";
+function windowPrefs() { try { return JSON.parse(localStorage.getItem(WINDOW_KEY) || "{}"); } catch { return {}; } }
+function saveWindow(k, w) { try { localStorage.setItem(WINDOW_KEY, JSON.stringify({ ...windowPrefs(), [k]: w })); } catch {} }
 function disposeCardCharts(card) {
   for (const el of card.querySelectorAll(".plot")) {
     if (el._lmap) { el._lmap.remove(); el._lmap = null; continue; }
@@ -757,9 +763,11 @@ function disposeCardCharts(card) {
 async function renderCard(card, v, di, c, q, token) {
   const pkey = `${v.name}|${di}|${c.index}`;
   const period = periodPrefs()[pkey];
+  const win = windowPrefs()[pkey];
   try {
     const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
-      + (period && c.kind === "athlete" ? `&period=${period}` : ""));
+      + (period && c.kind === "athlete" ? `&period=${period}` : "")
+      + (win && c.kind === "athlete" ? `&window=${win}` : ""));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -776,6 +784,7 @@ async function renderCard(card, v, di, c, q, token) {
       // 日／週／月／季／年: re-bucket this chart (remembered per chart)
       const seg = document.createElement("div");
       seg.className = "seg period";
+      seg.dataset.kind = "period";
       seg.setAttribute("role", "group");
       seg.setAttribute("aria-label", "統計週期");
       seg.innerHTML = PERIOD_LABELS.map(([p, t]) => `<button data-p="${p}" class="${p === res.x_period ? "on" : ""}"
@@ -784,6 +793,25 @@ async function renderCard(card, v, di, c, q, token) {
         const b = e.target.closest("button[data-p]");
         if (!b || b.dataset.p === card._res?.x_period) return;
         savePeriod(pkey, b.dataset.p);
+        card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+        await renderCard(card, v, di, c, q, loadToken);
+        if (ZOOM.card === card) fillZoom();
+      };
+      card.querySelector("h2").appendChild(seg);
+    }
+    if (res.window_toggle && res.window_choices?.length) {
+      // 近 N 天新高: 7／14／28 天 window (remembered per chart)
+      const seg = document.createElement("div");
+      seg.className = "seg period";
+      seg.dataset.kind = "window";
+      seg.setAttribute("role", "group");
+      seg.setAttribute("aria-label", "近幾天");
+      seg.innerHTML = res.window_choices.map((w) => `<button data-p="${w}" class="${w === res.window ? "on" : ""}"
+        aria-pressed="${w === res.window}">${w} 天</button>`).join("");
+      seg.onclick = async (e) => {
+        const b = e.target.closest("button[data-p]");
+        if (!b || +b.dataset.p === card._res?.window) return;
+        saveWindow(pkey, b.dataset.p);
         card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
         await renderCard(card, v, di, c, q, loadToken);
         if (ZOOM.card === card) fillZoom();
@@ -801,6 +829,14 @@ async function renderCard(card, v, di, c, q, token) {
 
 function drawInto(box, res) {
   if (res.range_note) box.insertAdjacentHTML("beforeend", `<p class="meta range-note">${esc(res.range_note)}</p>`);
+  const rb = res.recent_bests;
+  if (rb?.note) {
+    // 「近 7 天新高：12 分鐘 +18 W、…」 or why there is none
+    const body = rb.items?.length
+      ? `近 ${rb.window} 天新高：` + rb.items.map((i) => `<b>${esc(i.label)} +${esc(String(i.gain))} W</b>`).join("、")
+      : esc(rb.note);
+    box.insertAdjacentHTML("beforeend", `<p class="meta recent-note">${body}</p>`);
+  }
   if (res.kind === "zones") drawZones(box, res);
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "map") drawMap(box, res);
@@ -831,8 +867,10 @@ function fillZoom() {
   h.querySelector(".zbtn")?.remove();
   h.querySelector(".badge.fix")?.remove();
   $("zoom-title").replaceChildren(...h.childNodes);
-  const seg = $("zoom-title").querySelector(".seg.period");
-  if (seg) seg.onclick = (e) => card.querySelector(`h2 .seg.period button[data-p="${e.target.closest("button")?.dataset.p}"]`)?.click();
+  for (const seg of $("zoom-title").querySelectorAll(".seg.period")) {
+    const kind = seg.dataset.kind || "period";
+    seg.onclick = (e) => card.querySelector(`h2 .seg.period[data-kind="${kind}"] button[data-p="${e.target.closest("button")?.dataset.p}"]`)?.click();
+  }
   if (res.fixes?.length) body.insertAdjacentHTML("beforeend", `<p class="desc">已修正單位：${res.fixes.map(esc).join("；")}</p>`);
   drawInto(body, { ...res, _zoom: true });
   body.querySelectorAll(".plot").forEach((el) => echarts.getInstanceByDom(el)?.resize());
