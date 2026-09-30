@@ -503,7 +503,7 @@ class Status:
         # composite with no validated thresholds, so it only ever says INFO or
         # WATCH (a jump ≥ 1.5×, borrowed from the ACWR bands).
         from backend.engine.algorithms import chart_metrics as CM
-        loads = self.ws(f"athleterange(today-83, today, {CM.DOWNHILL_EXPR})")
+        loads = self.ws(f"athleterange(today-90, today, {CM.DOWNHILL_EXPR})")
         per_day: dict[int, float] = {}
         for i, v in loads.items():
             w = self.ds.workouts[i]

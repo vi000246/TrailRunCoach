@@ -241,7 +241,7 @@
     - Running Dynamics
     - dFRC
 - **總覽頁 `backend/static/overview.html`**：
-  - 「還缺什麼」的狀態卡，來自 `backend/engine/status.py` 的 14 個 indicator：phase、fitness、form、volume、intensity、efficiency、drift、climb、long、density、strength、durability、testing、data
+  - 「還缺什麼」的狀態卡，來自 `backend/engine/status.py` 的 indicator：phase、fitness、form、volume、intensity、efficiency、drift、climb、long、density、strength、durability、testing、data（盤點時 14 個；§7 之後加了 descent，共 15 個）
   - 本週課表
   - PMC（含照課表的預估虛線）
   - 期間統計磚和強度分配條
@@ -406,6 +406,7 @@
   - 1 單位 = 在平路用 3 m/s 跑 1 km。
   - 只算坡度陡於 −3% 且在移動的點。
   - 7:28 比 = 近 7 天每日平均 ÷ 近 28 天每日平均。
+  - 每週長條沿用其他訓練量圖的分類（路跑、越野、登山靠標籤）；7:28 比和總覽卡把所有步行類都算進去，包括沒有登山標籤的 walk。
 - **我們自己的假設**：
   - 0 到 −9° 之間用線性內插；比 −9° 陡的部分維持 +54%（沒有資料）。
   - 走路也用同一條坡度曲線（G&K 只量了跑步）。
