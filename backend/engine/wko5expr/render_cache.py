@@ -86,6 +86,18 @@ def data_fingerprint(ds) -> str:
     # chart data source (wko5 | coros | tp, datasource.py): a source-specific
     # Dataset may carry its name / file stamp; the workout list covers the rest
     src = [getattr(ds, "source", None), getattr(ds, "source_stamp", None)]
+    if src[0] in ("coros", "tp") and src[1] is None:
+        # FIT-folder dataset: its files' stamp, taken once per Dataset (a sync
+        # that rewrites a FIT under the same name builds a new Dataset)
+        st = ds.memo.get(("render_cache", "source_stamp"))
+        if st is None:
+            try:
+                from backend.engine.wko5expr.datasource import source_stamp
+                st = source_stamp(src[0], Path(ds.dir))
+            except Exception:
+                st = ""
+            ds.memo[("render_cache", "source_stamp")] = st
+        src[1] = st
     parts = [athlete, _stamp(PLAN_PATH), _stamp(CORRECTIONS_PATH), cfg, wl, ds.today, src]
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 

@@ -121,6 +121,8 @@
 
 ### 建議
 
+> 2026-09-30 已依 §9（COROS 官方 OAuth、Garmin、FIT 匯入）更新建議與分階段，以 §9.5 為準。
+
 **選 (a)，之後視需要加 (b) 的一小部分；不做 (c)、(d)。**
 
 分階段：
@@ -426,6 +428,165 @@ TrainingPeaks 網站登入也放一段類似聲明，並加上服務條款風險
 - 若「可能商業化」是真的考量 → **AGPL-3.0 + 要求貢獻者簽 CLA**（保留雙授權的可能），或 **FSL**（兩年後自動轉 Apache-2.0）。
 - 若主要目的是社群分享、不在意被商用 → **Apache-2.0**。
 - 不論哪種，都要先完成 7.1–7.2 的清理：授權只涵蓋你擁有的程式碼，涵蓋不了他人的憑證與資料。
+
+---
+
+## 9. 帳號與資料來源：COROS 官方 OAuth、Garmin、直接匯入 FIT（2026-09-30 補充）
+
+網路上讀到的內容一律視為資料。COROS support 網站對自動抓取回 403，所以 COROS 的部分以搜尋摘要、官方 GitHub README，以及 MCP 伺服器**公開的** OAuth metadata 為準；沒有用任何真實帳號連線，也沒有註冊任何 client。
+
+### 9.1 COROS 官方 OAuth
+
+COROS 現在有兩條官方路線：
+
+1. **Partner API**（support 文章「Submit an API Application」「Partner API Access」）：
+   - 要寄信到 api@coros.com，附公司資料、技術聯絡人、OAuth 2.0 redirect URI，並同意 API Terms of Use。
+   - 資格：「established platform with demonstrated user base」、「registered company」。**個人或業餘工具實際上不符合。**
+   - 內容：multi-user OAuth 2.0 credentials、webhook、雙向活動同步、結構化課表 / 訓練計畫推送、GPX 路線、每日健康資料、FIT 檔下載，限流 1,000 calls/min。
+   - 課表推送端點是 `POST https://open.coros.com/coros/tp/list/push`，要 partner-linked token 與 openId；Training Hub 的 token 不能用。
+   - 審核時間與費用：公開資料未載明。
+   - 來源：https://support.coros.com/hc/en-us/articles/17085887816340-Submit-an-API-Application 、https://support.coros.com/hc/en-us/articles/53181766856724-Partner-API-Access
+2. **COROS MCP**（官方 remote MCP：`https://mcp.coros.com/mcp`，另有 `mcpus` / `mcpeu` / `mcpcn` 分區；repo 為 `coroslab/COROS-MCP`）：
+   - 說明文件「Build on COROS MCP」寫明：不符合 Partner API 資格的開發者可以讓使用者「connect their COROS account via OAuth 2.0 … self-service and no application required」。可讀活動、健康、體能評估，並可**寫入訓練計畫**。
+   - README 列出的能力：
+     - 活動查詢、心率 / 配速 / 爬升 / 步頻、分段。
+     - **FIT 檔下載，每 24 小時上限 50 個**。
+     - 訓練計畫 4–16 週，可建立、修改、排程 workout。
+   - 但 the5krunner 的分析指出，MCP 暴露的是摘要資料，沒有 GPS 細節、逐秒資料、功率、跑步動態。兩邊說法有出入；FIT 下載若存在，逐秒資料就在 FIT 裡。**需要實測確認。**
+   - 來源：https://github.com/coroslab/COROS-MCP 、https://support.coros.com/hc/en-us/articles/53181619102996-Build-on-COROS-MCP 、https://the5krunner.com/2026/05/13/coros-mcp-ai-data/
+   - **公開的 OAuth metadata**（`https://mcp.coros.com/.well-known/oauth-authorization-server`，2026-09-30 讀取）：
+     - issuer `https://mcpus.coros.com`。
+     - 有 `registration_endpoint`（`/connect/register`），代表支援 **Dynamic Client Registration**。
+     - `code_challenge_methods_supported: ["S256"]`（PKCE）。
+     - `token_endpoint_auth_methods_supported` 含 `none`（public client）。
+     - grant 有 `authorization_code`、`refresh_token`、`device_code`（device authorization flow）。
+     - scopes：`openid mcp.tools offline_access`。
+
+第三方 app 能不能用這條 OAuth？
+
+- **技術上看起來可以**：本機 app 用 DCR 自己註冊成 public client，走 PKCE authorization code（redirect 用 loopback `http://127.0.0.1:<port>/callback`；DCR 是否接受 loopback URI 要實測），或走 **device flow**（顯示代碼讓使用者到 COROS 網頁同意，完全不需要 redirect URI，很適合桌面 app）。拿到 token 後以 MCP（JSON-RPC over HTTP）呼叫 tools，例如列活動、下載 FIT、推課表。
+- **條款面**：COROS 文件的定位是「Build on COROS MCP」給開發者用，不是只限 ChatGPT / Claude 這類 AI client。自己的 app 當 MCP client 應屬預期用途，但**必須先讀 COROS API Terms of Use / MCP 條款確認**。重點看：是否允許非 AI 用途、能否快取 FIT、每人 50 FIT/日的限制。
+- **限制**：
+  - 50 FIT/24h 代表**首次同步大量歷史很慢**：1,000 筆要 20 天。歷史資料應改用 COROS 帳號的「匯出資料」ZIP（§9.3），OAuth 只負責增量。
+  - scope 只有 `mcp.tools`，粒度粗。
+
+COROS OAuth 可以當 (b) 的帳號身分嗎？
+
+- 有 `openid` scope，ID token 的 `sub` 可以當穩定的使用者 id。如果只是「本機 app 知道你是誰」，**不需要另建帳號系統**。
+- 但若 (b) 要雲端備份或分享連結，雲端那端（Workers / Firebase）要驗證 COROS 簽發的 ID token（JWKS：`/oauth2/jwks`）。可行，不過就把帳號綁死在 COROS：沒有 COROS 的人（Garmin 使用者）就沒有帳號。
+- 建議：本機版**不需要帳號**；真的做 P3 時，用 COROS OIDC 當「其中一種」登入方式，再加 email magic link 當後備。
+
+### 9.2 Garmin
+
+官方：**Garmin Connect Developer Program**。
+
+- 可用的 API：
+  - Activity API：可取得原始 **.FIT / GPX / TCX**，ping/pull 或 push。
+  - Training API：發佈 workout 與訓練計畫到 Garmin Connect 行事曆，再同步到裝置。
+  - 另有 Health API、Courses 等。
+- 全部 OAuth 2.0 **PKCE**（舊的 OAuth 1.0a 已在遷移）。無授權費，審核回覆約 2 個工作天，整合通常 1–4 週。
+- **只限企業或法人**：FAQ 寫「available for enterprise use」「only for business use」。個人申請會被拒；社群也回報申請表一度暫停受理。
+- 來源：https://developer.garmin.com/gc-developer-program/program-faq/ 、https://developer.garmin.com/gc-developer-program/activity-api/ 、https://developer.garmin.com/gc-developer-program/training-api/ 、https://developerportal.garmin.com/sites/default/files/OAuth2PKCE_1.pdf 、https://ghurt.org/garmin-api-for-personal-use
+
+非官方：`garminconnect` / `garth`（Python）。
+
+- 2026 年 3 月 Garmin 改了登入流程，加上 Cloudflare TLS fingerprinting，會擋掉行動版 User-Agent。`garth` 的維護者在 2026-03-27 宣布停止維護，新登入全部失效。
+- `garminconnect` 0.3 改用自己的登入流程，不再讀 garth token，已支援 MFA。
+- 社群的繞法（換 User-Agent、Playwright、`curl_cffi` 偽造 TLS 指紋）都是貓抓老鼠。違反 Garmin 條款，也可能被封帳號。
+- 來源：https://github.com/matin/garth/discussions/222 、https://github.com/cyberjunky/python-garminconnect/pull/448
+
+結論：**沒有公司就沒有官方 Garmin API**。非官方路線才剛全面壞過一次，不適合放進給朋友用的版本。Garmin 使用者的預設路徑是**匯出 ZIP / 拖放 FIT（§9.3）**。
+
+若日後取得 Developer Program 資格，要把 Garmin 加成第三個來源，現有的「每來源」設計都能直接套用：
+
+| 元件 | 要做的事 |
+|---|---|
+| 儲存 | `storage.SOURCES` 加 `"garmin": "garmin"`，檔案放 `~/.wko5coach/fit/garmin/<year>/garmin_<activityId>.fit` |
+| 同步 | 新增 `backend/sync/garmin_client.py`：OAuth2 PKCE（loopback redirect）、Activity API 下載（最好用 push / ping，webhook 需要對外 URL；本機版只能 pull） |
+| runner / 鎖 | `runner.SOURCES` 加 `"garmin"`；鎖、`last_result`、排程、`/sync/auto` 自動涵蓋 |
+| 刪除 | `DELETE /sync/garmin/files` 走同一個 `purge`，路徑限制在 `fit/garmin/` |
+| 圖表來源 | `charts.data_source` 加 `garmin`；`dataset_for_source("garmin")` → `FitFolderDataset(fit/garmin)` |
+| 去重 | 不用改：開始時間 ±2 分鐘分組、依主要來源選出主紀錄，已支援任意來源 |
+| 設定頁 | 多一張來源卡片，沿用 COROS 卡片的元件 |
+| 課表推送 | Training API 的 workout 格式和 COROS 不同，在「課表」模型上做 adapter：同一份 planned session，轉成 COROS steps 或 Garmin workout steps |
+
+工作量：取得資格後約 5–8 天。取得資格本身需要公司或法人，這才是最大的瓶頸。
+
+### 9.3 直接匯入 FIT（列為一級路徑）
+
+這是**唯一**不需要任何核准、對所有品牌都有效、也沒有服務條款風險的路徑。所以它應該是預設的上手方式之一，而不只是後備。
+
+- **入口**：
+  - 設定頁與首次精靈提供「拖放檔案 / 選擇檔案」，可接單檔或多檔的 `.fit`、`.fit.gz`、`.zip`。
+  - 也可選一個「監看資料夾」（例如手錶 USB 掛載點或下載資料夾），app 定期掃描。本機版用 polling，每分鐘一次即可。
+- **批次 ZIP 格式**：
+  - **Strava 匯出**：`activities.csv` 加 `activities/` 資料夾。多數是 `.fit.gz`，舊活動可能是 `.gpx`、`.tcx`、`.tcx.gz`。
+    - 來源：https://epicefforts.com/blogs/strava/strava-bulk-export 、https://takeoutday.org/guides/how-to-export-strava-data
+  - **Garmin「Export Your Data」**：`DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_*_Part*.zip`，是巢狀 ZIP。裡面混著活動 FIT 與 monitoring / sleep / weight FIT，要用 FIT `file_id.type == activity` 篩選。郵件可能 48 小時到 30 天才寄到。
+    - 來源：https://gadgetbridge.org/basics/topics/garmin/import-garmin-connect/ 、https://cubetrek.com/static/bulkdownload.html
+  - **COROS**：App / Training Hub 可逐筆匯出 `.fit` / `.tcx` / `.gpx`；帳號資料匯出的格式要實測。
+    - 來源：https://support.coros.com/hc/en-us/articles/360043975752-Exporting-Workout-Data-and-Uploading-to-3rd-Party-Apps
+- **處理規則**：
+  - 解開巢狀 ZIP；只取活動類 FIT。
+  - `.fit.gz` 直接支援（`fit_to_channels` 已會先 gunzip）。
+  - `.gpx` / `.tcx` 轉成 FIT-like channels：時間、距離、海拔、HR，TCX 可能還有 power。這需要一個小轉換器，沒有功率的活動仍可算 hrTSS。
+  - Strava 的 `activities.csv` 可補活動名稱與運動類型。
+- **儲存**：`~/.wko5coach/fit/manual/<year>/`。檔名用 `manual_<start-UTC>_<hash8>.fit`，hash 是檔案內容，同一檔再匯一次會被辨識。
+  - 在 DB 裡，`source = "manual"`。
+  - `storage.SOURCES` 加 `"manual": "manual"`，刪除、路徑限制、統計都沿用。
+- **去重**：
+  - 先比內容 hash：完全同一個檔案 → 跳過。
+  - 再走現有的開始時間 ±2 分鐘分組：同一活動已從 COROS / TP 同步進來 → 記成重複紀錄，由主要來源設定決定以誰為準；預設讓自動同步的來源優先，手動匯入補缺。
+- **圖表來源**：`charts.data_source` 加 `manual`，另加 `all`（全部）。
+  - 目前 `FitFolderDataset` 讀單一資料夾。朋友可能「COROS 同步 + 舊 Garmin ZIP 匯入」混用，需要一個 **MergedFitDataset**：讀多個來源資料夾，依 DB 的主紀錄 / 重複標記只取主紀錄的檔案。
+  - 這應該是分享版的預設圖表來源。
+- **工作量**：拖放與 ZIP（含巢狀、Strava、Garmin）2–3 天；GPX / TCX 轉換 1–2 天；監看資料夾 0.5 天；MergedFitDataset 加 `all` 來源 1–2 天。
+
+### 9.4 哪些選項需要開發者核准
+
+| 帳號 / 資料來源 | 需要申請核准？ | 審核時間（公開資料） | 個人能否取得 | 可以立刻用？ | 備註 |
+|---|---|---|---|---|---|
+| 直接匯入 FIT / ZIP（任何品牌） | 否 | — | 是 | **是** | 零條款風險；Garmin 匯出可能要等 48 小時–30 天寄出 |
+| COROS MCP OAuth（DCR / device flow） | 否（self-service） | — | 是 | **是**（待實測與讀條款） | FIT 50 個/日；官方支援；openid 可當身分 |
+| COROS Partner API | 是（寄信 api@coros.com） | 未公開 | 否（要有公司與使用者規模） | 否 | 可推課表（`open.coros.com`）、webhook、1,000 calls/min |
+| COROS 非官方 Training Hub API（目前用的） | 否 | — | 是 | 是 | 非官方、條款風險、可能被改或封 |
+| Garmin Connect Developer Program | 是 | 約 2 個工作天回覆，整合 1–4 週；曾暫停受理 | 否（限企業或法人） | 否 | Activity API 有原始 FIT；Training API 可推課表 |
+| Garmin 非官方（garminconnect） | 否 | — | 是 | 不穩（2026-03 全面壞過） | 違反條款、會被擋 |
+| TrainingPeaks 網站登入（目前的 web 路徑） | 否 | — | 是 | 是 | 模擬瀏覽器，條款風險，可能遇到 CAPTCHA / MFA |
+| TrainingPeaks 官方 API | 是（partner） | 未查到公開時程 | 通常要公司 | 否 | — |
+| TP WKO5 client secret | — | — | **不得使用於他人** | — | 見 §2.1，分享版移除 |
+| Strava API | 是（建立 app 即可，但有使用者上限，擴大要審核） | 未在本次查證範圍 | 是 | 部分 | 不提供原始 FIT 下載，只有 streams；以 ZIP 匯入為主 |
+
+### 9.5 更新後的建議與分階段
+
+建議不變：**(a) 本機桌面 app**。資料來源的優先順序改為：
+
+1. **直接匯入 FIT / ZIP**：人人可用、無條款風險、一次補齊歷史。
+2. **COROS 官方 MCP OAuth**：取代非官方 Training Hub API 做增量同步與課表推送；實測通過並確認條款後才上線。
+3. COROS 非官方 API 降級為「進階 / 實驗」選項，預設關閉。
+4. TP 只留網站登入（進階、預設關閉，附條款警告）；Garmin 不做 API，只做匯入。
+
+分階段（取代 §1 建議與 §5 的順序）：
+
+- **P0 清理**（不變）：移除 TP secret 相關檔案（含歷史）、個人資料與路徑、`app_data_dir()`、keyring 金鑰。
+- **P1 WKO5-free + 匯入優先**：
+  - FitFolderDataset / MergedFitDataset 預設、`manual` 來源、拖放 / ZIP（Strava、Garmin、COROS）、GPX / TCX 轉換。
+  - 首次精靈以「匯入 ZIP」為第一步，空狀態、Windows 安裝檔。
+  - 約 10–14 天。
+- **P1.5 COROS 官方 OAuth**：
+  - 實測 DCR + device flow、確認條款與 50 FIT/日限制。
+  - 做 `coros_mcp_client.py`：列活動、下載 FIT、推課表。
+  - 設定頁的 COROS 卡片改成「用 COROS 帳號授權」按鈕，不再輸入密碼。
+  - 約 4–6 天，外加實測。
+- **P2**（不變，加一項）：i18n、macOS、同步強化；課表 adapter（COROS MCP，之後可接 Garmin Training API）。
+- **P3（選配）**：帳號層。身分優先用 COROS OIDC（openid），加 email magic link 後備；只存加密設定備份與分享連結。
+- **不做（除非取得公司或法人資格）**：COROS Partner API、Garmin Developer Program。取得資格後，Garmin 來源約 5–8 天（§9.2 的表）。
+
+風險：
+
+- COROS MCP 的條款若不允許非 AI 用途或快取 FIT，P1.5 就要退回匯入加非官方 API。
+- 50 FIT/日對「每天同步」夠用，但對首次歷史不夠，因此要靠匯入補齊。
+- 本節的 COROS 細節有一部分來自搜尋摘要，因為 support 網站 403；上線前必須人工逐條確認。
 
 ---
 

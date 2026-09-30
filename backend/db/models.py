@@ -142,6 +142,34 @@ class CorosPlanPush(Base):
     pushed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class PlanSession(Base):
+    """The stored, editable training plan (engine/plan_store.py): one row per
+    planned session. Auto rows come from the generator, custom rows from the
+    user; `edited` rows are never overwritten by regeneration."""
+    __tablename__ = "plan_sessions"
+    __table_args__ = (UniqueConstraint("athlete_id", "uid"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    uid: Mapped[str] = mapped_column(String(40))
+    week_start: Mapped[str] = mapped_column(String(10), index=True)
+    gen_key: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    day: Mapped[Optional[str]] = mapped_column(String(10), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(200))
+    minutes: Mapped[int] = mapped_column(Integer, default=0)
+    target: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tss: Mapped[Optional[float]] = mapped_column(nullable=True)
+    origin: Mapped[str] = mapped_column(String(10), default="auto")      # auto / custom
+    edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    provisional: Mapped[bool] = mapped_column(Boolean, default=False)
+    state: Mapped[str] = mapped_column(String(12), default="active")    # active/done/missed/deleted/superseded
+    done_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON activity row
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class UserSetting(Base):
     """Per-user key/value settings (backend/settings/repository.py)."""
     __tablename__ = "user_settings"
