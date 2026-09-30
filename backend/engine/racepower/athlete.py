@@ -267,7 +267,9 @@ def _aet(ds, today: dt.date) -> dict:
         return {"aet": None, "source": f"無法估算（{str(e)[:60]}）", "lthr": None}
 
 
-def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True) -> dict:
+def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
+           exclude: Optional[set] = None) -> dict:
+    """`exclude` = workout idx never used (racepower v2 back-test, leave-one-out)."""
     from backend.engine.wko5expr.dataset import date_to_day
     from backend.files.wko5_athlete import pd_snapshot
     today = today or dt.date.today()
@@ -275,7 +277,9 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True) -> d
     weight = ds.setting("weight", tday)
     weight_src = "賽季計畫體重" if ds.plan.weight_on(today) is not None else "WKO5 設定"
     prof = ds.plan.profile or {}
-    runs_365 = [w for w in ds.workouts if w.sport == "run" and tday - RIEGEL_WINDOW_DAYS < w.day <= tday + 1]
+    exclude = exclude or set()
+    runs_365 = [w for w in ds.workouts if w.sport == "run" and tday - RIEGEL_WINDOW_DAYS < w.day <= tday + 1
+                and w.idx not in exclude]
     runs_90 = [w for w in runs_365 if w.day > tday - CP_WINDOW_DAYS]
     metrics = run_metrics(ds, runs_365, weight)
     by_idx = {w.idx: w for w in ds.workouts}
@@ -423,3 +427,128 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True) -> d
         "events": events,
         "counts": {"runs_365": len(runs_365), "runs_with_power": len(metrics), "runs_90": len(runs_90)},
     }
+
+
+# ---- racepower v2: per-activity samples (docs/research/racepower-v2.md §10.1) ----
+
+GRADE_KEY = "racepower_v2_grade"
+HIKE_KEY = "racepower_v2_hike"
+RUN_MOVING_KMH = 1.0
+HIKE_REST_MS = 0.3
+
+
+def activity_arrays(ds, w) -> Optional[dict]:
+    """Sample-aligned numpy arrays of one activity: t (s), d (m, device
+    distance or integrated speed), z (smoothed elevation), lat, lon, p
+    (power, may be None), kmh (speed)."""
+    t = ds.channel(w.idx, "elapsedtime")
+    if t is None or len(t) < 10:
+        return None
+    n = len(t)
+    s = ds.channel(w.idx, "speed")
+    d = ds.channel(w.idx, "elapseddistance")
+    if d is not None and np.isfinite(d).sum() > 10:
+        dm = np.asarray(d, float)[:n] * 1000.0
+        ok = np.isfinite(dm)
+        dm = np.interp(np.arange(n), np.nonzero(ok)[0], dm[ok])
+    elif s is not None:
+        dt_ = np.diff(t, prepend=t[0])
+        dt_[~np.isfinite(dt_) | (dt_ < 0) | (dt_ > 60)] = 0
+        dm = np.cumsum(np.nan_to_num(s[:n]) / 3.6 * dt_)
+    else:
+        return None
+    z = ds.channel(w.idx, "_elevation")
+    if z is None:
+        z = ds.channel(w.idx, "elevation")
+    if z is None:
+        return None
+
+    def fit(a):
+        if a is None:
+            return None
+        a = np.asarray(a, float)[:n]
+        return a if len(a) == n else np.concatenate([a, np.full(n - len(a), np.nan)])
+    p = fit(ds.channel(w.idx, "power"))
+    kmh = fit(s) if s is not None else np.gradient(dm, t) * 3.6
+    return {"t": np.asarray(t, float), "d": dm, "z": fit(z), "lat": fit(ds.channel(w.idx, "latitude")),
+            "lon": fit(ds.channel(w.idx, "longitude")), "p": p, "kmh": kmh}
+
+
+def _grade_windows(ds, w) -> Optional[list]:
+    from backend.engine.racepower import grade_model as GM
+    a = activity_arrays(ds, w)
+    if a is None or a["p"] is None or not np.any(np.nan_to_num(a["p"]) > 0):
+        return None
+    mv = (np.nan_to_num(a["p"]) > 0) & (np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH)
+    rows = GM.windows(a["t"], a["d"], a["z"], a["p"], mv)
+    return [[round(r["g"], 4), round(r["v"], 3), round(r["p"], 1), round(r["z"], 1)] for r in rows
+            if r.get("p") and r["p"] > 0]
+
+
+def _hike_windows(ds, w) -> Optional[list]:
+    from backend.engine.racepower import grade_model as GM
+    a = activity_arrays(ds, w)
+    if a is None:
+        return None
+    mv = np.nan_to_num(a["kmh"]) > HIKE_REST_MS * 3.6
+    rows = GM.windows(a["t"], a["d"], a["z"], None, mv)
+    return [[round(r["g"], 4), round(r["v"], 3), round(r["z"], 1)] for r in rows if r["v"] >= HIKE_REST_MS]
+
+
+def grade_samples(ds, runs, exclude: Optional[set] = None) -> list[dict]:
+    """100 m windows (grade, speed, power, elevation) of every outdoor run
+    with power, disk-cached per activity; RE is computed with each run's
+    weight."""
+    from backend.engine.wko5expr.dataset import date_to_day  # noqa: F401
+    exclude = exclude or set()
+    out = []
+    for w in runs:
+        if w.idx in exclude or w.sport_type == "indoor running" or "runningtreadmill" in w.tags \
+                or "runningindoor" in w.tags:
+            continue
+        rows = ds.cached_series(GRADE_KEY, w, lambda w=w: _grade_windows(ds, w))
+        if not rows:
+            continue
+        wt = ds.setting("weight", w.day)
+        for g, v, p, z in rows:
+            out.append({"g": g, "v": v, "p": p, "z": z, "re": v / (p / wt) if wt and p else None, "a": w.idx})
+    ds.flush_series()
+    return out
+
+
+def hike_workouts(ds, today: dt.date) -> list:
+    from backend.engine.wko5expr.dataset import date_to_day
+    tday = date_to_day(today)
+    return [w for w in ds.workouts if w.sport_type in ("hiking", "mountaineering")
+            and tday - HIKE_WINDOW_DAYS < w.day <= tday + 1]
+
+
+def hike_samples(ds, hikes, exclude: Optional[set] = None) -> list[dict]:
+    exclude = exclude or set()
+    out = []
+    for w in hikes:
+        if w.idx in exclude:
+            continue
+        rows = ds.cached_series(HIKE_KEY, w, lambda w=w: _hike_windows(ds, w))
+        for g, v, z in rows or []:
+            out.append({"g": g, "v": v, "z": z, "a": w.idx})
+    ds.flush_series()
+    return out
+
+
+def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] = None,
+                 exclude: Optional[set] = None, runs: Optional[list] = None) -> dict:
+    """GradeRE from the 365-day runs and HikeSpeed from the 3-year hikes
+    before `today` (both leave `exclude` out)."""
+    from backend.engine.racepower import grade_model as GM
+    from backend.engine.wko5expr.dataset import date_to_day
+    today = today or dt.date.today()
+    tday = date_to_day(today)
+    if runs is None:
+        runs = [w for w in ds.workouts if w.sport == "run" and tday - RE_WINDOW_DAYS < w.day <= tday + 1]
+    gs = grade_samples(ds, runs, exclude)
+    if re_flat is None:
+        flat = [s["re"] for s in gs if s["re"] and abs(s["g"]) <= 0.01]
+        re_flat = float(median(flat)) if flat else 1.0
+    hs = hike_samples(ds, hike_workouts(ds, today), exclude)
+    return {"grade_re": GM.fit_grade_re(gs, re_flat), "hike_speed": GM.fit_hike_speed(hs)}
