@@ -123,6 +123,10 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
         <option value="tp">TrainingPeaks</option></select></label>
       <button class="primary" id="s-save">儲存同步設定</button>
     </div>
+    <p class="meta" id="s-chart-note">注意：目前圖表、總覽和功率計算機仍讀 WKO5 資料夾；「圖表資料來源」要等圖表頁接線完成後才會生效。
+      想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
+    <div class="row" hidden>
+    </div>
 
     <div class="src" id="src-coros">
       <h3>COROS <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden>同步中</span>
