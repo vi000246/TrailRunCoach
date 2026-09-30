@@ -43,7 +43,8 @@
       "description": "有沒有壓在 AeT 以下、Pa:HR 飄移多少。適用輕鬆跑、長跑、AeT 測試；基礎期最重要：飄移連續 3 次 < 5% 才加閾值下間歇。WKO5 版本：「WKO5 Workout View」→ Zone & Variation →「Heart Rate vs. Power by % of work」，以及 Workout →「PWHR 心飄移」。",
       "charts": [
         {"title": "飄移判讀", "kind": "review", "section": "aerobic",
-         "description": "Pa:HR = 速度／心率，前 10 分鐘不算，比較前後半。有坡（越野、每公里爬升 ≥ 20 m）、停頓 > 5%、功率起伏 > 15%、強度 > 90% CP 的跑步不採用。"},
+         "basis": {"default": "pace", "choices": ["pace", "power"]},
+         "description": "Pa:HR = 速度／心率，前 10 分鐘不算，比較前後半。有坡（越野、每公里爬升 ≥ 20 m）、停頓 > 5%、功率起伏 > 15%、強度 > 90% CP 的跑步不採用。連續 3 次 < 5% 的次數只看配速。"},
         {"title": "心率 vs AeT",
          "kind": "workout",
          "axes": [{"id": "BPM"}],
@@ -54,16 +55,22 @@
          ]},
         {"title": "滾動有氧效率 EF（5 分鐘）",
          "kind": "workout",
-         "description": "每下心跳換到的速度（m/min per bpm）。後段往下掉 = 心率飄移。",
-         "axes": [{"id": "NONE"}],
+         "description": "每下心跳換到的速度（m/min per bpm）。後段往下掉 = 心率飄移。前 10 分鐘不畫（和飄移判讀一樣，暖身時心率還沒跟上）。",
+         "basis": {"default": "pace", "choices": ["pace", "power"]},
+         "axes": [],
          "series": [
-           {"name": "EF", "type": "line", "y_axis": "NONE", "x_axis": "HHMMSS", "color": "#2a78d6", "expression": "ewma(speed,300)/ewma(heartrate,300)*1000/60"}
+           {"name": "EF 速度/心率", "basis": "pace", "type": "line", "y_axis": "CUSTOMm/min/bpm", "x_axis": "HHMMSS", "color": "#2a78d6", "expression": "@w := elapsedtime >= 600, if(@w, ewma(if(@w, speed), 300)/ewma(if(@w, heartrate), 300)*1000/60)"},
+           {"name": "EF 功率/心率", "basis": "power", "type": "line", "y_axis": "CUSTOMW/bpm", "x_axis": "HHMMSS", "color": "#2a78d6", "expression": "@w := elapsedtime >= 600, if(@w, ewma(if(@w, power), 300)/ewma(if(@w, heartrate), 300))"}
          ]},
-        {"title": "每公里心率",
+        {"title": "每公里心率與速度",
          "kind": "workout",
+         "description": "每公里的平均心率，和同一公里的速度。速度掉、心率卻沒掉 = 心率飄移。",
+         "basis": {"default": "pace", "choices": ["pace", "power"]},
          "axes": [{"id": "BPM"}],
          "series": [
            {"name": "平均心率", "type": "bar", "y_axis": "BPM", "x_axis": "KM", "color": "#eb6834", "expression": "avg(heartrate, floor(elapseddistance))"},
+           {"name": "速度", "basis": "pace", "type": "line", "y_axis": "KPH", "x_axis": "KM", "color": "#2a78d6", "expression": "avg(speed, floor(elapseddistance))"},
+           {"name": "功率", "basis": "power", "type": "line", "y_axis": "WATTS", "x_axis": "KM", "color": "#2a78d6", "expression": "avg(power, floor(elapseddistance))"},
            {"name": "AeT", "type": "line", "y_axis": "BPM", "color": "#1baf7a", "line_style": "dash", "expression": "(,aethr)"}
          ]}
       ]

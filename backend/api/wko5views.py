@@ -36,6 +36,7 @@ from backend.engine.wko5expr.dataset import Dataset, date_to_day
 from backend.engine.wko5expr import datasource as DSRC
 from backend.engine.wko5expr.fitdataset import dataset_for_source
 from backend.engine.wko5expr import periods as PD
+from backend.engine.wko5expr import basis as BS
 from backend.engine.wko5expr import recentbests as RB
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
@@ -208,7 +209,10 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
-    pinfo = winfo = None
+    pinfo = winfo = binfo = None
+    if v.get("source") == "custom" and BS.basis_spec(ch):
+        # 配速／功率 (basis.py): ?basis=power — athlete, workout and review charts alike
+        ch, binfo = BS.apply_basis(ch, request.query_params.get("basis"))
     if ch.get("kind") == "athlete":
         ch, b, pinfo = _apply_period(ch, b, e, request.query_params.get("period"),
                                      custom=v.get("source") == "custom")
@@ -227,6 +231,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         if winfo:
             rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
             res = {**res, **winfo, "recent_bests": rb}
+        if binfo:
+            if needs_workout:
+                from backend.engine.workout_review import _has
+                res = BS.no_power_note(res, ch, _has(ds.channel(ds.workouts[workout].idx, "power")))
+            res = {**res, **binfo}
         return {**res, **pinfo} if pinfo else res
     return RENDER_CACHE.get_or_compute(key, compute)
 
@@ -259,7 +268,8 @@ def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bo
 def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
-        return {**review(ds, w, ch.get("section") or "summary"), "title": ch.get("title"),
+        return {**review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace"),
+                "title": ch.get("title"),
                 "description": ch.get("description")}
     if ch.get("kind") == "workout":
         return render_chart(ch, ds, b, e, workout=w)
@@ -309,19 +319,23 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
 
 
 @router.get("/workouts/{i}/review")
-def workout_review(i: int, section: Optional[str] = None, parity: Optional[bool] = None):
+def workout_review(i: int, section: Optional[str] = None, parity: Optional[bool] = None,
+                   basis: str = "pace"):
     """Single-activity review (backend/engine/workout_review.py): one section's
-    card, or all six dashboards' cards plus the classification."""
+    card, or all six dashboards' cards plus the classification. `basis`
+    (pace / power) picks Pa:HR or Pw:HR on the aerobic card."""
     from backend.engine import workout_review as WR
     ds = _dataset(parity)
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     w = ds.workouts[i]
+    if basis not in BS.BASES:
+        raise HTTPException(400, f"basis must be one of {list(BS.BASES)}")
     if section:
         if section not in WR.SECTIONS + WR.EXTRA_SECTIONS:
             raise HTTPException(400, f"section must be one of {list(WR.SECTIONS + WR.EXTRA_SECTIONS)}")
-        return WR.review(ds, w, section)
-    cards = {s: WR.review(ds, w, s) for s in WR.SECTIONS}
+        return WR.review(ds, w, section, basis=basis)
+    cards = {s: WR.review(ds, w, s, basis=basis) for s in WR.SECTIONS}
     head = cards["summary"]
     return {"workout": i, "classification": head.get("classification"),
             "suggested_dashboard": head.get("suggested_dashboard"), "sections": cards}

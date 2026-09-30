@@ -67,8 +67,8 @@ and form drift.
   `hard_power_s` exists for runs **and hikes** (`QUALITY_CATEGORIES`,
   `backend/engine/workout_review.py:61`) with power and a CP; efforts are detected
   for the same sessions (`backend/engine/workout_review.py:661`).
-- Memoised on disk through `Dataset.cached_series` under key `workout_review_v4`
-  (`backend/engine/workout_review.py:58`, `backend/engine/workout_review.py:691`,
+- Memoised on disk through `Dataset.cached_series` under key `workout_review_v6`
+  (`backend/engine/workout_review.py:60`, `backend/engine/workout_review.py:691`,
   `backend/engine/wko5expr/dataset.py:403`). The key holds the file and thresholds,
   not the code, so the version is bumped whenever `_measure` changes. Phase,
   classification, baselines and verdicts are recomputed on each call.
@@ -77,7 +77,8 @@ and form drift.
 
 | Function | What | Rule / thresholds | Line |
 |---|---|---|---|
-| `drift_of` | Pa:HR decoupling, (r1 − r2)/r1 with r = speed/HR over the two halves of moving time after a 10-min warm-up | Refused (with a reason) when: no HR/speed; elapsed < 40 min; trail or ≥ `TRAIL_CLIMB_RATE_M_PER_KM` climbed per km; stopped > 5 % after warm-up; 30-s power CV > 15 %; mean power > 90 % CP; < 600 s usable | `backend/engine/workout_review.py:224` |
+| `drift_of` | Pa:HR decoupling, (r1 − r2)/r1 with r = speed/HR over the two halves of moving time after a 10-min warm-up; Pw:HR the same with power (`pw_drift`, `p1`/`p2`, `pw_hr1`/`pw_hr2`), through the shared `_halves_drift` (`backend/engine/workout_review.py:226`) | Refused (with a reason) when: no HR/speed; elapsed < 40 min; trail or ≥ `TRAIL_CLIMB_RATE_M_PER_KM` climbed per km; stopped > 5 % after warm-up; 30-s power CV > 15 %; mean power > 90 % CP; < 600 s usable. A refusal applies to both bases; a fair run without power gets `pw_reason` 這次沒有功率 | `backend/engine/workout_review.py:243` |
+| `basis_drift` | (drift, reason) of a `drift_of` result for pace or power | — | `backend/engine/workout_review.py:308` |
 | `detect_efforts` | Work bouts in the 1-s power stream | 30-s power ≥ max(0.85 CP, 1.12 × session median) (1.15 × median with no CP), ≥ 60 s, gaps < 30 s bridged; HR drop 60 s after the HR peak, skipped only when the next bout that is itself an effort (≥ 60 s) starts within those 60 s (`backend/engine/workout_review.py:336`) | `backend/engine/workout_review.py:294` |
 | `interval_summary` | Set band (median %CP), reps in band (±1 %), fade last vs first, median HR drop | Bands 閾值下 0.88–0.95, 閾值 0.95–1.01, 超閾值 1.01–1.06, VO2max 1.06–1.16, 無氧 ≥ 1.16 ×CP | `backend/engine/workout_review.py:346`, `backend/engine/workout_review.py:88` |
 | `cp_test` | Best 3′ and 12′ windows; CP = (P12·720 − P3·180)/540, W′ = (P3 − CP)·180; whether the two windows are separate | — | `backend/engine/workout_review.py:363` |
@@ -121,7 +122,7 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:741`).
 | Section | Card | Line |
 |---|---|---|
 | `summary` | Type · terrain · phase, time, HR vs AeT/LTHR, three zones; the type's verdict lines (trail / hike lines first); 建議分頁 | `backend/engine/workout_review.py:994` |
-| `aerobic` | Drift, HR/speed per half, Pw:HR, time over AeT+3, same-type drift baseline | `backend/engine/workout_review.py:1026` |
+| `aerobic` | Drift on the chosen basis (Pa:HR with HR/speed per half, or Pw:HR with HR/power per half; 這次沒有功率 without power), time over AeT+3, same-type drift baseline on that basis | `backend/engine/workout_review.py:1109` |
 | `intervals` | Per-rep table: start, duration, power, %CP, HR, max HR, 60-s drop | `backend/engine/workout_review.py:1049` |
 | `climbs` | Per-climb table: gain, distance, grade, VAM, HR, HR per 100 m | `backend/engine/workout_review.py:1089` |
 | `grades` | Grade bins: time, share, distance, pace, HR, power | `backend/engine/workout_review.py:1103` |
@@ -137,6 +138,37 @@ Verdict rules:
   long → 下次放慢; drift < 5 % → stable (with the streak; ≥ 3 → add a sub-threshold
   interval), but not counted when average HR > AeT+3; 5–10 % → hold intervals;
   > 10 % → aerobic base lacking. AeT test: drift < 5 % → first-half HR can be the AeT.
+  In power mode the same bands apply to Pw:HR, but the streak and the interval it
+  unlocks are never mentioned — they are counted on Pa:HR
+  (`backend/engine/workout_review.py:943`).
+
+### Basis (配速／功率)
+
+The 飄移判讀 card has the chart-level `basis` toggle
+(`views/workout.json:46`; mechanism in
+[wko5-engine.spec.md](./wko5-engine.spec.md) "Drift basis toggle").
+`review(ds, w, section, basis)` (`backend/engine/workout_review.py:1051`) puts the
+basis on the card; only `_aerobic` reads it. The summary card, `drift_series` /
+`drift_streak`, `status.i_drift` and `overview.week_plan` stay on Pa:HR, the
+documented default: Uphill Athlete's AeT drift test is a pace test
+(`docs/research/uphill-athlete-mountain-metrics.md:128-135`) and running power
+is for runnable terrain (`docs/research/coaching-dashboards-mountain.md:70`).
+
+Pw:HR here replaces the earlier row that came from
+`threshold_estimate.steady_drift`: that one used a 1-s grid over elapsed time and
+a 45-minute floor, and was empty on every fair run checked (e.g. 2026-09-15,
+2026-08-28). `steady_drift` still feeds the AeT estimate (`backend/engine/thresholds.py:34`).
+
+**Card vs season chart.** The season charts plot WKO5's stored `pahr` / `pwhr`,
+which split the whole recording at half its length with the warm-up and stops
+kept (`docs/wko5-internals/workout-metrics.md:18`). The card leaves out the first
+10 minutes and uses moving-time halves. On 2026-09-15, 08-28 and 08-27 the card
+is 1.2–9.4 percentage points lower than the stored value; the warm-up, when HR
+lags output, inflates the first half's output per beat.
+`backend/tests/test_drift_basis.py` recomputes both definitions with a plain
+loop: the card matches its definition to 1e-9, the stored values match the
+whole-run definition to 5e-5 (`pahr` is stored to 4 decimals) and 1e-9 (`pwhr`)
+(`backend/tests/test_drift_basis.py:310`, `backend/tests/test_drift_basis.py:327`).
 - Intervals (`backend/engine/workout_review.py:909`): reps in band; fade > 5 % → one
   rep fewer or more rest; median 60-s HR drop < 20 bpm → longer rest; band 閾值下/閾值
   with HR between AeT and LTHR → 屬於閾值下.
@@ -183,7 +215,7 @@ needs a selected workout (`backend/api/wko5views.py:205`) and renders through
 
 | Method | Path | Line | Purpose |
 |---|---|---|---|
-| GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:304` | `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
+| GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:321` | `basis` pace (default) or power, 400 otherwise. `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
 | GET | `/api/v1/wko5/views/{view}/dashboards/{d}/charts/{c}` | `backend/api/wko5views.py:253` | A review chart renders through the same branch |
 
 ## Deviations from the design doc
@@ -216,6 +248,8 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | Fake-dataset streak and review cards | `backend/tests/test_workout_review.py:234`, `backend/tests/test_workout_review.py:248`, `backend/tests/test_workout_review.py:264` |
 | View parsing | `backend/tests/test_workout_review.py:282`, `backend/tests/test_workout_review.py:293` |
 | Hike power quality, gap-free hard HR, HR drop past a short surge, last_quality over hikes by date | `backend/tests/test_workout_review.py:325`, `backend/tests/test_workout_review.py:340`, `backend/tests/test_workout_review.py:354`, `backend/tests/test_workout_review.py:364` |
+| Pw:HR halves and refusals, no-power text, power-mode verdicts and card | `backend/tests/test_drift_basis.py:47`, `backend/tests/test_drift_basis.py:68`, `backend/tests/test_drift_basis.py:84`, `backend/tests/test_drift_basis.py:114`, `backend/tests/test_drift_basis.py:127` |
+| Golden: 3 real runs, card and stored pahr / pwhr against a plain recomputation | `backend/tests/test_drift_basis.py:310`, `backend/tests/test_drift_basis.py:327` |
 
 ## Domain Model
 
@@ -233,6 +267,8 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | Terrain | road / trail / hike, from the workout category |
 | Phase | The plan phase on the activity date (base, specific, taper, …) |
 | Pa:HR drift | (r1 − r2)/r1, r = speed/HR, halves of moving time after 10 min; positive = HR drifted up |
+| Pw:HR drift | The same with r = power/HR, same fairness rules and halves |
+| Basis | Which drift the aerobic card shows: pace (Pa:HR, default) or power (Pw:HR) |
 | Fair drift | A drift `drift_of` did not refuse (flat, steady, not stopped, ≥ 40 min, ≤ 90 % CP) |
 | Drift streak | Consecutive most-recent fair drifts < 5 % on easy road runs; 3 unlocks base-phase intervals |
 | Effort | A work bout: 30-s power over the effort threshold for ≥ 60 s |
@@ -252,3 +288,4 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-09-30 | code-sync | N/A | Created from brownfield analysis — single-activity review cards (session type, Pa:HR drift, efforts, climbs, durability, form), 單次活動判讀 view, drift streak / CP-test hooks for status and week plan |
 | 2026-09-30 | user-decision | N/A | Hikes go through the same quality rule as road and trail; average HR ≤ AeT+3 still means easy |
 | 2026-09-30 | bugfix | N/A | Hikes get power quality and efforts like runs; hard HR time excludes recording gaps; HR-drop check skips short surges; last_quality covers hikes, sorted by date; measure cache `workout_review_v4`; docstring points at the done plan; refreshed anchors |
+| 2026-09-30 | feat/drift-basis | N/A | Pw:HR from `drift_of` itself (same rules and halves); aerobic card follows the 配速／功率 toggle, 這次沒有功率 without power; streak and overview stay on Pa:HR; measure cache `workout_review_v6`; golden recomputation test on 3 real runs |

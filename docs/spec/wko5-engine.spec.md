@@ -235,6 +235,56 @@ custom views only. The response adds `x_period`, `period_default`,
 `period_toggle`, `buckets` and `range_note`
 (`backend/api/wko5views.py:248`).
 
+## Drift basis toggle (配速／功率)
+
+`backend/engine/wko5expr/basis.py` lets a drift chart switch between Pa:HR
+(speed / HR) and Pw:HR (power / HR). Same pattern as the 近 7／14／28 天 window
+(`recentbests.py`): a chart-level spec, a server rewrite, a per-chart viewer
+toggle.
+
+- **Spec** (`backend/engine/wko5expr/customviews.py:110-124`): `"basis":
+  {"default": "pace", "choices": ["pace", "power"], "power_note": "…"}`. Series
+  carry `"basis": "pace"` or `"power"` (`SERIES_DEFAULTS`,
+  `backend/engine/wko5expr/customviews.py:58`); untagged series are drawn in
+  both modes. A tagged series on a chart without a basis spec is an error.
+- **Rewrite** (`backend/engine/wko5expr/basis.py:53`): keep the series of the
+  chosen basis, rewrite the title and description (Pa:HR → Pw:HR, 速度／心率 →
+  功率／心率 …, `backend/engine/wko5expr/basis.py:32`), append `power_note` in
+  power mode, and set `basis_chosen` for review cards. Tagged series rather
+  than an expression swap, because the two EF expressions differ by more than
+  a token (`*1000/60` is a speed-only unit factor) and 每公里心率與速度 has no
+  speed / power token to swap.
+- **No power** (`backend/engine/wko5expr/basis.py:71`): power mode on a
+  workout without a power channel drops the power series and says 這次沒有功率 —
+  as the chart's `empty` message when only reference lines would remain,
+  otherwise as `basis_note` above the chart. Season charts need nothing: a run
+  without power has no `pwhr`, so it has no point.
+- **API** (`backend/api/wko5views.py:213-215`): custom views, every chart kind
+  (athlete, workout, review); `?basis=` is a query parameter, so it is part of
+  the render-cache key. The response adds `basis`, `basis_default`,
+  `basis_choices`, `basis_labels` and `basis_toggle`. Review cards receive the
+  basis through `_render` (`backend/api/wko5views.py:271`).
+- **Charts using it**: 心率飄移 Pa:HR and 耐久度 in 我的訓練 › 能力
+  (`views/training.json:253-256`, `views/training.json:325-326`), 長時間輕鬆跑的心率飄移
+  and 耐久度 in 周期化訓練 (`views/periodization.json:58-59`,
+  `views/periodization.json:151-152`), and the 有氧／心率飄移 dashboard of
+  單次活動判讀: 飄移判讀, 滾動有氧效率 EF, 每公里心率與速度
+  (`views/workout.json:46`, `views/workout.json:62-63`, `views/workout.json:72-73`).
+  Season charts plot WKO5's stored `pahr` / `pwhr` (`backend/engine/wko5expr/dataset.py:376-377`);
+  the rolling EF leaves out the first 10 minutes, like the review card.
+- **Trail caveat**: the trail drift charts' `power_note` says Pw:HR is only a
+  reference off-road because Stryd power is validated only up to about 8 %
+  grade (user-supplied figure; not checked against a Stryd source here).
+- **Default stays pace.** Uphill Athlete's AeT drift test is a pace test
+  ("TrainingPeaks' Pa:HR does this automatically",
+  `docs/research/uphill-athlete-mountain-metrics.md:128-135`); UA says running
+  power suits runnable terrain while HR stays the practical tool for steep
+  hiking (`docs/research/coaching-dashboards-mountain.md:70`); the 5 % cut is
+  Friel's convention adopted by UA (`docs/research/coaching-dashboards-mountain.md:194-195`).
+  UA's EF allows "pace or power" (`docs/research/coaching-dashboards-mountain.md:74-78`),
+  but nothing found specifies Pw:HR for runners, so the overview's 心率飄移
+  indicator and the base-phase streak stay on Pa:HR.
+
 ## Render cache
 
 `backend/engine/wko5expr/render_cache.py`, used by the chart endpoint
@@ -285,6 +335,11 @@ custom views only. The response adds `x_period`, `period_default`,
   remembered per chart in local storage (`wko5viewer.period`) and re-fetches
   that card only. A chart with a `calendar` series (a day calendar such as
   肌力訓練日曆, `backend/static/wko5_viewer.html:1234`) never gets the toggle.
+- **Basis toggle** (`backend/static/wko5_viewer.html:754`,
+  `backend/static/wko5_viewer.html:827`): when the response says `basis_toggle`,
+  the header gets 配速／功率, remembered per chart in `wko5viewer.basis` and sent
+  as `&basis=` for athlete and workout cards (`backend/static/wko5_viewer.html:771`);
+  `basis_note` is drawn above the chart (`backend/static/wko5_viewer.html:857`).
 - **Enlarge** (`backend/static/wko5_viewer.html:782`): 「⤢ 放大」 opens a
   `<dialog>` redrawn from the card's JSON (no refetch) with the full legend and
   a zoom slider; it pushes a history entry with `&chart=`, so Back, Esc, the
@@ -361,7 +416,7 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 |---|---|---|---|
 | GET | `/views` | 156 | Both view kinds, with source; map panels report kind `map`, review cards kind `workout` |
 | GET | `/views/dirs` | 170 | Where custom view files live |
-| GET | `/views/{view}/dashboards/{d}/charts/{c}` | 189 | Render one chart through the render cache (`parity`, `begin`, `end`, `sports`, `workout`, `period`); the dataset follows `charts.data_source` |
+| GET | `/views/{view}/dashboards/{d}/charts/{c}` | 189 | Render one chart through the render cache (`parity`, `begin`, `end`, `sports`, `workout`, `period`, `window`, `basis`); the dataset follows `charts.data_source` |
 | GET | `/workouts` | 277 | RHE activity list, with TSS source |
 | GET | `/workouts/{i}/review` | 304 | Single-activity review cards — see [workout-review.spec.md](./workout-review.spec.md) |
 | GET | `/sports` | 323 | Sport groups and counts |
@@ -399,6 +454,12 @@ renaming, locks, floors and bucket lists (including `_apply_period`);
 code), disk persistence, error non-caching, size eviction, coalescing and the
 concurrency cap.
 
+`backend/tests/test_drift_basis.py` covers the basis spec and rewrite, the
+no-power note, the bundled drift charts (`backend/tests/test_drift_basis.py:152`,
+`backend/tests/test_drift_basis.py:175`, `backend/tests/test_drift_basis.py:192`),
+and, golden, that the season chart plots WKO5's stored `pahr` / `pwhr` in each
+mode (`backend/tests/test_drift_basis.py:340`).
+
 ## Domain Model
 
 ### Bounded Context
@@ -428,6 +489,7 @@ concurrency cap.
 | Samples | One workout's downsampled per-sample arrays, shared by the map and hover |
 | Synced hover | All time/distance charts and the map of one workout showing the same sample |
 | Basemap / overlay | The map's switchable tile layers; defaults from settings |
+| Basis | Whether a drift chart uses speed (Pa:HR, the default) or power (Pw:HR) against HR |
 
 ## Change History
 
@@ -437,3 +499,4 @@ concurrency cap.
 | 2026-09-30 | code-sync | N/A | Period toggle (periods.py, `period` / `min_days`), render cache, viewer (flat custom tabs, &chart= deep link, enlarge overlay, 數值與公式 table removed, Leaflet route map with basemaps / overlays / tile-error hint, samples endpoint and synced hover), regrouped custom views, refreshed API table |
 | 2026-09-30 | bugfix | N/A | Chart dataset follows `charts.data_source` (header chip); code signature also covers panels/, files/ and api/wko5views.py; render_map drops the unused track; tooltip units from the drawn series; no lttb on distance-x hover charts; WKO5 folder from env or found under the home directory's WKO5 folder; refreshed anchors |
 | 2026-09-30 | feat/competitor-charts | N/A | `chart_metrics.py` reference implementations + charts (Form% bands, ATL/CTL, monotony/strain, PI, downhill impact load and 7:28 ratio, up/downhill m/h, コース定数 / ITRA); 總覽 `descent` indicator |
+| 2026-09-30 | feat/drift-basis | N/A | 配速／功率 basis toggle (`basis.py`, chart `basis` spec, tagged series, `?basis=`, viewer control, 這次沒有功率) on the drift charts; rolling EF skips the first 10 min |
