@@ -296,3 +296,84 @@ def test_bundled_workout_view_parses():
     assert [d["title"] for d in v["dashboards"]] == [
         "本次重點", "有氧／心率飄移", "間歇", "爬坡與地形", "配速與耐久", "跑姿與膝蓋負荷（參考）"]
     assert all(d["charts"][0]["kind"] == "review" for d in v["dashboards"])
+
+
+# ---------------------------------------------------------------------------
+# spec-sync regressions
+# ---------------------------------------------------------------------------
+
+def _hike(day, minutes=60, hr=140.0, watts=None, climb_w=None, climb_s=0):
+    """A hike at `hr`; `climb_s` seconds at `climb_w` W in the middle."""
+    t = _t(minutes)
+    ch = {"elapsedtime": list(t), "heartrate": [hr] * len(t), "speed": [4.0] * len(t),
+          "elapseddistance": list(t * 4.0 / 3600.0)}
+    if watts is not None:
+        p = np.full(len(t), float(watts))
+        if climb_w is not None:
+            a = len(t) // 2 - climb_s // 2
+            p[a:a + climb_s] = climb_w
+        ch["power"] = list(p)
+    return FakeWorkout(start=dt.datetime.combine(day, dt.time(7)), sport="hike", tags=["hiking"],
+                       sport_type="hiking", channels=ch,
+                       metrics={"duration": minutes * 60.0, "movingduration": minutes * 60.0,
+                                "distance": minutes / 60 * 4.0, "climbing": 600.0})
+
+
+HIKE_SETTINGS = {"otherthr": 160.0, "otherftp": 200.0}     # AeT 142.4, CP 200
+
+
+def test_hike_reaches_quality_through_power():
+    today = dt.date(2026, 9, 30)
+    # HR stays under LTHR (150 < 160) but above AeT+3; 15' at 100 % CP
+    ds = FakeDataset([_hike(today, hr=150.0, watts=120.0, climb_w=200.0, climb_s=900)], today,
+                     settings=HIKE_SETTINGS)
+    w = ds.workouts[0]
+    m = R.measure(ds, w)
+    assert m["hard_power_s"] == pytest.approx(900, abs=40)
+    assert len(m["efforts"]) >= 1
+    assert R.classify(ds, w, m)["type"] == "quality"
+    # the same hike without the climb is not quality
+    ds2 = FakeDataset([_hike(today, hr=150.0, watts=120.0)], today, settings=HIKE_SETTINGS)
+    assert R.classify(ds2, ds2.workouts[0])["type"] != "quality"
+
+
+def test_hard_hr_excludes_recording_gaps():
+    today = dt.date(2026, 9, 30)
+    # 5' at LTHR, a 30-minute recording gap, 5' at LTHR: 10' of samples, not 40'
+    t = list(np.arange(0, 301, 1.0)) + list(np.arange(2101, 2402, 1.0))
+    ch = {"elapsedtime": t, "heartrate": [165.0] * len(t), "speed": [10.0] * len(t),
+          "elapseddistance": [x * 10 / 3600.0 for x in t]}
+    fw = FakeWorkout(start=dt.datetime.combine(today, dt.time(7)), sport="run", tags=["running"],
+                     sport_type="running", channels=ch,
+                     metrics={"duration": 2400.0, "movingduration": 600.0, "distance": 1.7})
+    ds = FakeDataset([fw], today, settings=SETTINGS)
+    m = R.measure(ds, ds.workouts[0])
+    assert m["hard_s"] == pytest.approx(600, abs=5)
+
+
+def test_hr_drop_ignores_a_short_blip_after_the_effort():
+    # 4' effort, 50 s easy, a 30-s surge (too short to be an effort), then rest
+    p = [150.0] * 600 + [250.0] * 240 + [120.0] * 50 + [250.0] * 30 + [120.0] * 600
+    h = [130.0] * 600 + list(np.linspace(140, 165, 240)) + list(np.linspace(165, 125, 60)) + [125.0] * 620
+    t = np.arange(len(p), dtype=float)
+    eff = R.detect_efforts(t, np.array(p), np.array(h), cp=220.0)
+    assert len(eff) == 1
+    assert eff[0]["hr_drop60"] is not None and eff[0]["hr_drop60"] > 20
+
+
+def test_last_quality_includes_hikes_and_sorts_by_date():
+    today = dt.date(2026, 9, 30)
+    t, p, h = _intervals()
+    run_ch = {"elapsedtime": list(t), "heartrate": list(h), "speed": [10.0] * len(t),
+              "power": list(p), "elapseddistance": list(t * 10 / 3600.0)}
+    run = FakeWorkout(start=dt.datetime.combine(today - dt.timedelta(days=6), dt.time(7)), sport="run",
+                      tags=["running"], sport_type="running", channels=run_ch,
+                      metrics={"duration": float(len(t)), "movingduration": float(len(t)), "distance": 8.0})
+    hike = _hike(today - dt.timedelta(days=2), hr=150.0, watts=120.0, climb_w=230.0, climb_s=900)
+    ds = FakeDataset([run, hike], today,
+                     settings={"runthr": 150.0, "runftp": 220.0, **HIKE_SETTINGS})
+    hike_idx = next(w.idx for w in ds.workouts if w.sport == "hike")
+    ds.workouts.reverse()                                 # not in date order
+    q = R.last_quality(ds, today)
+    assert q is not None and q["idx"] == hike_idx
+    assert q["date"] == (today - dt.timedelta(days=2)).isoformat()
