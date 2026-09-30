@@ -223,7 +223,7 @@ without changing them.
   elevation the archive answered for.
 - **Heat**: 熱 = Hadley sum = T °F + dew point °F (`env.heat_penalty_pct`'s x);
   `heat_pct` = its pace penalty; `hot` when the sum > 150 (≥ 4.5 % slower, Hadley's 151–160 band; > 130
-  flagged 78 % of the real efforts, Taiwan's ordinary summer evening). The
+  flagged 75 % of the real efforts, Taiwan's ordinary summer evening). The
   table flags hot efforts; the trend chart colours points by T (diverging blue
   ↔ gray ↔ red around 18 °C, toggle 依氣溫上色, remembered) and rings hot ones.
 - **Degrading**: the index is saved before the weather phase, so a slow or
@@ -324,8 +324,8 @@ brute force: 12/12 equal (the first run had 11/12 — a double rounding of the
 stored peaks, fixed); the 2026-08-22 effort's weather by a direct single-point
 archive query: T 21.7 °C, RH 91 %, dew 20.1 °C, Hadley 139, equal to the API;
 querying the unrounded raw-sample mean point instead gives the same T (Δ 0.00 °C).
-Monthly mean effort temperature runs 16.4 °C (Jan) to 28.2 °C (Jul); the
-watch sensor reads 1.4 °C above the archive on average (409 efforts with both).
+Monthly mean effort temperature runs 15.6 °C (Jan) to 27.9 °C (Jul / Aug); the
+watch sensor reads 1.8 °C above the archive on average (409 efforts with both).
 46 % of efforts are hot (Hadley > 150). Across the version bump 186 / 187 ids
 and the one rename survived.
 
