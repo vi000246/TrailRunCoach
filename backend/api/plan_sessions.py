@@ -41,16 +41,18 @@ def _compute_inputs() -> dict:
     of the last few weeks (for done / missed) and the current phase."""
     from backend.api.overview import _dataset, _plan_stamp, _status
     from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
     from backend.engine import planning
     ds = _dataset()
     today = O.day_to_date(ds.today)
-    key = (id(ds), today, _plan_stamp())
+    prefs = PP.load()
+    key = (id(ds), today, _plan_stamp(), prefs.stamp())       # saving 課表偏好 regenerates
     with _lock:
         hit = _cache.get(key)
     if hit is not None:
         return hit
     st = _status(ds, today)
-    cur = O.week_plan(ds, st, today)
+    cur = O.week_plan(ds, st, today, prefs=prefs)
     monday = dt.date.fromisoformat(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=P.MAX_WEEKS, days=6)
     ph = st.phase
@@ -58,7 +60,7 @@ def _compute_inputs() -> dict:
     horizon = min(cap, max(phase_end, monday + dt.timedelta(days=13)))
     phases = [{"kind": p.kind, "start": p.start, "end": p.end}
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
-    weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant)
+    weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs)
     since = monday - dt.timedelta(weeks=4)
     acts = [O.activity_row(w) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
@@ -67,7 +69,7 @@ def _compute_inputs() -> dict:
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
-           "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant}
+           "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant, "prefs": prefs.to_dict()}
     with _lock:
         _cache.clear()
         _cache[key] = out
@@ -295,6 +297,94 @@ async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSessio
 
 
 # ---------------------------------------------------------------------------
+# 課表偏好 (engine/plan_prefs.py) and same-load conversion (engine/equivalence.py)
+#
+#   GET /api/v1/overview/plan/prefs               the stored preferences (+ defaults)
+#   PUT /api/v1/overview/plan/prefs               validate + save; the page then opens
+#                                                 the reconcile preview (GET /reconcile)
+#   GET /api/v1/overview/plan/equivalence         the athlete's time model + LOO backtest
+#   POST /api/v1/overview/plan/equivalence/design {mode, minutes, climb_per_km} -> km / gain
+# ---------------------------------------------------------------------------
+
+def _prefs_body(p) -> dict:
+    from backend.engine import plan_prefs as PP
+    return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active}
+
+
+@router.get("/prefs")
+async def get_prefs(db: AsyncSession = Depends(get_db)):
+    from backend.engine import plan_prefs as PP
+    from backend.settings.repository import SettingsRepository
+    repo = SettingsRepository(db)
+    return _prefs_body(PP.from_settings({k: await repo.get(k) for k in PP.KEY_FIELDS}))
+
+
+@router.put("/prefs")
+async def put_prefs(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """The whole preference set (fields of plan_prefs.Prefs; missing = default)."""
+    from backend.engine import plan_prefs as PP
+    from backend.settings.repository import SettingsRepository
+    try:
+        p = PP.from_body(body)
+        PP.check(p)
+        repo = SettingsRepository(db)
+        for k, v in p.settings().items():
+            await repo.set(k, v)
+    except (ValueError, TypeError) as e:
+        await db.rollback()
+        raise HTTPException(400, str(e))
+    await db.commit()
+    return _prefs_body(p)
+
+
+_eq_lock = threading.Lock()
+_eq_cache: dict = {}
+
+
+def _equivalence() -> dict:
+    from backend.api.overview import _dataset
+    from backend.engine import equivalence as E
+    from backend.engine import overview as O
+    ds = _dataset()
+    today = O.day_to_date(ds.today)
+    aet = (_compute_inputs().get("thresholds") or {}).get("aet")
+    key = (id(ds), today, aet)
+    with _eq_lock:
+        hit = _eq_cache.get(key)
+    if hit is None:
+        hit = E.summary(ds, today, aet)
+        with _eq_lock:
+            _eq_cache.clear()
+            _eq_cache[key] = hit
+    return hit
+
+
+@router.get("/equivalence")
+async def equivalence():
+    return await run_in_threadpool(_equivalence)
+
+
+@router.post("/equivalence/design")
+async def equivalence_design(body: dict = Body(...)):
+    from backend.engine import equivalence as E
+    mode = body.get("mode")
+    if mode not in E.MODES:
+        raise HTTPException(400, f"mode must be one of {E.MODES}")
+    try:
+        minutes = float(body.get("minutes"))
+        density = float(body.get("climb_per_km") or 0.0)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "minutes / climb_per_km must be numbers")
+    if not (0 < minutes <= 1440 and 0 <= density <= 300):
+        raise HTTPException(400, "minutes 0-1440, climb_per_km 0-300")
+    s = await run_in_threadpool(_equivalence)
+    m = s["model"]
+    model = E.Model(v_flat_kmh=m["v_flat_kmh"], v_flat_source=m["v_flat_source"], road_n=m["road_n"],
+                    modes={k: E.ModeModel(**v) for k, v in m["modes"].items()})
+    return {**E.design(model, mode, minutes, density), "estimate": s["estimate"].get(mode, False)}
+
+
+# ---------------------------------------------------------------------------
 # 課表 page (static/schedule.html): a month / week calendar over the stored plan
 #
 #   GET /api/v1/overview/plan/calendar?start=&end=   sessions + activities + phases
@@ -320,7 +410,8 @@ def _range_extras(start: str, end: str) -> dict:
     lo, hi = min(a, today) - dt.timedelta(days=400), max(b, today) + dt.timedelta(days=400)
     phases = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end}
               for p in planning.phases(st.plan, lo, hi) if p.end >= start and p.start <= end]
-    return {"activities": acts, "phases": phases, "tph": O._tss_per_hour(ds, today)}
+    goal_d = ((st.goals.get("targets") or {}).get("climb_per_km") or {}).get("value")
+    return {"activities": acts, "phases": phases, "tph": O._tss_per_hour(ds, today), "goal_climb_per_km": goal_d}
 
 
 # TSS per hour of a planned session by kind: week_plan() / projection use the
@@ -408,6 +499,23 @@ async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
             "not_pushed": n("not_pushed")}
 
 
+def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
+    """The generator's notes for the weeks in view (課表偏好: capped weeks, CP test
+    exempt, soft-cap excess), each with its week start."""
+    cur = inp.get("cur") or {}
+    weeks = [((cur.get("week") or {}).get("start"), cur.get("notes") or [])] + \
+        [(w.get("start"), w.get("notes") or []) for w in inp.get("weeks") or []]
+    out = []
+    for ws, notes in weeks:
+        if not ws:
+            continue
+        we = (dt.date.fromisoformat(ws) + dt.timedelta(days=6)).isoformat()
+        if we < start or ws > end:
+            continue
+        out += [{"week_start": ws, **n} for n in notes if n.get("src") == "prefs"]
+    return out
+
+
 @router.get("/calendar")
 async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     """Everything the 課表 calendar needs for [start, end] (≤ 120 days)."""
@@ -441,6 +549,8 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
             "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
             "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
             "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES,
+            "prefs": inp.get("prefs"), "goal_climb_per_km": extras.get("goal_climb_per_km"),
+            "plan_notes": _plan_notes(inp, start, end),
             "coros": await _coros_state(db, every)}
 
 
