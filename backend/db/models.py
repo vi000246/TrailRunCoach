@@ -120,6 +120,28 @@ class SyncState(Base):
     coros_user_id: Mapped[Optional[str]] = mapped_column(String(50))
 
 
+class CorosPlanPush(Base):
+    """A week-plan session pushed to COROS Training Hub (sync/coros_workouts.py):
+    session key -> COROS program (library) id + schedule (calendar) ids."""
+    __tablename__ = "coros_plan_push"
+    __table_args__ = (UniqueConstraint("athlete_id", "session_key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    session_key: Mapped[str] = mapped_column(String(80))        # "<week start>/<session id>"
+    week_start: Mapped[str] = mapped_column(String(10), index=True)
+    session_id: Mapped[str] = mapped_column(String(40))
+    day: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)   # ISO date on the calendar
+    title: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    program_id: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    plan_id: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    id_in_plan: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    plan_program_id: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pushed")  # pushed / failed
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pushed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class UserSetting(Base):
     """Per-user key/value settings (backend/settings/repository.py)."""
     __tablename__ = "user_settings"
