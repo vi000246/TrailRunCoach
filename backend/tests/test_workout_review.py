@@ -31,7 +31,8 @@ def _t(minutes):
     (dict(category="road", moving_s=3000, hard_s=900, hard_power_s=100, n_efforts=0), "easy"),
     (dict(category="road", moving_s=3000, hard_s=900), "quality"),                     # HR only, no power
     (dict(category="road", moving_s=3000, hard_s=900, hard_power_s=900, easy_hr=True), "easy"),
-    (dict(category="hike", moving_s=3000, hard_s=1500), "easy"),                       # a steep hill, not a workout
+    (dict(category="hike", moving_s=3000, hard_s=1500), "quality"),                    # sustained climb above threshold counts
+    (dict(category="hike", moving_s=3000, hard_s=1500, easy_hr=True), "easy"),         # avg HR ≤ AeT+3: still easy
     (dict(category="trail", moving_s=80 * 60, hard_s=0), "long"),
     (dict(category="road", moving_s=50 * 60, hard_s=0, long_target_s=60 * 60), "long"),
     (dict(category="road", moving_s=40 * 60, hard_s=0), "easy"),

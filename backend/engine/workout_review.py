@@ -493,9 +493,10 @@ def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
     if plan_test.get("aethr") is not None or (aet_steady and moving_s >= TEST_AET_MIN_S):
         return "test_aet"
     need = _hard_session_s()
-    # a hike above LTHR is a steep hill, not a workout; a run whose average HR
-    # stayed ≤ AeT+3 was an easy run even if short rises spiked the power
-    runs = category in ("road", "trail") and not easy_hr
+    # hikes count too (the athlete's call, 2026-09-30): a sustained climb above
+    # threshold is a quality stimulus for 百岳. A session whose average HR stayed
+    # ≤ AeT+3 was easy even if short rises spiked HR or power.
+    runs = category in ("road", "trail", "hike") and not easy_hr
     if runs and hard_power_s is not None and hard_power_s >= need:
         return "quality"
     if runs and hard_s >= need and (n_efforts is None or n_efforts >= 1):
