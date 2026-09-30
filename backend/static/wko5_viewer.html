@@ -182,6 +182,25 @@ table.zt th.num { text-align: right; }
 .loading { color: var(--muted); padding: 30px 0; text-align: center; }
 .nodata { color: var(--muted); background: var(--code); border-radius: 6px; padding: 14px 12px; margin: 6px 0; text-align: center; }
 .nodata.small { padding: 6px 10px; font-size: 11.5px; text-align: left; }
+.card h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.seg.period { margin-left: auto; padding: 1px; font-size: 11.5px; }
+.seg.period button { padding: 1px 8px; font-weight: 500; }
+.range-note { margin: -2px 0 4px; font-size: 11px; }
+.zbtn { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; border-radius: 4px;
+  font: inherit; font-size: 13px; line-height: 1.4; }
+.zbtn:hover { color: var(--accent); background: var(--accent-soft); }
+/* enlarged chart: near-full viewport; full screen on phones */
+dialog#zoom { width: min(1400px, 96vw); height: 92vh; max-width: none; max-height: none; padding: 0; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel); color: var(--text); box-shadow: 0 12px 48px rgba(0,0,0,.35); }
+dialog#zoom[open] { display: flex; flex-direction: column; }
+dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
+#zoom .zh { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex: none; }
+#zoom .zh h2 { font-size: 15px; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+#zoom .zb { flex: 1; overflow: auto; border: 0; border-radius: 0; display: flex; flex-direction: column; min-height: 0; }
+#zoom .zb > h2 { display: none; }
+#zoom .zb .desc { max-height: none; }
+#zoom .zb .plot { flex: 1; min-height: 360px; height: auto; }
+@media (max-width: 700px) { dialog#zoom { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; margin: 0; } }
 .empty { grid-column: 1 / -1; color: var(--muted); padding: 40px; text-align: center; }
 </style>
 </head>
@@ -248,6 +267,11 @@ table.zt th.num { text-align: right; }
   </aside>
 </div>
 <div class="scrim" id="scrim"></div>
+<dialog id="zoom" aria-labelledby="zoom-title">
+  <div class="zh"><h2 id="zoom-title"></h2><span class="spacer"></span>
+    <button class="iconbtn" id="zoomclose" aria-label="關閉放大"><svg class="i"><use href="#i-x"/></svg></button></div>
+  <div class="zb card" id="zoombody"></div>
+</dialog>
 <script>
 const $ = (id) => document.getElementById(id);
 const API = "/api/v1/wko5";
@@ -385,6 +409,9 @@ async function init() {
     S.view[m] = qv.name;
     S.dash[m] = Math.max(0, /^\d+$/.test(dq) ? Math.min(+dq, qv.dashboards.length - 1) : qv.dashboards.findIndex((d) => d.title === dq));
     r.mode = m;
+    // &chart=<index>: open that chart enlarged once it has loaded (and load it first)
+    const qc = qp.get("chart");
+    if (/^\d+$/.test(qc ?? "")) { S.zoomAfter = +qc; S.focusChart = +qc; }
     history.replaceState(null, "", location.pathname);
   }
   $("m-season").onclick = () => setMode("season");
@@ -607,6 +634,7 @@ async function loadActs() {
 
 async function load() {
   save();
+  if (ZOOM.card) closeZoom(false);
   const token = ++loadToken;
   charts.splice(0).forEach((c) => c.dispose());
   const grid = $("grid"), v = curView();
@@ -649,23 +677,145 @@ async function load() {
       if (token !== loadToken) return;
       if (!["athlete", "workout", "zones", "targets", "map"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
       if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
-      try {
-        const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`);
-        if (token !== loadToken) continue;
-        if (res.kind === "zones") drawZones(card, res);
-        else if (res.kind === "targets") drawTargets(card, res);
-        else if (res.kind === "map") drawMap(card, res);
-        else draw(card, res);
-      } catch (e) {
-        console.error(c.title, e);
-        card.querySelector(".loading")?.remove();
-        card.insertAdjacentHTML("beforeend", `<div class="loading st-err">錯誤: ${esc(e.message)}</div>`);
-      }
+      await renderCard(card, v, di, c, q, token);
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
   // cards above the search hit grew while loading; put it back in view
   if (focusCard && token === loadToken) focusCard.scrollIntoView({ block: "start" });
+}
+
+// ---- one chart card: fetch (with the remembered period) and draw; re-run by the period toggle
+const PERIOD_KEY = "wko5viewer.period";
+const PERIOD_LABELS = [["day", "日"], ["week", "週"], ["month", "月"], ["quarter", "季"], ["year", "年"]];
+function periodPrefs() { try { return JSON.parse(localStorage.getItem(PERIOD_KEY) || "{}"); } catch { return {}; } }
+function savePeriod(k, p) { try { localStorage.setItem(PERIOD_KEY, JSON.stringify({ ...periodPrefs(), [k]: p })); } catch {} }
+function disposeCardCharts(card) {
+  for (const el of card.querySelectorAll(".plot")) {
+    const inst = echarts.getInstanceByDom(el);
+    if (!inst) continue;
+    const i = charts.indexOf(inst);
+    if (i >= 0) charts.splice(i, 1);
+    inst.dispose();
+  }
+}
+async function renderCard(card, v, di, c, q, token) {
+  const pkey = `${v.name}|${di}|${c.index}`;
+  const period = periodPrefs()[pkey];
+  try {
+    const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
+      + (period && c.kind === "athlete" ? `&period=${period}` : ""));
+    if (token !== loadToken) return;
+    card._res = res;
+    card._ctx = { v, di, c, q };
+    disposeCardCharts(card);
+    card.innerHTML = `<h2>${esc(res.title || c.title || (c.kind === "map" ? "地圖" : c.kind))}</h2>`;
+    const zb = document.createElement("button");
+    zb.className = "zbtn";
+    zb.title = zb.ariaLabel = "放大這張圖";
+    zb.textContent = "⤢ 放大";
+    zb.onclick = () => openZoom(card, zb);
+    card.querySelector("h2").appendChild(zb);
+    if (res.period_toggle) {
+      // 日／週／月／季／年: re-bucket this chart (remembered per chart)
+      const seg = document.createElement("div");
+      seg.className = "seg period";
+      seg.setAttribute("role", "group");
+      seg.setAttribute("aria-label", "統計週期");
+      seg.innerHTML = PERIOD_LABELS.map(([p, t]) => `<button data-p="${p}" class="${p === res.x_period ? "on" : ""}"
+        aria-pressed="${p === res.x_period}">${t}</button>`).join("");
+      seg.onclick = async (e) => {
+        const b = e.target.closest("button[data-p]");
+        if (!b || b.dataset.p === card._res?.x_period) return;
+        savePeriod(pkey, b.dataset.p);
+        card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+        await renderCard(card, v, di, c, q, loadToken);
+        if (ZOOM.card === card) fillZoom();
+      };
+      card.querySelector("h2").appendChild(seg);
+    }
+    drawInto(card, res);
+    if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
+  } catch (e) {
+    console.error(c.title, e);
+    card.querySelector(".loading")?.remove();
+    card.insertAdjacentHTML("beforeend", `<div class="loading st-err">錯誤: ${esc(e.message)}</div>`);
+  }
+}
+
+function drawInto(box, res) {
+  if (res.range_note) box.insertAdjacentHTML("beforeend", `<p class="meta range-note">${esc(res.range_note)}</p>`);
+  if (res.kind === "zones") drawZones(box, res);
+  else if (res.kind === "targets") drawTargets(box, res);
+  else if (res.kind === "map") drawMap(box, res);
+  else draw(box, res);
+}
+
+// ---- enlarge one chart: <dialog>, drawn again from the card's JSON (no refetch).
+// Deep link: &chart=<index>; the back button closes it.
+const ZOOM = { card: null, btn: null, pushed: false };
+function openZoom(card, btn) {
+  if (!card._res) return;
+  ZOOM.card = card; ZOOM.btn = btn;
+  const dlg = $("zoom");
+  if (!dlg.open) dlg.showModal();
+  fillZoom();
+  const { v, di, c } = card._ctx;
+  const url = `${location.pathname}?${new URLSearchParams({ view: v.name, dash: di, chart: c.index })}`;
+  if (!ZOOM.pushed) { history.pushState({ zoom: true }, "", url); ZOOM.pushed = true; }
+}
+function fillZoom() {
+  const card = ZOOM.card, res = card?._res;
+  if (!res) return;
+  const body = $("zoombody");
+  disposeCardCharts(body);
+  body.innerHTML = `<h2></h2>`;
+  // title row: the card's title, fix badge and period toggle (the toggle re-renders card + overlay)
+  const h = card.querySelector("h2").cloneNode(true);
+  h.querySelector(".zbtn")?.remove();
+  h.querySelector(".badge.fix")?.remove();
+  $("zoom-title").replaceChildren(...h.childNodes);
+  const seg = $("zoom-title").querySelector(".seg.period");
+  if (seg) seg.onclick = (e) => card.querySelector(`h2 .seg.period button[data-p="${e.target.closest("button")?.dataset.p}"]`)?.click();
+  if (res.fixes?.length) body.insertAdjacentHTML("beforeend", `<p class="desc">已修正單位：${res.fixes.map(esc).join("；")}</p>`);
+  drawInto(body, { ...res, _zoom: true });
+  body.querySelectorAll(".plot").forEach((el) => echarts.getInstanceByDom(el)?.resize());
+}
+function closeZoom(fromHistory) {
+  const dlg = $("zoom");
+  if (!ZOOM.card) return;
+  disposeCardCharts($("zoombody"));
+  $("zoombody").innerHTML = "";
+  if (dlg.open) dlg.close();
+  // the card may have been re-rendered (period toggle) since: focus its current button
+  const btn = ZOOM.card.querySelector(".zbtn") || ZOOM.btn;
+  ZOOM.card = null; ZOOM.btn = null;
+  if (ZOOM.pushed) { ZOOM.pushed = false; if (!fromHistory) history.back(); }
+  btn?.focus();
+  charts.forEach((c) => c.resize());
+}
+$("zoomclose").onclick = () => closeZoom(false);
+$("zoom").addEventListener("cancel", (e) => { e.preventDefault(); closeZoom(false); });   // Esc
+$("zoom").addEventListener("click", (e) => { if (e.target === $("zoom")) closeZoom(false); });   // backdrop
+window.addEventListener("popstate", () => { if (ZOOM.card) { ZOOM.pushed = false; closeZoom(true); } });
+window.addEventListener("resize", () => $("zoombody").querySelectorAll(".plot").forEach((el) => echarts.getInstanceByDom(el)?.resize()));
+
+// ---- period-total charts: one category per bucket (day / week / month / quarter / year)
+function bucketOf(isoDate, period) {
+  const d = new Date(String(isoDate).slice(0, 10) + "T00:00:00Z");
+  if (period === "week") d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+  else if (period === "month") d.setUTCDate(1);
+  else if (period === "quarter") { d.setUTCMonth(Math.floor(d.getUTCMonth() / 3) * 3); d.setUTCDate(1); }
+  else if (period === "year") { d.setUTCMonth(0); d.setUTCDate(1); }
+  return d.toISOString().slice(0, 10);
+}
+function bucketLabel(isoDate, period, long) {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  if (period === "year") return `${y}`;
+  if (period === "quarter") return `${y} Q${Math.floor((m - 1) / 3) + 1}`;
+  if (period === "month") return `${y}/${m}`;
+  if (long) return `${y}/${m}/${d}${period === "week" ? " 起的一週" : ""}`;
+  return `${m}/${d}`;
 }
 
 // x of a points series as text: date / datetime / elapsed seconds / duration / value
@@ -694,8 +844,12 @@ function lastVal(s) {
 
 function draw(card, res) {
   card.querySelector(".loading")?.remove();
-  if (res.fixes && res.fixes.length) card.querySelector("h2")?.insertAdjacentHTML("beforeend",
-    ` <span class="badge fix" title="${esc(res.fixes.join("\n"))}">已修正單位</span>`);
+  if (res.fixes && res.fixes.length) {
+    const badge = ` <span class="badge fix" title="${esc(res.fixes.join("\n"))}">已修正單位</span>`;
+    const seg = card.querySelector("h2 > .seg");
+    if (seg) seg.insertAdjacentHTML("beforebegin", badge);
+    else card.querySelector("h2")?.insertAdjacentHTML("beforeend", badge);
+  }
   if (res.description) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
   // nothing to draw: say why (no power in this workout, no activity this week, PD fit failed…)
   if (res.empty) card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`);
@@ -855,9 +1009,14 @@ function drawPlot(card, res, series) {
   // x kind comes from the data: date / datetime (season), seconds (elapsed time
   // in a workout), duration (mean-max / PD curves), value (x-y pairs)
   const firstPts = series.find((s) => s.data.kind === "points");
-  const xKind = firstPts?.data.x || (res.workout != null ? "seconds" : "date");
+  // period totals (sum(x, startofmonth(date))…): one category per bucket instead of a day axis
+  const cat = res.x_period && res.buckets?.length ? res.x_period : null;
+  const cats = cat ? res.buckets : [];
+  const catIdx = new Map(cats.map((b, i) => [b, i]));
+  const xKind = cat ? "category" : firstPts?.data.x || (res.workout != null ? "seconds" : "date");
   const xUnit = firstPts?.x_unit || UNONE;
-  series = series.filter((s) => s.data.kind !== "points" || (s.data.x || xKind) === xKind);
+  series = series.filter((s) => s.data.kind !== "points"
+    || (cat ? ["date", "datetime"].includes(s.data.x) : (s.data.x || xKind) === xKind));
   // a vertical line (WKO5's (x,) pair) lives on the x axis; it doesn't get a y axis of its own
   const axisIds = [...new Set(series.filter((s) => s.data.kind !== "vline").map((s) => s.y_axis || "NONE"))];
   if (!axisIds.length) axisIds.push("NONE");
@@ -898,7 +1057,7 @@ function drawPlot(card, res, series) {
     const lineType = s.line_style === "dot" ? "dotted" : s.line_style === "dash" ? "dashed" : "solid";
     const width = s.line_width === "thin" ? 1 : s.line_width === "thick" ? 3 : 1.5;
     if (s.data.kind === "vline") {
-      if (s.data.x == null || (xKind === "duration" && !(s.data.x > 0))) continue;
+      if (cat || s.data.x == null || (xKind === "duration" && !(s.data.x > 0))) continue;
       out.push({ name: s.name, type: "line", yAxisIndex: 0, data: [], color,
         markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ xAxis: s.data.x }] } });
       continue;
@@ -915,6 +1074,30 @@ function drawPlot(card, res, series) {
       continue;
     }
     const perWorkout = s.data.x === "datetime";
+    if (cat) {
+      if (perWorkout) {
+        // per-workout values: each workout's dot in its bucket
+        const d = s.data.points.filter((p) => p[1] != null).map((p) => [catIdx.get(bucketOf(p[0], cat)), p[1]])
+          .filter((p) => p[0] != null);
+        out.push({ name: s.name, yAxisIndex: yi, data: d, color, type: "scatter", symbolSize: 5 });
+        continue;
+      }
+      // a bucket total sits on the bucket's first day; a daily series is read at that day
+      const arr = new Array(cats.length).fill(null);
+      for (const [x, y] of s.data.points) {
+        const k = String(x).slice(0, 10), i = catIdx.get(k);
+        if (i != null && y != null) arr[i] = y;
+      }
+      if (s.type === "bar" || s.type === "stackedbar") {
+        out.push({ name: s.name, yAxisIndex: yi, data: arr, color, type: "bar",
+          stack: s.type === "stackedbar" ? "st" + yi : undefined, barCategoryGap: "25%" });
+      } else {
+        out.push({ name: s.name, yAxisIndex: yi, data: arr, color, type: "line", connectNulls: false,
+          step: s.type === "squareline" ? "middle" : false, showSymbol: cats.length <= 60, symbolSize: 4,
+          lineStyle: { type: lineType, width }, areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined });
+      }
+      continue;
+    }
     const pts = xKind === "duration" ? s.data.points.filter((p) => p[0] > 0) : s.data.points;
     const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false, sampling: "lttb" };
     if (s.type === "bar" || s.type === "stackedbar") {
@@ -933,7 +1116,10 @@ function drawPlot(card, res, series) {
   const lbl = { color: muted, fontSize: 10, hideOverlap: true };
   const axLine = { lineStyle: { color: line } };
   let xAxis;
-  if (xKind === "duration") {
+  if (cat) {
+    xAxis = { type: "category", data: cats.map((b) => bucketLabel(b, cat)), axisLine: axLine,
+      axisTick: { alignWithLabel: true }, axisLabel: { ...lbl } };
+  } else if (xKind === "duration") {
     const xs = out.flatMap((o) => (o.data || []).map((p) => p[0])).filter((x) => x > 0);
     const xmin = xs.length ? Math.min(...xs) : 1, xmax = xs.length ? Math.max(...xs) : 3600;
     let ticks = DUR_TICKS.filter((t) => t >= xmin * 0.999 && t <= xmax * 1.001);
@@ -958,22 +1144,33 @@ function drawPlot(card, res, series) {
   const unitByName = {};
   for (const s of series) unitByName[s.name] ??= s.unit;
   const tooltip = { trigger: "axis", confine: true, formatter: (ps) => {
-    ps = [].concat(ps).filter((p) => Array.isArray(p.value) && p.value[1] != null);
+    // category (bucket) series carry a bare y; other series [x, y]
+    const yOf = (p) => Array.isArray(p.value) ? p.value[1] : p.value;
+    ps = [].concat(ps).filter((p) => (cat || Array.isArray(p.value)) && yOf(p) != null);
     if (!ps.length) return "";
-    const x = ps[0].value[0];
-    const head = xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
+    const x = cat ? null : ps[0].value[0];
+    const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
+      : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
-    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(p.value[1], series[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>`);
+    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), series[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>`);
     if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
     return `<div style="font-size:11.5px">${esc(head)}<br>${rows.join("<br>")}</div>`;
   } };
+  // enlarged: the whole legend (click a name to hide / show it) and a zoom slider under the x axis
+  const zoom = !!res._zoom;
+  const legendRows = zoom ? Math.ceil(out.length / Math.max(1, Math.floor((el.clientWidth || 900) / 170))) : 1;
   chart.setOption({
     animation: false,
-    grid: { left: 52, right: 20 + Math.max(0, axisIds.length - 1) * 46, top: 26, bottom: 54 },
+    grid: { left: 52, right: 20 + Math.max(0, axisIds.length - 1) * 46, top: 26,
+      bottom: zoom ? 64 + legendRows * 22 : 54 },
     tooltip,
-    legend: { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } },
+    legend: zoom ? { type: "plain", bottom: 0, textStyle: { color: text, fontSize: 11.5 } }
+      : { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } },
     xAxis, yAxis, series: out,
-    dataZoom: [{ type: "inside" }],
+    dataZoom: zoom && xKind !== "duration"
+      ? [{ type: "inside" }, { type: "slider", bottom: 8 + legendRows * 22, height: 18,
+          borderColor: line, textStyle: { color: muted, fontSize: 10 } }]
+      : [{ type: "inside" }],
   });
   new ResizeObserver(() => chart.resize()).observe(el);
 }
