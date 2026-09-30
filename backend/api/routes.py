@@ -1,0 +1,400 @@
+"""
+Repeated segments and routes API (backend/engine/routes.py;
+docs/spec/route-progress.spec.md).
+
+Nothing here waits for a build: the first request starts one in the
+background and every endpoint answers from the last saved index, with the
+build's progress in `status`.
+"""
+from __future__ import annotations
+
+import datetime as dt
+import hashlib
+import json
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
+
+import numpy as np
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+from backend.engine import routes as R
+from backend.engine.algorithms import route_match as RM
+
+router = APIRouter(prefix="/api/v1/routes", tags=["routes"])
+workout_router = APIRouter(prefix="/api/v1/wko5", tags=["routes"])
+
+STORE = R.RouteStore()
+BUILDER = R.Builder(STORE)
+_CHECKED = {"at": 0.0}
+RECHECK_S = 60.0
+
+
+def _ds():
+    """The shared Dataset of the viewer (index -> file, plan, thresholds)."""
+    from backend.api.wko5views import _dataset
+    return _dataset()
+
+
+def _source():
+    """(workouts, reader) for the builder — built inside the build thread."""
+    from backend.engine.wko5expr.config import EngineConfig
+    from backend.engine.wko5expr.dataset import Dataset
+    from backend.api.wko5views import ATHLETE_DIR
+    ds = Dataset(ATHLETE_DIR, config=EngineConfig.load())
+    return _workouts(ds), (lambda f, p, meta: R.read_track(f, p, meta, ds.corrections))
+
+
+def _workouts(ds) -> list[tuple[str, Path, dict]]:
+    out = []
+    for w in ds.workouts:
+        if R.family_of(w.sport, w.sport_type) is None:
+            continue
+        p = ds.dir / w.entry.file
+        if not p.exists():
+            continue
+        out.append((w.entry.file, p, {"start": w.entry.start.isoformat(), "sport": w.sport,
+                                      "sport_type": w.sport_type, "lthr": ds.sport_setting("thr", w),
+                                      "climbing": w.metrics.get("climbing")}))
+    return out
+
+
+def _ensure_fresh() -> None:
+    """Start an (incremental) build when files changed; checked at most once a minute."""
+    import time
+    if BUILDER.running():
+        return
+    now = time.time()
+    if STORE.load_index() is not None and now - _CHECKED["at"] < RECHECK_S:
+        return
+    _CHECKED["at"] = now
+    try:
+        if BUILDER.stale(_workouts(_ds())):
+            BUILDER.start(_source)
+    except Exception:          # noqa: BLE001 — never block a page on the check
+        BUILDER.start(_source)
+
+
+# ---------------------------------------------------------------------------
+# index -> rows
+# ---------------------------------------------------------------------------
+
+_CACHE: dict = {"mtime": None, "view": None}
+
+
+def _index() -> Optional[dict]:
+    try:
+        m = STORE.index_path.stat().st_mtime_ns
+    except OSError:
+        return None
+    if _CACHE["mtime"] != m:
+        idx = STORE.load_index()
+        _CACHE.update(mtime=m, view=_materialise(idx) if idx else None)
+    return _CACHE["view"]
+
+
+def eid(file: str, i0: int) -> str:
+    return hashlib.sha1(f"{file}@{i0}".encode()).hexdigest()[:10]
+
+
+def _materialise(idx: dict) -> dict:
+    """Efforts with metrics, ranks and the list rows — computed once per index."""
+    items = {}
+    for s in idx["segments"]:
+        efforts = [{"id": eid(e["file"], e["i0"]), **e} for e in s["efforts"]]
+        items[s["id"]] = _item(s, efforts, key="elapsed_s")
+    for r in idx["routes"]:
+        efforts = [{"id": eid(e["file"], e["i0"]), **e} for e in r["efforts"]]
+        items[r["id"]] = _item(r, efforts, key="moving_s")
+    return {"built_at": idx.get("built_at"), "items": items}
+
+
+def _item(s: dict, efforts: list[dict], key: str) -> dict:
+    """Segments rank by elapsed time (Strava's segment convention); routes by
+    moving time (a whole activity includes stops you chose to make)."""
+    timed = sorted((e for e in efforts if e.get(key)), key=lambda e: e[key])
+    rank = {e["id"]: k + 1 for k, e in enumerate(timed)}
+    best = timed[0][key] if timed else None
+    for e in efforts:
+        e["rank"] = rank.get(e["id"])
+        e["delta_best_s"] = (e[key] - best) if (best is not None and e.get(key)) else None
+    last = efforts[-1] if efforts else None
+    lat, lon = s["lat"], s["lon"]
+    sports = sorted({e["sport_type"] or e["sport"] for e in efforts})
+    return {
+        "id": s["id"], "kind": s["kind"], "kind_zh": R.KIND_ZH[s["kind"]], "family": s["family"],
+        "direction": s.get("direction", "flat"), "time_key": key,
+        "auto_name": s.get("auto_name") or R.KIND_ZH[s["kind"]],
+        "length_m": s["length_m"], "gain_m": s["gain_m"], "ref_file": s["ref_file"],
+        "lat": lat, "lon": lon, "sports": sports,
+        "n_efforts": len(efforts), "n_activities": len({e["file"] for e in efforts}),
+        "best_s": best, "last_s": last.get(key) if last else None,
+        "last_date": last["start"] if last else None, "first_date": efforts[0]["start"] if efforts else None,
+        "efforts": efforts,
+    }
+
+
+def _row(it: dict, names: dict) -> dict:
+    row = {k: v for k, v in it.items() if k not in ("efforts", "lat", "lon")}
+    row["name"] = names.get(it["id"]) or it["auto_name"]
+    row["renamed"] = it["id"] in names
+    key = it["time_key"]
+    row["spark"] = [[e["start"][:10], e.get(key)] for e in it["efforts"][-20:]]
+    row["start_ll"] = [it["lat"][0], it["lon"][0]]
+    return row
+
+
+def _status() -> dict:
+    return dict(BUILDER.status)
+
+
+# ---------------------------------------------------------------------------
+# endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("")
+def list_routes(kind: Optional[str] = None, direction: Optional[str] = None,
+                sport: Optional[str] = None, min_efforts: int = 2, limit: Optional[int] = None):
+    """Segments and routes, most-done and most-recent first.
+    kind: segment | route | climb | descent | stretch; direction: up | down | flat;
+    sport: a sport type ("trail running") or group ("run")."""
+    _ensure_fresh()
+    view = _index()
+    if view is None:
+        return {"status": _status(), "built_at": None, "total": 0, "rows": [], "sports": []}
+    names = STORE.names()
+    rows = []
+    all_sports = set()
+    for it in view["items"].values():
+        all_sports.update(it["sports"])
+        if kind == "segment" and it["kind"] == "route" or kind == "route" and it["kind"] != "route":
+            continue
+        if kind in ("climb", "descent", "stretch") and it["kind"] != kind:
+            continue
+        if direction and it["direction"] != direction:
+            continue
+        if sport and not any(sport == e["sport_type"] or sport == e["sport"] for e in it["efforts"]):
+            continue
+        if it["n_activities"] < min_efforts:
+            continue
+        rows.append(_row(it, names))
+    rows.sort(key=lambda r: (-r["n_efforts"], r["last_date"] or ""), reverse=False)
+    rows.sort(key=lambda r: (r["n_efforts"], r["last_date"] or ""), reverse=True)
+    total = len(rows)
+    return {"status": _status(), "built_at": view["built_at"], "total": total,
+            "rows": rows[:limit] if limit else rows, "sports": sorted(all_sports),
+            "counts": _counts(view)}
+
+
+def _counts(view) -> dict:
+    c: dict = {}
+    for it in view["items"].values():
+        c[it["kind"]] = c.get(it["kind"], 0) + 1
+    return c
+
+
+@router.get("/status")
+def build_status():
+    return _status()
+
+
+class RebuildBody(BaseModel):
+    full: bool = False
+
+
+@router.post("/rebuild")
+def rebuild(body: Optional[RebuildBody] = None):
+    full = bool(body and body.full)
+    started = BUILDER.start(_source, full=full)
+    return {"started": started, "status": _status()}
+
+
+@router.get("/page", include_in_schema=False)
+def page():
+    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "routes.html")
+
+
+def _get(rid: str) -> dict:
+    view = _index()
+    if view is None or rid not in view["items"]:
+        raise HTTPException(404, "route not found")
+    return view["items"][rid]
+
+
+def _file_to_idx() -> dict[str, int]:
+    try:
+        return {w.entry.file: w.idx for w in _ds().workouts}
+    except Exception:      # noqa: BLE001
+        return {}
+
+
+def _phase_labels(days: list[dt.date]) -> list[Optional[str]]:
+    try:
+        from backend.engine.planning import Plan, phases
+        plan = Plan.load()
+        if not days:
+            return []
+        ph = phases(plan, min(days) - dt.timedelta(days=400), max(days) + dt.timedelta(days=400))
+        out = []
+        for d in days:
+            p = next((p for p in ph if dt.date.fromisoformat(p.start) <= d <= dt.date.fromisoformat(p.end)), None)
+            out.append(p.label if p else None)
+        return out
+    except Exception:      # noqa: BLE001 — phases are context, not required
+        return [None] * len(days)
+
+
+@router.get("/{rid}")
+def detail(rid: str):
+    it = _get(rid)
+    names = STORE.names()
+    f2i = _file_to_idx()
+    efforts = [dict(e) for e in it["efforts"]]
+    labels = _phase_labels([dt.date.fromisoformat(e["start"][:10]) for e in efforts])
+    for e, lab in zip(efforts, labels):
+        e["phase"] = lab
+        e["workout"] = f2i.get(e["file"])
+    out = {k: v for k, v in it.items() if k != "efforts"}
+    out["name"] = names.get(rid) or it["auto_name"]
+    out["renamed"] = rid in names
+    out["efforts"] = efforts
+    out["status"] = _status()
+    return out
+
+
+class RenameBody(BaseModel):
+    name: str
+
+
+@router.patch("/{rid}")
+def rename(rid: str, body: RenameBody):
+    _get(rid)
+    STORE.set_name(rid, body.name.strip())
+    return {"id": rid, "name": body.name.strip() or _get(rid)["auto_name"], "renamed": bool(body.name.strip())}
+
+
+@router.get("/{rid}/compare")
+def compare(rid: str, a: str, b: str, step: float = 25.0):
+    """Two efforts on the segment's distance axis: each effort's points are
+    projected in order onto the reference path (route_match.along), then
+    elapsed time, HR, power and elevation are interpolated every `step` m.
+    gap_s = t_b − t_a at the same distance (positive: b is behind)."""
+    it = _get(rid)
+    by_id = {e["id"]: e for e in it["efforts"]}
+    if a not in by_id or b not in by_id:
+        raise HTTPException(404, "effort not found")
+    ref_lat, ref_lon = it["lat"], it["lon"]
+    if it["kind"] == "route":
+        tr = BUILDER.track(it["ref_file"])
+        ref_lat, ref_lon = list(tr.lat), list(tr.lon)
+    lat0, lon0 = ref_lat[0], ref_lon[0]
+    ref = RM.project(ref_lat, ref_lon, lat0, lon0)
+    L = float(RM.path_length(ref)[-1])
+    grid = np.arange(0.0, L + 1e-6, step)
+    if grid[-1] < L:
+        grid = np.append(grid, L)
+    cum = RM.path_length(ref)
+    glat = np.interp(grid, cum, ref_lat)
+    glon = np.interp(grid, cum, ref_lon)
+    series = {}
+    for key in (a, b):
+        e = by_id[key]
+        tr = BUILDER.track(e["file"])
+        if tr is None:
+            raise HTTPException(404, "track missing")
+        series[key] = _along_series(tr, e["i0"], e["i1"], ref, grid, lat0, lon0)
+    ta, tb = np.asarray(series[a].pop("_t")), np.asarray(series[b].pop("_t"))
+    gap = tb - ta
+    return {
+        "id": rid, "length_m": round(L, 1), "x_m": [round(float(x), 1) for x in grid],
+        "lat": [round(float(x), 6) for x in glat], "lon": [round(float(x), 6) for x in glon],
+        "a": {"effort": _brief(by_id[a]), **series[a]}, "b": {"effort": _brief(by_id[b]), **series[b]},
+        "gap_s": [None if not np.isfinite(g) else round(float(g), 1) for g in gap],
+    }
+
+
+def _brief(e: dict) -> dict:
+    return {k: e.get(k) for k in ("id", "start", "sport_type", "elapsed_s", "moving_s", "avg_hr",
+                                  "avg_power", "vam", "rank")}
+
+
+def _along_series(tr, i0: int, i1: int, ref: np.ndarray, grid: np.ndarray, lat0, lon0) -> dict:
+    xy = tr.xy(lat0, lon0)[i0:i1 + 1]
+    s = RM.along(ref, xy)
+    t = tr.t[i0:i1 + 1] - tr.t[i0]
+    # strictly increasing x for interpolation: keep the last point of each tie
+    s2, keep = [], []
+    for k in range(len(s)):
+        if keep and s[k] <= s2[-1] + 1e-6:
+            s2[-1], keep[-1] = s[k], k
+        else:
+            s2.append(s[k]); keep.append(k)
+    s2 = np.asarray(s2)
+    keep = np.asarray(keep)
+    # an effort starts / ends within 60 m of the segment's ends (the match
+    # rule): up to that far past its own first / last projection it holds its
+    # end values, beyond that it has no data
+    outside = (grid < s2[0] - RM.END_TOL_M) | (grid > s2[-1] + RM.END_TOL_M)
+
+    def interp(v):
+        out = np.interp(grid, s2, v)
+        out[outside] = np.nan
+        return out
+
+    tt = interp(t[keep])
+    c = tr.cols
+
+    def interval_avg(num, den):
+        """Mean of a channel over each interval between kept points, placed at the interval's end."""
+        n = np.diff(c[num][i0:i1 + 1])
+        d = np.diff(c[den][i0:i1 + 1])
+        with np.errstate(invalid="ignore", divide="ignore"):
+            v = np.where(d > 0, n / d, np.nan)
+        v = np.concatenate(([v[0] if len(v) else np.nan], v))
+        return interp(v[keep])
+
+    hr = interval_avg("chr", "chrs")
+    pw = interval_avg("cpw", "cpws")
+    elev = interp(tr.e[i0:i1 + 1][keep])
+    # pace over a 100 m window of the common axis
+    win = max(1, int(round(100.0 / max(1.0, grid[1] - grid[0] if len(grid) > 1 else 25.0))))
+    pace = np.full(len(grid), np.nan)
+    for k in range(len(grid)):
+        lo = max(0, k - win)
+        if k > lo and np.isfinite(tt[k]) and np.isfinite(tt[lo]) and grid[k] > grid[lo]:
+            pace[k] = (tt[k] - tt[lo]) / 60.0 / ((grid[k] - grid[lo]) / 1000.0)
+    j = lambda arr, nd: [None if not np.isfinite(v) else round(float(v), nd) for v in arr]
+    return {"t_s": j(tt, 1), "hr": j(hr, 0), "power": j(pw, 0), "elev": j(elev, 1),
+            "pace_min_km": j(pace, 2), "_t": tt}
+
+
+@workout_router.get("/workouts/{idx}/segments")
+def workout_segments(idx: int):
+    """Segments and routes this activity matched, with its rank on each."""
+    ds = _ds()
+    if not 0 <= idx < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    _ensure_fresh()
+    file = ds.workouts[idx].entry.file
+    view = _index()
+    names = STORE.names()
+    out = []
+    if view is not None:
+        for it in view["items"].values():
+            if it["n_activities"] < 2:
+                continue
+            for e in it["efforts"]:
+                if e["file"] != file:
+                    continue
+                n_timed = sum(1 for x in it["efforts"] if x.get(it["time_key"]))
+                out.append({"id": it["id"], "name": names.get(it["id"]) or it["auto_name"],
+                            "kind": it["kind"], "kind_zh": it["kind_zh"], "length_m": it["length_m"],
+                            "gain_m": it["gain_m"], "rank": e["rank"], "of": n_timed,
+                            "time_s": e.get(it["time_key"]), "time_key": it["time_key"],
+                            "delta_best_s": e["delta_best_s"], "effort": e["id"],
+                            "n_efforts": it["n_efforts"]})
+    out.sort(key=lambda r: (r["kind"] == "route", r["rank"] or 999, -r["n_efforts"]))
+    return {"workout": idx, "file": file, "segments": out, "status": _status(),
+            "built": view is not None}
