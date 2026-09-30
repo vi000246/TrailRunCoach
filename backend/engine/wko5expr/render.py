@@ -69,10 +69,12 @@ def workout_result_to_json(r: Any, ds: Dataset, w) -> dict:
         if r.items and all(isinstance(i, RangeV) for i in r.items):
             i = r.items[0]
             return {"kind": "band", "range": [_f(i.lo), _f(i.hi)]}
-        return {"kind": "values", "values": [_f(i) for i in r.items]}
+        return _list_json(r)
     if isinstance(r, PairV) and r.x is None:
         y = _f(r.y)
         return {"kind": "hline", "y": y} if y is not None else {"kind": "none"}
+    if isinstance(r, str):
+        return {"kind": "value", "value": r}
     if isinstance(r, (Daily, WS)):
         # athleterange(...) inside a workout chart: report the latest value
         js = result_to_json(r, ds, int(math.floor(w.day)) - 1, int(math.floor(w.day)))
@@ -81,9 +83,29 @@ def workout_result_to_json(r: Any, ds: Dataset, w) -> dict:
     return {"kind": "value", "value": _f(r)}
 
 
+def _cell(v):
+    """A list / pair element for JSON: numbers (None for na) or strings."""
+    return v if isinstance(v, str) else _f(v)
+
+
+def _list_json(r: ListV) -> dict:
+    """{a, b, ...} values (numbers or strings, e.g. string(@from)+" to "+...),
+    or a list of (x, y) pairs such as bin(power, {("Recovery", 150), ...})."""
+    if r.items and all(isinstance(i, PairV) and i.x is not None
+                       and not isinstance(i.x, np.ndarray) for i in r.items):
+        return {"kind": "points", "x": "value",
+                "points": [[_cell(i.x), _cell(i.y)] for i in r.items]}
+    return {"kind": "values", "values": [_cell(i) for i in r.items]}
+
+
 def _curve_json(r) -> dict:
-    pts = [[_f(x), _f(y)] for x, y in zip(r.xs, r.ys) if _f(y) is not None]
-    out = {"kind": "points", "x": "duration", "points": pts}
+    xkind = getattr(r, "xkind", "duration")
+    if xkind == "date":
+        pts = [[_day_iso(x), _f(y)] for x, y in zip(r.xs, r.ys)
+               if _f(y) is not None and _f(x) is not None]
+    else:
+        pts = [[_f(x), _f(y)] for x, y in zip(r.xs, r.ys) if _f(y) is not None]
+    out = {"kind": "points", "x": xkind, "points": pts}
     if r.fit:
         out["fit"] = {k: _f(v) for k, v in r.fit.items()
                       if k in ("FTP", "FRC", "Pmax", "TTE", "tte", "vo2max", "tau1", "tau2", "D")}
@@ -101,8 +123,8 @@ def result_to_json(r: Any, ds: Dataset, begin: int, end: int) -> dict:
         return {"kind": "points", "x": "date", "points": pts}
     if isinstance(r, WS):
         pts = sorted(
-            ([_dt_iso(ds.workouts[k].day), _f(v)] for k, v in r.items()
-             if begin <= math.floor(ds.workouts[k].day) <= end and _f(v) is not None),
+            ([_dt_iso(ds.workouts[k].day), _cell(v)] for k, v in r.items()
+             if begin <= math.floor(ds.workouts[k].day) <= end and _cell(v) not in (None, "")),
             key=lambda p: p[0])
         return {"kind": "points", "x": "datetime", "points": pts}
     if isinstance(r, PairV):
@@ -116,7 +138,9 @@ def result_to_json(r: Any, ds: Dataset, begin: int, end: int) -> dict:
         if r.items and all(isinstance(i, RangeV) for i in r.items):
             i = r.items[0]
             return {"kind": "band", "range": [_f(i.lo), _f(i.hi)]}
-        return {"kind": "values", "values": [_f(i) for i in r.items]}
+        return _list_json(r)
+    if isinstance(r, str):
+        return {"kind": "values", "values": [r]}
     y = _f(r)
     if y is not None:
         return {"kind": "hline", "y": y}
@@ -126,14 +150,24 @@ def result_to_json(r: Any, ds: Dataset, begin: int, end: int) -> dict:
 def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
                  sports: Optional[set[str]] = None, workout=None) -> dict:
     """Athlete chart over [begin, end] (RHE sport filter), or a workout chart
-    for `workout` (a dataset Workout)."""
+    for `workout` (a dataset Workout).
+
+    Every series and axis carries unit metadata (label / kind / decimals, see
+    units.py). Outside parity mode imperial units become metric: english() is
+    evaluated as metric() and FT/MI/MPH/PACEMI ids are relabelled."""
+    from backend.engine.wko5expr import render_units as RU
+    parity = bool(getattr(getattr(ds, "config", None), "parity", True))
+    sport = RU.sport_hint(workout, sports)
+    notes = list(chart.get("fixes") or [])
     ev = Evaluator(ds, begin, end, sports=sports)
     out_series = []
     for s in chart.get("series", []):
-        expr = s.get("expression")
+        expr, y_id, s_notes = RU.prepare(s, parity)
+        notes += [n for n in s_notes if n not in notes]
         t0 = time.perf_counter()
         entry = {k: s.get(k) for k in ("id", "name", "type", "color", "y_axis", "x_axis",
-                                       "line_style", "line_width", "expression")}
+                                       "line_style", "line_width")}
+        entry["expression"] = expr
         if not expr or not expr.strip():
             entry["data"] = {"kind": "none"}
         else:
@@ -146,13 +180,16 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
                 entry["data"] = {"kind": "error", "message": str(e)}
             except Exception as e:  # keep the page usable; surface the bug
                 entry["data"] = {"kind": "error", "message": f"{type(e).__name__}: {e}"}
+        RU.finish(entry, s, y_id, parity, sport)
         entry["ms"] = round((time.perf_counter() - t0) * 1000)
         out_series.append(entry)
     return {
         "title": chart.get("title"),
         "description": chart.get("description"),
         "kind": chart.get("kind"),
-        "axes": chart.get("axes"),
+        "axes": RU.axes(chart.get("axes"), out_series, parity, sport),
+        "parity": parity,
+        "fixes": notes,
         "begin": _day_iso(ev.begin),
         "end": _day_iso(ev.end),
         "workout": None if workout is None else workout.idx,

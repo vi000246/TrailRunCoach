@@ -45,6 +45,8 @@ from typing import Iterable, Optional
 
 REPO_VIEWS = Path(__file__).resolve().parents[3] / "views"
 USER_VIEWS = Path.home() / ".wko5coach" / "views"
+# JSON files in the views folders that are not views (see chartfixes.py)
+NON_VIEW_FILES = {"wko5_fixes.json"}
 
 SERIES_DEFAULTS = {
     "id": None, "name": None, "type": "line", "expression": "", "color": None,
@@ -70,15 +72,23 @@ def _chart(raw: dict, where: str) -> dict:
     if "title" not in raw:
         raise CustomViewError(f"{where}: chart needs a title")
     kind = raw.get("kind", "athlete")
-    if kind not in ("athlete", "workout"):
-        raise CustomViewError(f"{where}: kind must be 'athlete' or 'workout'")
-    return {
+    if kind not in ("athlete", "workout", "zones", "targets"):
+        raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones' or 'targets'")
+    out = {
         "title": raw["title"],
         "description": raw.get("description"),
         "kind": kind,
         "axes": raw.get("axes") or [],
         "series": [_series(s, f"{where}/{raw['title']}") for s in raw.get("series", [])],
     }
+    if kind == "zones":
+        # a WKO5-style zone table: {"kind": "zones", "system": "frielhr", "days": 30}
+        from backend.engine.zones import SYSTEMS
+        if raw.get("system") not in SYSTEMS:
+            raise CustomViewError(f"{where}/{raw['title']}: system must be one of {sorted(SYSTEMS)}")
+        out["system"] = raw["system"]
+        out["days"] = int(raw.get("days", 30))
+    return out
 
 
 def parse_view(data: dict, source_path: Optional[Path] = None) -> dict:
@@ -108,6 +118,8 @@ def load_custom_views(dirs: Optional[Iterable[Path]] = None) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for d in (list(dirs) if dirs is not None else view_dirs()):
         for p in sorted(Path(d).glob("*.json")):
+            if p.name in NON_VIEW_FILES:
+                continue
             try:
                 view = parse_view(json.loads(p.read_text("utf-8")), p)
             except (OSError, ValueError) as e:

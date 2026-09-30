@@ -11,13 +11,22 @@ Top-level records (reverse-engineered 2026-09-29, WKO5 5.0.587):
           syncedvalue, tpid}} — dates are day numbers since 1901-01-01
     3403  current PMC snapshot: 108 {101 "atl"|"ctl"|"tsb"|"ramp", 102 value}
     3201  workout index: 3202 per workout {3203 "UNIFORM:<year>/<file>.wko4",
-          3213 sport ("Trail Running"), 3209 sport group ("Run"),
+          3213 title (WKO5 sets it to the workout type on import: "Trail Running"),
+          3209 sport group ("Run"), 3206 description, 3207 notes, 3210 code,
           3010 FTP at the time, 3205 {103 day#, 104 ms-of-day} start,
           4202 ranges incl. "Entire Workout" with metric fields 42xx}
+
+Text fields (DISASSEMBLY, WKO5.exe 5.0.587): the index-entry serializer 0x4fb517
+writes 3213 <- +0x144, 3206 <- +0x15c, 3207 <- +0x174, 3209 <- +0x18c,
+3210 <- +0x1a4; the summary-level variable resolver 0x4f93e6 reads `title` from
++0x144 (0x4f95da), `desc`/`description` from +0x15c (0x4f4990), `notes` from
++0x174 (0x4f49c0), `code` from +0x1a4. 3206 / 3207 are gzip-compressed by the
+writer (0x4f8c70) when that is shorter, and gunzipped on read (0x4d7400).
 """
 from __future__ import annotations
 
 import datetime as dt
+import gzip
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -37,15 +46,53 @@ def _num(v):
     return None if v is None or v == AUTO else v
 
 
+def text_field(value) -> str:
+    """A WKO5 free-text field: str, or gzip bytes (magic 1f 8b), or absent -> ""."""
+    if isinstance(value, (bytes, bytearray)):
+        raw = bytes(value)
+        if raw[:2] == b"\x1f\x8b":
+            try:
+                raw = gzip.decompress(raw)
+            except (OSError, EOFError):
+                return ""
+        return raw.decode("utf-8", "replace")
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+# index-entry field ids of the workout text variables (see the module docstring)
+F_TITLE, F_DESCRIPTION, F_NOTES, F_CODE = 3213, 3206, 3207, 3210
+
+
 @dataclass
 class WorkoutEntry:
     file: str                   # relative path, e.g. "2023/Athlete_2023_04_06_21_57.wko4"
-    sport: Optional[str]        # "Running", "Trail Running", ...
+    sport: Optional[str]        # 3213 = WKO5's title; the workout type unless renamed ("Trail Running")
     sport_group: Optional[str]  # "Run", "Walk", "Strength", ...
     start: Optional[dt.datetime]
     ftp: Optional[float]
     metrics: dict[int, float] = field(default_factory=dict)  # Entire Workout 42xx fields
     record: Optional[Record] = None
+
+    def _text(self, fid: int) -> str:
+        return text_field(self.record.get(fid)) if self.record is not None else ""
+
+    @property
+    def title(self) -> str:
+        return self._text(F_TITLE)
+
+    @property
+    def description(self) -> str:
+        return self._text(F_DESCRIPTION)
+
+    @property
+    def notes(self) -> str:
+        return self._text(F_NOTES)
+
+    @property
+    def code(self) -> str:
+        return self._text(F_CODE)
 
 
 @dataclass

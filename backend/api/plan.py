@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.engine import planning as P
+from backend.engine.zones import SOURCE, zones_json
 from backend.files.wko5_athlete import pd_snapshot, read_athlete
 
 ATHLETE_DIR = Path(os.getenv(
@@ -93,7 +94,8 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
             "days_left": (P._d(cur.end) - today).days},
         "goals": P.goals(plan, today),
         "thresholds": [t.__dict__ for t in sorted(plan.thresholds, key=lambda t: t.date)],
-        "effective_thresholds": _effective(plan, today),
+        "effective_thresholds": (eff := _effective(plan, today)),
+        "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"])},
         "wko5_settings": _wko5_settings(),
         "phase_labels": P.PHASES, "kinds": P.KINDS,
         "rules": {"taper_days": P.TAPER_DAYS, "specific_weeks": P.SPECIFIC_WEEKS,
@@ -183,6 +185,120 @@ def put_phases(body: list[PhaseIn]):
     plan.save()
     _notify(False)
     return {"phases": [P.phase_json(p) for p in plan.phases]}
+
+
+@lru_cache(maxsize=1)
+def _wko5_profile() -> dict:
+    """What WKO5 has on file, shown next to the editable profile."""
+    ath = read_athlete(next(ATHLETE_DIR.glob("*.wko5athlete")))
+    prof = ath.root.get(3001)
+    sex = prof.get(3017) if prof is not None else None
+    height = (ath.settings.get("height") or [(None, None)])[-1][1]
+    return {
+        "weights": [{"date": d.isoformat(), "kg": v} for d, v in ath.settings.get("weight") or []
+                    if d != WKO5_DEFAULT_DATE],
+        "height_cm": None if height is None else round(height * 100),
+        "sex": sex if sex in P.PROFILE_FIELDS["sex"] else None,
+    }
+
+
+@router.get("/profile")
+def get_profile():
+    plan = P.Plan.load()
+    today = dt.date.today()
+    wk = _wko5_profile()
+    eff_w = plan.weight_on(today)
+    if eff_w is None and wk["weights"]:
+        eff_w = wk["weights"][-1]["kg"]
+    return {
+        "weights": [w.__dict__ for w in sorted(plan.weights, key=lambda w: w.date)],
+        "profile": plan.profile,
+        "wko5": wk,
+        "effective": {
+            "weight": eff_w, "weight_source": "設定頁" if plan.weights else "WKO5",
+            "height_cm": plan.profile.get("height_cm") or wk["height_cm"],
+            "sex": plan.profile.get("sex") or wk["sex"],
+            "power_meter": plan.profile.get("power_meter"),
+        },
+        "options": P.PROFILE_FIELDS,
+    }
+
+
+class WeightIn(BaseModel):
+    date: str
+    kg: float
+
+
+class ProfileIn(BaseModel):
+    weights: list[WeightIn] = []
+    sex: Optional[str] = None
+    height_cm: Optional[float] = None
+    power_meter: Optional[str] = None
+
+
+@router.put("/profile")
+def put_profile(body: ProfileIn):
+    for w in body.weights:
+        try:
+            P._d(w.date)
+        except ValueError as e:
+            raise HTTPException(400, f"bad date: {e}")
+        if not 25 <= w.kg <= 250:
+            raise HTTPException(400, f"體重 {w.kg} kg 不合理")
+    if body.height_cm is not None and not 100 <= body.height_cm <= 250:
+        raise HTTPException(400, f"身高 {body.height_cm} cm 不合理")
+    for k in ("sex", "power_meter"):
+        v = getattr(body, k)
+        if v is not None and v not in P.PROFILE_FIELDS[k]:
+            raise HTTPException(400, f"{k} must be one of {P.PROFILE_FIELDS[k]}")
+    plan = P.Plan.load()
+    plan.weights = [P.Weight(w.date, round(w.kg, 1)) for w in body.weights]
+    plan.profile = {k: v for k, v in (("sex", body.sex), ("height_cm", body.height_cm),
+                                      ("power_meter", body.power_meter)) if v is not None}
+    plan.save()
+    _notify(True)     # weight feeds W/kg everywhere
+    return get_profile()
+
+
+def _estimate_dataset():
+    # the estimate reads samples; use the athlete's own-formula dataset so
+    # approved data corrections apply
+    from backend.api.wko5views import _dataset
+    return _dataset(parity=False)
+
+
+@router.get("/threshold-estimate")
+def threshold_estimate():
+    """Suggested LTHR / AeT from recent runs. Nothing is saved."""
+    from backend.engine.thresholds import estimate
+    return estimate(_estimate_dataset(), dt.date.today())
+
+
+class ApplyEstimate(BaseModel):
+    lthr: Optional[float] = None
+    aethr: Optional[float] = None
+    note: str = ""
+
+
+@router.post("/thresholds/apply-estimate")
+def apply_estimate(body: ApplyEstimate):
+    """The approval step: add today's dated row with the accepted estimate(s)."""
+    if body.lthr is None and body.aethr is None:
+        raise HTTPException(400, "nothing to apply")
+    plan = P.Plan.load()
+    today = dt.date.today().isoformat()
+    row = next((t for t in plan.thresholds if t.date == today), None)
+    if row is None:
+        row = P.Threshold(today)
+        plan.thresholds.append(row)
+    if body.lthr is not None:
+        row.lthr = round(body.lthr)
+    if body.aethr is not None:
+        row.aethr = round(body.aethr)
+    row.note = (row.note + "；" if row.note else "") + (body.note or "由活動資料自動估算")
+    plan.save()
+    _notify(True)
+    return {"threshold": row.__dict__}
 
 
 @router.get("/page", include_in_schema=False)

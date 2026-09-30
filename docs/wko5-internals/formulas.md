@@ -282,10 +282,17 @@ targetpower (@0x70a340, jump table @0x70aa9c):
   3,4,5: P_model(targetduration(level))    (pdcurve evaluated/looked up at that duration)
 ```
 
-### 6.9c `ftpcurve` / `frccurve` / `pmax(mm, lookback)` / `tte(mm, lookback)` / `phenotype(mm, lookback)`
-Per the Expression Reference these build a meanmax curve for every date in the range from the previous
-`lookback` days, fit the model (§6.3) per day and return the daily parameter. Same model code
-(@0x6741e0 via the daily builders @0x649de0/@0x64b440). DISASSEMBLY-ONLY; per-day caching details not decoded.
+### 6.9c `ftp/frc/pmax/tte/vo2max/fibertype(mm, lookback)`; `ftpcurve` / `frccurve`
+Per the Expression Reference the two-argument forms build a meanmax curve for every date in the range
+from the previous `lookback` days, fit the model (§6.3) per day and return the daily parameter. Same model
+code (@0x6741e0 via the daily builders @0x649de0/@0x64b440). DISASSEMBLY-ONLY; per-day caching details not
+decoded. The evaluator fits every day (a fit is ~10 ms; days whose window holds the same workouts share one
+fit) and returns na where the fit fails the validity gate (§6.5).
+
+`ftpcurve(mm)` / `frccurve(mm)` are **not** daily: the Reference defines them as "a power-duration curve
+… showing only the FTP / FRC component", i.e. `aerobic(t)` and `anaerobic(t)` of §6.1 over the curve's
+durations (their sum is `pdcurve`). The user's charts use them that way (`ftpcurve(mm)*xx(ftpcurve(mm))`
+= aerobic kJ per duration).
 
 ### 6.9d `pdcurve(standardindex, gender)` / `pdprofile(meanmaxcurve)` — TODO
 Standards: Novice, Novice 2, Fair, Moderate, Good, Very good, Excellent, Exceptional, World class
@@ -325,6 +332,18 @@ tisanaerobic := (Anaerobic TIS expression above)                                
 So **stamina** fits the PD model on the *normalized* MMP curve `meanmax(_rapower4)^0.25` (MMNP), and is
 `1 + D·(1 + ln(3600/TTE_param)) / mFTP` (D = params[12] `s`, TTE_param = params[10] `dmax`), clamped to
 [0, 100] (a fraction, displayed as %). Note `Dmax`/`s` are the expression names of params[10]/[12].
+
+Derived *channels* are expression strings too, created per workout by 0x7242ac for given sport
+groups (`builtin_exprs.py` misses them: they live outside its address window):
+```
+ecpower (Bike, Run) @0x860d18  if(ewma(power,25)/F<=sftp, ewma(power,25)/F, (ewma(power,25)/F-sftp)*F+sftp)
+                               F = -0.00000000674*(metric(elevation))^2-0.0000274*(metric(elevation))+.997
+fmax    (Run)       @0x860e88  (metric(weight)*g)*(pi/2)*((60*1000/cadence/2-stancetime)/stancetime+1)
+kleg    (Run)       0x725058   Fmax / (leg compression), leg = metric(height)/100*0.53
+rngp    (Run)       0x724e46   1000/_ragpace
+rgrade  (all)       0x724cfd   filter(dElev / sqrt((dDist*1000)^2 - dElev^2), gaussian(3,17), 2)
+```
+`sftp` resolves to `bikeftp` (0x71dba0). Full strings and units: functions.md §7b.
 
 ### 6.11 Handoff note for the functions agent (meanmax)
 Observed vs Cache5 `meanmax(power)`: windows are built from whole consecutive samples (a sample

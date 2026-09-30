@@ -157,6 +157,18 @@ def _hms(s: Optional[float]) -> str:
     return f"{s // 3600}:{s % 3600 // 60:02d}"
 
 
+def _period_line(rows: list[dict], date_from: Optional[str], date_to: Optional[str]) -> str:
+    """統計區間: the filter's dates when set, otherwise the span the records cover,
+    so a reader knows when the totals are from."""
+    days = sorted(r["start"][:10] for r in rows if r.get("start"))
+    lo = (date_from or "")[:10] or (days[0] if days else None)
+    hi = (date_to or "")[:10] or (days[-1] if days else None)
+    if not lo and not hi:
+        return "統計區間：—（沒有紀錄）"
+    whole = "（全部紀錄）" if not date_from and not date_to else ""
+    return f"統計區間：{lo or '最早'} ～ {hi or '最近'}{whole}，共 {len(rows)} 筆"
+
+
 @router.get("/export", response_class=PlainTextResponse)
 def export_text(kind: Optional[str] = None, mclass: Optional[str] = None, q: Optional[str] = None,
                 min_km: Optional[float] = None, max_km: Optional[float] = None,
@@ -169,6 +181,7 @@ def export_text(kind: Optional[str] = None, mclass: Optional[str] = None, q: Opt
     rows = sorted(all_rows, key=SORT_KEYS.get(sort, SORT_KEYS["climbing"]), reverse=True)[:limit]
     s = _summary(all_rows)
     lines = ["【登山 / 越野紀錄】"]
+    lines.append(_period_line(all_rows, date_from, date_to))
     peaks = s["baiyue_peaks"]
     if peaks:
         lines.append(f"已登百岳 {len(peaks)} 座：" + "、".join(

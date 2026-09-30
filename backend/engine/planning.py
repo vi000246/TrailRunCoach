@@ -112,10 +112,33 @@ class Threshold:
 
 
 @dataclass
+class Weight:
+    date: str
+    kg: float
+
+
+PROFILE_FIELDS = {
+    "sex": ("male", "female"),
+    "power_meter": ("stryd", "coros", "garmin", "other"),
+}
+
+
+@dataclass
 class Plan:
     events: list[Event] = field(default_factory=list)
     phases: list[Phase] = field(default_factory=list)       # manual; empty = auto
     thresholds: list[Threshold] = field(default_factory=list)
+    weights: list[Weight] = field(default_factory=list)     # dated body weight
+    profile: dict = field(default_factory=dict)             # sex, height_cm, power_meter
+
+    def weight_on(self, day: dt.date) -> Optional[float]:
+        """Body weight in effect on `day` (earliest entry before the first)."""
+        ws = sorted((_d(w.date), w.kg) for w in self.weights if w.kg)
+        val = None
+        for d, kg in ws:
+            if d <= day:
+                val = kg
+        return val if val is not None else (ws[0][1] if ws else None)
 
     # ---- persistence ------------------------------------------------------
     @classmethod
@@ -128,6 +151,8 @@ class Plan:
             events=[Event(**e) for e in raw.get("events", [])],
             phases=[Phase(**{**p, "auto": False}) for p in raw.get("phases", [])],
             thresholds=[Threshold(**t) for t in raw.get("thresholds", [])],
+            weights=[Weight(**w) for w in raw.get("weights", [])],
+            profile=dict(raw.get("profile", {})),
         )
 
     def save(self, path: Path = PLAN_PATH) -> None:
@@ -136,6 +161,8 @@ class Plan:
             "events": [asdict(e) for e in sorted(self.events, key=lambda e: e.date)],
             "phases": [{k: v for k, v in asdict(p).items() if k != "auto"} for p in self.phases],
             "thresholds": [asdict(t) for t in sorted(self.thresholds, key=lambda t: t.date)],
+            "weights": [asdict(w) for w in sorted(self.weights, key=lambda w: w.date)],
+            "profile": self.profile,
         }
         tmp = path.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), "utf-8")

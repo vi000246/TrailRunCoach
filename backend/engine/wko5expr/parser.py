@@ -8,7 +8,8 @@ WKO5 Expression Reference:
     stmt       := '@var' ':=' stmt | or
     or         := and (('or' | '||') and)*
     and        := cmp (('and' | '&&') cmp)*
-    cmp        := add (('=' | '==' | '<>' | '!=' | '<' | '>' | '<=' | '>=') add)*
+    cmp        := add (('=' | '==' | '<>' | '!=' | '<' | '>' | '<=' | '>=' | 'in') add)*
+                                              `a in b`: membership of a's values in b
     add        := mul (('+' | '-') mul)*
     mul        := unary (('*' | '/') unary)*
     unary      := ('-' | '+' | '!' | 'not') unary | pow
@@ -226,8 +227,8 @@ class Parser:
 
     def cmp(self) -> Node:
         n = self.add()
-        while self.at("=", "==", "<>", "!=", "<", ">", "<=", ">="):
-            op = self.take().text
+        while self.at("=", "==", "<>", "!=", "<", ">", "<=", ">=", "in"):
+            op = self.take().text.lower()
             op = {"==": "=", "!=": "<>"}.get(op, op)
             n = BinOp(op, n, self.add())
         return n

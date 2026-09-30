@@ -2,272 +2,225 @@
   "name": "我的訓練",
   "dashboards": [
     {
-      "title": "總覽",
-      "description": "所有運動一起看。訓練量用時數（不是距離），體能每個運動分開，疲勞才合併。依據：docs/research/coaching-dashboards-mountain.md",
+      "title": "訓練量與負荷",
+      "description": "所有運動合在一起看：越野、百岳、騎車的筆數太少，分開看不出趨勢。量用移動時間（多日行程的檔案包含睡覺時間），負荷用全部運動合計的 PMC。依據：docs/research/coaching-dashboards-mountain.md",
       "charts": [
         {
-          "title": "週訓練時數（依運動）",
-          "description": "Koop、Jornet、Uphill Athlete 都用時數當主要訓練量。堆疊看得出每週重心放在哪個運動。",
-          "axes": [{"id": "HHMMSS", "min": 0}],
-          "series": [
-            {"name": "路跑", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#2563eb",
-             "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), duration), startofweek(date))"},
-            {"name": "越野", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#16a34a",
-             "expression": "sum(if(hastag(\"runningtrail\"), duration), startofweek(date))"},
-            {"name": "百岳/健行", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#a16207",
-             "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), movingduration), startofweek(date))"},
-            {"name": "騎車", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#7c3aed",
-             "expression": "sum(if(sport=\"road bike\" or sport=\"bike\", duration), startofweek(date))"},
-            {"name": "重訓", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#64748b",
-             "expression": "sum(if(sport=\"strength\", duration), startofweek(date))"}
-          ]
-        },
-        {
-          "title": "週爬升",
-          "description": "越野與百岳的垂直訓練量。注意：教練建議用「每公里爬升」對照目標賽事，週總量本身沒有劑量反應（Koop）。",
-          "axes": [{"id": "METERS", "min": 0}],
-          "series": [
-            {"name": "週爬升", "type": "bar", "y_axis": "METERS", "color": "#16a34a",
-             "expression": "sum(climbing, startofweek(date))"}
-          ]
-        },
-        {
-          "title": "各運動體能（分開）與總疲勞",
-          "description": "Friel 的做法：每個運動各自一條體能線，因為合在一起「太籠統」；疲勞則全部運動合計，因為身體只有一個。",
-          "axes": [{"id": "TSSPERDAY", "min": 0}],
-          "series": [
-            {"name": "跑步體能", "type": "line", "y_axis": "TSSPERDAY", "color": "#2563eb",
-             "expression": "tl(if(sport=\"run\", tss), ctlconstant)"},
-            {"name": "百岳/健行體能", "type": "line", "y_axis": "TSSPERDAY", "color": "#a16207",
-             "expression": "tl(if(sport=\"walk\", tss), ctlconstant)"},
-            {"name": "騎車體能", "type": "line", "y_axis": "TSSPERDAY", "color": "#7c3aed",
-             "expression": "tl(if(sport=\"road bike\" or sport=\"bike\", tss), ctlconstant)"},
-            {"name": "總疲勞 ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#dc2626", "line_style": "dash",
-             "expression": "tl(tss, atlconstant)"}
-          ]
-        },
-        {
-          "title": "狀況（TSB）",
-          "description": "體能減疲勞。注意：沒有任何登山賽事公開過「比賽最佳 TSB 區間」，只當相對參考。",
+          "title": "PMC：體能 CTL・疲勞 ATL・狀況 TSB（全部運動）",
+          "description": "CTL = 42 天平均負荷，ATL = 7 天，TSB = 昨天的 CTL − ATL。−30～−10 是有效訓練區，賽前 A 賽 +10～+20（Friel / Palladino）。沒有任何登山越野賽公開過經驗證的最佳 TSB，只當方向參考。",
           "axes": [{"id": "TSSPERDAY"}],
           "series": [
-            {"name": "TSB", "type": "bar", "y_axis": "TSSPERDAY", "color": "#94a3b8", "expression": "tsb"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#64748b", "line_style": "dash", "expression": "(,0)"}
-          ]
-        },
-        {
-          "title": "訓練量變化（週時數 vs 上週）",
-          "description": "訓練量成長的速度。只看趨勢——ACWR 類指標預測受傷的說法已被推翻（Impellizzeri 2020），這張圖不做這種宣稱。",
-          "axes": [{"id": "HHMMSS"}],
-          "series": [
-            {"name": "本週 − 上週", "type": "bar", "y_axis": "HHMMSS", "color": "#0891b2",
-             "expression": "sum(duration, startofweek(date)) - shift(sum(duration, startofweek(date)), 7)"},
-            {"name": "0", "type": "line", "y_axis": "HHMMSS", "color": "#64748b", "line_style": "dash", "expression": "(,0)"}
+            {"name": "CTL 體能", "type": "line", "y_axis": "TSSPERDAY", "color": "#2a78d6", "line_width": "thick",
+             "expression": "ctl"},
+            {"name": "ATL 疲勞", "type": "line", "y_axis": "TSSPERDAY", "color": "#eb6834", "expression": "atl"},
+            {"name": "TSB 狀況", "type": "line", "y_axis": "TSSPERDAY", "color": "#1baf7a", "expression": "tsb"},
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"}
           ]
         },
         {
           "title": "每日 TSS",
           "axes": [{"id": "TSS", "min": 0}],
           "series": [
-            {"name": "TSS", "type": "bar", "y_axis": "TSS", "color": "#dc2626", "expression": "sum(tss, trunc(date))"}
+            {"name": "TSS", "type": "bar", "y_axis": "TSS", "color": "#8a8984", "expression": "sum(tss, trunc(date))"}
+          ]
+        },
+        {
+          "title": "每週移動時間（依類別堆疊）",
+          "description": "Koop、Jornet、Uphill Athlete 都用時數當主要訓練量。顏色只是看每週重心放在哪裡，高度是全部加總。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "路跑", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#2a78d6",
+             "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), movingduration), startofweek(date))"},
+            {"name": "越野跑", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#eb6834",
+             "expression": "sum(if(hastag(\"runningtrail\"), movingduration), startofweek(date))"},
+            {"name": "登山健行", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#1baf7a",
+             "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), movingduration), startofweek(date))"},
+            {"name": "騎車", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#eda100",
+             "expression": "sum(if(sport=\"road bike\" or sport=\"bike\", movingduration), startofweek(date))"},
+            {"name": "肌力", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#e87ba4",
+             "expression": "sum(if(sport=\"strength\", movingduration), startofweek(date))"}
+          ]
+        },
+        {
+          "title": "每週爬升",
+          "description": "越野與百岳的垂直訓練量。總量本身沒有劑量反應（Koop），拿來看量的背景；要對照比賽看「每公里爬升」。",
+          "axes": [{"id": "METERS", "min": 0}],
+          "series": [
+            {"name": "週爬升", "type": "bar", "y_axis": "METERS", "color": "#1baf7a",
+             "expression": "sum(climbing, startofweek(date))"}
+          ]
+        },
+        {
+          "title": "每週下降",
+          "description": "下坡的離心負荷是越野跑肌肉損傷的主因，心率看不出來（江晏慶）。",
+          "axes": [{"id": "METERS", "min": 0}],
+          "series": [
+            {"name": "週下降", "type": "bar", "y_axis": "METERS", "color": "#eb6834",
+             "expression": "sum(descending, startofweek(date))"}
+          ]
+        },
+        {
+          "title": "每週時數變化（本週 − 上週）",
+          "description": "訓練量成長的速度；Uphill Athlete 建議每週 ≤ +10%。只看趨勢——ACWR 類指標預測受傷的說法已被推翻（Impellizzeri 2020）。",
+          "axes": [{"id": "HHMMSS"}],
+          "series": [
+            {"name": "本週 − 上週", "type": "bar", "y_axis": "HHMMSS", "color": "#2a78d6",
+             "expression": "sum(movingduration, startofweek(date)) - shift(sum(movingduration, startofweek(date)), 7)"},
+            {"name": "0", "type": "line", "y_axis": "HHMMSS", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"}
           ]
         }
       ]
     },
     {
-      "title": "跑步",
-      "description": "路跑（含跑步機）。看有氧效率有沒有進步。",
+      "title": "每月・每年",
+      "description": "長期的量：每月、每年的移動時間與爬升，全部運動一起。",
       "charts": [
         {
-          "title": "有氧效率 EF（輕鬆跑）",
-          "description": "每一下心跳換到多少速度。只看輕鬆跑（IF < 0.8）才能公平比較。往上走 = 有氧能力進步。這是教練公認最直接的進步證據之一。",
-          "axes": [{"id": "NONE", "min": 0}],
+          "title": "每月移動時間（依類別堆疊）",
+          "axes": [{"id": "HHMMSS", "min": 0}],
           "series": [
-            {"name": "EF (m/min per bpm)", "type": "line", "y_axis": "NONE", "color": "#2563eb",
+            {"name": "路跑", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#2a78d6",
+             "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), movingduration), startofmonth(date))"},
+            {"name": "越野跑", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#eb6834",
+             "expression": "sum(if(hastag(\"runningtrail\"), movingduration), startofmonth(date))"},
+            {"name": "登山健行", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#1baf7a",
+             "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), movingduration), startofmonth(date))"},
+            {"name": "騎車", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#eda100",
+             "expression": "sum(if(sport=\"road bike\" or sport=\"bike\", movingduration), startofmonth(date))"},
+            {"name": "肌力", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#e87ba4",
+             "expression": "sum(if(sport=\"strength\", movingduration), startofmonth(date))"}
+          ]
+        },
+        {
+          "title": "每月爬升",
+          "axes": [{"id": "METERS", "min": 0}],
+          "series": [
+            {"name": "月爬升", "type": "bar", "y_axis": "METERS", "color": "#1baf7a",
+             "expression": "sum(climbing, startofmonth(date))"}
+          ]
+        },
+        {
+          "title": "每月 TSS",
+          "axes": [{"id": "TSS", "min": 0}],
+          "series": [
+            {"name": "月 TSS", "type": "bar", "y_axis": "TSS", "color": "#8a8984",
+             "expression": "sum(tss, startofmonth(date))"}
+          ]
+        },
+        {
+          "title": "每年移動時間",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "年移動時間", "type": "bar", "y_axis": "HHMMSS", "color": "#2a78d6",
+             "expression": "sum(movingduration, startofyear(date))"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "能力",
+      "description": "進步的證據。越野、百岳的爬坡能力合在一起看資料才夠；有氧效率只能用輕鬆路跑比。",
+      "charts": [
+        {
+          "title": "有氧效率 EF（輕鬆路跑）",
+          "description": "每下心跳換到的速度（m/min per bpm）。往上走 = 有氧引擎變強。只取 IF < 0.8 的路跑才能公平比較。",
+          "axes": [{"id": "CUSTOMm/min/bpm", "min": 0}],
+          "series": [
+            {"name": "EF", "type": "line", "y_axis": "CUSTOMm/min/bpm", "color": "#2a78d6",
              "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and if < 0.8, avg(speed)/avg(heartrate)*1000/60)"}
           ]
         },
         {
-          "title": "心率飄移 Pa:HR",
-          "description": "後半段每單位速度要多用多少心跳。Uphill Athlete 的有氧閾值測試：< 5% 代表在閾值以下。長期下降代表耐力進步。",
-          "axes": [{"id": "PERCENT"}],
-          "series": [
-            {"name": "飄移", "type": "line", "y_axis": "PERCENT", "color": "#dc2626",
-             "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration > 2400, pahr)"},
-            {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash",
-             "expression": "(,0.05)"}
-          ]
-        },
-        {
-          "title": "每週跑步時數與距離",
-          "axes": [{"id": "HHMMSS", "min": 0}, {"id": "KM", "min": 0}],
-          "series": [
-            {"name": "時數", "type": "bar", "y_axis": "HHMMSS", "color": "#2563eb",
-             "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), duration), startofweek(date))"},
-            {"name": "距離", "type": "line", "y_axis": "KM", "color": "#f59e0b",
-             "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), distance), startofweek(date))"}
-          ]
-        },
-        {
-          "title": "跑步體能與疲勞",
-          "axes": [{"id": "TSSPERDAY", "min": 0}],
-          "series": [
-            {"name": "CTL", "type": "line", "y_axis": "TSSPERDAY", "color": "#2563eb",
-             "expression": "tl(if(sport=\"run\", tss), ctlconstant)"},
-            {"name": "ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#f59e0b",
-             "expression": "tl(if(sport=\"run\", tss), atlconstant)"}
-          ]
-        }
-      ]
-    },
-    {
-      "title": "越野跑",
-      "description": "越野的能力指標是「爬升能力」與「長時間耐久度」，不是配速。",
-      "charts": [
-        {
-          "title": "爬升速度 VAM",
-          "description": "每小時爬升公尺數。固定心率下 VAM 上升 = 爬坡能力進步。這是所有教練公認的越野進步證據。",
+          "title": "爬坡速度 VAM（越野 + 登山）",
+          "description": "每小時爬升公尺數。相近心率下 VAM 上升 = 爬坡進步。",
           "axes": [{"id": "METERSPERHOUR", "min": 0}],
           "series": [
-            {"name": "VAM", "type": "line", "y_axis": "METERSPERHOUR", "color": "#16a34a",
-             "expression": "if(hastag(\"runningtrail\") and climbing > 200, vam)"}
+            {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834",
+             "expression": "if(hastag(\"runningtrail\") and climbing > 200, vam)"},
+            {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#1baf7a",
+             "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and climbing > 200, vam)"}
           ]
         },
         {
-          "title": "每百公尺爬升心跳數",
-          "description": "爬 100 公尺要多少下心跳。越低 = 爬坡越經濟。（本專案提出的指標，尚未經研究驗證）",
-          "axes": [{"id": "NONE", "min": 0}],
+          "title": "心率飄移 Pa:HR（> 40 分鐘的跑步）",
+          "description": "後半段每單位速度多用多少心跳。< 5% = 在有氧閾值以下（Uphill Athlete）。",
+          "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "心跳/100m", "type": "line", "y_axis": "NONE", "color": "#dc2626",
-             "expression": "if(hastag(\"runningtrail\") and climbing > 200, sum(heartrate*deltatime)/60/(climbing/100))"}
+            {"name": "路跑", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6",
+             "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration > 2400, pahr)"},
+            {"name": "越野跑", "type": "line", "y_axis": "PERCENT", "color": "#eb6834",
+             "expression": "if(hastag(\"runningtrail\") and duration > 2400 and abs(pahr) < 0.3, pahr)"},
+            {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"}
+          ]
+        },
+        {
+          "title": "每次移動時間（跑步、越野、登山）",
+          "description": "最長單次應該逐步接近目標賽事的時間（Koop）。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "路跑", "type": "line", "y_axis": "HHMMSS", "color": "#2a78d6",
+             "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), movingduration)"},
+            {"name": "越野跑", "type": "line", "y_axis": "HHMMSS", "color": "#eb6834",
+             "expression": "if(hastag(\"runningtrail\"), movingduration)"},
+            {"name": "登山健行", "type": "line", "y_axis": "HHMMSS", "color": "#1baf7a",
+             "expression": "if(hastag(\"hiking\") or hastag(\"mountaineering\"), movingduration)"}
           ]
         },
         {
           "title": "爬升密度（每公里爬升）",
-          "description": "Koop 的建議：拿這個對照目標賽事的爬升密度，而不是追求週總量。",
-          "axes": [{"id": "NONE", "min": 0}],
+          "description": "Koop：拿每公里爬升對照目標賽事，而不是追週總量。",
+          "axes": [{"id": "CUSTOMm/km", "min": 0}],
           "series": [
-            {"name": "m/km", "type": "line", "y_axis": "NONE", "color": "#a16207",
-             "expression": "if(hastag(\"runningtrail\") and distance > 3, climbing/distance)"}
-          ]
-        },
-        {
-          "title": "長距離心率飄移",
-          "description": "超過 2 小時的越野，後半段效率掉多少。耐久度（durability）的代理指標。",
-          "axes": [{"id": "PERCENT"}],
-          "series": [
-            {"name": "飄移", "type": "line", "y_axis": "PERCENT", "color": "#dc2626",
-             "expression": "if(hastag(\"runningtrail\") and duration > 7200, pahr)"},
-            {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash",
-             "expression": "(,0.05)"}
-          ]
-        },
-        {
-          "title": "越野時數與最長單次",
-          "description": "準備賽事時，最長單次訓練應該逐步接近比賽需求。",
-          "axes": [{"id": "HHMMSS", "min": 0}],
-          "series": [
-            {"name": "每次時長", "type": "line", "y_axis": "HHMMSS", "color": "#16a34a",
-             "expression": "if(hastag(\"runningtrail\"), duration)"}
+            {"name": "越野 + 登山", "type": "line", "y_axis": "CUSTOMm/km", "color": "#1baf7a",
+             "expression": "if((hastag(\"runningtrail\") or hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 3, climbing/distance)"},
+            {"name": "目標賽事", "type": "line", "y_axis": "CUSTOMm/km", "color": "#e34948", "line_style": "dash",
+             "expression": "goalclimbperkm"}
           ]
         }
       ]
     },
     {
-      "title": "百岳",
-      "description": "多日、負重、高海拔。用移動時間、垂直能力與高度暴露來看。",
+      "title": "強度",
+      "description": "輕鬆日有沒有真的輕鬆。只算移動中的時間。",
       "charts": [
         {
-          "title": "每趟爬升與下降",
-          "description": "百岳路線常有長下坡，下坡對股四頭肌的負荷不容忽視。",
-          "axes": [{"id": "METERS", "min": 0}],
-          "series": [
-            {"name": "爬升", "type": "bar", "y_axis": "METERS", "color": "#16a34a",
-             "expression": "if(hastag(\"hiking\") or hastag(\"mountaineering\"), climbing)"},
-            {"name": "下降", "type": "bar", "y_axis": "METERS", "color": "#dc2626",
-             "expression": "if(hastag(\"hiking\") or hastag(\"mountaineering\"), descending)"}
-          ]
-        },
-        {
-          "title": "健行爬升速度 VAM",
-          "description": "陡坡健行的爬升速度。在相近心率下 VAM 上升 = 登山體能進步。",
-          "axes": [{"id": "METERSPERHOUR", "min": 0}],
-          "series": [
-            {"name": "VAM", "type": "line", "y_axis": "METERSPERHOUR", "color": "#a16207",
-             "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and climbing > 300, vam)"}
-          ]
-        },
-        {
-          "title": "高海拔暴露（>2500m 時數）",
-          "description": "高度不增加每公尺的能量成本，但每升 1000 公尺 VO2max 約降 6.3%（Wehrlin 2006），同樣速度強度更高。這張圖追蹤高度適應的累積。",
+          "title": "每週強度分布（心率）",
+          "description": "低 < AeT、中 AeT–LTHR、高 ≥ LTHR。目標：低強度 ≥ 75–80%（Seiler）。LTHR 還是 WKO5 預設值時先到「賽事周期」頁套用估算值。",
           "axes": [{"id": "HHMMSS", "min": 0}],
           "series": [
-            {"name": ">2500m", "type": "bar", "y_axis": "HHMMSS", "color": "#0891b2",
-             "expression": "if(hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(elevation > 2500, deltatime)))"}
+            {"name": "低", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#1baf7a",
+             "expression": "sum(sum(if(heartrate > 0 and heartrate < aethr and (speed > 1.6 or !isvalid(speed)), deltatime)), startofweek(date))"},
+            {"name": "中", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#eda100",
+             "expression": "sum(sum(if(heartrate >= aethr and heartrate < lthr and (speed > 1.6 or !isvalid(speed)), deltatime)), startofweek(date))"},
+            {"name": "高", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#e34948",
+             "expression": "sum(sum(if(heartrate >= lthr and (speed > 1.6 or !isvalid(speed)), deltatime)), startofweek(date))"}
           ]
         },
         {
-          "title": "移動時間 vs 總時間",
-          "description": "多日行程的總時間包含紮營睡覺。移動時間才是真正的運動量——TSS 也只該算移動時間。",
+          "title": "每週跑步功率區間（Palladino）",
+          "description": "Z1 < 80% CP、Z2 80–88%、Z3 88–101%、Z4 101–106%、Z5+ ≥ 106%。只算有功率的跑步。",
           "axes": [{"id": "HHMMSS", "min": 0}],
           "series": [
-            {"name": "移動時間", "type": "bar", "y_axis": "HHMMSS", "color": "#16a34a",
-             "expression": "if(hastag(\"hiking\") or hastag(\"mountaineering\"), movingduration)"},
-            {"name": "總時間", "type": "line", "y_axis": "HHMMSS", "color": "#94a3b8",
-             "expression": "if(hastag(\"hiking\") or hastag(\"mountaineering\"), duration)"}
+            {"name": "Z1 <80%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#1baf7a",
+             "expression": "sum(sum(if(runpower > 0 and runpower < 0.80*cp, deltatime)), startofweek(date))"},
+            {"name": "Z2 80–88%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#2a78d6",
+             "expression": "sum(sum(if(runpower >= 0.80*cp and runpower < 0.88*cp, deltatime)), startofweek(date))"},
+            {"name": "Z3 88–101%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#eda100",
+             "expression": "sum(sum(if(runpower >= 0.88*cp and runpower < 1.01*cp, deltatime)), startofweek(date))"},
+            {"name": "Z4 101–106%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#eb6834",
+             "expression": "sum(sum(if(runpower >= 1.01*cp and runpower < 1.06*cp, deltatime)), startofweek(date))"},
+            {"name": "Z5+ ≥106%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#e34948",
+             "expression": "sum(sum(if(runpower >= 1.06*cp, deltatime)), startofweek(date))"}
           ]
         },
         {
-          "title": "健行每百公尺爬升心跳數",
-          "description": "越低 = 爬坡越經濟。（本專案提出的指標，尚未經研究驗證）",
-          "axes": [{"id": "NONE", "min": 0}],
+          "title": "每週肌力次數",
+          "description": "基礎期每週 2 次（Uphill Athlete）。",
+          "axes": [{"id": "CUSTOM次", "min": 0}],
           "series": [
-            {"name": "心跳/100m", "type": "line", "y_axis": "NONE", "color": "#dc2626",
-             "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and climbing > 300, sum(heartrate*deltatime)/60/(climbing/100))"}
-          ]
-        }
-      ]
-    },
-    {
-      "title": "騎車",
-      "description": "騎車是 WKO5 的強項，功率相關指標沿用它驗證過的算法。",
-      "charts": [
-        {
-          "title": "每週騎乘時數",
-          "axes": [{"id": "HHMMSS", "min": 0}],
-          "series": [
-            {"name": "時數", "type": "bar", "y_axis": "HHMMSS", "color": "#7c3aed",
-             "expression": "sum(if(sport=\"road bike\" or sport=\"bike\", duration), startofweek(date))"}
-          ]
-        },
-        {
-          "title": "平均速度與心率",
-          "description": "你的騎車目前都沒有功率計，所以用速度與心率。裝了功率計之後可改看 NP 與 IF。",
-          "axes": [{"id": "KPH", "min": 0}, {"id": "BPM", "min": 0}],
-          "series": [
-            {"name": "平均速度", "type": "line", "y_axis": "KPH", "color": "#7c3aed",
-             "expression": "if(sport=\"road bike\" or sport=\"bike\", avg(speed))"},
-            {"name": "平均心率", "type": "line", "y_axis": "BPM", "color": "#dc2626",
-             "expression": "if(sport=\"road bike\" or sport=\"bike\", avg(heartrate))"}
-          ]
-        },
-        {
-          "title": "騎車效率（速度 ÷ 心率）",
-          "description": "沒有功率計時的替代效率指標。受風、坡度影響大，只適合比較相同路線。",
-          "axes": [{"id": "NONE", "min": 0}],
-          "series": [
-            {"name": "km/h per bpm", "type": "line", "y_axis": "NONE", "color": "#7c3aed",
-             "expression": "if(sport=\"road bike\" or sport=\"bike\", avg(speed)/avg(heartrate))"}
-          ]
-        },
-        {
-          "title": "騎車體能與疲勞",
-          "axes": [{"id": "TSSPERDAY", "min": 0}],
-          "series": [
-            {"name": "CTL", "type": "line", "y_axis": "TSSPERDAY", "color": "#7c3aed",
-             "expression": "tl(if(sport=\"road bike\" or sport=\"bike\", tss), ctlconstant)"},
-            {"name": "ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#f59e0b",
-             "expression": "tl(if(sport=\"road bike\" or sport=\"bike\", tss), atlconstant)"}
+            {"name": "肌力", "type": "bar", "y_axis": "CUSTOM次", "color": "#e87ba4",
+             "expression": "count(if(sport=\"strength\", movingduration), startofweek(date))"},
+            {"name": "目標 2 次", "type": "line", "y_axis": "CUSTOM次", "color": "#8a8984", "line_style": "dash", "expression": "(,2)"}
           ]
         }
       ]

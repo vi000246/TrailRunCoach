@@ -73,6 +73,19 @@ def test_threshold_history(tmp_path):
     assert back.threshold_on("lthr", dt.date(2026, 9, 2)) == 168
 
 
+def test_weight_history_and_profile_roundtrip(tmp_path):
+    plan = P.Plan(weights=[P.Weight("2026-03-01", 70.0), P.Weight("2026-08-01", 67.5)],
+                  profile={"sex": "male", "height_cm": 172, "power_meter": "coros"})
+    assert plan.weight_on(dt.date(2026, 1, 1)) == 70.0        # before first: earliest
+    assert plan.weight_on(dt.date(2026, 8, 15)) == 67.5
+    path = tmp_path / "plan.json"
+    plan.save(path)
+    back = P.Plan.load(path)
+    assert back.weight_on(dt.date(2026, 5, 1)) == 70.0
+    assert back.profile["power_meter"] == "coros"
+    assert P.Plan().weight_on(dt.date(2026, 1, 1)) is None
+
+
 def test_bad_date_rejected():
     with pytest.raises(ValueError):
         P.Plan().upsert_event({"name": "x", "date": "2026-13-40"})

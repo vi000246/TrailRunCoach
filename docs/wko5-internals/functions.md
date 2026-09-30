@@ -9,6 +9,8 @@ is covered in `formulas.md`. Per-workout metrics (hrTSS, NGP, VAM, EF, …) are 
 - **VERIFIED**: reproduced bit-exact against a value WKO5 itself computed and stored.
 - **DISASSEMBLY**: read from the machine code; not yet compared against a WKO5 number.
 - **DOC**: taken from the WKO5 Expression Reference only; not yet checked in the code.
+- **PROVISIONAL**: neither source pins it down; the evaluator implements the most plausible
+  reading and says so in a code comment. Needs WKO5.exe or a WKO5 on-screen number.
 
 Reference implementations live in the scratchpad (`scratchpad\re\fn_*.py`), not in the repo.
 
@@ -157,6 +159,19 @@ values that are almost-equal (10 ULP) to 0.
 `sum(numbers, "day"|"week"|"month"|"year")` buckets values by calendar period. Weeks
 follow the first-day-of-week preference (§6).
 
+Evaluator: the period name, any per-workout key (`startofweek(date)`, `startofmonth(date)`,
+`trunc(date)`, …) and `weekval` / `monthval` / `yearval` keys all work for
+`sum/avg/count/max/min(values, groupby)`. Period-number keys (weekval …) are plotted at the
+period's first day. `max(values, groupby)` / `min(values, groupby)` group when both
+arguments are dated or listed sets or the second is a period name; two sample series, or a
+set and a number, stay elementwise (the disassembly says max/2 is elementwise, the Reference
+says groupby — PROVISIONAL split). Two plain sets (e.g. `max({hr…}, {pace…})`) give one
+(key, aggregate) point per key.
+
+### length — DOC
+
+All values, zeros and na included: `length({3,6,0,9,na,12}) = 6`.
+
 ---
 
 ## 3. bin — DISASSEMBLY (0x6ce3c0)
@@ -184,6 +199,13 @@ A single implementation handles every overload.
   return f+1 if |x−(f+1)| < 1e−15·|x+f+1| (or < DBL_MIN) else f
   ```
   This protects against 29.999999 → 29.
+
+Evaluator output shapes: `bin(v, size)` → an (x, y) set, x = bin start, empty bins between
+min and max included; `bin(v, {cuts})` → a list of n+1 weights; cut items that are pairs
+`("name", cut)` label the bins, and an na cut (e.g. `levelto(mm, 8)`, the open-ended Pmax
+level) is skipped as a cut but keeps its label, so 9 labelled cuts give 9 bins;
+`bin(v, "levels")` → one (level name, weight) pair per level. At the athlete level the bins
+of every workout in the range are added up.
 
 ---
 
@@ -239,13 +261,20 @@ A single implementation handles every overload.
 
 | # | name | lo | hi |
 |---|---|---|---|
-| 0 | Recovery | 0 | .82 |
-| 1 | Aerobic | .82 | .89 |
-| 2 | Tempo | .89 | .94 |
-| 3 | Sub-Threshold | .94 | 1.00 |
+| 0 | Recovery | 0 | .85 |
+| 1 | Aerobic | .85 | .90 |
+| 2 | Tempo | .90 | .95 |
+| 3 | Sub-Threshold | .95 | 1.00 |
 | 4 | Super-Threshold | 1.00 | 1.03 |
 | 5 | Aerobic Capacity | 1.03 | 1.06 |
 | 6 | Anaerobic Capacity | 1.06 | ∞ |
+
+VERIFIED against WKO5's own "Friel Heart Rate Zones for Running" table at THR 160
+(2026-09-29): 1 0–134, 2 136–142, 3 144–150, 4 152–158, 5a 160–163, 5b 165–170, 5c 170+.
+WKO5 shows Friel's whole-percent bands (≤84, 85–89, 90–94, 95–99, 100–102, 103–106,
+>106 %) rounded to bpm, hence the 1–2 bpm gaps. An earlier reading of this table
+(.82/.89/.94) was wrong. The "Classic Heart Rate Zones" table (AR 0–110, E 110–134,
+TE 134–152, TH 152–170, VM 170+) matches the classichr fractions above.
 
 **usachr**, T = `mhr` (max HR) (0x64e600). The names come from a format string and were
 not extracted.
@@ -305,14 +334,29 @@ to be checked against WKO5's Athlete Details level table.
 `meanmax(bikepower)` over the previous 90 days (`prev90`), then FTP / FRC / Pmax with the
 constants 0.5, 0.632 and 1.05. See `formulas.md`.
 
-**ctspower / rstpower**: these share one builder (0x64d1e0), which takes its values from
-data, not constants. Not decoded yet.
+**ctspower / rstpower** — DISASSEMBLY: **no levels** in 5.0.587. They share the builder
+0x64d1e0 (vtable slot 9 of `PKCTSPowerLevels` 0x8526cc and `PKRSTPowerLevels` 0x852878).
+It reads the `power` threshold into `[this+0x28]`, destroys every 0x80-byte level in the
+vector and sets end = begin. Nothing is added. The constructors (0x64d180, 0x64d0c0 /
+0x64d230 = clone) only set an empty vector, and slot 11 (the level count) is 0x457000,
+`xor eax,eax; ret`, while classicpower's is 0x64c810, `mov eax,6`. Only the display names
+("CTS Power Levels", "RST Sport Power Levels", slot 10) exist. They are placeholder systems.
+Evaluator: empty tables, so `levelcount(...) = 0` and every `levelname/from/to` is na / "".
 
 ### levelfrom / levelto / levelname / levelcount (0x6eaa00, 0x6ec250, …)
 
 - `levelfrom(sys, i)` returns `from_i` and `levelto(sys, i)` returns `to_i` of the table
   above, for the current workout date.
 - The `meanmax(power)` overloads return iLevels bounds.
+
+Evaluator: iLevels indices 0–8 = Recovery, Endurance, Tempo, Sweetspot, FTP, FRC/FTP, FRC,
+Pmax/FRC, Pmax (the order the user's "Time in iLevels" / "Power Histogram with iLevels"
+charts use), bounds from formulas.md §6.9. The open-ended top of any table is na (it is
+DBL_MAX = invalid in WKO5). T = the threshold of the workout's sport on its date; at the
+athlete level the Run setting at the range end (PROVISIONAL). `usachr` level names are
+PROVISIONAL ("Level 1"…); `ctspower` / `rstpower` raise "unsupported".
+The Friel HR zones chart (`round({0,0.85,…}*@thr)` + `string()`) reproduces WKO5's own
+table exactly at THR 160 (0–134, 136–142, 144–150, 152–158, 160–163, 165–170, 170+).
 
 ---
 
@@ -344,31 +388,126 @@ for each sample:
 
 ### delta(x) — DOC (0x6d7510)
 
-`delta({3,5,7,11,13}) = {na, 2, 2, 4, 2}`. The first element is na.
+`delta({3,5,7,11,13}) = {na, 2, 2, 4, 2}`. The first element is na. Evaluator: x[i] − x[i−1]
+in the set's natural order (samples, workouts by date, days, list items); na if either is na.
 
 ### cumsum(x) — DOC (0x6d45e0)
 
-Running total of valid values.
+Running total of valid values: `cumsum({1..10}) = {1,3,6,…,55}`. Evaluator: an na position
+stays na and does not reset the total (PROVISIONAL).
 
 ### rev, sort, sortd, sortx, sortxd, xx, yx — DOC
 
 - `rev`: reverse order.
-- `sort` / `sortd`: sort by value, ascending / descending.
+- `sort` / `sortd`: sort by value, ascending / descending (na last).
 - `sortx` / `sortxd`: sort pairs by x, ascending / descending.
-- `xx(pairs)` / `yx(pairs)`: return the x values / y values as a plain list.
+- `xx(pairs)`: (X,Y) → (X,X). `yx(pairs)`: (X,Y) → (Y,X), so `li(yx(pdcurve(mm)), watts)`
+  is the duration at which the model reaches `watts`.
+
+Evaluator: dated and timed sets keep each value's x, so `rev`/`sort` of them change nothing
+that is plotted (WKO5 shows the order only in reports). `xx(curve)` now returns the curve
+(x, x) and `yx(curve)` the swapped curve; before they returned the bare x / y arrays.
 
 ### filter(x, kernel, sides), isef(factor, length), gaussian(sigma, length) — DISASSEMBLY
 
-- `filter` (0x6dcf10) convolves x with the kernel list. `sides` must be 1 (causal) or 2
-  (centred); the constant 2.0 is used for the centred case.
-- `isef` (0x6e7590) builds an infinite-symmetric-exponential kernel.
-  - length must be 1…1000.
-  - Constants 0.005 and 1.0 appear.
-- `gaussian` (0x6e20a0) builds a Gaussian kernel.
-  - Constants 2π, 0.9 and −1.0 appear.
-  - σ must be 1…100 and length 1…1000.
+Fully decoded. No WKO5 cache holds a result of any of the three (checked every
+`Cache5\*.wko5cache`; `Views\Charts.wko5cache` holds chart configs only), so none is
+VERIFIED. The evaluator follows the machine code, including the order of summation.
 
-The exact kernel normalisation has not been decoded yet.
+**filter(x, kernel, sides)** (0x6dcf10; loop 0x6dd4bb…0x6dd638)
+
+```
+K = count(kernel); n = count(x)
+off = (K−1)/2 (C integer division)  if sides == 2.0      # 0x86c168
+      K−1                           otherwise           # sides 3 is causal too
+for i in 0…n−1:
+    acc = na; wsum = 0
+    for m in 0…K−1:
+        s = i − off + m
+        if 0 <= s < n and x[s] valid:
+            wsum = k[m] + wsum
+            acc  = k[m]·x[s]           if acc is na
+                   k[m]·x[s] + acc     otherwise
+    if not almost_equal(wsum, 0):  acc = acc / wsum      # 0x4a59a0, 10 ULP
+    out[i] = acc                                         # na if no valid sample
+```
+
+- The kernel is used **as listed**. k[0] is the oldest sample, and in the causal case
+  k[K−1] is the current one. It is not mirrored.
+- With sides = 2 and an even K the window leans forward: `filter(rgrade,{1,10},2)`
+  (the user's grade bands) is (1·x[i] + 10·x[i+1]) / 11.
+- The edges and na samples are handled by renormalising over the weights that were
+  actually used.
+- An na sample still gets an output if its window holds a valid one.
+- A weight sum ≈ 0 returns the undivided sum.
+- It is per sample, not time-weighted. The output keeps x's x-values and units.
+- `sides` is only checked for being one value ("Expected 1 or 2 sides in third argument.").
+- String data is returned unchanged (`0x5b6ea0`: type 2).
+
+**isef(factor, length)** (0x6e7590)
+
+- factor < 0 or ≥ 1 raises the error "Smoothing factor must be greater than or equal to
+  0.005 and less than 1.0."
+- factor ≤ 0.005 returns the identity kernel `{1}` (`0x60a780(1.0)`).
+- length must be 1…1000 ("Length must be between 1 and 1000."). It is rounded with
+  `floor(L+0.5)` (0x4a5a60) and made odd: N = L+1 if L is even. It defaults to 1.
+- The kernel is `w_i = exp(|i − N/2| · ln(1 − factor))`, i = 0…N−1, i.e. (1−f)^|j| for
+  j = −N/2…N/2.
+- It is then divided by its sum, accumulated in order as `s = w + s`.
+- It is symmetric and centred, so it is meant for sides = 2.
+
+**gaussian(sigma, length)** (0x6e20a0)
+
+- sigma < 0 or > 100 raises "Sigma must be between 1 and 100.".
+- sigma ≤ 1, or a sigma that is not a single value, returns `{1}`.
+- length is handled as in isef (1…1000, rounded, made odd).
+- c = 1 / (sqrt(2π)·σ), with 2π = 6.283185307179586. `w_i = exp(((−1.0·j)·j) / ((σ+σ)·σ)) · c`
+  for j = i − N/2.
+- It is then divided by the in-order sum. The Gaussian's own normalisation c cancels out,
+  apart from rounding.
+- The 0.9 in the earlier notes belongs to the neighbouring function at 0x6e25e0, not to
+  gaussian.
+
+In the user's VO2max charts, `filter(power, isef(1/L, L), 2)` with odd L (121, 31, 9) is a
+centred exponential smoother with decay (1−1/L)^|j| over ±L/2 samples.
+
+### dfrc(power, frc, ftp) — DISASSEMBLY (0x6d7ae0; loop 0x6d82f0…0x6d8489)
+
+The FRC balance in **kJ** per sample (output units `KJ`, x `HHMMSS`). This is WKO5's W′bal.
+
+Arguments:
+- power must carry WATTS units.
+- frc must be a single valid value in KJ (or NONE units). frc·1000 must be in (0, 50000] J.
+- ftp must be a single valid value in WATTS (or NONE units), 10…600.
+- Otherwise it raises "Invalid FRC." / "Invalid FRC value." / "Invalid FTP value." / "Expecting power in watts.".
+
+```
+D = 0 (depletion, J)   R = 0 (recovered, J)   t = 0 (time since the effort, s)
+for each sample i:
+    dt = x[i] − x[i−1]            # 0x5b7ce0; x[−1] = the range begin
+    if dt is na or dt < 0.001: skip (no output point)
+    p = power[i]; na → 0
+    if p > ftp:
+        left = D − R;  t = 0;  R = 0
+        D = (p − ftp)·dt + (left if left > 0 else 0)
+    else:
+        t += dt
+        R = (1 − e^(t/−300))·(D·0.7) + (1 − e^(t/−25))·(D·0.3)
+    out[i] = ((frc·1000 − D) + R) / 1000
+```
+
+- Recovery is **bi-exponential**: 30 % of the depleted energy returns with τ = 25 s and
+  70 % with τ = 300 s. The clock restarts when an effort ends.
+- The next effort starts from what is still missing (D − R).
+- The first sample starts at full FRC.
+- Nothing clamps the output. A hard effort can take it below 0.
+- In the user's chart it is called as `dfrc(runpower, athleterange(date-89, date,
+  frc(meanmax(runpower))), athleterange(…, ftp(…)))`. The frc argument is in kJ, as
+  `frc()` reports it.
+- Evaluator: `_dfrc`, dt = the `deltatime` channel. It is **not VERIFIED**, because no
+  WKO5 cache holds a dfrc result.
+- CRT `exp` (`_libm_sse2_exp_precise`) and Python's `math.exp` may differ in the last
+  ULP.
 
 ### li(pairs, x) — DISASSEMBLY (0x6ed370)
 
@@ -382,6 +521,12 @@ The exact kernel normalisation has not been decoded yet.
 - Returns the y of the **last point with X ≤ x**, a step lookup.
 - X must be numeric (error "X value must be numeric.").
 - Example: `lookup(weight, enddate)` gives the weight in effect at enddate.
+
+Evaluator: a dated setting (`runthr`, `runftp`, `weight`, …) as the first argument is read
+as its (date, value) history, i.e. the setting in effect on x (before the first entry, the
+earliest value, as for settings everywhere). For other sets, lookup before the first x is na.
+`li` / `lookup` accept any set (curve, workouts by date, samples by elapsed time) and a
+number, list or set of x values.
 
 ---
 
@@ -406,6 +551,14 @@ The exact kernel normalisation has not been decoded yet.
 - `week` uses the constants 1.0 and 7.0.
 - Exact numbering has not been decoded yet.
 
+Evaluator (DOC — each reproduces the Reference's worked example exactly):
+- `weekval(d) = (d + 8) / 7` → weekval(2015-11-08) = 5993.857, trunc → Monday 2015-11-02.
+- `monthval(d) = (year−1901)·12 + (month−1) + (day−1)/days_in_month` → 1378.0667 for 2015-11-03.
+- `yearval(d) = (year−1901) + (day_of_year−1)/days_in_year` → 114.852 for 2015-11-08.
+- `startofmonth`, `startofyear`, `week` (ISO-8601), `month`, `year`, `day`, `dayofweek`
+  (days after Monday), `date(y, m, d)`.
+- `date(x)` of a week/month value does not convert units (the evaluator has no unit types).
+
 ---
 
 ## 7. Statistics
@@ -426,18 +579,115 @@ Sample standard deviation, dividing by n−1: `stddev(1..10) = 3.0276504`.
   xmin/xmax taken over valid points.
 - Time units (HHMMSS / SECONDS …) only affect the unit label of the slope.
 
-### greatest(values, n), least(values, n) — DOC (0x6e4230, 0x6e8890)
+Evaluator: `slrm/slrb/slrrsq` of sample data at the athlete level give one number per
+workout; `slr` of dated values is drawn as a daily line from xmin to xmax (same line),
+of samples as one value per sample, of other sets as the two-point curve. The slope of
+dated values is per day.
+
+### greatest(values, n), least(values, n), first, last — DOC (0x6e4230, 0x6e8890)
 
 - Return the n greatest (or least) values as a set, keeping each value's x (date).
 - n must be ≥ 0 (error "Count of elements must be 0 or greater.").
 - `sortd(greatest(tss, 5))` gives the 5 biggest TSS.
 - In the PMC chart, `greatest(meanmax(power,300),5)` marks the 5 best 5-minute efforts.
+- Lists keep their original order: `greatest({5,7,3,2,4,9,8},3) = {7,9,8}`,
+  `least(…,3) = {3,2,4}`, `first(…,3) = {5,7,3}`, `last(…,3) = {4,9,8}`.
+- Evaluator: athlete-level sets are limited to the chart range first.
 
-### unique, round, trunc, noinvalid, nozero, clamp — DOC
+### unique, round, trunc, noinvalid, nozero, clamp, sign, string — DOC
 
-- `round(x, places)`: places must be in −7…7.
+- `round(x, places)`: places must be in −7…7, and counts powers of ten **left** of the point:
+  `round(pi,-1) = 3.1`, `round(pi,-3) = 3.142`, `round(1234.567,2) = 1200`.
+  - **DISASSEMBLY** (round/1 0x6fe4f0, round/2 0x6feaa0, core 0x4a5bb0):
+    - m = 10^−places is taken from a literal table {1e7 … 1, 0.1 … 1e-7} (0x4a5be8).
+    - x > 0 → `floor(x·m + 0.5) / m`, otherwise `ceil(x·m − 0.5) / m`. Halves round
+      **away from zero**, and the scaling is x·0.01 then /0.01, not x/100.
+    - A result within DBL_MIN of 0 becomes +0, so `round(-0.4) = +0`.
+    - na stays na.
+    - places is itself rounded half away from zero (0x4a59f0) before the −7…7 check
+      ("Places must be between -7 and 7.").
+  - No cached value isolates it: in the Cache5 entry using `round(10*rngp)/10` WKO5's
+    x-values are min/**mi** (the athlete's pace unit; the evaluator's `rngp` is min/km, see
+    §7b `rngp`) and never an exact half after the unit change, and the TIS caches
+    `round(@score)` never hit an exact half.
 - `nozero(x)`: turns 0 into na.
-- `noinvalid(x)`: drops na values.
+- `noinvalid(x)`: drops na values: `noinvalid({13,0,7,na,0,21}) = {13,0,7,0,21}`. Sample
+  series keep their length in the evaluator (na = no point) so they stay aligned with time.
+- `clamp`: the Reference documents `clamp(min, max, values)`, but WKO5's own built-in TIS and
+  stamina expressions call `clamp(values, min, max)`. The evaluator uses the built-in order
+  and falls back to the Reference order when the first reading has min > max.
+- `sign`: 1 / −1 / 0.
+- `string(values)`: numbers → strings for `+` concatenation (`string(39)+"x"+string(23)`).
+  Formatting PROVISIONAL: integers without decimals, else up to 10 significant digits; na → "".
+
+## 7b. Other functions and identifiers the evaluator now supports
+
+| name | semantics | status |
+|---|---|---|
+| `na`, `e`, `g`, `pi` | constants: na, 2.718281828…, 9.80665 m/s², 3.14159… | DISASSEMBLY: identifier resolver 0x71ad70 compares the name `g` (0x71afe3) and loads the double 9.80665 @0x86c220 (0x71b013, unit METERSPERSECOND); `e` (0x71b07a) loads @0x86c180 = 2.718281828459045 |
+| `a in b` | 1 where a's value occurs in b's values, else 0 | PROVISIONAL (not in the Reference) |
+| `begintime`, `endtime` | selected range of a workout in elapsed s (0 and the last elapsedtime; the workoutrange window inside workoutrange) | DOC; the Cache5 entry `workoutrange(begintime,if(sport="run",endtime,0),…rngp…)` matches (see `rngp`). Summary-level resolver 0x4f9402 / 0x4f9442 reads them from a range object ([edi+0x270] vcall +0x20) — not decoded further |
+| `title` | athlete index 3213 (the workout type, "Trail Running", unless renamed; e.g. "Mountaineering"); "" → falls back to the sport type | DISASSEMBLY: summary resolver 0x4f93e6 reads `title` at +0x144 (0x4f95da), which the index serializer 0x4fb517 writes as 3213 (0x4fb520). In a .wko4 the title is info 4020; the workout getter 0x553760 falls back to 4006, then 4005 (sport group) |
+| `description` / `desc` | athlete index 3206 (gunzipped if it starts 1f 8b); .wko4 info 4003 | DISASSEMBLY: +0x15c via 0x4f4990 → 0x4d7400 (gunzip); written by 0x4fb55b through 0x4f8c70 (gzip when shorter). Data: workout 2025-06-21 has 3206 = 4003 = "雪主單攻" with title "Mountaineering", which is what the Season View chart `if(has(title,"Mountaineering") and climbing >1500, description)` labels |
+| `notes` | athlete index 3207 (gunzipped); in a .wko4 a list 4700 {4701 …} that the workout-level resolver joins as `X + "\n" + text + "\n"` per note (0x7201a1…0x72028f) | DISASSEMBLY (+0x174 via 0x4f49c0); empty for every workout in the data set, so not checked against data |
+| `code` | athlete index 3210 | DISASSEMBLY (+0x1a4, 0x4f95c2); no chart uses it |
+| `sftp` | the `bikeftp` setting, for every sport | DISASSEMBLY: settings resolver 0x71dba0 rewrites `sftp` to lower("Bike") + "ftp" (0x71dbe9…0x71dc20) |
+| `tisaerobic`, `tisanaerobic`, `stamina` | the built-in expression strings of formulas.md §6.10 / §6.12, evaluated in their own variable scope; TIS once per workout (na without a power channel) | VERIFIED strings, model DISASSEMBLY |
+| `sport(x).athleterange(a, b, e)` | athleterange limited to sport group x | from the TIS built-ins |
+| `workoutrange(a, b, e)` at athlete level | e once per workout: a number per workout, or the (x, y) sets of all workouts pooled | PROVISIONAL |
+| `ftp/frc/pmax/vo2max/tte(mm, lookback)` | one value per day of the range: model fitted to the envelope of the previous `lookback` days; fits failing the validity gate are na | DOC; every day fitted |
+| `ftpcurve(mm)`, `frccurve(mm)` | the model's aerobic / anaerobic component over the curve's durations (their sum is `pdcurve`) | DOC + model DISASSEMBLY |
+| `targetname/targetduration/targetpower(i, mm)` | formulas.md §6.9b; i may be a list (`{5:0:-1}`) | DISASSEMBLY |
+| `s`, `dmax`, `tau1`, `tau2` | model parameters (formulas.md §6.6) | DISASSEMBLY |
+| `ecpower` | WKO5's channel expression (below): P = ewma(power,25) / f(h), f(h) = −6.74e−9 h² − 2.74e−5 h + 0.997 (h = elevation, m); if P > sftp: (P − sftp)·f(h) + sftp. Bike and Run workouts only | DISASSEMBLY (string @0x860d18, pushed at 0x724bcc); not VERIFIED — no cached value |
+| `fmax` | "Maximum Force", N: `(metric(weight)*g)*(pi/2)*((60*1000/cadence/2-stancetime)/stancetime+1)` with stancetime in **ms** (Morin et al. 2005). Run only | DISASSEMBLY (string @0x860e88, 0x7251a1; unit N, LBSFORCE for English units); not VERIFIED — no cached value |
+| `kleg` | leg stiffness, kN/m (string at 0x725058, stancetime ms, height cm, leg length 0.53·height). Run only | DISASSEMBLY; no chart uses it |
+| `rngp` | `1000/_ragpace` (0x724e46; Run only): min/km at each sample's time | VERIFIED: Cache5 `workoutrange(begintime,if(sport="run",endtime,0),@Pace:=round(10*rngp)/10,…,xx(avg(@HR,if(@Pace<=20"min/km",@Pace))))` — the evaluator's pace bins × 1.609344 equal WKO5's bins exactly in 15/15 road runs (WKO5 hands rngp to expressions in the athlete's pace unit, min/mi here; units PACEKM/PACEMI chosen at 0x724f4b). WKO5 adds one more (na-key) bin per workout (§8 #21) |
+
+**Derived channels (0x7242ac).** WKO5 creates these channels per workout from expression strings, each
+for the listed sport groups only: `gprleft` `power*(1-balance)/effectivenessleft`, `gprright`
+`power*balance/effectivenessright`, `gpaleft` `gprleft-power*(1-balance)`, `gparight`
+`gprright-power*balance`, `kileft` / `kiright` `effectiveness…/smoothness…` (Bike); `ecpower`
+(Bike, Run); `rgrade` `filter(metric(_elevation-shift(_elevation,1)) / sqrt((metric(elapseddistance-shift(elapsedDistance,1))*1000)^2-metric(_elevation-shift(_elevation,1))^2), gaussian(3,17), 2)`
+(all sports, PERCENT); `rngp` `1000/_ragpace`, `kleg`, `fmax` (Run). **Units:** WKO5 evaluates
+identifiers in display units — `stancetime` in ms, `verticaloscillation` in cm, `height` in cm,
+pace in the athlete's pace unit (the Palladino report's own note: "built on the basis of English
+units … Kleg reports high"; the fmax/kleg strings divide stancetime by 1000 and height by 100, and
+the user's charts divide `metric(verticaloscillation)` by 100 to get metres). **The evaluator
+follows this for every expression** (`EXPR_UNIT_SCALE` / `SETTING_UNIT_SCALE`): the .wko4 files
+store stancetime in s and verticaloscillation in m, the height setting is in m, and they are
+scaled on read to ms / cm / cm. The channel strings are therefore parsed verbatim (the earlier
+`CHANNEL_EXPR_UNITS` name rewriting is gone), and the MILLISECONDS / CM axes need no display
+scale. Pace stays min/km (see `rngp`).
+
+**rgrade, step by step** (`Evaluator._rgrade`; `RGRADE_EXPR` is the string above):
+- dElev = `_elevation[i] − _elevation[i−1]` in m. `_elevation` is WKO5's smoothed elevation
+  channel; when a file has none (FIT files imported by this app) it is recomputed from
+  `elevation` with WKO5's smoothing (`algorithms/wko5_elevation.py`, VERIFIED bit-exact).
+- dRun = `(elapseddistance[i] − elapseddistance[i−1])·1000` in m (elapseddistance is km).
+- g = dElev / sqrt(dRun² − dElev²): rise over the **horizontal** run, not over distance.
+- g is na for the first sample (`shift(x,1)` has no predecessor), where either channel is na,
+  and where dRun < |dElev| (sqrt of a negative: e.g. standing, dRun = 0, while the barometer
+  drifts). |dElev| = dRun would be x/0, which is na (the evaluator's x/0 rule, PROVISIONAL).
+- **One guard the string does not have** (PROVISIONAL): a horizontal run below 1 cm is na.
+  Distance is stored in 1 cm steps, so a smaller run can only be the float residue of
+  dRun = |dElev|. On workout 1094, 0.5 m against 0.500000000000167 m gave g = 1.2·10⁶ and
+  would have made the trail run's average grade 37 000 %.
+- rgrade = `filter(g, gaussian(3,17), 2)`: a centred 17-sample Gaussian (σ = 3 samples, ±8),
+  renormalised over the valid samples, so single na samples are bridged by their neighbours.
+  A sample is na only when its whole ±8 window is.
+- It is per sample, not per metre or per second, and not VERIFIED (no cached rgrade result).
+  A file's own `rgrade` channel would win.
+
+Channels the athlete's recent .wko4 files contain (last 60 workouts, count): elapsedtime 60,
+heartrate 60, @activity_type 60, speed 59, elapseddistance 59, elevation / latitude / longitude /
+_elevation 58, power 55, cadence 55, @vertical_ratio 55, stancetime 55, verticaloscillation 55,
+@effort_pace 54, @step_length 54, @form_power 53, @impact_loading_rate 53,
+@leg_spring_stiffness 53, @air_power 52. None records `fmax`; WKO5 derives it.
+| `ln`, `log`, `floor`, `frac`, `length`, `unique`, `first`, `last`, `least` | as named | DOC |
+| `{lo:hi:step}` in a list | expands to lo, lo+step, … hi | DOC (a set bound is reduced to its max/min, PROVISIONAL) |
+| `(xs, ys)` with a list or curve side | an (x, y) set; string x values give labelled pairs | DOC |
+| `(, set)` | drops the x values; a single value is a plain number | DOC ("( ,Y) with no X value") |
 
 ---
 
@@ -447,28 +697,59 @@ Sample standard deviation, dividing by n−1: `stddev(1..10) = 3.0276504`.
 |---|---|---|---|---|
 | 1 | `_meanmax` | Integer k-window cumsum over samples, NaN→0 | Continuous d-second window with fractional end samples, 98% valid rule, 1.05 grid (§1) | Wrong on any non-1 s data, gaps or invalid samples. MMP, PD-curve and TIS charts are all affected. Port `fn_meanmax_exact.py`. |
 | 2 | `meanmax(x)` curve | Not supported | Grid §1.1 | Needed by pdcurve / levels / MMP charts |
-| 3 | `count` | Counts valid values | Counts valid **non-zero** values | `count(heartrate)`-style series |
-| 4 | `startofweek`, `weekval` | Hard-coded Monday; weekval = startofweek | Uses the user's first-day-of-week preference | Weekly charts, `@lastWeekEP`, `本周…` gauges |
-| 5 | `greatest` | Returns its input unchanged | The n greatest values (with dates) | PMC "MMP 5 Min (P5)" series |
+| 3 | `count` | **Fixed**: valid non-zero values (grouped counts too) | Counts valid **non-zero** values | OK |
+| 4 | `startofweek` | Hard-coded Monday | Uses the user's first-day-of-week preference | Weekly charts, `@lastWeekEP`, `本周…` gauges |
+| 4b | `weekval` / `monthval` / `yearval` | **Fixed**: fractional period numbers (§6, Reference examples exact); `date()` and groupby map them back to the period's first day | Period values with WEEK / MONTH / YEAR units | OK; `date()` conversion read off the expression, not from units |
+| 5 | `greatest` / `least` / `first` / `last` | **Implemented** (§7) | The n greatest values (with dates) | OK |
 | 6 | `avg` over athlete-level sets | Plain mean | Plain mean | OK |
 | 7 | `avg` over samples | Weights = `diff(t, prepend=0)` | Same, but `prev` starts at the range begin | OK for whole workouts; differs for sub-ranges starting mid-workout |
 | 8 | `ewma` | Same recurrence; k = 1 when c = 0 | Error when c ≈ 0 | Negligible |
-| 9 | `round` | `np.round` (half-to-even) | Not decoded; places limited to −7…7 | Possible ±1 in the last digit |
-| 10 | `bin`, `lookup`, `li`, `levelfrom/levelto/levelname`, `stddev`, `slr*`, `cumsum`, `delta`, `rev`, `sortx`, `xx`, `yx`, `filter`, `isef`, `gaussian`, `string`, `in`, groupby `sum/count/avg` | Not implemented | §3–§7 | Zones, 間歇, 有氧/無氧, Zone & Variation dashboards |
+| 9 | `round` | **Fixed**: x·m then /m with WKO5's m table, halves away from zero, −0 → +0, places rounded (§7) | DISASSEMBLY 0x4a5bb0 | OK |
+| 10 | `bin`, `lookup`, `li`, `levelfrom/levelto/levelname/levelcount`, `stddev` family, `slr*`, `cumsum`, `delta`, `rev`, `sort*`, `xx`, `yx`, `string`, `in`, groupby `sum/count/avg/max/min` | **Implemented** (§2–§7b) | §3–§7 | OK |
+| 10b | `filter`, `isef`, `gaussian` | **Fixed**: WKO5's loop and kernels (§5), in-order sums | DISASSEMBLY 0x6dcf10 / 0x6e7590 / 0x6e20a0 | OK; not VERIFIED (no cached result). VO2max marking charts still limited by #19 |
 | 11 | `_rolling_time_avg` | Still present | Replaced by `_rapower` (NP) | Dead code |
-| 12 | `shift` | Lag | Lag, plus the one pre-range value at position k−1 | First day of a TSB series |
-| 13 | `rgrade` | Rise/run over 10 m, PROVISIONAL | Not decoded here (workout-metrics agent) | Grade-coloured charts |
+| 12 | `shift` | Lag (lists too) | Lag, plus the one pre-range value at position k−1 | First day of a TSB series |
+| 13 | `rgrade` | **Fixed**: WKO5's channel string (§7b "rgrade, step by step"), plus a PROVISIONAL na for horizontal runs < 1 cm (float residue); `_elevation` recomputed from `elevation` when a file lacks it | Channel string (0x724cfd): `filter(Δ_elevation / sqrt((Δelapseddistance·1000)² − Δ_elevation²), gaussian(3,17), 2)`, per-sample rise over horizontal run, Gaussian-smoothed | Grade-coloured charts. Trail run 1094: average 2.9 % → 1.8 %, median 0.9 % → 0.4 %, 99th percentile 66 % → 52 %; road run 1097 unchanged on average (0.02–0.04 %), wider tails (±20–30 %). Not VERIFIED |
+| 14 | athlete-level sets | **Changed**: reductions (`max(tss)`, `greatest`, `stddev`…), `meanmax(x)` envelopes and per-workout sample aggregates cover the chart (RHE) range unless an `athleterange` is given; only `tl()` integrates the whole history | WKO5 works on the selected range | "(Range)" charts and range PD curves now use the range; before they used all history |
+| 15 | `max/min(a, b)` | Groupby for two dated / listed sets or a period name, elementwise otherwise (PROVISIONAL split) | Reference: groupby; disassembly: elementwise max/2 | Sample-vs-sample `max(x, y)` stays elementwise |
+| 16 | `dfrc(power, frc, ftp)` | **Implemented** (§5): kJ balance, bi-exponential recovery 0.3/τ25 + 0.7/τ300 | DISASSEMBLY 0x6d7ae0 | "dFRC Run" series; not VERIFIED (no cached result) |
+| 17 | `fmax`, `kleg`, `ecpower`, text fields | **Fixed**: WKO5's channel strings (§7b), parsed verbatim now that stancetime / height evaluate in ms / cm (#20), `sftp` = bikeftp, title/description/notes/code = index 3213/3206/3207/3210 | DISASSEMBLY 0x7242ac, 0x71dba0, 0x4f93e6 / 0x4fb517 | "Impact Gs", "ElevCP"/"Elev CF" rows of the Palladino / Hilly Run reports; the Mountaineering description labels |
+| 18 | `ctspower`, `rstpower` levels | **Fixed**: empty tables, `levelcount` = 0 | Builder 0x64d1e0 clears the table; level count 0 (§4) | none of the user's charts |
+| 20 | display units | **Fixed**: stancetime evaluates in ms, verticaloscillation in cm, the height setting in cm, in every expression (§7b); MILLISECONDS / CM axes lost their ×1000 / ×100 display scale. Pace stays min/km | Expressions see display units (stancetime ms, height cm, pace per the athlete's unit preference) | The user's formulas now read as written. Road run 1097: Palladino "Flight Phase" 0.999 → −1.5 % (GCT 448 ms average against a 420 ms step: the average includes walking samples with GCT up to 700 ms), "Pwr-GCT" none → 0.392 W/ms. Trail run 1094 Hilly Run Summary: "Coggan Osc Pwr %" 0.4 % → 42 %, "LSS/kg/GCT" 169 → 0.169 |
+| 20b | x/0 on sample series | **Fixed**: na, as for single values (before: ±inf, which made `avg(power/stancetime)` inf whenever a sample had GCT 0) | Not decoded | PROVISIONAL |
+| 21 | groupby with na keys | na keys are dropped | Cache5 shows one extra group with an na x per workout (`avg(@HR, if(@Pace<=20, @Pace))`) | One extra (na) bin in RHE pace/HR scatter charts |
+| 19 | XY-set model | Only curves, lists, pairs and per-workout / daily sets carry x; sample sets keep their x implicitly (elapsedtime) and are never re-ordered or shortened | Every WKO5 set is (x, y) pairs | The VO2max interval-marking charts (`{@ZeroBeginning, filter(...), @ZeroEnd}`, `lookup` over transition sets) evaluate but will not match WKO5 |
 
 ---
 
 ## 9. Open items
 
 1. `bin` with levels on pace channels: check whether values are compared as pace or
-   speed.
-2. Exact numbering and edge cases of `week` / `weekval` / `year`.
-3. Kernel normalisation of `filter` / `isef` / `gaussian`.
-4. The `ctspower` / `rstpower` tables.
-5. The rounding mode of `round`.
-6. Groupby buckets for `sum/count/avg(x, period)`.
-7. `in`, `string` and the `(expr)"unit"` casts. The casts appear to be unit tags only;
-   the parser already ignores them.
+   speed, and the index order of the pace systems (evaluator: fastest level = index 0).
+2. `week` numbering is ISO-8601 per the Reference; `weekval`'s offset follows the Monday
+   week start of the Reference example — check with a non-Monday first-day preference.
+3. ~~Kernel shape and normalisation of `filter` / `isef` / `gaussian`~~ — decoded (§5).
+   Still to do: VERIFY against a WKO5 number. Open a workout chart with e.g.
+   `filter(power, isef(1/9, 9), 2)` in WKO5 so that it is cached (or read a value off the
+   screen), then compare it with the evaluator.
+4. ~~The `ctspower` / `rstpower` tables~~ — they have no levels in 5.0.587 (§4).
+5. ~~The rounding mode of `round`~~ — halves away from zero, x·m/m (§7).
+6. ~~`dfrc(power, frc, ftp)`~~ — decoded (§5); VERIFY the same way as item 3, using the
+   "dFRC Run" chart's dFRC value at one time point.
+   ~~`fmax`~~ — a derived Run channel, decoded (§7b). VERIFY: open workout 1097 (2026-09-24
+   road run) in WKO5 with the Palladino Run Summary Report and read "Impact Gs" (evaluator
+   1.557; 1.539 for 1094). Also read "Flight Phase" (evaluator −1.5 %), "GCT" (448 ms) and
+   "Pwr-GCT" (0.392) there to confirm the ms convention (§8 #20), and the "Avg Grade" of 1094's
+   Hilly Run Summary (evaluator 1.83 %) to check rgrade (§8 #13).
+7. ~~`ecpower`~~ — WKO5's expression string, decoded (§7b). VERIFY: read "ElevCP" /
+   "Elev CF" of the same report (evaluator: 1097 150.16 W / 0.023 %, 1094 128.73 W /
+   0.60 %); a high-altitude workout (e.g. the 2025-06-21 Mountaineering day, but it has no
+   power) would test f(h) better.
+8. ~~Which index field is `description` / `notes`~~ — decoded (§7b): 3206 / 3207, title 3213.
+   Only `description` is backed by data (one workout). To check `notes`: add a note to any
+   workout in WKO5, save, and re-read index field 3207 (and .wko4 record 4700).
+9. `in` has no Reference entry; membership is the only plausible reading.
+10. Sample-level `avg(x, groupby)` is a plain mean per key; WKO5 may time-weight it.
+11. `max/min(a, b)`: groupby (Reference) vs elementwise (disassembly note) for two sample
+    series — look at 0x6f0c90's use of the `link` name.
+12. The `(expr)"unit"` casts appear to be unit tags only; the parser ignores them.

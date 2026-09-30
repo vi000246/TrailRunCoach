@@ -1,6 +1,6 @@
 # Spec Roadmap
 
-> Auto-updated index. Last updated: 2026-09-29
+> Auto-updated index. Last updated: 2026-09-30
 >
 > **AI Agents**: Read this file first to decide which specs to load. Load only what's relevant to your task to avoid context bloat.
 
@@ -13,6 +13,9 @@
 | coros-sync | [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md) | Supporting | Coros 非官方 API 自動下載 FIT，免依賴 WKO5/TrainingPeaks | — |
 | ai-coach | [ai-coach-training-analysis.spec.md](./ai-coach-training-analysis.spec.md) | Core Domain | In-app AI Coach chat、Smart Dashboard、Trail Analysis | — |
 | training-load-charts | [wko5-training-load-charts.spec.md](./wko5-training-load-charts.spec.md) | Core Domain | 逆向 WKO5 的五張 run-specific 訓練負荷圖表 | — |
+| overview | [overview.spec.md](./overview.spec.md) | Core Domain | 首頁：全部運動合計的訓練狀況、週/月/年紀錄、整合 PMC 與預估、本週課表 | — |
+| racepower | [racepower.spec.md](./racepower.spec.md) | Core Domain | 賽事功率：SuperPower 計算機移植到自己的活動資料，含越野／百岳模型與賽日天氣 | — |
+| wko5-chart-units | [wko5-chart-units.spec.md](./wko5-chart-units.spec.md) | Supporting | 圖表單位登錄表、公制顯示、WKO5 圖表設計修正（views/wko5_fixes.json） | — |
 
 ## Loading Guide
 
@@ -26,6 +29,9 @@
 
 | Date | Module | Feature SRS | One-line Summary |
 |------|--------|-------------|-----------------|
+| 2026-09-30 | overview | — | code-sync 建立：全部運動合計的首頁、週/月/年彙總、PMC 預估、規則式本週課表 |
+| 2026-09-30 | racepower | — | code-sync 建立：SuperPower 計算機移植、越野努力距離＋個人 RE、百岳 EP/h 模型、CWA／Open-Meteo 天氣 |
+| 2026-09-30 | wko5-chart-units | — | code-sync 建立：單位登錄表、非對照模式公制化、50 筆 WKO5 圖表修正 |
 | 2026-09-29 | wko5-engine | — | code-sync 建立：WKO5 檔案解析、驗證演算法（NP 359/359、hrTSS 1030/1030、mean-max 49,188 點）、表達式引擎、雙模式、資料校正、自訂圖表 |
 | 2026-06-13 | ai-coach | [knowledge-driven-prescription.srs.md](../srs/ai-coach-knowledge-driven-prescription.srs.md) | 知識驅動處方：curated 知識 + zone 計算 + 處方 prompt |
 | 2026-06-13 | coros-sync | [unified-sync-page-data-inventory.srs.md](../srs/completed/coros-sync-unified-sync-page-data-inventory.srs.md) | 統一同步頁：TP 下載接 UI、已載入資料盤點端點 |

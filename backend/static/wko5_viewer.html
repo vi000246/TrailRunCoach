@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WKO5 View Check</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
@@ -24,37 +24,131 @@
 html, body { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column;
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
-header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 8px 16px; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-h1 { font-size: 15px; margin: 0 12px 0 0; }
-.mode button, .tabs button { border: 1px solid var(--line); background: var(--panel); color: var(--text);
-  padding: 4px 10px; border-radius: 6px; cursor: pointer; font: inherit; }
-.mode button.on, .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-.tabs { margin-top: 8px; gap: 4px; }
 select, input { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 3px 6px; }
 .meta { color: var(--muted); font-size: 12px; }
+.spacer { flex: 1; }
+svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.iconbtn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); border-radius: 6px; padding: 4px 9px; cursor: pointer; font: inherit; }
+.iconbtn:hover { background: var(--accent-soft); }
+
+/* ---- toolbar: where am I (mode › group › view › dashboard) + active filters as chips ---- */
+.tb { flex: none; background: var(--panel); border-bottom: 1px solid var(--line); padding: 8px 16px 9px;
+  display: grid; gap: 8px; }
+.tb1 { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.tb2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.seg { display: inline-flex; flex: none; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--bg); }
+.seg button { border: 0; background: none; color: var(--muted); padding: 4px 12px; border-radius: 6px; cursor: pointer;
+  font: inherit; font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+.seg button .sub { font-weight: 400; font-size: 11.5px; }
+.seg button.on { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.crumb b { color: var(--text); font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
+.crumb .sep { opacity: .45; }
+.crumb .n { font-size: 11.5px; flex: none; }
+.crumb .c1, .crumb .c2 { flex: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); border-radius: 16px; padding: 3px 11px; font: inherit; cursor: pointer; white-space: nowrap; max-width: 100%; }
+.chip:hover { border-color: var(--accent); }
+.chip .k { color: var(--muted); font-size: 11.5px; }
+.chip .v { overflow: hidden; text-overflow: ellipsis; }
+.chip .caret { color: var(--muted); font-size: 10px; }
+.chip.go { background: var(--accent-soft); border-color: transparent; color: var(--accent); font-weight: 600; }
+.chip.go:hover { border-color: var(--accent); }
+.chip[aria-expanded="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pill { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: 11.5px; padding: 2px 10px; border-radius: 12px;
+  text-decoration: none; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pill:hover { background: var(--accent-soft); }
+.pill.parity { border-color: var(--warn); color: var(--warn); }
+.pill.mine { border-color: var(--ok); color: var(--ok); }
+body[data-mode="season"] .w-only, body[data-mode="workout"] .s-only { display: none !important; }
+.only-narrow { display: none !important; }
+
+/* ---- layout: chart directory | charts | filters & activities ---- */
 .wrap { flex: 1; display: flex; min-height: 0; }
-main { flex: 1; min-width: 0; overflow: auto; padding: 12px 16px;
+main { flex: 1; min-width: 0; overflow: auto; padding: 12px 16px 24px;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 12px; align-content: start; }
-aside { width: 320px; flex: none; background: var(--panel); border-left: 1px solid var(--line);
+.side { width: 260px; flex: none; background: var(--panel); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; min-height: 0; }
-aside section { padding: 10px 12px; border-bottom: 1px solid var(--line); }
-aside h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.side .sh { padding: 10px 12px 8px; border-bottom: 1px solid var(--line); display: flex; gap: 6px; align-items: center; }
+.side .search { position: relative; flex: 1; }
+.side .search svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.side input[type="search"] { width: 100%; padding: 5px 8px 5px 28px; }
+.tree { flex: 1; overflow-y: auto; padding: 4px 0 16px; }
+.grp-h { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  color: var(--muted); padding: 12px 14px 4px; }
+.grp-h .tag { font-weight: 500; letter-spacing: 0; border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; cursor: help; }
+.tree button { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer; padding: 5px 12px; }
+.tree button:hover { background: var(--accent-soft); }
+.tree button .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree button .n { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 400; flex: none; }
+.vw-h { font-weight: 600; }
+.vw-h::before { content: "▸"; font-size: 10px; color: var(--muted); width: 10px; transition: transform .12s; }
+.vw.open > .vw-h::before { transform: rotate(90deg); }
+.vw.has-cur:not(.open) > .vw-h { color: var(--accent); }
+.vw ul { list-style: none; margin: 0 0 4px; padding: 0; }
+.vw:not(.open) ul { display: none; }
+.tree .db { padding-left: 30px; }
+.tree .db.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+.tree .hit { display: block; padding: 6px 14px; }
+.tree .hit .w { display: block; color: var(--muted); font-size: 11px; }
+.tree .hit .tag { font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 5px; margin-right: 4px; }
+.tree mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; border-radius: 2px; }
+.tree .none { padding: 16px 14px; color: var(--muted); }
+.side .foot { border-top: 1px solid var(--line); padding: 7px 14px; font-size: 11px; color: var(--muted); }
+.ddesc { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 12px; cursor: pointer;
+  /* overflow: clip, not hidden — a scroll container's grid row would collapse to 0 in this scrolling grid */
+  white-space: nowrap; overflow: clip; text-overflow: ellipsis; min-width: 0; }
+.ddesc.full { white-space: normal; }
+.card.flash { box-shadow: 0 0 0 2px var(--accent); }
+
+aside { width: 320px; flex: none; background: var(--panel); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
+body.aside-closed aside { display: none; }
+aside .ah { display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 46px; flex: none; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--panel); z-index: 2; font-weight: 600; }
+aside details { padding: 8px 12px; border-bottom: 1px solid var(--line); margin: 0; scroll-margin-top: 46px; }
+aside summary { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .03em;
+  padding: 2px 0 6px; list-style: none; display: flex; gap: 6px; align-items: baseline; }
+aside summary::before { content: "▾"; font-size: 10px; }
+aside details:not([open]) > summary::before { content: "▸"; }
+aside details:not([open]) > summary { padding-bottom: 2px; }
+aside summary .meta { font-weight: 400; margin-left: auto; font-size: 11px; }
+aside details.actsbox { padding-bottom: 0; border-bottom: 0; }
+aside details.actsbox .acts { margin: 0 -12px; }
+aside details.actsbox > summary { position: sticky; top: 46px; padding-top: 8px; margin-top: -8px; background: var(--panel); z-index: 1; }
+aside .hint { font-size: 11.5px; color: var(--muted); margin: -2px 0 6px; }
 .presets button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--panel);
-  color: var(--text); border-radius: 4px; padding: 2px 6px; cursor: pointer; }
+  color: var(--text); border-radius: 4px; padding: 2px 7px; cursor: pointer; }
+.presets button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .sports label { display: inline-flex; gap: 4px; align-items: center; margin: 2px 8px 2px 0; }
-.acts { flex: 1; overflow: auto; }
 .act { padding: 6px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .act:hover { background: var(--accent-soft); }
 .act.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .act .t { display: flex; justify-content: space-between; gap: 8px; }
 .act .s { color: var(--muted); font-size: 11px; }
+.empty .iconbtn { margin-top: 10px; }
+.scrim { display: none; }
+@media (max-width: 1100px) { .crumb .c1, .crumb .c1 + .sep { display: none; } }
 @media (max-width: 900px) {
-  .wrap { flex-direction: column; }
-  aside { width: auto; border-left: 0; border-top: 1px solid var(--line); max-height: 50vh; }
-  main { grid-template-columns: 1fr; }
+  /* narrow: directory and filter panel become drawers over the charts */
+  .only-narrow { display: inline-flex !important; }
+  .side { position: fixed; left: 0; top: 0; bottom: 0; z-index: 50; width: min(300px, 86vw);
+    box-shadow: 8px 0 24px rgba(0,0,0,.3); transform: translateX(-105%); transition: transform .16s ease-out; }
+  body.side-open .side { transform: none; }
+  aside { position: fixed; right: 0; top: 0; bottom: 0; z-index: 50; width: min(330px, 90vw);
+    box-shadow: -8px 0 24px rgba(0,0,0,.3); }
+  body.side-open .scrim, body:not(.aside-closed) .scrim { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.35); }
+  main { grid-template-columns: 1fr; padding: 10px 10px 20px; }
+  .tb { padding: 8px 10px; }
+  .tb1 { flex-wrap: wrap; row-gap: 6px; gap: 8px; }
+  .crumb { order: 5; flex: 1 1 100%; }
+  .crumb .c2, .crumb .c2 + .sep { display: none; }
 }
+@media (max-width: 520px) { .seg button .sub { display: none; } }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
 .card.wide { grid-column: 1 / -1; }
 .card h2 { font-size: 13px; margin: 0 0 4px; }
@@ -74,54 +168,80 @@ td code { background: var(--code); padding: 1px 4px; border-radius: 4px; word-br
   font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; }
 .st-ok { color: var(--ok); } .st-err { color: var(--err); } .st-none { color: var(--muted); }
 .badge { display: inline-block; font-size: 10.5px; padding: 0 6px; border-radius: 10px; border: 1px solid var(--warn); color: var(--warn); }
+.badge.fix { border-color: var(--accent); color: var(--accent); font-weight: 400; margin-left: 6px; cursor: help; vertical-align: 1px; }
+table.zt td, table.zt th { padding: 4px 6px; white-space: nowrap; }
+table.zt th.num { text-align: right; }
+.vt { overflow-x: auto; }
+.zbar { position: relative; height: 16px; background: var(--code); border-radius: 3px; overflow: hidden; }
+.zbar i { position: absolute; left: 0; top: 0; bottom: 0; opacity: .75; }
+.zbar span { position: relative; font-size: 10.5px; padding-left: 5px; line-height: 16px; }
 .loading { color: var(--muted); padding: 30px 0; text-align: center; }
 .empty { grid-column: 1 / -1; color: var(--muted); padding: 40px; text-align: center; }
 </style>
 </head>
-<body>
-<header>
-  <div class="row">
-    <h1>WKO5 View Check</h1>
-    <a href="/api/v1/plan/page" style="font-size:13px">賽事周期</a>
-    <a href="/api/v1/achievements/page" style="font-size:13px">成就</a>
-    <div class="row mode"><button id="m-season" class="on">Season 總覽</button><button id="m-workout">Workout 單次活動</button></div>
-    <select id="view"></select>
-    <label id="paritylbl" title="開啟：完全比照 WKO5，用來驗證資料算得對不對。關閉：套用你自己調整的算式（移動時間 hrTSS、爬升加成、資料校正）">
-      <input type="checkbox" id="parity" checked> <b>WKO5 對照模式</b>
-    </label>
-    <span class="meta" id="meta"></span>
+<body class="aside-closed" data-mode="season">
+<script src="/api/v1/static/shell.js" data-page="charts"></script>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-sport" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="m6 21 3.5-6 3 2.5V22M9.5 15 11 9l3.5 2 3 .5M11 9 7 10.5 5.5 14"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  <symbol id="i-tree" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3"/></symbol>
+  <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+</svg>
+<div class="tb">
+  <div class="tb1">
+    <button class="iconbtn only-narrow" id="treebtn" aria-controls="side" aria-expanded="false"><svg class="i"><use href="#i-tree"/></svg>目錄</button>
+    <div class="seg mode" role="group" aria-label="圖表類型">
+      <button id="m-season" class="on" title="一段期間內多次活動的趨勢">趨勢<span class="sub">（多次活動）</span></button>
+      <button id="m-workout" title="一筆活動的逐秒圖表">單次活動</button>
+    </div>
+    <div class="crumb" id="crumb"></div>
+    <span class="spacer"></span>
+    <a class="pill" id="modepill" href="/api/v1/wko5/settings#mode"></a>
   </div>
-  <div class="row tabs" id="tabs"></div>
-</header>
+  <div class="tb2">
+    <button class="chip s-only" id="chip-range" aria-controls="aside"><svg class="i"><use href="#i-cal"/></svg><span class="v" id="range-txt"></span><span class="caret">▾</span></button>
+    <button class="chip s-only" id="chip-sports" aria-controls="aside"><svg class="i"><use href="#i-sport"/></svg><span class="v" id="sports-txt"></span><span class="caret">▾</span></button>
+    <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
+    <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
+    <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
+  </div>
+</div>
 <div class="wrap">
+  <nav class="side" id="side" aria-label="圖表目錄">
+    <div class="sh">
+      <label class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="q" placeholder="搜尋圖表名稱…" aria-label="搜尋圖表"></label>
+      <button class="iconbtn only-narrow" id="sideclose" aria-label="關閉目錄"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="tree" id="tree"></div>
+    <div class="foot" id="athinfo"></div>
+  </nav>
   <main id="grid"><div class="empty">載入中…</div></main>
-  <aside>
-    <section>
-      <h3>日期範圍</h3>
+  <aside id="aside" aria-label="篩選與活動">
+    <div class="ah">篩選與活動<span class="spacer"></span><button class="iconbtn" id="asideclose" aria-label="關閉"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <details open data-k="range">
+      <summary>日期範圍 <span class="meta" id="sum-range"></span></summary>
       <div class="row"><input type="date" id="begin"> → <input type="date" id="end"></div>
       <div class="row presets" style="margin-top:6px">
         <button data-d="7">7天</button><button data-d="42">42天</button><button data-d="90">90天</button>
         <button data-d="365">1年</button><button data-d="ytd">今年</button><button data-d="all">全部</button>
       </div>
-    </section>
-    <section>
-      <h3>運動類型</h3>
+    </details>
+    <details open data-k="sports">
+      <summary>運動類型 <span class="meta" id="sum-sports"></span></summary>
       <div class="sports" id="sports"></div>
-    </section>
-    <section id="cfgsec" hidden>
-      <h3>自訂算式 <span class="meta" id="cfgstate"></span></h3>
-      <div id="cfgbody"></div>
-    </section>
-    <section id="fixsec">
-      <h3>資料校正</h3>
-      <div class="row"><button id="scanbtn" class="preset">掃描壞點</button>
-        <button id="fixbtn" class="primary" disabled>套用勾選的修正</button></div>
-      <div id="fixlist" class="meta" style="margin-top:6px">尚未掃描</div>
-    </section>
-    <section style="padding-bottom:6px"><h3 id="acts-h">活動</h3></section>
-    <div class="acts" id="acts"></div>
+    </details>
+    <details open data-k="acts" class="actsbox">
+      <summary id="acts-h">活動</summary>
+      <p class="hint">點一筆 → 看它的單次活動圖表</p>
+      <div class="acts" id="acts"></div>
+    </details>
   </aside>
 </div>
+<div class="scrim" id="scrim"></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const API = "/api/v1/wko5";
@@ -135,9 +255,67 @@ const iso = (d) => d.toISOString().slice(0, 10);
 const fmtNum = (v, d = 2) => v == null ? "na" : (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : (+v).toFixed(d));
 const hms = (s) => { if (s == null) return "na"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
   return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(x).padStart(2, "0"); };
+
+// ---- units: every series / axis carries {id,label,kind,dec,scale,base} (backend units.py)
+const AUTO_DEC = [[100, 0], [10, 1], [0, 2]];
+const UNONE = { id: "NONE", label: "", kind: "number", dec: AUTO_DEC };
+function decFor(u, dv) { const r = u.dec || AUTO_DEC; for (const [t, d] of r) if (Math.abs(dv) >= t) return d; return r[r.length - 1][1]; }
+const trimZeros = (s) => s.includes(".") ? s.replace(/\.?0+$/, "") : s;
+// seconds -> h:mm:ss / m:ss ("hm" = h:mm)
+function fmtDur(s, style) {
+  if (s == null || !isFinite(s)) return "—";
+  const neg = s < 0; s = Math.round(Math.abs(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60, p2 = (n) => String(n).padStart(2, "0");
+  const t = style === "hm" ? `${h}:${p2(m)}` : h ? `${h}:${p2(m)}:${p2(x)}` : `${m}:${p2(x)}`;
+  return (neg ? "-" : "") + t;
+}
+// pace series may hold min/km (default), s/km ("s") or a speed in km/h ("kph")
+function paceMin(v, base) { if (v == null) return null; return base === "s" ? v / 60 : base === "kph" ? (v > 0 ? 60 / v : null) : v; }
+const WKO_EPOCH = Date.UTC(1901, 0, 1);
+const dayIso = (n) => new Date(WKO_EPOCH + Math.floor(n) * 864e5).toISOString().slice(0, 10);
+// one value in unit u. opts: {label: add unit text, tick: axis tick (trim zeros), span: axis range in seconds}
+function fmtU(v, u, opts = {}) {
+  u = u || UNONE;
+  if (v == null || typeof v !== "number" || !isFinite(v)) return typeof v === "string" ? v : "—";
+  const lab = opts.label !== false;
+  if (u.kind === "duration") {
+    if (opts.tick) return fmtDur(v, (opts.span ?? Math.abs(v)) >= 3 * 3600 ? "hm" : undefined);
+    return fmtDur(v, u.id === "HHMM" ? "hm" : undefined);
+  }
+  if (u.kind === "pace") {
+    const p = paceMin(v, u.base);
+    if (p == null || p <= 0 || p > 600) return "—";
+    return fmtDur(p * 60) + (lab && !opts.tick ? (u.id === "PACEMI" ? " /mi" : " /km") : "");
+  }
+  if (u.kind === "date") return dayIso(v);
+  const dv = v * (u.scale || 1);
+  let d = decFor(u, dv);
+  // a tick needs enough decimals to be distinct (0.2 on a W axis, not "0")
+  if (opts.tick) while (d < 4 && Math.abs(+dv.toFixed(d) - dv) > 1e-9 * Math.max(1, Math.abs(dv))) d++;
+  let t = dv.toFixed(d);
+  if (opts.tick) t = trimZeros(t);
+  if (t === "-0") t = "0";
+  if (u.kind === "percent") return t + "%";
+  return lab && u.label ? `${t} ${u.label}` : t;
+}
+// unit text printed after a number that fmtU(..., {label:false}) formatted
+const unitText = (u) => !u || ["duration", "percent", "date"].includes(u.kind) ? ""
+  : u.kind === "pace" ? (u.id === "PACEMI" ? "/mi" : "/km") : (u.label || "");
+function axisName(u) {
+  if (!u) return "";
+  if (u.kind === "duration") return "時間";
+  if (u.kind === "pace") return u.id === "PACEMI" ? "配速 /mi" : "配速 /km";
+  if (u.kind === "percent") return "%";
+  if (u.id === "TSSPERDAY" || u.label === "TSS/天") return "TSS/天";
+  return u.label || "";
+}
+// duration-x (mean-max / PD curves): log axis with round-number ticks
+const DUR_TICKS = [1, 5, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800];
+const DUR_TICKS_SPARSE = [1, 5, 30, 60, 300, 1200, 3600, 10800, 36000, 86400, 172800];
+const durTick = (s) => s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${+(s / 3600).toFixed(1)}h`;
 async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${await r.text()}`); return r.json(); }
 function save() { try { localStorage.setItem("wko5viewer", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
-  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout })); } catch {} }
+  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel })); } catch {} }
 function restore() { try { return JSON.parse(localStorage.getItem("wko5viewer") || "{}"); } catch { return {}; } }
 
 function viewKind(v) {
@@ -145,43 +323,62 @@ function viewKind(v) {
   return kinds.filter((k) => k === "workout").length > kinds.filter((k) => k === "athlete").length ? "workout" : "season";
 }
 const viewsOf = (mode) => S.views.filter((v) => viewKind(v) === mode && !v.error);
-const SOURCE_LABEL = { custom: "我的圖表", wko5: "WKO5（對照用）" };
+const SOURCE_LABEL = { custom: "我的圖表", wko5: "WKO5 對照" };
+const MODE_LABEL = { season: "趨勢", workout: "單次活動" };
 const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || viewsOf(S.mode)[0];
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
 function sportsParam() { const s = selectedSports(); return s.length === S.sports.length ? "" : s.join(","); }
-function tpParam() { return `parity=${$("parity").checked}`; }
+function tpParam() { return `parity=${S.parity}`; }
+const narrowMq = matchMedia("(max-width: 900px)");
 
 async function init0() {
   const ath = await j(`${API}/athlete?${tpParam()}`);
   S.athlete = ath;
   const snap = ath.wko5_pmc_snapshot || {};
-  $("meta").textContent = `${ath.name} · ${ath.workouts} 筆活動 · WKO5 快照 CTL ${fmtNum(snap.ctl)} ATL ${fmtNum(snap.atl)} TSB ${fmtNum(snap.tsb)}`;
+  const info = $("athinfo");
+  info.textContent = `${ath.name} · ${ath.workouts} 筆活動`;
+  info.title = `WKO5 快照 CTL ${fmtNum(snap.ctl)} ATL ${fmtNum(snap.atl)} TSB ${fmtNum(snap.tsb)}`;
 }
 
 async function init() {
-  const [views, sports] = await Promise.all([j(`${API}/views`), j(`${API}/sports`)]);
+  const [views, sports, cfg] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`)]);
   S.views = views; S.sports = sports;
+  S.parity = !!cfg.config.parity;   // switched on the settings page
+  const pill = $("modepill");
+  pill.innerHTML = `<svg class="i"><use href="#i-calc"/></svg><span>算式：${S.parity ? "比照 WKO5" : "我的"}</span>`;
+  pill.title = (S.parity ? "WKO5 對照模式：完全比照 WKO5 的公式，不套用資料校正與你的測試值"
+    : "我的算式：移動時間 hrTSS、爬升加成、套用資料校正與你的測試值") + "（點這裡到設定切換）";
+  pill.className = "pill " + (S.parity ? "parity" : "mine");
+  const broken = S.views.filter((v) => v.error);
+  if (broken.length) console.warn("view files with errors:", broken.map((v) => `${v.path}: ${v.error}`));
   await init0();
-  const ath = S.athlete;
   const r = restore();
   const today = new Date();
   $("end").value = r.end || iso(today);
   $("begin").value = r.begin || iso(new Date(today - 365 * 864e5));
   $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!r.sports || r.sports.includes(s.sport) ? "checked" : ""}>${esc(s.sport)} <span class="meta">${s.count}</span></label>`).join("");
-  S.dash = r.dash || S.dash; S.view = r.view || {}; S.workout = r.workout ?? null;
+  S.dash = { ...S.dash, ...(r.dash || {}) }; S.view = r.view || {}; S.workout = r.workout ?? null; S.workoutLabel = r.workoutLabel || null;
+  // deep link from other pages: ?view=<name>&dash=<index or title>
+  const qp = new URLSearchParams(location.search), qv = S.views.find((x) => x.name === qp.get("view") && !x.error);
+  if (qv) {
+    const m = viewKind(qv), dq = qp.get("dash") || "0";
+    S.view[m] = qv.name;
+    S.dash[m] = Math.max(0, /^\d+$/.test(dq) ? Math.min(+dq, qv.dashboards.length - 1) : qv.dashboards.findIndex((d) => d.title === dq));
+    r.mode = m;
+    history.replaceState(null, "", location.pathname);
+  }
   $("m-season").onclick = () => setMode("season");
   $("m-workout").onclick = () => setMode("workout");
-  $("view").onchange = () => { S.view[S.mode] = $("view").value; S.dash[S.mode] = 0; renderTabs(); load(); };
-  $("begin").onchange = $("end").onchange = () => { loadActs(); if (S.mode === "season") load(); };
-  $("parity").onchange = () => { renderConfig(); init0(); loadActs(); load(); };
-  $("fixbtn").onclick = approveFixes;
-  $("scanbtn").onclick = () => loadProposals(true);
-  await renderConfig();
-  $("sports").onchange = () => { loadActs(); if (S.mode === "season") load(); };
+  $("begin").onchange = $("end").onchange = onFilter;
+  $("sports").onchange = onFilter;
+  initChrome();
+  filterSummary();
   document.querySelectorAll(".presets button").forEach((b) => b.onclick = () => preset(b.dataset.d));
   setMode(r.mode === "workout" && S.workout != null ? "workout" : "season");
   loadActs();
 }
+
+function onFilter() { filterSummary(); loadActs(); if (S.mode === "season") load(); }
 
 function preset(d) {
   const end = new Date($("end").value || iso(new Date()));
@@ -190,112 +387,188 @@ function preset(d) {
   else if (d === "all") begin = new Date((S.athlete.first || "2000-01-01").slice(0, 10));
   else begin = new Date(end - (+d - 1) * 864e5);
   $("begin").value = iso(begin);
-  loadActs(); if (S.mode === "season") load();
+  onFilter();
 }
 
 function setMode(mode) {
   S.mode = mode;
+  document.body.dataset.mode = mode;
   $("m-season").classList.toggle("on", mode === "season");
   $("m-workout").classList.toggle("on", mode === "workout");
-  const vs = viewsOf(mode);
-  const cur = curView()?.name;
-  // group by source so WKO5 parity views stay visibly separate from your own
-  $("view").innerHTML = ["custom", "wko5"].map((src) => {
-    const group = vs.filter((v) => (v.source || "wko5") === src);
-    if (!group.length) return "";
-    return `<optgroup label="${SOURCE_LABEL[src]}">` + group.map((v) =>
-      `<option ${v.name === cur ? "selected" : ""}>${esc(v.name)}</option>`).join("") + `</optgroup>`;
-  }).join("");
-  const broken = S.views.filter((v) => v.error);
-  if (broken.length) console.warn("view files with errors:", broken.map((v) => `${v.path}: ${v.error}`));
-  renderTabs(); load();
+  $("m-season").setAttribute("aria-pressed", String(mode === "season"));
+  $("m-workout").setAttribute("aria-pressed", String(mode === "workout"));
+  if ($("begin").value) filterSummary();
+  renderTree(); renderActChip();
+  if (mode === "workout" && S.workout == null) openAside("acts");
+  load();
 }
 
-function renderTabs() {
+// jump to a dashboard (from the directory tree or a search hit)
+function pick(mode, viewName, di, ci) {
+  S.view[mode] = viewName; S.dash[mode] = di; S.focusChart = ci ?? null;
+  if (narrowMq.matches) setSide(false);
+  if (mode !== S.mode) setMode(mode); else { renderTree(); load(); }
+}
+
+// ---- chart directory: group (我的圖表 / WKO5 對照) → view → dashboards ----
+function treeOpen(view, cur) {
+  const t = uiState().tree || {};
+  if (view.name in t) return t[view.name];
+  return view === cur || view.source === "custom";
+}
+function renderTree() {
+  const q = $("q").value.trim();
   const v = curView();
-  if (!v) { $("tabs").innerHTML = ""; return; }
-  if (S.dash[S.mode] >= v.dashboards.length) S.dash[S.mode] = 0;
-  $("tabs").innerHTML = v.dashboards.map((d, i) => `<button class="${i === S.dash[S.mode] ? "on" : ""}" data-i="${i}">${esc(d.title)}</button>`).join("");
-  $("tabs").querySelectorAll("button").forEach((b) => b.onclick = () => { S.dash[S.mode] = +b.dataset.i; renderTabs(); load(); });
-}
-
-const CFG_FIELDS = [
-  ["use_tp_tss", "採用 TrainingPeaks 的 TSS", "checkbox"],
-  ["hr_tss_moving_only", "hrTSS 只計移動時間", "checkbox"],
-  ["elevation_tss_per_1000ft", "每爬升 1000 ft 加 TSS", "number"],
-  ["pack_weight_pct", "背負重量（體重 %）", "number"],
-];
-
-async function renderConfig() {
-  const parity = $("parity").checked;
-  const { config } = await j(`${API}/config`);
-  S.config = config;
-  // The custom formulas are a fixed, researched preset — not knobs to fiddle
-  // with. The panel stays hidden; unhide #cfgsec to expose it for debugging.
-  $("cfgstate").textContent = parity ? "（對照模式中，以下設定不生效）" : "生效中";
-  $("cfgsec").style.opacity = parity ? 0.45 : 1;
-  $("fixsec").style.opacity = parity ? 0.45 : 1;
-  $("paritylbl").nextElementSibling?.remove?.();
-  $("paritylbl").insertAdjacentHTML("afterend",
-    `<span class="meta">${parity ? "比照 WKO5" : "我的算式（移動時間 hrTSS ＋ 爬升加成 ＋ 資料校正）"}</span>`);
-  $("cfgbody").innerHTML = CFG_FIELDS.map(([k, label, type]) =>
-    type === "checkbox"
-      ? `<label style="display:block"><input type="checkbox" data-k="${k}" ${config[k] ? "checked" : ""} ${parity ? "disabled" : ""}> ${label}</label>`
-      : `<label style="display:block;margin-top:4px">${label} <input type="number" step="0.5" style="width:70px" data-k="${k}" value="${config[k]}" ${parity ? "disabled" : ""}></label>`
-  ).join("") + `<button class="preset" id="presetbtn" style="margin-top:6px" ${parity ? "disabled" : ""}>套用登山預設</button>`;
-  $("cfgbody").querySelectorAll("[data-k]").forEach((el) => el.onchange = async () => {
-    const v = el.type === "checkbox" ? el.checked : +el.value;
-    await fetch(`${API}/config`, { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [el.dataset.k]: v }) });
-    loadActs(); load();
+  if (v && S.dash[S.mode] >= v.dashboards.length) S.dash[S.mode] = 0;
+  renderCrumb();
+  if (q) return renderSearch(q);
+  const vs = viewsOf(S.mode);
+  $("tree").innerHTML = ["custom", "wko5"].map((src) => {
+    const group = vs.filter((x) => (x.source || "wko5") === src);
+    if (!group.length) return "";
+    return `<div class="grp"><div class="grp-h">${SOURCE_LABEL[src]}${src === "wko5"
+      ? `<span class="tag" title="從 WKO5 匯入的原始 view，用來對照數字">匯入</span>` : ""}</div>` +
+      group.map((view) => {
+        const open = treeOpen(view, v);
+        return `<div class="vw ${open ? "open" : ""} ${view === v ? "has-cur" : ""}" data-v="${esc(view.name)}">
+          <button class="vw-h" aria-expanded="${open}"><span class="nm">${esc(view.name)}</span><span class="n" title="${view.dashboards.length} 個頁面">${view.dashboards.length}</span></button>
+          <ul>${view.dashboards.map((d, i) => `<li><button class="db ${view === v && i === S.dash[S.mode] ? "on" : ""}" data-i="${i}" title="${esc(d.title)}"
+            ${view === v && i === S.dash[S.mode] ? 'aria-current="page"' : ""}><span class="nm">${esc(d.title)}</span><span class="n" title="${d.charts.length} 張圖">${d.charts.length}</span></button></li>`).join("")}</ul></div>`;
+      }).join("") + `</div>`;
+  }).join("") || `<div class="none">沒有${MODE_LABEL[S.mode]}的 view</div>`;
+  $("tree").querySelectorAll(".vw").forEach((el) => {
+    const name = el.dataset.v;
+    el.querySelector(".vw-h").onclick = () => {
+      const open = !el.classList.contains("open");
+      el.classList.toggle("open", open);
+      el.querySelector(".vw-h").setAttribute("aria-expanded", String(open));
+      saveUi({ tree: { ...(uiState().tree || {}), [name]: open } });
+    };
+    el.querySelectorAll(".db").forEach((b) => b.onclick = () => pick(S.mode, name, +b.dataset.i));
   });
-  const pb = document.getElementById("presetbtn");
-  if (pb) pb.onclick = async () => {
-    const { mountain_preset } = await j(`${API}/config`);
-    const body = { ...mountain_preset, parity: false };
-    await fetch(`${API}/config`, { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body) });
-    await renderConfig(); loadActs(); load();
-  };
+}
+function markHit(s, q) {
+  const i = s.toLowerCase().indexOf(q.toLowerCase());
+  return i < 0 ? esc(s) : esc(s.slice(0, i)) + `<mark>${esc(s.slice(i, i + q.length))}</mark>` + esc(s.slice(i + q.length));
+}
+function renderSearch(q) {
+  const ql = q.toLowerCase(), hits = [];
+  for (const mode of [S.mode, S.mode === "season" ? "workout" : "season"])
+    for (const v of viewsOf(mode)) v.dashboards.forEach((d, di) => {
+      if (d.title.toLowerCase().includes(ql)) hits.push({ mode, v, di, ci: null, label: d.title, where: `${v.name} · 頁面` });
+      for (const c of d.charts) if ((c.title || "").toLowerCase().includes(ql))
+        hits.push({ mode, v, di, ci: c.index, label: c.title, where: `${v.name} › ${d.title}` });
+    });
+  const shown = hits.slice(0, 80);
+  $("tree").innerHTML = shown.length ? `<div class="grp-h">${hits.length} 筆符合</div>` + shown.map((h, k) =>
+    `<button class="hit" data-k="${k}"><span class="tag">${MODE_LABEL[h.mode]}</span>${markHit(h.label, q)}<span class="w">${esc(h.where)}</span></button>`).join("")
+    : `<div class="none">找不到「${esc(q)}」</div>`;
+  $("tree").querySelectorAll(".hit").forEach((b) => b.onclick = () => { const h = shown[+b.dataset.k]; pick(h.mode, h.v.name, h.di, h.ci); });
+}
+function renderCrumb() {
+  const v = curView(), d = v?.dashboards[S.dash[S.mode]];
+  $("crumb").innerHTML = !v ? "" : `<span class="c1">${SOURCE_LABEL[v.source || "wko5"]}</span><span class="sep">›</span>
+    <span class="c2" title="${esc(v.name)}">${esc(v.name)}</span><span class="sep">›</span><b title="${esc(d?.title || "")}">${esc(d?.title || "")}</b>
+    <span class="n">${d ? d.charts.length + " 張圖" : ""}</span>`;
 }
 
-async function loadProposals(scan) {
-  if (!scan) return;
-  $("fixlist").textContent = "掃描中…";
-  try {
-    const { proposals } = await j(`${API}/corrections/proposals`);
-    S.proposals = proposals;
-    if (!proposals.length) { $("fixlist").textContent = "沒有偵測到壞點"; $("fixbtn").disabled = true; return; }
-    $("fixlist").innerHTML = proposals.map((p, i) =>
-      `<label style="display:block;margin-bottom:4px"><input type="checkbox" data-i="${i}" checked>
-       ${esc(p.start.slice(0, 10))} ${esc(p.sport)}<br>
-       <span style="margin-left:18px">${p.samples} 筆 · 峰值 ${fmtNum(p.peak, 0)}W → ${fmtNum(p.peak_after, 0)}W</span></label>`).join("");
-    $("fixbtn").disabled = false;
-  } catch (e) { $("fixlist").textContent = "錯誤: " + e.message; }
+// ---- page chrome: directory drawer, filter / activity panel --------------
+const UI_KEY = "wko5viewer.ui";
+function uiState() { try { return JSON.parse(localStorage.getItem(UI_KEY) || "{}"); } catch { return {}; } }
+function saveUi(patch) { try { localStorage.setItem(UI_KEY, JSON.stringify({ ...uiState(), ...patch })); } catch {} }
+
+function initChrome() {
+  const ui = uiState();
+  // the panel opens from the filter chips; on wide screens it stays docked if you left it open
+  setAside(!narrowMq.matches && ui.aside === true, false);
+  $("asideclose").onclick = () => setAside(false, true);
+  $("chip-range").onclick = () => toggleAside("range");
+  $("chip-sports").onclick = () => toggleAside("sports");
+  $("chip-acts").onclick = () => toggleAside("acts");
+  $("chip-act").onclick = () => toggleAside("acts");
+  $("back").onclick = () => setMode("season");
+  $("treebtn").onclick = () => setSide(!document.body.classList.contains("side-open"));
+  $("sideclose").onclick = () => setSide(false);
+  $("scrim").onclick = () => { setSide(false); if (narrowMq.matches) setAside(false, false); };
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (document.activeElement === $("q") && $("q").value) { $("q").value = ""; renderTree(); return; }
+    setSide(false); if (narrowMq.matches) setAside(false, false);
+  });
+  $("q").oninput = () => renderTree();
+
+  document.querySelectorAll("aside details[data-k]").forEach((d) => {
+    const k = "sec_" + d.dataset.k;
+    if (ui[k] === false) d.open = false;
+    d.addEventListener("toggle", () => saveUi({ [k]: d.open }));
+  });
 }
 
-async function approveFixes() {
-  const picked = [...$("fixlist").querySelectorAll("input:checked")].map((el) => S.proposals[+el.dataset.i]);
-  if (!picked.length) return;
-  if (!confirm(`要套用 ${picked.length} 筆修正嗎？（不會改到你的 .wko4 原始檔，隨時可以取消）`)) return;
-  $("fixbtn").disabled = true;
-  const r = await fetch(`${API}/corrections/approve`, { method: "POST",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proposals: picked }) });
-  const res = await r.json();
-  $("fixlist").textContent = `已套用 ${res.added.length} 筆（共 ${res.total} 筆生效中）`;
-  loadActs(); load();
+function setSide(open) {
+  document.body.classList.toggle("side-open", open);
+  $("treebtn").setAttribute("aria-expanded", String(open));
+}
+function asideOpen() { return !document.body.classList.contains("aside-closed"); }
+function setAside(open, persist) {
+  document.body.classList.toggle("aside-closed", !open);
+  // only the chip whose section the panel was opened for reads as "active"
+  for (const [id, sec] of [["chip-range", "range"], ["chip-sports", "sports"], ["chip-acts", "acts"], ["chip-act", "acts"]])
+    $(id).setAttribute("aria-expanded", String(open && S.lastSec === sec));
+  if (persist && !narrowMq.matches) saveUi({ aside: open });
+  // charts need to re-measure after the grid width changes
+  setTimeout(() => charts.forEach((c) => c.resize()), 50);
+}
+function openAside(sec) {
+  S.lastSec = sec;
+  setAside(true, true);
+  const d = document.querySelector(`aside details[data-k="${sec}"]`);
+  if (!d) return;
+  d.open = true;
+  if (sec === "acts") { const on = d.querySelector(".act.on"); on ? on.scrollIntoView({ block: "center" }) : d.scrollIntoView({ block: "start" }); }
+  else d.scrollIntoView({ block: "nearest" });
+}
+function toggleAside(sec) {
+  const d = document.querySelector(`aside details[data-k="${sec}"]`);
+  if (asideOpen() && d?.open && S.lastSec === sec) { S.lastSec = null; setAside(false, true); return; }
+  openAside(sec);
+}
+
+function filterSummary() {
+  const b = $("begin").value, e = $("end").value;
+  const days = b && e ? Math.round((new Date(e) - new Date(b)) / 864e5) + 1 : null;
+  const sel = selectedSports();
+  const sp = sel.length === S.sports.length ? "全部運動" : sel.length === 1 ? sel[0] : `${sel.length}/${S.sports.length} 類運動`;
+  $("sum-range").textContent = days ? `${days} 天` : "";
+  $("sum-sports").textContent = sp;
+  // the active filter lives in the toolbar chips, so it's visible when the panel is closed
+  const endTxt = b.slice(0, 4) === e.slice(0, 4) ? e.slice(5).replace("-", "/") : e.replaceAll("-", "/");
+  $("range-txt").textContent = b && e ? `${b.replaceAll("-", "/")} – ${endTxt}${days ? ` · ${days} 天` : ""}` : "選日期";
+  $("sports-txt").textContent = sp;
+  const isToday = e === iso(new Date());
+  document.querySelectorAll(".presets button").forEach((x) => x.classList.toggle("on",
+    isToday && ((+x.dataset.d && +x.dataset.d === days) || (x.dataset.d === "ytd" && b === `${e.slice(0, 4)}-01-01`))));
+}
+
+function renderActChip() {
+  const a = (S.acts || []).find((x) => x.index === S.workout);
+  // the picked activity may fall outside the current date filter; keep its last known label
+  if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.sport_type || a.sport} · ${hms(a.duration)}`;
+  $("act-txt").textContent = S.workout == null ? "還沒選" : S.workoutLabel || `#${S.workout}`;
 }
 
 async function loadActs() {
   const q = `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}&${tpParam()}`;
-  const acts = await j(`${API}/workouts?${q}`);
+  const acts = S.acts = await j(`${API}/workouts?${q}`);
   $("acts-h").textContent = `活動 (${acts.length})`;
+  $("acts-n").textContent = acts.length;
+  renderActChip();
   $("acts").innerHTML = acts.map((a) => `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
     <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="TSS 來源">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
   $("acts").querySelectorAll(".act").forEach((el) => el.onclick = () => {
     S.workout = +el.dataset.i;
     $("acts").querySelectorAll(".act").forEach((x) => x.classList.toggle("on", x === el));
+    if (narrowMq.matches) setAside(false, false);
     setMode("workout");
   });
 }
@@ -306,28 +579,49 @@ async function load() {
   charts.splice(0).forEach((c) => c.dispose());
   const grid = $("grid"), v = curView();
   grid.innerHTML = "";
-  if (!v) { grid.innerHTML = `<div class="empty">沒有 ${S.mode} view</div>`; return; }
-  if (S.mode === "workout" && S.workout == null) { grid.innerHTML = `<div class="empty">從右側活動列表選一筆活動</div>`; return; }
+  if (!v) { grid.innerHTML = `<div class="empty">沒有${MODE_LABEL[S.mode]}的 view</div>`; return; }
+  if (S.mode === "workout" && S.workout == null) {
+    grid.innerHTML = `<div class="empty">先選一筆活動<br><button class="iconbtn" id="pickact"><svg class="i"><use href="#i-list"/></svg>打開活動清單</button></div>`;
+    $("pickact").onclick = () => openAside("acts");
+    return;
+  }
   const di = S.dash[S.mode], d = v.dashboards[di];
   const q = (S.mode === "workout" ? `workout=${S.workout}`
     : `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}`)
     + "&" + tpParam();
+  if (d.description) {
+    grid.insertAdjacentHTML("beforeend", `<p class="ddesc" title="點一下展開">${esc(d.description)}</p>`);
+    grid.lastElementChild.onclick = (e) => e.currentTarget.classList.toggle("full");
+  }
   // render sequentially-ish (4 at a time) so heavy charts don't block the rest
+  const focus = S.focusChart; S.focusChart = null;
   const queue = d.charts.map((c) => {
     const card = document.createElement("section");
     card.className = "card";
+    card.dataset.ci = c.index;
     card.innerHTML = `<h2>${esc(c.title || c.kind)}</h2><div class="loading">計算中…</div>`;
     grid.appendChild(card);
     return { c, card };
   });
+  const focusCard = focus == null ? null : queue.find((x) => x.c.index === focus)?.card;
+  if (focusCard) {
+    // search hit: load that chart first, scroll to it, flash it
+    queue.unshift(...queue.splice(queue.findIndex((x) => x.card === focusCard), 1));
+    focusCard.classList.add("flash");
+    focusCard.scrollIntoView({ block: "start" });
+    setTimeout(() => focusCard.classList.remove("flash"), 2500);
+  }
   const worker = async () => {
     while (queue.length) {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
-      if (c.kind !== "athlete" && c.kind !== "workout") { card.querySelector(".loading").textContent = "地圖 / 其他面板尚未支援"; continue; }
+      if (!["athlete", "workout", "zones", "targets"].includes(c.kind)) { card.querySelector(".loading").textContent = "地圖 / 其他面板尚未支援"; continue; }
       try {
         const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`);
-        if (token === loadToken) draw(card, res);
+        if (token !== loadToken) continue;
+        if (res.kind === "zones") drawZones(card, res);
+        else if (res.kind === "targets") drawTargets(card, res);
+        else draw(card, res);
       } catch (e) {
         console.error(c.title, e);
         card.querySelector(".loading")?.remove();
@@ -336,43 +630,118 @@ async function load() {
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
+  // cards above the search hit grew while loading; put it back in view
+  if (focusCard && token === loadToken) focusCard.scrollIntoView({ block: "start" });
 }
 
-function lastVal(data) {
-  if (data.kind === "points") { for (let i = data.points.length - 1; i >= 0; i--) if (data.points[i][1] != null) return data.points[i]; return null; }
-  if (data.kind === "hline") return ["", data.y];
-  if (data.kind === "value") return ["", data.value];
-  if (data.kind === "values") return ["", data.values.map((x) => fmtNum(x, 3)).join(" / ")];
-  if (data.kind === "band") return ["", data.range.join(" ~ ")];
+// x of a points series as text: date / datetime / elapsed seconds / duration / value
+function fmtX(x, kind, xu) {
+  if (x == null) return "";
+  if (kind === "date") return String(x).slice(0, 10);
+  if (kind === "datetime") return String(x).slice(0, 16).replace("T", " ");
+  if (kind === "seconds") return fmtDur(x);
+  if (kind === "duration") return fmtDur(x);
+  return typeof x === "number" ? fmtU(x, xu) : String(x);
+}
+function lastVal(s) {
+  const data = s.data, u = s.unit;
+  if (data.kind === "points") {
+    for (let i = data.points.length - 1; i >= 0; i--) if (data.points[i][1] != null)
+      return [fmtX(data.points[i][0], data.x, s.x_unit), fmtU(data.points[i][1], u)];
+    return null;
+  }
+  if (data.kind === "hline") return ["", fmtU(data.y, u)];
+  if (data.kind === "value") return ["", fmtU(data.value, u)];
+  if (data.kind === "values") return ["", data.values.map((x) => fmtU(x, u, { label: false })).join(" / ") + (u?.label && !["duration", "pace", "percent"].includes(u.kind) ? " " + u.label : "")];
+  if (data.kind === "band") return ["", data.range.map((x) => fmtU(x, u, { label: false })).join(" ~ ")];
   return null;
 }
 
 function draw(card, res) {
   card.querySelector(".loading")?.remove();
+  if (res.fixes && res.fixes.length) card.querySelector("h2")?.insertAdjacentHTML("beforeend",
+    ` <span class="badge fix" title="${esc(res.fixes.join("\n"))}">已修正單位</span>`);
   if (res.description) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
   const S_ = res.series;
   const gauges = S_.filter((s) => s.type === "gauge" && ["values", "value"].includes(s.data.kind));
   if (gauges.length) drawGauges(card, gauges);
   const plotted = S_.filter((s) => ["points", "hline", "band"].includes(s.data.kind) && s.type !== "gauge");
   if (plotted.some((s) => s.data.kind === "points")) drawPlot(card, res, plotted);
+  // WKO5 table charts: every series evaluates to a list -> one column per series, one row per index
+  const cols = S_.filter((s) => s.data.kind === "values" && s.type !== "gauge");
+  if (cols.length) drawValuesTable(card, cols);
   const values = S_.filter((s) => s.data.kind === "value" && s.type !== "gauge");
   if (values.length) {
     if (values.length > 8) card.classList.add("wide");
     card.insertAdjacentHTML("beforeend", `<table>${values.map((s) =>
-      `<tr><td>${esc(s.name)}</td><td class="num">${fmtNum(s.data.value, 3)}</td><td class="meta">${esc((s.y_axis || "").replace(/^CUSTOM/, ""))}</td></tr>`).join("")}</table>`);
+      `<tr><td>${esc(s.name)}</td><td class="num">${esc(fmtU(s.data.value, s.unit, { label: false }))}</td><td class="meta">${esc(unitText(s.unit))}</td></tr>`).join("")}</table>`);
   }
   const rows = S_.map((s) => {
     const st = s.data.kind === "error" ? `<span class="st-err">✗ ${esc(s.data.message)}</span>`
       : s.data.kind === "none" ? `<span class="st-none">—</span>` : `<span class="st-ok">✓ ${s.data.kind}</span>`;
-    const lv = lastVal(s.data);
+    const lv = lastVal(s);
     const n = s.data.kind === "points" ? s.data.points.filter((p) => p[1] != null).length : "";
     return `<tr><td>${esc(s.name || s.id)}</td><td>${st}</td><td class="num">${n}</td>
-      <td class="num">${lv ? esc(lv[0]) + " " + (typeof lv[1] === "number" ? fmtNum(lv[1], 4) : esc(lv[1])) : ""}</td>
+      <td class="num">${lv ? (lv[0] ? `<span class="meta">${esc(lv[0])}</span> ` : "") + esc(lv[1]) : ""}</td>
+      <td class="meta" title="${esc(s.unit?.id || "")}">${esc(s.unit?.label || "")}</td>
       <td><code>${esc(s.expression || "")}</code></td></tr>`;
   }).join("");
   const unsup = res.unsupported.length ? ` <span class="badge">未驗證/不支援: ${esc(res.unsupported.join(", "))}</span>` : "";
-  card.insertAdjacentHTML("beforeend", `<details><summary>數值與公式 (${S_.length})${unsup}</summary>
-    <table><thead><tr><th>Series</th><th>狀態</th><th>點數</th><th>最後值</th><th>公式</th></tr></thead><tbody>${rows}</tbody></table></details>`);
+  const fixes = res.fixes && res.fixes.length ? `<p class="desc" style="max-height:none">已修正：${res.fixes.map(esc).join("；")}</p>` : "";
+  card.insertAdjacentHTML("beforeend", `<details><summary>數值與公式 (${S_.length})${unsup}</summary>${fixes}
+    <table><thead><tr><th>Series</th><th>狀態</th><th>點數</th><th>最後值</th><th>單位</th><th>公式</th></tr></thead><tbody>${rows}</tbody></table></details>`);
+}
+
+// WKO5-style zone table: boundaries + time in zone over the last N days
+function drawZones(card, res) {
+  card.querySelector(".loading")?.remove();
+  const Z = res.zones, pace = Z.unit === "min/km";
+  const f = (v) => v == null ? "" : pace ? `${Math.floor(v)}:${String(Math.round(v % 1 * 60)).padStart(2, "0")}` : Math.round(v);
+  const range = (r) => pace
+    ? (r.from == null ? `快於 ${f(r.to)}` : r.to == null ? `慢於 ${f(r.from)}` : `${f(r.to)}–${f(r.from)}`)
+    : (r.to == null ? `${f(r.from)}+` : `${f(r.from) || 0}–${f(r.to)}`);
+  const pct = (r) => `${r.lo == null ? "" : Math.round(r.lo * 100)}${r.hi == null ? "+" : (r.lo == null ? "<" : "–") + Math.round(r.hi * 100)}%`;
+  const maxShare = Math.max(0.0001, ...Z.rows.map((r) => r.share || 0));
+  const basis = { lthr: "LTHR", cp: "CP", tpace: "閾值配速" }[Z.basis];
+  card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}
+    ${basis} ${pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit} · 最近 ${Z.days} 天 ${Z.runs} 次跑步</p>
+    ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${basis} 是 WKO5 出廠預設值，這張表的區間不準${Z.basis === "lthr" ? "——到「賽事周期」頁套用自動估算的 LTHR" : "——山路配速本來就不準，建議看功率區間"}</p>` : ""}
+    <table class="zt"><thead><tr><th>區間</th><th>名稱</th><th class="num">${esc(Z.unit)}</th><th class="num">% ${basis}</th>
+      <th style="width:34%">時間</th></tr></thead><tbody>${Z.rows.map((r, i) => `<tr>
+      <td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="num">${range(r)}</td><td class="num meta">${pct(r)}</td>
+      <td><div class="zbar"><i style="width:${((r.share || 0) / maxShare * 100).toFixed(1)}%;background:${ZCOL(i, Z.rows.length)}"></i>
+        <span>${r.share == null ? "" : Math.round(r.share * 100) + "% · " + hms(r.seconds)}</span></div></td></tr>`).join("")}</tbody></table>
+    <p class="desc" style="margin-top:6px">${esc(Z.source)}</p>`);
+}
+const ZCOL = (i, n) => `hsl(${140 - 140 * i / Math.max(1, n - 1)} 65% 45%)`;   // green → red
+
+function drawTargets(card, res) {
+  card.querySelector(".loading")?.remove();
+  const T = res.targets;
+  const w = (a) => a[0] == null && a[1] == null ? "–" : a[0] == null ? `< ${Math.round(a[1])}` : a[1] == null ? `${Math.round(a[0])}+` : `${Math.round(a[0])}–${Math.round(a[1])}`;
+  card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}</p>
+    <div class="meta" style="margin-bottom:4px">CP ${Math.round(T.cp || 0)} W（${esc(T.cp_source)}）· LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
+    <table class="zt"><thead><tr><th>課表</th><th class="num">功率 W</th><th class="num">心率</th><th>看哪個</th><th>怎麼練</th></tr></thead>
+    <tbody>${T.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
+      <td class="num">${w(r.power)}</td><td class="num">${w(r.hr)}</td><td>${esc(r.primary)}</td>
+      <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
+}
+
+function drawValuesTable(card, cols) {
+  const n = Math.max(...cols.map((s) => s.data.values.length));
+  // a column is numeric when it holds numbers; string columns (e.g. "125 to 162") ignore the axis unit
+  const numeric = cols.map((s) => s.data.values.some((x) => typeof x === "number"));
+  const head = cols.map((s, i) => {
+    const ut = numeric[i] ? unitText(s.unit) || (s.unit?.kind === "percent" ? "%" : "") : "";
+    return `<th${numeric[i] ? ' class="num"' : ""}>${esc(s.name || s.id)}${ut ? ` <span class="meta">${esc(ut)}</span>` : ""}</th>`;
+  }).join("");
+  const body = Array.from({ length: n }, (_, r) => `<tr>${cols.map((s, i) => {
+    const x = s.data.values[r];
+    const t = x === undefined ? "" : typeof x === "number" ? fmtU(x, s.unit, { label: false }) : x == null ? "" : String(x);
+    return `<td${numeric[i] ? ' class="num"' : ""}>${esc(t)}</td>`;
+  }).join("")}</tr>`).join("");
+  if (cols.length > 4) card.classList.add("wide");
+  card.insertAdjacentHTML("beforeend", `<div class="vt"><table class="zt"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`);
 }
 
 function drawGauges(card, gauges) {
@@ -382,9 +751,11 @@ function drawGauges(card, gauges) {
     const vals = s.data.kind === "values" ? s.data.values : [s.data.value];
     const [cur, target] = vals;
     const pct = target ? Math.max(0, Math.min(1, (cur || 0) / target)) : null;
-    const f = (x) => (s.y_axis || "").startsWith("HH") ? hms(x) : fmtNum(x);
+    const u = s.unit || UNONE;
+    const f = (x) => esc(fmtU(x, u, { label: false }));
+    const lab = unitText(u);
     box.insertAdjacentHTML("beforeend", `<div class="g"><div class="desc">${esc(s.name)}</div>
-      <div class="big">${f(cur)}${target != null ? ` <span class="desc">/ ${f(target)}</span>` : ""}</div>
+      <div class="big">${f(cur)}${lab && !["duration", "percent"].includes(u.kind) ? ` <span class="desc">${esc(lab)}</span>` : ""}${target != null ? ` <span class="desc">/ ${f(target)}</span>` : ""}</div>
       ${pct != null ? `<div class="bar"><i style="width:${(pct * 100).toFixed(1)}%;background:${s.color || css("--accent")}"></i></div>` : ""}</div>`);
   }
   card.appendChild(box);
@@ -396,17 +767,44 @@ function drawPlot(card, res, series) {
   card.appendChild(el);
   const chart = echarts.init(el);
   charts.push(chart);
-  const isWorkout = res.workout != null;
+  const text = css("--text"), muted = css("--muted"), line = css("--line");
+  // x kind comes from the data: date / datetime (season), seconds (elapsed time
+  // in a workout), duration (mean-max / PD curves), value (x-y pairs)
+  const firstPts = series.find((s) => s.data.kind === "points");
+  const xKind = firstPts?.data.x || (res.workout != null ? "seconds" : "date");
+  const xUnit = firstPts?.x_unit || UNONE;
+  series = series.filter((s) => s.data.kind !== "points" || (s.data.x || xKind) === xKind);
   const axisIds = [...new Set(series.map((s) => s.y_axis || "NONE"))];
   const axisCfg = Object.fromEntries((res.axes || []).map((a) => [a.id, a]));
-  const text = css("--text"), muted = css("--muted"), line = css("--line");
-  const yAxis = axisIds.map((id, i) => ({
-    type: "value", name: id === "NONE" ? "" : id.replace(/^CUSTOM/, ""), scale: true,
-    position: i === 0 ? "left" : "right", offset: i > 1 ? (i - 1) * 46 : 0,
-    min: axisCfg[id]?.min ?? null, max: axisCfg[id]?.max ?? null,
-    axisLabel: { color: muted, fontSize: 10 }, nameTextStyle: { color: muted, fontSize: 10 },
-    splitLine: { show: i === 0, lineStyle: { color: line } },
-  }));
+  const unitOf = (id) => series.find((s) => (s.y_axis || "NONE") === id)?.unit || axisCfg[id]?.unit || UNONE;
+  const yExtent = (id) => {
+    let lo = Infinity, hi = -Infinity;
+    for (const s of series) if ((s.y_axis || "NONE") === id) {
+      const ys = s.data.kind === "points" ? s.data.points.map((p) => p[1]) : s.data.kind === "hline" ? [s.data.y] : s.data.kind === "band" ? s.data.range : [];
+      for (const y of ys) if (y != null) { lo = Math.min(lo, y); hi = Math.max(hi, y); }
+    }
+    return isFinite(lo) ? [lo, hi] : [0, 0];
+  };
+  // time axes step in round units (1 min … 1 day), never "1:23:20"
+  const DUR_STEPS = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800, 604800];
+  const durInterval = (span) => DUR_STEPS.find((st) => span / st <= 6) || 604800;
+  const yAxis = axisIds.map((id, i) => {
+    const u = unitOf(id), cfg = axisCfg[id] || {};
+    const [lo, hi] = yExtent(id);
+    const span = Math.max(Math.abs(lo), Math.abs(hi), Math.abs((cfg.max ?? 0) - (cfg.min ?? 0)));
+    const iv = u.kind === "duration" && span > 0 ? durInterval(span * 1.1) : undefined;
+    return {
+      type: "value", name: axisName(u), scale: true,
+      position: i === 0 ? "left" : "right", offset: i > 1 ? (i - 1) * 46 : 0,
+      // duration axes end on a round step so the top tick isn't "27:46"
+      min: cfg.min ?? (iv ? (e) => Math.floor(e.min / iv) * iv : null),
+      max: cfg.max ?? (iv ? (e) => Math.ceil(e.max / iv) * iv : null),
+      interval: iv,
+      axisLabel: { color: muted, fontSize: 10, hideOverlap: true, formatter: (v) => fmtU(v, u, { tick: true, label: false, span }) },
+      nameTextStyle: { color: muted, fontSize: 10 },
+      splitLine: { show: i === 0, lineStyle: { color: line } },
+    };
+  });
   const out = [];
   for (const s of series) {
     const yi = axisIds.indexOf(s.y_axis || "NONE");
@@ -425,7 +823,8 @@ function drawPlot(card, res, series) {
       continue;
     }
     const perWorkout = s.data.x === "datetime";
-    const base = { name: s.name, yAxisIndex: yi, data: s.data.points, color, connectNulls: false, sampling: "lttb" };
+    const pts = xKind === "duration" ? s.data.points.filter((p) => p[0] > 0) : s.data.points;
+    const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false, sampling: "lttb" };
     if (s.type === "bar" || s.type === "stackedbar") {
       out.push({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 });
     } else {
@@ -434,15 +833,49 @@ function drawPlot(card, res, series) {
         areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined });
     }
   }
+  const lbl = { color: muted, fontSize: 10, hideOverlap: true };
+  const axLine = { lineStyle: { color: line } };
+  let xAxis;
+  if (xKind === "duration") {
+    const xs = out.flatMap((o) => (o.data || []).map((p) => p[0])).filter((x) => x > 0);
+    const xmin = xs.length ? Math.min(...xs) : 1, xmax = xs.length ? Math.max(...xs) : 3600;
+    let ticks = DUR_TICKS.filter((t) => t >= xmin * 0.999 && t <= xmax * 1.001);
+    if (ticks.length > 9) ticks = DUR_TICKS_SPARSE.filter((t) => t >= xmin * 0.999 && t <= xmax * 1.001);
+    xAxis = { type: "log", logBase: 10, min: xmin, max: xmax, axisLine: axLine,
+      axisLabel: { ...lbl, customValues: ticks, formatter: (v) => durTick(Math.round(v)) },
+      axisTick: { customValues: ticks }, splitLine: { show: true, lineStyle: { color: line, opacity: 0.5 } } };
+  } else if (xKind === "seconds") {
+    const xs = out.flatMap((o) => (o.data || []).map((p) => p[0])).filter((x) => x != null);
+    const xmax = xs.length ? Math.max(...xs) : 3600;
+    xAxis = { type: "value", min: 0, max: xmax, interval: durInterval(xmax), axisLine: axLine,
+      splitLine: { lineStyle: { color: line } },
+      axisLabel: { ...lbl, formatter: (v) => fmtDur(v, xmax >= 3 * 3600 ? "hm" : undefined) } };
+  } else if (xKind === "value") {
+    xAxis = { type: "value", scale: true, name: axisName(xUnit), nameLocation: "middle", nameGap: 20,
+      nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { lineStyle: { color: line } },
+      axisLine: axLine, axisLabel: { ...lbl, formatter: (v) => fmtU(v, xUnit, { tick: true, label: false }) } };
+  } else {
+    xAxis = { type: "time", min: res.begin, max: res.end, axisLine: axLine,
+      axisLabel: { ...lbl, formatter: { year: "{yyyy}", month: "{M}月", day: "{M}/{d}", hour: "{HH}:{mm}", minute: "{HH}:{mm}", second: "{HH}:{mm}:{ss}" } } };
+  }
+  const unitByName = {};
+  for (const s of series) unitByName[s.name] ??= s.unit;
+  const tooltip = { trigger: "axis", confine: true, formatter: (ps) => {
+    ps = [].concat(ps).filter((p) => Array.isArray(p.value) && p.value[1] != null);
+    if (!ps.length) return "";
+    const x = ps[0].value[0];
+    const head = xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
+      : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
+    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(p.value[1], series[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>`);
+    if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
+    return `<div style="font-size:11.5px">${esc(head)}<br>${rows.join("<br>")}</div>`;
+  } };
   chart.setOption({
     animation: false,
-    grid: { left: 46, right: 20 + Math.max(0, axisIds.length - 1) * 46, top: 24, bottom: 54 },
-    tooltip: { trigger: "axis", valueFormatter: (v) => fmtNum(v, 3) },
+    grid: { left: 52, right: 20 + Math.max(0, axisIds.length - 1) * 46, top: 26, bottom: 54 },
+    tooltip,
     legend: { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } },
-    xAxis: isWorkout
-      ? { type: "value", axisLabel: { color: muted, fontSize: 10, formatter: hms }, axisLine: { lineStyle: { color: line } } }
-      : { type: "time", min: res.begin, max: res.end, axisLabel: { color: muted, fontSize: 10 }, axisLine: { lineStyle: { color: line } } },
-    yAxis, series: out,
+    xAxis, yAxis, series: out,
     dataZoom: [{ type: "inside" }],
   });
   new ResizeObserver(() => chart.resize()).observe(el);

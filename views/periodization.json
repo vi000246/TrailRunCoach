@@ -2,6 +2,22 @@
   "name": "周期化訓練",
   "dashboards": [
     {
+      "title": "區間與課表強度",
+      "description": "每種課表該跑多少功率、心率，以及最近 30 天在各區間的時間。",
+      "charts": [
+        {"title": "課表建議強度", "kind": "targets",
+         "description": "輕鬆跑、長跑看心率（不超過 AeT）；間歇看功率（心率會一路往上飄，來不及反應）。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
+        {"title": "Palladino 功率區間（跑步）", "kind": "zones", "system": "palladino", "days": 30,
+         "description": "官方表（% CP）。"},
+        {"title": "Friel 心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30,
+         "description": "WKO5 的 Friel 心率區間。"},
+        {"title": "Classic 心率區間（跑步）", "kind": "zones", "system": "classichr", "days": 30,
+         "description": "WKO5 的 Classic（Coggan）心率區間。"},
+        {"title": "Friel 配速區間（跑步）", "kind": "zones", "system": "frielpace", "days": 30,
+         "description": "依閾值配速；山路配速不準，路跑才有參考價值。"}
+      ]
+    },
+    {
       "title": "① 轉換期",
       "description": "目標：恢復、重建習慣、打肌力底子（Uphill Athlete：2–4 週）。要看的不是體能有沒有進步，而是有沒有真的恢復。成功的樣子：疲勞 ATL 下降、TSB 回到正值、每週時數低但穩定、有固定肌力訓練。",
       "charts": [
@@ -32,11 +48,11 @@
         {
           "title": "每週肌力訓練次數",
           "description": "Uphill Athlete 的轉換期每週兩次核心與肌力訓練。這是為基礎期打底。",
-          "axes": [{"id": "NONE", "min": 0}],
+          "axes": [{"id": "CUSTOM次", "min": 0}],
           "series": [
-            {"name": "肌力次數", "type": "bar", "y_axis": "NONE", "color": "#64748b",
+            {"name": "肌力次數", "type": "bar", "y_axis": "CUSTOM次", "color": "#64748b",
              "expression": "count(if(sport=\"strength\", duration), startofweek(date))"},
-            {"name": "目標 2 次", "type": "line", "y_axis": "NONE", "color": "#16a34a", "line_style": "dash",
+            {"name": "目標 2 次", "type": "line", "y_axis": "CUSTOM次", "color": "#16a34a", "line_style": "dash",
              "expression": "(,2)"}
           ]
         }
@@ -73,11 +89,28 @@
           ]
         },
         {
+          "title": "每週跑步功率區間（Palladino）",
+          "description": "Palladino 官方功率區間（% CP）：Z1 < 80%、Z2 80–88%、Z3 88–101%（3A+3B，閾值刺激）、Z4 101–106%（Supra）、Z5+ ≥ 106%。只算有功率的跑步。基礎期大部分應在 Z1–Z2，Z3 約 15%（Palladino 基礎中期）。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "series": [
+            {"name": "Z1 <80%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#16a34a",
+             "expression": "sum(sum(if(runpower > 0 and runpower < 0.80*cp, deltatime)), startofweek(date))"},
+            {"name": "Z2 80–88%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#65a30d",
+             "expression": "sum(sum(if(runpower >= 0.80*cp and runpower < 0.88*cp, deltatime)), startofweek(date))"},
+            {"name": "Z3 88–101%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#f59e0b",
+             "expression": "sum(sum(if(runpower >= 0.88*cp and runpower < 1.01*cp, deltatime)), startofweek(date))"},
+            {"name": "Z4 101–106%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#ea580c",
+             "expression": "sum(sum(if(runpower >= 1.01*cp and runpower < 1.06*cp, deltatime)), startofweek(date))"},
+            {"name": "Z5+ ≥106%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#dc2626",
+             "expression": "sum(sum(if(runpower >= 1.06*cp, deltatime)), startofweek(date))"}
+          ]
+        },
+        {
           "title": "有氧效率 EF（輕鬆路跑）",
           "description": "每下心跳換到的速度。往上走 = 有氧引擎變強。基礎期最重要的一張圖。只看輕鬆跑（IF < 0.8）才公平。",
-          "axes": [{"id": "NONE", "min": 0}],
+          "axes": [{"id": "CUSTOMm/min/bpm", "min": 0}],
           "series": [
-            {"name": "EF", "type": "line", "y_axis": "NONE", "color": "#2563eb",
+            {"name": "EF", "type": "line", "y_axis": "CUSTOMm/min/bpm", "color": "#2563eb",
              "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and if < 0.8, avg(speed)/avg(heartrate)*1000/60)"}
           ]
         },
@@ -125,11 +158,11 @@
         {
           "title": "爬升密度 vs 目標賽事",
           "description": "Koop：拿每公里爬升對照比賽，而不是追求週總爬升（總量本身沒有劑量反應）。紅虛線 = 「賽事周期」頁裡接下來 A / B 賽事中最陡的一場。",
-          "axes": [{"id": "NONE", "min": 0}],
+          "axes": [{"id": "CUSTOMm/km", "min": 0}],
           "series": [
-            {"name": "每公里爬升", "type": "line", "y_axis": "NONE", "color": "#a16207",
+            {"name": "每公里爬升", "type": "line", "y_axis": "CUSTOMm/km", "color": "#a16207",
              "expression": "if((hastag(\"runningtrail\") or hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 3, climbing/distance)"},
-            {"name": "目標賽事", "type": "line", "y_axis": "NONE", "color": "#dc2626", "line_style": "dash",
+            {"name": "目標賽事", "type": "line", "y_axis": "CUSTOMm/km", "color": "#dc2626", "line_style": "dash",
              "expression": "goalclimbperkm"}
           ]
         },
@@ -158,11 +191,11 @@
         {
           "title": "體能成長速度（CTL 每週增加）",
           "description": "每週 CTL 增加多少。專項期可以比基礎期快，但太快代表負荷堆太急。",
-          "axes": [{"id": "TSSPERDAY"}],
+          "axes": [{"id": "TSSPERDAYPERWEEK"}],
           "series": [
-            {"name": "CTL 週變化", "type": "bar", "y_axis": "TSSPERDAY", "color": "#2563eb",
+            {"name": "CTL 週變化", "type": "bar", "y_axis": "TSSPERDAYPERWEEK", "color": "#2563eb",
              "expression": "tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7)"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#64748b", "line_style": "dash",
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#64748b", "line_style": "dash",
              "expression": "(,0)"}
           ]
         }

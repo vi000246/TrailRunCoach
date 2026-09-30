@@ -12,6 +12,7 @@ Workout metrics come from the athlete index "Entire Workout" range fields
 from __future__ import annotations
 
 import datetime as dt
+import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -239,6 +240,7 @@ class Dataset:
         self.memo: dict = {}  # evaluator cache: per-workout aggregate results
         self._series: dict[str, dict] = {}        # disk-memoised derived series
         self._series_dirty: set[str] = set()
+        self._series_lock = threading.Lock()
         self.workouts: list[Workout] = []
         for i, e in enumerate(self.athlete.workouts):
             if e.start is None:
@@ -292,6 +294,10 @@ class Dataset:
     # ---- settings ---------------------------------------------------------
     def setting(self, name: str, day: float) -> Optional[float]:
         name = name.lower()
+        if name == "weight":
+            v = self.plan.weight_on(day_to_date(day))   # settings page; empty in parity mode
+            if v is not None:
+                return v
         for suffix, field_ in (("thr", "lthr"), ("mhr", "mhr")):
             if name.endswith(suffix):
                 v = self.plan.threshold_on(field_, day_to_date(day))
@@ -402,30 +408,40 @@ class Dataset:
         what the current chart actually asks for. Call `flush_series()` after a
         batch to persist.
         """
-        store = self._series.get(key)
-        if store is None:
-            store = self._series[key] = _cache_read(_CACHE_DIR / f"series_{_safe(key)}.json")
+        # The API serves several charts at once from one Dataset, so the store
+        # and the dirty set are shared between threads. The lock is not held
+        # while computing (that can take seconds); two threads may then compute
+        # the same value, which is harmless — it's a pure function.
+        with self._series_lock:
+            store = self._series.get(key)
+            if store is None:
+                store = self._series[key] = _cache_read(_CACHE_DIR / f"series_{_safe(key)}.json")
         p = self.dir / w.entry.file
         if not p.exists():
             return None
         # Thresholds are inputs too (zones, IF): a changed LTHR / AeT test must
         # not serve values computed with the old one.
         stamp = _file_stamp(p) + [self._corr_sig(w.entry.file), self._settings_sig(w)]
-        hit = store.get(w.entry.file)
+        with self._series_lock:
+            hit = store.get(w.entry.file)
         if not hit or hit[:4] != stamp:
             hit = stamp + [compute()]
-            store[w.entry.file] = hit
-            self._series_dirty.add(key)
+            with self._series_lock:
+                store[w.entry.file] = hit
+                self._series_dirty.add(key)
         return hit[4]
 
     def _settings_sig(self, w: Workout) -> str:
-        vals = [self.sport_setting(k, w) for k in ("thr", "mhr", "ftp", "tpace")] + [self.aethr(w), self.cp(w)]
+        vals = [self.sport_setting(k, w) for k in ("thr", "mhr", "ftp", "tpace")] + \
+            [self.aethr(w), self.cp(w), self.setting("weight", w.day)]
         return ",".join("" if v is None else f"{v:g}" for v in vals)
 
     def flush_series(self) -> None:
-        for key in self._series_dirty:
-            _cache_write(_CACHE_DIR / f"series_{_safe(key)}.json", self._series[key])
-        self._series_dirty.clear()
+        with self._series_lock:
+            todo = {key: dict(self._series[key]) for key in self._series_dirty}
+            self._series_dirty.clear()
+        for key, entries in todo.items():      # write outside the lock, from snapshots
+            _cache_write(_CACHE_DIR / f"series_{_safe(key)}.json", entries)
 
     def _cached_per_workout(self, cache_name: str, channel: str, compute):
         """{relative file -> value} for every workout, memoised on disk.

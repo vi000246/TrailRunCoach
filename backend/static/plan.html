@@ -31,8 +31,9 @@ header { background: var(--panel); border-bottom: 1px solid var(--line); padding
 h1 { font-size: 17px; margin: 0; }
 h2 { font-size: 15px; margin: 0 0 8px; }
 header a, a { color: var(--accent); text-decoration: none; font-size: 13px; }
-main { max-width: 1180px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
-section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+main { max-width: 1180px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+@media (max-width: 699px) { main { padding: 10px; } }
 .meta { color: var(--muted); font-size: 12.5px; }
 .warn { color: var(--warn); }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
@@ -74,16 +75,19 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 .guide div { border-left: 4px solid var(--line); padding: 4px 10px; }
 .guide b { display: block; margin-bottom: 2px; }
 .guide ul { margin: 2px 0 0; padding-left: 18px; font-size: 13px; }
+.est { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin: 8px 0 12px; }
+.est .card { position: relative; }
+.est .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.est button { margin-top: 6px; }
 .toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
 .toast.on { opacity: .92; }
 </style>
 </head>
 <body>
+<script src="/api/v1/static/shell.js" data-page="plan"></script>
 <header>
   <h1>賽事周期</h1>
-  <a href="/api/v1/wko5/viewer">← 圖表</a>
-  <a href="/api/v1/achievements/page">成就</a>
   <span class="meta" id="todayinfo"></span>
 </header>
 <main>
@@ -148,6 +152,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
   <section>
     <h2>心率門檻</h2>
     <div id="thrstatus"></div>
+    <div class="est" id="est"><span class="meta">正在從你的跑步資料估算 LTHR / AeT…</span></div>
     <div class="tablewrap"><table>
       <thead><tr><th>測試日期</th><th class="num">LTHR 乳酸閾值心率</th><th class="num">AeT 有氧閾值心率</th>
         <th class="num">最大心率</th><th class="num">CP 跑步臨界功率 W</th><th>備註（測試方式）</th><th></th></tr></thead>
@@ -160,13 +165,18 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
     <p class="meta">每次測試記一筆，圖表會依日期套用當時的數值（跟 WKO5 的做法一樣）。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。
       <br>AeT 測試（Uphill Athlete）：熱身後在平路或跑步機用固定配速/心率跑 60 分鐘，前後半段的 Pa:HR 飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。
       <br>LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。
-      <br>CP 測試（你筆記裡的 3'/12' 流程）：先 3 分鐘再 12 分鐘全力，中間至少恢復 30 分鐘；每 4–6 週或賽前 10–21 天做一次。沒填的話用 WKO5 的 mFTP。</p>
+    </p>
+    <details style="margin-top:8px"><summary class="meta">功率區間（Palladino 官方表，依目前 CP）</summary>
+      <div class="tablewrap"><table><thead><tr><th>區間</th><th>名稱</th><th class="num">% CP</th><th class="num">W</th></tr></thead>
+      <tbody id="pzones"></tbody></table></div>
+      <p class="meta" id="pzsrc"></p></details>
+    <p class="meta">CP 測試（你筆記裡的 3'/12' 流程）：先 3 分鐘再 12 分鐘全力，中間至少恢復 30 分鐘；每 4–6 週或賽前 10–21 天做一次。沒填的話用 WKO5 的 mFTP。</p>
   </section>
 
   <section>
     <h2>各周期看什麼</h2>
     <div class="guide" id="guide"></div>
-    <p class="meta">圖表在「圖表 → 我的圖表 → 周期化訓練」，依據與來源見 docs/research/periodization-phase-metrics.md。</p>
+    <p class="meta">圖表在「圖表分析 → 我的圖表 → 周期化訓練」，依據與來源見 docs/research/periodization-phase-metrics.md。</p>
   </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -187,7 +197,34 @@ async function call(method, path, body) {
   if (!r.ok) { const t = await r.text(); toast("失敗：" + t.slice(0, 120)); throw new Error(t); }
   return r.json();
 }
-async function load() { S = await call("GET", ""); manual = null; render(); }
+async function load() { S = await call("GET", ""); manual = null; render(); loadEstimate(); }
+
+async function loadEstimate() {
+  let E;
+  try { E = await call("GET", "/threshold-estimate"); }
+  catch { $("#est").innerHTML = `<span class="meta">估算失敗</span>`; return; }
+  const cur = S.effective_thresholds;
+  const card = (key, label, est, curV, help) => {
+    const ok = est && est.value != null;
+    const same = ok && curV != null && Math.abs(est.value - curV) < 1;
+    return `<div class="card"><div class="k">${label}（自動估算）</div>
+      <div class="v">${ok ? est.value + " bpm" : "–"} <small>${ok && curV != null ? `目前用 ${fmt(curV)}` : ""}</small></div>
+      <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? `；中間一半落在 ${est.spread[0]}–${est.spread[1]}` : ""}${est && est.days ? `（近 ${est.days} 天）` : ""}</div>
+      ${help ? `<div class="s">${help}</div>` : ""}
+      ${ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">套用 ${est.value}</button>` : ok ? `<div class="s">✓ 已經在用</div>` : ""}</div>`;
+  };
+  const aetHelp = E.aethr && E.aethr.value == null
+    ? "你很少有「穩定、輕鬆、45 分鐘以上」的跑步，所以資料推不出來。做一次 Uphill Athlete 的 AeT 測試最準（下方說明）。" : "";
+  $("#est").innerHTML = card("lthr", "LTHR", E.lthr, cur.lthr.value,
+      E.lthr && E.lthr.hr_at_cp ? `交叉檢查：功率在 CP ±3% 時心率 ${E.lthr.hr_at_cp}（${E.lthr.n_at_cp} 次）` : "")
+    + card("aethr", "AeT", E.aethr, cur.aethr.source === "plan" ? cur.aethr.value : null, aetHelp);
+  $("#est").querySelectorAll("[data-apply]").forEach((b) => b.onclick = async () => {
+    const k = b.dataset.apply, v = Number(b.dataset.v);
+    if (!confirm(`把 ${k === "lthr" ? "LTHR" : "AeT"} 設成 ${v}？會新增一筆今天日期的紀錄，之後的區間、hrTSS 都會用它重算。`)) return;
+    await call("POST", "/thresholds/apply-estimate", { [k]: v, note: `${k === "lthr" ? "LTHR" : "AeT"} 自動估算（${(E[k] || {}).reason || ""}）` });
+    toast("已套用，圖表會重新計算"); load();
+  });
+}
 
 const GUIDE = {
   recovery: ["轉換 / 恢復期", ["ATL 下降、TSB 回正", "每週時數低而穩定", "每週 2 次肌力"]],
@@ -205,11 +242,11 @@ function renderNow() {
   const c = S.current_phase, g = S.goals, next = S.events.find((e) => e.id === g.next_a);
   const cards = [];
   cards.push(`<div class="card"><div class="k">目前周期</div><div class="v" style="color:${c ? PCOL(c.kind) : "inherit"}">${c ? esc(c.label) : "未設定"}</div>
-    <div class="s">${c ? `${c.start} ～ ${c.end}，還有 ${c.days_left} 天` : "新增一場 A 賽事就會自動排周期"}</div></div>`);
+    <div class="s">${!c ? "新增一場 A 賽事就會自動排周期" : next ? `${c.start} ～ ${c.end}，還有 ${c.days_left} 天` : "沒有目標賽事，預設為基礎期"}</div></div>`);
   cards.push(`<div class="card"><div class="k">下一場 A 賽事</div><div class="v">${next ? esc(next.name) : "–"}</div>
     <div class="s">${next ? `${next.date}，倒數 ${next.days_to} 天` : ""}</div></div>`);
   if (c && c.dashboard) cards.push(`<div class="card"><div class="k">現在該看的圖</div><div class="v" style="font-size:16px">${esc(c.dashboard)}</div>
-    <div class="s"><a href="/api/v1/wko5/viewer">圖表 → 我的圖表 → 周期化訓練</a></div></div>`);
+    <div class="s"><a href="/api/v1/wko5/viewer?view=${encodeURIComponent("周期化訓練")}&dash=${encodeURIComponent(c.dashboard)}">圖表分析 → 我的圖表 → 周期化訓練</a></div></div>`);
   const t = S.effective_thresholds;
   cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(t.aethr.value)} / LTHR ${fmt(t.lthr.value)} / CP ${fmt(t.cp.value)} W</div>
     <div class="s ${t.lthr.wko5_default ? "warn" : ""}">${t.lthr.wko5_default ? "⚠ LTHR 是 WKO5 預設值，請到下方填測試結果" : t.lthr.source === "plan" ? "心率來自你的測試紀錄" : "心率來自 WKO5 設定"}；CP ${t.cp.source === "plan" ? "來自你的測試" : "＝WKO5 的 mFTP"}</div></div>`);
@@ -290,7 +327,16 @@ function renderPhases() {
   $("#toauto").hidden = !(S.manual_phases || manual);
 }
 
+function renderZones() {
+  const pz = S.power_zones;
+  $("#pzones").innerHTML = pz.zones.map((z) => `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td>
+    <td class="num">${Math.round(z.lo * 100)}${z.hi ? "–" + Math.round(z.hi * 100) : "+"}%</td>
+    <td class="num">${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td></tr>`).join("");
+  $("#pzsrc").textContent = `來源：${pz.source}。Palladino：區間用來「描述」訓練，不是拿來開課表。Near threshold 不是正式區間名稱，落在 3B 上段。`;
+}
+
 function renderThr() {
+  renderZones();
   const w = S.wko5_settings.runthr, m = S.wko5_settings.runmhr;
   $("#thrstatus").innerHTML = `<p class="meta">WKO5 裡的設定：跑步 LTHR ${fmt(w && w.value)}、最大心率 ${fmt(m && m.value)}
     ${w && w.is_default ? `<span class="warn">— 這是 WKO5 的出廠預設值（日期 ${w.date}，代表從沒填過）。WKO5 的心率區間 = 區間表 × LTHR，所以用預設值算出來的區間也不準。</span>` : ""}</p>`;
