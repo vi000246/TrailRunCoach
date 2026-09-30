@@ -304,7 +304,8 @@ def compare(rid: str, a: str, b: str, step: float = 25.0):
         tr = BUILDER.track(e["file"])
         if tr is None:
             raise HTTPException(404, "track missing")
-        series[key] = _along_series(tr, e["i0"], e["i1"], ref, grid, lat0, lon0)
+        series[key] = _along_series(tr, e["i0"], e["i1"], ref, grid, lat0, lon0,
+                                    end_tol=R.ROUTE_END_TOL_M if it["kind"] == "route" else RM.END_TOL_M)
     ta, tb = np.asarray(series[a].pop("_t")), np.asarray(series[b].pop("_t"))
     gap = tb - ta
     return {
@@ -320,7 +321,8 @@ def _brief(e: dict) -> dict:
                                   "avg_power", "vam", "rank")}
 
 
-def _along_series(tr, i0: int, i1: int, ref: np.ndarray, grid: np.ndarray, lat0, lon0) -> dict:
+def _along_series(tr, i0: int, i1: int, ref: np.ndarray, grid: np.ndarray, lat0, lon0,
+                  end_tol: float = RM.END_TOL_M) -> dict:
     xy = tr.xy(lat0, lon0)[i0:i1 + 1]
     s = RM.along(ref, xy)
     t = tr.t[i0:i1 + 1] - tr.t[i0]
@@ -336,7 +338,7 @@ def _along_series(tr, i0: int, i1: int, ref: np.ndarray, grid: np.ndarray, lat0,
     # an effort starts / ends within 60 m of the segment's ends (the match
     # rule): up to that far past its own first / last projection it holds its
     # end values, beyond that it has no data
-    outside = (grid < s2[0] - RM.END_TOL_M) | (grid > s2[-1] + RM.END_TOL_M)
+    outside = (grid < s2[0] - end_tol) | (grid > s2[-1] + end_tol)
 
     def interp(v):
         out = np.interp(grid, s2, v)

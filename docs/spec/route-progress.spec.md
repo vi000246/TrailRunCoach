@@ -156,7 +156,7 @@ matches `climbs._measure` on the same sample range (tested).
 | `avg_hr`, `avg_power` | time-weighted over moving samples |
 | `hr_per_100m` | Σhr·dt ÷ 60 ÷ gain × 100 (climbs.py) |
 | `hr_vam`, `power_vam` | avg HR (W) ÷ VAM × 1000, up segments only |
-| `hrtss`, `hrtss_share` | WKO5 hrTSS (`wko5_hr.hr_tss`, verified 1030/1030 against WKO5) on the slice ÷ the same over the whole activity, LTHR of the day |
+| `hrtss`, `hrtss_share` | WKO5 hrTSS (`wko5_hr.hr_tss`, verified 1030/1030 against WKO5) on the slice ÷ the same over the whole activity. LTHR is `Dataset.sport_setting("thr")` of the engine config in use — outside parity mode that is the plan's own test value (e.g. 155 vs WKO5's 160), so the totals differ from WKO5's stored hrTSS while the share uses one LTHR on both sides |
 | `temp_c` | watch temperature sensor, time-weighted |
 | `phase` | plan phase on the effort's date (`planning.phases`), at serve time |
 | `overlap`, `frechet_m` | match quality |
@@ -178,8 +178,9 @@ moving time. Route efforts are whole activities: no VAM (a loop's net gain is
 
 Each effort's kept points are projected in order onto the reference path
 (`along`); elapsed time, interval-average HR and power, and elevation are
-interpolated every 25 m of reference distance (up to 60 m past an effort's own
-first / last projection it holds its end value — the endpoint tolerance).
+interpolated every 25 m of reference distance (up to 60 m — 200 m for routes —
+past an effort's own first / last projection it holds its end value: the
+endpoint tolerance of the match).
 Pace = Δt over the trailing 100 m. `gap_s = t_b − t_a` at the same distance
 (positive: B behind); at the end it equals the elapsed difference (tested).
 
@@ -232,7 +233,9 @@ compare gap and rename.
 
 Real-data verification (2026-09-30): per-effort metrics of 小油坑 → 七星山主峰
 (13 efforts) recomputed from raw samples by an independent plain-loop script
-agreed on all fields for 13/13; 14 segments / routes drawn with every matched
+agreed on all fields for 13/13; the same plain-loop whole-activity hrTSS at
+WKO5's LTHR equals WKO5's stored hrTSS on 13/13; a route compare (122-effort
+loop) ends with gap = the elapsed difference; 14 segments / routes drawn with every matched
 effort's own path (≈ 720 efforts) showed no effort off the reference path; for
 5 climbs every activity passing within 60 m of the start and later the end was
 matched (0 missed).
