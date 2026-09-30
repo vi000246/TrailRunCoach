@@ -164,6 +164,10 @@ class GaitRE:
     tech: dict = field(default_factory=dict)           # class|"all" -> {"f", "n"}
     trail: bool = False
     tech_class: Optional[str] = None
+    # hook: a route-specific factor ({"f", "n", "route"}) from the athlete's
+    # efforts on a known route that overlaps the course (routes module); when
+    # set it replaces the per-class factor. Nothing fills it yet.
+    route_tech: Optional[dict] = None
 
     @property
     def re_flat(self) -> float:
@@ -186,6 +190,8 @@ class GaitRE:
         return bool(wb and wb[1] >= VMAX_MIN_N and wb[0] / wb[1] >= WALK_MAJORITY and self.walk.data_n(g) > 0)
 
     def tech_factor(self) -> tuple[float, str]:
+        if self.route_tech and self.route_tech.get("f"):
+            return float(self.route_tech["f"]), "route"
         t = self.tech.get(self.tech_class) if self.tech_class else None
         if t and t["n"] >= TECH_MIN_N:
             return t["f"], self.tech_class

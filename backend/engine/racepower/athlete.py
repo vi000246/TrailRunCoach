@@ -628,6 +628,15 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
 
     # ---- lower bound: CP must cover what the athlete already held -----------
     env_pts = [(x, y, i) for x, y, i in zip(env365["xs"], env365["ys"], env365["who"])]
+    # each run's moving-time average too: the back-test, the effort f and the
+    # predictions all work on moving time, and a paused run's elapsed mean-max
+    # understates what the athlete held (2025-12-21: 178.8 vs 184.2 W)
+    bad = {d_["idx"] for d_ in dropped365}
+    for w in runs_365:
+        m_ = metrics.get(w.idx)
+        if m_ and w.idx not in bad and m_.get("moving_s", 0) >= DF.SHORT_MAX_S and m_.get("avg_power"):
+            env_pts.append((float(m_["moving_s"]), m_["avg_power"] * altitude_norm(m_.get("elev_median"), training),
+                            w.idx))
 
     def bound(w_, tte_, cp2_=None):
         # two anchors: the bound applies to the F1 anchor only where F1 alone

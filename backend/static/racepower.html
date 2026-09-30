@@ -952,7 +952,7 @@ function renderRE() {
     <td class="n">${r.lss_kg != null ? r.lss_kg.toFixed(3) : "–"}</td><td class="n">${r.air_pct != null ? r.air_pct.toFixed(1) + "%" : "–"}</td><td class="n">${r.form_pct != null ? Math.round(r.form_pct) + "%" : "–"}</td></tr>`;
   const head = (trail) => `<thead><tr><th>活動</th><th class="n">km</th><th class="n">爬升</th><th class="n">CVI</th><th class="n">移動</th><th class="n">功率</th><th class="n">RE</th>${trail ? '<th class="n">越野 RE</th>' : ""}<th class="n">LSS/kg</th><th class="n">風阻 Pa</th><th class="n">Form</th></tr></thead>`;
   const s = (x) => x ? `<b>${r3(x.median)}</b>（IQR ${r3(x.q1)}–${r3(x.q3)}，${x.n} 次）` : "–";
-  $("re-detail").innerHTML = `<div class="kv"><span>平路 RE（CVI &lt; 25）${s(re.road)}</span><span>越野 RE（effort km）${s(re.trail[fx])}</span>
+  $("re-detail").innerHTML = `<div class="kv"><span>平路 RE（CVI &lt; 51 的路跑各自調到平路）${s(re.road)}</span><span>越野 RE（effort km）${s(re.trail[fx])}</span>
     <span>訓練 CVI 中位 <b>${n0(re.train_cvi?.median)}</b>（近 90 天）</span></div>
     <div class="note">越野 RE = (effort 距離 m ÷ 移動秒) ÷ (功率 ÷ 體重)，近 ${re.window_days} 天有功率、爬升 ≥ 150 m、移動 ≥ 45 分的越野跑。移動 = 功率 &gt; 0 且速度 &gt; 1 km/h。</div>
     <details><summary>越野跑（${re.trail_runs.length}）</summary><div class="tablewrap"><table>${head(true)}<tbody>${re.trail_runs.slice().reverse().map((r) => row(r, true)).join("")}</tbody></table></div></details>
