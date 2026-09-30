@@ -129,9 +129,15 @@ _SETTING_KEYS = {"primary_source": "sync.primary_source", "timezone": "athlete.t
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:
-    from backend.sync.tp_client import load_client_creds
+    from backend.sync.tp_client import lookup_client_creds
     out = {k: await repo.get(v) for k, v in _SETTING_KEYS.items()}
-    out["tp_client_credentials_configured"] = load_client_creds() is not None   # never the values
+    creds, source = lookup_client_creds()
+    out["tp_client_credentials_configured"] = creds is not None      # never the values
+    out["tp_client_credentials_source"] = source                     # env|file|sealed|wko5_exe|none
+    from backend.settings.secrets import KEY_DOC, key_status
+    out["secret_key_status"] = key_status()      # env|file|missing|none
+    if out["secret_key_status"] == "missing":
+        out["secret_key_hint"] = f"SECRET_KEY_MISSING: deploy the key (chezmoi apply) or set WKO5COACH_SECRET_KEY — see {KEY_DOC}"
     return out
 
 

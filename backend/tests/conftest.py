@@ -9,6 +9,9 @@ def _test_secret_key(monkeypatch):
     from cryptography.fernet import Fernet
     from backend.settings import secrets
     monkeypatch.setenv("WKO5COACH_SECRET_KEY", Fernet.generate_key().decode())
+    # never look at the repo's real sealed blob or the user's DB
+    monkeypatch.setattr(secrets, "SEALED_FILES", [])
+    monkeypatch.setattr(secrets, "_db_path", lambda: None)
     secrets.reset_cache()
     yield
     secrets.reset_cache()
@@ -20,8 +23,10 @@ def _no_real_tp_client(monkeypatch, tmp_path_factory):
     from backend.sync import tp_client
     monkeypatch.delenv("TP_CLIENT_ID", raising=False)
     monkeypatch.delenv("TP_CLIENT_SECRET", raising=False)
-    monkeypatch.setattr(tp_client, "TP_CLIENT_FILE",
-                        tmp_path_factory.mktemp("tpc") / "missing_tp_client.json")
+    d = tmp_path_factory.mktemp("tpc")
+    monkeypatch.setattr(tp_client, "TP_CLIENT_FILE", d / "missing_tp_client.json")
+    monkeypatch.setattr(tp_client, "SEALED_CLIENT_FILE", d / "missing_tp_client.enc")
+    monkeypatch.setenv(tp_client.WKO5_EXE_ENV, str(d / "missing_WKO5.exe"))
 
 
 @pytest.fixture

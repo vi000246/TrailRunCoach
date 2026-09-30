@@ -33,12 +33,72 @@ class SecretError(RuntimeError):
     pass
 
 
+class SecretKeyMissing(SecretError):
+    """No key, but ciphertext already exists: generating a new key would make
+    it undecryptable, so refuse."""
+
+
+KEY_DOC = "docs/secrets-and-keys.md"
+# where sealed values can live (paths / DB are patched in tests)
+SEALED_FILES: list[Path] = [Path(__file__).resolve().parent / "tp_client.enc"]
+SEALED_DB_COLUMNS = (("sync_state", "tp_access_token"), ("sync_state", "tp_refresh_token"),
+                     ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"))
+
+
+def _db_path() -> Optional[Path]:
+    try:
+        from backend.db.database import DB_PATH
+        return DB_PATH
+    except Exception:
+        return None
+
+
+def ciphertext_exists() -> bool:
+    """Is anything already sealed (a committed .enc, or a sealed DB column)?"""
+    if any(p.exists() for p in SEALED_FILES):
+        return True
+    db = _db_path()
+    if db is None or not Path(db).exists():
+        return False
+    import sqlite3
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return False
+    try:
+        for table, col in SEALED_DB_COLUMNS:
+            try:
+                row = con.execute(f"SELECT 1 FROM {table} WHERE {col} LIKE ? LIMIT 1",
+                                  (PREFIX + "%",)).fetchone()
+            except sqlite3.Error:
+                continue          # table / column not there yet
+            if row:
+                return True
+    finally:
+        con.close()
+    return False
+
+
+def key_status() -> str:
+    """env | file | missing (sealed data exists: deploy the key) | none (will be generated)."""
+    if os.getenv("WKO5COACH_SECRET_KEY"):
+        return "env"
+    if KEY_FILE.exists():
+        return "file"
+    return "missing" if ciphertext_exists() else "none"
+
+
 @lru_cache(maxsize=1)
 def _fernet() -> Fernet:
     key = os.getenv("WKO5COACH_SECRET_KEY")
     if not key:
         if KEY_FILE.exists():
             key = KEY_FILE.read_text("ascii").strip()
+        elif ciphertext_exists():
+            raise SecretKeyMissing(
+                f"SECRET_KEY_MISSING: encrypted data exists but no key was found at {KEY_FILE} "
+                f"and WKO5COACH_SECRET_KEY is not set. Deploy the key (chezmoi apply) or set "
+                f"WKO5COACH_SECRET_KEY — see {KEY_DOC}. A new key will not be generated.")
         else:
             key = Fernet.generate_key().decode()
             KEY_FILE.parent.mkdir(parents=True, exist_ok=True)

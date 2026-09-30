@@ -38,6 +38,69 @@ def test_generated_key_file_when_no_env(monkeypatch, tmp_path):
     assert S.unseal(v) == "x"                       # same key read back
 
 
+def test_missing_key_with_sealed_file_refuses_to_generate(monkeypatch, tmp_path):
+    enc = tmp_path / "tp_client.enc"
+    enc.write_text("enc:v1:whatever", "ascii")
+    monkeypatch.delenv("WKO5COACH_SECRET_KEY")
+    monkeypatch.setattr(S, "KEY_FILE", tmp_path / "secret.key")
+    monkeypatch.setattr(S, "SEALED_FILES", [enc])
+    S.reset_cache()
+    assert S.key_status() == "missing"
+    with pytest.raises(S.SecretKeyMissing) as ei:
+        S.seal("x")
+    assert "SECRET_KEY_MISSING" in str(ei.value) and "docs/secrets-and-keys.md" in str(ei.value)
+    assert not (tmp_path / "secret.key").exists()
+
+
+def test_missing_key_with_sealed_db_column_refuses(monkeypatch, tmp_path):
+    import sqlite3
+    db = tmp_path / "w.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE sync_state (athlete_id INT, tp_access_token TEXT, tp_refresh_token TEXT,"
+                " tp_web_cookie TEXT, coros_access_token TEXT)")
+    con.execute("INSERT INTO sync_state VALUES (1, NULL, NULL, 'enc:v1:abc', NULL)")
+    con.commit(); con.close()
+    monkeypatch.delenv("WKO5COACH_SECRET_KEY")
+    monkeypatch.setattr(S, "KEY_FILE", tmp_path / "secret.key")
+    monkeypatch.setattr(S, "_db_path", lambda: db)
+    S.reset_cache()
+    with pytest.raises(S.SecretKeyMissing):
+        S.unseal("enc:v1:abc")
+    assert not (tmp_path / "secret.key").exists()
+
+
+def test_key_generated_only_without_ciphertext_and_env_wins(monkeypatch, tmp_path):
+    monkeypatch.setattr(S, "KEY_FILE", tmp_path / "secret.key")
+    assert S.key_status() == "env"                      # conftest sets the env key
+    monkeypatch.delenv("WKO5COACH_SECRET_KEY")
+    assert S.key_status() == "none"
+    S.reset_cache()
+    S.seal("x")
+    assert (tmp_path / "secret.key").exists() and S.key_status() == "file"
+
+
+def test_settings_api_and_login_surface_missing_key(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from backend.api.auth import CorosLoginRequest, coros_login
+    from backend.api.sync import get_sync_settings
+    from backend.tests.test_sync_e2e import FakeCoros, make_session, run
+
+    async def go():
+        s = await make_session(tmp_path)
+        enc = tmp_path / "x.enc"
+        enc.write_text("enc:v1:x", "ascii")
+        monkeypatch.delenv("WKO5COACH_SECRET_KEY")
+        monkeypatch.setattr(S, "KEY_FILE", tmp_path / "secret.key")
+        monkeypatch.setattr(S, "SEALED_FILES", [enc])
+        S.reset_cache()
+        assert (await get_sync_settings(1, s))["secret_key_status"] == "missing"
+        with http.use_transport(httpx.MockTransport(FakeCoros([]))):
+            with pytest.raises(HTTPException) as ei:
+                await coros_login(CorosLoginRequest(email="me@example.com", password="pw"), s)
+        assert ei.value.status_code == 503 and ei.value.detail.startswith("SECRET_KEY_MISSING")
+    run(go())
+
+
 def test_tokens_are_not_stored_in_plaintext(tmp_path, tp_creds):
     async def go():
         s = await make_session(tmp_path)

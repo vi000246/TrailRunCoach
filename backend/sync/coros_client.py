@@ -177,6 +177,8 @@ async def login(email: str, password: str, db: AsyncSession, athlete_id: int = 1
                 "lthr": lthr,
                 "token_expires": expires_at.isoformat(),
             }
+        except SecretError:
+            raise                      # SECRET_KEY_MISSING: not a login failure
         except Exception as e:
             last_error = str(e)
             continue
