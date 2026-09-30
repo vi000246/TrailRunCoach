@@ -148,15 +148,21 @@ def test_drift_refuses_stops_short_and_unsteady():
 def test_aerobic_lines():
     base = {"aet": 140.0, "avg_hr": 135.0, "hr_s": 3000, "over_aet_s": 0}
     ok = {**base, "drift": {"ok": True, "drift": 0.03, "hr1": 135.0}}
-    assert any("可以加一次閾值下間歇" in ln for ln in R.aerobic_lines("easy", ok, streak=3))
-    assert not any("閾值下" in ln for ln in R.aerobic_lines("easy", ok, streak=2))
+    # informational only: the unsourced 「連續 3 次 → 加間歇」 line is gone (engine/quality_gate.py)
+    assert any("有氧基礎穩" in ln for ln in R.aerobic_lines("easy", ok, streak=3))
+    assert not any("間歇" in ln for ln in R.aerobic_lines("easy", ok, streak=3))
     mid = {**base, "drift": {"ok": True, "drift": 0.07, "hr1": 135.0}}
-    assert any("暫時不加間歇" in ln for ln in R.aerobic_lines("easy", mid))
+    assert any("後段心率往上跑" in ln for ln in R.aerobic_lines("easy", mid))
     bad = {**base, "drift": {"ok": True, "drift": 0.12, "hr1": 135.0}}
     assert any("有氧基礎不足" in ln for ln in R.aerobic_lines("easy", bad))
     fast = {**ok, "over_aet_s": 600}
     assert any("下次放慢" in ln for ln in R.aerobic_lines("easy", fast))
-    assert any("可以設成 AeT" in ln for ln in R.aerobic_lines("test_aet", ok))
+    # UA's three bands on the AeT test
+    assert any("還在 AeT 以下" in ln for ln in R.aerobic_lines("test_aet", ok))
+    at = {**base, "drift": {"ok": True, "drift": 0.042, "hr1": 146.0}}
+    assert any("就是 AeT" in ln for ln in R.aerobic_lines("test_aet", at))
+    hi = {**base, "drift": {"ok": True, "drift": 0.06, "hr1": 150.0}}
+    assert any("放慢 5 bpm" in ln for ln in R.aerobic_lines("test_aet", hi))
 
 
 # ---------------------------------------------------------------------------
@@ -191,17 +197,20 @@ def test_streak_of(drifts, n):
     assert R.streak_of(drifts) == n
 
 
-@pytest.mark.parametrize("kind, levels, streak_ok, allowed", [
-    ("base", {"intensity": "good", "drift": "good"}, False, False),
-    ("base", {"intensity": "good", "drift": "good"}, True, True),
-    ("base", {"intensity": "watch", "drift": "watch"}, True, True),
-    ("base", {"intensity": "good", "drift": "bad"}, True, False),
-    (None, {"intensity": "good", "drift": "good"}, False, False),       # no phase = base
+@pytest.mark.parametrize("kind, levels, gate, allowed", [
+    # no method (legacy bool / None): base is no longer held back by a drift streak
+    ("base", {"intensity": "good", "drift": "good"}, False, True),
+    ("base", {"intensity": "watch", "drift": "watch"}, None, True),
+    ("base", {"intensity": "bad", "drift": "good"}, None, False),
+    (None, {"intensity": "good", "drift": "good"}, False, True),        # no phase = base
+    ("base", {"intensity": "good", "drift": "good"}, {"state": "locked", "verdict": "x"}, False),
+    ("base", {"intensity": "good", "drift": "good"}, {"state": "unlocked", "dose": {"step": 0}}, True),
     ("specific", {"intensity": "good", "drift": "good"}, False, True),
     ("specific", {"intensity": "bad", "drift": "good"}, False, False),
+    ("specific", {"intensity": "good", "drift": "bad"}, False, False),
 ])
-def test_quality_gate(kind, levels, streak_ok, allowed):
-    assert R.quality_gate(kind, levels, streak_ok) is allowed
+def test_quality_gate(kind, levels, gate, allowed):
+    assert R.quality_gate(kind, levels, gate) is allowed
 
 
 def test_next_quality():

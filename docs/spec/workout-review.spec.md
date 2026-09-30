@@ -14,9 +14,11 @@ expression cannot — Pa:HR drift of a steady run, work bouts, climbs, durabilit
 pacing by distance, and form drift — and writes at most three verdict lines per
 card, compared against the athlete's own 8–12-week baseline.
 
-The same measurements feed the progression decisions: the drift streak gates
-base-phase intervals in `status.i_drift` and `overview.week_plan`, and the
-latest CP test drives `status.i_testing` (see `overview.spec.md`).
+The same measurements feed the progression decisions: the drift series is
+informational in `status.i_drift` (the base-phase interval gate is
+`engine/quality_gate.py`, see `overview.spec.md`), the measurements feed the
+gate's Friel / 徐國峰 methods and dose count, and the latest CP and AeT tests
+drive `status.i_testing`.
 
 Design doc: `docs/plans/done-workout-review.plan.md:1`. The verdicts are coaching
 heuristics; the knee / form card always says 參考 (`backend/engine/workout_review.py:35-37`).
@@ -34,8 +36,8 @@ heuristics; the knee / form card always says 參考 (`backend/engine/workout_rev
                  │
      drift_of · detect_efforts · cp_test · detect_climbs · form_drift · downhill_share · pacing_deciles
                  │
- status.i_drift ◄── drift_streak      status.i_testing ◄── latest_cp_test
- overview.week_plan ◄── quality_gate · last_quality · next_quality
+ status.i_drift ◄── drift_series      status.i_testing ◄── latest_cp_test · aet_test.latest_aet_test
+ quality_gate (friel_check · xu_check · dose_history) ◄── measure · classify · _samples
 ```
 
 | Layer | Responsibility | Entry point |
@@ -43,7 +45,7 @@ heuristics; the knee / form card always says 參考 (`backend/engine/workout_rev
 | Pure analyses | Arrays in, numbers out; unit-tested on synthetic data | `backend/engine/workout_review.py:224` |
 | Session typing | Plan order: category → test_cp → test_aet → quality → long → easy | `backend/engine/workout_review.py:481` |
 | Dataset adapters | Samples, thresholds on the date, per-workout measure, classify, peers, baselines | `backend/engine/workout_review.py:615` |
-| Progression hooks | Drift streak, last quality session, latest CP test | `backend/engine/workout_review.py:789` |
+| Progression hooks | Drift series (informational), latest CP test; the AeT test lives in `engine/aet_test.py` | `backend/engine/workout_review.py:955` |
 | Verdicts | Line builders for aerobic, interval and CP cards | `backend/engine/workout_review.py:877` |
 | Review JSON | One card per section, in the shape the viewer's `draw()` renders | `backend/engine/workout_review.py:969` |
 | View definition | Kind `review` with a `section` | `backend/engine/wko5expr/customviews.py:94-100` |
@@ -124,8 +126,10 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:741`).
    `classify` returns `protocol` (the session's, else the method of a
    threshold row that day, the title, the pattern) and `test_match`
    (done_by / same_day / race / threshold / title / pattern).
-3. `test_aet`: plan AeT record on that date, or a fair drift on a road run with
-   moving time ≥ 55 min.
+3. `test_aet`: a title with 「AeT」 (the planned 「AeT 飄移測試」; checked before the CP
+   test's 「測試」 title rule unless the CP pattern matched,
+   `backend/engine/workout_review.py:563`), a plan AeT record on that date, or a fair
+   drift on a road run with moving time ≥ 55 min.
 4. `quality`: road, trail or hike whose average HR is **not** ≤ AeT+3, and either
    30-s power time ≥ 95 % CP reaches `HARD_SESSION_S` (600 s,
    `backend/engine/overview.py:65`), or hard time reaches it **and**, when a power
@@ -150,13 +154,23 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:741`).
 
 Verdict rules:
 
-- Aerobic (`backend/engine/workout_review.py:877`): time over AeT+3 > 10 % on easy /
-  long → 下次放慢; drift < 5 % → stable (with the streak; ≥ 3 → add a sub-threshold
-  interval), but not counted when average HR > AeT+3; 5–10 % → hold intervals;
-  > 10 % → aerobic base lacking. AeT test: drift < 5 % → first-half HR can be the AeT.
-  In power mode the same bands apply to Pw:HR, but the streak and the interval it
-  unlocks are never mentioned — they are counted on Pa:HR
-  (`backend/engine/workout_review.py:943`).
+- Aerobic (`aerobic_lines`, `backend/engine/workout_review.py:1066`), informational: time
+  over AeT+3 > 10 % on easy / long → 下次放慢; drift < 5 % → 有氧基礎穩 (不是輕鬆跑 when
+  average HR > AeT+3); 5–10 % → 後段心率往上跑; > 10 % → 有氧基礎不足或跑太快. The old
+  streak lines (「連續 N 次」, 「可以加一次閾值下間歇」) are gone — no source; the gate is
+  `engine/quality_gate.py`. Same bands on Pw:HR in power mode.
+- AeT test (`_aet_test_lines`, `backend/engine/workout_review.py:1285`, on the summary and
+  aerobic cards): `aet_test.analyze` (`backend/engine/aet_test.py:69`) cuts the 15′
+  warm-up and the cool-down (trailing 60-s output < 85 % of the block's median), needs
+  ≥ 40 min after the warm-up (UA; drift_of counts its 40 min from the start), refuses
+  stops > 5 %, 30-s power CV > 15 %, hills, a fast finish (last 10 % > 5 % above the rest,
+  自訂) and a mean temperature > 25 °C when the file has one (自訂). Pw:HR over the halves
+  (Pa:HR without power), UA's bands (`lines`, `backend/engine/aet_test.py:162`): < 3.5 % →
+  still below AeT, +5 bpm next time; 3.5–5 % → first-half HR is the AeT; > 5 % → −5 bpm.
+  In band "at" and not applied, the card's `action` is 「套用這次的 AeT（N bpm）」 → POST
+  `/api/v1/plan/thresholds/apply-estimate` `{aethr, date, note}` (the viewer's `drawAction`,
+  `backend/static/wko5_viewer.html:1022`). Without samples the three bands run on
+  `drift_of`'s drift.
 
 ### Basis (配速／功率)
 
@@ -209,9 +223,11 @@ Unknown section or no samples → an `empty` card.
 
 | Function | Used by | Rule | Line |
 |---|---|---|---|
-| `drift_series` / `drift_streak` | `status.i_drift` (`backend/engine/status.py:390`) | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; streak = consecutive most recent fair drifts < 5 % (refused runs skipped); `streak_ok` at 3 | `backend/engine/workout_review.py:789`, `backend/engine/workout_review.py:814`, `backend/engine/workout_review.py:513` |
-| `quality_gate` | `overview.week_plan` `allow_quality` (`backend/engine/overview.py:512`) and each projected week (`projection.allow_quality`) | Intensity and drift not bad; in base phase (or no phase) `streak_ok` also required | `backend/engine/workout_review.py:524` |
-| `last_quality` / `next_quality` | `overview.week_plan` base branch (`backend/engine/overview.py:541-544`) | Latest run **or hike** classified quality in 28 days, by date whatever the workout order (`backend/engine/workout_review.py:828`); next session 3×8 min, one rep fewer (min 2) when it faded | `backend/engine/workout_review.py:820`, `backend/engine/workout_review.py:533` |
+| `drift_series` | `status.i_drift` (`backend/engine/status.py:392`), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days | `backend/engine/workout_review.py:955` |
+| `drift_streak` / `STREAK_NEED` | legacy only (the removed 「連續 3 次」 rule) | consecutive most recent fair drifts < 5 % | `backend/engine/workout_review.py:980`, `backend/engine/workout_review.py:70` |
+| `quality_gate` | thin wrapper over `quality_gate.week_decision`; a legacy bool / None gate = no method | outside base: intensity and drift not bad | `backend/engine/workout_review.py:594` |
+| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:182`, `backend/engine/quality_gate.py:228`, `backend/engine/quality_gate.py:281`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′; dose: `quality` class or ≥ 4 short reps at ≥ 95 % CP | — |
+| `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:660`) | Latest run classified `test_aet` in 120 days: `analyze` result, `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:187`, `backend/engine/aet_test.py:215`, `backend/engine/aet_test.py:223` |
 | `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:580`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:976`, `backend/engine/workout_review.py:996` |
 
 ## CP-test protocols (`engine/cp_protocols.py`)
@@ -308,6 +324,8 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | Golden: 3 real runs, card and stored pahr / pwhr against a plain recomputation | `backend/tests/test_drift_basis.py:310`, `backend/tests/test_drift_basis.py:327` |
 | CP-test detection: done_by, wrong index / day, same day, pattern standard (no overlap) / quick, race | `backend/tests/test_cp_protocols.py:146`, `backend/tests/test_cp_protocols.py:156`, `backend/tests/test_cp_protocols.py:164`, `backend/tests/test_cp_protocols.py:174`, `backend/tests/test_cp_protocols.py:187`, `backend/tests/test_cp_protocols.py:195` |
 | CP analysis per protocol, the real 2026-09-30 file, same-method comparison, card button, apply-cp API | `backend/tests/test_cp_protocols.py:215`, `backend/tests/test_cp_protocols.py:264`, `backend/tests/test_cp_protocols.py:293`, `backend/tests/test_cp_protocols.py:308`, `backend/tests/test_cp_protocols.py:341`, `backend/tests/test_cp_protocols.py:369` |
+| Informational aerobic lines (no streak), UA three bands on test_aet, the gate wrapper | `backend/tests/test_workout_review.py:148`, `backend/tests/test_workout_review.py:212` |
+| AeT test: analysis bands, refusals (short / hot / fast finish / hills), `latest_aet_test`, 「AeT」 title → test_aet, the card's apply action, COROS steps, apply on a temp plan | `backend/tests/test_quality_gate.py:350`, `backend/tests/test_quality_gate.py:360`, `backend/tests/test_quality_gate.py:381`, `backend/tests/test_quality_gate.py:401`, `backend/tests/test_quality_gate.py:430` |
 
 ## Domain Model
 
@@ -328,7 +346,8 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | Pw:HR drift | The same with r = power/HR, same fairness rules and halves |
 | Basis | Which drift the aerobic card shows: pace (Pa:HR, default) or power (Pw:HR) |
 | Fair drift | A drift `drift_of` did not refuse (flat, steady, not stopped, ≥ 40 min, ≤ 90 % CP) |
-| Drift streak | Consecutive most-recent fair drifts < 5 % on easy road runs; 3 unlocks base-phase intervals |
+| Drift streak | Legacy only: consecutive most-recent fair drifts < 5 % (the removed, unsourced 3-run interval rule) |
+| AeT drift test | 15′ warm-up + 45–60′ fixed power on the flat; UA bands < 3.5 % / 3.5–5 % / > 5 % on the block after the warm-up |
 | Effort | A work bout: 30-s power over the effort threshold for ≥ 60 s |
 | Band | A %CP power band (閾值下 … 無氧) of the set's median effort |
 | Fade | Last rep power vs first − 1; < −5 % = faded |
@@ -348,6 +367,7 @@ None. The module computes on request; there are no emitters or subscribers.
 |------|------|-------------|---------|
 | 2026-09-30 | code-sync | N/A | Created from brownfield analysis — single-activity review cards (session type, Pa:HR drift, efforts, climbs, durability, form), 單次活動判讀 view, drift streak / CP-test hooks for status and week plan |
 | 2026-09-30 | user-decision | N/A | Hikes go through the same quality rule as road and trail; average HR ≤ AeT+3 still means easy |
+| 2026-10-01 | feature | N/A | 間歇門檻 replaces the drift streak (aerobic lines informational, streak legacy only; `quality_gate` wraps `engine/quality_gate.py`); AeT drift test: 「AeT」 title → test_aet, `aet_test.analyze` (post-warm-up block, UA bands, fast-finish / heat / 40-min-after-warm-up checks kept out of `drift_of`), `latest_aet_test`, 「套用這次的 AeT」 card action through `drawAction` |
 | 2026-09-30 | bugfix | N/A | Hikes get power quality and efforts like runs; hard HR time excludes recording gaps; HR-drop check skips short surges; last_quality covers hikes, sorted by date; measure cache `workout_review_v4`; docstring points at the done plan; refreshed anchors |
 | 2026-09-30 | feat/drift-basis | N/A | Pw:HR from `drift_of` itself (same rules and halves); aerobic card follows the 配速／功率 toggle, 這次沒有功率 without power; streak and overview stay on Pa:HR; measure cache `workout_review_v6`; golden recomputation test on 3 real runs |
 | 2026-10-01 | feature | N/A | CP-test protocols (quick default / standard / race): detection from the plan's done_by first, per-protocol analysis with quality checks (自組 labelled), single-bout W′ prior 參考, same-method comparison, 「套用這次的 CP」 button + `POST /api/v1/plan/thresholds/apply-cp`; measure cache `workout_review_v6` |

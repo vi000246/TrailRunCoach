@@ -41,15 +41,16 @@ def _status(ds, today: dt.date) -> Status:
     """Status is the slow part (it reads samples); memoise per dataset / day / plan edit."""
     from backend.engine import plan_prefs as PP
     from backend.engine.plan_store import test_sessions
-    # the CP-test protocol (課表偏好) and the stored test sessions (done_by)
-    # change the testing indicator too
+    # the 課表偏好 (CP-test protocol, 間歇門檻 for status.i_gate) and the stored
+    # test sessions (done_by) change the testing / gate indicators too
+    prefs = PP.load()
     tests = tuple((s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol"))
                   for s in test_sessions())
-    key = (id(ds), today, _plan_stamp(), PP.load().cp_test_protocol, tests)
+    key = (id(ds), today, _plan_stamp(), prefs.stamp(), tests)
     with _lock:
         hit = _status_cache.get(key)
     if hit is None:
-        hit = Status(ds, today=today).compute()
+        hit = Status(ds, today=today, prefs=prefs).compute()
         with _lock:
             _status_cache.clear()
             _status_cache[key] = hit

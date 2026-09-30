@@ -111,7 +111,9 @@ def test_projection_ramp_31_and_cap():
 def test_projection_sessions_placed_like_week_plan():
     weeks = P.project_weeks(cur_plan(), PHASES, date(2026, 10, 25))
     assert weeks[0]["mode"] == "recovery_week"                      # history already built 3 weeks
-    assert not [s for s in weeks[0]["sessions"] if s["kind"] in ("long", "quality")]
+    assert not [s for s in weeks[0]["sessions"] if s["kind"] == "long"]
+    # base recovery week: the short Palladino fartlek instead of intervals (engine/quality_gate.py)
+    assert [s["title"] for s in weeks[0]["sessions"] if s["kind"] == "quality"] == ["恢復週 fartlek 4×1 分"]
     w = weeks[1]
     days = {s["id"]: s["day"] for s in w["sessions"]}
     assert days["long"] == "2026-10-18"                             # the usual long weekday (日)
@@ -559,21 +561,33 @@ def _quality_by_week(weeks):
 
 
 def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
-    # drift streak not there yet: base weeks get no quality, even though this week
-    # had a CP test; the specific weeks (no streak rule) do
-    weeks = P.project_weeks(_test_week({"levels": {"intensity": "good", "drift": "good"}, "streak_ok": False}),
-                            PHASES, date(2027, 3, 1))
-    q = _quality_by_week(weeks)
-    base = [w["start"] for w in weeks if w["phase"] == "base" and w["mode"] != "recovery_week"]
-    spec = [w["start"] for w in weeks if w["phase"] == "specific" and w["mode"] != "recovery_week"]
+    from backend.engine import quality_gate as QG
+    good = {"intensity": "good", "drift": "good"}
+
+    def split(weeks):
+        q = _quality_by_week(weeks)
+        aet = {w["start"] for w in weeks if any(s["id"] == "test_aet" for s in w["sessions"])}
+        base = [w["start"] for w in weeks if w["phase"] == "base" and w["mode"] != "recovery_week"
+                and w["start"] not in aet]
+        spec = [w["start"] for w in weeks if w["phase"] == "specific" and w["mode"] != "recovery_week"]
+        return q, base, spec
+    # the old {levels, streak_ok} shape: the unsourced drift streak no longer
+    # blocks — no method, the guardrails and the dose table step forward per week
+    # (this week's CP test is not a step and doesn't leak)
+    weeks = P.project_weeks(_test_week({"levels": good, "streak_ok": False}), PHASES, date(2027, 3, 1))
+    q, base, spec = split(weeks)
+    dose = [s[1] for s in QG.DOSE + QG.AFTER]
+    assert base and all(q[d] and q[d][0] in dose for d in base)
+    assert [q[d][0] for d in base][:2] == ["短間歇 5×1 分", "短間歇 6×1 分"]
+    assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
+    # a locked method (data there, criterion not met): no base intervals; specific keeps its rule
+    locked = {"state": "locked", "mode": "ua_gap", "resolved": "ua_gap", "verdict": "差距 16%", "levels": good,
+              "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}}
+    q, base, spec = split(P.project_weeks(_test_week(locked), PHASES, date(2027, 3, 1)))
     assert base and all(q[d] == [] for d in base)
     assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
-    # streak there: base weeks get 閾值 3×10 like week_plan's intensity-good branch
-    weeks = P.project_weeks(_test_week({"levels": {"intensity": "good", "drift": "good"}, "streak_ok": True}),
-                            PHASES, date(2026, 11, 1))
-    assert all(v == ["閾值 3×10 分"] for v in _quality_by_week(weeks).values())
-    # drift bad: no quality in any phase that has the gate
-    weeks = P.project_weeks(_test_week({"levels": {"intensity": "good", "drift": "bad"}, "streak_ok": True}),
+    # intensity bad: no quality in base (the guardrail) nor specific (the old rule)
+    weeks = P.project_weeks(_test_week({"levels": {"intensity": "bad", "drift": "good"}, "streak_ok": True}),
                             PHASES, date(2027, 3, 1))
     assert all(v == [] for s, v in _quality_by_week(weeks).items()
                if next(w for w in weeks if w["start"] == s)["phase"] in ("base", "specific"))

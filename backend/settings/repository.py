@@ -71,6 +71,9 @@ DEFAULTS: dict[str, Any] = {
     # CP 測試方式 (engine/cp_protocols.py): quick 20 min all-out | standard 12′ +
     # 30′ + 3′ | race (a 5–10 K race instead). The athlete chose quick as the default.
     "plan.prefs.cp_test_protocol": "quick",
+    # 間歇門檻 (engine/quality_gate.py): what unlocks base-phase intervals
+    "plan.prefs.quality_gate": "auto",        # auto | ua_gap | friel_drift | xu_drift | plateau | weeks | none
+    "plan.prefs.quality_gate_weeks": 8,       # weeks mode: base-phase weeks before intervals (2-16)
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
@@ -85,6 +88,7 @@ PREF_ENUMS = {
     "plan.prefs.terrain_quality": ("flat", "hill", "any"),
     "plan.prefs.interval_target": ("power", "hr"),
     "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
+    "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"),
 }
 PREF_INTS = {                                 # key -> (lo, hi); None always allowed
     "plan.prefs.cap_weekday": (20, 300),
@@ -92,6 +96,7 @@ PREF_INTS = {                                 # key -> (lo, hi); None always all
     "plan.prefs.runs_per_week": (3, 7),
     "plan.prefs.quality_per_week": (0, 2),
     "plan.prefs.strength_per_week": (0, 3),
+    "plan.prefs.quality_gate_weeks": (2, 16),
 }
 
 
