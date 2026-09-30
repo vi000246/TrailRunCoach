@@ -1,6 +1,7 @@
 """
-Push the week plan (engine/overview.week_plan) to COROS Training Hub as
-structured workouts, scheduled on their day so they sync to the watch.
+Push stored plan sessions (engine/plan_store, via api/plan_sessions) to
+COROS Training Hub as structured workouts, scheduled on their day so they
+sync to the watch.
 
 Unofficial Training Hub API (same host + token as coros_client). Endpoints
 and field codes cross-checked in dholliday3/coros-training-mcp,
@@ -25,7 +26,8 @@ Program codes: sportType 1 run, 2 bike, 4 strength. exerciseType 0 group,
 intensityValue/intensityValueExtend; hrType 3 = the LTHR zone scheme
 (intensityPercent = % of LTHR × 1000).
 
-Every pushed session is recorded in `coros_plan_push` (session key -> COROS
+Every pushed session is recorded in `coros_plan_push` (session key = the
+stored session's uid, plan_store.push_dict -> COROS
 program / schedule ids + a fingerprint of what was sent), so pushing again
 leaves unchanged sessions alone, replaces changed ones and removes sessions
 that dropped out of the plan. Only workouts recorded there are ever deleted.
@@ -305,10 +307,6 @@ def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = 
     return WorkoutSpec(s["id"], s["day"], name, payload, fp)
 
 
-def session_key(week_start: str, session_id: str) -> str:
-    return f"{week_start}/{session_id}"
-
-
 # ---------------------------------------------------------------------------
 # Training Hub client
 # ---------------------------------------------------------------------------
@@ -437,12 +435,6 @@ def _row_view(r: Optional[CorosPlanPush]) -> dict:
             "pushed_at": r.pushed_at.isoformat() if r.pushed_at else None, "error": r.error}
 
 
-async def _rows(db: AsyncSession, athlete_id: int, week_start: str) -> dict[str, CorosPlanPush]:
-    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id,
-                                                       CorosPlanPush.week_start == week_start))
-    return {r.session_id: r for r in res.scalars().all()}
-
-
 class Executed(Exception):
     """The COROS calendar entry was already done: leave it alone."""
 
@@ -503,18 +495,6 @@ def status_of(s: dict, thresholds: Optional[dict], row: Optional[CorosPlanPush],
         return {**out, "status": "failed", "name": spec.name, **_row_view(row)}
     st = "pushed" if row.fingerprint == spec.fingerprint else "outdated"
     return {**out, "status": st, "name": spec.name, **_row_view(row)}
-
-
-async def week_status(db: AsyncSession, plan: dict, athlete_id: int = 1) -> dict:
-    week_start = plan["week"]["start"]
-    today = plan_today(plan)
-    rows = await _rows(db, athlete_id, week_start)
-    ids = {s["id"] for s in plan["sessions"]}
-    return {"week_start": week_start,
-            "sessions": [status_of(s, plan.get("thresholds"), rows.get(s["id"]), today)
-                         for s in plan["sessions"]],
-            "orphans": [{"id": k, "title": r.title, "day": r.day, **_row_view(r)}
-                        for k, r in rows.items() if k not in ids]}
 
 
 def _monday(day: Optional[str], default: Optional[str]) -> Optional[str]:
@@ -597,28 +577,6 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
         return {**out, "status": "failed", "name": spec.name, "error": row.error, **_row_view(row)}
 
 
-async def push_week(db: AsyncSession, plan: dict, only: Optional[str] = None,
-                    athlete_id: int = 1, hub: Optional[TrainingHub] = None) -> dict:
-    """Push the week (or one session). Idempotent: unchanged sessions are left
-    alone, changed ones replaced, and (whole-week push) sessions no longer in
-    the plan are removed from COROS."""
-    week_start = plan["week"]["start"]
-    sessions = [{**s, "key": session_key(week_start, s["id"]), "week_start": week_start}
-                for s in plan["sessions"]]
-    stale: list[str] = []
-    if only is not None:
-        sessions = [s for s in sessions if s["id"] == only]
-        if not sessions:
-            raise KeyError(only)
-    else:
-        live = {s["key"] for s in sessions}
-        stale = [r.session_key for r in (await _rows(db, athlete_id, week_start)).values()
-                 if r.session_key not in live]
-    res = await push_sessions(db, sessions, plan.get("thresholds"), plan_today(plan),
-                              stale_keys=stale, athlete_id=athlete_id, hub=hub)
-    return {"week_start": week_start, **res}
-
-
 async def push_sessions(db: AsyncSession, sessions: list[dict], thresholds: Optional[dict], today: str,
                         *, stale_keys=(), missed_keys=(), athlete_id: int = 1,
                         hub: Optional[TrainingHub] = None) -> dict:
@@ -658,11 +616,6 @@ def real_today() -> dt.date:
     return dt.date.today()
 
 
-def plan_today(plan: dict) -> str:
-    """The plan's `today` is the last day with data; never schedule before the real today."""
-    return max(plan["week"].get("today") or "", real_today().isoformat())
-
-
 async def _remove_row(db: AsyncSession, hub: TrainingHub, r: CorosPlanPush,
                       keep_before: Optional[str] = None) -> dict:
     """Remove one pushed session. Automatic removals (the session left the
@@ -685,17 +638,3 @@ async def _remove_row(db: AsyncSession, hub: TrainingHub, r: CorosPlanPush,
     await db.delete(r)
     await db.commit()
     return {**out, "status": "removed"}
-
-
-async def remove_week(db: AsyncSession, week_start: str, only: Optional[str] = None,
-                      athlete_id: int = 1, hub: Optional[TrainingHub] = None) -> dict:
-    """Remove what was pushed for this week (or one session) from COROS."""
-    async with _push_lock:
-        rows = await _rows(db, athlete_id, week_start)
-        if only is not None:
-            rows = {k: v for k, v in rows.items() if k == only}
-        if not rows:
-            return {"week_start": week_start, "removed": []}
-        hub = hub or await TrainingHub.from_db(db, athlete_id)
-        return {"week_start": week_start,
-                "removed": [await _remove_row(db, hub, r) for r in rows.values()]}

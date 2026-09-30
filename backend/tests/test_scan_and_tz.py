@@ -59,6 +59,31 @@ def test_scan_skips_files_the_sync_already_recorded(tmp_path, _fit_root_in_tmp):
     run(go())
 
 
+def test_provider_id_dedup_is_per_athlete(tmp_path, _fit_root_in_tmp):
+    """Another athlete's copy of the same COROS / TP activity doesn't hide it."""
+    async def go():
+        s = await make_session(tmp_path)
+        _tree(_fit_root_in_tmp)
+        s.add(WorkoutFile(athlete_id=2, file_path="other-coros.fit", file_format="fit",
+                          source="coros", coros_activity_id="480567774272323786"))
+        s.add(WorkoutFile(athlete_id=2, file_path="other-tp.fit", file_format="fit",
+                          source="trainingpeaks", tp_workout_id=3933231656))
+        await s.commit()
+        r = await scan_and_import(s, 1, str(_fit_root_in_tmp))
+        assert r["new"] == 2
+    run(go())
+
+
+def test_sync_ids_accepts_folder_and_db_source_names():
+    from pathlib import Path
+    from backend.files.file_service import _sync_ids
+    tp = Path("tp_2026_09_02_3933231656.fit")
+    assert _sync_ids("trainingpeaks", tp) == _sync_ids("tp", tp) == {"tp_workout_id": 3933231656}
+    assert _sync_ids("coros", Path("480567774272323786_2026-09-02_run.fit")) == \
+        {"coros_activity_id": "480567774272323786"}
+    assert _sync_ids("local", tp) == {}
+
+
 def test_scan_classic_year_layout_still_local(tmp_path):
     async def go():
         s = await make_session(tmp_path)

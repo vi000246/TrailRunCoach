@@ -48,7 +48,11 @@ def discover_workout_files(athlete_dir: Path) -> list[Path]:
 
 def _sync_ids(source: str, path: Path) -> dict:
     """Provider ids encoded in the sync file names (coros_client / tp_client):
-    COROS "<labelId>_<YYYY-MM-DD>_<sport>.fit", TP "tp_<YYYY_MM_DD>_<workoutId>.fit"."""
+    COROS "<labelId>_<YYYY-MM-DD>_<sport>.fit", TP "tp_<YYYY_MM_DD>_<workoutId>.fit".
+    `source` is the DB name ("coros" / "trainingpeaks") or the folder / API name
+    ("tp"), storage.SOURCES."""
+    from backend.sync import storage
+    source = storage.SOURCES.get(source, source)
     stem = path.name.split(".")[0]
     if source == "coros":
         head = stem.split("_", 1)[0]
@@ -85,7 +89,8 @@ async def _already_imported(db: AsyncSession, athlete_id: int, path: Path, ids: 
     if (await db.execute(q)).first():
         return True
     if ids.get("coros_activity_id"):
-        q = select(WorkoutFile.id).where(WorkoutFile.coros_activity_id == ids["coros_activity_id"])
+        q = select(WorkoutFile.id).where(WorkoutFile.athlete_id == athlete_id,
+                                         WorkoutFile.coros_activity_id == ids["coros_activity_id"])
         if (await db.execute(q)).first():
             return True
     if ids.get("tp_workout_id"):

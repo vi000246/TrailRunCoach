@@ -369,24 +369,15 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
     }
 
 
-MAP_MAX_POINTS = 2000
-
-
 def render_map(chart: dict, ds: Dataset, workout) -> dict:
-    """WKO5's map panel: the workout's GPS track as [[lon, lat, elevation m,
-    elapsed s], ...] (downsampled), or `empty` when it has no GPS."""
+    """WKO5's map panel: which workout, or `empty` when it has no GPS. The
+    viewer's Leaflet map draws the track from /workouts/{idx}/samples (the
+    same samples the synced hover uses), so no track is sent here."""
     base = {"title": chart.get("title") or "地圖", "description": chart.get("description"),
             "kind": "map", "workout": workout.idx, "series": [], "unsupported": [], "fixes": []}
+    no_gps = "這筆活動沒有 GPS 資料（室內或裝置沒有記錄位置）。"
     lat, lon = ds.channel(workout.idx, "latitude"), ds.channel(workout.idx, "longitude")
     if lat is None or lon is None or len(lat) != len(lon):
-        return {**base, "track": [], "empty": "這筆活動沒有 GPS 資料（室內或裝置沒有記錄位置）。"}
-    elev = ds.channel(workout.idx, "elevation")
-    t = ds.channel(workout.idx, "elapsedtime")
+        return {**base, "empty": no_gps}
     ok = ~np.isnan(lat) & ~np.isnan(lon) & ~((lat == 0) & (lon == 0))
-    idx = np.nonzero(ok)[0]
-    if not len(idx):
-        return {**base, "track": [], "empty": "這筆活動沒有 GPS 資料（室內或裝置沒有記錄位置）。"}
-    idx = idx[::max(1, int(math.ceil(len(idx) / MAP_MAX_POINTS)))]
-    col = lambda a, i: None if a is None or len(a) != len(lat) else _f(a[i])   # noqa: E731
-    track = [[round(float(lon[i]), 6), round(float(lat[i]), 6), col(elev, i), col(t, i)] for i in idx]
-    return {**base, "track": track, "empty": None}
+    return {**base, "empty": None if ok.any() else no_gps}

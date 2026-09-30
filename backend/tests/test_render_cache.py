@@ -35,6 +35,19 @@ def test_key_changes_with_code_version(monkeypatch):
 def test_code_signature_covers_zones_and_planning():
     names = {p.name for d, pat in RC._ENGINE_GLOBS for p in d.glob(pat)}
     assert {"zones.py", "planning.py", "thresholds.py", "evaluator.py", "render.py"} <= names
+    # the endpoint around render_chart, the readers and the review panels shape the JSON too
+    assert {"wko5views.py", "workout_review.py", "workout.py", "fit_to_channels.py", "wko4_file.py"} <= names
+
+
+def test_code_signature_changes_with_wko5views(monkeypatch, tmp_path):
+    api = tmp_path / "api"
+    api.mkdir()
+    f = api / "wko5views.py"
+    f.write_text("x = 1\n")
+    monkeypatch.setattr(RC, "_ENGINE_GLOBS", [(api, "wko5views.py")])
+    a = RC._compute_code_signature()
+    f.write_text("x = 22\n")
+    assert RC._compute_code_signature() != a
 
 
 def test_fingerprint_follows_workouts_and_today(tmp_path):

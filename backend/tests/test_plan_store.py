@@ -536,3 +536,79 @@ def test_edit_moves_the_bars_and_projection(monkeypatch):
         p1 = {r["date"]: r["tss"] for r in s1["projection"]}
         assert p0["2026-10-01"] > 0 and p1["2026-10-01"] == 0
         assert s1["ctl_end"] < s0["ctl_end"]
+
+
+# ---------------------------------------------------------------------------
+# spec-sync regressions
+# ---------------------------------------------------------------------------
+
+def _test_week(gate):
+    """This week: a CP test in place of the quality session (week_plan's test_due)."""
+    cur = cur_plan(sessions=[
+        g("test", "test", "CP 測試 3 分 + 12 分", 60, "2026-10-01"),
+        g("strength1", "strength", "肌力（下肢單腳＋核心）", 35, "2026-10-02"),
+        g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
+        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+    cur["quality_gate"] = gate
+    return cur
+
+
+def _quality_by_week(weeks):
+    return {w["start"]: [s["title"] for s in w["sessions"] if s["kind"] == "quality"]
+            for w in weeks if w["mode"] != "recovery_week"}
+
+
+def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
+    # drift streak not there yet: base weeks get no quality, even though this week
+    # had a CP test; the specific weeks (no streak rule) do
+    weeks = P.project_weeks(_test_week({"levels": {"intensity": "good", "drift": "good"}, "streak_ok": False}),
+                            PHASES, date(2027, 3, 1))
+    q = _quality_by_week(weeks)
+    base = [w["start"] for w in weeks if w["phase"] == "base" and w["mode"] != "recovery_week"]
+    spec = [w["start"] for w in weeks if w["phase"] == "specific" and w["mode"] != "recovery_week"]
+    assert base and all(q[d] == [] for d in base)
+    assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
+    # streak there: base weeks get 閾值 3×10 like week_plan's intensity-good branch
+    weeks = P.project_weeks(_test_week({"levels": {"intensity": "good", "drift": "good"}, "streak_ok": True}),
+                            PHASES, date(2026, 11, 1))
+    assert all(v == ["閾值 3×10 分"] for v in _quality_by_week(weeks).values())
+    # drift bad: no quality in any phase that has the gate
+    weeks = P.project_weeks(_test_week({"levels": {"intensity": "good", "drift": "bad"}, "streak_ok": True}),
+                            PHASES, date(2027, 3, 1))
+    assert all(v == [] for s, v in _quality_by_week(weeks).items()
+               if next(w for w in weeks if w["start"] == s)["phase"] in ("base", "specific"))
+
+
+def test_projection_uses_the_athletes_atl_constant(monkeypatch):
+    from backend.engine import overview as O
+    seen = []
+    real = O.project
+
+    def spy(ctl, atl, planned, cc, ac):
+        seen.append((cc, ac))
+        return real(ctl, atl, planned, cc, ac)
+    monkeypatch.setattr(O, "project", spy)
+    P.project_weeks(cur_plan(), PHASES, date(2026, 10, 11), 40.0, 10.0)
+    assert seen and all(x == (40.0, 10.0) for x in seen)
+
+
+def test_projection_survives_a_session_without_a_day(monkeypatch):
+    real = P.week_sessions
+
+    def with_unplaced(*a, **kw):
+        ss = real(*a, **kw)
+        ss.append({**ss[-1], "id": "strength9", "kind": "strength", "day": None})
+        return ss
+    monkeypatch.setattr(P, "week_sessions", with_unplaced)
+    weeks = P.project_weeks(cur_plan(), PHASES, date(2026, 10, 14))
+    assert weeks and all(s["day"] for w in weeks for s in w["sessions"])
+
+
+def test_past_week_scope_is_a_400(monkeypatch):
+    with Env(monkeypatch) as e:
+        q = "scope=week&day=2026-09-21"                                 # Mon 9/21 – Sun 9/27, today 9/30
+        r = e.c.get(f"{API}/push-coros/preview?{q}")
+        assert r.status_code == 400 and "已經過去" in r.json()["detail"]
+        assert e.c.post(f"{API}/push-coros?{q}").status_code == 400
+        assert e.c.delete(f"{API}/push-coros?{q}").status_code == 400
+        assert e.c.get(f"{API}/push-coros/preview?scope=week&day=2026-09-28").status_code == 200

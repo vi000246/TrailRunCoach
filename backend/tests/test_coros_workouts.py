@@ -256,9 +256,44 @@ def test_fingerprint_tracks_content_and_day():
 # push / idempotency
 # ---------------------------------------------------------------------------
 
+# push_week / remove_week / week_status are gone (production pushes stored
+# sessions through push_sessions / remove_keys / status_of, api/plan_sessions);
+# these helpers drive the same live functions with a hand-built week.
+
+def _today_of(p):
+    return max(p["week"].get("today") or "", CW.real_today().isoformat())
+
+
+def _keyed(p):
+    ws = p["week"]["start"]
+    return [{**s, "key": f"{ws}/{s['id']}", "week_start": ws} for s in p["sessions"]]
+
+
+async def _push_plan(db, p, only=None):
+    sessions = _keyed(p)
+    stale = []
+    if only is not None:
+        sessions = [s for s in sessions if s["id"] == only]
+    else:
+        live = {s["key"] for s in sessions}
+        stale = [k for k in await CW.all_rows(db) if k not in live]
+    return await CW.push_sessions(db, sessions, p.get("thresholds"), _today_of(p), stale_keys=stale)
+
+
 def _push(db, p, fake, **kw):
     with http.use_transport(httpx.MockTransport(fake)):
-        return run(CW.push_week(db, p, **kw))
+        return run(_push_plan(db, p, **kw))
+
+
+def _status(db, p):
+    rows = run(CW.all_rows(db))
+    return {s["id"]: CW.status_of(s, p.get("thresholds"), rows.get(s["key"]), _today_of(p))["status"]
+            for s in _keyed(p)}
+
+
+def _remove(db, only=None):
+    rows = run(CW.all_rows(db))
+    return run(CW.remove_keys(db, [k for k, r in rows.items() if only is None or r.session_id == only]))
 
 
 def test_push_week_creates_and_schedules():
@@ -357,8 +392,6 @@ def test_push_one_session_only():
     res = _push(db, week1(), fake, only="long")
     assert [r["id"] for r in res["sessions"]] == ["long"] and res["removed"] == []
     assert len(fake.live()) == 1
-    with pytest.raises(KeyError):
-        _push(db, week1(), fake, only="nope")
 
 
 def test_user_deleted_it_in_coros_app():
@@ -391,8 +424,7 @@ def test_add_failure_is_recorded_and_retried():
     assert len(failed) == 1 and "intensity not supported" in st[failed[0]]["error"]
     assert sum(1 for r in st.values() if r["status"] == "pushed") == 2
     # status endpoint says failed; the next push retries just that one
-    status = run(CW.week_status(db, week1()))
-    assert {s["id"]: s["status"] for s in status["sessions"]}[failed[0]] == "failed"
+    assert _status(db, week1())[failed[0]] == "failed"
     res = _push(db, week1(), fake)
     assert {r["id"]: r["status"] for r in res["sessions"]}[failed[0]] == "pushed"
     assert len(fake.live()) == 3 and len(fake.entities) == 3
@@ -440,26 +472,23 @@ def test_network_error_marks_failed():
 # remove + status
 # ---------------------------------------------------------------------------
 
-def test_remove_week_and_status():
+def test_remove_and_status():
     db = run(make_db())
     fake = FakeHub()
     _push(db, week1(), fake)
-    st = {s["id"]: s["status"] for s in run(CW.week_status(db, week1()))["sessions"]}
-    assert st == {"long": "pushed", "quality": "pushed", "easy1": "pushed",
-                  "strength1": "skipped", "easy2": "done"}
+    assert _status(db, week1()) == {"long": "pushed", "quality": "pushed", "easy1": "pushed",
+                                    "strength1": "skipped", "easy2": "done"}
     p = week1()
     p["sessions"][0]["minutes"] = 90
-    st = {s["id"]: s["status"] for s in run(CW.week_status(db, p))["sessions"]}
-    assert st["long"] == "outdated"
+    assert _status(db, p)["long"] == "outdated"
     with http.use_transport(httpx.MockTransport(fake)):
-        one = run(CW.remove_week(db, "2026-09-28", only="quality"))
-        assert [r["status"] for r in one["removed"]] == ["removed"]
-        rest = run(CW.remove_week(db, "2026-09-28"))
-    assert sorted(r["id"] for r in rest["removed"]) == ["easy1", "long"]
+        one = _remove(db, only="quality")
+        assert [r["status"] for r in one] == ["removed"]
+        rest = _remove(db)
+    assert sorted(r["id"] for r in rest) == ["easy1", "long"]
     assert fake.live() == {} and fake.entities == []
     assert run(db.execute(select(CorosPlanPush))).scalars().all() == []
-    st = {s["id"]: s["status"] for s in run(CW.week_status(db, week1()))["sessions"]}
-    assert st["long"] == "not_pushed"
+    assert _status(db, week1())["long"] == "not_pushed"
 
 
 def test_never_touches_workouts_it_did_not_create():
@@ -470,7 +499,7 @@ def test_never_touches_workouts_it_did_not_create():
                           "planId": "plan9", "sortNoInSchedule": 1, "executeStatus": 0})
     _push(db, week1(), fake)
     with http.use_transport(httpx.MockTransport(fake)):
-        run(CW.remove_week(db, "2026-09-28"))
+        _remove(db)
     assert fake.programs["111"]["deleted"] == 0
     assert [e["idInPlan"] for e in fake.entities] == ["3"]
 
@@ -507,8 +536,8 @@ def test_executed_entry_is_never_removed_or_replaced():
     assert res["sessions"][0]["status"] == "done"
     assert fake.adds() == 1 and len(fake.entities) == 1
     with http.use_transport(httpx.MockTransport(fake)):
-        out = run(CW.remove_week(db, "2026-09-28"))
-    assert out["removed"][0]["status"] == "kept"
+        out = _remove(db)
+    assert out[0]["status"] == "kept"
     assert len(fake.entities) == 1 and len(fake.live()) == 1
 
 
@@ -529,5 +558,5 @@ def test_entry_moved_in_the_app_is_still_found():
     _push(db, week1(), fake, only="easy1")
     fake.entities[0]["happenDay"] = 20261004                   # dragged to Sunday in the COROS app
     with http.use_transport(httpx.MockTransport(fake)):
-        run(CW.remove_week(db, "2026-09-28"))
+        _remove(db)
     assert fake.entities == [] and fake.live() == {}
