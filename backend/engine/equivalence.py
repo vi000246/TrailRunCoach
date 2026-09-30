@@ -47,6 +47,12 @@ MODEL — the athlete's own history, not a fixed formula
 
     Converting *to* road uses EP at v_flat (a flat road is km / v_flat).
 
+    GROUP HIKES (user decision 2026-09-30): hiking / mountaineering days are
+    mostly group trips paced by the group, so only hikes the user opted in as
+    solo (racepower.athlete.solo_hikes) are hike samples. With fewer than
+    MIN_SAMPLES of them the 登山 mode is EP at the pooled trail EP speed and
+    the backtest has nothing to test → 推估.
+
 STATUS / VALIDATION
     `backtest()` runs leave-one-out on the athlete's own easy trail and hike
     activities: refit without the activity, predict its moving time, compare.
@@ -83,6 +89,7 @@ GENTLE_DEG, STEEP_DEG = 5.0, 12.0
 ESTIMATE_MAPE = 15.0           # above: shown as 推估
 DEFAULT_V_FLAT = 8.0           # km/h, only when there is no road run at all
 MODES = ("road", "trail", "hike")
+HIKE_NOTE = "百岳多為跟團，速度不代表個人能力：登山換算只用你標記為自己走的登山，不足時用 EP（推估）"
 SOURCES = [
     "Naismith 1892（平地時間＋爬升時間，相加）",
     "Langmuir《Mountaincraft and Leadership》1984（下坡 5–12° 每 300 m 減 10 分、> 12° 加 10 分）",
@@ -318,14 +325,22 @@ def backtest(samples: list[Sample], aet: Optional[float]) -> dict:
 # samples from the dataset
 # ---------------------------------------------------------------------------
 
-def samples_from(ds, today: dt.date, aet: Optional[float], weeks: int = WINDOW_WEEKS) -> list[Sample]:
+def samples_from(ds, today: dt.date, aet: Optional[float], weeks: int = WINDOW_WEEKS,
+                 solo: Optional[set] = None) -> list[Sample]:
     """Road runs (any HR, for the flat speed) and easy trail / hike sessions
-    (avg HR <= AeT + EASY_HR_TOL) of the last `weeks` weeks."""
+    (avg HR <= AeT + EASY_HR_TOL) of the last `weeks` weeks. Hikes only when
+    the user opted them in as solo (racepower.athlete.solo_hikes): group
+    hikes (百岳多為跟團) are paced by the group, not by the athlete, so with
+    too few solo hikes the 登山 conversion falls back to EP, labelled 推估."""
     from backend.engine import overview as O
     from backend.engine.wko5expr.dataset import date_to_day
     from backend.engine.wko5expr.evaluator import WS, Evaluator
+    if solo is None:
+        from backend.engine.racepower.athlete import solo_hikes
+        solo = solo_hikes()
     lo = today - dt.timedelta(weeks=weeks)
-    ws = [w for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1)) if O.category(w) in MODES]
+    ws = [w for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1)) if O.category(w) in MODES
+          and (O.category(w) != "hike" or w.entry.file in solo)]
     if not ws:
         return []
     b, e = int(date_to_day(lo)), int(date_to_day(today))
@@ -356,4 +371,4 @@ def summary(ds, today: dt.date, aet: Optional[float]) -> dict:
             "easy_hr_max": None if aet is None else aet + EASY_HR_TOL, "min_samples": MIN_SAMPLES,
             "estimate_mape": ESTIMATE_MAPE,
             "estimate": {m: bt[m]["estimate"] if m in bt else True for m in ("trail", "hike")},
-            "sources": SOURCES}
+            "sources": SOURCES, "hike_note": HIKE_NOTE}
