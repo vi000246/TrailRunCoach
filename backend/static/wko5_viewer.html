@@ -1167,9 +1167,10 @@ function drawPlot(card, res, series) {
     legend: zoom ? { type: "plain", bottom: 0, textStyle: { color: text, fontSize: 11.5 } }
       : { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } },
     xAxis, yAxis, series: out,
-    dataZoom: zoom && xKind !== "duration"
-      ? [{ type: "inside" }, { type: "slider", bottom: 8 + legendRows * 22, height: 18,
-          borderColor: line, textStyle: { color: muted, fontSize: 10 } }]
+    dataZoom: zoom
+      ? [{ type: "inside" }, { type: "slider", bottom: 8 + legendRows * 22, height: 18, borderColor: line,
+          textStyle: { color: muted, fontSize: 10 },
+          labelFormatter: xKind === "duration" ? (v) => durTick(Math.round(v)) : undefined }]
       : [{ type: "inside" }],
   });
   new ResizeObserver(() => chart.resize()).observe(el);
