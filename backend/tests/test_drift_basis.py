@@ -86,8 +86,9 @@ def test_aerobic_lines_power_mode_never_counts_the_streak():
          "category": "road"}
     pace = R.aerobic_lines("easy", m, streak=3)
     power = R.aerobic_lines("easy", m, streak=3, basis="power")
-    assert any("連續 3 次" in ln for ln in pace)
-    assert power and "Pw:HR" in power[0] and not any("閾值下間歇" in ln for ln in power)
+    # the unsourced 「連續 3 次」 streak is gone on both bases (engine/quality_gate.py is the gate)
+    assert pace and not any("連續" in ln or "間歇" in ln for ln in pace)
+    assert power and "Pw:HR" in power[0] and not any("連續" in ln or "閾值下間歇" in ln for ln in power)
 
 
 # ---------------------------------------------------------------------------

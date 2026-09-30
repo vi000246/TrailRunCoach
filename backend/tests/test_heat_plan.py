@@ -46,8 +46,8 @@ def test_off_and_already_acclimatised():
     ss = week()
     assert HP.apply(ss, events=[ev(20)], today=TODAY, prefs=PP.Prefs(heat="off"), acts=[])["reason"] == "熱適應課已關閉"
     hot = [{"date": (TODAY - dt.timedelta(days=i)).isoformat(), "hot_min": 90} for i in range(12)]
-    info = HP.apply(ss, events=[ev(20)], today=TODAY, acts=hot)
-    assert not info["active"] and info["s_race_before"] >= 0.75 or "≥ 75" in info.get("reason", "")
+    info = HP.apply(ss, events=[ev(5)], today=TODAY, acts=hot)      # S ≈ 0.94 decays to ≈ 0.83 by race day
+    assert not info["active"] and info["s_race_before"] >= 0.75 and "≥ 75" in info["reason"]
 
 
 def test_induction_block_tags_the_long_run_and_easy_runs():
@@ -55,7 +55,7 @@ def test_induction_block_tags_the_long_run_and_easy_runs():
     notes = []
     info = HP.apply(ss, events=[ev(20)], today=TODAY, acts=[], notes=notes, aet=142)
     # race on 10/25: induction 10/04 – 10/17 → every placed easy / long run this week
-    assert info["active"] and info["days"] == [s["day"] for s in ss if s["kind"] in ("easy", "long")][:0] or info["days"]
+    assert info["active"] and info["days"] == sorted(s["day"] for s in ss if s["kind"] in ("easy", "long"))
     easy = [s for s in ss if s["kind"] == "easy"]
     assert all(s["heat"] and s["minutes"] == 60 and s["title"] == "熱適應輕鬆跑" for s in easy)
     assert easy[0]["tss"] == approx(40.0 * 60 / 45)
@@ -87,10 +87,10 @@ def test_methods_and_maintenance_spacing():
     HP.apply(ss, events=[ev(20)], today=TODAY, acts=[], prefs=PP.Prefs(heat_method="mixed"))
     heat = [s for s in ss if s.get("heat") and s["kind"] == "easy"]
     assert heat[0]["title"] == "熱適應輕鬆跑" and "熱水浴" in heat[1]["title"]
-    # race in 8 days: maintenance window 10/06–10/10, one every 4 days; none within 2 days of it
+    # race 10/13: maintenance window 10/06–10/10, at most one every 4 days (10/08 skipped)
     ss = week()
     info = HP.apply(ss, events=[ev(8)], today=TODAY, acts=[])
-    assert info["active"] and len(info["days"]) == 1
+    assert info["active"] and info["days"] == ["2026-10-06", "2026-10-10"]
 
 
 def test_prefs_heat_is_not_shaping_and_round_trips():
