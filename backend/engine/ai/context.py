@@ -67,6 +67,7 @@ async def build_context(db: AsyncSession, athlete_id: int) -> str:
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.workout_date >= week_start,
+            WorkoutFile.duplicate_of.is_(None),   # same activity from a 2nd source
         )
         .order_by(WorkoutFile.workout_date.desc())
     )
