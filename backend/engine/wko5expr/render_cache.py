@@ -106,7 +106,12 @@ def data_fingerprint(ds) -> str:
                 st = ""
             ds.memo[("render_cache", "source_stamp")] = st
         src[1] = st
-    parts = [athlete, _stamp(PLAN_PATH), _stamp(CORRECTIONS_PATH), cfg, wl, ds.today, src]
+    # the stored CP-test sessions: workout_review.classify recognises a test
+    # from the plan (done_by) first
+    from backend.engine.plan_store import test_sessions
+    tests = sorted((s["uid"], s["state"], s.get("day") or "", (s.get("done_by") or {}).get("index") or -1,
+                    s.get("protocol") or "") for s in test_sessions())
+    parts = [athlete, _stamp(PLAN_PATH), _stamp(CORRECTIONS_PATH), cfg, wl, ds.today, src, tests]
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
