@@ -253,7 +253,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | LT1 心率佔 HRmax | VT1 71–78% HRmax | Pallarés 2016（同上） | 「Seiler：VT1 ≈ 77–79% HRmax」未找到來源 |
 | LT1 心率佔 LTHR | Friel 跑步 Zone 2 = 85–89% LTHR | https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones | 這是分區慣例。App 的 0.89×LTHR 就是 Friel Zone 2 的上限，**不是測出來的 LT1** |
 | VT1 佔 VO2max | 61–86%，平均 70 ± 6% | Rogers et al. 2021, *Front Physiol* 11:596567, DOI 10.3389/fphys.2020.596567 | 受訓者乳酸閾值 79%（男）/ 73%（女）VO2max，未受訓 66.5% / 58.9%（*MSSE* 1987, DOI 10.1249/00005768-198708000-00006）。需要氣體分析 |
-| DFA-α1 | α1 = 0.75 ≈ VT1。HRVT 和 VT1 的 r = 0.99（VO2）/ 0.97（HR），心率 154 vs 152 bpm | Rogers 2021（同上），n = 15、ECG | α1 = 0.5 ≈ VT2（Rogers 2021, *J Funct Morphol Kinesiol* 6:38, DOI 10.3390/jfmk6020038）。3–6% 漏拍會有偏差，但 HRVT 仍在 1 bpm 內（Rogers 2021, *Sensors* 21:821, DOI 10.3390/s21030821）。反例：*Physiol Rep* 2026, DOI 10.14814/phy2.70777，自行車 HRVT1 和 LT1/VT1 一致性差 |
+| DFA-α1 | α1 = 0.75 ≈ VT1。HRVT 和 VT1 的 r = 0.99（VO2）/ 0.97（HR），心率 154 vs 152 bpm | Rogers 2021（同上），n = 15、ECG。摘要原文："DFA a1 reaching a value of 0.75 (HRVT)" | α1 = 0.5 ≈ VT2（Rogers 2021, *J Funct Morphol Kinesiol* 6:38, DOI 10.3390/jfmk6020038）。3–6% 漏拍會有偏差，但 HRVT 仍在 1 bpm 內（Rogers 2021, *Sensors* 21:821, DOI 10.3390/s21030821）。反例：*Physiol Rep* 2026, DOI 10.14814/phy2.70777，自行車 HRVT1 和 LT1/VT1 一致性差 |
 | DFA-α1 在 COROS 上 | "COROS does not support HRV data from external accessories" | https://support.coros.com/hc/en-us/articles/360058469472 | **不能做**：活動 FIT 沒有 RR 間期（官方沒說有，視為不支援）。替代方式：Polar H10＋FatMaxxer（https://github.com/IanPeake/FatMaxxer）另外錄 |
 | EF 停滯 | Friel：有氧進步時 EF "will rise over the course of a few weeks" | https://www.trainingpeaks.com/blog/efficiency-factor-and-decoupling/ | 「EF 停滯＝可以加間歇」未找到來源 |
 | FATmax | 64 ± 4% VO2max、74 ± 3% HRmax（Achten 2002, *MSSE*, DOI 10.1097/00005768-200201000-00015） | FATmax 和乳酸剛上升點（LIAB）沒有差異：63% vs 61% VO2max（Achten & Jeukendrup 2004, *IJSM*, DOI 10.1055/s-2003-45231） | 需要氣體分析。當準備好的指標：未找到來源 |
@@ -349,6 +349,17 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | `plateau` | 有氧停滯法 | 基礎期已經 ≥ 8 週，而且 `i_efficiency` 近 8 週和之前比 < +2%（持平） | 徐國峰「錶上 VO2max 不再提升」（讀書心得 L12–L13）；Cusick「指標會比表現先到平台期」（強化期 L492）。EF 代替錶上 VO2max、8 週、2% 都是自訂。**不叫「MAF 停滯」**，因為 Maffetone 把停滯當警訊 |
 | `weeks` | 週數法 | 基礎期開始後 ≥ N 週（`plan.prefs.quality_gate_weeks`，預設 8，範圍 2–16） | Palladino GP 早期 1–3 週＋中期 4–6 週之後才加 HIIT（palladino基礎期 L49、L77、L94）；Cusick 第一階段 4–8 週。8 週取中間值，屬自訂 |
 | `none` | 不設門檻（Seiler） | 只看 §4.4 的護欄 | Seiler 2010、Seiler & Tønnessen 2009、Koop／CTS |
+
+**強制選了某個模式、但缺少它需要的資料時**：
+- 例如選了 `ua_gap`、`friel_drift`，但沒有實測 AeT 或 LTHR 還是預設值；或選了 `xu_drift`、`friel_drift`，但 8 週內沒有符合條件的跑步。
+- 這時 `i_gate` 顯示 WATCH，說明寫原因，例如「沒有實測 AeT，差距法算不出來」，行動寫「先做 AeT 飄移測試，或把間歇門檻改回自動」。
+- `allow_quality` **不會一直鎖住**，而是退回 `none` 的護欄（§4.4）。這是自訂的選擇：理由是缺資料不應該讓間歇永久停掉，這和「沒有 AeT 就不擋」的原則一致。
+- 資料齊全、只是沒達標（差距 > 10%、飄移 ≥ 5%、≥ 10%）時才真的鎖住。
+
+**「套用」的自動估算算不算實測？**
+- 算。plan 裡 aethr 那一筆不論來源，都是使用者按過「套用」才寫進去的。
+- `thresholds.estimate()` 用多次穩定跑做回歸，和 UA 的 Continuous AeT 是同一個概念（UA 說需要約 4 週資料，見 `docs/research/uphill-athlete-mountain-metrics.md` §2(b) Continuous AeT）。
+- 但 `i_gate` 的說明要把來源寫出來：note 含「自動估算」時顯示「AeT 146（活動資料估算）」；飄移測試套用的顯示「AeT 146（{date} 飄移測試）」。這樣使用者看得出門檻是靠什麼判斷的。
 
 舊的「連續 3 次」**拿掉**。要保留相容的話可以留一個 `legacy_streak` 值，但不出現在 UI。
 
