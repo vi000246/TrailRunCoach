@@ -1388,7 +1388,14 @@ function drawPlot(card, res, series) {
       splitLine: { show: i === 0, lineStyle: { color: line } },
     };
   });
-  const out = [];
+  // workout charts over time (or distance) join the synced hover with the map and each other;
+  // x-y scatters (HR vs power, LSS vs grade) and tables don't
+  const hx = res.workout == null || cat ? null
+    : xKind === "seconds" ? "t" : xKind === "value" && DIST_X[xUnit.id] ? "d" : null;
+  // out[i] (the ECharts series, what p.seriesIndex indexes) came from srcOf[i]: not
+  // series[i] once a vline is skipped (category axes) or a series adds nothing
+  const out = [], srcOf = [];
+  const put = (o, s) => { out.push(o); srcOf.push(s); };
   for (const s of series) {
     const yi = Math.max(0, axisIds.indexOf(s.y_axis || "NONE"));
     const color = s.color || undefined;
@@ -1396,19 +1403,19 @@ function drawPlot(card, res, series) {
     const width = s.line_width === "thin" ? 1 : s.line_width === "thick" ? 3 : 1.5;
     if (s.data.kind === "vline") {
       if (cat || s.data.x == null || (xKind === "duration" && !(s.data.x > 0))) continue;
-      out.push({ name: s.name, type: "line", yAxisIndex: 0, data: [], color,
-        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ xAxis: s.data.x }] } });
+      put({ name: s.name, type: "line", yAxisIndex: 0, data: [], color,
+        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ xAxis: s.data.x }] } }, s);
       continue;
     }
     if (s.data.kind === "hline") {
-      out.push({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
-        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ yAxis: s.data.y }] } });
+      put({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
+        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ yAxis: s.data.y }] } }, s);
       continue;
     }
     if (s.data.kind === "band") {
       const [lo, hi] = s.data.range;
-      out.push({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
-        markArea: { silent: true, itemStyle: { color, opacity: 0.12 }, data: [[{ yAxis: lo }, { yAxis: hi }]] } });
+      put({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
+        markArea: { silent: true, itemStyle: { color, opacity: 0.12 }, data: [[{ yAxis: lo }, { yAxis: hi }]] } }, s);
       continue;
     }
     const perWorkout = s.data.x === "datetime";
@@ -1417,7 +1424,7 @@ function drawPlot(card, res, series) {
         // per-workout values: each workout's dot in its bucket
         const d = s.data.points.filter((p) => p[1] != null).map((p) => [catIdx.get(bucketOf(p[0], cat)), p[1]])
           .filter((p) => p[0] != null);
-        out.push({ name: s.name, yAxisIndex: yi, data: d, color, type: "scatter", symbolSize: 5 });
+        put({ name: s.name, yAxisIndex: yi, data: d, color, type: "scatter", symbolSize: 5 }, s);
         continue;
       }
       // a bucket total sits on the bucket's first day; a daily series is read at that day
@@ -1427,31 +1434,32 @@ function drawPlot(card, res, series) {
         if (i != null && y != null) arr[i] = y;
       }
       if (s.type === "bar" || s.type === "stackedbar") {
-        out.push({ name: s.name, yAxisIndex: yi, data: arr, color, type: "bar",
-          stack: s.type === "stackedbar" ? "st" + yi : undefined, barCategoryGap: "25%" });
+        put({ name: s.name, yAxisIndex: yi, data: arr, color, type: "bar",
+          stack: s.type === "stackedbar" ? "st" + yi : undefined, barCategoryGap: "25%" }, s);
       } else {
-        out.push({ name: s.name, yAxisIndex: yi, data: arr, color, type: "line", connectNulls: false,
+        put({ name: s.name, yAxisIndex: yi, data: arr, color, type: "line", connectNulls: false,
           step: s.type === "squareline" ? "middle" : false, showSymbol: cats.length <= 60, symbolSize: 4,
-          lineStyle: { type: lineType, width }, areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined });
+          lineStyle: { type: lineType, width }, areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined }, s);
       }
       continue;
     }
     const pts = xKind === "duration" ? s.data.points.filter((p) => p[0] > 0) : s.data.points;
-    // hover-synced workout charts keep every point, so each chart's tooltip lands on the same sample
-    // (lttb would snap them to different kept points); they are already downsampled to ≤3000
+    // hover-synced workout charts (time or distance x) keep every point, so each chart's tooltip
+    // lands on the same sample (lttb would snap them to different kept points); they are already
+    // downsampled to ≤3000
     const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false,
-      sampling: res.workout != null && xKind === "seconds" ? undefined : "lttb" };
+      sampling: hx ? undefined : "lttb" };
     if (s.type === "bar" || s.type === "stackedbar") {
-      out.push({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 });
+      put({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 }, s);
     } else if (s.line_style === "none" && s.type !== "area") {
       // WKO5 "no line" = markers only: an x-y scatter (HR vs power, LSS vs grade) or event markers
-      out.push({ name: s.name, yAxisIndex: yi, data: pts.filter((p) => p[1] != null && p[0] != null), color,
+      put({ name: s.name, yAxisIndex: yi, data: pts.filter((p) => p[1] != null && p[0] != null), color,
         type: "scatter", symbolSize: perWorkout || pts.length < 400 ? 5 : 3, large: pts.length > 2000,
-        itemStyle: { opacity: pts.length > 400 ? 0.55 : 0.9 } });
+        itemStyle: { opacity: pts.length > 400 ? 0.55 : 0.9 } }, s);
     } else {
-      out.push({ ...base, type: "line", step: s.type === "squareline" ? "end" : false,
+      put({ ...base, type: "line", step: s.type === "squareline" ? "end" : false,
         showSymbol: perWorkout, symbolSize: 4, lineStyle: { type: lineType, width: perWorkout ? 0 : width },
-        areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined });
+        areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined }, s);
     }
   }
   const lbl = { color: muted, fontSize: 10, hideOverlap: true };
@@ -1493,7 +1501,7 @@ function drawPlot(card, res, series) {
     const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
       : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
-    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), series[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>`);
+    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>`);
     if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
     // stacked series (依類別堆疊): add the stack's total — only the series shown in the
     // legend are in `ps`, so hiding a category takes it out of the total too
@@ -1504,7 +1512,7 @@ function drawPlot(card, res, series) {
     }
     for (const g of Object.values(stacks)) {
       if (g.length < 2) continue;
-      const u = series[g[0].seriesIndex]?.unit || unitByName[g[0].seriesName];
+      const u = srcOf[g[0].seriesIndex]?.unit || unitByName[g[0].seriesName];
       if (u?.kind === "percent") continue;  // shares of one whole: the total is always 100%
       const tot = g.reduce((a, p) => a + +yOf(p), 0);
       rows.push(`<span style="display:block;border-top:1px solid rgba(128,128,128,.35);margin-top:3px;padding-top:2px">合計 <b style="float:right;margin-left:12px">${esc(fmtU(tot, u))}</b></span>`);
@@ -1529,10 +1537,6 @@ function drawPlot(card, res, series) {
       : [{ type: "inside" }],
   });
   new ResizeObserver(() => chart.resize()).observe(el);
-  // workout charts over time (or distance) join the synced hover with the map and each other;
-  // x-y scatters (HR vs power, LSS vs grade) and tables don't
-  const hx = res.workout == null || cat ? null
-    : xKind === "seconds" ? "t" : xKind === "value" && DIST_X[xUnit.id] ? "d" : null;
   if (hx) samplesFor(res.workout).then((s) => { if (!chart.isDisposed()) hoverChart(chart, s, hx, DIST_X[xUnit.id] || 1); })
     .catch((e) => console.warn("hover sync off:", e.message));
 }
