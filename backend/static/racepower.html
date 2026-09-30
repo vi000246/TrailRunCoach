@@ -242,6 +242,12 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <span class="badge watch hidden" id="accl-badge">推估</span>
       <span class="help" tabindex="0">?<span class="tip">未適應：剛上山，每升高 1000 m 有氧能力約少 6.3%（300 m 起算）。已適應：較樂觀的海拔曲線。部分適應（例如前一晚住山屋）取兩者中間，沒有研究可依，所以標推估。</span></span>
     </div>
+    <div class="row rf"><span class="lbl">熱</span>
+      <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
+      <span class="badge watch">推估</span>
+      <span class="help" tabindex="0">?<span class="tip">取得比賽日天氣後，如果有逐時預報（中央氣象署三天預報或 Open-Meteo），每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時預報（日期太遠、離線）或沒填起跑時間時，全程用同一個溫度。</span></span>
+      <span class="meta" id="heat-line"></span>
+    </div>
     <div class="row rf"><span class="lbl">顯示</span>
       <div class="seg" id="unit"><button data-u="power">功率</button><button data-u="pace">配速</button></div>
       <label class="meta">W′ 曲線 <select id="wbal" style="width:auto"><option value="">不顯示</option><option value="wko5">WKO5 算法</option><option value="skiba">Skiba τ 自行車（推估）</option><option value="skiba_run">Skiba τ 跑步擬合（推估）</option></select></label>
@@ -272,7 +278,8 @@ td select.terr { width: 80px; padding: 2px 5px; }
     <div class="toolbar" id="daysplit-bar"><label class="meta bf"><input type="checkbox" id="splitmode"> 在剖面上點選分日點</label>
       <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
-      <button class="btn" id="coros">匯出到 COROS</button><span class="meta" id="coros-meta"></span></div>
+      <button class="btn" id="coros">匯出到 COROS</button><span class="meta" id="coros-meta"></span>
+      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span></div>
     <div class="profile" id="profile"></div>
     <div class="segtable tablewrap" id="segtable"></div>
     <div class="segcards" id="segcards"></div>
@@ -460,8 +467,10 @@ function readDayPlan(raw) {
   return full ? rows.map((r) => ({ km: r.km, gain_m: r.gain_m || 0, loss_m: r.loss_m ?? null })) : null;
 }
 const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"];
-function saveForm() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.wbal = $("wbal").value; ls.set("form", o); }
-function loadForm() { const o = ls.get("form", null); if (!o) return false; FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("wbal").value = o.wbal || ""; return true; }
+function saveForm() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.wbal = $("wbal").value; o.hourlyheat = $("hourlyheat").checked; ls.set("form", o); }
+function loadForm() { const o = ls.get("form", null); if (!o) return false; FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("wbal").value = o.wbal || ""; $("hourlyheat").checked = o.hourlyheat !== false; return true; }
+// hourly rows go with the plan only when the race-day temperature / humidity are the fetched ones
+const tempOverridden = () => ["t-t", "t-rh"].some((id) => $(id).classList.contains("ovr"));
 
 function getLoc() {
   const peak = PEAKS.find((p) => p.name === $("peak").value.trim());
@@ -593,7 +602,8 @@ async function getWeather() {
     const d = w.detail || {};
     $("wx-meta").textContent = v ? `白天 06–18 平均${w.fetched_at ? "，取得於 " + w.fetched_at.slice(5, 16).replace("T", " ") : ""}` +
       (d.cwa_location ? `，CWA 地點 ${d.cwa_location}${d.match === "nearest" ? `（最近 ${d.distance_km.toFixed(1)} km）` : ""}` : "") +
-      (d.years ? `，${d.years} 年平均，已依海拔修正溫度` : "") : "沒有自動資料，請手動輸入";
+      (d.years ? `，${d.years} 年平均，已依海拔修正溫度` : "") +
+      (w.hourly?.length ? `；逐時 ${w.hourly.length} 筆，可逐段修正熱` : "；沒有逐時資料，熱用這個平均值") : "沒有自動資料，請手動輸入";
     $("wx-tried").innerHTML = "嘗試：" + w.tried.map((t) => `<span class="${t.ok ? "ok" : "faint"}">${esc(t.provider)} ${t.ok ? "✓" : "✕ " + esc(t.reason || "")}</span>`).join(" → ");
     $("attrib").textContent = (d.attribution || "");
     schedule();
@@ -611,7 +621,8 @@ function planBody(extra = {}) {
     hills: { up: (num("hup") ?? 5) / 100, down: (num("hdown") ?? 10) / 100 }, acclimatisation: accl(),
     effort_target: Number(S.effort), wbal: $("wbal").value || null,
     locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power })), day_splits_km: SPLITS,
-    terrain: TERRAIN, ...extra };
+    terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
+    hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null, ...extra };
   if (S.mode === "time") {
     if (type !== "baiyue" && S.tunit === "pace") body.target_pace_s_per_km = parseMs($("tpace").value);
     else body.target_time_s = parseHms($("target").value);
@@ -645,7 +656,7 @@ async function run() {
   try {
     PLAN = await post(`${API}/plan`, planBody());
     LAST = PLAN.v1;
-    renderResults(); renderProfile(); renderSegments(); renderInputs(); renderEnv(); renderZones();
+    renderResults(); renderProfile(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
     if (LAST.type !== "baiyue") renderRiegel();
   } catch (e) {
     if (e.status === 410) { COURSE = null; ls.set("course", null); syncForm(); $("results").innerHTML = `<h2>預估結果</h2><div class="err">GPX 路線已過期（伺服器重啟過），請重新上傳。</div>`; return; }
@@ -653,6 +664,15 @@ async function run() {
   }
 }
 
+function renderHeatLine() {
+  const h = PLAN?.summary?.heat;
+  if (!h || PLAN.type === "baiyue") { $("heat-line").textContent = ""; return; }
+  let t = "";
+  if (h.mode === "hourly") t = `已套用：${PLAN.segments.filter((s) => s.heat_src === "hourly").length} 段用逐時預報，${h.passes} 次迭代${h.converged ? "收斂" : "未收斂"}`;
+  else if ($("hourlyheat").checked && tempOverridden()) t = "比賽日溫度 / 濕度是你輸入的值：全程用這個溫度";
+  else if (h.reason) t = `全程單一溫度（${h.reason}）`;
+  $("heat-line").textContent = t;
+}
 function tile(k, v, s, main) { return `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`; }
 function warnList(ws) { return ws && ws.length ? `<ul class="warn">${ws.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""; }
 
@@ -778,7 +798,7 @@ function renderProfile() {
   $("profile-sec").classList.toggle("hidden", !P.segments.length);
   if (!P.segments.length) return;
   const hike = P.type === "baiyue", paceMode = !hike && S.unit === "pace";
-  $("profile-sub").textContent = `${P.segments.length} 段 · ${hike ? "階梯線 = 速度 km/h" : paceMode ? "階梯線 = 配速" : "階梯線 = 目標功率"}${P.summary.badge ? " · 分段目標是推估" : ""}`;
+  $("profile-sub").textContent = `${P.segments.length} 段 · ${hike ? "階梯線 = 速度 km/h" : paceMode ? "階梯線 = 配速" : "階梯線 = 目標功率"}${P.summary.badge ? " · 分段目標是推估" : ""}${!hike && P.heat_profile?.length ? " · 氣溫 / 露點 = 逐時預報，點在那個整點跑到的位置（推估）" : ""}`;
   $("splits-line").textContent = SPLITS.length ? "分日點：" + SPLITS.map((x) => x.toFixed(1) + " km").join("、") : "";
   const step = [];
   P.segments.forEach((s) => {
@@ -795,13 +815,26 @@ function renderProfile() {
   if (P.wbal && !hike) series.push({ name: "W′bal", type: "line", yAxisIndex: pr ? 1 : 0, data: P.segments.map((s) => [s.end_km, s.wbal_j / P.wbal.w_prime * (P.summary.power)]),
     symbol: "circle", symbolSize: 4, lineStyle: { color: css("--s5"), width: 1, type: "dotted" } });
   const narrow = window.innerWidth < 700;
+  // hourly temperature / dew point, each forecast hour placed at the km the plan reaches then (推估)
+  const hp = !hike && P.heat_profile && P.heat_profile.length ? P.heat_profile : null;
+  const yT = pr ? 2 : 1, every = hp && hp.length > 12 ? 2 : 1;
+  if (hp) {
+    series.push({ name: "氣溫 °C", type: "line", yAxisIndex: yT, data: hp.map((h) => [h.km, h.temp_c, h.clock]), symbol: "circle", symbolSize: 5,
+      lineStyle: { color: css("--hi"), width: 1.5 }, itemStyle: { color: css("--hi") },
+      label: { show: !narrow, fontSize: 10, color: css("--muted"), formatter: (p) => p.dataIndex % every ? "" : p.data[2] } });
+    series.push({ name: "露點 °C", type: "line", yAxisIndex: yT, data: hp.map((h) => [h.km, h.dew_c, h.clock]), symbol: "circle", symbolSize: 4,
+      lineStyle: { color: css("--s1"), width: 1.2, type: "dashed" }, itemStyle: { color: css("--s1") } });
+  }
   const y2 = { type: "value", position: "right", name: hike ? "km/h" : paceMode ? "分/km" : "W", scale: true, inverse: paceMode, ...axisStyle(), splitLine: { show: false } };
+  const y3 = { type: "value", position: "right", offset: 46, name: "°C", scale: true, ...axisStyle(), splitLine: { show: false } };
+  const yAxes = (pr ? [{ type: "value", name: "m", scale: true, ...axisStyle() }, y2] : [y2]).concat(hp ? [y3] : []);
   chart("profile").setOption({
-    animation: false, grid: { left: 48, right: 48, top: 26, bottom: narrow ? 30 : 56 },
+    animation: false, grid: { left: 48, right: hp ? 92 : 48, top: hp ? 34 : 26, bottom: narrow ? 30 : 56 },
+    legend: hp ? { top: 0, left: "center", textStyle: { color: css("--muted"), fontSize: 11 }, data: ["氣溫 °C", "露點 °C"] } : undefined,
     tooltip: { trigger: "axis", confine: true, formatter: (ps) => { const km = ps[0].axisValue ?? ps[0].value[0]; const s = segAt(km); return s ? segCard(s, true) : ""; } },
     xAxis: { type: "value", name: "km", min: 0, max: P.summary.km, ...axisStyle(), splitNumber: narrow ? 4 : 8,
       axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => +v.toFixed(1), showMaxLabel: false } },
-    yAxis: pr ? [{ type: "value", name: "m", scale: true, ...axisStyle() }, y2] : [y2],
+    yAxis: yAxes,
     dataZoom: narrow ? [{ type: "inside" }] : [{ type: "inside" }, { type: "slider", height: 16, bottom: 6 }],
     series,
   }, true);
@@ -822,7 +855,11 @@ function segCard(s, tip) {
   const dot = `<span class="dot" style="background:${segColor(s.cls)}"></span>`;
   const main = hike ? `${f1(s.speed_kmh)} km/h${s.vert_m_per_h ? ` · ↑${n0(s.vert_m_per_h)} m/h` : ""}` :
     `${W(s.power)} · ${pace(s.pace_s_per_km)}${s.vert_m_per_h ? ` · ↑${n0(s.vert_m_per_h)} m/h` : ""}`;
-  return `${dot}<b>#${s.i} ${esc(s.cls_label)}</b> ${f1(s.start_km)}–${f1(s.end_km)} km（${f1(s.grade * 100)}%）<br>${main}<br>分段 ${dur(s.t)} · 累計 ${dur(s.cum_s)}${s.eta ? " · " + s.eta : ""}${s.badge ? " · 推估" : ""}`;
+  return `${dot}<b>#${s.i} ${esc(s.cls_label)}</b> ${f1(s.start_km)}–${f1(s.end_km)} km（${f1(s.grade * 100)}%）<br>${main}<br>分段 ${dur(s.t)} · 累計 ${dur(s.cum_s)}${s.eta ? " · " + s.eta : ""}${s.badge ? " · 推估" : ""}` +
+    (!hike && ok(s.temp_c) ? `<br>${heatText(s)}` : "");
+}
+function heatText(s) {
+  return `${f1(s.temp_c)} °C · 露點 ${f1(s.dew_c)} °C · 熱 ${s.heat_pct > 0 ? "−" + s.heat_pct.toFixed(1) + "%" : "0"}${s.heat_src === "hourly" ? `（${esc(s.heat_clock || "")} 逐時，推估）` : "（單一溫度）"}`;
 }
 function renderSegments() {
   const P = PLAN, hike = P.type === "baiyue", trail = P.type === "trail", paceMode = S.unit === "pace";
@@ -830,7 +867,8 @@ function renderSegments() {
   let h = `<table><thead><tr><th>#</th>${hike ? "<th>天</th>" : ""}<th>類別</th><th class="n">km</th><th class="n">距離</th><th class="n">↑ / ↓</th><th class="n">坡度</th>`;
   h += hike ? `<th>地形</th><th class="n">速度</th><th class="n">垂直</th>` :
     `<th class="n">目標功率</th><th class="n">% CP</th><th>區</th><th class="n">配速</th><th class="n">${trail ? "GAP / 垂直" : ""}</th>`;
-  h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${hike ? "" : "<th class=\"n\">M</th>"}<th>備註</th></tr></thead><tbody>`;
+  const hourly = P.summary.heat?.mode === "hourly";
+  h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
   for (const s of P.segments) {
     h += `<tr data-seg="${s.i}" class="${HL === s.i ? "hl" : ""}"><td>${s.i}</td>${hike ? `<td>${s.day || 1}</td>` : ""}<td><span class="dot" style="background:${segColor(s.cls)}"></span>${esc(s.cls_label)}</td>
       <td class="n">${f1(s.start_km)}–${f1(s.end_km)}</td><td class="n">${s.dist_m >= 1000 ? f1(s.dist_m / 1000) + " km" : n0(s.dist_m) + " m"}</td>
@@ -843,20 +881,21 @@ function renderSegments() {
         <td class="n">${pct(s.pct_cp)}</td><td>${esc(s.zone)}</td><td class="n">${pace(s.pace_s_per_km)}</td>
         <td class="n">${s.vert_m_per_h ? "↑" + n0(s.vert_m_per_h) + " m/h" : trail ? pace(s.gap_pace_s_per_km) : ""}</td>`;
     }
-    h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>`}
+    h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>
+      <td class="n" title="${esc(heatText(s).replace(/<[^>]+>/g, ""))}">${f1(s.temp_c)}°${s.heat_pct > 0 ? ` <span class="wn">−${s.heat_pct.toFixed(1)}%</span>` : ""}</td>`}
       <td class="wrap">${esc(segNote(s))}${s.badge ? ' <span class="badge watch">推估</span>' : ""}</td></tr>`;
   }
   const tot = P.summary;
   h += `<tr class="center"><td colspan="${hike ? 7 : 6}">合計</td>${hike ? `<td></td><td class="n">${f1(tot.km / (tot.time_s / 3600))} km/h</td><td></td>` :
     `<td class="n">${W(tot.power)}</td><td class="n">${pct(tot.pct_cp)}</td><td></td><td class="n">${pace(tot.pace_s_per_km)}</td><td></td>`}
-    <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${hike ? "" : "<td></td>"}<td></td></tr></tbody></table>`;
+    <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${hike ? "" : "<td></td><td></td>"}<td></td></tr></tbody></table>`;
   h += `<div class="note">${hike ? "速度已含背負、海拔、地形與多日修正。" : `目標功率請${esc(PLAN.hint || "看 30 秒平均功率")}，不要看瞬間值（上坡起點讀數常會衝高）。在功率欄改數字會鎖定該段，其他段重新分配、平均不變。`}</div>`;
   $("segtable").innerHTML = h;
   $("segcards").innerHTML = P.segments.map((s) => `<div class="card ${HL === s.i ? "hl" : ""}" data-seg="${s.i}"><div class="top">
       <span><span class="dot" style="background:${segColor(s.cls)}"></span><b>#${s.i} ${esc(s.cls_label)}</b> <span class="meta">${f1(s.start_km)}–${f1(s.end_km)} km · ${f1(s.grade * 100)}%</span></span>
       <span class="big">${hike ? f1(s.speed_kmh) + " km/h" : paceMode ? pace(s.pace_s_per_km) : W(s.power)}</span></div>
       <div class="meta">${hike ? (s.vert_m_per_h ? `↑${n0(s.vert_m_per_h)} m/h · ` : "") : `${paceMode ? W(s.power) : pace(s.pace_s_per_km)} · ${pct(s.pct_cp)} CP · `}${dur(s.t)} · 累計 ${dur(s.cum_s)}${s.eta ? " · " + s.eta : ""}</div>
-      <details><summary>全部欄位</summary><div class="meta">距離 ${n0(s.dist_m)} m · ↑${n0(s.gain_m)} / ↓${n0(s.loss_m)} m · 最陡 ${f1((s.max_grade || 0) * 100)}%${hike ? ` · 第 ${s.day || 1} 天 · 地形 ${esc((TERRAIN_OPTS.find((t) => t[0] === s.terrain) || [])[1] || "一般")}` : ` · 區間 ${esc(s.zone)} · M ${s.M.toFixed(3)}`}${segNote(s) ? " · " + esc(segNote(s)) : ""}${s.badge ? " · 推估" : ""}</div></details></div>`).join("");
+      <details><summary>全部欄位</summary><div class="meta">距離 ${n0(s.dist_m)} m · ↑${n0(s.gain_m)} / ↓${n0(s.loss_m)} m · 最陡 ${f1((s.max_grade || 0) * 100)}%${hike ? ` · 第 ${s.day || 1} 天 · 地形 ${esc((TERRAIN_OPTS.find((t) => t[0] === s.terrain) || [])[1] || "一般")}` : ` · 區間 ${esc(s.zone)} · M ${s.M.toFixed(3)} · ${heatText(s)}`}${segNote(s) ? " · " + esc(segNote(s)) : ""}${s.badge ? " · 推估" : ""}</div></details></div>`).join("");
   document.querySelectorAll("[data-lock]").forEach((e) => e.addEventListener("change", () => {
     const v = Number(e.value); if (v > 0) LOCKS[e.dataset.lock] = v; else delete LOCKS[e.dataset.lock]; schedule(); }));
   document.querySelectorAll("[data-terr]").forEach((e) => e.addEventListener("change", () => { TERRAIN[e.dataset.terr] = e.value; schedule(); }));
@@ -874,6 +913,21 @@ async function corosExport(push) {
       $("coros-meta").innerHTML = `<span class="ok">已送出 ✓</span> ${r.pushed?.scheduled ? "已排到比賽日" : "已加入課表庫"}`;
     }
   } catch (e) { $("coros-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+async function csvExport() {
+  $("csv-meta").textContent = "產生中…";
+  try {
+    const ev = (INP?.events || []).find((e) => e.id === $("event").value);
+    const r = await fetch(`${API}/export/csv`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...planBody(), name: ev ? ev.name : null }) });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 300)}`);
+    const fname = decodeURIComponent(r.headers.get("X-Filename") || "racepower.csv");
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement("a"); a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    $("csv-meta").innerHTML = `<span class="ok">已下載 ✓</span> ${esc(fname)}`;
+  } catch (e) { $("csv-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
 
 // ---------------- analyses (v1 sections) ----------------
@@ -1107,7 +1161,7 @@ bindSeg("accl", "a", "accl");
 $("amount").addEventListener("input", () => { S.amount = Number($("amount").value); syncForm(); schedule(); });
 ["hup", "hdown"].forEach((id) => $(id).addEventListener("input", () => { S[id] = num(id) ?? S[id]; schedule(); }));
 ["dist", "gain", "loss", "date", "target", "tpace", "tpower", "tspeed", "pack", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"].forEach((id) => $(id).addEventListener("input", schedule));
-$("ptrain").addEventListener("change", schedule); $("wbal").addEventListener("change", schedule);
+$("ptrain").addEventListener("change", schedule); $("wbal").addEventListener("change", schedule); $("hourlyheat").addEventListener("change", schedule);
 $("days").addEventListener("input", () => { renderDayPlan(); schedule(); });
 $("formula").addEventListener("change", () => { schedule(); if (INP) renderRE(); });
 $("peak").addEventListener("change", () => { const l = getLoc(); if (l?.elevation != null) { $("t-alt").value = Math.round(l.elevation); } schedule(); });
@@ -1121,6 +1175,7 @@ drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove
 $("clearsplits").onclick = () => { SPLITS = []; schedule(); };
 $("unlock").onclick = () => { LOCKS = {}; schedule(); };
 $("coros").onclick = () => corosExport(false);
+$("csv").onclick = csvExport;
 $("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
 document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   const t = b.dataset.tab; segOn("tabs", "tab", t); ls.set("tab", t);

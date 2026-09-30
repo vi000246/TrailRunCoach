@@ -32,7 +32,9 @@ Caps and hard sessions: a quality session over the weekday cap is shortened —
 warm-up 15 -> 10 min, cool-down 10 -> 5 min, then one rep fewer (never below
 2) — and its detail text is rewritten so the COROS step builder still parses
 it. The CP test protocol (3' + 30' + 12') is fixed: it is exempt from the cap,
-with a note.
+with a note. The protocol itself (cp_test_protocol, engine/cp_protocols.py) is
+not a shaping preference: it is left out of `active`, and week_plan reads it
+from the Prefs even when the rest are defaults.
 
 User-edited sessions are never touched: preferences only change what the
 generator produces, and reconcile keeps edited / custom sessions (rule 3).
@@ -61,6 +63,7 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.terrain_long": "terrain_long",
     "plan.prefs.terrain_quality": "terrain_quality",
     "plan.prefs.interval_target": "interval_target",
+    "plan.prefs.cp_test_protocol": "cp_test_protocol",
     "plan.prefs.quality_gate": "quality_gate",
     "plan.prefs.quality_gate_weeks": "quality_gate_weeks",
 }
@@ -73,8 +76,16 @@ TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
 
 NOTE_HARD = "受限於你的偏好，本週少 {h} 小時；想補量可以多排一天或放寬長跑日上限"
 NOTE_SOFT = "單次上限 {cap} 分：多出的 {m} 分鐘放在長跑日（盡量不超過）"
-NOTE_TEST = "CP 測試的流程固定（3 分 + 休 30 分 + 12 分），不受單次時間上限"
 NOTE_AET_TEST = "AeT 飄移測試要 15 分暖身＋至少 45 分固定功率，不受單次時間上限"
+
+
+def note_test(protocol: Optional[str]) -> str:
+    """The cap-exemption note of the CP test, by protocol (cp_protocols.cap_note)."""
+    from backend.engine import cp_protocols as CPP
+    return CPP.cap_note(protocol)
+
+
+NOTE_TEST = note_test("standard")      # the 70-min protocol; quick (37 min) rarely hits a cap
 
 
 @dataclass(frozen=True)
@@ -93,14 +104,19 @@ class Prefs:
     terrain_long: str = "auto"
     terrain_quality: str = "any"
     interval_target: str = "power"
+    # CP 測試方式 (engine/cp_protocols.py). Not part of `active`: choosing a
+    # protocol only changes the test session, not the shaping of the week.
+    cp_test_protocol: str = "quick"
+    # 間歇門檻 (engine/quality_gate.py): not part of `active` either (GATE_FIELDS)
     quality_gate: str = "auto"
     quality_gate_weeks: int = 8
 
     @property
     def active(self) -> bool:
-        """Anything that shapes sessions differs from the defaults. The 間歇門檻
-        fields are read by the gate (engine/quality_gate.py), not by shape()."""
-        return replace(self, **{f: getattr(Prefs, f) for f in GATE_FIELDS}) != Prefs()
+        """Anything that shapes sessions differs from the defaults (the CP-test
+        protocol and the 間歇門檻 fields don't shape the week)."""
+        return replace(self, cp_test_protocol=Prefs.cp_test_protocol,
+                       **{f: getattr(Prefs, f) for f in GATE_FIELDS}) != Prefs()
 
     @property
     def long_cap(self) -> Optional[int]:
@@ -357,7 +373,8 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
         for s in hard:
             if s["kind"] == "test" and s["minutes"] > p.cap_weekday:
                 c.notes.append({"level": "info", "src": "prefs",
-                                "text": NOTE_AET_TEST if s["id"] == "test_aet" else NOTE_TEST})
+                                "text": NOTE_AET_TEST if s["id"] == "test_aet"
+                                else note_test(s.get("protocol") or "standard")})
             elif s["kind"] == "quality":
                 trim_quality(s, p.cap_weekday)
 

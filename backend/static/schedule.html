@@ -313,6 +313,11 @@ dialog.sd .gopt label:has(input:checked) { background: var(--accent); border-col
 .qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
   background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
   font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
+dialog.sd label.pf-opt { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer;
+  padding: 5px 7px; border-radius: 7px; }
+dialog.sd label.pf-opt:has(input:checked) { background: var(--bg); }
+dialog.sd label.pf-opt input { margin-top: 3px; flex: none; }
+dialog.sd label.pf-opt .meta { display: block; font-size: 12px; }
 .pf-sum { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 7px 10px; }
 .pf-sum b { color: var(--text); }
 
@@ -496,6 +501,11 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="pf-row"><label class="il"><span>品質課</span><select name="terrain_quality"><option value="any">都可</option><option value="flat">平路間歇</option><option value="hill">爬坡間歇</option></select></label></div>
       <div class="pf-row"><span class="lbl">間歇目標</span><label class="rb"><input type="radio" name="interval_target" value="power">功率</label><label class="rb"><input type="radio" name="interval_target" value="hr">心率</label></div>
     </fieldset>
+    <fieldset class="pf-sec" id="pf-cpt"><legend>CP 測試方式</legend>
+      <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="quick"><span><b>快速：20 分全力</b><span class="meta">約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測 W′</span></span></label>
+      <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="standard"><span><b>標準：12 分＋休 30 分＋3 分</b><span class="meta">約 70 分；兩點 CP＋W′，最準，休息不能縮短</span></span></label>
+      <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="race"><span><b>用比賽：5–10 K 比賽或計時跑</b><span class="meta">不另外排；Riegel 換算（外插），不測 W′</span></span></label>
+    </fieldset>
     <div class="pf-sum" id="pf-sum" aria-live="polite"></div>
     <div class="err" id="pf-err" role="alert"></div>
     <div class="btns">
@@ -549,13 +559,12 @@ const GLOSS = {
     "3. 比較前半與後半的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
     "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
   "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
-    "怎麼測（3 分 + 12 分）：\n" +
-    "1. 平路或田徑場，熱身 15–20 分鐘，含 3–4 趟加速跑\n" +
-    "2. 3 分鐘全力、配速平均（不要一開始衝死）\n" +
-    "3. 走路／慢跑恢復 30 分鐘\n" +
-    "4. 12 分鐘全力、配速平均\n" +
-    "5. CP = (12 分平均功率×720 − 3 分平均功率×180) ÷ 540；W′ = (3 分功率 − CP) × 180\n" +
-    "6. 結果填到「賽事周期」頁的門檻；每 4–6 週測一次，賽前 10 天內不要測",
+    "怎麼測（課表偏好選一種）：\n" +
+    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分；CP ≈ 0.95 × 20 分平均功率\n" +
+    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分；" +
+    "CP = (12 分功率×720 − 3 分功率×180) ÷ 540，W′ = (3 分功率 − CP) × 180\n" +
+    "• 用比賽：5–10 K 比賽或計時跑，以 30 分為錨點換算\n" +
+    "測完在活動判讀卡按「套用這次的 CP」；每 4–6 週測一次，賽前 10 天內不要測",
 };
 const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
 const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
@@ -1320,6 +1329,7 @@ function pfFill(p) {
   PFF.elements.terrain_long.value = p.terrain_long;
   PFF.elements.terrain_quality.value = p.terrain_quality;
   PFF.querySelector(`input[name="interval_target"][value="${p.interval_target}"]`).checked = true;
+  (PFF.querySelector(`input[name="cp_test_protocol"][value="${p.cp_test_protocol || "quick"}"]`) || {}).checked = true;
   gateRender(p.quality_gate || "auto");
   PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
   pfSync();
@@ -1332,8 +1342,8 @@ function pfRead() {
     strength_days: [...PFF.querySelectorAll('input[name="pf-sday"]:checked')].map((b) => +b.value),
     weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
     terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
-    interval_target: radioVal("interval_target"), quality_gate: radioVal("quality_gate") || "auto",
-    quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8 };
+    interval_target: radioVal("interval_target"), cp_test_protocol: radioVal("cp_test_protocol") || "quick",
+    quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8 };
 }
 function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
   const n = p.days.filter(Boolean).length;

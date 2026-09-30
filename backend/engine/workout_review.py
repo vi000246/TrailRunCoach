@@ -13,7 +13,9 @@ drift_of
     runs where the number means nothing: hilly (≥ 20 m climbed per km, or a
     trail run), stopped (> 5 % of the time standing), too short (< 40 min),
     unsteady (30-s power CV > 15 %, steady_drift's rule) or too hard
-    (> 90 % CP, steady_drift's rule).
+    (> 90 % CP, steady_drift's rule). Pw:HR (power / HR) comes out of the
+    same call, with the same rules and halves; the aerobic card shows the
+    basis the viewer's 配速／功率 toggle picked.
 detect_efforts
     Work bouts in the power stream (30-s power over max(0.85 CP, 1.12 ×
     the session median)), with duration, power, %CP, HR and the HR drop in
@@ -49,13 +51,15 @@ import numpy as np
 from backend.engine.algorithms.classify import TRAIL_CLIMB_RATE_M_PER_KM
 from backend.engine.algorithms.climbs import detect_climbs
 from backend.engine.algorithms.threshold_estimate import (
-    AET_MAX_OF_CP, AET_MAX_POWER_CV, WARMUP_S, steady_drift,
+    AET_MAX_OF_CP, AET_MAX_POWER_CV, WARMUP_S,
 )
 from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 
 # cached_series keys on the file and the thresholds, not on this code: bump the
 # version whenever _measure's output changes
-CACHE_KEY = "workout_review_v5"      # v5: cp_test windows never overlap; single-bout fallback
+# v6 (two branches): Pw:HR on drift_of's own halves (pw_drift / pw_ok / p1 / p2), and cp_bouts
+# per CP-test protocol (engine/cp_protocols.py); v7 = both merged, so no cache from either v6 is reused
+CACHE_KEY = "workout_review_v7"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -221,13 +225,36 @@ def _best_window(p: np.ndarray, n: int) -> tuple[Optional[float], Optional[int]]
 # pure analyses (arrays in, numbers out) — unit-tested on synthetic data
 # ---------------------------------------------------------------------------
 
+def _halves_drift(h: np.ndarray, x: np.ndarray, d: np.ndarray, m: np.ndarray) -> Optional[tuple]:
+    """(drift, hr1, hr2, x1, x2) with r = x / HR over the two halves of the
+    time in mask `m`; None when < 600 s usable or a half is empty."""
+    m = m & np.isfinite(h) & (h > 0) & np.isfinite(x) & (x > 0)
+    if d[m].sum() < 600:
+        return None
+    cum = np.cumsum(np.where(m, d, 0.0))
+    half = cum[-1] / 2.0
+    a, b = m & (cum <= half), m & (cum > half)
+    h1, h2 = _wmean(h, d, a), _wmean(h, d, b)
+    x1, x2 = _wmean(x, d, a), _wmean(x, d, b)
+    if not all((h1, h2, x1, x2)):
+        return None
+    r1, r2 = x1 / h1, x2 / h2
+    return float((r1 - r2) / r1), h1, h2, x1, x2
+
+
 def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
              climb_m_per_km: Optional[float] = None, trail: bool = False) -> dict:
     """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
     moving time after a 10-minute warm-up). Positive = HR drifted up for the
-    same pace. `ok` False (with `reason`) when the run is not a fair test."""
+    same pace. `ok` False (with `reason`) when the run is not a fair test.
+
+    Pw:HR is the same measurement with power in place of speed — same
+    fairness rules, same warm-up, same moving-time halves (`pw_drift`, `p1`,
+    `p2`, `pw_hr1`, `pw_hr2`; `pw_reason` 「這次沒有功率」 without a power
+    channel)."""
     out = {"drift": None, "ok": False, "reason": "", "hr1": None, "hr2": None,
-           "v1": None, "v2": None, "pw_drift": None}
+           "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_reason": "",
+           "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None}
     if hr is None or speed is None or not _has(hr) or not _has(speed):
         out["reason"] = "沒有心率或速度"
         return out
@@ -250,7 +277,8 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     if span > 0 and stopped / span > MAX_STOPPED_SHARE:
         out["reason"] = f"中途停了 {_hms(stopped)}（> 5%），飄移數字不採用"
         return out
-    if power is not None and _has(power):
+    has_power = power is not None and _has(power)
+    if has_power:
         _, p1 = _grid1(t, power)
         if p1 is not None:
             p = p1[WARMUP_S:]
@@ -263,23 +291,30 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
                 if cp and p.mean() > AET_MAX_OF_CP * cp:
                     out["reason"] = f"強度 {p.mean() / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
                     return out
-        dp = steady_drift(list(t), list(h), list(_arr(power, n)), cp)
-        out["pw_drift"] = None if dp is None else dp.drift
-    m = after & mov & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
-    if d[m].sum() < 600:
+    r = _halves_drift(h, s, d, after & mov)
+    if r is None:
         out["reason"] = "有效資料不夠"
         return out
-    cum = np.cumsum(np.where(m, d, 0.0))
-    half = cum[-1] / 2.0
-    a, b = m & (cum <= half), m & (cum > half)
-    h1, h2 = _wmean(h, d, a), _wmean(h, d, b)
-    v1, v2 = _wmean(s, d, a), _wmean(s, d, b)
-    if not all((h1, h2, v1, v2)):
-        out["reason"] = "有效資料不夠"
+    out.update(drift=r[0], ok=True, hr1=r[1], hr2=r[2], v1=r[3], v2=r[4])
+    if not has_power:
+        out["pw_reason"] = "這次沒有功率"
         return out
-    r1, r2 = v1 / h1, v2 / h2
-    out.update(drift=float((r1 - r2) / r1), ok=True, hr1=h1, hr2=h2, v1=v1, v2=v2)
+    rp = _halves_drift(h, _arr(power, n), d, after & mov)
+    if rp is None:
+        out["pw_reason"] = "功率資料不夠"
+        return out
+    out.update(pw_drift=rp[0], pw_ok=True, pw_hr1=rp[1], pw_hr2=rp[2], p1=rp[3], p2=rp[4])
     return out
+
+
+def basis_drift(dr: dict, basis: str = "pace") -> tuple[Optional[float], str]:
+    """(drift, reason) of a drift_of result for the chosen basis; drift None
+    when refused (the run was unfair, or there is no power in power mode)."""
+    if not dr.get("ok"):
+        return None, dr.get("reason") or "飄移數字不採用"
+    if basis == "power":
+        return (dr["pw_drift"], "") if dr.get("pw_ok") else (None, dr.get("pw_reason") or "這次沒有功率")
+    return dr["drift"], ""
 
 
 def band_of(pct_cp: Optional[float]) -> Optional[tuple[str, float, float]]:
@@ -698,6 +733,8 @@ def _measure(ds, w) -> Optional[dict]:
     out["efforts"] = efforts[:40]
     out["intervals"] = interval_summary(efforts)
     out["cp_test"] = cp_test(t, s["power"]) if w.sport == "run" else None
+    from backend.engine import cp_protocols as CPP
+    out["cp_bouts"] = CPP.measure_bouts(t, s["power"], s["hr"]) if w.sport == "run" else None
     climbs = []
     if s["elev"] is not None and s["dist"] is not None:
         try:
@@ -751,8 +788,80 @@ def _plan_test(ds, day: dt.date) -> dict:
     return out
 
 
+SAME_DAY_BOUT = 1.05          # an unfinished test that day counts with a ≥ 3′ bout ≥ 1.05 × CP
+QUICK_PATTERN = 1.03          # 自組: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
+METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
+MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
+               "title": "標題", "pattern": "功率型態"}
+
+
+def _plan_test_sessions(ds) -> list[dict]:
+    """The stored CP-test sessions (plan_store.test_sessions); a dataset may
+    carry its own list (`plan_test_sessions`, tests)."""
+    ss = getattr(ds, "plan_test_sessions", None)
+    if ss is None:
+        try:
+            from backend.engine.plan_store import test_sessions
+            ss = test_sessions()
+        except Exception:                       # noqa: BLE001 — no plan store: nothing scheduled
+            ss = []
+    return list(ss or [])
+
+
+def scheduled_test(ds, w, m: dict) -> Optional[dict]:
+    """The plan's CP-test session this activity did, or None.
+
+    1. done_by: a stored test session marked done by this very activity
+       (index and date) — the plan says it was the test.
+    2. an unfinished (active / missed) test session the same day, and the
+       activity has a ≥ 3-min bout at ≥ 1.05 × the CP in effect."""
+    iso = _wdate(w).isoformat()
+    ss = _plan_test_sessions(ds)
+    for s in ss:
+        db = s.get("done_by") or {}
+        if s.get("state") == "done" and db.get("index") == w.idx and db.get("date", iso) == iso:
+            return {**s, "match": "done_by"}
+    cp, b180 = m.get("cp"), (m.get("cp_bouts") or {}).get("best180")
+    if cp and b180 and b180 >= SAME_DAY_BOUT * cp:
+        for s in ss:
+            if s.get("day") == iso and s.get("state") in ("active", "missed"):
+                return {**s, "match": "same_day"}
+    return None
+
+
+def _race_test(ds, w, m: dict, title: str) -> bool:
+    """A 5–10 K race or time trial (protocol race, no session of its own): a
+    plan race event that day (4–11 km or no distance) or a race / TT title,
+    and 15–90 min of moving time."""
+    from backend.engine import cp_protocols as CPP
+    mv = m.get("moving_s") or 0.0
+    if not (CPP.RACE_MIN_S <= mv <= 90 * 60) or not (m.get("cp_bouts") or {}).get("race"):
+        return False
+    if re.search(r"計時|\bTT\b|(?<!\d)(5|10)\s*[kK](?![a-zA-Z])|比賽", title or ""):
+        return True
+    iso = _wdate(w).isoformat()
+    for e in getattr(getattr(ds, "plan", None), "events", None) or []:
+        if e.kind == "race" and e.date == iso and (e.distance_km is None or 4.0 <= e.distance_km <= 11.0):
+            return True
+    return False
+
+
+def _looks_like_quick(m: dict) -> bool:
+    """自組: a 20′ window ≥ 1.03 × CP whose HR also reached LTHR (a tempo run
+    against a stale, low CP would otherwise look like a test)."""
+    q = (m.get("cp_bouts") or {}).get("quick")
+    cp, lthr = m.get("cp"), m.get("lthr")
+    if not (q and cp and q["power"] >= QUICK_PATTERN * cp):
+        return False
+    return not lthr or q.get("hr_peak") is None or q["hr_peak"] >= lthr
+
+
 def classify(ds, w, m: Optional[dict] = None) -> dict:
-    """Session type, terrain and phase on the activity date."""
+    """Session type, terrain and phase on the activity date. A CP test is
+    recognised from the plan first (scheduled_test: done_by, then the same
+    day), then a race / TT, then the old rules (a threshold row that day, the
+    title, the power pattern — two separate bouts, or a 20′ all-out)."""
+    from backend.engine import cp_protocols as CPP
     from backend.engine.overview import category
     m = m if m is not None else (measure(ds, w) or {})
     day = _wdate(w)
@@ -768,17 +877,38 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
             phase = None
     drift = m.get("drift") or {}
     aet_steady = bool(drift.get("ok")) and cat == "road"
-    typ = session_type(cat, m.get("moving_s") or 0.0, m.get("hard_s") or 0.0, _title(w),
-                       _plan_test(ds, day), looks_like_cp_test(m.get("cp_test"), m.get("cp")), aet_steady,
+    title = _title(w)
+    runs = w.sport == "run" and cat not in ("strength", "bike", "walk", "other")
+    sched = scheduled_test(ds, w, m) if runs else None
+    race = runs and sched is None and _race_test(ds, w, m, title)
+    std = looks_like_cp_test(m.get("cp_test"), m.get("cp"))
+    quick = runs and not std and _looks_like_quick(m)
+    typ = session_type(cat, m.get("moving_s") or 0.0, m.get("hard_s") or 0.0, title,
+                       _plan_test(ds, day), bool(sched) or race or std or quick, aet_steady,
                        hard_power_s=m.get("hard_power_s"),
                        n_efforts=len(m.get("efforts") or []) if m.get("hard_power_s") is not None else None,
                        easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN))
+    protocol = match = None
+    if typ == "test_cp":
+        applied = next((t for t in getattr(plan, "thresholds", None) or []
+                        if t.date == day.isoformat() and getattr(t, "cp_method", None)), None)
+        if sched:
+            protocol, match = CPP.protocol_of(sched), sched["match"]
+        elif race:
+            protocol, match = "race", "race"
+        elif applied is not None:
+            protocol, match = METHOD_PROTOCOL.get(applied.cp_method), "threshold"
+        if protocol is None:
+            protocol = CPP.protocol_of({"title": title}) or ("standard" if std else "quick" if quick else
+                                                            "standard" if (m.get("cp_bouts") or {}).get("standard")
+                                                            else "quick")
+            match = match or ("title" if CPP.protocol_of({"title": title}) else "pattern")
     terrain = cat if cat in TERRAIN_LABEL else None
     label = "輕鬆健行" if typ == "easy" and cat == "hike" else TYPE_LABEL.get(typ, typ)
     return {"type": typ, "type_label": label, "terrain": terrain,
             "terrain_label": TERRAIN_LABEL.get(terrain, ""), "category": cat,
             "phase": phase, "phase_label": PHASE_LABEL.get(phase, "未設定周期"),
-            "date": day.isoformat()}
+            "date": day.isoformat(), "protocol": protocol, "test_match": match}
 
 
 def peers(ds, w, weeks: int, same_type: bool = True) -> list[tuple]:
@@ -881,27 +1011,50 @@ def last_quality(ds, today: dt.date, days: int = 28) -> Optional[dict]:
     return best
 
 
+def cp_eval(ds, w, m: dict, c: dict) -> Optional[dict]:
+    """The CP-test result of a test_cp activity by its protocol
+    (cp_protocols.result), compared with the previous result of the same
+    method (cp_protocols.reference), and the 「套用這次的 CP」 payload."""
+    from backend.engine import cp_protocols as CPP
+    plan = getattr(ds, "plan", None)
+    sex = (getattr(plan, "profile", None) or {}).get("sex")
+    res = CPP.result(m.get("cp_bouts"), c.get("protocol"), m.get("lthr"), sex)
+    if res is None:
+        return None
+    date = c.get("date") or _wdate(w).isoformat()
+    ths = getattr(plan, "thresholds", None) or []
+    ref = CPP.reference(ths, date, res["method"], m.get("cp"))
+    delta = (res["cp"] / ref["cp"] - 1.0) if ref.get("cp") else None
+    applied = any(t.date == date and t.cp is not None for t in ths)
+    return {**res, "idx": w.idx, "date": date, "cp_now": m.get("cp"), "ref": ref, "delta": delta,
+            "applied": applied, "method_label": CPP.METHOD_LABEL.get(res["method"], res["method"]),
+            "apply": None if applied else CPP.apply_payload(res, date, w.idx)}
+
+
 def latest_cp_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
-    """The latest run classified test_cp: its 3'/12' CP vs the CP in effect."""
+    """The latest run classified test_cp: its CP by protocol (cp_eval), the
+    delta against the previous result of the same method, and the apply payload."""
     from backend.engine.wko5expr.dataset import date_to_day
     tday = math.floor(date_to_day(today))
     found = None
-    for w in ds.workouts:
+    for w in sorted(ds.workouts, key=lambda x: x.day):
         d = math.floor(w.day)
         if not (tday - days < d <= tday) or w.sport != "run":
             continue
         if (_f(w.metrics.get("duration")) or 0) < 1500:
             continue
         m = measure(ds, w)
-        if not m or not m.get("cp_test"):
+        if not m or not m.get("cp_bouts"):
             continue
         c = classify(ds, w, m)
         if c["type"] != "test_cp":
             continue
-        r = m["cp_test"]
-        cp_now = m.get("cp")
-        found = {"idx": w.idx, "date": _wdate(w).isoformat(), "cp": r["cp"], "wprime": r["wprime"],
-                 "cp_now": cp_now, "delta": (r["cp"] / cp_now - 1.0) if cp_now else None}
+        ev = cp_eval(ds, w, m, c)
+        if ev is None:
+            continue
+        found = {k: ev[k] for k in ("idx", "date", "cp", "wprime", "cp_range", "cp_now", "delta", "ref", "method",
+                                    "method_label", "protocol", "protocol_label", "quality", "reasons", "apply",
+                                    "applied")}
     _flush(ds)
     return found
 
@@ -910,36 +1063,43 @@ def latest_cp_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
 # verdicts
 # ---------------------------------------------------------------------------
 
-def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None) -> list[str]:
+def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = "pace") -> list[str]:
+    """Verdict lines for the drift on the chosen basis. Informational: the
+    interval gate is engine/quality_gate.py (the old drift streak is gone);
+    `streak` is accepted and ignored."""
     lines = []
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0 and over / tot > OVER_AET_SHARE and typ in ("easy", "long"):
         lines.append(f"心率超過 AeT+3 的時間佔 {over / tot * 100:.0f}%（> 10%）：下次放慢")
     dr = m.get("drift") or {}
-    if not dr.get("ok"):
-        if m.get("category") in ("road", "trail"):
-            lines.append(dr.get("reason") or "飄移數字不採用")
+    d, why = basis_drift(dr, basis)
+    if d is None:
+        # a fair run without power: the card's Pw:HR row already says 這次沒有功率
+        if m.get("category") in ("road", "trail") and not (basis == "power" and dr.get("ok")):
+            lines.append(why)
         return lines[:3]
-    d = dr["drift"]
+    power = basis == "power"
+    name = "Pw:HR 飄移" if power else "飄移"
+    hr1 = dr["pw_hr1"] if power else dr["hr1"]
     if typ == "test_aet":
         # Uphill Athlete's three bands (engine/aet_test.py has the full analysis)
         if d < 0.035:
-            lines.append(f"飄移 {_pct(d)} < 3.5%：前半段心率 {dr['hr1']:.0f} bpm 還在 AeT 以下，下次 +5 bpm 再測")
+            lines.append(f"{name} {_pct(d)} < 3.5%：前半段心率 {hr1:.0f} bpm 還在 AeT 以下，下次 +5 bpm 再測")
         elif d <= DRIFT_GOOD:
-            lines.append(f"飄移 {_pct(d)}（3.5–5%）：前半段心率 {dr['hr1']:.0f} bpm 就是 AeT")
+            lines.append(f"{name} {_pct(d)}（3.5–5%）：前半段心率 {hr1:.0f} bpm 就是 AeT")
         else:
-            lines.append(f"飄移 {_pct(d)} > 5%：AeT 低於前半段心率 {dr['hr1']:.0f} bpm，下次放慢 5 bpm 再測")
+            lines.append(f"{name} {_pct(d)} > 5%：AeT 低於前半段心率 {hr1:.0f} bpm，下次放慢 5 bpm 再測")
         return lines[:3]
     # informational: the interval gate is engine/quality_gate.py, not this drift
     aet, hr = m.get("aet"), m.get("avg_hr")
     if d < DRIFT_GOOD and aet and hr and hr > aet + AET_MARGIN:
-        lines.append(f"飄移 {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3，不是輕鬆跑")
+        lines.append(f"{name} {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3，不是輕鬆跑")
     elif d < DRIFT_GOOD:
-        lines.append(f"飄移 {_pct(d)} < 5%：有氧基礎穩")
+        lines.append(f"{name} {_pct(d)} < 5%：有氧基礎穩")
     elif d < DRIFT_WATCH:
-        lines.append(f"飄移 {_pct(d)}（5–10%）：後段心率往上跑")
+        lines.append(f"{name} {_pct(d)}（5–10%）：後段心率往上跑")
     else:
-        lines.append(f"飄移 {_pct(d)} > 10%：有氧基礎不足或跑太快")
+        lines.append(f"{name} {_pct(d)} > 10%：有氧基礎不足或跑太快")
     return lines[:3]
 
 
@@ -966,18 +1126,42 @@ def interval_lines(m: dict) -> list[str]:
     return lines[:3]
 
 
-def cp_lines(m: dict) -> list[str]:
-    r = m.get("cp_test")
-    if not r:
-        return ["沒有功率，算不出 CP"]
-    cp_now = m.get("cp")
-    lines = [f"3 分 {r['p3']:.0f} W、12 分 {r['p12']:.0f} W → CP {r['cp']:.0f} W，W′ {r['wprime'] / 1000:.1f} kJ"]
-    if cp_now:
-        dlt = r["cp"] / cp_now - 1
-        if abs(dlt) > CP_DELTA:
-            lines.append(f"和目前 CP {cp_now:.0f} W 差 {dlt * 100:+.1f}%（> 3%）：建議更新")
-        else:
-            lines.append(f"和目前 CP {cp_now:.0f} W 差 {dlt * 100:+.1f}%：不用改")
+def cp_headline(ev: dict) -> str:
+    """One line: the bouts → CP (by method)."""
+    lo, hi = ev["cp_range"]
+    rng = f"（{lo:.0f}–{hi:.0f} W）" if hi - lo >= 1 else ""
+    if ev["method"] == "2pt":
+        return f"12 分 {ev['p12']:.0f} W、3 分 {ev['p3']:.0f} W → CP {ev['cp']:.0f} W，W′ {ev['wprime'] / 1000:.1f} kJ"
+    if ev["method"] == "1pt_prior":
+        return (f"只用 12 分 {ev['p12']:.0f} W − W′ 先驗 {ev['wprime_prior'] / 1000:.1f} kJ ÷ 720 → "
+                f"CP {ev['cp']:.0f} W{rng}，{ev['quality']}")
+    if ev["method"] == "tt20":
+        return f"20 分 {ev['p20']:.0f} W × 0.95 → CP {ev['cp']:.0f} W{rng}"
+    return f"{ev['race_s'] / 60:.0f} 分 {ev['race_power']:.0f} W → CP {ev['cp']:.0f} W{rng}（Riegel 換算，外插）"
+
+
+def cp_compare_line(ev: dict) -> Optional[str]:
+    """vs the previous result of the same method (cp_protocols.reference)."""
+    if ev.get("applied"):
+        return f"已套用到 {ev['date']} 的門檻"
+    ref, dlt = ev.get("ref") or {}, ev.get("delta")
+    if dlt is None:
+        return "沒有可以比較的 CP（還沒有門檻）"
+    who = (f"上一次同方法（{ref['date']}）" if ref.get("same_method") else
+           f"目前的 CP（{ref.get('method') or 'WKO5'}{'，換算到同一基準' if ref.get('converted') else ''}）")
+    verdict = "建議更新" if abs(dlt) > CP_DELTA else "不用改"
+    return f"和{who} {ref['cp']:.0f} W 差 {dlt * 100:+.1f}%" + ("（> 3%）" if abs(dlt) > CP_DELTA else "") + f"：{verdict}"
+
+
+def cp_lines(ev: Optional[dict], has_power: bool = True) -> list[str]:
+    if not ev:
+        return ["沒有功率，算不出 CP" if not has_power else "找不到這個流程的全力段，算不出 CP"]
+    lines = [cp_headline(ev)]
+    if ev.get("reasons"):
+        lines.append(ev["reasons"][0])
+    cmp_ = cp_compare_line(ev)
+    if cmp_:
+        lines.append(cmp_)
     return lines
 
 
@@ -1003,12 +1187,13 @@ def _base_text(b: dict, fmt: Callable[[float], str]) -> str:
     return f"中位 {fmt(b['median'])}（IQR {fmt(b['q1'])}～{fmt(b['q3'])}，{b['n']} 次／{b.get('weeks')} 週）"
 
 
-def review(ds, w, section: str = "summary") -> dict:
-    """The card JSON for one section of views/workout.json."""
+def review(ds, w, section: str = "summary", basis: str = "pace") -> dict:
+    """The card JSON for one section of views/workout.json. `basis` (pace /
+    power, the chart's 配速／功率 toggle) only changes the aerobic card."""
     m = measure(ds, w)
     _flush(ds)
     base = {"kind": "review", "section": section, "workout": w.idx, "axes": [], "series": [],
-            "empty": None, "description": None}
+            "empty": None, "description": None, "basis": basis if basis == "power" else "pace"}
     if not m:
         return {**base, "empty": "這筆活動沒有逐秒資料"}
     c = classify(ds, w, m)
@@ -1050,7 +1235,10 @@ def _summary(ds, w, m, c, base):
     elif typ == "quality":
         lines = interval_lines(m)
     else:
-        lines = cp_lines(m)
+        ev = cp_eval(ds, w, m, c)
+        lines = cp_lines(ev, m.get("avg_power") is not None)
+        if ev and ev.get("apply"):
+            base = {**base, "action": _apply_action(ev)}
     if c["terrain"] in ("trail", "hike"):
         cl = m.get("climbs") or []
         if cl:
@@ -1064,33 +1252,40 @@ def _summary(ds, w, m, c, base):
 
 def _aerobic(ds, w, m, c, base):
     dr = m.get("drift") or {}
+    basis = base.get("basis") or "pace"
+    power = basis == "power"
+    d, why = basis_drift(dr, basis)
     rows = []
-    if dr.get("ok"):
-        rows += [_row("Pa:HR 飄移", f"{_pct(dr['drift'])}（前 10 分鐘不算）"),
+    if d is not None and power:
+        rows += [_row("Pw:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）"),
+                 _row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
+                 _row("前半／後半功率", f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
+    elif d is not None:
+        rows += [_row("Pa:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）"),
                  _row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
                  _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
-        if dr.get("pw_drift") is not None:
-            rows.append(_row("Pw:HR 飄移", _pct(dr["pw_drift"])))
+    elif power and (dr.get("ok") or m.get("avg_power") is None):
+        # nothing to show on this basis (no power, or too little): say so, not 0 %
+        rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0:
         rows.append(_row("超過 AeT+3", f"{_hms(over)}（{over / tot * 100:.0f}%）"))
-    if c["type"] in ("easy", "long", "test_aet") and dr.get("ok"):
-        b = baseline_for(ds, w, lambda pm: (pm.get("drift") or {}).get("drift")
-                         if (pm.get("drift") or {}).get("ok") else None)
+    if c["type"] in ("easy", "long", "test_aet") and d is not None:
+        b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis)[0])
         rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x))))
     if c["type"] not in ("easy", "long", "test_aet"):
         lines = [f"這次是{c['type_label']}，飄移只在輕鬆跑、長跑、AeT 測試判讀"]
     elif c["type"] == "test_aet":
         lines = _aet_test_lines(ds, w, m, base) or aerobic_lines("test_aet", m)
     else:
-        lines = aerobic_lines(c["type"], m)
+        lines = aerobic_lines(c["type"], m, None, basis)
     return {**base, "series": rows + _verdict_rows(lines)}
 
 
 def _aet_test_lines(ds, w, m, base: dict) -> Optional[list[str]]:
     """AeT test card: UA's three bands on the block after the 15′ warm-up
     (engine/aet_test.py) and, in band "at", the 「套用這次的 AeT」 button
-    (`base["apply"]`, drawn by the viewer). None when it isn't a fair test."""
+    (`base["action"]`, the viewer's drawAction). None when it isn't a fair test."""
     from backend.engine import aet_test as AT
     try:
         r = AT.analyze_workout(ds, w, m)
@@ -1105,8 +1300,10 @@ def _aet_test_lines(ds, w, m, base: dict) -> Optional[list[str]]:
     body = AT.apply_body(t)
     plan = getattr(ds, "plan", None)
     if body and not AT.applied(plan, t):
-        base["apply"] = {"label": f"套用這次的 AeT（{body['aethr']} bpm）",
-                         "url": "/api/v1/plan/thresholds/apply-estimate", "body": body}
+        base["action"] = {"kind": "apply_aet", "label": f"套用這次的 AeT（{body['aethr']} bpm）", "method": "POST",
+                          "url": "/api/v1/plan/thresholds/apply-estimate", "body": body,
+                          "done": f"已套用：{body['date']} AeT {body['aethr']} bpm",
+                          "confirm": f"把 {body['date']} 的 AeT 設成 {body['aethr']} bpm？區間和間歇門檻會重新計算"}
     return AT.lines(r, m.get("aet"))
 
 
@@ -1123,7 +1320,8 @@ def _intervals(ds, w, m, c, base):
             _col("心率", [_num(e.get("hr")) for e in eff]),
             _col("最高心率", [_num(e.get("hr_max")) for e in eff]),
             _col("休 60 秒降", [_num(e.get("hr_drop60")) for e in eff])]
-    lines = cp_lines(m) if c["type"] == "test_cp" else interval_lines(m)
+    lines = cp_lines(cp_eval(ds, w, m, c), m.get("avg_power") is not None) if c["type"] == "test_cp" \
+        else interval_lines(m)
     if c["type"] not in ("quality", "test_cp"):
         lines = [f"這次是{c['type_label']}，下表只是偵測到的用力段"] + lines[:2]
     return {**base, "series": cols + _verdict_rows(lines)}
@@ -1300,15 +1498,40 @@ def _form(ds, w, m, c, base):
     return {**base, "series": cols + rows + _verdict_rows(lines, "判讀（參考）")}
 
 
+def _apply_action(ev: dict) -> dict:
+    """The review card's 「套用這次的 CP」 button (viewer draw(): res.action)."""
+    a = ev["apply"]
+    return {"kind": "apply_cp", "label": a["label"], "method": "POST", "url": "/api/v1/plan/thresholds/apply-cp",
+            "body": {k: a[k] for k in ("date", "cp", "wprime", "cp_method", "activity_index", "note")},
+            "done": f"已套用：{a['date']} CP {a['cp']} W", "confirm":
+            f"把 {a['date']} 的 CP 設成 {a['cp']} W（{ev['method_label']}，品質 {ev['quality']}）？區間和 TSS 會重新計算"}
+
+
 def _cp(ds, w, m, c, base):
     if c["type"] != "test_cp":
-        return {**base, "empty": "這次不是 CP 測試（3 分＋12 分全力）"}
-    r = m.get("cp_test")
-    if not r:
-        return {**base, "empty": "沒有功率，算不出 CP"}
-    rows = [_row("3 分", f"{r['p3']:.0f} W"), _row("12 分", f"{r['p12']:.0f} W"),
-            _row("CP", f"{r['cp']:.0f} W"), _row("W′", f"{r['wprime'] / 1000:.1f} kJ")]
-    return {**base, "series": rows + _verdict_rows(cp_lines(m))}
+        return {**base, "empty": "這次不是 CP 測試（課表偏好的 CP 測試方式：20 分全力／12 分＋3 分／5–10 K 比賽）"}
+    ev = cp_eval(ds, w, m, c)
+    if not ev:
+        return {**base, "empty": "沒有功率，算不出 CP" if m.get("avg_power") is None
+                else "找不到這個流程的全力段，算不出 CP"}
+    how = MATCH_LABEL.get(c.get("test_match"))
+    rows = [_row("流程", ev["protocol_label"] + (f"（依{how}）" if how else ""))]
+    for b in ev.get("bouts") or []:
+        hr = f"，最高心率 {b['hr_peak']:.0f}" if b.get("hr_peak") is not None else ""
+        rows.append(_row(f"{b['duration_s'] / 60:.0f} 分段", f"{b['power']:.0f} W（{_hms(b['start_s'])} 開始{hr}）"))
+    lo, hi = ev["cp_range"]
+    rows.append(_row("CP", f"{ev['cp']:.0f} W" + (f"（{lo:.0f}–{hi:.0f}）" if hi - lo >= 1 else "")
+                     + f" · {ev['method_label']}"))
+    rows.append(_row("W′", f"{ev['wprime'] / 1000:.1f} kJ" if ev.get("wprime") is not None
+                     else "沒量到" + (f"（CP 用先驗 {ev['wprime_prior'] / 1000:.1f} kJ 算）"
+                                      if ev.get("wprime_prior") and ev["method"] == "1pt_prior" else "")))
+    rows.append(_row("品質", ev["quality"]))
+    for k in ev.get("checks") or []:
+        rows.append(_row("檢查", ("✓ " if k["ok"] else "✗ ") + k["text"]))
+    out = {**base, "series": rows + _verdict_rows(cp_lines(ev))}
+    if ev.get("apply"):
+        out["action"] = _apply_action(ev)
+    return out
 
 
 _SECTIONS = {"summary": _summary, "aerobic": _aerobic, "intervals": _intervals, "climbs": _climbs,

@@ -14,6 +14,7 @@ v2 (docs/research/racepower-v2.md §10.2):
     GET  /grade-model   personal RE(g), v_max(g), v_h(g)
     GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
     POST /export/coros  plan → COROS structured workout (preview, or push=true)
+    POST /export/csv    plan → CSV (UTF-8 BOM), header block + one row per segment
 """
 from __future__ import annotations
 
@@ -524,6 +525,13 @@ class StopIn(BaseModel):
     minutes: float = 0.0
 
 
+class HourIn(BaseModel):
+    t: str                                  # local clock 'YYYY-MM-DDTHH:MM' (UTC+8), as /weather returns it
+    temp_c: float
+    rh_pct: Optional[float] = None
+    dew_c: Optional[float] = None
+
+
 class PlanIn(PredictIn):
     distance_km: Optional[float] = None
     mode: Literal["time", "power", "auto"] = "auto"
@@ -543,6 +551,10 @@ class PlanIn(PredictIn):
     day_splits_km: list[float] = []
     terrain: dict = {}
     wbal: Optional[Literal["wko5", "skiba", "skiba_run"]] = None
+    # per-segment heat: the /weather hourly rows of the event (CWA 3-day or
+    # Open-Meteo); none, or no date / start time → the single To value
+    hourly: Optional[list[HourIn]] = None
+    hourly_heat: bool = True
 
 
 def _resolve_course(body: PlanIn) -> dict:
@@ -553,7 +565,7 @@ def _resolve_course(body: PlanIn) -> dict:
             track = _courses.get(c.course_id)
         if track is None:
             raise HTTPException(410, "路線已過期（伺服器重啟過），請重新上傳 GPX")
-        return _build(track, _course_opts(c.model_dump()))
+        return {**_build(track, _course_opts(c.model_dump())), "name": track.name}
     man = (c.manual if c and c.manual else None) or {}
     km = float(man.get("km") or body.distance_km or 0)
     if km <= 0:
@@ -602,6 +614,7 @@ def make_plan(body: PlanIn) -> dict:
     opts = body.model_dump()
     opts["locks"] = [x.model_dump() for x in body.locks]
     opts["stops"] = [x.model_dump() for x in body.stops]
+    opts["hourly"] = [x.model_dump() for x in body.hourly or []]
     try:
         if body.type == "baiyue":
             opts["moving_rows"] = gm.get("moving_rows") or []
@@ -624,7 +637,7 @@ def make_plan(body: PlanIn) -> dict:
     except ValueError as e:
         raise HTTPException(400, str(e))
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
-               course_id=body.course.course_id if body.course else None)
+               course_id=body.course.course_id if body.course else None, course_name=course.get("name"))
     return out
 
 
@@ -687,6 +700,29 @@ async def _db():
     from backend.db.database import get_db
     async for s in get_db():
         yield s
+
+
+@router.post("/export/csv")
+def export_csv(body: ExportIn):
+    """The /plan output as CSV (UTF-8 with BOM for Excel): a header block
+    (course totals, mode, CP / TTE / k sources, strategy, heat, date computed)
+    and one row per segment. Same body as /plan; `name` names the file."""
+    from urllib.parse import quote
+
+    from fastapi.responses import Response
+
+    from backend.engine.racepower import csvplan as CSV
+    p = _py(make_plan(body))
+    fname = CSV.filename(p, body.name, body.date)
+    label = body.name or p.get("course_name") or f"{CSV.TYPE_LABEL.get(p['type'], '')} {p['summary']['km']:.1f} km"
+    text = CSV.plan_csv(p, name=label, date=body.date, start_time=body.start_time,
+                        stops=[x.model_dump() for x in body.stops],
+                        acclimatisation=body.acclimatisation or ("unacclimatised" if body.type == "baiyue"
+                                                                 else "acclimatised"))
+    q = quote(fname)
+    return Response(content=text.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=\"racepower.csv\"; filename*=UTF-8''{q}",
+                             "X-Filename": q})
 
 
 @router.post("/export/coros")

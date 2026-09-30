@@ -326,6 +326,7 @@ class Session:
     terrain: Optional[str] = None       # road / trail / hike (課表偏好); None = unspecified
     distance_km: Optional[float] = None
     climb_m: Optional[float] = None
+    protocol: Optional[str] = None      # CP-test protocol (engine/cp_protocols.py); tests only
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -566,10 +567,15 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     dec = QG.week_decision(gate, kind, mode, monday)
     allow_quality = dec["allow"]
     tx = getattr(by.get("testing"), "extra", None) or {}
-    cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch"))
+    cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch"))      # the CP test measures CP only
     test_due = cp_due and lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10)
+    # 課表偏好 CP 測試方式 (engine/cp_protocols.py) — read even when the other
+    # preferences are the defaults (it is not part of Prefs.active)
+    from backend.engine import cp_protocols as CPP
+    protocol = CPP.norm(getattr(prefs, "cp_test_protocol", None))
+    test_s = CPP.session_for(protocol) if test_due else None      # race: nothing scheduled
     # the AeT drift test: base phase, no (fresh) measured AeT, never the CP-test week
-    aet_due = not test_due and (days_to is None or days_to > 10) and AT.due(
+    aet_due = test_s is None and (days_to is None or days_to > 10) and AT.due(
         today, kind, gate.get("base_start"), tx.get("aet_date"), tx.get("aet_last_test"))
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 
@@ -589,11 +595,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
             source=SRC_KOOP if kind == "specific" else SRC_UA,
             tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
-        if test_due:
-            add(id="test", kind="test", title="CP 測試 3 分 + 12 分", minutes=60,
-                target="兩段都全力、配速平均；中間休 30 分鐘",
-                detail="門檻過期或沒測過：區間、TSS、賽事功率都靠它。平路或跑步機，暖身 15 分鐘",
-                source="你的筆記：3'/12' CP 測試，每 4–6 週", tss=60 / 60 * 75)
+        if test_s is not None:
+            add(**{**test_s, "detail": test_s["detail"] + "。門檻過期或沒測過：區間、TSS、賽事功率都靠它"})
         elif aet_due and kind == "base":
             # AeT drift test in place of this week's interval (engine/aet_test.py)
             add(**AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
@@ -756,7 +759,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # ---- non-session to-dos from the indicators --------------------------
     for iid in ("data", "testing"):
         i = by.get(iid)
-        if i is not None and i.level in ("bad", "watch") and i.action and not (iid == "testing" and test_due):
+        if i is not None and i.level in ("bad", "watch") and i.action and not (iid == "testing" and test_s is not None):
             notes.append({"level": i.level, "text": f"{i.title}：{i.action}"})
 
     mode_label = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
@@ -785,7 +788,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # re-evaluate it for each projected week instead of copying this week's answer
         "quality_gate": {**gate, "levels": gate_levels, "allowed": allow_quality,
                          "this_week": dec["spec"][1] if allow_quality and dec["spec"] and kind == "base"
-                         and not (test_due or aet_due) else None,
+                         and not (test_s is not None or aet_due) else None,
                          # a suggested test counts as the last one, so the projection waits ≥ 4 weeks
                          "aet_test": {"due": aet_due, "last": today.isoformat() if aet_due else tx.get("aet_last_test")}},
         # per-category TSS / h (projection shapes projected weeks with the same rates)
