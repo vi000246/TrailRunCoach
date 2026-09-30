@@ -164,25 +164,79 @@ def test_token_step_named_in_error(tmp_path):
     run(go())
 
 
-def test_live_shape_numeric_types_and_athlete_id_fallback(tmp_path):
-    """users/v3/user without athletes / userId -> id from users/v3/user/athletes."""
-    class LiveShape(FakeTPWeb):
-        def __call__(self, req):
-            if req.url.host == "tpapi.trainingpeaks.com" and req.url.path == "/users/v3/user":
-                return httpx.Response(200, json={"user": {"userName": "x", "userType": 1,
-                                                          "athleteType": 2, "isPremium": True},
-                                                 "accountStatus": {"isLocked": False}})
-            if req.url.host == "tpapi.trainingpeaks.com" and req.url.path == "/users/v3/user/athletes":
-                return httpx.Response(200, json=[{"athleteId": 4242}])
-            return super().__call__(req)
+LIVE_USER = {"user": {"userId": 4242, "userName": "x", "userType": 1, "athleteType": 2,
+                      "coachType": 0, "isPremium": False, "isCoached": False,
+                      "athletes": [{"athleteId": 4242, "athleteType": 2, "isPremium": False}]},
+             "accountStatus": {"isLocked": False}}
 
+
+class LiveShape(FakeTPWeb):
+    """users/v3/user as the live API returns it (2026-09-30): numeric types."""
+    user = LIVE_USER
+
+    def __call__(self, req):
+        if req.url.host == "tpapi.trainingpeaks.com" and req.url.path == "/users/v3/user":
+            return httpx.Response(200, json=self.user)
+        return super().__call__(req)
+
+
+def test_live_shape_numeric_types_basic_account(tmp_path):
     async def go():
         s = await make_session(tmp_path)
         with http.use_transport(httpx.MockTransport(LiveShape())):
             r = await tp_client.login_password("u@example.com", "pw", s, 1)
-        assert r["tp_athlete_id"] == 4242 and r["premium"] and r["can_download"]
-        from backend.db.models import Athlete
-        assert (await s.get(Athlete, 1)).tp_athlete_id == 4242
+        assert r["method"] == "web" and r["tp_athlete_id"] == 4242
+        assert r["premium"] is False and r["can_download"] is False   # TP basic
+    run(go())
+
+
+@pytest.mark.parametrize("user,premium,can_download", [
+    ({"userId": 1, "isPremium": True, "athleteType": 2}, True, True),
+    ({"userId": 1, "isPremium": False, "coachType": 1}, False, True),     # coach
+    ({"userId": 1, "athletes": [{"athleteId": 1, "athleteType": "premium"}]}, True, True),  # legacy strings
+    ({"userId": 1, "athletes": [{"athleteId": 1, "athleteType": 2, "isPremium": True}]}, True, True),
+    ({"userId": 1, "userType": 1, "athleteType": 2}, False, False),
+])
+def test_premium_and_coach_flags(user, premium, can_download):
+    aid, _athletes, user_type, prem = tp_client._extract_athlete_id({"user": user})
+    assert aid == 1 and prem is premium
+    assert tp_client._can_download(user_type, prem) is can_download
+
+
+async def _session_without_athlete(tmp_path):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from backend.db.models import Base
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    return async_sessionmaker(engine, expire_on_commit=False)()
+
+
+@pytest.mark.parametrize("path", ["web", "oauth", "code"])
+def test_ensure_athlete_on_fresh_db_is_idempotent(tmp_path, monkeypatch, path):
+    from pathlib import Path
+    from backend.db.models import Athlete
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+
+    class Oauth(LiveShape):
+        def __call__(self, req):
+            if req.url.host == "oauth.trainingpeaks.com":
+                return httpx.Response(200, json={"access_token": "web-at-o", "refresh_token": "rt",
+                                                 "expires_in": 3600})
+            return super().__call__(req)
+
+    async def go():
+        s = await _session_without_athlete(tmp_path)
+        fake = LiveShape() if path == "web" else Oauth()
+        with http.use_transport(httpx.MockTransport(fake)):
+            for _ in range(2):          # second login must not create a second row
+                if path == "code":
+                    await tp_client.exchange_code("abc", s, 1)
+                else:
+                    await tp_client.login_password("u@example.com", "pw", s, 1)
+        rows = (await s.execute(text("SELECT id, tp_athlete_id, data_dir FROM athletes"))).all()
+        assert len(rows) == 1 and rows[0][0] == 1 and rows[0][1] == 4242
+        assert Path(rows[0][2]).is_dir() and str(tmp_path) in rows[0][2]
     run(go())
 
 
