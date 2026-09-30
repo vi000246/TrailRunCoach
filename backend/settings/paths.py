@@ -4,8 +4,9 @@ Where the WKO5 athlete folder is (<Name>.wko5athlete + year/*.wko4).
   1. WKO5_ATHLETE_DIR (or WKO5COACH_ATHLETE_DIR, compare_sources' name) when set
   2. otherwise the first folder under one of DEFAULT_ROOTS (the root itself or
      one level below it) that holds a *.wko5athlete:
-       ~/WKO5                        docker-compose mounts it at the same path
-       ~/Projects/TrailRunCoach/WKO5 where WKO5 keeps the library on the dev PC
+       ~/WKO5   where WKO5 keeps the library on the dev PC (moved here on
+                2026-10-01, when ~/Projects/TrailRunCoach became the repo);
+                docker-compose mounts it at the same path
   3. otherwise ~/WKO5 (a missing folder: the charts say there is no data)
 """
 from __future__ import annotations
@@ -18,7 +19,7 @@ ENV_VARS = ("WKO5_ATHLETE_DIR", "WKO5COACH_ATHLETE_DIR")
 
 def default_roots() -> list[Path]:
     home = Path.home()
-    return [home / "WKO5", home / "Projects" / "TrailRunCoach" / "WKO5"]
+    return [home / "WKO5"]
 
 
 def _has_athlete(d: Path) -> bool:
