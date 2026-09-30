@@ -43,7 +43,7 @@ import datetime as dt
 import json
 import math
 import re
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Optional
 
 KEY_FIELDS = {                       # user_settings key -> Prefs field
@@ -61,7 +61,12 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.terrain_long": "terrain_long",
     "plan.prefs.terrain_quality": "terrain_quality",
     "plan.prefs.interval_target": "interval_target",
+    "plan.prefs.quality_gate": "quality_gate",
+    "plan.prefs.quality_gate_weeks": "quality_gate_weeks",
 }
+# 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
+# not how sessions are shaped, so these alone don't switch shape() / place() on
+GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 LONG_WD = {"sat": 5, "sun": 6}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
@@ -69,6 +74,7 @@ TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
 NOTE_HARD = "受限於你的偏好，本週少 {h} 小時；想補量可以多排一天或放寬長跑日上限"
 NOTE_SOFT = "單次上限 {cap} 分：多出的 {m} 分鐘放在長跑日（盡量不超過）"
 NOTE_TEST = "CP 測試的流程固定（3 分 + 休 30 分 + 12 分），不受單次時間上限"
+NOTE_AET_TEST = "AeT 飄移測試要 15 分暖身＋至少 45 分固定功率，不受單次時間上限"
 
 
 @dataclass(frozen=True)
@@ -87,10 +93,14 @@ class Prefs:
     terrain_long: str = "auto"
     terrain_quality: str = "any"
     interval_target: str = "power"
+    quality_gate: str = "auto"
+    quality_gate_weeks: int = 8
 
     @property
     def active(self) -> bool:
-        return self != Prefs()
+        """Anything that shapes sessions differs from the defaults. The 間歇門檻
+        fields are read by the gate (engine/quality_gate.py), not by shape()."""
+        return replace(self, **{f: getattr(Prefs, f) for f in GATE_FIELDS}) != Prefs()
 
     @property
     def long_cap(self) -> Optional[int]:
@@ -150,6 +160,12 @@ def check(p: Prefs) -> None:
         raise ValueError("品質課次數要比每週跑步次數少（至少留一次輕鬆或長跑）")
     if p.cap_long is not None and p.cap_weekday is not None and p.cap_long < p.cap_weekday:
         raise ValueError("長跑日上限不能比平日上限短")
+    from backend.engine.quality_gate import MODES, WEEKS_RANGE
+    if p.quality_gate not in MODES:
+        raise ValueError(f"間歇門檻要是 {MODES} 其中之一")
+    if isinstance(p.quality_gate_weeks, bool) or not isinstance(p.quality_gate_weeks, int) or \
+            not WEEKS_RANGE[0] <= p.quality_gate_weeks <= WEEKS_RANGE[1]:
+        raise ValueError(f"週數法的週數要在 {WEEKS_RANGE[0]}–{WEEKS_RANGE[1]} 週")
 
 
 def load(user_id: int = 1) -> Prefs:
@@ -234,6 +250,7 @@ class Ctx:
     aet: Optional[float] = None
     slots: int = 7                    # allowed days for main sessions
     notes: list = field(default_factory=list)
+    quality_cap: Optional[int] = None  # 間歇門檻 guardrail mode: base phase ≤ 1 (engine/quality_gate.py)
 
     def rate(self, cat: str) -> float:
         return float(self.rates.get(cat) or self.rates.get("road") or 50.0)
@@ -330,7 +347,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
             c.notes.append({"level": "info", "src": "prefs", "text": "偏好每週 0 次品質課：CP 測試也先不排"})
         hard = []
     q = [s for s in hard if s["kind"] == "quality"]
-    if p.quality == 2 and c.allow_quality and q and c.mode != "recovery_week":
+    if p.quality == 2 and c.allow_quality and q and c.mode != "recovery_week" and (c.quality_cap or 2) >= 2:
         hard.append({**q[0], "id": "quality2"})
     for s in hard:
         _quality_terrain(s, p)
@@ -339,7 +356,8 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     if p.cap_weekday is not None:
         for s in hard:
             if s["kind"] == "test" and s["minutes"] > p.cap_weekday:
-                c.notes.append({"level": "info", "src": "prefs", "text": NOTE_TEST})
+                c.notes.append({"level": "info", "src": "prefs",
+                                "text": NOTE_AET_TEST if s["id"] == "test_aet" else NOTE_TEST})
             elif s["kind"] == "quality":
                 trim_quality(s, p.cap_weekday)
 

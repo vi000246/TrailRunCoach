@@ -24,7 +24,9 @@ import datetime as dt
 import statistics
 from typing import Optional
 
+from backend.engine import aet_test as AT
 from backend.engine import overview as O
+from backend.engine import quality_gate as QG
 from backend.engine.zones import WORKOUT_TARGETS
 
 MAX_WEEKS = 8                 # never schedule further ahead than this
@@ -99,11 +101,12 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   tgt: dict, long_wd: int, longest: float, mountain: bool,
                   allow_quality: bool, strength_tss: float, aet: Optional[float],
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
-                  notes: Optional[list] = None, blocked=frozenset()) -> list[dict]:
+                  notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
-    `base_quality`: this week's base-phase quality session (week_plan picks
-    閾值下 N×8 分 when the drift streak first unlocks intervals or the last one
-    faded); projected base weeks repeat it instead of 閾值 3×10.
+    `base_quality`: the base-phase session the gate picked for this week
+    (engine/quality_gate.py dose step, the recovery-week fartlek, or the AeT
+    test, kind "test"); None in base with `allow_quality` = 閾值 3×10.
+    `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
     `rates` = TSS / h per category for it, `notes` collects its notes.
     `blocked`: ISO days of 不排課日期 (engine/blackouts.py) — never a candidate day."""
@@ -127,12 +130,13 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=O.SRC_PALLADINO + "（Supra-threshold）", tss=75.0)
         elif allow_quality and kind == "base" and base_quality:
-            add(id="quality", kind="quality", title=base_quality["title"], minutes=base_quality["minutes"],
-                target=base_quality.get("target", ""), detail=base_quality.get("detail", ""),
-                source=base_quality.get("source", ""), tss=float(base_quality.get("tss") or 65.0))
+            add(**_bq(base_quality))
         elif allow_quality:
             add(id="quality", kind="quality", title="閾值 3×10 分", minutes=60, target=tgt.get("threshold", ""),
                 detail="休 2–3 分鐘；暖身 15 分、緩和 10 分", source=O.SRC_PALLADINO + "（3B）", tss=70.0)
+    elif kind == "base" and mode == "recovery_week" and allow_quality and base_quality \
+            and base_quality.get("kind", "quality") == "quality":
+        add(**_bq(base_quality))                   # 3:1 recovery week: the short fartlek (Palladino)
     elif kind == "taper":
         add(id="quality", kind="quality", title="短強度 4×3 分", minutes=45, target=tgt.get("threshold", ""),
             detail="保留強度、不累積疲勞（98–102% CP）", source=O.SRC_BOSQUET, tss=45 / 60 * 65)
@@ -156,12 +160,21 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         days = [d for d in (monday + dt.timedelta(days=i) for i in range(7)) if d.isoformat() not in blocked]
         n_lost = sum(1 for i in range(7) if prefs.days[i] and (monday + dt.timedelta(days=i)).isoformat() in blocked)
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=r, aet=aet,
-                     slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [])
+                     slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
+                     quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
         PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs)
         return ss
     _place(ss, monday, long_wd, blocked)
     return ss
+
+
+def _bq(b: dict) -> dict:
+    """add() kwargs for a gate-picked base session (quality or the AeT test)."""
+    kind = b.get("kind", "quality")
+    return {"id": b.get("id") or ("test_aet" if kind == "test" else "quality"), "kind": kind, "title": b["title"],
+            "minutes": b["minutes"], "target": b.get("target", ""), "detail": b.get("detail", ""),
+            "source": b.get("source", ""), "tss": float(b.get("tss") or 65.0)}
 
 
 def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset()) -> None:
@@ -196,32 +209,35 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset()) -
 
 
 def _gate_inputs(cur: dict) -> dict:
-    """week_plan()'s quality-gate inputs (levels + drift streak). A `cur`
-    without them (built before week_plan returned them) falls back to reading
-    this week's sessions: a quality session, a non-base phase or a recovery /
-    rest week (none by design) -> allowed. A CP-test session says nothing
-    (week_plan puts the test in place of the quality session)."""
+    """week_plan()'s gate (engine/quality_gate.py): method state, guardrails,
+    dose step, base-phase start. An older `cur` without it — or with the old
+    {levels, streak_ok} shape — becomes a no-method gate (guardrails only; the
+    unsourced drift streak is gone): intensity bad blocks, otherwise allowed.
+    A CP-test session says nothing (week_plan puts the test in place of the
+    quality session)."""
+    from backend.engine import quality_gate as QG
     g = cur.get("quality_gate")
-    if g is not None:
-        return {"levels": dict(g.get("levels") or {}), "streak_ok": bool(g.get("streak_ok"))}
-    ok = (any(s["kind"] == "quality" for s in cur.get("sessions") or []) or cur.get("phase") != "base"
-          or cur.get("mode") not in ("base", "specific"))
-    return {"levels": {"intensity": "good" if ok else "na", "drift": "na"}, "streak_ok": ok}
+    if g is not None and not QG.legacy(g):
+        return g
+    levels = dict((g or {}).get("levels") or {})
+    if g is None:
+        ok = (any(s["kind"] == "quality" for s in cur.get("sessions") or []) or cur.get("phase") != "base"
+              or cur.get("mode") not in ("base", "specific"))
+        levels = {"intensity": "good" if ok else "na", "drift": "na"}
+    blocked = levels.get("intensity") == "bad"
+    return {"state": "none", "mode": "auto", "resolved": "none", "levels": levels,
+            "guard": {"block": blocked, "rule": "intensity" if blocked else "", "verdict": ""},
+            "dose": {"done": 0, "step": 0, "faded": False}}
 
 
-def allow_quality(kind: str, gate: dict, base_q: Optional[dict] = None) -> bool:
-    """week_plan()'s rule, evaluated for one projected week's phase: the gate
-    (intensity / drift not bad; in base also the drift streak), then in base
-    either the unlocked 閾值下 session this week carried (`base_q`) or the
-    intensity indicator good for 閾值 3×10. Not copied from this week, so a
-    CP-test week or the base drift gate doesn't leak into later weeks."""
-    from backend.engine import workout_review as WR
-    levels = gate.get("levels") or {}
-    if not WR.quality_gate(kind, levels, bool(gate.get("streak_ok"))):
-        return False
-    if kind == "base":
-        return bool(base_q) or levels.get("intensity") == "good"
-    return True
+def allow_quality(kind: str, gate: dict, monday: Optional[dt.date] = None, step: Optional[int] = None,
+                  mode: Optional[str] = None) -> dict:
+    """week_plan()'s rule for one projected week: quality_gate.week_decision
+    with the week's phase, mode (a recovery week gets the fartlek) and Monday
+    (weeks mode) and the dose step reached by then; this week's ramp / volume /
+    TSB guardrails are not carried forward (re-checked when the week comes)."""
+    from backend.engine import quality_gate as QG
+    return QG.week_decision(gate, kind, mode or kind, monday, step, first=False)
 
 
 def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
@@ -248,8 +264,11 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     mountain = bool(long_s and "山路" in long_s["title"])
     rates = cur.get("tss_per_category") if PR is not None else None
     gate = _gate_inputs(cur)
-    base_q = next((s for s in cur_s if s["kind"] == "quality" and s["title"].startswith("閾值下")), None) \
-        if cur.get("phase") == "base" else None
+    step = int((gate.get("dose") or {}).get("step") or 0)
+    if cur.get("phase") == "base" and (gate.get("allowed") and (gate.get("this_week") or "") not in
+                                       ("", QG.RECOVERY[1], QG.SUB[1])):
+        step += 1                              # this week's interval is one step of the dose
+    last_aet = (gate.get("aet_test") or {}).get("last")
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
     strength_tss = float(st["tss"]) if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]
@@ -285,9 +304,20 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 hours *= f
                 why = why + [f"不排課 {BL.range_text(lost)}：少 {len(lost)} 個可練日，週量 × {f:.0%}"]
                 notes.append(BL.week_note(bmap, lost, lost_h))
+        dec = allow_quality(kind, gate, week, step, mode)
+        base_q = None
+        if kind == "base" and mode != "recovery_week" and \
+                AT.due(week, kind, gate.get("base_start"), (gate.get("aet") or {}).get("date"), last_aet):
+            base_q = AT.session(th, AT.start_hr(None, th.get("lthr")), AT.start_power(th.get("cp")))
+            last_aet = week.isoformat()          # suggested, not done: keeps the next one ≥ 4 weeks away
+        elif kind == "base" and dec["allow"] and dec["spec"] is not None:
+            base_q = O._gate_session(gate, dec, th, hours)
+            if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB):
+                step += 1
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
-                           allow_quality(kind, gate, base_q), strength_tss, th.get("aet"), base_q,
-                           prefs=PR, rates=rates, notes=notes, blocked=set(bmap))
+                           dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
+                           prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
+                           quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None)
         prev_lost = lost
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
         if drop:
