@@ -499,3 +499,40 @@ def test_unpush_range(monkeypatch):
         r = e.c.delete(f"{API}/push-coros?scope=week")
         assert len(r.json()["removed"]) == 3
         assert sorted(x["happenDay"] for x in e.fake.entities) == [20261006, 20261007, 20261011, 20261018]
+
+
+# ---------------------------------------------------------------------------
+# bars + PMC projection follow the stored plan
+# ---------------------------------------------------------------------------
+
+def test_plan_summary_math():
+    ss = [{"state": "done", "day": "2026-09-29", "kind": "easy", "minutes": 40, "tss": 32.0},
+          {"state": "active", "day": "2026-10-01", "kind": "quality", "minutes": 60, "tss": 48.0},
+          {"state": "active", "day": "2026-10-02", "kind": "strength", "minutes": 35, "tss": 10.0},
+          {"state": "missed", "day": "2026-09-30", "kind": "easy", "minutes": 45, "tss": 36.0},
+          {"state": "deleted", "day": "2026-10-03", "kind": "long", "minutes": 120, "tss": 96.0},
+          {"state": "active", "day": "2026-10-06", "kind": "easy", "minutes": 50, "tss": 40.0}]
+    s = PS.plan_summary(ss, "2026-09-28", "2026-09-30", 30.0, 32.0, 42.0, 7.0, "2026-10-11")
+    assert s["hours"] == pytest.approx(100 / 60) and s["tss"] == pytest.approx(90.0)   # no strength time, no missed/deleted
+    days = [r["date"] for r in s["projection"]]
+    assert days[0] == "2026-10-01" and days[-1] == "2026-10-11"
+    assert {r["date"]: r["tss"] for r in s["projection"]}["2026-10-06"] == 40.0
+    c = 30.0
+    for x in (48.0, 10.0, 0.0, 0.0):                         # 10/1 .. 10/4
+        c += (x - c) / 42.0
+    assert s["ctl_end"] == pytest.approx(c)
+
+
+def test_edit_moves_the_bars_and_projection(monkeypatch):
+    with Env(monkeypatch) as e:
+        body = e.c.get(f"{API}/sessions").json()
+        s0 = body["summary"]
+        long = next(s for s in body["sessions"] if s["day"] == "2026-10-04")
+        e.c.patch(f"{API}/sessions/{long['uid']}", json={"minutes": 60})
+        e.c.delete(f"{API}/sessions/{next(s for s in body['sessions'] if s['day'] == '2026-10-01')['uid']}")
+        s1 = e.c.get(f"{API}/sessions").json()["summary"]
+        assert s1["hours"] == pytest.approx(s0["hours"] - 1.0 - 1.0)       # long 120→60, quality 60 gone
+        p0 = {r["date"]: r["tss"] for r in s0["projection"]}
+        p1 = {r["date"]: r["tss"] for r in s1["projection"]}
+        assert p0["2026-10-01"] > 0 and p1["2026-10-01"] == 0
+        assert s1["ctl_end"] < s0["ctl_end"]

@@ -200,6 +200,36 @@ async def delete(db: AsyncSession, uid: str, athlete_id: int = 1) -> dict:
     return d
 
 
+def plan_summary(ss: list[dict], week_start: str, today: str, ctl0: float, atl0: float,
+                 cc: float, ac: float, horizon_end: Optional[str] = None) -> dict:
+    """Week targets and the CTL/ATL projection from the stored plan, so edits show
+    in the progress bars and the PMC. Target = active + done sessions of the week
+    (missed ones were re-planned or dropped); time excludes strength, like
+    week_plan(). The projection continues today's CTL/ATL with the planned TSS
+    of each later day up to the horizon."""
+    from backend.engine.overview import project
+    week_end = (dt.date.fromisoformat(week_start) + dt.timedelta(days=6)).isoformat()
+    live = [s for s in ss if s["state"] in ("active", "done") and s.get("day")]
+    wk = [s for s in live if week_start <= s["day"] <= week_end]
+    hours = sum(s["minutes"] or 0 for s in wk if s["kind"] != "strength") / 60.0
+    tss = sum(float(s.get("tss") or 0.0) for s in wk)
+    end = max(week_end, horizon_end or week_end)
+    days, d = [], dt.date.fromisoformat(today) + dt.timedelta(days=1)
+    while d.isoformat() <= end:
+        days.append(d.isoformat())
+        d += dt.timedelta(days=1)
+    by_day: dict[str, float] = {}
+    for s in live:
+        if s["state"] == "active" and s["day"] > today:
+            by_day[s["day"]] = by_day.get(s["day"], 0.0) + float(s.get("tss") or 0.0)
+    rows = [{"date": x, **p} for x, p in zip(days, project(ctl0, atl0, [by_day.get(x, 0.0) for x in days], cc, ac))]
+    wrows = [r for r in rows if r["date"] <= week_end]
+    ctl_end = wrows[-1]["ctl"] if wrows else ctl0
+    atl_end = wrows[-1]["atl"] if wrows else atl0
+    return {"hours": hours, "tss": tss, "projection": rows, "ctl_end": ctl_end, "atl_end": atl_end,
+            "tsb_next": ctl_end - atl_end}
+
+
 def push_dict(s: dict) -> dict:
     """A stored session in the shape coros_workouts expects (key = uid)."""
     return {"id": s["uid"], "key": s["uid"], "week_start": s["week_start"], "kind": s["kind"],
