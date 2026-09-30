@@ -88,6 +88,16 @@ async def migrate(db: AsyncSession, apply: bool = False, legacy_dirs: Optional[d
                         sub.rmdir()
                 if d.exists() and not any(d.iterdir()):
                     d.rmdir()
+    # athletes whose data_dir was a (now removed) legacy TP folder
+    from backend.db.models import Athlete
+    legacy_tp = {str(p.resolve()) for p in legacy_dirs.get("tp", [])}
+    out["athlete_dirs_updated"] = 0
+    for a in (await db.execute(select(Athlete))).scalars():
+        if a.data_dir and (str(Path(a.data_dir).resolve()) in legacy_tp
+                           or (Path(a.data_dir).parent == storage.FIT_ROOT and Path(a.data_dir).name.startswith("athlete_"))):
+            out["athlete_dirs_updated"] += 1
+            if apply:
+                a.data_dir = str(storage.FIT_ROOT)
     if apply:
         await db.commit()
     else:
