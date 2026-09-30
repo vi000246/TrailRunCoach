@@ -66,7 +66,8 @@ def _compute_inputs() -> dict:
            "horizon_end": horizon.isoformat(), "thresholds": cur.get("thresholds") or {},
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
-           "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None}
+           "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
+           "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant}
     with _lock:
         _cache.clear()
         _cache[key] = out
@@ -157,11 +158,23 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     inp = await _inputs(db)
     async with _wlock():
         await _ensure(db, inp)
-        ss = await PS.load(db, start=start, end=end)
+        every = await PS.load(db)
+    ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
+                                                     and (not end or s["day"] <= end))]
     today = _today(inp)
     rows = await CW.all_rows(db)
-    return {**_meta(inp), "sessions": [_view(s, inp, rows, today) for s in ss if s["state"] != "deleted"
-                                        and s["state"] != "superseded"]}
+    return {**_meta(inp), "summary": _summary(every, inp),
+            "sessions": [_view(s, inp, rows, today) for s in ss if s["state"] != "deleted"
+                         and s["state"] != "superseded"]}
+
+
+def _summary(every: list[dict], inp: dict) -> dict:
+    """Bars + PMC projection from the stored plan (edits included)."""
+    cur = inp["cur"]
+    load = cur.get("load") or {}
+    return PS.plan_summary(every, cur["week"]["start"], inp["today"], float(load.get("ctl_today") or 0.0),
+                           float(load.get("atl_today") or 0.0), float(inp.get("cc") or 42.0),
+                           float(inp.get("ac") or 7.0), inp.get("horizon_end"))
 
 
 def _err(e: Exception):
