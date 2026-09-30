@@ -40,6 +40,14 @@ def _fit_root_in_tmp(monkeypatch, tmp_path_factory):
     return root
 
 
+@pytest.fixture(autouse=True)
+def _no_real_heat_history(monkeypatch):
+    """The heat-acclimation index never reads the real per-activity weather
+    (~/.wko5coach/routes/activity_weather.json); tests pass their own rows."""
+    from backend.engine import heat_data
+    monkeypatch.setattr(heat_data, "exposures", lambda root=None: ([], {"missing": True}))
+
+
 @pytest.fixture
 def tp_creds(monkeypatch):
     """Obviously fake OAuth client credentials via env."""

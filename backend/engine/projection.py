@@ -225,12 +225,17 @@ def allow_quality(kind: str, gate: dict, base_q: Optional[dict] = None) -> bool:
 
 
 def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
-                  atlconstant: float = 7.0, prefs=None, blackouts=None) -> list[dict]:
+                  atlconstant: float = 7.0, prefs=None, blackouts=None, events=None,
+                  heat_acts: Optional[list] = None) -> list[dict]:
     """Weeks after cur['week'] (a week_plan() result) up to `until` (≤ MAX_WEEKS).
     `ctlconstant` / `atlconstant`: the athlete's (ds.athlete), as for the PMC.
     `prefs`: the 課表偏好 week_plan() used (None / defaults = the original rules).
-    `blackouts`: the 不排課日期 ranges week_plan() used (engine/blackouts.py)."""
+    `blackouts`: the 不排課日期 ranges week_plan() used (engine/blackouts.py).
+    `events` (season-plan events) + `heat_acts` (per-activity heat exposure):
+    熱適應課 before a hot A/B race (engine/heat_plan.py); None = none. The S
+    carried into each week counts the heat sessions planned before it."""
     from backend.engine import blackouts as BL
+    planned_heat: dict = {d: 1.0 for d in ((cur.get("heat") or {}).get("days") or [])}
     PR = prefs if prefs is not None and prefs.active else None
     bmap = BL.blocked(blackouts or ())
     allowed_fn = PR.allowed if PR is not None else None
@@ -288,6 +293,18 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            allow_quality(kind, gate, base_q), strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap))
+        heat_w = None
+        if events is not None:
+            try:
+                from backend.engine import heat as HT
+                from backend.engine import heat_plan as HP
+                acts_w = list(heat_acts or []) + [{"date": d, "hot_min": 60.0} for d in planned_heat]
+                heat_w = HP.apply(ss, events=events, today=week, prefs=prefs, aet=th.get("aet"), mode=mode, kind=kind,
+                                  notes=notes, acts=acts_w, s_now=HT.current(acts_w, week - dt.timedelta(days=1))["s"])
+                for d in heat_w.get("days") or []:
+                    planned_heat[d] = 1.0
+            except Exception:              # noqa: BLE001 — never breaks the projection
+                heat_w = None
         prev_lost = lost
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
         if drop:
@@ -307,7 +324,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "tss": sum(planned), "ctl_start": ctl0, "ctl_end": ctl,
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
-                    **({"notes": notes} if PR is not None or bmap else {}),
+                    **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active") else {}),
+                    **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None)
         if long_n:

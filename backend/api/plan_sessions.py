@@ -65,8 +65,13 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     horizon = min(cap, max(phase_end, monday + dt.timedelta(days=13)))
     phases = [{"kind": p.kind, "start": p.start, "end": p.end}
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
+    try:
+        from backend.engine import heat_data as HD
+        heat_acts = HD.exposures()[0]
+    except Exception:                       # noqa: BLE001
+        heat_acts = []
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
-                            blackouts=bos)
+                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts)
     since = monday - dt.timedelta(weeks=4)
     acts = [O.activity_row(w) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
@@ -526,6 +531,7 @@ def tss_rates(tph: Optional[dict], sessions: list[dict], fallback: float = 50.0)
     for k, v in seen.items():
         if k in out:
             out[k] = round(statistics.median(v), 1)
+    out["heat_passive"] = 0.0          # a bath / sauna: no TSS conversion was found (heat-acclimation.md §5.4)
     return out
 
 
