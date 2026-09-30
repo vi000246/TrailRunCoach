@@ -154,10 +154,19 @@ def _alt_factor(alt_m: float, temp_c: float, mode: str) -> float:
     return 0.5 * (curve + lin)
 
 
-def segment_factors(zs, frm, to, mode: str = "acclimatised") -> list[float]:
+def segment_factors(zs, frm, to, mode: str = "acclimatised", heat=None) -> list[float]:
     """Per-segment environment multiplier Mᵢ (F14): the v1 formula
     M = 1 − (A_from − A_to) − (H_to − H_from)/100 with the race-day altitude
-    replaced by each segment's mean elevation zᵢ; heat stays one value.
+    replaced by each segment's mean elevation zᵢ.
+
+    Heat: one value (the race-day To side) unless `heat` gives one
+    (temp_c, rh_pct) per segment — the conditions at the hour that segment is
+    run. H is the same Hadley penalty (`heat_penalty_pct`, the SuperPower
+    workbook's `v4 Calcs` formula, docs/research/superpower-calculator.md
+    §1.1); only its input changes. The altitude term keeps the To temperature,
+    so a heat list equal to the To conditions gives exactly the single-heat
+    Mᵢ. Mapping forecast hours to segments is our own composition (自組); the
+    page labels it 推估.
 
     mode: "acclimatised" = this module's pressure polynomial (v1; the same
     coefficients as the SuperPower workbook and GoldenCheetah's aPower, which
@@ -170,6 +179,13 @@ def segment_factors(zs, frm, to, mode: str = "acclimatised") -> list[float]:
     exactly v1's single M (T14)."""
     a, b = resolve(frm, to)
     sa, sb = side(a), side(b)
-    heat = -(sb["heat_penalty_pct"] - sa["heat_penalty_pct"]) / 100.0
     a_from = _alt_factor(a.altitude_m, a.temp_c, mode)
-    return [1.0 - (a_from - _alt_factor(z, b.temp_c, mode)) + heat for z in zs]
+    zs = list(zs)
+    if heat is None:
+        hs = [sb["heat_penalty_pct"]] * len(zs)
+    else:
+        if len(heat) != len(zs):
+            raise ValueError("heat needs one (temp_c, rh_pct) per segment")
+        hs = [heat_penalty_pct(t, rh) for t, rh in heat]
+    return [1.0 - (a_from - _alt_factor(z, b.temp_c, mode)) - (h - sa["heat_penalty_pct"]) / 100.0
+            for z, h in zip(zs, hs)]

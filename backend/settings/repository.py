@@ -68,6 +68,9 @@ DEFAULTS: dict[str, Any] = {
     "plan.prefs.terrain_long": "auto",        # road | trail | hike | auto
     "plan.prefs.terrain_quality": "any",      # flat | hill | any
     "plan.prefs.interval_target": "power",    # power | hr
+    # CP 測試方式 (engine/cp_protocols.py): quick 20 min all-out | standard 12′ +
+    # 30′ + 3′ | race (a 5–10 K race instead). The athlete chose quick as the default.
+    "plan.prefs.cp_test_protocol": "quick",
     # 間歇門檻 (engine/quality_gate.py): what unlocks base-phase intervals
     "plan.prefs.quality_gate": "auto",        # auto | ua_gap | friel_drift | xu_drift | plateau | weeks | none
     "plan.prefs.quality_gate_weeks": 8,       # weeks mode: base-phase weeks before intervals (2-16)
@@ -84,6 +87,7 @@ PREF_ENUMS = {
     "plan.prefs.terrain_long": ("road", "trail", "hike", "auto"),
     "plan.prefs.terrain_quality": ("flat", "hill", "any"),
     "plan.prefs.interval_target": ("power", "hr"),
+    "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
     "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"),
 }
 PREF_INTS = {                                 # key -> (lo, hi); None always allowed

@@ -574,6 +574,18 @@ class Status:
             lvl, v, act = BAD, "後段掉很多", "拉長時間前先把長天配速放慢；檢查補給與水分"
         return Indicator("durability", "耐久度", lvl, txt, v, why, act, SRC_KOOP, med, spark)
 
+    def _cp_protocol(self) -> str:
+        """課表偏好 CP 測試方式 (plan.prefs.cp_test_protocol; default quick)."""
+        from backend.engine import cp_protocols as CPP
+        p = getattr(self, "cp_protocol", None)
+        if p is None:
+            try:
+                from backend.engine import plan_prefs as PP
+                p = PP.load().cp_test_protocol
+            except Exception:                     # noqa: BLE001 — no settings store: the default
+                p = None
+        return CPP.norm(p)
+
     def i_testing(self) -> Indicator:
         def last(name):
             ds_ = [dt.date.fromisoformat(t.date) for t in self.plan.thresholds if getattr(t, name) is not None]
@@ -598,8 +610,12 @@ class Status:
         # which test week_plan should schedule: the CP test measures CP only; the
         # AeT test (engine/aet_test.py) has its own cadence
         cp_due = cp is None or (self.today - cp).days > TEST_DAYS_WATCH
+        from backend.engine import cp_protocols as CPP
+        proto = self._cp_protocol()
         if worst != GOOD:
-            act = "排一次 CP 測試（3'/12'，中間休 30 分鐘）＋ 45–60 分鐘 AeT 飄移測試；每 4–6 週一次"
+            act = (f"{CPP.NOTE_RACE}（課表偏好：用比賽）" if proto == "race" else
+                   f"排一次 CP 測試（{CPP.TABLE[proto]['label']}，{CPP.TABLE[proto]['hint'].split('；')[0]}）") + \
+                "＋ 45–60 分鐘 AeT 飄移測試；每 4–6 週一次"
             if days_to is not None and 10 <= days_to <= 21:
                 act += f"——賽前 {days_to} 天正好是測試的時機（賽前 10–21 天）"
             elif days_to is not None and days_to < 10:
@@ -613,15 +629,26 @@ class Status:
             ct = WR.latest_cp_test(self.ds, self.today)
         except Exception:
             ct = None
-        if ct and ct.get("delta") is not None:
-            extra["cp_test"] = ct
+        if ct and ct.get("cp") is not None:
+            # compared only with the previous result of the same method
+            # (cp_protocols.reference): rotating quick / standard doesn't flag 要更新
             applied = cp is not None and cp >= dt.date.fromisoformat(ct["date"])
-            if abs(ct["delta"]) > WR.CP_DELTA and not applied:
+            ct = {**ct, "applied": applied}
+            if applied:
+                ct["apply"] = None
+            extra["cp_test"] = ct
+            dlt = ct.get("delta")
+            ref = ct.get("ref") or {}
+            vs = ("" if dlt is None else
+                  f"，和{'上一次同方法' if ref.get('same_method') else '目前'} {ref.get('cp') or 0:.0f} W"
+                  f"{'（換算）' if ref.get('converted') else ''} 差 {dlt * 100:+.1f}%")
+            if not applied and ct.get("apply") and (dlt is None or abs(dlt) > WR.CP_DELTA):
                 worst = WATCH if worst == GOOD else worst
                 txt = "要更新"
-                v = f"{ct['date']} 的 CP 測試 {ct['cp']:.0f} W，和目前 {ct['cp_now']:.0f} W 差 {ct['delta'] * 100:+.1f}%"
-                act = f"套用這次的 CP（{ct['cp']:.0f} W，到「賽事周期」頁的門檻測試填上）" + (f"；{act}" if act else "")
-            why += f"；最近一次 CP 測試 {ct['date']}：{ct['cp']:.0f} W（{ct['delta'] * 100:+.1f}%）"
+                v = f"{ct['date']} 的 CP 測試 {ct['cp']:.0f} W（{ct.get('method_label', '')}，{ct.get('quality', '')}）{vs}"
+                act = f"套用這次的 CP（{ct['cp']:.0f} W）" + (f"；{act}" if act else "")
+            why += f"；最近一次 CP 測試 {ct['date']}：{ct['cp']:.0f} W" + \
+                (f"（{dlt * 100:+.1f}%）" if dlt is not None else "")
         # the latest AeT drift test (engine/aet_test.py): UA's three bands
         try:
             from backend.engine import aet_test as AT
@@ -644,7 +671,7 @@ class Status:
                            f"下次起始心率 {step} bpm 再測一次") + (f"；{act}" if act else "")
             why += f"；最近一次 AeT 測試 {at['date']}：" + (f"飄移 {at['drift'] * 100:.1f}%" if at.get("ok")
                                                           else at.get("reason") or "不採用")
-        gate = next((i.extra for i in self.indicators if i.id == "gate"), None) or {}
+        gate = next((i.extra for i in getattr(self, "indicators", []) if i.id == "gate"), None) or {}
         if gate.get("stale_aet") and not (at and at.get("band") == "at" and not extra["aet_test"]["applied"]):
             wk = ((gate.get("aet") or {}).get("age_days") or 0) // 7
             worst = WATCH if worst == GOOD else worst

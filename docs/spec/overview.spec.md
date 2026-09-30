@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-09-30
+> **Last Updated**: 2026-10-01
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -128,21 +128,58 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
   ≤ 1.15 × the longest of the last 28 days; specific: toward 70 % of the goal event's hours,
   ≥ 90 min), terrain from the goal's climb density; then one of, in this order
   (`backend/engine/overview.py:566`):
-  1. **CP test 3'/12'** when the `testing` indicator is bad / watch and the A event is > 10
-     days away (independent of the quality gate);
-  2. specific → uphill intervals 5×4';
-  3. base, when the last quality session (run or hike, date-sorted) of the past 28 days is
-     missing or faded → **閾值下 N×8'** at 88–95 % CP, 3×8 the first time, one rep fewer (not
-     below 2) after a faded one (`backend/engine/overview.py:575`,
-     `backend/engine/workout_review.py:533`, `backend/engine/workout_review.py:820`);
-  4. a good `intensity` indicator → threshold 3×10' (`backend/engine/overview.py:588`).
-- **Quality gate** (`workout_review.quality_gate`, `backend/engine/workout_review.py:524`,
-  called at `backend/engine/overview.py:546`): no quality session when `intensity` or `drift`
-  is bad; in base phase (or no phase) the drift streak — ≥ 3 consecutive fair easy road runs
-  with drift < 5 % (`STREAK_NEED`, `backend/engine/workout_review.py:66`) — must also be
-  there. The streak comes from the `drift` indicator's `extra.streak_ok`
-  (`backend/engine/overview.py:544`). The gate's inputs are returned as `quality_gate`
-  (`levels`, `streak_ok`, `allowed`) for the projection (`backend/engine/overview.py:763`).
+  1. **CP test** when the `testing` indicator is bad / watch and the A event is > 10
+     days away (independent of the quality gate), built by `cp_protocols.session_for` from the
+     課表偏好 CP 測試方式 — read from `prefs` even when the other preferences are the defaults
+     (`backend/engine/overview.py:553`, `backend/engine/cp_protocols.py:93`):
+     `quick` 「CP 測試 20 分全力」 37 min, TSS 45 (warm-up 12 → 20′ all-out → cool-down 5);
+     `standard` 「CP 測試 12 分 + 3 分」 70 min, TSS 65 (15 → 12′ → rest 30 → 3′ → 10, long
+     bout first); `race` → **no session**: the quality branches below run instead and the
+     testing action 「用 5–10 K 比賽或計時跑代替 CP 測試」 goes to 還缺什麼 and the week notes.
+     The session carries `protocol` (Session field, `plan_sessions.protocol` column + migration,
+     `reconcile.FIELDS`, `plan_store.to_dict` / `push_dict`);
+  2. base → the **AeT 飄移測試** when `aet_test.due` says so and no CP test was placed
+     (`backend/engine/overview.py:578`, `backend/engine/overview.py:600`; see AeT drift test below);
+  3. specific → uphill intervals 5×4';
+  4. base → the **間歇門檻**'s dose step (`_gate_session`, `backend/engine/overview.py:409`,
+     `backend/engine/overview.py:610`; see below).
+  - Base **recovery week** (3:1): the gate's 「恢復週 fartlek 4×1 分」 instead of intervals
+    (Palladino, `backend/engine/overview.py:611`).
+- **間歇門檻 — quality gate** (`backend/engine/quality_gate.py`; design
+  `docs/research/aerobic-base-readiness.md` §4–§5). The old 「連續 3 次輕鬆路跑飄移 < 5%」
+  rule had no source and is gone (`STREAK_NEED` is legacy only,
+  `backend/engine/workout_review.py:70`). `week_plan` reads status `i_gate`'s dict
+  (`backend/engine/overview.py:561`) and asks `week_decision`
+  (`backend/engine/quality_gate.py:546`) for this week:
+  - **Method** (`plan.prefs.quality_gate`, `evaluate`, `backend/engine/quality_gate.py:371`):
+    `auto` → `ua_gap` + `friel_drift` when the plan has a measured AeT row ≤ 16 weeks old
+    (`aet_info`, `backend/engine/quality_gate.py:137`) and LTHR is not WKO5's default
+    (`lthr_info`, `backend/engine/quality_gate.py:149`), else `none`. `ua_gap`: LTHR / AeT − 1
+    ≤ 10 %; `friel_drift`: one run in 8 weeks, avg HR AeT−5…AeT+3, ≥ 70 min, fair drift < 5 %
+    (`friel_check`, `backend/engine/quality_gate.py:182`); `xu_drift`: flat ≥ 90-min run,
+    (HR@90′ − HR@10′) / HR@10′ < 10 % (`xu_drift_of` / `xu_check`,
+    `backend/engine/quality_gate.py:209`, `backend/engine/quality_gate.py:228`); `plateau`: ≥ 8
+    base weeks and EF change < +2 %; `weeks`: > N base weeks (evaluated per projected Monday);
+    `none`: guardrails only. States: unlocked / locked (data there, criterion not met) /
+    missing. **Forced mode with missing data → `fallback`**: i_gate WATCH with the reason and
+    the guardrail plan (our own choice: never a permanent lock).
+  - **Guardrails** (`guard`, `backend/engine/quality_gate.py:320`), base phase, every mode:
+    low-intensity time share < 75 % (or run power < 80 % CP share < 75 %) → none; CTL ramp ≥ 5
+    → sub-threshold 3×8 only, ≥ 7 → none; last week's step > 20 % → none, 10–20 % → hold the
+    dose; TSB −30…−20 → hold. Projected weeks keep only the intensity block.
+  - **Dose** (`DOSE`, `backend/engine/quality_gate.py:89`; `dose_step`,
+    `backend/engine/quality_gate.py:351`): step = interval sessions in the last 8 weeks
+    (`dose_history`, `backend/engine/quality_gate.py:281`, counting ≥ 4 short reps at ≥ 95 % CP
+    with `count_reps`, `backend/engine/quality_gate.py:258`, since 1′ reps never reach
+    10 min at threshold): 5×1′ → 6×1′ → 4×3′ uphill → 5×3′ → 4×4′, then 閾值下 3×8′ / 4×8′
+    alternating; a faded last session steps back one; `ua_gap` unlock → 3 Zone 3 sessions
+    (AeT–LTHR, ≈ 5 % of the week) first. Session text keeps the COROS / trim tokens
+    (`session`, `backend/engine/quality_gate.py:593`); the detail prefix names the rule
+    (`prefix`, `backend/engine/quality_gate.py:625`). In guardrail mode `plan_prefs.shape`
+    gets `quality_cap=1` (`backend/engine/overview.py:639`).
+  - Outside base: intensity and drift not bad (unchanged).
+  - Returned as `quality_gate` (the gate dict + `levels`, `allowed`, `this_week`,
+    `aet_test`) for the projection (`backend/engine/overview.py:789`).
 - Taper: one short intensity 4×3'. Event week: the race.
 - Strength ×2 in base / transition / recovery or when the `strength` indicator is bad / watch,
   else ×1 (not counted in the hours).
@@ -155,8 +192,10 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
 
 **Done-matching**: strength ← a strength workout; long (by id, so a 登山 long day of kind
 `hike` too, `backend/engine/overview.py:639`) ← an endurance session ≥ 80 % of the planned
-minutes; quality / test ← a session with ≥ 10 min at ≥ LTHR or ≥ 0.95 CP run power
-(`backend/engine/overview.py:393`); easy ← any other endurance session.
+minutes; the AeT test ← a road run ≥ 55 min (`backend/engine/overview.py:664`); quality / test
+← a session with ≥ 10 min at ≥ LTHR or ≥ 0.95 CP run power, or 60 % of the planned work for
+short reps (`hard_need`, `backend/engine/quality_gate.py:647`, `backend/engine/overview.py:667`);
+easy ← any other endurance session.
 
 **Placement**: remaining days from today (tomorrow when something is already logged today)
 to Sunday. The long session goes on the athlete's usual long-day weekday (mode over 12 weeks,
@@ -198,21 +237,23 @@ defaults reproduce today's plan exactly.
 | 每週時數 | `plan.prefs.weekly_hours` | 1–40 h cap (`null` = CTL ramp rules) |
 | 地形偏好 | `plan.prefs.terrain_easy` / `_long` / `_quality` | easy `road`/`trail`/`any`; long `road`/`trail`/`hike`/`auto`; quality `flat`/`hill`/`any` |
 | 間歇目標 | `plan.prefs.interval_target` | `power` / `hr` (`power`) |
+| 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:72`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:491`, `backend/static/schedule.html:1274`, `backend/static/schedule.html:1292`) |
+| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`, the athlete's choice). **Not part of `active`**: it only changes the test session (`backend/engine/plan_prefs.py:103`). Panel: three radio options with a time / accuracy line (`backend/static/schedule.html:487`) |
 
 **Application order** (`shape()`, `backend/engine/plan_prefs.py:314`, then `place()`,
 `backend/engine/plan_prefs.py:420`), in `week_plan` and every projected week:
 1. The target hours are computed as before (CTL ramp, ≤ 10 % step, 3:1); `weekly_hours` only
    lowers them.
 2. Quality count: 0 removes quality and the CP test (with a note); 2 duplicates this week's
-   quality session as `quality2` — only when the caller's gate allows quality at all, so the
-   base-phase drift-streak gate (status `i_drift` `streak_ok`) still applies. Quality terrain
+   quality session as `quality2` — only when the caller's gate allows quality at all, and not
+   in the 間歇門檻's guardrail mode (`Ctx.quality_cap`, `backend/engine/plan_prefs.py:366`). Quality terrain
    adds （平路）/（坡道） and rewrites the detail; HR target keeps only the 心率 part.
 3. **Caps**: the long session is capped at the long-day cap (同平日 = weekday cap). A quality
    session over the weekday cap is shortened — warm-up 15 → 10, cool-down 10 → 5 min, then one
    rep fewer (never below 2) — with title / detail rewritten so the COROS step builder still
    parses it (`trim_quality`, `backend/engine/plan_prefs.py:184`). The **CP test is exempt**
-   (its 3' + 30' + 12' protocol is fixed) with note `NOTE_TEST`
-   (`backend/engine/plan_prefs.py:71`).
+   (its protocol is fixed) with the protocol's note `note_test(protocol)`
+   (`backend/engine/plan_prefs.py:76`); the 37-min quick test rarely hits a cap.
 4. **Distribution**: the remaining minutes go to easy runs. Count = runs − (long + hard) when
    set, else the original count raised to ⌈minutes / cap⌉ so every run fits the cap; never
    more than the allowed days. When the target still does not fit (target > count × cap):
@@ -321,7 +362,7 @@ same intensity TSS grows with time at the same rate (hrTSS = h × IF² × 100). 
 be predicted from distance and climb, per terrain, for this athlete.
 
 **Model** (docstring `backend/engine/equivalence.py:1`; `fit`, `backend/engine/equivalence.py:236`):
-- Samples: the last 26 weeks; easy = avg HR ≤ AeT + 3 (the drift streak's tolerance), ≥ 20
+- Samples: the last 26 weeks; easy = avg HR ≤ AeT + 3 (the review card's easy-run tolerance), ≥ 20
   min, ≥ 1 km (`samples_from`, `backend/engine/equivalence.py:320`).
 - Naismith's additive form (1892) with Langmuir's grade-dependent descent correction
   (*Mountaincraft and Leadership*, 1984: −10 min per 300 m on 5–12° descents, +10 min on
@@ -377,15 +418,18 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:30`):
   (`backend/engine/projection.py:269`).
 - Sessions (`week_sessions`, `backend/engine/projection.py:98`): the same template (long, one
   quality, strength, easy fill) placed by `_place` (`backend/engine/projection.py:167`), or
-  shaped and placed by the preferences.
-  Projected base weeks repeat this week's 閾值下 session when there is one.
-- Whether a projected week gets a quality session is decided per week, for that week's phase
-  (`allow_quality`, `backend/engine/projection.py:212`, called at
-  `backend/engine/projection.py:289`): week_plan's gate (`quality_gate` with this week's
-  indicator levels and drift streak), then in base either the carried 閾值下 session or a good
-  `intensity`. A CP-test week or the base drift gate no longer carries into later weeks; a
-  `cur` without `quality_gate` falls back to reading this week's sessions
-  (`backend/engine/projection.py:198`).
+  shaped and placed by the preferences. Base sessions come from the 間歇門檻 per week
+  (`_bq`, `backend/engine/projection.py:172`), a base recovery week gets the fartlek
+  (`backend/engine/projection.py:137`), and the AeT test is projected on its cadence
+  (`backend/engine/projection.py:310`).
+- Whether a projected week gets a quality session is decided per week, for that week's phase,
+  mode and Monday (`allow_quality` → `quality_gate.week_decision`,
+  `backend/engine/projection.py:233`): the method state from this week (`weeks` mode
+  re-evaluated per Monday), only the intensity guardrail carried forward, and the dose step
+  advanced once per projected interval week (this week's own interval counts as a step).
+  A CP-test week no longer carries into later weeks; a `cur` without the new gate — or with
+  the old `{levels, streak_ok}` shape — becomes a no-method gate (intensity bad blocks)
+  (`_gate_inputs`, `backend/engine/projection.py:211`).
 - CTL / ATL roll forward with the athlete's constants (`ds.athlete.ctlconstant` /
   `atlconstant`, `backend/engine/projection.py:302`); a session `_place` left without a day is
   kept out of the date filter.
@@ -530,20 +574,55 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
 - `Status.weekly_hours()` sums moving time (fallback recorded time) instead of recorded
   time (`backend/engine/status.py:168`), so the volume indicators aren't inflated by multi-day
   trips.
-- **`i_drift`** (`backend/engine/status.py:390`) uses the same per-run drift as the single-activity
-  review (`workout_review.drift_streak`, `backend/engine/workout_review.py:814`): road runs,
-  ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. It reports the streak of
-  consecutive runs < 5 % in `extra` (`streak`, `streak_ok`, `runs`, `fair`). In base phase (or
-  no phase) a good median without the streak is only **watch**, with a "還差 N 次" action; with
-  fewer than 2 fair runs it is watch instead of n/a (`backend/engine/status.py:403`,
-  `backend/engine/status.py:414`). `streak_ok` is what gates the base-phase quality session.
-- **`i_testing`** (`backend/engine/status.py:538`) also reads the latest 3'/12' CP test found in
-  the data (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:848`).
-  When its CP differs from the CP in effect by more than `CP_DELTA` = 3 %
-  (`backend/engine/workout_review.py:77`) and no CP threshold dated on or after the test exists,
-  the indicator becomes at least watch with text 要更新 and an action to apply the new CP
-  (`backend/engine/status.py:574`). The test is always appended to `why` and returned in
-  `extra.cp_test`.
+- **`i_drift`** (`backend/engine/status.py:392`) is **informational**: the same per-run drift as
+  the single-activity review (`workout_review.drift_series`, `backend/engine/workout_review.py:955`):
+  road runs, ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. `extra` is
+  `{fair, median}`; > 10 % → bad (輕鬆跑太快), otherwise info; the text says 「飄移是 AeT 測試用的，
+  不是間歇門檻」. Source Friel (< 5 %) and 徐國峰 (90′ < 10 %), not Uphill Athlete.
+- **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:419`): `quality_gate.evaluate` +
+  `indicator` (`backend/engine/quality_gate.py:661`) with the status' 課表偏好 (`Status(prefs=…)`;
+  the API's status cache keys on `prefs.stamp()`, `backend/api/overview.py:49`). Second in
+  `PHASE_PRIORITY["base"]` (`backend/engine/status.py:793`), so its WATCH action lands in 還缺什麼.
+  Texts per the design doc §4.6: auto without AeT → info 「沒有 AeT 實測：照 80/20 原則每週 1
+  次間歇（第 N 步：…）」; a blocking guardrail → watch with its number (e.g. 「本週不排間歇：低強度只有
+  68%（< 75%）」); ua_gap locked → 「AeT 142 / LTHR 165：差距 16%（> 10%，有氧不足）」; unlocked →
+  good 「差距 9% ≤ 10%：可以加 Zone 3」; forced + missing → watch 「沒有實測 AeT，差距法算不出來：先照
+  護欄排（自訂…）」, action 「先做 AeT 飄移測試，或把間歇門檻改回自動」. `why` names the mode and
+  the AeT source (「AeT 146（活動資料估算）」 / 「（{date} 飄移測試）」). `extra` is the gate dict incl.
+  `options` (per mode usable + why, `backend/engine/quality_gate.py:505`).
+- `PHASE_GOAL["base"]` no longer says 飄移 < 5 %; `PHASE_FOCUS["base"]` cites UA for the easy long
+  run and Palladino for the 8–15 s hill sprints (`backend/engine/status.py:804`).
+- `i_data`'s action for a missing AeT is 「排一次 AeT 飄移測試（15 分暖身＋45–60 分固定功率，平路）；
+  測了可以改用有氧基礎門檻」 (`backend/engine/status.py:721`).
+- **`i_testing`** (`backend/engine/status.py:580`) — timing rules unchanged: a CP / LTHR / AeT
+  row older than 42 days → watch, 90 → bad (`backend/engine/status.py:51`); 10–21 days before
+  the A event is named the right time; < 10 days → 「賽前 10 天內不要測，賽後再測」, watch. The
+  action names the 課表偏好 protocol (`_cp_protocol`, `backend/engine/status.py:568`); `race` →
+  「用 5–10 K 比賽或計時跑代替 CP 測試」. It also reads the latest CP test in the data
+  (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:996`), whose
+  `delta` is against the **previous result of the same method** (`cp_protocols.reference`;
+  across methods converted two-point ≈ 1.05 × a 30-min CP, 外插), so rotating quick / standard
+  doesn't keep flagging. Not applied (no CP row dated on / after the test), an `apply` payload
+  (not 不採用) and |delta| > `CP_DELTA` 3 % → at least watch, 要更新, action 「套用這次的 CP」.
+  `extra.cp_test` carries method, quality, `ref`, `apply`, `applied`; the 總覽 測試 card draws
+  the apply button from it (`applyCpBtn`, `backend/static/overview.html:289`), POSTing
+  `/api/v1/plan/thresholds/apply-cp` (see `workout-review.spec.md`).
+  `extra.cp_due` (CP missing / > 42 days, `backend/engine/status.py:612`) decides the CP-test
+  session in `week_plan` (the CP test measures CP only). The latest AeT drift test
+  (`aet_test.latest_aet_test`) → `extra.aet_test` (`backend/engine/status.py:660`): band "at" and
+  not applied → watch 「{date} 的 AeT 測試：飄移 4.2%，AeT = 146 bpm（目前 142）」, action 「套用這次的
+  AeT（146 bpm）」, and the 總覽 測試 card's button (`aetApply`, `backend/static/overview.html:296`)
+  POSTs `extra.aet_test.apply` to `/api/v1/plan/thresholds/apply-estimate` with the test `date`;
+  band below / above → 「下次起始心率 +5／−5 bpm 再測一次」. A plan AeT older than 16 weeks under
+  `auto` → watch 「AeT 已經 N 週沒測，門檻改用不設門檻模式」, action 「重測 AeT」
+  (`backend/engine/status.py:675`).
+- **AeT drift test** (`backend/engine/aet_test.py`): `due` (`backend/engine/aet_test.py:243`) — base
+  phase, no plan AeT or one > 6 weeks old, no test in 4 weeks, base week 2, 7, 12… (every 5
+  weeks, our choice); the session (`backend/engine/aet_test.py:263`) is kind `test`, id
+  `test_aet`, 「AeT 飄移測試 60 分」, 80 min, target 「固定功率 P W（±3%）；心率從 HR 附近開始」
+  (start HR = the estimate's aethr, else 0.89 × LTHR − 5; P = 0.75 × CP, both our choice),
+  detail 平路環線或跑步機 2–3%、< 25 °C、暖身 15 + 測試 60（至少 45）+ 緩和 5. Never the CP-test
+  week. COROS steps in `coros-sync` (`_aet_test_steps`, `backend/sync/coros_workouts.py:200`).
 - Inline source names were removed from engine text (e.g. the ramp verdict, phase focus).
 
 ## API
@@ -564,7 +643,9 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
 | GET | `/api/v1/overview/plan/push-coros/preview?scope=day\|week\|phase&day=` | sessions in range with COROS status, counts to send / unchanged / skipped, missed to remove, pending changes; 400 for a past week (`backend/api/plan_sessions.py:265`) |
 | POST | `/api/v1/overview/plan/push-coros?scope=&day=` | reconcile, push the range, clean up; 401 `COROS_AUTH_REQUIRED`; 400 for a past week (`backend/api/plan_sessions.py:295`) |
 | DELETE | `/api/v1/overview/plan/push-coros?scope=&day=` | remove what was pushed in the range; 400 for a past week (`backend/api/plan_sessions.py:320`) |
-| GET | `/api/v1/overview/plan/prefs` | `{prefs, defaults, active}` (`backend/api/plan_sessions.py:348`) |
+| GET | `/api/v1/overview/plan/prefs` | `{prefs, defaults, active, gate_options}` — `gate_options` = the 間歇門檻 hover texts (`quality_gate.option_texts`, `backend/engine/quality_gate.py:744`) (`backend/api/plan_sessions.py:346`) |
+| GET | `/api/v1/overview/plan/prefs/gate` | per mode `{usable, why}` on the athlete's data, plus the active mode / state / verdict (status `i_gate`, `backend/api/plan_sessions.py:353`) |
+| POST | `/api/v1/plan/thresholds/apply-estimate` | now takes an optional `date` (the test day; not in the future) so 「套用這次的 AeT」 dates the row on the test (`backend/api/plan.py:282`, `backend/api/plan.py:292`) |
 | PUT | `/api/v1/overview/plan/prefs` | the whole preference set (Prefs field names, missing = default); 400 on a bad / unknown value or a cross-field rule (`backend/api/plan_sessions.py:356`) |
 | GET | `/api/v1/overview/plan/blackouts` | `{blackouts}` — the stored 不排課日期 (`backend/api/plan_sessions.py:393`) |
 | POST | `/api/v1/overview/plan/blackouts/preview` | `{blackouts}` → the reconcile preview with that list; nothing saved; 400 on a bad range (`backend/api/plan_sessions.py:400`) |
@@ -574,7 +655,8 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
 | GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload, now with `prefs`, `goal_climb_per_km` (`backend/api/plan_sessions.py:503`) and `plan_notes` (`backend/api/plan_sessions.py:610`) |
 | GET | `/` | redirects to the overview page when no `frontend/dist` build exists (`backend/main.py:79`) |
 
-`Status` is memoised per (dataset, day, `plan.json` mtime) (`backend/api/overview.py:40`); the
+`Status` is memoised per (dataset, day, `plan.json` mtime, CP-test protocol, stored test
+sessions) (`backend/api/overview.py:40`); the
 plan endpoints memoise their generator inputs on the same key plus the preference and blackout stamps
 (`backend/api/plan_sessions.py:54`). Bad scope or day → 400 (`backend/api/plan_sessions.py:135`).
 
@@ -609,6 +691,16 @@ plan endpoints memoise their generator inputs on the same key plus the preferenc
   grade-cost hook, the API, and (golden) the backtest on the athlete's own activities.
 - `backend/tests/test_coros_workouts.py`: step building, program payload, push / replace /
   remove against a fake Training Hub.
+- `backend/tests/test_quality_gate.py`: the gate prefs (round trip, validation, not `active`);
+  every mode with and without a measured AeT (auto → none / ua_gap + friel, stale AeT, default
+  LTHR, forced ua_gap / friel / xu / plateau / weeks / none); forced mode with missing data
+  (watch, fallback, never locked); guardrails (intensity, power share, ramp 5 / 7, step 10 / 20 %,
+  TSB); the dose table, hold, fade and the recovery fartlek; dose sessions through the COROS
+  step builder; 1-minute rep counting and the dose history; `Status.i_gate` + `week_plan` on a
+  fake dataset; the projection's per-week `weeks` unlock and dose advance; the AeT analysis
+  bands and refusals (short, hot, fast finish, hills); `latest_aet_test`, the review card's
+  apply action; the AeT session's COROS steps and payload (nothing sent); the due cadence; the
+  apply flow on a **temp** plan (the real plan.json untouched).
 
 ## Domain Model
 
@@ -631,8 +723,10 @@ plan endpoints memoise their generator inputs on the same key plus the preferenc
 | ramp | CTL change per week |
 | recovery week | reduced week triggered by fatigue (TSB) or three building weeks |
 | quality session | ≥ 10 min at ≥ LTHR or ≥ 0.95 CP |
-| quality gate | intensity and drift not bad; in base phase also the drift streak |
-| drift streak | consecutive fair easy road runs with drift < 5 %; 3 unlocks the base-phase interval |
+| 間歇門檻 / quality gate | base phase: the method (`plan.prefs.quality_gate`) unlocks, locks or is missing data (→ guardrails); guardrails decide this week; outside base: intensity and drift not bad |
+| guardrails | low-intensity ≥ 75 %, CTL ramp < 5 (5–7 sub-threshold only), volume step ≤ 10 % (≤ 20 % holds), 3:1 fartlek, TSB, 48 h spacing |
+| dose step | the next row of the 6-week table (5×1′ … 4×4′, then 3×8′ / 4×8′), one per interval session done in 8 weeks |
+| drift streak | legacy only: the removed, unsourced 「連續 3 次 < 5%」 rule |
 | 閾值下 N×8 | base-phase sub-threshold interval (88–95 % CP), 3×8 first, one rep fewer after a faded one |
 | projection | the tl() recurrence continued with planned daily TSS; on the page, from the stored plan |
 | stored plan | the `plan_sessions` table — the source of truth once generated |
@@ -668,4 +762,6 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-09-30 | code-sync | N/A | Stored editable plan (plan_store / reconcile / projection, /plan/* endpoints), COROS push by day/week/phase via coros_plan_push, bars + PMC projection from the stored plan, 總覽 page with AeT/CP glossary and sources removed, drift-streak quality gate and CP-test delta in status |
 | 2026-09-30 | bugfix | N/A | Spec-sync fixes: projection quality gate per projected week (week_plan returns `quality_gate`), athlete ATL constant, sessions without a day; past-week push scope is a 400; test-only push_week / remove_week / week_status removed; last_quality includes hikes |
 | 2026-09-30 | feature | N/A | 課表偏好 (plan_prefs.py, `plan.prefs.*`, /plan/prefs, ⚙ panel + reconcile preview, notes on the 課表 page) applied in week_plan / projection / COROS HR intervals; same-load terrain conversion (equivalence.py, /plan/equivalence, dialog slider / locks) with LOO backtest; plan_sessions terrain / distance_km / climb_m; stale overview.html anchors refreshed |
+| 2026-10-01 | feature | N/A | 間歇門檻 (quality_gate.py, `plan.prefs.quality_gate` / `_weeks`; design docs/research/aerobic-base-readiness.md): 7 modes, guardrails, the 6-week dose table, recovery-week fartlek, forced-mode fallback (自訂), i_gate / informational i_drift, per-week projection; AeT drift test (aet_test.py: due cadence, session, COROS steps, UA bands, 「套用這次的 AeT」 on the review card and 測試 card, apply-estimate `date`); prefs chips with fixed-position `?` hover; the 「連續 3 次」 rule and UA misattributions removed |
+| 2026-10-01 | feature | N/A | CP 測試方式 (`plan.prefs.cp_test_protocol`, quick default / standard / race; cp_protocols.py): per-protocol test session with `protocol` (column + migration, reconcile field), race = a 還缺什麼 note instead of a session, protocol-specific cap note and COROS steps (all-out bouts open), same-method comparison in i_testing, 測試 card apply button |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |

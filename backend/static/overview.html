@@ -220,13 +220,12 @@ const GLOSS = {
     "3. 比較前半與後半的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
     "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
   "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
-    "怎麼測（3 分 + 12 分）：\n" +
-    "1. 平路或田徑場，熱身 15–20 分鐘，含 3–4 趟加速跑\n" +
-    "2. 3 分鐘全力、配速平均（不要一開始衝死）\n" +
-    "3. 走路／慢跑恢復 30 分鐘\n" +
-    "4. 12 分鐘全力、配速平均\n" +
-    "5. CP = (12 分平均功率×720 − 3 分平均功率×180) ÷ 540；W′ = (3 分功率 − CP) × 180\n" +
-    "6. 結果填到「賽事周期」頁的門檻；每 4–6 週測一次，賽前 10 天內不要測",
+    "怎麼測（課表偏好選一種）：\n" +
+    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分；CP ≈ 0.95 × 20 分平均功率\n" +
+    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分；" +
+    "CP = (12 分功率×720 − 3 分功率×180) ÷ 540，W′ = (3 分功率 − CP) × 180\n" +
+    "• 用比賽：5–10 K 比賽或計時跑，以 30 分為錨點換算\n" +
+    "測完在活動判讀卡按「套用這次的 CP」；每 4–6 週測一次，賽前 10 天內不要測",
   "間歇門檻": "間歇門檻：基礎期什麼時候可以排間歇（課表偏好可以選方法，每個選項的 ? 有說明）。\n\n" +
     "自動（預設）：有實測 AeT（16 週內）而且 LTHR 不是預設值 → Uphill Athlete 差距法（LTHR ÷ AeT − 1 ≤ 10%），" +
     "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5、週增量 ≤ 10%、" +
@@ -286,29 +285,59 @@ async function loadStatus() {
     ${i.spark && i.spark.filter((p) => p[1] != null).length > 2 ? spark(i.spark, i.level) : ""}
     ${i.why ? `<div class="why">${gl(i.why)}</div>` : ""}
     ${i.action ? `<div class="act">→ ${gl(i.action)}</div>` : ""}
+    ${applyCpBtn(i)}
     ${aetApply(i)}
     ${i.source ? `<details class="src"><summary>來源</summary><p>${esc(i.source)}</p></details>` : ""}
   </div>`).join("");
 }
 
 // 測試 card: 「套用這次的 AeT」 when the latest AeT drift test is in UA's 3.5–5 % band
-// (engine/aet_test.py); writes aethr on the test day through the existing approval endpoint
+// (status.i_testing extra.aet_test.apply, engine/aet_test.py) -> POST apply-estimate on the test day
 function aetApply(i) {
-  const b = i.id === "testing" && i.extra && i.extra.aet_test && i.extra.aet_test.apply;
-  return b ? `<div class="act"><button type="button" class="btn" data-aet-apply='${esc(JSON.stringify(b))}'>套用這次的 AeT（${esc(b.aethr)} bpm）</button></div>` : "";
+  const at = i.id === "testing" && i.extra && i.extra.aet_test;
+  if (!at || !at.apply) return "";
+  return `<div class="act"><button type="button" class="btn" data-aet-apply>套用這次的 AeT（${esc(at.apply.aethr)} bpm）</button>
+    <span class="meta" data-apply-msg>${esc(at.date)} · ${esc(at.basis || "")} ${at.drift != null ? (at.drift * 100).toFixed(1) + "%" : ""}</span></div>`;
 }
-document.addEventListener("click", async (e) => {
-  const btn = e.target.closest("[data-aet-apply]");
-  if (!btn) return;
-  btn.disabled = true;
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-aet-apply]");
+  if (!b || !STATUS) return;
+  const at = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).aet_test;
+  if (!at || !at.apply) return;
+  const a = at.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
+  if (!confirm(`把 ${a.date} 的 AeT 設成 ${a.aethr} bpm？區間和間歇門檻會重新計算`)) return;
+  b.disabled = true;
   try {
     const r = await fetch("/api/v1/plan/thresholds/apply-estimate", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: btn.dataset.aetApply });
+      body: JSON.stringify(a) });
     if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
-    btn.textContent = "已套用 ✓";
-    await loadStatus();
-    loadWeek().then(() => loadPlan()).catch(() => {});
-  } catch (x) { btn.disabled = false; btn.insertAdjacentHTML("afterend", `<span class="err"> ${esc(x.message)}</span>`); }
+    b.remove();
+    msg.textContent = `已套用：${a.date} AeT ${a.aethr} bpm`;
+  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+});
+
+// 測試 indicator: 「套用這次的 CP」 (status.i_testing extra.cp_test.apply -> POST /api/v1/plan/thresholds/apply-cp)
+function applyCpBtn(i) {
+  const ct = i.id === "testing" && i.extra && i.extra.cp_test;
+  if (!ct || !ct.apply) return "";
+  return `<div class="act"><button type="button" class="btn" data-apply-cp="${esc(ct.idx)}">${esc(ct.apply.label)}</button>
+    <span class="meta" data-apply-msg>${esc(ct.date)} · ${esc(ct.method_label || "")} · 品質 ${esc(ct.quality || "")}</span></div>`;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-apply-cp]");
+  if (!b || !STATUS) return;
+  const ct = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).cp_test;
+  if (!ct || !ct.apply) return;
+  const a = ct.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
+  if (!confirm(`把 ${a.date} 的 CP 設成 ${a.cp} W（${ct.method_label}，品質 ${ct.quality}）？區間和 TSS 會重新計算`)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch("/api/v1/plan/thresholds/apply-cp", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: a.date, cp: a.cp, wprime: a.wprime, cp_method: a.cp_method, activity_index: a.activity_index, note: a.note }) });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+    b.remove();
+    msg.textContent = `已套用：${a.date} CP ${a.cp} W`;
+  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
 });
 
 function spark(pts, level) {

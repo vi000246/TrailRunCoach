@@ -246,10 +246,14 @@
         {
           "title": "心率飄移 Pa:HR（> 40 分鐘的跑步）",
           "description": "後半段每單位速度多用多少心跳。< 5% = 在有氧閾值以下（Uphill Athlete）。",
+          "basis": {"default": "pace", "choices": ["pace", "power"],
+                    "power_note": "越野跑的 Pw:HR 只當參考：Stryd 功率只驗證到約 8% 坡度，陡坡上的功率不一定準。"},
           "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "路跑", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 2400, pahr)"},
-            {"name": "越野跑", "type": "line", "y_axis": "PERCENT", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and duration > 2400 and abs(pahr) < 0.3, pahr)"},
+            {"name": "路跑 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 2400, pahr)"},
+            {"name": "越野跑 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and duration > 2400 and abs(pahr) < 0.3, pahr)"},
+            {"name": "路跑 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 2400, pwhr)"},
+            {"name": "越野跑 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and duration > 2400 and abs(pwhr) < 0.3, pwhr)"},
             {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "10% 注意", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.10)"}
           ]
@@ -313,10 +317,13 @@
         },
         {
           "title": "耐久度：長時間後段心率飄移",
-          "description": "超過 90 分鐘的越野跑，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。登山的 Pa:HR 混了休息時間、會亂跳，所以不算；|飄移| > 30% 當成壞資料（和總覽「耐久度」指標同一個條件）。",
+          "description": "超過 90 分鐘的越野跑，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。登山的 Pa:HR 混了休息時間、會亂跳，所以不算；|飄移| > 30% 當成壞資料（和總覽「耐久度」指標同一個條件，總覽用配速）。",
+          "basis": {"default": "pace", "choices": ["pace", "power"],
+                    "power_note": "越野的 Pw:HR 只當參考：Stryd 功率只驗證到約 8% 坡度，陡坡上的功率不一定準。"},
           "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "飄移", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pahr) <= 0.3, pahr)"},
+            {"name": "飄移 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pahr) <= 0.3, pahr)"},
+            {"name": "飄移 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pwhr) <= 0.3, pwhr)"},
             {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "15% 掉很多", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.15)"}
           ]

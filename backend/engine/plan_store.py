@@ -20,8 +20,20 @@ KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test
          "hike": "健行／登山", "strength": "肌力"}
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m")
 TERRAINS = ("road", "trail", "hike")
-DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 3 分 + 12 分",
+DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
                   "hike": "健行", "strength": "肌力（下肢單腳＋核心）"}
+
+
+def _test_default(data: dict) -> None:
+    """A new custom test session follows 課表偏好 CP 測試方式 (title, minutes,
+    target, detail, protocol); `race` has no session of its own -> quick."""
+    from backend.engine import cp_protocols as CPP
+    from backend.engine import plan_prefs as PP
+    proto = data.get("protocol") or CPP.protocol_of({"title": data.get("title")}) or PP.load().cp_test_protocol
+    t = CPP.session_for(proto) or CPP.session_for(CPP.DEFAULT)
+    data["protocol"] = t["protocol"]
+    for k in ("title", "minutes", "target", "detail", "source", "tss"):
+        data.setdefault(k, t[k])
 
 
 class PlanError(ValueError):
@@ -39,12 +51,14 @@ def to_dict(r: PlanSession) -> dict:
             "title": r.title, "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
             "source": r.source or "", "tss": r.tss or 0.0, "origin": r.origin, "edited": bool(r.edited),
             "provisional": bool(r.provisional), "state": r.state, "done_by": done_by, "note": r.note,
-            "terrain": r.terrain, "distance_km": r.distance_km, "climb_m": r.climb_m}
+            "terrain": r.terrain, "distance_km": r.distance_km, "climb_m": r.climb_m,
+            "protocol": r.protocol}
 
 
 def _fill(r: PlanSession, d: dict) -> None:
     for k in ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
-              "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m"):
+              "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
+              "protocol"):
         setattr(r, k, d.get(k))
     r.minutes = int(d.get("minutes") or 0)
     r.done_by = json.dumps(d["done_by"], ensure_ascii=False) if d.get("done_by") else None
@@ -207,6 +221,9 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
         _fill(t, tomb)
         d.update(origin="custom", gen_key=None)
     d.update(ch)
+    if d["kind"] == "test" and "title" in ch:
+        from backend.engine import cp_protocols as CPP
+        d["protocol"] = CPP.protocol_of({"title": ch["title"]}) or d.get("protocol")
     d.update(edited=True, week_start=new_week, provisional=False)
     _fill(r, d)
     await db.commit()
@@ -217,6 +234,8 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
               blocked: Optional[dict] = None) -> dict:
     data = dict(data)
     data.setdefault("kind", "easy")
+    if data["kind"] == "test":
+        _test_default(data)
     data.setdefault("title", DEFAULT_TITLES.get(data.get("kind"), "自訂"))
     if "day" not in data:
         raise PlanError("要選日期")
@@ -225,6 +244,9 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     d = {"uid": R.new_uid(), "week_start": R.monday_of(ch["day"]), "gen_key": None, "origin": "custom",
          "edited": True, "provisional": False, "state": "active", "done_by": None, "note": None,
          "source": "", "tss": 0.0, "target": "", "detail": "", "minutes": 45, **ch}
+    if d["kind"] == "test":
+        d["protocol"] = data.get("protocol")
+        d["source"] = str(data.get("source") or "")
     r = PlanSession(athlete_id=athlete_id, uid=d["uid"])
     db.add(r)
     _fill(r, d)
@@ -283,4 +305,55 @@ def push_dict(s: dict) -> dict:
     return {"id": s["uid"], "key": s["uid"], "week_start": s["week_start"], "kind": s["kind"],
             "title": s["title"], "minutes": s["minutes"], "target": s.get("target") or "",
             "detail": s.get("detail") or "", "source": s.get("source") or "", "day": s.get("day"),
-            "done": s["state"] == "done"}
+            "done": s["state"] == "done", "protocol": s.get("protocol")}
+
+
+# ---------------------------------------------------------------------------
+# synchronous read for workout_review.classify (runs in worker threads, like
+# plan_prefs.load): the stored CP-test sessions, so a test is recognised from
+# the plan (done_by) before any guessing from the power pattern
+# ---------------------------------------------------------------------------
+
+_TEST_CACHE: dict = {}
+
+
+def test_sessions(db_path=None) -> list[dict]:
+    """Stored kind 'test' sessions: {uid, day, state, title, protocol, done_by}.
+    Read-only sqlite; [] when the DB / table / column is missing. Cached on
+    the file's mtime."""
+    import sqlite3
+    from pathlib import Path
+    if db_path is None:
+        from backend.engine.wko5expr.datasource import _db_path
+        db_path = _db_path()
+    if db_path is None:
+        return []
+    p = Path(db_path)
+    try:
+        mt = p.stat().st_mtime_ns
+    except OSError:
+        return []
+    hit = _TEST_CACHE.get(str(p))
+    if hit and hit[0] == mt:
+        return hit[1]
+    out: list[dict] = []
+    try:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            cols = {r[1] for r in con.execute("PRAGMA table_info(plan_sessions)")}
+            if cols:
+                proto = "protocol" if "protocol" in cols else "NULL"
+                for uid, day, state, title, pr, done_by in con.execute(
+                        f"SELECT uid, day, state, title, {proto}, done_by FROM plan_sessions WHERE kind='test'"):
+                    try:
+                        db_ = json.loads(done_by) if done_by else None
+                    except ValueError:
+                        db_ = None
+                    out.append({"uid": uid, "day": day, "state": state, "title": title, "protocol": pr,
+                                "done_by": db_ if isinstance(db_, dict) else None})
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+    _TEST_CACHE[str(p)] = (mt, out)
+    return out

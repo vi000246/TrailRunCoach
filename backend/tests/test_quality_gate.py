@@ -389,12 +389,13 @@ def test_latest_aet_test_review_card_and_the_apply_button():
     body = AT.apply_body(at)
     assert body["date"] == day.isoformat() and body["aethr"] == at["aethr_suggest"]
     assert body["note"].startswith(f"AeT 飄移測試 {day.isoformat()}：Pw:HR ")
-    card = R.review(ds, w, "summary")
-    assert card["apply"]["body"] == body and card["apply"]["label"].startswith("套用這次的 AeT")
-    assert card["apply"]["url"] == "/api/v1/plan/thresholds/apply-estimate"
+    card = R.review(ds, w, "summary")                                # the viewer's drawAction hook
+    assert card["action"]["body"] == body and card["action"]["label"].startswith("套用這次的 AeT")
+    assert card["action"]["url"] == "/api/v1/plan/thresholds/apply-estimate" and card["action"]["method"] == "POST"
+    assert "action" in R.review(ds, w, "aerobic")
     # once the plan has an AeT dated on / after the test, no button
     ds.plan.thresholds.append(Threshold(day.isoformat(), aethr=body["aethr"], note=body["note"]))
-    assert "apply" not in R.review(ds, w, "summary") and AT.applied(ds.plan, at)
+    assert "action" not in R.review(ds, w, "summary") and AT.applied(ds.plan, at)
 
 
 def test_aet_test_session_steps_and_payload_without_coros():

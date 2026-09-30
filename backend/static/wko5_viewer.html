@@ -191,10 +191,6 @@ table.zt th.num { text-align: right; }
 .qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
   background: var(--panel, #fff); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
   font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
-.apply-row { margin: 6px 0 2px; }
-.apply-btn { font: 600 12.5px/1.2 system-ui, sans-serif; padding: 5px 10px; border-radius: 6px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--panel, #fff); color: var(--text); }
-.apply-btn:disabled { opacity: .7; cursor: default; }
 .seg.period { margin-left: auto; padding: 1px; font-size: 11.5px; }
 .seg.period button { padding: 1px 8px; font-weight: 500; }
 .range-note { margin: -2px 0 4px; font-size: 11px; }
@@ -754,6 +750,10 @@ function savePeriod(k, p) { try { localStorage.setItem(PERIOD_KEY, JSON.stringif
 const WINDOW_KEY = "wko5viewer.window";
 function windowPrefs() { try { return JSON.parse(localStorage.getItem(WINDOW_KEY) || "{}"); } catch { return {}; } }
 function saveWindow(k, w) { try { localStorage.setItem(WINDOW_KEY, JSON.stringify({ ...windowPrefs(), [k]: w })); } catch {} }
+// 配速／功率 drift charts (views "basis"): Pa:HR or Pw:HR, remembered per chart
+const BASIS_KEY = "wko5viewer.basis";
+function basisPrefs() { try { return JSON.parse(localStorage.getItem(BASIS_KEY) || "{}"); } catch { return {}; } }
+function saveBasis(k, b) { try { localStorage.setItem(BASIS_KEY, JSON.stringify({ ...basisPrefs(), [k]: b })); } catch {} }
 function disposeCardCharts(card) {
   for (const el of card.querySelectorAll(".plot")) {
     if (el._lmap) { el._lmap.remove(); el._lmap = null; continue; }
@@ -768,10 +768,12 @@ async function renderCard(card, v, di, c, q, token) {
   const pkey = `${v.name}|${di}|${c.index}`;
   const period = periodPrefs()[pkey];
   const win = windowPrefs()[pkey];
+  const basis = basisPrefs()[pkey];
   try {
     const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
-      + (win && c.kind === "athlete" ? `&window=${win}` : ""));
+      + (win && c.kind === "athlete" ? `&window=${win}` : "")
+      + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : ""));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -822,6 +824,25 @@ async function renderCard(card, v, di, c, q, token) {
       };
       card.querySelector("h2").appendChild(seg);
     }
+    if (res.basis_toggle && res.basis_choices?.length) {
+      // 配速／功率: Pa:HR or Pw:HR (remembered per chart)
+      const seg = document.createElement("div");
+      seg.className = "seg period";
+      seg.dataset.kind = "basis";
+      seg.setAttribute("role", "group");
+      seg.setAttribute("aria-label", "飄移用配速或功率");
+      seg.innerHTML = res.basis_choices.map((b) => `<button data-p="${esc(b)}" class="${b === res.basis ? "on" : ""}"
+        aria-pressed="${b === res.basis}">${esc(res.basis_labels?.[b] || b)}</button>`).join("");
+      seg.onclick = async (e) => {
+        const b = e.target.closest("button[data-p]");
+        if (!b || b.dataset.p === card._res?.basis) return;
+        saveBasis(pkey, b.dataset.p);
+        card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+        await renderCard(card, v, di, c, q, loadToken);
+        if (ZOOM.card === card) fillZoom();
+      };
+      card.querySelector("h2").appendChild(seg);
+    }
     drawInto(card, res);
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
   } catch (e) {
@@ -833,6 +854,7 @@ async function renderCard(card, v, di, c, q, token) {
 
 function drawInto(box, res) {
   if (res.range_note) box.insertAdjacentHTML("beforeend", `<p class="meta range-note">${esc(res.range_note)}</p>`);
+  if (res.basis_note) box.insertAdjacentHTML("beforeend", `<p class="meta basis-note">${esc(res.basis_note)}</p>`);
   const rb = res.recent_bests;
   if (rb?.note) {
     // 「近 7 天新高：12 分鐘 +18 W、…」 or why there is none
@@ -959,20 +981,6 @@ function draw(card, res) {
       if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);
     }
   }
-  // a review card's one action (「套用這次的 AeT」, engine/workout_review._aet_test_lines):
-  // POST its body to its url, then say so
-  if (res.apply && res.apply.url) {
-    card.insertAdjacentHTML("beforeend", `<p class="apply-row"><button type="button" class="apply-btn">${esc(res.apply.label)}</button></p>`);
-    const ab = card.querySelector(".apply-btn");
-    ab.onclick = async () => {
-      ab.disabled = true;
-      try {
-        const r = await fetch(res.apply.url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(res.apply.body) });
-        if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
-        ab.textContent = "已套用 ✓（門檻與區間會重算）";
-      } catch (x) { ab.disabled = false; ab.insertAdjacentHTML("afterend", ` <span class="err">${esc(x.message)}</span>`); }
-    };
-  }
   // nothing to draw: say why (no power in this workout, no activity this week, PD fit failed…)
   if (res.empty) card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`);
   // drew something, but some series are blank for a known reason (PD model not fitted)
@@ -1002,10 +1010,32 @@ function draw(card, res) {
     card.insertAdjacentHTML("beforeend", `<table>${values.map((s) =>
       `<tr><td>${esc(s.name)}</td><td class="num">${esc(fmtU(v1(s), s.unit, { label: false }))}</td><td class="meta">${esc(unitText(s.unit))}</td></tr>`).join("")}</table>`);
   }
+  if (res.action && !res.empty) drawAction(card, res.action);
   // The per-series table (status, point count, last value, unit, expression) is not shown:
   // it is for debugging and AI use. The same data is in the chart JSON from
   // GET /api/v1/wko5/views/{view}/dashboards/{d}/charts/{c} (series[].expression / data / unit,
   // unsupported, fixes).
+}
+
+// a review card's action button (workout_review: 「套用這次的 CP」 -> POST apply-cp;
+// 「套用這次的 AeT」 -> POST apply-estimate with the test date)
+function drawAction(card, a) {
+  const wrap = document.createElement("p");
+  wrap.className = "card-action";
+  wrap.style.margin = "8px 0 0";
+  wrap.innerHTML = `<button type="button" class="chip go">${esc(a.label)}</button> <span class="meta" role="status"></span>`;
+  const [btn, msg] = [wrap.querySelector("button"), wrap.querySelector("span")];
+  btn.onclick = async () => {
+    if (a.confirm && !confirm(a.confirm)) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(a.url, { method: a.method || "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(a.body) });
+      if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+      btn.remove();
+      msg.textContent = a.done || "已套用";
+    } catch (e) { btn.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+  };
+  card.appendChild(wrap);
 }
 
 // WKO5-style zone table: boundaries + time in zone over the last N days
