@@ -14,6 +14,7 @@ from backend.api import achievements as achievements_api
 from backend.api import overview as overview_api
 from backend.api import plan as plan_api
 from backend.api import racepower as racepower_api
+from backend.api import coros_plan as coros_plan_api
 
 
 @asynccontextmanager
@@ -62,6 +63,7 @@ app.include_router(sports.router)
 app.include_router(wko5views.router)
 app.include_router(achievements_api.router)
 app.include_router(plan_api.router)
+app.include_router(coros_plan_api.router)
 app.include_router(overview_api.router)
 app.include_router(racepower_api.router)
 
