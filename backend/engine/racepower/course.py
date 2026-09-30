@@ -66,11 +66,22 @@ def _fill(vals: Sequence[Optional[float]]) -> np.ndarray:
 def track_distance(track) -> dict:
     """Cumulative horizontal distance along a Track, dropping duplicate
     points (< 0.5 m) and GPS jumps (implied speed > 60 km/h, only when the
-    track has times). Returns {"d", "z", "t", "keep"} (numpy, kept points)."""
+    track has times). With `track.dist` (device distance of the athlete's
+    own activity) that distance is used instead, keeping points where it
+    advances ≥ 0.5 m. Returns {"d", "z", "t", "keep"} (numpy, kept points)."""
     lat = np.asarray(track.lat, float)
     lon = np.asarray(track.lon, float)
     z = _fill(track.ele)
     tt = None if not track.time else _fill(track.time)
+    dev = getattr(track, "dist", None)
+    if dev is not None:
+        dv = np.asarray(dev, float)
+        keep = [0]
+        for i in range(1, len(dv)):
+            if dv[i] - dv[keep[-1]] >= DUP_M:
+                keep.append(i)
+        k = np.array(keep)
+        return {"d": dv[k] - dv[0], "z": z[k], "t": None if tt is None else tt[k], "keep": k}
     keep = [0]
     d = [0.0]
     for i in range(1, len(lat)):

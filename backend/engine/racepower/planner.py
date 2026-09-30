@@ -224,6 +224,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     T = res["T"]
     rows = res["rows"]
     p_bar = sum(r["P"] * r["t"] for r in rows) / T
+    # the bisection clamps silently when a target is out of reach (locks,
+    # absurd targets): say so instead of showing a confident wrong number
+    if mode == "time" and abs(T - t_whole) > 1.0:
+        warnings.append(f"達不到目標時間：最接近的是 {T / 3600:.2f} h（鎖定的分段或目標超出範圍）")
+    if (mode == "power" or not v2_primary) and abs(p_bar - p_whole) > 0.5:
+        warnings.append(f"平均功率只能到 {p_bar:.0f} W（目標 {p_whole:.0f} W）：鎖定的分段或下坡上限限制了配置")
     p_train = sum(r["P"] / s["M"] * r["t"] for r, s in zip(rows, segs)) / T
     eff = DF.effort(p_train, T, cp, w_prime, tte, k)
     eff["badge"] = None if effort_validated else "推估"
