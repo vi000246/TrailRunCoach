@@ -216,7 +216,8 @@ the points with the greatest percentage deviation」。它是圖表庫的內容�
   `CP = (P₂t₂ − P₁t₁)/(t₂ − t₁)`、`W′ = (P₁ − CP)·t₁`（P₁ 是短段）。例：9 分 300 W、3 分 360 W →
   CP = (300·540 − 360·180)/360 = 270 W、W′ = 16.2 kJ。
 
-**重要修正**：Stryd 目前的說明頁寫的兩段測試是 **9 分 + 3 分**（先長後短），**不是 3′/12′**。
+**重要修正**：Stryd 目前的說明頁（8718390）列的兩段測試是「**9-3 minute test**」，**不是 3′/12′**；
+先 9 後 3、休 30 分的細節來自 Ruiz-Alias 2025 與 Olaya-Cuartero 2023 的全文，不是 Stryd 頁面。
 3′/12′ 在跑步沒有找到驗證研究，Stryd 或 Palladino 的 3′/12′ 說法也沒找到 **未驗證**。
 3′/12′ 只有自行車的驗證（Simpson & Kordi 2017）。
 
@@ -238,10 +239,15 @@ the points with the greatest percentage deviation」。它是圖表庫的內容�
 | 10 | 分日 TT（近似參考標準） | 3–4 趟 1200–4400 m，或 3/7/12 分，分不同天 | 3–4 天 × 約 40 分 | ≥ 24–48 h | 2 參數雙曲線／線性 | 跑步（Stryd），n = 10：CS 對應功率 271 W vs CP3TT 270 W，ICC .98 [摘要]。Kranenburg 1996，n = 9 菁英：CS 293 m/min = 10 km 比賽速度，r = .92 [摘要] | 同左 | 最準；負擔最大 | van Rassel 2024；Kranenburg 1996 |
 | 11 | 比賽 / 訓練資料（Stryd Auto-CP） | 約 90 天 PDC 的最佳值，舊的降權。Stryd 建議的測試組：10 s、2、10、20 分（或 5 K），「最多 5 次跑步」，每 90 天重測 | 0 額外 | — | Stryd 專有；文獻用 3/7/12 分最佳段做線性 | 跑步：訓練資料 CP 281 W vs TT 290 W，CP r = .916，W′ 差 [摘要]。自行車 3/7/12 分訓練最佳段：CP SEE 5.2 %、LoA −34 到 +44 W [摘要]。自行車濾過的比賽 MMP：與測試差 5–7 W，r = .87–.92，n = 13 [摘要列表] | Hunter 2023，n = 23 [摘要]；Smyth & Muniz-Pumares 2020（> 25,000 人，400/800/5000 m 最佳）：全馬預測誤差 7.67 %，全馬以 84.8 ± 13.6 % CS 完成 [摘要] | 內建；準不準取決於紀錄裡有沒有真正的全力 | Stryd 6879345、6879351；Hunter 2023；Karsten 2014；Spragg 2023；Smyth 2020 |
 
-補充：比賽當測試時的換算（**[廠商]**，`racepower-v2.md` §2.1.1 已核對）：Stryd 表以 10 K 功率為 100 %，
-5 K 103.8 %、半馬 94.6 %；Stryd 說 CP 約是 30–70 分鐘的功率。業餘跑者 10 K 多在 40–60 分，所以
-**10 K 平均功率 ≈ CP**（Kranenburg 1996：菁英 CS = 10 km 速度 **[確立]**），5 K 平均 ≈ 1.04 × CP。
-半馬 ≈ 0.97 × CP（Olaya-Cuartero 2023 **[確立]**，n = 9）。
+補充：比賽當測試時的換算要**依時間，不是依距離**。
+- Kranenburg 1996 的「CS = 10 km 速度」是菁英（10 K 約 30 分）**[確立]**；Ñancupil-Andrade 2024 的 CP ≈ 30 分功率、
+  比 60 分功率高 14 W **[確立]**（全文摘要已親自核對：20 分 TT 的 95 % 是迴歸得到的修正係數，SEE 6.67 W；
+  這裡的 CP 是 Stryd 平台依廠商建議算的 CP）。
+- 所以業餘跑者 10 K 跑 50–60 分時，10 K 功率約比 CP **低 5 %**，不能當 CP。
+- 做法（**[外插]**，F1 的代數）：以 30 分為錨點，`CP = P_race · (T_race/1800)^(−k)`，k ≈ −0.07
+  （`racepower/riegel.py`；Stryd 表 10–42 km 隱含 k −0.069，`racepower-v2.md` §2.1.1）。檢查：T = 20 分 → 0.972
+  （文獻 0.95，差 2 %）；T = 55 分 → CP = 1.04 × P_race（和 Ñancupil-Andrade 的 60 分功率低 CP 約 5 % 一致）。半馬 97.3 % CP（Olaya-Cuartero 2023）是 9/3 CP，
+  不同定義，只當交叉檢查。
 
 ### 3.2 休息要多久
 
@@ -294,7 +300,7 @@ the points with the greatest percentage deviation」。它是圖表庫的內容�
 |---|---|---|---|---|---|---|
 | **快速** `quick` | 暖身 12 分（含 3 趟 20 秒加速）→ **20 分全力** → 緩和 5 分 | **約 37 分** | SEE 6.67 W（約 3 %），CP ≈ 0.95 × P20 | 不測；用先驗 | Ñancupil-Andrade 2024（跑步、Stryd、n = 15）**[確立]** | 最短的「有跑者驗證」流程；同時補上 WKO5 mFTP 最缺的 15–20 分點（§2.3），mFTP 會跟著變準。缺點：20 分全力很痛；沒有 W′ |
 | **標準** `standard` | 暖身 15 分 → **12 分全力** → 休 30 分（走或極慢跑）→ **3 分全力** → 緩和 10 分 | **約 70 分** | 兩點；9/3 版本 CP 與 VT2 差 3.5 W、18/19 人在 5 % 內 | 有（但 30 分休息時 W′ 誤差可到 33 %） | 9/3：Ruiz-Alias 2022/2025、Olaya-Cuartero 2023 **[確立]**；3/12：只有自行車（Simpson & Kordi 2017）；12 分比 9 分少一點短段高估（Mattioni Maturana 2018）**[外插]** | 拿到 CP 和 W′（賽事功率 F2 需要 W′）。時間最長；**休息不能縮**（§3.2） |
-| **用比賽** `race` | 5–10 K 比賽或計時跑（平路） | 0 額外（比賽本身 40–60 分） | 10 K ≈ CP（Kranenburg 1996 **[確立]**，菁英）；5 K ≈ 1.04 × CP、半馬 ≈ 0.97 × CP（Stryd 表 **[廠商]**、Olaya-Cuartero 2023） | 不測 | 同左 | 不多花時間、動機最強；但路線、天氣、配速策略會影響；越野賽不適用 |
+| **用比賽** `race` | 5–10 K 比賽或計時跑（平路，15–70 分） | 0 額外（比賽本身 20–60 分） | 以 30 分為錨點用 Riegel 換算（§3.1 補充，**[外插]**）；20 分的換算和文獻 0.95 差 2 % | 不測 | CP ≈ 30 分功率（Ñancupil-Andrade 2024）；Riegel k（`racepower-v2.md` §2.1.1） | 不多花時間、動機最強；但路線、天氣、配速策略會影響；越野賽不適用 |
 
 **建議預設**：`standard` 保留為預設（重現現在的行為，也給 W′）；**使用者嫌長時選 `quick`**，而不是把標準流程的
 休息縮短——今天的 16.5 分休息 + 非全力的 3 分，得到的資訊其實和一次 12 分全力差不多（§1），卻花了 48 分。
@@ -368,8 +374,9 @@ CP_PROTOCOLS = {   # engine/cp_protocols.py（新檔）
 | standard | 暖身 15 分 → 訓練 12 分「12 分全力」開放 → 休息 30 分（HR ≤ AeT）→ 訓練 3 分「3 分全力」開放 → 緩和 10 分 |
 | race | 不推（`Unsupported("比賽不推")`），同 `kind == "race"` |
 
-- **全力段不要設功率範圍**。現在 3 分段目標是 `power(th, 1.10, 1.30)`：用舊 CP（176 W）算就是 194–229 W，
-  手錶到上限會叫，等於叫人不要超過 229 W——今天 3 分只跑 217 W 可能就是這樣。全力段改成開放目標，
+- **全力段不要設功率範圍**。現在 3 分段目標是 `power(th, 1.10, 1.30)`：用舊 CP（176 W）算就是 194–229 W；
+  12 分段 `0.98–1.08` 是 172–190 W。今天 217 W 在範圍內，上限不是原因，但一個「範圍」讀起來像目標，
+  而且 12 分段的上限 190 W 明顯低於實際 221 W。全力段改成開放目標，
   名稱寫「全力」；要給參考就放在說明文字（「預估 ≥ {1.15·CP} W」）。
 - 緩和從寫死 10 分改成讀 detail。
 - 測試：`backend/tests/test_coros_workouts.py::test_cp_test_structure` 改成三個流程各一個。
@@ -408,7 +415,7 @@ CP_PROTOCOLS = {   # engine/cp_protocols.py（新檔）
 |---|---|---|
 | standard | `CP = (P12·720 − P3·180)/540`、`W′ = (P3 − CP)·180`（§3.0 兩點式） | CP、W′、`method="2pt"` |
 | quick | 主：`CP = 0.95·P20`（Ñancupil-Andrade 2024）；交叉檢查：`CP = P20 − W′prior/1200` | CP、兩者差、`method="tt20"` |
-| race | `CP = P_race / f`：10 K f = 1.00、5 K f = 1.04、半馬 f = 0.97（§3.1 補充）；其他距離用 Riegel D1 反推（`racepower/riegel.py`） | CP、`method="race"` |
+| race | `CP = P_race · (T_race/1800)^(−k)`，k 取個人 k（`riegel.personal_k`）否則 −0.07；只接受 15–70 分的比賽（§3.1 補充） | CP、`method="race"` |
 | standard 失敗時的退回 | `CP = P12 − W′prior/720` | CP、區間、`method="1pt_prior"`、品質「參考」 |
 
 **W′ 先驗**（依序）：①90 天內最近一次**有效**兩點測試的 W′；②Ruiz-Alias 2025 的業餘平均（男 13.1 ± 4.0、
@@ -441,7 +448,12 @@ CP_PROTOCOLS = {   # engine/cp_protocols.py（新檔）
 - 新 API：`POST /api/plan/thresholds/apply-cp`，body `{activity_index, cp, wprime?, note}`，
   仿 `api/plan.py::apply_estimate`（282–300 行），**但門檻列的日期是測試那天**（不是今天），
   這樣 `i_testing` 的「幾天前」與 90 天新鮮度都對。
-- `planning.Threshold` 加 `wprime: Optional[float]`（`THRESHOLD_FIELDS` 加上），賽事功率 F2 用它（§1B.3）。
+- `planning.Threshold` 加 `wprime: Optional[float]` 與 `cp_method: Optional[str]`（`2pt` / `tt20` / `race` /
+  `1pt_prior`），賽事功率 F2 用 `wprime`（§1B.3）。
+- **不同流程的 CP 定義不同**：兩點 CP（3–12 分模型）比 `tt20` / `race`（≈ 30 分功率）高約 5 %（§1B.1）。
+  使用者輪流用 quick 與 standard 時，`status.i_testing`（607 行，`CP_DELTA` 3 %）會一直誤報「要更新」。
+  所以 `latest_cp_test` 只和**同一 method** 的上一筆比；跨 method 時先換算到同一基準
+  （兩點 CP ≈ 1.05 × tt20 CP **[外插]**，要用使用者自己做過兩種測試的資料校正）再比。
 - note 自動寫「{流程}；{method}；品質 {quality}」。
 - 按鈕位置：活動檢討的 CP 區塊（`_cp` 的輸出多一個 `action`）與總覽「測試」指標（`status.py` extra.cp_test）。
   品質「不採用」時不給按鈕；「參考」時按鈕文字是「套用下限 {cp_low} W」。
@@ -479,7 +491,7 @@ CP_PROTOCOLS = {   # engine/cp_protocols.py（新檔）
 | `backend/sync/coros_workouts.py` | `_test_steps` | 三種流程；全力段開放目標；緩和讀 detail |
 | `backend/engine/workout_review.py` | `cp_test`→`cp_result`、`looks_like_cp_test`、`session_type`/`classify`、`latest_cp_test`、`cp_lines`、`_cp` | 不重疊的段、課表優先、W′ 先驗、品質檢查 |
 | `backend/engine/status.py` | `i_testing` 590、611 行 | 依流程的文字；套用按鈕的資料 |
-| `backend/engine/planning.py` | `Threshold` | `wprime` |
+| `backend/engine/planning.py` | `Threshold` | `wprime`、`cp_method` |
 | `backend/api/plan.py` | 新 `apply_cp` | 套用 CP（測試日期） |
 | `backend/engine/racepower/athlete.py` | 290–317 行 sources / `default_cp` | F1 用 mFTP+TTE、F2 用 CP+W′（§1B.3） |
 | `backend/static/plan.html` 173、`overview.html` 222、`schedule.html` 491、`racepower.html` 905 | 說明文字 | 依流程；說明 CP 與 mFTP 的差別 |
