@@ -186,7 +186,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     long_s = next((s for s in cur_s if s["kind"] == "long"), None)
     longest = float(long_s["minutes"]) if long_s else 60.0
     mountain = bool(long_s and "山路" in long_s["title"])
-    allow_quality = any(s["kind"] in ("quality", "test") for s in cur_s) or cur.get("phase") != "base"
+    # this week's quality session tells whether the indicators allow one; a
+    # recovery / rest week has none by design, so it says nothing -> allow
+    allow_quality = (any(s["kind"] in ("quality", "test") for s in cur_s) or cur.get("phase") != "base"
+                     or cur.get("mode") not in ("base", "specific"))
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
     strength_tss = float(st["tss"]) if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]

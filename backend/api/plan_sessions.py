@@ -14,6 +14,7 @@ engine/projection.py, sync/coros_workouts.py).
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import threading
 from typing import Optional
@@ -60,19 +61,49 @@ def _compute_inputs() -> dict:
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant)
     since = monday - dt.timedelta(weeks=4)
     acts = [O.activity_row(w) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
+    last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
            "horizon_end": horizon.isoformat(), "thresholds": cur.get("thresholds") or {},
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
-           "max_weeks": P.MAX_WEEKS}
+           "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None}
     with _lock:
         _cache.clear()
         _cache[key] = out
     return out
 
 
-async def _inputs() -> dict:
-    return await run_in_threadpool(_compute_inputs)
+async def _covered(db: AsyncSession, last_activity: Optional[str]) -> Optional[str]:
+    """Last day the synced data covers: the latest activity's day, or the day
+    before the latest successful sync, whichever is later."""
+    from sqlalchemy import select
+    from backend.db.models import SyncState
+    days = [last_activity] if last_activity else []
+    st = (await db.execute(select(SyncState).where(SyncState.athlete_id == 1))).scalar_one_or_none()
+    for t in (getattr(st, "coros_last_sync_at", None), getattr(st, "last_sync_at", None)):
+        if t is not None:
+            days.append((t.date() - dt.timedelta(days=1)).isoformat())
+    return max(days) if days else None
+
+
+async def _inputs(db: Optional[AsyncSession] = None) -> dict:
+    inp = await run_in_threadpool(_compute_inputs)
+    if db is not None:
+        inp = {**inp, "covered": await _covered(db, inp.get("last_activity"))}
+    return inp
+
+
+# one writer at a time: two tabs / a preview racing a push must not generate
+# the same week twice (fresh uids each time) and push the duplicates
+_locks: dict = {}
+
+
+def _wlock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()          # one lock per event loop (tests run several)
+    lk = _locks.get(id(loop))
+    if lk is None:
+        lk = _locks[id(loop)] = asyncio.Lock()
+    return lk
 
 
 def _today(inp: dict) -> str:
@@ -80,8 +111,10 @@ def _today(inp: dict) -> str:
 
 
 async def _ensure(db: AsyncSession, inp: dict) -> None:
-    """First visit of a week: generate it into the table (marks last week's leftovers missed)."""
-    if not await PS.initialized(db, inp["cur"]["week"]["start"]):
+    """First visit of a week, or last week's sessions still open: reconcile, so the
+    week is generated into the table and leftovers are marked done / missed."""
+    ws = inp["cur"]["week"]["start"]
+    if not await PS.initialized(db, ws) or await PS.has_leftovers(db, ws):
         await PS.plan_reconcile(db, inp, apply=True)
 
 
@@ -121,11 +154,12 @@ def _meta(inp: dict) -> dict:
 
 @router.get("/sessions")
 async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: AsyncSession = Depends(get_db)):
-    inp = await _inputs()
-    await _ensure(db, inp)
+    inp = await _inputs(db)
+    async with _wlock():
+        await _ensure(db, inp)
+        ss = await PS.load(db, start=start, end=end)
     today = _today(inp)
     rows = await CW.all_rows(db)
-    ss = await PS.load(db, start=start, end=end)
     return {**_meta(inp), "sessions": [_view(s, inp, rows, today) for s in ss if s["state"] != "deleted"
                                         and s["state"] != "superseded"]}
 
@@ -138,7 +172,8 @@ def _err(e: Exception):
 async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
     try:
-        return await PS.add(db, data, _today(inp))
+        async with _wlock():
+            return await PS.add(db, data, _today(inp))
     except PS.PlanError as e:
         raise _err(e)
 
@@ -147,7 +182,8 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
 async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
     try:
-        return await PS.edit(db, uid, patch, _today(inp))
+        async with _wlock():
+            return await PS.edit(db, uid, patch, _today(inp))
     except PS.PlanError as e:
         raise _err(e)
 
@@ -155,24 +191,27 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
 @router.delete("/sessions/{uid}")
 async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
     try:
-        return await PS.delete(db, uid)
+        async with _wlock():
+            return await PS.delete(db, uid)
     except PS.PlanError as e:
         raise HTTPException(404, str(e))
 
 
 @router.get("/reconcile")
 async def reconcile_preview(db: AsyncSession = Depends(get_db)):
-    inp = await _inputs()
-    await _ensure(db, inp)
-    _, changes = await PS.plan_reconcile(db, inp, apply=False)
+    inp = await _inputs(db)
+    async with _wlock():
+        await _ensure(db, inp)
+        _, changes = await PS.plan_reconcile(db, inp, apply=False)
     return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes)}
 
 
 @router.post("/reconcile")
 async def reconcile_apply(db: AsyncSession = Depends(get_db)):
-    inp = await _inputs()
-    await _ensure(db, inp)
-    _, changes = await PS.plan_reconcile(db, inp, apply=True)
+    inp = await _inputs(db)
+    async with _wlock():
+        await _ensure(db, inp)
+        _, changes = await PS.plan_reconcile(db, inp, apply=True)
     return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes)}
 
 
@@ -182,11 +221,12 @@ def _in_range(ss: list[dict], a: str, b: str) -> list[dict]:
 
 @router.get("/push-coros/preview")
 async def push_preview(scope: str = "week", day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
-    inp = await _inputs()
-    await _ensure(db, inp)
+    inp = await _inputs(db)
     a, b = _range(scope, day, inp)
     today = _today(inp)
-    new, changes = await PS.plan_reconcile(db, inp, apply=False)
+    async with _wlock():
+        await _ensure(db, inp)
+        new, changes = await PS.plan_reconcile(db, inp, apply=False)
     rows = await CW.all_rows(db)
     todo = [_view(s, inp, rows, today) for s in _in_range(new, a, b)]
     pushable = [s for s in todo if s["coros"]["status"] not in ("skipped", "done")]
@@ -204,22 +244,23 @@ def _auth(e: CW.CorosAuthError):
 
 @router.post("/push-coros")
 async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
-    inp = await _inputs()
-    await _ensure(db, inp)
+    inp = await _inputs(db)
     a, b = _range(scope, day, inp)
     today = _today(inp)
-    new, changes = await PS.plan_reconcile(db, inp, apply=True)
-    live = {s["uid"] for s in new if s["state"] in ("active", "done", "missed")}
-    rows = await CW.all_rows(db)
-    # pushed sessions gone from the plan (deleted / superseded / regenerated away);
-    # past-day ones stay, see push_sessions. Missed ones are removed separately.
-    stale = [k for k in rows if k not in live]
-    missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
-    try:
-        res = await CW.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b)], inp["thresholds"],
-                                     today, stale_keys=stale, missed_keys=missed)
-    except CW.CorosAuthError as e:
-        raise _auth(e)
+    async with _wlock():
+        await _ensure(db, inp)
+        new, changes = await PS.plan_reconcile(db, inp, apply=True)
+        live = {s["uid"] for s in new if s["state"] in ("active", "done", "missed")}
+        rows = await CW.all_rows(db)
+        # pushed sessions gone from the plan (deleted / superseded / regenerated away);
+        # past-day ones stay, see push_sessions. Missed ones are removed separately.
+        stale = [k for k in rows if k not in live]
+        missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
+        try:
+            res = await CW.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b)], inp["thresholds"],
+                                         today, stale_keys=stale, missed_keys=missed)
+        except CW.CorosAuthError as e:
+            raise _auth(e)
     return {"scope": scope, "start": a, "end": b, "changes": changes, **res}
 
 
@@ -227,9 +268,10 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
 async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
     a, b = _range(scope, day, inp)
-    rows = await CW.all_rows(db)
-    keys = [k for k, r in rows.items() if r.day and a <= r.day <= b]
-    try:
-        return {"scope": scope, "start": a, "end": b, "removed": await CW.remove_keys(db, keys)}
-    except CW.CorosAuthError as e:
-        raise _auth(e)
+    async with _wlock():
+        rows = await CW.all_rows(db)
+        keys = [k for k, r in rows.items() if r.day and a <= r.day <= b]
+        try:
+            return {"scope": scope, "start": a, "end": b, "removed": await CW.remove_keys(db, keys)}
+        except CW.CorosAuthError as e:
+            raise _auth(e)

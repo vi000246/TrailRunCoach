@@ -72,9 +72,13 @@ def _change(action: str, s: dict, reason: str = "", before: Optional[dict] = Non
 
 
 def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict], today: str,
-              horizon_end: Optional[str] = None, uid_fn: Callable[[], str] = new_uid) -> tuple[list[dict], list[dict]]:
+              horizon_end: Optional[str] = None, uid_fn: Callable[[], str] = new_uid,
+              covered: Optional[str] = None) -> tuple[list[dict], list[dict]]:
     """(new stored list, changes). `gen_weeks`: [{start, mode, provisional, sessions}],
-    the current week from week_plan() (with done flags) then projected weeks."""
+    the current week from week_plan() (with done flags) then projected weeks.
+    `covered`: last day the synced data is known to cover; a past session is
+    only called missed up to that day (a late sync must not turn a done
+    workout into a missed one). Missed rows are re-checked every time."""
     out = [copy.deepcopy(s) for s in stored]
     changes: list[dict] = []
     used = {s["done_by"]["index"] for s in out
@@ -82,7 +86,7 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
     gen_done = {(w["start"], g["id"]): g for w in gen_weeks for g in w["sessions"] if g.get("done")}
 
     # ---- 1. done / missed ------------------------------------------------
-    for s in sorted([s for s in out if s["state"] == "active"], key=lambda s: s.get("day") or "9999"):
+    for s in sorted([s for s in out if s["state"] in ("active", "missed")], key=lambda s: s.get("day") or "9999"):
         g = gen_done.get((s["week_start"], s["gen_key"])) if s.get("gen_key") else None
         if g is not None and (not g.get("done_by") or g["done_by"].get("index") not in used):
             s["state"], s["done_by"] = "done", g.get("done_by")
@@ -100,7 +104,8 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
                 used.add(a.get("index"))
                 changes.append(_change("done", s))
                 continue
-        if s.get("day") and s["day"] < today:
+        if (s["state"] == "active" and s.get("day") and s["day"] < today
+                and (covered is None or s["day"] <= covered)):
             s["state"] = "missed"
             changes.append(_change("missed", s, "沒有對應的活動"))
 
