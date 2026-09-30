@@ -5,6 +5,7 @@ WKO5 itself.
 
 Env:
     WKO5_ATHLETE_DIR  folder containing <Name>.wko5athlete and year/*.wko4
+                      (unset: backend/settings/paths.py looks under ~/WKO5)
     WKO5_VIEWS_DIR    folder searched (recursively) for *.wko5chart
 """
 from __future__ import annotations
@@ -36,10 +37,10 @@ from backend.engine.wko5expr import periods as PD
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
+from backend.settings.paths import athlete_dir
 
 ROOT = Path(__file__).resolve().parents[2]
-ATHLETE_DIR = Path(os.getenv(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete"))
+ATHLETE_DIR = athlete_dir()     # WKO5_ATHLETE_DIR, else found under ~/WKO5 (settings/paths.py)
 VIEWS_DIR = Path(os.getenv("WKO5_VIEWS_DIR", str(ROOT)))
 
 router = APIRouter(prefix="/api/v1/wko5", tags=["wko5-views"])
