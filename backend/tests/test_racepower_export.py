@@ -214,6 +214,7 @@ def client(monkeypatch):
     monkeypatch.setattr(RP, "inputs", lambda refresh=False: fake_inputs())
     monkeypatch.setattr(RP, "_grade_models", lambda: {"grade_re": GM.GradeRE(RE0), "hike_speed": GM.fit_hike_speed([]),
                                                       "moving_rows": []})
+    monkeypatch.setattr(RP, "_trail_hr", lambda: None)      # no real dataset: trail total from power
     monkeypatch.setattr(BT, "flags", lambda path=None: ({"road": False, "trail": False, "hike": False}, False))
     RP._courses.clear()
     app = FastAPI()

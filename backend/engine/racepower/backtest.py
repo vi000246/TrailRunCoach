@@ -5,10 +5,13 @@ feedback (HR-aware; group hikes out) and the capacity review. Two separate
 questions, reported separately:
 
 1. 能力模型回測 (capacity / 比賽預測) — only maximal efforts can test
-   CP / W′ / k (the capacity samples, 2026-10-01, maximal.py): season-plan
-   races matched to their activity, the maximal bouts of CP tests (cptest
-   FIT scan + workout_review test_cp), self-paced maximal road efforts and
-   race-like trail efforts. The HR "race" class is no longer a sample (it
+   CP / W′ / k (the capacity samples, 2026-10-01): runs whose effective
+   effort is 全力 (activity_tags: the user's mark wins; auto = self-paced
+   maximal road rules / trail HR on moving time with long rests), and the
+   maximal bouts of CP tests (cptest FIT scan + workout_review test_cp). A
+   season-plan race is activity type 比賽, not a sample by itself. Trail
+   cases also get the HR pace model (trailhr.py, `trail_hr`), with or
+   without power. The HR "race" class is no longer a sample (it
    caught hard 5 km training runs). Explicit AeT tests are submaximal
    anchors: only the HR model's power at their HR is checked. Each case
    also gets the HR-based capacity as of the day before (hrcap.py, two TTE
@@ -317,7 +320,11 @@ def run_harness(cases: list[dict], context: Callable[[dict], dict], evaluate: Ca
                          "priority_a": c.get("priority_a", False), "day": c.get("day"),
                          "cap_sample": bool(c.get("cap_sample")), "cap_kind": c.get("cap_kind"),
                          "cap_reason": c.get("cap_reason"),
-                         "intensity": c.get("intensity"), "intensity_reason": c.get("intensity_reason"), **r})
+                         "intensity": c.get("intensity"), "intensity_reason": c.get("intensity_reason"),
+                         **{k: c.get(k) for k in ("activity_type", "activity_type_overridden", "effort_tag",
+                                                  "effort_overridden", "effort_reason", "file", "rest_share",
+                                                  "marked", "no_power") if k in c},
+                         **r})
     return rows
 
 
@@ -528,6 +535,50 @@ def evaluate_test(case: dict, ctx: dict) -> Optional[dict]:
             **_hr_eval(ctx, cap, case["t_s"], case["p"], psus)}
 
 
+def evaluate_trail_hr(case: dict, ctx: dict) -> dict:
+    """The trail HR pace model (trailhr.py) as of the day before, without
+    the case: moving time at the case's own moving HR ("given", tests the
+    pace + durability model; also without durability) and at the athlete's
+    race HR level from EARLIER races ("race", the prediction a race plan
+    would make). No power needed."""
+    from backend.engine.racepower import trailhr as TH
+    pt, m = case.get("trail_pt"), ctx.get("trail_hr")
+    if not pt or not m or not (m.get("a") or m.get("c")):
+        return {}
+    act = pt["T_h"] * 3600.0
+    tg = TH.predict_time(m, pt["eff_km"], pt["x"])
+    tn = TH.predict_time(m, pt["eff_km"], pt["x"], delta=0.0)
+    tr = TH.predict_time(m, pt["eff_km"], m["x_race"])
+    trn = TH.predict_time(m, pt["eff_km"], m["x_race"], delta=0.0)
+    return {"th": {"moving_s": act, "eff_km": pt["eff_km"], "x": pt["x"], "x_race": m["x_race"],
+                   "t_given": tg, "t_nodur": tn, "t_race": tr, "t_race_nodur": trn, "delta": m["delta"],
+                   "kind": m["kind"], "n_runs": m["n"], "x_race_n": m.get("x_race_n")},
+            "err_th_given": tg / act - 1.0 if tg else None, "err_th_nodur": tn / act - 1.0 if tn else None,
+            "err_th_race": tr / act - 1.0 if tr else None, "err_th_race_nodur": trn / act - 1.0 if trn else None}
+
+
+def summarise_trail_hr(rows: list[dict]) -> dict:
+    """Trail HR pace model errors: every trail case (given HR), the races
+    (activity type 比賽) and the 全力 capacity samples (given and race level)."""
+    th = [r for r in rows if r.get("category") == "trail" and r.get("th")]
+    races = [r for r in th if r.get("activity_type") == "race"]
+    maxes = [r for r in th if r.get("effort_tag") == "max"]
+
+    def blk(rs):
+        return {"n": len(rs), "given": stats(r.get("err_th_given") for r in rs),
+                "no_durability": stats(r.get("err_th_nodur") for r in rs),
+                "race_level": stats(r.get("err_th_race") for r in rs),
+                "race_level_no_durability": stats(r.get("err_th_race_nodur") for r in rs),
+                "power_envelope": stats(r.get("err_c") for r in rs)}
+    return {"all": blk(th), "races": blk(races), "max_effort": blk(maxes),
+            "race_rows": [{k: r.get(k) for k in ("date", "label", "file", "effort_tag", "effort_overridden",
+                                                 "effort_reason", "rest_share", "no_power", "err_th_given",
+                                                 "err_th_nodur", "err_th_race", "err_th_race_nodur", "err_c",
+                                                 "err_p", "error")}
+                          | {"th": r.get("th")} for r in sorted(races, key=lambda r: r["date"])],
+            "source": "trailhr.py（越野心率配速模型，推估）", "threshold": THRESHOLDS["trail"]}
+
+
 def evaluate_hike(case: dict, ctx: dict) -> Optional[dict]:
     """Opted-in solo hikes only (group hikes are never cases)."""
     arr = ctx["arrays"]
@@ -627,15 +678,37 @@ def wko5_cp_tests(ds, today: dt.date, skip_dates: set) -> list[dict]:
     return out
 
 
-def candidates(ds, today: dt.date, classes: Optional[dict] = None) -> list[dict]:
+def user_marked(ds, tags: list) -> set:
+    """Outdoor runs the user marked as a race (activity type 比賽) or 全力
+    (activity_tags): back-test cases over the FULL history, not only the
+    last 365 days (the user's diary races go back to 2024; each case is
+    still predicted as of the day before with own-date thresholds, so an
+    older case is no leak — it just tests an older model)."""
+    from backend.engine import activity_tags as AT
+    out = set()
+    if not tags:
+        return out
+    for w in ds.workouts:
+        if not outdoor_run(w):
+            continue
+        u = AT.find(tags, w.entry.start, w.entry.file)
+        if u and (AT.user_type(u) == "race" or AT.user_effort(u) == "max"):
+            out.add(w.idx)
+    return out
+
+
+def candidates(ds, today: dt.date, classes: Optional[dict] = None, marked: Optional[set] = None) -> list[dict]:
     """Outdoor runs ≥ 20 min in the last 365 days (road vs trail by the trail
-    tag; season-plan races whatever their length), each with its intensity
+    tag; season-plan races whatever their length) plus the user-marked races
+    / 全力 runs of any date (`marked`, user_marked), each with its intensity
     class, and opted-in solo hikes (3 years). Group hikes never."""
     from backend.engine.racepower import athlete as A
     from backend.engine.wko5expr.dataset import date_to_day
     tday = date_to_day(today)
     races = A.plan_race_runs(ds)
-    runs = [w for w in ds.workouts if outdoor_run(w) and tday - RUN_WINDOW_DAYS < w.day <= tday]
+    marked = marked or set()
+    runs = [w for w in ds.workouts if outdoor_run(w) and w.day <= tday
+            and (tday - RUN_WINDOW_DAYS < w.day or w.idx in marked)]
     classes = classes if classes is not None else A.classify_runs(ds, runs)
     out = []
     for w in runs:
@@ -649,11 +722,21 @@ def candidates(ds, today: dt.date, classes: Optional[dict] = None) -> list[dict]
         cat = "trail" if A.is_trail(w) else "road"
         c = classes.get(w.idx) or {}
         cs = c.get("capacity") or {}
+        tg = cs.get("tags") or {}
+        try:
+            pt = A.trail_hr_points(ds, [w]) if cat == "trail" else []
+        except Exception:                   # noqa: BLE001 — the HR pace model is optional per case
+            pt = []
         out.append({"idx": w.idx, "date": date, "category": cat, "label": A.label(w),
                     "priority_a": bool(ev and ev.get("priority") == "A"), "event": ev,
                     "intensity": c.get("cls"), "intensity_reason": c.get("reason"),
                     "cap_sample": bool(cs.get("ok")), "cap_kind": cs.get("kind") if cs.get("ok") else None,
-                    "cap_reason": cs.get("reason"), "aet_test": _is_aet_test(ds, w)})
+                    "cap_reason": cs.get("reason"), "aet_test": _is_aet_test(ds, w),
+                    "activity_type": tg.get("activity_type"), "activity_type_overridden": tg.get("activity_type_overridden"),
+                    "effort_tag": tg.get("effort"), "effort_overridden": tg.get("effort_overridden"),
+                    "effort_reason": tg.get("effort_reason"), "file": w.entry.file,
+                    "rest_share": (cs.get("effort") or {}).get("rest_share"),
+                    "trail_pt": pt[0] if pt else None, "marked": w.idx in marked})
     solo = A.solo_hikes()
     for w in A.hike_workouts(ds, today):
         if w.day > tday or w.entry.file not in solo:
@@ -672,18 +755,29 @@ def _hike_days(arr: dict, start: dt.datetime) -> list[tuple[int, dict]]:
     return [(n, _slice(arr, days == x)) for n, x in enumerate(uniq, 1)]
 
 
-def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
+def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[list] = None) -> dict:
+    """`tags` = activity_tags rows (default: activity_tags.load(), the app DB
+    or WKO5COACH_TAGS_DB)."""
+    from backend.engine import activity_tags as AT
     from backend.engine.racepower import athlete as A
     from backend.engine.racepower import grade_model as GM
     from backend.engine.wko5expr.dataset import date_to_day
     today = today or dt.date.today()
     tday = date_to_day(today)
     by_idx = {w.idx: w for w in ds.workouts}
-    all_runs = [w for w in ds.workouts if w.sport == "run" and tday - 2 * RUN_WINDOW_DAYS < w.day <= tday + 1]
-    classes = A.classify_runs(ds, all_runs)
+    tags = AT.load() if tags is None else tags
+    marked = user_marked(ds, tags)
+    all_runs = [w for w in ds.workouts if w.sport == "run" and w.day <= tday + 1
+                and (tday - 2 * RUN_WINDOW_DAYS < w.day or w.idx in marked)]
+    classes = A.classify_runs(ds, all_runs, tags=tags)
     cmap = {i: c.get("cls") for i, c in classes.items()}
+    # trail race HR level: runs whose effective type is 比賽, or 全力 samples (trail_hr_model
+    # only reads the ones before each case's as-of date)
+    race_idx = {i for i, c in classes.items()
+                if ((c.get("capacity") or {}).get("tags") or {}).get("activity_type") == "race"
+                or (c.get("capacity") or {}).get("ok")}
     cases, arrays = [], {}
-    for c in candidates(ds, today, classes):
+    for c in candidates(ds, today, classes, marked):
         w = by_idx[c["idx"]]
         arr = A.activity_arrays(ds, w)
         if arr is None:
@@ -695,7 +789,10 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
                 cases.append(cc)
         else:
             if arr.get("p") is None or not np.any(np.nan_to_num(arr["p"]) > 0):
-                continue
+                if c["category"] != "trail":
+                    continue
+                # trail without power (e.g. the 2024-09-21 race): only the HR pace model
+                c = {**c, "no_power": True, "cap_sample": False}
             arrays[(c["idx"], None)] = arr
             cases.append(c)
     weight = ds.setting("weight", tday)
@@ -722,6 +819,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
                      if (classes.get(w.idx, {}).get("capacity") or {}).get("ok")}
     derived: dict = {}
     hrcaps: dict = {}
+    trailhr: dict = {}
 
     def n_max(as_of, exclude):
         lo = as_of - dt.timedelta(days=RUN_WINDOW_DAYS)
@@ -733,11 +831,25 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
         key = (c.get("idx"), c.get("day"))
         ctx = {"arrays": arrays.get(key), "exclude": c["exclude"]}
         dk = (tuple(sorted(c["exclude"])), as_of)
+        if c["category"] == "trail":
+            if dk not in trailhr:
+                try:
+                    trailhr[dk] = A.trail_hr_model(ds, as_of, c["exclude"], race_idx=race_idx)
+                except Exception as e:      # noqa: BLE001
+                    trailhr[dk] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+            ctx["trail_hr"] = trailhr[dk]
+            if c.get("no_power"):
+                return ctx
         if dk not in derived:
-            derived[dk] = A.derive(ds, as_of, fetch_weather=False, exclude=c["exclude"], strict_as_of=True,
-                                   classes=classes, hiking=False)
+            try:
+                derived[dk] = A.derive(ds, as_of, fetch_weather=False, exclude=c["exclude"], strict_as_of=True,
+                                       classes=classes, hiking=False)
+            except Exception as e:          # noqa: BLE001 — e.g. no data before an old marked race
+                derived[dk] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
         inp = derived[dk]
         ctx["inputs"] = inp
+        if "error" in inp:
+            return ctx
         if c.get("cap_sample") or c.get("aet_test"):
             if dk not in hrcaps:
                 hrcaps[dk] = A.hr_capacity(ds, as_of, c["exclude"], distribution=False)
@@ -762,7 +874,18 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
     def evaluate(c, ctx):
         if c["category"] == "test":
             return evaluate_test(c, ctx)
-        return evaluate_hike(c, ctx) if c["category"] == "hike" else evaluate_run(c, ctx)
+        if c["category"] == "hike":
+            return evaluate_hike(c, ctx)
+        th = evaluate_trail_hr(c, ctx) if c["category"] == "trail" else {}
+        if c.get("no_power"):
+            return {**th, "error": "沒有功率：只評估越野心率配速模型"} if th else {"error": "沒有功率"}
+        if "error" in (ctx.get("inputs") or {}):
+            return {**th, "error": ctx["inputs"]["error"]}
+        try:
+            r = evaluate_run(c, ctx) or {}
+        except Exception as e:              # noqa: BLE001
+            r = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
+        return {**r, **th}
 
     t0 = time.time()
     rows = run_harness(sorted(cases, key=lambda c: c["date"]), context, evaluate, progress)
@@ -786,21 +909,27 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
     counts = {k: sum(1 for r in run_rows if r.get("intensity") == k) for k in CLASSES}
     leaks = sum(1 for r in ok if (r.get("capacity") or {}).get("cp_source") == "wko5")
     win_lo = date_to_day(today) - RUN_WINDOW_DAYS
-    in_win = [w for w in all_runs if win_lo < w.day <= date_to_day(today)]
+    in_win = [w for w in all_runs if (win_lo < w.day or w.idx in marked) and w.day <= date_to_day(today)]
     samples = []
     for w in in_win:
         cs = (classes.get(w.idx) or {}).get("capacity") or {}
         if not cs:
             continue
-        near = cs.get("ok") or cs.get("category") in ("5k", "10k", "half", "marathon") or \
-            (cs.get("kind") == "trail_race_like" and all(c["ok"] for c in cs.get("checks", []) if c["id"] in ("km", "time")))
+        near = cs.get("ok") or cs.get("user_marked") or cs.get("category") in ("5k", "10k", "half", "marathon") or \
+            (cs.get("rule") == "trail_race_like" and all(c["ok"] for c in cs.get("checks", []) if c["id"] in ("km", "time")))
         if near:
+            tg = cs.get("tags") or {}
             samples.append({"idx": w.idx, "date": w.entry.start.date().isoformat(), "label": A.label(w),
                             "category": "trail" if A.is_trail(w) else "road", "ok": bool(cs.get("ok")),
                             "kind": cs.get("kind"), "reason": cs.get("reason"), "checks": cs.get("checks"),
                             "km": w.metrics.get("distance"), "climb_m": w.metrics.get("climbing"),
                             "moving_s": w.metrics.get("movingduration"), "event": cs.get("event"),
-                            "hr_class": (classes.get(w.idx) or {}).get("cls")})
+                            "hr_class": (classes.get(w.idx) or {}).get("cls"), "file": w.entry.file,
+                            "activity_type": tg.get("activity_type"), "effort": tg.get("effort"),
+                            "effort_overridden": tg.get("effort_overridden"),
+                            "activity_type_overridden": tg.get("activity_type_overridden"),
+                            "rest_share": (cs.get("effort") or {}).get("rest_share"),
+                            "hr_frac": (cs.get("effort") or {}).get("hr_frac")})
     kinds: dict = {}
     for s in samples:
         if s["ok"]:
@@ -811,6 +940,15 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
         hr_now = A.hr_capacity(ds, today)
     except Exception as e:                  # noqa: BLE001
         hr_now = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+    try:
+        th_now = {k: v for k, v in A.trail_hr_model(ds, today, race_idx=race_idx).items() if k != "points"}
+    except Exception as e:                  # noqa: BLE001
+        th_now = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+    trail_hr = summarise_trail_hr(rows)
+    trail_hr["model_now"] = th_now
+    t_med = trail_hr["races"]["race_level"]["median_abs"]
+    trail_hr["passed"] = bool(trail_hr["races"]["n"] >= MIN_N and t_med is not None and t_med <= THRESHOLDS["trail"])
+    validated["trail_hr"] = trail_hr["passed"]
     return {"computed_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"), "today": today.isoformat(),
             "seconds": round(time.time() - t0, 1), "version": 2, "rows": rows,
             "terrain": terrain, "capacity": capacity, "validated": validated, "hike_capacity": hike_cap,
@@ -821,14 +959,19 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
             "capacity_samples": {"counts": kinds, "rows": samples,
                                  "trail_race_like": [s for s in samples if s["category"] == "trail" and s["ok"]]},
             "hr_capacity": {k: v for k, v in hr_now.items() if k != "points"} | {"points": hr_now.get("points")},
+            "trail_hr": trail_hr, "user_marked": len(marked),
             "notes": [A.GROUP_HIKE_NOTE + "；只有你標記為自己走的登山才會成為回測案例",
+                      "能力樣本看「努力度」不看「是不是比賽」：你標記的努力度優先（全力＝一定算、其他＝一定不算）；"
+                      "自動：路跑用全力路跑規則，越野用移動心率（≥ 0.90 × LTHR、AeT 以上 ≥ 2/3）＋長休息（≥ 5 分的停留 ≤ 10 %）",
+                      "你標記為比賽或全力的活動不受 365 天限制（每場仍用前一天的資料預測）；自動偵測的樣本只看近 365 天",
+                      "越野心率配速模型（推估）：effort km ÷ 移動時間 對 移動心率/LTHR，加耐久衰減；不需要功率",
                       "每一場都用活動前一天的資料、排除該活動；不用 WKO5 今天存的 mFTP / TTE，"
                       "改用當天以前的 mean-max 重算 PD 模型（mFTP / TTE），再加上 CP 下限",
                       "強度分類用每次活動當天以前的 LTHR / AeT（計畫測試只算當天以前做過的；否則用當天以前資料的自動估算，"
                       "每次跑步對照它當天以前重算的 CP）",
                       "地形模型回測餵實際功率，只檢驗「功率 → 速度」（坡度-RE、走跑、下坡上限、技術係數），不是預測準確度",
-                      "能力模型只用能力樣本檢驗：賽季計畫比賽（日期＋種類＋距離比對）、CP 測試全力段、"
-                      "自配速全力路跑（5K/10K/半馬/全馬 ±10 %＋心率證據＋平均或負分段）、比賽型越野（≥ 10 km、≥ 90 分、心率持續高）",
+                      "能力模型只用能力樣本檢驗：努力度＝全力的跑步（你的標記，或自動：自配速全力路跑、"
+                      "≥ 10 km / ≥ 90 分且心率全力、沒有長休息的越野）與 CP 測試全力段；賽季計畫比賽只標為「比賽」",
                       "心率能力（推估）：近 90 天穩定平路跑的心率–功率回歸外插到 LTHR；"
                       f"能力樣本 < {FEW_MAXIMAL} 次時當第二個下限（合併）"]}
 

@@ -541,6 +541,22 @@ def test_planner_modes_on_a_gpx_course_and_the_validation_gate():
     assert len(steps) == len(ok["segments"]) and steps[0].intensity[0] == "power"
 
 
+def test_planner_trail_total_from_the_hr_pace_model():
+    tr = synthetic_track({"len": 12000, "z": lambda x: 200 + (x * 0.05 if x < 6000 else (12000 - x) * 0.05)})
+    c = CO.build_course(tr)
+    v1 = fake_v1("trail", 12.0, c["totals"]["gain_m"])
+    common = dict(v1=v1, course=c, grade_re=GM.GradeRE(RE0), effort_validated=False)
+    m = {"kind": "ols", "a": 2.0, "b": 4.0, "c": 6.0, "delta": 0.05, "x_race": 1.0, "x_race_source": "t", "n": 9}
+    r = PL.plan_run(opts={"mode": "auto"}, validated={"trail": True}, trail_hr=m, **common)
+    est = PL.trail_hr_estimate(m, c["totals"]["km"], c["totals"]["gain_m"], 1.0)
+    assert r["summary"]["total_method"] == "trail_hr"
+    assert r["summary"]["time_s"] == approx(est["time_s"] / r["summary"]["M"], rel=1e-3)
+    assert r["crosscheck"]["power_envelope"]["time_s"] > 0
+    # time / power modes keep the power path
+    t = PL.plan_run(opts={"mode": "time", "target_time_s": 5400}, validated={}, trail_hr=m, **common)
+    assert t["summary"]["total_method"] == "v1" and t["summary"]["time_s"] == approx(5400, abs=1)
+
+
 def test_planner_hike_three_modes_and_days():
     tr = synthetic_track({"len": 16000, "z": lambda x: 2600 + (x * 0.1 if x < 8000 else (16000 - x) * 0.1)})
     c = CO.build_course(tr)
@@ -734,6 +750,7 @@ def client(monkeypatch):
     monkeypatch.setattr(RP, "inputs", lambda refresh=False: fake_inputs())
     monkeypatch.setattr(RP, "_grade_models", lambda: {"grade_re": GM.GradeRE(RE0), "hike_speed": GM.fit_hike_speed([]),
                                                       "moving_rows": []})
+    monkeypatch.setattr(RP, "_trail_hr", lambda: None)      # no real dataset: trail total from power
     monkeypatch.setattr(BT, "flags", lambda path=None: ({"road": False, "trail": False, "hike": False}, False))
     RP._courses.clear()
     app = FastAPI()
