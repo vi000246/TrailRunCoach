@@ -992,7 +992,8 @@ QUICK_PATTERN = 1.03          # 自組: a 20′ window ≥ 1.03 × CP without a 
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
 CP_HINT = "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」"
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
-               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑"}
+               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑",
+               "user": "你標記為測試（活動資訊）"}
 AET_TITLE = re.compile(r"(?<![A-Za-z])AeT(?![A-Za-z])")
 
 
