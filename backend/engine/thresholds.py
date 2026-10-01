@@ -62,9 +62,16 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
             v = ds.cached_series(_KEY, w, lambda w=w: _nan_free(_per_run(ds, w)))
         else:
             cp_w = cp_of(w.entry.start.date())
-            v = ds.cached_series(_KEY_ASOF, w, lambda w=w, c=cp_w: _nan_free(_per_run(ds, w, c, False)))
-            if v is not None and v.get("cp") != cp_w:      # cached with another CP: recompute, don't store
-                v = _nan_free(_per_run(ds, w, cp_w, False))
+            mk = (_KEY_ASOF, w.idx, cp_w)          # in-memory: many as-of dates share a run's CP
+            memo = getattr(ds, "memo", None)
+            if isinstance(memo, dict) and mk in memo:
+                v = memo[mk]
+            else:
+                v = ds.cached_series(_KEY_ASOF, w, lambda w=w, c=cp_w: _nan_free(_per_run(ds, w, c, False)))
+                if v is not None and v.get("cp") != cp_w:  # cached with another CP: recompute, don't store
+                    v = _nan_free(_per_run(ds, w, cp_w, False))
+                if isinstance(memo, dict):
+                    memo[mk] = v
         if v:
             data[w.idx] = v
     ds.flush_series()

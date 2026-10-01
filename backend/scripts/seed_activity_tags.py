@@ -9,15 +9,22 @@ engine/activity_tags.py) — the corrections the user gave on 2026-10-01:
 * the trail races from their diary → 比賽, effort left AUTO (they often race
   by feel, so the effort comes from the HR rule, not from "race").
 
-Activities are found in the dataset (default: the WKO5 source) by date +
-distance, or date + WKO5 file name for the races. Dry run by default: it
-prints what it would change; --apply writes.
+Activities are found in the dataset (default: the charts.data_source
+setting, e.g. coros) by date + distance, or for the races by the WKO5 file
+name — on a COROS / TP source by the start time that name encodes (±3 min,
+activity_tags.MATCH_TOL_MIN). Tags go to the app DB's activity_tags table
+(the same DB activity_tags.load() and the back-test read; the table is
+created on the first write), keyed by the local start minute, so a tag
+applies to the same activity in every source. Dry run by default: it prints
+what it would change; --apply writes.
 
-    python -m backend.scripts.seed_activity_tags [--source wko5] [--db PATH] [--apply]
+    python -m backend.scripts.seed_activity_tags [--source coros|tp|wko5] [--db PATH] [--apply]
 """
 from __future__ import annotations
 
 import argparse
+import datetime as dt
+import re
 import sys
 from typing import Optional
 
@@ -46,14 +53,36 @@ def _trail(w) -> bool:
     return "runningtrail" in w.tags or w.sport_type == "trail running"
 
 
+def start_of_file(name: str) -> Optional[dt.datetime]:
+    """The local start a WKO5 file name encodes: Athlete_YYYY_MM_DD_HH_MM.wko4."""
+    m = re.search(r"(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})\.wko4$", name or "")
+    if not m:
+        return None
+    try:
+        return dt.datetime(*(int(x) for x in m.groups()))
+    except ValueError:
+        return None
+
+
 def match(spec: dict, workouts) -> tuple[Optional[object], str]:
     """The dataset workout a seed row means: the file name (ending) on that
-    date, else the run that date whose distance is within ±10 % (and the
-    right terrain), the nearest if several."""
+    date; on a COROS / TP source (no .wko4 names) the activity starting
+    within ±activity_tags.MATCH_TOL_MIN of the start the WKO5 file name
+    encodes (the same rule activity_tags.find uses across sources); else the
+    run that date whose distance is within ±10 % (and the right terrain),
+    the nearest if several."""
     day = [w for w in workouts if w.entry.start.date().isoformat() == spec["date"]]
     if spec.get("file"):
         hit = [w for w in day if str(w.entry.file).replace("\\", "/").endswith(spec["file"])]
-        return (hit[0], "file") if hit else (None, "找不到這個檔名")
+        if hit:
+            return hit[0], "file"
+        st = start_of_file(spec["file"])
+        near = [(abs((w.entry.start.replace(second=0, microsecond=0) - st).total_seconds()) / 60.0, w)
+                for w in day if st is not None]
+        near = [x for x in near if x[0] <= AT.MATCH_TOL_MIN]
+        if near:
+            return min(near, key=lambda x: x[0])[1], "start"
+        return None, "找不到這個檔名或起始時間"
     cand = [w for w in day if w.sport == "run" and w.metrics.get("distance")
             and abs(w.metrics["distance"] / spec["km"] - 1.0) <= KM_TOL
             and ("trail" not in spec or _trail(w) == spec["trail"])]
@@ -114,7 +143,8 @@ def _fmt(item: dict) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=("wko5", "coros", "tp"), default="wko5")
+    ap.add_argument("--source", choices=("wko5", "coros", "tp"),
+                    help="dataset to match against (default: the charts.data_source setting)")
     ap.add_argument("--db", help="the DB to write (default: the app DB ~/.wko5coach/wko5coach.db)")
     ap.add_argument("--apply", action="store_true", help="write the changes (default: dry run)")
     a = ap.parse_args(argv)
@@ -123,6 +153,8 @@ def main(argv=None) -> int:
     except (AttributeError, ValueError):
         pass
     from backend.api.wko5views import _dataset
+    from backend.engine.wko5expr.datasource import current_source
+    a.source = a.source or current_source()
     db = a.db or str(AT._db_path())
     ds = _dataset(source=a.source)
     items = plan(ds.workouts, AT.load(db), a.source)

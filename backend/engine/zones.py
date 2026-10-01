@@ -185,7 +185,7 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     hist = ds.athlete.settings.get("runthr") or []
     from backend.files.wko5_athlete import day_to_date
     planned = ref is not None and ds.plan.threshold_on("lthr", day_to_date(ref.day)) is not None
-    lthr_src = "你的測試" if planned else "WKO5 設定"
+    lthr_src = "你的測試" if planned else ds.setting_label("runthr", "WKO5 設定")
     if not planned and hist and all(d == dt.date(1980, 1, 1) for d, _ in hist) and lthr_est:
         lthr, lthr_src = float(lthr_est), "自動估算（尚未套用）"
     aet_planned = ref is not None and ds.plan.threshold_on("aethr", day_to_date(ref.day)) is not None
@@ -205,7 +205,8 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
                      "power": [None if plo is None or not cp else plo * cp, None if phi is None or not cp else phi * cp],
                      "power_pct": [plo, phi], "hr": [hr(hlo), hr(hhi)]})
     return {"cp": cp, "cp_source": "你的測試" if ref is not None and ds.plan.threshold_on("cp", day_to_date(ref.day)) is not None
-            else "WKO5 mFTP", "lthr": lthr, "lthr_source": lthr_src, "aet": aet, "aet_source": aet_src, "rows": rows}
+            else ("WKO5 mFTP" if ds.settings_from == "wko5" else ds.setting_label("runftp")),
+            "lthr": lthr, "lthr_source": lthr_src, "aet": aet, "aet_source": aet_src, "rows": rows}
 
 
 def zones_json(cp: float | None) -> list[dict]:
