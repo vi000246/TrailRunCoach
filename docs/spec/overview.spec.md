@@ -621,6 +621,19 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   (`backend/static/overview.html:357`).
 - The day list, the week's progress-bar targets, the Sunday CTL, next-Monday TSB and the PMC
   projection come from the stored plan (`backend/static/overview.html:306`).
+- **5 區（最大攝氧量間歇）狀態** card (`#z5card`, left column under 還缺什麼, beside 本週該做什麼
+  because it decides whether the week's interval is Zone 3 or Zone 5): the state pill (icon + text:
+  未確認 / 已確認（日期、路徑）/ 暫停（原因）/ 恢復期 / 不設門檻), three steps — 確認有氧基礎 (the
+  mode's paths: 三訊號 ①②③ with value vs requirement, the 90-min test, measured AeT UA gap / Friel;
+  ✓ / ✕ / – = no data), 3 區達標 n / 3, 排 5 區間歇 — then the re-entry days left, the 2/3 pause
+  line vs last week's Zone 1, and 建議測試. Every rule has an ⓘ with its source (推估 where ours).
+  「看歷程圖 →」 opens the 基礎期 chart below.
+- **5 區開放流程 chart** (viewer, 周期化訓練 → ② 基礎期, custom view `kind: "z5gate"`,
+  `wko5views.z5gate_panel` → `quality_gate.z5_history`, range capped at a year): a state band
+  (segments with text labels), an event lane (◆ confirmation, ● 90-min run — hollow = failed, ▲
+  measured AeT, ▼ pause, ■ break), weekly Zone 1 minutes with the 150–210 band and the dashed 2/3
+  pause line; item tooltips; a table of every state change and event with the sources. The render
+  cache key adds the preference stamp.
 - Plan editing, drag-to-move, reconcile preview and COROS push by day / week / phase live on
   the 課表 page (`backend/static/schedule.html`: session dialog `backend/static/schedule.html:1152`,
   reconcile `backend/static/schedule.html:864`, push `backend/static/schedule.html:884`, unpush
@@ -728,6 +741,7 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
 | GET | `/api/v1/overview/summary?unit=week\|month\|year&anchor=&n=` | buckets + current detail; n capped 104 / 60 / 12 (`backend/api/overview.py:69`) |
 | GET | `/api/v1/overview/pmc?begin=&end=` | daily tss / ctl / atl / tsb; default the last 180 days (`backend/api/overview.py:79`) |
 | GET | `/api/v1/overview/weekplan` | the generated week plan, with the stored 課表偏好 (`backend/api/overview.py:90`) |
+| GET | `/api/v1/overview/z5` | the 「5 區（最大攝氧量間歇）狀態」 card: `quality_gate.z5_card` on the status gate (the object the week plan decides with) + `history_href`, the viewer link of the first `z5gate` panel (`backend/api/overview.py`) |
 | GET | `/api/v1/overview/page` | `backend/static/overview.html` (`backend/api/overview.py:100`) |
 | GET | `/api/v1/overview/plan/sessions?start=&end=` | reconcile-if-needed, then stored sessions (not deleted / superseded) with COROS status, week meta, projected weeks and `summary` (`backend/api/plan_sessions.py:203`) |
 | POST | `/api/v1/overview/plan/sessions` | add a custom session; 400 on a bad field (`backend/api/plan_sessions.py:231`) |
@@ -864,4 +878,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |
 | 2026-10-01 | feat/auto-replan | N/A | Adaptive plan: `adapt.py` (missed easy / quality / long, easy run too hard, fatigue guard) applied before reconcile on every path. The interval progression state machine (`interval_outcome` / `dose_step`) replaces the 5 % fade rule. Actual TSS for done sessions. Kind `notice`. Automatic run after sync with hold / approve / reject / 復原 and the `plan_change_log` table. Details in plan-auto.spec.md |
 | 2026-10-01 | feat/drift-v2-planning | docs/research/drift-algorithm.md, unsourced-rules.md, xu-guofeng-reply.md, detraining.md | `i_drift` = 6-run mean ± SE; season drift charts add 「6 次平均」 ± SE (`drift_avg()`); guardrail sources (ramp 5/8 Friel, volume step Nielsen/Damsted, TSB Friel/TP); AeT valid by the aggregate (B3) and the test by reason; ladder Z3 → Z5 with the Zone 5 lifecycle (base_check); AeT test protocols (`plan.prefs.aet_test_protocol`, 徐國峰 90′ standard on the weekend, UA 40′ backup); re-entry block after breaks ≥ 6 days replaces `blackouts.step_cap`; easy targets from the recent EF (推估) |
+| 2026-10-01 | feat/z5-gate-viz | N/A | Zone 5 opening process: `quality_gate.z5_history` replays the lifecycle day by day through the same `_z5` evaluate() uses (`ua_gap_method`, `_break_on` shared; `base_check.replay_memo` per-run memo inside a replay only); `z5_card` + GET `/overview/z5` card on 總覽; `z5gate` panel in 基礎期; auto-mode hover text corrected to 2/3 × 3 weeks and re-entry ≥ 6 days |
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 自組), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
