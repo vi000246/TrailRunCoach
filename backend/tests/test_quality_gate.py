@@ -397,6 +397,28 @@ def _b(*ps, at60=None):
     return [{"power": p, "hr_at60": at60} for p in ps]
 
 
+@pytest.mark.xfail(strict=True, reason="bug (a) reproduced: dose_step judges titles — fixed in S3")
+def test_bug_a_a_shortened_session_still_moves_the_ladder():
+    # bug (a), interval-prescription.md §A5.2-1: under a 45/50-min weekday cap the old
+    # trim_quality turned 4×8′ into 「閾值 3×8 分」; dose_step matched the *title* to the first
+    # rung (not where the ladder stood) → neutral → the 4×8′ / 3×10′ steps never moved.
+    # The stored variant key (and its rung) is what is judged now.
+    cp = 250.0
+    good = _b(*[240] * 6)
+    first = {"bouts": good, "cp": cp, "title": "閾值 3×8 分", "variant_key": "t1a", "rung_key": "z3a", "equiv": True}
+    trimmed = {"bouts": good, "cp": cp, "title": "閾值 3×8 分", "variant_key": "t2c", "rung_key": "z3b",
+               "equiv": True}                              # an equivalent shorter variant of the second rung
+    d = QG.dose_step([first, trimmed])
+    assert trimmed["outcome"] == "met" and d["step"] == 2
+    # a 縮量版 (TIZ < 85 %, equiv False) is judged for display only: the rung doesn't move …
+    reduced = {"bouts": good, "cp": cp, "variant_key": "t2a", "variant_reps": 2, "rung_key": "z3b", "equiv": False}
+    d = QG.dose_step([first, reduced])
+    assert reduced["outcome"] == "met" and reduced.get("counted") is False and d["step"] == 1
+    # … and the old title-only rows still work the old way (backward compatible)
+    old = {"bouts": good, "cp": cp, "title": QG.Z3[0][1]}
+    assert QG.dose_step([old])["step"] == 1
+
+
 def test_interval_outcome_state_machine_rows():
     # a 5×1′ spec at 98–101 % CP (the old first rung); floor = 0.98 × 0.98 × 250 = 240 W
     spec = ("d1", "短間歇 5×1 分", 5, 1, 2, 0.98, 1.01, False, "test")

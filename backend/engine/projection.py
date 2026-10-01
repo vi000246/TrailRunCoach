@@ -175,13 +175,24 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     return ss
 
 
+VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
+                  "variant_adj", "progress", "prefer_days", "terrain")
+
+
+def PP_long(prefs, auto_wd: int) -> int:
+    from backend.engine import plan_prefs as PP
+    return PP.long_weekday(prefs, auto_wd) if prefs is not None else auto_wd
+
+
 def _bq(b: dict) -> dict:
     """add() kwargs for a gate-picked base session (quality or the AeT test)."""
     kind = b.get("kind", "quality")
     return {"id": b.get("id") or ("test_aet" if kind == "test" else "quality"), "kind": kind, "title": b["title"],
             "minutes": b["minutes"], "target": b.get("target", ""), "detail": b.get("detail", ""),
             "source": b.get("source", ""), "tss": float(b.get("tss") or 65.0),
-            **({"protocol": b["protocol"]} if b.get("protocol") else {})}   # the AeT test: "aet"
+            **({"protocol": b["protocol"]} if b.get("protocol") else {}),   # the AeT test: "aet"
+            # the interval library variant (engine/interval_library.py)
+            **{k: b[k] for k in VARIANT_FIELDS if b.get(k) is not None}}
 
 
 def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
@@ -297,10 +308,20 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     rates = cur.get("tss_per_category") if PR is not None else None
     gate = _gate_inputs(cur)
     step = int((gate.get("dose") or {}).get("step") or 0)
+    cur_q = next((s for s in cur_s if s.get("kind") == "quality"), None)
     if cur.get("phase") == "base" and (gate.get("allowed") and (gate.get("this_week") or "") not in
-                                       ("", QG.RECOVERY[1], QG.SUB[1])):
+                                       ("", QG.RECOVERY[1], QG.SUB[1])) and \
+            not (cur_q is not None and cur_q.get("progress") is False):
         step += 1                              # this week's interval is one step of the dose
+        # (a 縮量版 / the step before under a tight cap is maintenance: no step — §C5.3)
     last_aet = (gate.get("aet_test") or {}).get("last")
+    # the interval library's rotation (engine/interval_library.fit): the stored variants done
+    # before this week, then this week's pick and each projected week's
+    vhist = O.variant_history(monday, gate)
+    this_q = next((s for s in cur_s if s.get("kind") == "quality" and s.get("variant_key")), None)
+    if this_q is not None:
+        vhist.append({"day": monday.isoformat(), "rung_key": this_q.get("rung_key"),
+                      "variant_key": this_q["variant_key"], "state": "done", "outcome": None})
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
     strength_tss = float(st["tss"]) if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]
@@ -365,8 +386,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                                 getattr(prefs, "cap_weekday", None), proto, getattr(prefs, "long_cap", None))
             last_aet = week.isoformat()
         if base_q is None and kind == "base" and dec["allow"] and dec["spec"] is not None:
-            base_q = O._gate_session(gate, dec, th, hours)
-            if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB):
+            q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
+            base_q = O._gate_session(gate, dec, th, hours, prefs, vhist, mountain, q_cap, q_alt)
+            if base_q.get("variant_key"):
+                # this week's pick joins the rotation history of the weeks after it
+                vhist.append({"day": week.isoformat(), "rung_key": base_q.get("rung_key"),
+                              "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
+            if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB) and base_q.get("progress", True) is not False:
                 step += 1
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,

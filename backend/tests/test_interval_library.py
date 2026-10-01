@@ -75,3 +75,134 @@ def test_tiz_main_blocks_and_text():
     assert IL.with_reps(IL.get("t2a"), 2).n == 2
     rows = IL.library_table()
     assert {r["key"] for r in rows} == set(IL.ALL) and all({"full", "std", "min"} <= set(r) for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# S2: choosing the variant and fitting it into the day's cap (§C5.2–§C5.3)
+# ---------------------------------------------------------------------------
+
+def _done(rung, key, outcome="met"):
+    return {"rung_key": rung, "variant_key": key, "state": "done", "outcome": outcome, "day": "2026-09-01"}
+
+
+def test_time_enough_means_the_standard_full_length_session():
+    f = IL.fit("z3b", None)
+    assert f["variant"].key == "t2a" and f["level"] == "full" and f["equiv"] and f["progress"]
+    assert f["reason"].startswith("時間足夠 → 標準版")
+    assert IL.total_min(f["variant"], "full") == 53                  # 15 + 28 + 10
+    f = IL.fit("z5d", 60)                                             # a cap that fits the full session
+    assert (f["variant"].key, f["level"]) == ("v4a", "full")
+    s = IL.session_for(f, {"cp": 204.0, "lthr": 170.0, "aet": 150.0})
+    assert s["title"] == "VO2max 4×4 分" and s["minutes"] == 55 and s["variant_key"] == "v4a"
+    assert s["detail"].startswith("時間足夠 → 標準版") and "暖身 20 分" in s["detail"] and "緩和 10 分" in s["detail"]
+    assert "212–220 W" in s["target"] and "心率" in s["target"]
+
+
+@pytest.mark.parametrize("rung, cap, key, level, equiv", [
+    ("z3b", 45, "t2a", "std", True),        # 12 + 28 + 5 = 45: the standard version, blocks at §C3
+    ("z3b", 50, "t2a", "std", True),        # 53 with the full blocks > 50
+    ("z5c", 43, "v3a", "min", True),        # 13 + 25 + 5
+    ("z5c", 42, "v3b", "min", True),        # no standard-length variant fits: the shorter equivalent
+    ("z5a", 36, "v1a", "min", True),
+    ("z3b", 40, "t2a", "min", False),       # 2×8′ = 67 % of the TIZ: 縮量版
+    ("z5d", 40, "v4a", "min", False),       # 3×4′ = 75 %
+])
+def test_the_cap_rules(rung, cap, key, level, equiv):
+    f = IL.fit(rung, cap)
+    assert (f["variant"].key, f["level"], f["equiv"]) == (key, level, equiv), f["reason"]
+    assert IL.total_min(f["variant"], f["level"]) <= cap
+    assert f["reason"].startswith(f"平日上限 {cap} 分 → ")
+    if not equiv:
+        assert f["reps"] is not None and "達標也只算維持" in f["reason"] and not f["progress"]
+
+
+def test_fewer_reps_with_85_percent_of_the_tiz_still_count():
+    # §C4 v4b note: 8×2′ cut to 7×2′ keeps 14 of 16 min (88 %) — inside the ±15 % rule
+    r = IL.with_reps(IL.get("v4b"), 7)
+    assert IL.tiz_s(r) / IL.tiz_s(IL.get("v4b")) >= IL.EQUIV_TIZ and IL.equivalent(r, IL.canonical("z5d"))[0]
+
+
+def test_rotation_and_first_exposure():
+    # first time on a rung: the studied protocol even if another variant was used elsewhere
+    assert IL.fit("z5b", None, [_done("z5a", "v1b")])["variant"].key == "v2a"
+    # after v2a, an equivalent standard-length variant; the reason says it
+    f = IL.fit("z5b", None, [_done("z5b", "v2a")])
+    assert f["variant"].key == "v2b" and "上次做 4×3 分，這次換 6×2 分（同等，不影響進階）" in f["reason"]
+    # not within the last 2 sessions of the rung, and not the one judged 未適應 last time
+    # (with time enough the pool is the flat standard-length variants: v2a / v2b alternate;
+    # the shorter 3×4′ is only the tight-cap fallback)
+    f = IL.fit("z5c", None, [_done("z5c", "v3a"), _done("z5c", "v3c")])
+    assert f["variant"].key == "v3a"                       # both used recently: the canonical on the tie
+    # both recent, the one judged 未適應 last time loses the tie
+    assert IL.fit("z5b", None, [_done("z5b", "v2b"), _done("z5b", "v2a", "unadapted")])["variant"].key == "v2b"
+    assert IL.fit("z3b", None, [_done("z3b", "t2a"), _done("z3b", "t2b")])["variant"].key == "t2c"
+    assert IL.fit("z3b", None, [_done("z3b", "t2c"), _done("z3b", "t2a"), _done("z3b", "t2b")])["variant"].key == "t2c"
+    # uphill versions only when the prefs / a mountain goal allow them; then every 2nd session
+    assert all(IL.fit(r, None, [_done(r, IL.canonical(r).key)])["variant"].terrain == "flat" for r in IL.LIBRARY)
+    hill = PP.Prefs(terrain_quality="hill")
+    assert IL.fit("z5c", None, [_done("z5c", "v3a")], hill)["variant"].key == "v3d"
+    assert IL.fit("z5c", None, [_done("z5c", "v3a")], mountain=True)["variant"].terrain == "hill"
+    assert IL.fit("z5c", None, [_done("z5c", "v3a")], PP.Prefs(terrain_quality="flat"), mountain=True)[
+        "variant"].terrain == "flat"
+
+
+def test_another_day_then_the_step_before():
+    # 30 min on weekdays: 3×8′ can't be cut to fit (2×8′ = 33′) → Saturday without a cap
+    f = IL.fit("z3b", 30, alt_caps=[("週六", None, 5)])
+    assert f["action"] == "move" and f["move_wd"] == 5 and f["variant"].key == "t2a" and f["level"] == "full"
+    assert f["reason"].startswith("平日上限 30 分 放不下 T2 → 改到週六")
+    # no other day: the rung before as maintenance, with the doc's warning
+    f = IL.fit("z3b", 30)
+    assert f["action"] == "back" and f["rung"] == "z3a" and not f["equiv"] and not f["progress"] and f["warn"]
+    assert "放不下 T2 的 3×8 分（需要 43 分以上）：本週改排 T1 的" in f["reason"] and "不算進階" in f["reason"]
+    assert "把平日上限調到 43 分，或把品質課改到週末" in f["reason"]
+
+
+def test_the_state_machines_tweak_is_applied_before_fitting():
+    f = IL.fit("z5a", None, adj={"rest_add": 1})
+    assert f["variant"].rest_s == 180 and f["adj"] == {"rest_add": 1}
+    assert IL.resolve("v1a", None, {"rest_add": 1}).rest_s == 180
+    f = IL.fit("z3a", None, adj={"power": 0.95})
+    assert f["variant"].lo == round(0.90 * 0.95, 3)
+
+
+@pytest.mark.parametrize("cap", [45, 50, None])
+def test_the_second_rung_stays_the_second_rung_under_any_cap(cap):
+    # §C5.5 S2: 「上限 45／50／無：z3b 不會變成 z3a」 — the old trim_quality cut 4×8′ to 3×8′ and the
+    # title then read as the first rung
+    from backend.engine import overview as O
+    from backend.engine import quality_gate as QG
+    gate = {"state": "none", "mode": "auto", "guard": {}, "dose": {"step": 1}, "lthr": {"default": False}}
+    dec = {"spec": QG.Z3[1], "advance": True}
+    prefs = PP.Prefs(cap_weekday=cap) if cap else PP.Prefs()
+    q_cap, alt = O.quality_caps(prefs, 6)
+    s = O._gate_session(gate, dec, {"cp": 204.0, "lthr": 170.0, "aet": 150.0}, 5.0, prefs, [], False, q_cap, alt)
+    assert s["rung_key"] == "z3b" and s["equiv"] and s["progress"]
+    assert s["minutes"] <= (cap or 999) and s["variant_key"] in {v.key for v in IL.LIBRARY["z3b"]}
+    assert s["detail"].startswith("時間足夠 → 標準版" if cap is None else f"平日上限 {cap} 分 → 標準版")
+    # 課表偏好 shape() leaves a fitted variant alone (no trim, no title suffix)
+    c = PP.Ctx(kind="base", mode="base", allow_quality=True, rates={"road": 50.0})
+    out = PP.shape([{**s, "day": None, "done": False, "done_by": None}], 300, PP.Prefs(cap_weekday=40, terrain_quality="flat"), c)
+    q = next(x for x in out if x["kind"] == "quality")
+    assert (q["title"], q["minutes"]) == (s["title"], s["minutes"])
+
+
+def test_quality_caps_weekend_alternatives():
+    from backend.engine import overview as O
+    p = PP.Prefs(cap_weekday=40, cap_long=120, long_day="sun")
+    cap, alt = O.quality_caps(p, 6)
+    assert cap == 40 and alt == []                         # Saturday is 1 day from the Sunday long run
+    p = PP.Prefs(cap_weekday=40, cap_long=120, days=(True, True, True, True, False, True, True))
+    assert O.quality_caps(p, 2)[1] == [("週六", 120, 5), ("週日", 120, 6)]
+    assert O.quality_caps(PP.Prefs(), 6) == (None, [])
+
+
+def test_steps_carry_the_blocks_and_the_walk_rests():
+    st = IL.steps(IL.get("v1a"), "std")
+    kinds = [s["kind"] for s in st]
+    assert kinds[:3] == ["warm"] * 3 and kinds[-1] == "cool"
+    assert kinds.count("work") == 5 and kinds.count("rest") == 4                  # no rest after the last rep
+    assert all(s["mode"] == "walk" for s in st if s["kind"] == "rest")
+    assert sum(s["s"] for s in st) == IL.total_min(IL.get("v1a"), "std") * 60
+    x = IL.steps(IL.get("x3015"), "std")
+    assert sum(1 for s in x if s["kind"] == "rest" and s["s"] == 180) == 1

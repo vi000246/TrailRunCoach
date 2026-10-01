@@ -402,11 +402,15 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     if p.quality == 2 and c.allow_quality and q and c.mode != "recovery_week" and (c.quality_cap or 2) >= 2:
         hard.append({**q[0], "id": "quality2"})
     for s in hard:
-        _quality_terrain(s, p)
+        if not s.get("variant_key"):
+            # a library variant already carries its terrain (interval_library.terrains)
+            _quality_terrain(s, p)
         if p.interval_target == "hr" and s["kind"] == "quality":
             s["target"] = _hr_part(s.get("target", ""))
     if p.cap_weekday is not None:
         for s in hard:
+            if s.get("variant_key"):
+                continue                        # fitted to the cap already (interval_library.fit, §C5.3)
             if s["kind"] == "test" and s["minutes"] > p.cap_weekday:
                 from backend.engine import aet_test as AT
                 if AT.is_xu(s):
@@ -551,6 +555,9 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             ok = lambda d: (long_day is None or abs((d - long_day).days) >= 2) and \
                 all(abs((d - h).days) >= 2 for h in hard_days)
             cands = sorted(avail, key=lambda d: QUALITY_ORDER.index(d.weekday()))
+            if s.get("prefer_days"):
+                # interval_library.fit moved it to a day with a bigger cap (§C5.3-4)
+                cands = sorted(cands, key=lambda d: d.weekday() not in s["prefer_days"])
             pick = next((d for d in cands if ok(d)), None) or next(
                 (d for d in cands if long_day is None or abs((d - long_day).days) >= 1), cands[0])
         else:

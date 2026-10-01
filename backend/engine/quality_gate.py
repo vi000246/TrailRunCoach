@@ -1184,10 +1184,12 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
     spec = dose_spec(s, z5_open)
     if s >= len(Z3) and not z5_open:
         adv = False                                       # Zone 3 maintenance: the Z5 step waits
+    adj = None
     if first and step is None and s == d.get("step", 0):
-        spec = adjusted_spec(spec, d.get("adjust"))       # the state machine's tweak, this week only
+        adj = d.get("adjust") or None
+        spec = adjusted_spec(spec, adj)                   # the state machine's tweak, this week only
     note = "" if z5_open or s < len(Z3) else (z5.get("text") or "Zone 5 還沒開：先排 3 區")
-    return {"allow": True, "spec": spec, "advance": adv, "note": note}
+    return {"allow": True, "spec": spec, "advance": adv, "note": note, "adjust": adj}
 
 
 def zone3_work(hours: Optional[float], reps: int = 3) -> int:
@@ -1254,14 +1256,27 @@ def guardrail_mode(gate: Optional[dict]) -> bool:
     return bool(gate) and gate.get("state") in ("none", "missing")
 
 
-def hard_need(title: str, default: float) -> float:
+def hard_need(title: str, default: float, variant_key: Optional[str] = None,
+              variant_reps: Optional[int] = None) -> float:
     """Seconds at/above threshold that mark a planned interval session done:
-    short reps (5×1′) never reach 10 min, so 60 % of the planned work."""
+    short reps (5×1′) never reach 10 min, so 60 % of the planned work (a
+    library variant: 60 % of its time in zone)."""
     import re
+    if variant_key:
+        from backend.engine import interval_library as IL
+        v = IL.resolve(variant_key, variant_reps)
+        if v is not None:
+            return min(default, 0.6 * IL.tiz_s(v))
     m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*分", title or "")
     if not m:
         return default
     return min(default, 0.6 * int(m.group(1)) * int(m.group(2)) * 60)
+
+
+def is_z3_variant(key: Optional[str]) -> bool:
+    from backend.engine import interval_library as IL
+    v = IL.get(key)
+    return v is not None and v.cls == "Z3sub"
 
 
 # ---------------------------------------------------------------------------
