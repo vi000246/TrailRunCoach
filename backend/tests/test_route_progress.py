@@ -226,16 +226,99 @@ def test_climbs_with_slightly_different_endpoints_cluster_into_one():
     assert len(climbs) == 1
 
 
-def test_route_needs_same_direction():
-    loop = [(0, 0), (1500, 0), (1500, 1500), (0, 1500), (0, 0)]
-    a = activity(loop, start="2025-01-01T08:00")
-    b = activity(loop, start="2025-02-01T08:00", noise=(6.0, 3.0))
-    c = activity(list(reversed(loop)), start="2025-03-01T08:00")
+LOOP = [(0, 0), (1500, 0), (1500, 1500), (0, 1500), (0, 0)]
+
+
+def test_reversed_loop_is_the_same_route_marked_reversed():
+    a = activity(LOOP, start="2025-01-01T08:00")
+    b = activity(LOOP, start="2025-02-01T08:00", noise=(6.0, 3.0))
+    c = activity(list(reversed(LOOP)), start="2025-03-01T08:00")
     idx = R.detect(_tracks(a, b, c))
     assert len(idx["routes"]) == 1
-    assert idx["routes"][0]["members"] == [a[0]["file"], b[0]["file"]]
-    assert idx["routes"][0]["id"] == R.seg_id("route", a[0]["file"], 0,
-                                              R.Track(track_of(*a)).raw["idx"][-1])
+    r = idx["routes"][0]
+    assert r["members"] == [a[0]["file"], b[0]["file"], c[0]["file"]]
+    assert r["dirs"] == {a[0]["file"]: "same", b[0]["file"]: "same", c[0]["file"]: "reversed"}
+    assert r["id"] == R.seg_id("route", a[0]["file"], 0, R.Track(track_of(*a)).raw["idx"][-1])
+
+
+def test_loop_started_at_another_corner_is_the_same_route():
+    # the same square, started at the opposite corner: start / end 2.1 km from
+    # the first run's — the old rule (ends within 200 m) made it a second route
+    other = [(1500, 1500), (0, 1500), (0, 0), (1500, 0), (1500, 1500)]
+    a = activity(LOOP, start="2025-01-01T08:00")
+    b = activity(other, start="2025-02-01T08:00", noise=(5.0, 0.0))
+    c = activity(LOOP, start="2025-03-01T08:00", noise=(0.0, 5.0))
+    idx = R.detect(_tracks(a, b, c))
+    assert [len(r["members"]) for r in idx["routes"]] == [3]
+    assert set(idx["routes"][0]["dirs"].values()) == {"same"}
+
+
+def test_out_and_back_both_ways_is_one_route_same_direction():
+    line = [(0, 0), (2500, 0), (2500, 800)]
+    ob = line + list(reversed(line))[1:]
+    a = activity(ob, start="2025-01-01T08:00")
+    b = activity(ob, start="2025-02-01T08:00", noise=(4.0, 4.0))
+    # walked from the far end: start and end 2.6 km from the others'
+    far = list(reversed(line)) + line[1:]
+    c = activity(far, start="2025-03-01T08:00")
+    idx = R.detect(_tracks(a, b, c))
+    assert [len(r["members"]) for r in idx["routes"]] == [3]
+    # each leg lies on the other: an out-and-back has no wrong way round
+    assert idx["routes"][0]["dirs"][a[0]["file"]] == "same" and idx["routes"][0]["dirs"][b[0]["file"]] == "same"
+
+
+def test_runs_with_their_own_spurs_cluster_on_the_common_part():
+    # the first run starts 600 m away (another car park): with the first run as
+    # the reference and ends within 200 m, the old rule split these into two routes
+    spur = [(-600, 0)] + LOOP
+    a = activity(spur, start="2025-01-01T08:00")
+    b = activity(LOOP, start="2025-02-01T08:00", noise=(4.0, 0.0))
+    c = activity(LOOP, start="2025-03-01T08:00", noise=(0.0, 4.0))
+    d = activity(LOOP + [(0, -400)], start="2025-04-01T08:00", noise=(3.0, 3.0))   # a cool-down spur
+    idx = R.detect(_tracks(a, b, c, d))
+    assert [len(r["members"]) for r in idx["routes"]] == [4]
+    r = idx["routes"][0]
+    # canonical = the part more than half of the runs share: the 6 km loop, no spurs
+    assert r["length_m"] == pytest.approx(6000, abs=80)
+
+
+def test_a_run_over_part_of_a_route_is_linked_not_a_new_route():
+    a = activity(LOOP, start="2025-01-01T08:00")
+    b = activity(LOOP, start="2025-02-01T08:00", noise=(5.0, 0.0))
+    half = activity([(0, 0), (1500, 0), (1500, 1500)], start="2025-03-01T08:00", noise=(0.0, 5.0))
+    idx = R.detect(_tracks(a, b, half))
+    assert len(idx["routes"]) == 1
+    r = idx["routes"][0]
+    assert half[0]["file"] not in r["members"]
+    assert [p["file"] for p in r["partials"]] == [half[0]["file"]] and r["partials"][0]["share"] >= 0.8
+    # ... and two runs of that part are a sub-route of the loop, not a top-level route
+    half2 = activity([(0, 0), (1500, 0), (1500, 1500)], start="2025-04-01T08:00", noise=(4.0, 4.0))
+    idx = R.detect(_tracks(a, b, half, half2))
+    loop = next(x for x in idx["routes"] if a[0]["file"] in x["members"])
+    sub = next(x for x in idx["routes"] if half[0]["file"] in x["members"])
+    assert sub["parent"] == loop["id"] and loop["parent"] is None and loop["partials"] == []
+
+
+def test_route_ids_carry_over_and_merged_routes_become_aliases():
+    a = activity([(-600, 0)] + LOOP, start="2025-01-01T08:00", file="ra")
+    b = activity(LOOP, start="2025-02-01T08:00", noise=(4.0, 0.0), file="rb")
+    c = activity(LOOP, start="2025-03-01T08:00", noise=(0.0, 4.0), file="rc")
+    tracks = _tracks(a, b, c)
+    # an old index with two routes for these runs (as the old rule built them)
+    old = [{"id": "rOLD1", "ref_file": "rb", "members": ["rb", "rc"]},
+           {"id": "rOLD2", "ref_file": "ra", "members": ["ra", "rx"]}]
+    routes = R.cluster_routes(tracks, old)
+    assert len(routes) == 1
+    assert routes[0]["id"] == "rOLD1" and routes[0]["ref_file"] == "rb" and routes[0]["aliases"] == ["rOLD2"]
+
+
+def test_direction_shares_are_start_free():
+    sq = np.array(polyline(LOOP, 25))
+    shifted = np.roll(sq[:-1], 30, axis=0)            # the same loop from another point
+    f, r = RM.direction_shares(sq, shifted + 6.0)
+    assert f > 0.95 and r < 0.2
+    f, r = RM.direction_shares(sq, shifted[::-1] + 6.0)
+    assert r > 0.95 and f < 0.2
 
 
 def _seg(sid, kind, pts, files):
@@ -252,9 +335,94 @@ def test_climb_inside_a_longer_climb_with_the_same_activities_is_dropped():
     more = _seg("s3", "climb", [(0, 500), (0, 1500)], ["a", "b", "c"])
     out = R._finish([long_, inner], [], {})
     assert [s["id"] for s in out["segments"]] == ["s1"]
-    # done by an extra activity, the inner climb carries information: kept
+    # done by an extra activity, the inner climb is the common part of more
+    # activities, and the longer one adds nobody: only the common part is listed
     out = R._finish([long_, more], [], {})
-    assert sorted(s["id"] for s in out["segments"]) == ["s1", "s3"]
+    assert sorted(s["id"] for s in out["segments"]) == ["s3"]
+    assert "s1" in {s["id"] for s in out["pending"]}
+    # a longer climb done by someone the inner one misses carries information: both kept
+    other = _seg("s4", "climb", [(0, 0), (0, 1500)], ["a", "b", "d"])
+    out = R._finish([other, more], [], {})
+    assert sorted(s["id"] for s in out["segments"]) == ["s3", "s4"]
+
+
+def test_a_stretch_that_is_a_route_is_folded_into_it():
+    route = {"id": "rL", "kind": "route", "family": "foot", "members": ["a", "b", "c"], "partials": [],
+             "parent": None}
+    route["lat"], route["lon"] = map(list, zip(*(ll(x, y) for x, y in polyline(LOOP, 25))))
+    st = _seg("sS", "stretch", [(0, 0), (1500, 0), (1500, 1200)], ["a", "b", "c"])
+    away = _seg("sA", "stretch", [(0, 0), (1500, 0), (1500, 1200)], ["a", "x", "y", "z"])   # mostly other runs
+    out = R._finish([st, away], [route], {})
+    assert [s["id"] for s in out["segments"]] == ["sA"]
+    assert out["routes"][0]["stretches"] == ["sS"]
+
+
+def test_a_chain_of_stretches_is_merged_into_its_common_part():
+    path = [(0, 0), (3000, 0)]
+    acts = [activity([(-500, 300), (0, 0)] + path, start="2025-01-01T08:00", file="c0"),
+            activity([(-500, -300), (0, 0)] + path, start="2025-02-01T08:00", file="c1", noise=(0, 4.0)),
+            activity(path + [(3500, 300)], start="2025-03-01T08:00", file="c2", noise=(0, -4.0))]
+    tracks = _tracks(*acts)
+    host = tracks["c0"]
+    X = RM.project(host.lat, host.lon, LAT0, LON0)              # the test's metres
+    on = np.flatnonzero(np.abs(X[:, 1]) < 3)                   # c0's points on the shared path
+    k = lambda m: int(on[np.argmin(np.abs(X[on, 0] - m))])     # c0's point at path metre m
+    pieces = []
+    for sid_end in ((0, 1600), (1500, 3000)):
+        s = R._new_segment("stretch", host, k(sid_end[0]), min(len(host) - 1, k(sid_end[1])))
+        for f in ("c0", "c1", "c2"):
+            s.efforts += R.match_segment(s, tracks[f])
+        pieces.append(s)
+    assert all({e["file"] for e in p.efforts} == {"c0", "c1", "c2"} for p in pieces)
+    out = R._finish(pieces, [], tracks)
+    assert len(out["segments"]) == 1
+    m = out["segments"][0]
+    assert m["derived"] and sorted(m["merged_from"]) == sorted(p.id for p in pieces)
+    assert m["length_m"] == pytest.approx(3000, abs=60)
+    assert {e["file"] for e in m["efforts"]} == {"c0", "c1", "c2"}
+    assert {p.id for p in pieces} <= {s["id"] for s in out["pending"]}
+    # derived stretches are never references: a later build rebuilds them
+    assert all(not s.get("derived") for s in out["pending"])
+
+
+# --- thumbnails ---------------------------------------------------------------
+
+def _thumb_points(t):
+    return np.array([[float(v) for v in p.split(",")] for p in t["d"][1:].split("L")])
+
+
+def test_thumbnail_keeps_the_shape_north_up_at_taiwan_latitude():
+    # an L: 1 km east, then 1 km north, at 24 °N
+    lat, lon = zip(*(ll(x, y) for x, y in polyline([(0, 0), (1000, 0), (1000, 1000)], 10)))
+    t = RM.thumbnail(lat, lon, w=64, h=40, pad=3)
+    p = _thumb_points(t)
+    assert len(p) == 3                                   # corners kept, the straight legs simplified
+    east, north = p[1] - p[0], p[2] - p[1]
+    # equal legs on the ground are equal on screen: x is scaled by cos(lat).
+    # Plotting raw degrees would make the east leg 1/cos(24°) = 1.095 x longer
+    assert abs(east[0]) == pytest.approx(abs(north[1]), rel=0.005)
+    assert east[0] > 0 and abs(east[1]) < 0.05          # east = right
+    assert north[1] < 0 and abs(north[0]) < 0.05        # north = up (SVG y grows down)
+    # one scale for both axes: the 1 x 1 km box fills the 34 px height, centred in the width
+    assert north[1] == pytest.approx(-(40 - 2 * 3), abs=0.05)
+    assert (p[:, 0].min() + p[:, 0].max()) / 2 == pytest.approx(32, abs=0.05)
+    assert t["start"] == [round(p[0, 0], 1), round(p[0, 1], 1)]
+
+
+def test_thumbnail_aspect_of_a_wide_loop_and_detail_within_a_pixel():
+    loop = [(0, 0), (3000, 0), (3000, 1000), (0, 1000), (0, 0)]
+    lat, lon = zip(*(ll(x, y) for x, y in polyline(loop, 10)))
+    t = RM.thumbnail(lat, lon, w=64, h=40, pad=3)
+    p = _thumb_points(t)
+    wpx, hpx = np.ptp(p[:, 0]), np.ptp(p[:, 1])
+    assert wpx / hpx == pytest.approx(3.0, rel=0.01)    # 3 km x 1 km stays 3 : 1
+    assert wpx == pytest.approx(58, abs=0.05)           # the wide side fills the width
+    # every GPS point lies within half a pixel of the drawn line
+    xy = RM.project(lat, lon, (min(lat) + max(lat)) / 2, (min(lon) + max(lon)) / 2)
+    s = 58 / np.ptp(xy[:, 0])
+    raw = np.column_stack(((xy[:, 0] - xy[:, 0].min()) * s + 3, (xy[:, 1].max() - xy[:, 1]) * s + (40 - np.ptp(xy[:, 1]) * s) / 2))
+    assert RM.dist_to_path(raw, p).max() < 0.5
+    assert RM.thumbnail([24.0], [121.0]) is None
 
 
 def test_shared_flat_stretch_becomes_a_segment():
@@ -300,6 +468,9 @@ def test_incremental_build_matches_full_and_keeps_ids(tmp_path):
     assert all(len(s["efforts"]) == 3 for s in inc["segments"] if s["kind"] in ("climb", "descent"))
     full = R.Builder(R.RouteStore(tmp_path / "full")).build(wl3, reader3, full=True)
     assert _summary(inc) == _summary(full)
+    members = lambda ix: sorted(tuple(r["members"]) for r in ix["routes"])
+    assert members(inc) == members(full) == [("f0", "f1", "f2")]
+    assert {r["id"] for r in first["routes"]} <= {r["id"] for r in inc["routes"]}     # the route keeps its id
     # enrich ran: metrics and names are in the saved index
     e = inc["segments"][0]["efforts"][0]
     assert e["elapsed_s"] > 0 and inc["segments"][0]["auto_name"]
@@ -349,6 +520,46 @@ def test_api_compare_gap_ends_at_the_elapsed_difference(tmp_path, monkeypatch):
     assert all(x is not None for x in c["a"]["t_s"])
     API.rename(climb["id"], API.RenameBody(name="測試坡"))
     assert API.detail(climb["id"])["name"] == "測試坡"
+
+
+def test_api_route_rows_thumbnails_directions_and_aliases(tmp_path, monkeypatch):
+    from backend.api import routes as API
+    acts = [activity(LOOP, start="2025-01-01T08:00", file="L0"),
+            activity(LOOP, start="2025-02-01T08:00", noise=(5.0, 0.0), file="L1", speed=3.3),
+            activity(list(reversed(LOOP)), start="2025-03-01T08:00", file="L2"),
+            activity([(0, 0), (1500, 0), (1500, 1500)], start="2025-04-01T08:00", file="L3")]
+    store = R.RouteStore(tmp_path / "api2")
+    bld = R.Builder(store)
+    monkeypatch.setattr(API, "STORE", store)
+    monkeypatch.setattr(API, "BUILDER", bld)
+    monkeypatch.setattr(API, "_ensure_fresh", lambda: None)
+    monkeypatch.setattr(API, "_file_to_idx", lambda: {"L3": 7})
+    monkeypatch.setattr(API, "_phase_labels", lambda days: [None] * len(days))
+    API._CACHE.update(mtime=None, view=None)
+    wl, rd = _builder(tmp_path, acts)
+    idx = bld.build(wl, rd)
+    rid = idx["routes"][0]["id"]
+    # an alias written into the index (a route merged away by an earlier build)
+    idx["routes"][0]["aliases"] = ["rGONE"]
+    store.save_index(idx)
+    API._CACHE.update(mtime=None, view=None)
+    lst = API.list_routes(kind="route")
+    assert [r["id"] for r in lst["rows"]] == [rid]
+    row = lst["rows"][0]
+    assert row["thumb"]["d"].startswith("M") and row["n_reversed"] == 1 and row["n_partials"] == 1
+    assert lst["counts"]["route"] == 1
+    d = API.detail("rGONE")                                # the old id opens the route
+    assert d["id"] == rid and [p["workout"] for p in d["partials"]] == [7]
+    by_file = {e["file"]: e for e in d["efforts"]}
+    # ranks per direction: the reversed run is first of its own direction
+    assert by_file["L2"]["dir"] == "reversed" and by_file["L2"]["rank"] == 1
+    assert sorted(by_file[f]["rank"] for f in ("L0", "L1")) == [1, 2]
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as ex:
+        API.compare(rid, by_file["L0"]["id"], by_file["L2"]["id"])
+    assert ex.value.status_code == 400
+    c = API.compare(rid, by_file["L0"]["id"], by_file["L1"]["id"])
+    assert c["gap_s"][-1] == pytest.approx(by_file["L1"]["moving_s"] - by_file["L0"]["moving_s"], abs=3)
 
 
 def test_names_survive_and_are_keyed_by_id(tmp_path):
