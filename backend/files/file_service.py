@@ -279,7 +279,8 @@ async def _import_one_file(
         total_distance_m = meta.total_distance_m
     elif fmt == "fit":
         try:
-            raw = parse_fit(str(path))
+            import asyncio
+            raw = await asyncio.to_thread(parse_fit, str(path))     # FIT parsing: off the event loop
         except Exception:
             return None
         start_time = raw.start_time

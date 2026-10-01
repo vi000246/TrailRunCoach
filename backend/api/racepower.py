@@ -443,10 +443,11 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
                         official_gain_m: Optional[float] = Form(None)):
     """Parse a .gpx / .fit once and cache the Track (LRU 20, by content sha1);
     later plans send only the course_id and re-segment with their options."""
+    from starlette.concurrency import run_in_threadpool
     from backend.engine.racepower import gpx as GPX
     data = await file.read(GPX.MAX_BYTES + 1)
     try:
-        track = GPX.parse(data, file.filename or "")
+        track = await run_in_threadpool(GPX.parse, data, file.filename or "")   # CPU: off the event loop
     except GPX.GpxError as e:
         raise HTTPException(400, str(e))
     cid = hashlib.sha1(data).hexdigest()
@@ -455,8 +456,9 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
         _courses.move_to_end(cid)
         while len(_courses) > COURSE_CACHE_MAX:
             _courses.popitem(last=False)
-    c = _build(track, _course_opts({"sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m,
-                                    "flat_pct": flat_pct, "split": split, "official_gain_m": official_gain_m}))
+    c = await run_in_threadpool(_build, track, _course_opts({
+        "sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m, "flat_pct": flat_pct, "split": split,
+        "official_gain_m": official_gain_m}))
     return _py({"course_id": cid, "name": track.name or file.filename, **c})
 
 
@@ -880,8 +882,9 @@ def export_csv(body: ExportIn):
 
 @router.post("/export/coros")
 async def export_coros(body: ExportIn, db=Depends(_db)):
+    from starlette.concurrency import run_in_threadpool
     from backend.sync import coros_workouts as CW
-    p = make_plan(body)
+    p = await run_in_threadpool(make_plan, body)      # reads the Dataset: never on the event loop
     payload = coros_payload(body, p)
     payload = _py(payload)
     out = {"payload": payload, "steps": len(payload["exercises"]), "pushed": None}
