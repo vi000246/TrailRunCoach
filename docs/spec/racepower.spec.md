@@ -38,6 +38,8 @@ decisions on the workbook's ambiguities (D1–D10) are in
 | `grade_model.py` (v2) | Personal RE(g) / v_max(g) and walking speed v_h(g) | `backend/engine/racepower/grade_model.py:47` |
 | `difficulty.py` (v2) | Sustainable power F1–F3, t_lim, effort bar | `backend/engine/racepower/difficulty.py:36` |
 | `pacing.py` (v2) | Hill / ramp weights, the three solvers, W′ budget and curves | `backend/engine/racepower/pacing.py:77` |
+| `trailhr.py` | Trail HR pace model (effort km vs HR / LTHR, durability, race HR level; 推估) | `backend/engine/racepower/trailhr.py` |
+| `activity_tags.py` | Activity type / effort tags (auto + user override) used to pick capacity samples | `backend/engine/activity_tags.py` |
 | `hike.py` (v2) | Pandolf, multi-day fatigue, walking rows, Naismith / Langmuir | `backend/engine/racepower/hike.py:28` |
 | `planner.py` (v2) | Plan orchestration, the validation gate, per-segment heat fixed point, COROS steps | `backend/engine/racepower/planner.py:258` |
 | `csvplan.py` | Plan → CSV text (header block + one row per segment); formatting only | `backend/engine/racepower/csvplan.py:146` |
@@ -843,6 +845,10 @@ the version-2 store.
     account); only the user's mark (`backend/scripts/seed_activity_tags.py`) removes it. The
     trail runs 2025-11-02 and 2026-07-27 are now auto 有拼但有休息; 2026-07-27's long-rest share
     (11 %) is close to the 10 % cut;
+  - `validated["trail_hr"]` is stored but `flags()` does not return it, so the planner's trail
+    HR total keeps its 推估 badge even after a pass; the durability δ sits on its 0.15 /h clamp;
+  - the chosen data source may have no trail history (COROS since 2025-10): the planner's trail
+    HR model then falls back to the WKO5 dataset;
   - many 2024–2025 dates use WKO5's default LTHR of 160 (not set), so x = HR / LTHR is
     unreliable there; 2024-04-13's power is partial (NP 81), so its power-envelope error (+122 %)
     is meaningless — the HR model still works on it;
