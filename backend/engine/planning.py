@@ -203,16 +203,19 @@ class Plan:
 
     # ---- thresholds -------------------------------------------------------
     def threshold_on(self, name: str, day: dt.date) -> Optional[float]:
-        """Latest non-blank `name` (lthr / aethr / mhr / cp) dated on or before `day`.
-        Before the first test the earliest value applies, as WKO5 does."""
-        vals = [(_d(t.date), getattr(t, name)) for t in self.thresholds
-                if getattr(t, name) is not None]
-        vals.sort()
+        """Latest non-blank `name` (lthr / aethr / mhr / cp) dated on or before `day`,
+        else None. A test never applies to the days before it was done (fixed
+        2026-10-01: the earliest row used to apply backwards, so the 2026-09-30
+        CP 204 / LTHR 155 row leaked into every earlier date). Callers then fall
+        back to what existed on `day`: WKO5's dated setting history
+        (Dataset.setting / cp / aethr) or an estimate as of that date
+        (racepower.athlete.thresholds_as_of)."""
         val = None
-        for d, v in vals:
+        for d, v in sorted((_d(t.date), getattr(t, name)) for t in self.thresholds
+                           if getattr(t, name) is not None):
             if d <= day:
                 val = v
-        return val if val is not None else (vals[0][1] if vals else None)
+        return val
 
 
 # ---------------------------------------------------------------------------

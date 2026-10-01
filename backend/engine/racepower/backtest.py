@@ -4,9 +4,16 @@ docs/research/racepower-v2.md §3B, redesigned 2026-09-30 after the user's
 feedback (HR-aware; group hikes out) and the capacity review. Two separate
 questions, reported separately:
 
-1. 能力模型回測 (capacity / 比賽預測) — only near-maximal efforts can test
-   CP / W′ / k: HR race-like runs (intensity.classify), season-plan races
-   and the maximal bouts of formal CP tests (cptest). Per case, as of the day
+1. 能力模型回測 (capacity / 比賽預測) — only maximal efforts can test
+   CP / W′ / k (the capacity samples, 2026-10-01, maximal.py): season-plan
+   races matched to their activity, the maximal bouts of CP tests (cptest
+   FIT scan + workout_review test_cp), self-paced maximal road efforts and
+   race-like trail efforts. The HR "race" class is no longer a sample (it
+   caught hard 5 km training runs). Explicit AeT tests are submaximal
+   anchors: only the HR model's power at their HR is checked. Each case
+   also gets the HR-based capacity as of the day before (hrcap.py, two TTE
+   anchors) and the combined rule (HR as a second lower bound when < 3
+   samples in the year before) next to the power envelope. Per case, as of the day
    before and without the case: P_sus(T_actual) vs the actual power (f), and
    mode C (f* = 1) on the activity's own course → time vs actual. Plus the
    lower-bound test on EVERY run: a model that predicts P_sus(T) below a
@@ -22,8 +29,9 @@ WKO5 snapshot value (today's mFTP / TTE); the PD model is refitted on the
 mean-max up to that day (athlete.pd_model) and raised to the lower bound
 when below it; only thresholds / tests dated before the case; intensity
 classes use each activity's own-date
-thresholds (athlete.thresholds_as_of). Remaining leak, stated in `notes`:
-thresholds.estimate filters its runs with WKO5's current mFTP.
+thresholds (athlete.thresholds_as_of; the LTHR estimate measures every run
+against athlete.cp_as_of its own date). planning.threshold_on no longer
+applies a plan test to earlier dates (fixed 2026-10-01).
 
 Group hikes (hiking / mountaineering) are paced by the group: no hike is a
 case unless the user opted it in as solo (athlete.solo_hikes).
@@ -212,6 +220,27 @@ def summarise_terrain(rows: list[dict]) -> dict:
     return out
 
 
+def _hr_stats(rs: list[dict]) -> dict:
+    """Power / time errors of the HR-based capacity variants and the
+    combined rule next to the power envelope (err_p / err_c)."""
+    out = {"power_envelope": {"power": stats(r.get("err_p") for r in rs), "time": stats(r.get("err_c") for r in rs)},
+           "combined": {"power": stats(r.get("err_p_comb") for r in rs),
+                        "time": stats(r.get("err_c_comb") if r.get("err_c_comb") is not None else r.get("err_c")
+                                      for r in rs)}}
+    for v, label in HR_VARIANTS:
+        out[f"hr_{v}"] = {"label": label, "power": stats(r.get(f"err_p_hr_{v}") for r in rs),
+                          "time": stats(r.get(f"err_c_hr_{v}") for r in rs)}
+    return out
+
+
+def _kinds(rs: list[dict]) -> dict:
+    out: dict = {}
+    for r in rs:
+        k = r.get("cap_kind") or "?"
+        out[k] = out.get(k, 0) + 1
+    return out
+
+
 def summarise_capacity(rows: list[dict], lb_rows: list[dict]) -> dict:
     """Capacity cases (race-like runs, plan races, CP-test bouts) and the
     lower-bound test over every run."""
@@ -235,9 +264,11 @@ def summarise_capacity(rows: list[dict], lb_rows: list[dict]) -> dict:
         out["categories"][cat] = {"label": CATEGORY_ZH[cat], "n": len(rs), "threshold": thr, "time": t,
                                   "power": stats(r.get("err_p") for r in rs),
                                   "f_median": float(median(r["f"] for r in rs)) if rs else None,
-                                  "passed": not reasons, "reasons": reasons}
+                                  "passed": not reasons, "reasons": reasons, "hr": _hr_stats(rs),
+                                  "kinds": _kinds(rs)}
     tests = [r for r in cap if r["category"] == "test"]
-    out["tests"] = {"n": len(tests), "power": stats(r.get("err_p") for r in tests), "rows": tests}
+    out["tests"] = {"n": len(tests), "power": stats(r.get("err_p") for r in tests), "rows": tests,
+                    "hr": _hr_stats(tests)}
     fs = [r["f"] for r in cap]
     fm = float(median(fs)) if fs else None
     reasons = []
@@ -284,6 +315,8 @@ def run_harness(cases: list[dict], context: Callable[[dict], dict], evaluate: Ca
         if r is not None:
             rows.append({**{k: c[k] for k in ("idx", "date", "category", "label") if k in c},
                          "priority_a": c.get("priority_a", False), "day": c.get("day"),
+                         "cap_sample": bool(c.get("cap_sample")), "cap_kind": c.get("cap_kind"),
+                         "cap_reason": c.get("cap_reason"),
                          "intensity": c.get("intensity"), "intensity_reason": c.get("intensity_reason"), **r})
     return rows
 
@@ -315,6 +348,24 @@ def _cp_of(d: dict) -> dict:
     return {"cp": s.get("cp"), "w_prime": s.get("w_prime") or acts.get("w_prime"),
             "tte": s.get("tte") or d["tte"]["value"], "cp2": s.get("cp2"), "cp_source": sid or "",
             "base": s.get("base")}
+
+
+HR_VARIANTS = (("tt30", "TTE 1800 s（Friel 30 分計時）"), ("tte", "當時 PD 模型 TTE"))
+FEW_MAXIMAL = 3                 # 自組: < 3 capacity samples in the 365 days before → HR capacity as a second lower bound
+COMBINED_VARIANT = "tte"
+
+
+def hr_psus(hc: Optional[dict], t_s: float, cap: dict, w_prime: Optional[float]) -> dict:
+    """Sustainable power for t_s from the HR-based capacity (hrcap): P_LTHR as
+    the F1 anchor at TTE 1800 s ("tt30") and at the as-of TTE ("tte"), the
+    case's k, a single anchor (no separate short-range CP) and the W′ prior."""
+    if not hc or not hc.get("p_lthr"):
+        return {}
+    out = {}
+    for v, _ in HR_VARIANTS:
+        tte = 1800.0 if v == "tt30" else cap["tte"]
+        out[v] = DF.p_sus(t_s, hc["p_lthr"], w_prime, tte, cap["k"])
+    return out
 
 
 def capacity_of(inp: dict, t_s: float, target_m: float) -> dict:
@@ -400,6 +451,17 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
            "t_v1": t_v1, "err_v1": (t_v1 / t_act - 1.0) if t_v1 else None,
            "strategy": empirical_strategy(segs, act), "segments": seg_rows, "grade_n": gre.n_samples,
            "tech": gre.tech_factor() if trail and hasattr(gre, "tech_factor") else None}
+    if case.get("aet_test"):
+        # a submaximal anchor: the HR model's power at this run's HR vs the actual power
+        hc = ctx.get("hrcap") or {}
+        hr = arr.get("hr")
+        fit = hc.get("fit")
+        if fit and hr is not None:
+            mh = moving & np.isfinite(hr) & (hr > 40)
+            if d[mh].sum() > 0:
+                h = float((hr[mh] * d[mh]).sum() / d[mh].sum())
+                pp = fit["a"] + fit["b"] * h
+                out["aet_check"] = {"hr": h, "p_pred": pp, "p_act": p_act, "err": pp / p_act - 1.0}
     # capacity: the power the model says is sustainable for this duration
     target_m = (RE.effort_km(km, gain, 153.0) if trail else km) * 1000.0
     cap = capacity_of(inp, t_act, target_m)
@@ -409,11 +471,46 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
         e = DF.effort(p_train, t_act, cap["cp"], cap["w_prime"], cap["tte"], cap["k"], cp2=cap["cp2"])
         out.update(capacity=cap, p_train=p_train, f=f, effort={"f": f, "label": e["label"]},
                    err_p=cap["p_sus"] / p_train - 1.0)
-        if cls == "race" or case.get("priority_a"):
+        if case.get("cap_sample"):
             def psus(t):
                 return DF.p_sus(t, cap["cp"], cap["w_prime"], cap["tte"], cap["k"], cp2=cap["cp2"])
             rc = PC.solve_auto_mode(1.0, psus, segs, model, cap["cp"])
             out.update(t_c=rc["T"], err_c=rc["T"] / t_act - 1.0, p_c=rc["P"])
+            out.update(_hr_eval(ctx, cap, t_act, p_train, psus, lambda ps: PC.solve_auto_mode(
+                1.0, ps, segs, model, cap["cp"])["T"] / t_act - 1.0))
+    return out
+
+
+def _hr_eval(ctx: dict, cap: dict, t_s: float, p_act: float, psus_power, time_err=None) -> dict:
+    """HR-based capacity next to the power envelope for one capacity case:
+    P_sus by each HR variant, the combined rule (HR as a second lower bound
+    when < FEW_MAXIMAL samples in the year before) and, with `time_err`
+    (mode C on the course), the time errors."""
+    hc = ctx.get("hrcap")
+    wp = ctx.get("w_prime_prior")
+    ps = hr_psus(hc, t_s, cap, wp)
+    if not ps:
+        return {"hr": {"p_lthr": None, "reasons": (hc or {}).get("reasons")}}
+    # the second lower bound only from a valid fit (hrcap.capacity reasons empty)
+    few = (ctx.get("n_max") or 0) < FEW_MAXIMAL and bool(hc.get("valid"))
+    out = {"hr": {"p_lthr": hc["p_lthr"], "range": hc.get("range"), "valid": hc.get("valid"),
+                  "reasons": hc.get("reasons"), "n_runs": hc.get("n_runs"), "slope": (hc.get("fit") or {}).get("b"),
+                  "extrap_bpm": hc.get("extrap_bpm"), "lthr": hc.get("lthr"), "n_max": ctx.get("n_max"), "few": few}}
+    for v, p in ps.items():
+        out[f"err_p_hr_{v}"] = p / p_act - 1.0
+        out["hr"][f"p_sus_{v}"] = p
+    p_pow = psus_power(t_s)
+    p_comb = max(p_pow, ps[COMBINED_VARIANT]) if few else p_pow
+    out["err_p_comb"] = p_comb / p_act - 1.0
+    out["hr"]["p_sus_comb"] = p_comb
+    if time_err is not None:
+        def mk(v):
+            tte = 1800.0 if v == "tt30" else cap["tte"]
+            return lambda t: DF.p_sus(t, hc["p_lthr"], wp, tte, cap["k"])
+        for v in ps:
+            out[f"err_c_hr_{v}"] = time_err(mk(v))
+        hr_f = mk(COMBINED_VARIANT)
+        out["err_c_comb"] = time_err(lambda t: max(psus_power(t), hr_f(t))) if few else None
     return out
 
 
@@ -423,9 +520,12 @@ def evaluate_test(case: dict, ctx: dict) -> Optional[dict]:
     cap = capacity_of(inp, case["t_s"], 0.0)
     if not cap["cp"]:
         return {"error": "沒有 CP"}
+    def psus(t):
+        return DF.p_sus(t, cap["cp"], cap["w_prime"], cap["tte"], cap["k"], cp2=cap["cp2"])
     return {"t_act": case["t_s"], "p_act": case["p"], "p_train": case["p"], "capacity": cap,
             "f": case["p"] / cap["p_sus"], "err_p": cap["p_sus"] / case["p"] - 1.0,
-            "effort": {"f": case["p"] / cap["p_sus"]}, "segments": []}
+            "effort": {"f": case["p"] / cap["p_sus"]}, "segments": [],
+            **_hr_eval(ctx, cap, case["t_s"], case["p"], psus)}
 
 
 def evaluate_hike(case: dict, ctx: dict) -> Optional[dict]:
@@ -477,6 +577,56 @@ def outdoor_run(w) -> bool:
         and "runningtreadmill" not in w.tags and "runningindoor" not in w.tags
 
 
+def _is_aet_test(ds, w) -> bool:
+    """An explicit AeT drift test (engine/aet_test.py): the title says AeT (the
+    scheduled session's title, workout_review.session_type) or the plan has
+    an AeT row dated that day. A steady run is NOT an AeT test here (the
+    session_type steady-drift path would make most steady runs tests)."""
+    import re
+    title = getattr(w.entry, "title", "") or ""
+    if re.search(r"(?<![A-Za-z])AeT(?![A-Za-z])", title):
+        return True
+    iso = w.entry.start.date().isoformat()
+    return any(t.date[:10] == iso and t.aethr is not None for t in ds.plan.thresholds)
+
+
+def wko5_cp_tests(ds, today: dt.date, skip_dates: set) -> list[dict]:
+    """CP tests among the WKO5 activities (workout_review.classify type
+    test_cp, cp_protocols) not already found in the synced FIT files: their
+    12′ bout, and the 3′ only when the two-point fit is valid (3′ above 12′)."""
+    from backend.engine import workout_review as WR
+    from backend.engine.wko5expr.dataset import date_to_day
+    tday = date_to_day(today)
+    out = []
+    for w in ds.workouts:
+        if not outdoor_run(w) or not (tday - RUN_WINDOW_DAYS < w.day <= tday):
+            continue
+        iso = w.entry.start.date().isoformat()
+        if iso in skip_dates:
+            continue
+        try:
+            m = WR.measure(ds, w)
+            if not m:
+                continue
+            c = WR.classify(ds, w, m)
+            # the power pattern alone ("pattern") marks hard 5 km runs as tests against an
+            # older, lower CP (2026-10-01: 43 false tests); the plan / title / race must say so
+            if c["type"] != "test_cp" or c.get("test_match") in (None, "pattern"):
+                continue
+        except Exception:                   # noqa: BLE001
+            continue
+        ct = m.get("cp_test") or {}
+        bouts = []
+        if ct.get("p12"):
+            bouts.append({"t": 720.0, "p": ct["p12"], "nominal_s": 720, "maximal": True})
+        if ct.get("p3") and ct.get("method") == "2pt":
+            bouts.append({"t": 180.0, "p": ct["p3"], "nominal_s": 180, "maximal": True})
+        if bouts:
+            out.append({"date": iso, "bouts": bouts, "idx": w.idx, "source": "workout_review"})
+    WR._flush(ds)
+    return out
+
+
 def candidates(ds, today: dt.date, classes: Optional[dict] = None) -> list[dict]:
     """Outdoor runs ≥ 20 min in the last 365 days (road vs trail by the trail
     tag; season-plan races whatever their length), each with its intensity
@@ -484,22 +634,26 @@ def candidates(ds, today: dt.date, classes: Optional[dict] = None) -> list[dict]
     from backend.engine.racepower import athlete as A
     from backend.engine.wko5expr.dataset import date_to_day
     tday = date_to_day(today)
-    races = A.race_dates(ds)
-    a_dates = {e.date[:10]: e for e in ds.plan.events if (e.priority or "").upper() == "A" and e.date[:10] < today.isoformat()}
+    races = A.plan_race_runs(ds)
     runs = [w for w in ds.workouts if outdoor_run(w) and tday - RUN_WINDOW_DAYS < w.day <= tday]
     classes = classes if classes is not None else A.classify_runs(ds, runs)
     out = []
     for w in runs:
         date = w.entry.start.date().isoformat()
         mv = w.metrics.get("movingduration") or 0
-        if mv < MIN_MOVING_S and date not in races:
+        ev = races.get(w.idx)
+        if mv < MIN_MOVING_S and ev is None:
             continue
-        cat = "trail" if ("runningtrail" in w.tags or w.sport_type == "trail running") else "road"
-        if date in a_dates and a_dates[date].kind == "road":
-            cat = "road"
+        if ev is not None and date >= today.isoformat():
+            ev = None                      # only past events
+        cat = "trail" if A.is_trail(w) else "road"
         c = classes.get(w.idx) or {}
-        out.append({"idx": w.idx, "date": date, "category": cat, "label": A.label(w), "priority_a": date in a_dates,
-                    "intensity": c.get("cls"), "intensity_reason": c.get("reason")})
+        cs = c.get("capacity") or {}
+        out.append({"idx": w.idx, "date": date, "category": cat, "label": A.label(w),
+                    "priority_a": bool(ev and ev.get("priority") == "A"), "event": ev,
+                    "intensity": c.get("cls"), "intensity_reason": c.get("reason"),
+                    "cap_sample": bool(cs.get("ok")), "cap_kind": cs.get("kind") if cs.get("ok") else None,
+                    "cap_reason": cs.get("reason"), "aet_test": _is_aet_test(ds, w)})
     solo = A.solo_hikes()
     for w in A.hike_workouts(ds, today):
         if w.day > tday or w.entry.file not in solo:
@@ -546,13 +700,33 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
             cases.append(c)
     weight = ds.setting("weight", tday)
     sex = (ds.plan.profile or {}).get("sex") or "male"
-    for t in A.cp_tests(ds, today, weight, sex):
+    from backend.engine.racepower import cptest as T
+    w_prior = T.w_prime_prior(weight, sex)["mid"]
+    fit_tests = A.cp_tests(ds, today, weight, sex)
+    try:
+        wr_tests = wko5_cp_tests(ds, today, {t["date"] for t in fit_tests})
+    except Exception:                       # noqa: BLE001
+        wr_tests = []
+    test_dates = []
+    for t in fit_tests + wr_tests:
         for b in t["bouts"]:
             if b["maximal"]:
+                test_dates.append(t["date"])
                 cases.append({"idx": None, "date": t["date"], "category": "test", "t_s": b["t"], "p": b["p"],
                               "label": f"{t['date']} CP 測試 {b['nominal_s'] // 60:.0f}′ {b['p']:.0f} W",
-                              "intensity": "race", "intensity_reason": "正式 CP 測試（全力段）"})
+                              "intensity": "race", "intensity_reason": "正式 CP 測試（全力段）",
+                              "cap_sample": True, "cap_kind": "cp_test",
+                              "cap_reason": "FIT 偵測的 3′/12′ 測試" if t.get("source") != "workout_review"
+                              else "workout_review 判定的 CP 測試"})
+    cap_idx_dates = {w.idx: w.entry.start.date() for w in all_runs
+                     if (classes.get(w.idx, {}).get("capacity") or {}).get("ok")}
     derived: dict = {}
+    hrcaps: dict = {}
+
+    def n_max(as_of, exclude):
+        lo = as_of - dt.timedelta(days=RUN_WINDOW_DAYS)
+        n = sum(1 for i, d in cap_idx_dates.items() if lo < d <= as_of and i not in exclude)
+        return n + sum(1 for d in set(test_dates) if lo < dt.date.fromisoformat(d) <= as_of)
 
     def context(c):
         as_of = c["as_of"]
@@ -564,6 +738,10 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
                                    classes=classes, hiking=False)
         inp = derived[dk]
         ctx["inputs"] = inp
+        if c.get("cap_sample") or c.get("aet_test"):
+            if dk not in hrcaps:
+                hrcaps[dk] = A.hr_capacity(ds, as_of, c["exclude"], distribution=False)
+            ctx.update(hrcap=hrcaps[dk], w_prime_prior=w_prior, n_max=n_max(as_of, c["exclude"]))
         if c["category"] == "test":
             return ctx
         if c["category"] == "hike":
@@ -590,7 +768,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
     rows = run_harness(sorted(cases, key=lambda c: c["date"]), context, evaluate, progress)
     ok = [r for r in rows if "error" not in r]
     run_rows = [r for r in ok if r["category"] in ("road", "trail", "hike")]
-    cap_rows = [r for r in ok if (r.get("intensity") == "race" or r.get("priority_a")) and r.get("f") is not None]
+    cap_rows = [r for r in ok if r.get("cap_sample") and r.get("f") is not None]
     lb_rows = [{"date": r["date"], "label": r.get("label"), "category": r["category"], "t_s": r["t_act"],
                 "p_train": r.get("p_train"), "p_sus": (r.get("capacity") or {}).get("p_sus"), "f": r.get("f"),
                 "intensity": r.get("intensity"), "cp": (r.get("capacity") or {}).get("cp"),
@@ -607,6 +785,32 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
     gm_now = A.grade_models(ds, today, classes=classes)
     counts = {k: sum(1 for r in run_rows if r.get("intensity") == k) for k in CLASSES}
     leaks = sum(1 for r in ok if (r.get("capacity") or {}).get("cp_source") == "wko5")
+    win_lo = date_to_day(today) - RUN_WINDOW_DAYS
+    in_win = [w for w in all_runs if win_lo < w.day <= date_to_day(today)]
+    samples = []
+    for w in in_win:
+        cs = (classes.get(w.idx) or {}).get("capacity") or {}
+        if not cs:
+            continue
+        near = cs.get("ok") or cs.get("category") in ("5k", "10k", "half", "marathon") or \
+            (cs.get("kind") == "trail_race_like" and all(c["ok"] for c in cs.get("checks", []) if c["id"] in ("km", "time")))
+        if near:
+            samples.append({"idx": w.idx, "date": w.entry.start.date().isoformat(), "label": A.label(w),
+                            "category": "trail" if A.is_trail(w) else "road", "ok": bool(cs.get("ok")),
+                            "kind": cs.get("kind"), "reason": cs.get("reason"), "checks": cs.get("checks"),
+                            "km": w.metrics.get("distance"), "climb_m": w.metrics.get("climbing"),
+                            "moving_s": w.metrics.get("movingduration"), "event": cs.get("event"),
+                            "hr_class": (classes.get(w.idx) or {}).get("cls")})
+    kinds: dict = {}
+    for s in samples:
+        if s["ok"]:
+            kinds[s["kind"]] = kinds.get(s["kind"], 0) + 1
+    kinds["cp_test_bouts"] = sum(1 for c in cases if c["category"] == "test")
+    kinds["aet_test"] = sum(1 for c in cases if c.get("aet_test"))
+    try:
+        hr_now = A.hr_capacity(ds, today)
+    except Exception as e:                  # noqa: BLE001
+        hr_now = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     return {"computed_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"), "today": today.isoformat(),
             "seconds": round(time.time() - t0, 1), "version": 2, "rows": rows,
             "terrain": terrain, "capacity": capacity, "validated": validated, "hike_capacity": hike_cap,
@@ -614,13 +818,19 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None) -> dict:
             "intensity_counts": counts, "grade_bins": BIN_LABELS, "hike_hr": gm_now["hike_hr"],
             "hike_basis": gm_now["hike_basis"], "leaks_wko5_cp": leaks,
             "classes_all": {k: sum(1 for v in cmap.values() if v == k) for k in CLASSES},
+            "capacity_samples": {"counts": kinds, "rows": samples,
+                                 "trail_race_like": [s for s in samples if s["category"] == "trail" and s["ok"]]},
+            "hr_capacity": {k: v for k, v in hr_now.items() if k != "points"} | {"points": hr_now.get("points")},
             "notes": [A.GROUP_HIKE_NOTE + "；只有你標記為自己走的登山才會成為回測案例",
                       "每一場都用活動前一天的資料、排除該活動；不用 WKO5 今天存的 mFTP / TTE，"
                       "改用當天以前的 mean-max 重算 PD 模型（mFTP / TTE），再加上 CP 下限",
-                      "強度分類用每次活動當天以前的 LTHR / AeT（計畫測試只算已經做過的；否則用當天以前資料的自動估算）",
-                      "殘留洩漏：LTHR 自動估算篩選跑步時用 ds.cp（計畫的 CP 測試會被套到更早的日期，或 WKO5 目前的 mFTP）",
+                      "強度分類用每次活動當天以前的 LTHR / AeT（計畫測試只算當天以前做過的；否則用當天以前資料的自動估算，"
+                      "每次跑步對照它當天以前重算的 CP）",
                       "地形模型回測餵實際功率，只檢驗「功率 → 速度」（坡度-RE、走跑、下坡上限、技術係數），不是預測準確度",
-                      "能力模型只能用接近全力的努力檢驗：心率判定的比賽強度、賽季計畫比賽、正式 CP 測試的全力段"]}
+                      "能力模型只用能力樣本檢驗：賽季計畫比賽（日期＋種類＋距離比對）、CP 測試全力段、"
+                      "自配速全力路跑（5K/10K/半馬/全馬 ±10 %＋心率證據＋平均或負分段）、比賽型越野（≥ 10 km、≥ 90 分、心率持續高）",
+                      "心率能力（推估）：近 90 天穩定平路跑的心率–功率回歸外插到 LTHR；"
+                      f"能力樣本 < {FEW_MAXIMAL} 次時當第二個下限（合併）"]}
 
 
 # ---------------------------------------------------------------------------
