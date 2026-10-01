@@ -271,6 +271,26 @@ dialog.sd .err:empty { display: none; }
 .hint { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .hint button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
 .done-box { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
+/* interval library: editor templates + the 換一個 drawer (engine/interval_library.py) */
+.var-box { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.var-box select { width: 100%; }
+.var-cur { font-size: 12.5px; color: var(--muted); }
+.pdays { display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px 8px; align-items: center; font-size: 13px; }
+.pf-dw { display: grid; gap: 6px; }
+.pf-dw .w { border: 1px solid var(--watch, #b45309); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; }
+.pf-dw .w .m { color: var(--muted); }
+.steps-prev { margin: 0; padding: 0; list-style: none; font-size: 12.5px; font-variant-numeric: tabular-nums; display: grid; gap: 2px; }
+.var-cur b { color: var(--text); }
+.vd-g { margin: 12px 0 4px; font-size: 13px; }
+.vd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.vd-list li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: start; }
+.vd-list li.cur { border-color: var(--accent); }
+.vd-list li.off { opacity: .55; }
+.vd-list .t { font-weight: 600; font-size: 13.5px; }
+.vd-list .m { grid-column: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vd-list .c { grid-column: 1 / -1; font-size: 12px; }
+.vd-list .c.neq { color: var(--warn, #b45309); }
+.vd-list button { grid-column: 2; grid-row: 1 / span 2; }
 .chg { margin: 0; padding-left: 18px; font-size: 13px; max-height: 50vh; overflow: auto; display: grid; gap: 3px; }
 .chg .add-c { color: var(--good); } .chg .rm-c { color: var(--bad); } .chg .ch-c { color: var(--watch); }
 .cf-body { font-size: 13.5px; display: grid; gap: 6px; }
@@ -280,6 +300,10 @@ dialog.sd .err:empty { display: none; }
 .pnotes li.watch { color: var(--watch); }
 .pnotes .wk-l { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .pnotes button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
+.tsug { display: grid; gap: 6px; }
+.tsug-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; font-size: 13px; }
+.tsug-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* ---- 自動調整 (autoplan.js) ---- */
 .adapt-note { color: #b36b00; }
@@ -427,6 +451,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   <div id="autoplan" data-settings data-limit="5" style="margin-bottom:8px"></div>
   <script src="/api/v1/static/autoplan.js" defer></script>
   <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
+  <div class="tsug" id="tsug" aria-label="建議的測試" hidden></div>
   <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
   <div class="legend" id="legend"></div>
 </main>
@@ -437,6 +462,24 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
+    <div class="var-box" id="sd-tb">
+      <label>目標用<select name="target_basis" id="sd-tbsel"><option value="auto">自動</option><option value="hr">心率</option><option value="power">功率</option></select></label>
+      <div class="hint" id="sd-tbwhy" aria-live="polite"></div>
+      <ol class="steps-prev" id="sd-steps" aria-label="每一段的目標"></ol>
+    </div>
+    <div class="var-box" id="sd-test" hidden>
+      <div class="row2">
+        <label>哪一種測試<select id="sd-tkind"><option value="">先選…</option><option value="cp">CP 測試</option><option value="aet">AeT 測試</option></select></label>
+        <label>方式<select id="sd-tproto" disabled><option value="">先選測試</option></select></label>
+      </div>
+      <div class="hint" id="sd-tinfo"></div>
+    </div>
+    <div class="var-box" id="sd-var" hidden>
+      <label>間歇範本 <button type="button" class="qtip" aria-label="說明" data-tip="選範本會帶入標題、分鐘、目標和備註，推送到 COROS 時照範本的暖身（市區段＋drill＋快步跑）、每一趟和組休，每段一個 lap。★ 推薦＝依你目前的階段和這天的時間上限自動會選的那份。自己寫的話，標題用「3×10 分」這種格式才有間歇結構。">?</button><select id="sd-tpl"><option value="">（不用範本，自己寫）</option></select></label>
+      <div class="hint" id="sd-tpl-info" aria-live="polite"></div>
+      <div class="var-cur" id="sd-var-cur"></div>
+      <button class="btn" type="button" id="sd-swap" hidden>換一個（同等課表）</button>
+    </div>
     <div class="row2">
       <label>日期<input type="date" name="day" required></label>
       <label>分鐘<input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
@@ -468,7 +511,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="hint" id="sd-tgt"></div>
     <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
     <div class="hint" id="sd-gl"></div>
-    <p class="meta faint" style="margin:0" id="sd-q">強度課的標題寫成「3×10 分」這種格式，推送到 COROS 才會有間歇結構</p>
+    <p class="meta faint" style="margin:0" id="sd-q" hidden></p>
     <div class="err" id="sd-err" role="alert"></div>
     <div class="btns">
       <button class="btn danger" type="button" id="sd-del">刪除</button>
@@ -480,13 +523,27 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   </form>
 </dialog>
 
+<!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
+<dialog class="sd wide" id="vd" aria-labelledby="vd-h">
+  <div class="dh"><div><h3 id="vd-h">換一個課表 <button type="button" class="qtip" id="vd-tip" aria-label="說明" data-tip="">?</button></h3><span class="meta" id="vd-sub"></span></div>
+    <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+  <p class="meta" id="vd-rec"></p>
+  <h4 class="vd-g">同等（不影響進階）</h4>
+  <ul class="vd-list" id="vd-eq"></ul>
+  <h4 class="vd-g">不同等（會影響進階）</h4>
+  <ul class="vd-list" id="vd-ot"></ul>
+  <div class="err" id="vd-err" role="alert"></div>
+</dialog>
+
 <dialog class="sd wide" id="pf" aria-labelledby="pf-h">
   <form id="pf-form" novalidate>
     <div class="dh"><div><h3 id="pf-h">⚙ 課表偏好</h3><span class="meta">只改自動產生、還沒做、你沒改過的課；存檔後先預覽變動再套用</span></div>
       <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
     <fieldset class="pf-sec"><legend>哪幾天、多久</legend>
       <div class="pf-row"><span class="lbl" id="pf-days-l">可練日</span><span class="daychk" id="pf-days" role="group" aria-labelledby="pf-days-l"></span></div>
-      <div class="pf-row"><label class="il"><span>長跑日</span><select name="long_day"><option value="auto">自動（你最常長跑的那天）</option><option value="sat">週六</option><option value="sun">週日</option></select></label></div>
+      <div class="pf-row"><label class="il"><span>長跑日</span><select name="long_day"><option value="auto">自動（你最常長跑的那天）</option><option value="mon">週一</option><option value="tue">週二</option><option value="wed">週三</option><option value="thu">週四</option><option value="fri">週五</option><option value="sat">週六</option><option value="sun">週日</option></select></label></div>
+      <div class="pf-row pdays" id="pf-pdays"></div>
+      <div class="pf-dw" id="pf-dw" aria-live="polite"></div>
       <div class="pf-row"><label class="il"><span>單次時間上限（平日）</span><input type="number" name="cap_weekday" min="20" max="300" step="5" placeholder="不限" inputmode="numeric"> 分</label></div>
       <div class="pf-row"><label class="il"><span>長跑日上限</span><input type="number" name="cap_long" min="20" max="600" step="5" placeholder="同平日" inputmode="numeric"> 分</label></div>
       <div class="pf-row"><span class="lbl">上限模式</span><label class="rb"><input type="radio" name="cap_mode" value="soft">盡量不超過</label><label class="rb"><input type="radio" name="cap_mode" value="hard">絕對不超過</label></div>
@@ -506,7 +563,13 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="pf-row"><label class="il"><span>輕鬆跑</span><select name="terrain_easy"><option value="any">都可</option><option value="road">路跑</option><option value="trail">越野（只看心率）</option></select></label></div>
       <div class="pf-row"><label class="il"><span>長跑</span><select name="terrain_long"><option value="auto">自動（依目標賽事）</option><option value="road">路跑</option><option value="trail">山路越野</option><option value="hike">登山（以時間為主）</option></select></label></div>
       <div class="pf-row"><label class="il"><span>品質課</span><select name="terrain_quality"><option value="any">都可</option><option value="flat">平路間歇</option><option value="hill">爬坡間歇</option></select></label></div>
-      <div class="pf-row"><span class="lbl">間歇目標</span><label class="rb"><input type="radio" name="interval_target" value="power">功率</label><label class="rb"><input type="radio" name="interval_target" value="hr">心率</label></div>
+      <div class="pf-row"><label class="il" title="暖身裡一定要跑的那段（從家裡跑到河濱），間歇課表不會砍這段"><span>間歇暖身：市區段</span><input type="number" name="warmup_commute_min" min="0" max="30" step="1" inputmode="numeric"> 分</label>
+        <label class="il" title="緩和；跑回家的話設 10"><span>緩和</span><input type="number" name="cooldown_min" min="0" max="20" step="1" inputmode="numeric"> 分</label></div>
+      <div class="pf-row"><span class="lbl" id="pf-tb-lbl">目標依據 <button type="button" class="qtip" aria-label="說明" data-tip="課表的目標用心率還是功率。
+自動：輕鬆跑、長跑、山路長天、恢復跑用心率（≤ AeT）；3 區／5 區間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡只給建議、不設目標；下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
+心率：全部用心率區間（Friel % LTHR，輕鬆跑上限 AeT）。
+功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
+每次課表也可以在編輯時改「目標用：自動／心率／功率」，只影響這次課表。">?</button></span><label class="rb"><input type="radio" name="target_basis" value="auto">自動</label><label class="rb"><input type="radio" name="target_basis" value="hr">心率</label><label class="rb"><input type="radio" name="target_basis" value="power">功率</label></div>
     </fieldset>
     <fieldset class="pf-sec" id="pf-cpt"><legend>CP 測試方式</legend>
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="quick"><span><b>快速：20 分全力</b><span class="meta">約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測 W′</span></span></label>
@@ -770,6 +833,7 @@ function render() {
   }
   renderToolbar();
   renderNotes();
+  renderSug();
 }
 function renderNotes() {
   const ns = (D.plan_notes || []).filter((n, i, all) => all.findIndex((x) => x.week_start === n.week_start && x.text === n.text) === i);
@@ -778,6 +842,28 @@ function renderNotes() {
     (ns.some((n) => n.src === "prefs") ? `<li style="list-style:none;margin-left:-16px"><button type="button" data-open-prefs>調整課表偏好 →</button></li>` : "");
 }
 $("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
+// due CP / AeT tests: suggested with a day picker, never put into the plan by the generator
+function renderSug() {
+  const sg = D.test_suggestions || [];
+  const box = $("tsug");
+  box.hidden = !sg.length;
+  box.innerHTML = sg.map((x) => `<div class="tsug-row" data-kind="${esc(x.kind)}"><span>🧪 ${esc(x.label)}</span>
+    <span class="tsug-act">${x.days.length ? `<select aria-label="測試日期">${x.days.map((d) =>
+      `<option value="${esc(d.day)}">${md(d.day)}（週${wd(d.day)}）${d.note ? ` · ${esc(d.note)}` : ""}</option>`).join("")}</select>
+      <button class="btn primary" type="button" data-sug="${esc(x.kind)}">排入</button>` : `<span class="meta">兩週內沒有適合的日子（離長跑、強度課太近）</span>`}
+      <span class="meta">${esc(x.title)} · ${x.minutes} 分</span></span></div>`).join("");
+}
+$("tsug").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-sug]");
+  if (!b) return;
+  const day = b.parentElement.querySelector("select").value;
+  b.disabled = true;
+  try {
+    const r = await sj("POST", `${PAPI}/test-suggestions/schedule`, { kind: b.dataset.sug, day });
+    S.sel = day; await load();
+    msg(`已排入「${esc(r.title)}」到 ${md(day)}`, "ok");
+  } catch (err) { msg(esc(err.message), "err"); b.disabled = false; }
+});
 function agendaHtml(a, ss, acts) {
   const w = weekRow(a), ph = phaseOf(addDays(a, 3));
   const days = [];
@@ -1191,12 +1277,132 @@ function tgtHint() {
   $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `依門檻建議：${gl(t)} <button type="button" id="sd-tgt-use">套用</button>` : "";
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
   $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
-  $("sd-q").hidden = kindVal() !== "quality";
+  $("sd-test").hidden = kindVal() !== "test" || !!dlg.ro;
+  varLoad();
+  stepsPreview();
 }
+
+// 「目標用：自動／心率／功率」: what each step of this session gets (engine/target_policy.py)
+let SP_T = null;
+function stepsPreview() {
+  clearTimeout(SP_T);
+  SP_T = setTimeout(async () => {
+    const k = kindVal();
+    if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
+    $("sd-tb").hidden = false;
+    const body = { kind: k, title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+      target_basis: F.target_basis.value, terrain: (dlg.orig || {}).terrain, protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
+      ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
+        variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
+        variant_adj: dlg.orig.variant_adj } : {}) };
+    try {
+      const r = await sj("POST", `${PAPI}/steps-preview`, body);
+      $("sd-tbwhy").textContent = r.label;
+      $("sd-steps").innerHTML = r.lines.map((l) => `<li>${esc(l)}</li>`).join("");
+    } catch (e) { $("sd-tbwhy").textContent = ""; $("sd-steps").innerHTML = ""; }
+  }, 250);
+}
+$("sd-tbsel").addEventListener("change", stepsPreview);
+
+// ---- 測試: which test first (CP / AeT), then its protocol; the steps are filled in ----
+$("sd-tkind").addEventListener("change", () => {
+  const k = $("sd-tkind").value, T = (D.test_templates || {})[k] || [], sel = $("sd-tproto");
+  sel.disabled = !k;
+  sel.innerHTML = k ? `<option value="">選方式…</option>` + T.map((t) => `<option value="${esc(t.protocol)}"${t.none ? " disabled" : ""}>${esc(t.label)}${t.minutes ? ` · ${t.minutes} 分` : ""}</option>`).join("")
+    : `<option value="">先選測試</option>`;
+  $("sd-tinfo").textContent = k === "cp" ? "CP 測試量 CP（功率）；比賽代替測試時不排課" : k === "aet" ? "AeT 測試量有氧閾值心率（依方式看心率或配速）" : "";
+});
+$("sd-tproto").addEventListener("change", () => {
+  const k = $("sd-tkind").value, t = ((D.test_templates || {})[k] || []).find((x) => x.protocol === $("sd-tproto").value);
+  if (!t) return;
+  dlg.test = { protocol: k === "aet" ? (t.protocol_stored || "aet") : t.protocol };
+  F.title.value = t.title; F.minutes.value = t.minutes; F.target.value = t.target || ""; F.detail.value = t.detail || "";
+  dlg.targetTouched = true;
+  $("sd-tinfo").textContent = t.tip || t.source || "";
+  tgtHint();
+});
+
+// ---- interval library: the editor's templates and 換一個 (engine/interval_library.py) ----
+const SRC_KIND = { peer: "同儕審查", coach: "教練來源", "推估": "推估" };
+const OUTC = { met: "達標", border: "邊界", unadapted: "未適應", too_high: "未適應（目標太高）" };
+async function varLoad() {
+  const box = $("sd-var");
+  box.hidden = kindVal() !== "quality" || !!dlg.ro;
+  const key = `${F.day.value}|${dlg.uid || ""}`;
+  if (box.hidden || dlg.varFor === key) return;
+  dlg.varFor = key;
+  try {
+    const q = new URLSearchParams({ day: F.day.value });
+    if (dlg.uid) q.set("uid", dlg.uid);
+    const r = await sj("GET", `${PAPI}/variants?${q}`);
+    dlg.vars = r;
+    const T = r.templates, rec = T.recommended_key, mine = dlg.orig && dlg.orig.variant_key;
+    $("sd-tpl").innerHTML = `<option value="">（不用範本，自己寫）</option>` + T.groups.map((g) =>
+      `<optgroup label="${esc(g.label)}">${g.rows.map((v) => `<option value="${esc(v.key)}"${v.key === mine ? " selected" : ""}>${
+        v.key === rec ? "★ 推薦 · " : ""}${esc(v.title)} · ${v.total_min} 分${v.fits ? "" : "（超過今天上限）"}</option>`).join("")}</optgroup>`).join("");
+    $("sd-tpl-info").textContent = T.recommended_reason || "";
+    const s = r.session;
+    $("sd-var-cur").innerHTML = s ? `目前：<b>${esc(s.title)}</b>${s.swap_reason ? ` · ${esc(s.swap_reason)}` : ""}${s.equiv === false ? " · <b>不算進階</b>" : ""}` : "";
+    $("sd-swap").hidden = !r.drawer;
+  } catch (e) { $("sd-tpl-info").textContent = `範本讀取失敗：${e.message}`; }
+}
+function tplRow(key) {
+  for (const g of (dlg.vars && dlg.vars.templates && dlg.vars.templates.groups) || []) for (const v of g.rows) if (v.key === key) return v;
+  return null;
+}
+$("sd-tpl").addEventListener("change", () => {
+  const v = tplRow($("sd-tpl").value);
+  if (!v) { dlg.variant = null; return; }
+  dlg.variant = { key: v.key };
+  F.title.value = v.title; F.minutes.value = v.total_min;
+  F.target.value = `功率 ${v.power}` + (v.hr ? ` · ${v.hr}` : ""); dlg.targetTouched = true;
+  F.detail.value = `${v.structure}，${v.rest}；${v.split}`;
+  $("sd-tpl-info").textContent = `${v.split}。心率備用：${v.hr || "—"}。來源（${SRC_KIND[v.source_kind] || v.source_kind}）：${v.source}` +
+    (v.equiv ? "" : `。${v.consequence}`);
+  tgtHint();
+});
+function vdRow(v, cur) {
+  const meta = [v.structure, v.power, v.rest, `目標區 ${v.tiz_min} 分`, v.terrain === "hill" ? `⛰ 上坡 ${v.grade}` : "平路",
+    v.last ? `上次 ${md(v.last.date)}${v.last.outcome ? ` ${OUTC[v.last.outcome] || v.last.outcome}` : ""}` : "沒做過"].filter(Boolean);
+  return `<li class="${v.key === cur && !v.reps ? "cur" : ""}${v.fits ? "" : " off"}"><span class="t">${esc(v.title)}${v.key === cur && !v.reps ? "（目前）" : ""}</span>
+    <button class="btn" type="button" data-vk="${esc(v.key)}" data-vr="${v.reps || ""}"${v.fits ? "" : " disabled"}>換成這個</button>
+    <span class="m">${esc(meta.join(" · "))}<br>${esc(v.split)}${v.fits ? "" : ` · ${esc(v.why_not)}`}</span>
+    <span class="c${v.equiv ? "" : " neq"}">${esc(v.consequence)}；來源（${esc(SRC_KIND[v.source_kind] || v.source_kind)}）：${esc(v.source)}</span></li>`;
+}
+function openVd() {
+  const d = dlg.vars && dlg.vars.drawer;
+  if (!d) return;
+  $("vd-sub").textContent = `${d.rung_name} · ${md(F.day.value)}（週${wd(F.day.value)}）${dlg.vars.cap ? ` · 今天上限 ${dlg.vars.cap} 分` : " · 今天不限時間"}`;
+  $("vd-rec").textContent = d.recommended_reason ? `自動會選：${d.recommended_reason}` : "";
+  $("vd-eq").innerHTML = d.equivalent.map((v) => vdRow(v, d.current_key)).join("");
+  $("vd-ot").innerHTML = d.other.map((v) => vdRow(v, d.current_key)).join("");
+  $("vd-tip").dataset.tip = `同等＝同一類強度、目標區時間差 ±15% 內、5 區每趟 ≥ 2 分、工休比在範圍內、每趟 W′ 相近（30/15 不算同等）。` +
+    `換同等的課不影響進階；換不同等的會記下來，這次不算進階。換過的課算你的修改：自動重排不會蓋掉。${d.terrain_note}`;
+  $("vd-err").textContent = "";
+  $("vd").showModal();
+}
+$("sd-swap").addEventListener("click", openVd);
+$("vd").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-close]") || e.target === $("vd")) return $("vd").close();
+  const b = e.target.closest("button[data-vk]");
+  if (!b) return;
+  b.disabled = true;
+  try {
+    const body = { variant_key: b.dataset.vk };
+    if (b.dataset.vr) body.variant_reps = +b.dataset.vr;
+    const r = await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}`, body);
+    $("vd").close(); $("sd").close();
+    S.sel = r.day || S.sel;
+    await load();
+    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}`, "ok");
+  } catch (err) { $("vd-err").textContent = err.message; b.disabled = false; }
+});
 function openDlg(s, day) {
   closeMenus();
   const ro = s && !editable(s);
-  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null };
+  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null, test: null };
+  $("sd-tkind").value = s && s.kind === "test" ? (s.protocol === "aet" || /AeT|飄移/.test(s.title || "") ? "aet" : "cp") : "";
+  $("sd-tkind").dispatchEvent(new Event("change"));
   $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
   const d = s ? s.day : day;
   $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
@@ -1213,7 +1419,8 @@ function openDlg(s, day) {
   F.minutes.value = s ? s.minutes : 45;
   F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";
   F.detail.value = s ? s.detail || "" : "";
-  F.querySelectorAll("input, textarea").forEach((x) => { x.disabled = !!ro; });
+  F.target_basis.value = s && s.target_basis ? s.target_basis : "auto";
+  F.querySelectorAll("input, textarea, select[name=target_basis]").forEach((x) => { x.disabled = !!ro; });
   $("sd-err").textContent = "";
   $("sd-save").hidden = !!ro;
   $("sd-cancel").textContent = ro ? "關閉" : "取消";
@@ -1253,6 +1460,10 @@ F.addEventListener("submit", async (e) => {
   if (!F.day.value || F.day.value < D.today) { $("sd-err").textContent = "不能排到過去的日子"; F.day.focus(); return; }
   const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
     tss: Math.round(estDialog().tss * 10) / 10 };
+  if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
+  if (dlg.test && body.kind === "test") body.protocol = dlg.test.protocol;          // 測試 → which protocol
+  // 目標用 (a user edit only when it changes from what the session had)
+  if (!dlg.uid || F.target_basis.value !== ((dlg.orig || {}).target_basis || "auto")) body.target_basis = F.target_basis.value;
   if (eqOn()) {
     const f = eqF();
     Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });
@@ -1293,7 +1504,7 @@ dayBoxes("pf-sdays", "pf-sday");
 // ---- 間歇門檻 (engine/quality_gate.py): chips; each ? says what the method is, how it is
 // computed, what to do, and whether it runs on your data now (GET /prefs/gate)
 const GATE_MODES = [["auto", "自動"], ["ua_gap", "UA 差距"], ["friel_drift", "Friel 飄移"], ["xu_drift", "徐國峰 90′"],
-  ["xu_signals", "三訊號"], ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
+  ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
 let PF_GATE = {}, PF_AVAIL = null, PF_AETP = {};
 // ---- AeT 測試方式 (engine/aet_test.py PROTOCOLS): chips; each ? = duration, terrain, held, judging, source
 const AET_PROTOCOLS = [["auto", "自動"], ["xu90", "徐國峰 90′"], ["ua60", "UA 60′"], ["ua40", "UA 40′"],
@@ -1360,7 +1571,10 @@ function pfFill(p) {
   PFF.elements.terrain_easy.value = p.terrain_easy;
   PFF.elements.terrain_long.value = p.terrain_long;
   PFF.elements.terrain_quality.value = p.terrain_quality;
-  PFF.querySelector(`input[name="interval_target"][value="${p.interval_target}"]`).checked = true;
+  (PFF.querySelector(`input[name="target_basis"][value="${p.target_basis || "auto"}"]`) || {}).checked = true;
+  pdaysRender(p);
+  PFF.elements.warmup_commute_min.value = p.warmup_commute_min ?? 10;
+  PFF.elements.cooldown_min.value = p.cooldown_min ?? 5;
   (PFF.querySelector(`input[name="cp_test_protocol"][value="${p.cp_test_protocol || "quick"}"]`) || {}).checked = true;
   (PFF.querySelector(`input[name="aet_test_days"][value="${p.aet_test_days || "weekday"}"]`) || {}).checked = true;
   aetpRender(p.aet_test_protocol || "auto");
@@ -1385,7 +1599,11 @@ function pfRead() {
     strength_days: [...PFF.querySelectorAll('input[name="pf-sday"]:checked')].map((b) => +b.value),
     weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
     terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
-    interval_target: radioVal("interval_target"), cp_test_protocol: radioVal("cp_test_protocol") || "quick",
+    // 目標依據 replaces 間歇目標 (engine/target_policy.py); interval_target stays "power" so it can't override it
+    interval_target: "power", target_basis: radioVal("target_basis") || "auto",
+    warmup_commute_min: numOrNull(E.warmup_commute_min.value) ?? 10, cooldown_min: numOrNull(E.cooldown_min.value) ?? 5,
+    pref_days: pdaysRead(), pref_keep: [...PFF.querySelectorAll("input[data-keep]:checked")].map((b) => b.dataset.keep),
+    cp_test_protocol: radioVal("cp_test_protocol") || "quick",
     aet_test_days: radioVal("aet_test_days") || "weekday",
     aet_test_protocol: radioVal("aet_test_protocol") || "auto",
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
@@ -1427,15 +1645,42 @@ function pfSync() {
 }
 PFF.addEventListener("input", pfSync);
 PFF.addEventListener("change", pfSync);
+// ---- 偏好的星期 per session type (engine/plan_prefs.py day_conflicts / place) ----
+const PD_KINDS = [["quality", "間歇"], ["aet_test", "AeT 測試"], ["cp_test", "CP 測試"], ["strides", "坡道衝刺／加速跑"]];
+const WDZ = "一二三四五六日";
+let PF_WARNED = null;
+function pdaysRender(p) {
+  const pd = p.pref_days || {};
+  const opt = (sel) => `<option value="">不指定</option>` + [...WDZ].map((z, i) => `<option value="${i}"${sel === i ? " selected" : ""}>週${z}</option>`).join("");
+  $("pf-pdays").innerHTML = `<span class="lbl">偏好的星期</span><span class="meta">第一選擇</span><span class="meta">第二選擇</span>` +
+    PD_KINDS.map(([k, label]) => `<span>${label}</span><select data-pd="${k}" data-i="0" aria-label="${label} 第一選擇">${opt((pd[k] || [])[0])}</select>
+      <select data-pd="${k}" data-i="1" aria-label="${label} 第二選擇">${opt((pd[k] || [])[1])}</select>`).join("");
+  dwRender(p._conflicts || [], p.pref_keep || []);
+}
+function pdaysRead() {
+  const out = {};
+  for (const [k] of PD_KINDS) {
+    const v = [0, 1].map((i) => PFF.querySelector(`select[data-pd="${k}"][data-i="${i}"]`).value).filter((x) => x !== "").map(Number);
+    const u = [...new Set(v)];
+    if (u.length) out[k] = u;
+  }
+  return out;
+}
+function dwRender(cs, keep) {
+  keep = keep || cs.filter((c) => c.keep).map((c) => c.code);
+  $("pf-dw").innerHTML = cs.map((c) => `<div class="w"><b>⚠ ${esc(c.text)}</b><br><span class="m">規則：${esc(c.rule)}（${esc(c.source)}）· 不改的話：${esc(c.action)}</span><br>
+    <label class="chk"><input type="checkbox" data-keep="${esc(c.code)}"${keep.includes(c.code) ? " checked" : ""}>照我的偏好（不移動）</label></div>`).join("");
+}
 async function openPrefs() {
   closeMenus();
+  PF_WARNED = null;
   $("pf-err").textContent = "";
   let b;
   try { b = await sj("GET", `${PAPI}/prefs`); } catch (e) { return errMsg("讀取課表偏好", e); }
   PF_DEF = b.defaults;
   PF_GATE = b.gate_options || {};
   PF_AETP = b.aet_options || {};
-  pfFill(b.prefs);
+  pfFill({ ...b.prefs, _conflicts: b.day_conflicts || [] });
   $("pf").showModal();
   if (PF_AVAIL == null) gateAvail();          // needs the dataset: filled in when it arrives
   PFF.querySelector('input[name="pf-day"]').focus();
@@ -1447,9 +1692,20 @@ PFF.addEventListener("submit", async (e) => {
   const p = pfRead(), err = pfError(p);
   if (err) { $("pf-err").textContent = err; return; }
   $("pf-save").disabled = true;
-  try { await sj("PUT", `${PAPI}/prefs`, p); }
+  let saved;
+  try { saved = await sj("PUT", `${PAPI}/prefs`, p); }
   catch (x) { $("pf-err").textContent = x.message; return; }
   finally { $("pf-save").disabled = false; }
+  // 偏好的星期 vs the default rules: show them once, with 照我的偏好, before replanning
+  const open = (saved.day_conflicts || []).filter((c) => !c.keep);
+  const sig = open.map((c) => c.code).join(",");
+  if (open.length && PF_WARNED !== sig) {
+    PF_WARNED = sig;
+    dwRender(saved.day_conflicts);
+    $("pf-err").textContent = "已儲存。上面有偏好和預設規則衝突：勾「照我的偏好」再按一次儲存，或直接再按儲存讓課表照規則移動。";
+    return;
+  }
+  PF_WARNED = null;
   $("pf").close();
   PF_AVAIL = null;                                   // the gate's state depends on the mode
   if (D) D.prefs = p;

@@ -172,7 +172,8 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
     Projected weeks keep only the intensity block.
   - **Two gates** (台灣教練): Zone 3 whenever the guardrails pass — a locked
     method no longer stops it; Zone 5 only while the base is confirmed (`gate["z5"]`,
-    `base_check.z5_status`: 三訊號 / the 90-min test / a measured AeT passing UA gap or Friel;
+    `base_check.z5_status`: one of three tests done and passed — the 90-min test, a measured AeT
+    passing the UA gap, or the Friel drift near a measured AeT;
     maintenance and re-entry rules in plan-auto.spec.md).
   - **Dose** (`Z3` / `Z5` / `LADDER`, `dose_spec(step, z5_open)`; `dose_step`): step = 達標
     sessions in the last 8 weeks (`dose_history`, counting ≥ 4 short reps at ≥ 95 % CP with
@@ -623,17 +624,22 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   projection come from the stored plan (`backend/static/overview.html:306`).
 - **5 區（最大攝氧量間歇）狀態** card (`#z5card`, left column under 還缺什麼, beside 本週該做什麼
   because it decides whether the week's interval is Zone 3 or Zone 5): the state pill (icon + text:
-  未確認 / 已確認（日期、路徑）/ 暫停（原因）/ 恢復期 / 不設門檻), three steps — 確認有氧基礎 (the
-  mode's paths: 三訊號 ①②③ with value vs requirement, the 90-min test, measured AeT UA gap / Friel;
-  ✓ / ✕ / – = no data), 3 區達標 n / 3, 排 5 區間歇 — then the re-entry days left, the 2/3 pause
-  line vs last week's Zone 1, and 建議測試. Every rule has an ⓘ with its source (推估 where ours).
+  未確認 / 已確認（日期、路徑）/ 暫停（原因）/ 恢復期 / 不設門檻), the 「還缺：…」 line
+  (`z5_card.next`), three steps — 確認有氧基礎（三選一，做了且達標） (the mode's tests: 90-min test,
+  UA gap, Friel drift, each once, with ✓ / ✕ / – = not done and the current value vs
+  requirement), 3 區達標 n / 3, 排 5 區間歇 — then the re-entry days left, the 2/3 pause line vs
+  last week's Zone 1, and 建議測試. Every rule has an ⓘ with its source (推估 where ours).
   「看歷程圖 →」 opens the 基礎期 chart below.
 - **5 區開放流程 chart** (viewer, 周期化訓練 → ② 基礎期, custom view `kind: "z5gate"`,
-  `wko5views.z5gate_panel` → `quality_gate.z5_history`, range capped at a year): a state band
-  (segments with text labels), an event lane (◆ confirmation, ● 90-min run — hollow = failed, ▲
-  measured AeT, ▼ pause, ■ break), weekly Zone 1 minutes with the 150–210 band and the dashed 2/3
-  pause line; item tooltips; a table of every state change and event with the sources. The render
-  cache key adds the preference stamp.
+  `wko5views.z5gate_panel` → `quality_gate.z5_history`, range capped at a year): on top the
+  3-step tracker (① 確認有氧基礎（三選一）with the three tests' ✓ / ✕ / – → ② 3 區達標 n/3 → ③ 5
+  區開放; icon + word per step) and the same 「還缺什麼」 line as the card (`z5.progress` =
+  `wko5views.z5_progress` = `z5_card` on the status gate); below a simple history: one state
+  band with text labels, a marker lane with only ◆ confirmation, ● 90-min test (hollow = failed)
+  and ▲ measured AeT, and — only once Zone 5 has been confirmed — weekly Zone 1 minutes with the
+  dashed 2/3 pause line. Item tooltips; a collapsible 細節 with the three tests, every state
+  change and event, the description and the sources. The render cache key adds the preference
+  and test-session stamps.
 - Plan editing, drag-to-move, reconcile preview and COROS push by day / week / phase live on
   the 課表 page (`backend/static/schedule.html`: session dialog `backend/static/schedule.html:1152`,
   reconcile `backend/static/schedule.html:864`, push `backend/static/schedule.html:884`, unpush
@@ -879,4 +885,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feat/auto-replan | N/A | Adaptive plan: `adapt.py` (missed easy / quality / long, easy run too hard, fatigue guard) applied before reconcile on every path. The interval progression state machine (`interval_outcome` / `dose_step`) replaces the 5 % fade rule. Actual TSS for done sessions. Kind `notice`. Automatic run after sync with hold / approve / reject / 復原 and the `plan_change_log` table. Details in plan-auto.spec.md |
 | 2026-10-01 | feat/drift-v2-planning | docs/research/drift-algorithm.md, unsourced-rules.md, xu-guofeng-reply.md, detraining.md | `i_drift` = 6-run mean ± SE; season drift charts add 「6 次平均」 ± SE (`drift_avg()`); guardrail sources (ramp 5/8 Friel, volume step Nielsen/Damsted, TSB Friel/TP); AeT valid by the aggregate (B3) and the test by reason; ladder Z3 → Z5 with the Zone 5 lifecycle (base_check); AeT test protocols (`plan.prefs.aet_test_protocol`, 徐國峰 90′ standard on the weekend, UA 40′ backup); re-entry block after breaks ≥ 6 days replaces `blackouts.step_cap`; easy targets from the recent EF (推估) |
 | 2026-10-01 | feat/z5-gate-viz | N/A | Zone 5 opening process: `quality_gate.z5_history` replays the lifecycle day by day through the same `_z5` evaluate() uses (`ua_gap_method`, `_break_on` shared; `base_check.replay_memo` per-run memo inside a replay only); `z5_card` + GET `/overview/z5` card on 總覽; `z5gate` panel in 基礎期; auto-mode hover text corrected to 2/3 × 3 weeks and re-entry ≥ 6 days |
+| 2026-10-01 | feat/z5-unlock-simplify | docs/research/aerobic-base-readiness.md | Zone 5 opens on one of three tests (90-min test, UA gap, Friel drift); 三訊號 and the `xu_signals` mode removed (stored value reads as auto); the late long-run check no longer pauses Zone 5 (kept as the post-break drift check); `z5_card` gives one 三選一 step, `steps` and the 「還缺什麼」 `next` line, shared with the 基礎期 chart (`z5_progress`); the chart redrawn as tracker + simple history |
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 自組), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
