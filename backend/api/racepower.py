@@ -459,7 +459,9 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
     c = await run_in_threadpool(_build, track, _course_opts({
         "sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m, "flat_pct": flat_pct, "split": split,
         "official_gain_m": official_gain_m}))
-    return _py({"course_id": cid, "name": track.name or file.filename, **c})
+    from backend.engine.racepower import fuel as FU
+    sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
+    return _py({"course_id": cid, "name": track.name or file.filename, **c, "stop_suggestions": sug})
 
 
 def _grade_models() -> dict:
@@ -633,6 +635,9 @@ class LockIn(BaseModel):
 class StopIn(BaseModel):
     km: float
     minutes: float = 0.0
+    # aid-station editor (fuel.STOP_TYPES); the old 「km:分」 text has neither
+    type: Optional[Literal["water", "aid", "big", "medical", "self"]] = None
+    name: Optional[str] = Field(None, max_length=40)
 
 
 class HourIn(BaseModel):
@@ -793,7 +798,25 @@ def make_plan(body: PlanIn) -> dict:
         raise HTTPException(400, str(e))
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
                course_id=body.course.course_id if body.course else None, course_name=course.get("name"))
+    out["fuel"] = _fuel(body, out)
+    if course.get("source") == "gpx":
+        from backend.engine.racepower import fuel as FU
+        out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
     return out
+
+
+def _fuel(body: PlanIn, out: dict) -> dict:
+    """The 補給 card (engine/racepower/fuel.py) on the predicted segments;
+    adds kcal / carbohydrate / water / sodium / fuel_action to each one."""
+    from backend.engine.racepower import fuel as FU
+    inp = inputs()
+    hr = None
+    th = (out.get("summary") or {}).get("trail_hr")
+    lthr = (inp.get("aet") or {}).get("lthr")
+    if th and th.get("x") and lthr:
+        hr = th["x"] * lthr                 # the race HR the trail model predicts
+    return FU.plan_fuel(out, weight=out["used"]["weight"]["value"], stops=[x.model_dump() for x in body.stops],
+                        start_time=body.start_time, hr_bpm=hr, body=inp.get("body"))
 
 
 @router.post("/plan")

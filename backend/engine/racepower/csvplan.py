@@ -18,13 +18,43 @@ from typing import Optional
 TYPE_LABEL = {"road": "路跑", "trail": "越野", "baiyue": "百岳"}
 MODE_LABEL = {"time": "目標時間", "power": "目標功率", "auto": "通通幫我算"}
 STRATEGY_LABEL = {"even": "均速", "negative": "前慢後快", "positive": "前快後慢"}
+STOP_LABEL = {"water": "水站", "aid": "補給站", "big": "大補給站", "medical": "醫護站", "self": "自備補給點"}
 ACCL_LABEL = {"acclimatised": "已適應", "partial": "部分適應（推估）", "unacclimatised": "未適應"}
 USED_ROWS = (("cp", "CP", "W"), ("cp2", "CP（20 分鐘內）", "W"), ("w_prime", "W′", "J"), ("tte", "TTE", "s"),
              ("k", "Riegel k", ""), ("re", "RE", ""), ("weight", "體重", "kg"), ("eph", "EP/h", ""),
              ("pack_kg", "背負", "kg"), ("aet", "心率上限 AeT", "bpm"))
 COLUMNS = ("段", "天", "起點 km", "終點 km", "距離 m", "爬升 m", "下降 m", "坡度 %", "類別",
            "目標功率 W", "% CP", "區間", "配速 /km", "速度 km/h", "分段時間", "累計時間", "ETA（含補給）",
-           "M", "溫度 °C", "露點 °C", "熱修正 %", "熱修正時刻", "備註", "標記")
+           "M", "溫度 °C", "露點 °C", "熱修正 %", "熱修正時刻", "備註", "標記",
+           "熱量 kcal", "累積 kcal", "碳水 g", "水 ml", "鈉 mg", "補給動作")
+FUEL_METHOD = {"power": "功率法", "minetti": "Minetti × Fletcher", "minetti_walk": "Minetti 走路", "keytel": "心率 Keytel",
+               "pandolf": "Pandolf", "yamamoto": "Yamamoto"}
+
+
+def _span(v, unit: str, nd: int = 0) -> str:
+    if not v:
+        return ""
+    a, b = (_r(x, nd) for x in v)
+    return f"{a} {unit}" if a == b else f"{a}–{b} {unit}"
+
+
+def fuel_rows(plan: dict) -> list[list]:
+    """The 補給 block of the header (fuel.plan_fuel); empty without one."""
+    f = plan.get("fuel") or {}
+    if not f.get("kcal_band"):
+        return []
+    meth = "、".join(FUEL_METHOD.get(k, k) for k in (f.get("methods") or {}))
+    rows = [["預估熱量 kcal", _span(f["kcal_band"], "kcal"), meth + (f"（±{f['band_rel']:.0%}）" if f.get("band_rel") else ""),
+             "推估"]]
+    c, w, n = f.get("cho") or {}, f.get("water") or {}, f.get("sodium") or {}
+    rows.append(["碳水 g/h", _span(c.get("per_h"), "g/h"), _span(c.get("total"), "g"), c.get("badge") or ""])
+    rows.append(["水 ml/h", "口渴再喝" if w.get("thirst") else _span(w.get("per_h"), "ml/h") or _span(w.get("total_ml"), "ml"),
+                 w.get("caution") or "", w.get("badge") or ""])
+    rows.append(["鈉 mg/h", _span(n.get("per_h"), "mg/h"), _span(n.get("total_mg"), "mg")])
+    ld = f.get("loading") or {}
+    rows.append(["賽前超補", ld.get("label") or "", _span(ld.get("g_day"), "g/天") if ld.get("g_day") else "",
+                 ld.get("badge") or ""])
+    return rows
 
 
 def _r(v, nd: int = 1):
@@ -126,7 +156,10 @@ def header_rows(plan: dict, *, name: str, date: Optional[str], computed_at: dt.d
         rows.append(["熱修正", f"單一溫度 {t:.1f} °C" if t is not None else "單一溫度", h.get("reason") or ""])
     rows.append(["起跑時間", start_time or ""])
     if stops:
-        rows.append(["補給站", "；".join(f"{float(x['km']):g} km {float(x.get('minutes') or 0):g} 分" for x in stops)])
+        rows.append(["補給站", "；".join(f"{float(x['km']):g} km {float(x.get('minutes') or 0):g} 分" +
+                                      (f" {STOP_LABEL.get(x.get('type'), '')}" if x.get("type") else "") +
+                                      (f" {x['name']}" if x.get("name") else "") for x in stops)])
+    rows += fuel_rows(plan)
     rows.append(["計算時間", computed_at.strftime("%Y-%m-%d %H:%M")])
     return rows
 
@@ -140,7 +173,9 @@ def segment_row(s: dict, hike: bool) -> list:
             s.get("zone") or "", pace(s.get("pace_s_per_km")), _r(_speed_kmh(s), 2), hms(s.get("t")),
             hms(s.get("cum_s")), s.get("eta") or "", _r(s.get("M", s.get("A")), 4),
             _r(s.get("temp_c"), 1), _r(s.get("dew_c"), 1), _r(s.get("heat_pct"), 2), s.get("heat_clock") or "",
-            "、".join(s.get("notes") or ([s["walk"]] if s.get("walk") else [])), s.get("badge") or ""]
+            "、".join(s.get("notes") or ([s["walk"]] if s.get("walk") else [])), s.get("badge") or "",
+            _r(s.get("kcal"), 0), _r(s.get("cum_kcal"), 0), _r(s.get("cho_g"), 0), _r(s.get("water_ml"), 0),
+            _r(s.get("na_mg"), 0), s.get("fuel_action") or ""]
 
 
 def plan_csv(plan: dict, *, name: str, date: Optional[str] = None, computed_at: Optional[dt.datetime] = None,
@@ -166,5 +201,7 @@ def plan_csv(plan: dict, *, name: str, date: Optional[str] = None, computed_at: 
                _r(s["pct_cp"] * 100 if s.get("pct_cp") is not None else None, 0), "", pace(s.get("pace_s_per_km")),
                _r(s["km"] / (s["time_s"] / 3600.0), 2) if s.get("time_s") else "", hms(s.get("time_s")),
                hms(s.get("time_s")), s.get("finish_eta") or "", _r(s.get("M"), 4), "", "", "", "", "", ""]
+        tsum = (lambda k: _r(sum(x.get(k) or 0 for x in segs), 0) if any(x.get(k) is not None for x in segs) else "")
+        tot += [tsum("kcal"), "", tsum("cho_g"), tsum("water_ml"), tsum("na_mg"), ""]
         w.writerow(tot)
     return buf.getvalue()
