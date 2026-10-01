@@ -101,7 +101,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   tgt: dict, long_wd: int, longest: float, mountain: bool,
                   allow_quality: bool, strength_tss: float, aet: Optional[float],
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
-                  notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None) -> list[dict]:
+                  notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
+                  aet_test_days: Optional[str] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `base_quality`: the base-phase session the gate picked for this week
     (engine/quality_gate.py dose step, the recovery-week fartlek, or the AeT
@@ -163,9 +164,11 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
                      quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
-        PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs)
+        PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs, notes=ctx.notes)
         return ss
-    _place(ss, monday, long_wd, blocked)
+    # the raw 課表偏好 value: aet_test_days isn't part of `active`, so `prefs` may be None here
+    aet_days = AT.TEST_DAYS.get(aet_test_days or getattr(prefs, "aet_test_days", None) or "weekday")
+    _place(ss, monday, long_wd, blocked, aet_days, notes)
     return ss
 
 
@@ -178,7 +181,10 @@ def _bq(b: dict) -> dict:
             **({"protocol": b["protocol"]} if b.get("protocol") else {})}   # the AeT test: "aet"
 
 
-def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset()) -> None:
+def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
+           aet_days: Optional[tuple] = AT.TEST_DAYS["weekday"], notes: Optional[list] = None) -> None:
+    """`aet_days`: where the AeT test goes (aet_test.test_days / pick_day:
+    Mon–Fri by default; None = like an interval)."""
     days = [monday + dt.timedelta(days=i) for i in range(7)]
     free = [d for d in days if d.isoformat() not in blocked]
     main = [s for s in ss if s["kind"] != "strength"]
@@ -189,6 +195,15 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset()) -
         if s["kind"] == "long":
             pick = days[long_wd] if days[long_wd] in free else free[-1]
             long_day = pick
+        elif s["kind"] == "test" and aet_days is not None and AT.is_aet_session(s):
+            r = AT.pick_day(free, long_day, [], aet_days, weekend_ok=not AT.is_short(s))
+            if r["day"] is None:
+                if notes is not None:
+                    notes.append({"level": "info", "text": r["note"]})
+                continue
+            s["day"] = r["day"].isoformat()
+            free.remove(r["day"])
+            continue
         elif s["kind"] in ("quality", "test"):
             order = [days[i] for i in (1, 2, 3, 0, 4, 5, 6)]
             pick = next((d for d in order if d in free and (long_day is None or abs((d - long_day).days) >= 2)),
@@ -314,7 +329,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         base_q = None
         if kind == "base" and mode != "recovery_week" and \
                 AT.due(week, kind, gate.get("base_start"), (gate.get("aet") or {}).get("date"), last_aet):
-            base_q = AT.session(th, AT.start_hr(None, th.get("lthr")), AT.start_power(th.get("cp")))
+            base_q = AT.session(th, AT.start_hr(None, th.get("lthr")), AT.start_power(th.get("cp")),
+                                getattr(prefs, "cap_weekday", None))     # 80′, or 50′ under a weekday cap
             last_aet = week.isoformat()          # suggested, not done: keeps the next one ≥ 4 weeks away
         elif kind == "base" and dec["allow"] and dec["spec"] is not None:
             base_q = O._gate_session(gate, dec, th, hours)
@@ -323,7 +339,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
-                           quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None)
+                           quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
+                           aet_test_days=getattr(prefs, "aet_test_days", None))
         heat_w = None
         if events is not None:
             try:

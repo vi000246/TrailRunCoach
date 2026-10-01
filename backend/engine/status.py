@@ -454,28 +454,39 @@ class Status:
         # min after the 10-min warm-up, avg HR ≤ AeT+3; hilly / stopped / unsteady /
         # fast-finish / > 25 °C runs refused). It is not
         # the interval gate any more — that is i_gate (engine/quality_gate.py).
+        # Display only, so the 參考 tier counts too (workout_review.DRIFT_REF_MIN_S:
+        # 30–40 min after the warm-up, 自組), labelled; the gate reads the strict tier.
         from backend.engine import workout_review as WR
-        pts = WR.drift_series(self.ds, self.today)
+        pts = WR.drift_series(self.ds, self.today, ref=True)
         fair = [p for p in pts if p["drift"] is not None]
+        n_ref = sum(1 for p in fair if p.get("tier") == "ref")
         spark = [[p["date"], round(p["drift"], 4)] for p in fair]
         note = "飄移是 AeT 測試用的，不是間歇門檻"
+        ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": WR.REF_LABEL, "ref_tip": WR.REF_TIP}
         if len(fair) < 2:
             return Indicator("drift", "心率飄移", NA, "–",
                              f"8 週內可判讀的輕鬆路跑不到 2 次（{len(pts)} 次符合條件）",
-                             "只算路跑、暖身 10 分鐘後還有 ≥ 40 分鐘、平均心率 ≤ AeT+3；"
+                             "只算路跑、暖身 10 分鐘後還有 ≥ 40 分鐘（30–40 分算參考）、平均心率 ≤ AeT+3；"
                              "有坡、有停頓、功率起伏大、快速結尾、> 25 °C 的不採用",
-                             "", SRC_FRIEL, spark=spark, extra={"fair": len(fair), "median": None})
+                             "", SRC_FRIEL, spark=spark, extra={"fair": len(fair), "median": None, **ref_extra})
         med = _median([p["drift"] for p in fair])
-        txt = _pct(med, 1)
-        why = f"8 週內 {len(fair)} 次可判讀的輕鬆路跑，Pa:HR 中位數 {_pct(med, 1)}；{note}"
+        txt = _pct(med, 1) + ("（參考）" if n_ref == len(fair) else "（含參考）" if n_ref else "")
+        mix = (f"，其中 {n_ref} 次是{WR.REF_LABEL}" if n_ref else "")
+        why = f"8 週內 {len(fair)} 次可判讀的輕鬆路跑{mix}，Pa:HR 中位數 {_pct(med, 1)}；{note}"
         if med < DRIFT_GOOD:
             lvl, v, act = INFO, "< 5%：輕鬆跑後段心率穩", ""
         elif med < DRIFT_WATCH:
             lvl, v, act = INFO, "5–10%：長跑後段心率往上跑", ""
         else:
             lvl, v, act = BAD, "> 10%：輕鬆跑太快（或太熱、沒補給）", "所有輕鬆跑壓在 AeT 以下"
+        # the level feeds the base-phase guardrail (overview gate levels,
+        # quality_gate): BAD only on the strict tier's own median (≥ 2 test runs)
+        test = [p["drift"] for p in fair if p.get("tier") != "ref"]
+        if lvl == BAD and not (len(test) >= 2 and _median(test) >= DRIFT_WATCH):
+            lvl, act = INFO, ""
+            v = "> 10%（參考值為主，不當警示）：輕鬆跑可能太快"
         return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_FRIEL, med, spark,
-                         {"fair": len(fair), "median": med})
+                         {"fair": len(fair), "median": med, **ref_extra})
 
     def i_gate(self) -> Indicator:
         # 間歇門檻 (engine/quality_gate.py; docs/research/aerobic-base-readiness.md §4)
@@ -676,7 +687,7 @@ class Status:
         if worst != GOOD:
             act = (f"{CPP.NOTE_RACE}（課表偏好：用比賽）" if proto == "race" else
                    f"排一次 CP 測試（{CPP.TABLE[proto]['label']}，{CPP.TABLE[proto]['hint'].split('；')[0]}）") + \
-                "＋ 45–60 分鐘 AeT 飄移測試；每 4–6 週一次"
+                "＋ AeT 飄移測試（平日 50 分：10 分暖身＋40 分固定功率）；每 4–6 週一次"
             if days_to is not None and 10 <= days_to <= 21:
                 act += f"——賽前 {days_to} 天正好是測試的時機（賽前 10–21 天）"
             elif days_to is not None and days_to < 10:
@@ -779,7 +790,7 @@ class Status:
         if thr_default:
             acts.append("到「賽事周期」頁填 LTHR 測試結果")
         if aet_missing:
-            acts.append("排一次 AeT 飄移測試（15 分暖身＋45–60 分固定功率，平路）；測了可以改用有氧基礎門檻")
+            acts.append("排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；測了可以改用有氧基礎門檻")
         act = "；".join(acts)
         if pend:
             act = (act + "；" if act else "") + "到圖表頁「資料校正」核准壞點修正"

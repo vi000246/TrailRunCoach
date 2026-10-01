@@ -5,16 +5,29 @@ Design: docs/research/aerobic-base-readiness.md §6. Uphill Athlete's heart-rate
 drift test (https://uphillathlete.com/aerobic-training/heart-rate-drift/), run at
 a fixed *power* (Stryd is steadier than pace; Pa:HR is kept as a cross-check):
 
-  15′ warm-up, then 60′ steady (at least 45′; UA: never under 40′), 5′ cool-down,
-  flat loop or treadmill 2–3 % (not trails), < 25 °C (徐國峰; Lafrenz 2008).
+Two lengths, chosen by the 課表偏好 weekday cap (`variant_for`):
+  * standard (no cap, or a cap ≥ 80 min): 15′ warm-up + 60′ fixed power + 5′
+    cool-down = 80 min (UA 40–60′; Evoke 60′);
+  * short (a weekday cap < 80 min): UA's minimum — 10′ warm-up (until
+    sweating, HR ≤ the start HR) + 40′ fixed power ("If you only have 40
+    minutes, do that."), cool-down optional = 50 min; never shorter, even
+    under a 45-min cap.
+  Both on a weekday first (the athlete trail-runs on weekends; pick_day): the
+  short one only Mon–Fri, the standard one may fall back to a weekend day that
+  isn't the long run's. An air-conditioned treadmill 2–3 % with a fan first,
+  else an early flat loop (not trails). Note the temperature: heat inflates
+  the drift. Evoke's early abort: HR already 10 above the start at minute 10
+  of the block and rising → started too high, stop, retest 5 bpm lower.
 
-Analysis (`analyze`): the main block is the time after the 15′ warm-up up to
-60′ of it, cool-down trimmed; Pw:HR over its halves (Pa:HR without power).
-UA's bands: < 3.5 % → below AeT (next time start 5 bpm higher), 3.5–5 % → the
-first-half HR is the AeT, > 5 % → started above AeT (5 bpm lower).
+Analysis (`analyze`): the main block is the time after the warm-up (15′ for
+the standard test, 10′ for the short one — `warm_for`, from the title, else
+the length), up to 60′ of it, cool-down trimmed; Pw:HR over its halves (Pa:HR
+without power) — on the short test the first 20′ vs the last 20′. Both are
+the strict tier (≥ 40′ after the warm-up). UA's bands: < 3.5 % → below AeT
+(next time start 5 bpm higher), 3.5–5 % → the first-half HR is the AeT, > 5 %
+→ started above AeT (5 bpm lower).
 
-The same three checks as workout_review.drift_of (the daily runs; there the
-warm-up is 10′, here the planned 15′):
+The same three checks as workout_review.drift_of (the daily runs):
   * the 40-min floor counts *after* the warm-up;
   * a fast finish (last 10 % of the block > 5 % above the rest) is refused — 自訂;
   * heat: a mean temperature > 25 °C is refused — 自訂. The route_weather
@@ -31,15 +44,22 @@ from __future__ import annotations
 
 import datetime as dt
 import math
+import re
 from typing import Optional
 
 import numpy as np
 
-WARM_S = 15 * 60
-MAIN_S = 60 * 60
-MAIN_MIN_S = 45 * 60            # the planned minimum
+# (warm-up, main, cool-down) minutes per length
+VARIANTS = {"standard": (15, 60, 5),      # 80′: UA 40–60′ after a 10–15′ warm-up; Evoke 60′
+            "short": (10, 40, 0)}         # 50′: UA's minimum ("If you only have 40 minutes, do that.")
+STD_MIN = sum(VARIANTS["standard"])       # 80: a weekday cap below this → the short test
+SHORT_MIN = sum(VARIANTS["short"])        # 50
+WARM_S = 10 * 60                # the short test's warm-up (and the shortest)
+WARM_STD_S = 15 * 60            # the standard test's
+MAIN_MAX_S = 60 * 60            # the analysis window: up to 60′ after the warm-up (UA 40–60)
+MAIN_MIN_S = 40 * 60            # the planned minimum = UA's
 UA_MIN_S = 40 * 60              # UA: "We don't recommend relying on tests less than 40 minutes long"
-COOL_S = 5 * 60
+UA_SLACK_S = 30                 # 自組: a few lost samples (GPS / Stryd dropouts) don't fail a 40′ test
 BAND_LOW, BAND_HIGH = 0.035, 0.05
 FAST_FINISH = 0.05              # 自訂
 HEAT_C = 25.0                   # 自訂 (徐國峰's condition applied to the analysis)
@@ -51,8 +71,12 @@ EVERY_WEEKS = 5                 # 自訂: suggest at most once every 5 base week
 RECENT_DAYS = 28                # a test in the last 4 weeks → don't suggest another
 STALE_DAYS = 42                 # plan AeT older than 6 weeks → due again (i_testing's 4–6 weeks)
 
-SRC = "Uphill Athlete 心率飄移測試（40–60 分，< 3.5% / 3.5–5% / > 5%）；Evoke 60 分"
-TITLE = "AeT 飄移測試 60 分"
+SRC = ("Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/："
+       "\"If you only have 40 minutes, do that.\"、不建議短於 40 分；前 20 分對後 20 分，< 3.5% / 3.5–5% / > 5%）；"
+       "Evoke 提早中止（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/）")
+TITLES = {"standard": "AeT 飄移測試 60 分", "short": "AeT 飄移測試 40 分"}   # the main block's length
+TITLE = TITLES["standard"]
+AT_TITLE_LEN = re.compile(r"飄移測試\s*(\d+)\s*分")
 PROTOCOL = "aet"                # the stored session's `protocol` (not a cp_protocols protocol)
 BAND_LABEL = {"below": "低於 AeT", "at": "就是 AeT", "above": "高於 AeT"}
 
@@ -76,7 +100,7 @@ def band_of(drift: Optional[float]) -> Optional[str]:
 
 
 def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[float] = None,
-            trail: bool = False, warm_s: float = WARM_S, main_s: float = MAIN_S,
+            trail: bool = False, warm_s: float = WARM_S, main_s: float = MAIN_MAX_S,
             temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
     """UA drift test on one recording. `ok` False with `reason` when it isn't a
     fair test. `temp_c` (with `temp_src`, route_weather / watch) overrides the
@@ -113,7 +137,10 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
         out["reason"] = f"暖身 {warm_s / 60:.0f} 分之後沒有資料"
         return out
     o = np.nan_to_num(outp)
-    o60 = np.convolve(o, np.ones(60) / 60, "same")
+    # 60-s mean over the samples that exist: at the recording's end a plain
+    # "same" convolution pads zeros and would trim the last ~20 s of a test
+    # stopped right at 40′ (no cool-down)
+    o60 = np.convolve(o, np.ones(60), "same") / np.convolve(np.ones(len(o)), np.ones(60), "same")
     med = float(np.median(o[idx][o[idx] > 0])) if (o[idx] > 0).any() else 0.0
     end = idx[-1]
     while end > idx[0] and o60[end] < 0.85 * med:
@@ -130,8 +157,8 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
     m = win & moving
     main = float(m.sum())
     out["main_s"] = main
-    if main < UA_MIN_S:
-        out["reason"] = f"暖身後只有 {main / 60:.0f} 分鐘（< 40 分，UA 不建議採用）"
+    if main < UA_MIN_S - UA_SLACK_S:
+        out["reason"] = f"暖身後只有 {main // 60:.0f} 分鐘（< 40 分，UA 不建議採用）"
         return out
     ow = o[m]
     if series.get("power") is not None:
@@ -190,6 +217,16 @@ def lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
     return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", f"下次起始心率 −5 bpm（約 {h1 - 5:.0f}）再測一次{now}"]
 
 
+def warm_for(title: str, duration_s: float) -> float:
+    """The warm-up to cut: from the test's title (「AeT 飄移測試 60 分」 → the
+    standard 15′, 「… 40 分」 → the short 10′), else 15′ when the run is long
+    enough for 40′ after it, else 10′ (自組)."""
+    m = AT_TITLE_LEN.search(title or "")
+    if m:
+        return WARM_STD_S if int(m.group(1)) >= 60 else WARM_S
+    return WARM_STD_S if duration_s >= WARM_STD_S + UA_MIN_S else WARM_S
+
+
 def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     from backend.engine import workout_review as WR
     s = WR._samples(ds, w)
@@ -198,8 +235,11 @@ def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     m = m if m is not None else (WR.measure(ds, w) or {})
     temp = ds.channel(w.idx, "temperature")
     tc, src = WR.activity_temp(ds, w, None)       # the archive only; the watch is averaged over the block
-    return analyze(s["t"], s["hr"], s["speed"], s["power"], temp, m.get("climb_m_per_km"),
-                   trail="runningtrail" in w.tags, temp_c=tc, temp_src=src)
+    sched = WR.scheduled_aet_test(ds, w) or {}
+    title = WR._title(w) if AT_TITLE_LEN.search(WR._title(w) or "") else (sched.get("title") or WR._title(w))
+    warm = warm_for(title, _f(w.metrics.get("duration")) or float(s["t"][-1] - s["t"][0]))
+    return {**analyze(s["t"], s["hr"], s["speed"], s["power"], temp, m.get("climb_m_per_km"),
+                      trail="runningtrail" in w.tags, warm_s=warm, temp_c=tc, temp_src=src), "warm_s": warm}
 
 
 def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
@@ -215,7 +255,8 @@ def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
             continue
         # too short to be a fair test — unless the plan says it was the test
         # (then analyze() refuses it and the card / i_testing say why)
-        if (_f(w.metrics.get("duration")) or 0) < WARM_S + UA_MIN_S and WR.scheduled_aet_test(ds, w) is None:
+        if (_f(w.metrics.get("duration")) or 0) < WARM_S + UA_MIN_S - UA_SLACK_S and \
+                WR.scheduled_aet_test(ds, w) is None:
             continue
         m = WR.measure(ds, w)
         if not m or WR.classify(ds, w, m)["type"] != "test_aet":
@@ -280,18 +321,89 @@ def due(today: dt.date, kind: Optional[str], base_start: Optional[str], aet_date
     return k % EVERY_WEEKS == 1
 
 
-def session(th: dict, hr0: Optional[float], p0: Optional[float]) -> dict:
-    """The schedulable session (kind test, id test_aet); 15 + 60 + 5 = 80 min."""
+def variant_for(cap_weekday: Optional[int]) -> str:
+    """standard (80′) without a weekday cap or with one ≥ 80 min; short (UA's
+    40′ minimum, 50′ in all) when the cap can't fit the standard test."""
+    return "short" if cap_weekday is not None and cap_weekday < STD_MIN else "standard"
+
+
+def is_short(s: dict) -> bool:
+    """A planned AeT test of the short (50-min) length."""
+    m = AT_TITLE_LEN.search(s.get("title") or "")
+    return int(m.group(1)) < 60 if m else (s.get("minutes") or STD_MIN) <= SHORT_MIN
+
+
+def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Optional[int] = None) -> dict:
+    """The schedulable session (kind test, id test_aet), its length by the 課表偏好
+    weekday cap (variant_for): standard 15′ + 60′ + 5′ = 80 min, or UA's minimum
+    10′ + 40′ (cool-down optional) = 50 min — the detail says which and why. It
+    keeps 「暖身 N 分」「測試 N 分」「緩和 N 分」 for the COROS step builder."""
+    v = variant_for(cap_weekday)
+    warm, main, cool = VARIANTS[v]
     tgt = []
     if p0:
         tgt.append(f"固定功率 {p0:.0f} W（±3%）")
     if hr0:
         tgt.append(f"心率從 {hr0:.0f} 附近開始")
-    return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": TITLE, "minutes": 80,
+    if v == "short":
+        why = (f"平日上限 {cap_weekday} 分 → 用 UA 最短 40 分版本"
+               + ("（還是要 50 分：UA 不建議短於 40 分，不受上限）" if cap_weekday < SHORT_MIN else "") + "：")
+        body = (f"暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分固定功率不要調；中途不停；"
+                "緩和可省略（0–5 分慢跑）。")
+    else:
+        why = "沒有平日時間上限 → 標準版 80 分：" if cap_weekday is None else \
+            f"平日上限 {cap_weekday} 分放得下 → 標準版 80 分："
+        body = (f"暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分固定功率不要調"
+                f"（至少 40 分）；中途不停；緩和 {cool} 分。")
+    return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": TITLES[v], "minutes": warm + main + cool,
             "target": "；".join(tgt) or "固定功率（±3%），不要調",
-            "detail": "平路環線或跑步機 2–3%，不要山路；< 25 °C；暖身 15 分、測試 60 分（至少 45 分）、緩和 5 分；"
-                      "中途不停、不加速。暖身後心率明顯高於起始心率就把功率調低再開始",
-            "source": SRC, "tss": 80 / 60 * 50}
+            "detail": why + "冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線，不要山路；" + body +
+                      "記下溫度；熱的時候結果會偏高。"
+                      "主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）",
+            "source": SRC, "tss": (warm + main + cool) / 60 * 50}
+
+
+# 課表偏好 plan.prefs.aet_test_days: the athlete trail-runs on weekends, so the
+# test defaults to a weekday (Mon–Fri); "any" = the interval placement.
+TEST_DAYS = {"weekday": (0, 1, 2, 3, 4)}
+DAY_ORDER = (1, 2, 3, 0, 4, 5, 6)      # Tue, Wed, Thu, Mon, Fri — plan_prefs.QUALITY_ORDER
+NOTE_NONE = "AeT 測試只排平日，本週平日沒有可練的日子：這週先不測"
+
+
+def test_days(prefs) -> Optional[tuple]:
+    """The weekdays the AeT test may go on (None = no restriction: the caller's
+    interval rule). Default Mon–Fri, also without stored preferences."""
+    return TEST_DAYS.get(getattr(prefs, "aet_test_days", None) or "weekday")
+
+
+def pick_day(avail: list, long_day: Optional[dt.date], hard_days=(), days=TEST_DAYS["weekday"],
+             weekend_ok: bool = False) -> dict:
+    """Where the AeT test goes in a week whose long run (`long_day`, may be
+    None) is already placed. `avail` = the free allowed days left; `days` =
+    test_days(); `weekend_ok` = the standard 80-min test (no weekday cap) may
+    fall back to a weekend day — never the long run's, which is not in
+    `avail`. Returns {"day", "note"}; candidates in DAY_ORDER (Tue first):
+
+      1. a preferred day ≥ 2 days from the long run and from other hard
+         days — so the day before is a rest / easy day, not the long run;
+      2. else a preferred day that is not the day after the long run (a
+         tired test drifts more) and not next to another hard day;
+      3. else any preferred day left;
+      4. else (weekend_ok) the same three steps on the weekend days;
+      5. none: `day` None — not placed this week (`note`).
+    自組 (no source gives a placement rule; the reasons are UA's: test
+    rested, flat, ≥ 40 min — docs/research/aerobic-base-readiness.md §6.4)."""
+    def best(pool):
+        cands = sorted((d for d in avail if d.weekday() in pool), key=lambda d: (DAY_ORDER.index(d.weekday()), d))
+        far = [d for d in cands if (long_day is None or abs((d - long_day).days) >= 2)
+               and all(abs((d - h).days) >= 2 for h in hard_days)]
+        near = [d for d in cands if (long_day is None or d != long_day + dt.timedelta(days=1))
+                and all(abs((d - h).days) >= 1 for h in hard_days)]
+        return (far or near or cands or [None])[0]
+    pick = best(days)
+    if pick is None and weekend_ok:
+        pick = best(tuple(d for d in range(7) if d not in days))
+    return {"day": pick, "note": None if pick is not None else NOTE_NONE}
 
 
 def is_aet_session(s: dict) -> bool:

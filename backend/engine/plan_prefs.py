@@ -32,7 +32,10 @@ Caps and hard sessions: a quality session over the weekday cap is shortened —
 warm-up 15 -> 10 min, cool-down 10 -> 5 min, then one rep fewer (never below
 2) — and its detail text is rewritten so the COROS step builder still parses
 it. The CP test protocol (3' + 30' + 12') is fixed: it is exempt from the cap,
-with a note. The protocol itself (cp_test_protocol, engine/cp_protocols.py) is
+with a note. The AeT drift test picks its length from the weekday cap instead
+(engine/aet_test.py variant_for: 80 min, or UA's 50-min minimum under a cap
+< 80; never shorter) and its day from aet_test_days (pick_day, weekday first).
+The protocol itself (cp_test_protocol, engine/cp_protocols.py) is
 not a shaping preference: it is left out of `active`, and week_plan reads it
 from the Prefs even when the rest are defaults.
 
@@ -68,20 +71,23 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.heat_method": "heat_method",
     "plan.prefs.quality_gate": "quality_gate",
     "plan.prefs.quality_gate_weeks": "quality_gate_weeks",
+    "plan.prefs.aet_test_days": "aet_test_days",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
 GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # fields that only add sessions for a specific reason and never reshape the
 # week: they are not part of `active` (the default plan stays untouched)
-NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method") + GATE_FIELDS
+# aet_test_days: where the AeT test goes, applied by every placement path
+# (aet_test.pick_day) whether or not the other preferences are set
+NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days") + GATE_FIELDS
 LONG_WD = {"sat": 5, "sun": 6}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
 
 NOTE_HARD = "受限於你的偏好，本週少 {h} 小時；想補量可以多排一天或放寬長跑日上限"
 NOTE_SOFT = "單次上限 {cap} 分：多出的 {m} 分鐘放在長跑日（盡量不超過）"
-NOTE_AET_TEST = "AeT 飄移測試要 15 分暖身＋至少 45 分固定功率，不受單次時間上限"
+NOTE_AET_TEST = "AeT 飄移測試至少要 10 分暖身＋40 分固定功率（共 50 分，UA 不建議更短），不受單次時間上限"
 
 
 def note_test(protocol: Optional[str]) -> str:
@@ -119,6 +125,10 @@ class Prefs:
     # 間歇門檻 (engine/quality_gate.py): not part of `active` either (GATE_FIELDS)
     quality_gate: str = "auto"
     quality_gate_weeks: int = 8
+    # AeT 飄移測試的日子 (engine/aet_test.py pick_day): weekday (default; the
+    # athlete trail-runs on weekends) | any. Not part of `active`: it moves one
+    # session, it doesn't reshape the week.
+    aet_test_days: str = "weekday"
 
     @property
     def active(self) -> bool:
@@ -187,6 +197,8 @@ def check(p: Prefs) -> None:
     from backend.engine.quality_gate import MODES, WEEKS_RANGE
     if p.quality_gate not in MODES:
         raise ValueError(f"間歇門檻要是 {MODES} 其中之一")
+    if p.aet_test_days not in ("weekday", "any"):
+        raise ValueError("AeT 測試日要是 weekday 或 any")
     if isinstance(p.quality_gate_weeks, bool) or not isinstance(p.quality_gate_weeks, int) or \
             not WEEKS_RANGE[0] <= p.quality_gate_weeks <= WEEKS_RANGE[1]:
         raise ValueError(f"週數法的週數要在 {WEEKS_RANGE[0]}–{WEEKS_RANGE[1]} 週")
@@ -460,14 +472,20 @@ def long_weekday(p: Prefs, auto_wd: int) -> int:
     return LONG_WD.get(p.long_day, auto_wd)
 
 
-def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs) -> list[dict]:
+def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
+          notes: Optional[list] = None, long_done: Optional[dt.date] = None) -> list[dict]:
     """Put `ss` (not done, day None) on `free` days. Main sessions only on
     allowed days, one per day; strength on the chosen weekdays, else with an
     easy run / on an allowed day, never the day before the long session.
-    Returns the sessions that found no day."""
+    The AeT test goes on the aet_test_days (aet_test.pick_day: a weekday by
+    default, ≥ 2 days from the long run where possible). `long_done` = the
+    day of a long run already done this week. Returns the sessions that found
+    no day; notes go to `notes`."""
+    from backend.engine import aet_test as AT
     avail = [d for d in free if p.allowed(d)]
     main = [s for s in ss if s["kind"] != "strength"]
-    long_day = None
+    long_day = long_done
+    aet_days = AT.test_days(p)
 
     def pick_near(wd: int) -> Optional[dt.date]:
         if not avail:
@@ -484,6 +502,17 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs) -> list[d
             pick = pick_near(long_wd)
             if s["id"] == "long":
                 long_day = pick
+        elif s["kind"] == "test" and aet_days is not None and AT.is_aet_session(s):
+            hard_days = [dt.date.fromisoformat(x["day"]) for x in main
+                         if x["kind"] in ("quality", "test") and x["day"]]
+            r = AT.pick_day(avail, long_day, hard_days, aet_days, weekend_ok=not AT.is_short(s))
+            if r["day"] is None:
+                if notes is not None:
+                    notes.append({"level": "info", "src": "prefs", "text": r["note"]})
+                continue
+            s["day"] = r["day"].isoformat()
+            avail.remove(r["day"])
+            continue
         elif s["kind"] in ("quality", "test"):
             hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
             ok = lambda d: (long_day is None or abs((d - long_day).days) >= 2) and \

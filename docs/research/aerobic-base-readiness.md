@@ -516,7 +516,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 脫水、沒補給 | 2 小時不補水：體重 −2.9%、心率 +10%；補水加葡萄糖可以防止飄移（Hamilton 1991 *J Appl Physiol* DOI 10.1152/jappl.1991.71.3.871） | 沒有（無資料）。只能在測試說明裡提醒 |
 | 咖啡因 | 對運動心率有交互作用（Glaister 2025 *RQES* DOI 10.1080/02701367.2024.2377303，效果大小沒取得） | 沒有；只能提醒 |
 | 前一天的疲勞 | Evoke "vary daily, depending on your recovery state"；Friel "cardiovascular fatigue"（沒有同儕審查來源） | 沒有；排課時避開（§6.4） |
-| 時間不夠 | UA ≥ 40 分鐘 | 有：總時間 < 40 分鐘不採用（`DRIFT_MIN_S`）。**但 UA 的 40 分鐘是暖身之後的測試長度**；`drift_of` 用總時間 ≥ 40 分鐘再扣 10 分鐘，實際只量了 30 分鐘。`test_aet` 分類用 ≥ 55 分鐘（`TEST_AET_MIN_S`），這個是對的 |
+| 時間不夠 | UA ≥ 40 分鐘（暖身之後）；心血管飄移約在運動 10–20 分鐘後開始（Coyle & González-Alonso 2001 *Exerc Sport Sci Rev* DOI 10.1097/00003677-200104000-00009） | 有，分兩級（2026-10-01 使用者決定）。**嚴格／測試級**：暖身 10 分鐘後的移動時間 ≥ 40 分鐘（`DRIFT_MIN_S`），只有這一級拿來判斷間歇門檻（Friel／徐國峰）、AeT 測試分類和寫門檻。**參考級**：暖身後 30–40 分鐘（`DRIFT_REF_MIN_S`，**自組**，30 分鐘沒有來源；UA 的 40 分鐘是正式 AeT 測試的標準），其他排除條件（熱、坡、停頓、快速結尾、功率變異、強度、功率涵蓋率）照樣套用；只在總覽心率飄移、季圖、判讀卡顯示，標「參考（暖身後 30–40 分，未達 UA 測試標準）」。< 30 分鐘兩級都不採用。這位選手的路跑多是 41–52 分鐘：實際資料（164 次 ≥ 40 分鐘的路跑）嚴格 1 次、參考 32 次。`test_aet` 的穩定跑備援仍用 ≥ 55 分鐘（`TEST_AET_MIN_S`），排進課表的 50 分鐘測試靠課表 done_by／標題辨認 |
 
 ### 6.3 這位選手的建議
 
@@ -524,6 +524,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
   - 固定**功率**：有 Stryd，功率比配速穩；`steady_drift` 本來就是 Pw:HR。
   - 同時記錄 Pa:HR 當作對照。
 - **長度**：暖身 15 分鐘＋測試 **60 分鐘**；時間不夠時 **45 分鐘**（不要少於 40 分鐘，UA）。
+  - 2026-10-01 更新：選手平日只有約 50 分鐘、週末跑越野。課表偏好有平日上限而且 < 80 分鐘時，改排 UA 的最短版本：暖身 10 分鐘（到開始流汗）＋測試 **40 分鐘**、緩和可省略，共 50 分鐘（UA："If you only have 40 minutes, do that."；"We don't recommend relying on tests less than 40 minutes long"），排在平日。沒有上限時照標準 15＋60＋5。
 - **場地**：
   - 首選平路環線（每公里爬升 < 20 m、不折返，Evoke）或田徑場。
   - 次選跑步機 2–3%。
@@ -550,10 +551,11 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
   - plan 的 AeT 超過 6 週沒更新（`i_testing` 已經有「每 4–6 週」的說法）
 - 放在 CP 測試那一堆的後一週（兩者不同週），取代當週的間歇。
 - 放在休息日或輕鬆日之後，離長跑 ≥ 2 天（`place()` 用 kind `test` 已經會處理）。
+  - 2026-10-01 實作：`aet_test.pick_day`，三條排課路徑共用。預設平日（`plan.prefs.aet_test_days` = `weekday`），週二優先；離長跑和其他硬課 ≥ 2 天，盡量不排長跑隔天。80 分標準版在平日排不下時可以退到不是長跑日的週末；50 分版只排平日。選 `any` 就照間歇的規則。
 - Session 內容：
-  - `kind="test"`、`id="test_aet"`、`title="AeT 飄移測試 60 分"`、`minutes=80`
+  - `kind="test"`、`id="test_aet"`；標準版 `title="AeT 飄移測試 60 分"`、`minutes=80`；平日上限 < 80 分時 `title="AeT 飄移測試 40 分"`、`minutes=50`
   - target 寫「固定功率 {P} W（±3%）；心率從 {HR} 附近開始」
-  - detail 寫「平路環線或跑步機 2–3%，不要山路；< 25 °C；暖身 15 分、測試 60 分（至少 45 分）、緩和 5 分；中途不停、不加速」
+  - detail 先寫選哪一版、為什麼（例如「平日上限 50 分 → 用 UA 最短 40 分版本」），再寫「冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線，不要山路；暖身 N 分到開始流汗，接著測試 N 分固定功率不要調；中途不停；記下溫度；熱的時候結果會偏高」，以及 Evoke 的提早中止：「主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測」（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/）。原本的「< 25 °C」從說明拿掉（溫度規則之後會改成分級），分析仍然擋 > 25 °C
 - **COROS**（`coros_workouts.session_steps`）：目前 `kind == "test"` 一律走 `_test_steps`（CP 的 3′+12′），要依 `id` 或標題分流，新增 `_aet_test_steps`：
   1. 暖身 15 分，`EX_WARMUP`，心率 ≤ 起始心率
   2. 主課 60 分，`EX_TRAIN`，功率目標 P×0.97–P×1.03，名稱「固定功率，不要調」
