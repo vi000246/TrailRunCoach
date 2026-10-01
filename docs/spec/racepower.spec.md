@@ -249,8 +249,9 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   (`backend/engine/racepower/pacing.py:153`). The W′ budget F11b
   (`backend/engine/racepower/pacing.py:165`) shrinks α while a stretch above CP spends > 0.75 W′.
 - **W′ curve** (display only): WKO5's dfrc port (default, `backend/engine/racepower/pacing.py:246`)
-  or Skiba with a labelled τ — 2012 cycling 546·e^(−0.01D)+316 or Vassallo 2020's running refit
-  372·e^(−0.02D)+102 (`backend/engine/racepower/pacing.py:224`).
+  or Skiba with Vassallo 2020's running-refit τ 372·e^(−0.02D)+102
+  (`backend/engine/racepower/pacing.py:224`). The 2012 cycling τ option was removed from the page
+  (user, 2026-10-01); an old `wbal: "skiba"` request is mapped to the WKO5 curve.
 - **Environment per segment** (`backend/engine/racepower/env.py:157`): v1's M with each segment's
   mean elevation; acclimatised = the pressure polynomial (the workbook / GoldenCheetah
   coefficients, attributed to Péronnet 1991 there — not Bassett), unacclimatised = Wehrlin linear

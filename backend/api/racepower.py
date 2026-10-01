@@ -658,6 +658,7 @@ class PlanIn(PredictIn):
     stops: list[StopIn] = []
     day_splits_km: list[float] = []
     terrain: dict = {}
+    # "skiba" (cycling τ) is still accepted from old saved pages and mapped to "wko5" in the planner
     wbal: Optional[Literal["wko5", "skiba", "skiba_run"]] = None
     # per-segment heat: the /weather hourly rows of the event (CWA 3-day or
     # Open-Meteo); none, or no date / start time → the single To value
