@@ -412,8 +412,10 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float]) -> di
     from backend.engine import quality_gate as QG
     spec = dec["spec"]
     pre = "" if spec is QG.RECOVERY else QG.prefix(gate)
-    if (gate.get("dose") or {}).get("faded") and spec not in (QG.RECOVERY, QG.SUB):
-        pre = "上次間歇後段掉了：退一步；" + pre
+    dose = gate.get("dose") or {}
+    if dose.get("faded") and spec not in (QG.RECOVERY, QG.SUB):
+        # the progression state machine's verdict (quality_gate.dose_step)
+        pre = (dose.get("note") or "上次間歇沒有達標：") + pre
     s = QG.session(spec, {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}, pre, hours,
                    bool((gate.get("lthr") or {}).get("default")))
     s["source"] = QG.source(gate, spec)

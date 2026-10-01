@@ -281,6 +281,9 @@ dialog.sd .err:empty { display: none; }
 .pnotes .wk-l { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .pnotes button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
 
+/* ---- 自動調整 (autoplan.js) ---- */
+.adapt-note { color: #b36b00; }
+.chip.k-notice { border-style: dashed; opacity: .85; }
 /* ---- 課表偏好 dialog ---- */
 dialog.sd.wide { width: min(580px, 96vw); }
 dialog.sd form { max-height: calc(100vh - 40px); overflow: auto; }
@@ -421,6 +424,8 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div id="sync-msg" role="status" aria-live="polite"></div>
   </section>
 
+  <div id="autoplan" data-settings data-limit="5" style="margin-bottom:8px"></div>
+  <script src="/api/v1/static/autoplan.js" defer></script>
   <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
   <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
   <div class="legend" id="legend"></div>
@@ -610,7 +615,8 @@ async function sj(method, url, body) {
 }
 
 const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength", "heat_passive"];
-const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "健行／登山", strength: "肌力", heat_passive: "被動熱適應" };
+const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "健行／登山", strength: "肌力", heat_passive: "被動熱適應",
+  notice: "課表待確認" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
 // 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
 const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
 const SYNC = { pushed: ["ok", "已推送到 COROS"], updated: ["ok", "已推送到 COROS"], outdated: ["warn", "需更新：課表改過，再同步一次會更新 COROS"],
@@ -666,7 +672,7 @@ function chipHtml(s, big) {
       ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${icon}</span>
     <span class="c-m">${meta}</span>
-    ${line ? `<span class="c-x">${line}</span>` : ""}${big && s.detail && s.state !== "done" ? `<span class="c-d">${esc(s.detail)}</span>` : ""}</button>`;
+    ${line ? `<span class="c-x">${line}</span>` : ""}${big && s.detail && s.state !== "done" ? `<span class="c-d">${esc(s.detail)}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
 }
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s4", bike: "--s7", strength: "--s5", walk: "--s6", other: "--bar" };
 function actHtml(a) {
@@ -1196,7 +1202,8 @@ function openDlg(s, day) {
   const db = $("sd-done");
   db.hidden = !(s && (s.state === "done" || s.state === "missed"));
   if (s && s.state === "done") db.innerHTML = `<b class="ok">✓ 已完成</b>${s.done_by ? `：${esc(s.done_by.category_label || "")} ${hm(s.done_by.moving_s)}${s.done_by.tss != null ? ` · TSS ${n0(s.done_by.tss)}` : ""}` : ""}` +
-    (s.compliance ? `<br><span class="cp-${esc(s.compliance.level)}"><span class="cpw">${esc(compTip(s.compliance))}</span></span>` : "");
+    (s.compliance ? `<br><span class="cp-${esc(s.compliance.level)}"><span class="cpw">${esc(compTip(s.compliance))}</span></span>` : "") +
+    (s.note ? `<br><span class="adapt-note" title="自動調整（engine/adapt.py）：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬自組）">⚠ ${esc(s.note)}</span>` : "");
   else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
   F.day.value = d;
@@ -1606,6 +1613,7 @@ $("cal").addEventListener("drop", async (e) => {
 });
 
 // ---------------- wiring ----------------
+window.onAutoPlanChange = () => load();      // autoplan.js: approve / reject / 復原 changed the plan
 function shift(dir) {
   if (S.narrow || S.view === "week") S.anchor = addDays(mondayOf(S.anchor), 7 * dir);
   else { const d = dOf(S.anchor); S.anchor = isoOf(new Date(d.getFullYear(), d.getMonth() + dir, 1)); }

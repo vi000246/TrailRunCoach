@@ -19,6 +19,7 @@
 | 2026-09-30 | code-sync | — | 同步強化：增量 cursor、錯誤不推進 cursor、失敗 rollback、跨來源去重（`duplicate_of`）、本地日期（`start_time_utc`）、token 以 Fernet 加密。TP 改走網站登入 / WKO5-client OAuth，檔案改用 `details` + `rawfiledata` 下載 |
 | 2026-09-30 | code-sync | — | 設定頁「資料同步」區塊、每來源互斥鎖（409 `SYNC_BUSY`）、每日排程（lifespan task）、`POST /sync/auto` + `autosync.js`、每來源獨立 FIT 資料夾與遷移腳本、刪除單一來源檔案、`FitFolderDataset` 與 `/sync/compare` |
 | 2026-09-30 | code-sync | N/A | 掃描改走 `fit/<source>/` 並標 source + provider id、`FitFolderDataset` 時區取 `athlete.timezone`、`charts.map.basemap` / `charts.map.overlays` 設定鍵、COROS 課表推送改指向 overview.spec.md；路徑改寫成使用者資料夾相對形式 |
+| 2026-10-01 | feat/auto-replan | N/A | 同步結束時，若這次下載 ≥ 1 筆活動（狀態 ok／partial），`runner.stream` 會呼叫 `plan_auto.after_sync`，在背景 task 裡用自己的 DB session 自動調整課表並推送（`docs/spec/plan-auto.spec.md`）。失敗不影響同步結果 |
 | 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
 
 ---
@@ -367,7 +368,7 @@ ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
 
 **時區**：`FitFolderDataset` 把 FIT 的 UTC 起始時間換成運動員當地時間再取日期（`backend/engine/wko5expr/fitdataset.py:162`、`backend/engine/wko5expr/fitdataset.py:192-194`；naive 時間視為 UTC），時區來源與同步一致：`athlete.timezone` 設定 → `WKO5COACH_TZ` → 系統時區（`backend/engine/wko5expr/datasource.py:59`）。測試：`backend/tests/test_scan_and_tz.py:90`、`backend/tests/test_scan_and_tz.py:99`、`backend/tests/test_scan_and_tz.py:105`。
 
-**路線圖設定**（`charts.map.basemap` / `charts.map.overlays`，`backend/settings/repository.py:53-54`）：預設底圖 `rudy`、無疊加層。底圖限 `MAP_BASEMAPS`、疊加層須為 `MAP_OVERLAYS` 內不重複的清單（`backend/settings/repository.py:56-57`、`backend/settings/repository.py:113-118`），不合法時 `PUT /sync/settings` 回 400。API 欄位對應在 `backend/api/sync.py:203-215`。地圖本身屬 viewer，見 wko5-engine.spec.md。
+**路線圖設定**（`charts.map.basemap` / `charts.map.overlays`，`backend/settings/repository.py:53-54`）：預設底圖 `rudy`、無疊加層。底圖限 `MAP_BASEMAPS`、疊加層須為 `MAP_OVERLAYS` 內不重複的清單（`backend/settings/repository.py:56-57`、`backend/settings/repository.py:125-130`），不合法時 `PUT /sync/settings` 回 400。API 欄位對應在 `backend/api/sync.py:203-215`。地圖本身屬 viewer，見 wko5-engine.spec.md。
 
 **接線**：`_dataset()`（`backend/api/wko5views.py:78`）讀 `current_source()`，以 `source_stamp()` 當 `_dataset_cfg` 的快取 key（`backend/api/wko5views.py:87`），`_dataset_cfg`（`backend/api/wko5views.py:55`）呼叫 `dataset_for_source(source, ATHLETE_DIR, config)`：`coros` / `tp` 建 `FitFolderDataset`，`wko5` 照舊是 WKO5 `Dataset`。總覽（`backend/api/overview.py:27`）與功率計算機（`backend/api/racepower.py:41`）都走同一個 `_dataset()`。render cache 把 dataset 的 `source` / `source_stamp` 放進 key（`backend/engine/wko5expr/render_cache.py:96`），圖表請求本身也帶 `source`，所以換來源或同步新檔案都不會拿到舊圖。圖表頁右上角有資料來源切換（`#source-chip` + `sourcechip.js`，`backend/static/wko5_viewer.html:251`），設定頁的說明也改成已生效（`backend/static/settings.html:126`）。實測（2026-09-30，本機資料）：`coros` 17 筆活動，5 個 view 共 186 張圖 0 錯誤；`wko5` 預設的輸出與改動前相同（只少了地圖面板不再使用的 `track`）。
 

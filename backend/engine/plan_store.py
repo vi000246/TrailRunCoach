@@ -17,7 +17,11 @@ from backend.db.models import PlanSession
 from backend.engine import reconcile as R
 
 KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test": "測試",
-         "hike": "健行／登山", "strength": "肌力", "heat_passive": "被動熱適應"}
+         "hike": "健行／登山", "strength": "肌力", "heat_passive": "被動熱適應",
+         # 課表待確認 (engine/plan_auto.py): a reminder pushed to the watch, not a
+         # training session — never done / missed, no TSS, no compliance
+         "notice": "課表待確認"}
+NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m")
 TERRAINS = ("road", "trail", "hike")
 DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
@@ -111,17 +115,46 @@ def blocked_map(inputs: dict) -> dict:
     return {d: b.label for d, b in BL.blocked(BL.from_list(inputs.get("blackouts") or [])).items()}
 
 
-async def plan_reconcile(db: AsyncSession, inputs: dict, apply: bool, athlete_id: int = 1,
-                         decisions: Optional[dict] = None):
-    """(new sessions, changes). `inputs`: cur (week_plan()), weeks (projection),
-    activities, today, horizon_end, blackouts (不排課日期), prefs.
-    `decisions`: {uid: move | delete} for edited sessions on a blocked day."""
-    stored = await load(db, athlete_id)
+def reconcile_with_adapt(stored: list[dict], inputs: dict, decisions: Optional[dict] = None,
+                         adjustments: Optional[list] = None) -> tuple[list[dict], list[dict]]:
+    """reconcile() on the generator's weeks after engine/adapt.py's adjustments
+    (when `inputs["adapt"]` is there and enabled — _compute_inputs adds it;
+    plan.auto.enabled off = the plain generator). Pure."""
+    from backend.engine import adapt as A
     prefs = inputs.get("prefs") or {}
     days = prefs.get("days") if prefs and not all(prefs.get("days") or [True]) else None
-    new, changes = R.reconcile(stored, gen_weeks(inputs), inputs.get("activities") or [],
+    blocked = blocked_map(inputs)
+    gw = gen_weeks(inputs)
+    ctx = inputs.get("adapt")
+    adj: list[dict] = []
+    notes: dict = {}
+    if ctx and ctx.get("enabled", True):
+        cur = inputs.get("cur") or {}
+        load = cur.get("load") or {}
+        gw, adj, notes = A.adapt(gw, stored, {
+            "today": inputs["today"], "first_free": ctx.get("first_free"), "blocked": blocked,
+            "allowed_days": days, "thresholds": inputs.get("thresholds") or {}, "mode": cur.get("mode"),
+            "load": {"tsb": ctx.get("tsb", load.get("tsb_today")), "ramp": ctx.get("ramp")},
+            "reviews": ctx.get("reviews") or {}})
+    new, changes = R.reconcile(stored, gw, inputs.get("activities") or [],
                                inputs["today"], inputs.get("horizon_end"), covered=inputs.get("covered"),
-                               blocked=blocked_map(inputs), allowed_days=days, decisions=decisions)
+                               blocked=blocked, allowed_days=days, decisions=decisions)
+    if ctx and ctx.get("enabled", True):
+        A.apply_notes(new, notes)
+        A.annotate(changes, adj, new, stored)
+    if adjustments is not None:
+        adjustments.extend(adj)
+    return new, changes
+
+
+async def plan_reconcile(db: AsyncSession, inputs: dict, apply: bool, athlete_id: int = 1,
+                         decisions: Optional[dict] = None, adjustments: Optional[list] = None):
+    """(new sessions, changes). `inputs`: cur (week_plan()), weeks (projection),
+    activities, today, horizon_end, blackouts (不排課日期), prefs, adapt
+    (engine/adapt.py context). `decisions`: {uid: move | delete} for edited
+    sessions on a blocked day. `adjustments`: filled with adapt()'s list."""
+    stored = await load(db, athlete_id)
+    new, changes = reconcile_with_adapt(stored, inputs, decisions, adjustments)
     if apply:
         await save(db, new, athlete_id)
     return new, changes
@@ -155,7 +188,7 @@ def _clean(patch: dict, today: str) -> dict:
             if v < today:
                 raise PlanError("不能排到過去的日子")
         elif k == "kind":
-            if v not in KINDS:
+            if v not in KINDS or v in NOT_LOAD:
                 raise PlanError(f"不支援的類型：{v!r}")
         elif k == "minutes":
             try:
@@ -237,6 +270,8 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
               blocked: Optional[dict] = None) -> dict:
     data = dict(data)
     data.setdefault("kind", "easy")
+    if data["kind"] in NOT_LOAD:
+        raise PlanError("課表待確認是自動調整的提醒，不能自己新增")
     if data["kind"] == "test":
         _test_default(data)
     data.setdefault("title", DEFAULT_TITLES.get(data.get("kind"), "自訂"))
@@ -273,6 +308,17 @@ async def delete(db: AsyncSession, uid: str, athlete_id: int = 1) -> dict:
     return d
 
 
+def session_tss(s: dict) -> float:
+    """The load a session counts for: a done one its activity's real TSS (an
+    easy run done too hard counts what it really cost, engine/adapt.py rule
+    D1), else the planned TSS; a notice nothing."""
+    if s.get("kind") in NOT_LOAD:
+        return 0.0
+    if s.get("state") == "done" and isinstance(s.get("done_by"), dict) and s["done_by"].get("tss") is not None:
+        return float(s["done_by"]["tss"])
+    return float(s.get("tss") or 0.0)
+
+
 def plan_summary(ss: list[dict], week_start: str, today: str, ctl0: float, atl0: float,
                  cc: float, ac: float, horizon_end: Optional[str] = None) -> dict:
     """Week targets and the CTL/ATL projection from the stored plan, so edits show
@@ -282,10 +328,10 @@ def plan_summary(ss: list[dict], week_start: str, today: str, ctl0: float, atl0:
     of each later day up to the horizon."""
     from backend.engine.overview import project
     week_end = (dt.date.fromisoformat(week_start) + dt.timedelta(days=6)).isoformat()
-    live = [s for s in ss if s["state"] in ("active", "done") and s.get("day")]
+    live = [s for s in ss if s["state"] in ("active", "done") and s.get("day") and s["kind"] not in NOT_LOAD]
     wk = [s for s in live if week_start <= s["day"] <= week_end]
     hours = sum(s["minutes"] or 0 for s in wk if s["kind"] != "strength") / 60.0
-    tss = sum(float(s.get("tss") or 0.0) for s in wk)
+    tss = sum(session_tss(s) for s in wk)
     end = max(week_end, horizon_end or week_end)
     days, d = [], dt.date.fromisoformat(today) + dt.timedelta(days=1)
     while d.isoformat() <= end:
@@ -318,6 +364,47 @@ def push_dict(s: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 _TEST_CACHE: dict = {}
+_TITLE_CACHE: dict = {}
+
+
+def done_titles(db_path=None) -> dict:
+    """{activity index: title} of the done quality / test sessions, so
+    quality_gate.dose_step judges an interval against what was planned
+    (a recovery fartlek is not a ladder step). Read-only sqlite, cached on
+    the file's mtime; {} when the DB is missing."""
+    import sqlite3
+    from pathlib import Path
+    if db_path is None:
+        from backend.engine.wko5expr.datasource import _db_path
+        db_path = _db_path()
+    if db_path is None:
+        return {}
+    p = Path(db_path)
+    try:
+        mt = p.stat().st_mtime_ns
+    except OSError:
+        return {}
+    hit = _TITLE_CACHE.get(str(p))
+    if hit and hit[0] == mt:
+        return hit[1]
+    out: dict = {}
+    try:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            for title, done_by in con.execute("SELECT title, done_by FROM plan_sessions "
+                                              "WHERE state='done' AND kind IN ('quality','test')"):
+                try:
+                    d = json.loads(done_by) if done_by else None
+                except ValueError:
+                    d = None
+                if isinstance(d, dict) and d.get("index") is not None:
+                    out[d["index"]] = title
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    _TITLE_CACHE[str(p)] = (mt, out)
+    return out
 
 
 def test_sessions(db_path=None) -> list[dict]:

@@ -62,11 +62,14 @@ def session_from_gen(g: dict, week_start: str, provisional: bool, uid: Optional[
             **{k: g.get(k) for k in FIELDS}}
 
 
-SIDE_KINDS = ("strength", "heat_passive")     # never hold a main day (heat_passive: engine/heat_plan.py)
+# never hold a main day (heat_passive: engine/heat_plan.py; notice: the 課表待確認
+# reminder pushed to the watch, engine/plan_auto.py — never done / missed / load)
+SIDE_KINDS = ("strength", "heat_passive", "notice")
+NOTICE = "notice"
 
 
 def _matches(s: dict, a: dict) -> bool:
-    if s["kind"] == "heat_passive":
+    if s["kind"] in ("heat_passive", NOTICE):
         return False                              # a bath / sauna has no FIT: the user ticks it
     if s["kind"] == "strength":
         return a.get("category") == "strength"
@@ -106,7 +109,8 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
     gen_done = {(w["start"], g["id"]): g for w in gen_weeks for g in w["sessions"] if g.get("done")}
 
     # ---- 1. done / missed ------------------------------------------------
-    for s in sorted([s for s in out if s["state"] in ("active", "missed")], key=lambda s: s.get("day") or "9999"):
+    for s in sorted([s for s in out if s["state"] in ("active", "missed") and s["kind"] != NOTICE],
+                    key=lambda s: s.get("day") or "9999"):
         g = gen_done.get((s["week_start"], s["gen_key"])) if s.get("gen_key") else None
         if g is not None and (not g.get("done_by") or g["done_by"].get("index") not in used):
             s["state"], s["done_by"] = "done", g.get("done_by")
@@ -216,7 +220,8 @@ def _clear_blackouts(out: list[dict], ws: str, today: str, changes: list[dict], 
     """Rule 6 for one week: active sessions on a blocked day from today on."""
     from backend.engine.blackouts import move_to
     week = [s for s in out if s["week_start"] == ws and s.get("day")]
-    hits = sorted([s for s in week if s["state"] == "active" and s["day"] >= today and s["day"] in blocked],
+    hits = sorted([s for s in week if s["state"] == "active" and s["day"] >= today and s["day"] in blocked
+                   and s["kind"] != NOTICE],
                   key=lambda s: (_prio(s), s["day"]))
     held: list[dict] = []                          # proposed moves still waiting for a decision
     for s in hits:

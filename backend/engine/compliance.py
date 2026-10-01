@@ -43,7 +43,10 @@ def level_of(dev: float) -> str:
 
 def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
     """{level, pct, duration_pct, tss_pct, wrong_type, label} for a done or
-    missed stored session (plan_store dict), None for anything else."""
+    missed stored session (plan_store dict), None for anything else (also the
+    課表待確認 notice, which is not training)."""
+    if s.get("kind") == "notice":
+        return None
     if s.get("state") == "missed":
         return {"level": "missed", "pct": 0, "duration_pct": None, "tss_pct": None,
                 "wrong_type": False, "label": LEVEL_LABEL["missed"]}
