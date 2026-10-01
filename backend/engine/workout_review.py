@@ -73,7 +73,9 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # v10: adaptive start — drift_of's window starts after the last stop in the first 20 min (`warmup_s`, `start_shift`)
 # v11: drift v2 (docs/research/drift-algorithm.md) — trailing idle cut, return-leg city tail as cool-down, VI /
 # walk / halves-power gate on the window, SE (drift_se / pw_drift_se), ramp-free comparison (`ramps`)
-CACHE_KEY = "workout_review_v12"
+# v13: climbs carry start/end km, elevations, avg power, moving pace and GAP (the 爬坡段 profile);
+# `grade_bins` per workout (the 坡度分組 baseline)
+CACHE_KEY = "workout_review_v13"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -1298,6 +1300,42 @@ def _none_list(a) -> list:
     return [None if not np.isfinite(x) else float(x) for x in np.asarray(a, dtype=float)]
 
 
+def _gap_factor(grade: Optional[float], walking: bool) -> Optional[float]:
+    """Minetti's cost at `grade` relative to flat (algorithms/minetti.py, Strava's 0.9 downhill floor)."""
+    if grade is None or not math.isfinite(grade):
+        return None
+    from backend.engine.algorithms.minetti import grade_factor
+    return grade_factor(grade, walking)
+
+
+def _climb_dict(c, dist, p: np.ndarray, d: np.ndarray, mov: np.ndarray, walking: bool = False) -> dict:
+    """One detected climb as cached JSON: the table's numbers plus where it is
+    (km, elevations) and what it cost (avg power, moving pace, GAP)."""
+    a, b = c.start_index, c.end_index
+    dk = _arr(dist, len(d))
+    sl = slice(a, b + 1)
+    pace = c.duration_s / c.distance_km if c.distance_km > 0 else None
+    f = _gap_factor(c.grade, walking)
+    return {"t_start": c.t_start, "duration_s": c.duration_s, "distance_km": c.distance_km,
+            "gain_m": c.gain_m, "grade": c.grade, "vam": c.vam_m_per_h, "avg_hr": c.avg_hr,
+            "hr_per_100m": c.hr_per_100m,
+            "start_km": _f(dk[a]), "end_km": _f(dk[b]), "start_elev": c.start_elev_m, "top_elev": c.top_elev_m,
+            "avg_power": _wmean(p[sl], d[sl], mov[sl]),
+            "pace_s_per_km": pace, "gap_s_per_km": (pace / f) if pace and f else None}
+
+
+def _grade_rows(ds, w, s: dict) -> list:
+    """grade_bins (rgrade) for the cache: the 坡度分組 card and its baseline."""
+    if s["dist"] is None or s["elev"] is None:
+        return []
+    g = _eval(ds, w, "rgrade")
+    if g is None:
+        return []
+    keep = ("label", "lo", "hi", "time_s", "distance_km", "pace_s_per_km", "power", "hr", "vam", "time_pct")
+    rows = grade_bins(_dt(s["t"]), g, s["dist"], s["power"], s["hr"], s["cadence"], elev_m=s["elev"])
+    return [{k: r.get(k) for k in keep} for r in rows]
+
+
 def _measure(ds, w) -> Optional[dict]:
     """Per-workout raw measurements (JSON; disk-memoised by `measure`)."""
     s = _samples(ds, w)
@@ -1358,12 +1396,11 @@ def _measure(ds, w) -> Optional[dict]:
         try:
             cl = detect_climbs(_none_list(t), _none_list(s["dist"]), _none_list(s["elev"]),
                                _none_list(h) if s["hr"] is not None else None, moving=list(mov))
-            climbs = [{"t_start": c.t_start, "duration_s": c.duration_s, "distance_km": c.distance_km,
-                       "gain_m": c.gain_m, "grade": c.grade, "vam": c.vam_m_per_h, "avg_hr": c.avg_hr,
-                       "hr_per_100m": c.hr_per_100m} for c in cl]
+            climbs = [_climb_dict(c, s["dist"], p, d, mov, walking=cat in ("hike", "walk")) for c in cl]
         except Exception:
             climbs = []
     out["climbs"] = climbs
+    out["grade_bins"] = _grade_rows(ds, w, s)
     hp = [c["hr_per_100m"] for c in climbs if c.get("hr_per_100m")]
     out["hr_per_100m"] = statistics.median(hp) if hp else None
     stryd = s["ilr"] is not None or s["lss"] is not None
@@ -2127,36 +2164,241 @@ def _trail_lines(ds, w, m) -> list[str]:
     return lines
 
 
+# ---------------------------------------------------------------------------
+# 爬坡段: elevation profile + per-climb comparison; 坡度分組: one row per grade bin
+# (wko5_viewer drawClimbProfile / drawGradeProfile; res.climb_profile / res.grade_profile)
+# ---------------------------------------------------------------------------
+
+PROFILE_POINTS = 900          # points on the drawn profile (display only)
+PROFILE_WIN_S = 60.0          # 推估: centred 60-s window for the profile's VAM / pace / power / HR (1-s VAM is noise)
+POOL_WEEKS = (8, 12, 26)      # 推估: "your usual" = the same category's previous 8 weeks, widened to 12, then 26, until ≥ 5
+CLIMB_GRADE_MATCH = 0.04      # 推估: a climb is compared with past climbs within ±4 pp of its grade (VAM rises with grade)
+BIN_MIN_S = 60.0              # 推估: a past workout counts for a grade bin when it spent ≥ 60 s in it
+CLIMB_KEYS = ("vam", "pct_cp", "hr_per_100m", "gap_s_per_km")
+BIN_KEYS = ("pace_s_per_km", "vam", "power", "hr", "eff_speed", "eff_power")
+CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+
+def climb_no(i: int) -> str:
+    return CIRCLED[i] if i < len(CIRCLED) else f"({i + 1})"
+
+
+def profile_series(t, dist, elev, grade=None, hr=None, power=None, walking: bool = False,
+                   n: int = PROFILE_POINTS, win_s: float = PROFILE_WIN_S) -> Optional[dict]:
+    """The elevation profile against distance, ~`n` points evenly spaced in km,
+    each with the centred `win_s` window's VAM (m/h), moving pace and GAP
+    (s/km; None when stopped), HR and power. None without distance and altitude."""
+    t = np.asarray(t, dtype=float)
+    N = len(t)
+    d, e = _arr(dist, N), _arr(elev, N)
+    ok = np.isfinite(t) & np.isfinite(d) & np.isfinite(e)
+    if ok.sum() < 10:
+        return None
+    ii = np.flatnonzero(ok)
+    tt, dd, ee = t[ii], np.maximum.accumulate(d[ii]), e[ii]
+    if dd[-1] - dd[0] < 0.2 or not np.all(np.diff(tt) >= 0):
+        return None
+    sel = np.unique(np.searchsorted(dd, np.linspace(dd[0], dd[-1], n)).clip(0, len(dd) - 1))
+    lo = np.searchsorted(tt, tt[sel] - win_s / 2).clip(0, len(tt) - 1)
+    hi = (np.searchsorted(tt, tt[sel] + win_s / 2, side="right") - 1).clip(0, len(tt) - 1)
+    span = tt[hi] - tt[lo]
+    with np.errstate(all="ignore"):
+        kmh = np.where(span > 0, (dd[hi] - dd[lo]) / span * 3600.0, np.nan)
+        moving = np.isfinite(kmh) & (kmh > STOP_KMH)
+        vam = np.where(moving, (ee[hi] - ee[lo]) / span * 3600.0, np.nan)
+        pace = np.where(moving, 3600.0 / kmh, np.nan)
+        if grade is not None:
+            g = _arr(grade, N)[ii][sel]
+        else:
+            run = (dd[hi] - dd[lo]) * 1000.0
+            g = np.where(run > 5, (ee[hi] - ee[lo]) / run, np.nan)
+        gf = np.array([_gap_factor(float(x), walking) if np.isfinite(x) else np.nan for x in g], dtype=float)
+        gap = pace / gf
+
+    def wmean(x):
+        if x is None:
+            return None
+        v = _arr(x, N)[ii]
+        okv = np.isfinite(v) & (v > 0)
+        cs = np.concatenate([[0.0], np.cumsum(np.where(okv, v, 0.0))])
+        cn = np.concatenate([[0.0], np.cumsum(okv.astype(float))])
+        cnt = cn[hi + 1] - cn[lo]
+        with np.errstate(all="ignore"):
+            return np.where(cnt > 0, (cs[hi + 1] - cs[lo]) / np.maximum(cnt, 1), np.nan)
+
+    def r(a, k):
+        if a is None:
+            return None
+        out = [None if not np.isfinite(x) else round(float(x), k) for x in a]
+        return out if any(x is not None for x in out) else None
+
+    pace = np.where(pace <= 3600, pace, np.nan)
+    gap = np.where(gap <= 3600, gap, np.nan)
+    return {"x": r(dd[sel], 3), "alt": r(ee[sel], 1), "t": r(tt[sel] - tt[0], 0), "grade": r(g * 100.0, 1),
+            "vam": r(vam, 0), "pace": r(pace, 0), "gap": r(gap, 0), "hr": r(wmean(hr), 0),
+            "power": r(wmean(power), 0)}
+
+
+def descents_of(t, dist, elev, hr=None, moving=None) -> list[dict]:
+    """Sustained descents: detect_climbs on the mirrored elevation (≥ 80 m down, ≥ 3 %)."""
+    neg = [None if x is None else -x for x in _none_list(elev)]
+    try:
+        cl = detect_climbs(_none_list(t), _none_list(dist), neg, _none_list(hr) if hr is not None else None,
+                           moving=moving)
+    except Exception:
+        return []
+    dk = _arr(dist, len(neg))
+    return [{"start_km": _f(dk[c.start_index]), "end_km": _f(dk[c.end_index]), "t_start": c.t_start,
+             "duration_s": c.duration_s, "distance_km": c.distance_km, "drop_m": c.gain_m, "grade": -c.grade,
+             "rate": -c.vam_m_per_h, "avg_hr": c.avg_hr, "start_elev": -c.start_elev_m, "end_elev": -c.top_elev_m,
+             "pace_s_per_km": c.duration_s / c.distance_km if c.distance_km > 0 else None} for c in cl]
+
+
+def _pool(ds, w, weeks: int = POOL_WEEKS[-1]) -> list[tuple[float, dict]]:
+    """(age in days, measure) of the same category's workouts in the `weeks` before `w`."""
+    from backend.engine.overview import category
+    cat, lo = category(w), math.floor(w.day) - 7 * weeks
+    out = []
+    for p in ds.workouts:
+        if p.idx == w.idx or p.day >= w.day or math.floor(p.day) < lo or category(p) != cat:
+            continue
+        pm = measure(ds, p)
+        if pm:
+            out.append((w.day - p.day, pm))
+    _flush(ds)
+    return out
+
+
+def pooled(items: Sequence[tuple[float, Optional[float]]]) -> dict:
+    """baseline() over the values aged ≤ 8 weeks, widened to 12 and 26 until ≥ 5 (POOL_WEEKS)."""
+    b = {"n": 0, "ok": False}
+    for weeks in POOL_WEEKS:
+        b = {**baseline([v for age, v in items if age <= 7 * weeks]), "weeks": weeks}
+        if b["ok"]:
+            break
+    return b
+
+
+def _with_pct_cp(c: dict, cp: Optional[float]) -> dict:
+    p = c.get("avg_power")
+    return {**c, "pct_cp": (p / cp) if p and cp else None}
+
+
+def climb_baselines(pool: list[tuple[float, dict]], climb: dict) -> dict:
+    """Per metric (CLIMB_KEYS), the athlete's usual on past climbs of a similar grade."""
+    near = [(age, _with_pct_cp(pc, pm.get("cp"))) for age, pm in pool for pc in (pm.get("climbs") or [])
+            if pc.get("grade") is not None and abs(pc["grade"] - climb["grade"]) <= CLIMB_GRADE_MATCH]
+    return {k: pooled([(age, pc.get(k)) for age, pc in near]) for k in CLIMB_KEYS}
+
+
+def _bin_metrics(r: dict) -> dict:
+    pace, hr, p = _f(r.get("pace_s_per_km")), _f(r.get("hr")), _f(r.get("power"))
+    return {"pace_s_per_km": pace, "vam": _f(r.get("vam")), "power": p, "hr": hr,
+            "eff_speed": (60000.0 / pace / hr) if pace and hr else None,     # m/min per bpm
+            "eff_power": (p / hr) if p and hr else None}                    # W per bpm
+
+
+def bin_baselines(pool: list[tuple[float, dict]], label: str) -> dict:
+    rows = [(age, _bin_metrics(r)) for age, pm in pool for r in (pm.get("grade_bins") or [])
+            if r.get("label") == label and (r.get("time_s") or 0) >= BIN_MIN_S]
+    return {k: pooled([(age, x[k]) for age, x in rows]) for k in BIN_KEYS}
+
+
+def _vs(x: Optional[float], b: dict) -> Optional[float]:
+    x = _f(x)
+    return (x / b["median"] - 1.0) if x is not None and b.get("ok") and b.get("median") else None
+
+
+def _climb_cards(ds, w, m) -> list[dict]:
+    pool = _pool(ds, w)
+    cp = m.get("cp")
+    out = []
+    for i, x in enumerate(m.get("climbs") or []):
+        x = _with_pct_cp(x, cp)
+        b = climb_baselines(pool, x)
+        out.append({**x, "no": climb_no(i), "base": b, "vs": {k: _vs(x.get(k), b[k]) for k in CLIMB_KEYS}})
+    return out
+
+
+def _climb_lines(cards: list[dict]) -> list[str]:
+    """VAM against the athlete's usual on similar-grade climbs: which climbs were faster / slower."""
+    hi = [c["no"] for c in cards if compare(c.get("vam"), c["base"]["vam"]) == "high"]
+    lo = [c["no"] for c in cards if compare(c.get("vam"), c["base"]["vam"]) == "low"]
+    if not any(c["base"]["vam"].get("ok") for c in cards):
+        return []
+    if not hi and not lo:
+        return ["每段的 VAM 都在你平常（相近坡度）的四分位範圍內"]
+    parts = ([f"VAM 高於平常：{''.join(hi)}"] if hi else []) + ([f"低於平常：{''.join(lo)}"] if lo else [])
+    return ["；".join(parts) + "（和近期相近坡度的爬坡比）"]
+
+
 def _climbs(ds, w, m, c, base):
     cl = m.get("climbs") or []
-    if not cl:
-        return {**base, "empty": "這次沒有 ≥ 80 m、坡度 ≥ 3% 的連續爬坡"}
-    cols = [_col("開始", [_hms(x["t_start"]) for x in cl]),
-            _col("爬升 m", [_num(x["gain_m"]) for x in cl]),
-            _col("距離 km", [_num(x["distance_km"], 2) for x in cl]),
-            _col("坡度", [_pct(x["grade"], 0) for x in cl]),
-            _col("VAM m/h", [_num(x["vam"]) for x in cl]),
-            _col("平均心率", [_num(x.get("avg_hr")) for x in cl]),
-            _col("每 100 m 心跳", [_num(x.get("hr_per_100m")) for x in cl])]
-    return {**base, "series": cols + _verdict_rows(_trail_lines(ds, w, m) or ["（沒有心率，無法比較爬坡經濟性）"])}
+    s = _samples(ds, w)
+    walking = m.get("category") in ("hike", "walk")
+    prof = None
+    if s is not None and s["dist"] is not None and s["elev"] is not None:
+        prof = profile_series(s["t"], s["dist"], s["elev"], _eval(ds, w, "rgrade"), s["hr"], s["power"], walking)
+    if not cl and prof is None:
+        return {**base, "empty": "這筆活動沒有海拔資料，畫不出高度圖，也找不到爬坡段"}
+    cards = _climb_cards(ds, w, m) if cl else []
+    desc = []
+    if prof is not None:
+        desc = descents_of(s["t"], s["dist"], s["elev"], s["hr"], list(moving_mask(s["t"], s["speed"])))
+    cols = []
+    if cards:
+        cols = [_col("段", [x["no"] for x in cards]),
+                _col("開始", [_hms(x["t_start"]) for x in cards]),
+                _col("從 km", [_num(x.get("start_km"), 1) for x in cards]),
+                _col("爬升 m", [_num(x["gain_m"]) for x in cards]),
+                _col("距離 km", [_num(x["distance_km"], 2) for x in cards]),
+                _col("坡度", [_pct(x["grade"], 0) for x in cards]),
+                _col("時間", [_hms(x["duration_s"]) for x in cards]),
+                _col("VAM m/h", [_num(x["vam"]) for x in cards]),
+                _col("VAM 平常", [_num(x["base"]["vam"].get("median")) if x["base"]["vam"].get("ok") else "–"
+                                for x in cards]),
+                _col("平均心率", [_num(x.get("avg_hr")) for x in cards]),
+                _col("每 100 m 心跳", [_num(x.get("hr_per_100m")) for x in cards]),
+                _col("功率 W", [_num(x.get("avg_power")) for x in cards]),
+                _col("%CP", [_pct(x.get("pct_cp"), 0) for x in cards]),
+                _col("配速 /km", [_pace(x.get("pace_s_per_km")) for x in cards]),
+                _col("GAP /km", [_pace(x.get("gap_s_per_km")) for x in cards])]
+    lines = (_trail_lines(ds, w, m) + _climb_lines(cards))[:3] if cards else []
+    if cards and not lines:
+        lines = ["（沒有心率，無法比較爬坡經濟性）"]
+    note = None if cards else "這次沒有 ≥ 80 m、坡度 ≥ 3% 的連續爬坡"
+    if prof is None:
+        note = "這筆活動沒有海拔資料，畫不出高度圖"
+    return {**base, "series": cols + _verdict_rows(lines),
+            "climb_profile": {"profile": prof, "climbs": cards, "descents": desc, "cp": m.get("cp"),
+                              "walking": walking, "note": note,
+                              "grade_match": CLIMB_GRADE_MATCH, "pool_weeks": list(POOL_WEEKS)}}
 
 
 def _grades(ds, w, m, c, base):
-    s = _samples(ds, w)
-    g = _eval(ds, w, "rgrade")
-    if s is None or g is None or s["dist"] is None:
-        return {**base, "empty": "沒有距離或海拔，算不出坡度"}
-    rows = grade_bins(_dt(s["t"]), g, s["dist"], s["power"], s["hr"], s["cadence"])
+    rows = m.get("grade_bins") or []
     if not rows:
-        return {**base, "empty": "沒有坡度資料"}
+        return {**base, "empty": "沒有距離或海拔，算不出坡度"}
+    pool = _pool(ds, w)
+    bins = []
+    for r in rows:
+        mt = _bin_metrics(r)
+        b = bin_baselines(pool, r["label"])
+        bins.append({**{k: r.get(k) for k in ("label", "lo", "hi", "time_s", "time_pct", "distance_km")},
+                     "metrics": mt, "base": b, "vs": {k: _vs(mt[k], b[k]) for k in BIN_KEYS}})
     cols = [_col("坡度", [r["label"] for r in rows]),
             _col("時間", [_hms(r["time_s"]) for r in rows]),
             _col("佔比", [f"{r['time_pct']:.0f}%" for r in rows]),
             _col("距離 km", [_num(r["distance_km"], 2) for r in rows]),
             _col("配速 /km", [_pace(r["pace_s_per_km"]) for r in rows]),
+            _col("配速平常", [_pace(b["base"]["pace_s_per_km"].get("median")) if b["base"]["pace_s_per_km"].get("ok")
+                             else "–" for b in bins]),
+            _col("VAM m/h", [_num(r.get("vam")) for r in rows]),
             _col("心率", [_num(r["hr"]) for r in rows]),
             _col("功率 W", [_num(r["power"]) for r in rows])]
-    return {**base, "series": cols}
+    return {**base, "series": cols,
+            "grade_profile": {"bins": bins, "min_s": BIN_MIN_S, "pool_weeks": list(POOL_WEEKS),
+                              "walking": m.get("category") in ("hike", "walk")}}
 
 
 def _durability_pts(ds, w) -> Optional[dict]:
