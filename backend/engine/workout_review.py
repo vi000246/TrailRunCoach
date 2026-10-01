@@ -2204,11 +2204,18 @@ def _durability_curve(ds, w, m, c, base):
     pct = U.meta("PERCENT")
     xu = {"id": "HOURS", "label": "h", "kind": "number", "dec": [[0, 1]]}
     pts = [[round(x, 4), round(y / 100.0, 4)] for x, y in r["points"]]
-    s = [{"name": "耐久（輸出／心率）", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct,
-          "x_unit": xu, "color": "#2a78d6", "data": {"kind": "points", "x": "value", "points": pts}},
-         {"name": "90%", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "x_unit": xu,
-          "color": "#8a8984", "line_style": "dash", "data": {"kind": "hline", "y": 0.9}}]
-    return {**base, "axes": [{"id": "PERCENT", "unit": pct}], "series": s}
+    s = [{"name": "同樣心率的輸出（暖身後 = 100%）", "type": "line", "expression": "", "y_axis": "PERCENT",
+          "unit": pct, "x_unit": xu, "color": "#2a78d6", "data": {"kind": "points", "x": "value", "points": pts}},
+         {"name": "95%：開始累（推估）", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct,
+          "x_unit": xu, "color": "#c98a00", "line_style": "dash", "data": {"kind": "hline", "y": 0.95}},
+         {"name": "90%：明顯掉了，補給或配速要調", "type": "line", "expression": "", "y_axis": "PERCENT",
+          "unit": pct, "x_unit": xu, "color": "#c0392b", "line_style": "dash", "data": {"kind": "hline", "y": 0.9}}]
+    last = _last20(ds, w)
+    out = {**base, "axes": [{"id": "PERCENT", "unit": pct}], "series": s}
+    if last is not None:
+        word = "後段撐得住" if last >= 0.95 else ("後段開始累" if last >= LAST20_MIN else "後段明顯掉了")
+        out["subtitle"] = f"最後 20%：{last * 100:.0f}% → {word}"
+    return out
 
 
 def _pacing(ds, w, m, c, base):
