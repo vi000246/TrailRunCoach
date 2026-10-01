@@ -354,11 +354,12 @@ def _red_streak(stored: list[dict], today: str) -> bool:
 def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> None:
     load = ctx.get("load") or {}
     tsb, ramp = load.get("tsb"), load.get("ramp")
-    rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition")
+    rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "reentry")
     why, remove = None, False
     if tsb is not None and tsb < TSB_FLOOR and not rest_week:
         why, remove = f"TSB {tsb:+.0f} < {TSB_FLOOR:.0f}", True
-    elif ramp is not None and ramp >= RAMP_SHORT:
+    elif ramp is not None and ramp >= RAMP_SHORT and ctx.get("mode") != "reentry":
+        # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)
         why, remove = f"CTL 每週 +{ramp:.1f}（≥ {RAMP_SHORT:.0f}）", True
     elif _red_streak(stored, wk.today):
         why = f"連續 {RED_STREAK} 堂偏離計畫（紅色）"

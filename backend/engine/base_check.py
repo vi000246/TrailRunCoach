@@ -23,12 +23,13 @@ z5_status(ds, today, …)
     Zone 5 opens only once the base is confirmed (徐國峰: Zone 3 first, then
     Zone 5), by any path: 三訊號, the 90-min test, or a measured AeT that
     passes the UA gap / Friel drift. Once confirmed it stays open with no
-    expiry while (all 推估): weekly Z1 time is not < 70 % of the level at
-    confirmation for 2 weeks in a row, the recent long runs still pass ③,
-    and there is no ≥ 14-day break from running. A failed check pauses Z5
-    (Zone 3 continues) until the next confirmation. The detraining
-    literature (e.g. Mujika & Padilla 2000, Sports Med) should be checked
-    for the day count — no number is taken from it here (未驗證).
+    expiry while (docs/research/detraining.md §6.1): weekly Z1 time is not
+    < 2/3 of the level at confirmation for 3 weeks in a row (Hickson 1982;
+    3 weeks 推估; recovery / taper weeks don't count) and the recent long
+    runs still pass ③. A break ≥ 6 days without running starts a re-entry
+    block (engine/reentry.py, Daniels table 9.2): no Zone 3 / 5 inside it,
+    then Zone 3 first; Zone 5 after 1–2 Zone 3 sessions, a drift check, or
+    — after ≥ 29 days — a new confirmation dated after the break.
 
 Zone 1 = the app's easy rule: avg HR ≤ AeT + 3 and ≤ 10 % of the time above
 AeT + 3 (workout_review). 徐國峰's 心率 1 區 is the E zone of Daniels'
@@ -76,16 +77,22 @@ LONG_HR_RISE = 0.05                  # 推估: last third's HR ≤ first third's
 LONG_PACE_DROP = 0.05                # 推估: last third's speed ≥ first third's − 5 %
 LONG_LAST_N = 3                      # 推估: the latest 3 long runs must all pass
 
-# ---- the Z5 lifecycle (all 推估) -------------------------------------------------
-Z1_KEEP = 0.70                       # weekly Z1 time vs the level at confirmation …
-Z1_LOW_WEEKS = 2                     # … below it 2 complete weeks in a row → pause
-GAP_DAYS = 14                        # ≥ 14 days without running → pause (Mujika & Padilla 2000 to verify)
+# ---- the Z5 lifecycle (docs/research/detraining.md §6.1) ---------------------------
+Z1_KEEP = 2.0 / 3.0                  # weekly Z1 time < 2/3 of the level at confirmation … (Hickson 1982:
+                                     # 2/3 of the volume kept long endurance, 1/3 lost 10 % — peer-reviewed)
+Z1_LOW_WEEKS = 3                     # … 3 complete weeks in a row → pause Z5 only (推估: 2 weeks trip on one
+                                     # recovery week + one busy week). Recovery / taper / event / transition
+                                     # weeks and weeks touching a break or its re-entry block don't count
+# A break ≥ 6 days without running = a re-entry block (engine/reentry.py, Daniels table 9.2): no Z3 /
+# Z5 inside it; after it Z5 needs 1 (6–13 d) / 2 (≥ 14 d) Z3 sessions, the last long run's drift check
+# (14–28 d), or a re-confirmation dated after the break (≥ 29 d — Mujika & Padilla 2000)
 LOOKBACK_DAYS = 182                  # how far back a confirmation is looked for
 NO_DATA_DAYS = 42                    # no interpretable data for ~6 weeks → schedule the AeT test
                                      # (UA's 4–6-week retest, coach; the original wording 未驗證)
 SIGNAL1_DAYS = 56                    # ① within 8 weeks (the gate's LOOKBACK_DAYS)
 
-STATE_LABEL = {"unconfirmed": "未確認", "confirmed": "已確認", "paused": "暫停", "open": "不設門檻"}
+STATE_LABEL = {"unconfirmed": "未確認", "confirmed": "已確認", "paused": "暫停", "open": "不設門檻",
+               "reentry": "恢復期"}
 PATH_LABEL = {"xu_signals": "三訊號", "xu90": "徐國峰 90 分鐘飄移", "aet_ua_gap": "實測 AeT（UA 差距法）",
               "aet_friel_drift": "實測 AeT（Friel 飄移）", "method": "你選的間歇門檻"}
 
@@ -357,6 +364,50 @@ def three_signals(ds, today: dt.date) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# faster at the same HR: easy targets from the recent EF (推估)
+# ---------------------------------------------------------------------------
+
+EF_RUNS = 6                          # 推估: the last 6 easy road runs (the drift aggregate's n)
+EF_DAYS = 56
+
+
+def easy_targets(ds, today: dt.date, aet: Optional[float]) -> Optional[dict]:
+    """Pace and power at the AeT HR from the median EF (speed / HR, power /
+    HR) of the last EF_RUNS easy road runs (avg HR ≤ AeT + 3, ≥ 30 min) in 8
+    weeks — when the athlete gets faster at the same HR the easy targets
+    follow without a retest (the AeT HR itself is unchanged). Method 推估.
+    {"pace_s_km", "power", "n", "text"}; None with < 3 runs or no AeT."""
+    from backend.engine import workout_review as WR
+    from backend.engine.overview import category
+    if not aet:
+        return None
+    ev, ep = [], []
+    for w in reversed(_runs(ds, today, EF_DAYS)):
+        if category(w) != "road":
+            continue
+        m = WR.measure(ds, w)
+        if not m or (m.get("moving_s") or 0) < 1800 or not m.get("avg_hr") or m["avg_hr"] > aet + 3.0:
+            continue
+        dist = _f(w.metrics.get("distance"))
+        if dist and m["moving_s"]:
+            ev.append(dist / (m["moving_s"] / 3600.0) / m["avg_hr"])
+        if m.get("avg_power"):
+            ep.append(m["avg_power"] / m["avg_hr"])
+        if len(ev) >= EF_RUNS:
+            break
+    WR._flush(ds)
+    if len(ev) < 3:
+        return None
+    kmh = float(np.median(ev)) * aet
+    pw = float(np.median(ep)) * aet if len(ep) >= 3 else None
+    pace = 3600.0 / kmh if kmh > 0 else None
+    txt = (f"最近 {len(ev)} 次輕鬆跑：AeT {aet:.0f} bpm ≈ "
+           + (f"{int(pace // 60)}:{int(pace % 60):02d}/km" if pace else "")
+           + (f"、{pw:.0f} W" if pw else "") + "（同心率跑更快就自動跟著調；推估）")
+    return {"pace_s_km": pace, "power": pw, "n": len(ev), "text": txt}
+
+
+# ---------------------------------------------------------------------------
 # the Zone 5 lifecycle
 # ---------------------------------------------------------------------------
 
@@ -365,35 +416,52 @@ def _paths_for(mode: str) -> tuple:
             "xu_drift": ("xu90",), "ua_gap": ("aet_ua_gap",), "friel_drift": ("aet_friel_drift",)}.get(mode, ())
 
 
-def maintenance(ds, today: dt.date, since: dt.date) -> dict:
-    """The weekly checks after a confirmation on `since` (all 推估):
-    {"ok", "why", "at", "z1_level_min", "weeks", "gap_days", "long"}."""
-    from backend.engine import workout_review as WR
+def _skip_week(ds, mon: dt.date, brk: Optional[dict]) -> bool:
+    """Weeks the Z1 rule doesn't count: recovery / taper / event / transition
+    phases and weeks touching a break or its re-entry block (detraining.md §6.1)."""
+    if brk:
+        end = (mon + dt.timedelta(days=6)).isoformat()
+        start = (dt.date.fromisoformat(brk["last_run"]) + dt.timedelta(days=1)).isoformat()
+        if start <= end and mon.isoformat() < brk["end"]:
+            return True
+    plan = getattr(ds, "plan", None)
+    if plan is not None:
+        try:
+            from backend.engine.planning import phase_on
+            p = phase_on(plan, mon + dt.timedelta(days=3))
+            if p is not None and p.kind in ("recovery", "taper", "event", "transition"):
+                return True
+        except Exception:                   # noqa: BLE001
+            pass
+    return False
+
+
+def maintenance(ds, today: dt.date, since: dt.date, brk: Optional[dict] = None) -> dict:
+    """The weekly checks after a confirmation on `since`: {"ok", "why", "at",
+    "z1_level_min", "weeks", "long"}. Z1 time < 2/3 of the level at
+    confirmation (mean of the 4 weeks up to it — 推估) for 3 complete weeks in
+    a row (Hickson 1982; 3 weeks 推估) → pause Z5; the recent long runs
+    failing ③ → pause. Breaks are the re-entry rule's (z5_status)."""
     n = max(5, (monday(today) - monday(since)).days // 7 + 5)
     rows = weekly(ds, today, n)
     cm = monday(since).isoformat()
     upto = [r for r in rows if r["monday"] <= cm and r["complete"] or r["monday"] == cm][-4:]
     level = float(np.mean([r["z1_s"] for r in upto])) if upto else 0.0
-    out = {"ok": True, "why": "", "at": None, "z1_level_min": level / 60.0, "weeks": [], "gap_days": None}
+    out = {"ok": True, "why": "", "at": None, "z1_level_min": level / 60.0, "weeks": []}
     low = 0
     for r in rows:
         if r["monday"] <= cm or not r["complete"]:
+            continue
+        mon = dt.date.fromisoformat(r["monday"])
+        if _skip_week(ds, mon, brk):
             continue
         frac = r["z1_s"] / level if level > 0 else None
         out["weeks"].append({"monday": r["monday"], "z1_min": r["z1_s"] / 60.0, "frac": frac})
         low = low + 1 if frac is not None and frac < Z1_KEEP else 0
         if low >= Z1_LOW_WEEKS and out["ok"]:
             out.update(ok=False, at=r["monday"],
-                       why=f"連續 {Z1_LOW_WEEKS} 週 1 區時間 < 確認時的 {Z1_KEEP * 100:.0f}%"
-                           f"（{level / 60:.0f} 分／週；推估）")
-    days = sorted({WR._wdate(w) for w in _runs(ds, today, (today - since).days + 1)} | {since})
-    days.append(today)
-    gaps = [(b - a).days for a, b in zip(days, days[1:])]
-    out["gap_days"] = max(gaps) if gaps else 0
-    if out["ok"] and gaps and max(gaps) >= GAP_DAYS:
-        i = gaps.index(max(gaps))
-        out.update(ok=False, at=days[i].isoformat(),
-                   why=f"{days[i].isoformat()} 起 {max(gaps)} 天沒有跑步（≥ {GAP_DAYS} 天；推估）")
+                       why=f"連續 {Z1_LOW_WEEKS} 週 1 區時間 < 確認時的 2/3（{level / 60:.0f} 分／週；"
+                           "Hickson 1982；3 週推估）")
     lc = long_check(ds, today)
     out["long"] = lc
     if out["ok"] and lc["state"] == "fail" and lc.get("date", "") > since.isoformat():
@@ -402,7 +470,49 @@ def maintenance(ds, today: dt.date, since: dt.date) -> dict:
 
 
 def z5_status(ds, today: dt.date, mode: str = "auto", method_state: Optional[str] = None,
-              aet_paths: Optional[dict] = None) -> dict:
+              aet_paths: Optional[dict] = None, brk: Optional[dict] = None,
+              quality_dates: Optional[list] = None) -> dict:
+    """z5_status_base, then the re-entry rules of the latest break `brk`
+    (engine/reentry.plan; detraining.md §6.2). `quality_dates`: ISO dates of
+    the interval sessions done (quality_gate.dose_history) — after a block
+    the first ones are Zone 3 (Zone 5 is closed then)."""
+    if brk and brk.get("return") and brk["return"] > today.isoformat():
+        brk = None                                   # a planned break ahead: nothing yet
+    if mode == "none" or not brk:
+        return z5_status_base(ds, today, mode, method_state, aet_paths)
+    ret, end, qf = brk["return"], brk["end"], brk["quality_from"]
+    iso = today.isoformat()
+    if iso < qf:
+        why = f"{brk['text']}：恢復期內 3 區、5 區都不排（Daniels：只有 E 日）"
+        return {"state": "reentry", "label": "恢復期", "open": False, "since": None, "path": None, "path_label": "",
+                "reason": why, "signals": None, "maintenance": None, "xu_last": None, "reentry": brk,
+                "text": f"Zone 5：恢復期（{why}）"}
+    after = ret if brk.get("reconfirm") else None
+    st = z5_status_base(ds, today, mode, method_state, aet_paths, after=after, brk=brk)
+    st["reentry"] = brk
+    if not st["open"]:
+        if brk.get("reconfirm") and st["state"] == "unconfirmed":
+            st["reason"] = f"停跑 {brk['days']} 天（≥ 4 週）：要在 {ret} 之後重新確認有氧基礎（90 分飄移或三訊號）"
+            st["text"] = f"Zone 5：未確認（{st['reason']}；Mujika & Padilla 2000）"
+        return st
+    n = sum(1 for d in (quality_dates or []) if d >= qf)
+    need = int(brk.get("z3_before_z5") or 1)
+    if n < need:
+        why = f"恢復期後先完成 {need} 堂 3 區（已 {n} 堂；徐國峰：先 3 區後 5 區，堂數推估）"
+        return {**st, "state": "paused", "label": STATE_LABEL["paused"], "open": False, "reason": why,
+                "text": f"Zone 5：暫停（{why}）"}
+    if brk.get("drift_check"):
+        lc = long_check(ds, today, days=max(7, (today - dt.date.fromisoformat(ret)).days + 1))
+        if lc["state"] == "fail":
+            why = f"恢復期後的長跑飄移檢查沒過（{lc['why']}；UA：中斷後重新讀）"
+            return {**st, "state": "paused", "label": STATE_LABEL["paused"], "open": False, "reason": why,
+                    "text": f"Zone 5：暫停（{why}）"}
+    return st
+
+
+def z5_status_base(ds, today: dt.date, mode: str = "auto", method_state: Optional[str] = None,
+                   aet_paths: Optional[dict] = None, after: Optional[str] = None,
+                   brk: Optional[dict] = None) -> dict:
     """The Zone 5 state for `today`: {"state" (unconfirmed / confirmed /
     paused / open), "label", "open", "since", "path", "path_label",
     "reason", "signals", "maintenance", "xu_last"}. `aet_paths`:
@@ -427,6 +537,9 @@ def z5_status(ds, today: dt.date, mode: str = "auto", method_state: Optional[str
             events.append((str(d)[:10], k, PATH_LABEL[k]))
     if mode in ("plateau", "weeks") and method_state == "unlocked":
         events.append((today.isoformat(), "method", PATH_LABEL["method"]))
+    if after:
+        # a break ≥ 4 weeks: confirmations from before it no longer count (Mujika & Padilla 2000)
+        events = [e for e in events if e[0] >= after]
     base = {"signals": sig, "xu_last": xs[-1] if xs else None, "maintenance": None}
     if not events:
         why = sig["text"] if sig else ("沒有符合的確認" if paths else "這個間歇門檻不開 5 區")
@@ -436,7 +549,7 @@ def z5_status(ds, today: dt.date, mode: str = "auto", method_state: Optional[str
     # prefer 三訊號 on a tie: the label the user asked for
     since_s, path, detail = max(events, key=lambda e: (e[0], e[1] == "xu_signals"))
     since = dt.date.fromisoformat(since_s)
-    mt = maintenance(ds, today, since)
+    mt = maintenance(ds, today, since, brk)
     base["maintenance"] = mt
     common = {"since": since_s, "path": path, "path_label": PATH_LABEL[path], "detail": detail}
     if not mt["ok"]:

@@ -115,7 +115,9 @@ LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 
                  "閾值下 3×8 分", "閾值下 4×8 分")
 DOSE = Z3                      # kept for callers that read the first rungs (adapt._downgrade)
 RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
-SUB = Z3[0]
+# the ramp-week session (CTL ramp ≥ 5: threshold only) — Z3[0]'s content under its own key / title so
+# it is never mistaken for the ladder's first rung (planned_spec: neutral)
+SUB = ("sub", "閾值 3×8 分（只排閾值）", 3, 8, 2, 0.88, 0.95, False, "CTL ramp ≥ 5（Friel）：只排閾值；88–95% CP")
 ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
 
 
@@ -506,8 +508,8 @@ def planned_spec(title: Optional[str], step: int) -> tuple[tuple, bool]:
         t = str(title)
         if t == RECOVERY[1] or t.startswith("Zone 3"):
             return RECOVERY if t == RECOVERY[1] else ZONE3, True
-        if t in LEGACY_TITLES:
-            return want, True
+        if t in LEGACY_TITLES or t == SUB[1]:
+            return (SUB if t == SUB[1] else want), True
         for s in LADDER:
             if s[1] == t:
                 return s, s[1] != want[1]
@@ -558,6 +560,15 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     # and no one-way shift > 5 bpm over the last 6 points (推估) — no fixed expiry any more
     from backend.engine import drift_agg as DA
     val = DA.aet_validity(ds, today, lthr=lt["value"] if lthr_ok else None)
+    try:
+        from backend.engine import reentry as RE
+        brk = RE.find(ds, today)                # breaks from the runs (detraining.md §6)
+    except Exception:                           # noqa: BLE001
+        brk = None
+    if brk and brk.get("aet_stale") and brk["return"] <= today.isoformat() and ae.get("measured") and \
+            str(ae.get("date") or "") < brk["return"]:
+        # a break ≥ 4 weeks: the AeT from before it is stale (UA: re-read after a layoff)
+        val = {**val, "valid": False, "reason": f"停跑 {brk['days']} 天（≥ 4 週）：之前的 AeT 視同過期（Uphill Athlete）"}
     ae = {**ae, "valid": bool(val.get("valid")), "fresh": bool(ae["measured"] and val.get("valid")),
           "validity": val}
     gap = ua_gap(ae["value"], lt["value"]) if ae["measured"] and lthr_ok else None
@@ -683,8 +694,8 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         hist = []
     dose = dose_step(hist, ae.get("value"))
     # ---- Zone 5 (engine/base_check.py) and the AeT test's reason -----------
-    z5 = _z5(ds, today, mode, state, ae, lthr_ok, method, friel)
-    test_reason = aet_test_reason(ds, today, ae, z5)
+    z5 = _z5(ds, today, mode, state, ae, lthr_ok, method, friel, brk, [h.get("date") for h in hist])
+    test_reason = aet_test_reason(ds, today, ae, z5, brk)
     out = {
         "mode": mode, "mode_label": LABEL[mode], "resolved": resolved, "state": state,
         "via": r.get("via"), "verdict": r.get("verdict", ""), "action": r.get("action", ""),
@@ -695,13 +706,14 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         "gap": gap, "ef_change": ef, "levels": levels, "guard": g,
         "dose": {**dose, "history": hist[-8:]},
         "kind": kind, "week_hours": _extra(by, "volume").get("last_week"),
-        "z5": z5, "aet_test_reason": test_reason,
+        "z5": z5, "aet_test_reason": test_reason, "reentry": brk,
     }
     out["options"] = options(out, ae, lt, cache, friel, xu, base_weeks, ef, need_weeks)
     return out
 
 
-def _z5(ds, today: dt.date, mode: str, state: str, ae: dict, lthr_ok: bool, method, friel) -> dict:
+def _z5(ds, today: dt.date, mode: str, state: str, ae: dict, lthr_ok: bool, method, friel,
+        brk: Optional[dict] = None, quality_dates: Optional[list] = None) -> dict:
     """base_check.z5_status with the AeT paths (a measured AeT passing the UA
     gap → its row date; a Friel run → its date). Never raises."""
     from backend.engine import base_check as BC
@@ -714,14 +726,14 @@ def _z5(ds, today: dt.date, mode: str, state: str, ae: dict, lthr_ok: bool, meth
             f = friel()
             if f.get("state") == "unlocked":
                 paths["aet_friel_drift"] = f["run"]["date"]
-        return BC.z5_status(ds, today, mode, state, paths)
+        return BC.z5_status(ds, today, mode, state, paths, brk, quality_dates)
     except Exception as e:                  # noqa: BLE001 — Z5 stays closed, the plan still builds
         return {"state": "unconfirmed", "label": BC.STATE_LABEL["unconfirmed"], "open": False, "since": None,
                 "path": None, "path_label": "", "reason": f"算不出來（{type(e).__name__}）",
                 "text": f"Zone 5：未確認（算不出來：{type(e).__name__}）"}
 
 
-def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict) -> Optional[dict]:
+def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] = None) -> Optional[dict]:
     """Why an AeT test should be scheduled now, or None (unsourced-rules.md §B3
     and the Z5 lifecycle; numbers 推估 unless noted): {"code", "text"}.
       no_data  no interpretable run (a drift_of value or a 90-min 徐國峰 run) for
@@ -743,6 +755,11 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict) -> Optional[dict]:
     passive = z5.get("state") == "confirmed" and z5.get("path") in ("xu90", "xu_signals") and z5.get("since") and \
         (today - dt.date.fromisoformat(z5["since"])).days <= BC.NO_DATA_DAYS
     v, se = val.get("value"), val.get("se")
+    if brk and brk.get("aet_stale") and brk["end"] <= today.isoformat() and not (
+            z5.get("state") == "confirmed" and (z5.get("since") or "") >= brk["return"]):
+        # after the re-entry block of a break ≥ 4 weeks (UA: re-read after a layoff); a
+        # passive re-confirmation after the break stands in for it
+        return {"code": "break", "text": f"停跑 {brk['days']} 天（≥ 4 週）：恢復期結束後重新讀一次 AeT（Uphill Athlete）"}
     if v is not None and se is not None and se <= 3.0 and val.get("shift_bpm") is not None and \
             abs(val["shift_bpm"]) > 5.0:
         return {"code": "shift", "text": val.get("reason") or "最近 6 次的飄移有系統性偏移"}
@@ -821,6 +838,9 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
     # method no longer stops Zone 3 — it only keeps Zone 5 closed.
     z5 = gate.get("z5") or {}
     z5_open = bool(z5.get("open"))
+    if first and z5.get("state") == "reentry":
+        # inside a re-entry block: E days only (Daniels table 9.2; engine/reentry.py)
+        return {"allow": False, "spec": None, "advance": False, "note": z5.get("text", "")}
     if gate.get("resolved") == "weeks" and monday is not None and gate.get("base_start") and \
             gate.get("mode") == "weeks":
         wk = (monday - dt.date.fromisoformat(gate["base_start"])).days // 7 + 1
@@ -876,7 +896,7 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
     else:
         what = f"{lo * 100:.0f}–{hi * 100:.0f}% CP"
         parts = [f"功率 {lo * cp:.0f}–{hi * cp:.0f} W（{what}）"] if cp else [f"RPE 8（{what}）"]
-        if key in ("z3a", "z3b") and aet and use_hr:
+        if key in ("z3a", "z3b", "sub") and aet and use_hr:
             parts.append(f"心率 {aet:.0f}–{lthr:.0f} bpm")
         elif key in _HR_FRAC and use_hr:
             a, b = _HR_FRAC[key]
@@ -886,7 +906,7 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
     else:
         body = f"{what}；休 {rest} 分鐘（慢跑）"
     minutes = 15 + reps * (work + rest) + 10
-    rate = {"z3": 60.0, "z3a": 65.0, "z3b": 65.0, "z3c": 68.0, "r1": 55.0}.get(key, 72.0)
+    rate = {"z3": 60.0, "z3a": 65.0, "z3b": 65.0, "sub": 65.0, "z3c": 68.0, "r1": 55.0}.get(key, 72.0)
     return {"id": "quality", "kind": "quality", "title": title, "minutes": minutes,
             "target": " · ".join(parts), "detail": f"{prefix}{body}；暖身 15 分、緩和 10 分",
             "source": src, "tss": minutes / 60.0 * rate}

@@ -31,7 +31,7 @@ from backend.engine.zones import WORKOUT_TARGETS
 
 MAX_WEEKS = 8                 # never schedule further ahead than this
 MODE_LABELS = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
-               "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週"}
+               "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週", "reentry": "停訓後恢復期"}
 
 
 def _d(s) -> dt.date:
@@ -153,7 +153,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     n_easy = 0 if left < 25 else max(1, min(5, int(round(left / 50.0))))
     for i in range(n_easy):
         m = left / n_easy
-        strides = kind == "base" and i == 0 and mode != "recovery_week"
+        strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + ("＋坡道衝刺 8×10 秒" if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail="心率不超過 AeT" + ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else ""),
@@ -310,6 +310,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     ctl = float((cur.get("load") or {}).get("ctl_end") or 0.0)
     atl = float((cur.get("load") or {}).get("atl_end") or 0.0)
     out = []
+    from backend.engine import reentry as RE
+    blocks = ([cur["reentry"]] if cur.get("reentry") else []) + RE.planned_ahead(
+        blackouts or (), monday + dt.timedelta(days=6),
+        (sum(hist[-5:-1]) / 4.0) if len(hist) >= 5 else (hist[-1] if hist else None), longest)
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
@@ -321,15 +325,22 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             hours = PR.weekly_hours
             why = why + [f"你的每週時數上限 {PR.weekly_hours:g} h"]
         lost: list[dt.date] = []
+        # 停訓後的恢復期 (engine/reentry.py) replaces the old step_cap after 不排課日期
+        rp = RE.block_on(blocks, week) if kind in ("base", "specific") else None
+        if rp is not None and rp.get("prev_hours"):
+            f = RE.week_factor(rp, week)
+            hours, mode = rp["prev_hours"] * f, "reentry"
+            why = why + [f"{rp['text']}：停訓前 {rp['prev_hours']:.1f} h × {f:.0%} → {hours:.1f} h"]
+        elif kind in ("base", "specific") and any(p.get("prev_hours") and p["end"] <= week.isoformat()
+                                                   < (_d(p["end"]) + dt.timedelta(days=7)).isoformat() for p in blocks):
+            p = next(p for p in blocks if p["end"] <= week.isoformat() < (_d(p["end"]) + dt.timedelta(days=7)).isoformat())
+            hours = max(hours, p["prev_hours"])
+            why = why + [f"恢復期結束：回到停訓前的量 {p['prev_hours']:.1f} h（Daniels 表 9.2）"]
+        full_h = hours                       # before this week's 不排課 days are taken off
         if bmap:
-            # 不排課日期: the step after a short week starts from that week's volume
-            if prev_lost and hist:
-                cap_b = BL.step_cap(hist[-1])
-                if hours > cap_b + 1e-9:
-                    hours = cap_b
-                    why = why + [f"上週不排課、只排 {hist[-1]:.1f} h：本週從那個量 +10%（至少 +0.5 h）→ {cap_b:.1f} h"]
-                    notes.append(BL.step_note(prev_lost, hist[-1], cap_b))
             lost = BL.lost_days(bmap, week, allowed_fn)
+            if lost and mode == "reentry":
+                lost = []
             if lost:
                 f = BL.factor(week, lost, allowed_fn)
                 lost_h = hours * (1.0 - f)
@@ -337,10 +348,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 why = why + [f"不排課 {BL.range_text(lost)}：少 {len(lost)} 個可練日，週量 × {f:.0%}"]
                 notes.append(BL.week_note(bmap, lost, lost_h))
         dec = allow_quality(kind, gate, week, step, mode)
+        no_q = mode == "reentry" and rp is not None and not RE.quality_ok(rp, week)
+        if no_q:
+            dec = {**dec, "allow": False, "spec": None, "advance": False}
         base_q, xu_q = None, None
         proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
                                     getattr(prefs, "cap_weekday", None), getattr(prefs, "long_cap", None))
-        due = kind == "base" and mode != "recovery_week" and \
+        due = kind == "base" and mode not in ("recovery_week", "reentry") and \
             AT.due(week, kind, gate.get("base_start"), gate.get("aet_test_reason"), last_aet)
         if due and proto == "xu90":
             # 徐國峰's 90-min test replaces that week's long run; the interval stays
@@ -400,7 +414,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             # what the preferences / 不排課日期 actually let through (a hard cap or
             # too few days can leave less)
             hours = sum(s["minutes"] for s in ss if s["kind"] != "strength" and s["day"]) / 60.0
-        build.append(mode in ("base", "specific") and hours >= 0.95 * hist[-1] and hours > 0.5)
-        hist.append(hours)
+        # a short break (< 6 days, Daniels cat. 1: back to 100 %) doesn't lower the base the next
+        # weeks ramp from — the re-entry block handles the longer ones
+        h_hist = full_h if lost and mode != "reentry" else hours
+        build.append(mode in ("base", "specific") and h_hist >= 0.95 * hist[-1] and h_hist > 0.5)
+        hist.append(h_hist)
         week += dt.timedelta(weeks=1)
     return out

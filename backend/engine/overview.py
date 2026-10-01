@@ -505,20 +505,31 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         hours = PR.weekly_hours
         why.append(f"你的每週時數上限 {PR.weekly_hours:g} h")
     lost: list[dt.date] = []
+    # 停訓後的恢復期 (engine/reentry.py; detraining.md §6): a break ≥ 6 days without running —
+    # planned (不排課日期) or not — gets Daniels' block (table 9.2). It replaces the old
+    # 「不排課後週量 +10%（至少 +0.5 h）」 step (blackouts.step_cap), which after a fully blocked
+    # week capped the next one at 0.5 h — far slower than Daniels' 50 % → 75 % → 100 %.
+    from backend.engine import reentry as RE
+    try:
+        rp = RE.find(ds, today, blackouts or ())
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        rp = None
+    re_f = RE.week_factor(rp, monday) if rp and kind in ("base", "specific") else None
+    if re_f is not None and rp.get("prev_hours"):
+        hours = rp["prev_hours"] * re_f
+        mode = "reentry"
+        why.append(f"{rp['text']}：本週 = 停訓前 4 週平均 {rp['prev_hours']:.1f} h × {re_f:.0%} → {hours:.1f} h")
+        notes.append({"level": "info", "src": "reentry", "text": rp["text"]})
+    elif rp and kind in ("base", "specific") and rp.get("prev_hours") and \
+            rp["end"] <= monday.isoformat() < (dt.date.fromisoformat(rp["end"]) + dt.timedelta(days=7)).isoformat():
+        hours = max(hours, rp["prev_hours"])            # Daniels: back to 100 % after the block
+        why.append(f"恢復期結束：回到停訓前的量 {rp['prev_hours']:.1f} h（Daniels 表 9.2）")
     if bmap:
-        # 不排課日期 (engine/blackouts.py): after a week that lost days, the <= 10 %
-        # step is taken from what was actually done; this week's lost days shrink it
         def trained(m: dt.date) -> set:
             return {wdate(w) for w in workouts_between(ds, m, m + dt.timedelta(days=7))}
-        prev_m = monday - dt.timedelta(days=7)
-        prev_lost = BL.lost_days(bmap, prev_m, allowed_fn, trained(prev_m))
-        if prev_lost:
-            cap_b = BL.step_cap(last_h)
-            if hours > cap_b + 1e-9:
-                hours = cap_b
-                why.append(f"上週 {BL.range_text(prev_lost)} 不排課、實際 {last_h:.1f} h：本週從實際量 +10%（至少 +0.5 h）→ {cap_b:.1f} h")
-                notes.append(BL.step_note(prev_lost, last_h, cap_b))
         lost = BL.lost_days(bmap, monday, allowed_fn, trained(monday))
+        if lost and mode == "reentry":
+            lost = []                                    # the block already counts the break days as 0
         if lost:
             f = BL.factor(monday, lost, allowed_fn)
             lost_h = hours * (1.0 - f)
@@ -545,8 +556,27 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             est = {}
     tt = training_targets(ds, tday, (est.get("lthr") or {}).get("value"),
                           (est.get("aethr") or {}).get("value"))
+    if rp and rp["return"] <= sunday.isoformat() and monday.isoformat() < (
+            dt.date.fromisoformat(rp["end"]) + dt.timedelta(days=RE.TARGETS_AFTER_DAYS)).isoformat() \
+            and rp.get("fvdot", 1.0) < 1.0:
+        # re-entry: HR zones stay (they follow the body); power / pace targets × FVDOT
+        # (Daniels / VDOT O2; power × FVDOT is 推估 — VDOT ↔ CP not verified)
+        f = float(rp["fvdot"])
+        tt = {**tt, "cp": (tt.get("cp") or 0) * f or tt.get("cp"),
+              "rows": [{**r, "power": [None if x is None else x * f for x in (r.get("power") or [])]}
+                       for r in tt.get("rows") or []]}
+        notes.append({"level": "info", "src": "reentry",
+                      "text": f"恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {rp['days']} 天的 FVDOT"
+                              f"{'，有交叉訓練' if rp.get('cross') else ''}）"})
     tgt = _targets(tt)
     aet = tt.get("aet")
+    try:
+        from backend.engine import base_check as BC
+        et = BC.easy_targets(ds, today, aet) if not ds.config.parity else None
+    except Exception:                       # noqa: BLE001
+        et = None
+    if et and tgt.get("z2") is not None:
+        tgt = {**tgt, "z2": (tgt["z2"] + " · " if tgt["z2"] else "") + et["text"]}
     lvl = lambda iid: getattr(by.get(iid), "level", "na")
     days_to = goals.get("days_to_next_a")
     goal_h = (goals["targets"].get("est_hours") or {}).get("value")
@@ -570,9 +600,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     gate_levels = gate["levels"]
     dec = QG.week_decision(gate, kind, mode, monday)
     allow_quality = dec["allow"]
+    in_reentry = mode == "reentry"
+    # a week touching the block gets no quality (推估: the whole week after it, so nothing lands inside)
+    if in_reentry and not RE.quality_ok(rp, monday):
+        # Daniels: E days only inside the block — no Zone 3, no Zone 5, no test
+        allow_quality = False
+        dec = {**dec, "allow": False, "spec": None, "advance": False}
     tx = getattr(by.get("testing"), "extra", None) or {}
     cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch"))      # the CP test measures CP only
-    test_due = cp_due and lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10)
+    test_due = cp_due and lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10) \
+        and not (in_reentry and not RE.quality_ok(rp, monday))
     # 課表偏好 CP 測試方式 (engine/cp_protocols.py) — read even when the other
     # preferences are the defaults (it is not part of Prefs.active)
     from backend.engine import cp_protocols as CPP
@@ -580,7 +617,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     test_s = CPP.session_for(protocol) if test_due else None      # race: nothing scheduled
     # the AeT test: base phase, a reason (quality_gate.aet_test_reason — B3 and the Z5
     # lifecycle; no fixed cadence), never the CP-test week; its protocol from 課表偏好
-    aet_due = test_s is None and (days_to is None or days_to > 10) and AT.due(
+    aet_due = test_s is None and (days_to is None or days_to > 10) and not in_reentry \
+        and mode != "recovery_week" and AT.due(
         today, kind, gate.get("base_start"), gate.get("aet_test_reason"), tx.get("aet_last_test"))
     aet_proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
                                     getattr(prefs, "cap_weekday", None),
@@ -597,6 +635,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         else:
             long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * 1.15))
         long_min = min(long_min, 0.5 * minutes_total) if minutes_total >= 120 else long_min
+        if in_reentry:
+            # the longest run before the break × the block's % (6–13 days: ≤ 90 min) — detraining.md §6.2
+            fr = max((RE.frac_on(rp, monday + dt.timedelta(days=i)) or 0.0) for i in range(7)) or 1.0
+            long_min = min(long_min, max(30.0, (rp.get("prev_long_min") or long_min) * fr))
+            if rp["category"] == "6-13":
+                long_min = min(long_min, float(RE.LONG_CAP_MIN))
         terrain = (f"挑每公里爬升 ≥ {goal_d * 0.7:.0f} m 的路線" if goal_d else
                    "有山路就走山路，陡坡用走的" if mountain_goal else "平路或緩坡")
         if xu_test:
@@ -643,7 +687,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     n_easy = 0 if left < 25 else max(1, min(5, int(round(left / 50.0))))
     for i in range(n_easy):
         m = left / n_easy
-        strides = kind == "base" and i == 0 and mode != "recovery_week"
+        strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + ("＋坡道衝刺 8×10 秒" if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail="心率不超過 AeT" + ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else ""),
@@ -824,7 +868,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             notes.append({"level": i.level, "text": f"{i.title}：{i.action}"})
 
     mode_label = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
-                  "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週"}[mode]
+                  "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週",
+                  "reentry": "停訓後恢復期"}[mode]
     return {
         "week": {"start": monday.isoformat(), "end": sunday.isoformat(), "today": today.isoformat(),
                  "days_left": len(free)},
@@ -857,4 +902,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "prefs": PR.to_dict() if PR is not None else None,
         "blackout_days": [d.isoformat() for d in lost],
         "heat": heat_info,
+        # 停訓後的恢復期 (engine/reentry.py): the block in effect / ahead, for projection and the log
+        "reentry": rp,
     }
