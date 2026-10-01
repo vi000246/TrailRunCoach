@@ -309,13 +309,33 @@ def _heat_profile(hourly: list, start: dt.datetime, out_segs: list, stops) -> li
 # road / trail
 # ---------------------------------------------------------------------------
 
+def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target: float = 1.0) -> Optional[dict]:
+    """The primary trail estimate (2026-10-01, trailhr.py): moving time of a
+    course from the athlete's HR pace model at f_target × their race HR
+    level, with the durability decline. None without a usable model."""
+    from backend.engine.racepower import trailhr as TH
+    if not model or not (model.get("a") or model.get("c")) or not km:
+        return None
+    e = km + (gain_m or 0.0) / TH.TRAILHR["divisor"]
+    x = f_target * (model.get("x_race") or TH.TRAILHR["x_default"])
+    t = TH.predict_time(model, e, x)
+    if not t:
+        return None
+    return {"time_s": t, "time_no_durability_s": TH.predict_time(model, e, x, delta=0.0), "x": x, "eff_km": e,
+            "x_race": model.get("x_race"), "x_race_source": model.get("x_race_source"), "delta": model.get("delta"),
+            "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
+
+
 def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
              effort_validated: bool, longest_s: Optional[float] = None,
-             capacity: Optional[dict] = None) -> dict:
+             capacity: Optional[dict] = None, trail_hr: Optional[dict] = None) -> dict:
     """v1 = the /predict response for the same inputs (used values, env, v1
     result = the cross-check and the degraded baseline). `capacity` =
     {spread, lower_bound, message, lthr, aet} from the inputs (effort band,
-    the lower-bound warning, HR-first trail targets)."""
+    the lower-bound warning, HR-first trail targets). `trail_hr` = the trail
+    HR pace model (athlete.trail_hr_model): for a trail race in auto mode it
+    gives the whole-race time (the power envelope is shown only as a
+    cross-check — on trail it was +46 % power / −35 % time off)."""
     used, env, r1 = v1["used"], v1["env"], v1["result"]
     kind = v1["type"]
     capacity = capacity or {}
@@ -368,8 +388,11 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     model = PC.RunModel(weight, grade_re.re, grade_re.v_max)
     d_eff_m = (r1.get("effort_km") or r1["distance_km"]) * 1000.0
     cat = "trail" if trail else "road"
-    v2_primary = bool(validated.get(cat)) and gpx
     f_target = float(opts.get("effort_target") or 1.0)
+    hr_est = trail_hr_estimate(trail_hr, course["totals"]["km"], course["totals"].get("gain_m") or 0.0, f_target) \
+        if trail and mode == "auto" else None
+    # the HR estimate gives the total; the segment model only distributes it
+    v2_primary = bool(validated.get(cat)) and gpx and hr_est is None
 
     kw = {"beta": beta, "sigma": sigma, "locks": locks}
     cp_w = cp2 or cp                # the W′ budget runs above the short-range CP
@@ -398,6 +421,10 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                 raise ValueError("模式「目標功率」需要功率或 %CP")
             p_star = float(p_star) * (mbar if opts.get("power_is_training") else 1.0)
             t_whole, p_whole = d_eff_m * weight / (re_v1 * p_star), p_star
+        elif hr_est is not None:
+            # heat / altitude: the HR model is in training conditions; M scales the speed (推估)
+            t_whole = hr_est["time_s"] / mbar
+            p_whole = d_eff_m / t_whole / re_v1 * weight
         else:
             t_whole, p_whole = t_c, p_c
         tgt = {"t": t_whole, "p": p_whole}
@@ -413,7 +440,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
 
         res, alpha_used, runs = PC.solve_with_budget(solver, segs, cp_w, w_prime, alpha)
         varied = max(ms) - min(ms) > 1e-12
-        if mode == "auto" and not v2_primary and (gpx or varied):
+        if mode == "auto" and not v2_primary and hr_est is None and (gpx or varied):
             # the whole-race M must be the one the effort uses (time-weighted
             # Σ(Pᵢ/Mᵢ)tᵢ, not the distance-weighted mean): a couple of fixed-point
             # passes make f come out at f* exactly
@@ -557,7 +584,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         warnings.append(f"逐段耗損指數 {dmg:.2f} > {DAMAGE_NOTE}：這只是診斷數字，短時間的起伏會被高估")
     if not gpx:
         warnings.append("手動路線沒有坡度剖面：整場時間用 v1 方法，分段只是平均切開")
-    if gpx and not v2_primary:
+    if gpx and not v2_primary and hr_est is None:
         warnings.append("分段目標是推估：回測通過前，整場時間照 v1 方法算，分段只負責分配")
     if any(not s["trusted"] for s in out_segs):
         warnings.append("有坡度超過 8 % 的段，你在這個坡度的資料不足：該段目標是外插")
@@ -580,9 +607,16 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             crosscheck["stryd_table"] = {"power": sp, "p10k": p10, "time_s": d_eff_m * weight / (re_v1 * sp)}
     else:
         crosscheck["cvi"] = r1.get("cvi_crosscheck")
+        if hr_est is not None:
+            crosscheck["power_envelope"] = {"time_s": t_c, "power": p_c, "method": "功率能力（CP/Riegel，僅供對照）"}
+            warnings.append(f"越野整場時間用心率配速模型（推估）：你的比賽心率 {hr_est['x']:.0%} LTHR"
+                            f"（{hr_est['x_race_source']}），effort km {hr_est['eff_km']:.1f}，耐久每小時 −"
+                            f"{(hr_est['delta'] or 0):.0%}（1 小時後）；功率只當參考")
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp, "w_per_kg": p_bar / weight,
                "pace_s_per_km": T / km, "km": km, "gain_m": course["totals"].get("gain_m"),
-               "loss_m": course["totals"].get("loss_m"), "M": mbar, "total_method": "v2" if v2_primary else "v1",
+               "loss_m": course["totals"].get("loss_m"), "M": mbar,
+               "total_method": "trail_hr" if hr_est is not None else "v2" if v2_primary else "v1",
+               "trail_hr": hr_est,
                "category": cat, "mode": mode, "effort_target": f_target if mode == "auto" else None,
                "finish_eta": _clock(opts.get("start_time"), T + _stops_before(stops, km + 1)),
                "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
