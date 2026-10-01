@@ -401,6 +401,9 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
         src = _threshold_text(ds, w, b)
         text = f"{'LTHR' if b == 'lthr' else 'CP'} {T:.0f} {unit}" + (f"（{src}）" if src else "")
     rows = [(zid, nm, (lo or 0.0) * T, None if hi is None else hi * T) for zid, nm, lo, hi in model["zones"]()]
+    # the first zone takes everything below it too (Palladino starts at 50 % CP; zones.zone_of
+    # counts below 50 % as 1A), so every second has a zone
+    rows[0] = (rows[0][0], rows[0][1], 0.0, rows[0][3])
     return {"rows": rows, "basis_text": text, "estimate": est}
 
 
