@@ -777,7 +777,7 @@ function renderResults() {
   if (P.type === "baiyue") return renderBaiyue();
   const trail = P.type === "trail", cp = P.used.cp.value, wt = P.used.weight.value;
   const MODE = { time: "目標時間", power: "目標功率", auto: "通通幫我算" }[s.mode];
-  let h = `<h2>預估結果 <span class="meta">${trail ? "越野" : "路跑"} · ${MODE}${s.total_method === "v1" ? " · 整場用已驗證的方法（Riegel + 你的 RE），分段是推估" : " · 分段加總"}</span></h2>`;
+  let h = `<h2>預估結果 <span class="meta">${trail ? "越野" : "路跑"} · ${MODE}${s.total_method === "trail_hr" ? " · 整場用你的越野心率配速模型（推估），功率只當參考" : s.total_method === "v1" ? " · 整場用已驗證的方法（Riegel + 你的 RE），分段是推估" : " · 分段加總"}</span></h2>`;
   h += `<div class="tiles">`;
   h += tile("預估完賽", hms(s.time_s), `${f1(s.km)} km${s.stops_s ? ` · 含補給 ${Math.round(s.stops_s / 60)} 分 → ${s.finish_eta || ""}` : s.finish_eta ? " · 抵達 " + s.finish_eta : ""}`, true);
   h += tile("平均功率", W(s.power), `${pct(s.pct_cp)} CP · ${wkg(s.w_per_kg)}`, true);
@@ -813,6 +813,9 @@ function otherCalcs() {
   const P = PLAN, v1 = P.v1, r = v1.result, cc = P.crosscheck || {};
   const items = [];
   items.push(`<li>v1 整場預估（effort 距離 × RE，不分段）：${hms(cc.v1?.time_s)} @ ${W(cc.v1?.power)}</li>`);
+  if (cc.power_envelope) items.push(`<li>功率能力（CP / Riegel，越野只供對照）：${hms(cc.power_envelope.time_s)} @ ${W(cc.power_envelope.power)}</li>`);
+  const th = P.summary?.trail_hr;
+  if (th) items.push(`<li>越野心率配速模型（推估）：比賽心率 ${(th.x * 100).toFixed(0)}% LTHR、effort ${th.eff_km.toFixed(1)} km → ${hms(th.time_s)}（不含耐久衰減 ${hms(th.time_no_durability_s)}）</li>`);
   if (cc.stryd_table) items.push(`<li>Stryd 比賽功率表（由你的 10K 功率 ${W(cc.stryd_table.p10k)} 換算）：${W(cc.stryd_table.power)} → ${hms(cc.stryd_table.time_s)}</li>`);
   if (cc.cvi) items.push(`<li>CVI 法（平路 RE ${r3(cc.cvi.road_re)} ${cc.cvi.adjust >= 0 ? "+" : "−"}${Math.abs(cc.cvi.adjust).toFixed(2)}）：${hms(cc.cvi.time_s)} @ ${W(cc.cvi.power)}</li>`);
   const T = v1.tasks || {};

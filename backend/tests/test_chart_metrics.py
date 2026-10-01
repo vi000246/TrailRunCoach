@@ -153,7 +153,8 @@ def _daily_tss(ds):
     x = np.zeros(last - first + 1)
     for w in ds.workouts:
         t = w.metrics.get("tss")
-        if t is not None and not math.isnan(t):
+        # the athlete folder keeps growing past the pinned TODAY; later workouts don't belong in this PMC
+        if t is not None and not math.isnan(t) and int(math.floor(w.day)) <= last:
             x[int(math.floor(w.day)) - first] += t
     return first, x
 

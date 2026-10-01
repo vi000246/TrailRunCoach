@@ -10,7 +10,8 @@ classify
     on the activity date.
 drift_of
     Pa:HR decoupling of a steady run, first 10 minutes (the warm-up)
-    excluded. Refuses runs where the number means nothing: hilly (≥ 20 m
+    excluded — later after a city start: 60 s after the last stop in the
+    first 20 min when that costs no tier (steady_start, 自組). Refuses runs where the number means nothing: hilly (≥ 20 m
     climbed per km, or a trail run), stopped (> 5 % of the time standing),
     too short (< 40 min of moving time *after* the warm-up — Uphill
     Athlete's 40–60 min is the test after the warm-up), unsteady (30-s
@@ -69,7 +70,8 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # v8: drift_of's 40 min counted after the warm-up, fast-finish refusal, Pa/Pw on one shared window,
 # watch_temp_c for heat_gate
 # v9: two tiers — drift / pw_drift also on 30–40 min after the warm-up (`ref_ok`, `tier` "ref")
-CACHE_KEY = "workout_review_v9"
+# v10: adaptive start — drift_of's window starts after the last stop in the first 20 min (`warmup_s`, `start_shift`)
+CACHE_KEY = "workout_review_v10"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -88,10 +90,21 @@ REF_LABEL = "參考（暖身後 30–40 分，未達 UA 測試標準）"
 REF_TIP = ("暖身後只有 30–40 分鐘：Uphill Athlete 不建議用短於 40 分的測試判定 AeT，所以這個數字只當參考，"
            "不拿來解鎖間歇、不算 AeT 測試、不寫進門檻。30 分是自組的門檻（未找到來源）：心血管飄移約在運動"
            "10–20 分鐘後開始（Coyle & González-Alonso 2001），暖身後 30 分已看得到一部分。")
-DRIFT_FINISH_SHARE = 0.10     # 自組 (doc §6.2 / §7): the last 10 % of the measured time …
+START_TIP = ("出門先過市區路口、到河濱才開始穩定跑時，前 20 分鐘內的停等不算穩定跑：飄移從最後一次停等後 1 分鐘、"
+             "而且至少第 10 分鐘起算。20 分鐘和 1 分鐘都是自組（未找到來源；UA／Friel 只說要排除暖身）。"
+             "坡道、快步不排除：上坡後心率不一定回得來，排除會把真的影響藏起來。")
+DRIFT_FINISH_SHARE = 0.10    # 自組 (doc §6.2 / §7): the last 10 % of the measured time …
 DRIFT_FAST_FINISH = 0.05      # … > 5 % above the rest (power or pace) = a fast finish, refused
 DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C); in drift_of 自組
 DRIFT_POWER_COVER = 0.95      # 自組: Pw:HR only when power covers ≥ 95 % of the Pa:HR window (same samples)
+DRIFT_EARLY_S = 1200          # 自組 (adaptive start): stops that begin in the first 20 min are the city section
+                              # before a steady path (crossings), not the steady run; no source gives 20 min
+DRIFT_SETTLE_S = 60           # 自組: the window starts 60 s after the last of those stops ends (re-acceleration);
+                              # no sourced settle time. UA / Friel only say "exclude the warm-up".
+                              # Never later than needed: start = max(WARMUP_S, that); and never at the cost of a
+                              # tier — when the later start leaves less moving time than a tier needs that the
+                              # fixed 10-min start reaches, the fixed start is kept (the stops then count
+                              # toward the 5 % stop rule, as before)
 TEMP_SRC_LABEL = {"route_weather": "路線天氣（Open-Meteo 檔案）", "watch": "手錶溫度"}
 DRIFT_GOOD = 0.05
 DRIFT_WATCH = 0.10
@@ -309,6 +322,69 @@ def heat_gate(dr: dict, temp_c: Optional[float], src: Optional[str]) -> dict:
     return out
 
 
+def _tier_rank(measured_s: float) -> int:
+    return 2 if measured_s >= DRIFT_MIN_S else 1 if measured_s >= DRIFT_REF_MIN_S else 0
+
+
+def steady_start(t, hr, speed) -> tuple[float, Optional[dict]]:
+    """drift_of's adaptive start (自組): (start s after the first sample,
+    record or None). A stop = a sample at ≤ 1.6 km/h (WKO5's moving
+    threshold; a recording gap is not a stop). The window starts at
+    max(WARMUP_S, end of the last stop that begins in the first
+    DRIFT_EARLY_S + DRIFT_SETTLE_S) — unless that leaves less moving time
+    (HR and speed valid) than a tier needs that the fixed WARMUP_S start
+    reaches: then WARMUP_S, with `fallback` True in the record. The record:
+    {stops, stopped_s (standing time in the first 20 min), last_stop_s (when
+    the last of them ended), shifted_s (start − WARMUP_S), fallback}; None
+    when no stop in the first 20 min reaches past the warm-up."""
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    s = _arr(speed, n)
+    fin = np.isfinite(t)
+    if not fin.any():
+        return float(WARMUP_S), None
+    rel = t - t[fin][0]
+    stop = fin & np.isfinite(s) & (s <= STOP_KMH)
+    idx = np.flatnonzero(stop & (rel < DRIFT_EARLY_S))
+    if not len(idx):
+        return float(WARMUP_S), None
+    j = int(idx[-1])
+    while j + 1 < n and stop[j + 1]:           # the last early stop, to its end
+        j += 1
+    start = max(float(WARMUP_S), float(rel[j]) + DRIFT_SETTLE_S)
+    if start <= WARMUP_S:
+        return float(WARMUP_S), None
+    d = _dt(t)
+    early = stop & (rel < DRIFT_EARLY_S)
+    stops = int(np.sum(early & ~np.concatenate([[False], early[:-1]])))
+    rec = {"stops": stops, "stopped_s": float(d[early].sum()), "last_stop_s": float(rel[j]),
+           "shifted_s": start - WARMUP_S, "fallback": False}
+    h = _arr(hr, n)
+    valid = moving_mask(t, s) & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
+    fixed, later = float(d[valid & (rel >= WARMUP_S)].sum()), float(d[valid & (rel >= start)].sum())
+    if _tier_rank(later) < _tier_rank(fixed):
+        return float(WARMUP_S), {**rec, "shifted_s": 0.0, "fallback": True}
+    return start, rec
+
+
+def start_text(dr: dict) -> str:
+    """「前 10 分鐘不算」 or the adaptive start's 「前 11:41 不算」."""
+    w = _f(dr.get("warmup_s")) or WARMUP_S
+    return "前 10 分鐘不算" if abs(w - WARMUP_S) < 1 else f"前 {_hms(w)} 不算"
+
+
+def excluded_text(dr: dict) -> Optional[str]:
+    """The 「已排除」 row: what the adaptive start left out (None when nothing)."""
+    r = dr.get("start_shift")
+    if not r:
+        return None
+    if r.get("fallback"):
+        return (f"前 20 分鐘內有路口停等（最後一次在 {_hms(r['last_stop_s'])}），但從那之後起算會不夠"
+                f" {DRIFT_REF_MIN_S // 60}／{DRIFT_MIN_S // 60} 分鐘，所以仍從第 10 分鐘起算，停等計入 5% 停頓（自組）")
+    return (f"前段路口停等 {r['stops']} 次（共 {_hms(r['stopped_s'])}）：從最後一次停等後 1 分鐘、"
+            f"第 {_hms(_f(dr.get('warmup_s')))} 起算，多排除 {_hms(r['shifted_s'])}（自組）")
+
+
 def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
              climb_m_per_km: Optional[float] = None, trail: bool = False,
              temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
@@ -333,11 +409,18 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         and ≥ DRIFT_REF_MIN_S (30 min, 自組) but < 40 min. `drift` / `hr1` …
         are filled, `ok` stays False and `reason` is the strict refusal.
     `tier` = "test" / "ref" / None. Display callers opt in with
-    basis_drift(…, ref=True)."""
+    basis_drift(…, ref=True).
+
+    The warm-up is adaptive (steady_start, 自組): after a city section with
+    crossings the window starts 60 s after the last stop that begins in the
+    first 20 min, if that is past 10 min and costs no tier. `warmup_s` = the
+    start used, `start_shift` = what it left out (None: the fixed 10 min).
+    Every check (stops, power CV, intensity, finish, halves) runs on that
+    window. Nothing else is masked: ramps and strides stay in."""
     out = {"drift": None, "ok": False, "ref_ok": False, "tier": None, "reason": "", "hr1": None, "hr2": None,
            "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_ref_ok": False, "pw_reason": "",
            "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None, "measured_s": None,
-           "finish": None, "temp_c": None, "temp_src": None}
+           "finish": None, "temp_c": None, "temp_src": None, "warmup_s": float(WARMUP_S), "start_shift": None}
     if hr is None or speed is None or not _has(hr) or not _has(speed):
         out["reason"] = "沒有心率或速度"
         return out
@@ -353,7 +436,9 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     if trail or (climb_m_per_km is not None and climb_m_per_km >= TRAIL_CLIMB_RATE_M_PER_KM):
         out["reason"] = "有坡（越野或每公里爬升 ≥ 20 m），飄移數字不採用"
         return out
-    after = (t - t0) >= WARMUP_S
+    start, shift = steady_start(t, h, s)
+    out.update(warmup_s=start, start_shift=shift)
+    after = (t - t0) >= start
     mov = moving_mask(t, s)
     span = float(d[after].sum())
     stopped = float(d[after & ~mov].sum())       # standing still + recording gaps
@@ -362,9 +447,9 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         return out
     has_power = power is not None and _has(power)
     if has_power:
-        _, p1 = _grid1(t, power)
+        g1, p1 = _grid1(t, power)
         if p1 is not None:
-            p = p1[WARMUP_S:]
+            p = p1[(g1 - t0) >= start]           # by time: the grid starts at the first valid power sample
             p = p[np.isfinite(p)]
             if len(p) > 60:
                 p30 = np.convolve(p, np.ones(30) / 30, "valid")
@@ -992,7 +1077,8 @@ QUICK_PATTERN = 1.03          # 自組: a 20′ window ≥ 1.03 × CP without a 
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
 CP_HINT = "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」"
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
-               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑"}
+               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑",
+               "user": "你標記為測試（活動資訊）"}
 AET_TITLE = re.compile(r"(?<![A-Za-z])AeT(?![A-Za-z])")
 
 
@@ -1122,7 +1208,19 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
                        easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN),
                        plan_aet=aet_sched is not None)
     protocol = match = None
-    if typ == "test_aet":
+    user_test = False
+    if runs and typ not in ("test_cp", "test_aet"):
+        # the user's activity tag 測試 (engine/activity_tags.py) is a test mark like the plan's
+        try:
+            from backend.engine import activity_tags as AT
+            user_test = AT.user_type(AT.user_of(w)) == "test"
+        except Exception:                   # noqa: BLE001
+            user_test = False
+        if user_test:
+            typ = "test_aet" if AET_TITLE.search(title or "") else "test_cp"
+    if user_test:
+        match = "user"
+    if typ == "test_aet" and not user_test:
         # session_type's order: the plan's session (done_by), the title, a plan AeT row, ≥ 55′ steady
         match = ("done_by" if aet_sched is not None else
                  "title" if AET_TITLE.search(title or "") and not cp_detected else
@@ -1518,17 +1616,20 @@ def _aerobic(ds, w, m, c, base):
     tag = "（參考）" if ref else ""
     rows = []
     if d is not None and power:
-        rows += [_row("Pw:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）{tag}", REF_TIP if ref else None),
+        rows += [_row("Pw:HR 飄移", f"{_pct(d)}（{start_text(dr)}）{tag}", REF_TIP if ref else None),
                  _row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
                  _row("前半／後半功率", f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
     elif d is not None:
-        rows += [_row("Pa:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）{tag}", REF_TIP if ref else None),
+        rows += [_row("Pa:HR 飄移", f"{_pct(d)}（{start_text(dr)}）{tag}", REF_TIP if ref else None),
                  _row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
                  _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
     if ref:
         rows.append(_row("飄移等級", REF_LABEL, REF_TIP))
     elif d is not None:
         rows.append(_row("飄移等級", "嚴格（暖身後 ≥ 40 分，UA 測試標準）"))
+    ex = excluded_text(dr)
+    if ex and m.get("category") == "road":
+        rows.append(_row("已排除", ex, START_TIP))
     if d is None and power and (dr.get("ok") or dr.get("ref_ok") or m.get("avg_power") is None):
         # nothing to show on this basis (no power, or too little): say so, not 0 %
         rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
