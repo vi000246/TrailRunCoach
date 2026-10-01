@@ -139,6 +139,71 @@ def test_cadence_hint_on_the_cards_only_when_the_data_supports_it():
         assert "步頻提高" not in _texts(R.review(ds, ds.workouts[-1], sec))
 
 
+def _steady_run(seed, n_win=40, slope=-0.3):
+    """n_win steady 30-s windows; cadence and speed vary window to window independently;
+    ILR = 50 + 6·(km/h − 8) + slope·(spm − 160) + noise."""
+    rng = np.random.default_rng(seed)
+    cad = np.repeat(160 + rng.normal(0, 4, n_win), 30)
+    spd = np.repeat(8 + rng.normal(0, 0.4, n_win), 30)
+    ilr = (50 + 6 * (spd - 8) + slope * (cad - 160) + np.repeat(rng.normal(0, 1.5, n_win), 30)
+           + rng.normal(0, 0.5, len(cad)))
+    t = np.arange(len(cad), dtype=float)
+    return t, spd, cad / 2.0, ilr, np.zeros(len(cad))
+
+
+def test_cadence_windows_and_within_run_fit_recover_the_slope():
+    runs = []
+    for k in range(6):
+        t, spd, stride, ilr, g = _steady_run(k)
+        cw = R.cadence_windows(t, spd, stride, ilr, g)
+        assert len(cw) >= 35 and cw[0][1] == pytest.approx(stride[0] * 2, abs=0.2)
+        runs.append(cw)
+    fit = R.cadence_fit(runs)
+    assert fit["n_runs"] == 6 and fit["b_cad"] == pytest.approx(-0.3, abs=0.05)
+    assert fit["b_speed"] == pytest.approx(6.0, abs=0.3)
+    assert fit["b_cad"] + 1.96 * fit["se_cad"] < 0 and fit["partial_r"] < -0.5
+    assert R.cadence_fit(runs[:4]) is None                       # < 5 runs: no personal trend
+    # walking (< 130 spm) and unsteady windows are left out
+    t, spd, stride, ilr, g = _steady_run(9)
+    assert R.cadence_windows(t, spd, np.full(len(t), 60.0), ilr, g) == []
+    wobbly = spd * np.where(np.arange(len(t)) % 2 == 0, 0.8, 1.2)
+    assert R.cadence_windows(t, wobbly, stride, ilr, g) == []
+
+
+def _fake_steady(day, seed, slope=-0.3):
+    t, spd, stride, ilr, _ = _steady_run(seed, slope=slope)
+    ch = {"elapsedtime": list(t), "heartrate": [140.0] * len(t), "speed": list(spd), "cadence": list(stride),
+          "elapseddistance": list(np.cumsum(spd) / 3600.0), "@impact_loading_rate": list(ilr),
+          "stancetime": [0.25] * len(t)}
+    return FakeWorkout(start=dt.datetime.combine(day, dt.time(7)), sport="run", tags=["running"], channels=ch,
+                       metrics={"duration": float(len(t)), "movingduration": float(len(t)),
+                                "distance": float(np.sum(spd) / 3600.0)})
+
+
+def test_cadence_card_with_trend_and_suggested_range():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_fake_steady(today - dt.timedelta(days=2 * k), k) for k in range(1, 7)]
+                     + [_fake_steady(today, 99)], today, settings=SETTINGS)
+    r = R.review(ds, ds.workouts[-1], "form_cadence")
+    cp = r["cadence_profile"]
+    assert cp["fit"]["b_cad"] == pytest.approx(-0.3, abs=0.08) and cp["fit"]["n_runs"] == 6
+    assert cp["suggest"][0] == pytest.approx(cp["median_cad"] * 1.05)
+    assert len(cp["points"]) >= 35
+    t = _texts(r)
+    assert "每 +5 spm" in t and "Heiderscheit 2011" in t and "推估" in t
+    # no relation in the past runs: said so, no chart data
+    ds = FakeDataset([_fake_steady(today - dt.timedelta(days=2 * k), k, slope=0.0) for k in range(1, 7)]
+                     + [_fake_steady(today, 99, slope=0.0)], today, settings=SETTINGS)
+    r = R.review(ds, ds.workouts[-1], "form_cadence")
+    assert r["cadence_profile"]["weak"] and r["cadence_profile"]["points"] == [] and "關係不明顯" in _texts(r)
+
+
+def test_cadence_fit_says_nothing_when_there_is_no_relation():
+    runs = [R.cadence_windows(*_steady_run(k, slope=0.0)) for k in range(6)]
+    fit = R.cadence_fit(runs)
+    assert abs(fit["b_cad"]) < 0.05 and fit["b_cad"] - 1.96 * fit["se_cad"] < 0 < fit["b_cad"] + 1.96 * fit["se_cad"]
+
+
 def test_form_cards_without_stryd_drop_ilr_lss_and_say_why():
     today = dt.date(2026, 9, 30)
     ds = FakeDataset([_run(today, ilr=False)], today, settings=SETTINGS)
