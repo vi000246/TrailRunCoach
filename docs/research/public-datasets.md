@@ -11,7 +11,7 @@
 ## 0. 結論先講
 
 1. **沒有任何公開資料同時有「同一批人的越野訓練歷史＋比賽成績＋逐秒心率／功率／海拔」。** 這正是賽事預測（需求 1）最需要的東西，目前只能拿公開資料驗證其中一部分（Riegel 指數、族群離散度、坡度與速度的關係），完整的回測仍然只能靠使用者自己和日後自願捐贈的資料（`docs/plan` §10.5）。
-2. **能放心用在付費版的（CC0／CC BY 4.0）只有幾個**：GoldenCheetah OpenData（CC0）、Lövdal 受傷資料（CC0）、DUV 系 ultramarathon 成績（Kaggle，上傳者標 CC0，但原始來源權利未驗證）、4TU 多感測器跑步資料（CC BY 4.0）、PMData（CC BY 4.0）、Kerhervé 2016（CC BY 4.0，但只有彙總表）、Trinity 漸增負荷測試（CC BY 4.0）。
+2. **能放心用在付費版的（CC0／CC BY 4.0）只有幾個**：GoldenCheetah OpenData（CC0）、Lövdal 受傷資料（CC0）、ultramarathon 大型成績集（Kaggle，來源疑似 DUV，上傳者標 CC0，但原始來源權利未驗證）、4TU 多感測器跑步資料（CC BY 4.0）、PMData（CC BY 4.0）、Kerhervé 2016（CC BY 4.0，但只有彙總表）、Trinity 漸增負荷測試（CC BY 4.0）。
 3. **資料最豐富的 FitRec／Endomondo 明文禁止商業用途與再散布**，而且每筆訓練固定 500 點、取樣間隔從幾秒到幾分鐘，不是逐秒資料。只能當學術參考，不能進付費版的任何流程。
 4. **不要爬 Strava／Garmin。** Strava 服務條款明文禁止任何自動化收集（含未登入時）；Garmin 開發者協議禁止用 robot／spider 抓取服務內容。§2 有原文。
 5. 公開比賽成績（ITRA、UTMB、台灣計時網站）**沒辦法**和公開訓練資料接起來：兩邊的人不同、ID 各自遮蔽、沒有共同鍵。§6。
@@ -40,7 +40,7 @@
 
 ## 2. 爬 Strava／Garmin：不可以
 
-### Strava 服務條款（Terms of Service，最後更新 2026-09-28，第 19 節 Proprietary Rights）
+### Strava 服務條款（Terms of Service，頁面標示 "Effective Date: September 28, 2026"，第 19 節 Proprietary Rights）
 
 > "Automated access to or collection of data from the Services—by any means, including data mining, robots, screen scraping, scripts, or similar data-gathering tools or software such as browser extensions and crawlers—is prohibited. This prohibition applies regardless of whether you are logged into a Strava account at the time of such automated access or collection."
 
@@ -81,11 +81,11 @@ Garmin 一般消費者的 Terms of Use 頁面是 JavaScript 渲染，抓不到�
 | 項目 | 內容 |
 |---|---|
 | 網址 | https://osf.io/6hfpz/ ；工具 https://github.com/GoldenCheetah/OpenData |
-| 維護者 | GoldenCheetah 專案（Mark Liversedge 等）；R 套件 Ioannis Kosmidis |
+| 維護者 | GoldenCheetah 專案；R 套件 Ioannis Kosmidis |
 | DOI | 10.17605/OSF.IO/6HFPZ |
 | 相關論文 | Dobiasch 2020, *Journal of Science and Cycling*（"Training Characteristics of Athletes in Golden Cheetah Open Data"）：2020-03 下載時有 4,885 位運動員，篩到 619 位做分析；資料涵蓋 "cyclists, runners, swimmers, triathletes and other unspecified athletes"，分析只看騎車 |
 | 大小 | OSF 上 **6,614 個運動員 zip**（OSF API `meta.total`，2026-10-01）；每人 0.3 KB～40 MB 以上；總量未驗證（估計數十 GB） |
-| 年份 | 上傳從 2018 年中開始；OSF 專案最後修改 2021-12-24；S3 鏡像已關閉 → 資料大致停在 2021 |
+| 年份 | 上傳從 2018 年中開始；OSF 專案節點的 metadata 最後修改 2021-12-24；S3 鏡像已關閉。API 列出的檔案上傳日期看到的是 2020-03～2020-05（API 不接受依日期排序，最新一筆上傳日 **未驗證**），所以資料多半停在 2020–2021 左右 |
 | 欄位 | 每次活動一個 CSV：`secs,km,power,hr,cad,alt`（實際下載確認），**逐秒**；另有一個 JSON：每次活動的 `sport`、`date`、GC 算好的指標（NP、IF、TSS、xPower、距離、時間、體重…） |
 | GPS | **沒有**（OSF wiki："The data does not contain any GPS information."） |
 | 比賽標籤 | 沒有 |
@@ -197,6 +197,8 @@ Garmin 一般消費者的 Terms of Use 頁面是 JavaScript 渲染，抓不到�
 
 這一類的共同問題：**上傳者自己標的授權不等於有權利授權**。原始資料是爬來的，授權鏈斷在原網站。
 
+注意：FitRec（WWW 2019）和 Afonseca（PeerJ 2022）本身有同儕審查論文；放在這一節不是因為論文品質，而是因為**資料取得方式**（從 Endomondo／社群網站收集）和授權限制，用起來的風險和社群資料一樣。
+
 ### 4.1 FitRec／Endomondo（UCSD McAuley Lab）— 只限學術
 
 | 項目 | 內容 |
@@ -204,7 +206,7 @@ Garmin 一般消費者的 Terms of Use 頁面是 JavaScript 渲染，抓不到�
 | 網址 | https://cseweb.ucsd.edu/~jmcauley/datasets/fitrec.html |
 | 論文 | Ni, Muhlstein, McAuley, "Modeling Heart Rate and Activity Data for Personalized Fitness Recommendation", WWW 2019, DOI 10.1145/3308558.3313643（同儕審查會議論文） |
 | 來源 | 論文："We collect data from endomondo.com"（從 Endomondo 收集，方式未說明） |
-| 大小 | 原始 253,020 次訓練、1,104 人（`endomondoHR.json.gz`，約 2.9 GB 未驗證）；過濾後 167,373 次、956 人；10 秒重取樣版 102,343 次、887 人 |
+| 大小 | 原始 253,020 次訓練、1,104 人（`endomondoHR.json.gz`，約 2.9 GB 未驗證）；過濾後 167,373 次（資料頁寫 956 人，論文內文寫 965 人）；10 秒重取樣版 102,343 次、887 人 |
 | 欄位 | userId、gender、sport、經緯度、altitude、timestamp、heart_rate、derived_speed、distance |
 | 取樣 | **每次訓練固定 500 點**，"not necessarily sampled in fixed-width intervals. The sampling interval may vary from seconds to minutes"。速度是從 GPS 推算的。**不是逐秒資料** |
 | 運動 | 跑步、騎車等（各類數量 **未驗證**） |
