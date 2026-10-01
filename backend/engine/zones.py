@@ -95,15 +95,10 @@ STRYD_ZONES = [
     ("4", "Interval", 1.00, 1.15),
     ("5", "Repetition", 1.15, None),
 ]
-# Five zones of HRmax, the watch default (Garmin / Polar: 50–60–70–80–90 %);
-# below 60 % folded into zone 1.
-HRMAX5_ZONES = [
-    ("1", "Warm up", 0.0, 0.60),
-    ("2", "Easy", 0.60, 0.70),
-    ("3", "Aerobic", 0.70, 0.80),
-    ("4", "Threshold", 0.80, 0.90),
-    ("5", "Maximum", 0.90, None),
-]
+# No %HRmax zones (user decision 2026-10-01): a fixed % of HRmax puts LT
+# anywhere from 60 to 90 % HRmax and MLSS at 75–97 % (Iannetta et al. 2020,
+# MSSE 52:466; docs/research/zones-and-thresholds.md §2.1, §3.1). HR zones
+# are Friel % LTHR, power zones Palladino % CP; HRmax is only a data check.
 # 徐國峰 RQ 跑力 heart-rate-reserve zones (% HRR): T = 84–88 % HRR
 # (runningquotient.com/article/single/52); the other edges are RQ's zone table
 # as the athlete's notes have it — not checked edge by edge against RQ (推估).
@@ -192,10 +187,12 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
                     "wprime_source": "測試（兩點法）" if rows[-1].wprime else None}
         return {**out, "value": ds.cp(ref), "source": "WKO5 mFTP" if ds.settings_from == "wko5" else None}
     if basis == "lthr":
-        t = ds.plan.threshold_on("lthr", day)
-        if t is not None:
-            d = max(x.date[:10] for x in ds.plan.thresholds if x.lthr is not None and x.date[:10] <= day.isoformat())
-            return {**out, "value": t, "source": f"你的測試 {d}", "date": d}
+        # an applied estimate is labelled as one, not 「你的測試」 (zones-and-thresholds.md §3.4 change 1)
+        from backend.engine.planning import threshold_row
+        r = threshold_row(ds.plan, "lthr", day)
+        if r is not None:
+            return {**out, "value": r["value"], "source": r["label"], "date": r["date"],
+                    "method": r["method"], "measured": r["measured"]}
         return {**out, "value": ds.sport_setting("thr", ref), "source": ds.setting_label("runthr", "WKO5 設定")}
     # threshold pace: a dated setting, else the estimate
     v = ds.sport_setting("tpace", ref)
@@ -322,18 +319,25 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     cp = ds.cp(ref) if ref else None
     lthr = ds.sport_setting("thr", ref) if ref else None
     hist = ds.athlete.settings.get("runthr") or []
+    from backend.engine.planning import threshold_row
     from backend.files.wko5_athlete import day_to_date
-    planned = ref is not None and ds.plan.threshold_on("lthr", day_to_date(ref.day)) is not None
-    lthr_src = "你的測試" if planned else ds.setting_label("runthr", "WKO5 設定")
+    # where each value comes from, said as it is: a test, or an applied estimate
+    # (zones-and-thresholds.md §3.4 change 1 — LTHR 155 was an applied estimate shown as 「你的測試」)
+    lr = threshold_row(ds.plan, "lthr", day_to_date(ref.day)) if ref is not None else None
+    planned = lr is not None
+    lthr_src = lr["label"] if planned else ds.setting_label("runthr", "WKO5 設定")
+    lthr_measured = bool(lr and lr["measured"])
     if not planned and hist and all(d == dt.date(1980, 1, 1) for d, _ in hist) and lthr_est:
         lthr, lthr_src = float(lthr_est), "自動估算（尚未套用）"
-    aet_planned = ref is not None and ds.plan.threshold_on("aethr", day_to_date(ref.day)) is not None
-    if aet_planned:
-        aet, aet_src = ds.aethr(ref), "你的測試"
+    ar = threshold_row(ds.plan, "aethr", day_to_date(ref.day)) if ref is not None else None
+    aet_measured = bool(ar and ar["measured"])
+    if ar is not None:
+        # the easy cap: a measured AeT; an applied estimate is used (the user approved it) but says so
+        aet, aet_src = ds.aethr(ref), ar["label"] + ("" if aet_measured else "（推估）")
     elif aet_est:
         aet, aet_src = float(aet_est), "自動估算（尚未套用）"
     else:
-        aet, aet_src = (None if lthr is None else 0.89 * lthr), "0.89 × LTHR（Friel Z2 上限）"
+        aet, aet_src = (None if lthr is None else 0.89 * lthr), "0.89 × LTHR（Friel Z2 上限，推估）"
     rows = []
     for tid, name, plo, phi, hlo, hhi, primary, example, src in WORKOUT_TARGETS:
         def hr(x):
@@ -347,7 +351,9 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     return {"cp": cp, "cp_source": ci.get("source") or ("WKO5 mFTP" if ds.settings_from == "wko5"
                                                         else ds.setting_label("runftp")),
             "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
-            "lthr": lthr, "lthr_source": lthr_src, "aet": aet, "aet_source": aet_src, "rows": rows}
+            "lthr": lthr, "lthr_source": lthr_src, "lthr_measured": lthr_measured,
+            "aet": aet, "aet_source": aet_src, "aet_measured": aet_measured,
+            "hr_zones": "Friel % LTHR", "power_zones": "Palladino % CP", "rows": rows}
 
 
 def zones_json(cp: float | None) -> list[dict]:
