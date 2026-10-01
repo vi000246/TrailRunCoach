@@ -22,7 +22,11 @@ the WKO5 athlete folder.
 * sport type: trail / road from the app DB's workout_files.trail_classification
   (user overrides included, shared across a duplicate_of group), the FIT
   session sub_sport only as a fallback; trail runs carry WKO5's
-  "runningtrail" tag.
+  "runningtrail" tag, hikes "hiking" / "mountaineering" (TYPE_TAGS).
+* vam (4224) = climbing / duration · 3600, as WKO5.
+* CP for the charts (`cp`, cp_info): plan test -> athlete_settings
+  run_ftp_w -> a Stryd-only PD fit as of the run's date (_estimate_cp,
+  never watch power) -> unset; power TSS does not use the fit.
 * thresholds / weight, in order: the season plan's dated rows (Dataset.setting
   / cp) -> athlete_settings in the app DB (weight, run_ftp_w, threshold pace;
   not lthr / ftp_w, see _load_db_settings) -> as-of LTHR / CP estimates from
@@ -57,13 +61,18 @@ from backend.files.wko5_athlete import Athlete, WorkoutEntry, read_athlete
 
 log = logging.getLogger(__name__)
 
-F_DESCENDING, F_WORK = 4225, 4218
+F_DESCENDING, F_WORK, F_VAM = 4225, 4218, 4224
 
 # 自組: how often the as-of LTHR / CP estimate is refreshed for a FIT source
 # (a value estimated on a grid day applies until the next one). 30 days keeps
 # a full-history load to ~one estimate per month; the thresholds.estimate
 # windows (90 / 180 days) are much longer, so a finer grid changes little.
 ESTIMATE_STEP_DAYS = 30
+# 推估: fewest Stryd runs in the 90-day window for a chart CP fit. On this
+# athlete's data the first Stryd window (2025-03-22, one run) fitted 135.6 W
+# against 178–203 W from the next window (11 runs) on; a single run's
+# mean-max rarely holds a maximal effort at every duration.
+CP_FIT_MIN_RUNS = 5
 # Athlete.setting_on applies the earliest value backwards (WKO5's rule); a
 # leading (date.min, None) entry stops that for thresholds that must not reach
 # the days before they were known
@@ -88,6 +97,9 @@ SPORTS = {
     "training": ("strength", "strength"), "fitness_equipment": ("strength", "strength"),
     "swimming": ("swim", "swimming"),
 }
+
+# sport type -> the WKO5 tags the charts select by (hastag)
+TYPE_TAGS = {"trail running": ["runningtrail"], "hiking": ["hiking"], "mountaineering": ["mountaineering"]}
 
 
 def sport_of(sport: Optional[str], sub_sport: Optional[str],
@@ -250,6 +262,11 @@ def workout_fields(t: np.ndarray, ch: dict[str, np.ndarray], group: str,
         de = np.diff(sm)
         out[F_CLIMBING] = float(de[de > 0].sum())
         out[F_DESCENDING] = float(-de[de < 0].sum())
+        if out[F_DURATION] > 0:
+            # WKO5 4224 vam = round(climbing / range length · 3600), m/h
+            # (docs/wko5-internals/workout-metrics.md); without it every FIT
+            # workout's `vam` was NaN and the VAM charts were empty
+            out[F_VAM] = float(round(out[F_CLIMBING] / out[F_DURATION] * 3600.0))
     p = ch.get("power")
     if p is not None and np.isfinite(p).any() and np.nanmax(p) > 0:
         roll = _rolling(p, 30)
@@ -368,8 +385,10 @@ class FitFolderDataset(Dataset):
                                  ftp=None, metrics={}, record=None)
             # WKO5 marks trail runs with the "runningtrail" tag; several
             # engine paths (thresholds, quality gate, status, achievements)
-            # read only the tag, so a FIT trail run carries it too
-            tags = ["runningtrail"] if stype == "trail running" else []
+            # read only the tag, so a FIT trail run carries it too; likewise
+            # hikes carry "hiking" / "mountaineering" (the 專項期 charts
+            # select hikes with hastag(), as on the user's WKO5 data)
+            tags = list(TYPE_TAGS.get(stype, []))
             w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags)
             # a bad file (car / bike segment, impossible power: bad_activity.py)
             # never enters ds.workouts; it is listed in ds.excluded
@@ -473,11 +492,15 @@ class FitFolderDataset(Dataset):
         day to the next. A plan test still wins (Dataset.setting looks at the
         plan first). True when anything was set.
 
-        CP / run FTP is NOT filled from the estimate: cp_as_of's PD refit has
-        no plausibility reference before the first plan CP and gave 362–384 W
-        for 2024-06…12 on this athlete's COROS data (plan CP 204 W), which
-        would cut every power TSS there ~4×. Without a plan / DB value those
-        runs fall back to hrTSS (with the estimated LTHR) or stay unset."""
+        Run FTP (power TSS) is NOT filled from an estimate: cp_as_of's PD
+        refit falls back to watch power and gave 362–384 W for 2024-06…12 on
+        this athlete's COROS data (plan CP 204 W), which would cut every
+        power TSS there ~4×. Without a plan / DB value those runs fall back to
+        hrTSS (with the estimated LTHR) or stay unset.
+
+        CP for the charts (Dataset.cp: Palladino zones, `cp` in expressions)
+        is filled before the first plan CP by a Stryd-only PD fit on the same
+        grid (_estimate_cp); it does not change any TSS."""
         from backend.engine.racepower import athlete as A
         from backend.engine.thresholds import estimate
         runs = [w for w in self.workouts if w.sport == "run"]
@@ -504,8 +527,78 @@ class FitFolderDataset(Dataset):
         if thr:
             self.athlete.settings["runthr"] = [NOT_BEFORE] + thr
             self._setting_labels["runthr"] = SETTING_LABELS["estimate"]
+        self._estimate_cp(first, end)
         self.memo.clear()
         return bool(thr)
+
+    # ---- CP for the charts before the first plan CP --------------------------
+    _cp_est: list = []
+
+    def _estimate_cp(self, first: dt.date, end: dt.date) -> None:
+        """Stryd-only PD fits (racepower.athlete.pd_model: WKO5's PD model on
+        the 90-day mean-max up to the grid day) every ESTIMATE_STEP_DAYS. Only
+        runs whose power source is Stryd: watch-estimated power never enters
+        (it gave the 362–384 W fits above), and bad activity files are already
+        out of ds.workouts / cptest.curves. A grid day without Stryd runs gets
+        no value (no fallback to watch power). Read by `cp` / `cp_info`; a plan
+        CP test on or before the date wins."""
+        from backend.engine.racepower import athlete as A
+        from backend.engine import power_source as PS
+        out = []
+        day = first
+        while day <= end:
+            tday = date_to_day(day)
+            runs = [w for w in self.workouts if w.sport == "run" and tday - A.CP_WINDOW_DAYS < w.day < tday + 1
+                    and self.power_source(w) == PS.STRYD and self.power_ok(w)]
+            pdm = None
+            if len(runs) >= CP_FIT_MIN_RUNS:
+                try:
+                    pdm = A.pd_model(self, day, runs, None)
+                except Exception as e:           # noqa: BLE001
+                    log.warning("FIT dataset: CP fit %s failed (%s)", day, type(e).__name__)
+            if pdm:
+                out.append({"date": day, "cp": float(pdm["mftp"]), "frc_j": float(pdm["frc"]),
+                            "runs": len(runs), "n_points": pdm.get("n_points")})
+            day += dt.timedelta(days=ESTIMATE_STEP_DAYS)
+        self._cp_est = out
+
+    def _cp_fit_on(self, day: dt.date) -> Optional[dict]:
+        hit = None
+        for r in self._cp_est:
+            if r["date"] <= day:
+                hit = r
+        return hit
+
+    def cp(self, w: Workout) -> Optional[float]:
+        """Dataset.cp (the plan's dated CP test, else athlete_settings
+        run_ftp_w), else the Stryd-only PD fit in effect on the run's date."""
+        v = super().cp(w)
+        if v is not None or w.sport != "run":
+            return v
+        fit = self._cp_fit_on(day_to_date(w.day))
+        return fit["cp"] if fit else None
+
+    def cp_info(self, w: Workout) -> dict:
+        """CP / W′ in effect for `w` and where they come from (UI labels)."""
+        day = day_to_date(w.day)
+        rows = sorted((t for t in self.plan.thresholds if t.cp is not None and t.date[:10] <= day.isoformat()),
+                      key=lambda t: t.date)
+        if rows:
+            t = rows[-1]
+            return {"cp": float(t.cp), "source": f"你的測試 {t.date[:10]}", "date": t.date[:10],
+                    "wprime": t.wprime, "wprime_source": "測試（兩點法）" if t.wprime else None}
+        v = super().cp(w)
+        if v is not None:
+            return {"cp": v, "source": self.setting_label("runftp"), "date": None, "wprime": None,
+                    "wprime_source": None}
+        fit = self._cp_fit_on(day)
+        if fit:
+            return {"cp": fit["cp"], "date": fit["date"].isoformat(),
+                    "source": f"推估：Stryd 功率 PD 模型 {fit['date'].isoformat()}（近 90 天 {fit['runs']} 次 Stryd 跑步，"
+                              f"排除手錶功率）",
+                    "wprime": fit["frc_j"], "wprime_source": "推估：PD 模型 FRC（≈ W′）"}
+        return {"cp": None, "source": "未設定（測試日以前沒有 Stryd 功率可擬合）", "date": None,
+                "wprime": None, "wprime_source": None}
 
     def _refresh_hr_fields(self, w: Workout) -> None:
         """Recompute the LTHR-dependent hrTSS / hrIF after the estimates."""
