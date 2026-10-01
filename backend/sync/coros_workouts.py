@@ -372,6 +372,7 @@ def _day(iso: str) -> str:
 class TrainingHub:
     def __init__(self, token: str, base: str, user_id: str):
         self.token, self.base, self.user_id = token, base, user_id
+        self._db, self._athlete_id, self._relogged = None, 1, False
 
     @classmethod
     async def from_db(cls, db: AsyncSession, athlete_id: int = 1) -> "TrainingHub":
@@ -379,9 +380,29 @@ class TrainingHub:
             token, base, user_id = await _get_token_and_base(db, athlete_id)
         except ValueError as e:
             raise CorosAuthError(str(e)) from None
-        return cls(token, base, user_id)
+        hub = cls(token, base, user_id)
+        hub._db, hub._athlete_id = db, athlete_id
+        return hub
 
     async def _call(self, method: str, path: str, *, params=None, body=None):
+        """One API call. "Access token is invalid" with a remembered password
+        (coros_client.relogin): one automatic login, then this call once more."""
+        import time
+        t0 = time.monotonic()
+        try:
+            return await self._call_once(method, path, params=params, body=body)
+        except CorosAuthError:
+            if self._db is None or self._relogged:
+                raise
+            from backend.sync.coros_client import relogin
+            if not await relogin(self._db, self._athlete_id, since=t0):
+                raise
+            self._relogged = True
+            self.token, self.base, self.user_id = await _get_token_and_base(self._db, self._athlete_id,
+                                                                            auto_relogin=False)
+            return await self._call_once(method, path, params=params, body=body)
+
+    async def _call_once(self, method: str, path: str, *, params=None, body=None):
         try:
             async with http.client(timeout=30) as c:
                 r = await c.request(method, self.base + path, params=params, json=body,
