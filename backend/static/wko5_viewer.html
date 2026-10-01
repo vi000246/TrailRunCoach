@@ -184,6 +184,10 @@ table.zt th.num { text-align: right; }
 .loading { color: var(--muted); padding: 30px 0; text-align: center; }
 .nodata { color: var(--muted); background: var(--code); border-radius: 6px; padding: 14px 12px; margin: 6px 0; text-align: center; }
 .nodata.small { padding: 6px 10px; font-size: 11.5px; text-align: left; }
+/* 間歇判讀 verdict pill: icon + label + a status tint (engine/interval_eval.py) */
+.verdict-pill { margin: 4px 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--code); font-size: 13px; }
+.verdict-pill b { font-weight: 650; }
+.verdict-pill.good b { color: var(--ok); } .verdict-pill.warn b { color: var(--warn); } .verdict-pill.bad b { color: var(--err); }
 .card h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .qtip { position: relative; display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; margin: 0 2px 0 6px;
   border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif;
@@ -999,6 +1003,14 @@ function lastVal(s) {
 
 function draw(card, res) {
   card.querySelector(".loading")?.remove();
+  // a review card that doesn't apply to this activity (the interval cards on an easy run)
+  if (res.hide) { card.remove(); return; }
+  // a verdict pill (間歇判讀): status = icon + label, never colour alone
+  if (res.badge) {
+    const b = res.badge, icon = { good: "✓", warn: "◐", bad: "✕" }[b.level] || "•";
+    card.insertAdjacentHTML("beforeend", `<p class="verdict-pill ${esc(b.level || "")}"><b>${icon} ${esc(b.text)}</b>${
+      b.sub ? ` <span class="meta">${esc(b.sub)}</span>` : ""}</p>`);
+  }
   if (res.fixes && res.fixes.length) {
     const badge = ` <span class="badge fix" title="${esc(res.fixes.join("\n"))}">已修正單位</span>`;
     const seg = card.querySelector("h2 > .seg");
@@ -1715,8 +1727,16 @@ function drawPlot(card, res, series) {
     // downsampled to ≤3000
     const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false,
       sampling: hx ? undefined : "lttb" };
+    // per-point text labels (a review series' `labels`, e.g. 「✓ 達標」 on each rep bar)
+    const lab = s.labels ? { show: true, position: "top", color: text, fontSize: 10,
+      formatter: (p) => s.labels[p.dataIndex] ?? "" } : undefined;
     if (s.type === "bar" || s.type === "stackedbar") {
-      put({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 }, s);
+      put({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: s.bar_width || 6,
+        barGap: "-100%", label: lab, itemStyle: s.bar_width ? { borderRadius: [4, 4, 0, 0] } : undefined }, s);
+    } else if (s.labels) {
+      // a few labelled markers (the battery's minimum)
+      put({ name: s.name, yAxisIndex: yi, data: pts, color, type: "scatter", symbolSize: 9, label: lab,
+        itemStyle: { borderColor: css("--bg") || "#fff", borderWidth: 2 } }, s);
     } else if (s.line_style === "none" && s.type !== "area") {
       // WKO5 "no line" = markers only: an x-y scatter (HR vs power, LSS vs grade) or event markers
       put({ name: s.name, yAxisIndex: yi, data: pts.filter((p) => p[1] != null && p[0] != null), color,

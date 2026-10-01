@@ -410,6 +410,15 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
                       and e.get("hr_drop60") is not None else None} for e in (m.get("efforts") or [])]
         else:
             bouts = []                         # planned, nothing found: 無法判定 (dose_step), not 「目標太高」
+        tiz_ratio = None
+        if spec is not None and s is not None and m.get("cp"):
+            from backend.engine import interval_eval as IE
+            from backend.engine.interval_reps import lo_of, works_of
+            lo = lo_of(spec)
+            hi = getattr(spec, "hi", None) if hasattr(spec, "hi") else spec[6]
+            plan_tiz = sum(works_of(spec))
+            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, lo >= 1.02)
+            tiz_ratio = (t_in / plan_tiz) if t_in is not None and plan_tiz else None
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
                     **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",
                                                "variant_adj", "variant_blocks")
@@ -417,7 +426,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
                     "reps": len(reps) or (m.get("intervals") or {}).get("n") or 0,
                     # informational only now: dose_step judges the bouts (interval_outcome)
                     "faded": fade is not None and fade < -FADE,
-                    "bouts": bouts[:20], "cp": m.get("cp"), "rep_source": found["source"],
+                    "bouts": bouts[:20], "cp": m.get("cp"), "rep_source": found["source"], "tiz_ratio": tiz_ratio,
                     # the stored plan is in use and this run matched none of its quality sessions:
                     # a hard run, not a ladder session (real data 2026-10-01: steady runs at
                     # ~95 % CP were judged 「目標太高」 against 3×8′ and moved the ladder)
@@ -483,10 +492,11 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
 # gone: the WKO5 speakers (Golich, IT2:84-86) judge *which* rep fell out of the
 # band — the last one falling off is fine, rep 2 … second-to-last means the
 # session was set wrong.
-IN_BAND_TOL = 0.98      # 自組 (doc §4.2): a rep is in band at ≥ 98 % of the planned lower bound
+IN_BAND_TOL = 0.98      # 推估 (doc §4.2): a rep is in band at ≥ 98 % of the planned lower bound
 TARGET_DOWN = 0.95      # ROLE:499「下修 5～10%」: first rep already short -> target −5 %
-AET60_MIN_SHARE = 0.5   # 自組 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
-LAST_FADE = 0.05        # 自組 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
+AET60_MIN_SHARE = 0.5   # 推估 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
+LAST_FADE = 0.05        # 推估 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
+TIZ_GOAL = 0.85         # 推估 (interval_eval.TIZ_GOAL): time in zone ≥ 85 % of the chosen variant's plan
 OUTCOME_LABEL = {"met": "達標", "border": "邊界", "unadapted": "未適應", "too_high": "未適應（目標太高）",
                  "unknown": "無法判定"}
 
@@ -557,6 +567,12 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
         else:
             o = {"outcome": "unknown", "why": "沒有功率或 CP，無法判定達標：同一階再做一次"}
         oc = o.get("outcome") or "unknown"
+        r = h.get("tiz_ratio")
+        if oc == "met" and r is not None and r < TIZ_GOAL:
+            # interval_eval's verdict: every rep in band but too little time in the zone (stopped
+            # early, reps short) = 部分達到 → the same step again (≥ 85 % of the plan: 推估, §C2)
+            oc = "border"
+            o = {**o, "outcome": oc, "why": f"目標區時間只有計畫的 {r * 100:.0f}%（< 85%）"}
         h["outcome"] = oc
         if not counted:
             # a 縮量版 / non-equivalent swap / the step before under a tight cap: shown, but the
