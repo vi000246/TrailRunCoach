@@ -332,6 +332,21 @@ lines), 爬坡與地形 (climbs and grades cards, grade vs HR and grade vs power
 scatters), 配速與耐久 (durability, durability_curve, pacing cards), 跑姿與膝蓋負荷（參考）
 (form card, ILR vs grade and impact G vs grade scatters) (`views/workout.json:80-130`).
 
+### Activity charts (kind `activity`, `backend/engine/panels/activity_charts.py`)
+
+Chart kind `activity` with `chart` ∈ `hrpower`, `hrzones`, `powerzones`, `hrtrend`; the API
+reports it as panel kind `workout` and renders `activity_charts.render` (JSON `kind` `act_*`,
+drawn by the viewer's `drawActivity`).
+
+| Chart | Where | What |
+|---|---|---|
+| `hrpower` 心率與功率（拖曳選一段看統計） | 本次重點 (replaces the dual-axis HR + power chart) | HR (top) and 30-s power (bottom), two stacked panels on one time axis — two units never share a y-scale; AeT / LTHR / CP dashed. Each plotted point carries running totals on a 1-s grid, so a brushed range gets exact stats at plot resolution (`range_stats`, mirrored by `ACT.stats`): elapsed / moving time, distance, moving pace, avg / max HR, avg power (zeros included), NP (whole-run 30-s rolling power), Pw:HR = avg P ÷ avg HR, EF = NP ÷ avg HR, the range's Pw:HR halves (WKO5's definition) |
+| `hrtrend` 心率變化與趨勢 | 有氧／心率飄移 | WKO5 「Heart Rate Variation and Trend」 + 「Heart Rate Format」 (`docs/wko5-views/workout-view.json`): 1-min HR, `slr(heartrate)` trend (x = elapsed s), avg ± 1 `stddev` (n − 1) band, CV = SD / avg (< .33 穩定, < .66 混合), slope `slrm` ±0.0005 bpm/s = 持平, PWHR (PAHR without power) on halves of the recording. avg is deltatime-weighted like the evaluator; the test checks avg / stddev / slrm / slrb against the expression engine |
+| `hrzones` / `powerzones` 心率／功率區間時間 | 有氧／心率飄移 | Seconds per zone (1-s grid, value > 0) under every model, the viewer picks one (`localStorage` `wko5viewer.zmodel`); unavailable models are listed disabled with the reason. HR: Friel 7 (default), WKO5 Classic, Seiler 3 (AeT / LTHR), %HRmax 5 (setting, else observed HRmax — 推估), 徐國峰 RQ %HRR (needs a resting HR: unavailable). Power: WKO5 iLevels (default; WKO5's own `levelto(athleterange(date-89,date,meanmax(power)),i)` through the evaluator — works on the COROS / TP source, no WKO5 folder needed; unavailable when the PD fit fails), Palladino 10, Stryd 5, Coggan classic (CP as FTP — 推估), Palladino 3 zones. Tables in `zones.py` (`STRYD_ZONES`, `HRMAX5_ZONES`, `RQ_HRR_ZONES` added) and the evaluator's `LEVEL_TABLES["classicpower"]`; the first zone takes everything below it |
+
+Daniels' %HRmax ranges overlap (E 65–79, M 80–90, T 88–92), so they are not offered as zones.
+Tests: `backend/tests/test_activity_charts.py` (synthetic).
+
 `customviews` accepts kind `review` and requires `section` in
 `SECTIONS + EXTRA_SECTIONS` (`backend/engine/wko5expr/customviews.py:75`,
 `backend/engine/wko5expr/customviews.py:94-100`). The API reports a review card to
@@ -449,4 +464,5 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-10-01 | fix/drift-aet-todos | N/A | `drift_of`: 40 min counted after the warm-up, fast finish and > 25 °C refused (archive air temperature first, else the watch; heat applied on read), Pa:HR / Pw:HR on one window; measure cache `workout_review_v8`. AeT test recognised from the plan's done AeT session (done_by) before title / plan row / steady run; `scheduled_test` no longer takes AeT sessions. Season drift charts (能力, periodization ②) plot the card's drift through `drift()`; 耐久度 charts stay on WKO5's stored values |
 | 2026-10-01 | feat/drift-two-tier | N/A | Two drift tiers (user decision): strict `ok` unchanged for gates / AeT test / thresholds; `ref_ok` / `tier` "ref" at 30–40 min after the warm-up (`DRIFT_REF_MIN_S`, 自組) for display — card label + hover, i_drift (never BAD on ref), season charts' 參考 series via `drift(basis, "ref")`; hot runs refused in both; measure cache `workout_review_v9`. AeT test analysis: warm-up by protocol (`warm_for`), window up to 60′, end-of-recording trim fixed, 30-s slack. CP-test power pattern alone → `cp_hint`, not a test |
 | 2026-10-01 | feat/drift-v2-planning | docs/research/drift-algorithm.md | drift v2 (user-approved): trailing idle cut, return-leg city tail as the cool-down (12 / 6 min, 推估, calibrated), stop rule on the window; VI ≤ 1.04 + walk rule + halves power ≤ 5 % on the window's moving samples (30-s CV kept as information); ramps stay in with a ramp-free comparison and per-half counts; SE per run (τ 60 s regression) shown as ±pp; 6-run inverse-variance aggregate (`drift_agg`) for the overview indicator and the season charts (`drift_avg()`); AeT aggregate with SE and shift (B3); measure cache `workout_review_v11` |
+| 2026-10-01 | feat/workout-hr-power-charts | user request | Chart kind `activity`: stacked HR / power with brushed-range stats (replaces the dual-axis chart on 本次重點), time in HR / power zones with a remembered model picker (iLevels, Palladino, Stryd, Coggan, Friel, Classic, Seiler 3, %HRmax, RQ), WKO5 Heart Rate Variation and Trend |
 | 2026-10-01 | fix/drift-steady-window | N/A | `drift_of` adaptive start (`steady_start`, 自組): 60 s after the last stop in the first 20 min, never below a tier the fixed 10 min reaches; recorded (`warmup_s`, `start_shift`) and shown (「前 m:ss 不算」, 「已排除」 row); ramps / strides not masked, 15 % CV unchanged (no source found — `docs/research/drift-steady-window-data.md` §6); measure cache `workout_review_v10` |
