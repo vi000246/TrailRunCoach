@@ -140,21 +140,22 @@ def test_friel_zones_count_seconds_at_the_lthr_boundaries():
     # Seiler 3 zones on AeT (0.89 × LTHR without a plan) / LTHR
     s3 = _model(res, "seiler3")
     assert s3["available"] and [r["seconds"] for r in s3["rows"]] == [1200.0, 1200.0, 600.0]
-    # RQ needs a resting HR the app doesn't have; %HRmax needs an HRmax
+    # RQ needs a resting HR the app doesn't have
     rq = _model(res, "rqhrr")
     assert not rq["available"] and "靜息心率" in rq["reason"]
-    assert not _model(res, "hrmax5")["available"]
     assert res["default"] == "frielhr" and res["empty"] is None
 
 
-def test_hrmax_zones_with_a_setting_and_the_source_text():
+def test_no_hrmax_model_even_with_an_hrmax_setting():
+    # %HRmax zones were dropped (zones-and-thresholds.md §2.1: LT at 60–90 % HRmax, Iannetta 2020);
+    # a remembered 「hrmax5」 is not in the list, so the viewer falls back to res["default"]
     hr = np.repeat([110.0, 125.0, 160.0, 185.0], 300)
     t = np.arange(len(hr), dtype=float)
     ds = _ds(_run(t, hr), runmhr=190.0)
-    m = _model(A.zone_times(ds, ds.workouts[0], "hr"), "hrmax5")
-    # 190 × 60/70/80/90 % = 114 / 133 / 152 / 171
-    assert m["available"] and [r["seconds"] for r in m["rows"]] == [300.0, 300.0, 0.0, 300.0, 300.0]
-    assert "190" in m["basis_text"]
+    res = A.zone_times(ds, ds.workouts[0], "hr")
+    assert [m["id"] for m in res["models"]] == ["frielhr", "classichr", "seiler3", "rqhrr"]
+    assert res["default"] == "frielhr"
+    assert not hasattr(A.Z, "HRMAX5_ZONES")
 
 
 def test_power_zone_models_and_ilevels_unavailable_without_a_model(monkeypatch):
@@ -164,6 +165,7 @@ def test_power_zone_models_and_ilevels_unavailable_without_a_model(monkeypatch):
     monkeypatch.setattr(A, "ilevels_for", lambda ds, w: None)
     res = A.zone_times(ds, ds.workouts[0], "power")
     assert [m["id"] for m in res["models"]] == ["ilevels", "palladino", "stryd", "coggan", "palladino3"]
+    assert res["default"] == "palladino"          # Palladino % CP (zones-and-thresholds.md §3.2)
     il = _model(res, "ilevels")
     assert not il["available"] and "iLevels" in il["reason"]
     st = _model(res, "stryd")       # 0.8 / 0.9 / 1.0 / 1.15 × 250 = 200 / 225 / 250 / 287.5
