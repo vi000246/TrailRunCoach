@@ -49,6 +49,15 @@ async def _migrate_schema():
         ("plan_sessions", "distance_km", "REAL"),
         ("plan_sessions", "climb_m", "REAL"),
         ("plan_sessions", "protocol", "TEXT"),
+        ("plan_sessions", "variant_key", "TEXT"),
+        ("plan_sessions", "rung_key", "TEXT"),
+        ("plan_sessions", "equiv", "INTEGER"),
+        ("plan_sessions", "swap", "TEXT"),
+        ("plan_sessions", "swap_reason", "TEXT"),
+        ("plan_sessions", "variant_reps", "INTEGER"),
+        ("plan_sessions", "variant_blocks", "TEXT"),
+        ("plan_sessions", "variant_adj", "TEXT"),
+        ("plan_sessions", "target_basis", "TEXT"),
         ("activity_tags", "exclusion", "TEXT"),
     ]
     async with engine.begin() as conn:
