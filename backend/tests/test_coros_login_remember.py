@@ -220,6 +220,38 @@ def test_training_hub_call_relogs_once_on_invalid_token(tmp_path):
     run(go())
 
 
+def test_tp_relogs_once_when_the_token_cannot_be_refreshed(tmp_path, monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    from backend.settings.secrets import seal
+    from backend.sync import tp_client
+    calls = []
+
+    async def no_refresh(state, db):
+        return False
+
+    async def fake_login(user, pw, db, athlete_id, prefer=None):
+        calls.append((user, pw == PASSWORD))
+        st = await _state(db)
+        st.tp_access_token = seal("fresh")
+        st.tp_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        await db.commit()
+        return {"authenticated": True}
+    monkeypatch.setattr(tp_client, "_refresh_token", no_refresh)
+    monkeypatch.setattr(tp_client, "login_password", fake_login)
+
+    async def go():
+        s = await make_session(tmp_path)
+        s.add(SyncState(athlete_id=1, tp_access_token=seal("old"),
+                        tp_token_expires=datetime.now(timezone.utc) - timedelta(hours=1)))
+        await s.commit()
+        assert await tp_client._get_valid_token(s, 1) is None          # nothing remembered: no login
+        await tp_client.save_password(s, 1, "u@example.com", PASSWORD)
+        tok = await asyncio.gather(tp_client._get_valid_token(s, 1), tp_client._get_valid_token(s, 1))
+        assert tok == ["fresh", "fresh"] and calls == [("u@example.com", True)]   # one login for both
+    run(go())
+    assert PASSWORD not in caplog.text
+
+
 def test_tp_remember_and_logout(tmp_path):
     async def go():
         s = await make_session(tmp_path)
