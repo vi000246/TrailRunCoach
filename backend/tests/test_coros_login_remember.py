@@ -22,8 +22,9 @@ class Coros:
     """Scripted COROS: the account lives on `home`; tokens are numbered and
     only the latest one is valid (as COROS behaves)."""
 
-    def __init__(self, home=EU, activities=(), probe_ok=True, login_ok=True):
+    def __init__(self, home=EU, activities=(), probe_ok=True, login_ok=True, data=None):
         self.home, self.activities, self.probe_ok, self.login_ok = home, list(activities), probe_ok, login_ok
+        self.data = data or home          # the data server (a Taiwan account: login EU, data US)
         self.logins = []
         self.n = 0
         self.valid = None
@@ -46,7 +47,7 @@ class Coros:
         if path == "/activity/query":
             if not self.probe_ok and request.url.params.get("size") == "1":
                 raise httpx.ReadTimeout("busy loop", request=request)
-            if base != self.home or request.headers.get("accessToken") != self.valid:
+            if base != self.data or request.headers.get("accessToken") != self.valid:
                 return httpx.Response(200, json={"result": "1019", "message": "Access token is invalid"})
             q = dict(request.url.params)
             items = self.activities if q.get("pageNumber") == "1" and q.get("size") != "1" else []
@@ -62,16 +63,28 @@ async def _state(s):
     return (await s.execute(select(SyncState))).scalar_one()
 
 
-def test_login_is_made_once_and_keeps_the_login_server_when_probes_time_out(tmp_path):
+def test_login_is_made_once_and_finds_the_data_server(tmp_path):
     async def go():
         s = await make_session(tmp_path)
-        fake = Coros(home=EU, probe_ok=False)
+        fake = Coros(home=EU, data=US)                 # a Taiwan account
         with http.use_transport(httpx.MockTransport(fake)):
             info = await coros_client.login("me@example.com", PASSWORD, s, 1)
         assert fake.logins == [EU]                     # never a second login on US / CN
-        st = await _state(s)
-        assert st.coros_base_url == EU and info["data_server"] == EU    # not "US" by default
+        assert (await _state(s)).coros_base_url == US and info["data_server"] == US
         assert PASSWORD not in json.dumps(info)
+    run(go())
+
+
+def test_probes_timing_out_keep_the_known_data_server(tmp_path):
+    async def go():
+        s = await make_session(tmp_path)
+        with http.use_transport(httpx.MockTransport(Coros(home=CN))):
+            await coros_client.login("me@example.com", PASSWORD, s, 1)
+        assert (await _state(s)).coros_base_url == CN
+        fake = Coros(home=CN, probe_ok=False)          # e.g. a blocked event loop
+        with http.use_transport(httpx.MockTransport(fake)):
+            await coros_client.login("me@example.com", PASSWORD, s, 1)
+        assert (await _state(s)).coros_base_url == CN and len(fake.logins) == 1
     run(go())
 
 
