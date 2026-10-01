@@ -337,7 +337,8 @@ def step_lines(steps: list[StepLike]) -> list[str]:
         if isinstance(st, Repeat):
             w, r = st.steps[0], (st.steps[1] if len(st.steps) > 1 else None)
             rest = f"，休息 {mins(r.seconds)} {r.name or ''}".rstrip() if r else ""
-            out.append(f"{mark} {w.name or '跑'} {mins(w.seconds)} ×{st.sets} {_int_text(w.intensity)}{rest}")
+            head = w.name if w.name and re.search(r"\d", w.name) else f"{w.name or '跑'} {mins(w.seconds)}"
+            out.append(f"{mark} {head} ×{st.sets} {_int_text(w.intensity)}{rest}")
             i += 1
             continue
         if st.kind == EX_TRAIN and i + 1 < len(flat) and isinstance(flat[i + 1], Step) and flat[i + 1].kind == EX_REST:

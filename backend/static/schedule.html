@@ -475,7 +475,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="hint" id="sd-tinfo"></div>
     </div>
     <div class="var-box" id="sd-var" hidden>
-      <label>間歇範本<select id="sd-tpl"><option value="">（不用範本，自己寫）</option></select></label>
+      <label>間歇範本 <button type="button" class="qtip" aria-label="說明" data-tip="選範本會帶入標題、分鐘、目標和備註，推送到 COROS 時照範本的暖身（市區段＋drill＋快步跑）、每一趟和組休，每段一個 lap。★ 推薦＝依你目前的階段和這天的時間上限自動會選的那份。自己寫的話，標題用「3×10 分」這種格式才有間歇結構。">?</button><select id="sd-tpl"><option value="">（不用範本，自己寫）</option></select></label>
       <div class="hint" id="sd-tpl-info" aria-live="polite"></div>
       <div class="var-cur" id="sd-var-cur"></div>
       <button class="btn" type="button" id="sd-swap" hidden>換一個（同等課表）</button>
@@ -511,7 +511,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="hint" id="sd-tgt"></div>
     <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
     <div class="hint" id="sd-gl"></div>
-    <p class="meta faint" style="margin:0" id="sd-q">選「間歇範本」會照範本的暖身、每趟、組休推送到 COROS；自己寫的話標題用「3×10 分」這種格式才有間歇結構</p>
+    <p class="meta faint" style="margin:0" id="sd-q" hidden></p>
     <div class="err" id="sd-err" role="alert"></div>
     <div class="btns">
       <button class="btn danger" type="button" id="sd-del">刪除</button>
@@ -525,14 +525,13 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
 <dialog class="sd wide" id="vd" aria-labelledby="vd-h">
-  <div class="dh"><div><h3 id="vd-h">換一個課表</h3><span class="meta" id="vd-sub"></span></div>
+  <div class="dh"><div><h3 id="vd-h">換一個課表 <button type="button" class="qtip" id="vd-tip" aria-label="說明" data-tip="">?</button></h3><span class="meta" id="vd-sub"></span></div>
     <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
   <p class="meta" id="vd-rec"></p>
   <h4 class="vd-g">同等（不影響進階）</h4>
   <ul class="vd-list" id="vd-eq"></ul>
   <h4 class="vd-g">不同等（會影響進階）</h4>
   <ul class="vd-list" id="vd-ot"></ul>
-  <p class="meta faint" id="vd-note"></p>
   <div class="err" id="vd-err" role="alert"></div>
 </dialog>
 
@@ -1278,7 +1277,6 @@ function tgtHint() {
   $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `依門檻建議：${gl(t)} <button type="button" id="sd-tgt-use">套用</button>` : "";
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
   $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
-  $("sd-q").hidden = kindVal() !== "quality";
   $("sd-test").hidden = kindVal() !== "test" || !!dlg.ro;
   varLoad();
   stepsPreview();
@@ -1378,7 +1376,8 @@ function openVd() {
   $("vd-rec").textContent = d.recommended_reason ? `自動會選：${d.recommended_reason}` : "";
   $("vd-eq").innerHTML = d.equivalent.map((v) => vdRow(v, d.current_key)).join("");
   $("vd-ot").innerHTML = d.other.map((v) => vdRow(v, d.current_key)).join("");
-  $("vd-note").textContent = `換過的課算你的修改：自動重排不會蓋掉。${d.terrain_note}`;
+  $("vd-tip").dataset.tip = `同等＝同一類強度、目標區時間差 ±15% 內、5 區每趟 ≥ 2 分、工休比在範圍內、每趟 W′ 相近（30/15 不算同等）。` +
+    `換同等的課不影響進階；換不同等的會記下來，這次不算進階。換過的課算你的修改：自動重排不會蓋掉。${d.terrain_note}`;
   $("vd-err").textContent = "";
   $("vd").showModal();
 }

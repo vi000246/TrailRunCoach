@@ -2389,7 +2389,8 @@ def _iv_power(ds, w, m, c, base):
          {"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
           "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}}]
     for r in e["reps"]:
-        s.append({"name": f"第 {r['k']} 趟", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu,
+        s.append({"name": "✓ 達標的趟（開始）" if r["in_band"] else "✕ 沒到的趟（開始）", "type": "line",
+                  "expression": "", "y_axis": "WATTS", "unit": wu,
                   "color": GOOD if r["in_band"] else BAD, "line_style": "dot",
                   "data": {"kind": "vline", "x": r["start_s"]}})
     pdc = e.get("pdc5")
