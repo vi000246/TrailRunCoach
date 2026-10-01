@@ -23,11 +23,13 @@ Rules (thresholds: source or 自組):
      next to a quality / test day; else cancelled. Never carried into next week
      (reconcile never moves a session across weeks).
   D. easy run done too hard: the session stays done. Detected by
-     overhard(): avg HR > AeT + 3 bpm (workout_review.AET_MARGIN), or time
-     above AeT+3 > 10 % (workout_review.OVER_AET_SHARE), or avg power > 80 %
-     CP (zones z2 upper bound, Palladino 1C), or TSS > planned + 20 %
-     (TrainingPeaks compliance green band, engine/compliance.py). Using any
-     one of the four (OR) is 自組. Then:
+     overhard() (unsourced-rules.md §B5): the heart-rate condition needs BOTH
+     avg HR > AeT + 3 bpm (workout_review.AET_MARGIN) AND time above AeT+3
+     > 10 % (workout_review.OVER_AET_SHARE) — this athlete's summer easy runs
+     sit high on HR alone (heat), so one HR rule fired too often; or avg power
+     > 80 % CP (zones z2 upper bound, Palladino 1C); or TSS > planned + 20 %
+     (TrainingPeaks compliance green band, engine/compliance.py). Power / TSS
+     either one alone; the combination is 推估. Then:
        1. the actual TSS counts (plan_store.plan_summary uses done_by.tss;
           CTL/ATL already come from the real data);
        2. a hard session < 2 days after it moves later in the week if the 48-h
@@ -39,10 +41,11 @@ Rules (thresholds: source or 自組):
        4. a note on that day:「輕鬆跑偏強（…）：已調整之後的課表」.
   E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py)
      -> the quality steps down to the recovery fartlek and easy minutes × 0.8;
-     TSB < −30 (when week_plan has not already made it a recovery week) or a
-     CTL ramp ≥ status.RAMP["short"] (7/week, Palladino) -> the quality is
-     removed and easy minutes × 0.8. The 20 % cut is 自組. TSB < −30 itself is
-     week_plan's existing recovery-week rule and ramp ≥ 7 is quality_gate's
+     TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
+     made it a recovery week) or a CTL ramp ≥ status.RAMP["short"] (8/week,
+     Friel 5–8, coach) -> the quality is removed and easy minutes × 0.8. The
+     20 % cut is 推估. TSB < −30 itself is
+     week_plan's existing recovery-week rule and ramp ≥ 8 is quality_gate's
      existing block: those are not repeated when they already acted.
 """
 from __future__ import annotations
@@ -55,7 +58,7 @@ WEEKDAYS = "一二三四五六日"
 HARD = ("quality", "test")
 SIDE = ("strength", "heat_passive", "notice")
 
-# D. easy run done too hard (each one alone is enough; the OR is 自組)
+# D. easy run done too hard (unsourced-rules.md §B5): HR = both conditions together; power / TSS either alone (推估)
 OVER_HR_BPM = 3.0          # workout_review.AET_MARGIN: "easy" = avg HR ≤ AeT + 3
 OVER_SHARE = 0.10          # workout_review.OVER_AET_SHARE: > 10 % of the time above AeT + 3
 EASY_POWER_CAP = 0.80      # zones.py z2 upper bound (Palladino 1C: 75–80 % CP)
@@ -64,14 +67,15 @@ MIN_EASY_MIN = 20          # 自組: a trimmed easy run is never shorter than th
 SPACING_DAYS = 2           # plan_prefs.place(): 48 h between hard days / the long run
 # E. fatigue guard
 TSB_FLOOR = -30.0          # week_plan(): TSB < −30 -> recovery week
-RAMP_SHORT = 7.0           # status.RAMP["short"] (Palladino)
+RAMP_SHORT = 8.0           # status.RAMP["short"]: Friel 5–8, 10 the ceiling (coach; unsourced-rules.md §B2)
 FATIGUE_CUT = 0.80         # 自組: easy minutes × 0.8
 RED_STREAK = 2             # 自組: two red sessions in a row
 
 SRC_SEILER = "Seiler：easy days easy；不補課屬自組"
 SRC_SPACING = "plan_prefs.place() 48 小時間隔"
-SRC_OVER = "workout_review AeT+3／>10%、z2 上限 80% CP（Palladino）、TrainingPeaks ±20%；四擇一屬自組"
-SRC_FATIGUE = "Palladino CTL ramp ≥ 7；TSB < −30（week_plan）；連兩堂紅色、減 20% 屬自組"
+SRC_OVER = ("workout_review 平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
+            "TrainingPeaks ±20%；組合方式推估（unsourced-rules.md B5）")
+SRC_FATIGUE = "Friel CTL ramp ≥ 8（5–8 上限）；TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估"
 
 
 def wd(day: str) -> str:
@@ -92,11 +96,12 @@ def overhard(planned_tss: Optional[float], r: Optional[dict]) -> Optional[str]:
     if not r:
         return None
     aet, hr = r.get("aet"), r.get("avg_hr")
-    if aet and hr and hr > aet + OVER_HR_BPM:
-        return f"平均心率 {hr:.0f} > AeT+{OVER_HR_BPM:.0f}（{aet + OVER_HR_BPM:.0f}）"
     over, tot = r.get("over_aet_s"), r.get("hr_s") or 0
-    if over is not None and tot > 0 and over / tot > OVER_SHARE:
-        return f"心率超過 AeT+{OVER_HR_BPM:.0f} 的時間 {over / tot * 100:.0f}% > {OVER_SHARE * 100:.0f}%"
+    hi_avg = bool(aet and hr and hr > aet + OVER_HR_BPM)
+    hi_share = over is not None and tot > 0 and over / tot > OVER_SHARE
+    if hi_avg and hi_share:                     # B5: both, not either
+        return (f"平均心率 {hr:.0f} > AeT+{OVER_HR_BPM:.0f}（{aet + OVER_HR_BPM:.0f}），"
+                f"且超過的時間 {over / tot * 100:.0f}% > {OVER_SHARE * 100:.0f}%")
     p, cp = r.get("avg_power"), r.get("cp")
     if p and cp and p > EASY_POWER_CAP * cp:
         return f"平均功率 {p:.0f} W > {EASY_POWER_CAP * 100:.0f}% CP（{EASY_POWER_CAP * cp:.0f} W）"

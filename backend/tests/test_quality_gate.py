@@ -199,8 +199,9 @@ def test_options_say_what_the_data_allows():
 @pytest.mark.parametrize("kw, flag, words", [
     (dict(low_share=0.68), "block", "低強度只有 68%（< 75%）"),
     (dict(low_share=0.9, power_low_share=0.7), "block", "功率 < 80% CP 只有 70%"),
-    (dict(ramp=5.6), "sub", "CTL 每週 +5.6，本週只排閾值下"),
-    (dict(ramp=7.2), "block", "≥ 7"),
+    (dict(ramp=5.6), "sub", "CTL 每週 +5.6（≥ 5，Friel）：本週只排閾值下"),
+    (dict(ramp=7.2), "sub", "≥ 5，Friel"),                 # B2: 7 is no longer a block
+    (dict(ramp=8.2), "block", "≥ 8，Friel"),
     (dict(step=0.25), "block", "> 20%"),
     (dict(step=0.15), "hold", "10–20%"),
     (dict(tsb=-25.0), "hold", "TSB −25"),
