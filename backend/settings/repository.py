@@ -48,6 +48,9 @@ DEFAULTS: dict[str, Any] = {
     "sync.auto_on_open.hours": 6,
     # which data the charts / overview / race power read: wko5 | coros | tp
     "charts.data_source": "wko5",
+    # COROS / TP source: read thresholds / weight from the WKO5 athlete file
+    # (opt-in cross-check; default = plan → athlete_settings → estimates, fitdataset.py)
+    "charts.fit_settings_from_wko5": False,
     # workout route map (viewer 單次活動): default basemap id and overlay ids;
     # the map can switch them temporarily (remembered per browser)
     "charts.map.basemap": "rudy",
@@ -182,6 +185,8 @@ def validate(key: str, value: Any) -> None:
         raise ValueError(f"map overlays must be a list of distinct {MAP_OVERLAYS}")
     if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
         raise ValueError(f"{key} must be true/false/null")
+    if key == "charts.fit_settings_from_wko5" and not isinstance(value, bool):
+        raise ValueError(f"{key} must be true/false")
     if key.endswith(".enabled") and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
     if key.startswith("plan.prefs."):
