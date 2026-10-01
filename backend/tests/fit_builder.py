@@ -84,7 +84,7 @@ def _ts(t: datetime) -> int:
 def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0,
               speed_m_s: float = 3.0, climb_m_per_s: float = 0.0, total_ascent: int | None = None,
               sport: int = 1, sub_sport: int | None = None, stryd: bool = False,
-              stryd_device: bool = False) -> bytes:
+              stryd_device: bool = False, speeds_m_s: list | None = None) -> bytes:
     """A 1 Hz run starting at `start` (aware UTC). power=0 → no power channel;
     a list gives the power of each second (its length sets the duration).
     FIT enums: sport 1 running, 2 cycling, 10 training; sub_sport 0 generic,
@@ -92,13 +92,24 @@ def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0
     carry the Stryd developer fields (Form Power, Air Power, Leg Spring
     Stiffness) as a COROS watch with a paired pod writes them; without it a
     power run reads as watch-estimated power (backend/engine/power_source.py).
-    `stryd_device`: a device_info row with manufacturer stryd (95)."""
+    `stryd_device`: a device_info row with manufacturer stryd (95).
+    `speeds_m_s`: the speed of each second (its length sets the duration;
+    distance accumulates), e.g. a run with a car segment at the end."""
     if start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
     watts = None
     if isinstance(power, (list, tuple)):
         watts, seconds = list(power), len(power)
         power = 1
+    if speeds_m_s is not None:
+        seconds = len(speeds_m_s)
+    dist_m, speed_at = [], []
+    acc = 0.0
+    for i in range(seconds):
+        s = speeds_m_s[i] if speeds_m_s is not None else speed_m_s
+        dist_m.append(acc if speeds_m_s is not None else speed_m_s * i)
+        speed_at.append(s)
+        acc += s
     body = b""
     fid = [(0, ENUM), (1, UINT16), (4, UINT32)]
     body += _definition(0, 0, fid) + _data(0, fid, [4, 255, _ts(start)])
@@ -117,8 +128,8 @@ def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0
         body += _definition(1, 20, rec)
     for i in range(seconds):
         alt = 100.0 + climb_m_per_s * i
-        vals = [_ts(start + timedelta(seconds=i)), hr, int(speed_m_s * i * 100),
-                int((alt + 500) * 5), int(speed_m_s * 1000)]
+        vals = [_ts(start + timedelta(seconds=i)), hr, int(dist_m[i] * 100),
+                int((alt + 500) * 5), int(speed_at[i] * 1000)]
         if power:
             vals.append(int(watts[i]) if watts is not None else power)
         row = _data(1, rec, vals)
@@ -130,7 +141,8 @@ def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0
     ses = [(253, UINT32), (2, UINT32), (5, ENUM), (7, UINT32), (8, UINT32), (9, UINT32), (22, UINT16)]
     ascent = total_ascent if total_ascent is not None else int(climb_m_per_s * seconds)
     ses_vals = [_ts(start + timedelta(seconds=seconds)), _ts(start), sport,
-                seconds * 1000, seconds * 1000, int(speed_m_s * seconds * 100), ascent]
+                seconds * 1000, seconds * 1000,
+                int((acc if speeds_m_s is not None else speed_m_s * seconds) * 100), ascent]
     if sub_sport is not None:
         ses.append((6, ENUM))
         ses_vals.append(sub_sport)

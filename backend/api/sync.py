@@ -202,9 +202,10 @@ class SyncSettingsBody(BaseModel):
     chart_data_source: Optional[str] = None       # wko5 | coros | tp
     map_basemap: Optional[str] = None             # workout map default basemap id
     map_overlays: Optional[list[str]] = None      # workout map default overlay ids
+    exclude_bad_activities: Optional[bool] = None  # engine/bad_activity.py (設定 → 資料校正)
 
 
-_SETTING_KEYS = {"primary_source": "sync.primary_source", "timezone": "athlete.timezone",
+_SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad","primary_source": "sync.primary_source", "timezone": "athlete.timezone",
                  "coros_enabled": "sync.coros.enabled",
                  "trainingpeaks_enabled": "sync.trainingpeaks.enabled",
                  "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client",

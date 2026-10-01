@@ -26,6 +26,18 @@
     return `<select data-f="${name}" style="font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit">${o.join("")}</select>`;
   }
 
+  // bad activity files (engine/bad_activity.py): this workout is in the
+  // dataset, so it is not excluded; offer 手動排除, and when the rule flags it
+  // but the user kept it, say so with 恢復自動判定
+  function exclusionRow(x) {
+    if (!x) return "";
+    const btn = (v, t) => `<button data-ex="${v}" style="font:inherit;font-size:11.5px;padding:1px 8px;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit;cursor:pointer;margin-left:6px">${t}</button>`;
+    const kept = x.override === "keep";
+    return `<div class="meta" style="font-size:11.5px;margin-top:6px">排除：` +
+      (kept ? `你標成正常（這筆是正常的，不要排除）${x.flagged ? "；規則判定：" + esc(x.flagged) : ""}${btn("auto", "恢復自動判定")}`
+            : `沒有排除${btn("exclude", "手動排除")}`) + `</div>`;
+  }
+
   function render(card, r) {
     const body = card.querySelector(".body");
     const row = (lab, ctl, manual, why) => `<div style="display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap">
@@ -47,6 +59,7 @@
         ? `<div class="meta" style="font-size:11.5px;margin-top:6px">功率來源：${esc(r.power.label || r.power.source)}` +
           (r.power.used ? "" : "（功率模型、功率 TSS 不採用；心率／配速照常使用）") + `</div>` : "") +
       (r.capacity ? `<div class="meta" style="font-size:11.5px;margin-top:6px">比賽能力樣本：${r.capacity.ok ? "是" : "否"}（${esc(r.capacity.reason || "")}）</div>` : "") +
+      exclusionRow(r.exclusion_state) +
       `<div class="meta" data-msg style="font-size:11.5px;margin-top:4px;min-height:1em"></div>`;
     const msg = body.querySelector("[data-msg]");
     const save = async (patch) => {
@@ -58,6 +71,21 @@
         card.querySelector("[data-msg]").textContent = "已儲存";
       } catch (e) { msg.textContent = "儲存失敗：" + e.message; }
     };
+    body.querySelectorAll("button[data-ex]").forEach((b) => b.addEventListener("click", async () => {
+      const v = b.dataset.ex === "auto" ? null : b.dataset.ex;
+      if (v === "exclude" && !confirm("排除這筆活動？它會留在活動清單（標「已排除」），但不再算進 PMC、功率曲線、比賽功率和圖表。之後可以在清單或「設定 → 資料校正」取消。")) return;
+      msg.textContent = "儲存中…";
+      try {
+        const res = await fetch(URL_(card.dataset.w), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ exclusion: v }) });
+        if (!res.ok) throw new Error((await res.json()).detail || res.status);
+        // the dataset is rebuilt (the file may leave it): workout indices shift,
+        // so drop the selection and reload the list
+        const s = state();
+        if (s) { s.workout = null; s.workoutLabel = null; }
+        if (typeof loadActs === "function") loadActs();
+        if (typeof load === "function") load();
+      } catch (e) { msg.textContent = "儲存失敗：" + e.message; }
+    }));
     body.querySelectorAll("select[data-f]").forEach((el) => el.addEventListener("change", () => save({ [el.dataset.f]: el.value || null })));
     const note = body.querySelector("textarea[data-f=note]");
     note.addEventListener("change", () => save({ note: note.value }));

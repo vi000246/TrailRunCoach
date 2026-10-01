@@ -641,7 +641,7 @@ function filterSummary() {
 }
 
 function renderActChip() {
-  const a = (S.acts || []).find((x) => x.index === S.workout);
+  const a = S.workout == null ? null : (S.acts || []).find((x) => x.index === S.workout);   // excluded rows: index null
   // the picked activity may fall outside the current date filter; keep its last known label
   if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.sport_type || a.sport} · ${hms(a.duration)}`;
   $("act-txt").textContent = S.workout == null ? "還沒選" : S.workoutLabel || `#${S.workout}`;
@@ -653,10 +653,27 @@ async function loadActs() {
   $("acts-h").textContent = `活動 (${acts.length})`;
   $("acts-n").textContent = acts.length;
   renderActChip();
-  $("acts").innerHTML = acts.map((a) => `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
+  // an excluded bad file (engine/bad_activity.py) has no index: shown, not openable
+  $("acts").innerHTML = acts.map((a) => a.excluded ? `<div class="act excl" style="opacity:.6;cursor:default">
+    <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"}</div>
+    <div class="s" style="color:var(--err, #b91c1c)">${esc(a.excluded.label)}
+      <button class="iconbtn" data-exkey="${esc(a.excluded.key)}" data-exfile="${esc(a.file)}" data-exact="${a.excluded.auto ? "keep" : "auto"}"
+        style="font-size:11.5px;padding:1px 6px;margin-left:4px">${a.excluded.auto ? "這筆是正常的，不要排除" : "取消手動排除"}</button></div></div>`
+    : `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
     <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="TSS 來源">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
-  $("acts").querySelectorAll(".act").forEach((el) => el.onclick = () => {
+  $("acts").querySelectorAll("button[data-exkey]").forEach((b) => b.onclick = async (ev) => {
+    ev.stopPropagation(); b.disabled = true;
+    try {
+      const r = await fetch(`${API}/exclusions`, { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: b.dataset.exkey, file: b.dataset.exfile, exclusion: b.dataset.exact === "keep" ? "keep" : null }) });
+      if (!r.ok) throw new Error(r.status);
+      // the dataset is rebuilt with this file back in: indices shift
+      S.workout = null; S.workoutLabel = null; loadActs();
+    } catch (e) { b.disabled = false; b.textContent = "失敗：" + e.message; }
+  });
+  $("acts").querySelectorAll(".act:not(.excl)").forEach((el) => el.onclick = () => {
     S.workout = +el.dataset.i;
     $("acts").querySelectorAll(".act").forEach((x) => x.classList.toggle("on", x === el));
     if (narrowMq.matches) setAside(false, false);

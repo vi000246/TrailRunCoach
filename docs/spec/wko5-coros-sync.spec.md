@@ -22,6 +22,7 @@
 | 2026-10-01 | feat/auto-replan | N/A | 同步結束時，若這次下載 ≥ 1 筆活動（狀態 ok／partial），`runner.stream` 會呼叫 `plan_auto.after_sync`，在背景 task 裡用自己的 DB session 自動調整課表並推送（`docs/spec/plan-auto.spec.md`）。失敗不影響同步結果 |
 | 2026-10-01 | bugfix | N/A | `FitFolderDataset` 前置修正：越野分類讀 app DB（含覆寫、跨來源重複）、sub_sport 後備；門檻／體重改成計畫 → `athlete_settings` → as-of 估算，WKO5 athlete 檔改為選用（`charts.fit_settings_from_wko5`）；`source_stamp` 含 DB 簽章 |
 | 2026-10-01 | bugfix | user request (COROS vs TP back-test) | 每筆活動的功率來源（`stryd` / `watch` / `none`，`backend/engine/power_source.py`）；手錶推估功率預設不進功率模型、不算功率 TSS（設定 `power.accept_watch_power`，預設 false）；記錄 COROS 與 TP 檔案集合的差異（TP 獨有的 2025-12-14 垃圾功率檔、TP 缺 2025-03/04 的 Stryd 跑步） |
+| 2026-10-01 | feature | user request (bad activity files) | 壞掉的活動檔（忘了停錶騎車／開車、功率不可能）整筆排除：`FitFolderDataset`／`Dataset` 不放進 `ds.workouts`、`cptest.bad_files`；覆寫 `activity_tags.exclusion`，設定 `activities.exclude_bad`（預設 true），併入 `source_stamp`（見 workouts.spec.md） |
 | 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
 
 ---
@@ -503,6 +504,17 @@ COROS 上傳的 FIT；2025-12-21 與 2026-09-30 兩邊的檔案功率完全相�
 - API：`GET /api/v1/wko5/workouts` 每筆多 `power_source`、`power_label`（手錶功率未採用時為
   「手錶推估功率（未採用）」）；單次活動卡顯示「功率來源」。
 
+### 壞掉的活動檔（2026-10-01，`backend/engine/bad_activity.py`）
+
+忘了停錶就騎車／開車的「跑步」整筆排除：留在 DB 與活動清單（標「已排除：疑似交通工具／騎車（均速
+43 km/h）」），但 `FitFolderDataset` 載入時就不放進 `ds.workouts`（WKO5 `Dataset` 在建 index 前濾掉、
+重新編號），所以 PMC／TSS、功率曲線、比賽功率、圖表都讀不到；`cptest.curves`／`scan` 讀的 COROS
+檔也一樣濾掉（`cptest.bad_files`）。規則、門檻與來源見 `docs/spec/workouts.spec.md`「Bad activity
+files」：均速或持續 60 秒／5 分／20 分的速度超過同時間世界紀錄均速 × 1.15（推估），或平均功率
+> 10 W/kg（推估）。使用者覆寫存在 `activity_tags.exclusion`（`keep` / `exclude`），設定
+`activities.exclude_bad`（預設 true）；兩者都併入 `source_stamp`。parity 模式不排除。
+TP 的 2025-12-14 垃圾檔（下節）就是這條規則抓的：不再只靠「沒有 Stryd 欄位」擋下（已知限制 7）。
+
 ### COROS 與 TP 資料集差異（2026-10-01 實測，唯讀）
 
 TP 1086 筆（含 2020 起、796 筆標 `duplicate_of`），COROS 808 筆。功率回測差異的來源：
@@ -552,7 +564,7 @@ TP 1086 筆（含 2020 起、796 筆標 `duplicate_of`），COROS 808 筆。功�
 4. **檔名 sport 標籤不準確**：`SPORT_NAMES` 映射（e.g., `200="run"`）只影響 FIT 檔名，不影響 DB 中的 `sport` 欄位。`sport` 由 `fit_reader.py` 解析 FIT session 內的實際運動類型後正規化（`"running"`）。
 5. **損壞的 FIT 檔案**：部分 Coros FIT 檔案無效（e.g., `476897474257125477_2026-04-19_other.fit`，FitParseError: Invalid field size）。已修正：`coros_client.py` 現在對無法解析的 FIT 建立 `file_format="corrupt"` 的 stub DB 記錄，避免每次 sync 重複下載。
 6. **Coros 功率尖峰**：跑步功率由 Coros 手錶從加速度計/GPS 估算，偶有短暫尖峰（e.g., 2026-04-26 有 4 個樣本達 400–432W）。對 3-30 分鐘 MMP 的 CP 模型計算（runFTP）無影響，但會污染 1–3 秒 MMP 顯示值。2025-03-19 起的跑步功率多半來自 Stryd（見「功率來源」）。
-7. **垃圾功率檔只靠來源規則擋下**：TP 的 2025-12-14 899 W 檔沒有 Stryd 欄位，所以預設被排除；若打開 `power.accept_watch_power`，在第一筆計畫 CP（2026-09-30）以前 `implausible()` 沒有參考 CP（strict as-of），它又會讓 PD 擬合失敗。沒有另加無參考的合理性檢查。
+7. ~~垃圾功率檔只靠來源規則擋下~~（2026-10-01 已處理）：TP 的 2025-12-14 899 W 檔現在被「壞掉的活動檔」規則整筆排除（均速 43 km/h），打開 `power.accept_watch_power` 也不會再進 PD 擬合；除非使用者把它標成「這筆是正常的」。
 8. **圖表引擎**（WKO5 clone 的 `meanmax(power)`、`ftp(meanmax(power))` 等）照 WKO5 讀全部功率，不套用來源規則。
 
 ---

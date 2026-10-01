@@ -70,6 +70,12 @@ decisions on the workbook's ambiguities (D1–D10) are in
   of the LTHR estimate) uses the usable power when the 90-day window has any, else every power
   (the pre-Stryd history). `derive()["power_source"]` = counts, the unused watch runs, the setting;
   the page lists them under the CP detail and in the inputs note.
+- **Bad activity files** (2026-10-01, `backend/engine/bad_activity.py`; workouts.spec.md): a run
+  recorded in a car / on a bike, or with impossible power, is not in `ds.workouts`, so it is no run,
+  envelope point, capacity sample or back-test case; the synced FIT files read beside the dataset
+  (`cptest.curves` / `scan` → `_usable`) drop it too (`cptest.bad_files`, cached in
+  `racepower_bad_activity.json`). The TP 2025-12-14 file (43 km/h, 899 W) is excluded by the
+  average-speed rule whatever `power.accept_watch_power` says. The user's 「這筆是正常的」 brings it back.
 - **Altitude normalisation (D2)**: before building an envelope, each run's power is scaled by
   M(activity median elevation → training reference altitude), altitude term only
   (`backend/engine/racepower/athlete.py:86`).
@@ -913,4 +919,5 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-01 | feature | user request (activity tags) | Capacity samples gated on effort (activity_tags: user mark wins; road = road_maximal, trail = HR on moving time + long rests ≥ 5 min ≤ 10 %), plan races only set type 比賽; user-marked races / 全力 over the full history (auto 365 d); trail HR pace model (trailhr.py, effort km vs HR / LTHR, durability, race HR level; 推估) as the planner's trail total, power as cross-check; back-test `trail_hr`, no-power trail cases, `--tags-db`; seed script |
 | 2026-10-01 | bugfix | docs/research/unsourced-rules.md §0.10 step 0 | COROS / TP back-test prerequisites: the FIT dataset reads trail / road from the app DB (overrides, duplicates), takes thresholds / weight from plan → athlete_settings → as-of estimates (no WKO5 by default), and the activity-tag seed matches COROS / TP races by start time |
 | 2026-10-01 | bugfix | user request (COROS vs TP back-test) | Cause of the COROS / TP difference (one TP-only junk watch-power file); power models use Stryd power only by default (`power.accept_watch_power`), watch-power runs are no-power back-test cases, `power_source` in derive / back-test rows; cp_as_of prefers usable power (推估) |
+| 2026-10-01 | feature | user request (bad activity files) | Bad activity files (car / bike speed, impossible power) are no run, envelope point, capacity sample or back-test case (not in `ds.workouts`); the synced FIT curves / CP-test scan drop them (`cptest.bad_files`) |
 | 2026-09-30 | feature | user request | CSV export (`POST /export/csv`, `csvplan.py`, UTF-8 BOM, header block + one row per segment, 「匯出 CSV」 button); per-segment, time-of-day heat (road / trail): /weather returns hourly rows, the plan maps each segment's ETA to the forecast hour and applies Hadley there (自組, 推估), iterating to max |Δ cumulative time| < 1 s; falls back to the single value with a warning; °C axis on the profile, 熱 column in the table |
