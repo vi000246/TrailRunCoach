@@ -355,10 +355,14 @@ def _pd_mftp(ds, day: dt.date) -> Optional[float]:
         tday = date_to_day(day)
         runs = [w for w in ds.workouts if w.sport == "run" and tday - CP_WINDOW_DAYS < w.day < tday + 1]
         try:
-            # every power, watch-estimated too: this CP only locates the Friel
-            # window of the LTHR estimate (thresholds.estimate), an HR threshold;
-            # before the Stryd (2025-03) the history has watch power only (自組)
-            pdm = pd_model(ds, day, runs, None, any_power=True)
+            # this CP only locates the Friel window of the LTHR estimate
+            # (thresholds.estimate, an HR threshold): the power the models use
+            # when the window has any (a junk watch file, e.g. TP's 2025-12-14
+            # 899 W "run", must not break the fit), else every power — before
+            # the Stryd (2025-03) the history has watch power only, measured
+            # against a CP from the same watch power (推估)
+            pw = [w for w in runs if power_ok(ds, w) and power_source(ds, w) != "none"]
+            pdm = pd_model(ds, day, pw, None) if pw else pd_model(ds, day, runs, None, any_power=True)
         except Exception:                   # noqa: BLE001
             pdm = None
         _cp_memo[key] = pdm["mftp"] if pdm else None
@@ -370,8 +374,9 @@ def cp_as_of(ds, day: dt.date) -> Optional[float]:
     dated on or before `day`, else WKO5's PD model refitted on the 90-day
     mean-max up to `day` (pd_model, the port that reproduces WKO5's mFTP),
     else the last valid refit of the 30 days before. Used by the back-test's
-    thresholds (thresholds.estimate measures each run against it). Reads
-    watch-estimated power too (the one exception, see _pd_mftp)."""
+    thresholds (thresholds.estimate measures each run against it). Falls
+    back to watch-estimated power only in a window without usable power
+    (the one exception, see _pd_mftp)."""
     key = (id(ds), "cp", day)
     if key not in _cp_memo:
         c = _plan_last(ds, "cp", day)

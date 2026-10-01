@@ -20,7 +20,7 @@ power reads on another scale than the pod (2025-12-21: the same course and
 effort); the setting `power.accept_watch_power` (default False) lets watch
 power back in. HR- and pace-based paths always use every run.
 
-Reading a run with Form Power / Air Power / LSS as Stryd is 自組 (the watch
+Reading a run with Form Power / Air Power / LSS as Stryd is 推估 (the watch
 itself computes no form power); so is treating any run without them as watch
 power.
 """
