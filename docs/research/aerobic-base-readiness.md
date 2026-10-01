@@ -594,4 +594,10 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 0.89×LTHR − 5 bpm 當測試起始心率 | §6.3 |
 | 快速結尾 > 5% 就不採用 | §6.2 |
 | 溫度 > 25 °C 就不採用 | 取自徐國峰筆記的條件，用在 `drift_of` 屬我們的做法 |
+| 暖身後 30 分鐘＝飄移參考級（`DRIFT_REF_MIN_S`） | §6.2；只顯示、不當門檻（Coyle & González-Alonso 2001 只說飄移約 10–20 分鐘後開始，30 分鐘本身沒有來源） |
+| AeT 測試少 30 秒仍算 40 分鐘（`UA_SLACK_S`） | `aet_test.analyze`，掉幾筆 GPS／Stryd 資料不算失敗 |
+| 平日上限 < 80 分 → 改排 50 分版 | `aet_test.variant_for`（UA 有 40 分鐘版本，切換點是我們定的） |
+| AeT 測試排平日、週二優先、離長跑 ≥ 2 天、80 分版可退到週末 | `aet_test.pick_day` |
+| 標題有 AeT 且 ≥ 48 分，或沒標題 ≥ 55 分，才算做了 AeT 測試 | `overview.week_plan` 標完成 |
+| 沒標題時暖身切 15 分（≥ 55 分的跑步）或 10 分 | `aet_test.warm_for` |
 | 5% 掉速、48 小時的 2 天 | 現有規則 |
