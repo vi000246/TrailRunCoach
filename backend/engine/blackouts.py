@@ -216,7 +216,7 @@ def move_to(s: dict, week: list[dict], bmap: dict, today: str,
               and not (x.get("state") == "active" and x["day"] in bmap)]
     # heat_passive (a hot bath / sauna, engine/heat_plan.py) goes with strength:
     # it never holds a main day
-    main_days = {x["day"] for x in others if x["kind"] not in ("strength", "heat_passive")}
+    main_days = {x["day"] for x in others if x["kind"] not in ("strength", "heat_passive", "notice")}
     hard_days = {dt.date.fromisoformat(x["day"]) for x in others if _hard(x)}
     str_days = {x["day"] for x in others if x["kind"] == "strength"}
     long_days = {dt.date.fromisoformat(x["day"]) for x in others if x["kind"] in ("long", "hike")

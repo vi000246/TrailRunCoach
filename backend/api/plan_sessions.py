@@ -162,8 +162,14 @@ async def _ensure(db: AsyncSession, inp: dict) -> None:
     """First visit of a week, or last week's sessions still open: reconcile, so the
     week is generated into the table and leftovers are marked done / missed."""
     ws = inp["cur"]["week"]["start"]
-    if not await PS.initialized(db, ws) or await PS.has_leftovers(db, ws):
+    if not await PS.initialized(db, ws):
         await PS.plan_reconcile(db, inp, apply=True)
+    elif await PS.has_leftovers(db, ws):
+        # a 課表待確認 proposal is waiting (engine/plan_auto.py): don't apply it behind
+        # the user's back; the automatic run already applied the done / missed part
+        from backend.engine import plan_auto as PA
+        if await PA.pending(db) is None:
+            await PS.plan_reconcile(db, inp, apply=True)
 
 
 def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
