@@ -9,13 +9,20 @@ classify
     category for strength / bike / walk), the terrain, and the training phase
     on the activity date.
 drift_of
-    Pa:HR decoupling of a steady run, first 10 minutes excluded. Refuses
-    runs where the number means nothing: hilly (≥ 20 m climbed per km, or a
-    trail run), stopped (> 5 % of the time standing), too short (< 40 min),
-    unsteady (30-s power CV > 15 %, steady_drift's rule) or too hard
-    (> 90 % CP, steady_drift's rule). Pw:HR (power / HR) comes out of the
-    same call, with the same rules and halves; the aerobic card shows the
-    basis the viewer's 配速／功率 toggle picked.
+    Pa:HR decoupling of a steady run, first 10 minutes (the warm-up)
+    excluded. Refuses runs where the number means nothing: hilly (≥ 20 m
+    climbed per km, or a trail run), stopped (> 5 % of the time standing),
+    too short (< 40 min of moving time *after* the warm-up — Uphill
+    Athlete's 40–60 min is the test after the warm-up), unsteady (30-s
+    power CV > 15 %, steady_drift's rule), too hard (> 90 % CP,
+    steady_drift's rule), a fast finish (last 10 % of the measured time
+    > 5 % faster than the rest, power or pace — 自組, doc §6.2) or hot
+    (> 25 °C: the route_weather archive's air temperature, else the watch's
+    — 徐國峰's condition, applied here 自組; heat_gate, re-applied on every
+    measure() read so a later archive fill counts). Pw:HR (power / HR)
+    comes out of the same call, with the same rules and the same samples
+    and halves; the aerobic card shows the basis the viewer's 配速／功率
+    toggle picked.
 detect_efforts
     Work bouts in the power stream (30-s power over max(0.85 CP, 1.12 ×
     the session median)), with duration, power, %CP, HR and the HR drop in
@@ -59,12 +66,20 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # version whenever _measure's output changes
 # v6 (two branches): Pw:HR on drift_of's own halves (pw_drift / pw_ok / p1 / p2), and cp_bouts
 # per CP-test protocol (engine/cp_protocols.py); v7 = both merged, so no cache from either v6 is reused
-CACHE_KEY = "workout_review_v7"
+# v8: drift_of's 40 min counted after the warm-up, fast-finish refusal, Pa/Pw on one shared window,
+# watch_temp_c for heat_gate
+CACHE_KEY = "workout_review_v8"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
 
-DRIFT_MIN_S = 2400            # the plan's i_drift floor: ≥ 40 min
+DRIFT_MIN_S = 2400            # ≥ 40 min of moving time *after* the warm-up (UA: "We don't recommend
+                              # relying on tests less than 40 minutes long" — the test after a 10–15′ warm-up)
+DRIFT_FINISH_SHARE = 0.10     # 自組 (doc §6.2 / §7): the last 10 % of the measured time …
+DRIFT_FAST_FINISH = 0.05      # … > 5 % above the rest (power or pace) = a fast finish, refused
+DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C); in drift_of 自組
+DRIFT_POWER_COVER = 0.95      # 自組: Pw:HR only when power covers ≥ 95 % of the Pa:HR window (same samples)
+TEMP_SRC_LABEL = {"route_weather": "路線天氣（Open-Meteo 檔案）", "watch": "手錶溫度"}
 DRIFT_GOOD = 0.05
 DRIFT_WATCH = 0.10
 STREAK_NEED = 3               # legacy only: the old unsourced 「連續 3 次」 rule (gate: engine/quality_gate.py)
@@ -242,19 +257,56 @@ def _halves_drift(h: np.ndarray, x: np.ndarray, d: np.ndarray, m: np.ndarray) ->
     return float((r1 - r2) / r1), h1, h2, x1, x2
 
 
+def _short_reason(measured_s: float) -> str:
+    return f"暖身後只有 {int(max(0.0, measured_s) // 60)} 分鐘（< {DRIFT_MIN_S // 60} 分，UA 不建議採用），飄移不採用"
+
+
+def fast_finish(x: np.ndarray, d: np.ndarray, m: np.ndarray,
+                share: float = DRIFT_FINISH_SHARE) -> Optional[float]:
+    """Mean of `x` over the last `share` of the time in mask `m`, relative to
+    the rest (time-weighted): 0.08 = the finish was 8 % above the steady part."""
+    ok = m & np.isfinite(x) & (x > 0)
+    cum = np.cumsum(np.where(ok, d, 0.0))
+    if cum[-1] <= 0:
+        return None
+    last = ok & (cum > (1.0 - share) * cum[-1])
+    a, b = _wmean(x, d, ok & ~last), _wmean(x, d, last)
+    return (b / a - 1.0) if a and b else None
+
+
+def heat_gate(dr: dict, temp_c: Optional[float], src: Optional[str]) -> dict:
+    """drift_of's heat rule on its own: a fair result with a mean temperature
+    > DRIFT_HEAT_C becomes refused. Returns a new dict carrying `temp_c` /
+    `temp_src` (route_weather / watch / None) either way; idempotent, so
+    measure() re-applies it to the cached (pre-heat) result on every read."""
+    out = {**dr, "temp_c": temp_c, "temp_src": src if temp_c is not None else None}
+    if dr.get("ok") and temp_c is not None and temp_c > DRIFT_HEAT_C:
+        why = (f"{TEMP_SRC_LABEL.get(src, '溫度')} {temp_c:.0f} °C（> {DRIFT_HEAT_C:.0f} °C）："
+               "熱會讓心率飄，飄移不採用")
+        out.update(ok=False, reason=why, pw_ok=False, pw_reason=why, hot=True)
+    return out
+
+
 def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
-             climb_m_per_km: Optional[float] = None, trail: bool = False) -> dict:
+             climb_m_per_km: Optional[float] = None, trail: bool = False,
+             temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
     """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
     moving time after a 10-minute warm-up). Positive = HR drifted up for the
-    same pace. `ok` False (with `reason`) when the run is not a fair test.
+    same pace. `ok` False (with `reason`) when the run is not a fair test —
+    among others, < 40 min of moving time after the warm-up, a fast finish,
+    or `temp_c` > 25 °C (heat_gate).
 
     Pw:HR is the same measurement with power in place of speed — same
-    fairness rules, same warm-up, same moving-time halves (`pw_drift`, `p1`,
-    `p2`, `pw_hr1`, `pw_hr2`; `pw_reason` 「這次沒有功率」 without a power
-    channel)."""
+    fairness rules, same warm-up, and the *same samples* and halves: with
+    power, both use the moving samples where HR, speed and power are all
+    valid (`pw_drift`, `p1`, `p2`, `pw_hr1`, `pw_hr2`). When power covers
+    < 95 % of the Pa:HR window, Pa:HR keeps the whole window and Pw:HR is
+    refused (`pw_reason`); 「這次沒有功率」 without a power channel. `measured_s`
+    = the moving time the drift was computed on."""
     out = {"drift": None, "ok": False, "reason": "", "hr1": None, "hr2": None,
            "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_reason": "",
-           "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None}
+           "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None, "measured_s": None,
+           "finish": None, "temp_c": None, "temp_src": None}
     if hr is None or speed is None or not _has(hr) or not _has(speed):
         out["reason"] = "沒有心率或速度"
         return out
@@ -264,8 +316,8 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     d = _dt(t)
     t0 = t[np.isfinite(t)][0]
     elapsed = float(np.nanmax(t) - t0)
-    if elapsed < DRIFT_MIN_S:
-        out["reason"] = f"不到 {DRIFT_MIN_S // 60} 分鐘，飄移不採用"
+    if elapsed < WARMUP_S + DRIFT_MIN_S:            # can't reach 40 min after the warm-up
+        out["reason"] = _short_reason(elapsed - WARMUP_S)
         return out
     if trail or (climb_m_per_km is not None and climb_m_per_km >= TRAIL_CLIMB_RATE_M_PER_KM):
         out["reason"] = "有坡（越野或每公里爬升 ≥ 20 m），飄移數字不採用"
@@ -291,20 +343,48 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
                 if cp and p.mean() > AET_MAX_OF_CP * cp:
                     out["reason"] = f"強度 {p.mean() / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
                     return out
-    r = _halves_drift(h, s, d, after & mov)
+    # the measured window: moving, after the warm-up, HR and speed valid; with
+    # power (≥ 95 % coverage) also power valid, so Pa:HR and Pw:HR share it
+    m0 = after & mov & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
+    pw = _arr(power, n) if has_power else None
+    win, pw_same = m0, False
+    if pw is not None:
+        mp = m0 & np.isfinite(pw) & (pw > 0)
+        base_s = float(d[m0].sum())
+        if base_s > 0 and float(d[mp].sum()) >= DRIFT_POWER_COVER * base_s:
+            win, pw_same = mp, True
+    measured = float(d[win].sum())
+    out["measured_s"] = measured
+    if measured < DRIFT_MIN_S:
+        out["reason"] = _short_reason(measured)
+        return out
+    fin = [(name, fast_finish(x, d, win)) for name, x in (("功率", pw if pw_same else None), ("配速", s))
+           if x is not None]
+    fin = [(name, ff) for name, ff in fin if ff is not None]
+    if fin:
+        name, ff = max(fin, key=lambda z: z[1])
+        out["finish"] = ff
+        if ff > DRIFT_FAST_FINISH:
+            out["reason"] = (f"最後 10% 的{name}比前段高 {ff * 100:.0f}%（> {DRIFT_FAST_FINISH * 100:.0f}%）："
+                             "快速結尾會讓飄移看起來比較小，飄移不採用")
+            return out
+    r = _halves_drift(h, s, d, win)
     if r is None:
         out["reason"] = "有效資料不夠"
         return out
     out.update(drift=r[0], ok=True, hr1=r[1], hr2=r[2], v1=r[3], v2=r[4])
     if not has_power:
         out["pw_reason"] = "這次沒有功率"
-        return out
-    rp = _halves_drift(h, _arr(power, n), d, after & mov)
-    if rp is None:
-        out["pw_reason"] = "功率資料不夠"
-        return out
-    out.update(pw_drift=rp[0], pw_ok=True, pw_hr1=rp[1], pw_hr2=rp[2], p1=rp[3], p2=rp[4])
-    return out
+    elif not pw_same:
+        cover = float(d[m0 & np.isfinite(pw) & (pw > 0)].sum()) / max(1e-9, float(d[m0].sum()))
+        out["pw_reason"] = f"功率只涵蓋 {cover * 100:.0f}% 的時間（< {DRIFT_POWER_COVER * 100:.0f}%），Pw:HR 不採用"
+    else:
+        rp = _halves_drift(h, pw, d, win)
+        if rp is None:
+            out["pw_reason"] = "功率資料不夠"
+        else:
+            out.update(pw_drift=rp[0], pw_ok=True, pw_hr1=rp[1], pw_hr2=rp[2], p1=rp[3], p2=rp[4])
+    return heat_gate(out, temp_c, temp_src) if temp_c is not None else out
 
 
 def basis_drift(dr: dict, basis: str = "pace") -> tuple[Optional[float], str]:
@@ -550,8 +630,10 @@ def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
                  plan_test: Optional[dict] = None, cp_detected: bool = False,
                  aet_steady: bool = False, long_target_s: Optional[float] = None,
                  hard_power_s: Optional[float] = None, n_efforts: Optional[int] = None,
-                 easy_hr: bool = False) -> str:
-    """The plan's order: category → test_cp → test_aet → quality → long → easy.
+                 easy_hr: bool = False, plan_aet: bool = False) -> str:
+    """The plan's order: category → the plan's AeT-test session (`plan_aet`,
+    done_by) → test_cp → test_aet (title, a plan AeT row that day, a ≥ 55-min
+    steady run) → quality → long → easy.
 
     quality = ≥ HARD_SESSION_S at/above threshold (overview.HARD_EXPRS). With a
     power stream, time above LTHR alone isn't enough: an easy run whose HR
@@ -560,7 +642,9 @@ def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
     if category in ("strength", "bike", "walk", "other"):
         return category
     plan_test = plan_test or {}
-    if re.search(r"(?<![A-Za-z])AeT(?![A-Za-z])", title or "") and not cp_detected:
+    if plan_aet:
+        return "test_aet"                  # the plan says this activity was its AeT test
+    if AET_TITLE.search(title or "") and not cp_detected:
         return "test_aet"                  # 「AeT 飄移測試」 (engine/aet_test.py), not a CP test
     if plan_test.get("cp") is not None or re.search(r"\bCP\b|測試", title or "") or cp_detected:
         return "test_cp"
@@ -724,7 +808,9 @@ def _measure(ds, w) -> Optional[dict]:
     out["hard_power_s"] = hard_p if power_q else None
     cpm = (climb / dist) if dist and dist > 0.5 and climb is not None else None
     out["climb_m_per_km"] = cpm
+    out["watch_temp_c"] = _watch_temp(ds, w, t, s["speed"])
     if w.sport == "run" or cat in ("road", "trail"):
+        # heat is left to heat_gate in measure(): the archive can fill after this is cached
         out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail")
     else:
         out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
@@ -761,11 +847,75 @@ def _measure(ds, w) -> Optional[dict]:
     return out
 
 
+def _watch_temp(ds, w, t, speed) -> Optional[float]:
+    """Mean watch temperature over drift_of's window (moving, after the
+    warm-up); None without a temperature channel."""
+    try:
+        tc = ds.channel(w.idx, "temperature")
+    except Exception:
+        return None
+    if tc is None or not _has(tc):
+        return None
+    tt = np.asarray(t, dtype=float)
+    x = _arr(tc, len(tt))
+    sel = moving_mask(tt, speed) & ((tt - tt[np.isfinite(tt)][0]) >= WARMUP_S) & np.isfinite(x)
+    if not sel.any():
+        sel = np.isfinite(x)
+    return float(np.mean(x[sel])) if sel.any() else None
+
+
+_WX_CACHE: dict = {}
+
+
+def _archive_temps() -> dict:
+    """{activity file: air temp °C} from route_weather's activity_weather.json
+    (Open-Meteo archive at the activity's point, moving-weighted; filled by the
+    routes build). {} when it isn't there. Cached on the file's mtime."""
+    try:
+        from backend.engine import route_weather as RW
+        from backend.engine.routes import HOME
+        p = HOME / RW.ACTIVITY_WX_FILE
+        mt = p.stat().st_mtime_ns
+    except Exception:
+        return {}
+    hit = _WX_CACHE.get(str(p))
+    if hit and hit[0] == mt:
+        return hit[1]
+    acts = (RW.load_activity_weather(HOME).get("activities") or {})
+    out = {f: _f(v.get("temp_c")) for f, v in acts.items() if isinstance(v, dict) and _f(v.get("temp_c")) is not None}
+    _WX_CACHE[str(p)] = (mt, out)
+    return out
+
+
+def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Optional[str]]:
+    """(temperature °C, source) for drift_of's heat rule: the route_weather
+    archive's air temperature when it has this activity (the air is what
+    徐國峰's < 25 °C means; a wrist sensor is warmed by the body — doc §6.2),
+    else the watch's mean over the drift window; (None, None) without either.
+    A dataset may carry its own {file: temp_c} (`activity_temps`, tests)."""
+    arch = getattr(ds, "activity_temps", None)
+    if arch is None:
+        arch = _archive_temps()
+    f = getattr(getattr(w, "entry", None), "file", None)
+    v = _f(arch.get(f)) if f is not None else None
+    if v is not None:
+        return v, "route_weather"
+    wt = _f((m or {}).get("watch_temp_c"))
+    return (wt, "watch") if wt is not None else (None, None)
+
+
 def measure(ds, w) -> Optional[dict]:
+    """Per-workout measurements (disk-memoised on CACHE_KEY), with drift_of's
+    heat rule applied on read (heat_gate + activity_temp: the archive is not
+    part of the cache stamp)."""
     cache = getattr(ds, "cached_series", None)
     if cache is None:
-        return _nan_free(_measure(ds, w))
-    return cache(CACHE_KEY, w, lambda: _nan_free(_measure(ds, w)))
+        m = _nan_free(_measure(ds, w))
+    else:
+        m = cache(CACHE_KEY, w, lambda: _nan_free(_measure(ds, w)))
+    if m and isinstance(m.get("drift"), dict):
+        m = {**m, "drift": heat_gate(m["drift"], *activity_temp(ds, w, m))}
+    return m
 
 
 def _flush(ds) -> None:
@@ -792,7 +942,8 @@ SAME_DAY_BOUT = 1.05          # an unfinished test that day counts with a ≥ 3�
 QUICK_PATTERN = 1.03          # 自組: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
-               "title": "標題", "pattern": "功率型態"}
+               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑"}
+AET_TITLE = re.compile(r"(?<![A-Za-z])AeT(?![A-Za-z])")
 
 
 def _plan_test_sessions(ds) -> list[dict]:
@@ -808,18 +959,37 @@ def _plan_test_sessions(ds) -> list[dict]:
     return list(ss or [])
 
 
+def _done_by_this(s: dict, w, iso: str) -> bool:
+    db = s.get("done_by") or {}
+    return s.get("state") == "done" and db.get("index") == w.idx and db.get("date", iso) == iso
+
+
+def scheduled_aet_test(ds, w) -> Optional[dict]:
+    """The plan's AeT-test session this activity did: a stored test session
+    that is the AeT test (protocol / kind aet, gen_key test_aet, or an AeT
+    title — aet_test.is_aet_session) marked done by this very activity
+    (index and date), the way scheduled_test matches a CP test."""
+    from backend.engine.aet_test import is_aet_session
+    iso = _wdate(w).isoformat()
+    for s in _plan_test_sessions(ds):
+        if is_aet_session(s) and _done_by_this(s, w, iso):
+            return {**s, "match": "done_by"}
+    return None
+
+
 def scheduled_test(ds, w, m: dict) -> Optional[dict]:
-    """The plan's CP-test session this activity did, or None.
+    """The plan's CP-test session this activity did, or None (AeT-test
+    sessions are left to scheduled_aet_test).
 
     1. done_by: a stored test session marked done by this very activity
        (index and date) — the plan says it was the test.
     2. an unfinished (active / missed) test session the same day, and the
        activity has a ≥ 3-min bout at ≥ 1.05 × the CP in effect."""
+    from backend.engine.aet_test import is_aet_session
     iso = _wdate(w).isoformat()
-    ss = _plan_test_sessions(ds)
+    ss = [s for s in _plan_test_sessions(ds) if not is_aet_session(s)]   # the AeT test: scheduled_aet_test
     for s in ss:
-        db = s.get("done_by") or {}
-        if s.get("state") == "done" and db.get("index") == w.idx and db.get("date", iso) == iso:
+        if _done_by_this(s, w, iso):
             return {**s, "match": "done_by"}
     cp, b180 = m.get("cp"), (m.get("cp_bouts") or {}).get("best180")
     if cp and b180 and b180 >= SAME_DAY_BOUT * cp:
@@ -857,10 +1027,13 @@ def _looks_like_quick(m: dict) -> bool:
 
 
 def classify(ds, w, m: Optional[dict] = None) -> dict:
-    """Session type, terrain and phase on the activity date. A CP test is
-    recognised from the plan first (scheduled_test: done_by, then the same
-    day), then a race / TT, then the old rules (a threshold row that day, the
-    title, the power pattern — two separate bouts, or a 20′ all-out)."""
+    """Session type, terrain and phase on the activity date. The AeT test is
+    recognised from the plan first (scheduled_aet_test: a done AeT-test
+    session done_by this activity), then the title, a plan AeT row that day,
+    or a ≥ 55-min steady run. A CP test is recognised from the plan first
+    (scheduled_test: done_by, then the same day), then a race / TT, then the
+    old rules (a threshold row that day, the title, the power pattern — two
+    separate bouts, or a 20′ all-out). `test_match` says which rule matched."""
     from backend.engine import cp_protocols as CPP
     from backend.engine.overview import category
     m = m if m is not None else (measure(ds, w) or {})
@@ -879,16 +1052,25 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     aet_steady = bool(drift.get("ok")) and cat == "road"
     title = _title(w)
     runs = w.sport == "run" and cat not in ("strength", "bike", "walk", "other")
-    sched = scheduled_test(ds, w, m) if runs else None
-    race = runs and sched is None and _race_test(ds, w, m, title)
+    aet_sched = scheduled_aet_test(ds, w) if runs else None
+    sched = scheduled_test(ds, w, m) if runs and aet_sched is None else None
+    race = runs and aet_sched is None and sched is None and _race_test(ds, w, m, title)
     std = looks_like_cp_test(m.get("cp_test"), m.get("cp"))
     quick = runs and not std and _looks_like_quick(m)
+    cp_detected = bool(sched) or race or std or quick
+    plan_test = _plan_test(ds, day)
     typ = session_type(cat, m.get("moving_s") or 0.0, m.get("hard_s") or 0.0, title,
-                       _plan_test(ds, day), bool(sched) or race or std or quick, aet_steady,
+                       plan_test, cp_detected, aet_steady,
                        hard_power_s=m.get("hard_power_s"),
                        n_efforts=len(m.get("efforts") or []) if m.get("hard_power_s") is not None else None,
-                       easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN))
+                       easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN),
+                       plan_aet=aet_sched is not None)
     protocol = match = None
+    if typ == "test_aet":
+        # session_type's order: the plan's session (done_by), the title, a plan AeT row, ≥ 55′ steady
+        match = ("done_by" if aet_sched is not None else
+                 "title" if AET_TITLE.search(title or "") and not cp_detected else
+                 "threshold" if plan_test.get("aethr") is not None else "steady")
     if typ == "test_cp":
         applied = next((t for t in getattr(plan, "thresholds", None) or []
                         if t.date == day.isoformat() and getattr(t, "cp_method", None)), None)
@@ -1267,6 +1449,10 @@ def _aerobic(ds, w, m, c, base):
     elif power and (dr.get("ok") or m.get("avg_power") is None):
         # nothing to show on this basis (no power, or too little): say so, not 0 %
         rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
+    if m.get("category") in ("road", "trail"):
+        tc = dr.get("temp_c")
+        rows.append(_row("溫度", f"{TEMP_SRC_LABEL.get(dr.get('temp_src'), '溫度')} {tc:.0f} °C" if tc is not None
+                         else f"沒有溫度資料（> {DRIFT_HEAT_C:.0f} °C 檢查不到）"))
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0:
         rows.append(_row("超過 AeT+3", f"{_hms(over)}（{over / tot * 100:.0f}%）"))

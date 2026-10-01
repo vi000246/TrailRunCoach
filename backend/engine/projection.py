@@ -174,7 +174,8 @@ def _bq(b: dict) -> dict:
     kind = b.get("kind", "quality")
     return {"id": b.get("id") or ("test_aet" if kind == "test" else "quality"), "kind": kind, "title": b["title"],
             "minutes": b["minutes"], "target": b.get("target", ""), "detail": b.get("detail", ""),
-            "source": b.get("source", ""), "tss": float(b.get("tss") or 65.0)}
+            "source": b.get("source", ""), "tss": float(b.get("tss") or 65.0),
+            **({"protocol": b["protocol"]} if b.get("protocol") else {})}   # the AeT test: "aet"
 
 
 def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset()) -> None:

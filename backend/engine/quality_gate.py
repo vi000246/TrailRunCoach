@@ -226,8 +226,10 @@ def xu_drift_of(t, hr, a_s: float = 600.0, b_s: float = 5400.0, half_s: float = 
 
 
 def xu_check(ds, today: dt.date) -> dict:
-    """The latest flat ≥ 90-min E run in 8 weeks (drift_of's flat / stop / steady
-    checks must pass); over 25 °C it doesn't count when the file has a temperature."""
+    """The latest flat ≥ 90-min E run in 8 weeks (drift_of's flat / stop / steady /
+    fast-finish checks must pass). Over 25 °C it doesn't count: drift_of's heat
+    rule (workout_review.heat_gate — the route_weather archive's air
+    temperature, else the watch's; XU_HEAT_C == WR.DRIFT_HEAT_C)."""
     from backend.engine import workout_review as WR
     last = None
     for w in sorted(_runs(ds, today), key=lambda x: x.day):
@@ -238,9 +240,6 @@ def xu_check(ds, today: dt.date) -> dict:
             continue
         s = WR._samples(ds, w)
         if s is None:
-            continue
-        temp = ds.channel(w.idx, "temperature")
-        if temp is not None and np.isfinite(temp).any() and float(np.nanmean(temp)) > XU_HEAT_C:
             continue
         r = xu_drift_of(s["t"], s["hr"])
         if r is not None:
