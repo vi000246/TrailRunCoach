@@ -418,18 +418,20 @@ async function loadZ5() {
   if (c.history_href) $("z5-hist").href = c.history_href;
   // 未確認: the checklist below is the reason; 暫停 / 恢復期 say why in one line
   const sub = c.state === "confirmed" ? `${esc(c.since)} · ${esc(c.path_label)}`
-    : c.state === "paused" || c.state === "reentry" ? esc(c.reason || "") : "還沒有任何一條確認路徑做到";
+    : c.state === "paused" || c.state === "reentry" ? esc(c.reason || "") : "還沒確認有氧基礎";
   const top = `<div class="z5top"><span class="z5st ${esc(c.state)}"><span aria-hidden="true">${Z5_ICON[c.state] || "–"}</span>${esc(c.label)}</span>
     <span class="meta">${sub}</span></div>`;
   const R = c.reentry;
   const reentry = R && c.state === "reentry"
     ? `<div class="z5note"><b>恢復期還有 ${R.days_left} 天</b>（停跑 ${R.days} 天，到 ${esc(R.quality_from)} 前只排輕鬆跑，3 區、5 區都不排）；
        之後先完成 ${R.z3_before_z5} 堂 3 區${R.drift_check ? "，並通過長跑飄移檢查" : ""}${R.reconfirm ? "，而且要重新確認有氧基礎" : ""}${src(R.src)}</div>` : "";
-  const paths = c.paths.map((p) => `<div class="z5path"><b>${mark(p.ok)} ${esc(p.label)}</b>${src(p.src)}
-    ${p.items.length ? p.items.map((i) => `<div class="z5item">${mark(i.ok)}<div>${esc(i.label)}${src(i.src)}
-      <div class="val">${esc(i.value)} <span class="faint">／ 需要 ${esc(i.need)}</span>${i.why ? `<br>${esc(i.why)}` : ""}</div></div></div>`).join("")
-      : `<div class="z5item">${mark(null)}<div class="val">${esc(p.empty || "")}</div></div>`}</div>`).join("");
-  const base = c.state === "confirmed" || c.state === "open" || (c.state === "paused" && c.since);
+  // one step, the three tests (三選一，做了且達標); the 90-min test appears once
+  const B = c.base || { tests: [] };
+  const paths = `<div class="z5path">${B.tests.length ? B.tests.map((i) => `<div class="z5item">${mark(i.ok)}<div>${esc(i.label)}${src(i.src)}
+      <div class="val">${esc(i.value)}${i.need ? ` <span class="faint">／ 需要 ${esc(i.need)}</span>` : ""}</div></div></div>`).join("")
+      : `<div class="z5item">${mark(null)}<div class="val">${esc(B.empty || "")}</div></div>`}</div>`;
+  const base = B.ok;
+  const next = c.next?.text ? `<div class="z5note" role="status" style="margin:0 0 8px;padding-top:0;border-top:0"><b>${esc(c.next.text)}</b></div>` : "";
   const z3 = c.z3;
   const dots = Array.from({ length: z3.need }, (_, i) => `<i class="${i < z3.done ? "on" : ""}"></i>`).join("");
   const z5ok = c.open && z3.ok;
@@ -438,9 +440,9 @@ async function loadZ5() {
      ／ 暫停線 <b class="num">${Math.round(K.line_min)}</b> 分（確認時 ${Math.round(K.level_min)} 分的 2/3，連 3 週低於才暫停）${src(K.src)}
      ${K.why ? `<br><span class="lvl watch">${esc(K.why)}</span>` : ""}</div>` : "";
   const test = c.test ? `<div class="z5note"><span class="lvl watch">建議測試</span> ${esc(c.test.text)}</div>` : "";
-  $("z5").innerHTML = `${top}
+  $("z5").innerHTML = `${top}${next}
     <ol class="z5steps">
-      <li class="${base ? "ok" : ""}"><div><b>確認有氧基礎</b> <span class="meta">（下面任一條做到就算）</span>
+      <li class="${base ? "ok" : ""}"><div><b>${esc(B.label || "確認有氧基礎")}</b>
         ${c.state === "reentry" ? `<div class="meta">恢復期內不判斷</div>` : paths}</div></li>
       <li class="${z3.ok ? "ok" : ""}"><div><b>3 區達標 ${z3.done} / ${z3.need}</b><span class="z5dots" role="img" aria-label="3 區達標 ${z3.done} / ${z3.need}">${dots}</span>${src(z3.src)}
         <div class="meta">3 區只要護欄通過就照排；跑順 3 堂才進 5 區</div></div></li>
