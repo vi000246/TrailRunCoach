@@ -1293,7 +1293,7 @@ dayBoxes("pf-sdays", "pf-sday");
 // ---- 間歇門檻 (engine/quality_gate.py): chips; each ? says what the method is, how it is
 // computed, what to do, and whether it runs on your data now (GET /prefs/gate)
 const GATE_MODES = [["auto", "自動"], ["ua_gap", "UA 差距"], ["friel_drift", "Friel 飄移"], ["xu_drift", "徐國峰 90′"],
-  ["xu_signals", "三訊號"], ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
+  ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
 let PF_GATE = {}, PF_AVAIL = null, PF_AETP = {};
 // ---- AeT 測試方式 (engine/aet_test.py PROTOCOLS): chips; each ? = duration, terrain, held, judging, source
 const AET_PROTOCOLS = [["auto", "自動"], ["xu90", "徐國峰 90′"], ["ua60", "UA 60′"], ["ua40", "UA 40′"],

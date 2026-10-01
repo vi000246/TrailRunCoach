@@ -125,7 +125,7 @@ PREF_ENUMS = {
     "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
     "plan.prefs.heat": ("auto", "off"),
     "plan.prefs.heat_method": ("run", "overdress", "bath", "sauna", "mixed"),
-    "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "xu_signals", "plateau", "weeks", "none"),
+    "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"),
     "plan.prefs.aet_test_days": ("weekday", "any"),
     "plan.prefs.aet_test_protocol": ("auto", "xu90", "ua60", "ua40", "evoke60", "friel"),
 }
