@@ -298,14 +298,23 @@ function renderGoals() {
 function renderEvents() {
   const kinds = S.kinds;
   $("#kindsel").innerHTML = Object.entries(kinds).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
-  $("#events").innerHTML = S.events.map((e) => `<tr style="${e.days_to < 0 ? "opacity:.55" : ""}">
+  // finished events (last day already past) are hidden; one row at the bottom reveals them for
+  // editing — they stay in the plan because the race-power back-test uses past races
+  const done = (e) => e.days_to + Math.max(1, e.days || 1) - 1 < 0;
+  const past = S.events.filter(done);
+  const shown = S.showPast ? S.events : S.events.filter((e) => !done(e));
+  const toggle = past.length ? `<tr><td colspan="12" class="meta"><button class="link" id="togglepast">${S.showPast
+    ? "隱藏已完賽" : `顯示已完賽（${past.length} 場）`}</button></td></tr>` : "";
+  $("#events").innerHTML = (shown.map((e) => `<tr style="${done(e) ? "opacity:.55" : ""}">
     <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? "～" + e.end.slice(5) : ""}</td>
     <td>${esc(e.name)}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
     <td class="num">${fmt(e.distance_km, 1)}</td><td class="num">${fmt(e.climbing_m)}</td><td class="num">${fmt(e.climb_per_km)}</td>
     <td class="num">${fmt(e.est_hours, 1)}</td><td class="num">${e.days_to >= 0 ? e.days_to + " 天" : "已過"}</td>
     <td class="meta">${esc(e.note)}</td>
     <td><button class="link" data-edit="${e.id}">編輯</button><button class="link" data-del="${e.id}">刪除</button></td></tr>`).join("")
-    || `<tr><td colspan="12" class="meta">還沒有賽事。在下面填一場。</td></tr>`;
+    || `<tr><td colspan="12" class="meta">${past.length ? "沒有接下來的賽事。" : "還沒有賽事。"}在下面填一場。</td></tr>`) + toggle;
+  const t = $("#togglepast");
+  if (t) t.onclick = () => { S.showPast = !S.showPast; renderEvents(); };
 }
 
 function renderPhases() {
