@@ -787,8 +787,8 @@ async function load() {
     while (queue.length) {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
-      if (c.kind === "z5gate") card.classList.add("wide");
-      if (!["athlete", "workout", "zones", "targets", "map", "z5gate"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
+      if (c.kind === "z5gate" || (c.kind === "periodzones" && c.view === "weekly")) card.classList.add("wide");
+      if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
       if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
       await renderCard(card, v, di, c, q, token);
     }
@@ -854,7 +854,8 @@ async function renderCard(card, v, di, c, q, token) {
     const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
       + (win && c.kind === "athlete" ? `&window=${win}` : "")
-      + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : ""));
+      + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : "")
+      + (c.kind === "periodzones" ? pzQuery(c) : ""));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -947,6 +948,7 @@ function drawInto(box, res) {
   if (res.kind === "zones") drawZones(box, res);
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "z5gate") drawZ5Gate(box, res);
+  else if (res.kind === "periodzones") drawPeriodZones(box, res);   // panels/period_zones.py
   else if (res.kind === "map") drawMap(box, res);
   else if (String(res.kind || "").startsWith("act_")) drawActivity(box, res);   // panels/activity_charts.py
   else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)
@@ -1157,6 +1159,313 @@ function drawZones(card, res) {
     <p class="desc" style="margin-top:6px">${esc(Z.source)}</p>`);
 }
 const ZCOL = (i, n) => `hsl(${140 - 140 * i / Math.max(1, n - 1)} 65% 45%)`;   // green → red
+
+// ---- 區間時數 (views kind "periodzones" → panels/period_zones.py). Self-contained: its styles (pzStyle),
+// the shared controls (心率／功率, zone model, sports, period, week／month — remembered in PZ.KEY and applied to
+// every periodzones card at once, so both charts always show the same model and colours), drawPeriodZones
+// (view "total": one bar per zone, x = zone, y = hours, labelled h:mm + share; the 3-zone summary against
+// the phase's target with a verdict) and pzWeekly (view "weekly": hours per zone stacked per week / month,
+// and below it on the same category axis the low-intensity share against the target — two panels, one y-scale each).
+// Zones are ordinal: one blue ramp, light → dark (dark mode: dim → bright), from OKLCH so 3–9 steps pass the
+// dataviz ordinal checks in both modes; every zone is also labelled (axis, legend, table), never colour alone.
+const PZ = { KEY: "wko5viewer.pzone",
+  status: { good: "#0ca30c", watch: "#fab219", warning: "#ec835a", serious: "#d03b3b", none: "#898781" } };
+function pzPrefs() { try { return JSON.parse(localStorage.getItem(PZ.KEY) || "{}"); } catch { return {}; } }
+function pzSave(patch) { try { localStorage.setItem(PZ.KEY, JSON.stringify({ ...pzPrefs(), ...patch })); } catch {} }
+function pzQuery(c) {
+  const p = pzPrefs(), kind = p.kind === "power" ? "power" : "hr", q = new URLSearchParams({ zkind: kind });
+  const m = (p.model || {})[kind];
+  if (m) q.set("zmodel", m);
+  if (p.sports?.length) q.set("zsports", p.sports.join(","));
+  if (c.view === "weekly") { if (p.group) q.set("zgroup", p.group); }
+  else if (p.period) {
+    q.set("zperiod", p.period);
+    if (p.period === "custom" && p.zbegin && p.zend) { q.set("zbegin", p.zbegin); q.set("zend", p.zend); }
+  }
+  return "&" + q.toString();
+}
+async function pzRefresh() {
+  const cards = [...document.querySelectorAll("#grid .card")].filter((k) => k._ctx?.c.kind === "periodzones");
+  await Promise.all(cards.map((card) => {
+    card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+    const { v, di, c, q } = card._ctx;
+    return renderCard(card, v, di, c, q, loadToken);
+  }));
+  if (ZOOM.card?._ctx?.c.kind === "periodzones") fillZoom();
+}
+function pzDark() {
+  const t = document.documentElement.dataset.theme;
+  return t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+}
+function pzHex(L, C, h) {             // OKLCH → sRGB hex
+  const a = C * Math.cos(h * Math.PI / 180), b = C * Math.sin(h * Math.PI / 180);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3,
+    s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  const enc = (x) => { x = Math.max(0, Math.min(1, x)); x = x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;
+    return Math.round(x * 255).toString(16).padStart(2, "0"); };
+  return "#" + enc(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s) + enc(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
+    + enc(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+}
+function pzRamp(n) {
+  // light: L .76 (≥ 2:1 on the surface) → .17; dark: L .43 (≥ 2:1 on the dark surface) → .98. Hue 255 (the palette blue).
+  const [L0, L1] = pzDark() ? [0.43, 0.98] : [0.76, 0.17];
+  return Array.from({ length: n }, (_, i) => {
+    const L = n === 1 ? (L0 + L1) / 2 : L0 + (L1 - L0) * i / (n - 1);
+    const C = 0.15 * Math.max(0.25, 1 - Math.abs((L - 0.55) / 0.45) ** 2);
+    return { hex: pzHex(L, C, 255), ink: L < 0.62 ? "#ffffff" : "#0b0b0b" };
+  });
+}
+function pzStyle() {
+  if (document.getElementById("pz-style")) return;
+  const st = document.createElement("style");
+  st.id = "pz-style";
+  st.textContent = `.pzbar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 2px 0 6px; font-size: 12px; }
+.pzbar .seg { font-size: 11.5px; padding: 1px; flex-wrap: wrap; max-width: 100%; }
+.pzbar .seg button { padding: 1px 9px; font-weight: 500; }
+.pzbar select { font-size: 12px; max-width: 220px; }
+.pzbar .sp button { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 12px; padding: 1px 9px;
+  font: inherit; font-size: 11.5px; cursor: pointer; }
+.pzbar .sp button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.pzbar .sp button[aria-pressed="true"]::before { content: "✓ "; }
+.pzbar input[type="date"] { font-size: 11.5px; padding: 1px 4px; }
+.pzhead { font-size: 11.5px; color: var(--muted); margin: 0 0 6px; }
+.pzhead b { color: var(--text); font-weight: 600; }
+.pzsum { margin: 0 0 8px; }
+.pzsum .h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.pzsum .h b { color: var(--text); font-weight: 600; }
+.pzv { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-left: 4px solid; border-radius: 6px;
+  padding: 1px 8px; color: var(--text); font-size: 12px; font-weight: 600; }
+.pztrack { position: relative; display: flex; height: 22px; border-radius: 4px; overflow: visible; background: var(--code); margin-bottom: 18px; }
+.pztrack > i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; white-space: nowrap;
+  overflow: hidden; border-right: 2px solid var(--panel); min-width: 0; }
+.pztrack > i:first-child { border-radius: 4px 0 0 4px; } .pztrack > i:last-of-type { border-right: 0; border-radius: 0 4px 4px 0; }
+.pztrack > em { position: absolute; top: -3px; bottom: -3px; border-left: 2px dashed var(--text); font-style: normal; }
+.pztrack > em span { position: absolute; top: 100%; left: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; padding-top: 2px; }
+.pztrack > em.tgt { border-left-style: solid; }
+.pzleg { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
+.pzleg span { white-space: nowrap; }
+.pzleg i { display: inline-block; width: 12px; height: 10px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
+.pzleg i.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text); }
+.pzleg i.tri { width: 0; height: 0; border-radius: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--muted); }
+.pzleg i.band { background: color-mix(in srgb, var(--muted) 22%, transparent); }
+.pzleg i.ln { height: 0; border-top: 2px dashed var(--muted); border-radius: 0; vertical-align: 3px; }
+.pzmeta { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; }
+.plot.pzt { height: 280px; } .plot.pzw { height: 400px; }
+details.pzdet { margin-top: 6px; } details.pzdet > summary { font-size: 12px; cursor: pointer; }
+details.pzdet table { margin-top: 4px; }`;
+  document.head.appendChild(st);
+}
+function pzStep(max) {                      // y-axis step in seconds: 10 min … 10 h
+  const steps = [600, 900, 1800, 3600, 7200, 10800, 18000, 36000, 72000];
+  return steps.find((s) => max / s <= 5) || 144000;
+}
+const pzTick = (v) => v === 0 ? "0" : v < 3600 ? `${Math.round(v / 60)} 分` : v % 3600 ? fmtDur(v, "hm") : `${v / 3600} h`;
+const pzPct = (x) => x == null ? "—" : `${Math.round(x * 100)}%`;
+function pzBar(card, res) {
+  // the shared controls; a change saves the preference and re-renders every periodzones card
+  const p = pzPrefs(), kind = res.zone_kind, weekly = res.view === "weekly";
+  const bar = document.createElement("div");
+  bar.className = "pzbar";
+  const seg = (k, items, cur, label) => `<div class="seg" role="group" aria-label="${label}" data-k="${k}">${items.map(([id, t]) =>
+    `<button type="button" data-v="${esc(id)}" class="${id === cur ? "on" : ""}" aria-pressed="${id === cur}">${esc(t)}</button>`).join("")}</div>`;
+  const ms = res.models[kind];
+  bar.innerHTML = seg("kind", [["hr", "心率"], ["power", "功率"]], kind, "心率或功率區間")
+    + `<label>模型 <select aria-label="區間模型">${ms.map((m) => `<option value="${esc(m.id)}"${m.id === res.model.id ? " selected" : ""}>${esc(m.title)}${m.estimate ? "（推估）" : ""}</option>`).join("")}</select></label>`
+    + `<span class="sp" role="group" aria-label="運動">${res.sport_choices.map((s) => `<button type="button" data-s="${s.id}" aria-pressed="${res.sports.includes(s.id)}">${esc(s.label)}</button>`).join(" ")}</span>`
+    + (weekly ? seg("group", [["auto", "自動"], ["week", "週"], ["month", "月"]], res.group_choice, "每週或每月")
+      : seg("period", res.period_choices.map((c) => [c.id, c.label]), p.period || "range", "期間")
+        + (res.period.key === "custom" || p.period === "custom" ? `<span class="pzcustom"><input type="date" aria-label="開始" value="${esc(p.zbegin || res.period.begin)}"> – <input type="date" aria-label="結束" value="${esc(p.zend || res.period.end)}"> <button type="button" class="chip">套用</button></span>` : ""));
+  card.appendChild(bar);
+  bar.querySelectorAll(".seg").forEach((s) => s.onclick = (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b || b.classList.contains("on")) return;
+    pzSave({ [s.dataset.k]: b.dataset.v });
+    if (s.dataset.k === "period" && b.dataset.v === "custom" && !(p.zbegin && p.zend))
+      pzSave({ zbegin: res.period.begin, zend: res.period.end });
+    pzRefresh();
+  });
+  bar.querySelector("select").onchange = (e) => { pzSave({ model: { ...(p.model || {}), [kind]: e.target.value } }); pzRefresh(); };
+  bar.querySelectorAll(".sp button").forEach((b) => b.onclick = () => {
+    const on = new Set(res.sports);
+    if (on.has(b.dataset.s)) { if (on.size === 1) return; on.delete(b.dataset.s); } else on.add(b.dataset.s);
+    pzSave({ sports: res.sport_choices.map((s) => s.id).filter((s) => on.has(s)) });
+    pzRefresh();
+  });
+  const cu = bar.querySelector(".pzcustom");
+  if (cu) cu.querySelector("button").onclick = () => {
+    const [a, b] = [...cu.querySelectorAll("input")].map((x) => x.value);
+    if (!a || !b) return;
+    pzSave({ period: "custom", zbegin: a, zend: b });
+    pzRefresh();
+  };
+}
+function pzThresholdText(res) {
+  const t = res.thresholds || [];
+  if (!t.length) return "";
+  if (t.length === 1) return `門檻：${t[0].text}`;
+  const vals = [...new Set(t.map((r) => r.value))];
+  if (vals.length === 1) return `門檻：${vals[0]}（${t.length} 個來源，見下方）`;
+  return `門檻依每次活動當天：${vals.length <= 3 ? vals.join("、") : `${t[0].value} → ${t[t.length - 1].value}`}（${t.length} 組，見下方）`;
+}
+function pzSkipText(res) {
+  const s = res.skipped || [];
+  return s.length ? "沒算進來：" + s.map((x) => `${x.reason} ${x.n} 次`).join("、") : "";
+}
+function pzDetailsThresholds(res) {
+  const t = res.thresholds || [];
+  if (t.length < 2) return "";
+  return `<details class="pzdet"><summary>用到的門檻（${t.length} 組）</summary><table class="zt"><thead><tr><th>門檻</th><th class="num">活動</th><th>期間</th></tr></thead><tbody>
+    ${t.map((r) => `<tr><td>${esc(r.text)}</td><td class="num">${r.n}</td><td class="meta">${esc(r.first)} – ${esc(r.last)}</td></tr>`).join("")}</tbody></table></details>`;
+}
+function pzVerdict(v) {
+  if (!v) return "";
+  return `<span class="pzv" style="border-left-color:${PZ.status[v.level] || PZ.status.none}" role="status"><span aria-hidden="true">${esc(v.icon)}</span>${esc(v.text)}</span>`;
+}
+function drawPeriodZones(card, res) {
+  pzStyle();
+  card.querySelector(".loading")?.remove();
+  if (res.description) {
+    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
+    else {
+      const h2 = card.querySelector("h2"), zb = h2?.querySelector(".zbtn");
+      const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
+      if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);
+    }
+  }
+  pzBar(card, res);
+  if (res.view === "weekly") return pzWeekly(card, res);
+  const per = res.period, ph = per.phase;
+  card.insertAdjacentHTML("beforeend", `<p class="pzhead"><b>${esc(per.label)}</b> ${esc(per.begin)} – ${esc(per.end)}（${per.days} 天）
+    · ${ph ? `階段：${esc(ph.label)}` : "沒有賽事周期"} · ${res.n_used}／${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
+    ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}${per.note ? ` · ${esc(per.note)}` : ""}</p>`);
+  if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
+  // 3-zone summary against the phase target (the verdict's basis)
+  const S_ = res.summary, tg = res.target, c3 = pzRamp(3);
+  if (S_?.total_s) {
+    const tip = [`3 區摘要（${S_.title}）`, ...S_.rows.map((r) => `${r.name}（${r.pct}）${fmtDur(r.seconds, "hm")} · ${pzPct(r.share)}`),
+      `低強度至少 ${pzPct(tg.low_floor)}${tg.low_target ? `；${ph?.label || ""}目標 ≥ ${pzPct(tg.low_target)}` : ""}`, ...tg.sources].join("\n");
+    card.insertAdjacentHTML("beforeend", `<div class="pzsum">
+      <div class="h"><b>3 區摘要</b><button type="button" class="qtip" aria-label="目標的來源" data-tip="${esc(tip)}">?</button>
+        <span>${S_.rows.map((r) => esc(r.pct)).join("／")}</span>${pzVerdict(res.verdict)}</div>
+      <div class="pztrack" role="img" aria-label="${esc(S_.rows.map((r) => `${r.name} ${pzPct(r.share)}`).join("，"))}">
+        ${S_.rows.map((r, i) => `<i style="width:${((r.share || 0) * 100).toFixed(2)}%;background:${c3[i].hex};color:${c3[i].ink}">${(r.share || 0) >= 0.08 ? `${esc(r.name.slice(0, 1))} ${pzPct(r.share)}` : ""}</i>`).join("")}
+        <em style="left:${tg.low_floor * 100}%"><span>${pzPct(tg.low_floor)}</span></em>
+        ${tg.low_target ? `<em class="tgt" style="left:${tg.low_target * 100}%"><span>目標 ${pzPct(tg.low_target)}</span></em>` : ""}
+      </div></div>`);
+  }
+  const rows = res.rows, col = pzRamp(rows.length), max = Math.max(1, ...rows.map((r) => r.seconds));
+  const el = document.createElement("div");
+  el.className = "plot pzt";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `${res.model.title}：各區間的移動時間；表格在下方`);
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+  const step = pzStep(max);
+  const paint = () => {
+    const w = el.clientWidth || 480, bw = Math.max(24, (w - 60) / rows.length - 6);
+    const maxCh = Math.max(3, Math.floor(bw / 6.4));       // ~6.4 px per Latin character at 10 px
+    const short = (s) => s.length > maxCh ? s.slice(0, maxCh - 1) + "…" : s;
+    chart.setOption({
+      animation: false,
+      grid: { left: 46, right: 10, top: 34, bottom: rows.length > 7 ? 30 : 44 },
+      tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: ink },
+        formatter: (q) => { const r = rows[q.dataIndex];
+          return `<div style="font-size:11.5px;line-height:1.5"><b>${esc(r.id)} ${esc(r.name)}</b><br>${esc([r.pct, r.range].filter(Boolean).join(" · "))}<br>${fmtDur(r.seconds, "hm")}（${pzPct(r.share)}）</div>`; } },
+      xAxis: { type: "category", data: rows.map((r) => r.id), axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
+        axisLabel: { interval: 0, color: ink, fontSize: 11,
+          formatter: (id, i) => rows.length > 7 ? `{z|${id}}` : `{z|${id}}\n{n|${short(rows[i].name)}}`,
+          rich: { z: { color: ink, fontSize: 11, fontWeight: 600 }, n: { color: muted, fontSize: 10 } } } },
+      yAxis: { type: "value", min: 0, interval: step, max: (v) => Math.ceil(v.max * 1.18 / step) * step || step,
+        axisLabel: { color: muted, fontSize: 10.5, formatter: pzTick }, splitLine: { lineStyle: { color: line, opacity: 0.7 } } },
+      series: [{ type: "bar", barMaxWidth: 46, barCategoryGap: "18%",
+        data: rows.map((r, i) => ({ value: r.seconds, itemStyle: { color: col[i].hex, borderRadius: [4, 4, 0, 0] } })),
+        label: { show: true, position: "top", color: ink, fontSize: 10.5, lineHeight: 13,
+          formatter: (q) => { const r = rows[q.dataIndex]; return r.seconds ? `${fmtDur(r.seconds, "hm")}\n${pzPct(r.share)}` : ""; } } }],
+    });
+  };
+  paint();
+  new ResizeObserver(() => { chart.resize(); paint(); }).observe(el);
+  const meta = [pzThresholdText(res), pzSkipText(res)].filter(Boolean).map(esc).join(" · ");
+  card.insertAdjacentHTML("beforeend", `${meta ? `<p class="pzmeta">${meta}</p>` : ""}${pzDetailsThresholds(res)}
+    <details class="pzdet"><summary>表格（${esc(res.model.title)}）</summary><table class="zt"><thead><tr><th>區</th><th>名稱</th><th>門檻 %</th><th>範圍</th><th class="num">時間</th><th class="num">佔比</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="meta">${esc(r.pct || "—")}</td><td class="meta">${esc(r.range || "依活動")}</td><td class="num">${fmtDur(r.seconds, "hm")}</td><td class="num">${pzPct(r.share)}</td></tr>`).join("")}
+    </tbody></table></details>`);
+}
+function pzWeekly(card, res) {
+  const G = res.groups, Z = res.zones, col = pzRamp(Z.length), month = res.group_by === "month";
+  const lab = (g) => { const [y, m, d] = g.start.split("-").map(Number); return month ? `${y}/${m}` : `${m}/${d}`; };
+  card.insertAdjacentHTML("beforeend", `<p class="pzhead">${esc(res.range.begin)} – ${esc(res.range.end)} · 每${month ? "月" : "週"}一根 · ${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
+    ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}</p>`);
+  if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
+  const tip = ["下方小圖：低強度（3 區摘要第 1 區）佔比", `所有階段 ≥ ${pzPct(res.low_floor)}；基礎期 ≥ 90%`, ...res.target_sources].join("\n");
+  card.insertAdjacentHTML("beforeend", `<div class="pzleg" aria-label="圖例">${Z.map((z, i) => `<span><i style="background:${col[i].hex}"></i>${esc(z.id)} ${esc(z.name)}</span>`).join("")}</div>
+    <div class="pzleg" aria-label="下方小圖圖例"><span><i class="dot"></i>低強度佔比達標</span><span><i class="tri"></i>沒達標</span>
+      <span><i class="band"></i>目標帶（75% 到該階段目標）</span><span><i class="ln"></i>75% 護欄</span>
+      <button type="button" class="qtip" aria-label="目標的來源" data-tip="${esc(tip)}">?</button></div>`);
+  const el = document.createElement("div");
+  el.className = "plot pzw";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `每${month ? "月" : "週"}各區間的時數（堆疊）與低強度佔比；表格在下方`);
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+  const cats = G.map(lab), max = Math.max(1, ...G.map((g) => g.total_s)), step = pzStep(max);
+  const lows = G.map((g) => g.low_share).filter((x) => x != null);
+  const yMin = Math.min(0.5, Math.floor((lows.length ? Math.min(...lows) : 0.5) * 10) / 10);
+  const bandColor = pzDark() ? "rgba(195,194,183,0.16)" : "rgba(137,135,129,0.18)";
+  const zoneSeries = Z.map((z, i) => ({ name: `${z.id} ${z.name}`, type: "bar", stack: "t", xAxisIndex: 0, yAxisIndex: 0, barMaxWidth: 34,
+    data: G.map((g) => g.seconds[i] || 0), itemStyle: { color: col[i].hex, borderColor: panel, borderWidth: 1 },
+    emphasis: { focus: "series" } }));
+  chart.setOption({
+    animation: false,
+    grid: [{ left: 58, right: 12, top: 22, height: "58%" }, { left: 58, right: 12, top: "74%", bottom: 24 }],
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: ink },
+      formatter: (pp) => {
+        const i = [].concat(pp)[0]?.dataIndex; const g = G[i]; if (!g) return "";
+        const zr = Z.map((z, k) => g.seconds[k] ? `<span style="color:${col[k].hex}">■</span> ${esc(z.id)} ${esc(z.name)} <b>${fmtDur(g.seconds[k], "hm")}</b>` : "").filter(Boolean);
+        return `<div style="font-size:11.5px;line-height:1.5"><b>${esc(g.start)} – ${esc(g.end)}</b>${g.phase ? ` · ${esc(g.phase.label)}` : ""}<br>
+          合計 ${fmtDur(g.total_s, "hm")}（${g.n} 次）<br>${zr.join("<br>")}<br>低強度 ${pzPct(g.low_share)}${g.low_target ? `（目標 ≥ ${pzPct(g.low_target)}）` : ""}<br>${esc(g.verdict.icon)} ${esc(g.verdict.text)}</div>`;
+      } },
+    xAxis: [{ type: "category", data: cats, gridIndex: 0, axisTick: { show: false }, axisLabel: { show: false }, axisLine: { lineStyle: { color: line } } },
+      { type: "category", data: cats, gridIndex: 1, axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
+        axisLabel: { color: muted, fontSize: 10.5, hideOverlap: true } }],
+    yAxis: [{ type: "value", gridIndex: 0, min: 0, interval: step, max: (v) => Math.ceil(v.max * 1.12 / step) * step || step,
+        axisLabel: { color: muted, fontSize: 10.5, formatter: pzTick }, splitLine: { lineStyle: { color: line, opacity: 0.7 } } },
+      { type: "value", gridIndex: 1, min: yMin, max: 1, interval: (1 - yMin) / 2, name: "低強度", nameLocation: "middle", nameGap: 42,
+        nameTextStyle: { color: muted, fontSize: 10.5 },
+        axisLabel: { color: muted, fontSize: 10, formatter: (v) => `${Math.round(v * 100)}%` }, splitLine: { lineStyle: { color: line, opacity: 0.5 } } }],
+    series: [...zoneSeries,
+      { name: "合計", type: "bar", stack: "t", xAxisIndex: 0, yAxisIndex: 0, silent: true, data: G.map(() => 0), itemStyle: { color: "transparent" },
+        label: { show: G.length <= 16, position: "top", color: ink, fontSize: 10, formatter: (q) => G[q.dataIndex].total_s ? fmtDur(G[q.dataIndex].total_s, "hm") : "" },
+        tooltip: { show: false } },
+      { name: "目標帶", type: "custom", xAxisIndex: 1, yAxisIndex: 1, silent: true, z: 1, data: G.map((g, i) => [i, g.low_target || 0]),
+        renderItem: (params, api) => {
+          const g = G[params.dataIndex]; if (!g.low_target) return null;
+          const x = api.coord([params.dataIndex, 0])[0], w = api.size([1, 0])[0];
+          const y0 = api.coord([0, res.low_floor])[1], y1 = api.coord([0, g.low_target])[1];
+          return { type: "rect", shape: { x: x - w / 2, y: y1, width: w, height: y0 - y1 }, style: { fill: bandColor } };
+        } },
+      { name: "低強度佔比", type: "scatter", xAxisIndex: 1, yAxisIndex: 1, z: 3, symbolSize: 9,
+        data: G.map((g) => {
+          if (g.low_share == null || g.verdict.level === "none") return { value: null };
+          const ok = g.verdict.level === "good";
+          return { value: g.low_share, symbol: ok ? "circle" : "triangle",
+            itemStyle: ok ? { color: ink, borderColor: panel, borderWidth: 1.5 } : { color: panel, borderColor: ink, borderWidth: 1.5 } };
+        }),
+        markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: "dashed", width: 1 }, label: { show: false },
+          data: [{ yAxis: res.low_floor }] } }],
+  });
+  new ResizeObserver(() => chart.resize()).observe(el);
+  const meta = [pzThresholdText(res), pzSkipText(res)].filter(Boolean).map(esc).join(" · ");
+  card.insertAdjacentHTML("beforeend", `${meta ? `<p class="pzmeta">${meta}</p>` : ""}${pzDetailsThresholds(res)}
+    <details class="pzdet"><summary>表格（每${month ? "月" : "週"}）</summary><div style="overflow-x:auto"><table class="zt"><thead><tr><th>${month ? "月" : "週"}</th>${Z.map((z) => `<th class="num">${esc(z.id)}</th>`).join("")}<th class="num">合計</th><th class="num">低強度</th><th>判定</th></tr></thead><tbody>
+    ${G.map((g, i) => `<tr><td>${esc(cats[i])}${g.phase ? ` <span class="meta">${esc(g.phase.label)}</span>` : ""}</td>${g.seconds.map((s) => `<td class="num">${s ? fmtDur(s, "hm") : "—"}</td>`).join("")}<td class="num">${fmtDur(g.total_s, "hm")}</td><td class="num">${pzPct(g.low_share)}</td><td>${esc(g.verdict.icon)} ${esc(g.verdict.text)}</td></tr>`).join("")}
+    </tbody></table></div></details>`);
+}
 
 function drawTargets(card, res) {
   card.querySelector(".loading")?.remove();
