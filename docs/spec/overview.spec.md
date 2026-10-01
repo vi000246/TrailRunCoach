@@ -187,6 +187,19 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
   8×10 s hill strides.
 - Targets per session come from `zones.training_targets` (CP / LTHR / AeT, estimate-aware),
   formatted by `_targets` (`backend/engine/overview.py:374`).
+- A season-plan threshold row applies from its own date on, never to earlier days
+  (`planning.Plan.threshold_on`, `backend/engine/planning.py:205`, fixed 2026-10-01). Before the
+  first row, `Dataset.setting` / `cp` / `aethr` fall back to WKO5's dated settings (runthr, the
+  current mFTP snapshot, 0.89 × LTHR). Today's thresholds come from the last run moved to today
+  (`zones._on_day`, `backend/engine/zones.py:113`; also `status._aet_now` and the LTHR estimate's
+  CP), so a test dated after WKO5's last run still applies. Today's CP 204 / LTHR 155 / AeT 138,
+  the targets and the zone bounds are unchanged. Indicators that judge each past run with its
+  own-date AeT do move (2026-10-01, WKO5 source): 強度分配 mid share 26 % → 35 % (still bad);
+  效率 good 「進步」 → info 「持平」; drift-eligible easy runs 1 → 6 (still too few).
+  Past days change back to their pre-2026-09-30 values: hrTSS of past runs uses LTHR 160
+  instead of 155 (365-day TSS −0.7 %, CTL today 20.40 → 20.28 in the evaluator).
+  `workout_review` again labels 36 past hard 5 km runs (2025-10 … 2026-07) `test_cp` by power
+  pattern against mFTP 175.6 W. None of them falls in the 28 / 42-day windows the overview reads.
 - With active preferences the template is then shaped by `plan_prefs.shape()`
   (`backend/engine/overview.py:617`; see 課表偏好 below).
 
@@ -809,5 +822,6 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feature | N/A | 間歇門檻 (quality_gate.py, `plan.prefs.quality_gate` / `_weeks`; design docs/research/aerobic-base-readiness.md): 7 modes, guardrails, the 6-week dose table, recovery-week fartlek, forced-mode fallback (自訂), i_gate / informational i_drift, per-week projection; AeT drift test (aet_test.py: due cadence, session, COROS steps, UA bands, 「套用這次的 AeT」 on the review card and 測試 card, apply-estimate `date`); prefs chips with fixed-position `?` hover; the 「連續 3 次」 rule and UA misattributions removed |
 | 2026-10-01 | feature | N/A | CP 測試方式 (`plan.prefs.cp_test_protocol`, quick default / standard / race; cp_protocols.py): per-protocol test session with `protocol` (column + migration, reconcile field), race = a 還缺什麼 note instead of a session, protocol-specific cap note and COROS steps (all-out bouts open), same-method comparison in i_testing, 測試 card apply button |
 | 2026-10-01 | feature | docs/research/heat-acclimation.md | 熱適應: `i_heat` (S, doses, HRC, race-day S), 熱適應課 in week_plan / project_weeks (heat_plan.py: induction / maintenance, ≥ 60 min cap exemption `NOTE_HEAT`, hard cap → 40 min + bath, methods), `heat_passive` (side kind, TSS 0, never pushed, ticked = a dose), `plan.prefs.heat` / `heat_method` (not shaping), COROS heat-run steps, Event.heat, 課表 page 熱 tag + prefs block, 總覽 heat card |
+| 2026-10-01 | bugfix | N/A | Thresholds never apply backwards: `Plan.threshold_on` returns None before a row's date (the 2026-09-30 CP 204 / LTHR 155 row had leaked into every earlier date); past days use WKO5's dated settings; today's values unchanged |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 自組), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
