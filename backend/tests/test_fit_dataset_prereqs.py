@@ -72,7 +72,7 @@ def test_coros_trail_runs_classified_from_db(tmp_path, app_db):
         (2, str(paths[1]), "coros", "road", 0, None),
         (3, str(paths[2]), "coros", "unknown", 0, None),
     ]))
-    ds = FitFolderDataset(root, config=EngineConfig(parity=True), today=TODAY)
+    ds = FitFolderDataset(root, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=False)
     w0, w1, w2 = ds.workouts
     assert w0.sport_type == "trail running" and "runningtrail" in w0.tags
     assert w1.sport_type == "running" and w1.tags == []
@@ -183,13 +183,15 @@ def test_estimated_thresholds_fill_unset_dates(tmp_path, monkeypatch):
         (d / f"{i}.fit").write_bytes(build_run(start, seconds=1800, hr=150, power=220))
     monkeypatch.setattr(A, "cp_as_of", lambda ds, day: 240.0)
     monkeypatch.setattr(TH, "estimate", lambda ds, day, cp_of=None: {"lthr": {"value": 160.0}})
-    ds = FitFolderDataset(d, config=EngineConfig(parity=True), today=TODAY)
+    assert FitFolderDataset(d, config=EngineConfig(parity=True), today=TODAY).athlete.settings == {}  # no app DB: auto off
+    ds = FitFolderDataset(d, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=True)
     first = ds.workouts[0].entry.start.date()
     hist = ds.athlete.settings["runthr"]
     assert hist[0] == FD.NOT_BEFORE and hist[1][0] == first + dt.timedelta(days=FD.ESTIMATE_STEP_DAYS)
     assert ds.sport_setting("thr", ds.workouts[0]) is None            # before the first estimate
     late = ds.workouts[-1]
-    assert ds.sport_setting("thr", late) == 160.0 and ds.sport_setting("ftp", late) == 240.0
+    assert ds.sport_setting("thr", late) == 160.0
+    assert ds.sport_setting("ftp", late) is None and ds.cp(late) is None   # CP is never filled from the PD refit
     assert late.metrics["hrtss"] is not None and ds.workouts[0].metrics["hrtss"] is None
     assert ds.setting_label("runthr").startswith("自動估算")
 

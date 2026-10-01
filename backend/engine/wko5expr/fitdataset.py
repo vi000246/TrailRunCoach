@@ -70,7 +70,6 @@ SETTING_LABELS = {
     "wko5": "WKO5 athlete 檔（選用）",
     "db": "athlete_settings（app DB）",
     "estimate": "自動估算（當天以前的跑步，Friel 30 分鐘段）",
-    "estimate_cp": "自動估算（當天以前 90 天的 PD 模型 mFTP）",
     "unset": "未設定",
 }
 IGNORED_WHY = ("COROS 帳號 zoneData 的值（coros_client.login 寫入），沒有記錄是哪個運動；"
@@ -295,7 +294,7 @@ class FitFolderDataset(Dataset):
                  today: Optional[dt.date] = None, config: Optional[EngineConfig] = None,
                  corrections: Optional[CorrectionStore] = None, source: str = "fit",
                  tz: Optional[dt.tzinfo] = None, classifications: Optional[dict] = None,
-                 athlete_settings: Optional[list] = None, estimate_thresholds: bool = True):
+                 athlete_settings: Optional[list] = None, estimate_thresholds: Optional[bool] = None):
         from backend.engine.planning import Plan
         from backend.engine.wko5expr.datasource import athlete_tz
         from backend.files.fit_to_channels import fit_to_channels
@@ -378,6 +377,12 @@ class FitFolderDataset(Dataset):
             w.metrics = self._metrics(w)
         self.first_day = int(np.floor(self.workouts[0].day)) if self.workouts else int(self.today)
         self.last_day = int(np.floor(self.workouts[-1].day)) if self.workouts else int(self.today)
+        # None = auto: only on the app's own data (an app DB exists). The
+        # estimate reads the user's synced FIT folder too (pd_model ->
+        # cptest.curves(~/.wko5coach)), so a bare folder (tests, a scratch
+        # copy) does not estimate unless asked to.
+        if estimate_thresholds is None:
+            estimate_thresholds = _app_db() is not None
         if self.settings_from == "app" and estimate_thresholds and self.workouts:
             if self._estimate_settings():
                 for w in self.workouts:          # hrTSS / rTSS / power TSS with the estimated thresholds
@@ -438,44 +443,46 @@ class FitFolderDataset(Dataset):
                                                   "why": IGNORED_WHY})
 
     def _estimate_settings(self) -> bool:
-        """As-of running LTHR and CP estimated from these FITs, on a grid of
-        dates every ESTIMATE_STEP_DAYS: the value estimated on a grid day
-        (only runs up to that day: racepower.athlete.cp_as_of = the WKO5 PD
-        model refitted on the 90-day mean-max; thresholds.estimate = Friel
-        30-min-segment LTHR against that CP) applies from that day to the
-        next. A plan test still wins (Dataset.setting / cp look at the plan
-        first); a DB run_ftp_w row is kept. True when anything was set."""
+        """As-of running LTHR estimated from these FITs, on a grid of dates
+        every ESTIMATE_STEP_DAYS: the value estimated on a grid day (only runs
+        up to that day: thresholds.estimate = Friel 30-min-segment LTHR, each
+        run against racepower.athlete.cp_as_of its own date) applies from that
+        day to the next. A plan test still wins (Dataset.setting looks at the
+        plan first). True when anything was set.
+
+        CP / run FTP is NOT filled from the estimate: cp_as_of's PD refit has
+        no plausibility reference before the first plan CP and gave 362–384 W
+        for 2024-06…12 on this athlete's COROS data (plan CP 204 W), which
+        would cut every power TSS there ~4×. Without a plan / DB value those
+        runs fall back to hrTSS (with the estimated LTHR) or stay unset."""
         from backend.engine.racepower import athlete as A
         from backend.engine.thresholds import estimate
         runs = [w for w in self.workouts if w.sport == "run"]
         if not runs:
             return False
+        # module-level memos keyed on id(ds): a freed dataset's id can be reused
+        for memo in (A._cp_memo, A._est_memo):
+            for k in [k for k in memo if k[0] == id(self)]:
+                del memo[k]
         first = runs[0].entry.start.date() + dt.timedelta(days=ESTIMATE_STEP_DAYS)
         end = min(day_to_date(self.today), runs[-1].entry.start.date())
-        s = self.athlete.settings
-        thr, ftp = [], []
+        thr = []
         day = first
         while day <= end:
             try:
-                cp = A.cp_as_of(self, day)
                 est = estimate(self, day, cp_of=lambda d: A.cp_as_of(self, d))
             except Exception as e:           # noqa: BLE001
                 log.warning("FIT dataset: threshold estimate %s failed (%s)", day, type(e).__name__)
-                cp, est = None, {}
+                est = {}
             v = (est.get("lthr") or {}).get("value")
             if v:
                 thr.append((day, float(v)))
-            if cp and "runftp" not in s:
-                ftp.append((day, float(cp)))
             day += dt.timedelta(days=ESTIMATE_STEP_DAYS)
         if thr:
-            s["runthr"] = [NOT_BEFORE] + thr
+            self.athlete.settings["runthr"] = [NOT_BEFORE] + thr
             self._setting_labels["runthr"] = SETTING_LABELS["estimate"]
-        if ftp:
-            s["runftp"] = [NOT_BEFORE] + ftp
-            self._setting_labels["runftp"] = SETTING_LABELS["estimate_cp"]
         self.memo.clear()
-        return bool(thr or ftp)
+        return bool(thr)
 
     def _refresh_hr_fields(self, w: Workout) -> None:
         """Recompute the LTHR-dependent hrTSS / hrIF after the estimates."""
