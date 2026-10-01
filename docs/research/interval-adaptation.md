@@ -8,7 +8,8 @@
 
 ## 0. 結論先講
 
-1. **「休息 60 秒內心率掉回有氧閾值＝適應了，可以加趟」只有徐國峰一個來源，而且他的有氧閾值指的是 70% 儲備心率（HRR），不是 app 實測的 AeT。** 文獻裡沒有這條規則。心率恢復在研究裡是很雜訊的指標，而且功能性過量訓練時反而會變快（§3.1）。所以它只能當**輔助訊號**，要跟功率達標一起看，不能單獨拿來決定加趟。
+1. **「休息 60 秒內心率掉回有氧閾值＝適應了，可以加趟」只有徐國峰一個來源，而且他的有氧閾值指的是 70% 儲備心率，不是 app 實測的 AeT。**
+   - 本文的「HRR」一律指心率恢復（heart-rate recovery）；儲備心率都寫全名。 文獻裡沒有這條規則。心率恢復在研究裡是很雜訊的指標，而且功能性過量訓練時反而會變快（§3.1）。所以它只能當**輔助訊號**，要跟功率達標一起看，不能單獨拿來決定加趟。
 2. **WKO5 有的是「目標」演算法，不是「進階」演算法。**
    - Optimized Intervals／iLevels 用功率–時間模型算出每一級的**每趟時間＋功率**。
    - 組數、組休比、區間總時間（TIZ）是教練寫死的建議值（Cusick 和 Golich 定的）。
@@ -21,10 +22,10 @@
    - 再加長每趟時間，或縮短組休。
    - 最後才加功率。
    - 平日 40–50 分鐘的上限會擋住「加組」，所以要先把上限算進去再選哪個維度（§4.1）。
-5. **資料缺口：**
-   - COROS 的 FIT lap 沒有 `wkt_step_index`、`intensity`、`lap_trigger`（已查最近 12 個檔）。
-   - 推送的結構化課表會不會把每個 step 切成一個 lap，還沒驗證。
-   - 也沒有靜息心率，所以算不出 HRR 70%（§4.4）。
+5. **資料：**
+   - 推送到 COROS 的課表，計時的 step 會各切成一個 lap。2026-09-30 推送的 CP 測試，lap 正好是 180.0 s 和 720.0 s。
+   - 但 lap 沒有 `wkt_step_index`、`intensity`、`lap_trigger`（已查最近 12 個檔），所以要靠順序和時長對回計畫。
+   - 沒有靜息心率，算不出 70% 儲備心率（§4.4）。
 
 ---
 
@@ -39,7 +40,8 @@
   - 影片：「6.1.2 常見跑步課表的訓練要領｜間歇跑(Interval)」，13:53。
   - 投影片寫：「關鍵指標：恢復秒數」「看每一趟間歇結束後，心率從高點 → 掉到有氧閾值（HRR 70%）所需的時間長短」。
   - **投影片上沒有「60 秒」**。60 秒是你從口述記下來的。
-  - **投影片上的有氧閾值＝70% 儲備心率**：靜息心率＋0.7×（最大心率−靜息心率）。
+  - **投影片上的有氧閾值（寫作「HRR 70%」）＝70% 儲備心率**：靜息心率＋0.7×（最大心率−靜息心率）。
+  - 你的筆記 `60 🏃 有氧訓練/各心率區間的目的.md:14` 也用「% HRR」表示儲備心率。
 
 徐國峰另外的門檻是**開始練間歇**的時機，不是適應：
 - `70 ⏳ 周期化訓練/400 爆發力、敏捷性、專項耐力周期.md:5`：「E配速90分鐘的心率飄移%…確定在10%以下之後就可以開始練間歇」
@@ -163,7 +165,7 @@
 
 - HRR 的「最小有意義變化」（幾 bpm 才算有變）：**未找到來源**。
 
-**「60 秒內掉回 AeT／70% HRR 就能加趟」：**
+**「60 秒內掉回 AeT／70% 儲備心率就能加趟」：**
 - 同儕審查文獻裡**未找到來源**。
 - 中文網路來源因為搜尋額度用完沒查到，等額度恢復再查一次。
 - 經典的 Gerschler／Reindell「休到心率 120 下一趟」：**未驗證**。
@@ -177,7 +179,7 @@
 
 | 研究 | 發現 | 讀到哪裡 |
 |---|---|---|
-| Seiler & Hetlelid 2005 | 訓練有素的跑者做 6×4 分，組休 1／2／4 分。組休 2 分時配速最好、VO2 最高（66.2 vs 65.1／64.9 mL/kg/min）。自選組休平均 118±23 秒。結論：4 分鐘的趟，約 2 分鐘主動恢復最好。 | 摘要 |
+| Seiler & Hetlelid 2005 | 訓練有素的跑者做 6×4 分，組休 1／2／4 分。配速 14.4／14.7／14.7 km/h（休 2 分和 4 分一樣）；VO2 以休 2 分最高（66.2 vs 65.1／64.9 mL/kg/min）。自選組休平均 118±23 秒。結論：4 分鐘的趟，約 2 分鐘主動恢復最好。 | 摘要 |
 | Seiler & Sjursen 2004 | 1 分鐘的趟 VO2 只到 82±5%；2–6 分鐘的趟到 92±4%。自選強度時，每趟 3–5 分最好。 | 摘要 |
 | Dupont 2004、Thevenet 2007、Tardieu-Berger 2004、Ben Abderrahman 2013 | 被動恢復能撐的時間約是主動恢復的 2 倍。在 ≥ 90% VO2max 的絕對時間差不多。 | 摘要 |
 | Thevenet 2008 | 主動恢復強度在最大有氧速度的 50% 或 67% 時，≥ 90% VO2max 的時間差不多；84% 時明顯變少。 | 摘要 |
@@ -282,10 +284,13 @@
 ### 4.2 (b) 檢討：從 FIT 判斷每一趟
 
 **找出每一趟：**
-1. **有推送的課表 → 用 FIT 的 lap 對到計畫的 step。** 用時長比對，誤差 ±5 秒內（自組）。
-   - 2026-09-30 的 CP 測試 lap 正好是 180.0 s 和 720.0 s，休息 lap（989 s）也有記錄。
-   - 但那是手動按 lap 的，推送的課表會不會自動切 lap 還**未驗證**（見 §4.5 S0）。
-   - lap 對應用 `racepower/cptest._read` 的同一套讀法。
+1. **有推送的課表 → 依順序把 FIT 的 lap 對到計畫的 step。**
+   - 證據：2026-09-30 的「CP 測試 3 分 + 12 分」有 `coros_plan_push` 紀錄，FIT 的 lap 是 536／180.0／989／720.0／479 s。
+     - 計時的全力段剛好等於 step 的長度。
+     - 暖身和休息不是整數，表示按 lap 可以提早結束一個 step。
+   - 所以：用**順序**對 step；用時長（±5 秒，自組）確認是不是工作段；休息 lap 的實際長度照記錄。
+   - 讀 lap 的方法跟 `racepower/cptest._read` 一樣。
+   - 1 分鐘的趟會不會也切 lap，還**未驗證**（S0）。
 2. **對不到 → 用功率型態偵測。** 把 `count_reps` 和 `detect_efforts` 合成一支 `find_reps(t, power, plan)`：
    - 平滑窗：每趟 < 90 秒用 10 秒，否則 30 秒。
    - 門檻：`0.95 × 計畫下限`。
@@ -303,7 +308,7 @@
 | `hr_peak` | 結束前 10 秒到結束後 15 秒的最高心率 | 現有 `detect_efforts` |
 | `hr_at60`、`drop60` | 結束後第 60 秒的心率，以及 `hr_peak − hr_at60` | 現有；組休 < 60 秒時沒有值 |
 | `t_to_aet` | 組休內第一次 ≤ AeT 的秒數 | 徐國峰 |
-| `aet60` | `t_to_aet ≤ 60` | 徐國峰的門檻；**AeT 用 app 的實測 AeT 代替 HRR 70%**，有靜息心率時改用 HRR 70% |
+| `aet60` | `t_to_aet ≤ 60` | 徐國峰的門檻；**AeT 先用 app 的實測 AeT 代替 70% 儲備心率**，有靜息心率時改用 70% 儲備心率 |
 | `wbal_min` | 每趟結束時 dFRC 的最低點 | WKO5 `dfrc`（`_dfrc`），只顯示 |
 | `hr_creep` | 每一趟 `hr_peak` 比第一趟高多少（同功率） | 只顯示，**未找到來源**門檻 |
 
@@ -318,16 +323,20 @@
 
 每一堂分成三類。只有**達標**才往前；判斷依據功率為主，心率只當煞車。
 
+**判斷順序：未適應 → 邊界 → 達標。** 前面的條件先成立就停。
+
 | 結果 | 條件 | 下一堂 | 來源 |
 |---|---|---|---|
-| **達標** | `done = 1`；所有趟都 `in_band`，或只有最後一趟沒在帶內；有心率時 `aet60_share ≥ 0.5`；RPE ≤ 7（沒填就略過） | 進階一個維度（見下） | BI:357-358；IT2:84-86；徐國峰；0.5 和 7 屬自組 |
-| **邊界** | 功率達標，但 `aet60_share < 0.5`；或 RPE ≥ 8；或 `first_miss` 是最後一趟、而且掉 > 5% | 同一份課表再做一次 | ROLE:517「維持六組再做幾次」；徐國峰（煞車）；> 5% 屬自組 |
-| **未適應** | `done < 1`；或 `first_miss` 落在第 2 趟到倒數第 2 趟 | 先保持組數、組休多 1 分鐘。下一堂還是未適應，就退回劑量表上一步 | IT2:84-86、IT2:233-235；FR:238 |
+| **未適應** | `done < 1`；或 `first_miss` 落在第 2 趟到倒數第 2 趟 | 先保持組數、組休多 1 分鐘。下一堂還是未適應，就退回劑量表上一步 | IT2:84-86（Golich 說「第二或第三個」；推廣到倒數第 2 趟屬自組）、IT2:233-235；FR:238 |
+| **未適應（目標太高）** | `first_miss = 1`（第一趟就沒到） | 目標功率下修 5%，組數不變 | ROLE:499「下修 5～10%」 |
+| **邊界** | 有 `hr_at60` 時 `aet60_share < 0.5`；或 RPE ≥ 8；或只有最後一趟沒到、而且掉 > 5% | 同一份課表再做一次 | ROLE:517「維持六組再做幾次」；徐國峰（煞車）；0.5、8、5% 屬自組 |
+| **達標** | 以上都不成立：`done = 1`，所有趟都 `in_band`，或只有最後一趟沒到而且掉 ≤ 5% | 進階一個維度（見下） | BI:357-358；IT2:84-86；ROLE:514（「蠻輕鬆的」→ 加組） |
 
 **疲勞保險（f-OR）：**
 - 情況：`drop60` 比 8 週中位數快，**但**功率沒達標或 RPE 偏高。
 - 處理：當作未適應，並在 status 提示「可能累積疲勞」。
 - 來源：Aubry 2015、Bellenger 2016。觸發條件屬自組。
+- 限制：`baseline()` 要 ≥ 5 個樣本，FIT 資料夾裡目前一堂間歇都沒有，所以前 5 堂不會觸發。
 
 **進階的維度順序（達標時）：**
 1. **加組數或總時間，加到上限：**
@@ -356,12 +365,12 @@
 | 1 秒功率、心率（COROS／Stryd） | 有 |
 | CP、W′（3′/12′ 測試）、mFTP／TTE（WKO5 模型） | 有 |
 | 實測 AeT（plan threshold 列）、LTHR | 有；LTHR 可能還是 WKO5 預設，`lthr_default` |
-| FIT lap（時長、平均功率／心率、最高／最低心率） | 有：COROS 每 1 km 自動 lap；手動 lap 會留下休息 lap |
+| FIT lap（時長、距離、平均功率／心率、最高／最低心率） | 有。一般跑步每 1000 m 自動切 lap（已核對 09-24、09-28 的距離） |
 | FIT lap 的 `wkt_step_index`、`intensity`、`lap_trigger` | **沒有**（最近 12 個 COROS 檔都沒這些欄位） |
-| 推送的結構化課表會不會在 FIT 裡把每個 step 切成 lap | **未驗證**：最近 12 個檔裡沒有推送的間歇課 |
+| 推送的課表在 FIT 裡每個 step 一個 lap | **有**：09-30 推送的 CP 測試，5 個 step 對到 5 個 lap，計時段剛好 180.0／720.0 s。1 分鐘的趟還**未驗證** |
 | FIT 裡的 `workout`／`workout_step` 訊息 | **未驗證**：`fit_reader` 沒讀這兩種訊息 |
 | 活動對應到計畫的哪一堂 | 有一部分：`_done_by_this`／`scheduled_test` 只處理測試課 |
-| 靜息心率（算 HRR 70%） | **缺**：只有 racepower 估的 HRmax |
+| 靜息心率（算 70% 儲備心率） | **缺**：只有 racepower 估的 HRmax |
 | session RPE | **缺** |
 | HRV | **缺** |
 
@@ -369,13 +378,13 @@
 
 | 步驟 | 做什麼 | 檔案 | 測試 |
 |---|---|---|---|
-| **S0** | 不寫程式。推送一堂 5×1′ 到 COROS，跑完後抓 FIT，用 scratchpad 的 lap dump 確認：每個 step 是否一個 lap、有沒有 `wkt_step_index`、休息 lap 是否存在。後面 S2 怎麼做看這一步的結果。 | — | — |
+| **S0** | 不寫程式。推送一堂 5×1′ 到 COROS，跑完後抓 FIT，確認 1 分鐘的趟和 2 分鐘的休息也是各一個 lap。CP 測試已確認計時 step 會切 lap。 | — | — |
 | **S1** | 每一趟的指標：`detect_efforts` 加 `hr_end`、`hr_at60`、`t_to_aet`、`aet60`、`wbal_min`（呼叫 `_dfrc`）；`interval_summary` 加 `first_miss`、`aet60_share`；`CACHE_KEY` 升到 v9 | `engine/workout_review.py` | `test_workout_review.py`：用 `fit_builder` 合成的 5×1′ 串流，心率在第 40／70 秒掉到 AeT，檢查 `aet60`；組休 45 秒時沒有 `hr_at60` |
 | **S2** | 找出每一趟：新檔 `find_reps(t, power, plan)`，以及 `match_laps(plan_steps, laps)`；把活動連到計畫的品質課（plan_store 的 uid） | 新增 `engine/interval_reps.py`；`files/fit_reader.py`（讀 lap 欄位，有的話再讀 `workout_step`） | 新增 `test_interval_reps.py`：lap 完全對得上、少一趟、沒有 lap 時的功率偵測、1 分鐘的趟 |
 | **S3** | 判斷結果：`interval_outcome(reps, plan, aet, rpe)` → 達標／邊界／未適應；`dose_history` 改存 `outcome`；`dose_step` 改成達標才 +1 | `engine/quality_gate.py` | `test_quality_gate.py`：每一列（只有最後一趟掉、第 2 趟掉、心率煞車、f-OR 保險） |
 | **S4** | 可調的課表規格：`IntervalSpec` 和 `next_spec(prev, outcome, cap)`；`session()` 由規格產生 title／detail（COROS 的 `_quality_steps` 仍能解析）；`trim_quality` 不減到比上一堂完成的組數少 | `quality_gate.py`、`plan_prefs.py`、`sync/coros_workouts.py` | `test_quality_gate.py`、`test_plan_prefs.py`（上限 45 分時走第 2 維度）、`test_coros_workouts.py`（30 秒組休、走路恢復） |
 | **S5** | 專項期爬坡階梯、減量期規則、projection 的預測週 | `overview.py`、`projection.py` | `test_overview.py`、`test_planning.py` |
-| **S6** | UI：間歇卡加 `t_to_aet`、`aet60`、`wbal_min` 欄位與結論列；session RPE 輸入；選填的靜息心率設定（有了就改用 HRR 70%） | `workout_review._intervals`、static、`settings/repository.py` | `test_panels_workout.py` |
+| **S6** | UI：間歇卡加 `t_to_aet`、`aet60`、`wbal_min` 欄位與結論列；session RPE 輸入；選填的靜息心率設定（有了就改用 70% 儲備心率） | `workout_review._intervals`、static、`settings/repository.py` | `test_panels_workout.py` |
 
 規格同步：S1–S4 合併後跑 `/prp-spec`，更新 `docs/spec/workout-review.spec.md`，並在 `aerobic-base-readiness.md` §4.5 加一行指向這份文件。
 
