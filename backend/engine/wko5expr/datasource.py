@@ -62,6 +62,33 @@ def athlete_tz(user_id: int = 1):
     return resolve_tz(read_setting("athlete.timezone", None, user_id))
 
 
+def db_stamp() -> str:
+    """What a FIT dataset reads from the app DB besides the files: the trail
+    classification (incl. user overrides), the duplicate links and the
+    athlete_settings rows (fitdataset.py). A change there must rebuild the
+    cached Dataset even when no FIT file changed. Read-only; "" without a DB."""
+    db = _db_path()
+    if db is None or not db.exists():
+        return ""
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            a = con.execute("SELECT count(*), sum(trail_classification='trail'), sum(trail_classification='road'), "
+                            "sum(classification_overridden), sum(duplicate_of IS NOT NULL), "
+                            "sum(coalesce(duplicate_of, 0)) FROM workout_files").fetchone()
+            try:
+                b = con.execute("SELECT count(*), max(effective_date), sum(coalesce(weight_kg, 0)), "
+                                "sum(coalesce(run_ftp_w, 0)), sum(coalesce(threshold_pace_s_per_km, 0)) "
+                                "FROM athlete_settings").fetchone()
+            except sqlite3.Error:
+                b = ()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return ""
+    return ",".join("" if v is None else str(v) for v in (*a, *b))
+
+
 def source_stamp(source: str, wko5_dir: Path) -> str:
     if source in ("coros", "tp"):
         from backend.sync import storage
@@ -74,7 +101,7 @@ def source_stamp(source: str, wko5_dir: Path) -> str:
         # names are in the stamp too, so the Dataset doesn't keep stale paths
         import hashlib
         names = hashlib.sha1("\n".join(sorted(str(p.relative_to(root)) for p in files)).encode()).hexdigest()[:12]
-        return f"{source}:{len(files)}:{latest}:{names}"
+        return f"{source}:{len(files)}:{latest}:{names}:{db_stamp()}"
     try:
         return "wko5:" + ";".join(f"{p.name}:{p.stat().st_size}:{p.stat().st_mtime_ns}"
                                   for p in sorted(Path(wko5_dir).glob("*.wko5athlete")))

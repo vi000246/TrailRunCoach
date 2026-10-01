@@ -372,10 +372,13 @@ def thresholds_as_of(ds, day: dt.date) -> dict:
     elif (est.get("lthr") or {}).get("value"):
         out.update(lthr=float(est["lthr"]["value"]), lthr_source="自動估算（當天以前的跑步）")
     else:
+        # the dataset's own dated setting: WKO5's (WKO5 source / opt-in), or for
+        # a COROS / TP source the as-of estimates made at load (fitdataset.py)
         v = ds.athlete.setting_on("runthr", day)
         hist = ds.athlete.settings.get("runthr") or []
         default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
-        out.update(lthr=v, lthr_source="WKO5 預設值（未設定）" if default else "WKO5 設定")
+        out.update(lthr=v, lthr_source="WKO5 預設值（未設定）" if default
+                   else ds.setting_label("runthr", "WKO5 設定") if v is not None else "未設定")
     ae = _plan_last(ds, "aethr", day)
     if ae:
         out.update(aet=float(ae[1]), aet_source=f"測試 {ae[0]}")
@@ -793,7 +796,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     today = today or dt.date.today()
     tday = date_to_day(today)
     weight = ds.setting("weight", tday)
-    weight_src = "賽季計畫體重" if ds.plan.weight_on(today) is not None else "WKO5 設定"
+    weight_src = "賽季計畫體重" if ds.plan.weight_on(today) is not None else ds.setting_label("weight", "WKO5 設定")
     prof = ds.plan.profile or {}
     exclude = exclude or set()
     runs_365 = [w for w in ds.workouts if w.sport == "run" and tday - RIEGEL_WINDOW_DAYS < w.day <= tday + 1

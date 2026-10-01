@@ -764,7 +764,8 @@ class Status:
             self.plan.threshold_on("lthr", self.today) is None
         aet_missing = self.plan.threshold_on("aethr", self.today) is None
         cp_src = "測試" if self.plan.threshold_on("cp", self.today) is not None else \
-            ("WKO5 mFTP" if self.ds.mftp_run is not None else "WKO5 設定值")
+            ("WKO5 mFTP" if self.ds.mftp_run is not None else
+             "WKO5 設定值" if self.ds.settings_from == "wko5" else self.ds.setting_label("runftp"))
         recent = self.since(28)
         tot = self.ws("athleterange(today-27, today, sum(if(heartrate > 0, deltatime)))")
         with_hr = sum(1 for w in recent if tot.get(w.idx, 0) > 0)

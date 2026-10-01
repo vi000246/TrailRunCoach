@@ -19,9 +19,17 @@ the WKO5 athlete folder.
       work          sum power * dt (J)
       hrTSS / hrIF  backend/engine/algorithms/wko5_hr.hr_tss with the run/bike LTHR
       ngp           grade-adjusted pace (Minetti), min/km; pace tssduration = moving
-* thresholds / weight / PMC constants come from the WKO5 athlete file when a
-  WKO5 folder is given (so a FIT source and WKO5 use the same settings),
-  otherwise defaults + the plan's dated thresholds.
+* sport type: trail / road from the app DB's workout_files.trail_classification
+  (user overrides included, shared across a duplicate_of group), the FIT
+  session sub_sport only as a fallback; trail runs carry WKO5's
+  "runningtrail" tag.
+* thresholds / weight, in order: the season plan's dated rows (Dataset.setting
+  / cp) -> athlete_settings in the app DB (weight, run_ftp_w, threshold pace;
+  not lthr / ftp_w, see _load_db_settings) -> as-of LTHR / CP estimates from
+  these FITs (_estimate_settings) -> unset ("未設定"). The WKO5 athlete file
+  only when settings_dir is passed (dataset_for_source: the opt-in setting
+  charts.fit_settings_from_wko5). PMC constants: 42 / 7 (WKO5's defaults).
+* the app DB is opened read-only (a sync may be writing it).
 * parity mode / own-formula config flags behave as for the WKO5 Dataset.
 """
 from __future__ import annotations
@@ -38,7 +46,7 @@ from backend.engine.wko5expr.config import EngineConfig
 from backend.engine.wko5expr.corrections import CorrectionStore
 from backend.engine.wko5expr.dataset import (
     F_CLIMBING, F_DISTANCE, F_DURATION, F_HRIF, F_HRTSS, F_MOVING, F_NGP, F_NP,
-    F_PACE_TSSDURATION, F_TSSDURATION, Dataset, Workout, date_to_day,
+    F_PACE_TSSDURATION, F_TSSDURATION, Dataset, Workout, date_to_day, day_to_date,
 )
 from backend.files.wko4_file import Channel, Wko4File
 from backend.files.wko5_athlete import Athlete, WorkoutEntry, read_athlete
@@ -46,6 +54,26 @@ from backend.files.wko5_athlete import Athlete, WorkoutEntry, read_athlete
 log = logging.getLogger(__name__)
 
 F_DESCENDING, F_WORK = 4225, 4218
+
+# 自組: how often the as-of LTHR / CP estimate is refreshed for a FIT source
+# (a value estimated on a grid day applies until the next one). 30 days keeps
+# a full-history load to ~one estimate per month; the thresholds.estimate
+# windows (90 / 180 days) are much longer, so a finer grid changes little.
+ESTIMATE_STEP_DAYS = 30
+# Athlete.setting_on applies the earliest value backwards (WKO5's rule); a
+# leading (date.min, None) entry stops that for thresholds that must not reach
+# the days before they were known
+NOT_BEFORE = (dt.date.min, None)
+WKO5_OPT_IN_KEY = "charts.fit_settings_from_wko5"   # settings/repository.py DEFAULTS
+
+SETTING_LABELS = {
+    "wko5": "WKO5 athlete 檔（選用）",
+    "db": "athlete_settings（app DB）",
+    "estimate": "自動估算（當天以前的跑步，Friel 30 分鐘段）",
+    "unset": "未設定",
+}
+IGNORED_WHY = ("COROS 帳號 zoneData 的值（coros_client.login 寫入），沒有記錄是哪個運動；"
+               "不當跑步 LTHR／FTP 用")
 
 # FIT sport / sub_sport -> (sport group, sport type) like WKO5 uses them
 SPORTS = {
@@ -58,11 +86,125 @@ SPORTS = {
 }
 
 
-def sport_of(sport: Optional[str], sub_sport: Optional[str]) -> tuple[str, str]:
+def sport_of(sport: Optional[str], sub_sport: Optional[str],
+             classification: Optional[str] = None) -> tuple[str, str]:
+    """(sport group, sport type). `classification` = the app DB's
+    workout_files.trail_classification of the file (incl. a user override):
+    "trail" / "road" decide a run's terrain; None / "unknown" fall back to the
+    FIT sub_sport (COROS FITs carry no trail sub_sport, so without the DB value
+    every COROS trail run was a road run). A treadmill / indoor run stays
+    indoor when the DB says "road" (the climb-rate rule cannot tell indoor)."""
     sub = str(sub_sport or "").lower()
-    if str(sport or "").lower() == "running" and sub in ("trail", "treadmill", "track"):
+    sp = str(sport or "").lower()
+    if sp == "running" and classification == "trail":
+        return SPORTS["trail"]
+    if sp == "running" and classification == "road":
+        return SPORTS["treadmill"] if sub == "treadmill" else SPORTS["running"]
+    if sp == "running" and sub in ("trail", "treadmill", "track"):
         return SPORTS[sub]
-    return SPORTS.get(str(sport or "").lower(), ("other", str(sport or "other").lower()))
+    return SPORTS.get(sp, ("other", str(sport or "other").lower()))
+
+
+# ---------------------------------------------------------------------------
+# the app DB (read-only): classification, duplicates, athlete_settings
+# ---------------------------------------------------------------------------
+
+def _app_db() -> Optional[Path]:
+    """The app DB (datasource._db_path; tests patch it to None)."""
+    from backend.engine.wko5expr import datasource
+    p = datasource._db_path()
+    return p if p is not None and Path(p).exists() else None
+
+
+def _ro(db: Path):
+    import sqlite3
+    return sqlite3.connect(f"file:{Path(db).as_posix()}?mode=ro", uri=True)
+
+
+def _norm(p) -> str:
+    import os
+    return os.path.normcase(os.path.abspath(str(p)))
+
+
+def load_classifications(db: Optional[Path] = None) -> dict:
+    """{normalised file path: row} of every workout_files row, row = {id,
+    trail_classification, classification_overridden, duplicate_of}, plus
+    "_by_id" and "_by_name" indexes. {} when the DB / table is missing.
+    Read-only (the sync may be writing)."""
+    import sqlite3
+    db = _app_db() if db is None else db
+    if db is None:
+        return {}
+    try:
+        con = _ro(db)
+        try:
+            cur = con.execute("SELECT id, file_path, trail_classification, classification_overridden, "
+                              "duplicate_of FROM workout_files")
+            raw = cur.fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    out: dict = {"_by_id": {}, "_by_name": {}, "_dups": {}}
+    for i, fp, tc, ov, dup in raw:
+        r = {"id": i, "file_path": fp, "trail_classification": tc, "classification_overridden": bool(ov),
+             "duplicate_of": dup}
+        out["_by_id"][i] = r
+        if fp:
+            out[_norm(fp)] = r
+            out["_by_name"].setdefault(Path(str(fp).replace("\\", "/")).name, []).append(r)
+        if dup:
+            out["_dups"].setdefault(dup, []).append(r)
+    return out
+
+
+def read_athlete_settings(db: Optional[Path] = None, athlete_id: int = 1) -> list[dict]:
+    """The athlete_settings rows of the app DB (read-only); [] without one."""
+    import sqlite3
+    db = _app_db() if db is None else db
+    if db is None:
+        return []
+    cols = ("effective_date", "ftp_w", "weight_kg", "lthr", "threshold_pace_s_per_km", "run_ftp_w")
+    try:
+        con = _ro(db)
+        try:
+            rows = con.execute(f"SELECT {', '.join(cols)} FROM athlete_settings WHERE athlete_id=?",
+                               (athlete_id,)).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+    return [dict(zip(cols, r)) for r in rows]
+
+
+def classification_for(path, rows: dict) -> Optional[str]:
+    """The trail / road classification of one FIT file from the app DB.
+    Cross-source duplicates (dedup.py: the same activity from COROS and TP,
+    `duplicate_of` -> the canonical row) are one activity, so the group shares
+    one classification: a user override on any row of the group wins (this
+    file's row first, then the canonical row, then the other duplicates);
+    otherwise this row's own auto value, else the canonical row's. None when
+    the file has no row or every value is "unknown"."""
+    if not rows:
+        return None
+    r = rows.get(_norm(path))
+    if r is None:
+        cand = rows["_by_name"].get(Path(str(path)).name) or []
+        r = cand[0] if len(cand) == 1 else None
+    if r is None:
+        return None
+    canon_id = r["duplicate_of"] or r["id"]
+    canon = rows["_by_id"].get(canon_id)
+    group = [r] + ([canon] if canon is not None and canon is not r else []) + \
+        [x for x in rows["_dups"].get(canon_id, []) if x is not r]
+    ok = ("trail", "road")
+    for x in group:
+        if x["classification_overridden"] and x["trail_classification"] in ok:
+            return x["trail_classification"]
+    for x in (r, canon):
+        if x is not None and x["trail_classification"] in ok:
+            return x["trail_classification"]
+    return None
 
 
 def _arr(vals) -> np.ndarray:
@@ -151,7 +293,8 @@ class FitFolderDataset(Dataset):
     def __init__(self, fit_dir: str | Path, settings_dir: Optional[str | Path] = None,
                  today: Optional[dt.date] = None, config: Optional[EngineConfig] = None,
                  corrections: Optional[CorrectionStore] = None, source: str = "fit",
-                 tz: Optional[dt.tzinfo] = None):
+                 tz: Optional[dt.tzinfo] = None, classifications: Optional[dict] = None,
+                 athlete_settings: Optional[list] = None, estimate_thresholds: Optional[bool] = None):
         from backend.engine.planning import Plan
         from backend.engine.wko5expr.datasource import athlete_tz
         from backend.files.fit_to_channels import fit_to_channels
@@ -164,11 +307,21 @@ class FitFolderDataset(Dataset):
         self.corrections = None if self.config.parity else (corrections or CorrectionStore())
         self.plan = Plan() if self.config.parity else Plan.load()
         self.athlete = default_athlete()
+        # where the thresholds / weight come from (module docstring): the plan's
+        # dated rows (Dataset.setting) -> athlete_settings in the app DB -> as-of
+        # estimates from these FITs -> unset. The WKO5 athlete file only when
+        # asked for explicitly (settings_dir; charts.fit_settings_from_wko5).
+        self.settings_from = "app"
+        self._setting_labels: dict[str, str] = {}
+        self.settings_ignored: list[dict] = []
         if settings_dir:
             try:
                 self.athlete = read_athlete(next(Path(settings_dir).glob("*.wko5athlete")))
+                self.settings_from = "wko5"
             except (StopIteration, OSError) as e:
                 log.warning("FIT dataset: no WKO5 athlete settings (%s); using defaults", type(e).__name__)
+        if self.settings_from == "app":
+            self._load_db_settings(athlete_settings)
         self._tp_tss = {}
         self._moving_hrtss = {}
         self.today = date_to_day(today or dt.date.today())
@@ -194,11 +347,14 @@ class FitFolderDataset(Dataset):
             start = start.astimezone(self.tz).replace(tzinfo=None)
             entries.append((start, p, fc))
         entries.sort(key=lambda x: x[0])
+        # trail / road from the app DB (workout_files.trail_classification,
+        # user overrides included), the FIT sub_sport only as a fallback
+        self._classes = load_classifications() if classifications is None else classifications
         for start, p, fc in entries:
-            sport_raw, sub = (fc.sport or "", None)
+            sport_raw, sub = (fc.sport or "", getattr(fc, "sub_sport", None))
             if isinstance(sport_raw, str) and "/" in sport_raw:
                 sport_raw, sub = sport_raw.split("/", 1)
-            group, stype = sport_of(sport_raw, sub)
+            group, stype = sport_of(sport_raw, sub, classification_for(p, self._classes))
             rel = p.relative_to(self.dir).as_posix()
             idx = len(self.workouts)
             chans = {"elapsedtime": Channel("elapsedtime", list(fc.elapsedtime), 1.0, base=0.0)}
@@ -209,7 +365,11 @@ class FitFolderDataset(Dataset):
                                         channels=chans, ranges=[], info=None)
             entry = WorkoutEntry(file=rel, sport=stype.title(), sport_group=group.title(), start=start,
                                  ftp=None, metrics={}, record=None)
-            w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=[])
+            # WKO5 marks trail runs with the "runningtrail" tag; several
+            # engine paths (thresholds, quality gate, status, achievements)
+            # read only the tag, so a FIT trail run carries it too
+            tags = ["runningtrail"] if stype == "trail running" else []
+            w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags)
             self.workouts.append(w)
             t = _arr(fc.elapsedtime)
             ch = {k: _arr(v) for k, v in fc.channels.items()}
@@ -217,6 +377,17 @@ class FitFolderDataset(Dataset):
             w.metrics = self._metrics(w)
         self.first_day = int(np.floor(self.workouts[0].day)) if self.workouts else int(self.today)
         self.last_day = int(np.floor(self.workouts[-1].day)) if self.workouts else int(self.today)
+        # None = auto: only on the app's own data (an app DB exists). The
+        # estimate reads the user's synced FIT folder too (pd_model ->
+        # cptest.curves(~/.wko5coach)), so a bare folder (tests, a scratch
+        # copy) does not estimate unless asked to.
+        if estimate_thresholds is None:
+            estimate_thresholds = _app_db() is not None
+        if self.settings_from == "app" and estimate_thresholds and self.workouts:
+            if self._estimate_settings():
+                for w in self.workouts:          # hrTSS / rTSS / power TSS with the estimated thresholds
+                    self._refresh_hr_fields(w)
+                    w.metrics = self._metrics(w)
         if self.config.moving_hr_tss:
             self._apply_moving_hrtss()
         self._apply_elevation_bonus()
@@ -242,11 +413,112 @@ class FitFolderDataset(Dataset):
                 w.metrics["tss"] = v
                 w.metrics["hrtss_moving"] = v
 
+    # ---- thresholds / weight without the WKO5 athlete file -------------------
+    def _load_db_settings(self, rows: Optional[list] = None) -> None:
+        """athlete_settings rows (app DB, read-only) -> dated settings.
+        Used: weight_kg -> weight, run_ftp_w -> runftp, threshold_pace_s_per_km
+        -> runtpace. NOT used: `lthr` and `ftp_w` — the only automatic writer
+        is coros_client.login, which stores COROS's account zoneData.lthr /
+        .ftp without saying which sport they are for (the 2026-09-30 row:
+        LTHR 182, above the 171 bpm peak of that day's maximal 12′ test, so
+        not this athlete's running LTHR); they stay in settings_ignored."""
+        rows = read_athlete_settings() if rows is None else rows
+        s = self.athlete.settings
+        for r in sorted(rows, key=lambda r: str(r.get("effective_date"))):
+            try:
+                d = dt.date.fromisoformat(str(r["effective_date"])[:10])
+            except (KeyError, ValueError):
+                continue
+            for col, name, f in (("weight_kg", "weight", 1.0), ("run_ftp_w", "runftp", 1.0),
+                                 ("threshold_pace_s_per_km", "runtpace", 1 / 60.0)):
+                v = r.get(col)
+                if v:
+                    # a threshold never applies before its date; weight does
+                    # (as Plan.weight_on: the earliest entry before the first)
+                    s.setdefault(name, [] if name == "weight" else [NOT_BEFORE]).append((d, float(v) * f))
+                    self._setting_labels[name] = SETTING_LABELS["db"]
+            for col in ("lthr", "ftp_w"):
+                if r.get(col):
+                    self.settings_ignored.append({"field": col, "value": r[col], "date": d.isoformat(),
+                                                  "why": IGNORED_WHY})
+
+    def _estimate_settings(self) -> bool:
+        """As-of running LTHR estimated from these FITs, on a grid of dates
+        every ESTIMATE_STEP_DAYS: the value estimated on a grid day (only runs
+        up to that day: thresholds.estimate = Friel 30-min-segment LTHR, each
+        run against racepower.athlete.cp_as_of its own date) applies from that
+        day to the next. A plan test still wins (Dataset.setting looks at the
+        plan first). True when anything was set.
+
+        CP / run FTP is NOT filled from the estimate: cp_as_of's PD refit has
+        no plausibility reference before the first plan CP and gave 362–384 W
+        for 2024-06…12 on this athlete's COROS data (plan CP 204 W), which
+        would cut every power TSS there ~4×. Without a plan / DB value those
+        runs fall back to hrTSS (with the estimated LTHR) or stay unset."""
+        from backend.engine.racepower import athlete as A
+        from backend.engine.thresholds import estimate
+        runs = [w for w in self.workouts if w.sport == "run"]
+        if not runs:
+            return False
+        # module-level memos keyed on id(ds): a freed dataset's id can be reused
+        for memo in (A._cp_memo, A._est_memo):
+            for k in [k for k in memo if k[0] == id(self)]:
+                del memo[k]
+        first = runs[0].entry.start.date() + dt.timedelta(days=ESTIMATE_STEP_DAYS)
+        end = min(day_to_date(self.today), runs[-1].entry.start.date())
+        thr = []
+        day = first
+        while day <= end:
+            try:
+                est = estimate(self, day, cp_of=lambda d: A.cp_as_of(self, d))
+            except Exception as e:           # noqa: BLE001
+                log.warning("FIT dataset: threshold estimate %s failed (%s)", day, type(e).__name__)
+                est = {}
+            v = (est.get("lthr") or {}).get("value")
+            if v:
+                thr.append((day, float(v)))
+            day += dt.timedelta(days=ESTIMATE_STEP_DAYS)
+        if thr:
+            self.athlete.settings["runthr"] = [NOT_BEFORE] + thr
+            self._setting_labels["runthr"] = SETTING_LABELS["estimate"]
+        self.memo.clear()
+        return bool(thr)
+
+    def _refresh_hr_fields(self, w: Workout) -> None:
+        """Recompute the LTHR-dependent hrTSS / hrIF after the estimates."""
+        from backend.engine.algorithms.wko5_hr import hr_tss
+        f = self._files[w.idx]
+        t, hr = f.channels.get("elapsedtime"), f.channels.get("heartrate")
+        m = w.entry.metrics
+        m.pop(F_HRTSS, None)
+        m.pop(F_HRIF, None)
+        lthr = self.sport_setting("thr", w)
+        if not (t and hr and lthr):
+            return
+        v, iff = hr_tss(list(t.values), [None if h is None else float(h) for h in hr.values], lthr)
+        if v is not None:
+            m[F_HRTSS] = v
+        if iff is not None:
+            m[F_HRIF] = iff
+
+    def setting_label(self, name: str, default: str = "WKO5 設定") -> str:
+        """Where a dated setting (runthr / runftp / weight ...) came from."""
+        if self.settings_from == "wko5":
+            return SETTING_LABELS["wko5"]
+        return self._setting_labels.get(name.lower(), SETTING_LABELS["unset"])
+
     def curve_cache(self, expr: str) -> dict:
         return {}                         # no WKO5 Cache5 for FIT folders
 
     def cached_series(self, key: str, w: Workout, compute):
-        return compute()                  # no disk cache keyed on .wko4 files
+        """In-memory memo (no disk cache keyed on .wko4 files), keyed like the
+        WKO5 Dataset's disk cache on the corrections and the thresholds in
+        effect, so a threshold change never serves a stale value."""
+        k = (key, w.idx, self._corr_sig(w.entry.file), self._settings_sig(w))
+        store = self.__dict__.setdefault("_mem_series", {})
+        if k not in store:
+            store[k] = compute()
+        return store[k]
 
     def flush_series(self) -> None:
         pass
@@ -264,9 +536,15 @@ class FitFolderDataset(Dataset):
 
 def dataset_for_source(source: str, wko5_dir: Path, config: Optional[EngineConfig] = None,
                        today: Optional[dt.date] = None):
-    """The Dataset the charts should read for charts.data_source."""
+    """The Dataset the charts should read for charts.data_source. A COROS /
+    TP source takes its thresholds / weight from the app (plan, DB,
+    estimates); the WKO5 athlete file only when the user opted in
+    (setting charts.fit_settings_from_wko5 = true) — WKO5 is a cross-check
+    reference, not the default data path."""
     if source in ("coros", "tp"):
         from backend.sync import storage
-        return FitFolderDataset(storage.source_dir(source), settings_dir=wko5_dir, config=config,
-                                today=today, source=source)
+        from backend.engine.wko5expr.datasource import read_setting
+        use_wko5 = read_setting(WKO5_OPT_IN_KEY, False) is True
+        return FitFolderDataset(storage.source_dir(source), settings_dir=wko5_dir if use_wko5 else None,
+                                config=config, today=today, source=source)
     return Dataset(wko5_dir, today=today, config=config)
