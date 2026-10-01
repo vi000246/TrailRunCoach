@@ -901,6 +901,8 @@ function drawInto(box, res) {
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "z5gate") drawZ5Gate(box, res);
   else if (res.kind === "map") drawMap(box, res);
+  else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)
+  else if (res.grade_profile) drawGradeProfile(box, res);     // 坡度分組: one row per grade bin
   else draw(box, res);
 }
 
@@ -1807,6 +1809,566 @@ function drawPlot(card, res, series) {
   new ResizeObserver(() => chart.resize()).observe(el);
   if (hx) samplesFor(res.workout).then((s) => { if (!chart.isDisposed()) hoverChart(chart, s, hx, DIST_X[xUnit.id] || 1); })
     .catch((e) => console.warn("hover sync off:", e.message));
+}
+
+// ---- 爬坡與地形 (workout_review climbs / grades). Self-contained: its own styles (cpStyle), toggles and
+// helpers (cp*). drawClimbProfile: the elevation profile against km with the detected climbs (①②…) and
+// descents (↓, hatched) as bands, and an aligned metric panel below on the same km axis (never a second
+// y-scale on the profile); then one row per climb against the athlete's usual. drawGradeProfile: one row
+// per grade bin — time in it, and the metric against the usual for that bin. Tables sit in 「詳細數字」.
+const CP_KEYS = { climb: "wko5viewer.climbmetric", grade: "wko5viewer.grademetric" };
+function cpStyle() {
+  if (document.getElementById("cp-style")) return;
+  const dark = "--cp-elev: #9a9890; --cp-up: #d95926; --cp-down: #199e70; --cp-line: #3987e5; --cp-base: #3b424c; --cp-ink2: #c3c2b7; --cp-bar: #5b616b;";
+  const st = document.createElement("style");
+  st.id = "cp-style";
+  st.textContent = `:root { --cp-elev: #77756f; --cp-up: #eb6834; --cp-down: #1baf7a; --cp-line: #2a78d6; --cp-base: #d5d8dd; --cp-ink2: #52514e; --cp-bar: #a9adb4; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${dark} } }
+:root[data-theme="dark"] { ${dark} }
+.cpbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 2px 0 4px; }
+.cpbar .seg { font-size: 11.5px; padding: 1px; flex-wrap: wrap; max-width: 100%; }
+.cpbar .seg button { padding: 1px 9px; font-weight: 500; }
+.cpleg { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11px; color: var(--muted); }
+.cpleg span { white-space: nowrap; }
+.cpleg i { display: inline-block; width: 14px; height: 9px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
+.cpleg i.ln { height: 0; border-top: 2px solid; border-radius: 0; vertical-align: 3px; }
+.cpleg i.dot { width: 9px; height: 9px; border-radius: 50%; }
+.cpleg i.hol { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--cp-line); background: none; }
+.cpleg i.iqr { height: 7px; background: var(--cp-base); position: relative; }
+.cpleg i.iqr::after { content: ""; position: absolute; left: 6px; top: -2px; height: 11px; border-left: 2px solid var(--cp-ink2); }
+.cpleg i.hatch { background: repeating-linear-gradient(135deg, var(--cp-down) 0 1.5px, transparent 1.5px 4.5px); outline: 1px solid var(--cp-down); outline-offset: -1px; }
+.plot.cprof { height: 390px; }
+.cpcap { font-size: 11.5px; color: var(--muted); margin: 10px 0 2px; }
+.cpcap b { color: var(--text); font-weight: 600; }
+details.cpdet { margin-top: 8px; }
+details.cpdet > summary { font-size: 12px; }`;
+  document.head.appendChild(st);
+}
+const cpPref = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+const cpSave = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const cpMinus = (s) => String(s).replace(/^-/, "−");
+const cpN = (v, d = 0) => v == null || !isFinite(v) ? "–" : cpMinus(Number(v).toFixed(d));
+const cpPace = (s) => { if (s == null || !isFinite(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const cpDur = (s) => s == null ? "–" : hms(s);
+const cpPct = (v, d = 0) => v == null || !isFinite(v) ? "–" : `${cpMinus((v * 100).toFixed(d))}%`;
+const cpSigned = (v) => v == null ? "" : `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(0)}%`;
+const cpHas = (a) => Array.isArray(a) && a.some((v) => v != null);
+let CP_CTX = null;
+function cpTextW(t, font = "11px system-ui, sans-serif") {
+  CP_CTX ||= document.createElement("canvas").getContext("2d");
+  CP_CTX.font = font;
+  return CP_CTX.measureText(t).width;
+}
+function cpRgba(hex, a) {
+  const n = parseInt(String(hex).replace("#", ""), 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+}
+function cpHatch(color, alpha) {      // the descents' 135° lines (identity by pattern, not by colour alone)
+  const c = document.createElement("canvas");
+  c.width = c.height = 6;
+  const g = c.getContext("2d");
+  g.strokeStyle = cpRgba(color, alpha);
+  g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(6, 6); g.moveTo(-3, 3); g.lineTo(3, 9); g.moveTo(3, -3); g.lineTo(9, 3); g.stroke();
+  return { image: c, repeat: "repeat" };
+}
+// a value against the athlete's usual: "平常 690（+8%）" / "快 5%" for paces (lower = faster)
+function cpRel(v, b, f, pace) {
+  if (!b?.ok || v == null) return "";
+  const d = v / b.median - 1;
+  return `（平常 ${f(b.median)}，${pace ? (d <= 0 ? "快 " : "慢 ") + Math.abs(d * 100).toFixed(0) + "%" : cpSigned(d)}）`;
+}
+// above / below the usual's middle 50 %: the only rows that get a direct label
+function cpOutside(v, b, pace) {
+  if (!b?.ok || v == null) return null;
+  const d = v / b.median - 1;
+  if (pace) return v < b.q1 ? `▲ 快 ${Math.abs(d * 100).toFixed(0)}%` : v > b.q3 ? `▼ 慢 ${Math.abs(d * 100).toFixed(0)}%` : null;
+  return v > b.q3 ? `▲ 高於平常 ${cpSigned(d)}` : v < b.q1 ? `▼ 低於平常 ${cpSigned(d)}` : null;
+}
+function cpTipBox(html) { return `<div style="font-size:11.5px;line-height:1.55;max-width:340px;white-space:normal">${html}</div>`; }
+function cpTipOpts() {
+  return { confine: true, backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text") } };
+}
+// the shared frame: the 判讀 rows via draw() (description ?, verdict), the chart box above them,
+// the table behind 「詳細數字」
+function cpFrame(card, res, summary) {
+  const cols = (res.series || []).filter((s) => s.data.kind === "values");
+  draw(card, { ...res, series: (res.series || []).filter((s) => s.data.kind === "value") });
+  card.classList.add("wide");
+  const wrap = document.createElement("div");
+  wrap.className = "cpwrap";
+  card.insertBefore(wrap, [...card.children].find((el) => el.tagName === "TABLE") || null);
+  if (cols.length) {
+    const det = document.createElement("details");
+    det.className = "cpdet";
+    det.innerHTML = `<summary>${esc(summary)}</summary>`;
+    drawValuesTable(det, cols);
+    card.appendChild(det);
+  }
+  return wrap;
+}
+function cpSeg(opts, cur, label, onPick) {
+  const seg = document.createElement("div");
+  seg.className = "seg";
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", label);
+  for (const [k, t] of opts) {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.k = k; b.textContent = t;
+    b.className = k === cur ? "on" : ""; b.setAttribute("aria-pressed", String(k === cur));
+    seg.appendChild(b);
+  }
+  seg.onclick = (e) => {
+    const b = e.target.closest("button[data-k]");
+    if (!b) return;
+    seg.querySelectorAll("button").forEach((x) => { x.className = x === b ? "on" : ""; x.setAttribute("aria-pressed", String(x === b)); });
+    onPick(b.dataset.k);
+  };
+  return seg;
+}
+// the y range of a noisy rolling series: 2nd–98th percentile, padded
+function cpRange(vals, zero) {
+  const v = vals.filter((x) => x != null && isFinite(x));
+  if (!v.length) return [0, 1];
+  let lo = pctl(v, 0.02), hi = pctl(v, 0.98);
+  if (zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+  const pad = (hi - lo || Math.abs(hi) || 1) * 0.08;
+  return [lo - pad, hi + pad];
+}
+// round axis ends and a round step (paces in s: 10 s … 10 min), so ticks never land on odd ends
+function cpNice(lo, hi, k = 4, pace = false) {
+  const raw = Math.max(hi - lo, 1e-9) / k;
+  let step;
+  if (pace) step = [10, 15, 30, 60, 120, 300, 600].find((s) => s >= raw) || 600;
+  else {
+    const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
+    step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  }
+  let min = Math.floor(lo / step) * step;
+  if (pace && lo > 0 && min <= 0) min = Math.max(0, Math.floor(lo / 60) * 60);   // no 0:00 /km tick
+  return { min, max: Math.ceil(hi / step) * step, interval: step };
+}
+
+function drawClimbProfile(card, res) {
+  cpStyle();
+  const D = res.climb_profile, P = D.profile, climbs = D.climbs || [], cp = D.cp;
+  const wrap = cpFrame(card, res, `詳細數字（${climbs.length} 段爬坡）`);
+  if (D.note) wrap.insertAdjacentHTML("beforeend", `<p class="nodata small">${esc(D.note)}</p>`);
+  if (!P || !cpHas(P.alt)) return;
+  const pctLine = cpHas(P.power) && cp ? P.power.map((v) => v == null ? null : v / cp * 100) : null;
+  const M = {
+    vam: { label: "VAM", ys: P.vam, seg: (c) => c.vam, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), zero: true,
+      cap: "VAM 每小時爬升 m/h（60 秒滾動，推估）" },
+    power: { label: "功率", ys: P.power, seg: (c) => c.avg_power, segF: (v) => `${cpN(v)} W`, axisF: (v) => `${cpN(v)}`,
+      cap: "功率 W（60 秒平均）" },
+    pct: { label: "%CP", ys: pctLine, seg: (c) => c.pct_cp == null ? null : c.pct_cp * 100, segF: (v) => `${cpN(v)}%`,
+      axisF: (v) => `${cpN(v)}%`, cap: `功率佔 CP 的比例（CP ${cpN(cp)} W，60 秒平均）` },
+    hr: { label: "心率", ys: P.hr, seg: (c) => c.avg_hr, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), cap: "心率 bpm（60 秒平均）" },
+    pace: { label: "配速／GAP", ys: P.gap, ys2: P.pace, pace: true, seg: (c) => c.gap_s_per_km, segF: (v) => `GAP ${cpPace(v)}`,
+      axisF: cpPace, cap: "GAP（坡度換算平地配速）與實際配速 /km，上 = 快" },
+  };
+  const CMP = {
+    vam: { key: "vam", f: (v) => `${cpN(v)} m/h`, axisF: (v) => cpN(v), scale: 1, name: "VAM（m/h）", hint: "越右爬得越快" },
+    power: { key: "pct_cp", f: (v) => `${cpN(v)}%`, axisF: (v) => `${cpN(v)}%`, scale: 100, name: "%CP", hint: "越右越用力" },
+    hr: { key: "hr_per_100m", f: (v) => `${cpN(v)} 下`, axisF: (v) => cpN(v), scale: 1, name: "每 100 m 爬升的心跳", hint: "越左越省力（越經濟）" },
+    pace: { key: "gap_s_per_km", f: cpPace, axisF: cpPace, scale: 1, name: "GAP /km", hint: "越右越快", pace: true },
+  };
+  CMP.pct = CMP.power;
+  const avail = Object.entries(M).filter(([, m]) => cpHas(m.ys)).map(([k, m]) => [k, m.label]);
+  if (!avail.length) avail.push(["vam", "VAM"]);
+  const okKey = (k) => avail.some(([a]) => a === k);
+  const def = climbs.length && okKey("vam") ? "vam" : okKey("pace") ? "pace" : avail[0][0];
+  let metric = okKey(cpPref(CP_KEYS.climb, def)) ? cpPref(CP_KEYS.climb, def) : def;
+
+  const bar = document.createElement("div");
+  bar.className = "cpbar";
+  const leg = document.createElement("div");
+  leg.className = "cpleg";
+  leg.setAttribute("aria-label", "圖例");
+  const legend = () => {
+    const m = M[metric];
+    leg.innerHTML = `<span><i style="background:${cpRgba(css("--cp-elev"), .28)}"></i>海拔</span>`
+      + (climbs.length ? `<span><i style="background:${cpRgba(css("--cp-up"), .22)};border-bottom:2px solid var(--cp-up)"></i>①② 爬坡段（≥ 80 m、≥ 3%）</span>` : "")
+      + ((D.descents || []).length ? `<span><i class="hatch"></i>↓ 下坡段（≥ 80 m）</span>` : "")
+      + `<span><i class="ln" style="border-color:var(--cp-line)"></i>${esc(m.pace ? "GAP" : m.label)}</span>`
+      + (m.ys2 ? `<span><i class="ln" style="border-color:var(--cp-elev)"></i>實際配速</span>` : "")
+      + (climbs.length ? `<span><i class="ln" style="border-color:var(--text)"></i>每段平均</span>` : "");
+  };
+  bar.appendChild(cpSeg(avail, metric, "下方面板的指標", (k) => { metric = k; cpSave(CP_KEYS.climb, k); legend(); paint(); }));
+  bar.appendChild(leg);
+  legend();
+  wrap.appendChild(bar);
+  const el = document.createElement("div");
+  el.className = "plot cprof";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `高度圖：${climbs.length} 段爬坡、${(D.descents || []).length} 段下坡；數字在「詳細數字」表格`);
+  wrap.appendChild(el);
+  const cmpCap = document.createElement("p");
+  cmpCap.className = "cpcap";
+  const cmpEl = document.createElement("div");
+  cmpEl.className = "plot cpcmp";
+  cmpEl.style.flex = "none";
+  wrap.append(cmpCap, cmpEl);
+  if (res._zoom) el.style.minHeight = "460px";
+
+  const X = P.x, A = P.alt, n = X.length;
+  const x0 = X[0], x1 = X[n - 1];
+  const alts = A.filter((v) => v != null);
+  const aMin = Math.min(...alts), aMax = Math.max(...alts), aSpan = Math.max(20, aMax - aMin);
+  const yN0 = cpNice(aMin - aSpan * 0.04, aMax + aSpan * 0.08, 4), y0min = yN0.min, y0max = yN0.max;
+  const bands = [
+    ...climbs.map((c) => ({ up: true, c })),
+    ...(D.descents || []).map((c) => ({ up: false, c })),
+  ].filter((b) => b.c.start_km != null && b.c.end_km != null && b.c.end_km > b.c.start_km)
+    .sort((a, b) => a.c.start_km - b.c.start_km);
+  for (const b of bands) {
+    b.x0 = b.c.start_km; b.x1 = b.c.end_km;
+    b.pts = [];
+    for (let k = 0; k < n; k++) if (X[k] >= b.x0 && X[k] <= b.x1 && A[k] != null) b.pts.push([X[k], A[k]]);
+    const g = cpN(b.c.grade * 100);
+    b.full = b.up ? [`${b.c.no} +${cpN(b.c.gain_m)} m`, `${cpN(b.c.distance_km, 1)} km · ${g}%`]
+      : [`↓ −${cpN(b.c.drop_m)} m`, `${cpN(b.c.distance_km, 1)} km · ${g}%`];
+    b.short = b.up ? b.c.no : "↓";
+  }
+  const idxAt = (x) => {
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (X[m] < x) lo = m; else hi = m; }
+    return Math.abs(X[lo] - x) <= Math.abs(X[hi] - x) ? lo : hi;
+  };
+  const bandAt = (x) => bands.find((b) => b.up && x >= b.x0 && x <= b.x1) || bands.find((b) => !b.up && x >= b.x0 && x <= b.x1);
+  const F1 = "600 11px system-ui, sans-serif", F2 = "11px system-ui, sans-serif";
+  // label strip above the profile, two rows. Pass 1: every band gets its mark (① / ↓) on the first
+  // free row, nudged right only when both rows are taken. Pass 2, biggest first: a band's full label
+  // (mark + gain, km · grade, two lines) replaces its mark when it overlaps no other label.
+  function layout(api) {
+    const gx0 = api.coord([x0, y0min])[0], gx1 = api.coord([x1, y0min])[0];
+    const hit = (a, b) => a[0] < b[1] + 3 && b[0] < a[1] + 3;
+    const rows = [[], []];
+    for (const b of bands) {
+      const a = api.coord([b.x0, y0min])[0], z = api.coord([b.x1, y0min])[0];
+      b.cx = (a + z) / 2;
+      b.fw = Math.max(cpTextW(b.full[0], F1), cpTextW(b.full[1], F2)) + 8;
+      const sw = cpTextW(b.short, "600 12px system-ui, sans-serif") + 6;
+      let L = Math.min(Math.max(b.cx - sw / 2, gx0 - 30), gx1 + 10 - sw);
+      let row = [0, 1].find((r) => !rows[r].some((iv) => hit([L, L + sw], iv)));
+      if (row == null) { row = 1; L = Math.max(L, ...rows[1].map((iv) => iv[1] + 4)); }
+      b.iv = [L, L + sw];
+      rows[row].push(b.iv);
+      b.lay = { full: false, x: L + sw / 2, row };
+    }
+    const size = (b) => b.up ? b.c.gain_m : b.c.drop_m;
+    const fulls = [];
+    for (const b of [...bands].sort((p, q) => size(q) - size(p))) {
+      const L = Math.min(Math.max(b.cx - b.fw / 2, gx0 - 30), gx1 + 10 - b.fw), iv = [L, L + b.fw];
+      const others = bands.filter((o) => o !== b && !o.lay.full).map((o) => o.iv);
+      if ([...others, ...fulls].some((o) => hit(iv, o))) continue;
+      b.lay = { full: true, x: L + b.fw / 2 };
+      fulls.push(iv);
+    }
+  }
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const hatchTop = cpHatch(css("--cp-down"), 0.45), hatchLow = cpHatch(css("--cp-down"), 0.25);
+
+  function paint() {
+    const m = M[metric];
+    const H = el.clientHeight || 390;
+    const top0 = bands.length ? 44 : 12, gap = 34, bottom = 28;
+    const h1 = Math.round((H - top0 - gap - bottom) * 0.38), h0 = H - top0 - gap - bottom - h1, top1 = top0 + h0 + gap;
+    const ys = m.ys || [];
+    const yN1 = cpNice(...cpRange([...ys, ...(m.ys2 || [])], !!m.zero), 3, !!m.pace), y1min = yN1.min, y1max = yN1.max;
+    const ink = css("--text"), muted = css("--muted"), line = css("--line"), up = css("--cp-up"), down = css("--cp-down");
+    const elev = css("--cp-elev"), blue = css("--cp-line");
+    const lbl = { color: muted, fontSize: 10.5 };
+    const bandItem = (low) => (params, api) => {
+      const b = bands[params.dataIndex];
+      if (!low && (params.dataIndex === 0 || !b.lay)) layout(api);
+      const yA = low ? y1min : y0min, yB = low ? y1max : y0max;
+      const a = api.coord([b.x0, yA]), z = api.coord([b.x1, yB]);
+      const yTop = Math.min(a[1], z[1]), hgt = Math.abs(a[1] - z[1]);
+      const kids = [{ type: "rect", silent: true, shape: { x: a[0], y: yTop, width: Math.max(1, z[0] - a[0]), height: hgt },
+        style: { fill: b.up ? cpRgba(up, low ? 0.08 : 0.16) : low ? hatchLow : hatchTop } }];
+      if (!low) {
+        if (b.pts.length > 1) kids.push({ type: "polyline", silent: true, shape: { points: b.pts.map((p) => api.coord(p)) },
+          style: { stroke: b.up ? up : down, lineWidth: 2.5, fill: null, lineJoin: "round", lineCap: "round" } });
+        const L = b.lay || { full: false, x: (a[0] + z[0]) / 2, row: 0 };
+        const gy = api.coord([x0, y0max])[1];
+        if (L.full) {
+          kids.push({ type: "text", silent: true, style: { text: b.full[0], x: L.x, y: gy - 27, fill: ink, font: F1, align: "center", verticalAlign: "middle" } },
+            { type: "text", silent: true, style: { text: b.full[1], x: L.x, y: gy - 12, fill: muted, font: F2, align: "center", verticalAlign: "middle" } });
+        } else {
+          kids.push({ type: "text", silent: true, style: { text: b.short, x: L.x, y: gy - (L.row ? 12 : 27), fill: ink,
+            font: "600 12px system-ui, sans-serif", align: "center", verticalAlign: "middle" } });
+        }
+      } else if (b.up) {
+        // the climb's own average on the metric panel: a short ink rule, its value above when it fits
+        const v = m.seg(b.c);
+        if (v != null && isFinite(v) && v >= Math.min(y1min, y1max) && v <= Math.max(y1min, y1max)) {
+          const p0 = api.coord([b.x0, v]), p1 = api.coord([b.x1, v]);
+          kids.push({ type: "line", silent: true, shape: { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1] }, style: { stroke: ink, lineWidth: 2 } });
+          const t = m.segF(v), tw = cpTextW(t, F2);
+          if (p1[0] - p0[0] >= tw + 4) kids.push({ type: "text", silent: true, style: { text: t, x: (p0[0] + p1[0]) / 2, y: p0[1] - 8,
+            fill: ink, font: F2, align: "center", verticalAlign: "middle", stroke: css("--panel"), lineWidth: 3 } });
+        }
+      }
+      return { type: "group", children: kids };
+    };
+    const pts = (a) => X.map((x, k) => [x, a ? a[k] : null]);
+    const tipRow = (k) => {
+      const t = [], g = P.grade?.[k];
+      t.push(`<b>${cpN(X[k], 2)} km</b> <span style="opacity:.75">· ${cpDur(P.t?.[k])}</span>`);
+      t.push(`海拔 <b>${cpN(A[k])}</b> m · 坡度 <b>${g == null ? "–" : cpN(g, 1) + "%"}</b>`);
+      if (P.pace?.[k] != null || P.gap?.[k] != null) t.push(`配速 <b>${cpPace(P.pace?.[k])}</b> /km · GAP <b>${cpPace(P.gap?.[k])}</b>`);
+      else t.push(`配速 – （停下來或沒有速度）`);
+      const hp = [];
+      if (P.hr?.[k] != null) hp.push(`心率 <b>${cpN(P.hr[k])}</b>`);
+      if (P.power?.[k] != null) hp.push(`功率 <b>${cpN(P.power[k])}</b> W${cp ? `（${cpN(P.power[k] / cp * 100)}% CP）` : ""}`);
+      if (hp.length) t.push(hp.join(" · "));
+      if (P.vam?.[k] != null) t.push(`VAM <b>${cpN(P.vam[k])}</b> m/h`);
+      return t.join("<br>");
+    };
+    const tipBand = (b) => {
+      const c = b.c;
+      if (!b.up) return `<b>↓ 下坡</b> −${cpN(c.drop_m)} m · ${cpN(c.distance_km, 2)} km · ${cpN(c.grade * 100)}% · ${cpN(c.start_elev)} → ${cpN(c.end_elev)} m<br>`
+        + `時間 ${cpDur(c.duration_s)} · 配速 ${cpPace(c.pace_s_per_km)} /km${c.avg_hr != null ? ` · 心率 ${cpN(c.avg_hr)}` : ""}`;
+      const B = c.base || {};
+      const t = [`<b>${esc(c.no)} 爬坡</b> +${cpN(c.gain_m)} m · ${cpN(c.distance_km, 2)} km · ${cpN(c.grade * 100)}% · ${cpN(c.start_elev)} → ${cpN(c.top_elev)} m`,
+        `時間 ${cpDur(c.duration_s)} · VAM <b>${cpN(c.vam)}</b> m/h${cpRel(c.vam, B.vam, cpN)}`];
+      if (c.avg_hr != null) t.push(`心率 <b>${cpN(c.avg_hr)}</b> · 每 100 m 爬升 <b>${cpN(c.hr_per_100m)}</b> 下${cpRel(c.hr_per_100m, B.hr_per_100m, cpN)}`);
+      if (c.avg_power != null) t.push(`功率 <b>${cpN(c.avg_power)}</b> W${c.pct_cp != null ? ` · <b>${cpPct(c.pct_cp)}</b> CP${cpRel(c.pct_cp, B.pct_cp, (v) => cpPct(v))}` : ""}`);
+      t.push(`配速 <b>${cpPace(c.pace_s_per_km)}</b> · GAP <b>${cpPace(c.gap_s_per_km)}</b> /km${cpRel(c.gap_s_per_km, B.gap_s_per_km, cpPace, true)}`);
+      const vb = B.vam || {};
+      t.push(`<span style="opacity:.75">${vb.ok ? `平常 = 近 ${vb.weeks} 週坡度 ±${Math.round(D.grade_match * 100)} pp 內的爬坡中位數（${vb.n} 段，推估）`
+        : `相近坡度（±${Math.round(D.grade_match * 100)} pp）的過去爬坡只有 ${vb.n || 0} 段（< 5），不比較`}</span>`);
+      return t.join("<br>");
+    };
+    chart.setOption({
+      animation: false,
+      axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: muted, width: 1 } },
+      tooltip: { ...cpTipOpts(), trigger: "axis", axisPointer: { type: "line" },
+        formatter: (ps) => {
+          const p = Array.isArray(ps) ? ps[0] : ps;
+          const x = p?.axisValue ?? p?.value?.[0];
+          if (x == null) return "";
+          const b = bandAt(+x);
+          return cpTipBox(tipRow(idxAt(+x)) + (b ? `<hr style="border:0;border-top:1px solid ${line};margin:5px 0">${tipBand(b)}` : ""));
+        } },
+      grid: [{ left: 56, right: 18, top: top0, height: h0 }, { left: 56, right: 18, top: top1, height: h1 }],
+      xAxis: [
+        { type: "value", gridIndex: 0, min: x0, max: x1, axisLabel: { show: false }, axisTick: { show: false },
+          axisLine: { lineStyle: { color: line } }, splitLine: { lineStyle: { color: line } } },
+        { type: "value", gridIndex: 1, min: x0, max: x1, axisLine: { lineStyle: { color: line } }, splitLine: { lineStyle: { color: line } },
+          axisLabel: { ...lbl, showMinLabel: x0 === 0, showMaxLabel: false, formatter: (v) => `${cpN(v, v % 1 ? 1 : 0)} km` } },
+      ],
+      yAxis: [
+        { type: "value", gridIndex: 0, min: y0min, max: y0max, interval: yN0.interval, axisLabel: { ...lbl, formatter: (v) => `${v} m` },
+          splitLine: { lineStyle: { color: line } } },
+        { type: "value", gridIndex: 1, min: y1min, max: y1max, inverse: !!m.pace, interval: yN1.interval,
+          axisLabel: { ...lbl, formatter: (v) => m.axisF(v) }, splitLine: { lineStyle: { color: line } } },
+      ],
+      graphic: [{ type: "text", left: 56, top: top1 - 19, silent: true,
+        style: { text: m.cap, fill: muted, font: F2, width: Math.max(80, (el.clientWidth || 600) - 74), overflow: "truncate" } }],
+      series: [
+        { id: "alt", name: "海拔", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(A), showSymbol: false, z: 2,
+          lineStyle: { color: elev, width: 1.5 }, itemStyle: { color: elev }, areaStyle: { color: cpRgba(elev, 0.13) } },
+        { id: "bands", type: "custom", xAxisIndex: 0, yAxisIndex: 0, clip: false, z: 3, silent: true,
+          data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(false) },
+        { id: "bandsLow", type: "custom", xAxisIndex: 1, yAxisIndex: 1, z: 1, silent: true,
+          data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(true) },
+        { id: "m2", name: "實際配速", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: m.ys2 ? pts(m.ys2) : [], showSymbol: false,
+          connectNulls: false, lineStyle: { color: elev, width: 1 }, itemStyle: { color: elev }, z: 2 },
+        { id: "m", name: m.label, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(ys), showSymbol: false, connectNulls: false,
+          lineStyle: { color: blue, width: 1.5 }, itemStyle: { color: blue }, z: 3 },
+      ],
+    }, { replaceMerge: ["series", "graphic"] });
+    paintCmp();
+  }
+
+  // one row per climb: this climb (dot) against the usual on similar-grade climbs (bar = middle 50 %, rule = median)
+  const cmpChart = echarts.init(cmpEl);
+  charts.push(cmpChart);
+  function paintCmp() {
+    const cm = CMP[metric], rows = climbs.filter((c) => c[cm.key] != null);
+    if (!rows.length) {
+      cmpEl.style.display = "none";
+      cmpCap.innerHTML = climbs.length ? `每段和平常比：這次沒有 ${esc(cm.name)} 的資料` : "";
+      return;
+    }
+    cmpEl.style.display = "";
+    const nb = rows.filter((c) => c.base?.[cm.key]?.ok).length;
+    cmpCap.innerHTML = `<b>每段 ${esc(cm.name)} 和你平常比</b>（${esc(cm.hint)}）：點 = 這段；灰條 = 平常的中間 50%，直線 = 中位數。`
+      + `平常 = 同類活動近 8 週（不足 5 段放寬到 12、26 週）坡度相差 ±${Math.round(D.grade_match * 100)} pp 內的爬坡（推估）`
+      + (nb < rows.length ? `；${rows.length - nb} 段樣本不足，不比較` : "");
+    const narrow = (cmpEl.clientWidth || card.clientWidth || 800) < 520;
+    const h = rows.length * 30 + 34;
+    cmpEl.style.height = cmpEl.style.minHeight = `${h}px`;
+    const val = (c) => c[cm.key] * cm.scale;
+    const B = (c) => { const b = c.base?.[cm.key]; return b?.ok ? { ...b, q1: b.q1 * cm.scale, q3: b.q3 * cm.scale, median: b.median * cm.scale } : null; };
+    const all = rows.flatMap((c) => { const b = B(c); return [val(c), ...(b ? [b.q1, b.q3] : [])]; });
+    let lo = Math.min(...all), hi = Math.max(...all);
+    const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
+    const xn = cpNice(lo - pad, hi + pad, narrow ? 3 : 4, !!cm.pace);
+    lo = xn.min; hi = xn.max;
+    const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+    cmpChart.resize();
+    cmpChart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => {
+        const c = rows[p.dataIndex], b = c.base?.[cm.key];
+        if (!c) return "";
+        return cpTipBox(`<b>${esc(c.no)}</b> 從 ${cpN(c.start_km, 1)} km · +${cpN(c.gain_m)} m · ${cpN(c.grade * 100)}%<br>`
+          + `這段 <b>${cm.f(val(c))}</b>${b?.ok ? `<br>平常 中位 ${cm.f(b.median * cm.scale)}（中間 50%：${cm.f(b.q1 * cm.scale)}～${cm.f(b.q3 * cm.scale)}；${b.n} 段／${b.weeks} 週）`
+            + `<br>${cpOutside(c[cm.key], b, cm.pace) || "在平常範圍內"}` : `<br>相近坡度的過去爬坡 ${b?.n || 0} 段（< 5），不比較`}`);
+      } },
+      grid: { left: 92, right: narrow ? 14 : 124, top: 4, bottom: 26 },
+      xAxis: { type: "value", min: lo, max: hi, inverse: !!cm.pace, interval: xn.interval, axisLine: { show: false },
+        axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => cm.axisF(v) }, splitLine: { lineStyle: { color: line } } },
+      yAxis: { type: "category", inverse: true, data: rows.map((c) => `${c.no}  ${cpN(c.start_km, 1)} km`),
+        axisTick: { show: false }, axisLine: { lineStyle: { color: line } }, axisLabel: { color: ink, fontSize: 11 } },
+      series: [
+        { id: "base", type: "custom", data: rows.map((c, i) => [lo, i]), encode: { x: 0, y: 1 }, z: 1,
+          renderItem: (params, api) => {
+            const c = rows[params.dataIndex], b = B(c), yc = api.coord([lo, params.dataIndex])[1];
+            const gx0 = api.coord([lo, 0])[0], gx1 = api.coord([hi, 0])[0];
+            const kids = [{ type: "rect", shape: { x: Math.min(gx0, gx1), y: yc - 14, width: Math.abs(gx1 - gx0), height: 28 },
+              style: { fill: "rgba(0,0,0,0.001)" } }];                         // the row is the hover target
+            if (b) {
+              const a = api.coord([b.q1, 0])[0], z = api.coord([b.q3, 0])[0], md = api.coord([b.median, 0])[0];
+              kids.push({ type: "rect", silent: true, shape: { x: Math.min(a, z), y: yc - 5, width: Math.max(2, Math.abs(z - a)), height: 10, r: 4 },
+                style: { fill: css("--cp-base") } },
+                { type: "line", silent: true, shape: { x1: md, y1: yc - 8, x2: md, y2: yc + 8 }, style: { stroke: css("--cp-ink2"), lineWidth: 2 } });
+            }
+            // outside the usual's middle 50 %: said in a column right of the plot (never on top of the marks)
+            const t = narrow ? null : cpOutside(c[cm.key], c.base?.[cm.key], cm.pace);
+            if (t) kids.push({ type: "text", silent: true, style: { text: t, x: Math.max(gx0, gx1) + 12, y: yc, fill: ink,
+              font: "11px system-ui, sans-serif", verticalAlign: "middle" } });
+            return { type: "group", children: kids };
+          } },
+        { id: "me", type: "scatter", silent: true, z: 3, symbolSize: 11,
+          itemStyle: { color: css("--cp-line"), borderColor: panel, borderWidth: 2 },
+          data: rows.map((c, i) => [val(c), i]) },
+      ],
+    }, { replaceMerge: ["series"] });
+  }
+  paint();
+  new ResizeObserver(() => { chart.resize(); paint(); }).observe(el);
+}
+
+function drawGradeProfile(card, res) {
+  cpStyle();
+  const D = res.grade_profile, bins = (D.bins || []).filter((b) => b.time_s > 0);
+  const wrap = cpFrame(card, res, `詳細數字（${bins.length} 個坡度區間）`);
+  if (!bins.length) return;
+  const G = {
+    pace: { key: "pace_s_per_km", label: "配速", f: cpPace, unit: "/km", pace: true, hint: "越右越快" },
+    vam: { key: "vam", label: "VAM", f: (v) => cpN(v), unit: "m/h", hint: "越右爬升越快；下坡為負" },
+    power: { key: "power", label: "功率", f: (v) => cpN(v), unit: "W", hint: "越右功率越高" },
+    hr: { key: "hr", label: "心率", f: (v) => cpN(v), unit: "bpm", hint: "越右心率越高" },
+    eff_speed: { key: "eff_speed", label: "速度／心率", f: (v) => cpN(v, 2), unit: "m/min/bpm", hint: "越右越有效率" },
+    eff_power: { key: "eff_power", label: "功率／心率", f: (v) => cpN(v, 2), unit: "W/bpm", hint: "越右越有效率" },
+  };
+  const avail = Object.entries(G).filter(([, g]) => bins.some((b) => b.metrics?.[g.key] != null)).map(([k, g]) => [k, g.label]);
+  if (!avail.length) avail.push(["pace", "配速"]);
+  const okKey = (k) => avail.some(([a]) => a === k);
+  let metric = okKey(cpPref(CP_KEYS.grade, "pace")) ? cpPref(CP_KEYS.grade, "pace") : avail[0][0];
+  const bar = document.createElement("div");
+  bar.className = "cpbar";
+  bar.appendChild(cpSeg(avail, metric, "坡度分組的指標", (k) => { metric = k; cpSave(CP_KEYS.grade, k); paint(); }));
+  const leg = document.createElement("div");
+  leg.className = "cpleg";
+  leg.innerHTML = `<span><i style="background:var(--cp-bar)"></i>這次在該坡度的時間佔比</span>`
+    + `<span><i class="dot" style="background:var(--cp-line)"></i>這次</span>`
+    + `<span><i class="hol"></i>這次（不到 ${Math.round(D.min_s)} 秒，只供參考）</span>`
+    + `<span><i class="iqr"></i>平常的中間 50% 與中位數</span>`;
+  bar.appendChild(leg);
+  const cap = document.createElement("p");
+  cap.className = "cpcap";
+  const el = document.createElement("div");
+  el.className = "plot cpgrade";
+  el.style.flex = "none";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", "坡度分組：每個坡度的時間與表現，數字在「詳細數字」表格");
+  wrap.append(bar, cap, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  function paint() {
+    const g = G[metric];
+    const val = (b) => b.metrics?.[g.key];
+    const nb = bins.filter((b) => b.base?.[g.key]?.ok).length;
+    cap.innerHTML = `<b>每個坡度的${esc(g.label)}和你平常比</b>（${esc(g.hint)}；上 = 上坡、下 = 下坡）。`
+      + `平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度待 ≥ ${Math.round(D.min_s)} 秒的那幾次（推估）`
+      + (nb < bins.length ? `；${bins.length - nb} 個坡度樣本不足，只畫這次` : "");
+    const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
+    const h = bins.length * 28 + 34;
+    el.style.height = el.style.minHeight = `${h}px`;
+    const left = 78, w0 = narrow ? 64 : Math.max(90, Math.min(190, W * 0.2)), gap = narrow ? 14 : 26;
+    const vals = bins.flatMap((b) => { const v = val(b), bb = b.base?.[g.key]; return [v, ...(bb?.ok ? [bb.q1, bb.q3] : [])]; })
+      .filter((v) => v != null && isFinite(v));
+    let lo = vals.length ? Math.min(...vals) : 0, hi = vals.length ? Math.max(...vals) : 1;
+    const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
+    const xn = cpNice(lo - pad, hi + pad, narrow ? 3 : 5, !!g.pace);
+    lo = xn.min; hi = xn.max;
+    const maxShare = Math.max(...bins.map((b) => b.time_pct || 0), 1);
+    const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+    const cats = bins.map((b) => b.label);
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => {
+        const b = bins[p.dataIndex];
+        if (!b) return "";
+        const bb = b.base?.[g.key], v = val(b);
+        return cpTipBox(`<b>坡度 ${esc(b.label)}</b><br>時間 <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）· ${cpN(b.distance_km, 2)} km`
+          + `<br>${esc(g.label)} <b>${v == null ? "–" : g.f(v)}</b> ${esc(g.unit)}${b.time_s < D.min_s ? "（不到 " + Math.round(D.min_s) + " 秒，只供參考）" : ""}`
+          + (bb?.ok ? `<br>平常 中位 ${g.f(bb.median)}（中間 50%：${g.f(bb.q1)}～${g.f(bb.q3)}；${bb.n} 次／${bb.weeks} 週）<br>${cpOutside(v, bb, g.pace) || "在平常範圍內"}`
+            : `<br>平常：這個坡度只有 ${bb?.n || 0} 次 ≥ ${Math.round(D.min_s)} 秒（< 5），不比較`));
+      } },
+      grid: [{ left, width: w0, top: 4, bottom: 26 }, { left: left + w0 + gap, right: narrow ? 14 : 118, top: 4, bottom: 26 }],
+      xAxis: [
+        { type: "value", gridIndex: 0, min: 0, max: maxShare * (narrow ? 1.6 : 1.45), axisLabel: { show: false }, axisTick: { show: false },
+          axisLine: { show: false }, splitLine: { show: false } },
+        { type: "value", gridIndex: 1, min: lo, max: hi, inverse: !!g.pace, interval: xn.interval, axisLine: { show: false },
+          axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => g.f(v) }, splitLine: { lineStyle: { color: line } } },
+      ],
+      yAxis: [
+        { type: "category", gridIndex: 0, data: cats, axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
+          axisLabel: { color: ink, fontSize: 11 } },
+        { type: "category", gridIndex: 1, data: cats, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { show: false } },
+      ],
+      series: [
+        { id: "time", type: "bar", xAxisIndex: 0, yAxisIndex: 0, barWidth: 12, z: 2,
+          data: bins.map((b) => b.time_pct || 0),
+          itemStyle: { color: css("--cp-bar"), borderRadius: [0, 4, 4, 0] },
+          label: { show: true, position: "right", color: muted, fontSize: 10.5, formatter: (p) => `${Math.round(p.value)}%` } },
+        { id: "base", type: "custom", xAxisIndex: 1, yAxisIndex: 1, data: bins.map((b, i) => [lo, i]), encode: { x: 0, y: 1 }, z: 1,
+          renderItem: (params, api) => {
+            const b = bins[params.dataIndex], bb = b.base?.[g.key], yc = api.coord([lo, params.dataIndex])[1];
+            const gx0 = api.coord([lo, 0])[0], gx1 = api.coord([hi, 0])[0];
+            const kids = [{ type: "rect", shape: { x: Math.min(gx0, gx1), y: yc - 13, width: Math.abs(gx1 - gx0), height: 26 },
+              style: { fill: "rgba(0,0,0,0.001)" } }];
+            if (bb?.ok) {
+              const a = api.coord([bb.q1, 0])[0], z = api.coord([bb.q3, 0])[0], md = api.coord([bb.median, 0])[0];
+              kids.push({ type: "rect", silent: true, shape: { x: Math.min(a, z), y: yc - 5, width: Math.max(2, Math.abs(z - a)), height: 10, r: 4 },
+                style: { fill: css("--cp-base") } },
+                { type: "line", silent: true, shape: { x1: md, y1: yc - 8, x2: md, y2: yc + 8 }, style: { stroke: css("--cp-ink2"), lineWidth: 2 } });
+            }
+            const t = narrow || b.time_s < D.min_s ? null : cpOutside(val(b), bb, g.pace);
+            if (t) kids.push({ type: "text", silent: true, style: { text: t, x: Math.max(gx0, gx1) + 12, y: yc, fill: ink,
+              font: "11px system-ui, sans-serif", verticalAlign: "middle" } });
+            return { type: "group", children: kids };
+          } },
+        { id: "me", type: "scatter", xAxisIndex: 1, yAxisIndex: 1, silent: true, z: 3, symbolSize: 11,
+          data: bins.map((b, i) => {
+            const v = val(b), short = b.time_s < D.min_s;
+            return v == null ? { value: [null, i] } : { value: [v, i],
+              itemStyle: short ? { color: panel, borderColor: css("--cp-line"), borderWidth: 1.5 }
+                : { color: css("--cp-line"), borderColor: panel, borderWidth: 2 } };
+          }) },
+      ],
+    }, { replaceMerge: ["series"] });
+  }
+  paint();
+  new ResizeObserver(() => paint()).observe(el);
 }
 
 if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin",
