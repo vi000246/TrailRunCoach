@@ -641,7 +641,7 @@ function filterSummary() {
 }
 
 function renderActChip() {
-  const a = (S.acts || []).find((x) => x.index === S.workout);
+  const a = S.workout == null ? null : (S.acts || []).find((x) => x.index === S.workout);   // excluded rows: index null
   // the picked activity may fall outside the current date filter; keep its last known label
   if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.sport_type || a.sport} · ${hms(a.duration)}`;
   $("act-txt").textContent = S.workout == null ? "還沒選" : S.workoutLabel || `#${S.workout}`;

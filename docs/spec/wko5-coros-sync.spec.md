@@ -510,7 +510,7 @@ COROS 上傳的 FIT；2025-12-21 與 2026-09-30 兩邊的檔案功率完全相�
 43 km/h）」），但 `FitFolderDataset` 載入時就不放進 `ds.workouts`（WKO5 `Dataset` 在建 index 前濾掉、
 重新編號），所以 PMC／TSS、功率曲線、比賽功率、圖表都讀不到；`cptest.curves`／`scan` 讀的 COROS
 檔也一樣濾掉（`cptest.bad_files`）。規則、門檻與來源見 `docs/spec/workouts.spec.md`「Bad activity
-files」：均速或持續 60 秒／5 分／20 分的速度超過同時間世界紀錄均速 × 1.25（推估），或平均功率
+files」：均速或持續 60 秒／5 分／20 分的速度超過同時間世界紀錄均速 × 1.15（推估），或平均功率
 > 10 W/kg（推估）。使用者覆寫存在 `activity_tags.exclusion`（`keep` / `exclude`），設定
 `activities.exclude_bad`（預設 true）；兩者都併入 `source_stamp`。parity 模式不排除。
 TP 的 2025-12-14 垃圾檔（下節）就是這條規則抓的：不再只靠「沒有 Stryd 欄位」擋下（已知限制 7）。
