@@ -44,7 +44,7 @@
       "charts": [
         {"title": "飄移判讀", "kind": "review", "section": "aerobic",
          "basis": {"default": "pace", "choices": ["pace", "power"]},
-         "description": "Pa:HR = 速度／心率，前 10 分鐘不算，比較前後半。有坡（越野、每公里爬升 ≥ 20 m）、停頓 > 5%、功率起伏 > 15%、強度 > 90% CP 的跑步不採用。連續 3 次 < 5% 的次數只看配速。"},
+         "description": "Pa:HR = 速度／心率，前 10 分鐘不算（前 20 分鐘內有路口停等時，從最後一次停等後 1 分鐘起算，自組），比較前後半。有坡（越野、每公里爬升 ≥ 20 m）、停頓 > 5%、功率起伏 > 15%、強度 > 90% CP 的跑步不採用。連續 3 次 < 5% 的次數只看配速。"},
         {"title": "心率 vs AeT",
          "kind": "workout",
          "axes": [{"id": "BPM"}],
