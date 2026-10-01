@@ -197,6 +197,37 @@ def test_quality_caps_weekend_alternatives():
     assert O.quality_caps(PP.Prefs(), 6) == (None, [])
 
 
+def test_the_swap_drawer_and_the_templates():
+    d = IL.drawer("z5c", cp=204.0, cap=42, current="v3a")
+    eq = {r["key"]: r for r in d["equivalent"]}
+    assert set(eq) == {"v3a", "v3b", "v3c", "v3d"} and all(r["equiv"] for r in eq.values())
+    assert not eq["v3a"]["fits"] and "超過今天上限 42 分" in eq["v3a"]["why_not"]      # 43 min at the floor
+    assert eq["v3b"]["fits"] and eq["v3b"]["split"] == "暖身 15（市區 10＋drill 2＋快步跑 3） · 主課 22 · 緩和 5 ＝ 42 分"
+    other = {r["key"]: r["consequence"] for r in d["other"]}
+    assert other["v2a"].startswith("上一階（V2）：維持，不算進階") and "30/15" in other["x3015"]
+    assert "這週沒有 5 區" in other["t2a"] and any("縮量版" in r["consequence"] for r in d["other"])
+    assert d["recommended_key"] == "v3b"
+    t = IL.templates(204.0, 45, None, (), "z3b")
+    assert t["recommended_key"] == "t2a" and t["recommended_reason"].startswith("推薦（依你目前的階段與時間上限）")
+    keys = {r["key"] for g in t["groups"] for r in g["rows"]}
+    assert keys == set(IL.ALL) and any(r["terrain"] == "hill" for g in t["groups"] for r in g["rows"])
+    assert all(r["hr"] for g in t["groups"] for r in g["rows"])
+
+
+def test_a_user_swap_keeps_the_rung_and_says_whether_it_counts():
+    th = {"cp": 204.0, "lthr": 170.0, "aet": 150.0}
+    p = IL.variant_patch("v3c", "z5c", th, None, 45)
+    assert p["equiv"] and p["swap"] == "user" and p["rung_key"] == "z5c" and "同等，不影響進階" in p["swap_reason"]
+    p = IL.variant_patch("v2a", "z5c", th, None, 45)          # the step before
+    assert not p["equiv"] and p["rung_key"] == "z5c" and "這次不算進階" in p["swap_reason"]
+    p = IL.variant_patch("x3015", "z5d", th)
+    assert not p["equiv"]
+    p = IL.variant_patch("v3a", "z5c", th, None, None, reps=4)        # 12 of 15 min = 80 % < 85 %
+    assert not p["equiv"] and p["variant_reps"] == 4
+    with pytest.raises(ValueError):
+        IL.variant_patch("nope", "z5c", th)
+
+
 def test_steps_carry_the_blocks_and_the_walk_rests():
     st = IL.steps(IL.get("v1a"), "std")
     kinds = [s["kind"] for s in st]
