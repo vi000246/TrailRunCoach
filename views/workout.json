@@ -97,9 +97,9 @@
       "description": "爬坡段、每 100 m 爬升的心跳數、坡度對心率／功率。越野、登山；專項期最重要。WKO5 版本：「WKO5 Workout View」→ Workout「Elevation over Distance Colored Gradient」、爬坡分析「VAM Analysis」「Hilly Run Summary」「Elevation Corrected Power」、Zone & Variation「Heart Rate vs. Power by grade」。",
       "charts": [
         {"title": "爬坡段", "kind": "review", "section": "climbs",
-         "description": "連續爬升 ≥ 80 m、坡度 ≥ 3%（小起伏併入）。每 100 m 心跳數越低越經濟；和近 8 週的爬坡中位數比，低 > 5% = 變好。"},
+         "description": "上：高度圖（海拔對距離），爬坡段標 ①②③ 與爬升／距離／坡度，下坡段畫斜線、標 ↓。爬坡段 = 連續爬升 ≥ 80 m、坡度 ≥ 3%（小起伏併入）；下坡段用同一個規則反過來找。中：同一條距離軸上的 VAM／功率／%CP／心率／GAP（60 秒滾動，推估視窗），黑線 = 每段平均；滑過任何一點看那裡的數值，滑過爬坡段看整段的時間、VAM、心率、功率、%CP、配速／GAP 和平常比。下：每段和平常比，平常 = 同類活動近 8 週（不足 5 段放寬到 12、26 週）坡度相差 ±4 pp 內的爬坡中位數與中間 50%（推估）。每 100 m 心跳數越低越經濟；整次和近 8 週的爬坡中位數比，低 > 5% = 變好。表格在「詳細數字」。"},
         {"title": "坡度分組", "kind": "review", "section": "grades",
-         "description": "每個坡度區間的時間、距離、配速、心率、功率（停頓不算）。"},
+         "description": "每列一個坡度區間（上 = 上坡、下 = 下坡）。左邊灰條 = 這次在該坡度的時間佔比；右邊點 = 這次的配速／VAM／功率／心率／效率，灰條 = 平常的中間 50%、直線 = 中位數。平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度待 ≥ 60 秒的那幾次（推估）；這次不到 60 秒的坡度畫空心點，只供參考。停頓不算。表格在「詳細數字」。"},
         {"title": "坡度對心率",
          "kind": "workout",
          "axes": [{"id": "BPM"}],
