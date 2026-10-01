@@ -29,6 +29,10 @@ the WKO5 athlete folder.
   these FITs (_estimate_settings) -> unset ("未設定"). The WKO5 athlete file
   only when settings_dir is passed (dataset_for_source: the opt-in setting
   charts.fit_settings_from_wko5). PMC constants: 42 / 7 (WKO5's defaults).
+* power source per workout (backend/engine/power_source.py): stryd (Stryd
+  developer fields / a Stryd device_info row), watch (power without them) or
+  none, from the parsed FIT; watch power scores no power TSS unless
+  power.accept_watch_power (Dataset._apply_power_policy).
 * the app DB is opened read-only (a sync may be writing it).
 * parity mode / own-formula config flags behave as for the WKO5 Dataset.
 """
@@ -294,7 +298,8 @@ class FitFolderDataset(Dataset):
                  today: Optional[dt.date] = None, config: Optional[EngineConfig] = None,
                  corrections: Optional[CorrectionStore] = None, source: str = "fit",
                  tz: Optional[dt.tzinfo] = None, classifications: Optional[dict] = None,
-                 athlete_settings: Optional[list] = None, estimate_thresholds: Optional[bool] = None):
+                 athlete_settings: Optional[list] = None, estimate_thresholds: Optional[bool] = None,
+                 accept_watch_power: Optional[bool] = None):
         from backend.engine.planning import Plan
         from backend.engine.wko5expr.datasource import athlete_tz
         from backend.files.fit_to_channels import fit_to_channels
@@ -304,6 +309,7 @@ class FitFolderDataset(Dataset):
         # -> WKO5COACH_TZ -> system
         self.tz = tz or athlete_tz()
         self.config = config or EngineConfig()
+        self._init_power_policy(accept_watch_power)
         self.corrections = None if self.config.parity else (corrections or CorrectionStore())
         self.plan = Plan() if self.config.parity else Plan.load()
         self.athlete = default_athlete()
@@ -371,6 +377,9 @@ class FitFolderDataset(Dataset):
             tags = ["runningtrail"] if stype == "trail running" else []
             w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags)
             self.workouts.append(w)
+            self._power_src[idx] = fc.power_source      # stryd / watch / none (power_source.py)
+            if not self.accept_watch_power and self._power_src[idx] == "watch":
+                self._power_blocked.add(rel)            # no power TSS from watch power
             t = _arr(fc.elapsedtime)
             ch = {k: _arr(v) for k, v in fc.channels.items()}
             entry.metrics = workout_fields(t, ch, group, self.sport_setting("thr", w))

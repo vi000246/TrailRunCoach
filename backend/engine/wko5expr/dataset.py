@@ -222,9 +222,11 @@ class Workout:
 class Dataset:
     def __init__(self, athlete_dir: str | Path, today: Optional[dt.date] = None,
                  config: Optional[EngineConfig] = None,
-                 corrections: Optional["CorrectionStore"] = None):
+                 corrections: Optional["CorrectionStore"] = None,
+                 accept_watch_power: Optional[bool] = None):
         self.dir = Path(athlete_dir)
         self.config = config or EngineConfig()
+        self._init_power_policy(accept_watch_power)
         # Approved data corrections; skipped in parity mode so WKO5 comparisons
         # stay honest.
         self.corrections = None if self.config.parity else (corrections or CorrectionStore())
@@ -254,13 +256,90 @@ class Dataset:
             self.workouts.append(w)
         self.first_day = int(np.floor(self.workouts[0].day)) if self.workouts else int(self.today)
         self.last_day = int(np.floor(self.workouts[-1].day)) if self.workouts else int(self.today)
+        self._apply_power_policy()
         if self.config.moving_hr_tss:
             self._apply_moving_hrtss()
         self._apply_elevation_bonus()
 
+    # ---- power source (backend/engine/power_source.py) ----------------------
+    def _init_power_policy(self, accept: Optional[bool]) -> None:
+        """Parity mode reads every power like WKO5 does; otherwise watch-
+        estimated power feeds no power-based model unless the setting
+        power.accept_watch_power (or `accept`) says so."""
+        from backend.engine import power_source as PS
+        if self.config.parity:
+            self.accept_watch_power = True
+        else:
+            self.accept_watch_power = PS.read_setting(False) if accept is None else bool(accept)
+        self._power_blocked: set = set()
+        self._power_src: dict = {}
+
+    def _compute_power_source(self, w: Workout) -> str:
+        from backend.engine import power_source as PS
+        f = self.wko4(w.idx)
+        if f is None:
+            return PS.NONE
+        return PS.classify(f.channels, PS.is_stryd_device(f.device))
+
+    def power_source(self, w: Workout) -> str:
+        """stryd / watch / none for one workout (power_source.py). WKO5 .wko4
+        files: disk-cached by file stamp ("power_source_v1")."""
+        src = self._power_src.get(w.idx)
+        if src is None:
+            src = self._power_src[w.idx] = self._cached_power_source(w)
+        return src
+
+    def _cached_power_source(self, w: Workout) -> str:
+        p = self.dir / w.entry.file
+        if not p.exists():
+            return self._compute_power_source(w)
+        path = _CACHE_DIR / "power_source_v1.json"
+        store = self.__dict__.setdefault("_ps_store", None)
+        if store is None:
+            store = self._ps_store = _cache_read(path)
+        stamp = _file_stamp(p)
+        hit = store.get(w.entry.file)
+        if not hit or hit[:2] != stamp:
+            hit = stamp + [self._compute_power_source(w)]
+            store[w.entry.file] = hit
+            self._ps_dirty = True
+        return hit[2]
+
+    def _flush_power_sources(self) -> None:
+        if getattr(self, "_ps_dirty", False):
+            _cache_write(_CACHE_DIR / "power_source_v1.json", self._ps_store)
+            self._ps_dirty = False
+
+    def power_ok(self, w: Workout) -> bool:
+        """This workout's power may feed the power-based models."""
+        from backend.engine import power_source as PS
+        if self.accept_watch_power:
+            return True
+        return PS.usable(self.power_source(w), False)
+
+    def power_label(self, w: Workout) -> Optional[str]:
+        from backend.engine import power_source as PS
+        return PS.label(self.power_source(w), self.accept_watch_power)
+
+    def _apply_power_policy(self) -> None:
+        """No power TSS from watch-estimated power (default): the workouts
+        that would score power TSS are classified (only those files are
+        read) and the watch ones recomputed (rTSS / hrTSS)."""
+        from backend.engine import power_source as PS
+        if self.accept_watch_power:
+            return
+        for w in self.workouts:
+            m = w.entry.metrics
+            if not (m.get(F_TSSDURATION) and m.get(F_NP) is not None):
+                continue
+            if self.power_source(w) == PS.WATCH:
+                self._power_blocked.add(w.entry.file)
+                w.metrics = self._metrics(w)
+        self._flush_power_sources()
+
     def _is_hr_sourced(self, w: Workout) -> bool:
         m = w.metrics
-        if m["tssduration"] and m["np"] is not None:
+        if m["tssduration"] and m["np"] is not None and not m.get("power_tss_blocked"):
             return False                                   # power TSS
         if w.sport == "run" and m["ngp"] and m["tss"] is not None and m["tss"] != m["hrtss"]:
             return False                                   # rTSS
@@ -354,7 +433,10 @@ class Dataset:
         tssdur = m.get(F_TSSDURATION)
         ngp = m.get(F_NGP)
         tss = iff = None
-        if tssdur and tssdur > 0 and np_ is not None and ftp:
+        # watch-estimated power gives no power TSS unless power.accept_watch_power
+        # (backend/engine/power_source.py); the run falls back to rTSS / hrTSS
+        blocked = w.entry.file in getattr(self, "_power_blocked", ())
+        if tssdur and tssdur > 0 and np_ is not None and ftp and not blocked:
             iff = np_ / ftp
             tss = np_ * np_ * tssdur / (ftp * ftp * 36.0)       # = hours * IF^2 * 100
         elif w.sport == "run" and ngp and m.get(F_PACE_TSSDURATION):
@@ -394,6 +476,7 @@ class Dataset:
             "if": iff,
             "tss": tss,
             "plannedtss": None,
+            "power_tss_blocked": blocked,
         }
 
     # ---- disk-cached derived data -----------------------------------------

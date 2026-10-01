@@ -110,9 +110,16 @@ class FitChannels:
     channels: dict[str, list[Optional[float]]]
     one_second: bool = False
     sub_sport: Optional[str] = None     # session sub_sport (trail / treadmill / ...), when the device writes one
+    stryd_device: bool = False          # a device_info row names a Stryd pod (backend/engine/power_source.py)
+
+    @property
+    def power_source(self) -> str:
+        """stryd / watch / none (backend/engine/power_source.py)."""
+        from backend.engine.power_source import classify
+        return classify(self.channels, self.stryd_device)
 
 
-def _read_messages(raw: bytes):
+def _read_messages(raw: bytes, devices: Optional[list] = None):
     records, sessions, events = [], [], []
     with fitdecode.FitReader(io.BytesIO(raw)) as fr:
         for fm in fr:
@@ -124,6 +131,9 @@ def _read_messages(raw: bytes):
                 sessions.append({f.name: f.value for f in fm.fields})
             elif fm.name == "event":
                 events.append({f.name: f.value for f in fm.fields})
+            elif fm.name == "device_info" and devices is not None:
+                devices.append({f.name: f.value for f in fm.fields
+                                if f.name in ("manufacturer", "product_name", "product")})
     return records, sessions, events
 
 
@@ -270,8 +280,12 @@ def build_samples(records: list[dict], session: dict):
 def fit_to_channels(raw: bytes) -> FitChannels:
     if raw[:2] == b"\x1f\x8b":
         raw = gzip.decompress(raw)
-    records, sessions, events = _read_messages(raw)
-    return channels_from_messages(records, sessions, events)
+    devices: list = []
+    records, sessions, events = _read_messages(raw, devices)
+    fc = channels_from_messages(records, sessions, events)
+    from backend.engine.power_source import fit_stryd_device
+    fc.stryd_device = fit_stryd_device(devices)
+    return fc
 
 
 def channels_from_messages(records: list[dict], sessions: list[dict],
