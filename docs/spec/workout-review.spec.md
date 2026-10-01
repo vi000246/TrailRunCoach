@@ -161,7 +161,11 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:741`).
   or the AeT row; the untitled steady fallback stays at 55 min so the athlete's ordinary
   41–52′ road runs are not taken for tests (and never offer 「套用這次的 AeT」). `classify`
    returns `test_match` done_by / title / threshold / steady for a `test_aet`
-   (`backend/engine/workout_review.py:1029`, `MATCH_LABEL` `backend/engine/workout_review.py:944`).
+   (`backend/engine/workout_review.py:1029`, `MATCH_LABEL` `backend/engine/workout_review.py:994`).
+   **User mark** (2026-10-01): a run the user tagged activity type 測試 (`engine/activity_tags.py`,
+   the 活動資訊 card) that no other rule made a test becomes `test_aet` when the title says AeT,
+   else `test_cp`, with `test_match` "user" (accepted by the race-power back-test's
+   `wko5_cp_tests` like a plan / title mark). Other tags do not demote an auto test.
 4. `quality`: road, trail or hike whose average HR is **not** ≤ AeT+3, and either
    30-s power time ≥ 95 % CP reaches `HARD_SESSION_S` (600 s,
    `backend/engine/overview.py:65`), or hard time reaches it **and**, when a power
@@ -432,6 +436,7 @@ None. The module computes on request; there are no emitters or subscribers.
 |------|------|-------------|---------|
 | 2026-09-30 | code-sync | N/A | Created from brownfield analysis — single-activity review cards (session type, Pa:HR drift, efforts, climbs, durability, form), 單次活動判讀 view, drift streak / CP-test hooks for status and week plan |
 | 2026-09-30 | user-decision | N/A | Hikes go through the same quality rule as road and trail; average HR ≤ AeT+3 still means easy |
+| 2026-10-01 | feature | user request (activity tags) | The user's activity type 測試 marks a test (`test_match` "user") |
 | 2026-10-01 | feature | N/A | 間歇門檻 replaces the drift streak (aerobic lines informational, streak legacy only; `quality_gate` wraps `engine/quality_gate.py`); AeT drift test: 「AeT」 title → test_aet, `aet_test.analyze` (post-warm-up block, UA bands, fast-finish / heat / 40-min-after-warm-up checks kept out of `drift_of`), `latest_aet_test`, 「套用這次的 AeT」 card action through `drawAction` |
 | 2026-09-30 | bugfix | N/A | Hikes get power quality and efforts like runs; hard HR time excludes recording gaps; HR-drop check skips short surges; last_quality covers hikes, sorted by date; measure cache `workout_review_v4`; docstring points at the done plan; refreshed anchors |
 | 2026-09-30 | feat/drift-basis | N/A | Pw:HR from `drift_of` itself (same rules and halves); aerobic card follows the 配速／功率 toggle, 這次沒有功率 without power; streak and overview stay on Pa:HR; measure cache `workout_review_v6`; golden recomputation test on 3 real runs |

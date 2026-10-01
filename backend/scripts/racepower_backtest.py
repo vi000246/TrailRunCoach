@@ -31,8 +31,18 @@ def main(argv=None) -> int:
     ap.add_argument("--quiet", action="store_true", help="no per-case progress lines")
     ap.add_argument("--source", choices=("wko5", "coros", "tp"),
                     help="data source (default: the charts.data_source setting)")
+    ap.add_argument("--tags-db", help="read the activity tags from this DB (e.g. a scratch copy with the seed "
+                                      "applied) instead of the app DB")
     a = ap.parse_args(argv)
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")   # cp950 consoles cannot print ≥ / …
+    except (AttributeError, ValueError):
+        pass
+    import os
     from pathlib import Path
+    if a.tags_db:
+        from backend.engine import activity_tags as AT
+        os.environ[AT.TAGS_DB_ENV] = a.tags_db
     from backend.api.wko5views import _dataset
     from backend.engine.racepower import backtest as BT
     ds = _dataset(source=a.source)
@@ -111,6 +121,29 @@ def main(argv=None) -> int:
                   f"tte {hh.get('p_sus_tte') or 0:.1f} comb {hh.get('p_sus_comb') or 0:.1f} (P_LTHR "
                   f"{hh.get('p_lthr') or 0:.1f}, n_max {hh.get('n_max')}, valid {hh.get('valid')} {hh.get('reasons')})"
                   f" err_c {_pct(r.get('err_c'))} hr_tte {_pct(r.get('err_c_hr_tte'))} hr_tt30 {_pct(r.get('err_c_hr_tt30'))}")
+    th = res.get("trail_hr") or {}
+    if th:
+        mn = th.get("model_now") or {}
+        print(f"\n== 越野心率配速模型 (trailhr, 推估) == now: kind {mn.get('kind')} n {mn.get('n')} "
+              f"a {mn.get('a')} b {mn.get('b')} delta/h {mn.get('delta')} raw {mn.get('delta_raw')} "
+              f"(n_dur {mn.get('n_durability')}) "
+              f"x_race {mn.get('x_race')} ({mn.get('x_race_source')})")
+        for name in ("all", "races", "max_effort"):
+            b = th[name]
+            print(f"  {name:10s} n={b['n']:3d} given {_st(b['given'])}")
+            print(f"  {'':10s}       no-dur {_st(b['no_durability'])}")
+            print(f"  {'':10s}       race-x {_st(b['race_level'])}")
+            print(f"  {'':10s}  race-x no-dur {_st(b['race_level_no_durability'])}")
+            print(f"  {'':10s}  power envelope (mode C) {_st(b['power_envelope'])}")
+        for r in th["race_rows"]:
+            t = r.get("th") or {}
+            mv = t.get("moving_s") or 0
+            print(f"   {r['date']} {r.get('file') or ''} effort {r.get('effort_tag')}{'(手動)' if r.get('effort_overridden') else ''} "
+                  f"rest {(r.get('rest_share') or 0):.0%}{' NO POWER' if r.get('no_power') else ''}: actual {mv / 3600:.2f} h, "
+                  f"given-HR {((t.get('t_given') or 0) / 3600):.2f} h ({_pct(r.get('err_th_given'))}), "
+                  f"race-level x {t.get('x_race') or 0:.2f} -> {((t.get('t_race') or 0) / 3600):.2f} h "
+                  f"({_pct(r.get('err_th_race'))}); x {t.get('x') or 0:.2f}; power envelope err_c {_pct(r.get('err_c'))}"
+                  f"{'; ' + r['error'] if r.get('error') else ''}")
     print("validated:", res["validated"], "effort:", res["effort_validated"])
     hh = res["hike_hr"]
     print("hike HR windows:", {k: v.get("n") for k, v in hh["uses"].items()},

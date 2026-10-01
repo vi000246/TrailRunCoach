@@ -17,7 +17,9 @@ async def get_db():
 
 
 async def _migrate_schema():
-    """Add columns introduced after the initial schema without dropping data."""
+    """Add columns introduced after the initial schema without dropping data.
+    New TABLES (e.g. activity_tags, 2026-10-01) need no entry here: init_db's
+    create_all creates any missing table and leaves existing ones alone."""
     new_cols = [
         ("workout_files", "coros_activity_id", "TEXT"),
         ("workout_files", "coros_sport_type", "INTEGER"),

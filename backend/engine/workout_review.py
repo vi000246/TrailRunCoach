@@ -1077,7 +1077,8 @@ QUICK_PATTERN = 1.03          # 自組: a 20′ window ≥ 1.03 × CP without a 
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
 CP_HINT = "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」"
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
-               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑"}
+               "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑",
+               "user": "你標記為測試（活動資訊）"}
 AET_TITLE = re.compile(r"(?<![A-Za-z])AeT(?![A-Za-z])")
 
 
@@ -1207,7 +1208,19 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
                        easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN),
                        plan_aet=aet_sched is not None)
     protocol = match = None
-    if typ == "test_aet":
+    user_test = False
+    if runs and typ not in ("test_cp", "test_aet"):
+        # the user's activity tag 測試 (engine/activity_tags.py) is a test mark like the plan's
+        try:
+            from backend.engine import activity_tags as AT
+            user_test = AT.user_type(AT.user_of(w)) == "test"
+        except Exception:                   # noqa: BLE001
+            user_test = False
+        if user_test:
+            typ = "test_aet" if AET_TITLE.search(title or "") else "test_cp"
+    if user_test:
+        match = "user"
+    if typ == "test_aet" and not user_test:
         # session_type's order: the plan's session (done_by), the title, a plan AeT row, ≥ 55′ steady
         match = ("done_by" if aet_sched is not None else
                  "title" if AET_TITLE.search(title or "") and not cp_detected else
