@@ -14,8 +14,8 @@ hrpower
     is the reference implementation; the viewer mirrors it.
 hrzones / powerzones
     Time in zones of this activity under a zone model the viewer picks (and
-    remembers). The tables are zones.py's (Friel, Classic, Palladino, Stryd,
-    %HRmax, RQ) plus the evaluator's (WKO5 Classic power, iLevels from the
+    remembers; defaults Friel % LTHR and Palladino % CP, no %HRmax model).
+    The tables are zones.py's (Friel, Classic, Palladino, Stryd, RQ) plus the evaluator's (WKO5 Classic power, iLevels from the
     PD model of the previous 90 days' mean-max power — the WKO5 chart
     「Time in iLevels」's own expression).
 hrtrend
@@ -269,8 +269,8 @@ HR_MODELS = [
      "source": "WKO5 Classic HR 區間（% LTHR）"},
     {"id": "seiler3", "title": "Seiler 3 區（AeT／LTHR）", "basis": "aet_lthr",
      "source": "Seiler 三區模型：1 區 < 第一閾值、2 區 兩閾值之間、3 區 > 第二閾值；這裡第一閾值用 AeT、第二用 LTHR"},
-    {"id": "hrmax5", "title": "最大心率 5 區（% HRmax）", "basis": "hrmax", "zones": lambda: Z.HRMAX5_ZONES,
-     "source": "手錶預設的 5 區（Garmin／Polar：50–60–70–80–90% 最大心率），低於 60% 併入 1 區"},
+    # no %HRmax model (zones.py: Iannetta 2020); a remembered 「hrmax5」 choice is no
+    # longer in the list, so the viewer falls back to the default (Friel)
     {"id": "rqhrr", "title": "徐國峰 RQ 儲備心率（% HRR）", "basis": "hrr", "zones": lambda: Z.RQ_HRR_ZONES,
      "estimate": True,
      "source": "RQ 跑力（徐國峰）儲備心率法；T 區 84–88% HRR 出自 runningquotient.com/article/single/52，"
@@ -294,7 +294,8 @@ POWER_MODELS = [
      "source": "Palladino 的三區摘要（低 < 80% CP、中 80–95%、高 ≥ 95%），即功率版的 Seiler 三區"},
 ]
 MODELS = {"hr": HR_MODELS, "power": POWER_MODELS}
-DEFAULT_MODEL = {"hr": "frielhr", "power": "ilevels"}
+# defaults: Friel % LTHR and Palladino % CP (docs/research/zones-and-thresholds.md §3.1–3.2)
+DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 
 
 def _threshold_text(ds, w, basis: str) -> Optional[str]:
@@ -304,48 +305,6 @@ def _threshold_text(ds, w, basis: str) -> Optional[str]:
     except Exception:            # noqa: BLE001 — a dataset without a plan (tests)
         return None
     return i.get("source")
-
-
-def hrmax_for(ds, w) -> tuple[Optional[float], Optional[str], bool]:
-    """(HRmax, where it comes from, is an estimate): the plan's mhr test, the
-    dataset's setting, else the observed HRmax (racepower.maximal: median of
-    the top-5 per-run peaks held ≥ 120 s in the 365 days up to the run — 推估)."""
-    import datetime as dt
-    from backend.files.wko5_athlete import day_to_date
-    plan = getattr(ds, "plan", None)
-    if plan is not None:
-        try:
-            v = plan.threshold_on("mhr", day_to_date(w.day))
-        except Exception:        # noqa: BLE001
-            v = None
-        if v:
-            return float(v), "你的測試", False
-    v = _f(ds.sport_setting("mhr", w)) if hasattr(ds, "sport_setting") else None
-    if v:
-        hist = (getattr(ds, "athlete", None) and ds.athlete.settings.get("runmhr")) or []
-        default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
-        if default:
-            # WKO5 dates a never-changed setting 1980-01-01: maybe its factory value
-            return v, "WKO5 設定，從沒改過，可能是出廠值（推估）", True
-        return v, "設定", False
-    if not hasattr(ds, "cached_series"):
-        return None, None, False
-    try:
-        from backend.engine.racepower import athlete as RA
-        from backend.engine.racepower import maximal as MX
-        peaks = []
-        for x in ds.workouts:
-            if x.sport == "run" and w.day - 365 < x.day < w.day + 1:
-                st = RA.intensity_stats(ds, x)
-                pk = MX.peak_hr(st.get("hist"), st.get("hist_lo", 40), MX.MAXIMAL["hrmax_hold_s"]) if st else None
-                if pk:
-                    peaks.append(pk)
-        hm = MX.hrmax_observed(peaks)
-    except Exception:            # noqa: BLE001 — no estimate is fine, the model says why
-        return None, None, False
-    if hm:
-        return hm, "觀測最大心率：近 365 天每次跑步維持 ≥ 2 分鐘的最高心率，前 5 名的中位數（推估）", True
-    return None, None, False
 
 
 def ilevels_for(ds, w) -> Optional[list[tuple]]:
@@ -388,18 +347,12 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
                 "basis_text": f"AeT {aet:.0f}、LTHR {lthr:.0f} bpm", "estimate": est}
     if b == "hrr":
         return {"reason": "沒有靜息心率資料，算不出儲備心率（HRR = 最大心率 − 靜息心率）"}
-    if b == "hrmax":
-        hm, src, hm_est = ctx.setdefault("hrmax", hrmax_for(ds, w))
-        if not hm:
-            return {"reason": "沒有最大心率（設定或近一年的跑步紀錄）"}
-        T, text, est = hm, f"最大心率 {hm:.0f} bpm（{src}）", est or hm_est
-    else:
-        T = {"lthr": lthr, "cp": cp}[b]
-        if not T:
-            return {"reason": f"沒有 {'LTHR' if b == 'lthr' else 'CP'}，區間算不出來"}
-        unit = "bpm" if b == "lthr" else "W"
-        src = _threshold_text(ds, w, b)
-        text = f"{'LTHR' if b == 'lthr' else 'CP'} {T:.0f} {unit}" + (f"（{src}）" if src else "")
+    T = {"lthr": lthr, "cp": cp}[b]
+    if not T:
+        return {"reason": f"沒有 {'LTHR' if b == 'lthr' else 'CP'}，區間算不出來"}
+    unit = "bpm" if b == "lthr" else "W"
+    src = _threshold_text(ds, w, b)
+    text = f"{'LTHR' if b == 'lthr' else 'CP'} {T:.0f} {unit}" + (f"（{src}）" if src else "")
     rows = [(zid, nm, (lo or 0.0) * T, None if hi is None else hi * T) for zid, nm, lo, hi in model["zones"]()]
     # the first zone takes everything below it too (Palladino starts at 50 % CP; zones.zone_of
     # counts below 50 % as 1A), so every second has a zone

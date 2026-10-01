@@ -427,8 +427,11 @@ def thresholds_as_of(ds, day: dt.date) -> dict:
     out = {"day": day.isoformat()}
     lt = _plan_last(ds, "lthr", day)
     est = _estimate(ds, day)
+    from backend.engine.planning import threshold_row
     if lt:
-        out.update(lthr=float(lt[1]), lthr_source=f"測試 {lt[0]}")
+        # an applied estimate says so (zones-and-thresholds.md §3.4 change 1)
+        out.update(lthr=float(lt[1]), lthr_source=(threshold_row(ds.plan, "lthr", day) or {}).get("label")
+                   or f"測試 {lt[0]}")
     elif (est.get("lthr") or {}).get("value"):
         out.update(lthr=float(est["lthr"]["value"]), lthr_source="自動估算（當天以前的跑步）")
     else:
@@ -441,7 +444,8 @@ def thresholds_as_of(ds, day: dt.date) -> dict:
                    else ds.setting_label("runthr", "WKO5 設定") if v is not None else "未設定")
     ae = _plan_last(ds, "aethr", day)
     if ae:
-        out.update(aet=float(ae[1]), aet_source=f"測試 {ae[0]}")
+        out.update(aet=float(ae[1]), aet_source=(threshold_row(ds.plan, "aethr", day) or {}).get("label")
+                   or f"測試 {ae[0]}")
     elif (est.get("aethr") or {}).get("value"):
         out.update(aet=float(est["aethr"]["value"]), aet_source="自動估算（當天以前的跑步）")
     else:

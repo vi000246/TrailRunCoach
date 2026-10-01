@@ -76,6 +76,8 @@ def _no_auto_plan_after_sync(monkeypatch):
     run on the real DB (engine/plan_auto.py); test_plan_auto calls it itself."""
     from backend.engine import plan_auto
     monkeypatch.setattr(plan_auto, "after_sync", lambda *a, **k: None)
+    # nor a threshold edit through the plan API (a CP change re-pushes to COROS)
+    monkeypatch.setattr(plan_auto, "after_thresholds", lambda *a, **k: None)
 
 
 @pytest.fixture
