@@ -25,6 +25,19 @@ Safety
     Chinese reasons) with the affected sessions before / after; 復原 restores the
     before state (pinned as the user's own, so the next run doesn't redo it)
     and re-pushes.
+
+CP change (docs/research/zones-and-thresholds.md §3.2: power targets are %
+CP, and COROS running workouts take absolute watts only): a run also starts
+when the CP in effect (week_plan thresholds) differs from the one the last run
+saw (state["cp"]) — api/plan.py starts one after every threshold edit
+(after_thresholds). The upcoming active sessions' watt numbers (target /
+detail) are recomputed (rescale_sessions; regenerated sessions get the new
+text anyway), the pushed ones go out of date by fingerprint and are re-pushed
+through push_window — also those already on the watch beyond the window —
+and one change-log row says 「CP 204 → 210 W：未來 N 堂課的功率目標已更新並重新
+推送」. With plan.auto.push off the stored plan and the log are updated, the
+row says 「…，待推送」 and nothing is sent; each item says 已重新推送 / 待推送 /
+只在 app. plan.auto.enabled off: nothing (the next enabled run catches up).
 """
 from __future__ import annotations
 
@@ -33,6 +46,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import re
 from typing import Callable, Optional
 
 from sqlalchemy import select
@@ -212,6 +226,76 @@ def summary(items: list[dict], held: bool = False) -> str:
     return "；".join(p for p in parts if p) or "沒有變更"
 
 
+# ---------------------------------------------------------------------------
+# CP change -> power targets (COROS running workouts take absolute watts only)
+# ---------------------------------------------------------------------------
+
+# "180–194 W", "< 163 W", "固定功率 153 W"; not W′ / W/kg / kW
+_WATTS = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)(?:(\s*[–-]\s*)(\d+(?:\.\d+)?))?(\s*W)(?![′'/A-Za-z])")
+
+
+def cp_of(inp: dict) -> Optional[float]:
+    """The CP the plan's power targets use (week_plan()['thresholds']['cp'])."""
+    v = (inp.get("thresholds") or {}).get("cp")
+    try:
+        return float(v) if v else None
+    except (TypeError, ValueError):
+        return None
+
+
+def rescale_watts(text: Optional[str], old: float, new: float) -> Optional[str]:
+    """Every absolute watt number in `text` × new / old (the target is a % of CP)."""
+    if not text or not old or not new:
+        return text
+
+    def one(m):
+        a = f"{float(m.group(1)) * new / old:.0f}"
+        if m.group(3) is None:
+            return f"{a}{m.group(4)}"
+        return f"{a}{m.group(2)}{float(m.group(3)) * new / old:.0f}{m.group(4)}"
+    return _WATTS.sub(one, text)
+
+
+def _has_power(s: dict, cp: float) -> bool:
+    """The session's COROS workout has a power-target step (watts from % CP)."""
+    from backend.engine import plan_store as PS
+    from backend.sync import coros_workouts as CW
+    try:
+        steps = CW.session_steps(PS.push_dict(s), CW.Thresholds(cp=cp))
+    except Exception:                       # noqa: BLE001 — not pushable: no watts on the watch
+        return False
+    flat = []
+    for st in steps:
+        flat.extend(getattr(st, "steps", None) or [st])
+    return any(getattr(x, "intensity", None) and x.intensity[0] == "power" for x in flat)
+
+
+def rescale_sessions(stored: list[dict], old: float, new: float, today: str) -> tuple[list[dict], list[dict]]:
+    """CP old -> new: the upcoming active sessions' watt numbers (target /
+    detail) recomputed from % CP. Returns (sessions, items) — one item per
+    session whose text or COROS power steps change (the change log rows)."""
+    out, items = [], []
+    for s in stored:
+        if s["state"] != "active" or s["kind"] == NOTICE_KIND or (s.get("day") or "") < today:
+            out.append(s)
+            continue
+        t2, d2 = rescale_watts(s.get("target"), old, new), rescale_watts(s.get("detail"), old, new)
+        x = {**s, "target": t2 or "", "detail": d2 or ""}
+        if t2 != s.get("target") or d2 != s.get("detail") or _has_power(x, new):
+            before = {k: s.get(k) for k in ("target", "detail") if s.get(k) != x.get(k)}
+            items.append({"action": "changed", "uid": s["uid"], "day": s.get("day"), "kind": s.get("kind"),
+                          "title": s.get("title"), "minutes": s.get("minutes"), "tss": s.get("tss"),
+                          "reason": f"CP {old:.0f} → {new:.0f} W：功率目標依 % CP 重算", "rule": "cp",
+                          "before": before})
+        out.append(x)
+    return out, sorted(items, key=lambda i: i.get("day") or "9999")
+
+
+def cp_summary(old: float, new: float, n: int, pushed: bool) -> str:
+    return (f"CP {old:.0f} → {new:.0f} W：未來 {n} 堂課的功率目標已更新" +
+            ("並重新推送" if pushed else "，待推送"))
+
+
 def stamp(inp: dict) -> str:
     acts = inp.get("activities") or []
     key = [inp.get("today"), len(acts), sorted(str(a.get("index")) for a in acts),
@@ -341,11 +425,13 @@ async def _stale_notices(db, today: str, keep: Optional[str], errors: list) -> N
 # push
 # ---------------------------------------------------------------------------
 
-async def push_window(db, new: list[dict], inp: dict, today: str, days: int) -> dict:
+async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
+                      extra_uids: Optional[set] = None) -> dict:
     """Push the active sessions in [today, today + days − 1] (later ones stay in
     the app); remove pushed sessions that left the plan / were missed. Nothing
     is sent when every session in the window is already up to date. Errors are
-    returned, never raised."""
+    returned, never raised. `extra_uids`: sessions after the window that are
+    on the watch already and must be re-sent too (a CP change: their watts)."""
     from backend.api import plan_sessions as API
     from backend.engine import plan_store as PS
     from backend.sync import coros_workouts as CW
@@ -358,6 +444,10 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int) -> 
         stale += [s["uid"] for s in API._on_blocked(new, bl, today) if s["uid"] in rows]
         missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
         todo = [s for s in API._in_range(new, today, end, bl) if s["kind"] != NOTICE_KIND]
+        if extra_uids:
+            have = {s["uid"] for s in todo}
+            todo += [s for s in new if s["uid"] in extra_uids and s["uid"] in rows and s["uid"] not in have
+                     and s["state"] == "active" and (s.get("day") or "") >= today and s.get("day") not in bl]
         th = inp.get("thresholds") or {}
         need = [s for s in todo if CW.status_of(PS.push_dict(s), th, rows.get(s["uid"]), today)["status"]
                 in ("not_pushed", "outdated", "failed")]
@@ -446,6 +536,47 @@ async def _log_states(db, inp: dict, state: dict, trigger: str) -> None:
         await _add_entry(db, trigger=trigger, status="applied", summary=line, items=[], push=None)
 
 
+def _f(v) -> Optional[float]:
+    try:
+        return float(v) if v is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out: dict, trigger: str,
+                  th: dict, today: str) -> dict:
+    """The change-log row of a CP change: 「CP 204 → 210 W：未來 N 堂課的功率目標已更新
+    並重新推送」, or 「…，待推送」 when plan.auto.push is off (or the run is held / the
+    push failed). Per session: 已重新推送 / 待推送 (on the watch with old watts) /
+    只在 app (not on the watch yet: it is sent when it enters the push window)."""
+    from backend.engine import plan_store as PS
+    from backend.sync import coros_workouts as CW
+    cur = {s["uid"]: s for s in await PS.load(db)}
+    try:
+        rows = await CW.all_rows(db)
+    except Exception:                       # noqa: BLE001
+        rows = {}
+    marked = []
+    for i in items:
+        s = cur.get(i["uid"])
+        if i["uid"] in rows and s is not None:
+            st = CW.status_of(PS.push_dict(s), th, rows[i["uid"]], today)["status"]
+            label = "已重新推送" if st == "pushed" else "待推送"
+        else:
+            label = "只在 app"
+        marked.append({**i, "push": label})
+    pending_n = sum(1 for i in marked if i["push"] == "待推送")
+    pushed = bool(cfg.get("push")) and out.get("status") in ("applied", "noop") and not pending_n \
+        and (out.get("push") or {}).get("status") != "failed"
+    push = out.get("push") if cfg.get("push") else {"status": "off"}
+    await _add_entry(db, trigger="cp_change" if trigger.startswith("cp_change") else f"cp_change:{trigger}"[:40],
+                     status="applied",
+                     summary=cp_summary(old, new, len(marked), pushed), items=marked,
+                     push={**(push or {"status": "held"}), "pending": pending_n})
+    return {"old": old, "new": new, "n": len(marked), "pushed": pushed, "pending": pending_n,
+            "status": "已重新推送" if pushed else "待推送"}
+
+
 async def run(db, trigger: str = "sync", force: bool = False, approve_id: Optional[int] = None) -> dict:
     """One automatic run (see the module doc). `force`: ignore the data stamp
     and the big-change hold (approve, the page's 立即重算)."""
@@ -464,12 +595,22 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
     today = API._today(inp)
     state = dict(cfg["state"] or {})
     stp = stamp(inp)
-    if not force and state.get("stamp") == stp:
+    # a new CP in effect (a test applied, a plan row edited): the power targets are
+    # % CP, but COROS running workouts take absolute watts — recompute and re-push
+    cp_new, cp_old = cp_of(inp), _f(state.get("cp"))
+    cp_changed = bool(cp_new and cp_old and round(cp_new) != round(cp_old))
+    if not force and state.get("stamp") == stp and not cp_changed:
+        if cp_new and cp_old is None:
+            await _set_state(db, {**state, "cp": cp_new})        # the baseline, no event
         return {"status": "noop", "reason": "沒有新的活動"}
     errors: list = []
     p = await pending(db)
     await _stale_notices(db, today, p.notice_uid if p is not None else None, errors)
     stored = await PS.load(db)
+    cp_items: list = []
+    if cp_changed:
+        # the stored plan first, so the regenerated / held plan and the diff start from it
+        stored, cp_items = rescale_sessions(stored, cp_old, cp_new, today)
     adj: list = []
     new, changes = PS.reconcile_with_adapt(stored, inp, adjustments=adj)
     items = diff(stored, new, changes, adj)
@@ -513,10 +654,12 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
         # (one still on the watch is removed by the push: it left the plan)
         new = [s for s in new if s["kind"] != NOTICE_KIND]
         await PS.save(db, new)
-        push = await push_window(db, new, inp, today, days) if cfg["push"] else {"status": "off"}
+        push = await push_window(db, new, inp, today, days, {i["uid"] for i in cp_items}) if cfg["push"] \
+            else {"status": "off"}
         if errors:
             push = {**push, "errors": errors}
-        if items or push.get("status") not in ("unchanged", "off"):
+        # a push that only re-sends a CP change is logged by _log_cp (below), not twice
+        if items or (push.get("status") not in ("unchanged", "off") and not cp_items):
             before, after = _affected(stored, new, items)
             e = await _add_entry(db, trigger=trigger, status="applied", summary=summary(items),
                                  items=items, before=before, after=after, big=big or None, fingerprint=fp,
@@ -524,6 +667,11 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
             out = {"status": "applied", "id": e.id, "push": push}
         else:
             out = {"status": "noop", "push": push}
+    if cp_changed:
+        out["cp_change"] = await _log_cp(db, cp_old, cp_new, cp_items, cfg, out, trigger,
+                                         inp.get("thresholds") or {}, today)
+    if cp_new:
+        state["cp"] = cp_new
     state["stamp"] = stp
     if out["status"] in ("applied", "noop"):
         # the phase baseline moves only once a plan is applied: a held phase
@@ -642,3 +790,28 @@ def _after_sync(source: str, result: dict) -> Optional[asyncio.Task]:
 
 
 after_sync = _after_sync           # the hook sync/runner.py calls (tests replace it)
+
+
+def _after_thresholds() -> None:
+    """api/plan.py calls this after a threshold edit (apply-cp, the plan page):
+    a background run that sees the new CP (cp_of vs state["cp"]) re-zones the
+    upcoming power targets and re-pushes them (plan.auto.push permitting).
+    From a sync endpoint (a worker thread) the task is started on the app's
+    event loop; without one (scripts) nothing happens — the next sync does it."""
+    def start():
+        t = asyncio.get_running_loop().create_task(run_safe("cp_change"))
+        _TASKS.add(t)
+        t.add_done_callback(_TASKS.discard)
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            import anyio.from_thread
+            anyio.from_thread.run_sync(start)
+        except Exception:                   # noqa: BLE001 — no event loop: the next sync picks it up
+            pass
+        return
+    start()
+
+
+after_thresholds = _after_thresholds     # the hook api/plan.py calls (tests replace it)

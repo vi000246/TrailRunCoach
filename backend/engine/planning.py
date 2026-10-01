@@ -116,11 +116,63 @@ class Threshold:
     # when measured (two-point) — a prior is not the athlete's W′.
     wprime: Optional[float] = None
     cp_method: Optional[str] = None
+    # how `lthr` / `aethr` were obtained (LTHR_METHODS / AETHR_METHODS); None =
+    # a legacy row, read from its note (threshold_method). docs/research/
+    # zones-and-thresholds.md §3.4 change 1: an applied estimate is not a test.
+    lthr_method: Optional[str] = None
+    aethr_method: Optional[str] = None
 
     THRESHOLD_FIELDS = ("lthr", "aethr", "mhr", "cp")
 
 
-_THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "cp", "note", "wprime", "cp_method")
+_THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "cp", "note", "wprime", "cp_method",
+                   "lthr_method", "aethr_method")
+
+# estimate = thresholds.estimate applied with 「套用估計」; friel30 = Friel's
+# 30-min solo TT (last 20 min HR); test = an AeT drift test (engine/aet_test.py);
+# race / lab / manual = entered from a race, a lab test, by hand
+LTHR_METHODS = ("estimate", "friel30", "race", "lab", "manual")
+AETHR_METHODS = ("estimate", "test", "lab", "manual")
+METHOD_LABEL = {"estimate": "自動估算", "friel30": "30 分鐘測試", "test": "AeT 測試", "race": "比賽",
+                "lab": "實驗室測試", "manual": "手動輸入"}
+_FIELD_NAME = {"lthr": "LTHR", "aethr": "AeT"}
+
+
+def threshold_method(t: "Threshold", name: str) -> Optional[str]:
+    """How the row's `name` (lthr / aethr) was obtained. Rows written before
+    the *_method fields existed are read from their note: 「LTHR 自動估算」 /
+    「AeT 自動估算」 / 「由活動資料自動估算」 (the season-plan page's and
+    apply-estimate's notes) = estimate, 「AeT … 測試」 (apply_body of an AeT
+    drift test) = test, anything else = manual."""
+    if getattr(t, name, None) is None:
+        return None
+    m = getattr(t, f"{name}_method", None)
+    if m:
+        return m
+    note = t.note or ""
+    label = _FIELD_NAME.get(name, name)
+    if f"{label} 自動估算" in note or "由活動資料自動估算" in note:
+        return "estimate"
+    if name == "aethr" and "AeT" in note and "測試" in note:
+        return "test"
+    return "manual"
+
+
+def threshold_row(plan: "Plan", name: str, day: dt.date) -> Optional[dict]:
+    """The plan row whose `name` (lthr / aethr) is in effect on `day`:
+    {"value", "date", "method", "measured", "label"}; None without one.
+    measured = obtained by a test / race / lab / by hand, not an applied
+    estimate. label: 「自動估算（已套用 2026-09-30）」, 「30 分鐘測試 2026-…」 …"""
+    rows = sorted((t for t in plan.thresholds if getattr(t, name, None) is not None and _d(t.date) <= day),
+                  key=lambda t: t.date)
+    if not rows:
+        return None
+    t = rows[-1]
+    m = threshold_method(t, name)
+    d = t.date[:10]
+    label = f"自動估算（已套用 {d}）" if m == "estimate" else f"{METHOD_LABEL.get(m, '手動輸入')} {d}"
+    return {"value": float(getattr(t, name)), "date": d, "method": m, "measured": m != "estimate",
+            "label": label}
 
 
 @dataclass

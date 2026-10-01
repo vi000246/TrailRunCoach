@@ -689,11 +689,21 @@ class Status:
             return max(ds_) if ds_ else None
         cp, lt, ae = last("cp"), last("lthr"), last("aethr")
         parts, worst = [], GOOD
+        from backend.engine.planning import threshold_row
         for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)):
             if label == "AeT":
                 # B3 (unsourced-rules.md): no fixed expiry — the AeT test is due for a reason
                 # (quality_gate.aet_test_reason, below), not by age
                 parts.append("AeT 沒測過" if d is None else f"AeT {(self.today - d).days} 天前")
+                continue
+            if label == "LTHR" and d is not None:
+                # event-driven, not by age (zones-and-thresholds.md §3.4 change 4): an applied
+                # estimate is said as one; retests come from the zone events below
+                r = threshold_row(self.plan, "lthr", self.today)
+                if r is not None and not r["measured"]:
+                    parts.append(f"LTHR {r['label']}，不是測試")
+                else:
+                    parts.append(f"LTHR {(r or {}).get('label') or f'{(self.today - d).days} 天前'}")
                 continue
             if d is None:
                 parts.append(f"{label} 沒測過")
@@ -797,6 +807,25 @@ class Status:
             worst = WATCH if worst == GOOD else worst
             v = f"建議 AeT 測試：{tr['text']}"
             act = "排一次 AeT 測試（課表偏好的測試方式）" + (f"；{act}" if act else "")
+        # event-driven zone updates (engine/zone_events.py): suggestions only — they never
+        # set cp_due, so week_plan schedules nothing from them; the 「建議做測試」 UI renders them
+        try:
+            from backend.engine import zone_events as ZE
+            ze = ZE.suggestions(self.ds, self.plan, self.today, brk=brk)
+        except Exception:                   # noqa: BLE001 — no detector, no suggestion
+            ze = {"suggestions": [], "events": [], "checks": {}}
+        self.test_suggestions = ze["suggestions"]
+        extra["test_suggestions"] = ze["suggestions"]
+        extra["zone_events"] = ze["events"]
+        extra["zone_checks"] = ze["checks"]
+        if ze["suggestions"]:
+            worst = WATCH if worst == GOOD else worst
+            s0 = ze["suggestions"][0]
+            if txt == "OK":
+                txt, v = "建議測", s0["title"]
+            why += "；" + "；".join(s["title"] for s in ze["suggestions"])
+            act = (act + "；" if act else "") + "建議（不會自動排課）：" + "、".join(
+                ZE.TEST_LABEL[t] for t in s0["tests"])
         extra["cp_due"] = cp_due
         extra["aet_date"] = ae.isoformat() if ae else None
         extra["aet_last_test"] = at["date"] if at else None
@@ -819,7 +848,7 @@ class Status:
             issues.append("LTHR 還是 WKO5 預設值 160")
             lvl = BAD
         if aet_missing:
-            issues.append("AeT 用 0.89×LTHR 估")
+            issues.append("AeT 用 0.89×LTHR 估（推估）")
             lvl = WATCH if lvl == GOOD else lvl
         if recent and with_hr / len(recent) < 0.8:
             issues.append(f"4 週內 {len(recent) - with_hr}/{len(recent)} 筆活動沒心率")
@@ -894,6 +923,8 @@ class Status:
             "headline": self.headline(),
             "indicators": [asdict(i) for i in self.indicators],
             "actions": [asdict(a) for a in self.actions],
+            # engine/zone_events.py suggestion objects (schema in its module doc); never scheduled
+            "test_suggestions": list(getattr(self, "test_suggestions", None) or []),
             "counts": {lvl: sum(1 for i in self.indicators if i.level == lvl) for lvl in (GOOD, WATCH, BAD, INFO, NA)},
         }
 

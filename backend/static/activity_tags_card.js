@@ -104,6 +104,10 @@
     if (!s || !grid || s.mode !== "workout" || s.workout == null) return;
     if (!grid.querySelector("section.card:not(#tagcard):not(#segcard)")) return;   // viewer still starting its cards
     const cur = grid.querySelector("#tagcard");
+    // only on the single-activity 總覽 tab (the view's first dashboard, 本次重點); the other
+    // tabs (間歇, 有氧, 爬坡 …) don't repeat it
+    const dash = (s.dash && s.dash.workout) || 0;
+    if (dash !== 0) { cur?.remove(); return; }
     if (cur && +cur.dataset.w === s.workout) return;
     cur?.remove();
     const card = document.createElement("section");
