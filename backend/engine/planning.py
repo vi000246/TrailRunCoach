@@ -44,6 +44,7 @@ PHASES = {
 KINDS = {"race": "越野賽", "baiyue": "百岳", "road": "路跑賽", "other": "其他"}
 PRIORITIES = ("A", "B", "C")
 EVENT_HEAT = ("auto", "hot", "cool")      # Event.heat (heat-acclimation.md §5.4)
+PACK_MAX_KG = 40.0                         # Event.pack_kg: as athlete.set_hike_meta's 0–40 kg check
 
 
 def _d(s) -> Optional[dt.date]:
@@ -67,6 +68,17 @@ class Event:
     # is this a hot race? auto = the race-day forecast / climatology decides
     # (Hadley > 150, heat.race_is_hot); hot / cool = the user says so
     heat: str = "auto"
+    # the trip pack (kg, day 1 = the heaviest) — loaded-carry-training.md §5.1;
+    # None = capacity.PACK_DEFAULT_MULTI / _SINGLE (9 kg), see pack()
+    pack_kg: Optional[float] = None
+
+    @property
+    def pack(self) -> float:
+        """pack_kg, else the 9 kg default (capacity.PACK_DEFAULT_MULTI / _SINGLE)."""
+        if self.pack_kg is not None:
+            return float(self.pack_kg)
+        from backend.engine.racepower.capacity import PACK_DEFAULT_MULTI, PACK_DEFAULT_SINGLE
+        return PACK_DEFAULT_MULTI if (self.days or 1) > 1 else PACK_DEFAULT_SINGLE
 
     @property
     def start(self) -> dt.date:
@@ -242,6 +254,12 @@ class Plan:
             data["kind"] = "other"
         if data.get("heat") not in EVENT_HEAT:
             data["heat"] = "auto"
+        if data.get("pack_kg") in ("",):
+            data["pack_kg"] = None
+        if data.get("pack_kg") is not None:
+            data["pack_kg"] = float(data["pack_kg"])
+            if not 0 <= data["pack_kg"] <= PACK_MAX_KG:
+                raise ValueError(f"行程背包要在 0–{PACK_MAX_KG:g} kg")
         _d(data["date"])  # validate
         eid = data.get("id") or uuid.uuid4().hex[:8]
         ev = Event(**{**data, "id": eid})
