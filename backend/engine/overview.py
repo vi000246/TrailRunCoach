@@ -738,6 +738,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             add(**AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
                              AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None),
                              aet_proto, getattr(prefs, "long_cap", None) if prefs is not None else None))
+        elif allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
+                and (gate.get("z5") or {}).get("state") != "open":
+            # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (徐國峰: Zone 3
+            # first, Zone 5 only on a confirmed base) — the Zone 3 ladder, uphill versions allowed
+            dz = QG.week_decision({**gate, "z5": {**(gate.get("z5") or {}), "open": False}}, "base", "base", monday)
+            if dz["allow"] and dz["spec"] is not None:
+                q_cap, q_alt = quality_caps(PR, PP.long_weekday(PR, _long_weekday(ds, today)) if PR is not None else 5)
+                add(**_gate_session(gate, dz, tt, hours, prefs, variant_history(monday, gate), True, q_cap, q_alt))
         elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
                 target=tgt.get("supra", ""), detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",

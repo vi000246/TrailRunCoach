@@ -449,10 +449,16 @@ def done_plan(db_path=None) -> dict:
     return out
 
 
+_INUSE_CACHE: dict = {}
+
+
 def plan_in_use(db_path=None) -> bool:
-    """The stored plan generates quality sessions (any quality row in plan_sessions):
-    then a run that matched none of them is not a ladder session (dose_step: neutral)."""
-    return bool(_plan_rows(db_path, ("quality",), _VARIANT_CACHE))
+    """The stored plan is in use (any row in plan_sessions): then a run that matched
+    none of its quality sessions is not a ladder session (dose_step: neutral). Any row,
+    not only quality ones — a guardrail that blocks intervals for weeks leaves no quality
+    row, and the athlete's hard steady runs then counted as 「3 區達標 3/3」 (2026-10-01)."""
+    kinds = ("easy", "long", "quality", "test", "hike", "strength")
+    return bool(_plan_rows(db_path, kinds, _INUSE_CACHE))
 
 
 def done_titles(db_path=None) -> dict:
