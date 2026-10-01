@@ -142,7 +142,83 @@ def _num(pat: str, text: str, default: Optional[int] = None, group: int = 1) -> 
     return int(m.group(group)) if m and m.group(group) else default
 
 
+def _basis(s: dict) -> Optional[str]:
+    """hr / power / none from engine/target_policy (push_dict resolves it with the 課表偏好;
+    a session without it is resolved here with the defaults)."""
+    b = s.get("basis")
+    if b in ("hr", "power", "none"):
+        return b
+    from backend.engine import target_policy as TP
+    return TP.target_policy(s)["basis"]
+
+
+HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z5": (1.00, 1.05)}   # × LTHR (aet = the AeT)
+
+
+def _work_hr(s: dict, th: Thresholds, cls: Optional[str]) -> Optional[tuple]:
+    hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", s.get("target", ""))
+    if hm:
+        return ("hr", int(hm.group(1)), int(hm.group(2)))
+    a, b = HR_WORK.get(cls or "", (0.95, 1.00))
+    if not th.lthr:
+        return None
+    lo = th.aet if a == "aet" else a * th.lthr
+    return ("hr", round(lo or 0.89 * th.lthr), round(b * th.lthr))
+
+
+def easy_target(s: dict, th: Thresholds, frac: tuple = (0.75, 0.80)) -> Optional[tuple]:
+    """Easy / long / hike by the session's basis: HR ≤ AeT (auto), a power band (課表偏好 or the
+    session's own 功率: Palladino Z2), or nothing."""
+    b = _basis(s)
+    if b == "power":
+        return power(th, *frac) or easy_hr(th)
+    if b == "none":
+        return None
+    return easy_hr(th)
+
+
+WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
+REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
+
+
+def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
+    """A library variant (engine/interval_library.py) from its own timed steps:
+    the warm-up blocks (city run, riverside, drills, strides), every rep and rest
+    as its own lap (walk rests have no target), the cool-down. None when the
+    session carries no known variant."""
+    from backend.engine import interval_library as IL
+    v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj"))
+    if v is None:
+        return None
+    work_int = power(th, v.lo, v.hi)
+    if _basis(s) == "hr":
+        work_int = _work_hr(s, th, v.cls) or work_int
+    elif _basis(s) == "none":
+        work_int = None
+    out: list[StepLike] = []
+    for st in IL.steps(v, s.get("variant_blocks") or "std"):
+        k = st["kind"]
+        if k == "warm" and st["code"] == "strides":
+            n = max(1, st["s"] // 60)
+            out.append(Repeat(n, [Step(EX_TRAIN, 20, None, "快步跑 20 秒"), Step(EX_REST, 40, None, "慢跑")],
+                              f"快步跑 {n}×20 秒"))
+        elif k == "warm":
+            out.append(Step(EX_WARMUP, st["s"], None if st["code"] == "drills" else easy_hr(th),
+                            WARM_NAME.get(st["code"], "暖身")))
+        elif k == "work":
+            out.append(Step(EX_TRAIN, st["s"], work_int, st["text"]))
+        elif k == "rest":
+            out.append(Step(EX_REST, st["s"], easy_hr(th) if st.get("mode") == "jog" else None,
+                            REST_NAME.get(st.get("mode"), "恢復")))
+        else:
+            out.append(Step(EX_COOLDOWN, st["s"], easy_hr(th), "緩和"))
+    return out
+
+
 def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
+    vs = _variant_steps(s, th) if s.get("variant_key") else None
+    if vs is not None:
+        return vs
     title, detail, target = s.get("title", ""), s.get("detail", ""), s.get("target", "")
     m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*分", title)
     if not m:
@@ -160,8 +236,10 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
     work_int = power(th, plo, phi)
     # 課表偏好 間歇目標 = 心率 (engine/plan_prefs.py): the target carries only a heart-rate range
     hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", target)
-    if hm and "功率" not in target:
-        work_int = ("hr", int(hm.group(1)), int(hm.group(2)))
+    if (hm and "功率" not in target) or s.get("basis") == "hr":
+        work_int = _work_hr(s, th, None) or work_int
+    elif s.get("basis") == "none":
+        work_int = None
     return [Step(EX_WARMUP, warm * 60, easy_hr(th)),
             Repeat(reps, [Step(EX_TRAIN, work * 60, work_int, f"{work} 分"),
                           Step(EX_REST, rest * 60, None)], f"{reps}×{work} 分"),
@@ -230,6 +308,60 @@ def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     return steps
 
 
+CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+
+def _int_text(it: Optional[tuple]) -> str:
+    if not it:
+        return "不設目標"
+    typ, lo, hi = it
+    if typ == "hr":
+        return f"心率 {lo:.0f}–{hi:.0f}" if lo else f"心率 ≤ {hi:.0f}"
+    return f"功率 {lo:.0f}–{hi:.0f} W"
+
+
+def step_lines(steps: list[StepLike]) -> list[str]:
+    """「① 暖身 15 分 心率 ≤ 138」「② 跑 8 分 ×3 功率 184–194 W，休息 2 分 走路」 — what 自動
+    (or the chosen basis) gives each step of this session, as the editor lists it."""
+    def mins(sec):
+        return f"{sec / 60:g} 分" if sec >= 60 else f"{sec} 秒"
+    out = []
+    i = 0
+    flat = []
+    for st in steps:
+        flat.append(st)
+    while i < len(flat):
+        st = flat[i]
+        n = len(out)
+        mark = CIRCLED[n] if n < len(CIRCLED) else f"{n + 1}."
+        if isinstance(st, Repeat):
+            w, r = st.steps[0], (st.steps[1] if len(st.steps) > 1 else None)
+            rest = f"，休息 {mins(r.seconds)} {r.name or ''}".rstrip() if r else ""
+            head = w.name if w.name and re.search(r"\d", w.name) else f"{w.name or '跑'} {mins(w.seconds)}"
+            out.append(f"{mark} {head} ×{st.sets} {_int_text(w.intensity)}{rest}")
+            i += 1
+            continue
+        if st.kind == EX_TRAIN and i + 1 < len(flat) and isinstance(flat[i + 1], Step) and flat[i + 1].kind == EX_REST:
+            # a run of work + rest steps with the same lengths → one 「×n」 line
+            k, j = 0, i
+            while j + 1 < len(flat) and isinstance(flat[j], Step) and flat[j].kind == EX_TRAIN and \
+                    flat[j].seconds == st.seconds and isinstance(flat[j + 1], Step) and flat[j + 1].kind == EX_REST:
+                k += 1
+                j += 2
+            last_work = j < len(flat) and isinstance(flat[j], Step) and flat[j].kind == EX_TRAIN and flat[j].seconds == st.seconds
+            reps = k + (1 if last_work else 0)
+            if reps >= 2:
+                r = flat[i + 1]
+                out.append(f"{mark} 跑 {mins(st.seconds)} ×{reps} {_int_text(st.intensity)}，休息 {mins(r.seconds)} {REST_NAME.get('walk') if not r.intensity else '慢跑'}")
+                i = j + (1 if last_work else 0)
+                continue
+        label = {EX_WARMUP: "暖身", EX_COOLDOWN: "緩和", EX_REST: "休息"}.get(st.kind, st.name or "跑")
+        name = f"{label}（{st.name}）" if st.name and st.kind in (EX_WARMUP,) and st.name not in ("暖身",) else label
+        out.append(f"{mark} {name} {mins(st.seconds)} {_int_text(st.intensity)}")
+        i += 1
+    return out
+
+
 def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
     """Structured steps for one week-plan session, or Unsupported."""
     kind = s.get("kind")
@@ -252,7 +384,8 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
     if secs <= 0:
         raise Unsupported("沒有時間長度")
     if kind in ("long", "mountain", "hike"):
-        return [Step(EX_TRAIN, secs, easy_hr(th), "心率 ≤ AeT")]
+        it = easy_target(s, th, (0.80, 0.88) if kind == "long" else (0.75, 0.88))
+        return [Step(EX_TRAIN, secs, it, "心率 ≤ AeT" if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
     if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
         # heat-acclimation.md §5.4: warm-up 10 / main / cool-down 5 (walk), HR ≤ AeT
         return [Step(EX_WARMUP, 10 * 60, easy_hr(th), "熱適應：慢慢進入"),
@@ -265,10 +398,11 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
             recover = 60
             base = secs - n * (sprint + recover)
             if base >= 10 * 60:
-                return [Step(EX_TRAIN, base, easy_hr(th), "心率 ≤ AeT"),
+                return [Step(EX_TRAIN, base, easy_target(s, th), "心率 ≤ AeT"),
                         Repeat(n, [Step(EX_TRAIN, sprint, None, f"{sprint} 秒上坡衝刺"),
                                    Step(EX_REST, recover, None, "走下來")], f"衝刺 {n}×{sprint} 秒")]
-        return [Step(EX_TRAIN, secs, easy_hr(th), "心率 ≤ AeT")]
+        it = easy_target(s, th)
+        return [Step(EX_TRAIN, secs, it, "心率 ≤ AeT" if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
     raise Unsupported(f"不支援的課表類型 {kind}")
 
 

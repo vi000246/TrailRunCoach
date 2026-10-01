@@ -60,7 +60,9 @@ def test_settings_round_trip():
     s = p.settings()
     for k, v in s.items():
         SR.validate(k, v)                                   # every stored value is valid
-    assert PP.from_settings(s) == p
+    # the old 間歇目標 = 心率 reads back as 目標依據 = 心率 (engine/target_policy.py migration)
+    from dataclasses import replace
+    assert PP.from_settings(s) == replace(p, target_basis="hr")
     assert PP.Prefs().settings()["plan.prefs.days"] is None  # all days = the default (null)
 
 
@@ -244,6 +246,24 @@ def test_quality_terrain_and_hr_target():
 def test_bad_values_are_rejected(key, value):
     with pytest.raises(ValueError):
         SR.validate(key, value)
+
+
+def test_dropped_quality_gate_mode_falls_back_to_auto(monkeypatch):
+    # 三訊號 ("xu_signals") is no longer a 間歇門檻: a stored value reads as auto…
+    assert PP.from_settings({"plan.prefs.quality_gate": "xu_signals"}).quality_gate == "auto"
+    assert PP.from_settings({"plan.prefs.quality_gate": "ua_gap"}).quality_gate == "ua_gap"
+    from backend.engine.wko5expr import datasource as DSRC
+    monkeypatch.setattr(DSRC, "read_setting", lambda k, default=None, user_id=1:
+                        "xu_signals" if k == "plan.prefs.quality_gate" else default)
+    assert PP.load().quality_gate == "auto"
+    # …new writes of it are rejected (settings enum, API body)
+    with pytest.raises(ValueError):
+        SR.validate("plan.prefs.quality_gate", "xu_signals")
+    with pytest.raises(ValueError):
+        PP.check(PP.from_body({"quality_gate": "xu_signals"}))
+    # and evaluate() maps any unknown mode to auto too
+    from backend.engine import quality_gate as QG
+    assert "xu_signals" not in QG.MODES and "xu_signals" not in QG.OPTION_INFO
 
 
 def test_cross_field_checks():
