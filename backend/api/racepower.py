@@ -732,6 +732,12 @@ def _trail_hr() -> Optional[dict]:
         return hit[1]
     try:
         m = A.trail_hr_model(_dataset())
+        if not m.get("n"):
+            # the chosen source has no trail history (e.g. COROS synced since 2025-10):
+            # the WKO5 athlete folder has it
+            from backend.api.wko5views import _dataset as wds
+            m = A.trail_hr_model(wds(source="wko5"))
+            m["dataset"] = "wko5"
     except Exception:                       # noqa: BLE001 — the planner falls back to the power total
         import traceback
         traceback.print_exc()
