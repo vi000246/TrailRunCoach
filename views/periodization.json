@@ -51,12 +51,12 @@
         },
         {
           "title": "長時間輕鬆跑的心率飄移",
-          "description": "Uphill Athlete 的有氧閾值測試：40–60 分鐘穩定跑，飄移 < 5% 代表在有氧閾值以下。長期壓在 5% 以下代表有氧基礎穩固；> 10% 代表有氧基礎不足或跑太快。只看 ≥ 40 分鐘的路跑（和總覽「心率飄移」指標同一個條件，總覽用配速）。",
+          "description": "Uphill Athlete 的有氧閾值測試：暖身後 40–60 分鐘穩定跑，飄移 < 5% 代表在有氧閾值以下。長期壓在 5% 以下代表有氧基礎穩固；> 10% 代表有氧基礎不足或跑太快。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，只看路跑；有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾、> 25 °C 的跑步不採用（不畫點）。總覽「心率飄移」指標是同一個算法，另外只算平均心率 ≤ AeT+3 的輕鬆跑（總覽用配速）。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點。",
           "basis": {"default": "pace", "choices": ["pace", "power"]},
           "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "飄移 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 2400, pahr)"},
-            {"name": "飄移 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 2400, pwhr)"},
+            {"name": "飄移 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"pace\"))"},
+            {"name": "飄移 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\"))"},
             {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "10% 注意", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "line_style": "dash", "expression": "(,0.10)"}
           ]
@@ -143,7 +143,7 @@
         },
         {
           "title": "耐久度：長時間後段心率飄移",
-          "description": "超過 90 分鐘的越野跑，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。登山的 Pa:HR 混了休息時間、會亂跳，所以不算；|飄移| > 30% 當成壞資料（和總覽「耐久度」指標同一個條件，總覽用配速）。",
+          "description": "超過 90 分鐘的越野跑，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。登山的 Pa:HR 混了休息時間、會亂跳，所以不算；|飄移| > 30% 當成壞資料（和總覽「耐久度」指標同一個條件，總覽用配速）。這張圖用 WKO5 存的 Pa:HR（全程前半對後半、含暖身和停頓），不是單次活動判讀卡的算法：判讀卡把有坡的跑步（越野都是）判為不採用，換過去這張圖會一個點都沒有。",
           "basis": {"default": "pace", "choices": ["pace", "power"],
                     "power_note": "越野的 Pw:HR 只當參考：Stryd 功率只驗證到約 8% 坡度，陡坡上的功率不一定準。"},
           "axes": [{"id": "PERCENT"}],

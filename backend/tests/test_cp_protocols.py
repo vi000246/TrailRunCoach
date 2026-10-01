@@ -426,7 +426,7 @@ def test_test_sessions_reads_the_store_read_only(tmp_path):
     con.close()
     got = PS.test_sessions(db)
     assert got == [{"uid": "a", "day": "2026-09-30", "state": "done", "title": "CP 測試 20 分全力",
-                    "protocol": "quick", "done_by": {"index": 4, "date": "2026-09-30"}}]
+                    "protocol": "quick", "done_by": {"index": 4, "date": "2026-09-30"}, "gen_key": None}]
     assert PS.test_sessions(tmp_path / "missing.db") == []
     assert PS.test_sessions() == []                                   # tests: no user DB (conftest)
 

@@ -990,6 +990,35 @@ class Evaluator:
             return 1.0 if tag in ctx.workout.tags else 0.0
         return WS({w.idx: (1.0 if tag in w.tags else 0.0) for w in self.wlist})
 
+    def fn_drift(self, n, ctx):
+        """drift("pace" | "power"): the 單次活動判讀卡's drift of a run
+        (workout_review.drift_of through its cached measure: 10-min warm-up
+        excluded, ≥ 40 min after it, and the fairness refusals — hills, stops,
+        unsteady, > 90 % CP, fast finish, > 25 °C). NaN (nothing plotted) for
+        a refused run, a non-run, or power mode without power. Not WKO5's
+        stored pahr / pwhr (whole recording, warm-up and stops included)."""
+        from backend.engine import workout_review as WR
+        basis = str(self.arg(n, 0, ctx)).strip().lower() if n.args else "pace"
+        if basis not in ("pace", "power"):
+            raise EvalError(f'drift() basis must be "pace" or "power", got {basis!r}')
+
+        def one(w):
+            # cheap pre-filter: drift_of refuses anything shorter anyway, and a
+            # season render shouldn't measure every hike and ride
+            dur = WR._f(w.metrics.get("duration"))
+            if w.sport != "run" or dur is None or dur < WR.WARMUP_S + WR.DRIFT_MIN_S:
+                return math.nan
+            m = WR.measure(self.ds, w)         # disk-cached; heat_gate applied on read
+            d = WR.basis_drift((m or {}).get("drift") or {}, basis)[0]
+            return math.nan if d is None else float(d)
+        if ctx.workout is not None:
+            v = one(ctx.workout)
+            WR._flush(self.ds)
+            return v
+        out = WS({w.idx: one(w) for w in self.wlist})
+        WR._flush(self.ds)
+        return out
+
     def fn_has(self, n, ctx):
         s, sub = self.arg(n, 0, ctx), str(self.arg(n, 1, ctx)).lower()
         if isinstance(s, WS):
