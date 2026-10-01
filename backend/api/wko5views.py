@@ -239,7 +239,9 @@ def list_views():
          "dashboards": [
             {"index": i, "title": d["title"], "description": d.get("description"),
              "charts": [{"index": j, "title": c.get("title"), "kind": _panel_kind(c),
-                         "series": len(c.get("series", []))} for j, c in enumerate(d["charts"])]}
+                         "series": len(c.get("series", [])),
+                         **({"view": c.get("view")} if c.get("kind") == "periodzones" else {})}
+                        for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
         for name, v in _views().items()
     ]
@@ -283,7 +285,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
-    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate"):
+    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     pinfo = winfo = binfo = None
     if v.get("source") == "custom" and BS.basis_spec(ch):
@@ -312,7 +314,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     key = chart_key(ch, req, data_fingerprint(ds))
 
     def compute():
-        res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None)
+        res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None, params=params)
         if winfo:
             rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
             res = {**res, **winfo, "recent_bests": rb}
@@ -393,7 +395,13 @@ def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
             "range_note": f"重播 {begin.isoformat()} 起（最多 1 年）" if begin > day_to_date(int(math.floor(b))) else None}
 
 
-def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:
+def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
+            params: Optional[dict] = None) -> dict:
+    if ch.get("kind") == "periodzones":
+        # time in zone over a period: zkind / zmodel / zsports / zperiod (/ zbegin, zend) / zgroup
+        # come from the query (all part of the render-cache key); the RHE sport filter is not used
+        from backend.engine.panels.period_zones import render as render_period_zones
+        return render_period_zones(ds, ch, b, e, params or {})
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
         return {**review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace"),
