@@ -337,7 +337,8 @@ def test_projection_advances_the_dose_and_evaluates_weeks_per_week():
 # the AeT drift test
 # ---------------------------------------------------------------------------
 
-def _aet_series(rise, warm=15, main=60, cool=5, temp=None, finish=1.0):
+def _aet_series(rise, warm=10, main=40, cool=0, temp=None, finish=1.0):
+    """UA's minimum test by default: 10′ warm-up + 40′ fixed power, no cool-down."""
     n_w, n_m, n_c = warm * 60, main * 60, cool * 60
     hr = [128.0] * n_w + list(np.linspace(143.0, 143.0 + rise, n_m)) + [130.0] * n_c
     pw = [180.0] * n_w + [200.0] * int(n_m * 0.9) + [200.0 * finish] * (n_m - int(n_m * 0.9)) + [140.0] * n_c
@@ -347,12 +348,16 @@ def _aet_series(rise, warm=15, main=60, cool=5, temp=None, finish=1.0):
 
 
 @pytest.mark.parametrize("rise, band", [(4.0, "below"), (12.9, "at"), (25.0, "above")])
-def test_aet_analysis_bands(rise, band):
-    t, h, s, p, _ = _aet_series(rise)
+@pytest.mark.parametrize("main, cool", [(40, 0), (40, 5), (60, 5)])
+def test_aet_analysis_bands(rise, band, main, cool):
+    # the planned 50-min test (stopped right at 40′, or with a cool-down) and a longer 60′ one
+    t, h, s, p, _ = _aet_series(rise, main=main, cool=cool)
     r = AT.analyze(t, h, s, p)
     assert r["ok"] and r["basis"] == "Pw:HR" and r["band"] == band
-    assert r["main_s"] == pytest.approx(3600, abs=90)              # warm-up and cool-down cut
-    assert r["hr1"] == pytest.approx(143.0 + rise / 4, abs=0.6)
+    assert r["main_s"] == pytest.approx(main * 60, abs=90)          # warm-up and cool-down cut
+    if main == 40 and cool == 0:
+        assert r["main_s"] == 2400                                  # nothing trimmed at the very end
+    assert r["hr1"] == pytest.approx(143.0 + rise / 4, abs=0.6)    # first 20′ vs last 20′ on the 40′
     line = " ".join(AT.lines(r, 142.0))
     assert {"below": "< 3.5%", "at": "3.5–5%", "above": "> 5%"}[band] in line
 
@@ -360,6 +365,8 @@ def test_aet_analysis_bands(rise, band):
 def test_aet_analysis_refuses_short_hot_fast_finish_and_hills():
     t, h, s, p, _ = _aet_series(12.9, main=35)
     assert "< 40 分" in AT.analyze(t, h, s, p)["reason"]
+    t, h, s, p, _ = _aet_series(12.9, main=39)
+    assert "暖身後只有 39 分鐘" in AT.analyze(t, h, s, p)["reason"]
     t, h, s, p, tp = _aet_series(12.9, temp=28.0)
     assert "25 °C" in AT.analyze(t, h, s, p, tp)["reason"]
     t, h, s, p, _ = _aet_series(12.9, finish=1.12)
@@ -368,7 +375,7 @@ def test_aet_analysis_refuses_short_hot_fast_finish_and_hills():
     assert "有坡" in AT.analyze(t, h, s, p, climb_m_per_km=30.0)["reason"]
 
 
-def _aet_workout(day, rise=12.9, title="WKO5 AeT 飄移測試 60 分", main=60):
+def _aet_workout(day, rise=12.9, title="WKO5 AeT 飄移測試 40 分", main=40):
     t, h, s, p, _ = _aet_series(rise, main=main)
     ch = {"elapsedtime": list(t), "heartrate": list(h), "speed": list(s), "power": list(p),
           "elapseddistance": list(t * 10 / 3600)}
@@ -441,12 +448,16 @@ def test_aet_test_done_by_must_be_this_activity_and_day():
 def test_aet_test_fallbacks_title_plan_row_then_steady_run():
     from backend.engine import workout_review as R
     day = TODAY - dt.timedelta(days=3)
-    ds = _ds([_aet_workout(day)])                                        # 「WKO5 AeT 飄移測試 60 分」
+    ds = _ds([_aet_workout(day)])                                        # 「WKO5 AeT 飄移測試 40 分」, 50′
     assert R.classify(ds, ds.workouts[0])["test_match"] == "title"
     ds = _ds([_aet_workout(day, title="")], plan=_plan(aethr=145.0, day=day.isoformat()))
     c = R.classify(ds, ds.workouts[0])
     assert c["type"] == "test_aet" and c["test_match"] == "threshold"
-    ds = _ds([_aet_workout(day, title="")])                              # 80′ flat steady run, fair drift
+    # an untitled, unplanned 50′ run is not taken for a test: the steady fallback stays ≥ 55′
+    # (the athlete's ordinary 41–52′ road runs must not offer 「套用這次的 AeT」)
+    ds = _ds([_aet_workout(day, title="")])
+    assert R.classify(ds, ds.workouts[0])["type"] != "test_aet"
+    ds = _ds([_aet_workout(day, title="", main=60)])                     # 70′ flat steady run, fair drift
     m = R.measure(ds, ds.workouts[0])
     assert m["drift"]["ok"] and m["moving_s"] >= R.TEST_AET_MIN_S
     c = R.classify(ds, ds.workouts[0], m)
@@ -456,7 +467,7 @@ def test_aet_test_fallbacks_title_plan_row_then_steady_run():
 
 def test_a_short_planned_aet_test_is_found_and_refused_with_the_reason():
     day = TODAY - dt.timedelta(days=2)
-    ds = _ds([_aet_workout(day, title="", main=25)])                     # 15 + 25 + 5 = 45′ on the clock
+    ds = _ds([_aet_workout(day, title="", main=25)])                     # 10 + 25 = 35′ on the clock
     assert AT.latest_aet_test(ds, TODAY) is None                         # too short without the plan
     ds.plan_test_sessions = [_aet_row(day)]
     at = AT.latest_aet_test(ds, TODAY)
@@ -474,12 +485,21 @@ def test_the_aet_session_carries_protocol_aet():
 
 def test_aet_test_session_steps_and_payload_without_coros():
     th = {"cp": 250.0, "lthr": 165.0, "aet": 145.0}
+    # no weekday cap: the standard 15 + 60 + 5 (the short 50′ one: test_aet_weekday.py)
     s = {**AT.session(th, 140.0, AT.start_power(250.0)), "day": "2026-10-07"}
     assert s["kind"] == "test" and s["id"] == "test_aet" and s["minutes"] == 80
-    assert "至少 45 分" in s["detail"] and "< 25 °C" in s["detail"] and "跑步機 2–3%" in s["detail"]
+    assert "冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線" in s["detail"]
+    assert "暖身 15 分到開始流汗" in s["detail"] and "測試 60 分固定功率不要調" in s["detail"] and "中途不停" in s["detail"]
+    assert "< 25 °C" not in s["detail"] and "記下溫度；熱的時候結果會偏高" in s["detail"]
+    assert "主課第 10 分鐘心率已經比起始高 10 下還在升" in s["detail"] and "evokeendurance.com" in s["source"]
+    assert "If you only have 40 minutes" in s["source"]
     steps = CW.session_steps(s, CW.Thresholds.of(th))
     assert [x.kind for x in steps] == [CW.EX_WARMUP, CW.EX_TRAIN, CW.EX_COOLDOWN]
     assert [x.seconds for x in steps] == [900, 3600, 300]
+    short = {**AT.session(th, 140.0, AT.start_power(250.0), 50), "day": "2026-10-07"}
+    steps_s = CW.session_steps(short, CW.Thresholds.of(th))
+    assert [x.kind for x in steps_s] == [CW.EX_WARMUP, CW.EX_TRAIN]        # the cool-down is optional
+    assert [x.seconds for x in steps_s] == [600, 2400]
     assert steps[0].intensity[0] == "hr" and steps[0].intensity[2] == 140
     assert steps[1].intensity == ("power", round(187.5 * 0.97), round(187.5 * 1.03)) or \
         steps[1].intensity == ("power", round(188 * 0.97), round(188 * 1.03))
@@ -489,6 +509,7 @@ def test_aet_test_session_steps_and_payload_without_coros():
     assert len(CW.session_steps(cp, CW.Thresholds.of(th))) == 5
     spec = CW.session_workout(s, th, "2026-10-01")                      # payload only, nothing sent
     assert spec.payload["estimatedTime"] == 80 * 60 and "AeT" in spec.name
+    assert CW.session_workout(short, th, "2026-10-01").payload["estimatedTime"] == 50 * 60
 
 
 def test_aet_test_due_cadence():

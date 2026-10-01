@@ -244,13 +244,15 @@
           ]
         },
         {
-          "title": "心率飄移 Pa:HR（暖身後 ≥ 40 分鐘的路跑）",
-          "description": "後半段每單位速度多用多少心跳。< 5% = 在有氧閾值以下（Uphill Athlete）。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾、> 25 °C 的跑步不採用（不畫點）。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點；要看 WKO5 的數字請看 WKO5 匯入的心飄移圖。越野跑都有坡，判讀卡不算，所以這張圖只有路跑。",
+          "title": "心率飄移 Pa:HR（暖身後 ≥ 40 分鐘的路跑，30–40 分為參考）",
+          "description": "後半段每單位速度多用多少心跳。< 5% = 在有氧閾值以下（Uphill Athlete）。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾、> 25 °C 的跑步不採用（不畫點）。淺色點 = 參考（暖身後 30–40 分，未達 UA 測試標準）：其他條件都通過、只是不到 40 分；UA 不建議用短於 40 分的測試，30 分是自組的門檻（未找到來源；心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001），只當參考，不解鎖間歇、不寫進門檻。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點；要看 WKO5 的數字請看 WKO5 匯入的心飄移圖。越野跑都有坡，判讀卡不算，所以這張圖只有路跑。",
           "basis": {"default": "pace", "choices": ["pace", "power"]},
           "axes": [{"id": "PERCENT"}],
           "series": [
             {"name": "路跑 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"pace\"))"},
             {"name": "路跑 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\"))"},
+            {"name": "參考 Pa:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9cc0ec", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"pace\", \"ref\"))"},
+            {"name": "參考 Pw:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9cc0ec", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\", \"ref\"))"},
             {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "10% 注意", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.10)"}
           ]

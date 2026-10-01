@@ -996,20 +996,31 @@ class Evaluator:
         excluded, ≥ 40 min after it, and the fairness refusals — hills, stops,
         unsteady, > 90 % CP, fast finish, > 25 °C). NaN (nothing plotted) for
         a refused run, a non-run, or power mode without power. Not WKO5's
-        stored pahr / pwhr (whole recording, warm-up and stops included)."""
+        stored pahr / pwhr (whole recording, warm-up and stops included).
+
+        drift(basis, tier): "test" (default) = the strict tier, ≥ 40 min after
+        the warm-up (UA); "ref" = only the 參考 tier, 30–40 min after it (自組,
+        workout_review.DRIFT_REF_MIN_S — display only); "all" = either."""
         from backend.engine import workout_review as WR
         basis = str(self.arg(n, 0, ctx)).strip().lower() if n.args else "pace"
         if basis not in ("pace", "power"):
             raise EvalError(f'drift() basis must be "pace" or "power", got {basis!r}')
+        tier = str(self.arg(n, 1, ctx)).strip().lower() if len(n.args) > 1 else "test"
+        if tier not in ("test", "ref", "all"):
+            raise EvalError(f'drift() tier must be "test", "ref" or "all", got {tier!r}')
 
         def one(w):
             # cheap pre-filter: drift_of refuses anything shorter anyway, and a
             # season render shouldn't measure every hike and ride
             dur = WR._f(w.metrics.get("duration"))
-            if w.sport != "run" or dur is None or dur < WR.WARMUP_S + WR.DRIFT_MIN_S:
+            floor = WR.DRIFT_MIN_S if tier == "test" else WR.DRIFT_REF_MIN_S
+            if w.sport != "run" or dur is None or dur < WR.WARMUP_S + floor:
                 return math.nan
             m = WR.measure(self.ds, w)         # disk-cached; heat_gate applied on read
-            d = WR.basis_drift((m or {}).get("drift") or {}, basis)[0]
+            dr = (m or {}).get("drift") or {}
+            if tier == "ref" and WR.drift_tier(dr) != "ref":
+                return math.nan
+            d = WR.basis_drift(dr, basis, ref=tier != "test")[0]
             return math.nan if d is None else float(d)
         if ctx.workout is not None:
             v = one(ctx.workout)

@@ -1008,7 +1008,8 @@ function draw(card, res) {
     if (values.length > 8) card.classList.add("wide");
     const v1 = (s) => s.data.kind === "hline" ? s.data.y : s.data.value;
     card.insertAdjacentHTML("beforeend", `<table>${values.map((s) =>
-      `<tr><td>${esc(s.name)}</td><td class="num">${esc(fmtU(v1(s), s.unit, { label: false }))}</td><td class="meta">${esc(unitText(s.unit))}</td></tr>`).join("")}</table>`);
+      // data.tip (判讀卡 rows, e.g. the drift's 參考 tier): hover text on the row, ⓘ marks it
+      `<tr${s.data.tip ? ` title="${esc(s.data.tip)}"` : ""}><td>${esc(s.name)}${s.data.tip ? ` <span class="meta" aria-hidden="true">ⓘ</span>` : ""}</td><td class="num">${esc(fmtU(v1(s), s.unit, { label: false }))}</td><td class="meta">${esc(unitText(s.unit))}</td></tr>`).join("")}</table>`);
   }
   if (res.action && !res.empty) drawAction(card, res.action);
   // The per-series table (status, point count, last value, unit, expression) is not shown:

@@ -172,11 +172,22 @@ def test_same_day_unfinished_session_needs_a_hard_bout():
 
 
 def test_fallback_pattern_standard_with_bouts_that_never_overlap():
+    # the power pattern alone is only a hint (it labelled ~35 hard 5 km runs as tests)
     ds = _ds(_act(standard_parts()))
     w = ds.workouts[0]
     m = R.measure(ds, w)
     c = R.classify(ds, w, m)
+    assert c["type"] != "test_cp" and c["cp_hint"] and c["protocol"] is None
+    assert R.latest_cp_test(ds, TODAY) is None
+    rows = {s["name"]: s["data"]["value"] for s in R.review(ds, w, "summary")["series"]}
+    assert rows["CP 測試？"] == R.CP_HINT and "不當測試" in rows["CP 測試？"]
+    # marked by the title: a test, and the pattern picks the protocol
+    ds = _ds(_act(standard_parts(), title="週三 測試"))
+    w = ds.workouts[0]
+    m = R.measure(ds, w)
+    c = R.classify(ds, w, m)
     assert c["type"] == "test_cp" and c["protocol"] == "standard" and c["test_match"] == "pattern"
+    assert not c["cp_hint"]
     st = m["cp_bouts"]["standard"]
     L, S = st["long"], st["short"]
     assert L["start_s"] == approx(900, abs=2) and S["start_s"] == approx(900 + 720 + 1800, abs=2)
@@ -187,9 +198,13 @@ def test_fallback_pattern_standard_with_bouts_that_never_overlap():
 def test_fallback_pattern_quick_needs_power_and_hr():
     ds = _ds(_act(quick_parts(p20=240.0, hr=172)))                             # 240 ≥ 1.03 × 220, HR > LTHR
     c = R.classify(ds, ds.workouts[0])
+    assert c["type"] != "test_cp" and c["cp_hint"]                              # unmarked: a hint only
+    ds = _ds(_act(quick_parts(p20=240.0, hr=172), title="測試"))
+    c = R.classify(ds, ds.workouts[0])
     assert c["type"] == "test_cp" and c["protocol"] == "quick" and c["test_match"] == "pattern"
     ds = _ds(_act(quick_parts(p20=240.0, hr=150)))                             # a tempo run vs a stale CP
-    assert R.classify(ds, ds.workouts[0])["type"] != "test_cp"
+    c = R.classify(ds, ds.workouts[0])
+    assert c["type"] != "test_cp" and not c["cp_hint"]
 
 
 def test_race_by_title_or_plan_event():
