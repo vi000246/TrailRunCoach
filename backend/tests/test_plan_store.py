@@ -104,8 +104,9 @@ def test_projection_ramp_31_and_cap():
     assert modes[-1] == "taper"
     taper = weeks[-1]
     assert any(s["title"] == "短強度 4×3 分" for s in taper["sessions"])
-    assert weeks[6]["phase"] == "specific" and any("爬坡" in s["title"] for s in weeks[6]["sessions"]
-                                                   if weeks[6]["mode"] != "recovery_week")
+    # 專項期 without a confirmed aerobic base: the Zone 3 ladder, not the 5×4′ hill set (徐國峰)
+    assert weeks[6]["phase"] == "specific" and (weeks[6]["mode"] == "recovery_week" or any(
+        s["kind"] == "quality" and s["title"].startswith("閾值") for s in weeks[6]["sessions"]))
 
 
 def test_projection_sessions_placed_like_week_plan():
@@ -582,14 +583,19 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
     # standard session (no cap: the full-length one, engine/interval_library.fit)
     assert [q[d][0] for d in base][:2] == [IL.title(IL.canonical("z3a")), IL.title(IL.canonical("z3b"))]
-    assert all(q[d][0].startswith("閾值") for d in base)
-    assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
+    assert all(q[d][0].startswith("閾值") for d in base), {d: q[d] for d in base}
+    # 專項期 with Zone 5 not confirmed: the Zone 3 ladder carries on instead of the 5×4′ hill set
+    assert spec and all(q[d] and q[d][0].startswith("閾值") for d in spec), {d: q[d] for d in spec}
+    open5 = {"levels": good, "state": "none", "mode": "auto", "resolved": "none", "guard": {},
+             "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": True, "state": "confirmed"}}
+    q5, _, spec5 = split(P.project_weeks(_test_week(open5), PHASES, date(2027, 3, 1)))
+    assert spec5 and all(q5[d] == ["爬坡間歇 5×4 分"] for d in spec5)
     # a locked method (data there, criterion not met): Zone 3 still goes on, never Zone 5
     locked = {"state": "locked", "mode": "ua_gap", "resolved": "ua_gap", "verdict": "差距 16%", "levels": good,
               "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": False}}
     q, base, spec = split(P.project_weeks(_test_week(locked), PHASES, date(2027, 3, 1)))
     assert base and all(q[d] and q[d][0].startswith("閾值") for d in base)
-    assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
+    assert spec and all(q[d] and q[d][0].startswith("閾值") for d in spec)
     # intensity bad: no quality in base (the guardrail) nor specific (the old rule)
     weeks = P.project_weeks(_test_week({"levels": {"intensity": "bad", "drift": "good"}, "streak_ok": True}),
                             PHASES, date(2027, 3, 1))

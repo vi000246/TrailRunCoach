@@ -584,6 +584,10 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
     return out
 
 
+def ladder_keys() -> tuple:
+    return tuple(s[0] for s in LADDER) + (TP[0],)
+
+
 def variant_tuple(v) -> tuple:
     """A library variant as a ladder row (interval_outcome's spec): n reps, minutes, band."""
     from backend.engine import interval_library as IL
