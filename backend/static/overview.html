@@ -158,6 +158,28 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .loading { color: var(--muted); padding: 24px 0; text-align: center; }
 .err { color: var(--bad); }
 details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+/* 5 區狀態 card: status colours are fixed and always carry an icon + text */
+.z5st { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; font-size: 14px; border-radius: 14px;
+  padding: 2px 12px 2px 9px; border: 1px solid currentColor; }
+.z5st.confirmed, .z5st.open { color: var(--good); } .z5st.paused { color: var(--watch); }
+.z5st.reentry { color: var(--bad); } .z5st.unconfirmed { color: var(--muted); }
+.z5top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin-bottom: 8px; }
+ol.z5steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; counter-reset: z5; }
+ol.z5steps > li { display: grid; grid-template-columns: 22px 1fr; gap: 2px 8px; }
+ol.z5steps > li::before { counter-increment: z5; content: counter(z5); display: grid; place-items: center; width: 20px; height: 20px;
+  border-radius: 50%; font-size: 11.5px; font-weight: 700; border: 1.5px solid var(--line); color: var(--muted); }
+ol.z5steps > li.ok::before { content: "✓"; border-color: var(--good); color: var(--good); }
+ol.z5steps > li > div { min-width: 0; }
+.z5path { border-top: 1px solid var(--line); padding: 5px 0 2px; margin-top: 4px; }
+.z5path > b { font-size: 13px; }
+.z5item { display: grid; grid-template-columns: 16px 1fr; gap: 0 6px; font-size: 12.5px; margin-top: 3px; }
+.z5item .mk { font-weight: 700; text-align: center; }
+.z5item .mk.y { color: var(--good); } .z5item .mk.n { color: var(--bad); } .z5item .mk.u { color: var(--faint); }
+.z5item .val { color: var(--muted); }
+.z5dots { display: inline-flex; gap: 4px; vertical-align: -2px; margin-left: 6px; }
+.z5dots i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--accent); }
+.z5dots i.on { background: var(--accent); }
+.z5note { font-size: 12.5px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
 </style>
 </head>
 <body>
@@ -177,10 +199,19 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   <section id="hero"><div class="loading">計算訓練狀況中…</div></section>
 
   <div class="two">
+    <div style="display:grid;gap:14px;align-content:start;min-width:0">
     <section>
       <h2>還缺什麼 <span class="meta">依周期排優先順序</span></h2>
       <div id="actions"><div class="loading">…</div></div>
     </section>
+    <!-- Zone 5 opening process (quality_gate.z5_card): next to the week plan, whose interval
+         session is Zone 3 or Zone 5 because of it; the season history is the 基礎期 chart -->
+    <section id="z5card" aria-labelledby="z5-h">
+      <h2 id="z5-h">5 區（最大攝氧量間歇）狀態
+        <a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">看歷程圖 →</a></h2>
+      <div id="z5"><div class="loading">…</div></div>
+    </section>
+    </div>
     <section data-sec id="s-week">
       <h2>本週該做什麼 <span class="meta" id="wk-sub"></span><a class="to-sched" href="/api/v1/overview/plan/schedule/page">到課表編輯 →</a></h2>
       <div id="week"><div class="loading">排本週課表中…</div></div>
@@ -375,6 +406,44 @@ function spark(pts, level) {
   const col = level === "bad" ? "var(--bad)" : level === "watch" ? "var(--watch)" : level === "good" ? "var(--good)" : "var(--faint)";
   return `<svg viewBox="0 0 200 34" preserveAspectRatio="none" aria-hidden="true"><polyline fill="none" stroke="${col}" stroke-width="1.6"
     vector-effect="non-scaling-stroke" points="${P.map((p, i) => `${X(xs[i]).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join(" ")}"/></svg>`;
+}
+
+// ---------------- 5 區（最大攝氧量間歇）狀態 (GET /z5 = quality_gate.z5_card) ----------------
+const Z5_ICON = { confirmed: "✓", open: "✓", paused: "‖", reentry: "↺", unconfirmed: "–" };
+const mark = (ok) => ok === true ? `<span class="mk y" aria-label="做到">✓</span>`
+  : ok === false ? `<span class="mk n" aria-label="還沒">✕</span>` : `<span class="mk u" aria-label="沒有資料">–</span>`;
+const src = (s) => s ? ` <i class="tip" tabindex="0" title="${esc("來源：" + s)}">i</i>` : "";
+async function loadZ5() {
+  const c = await j(`${API}/z5`);
+  if (c.history_href) $("z5-hist").href = c.history_href;
+  const sub = c.state === "confirmed" ? `${esc(c.since)} · ${esc(c.path_label)}` : esc(c.reason || "");
+  const top = `<div class="z5top"><span class="z5st ${esc(c.state)}"><span aria-hidden="true">${Z5_ICON[c.state] || "–"}</span>${esc(c.label)}</span>
+    <span class="meta">${sub}</span></div>`;
+  const R = c.reentry;
+  const reentry = R && c.state === "reentry"
+    ? `<div class="z5note"><b>恢復期還有 ${R.days_left} 天</b>（停跑 ${R.days} 天，到 ${esc(R.quality_from)} 前只排輕鬆跑，3 區、5 區都不排）；
+       之後先完成 ${R.z3_before_z5} 堂 3 區${R.drift_check ? "，並通過長跑飄移檢查" : ""}${R.reconfirm ? "，而且要重新確認有氧基礎" : ""}${src(R.src)}</div>` : "";
+  const paths = c.paths.map((p) => `<div class="z5path"><b>${mark(p.ok)} ${esc(p.label)}</b>${src(p.src)}
+    ${p.items.length ? p.items.map((i) => `<div class="z5item">${mark(i.ok)}<div>${esc(i.label)}${src(i.src)}
+      <div class="val">${esc(i.value)} <span class="faint">／ 需要 ${esc(i.need)}</span>${i.why ? `<br>${esc(i.why)}` : ""}</div></div></div>`).join("")
+      : `<div class="z5item">${mark(null)}<div class="val">${esc(p.empty || "")}</div></div>`}</div>`).join("");
+  const base = c.state === "confirmed" || c.state === "open" || (c.state === "paused" && c.since);
+  const z3 = c.z3;
+  const dots = Array.from({ length: z3.need }, (_, i) => `<i class="${i < z3.done ? "on" : ""}"></i>`).join("");
+  const z5ok = c.open && z3.ok;
+  const K = c.keep;
+  const keep = K ? `<div class="z5note">維持條件：${K.last_week ? `上週 1 區 <b class="num">${Math.round(K.last_week.z1_min)}</b> 分` : "確認後還沒有完整的一週"}
+     ／ 暫停線 <b class="num">${Math.round(K.line_min)}</b> 分（確認時 ${Math.round(K.level_min)} 分的 2/3，連 3 週低於才暫停）${src(K.src)}
+     ${K.why ? `<br><span class="lvl watch">${esc(K.why)}</span>` : ""}</div>` : "";
+  const test = c.test ? `<div class="z5note"><span class="lvl watch">建議測試</span> ${esc(c.test.text)}</div>` : "";
+  $("z5").innerHTML = `${top}
+    <ol class="z5steps">
+      <li class="${base ? "ok" : ""}"><div><b>確認有氧基礎</b> <span class="meta">（下面任一條做到就算）</span>
+        ${c.state === "reentry" ? `<div class="meta">恢復期內不判斷</div>` : paths}</div></li>
+      <li class="${z3.ok ? "ok" : ""}"><div><b>3 區達標 ${z3.done} / ${z3.need}</b><span class="z5dots" role="img" aria-label="3 區達標 ${z3.done} / ${z3.need}">${dots}</span>${src(z3.src)}
+        <div class="meta">3 區只要護欄通過就照排；跑順 3 堂才進 5 區</div></div></li>
+      <li class="${z5ok ? "ok" : ""}"><div><b>排 5 區間歇</b> <span class="meta">${z5ok ? "可以排：每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天" : "還不行：本週的間歇是 3 區"}</span>${src("台灣教練")}</div></li>
+    </ol>${reentry}${keep}${test}`;
 }
 
 // ---------------- this week ----------------
@@ -621,6 +690,7 @@ const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：$
 (async () => {
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   await loadStatus().catch(fail("hero"));
+  loadZ5().catch(fail("z5"));
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
 })();
 </script>

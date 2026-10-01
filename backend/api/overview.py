@@ -104,6 +104,33 @@ def weekplan():
     return O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load())
 
 
+@router.get("/z5")
+def z5_card():
+    """The 「5 區（最大攝氧量間歇）狀態」 card: the status gate's Zone 5 state (the
+    object week_plan decides with) as a checklist (quality_gate.z5_card)."""
+    from backend.engine import quality_gate as QG
+    ds = _dataset()
+    today = O.day_to_date(ds.today)
+    st = _status(ds, today)
+    gate = next((i.extra for i in st.indicators if i.id == "gate"), None) or {}
+    return {"today": today.isoformat(), **QG.z5_card(gate, today), "history_href": _z5_chart_href()}
+
+
+def _z5_chart_href() -> str:
+    """The viewer deep link of the first z5gate panel in the custom views (the 基礎期 chart)."""
+    from urllib.parse import urlencode
+    from backend.engine.wko5expr.customviews import load_custom_views
+    try:
+        for name, v in load_custom_views().items():
+            for di, d in enumerate(v.get("dashboards") or []):
+                for ci, c in enumerate(d.get("charts") or []):
+                    if c.get("kind") == "z5gate":
+                        return "/api/v1/wko5/viewer?" + urlencode({"view": name, "dash": di, "chart": ci})
+    except Exception:                          # noqa: BLE001 — a broken view file: plain viewer link
+        pass
+    return "/api/v1/wko5/viewer"
+
+
 @router.get("/page", include_in_schema=False)
 def page():
     return FileResponse(STATIC / "overview.html")
