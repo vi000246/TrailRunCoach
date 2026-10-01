@@ -53,10 +53,12 @@ from typing import Optional
 
 import numpy as np
 
-MODES = ("auto", "ua_gap", "friel_drift", "xu_drift", "xu_signals", "plateau", "weeks", "none")
+# "xu_signals" (三訊號) was dropped 2026-10-01: stored prefs that still say it fall back to
+# auto (plan_prefs.from_settings; evaluate() maps any unknown mode to auto too)
+MODES = ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none")
 WEEKS_RANGE = (2, 16)
 LABEL = {"auto": "自動", "ua_gap": "Uphill Athlete 差距法", "friel_drift": "Friel 飄移法",
-         "xu_drift": "徐國峰 90 分鐘法", "xu_signals": "三訊號", "plateau": "有氧停滯法", "weeks": "週數法",
+         "xu_drift": "徐國峰 90 分鐘法", "plateau": "有氧停滯法", "weeks": "週數法",
          "none": "不設門檻（Seiler）"}
 
 SRC_UA = "Uphill Athlete：When to add intensity（AnT/AeT − 1 ≤ 10%，先加 Zone 3）"
@@ -665,12 +667,6 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
             cache["xu"] = xu_check(ds, today)
         return cache["xu"]
 
-    def signals():
-        if "signals" not in cache:
-            from backend.engine import base_check as BC
-            cache["signals"] = BC.three_signals(ds, today)
-        return cache["signals"]
-
     def method(m: str) -> dict:
         """{"state": unlocked | locked | missing | none, "verdict", "action", "prefix"}."""
         if m == "none":
@@ -697,16 +693,6 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
                         "prefix": f"90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%：", "run": run}
             return {"state": "locked", "verdict": f"最近一次 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}%（≥ 10%）",
                     "action": "繼續低強度長跑，下次選 < 25 °C 的日子再測", "run": run}
-        if m == "xu_signals":
-            from backend.engine import base_check as BC
-            r = signals()
-            if r["ok"]:
-                return {"state": "unlocked", "verdict": f"三訊號都做到：{r['text']}",
-                        "prefix": "三訊號都做到：", "signals": r}
-            missing = r["s1"]["run"] is None
-            return {"state": "missing" if missing else "locked", "verdict": f"三訊號還沒全部做到：{r['text']}",
-                    "action": "週末排一次 90 分鐘平路 1 區長跑（氣溫 25 °C 以下時開始）；每週 1 區約 210 分鐘",
-                    "signals": r, "src": BC.SRC_XU_SIGNALS}
         if m == "plateau":
             if base_weeks is None or ef is None:
                 return {"state": "missing", "verdict": "沒有基礎期起點或 EF 趨勢（輕鬆路跑不夠多），停滯法算不出來"}
@@ -808,8 +794,8 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
       shift    the last 6 points shift one way > 5 bpm
       moved    the estimate is more than max(SE, 3 bpm) away from the plan's AeT
                (UA: AeT rises toward AnT as the base improves — confirm it)
-    A passive re-confirmation (Zone 5 confirmed by a 徐國峰 run / 三訊號 in the
-    last 6 weeks) stands in for a test on no_data / se: no test then."""
+    A passive re-confirmation (Zone 5 confirmed by a passing 90-min 徐國峰 run
+    in the last 6 weeks) stands in for a test on no_data / se: no test then."""
     from backend.engine import base_check as BC
     from backend.engine import drift_agg as DA
     val = ae.get("validity") or {}
@@ -818,7 +804,7 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
         xu_recent = [r for r in BC.xu_runs(ds, today, BC.NO_DATA_DAYS)]
     except Exception:                       # noqa: BLE001
         recent, xu_recent = [], []
-    passive = z5.get("state") == "confirmed" and z5.get("path") in ("xu90", "xu_signals") and z5.get("since") and \
+    passive = z5.get("state") == "confirmed" and z5.get("path") == "xu90" and z5.get("since") and \
         (today - dt.date.fromisoformat(z5["since"])).days <= BC.NO_DATA_DAYS
     v, se = val.get("value"), val.get("se")
     if brk and brk.get("aet_stale") and brk["end"] <= today.isoformat() and not (
@@ -847,10 +833,8 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
 # ---------------------------------------------------------------------------
 
 SRC_Z5 = {
-    "s1": "台灣教練：90 分鐘心率 1 區，第 90 分 vs 第 10 分 < 10%",
-    "s2": "台灣教練：一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）；"
-          "隔週跑量 ≥ 70% 是推估",
-    "s3": "台灣教練：長跑後段心率不飄、配速不掉；±5%、最近 3 次、28 天是推估",
+    "week": "台灣教練：一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）"
+            "——圖上的參考帶，不是解鎖條件",
     "xu90": "台灣教練：平路、≤ 25 °C、停 ≤ 30 秒、心率 1 區，飄移 < 10%",
     "ua": SRC_UA,
     "friel": SRC_FRIEL,
@@ -1011,62 +995,56 @@ def z5_card(gate: dict, today: dt.date) -> dict:
                           "z3_before_z5": int(brk.get("z3_before_z5") or 1), "reconfirm": bool(brk.get("reconfirm")),
                           "drift_check": bool(brk.get("drift_check")), "text": brk.get("text") or "",
                           "src": SRC_Z5["reentry"]}
-    sig = z.get("signals")
-    paths = []
-    if mode_has(gate.get("mode"), "xu_signals"):
-        items = []
-        if sig:
-            run = (sig.get("s1") or {}).get("run")
-            items.append({"label": "① 90 分鐘 1 區長跑，第 90 分 vs 第 10 分心率飄移 < 10%", "ok": bool(sig["s1"].get("ok")),
-                          "value": (f"最近 {run['date']}：{run['drift'] * 100:.1f}%" if run and run.get("drift") is not None
-                                    else f"最近 {run['date']}：{'；'.join(run.get('why') or [])}" if run
-                                    else "—（8 週內沒有符合的長跑）"),
-                          "need": "< 10%", "src": SRC_Z5["s1"]})
-            s2 = sig.get("s2") or {}
-            lo, hi = z1_target_min()
-            v2 = f"最多一週 {s2.get('minutes', 0):.0f} 分（{s2.get('points', 0):.0f} 點）"
-            if s2.get("next_ratio") is not None:
-                v2 += f"，隔週跑量 {s2['next_ratio'] * 100:.0f}%"
-            items.append({"label": "② 一週 1 區時間", "ok": bool(s2.get("ok")), "value": v2,
-                          "need": f"{lo:.0f}–{hi:.0f} 分（≥ {lo:.0f}），隔週 ≥ 70%", "src": SRC_Z5["s2"],
-                          "why": "" if s2.get("ok") else s2.get("why", "")})
-            s3 = sig.get("s3") or {}
-            runs = s3.get("runs") or []
-            v3 = "—（28 天內沒有 ≥ 75 分鐘的路跑長跑）" if not runs else "；".join(
-                f"{r['date'][5:]} 心率 {r['hr_rise'] * 100:+.0f}%、配速 {-r['pace_drop'] * 100:+.0f}%" for r in runs)
-            items.append({"label": "③ 最近長跑後段心率不飄、配速不掉", "ok": s3.get("state") == "ok" if runs else None,
-                          "value": v3, "need": "各 ±5% 內（最近 3 次）", "src": SRC_Z5["s3"]})
-        paths.append({"key": "xu_signals", "label": "三訊號（三個都要）", "ok": bool(sig and sig.get("ok")),
-                      "items": items, "src": SRC_Z5["s1"],
-                      "empty": "" if sig else "恢復期內不判斷" if state == "reentry" else "這個間歇門檻不看三訊號"})
-    if mode_has(gate.get("mode"), "xu90"):
-        x = z.get("xu_last")
-        paths.append({"key": "xu90", "label": "徐國峰 90 分鐘測試", "ok": bool(x and x.get("ok")) or (z.get("path") == "xu90" and state != "unconfirmed"),
-                      "items": [{"label": "平路、≤ 25 °C、停 ≤ 30 秒、心率 1 區，飄移 < 10%",
-                                 "ok": bool(x and x.get("ok")) if x else None,
-                                 "value": BC.xu_text(x) if x else "—（半年內沒有 ≥ 90 分鐘的跑步）",
-                                 "need": "< 10%", "src": SRC_Z5["xu90"]}], "src": SRC_Z5["xu90"]})
+    mode = gate.get("mode") or "auto"
+    pause = z.get("pause") or {}
     ae = gate.get("aet") or {}
-    if mode_has(gate.get("mode"), "aet"):
-        lt = gate.get("lthr") or {}
-        g = gate.get("gap")
-        ap = z.get("aet_paths") or {}
-        items = [{"label": "UA 差距法：LTHR ÷ AeT − 1 ≤ 10%",
-                  "ok": (g <= UA_GAP_MAX) if g is not None else None,
-                  "value": (f"AeT {ae['value']:.0f} / LTHR {lt['value']:.0f} → {g * 100:.0f}%" if g is not None
-                            else "—（沒有實測 AeT）" if not ae.get("measured") else "—（LTHR 還是預設值）"),
-                  "need": "≤ 10%", "src": SRC_Z5["ua"]}]
-        fr = ((gate.get("options") or {}).get("friel_drift") or {})
-        items.append({"label": "Friel 飄移：AeT 附近 ≥ 60 分鐘，前後半飄移 < 5%",
-                      "ok": ("aet_friel_drift" in ap) if fr.get("usable") else None,
+    lt = gate.get("lthr") or {}
+    # the base step is done once a confirmation stands; a Z1-rule pause needs a new one
+    base_done = state in ("confirmed", "open") or (state == "paused" and z.get("since") and
+                                                   pause.get("kind") in ("reentry_z3", "drift_check"))
+    # a test only counts after the Z1 pause / a ≥ 4-week break (the confirmation before it no longer does)
+    after = pause.get("at") if state == "paused" and pause.get("kind") == "z1" else \
+        brk.get("return") if brk and brk.get("reconfirm") else None
+
+    def counts(date: Optional[str]) -> bool:
+        return bool(date) and (after is None or str(date)[:10] >= str(after)[:10])
+
+    tests = []
+    if mode_has(mode, "xu90"):
+        x = z.get("xu_last")
+        cur = z.get("path") == "xu90" and base_done
+        tests.append({"key": "xu90", "label": "徐國峰 90 分鐘測試：平路 1 區跑 90 分鐘，第 90 分 vs 第 10 分心率飄移 < 10%",
+                      "ok": True if cur else (bool(x.get("ok")) and counts(x.get("date"))) if x else None,
+                      "value": (f"確認於 {z.get('since')}" if cur and not (x and x.get("ok")) else
+                                BC.xu_text(x) if x else "—（還沒做過：半年內沒有 ≥ 90 分鐘的跑步）"),
+                      "need": "< 10%（≤ 25 °C、補給停 ≤ 30 秒）", "src": SRC_Z5["xu90"]})
+    g = gate.get("gap")
+    ap = z.get("aet_paths") or {}
+    if mode_has(mode, "aet_ua_gap"):
+        tests.append({"key": "aet_ua_gap", "label": "UA 差距法：實測 AeT，LTHR ÷ AeT − 1 ≤ 10%",
+                      "ok": (g <= UA_GAP_MAX and counts(ae.get("date"))) if g is not None else None,
+                      "value": (f"AeT {ae['value']:.0f} / LTHR {lt['value']:.0f} → {g * 100:.0f}%" if g is not None
+                                else "—（還沒做過：沒有實測 AeT）" if not ae.get("measured") else "—（LTHR 還是預設值）"),
+                      "need": "≤ 10%", "src": SRC_Z5["ua"]})
+    if mode_has(mode, "aet_friel_drift"):
+        fr = (gate.get("options") or {}).get("friel_drift") or {}
+        tests.append({"key": "aet_friel_drift", "label": "Friel 飄移：實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%",
+                      "ok": (("aet_friel_drift" in ap) and counts(ap.get("aet_friel_drift"))) if fr.get("usable") else None,
                       "value": fr.get("why") or "—", "need": "< 5%", "src": SRC_Z5["friel"]})
-        paths.append({"key": "aet", "label": "實測 AeT（任一種）",
-                      "ok": z.get("path") in ("aet_ua_gap", "aet_friel_drift") and state != "unconfirmed",
-                      "items": items, "src": SRC_Z5["ua"]})
+    method = None
+    if mode in ("plateau", "weeks"):
+        method = {"key": "method", "label": LABEL[mode], "ok": gate.get("state") == "unlocked",
+                  "value": gate.get("verdict") or "", "need": "", "src": source_of_mode(mode)}
+        tests.append(method)
+    out["base"] = {"label": "確認有氧基礎（三選一，做了且達標）" if len(tests) > 1 else
+                   f"確認有氧基礎（{tests[0]['label'].split('：')[0]}）" if tests else "確認有氧基礎",
+                   "ok": bool(base_done), "tests": tests,
+                   "empty": ("恢復期內不判斷" if state == "reentry" else
+                             "不設門檻（Seiler）" if state == "open" else "" if tests else "這個間歇門檻不開 5 區")}
     d = gate.get("dose") or {}
     step = int(d.get("step") or 0)
-    out["z3"] = {"done": min(step, Z3_MET_FOR_Z5), "need": Z3_MET_FOR_Z5, "ok": step >= Z3_MET_FOR_Z5,
-                 "src": SRC_Z5["z3"]}
+    z3 = out["z3"] = {"done": min(step, Z3_MET_FOR_Z5), "need": Z3_MET_FOR_Z5, "ok": step >= Z3_MET_FOR_Z5,
+                      "src": SRC_Z5["z3"]}
     mt = z.get("maintenance") or {}
     if state in ("confirmed", "paused") and mt.get("z1_level_min"):
         wk = mt.get("weeks") or []
@@ -1074,12 +1052,83 @@ def z5_card(gate: dict, today: dt.date) -> dict:
         out["keep"] = {"level_min": mt["z1_level_min"], "line_min": mt["z1_level_min"] * BC.Z1_KEEP,
                        "last_week": last, "ok": bool(mt.get("ok", True)), "why": mt.get("why") or "",
                        "src": SRC_Z5["keep"]}
-    out["paths"] = paths
+    out["next"] = _z5_next(out, z, gate, tests)
+    z5_ok = out["open"] and z3["ok"]
+    out["steps"] = [
+        {"key": "base", "label": "確認有氧基礎（三選一）" if len(tests) > 1 else "確認有氧基礎",
+         "status": "done" if base_done else "wait" if state == "reentry" else "active"},
+        {"key": "z3", "label": f"3 區達標 {z3['done']}/{z3['need']}",
+         "status": "done" if z3["ok"] else "active" if base_done else "todo"},
+        {"key": "z5", "label": "5 區開放",
+         "status": "done" if z5_ok else "paused" if state in ("paused", "reentry") else "todo"},
+    ]
     out["headline"] = {
         "confirmed": f"已確認（{z.get('since')}，{out['path_label']}）",
         "paused": "暫停", "reentry": "恢復期", "open": "不設門檻",
     }.get(state, "未確認")
     return out
+
+
+def source_of_mode(mode: str) -> str:
+    return OPTION_INFO.get(mode, {}).get("source", "")
+
+
+def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
+    """The one plain-language line 「還缺什麼」 under the current step (card and chart
+    alike): {"kind": open | reentry | paused | missing | done, "text"}."""
+    state, z3 = card["state"], card["z3"]
+    pause = z.get("pause") or {}
+    R = card.get("reentry")
+    if state == "open":
+        return {"kind": "open", "text": "不設門檻（Seiler）：5 區照 80/20 安排"}
+    if state == "reentry" and R:
+        after = f"之後先 {R['z3_before_z5']} 堂 3 區" + ("，並重新確認有氧基礎（三選一）" if R["reconfirm"] else "")
+        return {"kind": "reentry", "text": f"恢復期還剩 {R['days_left']} 天（到 {R['quality_from']} 前只排輕鬆跑）；{after}"}
+    if state == "paused":
+        if pause.get("kind") == "reentry_z3":
+            left = max(0, int(pause.get("need") or 1) - int(pause.get("done") or 0))
+            return {"kind": "paused", "text": f"還缺：恢復期後再 {left} 堂 3 區（已 {pause.get('done', 0)}／{pause.get('need', 1)}）"}
+        if pause.get("kind") == "drift_check":
+            return {"kind": "paused", "text": "還缺：恢復期後的長跑飄移檢查——下一次 ≥ 75 分鐘的路跑長跑，"
+                                              "後段心率、配速各在 ±5% 內（推估）"}
+        K = card.get("keep") or {}
+        line = f"（現在是 {K['line_min']:.0f} 分）" if K.get("line_min") else ""
+        return {"kind": "paused", "text": "還缺：重新確認有氧基礎（三選一，例如再做一次 90 分鐘測試）；"
+                                          f"之後每週 1 區時間別連 3 週低於確認時的 2/3{line}"}
+    if state == "confirmed":
+        if z3["ok"]:
+            return {"kind": "done", "text": "都做到了：5 區可以排（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天）"}
+        left = z3["need"] - z3["done"]
+        return {"kind": "missing", "text": f"還缺：再 {left} 堂 3 區達標（{z3['done']}/{z3['need']}；3 區只要護欄通過就照排）"}
+    # unconfirmed: what to do for the cheapest test the mode uses
+    mode = gate.get("mode") or "auto"
+    by = {t["key"]: t for t in tests}
+    pre = f"停跑 ≥ 4 週：{R['return']} 之後" if R and R.get("reconfirm") else ""
+    if mode in ("plateau", "weeks"):
+        return {"kind": "missing", "text": f"還缺：{gate.get('verdict') or '方法還沒解鎖'}"}
+    parts = []
+    if "xu90" in by:
+        x = z.get("xu_last")
+        last = ""
+        if x and not x.get("ok"):
+            last = (f"（上次 {x['date'][5:]} 飄移 {x['drift'] * 100:.1f}%）" if x.get("drift") is not None and
+                    all("飄移" in w for w in x.get("why") or []) else
+                    f"（上次 {x['date'][5:]}：{(x.get('why') or [''])[0]}）")
+        parts.append(f"做一次 90 分鐘平路 1 區測試（氣溫 25 °C 以下、補給停 ≤ 30 秒），飄移 < 10%{last}")
+    ae = gate.get("aet") or {}
+    g = gate.get("gap")
+    if "aet_ua_gap" in by or "aet_friel_drift" in by:
+        if not ae.get("measured"):
+            parts.append("做一次 AeT 測試" + ("（LTHR ÷ AeT − 1 ≤ 10% 就算）" if "aet_ua_gap" in by else
+                                             "，再在 AeT 附近跑 ≥ 60 分鐘、飄移 < 5%"))
+        elif "aet_ua_gap" in by and g is not None and len(by) == 1:
+            parts.append(f"AeT 和 LTHR 的差距降到 ≤ 10%（現在 {g * 100:.0f}%）：繼續有氧基礎，之後重測 AeT")
+        elif "aet_friel_drift" in by:
+            lo, hi = float(ae["value"]) + FRIEL_HR_BAND[0], float(ae["value"]) + FRIEL_HR_BAND[1]
+            parts.append(f"在 AeT 附近（{lo:.0f}–{hi:.0f} bpm）跑一次 ≥ 60 分鐘平路穩定跑，前後半飄移 < 5%")
+    if not parts:
+        return {"kind": "missing", "text": f"還缺：{z.get('reason') or '確認有氧基礎'}"}
+    return {"kind": "missing", "text": "還缺：" + pre + "；或".join(parts)}
 
 
 def z1_target_min() -> tuple[float, float]:
@@ -1089,11 +1138,13 @@ def z1_target_min() -> tuple[float, float]:
 
 
 def mode_has(mode: Optional[str], path: str) -> bool:
-    """Which confirmation paths a 間歇門檻 mode uses (base_check._paths_for, grouped for the card)."""
+    """Which confirmation tests a 間歇門檻 mode uses (base_check._paths_for):
+    xu90 / aet_ua_gap / aet_friel_drift, or "aet" for either AeT test."""
     from backend.engine.base_check import _paths_for
     p = _paths_for(mode or "auto")
-    return {"xu_signals": "xu_signals" in p, "xu90": "xu90" in p,
-            "aet": "aet_ua_gap" in p or "aet_friel_drift" in p}.get(path, False)
+    if path == "aet":
+        return "aet_ua_gap" in p or "aet_friel_drift" in p
+    return path in p
 
 
 def options(gate: dict, ae: dict, lt: dict, cache: dict, friel, xu, base_weeks, ef, need_weeks) -> dict:
@@ -1125,12 +1176,6 @@ def options(gate: dict, ae: dict, lt: dict, cache: dict, friel, xu, base_weeks, 
                               else "EF 趨勢算不出來（輕鬆路跑不夠多）" if base_weeks is not None else "現在不是基礎期")}
     out["weeks"] = {"usable": base_weeks is not None,
                     "why": f"基礎期第 {base_weeks} 週 / {need_weeks} 週" if base_weeks is not None else "現在不是基礎期"}
-    try:
-        s = cache.get("signals")
-        out["xu_signals"] = {"usable": True, "why": s["text"] if s else "三訊號：90 分鐘 1 區飄移 < 10%、"
-                             "每週 1 區約 210 分（RQ 30–42 點）、長跑後段不飄"}
-    except Exception as e:  # noqa: BLE001
-        out["xu_signals"] = {"usable": False, "why": f"算不出來（{type(e).__name__}）"}
     out["none"] = {"usable": True, "why": "隨時可用：只看護欄"}
     return out
 
@@ -1334,17 +1379,13 @@ def indicator(gate: dict) -> dict:
 
 OPTION_INFO = {
     "auto": {"source": "台灣教練、Uphill Athlete、Friel、Seiler",
-             "rule": "3 區（閾值）只要護欄通過就排；5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：徐國峰）要先確認有氧基礎，"
-                     "任一條：三訊號、徐國峰 90 分鐘飄移 < 10%、或實測 AeT 通過 UA 差距法／Friel 飄移。確認後沒有到期日，"
-                     "每週檢查：1 區時間連 3 週 < 確認時的 2/3 就暫停（Hickson 1982；3 週推估）、長跑後段變差也暫停（推估）；"
+             "rule": "3 區（閾值）只要護欄通過就排；5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：徐國峰）要先確認有氧基礎："
+                     "三種測試做了其中一種而且達標——① 徐國峰 90 分鐘測試（平路 1 區，第 90 分 vs 第 10 分心率飄移 < 10%）、"
+                     "② 實測 AeT 的 UA 差距法（LTHR ÷ AeT − 1 ≤ 10%）、③ 實測 AeT 的 Friel 飄移（AeT 附近 ≥ 60 分鐘，前後半 < 5%）。"
+                     "確認後沒有到期日，每週檢查：1 區時間連 3 週 < 確認時的 2/3 就暫停，到下次確認為止（Hickson 1982；3 週推估）；"
                      "停跑 ≥ 6 天進恢復期（Daniels 表 9.2），期間 3 區、5 區都不排，之後先 3 區；暫停時 3 區照排。"
                      "AeT 有效＝聚合估計標準誤 ≤ 3 bpm、最近 6 次沒偏移（推估），有效時才用差距法。",
              "todo": "週末的 LSD 改成 90 分鐘平路 1 區、配速不變，跑完就自動確認；不用另外測。"},
-    "xu_signals": {"source": "台灣教練",
-                   "rule": "三個都要做到：① 連續 90 分鐘心率 1 區，(第 90 分心率 − 第 10 分) ÷ 第 10 分 < 10%；"
-                           "② 一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝丹尼爾強度點數 E 每分 0.2；約 120–170 TSS，換算推估），"
-                           "隔週跑量 ≥ 70%（推估）；③ 最近的長跑後段心率沒上飄、配速沒掉（各 ±5%，推估）。",
-                   "todo": "週末跑一次 90 分鐘平路 1 區；每週 1 區約 210 分鐘。"},
     "ua_gap": {"source": "Uphill Athlete：When to add intensity",
                "rule": "AnT ÷ AeT − 1 ≤ 10%（Uphill Athlete）：用 LTHR 當 AnT、實測 AeT。差距越小代表有氧基礎越好。"
                        "解鎖後先排 Zone 3（AeT–LTHR），每週 1 次，約週有氧時數的 5%。",

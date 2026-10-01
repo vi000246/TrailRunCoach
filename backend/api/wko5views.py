@@ -299,7 +299,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         # the replay follows the 間歇門檻 preference (課表偏好) and the stored test / interval
         # sessions: both in the key so a changed preference isn't served from the cache
         from backend.engine import plan_prefs as PP
-        params = {**params, "_prefs": PP.load().stamp()}
+        from backend.engine.plan_store import test_sessions
+        # …and the stored test sessions, which the progress tracker's status gate reads (overview._status)
+        tests = [[s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol")]
+                 for s in test_sessions()]
+        params = {**params, "_prefs": PP.load().stamp(), "_tests": json.dumps(tests, default=str)}
     # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
@@ -348,6 +352,25 @@ def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bo
 Z5GATE_MAX_DAYS = 365       # the replay is day by day: at most a year back from the range's end
 
 
+def z5_progress(ds: Dataset) -> Optional[dict]:
+    """Today's 3-step tracker and the 「還缺什麼」 line: quality_gate.z5_card on the
+    status gate — the very object the 總覽 card (GET /overview/z5) shows, so the
+    chart and the card agree. None when the status can't be computed."""
+    import math
+    from backend.api.overview import _status
+    from backend.engine import quality_gate as QG
+    from backend.engine.overview import day_to_date
+    try:
+        today = day_to_date(int(math.floor(ds.today)))
+        st = _status(ds, today)
+        gate = next((i.extra for i in st.indicators if i.id == "gate"), None) or {}
+        c = QG.z5_card(gate, today)
+    except Exception:                          # noqa: BLE001 — the history still draws
+        return None
+    return {"today": today.isoformat(), **{k: c.get(k) for k in (
+        "state", "label", "headline", "steps", "next", "base", "z3", "keep", "reentry", "open")}}
+
+
 def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
     """The 5 區開放流程 panel: quality_gate.z5_history over the selected range
     (capped at a year), with the 間歇門檻 preference the planner uses."""
@@ -364,6 +387,7 @@ def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
         from backend.engine.planning import Plan
         plan = Plan.load()
     h = QG.z5_history(ds, plan, begin, end, prefs)
+    h["progress"] = z5_progress(ds)
     return {"title": ch.get("title"), "description": ch.get("description"), "kind": "z5gate", "z5": h,
             "range_note": f"重播 {begin.isoformat()} 起（最多 1 年）" if begin > day_to_date(int(math.floor(b))) else None}
 

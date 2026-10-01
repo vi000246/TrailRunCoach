@@ -196,14 +196,14 @@ def test_rq_points_are_daniels_intensity_points_and_the_tss_conversion():
     assert BC.rq_points(210 * 60) == pytest.approx(42.0)             # 210 min × 0.2
     assert BC.rq_points(150 * 60) == pytest.approx(30.0)
     assert BC.tss_of_points(30) == pytest.approx(150 / 60 * 0.7 ** 2 * 100)   # ≈ 122 (推估 IF 0.70)
-    rows = [{"monday": f"2026-08-{d:02d}", "z1_s": z, "run_s": r, "complete": True}
-            for d, z, r in ((3, 100 * 60, 200 * 60), (10, 160 * 60, 240 * 60), (17, 120 * 60, 200 * 60))]
-    s = BC.signal2(rows)
-    assert s["ok"] and s["points"] == pytest.approx(32.0) and s["next_ratio"] == pytest.approx(200 / 240)
-    collapse = [rows[0], rows[1], {**rows[2], "run_s": 120 * 60}]
-    assert not BC.signal2(collapse)["ok"] and "70%" in BC.signal2(collapse)["why"]
-    last = [rows[0], rows[1]]
-    assert not BC.signal2(last)["ok"] and "還沒有完整的一週" in BC.signal2(last)["why"]
+
+
+def test_three_signals_are_gone_three_tests_remain():
+    # 2026-10-01: Zone 5 opens on ONE of three tests; 三訊號 is no longer a path
+    assert not hasattr(BC, "three_signals") and not hasattr(BC, "signal2")
+    assert BC._paths_for("auto") == ("xu90", "aet_ua_gap", "aet_friel_drift")
+    assert BC._paths_for("xu_signals") == ()
+    assert "xu_signals" not in BC.PATH_LABEL
 
 
 def test_long_run_late_vs_early():
@@ -224,7 +224,6 @@ def xu_confirmed(monkeypatch):
     """A passing 徐國峰 run on 2026-08-01; the other paths off; maintenance ok."""
     monkeypatch.setattr(BC, "xu_runs", lambda ds, today, days=182: [
         {"idx": 0, "date": "2026-08-01", "ok": True, "drift": 0.06, "hr10": 128.0, "hr90": 135.7, "why": []}])
-    monkeypatch.setattr(BC, "three_signals", lambda ds, today: {"ok": False, "text": "三訊號：還沒", "s1": {}})
     monkeypatch.setattr(BC, "maintenance", lambda ds, today, since, brk=None: {"ok": True, "why": ""})
     monkeypatch.setattr(BC, "long_check", lambda ds, today, days=28: {"state": "ok", "why": "穩"})
 
@@ -256,7 +255,9 @@ def test_z1_rule_is_two_thirds_for_three_weeks(monkeypatch):
     since = date(2026, 7, 27)
     low = [{"monday": (date(2026, 8, 3) + dt.timedelta(weeks=i)).isoformat(), "z1_s": 120 * 60, "run_s": 120 * 60,
             "complete": True} for i in range(3)]
-    monkeypatch.setattr(BC, "long_check", lambda ds, today, days=28: {"state": "ok", "why": ""})
+    # a failing long run no longer pauses Zone 5: only the weekly Z1 rule does
+    monkeypatch.setattr(BC, "long_check", lambda ds, today, days=28: {"state": "fail", "why": "後段心率 +8%",
+                                                                      "date": "2026-08-15"})
     monkeypatch.setattr(BC, "weekly", lambda ds, today, n: rows + low[:2])
     assert BC.maintenance(_ds([]), date(2026, 8, 20), since)["ok"]          # 2 weeks low: not yet
     monkeypatch.setattr(BC, "weekly", lambda ds, today, n: rows + low)
@@ -291,9 +292,11 @@ def test_after_14_to_28_days_two_z3_and_the_drift_check(xu_confirmed, monkeypatc
     brk = _brk(20, "2026-09-01")                                  # block 9/1–9/20
     z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-22"])
     assert z["state"] == "paused" and "2 堂" in z["reason"]
+    assert z["pause"] == {"kind": "reentry_z3", "done": 1, "need": 2}
+    # the post-break long-run drift check (a re-entry rule, kept when 三訊號 went)
     monkeypatch.setattr(BC, "long_check", lambda ds, today, days=28: {"state": "fail", "why": "後段心率 +8%"})
     z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-22", "2026-09-26"])
-    assert z["state"] == "paused" and "飄移檢查" in z["reason"]
+    assert z["state"] == "paused" and "飄移檢查" in z["reason"] and z["pause"]["kind"] == "drift_check"
 
 
 def test_a_long_break_invalidates_the_earlier_confirmation(xu_confirmed):
