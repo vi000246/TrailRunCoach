@@ -576,10 +576,12 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     # (this week's CP test is not a step and doesn't leak)
     weeks = P.project_weeks(_test_week({"levels": good, "streak_ok": False}), PHASES, date(2027, 3, 1))
     q, base, spec = split(weeks)
-    dose = [s[1] for s in QG.LADDER]
+    from backend.engine import interval_library as IL
+    dose = [s[1] for s in QG.LADDER] + [IL.title(v) for v in IL.ALL.values()]
     assert base and all(q[d] and q[d][0] in dose for d in base)
-    # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going
-    assert [q[d][0] for d in base][:2] == ["閾值 3×8 分", "閾值 4×8 分"]
+    # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
+    # standard session (no cap: the full-length one, engine/interval_library.fit)
+    assert [q[d][0] for d in base][:2] == [IL.title(IL.canonical("z3a")), IL.title(IL.canonical("z3b"))]
     assert all(q[d][0].startswith("閾值") for d in base)
     assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
     # a locked method (data there, criterion not met): Zone 3 still goes on, never Zone 5

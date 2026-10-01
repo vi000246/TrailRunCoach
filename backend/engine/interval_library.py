@@ -359,6 +359,229 @@ def describe(v: Variant, cp: Optional[float] = None) -> dict:
             "source_kind": v.src_kind, "equivalent": ok, "not_equivalent_why": why}
 
 
+# ---------------------------------------------------------------------------
+# choosing a variant for a day (§C5.2) and fitting it into the day's cap (§C5.3)
+# ---------------------------------------------------------------------------
+
+ROTATE_N = 2                     # 推估 (§C5.2-3): skip a variant used in the last 2 sessions of its rung
+STD_LEN = 0.9                    # 推估: main set ≥ 90 % of the canonical's = 「標準長度」; shorter = cap fallback
+EQUIV_TIZ = 1.0 - TIZ_TOL        # fewer reps with ≥ 85 % of the TIZ still count as equivalent (§C5.3-3)
+MIN_REPS = {"Z5": 3, "Z3sub": 2, "Z3near": 2}
+BAD = ("unadapted", "too_high")
+
+
+def terrains(prefs=None, mountain: bool = False) -> tuple[set, bool]:
+    """(allowed terrains, prefer hill every 2nd session). Weekdays are flat by
+    default; plan.prefs.terrain_quality = hill or a mountain goal adds the uphill
+    versions (Koop / Daniels: train the race terrain before it — 推估 cadence)."""
+    t = getattr(prefs, "terrain_quality", "any") if prefs is not None else "any"
+    if t == "flat":
+        return {"flat"}, False
+    if t == "hill":
+        return {"flat", "hill"}, True
+    return ({"flat", "hill"}, True) if mountain else ({"flat"}, False)
+
+
+def adjust(v: Variant, adj: Optional[dict]) -> Variant:
+    """quality_gate's state-machine tweak on a variant: rest + N min, or the band × factor."""
+    if not adj:
+        return v
+    if adj.get("rest_add") and not v.continuous:
+        v = replace(v, rest_s=v.rest_s + 60 * int(adj["rest_add"]))
+    if adj.get("power"):
+        f = float(adj["power"])
+        v = replace(v, lo=round(v.lo * f, 3), hi=round(v.hi * f, 3))
+    return v
+
+
+def _rung_hist(rung: str, history) -> list[dict]:
+    return [h for h in (history or []) if h.get("rung_key") == rung and h.get("variant_key")]
+
+
+def _order(vs: list[Variant], rung: str, history, prefer_hill: bool) -> list[Variant]:
+    """Rotation order (§C5.2-3, all 推估): not in the last ROTATE_N sessions of the
+    rung, not 未適應 the last time it was done, uphill every 2nd session when
+    preferred, the canonical first on a tie."""
+    rh = _rung_hist(rung, history)
+    recent = [h["variant_key"] for h in rh[-ROTATE_N:]]
+    last_out = {}
+    for h in rh:
+        last_out[h["variant_key"]] = h.get("outcome")
+    want_hill = prefer_hill and bool(rh) and (get(rh[-1]["variant_key"]) or vs[0]).terrain == "flat"
+
+    def key(v: Variant):
+        return (v.key in recent, last_out.get(v.key) in BAD,
+                prefer_hill and (v.terrain == "hill") != want_hill, not v.canonical, v.key)
+    return sorted(vs, key=key)
+
+
+def _fit_result(v, level, reps, equiv, progress, reason, action="ok", base=None, **kw) -> dict:
+    return {"variant": v, "level": level, "reps": reps, "equiv": equiv, "progress": progress,
+            "reason": reason, "action": action, "base": base or v, **kw}
+
+
+def fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountain: bool = False,
+        alt_caps: Optional[list] = None, adj: Optional[dict] = None, cap_label: str = "平日上限") -> dict:
+    r = _fit(rung, cap, history, prefs, mountain, alt_caps, adj, cap_label)
+    if adj and r.get("rung") == rung:
+        r["adj"] = adj
+    return r
+
+
+def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountain: bool = False,
+         alt_caps: Optional[list] = None, adj: Optional[dict] = None, cap_label: str = "平日上限") -> dict:
+    """The session for `rung` on a day with `cap` minutes (None = no cap), §C5.3:
+      1. time enough → the canonical (first exposure) or a rotated equivalent of
+         standard length, with the full warm-up / cool-down; then the same with
+         the std, then the min blocks (the city run is never cut);
+      2. an equivalent shorter variant (min blocks) — progression as usual;
+      3. fewer reps of the canonical: ≥ 85 % of its TIZ still equivalent, else
+         「縮量版」 (達標 counts as maintenance, the rung doesn't move); floor
+         Z5 3 reps, Z3 2;
+      4. another day with a bigger cap (`alt_caps` [(label, cap)], already
+         filtered for the 48-h / Zone 5 spacing rules) → action "move";
+      5. the rung before's equivalent as maintenance with a warning → action "back".
+    `adj`: the state machine's tweak (rest + 1 min / power −5 %), applied first.
+    {"variant", "base" (before reps / tweak), "level", "reps", "equiv", "progress",
+     "reason", "action", "rung", "need_min"}."""
+    allowed, prefer_hill = terrains(prefs, mountain)
+    vs_all = [adjust(v, adj) for v in LIBRARY.get(rung, ())]
+    vs = [v for v in vs_all if v.terrain in allowed] or [v for v in vs_all if v.canonical]
+    canon = next(v for v in vs_all if v.canonical)
+    std_len = STD_LEN * main_s(canon)
+    rh = _rung_hist(rung, history)
+    first = not any(h.get("state", "done") == "done" for h in rh)
+    std_pool = _order([v for v in vs if main_s(v) >= std_len], rung, history, prefer_hill)
+    short_pool = _order([v for v in vs if main_s(v) < std_len], rung, history, prefer_hill)
+    if first and canon in std_pool:
+        std_pool = [canon] + [v for v in std_pool if v is not canon]
+    ok = lambda v, lv: cap is None or total_min(v, lv, prefs) <= float(cap) + 1e-6
+    need = total_min(canon, "min", prefs)
+    cl = f"{cap_label} {cap:.0f} 分" if cap is not None else ""
+    last = get(rh[-1]["variant_key"]) if rh else None
+    for lv in LEVELS:
+        for v in (std_pool[:1] if first else std_pool):
+            if not ok(v, lv):
+                continue
+            if lv == "full":
+                why = ("時間足夠 → 標準版" if v.canonical else "時間足夠 → 同等的標準長度版") + \
+                    ("（第一次做這一階：用有研究的那份課表）" if first else "")
+            else:
+                b = blocks(v, lv, prefs)
+                why = f"{cl} → {'標準版' if v.canonical else '同等的標準長度版'}，暖身縮到 {b['warm_min']} 分、緩和 {b['cool_min']} 分"
+            if last is not None and last.key != v.key:
+                why += f"；上次做 {structure(last)}，這次換 {structure(v)}（同等，不影響進階）"
+            return _fit_result(v, lv, None, True, True, why, rung=rung, need_min=need)
+    for v in std_pool[1:] if first else []:
+        if ok(v, "min"):
+            return _fit_result(v, "min", None, True, True, f"{cl} → 同等的標準長度版 {structure(v)}（標準版要 "
+                               f"{total_min(canon, 'min', prefs):.0f} 分）", rung=rung, need_min=need)
+    for v in short_pool:
+        if ok(v, "min"):
+            return _fit_result(v, "min", None, True, True,
+                               f"{cl} → 同等較短版 {structure(v)}（標準版 {structure(canon)} 要 {need:.0f} 分）",
+                               rung=rung, need_min=need)
+    floor = MIN_REPS.get(canon.cls, 2)
+    for n in range(canon.n - 1, floor - 1, -1):
+        r = with_reps(canon, n)
+        if not ok(r, "min"):
+            continue
+        share = tiz_s(r) / tiz_s(canon)
+        if share >= EQUIV_TIZ - 1e-9:
+            return _fit_result(r, "min", n, True, True, f"{cl} → 減成 {n} 趟（目標區時間 {share * 100:.0f}%，仍算同等）",
+                               base=canon, rung=rung, need_min=need)
+        return _fit_result(r, "min", n, False, False,
+                           f"{cl} → 縮量版 {n} 趟（目標區時間 {share * 100:.0f}% < 85%）：達標也只算維持，這一階不前進",
+                           base=canon, rung=rung, need_min=need, reduced=True)
+    for label, c, *wd in alt_caps or []:
+        if cap is not None and (c is None or c > cap):
+            r = fit(rung, c, history, prefs, mountain, None, adj, cap_label=f"{label}上限")
+            if r["action"] == "ok" and r["equiv"]:
+                return {**r, "action": "move", "move_to": label, "move_wd": wd[0] if wd else None,
+                        "reason": f"{cl} 放不下 {RUNG_NAME.get(rung, rung)} → 改到{label}（{r['reason']}）"}
+    i = RUNG_ORDER.index(rung) if rung in RUNG_ORDER else 0
+    if i > 0:
+        prev = RUNG_ORDER[i - 1]
+        r = fit(prev, cap, history, prefs, mountain, None, None, cap_label)
+        what = f"{RUNG_NAME.get(rung, rung)} 的 {structure(canon)}"
+        return {**r, "action": "back", "equiv": False, "progress": False, "rung": prev, "need_min": need,
+                "reason": f"{cl} 放不下 {what}（需要 {need:.0f} 分以上）：本週改排 {RUNG_NAME.get(prev, prev)} 的 "
+                          f"{structure(r['variant'])}，不算進階。要進階，把平日上限調到 {need:.0f} 分，或把品質課改到週末。",
+                "warn": True}
+    r = with_reps(canon, floor)
+    return _fit_result(r, "min", floor, False, False,
+                       f"{cl} 連 {floor} 趟都放不下：先排 {floor} 趟，達標也只算維持", base=canon, rung=rung,
+                       need_min=need, reduced=True, warn=True)
+
+
+HR_LTHR = {"Z3near": (0.95, 1.00), "Z5": (1.00, 1.05)}    # × LTHR; Z5 only on reps ≥ 3 min (Buchheit)
+RATE = {"Z3sub": 65.0, "Z3near": 68.0, "Z5": 72.0}        # TSS / h of a session (the old ladder's rates)
+
+
+def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False, prefs=None,
+                swap: str = "auto") -> dict:
+    """A week-plan session dict for a fit() result. Keeps the tokens the old
+    parsers read (N×M 分 in the title of plain reps, 暖身 / 緩和 N 分 in the
+    detail); COROS steps are built from the variant (variant_key + variant_reps
+    + variant_blocks), not from the text."""
+    v, lv = f["variant"], f["level"]
+    cp, lthr, aet = th.get("cp"), th.get("lthr"), th.get("aet")
+    use_hr = bool(lthr) and not lthr_default
+    band = f"{v.lo * 100:.0f}–{v.hi * 100:.0f}% CP"
+    parts = [f"功率 {v.lo * cp:.0f}–{v.hi * cp:.0f} W（{band}）"] if cp else [f"RPE 8（{band}）"]
+    if use_hr and v.cls == "Z3sub" and aet:
+        parts.append(f"心率 {aet:.0f}–{lthr:.0f} bpm")
+    elif use_hr and v.cls in HR_LTHR and (v.cls != "Z5" or min(v.works) >= 180):
+        a, b = HR_LTHR[v.cls]
+        parts.append(f"心率 {a * lthr:.0f}–{b * lthr:.0f} bpm" + ("（最後 1 分鐘）" if v.cls == "Z5" else ""))
+    b = blocks(v, lv, prefs)
+    warm_txt = "＋".join(t for _, _, t in b["warm"])
+    hill = f"上坡（{v.grade} 坡）" if v.terrain == "hill" else ""
+    body = f"{hill}{structure(v)}，{band}；{rest_text(v)}"
+    total = int(round(total_min(v, lv, prefs)))
+    detail = (f"{f['reason']}。{prefix}{body}；暖身 {b['warm_min']} 分（{warm_txt}）、緩和 {b['cool_min']} 分"
+              + ("；暖身完 1–2 分內開始第一趟" if is_z5(v) else ""))
+    return {"id": "quality", "kind": "quality", "title": title(v), "minutes": total,
+            "target": " · ".join(parts), "detail": detail, "source": v.src,
+            "tss": total / 60.0 * RATE.get(v.cls, 70.0),
+            "terrain": "trail" if v.terrain == "hill" else None,
+            "variant_key": v.key, "rung_key": f.get("rung") or v.rung, "equiv": bool(f["equiv"]),
+            "swap": swap, "swap_reason": f["reason"], "variant_reps": f.get("reps"),
+            "variant_blocks": lv, "variant_adj": f.get("adj") or None,
+            "progress": bool(f.get("progress", f["equiv"])),
+            **({"prefer_days": f["prefer_days"]} if f.get("prefer_days") else {})}
+
+
+def resolve(key: Optional[str], reps: Optional[int] = None, adj: Optional[dict] = None) -> Optional[Variant]:
+    """The variant a stored session was planned as (library row, fewer reps, the tweak)."""
+    v = get(key)
+    if v is None:
+        return None
+    return with_reps(adjust(v, adj if isinstance(adj, dict) else None), reps)
+
+
+def steps(v: Variant, level: str = "std", prefs=None) -> list[dict]:
+    """The session as timed steps (sync/coros_workouts builds the COROS program
+    from these; interval_reps matches laps against them):
+    [{"kind": warm | work | rest | cool, "s", "code", "text", "lo", "hi", "mode"}]."""
+    b = blocks(v, level, prefs)
+    out = []
+    for code, m, text in b["warm"]:
+        out.append({"kind": "warm", "code": code, "s": int(m * 60), "text": text})
+    works = v.works
+    for i, w in enumerate(works):
+        out.append({"kind": "work", "s": int(w), "lo": v.lo, "hi": v.hi, "text": f"第 {i + 1} 趟 {fmt_s(w)}"})
+        if i == len(works) - 1:
+            break
+        if v.sets > 1 and (i + 1) % v.reps == 0:
+            out.append({"kind": "rest", "s": int(v.set_rest_s), "mode": "jog", "text": f"組間 {fmt_s(v.set_rest_s)}"})
+        elif v.rest_s:
+            out.append({"kind": "rest", "s": int(v.rest_s), "mode": v.rest_mode,
+                        "text": REST_LABEL.get(v.rest_mode, "慢跑") or "恢復"})
+    out.append({"kind": "cool", "code": "cool", "s": int(b["cool_min"] * 60), "text": b["cool_text"]})
+    return out
+
+
 def library_table(prefs=None) -> list[dict]:
     """Every variant with its totals at each block level (report / docs)."""
     out = []
