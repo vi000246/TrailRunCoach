@@ -234,10 +234,12 @@ class FitStore:
 
     def ensure(self, paths: list[Path], progress=None, workers: Optional[int] = None) -> int:
         """Parse every file whose entry is missing / stale; returns how many."""
+        self._prune(paths)
         todo = self.stale(paths)
         if progress is not None:
             progress.phase("parse", total=len(todo))
         if not todo:
+            self.save()
             return 0
         n = _pool_size(len(todo)) if workers is None else workers
         done = 0
@@ -253,6 +255,21 @@ class FitStore:
                 progress.tick()
         self.save()
         return len(todo)
+
+    def _prune(self, paths: list[Path]) -> None:
+        """Forget files that left the folder (deleted, renamed) and their channels."""
+        keep = {self.rel(p) for p in paths}
+        with self.lock:
+            gone = [r for r in self.files if r not in keep]
+            for r in gone:
+                del self.files[r]
+            if gone:
+                self.dirty = True
+        for r in gone:
+            try:
+                self.npz(r).unlink()
+            except OSError:
+                pass
 
     def _parse_pool(self, todo: list[Path], n: int, progress) -> int:
         import multiprocessing as mp
