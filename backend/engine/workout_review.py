@@ -68,13 +68,26 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # per CP-test protocol (engine/cp_protocols.py); v7 = both merged, so no cache from either v6 is reused
 # v8: drift_of's 40 min counted after the warm-up, fast-finish refusal, Pa/Pw on one shared window,
 # watch_temp_c for heat_gate
-CACHE_KEY = "workout_review_v8"
+# v9: two tiers — drift / pw_drift also on 30–40 min after the warm-up (`ref_ok`, `tier` "ref")
+CACHE_KEY = "workout_review_v9"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
 
 DRIFT_MIN_S = 2400            # ≥ 40 min of moving time *after* the warm-up (UA: "We don't recommend
                               # relying on tests less than 40 minutes long" — the test after a 10–15′ warm-up)
+                              # = the 嚴格 / test tier: `ok`, the only tier gates and thresholds read
+DRIFT_REF_MIN_S = 1800        # 自組 — the 參考 / reference tier: ≥ 30 min after the warm-up (`ref_ok`,
+                              # `tier` "ref"). No source gives 30 min: Coyle & González-Alonso 2001
+                              # (Exerc Sport Sci Rev 29:88, doi 10.1097/00003677-200104000-00009) show
+                              # cardiovascular drift starting after ~10–20 min of exercise, so 30 min
+                              # after the warm-up shows some of it; UA's 40 min is for a formal AeT test.
+                              # Every other refusal (heat, hills, stops, fast finish, CV, intensity,
+                              # power coverage) applies to both tiers. Display only, never a gate.
+REF_LABEL = "參考（暖身後 30–40 分，未達 UA 測試標準）"
+REF_TIP = ("暖身後只有 30–40 分鐘：Uphill Athlete 不建議用短於 40 分的測試判定 AeT，所以這個數字只當參考，"
+           "不拿來解鎖間歇、不算 AeT 測試、不寫進門檻。30 分是自組的門檻（未找到來源）：心血管飄移約在運動"
+           "10–20 分鐘後開始（Coyle & González-Alonso 2001），暖身後 30 分已看得到一部分。")
 DRIFT_FINISH_SHARE = 0.10     # 自組 (doc §6.2 / §7): the last 10 % of the measured time …
 DRIFT_FAST_FINISH = 0.05      # … > 5 % above the rest (power or pace) = a fast finish, refused
 DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C); in drift_of 自組
@@ -258,7 +271,14 @@ def _halves_drift(h: np.ndarray, x: np.ndarray, d: np.ndarray, m: np.ndarray) ->
 
 
 def _short_reason(measured_s: float) -> str:
+    """The strict tier's refusal (also the `reason` of a reference-tier result)."""
     return f"暖身後只有 {int(max(0.0, measured_s) // 60)} 分鐘（< {DRIFT_MIN_S // 60} 分，UA 不建議採用），飄移不採用"
+
+
+def _too_short_reason(measured_s: float) -> str:
+    """Below the reference tier too."""
+    return (f"暖身後只有 {int(max(0.0, measured_s) // 60)} 分鐘（< {DRIFT_REF_MIN_S // 60} 分，"
+            "參考值也不採用），飄移不採用")
 
 
 def fast_finish(x: np.ndarray, d: np.ndarray, m: np.ndarray,
@@ -280,10 +300,12 @@ def heat_gate(dr: dict, temp_c: Optional[float], src: Optional[str]) -> dict:
     `temp_src` (route_weather / watch / None) either way; idempotent, so
     measure() re-applies it to the cached (pre-heat) result on every read."""
     out = {**dr, "temp_c": temp_c, "temp_src": src if temp_c is not None else None}
-    if dr.get("ok") and temp_c is not None and temp_c > DRIFT_HEAT_C:
+    if (dr.get("ok") or dr.get("ref_ok")) and temp_c is not None and temp_c > DRIFT_HEAT_C:
         why = (f"{TEMP_SRC_LABEL.get(src, '溫度')} {temp_c:.0f} °C（> {DRIFT_HEAT_C:.0f} °C）："
                "熱會讓心率飄，飄移不採用")
-        out.update(ok=False, reason=why, pw_ok=False, pw_reason=why, hot=True)
+        # both tiers: a hot run is not a reference either
+        out.update(ok=False, ref_ok=False, tier=None, reason=why, pw_ok=False, pw_ref_ok=False,
+                   pw_reason=why, hot=True)
     return out
 
 
@@ -302,9 +324,18 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     valid (`pw_drift`, `p1`, `p2`, `pw_hr1`, `pw_hr2`). When power covers
     < 95 % of the Pa:HR window, Pa:HR keeps the whole window and Pw:HR is
     refused (`pw_reason`); 「這次沒有功率」 without a power channel. `measured_s`
-    = the moving time the drift was computed on."""
-    out = {"drift": None, "ok": False, "reason": "", "hr1": None, "hr2": None,
-           "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_reason": "",
+    = the moving time the drift was computed on.
+
+    Two tiers (one window, so one tier for both bases):
+      * 嚴格 / test — `ok` (and `pw_ok`): ≥ DRIFT_MIN_S (40 min) after the
+        warm-up. Gates, AeT-test classification and thresholds read only this.
+      * 參考 / reference — `ref_ok` (and `pw_ref_ok`): every other check passed
+        and ≥ DRIFT_REF_MIN_S (30 min, 自組) but < 40 min. `drift` / `hr1` …
+        are filled, `ok` stays False and `reason` is the strict refusal.
+    `tier` = "test" / "ref" / None. Display callers opt in with
+    basis_drift(…, ref=True)."""
+    out = {"drift": None, "ok": False, "ref_ok": False, "tier": None, "reason": "", "hr1": None, "hr2": None,
+           "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_ref_ok": False, "pw_reason": "",
            "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None, "measured_s": None,
            "finish": None, "temp_c": None, "temp_src": None}
     if hr is None or speed is None or not _has(hr) or not _has(speed):
@@ -316,8 +347,8 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     d = _dt(t)
     t0 = t[np.isfinite(t)][0]
     elapsed = float(np.nanmax(t) - t0)
-    if elapsed < WARMUP_S + DRIFT_MIN_S:            # can't reach 40 min after the warm-up
-        out["reason"] = _short_reason(elapsed - WARMUP_S)
+    if elapsed < WARMUP_S + DRIFT_REF_MIN_S:        # can't reach 30 min after the warm-up
+        out["reason"] = _too_short_reason(elapsed - WARMUP_S)
         return out
     if trail or (climb_m_per_km is not None and climb_m_per_km >= TRAIL_CLIMB_RATE_M_PER_KM):
         out["reason"] = "有坡（越野或每公里爬升 ≥ 20 m），飄移數字不採用"
@@ -355,9 +386,10 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
             win, pw_same = mp, True
     measured = float(d[win].sum())
     out["measured_s"] = measured
-    if measured < DRIFT_MIN_S:
-        out["reason"] = _short_reason(measured)
+    if measured < DRIFT_REF_MIN_S:
+        out["reason"] = _too_short_reason(measured)
         return out
+    strict = measured >= DRIFT_MIN_S             # else the reference tier (30–40 min)
     fin = [(name, fast_finish(x, d, win)) for name, x in (("功率", pw if pw_same else None), ("配速", s))
            if x is not None]
     fin = [(name, ff) for name, ff in fin if ff is not None]
@@ -372,7 +404,10 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     if r is None:
         out["reason"] = "有效資料不夠"
         return out
-    out.update(drift=r[0], ok=True, hr1=r[1], hr2=r[2], v1=r[3], v2=r[4])
+    out.update(drift=r[0], ok=strict, ref_ok=not strict, tier="test" if strict else "ref",
+               hr1=r[1], hr2=r[2], v1=r[3], v2=r[4])
+    if not strict:
+        out["reason"] = _short_reason(measured)      # what the strict tier says; the value is a reference
     if not has_power:
         out["pw_reason"] = "這次沒有功率"
     elif not pw_same:
@@ -383,18 +418,32 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         if rp is None:
             out["pw_reason"] = "功率資料不夠"
         else:
-            out.update(pw_drift=rp[0], pw_ok=True, pw_hr1=rp[1], pw_hr2=rp[2], p1=rp[3], p2=rp[4])
+            out.update(pw_drift=rp[0], pw_ok=strict, pw_ref_ok=not strict, pw_hr1=rp[1], pw_hr2=rp[2],
+                       p1=rp[3], p2=rp[4])
+            if not strict:
+                out["pw_reason"] = out["reason"]
     return heat_gate(out, temp_c, temp_src) if temp_c is not None else out
 
 
-def basis_drift(dr: dict, basis: str = "pace") -> tuple[Optional[float], str]:
+def basis_drift(dr: dict, basis: str = "pace", ref: bool = False) -> tuple[Optional[float], str]:
     """(drift, reason) of a drift_of result for the chosen basis; drift None
-    when refused (the run was unfair, or there is no power in power mode)."""
-    if not dr.get("ok"):
+    when refused (the run was unfair, or there is no power in power mode).
+    Strict (the test tier) by default — gates and thresholds; `ref=True`
+    (display only) also returns a reference-tier value (drift_tier says which)."""
+    if not (dr.get("ok") or (ref and dr.get("ref_ok"))):
         return None, dr.get("reason") or "飄移數字不採用"
     if basis == "power":
-        return (dr["pw_drift"], "") if dr.get("pw_ok") else (None, dr.get("pw_reason") or "這次沒有功率")
+        good = dr.get("pw_ok") or (ref and dr.get("pw_ref_ok"))
+        return (dr["pw_drift"], "") if good else (None, dr.get("pw_reason") or "這次沒有功率")
     return dr["drift"], ""
+
+
+def drift_tier(dr: dict) -> Optional[str]:
+    """"test" / "ref" / None of a drift_of result (results cached before v9:
+    `ok` = test)."""
+    if dr.get("ok"):
+        return "test"
+    return "ref" if dr.get("ref_ok") else None
 
 
 def band_of(pct_cp: Optional[float]) -> Optional[tuple[str, float, float]]:
@@ -941,6 +990,7 @@ def _plan_test(ds, day: dt.date) -> dict:
 SAME_DAY_BOUT = 1.05          # an unfinished test that day counts with a ≥ 3′ bout ≥ 1.05 × CP
 QUICK_PATTERN = 1.03          # 自組: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
+CP_HINT = "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」"
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
                "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑"}
 AET_TITLE = re.compile(r"(?<![A-Za-z])AeT(?![A-Za-z])")
@@ -1031,9 +1081,11 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     recognised from the plan first (scheduled_aet_test: a done AeT-test
     session done_by this activity), then the title, a plan AeT row that day,
     or a ≥ 55-min steady run. A CP test is recognised from the plan first
-    (scheduled_test: done_by, then the same day), then a race / TT, then the
-    old rules (a threshold row that day, the title, the power pattern — two
-    separate bouts, or a 20′ all-out). `test_match` says which rule matched."""
+    (scheduled_test: done_by, then the same day), then a race / TT, then a
+    threshold row that day or the title. The power pattern (two separate
+    bouts, or a 20′ all-out) alone is not a test any more — `cp_hint` True —
+    it only picks the protocol of a test marked otherwise. `test_match` says
+    which rule matched."""
     from backend.engine import cp_protocols as CPP
     from backend.engine.overview import category
     m = m if m is not None else (measure(ds, w) or {})
@@ -1057,7 +1109,11 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     race = runs and aet_sched is None and sched is None and _race_test(ds, w, m, title)
     std = looks_like_cp_test(m.get("cp_test"), m.get("cp"))
     quick = runs and not std and _looks_like_quick(m)
-    cp_detected = bool(sched) or race or std or quick
+    # A CP test is only what the plan, the title or the athlete says is one (the
+    # plan's session, a race, a threshold row that day, 「CP」/「測試」 in the title):
+    # the power pattern alone labelled ~35 hard 5 km runs as tests against a low
+    # mFTP — now it is only a hint (`cp_hint`), and picks the protocol of a marked test
+    cp_detected = bool(sched) or race
     plan_test = _plan_test(ds, day)
     typ = session_type(cat, m.get("moving_s") or 0.0, m.get("hard_s") or 0.0, title,
                        plan_test, cp_detected, aet_steady,
@@ -1090,7 +1146,8 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     return {"type": typ, "type_label": label, "terrain": terrain,
             "terrain_label": TERRAIN_LABEL.get(terrain, ""), "category": cat,
             "phase": phase, "phase_label": PHASE_LABEL.get(phase, "未設定周期"),
-            "date": day.isoformat(), "protocol": protocol, "test_match": match}
+            "date": day.isoformat(), "protocol": protocol, "test_match": match,
+            "cp_hint": bool(runs and (std or quick) and typ != "test_cp")}
 
 
 def peers(ds, w, weeks: int, same_type: bool = True) -> list[tuple]:
@@ -1128,16 +1185,19 @@ def baseline_for(ds, w, get: Callable[[dict], Optional[float]], same_type: bool 
 
 def _easy_road(ds, w, m) -> bool:
     from backend.engine.overview import category
-    if category(w) != "road" or (m.get("elapsed_s") or 0) < DRIFT_MIN_S:
+    if category(w) != "road" or (m.get("elapsed_s") or 0) < WARMUP_S + DRIFT_REF_MIN_S:
         return False
     aet, hr = m.get("aet"), m.get("avg_hr")
     return aet is not None and hr is not None and hr <= aet + AET_MARGIN
 
 
-def drift_series(ds, today: dt.date, days: int = 56, upto_idx: Optional[int] = None) -> list[dict]:
-    """The i_drift runs: road, ≥ 40 min, avg HR ≤ AeT+3 in the `days` up to
-    `today` — oldest first, with the review's drift (refused ones kept with
-    drift None)."""
+def drift_series(ds, today: dt.date, days: int = 56, upto_idx: Optional[int] = None,
+                 ref: bool = False) -> list[dict]:
+    """The i_drift runs: road, ≥ 40 min on the clock, avg HR ≤ AeT+3 in the
+    `days` up to `today` — oldest first, with the review's drift (refused ones
+    kept with drift None) and its `tier`. Strict by default (drift_streak);
+    `ref=True` (the overview indicator, display only) also keeps the
+    reference-tier drifts (30–40 min after the warm-up)."""
     from backend.engine.wko5expr.dataset import date_to_day
     tday = math.floor(date_to_day(today))
     out = []
@@ -1147,14 +1207,17 @@ def drift_series(ds, today: dt.date, days: int = 56, upto_idx: Optional[int] = N
             continue
         if w.sport != "run" or "runningtrail" in w.tags:
             continue
-        if (_f(w.metrics.get("duration")) or 0) < DRIFT_MIN_S:
+        if (_f(w.metrics.get("duration")) or 0) < WARMUP_S + DRIFT_REF_MIN_S:
             continue
         m = measure(ds, w)
         if not m or not _easy_road(ds, w, m):
             continue
         dr = m.get("drift") or {}
+        tier = drift_tier(dr)
+        use = tier == "test" or (ref and tier == "ref")
         out.append({"idx": w.idx, "date": _wdate(w).isoformat(),
-                    "drift": dr.get("drift") if dr.get("ok") else None, "reason": dr.get("reason")})
+                    "drift": dr.get("drift") if use else None, "tier": tier if use else None,
+                    "reason": dr.get("reason")})
     _flush(ds)
     return out
 
@@ -1254,14 +1317,18 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
     if over is not None and tot > 0 and over / tot > OVER_AET_SHARE and typ in ("easy", "long"):
         lines.append(f"心率超過 AeT+3 的時間佔 {over / tot * 100:.0f}%（> 10%）：下次放慢")
     dr = m.get("drift") or {}
-    d, why = basis_drift(dr, basis)
+    # the AeT test's bands suggest a threshold: strict only; other runs show
+    # the reference tier too, labelled
+    ref = typ != "test_aet"
+    d, why = basis_drift(dr, basis, ref=ref)
     if d is None:
         # a fair run without power: the card's Pw:HR row already says 這次沒有功率
-        if m.get("category") in ("road", "trail") and not (basis == "power" and dr.get("ok")):
+        fair = dr.get("ok") or (ref and dr.get("ref_ok"))
+        if m.get("category") in ("road", "trail") and not (basis == "power" and fair):
             lines.append(why)
         return lines[:3]
     power = basis == "power"
-    name = "Pw:HR 飄移" if power else "飄移"
+    name = ("Pw:HR 飄移" if power else "飄移") + ("（參考）" if drift_tier(dr) == "ref" else "")
     hr1 = dr["pw_hr1"] if power else dr["hr1"]
     if typ == "test_aet":
         # Uphill Athlete's three bands (engine/aet_test.py has the full analysis)
@@ -1282,6 +1349,8 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
         lines.append(f"{name} {_pct(d)}（5–10%）：後段心率往上跑")
     else:
         lines.append(f"{name} {_pct(d)} > 10%：有氧基礎不足或跑太快")
+    if drift_tier(dr) == "ref":
+        lines.append(f"{REF_LABEL}：只當參考，不是 AeT 測試")
     return lines[:3]
 
 
@@ -1351,8 +1420,12 @@ def cp_lines(ev: Optional[dict], has_power: bool = True) -> list[str]:
 # review JSON
 # ---------------------------------------------------------------------------
 
-def _row(name: str, text: str) -> dict:
-    return {"name": name, "type": "line", "expression": "", "data": {"kind": "value", "value": text}}
+def _row(name: str, text: str, tip: Optional[str] = None) -> dict:
+    """A card row; `tip` = hover text (wko5_viewer shows it as the row's title)."""
+    data = {"kind": "value", "value": text}
+    if tip:
+        data["tip"] = tip
+    return {"name": name, "type": "line", "expression": "", "data": data}
 
 
 def _col(name: str, vals: list) -> dict:
@@ -1427,6 +1500,8 @@ def _summary(ds, w, m, c, base):
             rows.append(_row("爬坡", f"{len(cl)} 段、共 {sum(x['gain_m'] for x in cl):.0f} m；"
                                      f"每 100 m 心跳 {_num(m.get('hr_per_100m'))} 下"))
         lines = (_trail_lines(ds, w, m) + lines)[:3]
+    if c.get("cp_hint"):
+        rows.append(_row("CP 測試？", CP_HINT))
     rows.append(_row("建議分頁", ["本次重點", "有氧／心率飄移", "間歇", "爬坡與地形", "配速與耐久",
                                 "跑姿與膝蓋負荷（參考）"][base["suggested_dashboard"]]))
     return {**base, "series": rows + _verdict_rows(lines)}
@@ -1436,17 +1511,25 @@ def _aerobic(ds, w, m, c, base):
     dr = m.get("drift") or {}
     basis = base.get("basis") or "pace"
     power = basis == "power"
-    d, why = basis_drift(dr, basis)
+    # display: the reference tier too (labelled, with the why on hover); the AeT
+    # test's own lines stay strict (_aet_test_lines / aerobic_lines)
+    d, why = basis_drift(dr, basis, ref=True)
+    ref = d is not None and drift_tier(dr) == "ref"
+    tag = "（參考）" if ref else ""
     rows = []
     if d is not None and power:
-        rows += [_row("Pw:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）"),
+        rows += [_row("Pw:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）{tag}", REF_TIP if ref else None),
                  _row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
                  _row("前半／後半功率", f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
     elif d is not None:
-        rows += [_row("Pa:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）"),
+        rows += [_row("Pa:HR 飄移", f"{_pct(d)}（前 10 分鐘不算）{tag}", REF_TIP if ref else None),
                  _row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
                  _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
-    elif power and (dr.get("ok") or m.get("avg_power") is None):
+    if ref:
+        rows.append(_row("飄移等級", REF_LABEL, REF_TIP))
+    elif d is not None:
+        rows.append(_row("飄移等級", "嚴格（暖身後 ≥ 40 分，UA 測試標準）"))
+    if d is None and power and (dr.get("ok") or dr.get("ref_ok") or m.get("avg_power") is None):
         # nothing to show on this basis (no power, or too little): say so, not 0 %
         rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
     if m.get("category") in ("road", "trail"):
@@ -1457,7 +1540,7 @@ def _aerobic(ds, w, m, c, base):
     if over is not None and tot > 0:
         rows.append(_row("超過 AeT+3", f"{_hms(over)}（{over / tot * 100:.0f}%）"))
     if c["type"] in ("easy", "long", "test_aet") and d is not None:
-        b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis)[0])
+        b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis, ref=True)[0])
         rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x))))
     if c["type"] not in ("easy", "long", "test_aet"):
         lines = [f"這次是{c['type_label']}，飄移只在輕鬆跑、長跑、AeT 測試判讀"]

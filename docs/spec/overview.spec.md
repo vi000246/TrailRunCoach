@@ -252,6 +252,7 @@ defaults reproduce today's plan exactly.
 | 間歇目標 | `plan.prefs.interval_target` | `power` / `hr` (`power`) |
 | 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:72`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:491`, `backend/static/schedule.html:1274`, `backend/static/schedule.html:1292`) |
 | CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`, the athlete's choice). **Not part of `active`**: it only changes the test session (`backend/engine/plan_prefs.py:103`). Panel: three radio options with a time / accuracy line (`backend/static/schedule.html:487`) |
+| AeT 飄移測試 | `plan.prefs.aet_test_days` | `weekday` / `any` (`weekday`: the athlete trail-runs on weekends). **Not part of `active`** (`NOT_SHAPING`): every placement path reads it (`aet_test.test_days` / `pick_day`): weekday = Mon–Fri in Tue-first order, ≥ 2 days from the long run and other hard days where possible, never the day after the long run unless nothing else; the 80′ standard test may fall back to a weekend day that isn't the long run's, the 50′ short one never; `any` = the interval rule. The test's **length** follows `cap_weekday` (`aet_test.variant_for`): no cap or ≥ 80 → 15′ + 60′ + 5′; < 80 → UA's minimum 10′ + 40′ (never shorter, exempt below 50). Panel: `#pf-aet` radios |
 | 熱適應 | `plan.prefs.heat`, `plan.prefs.heat_method` | `auto` / `off` (`auto`); `run` / `overdress` / `bath` / `sauna` / `mixed` (`run`). **Not part of `active`** (`NOT_SHAPING`): they only add heat sessions before a hot A/B race (`engine/heat_plan.py`). Panel: radio + select with the current S and the rules (`#pf-heat`) |
 
 **熱適應課** (`engine/heat_plan.py`, heat-acclimation.md §5.4, 自組 from §3.4; applied after
@@ -608,8 +609,13 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   trips.
 - **`i_drift`** (`backend/engine/status.py:392`) is **informational**: the same per-run drift as
   the single-activity review (`workout_review.drift_series`, `backend/engine/workout_review.py:955`):
-  road runs, ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. `extra` is
-  `{fair, median}`; > 10 % → bad (輕鬆跑太快), otherwise info; the text says 「飄移是 AeT 測試用的，
+  road runs, ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. It reads
+  `drift_series(ref=True)`: the 參考 tier (30–40 min after the warm-up, 自組) counts for the
+  median, the text gets 「（參考）」/「（含參考）」, `why` names how many, and `extra` is
+  `{fair, median, ref, test, ref_label, ref_tip}` — overview.html's `driftTier` shows
+  「參考 N 次是參考（暖身後 30–40 分，未達 UA 測試標準）」 with the why as a `.tip` hover.
+  > 10 % → bad (輕鬆跑太快) **only on ≥ 2 strict runs whose own median is ≥ 10 %** (the level
+  feeds the base-phase guardrail), otherwise info; the text says 「飄移是 AeT 測試用的，
   不是間歇門檻」. Source Friel (< 5 %) and 徐國峰 (90′ < 10 %), not Uphill Athlete.
 - **`i_heat`** 「熱適應」 (`Status.i_heat`; design `docs/research/heat-acclimation.md` §5.3): the
   heat-acclimation index S (`engine/heat.py`) from the per-activity exposure
@@ -633,7 +639,7 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   `options` (per mode usable + why, `backend/engine/quality_gate.py:505`).
 - `PHASE_GOAL["base"]` no longer says 飄移 < 5 %; `PHASE_FOCUS["base"]` cites UA for the easy long
   run and Palladino for the 8–15 s hill sprints (`backend/engine/status.py:804`).
-- `i_data`'s action for a missing AeT is 「排一次 AeT 飄移測試（15 分暖身＋45–60 分固定功率，平路）；
+- `i_data`'s action for a missing AeT is 「排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；
   測了可以改用有氧基礎門檻」 (`backend/engine/status.py:721`).
 - **`i_testing`** (`backend/engine/status.py:580`) — timing rules unchanged: a CP / LTHR / AeT
   row older than 42 days → watch, 90 → bad (`backend/engine/status.py:51`); 10–21 days before
@@ -659,11 +665,21 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   (`backend/engine/status.py:675`).
 - **AeT drift test** (`backend/engine/aet_test.py`): `due` (`backend/engine/aet_test.py:243`) — base
   phase, no plan AeT or one > 6 weeks old, no test in 4 weeks, base week 2, 7, 12… (every 5
-  weeks, our choice); the session (`backend/engine/aet_test.py:263`) is kind `test`, id
-  `test_aet`, 「AeT 飄移測試 60 分」, 80 min, target 「固定功率 P W（±3%）；心率從 HR 附近開始」
-  (start HR = the estimate's aethr, else 0.89 × LTHR − 5; P = 0.75 × CP, both our choice),
-  detail 平路環線或跑步機 2–3%、< 25 °C、暖身 15 + 測試 60（至少 45）+ 緩和 5. Never the CP-test
-  week. COROS steps in `coros-sync` (`_aet_test_steps`, `backend/sync/coros_workouts.py:200`).
+  weeks, our choice); the session (`aet_test.session(th, hr0, p0, cap_weekday)`) is kind `test`,
+  id `test_aet`, target 「固定功率 P W（±3%）；心率從 HR 附近開始」 (start HR = the estimate's
+  aethr, else 0.89 × LTHR − 5; P = 0.75 × CP, both our choice), in place of the week's
+  interval, and its length follows the 課表偏好 weekday cap (`variant_for`): no cap / ≥ 80 →
+  「AeT 飄移測試 60 分」 80 min (暖身 15 + 測試 60 + 緩和 5); < 80 → 「AeT 飄移測試 40 分」 50 min,
+  UA's minimum (暖身 10 到開始流汗 + 測試 40, 緩和可省略; "If you only have 40 minutes, do
+  that."). The detail starts with which and why (「平日上限 50 分 → 用 UA 最短 40 分版本」 /
+  「沒有平日時間上限 → 標準版 80 分」), then 冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線，不要山路;
+  中途不停; 記下溫度；熱的時候結果會偏高 (the < 25 °C condition left the text; the analysis
+  still refuses > 25 °C); Evoke's early abort 「主課第 10 分鐘心率已經比起始高 10 下還在升 →
+  起始太高，停掉改天降 5 bpm 再測」. Placed by `aet_test.pick_day` (weekday first, see 課表偏好
+  AeT 飄移測試). Never the CP-test week. Marked done by a ≥ 48-min road run titled AeT, or an
+  untitled one ≥ 55 min (so ordinary 41–52′ easy runs aren't the test). COROS steps in
+  `coros-sync` (`_aet_test_steps`, `backend/sync/coros_workouts.py:200`): 10 / 40 (no
+  cool-down step) or 15 / 60 / 5.
 - Inline source names were removed from engine text (e.g. the ramp verdict, phase focus).
 
 ## API
@@ -808,3 +824,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feature | docs/research/heat-acclimation.md | 熱適應: `i_heat` (S, doses, HRC, race-day S), 熱適應課 in week_plan / project_weeks (heat_plan.py: induction / maintenance, ≥ 60 min cap exemption `NOTE_HEAT`, hard cap → 40 min + bath, methods), `heat_passive` (side kind, TSS 0, never pushed, ticked = a dose), `plan.prefs.heat` / `heat_method` (not shaping), COROS heat-run steps, Event.heat, 課表 page 熱 tag + prefs block, 總覽 heat card |
 | 2026-10-01 | bugfix | N/A | Thresholds never apply backwards: `Plan.threshold_on` returns None before a row's date (the 2026-09-30 CP 204 / LTHR 155 row had leaked into every earlier date); past days use WKO5's dated settings; today's values unchanged |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |
+| 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 自組), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |

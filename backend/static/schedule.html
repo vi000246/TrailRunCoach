@@ -508,6 +508,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="standard"><span><b>標準：12 分＋休 30 分＋3 分</b><span class="meta">約 70 分；兩點 CP＋W′，最準，休息不能縮短</span></span></label>
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="race"><span><b>用比賽：5–10 K 比賽或計時跑</b><span class="meta">不另外排；Riegel 換算（外插），不測 W′</span></span></label>
     </fieldset>
+    <fieldset class="pf-sec" id="pf-aet"><legend>AeT 飄移測試</legend>
+      <div class="pf-row"><span class="lbl">排在</span><label class="rb"><input type="radio" name="aet_test_days" value="weekday">平日（週一到週五）</label><label class="rb"><input type="radio" name="aet_test_days" value="any">和間歇一樣（週二優先，週末也可以）</label></div>
+      <div class="meta">50 分：暖身 10 分＋40 分固定功率（Uphill Athlete 最短版本，不建議更短）；冷氣房跑步機＋電扇最好。離長跑至少 2 天，不和 CP 測試同一週。</div>
+    </fieldset>
     <fieldset class="pf-sec" id="pf-heat"><legend>熱適應 <span class="badge watch">推估</span></legend>
       <div class="pf-row"><span class="lbl">熱適應課</span><label class="rb"><input type="radio" name="heat" value="auto">自動（只在 30 天內有熱天 A / B 賽時）</label><label class="rb"><input type="radio" name="heat" value="off">不排</label></div>
       <div class="pf-row"><label class="il"><span>方式</span><select name="heat_method">
@@ -1342,6 +1346,7 @@ function pfFill(p) {
   PFF.elements.terrain_quality.value = p.terrain_quality;
   PFF.querySelector(`input[name="interval_target"][value="${p.interval_target}"]`).checked = true;
   (PFF.querySelector(`input[name="cp_test_protocol"][value="${p.cp_test_protocol || "quick"}"]`) || {}).checked = true;
+  (PFF.querySelector(`input[name="aet_test_days"][value="${p.aet_test_days || "weekday"}"]`) || {}).checked = true;
   gateRender(p.quality_gate || "auto");
   PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
   (PFF.querySelector(`input[name="heat"][value="${p.heat || "auto"}"]`) || {}).checked = true;
@@ -1364,6 +1369,7 @@ function pfRead() {
     weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
     terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
     interval_target: radioVal("interval_target"), cp_test_protocol: radioVal("cp_test_protocol") || "quick",
+    aet_test_days: radioVal("aet_test_days") || "weekday",
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
     heat: radioVal("heat") || "auto", heat_method: E.heat_method.value || "run" };
 }

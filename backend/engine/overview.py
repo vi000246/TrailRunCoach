@@ -599,9 +599,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if test_s is not None:
             add(**{**test_s, "detail": test_s["detail"] + "。門檻過期或沒測過：區間、TSS、賽事功率都靠它"})
         elif aet_due and kind == "base":
-            # AeT drift test in place of this week's interval (engine/aet_test.py)
+            # AeT drift test in place of this week's interval (engine/aet_test.py); its
+            # length by the 課表偏好 weekday cap: 80′ standard, or UA's 50′ minimum
             add(**AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
-                             AT.start_power(tt.get("cp"))))
+                             AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None)))
         elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
                 target=tgt.get("supra", ""), detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
@@ -662,8 +663,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             w = take(lambda w: category(w) == "strength")
         elif s.id == "long":                      # kind long, or hike (課表偏好 登山)
             w = take(lambda w: category(w) in ENDURANCE and moving_s(w) / 60 >= 0.8 * s.minutes)
-        elif s.id == "test_aet":                  # a steady ≥ 45-min road run
-            w = take(lambda w: category(w) == "road" and moving_s(w) >= AT.WARM_S + AT.MAIN_MIN_S - 5 * 60)
+        elif s.id == "test_aet":
+            # the 50-min test: a ≥ 48-min road run (2′ slack) titled AeT — the COROS
+            # workout's name; untitled only from 55 min (workout_review.TEST_AET_MIN_S),
+            # so the athlete's ordinary 41–52′ road runs are not taken for the test (自組)
+            from backend.engine import workout_review as WR
+            w = take(lambda w: category(w) == "road" and moving_s(w) >= AT.WARM_S + AT.MAIN_MIN_S - 2 * 60
+                     and (bool(WR.AET_TITLE.search(WR._title(w))) or moving_s(w) >= WR.TEST_AET_MIN_S))
         elif s.kind in ("quality", "test"):
             need = QG.hard_need(s.title, HARD_SESSION_S)       # 5×1′ never reaches 10 min at threshold
             w = take(lambda w: hard.get(w.idx, 0) >= need)
@@ -688,10 +694,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         s.day = d.isoformat()
         plan_days.setdefault(s.day, []).append(s.id)
 
+    long_done = next((dt.date.fromisoformat(s.day) for s in sessions if s.kind == "long" and s.done and s.day), None)
     if PR is not None:
         long_wd = PP.long_weekday(PR, long_wd)
         ds_ = [{**asdict(s), "long_day": getattr(s, "_long_day", False)} for s in todo]
-        left_out = PP.place(ds_, free, long_wd, PR)
+        left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done)
         for s, d in zip(todo, ds_):
             if d["day"]:
                 put(s, dt.date.fromisoformat(d["day"]))
@@ -704,11 +711,23 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         avail = list(free)
         # keep one rest day when there is room
         keep_rest = len(avail) > len(main_todo) + 0
+    aet_days = AT.test_days(prefs)            # 課表偏好 aet_test_days; Mon–Fri without prefs too
     for s in sorted(main_todo, key=lambda s: {"long": 0, "test": 1, "quality": 1}.get(s.kind, 2)):
         if not avail:
             break
         if s.kind == "long":
             pick = next((d for d in avail if d.weekday() == long_wd), avail[-1])
+        elif s.kind == "test" and aet_days is not None and AT.is_aet_session(asdict(s)):
+            long_day = next((dt.date.fromisoformat(x.day) for x in sessions if x.kind == "long" and x.day), None)
+            hard_days = [dt.date.fromisoformat(x.day) for x in sessions
+                         if x.kind in ("quality", "test") and x.day and x is not s]
+            r = AT.pick_day(avail, long_day, hard_days, aet_days, weekend_ok=not AT.is_short(asdict(s)))
+            if r["day"] is None:
+                notes.append({"level": "info", "text": r["note"]})
+                continue
+            put(s, r["day"])
+            avail.remove(r["day"])
+            continue
         elif s.kind in ("quality", "test"):
             long_day = next((dt.date.fromisoformat(x.day) for x in sessions if x.kind == "long" and x.day), None)
             cands = [d for d in avail if long_day is None or abs((d - long_day).days) >= 2]

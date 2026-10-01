@@ -198,21 +198,25 @@ def _test_steps(s: dict, th: Thresholds) -> list[StepLike]:
 
 
 def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
-    # 「AeT 飄移測試」 (engine/aet_test.py): 15′ warm-up ≤ the start HR, 60′ at a
-    # fixed power ±3 %, 5′ cool-down; each its own lap so the analysis can cut them
+    # 「AeT 飄移測試」 (engine/aet_test.py, UA's minimum): 10′ warm-up ≤ the start HR,
+    # 40′ at a fixed power ±3 %; the cool-down is optional (「緩和可省略」 → no step, 50 min
+    # in all; a stored 「緩和 N 分」 → an N′ lap); each its own lap so the analysis can cut them.
+    # Rows stored with the old 15 / 60 / 5 text keep their own numbers.
     text = f"{s.get('target', '')} {s.get('detail', '')}"
-    warm = _num(r"暖身\s*(\d+)\s*分", text, 15)
-    main = _num(r"測試\s*(\d+)\s*分", text, 60)
-    cool = _num(r"緩和\s*(\d+)\s*分", text, 5)
+    warm = _num(r"暖身\s*(\d+)\s*分", text, 10)
+    main = _num(r"測試\s*(\d+)\s*分", text, 40)
+    cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
     p = _num(r"固定功率\s*(\d+)\s*W", text) or (round(0.75 * th.cp) if th.cp else None)
     hr0 = _num(r"心率從\s*(\d+)", text)
     warm_int = easy_hr(th)
     if hr0 and warm_int:
         warm_int = ("hr", min(warm_int[1], hr0 - 10), hr0)
     main_int = ("power", round(p * 0.97), round(p * 1.03)) if p else None
-    return [Step(EX_WARMUP, warm * 60, warm_int),
-            Step(EX_TRAIN, main * 60, main_int, "固定功率，不要調"),
-            Step(EX_COOLDOWN, cool * 60, easy_hr(th))]
+    steps = [Step(EX_WARMUP, warm * 60, warm_int),
+             Step(EX_TRAIN, main * 60, main_int, "固定功率，不要調")]
+    if cool:
+        steps.append(Step(EX_COOLDOWN, cool * 60, easy_hr(th)))
+    return steps
 
 
 def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
