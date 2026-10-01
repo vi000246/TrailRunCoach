@@ -19,9 +19,17 @@ the WKO5 athlete folder.
       work          sum power * dt (J)
       hrTSS / hrIF  backend/engine/algorithms/wko5_hr.hr_tss with the run/bike LTHR
       ngp           grade-adjusted pace (Minetti), min/km; pace tssduration = moving
-* thresholds / weight / PMC constants come from the WKO5 athlete file when a
-  WKO5 folder is given (so a FIT source and WKO5 use the same settings),
-  otherwise defaults + the plan's dated thresholds.
+* sport type: trail / road from the app DB's workout_files.trail_classification
+  (user overrides included, shared across a duplicate_of group), the FIT
+  session sub_sport only as a fallback; trail runs carry WKO5's
+  "runningtrail" tag.
+* thresholds / weight, in order: the season plan's dated rows (Dataset.setting
+  / cp) -> athlete_settings in the app DB (weight, run_ftp_w, threshold pace;
+  not lthr / ftp_w, see _load_db_settings) -> as-of LTHR / CP estimates from
+  these FITs (_estimate_settings) -> unset ("未設定"). The WKO5 athlete file
+  only when settings_dir is passed (dataset_for_source: the opt-in setting
+  charts.fit_settings_from_wko5). PMC constants: 42 / 7 (WKO5's defaults).
+* the app DB is opened read-only (a sync may be writing it).
 * parity mode / own-formula config flags behave as for the WKO5 Dataset.
 """
 from __future__ import annotations
@@ -56,7 +64,7 @@ ESTIMATE_STEP_DAYS = 30
 # leading (date.min, None) entry stops that for thresholds that must not reach
 # the days before they were known
 NOT_BEFORE = (dt.date.min, None)
-WKO5_OPT_IN_KEY ="charts.fit_settings_from_wko5"   # settings/repository.py DEFAULTS
+WKO5_OPT_IN_KEY = "charts.fit_settings_from_wko5"   # settings/repository.py DEFAULTS
 
 SETTING_LABELS = {
     "wko5": "WKO5 athlete 檔（選用）",

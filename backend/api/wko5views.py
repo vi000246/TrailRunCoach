@@ -56,8 +56,9 @@ _LIVE: "weakref.WeakSet[Dataset]" = weakref.WeakSet()
 @lru_cache(maxsize=4)
 def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "") -> Dataset:
     """The Dataset for charts.data_source: the WKO5 athlete folder, or the
-    COROS / TP FIT folder (FitFolderDataset, thresholds from the WKO5 athlete
-    file). `stamp` = datasource.source_stamp: a sync that adds FITs or WKO5
+    COROS / TP FIT folder (FitFolderDataset: thresholds from the plan, the
+    app DB's athlete_settings and as-of estimates; WKO5 only when opted in).
+    `stamp` = datasource.source_stamp: a sync that adds FITs or WKO5
     rewriting its index gives a new stamp, so a fresh Dataset."""
     ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
     _LIVE.add(ds)

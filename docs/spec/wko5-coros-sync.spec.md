@@ -8,7 +8,7 @@
 - **Owner**: vi000246
 - **Status**: IMPLEMENTED（M3 delta 進行中）
 - **Generated**: 2026-05-15
-- **Last updated**: 2026-09-30
+- **Last updated**: 2026-10-01
 
 ## Change History
 
@@ -20,6 +20,7 @@
 | 2026-09-30 | code-sync | — | 設定頁「資料同步」區塊、每來源互斥鎖（409 `SYNC_BUSY`）、每日排程（lifespan task）、`POST /sync/auto` + `autosync.js`、每來源獨立 FIT 資料夾與遷移腳本、刪除單一來源檔案、`FitFolderDataset` 與 `/sync/compare` |
 | 2026-09-30 | code-sync | N/A | 掃描改走 `fit/<source>/` 並標 source + provider id、`FitFolderDataset` 時區取 `athlete.timezone`、`charts.map.basemap` / `charts.map.overlays` 設定鍵、COROS 課表推送改指向 overview.spec.md；路徑改寫成使用者資料夾相對形式 |
 | 2026-10-01 | feat/auto-replan | N/A | 同步結束時，若這次下載 ≥ 1 筆活動（狀態 ok／partial），`runner.stream` 會呼叫 `plan_auto.after_sync`，在背景 task 裡用自己的 DB session 自動調整課表並推送（`docs/spec/plan-auto.spec.md`）。失敗不影響同步結果 |
+| 2026-10-01 | bugfix | N/A | `FitFolderDataset` 前置修正：越野分類讀 app DB（含覆寫、跨來源重複）、sub_sport 後備；門檻／體重改成計畫 → `athlete_settings` → as-of 估算，WKO5 athlete 檔改為選用（`charts.fit_settings_from_wko5`）；`source_stamp` 含 DB 簽章 |
 | 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
 
 ---
@@ -364,9 +365,17 @@ ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
 
 也可以在頁面裡放 `<script src="/api/v1/static/autosync.js" defer></script>`。它每個瀏覽器每 10 分鐘最多呼叫一次，狀態顯示在 `#nav-sync-status`（沒有這個元素就在右上角加一個小徽章）。
 
-**圖表資料來源**（`charts.data_source`）：`backend/engine/wko5expr/fitdataset.py` 用 FIT 資料夾建 `FitFolderDataset`，每筆活動的指標用本專案自己的公式計算，門檻取自 WKO5 athlete 檔。`datasource.current_source()` / `source_stamp()` 提供 Dataset 工廠。9 月 17 筆活動實測對照 WKO5：時長、距離相同，NP ±0.5%，TSS ±0.2，爬升 1–4%。
+**圖表資料來源**（`charts.data_source`）：`backend/engine/wko5expr/fitdataset.py` 用 FIT 資料夾建 `FitFolderDataset`，每筆活動的指標用本專案自己的公式計算。`datasource.current_source()` / `source_stamp()` 提供 Dataset 工廠。9 月 17 筆活動實測對照 WKO5（當時門檻取自 WKO5 athlete 檔）：時長、距離相同，NP ±0.5%，TSS ±0.2，爬升 1–4%。
 
-**時區**：`FitFolderDataset` 把 FIT 的 UTC 起始時間換成運動員當地時間再取日期（`backend/engine/wko5expr/fitdataset.py:162`、`backend/engine/wko5expr/fitdataset.py:192-194`；naive 時間視為 UTC），時區來源與同步一致：`athlete.timezone` 設定 → `WKO5COACH_TZ` → 系統時區（`backend/engine/wko5expr/datasource.py:59`）。測試：`backend/tests/test_scan_and_tz.py:90`、`backend/tests/test_scan_and_tz.py:99`、`backend/tests/test_scan_and_tz.py:105`。
+**FIT 資料集的前置（2026-10-01，`docs/research/unsourced-rules.md` §0.10 第 0 步）**：app 的資料要從 TP／COROS 來，WKO5 只當對照。
+
+- **越野／路跑**：`sport_of`（`backend/engine/wko5expr/fitdataset.py:90`）先看 app DB 的 `workout_files.trail_classification`（唯讀開啟，`load_classifications`，`backend/engine/wko5expr/fitdataset.py:130`），FIT 的 session sub_sport 只當後備（COROS 的 FIT 沒有 trail sub_sport，原本整批越野都被當路跑，回測越野 n = 0；sub_sport 先前也根本沒被讀進來，`fit_to_channels` 現在帶出 `sub_sport`）。跨來源重複（`duplicate_of`）視為同一筆活動：群組裡任一列的使用者覆寫優先（自己這列 → 主紀錄 → 其他重複列），否則用自己這列的自動值，再退到主紀錄（`classification_for`，`backend/engine/wko5expr/fitdataset.py:181`）。每個來源的資料集仍保留自己的檔案（不因為是重複列就丟掉，否則該來源會少活動）。越野跑同時加上 WKO5 的 `runningtrail` 標籤，因為 thresholds／品質門檻／status／成就只看標籤。
+- **門檻與體重**，依序：賽季計畫的 dated 列（`Dataset.setting` / `cp`）→ app DB 的 `athlete_settings`（體重、`run_ftp_w`、閾值配速；`_load_db_settings`，`backend/engine/wko5expr/fitdataset.py:412`）→ 從這些 FIT 估算的 as-of LTHR／CP（`_estimate_settings`，`backend/engine/wko5expr/fitdataset.py:440`：每 30 天一個格點，自組；格點日只用當天以前的跑步，`thresholds.estimate` + `racepower.athlete.cp_as_of`，估出的值只套用到格點日以後）→ 未設定。WKO5 athlete 檔只有在設定 `charts.fit_settings_from_wko5 = true`（預設 false，`backend/settings/repository.py:53`）時才讀（`dataset_for_source`，`backend/engine/wko5expr/fitdataset.py:530`）。各處的來源標籤改走 `Dataset.setting_label`，FIT 資料集不再顯示「WKO5 設定」。
+- **`athlete_settings.lthr` / `ftp_w` 不當跑步門檻**：唯一的自動寫入者是 `coros_client.login`（COROS 帳號 `zoneData.lthr` / `.ftp` 與體重，日期 = 登入當天 UTC），沒有記錄是哪個運動；TP 的 `fetch_tp_settings` 只回傳 JSON、不寫 DB。2026-09-30 那列（FTP 200、LTHR 182、66.3 kg）是 COROS 登入寫的，不是 TP；LTHR 182 高於同一天 12′ 全力測試的峰值心率 171，不可能是現在的跑步 LTHR。這兩欄留在 `settings_ignored` 供顯示，體重照用。
+- **快取**：`source_stamp` 多帶 `db_stamp()`（`backend/engine/wko5expr/datasource.py:65`），分類覆寫、去重或 `athlete_settings` 變了，即使 FIT 檔沒變也會重建 Dataset。`FitFolderDataset.cached_series` 改成記憶體快取，key 含當時的門檻（`backend/engine/wko5expr/fitdataset.py:506`）。
+- 測試：`backend/tests/test_fit_dataset_prereqs.py`（合成 FIT ＋ tmp SQLite，不碰 WKO5 資料夾與真實 DB）。
+
+**時區**：`FitFolderDataset` 把 FIT 的 UTC 起始時間換成運動員當地時間再取日期（`backend/engine/wko5expr/fitdataset.py:306`、`backend/engine/wko5expr/fitdataset.py:346-348`；naive 時間視為 UTC），時區來源與同步一致：`athlete.timezone` 設定 → `WKO5COACH_TZ` → 系統時區（`backend/engine/wko5expr/datasource.py:59`）。測試：`backend/tests/test_scan_and_tz.py:90`、`backend/tests/test_scan_and_tz.py:99`、`backend/tests/test_scan_and_tz.py:105`。
 
 **路線圖設定**（`charts.map.basemap` / `charts.map.overlays`，`backend/settings/repository.py:53-54`）：預設底圖 `rudy`、無疊加層。底圖限 `MAP_BASEMAPS`、疊加層須為 `MAP_OVERLAYS` 內不重複的清單（`backend/settings/repository.py:56-57`、`backend/settings/repository.py:125-130`），不合法時 `PUT /sync/settings` 回 400。API 欄位對應在 `backend/api/sync.py:203-215`。地圖本身屬 viewer，見 wko5-engine.spec.md。
 
