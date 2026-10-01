@@ -1018,6 +1018,8 @@ function draw(card, res) {
   }
   // nothing to draw: say why (no power in this workout, no activity this week, PD fit failed…)
   if (res.empty) card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`);
+  // a one-line plain-language reading of the chart (e.g. the durability curve's last 20 %)
+  if (res.subtitle && !res.empty) card.insertAdjacentHTML("beforeend", `<p class="badge" style="margin:4px 0 6px">${esc(res.subtitle)}</p>`);
   // drew something, but some series are blank for a known reason (PD model not fitted)
   else if (res.notice) card.insertAdjacentHTML("beforeend", `<p class="nodata small">${esc(res.notice)}</p>`);
   const S_ = res.series;
