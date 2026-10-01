@@ -265,8 +265,8 @@ td select.terr { width: 80px; padding: 2px 5px; }
     </div>
     <div class="row rf"><span class="lbl">顯示</span>
       <div class="seg" id="unit"><button data-u="power">功率</button><button data-u="pace">配速</button></div>
-      <label class="meta">W′ 曲線 <select id="wbal" style="width:auto"><option value="">不顯示</option><option value="wko5">WKO5 算法</option><option value="skiba">Skiba τ 自行車（推估）</option><option value="skiba_run">Skiba τ 跑步擬合（推估）</option></select></label>
-      <span class="help" tabindex="0">?<span class="tip">W′ 是超過 CP 時能用的「電池」。WKO5 算法和本站其他圖表一致。Skiba 的恢復時間常數有兩種：原始自行車版，和一篇跑步研究重新擬合的版本（原始版在跑步會低估撐得住的時間約 12%）。這條線只給你參考，不影響配速目標。</span></span>
+      <label class="meta">W′ 曲線 <select id="wbal" style="width:auto"><option value="">不顯示</option><option value="wko5">WKO5 算法（dFRC）</option><option value="skiba_run">Skiba τ 跑步擬合（推估）</option></select></label>
+      <span class="help" tabindex="0">?<span class="tip">W′ 是超過 CP 時能用的「電池」。WKO5 算法（dFRC）和本站其他圖表一致：超過 CP 的部分照功率消耗，回到 CP 以下時 70% 以 300 秒、30% 以 25 秒恢復。另一個選項是 Skiba 模型用跑步研究重新擬合的恢復速度。這條線只給你參考，不影響配速目標。</span></span>
     </div>
     <div class="form" style="margin-top:6px">
       <label>日期<input id="date" type="date"></label>

@@ -484,11 +484,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     over_idx = {i for c in runs if c["over"] for i in range(c["from"], c["to"] + 1)}
     wb = None
     wmodel = opts.get("wbal")
-    if wmodel in ("wko5", "skiba", "skiba_run") and w_prime:
+    if wmodel == "skiba":
+        # the cycling-τ option was removed (user, 2026-10-01): old saved choices get WKO5's dFRC
+        wmodel = "wko5"
+    if wmodel in ("wko5", "skiba_run") and w_prime:
         if wmodel == "wko5":
-            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "WKO5 算法（70 % τ 300 s + 30 % τ 25 s）"
-        elif wmodel == "skiba":
-            vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "cycling"), "Skiba τ = 546·e^(−0.01·D) + 316（自行車）"
+            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "WKO5 算法 dFRC（70 % τ 300 s + 30 % τ 25 s）"
         else:
             vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "running"), "τ = 372·e^(−0.02·D) + 102（跑步擬合）"
         wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",
