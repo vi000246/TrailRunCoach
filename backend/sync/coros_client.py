@@ -97,14 +97,19 @@ async def _probe(base: str, token: str, user_id: str, timeout: float = 10) -> tu
     return False, f"result={body.get('result')} {body.get('message') or ''}".strip()
 
 
-async def _detect_data_base(token: str, user_id: str, login_base: Optional[str] = None) -> str:
+async def _detect_data_base(token: str, user_id: str, login_base: Optional[str] = None,
+                            known: Optional[str] = None) -> str:
     """After login, find which base URL accepts the token for activity
-    queries: the server that issued the token first, then the others. When
-    no probe answers (network trouble, a busy event loop timing the probes
-    out) the LOGIN server is kept — the old default "US" sent an EU / CN
-    account's token to the wrong server, which COROS answers with
-    "Access token is invalid"."""
-    order = ([login_base] if login_base else []) + [b for b in COROS_BASES.values() if b != login_base]
+    queries. The login server is not always the data server (a Taiwan
+    account logs in on EU, its data is on teamapi = US), so: the server
+    detected before for this account (`known`), US, the login server, then
+    the rest. When no probe answers (network trouble; on 2026-10-01 a
+    blocked event loop timed every probe out) the known server is kept,
+    else US; the reasons are logged."""
+    order = []
+    for b in (known, COROS_BASES["us"], login_base, *COROS_BASES.values()):
+        if b and b not in order:
+            order.append(b)
     why = []
     for base in order:
         ok, reason = await _probe(base, token, user_id)
@@ -112,9 +117,8 @@ async def _detect_data_base(token: str, user_id: str, login_base: Optional[str] 
             log.info("Coros data server detected: %s", base)
             return base
         why.append(f"{base.split('//')[-1]}: {reason}")
-    fallback = login_base or COROS_BASES["us"]
-    log.warning("Could not detect the COROS data server (%s); using the login server %s",
-                "; ".join(why), fallback)
+    fallback = known or COROS_BASES["us"]
+    log.warning("Could not detect the COROS data server (%s); using %s", "; ".join(why), fallback)
     return fallback
 
 
@@ -185,11 +189,12 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
     user_id = str(result.get("userId", ""))
     expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
 
-    # Detect which server actually accepts this token for data calls
-    data_base = await _detect_data_base(token, user_id, login_base=base)
-
     state_res = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
     state = state_res.scalar_one_or_none()
+    known = state.coros_base_url if state is not None and state.coros_user_id == user_id else None
+
+    # Detect which server actually accepts this token for data calls
+    data_base = await _detect_data_base(token, user_id, login_base=base, known=known)
     if not state:
         state = SyncState(athlete_id=athlete_id)
         db.add(state)
