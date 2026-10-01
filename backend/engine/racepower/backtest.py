@@ -5,10 +5,13 @@ feedback (HR-aware; group hikes out) and the capacity review. Two separate
 questions, reported separately:
 
 1. 能力模型回測 (capacity / 比賽預測) — only maximal efforts can test
-   CP / W′ / k (the capacity samples, 2026-10-01, maximal.py): season-plan
-   races matched to their activity, the maximal bouts of CP tests (cptest
-   FIT scan + workout_review test_cp), self-paced maximal road efforts and
-   race-like trail efforts. The HR "race" class is no longer a sample (it
+   CP / W′ / k (the capacity samples, 2026-10-01): runs whose effective
+   effort is 全力 (activity_tags: the user's mark wins; auto = self-paced
+   maximal road rules / trail HR on moving time with long rests), and the
+   maximal bouts of CP tests (cptest FIT scan + workout_review test_cp). A
+   season-plan race is activity type 比賽, not a sample by itself. Trail
+   cases also get the HR pace model (trailhr.py, `trail_hr`), with or
+   without power. The HR "race" class is no longer a sample (it
    caught hard 5 km training runs). Explicit AeT tests are submaximal
    anchors: only the HR model's power at their HR is checked. Each case
    also gets the HR-based capacity as of the day before (hrcap.py, two TTE
@@ -720,7 +723,10 @@ def candidates(ds, today: dt.date, classes: Optional[dict] = None, marked: Optio
         c = classes.get(w.idx) or {}
         cs = c.get("capacity") or {}
         tg = cs.get("tags") or {}
-        pt = A.trail_hr_points(ds, [w]) if cat == "trail" else []
+        try:
+            pt = A.trail_hr_points(ds, [w]) if cat == "trail" else []
+        except Exception:                   # noqa: BLE001 — the HR pace model is optional per case
+            pt = []
         out.append({"idx": w.idx, "date": date, "category": cat, "label": A.label(w),
                     "priority_a": bool(ev and ev.get("priority") == "A"), "event": ev,
                     "intensity": c.get("cls"), "intensity_reason": c.get("reason"),
@@ -765,10 +771,11 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
                 and (tday - 2 * RUN_WINDOW_DAYS < w.day or w.idx in marked)]
     classes = A.classify_runs(ds, all_runs, tags=tags)
     cmap = {i: c.get("cls") for i, c in classes.items()}
-    # trail race HR level: earlier runs whose effective type is 比賽, or 全力 samples
-    trail_all = [w for w in ds.workouts if A.outdoor(w) and A.is_trail(w) and w.day <= tday + 1]
-    tcaps = A.capacity_samples(ds, trail_all, tags=tags)
-    race_idx = {i for i, c in tcaps.items() if c["tags"]["activity_type"] == "race" or c.get("ok")}
+    # trail race HR level: runs whose effective type is 比賽, or 全力 samples (trail_hr_model
+    # only reads the ones before each case's as-of date)
+    race_idx = {i for i, c in classes.items()
+                if ((c.get("capacity") or {}).get("tags") or {}).get("activity_type") == "race"
+                or (c.get("capacity") or {}).get("ok")}
     cases, arrays = [], {}
     for c in candidates(ds, today, classes, marked):
         w = by_idx[c["idx"]]
