@@ -100,6 +100,13 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
             await db.commit()
         except Exception as e:
             log.warning("could not store %s sync result: %s", source, type(e).__name__)
+        # 自動調整課表 (engine/plan_auto.py): ≥ 1 new activity -> reconcile, adapt and
+        # push in a background task with its own DB session; it never raises here
+        try:
+            from backend.engine import plan_auto
+            plan_auto.after_sync(source, result)
+        except Exception as e:           # noqa: BLE001 — the sync result stands
+            log.warning("auto plan trigger failed: %s", type(e).__name__)
 
 
 async def run_once(source: str, athlete_id: int = 1, since: Optional[str] = None,

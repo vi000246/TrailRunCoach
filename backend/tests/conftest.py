@@ -48,6 +48,14 @@ def _no_real_heat_history(monkeypatch):
     monkeypatch.setattr(heat_data, "exposures", lambda root=None: ([], {"missing": True}))
 
 
+@pytest.fixture(autouse=True)
+def _no_auto_plan_after_sync(monkeypatch):
+    """A sync test that imports an activity must not start an automatic plan
+    run on the real DB (engine/plan_auto.py); test_plan_auto calls it itself."""
+    from backend.engine import plan_auto
+    monkeypatch.setattr(plan_auto, "after_sync", lambda *a, **k: None)
+
+
 @pytest.fixture
 def tp_creds(monkeypatch):
     """Obviously fake OAuth client credentials via env."""
