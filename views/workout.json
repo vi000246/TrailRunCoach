@@ -77,19 +77,17 @@
     },
     {
       "title": "間歇",
-      "description": "每組有沒有達標、有沒有掉、恢復時心率有沒有降。適用品質課與 CP 測試。WKO5 版本：「WKO5 Workout View」→ 間歇（dFRC Run、Marking VO2max Intervals V3&V4）與 訓練效果（Today's Mean Max Power vs. 90 Day Best - Run）。",
+      "description": "這堂間歇有沒有達到訓練目標：對照這次選的課表本身（趟數、目標帶、目標區時間）。只在間歇／品質課顯示。WKO5 版本：「WKO5 Workout View」→ 間歇（dFRC Run、Run VO2max & FRC Chart – 5 Min PDC & Skiba、Marking VO2max Intervals V3&V4）。",
       "charts": [
+        {"title": "間歇判讀", "kind": "review", "section": "interval_verdict",
+         "description": "達到＝逐趟判定達標且目標區時間 ≥ 計畫的 85%；部分達到＝邊界或 60–85%；未達到＝未適應、目標太高或 < 60%（門檻推估）。這個判定也決定下一階。"},
+        {"title": "每趟功率 vs 目標帶", "kind": "review", "section": "interval_reps"},
+        {"title": "功率與每趟（簡化版 VO2max & FRC）", "kind": "review", "section": "interval_power"},
+        {"title": "功率電池（W′ 剩多少）", "kind": "review", "section": "interval_battery"},
+        {"title": "目標區時間 vs 計畫", "kind": "review", "section": "interval_tiz"},
+        {"title": "同功率下的心率（和之前的同類課比）", "kind": "review", "section": "interval_hr"},
         {"title": "每組", "kind": "review", "section": "intervals",
-         "description": "用力段 = 30 秒功率 ≥ max(85% CP, 1.12 × 這次中位功率) 且 ≥ 1 分鐘。目標帶取各組 %CP 的中位（閾值下 88–95%、閾值 95–101%、超閾值 101–106%、VO2max 106–116%）。"},
-        {"title": "功率與目標帶",
-         "kind": "workout",
-         "axes": [{"id": "WATTS", "min": 0}],
-         "series": [
-           {"name": "功率（30 秒）", "type": "line", "y_axis": "WATTS", "x_axis": "HHMMSS", "color": "#2a78d6", "expression": "ewma(power,30)"},
-           {"name": "88% CP", "type": "line", "y_axis": "WATTS", "color": "#1baf7a", "line_style": "dot", "expression": "(,0.88*cp)"},
-           {"name": "95% CP", "type": "line", "y_axis": "WATTS", "color": "#eda100", "line_style": "dash", "expression": "(,0.95*cp)"},
-           {"name": "101% CP", "type": "line", "y_axis": "WATTS", "color": "#d7191c", "line_style": "dash", "expression": "(,1.01*cp)"}
-         ]}
+         "description": "用力段 = 30 秒功率 ≥ max(85% CP, 1.12 × 這次中位功率) 且 ≥ 1 分鐘。目標帶取各組 %CP 的中位（閾值下 88–95%、閾值 95–101%、超閾值 101–106%、VO2max 106–116%）。"}
       ]
     },
     {
