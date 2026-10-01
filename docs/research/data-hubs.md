@@ -61,7 +61,7 @@
 | **原始活動檔** | `GET /api/v1/activity/{id}/file` | 摘要原文：「Download original activity file, Strava activities not supported」。回傳是否壓縮沒寫，**未驗證**；probe 會自動判斷 gzip／zip |
 | intervals.icu 重產的 FIT | `GET /api/v1/activity/{id}/fit-file` | 非原始檔 |
 | 逐點資料 | `GET /api/v1/activity/{id}/streams{ext}` | |
-| Wellness | `GET /api/v1/athlete/{id}/wellness{ext}?oldest=&newest=` | 欄位含 `restingHR, hrv, hrvSDNN, sleepSecs, sleepScore, sleepQuality, avgSleepingHR, readiness, spO2, respiration, vo2max, steps, weight` 等。沒有 Garmin 的 Training Status |
+| Wellness | `GET /api/v1/athlete/{id}/wellness{ext}?oldest=&newest=` | 欄位含 `restingHR, hrv, hrvSDNN, sleepSecs, sleepScore, sleepQuality, avgSleepingHR, readiness, spO2, respiration, vo2max, steps, weight` 等。沒有 Garmin 的 Training Status。OpenAPI 路徑要求 `{ext}`；probe 呼叫的是不帶副檔名的 `/wellness`（回 JSON），這個寫法**未驗證**，錯的話 probe 會顯示 404 |
 | 計畫課表（行事曆） | `GET /api/v1/athlete/{id}/events{format}?oldest=&newest=&category=WORKOUT` | |
 | 建立／更新課表（upsert） | `POST /api/v1/athlete/{id}/events/bulk?upsert=true` | 用 `external_id` 對應自己的主鍵（topic 63624，2024-12-04）。內容可以是 intervals.icu 的文字格式（`description`），或 base64 的 `.fit`／`.zwo`／`.mrc`／`.erg` |
 | 刪除課表 | `DELETE /api/v1/athlete/{id}/events/{eventId}`、`PUT .../events/bulk-delete` | |
@@ -81,6 +81,10 @@
   - 心率只有 `% HR`、`% LTHR`、`Z2 HR` 三種寫法，**沒有絕對 bpm**。所以 app 的 bpm 要換成 % LTHR，前提是 intervals.icu 裡設的 LTHR 和 app 一致。
   - 功率可以寫絕對瓦數 `220w`／`200-240w`。
   - 步驟前面的文字是提示語（cue）；提示語裡有數字可能被當成時間解析，所以 probe 只用「暖身／主課／恢復／緩和」。
+- 以下三點 probe 會實測，目前**未驗證**：
+  1. 沒有目標的步驟（`- 恢復 3m`）能不能被接受；
+  2. event `type: "Run"` 是不是 Garmin／COROS 上傳需要的類型；
+  3. 中文提示語能不能正常解析。
 - 對應實作：`backend/scripts/intervals_probe.py` 的 `workout_text()`／`session_event()`，一樣沿用 `coros_workouts.session_steps`；離線測試在 `backend/tests/test_intervals_probe.py`。
 - 功率的校正問題（同 `garmin.md` §3.3）：
   - app 的 CP 來自 COROS 功率，推到 **COROS 手錶**時瓦數是可比的。
@@ -151,7 +155,7 @@
 
 | 平台 | 輸入 | 個人 API／商業 API | 原始 FIT | 推課表到 Garmin／COROS | 費用 | 條款重點 | 可靠度 |
 |---|---|---|---|---|---|---|---|
-| **Strava** | 幾乎所有品牌 | 個人可建 app，新 app 只能連 1 人，自助升到 10 人，再多要審核（rate-limits 頁）。2026-06 起 Standard 開發者要付月費，金額**未驗證**（tryterra 2026-09-06） | **無**，只有 streams（API reference 沒有活動原始檔端點） | 否（Strava 沒有結構化課表推送） | 一般使用者免費／訂閱 | API Agreement（Effective June 1, 2026）：「Strava Data provided by a specific user can only be displayed or disclosed in your Developer Application to that user」；「You may not create applications that compete with or replicate Strava functionality」。AI 禁令：2024-11-15 公告加入「explicitly prohibit … artificial intelligence models」，目前在 API Policy；原文我沒讀到（API Policy 頁 404），**未驗證** | 高，但條款越來越緊；本 app 有 AI 功能，**不適合** |
+| **Strava** | 幾乎所有品牌 | 個人可建 app，新 app 只能連 1 人，自助升到 10 人，再多要審核（rate-limits 頁）。據 tryterra（2026-09-06）2026-06 起 Standard 開發者要付月費。官方 rate-limits 頁沒有提到費用，所以「要付費」這件事和金額都**未驗證** | **無**，只有 streams（API reference 沒有活動原始檔端點） | 否（Strava 沒有結構化課表推送） | 一般使用者免費／訂閱 | API Agreement（Effective June 1, 2026）：「Strava Data provided by a specific user can only be displayed or disclosed in your Developer Application to that user」；「You may not create applications that compete with or replicate Strava functionality」。AI 禁令：2024-11-15 公告加入「explicitly prohibit … artificial intelligence models」，目前在 API Policy；原文我沒讀到（API Policy 頁 404），**未驗證** | 高，但條款越來越緊；本 app 有 AI 功能，**不適合** |
 | **Runalyze** | Garmin、COROS（官方 API）等 | **Personal API**：帳號設定產生 token，要設到期日，header `token:`；免費版是基本端點，Supporter／Premium 可讀更多；「Currently, there is no rate limit」（help「personal-api」）。商業 API 叫 Third Party API，條件**未驗證** | 有：「original fit file」匯出端點（changelog 搜尋摘要，**未驗證**） | 未驗證 | 免費／Supporter／Premium | 未讀條款，**未驗證** | 中（德國小團隊） |
 | **SportTracks** | Garmin、COROS 等 | 寄信 api@sporttracks.mobi 取得 OAuth 憑證（api/doc 頁的搜尋摘要） | 未驗證 | Garmin：有（blog「Garmin Training Integration」）；COROS：有活動同步，課表推送**未驗證** | 訂閱 | 未讀，**未驗證** | 中 |
 | **Final Surge** | Garmin、COROS 等 | 找不到公開的開發者 API，**未驗證** | 未驗證 | 有：Garmin（每晚推接下來 4 天）、COROS（官方 blog 與 the5krunner 2024-09） | 免費（教練付費） | — | 中；沒有 API，不能當 hub |
