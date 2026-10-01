@@ -51,6 +51,10 @@ def _wko5_settings() -> dict:
 def _notify(thresholds: bool) -> None:
     from backend.api.wko5views import plan_changed
     plan_changed(thresholds)
+    if thresholds:
+        # a new CP re-zones the upcoming power targets and re-pushes them (engine/plan_auto.py)
+        from backend.engine import plan_auto as PA
+        PA.after_thresholds()
 
 
 def _effective(plan: P.Plan, today: dt.date) -> dict:
