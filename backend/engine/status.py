@@ -690,6 +690,11 @@ class Status:
         cp, lt, ae = last("cp"), last("lthr"), last("aethr")
         parts, worst = [], GOOD
         for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)):
+            if label == "AeT":
+                # B3 (unsourced-rules.md): no fixed expiry — the AeT test is due for a reason
+                # (quality_gate.aet_test_reason, below), not by age
+                parts.append("AeT 沒測過" if d is None else f"AeT {(self.today - d).days} 天前")
+                continue
             if d is None:
                 parts.append(f"{label} 沒測過")
                 worst = BAD
@@ -707,6 +712,18 @@ class Status:
         # which test week_plan should schedule: the CP test measures CP only; the
         # AeT test (engine/aet_test.py) has its own cadence
         cp_due = cp is None or (self.today - cp).days > TEST_DAYS_WATCH
+        # a break of ~8 weeks or more: redo the CP baseline after the re-entry block
+        # (WKO5 seminar notes: about two months off → new baseline; detraining.md §4.7)
+        try:
+            from backend.engine import reentry as RE
+            brk = RE.find(self.ds, self.today)
+        except Exception:                   # noqa: BLE001
+            brk = None
+        if brk and brk.get("cp_retest") and brk["end"] <= self.today.isoformat() and \
+                (cp is None or cp.isoformat() < brk["return"]):
+            cp_due = True
+            worst = WATCH if worst == GOOD else worst
+            why += f"；停跑 {brk['days']} 天：恢復期結束後重測 CP（WKO5 研討會筆記）"
         from backend.engine import cp_protocols as CPP
         proto = self._cp_protocol()
         if worst != GOOD:

@@ -576,15 +576,17 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     # (this week's CP test is not a step and doesn't leak)
     weeks = P.project_weeks(_test_week({"levels": good, "streak_ok": False}), PHASES, date(2027, 3, 1))
     q, base, spec = split(weeks)
-    dose = [s[1] for s in QG.DOSE + QG.AFTER]
+    dose = [s[1] for s in QG.LADDER]
     assert base and all(q[d] and q[d][0] in dose for d in base)
-    assert [q[d][0] for d in base][:2] == ["短間歇 5×1 分", "短間歇 6×1 分"]
+    # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going
+    assert [q[d][0] for d in base][:2] == ["閾值 3×8 分", "閾值 4×8 分"]
+    assert all(q[d][0].startswith("閾值") for d in base)
     assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
-    # a locked method (data there, criterion not met): no base intervals; specific keeps its rule
+    # a locked method (data there, criterion not met): Zone 3 still goes on, never Zone 5
     locked = {"state": "locked", "mode": "ua_gap", "resolved": "ua_gap", "verdict": "差距 16%", "levels": good,
-              "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}}
+              "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": False}}
     q, base, spec = split(P.project_weeks(_test_week(locked), PHASES, date(2027, 3, 1)))
-    assert base and all(q[d] == [] for d in base)
+    assert base and all(q[d] and q[d][0].startswith("閾值") for d in base)
     assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
     # intensity bad: no quality in base (the guardrail) nor specific (the old rule)
     weeks = P.project_weeks(_test_week({"levels": {"intensity": "bad", "drift": "good"}, "streak_ok": True}),
