@@ -60,15 +60,19 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
     aet = plan.threshold_on("aethr", today)
     lthr_v = lthr if lthr is not None else (wk["runthr"] or {}).get("value")
     cp = plan.threshold_on("cp", today)
+    lr, ar = P.threshold_row(plan, "lthr", today), P.threshold_row(plan, "aethr", today)
     return {
         "cp": {"value": cp if cp is not None else wk.get("mftp"),
                "source": "plan" if cp is not None else "wko5_mftp"},
         "lthr": {"value": lthr_v, "source": "plan" if lthr is not None else "wko5",
-                 "wko5_default": lthr is None and bool((wk["runthr"] or {}).get("is_default"))},
+                 "wko5_default": lthr is None and bool((wk["runthr"] or {}).get("is_default")),
+                 "method": (lr or {}).get("method"), "label": (lr or {}).get("label")},
         "mhr": {"value": mhr if mhr is not None else (wk["runmhr"] or {}).get("value"),
                 "source": "plan" if mhr is not None else "wko5"},
         "aethr": {"value": aet if aet is not None else (None if lthr_v is None else round(0.89 * lthr_v, 1)),
-                  "source": "plan" if aet is not None else "friel_0.89"},
+                  "source": "plan" if aet is not None else "friel_0.89",
+                  "method": (ar or {}).get("method"),
+                  "label": (ar or {}).get("label") or "0.89 × LTHR（Friel Z2 上限，推估）"},
     }
 
 
@@ -147,6 +151,8 @@ class ThresholdIn(BaseModel):
     note: str = ""
     wprime: Optional[float] = None       # carried through so an edit keeps what apply-cp wrote
     cp_method: Optional[str] = None
+    lthr_method: Optional[str] = None    # carried through likewise (planning.LTHR_METHODS)
+    aethr_method: Optional[str] = None
 
 
 @router.put("/thresholds")
@@ -157,6 +163,9 @@ def put_thresholds(body: list[ThresholdIn]):
             P._d(t.date)
     except ValueError as e:
         raise HTTPException(400, f"bad date: {e}")
+    for t in body:
+        if t.lthr_method not in (None, *P.LTHR_METHODS) or t.aethr_method not in (None, *P.AETHR_METHODS):
+            raise HTTPException(400, "unknown lthr_method / aethr_method")
     plan.thresholds = [P.Threshold(**t.model_dump()) for t in body
                        if any(v is not None for v in (t.lthr, t.aethr, t.mhr, t.cp))]
     plan.save()
@@ -281,6 +290,11 @@ class ApplyEstimate(BaseModel):
     aethr: Optional[float] = None
     note: str = ""
     date: Optional[str] = None      # the test day (「套用這次的 AeT」); None = today
+    # how the values were obtained (planning.LTHR_METHODS / AETHR_METHODS). Default:
+    # LTHR = estimate (「套用估計」); AeT = test when a test day is given (「套用這次的
+    # AeT」, aet_test.apply_body), else estimate. zones-and-thresholds.md §3.4 change 1.
+    lthr_method: Optional[str] = None
+    aethr_method: Optional[str] = None
 
 
 @router.post("/thresholds/apply-estimate")
@@ -288,6 +302,8 @@ def apply_estimate(body: ApplyEstimate):
     """The approval step: add a dated row (today, or the test's `date`) with the accepted estimate(s)."""
     if body.lthr is None and body.aethr is None:
         raise HTTPException(400, "nothing to apply")
+    if body.lthr_method not in (None, *P.LTHR_METHODS) or body.aethr_method not in (None, *P.AETHR_METHODS):
+        raise HTTPException(400, "unknown lthr_method / aethr_method")
     plan = P.Plan.load()
     today = dt.date.today().isoformat()
     if body.date:
@@ -304,8 +320,10 @@ def apply_estimate(body: ApplyEstimate):
         plan.thresholds.append(row)
     if body.lthr is not None:
         row.lthr = round(body.lthr)
+        row.lthr_method = body.lthr_method or "estimate"
     if body.aethr is not None:
         row.aethr = round(body.aethr)
+        row.aethr_method = body.aethr_method or ("test" if body.date else "estimate")
     row.note = (row.note + "；" if row.note else "") + (body.note or "由活動資料自動估算")
     plan.save()
     _notify(True)

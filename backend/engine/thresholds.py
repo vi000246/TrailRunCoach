@@ -20,6 +20,10 @@ from backend.engine.algorithms.threshold_estimate import (
 from backend.engine.wko5expr.dataset import Dataset, date_to_day
 
 WINDOWS = (90, 180)          # try 90 days, widen to 180 if too few runs
+# 「HR at CP」 is a cross-check only — never the LTHR value, never written to the
+# plan (docs/research/zones-and-thresholds.md §2.2, §3.3: the individual 95 %
+# limits of agreement of HR at CP vs MLSS are −16…+17 bpm, Micheli et al. 2025)
+HR_AT_CP_NOTE = "CP 附近的心率只當交叉檢查，不寫進 LTHR（個人誤差約 ±16 bpm，Micheli 2025）"
 _KEY = "thresholds_v1"
 
 
@@ -96,7 +100,7 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
         ws, lts, dps = pick(days)
         lt = estimate_lthr(lts, cp_now) if cp_now else None
         if lt and lt.value is not None or days == WINDOWS[-1]:
-            out["lthr"] = None if lt is None else {**asdict(lt), "days": days}
+            out["lthr"] = None if lt is None else {**asdict(lt), "days": days, "hr_at_cp_note": HR_AT_CP_NOTE}
             break
     lthr_v = (out.get("lthr") or {}).get("value")
     for days in WINDOWS:
