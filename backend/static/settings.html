@@ -67,6 +67,8 @@ progress { width: 220px; height: 10px; }
   background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-top: 6px; display: none; }
 .log.on { display: block; }
 .log .e { color: var(--err); } .log .d { color: var(--ok); }
+.ok-text { color: var(--ok); } .err-text { color: var(--err); }
+button[aria-busy="true"] { cursor: progress; opacity: .75; }
 button.danger { color: var(--err); border-color: var(--err); }
 button.danger.primary { background: var(--err); color: #fff; }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); max-width: 440px; }
@@ -137,7 +139,9 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
         <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
         <button data-act="login">登入</button>
       </div>
-      <div class="row"><button data-act="logout">登出</button></div>
+      <div class="row"><label><input type="checkbox" data-f="remember"> 記住密碼</label>
+        <span class="meta">密碼以本機金鑰加密存在這台電腦；取消勾選或登出會立即刪除。勾選後，登入過期（24 小時）或憑證失效時會自動重新登入一次。</span></div>
+      <div class="row"><button data-act="logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
         <label>第一次同步從 <input type="date" data-f="since"></label>
@@ -163,7 +167,9 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
           <dt>~/.wko5coach/tp_client.json</dt><dd data-f="secretfile">…</dd></dl>
         <div class="row"><label><input type="checkbox" data-f="usewko5"> 登入時先試 OAuth</label>
           <button data-act="login" data-method="oauth">用 OAuth 登入</button></div></div>
-      <div class="row"><button data-act="logout">登出</button></div>
+      <div class="row"><label><input type="checkbox" data-f="remember"> 記住密碼</label>
+        <span class="meta">密碼以本機金鑰加密存在這台電腦；取消勾選或登出會立即刪除。勾選後，登入憑證無法再更新時會自動重新登入一次。</span></div>
+      <div class="row"><button data-act="logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
         <label>第一次同步從 <input type="date" data-f="since"></label>
@@ -426,6 +432,7 @@ async function loadSources() {
     f(src, "loginform").hidden = !!auth.authenticated;
     box(src).querySelectorAll('[data-act="login"]').forEach((b) => b.hidden = !!auth.authenticated);
     box(src).querySelector('[data-act="logout"]').hidden = !auth.authenticated;
+    f(src, "remember").checked = !!auth.password_saved;
     f(src, "busy").hidden = !s.busy;
     const res = r ? `${({ ok: "成功", partial: "部分失敗", failed: "失敗", aborted: "中斷" })[r.status] || r.status}：`
       + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}` : "–";
@@ -462,21 +469,70 @@ f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.che
 f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast("已更新"));
 f("tp", "usewko5").onchange = (e) => putSetting({ tp_use_wko5_client: e.target.checked }).then(() => toast("已更新"));
 
-async function login(src, method) {
+// a button's request in progress: label 「登入中…」 etc., disabled (no double
+// login: COROS keeps only the latest token), then the outcome next to it
+async function busy(btn, label, fn) {
+  const was = btn.textContent;
+  btn.disabled = true; btn.textContent = label; btn.setAttribute("aria-busy", "true");
+  try { return await fn(); }
+  finally { btn.disabled = false; btn.textContent = was; btn.removeAttribute("aria-busy"); }
+}
+function authMsg(src, text, cls) {
+  const el = f(src, "authmsg"); el.textContent = text || "";
+  el.className = "meta" + (cls ? " " + cls : "");
+}
+// the server's error body -> a readable reason
+function reason(e) {
+  const m = String(e.message || e);
+  const body = m.replace(/^\d+\s*/, "");
+  try { const d = JSON.parse(body).detail; if (d) return String(d).slice(0, 160); } catch (_) {}
+  return body.slice(0, 160);
+}
+
+async function login(src, method, btn) {
   const user = f(src, "user").value.trim(), pass = f(src, "pass").value;
   if (!user || !pass) { toast("請輸入帳號與密碼"); return; }
   const url = src === "coros" ? "/api/v1/auth/coros/login" : "/api/v1/auth/tp/login";
-  const body = src === "coros" ? { email: user, password: pass } : { username: user, password: pass, method };
+  const remember = f(src, "remember").checked;
+  const body = src === "coros" ? { email: user, password: pass, remember } : { username: user, password: pass, method, remember };
+  // every login / logout / sync button of this source waits for this one
+  const others = [...box(src).querySelectorAll("button[data-act]")].filter((b) => b !== btn);
+  others.forEach((b) => b.disabled = true);
+  authMsg(src, "登入中…");
   try {
-    const r = await j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    toast(src === "tp" ? `登入成功（${r.method === "oauth" ? "OAuth" : "網站"}）` : "登入成功");
-  } catch (e) { toast("登入失敗：" + e.message.slice(0, 120)); }
-  f(src, "pass").value = "";                 // never kept in the page
+    await busy(btn, "登入中…", async () => {
+      const r = await j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const how = src === "tp" ? `（${r.method === "oauth" ? "OAuth" : "網站"}）` : "";
+      const saved = r.password_saved ? "，已記住密碼" : "";
+      authMsg(src, `登入成功${how}${saved}`, "ok-text");
+      toast(`登入成功${how}`);
+    });
+  } catch (e) {
+    const why = e.message.startsWith("409") ? "另一個登入還在進行中，請稍候" : reason(e);
+    authMsg(src, "登入失敗：" + why, "err-text"); toast("登入失敗");
+  } finally {
+    others.forEach((b) => b.disabled = false);
+    f(src, "pass").value = "";                 // never kept in the page
+    loadSources();
+  }
+}
+async function logout(src, btn) {
+  authMsg(src, "登出中…");
+  try {
+    await busy(btn, "登出中…", () => j(`/api/v1/auth/${src === "coros" ? "coros" : "tp"}/logout`, { method: "POST" }));
+    authMsg(src, "已登出（儲存的密碼已刪除）", "ok-text"); toast("已登出");
+  } catch (e) { authMsg(src, "登出失敗：" + reason(e), "err-text"); }
   loadSources();
 }
-async function logout(src) {
-  await j(`/api/v1/auth/${src === "coros" ? "coros" : "tp"}/logout`, { method: "POST" });
-  toast("已登出"); loadSources();
+for (const src of ["coros", "tp"]) {
+  f(src, "remember").onchange = async (e) => {
+    if (e.target.checked) { authMsg(src, "下次登入時會記住密碼（加密存在這台電腦）"); return; }
+    try {
+      const r = await j(`/api/v1/auth/${src}/remember`, { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ remember: false }) });
+      authMsg(src, r.password_saved ? "刪除失敗" : "已刪除儲存的密碼", r.password_saved ? "err-text" : "ok-text");
+    } catch (err) { authMsg(src, "刪除失敗：" + reason(err), "err-text"); e.target.checked = true; }
+  };
 }
 
 function logLine(src, text, cls) {
@@ -488,12 +544,15 @@ async function syncNow(src) {
   const since = f(src, "since").value;
   const url = `${SYNC}/${src === "coros" ? "coros/start" : "start"}` + (since ? `?since=${since}` : "");
   const prog = f(src, "prog"), txt = f(src, "progtxt"), btn = box(src).querySelector('[data-act="sync"]');
-  f(src, "log").innerHTML = ""; prog.hidden = false; prog.removeAttribute("value"); btn.disabled = true;
-  let total = 0, checked = 0, down = 0, errs = 0;
+  f(src, "log").innerHTML = ""; prog.hidden = false; prog.removeAttribute("value");
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "同步中…"; btn.setAttribute("aria-busy", "true");
+  txt.textContent = "同步中…（連線到 " + SRC_NAME[src] + "）";
+  let total = 0, checked = 0, down = 0, errs = 0, fatal = null, finished = false;
   try {
     const r = await fetch(url, { method: "POST" });
-    if (r.status === 409) { toast("這個來源正在同步中"); return; }
-    if (!r.ok) throw new Error(`${r.status}`);
+    if (r.status === 409) { txt.textContent = "這個來源正在同步中"; toast("這個來源正在同步中"); return; }
+    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
     const reader = r.body.getReader(), dec = new TextDecoder();
     let buf = "";
     for (;;) {
@@ -513,14 +572,25 @@ async function syncNow(src) {
         if (ev.status === "downloaded") { down++; logLine(src, `✓ ${day} ${id} 已下載`, "d"); }
         else if (ev.status === "skipped") logLine(src, `· ${day} ${id} 已存在`);
         else if (ev.status === "no_file") logLine(src, `· ${day} ${id} 沒有 FIT 檔`);
-        else if (ev.status === "error" || ev.error) { errs++; logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e"); }
-        else if (ev.status === "complete") logLine(src, `完成：下載 ${ev.total_downloaded}、檢查 ${ev.total_checked}、錯誤 ${(ev.errors || []).length}`, "d");
+        else if (ev.status === "relogin") logLine(src, "· 登入已失效，已用記住的密碼自動重新登入", "d");
+        else if (ev.status === "error" || ev.error) {
+          errs++; logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e");
+          if (!id) fatal = ev.error === "COROS_AUTH_REQUIRED" || ev.error === "TP_AUTH_REQUIRED"
+            ? "登入已失效，請重新登入" : (ev.detail || ev.error || "失敗");
+        }
+        else if (ev.status === "complete") { finished = true; logLine(src, `完成：下載 ${ev.total_downloaded}、檢查 ${ev.total_checked}、錯誤 ${(ev.errors || []).length}`, "d"); }
         if (total) { prog.max = total; prog.value = Math.min(checked, total); }
-        txt.textContent = `檢查 ${checked}${total ? " / " + total : ""} · 下載 ${down} · 錯誤 ${errs}`;
+        txt.textContent = `同步中… 檢查 ${checked}${total ? " / " + total : ""} · 下載 ${down} · 錯誤 ${errs}`;
       }
     }
-  } catch (e) { logLine(src, "連線失敗：" + e.message, "e"); }
-  finally { btn.disabled = false; prog.hidden = true; loadSources(); }
+    txt.textContent = fatal ? `同步失敗：${fatal}`
+      : finished ? `同步完成：下載 ${down}、檢查 ${checked}、錯誤 ${errs}` : `同步中斷：檢查 ${checked}、下載 ${down}`;
+    toast(fatal ? "同步失敗" : finished ? "同步完成" : "同步中斷");
+  } catch (e) { logLine(src, "連線失敗：" + e.message, "e"); txt.textContent = "同步失敗：" + reason(e); }
+  finally {
+    btn.disabled = false; btn.textContent = label; btn.removeAttribute("aria-busy");
+    prog.hidden = true; loadSources();
+  }
 }
 
 // delete dialog: names the source, count and size; typed confirmation
@@ -559,8 +629,10 @@ $("pd-ok").onclick = async () => {
 for (const src of ["coros", "tp"]) {
   box(src).addEventListener("click", (e) => {
     const act = e.target.dataset.act; if (!act) return;
-    if (act === "login") login(src, e.target.dataset.method);
-    if (act === "logout") logout(src);
+    const btn = e.target.closest("button[data-act]");
+    if (!btn || btn.disabled) return;
+    if (act === "login") login(src, btn.dataset.method, btn);
+    if (act === "logout") logout(src, btn);
     if (act === "sync") syncNow(src);
     if (act === "purge") openPurge(src);
   });
