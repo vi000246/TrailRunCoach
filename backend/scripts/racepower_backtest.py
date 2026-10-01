@@ -139,11 +139,16 @@ def main(argv=None) -> int:
             t = r.get("th") or {}
             mv = t.get("moving_s") or 0
             print(f"   {r['date']} {r.get('file') or ''} effort {r.get('effort_tag')}{'(手動)' if r.get('effort_overridden') else ''} "
-                  f"rest {(r.get('rest_share') or 0):.0%}{' NO POWER' if r.get('no_power') else ''}: actual {mv / 3600:.2f} h, "
+                  f"rest {(r.get('rest_share') or 0):.0%}"
+                  f"{(' 手錶推估功率（未採用）' if r.get('power_unused') else ' NO POWER') if r.get('no_power') else ''}"
+                  f": actual {mv / 3600:.2f} h, "
                   f"given-HR {((t.get('t_given') or 0) / 3600):.2f} h ({_pct(r.get('err_th_given'))}), "
                   f"race-level x {t.get('x_race') or 0:.2f} -> {((t.get('t_race') or 0) / 3600):.2f} h "
                   f"({_pct(r.get('err_th_race'))}); x {t.get('x') or 0:.2f}; power envelope err_c {_pct(r.get('err_c'))}"
                   f"{'; ' + r['error'] if r.get('error') else ''}")
+    ps = res.get("power_source") or {}
+    print("power source (runs of the back-test window):", ps.get("counts"), "accept_watch_power",
+          ps.get("accept_watch_power"), "unused (watch):", len(ps.get("unused") or []))
     print("validated:", res["validated"], "effort:", res["effort_validated"])
     hh = res["hike_hr"]
     print("hike HR windows:", {k: v.get("n") for k, v in hh["uses"].items()},

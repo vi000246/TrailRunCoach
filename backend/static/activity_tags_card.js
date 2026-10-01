@@ -43,6 +43,9 @@
       (nums ? `<div class="meta" style="font-size:11.5px;margin:0 0 6px 5.3em">${esc(nums)}</div>` : "") +
       `<div style="display:flex;gap:8px;margin-top:6px"><span style="min-width:4.5em;color:var(--muted, #888);font-size:13px">備註</span>
         <textarea data-f="note" rows="2" style="flex:1;font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit">${esc(r.note || "")}</textarea></div>` +
+      (r.power && r.power.source && r.power.source !== "none"
+        ? `<div class="meta" style="font-size:11.5px;margin-top:6px">功率來源：${esc(r.power.label || r.power.source)}` +
+          (r.power.used ? "" : "（功率模型、功率 TSS 不採用；心率／配速照常使用）") + `</div>` : "") +
       (r.capacity ? `<div class="meta" style="font-size:11.5px;margin-top:6px">比賽能力樣本：${r.capacity.ok ? "是" : "否"}（${esc(r.capacity.reason || "")}）</div>` : "") +
       `<div class="meta" data-msg style="font-size:11.5px;margin-top:4px;min-height:1em"></div>`;
     const msg = body.querySelector("[data-msg]");

@@ -66,7 +66,46 @@ def act_ref(w) -> dict:
             "file": w.entry.file}
 
 
-def _curve(ds, w) -> Optional[tuple[list, list]]:
+def power_ok(ds, w) -> bool:
+    """The run's power may feed the power-based models (Stryd power, or watch
+    power with power.accept_watch_power; backend/engine/power_source.py).
+    Datasets without the method (test doubles) accept every power."""
+    f = getattr(ds, "power_ok", None)
+    return True if f is None else bool(f(w))
+
+
+def power_source(ds, w) -> Optional[str]:
+    f = getattr(ds, "power_source", None)
+    return f(w) if f is not None else None
+
+
+def power_runs(ds, runs) -> list:
+    return [w for w in runs if power_ok(ds, w)]
+
+
+def watch_unused(ds, runs) -> list[dict]:
+    """The runs whose watch-estimated power the models skip (「手錶推估功率（未採用）」)."""
+    from backend.engine import power_source as PS
+    if getattr(ds, "accept_watch_power", True):
+        return []
+    return [{**act_ref(w), "power_source": PS.WATCH, "label_power": PS.UNUSED_LABEL}
+            for w in runs if power_source(ds, w) == PS.WATCH]
+
+
+def model_stats(ds, w) -> Optional[dict]:
+    """intensity_stats with the power numbers (p_avg, Pw:HR drift) removed
+    when the run's power is not used (watch power); HR / pace untouched."""
+    st = intensity_stats(ds, w)
+    if st and not power_ok(ds, w):
+        st = {**st, "p_avg": None, "drift": None}
+    return st
+
+
+def _curve(ds, w, any_power: bool = False) -> Optional[tuple[list, list]]:
+    """The run's power mean-max. `any_power`: also watch-estimated power
+    (only the LTHR estimate's cp_as_of reads it; see pd_model)."""
+    if not any_power and not power_ok(ds, w):
+        return None                      # watch-estimated power: no mean-max for the models
     hit = ds.curve_cache("meanmax(power)").get(w.entry.file)
     if hit is None:
         hit = ds.workout_curve(w.idx, "power")
@@ -165,8 +204,10 @@ def _per_run(ds, w, weight) -> Optional[dict]:
 
 
 def run_metrics(ds, runs, weight) -> dict[int, dict]:
+    """Per-run power metrics (RE, moving power, …) of the runs whose power
+    the models use (power_ok); watch-estimated power is left out."""
     out = {}
-    for w in runs:
+    for w in power_runs(ds, runs):
         v = ds.cached_series(METRICS_KEY, w, lambda w=w: _per_run(ds, w, weight))
         if v:
             out[w.idx] = v
@@ -314,7 +355,10 @@ def _pd_mftp(ds, day: dt.date) -> Optional[float]:
         tday = date_to_day(day)
         runs = [w for w in ds.workouts if w.sport == "run" and tday - CP_WINDOW_DAYS < w.day < tday + 1]
         try:
-            pdm = pd_model(ds, day, runs, None)
+            # every power, watch-estimated too: this CP only locates the Friel
+            # window of the LTHR estimate (thresholds.estimate), an HR threshold;
+            # before the Stryd (2025-03) the history has watch power only (自組)
+            pdm = pd_model(ds, day, runs, None, any_power=True)
         except Exception:                   # noqa: BLE001
             pdm = None
         _cp_memo[key] = pdm["mftp"] if pdm else None
@@ -326,7 +370,8 @@ def cp_as_of(ds, day: dt.date) -> Optional[float]:
     dated on or before `day`, else WKO5's PD model refitted on the 90-day
     mean-max up to `day` (pd_model, the port that reproduces WKO5's mFTP),
     else the last valid refit of the 30 days before. Used by the back-test's
-    thresholds (thresholds.estimate measures each run against it)."""
+    thresholds (thresholds.estimate measures each run against it). Reads
+    watch-estimated power too (the one exception, see _pd_mftp)."""
     key = (id(ds), "cp", day)
     if key not in _cp_memo:
         c = _plan_last(ds, "cp", day)
@@ -528,7 +573,8 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             pk = MX.peak_hr(st.get("hist"), st.get("hist_lo", 40), MX.MAXIMAL["hrmax_hold_s"]) if st else None
             if pk:
                 peaks.append((w.day, pk))
-            if st and st.get("p_avg") and outdoor(w) and not is_trail(w):
+            # the monotonicity check compares only power the models use (no watch power)
+            if st and st.get("p_avg") and outdoor(w) and not is_trail(w) and power_ok(ds, w):
                 held.append((w.day, st["moving_s"], st["p_avg"]))
     out = {}
     for w in runs:
@@ -536,11 +582,12 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             continue
         ev = events.get(w.idx)
         th = (th_of or {}).get(w.idx) or thresholds_as_of(ds, w.entry.start.date())
-        st = intensity_stats(ds, w) or {}
+        st = model_stats(ds, w) or {}
         ms = maximal_stats(ds, w) or {}
         km = w.metrics.get("distance")
         title = getattr(w.entry, "title", "") or ""
         es = effort_stats(ds, w, th)
+        pw_ok = power_ok(ds, w)
         trail = is_trail(w)
         if trail:
             r = MX.trail_maximal({"km": km, "moving_s": st.get("moving_s"), "hr_avg": st.get("hr_avg"),
@@ -555,7 +602,9 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
                       and s_ >= MX.MAXIMAL["longer_ratio"] * mv]
             r = MX.road_maximal({"km": km, "q4_hr": ms.get("q4_hr"), "split": ms.get("split"),
                                  "peak_hr": MX.peak_hr(st.get("hist"), st.get("hist_lo", 40)),
-                                 "p_avg": st.get("p_avg"), "longer_p": max(longer) if longer and mv else None},
+                                 "p_avg": st.get("p_avg"),
+                                 # watch-estimated power: the power check is skipped, not failed
+                                 "longer_p": max(longer) if longer and mv and pw_ok else None},
                                 th.get("lthr"), hrmax)
             r["hrmax"] = hrmax
             eff = AT.effort_road(r, es, th.get("aet"))
@@ -587,7 +636,7 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
                       "category": "trail" if trail else (r.get("category") or "road"), "event": ev,
                       "effort": eff, "tags": tg, "user_marked": user is not None,
                       "user_race": tg["activity_type"] == "race" and tg["activity_type_overridden"],
-                      "effort_stats": es}
+                      "effort_stats": es, "power_source": power_source(ds, w), "power_used": pw_ok}
     ds.flush_series()
     return out
 
@@ -672,7 +721,7 @@ def classify_runs(ds, runs, cp_of: Optional[dict] = None, tags: Optional[list] =
         cp = (cp_of or {}).get(w.idx) or th["cp"]
         is_floor = cp is None and floor.get(w.idx) is not None
         cp = cp or floor.get(w.idx)
-        c = I.classify(intensity_stats(ds, w), th["lthr"], th["aet"], cp, w.idx in races, is_floor)
+        c = I.classify(model_stats(ds, w), th["lthr"], th["aet"], cp, w.idx in races, is_floor)
         c.update(lthr_source=th["lthr_source"], aet_source=th["aet_source"],
                  cp_source=th["cp_source"] or ("之前跑步的 CP 下限" if cp else None))
         if w.idx in races:
@@ -708,19 +757,22 @@ def cptest_prior(weight: float, sex: str) -> dict:
     return T.w_prime_prior(weight, sex)
 
 
-def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float]) -> Optional[dict]:
+def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bool = False) -> Optional[dict]:
     """WKO5's default PD model (algorithms/wko5_pdmodel, reproduces WKO5's own
     mFTP 175.7 vs snapshot 175.6 W; docs/research/cp-test-protocols.md §1B.2)
     refitted on the raw 90-day mean-max of the runs (implausible power
     dropped) plus the synced running FIT files not yet in WKO5 (cptest.curves),
-    as of `today`. Returns mFTP, TTE, FRC and the curve's source."""
+    as of `today`. Returns mFTP, TTE, FRC and the curve's source. Watch-
+    estimated power (runs and FIT files) is left out unless `any_power` or
+    power.accept_watch_power."""
     from backend.engine.algorithms import wko5_pdmodel as PDM
     from backend.engine.racepower import cptest as T
+    accept = any_power or getattr(ds, "accept_watch_power", True)
     # WKO5's own duration grid (the PD fit is sensitive to point spacing; on
     # this grid the port reproduces WKO5's mFTP): the longest cached curve's xs
     curves_ = []
     for w in runs_90:
-        c = _curve(ds, w)
+        c = _curve(ds, w, any_power=any_power)
         if c and c[0]:
             xs = np.array(c[0], float)
             ys = np.array([np.nan if v is None else v for v in c[1]], float)
@@ -738,7 +790,7 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float]) -> Optional[d
         best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
     extra = []
     try:
-        extra = T.curves(WX.HOME, today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today)
+        extra = T.curves(WX.HOME, today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today, accept_watch=accept)
     except Exception:                       # noqa: BLE001
         extra = []
     for c in extra:
@@ -771,7 +823,8 @@ def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
     each with its estimate (cptest.estimate). Suggestions only."""
     from backend.engine.racepower import cptest as T
     try:
-        found = T.scan(WX.HOME, today - dt.timedelta(days=RIEGEL_WINDOW_DAYS), today)
+        found = T.scan(WX.HOME, today - dt.timedelta(days=RIEGEL_WINDOW_DAYS), today,
+                       accept_watch=getattr(ds, "accept_watch_power", True))
     except Exception:                       # noqa: BLE001
         return []
     out = []
@@ -1078,7 +1131,20 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         "aet": _aet(ds, today),
         "events": events,
         "counts": {"runs_365": len(runs_365), "runs_with_power": len(metrics), "runs_90": len(runs_90)},
+        "power_source": power_summary(ds, runs_365),
     }
+
+
+def power_summary(ds, runs) -> dict:
+    """Which runs' power the models used: counts per source, the watch-power
+    runs left out (「手錶推估功率（未採用）」) and the setting."""
+    from backend.engine import power_source as PS
+    accept = bool(getattr(ds, "accept_watch_power", True))
+    srcs = [power_source(ds, w) for w in runs]
+    return {"accept_watch_power": accept, "setting": PS.SETTING_KEY, "counts": PS.counts(s for s in srcs if s),
+            "unused": watch_unused(ds, runs)[-40:], "unused_label": PS.UNUSED_LABEL,
+            "note": "只用 Stryd 功率（有 Form Power／Air Power／LSS 欄位）；手錶推估功率不進功率模型" if not accept
+            else "手錶推估功率也採用（power.accept_watch_power）"}
 
 
 # ---- racepower v2: per-activity samples (docs/research/racepower-v2.md §10.1) ----
@@ -1177,16 +1243,20 @@ def _hike_windows(ds, w) -> Optional[list]:
     return out
 
 
-def grade_samples(ds, runs, exclude: Optional[set] = None) -> list[dict]:
+def grade_samples(ds, runs, exclude: Optional[set] = None, power_only: bool = True) -> list[dict]:
     """100 m windows (grade, speed, power, elevation) of every outdoor run
     with power, disk-cached per activity; RE is computed with each run's
-    weight."""
+    weight. `power_only` (default): only runs whose power the models use
+    (no watch-estimated power); the walking-capacity windows (speed / HR
+    only) pass False."""
     from backend.engine.wko5expr.dataset import date_to_day  # noqa: F401
     exclude = exclude or set()
     out = []
     for w in runs:
         if w.idx in exclude or w.sport_type == "indoor running" or "runningtreadmill" in w.tags \
                 or "runningindoor" in w.tags:
+            continue
+        if power_only and not power_ok(ds, w):
             continue
         rows = ds.cached_series(GRADE_KEY, w, lambda w=w: _grade_windows(ds, w))
         if not rows:
@@ -1283,7 +1353,7 @@ def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs
     if runs is None:
         runs = [w for w in ds.workouts if w.sport == "run" and tday - RE_WINDOW_DAYS < w.day <= tday + 1]
     runs = [w for w in runs if w.day < tday + 1]
-    gs = grade_samples(ds, runs, exclude)
+    gs = grade_samples(ds, runs, exclude, power_only=False)   # walking windows: speed / HR
     aet = {}
     for w in runs:
         aet[w.idx] = thresholds_as_of(ds, w.entry.start.date()).get("aet")
@@ -1477,6 +1547,8 @@ def hr_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = No
     lthr = lthr or th.get("lthr")
     pts, dropped, dist_rows = [], 0, []
     for w in runs:
+        if not power_ok(ds, w):
+            continue                     # an HR–power regression: watch-estimated power stays out
         st = intensity_stats(ds, w) or {}
         if st.get("p_avg"):
             dist_rows.append({"idx": w.idx, "date": w.entry.start.date().isoformat(), "p_avg": st["p_avg"],

@@ -614,7 +614,9 @@ function renderInputs() {
     schedule();
   }));
   const pe = $("prior"); if (pe) pe.addEventListener("change", () => { ls.set("prior", pe.value); schedule(); });
-  $("inputs-note").innerHTML = `性別 ${esc(INP.profile.sex === "female" ? "女" : "男")}（${esc(INP.profile.sex_source)}）· 功率計 ${esc(INP.profile.power_meter)}，${esc(INP.profile.wind_source)} · 近 365 天 ${INP.counts.runs_365} 次跑步，${INP.counts.runs_with_power} 次有功率`;
+  $("inputs-note").innerHTML = `性別 ${esc(INP.profile.sex === "female" ? "女" : "男")}（${esc(INP.profile.sex_source)}）· 功率計 ${esc(INP.profile.power_meter)}，${esc(INP.profile.wind_source)} · 近 365 天 ${INP.counts.runs_365} 次跑步，${INP.counts.runs_with_power} 次有功率` +
+    (INP.power_source && !INP.power_source.accept_watch_power && INP.power_source.counts && INP.power_source.counts.watch
+      ? `（另 ${INP.power_source.counts.watch} 次${esc(INP.power_source.unused_label)}）` : "");
 }
 
 // ---------------- environment ----------------
@@ -1103,6 +1105,7 @@ function renderCP() {
       `<tr><td class="num">${dur(p.t)}</td><td class="n">${W(p.p)}</td><td>${esc(p.label)}</td></tr>`).join("")}</tbody></table></div>
     <h3>有效性檢查</h3><ul style="padding-left:18px;margin:0;font-size:12.5px">${a.checks.map((c) => `<li class="${c.ok ? "ok" : c.level === "warn" ? "wn" : "no"}">${c.ok ? "✓" : c.level === "warn" ? "!" : "✕"} ${esc(c.text)}</li>`).join("")}</ul>
     ${INP.cp.dropped_365.length ? `<div class="note">排除功率異常的活動：${INP.cp.dropped_365.map((d) => esc(d.label)).join("、")}（NP ≥ 1.5 × CP 或 5 分鐘 > 2 × CP）</div>` : ""}
+    ${INP.power_source && (INP.power_source.unused || []).length ? `<div class="note">${esc(INP.power_source.unused_label)}，不進 CP／功率模型：${INP.power_source.unused.map((d) => esc(d.label)).join("、")}（設定 ${esc(INP.power_source.setting)}）</div>` : ""}
     <h3>CP 來源比較</h3><div class="tablewrap"><table><tbody>${sources}</tbody></table></div>
     ${INP.cp.lower_bound_message ? `<div class="err">${esc(INP.cp.lower_bound_message)}</div>` : ""}
     ${INP.cp.lower_bound ? `<div class="note">下限：你在 ${dur(INP.cp.lower_bound.t_s)} 撐過 ${W(INP.cp.lower_bound.p)}（${esc(INP.cp.lower_bound.who?.label || "")}），
