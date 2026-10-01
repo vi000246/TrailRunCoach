@@ -112,7 +112,10 @@ decisions on the workbook's ambiguities (D1–D10) are in
 - **Intensity class** of every run (`backend/engine/racepower/athlete.py:547`) uses the thresholds
   as of that run's date (`thresholds_as_of`, `backend/engine/racepower/athlete.py:359`). LTHR /
   AeT come from a plan test dated on or before that day, else `thresholds.estimate` on the runs
-  before it, else WKO5. AeT falls back to 0.89 × LTHR. In that estimate each run is measured
+  before it, else the dataset's own dated setting: WKO5's on the WKO5 source; on a COROS / TP
+  source the as-of estimates the FIT dataset made at load (`backend/engine/wko5expr/fitdataset.py`,
+  never WKO5 unless `charts.fit_settings_from_wko5` is on), else 未設定. AeT falls back to
+  0.89 × LTHR. In that estimate each run is measured
   against `cp_as_of` its own date (`backend/engine/racepower/athlete.py:324`): a plan CP row on
   or before the date, else WKO5's PD model refitted on the 90-day mean-max up to the date, else
   the last valid refit of the 30 days before (自組). It never uses a later CP or today's WKO5
@@ -848,8 +851,10 @@ the version-2 store.
     (11 %) is close to the 10 % cut;
   - `validated["trail_hr"]` is stored but `flags()` does not return it, so the planner's trail
     HR total keeps its 推估 badge even after a pass; the durability δ sits on its 0.15 /h clamp;
-  - the chosen data source may have no trail history (COROS since 2025-10): the planner's trail
-    HR model then falls back to the WKO5 dataset;
+  - the chosen data source may have no trail history: the planner's trail HR model then falls
+    back to the WKO5 dataset. Since 2026-10-01 COROS trail runs are trail in the FIT dataset (the
+    app DB's `trail_classification`, `backend/engine/wko5expr/fitdataset.py`); before that the
+    COROS back-test had trail n = 0 because COROS FITs carry no trail sub_sport;
   - many 2024–2025 dates use WKO5's default LTHR of 160 (not set), so x = HR / LTHR is
     unreliable there; 2024-04-13's power is partial (NP 81), so its power-envelope error (+122 %)
     is meaningless — the HR model still works on it;
@@ -877,4 +882,5 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-01 | feature | docs/research/baiyue-from-running.md, docs/research/heat-acclimation.md | 百岳 walking capacity (capacity.py B1–B8, window caches v3, pack per trip, group vs capacity time, band, solo suggestion, `validated["hike_capacity"]` back-test — not passed) replaces the Tobler fallback; heat acclimation S, H_eff on both sides of M, `#heat-accl`, per-activity exposure, heat back-test (does not support acclimation), Event.heat, /heat-status, /hike-meta |
 | 2026-10-01 | bugfix | user request | Capacity back-test: `threshold_on` never applies a row backwards; the LTHR estimate uses `cp_as_of`, so no later CP; capacity samples (maximal.py) replace the HR race class: plan events matched by date + kind + distance, CP bouts, self-paced maximal road (distance ±10 %, last-quarter HR, HRmax, split, monotonicity) and race-like trail (≥ 10 km, ≥ 90 min, HR; no split rule); personal k / table prior from the samples only; HR-based capacity (hrcap.py, 推估, invalid on this data: R² 0.01) with tt30 / tte anchors and a combined second lower bound; training-intensity distribution; script `--source` / `--out` |
 | 2026-10-01 | feature | user request (activity tags) | Capacity samples gated on effort (activity_tags: user mark wins; road = road_maximal, trail = HR on moving time + long rests ≥ 5 min ≤ 10 %), plan races only set type 比賽; user-marked races / 全力 over the full history (auto 365 d); trail HR pace model (trailhr.py, effort km vs HR / LTHR, durability, race HR level; 推估) as the planner's trail total, power as cross-check; back-test `trail_hr`, no-power trail cases, `--tags-db`; seed script |
+| 2026-10-01 | bugfix | docs/research/unsourced-rules.md §0.10 step 0 | COROS / TP back-test prerequisites: the FIT dataset reads trail / road from the app DB (overrides, duplicates), takes thresholds / weight from plan → athlete_settings → as-of estimates (no WKO5 by default), and the activity-tag seed matches COROS / TP races by start time |
 | 2026-09-30 | feature | user request | CSV export (`POST /export/csv`, `csvplan.py`, UTF-8 BOM, header block + one row per segment, 「匯出 CSV」 button); per-segment, time-of-day heat (road / trail): /weather returns hourly rows, the plan maps each segment's ETA to the forecast hour and applies Hadley there (自組, 推估), iterating to max |Δ cumulative time| < 1 s; falls back to the single value with a warning; °C axis on the profile, 熱 column in the table |
