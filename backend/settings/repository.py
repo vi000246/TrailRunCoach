@@ -83,7 +83,19 @@ DEFAULTS: dict[str, Any] = {
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
+    # 自動調整課表 (engine/plan_auto.py): after a sync that imported an activity,
+    # reconcile + adapt (engine/adapt.py) + push the next N days to COROS
+    "plan.auto.enabled": True,
+    "plan.auto.push": True,                   # push the window to COROS automatically
+    "plan.auto.push_days": 7,                 # 1-14 days from today
+    "plan.auto.confirm_big": True,            # hold big changes for the user's approval
+    "plan.auto.notify": "watch",              # watch (a 課表待確認 workout on COROS) | overview (banner only)
+    # internal: {stamp, phase, rejected: [fingerprint]} of the last automatic run
+    "plan.auto.state": None,
 }
+AUTO_NOTIFY = ("watch", "overview")
+AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan.auto.confirm_big",
+             "plan.auto.notify")
 MAP_BASEMAPS = ("rudy", "google-terrain", "nlsc-emap", "nlsc-photo", "osm")
 MAP_OVERLAYS = ("contour", "google-roads", "nlsc-roads")
 PREF_ENUMS = {
@@ -177,6 +189,15 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.blackouts":
         from backend.engine.blackouts import validate as validate_blackouts
         validate_blackouts(value)
+    if key in ("plan.auto.push", "plan.auto.confirm_big") and not isinstance(value, bool):
+        raise ValueError(f"{key} must be true/false")
+    if key == "plan.auto.push_days" and (isinstance(value, bool) or not isinstance(value, int)
+                                         or not 1 <= value <= 14):
+        raise ValueError("plan.auto.push_days must be an integer 1-14")
+    if key == "plan.auto.notify" and value not in AUTO_NOTIFY:
+        raise ValueError(f"plan.auto.notify must be one of {AUTO_NOTIFY}")
+    if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
+        raise ValueError("plan.auto.state must be an object or null")
 
 
 def _validate_pref(key: str, value: Any) -> None:
