@@ -239,7 +239,9 @@ def list_views():
          "dashboards": [
             {"index": i, "title": d["title"], "description": d.get("description"),
              "charts": [{"index": j, "title": c.get("title"), "kind": _panel_kind(c),
-                         "series": len(c.get("series", []))} for j, c in enumerate(d["charts"])]}
+                         "series": len(c.get("series", [])),
+                         **({"view": c.get("view")} if c.get("kind") == "periodzones" else {})}
+                        for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
         for name, v in _views().items()
     ]

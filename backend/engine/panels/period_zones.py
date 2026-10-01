@@ -372,7 +372,9 @@ def _thresholds_used(items: list[dict]) -> list[dict]:
         if not s or it.get("skip"):
             continue
         t = s.get("basis_text") or "—"
-        r = seen.setdefault(t, {"text": t, "n": 0, "first": it["day"].isoformat(), "last": it["day"].isoformat()})
+        # value = the numbers without the source in brackets (「LTHR 155 bpm」), for the short on-chart line
+        r = seen.setdefault(t, {"text": t, "value": t.split("（")[0].strip(), "n": 0,
+                                "first": it["day"].isoformat(), "last": it["day"].isoformat()})
         r["n"] += 1
         r["last"] = it["day"].isoformat()
     return sorted(seen.values(), key=lambda r: r["first"])
