@@ -205,6 +205,17 @@ def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     text = f"{s.get('target', '')} {s.get('detail', '')}"
     warm = _num(r"暖身\s*(\d+)\s*分", text, 10)
     main = _num(r"測試\s*(\d+)\s*分", text, 40)
+    from backend.engine.aet_test import protocol_of_title
+    proto = protocol_of_title(s.get("title"))
+    if proto in ("xu90", "friel"):
+        # 徐國峰 90 分 (constant E pace, HR in Zone 1) / Friel (steady at AeT): an HR-capped
+        # main block, no power range — the pace / HR is what is held
+        name = "固定 E 配速，不要調（心率 1 區）" if proto == "xu90" else "AeT 心率附近穩定跑"
+        steps = [Step(EX_WARMUP, warm * 60, easy_hr(th)), Step(EX_TRAIN, main * 60, easy_hr(th), name)]
+        cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
+        if cool:
+            steps.append(Step(EX_COOLDOWN, cool * 60, easy_hr(th)))
+        return steps
     cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
     p = _num(r"固定功率\s*(\d+)\s*W", text) or (round(0.75 * th.cp) if th.cp else None)
     hr0 = _num(r"心率從\s*(\d+)", text)
