@@ -178,6 +178,38 @@ class PlanSession(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ActivityTag(Base):
+    """The user's activity metadata (engine/activity_tags.py): activity type
+    (比賽 / 練跑 / 爬山 / 百岳跟團 / 測試 / 其他), effort (全力 / 有拼但有休息 /
+    一般 / 輕鬆) and a note — like WKO5's workout metadata. Only USER values
+    are stored; the auto values are computed by the engine at read time, so
+    re-classification can never clobber a user mark. `*_overridden` says
+    which field the user set (False + NULL = use the auto value).
+
+    Keyed by the activity's local start minute ('YYYY-MM-DDTHH:MM', as
+    Dataset entry.start), not by a workout_files row: the race-power engine
+    reads the WKO5 / COROS / TP datasets, and most WKO5 activities have no
+    workout_files row. `file` (the dataset's entry.file, e.g. a .wko4 name)
+    is matched first when present; `workout_id` links a workout_files row
+    when the tag was set through /api/v1/workouts/{id}/activity."""
+    __tablename__ = "activity_tags"
+    __table_args__ = (UniqueConstraint("athlete_id", "start_local"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    start_local: Mapped[str] = mapped_column(String(16), index=True)
+    source: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    file: Mapped[Optional[str]] = mapped_column(String(300), nullable=True, index=True)
+    workout_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    distance_km: Mapped[Optional[float]] = mapped_column(nullable=True)
+    label: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    activity_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    activity_type_overridden: Mapped[bool] = mapped_column(Boolean, default=False)
+    effort: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    effort_overridden: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class UserSetting(Base):
     """Per-user key/value settings (backend/settings/repository.py)."""
     __tablename__ = "user_settings"
