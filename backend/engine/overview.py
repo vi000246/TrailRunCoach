@@ -63,6 +63,9 @@ HARD_EXPRS = {
     "power": "sum(if(runpower >= 0.95*cp, deltatime))",
 }
 HARD_SESSION_S = 600          # ≥ 10 min at/above threshold = a quality session
+# a planned Zone 3 variant (90–95 % CP) is done by time at ≥ 85 % CP (≈ 0.95 × its 90 % floor,
+# interval-prescription.md §B3) — it never reaches 95 % CP
+Z3_EXPR = "sum(if(runpower >= 0.85*cp, deltatime))"
 
 
 def category(w: Workout) -> str:
@@ -329,6 +332,19 @@ class Session:
     climb_m: Optional[float] = None
     protocol: Optional[str] = None      # CP-test protocol (engine/cp_protocols.py); tests only
     heat: bool = False                  # 熱適應課 (engine/heat_plan.py); kind easy / long / heat_passive
+    # the interval library (engine/interval_library.py; interval-prescription.md §C5.4): the
+    # variant, the ladder step it serves, whether it counts for progression, who chose it
+    # (auto / user / cap) and why; fewer reps, the warm-up level, the state machine's tweak
+    variant_key: Optional[str] = None
+    rung_key: Optional[str] = None
+    equiv: Optional[bool] = None
+    swap: Optional[str] = None
+    swap_reason: Optional[str] = None
+    variant_reps: Optional[int] = None
+    variant_blocks: Optional[str] = None
+    variant_adj: Optional[dict] = None
+    progress: Optional[bool] = None     # not stored: this week's pick moves the projected ladder
+    prefer_days: Optional[list] = None  # not stored: weekdays the cap rule moved it to (plan_prefs.place)
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -393,13 +409,13 @@ def _targets(tt: dict) -> dict[str, str]:
     return out
 
 
-def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int) -> dict[int, float]:
+def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int, exprs=None) -> dict[int, float]:
     if not ws:
         return {}
     ev = Evaluator(ds, b, e)
     best: dict[int, float] = {}
     keep = {w.idx for w in ws}
-    for expr in HARD_EXPRS.values():
+    for expr in exprs or HARD_EXPRS.values():
         r = ev.evaluate(f"athleterange({b}, {e}, {expr})")
         if isinstance(r, WS):
             for i, v in r.items():
@@ -408,8 +424,16 @@ def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int) -> dict[int, f
     return best
 
 
-def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float]) -> dict:
-    """The base-phase interval for the gate's decision (engine/quality_gate.py)."""
+def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs=None,
+                  history=None, mountain: bool = False, cap: Optional[float] = None,
+                  alt_caps: Optional[list] = None) -> dict:
+    """The base-phase interval for the gate's decision (engine/quality_gate.py).
+    A ladder step is a library variant (engine/interval_library.fit): the
+    standard full-length session when the day's `cap` (課表偏好 weekday cap;
+    None = no cap) allows it, else an equivalent shorter one / fewer reps / another
+    day / the step before (§C5.3). `history`: the stored variants done before this
+    week (rotation). Recovery fartlek / sub / Zone 3 keep the old builder."""
+    from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
     spec = dec["spec"]
     pre = "" if spec is QG.RECOVERY else QG.prefix(gate)
@@ -417,10 +441,63 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float]) -> di
     if dose.get("faded") and spec not in (QG.RECOVERY, QG.SUB):
         # the progression state machine's verdict (quality_gate.dose_step)
         pre = (dose.get("note") or "上次間歇沒有達標：") + pre
-    s = QG.session(spec, {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}, pre, hours,
-                   bool((gate.get("lthr") or {}).get("default")))
+    lthr_default = bool((gate.get("lthr") or {}).get("default"))
+    tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}
+    if spec is QG.SUB:
+        # a ramp week (CTL ≥ +5): the first rung's content, never a ladder step (neutral)
+        f = IL.fit("z3a", cap, (), prefs, mountain)
+        s = IL.session_for({**f, "equiv": False, "progress": False, "rung": "sub",
+                            "reason": "CTL 每週 ≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
+        s["title"] = QG.SUB[1]
+        s["source"] = QG.source(gate, spec)
+        return s
+    if spec[0] in IL.LIBRARY:
+        f = IL.fit(spec[0], cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"))
+        by_cap = f["level"] != "full" or f["action"] != "ok" or f.get("reps") is not None
+        s = IL.session_for(f, tth, pre, lthr_default, prefs, swap="cap" if by_cap else "auto")
+        if f["action"] == "move" and f.get("move_wd") is not None:
+            s["prefer_days"] = [f["move_wd"]]
+        s["source"] = QG.source(gate, (s["source"],))
+        return s
+    s = QG.session(spec, tth, pre, hours, lthr_default)
     s["source"] = QG.source(gate, spec)
     return s
+
+
+def variant_history(before: dt.date, gate: Optional[dict] = None) -> list[dict]:
+    """The stored quality sessions with a library variant done before `before`
+    (plan_store.variant_rows, read-only), each with its outcome from the gate's
+    dose history (the activity it was done by) — interval_library.fit's rotation."""
+    try:
+        from backend.engine.plan_store import variant_rows
+        rows = variant_rows()
+    except Exception:                       # noqa: BLE001
+        return []
+    out_by_idx = {h.get("idx"): h.get("outcome") for h in ((gate or {}).get("dose") or {}).get("history") or []}
+    out = []
+    for r in rows:
+        if r.get("state") != "done" or not r.get("day") or r["day"] >= before.isoformat():
+            continue
+        idx = (r.get("done_by") or {}).get("index")
+        out.append({"day": r["day"], "rung_key": r.get("rung_key"), "variant_key": r.get("variant_key"),
+                    "state": "done", "outcome": out_by_idx.get(idx), "swap": r.get("swap")})
+    return out
+
+
+def quality_caps(prefs, long_wd: int) -> tuple[Optional[float], list]:
+    """(the weekday cap, [(label, cap, weekday)] of other days with a bigger cap) for the
+    interval session (§C5.3-4). 平日 = Mon–Fri; a weekend day takes the long-day cap
+    and is a candidate only ≥ 2 days from the long run (48 h)."""
+    if prefs is None or not getattr(prefs, "active", False) or prefs.cap_weekday is None:
+        return None, []
+    alt = []
+    for wd, label in ((5, "週六"), (6, "週日")):
+        if wd == long_wd or not prefs.days[wd] or min(abs(wd - long_wd), 7 - abs(wd - long_wd)) < 2:
+            continue
+        c = prefs.long_cap
+        if c is None or c > prefs.cap_weekday:
+            alt.append((label, c, wd))
+    return float(prefs.cap_weekday), alt
 
 
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None) -> dict:
@@ -631,7 +708,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     aet_proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
                                     getattr(prefs, "cap_weekday", None),
                                     getattr(prefs, "long_cap", None) if prefs is not None else None)
-    xu_test = aet_due and kind == "base" and aet_proto == "xu90" and mode != "recovery_week"
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 
     def add(**kw):
@@ -651,39 +727,39 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 long_min = min(long_min, float(RE.LONG_CAP_MIN))
         terrain = (f"挑每公里爬升 ≥ {goal_d * 0.7:.0f} m 的路線" if goal_d else
                    "有山路就走山路，陡坡用走的" if mountain_goal else "平路或緩坡")
-        if xu_test:
-            # 徐國峰's 90-min test IS the weekend LSD: it replaces this week's long run
-            # (flat, constant E pace); the week's interval stays
-            add(**AT.session(tt, None, None, getattr(prefs, "cap_weekday", None), "xu90", None))
-        else:
-            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
-                minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
-                detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
-                source=SRC_KOOP if kind == "specific" else SRC_UA,
-                tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
-            if b2b.get("candidate") and not in_reentry:
-                B2B.finalize(b2b, sessions[-1].minutes, b2b.get("longest_before") or 0.0, minutes_total)
-            if b2b.get("due"):            # day 2 (and 3): out of the easy minutes below (Koop: total unchanged)
-                ls = asdict(sessions[-1])
-                fol = B2B.followers(ls, b2b)
-                sessions[-1] = Session(**ls)
-                for f in fol:
-                    add(**f)
-        if test_s is not None:
-            add(**{**test_s, "detail": test_s["detail"] + "。門檻過期或沒測過：區間、TSS、賽事功率都靠它"})
-        elif aet_due and kind == "base" and not xu_test:
-            # AeT test in place of this week's interval (engine/aet_test.py): the chosen
-            # protocol (UA 60 / 40, Evoke, Friel), or UA 40 as the backup of the 90-min standard
-            add(**AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
-                             AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None),
-                             aet_proto, getattr(prefs, "long_cap", None) if prefs is not None else None))
+        # a due CP / AeT test is SUGGESTED, never put into the plan (the user, 2026-10-01): the
+        # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
+        add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
+            minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
+            detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
+            source=SRC_KOOP if kind == "specific" else SRC_UA,
+            tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
+        if b2b.get("candidate") and not in_reentry:
+            B2B.finalize(b2b, sessions[-1].minutes, b2b.get("longest_before") or 0.0, minutes_total)
+        if b2b.get("due"):            # day 2 (and 3): out of the easy minutes below (Koop: total unchanged)
+            ls = asdict(sessions[-1])
+            fol = B2B.followers(ls, b2b)
+            sessions[-1] = Session(**ls)
+            for f in fol:
+                add(**f)
+        if allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
+                and (gate.get("z5") or {}).get("state") != "open":
+            # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (徐國峰: Zone 3
+            # first, Zone 5 only on a confirmed base) — the Zone 3 ladder, uphill versions allowed
+            dz = QG.week_decision({**gate, "z5": {**(gate.get("z5") or {}), "open": False}}, "base", "base", monday)
+            if dz["allow"] and dz["spec"] is not None:
+                q_cap, q_alt = quality_caps(PR, PP.long_weekday(PR, _long_weekday(ds, today)) if PR is not None else 5)
+                add(**_gate_session(gate, dz, tt, hours, prefs, variant_history(monday, gate), True, q_cap, q_alt))
         elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
                 target=tgt.get("supra", ""), detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
         elif allow_quality and kind == "base" and dec["spec"] is not None:
-            # the gate's dose step (engine/quality_gate.py §4.5)
-            add(**_gate_session(gate, dec, tt, hours))
+            # the gate's dose step (engine/quality_gate.py §4.5) as a library variant fitted
+            # into the weekday cap (engine/interval_library.py)
+            q_cap, q_alt = quality_caps(PR, PP.long_weekday(PR, _long_weekday(ds, today)) if PR is not None else 5)
+            add(**_gate_session(gate, dec, tt, hours, prefs, variant_history(monday, gate), mountain_goal,
+                                q_cap, q_alt))
     elif kind == "base" and mode == "recovery_week" and allow_quality and dec["spec"] is not None:
         # 3:1 recovery week: a short fartlek instead of intervals (Palladino)
         add(**_gate_session(gate, dec, tt, hours))
@@ -735,6 +811,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # ---- mark what is done ----------------------------------------------
     pool = sorted(week_ws, key=lambda w: w.day)
     used_idx: set[int] = set()
+    hard_z3: Optional[dict] = None
 
     def take(pred) -> Optional[Workout]:
         for w in pool:
@@ -764,8 +841,15 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 w = take(lambda w: category(w) == "road" and moving_s(w) >= AT.WARM_S + AT.MAIN_MIN_S - 2 * 60
                          and (bool(WR.AET_TITLE.search(WR._title(w))) or moving_s(w) >= WR.TEST_AET_MIN_S))
         elif s.kind in ("quality", "test"):
-            need = QG.hard_need(s.title, HARD_SESSION_S)       # 5×1′ never reaches 10 min at threshold
-            w = take(lambda w: hard.get(w.idx, 0) >= need)
+            need = QG.hard_need(s.title, HARD_SESSION_S, s.variant_key, s.variant_reps)
+            if s.variant_key and QG.is_z3_variant(s.variant_key):
+                # Zone 3 at 90–95 % CP never reaches 95 % CP: its own time (10-s power ≥ 85 % CP)
+                if hard_z3 is None:
+                    hard_z3 = _hard_seconds(ds, [w for w in week_ws if category(w) in ENDURANCE],
+                                            int(date_to_day(monday)), int(date_to_day(sunday)), (Z3_EXPR,))
+                w = take(lambda w, h=hard_z3: h.get(w.idx, 0) >= need)
+            else:
+                w = take(lambda w: hard.get(w.idx, 0) >= need)
         elif s.kind == "easy":
             w = take(lambda w: category(w) in ENDURANCE)
         if w is not None:
@@ -791,6 +875,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if PR is not None:
         long_wd = PP.long_weekday(PR, long_wd)
         ds_ = [{**asdict(s), "long_day": getattr(s, "_long_day", False)} for s in todo]
+        notes.extend(PP.blocked_pref_notes(PR, monday, bmap))          # a preferred weekday on a 不排課日期
         left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done)
         for s, d in zip(todo, ds_):
             if d["day"]:
@@ -904,6 +989,26 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if i is not None and i.level in ("bad", "watch") and i.action and not (iid == "testing" and test_s is not None):
             notes.append({"level": i.level, "text": f"{i.title}：{i.action}"})
 
+    # ---- tests: suggested, not scheduled -----------------------------------
+    test_suggestions = []
+    if test_s is not None:
+        ti = by.get("testing")
+        test_suggestions.append({
+            "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
+            "reason": (getattr(ti, "verdict", "") or "門檻過期或沒測過") + "：區間、TSS、賽事功率都靠 CP",
+            "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
+                                                   "protocol")}})
+    if aet_due:
+        a_s = AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
+                         AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None), aet_proto,
+                         getattr(prefs, "long_cap", None) if prefs is not None else None)
+        test_suggestions.append({
+            "kind": "aet", "protocol": aet_proto, "title": a_s["title"], "minutes": a_s["minutes"],
+            "reason": (gate.get("aet_test_reason") or {}).get("text") or "AeT 需要重新確認",
+            "replaces_long": aet_proto == "xu90",
+            "session": {k: a_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
+                                                "protocol")}})
+
     mode_label = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
                   "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週",
                   "reentry": "停訓後恢復期"}[mode]
@@ -930,8 +1035,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # the quality gate (engine/quality_gate.py), so projection.project_weeks can
         # re-evaluate it for each projected week instead of copying this week's answer
         "quality_gate": {**gate, "levels": gate_levels, "allowed": allow_quality,
-                         "this_week": dec["spec"][1] if allow_quality and dec["spec"] and kind == "base"
-                         and not (test_s is not None or aet_due) else None,
+                         "this_week": dec["spec"][1] if allow_quality and dec["spec"] and kind == "base" else None,
                          # a suggested test counts as the last one, so the projection waits ≥ 4 weeks
                          "aet_test": {"due": aet_due, "last": today.isoformat() if aet_due else tx.get("aet_last_test")}},
         # per-category TSS / h (projection shapes projected weeks with the same rates)
@@ -939,6 +1043,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "prefs": PR.to_dict() if PR is not None else None,
         "blackout_days": [d.isoformat() for d in lost],
         "heat": heat_info,
+        # CP / AeT tests that are due: suggestions with a day picker, never scheduled
+        "test_suggestions": test_suggestions,
         # 停訓後的恢復期 (engine/reentry.py): the block in effect / ahead, for projection and the log
         "reentry": rp,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card

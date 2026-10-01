@@ -22,7 +22,8 @@ KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test
          # training session — never done / missed, no TSS, no compliance
          "notice": "課表待確認"}
 NOT_LOAD = ("notice",)
-EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m")
+EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
+            "target_basis")
 TERRAINS = ("road", "trail", "hike")
 DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
                   "hike": "健行", "strength": "肌力（下肢單腳＋核心）"}
@@ -54,21 +55,36 @@ def to_dict(r: PlanSession) -> dict:
             done_by = json.loads(r.done_by)
         except ValueError:
             done_by = None
+    adj = None
+    if getattr(r, "variant_adj", None):
+        try:
+            adj = json.loads(r.variant_adj)
+        except ValueError:
+            adj = None
     return {"uid": r.uid, "week_start": r.week_start, "gen_key": r.gen_key, "day": r.day, "kind": r.kind,
             "title": r.title, "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
             "source": r.source or "", "tss": r.tss or 0.0, "origin": r.origin, "edited": bool(r.edited),
             "provisional": bool(r.provisional), "state": r.state, "done_by": done_by, "note": r.note,
             "terrain": r.terrain, "distance_km": r.distance_km, "climb_m": r.climb_m,
-            "protocol": r.protocol}
+            "protocol": r.protocol,
+            "variant_key": r.variant_key, "rung_key": r.rung_key,
+            "equiv": None if r.equiv is None else bool(r.equiv), "swap": r.swap, "swap_reason": r.swap_reason,
+            "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj,
+            "target_basis": getattr(r, "target_basis", None)}
+
+
+VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
+                  "target_basis")
 
 
 def _fill(r: PlanSession, d: dict) -> None:
     for k in ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
               "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
-              "protocol"):
+              "protocol") + VARIANT_FIELDS:
         setattr(r, k, d.get(k))
     r.minutes = int(d.get("minutes") or 0)
     r.done_by = json.dumps(d["done_by"], ensure_ascii=False) if d.get("done_by") else None
+    r.variant_adj = json.dumps(d["variant_adj"]) if d.get("variant_adj") else None
     r.updated_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
 
 
@@ -201,6 +217,10 @@ def _clean(patch: dict, today: str) -> dict:
             v = v or None
             if v is not None and v not in TERRAINS:
                 raise PlanError(f"不支援的地形：{v!r}")
+        elif k == "target_basis":
+            v = None if v in (None, "", "auto") else v       # 自動 = None
+            if v is not None and v not in ("hr", "power"):
+                raise PlanError(f"目標用要是 自動／心率／功率：{v!r}")
         elif k in ("distance_km", "climb_m"):
             if v is not None and v != "":
                 try:
@@ -243,6 +263,12 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
         raise PlanError("找不到這堂課（或已經完成／錯過）")
     d = to_dict(r)
     ch = _clean(patch, today)
+    # a library variant chosen in the swap drawer / the editor's templates (api/plan_sessions
+    # builds it with interval_library.variant_patch): a user edit, kept by reconcile (rule 3)
+    ch.update(patch.get("_variant") or {})
+    if patch.get("_variant") is None and ch and d.get("variant_key") and \
+            any(k in ch for k in ("title", "minutes", "detail")) and "variant_key" not in ch:
+        ch["swap"] = "user"                 # hand-edited text: the variant stays, marked as the user's
     if not ch:
         return d
     if "day" in ch and ch["day"] != d["day"]:
@@ -260,6 +286,8 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
     if d["kind"] == "test" and "title" in ch:
         from backend.engine import cp_protocols as CPP
         d["protocol"] = CPP.protocol_of({"title": ch["title"]}) or d.get("protocol")
+    if d["kind"] == "test" and patch.get("protocol") in ("quick", "standard", "race", "aet"):
+        d["protocol"] = patch["protocol"]           # the editor's 測試 → 方式 choice
     d.update(edited=True, week_start=new_week, provisional=False)
     _fill(r, d)
     await db.commit()
@@ -278,6 +306,7 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     if "day" not in data:
         raise PlanError("要選日期")
     ch = _clean(data, today)
+    ch.update(data.get("_variant") or {})
     _not_blocked(ch["day"], blocked)
     d = {"uid": R.new_uid(), "week_start": R.monday_of(ch["day"]), "gen_key": None, "origin": "custom",
          "edited": True, "provisional": False, "state": "active", "done_by": None, "note": None,
@@ -354,7 +383,23 @@ def push_dict(s: dict) -> dict:
     return {"id": s["uid"], "key": s["uid"], "week_start": s["week_start"], "kind": s["kind"],
             "title": s["title"], "minutes": s["minutes"], "target": s.get("target") or "",
             "detail": s.get("detail") or "", "source": s.get("source") or "", "day": s.get("day"),
-            "done": s["state"] == "done", "protocol": s.get("protocol")}
+            "done": s["state"] == "done", "protocol": s.get("protocol"),
+            # a library variant is pushed from its own steps (coros_workouts._variant_steps)
+            **{k: s.get(k) for k in ("variant_key", "variant_reps", "variant_blocks", "variant_adj", "terrain",
+                                     "target_basis")
+               if s.get(k) is not None},
+            # 目標用: the session's own choice, else 課表偏好 目標依據, else 自動 (engine/target_policy.py)
+            "basis": _basis_for(s)}
+
+
+def _basis_for(s: dict) -> str:
+    from backend.engine import plan_prefs as PP
+    from backend.engine import target_policy as TP
+    try:
+        prefs = PP.load()
+    except Exception:                       # noqa: BLE001
+        prefs = None
+    return TP.target_policy(s, prefs)["basis"]
 
 
 # ---------------------------------------------------------------------------
@@ -365,46 +410,97 @@ def push_dict(s: dict) -> dict:
 
 _TEST_CACHE: dict = {}
 _TITLE_CACHE: dict = {}
+_VARIANT_CACHE: dict = {}
+# the interval-library columns (engine/interval_library.py; interval-prescription.md §C5.4)
+VARIANT_COLS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
+                "variant_adj")
 
 
-def done_titles(db_path=None) -> dict:
-    """{activity index: title} of the done quality / test sessions, so
-    quality_gate.dose_step judges an interval against what was planned
-    (a recovery fartlek is not a ladder step). Read-only sqlite, cached on
-    the file's mtime; {} when the DB is missing."""
+def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
+    """Rows of plan_sessions (kinds) as dicts with the variant columns that exist.
+    Read-only sqlite, cached on the file's mtime; [] when the DB is missing."""
     import sqlite3
     from pathlib import Path
     if db_path is None:
         from backend.engine.wko5expr.datasource import _db_path
         db_path = _db_path()
     if db_path is None:
-        return {}
+        return []
     p = Path(db_path)
     try:
         mt = p.stat().st_mtime_ns
     except OSError:
-        return {}
-    hit = _TITLE_CACHE.get(str(p))
+        return []
+    hit = cache.get((str(p), kinds))
     if hit and hit[0] == mt:
         return hit[1]
-    out: dict = {}
+    out: list[dict] = []
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
         try:
-            for title, done_by in con.execute("SELECT title, done_by FROM plan_sessions "
-                                              "WHERE state='done' AND kind IN ('quality','test')"):
-                try:
-                    d = json.loads(done_by) if done_by else None
-                except ValueError:
-                    d = None
-                if isinstance(d, dict) and d.get("index") is not None:
-                    out[d["index"]] = title
+            cols = {r[1] for r in con.execute("PRAGMA table_info(plan_sessions)")}
+            if cols:
+                extra = [c for c in VARIANT_COLS if c in cols]
+                sel = ", ".join(["uid", "day", "state", "kind", "title", "done_by"] + extra)
+                marks = ",".join("?" * len(kinds))
+                for row in con.execute(f"SELECT {sel} FROM plan_sessions WHERE kind IN ({marks})", kinds):
+                    d = dict(zip(["uid", "day", "state", "kind", "title", "done_by"] + extra, row))
+                    try:
+                        d["done_by"] = json.loads(d["done_by"]) if d["done_by"] else None
+                    except ValueError:
+                        d["done_by"] = None
+                    if "equiv" in d and d["equiv"] is not None:
+                        d["equiv"] = bool(d["equiv"])
+                    if d.get("variant_adj"):
+                        try:
+                            d["variant_adj"] = json.loads(d["variant_adj"])
+                        except (TypeError, ValueError):
+                            d["variant_adj"] = None
+                    out.append(d)
         finally:
             con.close()
     except sqlite3.Error:
-        return {}
-    _TITLE_CACHE[str(p)] = (mt, out)
+        return []
+    cache[(str(p), kinds)] = (mt, out)
     return out
+
+
+def done_plan(db_path=None) -> dict:
+    """{activity index: {title, variant_key, rung_key, equiv, swap, variant_reps, …}} of
+    the done quality / test sessions, so quality_gate.dose_step judges an interval
+    against what was planned (its library variant; a recovery fartlek is not a
+    ladder step)."""
+    out: dict = {}
+    for r in _plan_rows(db_path, ("quality", "test"), _TITLE_CACHE):
+        d = r.get("done_by")
+        if r.get("state") == "done" and isinstance(d, dict) and d.get("index") is not None:
+            out[d["index"]] = r
+    return out
+
+
+_INUSE_CACHE: dict = {}
+
+
+def plan_in_use(db_path=None) -> bool:
+    """The stored plan is in use (any row in plan_sessions): then a run that matched
+    none of its quality sessions is not a ladder session (dose_step: neutral). Any row,
+    not only quality ones — a guardrail that blocks intervals for weeks leaves no quality
+    row, and the athlete's hard steady runs then counted as 「3 區達標 3/3」 (2026-10-01)."""
+    kinds = ("easy", "long", "quality", "test", "hike", "strength")
+    return bool(_plan_rows(db_path, kinds, _INUSE_CACHE))
+
+
+def done_titles(db_path=None) -> dict:
+    """{activity index: title} of the done quality / test sessions (done_plan's titles)."""
+    return {k: v.get("title") for k, v in done_plan(db_path).items()}
+
+
+def variant_rows(db_path=None) -> list[dict]:
+    """Stored quality sessions that carry a library variant (done / active / missed),
+    oldest first — interval_library.pick_variant's rotation history."""
+    rows = [r for r in _plan_rows(db_path, ("quality",), _VARIANT_CACHE)
+            if r.get("variant_key") and r.get("state") in ("done", "active", "missed")]
+    return sorted(rows, key=lambda r: r.get("day") or "")
 
 
 def test_sessions(db_path=None) -> list[dict]:
