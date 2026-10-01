@@ -110,6 +110,18 @@ def _in_zone_expr(system: str, lo, hi) -> str:
     return f"sum(if({' and '.join(conds)}, deltatime))"
 
 
+def _on_day(w, end_day: int):
+    """The reference run moved to `end_day`, so its thresholds are those in
+    effect that day: a plan test dated after the last run but on or before
+    `end_day` applies (since Plan.threshold_on stopped applying tests
+    backwards, 2026-10-01, the last run's own date would miss a test done
+    on a day WKO5 has no run for — the 2026-09-30 CP test)."""
+    import dataclasses
+    if w is None or not dataclasses.is_dataclass(w):
+        return w
+    return dataclasses.replace(w, day=max(float(w.day), float(end_day)))
+
+
 def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
     """WKO5-style zone table: boundaries at the threshold in effect on
     `end_day`, plus time in each zone over the last `days` days of runs."""
@@ -118,6 +130,7 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
     spec = SYSTEMS[system]
     runs = [w for w in ds.workouts if w.sport == "run" and end_day - days < math.floor(w.day) <= end_day]
     ref = runs[-1] if runs else next((w for w in reversed(ds.workouts) if w.sport == "run"), None)
+    ref = _on_day(ref, end_day)
     basis = {"lthr": lambda w: ds.sport_setting("thr", w), "cp": ds.cp,
              "tpace": lambda w: ds.sport_setting("tpace", w)}[spec["basis"]]
     T = basis(ref) if ref else None
@@ -166,7 +179,7 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     import datetime as dt
     import math
     runs = [w for w in ds.workouts if w.sport == "run" and math.floor(w.day) <= end_day]
-    ref = runs[-1] if runs else None
+    ref = _on_day(runs[-1], end_day) if runs else None
     cp = ds.cp(ref) if ref else None
     lthr = ds.sport_setting("thr", ref) if ref else None
     hist = ds.athlete.settings.get("runthr") or []

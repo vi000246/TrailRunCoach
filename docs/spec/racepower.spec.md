@@ -725,7 +725,8 @@ the version-2 store.
 
 `backend/tests/test_racepower_capacity_samples.py` covers (temporary plans only):
 - `threshold_on` in the past, on the day and for a future row; `Dataset.setting` / `cp` /
-  `aethr` falling back to WKO5 before the row and using it from that day on;
+  `aethr` falling back to WKO5 before the row and using it from that day on; a test dated after
+  the last run still applying today through `zones._on_day`;
 - the standard-distance ±10 % buckets, the 30-s peak HR from the histogram and the robust
   observed HRmax;
 - every road rule alone, including HM / M without the HRmax rule and the monotonicity check on

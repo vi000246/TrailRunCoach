@@ -412,8 +412,11 @@ class Status:
                          extra={"low_share": share, "high_hours": hi_h, "power_low_share": pshare})
 
     def _aet_now(self) -> Optional[float]:
+        # the AeT in effect today (a plan row dated after the last run counts)
+        from backend.engine.wko5expr.dataset import date_to_day
+        from backend.engine.zones import _on_day
         ws = self.since(60, {"run"})
-        return self.ds.aethr(ws[-1]) if ws else None
+        return self.ds.aethr(_on_day(ws[-1], math.floor(date_to_day(self.today)))) if ws else None
 
     def i_efficiency(self) -> Indicator:
         eff = self.ws("athleterange(today-181, today, avg(speed)/avg(heartrate))")

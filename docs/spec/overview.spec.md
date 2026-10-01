@@ -190,7 +190,12 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
 - A season-plan threshold row applies from its own date on, never to earlier days
   (`planning.Plan.threshold_on`, `backend/engine/planning.py:205`, fixed 2026-10-01). Before the
   first row, `Dataset.setting` / `cp` / `aethr` fall back to WKO5's dated settings (runthr, the
-  current mFTP snapshot, 0.89 × LTHR). Today's thresholds, targets and gates are unchanged.
+  current mFTP snapshot, 0.89 × LTHR). Today's thresholds come from the last run moved to today
+  (`zones._on_day`, `backend/engine/zones.py:113`; also `status._aet_now` and the LTHR estimate's
+  CP), so a test dated after WKO5's last run still applies. Today's CP 204 / LTHR 155 / AeT 138,
+  the targets and the zone bounds are unchanged. Indicators that judge each past run with its
+  own-date AeT do move (2026-10-01, WKO5 source): 強度分配 mid share 26 % → 35 % (still bad);
+  效率 good 「進步」 → info 「持平」; drift-eligible easy runs 1 → 6 (still too few).
   Past days change back to their pre-2026-09-30 values: hrTSS of past runs uses LTHR 160
   instead of 155 (365-day TSS −0.7 %, CTL today 20.40 → 20.28 in the evaluator).
   `workout_review` again labels 36 past hard 5 km runs (2025-10 … 2026-07) `test_cp` by power

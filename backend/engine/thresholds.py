@@ -69,7 +69,12 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
             data[w.idx] = v
     ds.flush_series()
     if cp_of is None:
-        cp_now = ds.cp(runs[-1]) if runs else None
+        # the CP in effect on `today` (a plan test dated today counts even when
+        # the last WKO5 run is older), else the last run's
+        plan = getattr(ds, "plan", None)
+        cp_now = plan.threshold_on("cp", today) if plan is not None else None
+        if cp_now is None:
+            cp_now = ds.cp(runs[-1]) if runs else None
     else:
         cp_now = cp_of(today)
 
