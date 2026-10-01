@@ -380,13 +380,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                                     getattr(prefs, "cap_weekday", None), getattr(prefs, "long_cap", None))
         due = kind == "base" and mode not in ("recovery_week", "reentry") and \
             AT.due(week, kind, gate.get("base_start"), gate.get("aet_test_reason"), last_aet)
-        if due and proto == "xu90":
-            # 徐國峰's 90-min test replaces that week's long run; the interval stays
-            xu_q = AT.session(th, None, None, getattr(prefs, "cap_weekday", None), "xu90")
-            last_aet = week.isoformat()          # suggested, not done: keeps the next one ≥ 4 weeks away
-        elif due:
-            base_q = AT.session(th, AT.start_hr(None, th.get("lthr")), AT.start_power(th.get("cp")),
-                                getattr(prefs, "cap_weekday", None), proto, getattr(prefs, "long_cap", None))
+        if due:
+            # tests are suggested for the current week only (overview.week_plan test_suggestions),
+            # never put into the plan — projected weeks keep their long run and interval
             last_aet = week.isoformat()
         z5g = gate.get("z5") or {}
         if base_q is None and kind == "specific" and dec["allow"] and not z5g.get("open") and z5g.get("state") != "open" \
