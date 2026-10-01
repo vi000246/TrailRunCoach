@@ -87,8 +87,8 @@ def test_auto_without_aet_is_no_method_and_the_guardrails():
     assert g["resolved"] == "none" and g["state"] == "none" and not g["fallback"]
     t = QG.indicator(g)
     assert t["level"] == "info" and "沒有 AeT 實測：照 80/20 原則每週 1 次間歇" in t["verdict"]
-    # 徐國峰: Zone 3 first — the ladder's first rung is threshold 3×8, not 5×1′
-    assert "第 1 步：閾值 3×8 分" in t["verdict"]
+    # 徐國峰: Zone 3 first — the ladder's first rung is threshold 3×6 (§A5.3), not 5×1′
+    assert "第 1 步：閾值 3×6 分" in t["verdict"]
     assert QG.guardrail_mode(g)
     assert QG.week_decision(g, "base", "base")["spec"] is QG.Z3[0]
     assert g["z5"]["state"] == "unconfirmed" and not g["z5"]["open"]
@@ -244,10 +244,13 @@ def test_guardrails_block_the_week_and_say_so():
 
 def test_dose_ladder_zone3_first_then_zone5_only_when_open():
     # 徐國峰: Zone 3 first; Zone 5 reps ≥ 2 min, only while Zone 5 is open
-    open_titles = [QG.dose_spec(i, True)[1] for i in range(9)]
-    assert open_titles == ["閾值 3×8 分", "閾值 4×8 分", "閾值 3×10 分", "VO2max 5×2 分", "VO2max 4×3 分",
-                           "VO2max 5×3 分", "VO2max 4×4 分", "VO2max 4×4 分", "閾值 3×10 分"]
+    # the corrected ladder (interval-prescription.md §A5.3), then V3 / V4 / T+ maintenance
+    open_titles = [QG.dose_spec(i, True)[1] for i in range(10)]
+    assert open_titles == ["閾值 3×6 分", "閾值 3×8 分", "閾值 2×12 分", "VO2max 5×2 分", "VO2max 4×3 分",
+                           "VO2max 5×3 分", "VO2max 4×4 分", "VO2max 5×3 分", "VO2max 4×4 分", "近閾值 3×7 分"]
     assert all(s[3] >= 2 for s in QG.Z5)                                  # reps ≥ 2 min
+    assert [(s[5], s[6]) for s in QG.Z3] == [(0.90, 0.95)] * 3
+    assert [s[4] for s in QG.Z5] == [2, 3, 2.5, 3] and (QG.Z5[3][5], QG.Z5[3][6]) == (1.04, 1.08)
     shut = [QG.dose_spec(i, False)[1] for i in range(3, 7)]
     assert all(t.startswith("閾值") for t in shut)                        # Zone 3 continues
     assert QG.dose_step([]) == {"done": 0, "faded": False, "step": 0}
@@ -256,7 +259,7 @@ def test_dose_ladder_zone3_first_then_zone5_only_when_open():
     d = QG.dose_step(three)
     assert d["step"] == 0 and d["outcome"] == "unknown"
     g = {"state": "none", "guard": {"hold": True}, "dose": {"done": 2, "step": 2}}
-    assert QG.week_decision(g, "base", "base")["spec"][1] == "閾值 4×8 分"    # held: repeat the last step
+    assert QG.week_decision(g, "base", "base")["spec"][1] == "閾值 3×8 分"    # held: repeat the last step
     rec = QG.week_decision({"state": "none", "guard": {}, "dose": {"step": 4}}, "base", "recovery_week")
     assert rec["spec"] is QG.RECOVERY and not rec["advance"]
     # step 3 (3 Zone 3 達標): Zone 5 only with z5 open; else Zone 3, and the step waits
@@ -269,18 +272,35 @@ def test_dose_ladder_zone3_first_then_zone5_only_when_open():
 
 def test_dose_sessions_parse_for_coros_and_the_cap():
     th = {"cp": 250.0, "lthr": 165.0, "aet": 142.0}
-    s = QG.session(QG.Z3[0], th, "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，")
-    assert s["title"] == "閾值 3×8 分" and s["minutes"] == 15 + 3 * 10 + 10
+    # the legacy text builder (recovery fartlek, Zone 3 HR, adapt's old rows) on a ladder row:
+    # no rest after the last rep (§A5.2-3)
+    s = QG.session(QG.Z3[1], th, "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，")
+    assert s["title"] == "閾值 3×8 分" and s["minutes"] == 15 + 3 * 8 + 2 * 2 + 10
     assert s["detail"].startswith("沒有 AeT 實測：照 80/20 原則每週 1 次間歇，") and "休 2 分" in s["detail"]
     steps = CW.session_steps(s, CW.Thresholds.of(th))
     rep = steps[1]
     assert rep.sets == 3 and rep.steps[0].seconds == 480 and rep.steps[1].seconds == 120
-    assert rep.steps[0].intensity == ("power", 220, 238)                    # 88–95 % CP
+    assert rep.steps[0].intensity == ("power", 225, 238)                    # 90–95 % CP
     v = QG.session(QG.Z5[0], th)
+    assert "休 2 分鐘（走路或極慢跑）" in v["detail"]                         # Buchheit: < 2–3 min passive
     st = CW.session_steps(v, CW.Thresholds.of(th))
     assert st[1].sets == 5 and st[1].steps[0].seconds == 120 and st[1].steps[0].intensity == ("power", 265, 280)
     assert "心率" not in QG.session(QG.Z5[3], th, lthr_default=True)["target"]      # WKO5 default LTHR
     assert QG.hard_need("閾值 3×8 分", 600) == pytest.approx(600)
+    assert QG.hard_need("VO2max 5×2 分", 600, "v1a") == pytest.approx(360)
+    # a library variant goes to COROS as its own steps: blocks, every rep / rest, walk rests untargeted
+    from backend.engine import interval_library as IL
+    f = IL.fit("z5a", 45)
+    ls = IL.session_for(f, th)
+    cs = CW.session_steps({**ls, "day": "2026-10-07"}, CW.Thresholds.of(th))
+    names = [x.name for x in cs]
+    assert names[:3] == ["市區輕鬆跑到河濱", "動態伸展／drill", "快步跑 3×20 秒"] and names[-1] == "緩和"
+    work = [x for x in cs if isinstance(x, CW.Step) and x.kind == CW.EX_TRAIN]
+    rest = [x for x in cs if isinstance(x, CW.Step) and x.kind == CW.EX_REST]
+    assert len(work) == 5 and len(rest) == 4 and all(r.intensity is None and r.name == "走路或極慢跑" for r in rest)
+    assert work[0].intensity == ("power", 265, 280)
+    total = CW.session_workout({**ls, "day": "2026-10-07"}, th, "2026-10-01").payload["estimatedTime"]
+    assert total == ls["minutes"] * 60
     z3 = QG.session(QG.ZONE3, th, hours=6.0)
     assert z3["title"] == "Zone 3 間歇 3×6 分" and "心率 142–165 bpm" in z3["target"]
 
@@ -368,7 +388,7 @@ def test_planned_zone3_reps_come_from_the_coros_laps(monkeypatch):
     day = TODAY - dt.timedelta(days=4)
     w = _z3_run(day)
     ds = _ds([w])
-    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {0: {"title": QG.Z3[0][1], "state": "done"}})
+    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {0: {"title": QG.Z3[1][1], "state": "done"}})
     laps = [{"start_s": 0.0, "duration_s": 720.0, "power": 175.0}]
     t = 720.0
     for k in range(3):
@@ -484,12 +504,13 @@ def test_dose_step_replays_outcomes():
     d = QG.dose_step([{"bouts": _b(150, 250, 250, 250, 250), "cp": cp}])
     assert d["step"] == 0 and d["adjust"] == {"power": QG.TARGET_DOWN}
     spec = QG.adjusted_spec(QG.Z3[0], {"power": 0.95})
-    assert spec[5] == round(0.88 * 0.95, 3) and spec[1] == QG.Z3[0][1]
+    assert spec[5] == round(0.90 * 0.95, 3) and spec[1] == QG.Z3[0][1]
     g = {"state": "none", "guard": {}, "dose": {"done": 2, "step": 1, "adjust": {"rest_add": 1}}}
-    sp = QG.week_decision(g, "base", "base")["spec"]
-    assert sp[4] == QG.Z3[1][4] + 1
+    dec = QG.week_decision(g, "base", "base")
+    sp = dec["spec"]
+    assert sp[4] == QG.Z3[1][4] + 1 and dec["adjust"] == {"rest_add": 1}
     s = QG.session(sp, {"cp": cp})
-    assert f"休 {sp[4]} 分鐘" in s["detail"]
+    assert f"休 {sp[4]:g} 分鐘" in s["detail"]
 
 
 # ---------------------------------------------------------------------------

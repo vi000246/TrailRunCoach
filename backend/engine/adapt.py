@@ -209,8 +209,19 @@ def _dose_index(title: str) -> Optional[int]:
 
 def _downgrade(g: dict, th: dict) -> str:
     """One dose step down (quality_gate.DOSE), else an easy run. Returns what it became."""
+    from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
-    i = _dose_index(g.get("title") or "") if g.get("kind") == "quality" else None
+    rung = g.get("rung_key") if g.get("kind") == "quality" else None
+    if rung in IL.RUNG_ORDER and IL.RUNG_ORDER.index(rung) > 0:
+        # a library variant: the rung before's standard session, as maintenance (not progress)
+        prev = IL.RUNG_ORDER[IL.RUNG_ORDER.index(rung) - 1]
+        f = IL.fit(prev, g.get("minutes") or None)
+        s = IL.session_for({**f, "equiv": False, "progress": False,
+                            "reason": f"自動調整：降一階到 {IL.RUNG_NAME[prev]}（不算進階）"}, th or {}, swap="auto")
+        g.update({k: s.get(k) for k in ("title", "minutes", "target", "detail", "tss", "variant_key", "rung_key",
+                                        "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks", "variant_adj")})
+        return s["title"]
+    i = _dose_index(g.get("title") or "") if g.get("kind") == "quality" and not g.get("variant_key") else None
     if i is not None and i > 0:
         s = QG.session(QG.LADDER[i - 1], th or {})
         g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")})
@@ -218,14 +229,18 @@ def _downgrade(g: dict, th: dict) -> str:
     rate = 50.0 / 60.0
     m = min(int(g.get("minutes") or 45), 45)
     g.update(kind="easy", title="輕鬆跑", minutes=m, target="", detail="心率不超過 AeT（原本的強度課改成輕鬆跑）",
-             tss=round(m * rate, 1), protocol=None)
+             tss=round(m * rate, 1), protocol=None, **NO_VARIANT)
     return "輕鬆跑"
+
+
+NO_VARIANT = {k: None for k in ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps",
+                                "variant_blocks", "variant_adj")}
 
 
 def _to_recovery(g: dict, th: dict) -> str:
     from backend.engine import quality_gate as QG
     s = QG.session(QG.RECOVERY, th or {})
-    g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")})
+    g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")}, **NO_VARIANT)
     return s["title"]
 
 
