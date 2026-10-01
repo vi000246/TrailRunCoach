@@ -303,6 +303,40 @@ def _aet(ds, today: dt.date) -> dict:
 
 INTENSITY_KEY = "racepower_intensity_v1"
 _est_memo: dict = {}
+_cp_memo: dict = {}
+CP_ASOF_BACK_DAYS = 30          # 自組: an invalid PD fit on a day → the last valid fit up to 30 days earlier
+
+
+def _pd_mftp(ds, day: dt.date) -> Optional[float]:
+    key = (id(ds), "pd", day)
+    if key not in _cp_memo:
+        from backend.engine.wko5expr.dataset import date_to_day
+        tday = date_to_day(day)
+        runs = [w for w in ds.workouts if w.sport == "run" and tday - CP_WINDOW_DAYS < w.day < tday + 1]
+        try:
+            pdm = pd_model(ds, day, runs, None)
+        except Exception:                   # noqa: BLE001
+            pdm = None
+        _cp_memo[key] = pdm["mftp"] if pdm else None
+    return _cp_memo[key]
+
+
+def cp_as_of(ds, day: dt.date) -> Optional[float]:
+    """The running CP known on `day`, never a later value: a plan CP test
+    dated on or before `day`, else WKO5's PD model refitted on the 90-day
+    mean-max up to `day` (pd_model, the port that reproduces WKO5's mFTP),
+    else the last valid refit of the 30 days before. Used by the back-test's
+    thresholds (thresholds.estimate measures each run against it)."""
+    key = (id(ds), "cp", day)
+    if key not in _cp_memo:
+        c = _plan_last(ds, "cp", day)
+        v = float(c[1]) if c else None
+        for i in range(CP_ASOF_BACK_DAYS + 1):
+            if v is not None:
+                break
+            v = _pd_mftp(ds, day - dt.timedelta(days=i))
+        _cp_memo[key] = v
+    return _cp_memo[key]
 
 
 def _estimate(ds, day: dt.date) -> dict:
@@ -310,7 +344,7 @@ def _estimate(ds, day: dt.date) -> dict:
     if key not in _est_memo:
         from backend.engine.thresholds import estimate
         try:
-            _est_memo[key] = estimate(ds, day)
+            _est_memo[key] = estimate(ds, day, cp_of=lambda d: cp_as_of(ds, d))
         except Exception:                   # noqa: BLE001
             _est_memo[key] = {}
     return _est_memo[key]
@@ -324,14 +358,11 @@ def _plan_last(ds, name: str, day: dt.date):
 
 def thresholds_as_of(ds, day: dt.date) -> dict:
     """LTHR / AeT / CP in effect on `day` using only what existed then: a plan
-    test dated on or before `day` (planning.threshold_on would return the
-    earliest test for any earlier day — a leak for a back-test), else the
-    estimate from the runs before `day` (thresholds.estimate), else WKO5's
-    dated setting; AeT falls back to 0.89 × LTHR (Friel Z2 top). CP only from
-    a dated plan test (else None: the HR decides the class). Known residual
-    leak: thresholds.estimate filters runs with ds.cp — the plan CP test
-    applied to earlier dates by planning.threshold_on, or WKO5's current
-    mFTP when the plan has none."""
+    test dated on or before `day`, else the estimate from the runs before
+    `day` (thresholds.estimate, each run measured against cp_as_of its own
+    date — no later CP, no WKO5 snapshot), else WKO5's dated setting; AeT
+    falls back to 0.89 × LTHR (Friel Z2 top). CP only from a dated plan test
+    (else None: the HR decides the class)."""
     from backend.engine.racepower import intensity as I
     out = {"day": day.isoformat()}
     lt = _plan_last(ds, "lthr", day)
@@ -383,6 +414,108 @@ def race_dates(ds) -> set[str]:
     return out
 
 
+def is_trail(w) -> bool:
+    return "runningtrail" in w.tags or w.sport_type == "trail running"
+
+
+def outdoor(w) -> bool:
+    return w.sport == "run" and w.sport_type not in ("indoor running", "treadmill running") \
+        and "runningtreadmill" not in w.tags and "runningindoor" not in w.tags
+
+
+def plan_race_runs(ds) -> dict[int, dict]:
+    """{idx: matched season-plan event} for every past road / 越野賽 event
+    (any priority), matched by date, kind and distance (maximal.match_events)."""
+    from backend.engine.racepower import maximal as MX
+    runs = [{"idx": w.idx, "date": w.entry.start.date().isoformat(), "km": w.metrics.get("distance"),
+             "trail": is_trail(w)} for w in ds.workouts if outdoor(w)]
+    return MX.match_events(ds.plan.events, runs)
+
+
+MAXIMAL_KEY = "racepower_maximal_v1"
+
+
+def _maximal_stats(ds, w) -> Optional[dict]:
+    """Threshold-independent pacing / HR numbers of one run: last-quarter
+    time-weighted HR and second ÷ first half speed (moving time, kmh > 1)."""
+    a = activity_arrays(ds, w)
+    if a is None:
+        return None
+    t = a["t"]
+    d = np.diff(t, prepend=t[0])
+    d[~np.isfinite(d) | (d < 0) | (d > 30)] = 0.0
+    mv = (np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH) & (d > 0)
+    cum = np.cumsum(np.where(mv, d, 0.0))
+    tot = float(cum[-1]) if len(cum) else 0.0
+    if tot <= 0:
+        return None
+    hr = a["hr"]
+    q4 = None
+    if hr is not None:
+        m = mv & (cum > 0.75 * tot) & np.isfinite(hr) & (hr > 40)
+        if d[m].sum() > 0:
+            q4 = float((hr[m] * d[m]).sum() / d[m].sum())
+    h1, h2 = mv & (cum <= tot / 2), mv & (cum > tot / 2)
+    v = np.nan_to_num(a["kmh"])
+    s1 = float((v[h1] * d[h1]).sum() / d[h1].sum()) if d[h1].sum() > 0 else None
+    s2 = float((v[h2] * d[h2]).sum() / d[h2].sum()) if d[h2].sum() > 0 else None
+    return {"q4_hr": q4, "split": (s2 / s1) if s1 and s2 else None, "moving_s": tot}
+
+
+def maximal_stats(ds, w) -> Optional[dict]:
+    return ds.cached_series(MAXIMAL_KEY, w, lambda: _maximal_stats(ds, w))
+
+
+def capacity_samples(ds, runs, th_of: Optional[dict] = None) -> dict[int, dict]:
+    """{idx: {"ok", "kind", "reason", ...}} for every run: is it a capacity
+    sample (maximal.py)? Plan races first, then the road / trail rules with
+    each run's own-date thresholds and the HRmax observed in the 365 days up
+    to that run."""
+    from backend.engine.racepower import maximal as MX
+    from backend.engine.racepower import intensity as I
+    events = plan_race_runs(ds)
+    peaks, held = [], []
+    for w in ds.workouts:
+        if w.sport == "run":
+            st = intensity_stats(ds, w)
+            pk = MX.peak_hr(st.get("hist"), st.get("hist_lo", 40), MX.MAXIMAL["hrmax_hold_s"]) if st else None
+            if pk:
+                peaks.append((w.day, pk))
+            if st and st.get("p_avg") and outdoor(w) and not is_trail(w):
+                held.append((w.day, st["moving_s"], st["p_avg"]))
+    out = {}
+    for w in runs:
+        if not outdoor(w):
+            continue
+        if w.idx in events:
+            ev = events[w.idx]
+            out[w.idx] = {"ok": True, "kind": "plan_race", "event": ev, "category": "trail" if is_trail(w) else "road",
+                          "reason": f"賽季計畫的比賽「{ev['name']}」（{ev['priority'] or '-'} 級）"}
+            continue
+        th = (th_of or {}).get(w.idx) or thresholds_as_of(ds, w.entry.start.date())
+        st = intensity_stats(ds, w) or {}
+        ms = maximal_stats(ds, w) or {}
+        km = w.metrics.get("distance")
+        if is_trail(w):
+            sh = I.shares(st, th["aet"], th["lthr"]) if th.get("aet") and th.get("lthr") else None
+            r = MX.trail_maximal({"km": km, "moving_s": st.get("moving_s"), "hr_avg": st.get("hr_avg"),
+                                  "above_aet": (1.0 - sh["low"]) if sh else None}, th.get("lthr"), th.get("aet"),
+                                 getattr(w.entry, "title", "") or "", w.tags)
+        else:
+            hrmax = MX.hrmax_observed([p for d_, p in peaks if w.day - RIEGEL_WINDOW_DAYS < d_ < w.day + 1])
+            mv = st.get("moving_s") or 0.0
+            longer = [p for d_, s_, p in held if w.day - RIEGEL_WINDOW_DAYS < d_ < math.floor(w.day)
+                      and s_ >= MX.MAXIMAL["longer_ratio"] * mv]
+            r = MX.road_maximal({"km": km, "q4_hr": ms.get("q4_hr"), "split": ms.get("split"),
+                                 "peak_hr": MX.peak_hr(st.get("hist"), st.get("hist_lo", 40)),
+                                 "p_avg": st.get("p_avg"), "longer_p": max(longer) if longer and mv else None},
+                                th.get("lthr"), hrmax)
+            r["hrmax"] = hrmax
+        out[w.idx] = r
+    ds.flush_series()
+    return out
+
+
 def _cp_req(ds, w) -> Optional[float]:
     """The CP this run alone proves: max over its mean-max points ≥ 20 min of
     p·(TTE/t)^k (difficulty.cp_lower_bound with k −0.07, TTE 3000 s, no W′)."""
@@ -414,23 +547,39 @@ def cp_floor_by_date(ds, runs) -> dict[int, Optional[float]]:
 def classify_runs(ds, runs, cp_of: Optional[dict] = None) -> dict[int, dict]:
     """{idx: intensity.classify(...)} with each activity's own-date
     thresholds (thresholds_as_of) — never later values. CP: a dated plan
-    test, else the lower bound from the earlier runs (cp_floor_by_date)."""
+    test, else the lower bound from the earlier runs (cp_floor_by_date).
+    A run is a plan race only when it is the activity matched to a past
+    season-plan event (plan_race_runs: date + kind + distance), not every run
+    that day. Each class carries `capacity`: whether the run is a capacity
+    sample (capacity_samples; maximal.py) — the HR class "race" is only the
+    terrain stratum."""
     from backend.engine.racepower import intensity as I
-    races = race_dates(ds)
+    races = plan_race_runs(ds)
     floor = cp_floor_by_date(ds, runs) if cp_of is None else {}
-    out = {}
+    out, th_of = {}, {}
     for w in runs:
         d = w.entry.start.date()
         th = thresholds_as_of(ds, d)
+        th_of[w.idx] = th
         cp = (cp_of or {}).get(w.idx) or th["cp"]
         is_floor = cp is None and floor.get(w.idx) is not None
         cp = cp or floor.get(w.idx)
-        c = I.classify(intensity_stats(ds, w), th["lthr"], th["aet"], cp, d.isoformat() in races, is_floor)
+        c = I.classify(intensity_stats(ds, w), th["lthr"], th["aet"], cp, w.idx in races, is_floor)
         c.update(lthr_source=th["lthr_source"], aet_source=th["aet_source"],
                  cp_source=th["cp_source"] or ("之前跑步的 CP 下限" if cp else None))
+        if w.idx in races:
+            c["event"] = races[w.idx]
         out[w.idx] = c
+    caps = capacity_samples(ds, runs, th_of)
+    for i, c in out.items():
+        c["capacity"] = caps.get(i)
     ds.flush_series()
     return out
+
+
+def capacity_idx(classes: dict) -> set:
+    """Workout idx of the capacity samples among classify_runs() results."""
+    return {i for i, c in classes.items() if (c.get("capacity") or {}).get("ok")}
 
 
 def enforce_lower_bound(d: dict, cp: float, w_prime: Optional[float], tte: float, k: float,
@@ -550,7 +699,10 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
 
     # ---- intensity classes (own-date thresholds) -------------------------------
     cls = classes if classes is not None else classify_runs(ds, runs_365)
-    race_idx = {i for i, c in cls.items() if c.get("cls") == "race"}
+    # personal k and the table prior only from capacity samples (plan races,
+    # self-paced maximal efforts, race-like trail efforts — maximal.py), not
+    # the HR race-like class (hard 5 km training runs, 2026-10-01)
+    race_idx = capacity_idx(cls)
 
     # ---- CP sources ----------------------------------------------------------
     pd = {} if strict_as_of else pd_snapshot(ds.athlete.root)
@@ -601,14 +753,14 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
             if pk["r2"] < 0.8:
                 why.append("R² < 0.8")
         if len(span_who) < 3:
-            why.append(f"比賽強度（心率判定）的長時間努力只有 {len(span_who)} 次，至少要 3 次")
+            why.append(f"全力努力（比賽／自配速全力）的長時間努力只有 {len(span_who)} 次，至少要 3 次")
         base = pk or {"k": None, "r2": None, "n": 0, "t_min": None, "t_max": None}
         riegel = {**base, "valid": not why, "invalid_reasons": why, "n_activities": len(span_who),
                   "longest_s": base.get("t_max") or (env365["xs"][-1] if env365["xs"] else None),
                   "envelope_longest_s": env365["xs"][-1] if env365["xs"] else None,
                   "uncut": None if raw is None else {k_: raw[k_] for k_ in ("k", "r2", "n", "t_max")},
                   "activities": [act_ref(by_idx[i]) for i in span_who][:40],
-                  "basis": "只用心率判定為比賽強度的活動", "window_days": RIEGEL_WINDOW_DAYS}
+                  "basis": "只用能力樣本（計畫比賽、自配速全力、比賽型越野）", "window_days": RIEGEL_WINDOW_DAYS}
     k0 = riegel["k"] if riegel and riegel["valid"] else DEFAULT_K
     k0_src = "個人擬合" if riegel and riegel["valid"] else "預設 −0.07（≈ Stryd 表的 k −0.069）"
 
@@ -770,10 +922,10 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         if cat:
             c_ = cls.get(w.idx) or {}
             priors.append({**act_ref(w), "km": km, "category": cat, "time_s": w.metrics.get("movingduration") or m["moving_s"],
-                           "avg_power": m["avg_power"], "intensity": c_.get("cls"), "race": c_.get("cls") == "race"})
+                           "avg_power": m["avg_power"], "intensity": c_.get("cls"), "race": w.idx in race_idx})
     priors.sort(key=lambda r: r["date"], reverse=True)
     # the Riegel table encodes "slower racers fade more": only a real race
-    # (season-plan race or an HR race-like effort) may be the table prior —
+    # (a capacity sample: plan race or self-paced maximal) may be the table prior —
     # a training run would be circular. None → the API uses k −0.07.
     races_ = [p for p in priors if p["race"]]
     auto_prior = max(races_, key=lambda r: r["km"] * 1000.0 / r["time_s"]) if races_ else None
@@ -1122,3 +1274,43 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
             "hike_basis": {"solo_hikes": len(solo_w), "solo_windows": len(hs_solo), "steep_hr_windows": len(steep),
                            "group_hikes": len(hikes) - len(solo_w), "note": GROUP_HIKE_NOTE},
             "classes": cmap}
+
+
+def hr_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = None,
+                lthr: Optional[float] = None, distribution: bool = True) -> dict:
+    """HR-based capacity as of `today` (hrcap.py): the per-run steady flat
+    points of the outdoor road runs of the 90 days up to `today` (runs with
+    Pw:HR drift > 5 % dropped), OLS power on HR, P at the as-of LTHR; plus
+    each road run's moving power as a % of that P (training-intensity
+    distribution). 推估."""
+    from backend.engine.racepower import hrcap as HC
+    from backend.engine.wko5expr.dataset import date_to_day
+    today = today or dt.date.today()
+    tday = date_to_day(today)
+    exclude = exclude or set()
+    runs = [w for w in ds.workouts if outdoor(w) and not is_trail(w) and w.idx not in exclude
+            and tday - HC.HRCAP["window_days"] < w.day < tday + 1]
+    th = thresholds_as_of(ds, today)
+    lthr = lthr or th.get("lthr")
+    pts, dropped, dist_rows = [], 0, []
+    for w in runs:
+        st = intensity_stats(ds, w) or {}
+        if st.get("p_avg"):
+            dist_rows.append({"idx": w.idx, "date": w.entry.start.date().isoformat(), "p_avg": st["p_avg"],
+                              "moving_s": st.get("moving_s"), "hr_avg": st.get("hr_avg")})
+        if st.get("drift") is not None and st["drift"] > HC.HRCAP["drift_max"]:
+            dropped += 1
+            continue
+        q = HC.run_point(grade_samples(ds, [w]))
+        if q:
+            pts.append({**q, "idx": w.idx, "date": w.entry.start.date().isoformat()})
+    ds.flush_series()
+    cap = HC.capacity(pts, lthr)
+    cap.update(points=pts, dropped_drift=dropped, lthr_source=th.get("lthr_source"), today=today.isoformat(),
+               window_days=HC.HRCAP["window_days"])
+    if distribution:
+        cap["distribution"] = HC.intensity_distribution(dist_rows, cap["p_lthr"])
+        # the same runs against the CP in effect (plan test / as-of PD refit), for comparison
+        cp = cp_as_of(ds, today)
+        cap["distribution_cp"] = {**(HC.intensity_distribution(dist_rows, cp) or {}), "cp": cp} if cp else None
+    return cap
