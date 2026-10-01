@@ -932,6 +932,7 @@ function drawInto(box, res) {
   else if (String(res.kind || "").startsWith("act_")) drawActivity(box, res);   // panels/activity_charts.py
   else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)
   else if (res.grade_profile) drawGradeProfile(box, res);     // 坡度分組: one row per grade bin
+  else if (res.form_profile) drawFormProfile(box, res);       // 跑姿依坡度／隨疲勞 (form_grades / form_work)
   else draw(box, res);
 }
 
@@ -2559,10 +2560,8 @@ function drawGradeProfile(card, res) {
   function paint() {
     const g = G[metric];
     const val = (b) => b.metrics?.[g.key];
-    const nb = bins.filter((b) => b.base?.[g.key]?.ok).length;
-    cap.innerHTML = `<b>每個坡度的${esc(g.label)}和你平常比</b>（${esc(g.hint)}；上 = 上坡、下 = 下坡）。`
-      + `平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度待 ≥ ${Math.round(D.min_s)} 秒的那幾次（推估）`
-      + (nb < bins.length ? `；${bins.length - nb} 個坡度樣本不足，只畫這次` : "");
+    // the explanation lives behind the card's 「?」 (views/workout.json description); only a short axis hint here
+    cap.innerHTML = `<b>${esc(g.label)}</b>（${esc(g.unit)}）· ${esc(g.hint)}`;
     const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
     const h = bins.length * 28 + 34;
     el.style.height = el.style.minHeight = `${h}px`;
@@ -2631,6 +2630,192 @@ function drawGradeProfile(card, res) {
           }) },
       ],
     }, { replaceMerge: ["series"] });
+  }
+  paint();
+  new ResizeObserver(() => paint()).observe(el);
+}
+
+// ---- 跑姿與膝蓋負荷 (workout_review form_grades / form_work; res.form_profile). Self-contained; reuses the
+// cp* helpers above. mode "grade": one row per grade bin, like 坡度分組 (time share + this run's dot against the
+// usual's middle 50 % and median). mode "work": the metric across the ten 10 % slices of the work done, this run
+// as a line over the usual as a band (q1–q3) with the median dashed — a line reads change over the run (fatigue)
+// better than ten rows of dots. A band toggle keeps one grade band only. Explanations sit behind the card's 「?」.
+const FP_KEYS = { grade: "wko5viewer.formgrademetric", work: "wko5viewer.formworkmetric", band: "wko5viewer.formworkband" };
+const FP_METRICS = {
+  ilr: { label: "ILR", unit: "BW/s", d: 1 },
+  impact_g: { label: "衝擊 G", unit: "G", d: 2 },
+  lss: { label: "LSS", unit: "kN/m", d: 1 },
+  kleg: { label: "kleg", unit: "kN/m", d: 1 },
+  gct: { label: "觸地時間", unit: "ms", d: 0 },
+  cadence: { label: "步頻", unit: "spm", d: 0 },
+  vo: { label: "垂直振幅", unit: "cm", d: 1 },
+};
+function drawFormProfile(card, res) {
+  cpStyle();
+  const D = res.form_profile, work = D.mode === "work";
+  const rowsOf = (band) => work ? (D.bands?.[band] || []) : (D.bins || []).filter((b) => b.time_s > 0);
+  const keys = (D.keys || []).filter((k) => FP_METRICS[k]);
+  const wrap = cpFrame(card, res, work ? "詳細數字（每 10% 作功）" : `詳細數字（${rowsOf().length} 個坡度區間）`);
+  if (!keys.length) return;
+  const avail = keys.map((k) => [k, FP_METRICS[k].label]);
+  const mkey = work ? FP_KEYS.work : FP_KEYS.grade;
+  let metric = keys.includes(cpPref(mkey, keys[0])) ? cpPref(mkey, keys[0]) : keys[0];
+  const bands = work ? Object.keys(D.bands || {}) : [];
+  let band = bands.includes(cpPref(FP_KEYS.band, "all")) ? cpPref(FP_KEYS.band, "all") : (bands[0] || "all");
+  const bar = document.createElement("div");
+  bar.className = "cpbar";
+  bar.appendChild(cpSeg(avail, metric, "跑姿指標", (k) => { metric = k; cpSave(mkey, k); paint(); }));
+  if (bands.length > 1)
+    bar.appendChild(cpSeg(bands.map((b) => [b, D.band_labels?.[b] || b]), band, "只看一種坡度", (b) => { band = b; cpSave(FP_KEYS.band, b); paint(); }));
+  const leg = document.createElement("div");
+  leg.className = "cpleg";
+  const min = Math.round(D.min_s);
+  leg.innerHTML = work
+    ? `<span><i class="ln" style="border-color:var(--cp-line)"></i>這次</span>`
+      + `<span><i class="hol"></i>這次（不到 ${min} 秒）</span>`
+      + `<span><i style="background:var(--cp-base)"></i>平常的中間 50%</span>`
+      + `<span><i class="ln" style="border-top-style:dashed;border-color:var(--cp-ink2)"></i>平常中位數（推估）</span>`
+    : `<span><i style="background:var(--cp-bar)"></i>跑步時間佔比</span>`
+      + `<span><i class="dot" style="background:var(--cp-line)"></i>這次</span>`
+      + `<span><i class="hol"></i>這次（不到 ${min} 秒）</span>`
+      + `<span><i class="iqr"></i>平常的中間 50% 與中位數（推估）</span>`;
+  bar.appendChild(leg);
+  const cap = document.createElement("p");
+  cap.className = "cpcap";
+  const el = document.createElement("div");
+  el.className = "plot cpform";
+  el.style.flex = "none";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", work ? "跑姿隨作功進度的變化，數字在「詳細數字」表格" : "跑姿依坡度，數字在「詳細數字」表格");
+  wrap.append(bar, cap, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ink = () => css("--text"), muted = () => css("--muted"), line = () => css("--line"), panel = () => css("--panel");
+  function usualTip(v, bb, g) {
+    const f = (x) => cpN(x, g.d);
+    return bb?.ok ? `<br>平常 中位 ${f(bb.median)}（中間 50%：${f(bb.q1)}～${f(bb.q3)}；${bb.n} 次／${bb.weeks} 週，推估）<br>${cpOutside(v, bb, false) || "在平常範圍內"}`
+      : `<br>平常：只有 ${bb?.n || 0} 次 ≥ ${min} 秒（< 5），不比較`;
+  }
+  function paintGrade(g) {
+    const bins = rowsOf(), val = (b) => b.m?.[metric];
+    cap.innerHTML = `<b>${esc(g.label)}</b>（${esc(g.unit)}）· 越右越高`;
+    const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
+    const h = bins.length * 28 + 34;
+    el.style.height = el.style.minHeight = `${h}px`;
+    const left = 78, w0 = narrow ? 64 : Math.max(90, Math.min(190, W * 0.2)), gap = narrow ? 14 : 26;
+    const vals = bins.flatMap((b) => { const v = val(b), bb = b.base?.[metric]; return [v, ...(bb?.ok ? [bb.q1, bb.q3] : [])]; })
+      .filter((v) => v != null && isFinite(v));
+    let lo = vals.length ? Math.min(...vals) : 0, hi = vals.length ? Math.max(...vals) : 1;
+    const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
+    const xn = cpNice(lo - pad, hi + pad, narrow ? 3 : 5);
+    lo = xn.min; hi = xn.max;
+    const maxShare = Math.max(...bins.map((b) => b.time_pct || 0), 1);
+    const cats = bins.map((b) => b.label);
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => {
+        const b = bins[p.dataIndex];
+        if (!b) return "";
+        const v = val(b);
+        return cpTipBox(`<b>坡度 ${esc(b.label)}</b><br>跑步時間 <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）`
+          + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${b.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
+          + usualTip(v, b.base?.[metric], g));
+      } },
+      grid: [{ left, width: w0, top: 4, bottom: 26 }, { left: left + w0 + gap, right: narrow ? 14 : 118, top: 4, bottom: 26 }],
+      xAxis: [
+        { type: "value", gridIndex: 0, min: 0, max: maxShare * (narrow ? 1.6 : 1.45), axisLabel: { show: false }, axisTick: { show: false },
+          axisLine: { show: false }, splitLine: { show: false } },
+        { type: "value", gridIndex: 1, min: lo, max: hi, interval: xn.interval, axisLine: { show: false },
+          axisLabel: { color: muted(), fontSize: 10.5, formatter: (v) => cpN(v, xn.interval >= 1 ? 0 : g.d) }, splitLine: { lineStyle: { color: line() } } },
+      ],
+      yAxis: [
+        { type: "category", gridIndex: 0, data: cats, axisTick: { show: false }, axisLine: { lineStyle: { color: line() } },
+          axisLabel: { color: ink(), fontSize: 11 } },
+        { type: "category", gridIndex: 1, data: cats, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { show: false } },
+      ],
+      series: [
+        { id: "time", type: "bar", xAxisIndex: 0, yAxisIndex: 0, barWidth: 12, z: 2, data: bins.map((b) => b.time_pct || 0),
+          itemStyle: { color: css("--cp-bar"), borderRadius: [0, 4, 4, 0] },
+          label: { show: true, position: "right", color: muted(), fontSize: 10.5, formatter: (p) => `${Math.round(p.value)}%` } },
+        { id: "base", type: "custom", xAxisIndex: 1, yAxisIndex: 1, data: bins.map((b, i) => [lo, i]), encode: { x: 0, y: 1 }, z: 1,
+          renderItem: (params, api) => {
+            const b = bins[params.dataIndex], bb = b.base?.[metric], yc = api.coord([lo, params.dataIndex])[1];
+            const gx0 = api.coord([lo, 0])[0], gx1 = api.coord([hi, 0])[0];
+            const kids = [{ type: "rect", shape: { x: Math.min(gx0, gx1), y: yc - 13, width: Math.abs(gx1 - gx0), height: 26 },
+              style: { fill: "rgba(0,0,0,0.001)" } }];
+            if (bb?.ok) {
+              const a = api.coord([bb.q1, 0])[0], z = api.coord([bb.q3, 0])[0], md = api.coord([bb.median, 0])[0];
+              kids.push({ type: "rect", silent: true, shape: { x: Math.min(a, z), y: yc - 5, width: Math.max(2, Math.abs(z - a)), height: 10, r: 4 },
+                style: { fill: css("--cp-base") } },
+                { type: "line", silent: true, shape: { x1: md, y1: yc - 8, x2: md, y2: yc + 8 }, style: { stroke: css("--cp-ink2"), lineWidth: 2 } });
+            }
+            const t = narrow || b.time_s < D.min_s ? null : cpOutside(val(b), bb, false);
+            if (t) kids.push({ type: "text", silent: true, style: { text: t, x: Math.max(gx0, gx1) + 12, y: yc, fill: ink(),
+              font: "11px system-ui, sans-serif", verticalAlign: "middle" } });
+            return { type: "group", children: kids };
+          } },
+        { id: "me", type: "scatter", xAxisIndex: 1, yAxisIndex: 1, silent: true, z: 3, symbolSize: 11,
+          data: bins.map((b, i) => {
+            const v = val(b), short = b.time_s < D.min_s;
+            return v == null ? { value: [null, i] } : { value: [v, i],
+              itemStyle: short ? { color: panel(), borderColor: css("--cp-line"), borderWidth: 1.5 }
+                : { color: css("--cp-line"), borderColor: panel(), borderWidth: 2 } };
+          }) },
+      ],
+    }, { replaceMerge: ["series", "xAxis", "yAxis", "grid"] });
+  }
+  function paintWork(g) {
+    const rows = rowsOf(band), val = (r) => r.m?.[metric], B = (r) => r.base?.[metric];
+    const xname = D.split === "work" ? "累積作功" : "累積移動時間";
+    cap.innerHTML = `<b>${esc(g.label)}</b>（${esc(g.unit)}）· 越上越高；橫軸 = ${xname}`;
+    const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
+    el.style.height = el.style.minHeight = `${narrow ? 230 : 260}px`;
+    const vals = rows.flatMap((r) => { const v = val(r), bb = B(r); return [v, ...(bb?.ok ? [bb.q1, bb.q3] : [])]; })
+      .filter((v) => v != null && isFinite(v));
+    let lo = vals.length ? Math.min(...vals) : 0, hi = vals.length ? Math.max(...vals) : 1;
+    const pad = (hi - lo || Math.abs(hi) || 1) * 0.15;
+    const yn = cpNice(lo - pad, hi + pad, 4);
+    const cats = rows.map((r) => r.label);
+    const ok = (r) => B(r)?.ok;
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "axis", axisPointer: { type: "line", lineStyle: { color: muted() } }, formatter: (ps) => {
+        const r = rows[ps?.[0]?.dataIndex];
+        if (!r) return "";
+        const v = val(r);
+        return cpTipBox(`<b>${esc(xname)} ${esc(r.label)}</b>${band !== "all" ? `（${esc(D.band_labels?.[band] || band)}）` : ""}`
+          + `<br>跑步時間 <b>${cpDur(r.time_s)}</b>`
+          + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${r.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
+          + usualTip(v, B(r), g));
+      } },
+      grid: [{ left: 52, right: narrow ? 14 : 24, top: 12, bottom: 34 }],
+      xAxis: [{ type: "category", data: cats, boundaryGap: false, axisTick: { show: false },
+        axisLine: { lineStyle: { color: line() } }, axisLabel: { color: muted(), fontSize: 10.5, interval: narrow ? 1 : 0 } }],
+      yAxis: [{ type: "value", min: yn.min, max: yn.max, interval: yn.interval, axisLine: { show: false },
+        axisLabel: { color: muted(), fontSize: 10.5, formatter: (v) => cpN(v, yn.interval >= 1 ? 0 : g.d) }, splitLine: { lineStyle: { color: line() } } }],
+      series: [
+        { id: "q1", type: "line", stack: "iqr", silent: true, symbol: "none", lineStyle: { opacity: 0 },
+          data: rows.map((r) => ok(r) ? B(r).q1 : null) },
+        { id: "iqr", type: "line", stack: "iqr", silent: true, symbol: "none", lineStyle: { opacity: 0 },
+          areaStyle: { color: css("--cp-base"), opacity: 1 }, data: rows.map((r) => ok(r) ? B(r).q3 - B(r).q1 : null) },
+        { id: "med", type: "line", silent: true, symbol: "none", z: 4,
+          lineStyle: { color: css("--cp-ink2"), width: 1.5, type: [5, 4], opacity: 1 }, data: rows.map((r) => ok(r) ? B(r).median : null) },
+        { id: "me", type: "line", z: 5, symbol: "circle", symbolSize: 8, connectNulls: false,
+          lineStyle: { color: css("--cp-line"), width: 2 },
+          data: rows.map((r) => {
+            const v = val(r), short = r.time_s < D.min_s;
+            return { value: v == null ? null : v,
+              itemStyle: short ? { color: panel(), borderColor: css("--cp-line"), borderWidth: 1.5 }
+                : { color: css("--cp-line"), borderColor: panel(), borderWidth: 2 } };
+          }) },
+      ],
+    }, { replaceMerge: ["series", "xAxis", "yAxis", "grid"] });
+  }
+  function paint() {
+    const g = FP_METRICS[metric];
+    if (work) paintWork(g); else paintGrade(g);
   }
   paint();
   new ResizeObserver(() => paint()).observe(el);

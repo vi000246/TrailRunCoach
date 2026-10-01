@@ -118,19 +118,10 @@
       "charts": [
         {"title": "前半對後半（依作功切分，參考）", "kind": "review", "section": "form",
          "description": "依總作功（功率 × 時間，kJ）切成前後兩半：每一半做的功一樣多，越野的長慢坡不會擠在同一半（推估）。沒有功率（或功率缺超過 10%）時改用移動時間切半。只算跑步步頻（≥ 130 spm）的時間。基準 = 同類課表 8–12 週的變化 median 與 IQR，少於 5 次不比較。左右平衡：目前沒有這個通道。"},
-        {"title": "衝擊負荷 ILR 對坡度（參考）",
-         "kind": "workout",
-         "axes": [{"id": "NONE"}],
-         "series": [
-           {"name": "ILR", "type": "scatter", "y_axis": "NONE", "x_axis": "PERCENT", "color": "#eb6834", "expression": "(rgrade, if(@impact_loading_rate>0, @impact_loading_rate))"}
-         ]},
-        {"title": "衝擊 G 對坡度（參考）",
-         "kind": "workout",
-         "description": "Impact G = fmax ／（體重 × g），fmax 用 WKO5 的 Maximum Force（Morin 2005）。",
-         "axes": [{"id": "NONE"}],
-         "series": [
-           {"name": "衝擊 G", "type": "scatter", "y_axis": "NONE", "x_axis": "PERCENT", "color": "#4a3aa7", "expression": "(rgrade, if(stancetime>0, fmax/(metric(weight)*g)))"}
-         ]}
+        {"title": "跑姿依坡度（參考）", "kind": "review", "section": "form_grades",
+         "description": "每列一個坡度區間（上 = 上坡、下 = 下坡）。左邊灰條 = 這次跑步時間在該坡度的佔比；右邊點 = 這次該坡度的平均值，灰條 = 平常的中間 50%、直線 = 中位數。上方切換指標：ILR、衝擊 G、LSS、kleg、觸地時間、步頻、垂直振幅（這次有的才出現；ILR、LSS 要有 Stryd）。只算跑步步頻（≥ 130 spm）的時間，走路和停頓不算。平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度跑 ≥ 60 秒的那幾次（推估）；這次不到 60 秒的坡度畫空心點，只供參考。衝擊 G = fmax ／（體重 × g），fmax 用 WKO5 的 Maximum Force（Morin 2005）。表格在「詳細數字」。"},
+        {"title": "跑姿隨疲勞的變化（依作功，參考）", "kind": "review", "section": "form_work",
+         "description": "橫軸 = 累積作功（功率 × 時間，kJ）的 0–10%、10–20% … 90–100%，和「前半對後半」用同一種切法；沒有功率（或功率缺超過 10%）時改用移動時間。藍線 = 這次每一段的平均值，灰帶 = 平常同一段的中間 50%、虛線 = 中位數；線比灰帶越往後越偏，代表疲勞讓跑姿變了。上方可只看一種坡度（例如平路 −3～+3%），排除坡度的影響；預設全部坡度。只算跑步步頻（≥ 130 spm）的時間。平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在同一段跑 ≥ 60 秒的那幾次（推估）；這次不到 60 秒的段畫空心點。表格在「詳細數字」。"}
       ]
     }
   ]
