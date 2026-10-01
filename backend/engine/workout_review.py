@@ -71,7 +71,9 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # watch_temp_c for heat_gate
 # v9: two tiers — drift / pw_drift also on 30–40 min after the warm-up (`ref_ok`, `tier` "ref")
 # v10: adaptive start — drift_of's window starts after the last stop in the first 20 min (`warmup_s`, `start_shift`)
-CACHE_KEY = "workout_review_v10"
+# v11: drift v2 (docs/research/drift-algorithm.md) — trailing idle cut, return-leg city tail as cool-down, VI /
+# walk / halves-power gate on the window, SE (drift_se / pw_drift_se), ramp-free comparison (`ramps`)
+CACHE_KEY = "workout_review_v11"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -105,6 +107,28 @@ DRIFT_SETTLE_S = 60           # 自組: the window starts 60 s after the last of
                               # tier — when the later start leaves less moving time than a tier needs that the
                               # fixed 10-min start reaches, the fixed start is kept (the stops then count
                               # toward the 5 % stop rule, as before)
+# ---- drift v2 (docs/research/drift-algorithm.md, "DRIFT"; every number below is 推估 — no source — unless it says
+# otherwise; the research doc calls these 自組)
+DRIFT_IDLE_S = 120            # 推估 (DRIFT §7.4): trailing non-moving time ≥ 2 min (the watch not stopped) is cut,
+                              # and not counted toward the 5 % stop rule (precedent: aet_test.analyze's trim)
+DRIFT_TAIL_S = 720            # 推估, calibrated on the user's runs (DRIFT §7.1, 8 weeks 15/15): the cool-down = the
+DRIFT_TAIL_GAP_S = 360        # last cluster of stops that start ≤ 12 min before the end and ≤ 6 min apart (and after
+                              # DRIFT_EARLY_S), excluded to the end. Excluding the cool-down: UA, Friel (coach);
+                              # intervals.icu drops the last 10 min by default (platform)
+DRIFT_MAX_VI = 1.04           # 推估, calibrated (DRIFT §4.4): VI = NP30 / AP on the measured window's moving samples
+                              # (treadmill 1.003, strict 1.004, steady p90 1.019–1.020, run-walk ≥ 1.064). VI: Coggan (coach)
+WALK_FRAC = 0.75              # 推估 (DRIFT §4.3): a slow stretch = 30-s speed < 75 % of the window's median moving
+WALK_SEG_S = 60               # speed for ≥ 60 s; the longest ≥ 180 s = a run-walk, refused (UA / Evoke: hold the
+WALK_MAX_S = 180              # effort, coach — the numbers are ours)
+DRIFT_HALVES_DIFF = 0.05      # 推估 number (DRIFT §4.4): |P2 − P1| / P1 ≤ 5 % over the halves (pace without power);
+                              # UA / Evoke fixed effort, Palladino symmetric pacing (coach)
+DRIFT_TAU_S = 60.0            # 推估 (DRIFT §2.5, the user's max-likelihood τ), inside the literature's 55–70 s
+                              # (Hunt 2015, Hunt 2019, Wang & Hunt 2021 — peer-reviewed). Only for the SE.
+DRIFT_NOISY_SE = 0.05         # 推估 (DRIFT §8.3): SE > 5 pp → 「這次很吵，只當聚合的一個點」
+RAMP_GRADE = 0.03             # 推估 (DRIFT §1.2): |grade over a 15-s span| ≥ 3 % for ≥ 10 s = a ramp; the
+RAMP_SPAN_S = 15              # ramp-free comparison also drops the 120 s after each (≈ 2τ). Ramps are NOT excluded
+RAMP_MIN_S = 10               # from the drift (the user's decision): the ramp-free value and the per-half counts
+RAMP_AFTER_S = 120            # are display only
 TEMP_SRC_LABEL = {"route_weather": "路線天氣（Open-Meteo 檔案）", "watch": "手錶溫度"}
 DRIFT_GOOD = 0.05
 DRIFT_WATCH = 0.10
@@ -326,7 +350,7 @@ def _tier_rank(measured_s: float) -> int:
     return 2 if measured_s >= DRIFT_MIN_S else 1 if measured_s >= DRIFT_REF_MIN_S else 0
 
 
-def steady_start(t, hr, speed) -> tuple[float, Optional[dict]]:
+def steady_start(t, hr, speed, end: Optional[float] = None) -> tuple[float, Optional[dict]]:
     """drift_of's adaptive start (自組): (start s after the first sample,
     record or None). A stop = a sample at ≤ 1.6 km/h (WKO5's moving
     threshold; a recording gap is not a stop). The window starts at
@@ -336,7 +360,9 @@ def steady_start(t, hr, speed) -> tuple[float, Optional[dict]]:
     reaches: then WARMUP_S, with `fallback` True in the record. The record:
     {stops, stopped_s (standing time in the first 20 min), last_stop_s (when
     the last of them ended), shifted_s (start − WARMUP_S), fallback}; None
-    when no stop in the first 20 min reaches past the warm-up."""
+    when no stop in the first 20 min reaches past the warm-up. `end` (s after
+    the first sample, exclusive): the tier comparison only counts moving time
+    before it (drift_of's cool-down / trailing-idle cut)."""
     t = np.asarray(t, dtype=float)
     n = len(t)
     s = _arr(speed, n)
@@ -361,6 +387,8 @@ def steady_start(t, hr, speed) -> tuple[float, Optional[dict]]:
            "shifted_s": start - WARMUP_S, "fallback": False}
     h = _arr(hr, n)
     valid = moving_mask(t, s) & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
+    if end is not None:
+        valid &= rel < end
     fixed, later = float(d[valid & (rel >= WARMUP_S)].sum()), float(d[valid & (rel >= start)].sum())
     if _tier_rank(later) < _tier_rank(fixed):
         return float(WARMUP_S), {**rec, "shifted_s": 0.0, "fallback": True}
@@ -373,8 +401,7 @@ def start_text(dr: dict) -> str:
     return "前 10 分鐘不算" if abs(w - WARMUP_S) < 1 else f"前 {_hms(w)} 不算"
 
 
-def excluded_text(dr: dict) -> Optional[str]:
-    """The 「已排除」 row: what the adaptive start left out (None when nothing)."""
+def _start_text(dr: dict) -> Optional[str]:
     r = dr.get("start_shift")
     if not r:
         return None
@@ -385,9 +412,296 @@ def excluded_text(dr: dict) -> Optional[str]:
             f"第 {_hms(_f(dr.get('warmup_s')))} 起算，多排除 {_hms(r['shifted_s'])}（自組）")
 
 
+def tail_text(dr: dict) -> Optional[str]:
+    """「回程市區段 m:ss（當緩和）」 (steady_end) and the trailing idle cut; None when neither."""
+    parts = []
+    r = dr.get("tail")
+    if r:
+        parts.append(f"回程市區段 {_hms(r['excluded_s'])}（當緩和：從 {_hms(r['first_stop_s'])} 起、"
+                     f"停等 {r['stops']} 次；門檻推估）")
+    idle = _f(dr.get("idle_s"))
+    if idle:
+        parts.append(f"結尾靜止 {_hms(idle)}（錶沒按停，已裁掉；門檻推估）")
+    return "；".join(parts) or None
+
+
+def excluded_text(dr: dict) -> Optional[str]:
+    """The 「已排除」 row: what the adaptive start, the return-leg cool-down and
+    the trailing idle cut left out (None when nothing), e.g.
+    「已排除：回程市區段 6:12（當緩和…）」."""
+    parts = [x for x in (_start_text(dr), tail_text(dr)) if x]
+    return "；".join(parts) or None
+
+
+SE_TIP = ("單次 30–40 分鐘的飄移，誤差大約 ±4–6 個百分點：心率樣本前後高度相關（1 秒自相關 0.995），等效只有 4–5 個"
+          "獨立觀測。± 是回歸法的標準誤（心率 = 截距 + 功率經 60 秒延遲 + 時間；τ = 60 s 落在文獻 55–70 s，"
+          "Hunt 2015／2019、Wang & Hunt 2021；把兩者接成一個回歸是推估）。UA 的 3.5／5% 帶只差 1.5 個百分點，"
+          "單次分不出，要看多次平均（總覽、賽季圖的「6 次平均」）。")
+TAIL_TIP = ("回程市區段：從結尾往回，最後一群相隔 ≤ 6 分、離結束 ≤ 12 分、在第 20 分鐘之後的停等，從第一次停等起當緩和排除"
+            "（UA／Friel 都說不含暖身和緩和；12／6 分是推估，用你的跑步校正）。錶沒按停的結尾靜止 ≥ 2 分整段裁掉，"
+            "不算進 5% 停頓（推估）。")
+STABILITY_TIP = ("穩定度只算量測視窗內移動中的樣本：VI = NP30／平均功率 ≤ 1.04（VI 是 Coggan 的定義，1.04 推估、用你的跑步校正）；"
+                 "30 秒速度 < 中位速度 75% 連續 ≥ 3 分 = 跑走（推估）；後半功率和前半差 ≤ 5%（UA／Evoke 固定強度，5% 推估）。"
+                 "舊的「30 秒功率變異 > 15%」沒有來源，只留數字參考。")
+RAMP_TIP = ("坡道不排除（你的決定）：|15 秒坡度| ≥ 3% 連續 ≥ 10 秒算一段。「去坡道」是把坡道和坡後 120 秒拿掉再算一次前後半，"
+            "只當對照：河濱的小坡 Stryd 功率幾乎不升、心率會升，坡又多在後半，所以飄移會被往上推約 1–2 個百分點"
+            "（drift-algorithm.md §1.2，門檻推估）。")
+
+
+def se_text(se: Optional[float]) -> str:
+    """「±4.2 pp」."""
+    return "" if se is None else f"±{se * 100:.1f} pp"
+
+
+def stability_text(dr: dict, power: bool = True) -> Optional[str]:
+    """The card's 穩定度 row: VI, the longest slow stretch, the halves output
+    difference and the old 30-s CV (information only)."""
+    parts = []
+    if dr.get("vi") is not None:
+        parts.append(f"VI {dr['vi']:.3f}（≤ {DRIFT_MAX_VI:.2f}）")
+    if dr.get("walk_max_s") is not None:
+        parts.append(f"最長慢段 {_hms(dr['walk_max_s'])}（< {_hms(WALK_MAX_S)}）")
+    if dr.get("halves_diff") is not None:
+        name = "功率" if dr.get("halves_basis") == "power" else "速度"
+        parts.append(f"後半{name} {_pct(dr['halves_diff'], sign=True)}（±{DRIFT_HALVES_DIFF * 100:.0f}% 內）")
+    if dr.get("cv30") is not None:
+        parts.append(f"舊規則 30 秒變異 {dr['cv30'] * 100:.0f}%（只供參考）")
+    return " · ".join(parts) or None
+
+
+def ramps_text(dr: dict, power: bool = True) -> Optional[str]:
+    """The card's 坡道 row: ramps per half (climb) and the ramp-free comparison value."""
+    r = dr.get("ramps")
+    if not r:
+        return None
+    wo = r.get("pw_drift" if power else "drift")
+    tail = f"；去坡道 {_pct(wo)}（只當對照，不排除）" if wo is not None else "；去坡道後資料不夠"
+    return f"前半 {r['n1']} 段／後半 {r['n2']} 段（爬升 {r['climb1']:.0f}／{r['climb2']:.0f} m）{tail}"
+
+
+def trailing_idle(t, speed) -> tuple[float, float]:
+    """(end, idle_s) — DRIFT §7.4 (推估). `end` = seconds after the first
+    sample, exclusive: just after the last moving sample when the trailing
+    non-moving time (standing, or a recording gap) is ≥ DRIFT_IDLE_S (the watch
+    not stopped), else past the last sample; `idle_s` = the time cut (0.0)."""
+    t = np.asarray(t, dtype=float)
+    fin = np.isfinite(t)
+    if not fin.any():
+        return 0.0, 0.0
+    rel = t - t[fin][0]
+    last = float(np.nanmax(rel))
+    idx = np.flatnonzero(moving_mask(t, speed) & fin)
+    if not len(idx):
+        return last + 1e-3, 0.0
+    j = int(idx[-1])
+    idle = last - float(rel[j])
+    if idle >= DRIFT_IDLE_S:
+        return float(rel[j]) + 1e-3, idle
+    return last + 1e-3, 0.0
+
+
+def _stop_segments(rel: np.ndarray, stop: np.ndarray) -> list[tuple[float, float]]:
+    """[(start, end)] seconds of each unbroken run of stop samples."""
+    e = np.diff(np.concatenate([[0], stop.astype(int), [0]]))
+    a, b = np.flatnonzero(e == 1), np.flatnonzero(e == -1) - 1
+    return [(float(rel[i]), float(rel[j])) for i, j in zip(a, b)]
+
+
+def steady_end(t, speed, end: float) -> tuple[float, Optional[dict]]:
+    """drift_of's cool-down (DRIFT §7.1, 推估 numbers calibrated on the user's
+    runs): the return leg through the city. A stop = a sample at ≤ 1.6 km/h
+    (as in steady_start; a recording gap is not a stop). From `end` (the
+    trailing-idle cut) backwards, the last cluster of stops: each starts
+    ≤ DRIFT_TAIL_S (12 min) before `end` and after DRIFT_EARLY_S (20 min), and
+    is ≤ DRIFT_TAIL_GAP_S (6 min) from the next one. The window then ends at
+    the cluster's first stop. Returns (end, record or None); record = {stops,
+    first_stop_s, excluded_s, stopped_s}. No tier protection (unlike the
+    start): the return leg is not steady running, losing a tier for it is right."""
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    s = _arr(speed, n)
+    fin = np.isfinite(t)
+    if not fin.any():
+        return end, None
+    rel = t - t[fin][0]
+    stop = fin & np.isfinite(s) & (s <= STOP_KMH) & (rel < end)
+    if not stop.any():
+        return end, None
+    lo = max(end - DRIFT_TAIL_S, float(DRIFT_EARLY_S))
+    clus: list[tuple[float, float]] = []
+    for a, b in reversed(_stop_segments(rel, stop)):
+        if a < lo or (clus and clus[0][0] - b > DRIFT_TAIL_GAP_S):
+            break
+        clus.insert(0, (a, b))
+    if not clus:
+        return end, None
+    cut = clus[0][0]
+    d = _dt(t)
+    return cut, {"stops": len(clus), "first_stop_s": cut, "excluded_s": max(0.0, end - 1e-3 - cut),
+                 "stopped_s": float(d[stop & (rel >= cut)].sum())}
+
+
+def _runs_of(mask: np.ndarray) -> list[tuple[int, int]]:
+    """[(a, b)) index ranges of each unbroken run of True."""
+    e = np.diff(np.concatenate([[0], np.asarray(mask, dtype=int), [0]]))
+    return list(zip(np.flatnonzero(e == 1).tolist(), np.flatnonzero(e == -1).tolist()))
+
+
+def _at_grid(t, x, grid: np.ndarray) -> np.ndarray:
+    """x linearly at the 1-s `grid` times, NaN outside the samples or across a gap > MAX_DT."""
+    t = np.asarray(t, dtype=float)
+    x = _arr(x, len(t))
+    ok = np.isfinite(t) & np.isfinite(x)
+    if ok.sum() < 2:
+        return np.full(len(grid), np.nan)
+    tt, xx = t[ok], x[ok]
+    y = np.interp(grid, tt, xx, left=np.nan, right=np.nan)
+    j = np.clip(np.searchsorted(tt, grid), 1, len(tt) - 1)
+    y[(tt[j] - tt[j - 1]) > MAX_DT] = np.nan
+    return y
+
+
+def power_vi(gp: np.ndarray, wg: np.ndarray) -> tuple[Optional[float], Optional[float]]:
+    """(VI, CV30) on the window samples `wg` of a 1-s power grid (DRIFT §4.4):
+    the 30-s rolling mean inside each unbroken run of window samples (never
+    across a stop or a gap); NP = their 4th-power mean ^ ¼ (Coggan, coach),
+    AP = mean power; VI = NP / AP. CV30 = SD / mean of the same 30-s means
+    (VI ≈ 1 + 1.5·CV², DRIFT §4.2). (None, None) without 30 s of power."""
+    ok = wg & np.isfinite(gp)
+    rs = [np.convolve(gp[a:b], np.ones(30) / 30, "valid") for a, b in _runs_of(ok) if b - a >= 30]
+    if not rs:
+        return None, None
+    r = np.concatenate(rs)
+    ap = float(np.mean(gp[ok]))
+    if ap <= 0 or r.mean() <= 0:
+        return None, None
+    return float(np.mean(r ** 4) ** 0.25 / ap), float(r.std() / r.mean())
+
+
+def walk_breaks(gs: np.ndarray, wg: np.ndarray) -> list[tuple[int, float]]:
+    """Slow stretches in the window (DRIFT §4.3, 推估): 30-s mean speed (over
+    window samples only) < WALK_FRAC × the window's median moving speed, for
+    ≥ WALK_SEG_S. [(grid index, seconds)]; drift_of refuses the longest ≥
+    WALK_MAX_S as a run-walk."""
+    ok = wg & np.isfinite(gs)
+    if ok.sum() < WALK_SEG_S:
+        return []
+    med = float(np.median(gs[ok]))
+    k = np.ones(30)
+    s30 = np.convolve(np.where(ok, gs, 0.0), k, "same") / np.maximum(np.convolve(ok.astype(float), k, "same"), 1e-9)
+    slow = ok & (s30 < WALK_FRAC * med)
+    return [(a, float(b - a)) for a, b in _runs_of(slow) if b - a >= WALK_SEG_S]
+
+
+def _ffill(x: np.ndarray) -> np.ndarray:
+    ok = np.isfinite(x)
+    if not ok.any():
+        return np.zeros(len(x))
+    idx = np.where(ok, np.arange(len(x)), 0)
+    np.maximum.accumulate(idx, out=idx)
+    y = x[idx]
+    y[:int(np.argmax(ok))] = x[int(np.argmax(ok))]
+    return y
+
+
+def lowpass(x: np.ndarray, tau: float = DRIFT_TAU_S) -> np.ndarray:
+    """First-order low-pass (time constant `tau` s) of a 1-s series: the
+    heart-rate response to a step in output (Hunt 2015 / 2019, Wang & Hunt
+    2021 — peer-reviewed)."""
+    a = 1.0 - math.exp(-1.0 / max(1e-9, tau))
+    y = np.empty(len(x))
+    acc = float(x[0]) if len(x) else 0.0
+    for i, v in enumerate(x):
+        acc += a * (float(v) - acc)
+        y[i] = acc
+    return y
+
+
+def drift_regression(gh: np.ndarray, gx: np.ndarray, wg: np.ndarray, stopped: np.ndarray,
+                     hr2: float, tau: float = DRIFT_TAU_S) -> Optional[dict]:
+    """The drift's standard error (DRIFT §3.1; the regression itself is 推估,
+    its parts are sourced). On the window samples of a 1-s grid, least squares
+    HR = a + b·x_f + c·t (t in minutes), x_f = the output (power, or speed for
+    Pa:HR) through lowpass(τ = 60 s), gaps forward-filled and stops 0. The
+    output term is dropped when it doesn't vary (steady power: b is not
+    identifiable). In the halves method's units, drift_eq = c·T/2 ÷ HR₂ (T =
+    window minutes; DRIFT §3.1). SE(c) is OLS's times the AR(1) correction
+    √((n−k)/(n_eff−k)), n_eff = n(1−ρ₁)/(1+ρ₁), ρ₁ = the residuals' lag-1
+    autocorrelation (n_eff − k floored at 1, 推估 guard). τ only enters here.
+    {"drift_eq", "se", "c", "rho1", "n_eff"}; None with < 600 s or no HR₂."""
+    sel = wg & np.isfinite(gh) & (gh > 0)
+    n = int(sel.sum())
+    if n < 600 or not hr2:
+        return None
+    xf = lowpass(np.where(stopped, 0.0, _ffill(np.asarray(gx, dtype=float))), tau)
+    y = gh[sel]
+    tm = np.flatnonzero(sel) / 60.0
+    xs = xf[sel]
+    cols = [np.ones(n)]
+    if xs.std() > 1e-6 * max(1.0, abs(float(xs.mean()))):
+        cols.append(xs - xs.mean())
+    cols.append(tm - tm.mean())
+    X = np.column_stack(cols)
+    k = X.shape[1]
+    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+    r = y - X @ beta
+    rho = 0.0
+    if r.std() > 1e-12:
+        rho = float(np.corrcoef(r[:-1], r[1:])[0, 1])
+        rho = 0.0 if not math.isfinite(rho) else min(max(rho, 0.0), 0.999)
+    n_eff = n * (1.0 - rho) / (1.0 + rho)
+    s2 = float(r @ r) / max(1, n - k)
+    var_c = s2 * float(np.linalg.pinv(X.T @ X)[-1, -1])
+    se_c = math.sqrt(max(0.0, var_c)) * math.sqrt((n - k) / max(n_eff - k, 1.0))
+    c = float(beta[-1])
+    f = (n / 60.0) / 2.0 / float(hr2)
+    return {"drift_eq": c * f, "se": se_c * f, "c": c, "rho1": rho, "n_eff": n_eff}
+
+
+def ramp_contrast(gh: np.ndarray, gv: np.ndarray, gp: Optional[np.ndarray], gd: Optional[np.ndarray],
+                  ge: Optional[np.ndarray], wg: np.ndarray) -> Optional[dict]:
+    """Ramps in the window, display only (DRIFT §3.2–§3.3, 推估 numbers; the
+    user's decision: ramps stay in the drift). A ramp = |grade over a 15-s
+    span| ≥ 3 % for ≥ 10 s. {n1, n2 (ramps starting in the first / second
+    half of the window's moving time), climb1, climb2 (m, positive elevation
+    change in each half, 15-s smoothed), excluded_s, drift / pw_drift (the
+    halves drift with the ramps and the 120 s after each left out — the
+    ramp-free comparison value)}. None without distance and elevation."""
+    if gd is None or ge is None or not np.isfinite(gd).any() or not np.isfinite(ge).any():
+        return None
+    n = len(gd)
+    h = RAMP_SPAN_S // 2
+    grade = np.full(n, np.nan)
+    if n > 2 * h:
+        de = ge[2 * h:] - ge[:-2 * h]
+        dd = (gd[2 * h:] - gd[:-2 * h]) * 1000.0
+        with np.errstate(invalid="ignore", divide="ignore"):
+            grade[h:n - h] = np.where(dd >= 5.0, de / dd, np.nan)
+    ramp = np.isfinite(grade) & (np.abs(grade) >= RAMP_GRADE)
+    segs = [(a, b) for a, b in _runs_of(ramp) if b - a >= RAMP_MIN_S and wg[a:b].any()]
+    excl = np.zeros(n, dtype=bool)
+    for a, b in segs:
+        excl[a:min(n, b + RAMP_AFTER_S)] = True
+    cum = np.cumsum(wg.astype(float))
+    half = cum[-1] / 2.0
+    first = wg & (cum <= half)
+    second = wg & ~first
+    n1 = sum(1 for a, _ in segs if cum[a] <= half)
+    k = np.ones(15) / 15.0
+    es = np.convolve(_ffill(np.asarray(ge, dtype=float)), k, "same")
+    up = np.clip(np.diff(es, prepend=es[0]), 0.0, None)
+    ones = np.ones(n)
+    keep = wg & ~excl
+    pa = _halves_drift(gh, gv, ones, keep)
+    pw = _halves_drift(gh, gp, ones, keep) if gp is not None else None
+    return {"n1": n1, "n2": len(segs) - n1, "climb1": float(up[first].sum()), "climb2": float(up[second].sum()),
+            "excluded_s": float((wg & excl).sum()), "drift": pa[0] if pa else None, "pw_drift": pw[0] if pw else None}
+
+
 def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
              climb_m_per_km: Optional[float] = None, trail: bool = False,
-             temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
+             temp_c: Optional[float] = None, temp_src: Optional[str] = None,
+             dist=None, elev=None) -> dict:
     """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
     moving time after a 10-minute warm-up). Positive = HR drifted up for the
     same pace. `ok` False (with `reason`) when the run is not a fair test —
@@ -415,12 +729,30 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     crossings the window starts 60 s after the last stop that begins in the
     first 20 min, if that is past 10 min and costs no tier. `warmup_s` = the
     start used, `start_shift` = what it left out (None: the fixed 10 min).
-    Every check (stops, power CV, intensity, finish, halves) runs on that
-    window. Nothing else is masked: ramps and strides stay in."""
+
+    v2 (docs/research/drift-algorithm.md, "DRIFT"; the numbers 推估 unless noted):
+      * the end: trailing idle ≥ 2 min cut (trailing_idle → `idle_s`), then the
+        return-leg city section as the cool-down (steady_end → `tail`, `end_s`);
+      * the stop rule (≤ 5 %) on the window [start, end) only;
+      * the gate on the measured window's moving samples: run-walk (walk_breaks,
+        longest slow stretch ≥ 180 s → `walks`, `walk_max_s`), VI = NP30/AP ≤ 1.04
+        (`vi`; the old unsourced 30-s CV is kept as information only: `cv30` the
+        old way — every power sample after the start — and `cv30_w1` on the
+        window), > 90 % CP, |P2 − P1| / P1 ≤ 5 % (`halves_diff`, pace without
+        power), then the fast finish;
+      * precision: `drift_se` / `pw_drift_se` (drift_regression, τ = 60 s) and
+        `noisy` (SE > 5 pp); single runs are ±4–6 pp (DRIFT §1.3);
+      * ramps stay in (the user's decision); `ramps` (ramp_contrast, with dist /
+        elev) carries the per-half counts and the ramp-free comparison value.
+    Two tiers, the heat rule and the AeT test are unchanged."""
     out = {"drift": None, "ok": False, "ref_ok": False, "tier": None, "reason": "", "hr1": None, "hr2": None,
            "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_ref_ok": False, "pw_reason": "",
            "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None, "measured_s": None,
-           "finish": None, "temp_c": None, "temp_src": None, "warmup_s": float(WARMUP_S), "start_shift": None}
+           "finish": None, "temp_c": None, "temp_src": None, "warmup_s": float(WARMUP_S), "start_shift": None,
+           "end_s": None, "tail": None, "idle_s": 0.0, "vi": None, "cv30": None, "cv30_w1": None,
+           "walks": [], "walk_max_s": None, "halves_diff": None, "halves_basis": None,
+           "drift_se": None, "pw_drift_se": None,
+           "noisy": None, "ramps": None}
     if hr is None or speed is None or not _has(hr) or not _has(speed):
         out["reason"] = "沒有心率或速度"
         return out
@@ -429,6 +761,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     h, s = _arr(hr, n), _arr(speed, n)
     d = _dt(t)
     t0 = t[np.isfinite(t)][0]
+    rel = t - t0
     elapsed = float(np.nanmax(t) - t0)
     if elapsed < WARMUP_S + DRIFT_REF_MIN_S:        # can't reach 30 min after the warm-up
         out["reason"] = _too_short_reason(elapsed - WARMUP_S)
@@ -436,32 +769,33 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     if trail or (climb_m_per_km is not None and climb_m_per_km >= TRAIL_CLIMB_RATE_M_PER_KM):
         out["reason"] = "有坡（越野或每公里爬升 ≥ 20 m），飄移數字不採用"
         return out
-    start, shift = steady_start(t, h, s)
-    out.update(warmup_s=start, start_shift=shift)
-    after = (t - t0) >= start
+    end, idle = trailing_idle(t, s)
+    end, tail = steady_end(t, s, end)
+    start, shift = steady_start(t, h, s, end=end)
+    out.update(warmup_s=start, start_shift=shift, end_s=end, tail=tail, idle_s=idle)
+    after = rel >= start
+    inwin = after & (rel < end)
     mov = moving_mask(t, s)
-    span = float(d[after].sum())
-    stopped = float(d[after & ~mov].sum())       # standing still + recording gaps
+    span = float(d[inwin].sum())
+    stopped = float(d[inwin & ~mov].sum())       # standing still + recording gaps, inside the window only
     if span > 0 and stopped / span > MAX_STOPPED_SHARE:
         out["reason"] = f"中途停了 {_hms(stopped)}（> 5%），飄移數字不採用"
         return out
     has_power = power is not None and _has(power)
     if has_power:
+        # the old unsourced rule's number, information only: 30-s CV of every power
+        # sample after the start (stops' 0 W and the return leg included — DRIFT §4.1)
         g1, p1 = _grid1(t, power)
         if p1 is not None:
             p = p1[(g1 - t0) >= start]           # by time: the grid starts at the first valid power sample
             p = p[np.isfinite(p)]
             if len(p) > 60:
                 p30 = np.convolve(p, np.ones(30) / 30, "valid")
-                if p30.mean() > 0 and p30.std() / p30.mean() > AET_MAX_POWER_CV:
-                    out["reason"] = f"功率起伏大（變異 {p30.std() / p30.mean() * 100:.0f}% > 15%），不是穩定跑，飄移不採用"
-                    return out
-                if cp and p.mean() > AET_MAX_OF_CP * cp:
-                    out["reason"] = f"強度 {p.mean() / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
-                    return out
-    # the measured window: moving, after the warm-up, HR and speed valid; with
+                if p30.mean() > 0:
+                    out["cv30"] = float(p30.std() / p30.mean())
+    # the measured window: moving, in [start, end), HR and speed valid; with
     # power (≥ 95 % coverage) also power valid, so Pa:HR and Pw:HR share it
-    m0 = after & mov & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
+    m0 = inwin & mov & np.isfinite(h) & (h > 0) & np.isfinite(s) & (s > 0)
     pw = _arr(power, n) if has_power else None
     win, pw_same = m0, False
     if pw is not None:
@@ -475,6 +809,45 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         out["reason"] = _too_short_reason(measured)
         return out
     strict = measured >= DRIFT_MIN_S             # else the reference tier (30–40 min)
+    # ---- the stability gate, on the window's moving samples (1-s grid) ----
+    grid = np.arange(t0, t0 + float(np.nanmax(rel)) + 1.0)
+    rg = grid - t0
+    gh, gs = _at_grid(t, h, grid), _at_grid(t, s, grid)
+    gp = _at_grid(t, pw, grid) if has_power else None
+    wg = (rg >= start) & (rg < end) & np.isfinite(gh) & (gh > 0) & np.isfinite(gs) & (gs > STOP_KMH)
+    if pw_same:
+        wg &= np.isfinite(gp) & (gp > 0)
+    walks = walk_breaks(gs, wg)
+    out["walks"] = [[float(rg[a]), dur] for a, dur in walks]
+    out["walk_max_s"] = max((dur for _, dur in walks), default=0.0)
+    if out["walk_max_s"] >= WALK_MAX_S:
+        out["reason"] = (f"有一段 {_hms(out['walk_max_s'])} 明顯放慢（30 秒速度 < 中位速度的 {WALK_FRAC * 100:.0f}%，"
+                         f"≥ {WALK_MAX_S // 60} 分）：跑走交替不是穩定跑，飄移不採用（門檻推估）")
+        return out
+    if has_power:
+        pv = gp if pw_same else None
+        if pv is None:                               # power too patchy for Pw:HR: the gate on what there is
+            pv = np.where(np.isfinite(gp) & (gp > 0), gp, np.nan)
+        vi, cvw = power_vi(pv, wg)
+        out.update(vi=vi, cv30_w1=cvw)
+        if vi is not None and vi > DRIFT_MAX_VI:
+            out["reason"] = (f"功率起伏大（VI {vi:.3f} > {DRIFT_MAX_VI:.2f}，只算移動中的樣本）：不是穩定跑，"
+                             "飄移不採用（門檻推估、用你的跑步校正）")
+            return out
+        pm = _wmean(pw, d, m0 & np.isfinite(pw) & (pw > 0))
+        if cp and pm and pm > AET_MAX_OF_CP * cp:
+            out["reason"] = f"強度 {pm / cp * 100:.0f}% CP（> 90%），不是有氧跑，飄移不採用"
+            return out
+    hx = _halves_drift(h, pw if pw_same else s, d, win)
+    if hx is not None:
+        out["halves_diff"] = hx[4] / hx[3] - 1.0
+        out["halves_basis"] = "power" if pw_same else "pace"
+        if abs(out["halves_diff"]) > DRIFT_HALVES_DIFF:
+            name = "功率" if pw_same else "速度"
+            out["reason"] = (f"後半{name}比前半{'高' if out['halves_diff'] > 0 else '低'} "
+                             f"{abs(out['halves_diff']) * 100:.0f}%（> {DRIFT_HALVES_DIFF * 100:.0f}%）：強度沒有維持，"
+                             "飄移不採用（5% 推估）")
+            return out
     fin = [(name, fast_finish(x, d, win)) for name, x in (("功率", pw if pw_same else None), ("配速", s))
            if x is not None]
     fin = [(name, ff) for name, ff in fin if ff is not None]
@@ -507,6 +880,18 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
                        p1=rp[3], p2=rp[4])
             if not strict:
                 out["pw_reason"] = out["reason"]
+    # ---- precision (DRIFT §3.1) and ramps (display only) ----
+    stopped_g = np.isfinite(gs) & (gs <= STOP_KMH)
+    ra = drift_regression(gh, gs, wg, stopped_g, r[2])
+    out["drift_se"] = ra["se"] if ra else None
+    if out["pw_drift"] is not None:
+        rb = drift_regression(gh, gp, wg, stopped_g, out["pw_hr2"])
+        out["pw_drift_se"] = rb["se"] if rb else None
+    se_main = out["pw_drift_se"] if out["pw_drift_se"] is not None else out["drift_se"]
+    out["noisy"] = None if se_main is None else bool(se_main > DRIFT_NOISY_SE)
+    if dist is not None and elev is not None:
+        out["ramps"] = ramp_contrast(gh, gs, gp if out["pw_drift"] is not None else None,
+                                     _at_grid(t, dist, grid), _at_grid(t, elev, grid), wg)
     return heat_gate(out, temp_c, temp_src) if temp_c is not None else out
 
 
@@ -945,7 +1330,8 @@ def _measure(ds, w) -> Optional[dict]:
     out["watch_temp_c"] = _watch_temp(ds, w, t, s["speed"])
     if w.sport == "run" or cat in ("road", "trail"):
         # heat is left to heat_gate in measure(): the archive can fill after this is cached
-        out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail")
+        out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail",
+                                dist=s["dist"], elev=s["elev"])
     else:
         out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
     # hikes too: session_type needs a detected effort next to hard_power_s
@@ -1315,7 +1701,7 @@ def drift_series(ds, today: dt.date, days: int = 56, upto_idx: Optional[int] = N
         use = tier == "test" or (ref and tier == "ref")
         out.append({"idx": w.idx, "date": _wdate(w).isoformat(),
                     "drift": dr.get("drift") if use else None, "tier": tier if use else None,
-                    "reason": dr.get("reason")})
+                    "se": dr.get("drift_se") if use else None, "reason": dr.get("reason")})
     _flush(ds)
     return out
 
@@ -1615,21 +2001,32 @@ def _aerobic(ds, w, m, c, base):
     ref = d is not None and drift_tier(dr) == "ref"
     tag = "（參考）" if ref else ""
     rows = []
+    se = dr.get("pw_drift_se" if power else "drift_se")
+    pm = f" {se_text(se)}" if d is not None and se is not None else ""
     if d is not None and power:
-        rows += [_row("Pw:HR 飄移", f"{_pct(d)}（{start_text(dr)}）{tag}", REF_TIP if ref else None),
+        rows += [_row("Pw:HR 飄移", f"{_pct(d)}{pm}（{start_text(dr)}）{tag}", REF_TIP if ref else SE_TIP),
                  _row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
                  _row("前半／後半功率", f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
     elif d is not None:
-        rows += [_row("Pa:HR 飄移", f"{_pct(d)}（{start_text(dr)}）{tag}", REF_TIP if ref else None),
+        rows += [_row("Pa:HR 飄移", f"{_pct(d)}{pm}（{start_text(dr)}）{tag}", REF_TIP if ref else SE_TIP),
                  _row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
                  _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
     if ref:
         rows.append(_row("飄移等級", REF_LABEL, REF_TIP))
     elif d is not None:
         rows.append(_row("飄移等級", "嚴格（暖身後 ≥ 40 分，UA 測試標準）"))
+    if d is not None and se is not None and se > DRIFT_NOISY_SE:
+        rows.append(_row("精度", f"這次很吵（{se_text(se)} > ±{DRIFT_NOISY_SE * 100:.0f} pp）：只當多次平均的一個點（門檻推估）",
+                         SE_TIP))
     ex = excluded_text(dr)
     if ex and m.get("category") == "road":
-        rows.append(_row("已排除", ex, START_TIP))
+        rows.append(_row("已排除", ex, START_TIP + " " + TAIL_TIP))
+    st = stability_text(dr, power)
+    if st and m.get("category") == "road" and (d is not None or dr.get("vi") is not None):
+        rows.append(_row("穩定度", st, STABILITY_TIP))
+    rt = ramps_text(dr, power)
+    if rt and d is not None:
+        rows.append(_row("坡道", rt, RAMP_TIP))
     if d is None and power and (dr.get("ok") or dr.get("ref_ok") or m.get("avg_power") is None):
         # nothing to show on this basis (no power, or too little): say so, not 0 %
         rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
