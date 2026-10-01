@@ -182,8 +182,10 @@ def test_trail_targets_are_power_first(tmp_path):
     ds = _ds(tmp_path, [dict(start=datetime(2026, 9, 5, 0, tzinfo=UTC), seconds=1200)], plan)
     tt = training_targets(ds, int(date_to_day(TODAY)))
     rows = {r["id"]: r for r in tt["rows"]}
+    # engine/target_policy.py (vo2max-gate-and-trail-metric.md §2.5): long trail days by HR,
+    # hill repeats by power; both keep the other number as a reference
+    assert rows["trail"]["primary"] == "心率" and rows["hill"]["primary"] == "功率"
     for tid in ("trail", "hill"):
-        assert rows[tid]["primary"] == "功率"
         assert all(v is not None for v in rows[tid]["power"])
     assert rows["trail"]["power"] == [pytest.approx(150), pytest.approx(176)]
     assert rows["trail"]["hr"][1] is not None                     # HR stays as the second number

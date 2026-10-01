@@ -1798,6 +1798,13 @@ function drawPlot(card, res, series) {
     xAxis = { type: "value", min: 0, max: xmax, interval: durInterval(xmax), axisLine: axLine,
       splitLine: { lineStyle: { color: line } },
       axisLabel: { ...lbl, formatter: (v) => fmtDur(v, xmax >= 3 * 3600 ? "hm" : undefined) } };
+  } else if (xKind === "value" && ["REP", "BAR"].includes(xUnit.id)) {
+    // review bars (間歇判讀): one integer slot per rep / per bar, never 1.2 / 1.4 ticks
+    const xs = out.flatMap((o) => (o.data || []).map((p) => p[0])).filter((x) => x != null);
+    const lo = Math.min(...xs, 1), hi = Math.max(...xs, 1);
+    xAxis = { type: "value", min: lo - 0.6, max: hi + 0.6, interval: 1, name: xUnit.id === "REP" ? "趟" : "",
+      nameLocation: "middle", nameGap: 20, nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { show: false },
+      axisLine: axLine, axisLabel: { ...lbl, show: xUnit.id === "REP", formatter: (v) => Number.isInteger(v) ? `第 ${v} 趟` : "" } };
   } else if (xKind === "value") {
     xAxis = { type: "value", scale: true, name: axisName(xUnit), nameLocation: "middle", nameGap: 20,
       nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { lineStyle: { color: line } },
