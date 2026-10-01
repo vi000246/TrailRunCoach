@@ -355,6 +355,15 @@ unchanged files and unchanged code reads no FIT file at all.
   assemble 整理活動, estimate 估算門檻, finish), `n_done` / `n_total`,
   `message`. `shell.js` shows it under the nav and in the page's loading
   placeholders.
+- **Measured** (2026-10-01, 808 COROS files, a copy of the data dir, this
+  PC): before 468 s per build (FIT parsing 390 s, as-of estimates 66 s, of
+  which 670 PD refits 64 s), on every restart. After: cold cache 116–146 s
+  (parsing in 8 processes ~60 s, estimates 42 s); restart with unchanged
+  data 0.4–1.0 s build, ~2 s from process start to a served overview
+  status; one changed file 1.0 s. Event-loop latency during a cold build
+  with six page requests waiting: typically 3–6 ms, worst 240 ms. The
+  datasets are identical to the old build's (all 802 workouts' metrics,
+  power sources, exclusions, estimated settings).
 - **Warm-up**: the app's lifespan and a sync that downloaded files start a
   background build of the active source (and the overview status);
   `WKO5COACH_NO_WARMUP=1` disables. The AnyIO thread limit is 200
