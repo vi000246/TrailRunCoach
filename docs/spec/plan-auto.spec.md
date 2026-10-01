@@ -289,9 +289,27 @@ UI: `backend/static/autoplan.js` puts the proposal banner (同意 / 拒絕) and 
 - Dataset freshness: the plan reads `charts.data_source`. When that source is `wko5`, FITs from
   a COROS / TP sync reach the plan only after WKO5 imports them. Until then the run is a noop
   for that data.
-- Lap-based rep matching (`interval-adaptation.md` S0 / S2) is not built. The dataset gives
-  no FIT laps, and whether a 1-minute step gets its own lap is unverified. Reps are detected
-  from power.
+- Lap-based rep matching is built (`engine/interval_reps.py`, 2026-10-01): laps come from
+  the FIT that WKO5 keeps inside the .wko4 (or the FIT itself); a rep = a lap of the planned
+  rep length (±5 s / ±3 %) at the planned rest gap from the previous one, so 1-km auto laps
+  never chain. Without matching laps, 10-s power ≥ 0.95 × the planned lower bound.
+- Moves by `adapt.py` (rule B: a missed session to a free day) don't look at 偏好的星期;
+  only the generator's placement (`plan_prefs.place`) does.
+
+## Interval library, swaps and tests (2026-10-01, interval-prescription.md)
+
+- Every base-phase ladder step (and the 專項期 Zone 3 ladder while Zone 5 is unconfirmed) is a
+  library variant (`engine/interval_library.py`) fitted to the day's cap by `fit()`: the
+  standard full-length session when time allows, then the std / min warm-up, an equivalent
+  shorter variant, fewer reps (縮量版 doesn't progress), another day, the rung before. The
+  stored row carries `variant_key / rung_key / equiv / swap / swap_reason / variant_reps /
+  variant_blocks / variant_adj`; `dose_step` judges by the variant, not the title.
+- A swap from the 換一個 drawer or an editor template is a user edit (`swap = user`,
+  `edited`): reconcile rule 3 keeps it, so the automatic run never overrides it. A
+  non-equivalent swap is stored with `equiv = false` and doesn't move the ladder.
+- Due CP / AeT tests are never generated: `week_plan.test_suggestions` → the overview /
+  課表 suggestion with a day picker; the automatic run can't add them either.
+- 目標依據 / 目標用: `engine/target_policy.py` decides HR vs power for the push.
 - The 「休息 60 秒心率降幅 < 20」 line and the fade line in the workout review card
   (`workout_review.interval_lines`) are unchanged. They are display only and no longer drive
   the dose.
