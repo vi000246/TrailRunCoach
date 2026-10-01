@@ -406,6 +406,9 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 
 ### 4.5 沒有 AeT 時前 6 週的間歇劑量
 
+> 2026-10-01：這一節的階梯已由 `interval-prescription.md` §A5.3 取代（3 區 3×6 → 3×8 → 2×12，
+> 5 區 5×2 → 4×3 → 5×3 → 4×4，每階有同等課表庫；實作在 `backend/engine/interval_library.py`）。
+
 地形：有 `terrain_quality = hill` 或目標是山的時候，用 6–10% 坡、上坡跑、走或慢跑下來，對應 Koop 的 "uphill if possible"。功率目標依 CP（Stryd）。
 
 **2026-10-01 改：先 3 區、後 5 區（台灣教練，使用者決定）。** 原本第 1 步的 5×1 分 @ 98–101% CP，在徐國峰的分類裡太短、練不到最大攝氧量，又有 5 區的負荷（`xu-guofeng-reply.md` §3）。
