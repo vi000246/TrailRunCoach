@@ -321,7 +321,65 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
                            else "trainingpeaks" if w.entry.file in ds._tp_tss
                            else "hrtss" if m.get("tss") is not None else None),
         })
+    # bad activity files (engine/bad_activity.py) are in no model, but stay in
+    # the list, marked 「已排除：…」, without an index (nothing reads them)
+    for x in getattr(ds, "excluded", []):
+        day = date_to_day(dt.datetime.fromisoformat(x["start"]))
+        if not (b <= day < e + 1) or (sp is not None and x["sport"] not in sp):
+            continue
+        out.append({"index": None, "start": x["start"], "sport": x["sport"], "sport_type": x["sport_type"],
+                    "file": x["file"], "tags": [], "duration": x.get("duration"), "distance": x.get("distance"),
+                    "climbing": None, "tss": None, "if": None, "hrtss": None, "np": None,
+                    "power_source": None, "power_label": None, "tss_source": None,
+                    "excluded": _exclusion_json(x)})
+    out.sort(key=lambda a: a["start"], reverse=True)
     return out
+
+
+def _exclusion_json(x: dict) -> dict:
+    return {k: x.get(k) for k in ("key", "file", "label", "reason", "rule", "auto", "manual", "override",
+                                  "avg_kmh", "distance", "duration", "start", "sport_type")}
+
+
+@router.get("/exclusions")
+def exclusions():
+    """Bad activity files of the current source (設定 → 資料校正):
+    `excluded` (left out of every model, with the reason) and `kept` (the
+    rule flags them, the user said 這筆是正常的). `enabled` =
+    activities.exclude_bad."""
+    from backend.engine import bad_activity as BA
+    ds = _dataset(parity=False)
+    return {"enabled": bool(getattr(ds, "exclude_bad", False)), "setting": BA.SETTING_KEY,
+            "source": getattr(ds, "source", None) or "wko5",
+            "excluded": [_exclusion_json(x) for x in reversed(getattr(ds, "excluded", []))],
+            "kept": [_exclusion_json(x) for x in reversed(getattr(ds, "exclusion_kept", []))]}
+
+
+class ExclusionBody(BaseModel):
+    key: str                      # the activity's local start minute (activity_tags key)
+    file: Optional[str] = None
+    exclusion: Optional[str] = None   # keep | exclude | null (the auto rule)
+
+
+@router.put("/exclusions")
+async def put_exclusion(body: ExclusionBody):
+    """Override the bad-file rule of one activity, listed or not: "keep"
+    (這筆是正常的，不要排除), "exclude" (手動排除) or null (back to the rule).
+    Stored with the activity tags (start minute + file), so it applies
+    whatever the data source; the datasets rebuild (source_stamp)."""
+    from backend.api.workouts import ActivityUpdate, save_activity_tag
+    from backend.db.database import AsyncSessionLocal
+    from backend.engine import activity_tags as AT
+    try:
+        start = dt.datetime.fromisoformat(body.key)
+    except ValueError:
+        raise HTTPException(400, "INVALID_KEY")
+    cur = AT.find(AT.load(), start, body.file)
+    key = (cur or {}).get("start_local") or AT.key_of(start)
+    async with AsyncSessionLocal() as db:
+        await save_activity_tag(db, ActivityUpdate(exclusion=body.exclusion), start_local=key,
+                                source=DSRC.current_source(), file=body.file)
+    return {"key": key, "exclusion": body.exclusion}
 
 
 @router.get("/workouts/{i}/review")
@@ -353,8 +411,13 @@ def _activity_json(ds, w) -> dict:
     from backend.engine import power_source as PS
     t = A.auto_tags(ds, w)
     src = A.power_source(ds, w)
+    kept = next((x for x in getattr(ds, "exclusion_kept", []) if x["file"] == w.entry.file), None)
     return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
             "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
+            # bad activity files (engine/bad_activity.py): an excluded file is not
+            # in ds.workouts; `flagged` = the rule's reason when the user kept it
+            "exclusion_state": {"override": t.get("exclusion"), "flagged": kept["reason"] if kept else None,
+                                "enabled": bool(getattr(ds, "exclude_bad", False))},
             "power": {"source": src, "used": A.power_ok(ds, w) if src != PS.NONE else False,
                       "label": PS.label(src, bool(getattr(ds, "accept_watch_power", True))),
                       "setting": PS.SETTING_KEY}}
@@ -383,7 +446,7 @@ async def patch_activity(i: int, body: dict):
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     w = ds.workouts[i]
-    upd = ActivityUpdate(**{k: v for k, v in body.items() if k in ("activity_type", "effort", "note")})
+    upd = ActivityUpdate(**{k: v for k, v in body.items() if k in ("activity_type", "effort", "note", "exclusion")})
     from backend.engine.wko5expr import datasource as DSRC
     cur = AT.user_of(w)                     # an existing tag (maybe set from another source ±3 min)
     key = (cur or {}).get("start_local") or AT.key_of(w.entry.start)

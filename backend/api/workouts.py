@@ -84,6 +84,12 @@ class ActivityUpdate(BaseModel):
     activity_type: Optional[str] = None
     effort: Optional[str] = None
     note: Optional[str] = None
+    # bad activity files (engine/bad_activity.py): "keep" 這筆是正常的，不要排除 /
+    # "exclude" 手動排除 / null = the auto rule
+    exclusion: Optional[str] = None
+
+
+TAG_FIELDS = ("activity_type", "effort", "note", "exclusion")
 
 
 async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
@@ -92,7 +98,8 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
     from backend.engine import activity_tags as AT
     sent = body.model_fields_set
     err = AT.validate(body.activity_type if "activity_type" in sent else None,
-                      body.effort if "effort" in sent else None)
+                      body.effort if "effort" in sent else None,
+                      body.exclusion if "exclusion" in sent else None)
     if err:
         raise HTTPException(400, err)
     row = (await db.execute(select(ActivityTag).where(ActivityTag.athlete_id == athlete_id,
@@ -101,7 +108,7 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
         row = ActivityTag(athlete_id=athlete_id, start_local=start_local,
                           activity_type_overridden=False, effort_overridden=False)
         db.add(row)
-    kw = {k: getattr(body, k) for k in ("activity_type", "effort", "note") if k in sent}
+    kw = {k: getattr(body, k) for k in TAG_FIELDS if k in sent}
     AT.apply_update(row, **kw)
     for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
                  ("distance_km", distance_km), ("label", label)):
@@ -120,7 +127,8 @@ def _tag_json(t: Optional[ActivityTag]) -> dict:
     ef = t.effort if t and t.effort_overridden else None
     return {"activity_type": ty, "activity_type_label": AT.TYPES.get(ty), "activity_type_overridden": ty is not None,
             "effort": ef, "effort_label": AT.EFFORTS.get(ef), "effort_overridden": ef is not None,
-            "note": t.note if t else None, "key": t.start_local if t else None}
+            "note": t.note if t else None, "key": t.start_local if t else None,
+            "exclusion": AT.user_exclusion({"exclusion": t.exclusion}) if t else None}
 
 
 def _local_start(wf: WorkoutFile) -> Optional[str]:
