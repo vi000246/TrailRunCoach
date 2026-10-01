@@ -78,6 +78,45 @@ SYSTEMS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# More zone tables for the single-activity time-in-zone charts
+# (panels/activity_charts.py). Same shape: (id, name, lo, hi) fractions of
+# the basis, hi exclusive, None = open.
+# ---------------------------------------------------------------------------
+
+# Stryd's five running-power zones, % CP (Stryd 「Power Zones」: Easy 65–80,
+# Moderate 80–90, Threshold 90–100, Interval 100–115, Repetition 115–130).
+# Below 65 % is folded into zone 1 and above 130 % into zone 5 so every
+# second has a zone.
+STRYD_ZONES = [
+    ("1", "Easy", 0.0, 0.80),
+    ("2", "Moderate", 0.80, 0.90),
+    ("3", "Threshold", 0.90, 1.00),
+    ("4", "Interval", 1.00, 1.15),
+    ("5", "Repetition", 1.15, None),
+]
+# Five zones of HRmax, the watch default (Garmin / Polar: 50–60–70–80–90 %);
+# below 60 % folded into zone 1.
+HRMAX5_ZONES = [
+    ("1", "Warm up", 0.0, 0.60),
+    ("2", "Easy", 0.60, 0.70),
+    ("3", "Aerobic", 0.70, 0.80),
+    ("4", "Threshold", 0.80, 0.90),
+    ("5", "Maximum", 0.90, None),
+]
+# 徐國峰 RQ 跑力 heart-rate-reserve zones (% HRR): T = 84–88 % HRR
+# (runningquotient.com/article/single/52); the other edges are RQ's zone table
+# as the athlete's notes have it — not checked edge by edge against RQ (推估).
+RQ_HRR_ZONES = [
+    ("R", "恢復", 0.0, 0.59),
+    ("E", "輕鬆 E", 0.59, 0.74),
+    ("M", "馬拉松 M", 0.74, 0.84),
+    ("T", "閾值 T", 0.84, 0.88),
+    ("A", "無氧閾值 A", 0.88, 0.95),
+    ("I", "間歇 I", 0.95, None),
+]
+
+
 def zone_of(power: float, cp: float) -> str | None:
     if not cp or power is None or power <= 0:
         return None

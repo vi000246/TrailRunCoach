@@ -7,16 +7,8 @@
       "charts": [
         {"title": "判讀", "kind": "review", "section": "summary",
          "description": "課表類型用活動當天的周期、plan 的測試紀錄、標題與功率判斷；每頁最多 3 行結論。"},
-        {"title": "心率與功率（AeT／LTHR／95% CP）",
-         "kind": "workout",
-         "axes": [{"id": "BPM"}, {"id": "WATTS", "min": 0}],
-         "series": [
-           {"name": "心率", "type": "line", "y_axis": "BPM", "x_axis": "HHMMSS", "color": "#eb6834", "expression": "heartrate"},
-           {"name": "功率（30 秒）", "type": "line", "y_axis": "WATTS", "x_axis": "HHMMSS", "color": "#2a78d6", "line_width": "thin", "expression": "ewma(power,30)"},
-           {"name": "AeT", "type": "line", "y_axis": "BPM", "color": "#1baf7a", "line_style": "dash", "expression": "(,aethr)"},
-           {"name": "LTHR", "type": "line", "y_axis": "BPM", "color": "#d7191c", "line_style": "dash", "expression": "(,lthr)"},
-           {"name": "95% CP", "type": "line", "y_axis": "WATTS", "color": "#4a3aa7", "line_style": "dot", "expression": "(,0.95*cp)"}
-         ]},
+        {"title": "心率與功率（拖曳選一段看統計）", "kind": "activity", "chart": "hrpower",
+         "description": "上面是心率、下面是 30 秒功率，共用同一條時間軸（兩種單位不放在同一個刻度上）。在圖上左右拖曳選一段，下方會算出這段的時間、距離、移動配速、平均／最高心率、平均功率、NP、Pw:HR（平均功率 ÷ 平均心率，每下心跳推出幾瓦）、EF（NP ÷ 平均心率）和這段前後半的 Pw:HR 飄移（WKO5 的定義：從這段的一半切開）。虛線是 AeT、LTHR 和 CP。平均功率含停下來的 0 W；NP 用整趟的 30 秒滾動功率。統計精度到圖上的一個點（長活動每點幾秒）。"},
         {"title": "三區時間（AeT／LTHR）",
          "kind": "workout",
          "description": "< AeT 是低強度，AeT–LTHR 是中強度（灰色地帶），≥ LTHR 是高強度。只算有心率的時間。",
@@ -72,7 +64,13 @@
            {"name": "速度", "basis": "pace", "type": "line", "y_axis": "KPH", "x_axis": "KM", "color": "#2a78d6", "expression": "avg(speed, floor(elapseddistance))"},
            {"name": "功率", "basis": "power", "type": "line", "y_axis": "WATTS", "x_axis": "KM", "color": "#2a78d6", "expression": "avg(power, floor(elapseddistance))"},
            {"name": "AeT", "type": "line", "y_axis": "BPM", "color": "#1baf7a", "line_style": "dash", "expression": "(,aethr)"}
-         ]}
+         ]},
+        {"title": "心率變化與趨勢", "kind": "activity", "chart": "hrtrend",
+         "description": "WKO5「Heart Rate Variation and Trend」的簡化版：線是 1 分鐘平均心率，虛線是整趟心率對時間的直線迴歸（WKO5 的 slr），色帶是平均 ± 1 個標準差。變異 = 標準差 ÷ 平均（WKO5：< 0.33 穩定、< 0.66 混合、其他變化大）；趨勢 = 迴歸斜率（WKO5：每秒 ±0.0005 bpm 以內算持平，等於每小時 ±1.8 bpm）。Pw:HR 是 WKO5 的定義：整段從一半切開、含暖身和停頓，所以和上面「飄移判讀」（去掉暖身、只算移動時間）的數字不同。數字都用原始樣本算（WKO5 的算法）。"},
+        {"title": "心率區間時間", "kind": "activity", "chart": "hrzones",
+         "description": "這次每個心率區間的時間，區間模型可以換（每個教練定義不同），選擇會記住。只算有心率的秒數。門檻用活動當天有效的 LTHR／AeT／最大心率。"},
+        {"title": "功率區間時間", "kind": "activity", "chart": "powerzones",
+         "description": "這次每個功率區間的時間，區間模型可以換，選擇會記住。只算功率 > 0 的秒數（1 秒原始功率，和 WKO5 的 Time in iLevels 一樣）。WKO5 iLevels 用前 90 天的功率擬合 PD 模型，資料不夠時改選其他模型。"}
       ]
     },
     {
