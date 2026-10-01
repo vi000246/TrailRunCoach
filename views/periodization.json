@@ -101,11 +101,11 @@
         },
         {
           "title": "訓練量週增幅",
-          "description": "本週時數比上週多多少。Uphill Athlete：平均每週增加超過 10%，大約 8 週就會出問題。只看趨勢，不當受傷預測（ACWR 預測受傷的說法已被推翻）。",
+          "description": "近 4 週平均每週時數（所有運動的移動時間）比上一週的近 4 週平均多多少。Uphill Athlete 說的是「平均」每週增加超過 10%、持續約 8 週會出問題，所以看 4 週平均的變化（docs/research/coaching-dashboards-mountain.md 的設計），連續 3 週以上超過 +10% 才要注意。單週對單週會被一次百岳、一週休息放大成 +100%～+800%，不拿來比 10%。沒有活動的週算 0 小時。只看趨勢，不當受傷預測（ACWR 預測受傷的說法已被推翻）。",
           "axes": [{"id": "PERCENT"}],
           "period": "week",
           "series": [
-            {"name": "週增幅", "type": "bar", "y_axis": "PERCENT", "color": "#0891b2", "expression": "(sum(movingduration, startofweek(date)) - shift(sum(movingduration, startofweek(date)), 7)) / shift(sum(movingduration, startofweek(date)), 7)"},
+            {"name": "4 週平均週增幅", "type": "bar", "y_axis": "PERCENT", "color": "#0891b2", "expression": "(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0) - shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 28)) / if(shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 7) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 14) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 21) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 28) > 0, shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 7) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 14) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 21) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 28))"},
             {"name": "+10%", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "line_style": "dash", "expression": "(,0.10)"},
             {"name": "0", "type": "line", "y_axis": "PERCENT", "color": "#64748b", "line_style": "dash", "expression": "(,0)"}
           ]
@@ -221,7 +221,7 @@
       "title": "區間與課表強度",
       "description": "每種課表該跑多少功率、心率，以及最近 30 天在各區間的時間。",
       "charts": [
-        {"title": "課表建議強度", "kind": "targets", "description": "輕鬆跑、長跑看心率（不超過 AeT）；間歇看功率（心率會一路往上飄，來不及反應）。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
+        {"title": "課表建議強度", "kind": "targets", "description": "路上的輕鬆跑、長跑看心率（不超過 AeT）；山路、爬坡和間歇看功率（心率約慢 1 分鐘才反應，短坡和短間歇上來不及），心率當第二個數字。陡的技術下坡不看功率。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
         {"title": "Palladino 功率區間（跑步）", "kind": "zones", "system": "palladino", "days": 30, "description": "官方表（% CP）。"},
         {"title": "Friel 心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30, "description": "WKO5 的 Friel 心率區間。"},
         {"title": "Classic 心率區間（跑步）", "kind": "zones", "system": "classichr", "days": 30, "description": "WKO5 的 Classic（Coggan）心率區間。"},
