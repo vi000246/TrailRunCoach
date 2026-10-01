@@ -56,10 +56,15 @@ OVERRIDES = (KEEP, EXCLUDE)
 #   400 m 43.03 (W. van Niekerk 2016), 1500 m 3:26.00 (H. El Guerrouj 1998),
 #   10 000 m 26:11.00 (J. Cheptegei 2020), marathon 2:00:35 (K. Kiptum 2023)
 # = 33.5 / 26.2 / 22.9 / 21.0 km/h. Faster than these for as long is beyond
-# any runner; a fast downhill is not 25 % faster than a flat world record
+# any runner; a fast downhill is not 15 % faster than a flat world record
 # for a minute.
 WR_POINTS = ((43.03, 400.0), (206.00, 1500.0), (1571.00, 10000.0), (7235.0, 42195.0))
-MARGIN = 1.25          # 推估: room for GPS distance error and steep downhills
+# 推估: room for GPS distance error and steep downhills. Read-only scan of this
+# athlete's 1889 foot activities (2026-10-01): the fastest genuine run reaches
+# 0.65 of the limit (2024-06-14 treadmill); two real vehicle segments sat at
+# 1.12 (2024-03-18 run: 7 min at 25–38 km/h; 2021-07-17 hike: 5 min at 31
+# km/h), which a 1.25 margin missed.
+MARGIN = 1.15
 WINDOWS_S = (60, 300, 1200)
 MIN_MOVING_S = 60.0    # 推估: the average rule needs at least a minute of moving
 MOVING_KMH = 1.609344498   # algorithms.wko5_time.MOVING_SPEED_KMH["run"]

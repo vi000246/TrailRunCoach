@@ -74,9 +74,10 @@ the running limits). Distance resampled to 1 s; a second faster than 144 km/h (`
 MAX_SPEED_KMH`, WKO5's GPS-spike rule) counts as no distance, so a GPS jump never flags a file.
 `limit(T)` = men's world-record average speed at duration T (World Athletics: 400 m 43.03 van
 Niekerk 2016, 1500 m 3:26.00 El Guerrouj 1998, 10 000 m 26:11.00 Cheptegei 2020, marathon 2:00:35
-Kiptum 2023; log-interpolated, clamped outside) × 1.25 (推估 margin: GPS error, steep descents):
+Kiptum 2023; log-interpolated, clamped outside) × 1.15 (推估 margin: GPS error, steep descents;
+chosen on the real-data scan below):
 1. average moving speed > limit(moving time) → 「疑似交通工具／騎車（均速 N km/h）」;
-2. a sustained 60 s / 5 min / 20 min window > limit(window) (≈ 39.9 / 32.0 / 29.2 km/h) — a bike /
+2. a sustained 60 s / 5 min / 20 min window > limit(window) (≈ 36.7 / 29.4 / 26.9 km/h) — a bike /
    car segment inside a real run → 「疑似交通工具／騎車（第 a–b 分鐘連續 … N km/h，全程均速 M km/h）」;
 3. average of the non-zero power samples > 10 W/kg × weight (推估: Stryd-style power ≈ speed in m/s
    × ~1 W/kg, so the 1500 m record pace is ~7–8 W/kg; weight 70 kg 推估 when unknown).
@@ -103,7 +104,13 @@ overrides hash, so a change rebuilds the cached datasets. The legacy DB-row APIs
 (`/api/v1/pmc`, `/api/v1/analytics/*`, the unbuilt React `frontend/`) are not covered.
 
 Review scan: `python -m backend.scripts.scan_bad_activities` (read-only; flagged files and the
-closest calls).
+closest calls). 2026-10-01 on this athlete (WKO5 682, COROS 515, TP 692 foot activities; ratio =
+speed ÷ limit at 1.25): flagged files — 2025-12-14 run 12.28 km avg 45.5 km/h, 917 W (WKO5 + TP;
+not in COROS); 2021-05-16 "hiking" 57.0 km avg 26.6 km/h (car; WKO5); 2021-04-10 hiking 10.9 km,
+minutes at 28–50 km/h at the end (WKO5); with 1.15 also 2024-03-18 run 6.67 km, 7 min at 25–38
+km/h (all three sources) and 2021-07-17 hiking 4.83 km, 5 min at 31 km/h (WKO5) — all checked
+minute by minute as vehicle segments. The fastest genuine activity: ratio 0.60 (2024-06-14
+treadmill 4 km at 17.9 km/h); 2024-08-25 28.4 km run 0.56. No race or long run is flagged.
 
 ## API
 

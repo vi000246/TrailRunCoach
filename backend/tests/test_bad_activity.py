@@ -77,6 +77,14 @@ def test_vehicle_segment_at_the_end_is_flagged_by_a_sustained_window():
     assert v["window_start_s"] >= 7200 - 60
 
 
+def test_short_bike_segment_inside_a_run_is_flagged():
+    # the real 2024-03-18 shape: an easy run with ~7 min at 25–38 km/h
+    minutes = [36.0, 25.0, 38.0, 14.0, 26.0, 25.0, 30.0]          # km/h of each minute
+    t, d = _track([8.0] * 1500 + [v for m in minutes for v in [m] * 60] + [8.0] * 1500)
+    v = B.judge(B.features(t, d), "run")
+    assert v and v["rule"] == "window_speed"
+
+
 def test_impossible_power_is_flagged():
     t, d = _track([10.0] * 1200)
     f = B.features(t, d, power=[900.0] * 1200)
