@@ -116,6 +116,139 @@ def test_classification_override_changes_the_source_stamp(tmp_path, app_db, _fit
     assert DSRC.source_stamp("coros", tmp_path) != s0
 
 
+def test_no_db_falls_back_to_sub_sport_first(tmp_path):
+    d = tmp_path / "fit"
+    d.mkdir()
+    (d / "t.fit").write_bytes(build_run(datetime(2026, 9, 1, tzinfo=timezone.utc), seconds=300, sub_sport=1))
+    ds = FitFolderDataset(d, config=EngineConfig(parity=True), today=TODAY)
+    assert ds.workouts[0].sport_type == "indoor running"
+
+
+# ---- item 2: thresholds / weight ------------------------------------------
+
+def test_settings_from_db_not_wko5(tmp_path, app_db):
+    root, _ = _fits(tmp_path, 1)
+    app_db(_db(tmp_path, [], settings=[("2026-09-30", 200.0, 66.3, 182, None, None),
+                                       ("2026-01-01", None, 68.0, None, 300.0, 210.0)]))
+    ds = FitFolderDataset(root, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=False)
+    assert ds.settings_from == "app"
+    w = ds.workouts[0]                                        # 2026-09-01
+    assert ds.setting("weight", w.day) == pytest.approx(68.0)
+    assert ds.setting("weight", FD.date_to_day(dt.date(2026, 9, 30))) == pytest.approx(66.3)
+    assert ds.sport_setting("ftp", w) == pytest.approx(210.0)
+    assert ds.sport_setting("tpace", w) == pytest.approx(5.0)                 # 300 s/km
+    # the COROS-profile LTHR 182 / FTP 200 (sport unrecorded) are NOT running thresholds
+    assert ds.sport_setting("thr", w) is None
+    assert {x["field"] for x in ds.settings_ignored} == {"lthr", "ftp_w"}
+    assert ds.setting_label("weight").startswith("athlete_settings")
+    assert ds.setting_label("runthr") == "未設定"
+
+
+def test_plan_threshold_wins(tmp_path, app_db):
+    from backend.engine.planning import Plan, Threshold
+    root, _ = _fits(tmp_path, 1)
+    app_db(_db(tmp_path, [], settings=[("2026-01-01", None, 68.0, None, None, 210.0)]))
+    ds = FitFolderDataset(root, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=False)
+    ds.plan = Plan(thresholds=[Threshold(date="2026-08-01", lthr=165.0, cp=230.0)])
+    w = ds.workouts[0]
+    assert ds.sport_setting("thr", w) == 165.0 and ds.cp(w) == 230.0
+
+
+def test_wko5_settings_only_when_opted_in(tmp_path, _fit_root_in_tmp, monkeypatch):
+    from backend.engine.wko5expr import datasource
+    calls = []
+    real = FD.FitFolderDataset
+
+    def spy(*a, **k):
+        calls.append(k.get("settings_dir"))
+        return real(*a, **k, estimate_thresholds=False)
+    monkeypatch.setattr(FD, "FitFolderDataset", spy)
+    (_fit_root_in_tmp / "coros").mkdir()
+    FD.dataset_for_source("coros", tmp_path / "wko5", config=EngineConfig(parity=True), today=TODAY)
+    monkeypatch.setattr(datasource, "read_setting",
+                        lambda k, d=None, u=1: True if k == FD.WKO5_OPT_IN_KEY else d)
+    FD.dataset_for_source("coros", tmp_path / "wko5", config=EngineConfig(parity=True), today=TODAY)
+    assert calls == [None, tmp_path / "wko5"]
+
+
+def test_estimated_thresholds_fill_unset_dates(tmp_path, monkeypatch):
+    """No plan / DB value: the as-of estimate sets runthr / runftp from the
+    grid day on (never before), and hrTSS is recomputed with it."""
+    from backend.engine.racepower import athlete as A
+    import backend.engine.thresholds as TH
+    d = tmp_path / "fit"
+    d.mkdir()
+    for i in range(4):
+        start = datetime(2026, 6, 1, tzinfo=timezone.utc) + dt.timedelta(days=25 * i)
+        (d / f"{i}.fit").write_bytes(build_run(start, seconds=1800, hr=150, power=220))
+    monkeypatch.setattr(A, "cp_as_of", lambda ds, day: 240.0)
+    monkeypatch.setattr(TH, "estimate", lambda ds, day, cp_of=None: {"lthr": {"value": 160.0}})
+    ds = FitFolderDataset(d, config=EngineConfig(parity=True), today=TODAY)
+    first = ds.workouts[0].entry.start.date()
+    hist = ds.athlete.settings["runthr"]
+    assert hist[0] == FD.NOT_BEFORE and hist[1][0] == first + dt.timedelta(days=FD.ESTIMATE_STEP_DAYS)
+    assert ds.sport_setting("thr", ds.workouts[0]) is None            # before the first estimate
+    late = ds.workouts[-1]
+    assert ds.sport_setting("thr", late) == 160.0 and ds.sport_setting("ftp", late) == 240.0
+    assert late.metrics["hrtss"] is not None and ds.workouts[0].metrics["hrtss"] is None
+    assert ds.setting_label("runthr").startswith("自動估算")
+
+
+# ---- item 3: activity tags on COROS / TP workouts ---------------------------
+
+def _trail_fits(tmp_path):
+    """Two COROS-style runs (no sub_sport): 2025-07-26 07:31 and 2025-10-18
+    20:54 Asia/Taipei, the first a trail run by the DB classification."""
+    d = tmp_path / "fit" / "coros" / "2025"
+    d.mkdir(parents=True)
+    a, b = d / "1_2025-07-26_run.fit", d / "2_2025-10-18_run.fit"
+    a.write_bytes(build_run(datetime(2025, 7, 25, 23, 31, tzinfo=timezone.utc), seconds=1800, speed_m_s=3.0))
+    b.write_bytes(build_run(datetime(2025, 10, 18, 12, 54, tzinfo=timezone.utc), seconds=1680, speed_m_s=3.0))
+    return tmp_path / "fit" / "coros", a, b
+
+
+def test_tags_written_from_wko5_apply_to_coros_workouts(tmp_path, app_db, monkeypatch):
+    """A tag stored with a WKO5 file name and its start minute (the seed run
+    on the WKO5 source) is found for the COROS FIT of the same activity —
+    the file differs, the local start matches within ±3 min."""
+    from backend.engine import activity_tags as AT
+    monkeypatch.setenv("WKO5COACH_TZ", "Asia/Taipei")
+    root, a, b = _trail_fits(tmp_path)
+    app_db(_db(tmp_path, [(1, str(a), "coros", "trail", 0, None), (2, str(b), "coros", "road", 0, None)]))
+    ds = FitFolderDataset(root, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=False)
+    race, road = ds.workouts
+    assert race.entry.start == datetime(2025, 7, 26, 7, 31) and "runningtrail" in race.tags
+    tags_db = tmp_path / "tags.db"
+    AT.upsert(tags_db, start_local="2025-07-26T07:30", file="2025/Athlete_2025_07_26_07_30.wko4",
+              activity_type="race")
+    AT.upsert(tags_db, start_local="2025-10-18T20:54", file="2025/Athlete_2025_10_18_20_54.wko4",
+              activity_type="training", effort="moderate")
+    rows = AT.load(tags_db)
+    assert AT.user_type(AT.find(rows, race.entry.start, race.entry.file)) == "race"
+    u = AT.find(rows, road.entry.start, road.entry.file)
+    assert AT.user_effort(u) == "moderate"
+    assert AT.find(rows, road.entry.start + dt.timedelta(minutes=10), road.entry.file) is None
+
+
+def test_seed_matches_coros_races_by_wko5_start(tmp_path, app_db, monkeypatch):
+    from backend.engine import activity_tags as AT
+    from backend.scripts import seed_activity_tags as SD
+    monkeypatch.setenv("WKO5COACH_TZ", "Asia/Taipei")
+    root, a, b = _trail_fits(tmp_path)
+    app_db(_db(tmp_path, [(1, str(a), "coros", "trail", 0, None), (2, str(b), "coros", "road", 0, None)]))
+    ds = FitFolderDataset(root, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=False)
+    assert SD.start_of_file("Athlete_2025_07_26_07_30.wko4") == datetime(2025, 7, 26, 7, 30)
+    items = SD.plan(ds.workouts, [], "coros")
+    by = {it["spec"]["date"]: it for it in items if it["found"]}
+    race = by["2025-07-26"]
+    assert race["how"] == "start" and race["file"] == "2025/1_2025-07-26_run.fit"
+    assert race["start_local"] == "2025-07-26T07:31" and race["want"] == {"activity_type": "race"}
+    # the road 5 km correction matches by date + distance (5.04 km within ±10 %)
+    assert by["2025-10-18"]["file"] == "2025/2_2025-10-18_run.fit"
+    # dry run only: nothing written anywhere
+    assert AT.load(tmp_path / "app.db") == []
+
+
 def test_no_db_falls_back_to_sub_sport(tmp_path):
     d = tmp_path / "fit"
     d.mkdir()
