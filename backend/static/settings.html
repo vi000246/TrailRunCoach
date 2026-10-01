@@ -231,6 +231,16 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     <div class="list" id="fixlist"></div>
     <h2 style="margin-top:14px">已套用的修正</h2>
     <div class="list" id="applied"><span class="meta">載入中…</span></div>
+
+    <h2 style="margin-top:14px" id="badfiles">排除壞掉的活動檔</h2>
+    <p class="meta">跑步／登山的檔案如果速度或功率不可能是人跑出來的（例如忘了停錶就騎車、開車），整筆活動會被排除：
+      留在資料庫和活動清單（標「已排除」），但不進 PMC／TSS、功率曲線／CP、比賽功率、飄移／AeT、課表比對和圖表。
+      門檻：持續 1 分鐘以上比同時間的世界紀錄均速快 25%（推估餘裕），或平均功率超過 10 W/kg（推估）。
+      在單次活動的「活動資訊」卡也可以手動排除或標成正常。只在「我的算式」模式生效。</p>
+    <div class="row"><label><input type="checkbox" id="ex-on"> 自動排除疑似交通工具／騎車的活動（預設開）</label>
+      <span class="meta" id="ex-msg"></span></div>
+    <div class="list" id="exlist"><span class="meta">載入中…</span></div>
+    <div class="list" id="keptlist"></div>
   </section>
 </main>
 <div class="toast" id="toast"></div>
@@ -291,6 +301,46 @@ $("fixbtn").onclick = async () => {
     body: JSON.stringify({ proposals: picked }) });
   toast(`已套用 ${res.added.length} 筆`); $("fixlist").innerHTML = ""; $("fixbtn").disabled = true;
   $("scanmsg").textContent = ""; loadApplied();
+};
+
+// ---- bad activity files (engine/bad_activity.py) --------------------------
+const km = (v) => v == null ? "–" : (+v).toFixed(2) + " km";
+const mins = (s) => s == null ? "–" : Math.round(s / 60) + " 分";
+async function loadExclusions() {
+  $("exlist").innerHTML = `<span class="meta">載入中…（第一次會比較久）</span>`;
+  try {
+    const r = await j(`${API}/exclusions`);
+    $("ex-on").checked = !!r.enabled;
+    const row = (x, btn, act) => `<label>
+      <button class="x" data-key="${esc(x.key)}" data-file="${esc(x.file)}" data-act="${act}">${btn}</button>
+      ${esc((x.start || "").slice(0, 16).replace("T", " "))} ${esc(x.sport_type)} · ${km(x.distance)} · ${mins(x.duration)}
+      <div class="meta" style="margin-left:4px">${esc(x.label || x.reason || "")} · ${esc(x.file)}</div></label>`;
+    $("exlist").innerHTML = r.excluded.length
+      ? `<div class="meta">目前排除 ${r.excluded.length} 筆（資料來源：${esc(r.source)}）</div>` +
+        r.excluded.map((x) => row(x, x.auto ? "這筆是正常的，不要排除" : "取消手動排除", x.auto ? "keep" : "auto")).join("")
+      : `<span class="meta">目前沒有被排除的活動（資料來源：${esc(r.source)}）。</span>`;
+    $("keptlist").innerHTML = r.kept.length
+      ? `<div class="meta" style="margin-top:8px">你標成正常、規則會排除的：</div>` +
+        r.kept.map((x) => row(x, "恢復自動判定", "auto")).join("")
+      : "";
+  } catch (e) { $("exlist").innerHTML = `<span class="meta">讀取失敗：${esc(e.message.slice(0, 120))}</span>`; }
+}
+async function setExclusion(key, file, exclusion) {
+  await j(`${API}/exclusions`, { method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key, file, exclusion }) });
+}
+for (const id of ["exlist", "keptlist"]) $(id).onclick = async (e) => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  b.disabled = true;
+  try {
+    await setExclusion(b.dataset.key, b.dataset.file, b.dataset.act === "keep" ? "keep" : null);
+    toast(b.dataset.act === "keep" ? "已標成正常，這筆會重新算進去" : "已恢復自動判定"); loadExclusions();
+  } catch (err) { toast("失敗：" + err.message.slice(0, 80)); b.disabled = false; }
+};
+$("ex-on").onchange = async (e) => {
+  try { await putSetting({ exclude_bad_activities: e.target.checked });
+    toast(e.target.checked ? "已開啟自動排除" : "已關閉自動排除（手動排除仍有效）"); loadExclusions(); }
+  catch (err) { toast("失敗：" + err.message.slice(0, 80)); }
 };
 
 // ---- profile -------------------------------------------------------------
@@ -516,7 +566,7 @@ for (const src of ["coros", "tp"]) {
   });
 }
 
-loadMode(); loadApplied(); loadProfile();
+loadMode(); loadApplied(); loadProfile(); loadExclusions();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>
