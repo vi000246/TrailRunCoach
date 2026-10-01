@@ -17,6 +17,8 @@
 
 建議：**個人自用**可以用非官方 `garminconnect` 做 (a)(b)(c)，但要接受「隨時會壞、違反條款精神、可能被暫時鎖登入」；**付費版**不能用非官方路線，只能等 Garmin 重開申請並以公司名義申請（詳見 §5）。
 
+**更好的替代（2026-10-01 補充）**：透過 **intervals.icu** 當中繼。它是 Garmin、COROS 的既有官方合作夥伴，公開 API 能下載原始活動檔，計畫課表也會自動上傳到 Garmin 與 COROS 手錶，API 條款明文允許商業使用。細節、條款原文、probe 與測試步驟見 `docs/research/data-hubs.md`。若 intervals.icu 實測通過，本文件的非官方 `garminconnect` 路線就降為備案。
+
 ---
 
 ## 1. 官方路線：Garmin Connect Developer Program
