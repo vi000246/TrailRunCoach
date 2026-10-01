@@ -22,7 +22,8 @@ KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test
          # training session — never done / missed, no TSS, no compliance
          "notice": "課表待確認"}
 NOT_LOAD = ("notice",)
-EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m")
+EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
+            "target_basis")
 TERRAINS = ("road", "trail", "hike")
 DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
                   "hike": "健行", "strength": "肌力（下肢單腳＋核心）"}
@@ -68,10 +69,12 @@ def to_dict(r: PlanSession) -> dict:
             "protocol": r.protocol,
             "variant_key": r.variant_key, "rung_key": r.rung_key,
             "equiv": None if r.equiv is None else bool(r.equiv), "swap": r.swap, "swap_reason": r.swap_reason,
-            "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj}
+            "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj,
+            "target_basis": getattr(r, "target_basis", None)}
 
 
-VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks")
+VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
+                  "target_basis")
 
 
 def _fill(r: PlanSession, d: dict) -> None:
@@ -214,6 +217,10 @@ def _clean(patch: dict, today: str) -> dict:
             v = v or None
             if v is not None and v not in TERRAINS:
                 raise PlanError(f"不支援的地形：{v!r}")
+        elif k == "target_basis":
+            v = None if v in (None, "", "auto") else v       # 自動 = None
+            if v is not None and v not in ("hr", "power"):
+                raise PlanError(f"目標用要是 自動／心率／功率：{v!r}")
         elif k in ("distance_km", "climb_m"):
             if v is not None and v != "":
                 try:
@@ -378,8 +385,21 @@ def push_dict(s: dict) -> dict:
             "detail": s.get("detail") or "", "source": s.get("source") or "", "day": s.get("day"),
             "done": s["state"] == "done", "protocol": s.get("protocol"),
             # a library variant is pushed from its own steps (coros_workouts._variant_steps)
-            **{k: s.get(k) for k in ("variant_key", "variant_reps", "variant_blocks", "variant_adj")
-               if s.get(k) is not None}}
+            **{k: s.get(k) for k in ("variant_key", "variant_reps", "variant_blocks", "variant_adj", "terrain",
+                                     "target_basis")
+               if s.get(k) is not None},
+            # 目標用: the session's own choice, else 課表偏好 目標依據, else 自動 (engine/target_policy.py)
+            "basis": _basis_for(s)}
+
+
+def _basis_for(s: dict) -> str:
+    from backend.engine import plan_prefs as PP
+    from backend.engine import target_policy as TP
+    try:
+        prefs = PP.load()
+    except Exception:                       # noqa: BLE001
+        prefs = None
+    return TP.target_policy(s, prefs)["basis"]
 
 
 # ---------------------------------------------------------------------------

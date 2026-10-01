@@ -169,6 +169,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
                      quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
+        ctx.notes.extend(PP.blocked_pref_notes(prefs, monday, blocked))
         PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs, notes=ctx.notes)
         return ss
     # the raw 課表偏好 value: aet_test_days isn't part of `active`, so `prefs` may be None here

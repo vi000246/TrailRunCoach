@@ -60,7 +60,9 @@ def test_settings_round_trip():
     s = p.settings()
     for k, v in s.items():
         SR.validate(k, v)                                   # every stored value is valid
-    assert PP.from_settings(s) == p
+    # the old 間歇目標 = 心率 reads back as 目標依據 = 心率 (engine/target_policy.py migration)
+    from dataclasses import replace
+    assert PP.from_settings(s) == replace(p, target_basis="hr")
     assert PP.Prefs().settings()["plan.prefs.days"] is None  # all days = the default (null)
 
 

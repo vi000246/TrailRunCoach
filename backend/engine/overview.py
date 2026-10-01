@@ -844,6 +844,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if PR is not None:
         long_wd = PP.long_weekday(PR, long_wd)
         ds_ = [{**asdict(s), "long_day": getattr(s, "_long_day", False)} for s in todo]
+        notes.extend(PP.blocked_pref_notes(PR, monday, bmap))          # a preferred weekday on a 不排課日期
         left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done)
         for s, d in zip(todo, ds_):
             if d["day"]:
