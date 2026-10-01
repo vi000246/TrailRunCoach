@@ -98,17 +98,19 @@
          "description": "上：高度圖（海拔對距離），爬坡段標 ①②③ 與爬升／距離／坡度，下坡段畫斜線、標 ↓。爬坡段 = 連續爬升 ≥ 80 m、坡度 ≥ 3%（小起伏併入）；下坡段用同一個規則反過來找。中：同一條距離軸上的 VAM／功率／%CP／心率／GAP（60 秒滾動，推估視窗），黑線 = 每段平均；滑過任何一點看那裡的數值，滑過爬坡段看整段的時間、VAM、心率、功率、%CP、配速／GAP 和平常比。下：每段和平常比，平常 = 同類活動近 8 週（不足 5 段放寬到 12、26 週）坡度相差 ±4 pp 內的爬坡中位數與中間 50%（推估）。每 100 m 心跳數越低越經濟；整次和近 8 週的爬坡中位數比，低 > 5% = 變好。表格在「詳細數字」。"},
         {"title": "坡度分組", "kind": "review", "section": "grades",
          "description": "每列一個坡度區間（上 = 上坡、下 = 下坡）。左邊灰條 = 這次在該坡度的時間佔比；右邊點 = 這次的配速／VAM／功率／心率／效率，灰條 = 平常的中間 50%、直線 = 中位數。平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度待 ≥ 60 秒的那幾次（推估）；這次不到 60 秒的坡度畫空心點，只供參考。停頓不算。表格在「詳細數字」。"},
-        {"title": "坡度對心率",
+        {"title": "坡度對心率（原始散點）",
          "kind": "workout",
+         "description": "每一秒一個點，只畫 −50% 到 +50% 的坡（更陡的多半是 GPS 雜訊）。看不懂的話直接看上面的「坡度分組」，切到心率就是每個坡度的平均。",
          "axes": [{"id": "BPM"}],
          "series": [
-           {"name": "心率", "type": "scatter", "y_axis": "BPM", "x_axis": "PERCENT", "color": "#eb6834", "expression": "(rgrade, heartrate)"}
+           {"name": "心率", "type": "scatter", "y_axis": "BPM", "x_axis": "PERCENT", "color": "#eb6834", "expression": "(if(abs(rgrade)<=0.5, rgrade), heartrate)"}
          ]},
-        {"title": "坡度對功率",
+        {"title": "坡度對功率（原始散點）",
          "kind": "workout",
+         "description": "每一秒一個點（30 秒平滑功率），只畫 −50% 到 +50% 的坡。看不懂的話直接看上面的「坡度分組」，切到功率就是每個坡度的平均。",
          "axes": [{"id": "WATTS", "min": 0}],
          "series": [
-           {"name": "功率", "type": "scatter", "y_axis": "WATTS", "x_axis": "PERCENT", "color": "#2a78d6", "expression": "(rgrade, ewma(power,30))"}
+           {"name": "功率", "type": "scatter", "y_axis": "WATTS", "x_axis": "PERCENT", "color": "#2a78d6", "expression": "(if(abs(rgrade)<=0.5, rgrade), ewma(power,30))"}
          ]}
       ]
     },
