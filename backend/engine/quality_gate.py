@@ -37,7 +37,11 @@ Two questions, answered separately:
 The dose (§4.5) steps through DOSE, one step per interval session done in the
 last 8 weeks: 5×1′ → 6×1′ → 4×3′ uphill → 5×3′ → 4×4′, then sub-threshold 3×8′ /
 4×8′ alternating. The recovery-week fartlek is not a step. A held week repeats
-the last step; a faded last session steps back one.
+the last step. The step moves by the progression state machine of
+docs/research/interval-adaptation.md §4.3 (interval_outcome / dose_step):
+達標 forward, 邊界 repeat, 未適應 rest +1 min then back one step, first rep
+short = target −5 %. The old "last rep 5 % below the first -> back one" rule is
+gone (the WKO5 speakers oppose it).
 
 Other phases keep the old rule: intensity and drift not bad.
 """
@@ -277,6 +281,24 @@ def count_reps(t, power, cp: Optional[float]) -> list[dict]:
             for a, b in segs if b - a >= REP_MIN_S]
 
 
+def _with_hr_at60(reps: list[dict], s: Optional[dict]) -> list[dict]:
+    """count_reps bouts + the HR 60 s after each one ends (徐國峰's 60-s check,
+    a brake only); None when the next rep starts before that or there is no HR."""
+    from backend.engine.workout_review import _grid1
+    h = None
+    if s is not None and s.get("hr") is not None:
+        h = _grid1(s["t"], s["hr"])[1]
+    out = []
+    for i, r in enumerate(reps):
+        at = int(r["start_s"] + r["duration_s"] + 60)
+        nxt = reps[i + 1]["start_s"] if i + 1 < len(reps) else None
+        v = None
+        if h is not None and at < len(h) and (nxt is None or nxt >= at) and np.isfinite(h[at]):
+            v = float(h[at])
+        out.append({"power": r["power"], "duration_s": r["duration_s"], "hr_at60": v})
+    return out
+
+
 def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
     """Interval sessions in the `days` before `today`, oldest first:
     workout_review's `quality` class, or a road run with ≥ 4 short reps
@@ -286,6 +308,11 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
     from backend.engine.wko5expr.dataset import date_to_day
     tday = math.floor(date_to_day(today))
     out = []
+    try:
+        from backend.engine.plan_store import done_titles
+        titles = done_titles()                 # activity index -> the planned session's title
+    except Exception:                          # noqa: BLE001
+        titles = {}
     for w in sorted(ds.workouts, key=lambda x: x.day):
         if not (tday - days <= math.floor(w.day) < tday) or category(w) not in WR.QUALITY_CATEGORIES:
             continue
@@ -305,9 +332,17 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             fade = reps[-1]["power"] / reps[0]["power"] - 1.0
         else:
             fade = (m.get("intervals") or {}).get("fade")
-        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(),
+        if reps:
+            bouts = _with_hr_at60(reps, s)
+        else:
+            bouts = [{"power": e.get("power"),
+                      "hr_at60": (e["hr_max"] - e["hr_drop60"]) if e.get("hr_max") is not None
+                      and e.get("hr_drop60") is not None else None} for e in (m.get("efforts") or [])]
+        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": titles.get(w.idx),
                     "reps": len(reps) or (m.get("intervals") or {}).get("n") or 0,
-                    "faded": fade is not None and fade < -FADE})
+                    # informational only now: dose_step judges the bouts (interval_outcome)
+                    "faded": fade is not None and fade < -FADE,
+                    "bouts": bouts[:20], "cp": m.get("cp")})
     WR._flush(ds)
     return out
 
@@ -347,12 +382,125 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
     return out
 
 
-def dose_step(history: list[dict]) -> dict:
-    """Next DOSE step from the sessions done: n done → step n; the last one
-    faded → step back one (n − 2, the step before the last)."""
-    n = len(history)
-    faded = bool(history and history[-1].get("faded"))
-    return {"done": n, "faded": faded, "step": max(0, n - 2) if faded else n}
+# ---- the progression state machine (docs/research/interval-adaptation.md §4.3) --
+# Power decides, HR only brakes. The old「最後一組比第一組低 > 5% → 退一步」 is
+# gone: the WKO5 speakers (Golich, IT2:84-86) judge *which* rep fell out of the
+# band — the last one falling off is fine, rep 2 … second-to-last means the
+# session was set wrong.
+IN_BAND_TOL = 0.98      # 自組 (doc §4.2): a rep is in band at ≥ 98 % of the planned lower bound
+TARGET_DOWN = 0.95      # ROLE:499「下修 5～10%」: first rep already short -> target −5 %
+AET60_MIN_SHARE = 0.5   # 自組 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
+LAST_FADE = 0.05        # 自組 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
+OUTCOME_LABEL = {"met": "達標", "border": "邊界", "unadapted": "未適應", "too_high": "未適應（目標太高）"}
+
+
+def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: Optional[float] = None) -> dict:
+    """未適應 / 邊界 / 達標 for one interval session against the planned `spec`
+    (DOSE row). `bouts`: [{"power", "hr_at60"?}] in order. Checked in the
+    doc's order: 未適應 first, then 邊界, else 達標. RPE is not recorded, so
+    its rows are skipped. {"outcome": None} without CP / a %CP band."""
+    planned, lo = int(spec[2]), spec[5]
+    if not cp or lo is None or not planned:
+        return {"outcome": None, "why": "沒有 CP 或目標功率帶"}
+    floor = IN_BAND_TOL * lo * cp
+    ps = [float(b.get("power") or 0.0) for b in bouts[:planned]]
+    inb = [p >= floor for p in ps]
+    done = len(ps) / planned
+    miss = next((i + 1 for i, ok in enumerate(inb) if not ok), None)
+    if miss is None and done < 1:
+        miss = len(ps) + 1                        # stopped early: the first rep not done
+    fade = (ps[-1] / ps[0] - 1.0) if len(ps) >= 2 and ps[0] else None
+    base = {"first_miss": miss, "done": round(done, 2), "fade": fade}
+    if miss == 1:
+        return {**base, "outcome": "too_high", "why": f"第 1 趟就沒到 {floor:.0f} W：目標功率下修 5%"}
+    if done < 1 or (miss is not None and 2 <= miss <= planned - 1):
+        return {**base, "outcome": "unadapted",
+                "why": f"第 {miss} 趟掉出目標帶（共 {planned} 趟）" if done >= 1 else f"只完成 {len(ps)}/{planned} 趟"}
+    at60 = [b.get("hr_at60") for b in bouts[:planned] if b.get("hr_at60") is not None]
+    if aet and at60:
+        share = sum(1 for h in at60 if h <= aet) / len(at60)
+        if share < AET60_MIN_SHARE:
+            return {**base, "outcome": "border", "why": f"休息 60 秒心率回到 AeT 以下只有 {share * 100:.0f}% 的趟"}
+    if miss == planned and fade is not None and fade < -LAST_FADE:
+        return {**base, "outcome": "border", "why": f"只有最後一趟沒到、掉 {-fade * 100:.0f}%：同一份課表再做一次"}
+    return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else "只有最後一趟略掉（≤ 5%）"}
+
+
+def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
+    """Next DOSE step by replaying the interval sessions done (oldest first),
+    each judged against the step it was planned at (interval_outcome):
+      達標 -> next step (the ladder adds reps, then rep length, then power)
+      邊界 -> the same step again
+      未適應 -> same step, rest + 1 min; a second 未適應 in a row -> back one step
+      未適應（目標太高）-> same step, target power −5 %
+    A session without bouts (legacy rows) counts as 達標 unless it `faded`
+    (then 邊界). A missed session isn't in the history: the next week repeats
+    the step (engine/adapt.py rule B). `faded` stays for the week card."""
+    step, streak, adjust, last = 0, 0, {}, None
+    for h in history:
+        spec, neutral = planned_spec(h.get("title"), step)
+        if neutral:
+            # a recovery fartlek / sub-threshold (ramp week) / Zone 3 session the plan
+            # prescribed outside the ladder: not a step, never judged against it
+            h["outcome"] = "neutral"
+            continue
+        if h.get("bouts") is not None and h.get("cp"):
+            o = interval_outcome(h["bouts"], spec, h["cp"], aet)
+        else:
+            o = {"outcome": "border" if h.get("faded") else "met", "why": "最後一趟掉 > 5%" if h.get("faded") else ""}
+        oc = o.get("outcome") or "met"
+        h["outcome"] = oc
+        last = {**o, "outcome": oc, "date": h.get("date"), "step": step}
+        if oc == "met":
+            step, streak, adjust = step + 1, 0, {}
+        elif oc == "border":
+            streak, adjust = 0, {}
+        elif oc == "too_high":
+            streak, adjust = 0, {"power": TARGET_DOWN}
+        else:
+            if streak >= 1:
+                step, adjust = max(0, step - 1), {}
+            else:
+                adjust = {"rest_add": 1}
+            streak += 1
+    out = {"done": len(history), "faded": bool(last and last["outcome"] != "met"), "step": step}
+    if last is not None:
+        out.update(outcome=last["outcome"], adjust=adjust,
+                   note="" if last["outcome"] == "met" else f"上次間歇{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
+    return out
+
+
+def planned_spec(title: Optional[str], step: int) -> tuple[tuple, bool]:
+    """(the spec the session was planned at, neutral). By the stored plan's
+    title when there is one (dose_history reads it), else the ladder's step.
+    neutral = a session outside the ladder (RECOVERY, ZONE3, or SUB handed out
+    before the ladder reached it)."""
+    if title:
+        t = str(title)
+        if t == RECOVERY[1] or t.startswith("Zone 3"):
+            return RECOVERY if t == RECOVERY[1] else ZONE3, True
+        for s in DOSE:
+            if s[1] == t:
+                return s, False
+        for s in AFTER:
+            if s[1] == t:
+                return s, step < len(DOSE)
+    return dose_spec(step), False
+
+
+def adjusted_spec(spec: tuple, adjust: Optional[dict]) -> tuple:
+    """The dose row with the state machine's tweak: rest + N min, or the %CP band × factor."""
+    if not adjust:
+        return spec
+    key, title, reps, work, rest, lo, hi, uphill, src = spec
+    if adjust.get("rest_add"):
+        rest = rest + int(adjust["rest_add"])
+        src = f"{src}；上次未適應：組休 +{int(adjust['rest_add'])} 分（interval-adaptation.md §4.3）"
+    if adjust.get("power") and lo is not None:
+        f = float(adjust["power"])
+        lo, hi = round(lo * f, 3), round(hi * f, 3)
+        src = f"{src}；上次第 1 趟沒到：目標 −{round((1 - f) * 100)}%（ROLE:499）"
+    return (key, title, reps, work, rest, lo, hi, uphill, src)
 
 
 # ---------------------------------------------------------------------------
@@ -485,7 +633,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         hist = dose_history(ds, today)
     except Exception:
         hist = []
-    dose = dose_step(hist)
+    dose = dose_step(hist, ae.get("value"))
     out = {
         "mode": mode, "mode_label": LABEL[mode], "resolved": resolved, "state": state,
         "via": r.get("via"), "verdict": r.get("verdict", ""), "action": r.get("action", ""),
@@ -576,7 +724,10 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
         adv = True
     if gate.get("via") == "ua_gap" and s < ZONE3_SESSIONS:
         return {"allow": True, "spec": ZONE3, "advance": adv, "note": ""}
-    return {"allow": True, "spec": dose_spec(s), "advance": adv, "note": ""}
+    spec = dose_spec(s)
+    if first and step is None and s == d.get("step", 0):
+        spec = adjusted_spec(spec, d.get("adjust"))       # the state machine's tweak, this week only
+    return {"allow": True, "spec": spec, "advance": adv, "note": ""}
 
 
 def zone3_work(hours: Optional[float], reps: int = 3) -> int:

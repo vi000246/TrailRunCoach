@@ -230,7 +230,8 @@ def test_dose_table_progression_hold_fade_and_recovery():
     assert QG.dose_step([]) == {"done": 0, "faded": False, "step": 0}
     three = [{"faded": False}] * 3
     assert QG.dose_step(three)["step"] == 3
-    assert QG.dose_step(three[:2] + [{"faded": True}])["step"] == 1          # the last one faded: back one
+    # legacy rows without bouts: a faded last one = 邊界 -> repeat (no more "back one")
+    assert QG.dose_step(three[:2] + [{"faded": True}])["step"] == 2
     g = {"state": "none", "guard": {"hold": True}, "dose": {"done": 3, "step": 3}}
     assert QG.week_decision(g, "base", "base")["spec"][1] == "爬坡間歇 4×3 分"   # held: repeat step 3
     rec = QG.week_decision({"state": "none", "guard": {}, "dose": {"step": 4}}, "base", "recovery_week")
@@ -278,7 +279,63 @@ def test_count_reps_finds_one_minute_reps_and_the_history_counts_them():
     ds = _ds([r, _reps_run(TODAY - dt.timedelta(days=12), fade=0.08, on=260.0), _run(TODAY - dt.timedelta(days=2))])
     h = QG.dose_history(ds, TODAY)
     assert len(h) == 2 and h[0]["faded"] and not h[1]["faded"] and h[1]["reps"] == 5
-    assert QG.dose_step(h)["step"] == 2
+    # the first only lost its last rep (239 < 0.98 × 245 W, −8 %): 邊界, repeat step 0;
+    # the second hit every rep: 達標 -> step 1
+    d = QG.dose_step(h)
+    assert d["step"] == 1 and [x["outcome"] for x in h] == ["border", "met"] and d["outcome"] == "met"
+
+
+def _b(*ps, at60=None):
+    return [{"power": p, "hr_at60": at60} for p in ps]
+
+
+def test_interval_outcome_state_machine_rows():
+    spec = QG.DOSE[0]                  # 5×1′ at 98–101 % CP; floor = 0.98 × 0.98 × 250 = 240 W
+    cp = 250.0
+    met = QG.interval_outcome(_b(250, 250, 249, 248, 247), spec, cp)
+    assert met["outcome"] == "met"
+    last_small = QG.interval_outcome(_b(250, 250, 249, 248, 239), spec, cp)       # −4.4 %: still 達標
+    assert last_small["outcome"] == "met" and last_small["first_miss"] == 5
+    last_big = QG.interval_outcome(_b(255, 250, 249, 248, 235), spec, cp)         # −7.8 %: 邊界
+    assert last_big["outcome"] == "border"
+    rep2 = QG.interval_outcome(_b(250, 230, 249, 248, 247), spec, cp)
+    assert rep2["outcome"] == "unadapted" and rep2["first_miss"] == 2
+    short = QG.interval_outcome(_b(250, 250, 250), spec, cp)
+    assert short["outcome"] == "unadapted" and short["done"] == 0.6
+    first = QG.interval_outcome(_b(230, 250, 250, 250, 250), spec, cp)
+    assert first["outcome"] == "too_high"
+    # HR brake: power fine but HR still above AeT 60 s into the rest on most reps
+    brake = QG.interval_outcome(_b(250, 250, 250, 250, 250, at60=150), spec, cp, aet=140)
+    assert brake["outcome"] == "border"
+    assert QG.interval_outcome(_b(250, 250, 250, 250, 250, at60=135), spec, cp, aet=140)["outcome"] == "met"
+    assert QG.interval_outcome(_b(250), spec, None)["outcome"] is None
+
+
+def test_dose_step_replays_outcomes():
+    cp = 250.0
+    good = {"bouts": _b(250, 250, 250, 250, 250, 250), "cp": cp}
+    bad = {"bouts": _b(250, 230, 230, 230, 230), "cp": cp}
+    assert QG.dose_step([good, good])["step"] == 2
+    d = QG.dose_step([good, bad])                         # step 1 未適應 once: hold + rest +1
+    assert d["step"] == 1 and d["adjust"] == {"rest_add": 1} and d["faded"]
+    d = QG.dose_step([good, bad, bad])                    # twice in a row: back one
+    assert d["step"] == 0 and d["adjust"] == {}
+    # a recovery fartlek done at step 2 (4×3′ uphill @ 105–110 %): neutral, not "too high"
+    fart = {"bouts": _b(248, 248, 248, 248), "cp": cp, "title": QG.RECOVERY[1]}
+    d = QG.dose_step([good, {**good, "title": QG.DOSE[1][1]}, fart])
+    assert d["step"] == 2 and d.get("adjust") == {} and fart["outcome"] == "neutral"
+    sub = {"bouts": _b(230, 230, 230), "cp": cp, "title": QG.SUB[1]}       # ramp-week 3×8′ before the ladder got there
+    assert QG.dose_step([good, sub])["step"] == 1
+    assert QG.planned_spec(QG.AFTER[0][1], len(QG.DOSE)) == (QG.AFTER[0], False)
+    d = QG.dose_step([{"bouts": _b(200, 250, 250, 250, 250), "cp": cp}])
+    assert d["step"] == 0 and d["adjust"] == {"power": QG.TARGET_DOWN}
+    spec = QG.adjusted_spec(QG.DOSE[0], {"power": 0.95})
+    assert spec[5] == round(0.98 * 0.95, 3) and spec[1] == QG.DOSE[0][1]
+    g = {"state": "none", "guard": {}, "dose": {"done": 2, "step": 1, "adjust": {"rest_add": 1}}}
+    sp = QG.week_decision(g, "base", "base")["spec"]
+    assert sp[4] == QG.DOSE[1][4] + 1
+    s = QG.session(sp, {"cp": cp})
+    assert f"休 {sp[4]} 分鐘" in s["detail"]
 
 
 # ---------------------------------------------------------------------------

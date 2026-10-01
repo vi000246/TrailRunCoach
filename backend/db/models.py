@@ -178,6 +178,29 @@ class PlanSession(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class PlanChangeLog(Base):
+    """One automatic plan run (engine/plan_auto.py) or a user decision on one:
+    what changed and why, the affected sessions before / after (for 復原), the
+    COROS push outcome, and a held proposal waiting for approval. New table:
+    created by init_db's create_all (the schema's migration for new tables)."""
+    __tablename__ = "plan_change_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    trigger: Mapped[str] = mapped_column(String(40))          # sync:coros / sync:tp / manual / approve / undo …
+    # applied / pending / approved / rejected / superseded / undone / restore / failed
+    status: Mapped[str] = mapped_column(String(12), index=True)
+    summary: Mapped[str] = mapped_column(Text)                # Traditional Chinese, one line
+    items_json: Mapped[str] = mapped_column(Text, default="[]")      # [{action, uid, day, title, reason, rule}]
+    before_json: Mapped[str] = mapped_column(Text, default="[]")     # affected stored sessions before
+    after_json: Mapped[str] = mapped_column(Text, default="[]")      # … and after
+    big_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # why it was held
+    fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    push_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # {status, error, sent, removed}
+    notice_uid: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    ref_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # the entry an undo / approve acts on
+
+
 class ActivityTag(Base):
     """The user's activity metadata (engine/activity_tags.py): activity type
     (比賽 / 練跑 / 爬山 / 百岳跟團 / 測試 / 其他), effort (全力 / 有拼但有休息 /
