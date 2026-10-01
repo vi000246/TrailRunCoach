@@ -133,7 +133,8 @@ def test_the_card_labels_a_reference_drift_with_a_hover():
         assert "（參考）" in verdict
     ds = _ds([_run(TODAY - dt.timedelta(days=2), minutes=52)])
     rows = {s["name"]: s["data"] for s in R.review(ds, ds.workouts[0], "aerobic")["series"]}
-    assert "tip" not in rows["Pa:HR 飄移"] and rows["飄移等級"]["value"].startswith("嚴格")
+    # the strict tier's hover is the precision note (drift v2: ±4–6 pp per run)
+    assert rows["Pa:HR 飄移"]["tip"] == R.SE_TIP and rows["飄移等級"]["value"].startswith("嚴格")
 
 
 def test_aerobic_lines_keep_the_aet_test_bands_strict():

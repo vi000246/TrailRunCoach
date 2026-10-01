@@ -1069,7 +1069,8 @@ function drawZones(card, res) {
   const maxShare = Math.max(0.0001, ...Z.rows.map((r) => r.share || 0));
   const basis = { lthr: "LTHR", cp: "CP", tpace: "閾值配速" }[Z.basis];
   card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}
-    ${basis} ${pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit} · 最近 ${Z.days} 天 ${Z.runs} 次跑步</p>
+    ${basis} ${Z.threshold == null ? "未設定" : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · W′ ${(Z.wprime / 1000).toFixed(1)} kJ（${esc(Z.wprime_source || "")}）` : ""} · 最近 ${Z.days} 天 ${Z.runs} 次跑步</p>
+    ${Z.no_data_reason ? `<p class="badge" style="margin:0 0 6px">沒有資料：${esc(Z.no_data_reason)}</p>` : ""}
     ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${basis} 是 WKO5 出廠預設值，這張表的區間不準${Z.basis === "lthr" ? "——到「賽事周期」頁套用自動估算的 LTHR" : "——山路配速本來就不準，建議看功率區間"}</p>` : ""}
     <table class="zt"><thead><tr><th>區間</th><th>名稱</th><th class="num">${esc(Z.unit)}</th><th class="num">% ${basis}</th>
       <th style="width:34%">時間</th></tr></thead><tbody>${Z.rows.map((r, i) => `<tr>
@@ -1085,7 +1086,8 @@ function drawTargets(card, res) {
   const T = res.targets;
   const w = (a) => a[0] == null && a[1] == null ? "–" : a[0] == null ? `< ${Math.round(a[1])}` : a[1] == null ? `${Math.round(a[0])}+` : `${Math.round(a[0])}–${Math.round(a[1])}`;
   card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}</p>
-    <div class="meta" style="margin-bottom:4px">CP ${Math.round(T.cp || 0)} W（${esc(T.cp_source)}）· LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
+    ${T.terrain_note ? `<p class="desc" style="margin:0 0 4px">${esc(T.terrain_note)}</p>` : ""}
+    <div class="meta" style="margin-bottom:4px">CP ${T.cp ? Math.round(T.cp) + " W" : "未設定"}（${esc(T.cp_source)}）· LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
     <table class="zt"><thead><tr><th>課表</th><th class="num">功率 W</th><th class="num">心率</th><th>看哪個</th><th>怎麼練</th></tr></thead>
     <tbody>${T.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
       <td class="num">${w(r.power)}</td><td class="num">${w(r.hr)}</td><td>${esc(r.primary)}</td>

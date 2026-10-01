@@ -109,15 +109,28 @@ def eid(file: str, i0: int) -> str:
 
 
 def _materialise(idx: dict) -> dict:
-    """Efforts with metrics, ranks and the list rows — computed once per index."""
+    """Efforts with metrics, ranks and the list rows — computed once per index.
+    `aliases`: ids that no longer have an item of their own (a route merged
+    into another, a stretch that is a route, links of a merged chain) -> the
+    item that holds them now, so old links and the viewer card still open."""
     items = {}
+    aliases: dict[str, str] = {}
     for s in idx["segments"]:
         efforts = [{"id": eid(e["file"], e["i0"]), **e} for e in s["efforts"]]
         items[s["id"]] = _item(s, efforts, key="elapsed_s")
+        for m in s.get("merged_from") or []:
+            aliases.setdefault(m, s["id"])
     for r in idx["routes"]:
         efforts = [{"id": eid(e["file"], e["i0"]), **e} for e in r["efforts"]]
         items[r["id"]] = _item(r, efforts, key="moving_s")
-    return {"built_at": idx.get("built_at"), "items": items, "weather": _weather_summary(idx.get("weather"))}
+        for a in (r.get("aliases") or []) + (r.get("stretches") or []):
+            aliases.setdefault(a, r["id"])
+    for r in idx["routes"]:
+        it = items[r["id"]]
+        it["sub_routes"] = [q["id"] for q in idx["routes"] if q.get("parent") == r["id"]]
+    aliases = {a: t for a, t in aliases.items() if a not in items and t in items}
+    return {"built_at": idx.get("built_at"), "items": items, "aliases": aliases,
+            "weather": _weather_summary(idx.get("weather"))}
 
 
 def _weather_summary(w: Optional[dict]) -> Optional[dict]:
@@ -129,14 +142,26 @@ def _weather_summary(w: Optional[dict]) -> Optional[dict]:
 
 def _item(s: dict, efforts: list[dict], key: str) -> dict:
     """Segments rank by elapsed time (Strava's segment convention); routes by
-    moving time (a whole activity includes stops you chose to make)."""
-    timed = sorted((e for e in efforts if e.get(key)), key=lambda e: e[key])
-    rank = {e["id"]: k + 1 for k, e in enumerate(timed)}
-    best = timed[0][key] if timed else None
+    moving time (a whole activity includes stops you chose to make). A route
+    run the other way round (dir = reversed / mixed) ranks among the runs of
+    its own direction: the climbs are not the same."""
+    groups: dict[str, list] = {}
+    for e in efforts:
+        if e.get(key):
+            groups.setdefault(e.get("dir") or "same", []).append(e)
+    rank, best_of = {}, {}
+    for d, g in groups.items():
+        g.sort(key=lambda e: e[key])
+        best_of[d] = g[0][key]
+        for k, e in enumerate(g):
+            rank[e["id"]] = k + 1
     for e in efforts:
         e["rank"] = rank.get(e["id"])
-        e["delta_best_s"] = (e[key] - best) if (best is not None and e.get(key)) else None
-    last = efforts[-1] if efforts else None
+        b = best_of.get(e.get("dir") or "same")
+        e["delta_best_s"] = (e[key] - b) if (b is not None and e.get(key)) else None
+    main = [e for e in efforts if (e.get("dir") or "same") == "same"]
+    best = best_of.get("same")
+    last = main[-1] if main else (efforts[-1] if efforts else None)
     lat, lon = s["lat"], s["lon"]
     sports = sorted({e["sport_type"] or e["sport"] for e in efforts})
     return {
@@ -145,21 +170,51 @@ def _item(s: dict, efforts: list[dict], key: str) -> dict:
         "auto_name": s.get("auto_name") or R.KIND_ZH[s["kind"]],
         "length_m": s["length_m"], "gain_m": s["gain_m"], "ref_file": s["ref_file"],
         "lat": lat, "lon": lon, "sports": sports,
+        "thumb": RM.thumbnail(lat, lon),
         "n_efforts": len(efforts), "n_activities": len({e["file"] for e in efforts}),
+        "n_reversed": sum(1 for e in efforts if (e.get("dir") or "same") != "same"),
         "best_s": best, "last_s": last.get(key) if last else None,
         "last_date": last["start"] if last else None, "first_date": efforts[0]["start"] if efforts else None,
+        "parent": s.get("parent"), "partials": list(s.get("partials") or []),
+        "merged_from": list(s.get("merged_from") or []), "derived": bool(s.get("derived")),
         "efforts": efforts,
     }
 
 
 def _row(it: dict, names: dict) -> dict:
-    row = {k: v for k, v in it.items() if k not in ("efforts", "lat", "lon")}
+    row = {k: v for k, v in it.items() if k not in ("efforts", "lat", "lon", "partials")}
     row["name"] = names.get(it["id"]) or it["auto_name"]
     row["renamed"] = it["id"] in names
     key = it["time_key"]
-    row["spark"] = [[e["start"][:10], e.get(key)] for e in it["efforts"][-20:]]
+    main = [e for e in it["efforts"] if (e.get("dir") or "same") == "same"]
+    row["spark"] = [[e["start"][:10], e.get(key)] for e in main[-20:]]
     row["start_ll"] = [it["lat"][0], it["lon"][0]]
+    row["n_partials"] = len(it.get("partials") or [])
     return row
+
+
+def _nest(rows: list[dict]) -> list[dict]:
+    """Sub-routes right under their parent (when it is listed), `depth` 1."""
+    by_parent: dict[str, list] = {}
+    present = {r["id"] for r in rows}
+    top = []
+    for r in rows:
+        p = r.get("parent")
+        if p and p in present:
+            by_parent.setdefault(p, []).append(r)
+        else:
+            top.append(r)
+    out = []
+
+    def put(r, depth):
+        r["depth"] = depth
+        out.append(r)
+        for c in by_parent.get(r["id"], []):
+            put(c, depth + 1)
+
+    for r in top:
+        put(r, 0)
+    return out
 
 
 def _status() -> dict:
@@ -196,8 +251,8 @@ def list_routes(kind: Optional[str] = None, direction: Optional[str] = None,
         if it["n_activities"] < min_efforts:
             continue
         rows.append(_row(it, names))
-    rows.sort(key=lambda r: (-r["n_efforts"], r["last_date"] or ""), reverse=False)
     rows.sort(key=lambda r: (r["n_efforts"], r["last_date"] or ""), reverse=True)
+    rows = _nest(rows)
     total = len(rows)
     return {"status": _status(), "built_at": view["built_at"], "total": total,
             "rows": rows[:limit] if limit else rows, "sports": sorted(all_sports),
@@ -205,9 +260,11 @@ def list_routes(kind: Optional[str] = None, direction: Optional[str] = None,
 
 
 def _counts(view) -> dict:
+    """Per kind; a sub-route counts as `sub_route`, not as one more route."""
     c: dict = {}
     for it in view["items"].values():
-        c[it["kind"]] = c.get(it["kind"], 0) + 1
+        k = "sub_route" if it["kind"] == "route" and it.get("parent") else it["kind"]
+        c[k] = c.get(k, 0) + 1
     return c
 
 
@@ -233,7 +290,10 @@ def page():
 
 
 def _get(rid: str) -> dict:
+    """The item, also by an alias (an id merged into another item)."""
     view = _index()
+    if view is not None and rid not in view["items"]:
+        rid = view.get("aliases", {}).get(rid, rid)
     if view is None or rid not in view["items"]:
         raise HTTPException(404, "route not found")
     return view["items"][rid]
@@ -265,6 +325,7 @@ def _phase_labels(days: list[dt.date]) -> list[Optional[str]]:
 @router.get("/{rid}")
 def detail(rid: str):
     it = _get(rid)
+    rid = it["id"]
     names = STORE.names()
     f2i = _file_to_idx()
     efforts = [dict(e) for e in it["efforts"]]
@@ -276,6 +337,12 @@ def detail(rid: str):
     out["name"] = names.get(rid) or it["auto_name"]
     out["renamed"] = rid in names
     out["efforts"] = efforts
+    out["partials"] = [dict(p, workout=f2i.get(p["file"])) for p in it.get("partials") or []]
+    items = _index()["items"]
+    ref = lambda i: {"id": i, "name": names.get(i) or items[i]["auto_name"], "length_m": items[i]["length_m"],
+                     "n_efforts": items[i]["n_efforts"]}
+    out["parent"] = ref(it["parent"]) if it.get("parent") in items else None
+    out["sub_routes"] = [ref(i) for i in it.get("sub_routes") or [] if i in items]
     out["status"] = _status()
     out["weather"] = _index().get("weather")
     return out
@@ -287,7 +354,7 @@ class RenameBody(BaseModel):
 
 @router.patch("/{rid}")
 def rename(rid: str, body: RenameBody):
-    _get(rid)
+    rid = _get(rid)["id"]
     STORE.set_name(rid, body.name.strip())
     return {"id": rid, "name": body.name.strip() or _get(rid)["auto_name"], "renamed": bool(body.name.strip())}
 
@@ -299,13 +366,28 @@ def compare(rid: str, a: str, b: str, step: float = 25.0):
     elapsed time, HR, power and elevation are interpolated every `step` m.
     gap_s = t_b − t_a at the same distance (positive: b is behind)."""
     it = _get(rid)
+    rid = it["id"]
     by_id = {e["id"]: e for e in it["efforts"]}
     if a not in by_id or b not in by_id:
         raise HTTPException(404, "effort not found")
     ref_lat, ref_lon = it["lat"], it["lon"]
     if it["kind"] == "route":
+        da, db = (by_id[a].get("dir") or "same"), (by_id[b].get("dir") or "same")
+        if da != db or da == "mixed":
+            # one distance axis needs one direction; a mixed run follows neither
+            raise HTTPException(400, "兩次方向不同，無法沿同一條路線逐點比較")
         tr = BUILDER.track(it["ref_file"])
         ref_lat, ref_lon = list(tr.lat), list(tr.lon)
+        if da == "reversed":
+            ref_lat, ref_lon = ref_lat[::-1], ref_lon[::-1]
+        # the comparison walks each run from the reference's start: a run of
+        # the same loop started elsewhere has no common distance axis
+        for k in (a, b):
+            t = BUILDER.track(by_id[k]["file"])
+            if t is None:
+                raise HTTPException(404, "track missing")
+            if RM.haversine_m(float(t.lat[0]), float(t.lon[0]), ref_lat[0], ref_lon[0]) > R.ROUTE_END_TOL_M:
+                raise HTTPException(400, "這次的起點和參考路線不同，無法逐點比較")
     lat0, lon0 = ref_lat[0], ref_lon[0]
     ref = RM.project(ref_lat, ref_lon, lat0, lon0)
     L = float(RM.path_length(ref)[-1])

@@ -90,18 +90,23 @@ def zone_of(power: float, cp: float) -> str | None:
     return None
 
 
-def _in_zone_expr(system: str, lo, hi) -> str:
-    """Per-workout expression: seconds of this workout inside the zone."""
+def _in_zone_expr(system: str, lo, hi, threshold: Optional[str] = None) -> str:
+    """Per-workout expression: seconds of this workout inside the zone.
+    `threshold`: the threshold operand — None = each workout's own dated
+    value (runtpace / cp / lthr), or a number (zone_table: the threshold its
+    rows show, so the time in a row matches that row's boundaries)."""
     if system == "frielpace":
         # pace min/km = 60 / speed(km/h); slower pace = lower speed.
         # pace ≥ lo·tpace  ⇔  speed ≤ 60/(lo·tpace)
+        tpace = threshold or "runtpace"
         conds = ["speed > 0"]
         if lo is not None:
-            conds.append(f"speed <= 60/({lo}*runtpace)")
+            conds.append(f"speed <= 60/({lo}*{tpace})")
         if hi is not None:
-            conds.append(f"speed > 60/({hi}*runtpace)")
+            conds.append(f"speed > 60/({hi}*{tpace})")
     else:
         ch, basis = ("runpower", "cp") if system == "palladino" else ("heartrate", "lthr")
+        basis = threshold or basis
         conds = [f"{ch} > 0"]
         if lo:
             conds.append(f"{ch} >= {lo}*{basis}")
@@ -120,6 +125,57 @@ def _on_day(w, end_day: int):
     if w is None or not dataclasses.is_dataclass(w):
         return w
     return dataclasses.replace(w, day=max(float(w.day), float(end_day)))
+
+
+def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
+    """{"value", "source", "date", "wprime", "wprime_source"} of the zone
+    basis (cp / lthr / tpace) in effect for the reference run, with where it
+    comes from: the plan's dated test, the dataset's dated setting (WKO5 /
+    athlete_settings / the FIT dataset's as-of estimates) or, for CP before
+    the first plan test on a COROS / TP source, the Stryd-only PD fit
+    (FitFolderDataset.cp_info); for pace without a setting, the estimate
+    thresholds.estimate_tpace (推估)."""
+    from backend.files.wko5_athlete import day_to_date
+    out = {"value": None, "source": None, "date": None, "wprime": None, "wprime_source": None}
+    if ref is None:
+        return out
+    day = day_to_date(ref.day)
+    if basis == "cp":
+        f = getattr(ds, "cp_info", None)
+        if f is not None:
+            i = f(ref)
+            return {**out, **i, "value": i.get("cp")}
+        rows = sorted((t for t in ds.plan.thresholds if t.cp is not None and t.date[:10] <= day.isoformat()),
+                      key=lambda t: t.date)
+        if rows:
+            return {**out, "value": float(rows[-1].cp), "source": f"你的測試 {rows[-1].date[:10]}",
+                    "date": rows[-1].date[:10], "wprime": rows[-1].wprime,
+                    "wprime_source": "測試（兩點法）" if rows[-1].wprime else None}
+        return {**out, "value": ds.cp(ref), "source": "WKO5 mFTP" if ds.settings_from == "wko5" else None}
+    if basis == "lthr":
+        t = ds.plan.threshold_on("lthr", day)
+        if t is not None:
+            d = max(x.date[:10] for x in ds.plan.thresholds if x.lthr is not None and x.date[:10] <= day.isoformat())
+            return {**out, "value": t, "source": f"你的測試 {d}", "date": d}
+        return {**out, "value": ds.sport_setting("thr", ref), "source": ds.setting_label("runthr", "WKO5 設定")}
+    # threshold pace: a dated setting, else the estimate
+    v = ds.sport_setting("tpace", ref)
+    if v is not None:
+        return {**out, "value": v, "source": ds.setting_label("runtpace", "WKO5 設定")}
+    from backend.engine.thresholds import estimate_tpace
+    est = estimate_tpace(ds, day)
+    return {**out, "value": est.get("value"), "source": est.get("reason"),
+            "date": day.isoformat() if est.get("value") else None}
+
+
+def _no_data_reason(basis: str, T, n_runs: int, days: int) -> str:
+    name = {"cp": "CP", "lthr": "LTHR", "tpace": "閾值配速"}[basis]
+    if not n_runs:
+        return f"最近 {days} 天沒有跑步"
+    if T is None:
+        return f"沒有 {name}，區間算不出來"
+    return {"cp": f"最近 {days} 天的跑步沒有可用的功率（手錶推估功率不採用）",
+            "lthr": f"最近 {days} 天的跑步沒有心率", "tpace": f"最近 {days} 天的跑步沒有速度"}[basis]
 
 
 def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
@@ -142,10 +198,19 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
     hist = ds.athlete.settings.get(setting) or [] if setting else []
     overridden = ref is not None and plan_field and ds.plan.threshold_on(plan_field, day_to_date(ref.day)) is not None
     is_default = bool(hist) and not overridden and all(d == _dt.date(1980, 1, 1) for d, _ in hist)
+    info = threshold_info(ds, spec["basis"], ref, end_day)
+    if spec["basis"] == "tpace" and T is None and info.get("value"):
+        # no threshold-pace setting: the estimate (thresholds.estimate_tpace)
+        T = info["value"]
+    # the time in each zone is counted against the threshold the rows show
+    # (T, in effect on end_day), not each run's own dated value: with a CP
+    # test on 2026-09-30, runs before it had no CP and the table read 0 s
+    # (FIT source), or a different CP than the boundaries printed in the row
+    op = None if T is None else f"{float(T):.4f}"
     ev = Evaluator(ds, end_day - days + 1, end_day, sports={"run"})
     rows, total = [], 0.0
     for zid, name, lo, hi in spec["zones"]:
-        r = ev.evaluate(f"athleterange({end_day - days + 1}, {end_day}, {_in_zone_expr(system, lo, hi)})")
+        r = ev.evaluate(f"athleterange({end_day - days + 1}, {end_day}, {_in_zone_expr(system, lo, hi, op)})")
         secs = sum(float(v) for v in r.values() if v == v) if isinstance(r, WS) else 0.0
         total += secs
         rows.append({"id": zid, "name": name, "lo": lo, "hi": hi, "seconds": secs,
@@ -155,17 +220,42 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
         r["share"] = r["seconds"] / total if total else None
     return {"system": system, "title": spec["title"], "unit": spec["unit"], "basis": spec["basis"],
             "threshold": T, "threshold_is_default": is_default, "days": days, "runs": len(runs), "total_seconds": total, "rows": rows,
+            "threshold_source": info.get("source"), "threshold_date": info.get("date"),
+            "wprime": info.get("wprime"), "wprime_source": info.get("wprime_source"),
+            "no_data_reason": None if total else _no_data_reason(spec["basis"], T, len(runs), days),
             "source": SOURCE if system == "palladino" else "WKO5 level tables (docs/wko5-internals/functions.md §4)"}
 
 
 # What to run by, per workout type. Power from Palladino's table; HR caps from
 # the athlete's AeT / Friel HR bands. For intervals HR lags too much to steer
 # by (it keeps climbing through a 5-minute rep), so power is primary there.
+#
+# Trail / hills: power first, HR second. HR answers a change of effort with a
+# ~60 s lag (τ 55–70 s, Hunt 2015/2019, Wang & Hunt 2021;
+# docs/research/drift-algorithm.md §2), so on a 1–3-minute climb it is still
+# rising when the climb ends, while a steady Stryd power on 0–8 % grades is a
+# steady metabolic load (van Rassel et al. 2026; docs/research/racepower-v2.md
+# §2.4). Limits, both from the same docs: Stryd's own trail guidance — "in
+# technical terrain and face steep terrain, you can no longer use a single
+# power number" (help.stryd.com 6879554) — so on steep technical descents
+# power is ignored; and for steep hiking under load Uphill Athlete keeps HR as
+# the practical tool (docs/research/coaching-dashboards-mountain.md §1.1). The
+# power bands themselves are Palladino's (% CP); applying them uphill above
+# ~8 % grade is 推估 (Stryd is validated to ~8 %).
+TERRAIN_NOTE = ("山路、爬坡看功率（心率約慢 1 分鐘才反應，短坡上來不及；Stryd 功率在 0–8% 坡≈固定代謝負荷，"
+                "van Rassel 2026），心率當上限檢查。陡的技術下坡不看功率（Stryd：陡峭、技術地形不能用單一功率數字），"
+                "照感覺與安全；陡坡負重健行仍以心率為主（Uphill Athlete）。超過 8% 坡套用功率區間是推估。")
 WORKOUT_TARGETS = [
     # (id, name, power lo, power hi, hr lo (×LTHR or "aet"), hr hi, primary, example, source)
     ("recovery", "恢復跑", None, 0.75, None, 0.85, "心率", "20–40 分鐘，隔天有強度課時", "Palladino 1A–1B；Friel Z1"),
     ("z2", "輕鬆跑（Zone 2）", 0.75, 0.80, None, "aet", "心率", "大部分的跑步；心率不超過 AeT", "Palladino 1C；Uphill Athlete AeT"),
-    ("long", "長跑 / 山路長天", 0.80, 0.88, None, "aet", "心率", "60 分鐘以上；上坡可以走，心率壓在 AeT", "Palladino Z2；Uphill Athlete"),
+    ("long", "長跑（路跑）", 0.80, 0.88, None, "aet", "心率", "60 分鐘以上；心率壓在 AeT", "Palladino Z2；Uphill Athlete"),
+    ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "功率",
+     "上坡把功率壓在範圍內（可以走），心率不超過 AeT 當上限；陡的技術下坡不看功率",
+     "Palladino 1C–Z2（% CP）；心率延遲 Hunt 2015；Stryd 6879554；坡度 > 8% 為推估"),
+    ("hill", "爬坡重複", 0.95, 1.06, 0.95, 1.03, "功率",
+     "4–6×4 分鐘上坡，走或慢跑下來恢復；看 30 秒平均功率，心率只當參考（短坡上還沒升上來）",
+     "Palladino 3B–Z4（% CP）；心率延遲 Hunt 2015；坡度 > 8% 為推估"),
     ("threshold", "閾值（Near threshold）", 0.95, 1.01, 0.95, 1.00, "功率", "3×10 分鐘 或 2×15 分鐘，休 2–3 分鐘", "Palladino 3B；Friel Z4"),
     ("supra", "Supra threshold", 1.01, 1.06, 1.00, 1.03, "功率", "4–6×5 分鐘，休 2:45（你的筆記）", "Palladino Z4；Friel Z5a"),
     ("vo2", "VO2max", 1.06, 1.16, 1.03, 1.06, "功率", "5×3 分鐘，休 3 分鐘；FTP 紮實後、賽前 4–6 週", "Palladino Z5；Friel Z5b"),
@@ -204,8 +294,10 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
         rows.append({"id": tid, "name": name, "primary": primary, "example": example, "source": src,
                      "power": [None if plo is None or not cp else plo * cp, None if phi is None or not cp else phi * cp],
                      "power_pct": [plo, phi], "hr": [hr(hlo), hr(hhi)]})
-    return {"cp": cp, "cp_source": "你的測試" if ref is not None and ds.plan.threshold_on("cp", day_to_date(ref.day)) is not None
-            else ("WKO5 mFTP" if ds.settings_from == "wko5" else ds.setting_label("runftp")),
+    ci = threshold_info(ds, "cp", ref, end_day)
+    return {"cp": cp, "cp_source": ci.get("source") or ("WKO5 mFTP" if ds.settings_from == "wko5"
+                                                        else ds.setting_label("runftp")),
+            "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
             "lthr": lthr, "lthr_source": lthr_src, "aet": aet, "aet_source": aet_src, "rows": rows}
 
 

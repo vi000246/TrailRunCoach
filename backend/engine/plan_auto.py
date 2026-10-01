@@ -148,13 +148,19 @@ def _week_tss(ss: list[dict], ws: str) -> tuple[float, int]:
 
 
 def classify(stored: list[dict], new: list[dict], items: list[dict], today: str, window_end: str,
-             phase: Optional[str], last_phase: Optional[str], days_to_race: Optional[int]) -> list[dict]:
-    """Why this run's change is big (empty = apply on its own)."""
+             phase: Optional[str], last_phase: Optional[str], days_to_race: Optional[int],
+             reentry_weeks: Optional[set] = None) -> list[dict]:
+    """Why this run's change is big (empty = apply on its own). Weeks of a
+    停訓後恢復期 and the week right after it (`reentry_weeks`) are exempt from
+    the TSS rule: Daniels' 50 → 75 → 100 % steps are planned (detraining.md
+    §6.5, 推估)."""
     from backend.engine.reconcile import monday_of
     out = []
     fw = forward(items, today)
     weeks = sorted({monday_of(today), monday_of(window_end)})
     for ws in weeks:
+        if reentry_weeks and ws in reentry_weeks:
+            continue
         before, n0 = _week_tss(stored, ws)
         after, _ = _week_tss(new, ws)
         if n0 and before > 0 and after > before * (1 + BIG_TSS_UP):
@@ -402,6 +408,44 @@ def _affected(stored: list[dict], new: list[dict], items: list[dict]) -> tuple[l
     return ([s for s in stored if s["uid"] in uids], [s for s in new if s["uid"] in uids])
 
 
+def reentry_weeks(inp: dict) -> set:
+    """Week starts in a 停訓後恢復期 (mode reentry) plus the week after it ends."""
+    from backend.engine.reconcile import monday_of
+    out = {w.get("start") for w in inp.get("weeks") or [] if w.get("mode") == "reentry"}
+    rp = (inp.get("cur") or {}).get("reentry")
+    if (inp.get("cur") or {}).get("mode") == "reentry":
+        out.add(((inp.get("cur") or {}).get("week") or {}).get("start"))
+    if rp and rp.get("end"):
+        out.add(monday_of(rp["end"]))
+        out.add(monday_of((dt.date.fromisoformat(rp["end"]) + dt.timedelta(days=7)).isoformat()))
+    return {x for x in out if x}
+
+
+def state_changes(inp: dict, state: dict) -> list[str]:
+    """Log lines for a Zone 5 state change and a new re-entry block (both are
+    plan rules, not sessions); updates `state` in place (keys z5, reentry)."""
+    out = []
+    cur = inp.get("cur") or {}
+    z5 = (cur.get("quality_gate") or {}).get("z5") or {}
+    key = f"{z5.get('state')}|{z5.get('since')}|{z5.get('path')}" if z5 else None
+    if z5 and key != state.get("z5"):
+        old = (state.get("z5") or "").split("|")[0]
+        from backend.engine.base_check import STATE_LABEL
+        out.append(f"Zone 5：{STATE_LABEL.get(old, '—') if old else '—'} → {z5.get('text') or z5.get('label')}")
+        state["z5"] = key
+    rp = cur.get("reentry")
+    rkey = f"{rp['return']}|{rp['days']}" if rp else None
+    if rp and rkey != state.get("reentry"):
+        out.append(f"恢復期：{rp['text']}" + ("（不排課日期，事前排好）" if rp.get("planned") else "（從活動資料偵測）"))
+        state["reentry"] = rkey
+    return out
+
+
+async def _log_states(db, inp: dict, state: dict, trigger: str) -> None:
+    for line in state_changes(inp, state):
+        await _add_entry(db, trigger=trigger, status="applied", summary=line, items=[], push=None)
+
+
 async def run(db, trigger: str = "sync", force: bool = False, approve_id: Optional[int] = None) -> dict:
     """One automatic run (see the module doc). `force`: ignore the data stamp
     and the big-change hold (approve, the page's 立即重算)."""
@@ -432,7 +476,9 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
     days = int(cfg["push_days"] or 7)
     wend = (dt.date.fromisoformat(today) + dt.timedelta(days=days - 1)).isoformat()
     phase = (inp.get("phase") or {}).get("kind")
-    big = classify(stored, new, items, today, wend, phase, state.get("phase"), inp.get("days_to_next_a"))
+    big = classify(stored, new, items, today, wend, phase, state.get("phase"), inp.get("days_to_next_a"),
+                   reentry_weeks(inp))
+    await _log_states(db, inp, state, trigger)
     fw = forward(items, today) + [i for i in items if i["action"] == "dropped"]
     fp = fingerprint(fw) if fw else None
     out: dict = {"status": "noop", "items": items}

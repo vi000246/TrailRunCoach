@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import heapq
 import json
 import math
 import os
@@ -53,8 +54,11 @@ from backend.engine.algorithms.routes import cells as coarse_cells
 from backend.engine.algorithms.wko5_hr import HR_LEVELS
 from backend.engine.algorithms.wko5_time import MOVING_SPEED_KMH
 
-ALGO_VERSION = 3          # 2: elevation gaps filled from the previous sample
+ALGO_VERSION = 3          # tier A (tracks): 2: elevation gaps filled from the previous sample
                           # 3: per-interval peaks (max HR, max 30 s power)
+INDEX_VERSION = 4         # tier B (index.json): 3 = ALGO_VERSION 3's index;
+                          # 4: routes clustered by shared length share (start / direction free),
+                          #    canonical common part, partials / sub-routes, stretches merged
 # WKO5COACH_ROUTES_DIR: another store root (a second server on the same
 # machine must not share the live index — two versions would rebuild it in turn)
 HOME = Path(os.getenv("WKO5COACH_ROUTES_DIR") or (Path.home() / ".wko5coach" / "routes"))
@@ -467,6 +471,8 @@ class Segment:
     gain_m: float                  # net, reference effort
     created: str
     efforts: list = field(default_factory=list)   # [{file, i0, i1, overlap, frechet_m}]
+    derived: bool = False          # a merged chain of stretches (`_merge_chains`), rebuilt every time
+    merged_from: list = field(default_factory=list)
 
     @property
     def direction(self) -> str:
@@ -519,27 +525,6 @@ def match_segment(seg: Segment, tr: Track) -> list[dict]:
     return out
 
 
-def route_match(ref: Track, tr: Track) -> Optional[float]:
-    """Mutual overlap of two whole tracks when they are the same route
-    (>= 0.8 both ways, start and end within 200 m, same direction), else None."""
-    if tr.family != ref.family or not ref.cells or not tr.cells:
-        return None
-    if len(ref.cells & tr.cells) / len(ref.cells | tr.cells) < 0.3:
-        return None
-    a = ref.xy(ref.lat[0], ref.lon[0])
-    b = tr.xy(ref.lat[0], ref.lon[0])
-    if np.hypot(*(a[0] - b[0])) > ROUTE_END_TOL_M or np.hypot(*(a[-1] - b[-1])) > ROUTE_END_TOL_M:
-        return None
-    ov = RM.mutual_overlap(a, b)
-    if ov < ROUTE_MIN_OVERLAP:
-        return None
-    # direction: b followed in order along a stays on a
-    s, res = RM.along_residual(a, b)
-    if float((res <= RM.TOL_M * 2).mean()) < ROUTE_MIN_OVERLAP:
-        return None
-    return ov
-
-
 # ---------------------------------------------------------------------------
 # the index
 # ---------------------------------------------------------------------------
@@ -581,7 +566,7 @@ class RouteStore:
     # tier B
     def load_index(self) -> Optional[dict]:
         d = _read(self.index_path)
-        return d if d and d.get("version") == ALGO_VERSION else None
+        return d if d and d.get("version") == INDEX_VERSION else None
 
     def save_index(self, d: dict) -> None:
         _write(self.index_path, d)
@@ -750,7 +735,8 @@ class _State:
 
 
 def detect(tracks: dict[str, Track], prev: Optional[dict] = None, new_files: Optional[set] = None,
-           progress: Progress = _noop) -> dict:
+           progress: Progress = _noop, old_routes: Optional[list] = None,
+           pair_cache: Optional[dict] = None) -> dict:
     """Segments and routes over `tracks`, one track at a time, oldest first.
 
     For each track:
@@ -766,20 +752,24 @@ def detect(tracks: dict[str, Track], prev: Optional[dict] = None, new_files: Opt
     tracks meet it in step a. So an incremental build (prev + new_files: the
     old tracks count as processed, their efforts kept) finds what a full
     build does, and existing ids and references never change.
+    Routes are clustered over all tracks every time (`cluster_routes`); ids
+    and references come from prev's routes, or `old_routes` (a full rebuild /
+    an index of an older version).
     """
     ordered = sorted(tracks.values(), key=lambda t: t.start)
     st = _State(tracks)
-    routes: list[dict] = []
+    routes: list[dict] = list(old_routes or [])
     if prev:
         for d in prev.get("segments", []) + prev.get("pending", []):
+            if d.get("derived"):           # merged chains are rebuilt by _finish, never references
+                continue
             s = Segment.from_json(d)
             if s.ref_file not in tracks:
                 continue
             s.efforts = [{k: e[k] for k in ("file", "i0", "i1", "overlap", "frechet_m")}
                          for e in s.efforts if e["file"] in tracks and e["file"] not in new_files]
             st.add_segment(s)
-        routes = [dict(r, members=[m for m in r["members"] if m in tracks and m not in new_files])
-                  for r in prev.get("routes", []) + prev.get("pending_routes", [])
+        routes = [r for r in prev.get("routes", []) + prev.get("pending_routes", [])
                   if r["ref_file"] in tracks]
         for t in ordered:
             if t.file not in new_files:
@@ -824,47 +814,540 @@ def detect(tracks: dict[str, Track], prev: Optional[dict] = None, new_files: Opt
     for s in segs:
         s.efforts.sort(key=lambda e: (tracks[e["file"]].start, e["i0"]))
 
-    # routes
-    progress("找重複路線", 0, len(todo))
-    for n, tr in enumerate(todo):
-        progress("找重複路線", n, len(todo))
-        best, best_ov = None, 0.0
-        own = next((r for r in routes if r["ref_file"] == tr.file), None)
-        if own is not None:          # a re-parsed reference stays its route's reference
-            if tr.file not in own["members"]:
-                own["members"].append(tr.file)
-            continue
-        for r in routes:
-            ref = tracks.get(r["ref_file"])
-            if ref is None:
-                continue
-            ov = route_match(ref, tr)
-            if ov is not None and ov > best_ov:
-                best, best_ov = r, ov
-        if best is not None:
-            if tr.file not in best["members"]:
-                best["members"].append(tr.file)
-        else:
-            routes.append(_new_route(tr))
-    for r in routes:
-        r["members"].sort(key=lambda f: tracks[f].start)
+    # routes: clustered again over ALL tracks on every build (cheap next to the
+    # segments), ids and references carried over from the previous index
+    progress("找重複路線", 0, 1)
+    routes = cluster_routes(tracks, routes, progress=progress, pair_cache=pair_cache)
 
     # 4. keep what repeats; drop stretches that add nothing
     return _finish(segs, routes, tracks)
 
 
-def _new_route(tr: Track) -> dict:
-    step = max(1, len(tr) // 400)
-    lat = [float(x) for x in tr.lat[::step]]
-    lon = [float(x) for x in tr.lon[::step]]
-    if lat[-1] != float(tr.lat[-1]):
-        lat.append(float(tr.lat[-1])); lon.append(float(tr.lon[-1]))
-    xy = RM.project(tr.lat, tr.lon, tr.lat[0], tr.lon[0])
-    return {"id": seg_id("route", tr.file, 0, tr.raw["idx"][-1]), "kind": "route", "family": tr.family,
-            "ref_file": tr.file, "lat": lat, "lon": lon,
-            "length_m": round(float(RM.path_length(xy)[-1]), 1),
-            "gain_m": round(float(tr.raw.get("climbing") or 0.0), 0),   # WKO5's climbing of the reference
-            "created": tr.start, "members": [tr.file]}
+# ---------------------------------------------------------------------------
+# routes: whole activities clustered by the length share they have in common
+# ---------------------------------------------------------------------------
+
+ROUTE_SAME = ROUTE_MIN_OVERLAP   # mutual length share in each other's 30 m buffer: the same route
+ROUTE_PART = 0.8                 # 推估 one-way share: a run lying this much on a longer route is part of it
+ROUTE_PART_LEN = 0.9             # 推估 ... and is at most 0.9 x its length (two variants of one
+                                 #      length sharing 80 % are siblings, not one inside the other)
+ROUTE_COMMON = 0.5               # 推估 canonical path = the reference's stretch more than half the members run
+ROUTE_DIR = 0.8                  # share of on-path points that follow the canonical path in order
+ROUTE_MAX_POINTS = 400           # canonical path thinned for the index / map
+
+
+_CELL = 0.001                    # the 100 m cells of algorithms/routes.py
+
+
+def _cell_codes(lat: np.ndarray, lon: np.ndarray) -> np.ndarray:
+    return np.floor(lat / _CELL).astype(np.int64) * 1_000_000 + np.floor(lon / _CELL).astype(np.int64)
+
+
+class _RouteGeo:
+    """Per-track geometry for one clustering pass, cached:
+
+      even   points every 25 m along the track, as lat / lon (the local
+             projection is linear in lat / lon, so interpolating lat / lon is
+             the same as resampling the projected path: `RM.resample_even`)
+      halo   the 100 m cells of those points and their 8 neighbours. A point
+             within 30 m of the track lies within 30 + 12.5 m of one of its
+             even points, so inside the halo: the share of a's even points in
+             b's halo bounds a's share in b's 30 m buffer from above, and a
+             pair whose bound is short of the threshold is never measured."""
+
+    def __init__(self, tracks: dict[str, Track]):
+        self.tracks = tracks
+        self._xy: dict[tuple, np.ndarray] = {}
+        self._even: dict[str, tuple] = {}
+        self._halo: dict[str, np.ndarray] = {}
+        self.memo: dict = {}
+
+    def xy(self, f: str, origin: tuple) -> np.ndarray:
+        k = (f, origin)
+        v = self._xy.get(k)
+        if v is None:
+            tr = self.tracks[f]
+            v = self._xy[k] = RM.project(tr.lat, tr.lon, origin[0], origin[1])
+        return v
+
+    def origin(self, f: str) -> tuple:
+        tr = self.tracks[f]
+        return float(tr.lat[0]), float(tr.lon[0])
+
+    def even(self, f: str) -> tuple:
+        """(lat, lon, cell codes) of the even points."""
+        v = self._even.get(f)
+        if v is None:
+            tr = self.tracks[f]
+            cum = RM.path_length(self.xy(f, self.origin(f)))
+            L = float(cum[-1]) if len(cum) else 0.0
+            s = np.append(np.arange(0.0, L, RM.STEP_M), L) if L > 0 else np.zeros(1)
+            la, lo = np.interp(s, cum, tr.lat), np.interp(s, cum, tr.lon)
+            v = self._even[f] = (la, lo, _cell_codes(la, lo))
+        return v
+
+    def even_xy(self, f: str, origin: tuple) -> np.ndarray:
+        la, lo, _ = self.even(f)
+        return RM.project(la, lo, origin[0], origin[1])
+
+    def halo(self, f: str) -> np.ndarray:
+        v = self._halo.get(f)
+        if v is None:
+            c = np.unique(self.even(f)[2])
+            v = self._halo[f] = np.unique(np.concatenate(
+                [c + dy * 1_000_000 + dx for dy in (-1, 0, 1) for dx in (-1, 0, 1)]))
+        return v
+
+    def bound(self, a: str, b: str) -> float:
+        """Upper bound of a's share in b's 30 m buffer."""
+        codes = self.even(a)[2]
+        return float(np.isin(codes, self.halo(b), assume_unique=False).mean())
+
+    def cover(self, a: str, b: str, origin: tuple) -> float:
+        """a's length share inside b's 30 m buffer (= RM.cover_share)."""
+        return RM.overlap_ratio(self.even_xy(a, origin), self.xy(b, origin))
+
+
+def route_pairs(tracks: dict[str, Track], geo: Optional[_RouteGeo] = None,
+                need: float = ROUTE_MIN_OVERLAP, cache: Optional[dict] = None) -> dict:
+    """{(a, b): (share of a in b's buffer, share of b in a's buffer)} for every
+    pair of same-family tracks that can reach `need` both ways (a before b in
+    start order); the halo bound (`_RouteGeo`) skips the rest unmeasured.
+    Direction- and start-free: the share is of length within 30 m of the
+    other track's polyline. `cache` ({(a, b): shares or None}, kept by the
+    Builder between builds, entries of changed files dropped) makes an
+    incremental build measure only the pairs of its new tracks."""
+    geo = geo or _RouteGeo(tracks)
+    cache = {} if cache is None else cache
+    order = sorted(tracks, key=lambda f: (tracks[f].start, f))
+    pos = {f: k for k, f in enumerate(order)}
+    cell_index: dict = {}
+    for f in order:
+        for c in tracks[f].cells:
+            cell_index.setdefault(c, []).append(f)
+    out = {}
+    for a in order:
+        ta = tracks[a]
+        if not ta.cells or ta.family is None:
+            continue
+        counts: dict[str, int] = {}
+        for c in ta.cells:
+            for b in cell_index[c]:
+                if pos[b] > pos[a]:
+                    counts[b] = counts.get(b, 0) + 1
+        oa = geo.origin(a)
+        for b in sorted(counts, key=pos.get):
+            tb = tracks[b]
+            if tb.family != ta.family:
+                continue
+            key = (a, b)
+            if key in cache:
+                v = cache[key]
+            else:
+                v = None
+                if geo.bound(a, b) >= need and geo.bound(b, a) >= need:
+                    ca = geo.cover(a, b, oa)
+                    if ca >= need:
+                        v = (ca, geo.cover(b, a, oa))
+                cache[key] = v
+            if v is not None:
+                out[key] = v
+    return out
+
+
+def _canonical(ref: Track, members: list[str], geo: _RouteGeo) -> dict:
+    """The maximal common part of a route: the reference's kept points from
+    the first to the last place at least ROUTE_COMMON of the members pass
+    (within 30 m). Different car parks, a warm-up loop of one run or a detour
+    at the end trim away; the shared path stays whole."""
+    o = geo.origin(ref.file)
+    xr = geo.xy(ref.file, o)
+    la = RM.path_length(xr)
+    even = RM.resample_even(xr)
+    s_even = np.linspace(0.0, float(la[-1]), len(even)) if len(even) > 1 else np.zeros(len(even))
+    cnt = np.ones(len(even))
+    for f in members:
+        if f != ref.file:
+            cnt += RM.dist_to_path(even, geo.xy(f, o)) <= RM.TOL_M
+    share = cnt / max(1, len(members))
+    common = np.flatnonzero(share > ROUTE_COMMON)
+    if len(common) == 0:
+        i0, i1 = 0, len(ref) - 1
+    else:
+        s0, s1 = s_even[common[0]], s_even[common[-1]]
+        i0 = int(max(0, np.searchsorted(la, s0, side="right") - 1))
+        i1 = int(min(len(ref) - 1, np.searchsorted(la, s1, side="left")))
+        if i1 <= i0:
+            i0, i1 = 0, len(ref) - 1
+    step = max(1, (i1 - i0 + 1) // ROUTE_MAX_POINTS)
+    ks = list(range(i0, i1 + 1, step))
+    if ks[-1] != i1:
+        ks.append(i1)
+    return {"ref_i0": i0, "ref_i1": i1, "lat": [float(ref.lat[k]) for k in ks],
+            "lon": [float(ref.lon[k]) for k in ks], "length_m": round(float(la[i1] - la[i0]), 1),
+            "common_share": round(float(share.mean()), 3)}
+
+
+def _direction(canon_xy: np.ndarray, pts: np.ndarray) -> str:
+    """same / reversed / mixed: the member's on-path points followed in order
+    along the canonical path (`route_match.direction_shares`). An out-and-back
+    fits both ways and counts as the same direction."""
+    f, r = RM.direction_shares(canon_xy, pts)
+    if f >= ROUTE_DIR and f >= r:
+        return "same"
+    if r >= ROUTE_DIR:
+        return "reversed"
+    return "mixed"
+
+
+def cluster_routes(tracks: dict[str, Track], prev_routes: Optional[list] = None,
+                   progress: Progress = _noop, pair_cache: Optional[dict] = None) -> list[dict]:
+    """Routes over all tracks (docs/spec/route-progress.spec.md, Routes).
+
+    1. pairs: the length share of each track inside the other's 30 m buffer
+       (`route_pairs`); two runs are the same route when both shares are
+       >= 0.8 — whatever the start point and direction;
+    2. clusters, leader style: the track with the most unassigned same-route
+       neighbours (ties: higher summed share, older, file) takes all of them;
+       every member is within the threshold of its leader, so long chains of
+       slightly different runs cannot drift into one route;
+    3. the reference is the previous index's reference when it is in the
+       cluster (the id and the comparison axis stay), else the leader; the
+       canonical path is the reference's maximal common part (`_canonical`);
+    4. each member's direction (same / reversed / mixed) on that path;
+    5. a cluster lying >= 0.8 inside a longer route is linked to it: with one
+       run it is that route's partial, with more a sub-route (`parent`).
+    Returns route dicts; single runs not part of any route are kept as
+    pending routes (members = 1)."""
+    geo = _RouteGeo(tracks)
+    pairs = route_pairs(tracks, geo, cache=pair_cache)
+    nbr: dict[str, dict[str, float]] = {f: {} for f in tracks}
+    for (a, b), (ca, cb) in pairs.items():
+        m = min(ca, cb)
+        if m >= ROUTE_SAME:
+            nbr[a][b] = m
+            nbr[b][a] = m
+    left = set(f for f in tracks if tracks[f].family is not None)
+
+    def score(f):
+        nb = [g for g in nbr[f] if g in left]
+        return (-len(nb), -round(sum(nbr[f][g] for g in nb), 6), tracks[f].start, f)
+
+    # lazy greedy: a score only gets worse as tracks are taken, so a popped
+    # entry whose fresh score equals its stored one is the true best
+    heap = [score(f) for f in left]
+    heapq.heapify(heap)
+    clusters: list[list[str]] = []
+    while heap:
+        item = heapq.heappop(heap)
+        f = item[3]
+        if f not in left:
+            continue
+        cur = score(f)
+        if cur != item:
+            heapq.heappush(heap, cur)
+            continue
+        group = [f] + sorted((g for g in nbr[f] if g in left), key=lambda g: (tracks[g].start, g))
+        left.difference_update(group)
+        clusters.append(group)
+    progress("找重複路線", 1, 3)
+
+    prev_routes = sorted(prev_routes or [], key=lambda r: (-len(r.get("members", [])), r["id"]))
+    out = _route_dicts(clusters, tracks, geo, prev_routes)
+    # clusters whose canonical paths are the same route are one route: a
+    # leader with its own spur can leave out a run that matches the common part
+    for _ in range(4):
+        merged = _merge_same_canonical(out)
+        if merged is None:
+            break
+        out = _route_dicts(merged, tracks, geo, prev_routes)
+    progress("找重複路線", 2, 3)
+    _link_parts(out, tracks)
+    progress("找重複路線", 3, 3)
+    return out
+
+
+class _Shape:
+    """lat / lon arrays of a canonical path, for _RouteGeo."""
+
+    def __init__(self, lat, lon):
+        self.lat = np.asarray(lat, dtype=float)
+        self.lon = np.asarray(lon, dtype=float)
+
+
+def _boxes_touch(a: tuple, b: tuple, pad: float = 0.0005) -> bool:
+    return not (a[1] < b[0] - pad or a[0] > b[1] + pad or a[3] < b[2] - pad or a[2] > b[3] + pad)
+
+
+def _box(r: dict) -> tuple:
+    return min(r["lat"]), max(r["lat"]), min(r["lon"]), max(r["lon"])
+
+
+def _merge_same_canonical(out: list[dict]) -> Optional[list[list[str]]]:
+    """Member lists after merging every cluster into a larger one whose
+    canonical path it matches (mutual length share >= 0.8); None when none
+    does. The larger cluster's reference stays first (it stays the reference)."""
+    shapes = {k: _Shape(r["lat"], r["lon"]) for k, r in enumerate(out)}
+    g = _RouteGeo(shapes)
+    order = sorted(range(len(out)), key=lambda k: (-len(out[k]["members"]), out[k]["created"], out[k]["id"]))
+    boxes = [_box(r) for r in out]
+    into: dict[int, int] = {}
+    for i, a in enumerate(order):
+        if a in into:
+            continue
+        ra = out[a]
+        for b in order[i + 1:]:
+            if b in into:
+                continue
+            rb = out[b]
+            if rb["family"] != ra["family"] or not _boxes_touch(boxes[a], boxes[b]):
+                continue
+            if g.bound(a, b) < ROUTE_SAME or g.bound(b, a) < ROUTE_SAME:
+                continue
+            o = g.origin(a)
+            if g.cover(a, b, o) >= ROUTE_SAME and g.cover(b, a, o) >= ROUTE_SAME:
+                into[b] = a
+    if not into:
+        return None
+    groups = []
+    for k in order:
+        if k in into:
+            continue
+        r = out[k]
+        mem = [r["ref_file"]] + [f for f in r["members"] if f != r["ref_file"]]
+        for b in order:
+            if into.get(b) == k:
+                mem += out[b]["members"]
+        groups.append(mem)
+    return groups
+
+
+def _link_parts(out: list[dict], tracks: dict[str, Track]) -> None:
+    """A route lying >= ROUTE_PART inside a longer repeated route (while that
+    one is not >= ROUTE_SAME inside it — then they would be the same route)
+    gets `parent`; a single run there is that route's partial."""
+    shapes = {k: _Shape(r["lat"], r["lon"]) for k, r in enumerate(out)}
+    g = _RouteGeo(shapes)
+    boxes = [_box(r) for r in out]
+    hosts = sorted((k for k, r in enumerate(out) if len(r["members"]) >= 2), key=lambda k: -out[k]["length_m"])
+    for k, r in enumerate(out):
+        best, best_key = None, None
+        for p in hosts:
+            q = out[p]
+            if p == k or q["family"] != r["family"] or r["length_m"] > ROUTE_PART_LEN * q["length_m"]:
+                continue
+            if not _boxes_touch(boxes[k], boxes[p]) or g.bound(k, p) < ROUTE_PART:
+                continue
+            o = g.origin(k)
+            share = g.cover(k, p, o)
+            if share < ROUTE_PART or g.cover(p, k, o) >= ROUTE_SAME:
+                continue
+            key = (share, len(q["members"]), q["id"])
+            if best_key is None or key > best_key:
+                best, best_key = p, key
+        if best is not None:
+            r["parent"] = out[best]["id"]
+            r["parent_share"] = round(best_key[0], 3)
+    by_id = {r["id"]: r for r in out}
+    for r in out:
+        if r["parent"] and len(r["members"]) == 1:
+            by_id[r["parent"]]["partials"].append({"file": r["members"][0], "share": r["parent_share"]})
+    for r in out:
+        r["partials"].sort(key=lambda p: (tracks[p["file"]].start, p["file"]))
+
+
+def _route_dicts(clusters: list[list[str]], tracks: dict[str, Track], geo: _RouteGeo,
+                 prev_routes: list[dict]) -> list[dict]:
+    """Route dicts of member lists: ids and references from the previous
+    index (its largest route first), else the cluster's first track."""
+    where = {f: k for k, g in enumerate(clusters) for f in g}
+    ref_of: dict[int, tuple[str, str]] = {}
+    aliases: dict[str, int] = {}
+    for r in prev_routes:
+        k = where.get(r["ref_file"])
+        if k is None:
+            continue
+        if k not in ref_of:
+            ref_of[k] = (r["id"], r["ref_file"])
+        elif len(r.get("members", [])) >= 2:      # a listed route merged into another: its link resolves
+            aliases[r["id"]] = k
+        for a in r.get("aliases", []):
+            aliases.setdefault(a, k)
+    out: list[dict] = []
+    for k, group in enumerate(clusters):
+        if k in ref_of:
+            rid, ref_file = ref_of[k]
+        else:
+            ref_file = group[0]
+            rid = seg_id("route", ref_file, 0, tracks[ref_file].raw["idx"][-1])
+        ref = tracks[ref_file]
+        members = sorted(group, key=lambda f: (tracks[f].start, f))
+        ck = (ref_file, tuple(members))
+        if ck not in geo.memo:                # the merge passes rebuild unchanged clusters
+            canon = _canonical(ref, members, geo)
+            o = (canon["lat"][0], canon["lon"][0])
+            cxy = RM.project(canon["lat"], canon["lon"], *o)
+            dirs = {f: ("same" if f == ref_file else _direction(cxy, geo.xy(f, o))) for f in members}
+            geo.memo[ck] = (canon, dirs)
+        canon, dirs = geo.memo[ck]
+        out.append({"id": rid, "kind": "route", "family": ref.family, "ref_file": ref_file,
+                    **canon,
+                    "gain_m": round(float(ref.raw.get("climbing") or 0.0), 0),   # WKO5's climbing of the reference
+                    "created": tracks[members[0]].start, "members": members, "dirs": dirs,
+                    "partials": [], "parent": None,
+                    "aliases": sorted(a for a, kk in aliases.items() if kk == k)})
+    return out
+
+
+STRETCH_ON_ROUTE = 0.8     # 推估 a stretch this much (length share) inside a route's canonical path ...
+STRETCH_ROUTE_ACTS = 0.8   # 推估 ... with this share of its activities being that route's runs is the route
+CHAIN_GAP_M = 250.0        # 推估 two stretches this close along a shared activity continue each other
+CHAIN_JACCARD = 0.6        # 推估 activities in common (Jaccard) for two stretches to be one corridor
+CHAIN_PIECE_ACTS = 0.8     # 推估 a piece with this share of its activities on the merged stretch is dropped
+
+
+def _route_family(r: dict, routes: list[dict]) -> set:
+    """Runs of a route, its partials and its sub-routes' runs."""
+    out = set(r["members"]) | {p["file"] for p in r.get("partials", [])}
+    for q in routes:
+        if q.get("parent") == r["id"]:
+            out |= set(q["members"])
+    return out
+
+
+def _route_holding(s: Segment, sxy: np.ndarray, acts: frozenset, kept_routes: list[dict],
+                   routes: list[dict]) -> Optional[dict]:
+    """The repeated route a stretch belongs to: the stretch lies >= 0.8 inside
+    its canonical path and >= 0.8 of the stretch's activities are its runs
+    (or partials / sub-route runs). Best = the most covering route."""
+    best, best_key = None, None
+    for r in kept_routes:
+        if r["family"] != s.family:
+            continue
+        if max(r["lat"]) < min(s.lat) - 0.001 or min(r["lat"]) > max(s.lat) + 0.001 or \
+                max(r["lon"]) < min(s.lon) - 0.001 or min(r["lon"]) > max(s.lon) + 0.001:
+            continue
+        fam = _route_family(r, routes)
+        share_acts = len(acts & fam) / max(1, len(acts))
+        if share_acts < STRETCH_ROUTE_ACTS:
+            continue
+        b = RM.project(r["lat"], r["lon"], s.lat[0], s.lon[0])
+        cov = RM.cover_share(sxy, b)
+        if cov >= STRETCH_ON_ROUTE:
+            key = (share_acts, cov, len(r["members"]), r["id"])
+            if best_key is None or key > best_key:
+                best, best_key = r, key
+    return best
+
+
+def _merge_chains(stretches: list[Segment], acts: dict, tracks: dict[str, Track], drop: set) -> list[Segment]:
+    """Chains of stretches -> their maximal common part (docs/spec, What is listed).
+
+    Two stretches are links of one chain when they share >= 0.6 of their
+    activities (Jaccard) and, on the oldest activity doing both, one's effort
+    overlaps the other's or starts within 250 m of its end. For each chain of
+    >= 2: the host is the activity doing the most links (ties: older, file);
+    the links' efforts on the host merged where they touch give the longest
+    run covering the most links; that run becomes a stretch (`derived`,
+    matched against every activity of the chain). Each link whose activities
+    are >= 0.8 on it, and whose path lies on it, is dropped. The merged
+    stretch is kept only when it replaces >= 2 links — never one more item.
+    Derived stretches are recomputed by every build (never references), so an
+    incremental build makes the same ones as a full build."""
+    if len(stretches) < 2 or not tracks:
+        return []
+    stretches = sorted(stretches, key=lambda s: s.id)
+    eff: dict[str, dict[str, list]] = {}
+    for s in stretches:
+        d = eff[s.id] = {}
+        for e in s.efforts:
+            d.setdefault(e["file"], []).append((e["i0"], e["i1"]))
+    la_cache: dict[str, np.ndarray] = {}
+
+    def la(f):
+        v = la_cache.get(f)
+        if v is None:
+            tr = tracks[f]
+            v = la_cache[f] = RM.path_length(tr.xy(tr.lat[0], tr.lon[0]))
+        return v
+
+    def touch(f, a, b):
+        L = la(f)
+        lo, hi = (a, b) if a[0] <= b[0] else (b, a)
+        return b[0] <= a[1] and a[0] <= b[1] or (L[hi[0]] - L[lo[1]] <= CHAIN_GAP_M)
+
+    box = {s.id: (min(s.lat), max(s.lat), min(s.lon), max(s.lon)) for s in stretches}
+    parent = {s.id: s.id for s in stretches}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    pad = 0.003                                    # ~300 m: CHAIN_GAP_M plus slack
+    for i, s in enumerate(stretches):
+        for t in stretches[i + 1:]:
+            if s.family != t.family:
+                continue
+            bs, bt = box[s.id], box[t.id]
+            if bs[1] < bt[0] - pad or bs[0] > bt[1] + pad or bs[3] < bt[2] - pad or bs[2] > bt[3] + pad:
+                continue
+            common = acts[s.id] & acts[t.id]
+            if not common or len(common) / len(acts[s.id] | acts[t.id]) < CHAIN_JACCARD:
+                continue
+            f = min((f for f in common if f in tracks), key=lambda f: (tracks[f].start, f), default=None)
+            if f is None:
+                continue
+            if any(touch(f, a, b) for a in eff[s.id][f] for b in eff[t.id][f]):
+                parent[find(s.id)] = find(t.id)
+    groups: dict[str, list[Segment]] = {}
+    for s in stretches:
+        groups.setdefault(find(s.id), []).append(s)
+    out = []
+    for g in sorted(groups.values(), key=lambda g: min(s.id for s in g)):
+        if len(g) < 2:
+            continue
+        files = sorted({f for s in g for f in acts[s.id] if f in tracks}, key=lambda f: (tracks[f].start, f))
+        host = max(files, key=lambda f: (sum(1 for s in g if f in acts[s.id]), -files.index(f)))
+        ivs = sorted((iv[0], iv[1], s.id) for s in g for iv in eff[s.id].get(host, []))
+        runs: list[list] = []                          # [i0, i1, {ids}]
+        for i0, i1, sid in ivs:
+            if runs and touch(host, (runs[-1][0], runs[-1][1]), (i0, i1)):
+                runs[-1][1] = max(runs[-1][1], i1)
+                runs[-1][2].add(sid)
+            else:
+                runs.append([i0, i1, {sid}])
+        L = la(host)
+        i0, i1, ids = max(runs, key=lambda r: (len(r[2]), L[r[1]] - L[r[0]], -r[0]))
+        if len(ids) < 2:
+            continue
+        m = _new_segment("stretch", tracks[host], i0, i1)
+        if m.id in acts:                               # the run is one of the links itself
+            continue
+        m.derived = True
+        for f in files:
+            m.efforts.extend(match_segment(m, tracks[f]))
+        m.efforts.sort(key=lambda e: (tracks[e["file"]].start, e["i0"]))
+        m_acts = frozenset(e["file"] for e in m.efforts)
+        if len(m_acts) < 2:
+            continue
+        mxy = m.xy()
+        gone = []
+        for s in g:
+            if s.id not in ids:
+                continue
+            if len(acts[s.id] & m_acts) < CHAIN_PIECE_ACTS * len(acts[s.id]):
+                continue
+            if RM.overlap_ratio(s.xy(m.lat[0], m.lon[0]), mxy) < RM.MIN_OVERLAP:
+                continue
+            gone.append(s.id)
+        if len(gone) < 2:
+            continue
+        drop.update(gone)
+        m.merged_from = sorted(gone)
+        out.append(m)
+    return out
 
 
 def _finish(segs: list[Segment], routes: list[dict], tracks: dict[str, Track]) -> dict:
@@ -874,6 +1357,7 @@ def _finish(segs: list[Segment], routes: list[dict], tracks: dict[str, Track]) -
     # a stretch is redundant when a segment containing it was done by exactly
     # the same activities — it would show the same efforts, only shorter
     drop = set()
+    folded: set = set()                    # stretches that are a route (`_route_holding`)
     kept_routes = [r for r in routes if len(r["members"]) >= 2]
     same_acts: dict[frozenset, list[Segment]] = {}
     for s in keep:
@@ -894,22 +1378,46 @@ def _finish(segs: list[Segment], routes: list[dict], tracks: dict[str, Track]) -
             if RM.overlap_ratio(a, b) >= RM.MIN_OVERLAP:
                 drop.add(s.id)
                 break
+    # the other way round: a longer variant whose activities (>= 0.8) all do
+    # a part of it that more activities do — the same hill or path with its
+    # ends detected a little differently — is listed once, as that common part
+    for o in sorted(keep, key=lambda s: (-s.length_m, s.id)):
+        if o.id in drop:
+            continue
+        for s in keep:
+            if s is o or s.id in drop or s.family != o.family or s.length_m >= o.length_m:
+                continue
+            if (s.kind == "stretch") != (o.kind == "stretch") or s.kind != "stretch" and s.kind != o.kind:
+                continue
+            if len(acts[s.id]) <= len(acts[o.id]) or \
+                    len(acts[o.id] & acts[s.id]) < CHAIN_PIECE_ACTS * len(acts[o.id]):
+                continue
+            if RM.overlap_ratio(s.xy(), o.xy(s.lat[0], s.lon[0])) >= RM.MIN_OVERLAP:
+                drop.add(o.id)
+                break
+    for s in keep:
         if s.id in drop or s.kind != "stretch":
             continue
-        # the whole route, done by the route's activities, is the route
-        for r in kept_routes:
-            if frozenset(r["members"]) == acts[s.id]:
-                b = RM.project(r["lat"], r["lon"], s.lat[0], s.lon[0])
-                if RM.mutual_overlap(a, b) >= RM.MIN_OVERLAP:
-                    drop.add(s.id)
-                    break
+        a = s.xy()
+        # a stretch on a route, done mostly by that route's runs, is that route
+        r = _route_holding(s, a, acts[s.id], kept_routes, routes)
+        if r is not None:
+            drop.add(s.id)
+            folded.add(s.id)
+            covered = r.setdefault("stretches", [])
+            if s.id not in covered:
+                covered.append(s.id)
     # overlapping stretches: common runs of different pairs start and end at
     # different junctions, so one busy path yields many overlapping pieces.
     # Keep climbs / descents, then stretches by activities x length (ties: id);
     # a stretch lying >= 50 % on an already kept segment is dropped.
+    # A stretch folded into a route takes its place in that order as before and
+    # suppresses the lower pieces around it (its path is listed — as the
+    # route), without being listed itself.
     kept: list[Segment] = [s for s in keep if s.kind != "stretch" and s.id not in drop]
-    order = sorted((s for s in keep if s.kind == "stretch" and s.id not in drop),
+    order = sorted((s for s in keep if s.kind == "stretch" and (s.id not in drop or s.id in folded)),
                    key=lambda s: (-len(acts[s.id]) * s.length_m, s.id))
+    suppressed = set()
     boxes = {}
 
     def box(s):
@@ -931,16 +1439,31 @@ def _finish(segs: list[Segment], routes: list[dict], tracks: dict[str, Track]) -
                 a = s.xy()
             if RM.overlap_ratio(a, k.xy(s.lat[0], s.lon[0])) >= STRETCH_NMS_OVERLAP:
                 drop.add(s.id)
+                suppressed.add(s.id)
                 break
-        if s.id not in drop:
+        if s.id in folded:
+            if s.id not in suppressed:
+                kept.append(s)
+        elif s.id not in drop:
             kept.append(s)
+    # pieces of one corridor: common runs of different pairs end at different
+    # junctions, so one path walked by the same activities comes out as a
+    # chain of listed stretches; the chain's maximal common part replaces them
+    derived = _merge_chains([s for s in keep if s.kind == "stretch" and s.id not in drop], acts, tracks, drop)
+    for s in derived:
+        acts[s.id] = frozenset(e["file"] for e in s.efforts)
+        r = _route_holding(s, s.xy(), acts[s.id], kept_routes, routes)
+        if r is not None:                      # the merged corridor is a route already
+            r.setdefault("stretches", []).append(s.id)
+            continue
+        keep.append(s)
     return {
-        "version": ALGO_VERSION,
+        "version": INDEX_VERSION,
         "built_at": dt.datetime.now().isoformat(timespec="seconds"),
         "segments": [s.to_json() for s in keep if s.id not in drop],
         # singles and redundant stretches stay as references, so an incremental
         # build that adds their second effort finds what a full build would
-        "pending": [s.to_json() for s in pending] + [s.to_json() for s in keep if s.id in drop],
+        "pending": [s.to_json() for s in pending] + [s.to_json() for s in keep if s.id in drop and not s.derived],
         "routes": kept_routes,
         "pending_routes": [r for r in routes if len(r["members"]) < 2],
     }
@@ -1027,6 +1550,7 @@ class Builder:
         self.status = {"state": "idle", "phase": None, "done": 0, "total": 0,
                        "started_at": None, "finished_at": None, "error": None}
         self._tracks: dict[str, Track] = {}
+        self._pairs: dict = {}            # route_pairs cache, by file pair
 
     def running(self) -> bool:
         return self.thread is not None and self.thread.is_alive()
@@ -1132,7 +1656,10 @@ class Builder:
         # the previous index of ANY version: after a version bump prev is None,
         # and carrying ids over is what keeps renames and links
         old = _read(self.store.index_path) if (full or prev is None) else None
-        idx = detect(tracks, prev=prev, new_files=new_files, progress=self._progress)
+        old_routes = (old.get("routes", []) + old.get("pending_routes", [])) if old else None
+        self._pairs = {k: v for k, v in self._pairs.items() if k[0] not in changed and k[1] not in changed}
+        idx = detect(tracks, prev=prev, new_files=new_files, progress=self._progress, old_routes=old_routes,
+                     pair_cache=self._pairs)
         if old:
             carry_over(old, idx, self.store)
         self._progress("計算每次成績", 0, 1)
@@ -1202,13 +1729,22 @@ def enrich(idx: dict, tracks: dict[str, Track]) -> None:
         direction = "flat"
         r["direction"] = direction
         r["efforts"] = []
+        dirs = r.get("dirs") or {}
         for f in r["members"]:
             tr = tracks[f]
             r["efforts"].append({"file": f, "i0": 0, "i1": len(tr) - 1, "start": tr.start,
                                  "sport": tr.sport, "sport_type": tr.sport_type,
                                  "raw_i0": tr.raw["idx"][0], "raw_i1": tr.raw["idx"][-1],
+                                 "dir": dirs.get(f, "same"),
                                  **effort_metrics(tr, 0, len(tr) - 1, direction),
                                  "climbing_m": _r(tr.raw.get("climbing"), 0)})
+        for p in r.get("partials", []):
+            tr = tracks.get(p["file"])
+            if tr is None:
+                continue
+            m = effort_metrics(tr, 0, len(tr) - 1, direction)
+            p.update(start=tr.start, sport=tr.sport, sport_type=tr.sport_type,
+                     dist_km=m["dist_km"], moving_s=m["moving_s"])
         ref = tracks[r["ref_file"]]
         elev = [None if np.isnan(v) else float(v) for v in ref.e]
         r["auto_name"] = auto_name("route", [float(x) for x in ref.lat], [float(x) for x in ref.lon],

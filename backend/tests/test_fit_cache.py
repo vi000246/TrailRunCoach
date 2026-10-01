@@ -235,6 +235,38 @@ def test_pd_refits_are_memoised_per_day_window(tmp_path, monkeypatch):
     assert A._pd_mftp(c, dt.date(2026, 9, 2)) is not None
 
 
+def test_chart_cp_fits_use_the_pd_cache_and_the_estimate_memo(tmp_path, monkeypatch):
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import weather as WX
+    monkeypatch.setattr(WX, "HOME", tmp_path / "home")
+    d = tmp_path / "fit" / "coros" / "2026"
+    d.mkdir(parents=True)
+    for i in range(6):                       # Stryd runs: the chart CP fit needs >= CP_FIT_MIN_RUNS
+        (d / f"{i}.fit").write_bytes(build_run(datetime(2026, 8, 1 + i, 8, tzinfo=timezone.utc), seconds=900,
+                                               power=220 + i, stryd=True))
+    (d / "7.fit").write_bytes(build_run(datetime(2026, 9, 25, 8, tzinfo=timezone.utc), seconds=900, power=225,
+                                        stryd=True))       # the estimate grid runs to here
+    root = tmp_path / "fit" / "coros"
+    fits = []
+    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False:
+                        fits.append((day, any_power)) or {"mftp": 210.0, "frc": 15000.0, "n_points": 40, "tte": 1})
+    mk = lambda: FitFolderDataset(root, config=EngineConfig(parity=False), today=TODAY, classifications={},
+                                  athlete_settings=[], estimate_thresholds=True)
+    a = mk()
+    assert a._cp_est and a.cp(a.workouts[-1]) == 210.0
+    assert any(not k for _, k in fits)                       # the chart CP fit ran (Stryd only)
+    n = len(fits)
+    b = mk()                                                  # restart: everything from disk
+    assert len(fits) == n and b.cp(b.workouts[-1]) == 210.0
+    assert b.cp_info(b.workouts[-1])["cp"] == 210.0
+    # the estimate memo misses (new data) but the unchanged days' chart fits come from the PD cache
+    (d / "9.fit").write_bytes(build_run(datetime(2026, 9, 28, 8, tzinfo=timezone.utc), seconds=600))
+    c = mk()
+    stryd_days = {day for day, k in fits[:n] if not k}
+    assert not stryd_days & {day for day, k in fits[n:] if not k}
+    assert c.cp(c.workouts[0]) is None or c.cp(c.workouts[0]) == 210.0
+
+
 # ---- the factory: single flight + progress --------------------------------
 
 def test_concurrent_requests_build_one_dataset(monkeypatch, tmp_path):

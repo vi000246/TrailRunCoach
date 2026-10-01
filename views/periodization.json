@@ -51,7 +51,7 @@
         },
         {
           "title": "長時間輕鬆跑的心率飄移",
-          "description": "Uphill Athlete 的有氧閾值測試：暖身後 40–60 分鐘穩定跑，飄移 < 5% 代表在有氧閾值以下。長期壓在 5% 以下代表有氧基礎穩固；> 10% 代表有氧基礎不足或跑太快。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，只看路跑；有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾、> 25 °C 的跑步不採用（不畫點）。淺色點 = 參考（暖身後 30–40 分，未達 UA 測試標準）：其他條件都通過、只是不到 40 分；30 分是自組的門檻（未找到來源；心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001），只當參考，不解鎖間歇、不算 AeT 測試、不寫進門檻。總覽「心率飄移」指標是同一個算法，另外只算平均心率 ≤ AeT+3 的輕鬆跑（總覽用配速）。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點。",
+          "description": "Uphill Athlete 的有氧閾值測試：暖身後 40–60 分鐘穩定跑，飄移 < 5% 代表在有氧閾值以下。長期壓在 5% 以下代表有氧基礎穩固；> 10% 代表有氧基礎不足或跑太快。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，只看路跑；有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾、> 25 °C 的跑步不採用（不畫點）。淺色點 = 參考（暖身後 30–40 分，未達 UA 測試標準）：其他條件都通過、只是不到 40 分；30 分是推估的門檻（未找到來源；心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001），只當參考，不解鎖間歇、不算 AeT 測試、不寫進門檻。總覽「心率飄移」指標是同一個算法，另外只算平均心率 ≤ AeT+3 的輕鬆跑（總覽用配速）。單次跑步誤差約 ±4–6 個百分點，所以深色線是最近 6 次（8 週內）的加權平均、虛線是 ± 標準誤，判讀看平均（drift-algorithm.md §1.3、§5.4；權重 1/SE² 推估）；回程市區段當緩和排除、結尾靜止裁掉，跑走、VI > 1.04、前後半功率差 > 5% 的不採用。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點。",
           "basis": {"default": "pace", "choices": ["pace", "power"]},
           "axes": [{"id": "PERCENT"}],
           "series": [
@@ -59,6 +59,12 @@
             {"name": "飄移 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\"))"},
             {"name": "參考 Pa:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#f2a7a7", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"pace\", \"ref\"))"},
             {"name": "參考 Pw:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#f2a7a7", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\", \"ref\"))"},
+            {"name": "6 次平均 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#7f1d1d", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\"))"},
+            {"name": "6 次平均 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#7f1d1d", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\"))"},
+            {"name": "Pa:HR 平均 + 標準誤", "basis": "pace", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#e58f8f", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"hi\"))"},
+            {"name": "Pa:HR 平均 − 標準誤", "basis": "pace", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#e58f8f", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"lo\"))"},
+            {"name": "Pw:HR 平均 + 標準誤", "basis": "power", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#e58f8f", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"hi\"))"},
+            {"name": "Pw:HR 平均 − 標準誤", "basis": "power", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#e58f8f", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"lo\"))"},
             {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "10% 注意", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "line_style": "dash", "expression": "(,0.10)"}
           ]
@@ -101,11 +107,11 @@
         },
         {
           "title": "訓練量週增幅",
-          "description": "本週時數比上週多多少。Uphill Athlete：平均每週增加超過 10%，大約 8 週就會出問題。只看趨勢，不當受傷預測（ACWR 預測受傷的說法已被推翻）。",
+          "description": "近 4 週平均每週時數（所有運動的移動時間）比上一週的近 4 週平均多多少。Uphill Athlete 說的是「平均」每週增加超過 10%、持續約 8 週會出問題，所以看 4 週平均的變化（docs/research/coaching-dashboards-mountain.md 的設計），連續 3 週以上超過 +10% 才要注意。單週對單週會被一次百岳、一週休息放大成 +100%～+800%，不拿來比 10%。沒有活動的週算 0 小時。只看趨勢，不當受傷預測（ACWR 預測受傷的說法已被推翻）。",
           "axes": [{"id": "PERCENT"}],
           "period": "week",
           "series": [
-            {"name": "週增幅", "type": "bar", "y_axis": "PERCENT", "color": "#0891b2", "expression": "(sum(movingduration, startofweek(date)) - shift(sum(movingduration, startofweek(date)), 7)) / shift(sum(movingduration, startofweek(date)), 7)"},
+            {"name": "4 週平均週增幅", "type": "bar", "y_axis": "PERCENT", "color": "#0891b2", "expression": "(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0) - shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 28)) / if(shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 7) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 14) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 21) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 28) > 0, shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 7) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 14) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 21) + shift(if(isvalid(sum(movingduration, startofweek(date))), sum(movingduration, startofweek(date)), 0), 28))"},
             {"name": "+10%", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "line_style": "dash", "expression": "(,0.10)"},
             {"name": "0", "type": "line", "y_axis": "PERCENT", "color": "#64748b", "line_style": "dash", "expression": "(,0)"}
           ]
@@ -221,7 +227,7 @@
       "title": "區間與課表強度",
       "description": "每種課表該跑多少功率、心率，以及最近 30 天在各區間的時間。",
       "charts": [
-        {"title": "課表建議強度", "kind": "targets", "description": "輕鬆跑、長跑看心率（不超過 AeT）；間歇看功率（心率會一路往上飄，來不及反應）。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
+        {"title": "課表建議強度", "kind": "targets", "description": "路上的輕鬆跑、長跑看心率（不超過 AeT）；山路、爬坡和間歇看功率（心率約慢 1 分鐘才反應，短坡和短間歇上來不及），心率當第二個數字。陡的技術下坡不看功率。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
         {"title": "Palladino 功率區間（跑步）", "kind": "zones", "system": "palladino", "days": 30, "description": "官方表（% CP）。"},
         {"title": "Friel 心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30, "description": "WKO5 的 Friel 心率區間。"},
         {"title": "Classic 心率區間（跑步）", "kind": "zones", "system": "classichr", "days": 30, "description": "WKO5 的 Classic（Coggan）心率區間。"},

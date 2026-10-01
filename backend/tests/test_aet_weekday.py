@@ -34,8 +34,8 @@ def _day(ss, sid="test_aet"):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("cap, variant, minutes, steps, why", [
-    (None, "standard", 80, [900, 3600, 300], "沒有平日時間上限 → 標準版 80 分"),
-    (90, "standard", 80, [900, 3600, 300], "平日上限 90 分放得下 → 標準版 80 分"),
+    (None, "standard", 80, [900, 3600, 300], "沒有平日時間上限 → UA 標準版 80 分"),
+    (90, "standard", 80, [900, 3600, 300], "平日上限 90 分放得下 → UA 標準版 80 分"),
     (50, "short", 50, [600, 2400], "平日上限 50 分 → 用 UA 最短 40 分版本"),
     (45, "short", 50, [600, 2400], "還是要 50 分：UA 不建議短於 40 分"),
 ])
@@ -45,9 +45,9 @@ def test_the_length_follows_the_weekday_cap(cap, variant, minutes, steps, why):
     assert s["minutes"] == minutes and s["title"] == AT.TITLES[variant] and AT.is_aet_session(s)
     assert AT.is_short(s) is (variant == "short")
     assert why in s["detail"]                                         # which protocol and why
-    assert "冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線" in s["detail"] and "不要山路" in s["detail"]
-    assert "中途不停" in s["detail"] and "記下溫度；熱的時候結果會偏高" in s["detail"]
-    assert "< 25 °C" not in s["detail"]
+    assert "冷氣房跑步機 2–3%＋電扇（首選），或平路環線" in s["detail"] and "不要山路" in s["detail"]
+    assert "中途不停" in s["detail"] and "記下溫度" in s["detail"]
+    assert "氣溫 25 °C 以下時開始" in s["detail"]
     assert "主課第 10 分鐘心率已經比起始高 10 下還在升" in s["detail"] and "evokeendurance.com" in s["source"]
     st = CW.session_steps({**s, "day": "2026-10-07"}, CW.Thresholds.of(TH))
     assert [x.seconds for x in st] == steps                           # the short test: no cool-down step
@@ -151,7 +151,21 @@ def _build_week_ds(extra=()):
     return _ds(ws + list(extra), plan), plan
 
 
-@pytest.mark.parametrize("prefs, minutes", [(PP.Prefs(), 80), (PP.Prefs(cap_weekday=50, long_day="sat"), 50)])
+def test_week_plan_auto_puts_xu90_on_the_weekend_in_place_of_the_long_run(monkeypatch):
+    # auto = the standard 徐國峰 90-min test: it IS the weekend LSD (flat), the interval stays
+    ds, plan = _build_week_ds()
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    monkeypatch.setattr(AT, "due", lambda *a, **k: True)
+    wp = O.week_plan(ds, st, TODAY, prefs=PP.Prefs())
+    (t,) = [s for s in wp["sessions"] if s["id"] == "test_aet"]
+    assert t["title"] == AT.PROTOCOLS["xu90"]["title"] and t["minutes"] == 90
+    assert dt.date.fromisoformat(t["day"]).weekday() >= 5
+    assert not any(s["kind"] == "long" for s in wp["sessions"])
+    assert "氣溫 25 °C 以下時開始" in t["detail"]
+
+
+@pytest.mark.parametrize("prefs, minutes", [(PP.Prefs(aet_test_protocol="ua60"), 80),
+                                            (PP.Prefs(cap_weekday=50, long_day="sat"), 50)])
 def test_week_plan_puts_this_weeks_test_on_a_weekday(monkeypatch, prefs, minutes):
     ds, plan = _build_week_ds()
     st = Status(ds, plan, TODAY, prefs=prefs).compute()

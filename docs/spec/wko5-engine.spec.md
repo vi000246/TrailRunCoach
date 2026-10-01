@@ -338,7 +338,9 @@ unchanged files and unchanged code reads no FIT file at all.
   | parsed channels, start, sport, sub_sport, Stryd device | the file's size / mtime; `fit_to_channels.py`, `power_source.fit_stryd_device`, the fitdecode version |
   | power source | the parse; `power_source.classify` |
   | bad-file features | the parse; `bad_activity.features` and its constants; the file's approved power corrections (separate key) |
-  | workout fields (duration, moving, distance, climbing, NP, work, NGP) | the parse; `workout_fields` / `_rolling` / `_smooth` / `minetti.py` / the moving-speed table; the sport group |
+  | workout fields (duration, moving, distance, climbing, NP, work, NGP, VAM 4224) | the parse; `workout_fields` (where VAM is computed) / `_rolling` / `_smooth` / `minetti.py` / the moving-speed table; the sport group |
+  | hike / trail tags (`hiking`, `mountaineering`, `runningtrail`) | not cached: derived on every build from the sport type (`TYPE_TAGS`, the DB classification) |
+  | the charts' Stryd-only CP fit of a grid day (`_estimate_cp`) | the PD-refit entry of that day (same window key, kind `stryd`) plus the source of `_estimate_cp` and `CP_FIT_MIN_RUNS`; the whole grid is also in the estimate memo |
   | hrTSS / hrIF, moving-time hrTSS | the parse; `wko5_hr.py`; the LTHR (and moving speed) — separate keys |
   | `cached_series` (thresholds, race power, workout review, evaluator aggregates, mean-max) | the file stamp, its corrections, the thresholds in effect (as on the WKO5 Dataset) |
   | as-of PD refit of a day | the day's 90-day window: runs (stamp, power source / use, power corrections, NP), synced FITs `cptest.curves` adds, watch-power / bad-file settings and overrides, the code of athlete / cptest / PD model / mean-max / power_source |
