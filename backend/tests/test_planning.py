@@ -60,8 +60,13 @@ def test_goals_take_hardest_upcoming_a_b_and_ignore_c():
 def test_threshold_history(tmp_path):
     plan = P.Plan(thresholds=[P.Threshold("2026-03-01", lthr=165), P.Threshold("2026-08-01", aethr=142),
                               P.Threshold("2026-09-01", lthr=168)])
-    assert plan.threshold_on("lthr", dt.date(2026, 1, 1)) == 165   # before first test: earliest
+    # before the first test: nothing (no future row leaks backwards)
+    assert plan.threshold_on("lthr", dt.date(2026, 1, 1)) is None
+    assert plan.threshold_on("lthr", dt.date(2026, 2, 28)) is None
+    assert plan.threshold_on("lthr", dt.date(2026, 3, 1)) == 165    # on the test day
+    assert plan.threshold_on("aethr", dt.date(2026, 7, 31)) is None
     assert plan.threshold_on("lthr", dt.date(2026, 8, 15)) == 165
+    assert plan.threshold_on("lthr", dt.date(2026, 8, 31)) == 165    # the later row is not yet in effect
     assert plan.threshold_on("lthr", dt.date(2026, 9, 2)) == 168
     assert plan.threshold_on("aethr", dt.date(2026, 9, 2)) == 142
     assert plan.threshold_on("mhr", dt.date(2026, 9, 2)) is None
