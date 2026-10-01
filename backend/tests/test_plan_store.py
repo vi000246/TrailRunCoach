@@ -104,8 +104,9 @@ def test_projection_ramp_31_and_cap():
     assert modes[-1] == "taper"
     taper = weeks[-1]
     assert any(s["title"] == "短強度 4×3 分" for s in taper["sessions"])
-    assert weeks[6]["phase"] == "specific" and any("爬坡" in s["title"] for s in weeks[6]["sessions"]
-                                                   if weeks[6]["mode"] != "recovery_week")
+    # 專項期 without a confirmed aerobic base: the Zone 3 ladder, not the 5×4′ hill set (徐國峰)
+    assert weeks[6]["phase"] == "specific" and (weeks[6]["mode"] == "recovery_week" or any(
+        s["kind"] == "quality" and s["title"].startswith("閾值") for s in weeks[6]["sessions"]))
 
 
 def test_projection_sessions_placed_like_week_plan():
@@ -384,6 +385,57 @@ def test_api_sessions_initialize_and_edit(monkeypatch):
         assert prev["changes"] == []                                    # nothing new since initialization
 
 
+def test_api_swap_a_variant_is_a_user_edit_and_pushes_its_steps(monkeypatch):
+    # interval-prescription.md §C5.4: the 換一個 drawer / editor templates; a swap is the user's
+    # edit (reconcile rule 3: auto-replan never overrides it) and COROS gets the variant's steps
+    with Env(monkeypatch) as e:
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        q = next(s for s in ss if s["kind"] == "quality")
+        tpl = e.c.get(f"{API}/variants", params={"day": q["day"]}).json()
+        assert any(r["key"] == "v4a" for g in tpl["templates"]["groups"] for r in g["rows"])
+        r = e.c.patch(f"{API}/sessions/{q['uid']}", json={"variant_key": "v3c"})
+        assert r.status_code == 200
+        s = r.json()
+        assert s["edited"] and s["variant_key"] == "v3c" and s["swap"] == "user" and s["title"] == "VO2max 6×2:30"
+        d = e.c.get(f"{API}/variants", params={"uid": q["uid"]}).json()
+        assert d["drawer"]["rung"] == "z5c" and d["drawer"]["current_key"] == "v3c"
+        e.c.post(f"{API}/reconcile")
+        again = next(x for x in e.c.get(f"{API}/sessions").json()["sessions"] if x["uid"] == q["uid"])
+        assert again["variant_key"] == "v3c" and again["title"] == "VO2max 6×2:30"
+        assert e.c.patch(f"{API}/sessions/{q['uid']}", json={"variant_key": "zz"}).status_code == 400
+        e.c.post(f"{API}/push-coros?scope=day&day={q['day']}")
+        prog = next(p for p in e.fake.programs.values() if "6×2:30" in p["name"])
+        names = [x["name"] for x in prog["exercises"]]
+        assert "市區輕鬆跑到河濱" in names and names.count("走路或極慢跑") == 5
+
+
+def test_api_tests_are_suggested_and_put_in_by_the_user(monkeypatch):
+    from backend.engine import aet_test as AT
+    with Env(monkeypatch) as e:
+        a = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 50, "ua40")
+        e.inp["cur"]["test_suggestions"] = [{"kind": "aet", "protocol": "ua40", "title": a["title"], "minutes": a["minutes"],
+                                             "reason": "6 週內沒有可判讀的跑步", "replaces_long": False,
+                                             "session": {k: a.get(k) for k in ("kind", "title", "minutes", "target",
+                                                                               "detail", "source", "protocol")}}]
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        hard = {s["day"] for s in ss if s["kind"] in ("long", "quality", "test")}
+        r = e.c.get(f"{API}/test-suggestions").json()["suggestions"]
+        (sg,) = r
+        assert sg["label"].startswith("建議做一次 AeT 測試（6 週內沒有可判讀的跑步）— 要排在哪一天？")
+        days = [d["day"] for d in sg["days"]]
+        assert days and all(dt.date.fromisoformat(d).weekday() < 5 for d in days)          # aet_test_days = weekday
+        for d in days:                                                                   # ≥ 1 easy day from hard ones
+            x = dt.date.fromisoformat(d)
+            assert not {(x + dt.timedelta(days=k)).isoformat() for k in (-1, 0, 1)} & hard
+        assert e.c.post(f"{API}/test-suggestions/schedule", json={"kind": "aet", "day": "2020-01-01"}).status_code == 400
+        s = e.c.post(f"{API}/test-suggestions/schedule", json={"kind": "aet", "day": days[0]}).json()
+        assert s["kind"] == "test" and s["edited"] and s["origin"] == "custom" and AT.is_aet_session(s)
+        assert e.c.get(f"{API}/test-suggestions").json()["suggestions"] == []           # done: no more nagging
+        cal_t = e.c.get(f"{API}/test-templates").json()
+        assert [t["protocol"] for t in cal_t["cp"]] == ["quick", "standard", "race"]
+        assert [t["protocol"] for t in cal_t["aet"]] == list(AT.PROTOCOLS)
+
+
 def test_push_scopes_and_idempotency(monkeypatch):
     with Env(monkeypatch) as e:
         pv = e.c.get(f"{API}/push-coros/preview?scope=day&day=2026-10-01").json()
@@ -576,18 +628,25 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     # (this week's CP test is not a step and doesn't leak)
     weeks = P.project_weeks(_test_week({"levels": good, "streak_ok": False}), PHASES, date(2027, 3, 1))
     q, base, spec = split(weeks)
-    dose = [s[1] for s in QG.LADDER]
+    from backend.engine import interval_library as IL
+    dose = [s[1] for s in QG.LADDER] + [IL.title(v) for v in IL.ALL.values()]
     assert base and all(q[d] and q[d][0] in dose for d in base)
-    # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going
-    assert [q[d][0] for d in base][:2] == ["閾值 3×8 分", "閾值 4×8 分"]
-    assert all(q[d][0].startswith("閾值") for d in base)
-    assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
+    # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
+    # standard session (no cap: the full-length one, engine/interval_library.fit)
+    assert [q[d][0] for d in base][:2] == [IL.title(IL.canonical("z3a")), IL.title(IL.canonical("z3b"))]
+    assert all(q[d][0].startswith("閾值") for d in base), {d: q[d] for d in base}
+    # 專項期 with Zone 5 not confirmed: the Zone 3 ladder carries on instead of the 5×4′ hill set
+    assert spec and all(q[d] and q[d][0].startswith("閾值") for d in spec), {d: q[d] for d in spec}
+    open5 = {"levels": good, "state": "none", "mode": "auto", "resolved": "none", "guard": {},
+             "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": True, "state": "confirmed"}}
+    q5, _, spec5 = split(P.project_weeks(_test_week(open5), PHASES, date(2027, 3, 1)))
+    assert spec5 and all(q5[d] == ["爬坡間歇 5×4 分"] for d in spec5)
     # a locked method (data there, criterion not met): Zone 3 still goes on, never Zone 5
     locked = {"state": "locked", "mode": "ua_gap", "resolved": "ua_gap", "verdict": "差距 16%", "levels": good,
               "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": False}}
     q, base, spec = split(P.project_weeks(_test_week(locked), PHASES, date(2027, 3, 1)))
     assert base and all(q[d] and q[d][0].startswith("閾值") for d in base)
-    assert spec and all(q[d] == ["爬坡間歇 5×4 分"] for d in spec)
+    assert spec and all(q[d] and q[d][0].startswith("閾值") for d in spec)
     # intensity bad: no quality in base (the guardrail) nor specific (the old rule)
     weeks = P.project_weeks(_test_week({"levels": {"intensity": "bad", "drift": "good"}, "streak_ok": True}),
                             PHASES, date(2027, 3, 1))

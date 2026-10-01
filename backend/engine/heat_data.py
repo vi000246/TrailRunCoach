@@ -8,6 +8,7 @@ race day. docs/research/heat-acclimation.md §2.4, §4.3, §5.3.
 from __future__ import annotations
 
 import datetime as dt
+import json
 from pathlib import Path
 from statistics import median
 from typing import Iterable, Optional
@@ -29,6 +30,62 @@ def exposures(root: Optional[Path] = None) -> tuple[list[dict], dict]:
     acts = [dict(v, file=f) for f, v in (doc.get("activities") or {}).items() if v]
     return acts, {"at": doc.get("at"), "stats": doc.get("stats"), "attribution": doc.get("attribution"),
                   "missing": not doc}
+
+
+MORNING_H = (5, 6, 7)            # local hours 05:00–07:59: when a dawn test would run [自組]
+
+
+def morning_weather(dates: Iterable, root: Optional[Path] = None) -> dict:
+    """{date iso: {"temp_c", "hadley", "min_c", "cell", "src"}} — each day's
+    dawn weather at the athlete's home, independent of when they ran: the
+    Open-Meteo archive day that route_weather already cached (one file per
+    (0.25° cell, day), the full 24 hours of every point asked for that day).
+    Home = the cell with the most cached days; on a day, its lowest point
+    (the town, not a hill climbed the same day). morning = mean of the
+    05–07 h rows (T, and Hadley from T + Magnus dew point), min_c = the day's
+    lowest hourly T. Days without a home-cell file are left out (a trip, or
+    the archive not fetched yet). Local disk only — no network."""
+    from backend.engine import route_weather as RW
+    dates = {str(x)[:10] for x in dates}
+    if not dates:
+        return {}
+    wdir = Path(root or _root()) / "weather"
+    try:
+        files = [p for p in wdir.glob("*.json")]
+    except OSError:
+        return {}
+    by_cell: dict = {}
+    for p in files:
+        parts = p.stem.split("_")
+        if len(parts) == 3:
+            by_cell.setdefault((parts[0], parts[1]), {})[parts[2]] = p
+    if not by_cell:
+        return {}
+    home = max(by_cell, key=lambda c: len(by_cell[c]))
+    out = {}
+    for d in sorted(dates):
+        p = by_cell[home].get(d)
+        if p is None:
+            continue
+        try:
+            doc = json.loads(p.read_text("utf-8"))
+        except (OSError, ValueError):
+            continue
+        pts = [js for js in (doc.get("points") or {}).values() if isinstance(js, dict)]
+        if not pts:
+            continue
+        js = min(pts, key=lambda j: j.get("elevation") if j.get("elevation") is not None else 1e9)
+        rows = RW._hours([js])
+        if not rows:
+            continue
+        morn = [(T, RH) for when, T, RH in rows if when.hour in MORNING_H]
+        if not morn:
+            continue
+        t = sum(T for T, _ in morn) / len(morn)
+        h = sum(HT.hadley_sum(T, RH) for T, RH in morn) / len(morn)
+        out[d] = {"temp_c": round(t, 1), "hadley": round(h, 1), "min_c": round(min(T for _, T, _ in rows), 1),
+                  "cell": f"{home[0]}_{home[1]}", "src": "open_meteo_morning"}
+    return out
 
 
 def completed_passive_dates(athlete_id: int = 1) -> list[str]:
