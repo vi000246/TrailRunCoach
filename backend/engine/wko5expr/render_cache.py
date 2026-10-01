@@ -111,7 +111,15 @@ def data_fingerprint(ds) -> str:
     from backend.engine.plan_store import test_sessions
     tests = sorted((s["uid"], s["state"], s.get("day") or "", (s.get("done_by") or {}).get("index") or -1,
                     s.get("protocol") or "") for s in test_sessions())
-    parts = [athlete, _stamp(PLAN_PATH), _stamp(CORRECTIONS_PATH), cfg, wl, ds.today, src, tests]
+    # route_weather's per-activity air temperature: drift() / the review card's
+    # heat rule read it (workout_review.activity_temp), and a routes build fills it
+    try:
+        from backend.engine import route_weather as RW
+        from backend.engine.routes import HOME
+        wx = _stamp(HOME / RW.ACTIVITY_WX_FILE)
+    except Exception:                          # noqa: BLE001 — no routes module: no archive
+        wx = None
+    parts = [athlete, _stamp(PLAN_PATH), _stamp(CORRECTIONS_PATH), cfg, wl, ds.today, src, tests, wx]
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 

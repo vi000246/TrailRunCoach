@@ -29,6 +29,9 @@ def _test_default(data: dict) -> None:
     target, detail, protocol); `race` has no session of its own -> quick."""
     from backend.engine import cp_protocols as CPP
     from backend.engine import plan_prefs as PP
+    from backend.engine.aet_test import is_aet_session
+    if is_aet_session(data):
+        return                                   # the AeT test keeps its own title / protocol "aet"
     proto = data.get("protocol") or CPP.protocol_of({"title": data.get("title")}) or PP.load().cp_test_protocol
     t = CPP.session_for(proto) or CPP.session_for(CPP.DEFAULT)
     data["protocol"] = t["protocol"]
@@ -318,7 +321,7 @@ _TEST_CACHE: dict = {}
 
 
 def test_sessions(db_path=None) -> list[dict]:
-    """Stored kind 'test' sessions: {uid, day, state, title, protocol, done_by}.
+    """Stored kind 'test' sessions: {uid, day, state, title, protocol, done_by, gen_key}.
     Read-only sqlite; [] when the DB / table / column is missing. Cached on
     the file's mtime."""
     import sqlite3
@@ -343,14 +346,17 @@ def test_sessions(db_path=None) -> list[dict]:
             cols = {r[1] for r in con.execute("PRAGMA table_info(plan_sessions)")}
             if cols:
                 proto = "protocol" if "protocol" in cols else "NULL"
-                for uid, day, state, title, pr, done_by in con.execute(
-                        f"SELECT uid, day, state, title, {proto}, done_by FROM plan_sessions WHERE kind='test'"):
+                gk = "gen_key" if "gen_key" in cols else "NULL"
+                for uid, day, state, title, pr, done_by, gen in con.execute(
+                        f"SELECT uid, day, state, title, {proto}, done_by, {gk} FROM plan_sessions "
+                        "WHERE kind='test'"):
                     try:
                         db_ = json.loads(done_by) if done_by else None
                     except ValueError:
                         db_ = None
+                    # gen_key test_aet: the AeT test (aet_test.is_aet_session), also on rows without protocol
                     out.append({"uid": uid, "day": day, "state": state, "title": title, "protocol": pr,
-                                "done_by": db_ if isinstance(db_, dict) else None})
+                                "done_by": db_ if isinstance(db_, dict) else None, "gen_key": gen})
         finally:
             con.close()
     except sqlite3.Error:

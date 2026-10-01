@@ -451,7 +451,8 @@ class Status:
     def i_drift(self) -> Indicator:
         # Informational (docs/research/aerobic-base-readiness.md §4.3): the same
         # per-run drift the 單次活動 review card shows (workout_review: road, ≥ 40
-        # min, avg HR ≤ AeT+3; hilly / stopped / unsteady runs refused). It is not
+        # min after the 10-min warm-up, avg HR ≤ AeT+3; hilly / stopped / unsteady /
+        # fast-finish / > 25 °C runs refused). It is not
         # the interval gate any more — that is i_gate (engine/quality_gate.py).
         from backend.engine import workout_review as WR
         pts = WR.drift_series(self.ds, self.today)
@@ -461,7 +462,8 @@ class Status:
         if len(fair) < 2:
             return Indicator("drift", "心率飄移", NA, "–",
                              f"8 週內可判讀的輕鬆路跑不到 2 次（{len(pts)} 次符合條件）",
-                             "只算路跑、≥ 40 分鐘、平均心率 ≤ AeT+3；有坡、有停頓、功率起伏大的不採用",
+                             "只算路跑、暖身 10 分鐘後還有 ≥ 40 分鐘、平均心率 ≤ AeT+3；"
+                             "有坡、有停頓、功率起伏大、快速結尾、> 25 °C 的不採用",
                              "", SRC_FRIEL, spark=spark, extra={"fair": len(fair), "median": None})
         med = _median([p["drift"] for p in fair])
         txt = _pct(med, 1)

@@ -145,6 +145,129 @@ def test_drift_refuses_stops_short_and_unsteady():
     assert not r["ok"] and "CP" in r["reason"]
 
 
+def _warmup_run(minutes, warm_hr=110.0, warm_kmh=8.0):
+    """A 10′ warm-up (low HR, slower), then steady 10 km/h with HR 140 → 147."""
+    t = _t(minutes)
+    after = t >= 600
+    hr = np.where(after, 140.0 + 7.0 * (t - 600) / max(1.0, t[-1] - 600), warm_hr)
+    v = np.where(after, 10.0, warm_kmh)
+    return t, hr, v
+
+
+def test_drift_counts_the_40_minutes_after_the_warmup():
+    # 48′ = 10′ warm-up + 38′: the old floor (40′ total) took it, UA's 40′ after the warm-up doesn't
+    t, hr, v = _warmup_run(48)
+    r = R.drift_of(t, hr, v)
+    assert not r["ok"] and r["drift"] is None
+    assert "暖身後只有 38 分鐘" in r["reason"] and "< 40 分" in r["reason"]
+    # 51′ on the clock, but a 90-s stop (< 5 %) after the warm-up leaves 39.5′ of moving time
+    t, hr, v = _warmup_run(51)
+    v[1200:1290] = 0.0
+    r = R.drift_of(t, hr, v)
+    assert not r["ok"] and "暖身後只有 39 分鐘" in r["reason"]
+    assert r["measured_s"] == pytest.approx(39.5 * 60, abs=2)
+    # 52′ = 10′ + 42′: measured on the 42′ after the warm-up only
+    t, hr, v = _warmup_run(52)
+    r = R.drift_of(t, hr, v)
+    assert r["ok"] and r["measured_s"] == pytest.approx(42 * 60, abs=2)
+    # the warm-up's low HR / speed is not in the first half: HR 140 → 143.5 over the first 21′
+    assert r["hr1"] == pytest.approx(140.0 + 3.5 / 2, abs=0.05) and r["v1"] == pytest.approx(10.0)
+    plain = (10.0 / r["hr1"] - 10.0 / r["hr2"]) / (10.0 / r["hr1"])
+    assert r["drift"] == pytest.approx(plain, abs=1e-12) and r["drift"] > 0.02     # 141.75 → 145.25 bpm
+
+
+def test_drift_refuses_a_hot_run_and_says_which_temperature():
+    t, hr, v = _warmup_run(60)
+    r = R.drift_of(t, hr, v, temp_c=27.4, temp_src="watch")
+    assert not r["ok"] and not r["pw_ok"] and "手錶溫度 27 °C" in r["reason"] and "25 °C" in r["reason"]
+    r = R.drift_of(t, hr, v, temp_c=26.0, temp_src="route_weather")
+    assert not r["ok"] and "路線天氣" in r["reason"] and r["temp_src"] == "route_weather"
+    r = R.drift_of(t, hr, v, temp_c=24.0, temp_src="watch")
+    assert r["ok"] and r["temp_c"] == 24.0 and r["temp_src"] == "watch"
+    assert R.basis_drift(R.heat_gate(r, 30.0, "watch"), "power")[0] is None
+
+
+def _hot_run(day, temp):
+    w = _run(day, minutes=60)
+    w.channels["temperature"] = [float(temp)] * len(w.channels["elapsedtime"])
+    return w
+
+
+def test_measure_uses_the_archive_first_then_the_watch():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_hot_run(today, 28.0)], today, settings=SETTINGS)
+    w = ds.workouts[0]
+    ds.activity_temps = {}                                          # no archive: the watch's 28 °C
+    m = R.measure(ds, w)
+    assert m["watch_temp_c"] == pytest.approx(28.0)
+    assert not m["drift"]["ok"] and m["drift"]["temp_src"] == "watch" and "手錶溫度 28 °C" in m["drift"]["reason"]
+    ds.activity_temps = {w.entry.file: 22.4}                         # the archive's air temperature wins
+    m = R.measure(ds, w)
+    assert m["drift"]["ok"] and m["drift"]["temp_c"] == 22.4 and m["drift"]["temp_src"] == "route_weather"
+    rows = {s["name"]: s["data"]["value"] for s in R.review(ds, w, "aerobic")["series"]}
+    assert rows["溫度"] == "路線天氣（Open-Meteo 檔案） 22 °C"
+    ds.activity_temps = {w.entry.file: 26.0}
+    assert "路線天氣" in R.measure(ds, w)["drift"]["reason"]
+
+
+def test_activity_temp_reads_the_route_weather_archive(tmp_path, monkeypatch):
+    import json
+    from backend.engine import route_weather as RW
+    from backend.engine import routes as RT
+    monkeypatch.setattr(RT, "HOME", tmp_path)
+    R._WX_CACHE.clear()
+    (tmp_path / RW.ACTIVITY_WX_FILE).write_text(json.dumps(
+        {"version": RW.ACTIVITY_WX_VERSION, "activities": {"fake/0.wko4": {"temp_c": 26.3}, "fake/1.wko4": None}}),
+        "utf-8")
+    ds = FakeDataset([_run(dt.date(2026, 9, 30)), _run(dt.date(2026, 9, 29))], dt.date(2026, 9, 30),
+                     settings=SETTINGS)
+    w0 = next(w for w in ds.workouts if w.entry.file == "fake/0.wko4")
+    w1 = next(w for w in ds.workouts if w.entry.file == "fake/1.wko4")
+    assert R.activity_temp(ds, w0) == (26.3, "route_weather")
+    assert R.activity_temp(ds, w1, {"watch_temp_c": 21.0}) == (21.0, "watch")
+    assert R.activity_temp(ds, w1) == (None, None)
+    assert not R.measure(ds, w0)["drift"]["ok"]
+    R._WX_CACHE.clear()
+
+
+@pytest.mark.parametrize("channel", ["speed", "power"])
+def test_drift_refuses_a_fast_finish(channel):
+    t, hr, v = _warmup_run(60)
+    p = np.full(len(t), 200.0)
+    last = t > 600 + 0.9 * (t[-1] - 600)                            # the last 10 % of the measured time
+    x = v if channel == "speed" else p
+    x[last] *= 1.08
+    r = R.drift_of(t, hr, v, power=p, cp=300.0)
+    assert not r["ok"] and "快速結尾" in r["reason"] and "8%" in r["reason"]
+    assert ("配速" if channel == "speed" else "功率") in r["reason"]
+    assert r["finish"] == pytest.approx(0.08, abs=0.005)
+    # +3 %: within the 5 % (自組) — a fair run
+    t, hr, v = _warmup_run(60)
+    p = np.full(len(t), 200.0)
+    (v if channel == "speed" else p)[last] *= 1.03
+    r = R.drift_of(t, hr, v, power=p, cp=300.0)
+    assert r["ok"] and r["finish"] == pytest.approx(0.03, abs=0.005)
+
+
+def test_pa_and_pw_share_one_window():
+    t, hr, v = _warmup_run(60)
+    p = np.full(len(t), 200.0)
+    p[2000:2060] = np.nan                                           # a 1-min Stryd dropout (< 5 %)
+    hr2 = hr.copy()
+    hr2[2000:2060] = 200.0                                          # …where HR spikes: both bases drop it
+    r = R.drift_of(t, hr2, v, power=p, cp=300.0)
+    assert r["ok"] and r["pw_ok"]
+    assert r["pw_hr1"] == pytest.approx(r["hr1"], abs=1e-12) and r["pw_hr2"] == pytest.approx(r["hr2"], abs=1e-12)
+    assert r["pw_drift"] == pytest.approx(r["drift"], abs=1e-12)    # constant speed and power
+    assert r["measured_s"] == pytest.approx(50 * 60 - 60, abs=2)
+    # power on only 80 % of the window: Pa:HR keeps the whole window, Pw:HR is refused
+    p = np.full(len(t), 200.0)
+    p[2400:3000] = np.nan
+    r = R.drift_of(t, hr, v, power=p, cp=300.0)
+    assert r["ok"] and not r["pw_ok"] and "涵蓋" in r["pw_reason"]
+    assert r["measured_s"] == pytest.approx(50 * 60, abs=2)
+
+
 def test_aerobic_lines():
     base = {"aet": 140.0, "avg_hr": 135.0, "hr_s": 3000, "over_aet_s": 0}
     ok = {**base, "drift": {"ok": True, "drift": 0.03, "hr1": 135.0}}
@@ -224,7 +347,8 @@ def test_next_quality():
 # dataset adapters (FakeDataset)
 # ---------------------------------------------------------------------------
 
-def _run(day, minutes=45, hr=135.0, hr_end=None, kmh=10.0, power=None, tags=("running",)):
+# 52 min = the 10′ warm-up + 42′: drift_of wants ≥ 40 min after the warm-up
+def _run(day, minutes=52, hr=135.0, hr_end=None, kmh=10.0, power=None, tags=("running",)):
     t = _t(minutes)
     h = np.linspace(hr, hr_end if hr_end is not None else hr, len(t))
     ch = {"elapsedtime": list(t), "heartrate": list(h), "speed": [kmh] * len(t),
