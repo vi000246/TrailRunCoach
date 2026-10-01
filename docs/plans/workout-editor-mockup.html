@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>課表編輯器 mockup</title>
+<!--
+  Static mockup for docs/plans/workout-editor.plan.md (§3.3). No backend: the
+  thresholds below are made up for the demo. Tokens copied from
+  backend/static/schedule.html so it reads like the real page. Zone ramp:
+  dataviz reference sequential blue, validated with validate_palette.js --ordinal
+  (light #86b6ef→#104281, dark #184f95→#9ec5f4).
+-->
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --good: #1a7f37; --watch: #b45309; --bad: #c62828; --bar: #b9b8b1;
+  --z1: #86b6ef; --z2: #5598e7; --z3: #2a78d6; --z4: #1c5cab; --z5: #104281; --hatch: #8a8984;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --bar: #5a5954;
+    --z1: #184f95; --z2: #256abf; --z3: #3987e5; --z4: #6da7ec; --z5: #9ec5f4; --hatch: #8f8e86;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --bar: #5a5954;
+  --z1: #184f95; --z2: #256abf; --z3: #3987e5; --z4: #6da7ec; --z5: #9ec5f4; --hatch: #8f8e86;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+.wrap { max-width: 920px; margin: 0 auto; padding: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+h1 { font-size: 17px; margin: 0; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+.num { font-variant-numeric: tabular-nums; }
+.head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 10px; }
+.head .sp { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.btn:hover { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+select, input { font: inherit; font-size: 13px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+input[type=number] { width: 4.6em; }
+input.t { width: 4.4em; }
+label.inl { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12.5px; }
+
+/* ---- step chart ---- */
+.chart { position: relative; margin: 6px 0 4px; }
+.chart svg { display: block; width: 100%; height: 130px; overflow: visible; }
+.chart .tip { position: absolute; pointer-events: none; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 8px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; transform: translate(-50%, -100%); display: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 2px; font-size: 13px; }
+.stats b { font-size: 15px; }
+
+/* ---- issues ---- */
+.issues { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; }
+.issues li { display: flex; gap: 6px; align-items: baseline; }
+.issues .err { color: var(--bad); } .issues .warn { color: var(--watch); } .issues .info { color: var(--muted); }
+.issues .ic { font-weight: 700; width: 1.2em; flex: none; text-align: center; }
+
+/* ---- toolbar ---- */
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 8px; }
+.tools .sp { flex: 1; }
+.menu { position: relative; }
+.menu .pop { position: absolute; z-index: 5; top: calc(100% + 4px); left: 0; min-width: 260px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 6px; display: none; }
+.menu.open .pop { display: block; }
+.pop button { display: block; width: 100%; text-align: left; border: 0; background: none; color: var(--text); font: inherit; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.pop button:hover { background: var(--soft); }
+.pop .g { font-size: 11.5px; color: var(--faint); padding: 6px 8px 2px; }
+
+/* ---- step list ---- */
+.list { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: 22px 92px 150px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel); border-left: 4px solid var(--zc, var(--bar)); }
+.row.sel { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); }
+.row.drop { box-shadow: 0 -3px 0 var(--accent); }
+.grip { cursor: grab; color: var(--faint); user-select: none; text-align: center; font-size: 15px; line-height: 1; }
+.dur { display: flex; gap: 4px; align-items: center; }
+.tgt { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+.abs { font-size: 12.5px; color: var(--muted); }
+.abs b { color: var(--text); font-weight: 600; }
+.warnmark { color: var(--watch); font-size: 12px; }
+.acts { display: flex; gap: 2px; }
+.acts button { border: 0; background: none; color: var(--faint); cursor: pointer; padding: 3px 5px; border-radius: 5px; font-size: 13px; }
+.acts button:hover { color: var(--text); background: var(--soft); }
+.rep { border: 1px dashed var(--line); border-radius: 11px; padding: 6px; display: grid; gap: 6px; background: color-mix(in srgb, var(--soft) 45%, transparent); }
+.rep.drop { box-shadow: 0 -3px 0 var(--accent); }
+.rep-h { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 0 2px; }
+.rep-h .sp { flex: 1; }
+.rep-in { display: grid; gap: 6px; padding-left: 14px; }
+.rep-in:empty::after { content: "把步驟拖進來"; color: var(--faint); font-size: 12px; padding: 6px; }
+
+/* ---- watch preview ---- */
+.watch { margin-top: 14px; }
+.watch ol { margin: 6px 0 0; padding-left: 22px; font-size: 13px; }
+.watch ol ol { list-style: lower-alpha; }
+.watch .lost { color: var(--watch); font-size: 12.5px; margin-top: 6px; }
+details > summary { cursor: pointer; font-weight: 600; font-size: 13.5px; }
+
+.row > *, .rep-h > *, .issues li > span { min-width: 0; }
+select { max-width: 100%; }
+@media (max-width: 640px) {
+  .wrap { padding: 10px 16px; }
+  .card { padding: 12px; }
+  .chart svg { height: 96px; }
+  .head label.inl { width: 100%; justify-content: space-between; }
+  .tools .sp { display: none; }
+  .row { grid-template-columns: 22px minmax(0, 1fr); grid-template-areas: "g k" "g d" "g t" "g a"; row-gap: 6px; }
+  .row > .acts { justify-content: flex-end; }
+  .row > .kind { justify-self: start; min-width: 7em; }
+  .rep-h { flex-wrap: wrap; }
+  .row > .grip { grid-area: g; align-self: start; padding-top: 4px; }
+  .row > .kind { grid-area: k; }
+  .row > .dur { grid-area: d; }
+  .row > .tgt { grid-area: t; }
+  .row > .acts { grid-area: a; }
+  .rep-in { padding-left: 6px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <div><h1 id="title">VO2max 5×2 分</h1><span class="meta">週三 10/7 · 強度課 · 平路　<span class="faint">（mockup：門檻是假的 CP 280 W · LTHR 168 · AeT 148 · 閾值配速 4:40/km）</span></span></div>
+      <span class="sp"></span>
+      <label class="inl">整堂預設目標
+        <select id="deflt">
+          <option value="auto">自動（強度課＝功率）</option>
+          <option value="power">功率</option>
+          <option value="hr">心率</option>
+          <option value="pace">配速</option>
+          <option value="none">無</option>
+        </select></label>
+    </div>
+
+    <div class="chart" id="chart"><svg id="svg" role="img" aria-label="區段圖：強度隨時間"></svg><div class="tip" id="tip"></div></div>
+    <div class="legend" id="legend"></div>
+    <div class="stats" id="stats"></div>
+    <ul class="issues" id="issues"></ul>
+
+    <div class="tools">
+      <button class="btn" id="add-step">＋ 步驟</button>
+      <button class="btn" id="add-rep">＋ 重複</button>
+      <div class="menu" id="tpl-menu"><button class="btn" id="tpl-btn" aria-haspopup="true">插入範本 ▾</button>
+        <div class="pop" id="tpl-pop"></div></div>
+      <span class="sp"></span>
+      <label class="inl">單日上限 <select id="cap"><option value="60">平日 60 分</option><option value="45">平日 45 分</option><option value="0">不限</option></select></label>
+    </div>
+
+    <div class="list" id="list" data-cont="root"></div>
+
+    <details class="watch" id="watch" open>
+      <summary>推到手錶會長這樣（COROS）</summary>
+      <div id="watch-body"></div>
+    </details>
+
+    <div class="tools" style="margin-top:14px">
+      <span class="meta">改結構會把這堂設成「你編輯過的課」：自動調整不會再改它（engine/adapt.py）。</span>
+      <span class="sp"></span>
+      <button class="btn">取消</button><button class="btn primary">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+// #light / #dark in the URL forces the theme (for screenshots)
+if (/^#(light|dark)$/.test(location.hash)) document.documentElement.dataset.theme = location.hash.slice(1);
+// ---------------- thresholds (made up) ----------------
+const TH = { cp: 280, lthr: 168, aet: 148, tpace: 280 /* s/km */ };
+const KIND = { warm: "暖身", work: "主課", rest: "休息", cool: "緩和", other: "其他" };
+const TYPE = { inherit: "跟整堂", power: "功率", hr: "心率", pace: "配速", none: "無" };
+const PZ = [ // Palladino ×CP
+  ["1A", .50, .65], ["1B", .65, .75], ["1C", .75, .80], ["2", .80, .88], ["3A", .88, .95],
+  ["3B", .95, 1.01], ["4", 1.01, 1.06], ["5", 1.06, 1.16], ["6", 1.16, 1.50]];
+const HZ = [ // Friel HR ×LTHR (+ AeT)
+  ["aet", null, null], ["1", .70, .85], ["2", .85, .90], ["3", .90, .95], ["4", .95, 1.00], ["5a", 1.00, 1.03], ["5b", 1.03, 1.06]];
+const PACEZ = [ // Friel pace ×threshold pace (bigger = slower)
+  ["2", 1.14, 1.29], ["3", 1.06, 1.14], ["4", 1.00, 1.06], ["5a", .97, 1.00], ["5b", .90, .97]];
+
+let uid = 0; const nid = () => "s" + (++uid);
+const step = (kind, sec, target = { type: "inherit" }, note = "") => ({ id: nid(), kind, dur: sec === null ? { type: "open" } : { type: "time", value: sec }, target, note });
+const rep = (times, items) => ({ id: nid(), kind: "repeat", times, items });
+
+let S = {
+  default_target: "auto",
+  items: [
+    step("warm", 600, { type: "hr", mode: "zone", zone: "aet" }, "市區輕鬆跑到河濱"),
+    step("warm", 120, { type: "none" }, "drill 2 分"),
+    step("warm", 180, { type: "none" }, "快步跑 3×20 秒"),
+    rep(5, [
+      step("work", 120, { type: "power", mode: "pct", lo: 1.06, hi: 1.12 }),
+      step("rest", 120, { type: "none" }, "走路或極慢跑")]),
+    step("cool", 300, { type: "inherit" }, "慢跑或走路"),
+  ],
+};
+let sel = null;
+
+// ---------------- target resolution ----------------
+function effType(st) {
+  if (st.target.type !== "inherit") return st.target.type;
+  if (S.default_target !== "auto") return S.default_target;
+  if (st.kind === "work") return "power";      // quality → power (課表偏好 interval_target)
+  if (st.kind === "rest") return "none";
+  return "hr";                                 // warm / cool → ≤ AeT
+}
+const r5 = (x) => Math.round(x);
+function mmss(s) { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function hrToP(f) { // Friel HR frac → ~power frac (推估, display only)
+  const t = [[.70, .62], [.85, .75], [.90, .82], [.95, .92], [1.00, 1.00], [1.03, 1.06], [1.06, 1.12]];
+  if (f <= t[0][0]) return t[0][1];
+  for (let i = 1; i < t.length; i++) if (f <= t[i][0]) { const [a, b] = [t[i - 1], t[i]]; return a[1] + (f - a[0]) / (b[0] - a[0]) * (b[1] - a[1]); }
+  return t[t.length - 1][1];
+}
+function resolve(st) {
+  const type = effType(st);
+  const tg = st.target.type === "inherit" ? defaultSpec(type, st.kind) : st.target;
+  const out = { type, inherited: st.target.type === "inherit", spec: tg, warn: "" };
+  if (type === "none") return { ...out, frac: st.kind === "rest" ? .55 : st.kind === "work" ? 1.2 : .6, text: st.kind === "work" ? "無目標（全力）" : "無目標" };
+  if (type === "power") {
+    const [lo, hi] = fracs(tg, PZ, "power");
+    return { ...out, lo: lo * TH.cp, hi: hi * TH.cp, frac: (lo + hi) / 2, text: `${r5(lo * TH.cp)}–${r5(hi * TH.cp)} W`, sub: `${Math.round(lo * 100)}–${Math.round(hi * 100)}% CP · ${pzone((lo + hi) / 2)}` };
+  }
+  if (type === "hr") {
+    if (tg.mode === "zone" && tg.zone === "aet") {
+      const lo = Math.min(.75 * TH.lthr, TH.aet - 10);
+      return { ...out, lo, hi: TH.aet, frac: hrToP(((lo + TH.aet) / 2) / TH.lthr), text: `${r5(lo)}–${TH.aet} bpm`, sub: "≤ AeT" };
+    }
+    const [lo, hi] = fracs(tg, HZ, "hr");
+    return { ...out, lo: lo * TH.lthr, hi: hi * TH.lthr, frac: hrToP((lo + hi) / 2), text: `${r5(lo * TH.lthr)}–${r5(hi * TH.lthr)} bpm`, sub: `${Math.round(lo * 100)}–${Math.round(hi * 100)}% LTHR` };
+  }
+  const [lo, hi] = fracs(tg, PACEZ, "pace");   // pace: lo = faster
+  const a = Math.min(lo, hi) * TH.tpace, b = Math.max(lo, hi) * TH.tpace;
+  return { ...out, frac: 2 / (lo + hi), text: `${mmss(a)}–${mmss(b)} /km`, sub: "% 閾值配速（推估）", warn: "COROS 配速單位未驗證" };
+}
+function fracs(tg, zones, type) {
+  if (tg.mode === "zone") { const z = zones.find((z) => z[0] === tg.zone) || zones[0]; return [z[1], z[2]]; }
+  if (tg.mode === "abs") {
+    if (type === "power") return [tg.lo / TH.cp, tg.hi / TH.cp];
+    if (type === "hr") return [tg.lo / TH.lthr, tg.hi / TH.lthr];
+    return [tg.lo / TH.tpace, tg.hi / TH.tpace];
+  }
+  return [tg.lo, tg.hi];
+}
+function defaultSpec(type, kind) {
+  if (type === "power") return kind === "work" ? { type, mode: "zone", zone: "3B" } : { type, mode: "zone", zone: "1B" };
+  if (type === "hr") return kind === "work" ? { type, mode: "zone", zone: "4" } : { type, mode: "zone", zone: "aet" };
+  if (type === "pace") return kind === "work" ? { type, mode: "zone", zone: "4" } : { type, mode: "zone", zone: "2" };
+  return { type: "none" };
+}
+function pzone(f) { const z = PZ.find((z) => f >= z[1] && f < z[2]); return z ? "Z" + z[0] : f >= 1.5 ? "Z7" : "Z1A"; }
+function level(f) { return f < .75 ? 1 : f < .88 ? 2 : f < 1.01 ? 3 : f < 1.06 ? 4 : 5; }
+
+// ---------------- flatten / totals / validation ----------------
+function flat(items = S.items, out = [], ctx = null) {
+  for (const it of items) {
+    if (it.kind === "repeat") { for (let i = 0; i < it.times; i++) flat(it.items, out, { rep: it, i }); }
+    else out.push({ st: it, ctx });
+  }
+  return out;
+}
+const OPEN_W = 90; // seconds of width an open step gets in the chart
+function totals() {
+  let sec = 0, tss = 0, hard = 0, open = 0;
+  for (const { st } of flat()) {
+    const r = resolve(st);
+    if (st.dur.type === "open") { open++; continue; }
+    const s = st.dur.value; sec += s;
+    const f = r.type === "none" ? (st.kind === "work" ? 1.1 : .6) : r.frac;
+    tss += s * f * f * 100 / 3600;
+    if (f >= .88) hard += s;
+  }
+  return { sec, tss, hard, open };
+}
+function issues() {
+  const out = [];
+  const t = totals(), cap = +document.getElementById("cap").value;
+  const seen = new Set();
+  for (const { st } of flat()) {
+    if (seen.has(st.id)) continue; seen.add(st.id);
+    const r = resolve(st);
+    if (st.kind === "work" && r.type === "power" && r.frac >= 1.02 && st.dur.type === "time" && st.dur.value < 120)
+      out.push(["err", `5 區每趟至少 2 分鐘（徐國峰）：這段只有 ${mmss(st.dur.value)}`, st.id]);
+    if (r.type === "power" && r.lo > r.hi) out.push(["err", "功率下限比上限高", st.id]);
+    if (r.warn) out.push(["warn", r.warn, st.id]);
+  }
+  for (const it of S.items) if (it.kind === "repeat") {
+    const w = it.items.filter((x) => x.kind === "work" && x.dur.type === "time");
+    const rs = it.items.filter((x) => x.kind === "rest" && x.dur.type === "time");
+    if (w.length && rs.length && resolve(w[0]).frac >= 1.02) {
+      const minW = Math.min(...w.map((x) => x.dur.value)), maxR = Math.max(...rs.map((x) => x.dur.value));
+      if (maxR > Math.min(minW, 180)) out.push(["warn", `5 區休息 ${mmss(maxR)} 比一趟長或超過 3 分鐘（Buchheit 工休比）`, it.id]);
+    }
+    if (it.items.some((x) => x.kind === "repeat")) out.push(["warn", "重複裡再放重複：COROS 未驗證，推送時會攤平", it.id]);
+  }
+  if (cap && t.sec / 60 > cap) out.push(["warn", `總時間 ${Math.round(t.sec / 60)} 分超過單日上限 ${cap} 分（偏好是 soft：只提醒）`, null]);
+  if (t.open) out.push(["info", `${t.open} 段「按圈結束」不算進總時間`, null]);
+  // equivalence vs the rung's canonical (V1: 5×2′ = 10′ in Z5), §C2 rules 2–3 only (TIZ ±15 %, reps ≥ 2′)
+  const z5 = flat().filter(({ st }) => st.kind === "work" && st.dur.type === "time" && resolve(st).type === "power" && resolve(st).frac >= 1.02);
+  const tiz = z5.reduce((a, { st }) => a + st.dur.value, 0), short = z5.some(({ st }) => st.dur.value < 120);
+  const ok = tiz >= 600 * .85 && tiz <= 600 * 1.15 && !short;
+  out.push(["info", `5 區累積 ${mmss(tiz)}（V1 範本 10:00，±15% 內${short ? "、每趟 ≥ 2 分" : ""}）：${ok ? "等效，這堂算進階" : "不等效，這堂不算進階"}（interval_library.equivalent）`, null]);
+  return out;
+}
+
+// ---------------- render: chart ----------------
+const svgNS = "http://www.w3.org/2000/svg";
+function el(n, a = {}, p) { const e = document.createElementNS(svgNS, n); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; }
+function renderChart() {
+  const svg = document.getElementById("svg"), box = svg.getBoundingClientRect();
+  const W = Math.max(280, box.width), H = box.height || 130, top = 20, base = H - 16;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = "";
+  const defs = el("defs", {}, svg);
+  const pat = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+  el("rect", { width: 6, height: 6, fill: "var(--bar)" }, pat);
+  el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--panel)", "stroke-width": 2 }, pat);
+  const fl = flat();
+  const total = fl.reduce((a, { st }) => a + (st.dur.type === "open" ? OPEN_W : st.dur.value), 0) || 1;
+  const sx = (W - 2) / total, maxF = 1.3;
+  // CP reference line
+  const yCP = base - (1 / maxF) * (base - top);
+  el("line", { x1: 0, x2: W, y1: yCP, y2: yCP, stroke: "var(--faint)", "stroke-dasharray": "3 3", "stroke-width": 1 }, svg);
+  const lbl = el("text", { x: W - 2, y: yCP - 3, "text-anchor": "end", "font-size": 10.5, fill: "var(--muted)" }, svg); lbl.textContent = "CP";
+  el("line", { x1: 0, x2: W, y1: base, y2: base, stroke: "var(--line)" }, svg);
+  let x = 1, repSpan = new Map();
+  for (const { st, ctx } of fl) {
+    const r = resolve(st), w = (st.dur.type === "open" ? OPEN_W : st.dur.value) * sx;
+    const f = Math.min(maxF, r.frac), h = Math.max(6, (f / maxF) * (base - top));
+    const fill = st.dur.type === "open" ? "url(#hatch)" : r.type === "none" ? "var(--bar)" : `var(--z${level(r.frac)})`;
+    const rr = el("rect", { x: x + 1, y: base - h, width: Math.max(1, w - 2), height: h, rx: 3, fill, "data-id": st.id, class: "blk" }, svg);
+    if (sel === st.id) { rr.setAttribute("stroke", "var(--text)"); rr.setAttribute("stroke-width", 1.5); }
+    rr.addEventListener("mousemove", (e) => tip(e, st, r, ctx));
+    rr.addEventListener("mouseleave", () => (document.getElementById("tip").style.display = "none"));
+    rr.addEventListener("click", () => select(st.id));
+    if (ctx) { const sp = repSpan.get(ctx.rep.id) || { a: x, b: x + w, rep: ctx.rep }; sp.b = x + w; repSpan.set(ctx.rep.id, sp); }
+    x += w;
+  }
+  for (const { a, b, rep } of repSpan.values()) {
+    const y = 9;
+    el("path", { d: `M${a + 2} ${y + 6} V${y} H${b - 2} V${y + 6}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1 }, svg);
+    const t = el("text", { x: (a + b) / 2, y: y - 2, "text-anchor": "middle", "font-size": 11, fill: "var(--text)", "font-weight": 600 }, svg);
+    t.textContent = `×${rep.times}`;
+  }
+  // time axis: every 10 min
+  const tot = totals().sec;
+  for (let m = 10; m * 60 < total; m += 10) {
+    // approximate position ignoring open widths before it (open steps are at the edges in practice)
+    const px = 1 + m * 60 * sx;
+    const t = el("text", { x: px, y: H - 3, "text-anchor": "middle", "font-size": 10.5, fill: "var(--faint)" }, svg); t.textContent = `${m}′`;
+  }
+  document.getElementById("chart").setAttribute("aria-label", `總長 ${Math.round(tot / 60)} 分`);
+}
+function tip(e, st, r, ctx) {
+  const t = document.getElementById("tip"), box = document.getElementById("chart").getBoundingClientRect();
+  const dur = st.dur.type === "open" ? "按圈結束" : mmss(st.dur.value);
+  const n = ctx ? `第 ${ctx.i + 1}/${ctx.rep.times} 趟 · ` : "";
+  t.innerHTML = `<b>${n}${KIND[st.kind]}</b> · ${dur}<br>${TYPE[r.type]} <b class="num">${r.text}</b>${r.sub ? ` <span class="meta">${r.sub}</span>` : ""}${st.note ? `<br><span class="meta">${esc(st.note)}</span>` : ""}`;
+  t.style.display = "block";
+  t.style.left = Math.min(box.width - 90, Math.max(90, e.clientX - box.left)) + "px";
+  t.style.top = (e.clientY - box.top - 10) + "px";
+}
+function renderLegend() {
+  const z = [["z1", "< 75% CP"], ["z2", "75–88%"], ["z3", "88–101%"], ["z4", "101–106%"], ["z5", "≥ 106%"]];
+  document.getElementById("legend").innerHTML = z.map(([c, l]) => `<span><i style="background:var(--${c})"></i>${l}</span>`).join("") +
+    `<span><i style="background:var(--bar)"></i>無目標 / 休息</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>按圈結束</span><span class="faint">高度＝強度；心率段換算到功率是推估</span>`;
+}
+function renderStats() {
+  const t = totals(), cap = +document.getElementById("cap").value;
+  document.getElementById("stats").innerHTML =
+    `<span>總時間 <b class="num">${mmss(t.sec)}</b>${t.open ? "＋按圈" : ""}</span>` +
+    `<span>≥ 88% CP <b class="num">${mmss(t.hard)}</b></span>` +
+    `<span>TSS 估 <b class="num">${Math.round(t.tss)}</b></span>` +
+    `<span class="meta">單日上限 ${cap ? cap + " 分" : "不限"}</span>`;
+  document.getElementById("issues").innerHTML = issues().map(([lv, m, id]) =>
+    `<li class="${lv}" ${id ? `data-id="${id}"` : ""}><span class="ic">${lv === "err" ? "✕" : lv === "warn" ? "!" : "i"}</span><span>${m}</span></li>`).join("");
+}
+
+// ---------------- render: list ----------------
+function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function opt(v, l, cur) { return `<option value="${v}"${v === cur ? " selected" : ""}>${l}</option>`; }
+function rowHtml(st) {
+  const r = resolve(st), tg = st.target, ty = tg.type;
+  const zc = st.dur.type === "open" || r.type === "none" ? "var(--bar)" : `var(--z${level(r.frac)})`;
+  const zones = r.type === "power" ? PZ : r.type === "hr" ? HZ : r.type === "pace" ? PACEZ : [];
+  const spec = r.spec;
+  let fill = "";
+  if (!r.inherited && r.type !== "none") {
+    fill = `<select data-f="mode">${opt("zone", "區間", spec.mode)}${opt("pct", "% 門檻", spec.mode)}${opt("abs", "自訂數字", spec.mode)}</select>`;
+    if (spec.mode === "zone") fill += `<select data-f="zone">${zones.map((z) => opt(z[0], z[0] === "aet" ? "≤ AeT" : "Z" + z[0], spec.zone)).join("")}</select>`;
+    else if (spec.mode === "pct") fill += `<input type="number" step="1" data-f="lo" value="${Math.round(spec.lo * 100)}">–<input type="number" step="1" data-f="hi" value="${Math.round(spec.hi * 100)}"><span class="meta">%</span>`;
+    else fill += `<input type="number" data-f="lo" value="${Math.round(spec.lo)}">–<input type="number" data-f="hi" value="${Math.round(spec.hi)}"><span class="meta">${r.type === "power" ? "W" : r.type === "hr" ? "bpm" : "s/km"}</span>`;
+  }
+  const inh = r.inherited ? `<span class="meta">→ ${TYPE[r.type]}${S.default_target === "auto" ? "（自動）" : ""}</span>` : "";
+  const durT = st.dur.type;
+  return `<div class="row${sel === st.id ? " sel" : ""}" draggable="true" data-id="${st.id}" style="--zc:${zc}">
+    <span class="grip" title="拖曳排序" aria-hidden="true">⋮⋮</span>
+    <select class="kind" data-f="kind" aria-label="類型">${Object.entries(KIND).map(([k, l]) => opt(k, l, st.kind)).join("")}</select>
+    <span class="dur"><select data-f="durtype" aria-label="時長類型">${opt("time", "時間", durT)}${opt("open", "按圈", durT)}</select>${durT === "time" ? `<input class="t num" data-f="sec" value="${mmss(st.dur.value)}" aria-label="分:秒">` : ""}</span>
+    <span class="tgt"><select data-f="type" aria-label="目標類型">${Object.entries(TYPE).map(([k, l]) => opt(k, l, ty)).join("")}</select>${inh}${fill}
+      <span class="abs">${r.type === "none" ? r.text : `<b class="num">${r.text}</b>${r.sub ? " · " + r.sub : ""}`}</span>${r.warn ? `<span class="warnmark">⚠ ${r.warn}</span>` : ""}${!r.inherited && spec.mode === "abs" ? ` <button class="btn" data-a="reset" style="padding:1px 6px">↺ 建議值</button>` : ""}</span>
+    <span class="acts"><button data-a="up" title="上移" aria-label="上移">↑</button><button data-a="down" title="下移" aria-label="下移">↓</button><button data-a="dup" title="複製" aria-label="複製">⧉</button><button data-a="wrap" title="包成重複" aria-label="包成重複">⟳</button><button data-a="del" title="刪除" aria-label="刪除">✕</button></span>
+  </div>`;
+}
+function repHtml(it) {
+  return `<div class="rep" draggable="true" data-id="${it.id}">
+    <div class="rep-h"><span class="grip" aria-hidden="true">⋮⋮</span><b>重複</b> ×
+      <input type="number" min="1" max="99" data-f="times" value="${it.times}" aria-label="次數">
+      <span class="meta">${mmss(it.items.reduce((a, x) => a + (x.dur && x.dur.type === "time" ? x.dur.value : 0), 0) * it.times)}</span>
+      <span class="sp"></span>
+      <span class="acts"><button data-a="addin" title="在裡面加一步">＋</button><button data-a="up" title="上移">↑</button><button data-a="down" title="下移">↓</button><button data-a="dup" title="複製">⧉</button><button data-a="unwrap" title="拆開">⇲</button><button data-a="del" title="刪除">✕</button></span></div>
+    <div class="rep-in" data-cont="${it.id}">${it.items.map(itemHtml).join("")}</div>
+  </div>`;
+}
+function itemHtml(it) { return it.kind === "repeat" ? repHtml(it) : rowHtml(it); }
+function renderList() { document.getElementById("list").innerHTML = S.items.map(itemHtml).join(""); }
+
+// ---------------- watch preview ----------------
+const CW = { warm: "暖身", work: "訓練", rest: "休息", cool: "緩和", other: "訓練" };
+function watchLine(st) {
+  const r = resolve(st);
+  const d = st.dur.type === "open" ? "按圈結束" : mmss(st.dur.value);
+  const t = r.type === "none" ? "無強度" : r.type === "power" ? `功率 ${r.text}` : r.type === "hr" ? `心率 ${r.text}` : `配速 ${r.text}（未驗證）`;
+  return `<li>${CW[st.kind]} · ${d} · ${t}${st.note ? ` <span class="faint">「${esc(st.note.slice(0, 20))}」</span>` : ""}</li>`;
+}
+function renderWatch() {
+  const lost = [];
+  const body = S.items.map((it) => {
+    if (it.kind !== "repeat") return watchLine(it);
+    if (it.items.some((x) => x.kind === "repeat")) lost.push("巢狀重複會攤平成多個群組（COROS 未驗證）");
+    const inner = it.items.flatMap((x) => x.kind === "repeat" ? Array.from({ length: x.times }, () => x.items).flat() : [x]);
+    return `<li>間歇群組 × ${it.times}<ol>${inner.map(watchLine).join("")}</ol></li>`;
+  }).join("");
+  if (flat().some(({ st }) => resolve(st).type === "pace")) lost.push("配速目標的 COROS 單位還沒驗證，先不推");
+  lost.push("功率送的是瓦數（COROS 跑步沒有 % CP），CP 更新後這堂會變成「已過期，需重推」");
+  document.getElementById("watch-body").innerHTML = `<ol>${body}</ol>` + lost.map((l) => `<div class="lost">! ${l}</div>`).join("");
+}
+
+function render() { renderList(); renderChart(); renderStats(); renderWatch(); }
+
+// ---------------- model edits ----------------
+function find(id, items = S.items, parent = null) {
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].id === id) return { arr: items, i, it: items[i], parent };
+    if (items[i].kind === "repeat") { const f = find(id, items[i].items, items[i]); if (f) return f; }
+  }
+  return null;
+}
+function clone(it) { const c = JSON.parse(JSON.stringify(it)); const re = (x) => { x.id = nid(); (x.items || []).forEach(re); }; re(c); return c; }
+function parseSec(v) { const m = String(v).match(/^(\d+)(?::(\d{1,2}))?$/); return m ? +m[1] * 60 + +(m[2] || 0) : null; }
+function select(id) { sel = id; render(); const r = document.querySelector(`.row[data-id="${id}"]`); if (r) r.scrollIntoView({ block: "nearest" }); }
+
+document.getElementById("list").addEventListener("change", (e) => {
+  const host = e.target.closest("[data-id]"); if (!host) return;
+  const f = find(host.dataset.id); if (!f) return;
+  const it = f.it, k = e.target.dataset.f, v = e.target.value;
+  if (k === "times") it.times = Math.max(1, Math.min(99, +v || 1));
+  else if (k === "kind") it.kind = v;
+  else if (k === "durtype") it.dur = v === "open" ? { type: "open" } : { type: "time", value: 300 };
+  else if (k === "sec") { const s = parseSec(v); if (s) it.dur = { type: "time", value: s }; }
+  else if (k === "type") it.target = v === "inherit" || v === "none" ? { type: v } : { ...defaultSpec(v, it.kind) };
+  else if (k === "mode") {
+    const r = resolve(it), t = it.target.type;
+    if (v === "abs") it.target = { type: t, mode: "abs", lo: r.lo ?? 0, hi: r.hi ?? 0 };       // carry the numbers over
+    else if (v === "pct") { const [lo, hi] = fracs(it.target, t === "power" ? PZ : t === "hr" ? HZ : PACEZ, t); it.target = { type: t, mode: "pct", lo: isFinite(lo) ? lo : .75, hi: isFinite(hi) ? hi : .85 }; }
+    else it.target = defaultSpec(t, it.kind);
+  }
+  else if (k === "zone") it.target.zone = v;
+  else if (k === "lo" || k === "hi") it.target[k] = it.target.mode === "pct" ? (+v || 0) / 100 : +v || 0;
+  sel = it.id; render();
+});
+document.getElementById("list").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-a]");
+  const host = e.target.closest("[data-id]"); if (!host) return;
+  if (!b) { if (!e.target.closest("select,input")) select(host.dataset.id); return; }
+  const f = find(host.dataset.id); if (!f) return;
+  const a = b.dataset.a;
+  if (a === "del") f.arr.splice(f.i, 1);
+  else if (a === "dup") f.arr.splice(f.i + 1, 0, clone(f.it));
+  else if (a === "up" && f.i > 0) [f.arr[f.i - 1], f.arr[f.i]] = [f.arr[f.i], f.arr[f.i - 1]];
+  else if (a === "down" && f.i < f.arr.length - 1) [f.arr[f.i + 1], f.arr[f.i]] = [f.arr[f.i], f.arr[f.i + 1]];
+  else if (a === "wrap") f.arr.splice(f.i, 1, rep(3, [f.it, step("rest", 120, { type: "none" })]));
+  else if (a === "unwrap") f.arr.splice(f.i, 1, ...f.it.items);
+  else if (a === "addin") f.it.items.push(step("work", 120, { type: "inherit" }));
+  else if (a === "reset") f.it.target = defaultSpec(f.it.target.type, f.it.kind);
+  render();
+});
+document.getElementById("issues").addEventListener("click", (e) => { const li = e.target.closest("li[data-id]"); if (li) select(li.dataset.id); });
+
+// drag & drop (HTML5; up / down buttons are the touch / keyboard path)
+let dragId = null;
+document.getElementById("list").addEventListener("dragstart", (e) => {
+  const h = e.target.closest("[data-id]"); if (!h) return; dragId = h.dataset.id; e.dataTransfer.effectAllowed = "move"; e.stopPropagation();
+});
+document.getElementById("list").addEventListener("dragover", (e) => {
+  const h = e.target.closest("[data-id]"); document.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop"));
+  if (!h || !dragId || h.dataset.id === dragId) return; e.preventDefault(); h.classList.add("drop");
+});
+document.getElementById("list").addEventListener("drop", (e) => {
+  e.preventDefault(); document.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop"));
+  const h = e.target.closest("[data-id]"); if (!h || !dragId || h.dataset.id === dragId) return;
+  const src = find(dragId); if (!src) return;
+  if (src.it.kind === "repeat" && find(h.dataset.id).parent) return;   // keep repeats one level deep in the mockup
+  if (src.it.kind === "repeat" && find(h.dataset.id, src.it.items)) return;
+  src.arr.splice(src.i, 1);
+  const dst = find(h.dataset.id); dst.arr.splice(dst.i, 0, src.it);
+  dragId = null; render();
+});
+
+// toolbar
+document.getElementById("add-step").addEventListener("click", () => { const s = step("work", 300); S.items.splice(Math.max(0, S.items.length - 1), 0, s); select(s.id); });
+document.getElementById("add-rep").addEventListener("click", () => { S.items.splice(Math.max(0, S.items.length - 1), 0, rep(4, [step("work", 180), step("rest", 120, { type: "none" })])); render(); });
+document.getElementById("deflt").addEventListener("change", (e) => { S.default_target = e.target.value; render(); });
+document.getElementById("cap").addEventListener("change", render);
+
+const TPL = [
+  ["Zone 3（閾值 90–95% CP）", [
+    ["T1 3×6 分，休 90 秒（canonical）", () => rep(3, [step("work", 360, { type: "power", mode: "pct", lo: .90, hi: .95 }), step("rest", 90, { type: "none" }, "慢跑")])],
+    ["T2 3×8 分，休 2 分（canonical）", () => rep(3, [step("work", 480, { type: "power", mode: "pct", lo: .90, hi: .95 }), step("rest", 120, { type: "none" }, "慢跑")])],
+    ["T3b 24 分連續節奏跑", () => step("work", 1440, { type: "power", mode: "pct", lo: .88, hi: .92 })]]],
+  ["Zone 5（VO2max）", [
+    ["V1 5×2 分 106–112%，休 2 分走（canonical）", () => rep(5, [step("work", 120, { type: "power", mode: "pct", lo: 1.06, hi: 1.12 }), step("rest", 120, { type: "none" }, "走路或極慢跑")])],
+    ["V4 4×4 分 104–108%，休 3 分（Helgerud）", () => rep(4, [step("work", 240, { type: "power", mode: "pct", lo: 1.04, hi: 1.08 }), step("rest", 180, { type: "none" }, "慢跑")])],
+    ["30/15 × 2 組（非等效：每趟 < 2 分）", () => rep(2, [rep(10, [step("work", 30, { type: "power", mode: "pct", lo: 1.20, hi: 1.30 }), step("rest", 15, { type: "none" })]), step("rest", 180, { type: "none" }, "組間")])]]],
+  ["測試 / 其他", [
+    ["CP 測試：20 分全力", () => step("work", 1200, { type: "none" }, "全力、配速平均")],
+    ["坡道衝刺 8×10 秒", () => rep(8, [step("work", 10, { type: "none" }, "上坡衝刺"), step("rest", 60, { type: "none" }, "走下來")])]]],
+];
+const pop = document.getElementById("tpl-pop");
+pop.innerHTML = TPL.map(([g, xs], gi) => `<div class="g">${g}</div>` + xs.map(([l], i) => `<button data-t="${gi}.${i}">${l}</button>`).join("")).join("");
+document.getElementById("tpl-btn").addEventListener("click", (e) => { e.stopPropagation(); document.getElementById("tpl-menu").classList.toggle("open"); });
+pop.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-t]"); if (!b) return;
+  const [g, i] = b.dataset.t.split(".").map(Number);
+  const it = TPL[g][1][i][1]();
+  // replace the main set (the first repeat) or insert before the cool-down
+  const k = S.items.findIndex((x) => x.kind === "repeat" || (x.kind === "work"));
+  if (k >= 0) S.items.splice(k, 1, it); else S.items.splice(Math.max(0, S.items.length - 1), 0, it);
+  document.getElementById("tpl-menu").classList.remove("open"); render();
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) document.getElementById("tpl-menu").classList.remove("open"); });
+window.addEventListener("resize", renderChart);
+
+renderLegend();
+render();
+</script>
+</body>
+</html>
