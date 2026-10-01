@@ -19,6 +19,14 @@ from backend.tests.fit_builder import build_run
 TODAY = dt.date(2026, 9, 30)
 
 
+def _run(coro):
+    # not asyncio.run(): it leaves no current loop behind, and older tests in
+    # the suite call asyncio.get_event_loop() (test_sync_e2e.run does the same)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
+
+
 def _folder(tmp_path, n=3):
     d = tmp_path / "fit" / "coros" / "2026"
     d.mkdir(parents=True)
@@ -251,13 +259,13 @@ def test_concurrent_requests_build_one_dataset(monkeypatch, tmp_path):
     for t in ts:
         t.start()
     time.sleep(0.3)
-    snap = asyncio.run(WV.dataset_status())
+    snap = _run(WV.dataset_status())
     assert snap["state"] == "building" and snap["message"] == "正在處理第 4／10 筆（解析 FIT）…"
     gate.set()
     for t in ts:
         t.join(5)
     assert built == ["coros"] and len(out) == 5 and all(x is out[0] for x in out)
-    assert asyncio.run(WV.dataset_status())["state"] == "ready"
+    assert _run(WV.dataset_status())["state"] == "ready"
     WV._dataset_cfg.cache_clear()
 
 
@@ -273,7 +281,7 @@ def test_a_failed_build_reports_the_error(monkeypatch):
     monkeypatch.setattr(DSRC, "source_stamp", lambda s, d: "x")
     with pytest.raises(RuntimeError):
         WV._dataset()
-    s = asyncio.run(WV.dataset_status())
+    s = _run(WV.dataset_status())
     assert s["source"] == "tp" and s["state"] == "error" and "disk gone" in s["error"]
     WV._dataset_cfg.cache_clear()
 
