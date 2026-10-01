@@ -368,12 +368,12 @@ def test_aet_analysis_refuses_short_hot_fast_finish_and_hills():
     assert "有坡" in AT.analyze(t, h, s, p, climb_m_per_km=30.0)["reason"]
 
 
-def _aet_workout(day, rise=12.9):
-    t, h, s, p, _ = _aet_series(rise)
+def _aet_workout(day, rise=12.9, title="WKO5 AeT 飄移測試 60 分", main=60):
+    t, h, s, p, _ = _aet_series(rise, main=main)
     ch = {"elapsedtime": list(t), "heartrate": list(h), "speed": list(s), "power": list(p),
           "elapseddistance": list(t * 10 / 3600)}
     return FakeWorkout(start=dt.datetime.combine(day, dt.time(7)), sport="run", tags=["running"], sport_type="running",
-                       title="WKO5 AeT 飄移測試 60 分", channels=ch,
+                       title=title, channels=ch,
                        metrics={"duration": float(len(t)), "movingduration": float(len(t)),
                                 "distance": len(t) / 360.0, "climbing": 5.0})
 
@@ -396,6 +396,80 @@ def test_latest_aet_test_review_card_and_the_apply_button():
     # once the plan has an AeT dated on / after the test, no button
     ds.plan.thresholds.append(Threshold(day.isoformat(), aethr=body["aethr"], note=body["note"]))
     assert "action" not in R.review(ds, w, "summary") and AT.applied(ds.plan, at)
+
+
+def _aet_row(day, idx=0, **kw):
+    """A stored AeT-test session (plan_store.test_sessions shape), done by activity `idx`."""
+    row = {"uid": "aet1", "day": day.isoformat(), "state": "done", "title": AT.TITLE, "protocol": AT.PROTOCOL,
+           "gen_key": "test_aet", "done_by": {"index": idx, "date": day.isoformat()}}
+    row.update(kw)
+    return row
+
+
+@pytest.mark.parametrize("row", [
+    {},                                                                  # protocol "aet"
+    {"protocol": None},                                                  # a row stored before the field: gen_key
+    {"protocol": None, "gen_key": None, "title": "AeT 測試（自訂）"},       # a custom session: its title
+])
+def test_aet_test_is_matched_through_the_plans_done_by(row):
+    from backend.engine import workout_review as R
+    day = TODAY - dt.timedelta(days=3)
+    # title 「飄移測試」 has 測試 but no AeT: without the plan it would be read as a CP test
+    ds = _ds([_aet_workout(day, title="週三 飄移測試")])
+    w = ds.workouts[0]
+    assert R.classify(ds, w)["type"] == "test_cp"
+    ds.plan_test_sessions = [_aet_row(day, **row)]
+    c = R.classify(ds, w)
+    assert c["type"] == "test_aet" and c["test_match"] == "done_by" and c["protocol"] is None
+    assert R.scheduled_aet_test(ds, w)["uid"] == "aet1"
+    assert R.scheduled_test(ds, w, R.measure(ds, w)) is None            # never the CP path
+    assert AT.latest_aet_test(ds, TODAY)["idx"] == w.idx
+
+
+def test_aet_test_done_by_must_be_this_activity_and_day():
+    from backend.engine import workout_review as R
+    day = TODAY - dt.timedelta(days=3)
+    ds = _ds([_aet_workout(day, title="週三 飄移測試")])
+    w = ds.workouts[0]
+    for row in (_aet_row(day, idx=5), _aet_row(day, state="active", done_by=None),
+                _aet_row(day, done_by={"index": 0, "date": (day - dt.timedelta(days=1)).isoformat()})):
+        ds.plan_test_sessions = [row]
+        assert R.scheduled_aet_test(ds, w) is None
+        assert R.classify(ds, w)["type"] == "test_cp"                    # back to the old rules
+
+
+def test_aet_test_fallbacks_title_plan_row_then_steady_run():
+    from backend.engine import workout_review as R
+    day = TODAY - dt.timedelta(days=3)
+    ds = _ds([_aet_workout(day)])                                        # 「WKO5 AeT 飄移測試 60 分」
+    assert R.classify(ds, ds.workouts[0])["test_match"] == "title"
+    ds = _ds([_aet_workout(day, title="")], plan=_plan(aethr=145.0, day=day.isoformat()))
+    c = R.classify(ds, ds.workouts[0])
+    assert c["type"] == "test_aet" and c["test_match"] == "threshold"
+    ds = _ds([_aet_workout(day, title="")])                              # 80′ flat steady run, fair drift
+    m = R.measure(ds, ds.workouts[0])
+    assert m["drift"]["ok"] and m["moving_s"] >= R.TEST_AET_MIN_S
+    c = R.classify(ds, ds.workouts[0], m)
+    assert c["type"] == "test_aet" and c["test_match"] == "steady"
+    assert R.MATCH_LABEL["steady"].startswith("≥ 55")
+
+
+def test_a_short_planned_aet_test_is_found_and_refused_with_the_reason():
+    day = TODAY - dt.timedelta(days=2)
+    ds = _ds([_aet_workout(day, title="", main=25)])                     # 15 + 25 + 5 = 45′ on the clock
+    assert AT.latest_aet_test(ds, TODAY) is None                         # too short without the plan
+    ds.plan_test_sessions = [_aet_row(day)]
+    at = AT.latest_aet_test(ds, TODAY)
+    assert at is not None and not at["ok"] and "< 40 分" in at["reason"]
+
+
+def test_the_aet_session_carries_protocol_aet():
+    s = AT.session({"cp": 250.0}, 140.0, 190.0)
+    assert s["protocol"] == AT.PROTOCOL == "aet" and AT.is_aet_session(s)
+    assert AT.is_aet_session({"kind": "aet"}) and AT.is_aet_session({"gen_key": "test_aet"})
+    assert not AT.is_aet_session({"kind": "test", "protocol": "quick", "title": "CP 測試 20 分全力"})
+    q = P._bq({**s, "kind": "test"})
+    assert q["protocol"] == "aet" and q["id"] == "test_aet"              # projection keeps it for the store
 
 
 def test_aet_test_session_steps_and_payload_without_coros():

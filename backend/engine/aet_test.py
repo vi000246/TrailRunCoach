@@ -13,11 +13,19 @@ Analysis (`analyze`): the main block is the time after the 15′ warm-up up to
 UA's bands: < 3.5 % → below AeT (next time start 5 bpm higher), 3.5–5 % → the
 first-half HR is the AeT, > 5 % → started above AeT (5 bpm lower).
 
-These checks are the doc's fixes to workout_review.drift_of, kept here so
-drift_of itself is untouched (it serves the daily runs):
-  * the 40-min floor counts *after* the warm-up (drift_of counts it from the start);
+The same three checks as workout_review.drift_of (the daily runs; there the
+warm-up is 10′, here the planned 15′):
+  * the 40-min floor counts *after* the warm-up;
   * a fast finish (last 10 % of the block > 5 % above the rest) is refused — 自訂;
-  * heat: a mean temperature > 25 °C is refused when the file has one — 自訂.
+  * heat: a mean temperature > 25 °C is refused — 自訂. The route_weather
+    archive's air temperature when it has the activity, else the watch's
+    (workout_review.activity_temp); the reason says which.
+
+The activity is the AeT test when the plan says so first: a done test session
+that is the AeT test (is_aet_session: protocol / kind aet, gen_key test_aet)
+done_by this activity — workout_review.scheduled_aet_test, the way
+cp_protocols' CP tests are matched; then the title, a plan AeT row that day,
+or a ≥ 55-min steady run (workout_review.classify).
 """
 from __future__ import annotations
 
@@ -45,6 +53,7 @@ STALE_DAYS = 42                 # plan AeT older than 6 weeks → due again (i_t
 
 SRC = "Uphill Athlete 心率飄移測試（40–60 分，< 3.5% / 3.5–5% / > 5%）；Evoke 60 分"
 TITLE = "AeT 飄移測試 60 分"
+PROTOCOL = "aet"                # the stored session's `protocol` (not a cp_protocols protocol)
 BAND_LABEL = {"below": "低於 AeT", "at": "就是 AeT", "above": "高於 AeT"}
 
 
@@ -67,8 +76,11 @@ def band_of(drift: Optional[float]) -> Optional[str]:
 
 
 def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[float] = None,
-            trail: bool = False, warm_s: float = WARM_S, main_s: float = MAIN_S) -> dict:
-    """UA drift test on one recording. `ok` False with `reason` when it isn't a fair test."""
+            trail: bool = False, warm_s: float = WARM_S, main_s: float = MAIN_S,
+            temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
+    """UA drift test on one recording. `ok` False with `reason` when it isn't a
+    fair test. `temp_c` (with `temp_src`, route_weather / watch) overrides the
+    mean of the `temp` channel over the block."""
     from backend.engine.workout_review import MAX_DT, STOP_KMH, _arr, _grid1, _hms
     out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
            "main_s": None, "band": None, "basis": None}
@@ -132,8 +144,13 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
         out["reason"] = f"最後 10% 比前段快 {(ow[-k:].mean() / ow[:-k].mean() - 1) * 100:.0f}%（> 5%）：快速結尾會讓飄移看起來比較小"
         return out
     tp = series.get("temp")
-    if tp is not None and np.isfinite(tp[m]).any() and float(np.nanmean(tp[m])) > HEAT_C:
-        out["reason"] = f"平均氣溫 {float(np.nanmean(tp[m])):.0f} °C（> 25 °C）：熱會讓心率飄，換涼一點的時段再測"
+    if temp_c is None and tp is not None and np.isfinite(tp[m]).any():
+        temp_c, temp_src = float(np.nanmean(tp[m])), "watch"
+    out["temp_c"], out["temp_src"] = temp_c, temp_src if temp_c is not None else None
+    if temp_c is not None and temp_c > HEAT_C:
+        from backend.engine.workout_review import TEMP_SRC_LABEL
+        out["reason"] = (f"{TEMP_SRC_LABEL.get(temp_src, '平均氣溫')} {temp_c:.0f} °C（> 25 °C）："
+                         "熱會讓心率飄，換涼一點的時段再測")
         return out
     cum = np.cumsum(m.astype(float))
     half = cum[-1] / 2.0
@@ -180,8 +197,9 @@ def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
         return None
     m = m if m is not None else (WR.measure(ds, w) or {})
     temp = ds.channel(w.idx, "temperature")
+    tc, src = WR.activity_temp(ds, w, None)       # the archive only; the watch is averaged over the block
     return analyze(s["t"], s["hr"], s["speed"], s["power"], temp, m.get("climb_m_per_km"),
-                   trail="runningtrail" in w.tags)
+                   trail="runningtrail" in w.tags, temp_c=tc, temp_src=src)
 
 
 def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
@@ -195,7 +213,9 @@ def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
     for w in sorted(ds.workouts, key=lambda x: x.day):
         if not (tday - days < math.floor(w.day) <= tday) or w.sport != "run":
             continue
-        if (_f(w.metrics.get("duration")) or 0) < WARM_S + UA_MIN_S:
+        # too short to be a fair test — unless the plan says it was the test
+        # (then analyze() refuses it and the card / i_testing say why)
+        if (_f(w.metrics.get("duration")) or 0) < WARM_S + UA_MIN_S and WR.scheduled_aet_test(ds, w) is None:
             continue
         m = WR.measure(ds, w)
         if not m or WR.classify(ds, w, m)["type"] != "test_aet":
@@ -267,7 +287,7 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float]) -> dict:
         tgt.append(f"固定功率 {p0:.0f} W（±3%）")
     if hr0:
         tgt.append(f"心率從 {hr0:.0f} 附近開始")
-    return {"id": "test_aet", "kind": "test", "title": TITLE, "minutes": 80,
+    return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": TITLE, "minutes": 80,
             "target": "；".join(tgt) or "固定功率（±3%），不要調",
             "detail": "平路環線或跑步機 2–3%，不要山路；< 25 °C；暖身 15 分、測試 60 分（至少 45 分）、緩和 5 分；"
                       "中途不停、不加速。暖身後心率明顯高於起始心率就把功率調低再開始",
@@ -275,4 +295,8 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float]) -> dict:
 
 
 def is_aet_session(s: dict) -> bool:
-    return (s.get("id") == "test_aet" or s.get("gen_key") == "test_aet" or "AeT" in (s.get("title") or ""))
+    """A planned / stored session that is the AeT test: protocol or kind
+    `aet`, id / gen_key `test_aet` (rows stored before the protocol field
+    was set), or an AeT title (a custom session)."""
+    return (s.get("protocol") == PROTOCOL or s.get("kind") == PROTOCOL or s.get("id") == "test_aet"
+            or s.get("gen_key") == "test_aet" or "AeT" in (s.get("title") or ""))
