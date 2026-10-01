@@ -53,6 +53,23 @@ def test_plan_test_never_applies_to_earlier_dates():
         assert Dataset.aethr(ns, _w(d)) == pytest.approx(0.89 * 155.0)
 
 
+def test_todays_thresholds_include_a_test_after_the_last_run():
+    """zones / status read the thresholds through the last run moved to
+    today: the 2026-09-30 test applies even when WKO5's last run is 09-24."""
+    from backend.engine.wko5expr.dataset import Workout
+    from backend.engine.zones import _on_day
+    plan = P.Plan(thresholds=[P.Threshold("2026-09-30", lthr=155.0, cp=204.0)])
+    ns = _ns(plan)
+    last = Workout(idx=1, entry=SimpleNamespace(ftp=None), day=date_to_day(dt.date(2026, 9, 24)), sport="run",
+                   sport_type="running", tags=[])
+    assert Dataset.cp(ns, last) == pytest.approx(175.6)                   # the run's own date
+    today = math.floor(date_to_day(dt.date(2026, 10, 1)))
+    assert Dataset.cp(ns, _on_day(last, today)) == 204.0
+    assert Dataset.sport_setting(ns, "thr", _on_day(last, today)) == 155.0
+    assert _on_day(last, today - 30).day == last.day                      # never moved backwards
+    assert last.day == date_to_day(dt.date(2026, 9, 24))                   # the original is untouched
+
+
 def test_future_row_is_not_in_effect_yet():
     plan = P.Plan(thresholds=[P.Threshold("2026-03-01", lthr=150.0), P.Threshold("2026-12-01", lthr=170.0)])
     assert plan.threshold_on("lthr", dt.date(2026, 10, 1)) == 150.0
