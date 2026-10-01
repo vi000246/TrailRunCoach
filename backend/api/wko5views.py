@@ -224,8 +224,9 @@ MAP_PANEL = "PKMapPanelConfig"
 
 def _panel_kind(c: dict) -> Optional[str]:
     """WKO5's map panel has no series; it is a workout's GPS track ("map").
-    A review card (workout_review.py) is a workout chart to the viewer."""
-    if c.get("kind") == "review":
+    A review card (workout_review.py) and a kind "activity" chart
+    (panels/activity_charts.py) are workout charts to the viewer."""
+    if c.get("kind") in ("review", "activity"):
         return "workout"
     return "map" if c.get("kind") == "other" and c.get("class") == MAP_PANEL else c.get("kind")
 
@@ -374,6 +375,9 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w)
         return {**review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace"),
                 "title": ch.get("title"),
                 "description": ch.get("description")}
+    if ch.get("kind") == "activity":
+        from backend.engine.panels.activity_charts import render as render_activity
+        return render_activity(ds, w, ch)
     if ch.get("kind") == "workout":
         return render_chart(ch, ds, b, e, workout=w)
     if _panel_kind(ch) == "map":

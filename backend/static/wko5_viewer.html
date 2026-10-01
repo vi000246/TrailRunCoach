@@ -241,6 +241,34 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 .z5leg .sym { font-style: normal; color: var(--text); font-size: 12px; width: auto; height: auto; }
 .plot.z5 { height: 340px; }
 table.z5ev td { white-space: normal; }
+/* single-activity charts (kind "activity": 心率與功率, 區間時間, 心率變化與趨勢) — one hue per measure */
+:root { --ac-hr: #eb6834; --ac-pw: #2a78d6; --ac-ink: #0b0b0b; --ac-ink2: #52514e; --ac-brush: rgba(42,120,214,.10); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ac-hr: #d95926; --ac-pw: #3987e5;
+  --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); } }
+:root[data-theme="dark"] { --ac-hr: #d95926; --ac-pw: #3987e5; --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); }
+.card.ac-wide { grid-column: 1 / -1; }
+.ac-leg { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 11.5px; color: var(--muted); margin: 0 0 2px; align-items: center; }
+.ac-leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.ac-leg i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.ac-leg i.dash { border-top-style: dashed; }
+.ac-leg i.band { height: 10px; border: 0; border-radius: 3px; }
+.ac-leg .hint { margin-left: auto; }
+.ac-leg button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  border-radius: 4px; padding: 1px 8px; cursor: pointer; }
+.plot.ac-hp { height: 360px; }
+.plot.ac-z { height: 260px; }
+.plot.ac-tr { height: 280px; }
+.ac-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px 10px; margin: 6px 0 2px; }
+.ac-stats .s { border-left: 2px solid var(--line); padding: 1px 0 1px 8px; min-width: 0; }
+.ac-stats .k { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-stats .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ac-stats .v small { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+.ac-stats .s.hr { border-left-color: var(--ac-hr); } .ac-stats .s.pw { border-left-color: var(--ac-pw); }
+.ac-head { font-size: 12px; margin: 4px 0 0; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.ac-head b { font-size: 12.5px; }
+.ac-zbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 4px; font-size: 11.5px; }
+.ac-zbar select { font-size: 12px; max-width: 100%; }
+.ac-src { font-size: 11px; color: var(--muted); margin: 2px 0 0; }
 </style>
 </head>
 <body class="aside-closed" data-mode="season">
@@ -901,6 +929,7 @@ function drawInto(box, res) {
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "z5gate") drawZ5Gate(box, res);
   else if (res.kind === "map") drawMap(box, res);
+  else if (String(res.kind || "").startsWith("act_")) drawActivity(box, res);   // panels/activity_charts.py
   else draw(box, res);
 }
 
@@ -1807,6 +1836,243 @@ function drawPlot(card, res, series) {
   new ResizeObserver(() => chart.resize()).observe(el);
   if (hx) samplesFor(res.workout).then((s) => { if (!chart.isDisposed()) hoverChart(chart, s, hx, DIST_X[xUnit.id] || 1); })
     .catch((e) => console.warn("hover sync off:", e.message));
+}
+
+// ---- single-activity charts (views kind "activity" → res.kind "act_*", panels/activity_charts.py)
+// act_hrpower: HR (top) and 30-s power (bottom) on one time axis — two units, never one y-scale;
+//   drag to select a range, the stats under it come from the running totals (ACT.stats mirrors
+//   activity_charts.range_stats). act_hrzones / act_powerzones: time in zones, model picked in the
+//   card and remembered. act_hrtrend: WKO5 Heart Rate Variation and Trend.
+const ACT = {
+  ZKEY: "wko5viewer.zmodel",
+  steps: [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800],
+  interval: (span) => ACT.steps.find((st) => span / st <= 7) || 21600,
+  tick: (v, span) => fmtDur(v, span >= 3 * 3600 ? "hm" : undefined),
+  tipBox: (html) => `<div style="font-size:11.5px;line-height:1.5">${html}</div>`,
+  theme: () => ({ hr: css("--ac-hr"), pw: css("--ac-pw"), ink: css("--ac-ink"), ink2: css("--ac-ink2"), brush: css("--ac-brush"),
+    line: css("--line"), muted: css("--muted"), text: css("--text"), panel: css("--panel") }),
+  num: (v, d = 0) => v == null || !isFinite(v) ? "—" : (+v).toFixed(d),
+  pace: (s) => s == null || !isFinite(s) || s <= 0 || s > 3600 ? "—" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`,
+};
+function drawActivity(card, res) {
+  card.querySelector(".loading")?.remove();
+  if (res.description) {
+    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
+    else {
+      const h2 = card.querySelector("h2"), zb = h2?.querySelector(".zbtn");
+      const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
+      if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);
+    }
+  }
+  if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
+  if (res.kind === "act_hrpower") drawActHrPower(card, res);
+  else if (res.kind === "act_hrzones" || res.kind === "act_powerzones") drawActZones(card, res);
+  else if (res.kind === "act_hrtrend") drawActHrTrend(card, res);
+}
+function actChart(card, cls, label) {
+  const el = document.createElement("div");
+  el.className = `plot ${cls}`;
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", label);
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  new ResizeObserver(() => chart.resize()).observe(el);
+  return chart;
+}
+// stats of plotted buckets ka … kb−1 (activity_charts.range_stats)
+ACT.stats = (r, ka, kb) => {
+  const K = r.x.length, c = r.cum;
+  ka = Math.max(0, Math.min(ka, K - 1)); kb = Math.max(1, Math.min(kb, K)); if (kb <= ka) kb = ka + 1;
+  const bnd = (k) => k < K ? r.x[k] : r.n, d = (n) => c[n][kb] - c[n][ka], ratio = (a, b) => b ? a / b : null;
+  const moving = d("mov"), km = c.d ? d("d") : null;
+  const hr = ratio(d("hs"), d("hn")), p = ratio(d("ps"), d("pn")), n4 = ratio(d("n4"), d("nn"));
+  const np = n4 ? 100 * Math.pow(n4, 0.25) : null;
+  const hmax = (r.hr_max || []).slice(ka, kb).filter((v) => v != null);
+  let drift = null;
+  const mid = Math.round(ka + (kb - ka) / 2);
+  if (kb - ka >= 2 && ka < mid && mid < kb) {
+    const e = (a, b) => { const n = c.bn[b] - c.bn[a]; if (!n) return null; const h = (c.bh[b] - c.bh[a]) / n; return h ? ((c.bp[b] - c.bp[a]) / n) / h : null; };
+    const e1 = e(ka, mid), e2 = e(mid, kb);
+    drift = e1 && e2 != null ? (e1 - e2) / e1 : null;
+  }
+  return { t0: bnd(ka), t1: bnd(kb), elapsed: bnd(kb) - bnd(ka), moving, km, pace: km && km > 0.05 ? moving / km : null,
+    hr, hmax: hmax.length ? Math.max(...hmax) : null, p, np, pwhr: p != null && hr ? p / hr : null,
+    ef: np && hr ? np / hr : null, drift };
+};
+function drawActHrPower(card, res) {
+  const T = ACT.theme(), K = res.x.length, span = res.n, iv = ACT.interval(span);
+  if (!res._zoom) card.classList.add("ac-wide");
+  card.insertAdjacentHTML("beforeend", `<div class="ac-leg" aria-label="圖例">
+      ${res.has_hr ? `<span><i style="border-color:${T.hr}"></i>心率 bpm（上）</span>` : ""}
+      ${res.has_power ? `<span><i style="border-color:${T.pw}"></i>功率 W，30 秒平均（下）</span>` : `<span>這筆沒有可用的功率</span>`}
+      <span><i class="dash" style="border-color:${T.ink2}"></i>AeT／LTHR／CP</span>
+      <span class="hint">左右拖曳選一段 <button type="button" class="ac-clear" hidden>清除選取</button></span></div>`);
+  const chart = actChart(card, "ac-hp", "心率與功率隨時間；拖曳選一段看那段的統計，統計列在圖下方");
+  const head = document.createElement("p"); head.className = "ac-head"; card.appendChild(head);
+  const box = document.createElement("div"); box.className = "ac-stats"; card.appendChild(box);
+  const show = (ka, kb, picked) => {
+    const s = ACT.stats(res, ka, kb), f = ACT.num;
+    head.innerHTML = picked ? `<b>選取</b><span>${fmtDur(s.t0)} – ${fmtDur(s.t1)}</span>` : `<b>整趟</b><span class="meta">拖曳圖表選一段，只看那段</span>`;
+    const tile = (k, v, u, cls = "") => `<div class="s ${cls}"><div class="k">${k}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div></div>`;
+    box.innerHTML = [
+      tile("時間", fmtDur(s.elapsed)), tile("移動時間", fmtDur(s.moving)),
+      res.has_dist ? tile("距離", f(s.km, 2), "km") : "", res.has_dist ? tile("移動配速", ACT.pace(s.pace), "/km") : "",
+      res.has_hr ? tile("平均心率", f(s.hr), "bpm", "hr") : "", res.has_hr ? tile("最高心率", f(s.hmax), "bpm", "hr") : "",
+      res.has_power ? tile("平均功率", f(s.p), "W", "pw") : "", res.has_power ? tile("NP", f(s.np), "W", "pw") : "",
+      res.has_power && res.has_hr ? tile("Pw:HR 平均功率÷心率", f(s.pwhr, 2), "W/bpm") : "",
+      res.has_power && res.has_hr ? tile("EF NP÷心率", f(s.ef, 2), "W/bpm") : "",
+      res.has_power && res.has_hr ? tile("前後半 Pw:HR 飄移", s.drift == null ? "—" : (s.drift * 100).toFixed(1), s.drift == null ? "" : "%") : "",
+    ].join("");
+  };
+  show(0, K, false);
+  const pts = (ys) => ys ? res.x.map((x, i) => [x, ys[i]]) : [];
+  const ref = (v, name) => v == null ? null : { yAxis: v, name, label: { formatter: `${name} ${v}`, position: "insideEndTop", color: T.ink2, fontSize: 10 } };
+  const mark = (rows) => ({ silent: true, symbol: "none", lineStyle: { color: T.ink2, type: "dashed", width: 1 }, data: rows.filter(Boolean) });
+  const hrs = (res.hr || []).filter((v) => v != null), ps = (res.power || []).filter((v) => v != null);
+  const hrLo = hrs.length ? Math.min(...hrs, res.ref.aet ?? Infinity) : 60, hrHi = hrs.length ? Math.max(...hrs, res.ref.lthr ?? 0) : 200;
+  const pHi = ps.length ? Math.max(...ps, res.ref.cp ?? 0) : 300;
+  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  const xBase = { type: "value", min: 0, max: span, interval: iv, axisLine: { lineStyle: { color: T.line } }, axisLabel: { showMaxLabel: false },
+    splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } };
+  chart.setOption({
+    animation: false,
+    grid: [{ left: 62, right: 16, top: 10, height: "40%" }, { left: 62, right: 16, top: "53%", bottom: 26 }],
+    axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: T.ink2 } },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
+      formatter: (pp) => {
+        pp = [].concat(pp); if (!pp.length) return "";
+        const i = pp[0].dataIndex, rows = [`<b>${fmtDur(res.x[i])}</b>`];
+        if (res.hr) rows.push(`<span style="color:${T.hr}">●</span> 心率 <b>${ACT.num(res.hr[i])}</b> bpm`);
+        if (res.power) rows.push(`<span style="color:${T.pw}">●</span> 功率（30 秒） <b>${ACT.num(res.power[i])}</b> W`);
+        return ACT.tipBox(rows.join("<br>"));
+      } },
+    brush: { xAxisIndex: [0, 1], brushType: "lineX", brushMode: "single", brushLink: "all", transformable: true,
+      throttleType: "debounce", throttleDelay: 80, removeOnClick: true,
+      brushStyle: { color: T.brush, borderColor: T.pw, borderWidth: 1 }, outOfBrush: { colorAlpha: 0.3 } },
+    toolbox: { show: false },
+    xAxis: [{ ...xBase, gridIndex: 0, axisLabel: { show: false }, axisTick: { show: false } },
+      { ...xBase, gridIndex: 1, axisLabel: { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v, span) } }],
+    yAxis: [
+      { type: "value", gridIndex: 0, min: Math.floor((hrLo - 5) / 10) * 10, max: Math.ceil((hrHi + 5) / 10) * 10,
+        axisLabel: { ...lbl, formatter: (v) => `${v} bpm` }, splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } },
+      { type: "value", gridIndex: 1, min: 0, max: Math.ceil((pHi * 1.08) / 50) * 50,
+        axisLabel: { ...lbl, formatter: (v) => `${v} W` }, splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } },
+    ],
+    series: [
+      { name: "心率", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(res.hr), showSymbol: false, connectNulls: false,
+        lineStyle: { color: T.hr, width: 1.5 }, itemStyle: { color: T.hr },
+        markLine: mark([ref(res.ref.aet, "AeT"), ref(res.ref.lthr, "LTHR")]) },
+      { name: "功率", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(res.power), showSymbol: false, connectNulls: false,
+        lineStyle: { color: T.pw, width: 1.5 }, itemStyle: { color: T.pw },
+        markLine: mark([res.has_power ? ref(res.ref.cp, "CP") : null]) },
+    ],
+  });
+  chart.dispatchAction({ type: "takeGlobalCursor", key: "brush", brushOption: { brushType: "lineX", brushMode: "single" } });
+  const clearBtn = card.querySelector(".ac-clear");
+  const toK = (x) => Math.max(0, Math.min(K, Math.round(x / res.step)));
+  // the brush rectangle sits in the panel it was drawn in; the other panel gets the same span as a tint
+  const mirror = (panel, x0, x1) => chart.setOption({ series: [0, 1].map((i) => ({
+    markArea: { silent: true, itemStyle: { color: T.brush, borderColor: T.pw, borderWidth: 1, borderType: "dashed" },
+      data: panel != null && panel !== i ? [[{ xAxis: x0 }, { xAxis: x1 }]] : [] } })) });
+  chart.on("brushSelected", (e) => {
+    const a = e.batch?.[0]?.areas?.[0];
+    const none = () => { show(0, K, false); clearBtn.hidden = true; mirror(null); };
+    if (!a || !a.coordRange) return none();
+    const r = Array.isArray(a.coordRange[0]) ? a.coordRange[0] : a.coordRange;
+    const ka = toK(Math.min(r[0], r[1])), kb = toK(Math.max(r[0], r[1]));
+    if (kb - ka < 1) return none();
+    show(ka, kb, true); clearBtn.hidden = false;
+    mirror(/1$/.test(String(a.panelId || "")) ? 1 : 0, Math.min(r[0], r[1]), Math.max(r[0], r[1]));
+  });
+  clearBtn.onclick = () => chart.dispatchAction({ type: "brush", areas: [] });
+}
+function actZonePrefs() { try { return JSON.parse(localStorage.getItem(ACT.ZKEY) || "{}"); } catch { return {}; } }
+function drawActZones(card, res) {
+  const T = ACT.theme(), kind = res.zone_kind, color = kind === "hr" ? T.hr : T.pw, unit = kind === "hr" ? "bpm" : "W";
+  const models = res.models || [], avail = models.filter((m) => m.available);
+  if (!avail.length) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(models.map((m) => `${m.title}：${m.reason}`).join("；"))}</p>`); return; }
+  const want = actZonePrefs()[kind] || res.default;
+  const asked = models.find((m) => m.id === want);
+  const cur = asked?.available ? asked : (models.find((m) => m.id === res.default && m.available) || avail[0]);
+  const bar = document.createElement("div"); bar.className = "ac-zbar";
+  bar.innerHTML = `<label>區間模型 <select aria-label="區間模型">${models.map((m) => `<option value="${esc(m.id)}"${m.available ? "" : " disabled"}${m.id === cur.id ? " selected" : ""}>${esc(m.title)}${m.available ? (m.estimate ? "（推估）" : "") : "（這次無法使用）"}</option>`).join("")}</select></label>
+    <span class="meta">${esc(cur.basis_text || "")}</span>${cur.estimate ? ` <span class="badge">推估</span>` : ""}`;
+  card.appendChild(bar);
+  if (asked && !asked.available) card.insertAdjacentHTML("beforeend", `<p class="nodata small">你選的「${esc(asked.title)}」這次無法使用：${esc(asked.reason)}；先顯示「${esc(cur.title)}」。</p>`);
+  bar.querySelector("select").onchange = (e) => {
+    try { localStorage.setItem(ACT.ZKEY, JSON.stringify({ ...actZonePrefs(), [kind]: e.target.value })); } catch {}
+    disposeCardCharts(card);
+    for (const el of [...card.children]) if (el.tagName !== "H2") el.remove();
+    drawActivity(card, { ...res, description: null });
+    if (ZOOM.card === card) fillZoom();
+  };
+  const rows = cur.rows;
+  const rng = (r) => r.to == null ? `≥ ${r.from}` : r.from ? `${r.from}–${r.to}` : `< ${r.to}`;
+  const label = (r) => `${r.id}  ${r.name}`;
+  const chart = actChart(card, "ac-z", `${cur.title} 的區間時間；下方表格列出每區的範圍與時間`);
+  if (res._zoom) chart.getDom().style.height = Math.max(260, rows.length * 34 + 40) + "px";
+  else chart.getDom().style.height = Math.max(200, rows.length * 28 + 30) + "px";
+  chart.resize();
+  chart.setOption({
+    animation: false,
+    grid: { left: 8, right: 92, top: 4, bottom: 4, containLabel: true },
+    tooltip: { trigger: "item", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
+      formatter: (p) => { const r = rows[p.dataIndex]; return ACT.tipBox(`<b>${esc(label(r))}</b><br>${esc(rng(r))} ${unit}<br>${fmtDur(r.seconds)}（${r.share == null ? "—" : Math.round(r.share * 100) + "%"}）`); } },
+    xAxis: { type: "value", show: false, max: (v) => v.max * 1.02 || 1 },
+    yAxis: { type: "category", inverse: true, data: rows.map((r) => r), axisTick: { show: false }, axisLine: { lineStyle: { color: T.line } },
+      axisLabel: { color: T.text, fontSize: 11, formatter: (_, i) => `{n|${label(rows[i])}}  {r|${rng(rows[i])}}`,
+        rich: { n: { color: T.text, fontSize: 11 }, r: { color: T.muted, fontSize: 10 } } } },
+    series: [{ type: "bar", data: rows.map((r) => r.seconds), barMaxWidth: 16, itemStyle: { color, borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: "right", color: T.text, fontSize: 10.5,
+        formatter: (p) => { const r = rows[p.dataIndex]; return r.seconds ? `${fmtDur(r.seconds)} · ${Math.round((r.share || 0) * 100)}%` : ""; } } }],
+  });
+  card.insertAdjacentHTML("beforeend", `<details><summary>表格（${esc(cur.title)}）</summary><table class="zt"><thead><tr><th>區</th><th>名稱</th><th class="num">${unit}</th><th class="num">時間</th><th class="num">比例</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="num">${esc(rng(r))}</td><td class="num">${fmtDur(r.seconds)}</td><td class="num">${r.share == null ? "—" : (r.share * 100).toFixed(0) + "%"}</td></tr>`).join("")}
+    </tbody></table></details><p class="ac-src">${esc(cur.source)} · 合計 ${fmtDur(cur.total_s)}</p>`);
+}
+function drawActHrTrend(card, res) {
+  const T = ACT.theme(), f = ACT.num;
+  const pwhr = res.decoupling == null ? "—" : (res.decoupling * 100).toFixed(1) + "%";
+  const sign = (v, d) => v == null ? "—" : (v > 0 ? "+" : "") + (+v).toFixed(d);
+  card.insertAdjacentHTML("beforeend", `<div class="ac-stats">
+      <div class="s hr"><div class="k">平均 ± 標準差</div><div class="v">${f(res.avg)} ± ${f(res.sd, 1)}<small>bpm</small></div></div>
+      <div class="s" title="標準差 ÷ 平均；WKO5：< 0.33 穩定、< 0.66 混合"><div class="k">變異：${esc(res.variability_label || "—")}</div><div class="v">${res.cv == null ? "—" : (res.cv * 100).toFixed(1) + "%"}</div></div>
+      <div class="s" title="直線迴歸斜率；WKO5：每秒 ±0.0005 bpm 以內算持平"><div class="k">趨勢：${esc(res.trend_label)}</div><div class="v">${sign(res.slope_bpm_h, 1)}<small>bpm/時</small></div></div>
+      <div class="s"><div class="k">整趟趨勢變化</div><div class="v">${sign(res.change_bpm, 1)}<small>bpm</small></div></div>
+      <div class="s" title="WKO5 的定義：整段從一半切開，含暖身與停頓"><div class="k">${res.decoupling_basis === "pahr" ? "Pa:HR" : "Pw:HR"} 前後半</div><div class="v">${pwhr}</div></div>
+    </div>
+    <div class="ac-leg" aria-label="圖例"><span><i style="border-color:${T.hr}"></i>心率（1 分鐘平均）</span>
+      <span><i class="dash" style="border-color:${T.ink}"></i>趨勢（直線迴歸）</span>
+      <span><i class="band" style="background:${T.hr};opacity:.18"></i>平均 ± 1 標準差</span></div>`);
+  const chart = actChart(card, "ac-tr", `心率變化與趨勢：趨勢 ${res.trend_label}，每小時 ${sign(res.slope_bpm_h, 1)} bpm`);
+  const pts = res.points, span = pts.length ? pts[pts.length - 1][0] : 3600;
+  const [[x0, y0], [x1, y1]] = res.trend_line;
+  const trendAt = (x) => x1 === x0 ? y0 : y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+  const ys = pts.map((p) => p[1]).filter((v) => v != null);
+  const lo = Math.min(...ys, res.avg - res.sd), hi = Math.max(...ys, res.avg + res.sd);
+  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  chart.setOption({
+    animation: false,
+    grid: { left: 62, right: 16, top: 10, bottom: 26 },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
+      formatter: (pp) => { pp = [].concat(pp).filter((p) => p.seriesId === "hr"); if (!pp.length) return "";
+        const [x, y] = pp[0].value;
+        return ACT.tipBox(`<b>${fmtDur(x)}</b><br><span style="color:${T.hr}">●</span> 心率 <b>${f(y)}</b> bpm<br>趨勢線 ${f(trendAt(x), 1)} bpm`); } },
+    xAxis: { type: "value", min: 0, max: span, interval: ACT.interval(span), axisLine: { lineStyle: { color: T.line } },
+      splitLine: { lineStyle: { color: T.line, opacity: 0.6 } }, axisLabel: { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v, span) } },
+    yAxis: { type: "value", min: Math.floor((lo - 3) / 5) * 5, max: Math.ceil((hi + 3) / 5) * 5,
+      axisLabel: { ...lbl, formatter: (v) => `${v} bpm` },
+      splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } },
+    series: [
+      { id: "hr", name: "心率", type: "line", data: pts, showSymbol: false, connectNulls: false,
+        lineStyle: { color: T.hr, width: 1.5 }, itemStyle: { color: T.hr },
+        markArea: { silent: true, itemStyle: { color: T.hr, opacity: 0.12 }, data: [[{ yAxis: res.avg - res.sd }, { yAxis: res.avg + res.sd }]] } },
+      { id: "trend", name: "趨勢", type: "line", data: res.trend_line, showSymbol: false, silent: true,
+        lineStyle: { color: T.ink, type: "dashed", width: 2 }, z: 4,
+        endLabel: { show: true, color: T.ink2, fontSize: 10, formatter: `趨勢 ${sign(res.change_bpm, 1)} bpm`, offset: [-90, -12] } },
+    ],
+  });
 }
 
 if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin",
