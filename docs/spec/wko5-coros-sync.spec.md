@@ -23,6 +23,7 @@
 | 2026-10-01 | bugfix | N/A | `FitFolderDataset` 前置修正：越野分類讀 app DB（含覆寫、跨來源重複）、sub_sport 後備；門檻／體重改成計畫 → `athlete_settings` → as-of 估算，WKO5 athlete 檔改為選用（`charts.fit_settings_from_wko5`）；`source_stamp` 含 DB 簽章 |
 | 2026-10-01 | bugfix | user request (COROS vs TP back-test) | 每筆活動的功率來源（`stryd` / `watch` / `none`，`backend/engine/power_source.py`）；手錶推估功率預設不進功率模型、不算功率 TSS（設定 `power.accept_watch_power`，預設 false）；記錄 COROS 與 TP 檔案集合的差異（TP 獨有的 2025-12-14 垃圾功率檔、TP 缺 2025-03/04 的 Stryd 跑步） |
 | 2026-10-01 | feature | user request (bad activity files) | 壞掉的活動檔（忘了停錶騎車／開車、功率不可能）整筆排除：`FitFolderDataset`／`Dataset` 不放進 `ds.workouts`、`cptest.bad_files`；覆寫 `activity_tags.exclusion`，設定 `activities.exclude_bad`（預設 true），併入 `source_stamp`（見 workouts.spec.md） |
+| 2026-10-01 | perf/dataset-load | user request (login / token) | 登入一次：某 region 發了 token 後不再登入其他 region；同時兩個登入回 409 `COROS_LOGIN_BUSY`（COROS 只認最後一次登入）。資料 server 偵測順序：上次偵測到的 → US → 登入 server → 其餘；全部探測失敗（2026-10-01：dataset 建置卡住 event loop，探測全部逾時）時沿用上次的，否則 US。「記住密碼」（預設關）：密碼以 `secrets.seal` 存 `sync_state.coros_password_sealed`／`tp_password_sealed`，token 過期或 result 1019 時自動登入一次、重試一次，取消勾選或登出即刪除（`docs/secrets-and-keys.md`）。同步時 FIT 解析改在 thread，同步下載到新檔後背景重建圖表 Dataset |
 | 2026-10-01 | bugfix | user request (charts on COROS) | 圖表分析在 COROS 來源：FIT `vam` 與登山標籤、Stryd-only PD 擬合的圖表 CP（計畫測試之前）、閾值配速推估（CP × 速度／功率比）、區間表來源與日期、越野／爬坡課表看功率、訓練量週增幅改 4 週平均（見「圖表分析在 COROS 來源」） |
 | 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
 
@@ -100,7 +101,9 @@ Coros 有多個 region server，登入成功的 server 不一定是活動資料�
 
 **台灣帳號實測**：EU server 登入成功，但 token 對資料 API 有效的是 `teamapi.coros.com`（US server）。
 
-**偵測策略**：登入成功後，對每個 base URL 發一次 `/activity/query` 測試請求，找第一個回傳 `result=="0000"` 的 server，儲存為 `coros_base_url`。
+**偵測策略**：登入成功後，依序對「上次偵測到的 server（同一 userId）→ US → 登入 server → 其餘」發一次 `/activity/query` 測試請求，找第一個回傳 `result=="0000"` 的 server，儲存為 `coros_base_url`。全部失敗（逾時、網路）時沿用上次的，否則 US，並在 log 記下每個 server 的原因。登入本身只做一次：一個 region 回 `0000` 之後就不再對其他 region 登入（再登入會讓前一個 token 失效）。
+
+**記住密碼 / 自動重新登入**（2026-10-01）：見 `docs/secrets-and-keys.md`。活動列表或 Training Hub 回 result 1019（Access token is invalid）、或 token 過期時，有存密碼就自動登入一次、重試一次；同步事件流會多一筆 `{"status": "relogin"}`。
 
 ### 所有 API 呼叫的必要 Headers
 
@@ -315,6 +318,10 @@ ALTER TABLE sync_state ADD COLUMN coros_last_sync_at  DATETIME;
 ALTER TABLE sync_state ADD COLUMN coros_email         TEXT;
 ALTER TABLE sync_state ADD COLUMN coros_base_url      TEXT;  -- 偵測到的資料 server URL
 ALTER TABLE sync_state ADD COLUMN coros_user_id       TEXT;  -- 用於 yfheader
+-- 2026-10-01 「記住密碼」（勾選才有；secrets.seal 加密；取消勾選／登出即 NULL）
+ALTER TABLE sync_state ADD COLUMN coros_password_sealed TEXT;
+ALTER TABLE sync_state ADD COLUMN tp_username           TEXT;
+ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 ```
 
 ### `athlete_settings` 表（已有，從 Coros 登入自動填入）

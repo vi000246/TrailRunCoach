@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -52,6 +53,7 @@ import numpy as np
 
 from backend.engine.wko5expr.config import EngineConfig
 from backend.engine.wko5expr.corrections import CorrectionStore
+from backend.engine.wko5expr.fitcache import to_list as fitcache_list
 from backend.engine.wko5expr.dataset import (
     F_CLIMBING, F_DISTANCE, F_DURATION, F_HRIF, F_HRTSS, F_MOVING, F_NGP, F_NP,
     F_PACE_TSSDURATION, F_TSSDURATION, Dataset, Workout, date_to_day, day_to_date,
@@ -297,9 +299,154 @@ def workout_fields(t: np.ndarray, ch: dict[str, np.ndarray], group: str,
     return out
 
 
+def _json_default(o):
+    """numpy scalars / arrays in a cached_series value."""
+    if isinstance(o, np.generic):
+        return o.item()
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    raise TypeError(type(o).__name__)
+
+
 def _smooth(x: np.ndarray, n: int = 10) -> np.ndarray:
     k = np.ones(n) / n
     return np.convolve(np.nan_to_num(x), k, mode="same") * n
+
+
+class PdMemo:
+    """Disk memo of racepower.athlete._pd_mftp (the as-of PD refit behind
+    cp_as_of: ~670 refits for the LTHR estimates of a full COROS history,
+    the slowest part of a build). One entry per day, valid while the day's
+    inputs hash the same: the runs of its 90-day window (file stamp, power
+    source / use, power corrections, NP), the synced FIT files cptest.curves
+    adds for that window (name, size, mtime), the watch-power / bad-file
+    settings and overrides, and the code of the fit. A sync adding today's
+    run invalidates only the days whose window holds it."""
+    MISS = object()
+
+    def __init__(self, ds: "FitFolderDataset"):
+        self.ds = ds
+        self.path = ds._store.home / "pd_mftp.json"
+        self._lock = threading.Lock()
+        self._prep = None
+        self.dirty = False
+        try:
+            import json
+            self.store = json.loads(self.path.read_text("utf-8"))
+        except (OSError, ValueError):
+            self.store = {}
+
+    def _prepare(self):
+        import bisect  # noqa: F401
+        import hashlib
+        import inspect
+        from backend.engine import bad_activity as BA
+        from backend.engine import power_source as PS
+        from backend.engine.algorithms import wko5_meanmax, wko5_pdmodel
+        from backend.engine.racepower import athlete as A
+        from backend.engine.racepower import cptest as T
+        from backend.engine.racepower import weather as WX
+        from backend.engine.wko5expr.fitcache import stamp_of
+        ds = self.ds
+        code = hashlib.sha1()
+        for m in (A, T, wko5_pdmodel, wko5_meanmax, PS):
+            try:
+                code.update(inspect.getsource(m).encode("utf-8"))
+            except (OSError, TypeError):
+                code.update(m.__name__.encode())
+        days, rows = [], []
+        for w in ds.workouts:
+            if w.sport != "run":
+                continue
+            try:
+                st = stamp_of(ds.dir / w.entry.file)
+            except OSError:
+                st = None
+            days.append(w.day)
+            rows.append((w.entry.file, st, A.power_ok(ds, w), A.power_source(ds, w),
+                         ds._corr_sig(w.entry.file, "power"), w.metrics.get("np")))
+        files = []
+        root = Path(WX.HOME) / "fit"
+        if root.exists():
+            for p in root.rglob("*.fit"):
+                d = T._file_date(p)
+                if d is None:
+                    continue
+                try:
+                    s = p.stat()
+                except OSError:
+                    continue
+                files.append((d, str(p.relative_to(root)), s.st_size, int(s.st_mtime)))
+        files.sort()
+        glob = (code.hexdigest(), A.CP_WINDOW_DAYS, bool(ds.accept_watch_power), BA.read_setting(True),
+                BA.overrides_stamp(), str(WX.HOME))
+        self._prep = (days, rows, files, glob)
+
+    def sig(self, day: dt.date) -> str:
+        import bisect
+        import hashlib
+        from backend.engine.racepower import athlete as A
+        if self._prep is None:
+            self._prepare()
+        days, rows, files, glob = self._prep
+        tday = date_to_day(day)
+        lo = bisect.bisect_right(days, tday - A.CP_WINDOW_DAYS)
+        hi = bisect.bisect_left(days, tday + 1)
+        since = day - dt.timedelta(days=A.CP_WINDOW_DAYS - 1)
+        fl = [f for f in files if since <= f[0] <= day]
+        return hashlib.sha1(repr((glob, rows[lo:hi], fl)).encode("utf-8")).hexdigest()
+
+    # kinds: "" = _pd_mftp (the LTHR estimate's cp_as_of; watch power as a
+    # fallback), "stryd" = the charts' Stryd-only CP fit (_estimate_cp). Each
+    # kind's entry also carries a hash of the code that makes it.
+    @staticmethod
+    def _key(day: dt.date, kind: str) -> str:
+        return f"{kind}:{day.isoformat()}" if kind else day.isoformat()
+
+    def _kind_sig(self, day: dt.date, kind: str) -> str:
+        s = self.sig(day)
+        if kind == "stryd":
+            import hashlib
+            import inspect
+            src = inspect.getsource(FitFolderDataset._estimate_cp) + repr(CP_FIT_MIN_RUNS)
+            s = hashlib.sha1((s + src).encode("utf-8")).hexdigest()
+        return s
+
+    def get(self, day: dt.date, kind: str = ""):
+        with self._lock:
+            hit = self.store.get(self._key(day, kind))
+        if hit is None:
+            return self.MISS
+        try:
+            ok = hit[0] == self._kind_sig(day, kind)
+        except Exception:                        # noqa: BLE001 — no memo, just refit
+            return self.MISS
+        return hit[1] if ok else self.MISS
+
+    def put(self, day: dt.date, value, kind: str = "") -> None:
+        try:
+            s = self._kind_sig(day, kind)
+        except Exception:                        # noqa: BLE001
+            return
+        with self._lock:
+            self.store[self._key(day, kind)] = [s, value]
+            self.dirty = True
+
+    def flush(self) -> None:
+        import json
+        import os
+        with self._lock:
+            if not self.dirty:
+                return
+            text = json.dumps(self.store)
+            self.dirty = False
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(f"pd_mftp.{os.getpid()}.{threading.get_ident()}.tmp")
+            tmp.write_text(text, "utf-8")
+            os.replace(tmp, self.path)
+        except OSError as e:
+            log.warning("FIT dataset: could not write the PD memo (%s)", type(e).__name__)
 
 
 def default_athlete() -> Athlete:
@@ -318,8 +465,8 @@ class FitFolderDataset(Dataset):
                  athlete_settings: Optional[list] = None, estimate_thresholds: Optional[bool] = None,
                  accept_watch_power: Optional[bool] = None, exclude_bad: Optional[bool] = None):
         from backend.engine.planning import Plan
+        from backend.engine.wko5expr import buildstate, fitcache
         from backend.engine.wko5expr.datasource import athlete_tz
-        from backend.files.fit_to_channels import fit_to_channels
         self.dir = Path(fit_dir)
         self.source = source
         # same zone as the sync's local workout dates: athlete.timezone setting
@@ -351,31 +498,42 @@ class FitFolderDataset(Dataset):
         self.today = date_to_day(today or dt.date.today())
         self.memo = {}
         self._series, self._series_dirty = {}, set()
-        self._files: dict[int, Wko4File] = {}
+        self._series_lock = threading.Lock()
         self.workouts: list[Workout] = []
+        # every per-file result (parsed channels, power source, bad-file
+        # features, workout fields, hrTSS) comes from the persistent cache
+        # (fitcache.py); only new / changed files are parsed, in a process
+        # pool when there are many. Channels are loaded lazily (LazyFiles).
+        prog = buildstate.get(source)
+        prog.phase("scan")
+        self._store = fitcache.FitStore(self.dir)
+        self._files = fitcache.LazyFiles(self._store)
+        paths = [p for p in sorted(list(self.dir.rglob("*.fit")) + list(self.dir.rglob("*.fit.gz")))
+                 if not p.is_symlink()]
+        self._store.ensure(paths, progress=prog)
         entries = []
-        for p in sorted(list(self.dir.rglob("*.fit")) + list(self.dir.rglob("*.fit.gz"))):
-            if p.is_symlink():
+        for p in paths:
+            e = self._store.entry(p)
+            meta = (e or {}).get("meta") or {"error": "unreadable"}
+            if meta.get("error"):
+                log.warning("FIT dataset: skipping unreadable file (%s)", meta["error"])
                 continue
-            try:
-                fc = fit_to_channels(p.read_bytes())
-            except Exception as e:
-                log.warning("FIT dataset: skipping unreadable file (%s)", type(e).__name__)
+            if not meta.get("start") or not meta.get("n"):
                 continue
-            start = fc.start_time
-            if start is None or not fc.elapsedtime:
-                continue
+            start = dt.datetime.fromisoformat(meta["start"])
             # FIT times are UTC; WKO5 dates are the athlete's local wall clock
             if start.tzinfo is None:
                 start = start.replace(tzinfo=dt.timezone.utc)
             start = start.astimezone(self.tz).replace(tzinfo=None)
-            entries.append((start, p, fc))
+            entries.append((start, p, meta))
         entries.sort(key=lambda x: x[0])
         # trail / road from the app DB (workout_files.trail_classification,
         # user overrides included), the FIT sub_sport only as a fallback
         self._classes = load_classifications() if classifications is None else classifications
-        for start, p, fc in entries:
-            sport_raw, sub = (fc.sport or "", getattr(fc, "sub_sport", None))
+        prog.phase("assemble", total=len(entries))
+        for start, p, meta in entries:
+            prog.tick()
+            sport_raw, sub = (meta.get("sport") or "", meta.get("sub_sport"))
             if isinstance(sport_raw, str) and "/" in sport_raw:
                 sport_raw, sub = sport_raw.split("/", 1)
             group, stype = sport_of(sport_raw, sub, classification_for(p, self._classes))
@@ -392,22 +550,16 @@ class FitFolderDataset(Dataset):
             w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags)
             # a bad file (car / bike segment, impossible power: bad_activity.py)
             # never enters ds.workouts; it is listed in ds.excluded
-            if self._exclusion(w, lambda fc=fc, rel=rel: self._fit_bad_features(fc, rel),
-                               duration=float(fc.elapsedtime[-1]) if fc.elapsedtime else None):
+            if self._exclusion(w, lambda rel=rel: self._fit_bad_features(rel), duration=meta.get("duration")):
                 continue
-            chans = {"elapsedtime": Channel("elapsedtime", list(fc.elapsedtime), 1.0, base=0.0)}
-            for name, vals in fc.channels.items():
-                chans[name] = Channel(name, list(vals), 1.0)
-            self._files[idx] = Wko4File(path=str(p), sport=stype, start_time=start.isoformat(), device=None,
-                                        weight_kg=None, original_type="fit", original_bytes=None,
-                                        channels=chans, ranges=[], info=None)
+            self._files.add(idx, p, rel, stype, start.isoformat())
             self.workouts.append(w)
-            self._power_src[idx] = fc.power_source      # stryd / watch / none (power_source.py)
+            # stryd / watch / none (power_source.py)
+            self._power_src[idx] = self._store.power(rel, lambda rel=rel, m=meta: self._classify_power(rel, m))
             if not self.accept_watch_power and self._power_src[idx] == "watch":
                 self._power_blocked.add(rel)            # no power TSS from watch power
-            t = _arr(fc.elapsedtime)
-            ch = {k: _arr(v) for k, v in fc.channels.items()}
-            entry.metrics = workout_fields(t, ch, group, self.sport_setting("thr", w))
+            entry.metrics = self._fit_fields(w, group)
+            self._add_hr_fields(w, self.sport_setting("thr", w))
             w.metrics = self._metrics(w)
         self.first_day = int(np.floor(self.workouts[0].day)) if self.workouts else int(self.today)
         self.last_day = int(np.floor(self.workouts[-1].day)) if self.workouts else int(self.today)
@@ -417,40 +569,104 @@ class FitFolderDataset(Dataset):
         # copy) does not estimate unless asked to.
         if estimate_thresholds is None:
             estimate_thresholds = _app_db() is not None
+        self.pd_memo = PdMemo(self)               # racepower.athlete._pd_mftp on disk
         if self.settings_from == "app" and estimate_thresholds and self.workouts:
-            if self._estimate_settings():
+            prog.phase("estimate")
+            if self._estimate_settings_memo():
                 for w in self.workouts:          # hrTSS / rTSS / power TSS with the estimated thresholds
                     self._refresh_hr_fields(w)
                     w.metrics = self._metrics(w)
+        prog.phase("finish")
         if self.config.moving_hr_tss:
             self._apply_moving_hrtss()
         self._apply_elevation_bonus()
+        self._store.save()
 
     # FIT data: channels come from the parsed files, not .wko4
     def wko4(self, idx: int) -> Optional[Wko4File]:
         return self._files.get(idx)
 
-    def _fit_bad_features(self, fc, rel: str) -> dict:
-        """bad_activity.features of a parsed FIT (approved power corrections applied)."""
+    # ---- per-file results, from the persistent cache (fitcache.py) ---------
+    def _arrays(self, rel: str):
+        return self._store.arrays(rel)
+
+    def _fit_bad_features(self, rel: str) -> dict:
+        """bad_activity.features of a FIT (approved power corrections applied),
+        cached per file and corrections signature."""
         from backend.engine import bad_activity as BA
-        pw = fc.channels.get("power")
-        if pw is not None and self.corrections is not None:
-            pw = self.corrections.apply(rel, "power", fc.elapsedtime, pw)
-        return BA.features(fc.elapsedtime, fc.channels.get("elapseddistance"), pw)
+        sig = self._corr_sig(rel, "power")
+
+        def compute():
+            t, ch = self._arrays(rel)
+            tl = t.tolist()
+            pw = ch.get("power")
+            pw = fitcache_list(pw) if pw is not None else None
+            if pw is not None and self.corrections is not None:
+                pw = self.corrections.apply(rel, "power", tl, pw)
+            d = ch.get("elapseddistance")
+            return BA.features(tl, fitcache_list(d) if d is not None else None, pw)
+        return self._store.derived(rel, "bad", sig, compute)
+
+    def _classify_power(self, rel: str, meta: dict) -> str:
+        from backend.engine.power_source import classify
+        _, ch = self._arrays(rel)
+        return classify({k: fitcache_list(a) for k, a in ch.items()}, bool(meta.get("stryd_device")))
+
+    def _fit_fields(self, w: Workout, group: str) -> dict:
+        """workout_fields without the LTHR-dependent hrTSS / hrIF (cached per
+        file and sport group); _add_hr_fields adds those."""
+        def compute():
+            t, ch = self._arrays(w.entry.file)
+            return workout_fields(t, ch, group, None)
+        return self._store.fields(w.entry.file, group, compute)
+
+    def _hr_tss(self, w: Workout, lthr: float, moving_kmh: Optional[float] = None):
+        """(hrTSS, hrIF) of one workout for `lthr` (moving_kmh: moving-time
+        only, hrTSS alone), cached per file and inputs."""
+        from backend.engine.algorithms.wko5_hr import hr_tss
+        rel = w.entry.file
+
+        def compute():
+            t, ch = self._arrays(rel)
+            hr = ch.get("heartrate")
+            if hr is None or not len(t):
+                return [None, None]
+            hv = fitcache_list(hr)
+            if moving_kmh is None:
+                return list(hr_tss(t.tolist(), hv, lthr))
+            sp = ch.get("speed")
+            mask = [s is not None and s > moving_kmh for s in fitcache_list(sp)] if sp is not None \
+                else [True] * len(t)
+            return [hr_tss(t.tolist(), hv, lthr, moving=mask)[0], None]
+        if moving_kmh is None:
+            return self._store.derived(rel, "hr", f"{lthr:g}", compute)
+        return self._store.derived(rel, "mhr", f"{lthr:g}|{moving_kmh:g}", compute)
+
+    def _add_hr_fields(self, w: Workout, lthr: Optional[float]) -> None:
+        m = w.entry.metrics
+        m.pop(F_HRTSS, None)
+        m.pop(F_HRIF, None)
+        if not lthr or "heartrate" not in self._store_channels(w):
+            return
+        v, iff = self._hr_tss(w, float(lthr))
+        if v is not None:
+            m[F_HRTSS] = v
+        if iff is not None:
+            m[F_HRIF] = iff
+
+    def _store_channels(self, w: Workout) -> list:
+        e = self._store.files.get(w.entry.file) or {}
+        return (e.get("meta") or {}).get("channels") or []
 
     def _apply_moving_hrtss(self) -> None:
-        from backend.engine.algorithms.wko5_hr import hr_tss
         from backend.engine.algorithms.wko5_time import MOVING_SPEED_KMH
         for w in self.workouts:
             if not self._is_hr_sourced(w):
                 continue
-            f = self._files[w.idx]
-            t, hr, sp = (f.channels.get(k) for k in ("elapsedtime", "heartrate", "speed"))
-            if not (t and hr):
+            lthr = self.sport_setting("thr", w)
+            if not lthr or "heartrate" not in self._store_channels(w):
                 continue
-            thr = MOVING_SPEED_KMH.get(w.sport, 0.0)
-            mask = [s is not None and s > thr for s in sp.values] if sp else [True] * len(t.values)
-            v = hr_tss(t.values, hr.values, self.sport_setting("thr", w), moving=mask)[0]
+            v = self._hr_tss(w, float(lthr), moving_kmh=MOVING_SPEED_KMH.get(w.sport, 0.0))[0]
             if v is not None:
                 w.metrics["tss"] = v
                 w.metrics["hrtss_moving"] = v
@@ -531,6 +747,97 @@ class FitFolderDataset(Dataset):
         self.memo.clear()
         return bool(thr)
 
+    # ---- the as-of estimates, memoised on disk ------------------------------
+    ESTIMATE_MEMO_KEEP = 4
+
+    def _estimate_key(self) -> str:
+        """Everything _estimate_settings reads: the workouts (file stamps,
+        sport, tags, power source / blocking, exclusions), the thresholds and
+        weight before the estimate (plan, DB), the corrections, the engine
+        config, today, and the code of the estimate (thresholds.py, race-power
+        athlete / CP / PD model, mean-max)."""
+        import hashlib
+        import inspect
+        from backend.engine import thresholds
+        from backend.engine.algorithms import power_model, wko5_meanmax, wko5_pdmodel
+        from backend.engine.racepower import athlete, cp
+        from backend.engine.wko5expr.fitcache import stamp_of
+        m = hashlib.sha1()
+
+        def add(x):
+            m.update(repr(x).encode("utf-8"))
+            m.update(b"\x00")
+        for mod in (thresholds, athlete, cp, power_model, wko5_pdmodel, wko5_meanmax):
+            try:
+                add(inspect.getsource(mod))
+            except (OSError, TypeError):
+                add(mod.__name__)
+        add(inspect.getsource(type(self)._estimate_settings))
+        add(inspect.getsource(type(self)._estimate_cp))
+        add((ESTIMATE_STEP_DAYS, CP_FIT_MIN_RUNS))
+        add(day_to_date(self.today).isoformat())
+        add(self.config.to_dict())
+        add(self.accept_watch_power)
+        for w in self.workouts:
+            try:
+                st = stamp_of(self.dir / w.entry.file)
+            except OSError:
+                st = None
+            add((w.entry.file, st, w.sport, w.sport_type, w.tags, w.entry.start.isoformat(),
+                 self._power_src.get(w.idx), w.entry.file in self._power_blocked))
+        add(sorted(x["file"] for x in self.excluded))
+        add(sorted((k, [(d.isoformat(), v) for d, v in vals]) for k, vals in self.athlete.settings.items()))
+        add(repr(self.plan))                     # a dataclass: events, phases, thresholds, weights, profile
+        add([(c.file, c.channel, c.t_start, c.t_end) for c in (self.corrections.items if self.corrections else [])])
+        return m.hexdigest()
+
+    def _estimate_settings_memo(self) -> bool:
+        """_estimate_settings, its result (the dated settings / labels it
+        added) memoised on disk under _estimate_key: a restart with the same
+        data does not re-run the as-of estimates (minutes on a full COROS
+        history)."""
+        import json
+        path = self._store.home / "estimate.json"
+        try:
+            key = self._estimate_key()
+        except Exception as e:                   # noqa: BLE001 — no memo, just estimate
+            log.warning("FIT dataset: estimate memo key failed (%s)", type(e).__name__)
+            return self._estimate_settings()
+        try:
+            memo = json.loads(path.read_text("utf-8"))
+        except (OSError, ValueError):
+            memo = {}
+        hit = memo.get(key)
+        if hit is not None:
+            for name, vals in hit["settings"].items():
+                self.athlete.settings[name] = [(dt.date.fromisoformat(d), v) for d, v in vals]
+            self._setting_labels.update(hit["labels"])
+            self._cp_est = [{**r, "date": dt.date.fromisoformat(r["date"])} for r in hit.get("cp_est") or []]
+            self.memo.clear()
+            return bool(hit["ret"])
+        before = {k: list(v) for k, v in self.athlete.settings.items()}
+        labels = dict(self._setting_labels)
+        ret = self._estimate_settings()
+        self.pd_memo.flush()
+        changed = {k: [(d.isoformat(), val) for d, val in v] for k, v in self.athlete.settings.items()
+                   if before.get(k) != list(v)}
+        memo.pop(key, None)
+        memo[key] = {"ret": bool(ret), "settings": changed,
+                     "labels": {k: v for k, v in self._setting_labels.items() if labels.get(k) != v},
+                     # the charts' Stryd-only CP fits (_estimate_cp), read by cp / cp_info
+                     "cp_est": [{**r, "date": r["date"].isoformat()} for r in self._cp_est]}
+        while len(memo) > self.ESTIMATE_MEMO_KEEP:
+            memo.pop(next(iter(memo)))
+        try:
+            import os
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(f"estimate.{os.getpid()}.{threading.get_ident()}.tmp")
+            tmp.write_text(json.dumps(memo), "utf-8")
+            os.replace(tmp, path)
+        except (OSError, TypeError, ValueError) as e:
+            log.warning("FIT dataset: could not write the estimate memo (%s)", type(e).__name__)
+        return ret
+
     # ---- CP for the charts before the first plan CP --------------------------
     _cp_est: list = []
 
@@ -552,10 +859,18 @@ class FitFolderDataset(Dataset):
                     and self.power_source(w) == PS.STRYD and self.power_ok(w)]
             pdm = None
             if len(runs) >= CP_FIT_MIN_RUNS:
-                try:
-                    pdm = A.pd_model(self, day, runs, None)
-                except Exception as e:           # noqa: BLE001
-                    log.warning("FIT dataset: CP fit %s failed (%s)", day, type(e).__name__)
+                # the PD-refit disk memo (PdMemo, its own key "stryd"): keyed on
+                # the day's 90-day window, so a restart / a sync refits only the
+                # days whose window changed
+                pdm = self.pd_memo.get(day, "stryd")
+                if pdm is self.pd_memo.MISS:
+                    try:
+                        pdm = A.pd_model(self, day, runs, None)
+                        pdm = None if not pdm else {k: pdm.get(k) for k in ("mftp", "frc", "n_points")}
+                        self.pd_memo.put(day, pdm, "stryd")
+                    except Exception as e:           # noqa: BLE001
+                        pdm = None
+                        log.warning("FIT dataset: CP fit %s failed (%s)", day, type(e).__name__)
             if pdm:
                 out.append({"date": day, "cp": float(pdm["mftp"]), "frc_j": float(pdm["frc"]),
                             "runs": len(runs), "n_points": pdm.get("n_points")})
@@ -602,20 +917,7 @@ class FitFolderDataset(Dataset):
 
     def _refresh_hr_fields(self, w: Workout) -> None:
         """Recompute the LTHR-dependent hrTSS / hrIF after the estimates."""
-        from backend.engine.algorithms.wko5_hr import hr_tss
-        f = self._files[w.idx]
-        t, hr = f.channels.get("elapsedtime"), f.channels.get("heartrate")
-        m = w.entry.metrics
-        m.pop(F_HRTSS, None)
-        m.pop(F_HRIF, None)
-        lthr = self.sport_setting("thr", w)
-        if not (t and hr and lthr):
-            return
-        v, iff = hr_tss(list(t.values), [None if h is None else float(h) for h in hr.values], lthr)
-        if v is not None:
-            m[F_HRTSS] = v
-        if iff is not None:
-            m[F_HRIF] = iff
+        self._add_hr_fields(w, self.sport_setting("thr", w))
 
     def setting_label(self, name: str, default: str = "WKO5 設定") -> str:
         """Where a dated setting (runthr / runftp / weight ...) came from."""
@@ -626,18 +928,62 @@ class FitFolderDataset(Dataset):
     def curve_cache(self, expr: str) -> dict:
         return {}                         # no WKO5 Cache5 for FIT folders
 
+    SERIES_VARIANTS = 4     # thresholds in effect kept per file and key (before / after the estimates, ...)
+
     def cached_series(self, key: str, w: Workout, compute):
-        """In-memory memo (no disk cache keyed on .wko4 files), keyed like the
-        WKO5 Dataset's disk cache on the corrections and the thresholds in
-        effect, so a threshold change never serves a stale value."""
-        k = (key, w.idx, self._corr_sig(w.entry.file), self._settings_sig(w))
-        store = self.__dict__.setdefault("_mem_series", {})
-        if k not in store:
-            store[k] = compute()
-        return store[k]
+        """Disk memo per FIT file (fitcache folder, series_<key>.json), keyed
+        like the WKO5 Dataset's on the file stamp, the corrections and the
+        thresholds in effect, so a threshold change never serves a stale
+        value. A few threshold variants are kept per file: a build computes
+        with the plan / DB values, then again with the estimated LTHR."""
+        import json
+        from backend.engine.wko5expr.dataset import _cache_read, _safe
+        from backend.engine.wko5expr.fitcache import stamp_of
+        with self._series_lock:
+            store = self._series.get(key)
+            if store is None:
+                store = self._series[key] = _cache_read(self._store.home / f"series_{_safe(key)}.json")
+        try:
+            st = stamp_of(self.dir / w.entry.file)
+        except OSError:
+            return compute()
+        sk = json.dumps(st + [self._corr_sig(w.entry.file), self._settings_sig(w)])
+        with self._series_lock:
+            slot = store.get(w.entry.file)
+            if isinstance(slot, dict) and sk in slot:
+                return slot[sk]
+        val = compute()
+        with self._series_lock:
+            slot = store.get(w.entry.file)
+            if not isinstance(slot, dict):
+                slot = store[w.entry.file] = {}
+            slot.pop(sk, None)
+            slot[sk] = val
+            while len(slot) > self.SERIES_VARIANTS:
+                slot.pop(next(iter(slot)))
+            self._series_dirty.add(key)
+        return val
 
     def flush_series(self) -> None:
-        pass
+        import json
+        import os
+        from backend.engine.wko5expr.dataset import _safe
+        memo = getattr(self, "pd_memo", None)
+        if memo is not None:
+            memo.flush()
+        with self._series_lock:
+            todo = {key: {f: dict(v) for f, v in self._series[key].items()} for key in self._series_dirty}
+            self._series_dirty.clear()
+        for key, entries in todo.items():
+            path = self._store.home / f"series_{_safe(key)}.json"
+            try:
+                text = json.dumps({"files": entries}, default=_json_default)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_name(f"{path.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
+                tmp.write_text(text, "utf-8")
+                os.replace(tmp, path)
+            except (OSError, TypeError, ValueError) as e:
+                log.warning("FIT dataset: could not write the %s cache (%s)", key, type(e).__name__)
 
     @property
     def mftp_run(self) -> Optional[float]:

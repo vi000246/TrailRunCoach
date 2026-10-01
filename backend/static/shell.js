@@ -99,6 +99,72 @@
   if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · 訓練教練`;
   window.AppShell = { pages: PAGES, current: cur };
 
+  // ---- dataset build progress -------------------------------------------
+  // While the chart Dataset of the data source builds (first start, new FIT
+  // files, a changed setting), every page that needs it waits. Instead of a
+  // frozen 「載入中…」 they show the build's progress
+  // (GET /api/v1/wko5/dataset/status: 「正在處理第 350／808 筆（解析 FIT）…」):
+  // a bar under the nav, and the text of the page's own loading placeholders.
+  const PCSS = `
+  .an-build { position: sticky; top: var(--shell-top, 0px); z-index: 39; display: flex; gap: 10px; align-items: center;
+    padding: 6px 14px; font: 12.5px/1.4 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+    background: color-mix(in srgb, var(--accent, #2563eb) 10%, var(--panel, #fff)); color: var(--text, #111);
+    border-bottom: 1px solid var(--line, #e1e5ea); }
+  .an-build[hidden] { display: none; }
+  .an-build progress { width: 160px; height: 8px; flex: none; }
+  .an-build .an-b-sub { color: var(--muted, #667); }
+  @media (max-width: 699px) { .an-build { top: 0; } .an-build progress { width: 90px; } }
+  `;
+  st.textContent += PCSS;
+  const bar = document.createElement("div");
+  bar.className = "an-build"; bar.hidden = true;
+  bar.setAttribute("role", "status"); bar.setAttribute("aria-live", "polite");
+  bar.innerHTML = `<progress></progress><span class="an-b-msg"></span><span class="an-b-sub"></span>`;
+  const mountBar = () => nav.after(bar);
+  if (document.body) mountBar(); else document.addEventListener("DOMContentLoaded", mountBar);
+  const WAITING = /^(載入中|計算中|讀取中|讀取你的活動資料中|計算訓練狀況中|排本週課表中|載入課表中|…$)/;
+  const placeholders = () => [...document.querySelectorAll(".loading, .empty, .meta, td.empty")]
+    .filter((el) => el.dataset.buildWait || (!el.children.length && WAITING.test(el.textContent.trim())));
+  let tries = 0, wasBuilding = false;
+  async function poll() {
+    let s = null;
+    try { s = await (await fetch("/api/v1/wko5/dataset/status", { cache: "no-store" })).json(); } catch (_) {}
+    const building = s && s.state === "building";
+    if (building) {
+      wasBuilding = true;
+      const p = bar.querySelector("progress");
+      if (s.n_total) { p.max = s.n_total; p.value = Math.min(s.n_done, s.n_total); } else p.removeAttribute("value");
+      bar.querySelector(".an-b-msg").textContent = s.message || "正在準備資料…";
+      bar.querySelector(".an-b-sub").textContent = s.elapsed_s != null ? `已 ${Math.round(s.elapsed_s)} 秒` : "";
+      bar.hidden = false;
+      for (const el of placeholders()) {
+        // the page has written its own text meanwhile: leave it alone
+        if (el.dataset.buildWait && el.textContent !== el.dataset.buildMsg) { delete el.dataset.buildWait; continue; }
+        if (!el.dataset.buildWait) el.dataset.buildWait = el.textContent;
+        el.textContent = el.dataset.buildMsg = s.message || "正在準備資料…";
+      }
+      setTimeout(poll, 1000);
+      return;
+    }
+    bar.hidden = true;
+    if (wasBuilding) {
+      wasBuilding = false;
+      for (const el of document.querySelectorAll("[data-build-wait]")) {   // still waiting for its own reply
+        if (el.textContent === el.dataset.buildMsg) el.textContent = el.dataset.buildWait;
+        delete el.dataset.buildWait; delete el.dataset.buildMsg;
+      }
+      if (s && s.state === "error") {
+        bar.hidden = false; bar.querySelector("progress").hidden = true;
+        bar.querySelector(".an-b-msg").textContent = "資料處理失敗：" + (s.error || "");
+        bar.querySelector(".an-b-sub").textContent = "";
+      }
+    }
+    // a page's first requests may start a build a moment after load
+    if (++tries < 4) setTimeout(poll, [600, 1500, 4000][tries - 1] || 4000);
+  }
+  setTimeout(poll, 250);
+  window.AppShell.datasetStatus = poll;
+
   // auto-sync on site open (COROS / TP, per the settings page; throttled inside autosync.js)
   const as = document.createElement("script");
   as.src = "/api/v1/static/autosync.js";

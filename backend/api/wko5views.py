@@ -13,6 +13,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import threading
 import weakref
 from functools import lru_cache
 from pathlib import Path
@@ -60,7 +61,17 @@ def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "") -> Datase
     app DB's athlete_settings and as-of estimates; WKO5 only when opted in).
     `stamp` = datasource.source_stamp: a sync that adds FITs or WKO5
     rewriting its index gives a new stamp, so a fresh Dataset."""
-    ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
+    from backend.engine.wko5expr import buildstate
+    st = buildstate.get(source)
+    st.begin()                      # runs only on a cache miss: a real build
+    if source == "wko5":
+        st.phase("wko5")
+    try:
+        ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
+    except BaseException as e:
+        st.fail(e)
+        raise
+    st.finish()
     _LIVE.add(ds)
     return ds
 
@@ -78,17 +89,80 @@ def plan_changed(thresholds: bool) -> None:
             ds.plan = Plan.load()   # per-workout memo doesn't depend on events
 
 
+_FLIGHT: dict = {}                       # build key -> lock (single flight)
+_FLIGHT_LOCK = threading.Lock()
+
+
+def _dataset_key(parity: Optional[bool] = None, source: Optional[str] = None) -> tuple[str, str, str]:
+    cfg = EngineConfig.load()
+    if parity is not None and parity != cfg.parity:
+        cfg = cfg.replace(parity=parity)
+    src = source if source in DSRC.SOURCES else DSRC.current_source()
+    return json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, ATHLETE_DIR)
+
+
 def _dataset(parity: Optional[bool] = None, source: Optional[str] = None) -> Dataset:
     """parity=True reproduces WKO5 exactly (verification mode); False applies
     the athlete's own adjusted formulas from ~/.wko5coach/engine.json.
     `source` (default: the charts.data_source setting): wko5 | coros | tp.
     The chart page, overview (api/overview.py) and race power
-    (api/racepower.py) all come through here."""
-    cfg = EngineConfig.load()
-    if parity is not None and parity != cfg.parity:
-        cfg = cfg.replace(parity=parity)
-    src = source if source in DSRC.SOURCES else DSRC.current_source()
-    return _dataset_cfg(json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, ATHLETE_DIR))
+    (api/racepower.py) all come through here.
+
+    Single flight: concurrent callers of the same key (the viewer asks for a
+    dozen charts at once) wait for ONE build instead of each building its
+    own; the build's progress is in buildstate (GET /dataset/status)."""
+    key = _dataset_key(parity, source)
+    with _FLIGHT_LOCK:
+        lk = _FLIGHT.get(key)
+        if lk is None:
+            # forget the locks of old stamps (never asked for again)
+            for k in [k for k in _FLIGHT if k[1] == key[1] and k != key and not _FLIGHT[k].locked()]:
+                del _FLIGHT[k]
+            lk = _FLIGHT[key] = threading.Lock()
+    with lk:
+        return _dataset_cfg(*key)
+
+
+_WARM = {"thread": None}
+
+
+def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
+    """Build the active source's Dataset (and the overview status, its other
+    slow part) in a background thread, so the first page load does not wait.
+    The FIT parsing inside runs in a process pool (fitcache.py); a request
+    arriving meanwhile joins the same build (single flight). None when a
+    warm-up is already running or WKO5COACH_NO_WARMUP is set."""
+    if os.getenv("WKO5COACH_NO_WARMUP"):
+        return None
+    t = _WARM["thread"]
+    if t is not None and t.is_alive():
+        return None
+
+    def run():
+        import logging
+        try:
+            ds = _dataset()
+            from backend.api import overview as OV
+            OV._status(ds, OV.O.day_to_date(ds.today))
+        except Exception as e:           # noqa: BLE001 — a page request will show the error
+            logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__)
+    t = threading.Thread(target=run, name=f"dataset-warmup-{reason}", daemon=True)
+    _WARM["thread"] = t
+    t.start()
+    return t
+
+
+@router.get("/dataset/status")
+async def dataset_status():
+    """Progress of the chart Dataset build of the active data source:
+    state idle | building | ready | error, phase (解析 FIT, 整理活動, 估算門檻
+    ...), n_done / n_total, and `message` (「正在處理第 350／808 筆（解析 FIT）…」).
+    Async on purpose: answered on the event loop, never queued behind the
+    builds in the thread pool."""
+    from backend.engine.wko5expr import buildstate
+    src = DSRC.current_source()
+    cur = buildstate.get(src).snapshot()
+    return {**cur, "sources": buildstate.all_states()}
 
 
 @lru_cache(maxsize=1)
@@ -208,7 +282,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
-    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets"):
+    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     pinfo = winfo = binfo = None
     if v.get("source") == "custom" and BS.basis_spec(ch):
@@ -221,6 +295,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
             # 近 7／14／28 天新高 (recentbests.py): ?window=14
             ch, winfo = RB.apply_window(ch, request.query_params.get("window"))
     params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
+    if ch.get("kind") == "z5gate":
+        # the replay follows the 間歇門檻 preference (課表偏好) and the stored test / interval
+        # sessions: both in the key so a changed preference isn't served from the cache
+        from backend.engine import plan_prefs as PP
+        params = {**params, "_prefs": PP.load().stamp()}
     # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
@@ -266,6 +345,29 @@ def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bo
                    "buckets": PD.buckets(b, e, chosen), "range_note": note}
 
 
+Z5GATE_MAX_DAYS = 365       # the replay is day by day: at most a year back from the range's end
+
+
+def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
+    """The 5 區開放流程 panel: quality_gate.z5_history over the selected range
+    (capped at a year), with the 間歇門檻 preference the planner uses."""
+    import math
+    from backend.engine import quality_gate as QG
+    from backend.engine.overview import day_to_date
+    if prefs is None:
+        from backend.engine import plan_prefs as PP
+        prefs = PP.load()
+    end = min(day_to_date(int(math.floor(e))), day_to_date(int(math.floor(ds.today))))
+    begin = max(day_to_date(int(math.floor(b))), end - dt.timedelta(days=Z5GATE_MAX_DAYS))
+    plan = getattr(ds, "plan", None)
+    if plan is None:
+        from backend.engine.planning import Plan
+        plan = Plan.load()
+    h = QG.z5_history(ds, plan, begin, end, prefs)
+    return {"title": ch.get("title"), "description": ch.get("description"), "kind": "z5gate", "z5": h,
+            "range_note": f"重播 {begin.isoformat()} 起（最多 1 年）" if begin > day_to_date(int(math.floor(b))) else None}
+
+
 def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
@@ -276,6 +378,8 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w)
         return render_chart(ch, ds, b, e, workout=w)
     if _panel_kind(ch) == "map":
         return render_map(ch, ds, w)
+    if ch.get("kind") == "z5gate":
+        return z5gate_panel(ch, ds, b, e)
     if ch.get("kind") in ("zones", "targets"):
         import math
         from backend.engine.zones import training_targets, zone_table
@@ -441,8 +545,9 @@ async def patch_activity(i: int, body: dict):
     and file, so it applies whatever the data source."""
     from backend.api.workouts import ActivityUpdate, save_activity_tag
     from backend.db.database import AsyncSessionLocal
+    from starlette.concurrency import run_in_threadpool
     from backend.engine import activity_tags as AT
-    ds = _dataset()
+    ds = await run_in_threadpool(_dataset)        # never build on the event loop
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     w = ds.workouts[i]
@@ -454,7 +559,7 @@ async def patch_activity(i: int, body: dict):
         await save_activity_tag(db, upd, start_local=key, source=DSRC.current_source(),
                                 file=w.entry.file, distance_km=w.metrics.get("distance"),
                                 label=f"{w.entry.start:%Y-%m-%d} {w.sport_type}")
-    return _activity_json(ds, w)
+    return await run_in_threadpool(_activity_json, ds, w)
 
 
 @router.get("/sports")

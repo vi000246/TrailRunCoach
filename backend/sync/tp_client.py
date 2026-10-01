@@ -43,7 +43,7 @@ from sqlalchemy import select
 from backend.db.models import SyncState, Athlete, WorkoutFile
 from backend.sync import http, storage
 from backend.sync.http import as_utc
-from backend.settings.secrets import SecretError, seal, unseal
+from backend.settings.secrets import SecretError, SecretKeyMissing, seal, unseal
 
 log = logging.getLogger(__name__)
 
@@ -558,6 +558,60 @@ async def _refresh_token(state: SyncState, db: AsyncSession) -> bool:
     return False
 
 
+# 「記住密碼」 (opt-in, user-approved 2026-10-01): username + password sealed
+# (secrets.seal) in sync_state; used only when the token can no longer be
+# refreshed (refresh token / session cookie rejected): ONE automatic login,
+# serialised by a lock, never retried in a loop. Deleted on untick / logout.
+_RELOGIN_LOCKS: dict = {}
+
+
+def _relogin_lock():
+    import asyncio
+    loop = asyncio.get_running_loop()
+    lk = _RELOGIN_LOCKS.get(id(loop))
+    if lk is None:
+        lk = _RELOGIN_LOCKS[id(loop)] = asyncio.Lock()
+    return lk
+
+
+async def save_password(db: AsyncSession, athlete_id: int, username: Optional[str],
+                        password: Optional[str]) -> None:
+    """Store (sealed) or delete (password None) the remembered TP login; commits."""
+    state = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
+    if state is None:
+        if not password:
+            return
+        state = SyncState(athlete_id=athlete_id)
+        db.add(state)
+    state.tp_username = username if password else None
+    state.tp_password_sealed = seal(password) if password else None
+    await db.commit()
+
+
+async def _relogin(db: AsyncSession, athlete_id: int, state: SyncState) -> bool:
+    async with _relogin_lock():
+        await db.refresh(state)
+        expires = as_utc(state.tp_token_expires)
+        if expires and datetime.now(timezone.utc) < expires - timedelta(minutes=5):
+            return True                       # another caller renewed it while we waited
+        if not (state.tp_password_sealed and state.tp_username):
+            return False
+        try:
+            password = unseal(state.tp_password_sealed)
+        except SecretError:
+            return False
+        try:
+            await login_password(state.tp_username, password, db, athlete_id)
+        except SecretKeyMissing:
+            raise
+        except Exception as e:                # noqa: BLE001 — reported as TP_AUTH_REQUIRED, not retried
+            log.warning("TP automatic re-login failed: %s", type(e).__name__)
+            return False
+        log.warning("TP token renewed with the remembered password")
+        await db.refresh(state)
+        return True
+
+
 async def _get_valid_token(db: AsyncSession, athlete_id: int) -> Optional[str]:
     result = await db.execute(
         select(SyncState).where(SyncState.athlete_id == athlete_id)
@@ -570,6 +624,8 @@ async def _get_valid_token(db: AsyncSession, athlete_id: int) -> Optional[str]:
     expires = as_utc(state.tp_token_expires)
     if expires and datetime.now(timezone.utc) >= expires - timedelta(minutes=5):
         ok = await _refresh_token(state, db)
+        if not ok and state.tp_password_sealed:
+            ok = await _relogin(db, athlete_id, state)
         if not ok:
             return None
     try:

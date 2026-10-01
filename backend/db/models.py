@@ -118,6 +118,11 @@ class SyncState(Base):
     coros_email: Mapped[Optional[str]] = mapped_column(String(200))
     coros_base_url: Mapped[Optional[str]] = mapped_column(String(100))
     coros_user_id: Mapped[Optional[str]] = mapped_column(String(50))
+    # 「記住密碼」 (opt-in): the password sealed with the local key (settings/secrets.py),
+    # for the automatic re-login; deleted on untick / logout; never returned by an API
+    coros_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tp_username: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    tp_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class CorosPlanPush(Base):
