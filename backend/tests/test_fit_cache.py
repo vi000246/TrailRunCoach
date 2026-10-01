@@ -173,6 +173,29 @@ def test_estimate_memo_restores_the_estimated_settings(tmp_path, monkeypatch):
     assert runs == [1, 1]
 
 
+def test_pd_refits_are_memoised_per_day_window(tmp_path, monkeypatch):
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import weather as WX
+    monkeypatch.setattr(WX, "HOME", tmp_path / "home")          # no real synced FIT folder
+    root = _folder(tmp_path)
+    fits = []
+    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False:
+                        fits.append(day) or {"mftp": 200.0 + len(runs)})
+    a = _build(root)
+    d1, d2 = dt.date(2026, 9, 5), dt.date(2026, 8, 1)
+    assert A._pd_mftp(a, d1) == 203.0 and A._pd_mftp(a, d2) == 200.0     # 3 runs / none in the window
+    a.flush_series()
+    n = len(fits)
+    b = _build(root)
+    assert A._pd_mftp(b, d1) == 203.0 and len(fits) == n        # from disk, no refit
+    # a new run inside d1's window: refit d1 only
+    (root / "2026" / "8.fit").write_bytes(build_run(datetime(2026, 9, 4, 8, tzinfo=timezone.utc), seconds=600,
+                                                    power=210))
+    c = _build(root)
+    assert A._pd_mftp(c, d1) == 204.0 and len(fits) == n + 1
+    assert A._pd_mftp(c, dt.date(2026, 9, 2)) is not None
+
+
 # ---- the factory: single flight + progress --------------------------------
 
 def test_concurrent_requests_build_one_dataset(monkeypatch, tmp_path):
