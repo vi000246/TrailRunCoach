@@ -432,12 +432,16 @@ def plan_race_runs(ds) -> dict[int, dict]:
     return MX.match_events(ds.plan.events, runs)
 
 
-MAXIMAL_KEY = "racepower_maximal_v1"
+MAXIMAL_KEY = "racepower_maximal_v3"     # v3 (2026-10-01): + elapsed_s / stopped / long-rest share (activity_tags)
 
 
 def _maximal_stats(ds, w) -> Optional[dict]:
     """Threshold-independent pacing / HR numbers of one run: last-quarter
-    time-weighted HR and second ÷ first half speed (moving time, kmh > 1)."""
+    time-weighted HR and second ÷ first half speed (moving time, kmh > 1),
+    and the elapsed time (first → last sample, so a watch auto-pause counts
+    as stopped) with the stopped share and the LONG-rest share
+    (activity_tags.rest_spells: stops ≥ 5 min)."""
+    from backend.engine import activity_tags as AT
     a = activity_arrays(ds, w)
     if a is None:
         return None
@@ -447,6 +451,8 @@ def _maximal_stats(ds, w) -> Optional[dict]:
     mv = (np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH) & (d > 0)
     cum = np.cumsum(np.where(mv, d, 0.0))
     tot = float(cum[-1]) if len(cum) else 0.0
+    rs = AT.rest_spells(t, np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH)
+    elapsed = rs["elapsed_s"]
     if tot <= 0:
         return None
     hr = a["hr"]
@@ -459,21 +465,59 @@ def _maximal_stats(ds, w) -> Optional[dict]:
     v = np.nan_to_num(a["kmh"])
     s1 = float((v[h1] * d[h1]).sum() / d[h1].sum()) if d[h1].sum() > 0 else None
     s2 = float((v[h2] * d[h2]).sum() / d[h2].sum()) if d[h2].sum() > 0 else None
-    return {"q4_hr": q4, "split": (s2 / s1) if s1 and s2 else None, "moving_s": tot}
+    return {"q4_hr": q4, "split": (s2 / s1) if s1 and s2 else None, "moving_s": tot, "elapsed_s": elapsed,
+            "stopped_share": rs["stopped_share"], "rest_share": rs["rest_share"], "rest_s": rs["rest_s"]}
 
 
 def maximal_stats(ds, w) -> Optional[dict]:
     return ds.cached_series(MAXIMAL_KEY, w, lambda: _maximal_stats(ds, w))
 
 
-def capacity_samples(ds, runs, th_of: Optional[dict] = None) -> dict[int, dict]:
-    """{idx: {"ok", "kind", "reason", ...}} for every run: is it a capacity
-    sample (maximal.py)? Plan races first, then the road / trail rules with
-    each run's own-date thresholds and the HRmax observed in the 365 days up
-    to that run."""
-    from backend.engine.racepower import maximal as MX
+def baiyue_on(ds, day: dt.date) -> Optional[str]:
+    """The season-plan 百岳 event covering `day` (its name), else None."""
+    for e in getattr(ds.plan, "events", None) or []:
+        if getattr(e, "kind", None) != "baiyue":
+            continue
+        d0 = e.start
+        if d0 <= day < d0 + dt.timedelta(days=max(1, int(e.days or 1))):
+            return getattr(e, "name", "") or "百岳"
+    return None
+
+
+def effort_stats(ds, w, th: dict) -> dict:
+    """The numbers activity_tags.effort_hr reads: moving HR (intensity_stats,
+    the sport's moving rule), the shares below / above the own-date AeT, and
+    the elapsed time (maximal_stats) for the stopped share."""
     from backend.engine.racepower import intensity as I
+    st = intensity_stats(ds, w) or {}
+    ms = maximal_stats(ds, w) or {}
+    sh = I.shares(st, th["aet"], th["lthr"]) if th.get("aet") and th.get("lthr") else None
+    return {"hr_avg": st.get("hr_avg"), "moving_s": st.get("moving_s"), "elapsed_s": ms.get("elapsed_s"),
+            "rest_share": ms.get("rest_share"), "stopped_share": ms.get("stopped_share"),
+            "low_share": sh["low"] if sh else None, "above_aet": (1.0 - sh["low"]) if sh else None}
+
+
+def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list] = None,
+                     tests: Optional[dict] = None) -> dict[int, dict]:
+    """{idx: {"ok", "kind", "reason", "tags", ...}} for every outdoor run: is it
+    a capacity sample? (2026-10-01, user: what matters is whether the effort
+    was MAXIMAL, not whether it was a race.)
+
+    A run is a sample when its effective effort (activity_tags.merge: the
+    user's mark, else the auto rule) is 全力 and its activity type is not
+    測試 (tests go through the CP-test path). A user effort mark always wins:
+    ≠ 全力 always excludes, 全力 always includes. Auto effort: road =
+    maximal.road_maximal; trail = activity_tags.effort_hr (HR on moving time
+    with the stopped share), and an auto trail sample also needs the trail
+    duration rule (≥ 10 km, ≥ 90 min: maximal.trail_maximal's km / time).
+    Plan races are activity type 比賽 but no longer samples by themselves.
+    `tags` = activity_tags.load() rows (default: the app DB); `tests` =
+    {idx: reason} of runs workout_review marks as tests."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.racepower import maximal as MX
     events = plan_race_runs(ds)
+    tags = AT.load() if tags is None else tags
+    tests = tests or {}
     peaks, held = [], []
     for w in ds.workouts:
         if w.sport == "run":
@@ -487,20 +531,20 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None) -> dict[int, dict]:
     for w in runs:
         if not outdoor(w):
             continue
-        if w.idx in events:
-            ev = events[w.idx]
-            out[w.idx] = {"ok": True, "kind": "plan_race", "event": ev, "category": "trail" if is_trail(w) else "road",
-                          "reason": f"賽季計畫的比賽「{ev['name']}」（{ev['priority'] or '-'} 級）"}
-            continue
+        ev = events.get(w.idx)
         th = (th_of or {}).get(w.idx) or thresholds_as_of(ds, w.entry.start.date())
         st = intensity_stats(ds, w) or {}
         ms = maximal_stats(ds, w) or {}
         km = w.metrics.get("distance")
-        if is_trail(w):
-            sh = I.shares(st, th["aet"], th["lthr"]) if th.get("aet") and th.get("lthr") else None
+        title = getattr(w.entry, "title", "") or ""
+        es = effort_stats(ds, w, th)
+        trail = is_trail(w)
+        if trail:
             r = MX.trail_maximal({"km": km, "moving_s": st.get("moving_s"), "hr_avg": st.get("hr_avg"),
-                                  "above_aet": (1.0 - sh["low"]) if sh else None}, th.get("lthr"), th.get("aet"),
-                                 getattr(w.entry, "title", "") or "", w.tags)
+                                  "above_aet": es["above_aet"]}, th.get("lthr"), th.get("aet"), title, w.tags)
+            eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"))
+            long_ok = all(c["ok"] for c in r["checks"] if c["id"] in ("km", "time"))
+            auto_ok = eff["effort"] == "max" and long_ok
         else:
             hrmax = MX.hrmax_observed([p for d_, p in peaks if w.day - RIEGEL_WINDOW_DAYS < d_ < w.day + 1])
             mv = st.get("moving_s") or 0.0
@@ -511,8 +555,69 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None) -> dict[int, dict]:
                                  "p_avg": st.get("p_avg"), "longer_p": max(longer) if longer and mv else None},
                                 th.get("lthr"), hrmax)
             r["hrmax"] = hrmax
-        out[w.idx] = r
+            eff = AT.effort_road(r, es, th.get("aet"))
+            auto_ok = eff["effort"] == "max"
+        typ, typ_reason = AT.auto_type(plan_race=ev, test=tests.get(w.idx), sport=w.sport, sport_type=w.sport_type,
+                                       title=title, trail=trail)
+        user = AT.find(tags, w.entry.start, w.entry.file)
+        tg = AT.merge({"activity_type": typ, "activity_type_reason": typ_reason, "effort": eff["effort"],
+                       "effort_reason": eff["reason"]}, user)
+        ue = AT.user_effort(user)
+        if tg["activity_type"] == "test":
+            ok, kind, why = False, "test", "活動類型是測試：走 CP 測試路徑"
+        elif ue is not None:
+            ok, kind = ue == "max", "user"
+            why = f"你標記為「{AT.EFFORTS[ue]}」" + ("" if ok else "：不列入能力樣本")
+        else:
+            ok = auto_ok
+            kind = "plan_race" if ev else r["kind"]
+            if ok:
+                why = f"自動判定全力：{eff['reason']}"
+            elif eff["effort"] == "max":
+                why = "全力但未達越野樣本長度：" + "；".join(
+                    c["text"] for c in r["checks"] if c["id"] in ("km", "time") and not c["ok"])
+            else:
+                why = f"自動努力度「{AT.EFFORTS.get(eff['effort'], '?')}」：{eff['reason']}"
+            if ev:
+                why = f"賽季計畫的比賽「{ev['name']}」（{ev['priority'] or '-'} 級）；" + why
+        out[w.idx] = {**r, "ok": bool(ok), "kind": kind, "reason": why, "rule": r["kind"], "rule_ok": r["ok"],
+                      "category": "trail" if trail else (r.get("category") or "road"), "event": ev,
+                      "effort": eff, "tags": tg, "user_marked": user is not None,
+                      "user_race": tg["activity_type"] == "race" and tg["activity_type_overridden"],
+                      "effort_stats": es}
     ds.flush_series()
+    return out
+
+
+def auto_tags(ds, w) -> dict:
+    """The merged activity tags of ONE dataset workout (the tag card / API):
+    the auto activity type and effort with their reasons, the user's stored
+    values, and the effort numbers. Runs reuse capacity_samples; hikes and
+    other sports use the HR effort rule."""
+    from backend.engine import activity_tags as AT
+    from backend.engine import workout_review as WR
+    test = None
+    try:
+        if w.sport == "run":
+            c = WR.classify(ds, w)
+            if c.get("type") in ("test_cp", "test_aet") and c.get("test_match") not in (None, "pattern", "user"):
+                test = f"{c.get('type_label')}（{c.get('test_match')}）"
+    except Exception:                       # noqa: BLE001
+        test = None
+    if outdoor(w):
+        r = capacity_samples(ds, [w], tests={w.idx: test} if test else None)[w.idx]
+        out = dict(r["tags"])
+        out.update(effort_detail=r["effort"], capacity={"ok": r["ok"], "kind": r["kind"], "reason": r["reason"]})
+        return out
+    th = thresholds_as_of(ds, w.entry.start.date())
+    es = effort_stats(ds, w, th)
+    eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"))
+    typ, why = AT.auto_type(test=test, sport=w.sport, sport_type=w.sport_type,
+                            title=getattr(w.entry, "title", "") or "", trail=is_trail(w),
+                            baiyue_event=baiyue_on(ds, w.entry.start.date()))
+    out = AT.merge({"activity_type": typ, "activity_type_reason": why, "effort": eff["effort"],
+                    "effort_reason": eff["reason"]}, AT.user_of(w))
+    out["effort_detail"] = eff
     return out
 
 
