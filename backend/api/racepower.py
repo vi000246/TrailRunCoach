@@ -720,6 +720,26 @@ def _v1_for(body: PlanIn, course: dict) -> dict:
     return predict(PredictIn(**data))
 
 
+def _trail_hr() -> Optional[dict]:
+    """The trail HR pace model as of today (athlete.trail_hr_model), cached
+    with the inputs."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.racepower import athlete as A
+    AT.load()
+    key = (id(_dataset()), dt.date.today(), _plan_stamp(), AT._memo.get("stamp"))
+    hit = _cache.get("trail_hr")
+    if hit and hit[0] == key:
+        return hit[1]
+    try:
+        m = A.trail_hr_model(_dataset())
+    except Exception:                       # noqa: BLE001 — the planner falls back to the power total
+        import traceback
+        traceback.print_exc()
+        m = None
+    _cache["trail_hr"] = (key, m)
+    return m
+
+
 def make_plan(body: PlanIn) -> dict:
     from backend.engine.racepower import backtest as BT
     from backend.engine.racepower import planner as PL
@@ -760,7 +780,7 @@ def make_plan(body: PlanIn) -> dict:
                         "lthr": (inp.get("aet") or {}).get("lthr"), "aet": (inp.get("aet") or {}).get("aet")}
             out = PL.plan_run(v1=v1, course=course, grade_re=gre, opts=opts, validated=validated,
                               effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
-                              capacity=capacity)
+                              capacity=capacity, trail_hr=_trail_hr() if body.type == "trail" else None)
     except ValueError as e:
         raise HTTPException(400, str(e))
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
