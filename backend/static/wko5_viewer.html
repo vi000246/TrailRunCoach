@@ -2644,12 +2644,20 @@ const FP_KEYS = { grade: "wko5viewer.formgrademetric", work: "wko5viewer.formwor
 const FP_METRICS = {
   ilr: { label: "ILR", unit: "BW/s", d: 1 },
   impact_g: { label: "衝擊 G", unit: "G", d: 2 },
+  impact_km: { label: "每公里衝擊量", unit: "G·步/km，推估", d: 0 },
   lss: { label: "LSS", unit: "kN/m", d: 1 },
   kleg: { label: "kleg", unit: "kN/m", d: 1 },
   gct: { label: "觸地時間", unit: "ms", d: 0 },
   cadence: { label: "步頻", unit: "spm", d: 0 },
   vo: { label: "垂直振幅", unit: "cm", d: 1 },
 };
+const FP_IMPACT = new Set(["ilr", "impact_g", "impact_km"]);      // these show the same bin's cadence beside them
+// "158↓": the bin's cadence, ↑ / ↓ when above / below the usual's middle 50 %
+function fpCad(r) {
+  const v = r.m?.cadence, b = r.base?.cadence;
+  if (v == null) return "–";
+  return `${Math.round(v)}${b?.ok ? (v > b.q3 ? "↑" : v < b.q1 ? "↓" : "") : ""}`;
+}
 function drawFormProfile(card, res) {
   cpStyle();
   const D = res.form_profile, work = D.mode === "work";
@@ -2679,6 +2687,9 @@ function drawFormProfile(card, res) {
       + `<span><i class="dot" style="background:var(--cp-line)"></i>這次</span>`
       + `<span><i class="hol"></i>這次（不到 ${min} 秒）</span>`
       + `<span><i class="iqr"></i>平常的中間 50% 與中位數（推估）</span>`;
+  const cadLeg = document.createElement("span");
+  cadLeg.textContent = work ? "橫軸下方數字 = 該段步頻 spm（↑↓ = 高／低於平常）" : "右欄數字 = 該坡度步頻 spm（↑↓ = 高／低於平常）";
+  leg.appendChild(cadLeg);
   bar.appendChild(leg);
   const cap = document.createElement("p");
   cap.className = "cpcap";
@@ -2720,9 +2731,10 @@ function drawFormProfile(card, res) {
         const v = val(b);
         return cpTipBox(`<b>坡度 ${esc(b.label)}</b><br>跑步時間 <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）`
           + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${b.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
-          + usualTip(v, b.base?.[metric], g));
+          + usualTip(v, b.base?.[metric], g) + cadTip(b));
       } },
-      grid: [{ left, width: w0, top: 4, bottom: 26 }, { left: left + w0 + gap, right: narrow ? 14 : 118, top: 4, bottom: 26 }],
+      grid: [{ left, width: w0, top: 4, bottom: 26 },
+        { left: left + w0 + gap, right: (narrow ? 14 : 118) + (showCad ? 48 : 0), top: 4, bottom: 26 }],
       xAxis: [
         { type: "value", gridIndex: 0, min: 0, max: maxShare * (narrow ? 1.6 : 1.45), axisLabel: { show: false }, axisTick: { show: false },
           axisLine: { show: false }, splitLine: { show: false } },
@@ -2750,8 +2762,12 @@ function drawFormProfile(card, res) {
                 style: { fill: css("--cp-base") } },
                 { type: "line", silent: true, shape: { x1: md, y1: yc - 8, x2: md, y2: yc + 8 }, style: { stroke: css("--cp-ink2"), lineWidth: 2 } });
             }
+            const xr = Math.max(gx0, gx1);
+            // the same bin's cadence, a quiet column right of the plot (impact metrics only)
+            if (showCad) kids.push({ type: "text", silent: true, style: { text: fpCad(b), x: xr + 10, y: yc, fill: muted(),
+              font: "10.5px system-ui, sans-serif", verticalAlign: "middle" } });
             const t = narrow || b.time_s < D.min_s ? null : cpOutside(val(b), bb, false);
-            if (t) kids.push({ type: "text", silent: true, style: { text: t, x: Math.max(gx0, gx1) + 12, y: yc, fill: ink(),
+            if (t) kids.push({ type: "text", silent: true, style: { text: t, x: xr + (showCad ? 58 : 12), y: yc, fill: ink(),
               font: "11px system-ui, sans-serif", verticalAlign: "middle" } });
             return { type: "group", children: kids };
           } },
@@ -2788,11 +2804,15 @@ function drawFormProfile(card, res) {
         return cpTipBox(`<b>${esc(xname)} ${esc(r.label)}</b>${band !== "all" ? `（${esc(D.band_labels?.[band] || band)}）` : ""}`
           + `<br>跑步時間 <b>${cpDur(r.time_s)}</b>`
           + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${r.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
-          + usualTip(v, B(r), g));
+          + usualTip(v, B(r), g) + cadTip(r));
       } },
-      grid: [{ left: 52, right: narrow ? 14 : 24, top: 12, bottom: 34 }],
+      grid: [{ left: 52, right: narrow ? 22 : 30, top: 12, bottom: showCad ? 48 : 34 }],
       xAxis: [{ type: "category", data: cats, boundaryGap: false, axisTick: { show: false },
-        axisLine: { lineStyle: { color: line() } }, axisLabel: { color: muted(), fontSize: 10.5, interval: narrow ? 1 : 0 } }],
+        axisLine: { lineStyle: { color: line() } },
+        // with an impact metric: the slice's cadence on a second, quieter line under each label
+        axisLabel: { color: muted(), fontSize: 10.5, interval: narrow ? 1 : 0, lineHeight: 15,
+          formatter: (c, i) => showCad && rows[i] ? `${c}\n{c|${fpCad(rows[i])}}` : c,
+          rich: { c: { color: muted(), fontSize: 10, fontWeight: 600 } } } }],
       yAxis: [{ type: "value", min: yn.min, max: yn.max, interval: yn.interval, axisLine: { show: false },
         axisLabel: { color: muted(), fontSize: 10.5, formatter: (v) => cpN(v, yn.interval >= 1 ? 0 : g.d) }, splitLine: { lineStyle: { color: line() } } }],
       series: [
@@ -2813,8 +2833,13 @@ function drawFormProfile(card, res) {
       ],
     }, { replaceMerge: ["series", "xAxis", "yAxis", "grid"] });
   }
+  let showCad = false;
+  const cadTip = (r) => showCad && r.m?.cadence != null
+    ? `<br>步頻 <b>${cpN(r.m.cadence)}</b> spm${r.base?.cadence?.ok ? `（平常 ${cpN(r.base.cadence.median)}）` : ""}` : "";
   function paint() {
     const g = FP_METRICS[metric];
+    showCad = FP_IMPACT.has(metric) && keys.includes("cadence");
+    cadLeg.style.display = showCad ? "" : "none";
     if (work) paintWork(g); else paintGrade(g);
   }
   paint();

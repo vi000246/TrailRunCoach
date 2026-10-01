@@ -56,7 +56,29 @@ def test_form_bins_without_grade_has_only_all():
     assert out["grade"] == [] and list(out["work"]) == ["all"]
 
 
-def _run(day, gct=250.0, ilr=True):
+def test_impact_per_km_is_impact_times_steps_per_km():
+    # 180 spm at 10 km/h = 6 min/km → 1080 steps/km; 1.5 G × 1080 = 1620
+    v = R.impact_per_km(np.array([1.5, 1.5]), np.array([180.0, 180.0]), np.array([10.0, 0.5]))
+    assert v[0] == pytest.approx(1620.0) and np.isnan(v[1])          # stopped: no value
+    assert R.impact_per_km(None, np.array([180.0]), np.array([10.0])) is None
+
+
+def _b(med):
+    return {"ok": True, "median": med, "q1": med * 0.97, "q3": med * 1.03, "n": 5}
+
+
+def test_cadence_hint_needs_high_impact_and_low_cadence():
+    row = lambda ilr, cad, secs=300: {"time_s": secs, "m": {"ilr": ilr, "cadence": cad},
+                                      "base": {"ilr": _b(50.0), "cadence": _b(160.0)}}
+    h = R.cadence_hint([row(60, 150), row(60, 165), row(45, 150), row(60, 150, secs=30)], ["A", "B", "C", "D"])
+    assert h is not None and h.startswith("A：") and "Heiderscheit 2011" in h
+    assert "B" not in h and "C" not in h and "D" not in h                # cadence high / impact low / < 60 s
+    assert R.cadence_hint([row(60, 165)], ["B"]) is None
+    no_base = {"time_s": 300, "m": {"ilr": 60, "cadence": 150}, "base": {"ilr": {"ok": False}, "cadence": _b(160.0)}}
+    assert R.cadence_hint([no_base], ["E"]) is None
+
+
+def _run(day, gct=250.0, ilr=True, ilr_v=70.0, cad=85.0):
     """40 min: 20' flat, 10' up 8 %, 10' down 8 %; cadence 170 spm, power, Stryd ILR when `ilr`."""
     t = np.arange(0, 2401, 1.0)
     kmh = 10.0
@@ -67,10 +89,10 @@ def _run(day, gct=250.0, ilr=True):
     e[dn] = e[up].max() - (dist[dn] - dist[1800]) * 1000 * 0.08
     ch = {"elapsedtime": list(t), "heartrate": [140.0] * len(t), "speed": [kmh] * len(t),
           "elapseddistance": list(dist), "elevation": list(e + 100.0), "power": [220.0] * len(t),
-          "cadence": [85.0] * len(t), "stancetime": [gct / 1000.0] * len(t),
+          "cadence": [cad] * len(t), "stancetime": [gct / 1000.0] * len(t),
           "verticaloscillation": [0.08] * len(t)}
     if ilr:
-        ch["@impact_loading_rate"] = list(np.where(dn, 90.0, 70.0))
+        ch["@impact_loading_rate"] = list(np.where(dn, ilr_v + 20.0, ilr_v))
     return FakeWorkout(start=dt.datetime.combine(day, dt.time(7)), sport="run", tags=["running"],
                        channels=ch, metrics={"duration": 2400.0, "movingduration": 2400.0,
                                              "distance": float(dist[-1]), "climbing": float(e.max())})
@@ -97,6 +119,24 @@ def test_form_cards_with_baseline_and_stryd():
     assert set(wk["bands"]) >= {"all", "flat", "up", "down"}
     assert len(wk["bands"]["all"]) == 10 and wk["bands"]["all"][0]["base"]["gct"]["ok"]
     assert wk["band_labels"]["flat"] == "平路 −3～+3%"
+
+
+def _texts(r):
+    return " ".join(s["data"]["value"] for s in r["series"] if s["data"]["kind"] == "value")
+
+
+def test_cadence_hint_on_the_cards_only_when_the_data_supports_it():
+    today = dt.date(2026, 9, 30)
+    past = [_run(today - dt.timedelta(days=3 * k)) for k in range(1, 6)]           # ILR 70, 170 spm
+    # higher impact with a lower cadence (160 spm): the hint shows
+    ds = FakeDataset(past + [_run(today, ilr_v=90.0, cad=80.0)], today, settings=SETTINGS)
+    for sec in ("form_grades", "form_work"):
+        t = _texts(R.review(ds, ds.workouts[-1], sec))
+        assert "步頻提高 5–10%" in t and "Heiderscheit 2011" in t
+    # higher impact but a higher cadence: no hint
+    ds = FakeDataset(past + [_run(today, ilr_v=90.0, cad=90.0)], today, settings=SETTINGS)
+    for sec in ("form_grades", "form_work"):
+        assert "步頻提高" not in _texts(R.review(ds, ds.workouts[-1], sec))
 
 
 def test_form_cards_without_stryd_drop_ilr_lss_and_say_why():

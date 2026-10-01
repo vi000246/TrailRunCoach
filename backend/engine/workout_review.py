@@ -76,7 +76,8 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # v13: climbs carry start/end km, elevations, avg power, moving pace and GAP (the 爬坡段 profile);
 # `grade_bins` per workout (the 坡度分組 baseline)
 # v14: `form_bins` (跑姿分組: form metrics per grade bin and per 10 % of the work done, form_bins)
-CACHE_KEY = "workout_review_v14"
+# v15: form_bins also carry `impact_km` (每公里衝擊量, impact_per_km)
+CACHE_KEY = "workout_review_v15"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -1081,7 +1082,23 @@ def _run_work(t, speed, cadence=None, power=None) -> tuple[np.ndarray, np.ndarra
 
 
 # 跑姿分組 (form_bins): the form metrics per grade bin and per 10 % of the work done
-FORM_KEYS = ("ilr", "impact_g", "lss", "kleg", "gct", "cadence", "vo")
+FORM_KEYS = ("ilr", "impact_g", "impact_km", "lss", "kleg", "gct", "cadence", "vo")
+IMPACT_KEYS = ("ilr", "impact_g")       # the per-step impact metrics the cadence hint checks
+
+
+def impact_per_km(impact_g, cadence_spm, speed_kmh) -> Optional[np.ndarray]:
+    """每公里衝擊量 (推估): impact G × steps per km = G × spm × 60 / (km/h), per
+    sample, NaN when stopped. Cumulative-per-distance load is how Willson 2014
+    (Clin Biomech 29:243) compared step lengths for the patellofemoral joint;
+    multiplying a whole-body impact by the step count is our own proxy, not a
+    measured knee load."""
+    if impact_g is None or cadence_spm is None or speed_kmh is None:
+        return None
+    n = len(np.asarray(impact_g))
+    g, c, v = _arr(impact_g, n), _arr(cadence_spm, n), _arr(speed_kmh, n)
+    with np.errstate(all="ignore"):
+        out = np.where(np.isfinite(v) & (v > STOP_KMH) & (c > 0), g * c * 60.0 / v, np.nan)
+    return out
 STRYD_ONLY = ("ilr", "lss")
 FORM_BANDS = (("all", None, None), ("flat", -0.03, 0.03), ("up", 0.03, None), ("down", None, -0.03))
 WORK_DECILES = 10
@@ -1509,6 +1526,7 @@ def _measure(ds, w) -> Optional[dict]:
     out["form"] = form_drift(t, s["speed"], fchans, s["cadence"], s["power"]) if w.sport == "run" else {}
     # 跑姿分組: ILR / LSS only from Stryd (as the 前半對後半 table)
     bchans = {k: fchans.get(k) for k in FORM_KEYS if stryd or k not in STRYD_ONLY}
+    bchans["impact_km"] = impact_per_km(fchans.get("impact_g"), fchans.get("cadence"), s["speed"])
     out["form_bins"] = (form_bins(t, s["speed"], bchans, s["cadence"], s["power"], rg)
                         if w.sport == "run" else {})
     return out
@@ -2629,9 +2647,29 @@ def _form(ds, w, m, c, base):
 # (form_grades) and per 10 % of the work done (form_work), each against the athlete's usual
 # for that bin — the same pool as 坡度分組 (_pool + pooled: same category, 8 → 12 → 26 weeks
 # until ≥ 5 activities that spent ≥ BIN_MIN_S running in the bin; 推估)
-FORM_DEC = {"ilr": 1, "impact_g": 2, "lss": 1, "kleg": 1, "gct": 0, "cadence": 0, "vo": 1}
-FORM_LABEL = {"ilr": "ILR", "impact_g": "衝擊 G", "lss": "LSS", "kleg": "kleg", "gct": "觸地時間",
-              "cadence": "步頻", "vo": "垂直振幅"}
+FORM_DEC = {"ilr": 1, "impact_g": 2, "impact_km": 0, "lss": 1, "kleg": 1, "gct": 0, "cadence": 0, "vo": 1}
+FORM_LABEL = {"ilr": "ILR", "impact_g": "衝擊 G", "impact_km": "每公里衝擊量（推估）", "lss": "LSS", "kleg": "kleg",
+              "gct": "觸地時間", "cadence": "步頻", "vo": "垂直振幅"}
+CADENCE_HINT = "衝擊高於平常、步頻低於平常 → 可試著把步頻提高 5–10%（Heiderscheit 2011）"
+
+
+def cadence_hint(rows: list[dict], names: list[str]) -> Optional[str]:
+    """「−10 ~ −5%、0–10%：衝擊高於平常、步頻低於平常 → …」 for the rows (≥ BIN_MIN_S) where ILR or
+    impact G is above the usual's middle 50 % and the cadence below it; None when there is none.
+    Heiderscheit 2011 (MSSE 43:296): +5 / +10 % step rate cut the energy absorbed at the knee."""
+    hit = []
+    for r, name in zip(rows, names):
+        if (r.get("time_s") or 0) < BIN_MIN_S:
+            continue
+        m, b = r.get("m") or {}, r.get("base") or {}
+        high = any(compare(m.get(k), b.get(k) or {}) == "high" for k in IMPACT_KEYS)
+        if high and compare(m.get("cadence"), b.get("cadence") or {}) == "low":
+            hit.append(name)
+    return f"{'、'.join(hit)}：{CADENCE_HINT}" if hit else None
+
+
+def _hint_rows(hint: Optional[str]) -> list[dict]:
+    return _verdict_rows([hint], "判讀（參考）") if hint else []
 BAND_LABEL = {"all": "全部坡度", "flat": "平路 −3～+3%", "up": "上坡 ≥ 3%", "down": "下坡 < −3%"}
 NO_STRYD_NOTE = ("這次沒有 Stryd：ILR（衝擊負荷率）和 LSS（腿部剛性）是 Stryd 腳掌感測器算的，手錶沒有，"
                  "所以只看步頻、觸地時間、垂直振幅、kleg、衝擊 G")
@@ -2680,7 +2718,8 @@ def _form_grades(ds, w, m, c, base):
     cols = [_col("坡度", [b["label"] for b in bins]), _col("跑步時間", [_hms(b["time_s"]) for b in bins]),
             _col("佔比", [f"{b['time_pct']:.0f}%" for b in bins])]
     cols += [_col(f"{FORM_LABEL[k]}（平常）", [_form_cell(b["m"][k], b["base"][k], k) for b in bins]) for k in keys]
-    return {**base, "series": cols + _form_note_rows(m),
+    hint = cadence_hint(bins, [f"坡度 {b['label']}" for b in bins])
+    return {**base, "series": cols + _form_note_rows(m) + _hint_rows(hint),
             "form_profile": {"mode": "grade", "bins": bins, "keys": keys, "min_s": BIN_MIN_S,
                              "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
                              "note": None if m.get("stryd") else NO_STRYD_NOTE}}
@@ -2713,7 +2752,9 @@ def _form_work(ds, w, m, c, base):
             _col("跑步時間", [_hms(r["time_s"]) for rows in bands.values() for r in rows])]
     cols += [_col(f"{FORM_LABEL[k]}（平常）", [_form_cell(r["m"][k], r["base"][k], k)
                                               for rows in bands.values() for r in rows]) for k in keys]
-    return {**base, "series": cols + _form_note_rows(m),
+    word = "作功" if split == "work" else "時間"
+    hint = cadence_hint(bands["all"], [f"{word} {r['label']}" for r in bands["all"]])
+    return {**base, "series": cols + _form_note_rows(m) + _hint_rows(hint),
             "form_profile": {"mode": "work", "split": split, "bands": bands,
                              "band_labels": {b: BAND_LABEL[b] for b in bands}, "keys": keys, "min_s": BIN_MIN_S,
                              "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
