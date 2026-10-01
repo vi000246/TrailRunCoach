@@ -224,6 +224,25 @@ def test_race_guard_holds_a_removed_quality(monkeypatch):
     run(go())
 
 
+def test_phase_change_stays_held_on_the_next_sync(monkeypatch):
+    b = Box(monkeypatch, base_inputs(), Push())
+
+    async def go():
+        db = await make_db()
+        await PA.run(db)
+        b.inp = base_inputs(new=1, easy_minutes=50)
+        b.inp["phase"] = {**b.inp["phase"], "kind": "specific"}
+        r = await PA.run(db)
+        assert r["status"] == "pending"
+        b.inp = later(b.inp)                                   # another sync, same plan
+        r2 = await PA.run(db)
+        assert r2["status"] == "pending" and r2["id"] == r["id"]
+        assert _active(await PS.load(db))["easy1"]["minutes"] == 45
+        await PA.approve(db, r["id"])
+        assert (await PA.settings(db))["state"]["phase"] == "specific"
+    run(go())
+
+
 def test_undo_restores_pins_and_repushes(monkeypatch):
     b = Box(monkeypatch, base_inputs(), Push())
 

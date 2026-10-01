@@ -271,7 +271,7 @@ def entry_dict(r: PlanChangeLog) -> dict:
     return {"id": r.id, "at": r.created_at.isoformat() + "Z" if r.created_at else None, "trigger": r.trigger,
             "status": r.status, "summary": r.summary, "items": j(r.items_json, []), "big": j(r.big_json, None),
             "push": j(r.push_json, None), "notice_uid": r.notice_uid, "ref_id": r.ref_id,
-            "can_undo": r.status in ("applied", "approved") and bool(j(r.before_json, []) or j(r.after_json, []))}
+            "can_undo": r.status == "applied" and bool(j(r.before_json, []) or j(r.after_json, []))}
 
 
 async def _add_entry(db, **kw) -> PlanChangeLog:
@@ -478,7 +478,11 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
             out = {"status": "applied", "id": e.id, "push": push}
         else:
             out = {"status": "noop", "push": push}
-    state.update(stamp=stp, phase=phase)
+    state["stamp"] = stp
+    if out["status"] in ("applied", "noop"):
+        # the phase baseline moves only once a plan is applied: a held phase
+        # change must stay held on the next sync
+        state["phase"] = phase
     await _set_state(db, state)
     return out
 
@@ -517,7 +521,7 @@ async def undo(db, entry_id: int) -> dict:
     from backend.engine import plan_store as PS
     async with API._wlock():
         r = await db.get(PlanChangeLog, entry_id)
-        if r is None or r.status not in ("applied", "approved"):
+        if r is None or r.status != "applied":
             raise ValueError("這筆紀錄不能復原")
         before = json.loads(r.before_json or "[]")
         after = json.loads(r.after_json or "[]")

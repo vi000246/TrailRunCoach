@@ -308,6 +308,11 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
     from backend.engine.wko5expr.dataset import date_to_day
     tday = math.floor(date_to_day(today))
     out = []
+    try:
+        from backend.engine.plan_store import done_titles
+        titles = done_titles()                 # activity index -> the planned session's title
+    except Exception:                          # noqa: BLE001
+        titles = {}
     for w in sorted(ds.workouts, key=lambda x: x.day):
         if not (tday - days <= math.floor(w.day) < tday) or category(w) not in WR.QUALITY_CATEGORIES:
             continue
@@ -333,7 +338,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             bouts = [{"power": e.get("power"),
                       "hr_at60": (e["hr_max"] - e["hr_drop60"]) if e.get("hr_max") is not None
                       and e.get("hr_drop60") is not None else None} for e in (m.get("efforts") or [])]
-        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(),
+        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": titles.get(w.idx),
                     "reps": len(reps) or (m.get("intervals") or {}).get("n") or 0,
                     # informational only now: dose_step judges the bouts (interval_outcome)
                     "faded": fade is not None and fade < -FADE,
@@ -433,8 +438,14 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
     the step (engine/adapt.py rule B). `faded` stays for the week card."""
     step, streak, adjust, last = 0, 0, {}, None
     for h in history:
+        spec, neutral = planned_spec(h.get("title"), step)
+        if neutral:
+            # a recovery fartlek / sub-threshold (ramp week) / Zone 3 session the plan
+            # prescribed outside the ladder: not a step, never judged against it
+            h["outcome"] = "neutral"
+            continue
         if h.get("bouts") is not None and h.get("cp"):
-            o = interval_outcome(h["bouts"], dose_spec(step), h["cp"], aet)
+            o = interval_outcome(h["bouts"], spec, h["cp"], aet)
         else:
             o = {"outcome": "border" if h.get("faded") else "met", "why": "最後一趟掉 > 5%" if h.get("faded") else ""}
         oc = o.get("outcome") or "met"
@@ -457,6 +468,24 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
         out.update(outcome=last["outcome"], adjust=adjust,
                    note="" if last["outcome"] == "met" else f"上次間歇{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
     return out
+
+
+def planned_spec(title: Optional[str], step: int) -> tuple[tuple, bool]:
+    """(the spec the session was planned at, neutral). By the stored plan's
+    title when there is one (dose_history reads it), else the ladder's step.
+    neutral = a session outside the ladder (RECOVERY, ZONE3, or SUB handed out
+    before the ladder reached it)."""
+    if title:
+        t = str(title)
+        if t == RECOVERY[1] or t.startswith("Zone 3"):
+            return RECOVERY if t == RECOVERY[1] else ZONE3, True
+        for s in DOSE:
+            if s[1] == t:
+                return s, False
+        for s in AFTER:
+            if s[1] == t:
+                return s, step < len(DOSE)
+    return dose_spec(step), False
 
 
 def adjusted_spec(spec: tuple, adjust: Optional[dict]) -> tuple:

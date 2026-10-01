@@ -188,7 +188,7 @@ def _clean(patch: dict, today: str) -> dict:
             if v < today:
                 raise PlanError("不能排到過去的日子")
         elif k == "kind":
-            if v not in KINDS:
+            if v not in KINDS or v in NOT_LOAD:
                 raise PlanError(f"不支援的類型：{v!r}")
         elif k == "minutes":
             try:
@@ -270,6 +270,8 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
               blocked: Optional[dict] = None) -> dict:
     data = dict(data)
     data.setdefault("kind", "easy")
+    if data["kind"] in NOT_LOAD:
+        raise PlanError("課表待確認是自動調整的提醒，不能自己新增")
     if data["kind"] == "test":
         _test_default(data)
     data.setdefault("title", DEFAULT_TITLES.get(data.get("kind"), "自訂"))
@@ -362,6 +364,47 @@ def push_dict(s: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 _TEST_CACHE: dict = {}
+_TITLE_CACHE: dict = {}
+
+
+def done_titles(db_path=None) -> dict:
+    """{activity index: title} of the done quality / test sessions, so
+    quality_gate.dose_step judges an interval against what was planned
+    (a recovery fartlek is not a ladder step). Read-only sqlite, cached on
+    the file's mtime; {} when the DB is missing."""
+    import sqlite3
+    from pathlib import Path
+    if db_path is None:
+        from backend.engine.wko5expr.datasource import _db_path
+        db_path = _db_path()
+    if db_path is None:
+        return {}
+    p = Path(db_path)
+    try:
+        mt = p.stat().st_mtime_ns
+    except OSError:
+        return {}
+    hit = _TITLE_CACHE.get(str(p))
+    if hit and hit[0] == mt:
+        return hit[1]
+    out: dict = {}
+    try:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            for title, done_by in con.execute("SELECT title, done_by FROM plan_sessions "
+                                              "WHERE state='done' AND kind IN ('quality','test')"):
+                try:
+                    d = json.loads(done_by) if done_by else None
+                except ValueError:
+                    d = None
+                if isinstance(d, dict) and d.get("index") is not None:
+                    out[d["index"]] = title
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    _TITLE_CACHE[str(p)] = (mt, out)
+    return out
 
 
 def test_sessions(db_path=None) -> list[dict]:

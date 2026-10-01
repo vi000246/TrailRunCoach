@@ -95,7 +95,16 @@ RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_r
 - The training phase changed since the last run.
 - More than 3 sessions change in the push window and they are not all reductions.
 
-A week generated for the first time is not a change.
+A week generated for the first time is not a change. The phase baseline (`plan.auto.state.phase`)
+moves only when a plan is applied, so a held phase change stays held on later syncs. While a
+proposal waits, the page's Monday reconcile (`_ensure` with leftovers) does not apply it either;
+a manual push still applies everything (an explicit user action), and the next run then marks
+the proposal superseded. Only an `applied` entry can be undone.
+
+Interval sessions the plan prescribed outside the ladder (recovery fartlek, Zone 3, a
+sub-threshold 3×8′ in a ramp week before the ladder reached it) are neutral in `dose_step`:
+`dose_history` reads the planned title of the done session (`plan_store.done_titles`), and
+`planned_spec` resolves it.
 
 While a proposal is held, the stored plan only takes the done / missed / note part, and the
 watch keeps what was pushed. When the same proposal comes up again, nothing new is logged

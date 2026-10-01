@@ -320,6 +320,13 @@ def test_dose_step_replays_outcomes():
     assert d["step"] == 1 and d["adjust"] == {"rest_add": 1} and d["faded"]
     d = QG.dose_step([good, bad, bad])                    # twice in a row: back one
     assert d["step"] == 0 and d["adjust"] == {}
+    # a recovery fartlek done at step 2 (4×3′ uphill @ 105–110 %): neutral, not "too high"
+    fart = {"bouts": _b(248, 248, 248, 248), "cp": cp, "title": QG.RECOVERY[1]}
+    d = QG.dose_step([good, {**good, "title": QG.DOSE[1][1]}, fart])
+    assert d["step"] == 2 and d.get("adjust") == {} and fart["outcome"] == "neutral"
+    sub = {"bouts": _b(230, 230, 230), "cp": cp, "title": QG.SUB[1]}       # ramp-week 3×8′ before the ladder got there
+    assert QG.dose_step([good, sub])["step"] == 1
+    assert QG.planned_spec(QG.AFTER[0][1], len(QG.DOSE)) == (QG.AFTER[0], False)
     d = QG.dose_step([{"bouts": _b(200, 250, 250, 250, 250), "cp": cp}])
     assert d["step"] == 0 and d["adjust"] == {"power": QG.TARGET_DOWN}
     spec = QG.adjusted_spec(QG.DOSE[0], {"power": 0.95})
