@@ -93,6 +93,10 @@ DEFAULTS: dict[str, Any] = {
     "plan.prefs.aet_test_days": "weekday",
     # AeT 測試方式 (engine/aet_test.py PROTOCOLS): auto = 徐國峰 90 分 (backup UA 40) | xu90 | ua60 | ua40 | evoke60 | friel
     "plan.prefs.aet_test_protocol": "auto",
+    # 間歇暖身／緩和 (engine/interval_library.py §C3): the city run to the riverside (never cut)
+    # and the cool-down (10 when running home)
+    "plan.prefs.warmup_commute_min": 10,
+    "plan.prefs.cooldown_min": 5,
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
@@ -132,6 +136,8 @@ PREF_INTS = {                                 # key -> (lo, hi); None always all
     "plan.prefs.quality_per_week": (0, 2),
     "plan.prefs.strength_per_week": (0, 3),
     "plan.prefs.quality_gate_weeks": (2, 16),
+    "plan.prefs.warmup_commute_min": (0, 30),
+    "plan.prefs.cooldown_min": (0, 20),
 }
 
 
