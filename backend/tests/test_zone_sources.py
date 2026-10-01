@@ -89,6 +89,25 @@ def test_a_measured_aet_is_the_easy_cap(tmp_path):
     assert z2["hr"][1] == 142
 
 
+def test_a_new_test_re_zones_from_its_day(tmp_path, monkeypatch):
+    # event 1 (§2.5): a CP / AeT test applied -> the zones change at once; the
+    # API's _notify(True) rebuilds the datasets (wko5views.plan_changed)
+    from backend.api import wko5views as WV
+    from backend.engine.zones import training_targets, zone_table
+    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, note=REAL_NOTE)])
+    ds = _ds(tmp_path, plan)
+    end = int(date_to_day(TODAY))
+    assert zone_table(ds, "palladino", end)["threshold"] == 204
+    plan.thresholds.append(Threshold(TODAY.isoformat(), cp=210, cp_method="tt20", aethr=144, aethr_method="test"))
+    assert zone_table(ds, "palladino", end)["threshold"] == 210
+    tt = training_targets(ds, end)
+    assert tt["cp"] == 210 and tt["aet"] == 144 and tt["aet_measured"]
+    cleared = []
+    monkeypatch.setattr(WV._dataset_cfg, "cache_clear", lambda: cleared.append(1))
+    WV.plan_changed(True)
+    assert cleared == [1]
+
+
 def test_apply_estimate_writes_the_method(tmp_path, monkeypatch):
     from backend.api import plan as API
     path = tmp_path / "plan.json"
