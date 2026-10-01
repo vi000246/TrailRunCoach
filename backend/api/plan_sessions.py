@@ -239,9 +239,51 @@ def _err(e: Exception):
     return HTTPException(400, str(e))
 
 
+def day_cap(prefs, day: Optional[str]) -> Optional[float]:
+    """The time cap of a day (課表偏好): Mon–Fri the weekday cap, Sat / Sun the long-day cap."""
+    if prefs is None or not prefs.active or not day:
+        return None
+    wd = dt.date.fromisoformat(day).weekday()
+    c = prefs.long_cap if wd >= 5 else prefs.cap_weekday
+    return float(c) if c is not None else None
+
+
+def _variant_ctx(inp: dict, day: Optional[str]) -> dict:
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    prefs = PP.load()
+    gate = (inp.get("cur") or {}).get("quality_gate") or {}
+    before = dt.date.fromisoformat(day) if day else dt.date.fromisoformat(_today(inp))
+    return {"th": inp.get("thresholds") or {}, "prefs": prefs, "cap": day_cap(prefs, day),
+            "history": O.variant_history(before, gate), "gate": gate}
+
+
+def _with_variant(data: dict, inp: dict, rung: Optional[str], day: Optional[str]) -> dict:
+    """A body that names a library variant (`variant_key`, optional `variant_reps`): the
+    stored variant fields, built server-side (interval_library.variant_patch). The text
+    fields the user typed win; the rest come from the library."""
+    from backend.engine import interval_library as IL
+    key = data.get("variant_key")
+    if not key:
+        return data
+    ctx = _variant_ctx(inp, day or data.get("day"))
+    try:
+        vp = IL.variant_patch(key, rung, ctx["th"], ctx["prefs"], ctx["cap"], data.get("variant_reps"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    body = {k: v for k, v in data.items() if k not in ("variant_key", "variant_reps")}
+    for k in ("title", "minutes", "target", "detail", "tss"):
+        body.setdefault(k, vp[k])
+    body["kind"] = "quality"
+    body["_variant"] = {k: vp[k] for k in ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps",
+                                           "variant_blocks", "source")}
+    return body
+
+
 @router.post("/sessions")
 async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
+    data = _with_variant(data, inp, None, data.get("day"))
     try:
         async with _wlock():
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
@@ -252,11 +294,38 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
 @router.patch("/sessions/{uid}")
 async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
+    if patch.get("variant_key"):
+        cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
+        patch = _with_variant(patch, inp, (cur or {}).get("rung_key"), patch.get("day") or (cur or {}).get("day"))
     try:
         async with _wlock():
             return await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
+
+
+@router.get("/variants")
+async def variants(uid: Optional[str] = None, day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """The swap drawer for a stored interval session (uid) and the editor's templates
+    (interval_library.drawer / templates; interval-prescription.md §C5.4)."""
+    from backend.engine import interval_library as IL
+    from backend.engine import quality_gate as QG
+    inp = await _inputs()
+    s = next((x for x in await PS.load(db) if x["uid"] == uid), None) if uid else None
+    day = day or (s or {}).get("day")
+    ctx = _variant_ctx(inp, day)
+    cp = (ctx["th"] or {}).get("cp")
+    gate = ctx["gate"]
+    dec = QG.week_decision(gate, "base", "base") if gate.get("state") else {"spec": None}
+    rung_now = (dec.get("spec") or (None,))[0]
+    out = {"day": day, "cap": ctx["cap"], "cp": cp,
+           "templates": IL.templates(cp, ctx["cap"], ctx["prefs"], ctx["history"], rung_now)}
+    rung = (s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)) if s and s.get("variant_key") \
+        else None
+    if rung in IL.LIBRARY:
+        out["drawer"] = IL.drawer(rung, cp, ctx["cap"], ctx["prefs"], ctx["history"], s.get("variant_key"))
+        out["session"] = {k: s.get(k) for k in ("uid", "title", "variant_key", "rung_key", "equiv", "swap", "swap_reason")}
+    return out
 
 
 @router.delete("/sessions/{uid}")

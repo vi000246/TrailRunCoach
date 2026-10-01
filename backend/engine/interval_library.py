@@ -352,7 +352,9 @@ def describe(v: Variant, cp: Optional[float] = None) -> dict:
     pw = f"{v.lo * cp:.0f}–{v.hi * cp:.0f} W（{v.lo * 100:.0f}–{v.hi * 100:.0f}% CP）" if cp else \
         f"{v.lo * 100:.0f}–{v.hi * 100:.0f}% CP"
     ok, why = equivalent(v)
-    return {"key": v.key, "rung": v.rung, "rung_name": RUNG_NAME.get(v.rung, ""), "cls": v.cls,
+    hr = {"Z3sub": "心率 AeT–LTHR（LTHR 還是預設值時約 85–90% HRmax）", "Z3near": "心率 95–100% LTHR",
+          "Z5": "最後 1 分鐘 ≥ 90% HRmax（Helgerud；3 分以上的趟才看心率）"}.get(v.cls, "")
+    return {"key": v.key, "rung": v.rung, "hr": hr, "rung_name": RUNG_NAME.get(v.rung, ""), "cls": v.cls,
             "title": title(v), "structure": structure(v), "power": pw, "rest": rest_text(v),
             "terrain": v.terrain, "grade": v.grade, "tiz_min": round(tiz_s(v) / 60.0, 1),
             "main_min": round(main_s(v) / 60.0, 1), "canonical": v.canonical, "source": v.src,
@@ -580,6 +582,104 @@ def steps(v: Variant, level: str = "std", prefs=None) -> list[dict]:
                         "text": REST_LABEL.get(v.rest_mode, "慢跑") or "恢復"})
     out.append({"kind": "cool", "code": "cool", "s": int(b["cool_min"] * 60), "text": b["cool_text"]})
     return out
+
+
+# ---------------------------------------------------------------------------
+# the 課表 page: the swap drawer and the editor's templates (§C5.4)
+# ---------------------------------------------------------------------------
+
+def _split(v: Variant, level: str, prefs=None) -> str:
+    b = blocks(v, level, prefs)
+    name = {"city": "市區", "river": "河濱", "drills": "drill", "strides": "快步跑"}
+    warm = f"暖身 {b['warm_min']}（" + "＋".join(f"{name.get(c, c)} {m}" for c, m, _ in b["warm"]) + "）"
+    return f"{warm} · 主課 {_mins(main_s(v))} · 緩和 {b['cool_min']} ＝ {total_min(v, level, prefs):.0f} 分"
+
+
+def best_level(v: Variant, cap: Optional[float], prefs=None) -> Optional[str]:
+    return next((lv for lv in LEVELS if cap is None or total_min(v, lv, prefs) <= cap + 1e-6), None)
+
+
+def option_row(v: Variant, cp: Optional[float], cap: Optional[float], prefs=None, history=(),
+               consequence: str = "", equiv: bool = True, reps: Optional[int] = None) -> dict:
+    lv = best_level(v, cap, prefs)
+    d = describe(v, cp)
+    last = next((h for h in reversed(list(history or [])) if h.get("variant_key") == v.key), None)
+    d.update({"reps": reps, "level": lv or "min", "fits": lv is not None, "total_min": round(total_min(v, lv or "min", prefs)),
+              "split": _split(v, lv or "min", prefs),
+              "why_not": "" if lv is not None else f"超過今天上限 {cap:.0f} 分（最短也要 {total_min(v, 'min', prefs):.0f} 分）",
+              "last": {"date": last.get("day"), "outcome": last.get("outcome")} if last else None,
+              "equiv": equiv, "consequence": consequence or ("同等：不影響進階" if equiv else "")})
+    return d
+
+
+def drawer(rung: str, cp: Optional[float] = None, cap: Optional[float] = None, prefs=None, history=(),
+           current: Optional[str] = None, mountain: bool = False) -> dict:
+    """The swap drawer for a session of `rung`: the equivalent variants (rotation order,
+    the ones over today's cap greyed with why) and the non-equivalent choices, each with
+    its consequence (§C5.4)."""
+    if rung not in LIBRARY:
+        return {"rung": rung, "equivalent": [], "other": [], "recommended_key": None}
+    rec = fit(rung, cap, history, prefs, mountain)
+    allowed, hill = terrains(prefs, mountain)
+    vs = _order(list(LIBRARY[rung]), rung, history, hill)
+    eq = [option_row(v, cp, cap, prefs, history) for v in vs]
+    other = []
+    i = RUNG_ORDER.index(rung) if rung in RUNG_ORDER else -1
+    if i > 0:
+        p = canonical(RUNG_ORDER[i - 1])
+        other.append(option_row(p, cp, cap, prefs, history, f"上一階（{RUNG_NAME[p.rung]}）：維持，不算進階", False))
+    c = canonical(rung)
+    if c.n > MIN_REPS.get(c.cls, 2):
+        r = with_reps(c, c.n - 1)
+        share = tiz_s(r) / tiz_s(c)
+        other.append({**option_row(r, cp, cap, prefs, history,
+                                   f"縮量版：目標區時間 {share * 100:.0f}%，達標也不前進" if share < EQUIV_TIZ
+                                   else "少一趟（仍同等）", share >= EQUIV_TIZ, c.n - 1),
+                      "title": f"{title(c)}（少 1 趟：{r.n} 趟）"})
+    if c.cls == "Z5":
+        other.append(option_row(NON_EQUIV[0], cp, cap, prefs, history, "30/15：算一堂 5 區（頻率照算），不算進階", False))
+        z3 = canonical("z3b")
+        other.append(option_row(z3, cp, cap, prefs, history, "換成 3 區：這週沒有 5 區，不算進階", False))
+    return {"rung": rung, "rung_name": RUNG_NAME.get(rung, rung), "current_key": current,
+            "recommended_key": rec["variant"].key if rec.get("rung") == rung else None,
+            "recommended_reason": rec["reason"], "equivalent": eq, "other": other,
+            "terrain_note": "上坡版用一樣的 %CP，但上坡時攝氧量比例較低（Gajer，Buchheit Part I），下坡回程有離心負荷"}
+
+
+def templates(cp: Optional[float] = None, cap: Optional[float] = None, prefs=None, history=(),
+              rung_now: Optional[str] = None) -> dict:
+    """Every library session for the editor's dropdown, grouped by rung, the one fit()
+    picks for the athlete's current rung and cap marked 推薦."""
+    rec = fit(rung_now, cap, history, prefs) if rung_now in LIBRARY else None
+    groups = []
+    for rung in RUNG_ORDER + ("tp",):
+        rows = [option_row(v, cp, cap, prefs, history) for v in LIBRARY[rung]]
+        groups.append({"rung": rung, "label": f"{RUNG_NAME[rung]}（{CLASS_LABEL[LIBRARY[rung][0].cls]}）", "rows": rows})
+    groups.append({"rung": "x", "label": "非同等（不算進階）",
+                   "rows": [option_row(v, cp, cap, prefs, history, "每趟 < 2 分：算一堂 5 區，不算進階", False)
+                            for v in NON_EQUIV]})
+    return {"groups": groups, "recommended_key": rec["variant"].key if rec else None,
+            "recommended_reason": "推薦（依你目前的階段與時間上限）：" + rec["reason"] if rec else ""}
+
+
+def variant_patch(key: str, rung: Optional[str], th: dict, prefs=None, cap: Optional[float] = None,
+                  reps: Optional[int] = None, prefix: str = "") -> dict:
+    """The stored fields of a session switched to `key` by the user (swap = user): the
+    session keeps its ladder position (`rung`); it counts for progression only when the
+    variant is an equivalent of that rung (and keeps ≥ 85 % of the TIZ)."""
+    v0 = get(key)
+    if v0 is None:
+        raise ValueError(f"沒有這個課表：{key}")
+    rung = rung or v0.rung
+    v = with_reps(v0, reps)
+    canon = canonical(rung)
+    equiv = v0.rung == rung and v0.listed_equiv and (canon is None or tiz_s(v) >= EQUIV_TIZ * tiz_s(canon) - 1e-9)
+    lv = best_level(v, cap, prefs) or "min"
+    why = f"你換成 {structure(v)}（{'同等，不影響進階' if equiv else '非同等：這次不算進階'}）"
+    s = session_for({"variant": v, "level": lv, "reps": reps if reps and reps < v0.n else None, "equiv": equiv,
+                     "progress": equiv, "reason": why, "rung": rung}, th, prefix, prefs=prefs, swap="user")
+    return {k: s[k] for k in ("title", "minutes", "target", "detail", "source", "tss", "variant_key", "rung_key",
+                              "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks")}
 
 
 def library_table(prefs=None) -> list[dict]:

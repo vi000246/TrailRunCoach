@@ -256,6 +256,12 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
         raise PlanError("找不到這堂課（或已經完成／錯過）")
     d = to_dict(r)
     ch = _clean(patch, today)
+    # a library variant chosen in the swap drawer / the editor's templates (api/plan_sessions
+    # builds it with interval_library.variant_patch): a user edit, kept by reconcile (rule 3)
+    ch.update(patch.get("_variant") or {})
+    if patch.get("_variant") is None and ch and d.get("variant_key") and \
+            any(k in ch for k in ("title", "minutes", "detail")) and "variant_key" not in ch:
+        ch["swap"] = "user"                 # hand-edited text: the variant stays, marked as the user's
     if not ch:
         return d
     if "day" in ch and ch["day"] != d["day"]:
@@ -291,6 +297,7 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     if "day" not in data:
         raise PlanError("要選日期")
     ch = _clean(data, today)
+    ch.update(data.get("_variant") or {})
     _not_blocked(ch["day"], blocked)
     d = {"uid": R.new_uid(), "week_start": R.monday_of(ch["day"]), "gen_key": None, "origin": "custom",
          "edited": True, "provisional": False, "state": "active", "done_by": None, "note": None,

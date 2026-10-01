@@ -271,6 +271,21 @@ dialog.sd .err:empty { display: none; }
 .hint { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .hint button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
 .done-box { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
+/* interval library: editor templates + the 換一個 drawer (engine/interval_library.py) */
+.var-box { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.var-box select { width: 100%; }
+.var-cur { font-size: 12.5px; color: var(--muted); }
+.var-cur b { color: var(--text); }
+.vd-g { margin: 12px 0 4px; font-size: 13px; }
+.vd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.vd-list li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: start; }
+.vd-list li.cur { border-color: var(--accent); }
+.vd-list li.off { opacity: .55; }
+.vd-list .t { font-weight: 600; font-size: 13.5px; }
+.vd-list .m { grid-column: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vd-list .c { grid-column: 1 / -1; font-size: 12px; }
+.vd-list .c.neq { color: var(--warn, #b45309); }
+.vd-list button { grid-column: 2; grid-row: 1 / span 2; }
 .chg { margin: 0; padding-left: 18px; font-size: 13px; max-height: 50vh; overflow: auto; display: grid; gap: 3px; }
 .chg .add-c { color: var(--good); } .chg .rm-c { color: var(--bad); } .chg .ch-c { color: var(--watch); }
 .cf-body { font-size: 13.5px; display: grid; gap: 6px; }
@@ -437,6 +452,12 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
+    <div class="var-box" id="sd-var" hidden>
+      <label>間歇範本<select id="sd-tpl"><option value="">（不用範本，自己寫）</option></select></label>
+      <div class="hint" id="sd-tpl-info" aria-live="polite"></div>
+      <div class="var-cur" id="sd-var-cur"></div>
+      <button class="btn" type="button" id="sd-swap" hidden>換一個（同等課表）</button>
+    </div>
     <div class="row2">
       <label>日期<input type="date" name="day" required></label>
       <label>分鐘<input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
@@ -468,7 +489,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="hint" id="sd-tgt"></div>
     <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
     <div class="hint" id="sd-gl"></div>
-    <p class="meta faint" style="margin:0" id="sd-q">強度課的標題寫成「3×10 分」這種格式，推送到 COROS 才會有間歇結構</p>
+    <p class="meta faint" style="margin:0" id="sd-q">選「間歇範本」會照範本的暖身、每趟、組休推送到 COROS；自己寫的話標題用「3×10 分」這種格式才有間歇結構</p>
     <div class="err" id="sd-err" role="alert"></div>
     <div class="btns">
       <button class="btn danger" type="button" id="sd-del">刪除</button>
@@ -478,6 +499,19 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <button class="btn primary" type="submit" id="sd-save">儲存</button>
     </div>
   </form>
+</dialog>
+
+<!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
+<dialog class="sd wide" id="vd" aria-labelledby="vd-h">
+  <div class="dh"><div><h3 id="vd-h">換一個課表</h3><span class="meta" id="vd-sub"></span></div>
+    <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+  <p class="meta" id="vd-rec"></p>
+  <h4 class="vd-g">同等（不影響進階）</h4>
+  <ul class="vd-list" id="vd-eq"></ul>
+  <h4 class="vd-g">不同等（會影響進階）</h4>
+  <ul class="vd-list" id="vd-ot"></ul>
+  <p class="meta faint" id="vd-note"></p>
+  <div class="err" id="vd-err" role="alert"></div>
 </dialog>
 
 <dialog class="sd wide" id="pf" aria-labelledby="pf-h">
@@ -1192,11 +1226,87 @@ function tgtHint() {
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
   $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
   $("sd-q").hidden = kindVal() !== "quality";
+  varLoad();
 }
+
+// ---- interval library: the editor's templates and 換一個 (engine/interval_library.py) ----
+const SRC_KIND = { peer: "同儕審查", coach: "教練來源", "推估": "推估" };
+const OUTC = { met: "達標", border: "邊界", unadapted: "未適應", too_high: "未適應（目標太高）" };
+async function varLoad() {
+  const box = $("sd-var");
+  box.hidden = kindVal() !== "quality" || !!dlg.ro;
+  const key = `${F.day.value}|${dlg.uid || ""}`;
+  if (box.hidden || dlg.varFor === key) return;
+  dlg.varFor = key;
+  try {
+    const q = new URLSearchParams({ day: F.day.value });
+    if (dlg.uid) q.set("uid", dlg.uid);
+    const r = await sj("GET", `${PAPI}/variants?${q}`);
+    dlg.vars = r;
+    const T = r.templates, rec = T.recommended_key, mine = dlg.orig && dlg.orig.variant_key;
+    $("sd-tpl").innerHTML = `<option value="">（不用範本，自己寫）</option>` + T.groups.map((g) =>
+      `<optgroup label="${esc(g.label)}">${g.rows.map((v) => `<option value="${esc(v.key)}"${v.key === mine ? " selected" : ""}>${
+        v.key === rec ? "★ 推薦 · " : ""}${esc(v.title)} · ${v.total_min} 分${v.fits ? "" : "（超過今天上限）"}</option>`).join("")}</optgroup>`).join("");
+    $("sd-tpl-info").textContent = T.recommended_reason || "";
+    const s = r.session;
+    $("sd-var-cur").innerHTML = s ? `目前：<b>${esc(s.title)}</b>${s.swap_reason ? ` · ${esc(s.swap_reason)}` : ""}${s.equiv === false ? " · <b>不算進階</b>" : ""}` : "";
+    $("sd-swap").hidden = !r.drawer;
+  } catch (e) { $("sd-tpl-info").textContent = `範本讀取失敗：${e.message}`; }
+}
+function tplRow(key) {
+  for (const g of (dlg.vars && dlg.vars.templates && dlg.vars.templates.groups) || []) for (const v of g.rows) if (v.key === key) return v;
+  return null;
+}
+$("sd-tpl").addEventListener("change", () => {
+  const v = tplRow($("sd-tpl").value);
+  if (!v) { dlg.variant = null; return; }
+  dlg.variant = { key: v.key };
+  F.title.value = v.title; F.minutes.value = v.total_min;
+  F.target.value = `功率 ${v.power}` + (v.hr ? ` · ${v.hr}` : ""); dlg.targetTouched = true;
+  F.detail.value = `${v.structure}，${v.rest}；${v.split}`;
+  $("sd-tpl-info").textContent = `${v.split}。心率備用：${v.hr || "—"}。來源（${SRC_KIND[v.source_kind] || v.source_kind}）：${v.source}` +
+    (v.equiv ? "" : `。${v.consequence}`);
+  tgtHint();
+});
+function vdRow(v, cur) {
+  const meta = [v.structure, v.power, v.rest, `目標區 ${v.tiz_min} 分`, v.terrain === "hill" ? `⛰ 上坡 ${v.grade}` : "平路",
+    v.last ? `上次 ${md(v.last.date)}${v.last.outcome ? ` ${OUTC[v.last.outcome] || v.last.outcome}` : ""}` : "沒做過"].filter(Boolean);
+  return `<li class="${v.key === cur && !v.reps ? "cur" : ""}${v.fits ? "" : " off"}"><span class="t">${esc(v.title)}${v.key === cur && !v.reps ? "（目前）" : ""}</span>
+    <button class="btn" type="button" data-vk="${esc(v.key)}" data-vr="${v.reps || ""}"${v.fits ? "" : " disabled"}>換成這個</button>
+    <span class="m">${esc(meta.join(" · "))}<br>${esc(v.split)}${v.fits ? "" : ` · ${esc(v.why_not)}`}</span>
+    <span class="c${v.equiv ? "" : " neq"}">${esc(v.consequence)}；來源（${esc(SRC_KIND[v.source_kind] || v.source_kind)}）：${esc(v.source)}</span></li>`;
+}
+function openVd() {
+  const d = dlg.vars && dlg.vars.drawer;
+  if (!d) return;
+  $("vd-sub").textContent = `${d.rung_name} · ${md(F.day.value)}（週${wd(F.day.value)}）${dlg.vars.cap ? ` · 今天上限 ${dlg.vars.cap} 分` : " · 今天不限時間"}`;
+  $("vd-rec").textContent = d.recommended_reason ? `自動會選：${d.recommended_reason}` : "";
+  $("vd-eq").innerHTML = d.equivalent.map((v) => vdRow(v, d.current_key)).join("");
+  $("vd-ot").innerHTML = d.other.map((v) => vdRow(v, d.current_key)).join("");
+  $("vd-note").textContent = `換過的課算你的修改：自動重排不會蓋掉。${d.terrain_note}`;
+  $("vd-err").textContent = "";
+  $("vd").showModal();
+}
+$("sd-swap").addEventListener("click", openVd);
+$("vd").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-close]") || e.target === $("vd")) return $("vd").close();
+  const b = e.target.closest("button[data-vk]");
+  if (!b) return;
+  b.disabled = true;
+  try {
+    const body = { variant_key: b.dataset.vk };
+    if (b.dataset.vr) body.variant_reps = +b.dataset.vr;
+    const r = await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}`, body);
+    $("vd").close(); $("sd").close();
+    S.sel = r.day || S.sel;
+    await load();
+    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}`, "ok");
+  } catch (err) { $("vd-err").textContent = err.message; b.disabled = false; }
+});
 function openDlg(s, day) {
   closeMenus();
   const ro = s && !editable(s);
-  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null };
+  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null };
   $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
   const d = s ? s.day : day;
   $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
@@ -1253,6 +1363,7 @@ F.addEventListener("submit", async (e) => {
   if (!F.day.value || F.day.value < D.today) { $("sd-err").textContent = "不能排到過去的日子"; F.day.focus(); return; }
   const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
     tss: Math.round(estDialog().tss * 10) / 10 };
+  if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
   if (eqOn()) {
     const f = eqF();
     Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });

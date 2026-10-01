@@ -385,6 +385,30 @@ def test_api_sessions_initialize_and_edit(monkeypatch):
         assert prev["changes"] == []                                    # nothing new since initialization
 
 
+def test_api_swap_a_variant_is_a_user_edit_and_pushes_its_steps(monkeypatch):
+    # interval-prescription.md §C5.4: the 換一個 drawer / editor templates; a swap is the user's
+    # edit (reconcile rule 3: auto-replan never overrides it) and COROS gets the variant's steps
+    with Env(monkeypatch) as e:
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        q = next(s for s in ss if s["kind"] == "quality")
+        tpl = e.c.get(f"{API}/variants", params={"day": q["day"]}).json()
+        assert any(r["key"] == "v4a" for g in tpl["templates"]["groups"] for r in g["rows"])
+        r = e.c.patch(f"{API}/sessions/{q['uid']}", json={"variant_key": "v3c"})
+        assert r.status_code == 200
+        s = r.json()
+        assert s["edited"] and s["variant_key"] == "v3c" and s["swap"] == "user" and s["title"] == "VO2max 6×2:30"
+        d = e.c.get(f"{API}/variants", params={"uid": q["uid"]}).json()
+        assert d["drawer"]["rung"] == "z5c" and d["drawer"]["current_key"] == "v3c"
+        e.c.post(f"{API}/reconcile")
+        again = next(x for x in e.c.get(f"{API}/sessions").json()["sessions"] if x["uid"] == q["uid"])
+        assert again["variant_key"] == "v3c" and again["title"] == "VO2max 6×2:30"
+        assert e.c.patch(f"{API}/sessions/{q['uid']}", json={"variant_key": "zz"}).status_code == 400
+        e.c.post(f"{API}/push-coros?scope=day&day={q['day']}")
+        prog = next(p for p in e.fake.programs.values() if "6×2:30" in p["name"])
+        names = [x["name"] for x in prog["exercises"]]
+        assert "市區輕鬆跑到河濱" in names and names.count("走路或極慢跑") == 5
+
+
 def test_push_scopes_and_idempotency(monkeypatch):
     with Env(monkeypatch) as e:
         pv = e.c.get(f"{API}/push-coros/preview?scope=day&day=2026-10-01").json()
