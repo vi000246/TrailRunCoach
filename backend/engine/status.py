@@ -27,7 +27,12 @@ GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 
 # ---- thresholds, each with its source --------------------------------------
 SRC_PALLADINO = "Palladino（你的筆記：PMC 訓練負荷 / Ramp rate）"
-SRC_TP_TSB = "TrainingPeaks / Friel TSB 區間；Palladino A/B/C 賽 TSB"
+SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）TSB 區間：−10～−30 有效訓練、< −30 過度（教練）；Palladino A/B/C 賽 TSB"
+# weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
+# Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10–20 % hold = 推估, conservative.
+# The 「10 % 法則」 itself has no evidence (unsourced-rules.md §B2)
+SRC_VOLUME = ("週增量 > 20%：Nielsen 2014、Damsted 2019（同儕審查：增 20–30% 以上受傷風險升高）；"
+              "10–20% 先維持：推估（保守）")
 SRC_UA = "Uphill Athlete"
 SRC_SEILER = "Seiler 2006 強度分配；Palladino 金字塔 70–90% 輕鬆"
 SRC_BOSQUET = "Bosquet 2007 減量統合分析"
@@ -35,13 +40,16 @@ SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
 SRC_CHIANG = "江晏慶（你的筆記：越野跑周期化訓練）"
 SRC_NOTES = "你的筆記"
 
-RAMP = {"sustain": 3.0, "elite": 5.0, "short": 7.0}          # CTL/week (Palladino)
+# CTL/week. warn 5 / block 8: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits
+# most athletes, 10 is the ceiling; unsourced-rules.md §B2). "sustain" 3 = Palladino's 1–3 long-term (display)
+RAMP = {"sustain": 3.0, "elite": 5.0, "short": 8.0}
+SRC_RAMP_FRIEL = "Friel：CTL ramp 每週 5–8 適合多數人、10 是上限（教練）；Palladino：每週 +1–3 可長期維持"
 TSB_A = (10.0, 20.0)                                        # A race, taper end (Palladino)
 TSB_PRODUCTIVE = (-30.0, -10.0)                             # Friel: productive training
 TSB_OVERREACH = -30.0
 TSB_STALE = 25.0
 LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # Seiler / Palladino
-VOLUME_STEP_WATCH = 0.10                                    # UA: >10%/week
+VOLUME_STEP_WATCH = 0.10                                    # 推估 hold band 10–20 %; > 20 % block (SRC_VOLUME)
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
 DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # Friel (<5%), 徐國峰 (90' E <10%)
 SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）"
@@ -295,9 +303,10 @@ class Status:
                     level, verdict, action = WATCH, "減量期 CTL 還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
             else:
                 if ramp >= RAMP["short"]:
-                    level, verdict, action = BAD, f"每週 +{ramp:.1f}，≥7 是受傷與生病的風險區", "本週維持或減量，不要再加"
+                    level, verdict, action = (BAD, f"每週 +{ramp:.1f}，≥ {RAMP['short']:.0f} 超過 Friel 建議的 5–8",
+                                              "本週維持或減量，不要再加")
                 elif ramp >= RAMP["elite"]:
-                    level, verdict, action = WATCH, f"每週 +{ramp:.1f}，只能撐一兩週的增幅", "下週安排恢復週"
+                    level, verdict, action = WATCH, f"每週 +{ramp:.1f}（5–8：Friel 的上段），只能撐一兩週", "下週安排恢復週"
                 elif ramp >= 1:
                     level, verdict = GOOD, f"每週 +{ramp:.1f}，可長期維持的增幅（1–3；菁英 3–5）"
                 elif ramp > -1:
@@ -305,7 +314,7 @@ class Status:
                     action = "訓練期體能沒有成長：檢查每週時數是否卡住" if k in ("base", "specific") else ""
                 else:
                     level, verdict, action = WATCH, f"每週 {ramp:+.1f}，體能在下降", "補回訓練量，或確認是否在恢復"
-        return Indicator("fitness", "體能 CTL", level, txt, verdict, why, action, SRC_PALLADINO, now, spark,
+        return Indicator("fitness", "體能 CTL", level, txt, verdict, why, action, SRC_RAMP_FRIEL, now, spark,
                          {"ramp_week": ramp, "delta_28d": None if mo is None else now - mo})
 
     def i_form(self) -> Indicator:
@@ -368,14 +377,15 @@ class Status:
             lvl, v, act = (GOOD, "量降下來了", "") if last <= base6 * 0.7 else (WATCH, "恢復期量還太多", "本週再降")
         else:
             if step is not None and step > VOLUME_STEP_WATCH * 2:
-                lvl, v, act = BAD, f"上週比前一週多 {step * 100:+.0f}%，遠超過 10%", "本週維持上週的量，不要再加"
+                lvl, v, act = (BAD, f"上週比前一週多 {step * 100:+.0f}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）",
+                               "本週維持上週的量，不要再加")
             elif step is not None and step > VOLUME_STEP_WATCH:
-                lvl, v, act = WATCH, f"上週比前一週多 {step * 100:+.0f}%（建議 ≤ 10%）", "本週維持，下週再加"
+                lvl, v, act = WATCH, f"上週比前一週多 {step * 100:+.0f}%（10–20%：先維持，推估）", "本週維持，下週再加"
             elif last < avg4 * 0.6 and avg4 > 1:
                 lvl, v, act = WATCH, f"上週只有前 4 週平均的 {last / avg4 * 100:.0f}%", "如果不是刻意恢復，本週補回來"
             else:
                 lvl, v, act = GOOD, "量穩定" if step is None or abs(step) < 0.1 else f"週增幅 {step * 100:+.0f}%，在範圍內", ""
-        return Indicator("volume", "每週時數", lvl, txt, v, why, act, SRC_UA if k not in ("taper",) else SRC_BOSQUET,
+        return Indicator("volume", "每週時數", lvl, txt, v, why, act, SRC_VOLUME if k not in ("taper",) else SRC_BOSQUET,
                          last, spark, {"this_week": this, "last_week": last, "avg4": avg4, "step": step})
 
     def i_intensity(self) -> Indicator:
@@ -459,6 +469,10 @@ class Status:
         # the interval gate any more — that is i_gate (engine/quality_gate.py).
         # Display only, so the 參考 tier counts too (workout_review.DRIFT_REF_MIN_S:
         # 30–40 min after the warm-up, 自組), labelled; the gate reads the strict tier.
+        # drift v2 (docs/research/drift-algorithm.md §1.3, §5.4): one run is ±4–6 pp, so the
+        # number shown is the mean ± SE of the last 6 fair runs (engine/drift_agg.py), not a
+        # verdict on one run; the single runs stay in the spark.
+        from backend.engine import drift_agg as DA
         from backend.engine import workout_review as WR
         pts = WR.drift_series(self.ds, self.today, ref=True)
         fair = [p for p in pts if p["drift"] is not None]
@@ -466,16 +480,23 @@ class Status:
         spark = [[p["date"], round(p["drift"], 4)] for p in fair]
         note = "飄移是 AeT 測試用的，不是間歇門檻"
         ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": WR.REF_LABEL, "ref_tip": WR.REF_TIP}
-        if len(fair) < 2:
+        agg = DA.aggregate(fair)
+        if len(fair) < DA.AGG_MIN:
             return Indicator("drift", "心率飄移", NA, "–",
                              f"8 週內可判讀的輕鬆路跑不到 2 次（{len(pts)} 次符合條件）",
-                             "只算路跑、暖身 10 分鐘後還有 ≥ 40 分鐘（30–40 分算參考）、平均心率 ≤ AeT+3；"
-                             "有坡、有停頓、功率起伏大、快速結尾、> 25 °C 的不採用",
-                             "", SRC_FRIEL, spark=spark, extra={"fair": len(fair), "median": None, **ref_extra})
+                             "只算路跑、暖身後還有 ≥ 40 分鐘（30–40 分算參考）、平均心率 ≤ AeT+3；回程市區段當緩和、"
+                             "結尾靜止裁掉；有坡、有停頓、跑走、功率起伏（VI > 1.04）、前後半功率差 > 5%、快速結尾、"
+                             "> 25 °C 的不採用",
+                             "", SRC_FRIEL, spark=spark,
+                             extra={"fair": len(fair), "median": None, "agg": agg, **ref_extra})
         med = _median([p["drift"] for p in fair])
-        txt = _pct(med, 1) + ("（參考）" if n_ref == len(fair) else "（含參考）" if n_ref else "")
+        mean = agg["mean"]
+        txt = (_pct(mean, 1) + f" ±{agg['se'] * 100:.1f}" +
+               ("（參考）" if n_ref == len(fair) else "（含參考）" if n_ref else ""))
         mix = (f"，其中 {n_ref} 次是{WR.REF_LABEL}" if n_ref else "")
-        why = f"8 週內 {len(fair)} 次可判讀的輕鬆路跑{mix}，Pa:HR 中位數 {_pct(med, 1)}；{note}"
+        why = (f"8 週內 {len(fair)} 次可判讀的輕鬆路跑{mix}；最近 {agg['n']} 次平均 Pa:HR {DA.text(agg)}"
+               f"（單次 ±4–6 個百分點，所以看平均，不判單次；中位數 {_pct(med, 1)}）；{note}")
+        med = mean
         if med < DRIFT_GOOD:
             lvl, v, act = INFO, "< 5%：輕鬆跑後段心率穩", ""
         elif med < DRIFT_WATCH:
@@ -489,7 +510,8 @@ class Status:
             lvl, act = INFO, ""
             v = "> 10%（參考值為主，不當警示）：輕鬆跑可能太快"
         return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_FRIEL, med, spark,
-                         {"fair": len(fair), "median": med, **ref_extra})
+                         {"fair": len(fair), "median": _median([p["drift"] for p in fair]), "agg": agg,
+                          **ref_extra})
 
     def i_gate(self) -> Indicator:
         # 間歇門檻 (engine/quality_gate.py; docs/research/aerobic-base-readiness.md §4)
@@ -668,6 +690,11 @@ class Status:
         cp, lt, ae = last("cp"), last("lthr"), last("aethr")
         parts, worst = [], GOOD
         for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)):
+            if label == "AeT":
+                # B3 (unsourced-rules.md): no fixed expiry — the AeT test is due for a reason
+                # (quality_gate.aet_test_reason, below), not by age
+                parts.append("AeT 沒測過" if d is None else f"AeT {(self.today - d).days} 天前")
+                continue
             if d is None:
                 parts.append(f"{label} 沒測過")
                 worst = BAD
@@ -685,6 +712,18 @@ class Status:
         # which test week_plan should schedule: the CP test measures CP only; the
         # AeT test (engine/aet_test.py) has its own cadence
         cp_due = cp is None or (self.today - cp).days > TEST_DAYS_WATCH
+        # a break of ~8 weeks or more: redo the CP baseline after the re-entry block
+        # (WKO5 seminar notes: about two months off → new baseline; detraining.md §4.7)
+        try:
+            from backend.engine import reentry as RE
+            brk = RE.find(self.ds, self.today)
+        except Exception:                   # noqa: BLE001
+            brk = None
+        if brk and brk.get("cp_retest") and brk["end"] <= self.today.isoformat() and \
+                (cp is None or cp.isoformat() < brk["return"]):
+            cp_due = True
+            worst = WATCH if worst == GOOD else worst
+            why += f"；停跑 {brk['days']} 天：恢復期結束後重測 CP（WKO5 研討會筆記）"
         from backend.engine import cp_protocols as CPP
         proto = self._cp_protocol()
         if worst != GOOD:
@@ -740,6 +779,11 @@ class Status:
                     txt = "要更新"
                     v = f"{at['date']} 的 AeT 測試：飄移 {at['drift'] * 100:.1f}%，AeT = {at['aethr_suggest']} bpm{now}"
                     act = f"套用這次的 AeT（{at['aethr_suggest']} bpm）" + (f"；{act}" if act else "")
+                elif str(at.get("band") or "").startswith("base_"):
+                    # 徐國峰 90 分 / Friel: a base check, no AeT number to apply
+                    v2 = (f"{at['date']} 的有氧基礎測試：飄移 {at['drift'] * 100:.1f}%"
+                          f"（{AT.BAND_LABEL[at['band']]}）")
+                    why += f"；{v2}"
                 else:
                     step = "+5" if at["band"] == "below" else "−5"
                     act = (f"{at['date']} 的 AeT 測試飄移 {at['drift'] * 100:.1f}%（{AT.BAND_LABEL[at['band']]}）："
@@ -747,11 +791,12 @@ class Status:
             why += f"；最近一次 AeT 測試 {at['date']}：" + (f"飄移 {at['drift'] * 100:.1f}%" if at.get("ok")
                                                           else at.get("reason") or "不採用")
         gate = next((i.extra for i in getattr(self, "indicators", []) if i.id == "gate"), None) or {}
-        if gate.get("stale_aet") and not (at and at.get("band") == "at" and not extra["aet_test"]["applied"]):
-            wk = ((gate.get("aet") or {}).get("age_days") or 0) // 7
+        tr = gate.get("aet_test_reason")
+        if tr and not (at and at.get("band") == "at" and not extra["aet_test"]["applied"]):
+            # B3: the test is due for a reason, not a date (quality_gate.aet_test_reason)
             worst = WATCH if worst == GOOD else worst
-            v = f"AeT 已經 {wk} 週沒測，門檻改用不設門檻模式"
-            act = "重測 AeT" + (f"；{act}" if act else "")
+            v = f"建議 AeT 測試：{tr['text']}"
+            act = "排一次 AeT 測試（課表偏好的測試方式）" + (f"；{act}" if act else "")
         extra["cp_due"] = cp_due
         extra["aet_date"] = ae.isoformat() if ae else None
         extra["aet_last_test"] = at["date"] if at else None

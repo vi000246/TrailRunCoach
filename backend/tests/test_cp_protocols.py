@@ -507,7 +507,8 @@ def test_week_plan_builds_the_test_by_protocol(proto):
     wp = O.week_plan(ds, st2, today, prefs=PP.Prefs(cp_test_protocol=proto))
     if wp["mode"] == "recovery_week":
         pytest.skip("a recovery week has no test")
-    tests = [s for s in wp["sessions"] if s["kind"] == "test"]
+    # CP tests only: the AeT test (its own reason and protocol, engine/aet_test.py) may be due too
+    tests = [s for s in wp["sessions"] if s["kind"] == "test" and s["id"] != "test_aet"]
     if proto == "race":
         assert not tests
         assert any(CPP.NOTE_RACE in n["text"] for n in wp["notes"])            # the note instead

@@ -385,8 +385,13 @@ def _prefs_body(p) -> dict:
     from backend.engine import quality_gate as QG
     # gate_options: the 間歇門檻 hover texts (the page adds "usable with your data"
     # from GET /prefs/gate, which needs the dataset)
+    from backend.engine import aet_test as AT
+    # aet_options: the AeT 測試方式 hover texts (duration, terrain, what is held, judging, source)
     return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
-            "gate_options": QG.option_texts()}
+            "gate_options": QG.option_texts(),
+            "aet_options": {k: {"label": "自動（標準：徐國峰 90 分；備案 UA 40 分）" if k == "auto"
+                                else AT.PROTOCOLS[k]["label"], "tip": AT.protocol_tip(k)}
+                            for k in AT.PROTOCOL_CHOICES}}
 
 
 @router.get("/prefs/gate")

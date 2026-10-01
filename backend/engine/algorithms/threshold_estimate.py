@@ -191,3 +191,79 @@ def estimate_aet(points: Iterable[DriftPoint], lthr: Optional[float] = None,
                            f"推算值 {aet:.0f} 超出資料範圍（{x.min():.0f}–{x.max():.0f} bpm），先不採用")
     return AetEstimate(round(aet), len(pts), float(slope * 10), hi_ok,
                        f"{len(pts)} 次穩定輕鬆跑：心率每 +10 bpm 飄移 +{slope * 1000:.1f}%，在 {aet:.0f} bpm 達到 5%")
+
+
+# ---------------------------------------------------------------------------
+# the aggregated AeT estimate with a standard error (drift v2)
+#
+# docs/research/drift-algorithm.md §5.4 and unsourced-rules.md §B3: single-run
+# drift is ±4–6 pp, so the AeT comes from many runs — a regression of drift on
+# first-half HR weighted 1/SE² (推估), crossing 5 % at the estimate. The AeT
+# counts as valid when that estimate's SE ≤ 3 bpm and the last 6 points show
+# no one-way shift > 5 bpm (both 推估, B3); otherwise 「需要測試」. estimate_aet
+# above is left as it is (the race-power back-test reads it).
+# ---------------------------------------------------------------------------
+
+AET_MAX_SE_BPM = 3.0            # 推估 (unsourced-rules.md B3)
+AET_SHIFT_BPM = 5.0             # 推估 (B3): the last 6 points' mean horizontal offset from the line
+AET_SE_FLOOR = 0.005            # 推估: a point's SE is never taken below 0.5 pp (else one run weighs infinitely)
+AET_SE_DEFAULT = 0.05           # 推估: a point without an SE gets the single-run noise (DRIFT §1.3: 4–6 pp)
+
+
+@dataclass
+class AetAggregate:
+    value: Optional[float]
+    se: Optional[float]                  # bpm
+    n: int
+    slope_per_10bpm: Optional[float]
+    shift_bpm: Optional[float]           # the last `last` points: + = they put AeT higher than the fit
+    valid: bool
+    reason: str
+
+
+def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_runs: int = AET_MIN_RUNS,
+                  last: int = AET_MIN_RUNS) -> AetAggregate:
+    """`points`: (first-half HR, drift, SE or None), oldest first. Weighted
+    least squares drift = a + b·HR (w = 1/SE²), AeT = (5 % − a) / b. Its SE by
+    the delta method on the fit's covariance, scaled by the reduced χ² when
+    that is > 1 (the points scatter more than their SEs say — DRIFT §1.3:
+    cross-run SD ≈ single-run SE). Not extrapolated (data range ± 5 bpm,
+    below LTHR − 3, as estimate_aet)."""
+    pts = [(float(h), float(d), max(float(se) if se is not None else AET_SE_DEFAULT, AET_SE_FLOOR))
+           for h, d, se in points if h is not None and d is not None and abs(d) < 0.30]
+    n = len(pts)
+    bad = lambda why, slope=None, est=None, se=None: AetAggregate(est, se, n, slope, None, False, why)
+    if n < min_runs:
+        return bad(f"只有 {n} 次可用的穩定跑飄移（需要 ≥ {min_runs} 次）：AeT 需要測試")
+    x = np.array([p[0] for p in pts])
+    y = np.array([p[1] for p in pts])
+    w = 1.0 / np.array([p[2] for p in pts]) ** 2
+    if x.std() < 3:
+        return bad("這些跑步的心率都差不多，看不出飄移隨心率的變化：AeT 需要測試")
+    X = np.column_stack([np.ones(n), x])
+    A = X.T @ (X * w[:, None])
+    beta = np.linalg.solve(A, X.T @ (w * y))
+    r = y - X @ beta
+    chi2 = float(np.sum(w * r ** 2)) / max(1, n - 2)
+    cov = np.linalg.inv(A) * max(1.0, chi2)
+    a, b = float(beta[0]), float(beta[1])
+    if b <= 0:
+        return bad("心率越高飄移沒有跟著變大，找不出 AeT：需要測試", b * 10)
+    aet = (AET_DRIFT - a) / b
+    lo, hi = x.min() - 5, x.max() + 5
+    if lthr:
+        hi = min(hi, lthr - 3)
+    g = np.array([-1.0 / b, -aet / b])
+    se = float(np.sqrt(max(0.0, g @ cov @ g)))
+    if not lo <= aet <= hi:
+        return bad(f"推算值 {aet:.0f} 超出資料範圍（{x.min():.0f}–{x.max():.0f} bpm）：AeT 需要測試", b * 10, None, se)
+    shift = float(-np.mean(r[-last:]) / b)
+    if se > AET_MAX_SE_BPM:
+        why = f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（標準誤 > {AET_MAX_SE_BPM:.0f}）：還不夠準，需要測試"
+        return AetAggregate(aet, se, n, b * 10, shift, False, why)
+    if abs(shift) > AET_SHIFT_BPM:
+        why = (f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm，但最近 {min(last, n)} 次一致偏"
+               f"{'高' if shift > 0 else '低'} {abs(shift):.0f} bpm（> {AET_SHIFT_BPM:.0f}）：AeT 可能變了，需要測試")
+        return AetAggregate(aet, se, n, b * 10, shift, False, why)
+    return AetAggregate(aet, se, n, b * 10, shift, True,
+                        f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（≤ {AET_MAX_SE_BPM:.0f}），最近 {min(last, n)} 次沒有偏移")

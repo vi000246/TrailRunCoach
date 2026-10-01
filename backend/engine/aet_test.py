@@ -64,12 +64,47 @@ BAND_LOW, BAND_HIGH = 0.035, 0.05
 FAST_FINISH = 0.05              # 自訂
 HEAT_C = 25.0                   # 自訂 (徐國峰's condition applied to the analysis)
 MAX_STOPPED = 0.05
-MAX_CV = 0.15                   # threshold_estimate.AET_MAX_POWER_CV
+MAX_CV = 0.15                   # the old unsourced 30-s CV rule: information only now (drift v2 uses VI)
 START_BELOW = 5.0               # 自訂: 0.89 × LTHR − 5 as the starting HR without an estimate
 POWER_OF_CP = 0.75              # 自訂: starting power when nothing better is known (Palladino easy ≤ 80 % CP)
-EVERY_WEEKS = 5                 # 自訂: suggest at most once every 5 base weeks (the doc: 4–6)
-RECENT_DAYS = 28                # a test in the last 4 weeks → don't suggest another
-STALE_DAYS = 42                 # plan AeT older than 6 weeks → due again (i_testing's 4–6 weeks)
+RECENT_DAYS = 28                # 推估: a test in the last 4 weeks → don't suggest another (minimum spacing)
+# B3 (unsourced-rules.md): no fixed expiry / cadence any more (16 weeks, 4–6 weeks, every 5 base
+# weeks: no source). The test is due only for a reason (quality_gate.aet_test_reason).
+HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；台灣教練、Lafrenz 2008）"
+
+SRC_UA_TEST = "Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/，教練）"
+
+# ---- the protocols (課表偏好 plan.prefs.aet_test_protocol) -------------------------
+# judge: ua = halves, UA's 3.5 / 5 % bands (finds the AeT HR); evoke = halves, > 5 % = above
+# AeT; friel = halves < 5 % / 5–10 / > 10 (aerobic endurance at AeT); xu = HR at minute 10 vs
+# minute 90, < 10 % = the base is sufficient (徐國峰's own comparison, not halves).
+PROTOCOLS = {
+    "xu90": {"label": "徐國峰 90 分鐘平路 1 區", "warm": 10, "main": 80, "cool": 0, "judge": "xu",
+             "title": "AeT 飄移測試 徐國峰 90 分", "terrain": "平坦路段（就是週末那一次 LSD）",
+             "hold": "配速固定在 E 配速，心率自然變", "rule": "第 10 分鐘心率 A、第 90 分鐘心率 B：(B − A) ÷ A < 10% 有氧基礎夠（5% 內國家級）",
+             "source": "台灣教練"},
+    "ua60": {"label": "Uphill Athlete 60 分", "warm": 15, "main": 60, "cool": 5, "judge": "ua",
+             "title": "AeT 飄移測試 60 分", "terrain": "跑步機 2–3% 或平路環線（不要山路）",
+             "hold": "固定功率（UA 原文固定配速；有 Stryd 用功率較穩）", "rule": "前半對後半：< 3.5% 低於 AeT、3.5–5% 前半心率就是 AeT、> 5% 起始太高",
+             "source": SRC_UA_TEST},
+    "ua40": {"label": "Uphill Athlete 40 分（最短版）", "warm": 10, "main": 40, "cool": 0, "judge": "ua",
+             "title": "AeT 飄移測試 40 分", "terrain": "跑步機 2–3% 或平路環線",
+             "hold": "固定功率", "rule": "同 UA 60 分（\"If you only have 40 minutes, do that.\"、不建議短於 40 分）",
+             "source": SRC_UA_TEST},
+    "evoke60": {"label": "Evoke 60 分", "warm": 10, "main": 60, "cool": 5, "judge": "evoke",
+                "title": "AeT 飄移測試 Evoke 60 分", "terrain": "跑步機 2% 或平的環線（每 1.6 km 爬升 < 30 m、不要折返）",
+                "hold": "固定速度（\"DO NOT TOUCH THE SPEED CONTROL\"）", "rule": "1 小時內心率升 > 5% → 起始在 AeT 以上；第 10 分鐘已高 10 下還在升 → 提早放棄",
+                "source": "Evoke（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/）"},
+    "friel": {"label": "Friel 1 小時 decoupling", "warm": 10, "main": 60, "cool": 5, "judge": "friel",
+              "title": "AeT 飄移測試 Friel 60 分", "terrain": "穩定的平路",
+              "hold": "在 AeT 心率附近穩定跑（1–2 小時取下限 1 小時）", "rule": "前後半 Pa:HR／Pw:HR < 5% 有氧耐力夠、5–10% 還在進步、> 10% 不足",
+              "source": "Friel（https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/，教練）"},
+}
+STANDARD = "xu90"               # the auto choice — justification in aerobic-base-readiness.md §6.3
+BACKUP = "ua40"                 # when the standard doesn't fit (a long-day cap < 90 min)
+PROTOCOL_CHOICES = ("auto",) + tuple(PROTOCOLS)
+XU_MIN = sum((PROTOCOLS["xu90"]["warm"], PROTOCOLS["xu90"]["main"]))      # 90
+TITLE_RE = re.compile(r"飄移測試\s*(?:(徐國峰|Evoke|Friel)\s*)?(\d+)\s*分")
 
 SRC = ("Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/："
        "\"If you only have 40 minutes, do that.\"、不建議短於 40 分；前 20 分對後 20 分，< 3.5% / 3.5–5% / > 5%）；"
@@ -78,7 +113,9 @@ TITLES = {"standard": "AeT 飄移測試 60 分", "short": "AeT 飄移測試 40 �
 TITLE = TITLES["standard"]
 AT_TITLE_LEN = re.compile(r"飄移測試\s*(\d+)\s*分")
 PROTOCOL = "aet"                # the stored session's `protocol` (not a cp_protocols protocol)
-BAND_LABEL = {"below": "低於 AeT", "at": "就是 AeT", "above": "高於 AeT"}
+BAND_LABEL = {"below": "低於 AeT", "at": "就是 AeT", "above": "高於 AeT",
+              "base_ok": "有氧基礎夠", "base_mid": "還在進步", "base_not": "有氧基礎還不夠"}
+XU_GOOD, FRIEL_GOOD, FRIEL_BAD = 0.10, 0.05, 0.10
 
 
 def _f(v) -> Optional[float]:
@@ -89,9 +126,18 @@ def _f(v) -> Optional[float]:
     return None if math.isnan(x) or math.isinf(x) else x
 
 
-def band_of(drift: Optional[float]) -> Optional[str]:
+def band_of(drift: Optional[float], judge: str = "ua") -> Optional[str]:
+    """The protocol's verdict: ua below / at / above (3.5 / 5 %); evoke at
+    (≤ 5 %: the start HR is at or below AeT) / above; friel base_ok (< 5 %) /
+    base_mid / base_not (> 10 %); xu base_ok (< 10 %) / base_not."""
     if drift is None:
         return None
+    if judge == "xu":
+        return "base_ok" if drift < XU_GOOD else "base_not"
+    if judge == "friel":
+        return "base_ok" if drift < FRIEL_GOOD else "base_mid" if drift <= FRIEL_BAD else "base_not"
+    if judge == "evoke":
+        return "at" if drift <= BAND_HIGH else "above"
     if drift < BAND_LOW:
         return "below"
     if drift <= BAND_HIGH:
@@ -99,15 +145,47 @@ def band_of(drift: Optional[float]) -> Optional[str]:
     return "above"
 
 
+def protocol_of_title(title: Optional[str]) -> Optional[str]:
+    """The protocol key of a stored AeT-test title (TITLE_RE), None when unknown."""
+    m = TITLE_RE.search(title or "")
+    if not m:
+        return None
+    who, n = m.group(1), int(m.group(2))
+    return {"徐國峰": "xu90", "Evoke": "evoke60", "Friel": "friel"}.get(who) or ("ua60" if n >= 60 else "ua40")
+
+
+def resolve_protocol(pref: Optional[str], cap_weekday: Optional[int] = None,
+                     cap_long: Optional[int] = None) -> str:
+    """The protocol to schedule. auto = STANDARD (徐國峰 90 min, on the long
+    day) unless the long-day cap can't fit 90 min → BACKUP (UA 40). ua60 under
+    a weekday cap < 80 → ua40 (the old variant_for rule). Others as chosen."""
+    p = pref if pref in PROTOCOLS else "auto"
+    if p == "auto":
+        lc = cap_long if cap_long is not None else None
+        return STANDARD if lc is None or lc >= XU_MIN else BACKUP
+    if p == "ua60" and cap_weekday is not None and cap_weekday < STD_MIN:
+        return "ua40"
+    if p == "xu90" and cap_long is not None and cap_long < XU_MIN:
+        return BACKUP
+    return p
+
+
+def is_xu(s: dict) -> bool:
+    return protocol_of_title(s.get("title")) == "xu90"
+
+
 def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[float] = None,
             trail: bool = False, warm_s: float = WARM_S, main_s: float = MAIN_MAX_S,
-            temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
-    """UA drift test on one recording. `ok` False with `reason` when it isn't a
+            temp_c: Optional[float] = None, temp_src: Optional[str] = None, judge: str = "ua") -> dict:
+    """Halves drift test on one recording (UA / Evoke / Friel by `judge`;
+    徐國峰's 10-vs-90 is analyze_xu). `ok` False with `reason` when it isn't a
     fair test. `temp_c` (with `temp_src`, route_weather / watch) overrides the
     mean of the `temp` channel over the block."""
-    from backend.engine.workout_review import MAX_DT, STOP_KMH, _arr, _grid1, _hms
+    if judge == "xu":
+        return analyze_xu(t, hr, speed, temp, climb_m_per_km, trail, temp_c, temp_src)
+    from backend.engine.workout_review import DRIFT_MAX_VI, MAX_DT, STOP_KMH, _arr, _grid1, _hms, power_vi
     out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
-           "main_s": None, "band": None, "basis": None}
+           "main_s": None, "band": None, "basis": None, "judge": judge, "vi": None, "cv30": None}
     if hr is None or not np.isfinite(np.asarray(hr, dtype=float)).any():
         out["reason"] = "沒有心率"
         return out
@@ -162,9 +240,12 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
         return out
     ow = o[m]
     if series.get("power") is not None:
-        p30 = np.convolve(ow, np.ones(30) / 30, "valid")
-        if p30.mean() > 0 and p30.std() / p30.mean() > MAX_CV:
-            out["reason"] = f"功率起伏大（變異 {p30.std() / p30.mean() * 100:.0f}% > 15%）：要固定功率"
+        # drift v2: VI = NP30 / AP on the block's moving samples (the same function as drift_of);
+        # the old 30-s CV > 15 % (no source) stays as information
+        vi, cv = power_vi(np.where(m, series["power"], np.nan), m)
+        out.update(vi=vi, cv30=cv)
+        if vi is not None and vi > DRIFT_MAX_VI:
+            out["reason"] = f"功率起伏大（VI {vi:.3f} > {DRIFT_MAX_VI:.2f}，推估）：要固定功率"
             return out
     k = max(1, int(len(ow) * 0.1))
     if ow[:-k].mean() > 0 and ow[-k:].mean() > (1 + FAST_FINISH) * ow[:-k].mean():
@@ -199,7 +280,44 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
     if d is None:
         out["reason"] = "有效資料不夠"
         return out
-    out.update(ok=True, drift=d, hr1=h1, hr2=h2, band=band_of(d), basis=basis)
+    out.update(ok=True, drift=d, hr1=h1, hr2=h2, band=band_of(d, judge), basis=basis)
+    return out
+
+
+def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = None, trail: bool = False,
+               temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
+    """徐國峰's 90-minute test (notes L62–L67): flat, ≤ 25 °C, every stop ≤
+    30 s; HR at minute 10 (A) vs minute 90 (B), each the ±1-min mean;
+    drift = (B − A) ÷ A; < 10 % = the base is sufficient. Not halves."""
+    from backend.engine import base_check as BC
+    from backend.engine.quality_gate import xu_drift_of
+    out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
+           "main_s": None, "band": None, "basis": "HR 第 10→90 分", "judge": "xu"}
+    if trail or (climb_m_per_km is not None and climb_m_per_km >= BC.XU_FLAT_M_PER_KM):
+        out["reason"] = "有坡（越野或每公里爬升 ≥ 20 m）：徐國峰的測試要全程平坦"
+        return out
+    r = xu_drift_of(t, hr)
+    if r is None:
+        tt = np.asarray(t, dtype=float)
+        dur = float(np.nanmax(tt) - np.nanmin(tt)) if np.isfinite(tt).any() else 0.0
+        out["reason"] = f"只跑了 {dur / 60:.0f} 分鐘：要連續跑到第 91 分鐘（徐國峰：時間太短看不出後段心率會不會飄）"
+        return out
+    stop = BC.longest_stop(t, speed)
+    if stop > BC.XU_STOP_S:
+        out["reason"] = f"第 10–90 分鐘停了 {stop:.0f} 秒：補給每次不能停超過 30 秒（徐國峰）"
+        return out
+    if temp_c is None and temp is not None:
+        tp = np.asarray(temp, dtype=float)
+        if np.isfinite(tp).any():
+            temp_c, temp_src = float(np.nanmean(tp)), "watch"
+    out["temp_c"], out["temp_src"] = temp_c, temp_src if temp_c is not None else None
+    if temp_c is not None and temp_c > HEAT_C:
+        from backend.engine.workout_review import TEMP_SRC_LABEL
+        out["reason"] = (f"{TEMP_SRC_LABEL.get(temp_src, '平均氣溫')} {temp_c:.0f} °C（> 25 °C）：熱會讓心率偏高、"
+                         "飄移失真，換 25 °C 以下的時段（徐國峰）")
+        return out
+    d = r["drift"]
+    out.update(ok=True, drift=d, hr1=r["hr10"], hr2=r["hr90"], main_s=80 * 60.0, band=band_of(d, "xu"))
     return out
 
 
@@ -208,6 +326,22 @@ def lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
     if not r.get("ok"):
         return [r.get("reason") or "不是有效的 AeT 測試"]
     d, h1 = r["drift"], r["hr1"]
+    judge = r.get("judge") or "ua"
+    if judge == "xu":
+        head = f"徐國峰 90 分鐘：第 10 分 {h1:.0f} → 第 90 分 {r['hr2']:.0f} bpm，飄移 {d * 100:.1f}%"
+        if r["band"] == "base_ok":
+            return [f"{head} < 10%：有氧基礎夠（5% 內國家級），可以加 5 區（徐國峰）",
+                    "這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由多次飄移的聚合估計"]
+        return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑（徐國峰）", "5 區先不排；3 區照排"]
+    if judge == "friel":
+        head = f"{r['basis']} 飄移 {d * 100:.1f}%（Friel 1 小時）"
+        return [{"base_ok": f"{head} < 5%：有氧耐力夠", "base_mid": f"{head}（5–10%）：有氧耐力還在進步",
+                 "base_not": f"{head} > 10%：有氧耐力不足"}[r["band"]]]
+    if judge == "evoke":
+        head = f"{r['basis']} 飄移 {d * 100:.1f}%（Evoke 60 分）"
+        if r["band"] == "at":
+            return [f"{head} ≤ 5%：起始心率 {h1:.0f} bpm 在 AeT 或以下", "可以按「套用這次的 AeT」（保守：取起始心率）"]
+        return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", f"下次起始心率 −5 bpm（約 {h1 - 5:.0f}）再測一次"]
     head = f"{r['basis']} 飄移 {d * 100:.1f}%（暖身後 {r['main_s'] / 60:.0f} 分）"
     now = f"（目前 {aet_now:.0f}）" if aet_now else ""
     if r["band"] == "below":
@@ -221,6 +355,9 @@ def warm_for(title: str, duration_s: float) -> float:
     """The warm-up to cut: from the test's title (「AeT 飄移測試 60 分」 → the
     standard 15′, 「… 40 分」 → the short 10′), else 15′ when the run is long
     enough for 40′ after it, else 10′ (自組)."""
+    p = protocol_of_title(title)
+    if p:
+        return PROTOCOLS[p]["warm"] * 60.0
     m = AT_TITLE_LEN.search(title or "")
     if m:
         return WARM_STD_S if int(m.group(1)) >= 60 else WARM_S
@@ -228,6 +365,8 @@ def warm_for(title: str, duration_s: float) -> float:
 
 
 def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
+    """The analysis of the protocol the title (or the scheduled session's)
+    names: warm-up cut, window and judging rule (PROTOCOLS); untitled = UA."""
     from backend.engine import workout_review as WR
     s = WR._samples(ds, w)
     if s is None:
@@ -236,10 +375,15 @@ def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     temp = ds.channel(w.idx, "temperature")
     tc, src = WR.activity_temp(ds, w, None)       # the archive only; the watch is averaged over the block
     sched = WR.scheduled_aet_test(ds, w) or {}
-    title = WR._title(w) if AT_TITLE_LEN.search(WR._title(w) or "") else (sched.get("title") or WR._title(w))
+    own = WR._title(w) or ""
+    title = own if (TITLE_RE.search(own) or AT_TITLE_LEN.search(own)) else (sched.get("title") or own)
+    proto = protocol_of_title(title) or "ua60"
+    judge = PROTOCOLS[proto]["judge"]
     warm = warm_for(title, _f(w.metrics.get("duration")) or float(s["t"][-1] - s["t"][0]))
+    main = PROTOCOLS[proto]["main"] * 60.0 if proto in ("evoke60", "friel") else MAIN_MAX_S
     return {**analyze(s["t"], s["hr"], s["speed"], s["power"], temp, m.get("climb_m_per_km"),
-                      trail="runningtrail" in w.tags, warm_s=warm, temp_c=tc, temp_src=src), "warm_s": warm}
+                      trail="runningtrail" in w.tags, warm_s=warm, main_s=main, temp_c=tc, temp_src=src,
+                      judge=judge), "warm_s": warm, "protocol": proto}
 
 
 def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
@@ -267,7 +411,8 @@ def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
         now = m.get("aet")
         sug = round(r["hr1"]) if r.get("ok") and r["band"] == "at" else None
         found = {"idx": w.idx, "date": WR._wdate(w).isoformat(), **{k: r.get(k) for k in (
-            "ok", "reason", "hr1", "drift", "pw_drift", "pa_drift", "band", "basis", "main_s")},
+            "ok", "reason", "hr1", "drift", "pw_drift", "pa_drift", "band", "basis", "main_s", "judge",
+            "protocol")},
             "aethr_suggest": sug, "aethr_now": now, "delta": (sug - now) if sug is not None and now else None}
     WR._flush(ds)
     return found
@@ -301,66 +446,109 @@ def start_power(cp: Optional[float]) -> Optional[float]:
     return POWER_OF_CP * cp if cp else None
 
 
-def due(today: dt.date, kind: Optional[str], base_start: Optional[str], aet_date: Optional[str],
+def due(today: dt.date, kind: Optional[str], base_start: Optional[str], reason,
         last_test: Optional[str]) -> bool:
-    """Suggest the AeT test this week? Base phase; no measured AeT or one older
-    than 6 weeks; no test in the last 4 weeks; and at most once every
-    EVERY_WEEKS base weeks (week 2, 7, 12… of the base phase — 自訂)."""
+    """Suggest the AeT test this week? Base phase, a reason
+    (quality_gate.aet_test_reason: no data for ~6 weeks, the aggregate's SE
+    too large, a shift, the estimate moved — B3 and the Z5 lifecycle) and no
+    test in the last RECENT_DAYS (推估 spacing). No fixed cadence any more.
+    `reason` may be the reason dict or any truthy value; a date string (the
+    old signature) is not a reason."""
     if (kind or "base") != "base":
         return False
-    if aet_date and (today - dt.date.fromisoformat(aet_date)).days <= STALE_DAYS:
+    if not reason or isinstance(reason, str):
         return False
     if last_test and (today - dt.date.fromisoformat(last_test)).days < RECENT_DAYS:
         return False
-    monday = today - dt.timedelta(days=today.weekday())
-    if base_start:
-        b = dt.date.fromisoformat(base_start)
-        k = (monday - (b - dt.timedelta(days=b.weekday()))).days // 7
-    else:
-        k = monday.toordinal() // 7
-    return k % EVERY_WEEKS == 1
+    return True
 
 
 def variant_for(cap_weekday: Optional[int]) -> str:
-    """standard (80′) without a weekday cap or with one ≥ 80 min; short (UA's
-    40′ minimum, 50′ in all) when the cap can't fit the standard test."""
+    """UA lengths only: standard (80′) without a weekday cap or with one ≥ 80
+    min; short (UA's 40′ minimum, 50′ in all) under a smaller cap."""
     return "short" if cap_weekday is not None and cap_weekday < STD_MIN else "standard"
 
 
 def is_short(s: dict) -> bool:
-    """A planned AeT test of the short (50-min) length."""
+    """A planned AeT test of the short (≤ 50-min) length."""
+    p = protocol_of_title(s.get("title"))
+    if p:
+        return sum(PROTOCOLS[p][k] for k in ("warm", "main", "cool")) <= SHORT_MIN
     m = AT_TITLE_LEN.search(s.get("title") or "")
     return int(m.group(1)) < 60 if m else (s.get("minutes") or STD_MIN) <= SHORT_MIN
 
 
-def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Optional[int] = None) -> dict:
-    """The schedulable session (kind test, id test_aet), its length by the 課表偏好
-    weekday cap (variant_for): standard 15′ + 60′ + 5′ = 80 min, or UA's minimum
-    10′ + 40′ (cool-down optional) = 50 min — the detail says which and why. It
-    keeps 「暖身 N 分」「測試 N 分」「緩和 N 分」 for the COROS step builder."""
-    v = variant_for(cap_weekday)
-    warm, main, cool = VARIANTS[v]
-    tgt = []
-    if p0:
-        tgt.append(f"固定功率 {p0:.0f} W（±3%）")
-    if hr0:
-        tgt.append(f"心率從 {hr0:.0f} 附近開始")
-    if v == "short":
-        why = (f"平日上限 {cap_weekday} 分 → 用 UA 最短 40 分版本"
-               + ("（還是要 50 分：UA 不建議短於 40 分，不受上限）" if cap_weekday < SHORT_MIN else "") + "：")
-        body = (f"暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分固定功率不要調；中途不停；"
-                "緩和可省略（0–5 分慢跑）。")
+def protocol_tip(key: str) -> str:
+    """The 課表偏好 hover: duration, terrain, what is held, how it is judged, source."""
+    if key == "auto":
+        return (f"自動：標準版＝{PROTOCOLS[STANDARD]['label']}（放在週末長跑日，就是那次 LSD）；"
+                f"長跑日上限 < 90 分放不下時改用備案 {PROTOCOLS[BACKUP]['label']}（平日）。"
+                "選標準版的理由：你的教練徐國峰說檢測沒辦法縮短太多、時間太短看不出後段心率會不會飄；"
+                "UA 接受 40 分、Evoke 60 分、Friel 1–2 小時；沒有任何長度有同儕審查的驗證。")
+    p = PROTOCOLS[key]
+    total = p["warm"] + p["main"] + p["cool"]
+    return (f"{p['label']}：共 {total} 分（暖身 {p['warm']}＋測試 {p['main']}"
+            + (f"＋緩和 {p['cool']}" if p["cool"] else "") + f" 分）；場地：{p['terrain']}；固定：{p['hold']}；"
+            f"判讀：{p['rule']}；來源：{p['source']}")
+
+
+def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Optional[int] = None,
+            protocol: Optional[str] = None, cap_long: Optional[int] = None) -> dict:
+    """The schedulable session (kind test, id test_aet) of the chosen protocol
+    (課表偏好 aet_test_protocol; resolve_protocol). No protocol given = the old
+    UA behaviour by the weekday cap (variant_for). The detail keeps 「暖身 N
+    分」「測試 N 分」「緩和 N 分」 for the COROS step builder."""
+    if protocol is None:
+        key = "ua40" if variant_for(cap_weekday) == "short" else "ua60"
     else:
-        why = "沒有平日時間上限 → 標準版 80 分：" if cap_weekday is None else \
-            f"平日上限 {cap_weekday} 分放得下 → 標準版 80 分："
-        body = (f"暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分固定功率不要調"
-                f"（至少 40 分）；中途不停；緩和 {cool} 分。")
-    return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": TITLES[v], "minutes": warm + main + cool,
+        key = resolve_protocol(protocol, cap_weekday, cap_long)
+    p = PROTOCOLS[key]
+    warm, main, cool = p["warm"], p["main"], p["cool"]
+    tgt = []
+    if key == "xu90":
+        aet = th.get("aet") if isinstance(th, dict) else None
+        tgt.append("配速固定在 E 配速，不要調")
+        tgt.append(f"心率 1 區（≤ AeT {aet:.0f}）" if aet else "心率 1 區（≤ AeT）")
+        why = ("自動：標準版徐國峰 90 分鐘（就是週末那次 LSD）：" if protocol == "auto" else "徐國峰 90 分鐘：")
+        body = (f"暖身 {warm} 分，接著測試 {main} 分：平坦路段、配速盡量不變，記下第 10 分鐘和第 90 分鐘的心率；"
+                "補給每次停不超過 30 秒；(第 90 分 − 第 10 分) ÷ 第 10 分 < 10% 有氧基礎夠。")
+        place = "平坦路段（河濱）、不要山路；"
+    else:
+        if p0:
+            tgt.append(f"固定功率 {p0:.0f} W（±3%）")
+        if hr0:
+            tgt.append(f"心率從 {hr0:.0f} 附近開始")
+        if key == "ua40" and protocol in (None, "auto", "ua60", "xu90"):
+            why = ((f"平日上限 {cap_weekday} 分 → 用 UA 最短 40 分版本" if cap_weekday is not None else
+                    "長跑日放不下 90 分 → 備案 UA 最短 40 分版本")
+                   + ("（還是要 50 分：UA 不建議短於 40 分，不受上限）"
+                      if cap_weekday is not None and cap_weekday < SHORT_MIN else "") + "：")
+        elif key == "ua60":
+            why = "沒有平日時間上限 → UA 標準版 80 分：" if cap_weekday is None else \
+                f"平日上限 {cap_weekday} 分放得下 → UA 標準版 80 分："
+        else:
+            why = f"{p['label']}："
+        held = "固定功率不要調" if key != "friel" else "心率在 AeT 附近穩定跑"
+        body = (f"暖身 {warm} 分到開始流汗（心率不超過起始心率），接著測試 {main} 分{held}"
+                + ("（至少 40 分）" if key == "ua60" else "") + "；中途不停；"
+                + (f"緩和 {cool} 分。" if cool else "緩和可省略（0–5 分慢跑）。"))
+        place = "冷氣房跑步機 2–3%＋電扇（首選），或平路環線，不要山路；"
+    early = ("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）"
+             if p["judge"] in ("ua", "evoke") else "")
+    return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": p["title"], "minutes": warm + main + cool,
             "target": "；".join(tgt) or "固定功率（±3%），不要調",
-            "detail": why + "冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線，不要山路；" + body +
-                      "記下溫度；熱的時候結果會偏高。"
-                      "主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）",
-            "source": SRC, "tss": (warm + main + cool) / 60 * 50}
+            "detail": why + place + body + HEAT_TEXT + "；記下溫度。" + early,
+            "source": p["source"] if key != "ua60" and key != "ua40" else SRC, "tss": (warm + main + cool) / 60 * 50}
+
+
+def pick_day_xu(avail: list, long_wd: int, cap_weekday: Optional[int] = None) -> Optional[dt.date]:
+    """The 徐國峰 test is the weekend LSD: the long weekday first, then the
+    other weekend day, then (only without a weekday cap, or one ≥ 90) any day."""
+    order = [d for d in avail if d.weekday() == long_wd] + \
+            [d for d in avail if d.weekday() in (5, 6) and d.weekday() != long_wd]
+    if cap_weekday is None or cap_weekday >= XU_MIN:
+        order += [d for d in avail if d.weekday() < 5]
+    return order[0] if order else None
 
 
 # 課表偏好 plan.prefs.aet_test_days: the athlete trail-runs on weekends, so the

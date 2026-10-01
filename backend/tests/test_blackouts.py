@@ -246,12 +246,11 @@ def test_projection_weeks_honor_blackouts_hours_note_and_step():
     lost_h = base[i]["hours"] * 3 / 7
     assert any(n["text"] == f"10/16–10/18 不排課（連假出遊），本週少 {lost_h:.1f} 小時" for n in w["notes"])
     assert w["blackout_days"] == sorted(days)
-    # the next week: <= 10 % (at least +0.5 h) over what that week actually had
-    placed = sum(s["minutes"] for s in w["sessions"] if s["kind"] != "strength") / 60.0
+    # the next week: a 3-day break is Daniels' category 1 — back to 100 %, no make-up
+    # (detraining.md §6.2); the old ≤ 10 % step_cap is gone (it held the volume down for weeks)
     nxt = weeks[i + 1]
-    assert nxt["hours"] <= BL.step_cap(placed) + 1e-6
-    if base[i + 1]["hours"] > BL.step_cap(placed):
-        assert any("不直接跳回原本的量" in n["text"] and "≤ 10%" in n["text"] for n in nxt["notes"])
+    assert nxt["hours"] == pytest.approx(base[i + 1]["hours"])
+    assert nxt["mode"] != "reentry"
 
 
 def test_projection_first_week_after_a_short_current_week():
@@ -262,9 +261,9 @@ def test_projection_first_week_after_a_short_current_week():
     cur["history"][-2]["hours"] = 4.0
     base = P.project_weeks({**cur, "blackout_days": []}, PHASES, date(2026, 10, 11))
     weeks = P.project_weeks(cur, PHASES, date(2026, 10, 11), blackouts=[bo("2026-10-01", "2026-10-04")])
-    assert base[0]["hours"] > BL.step_cap(2.0)                            # would have jumped back
-    assert weeks[0]["hours"] == pytest.approx(BL.step_cap(2.0))
-    assert any("上週 10/1–10/4 不排課，實際只練了 2.0 小時" in n["text"] for n in weeks[0]["notes"])
+    # 4 days off < 6: no re-entry block and no step cap — the same week as without the blackout
+    assert weeks[0]["hours"] == pytest.approx(base[0]["hours"]) and weeks[0]["mode"] != "reentry"
+    assert not any("實際只練了" in n["text"] for n in weeks[0]["notes"])
 
 
 def test_50_min_cap_and_allowed_weekdays_with_blackouts():
