@@ -350,6 +350,14 @@ CP_ASOF_BACK_DAYS = 30          # 自組: an invalid PD fit on a day → the las
 
 def _pd_mftp(ds, day: dt.date) -> Optional[float]:
     key = (id(ds), "pd", day)
+    # a Dataset may keep these refits on disk (FitFolderDataset.pd_memo, keyed
+    # on everything the day's fit reads): a restart / a sync then refits only
+    # the days whose 90-day window changed
+    disk = getattr(ds, "pd_memo", None)
+    if key not in _cp_memo and disk is not None:
+        hit = disk.get(day)
+        if hit is not disk.MISS:
+            _cp_memo[key] = hit
     if key not in _cp_memo:
         from backend.engine.wko5expr.dataset import date_to_day
         tday = date_to_day(day)
@@ -366,6 +374,8 @@ def _pd_mftp(ds, day: dt.date) -> Optional[float]:
         except Exception:                   # noqa: BLE001
             pdm = None
         _cp_memo[key] = pdm["mftp"] if pdm else None
+        if disk is not None:
+            disk.put(day, _cp_memo[key])
     return _cp_memo[key]
 
 

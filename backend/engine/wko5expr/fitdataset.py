@@ -296,6 +296,127 @@ def _smooth(x: np.ndarray, n: int = 10) -> np.ndarray:
     return np.convolve(np.nan_to_num(x), k, mode="same") * n
 
 
+class PdMemo:
+    """Disk memo of racepower.athlete._pd_mftp (the as-of PD refit behind
+    cp_as_of: ~670 refits for the LTHR estimates of a full COROS history,
+    the slowest part of a build). One entry per day, valid while the day's
+    inputs hash the same: the runs of its 90-day window (file stamp, power
+    source / use, power corrections, NP), the synced FIT files cptest.curves
+    adds for that window (name, size, mtime), the watch-power / bad-file
+    settings and overrides, and the code of the fit. A sync adding today's
+    run invalidates only the days whose window holds it."""
+    MISS = object()
+
+    def __init__(self, ds: "FitFolderDataset"):
+        self.ds = ds
+        self.path = ds._store.home / "pd_mftp.json"
+        self._lock = threading.Lock()
+        self._prep = None
+        self.dirty = False
+        try:
+            import json
+            self.store = json.loads(self.path.read_text("utf-8"))
+        except (OSError, ValueError):
+            self.store = {}
+
+    def _prepare(self):
+        import bisect  # noqa: F401
+        import hashlib
+        import inspect
+        from backend.engine import bad_activity as BA
+        from backend.engine import power_source as PS
+        from backend.engine.algorithms import wko5_meanmax, wko5_pdmodel
+        from backend.engine.racepower import athlete as A
+        from backend.engine.racepower import cptest as T
+        from backend.engine.racepower import weather as WX
+        from backend.engine.wko5expr.fitcache import stamp_of
+        ds = self.ds
+        code = hashlib.sha1()
+        for m in (A, T, wko5_pdmodel, wko5_meanmax, PS):
+            try:
+                code.update(inspect.getsource(m).encode("utf-8"))
+            except (OSError, TypeError):
+                code.update(m.__name__.encode())
+        days, rows = [], []
+        for w in ds.workouts:
+            if w.sport != "run":
+                continue
+            try:
+                st = stamp_of(ds.dir / w.entry.file)
+            except OSError:
+                st = None
+            days.append(w.day)
+            rows.append((w.entry.file, st, A.power_ok(ds, w), A.power_source(ds, w),
+                         ds._corr_sig(w.entry.file, "power"), w.metrics.get("np")))
+        files = []
+        root = Path(WX.HOME) / "fit"
+        if root.exists():
+            for p in root.rglob("*.fit"):
+                d = T._file_date(p)
+                if d is None:
+                    continue
+                try:
+                    s = p.stat()
+                except OSError:
+                    continue
+                files.append((d, str(p.relative_to(root)), s.st_size, int(s.st_mtime)))
+        files.sort()
+        glob = (code.hexdigest(), A.CP_WINDOW_DAYS, bool(ds.accept_watch_power), BA.read_setting(True),
+                BA.overrides_stamp(), str(WX.HOME))
+        self._prep = (days, rows, files, glob)
+
+    def sig(self, day: dt.date) -> str:
+        import bisect
+        import hashlib
+        from backend.engine.racepower import athlete as A
+        if self._prep is None:
+            self._prepare()
+        days, rows, files, glob = self._prep
+        tday = date_to_day(day)
+        lo = bisect.bisect_right(days, tday - A.CP_WINDOW_DAYS)
+        hi = bisect.bisect_left(days, tday + 1)
+        since = day - dt.timedelta(days=A.CP_WINDOW_DAYS - 1)
+        fl = [f for f in files if since <= f[0] <= day]
+        return hashlib.sha1(repr((glob, rows[lo:hi], fl)).encode("utf-8")).hexdigest()
+
+    def get(self, day: dt.date):
+        k = day.isoformat()
+        with self._lock:
+            hit = self.store.get(k)
+        if hit is None:
+            return self.MISS
+        try:
+            ok = hit[0] == self.sig(day)
+        except Exception:                        # noqa: BLE001 — no memo, just refit
+            return self.MISS
+        return hit[1] if ok else self.MISS
+
+    def put(self, day: dt.date, value) -> None:
+        try:
+            s = self.sig(day)
+        except Exception:                        # noqa: BLE001
+            return
+        with self._lock:
+            self.store[day.isoformat()] = [s, value]
+            self.dirty = True
+
+    def flush(self) -> None:
+        import json
+        import os
+        with self._lock:
+            if not self.dirty:
+                return
+            text = json.dumps(self.store)
+            self.dirty = False
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(f"pd_mftp.{os.getpid()}.{threading.get_ident()}.tmp")
+            tmp.write_text(text, "utf-8")
+            os.replace(tmp, self.path)
+        except OSError as e:
+            log.warning("FIT dataset: could not write the PD memo (%s)", type(e).__name__)
+
+
 def default_athlete() -> Athlete:
     from backend.files.wko5chart_reader import Record
     return Athlete(first_name=None, last_name=None, ctlconstant=42.0, atlconstant=7.0,
@@ -414,6 +535,7 @@ class FitFolderDataset(Dataset):
         # copy) does not estimate unless asked to.
         if estimate_thresholds is None:
             estimate_thresholds = _app_db() is not None
+        self.pd_memo = PdMemo(self)               # racepower.athlete._pd_mftp on disk
         if self.settings_from == "app" and estimate_thresholds and self.workouts:
             prog.phase("estimate")
             if self._estimate_settings_memo():
@@ -655,6 +777,7 @@ class FitFolderDataset(Dataset):
         before = {k: list(v) for k, v in self.athlete.settings.items()}
         labels = dict(self._setting_labels)
         ret = self._estimate_settings()
+        self.pd_memo.flush()
         changed = {k: [(d.isoformat(), val) for d, val in v] for k, v in self.athlete.settings.items()
                    if before.get(k) != list(v)}
         memo.pop(key, None)
@@ -725,6 +848,9 @@ class FitFolderDataset(Dataset):
         import json
         import os
         from backend.engine.wko5expr.dataset import _safe
+        memo = getattr(self, "pd_memo", None)
+        if memo is not None:
+            memo.flush()
         with self._series_lock:
             todo = {key: {f: dict(v) for f, v in self._series[key].items()} for key in self._series_dirty}
             self._series_dirty.clear()
