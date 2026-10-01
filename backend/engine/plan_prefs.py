@@ -73,6 +73,8 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.quality_gate_weeks": "quality_gate_weeks",
     "plan.prefs.aet_test_days": "aet_test_days",
     "plan.prefs.aet_test_protocol": "aet_test_protocol",
+    "plan.prefs.warmup_commute_min": "warmup_commute_min",
+    "plan.prefs.cooldown_min": "cooldown_min",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
@@ -81,7 +83,10 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # week: they are not part of `active` (the default plan stays untouched)
 # aet_test_days: where the AeT test goes, applied by every placement path
 # (aet_test.pick_day) whether or not the other preferences are set
-NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol") + GATE_FIELDS
+# warmup_commute_min / cooldown_min: the interval warm-up's city part and the cool-down
+# (engine/interval_library.py blocks) — read for every interval session, not shaping
+NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
+               "warmup_commute_min", "cooldown_min") + GATE_FIELDS
 LONG_WD = {"sat": 5, "sun": 6}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
@@ -133,6 +138,10 @@ class Prefs:
     # AeT 測試方式 (engine/aet_test.py PROTOCOLS): auto = 徐國峰 90 分鐘 (the weekend LSD), UA 40 as the
     # backup; xu90 / ua60 / ua40 / evoke60 / friel. Not part of `active`.
     aet_test_protocol: str = "auto"
+    # 間歇的暖身／緩和 (engine/interval_library.py §C3): the ~10-min easy run through the
+    # city to the riverside (never cut) and the cool-down (10 when running home). Not `active`.
+    warmup_commute_min: int = 10
+    cooldown_min: int = 5
 
     @property
     def active(self) -> bool:
