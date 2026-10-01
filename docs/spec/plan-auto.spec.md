@@ -120,23 +120,29 @@ neutral.
 
 - **Zone 3** whenever the guardrails pass. A locked method (e.g. the UA gap > 10 %) keeps
   Zone 5 closed but no longer stops Zone 3.
-- **Zone 5** opens once the aerobic base is confirmed by any path (auto): 三訊號; 徐國峰's
-  90-min test (minute 10 vs minute 90, < 10 %); a measured AeT passing the UA gap or the Friel
-  drift. Forced modes use their own path (`xu_signals`, `xu_drift`, `ua_gap`, `friel_drift`;
-  `plateau` / `weeks` by their own unlock; `none` = no gate).
+- **Zone 5** opens only when ONE of three tests has been done and passed (auto; 2026-10-01
+  使用者決定): 徐國峰's 90-min test (`xu90`: minute 10 vs minute 90, < 10 %); a measured AeT with
+  LTHR ÷ AeT − 1 ≤ 10 % (`aet_ua_gap`); ≥ 60 min near a measured AeT, first vs second half
+  drift < 5 % (`aet_friel_drift`). Forced modes use their own test (`xu_drift`, `ua_gap`,
+  `friel_drift`; `plateau` / `weeks` by their own unlock; `none` = no gate). 三訊號 and its
+  mode `xu_signals` were removed (aerobic-base-readiness.md); a stored `xu_signals` reads as
+  `auto` (`plan_prefs.from_settings`), new writes are rejected.
 - **徐國峰's 90-min test** (`xu_run`): ≥ 90 min, flat (not trail, < 20 m/km), ≤ 25 °C, every
   stop ≤ 30 s, HR in Zone 1 (the app's easy rule: avg ≤ AeT + 3, ≤ 10 % above — mapping his
   E zone to "below AeT" is 推估), (HR@90′ − HR@10′) / HR@10′ < 10 % — his own comparison, not
   drift_of's halves (notes L58–L67). Any qualifying run counts: "就是你週末那一次 LSD".
-- **三訊號** (all three): ① that run; ② a week with ≥ 30 RQ 訓練指數 points of Zone 1 (RQ =
-  Daniels' intensity points, E 0.2/min — 徐國峰's blog, verified; 30–42 points = 150–210 min ≈
-  120–170 TSS at IF 0.70, the TSS conversion is 推估 / 未驗證), and the next week ≥ 70 % of its
-  running time (推估); ③ the latest ≤ 3 road long runs (≥ 75 min, 28 days): last third vs first
-  third HR ≤ +5 % and pace ≤ −5 % (推估).
 - **Maintenance** (weekly, no expiry): Zone 1 time < 2/3 of the level at confirmation (mean of
-  the 4 weeks up to it) for 3 complete weeks in a row → pause Zone 5 (Hickson 1982; 3 weeks
-  推估; recovery / taper / event / transition weeks and weeks touching a break don't count);
-  ③ failing → pause. A break ≥ 6 days is the re-entry rule below.
+  the 4 weeks up to it) for 3 complete weeks in a row → pause Zone 5 until the next
+  confirmation (Hickson 1982; 3 weeks 推估; recovery / taper / event / transition weeks and weeks
+  touching a break don't count). The late long-run HR / pace check no longer pauses Zone 5; it
+  survives only as the re-entry rule's post-break drift check (`long_check`, 14–28 days off). A
+  break ≥ 6 days is the re-entry rule below. A paused state says why in `z5["pause"]`
+  (`kind`: `z1` / `reentry_z3` with done / need / `drift_check`).
+- **Tracker** (`quality_gate.z5_card`): `base` = one step 「確認有氧基礎（三選一，做了且達標）」 with
+  the mode's tests (✓ / ✕ / – and the current value; after a Z1 pause or a ≥ 4-week break only
+  results dated after it count); `steps` = ① base ② 3 區達標 n/3 ③ 5 區開放, each done / active /
+  todo / paused / wait; `next` = the one 「還缺：…」 line (or 恢復期還剩 n 天 / 都做到了), computed
+  once and shown by the 總覽 card and the 基礎期 chart (`wko5views.z5_progress`).
 - **Re-confirmation**: passive first — any qualifying run re-confirms. The AeT test is
   scheduled only for a reason (`quality_gate.aet_test_reason`): no interpretable run for ~6
   weeks (UA's 4–6-week retest, coach; wording 未驗證), the aggregated AeT estimate missing or
