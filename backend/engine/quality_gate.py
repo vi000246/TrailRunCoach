@@ -256,6 +256,8 @@ def xu_check(ds, today: dt.date) -> dict:
     fast-finish checks must pass). Over 25 °C it doesn't count: drift_of's heat
     rule (workout_review.heat_gate — the route_weather archive's air
     temperature, else the watch's; XU_HEAT_C == WR.DRIFT_HEAT_C)."""
+    # the method stays strict-tier (drift_of's fairness, as before); the Zone 5 path uses
+    # base_check.xu_run with 徐國峰's own conditions (stops ≤ 30 s, Zone 1, ≤ 25 °C)
     from backend.engine import workout_review as WR
     last = None
     for w in sorted(_runs(ds, today), key=lambda x: x.day):
