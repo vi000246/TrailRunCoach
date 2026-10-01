@@ -121,7 +121,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margi
   box-shadow: 0 4px 16px rgba(0,0,0,.15); white-space: normal; font-weight: 400; }
 /* effort bar */
 .ebar { position: relative; height: 30px; border-radius: 6px; display: flex; overflow: hidden; cursor: ew-resize; touch-action: none;
-  user-select: none; margin: 6px 0 2px; }
+  user-select: none; touch-action: none; margin: 6px 0 2px; }
+.busy { padding: 4px 0; color: var(--accent, #1565c0); }
 .ebar > div.z { height: 100%; display: grid; place-items: center; font-size: 12px; color: #fff; font-weight: 600; }
 .ebar .band { position: absolute; top: 0; bottom: 0; background: rgba(255,255,255,.35); pointer-events: none; }
 .ebar .needle { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; background: var(--text); border-radius: 2px;
@@ -172,7 +173,7 @@ td select.terr { width: 80px; padding: 2px 5px; }
   <section id="target-sec" class="tab-calc">
     <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
     <div class="toolbar">
-      <select id="event" style="width:auto;max-width:320px"></select>
+      <label class="meta">目標賽事 <select id="event" style="width:auto;max-width:320px"></select></label>
       <div class="seg" id="type"><button data-t="road">路跑</button><button data-t="trail">越野</button><button data-t="baiyue">百岳</button></div>
       <span class="meta">快速：</span>
       <button class="btn" data-preset="10k">10K</button><button class="btn" data-preset="half">半馬</button>
@@ -568,11 +569,16 @@ function renderInputs() {
     rows.push(`<tr><td>背負</td><td class="num">${f1(u.pack_kg?.value)} kg</td><td class="meta wrap">${esc(u.pack_kg?.source || "")}；過去 ${f1(u.hist_pack_kg?.value)} kg（${esc(u.hist_pack_kg?.source || "")}）</td></tr>`);
     rows.push(`<tr><td>心率上限</td><td class="num">${n0(u.aet?.value)} bpm</td><td class="meta wrap">AeT：${esc(u.aet?.source || "")}</td></tr>`);
   } else {
-    const srcs = INP.cp.sources;
-    const cur = ovr.cp_source || u.cp?.id || INP.cp.default;
-    rows.push(`<tr><td>CP 來源</td><td colspan="2"><select class="src ${ovr.cp_source ? "ovr" : ""}" data-o="cp_source">${srcs.map((s) =>
-      `<option value="${s.id}" ${s.id === cur ? "selected" : ""}>${esc(s.label)}：${W(s.cp)}</option>`).join("")}</select></td></tr>`);
-    rows.push(inputRow("CP W", "cp", u.cp?.value, (v) => Math.round(v), u.cp?.source || "", ` · ${wkg((u.cp?.value) / (u.weight?.value || 1))} <a href="#cp-sec">看依據</a>`, 1));
+    // CP: 自動 (the engine picks the source and shows the value it used) or 手動 (typed in)
+    const manual = ovr.cp != null;
+    rows.push(`<tr><td>CP</td><td colspan="2"><div class="seg" id="cpmode" style="display:inline-flex">
+        <button type="button" data-cpm="auto" class="${manual ? "" : "on"}">自動</button><button type="button" data-cpm="manual" class="${manual ? "on" : ""}">手動</button></div>
+      ${manual ? ` <input data-o="cp" class="ovr" type="number" step="1" style="width:90px" value="${ovr.cp}"> W`
+        : ` <b class="num">${W(u.cp?.value)}</b> <span class="meta">${wkg((u.cp?.value) / (u.weight?.value || 1))} · ${esc(u.cp?.source || "")}</span>`}
+      <a href="#cp-sec" class="meta">看依據</a></td></tr>`);
+    // everything below is derived automatically; shown only under 進階設定
+    rows.push(`<tr><td colspan="3"><details id="adv" ${ls.get("advOpen", false) ? "open" : ""}><summary class="meta">進階設定（W′、TTE、Riegel k、RE、先前賽事）：平常不用動，都自動算</summary>
+      <table class="inputs"><tbody>`);
     rows.push(inputRow("W′ J", "w_prime", u.w_prime?.value, (v) => Math.round(v), u.w_prime?.source || "", "", 100));
     rows.push(inputRow("TTE 秒", "tte", u.tte?.value, (v) => Math.round(v), (u.tte?.source || "") + (ok(u.tte?.value) ? `（${dur(u.tte.value)}）` : ""), "", 10));
     const pk = INP.riegel, tk = LAST?.tasks?.table;
@@ -589,8 +595,16 @@ function renderInputs() {
       `<option value="${i}" ${String(i) === ls.get("prior", "") ? "selected" : ""}>${esc(p.label)} ${dur(p.time_s)} ${W(p.avg_power)}</option>`));
     rows.push(`<tr><td>先前賽事</td><td colspan="2"><select class="src" id="prior" style="width:100%">${opts.join("")}</select>
       <div class="meta">用於查表 k 與任務 7/9/10${pr ? `：${esc(pr.label || "")} ${dur(pr.time_s)} @ ${W(pr.power)}` : ""}</div></td></tr>`);
+    rows.push(`</tbody></table></details></td></tr>`);
   }
   $("inputs").innerHTML = rows.join("");
+  const adv = $("adv"); if (adv) adv.addEventListener("toggle", () => ls.set("advOpen", adv.open));
+  document.querySelectorAll("#cpmode button").forEach((b) => b.onclick = () => {
+    if (b.dataset.cpm === "auto") delete ovr.cp;
+    else if (ovr.cp == null) ovr.cp = Math.round(u.cp?.value || INP.cp.sources[0]?.cp || 200);
+    delete ovr.cp_source;
+    renderInputs(); schedule();
+  });
   $("inputs").querySelectorAll("[data-o]").forEach((e) => e.addEventListener("change", () => {
     const k = e.dataset.o; const v = e.value;
     if (v === "") delete ovr[k]; else ovr[k] = e.tagName === "SELECT" ? v : Number(v);
@@ -819,11 +833,21 @@ function wireEffortBar() {
   const bar = $("ebar"); if (!bar || PLAN.type === "baiyue") return;
   let drag = false;
   const at = (ev) => { const r = bar.getBoundingClientRect(); const x = (ev.clientX - r.left) / r.width; return EMIN + Math.max(0, Math.min(1, x)) * (EMAX - EMIN); };
+  // while dragging only the needle moves; releasing it recomputes at once (no debounce) and
+  // says so, so a slow GPX plan doesn't look like nothing happened
   const move = (ev) => { if (!drag) return; const f = Math.round(at(ev) * 100) / 100; bar.querySelector(".needle").style.left = ex(f) + "%";
-    S.mode = "auto"; S.effort = Math.max(0.6, Math.min(1.05, f)); syncForm(); schedule(); };
+    S.mode = "auto"; S.effort = Math.max(0.6, Math.min(1.05, f));
+    const lab = bar.querySelector(".needle-val"); if (lab) lab.textContent = Math.round(S.effort * 100) + "%"; };
   bar.addEventListener("pointerdown", (ev) => { drag = true; bar.setPointerCapture(ev.pointerId); move(ev); });
   bar.addEventListener("pointermove", move);
-  bar.addEventListener("pointerup", () => { drag = false; });
+  const done = () => {
+    if (!drag) return; drag = false;
+    syncForm(); saveForm(); clearTimeout(timer);
+    $("results").insertAdjacentHTML("afterbegin", `<div class="meta busy">以努力度 ${Math.round(S.effort * 100)}% 重新計算中…</div>`);
+    run();
+  };
+  bar.addEventListener("pointerup", done);
+  bar.addEventListener("pointercancel", done);
 }
 
 function renderBaiyue() {
@@ -1275,7 +1299,7 @@ $("bt-run").onclick = async () => { try { await post(`${API}/backtest/run`, {});
 function renderEvents() {
   const ev = INP.events;
   const KIND = { race: "trail", road: "road", baiyue: "baiyue", other: "trail" };
-  $("event").innerHTML = `<option value="">${ev.length ? "選一個賽季計畫的賽事…" : "賽季計畫沒有未來的賽事（手動輸入）"}</option>` +
+  $("event").innerHTML = `<option value="">手動輸入${ev.length ? "（或從下面選賽季計畫的賽事）" : "（賽季計畫沒有未來的賽事）"}</option>` +
     ev.map((e) => `<option value="${esc(e.id)}">${esc(e.date)} ${esc(e.name)}（${e.priority}）</option>`).join("");
   $("event").onchange = () => {
     const e = ev.find((x) => x.id === $("event").value); if (!e) return;
