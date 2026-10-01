@@ -57,6 +57,19 @@ decisions on the workbook's ambiguities (D1–D10) are in
   Per-run metrics are disk-cached (`backend/engine/racepower/athlete.py:164`).
 - **Implausible power** is excluded: NP > 1.5 × CP, or a 5-min best > 2 × CP
   (`backend/engine/racepower/athlete.py:73`).
+- **Power source** (2026-10-01, `backend/engine/power_source.py`; workouts.spec.md): only Stryd
+  power (Form Power / Air Power / LSS developer fields, or a Stryd device) feeds the power-based
+  models; watch-estimated power is 「手錶推估功率（未採用）」 unless `power.accept_watch_power`.
+  Gated in `athlete.py` (`power_ok`, `power_runs`, `model_stats`): the envelopes (`_curve`), the
+  per-run metrics (`run_metrics` → RE, the moving-power lower-bound points, priors, training
+  conditions), the PD refit including the synced FIT curves (`cptest.curves(accept_watch=…)`), the
+  CP-test scan, the grade RE samples (`grade_samples(power_only=True)`; the walking-capacity
+  windows pass False), the HR–power capacity, the CP floor, the road monotonicity check
+  (`longer_p` skipped, not failed, on a watch run) and the power side of the intensity class.
+  HR / pace paths use every run. One exception, 推估: `cp_as_of` (it only locates the Friel window
+  of the LTHR estimate) uses the usable power when the 90-day window has any, else every power
+  (the pre-Stryd history). `derive()["power_source"]` = counts, the unused watch runs, the setting;
+  the page lists them under the CP detail and in the inputs note.
 - **Altitude normalisation (D2)**: before building an envelope, each run's power is scaled by
   M(activity median elevation → training reference altitude), altitude term only
   (`backend/engine/racepower/athlete.py:86`).
@@ -708,6 +721,22 @@ Capacity before / after on the same data:
 - The bound includes each run's moving-time average (altitude-normalised) beside the elapsed
   mean-max envelope. The elapsed mean-max of that run was only 178.8 W.
 
+**COROS vs TP (2026-10-01, read-only).** The 2025-12-21 half's envelope was 180.4 W on COROS and
+152.9 W on TP (time +3.8 % vs +24.0 %). Settings were equal (weight 66.3, k −0.07, Riegel invalid
+on both) and the matched runs' mean-max curves identical. The whole difference is one TP-only file,
+`tp_2025_12_14_3477204875.fit`: 17 min, 12.3 km (≈ 43 km/h), mean 899 W / max 1462 W, COROS-recorded,
+no Stryd fields, not in the COROS folder (推定: deleted on COROS). Inside the 90-day window it made
+the PD refit invalid → the 3–20 min `activities` fit (W′ 367 kJ) raised to the lower bound, CP 164.5
+with TTE 3000 → P_sus 152.9 W. `implausible()` could not drop it (no reference CP before the first
+plan CP in strict mode). Excluding only that file on the old code gives TP = COROS exactly
+(pdmodel 200.5 W, TTE 1882, P_sus 180.4 W). It also shifted TP's LTHR estimates (cp_as_of) for
+~90 days, hence small trail-HR differences. Other set differences (TP lacks 10 COROS Stryd runs of
+2025-03/04; 3 short TP-only runs) changed no envelope point the half used. The watch-power rule
+removes the file; after the change TP gives 180.4 W / +3.8 % too. Back-tests after the change
+(TP): road capacity n 1, |time err| 3.8 % (before 24.0 %); trail capacity n 2 (the 2024 races are
+watch power → HR model only), 23.8 % (before 4 at 36.1 %); 2025-07-26 trail CP 262.9 → 191.5 W;
+trail HR model and the CP test unchanged (12′: P_sus 213.0 vs 220.9 W).
+
 ### Page
 
 Tabs 計算 / 準確度. Mode switch (sticky on phones), course manual / GPX (drop or file button),
@@ -883,4 +912,5 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-01 | bugfix | user request | Capacity back-test: `threshold_on` never applies a row backwards; the LTHR estimate uses `cp_as_of`, so no later CP; capacity samples (maximal.py) replace the HR race class: plan events matched by date + kind + distance, CP bouts, self-paced maximal road (distance ±10 %, last-quarter HR, HRmax, split, monotonicity) and race-like trail (≥ 10 km, ≥ 90 min, HR; no split rule); personal k / table prior from the samples only; HR-based capacity (hrcap.py, 推估, invalid on this data: R² 0.01) with tt30 / tte anchors and a combined second lower bound; training-intensity distribution; script `--source` / `--out` |
 | 2026-10-01 | feature | user request (activity tags) | Capacity samples gated on effort (activity_tags: user mark wins; road = road_maximal, trail = HR on moving time + long rests ≥ 5 min ≤ 10 %), plan races only set type 比賽; user-marked races / 全力 over the full history (auto 365 d); trail HR pace model (trailhr.py, effort km vs HR / LTHR, durability, race HR level; 推估) as the planner's trail total, power as cross-check; back-test `trail_hr`, no-power trail cases, `--tags-db`; seed script |
 | 2026-10-01 | bugfix | docs/research/unsourced-rules.md §0.10 step 0 | COROS / TP back-test prerequisites: the FIT dataset reads trail / road from the app DB (overrides, duplicates), takes thresholds / weight from plan → athlete_settings → as-of estimates (no WKO5 by default), and the activity-tag seed matches COROS / TP races by start time |
+| 2026-10-01 | bugfix | user request (COROS vs TP back-test) | Cause of the COROS / TP difference (one TP-only junk watch-power file); power models use Stryd power only by default (`power.accept_watch_power`), watch-power runs are no-power back-test cases, `power_source` in derive / back-test rows; cp_as_of prefers usable power (推估) |
 | 2026-09-30 | feature | user request | CSV export (`POST /export/csv`, `csvplan.py`, UTF-8 BOM, header block + one row per segment, 「匯出 CSV」 button); per-segment, time-of-day heat (road / trail): /weather returns hourly rows, the plan maps each segment's ETA to the forecast hour and applies Hadley there (自組, 推估), iterating to max |Δ cumulative time| < 1 s; falls back to the single value with a warning; °C axis on the profile, 熱 column in the table |

@@ -209,10 +209,65 @@ def _files(home: Path, since: dt.date, until: dt.date) -> list[dict]:
     return sorted(out, key=lambda x: x["date"])
 
 
-def scan(home: Path, since: dt.date, until: dt.date) -> list[dict]:
-    """Every 3′/12′ test in the FIT folder dated since…until (one per date)."""
+POWER_CACHE_NAME = "racepower_power_source.json"   # {path: [size, mtime, stryd|watch|none]}
+
+
+def _classify_file(p: Path) -> str:
+    from backend.engine import power_source as PS
+    from backend.files.fit_to_channels import fit_to_channels
+    try:
+        return fit_to_channels(p.read_bytes()).power_source
+    except Exception:                       # noqa: BLE001
+        return PS.NONE
+
+
+def power_sources(home: Path, paths: list[str]) -> dict[str, str]:
+    """{path (relative to home/fit): stryd / watch / none} of the given FIT
+    files (backend/engine/power_source.py), cached per file stamp in its own
+    file (the curve cache's version is left alone)."""
+    cache_p = home / POWER_CACHE_NAME
+    try:
+        cache = json.loads(cache_p.read_text("utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    root, out, dirty = home / "fit", {}, False
+    for key in paths:
+        p = root / key
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        stamp = [st.st_size, int(st.st_mtime)]
+        hit = cache.get(key)
+        if not hit or hit[:2] != stamp:
+            hit = stamp + [_classify_file(p)]
+            cache[key] = hit
+            dirty = True
+        out[key] = hit[2]
+    if dirty:
+        try:
+            cache_p.parent.mkdir(parents=True, exist_ok=True)
+            cache_p.write_text(json.dumps(cache), "utf-8")
+        except OSError:
+            pass
+    return out
+
+
+def _usable(home: Path, files: list[dict], accept_watch: bool) -> list[dict]:
+    """Drop the files whose power is watch-estimated (unless accepted)."""
+    from backend.engine import power_source as PS
+    if accept_watch or not files:
+        return files
+    src = power_sources(home, [f["path"] for f in files])
+    return [f for f in files if PS.usable(src.get(f["path"]), False)]
+
+
+def scan(home: Path, since: dt.date, until: dt.date, accept_watch: bool = True) -> list[dict]:
+    """Every 3′/12′ test in the FIT folder dated since…until (one per date).
+    `accept_watch` False: a test recorded with watch-estimated power is no test."""
     out, seen = [], set()
-    for f in _files(home, since, until):
+    files = [f for f in _files(home, since, until) if f.get("test")]
+    for f in _usable(home, files, accept_watch):
         if f.get("test") and f["date"] not in seen:
             seen.add(f["date"])
             out.append({**f["test"], "date": f["date"], "file": f["file"], "sport": f["sport"],
@@ -220,10 +275,13 @@ def scan(home: Path, since: dt.date, until: dt.date) -> list[dict]:
     return out
 
 
-def curves(home: Path, since: dt.date, until: dt.date) -> list[dict]:
+def curves(home: Path, since: dt.date, until: dt.date, accept_watch: bool = True) -> list[dict]:
     """Mean-max curves of the synced running FIT files (COROS / TP), so a
     session WKO5 has not imported yet (today's test) still enters the
     envelope. Duplicates of WKO5 activities are harmless: the envelope is a
-    maximum."""
+    maximum. Only file names with a YYYY-MM-DD date are read (`_file_date`):
+    the COROS files, not TP's tp_YYYY_MM_DD_… names. `accept_watch` False:
+    watch-estimated power is left out."""
+    files = [f for f in _files(home, since, until) if f.get("curve")]
     return [{"date": f["date"], "file": f["file"], "path": f["path"], "xs": f["curve"][0], "ys": f["curve"][1]}
-            for f in _files(home, since, until) if f.get("curve")]
+            for f in _usable(home, files, accept_watch)]
