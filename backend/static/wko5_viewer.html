@@ -1944,10 +1944,9 @@ function cpNice(lo, hi, k = 4, pace = false) {
     const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p;
     step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
   }
-  let min = Math.floor(lo / step) * step;
-  if (pace && lo > 0 && min <= 0) min = Math.max(0, Math.floor(lo / 60) * 60);   // no 0:00 /km tick
-  return { min, max: Math.ceil(hi / step) * step, interval: step };
+  return { min: Math.floor(lo / step) * step, max: Math.ceil(hi / step) * step, interval: step };
 }
+const cpPaceTick = (v) => v > 0 ? cpPace(v) : "";       // a 0:00 /km tick means nothing
 
 function drawClimbProfile(card, res) {
   cpStyle();
@@ -1965,13 +1964,13 @@ function drawClimbProfile(card, res) {
       axisF: (v) => `${cpN(v)}%`, cap: `功率佔 CP 的比例（CP ${cpN(cp)} W，60 秒平均）` },
     hr: { label: "心率", ys: P.hr, seg: (c) => c.avg_hr, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), cap: "心率 bpm（60 秒平均）" },
     pace: { label: "配速／GAP", ys: P.gap, ys2: P.pace, pace: true, seg: (c) => c.gap_s_per_km, segF: (v) => `GAP ${cpPace(v)}`,
-      axisF: cpPace, cap: "GAP（坡度換算平地配速）與實際配速 /km，上 = 快" },
+      axisF: cpPaceTick, cap: "GAP（坡度換算平地配速）與實際配速 /km，上 = 快" },
   };
   const CMP = {
     vam: { key: "vam", f: (v) => `${cpN(v)} m/h`, axisF: (v) => cpN(v), scale: 1, name: "VAM（m/h）", hint: "越右爬得越快" },
     power: { key: "pct_cp", f: (v) => `${cpN(v)}%`, axisF: (v) => `${cpN(v)}%`, scale: 100, name: "%CP", hint: "越右越用力" },
     hr: { key: "hr_per_100m", f: (v) => `${cpN(v)} 下`, axisF: (v) => cpN(v), scale: 1, name: "每 100 m 爬升的心跳", hint: "越左越省力（越經濟）" },
-    pace: { key: "gap_s_per_km", f: cpPace, axisF: cpPace, scale: 1, name: "GAP /km", hint: "越右越快", pace: true },
+    pace: { key: "gap_s_per_km", f: cpPace, axisF: cpPaceTick, scale: 1, name: "GAP /km", hint: "越右越快", pace: true },
   };
   CMP.pct = CMP.power;
   const avail = Object.entries(M).filter(([, m]) => cpHas(m.ys)).map(([k, m]) => [k, m.label]);
@@ -2328,7 +2327,7 @@ function drawGradeProfile(card, res) {
         { type: "value", gridIndex: 0, min: 0, max: maxShare * (narrow ? 1.6 : 1.45), axisLabel: { show: false }, axisTick: { show: false },
           axisLine: { show: false }, splitLine: { show: false } },
         { type: "value", gridIndex: 1, min: lo, max: hi, inverse: !!g.pace, interval: xn.interval, axisLine: { show: false },
-          axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => g.f(v) }, splitLine: { lineStyle: { color: line } } },
+          axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => g.pace ? cpPaceTick(v) : g.f(v) }, splitLine: { lineStyle: { color: line } } },
       ],
       yAxis: [
         { type: "category", gridIndex: 0, data: cats, axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
