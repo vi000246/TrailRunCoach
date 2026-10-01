@@ -1113,7 +1113,7 @@ def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
         if x and not x.get("ok"):
             last = (f"（上次 {x['date'][5:]} 飄移 {x['drift'] * 100:.1f}%）" if x.get("drift") is not None and
                     all("飄移" in w for w in x.get("why") or []) else
-                    f"（上次 {x['date'][5:]}：{(x.get('why') or [''])[0]}）")
+                    f"（上次 {x['date'][5:]} 沒過：{(x.get('why') or [''])[0].split('（')[0]}）")
         parts.append(f"做一次 90 分鐘平路 1 區測試（氣溫 25 °C 以下、補給停 ≤ 30 秒），飄移 < 10%{last}")
     ae = gate.get("aet") or {}
     g = gate.get("gap")
