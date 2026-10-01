@@ -171,6 +171,9 @@ def test_power_zone_models_and_ilevels_unavailable_without_a_model(monkeypatch):
     p3 = _model(res, "palladino3")  # 80 % / 95 % CP = 200 / 237.5
     assert [r["seconds"] for r in p3["rows"]] == [300.0, 300.0, 900.0]
     assert _model(res, "coggan")["estimate"] is True
+    # Palladino's table starts at 50 % CP; below that counts as 1A, so every second has a zone
+    pal = _model(res, "palladino")
+    assert pal["rows"][0]["from"] == 0 and pal["total_s"] == len(p)
 
 
 def test_ilevels_rows_come_from_the_wko5_levelto_expression(monkeypatch):
