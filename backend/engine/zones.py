@@ -269,7 +269,11 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
 # the athlete's AeT / Friel HR bands. For intervals HR lags too much to steer
 # by (it keeps climbing through a 5-minute rep), so power is primary there.
 #
-# Trail / hills: power first, HR second. HR answers a change of effort with a
+# Trail long days: HR first (user decision 2026-10-01, after
+# docs/research/vo2max-gate-and-trail-metric.md: only ~9 % of trail time is on
+# Stryd-validated 3–8 % grades). Long climbs: suggestions only, no enforced
+# target. Downhill practice: by feel. Hill repeats: power first, HR second.
+# (The paragraph below is the rationale for hill repeats.) HR answers a change of effort with a
 # ~60 s lag (τ 55–70 s, Hunt 2015/2019, Wang & Hunt 2021;
 # docs/research/drift-algorithm.md §2), so on a 1–3-minute climb it is still
 # rising when the climb ends, while a steady Stryd power on 0–8 % grades is a
@@ -281,17 +285,23 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
 # the practical tool (docs/research/coaching-dashboards-mountain.md §1.1). The
 # power bands themselves are Palladino's (% CP); applying them uphill above
 # ~8 % grade is 推估 (Stryd is validated to ~8 %).
-TERRAIN_NOTE = ("山路、爬坡看功率（心率約慢 1 分鐘才反應，短坡上來不及；Stryd 功率在 0–8% 坡≈固定代謝負荷，"
-                "van Rassel 2026），心率當上限檢查。陡的技術下坡不看功率（Stryd：陡峭、技術地形不能用單一功率數字），"
-                "照感覺與安全；陡坡負重健行仍以心率為主（Uphill Athlete）。超過 8% 坡套用功率區間是推估。")
+TERRAIN_NOTE = ("山路長天看心率（≤ AeT）；越野地形變化大，只有約 9% 時間在 Stryd 驗證過的 3–8% 坡，功率只當參考。"
+                "爬坡重複選 3–8% 的坡看功率（心率約慢 1 分鐘才反應，Hunt 2015；van Rassel 2026）。"
+                "長爬坡不設強制目標，能跑的坡參考功率、陡坡參考心率＋VAM。陡的技術下坡不看功率（Stryd），照感覺與安全。")
 WORKOUT_TARGETS = [
     # (id, name, power lo, power hi, hr lo (×LTHR or "aet"), hr hi, primary, example, source)
     ("recovery", "恢復跑", None, 0.75, None, 0.85, "心率", "20–40 分鐘，隔天有強度課時", "Palladino 1A–1B；Friel Z1"),
     ("z2", "輕鬆跑（Zone 2）", 0.75, 0.80, None, "aet", "心率", "大部分的跑步；心率不超過 AeT", "Palladino 1C；Uphill Athlete AeT"),
     ("long", "長跑（路跑）", 0.80, 0.88, None, "aet", "心率", "60 分鐘以上；心率壓在 AeT", "Palladino Z2；Uphill Athlete"),
-    ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "功率",
-     "上坡把功率壓在範圍內（可以走），心率不超過 AeT 當上限；陡的技術下坡不看功率",
-     "Palladino 1C–Z2（% CP）；心率延遲 Hunt 2015；Stryd 6879554；坡度 > 8% 為推估"),
+    ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "心率",
+     "心率不超過 AeT（可以走）；功率只當參考，陡坡、下坡不看功率",
+     "Uphill Athlete（AeT 心率）；越野只有約 9% 時間在 Stryd 驗證的 3–8% 坡（docs/research/vo2max-gate-and-trail-metric.md）"),
+    ("climb", "長爬坡（自由練，建議值）", 0.88, 1.00, 0.90, 1.00, "建議",
+     "不設強制目標：能跑的坡參考功率，陡到要走的坡參考心率＋VAM（每小時爬升）；自己決定練法",
+     "功率 Palladino Z2–3B（% CP）、心率 Friel Z3–Z4；陡坡用心率＋VAM：docs/research/vo2max-gate-and-trail-metric.md（推估）"),
+    ("downhill", "下坡練習", None, None, None, None, "體感",
+     "控制下降公尺數，練技術與步頻；不看功率也不看心率（離心負荷，量要慢慢加）",
+     "docs/research/vo2max-gate-and-trail-metric.md；下降量的上限是推估"),
     ("hill", "爬坡重複", 0.95, 1.06, 0.95, 1.03, "功率",
      "4–6×4 分鐘上坡，走或慢跑下來恢復；看 30 秒平均功率，心率只當參考（短坡上還沒升上來）",
      "Palladino 3B–Z4（% CP）；心率延遲 Hunt 2015；坡度 > 8% 為推估"),
