@@ -20,6 +20,16 @@ def _test_secret_key(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_activity_tags(monkeypatch):
+    """The engine never reads the user's activity tags (the app DB's
+    activity_tags table); tests pass their own rows or a tmp DB path."""
+    from backend.engine import activity_tags
+    monkeypatch.delenv(activity_tags.TAGS_DB_ENV, raising=False)
+    monkeypatch.setattr(activity_tags, "_default_db", lambda: None)
+    activity_tags._memo.clear()
+
+
+@pytest.fixture(autouse=True)
 def _no_real_tp_client(monkeypatch, tmp_path_factory):
     """Tests never read the real ~/.wko5coach/tp_client.json or TP_* env."""
     from backend.sync import tp_client
