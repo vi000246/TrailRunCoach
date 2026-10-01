@@ -72,6 +72,7 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.quality_gate": "quality_gate",
     "plan.prefs.quality_gate_weeks": "quality_gate_weeks",
     "plan.prefs.aet_test_days": "aet_test_days",
+    "plan.prefs.aet_test_protocol": "aet_test_protocol",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
@@ -80,7 +81,7 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # week: they are not part of `active` (the default plan stays untouched)
 # aet_test_days: where the AeT test goes, applied by every placement path
 # (aet_test.pick_day) whether or not the other preferences are set
-NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days") + GATE_FIELDS
+NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol") + GATE_FIELDS
 LONG_WD = {"sat": 5, "sun": 6}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
@@ -129,6 +130,9 @@ class Prefs:
     # athlete trail-runs on weekends) | any. Not part of `active`: it moves one
     # session, it doesn't reshape the week.
     aet_test_days: str = "weekday"
+    # AeT 測試方式 (engine/aet_test.py PROTOCOLS): auto = 徐國峰 90 分鐘 (the weekend LSD), UA 40 as the
+    # backup; xu90 / ua60 / ua40 / evoke60 / friel. Not part of `active`.
+    aet_test_protocol: str = "auto"
 
     @property
     def active(self) -> bool:
@@ -199,6 +203,9 @@ def check(p: Prefs) -> None:
         raise ValueError(f"間歇門檻要是 {MODES} 其中之一")
     if p.aet_test_days not in ("weekday", "any"):
         raise ValueError("AeT 測試日要是 weekday 或 any")
+    from backend.engine.aet_test import PROTOCOL_CHOICES
+    if p.aet_test_protocol not in PROTOCOL_CHOICES:
+        raise ValueError(f"AeT 測試方式要是 {PROTOCOL_CHOICES} 其中之一")
     if isinstance(p.quality_gate_weeks, bool) or not isinstance(p.quality_gate_weeks, int) or \
             not WEEKS_RANGE[0] <= p.quality_gate_weeks <= WEEKS_RANGE[1]:
         raise ValueError(f"週數法的週數要在 {WEEKS_RANGE[0]}–{WEEKS_RANGE[1]} 週")
@@ -392,6 +399,9 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     if p.cap_weekday is not None:
         for s in hard:
             if s["kind"] == "test" and s["minutes"] > p.cap_weekday:
+                from backend.engine import aet_test as AT
+                if AT.is_xu(s):
+                    continue                    # on the long day, not a weekday session
                 c.notes.append({"level": "info", "src": "prefs",
                                 "text": NOTE_AET_TEST if s["id"] == "test_aet"
                                 else note_test(s.get("protocol") or "standard")})
@@ -495,9 +505,22 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
         return exact[0] if exact else avail[-1]
 
     order = {"long": 0, "test": 1, "quality": 1}
-    for s in sorted(main, key=lambda s: (0 if s["id"] == "long" else order.get(s["kind"], 3 if not s.get("long_day") else 2))):
+    for s in sorted(main, key=lambda s: (0 if s["id"] == "long" or AT.is_xu(s) else
+                                         order.get(s["kind"], 3 if not s.get("long_day") else 2))):
         if not avail:
             break
+        if s["kind"] == "test" and AT.is_xu(s):
+            # 徐國峰's 90-min test is the weekend LSD (it replaced the long run this week)
+            pick = AT.pick_day_xu(avail, long_wd, p.cap_weekday)
+            if pick is None:
+                if notes is not None:
+                    notes.append({"level": "info", "src": "prefs",
+                                  "text": "徐國峰 90 分鐘測試排在週末長跑日，本週沒有可練的週末：這週先不測"})
+                continue
+            s["day"] = pick.isoformat()
+            avail.remove(pick)
+            long_day = pick
+            continue
         if s["id"] == "long" or s.get("long_day"):
             pick = pick_near(long_wd)
             if s["id"] == "long":
@@ -514,6 +537,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             avail.remove(r["day"])
             continue
         elif s["kind"] in ("quality", "test"):
+            # ≥ 2 days between hard days: 台灣教練— Zone 5 at most twice a week, ≥ 2 days apart
             hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
             ok = lambda d: (long_day is None or abs((d - long_day).days) >= 2) and \
                 all(abs((d - h).days) >= 2 for h in hard_days)

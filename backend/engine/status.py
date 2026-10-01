@@ -762,6 +762,11 @@ class Status:
                     txt = "要更新"
                     v = f"{at['date']} 的 AeT 測試：飄移 {at['drift'] * 100:.1f}%，AeT = {at['aethr_suggest']} bpm{now}"
                     act = f"套用這次的 AeT（{at['aethr_suggest']} bpm）" + (f"；{act}" if act else "")
+                elif str(at.get("band") or "").startswith("base_"):
+                    # 徐國峰 90 分 / Friel: a base check, no AeT number to apply
+                    v2 = (f"{at['date']} 的有氧基礎測試：飄移 {at['drift'] * 100:.1f}%"
+                          f"（{AT.BAND_LABEL[at['band']]}）")
+                    why += f"；{v2}"
                 else:
                     step = "+5" if at["band"] == "below" else "−5"
                     act = (f"{at['date']} 的 AeT 測試飄移 {at['drift'] * 100:.1f}%（{AT.BAND_LABEL[at['band']]}）："
@@ -769,11 +774,12 @@ class Status:
             why += f"；最近一次 AeT 測試 {at['date']}：" + (f"飄移 {at['drift'] * 100:.1f}%" if at.get("ok")
                                                           else at.get("reason") or "不採用")
         gate = next((i.extra for i in getattr(self, "indicators", []) if i.id == "gate"), None) or {}
-        if gate.get("stale_aet") and not (at and at.get("band") == "at" and not extra["aet_test"]["applied"]):
-            wk = ((gate.get("aet") or {}).get("age_days") or 0) // 7
+        tr = gate.get("aet_test_reason")
+        if tr and not (at and at.get("band") == "at" and not extra["aet_test"]["applied"]):
+            # B3: the test is due for a reason, not a date (quality_gate.aet_test_reason)
             worst = WATCH if worst == GOOD else worst
-            v = f"AeT 已經 {wk} 週沒測，門檻改用不設門檻模式"
-            act = "重測 AeT" + (f"；{act}" if act else "")
+            v = f"建議 AeT 測試：{tr['text']}"
+            act = "排一次 AeT 測試（課表偏好的測試方式）" + (f"；{act}" if act else "")
         extra["cp_due"] = cp_due
         extra["aet_date"] = ae.isoformat() if ae else None
         extra["aet_last_test"] = at["date"] if at else None
