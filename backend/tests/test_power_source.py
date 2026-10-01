@@ -148,6 +148,25 @@ def test_envelope_and_run_metrics_skip_watch_power(tmp_path, no_plan):
     assert 1 in A.envelope(ds2, ds2.workouts)["who"]
 
 
+def test_cp_as_of_prefers_stryd_and_falls_back_to_watch_power(tmp_path, no_plan, monkeypatch):
+    """The LTHR estimate's CP: the usable power when the 90-day window has
+    any (a junk watch file stays out), else every power (pre-Stryd era)."""
+    from backend.engine.racepower import athlete as A
+    seen = []
+
+    def fake_pd(ds, day, runs, ref_cp, any_power=False):
+        seen.append(([w.idx for w in runs], any_power))
+        return {"mftp": 200.0}
+    monkeypatch.setattr(A, "pd_model", fake_pd)
+    ds = _ds(tmp_path, RUNS)
+    A._cp_memo.clear()
+    assert A._pd_mftp(ds, dt.date(2026, 9, 10)) == 200.0
+    assert seen[-1] == ([0], False)                       # Stryd only; the 400 W watch run out
+    ds2 = _ds(tmp_path / "w", RUNS[1:])                     # watch power + no power only
+    A._pd_mftp(ds2, dt.date(2026, 9, 10))
+    assert seen[-1] == ([0, 1], True)                     # every run, watch power read
+
+
 def test_cptest_curves_and_scan_skip_watch_files(tmp_path):
     from backend.engine.racepower import cptest as T
     root = tmp_path / "fit" / "coros" / "2026"
