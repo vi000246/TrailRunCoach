@@ -295,6 +295,10 @@ dialog.sd .err:empty { display: none; }
 .pnotes li.watch { color: var(--watch); }
 .pnotes .wk-l { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .pnotes button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
+.tsug { display: grid; gap: 6px; }
+.tsug-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; font-size: 13px; }
+.tsug-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* ---- 自動調整 (autoplan.js) ---- */
 .adapt-note { color: #b36b00; }
@@ -442,6 +446,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   <div id="autoplan" data-settings data-limit="5" style="margin-bottom:8px"></div>
   <script src="/api/v1/static/autoplan.js" defer></script>
   <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
+  <div class="tsug" id="tsug" aria-label="建議的測試" hidden></div>
   <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
   <div class="legend" id="legend"></div>
 </main>
@@ -452,6 +457,13 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
+    <div class="var-box" id="sd-test" hidden>
+      <div class="row2">
+        <label>哪一種測試<select id="sd-tkind"><option value="">先選…</option><option value="cp">CP 測試</option><option value="aet">AeT 測試</option></select></label>
+        <label>方式<select id="sd-tproto" disabled><option value="">先選測試</option></select></label>
+      </div>
+      <div class="hint" id="sd-tinfo"></div>
+    </div>
     <div class="var-box" id="sd-var" hidden>
       <label>間歇範本<select id="sd-tpl"><option value="">（不用範本，自己寫）</option></select></label>
       <div class="hint" id="sd-tpl-info" aria-live="polite"></div>
@@ -804,6 +816,7 @@ function render() {
   }
   renderToolbar();
   renderNotes();
+  renderSug();
 }
 function renderNotes() {
   const ns = (D.plan_notes || []).filter((n, i, all) => all.findIndex((x) => x.week_start === n.week_start && x.text === n.text) === i);
@@ -812,6 +825,28 @@ function renderNotes() {
     (ns.some((n) => n.src === "prefs") ? `<li style="list-style:none;margin-left:-16px"><button type="button" data-open-prefs>調整課表偏好 →</button></li>` : "");
 }
 $("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
+// due CP / AeT tests: suggested with a day picker, never put into the plan by the generator
+function renderSug() {
+  const sg = D.test_suggestions || [];
+  const box = $("tsug");
+  box.hidden = !sg.length;
+  box.innerHTML = sg.map((x) => `<div class="tsug-row" data-kind="${esc(x.kind)}"><span>🧪 ${esc(x.label)}</span>
+    <span class="tsug-act">${x.days.length ? `<select aria-label="測試日期">${x.days.map((d) =>
+      `<option value="${esc(d.day)}">${md(d.day)}（週${wd(d.day)}）${d.note ? ` · ${esc(d.note)}` : ""}</option>`).join("")}</select>
+      <button class="btn primary" type="button" data-sug="${esc(x.kind)}">排入</button>` : `<span class="meta">兩週內沒有適合的日子（離長跑、強度課太近）</span>`}
+      <span class="meta">${esc(x.title)} · ${x.minutes} 分</span></span></div>`).join("");
+}
+$("tsug").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-sug]");
+  if (!b) return;
+  const day = b.parentElement.querySelector("select").value;
+  b.disabled = true;
+  try {
+    const r = await sj("POST", `${PAPI}/test-suggestions/schedule`, { kind: b.dataset.sug, day });
+    S.sel = day; await load();
+    msg(`已排入「${esc(r.title)}」到 ${md(day)}`, "ok");
+  } catch (err) { msg(esc(err.message), "err"); b.disabled = false; }
+});
 function agendaHtml(a, ss, acts) {
   const w = weekRow(a), ph = phaseOf(addDays(a, 3));
   const days = [];
@@ -1226,8 +1261,27 @@ function tgtHint() {
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
   $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
   $("sd-q").hidden = kindVal() !== "quality";
+  $("sd-test").hidden = kindVal() !== "test" || !!dlg.ro;
   varLoad();
 }
+
+// ---- 測試: which test first (CP / AeT), then its protocol; the steps are filled in ----
+$("sd-tkind").addEventListener("change", () => {
+  const k = $("sd-tkind").value, T = (D.test_templates || {})[k] || [], sel = $("sd-tproto");
+  sel.disabled = !k;
+  sel.innerHTML = k ? `<option value="">選方式…</option>` + T.map((t) => `<option value="${esc(t.protocol)}"${t.none ? " disabled" : ""}>${esc(t.label)}${t.minutes ? ` · ${t.minutes} 分` : ""}</option>`).join("")
+    : `<option value="">先選測試</option>`;
+  $("sd-tinfo").textContent = k === "cp" ? "CP 測試量 CP（功率）；比賽代替測試時不排課" : k === "aet" ? "AeT 測試量有氧閾值心率（依方式看心率或配速）" : "";
+});
+$("sd-tproto").addEventListener("change", () => {
+  const k = $("sd-tkind").value, t = ((D.test_templates || {})[k] || []).find((x) => x.protocol === $("sd-tproto").value);
+  if (!t) return;
+  dlg.test = { protocol: k === "aet" ? (t.protocol_stored || "aet") : t.protocol };
+  F.title.value = t.title; F.minutes.value = t.minutes; F.target.value = t.target || ""; F.detail.value = t.detail || "";
+  dlg.targetTouched = true;
+  $("sd-tinfo").textContent = t.tip || t.source || "";
+  tgtHint();
+});
 
 // ---- interval library: the editor's templates and 換一個 (engine/interval_library.py) ----
 const SRC_KIND = { peer: "同儕審查", coach: "教練來源", "推估": "推估" };
@@ -1306,7 +1360,9 @@ $("vd").addEventListener("click", async (e) => {
 function openDlg(s, day) {
   closeMenus();
   const ro = s && !editable(s);
-  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null };
+  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null, test: null };
+  $("sd-tkind").value = s && s.kind === "test" ? (s.protocol === "aet" || /AeT|飄移/.test(s.title || "") ? "aet" : "cp") : "";
+  $("sd-tkind").dispatchEvent(new Event("change"));
   $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
   const d = s ? s.day : day;
   $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
@@ -1364,6 +1420,7 @@ F.addEventListener("submit", async (e) => {
   const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
     tss: Math.round(estDialog().tss * 10) / 10 };
   if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
+  if (dlg.test && body.kind === "test") body.protocol = dlg.test.protocol;          // 測試 → which protocol
   if (eqOn()) {
     const f = eqF();
     Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });

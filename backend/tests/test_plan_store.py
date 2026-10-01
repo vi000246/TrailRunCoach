@@ -409,6 +409,33 @@ def test_api_swap_a_variant_is_a_user_edit_and_pushes_its_steps(monkeypatch):
         assert "市區輕鬆跑到河濱" in names and names.count("走路或極慢跑") == 5
 
 
+def test_api_tests_are_suggested_and_put_in_by_the_user(monkeypatch):
+    from backend.engine import aet_test as AT
+    with Env(monkeypatch) as e:
+        a = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 50, "ua40")
+        e.inp["cur"]["test_suggestions"] = [{"kind": "aet", "protocol": "ua40", "title": a["title"], "minutes": a["minutes"],
+                                             "reason": "6 週內沒有可判讀的跑步", "replaces_long": False,
+                                             "session": {k: a.get(k) for k in ("kind", "title", "minutes", "target",
+                                                                               "detail", "source", "protocol")}}]
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        hard = {s["day"] for s in ss if s["kind"] in ("long", "quality", "test")}
+        r = e.c.get(f"{API}/test-suggestions").json()["suggestions"]
+        (sg,) = r
+        assert sg["label"].startswith("建議做一次 AeT 測試（6 週內沒有可判讀的跑步）— 要排在哪一天？")
+        days = [d["day"] for d in sg["days"]]
+        assert days and all(dt.date.fromisoformat(d).weekday() < 5 for d in days)          # aet_test_days = weekday
+        for d in days:                                                                   # ≥ 1 easy day from hard ones
+            x = dt.date.fromisoformat(d)
+            assert not {(x + dt.timedelta(days=k)).isoformat() for k in (-1, 0, 1)} & hard
+        assert e.c.post(f"{API}/test-suggestions/schedule", json={"kind": "aet", "day": "2020-01-01"}).status_code == 400
+        s = e.c.post(f"{API}/test-suggestions/schedule", json={"kind": "aet", "day": days[0]}).json()
+        assert s["kind"] == "test" and s["edited"] and s["origin"] == "custom" and AT.is_aet_session(s)
+        assert e.c.get(f"{API}/test-suggestions").json()["suggestions"] == []           # done: no more nagging
+        cal_t = e.c.get(f"{API}/test-templates").json()
+        assert [t["protocol"] for t in cal_t["cp"]] == ["quick", "standard", "race"]
+        assert [t["protocol"] for t in cal_t["aet"]] == list(AT.PROTOCOLS)
+
+
 def test_push_scopes_and_idempotency(monkeypatch):
     with Env(monkeypatch) as e:
         pv = e.c.get(f"{API}/push-coros/preview?scope=day&day=2026-10-01").json()

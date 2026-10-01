@@ -700,7 +700,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     aet_proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
                                     getattr(prefs, "cap_weekday", None),
                                     getattr(prefs, "long_cap", None) if prefs is not None else None)
-    xu_test = aet_due and kind == "base" and aet_proto == "xu90" and mode != "recovery_week"
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 
     def add(**kw):
@@ -720,25 +719,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 long_min = min(long_min, float(RE.LONG_CAP_MIN))
         terrain = (f"挑每公里爬升 ≥ {goal_d * 0.7:.0f} m 的路線" if goal_d else
                    "有山路就走山路，陡坡用走的" if mountain_goal else "平路或緩坡")
-        if xu_test:
-            # 徐國峰's 90-min test IS the weekend LSD: it replaces this week's long run
-            # (flat, constant E pace); the week's interval stays
-            add(**AT.session(tt, None, None, getattr(prefs, "cap_weekday", None), "xu90", None))
-        else:
-            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
-                minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
-                detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
-                source=SRC_KOOP if kind == "specific" else SRC_UA,
-                tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
-        if test_s is not None:
-            add(**{**test_s, "detail": test_s["detail"] + "。門檻過期或沒測過：區間、TSS、賽事功率都靠它"})
-        elif aet_due and kind == "base" and not xu_test:
-            # AeT test in place of this week's interval (engine/aet_test.py): the chosen
-            # protocol (UA 60 / 40, Evoke, Friel), or UA 40 as the backup of the 90-min standard
-            add(**AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
-                             AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None),
-                             aet_proto, getattr(prefs, "long_cap", None) if prefs is not None else None))
-        elif allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
+        # a due CP / AeT test is SUGGESTED, never put into the plan (the user, 2026-10-01): the
+        # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
+        add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
+            minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
+            detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
+            source=SRC_KOOP if kind == "specific" else SRC_UA,
+            tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
+        if allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
                 and (gate.get("z5") or {}).get("state") != "open":
             # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (徐國峰: Zone 3
             # first, Zone 5 only on a confirmed base) — the Zone 3 ladder, uphill versions allowed
@@ -963,6 +951,26 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if i is not None and i.level in ("bad", "watch") and i.action and not (iid == "testing" and test_s is not None):
             notes.append({"level": i.level, "text": f"{i.title}：{i.action}"})
 
+    # ---- tests: suggested, not scheduled -----------------------------------
+    test_suggestions = []
+    if test_s is not None:
+        ti = by.get("testing")
+        test_suggestions.append({
+            "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
+            "reason": (getattr(ti, "verdict", "") or "門檻過期或沒測過") + "：區間、TSS、賽事功率都靠 CP",
+            "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
+                                                   "protocol")}})
+    if aet_due:
+        a_s = AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
+                         AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None), aet_proto,
+                         getattr(prefs, "long_cap", None) if prefs is not None else None)
+        test_suggestions.append({
+            "kind": "aet", "protocol": aet_proto, "title": a_s["title"], "minutes": a_s["minutes"],
+            "reason": (gate.get("aet_test_reason") or {}).get("text") or "AeT 需要重新確認",
+            "replaces_long": aet_proto == "xu90",
+            "session": {k: a_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
+                                                "protocol")}})
+
     mode_label = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
                   "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週",
                   "reentry": "停訓後恢復期"}[mode]
@@ -989,8 +997,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # the quality gate (engine/quality_gate.py), so projection.project_weeks can
         # re-evaluate it for each projected week instead of copying this week's answer
         "quality_gate": {**gate, "levels": gate_levels, "allowed": allow_quality,
-                         "this_week": dec["spec"][1] if allow_quality and dec["spec"] and kind == "base"
-                         and not (test_s is not None or aet_due) else None,
+                         "this_week": dec["spec"][1] if allow_quality and dec["spec"] and kind == "base" else None,
                          # a suggested test counts as the last one, so the projection waits ≥ 4 weeks
                          "aet_test": {"due": aet_due, "last": today.isoformat() if aet_due else tx.get("aet_last_test")}},
         # per-category TSS / h (projection shapes projected weeks with the same rates)
@@ -998,6 +1005,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "prefs": PR.to_dict() if PR is not None else None,
         "blackout_days": [d.isoformat() for d in lost],
         "heat": heat_info,
+        # CP / AeT tests that are due: suggestions with a day picker, never scheduled
+        "test_suggestions": test_suggestions,
         # 停訓後的恢復期 (engine/reentry.py): the block in effect / ahead, for projection and the log
         "reentry": rp,
     }

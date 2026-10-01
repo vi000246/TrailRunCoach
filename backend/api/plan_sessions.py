@@ -304,6 +304,121 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
         raise _err(e)
 
 
+# ---------------------------------------------------------------------------
+# tests: the editor's 測試 templates, and due tests suggested (never scheduled)
+#
+#   GET  /api/v1/overview/plan/test-templates?day=     CP (quick / standard / race) and AeT
+#                                                      (徐國峰 90 / UA 60 / UA 40 / Evoke 60 / Friel)
+#   GET  /api/v1/overview/plan/test-suggestions        the due tests + the days that suit them
+#   POST /api/v1/overview/plan/test-suggestions/schedule {kind, day}  → a custom test session
+# ---------------------------------------------------------------------------
+
+def _test_templates(th: dict, prefs) -> dict:
+    from backend.engine import aet_test as AT
+    from backend.engine import cp_protocols as CPP
+    cp = []
+    for p in CPP.PROTOCOLS:
+        s = CPP.session_for(p)
+        cp.append({"protocol": p, "label": CPP.TABLE[p]["label"], **({k: s.get(k) for k in (
+            "title", "minutes", "target", "detail", "source", "tss")} if s else
+            {"title": "用比賽當 CP 測試", "minutes": 0, "detail": CPP.NOTE_RACE, "none": True})})
+    aet = []
+    for p in AT.PROTOCOLS:
+        s = AT.session(th or {}, AT.start_hr(None, (th or {}).get("lthr")), AT.start_power((th or {}).get("cp")),
+                       None, p, None)
+        aet.append({"protocol": p, "label": AT.PROTOCOLS[p]["label"], "tip": AT.protocol_tip(p),
+                    **{k: s.get(k) for k in ("title", "minutes", "target", "detail", "source", "tss")},
+                    "protocol_stored": s.get("protocol")})
+    return {"cp": cp, "aet": aet}
+
+
+@router.get("/test-templates")
+async def test_templates():
+    inp = await _inputs()
+    from backend.engine import plan_prefs as PP
+    return _test_templates(inp.get("thresholds") or {}, PP.load())
+
+
+SUGGEST_DAYS = 14
+
+
+def suggestion_days(sg: dict, stored: list[dict], today: str, prefs, blocked: dict) -> list[dict]:
+    """The days in the next two weeks that suit a suggested test: an allowed, unblocked
+    day with no hard session (long / quality / test) the day before, that day or the day
+    after — except 徐國峰's 90-min test, which is the weekend LSD and takes the long
+    run's own day. The AeT test keeps to Mon–Fri with 課表偏好 aet_test_days = weekday."""
+    hard = {s["day"]: s for s in stored if s["state"] == "active" and s.get("day") and s["kind"] in ("long", "quality", "test")}
+    longs = {d for d, s in hard.items() if s["kind"] == "long"}
+    out = []
+    d0 = dt.date.fromisoformat(today)
+    for i in range(SUGGEST_DAYS):
+        d = d0 + dt.timedelta(days=i)
+        iso = d.isoformat()
+        if iso in (blocked or {}) or (prefs is not None and not prefs.allowed(d)):
+            continue
+        near = [x for x in ((d + dt.timedelta(days=k)).isoformat() for k in (-1, 0, 1)) if x in hard]
+        if sg.get("replaces_long"):
+            if d.weekday() < 5 and iso not in longs:
+                continue
+            near = [x for x in near if x != iso or x not in longs]
+            near = [x for x in near if hard[x]["kind"] != "long" or x == iso]
+            if any(hard[x]["kind"] in ("quality", "test") for x in near):
+                continue
+            out.append({"day": iso, "note": "取代這天的長跑" if iso in longs else "週末平路 90 分"})
+            continue
+        if sg["kind"] == "aet" and getattr(prefs, "aet_test_days", "weekday") == "weekday" and d.weekday() >= 5:
+            continue
+        if near:
+            continue
+        out.append({"day": iso, "note": ""})
+    return out
+
+
+async def _suggestions(db: AsyncSession, inp: dict) -> list[dict]:
+    from backend.engine import plan_prefs as PP
+    stored = await PS.load(db)
+    today = _today(inp)
+    prefs = PP.load()
+    bl = PS.blocked_map(inp)
+    out = []
+    for sg in (inp.get("cur") or {}).get("test_suggestions") or []:
+        from backend.engine.aet_test import is_aet_session
+        # already put in by the athlete (this or a later day): no suggestion
+        if any(s["kind"] == "test" and s["state"] in ("active", "done") and (s.get("day") or "") >= R.monday_of(today)
+               and (is_aet_session(s) == (sg["kind"] == "aet")) for s in stored):
+            continue
+        out.append({**sg, "days": suggestion_days(sg, stored, today, prefs, bl),
+                    "label": f"建議做一次 {'AeT' if sg['kind'] == 'aet' else 'CP'} 測試（{sg['reason']}）— 要排在哪一天？"})
+    return out
+
+
+@router.get("/test-suggestions")
+async def test_suggestions(db: AsyncSession = Depends(get_db)):
+    inp = await _inputs(db)
+    return {"suggestions": await _suggestions(db, inp)}
+
+
+@router.post("/test-suggestions/schedule")
+async def schedule_test(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    inp = await _inputs(db)
+    kind, day = body.get("kind"), body.get("day")
+    sg = next((x for x in await _suggestions(db, inp) if x["kind"] == kind), None)
+    if sg is None:
+        raise HTTPException(400, "現在沒有這個測試的建議")
+    if day not in {d["day"] for d in sg["days"]}:
+        raise HTTPException(400, "這天不適合排測試（太靠近長跑或強度課、不是可練日，或在不排課日期內）")
+    data = {**{k: v for k, v in sg["session"].items() if v is not None}, "day": day, "kind": "test"}
+    try:
+        async with _wlock():
+            if sg.get("replaces_long"):
+                for s in await PS.load(db):
+                    if s["state"] == "active" and s["kind"] == "long" and s.get("day") == day:
+                        await PS.delete(db, s["uid"])            # 徐國峰's test is that day's LSD
+            return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
+    except PS.PlanError as e:
+        raise _err(e)
+
+
 @router.get("/variants")
 async def variants(uid: Optional[str] = None, day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """The swap drawer for a stored interval session (uid) and the editor's templates
@@ -777,6 +892,8 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
             "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES,
             "prefs": inp.get("prefs"), "goal_climb_per_km": extras.get("goal_climb_per_km"),
             "plan_notes": _plan_notes(inp, start, end),
+            "test_suggestions": await _suggestions(db, inp),
+            "test_templates": _test_templates(inp["thresholds"] or {}, None),
             "coros": await _coros_state(db, every)}
 
 

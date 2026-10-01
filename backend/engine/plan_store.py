@@ -279,6 +279,8 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
     if d["kind"] == "test" and "title" in ch:
         from backend.engine import cp_protocols as CPP
         d["protocol"] = CPP.protocol_of({"title": ch["title"]}) or d.get("protocol")
+    if d["kind"] == "test" and patch.get("protocol") in ("quick", "standard", "race", "aet"):
+        d["protocol"] = patch["protocol"]           # the editor's 測試 → 方式 choice
     d.update(edited=True, week_start=new_week, provisional=False)
     _fill(r, d)
     await db.commit()
