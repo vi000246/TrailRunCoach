@@ -416,7 +416,9 @@ const src = (s) => s ? ` <i class="tip" tabindex="0" title="${esc("來源：" + 
 async function loadZ5() {
   const c = await j(`${API}/z5`);
   if (c.history_href) $("z5-hist").href = c.history_href;
-  const sub = c.state === "confirmed" ? `${esc(c.since)} · ${esc(c.path_label)}` : esc(c.reason || "");
+  // 未確認: the checklist below is the reason; 暫停 / 恢復期 say why in one line
+  const sub = c.state === "confirmed" ? `${esc(c.since)} · ${esc(c.path_label)}`
+    : c.state === "paused" || c.state === "reentry" ? esc(c.reason || "") : "還沒有任何一條確認路徑做到";
   const top = `<div class="z5top"><span class="z5st ${esc(c.state)}"><span aria-hidden="true">${Z5_ICON[c.state] || "–"}</span>${esc(c.label)}</span>
     <span class="meta">${sub}</span></div>`;
   const R = c.reentry;

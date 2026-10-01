@@ -1139,7 +1139,7 @@ function drawZ5Gate(card, res) {
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5 ? "#0b0b0b" : "#ffffff"; };
   const z5txt = cur.state === "confirmed" ? `已確認（${cur.since}，${cur.path_label}）` : st(cur.state).label;
   card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}</p>
-    <div class="z5now"><span>今天：<b>${esc(z5txt)}</b></span><span class="meta">${esc(cur.reason || "")}</span>
+    <div class="z5now"><span>今天：<b>${esc(z5txt)}</b></span><span class="meta">${esc(["paused", "reentry"].includes(cur.state) ? cur.reason || "" : "")}</span>
       <span class="meta">間歇門檻：${esc(H.mode_label)}</span></div>
     ${H.note ? `<p class="badge" style="margin:0 0 6px">${esc(H.note)}</p>` : ""}
     <div class="z5leg" aria-label="圖例">
@@ -1197,7 +1197,8 @@ function drawZ5Gate(card, res) {
   const lbl = { color: css("--muted"), fontSize: 10, hideOverlap: true };
   chart.setOption({
     animation: false,
-    tooltip: { trigger: "item", confine: true, formatter: (p) => `<div style="font-size:11.5px;max-width:320px;white-space:normal">${tip(p)}</div>` },
+    tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: css("--text") },
+      formatter: (p) => `<div style="font-size:11.5px;max-width:320px;white-space:normal">${tip(p)}</div>` },
     grid: [{ left: 64, right: 16, top: 4, height: 50 }, { left: 64, right: 16, top: 70, bottom: 28 }],
     xAxis: [
       { type: "time", gridIndex: 0, min: x0, max: x1, show: false },
@@ -1207,8 +1208,8 @@ function drawZ5Gate(card, res) {
     yAxis: [
       { type: "category", gridIndex: 0, data: ["事件", "5 區狀態"], axisTick: { show: false }, axisLine: { show: false },
         axisLabel: { color: css("--muted"), fontSize: 10.5 } },
-      { type: "value", gridIndex: 1, min: 0, max: Math.ceil(ymax / 30) * 30, name: "分／週", nameTextStyle: { color: css("--muted"), fontSize: 10 },
-        axisLabel: lbl, splitLine: { lineStyle: { color: line } } },
+      { type: "value", gridIndex: 1, min: 0, max: Math.ceil(ymax / 50) * 50, interval: 50,
+        axisLabel: { ...lbl, formatter: (v) => `${v} 分` }, splitLine: { lineStyle: { color: line } } },
     ],
     series: [
       { id: "state", type: "custom", xAxisIndex: 0, yAxisIndex: 0, data: segData, encode: { x: [0, 1], y: 2 },
