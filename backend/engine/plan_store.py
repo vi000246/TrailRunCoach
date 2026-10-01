@@ -365,46 +365,85 @@ def push_dict(s: dict) -> dict:
 
 _TEST_CACHE: dict = {}
 _TITLE_CACHE: dict = {}
+_VARIANT_CACHE: dict = {}
+# the interval-library columns (engine/interval_library.py; interval-prescription.md §C5.4)
+VARIANT_COLS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks")
 
 
-def done_titles(db_path=None) -> dict:
-    """{activity index: title} of the done quality / test sessions, so
-    quality_gate.dose_step judges an interval against what was planned
-    (a recovery fartlek is not a ladder step). Read-only sqlite, cached on
-    the file's mtime; {} when the DB is missing."""
+def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
+    """Rows of plan_sessions (kinds) as dicts with the variant columns that exist.
+    Read-only sqlite, cached on the file's mtime; [] when the DB is missing."""
     import sqlite3
     from pathlib import Path
     if db_path is None:
         from backend.engine.wko5expr.datasource import _db_path
         db_path = _db_path()
     if db_path is None:
-        return {}
+        return []
     p = Path(db_path)
     try:
         mt = p.stat().st_mtime_ns
     except OSError:
-        return {}
-    hit = _TITLE_CACHE.get(str(p))
+        return []
+    hit = cache.get((str(p), kinds))
     if hit and hit[0] == mt:
         return hit[1]
-    out: dict = {}
+    out: list[dict] = []
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
         try:
-            for title, done_by in con.execute("SELECT title, done_by FROM plan_sessions "
-                                              "WHERE state='done' AND kind IN ('quality','test')"):
-                try:
-                    d = json.loads(done_by) if done_by else None
-                except ValueError:
-                    d = None
-                if isinstance(d, dict) and d.get("index") is not None:
-                    out[d["index"]] = title
+            cols = {r[1] for r in con.execute("PRAGMA table_info(plan_sessions)")}
+            if cols:
+                extra = [c for c in VARIANT_COLS if c in cols]
+                sel = ", ".join(["uid", "day", "state", "kind", "title", "done_by"] + extra)
+                marks = ",".join("?" * len(kinds))
+                for row in con.execute(f"SELECT {sel} FROM plan_sessions WHERE kind IN ({marks})", kinds):
+                    d = dict(zip(["uid", "day", "state", "kind", "title", "done_by"] + extra, row))
+                    try:
+                        d["done_by"] = json.loads(d["done_by"]) if d["done_by"] else None
+                    except ValueError:
+                        d["done_by"] = None
+                    if "equiv" in d and d["equiv"] is not None:
+                        d["equiv"] = bool(d["equiv"])
+                    out.append(d)
         finally:
             con.close()
     except sqlite3.Error:
-        return {}
-    _TITLE_CACHE[str(p)] = (mt, out)
+        return []
+    cache[(str(p), kinds)] = (mt, out)
     return out
+
+
+def done_plan(db_path=None) -> dict:
+    """{activity index: {title, variant_key, rung_key, equiv, swap, variant_reps, …}} of
+    the done quality / test sessions, so quality_gate.dose_step judges an interval
+    against what was planned (its library variant; a recovery fartlek is not a
+    ladder step)."""
+    out: dict = {}
+    for r in _plan_rows(db_path, ("quality", "test"), _TITLE_CACHE):
+        d = r.get("done_by")
+        if r.get("state") == "done" and isinstance(d, dict) and d.get("index") is not None:
+            out[d["index"]] = r
+    return out
+
+
+def plan_in_use(db_path=None) -> bool:
+    """The stored plan generates quality sessions (any quality row in plan_sessions):
+    then a run that matched none of them is not a ladder session (dose_step: neutral)."""
+    return bool(_plan_rows(db_path, ("quality",), _VARIANT_CACHE))
+
+
+def done_titles(db_path=None) -> dict:
+    """{activity index: title} of the done quality / test sessions (done_plan's titles)."""
+    return {k: v.get("title") for k, v in done_plan(db_path).items()}
+
+
+def variant_rows(db_path=None) -> list[dict]:
+    """Stored quality sessions that carry a library variant (done / active / missed),
+    oldest first — interval_library.pick_variant's rotation history."""
+    rows = [r for r in _plan_rows(db_path, ("quality",), _VARIANT_CACHE)
+            if r.get("variant_key") and r.get("state") in ("done", "active", "missed")]
+    return sorted(rows, key=lambda r: r.get("day") or "")
 
 
 def test_sessions(db_path=None) -> list[dict]:

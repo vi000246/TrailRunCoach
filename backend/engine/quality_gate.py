@@ -319,56 +319,104 @@ def _with_hr_at60(reps: list[dict], s: Optional[dict]) -> list[dict]:
         v = None
         if h is not None and at < len(h) and (nxt is None or nxt >= at) and np.isfinite(h[at]):
             v = float(h[at])
-        out.append({"power": r["power"], "duration_s": r["duration_s"], "hr_at60": v})
+        out.append({"power": r["power"], "duration_s": r["duration_s"], "start_s": r["start_s"], "hr_at60": v,
+                    **({"source": r["source"]} if r.get("source") else {})})
     return out
 
 
+def spec_by_title(title: Optional[str]) -> Optional[tuple]:
+    """The ladder / recovery / sub row whose title is `title` (None when unknown)."""
+    if not title:
+        return None
+    return next((s for s in LADDER + (RECOVERY, SUB) if s[1] == str(title)), None)
+
+
 def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
-    """Interval sessions in the `days` before `today`, oldest first:
-    workout_review's `quality` class, or a road run with ≥ 4 short reps
-    (count_reps). {"idx", "date", "reps", "faded"}."""
+    """Interval sessions in the `days` before `today`, oldest first: a done
+    plan quality session, workout_review's `quality` class, a road run with
+    ≥ 4 short reps (count_reps) or ≥ 2 Zone 3 reps (interval_reps.find_reps).
+    {"idx", "date", "title", "reps", "faded", "bouts", "cp", "rep_source"}.
+
+    The reps come from interval_reps.find_reps against the planned session
+    (laps first, then 0.95 × the planned lower bound) — before, a Zone 3
+    session at 88–95 % CP had no time ≥ 95 % CP and no bout above
+    detect_efforts' median threshold, so it never counted (bug b,
+    interval-prescription.md §A5.2-2)."""
+    from backend.engine import interval_reps as IR
     from backend.engine import workout_review as WR
     from backend.engine.overview import category
     from backend.engine.wko5expr.dataset import date_to_day
     tday = math.floor(date_to_day(today))
     out = []
     try:
-        from backend.engine.plan_store import done_titles
-        titles = done_titles()                 # activity index -> the planned session's title
+        from backend.engine.plan_store import done_plan, plan_in_use
+        planned = done_plan()                  # activity index -> the planned session (title, variant)
+        in_use = plan_in_use()
     except Exception:                          # noqa: BLE001
-        titles = {}
+        planned, in_use = {}, False
     for w in sorted(ds.workouts, key=lambda x: x.day):
         if not (tday - days <= math.floor(w.day) < tday) or category(w) not in WR.QUALITY_CATEGORIES:
             continue
         if (_f(w.metrics.get("duration")) or 0) < 1200:
             continue
         m = WR.measure(ds, w)
-        if not m or (m.get("hard_s") or 0) < 120:
+        if not m:
             continue
+        row = planned.get(w.idx) or {}
+        spec = planned_variant_spec(row)
         c = WR.classify(ds, w, m)
-        reps, fade = [], None
-        if category(w) == "road" and m.get("cp"):
-            s = WR._samples(ds, w)
-            reps = count_reps(s["t"], s["power"], m["cp"]) if s is not None else []
-        if c["type"] != "quality" and len(reps) < DOSE_MIN_REPS:
+        s = WR._samples(ds, w) if m.get("cp") else None
+        found = IR.find_reps(ds, w, s, m.get("cp"), spec) if m.get("cp") and (
+            category(w) == "road" or spec is not None) else {"bouts": [], "source": None}
+        reps = found["bouts"]
+        z3 = found["source"] == "z3" and len(reps) >= 2
+        if not row and c["type"] != "quality" and not z3 and \
+                (found["source"] != "short" or len(reps) < DOSE_MIN_REPS):
             continue
-        if len(reps) >= 2 and reps[0]["power"]:
+        if not row and (m.get("hard_s") or 0) < 120 and not z3 and len(reps) < DOSE_MIN_REPS:
+            continue
+        fade = None
+        if len(reps) >= 2 and reps[0].get("power"):
             fade = reps[-1]["power"] / reps[0]["power"] - 1.0
-        else:
+        elif not reps:
             fade = (m.get("intervals") or {}).get("fade")
         if reps:
             bouts = _with_hr_at60(reps, s)
-        else:
-            bouts = [{"power": e.get("power"),
+        elif spec is None:
+            bouts = [{"power": e.get("power"), "duration_s": e.get("duration_s"), "start_s": e.get("start_s"),
                       "hr_at60": (e["hr_max"] - e["hr_drop60"]) if e.get("hr_max") is not None
                       and e.get("hr_drop60") is not None else None} for e in (m.get("efforts") or [])]
-        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": titles.get(w.idx),
+        else:
+            bouts = []                         # planned, nothing found: 無法判定 (dose_step), not 「目標太高」
+        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
+                    **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps")
+                       if row.get(k) is not None},
                     "reps": len(reps) or (m.get("intervals") or {}).get("n") or 0,
                     # informational only now: dose_step judges the bouts (interval_outcome)
                     "faded": fade is not None and fade < -FADE,
-                    "bouts": bouts[:20], "cp": m.get("cp")})
+                    "bouts": bouts[:20], "cp": m.get("cp"), "rep_source": found["source"],
+                    # the stored plan is in use and this run matched none of its quality sessions:
+                    # a hard run, not a ladder session (real data 2026-10-01: steady runs at
+                    # ~95 % CP were judged 「目標太高」 against 3×8′ and moved the ladder)
+                    **({"unplanned": True} if in_use and not row else {})})
     WR._flush(ds)
     return out
+
+
+def planned_variant_spec(row: dict):
+    """The planned spec of a stored plan row: its library variant (variant_key) when
+    there is one, else the ladder row by title; None for an unplanned activity."""
+    if not row:
+        return None
+    if row.get("variant_key"):
+        try:
+            from backend.engine import interval_library as IL
+            v = IL.get(row["variant_key"])
+            if v is not None:
+                return IL.with_reps(v, row.get("variant_reps"))
+        except Exception:                       # noqa: BLE001
+            pass
+    return spec_by_title(row.get("title"))
 
 
 # ---------------------------------------------------------------------------
@@ -467,12 +515,15 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
     step, streak, adjust, last = 0, 0, {}, None
     for h in history:
         spec, neutral = planned_spec(h.get("title"), step)
+        if h.get("unplanned"):
+            h["outcome"] = "neutral"           # not one of the plan's quality sessions
+            continue
         if neutral:
             # a recovery fartlek / sub-threshold (ramp week) / Zone 3 session the plan
             # prescribed outside the ladder: not a step, never judged against it
             h["outcome"] = "neutral"
             continue
-        if h.get("bouts") is not None and h.get("cp"):
+        if h.get("bouts") and h.get("cp"):
             o = interval_outcome(h["bouts"], spec, h["cp"], aet)
         else:
             o = {"outcome": "unknown", "why": "沒有功率或 CP，無法判定達標：同一階再做一次"}
@@ -491,7 +542,8 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
             else:
                 adjust = {"rest_add": 1}
             streak += 1
-    out = {"done": len(history), "faded": bool(last and last["outcome"] != "met"), "step": step}
+    out = {"done": sum(1 for h in history if not h.get("unplanned")),
+           "faded": bool(last and last["outcome"] != "met"), "step": step}
     if last is not None:
         out.update(outcome=last["outcome"], adjust=adjust,
                    note="" if last["outcome"] == "met" else f"上次間歇{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
