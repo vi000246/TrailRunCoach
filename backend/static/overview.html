@@ -180,6 +180,11 @@ ol.z5steps > li > div { min-width: 0; }
 .z5dots i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--accent); }
 .z5dots i.on { background: var(--accent); }
 .z5note { font-size: 12.5px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.b2bw { border-top: 1px solid var(--line); padding: 6px 0 4px; font-size: 13px; }
+.b2bw:first-child { border-top: 0; }
+.b2bw .row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.b2bw .num { font-variant-numeric: tabular-nums; }
+.b2bgrid { display: grid; grid-template-columns: auto auto auto; gap: 1px 10px; font-size: 12px; color: var(--muted); margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -210,6 +215,11 @@ ol.z5steps > li > div { min-width: 0; }
       <h2 id="z5-h">5 區（最大攝氧量間歇）狀態
         <a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">看歷程圖 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
+    </section>
+    <!-- 連續兩天長天 (engine/b2b.py card): only before a multi-day / ≥ 6 h A event, or once B2B weekends exist -->
+    <section id="b2bcard" aria-labelledby="b2b-h" hidden>
+      <h2 id="b2b-h">連續兩天長天（B2B） <span class="meta" id="b2b-sub"></span></h2>
+      <div id="b2b"><div class="loading">…</div></div>
     </section>
     </div>
     <section data-sec id="s-week">
@@ -446,6 +456,41 @@ async function loadZ5() {
         <div class="meta">3 區只要護欄通過就照排；跑順 3 堂才進 5 區</div></div></li>
       <li class="${z5ok ? "ok" : ""}"><div><b>排 5 區間歇</b> <span class="meta">${z5ok ? "可以排：每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天" : "還不行：本週的間歇是 3 區"}</span>${src("台灣教練")}</div></li>
     </ol>${reentry}${keep}${test}`;
+}
+
+// ---------------- 連續兩天長天（B2B） (GET /b2b = engine/b2b.card) ----------------
+// day 2 vs day 1 without RPE: ΔHR at the same VAM, VAM at the same HR (AeT − 10 … AeT) → 2 × 2
+const pctS = (v) => v == null ? "–" : (v >= 0 ? "+" : "−") + Math.abs(Math.round(v * 100)) + "%";
+async function loadB2B() {
+  const c = await j(`${API}/b2b`);
+  if (!c.active) return;
+  $("b2bcard").hidden = false;
+  const E = c.event;
+  $("b2b-sub").textContent = E ? `${E.name} ${md(E.start)}（${E.days > 1 ? E.days + " 天" : "單日"}）` : "";
+  const W = c.this_week, out = [];
+  if (W && W.due) out.push(`<div class="z5note"><span class="lvl good">本週</span> B2B 第 ${W.index} 次（${W.days} 天：${(W.minutes || []).join(" ＋ ")} 分）· ${esc((W.why || []).join("；"))}${src(c.rules.when)}</div>`);
+  else if (W && W.post) out.push(`<div class="z5note"><span class="lvl info">本週</span> B2B 後的輕鬆日到 ${md(W.post.until)}：不排間歇、不改恢復週${src(c.rules.post)}</div>`);
+  else if (W && W.blocked && W.blocked.length && E && E.qualifies) out.push(`<div class="meta">本週不排：${esc(W.blocked[0])}${src(c.rules.when)}</div>`);
+  const ahead = c.planned.filter((p) => !p.this_week);
+  if (ahead.length) out.push(`<div class="meta" style="margin-top:4px">之後排了：${ahead.map((p) =>
+    `${p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")}（${p.days} 天）`).join("、")} <span class="faint">（暫定，每週重算）</span></div>`);
+  const rows = c.done.map((d, i) => {
+    const r = d.eval || {}, n = r.n || {}, d1 = r.day1 || {}, d2 = r.day2 || {};
+    const share = (x) => x.over_aet_share == null ? "–" : Math.round(x.over_aet_share * 100) + "%";
+    return `<div class="b2bw"><div class="row"><b>第 ${i + 1} 次 ${md(d.start)}–${md(d.end)}</b>
+        <span class="meta num">${d.minutes.join(" ＋ ")} 分</span>
+        <span class="lvl ${esc(r.level || "na")}">${esc(r.label || "–")}</span></div>
+      <div class="meta">${esc(r.text || "")}</div>
+      <div class="b2bgrid"><span>同 VAM 的心率</span><span class="num">${r.hr_shift_bpm == null ? "–" : sgn(r.hr_shift_bpm, (v) => v.toFixed(1)) + " bpm"}</span><span>±${(r.thresholds || {}).hr_bpm ?? 3} bpm 內＝差不多</span>
+        <span>同心率的 VAM</span><span class="num">${r.vam_ratio == null ? "–" : pctS(r.vam_ratio - 1)}</span><span>±${Math.round(((r.thresholds || {}).vam ?? 0.05) * 100)}% 內＝差不多</span>
+        <span>心率 > AeT+3 的時間</span><span class="num">${share(d1)} → ${share(d2)}</span><span>≤ 10%＝達標</span>
+        <span>爬坡段（第 1／2 天）</span><span class="num">${n.day1 ?? 0} ／ ${n.day2 ?? 0}</span><span>每段 100 m、坡度 ≥ 10%</span></div></div>`;
+  }).join("");
+  const T = c.trend || {};
+  out.push(rows ? `<div style="margin-top:6px">${rows}</div>` : `<p class="meta">這個周期還沒有做過 B2B（連續兩天、每天 ≥ 90 分）。</p>`);
+  if (c.done.length) out.push(`<div class="z5note"><b>趨勢</b> ${esc(T.text || "")}${T.durable_share != null ? ` · 耐久性好 ${Math.round(T.durable_share * 100)}%（${T.judged} 次有判讀）` : ""}</div>`);
+  out.push(`<div class="meta" style="margin-top:6px"><span class="lvl watch">推估</span> 判讀門檻 ±3 bpm、±5%、趨勢 ±2 個百分點都沒有來源${src(c.rules.eval)}</div>`);
+  $("b2b").innerHTML = out.join("");
 }
 
 // ---------------- this week ----------------
@@ -693,6 +738,7 @@ const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：$
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   await loadStatus().catch(fail("hero"));
   loadZ5().catch(fail("z5"));
+  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
 })();
 </script>
