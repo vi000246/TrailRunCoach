@@ -184,6 +184,10 @@ table.zt th.num { text-align: right; }
 .loading { color: var(--muted); padding: 30px 0; text-align: center; }
 .nodata { color: var(--muted); background: var(--code); border-radius: 6px; padding: 14px 12px; margin: 6px 0; text-align: center; }
 .nodata.small { padding: 6px 10px; font-size: 11.5px; text-align: left; }
+/* 間歇判讀 verdict pill: icon + label + a status tint (engine/interval_eval.py) */
+.verdict-pill { margin: 4px 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--code); font-size: 13px; }
+.verdict-pill b { font-weight: 650; }
+.verdict-pill.good b { color: var(--ok); } .verdict-pill.warn b { color: var(--warn); } .verdict-pill.bad b { color: var(--err); }
 .card h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .qtip { position: relative; display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; margin: 0 2px 0 6px;
   border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif;
@@ -232,14 +236,28 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --z5-none: #5a5954; --z5-bar: #3987e5;
   --z5-band: rgba(25,158,112,.20); --z5-ink: #ffffff; --z5-ink2: #c3c2b7; } }
 :root[data-theme="dark"] { --z5-none: #5a5954; --z5-bar: #3987e5; --z5-band: rgba(25,158,112,.20); --z5-ink: #ffffff; --z5-ink2: #c3c2b7; }
-.z5now { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin: 2px 0 6px; font-size: 12.5px; }
-.z5now b { font-size: 13.5px; }
-.z5leg { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 11.5px; color: var(--muted); margin: 0 0 2px; }
-.z5leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.z5leg i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; }
-.z5leg i.ln { height: 0; border-top: 2px dashed var(--z5-ink2); border-radius: 0; }
-.z5leg .sym { font-style: normal; color: var(--text); font-size: 12px; width: auto; height: auto; }
-.plot.z5 { height: 340px; }
+/* the 3-step tracker: state = icon + word (never colour alone) */
+ol.z5trk { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+ol.z5trk > li { display: grid; grid-template-columns: 26px 1fr; gap: 0 8px; align-items: start; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+ol.z5trk > li.active { border-color: var(--accent); background: var(--accent-soft); }
+ol.z5trk .ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700;
+  font-size: 13px; border: 2px solid var(--muted); color: var(--muted); }
+ol.z5trk .done .ic { border-color: var(--z5-good); background: var(--z5-good); color: #fff; }
+ol.z5trk .active .ic { border-color: var(--accent); color: var(--accent); }
+ol.z5trk .paused .ic { border-color: var(--z5-warn); color: var(--text); }
+ol.z5trk .wait .ic { border-color: var(--z5-serious); color: var(--text); }
+ol.z5trk b.ttl { display: block; font-size: 13px; }
+ol.z5trk small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+ol.z5trk .tests { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+ol.z5trk .tests span { white-space: nowrap; }
+ol.z5trk .tests .y { color: var(--ok); font-weight: 700; } ol.z5trk .tests .n { color: var(--err); font-weight: 700; }
+.z5next { font-size: 14px; font-weight: 600; padding: 7px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 6px 6px 0; margin: 0 0 8px; }
+.z5next.done, .z5next.open { border-left-color: var(--z5-good); }
+.z5next.paused { border-left-color: var(--z5-warn); } .z5next.reentry { border-left-color: var(--z5-serious); }
+.z5h { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+.plot.z5 { height: 92px; } .plot.z5.bars { height: 210px; }
 table.z5ev td { white-space: normal; }
 /* single-activity charts (kind "activity": 心率與功率, 區間時間, 心率變化與趨勢) — one hue per measure */
 :root { --ac-hr: #eb6834; --ac-pw: #2a78d6; --ac-ink: #0b0b0b; --ac-ink2: #52514e; --ac-brush: rgba(42,120,214,.10); }
@@ -269,6 +287,7 @@ table.z5ev td { white-space: normal; }
 .ac-zbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 4px; font-size: 11.5px; }
 .ac-zbar select { font-size: 12px; max-width: 100%; }
 .ac-src { font-size: 11px; color: var(--muted); margin: 2px 0 0; }
+@media (max-width: 640px) { ol.z5trk { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body class="aside-closed" data-mode="season">
@@ -1031,6 +1050,14 @@ function lastVal(s) {
 
 function draw(card, res) {
   card.querySelector(".loading")?.remove();
+  // a review card that doesn't apply to this activity (the interval cards on an easy run)
+  if (res.hide) { card.remove(); return; }
+  // a verdict pill (間歇判讀): status = icon + label, never colour alone
+  if (res.badge) {
+    const b = res.badge, icon = { good: "✓", warn: "◐", bad: "✕" }[b.level] || "•";
+    card.insertAdjacentHTML("beforeend", `<p class="verdict-pill ${esc(b.level || "")}"><b>${icon} ${esc(b.text)}</b>${
+      b.sub ? ` <span class="meta">${esc(b.sub)}</span>` : ""}</p>`);
+  }
   if (res.fixes && res.fixes.length) {
     const badge = ` <span class="badge fix" title="${esc(res.fixes.join("\n"))}">已修正單位</span>`;
     const seg = card.querySelector("h2 > .seg");
@@ -1145,9 +1172,11 @@ function drawTargets(card, res) {
       <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
 }
 
-// ---- 5 區開放流程 (kind z5gate, quality_gate.z5_history): a state band over time on top, the
-// weekly Zone 1 minutes below (150–210 target band, the 2/3 pause line), event markers in a lane
-// between them. One value axis (minutes); the band and the lane are category lanes, not a scale.
+// ---- 5 區開放流程 (kind z5gate): on top the 3-step tracker and the 「還缺什麼」 line (H.progress =
+// quality_gate.z5_card, the same object as the 總覽 card); below a simple history
+// (quality_gate.z5_history): one state band with text labels, a few markers (confirmations and
+// test attempts) and — only once Zone 5 has been confirmed — the weekly Zone 1 minutes against the
+// pause line. Details live in the hover and in the collapsible table.
 const Z5_STATE = {
   unconfirmed: { label: "未確認", v: "--z5-none" }, confirmed: { label: "已確認", v: "--z5-good" },
   open: { label: "不設門檻", v: "--z5-good" }, paused: { label: "暫停", v: "--z5-warn" },
@@ -1155,11 +1184,27 @@ const Z5_STATE = {
 };
 const Z5_EV = {   // shape carries identity (never colour alone)
   confirm: { sym: "diamond", ch: "◆", label: "確認有氧基礎" },
-  xu_run: { sym: "circle", ch: "●", label: "90 分鐘長跑（實心＝通過、空心＝沒過）" },
+  xu_run: { sym: "circle", ch: "●", label: "90 分鐘測試（實心＝通過、空心＝沒過）" },
   aet: { sym: "triangle", ch: "▲", label: "實測 AeT" },
-  pause: { sym: "triangle", rot: 180, ch: "▼", label: "5 區暫停" },
-  break: { sym: "rect", ch: "■", label: "停跑（恢復期開始）" },
+  pause: { ch: "▼", label: "5 區暫停" },
+  break: { ch: "■", label: "停跑（恢復期開始）" },
 };
+const Z5_STEP = { done: ["✓", "完成"], active: ["●", "進行中"], todo: ["○", "還沒開始"], paused: ["‖", "暫停"],
+  wait: ["↺", "恢復期內不判斷"] };
+const Z5_TEST_SHORT = { xu90: "90 分鐘", aet_ua_gap: "UA 差距", aet_friel_drift: "Friel 飄移" };
+function z5Tracker(P) {
+  if (!P || !P.steps) return "";
+  const mk = (ok) => ok === true ? `<b class="y" aria-label="達標">✓</b>` : ok === false ? `<b class="n" aria-label="沒過">✕</b>`
+    : `<b aria-label="還沒做">–</b>`;
+  const tests = (P.base?.tests || []).map((t) => `<span title="${esc(t.label + "\n" + (t.value || ""))}">${mk(t.ok)} ${esc(Z5_TEST_SHORT[t.key] || t.label)}</span>`).join("");
+  const sub = { base: tests ? `<div class="tests">${tests}</div>` : "", z3: "", z5: "" };
+  const lis = P.steps.map((s, i) => { const [ic, word] = Z5_STEP[s.status] || Z5_STEP.todo;
+    return `<li class="${esc(s.status)}"><span class="ic" aria-hidden="true">${ic}</span><span><b class="ttl">${"①②③"[i]} ${esc(s.label)}</b>
+      <small>${esc(word)}</small>${sub[s.key] || ""}</span></li>`; }).join("");
+  const N = P.next || {};
+  return `<ol class="z5trk" aria-label="5 區開放的三步">${lis}</ol>
+    ${N.text ? `<div class="z5next ${esc(N.kind || "")}" role="status">${esc(N.text)}</div>` : ""}`;
+}
 function drawZ5Gate(card, res) {
   card.querySelector(".loading")?.remove();
   const H = res.z5, cur = H.current || {};
@@ -1168,45 +1213,38 @@ function drawZ5Gate(card, res) {
   const DAY = 86400000;
   const ink = css("--z5-ink"), ink2 = css("--z5-ink2"), line = css("--line"), panel = css("--panel");
   const fill = (k) => css(st(k).v);
-  // readable text on a status fill: black or white by the fill's luminance
   const onFill = (hex) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5 ? "#0b0b0b" : "#ffffff"; };
   const z5txt = cur.state === "confirmed" ? `已確認（${cur.since}，${cur.path_label}）` : st(cur.state).label;
-  card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}</p>
-    <div class="z5now"><span>今天：<b>${esc(z5txt)}</b></span><span class="meta">${esc(["paused", "reentry"].includes(cur.state) ? cur.reason || "" : "")}</span>
-      <span class="meta">間歇門檻：${esc(H.mode_label)}</span></div>
+  // the weekly bars only matter for the pause rule: shown once there is a pause line
+  const shown = H.weeks.filter((w) => w.keep_min != null);
+  const bars = shown.length > 0;
+  const marks = H.events.filter((e) => ["confirm", "xu_run", "aet"].includes(e.kind));
+  card.insertAdjacentHTML("beforeend", `${z5Tracker(H.progress)}
     ${H.note ? `<p class="badge" style="margin:0 0 6px">${esc(H.note)}</p>` : ""}
-    <div class="z5leg" aria-label="圖例">
-      ${["unconfirmed", "confirmed", "paused", "reentry"].map((k) => `<span><i style="background:${fill(k)}"></i>${st(k).label}</span>`).join("")}
-      <span><i style="background:var(--z5-bar)"></i>每週 1 區分鐘</span>
-      <span><i style="background:var(--z5-band);outline:1px solid ${line}"></i>目標 ${H.target[0]}–${H.target[1]} 分（徐國峰）</span>
-      <span><i class="ln"></i>暫停線＝確認時的 2/3（Hickson 1982）</span>
-      ${Object.values(Z5_EV).map((e) => `<span><i class="sym">${e.ch}</i>${esc(e.label)}</span>`).join("")}
-    </div>`);
+    <p class="z5h">歷程（間歇門檻：${esc(H.mode_label)}）· ◆ 確認 · ● 90 分鐘測試（空心＝沒過）· ▲ 實測 AeT${bars ? " · 長條＝每週 1 區分鐘，虛線＝暫停線" : ""}</p>`);
   const el = document.createElement("div");
-  el.className = "plot z5";
+  el.className = "plot z5" + (bars ? " bars" : "");
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `5 區開放流程：今天 ${z5txt}；下方表格列出每次狀態改變與事件`);
+  el.setAttribute("aria-label", `5 區開放流程：今天 ${z5txt}；${H.progress?.next?.text || ""}；下方表格列出每次狀態改變與事件`);
   card.appendChild(el);
   const chart = echarts.init(el);
   charts.push(chart);
   const x0 = ms(H.begin), x1 = ms(H.end) + DAY;
-  // lane 1 = state band, lane 0 = events
+  // lane 1 = state band, lane 0 = the few markers above it
   const segData = H.segments.map((s) => ({ value: [ms(s.start), ms(s.end), 1], s }));
-  const evData = H.events.map((e) => {
-    const k = Z5_EV[e.kind] || Z5_EV.break, hollow = e.kind === "xu_run" && !e.ok;
-    return { value: [ms(e.date) + DAY / 2, 0], e, symbol: k.sym, symbolRotate: k.rot || 0, symbolSize: 11,
+  const evData = marks.map((e) => {
+    const k = Z5_EV[e.kind], hollow = e.kind === "xu_run" && !e.ok;
+    return { value: [ms(e.date) + DAY / 2, 0], e, symbol: k.sym, symbolSize: 11,
       itemStyle: { color: hollow ? panel : ink, borderColor: ink, borderWidth: hollow ? 1.5 : 1 } };
   });
-  const wk = H.weeks.map((w) => ({ value: [ms(w.monday), ms(w.monday) + 7 * DAY, w.z1_min], w }));
-  // the pause line: flat across each week that has one, broken where there is none
+  const wk = shown.map((w) => ({ value: [ms(w.monday), ms(w.monday) + 7 * DAY, w.z1_min], w }));
   const keep = [];
   for (const w of H.weeks) {
     if (w.keep_min == null) { keep.push([ms(w.monday), null]); continue; }
     keep.push([ms(w.monday), w.keep_min], [ms(w.monday) + 7 * DAY - 1, w.keep_min]);
   }
-  const ymax = Math.max(H.target[1] * 1.15, ...H.weeks.map((w) => w.z1_min * 1.1));
-  const fmtD = (t) => { const d = new Date(t); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+  const ymax = Math.max(50, ...shown.map((w) => Math.max(w.z1_min, w.keep_min || 0) * 1.1));
   const lastDay = (iso) => new Date(ms(iso) - DAY).toISOString().slice(0, 10);
   const tip = (p) => {
     if (p.seriesId === "state") {
@@ -1217,70 +1255,74 @@ function drawZ5Gate(card, res) {
     }
     if (p.seriesId === "ev") {
       const e = p.data.e;
-      return `<b>${esc(e.date)}</b> ${esc((Z5_EV[e.kind] || {}).ch || "")}<br>${esc(e.label)}`;
+      return `<b>${esc(e.date)}</b> ${esc(Z5_EV[e.kind].ch)}<br>${esc(e.label)}`;
     }
     if (p.seriesId === "z1") {
-      const w = p.data.w, [lo, hi] = H.target;
-      const vs = w.z1_min >= hi ? `達到 ${hi} 分` : w.z1_min >= lo ? `在 ${lo}–${hi} 分之間` : `比 ${lo} 分少 ${Math.round(lo - w.z1_min)} 分`;
-      return `<b>${esc(bucketLabel(w.monday, "week", true))}${w.complete ? "" : "（本週未完）"}</b><br>1 區 ${Math.round(w.z1_min)} 分（${vs}）`
-        + (w.keep_min != null ? `<br>暫停線 ${Math.round(w.keep_min)} 分（確認時 ${Math.round(w.level_min)} 分的 2/3）${w.z1_min < w.keep_min ? "：低於" : ""}` : "");
+      const w = p.data.w;
+      return `<b>${esc(bucketLabel(w.monday, "week", true))}${w.complete ? "" : "（本週未完）"}</b><br>1 區 ${Math.round(w.z1_min)} 分`
+        + `<br>暫停線 ${Math.round(w.keep_min)} 分（確認時 ${Math.round(w.level_min)} 分的 2/3）${w.z1_min < w.keep_min ? "：低於" : ""}`
+        + `<br><span style="opacity:.85">連 3 週低於才暫停（Hickson 1982；3 週推估）</span>`;
     }
     if (p.seriesId === "keep") return `暫停線 ${Math.round(p.value[1])} 分（確認時水準的 2/3，Hickson 1982；連 3 週低於才暫停，3 週推估）`;
     return "";
   };
   const lbl = { color: css("--muted"), fontSize: 10, hideOverlap: true };
-  chart.setOption({
-    animation: false,
-    tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: css("--text") },
-      formatter: (p) => `<div style="font-size:11.5px;max-width:320px;white-space:normal">${tip(p)}</div>` },
-    grid: [{ left: 64, right: 16, top: 4, height: 50 }, { left: 64, right: 16, top: 70, bottom: 28 }],
-    xAxis: [
-      { type: "time", gridIndex: 0, min: x0, max: x1, show: false },
-      { type: "time", gridIndex: 1, min: x0, max: x1, axisLine: { lineStyle: { color: line } },
-        axisLabel: { ...lbl, formatter: { year: "{yyyy}", month: "{M}月", day: "{M}/{d}" } } },
-    ],
-    yAxis: [
-      { type: "category", gridIndex: 0, data: ["事件", "5 區狀態"], axisTick: { show: false }, axisLine: { show: false },
-        axisLabel: { color: css("--muted"), fontSize: 10.5 } },
-      { type: "value", gridIndex: 1, min: 0, max: Math.ceil(ymax / 50) * 50, interval: 50,
-        axisLabel: { ...lbl, formatter: (v) => `${v} 分` }, splitLine: { lineStyle: { color: line } } },
-    ],
-    series: [
-      { id: "state", type: "custom", xAxisIndex: 0, yAxisIndex: 0, data: segData, encode: { x: [0, 1], y: 2 },
-        renderItem: (params, api) => {
-          const s = segData[params.dataIndex].s;
-          const a = api.coord([api.value(0), 1]), b = api.coord([api.value(1), 1]);
-          const h = api.size([0, 1])[1] * 0.78, w = Math.max(1, b[0] - a[0] - 2), col = fill(s.state);
-          const text = st(s.state).label + (s.state === "confirmed" && w > 150 ? `（${s.path_label}）` : "");
-          return { type: "group", children: [
-            { type: "rect", shape: { x: a[0] + 1, y: a[1] - h / 2, width: w, height: h, r: 4 }, style: { fill: col } },
-            { type: "text", silent: true, style: { text: w > 40 ? text : "", x: a[0] + 7, y: a[1], fill: onFill(col),
-              font: "600 11px system-ui, sans-serif", verticalAlign: "middle", width: w - 10, overflow: "truncate" } }] };
-        } },
-      { id: "ev", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, data: evData, z: 3 },
+  const timeAxis = (gi, show) => ({ type: "time", gridIndex: gi, min: x0, max: x1, show,
+    axisLine: { lineStyle: { color: line } }, axisLabel: { ...lbl, formatter: { year: "{yyyy}", month: "{M}月", day: "{M}/{d}" } } });
+  const grid = [{ left: 64, right: 16, top: 4, height: 54 }];
+  const xAxis = [timeAxis(0, !bars)], yAxis = [
+    { type: "category", gridIndex: 0, data: ["測試", "5 區狀態"], axisTick: { show: false }, axisLine: { show: false },
+      axisLabel: { color: css("--muted"), fontSize: 10.5 } }];
+  const series = [
+    { id: "state", type: "custom", xAxisIndex: 0, yAxisIndex: 0, data: segData, encode: { x: [0, 1], y: 2 },
+      renderItem: (params, api) => {
+        const s = segData[params.dataIndex].s;
+        const a = api.coord([api.value(0), 1]), b = api.coord([api.value(1), 1]);
+        const h = api.size([0, 1])[1] * 0.8, w = Math.max(1, b[0] - a[0] - 2), col = fill(s.state);
+        return { type: "group", children: [
+          { type: "rect", shape: { x: a[0] + 1, y: a[1] - h / 2, width: w, height: h, r: 4 }, style: { fill: col } },
+          { type: "text", silent: true, style: { text: w > 36 ? st(s.state).label : "", x: a[0] + 7, y: a[1], fill: onFill(col),
+            font: "600 11px system-ui, sans-serif", verticalAlign: "middle", width: w - 10, overflow: "truncate" } }] };
+      } },
+    { id: "ev", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, data: evData, z: 3 },
+  ];
+  if (bars) {
+    grid.push({ left: 64, right: 16, top: 72, bottom: 24 });
+    xAxis.push(timeAxis(1, true));
+    yAxis.push({ type: "value", gridIndex: 1, min: 0, max: Math.ceil(ymax / 50) * 50, interval: 50,
+      axisLabel: { ...lbl, formatter: (v) => `${v} 分` }, splitLine: { lineStyle: { color: line } } });
+    series.push(
       { id: "z1", type: "custom", xAxisIndex: 1, yAxisIndex: 1, data: wk, encode: { x: [0, 1], y: 2 },
         renderItem: (params, api) => {
           const w = wk[params.dataIndex].w;
           const a = api.coord([api.value(0), api.value(2)]), b = api.coord([api.value(1), 0]);
           return { type: "rect", shape: { x: a[0] + 1, y: a[1], width: Math.max(1, b[0] - a[0] - 2), height: Math.max(0, b[1] - a[1]), r: [4, 4, 0, 0] },
             style: { fill: css("--z5-bar"), opacity: w.complete ? 1 : 0.45 } };
-        },
-        markArea: { silent: true, itemStyle: { color: css("--z5-band") }, label: { show: true, position: "insideTopLeft", color: ink2, fontSize: 10,
-          formatter: `目標 ${H.target[0]}–${H.target[1]} 分` }, data: [[{ yAxis: H.target[0] }, { yAxis: H.target[1] }]] } },
+        } },
       { id: "keep", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: keep, showSymbol: false, connectNulls: false,
-        lineStyle: { color: ink2, type: "dashed", width: 2 }, z: 4 },
-    ],
+        lineStyle: { color: ink2, type: "dashed", width: 2 }, z: 4 });
+  }
+  chart.setOption({
+    animation: false,
+    tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: css("--text") },
+      formatter: (p) => `<div style="font-size:11.5px;max-width:320px;white-space:normal">${tip(p)}</div>` },
+    grid, xAxis, yAxis, series,
   });
   new ResizeObserver(() => chart.resize()).observe(el);
-  // the table view: every state change and event, in order
+  // the table view: every state change and event, in order, plus the full description and sources
   const rows = [
     ...H.segments.map((s) => ({ d: s.start, k: `狀態：${st(s.state).label}`, t: s.reason || (s.path_label ? `確認（${s.path_label}）` : "") })),
     ...H.events.map((e) => ({ d: e.date, k: `${(Z5_EV[e.kind] || {}).ch || ""} ${(Z5_EV[e.kind] || {}).label?.split("（")[0] || e.kind}`, t: e.label })),
   ].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0);
-  card.insertAdjacentHTML("beforeend", `<details><summary>狀態變化與事件（${rows.length}）</summary>
+  const T = (H.progress?.base?.tests || []);
+  card.insertAdjacentHTML("beforeend", `<details><summary>細節：三種測試、狀態變化與事件（${rows.length}）</summary>
+    ${T.length ? `<table class="z5ev"><thead><tr><th>測試</th><th>結果</th><th>需要</th></tr></thead><tbody>
+      ${T.map((t) => `<tr><td>${esc(t.label)}</td><td class="meta">${t.ok === true ? "✓ " : t.ok === false ? "✕ " : "– "}${esc(t.value || "")}</td><td class="meta">${esc(t.need || "")}</td></tr>`).join("")}
+      </tbody></table>` : ""}
     <table class="z5ev"><thead><tr><th>日期</th><th>項目</th><th>說明</th></tr></thead><tbody>
     ${rows.map((r) => `<tr><td class="num">${esc(r.d)}</td><td>${esc(r.k)}</td><td class="meta">${esc(r.t)}</td></tr>`).join("")}
     </tbody></table>
+    <p class="desc" style="max-height:none;margin-top:6px">${esc(res.description || "")}</p>
     <p class="desc" style="max-height:none;margin-top:6px">來源：${Object.values(H.sources || {}).map(esc).join("；")}</p></details>`);
 }
 
@@ -1749,8 +1791,16 @@ function drawPlot(card, res, series) {
     // downsampled to ≤3000
     const base = { name: s.name, yAxisIndex: yi, data: pts, color, connectNulls: false,
       sampling: hx ? undefined : "lttb" };
+    // per-point text labels (a review series' `labels`, e.g. 「✓ 達標」 on each rep bar)
+    const lab = s.labels ? { show: true, position: "top", color: text, fontSize: 10,
+      formatter: (p) => s.labels[p.dataIndex] ?? "" } : undefined;
     if (s.type === "bar" || s.type === "stackedbar") {
-      put({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: 6 }, s);
+      put({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: s.bar_width || 6,
+        barGap: "-100%", label: lab, itemStyle: s.bar_width ? { borderRadius: [4, 4, 0, 0] } : undefined }, s);
+    } else if (s.labels) {
+      // a few labelled markers (the battery's minimum)
+      put({ name: s.name, yAxisIndex: yi, data: pts, color, type: "scatter", symbolSize: 9, label: lab,
+        itemStyle: { borderColor: css("--bg") || "#fff", borderWidth: 2 } }, s);
     } else if (s.line_style === "none" && s.type !== "area") {
       // WKO5 "no line" = markers only: an x-y scatter (HR vs power, LSS vs grade) or event markers
       put({ name: s.name, yAxisIndex: yi, data: pts.filter((p) => p[1] != null && p[0] != null), color,
@@ -1782,6 +1832,13 @@ function drawPlot(card, res, series) {
     xAxis = { type: "value", min: 0, max: xmax, interval: durInterval(xmax), axisLine: axLine,
       splitLine: { lineStyle: { color: line } },
       axisLabel: { ...lbl, formatter: (v) => fmtDur(v, xmax >= 3 * 3600 ? "hm" : undefined) } };
+  } else if (xKind === "value" && ["REP", "BAR"].includes(xUnit.id)) {
+    // review bars (間歇判讀): one integer slot per rep / per bar, never 1.2 / 1.4 ticks
+    const xs = out.flatMap((o) => (o.data || []).map((p) => p[0])).filter((x) => x != null);
+    const lo = Math.min(...xs, 1), hi = Math.max(...xs, 1);
+    xAxis = { type: "value", min: lo - 0.6, max: hi + 0.6, interval: 1, name: xUnit.id === "REP" ? "趟" : "",
+      nameLocation: "middle", nameGap: 20, nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { show: false },
+      axisLine: axLine, axisLabel: { ...lbl, show: xUnit.id === "REP", formatter: (v) => Number.isInteger(v) ? `第 ${v} 趟` : "" } };
   } else if (xKind === "value") {
     xAxis = { type: "value", scale: true, name: axisName(xUnit), nameLocation: "middle", nameGap: 20,
       nameTextStyle: { color: muted, fontSize: 10 }, splitLine: { lineStyle: { color: line } },

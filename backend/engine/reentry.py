@@ -14,8 +14,9 @@ period lasts as long as the break):
               last long run of the block is a drift check (UA: re-read after
               a layoff); 2 Zone 3 sessions before Zone 5 (推估)
   29–56 days  three stages 33 / 50 / 75 % (Daniels cat. 3); Zone 5 only after
-              the aerobic base is re-confirmed after the break (90-min drift
-              or 三訊號; Mujika & Padilla 2000: recent gains are lost
+              the aerobic base is re-confirmed after the break (one of the
+              three tests: the 90-min drift, UA gap or Friel drift; Mujika &
+              Padilla 2000: recent gains are lost
               after > 4 weeks); AeT counts as stale (UA)
   > 56 days   restart: 15 weeks, 3-week steps 33 → 50 → 70 → 85 → 100 %
               (Daniels cat. 4); Zone 3 from week 13 (推估 mapping of his T at
