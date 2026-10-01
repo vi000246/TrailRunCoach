@@ -323,7 +323,7 @@ def run_harness(cases: list[dict], context: Callable[[dict], dict], evaluate: Ca
                          "intensity": c.get("intensity"), "intensity_reason": c.get("intensity_reason"),
                          **{k: c.get(k) for k in ("activity_type", "activity_type_overridden", "effort_tag",
                                                   "effort_overridden", "effort_reason", "file", "rest_share",
-                                                  "marked", "no_power") if k in c},
+                                                  "marked", "no_power", "power_source", "power_unused") if k in c},
                          **r})
     return rows
 
@@ -572,7 +572,8 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
                 "power_envelope": stats(r.get("err_c") for r in rs)}
     return {"all": blk(th), "races": blk(races), "max_effort": blk(maxes),
             "race_rows": [{k: r.get(k) for k in ("date", "label", "file", "effort_tag", "effort_overridden",
-                                                 "effort_reason", "rest_share", "no_power", "err_th_given",
+                                                 "effort_reason", "rest_share", "no_power", "power_source",
+                                                 "power_unused", "err_th_given",
                                                  "err_th_nodur", "err_th_race", "err_th_race_nodur", "err_c",
                                                  "err_p", "error")}
                           | {"th": r.get("th")} for r in sorted(races, key=lambda r: r["date"])],
@@ -655,6 +656,9 @@ def wko5_cp_tests(ds, today: dt.date, skip_dates: set) -> list[dict]:
         iso = w.entry.start.date().isoformat()
         if iso in skip_dates:
             continue
+        from backend.engine.racepower import athlete as A
+        if not A.power_ok(ds, w):
+            continue                       # a "test" on watch-estimated power is no CP test
         try:
             m = WR.measure(ds, w)
             if not m:
@@ -782,17 +786,21 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
         arr = A.activity_arrays(ds, w)
         if arr is None:
             continue
+        c = {**c, "power_source": A.power_source(ds, w)}
         if c["category"] == "hike":
             for n, part in _hike_days(arr, w.entry.start):
                 cc = {**c, "day": n, "date": (w.entry.start + dt.timedelta(seconds=float(np.nanmin(part["t"])))).date().isoformat()}
                 arrays[(c["idx"], n)] = part
                 cases.append(cc)
         else:
-            if arr.get("p") is None or not np.any(np.nan_to_num(arr["p"]) > 0):
+            no_pw = arr.get("p") is None or not np.any(np.nan_to_num(arr["p"]) > 0)
+            if no_pw or not A.power_ok(ds, w):
+                # watch-estimated power counts as no power (power_source.py)
                 if c["category"] != "trail":
                     continue
                 # trail without power (e.g. the 2024-09-21 race): only the HR pace model
-                c = {**c, "no_power": True, "cap_sample": False}
+                c = {**c, "no_power": True, "cap_sample": False,
+                     "power_unused": not no_pw}
             arrays[(c["idx"], None)] = arr
             cases.append(c)
     weight = ds.setting("weight", tday)
@@ -960,6 +968,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
                                  "trail_race_like": [s for s in samples if s["category"] == "trail" and s["ok"]]},
             "hr_capacity": {k: v for k, v in hr_now.items() if k != "points"} | {"points": hr_now.get("points")},
             "trail_hr": trail_hr, "user_marked": len(marked),
+            "power_source": A.power_summary(ds, [w for w in all_runs if A.outdoor(w)]),
             "notes": [A.GROUP_HIKE_NOTE + "；只有你標記為自己走的登山才會成為回測案例",
                       "能力樣本看「努力度」不看「是不是比賽」：你標記的努力度優先（全力＝一定算、其他＝一定不算）；"
                       "自動：路跑用全力路跑規則，越野用移動心率（≥ 0.90 × LTHR、AeT 以上 ≥ 2/3）＋長休息（≥ 5 分的停留 ≤ 10 %）",

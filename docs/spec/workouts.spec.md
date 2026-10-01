@@ -49,20 +49,33 @@ race word in the title → 比賽; hiking / mountaineering with a plan 百岳 ev
   (intensity.py's easy rule) → 輕鬆, else 一般.
 - road (`effort_road`): `maximal.road_maximal` passes → 全力; else the easy rule → 輕鬆, else 一般.
 
+## Power source (`backend/engine/power_source.py`, 2026-10-01)
+
+Each dataset workout has a power source: `stryd` (Stryd developer fields Form Power / Air Power /
+Leg Spring Stiffness, or a Stryd `device_info` row), `watch` (power without them: estimated from the
+wrist) or `none`. Reading the fields as Stryd is 推估. `Dataset.power_source(w)` / `power_ok(w)` /
+`power_label(w)`; FIT datasets classify at load (`FitChannels.power_source`), WKO5 `.wko4` files from
+their channels (cached per file stamp). Setting `power.accept_watch_power` (default false): watch
+power feeds no power-based model and no power TSS; HR and pace paths still use the run. Parity mode
+reads every power (WKO5 does not tell them apart). The channel itself is never hidden (charts and
+the activity view still show it).
+
 ## API
 
 | Method | Path | Body / result |
 |---|---|---|
 | PATCH | `/api/v1/workouts/{id}/activity` | `{activity_type?, effort?, note?}`; a key present with null clears it (back to auto), absent = unchanged; 400 invalid value, 404, 422 no start time. Returns `{id, activity: …}` fields |
 | GET | `/api/v1/workouts`, `/api/v1/workouts/{id}` | each item now has `trail_classification`, `classification_overridden` and `activity` (the stored user values: `activity_type`, `effort`, labels, `*_overridden`, `note`, `key`) |
-| GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels |
+| GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`) |
+| GET | `/api/v1/wko5/workouts` | each item also has `power_source` and `power_label` (「手錶推估功率（未採用）」 for unused watch power); `tss_source` is no longer `power` for a blocked watch run |
 | PATCH | `/api/v1/wko5/workouts/{idx}/activity` | as above; keyed by start minute + file, so it applies across sources |
 
 ## UI
 
 `backend/static/activity_tags_card.js`, loaded by `wko5_viewer.html` (圖表分析 → 單次活動) the same
 way as `segments_card.js`: a 「活動資訊」 card first in the grid with two selects (活動類型, 努力度;
-「自動（…）」 = back to auto), a note, and a 「自動」 / 「手動」 badge per field with the auto reason.
+「自動（…）」 = back to auto), a note, and a 「自動」 / 「手動」 badge per field with the auto reason. Below them 「功率來源：Stryd」 or
+「功率來源：手錶推估功率（未採用）（功率模型、功率 TSS 不採用；心率／配速照常使用）」.
 No served static page edited the terrain classification (only the unbuilt React `frontend/` has a
 hook), so the single-activity view is where both live.
 
@@ -96,4 +109,5 @@ idempotence, the trail HR model and the planner estimate.
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-01 | feature | user request | Activity tags (type / effort / note), auto + user override, API, 活動資訊 card, seed script |
+| 2026-10-01 | feature | user request (COROS vs TP back-test) | Power source per workout (stryd / watch / none), `power.accept_watch_power` (default false), API fields and the 功率來源 line on the activity card; tests `backend/tests/test_power_source.py` |
 | 2026-10-01 | bugfix | docs/research/unsourced-rules.md §0.10 step 0 | Seed matches COROS / TP races by the WKO5 start (±3 min), `--source` defaults to the data source; documented that the tags live in the app DB (table created on first write) |

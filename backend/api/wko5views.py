@@ -310,7 +310,12 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
             "duration": m.get("duration"), "distance": m.get("distance"),
             "climbing": m.get("climbing"), "tss": m.get("tss"), "if": m.get("if"),
             "hrtss": m.get("hrtss"), "np": m.get("np"),
+            # stryd / watch / none (engine/power_source.py); watch power is
+            # 「手錶推估功率（未採用）」 unless power.accept_watch_power
+            "power_source": ds.power_source(w) if hasattr(ds, "power_source") else None,
+            "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
             "tss_source": ("power" if m.get("np") is not None and m.get("tssduration")
+                           and not m.get("power_tss_blocked")
                            else "rtss" if w.sport == "run" and m.get("ngp") and m.get("tss") is not None
                            and m.get("tss") != m.get("hrtss")
                            else "trainingpeaks" if w.entry.file in ds._tp_tss
@@ -345,9 +350,14 @@ def workout_review(i: int, section: Optional[str] = None, parity: Optional[bool]
 def _activity_json(ds, w) -> dict:
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import athlete as A
+    from backend.engine import power_source as PS
     t = A.auto_tags(ds, w)
+    src = A.power_source(ds, w)
     return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
-            "types": AT.TYPES, "efforts": AT.EFFORTS, **t}
+            "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
+            "power": {"source": src, "used": A.power_ok(ds, w) if src != PS.NONE else False,
+                      "label": PS.label(src, bool(getattr(ds, "accept_watch_power", True))),
+                      "setting": PS.SETTING_KEY}}
 
 
 @router.get("/workouts/{i}/activity")
