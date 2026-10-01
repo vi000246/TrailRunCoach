@@ -299,7 +299,7 @@ class FitFolderDataset(Dataset):
                  corrections: Optional[CorrectionStore] = None, source: str = "fit",
                  tz: Optional[dt.tzinfo] = None, classifications: Optional[dict] = None,
                  athlete_settings: Optional[list] = None, estimate_thresholds: Optional[bool] = None,
-                 accept_watch_power: Optional[bool] = None):
+                 accept_watch_power: Optional[bool] = None, exclude_bad: Optional[bool] = None):
         from backend.engine.planning import Plan
         from backend.engine.wko5expr.datasource import athlete_tz
         from backend.files.fit_to_channels import fit_to_channels
@@ -311,6 +311,7 @@ class FitFolderDataset(Dataset):
         self.config = config or EngineConfig()
         self._init_power_policy(accept_watch_power)
         self.corrections = None if self.config.parity else (corrections or CorrectionStore())
+        self._init_exclusion_policy(exclude_bad)
         self.plan = Plan() if self.config.parity else Plan.load()
         self.athlete = default_athlete()
         # where the thresholds / weight come from (module docstring): the plan's
@@ -363,12 +364,6 @@ class FitFolderDataset(Dataset):
             group, stype = sport_of(sport_raw, sub, classification_for(p, self._classes))
             rel = p.relative_to(self.dir).as_posix()
             idx = len(self.workouts)
-            chans = {"elapsedtime": Channel("elapsedtime", list(fc.elapsedtime), 1.0, base=0.0)}
-            for name, vals in fc.channels.items():
-                chans[name] = Channel(name, list(vals), 1.0)
-            self._files[idx] = Wko4File(path=str(p), sport=stype, start_time=start.isoformat(), device=None,
-                                        weight_kg=None, original_type="fit", original_bytes=None,
-                                        channels=chans, ranges=[], info=None)
             entry = WorkoutEntry(file=rel, sport=stype.title(), sport_group=group.title(), start=start,
                                  ftp=None, metrics={}, record=None)
             # WKO5 marks trail runs with the "runningtrail" tag; several
@@ -376,6 +371,17 @@ class FitFolderDataset(Dataset):
             # read only the tag, so a FIT trail run carries it too
             tags = ["runningtrail"] if stype == "trail running" else []
             w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags)
+            # a bad file (car / bike segment, impossible power: bad_activity.py)
+            # never enters ds.workouts; it is listed in ds.excluded
+            if self._exclusion(w, lambda fc=fc, rel=rel: self._fit_bad_features(fc, rel),
+                               duration=float(fc.elapsedtime[-1]) if fc.elapsedtime else None):
+                continue
+            chans = {"elapsedtime": Channel("elapsedtime", list(fc.elapsedtime), 1.0, base=0.0)}
+            for name, vals in fc.channels.items():
+                chans[name] = Channel(name, list(vals), 1.0)
+            self._files[idx] = Wko4File(path=str(p), sport=stype, start_time=start.isoformat(), device=None,
+                                        weight_kg=None, original_type="fit", original_bytes=None,
+                                        channels=chans, ranges=[], info=None)
             self.workouts.append(w)
             self._power_src[idx] = fc.power_source      # stryd / watch / none (power_source.py)
             if not self.accept_watch_power and self._power_src[idx] == "watch":
@@ -404,6 +410,14 @@ class FitFolderDataset(Dataset):
     # FIT data: channels come from the parsed files, not .wko4
     def wko4(self, idx: int) -> Optional[Wko4File]:
         return self._files.get(idx)
+
+    def _fit_bad_features(self, fc, rel: str) -> dict:
+        """bad_activity.features of a parsed FIT (approved power corrections applied)."""
+        from backend.engine import bad_activity as BA
+        pw = fc.channels.get("power")
+        if pw is not None and self.corrections is not None:
+            pw = self.corrections.apply(rel, "power", fc.elapsedtime, pw)
+        return BA.features(fc.elapsedtime, fc.channels.get("elapseddistance"), pw)
 
     def _apply_moving_hrtss(self) -> None:
         from backend.engine.algorithms.wko5_hr import hr_tss

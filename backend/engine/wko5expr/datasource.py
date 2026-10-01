@@ -91,9 +91,13 @@ def db_stamp() -> str:
 
 def source_stamp(source: str, wko5_dir: Path) -> str:
     """Changes when the source's files change, or power.accept_watch_power
-    (it changes power TSS, so the Dataset must be rebuilt)."""
+    (it changes power TSS, so the Dataset must be rebuilt), or which bad
+    activity files are left out (activities.exclude_bad and the per-activity
+    keep / exclude overrides, engine/bad_activity.py)."""
     from backend.engine.power_source import read_setting as accept_watch
-    return f"{_files_stamp(source, wko5_dir)}|pw:{int(accept_watch())}"
+    from backend.engine import bad_activity as BA
+    return (f"{_files_stamp(source, wko5_dir)}|pw:{int(accept_watch())}"
+            f"|ex:{int(BA.read_setting())}:{BA.overrides_stamp()}")
 
 
 def _files_stamp(source: str, wko5_dir: Path) -> str:

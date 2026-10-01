@@ -230,6 +230,9 @@ class ActivityTag(Base):
     effort: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     effort_overridden: Mapped[bool] = mapped_column(Boolean, default=False)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # bad activity files (engine/bad_activity.py): "keep" = 這筆是正常的，不要排除,
+    # "exclude" = 手動排除, NULL = the auto rule
+    exclusion: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

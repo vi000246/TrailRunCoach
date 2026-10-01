@@ -223,13 +223,15 @@ class Dataset:
     def __init__(self, athlete_dir: str | Path, today: Optional[dt.date] = None,
                  config: Optional[EngineConfig] = None,
                  corrections: Optional["CorrectionStore"] = None,
-                 accept_watch_power: Optional[bool] = None):
+                 accept_watch_power: Optional[bool] = None,
+                 exclude_bad: Optional[bool] = None):
         self.dir = Path(athlete_dir)
         self.config = config or EngineConfig()
         self._init_power_policy(accept_watch_power)
         # Approved data corrections; skipped in parity mode so WKO5 comparisons
         # stay honest.
         self.corrections = None if self.config.parity else (corrections or CorrectionStore())
+        self._init_exclusion_policy(exclude_bad)
         # Season plan (events, dated HR tests). Its thresholds replace WKO5's
         # settings outside parity mode.
         from backend.engine.planning import Plan
@@ -254,6 +256,9 @@ class Dataset:
                         sport_type=(e.sport or "").lower(), tags=tags)
             w.metrics = self._metrics(w)
             self.workouts.append(w)
+        # bad activity files leave ds.workouts here, before anything keyed by
+        # the workout index (wko4 / power source caches) exists
+        self._apply_exclusion_policy()
         self.first_day = int(np.floor(self.workouts[0].day)) if self.workouts else int(self.today)
         self.last_day = int(np.floor(self.workouts[-1].day)) if self.workouts else int(self.today)
         self._apply_power_policy()
@@ -336,6 +341,94 @@ class Dataset:
                 self._power_blocked.add(w.entry.file)
                 w.metrics = self._metrics(w)
         self._flush_power_sources()
+
+    # ---- bad activity files (backend/engine/bad_activity.py) ----------------
+    def _init_exclusion_policy(self, enabled: Optional[bool]) -> None:
+        """A bad file (a run recorded in a car / on a bike, impossible power)
+        leaves `self.workouts` — so it reaches no model, chart, PMC or plan
+        match — and is listed in `self.excluded` (the activity list, 設定 →
+        資料校正). Auto rule on unless activities.exclude_bad is false (or
+        `enabled`); the user's keep / exclude override (activity_tags) wins.
+        Parity mode excludes nothing (WKO5 reads every file), like the
+        corrections."""
+        from backend.engine import bad_activity as BA
+        self.excluded: list[dict] = []
+        self.exclusion_kept: list[dict] = []     # auto-flagged, the user said 這筆是正常的
+        if self.config.parity:
+            self.exclude_bad = False
+            self._exclusion_tags = None
+            return
+        self.exclude_bad = BA.read_setting(True) if enabled is None else bool(enabled)
+        from backend.engine import activity_tags as AT
+        self._exclusion_tags = AT.load()
+
+    def _exclusion(self, w: Workout, feats, distance: Optional[float] = None,
+                   duration: Optional[float] = None) -> Optional[dict]:
+        """Decide one workout (`feats()` = bad_activity.features, called only
+        when needed). Records it in excluded / exclusion_kept; returns the
+        exclusion (None = the workout stays)."""
+        from backend.engine import activity_tags as AT
+        from backend.engine import bad_activity as BA
+        if self._exclusion_tags is None:                    # parity mode
+            return None
+        rows = self._exclusion_tags
+        ov = AT.user_exclusion(AT.find(rows, w.entry.start, w.entry.file)) if rows else None
+        if not self.exclude_bad and ov is None:
+            return None
+        auto = None
+        if w.sport in BA.FOOT_GROUPS:
+            auto = BA.judge(feats(), w.sport, self.setting("weight", w.day))
+        ex = BA.decide(auto, ov, self.exclude_bad)
+        if ex is None and not (auto and ov == BA.KEEP):
+            return None
+        a = auto or {}
+        row = {"key": AT.key_of(w.entry.start), "start": w.entry.start.isoformat(), "file": w.entry.file,
+               "sport": w.sport, "sport_type": w.sport_type,
+               "distance": distance if distance is not None else a.get("distance_km"),
+               "duration": duration, "moving_s": a.get("moving_s"), "avg_kmh": a.get("avg_kmh"),
+               "rule": a.get("rule"), "auto": auto is not None, "override": ov,
+               "reason": (ex or {}).get("reason") or a.get("reason"),
+               "label": (ex or {}).get("label"), "manual": bool((ex or {}).get("manual"))}
+        (self.excluded if ex else self.exclusion_kept).append(row)
+        return ex
+
+    def _bad_features(self, w: Workout) -> Optional[dict]:
+        """bad_activity.features of a WKO5 .wko4 file, disk-cached by file
+        stamp + its corrections ("bad_activity_v1"). Reads the file directly
+        (not the per-index wko4 cache: the index is not final yet)."""
+        from backend.engine import bad_activity as BA
+        p = self.dir / w.entry.file
+        if not p.exists():
+            return None
+        store = self.__dict__.get("_ba_store")
+        if store is None:
+            store = self._ba_store = _cache_read(_CACHE_DIR / "bad_activity_v1.json")
+        stamp = _file_stamp(p) + [self._corr_sig(w.entry.file, "power")]
+        hit = store.get(w.entry.file)
+        if not hit or hit[:3] != stamp:
+            f = read_wko4(p)
+            ch = f.channels
+            t, d, pw = ch.get("elapsedtime"), ch.get("elapseddistance"), ch.get("power")
+            pv = pw.values if pw else None
+            if pv is not None and self.corrections is not None and t is not None:
+                pv = self.corrections.apply(w.entry.file, "power", t.values, pv)
+            hit = stamp + [BA.features(t.values if t else None, d.values if d else None, pv)]
+            store[w.entry.file] = hit
+            self._ba_dirty = True
+        return hit[3]
+
+    def _apply_exclusion_policy(self) -> None:
+        keep = []
+        for w in self.workouts:
+            ex = self._exclusion(w, lambda w=w: self._bad_features(w),
+                                 distance=w.entry.metrics.get(F_DISTANCE), duration=w.entry.metrics.get(F_DURATION))
+            if ex is None:
+                w.idx = len(keep)
+                keep.append(w)
+        self.workouts = keep
+        if getattr(self, "_ba_dirty", False):
+            _cache_write(_CACHE_DIR / "bad_activity_v1.json", self._ba_store)
+            self._ba_dirty = False
 
     def _is_hr_sourced(self, w: Workout) -> bool:
         m = w.metrics
