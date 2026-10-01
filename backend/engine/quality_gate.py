@@ -405,7 +405,8 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         else:
             bouts = []                         # planned, nothing found: 無法判定 (dose_step), not 「目標太高」
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
-                    **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps")
+                    **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",
+                                               "variant_adj", "variant_blocks")
                        if row.get(k) is not None},
                     "reps": len(reps) or (m.get("intervals") or {}).get("n") or 0,
                     # informational only now: dose_step judges the bouts (interval_outcome)
@@ -427,9 +428,9 @@ def planned_variant_spec(row: dict):
     if row.get("variant_key"):
         try:
             from backend.engine import interval_library as IL
-            v = IL.get(row["variant_key"])
+            v = IL.resolve(row["variant_key"], row.get("variant_reps"), row.get("variant_adj"))
             if v is not None:
-                return IL.with_reps(v, row.get("variant_reps"))
+                return v
         except Exception:                       # noqa: BLE001
             pass
     return spec_by_title(row.get("title"))
@@ -530,10 +531,16 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
     `faded` stays for the week card."""
     step, streak, adjust, last = 0, 0, {}, None
     for h in history:
-        spec, neutral = planned_spec(h.get("title"), step)
         if h.get("unplanned"):
             h["outcome"] = "neutral"           # not one of the plan's quality sessions
             continue
+        if h.get("variant_key"):
+            # judged by the stored variant (interval-prescription.md §C5.4) — not by the title,
+            # which a shortened session changed (bug a: the 4×8′ / 3×10′ steps never moved)
+            spec, neutral, counted = variant_spec(h, step)
+        else:
+            spec, neutral = planned_spec(h.get("title"), step)
+            counted = True
         if neutral:
             # a recovery fartlek / sub-threshold (ramp week) / Zone 3 session the plan
             # prescribed outside the ladder: not a step, never judged against it
@@ -545,6 +552,11 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
             o = {"outcome": "unknown", "why": "沒有功率或 CP，無法判定達標：同一階再做一次"}
         oc = o.get("outcome") or "unknown"
         h["outcome"] = oc
+        if not counted:
+            # a 縮量版 / non-equivalent swap / the step before under a tight cap: shown, but the
+            # rung doesn't move (§C5.4 「判定結果只顯示，不影響階數」)
+            h["counted"] = False
+            continue
         last = {**o, "outcome": oc, "date": h.get("date"), "step": step}
         if oc == "met":
             step, streak, adjust = step + 1, 0, {}
@@ -564,6 +576,27 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
         out.update(outcome=last["outcome"], adjust=adjust,
                    note="" if last["outcome"] == "met" else f"上次間歇{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
     return out
+
+
+def variant_tuple(v) -> tuple:
+    """A library variant as a ladder row (interval_outcome's spec): n reps, minutes, band."""
+    from backend.engine import interval_library as IL
+    return (v.key, IL.title(v), v.n, v.works[0] / 60.0, v.rest_s / 60.0, v.lo, v.hi, v.terrain == "hill", v.src)
+
+
+def variant_spec(h: dict, step: int) -> tuple[tuple, bool, bool]:
+    """(spec, neutral, counted) of a history row that carries a variant_key:
+    neutral when its rung isn't where the ladder stands (or it isn't a ladder
+    rung: T+ maintenance, 30/15); counted = equiv (a 縮量版 / non-equivalent swap is
+    judged but doesn't move the rung)."""
+    from backend.engine import interval_library as IL
+    v = IL.resolve(h.get("variant_key"), h.get("variant_reps"), h.get("variant_adj"))
+    want = dose_spec(step, True)
+    if v is None:
+        return want, True, False
+    rung = h.get("rung_key") or v.rung
+    neutral = rung != want[0]
+    return variant_tuple(v), neutral, h.get("equiv") is not False
 
 
 def planned_spec(title: Optional[str], step: int) -> tuple[tuple, bool]:
