@@ -56,8 +56,8 @@ def test_replay_opens_on_the_qualifying_90_min_run_and_ends_where_the_gate_is():
     by = {r["date"]: r for r in h["days"]}
     assert by[(xu_day - dt.timedelta(days=1)).isoformat()]["state"] == "unconfirmed"
     on = by[xu_day.isoformat()]
-    # the run also completes 三訊號 (the easy weeks give ②), which wins the tie (base_check)
-    assert on["state"] == "confirmed" and on["path"] == "xu_signals" and on["since"] == xu_day.isoformat()
+    # one of the three tests (the 90-min test) done and passed
+    assert on["state"] == "confirmed" and on["path"] == "xu90" and on["since"] == xu_day.isoformat()
     assert _states(h) == ["unconfirmed", "confirmed"]
     # the last replayed day is exactly what evaluate() (the planner) says today
     g = _gate_z5(ds)
@@ -69,8 +69,9 @@ def test_replay_opens_on_the_qualifying_90_min_run_and_ends_where_the_gate_is():
     assert all(a["end"] == b["start"] for a, b in zip(segs, segs[1:]))
     # events: the confirmation (path) and the 90-min run with its drift
     conf = [e for e in h["events"] if e["kind"] == "confirm"]
-    assert conf == [{"date": xu_day.isoformat(), "kind": "confirm", "path": "xu_signals",
-                     "label": "確認有氧基礎（三訊號）"}]
+    assert conf == [{"date": xu_day.isoformat(), "kind": "confirm", "path": "xu90",
+                     "label": "確認有氧基礎（徐國峰 90 分鐘飄移）"}]
+    assert not [e for e in h["events"] if "三訊號" in e.get("label", "")]
     xu = [e for e in h["events"] if e["kind"] == "xu_run"]
     assert len(xu) == 1 and xu[0]["ok"] and xu[0]["drift"] == pytest.approx(0.06, abs=0.003)
     # weekly Zone 1 minutes, the 150–210 band and the pause line after the confirmation
@@ -125,7 +126,6 @@ def test_replay_pause_by_the_zone1_rule(monkeypatch):
     monkeypatch.setattr(BC, "xu_runs", lambda ds, today, days=182: [
         {"idx": 0, "date": since.isoformat(), "ok": True, "drift": 0.05, "hr10": 128.0, "hr90": 134.4, "why": []}]
         if today >= since else [])
-    monkeypatch.setattr(BC, "three_signals", lambda ds, today: {"ok": False, "text": "還沒", "s1": {}})
     cut = TODAY - dt.timedelta(days=9)
 
     def mt(ds, today, since, brk=None):
@@ -158,30 +158,25 @@ def test_measured_aet_rows_are_events():
 # the overview card
 # ---------------------------------------------------------------------------
 
-def sig_ok(card):
-    return next(p for p in card["paths"] if p["key"] == "xu_signals")["ok"]
-
-
-def test_card_checklist_from_the_gate():
+def test_card_one_step_three_tests_from_the_gate():
     ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(TODAY - dt.timedelta(days=10))])
     g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
     c = QG.z5_card(g, TODAY)
-    assert c["state"] == "confirmed" and c["headline"].startswith("已確認（") and "三訊號" in c["headline"]
-    assert sig_ok(c)
-    keys = [p["key"] for p in c["paths"]]
-    assert keys == ["xu_signals", "xu90", "aet"]                 # auto: any one path opens Zone 5
-    sig = c["paths"][0]
-    assert [i["label"][0] for i in sig["items"]] == ["①", "②", "③"]
-    one, two, three = sig["items"]
-    assert one["ok"] and "6.0%" in one["value"] and "徐國峰" in one["src"]
-    assert two["need"].startswith("150–210 分") and "推估" in two["src"]
-    assert "分" in two["value"]
-    assert three["ok"] is not None and "推估" in three["src"]
-    assert c["paths"][1]["ok"]                                   # the 90-min test passed
-    ua = c["paths"][2]["items"][0]
+    assert c["state"] == "confirmed" and c["headline"].startswith("已確認（") and "90 分鐘" in c["headline"]
+    assert "paths" not in c and "三訊號" not in str(c)
+    b = c["base"]
+    assert b["label"] == "確認有氧基礎（三選一，做了且達標）" and b["ok"]
+    # auto: the three tests, the 90-min test exactly once
+    assert [t["key"] for t in b["tests"]] == ["xu90", "aet_ua_gap", "aet_friel_drift"]
+    xu, ua, fr = b["tests"]
+    assert xu["ok"] and "6.0%" in xu["value"] and "徐國峰" in xu["src"]
     assert ua["ok"] is None and "沒有實測 AeT" in ua["value"]
+    assert fr["ok"] is None
     assert c["z3"] == {"done": 0, "need": 3, "ok": False, "src": QG.SRC_Z5["z3"]}
     assert c["keep"] and c["keep"]["line_min"] == pytest.approx(c["keep"]["level_min"] * 2 / 3)
+    # the tracker and the 「還缺什麼」 line
+    assert [(s["key"], s["status"]) for s in c["steps"]] == [("base", "done"), ("z3", "active"), ("z5", "todo")]
+    assert c["next"] == {"kind": "missing", "text": "還缺：再 3 堂 3 區達標（0/3；3 區只要護欄通過就照排）"}
 
 
 def test_card_without_any_long_run_and_in_a_forced_mode():
@@ -189,11 +184,34 @@ def test_card_without_any_long_run_and_in_a_forced_mode():
     g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
     c = QG.z5_card(g, TODAY)
     assert c["state"] == "unconfirmed" and c["headline"] == "未確認"
-    one = c["paths"][0]["items"][0]
-    assert one["ok"] is False and one["value"] == "—（8 週內沒有符合的長跑）"
-    assert c["paths"][1]["items"][0]["ok"] is None
+    xu = c["base"]["tests"][0]
+    assert xu["ok"] is None and xu["value"].startswith("—（還沒做過")
+    assert c["steps"][0]["status"] == "active" and c["steps"][1]["status"] == "todo"
+    n = c["next"]["text"]
+    assert n.startswith("還缺：做一次 90 分鐘平路 1 區測試") and "25 °C" in n and "AeT 測試" in n
     g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(quality_gate="ua_gap"), GOOD_BY, BASE)
-    assert [p["key"] for p in QG.z5_card(g, TODAY)["paths"]] == ["aet"]
+    c = QG.z5_card(g, TODAY)
+    assert [t["key"] for t in c["base"]["tests"]] == ["aet_ua_gap"]
+    assert c["base"]["label"] == "確認有氧基礎（UA 差距法）" and "AeT 測試" in c["next"]["text"]
+
+
+def test_card_next_line_for_a_failed_90_min_test():
+    ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(TODAY - dt.timedelta(days=10), rise=0.12)])
+    c = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)
+    assert c["base"]["tests"][0]["ok"] is False
+    assert "上次" in c["next"]["text"] and "飄移" in c["next"]["text"]
+
+
+def test_card_next_line_when_paused_by_the_zone1_rule():
+    gate = {"mode": "auto", "dose": {"step": 0}, "aet": {}, "lthr": {},
+            "z5": {"state": "paused", "label": "暫停", "open": False, "since": "2026-08-01", "path": "xu90",
+                   "path_label": "徐國峰 90 分鐘飄移", "reason": "連續 3 週…", "pause": {"kind": "z1", "at": "2026-09-14"},
+                   "xu_last": {"date": "2026-08-01", "ok": True, "drift": 0.05, "hr10": 128, "hr90": 134, "why": []},
+                   "maintenance": {"z1_level_min": 210.0, "weeks": [], "ok": False}}}
+    c = QG.z5_card(gate, TODAY)
+    assert not c["base"]["ok"] and c["base"]["tests"][0]["ok"] is False   # the old pass is before the pause
+    assert c["next"]["kind"] == "paused" and "重新確認" in c["next"]["text"] and "140 分" in c["next"]["text"]
+    assert [s["status"] for s in c["steps"]] == ["active", "todo", "paused"]
 
 
 def test_card_in_a_reentry_block_counts_the_days_left():
@@ -204,7 +222,9 @@ def test_card_in_a_reentry_block_counts_the_days_left():
     assert c["state"] == "reentry" and c["headline"] == "恢復期"
     r = c["reentry"]
     assert r["days"] == 10 and r["days_left"] == (date.fromisoformat(r["quality_from"]) - TODAY).days > 0
-    assert "Daniels" in r["src"] and c["paths"][0]["empty"] == "恢復期內不判斷"
+    assert "Daniels" in r["src"] and c["base"]["empty"] == "恢復期內不判斷"
+    assert c["next"]["kind"] == "reentry" and c["next"]["text"].startswith(f"恢復期還剩 {r['days_left']} 天")
+    assert c["steps"][0]["status"] == "wait" and c["steps"][2]["status"] == "paused"
 
 
 # ---------------------------------------------------------------------------

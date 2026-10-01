@@ -174,8 +174,10 @@ class Prefs:
         return out
 
 
-def from_settings(values: dict) -> Prefs:
-    """Prefs from {user_settings key: value}; missing / None -> the default."""
+def from_settings(values: dict, lenient: bool = True) -> Prefs:
+    """Prefs from {user_settings key: value}; missing / None -> the default.
+    `lenient` (stored values): a 間歇門檻 that is no longer a mode — e.g. the
+    dropped "xu_signals" (三訊號) — reads as "auto"."""
     kw = {}
     for k, f in KEY_FIELDS.items():
         v = values.get(k)
@@ -185,17 +187,21 @@ def from_settings(values: dict) -> Prefs:
             v = tuple(v)
         if f == "weekly_hours":
             v = float(v)
+        if f == "quality_gate" and lenient:
+            from backend.engine.quality_gate import MODES
+            v = v if v in MODES else "auto"
         kw[f] = v
     return Prefs(**kw)
 
 
 def from_body(body: dict) -> Prefs:
-    """Prefs from the API body (field names); unknown fields are rejected."""
+    """Prefs from the API body (field names); unknown fields are rejected
+    (and an unknown 間歇門檻 too, by check())."""
     names = {f.name for f in fields(Prefs)}
     bad = set(body) - names
     if bad:
         raise ValueError(f"unknown preference(s): {sorted(bad)}")
-    return from_settings({k: body.get(f) for k, f in KEY_FIELDS.items()})
+    return from_settings({k: body.get(f) for k, f in KEY_FIELDS.items()}, lenient=False)
 
 
 def check(p: Prefs) -> None:

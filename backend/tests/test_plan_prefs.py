@@ -246,6 +246,24 @@ def test_bad_values_are_rejected(key, value):
         SR.validate(key, value)
 
 
+def test_dropped_quality_gate_mode_falls_back_to_auto(monkeypatch):
+    # 三訊號 ("xu_signals") is no longer a 間歇門檻: a stored value reads as auto…
+    assert PP.from_settings({"plan.prefs.quality_gate": "xu_signals"}).quality_gate == "auto"
+    assert PP.from_settings({"plan.prefs.quality_gate": "ua_gap"}).quality_gate == "ua_gap"
+    from backend.engine.wko5expr import datasource as DSRC
+    monkeypatch.setattr(DSRC, "read_setting", lambda k, default=None, user_id=1:
+                        "xu_signals" if k == "plan.prefs.quality_gate" else default)
+    assert PP.load().quality_gate == "auto"
+    # …new writes of it are rejected (settings enum, API body)
+    with pytest.raises(ValueError):
+        SR.validate("plan.prefs.quality_gate", "xu_signals")
+    with pytest.raises(ValueError):
+        PP.check(PP.from_body({"quality_gate": "xu_signals"}))
+    # and evaluate() maps any unknown mode to auto too
+    from backend.engine import quality_gate as QG
+    assert "xu_signals" not in QG.MODES and "xu_signals" not in QG.OPTION_INFO
+
+
 def test_cross_field_checks():
     with pytest.raises(ValueError):
         PP.check(PP.Prefs(days=(True, True, True, False, False, False, False), runs=4))
