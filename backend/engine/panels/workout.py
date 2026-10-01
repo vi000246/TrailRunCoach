@@ -57,14 +57,18 @@ def _wavg(v: Optional[np.ndarray], w: np.ndarray, m: np.ndarray) -> Optional[flo
 
 
 def grade_bins(dt_s, grade, distance_km=None, power=None, hr=None, cadence=None,
-               edges: Sequence[float] = GRADE_EDGES) -> list[dict]:
+               edges: Sequence[float] = GRADE_EDGES, elev_m=None) -> list[dict]:
     """Rows ordered from steepest downhill to steepest uphill; empty buckets dropped.
-    distance_km is cumulative (km); grade is a fraction (0.1 = 10%)."""
+    distance_km is cumulative (km); grade is a fraction (0.1 = 10%). With
+    `elev_m` (sample-aligned, m) each row also has `vam`: the net vertical
+    rate inside the bucket, m/h (negative on descents)."""
     d = np.asarray(dt_s, dtype=float)
     n = len(d)
     g = _arr(grade, n) * 100.0
     dist = _arr(distance_km, n)
     step = np.diff(dist, prepend=dist[0]) if dist is not None else None
+    el = _arr(elev_m, n)
+    rise = np.diff(el, prepend=el[0]) if el is not None else None
     ok = np.isfinite(d) & (d > 0) & (d <= MAX_DT) & np.isfinite(g)
     p, h, c = _arr(power, n), _arr(hr, n), _arr(cadence, n)
     bounds = [None, *edges, None]
@@ -82,7 +86,14 @@ def grade_bins(dt_s, grade, distance_km=None, power=None, hr=None, cadence=None,
         if step is not None:
             s = step[m]
             km = float(s[np.isfinite(s) & (s >= 0) & (s < 1)].sum())
+        vam = None
+        if rise is not None:
+            r = rise[m]
+            r_ok = np.isfinite(r) & (np.abs(r) < 50)       # a > 50 m step is a GPS / file jump
+            if r_ok.any():
+                vam = float(r[r_ok].sum() / t * 3600.0)
         rows.append({
+            "vam": vam,
             "label": _label(lo, hi), "lo": lo, "hi": hi,
             "time_s": t,
             "distance_km": km,
