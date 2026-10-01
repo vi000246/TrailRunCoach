@@ -79,6 +79,16 @@ def test_a_changed_file_is_the_only_one_parsed_again(tmp_path, monkeypatch):
     assert ds.workouts[1].metrics["duration"] == pytest.approx(1200, abs=2)
 
 
+def test_a_deleted_file_leaves_the_cache(tmp_path):
+    root = _folder(tmp_path)
+    a = _build(root)
+    npz = a._store.npz("2026/2.fit")
+    assert npz.exists()
+    (root / "2026" / "2.fit").unlink()
+    b = _build(root)
+    assert len(b.workouts) == 2 and "2026/2.fit" not in b._store.files and not npz.exists()
+
+
 def test_a_field_version_change_recomputes_only_that_field(tmp_path, monkeypatch):
     root = _folder(tmp_path)
     _build(root)
