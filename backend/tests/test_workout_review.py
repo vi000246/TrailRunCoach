@@ -137,7 +137,7 @@ def test_drift_refuses_stops_short_and_unsteady():
     assert not r["ok"] and "停" in r["reason"]
     short = _t(30)
     r = R.drift_of(short, np.full(len(short), 140.0), np.full(len(short), 10.0))
-    assert not r["ok"] and "40" in r["reason"]
+    assert not r["ok"] and not r["ref_ok"] and r["tier"] is None and "< 30 分" in r["reason"]
     p = np.where((t // 60) % 2 == 0, 100.0, 300.0)     # 1' on / 1' off
     r = R.drift_of(t, hr, np.full(len(t), 10.0), power=p, cp=300.0)
     assert not r["ok"] and "功率起伏" in r["reason"]
@@ -155,16 +155,18 @@ def _warmup_run(minutes, warm_hr=110.0, warm_kmh=8.0):
 
 
 def test_drift_counts_the_40_minutes_after_the_warmup():
-    # 48′ = 10′ warm-up + 38′: the old floor (40′ total) took it, UA's 40′ after the warm-up doesn't
+    # 48′ = 10′ warm-up + 38′: the old floor (40′ total) took it, UA's 40′ after the warm-up doesn't —
+    # strict refused; the 參考 tier (≥ 30′ after the warm-up, 自組) keeps the number
     t, hr, v = _warmup_run(48)
     r = R.drift_of(t, hr, v)
-    assert not r["ok"] and r["drift"] is None
+    assert not r["ok"] and r["ref_ok"] and r["tier"] == "ref" and r["drift"] is not None
     assert "暖身後只有 38 分鐘" in r["reason"] and "< 40 分" in r["reason"]
+    assert R.basis_drift(r)[0] is None and R.basis_drift(r, ref=True)[0] == r["drift"]
     # 51′ on the clock, but a 90-s stop (< 5 %) after the warm-up leaves 39.5′ of moving time
     t, hr, v = _warmup_run(51)
     v[1200:1290] = 0.0
     r = R.drift_of(t, hr, v)
-    assert not r["ok"] and "暖身後只有 39 分鐘" in r["reason"]
+    assert not r["ok"] and r["tier"] == "ref" and "暖身後只有 39 分鐘" in r["reason"]
     assert r["measured_s"] == pytest.approx(39.5 * 60, abs=2)
     # 52′ = 10′ + 42′: measured on the 42′ after the warm-up only
     t, hr, v = _warmup_run(52)

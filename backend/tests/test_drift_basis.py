@@ -41,7 +41,7 @@ from backend.engine.wko5expr import basis as BS
 from backend.engine.wko5expr.customviews import CustomViewError, REPO_VIEWS, load_custom_views, parse_view
 
 
-SEASON_TITLE = "心率飄移 Pa:HR（暖身後 ≥ 40 分鐘的路跑）"       # views/training.json 能力
+SEASON_TITLE = "心率飄移 Pa:HR（暖身後 ≥ 40 分鐘的路跑，30–40 分為參考）"       # views/training.json 能力
 
 
 def _t(minutes):
@@ -234,8 +234,15 @@ def test_season_drift_charts_use_the_card_definition():
         drawn = [s for s in c["series"] if s.get("basis")]
         assert {s["basis"] for s in drawn} == {"pace", "power"}
         for s in drawn:
-            assert f'drift("{s["basis"]}")' in s["expression"] and "pahr" not in s["expression"] \
-                and "pwhr" not in s["expression"], s
+            assert "pahr" not in s["expression"] and "pwhr" not in s["expression"], s
+            if s["name"].startswith("參考"):
+                # v9: the 參考 tier as its own markers, labelled in the legend
+                assert f'drift("{s["basis"]}", "ref")' in s["expression"] and s["line_style"] == "none", s
+                assert "（暖身後 30–40 分，未達 UA 測試標準）" in s["name"]
+            else:
+                assert f'drift("{s["basis"]}")' in s["expression"], s
+        assert sum(s["name"].startswith("參考") for s in drawn) == 2
+        assert "參考（暖身後 30–40 分，未達 UA 測試標準）" in c["description"] and "自組" in c["description"]
         assert "判讀卡" in c["description"] and "WKO5 存的 Pa:HR" in c["description"]
         assert "WKO5 存的 Pw:HR" in BS.apply_basis(c, "power")[0]["description"]
     for key in (("我的訓練", "耐久度：長時間後段心率飄移"), ("周期化訓練", "耐久度：長時間後段心率飄移")):
@@ -263,12 +270,13 @@ FAIR = "2025/Athlete_2025_06_30_20_42.wko4"
 DEFINITION_GAP = 0.10
 
 
-def plain_card(t, hr, speed, power):
+def plain_card(t, hr, speed, power, floor=2400):
     """drift_of v8, written out without workout_review's helpers: keep the
     samples after the first 10 min that are moving (gap ≤ 30 s, speed > 1.6
     km/h) with HR, speed and power all valid (one window for both bases;
-    power covers 100 % on these runs); ≥ 2400 s kept; the last 10 % of the
-    kept time ≤ 5 % above the rest for power and for speed; then halves."""
+    power covers 100 % on these runs); ≥ `floor` s kept (2400 = the strict
+    tier, 1800 = v9's 參考 tier); the last 10 % of the kept time ≤ 5 % above
+    the rest for power and for speed; then halves."""
     kept = []
     for i in range(1, len(t)):
         d = t[i] - t[i - 1]
@@ -280,7 +288,7 @@ def plain_card(t, hr, speed, power):
             continue
         kept.append((d, hr[i], speed[i], power[i]))
     total = sum(k[0] for k in kept)
-    out = {"measured_s": total, "ok": total >= 2400}
+    out = {"measured_s": total, "ok": total >= floor}
     if not out["ok"]:
         return out
     for j, name in ((3, "power"), (2, "speed")):
@@ -407,14 +415,25 @@ def test_card_matches_a_plain_recomputation(real):
     assert pace["Pa:HR 飄移"].startswith(R._pct(plain["pa"]))
     assert power["Pw:HR 飄移"].startswith(R._pct(plain["pw"]))
     assert pace["溫度"].startswith("沒有溫度資料")
-    # the three runs the card took until v7: < 40 min after the warm-up, refused on both bases
+    assert dr["tier"] == "test" and pace["飄移等級"].startswith("嚴格")
+    # the three runs the card took until v7: < 40 min after the warm-up, refused by the strict
+    # tier on both bases; v9's 參考 tier (≥ 30 min) takes the ones without a fast finish
+    tiers = []
     for w in ws:
         t, hr, sp, pw = (_chan(ds, w, c) for c in ("elapsedtime", "heartrate", "speed", "power"))
         p = plain_card(t, hr, sp, pw)
         dr = R.measure(ds, w)["drift"]
-        assert not p["ok"] and p["measured_s"] < 2400
-        assert not dr["ok"] and "暖身後只有" in dr["reason"], (w.entry.file, dr["reason"])
-        assert R.basis_drift(dr, "power")[0] is None
+        assert not p["ok"] and 1800 <= p["measured_s"] < 2400
+        assert not dr["ok"] and R.basis_drift(dr, "power")[0] is None
+        ref = plain_card(t, hr, sp, pw, floor=1800)
+        if ref["ok"]:
+            assert dr["tier"] == "ref" and "暖身後只有" in dr["reason"], (w.entry.file, dr["reason"])
+            assert R.basis_drift(dr, "pace", ref=True)[0] == pytest.approx(ref["pa"], abs=1e-9)
+            assert R.basis_drift(dr, "power", ref=True)[0] == pytest.approx(ref["pw"], abs=1e-9)
+        else:
+            assert dr["tier"] is None and "快速結尾" in dr["reason"], (w.entry.file, dr["reason"])
+        tiers.append(dr["tier"])
+    assert "ref" in tiers
 
 
 @pytest.mark.golden
@@ -454,3 +473,14 @@ def test_season_charts_plot_the_cards_drift_for_each_basis(real):
             assert abs(want_pa - w.metrics["pahr"]) > 1e-4
         else:
             assert want_pa is None and want_pw is None and w.metrics["pahr"] is not None
+    # v9: the 參考 series plot exactly the reference-tier runs (and nothing on the strict one)
+    ref_pa = "參考 Pa:HR（暖身後 30–40 分，未達 UA 測試標準）"
+    ref_pw = "參考 Pw:HR（暖身後 30–40 分，未達 UA 測試標準）"
+    for w in [fair] + ws:
+        dr = R.measure(ds, w)["drift"]
+        is_ref = R.drift_tier(dr) == "ref"
+        for view, title, _, _ in charts:
+            y, _ = _chart_point(ds, w, view, title, "pace", ref_pa)
+            assert (y == pytest.approx(R.basis_drift(dr, "pace", ref=True)[0], abs=1e-9)) if is_ref else y is None
+            y, _ = _chart_point(ds, w, view, title, "power", ref_pw)
+            assert (y == pytest.approx(R.basis_drift(dr, "power", ref=True)[0], abs=1e-9)) if is_ref else y is None

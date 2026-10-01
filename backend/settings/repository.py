@@ -77,6 +77,9 @@ DEFAULTS: dict[str, Any] = {
     # 間歇門檻 (engine/quality_gate.py): what unlocks base-phase intervals
     "plan.prefs.quality_gate": "auto",        # auto | ua_gap | friel_drift | xu_drift | plateau | weeks | none
     "plan.prefs.quality_gate_weeks": 8,       # weeks mode: base-phase weeks before intervals (2-16)
+    # AeT 飄移測試 (engine/aet_test.py, 50 min): weekday = Mon–Fri only (the athlete
+    # trail-runs on weekends) | any = the interval days (Tue first)
+    "plan.prefs.aet_test_days": "weekday",
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
@@ -94,6 +97,7 @@ PREF_ENUMS = {
     "plan.prefs.heat": ("auto", "off"),
     "plan.prefs.heat_method": ("run", "overdress", "bath", "sauna", "mixed"),
     "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"),
+    "plan.prefs.aet_test_days": ("weekday", "any"),
 }
 PREF_INTS = {                                 # key -> (lo, hi); None always allowed
     "plan.prefs.cap_weekday": (20, 300),

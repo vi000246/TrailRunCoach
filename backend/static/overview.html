@@ -217,9 +217,9 @@ const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n
 const GLOSS = {
   "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
     "怎麼測（心率飄移測試）：\n" +
-    "1. 平路環線或跑步機 2–3%（不要山路），< 25 °C，先暖身 15 分鐘\n" +
-    "2. 從你猜的 AeT 心率起跑，固定功率跑 60 分鐘（至少 45 分），中途不停、不加速；補給和咖啡因照平常\n" +
-    "3. 比較前半與後半的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
+    "1. 平日排 50 分：冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線（不要山路）；記下溫度，熱的時候結果會偏高；先暖身 10 分鐘到開始流汗\n" +
+    "2. 從你猜的 AeT 心率起跑，固定功率跑 40 分鐘（Uphill Athlete：只有 40 分就做 40 分，不建議更短），中途不停、不加速；主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）\n" +
+    "3. 比較前 20 分與後 20 分的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
     "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
   "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
     "怎麼測（課表偏好選一種）：\n" +
@@ -286,6 +286,7 @@ async function loadStatus() {
     <div class="verdict">${gl(i.verdict)}</div>
     ${i.spark && i.spark.filter((p) => p[1] != null).length > 2 ? spark(i.spark, i.level) : ""}
     ${i.why ? `<div class="why">${gl(i.why)}</div>` : ""}
+    ${driftTier(i)}
     ${i.action ? `<div class="act">→ ${gl(i.action)}</div>` : ""}
     ${applyCpBtn(i)}
     ${aetApply(i)}
@@ -304,6 +305,15 @@ function heatExtra(i) {
   const r = x.s_race ? `<div class="meta">${esc(x.s_race.event)}（${esc(x.s_race.date)}）比賽日預估 S ${Math.round(x.s_race.center * 100)} %（${Math.round(x.s_race.low * 100)}–${Math.round(x.s_race.high * 100)} %）</div>` : "";
   const h = x.hrc && x.hrc.recent != null ? `<div class="meta">熱天心率成本 HRC：近 4 週 ${x.hrc.recent.toFixed(1)}、前 4 週 ${x.hrc.before != null ? x.hrc.before.toFixed(1) : "–"} bpm / 10 Hadley${x.hrc.disagrees ? ' · <b>觀測不支持模型</b>' : ""}</div>` : "";
   return `${bars}${r}${h}<div class="meta"><span class="lvl watch">推估</span> a = ${x.a}（${(x.a_range || []).join("–")}）</div>`;
+}
+
+// 心率飄移 card (status.i_drift): runs on the 參考 tier (30–40 min after the warm-up,
+// workout_review.DRIFT_REF_MIN_S, 自組) are counted for display — say so, why on hover
+function driftTier(i) {
+  const x = i.id === "drift" && i.extra;
+  if (!x || !x.ref) return "";
+  return `<div class="meta"><span class="lvl watch">參考</span> ${esc(x.ref)} 次是${esc(x.ref_label || "")}${x.test ? `、${esc(x.test)} 次嚴格` : ""}
+    <i class="tip" tabindex="0" title="${esc(x.ref_tip || "")}">i</i></div>`;
 }
 
 // 測試 card: 「套用這次的 AeT」 when the latest AeT drift test is in UA's 3.5–5 % band
