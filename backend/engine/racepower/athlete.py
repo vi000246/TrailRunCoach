@@ -649,7 +649,7 @@ def cp_floor_by_date(ds, runs) -> dict[int, Optional[float]]:
     return out
 
 
-def classify_runs(ds, runs, cp_of: Optional[dict] = None) -> dict[int, dict]:
+def classify_runs(ds, runs, cp_of: Optional[dict] = None, tags: Optional[list] = None) -> dict[int, dict]:
     """{idx: intensity.classify(...)} with each activity's own-date
     thresholds (thresholds_as_of) — never later values. CP: a dated plan
     test, else the lower bound from the earlier runs (cp_floor_by_date).
@@ -675,7 +675,7 @@ def classify_runs(ds, runs, cp_of: Optional[dict] = None) -> dict[int, dict]:
         if w.idx in races:
             c["event"] = races[w.idx]
         out[w.idx] = c
-    caps = capacity_samples(ds, runs, th_of)
+    caps = capacity_samples(ds, runs, th_of, tags=tags)
     for i, c in out.items():
         c["capacity"] = caps.get(i)
     ds.flush_series()
@@ -1379,6 +1379,81 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
             "hike_basis": {"solo_hikes": len(solo_w), "solo_windows": len(hs_solo), "steep_hr_windows": len(steep),
                            "group_hikes": len(hikes) - len(solo_w), "note": GROUP_HIKE_NOTE},
             "classes": cmap}
+
+
+TRAILHR_DUR_KEY = "racepower_trailhr_dur_v1"
+
+
+def _trail_durability(ds, w) -> Optional[dict]:
+    """trailhr step 2 for one run: durability() on the moving-time axis with
+    effort-km speed as output; δ per hour after T0."""
+    from backend.engine.panels.workout import durability
+    from backend.engine.racepower import trailhr as TH
+    a = activity_arrays(ds, w)
+    if a is None or a["hr"] is None:
+        return None
+    mv = np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH
+    tm, es, m = TH.effort_speed_series(a["t"], a["d"], a["z"], mv)
+    if len(tm) < 100 or tm[-1] < TH.TRAILHR["dur_min_s"]:
+        return {"delta": None, "moving_s": float(tm[-1]) if len(tm) else 0.0}
+    r = durability(tm, es, a["hr"][m])
+    return {"delta": TH.durability_delta((r or {}).get("points")), "moving_s": float(tm[-1]),
+            "end_pct": (r or {}).get("end_pct")}
+
+
+def trail_hr_points(ds, runs, exclude: Optional[set] = None) -> list[dict]:
+    """trailhr run points (own-date LTHR) of the given outdoor trail runs."""
+    from backend.engine.racepower import trailhr as TH
+    exclude = exclude or set()
+    out = []
+    for w in runs:
+        if w.idx in exclude or not (outdoor(w) and is_trail(w)):
+            continue
+        st = intensity_stats(ds, w) or {}
+        th = thresholds_as_of(ds, w.entry.start.date())
+        p = TH.run_point(w.metrics.get("distance"), w.metrics.get("climbing"), st.get("moving_s"),
+                         st.get("hr_avg"), th.get("lthr"))
+        if p:
+            p.update(idx=w.idx, date=w.entry.start.date().isoformat(), label=label(w))
+            out.append(p)
+    return out
+
+
+def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] = None,
+                   race_idx: Optional[set] = None) -> dict:
+    """The trail HR pace model (trailhr.py) as of `today`: the trail runs of
+    the RE window before `today` without `exclude`; durability from the
+    runs ≥ 2 h; the race HR level from earlier `race_idx` runs (activity type
+    比賽 or 全力 ≥ 90 min; default: capacity_samples' effective tags)."""
+    from backend.engine.racepower import trailhr as TH
+    from backend.engine.wko5expr.dataset import date_to_day
+    today = today or dt.date.today()
+    tday = date_to_day(today)
+    exclude = exclude or set()
+    runs = [w for w in ds.workouts if outdoor(w) and is_trail(w) and w.idx not in exclude
+            and tday - TH.TRAILHR["window_days"] < w.day < tday + 1]
+    pts = trail_hr_points(ds, runs)
+    deltas = []
+    for p in pts:
+        if p["T_h"] * 3600.0 >= TH.TRAILHR["dur_min_s"]:
+            w = ds.workouts[p["idx"]]
+            r = ds.cached_series(TRAILHR_DUR_KEY, w, lambda w=w: _trail_durability(ds, w))
+            if r and r.get("delta") is not None:
+                deltas.append(r["delta"])
+                p["delta"] = r["delta"]
+    ds.flush_series()
+    m = TH.fit(pts, float(median(deltas)) if deltas else None)
+    m["n_durability"] = len(deltas)
+    if race_idx is None:
+        caps = capacity_samples(ds, [w for w in ds.workouts if outdoor(w) and is_trail(w) and w.day < tday])
+        race_idx = {i for i, c in caps.items() if c["tags"]["activity_type"] == "race" or c.get("ok")}
+    allx = trail_hr_points(ds, [w for w in ds.workouts if w.idx in race_idx and w.day < tday and w.idx not in exclude])
+    xs = [p["x"] for p in allx if p["T_h"] * 3600.0 >= TH.TRAILHR["race_min_s"]]
+    m["x_race"], m["x_race_source"] = TH.race_level(xs)
+    m["x_race_n"] = len(xs)
+    m["today"] = today.isoformat()
+    m["points"] = pts
+    return m
 
 
 def hr_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = None,
