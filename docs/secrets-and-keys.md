@@ -5,7 +5,19 @@
 | 資料 | 放在哪 | 說明 |
 |---|---|---|
 | TrainingPeaks client secret（WKO5 client） | repo 裡的 `backend/settings/tp_client.enc`（只有密文） | 解法見 `docs/wko5-internals/trainingpeaks-auth.md` |
-| COROS / TrainingPeaks 登入 token、cookie | 本機資料庫 `~/.wko5coach/wko5coach.db` | 帳密本身從不保存 |
+| COROS / TrainingPeaks 登入 token、cookie | 本機資料庫 `~/.wko5coach/wko5coach.db` | 帳密本身預設不保存 |
+| COROS / TrainingPeaks 密碼（只有勾「記住密碼」時） | 本機資料庫 `sync_state.coros_password_sealed`、`tp_password_sealed`（+ `tp_username`） | 見下方「記住密碼」 |
+
+## 記住密碼（2026-10-01，使用者要求）
+
+- 設定頁 COROS / TrainingPeaks 登入旁的「記住密碼」，**預設不勾**。
+- 勾選後登入成功，密碼用同一把金鑰的 `secrets.seal()`（Fernet）加密存進 `sync_state`；
+  資料庫裡沒有明文，log 不印，任何 API 都不回傳，狀態 API（`/auth/coros/status`、`/auth/tp/status`）只回 `password_saved: true/false`。
+- **取消勾選**（`PUT /api/v1/auth/{coros|tp}/remember {"remember": false}`）或**登出**會立刻刪除。
+- 用途只有自動重新登入：COROS token 過期（24 小時）或回「Access token is invalid」（result 1019），
+  TP 的 refresh token／網站 cookie 失效時，自動登入**一次**、原本的請求重試**一次**；
+  有鎖，同時多個請求只會登入一次（COROS 只認最後一次登入）；重新登入失敗就回報 `COROS_AUTH_REQUIRED`／`TP_AUTH_REQUIRED`，不會重試迴圈。
+- 換金鑰後存的密碼也解不開：重新登入並勾選一次即可。
 
 ## 金鑰放在哪
 

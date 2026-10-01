@@ -51,6 +51,18 @@ def _fit_root_in_tmp(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _fit_cache_in_tmp(monkeypatch, tmp_path_factory):
+    """The FIT dataset cache (engine/wko5expr/fitcache.py) lives in a temp
+    folder, never ~/.wko5coach/cache/fit; files are parsed inline (no
+    process pool) unless a test asks for one."""
+    from backend.engine.wko5expr import fitcache
+    monkeypatch.setenv(fitcache.ENV_ROOT, str(tmp_path_factory.mktemp("fitcache")))
+    monkeypatch.setenv(fitcache.ENV_WORKERS, "0")
+    # an app started by a test (TestClient lifespan) never builds a Dataset in the background
+    monkeypatch.setenv("WKO5COACH_NO_WARMUP", "1")
+
+
+@pytest.fixture(autouse=True)
 def _no_real_heat_history(monkeypatch):
     """The heat-acclimation index never reads the real per-activity weather
     (~/.wko5coach/routes/activity_weather.json); tests pass their own rows."""

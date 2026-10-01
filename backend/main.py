@@ -24,6 +24,15 @@ async def lifespan(app: FastAPI):
     import asyncio
     from backend.sync import scheduler
     await init_db()
+    # Sync endpoints run in AnyIO's worker threads (40 by default). While a
+    # Dataset builds, every chart request of a page waits in one (single
+    # flight, wko5views._dataset); with 40 the static files and the other
+    # pages queued behind them. Waiting threads cost nothing, so allow more.
+    import anyio.to_thread
+    anyio.to_thread.current_default_thread_limiter().total_tokens = int(os.getenv("WKO5COACH_THREADS", "200"))
+    # build the active data source's Dataset now, not on the first page load
+    # (FIT parsing in a process pool, fitcache.py); WKO5COACH_NO_WARMUP=1 disables
+    wko5views.warm_up("startup")
     # daily auto-sync (sync.schedule.daily_time); WKO5COACH_NO_SCHEDULER=1 disables
     task = None if os.getenv("WKO5COACH_NO_SCHEDULER") else asyncio.create_task(scheduler.loop())
     try:

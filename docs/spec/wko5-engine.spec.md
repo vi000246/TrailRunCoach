@@ -314,6 +314,63 @@ toggle.
   endpoints keep threadpool time. Errors are raised to every waiter and not
   cached.
 
+## FIT dataset build: cache, single flight, progress (2026-10-01)
+
+A COROS / TP `FitFolderDataset` reads every per-file result from the
+persistent FIT cache (`backend/engine/wko5expr/fitcache.py`); a restart with
+unchanged files and unchanged code reads no FIT file at all.
+
+- **Storage**: `<data dir>/cache/fit/<sha1(folder)>/` (`WKO5COACH_FIT_CACHE`
+  overrides the root): `index.json` (one entry per file, valid for its
+  size + `mtime_ns`), `ch/*.npz` (the parsed channels, float64, NaN = no
+  data), `series_*.json` (`cached_series`, up to 4 threshold variants per
+  file), `estimate.json` (the as-of LTHR estimates), `pd_mftp.json` (the
+  as-of PD refits behind `cp_as_of`).
+- **Parsing**: only new / changed files; ≥ 12 of them go to a spawn process
+  pool (≤ 8 workers, `WKO5COACH_FIT_WORKERS`), so the web server's event loop
+  keeps the GIL. Channels load lazily, at most 256 files in memory
+  (`WKO5COACH_FIT_OPEN`).
+- **Invalidation map** — each derived field has its own version (a constant
+  plus a hash of the source of the code computing it):
+
+  | Cached | Recomputed when |
+  |---|---|
+  | parsed channels, start, sport, sub_sport, Stryd device | the file's size / mtime; `fit_to_channels.py`, `power_source.fit_stryd_device`, the fitdecode version |
+  | power source | the parse; `power_source.classify` |
+  | bad-file features | the parse; `bad_activity.features` and its constants; the file's approved power corrections (separate key) |
+  | workout fields (duration, moving, distance, climbing, NP, work, NGP, VAM 4224) | the parse; `workout_fields` (where VAM is computed) / `_rolling` / `_smooth` / `minetti.py` / the moving-speed table; the sport group |
+  | hike / trail tags (`hiking`, `mountaineering`, `runningtrail`) | not cached: derived on every build from the sport type (`TYPE_TAGS`, the DB classification) |
+  | the charts' Stryd-only CP fit of a grid day (`_estimate_cp`) | the PD-refit entry of that day (same window key, kind `stryd`) plus the source of `_estimate_cp` and `CP_FIT_MIN_RUNS`; the whole grid is also in the estimate memo |
+  | hrTSS / hrIF, moving-time hrTSS | the parse; `wko5_hr.py`; the LTHR (and moving speed) — separate keys |
+  | `cached_series` (thresholds, race power, workout review, evaluator aggregates, mean-max) | the file stamp, its corrections, the thresholds in effect (as on the WKO5 Dataset) |
+  | as-of PD refit of a day | the day's 90-day window: runs (stamp, power source / use, power corrections, NP), synced FITs `cptest.curves` adds, watch-power / bad-file settings and overrides, the code of athlete / cptest / PD model / mean-max / power_source |
+  | as-of LTHR estimates | any workout (stamp, sport, tags, power source), exclusions, thresholds / weight before the estimate, plan, corrections, engine config, today, the code of thresholds / athlete / cp / PD model / mean-max |
+  | the Dataset object (in memory) | `source_stamp` (files, DB classification / settings, watch power, bad-file setting / overrides), engine config, plan threshold edits |
+
+  Not cached: the bad-file verdict itself (`judge` / `decide` read the
+  features, the weight and the user's overrides, cheap).
+- **Single flight** (`backend/api/wko5views.py` `_dataset`): one lock per
+  (config, source, stamp); concurrent chart requests wait for one build.
+- **Progress**: `backend/engine/wko5expr/buildstate.py`; `GET
+  /api/v1/wko5/dataset/status` (async, answered on the event loop) returns
+  `state` idle / building / ready / error, `phase` (scan, parse 解析 FIT,
+  assemble 整理活動, estimate 估算門檻, finish), `n_done` / `n_total`,
+  `message`. `shell.js` shows it under the nav and in the page's loading
+  placeholders.
+- **Measured** (2026-10-01, 808 COROS files, a copy of the data dir, this
+  PC): before 468 s per build (FIT parsing 390 s, as-of estimates 66 s, of
+  which 670 PD refits 64 s), on every restart. After: cold cache 116–146 s
+  (parsing in 8 processes ~60 s, estimates 42 s); restart with unchanged
+  data 0.4–1.0 s build, ~2 s from process start to a served overview
+  status; one changed file 1.0 s. Event-loop latency during a cold build
+  with six page requests waiting: typically 3–6 ms, worst 240 ms. The
+  datasets are identical to the old build's (all 802 workouts' metrics,
+  power sources, exclusions, estimated settings).
+- **Warm-up**: the app's lifespan and a sync that downloaded files start a
+  background build of the active source (and the overview status);
+  `WKO5COACH_NO_WARMUP=1` disables. The AnyIO thread limit is 200
+  (`WKO5COACH_THREADS`) so requests waiting on a build don't starve the rest.
+
 ## Viewer
 
 `backend/static/wko5_viewer.html`, served at `/api/v1/wko5/viewer`.
@@ -416,6 +473,7 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 |---|---|---|---|
 | GET | `/views` | 156 | Both view kinds, with source; map panels report kind `map`, review cards kind `workout` |
 | GET | `/views/dirs` | 170 | Where custom view files live |
+| GET | `/dataset/status` | — | Build progress of the active source's Dataset (state, phase, n_done / n_total, message) |
 | GET | `/views/{view}/dashboards/{d}/charts/{c}` | 189 | Render one chart through the render cache (`parity`, `begin`, `end`, `sports`, `workout`, `period`, `window`, `basis`); the dataset follows `charts.data_source` |
 | GET | `/workouts` | 277 | RHE activity list, with TSS source |
 | GET | `/workouts/{i}/review` | 304 | Single-activity review cards — see [workout-review.spec.md](./workout-review.spec.md) |
@@ -500,4 +558,5 @@ mode (`backend/tests/test_drift_basis.py:340`).
 | 2026-09-30 | code-sync | N/A | Period toggle (periods.py, `period` / `min_days`), render cache, viewer (flat custom tabs, &chart= deep link, enlarge overlay, 數值與公式 table removed, Leaflet route map with basemaps / overlays / tile-error hint, samples endpoint and synced hover), regrouped custom views, refreshed API table |
 | 2026-09-30 | bugfix | N/A | Chart dataset follows `charts.data_source` (header chip); code signature also covers panels/, files/ and api/wko5views.py; render_map drops the unused track; tooltip units from the drawn series; no lttb on distance-x hover charts; WKO5 folder from env or found under the home directory's WKO5 folder; refreshed anchors |
 | 2026-09-30 | feat/competitor-charts | N/A | `chart_metrics.py` reference implementations + charts (Form% bands, ATL/CTL, monotony/strain, PI, downhill impact load and 7:28 ratio, up/downhill m/h, コース定数 / ITRA); 總覽 `descent` indicator |
+| 2026-10-01 | perf/dataset-load | user request (site frozen during a COROS build) | Persistent per-file FIT cache with per-field versions, lazy channels, disk `cached_series` / as-of estimates / PD refits for `FitFolderDataset`; process-pool parsing; single-flight `_dataset`; `GET /dataset/status` + shell.js progress; warm-up at startup and after a sync |
 | 2026-09-30 | feat/drift-basis | N/A | 配速／功率 basis toggle (`basis.py`, chart `basis` spec, tagged series, `?basis=`, viewer control, 這次沒有功率) on the drift charts; rolling EF skips the first 10 min |
