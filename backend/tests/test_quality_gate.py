@@ -87,24 +87,39 @@ def test_auto_without_aet_is_no_method_and_the_guardrails():
     assert g["resolved"] == "none" and g["state"] == "none" and not g["fallback"]
     t = QG.indicator(g)
     assert t["level"] == "info" and "沒有 AeT 實測：照 80/20 原則每週 1 次間歇" in t["verdict"]
-    assert "第 1 步：短間歇 5×1 分" in t["verdict"]
+    # 徐國峰: Zone 3 first — the ladder's first rung is threshold 3×8, not 5×1′
+    assert "第 1 步：閾值 3×8 分" in t["verdict"]
     assert QG.guardrail_mode(g)
-    assert QG.week_decision(g, "base", "base")["spec"] is QG.DOSE[0]
+    assert QG.week_decision(g, "base", "base")["spec"] is QG.Z3[0]
+    assert g["z5"]["state"] == "unconfirmed" and not g["z5"]["open"]
 
 
-def test_auto_with_measured_aet_uses_ua_gap_then_friel():
+@pytest.fixture
+def valid_aet(monkeypatch):
+    """B3: the AeT counts as valid (the aggregate's SE ≤ 3 bpm, no shift)."""
+    from backend.engine import drift_agg as DA
+    monkeypatch.setattr(DA, "aet_validity", lambda ds, today, lthr=None: {
+        "valid": True, "value": 150.0, "se": 2.0, "n": 8, "shift_bpm": 0.0, "slope_per_10bpm": 0.05,
+        "reason": "8 次聚合估計 AeT 150 ± 2.0 bpm", "points": 8})
+
+
+def test_auto_with_measured_aet_uses_ua_gap_then_friel(valid_aet):
     open_ = _gate(plan=_plan(aethr=150, lthr=160))          # 160 / 150 − 1 = 6.7 %
     assert open_["resolved"] == "ua_gap+friel_drift" and open_["state"] == "unlocked" and open_["via"] == "ua_gap"
     assert open_["gap"] == pytest.approx(160 / 150 - 1)
     t = QG.indicator(open_)
-    assert t["level"] == "good" and "≤ 10%：可以加 Zone 3" in t["verdict"] and "Zone 3" in t["action"]
-    assert QG.week_decision(open_, "base", "base")["spec"] is QG.ZONE3
+    assert t["level"] == "good" and "≤ 10%：可以加 Zone 3" in t["verdict"]
+    # the measured AeT passing the UA gap confirms the base: Zone 5 opens (dated the AeT row)
+    assert open_["z5"]["state"] == "confirmed" and open_["z5"]["path"] == "aet_ua_gap"
+    assert QG.week_decision(open_, "base", "base")["spec"] is QG.Z3[0]          # still Zone 3 first
     shut = _gate(plan=_plan(aethr=140, lthr=165))           # 17.9 %
     assert shut["state"] == "locked"
     t = QG.indicator(shut)
-    assert t["level"] == "watch" and "AeT 140 / LTHR 165：差距 18%（> 10%，有氧不足）" == t["verdict"]
-    assert "每 4–6 週重測 AeT" in t["action"]
-    assert not QG.week_decision(shut, "base", "base")["allow"]
+    assert t["level"] == "watch" and t["verdict"].startswith("AeT 140 / LTHR 165：差距 18%（> 10%，有氧不足）")
+    assert "3 區照排" in t["action"]
+    # a locked method only keeps Zone 5 closed: Zone 3 still goes on (徐國峰)
+    d = QG.week_decision(shut, "base", "base")
+    assert d["allow"] and d["spec"] is QG.Z3[0] and not shut["z5"]["open"]
     # Friel is the second way in: one steady run at AeT (140 ± band), ≥ 70 min, flat drift
     run = _run(TODAY - dt.timedelta(days=3), minutes=80, hr=140.0)
     via = _gate(plan=_plan(aethr=140, lthr=165), workouts=[run])
@@ -112,8 +127,11 @@ def test_auto_with_measured_aet_uses_ua_gap_then_friel():
 
 
 def test_auto_ignores_a_stale_aet_and_a_default_lthr():
-    stale = _gate(plan=_plan(aethr=150, lthr=160, day="2026-05-01"))      # > 16 weeks
+    # B3: no runs → no aggregated estimate → not valid, whatever the row's age
+    stale = _gate(plan=_plan(aethr=150, lthr=160, day="2026-09-20"))
     assert stale["resolved"] == "none" and stale["stale_aet"]
+    assert "需要測試" in stale["aet"]["validity"]["reason"]
+    assert stale["aet_test_reason"]["code"] in ("no_data", "se")
     # AeT measured, LTHR still WKO5's default (runthr dated 1980, nothing in the plan)
     dflt = _gate(plan=_plan(aethr=150))
     assert dflt["lthr"]["default"] and dflt["resolved"] == "none"
@@ -123,10 +141,10 @@ def test_ua_gap_forced_without_aet_is_missing_watch_and_falls_back():
     g = _gate("ua_gap")
     assert g["state"] == "missing" and g["fallback"]
     t = QG.indicator(g)
-    assert t["level"] == "watch" and "沒有實測 AeT，差距法算不出來" in t["verdict"] and "自訂" in t["verdict"]
+    assert t["level"] == "watch" and "沒有實測 AeT，差距法算不出來" in t["verdict"] and "推估" in t["verdict"]
     assert t["action"] == "先做 AeT 飄移測試，或把間歇門檻改回自動"
     d = QG.week_decision(g, "base", "base")
-    assert d["allow"] and d["spec"] is QG.DOSE[0]                        # never a permanent lock
+    assert d["allow"] and d["spec"] is QG.Z3[0]                          # never a permanent lock
     assert QG.guardrail_mode(g)
     assert "缺資料，先照護欄排" in QG.prefix(g)
 
@@ -199,8 +217,9 @@ def test_options_say_what_the_data_allows():
 @pytest.mark.parametrize("kw, flag, words", [
     (dict(low_share=0.68), "block", "低強度只有 68%（< 75%）"),
     (dict(low_share=0.9, power_low_share=0.7), "block", "功率 < 80% CP 只有 70%"),
-    (dict(ramp=5.6), "sub", "CTL 每週 +5.6，本週只排閾值下"),
-    (dict(ramp=7.2), "block", "≥ 7"),
+    (dict(ramp=5.6), "sub", "CTL 每週 +5.6（≥ 5，Friel）：本週只排閾值下"),
+    (dict(ramp=7.2), "sub", "≥ 5，Friel"),                 # B2: 7 is no longer a block
+    (dict(ramp=8.2), "block", "≥ 8，Friel"),
     (dict(step=0.25), "block", "> 20%"),
     (dict(step=0.15), "hold", "10–20%"),
     (dict(tsb=-25.0), "hold", "TSB −25"),
@@ -223,36 +242,45 @@ def test_guardrails_block_the_week_and_say_so():
     assert QG.indicator(ramp)["action"] == "先穩住量"
 
 
-def test_dose_table_progression_hold_fade_and_recovery():
-    titles = [QG.dose_spec(i)[1] for i in range(8)]
-    assert titles == ["短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
-                      "閾值下 3×8 分", "閾值下 4×8 分", "閾值下 3×8 分"]
+def test_dose_ladder_zone3_first_then_zone5_only_when_open():
+    # 徐國峰: Zone 3 first; Zone 5 reps ≥ 2 min, only while Zone 5 is open
+    open_titles = [QG.dose_spec(i, True)[1] for i in range(9)]
+    assert open_titles == ["閾值 3×8 分", "閾值 4×8 分", "閾值 3×10 分", "VO2max 5×2 分", "VO2max 4×3 分",
+                           "VO2max 5×3 分", "VO2max 4×4 分", "VO2max 4×4 分", "閾值 3×10 分"]
+    assert all(s[3] >= 2 for s in QG.Z5)                                  # reps ≥ 2 min
+    shut = [QG.dose_spec(i, False)[1] for i in range(3, 7)]
+    assert all(t.startswith("閾值") for t in shut)                        # Zone 3 continues
     assert QG.dose_step([]) == {"done": 0, "faded": False, "step": 0}
+    # B4: a session that can't be judged (no bouts / CP) repeats the step — no progress
     three = [{"faded": False}] * 3
-    assert QG.dose_step(three)["step"] == 3
-    # legacy rows without bouts: a faded last one = 邊界 -> repeat (no more "back one")
-    assert QG.dose_step(three[:2] + [{"faded": True}])["step"] == 2
-    g = {"state": "none", "guard": {"hold": True}, "dose": {"done": 3, "step": 3}}
-    assert QG.week_decision(g, "base", "base")["spec"][1] == "爬坡間歇 4×3 分"   # held: repeat step 3
+    d = QG.dose_step(three)
+    assert d["step"] == 0 and d["outcome"] == "unknown"
+    g = {"state": "none", "guard": {"hold": True}, "dose": {"done": 2, "step": 2}}
+    assert QG.week_decision(g, "base", "base")["spec"][1] == "閾值 4×8 分"    # held: repeat the last step
     rec = QG.week_decision({"state": "none", "guard": {}, "dose": {"step": 4}}, "base", "recovery_week")
     assert rec["spec"] is QG.RECOVERY and not rec["advance"]
+    # step 3 (3 Zone 3 達標): Zone 5 only with z5 open; else Zone 3, and the step waits
+    g3 = {"state": "none", "guard": {}, "dose": {"done": 3, "step": 3}, "z5": {"open": False, "text": "Zone 5：未確認"}}
+    d = QG.week_decision(g3, "base", "base")
+    assert d["spec"][1].startswith("閾值") and not d["advance"] and "未確認" in d["note"]
+    d = QG.week_decision({**g3, "z5": {"open": True}}, "base", "base")
+    assert d["spec"] is QG.Z5[0] and d["advance"]
 
 
 def test_dose_sessions_parse_for_coros_and_the_cap():
     th = {"cp": 250.0, "lthr": 165.0, "aet": 142.0}
-    s = QG.session(QG.DOSE[0], th, "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，")
-    assert s["title"] == "短間歇 5×1 分" and s["minutes"] == 15 + 5 * 3 + 10
+    s = QG.session(QG.Z3[0], th, "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，")
+    assert s["title"] == "閾值 3×8 分" and s["minutes"] == 15 + 3 * 10 + 10
     assert s["detail"].startswith("沒有 AeT 實測：照 80/20 原則每週 1 次間歇，") and "休 2 分" in s["detail"]
     steps = CW.session_steps(s, CW.Thresholds.of(th))
     rep = steps[1]
-    assert rep.sets == 5 and rep.steps[0].seconds == 60 and rep.steps[1].seconds == 120
-    assert rep.steps[0].intensity == ("power", 245, 252)                    # 98–101 % CP
-    hill = QG.session(QG.DOSE[2], th)
-    assert "爬坡" in hill["title"] and "上坡 3 分鐘（6–10% 坡），慢跑或走下來恢復" in hill["detail"]
-    st = CW.session_steps(hill, CW.Thresholds.of(th))
-    assert st[1].sets == 4 and st[1].steps[0].intensity == ("power", 262, 275)
-    assert "心率" not in QG.session(QG.DOSE[4], th, lthr_default=True)["target"]      # WKO5 default LTHR
-    assert QG.hard_need("短間歇 5×1 分", 600) == pytest.approx(180)
+    assert rep.sets == 3 and rep.steps[0].seconds == 480 and rep.steps[1].seconds == 120
+    assert rep.steps[0].intensity == ("power", 220, 238)                    # 88–95 % CP
+    v = QG.session(QG.Z5[0], th)
+    st = CW.session_steps(v, CW.Thresholds.of(th))
+    assert st[1].sets == 5 and st[1].steps[0].seconds == 120 and st[1].steps[0].intensity == ("power", 265, 280)
+    assert "心率" not in QG.session(QG.Z5[3], th, lthr_default=True)["target"]      # WKO5 default LTHR
+    assert QG.hard_need("閾值 3×8 分", 600) == pytest.approx(600)
     z3 = QG.session(QG.ZONE3, th, hours=6.0)
     assert z3["title"] == "Zone 3 間歇 3×6 分" and "心率 142–165 bpm" in z3["target"]
 
@@ -279,10 +307,10 @@ def test_count_reps_finds_one_minute_reps_and_the_history_counts_them():
     ds = _ds([r, _reps_run(TODAY - dt.timedelta(days=12), fade=0.08, on=260.0), _run(TODAY - dt.timedelta(days=2))])
     h = QG.dose_history(ds, TODAY)
     assert len(h) == 2 and h[0]["faded"] and not h[1]["faded"] and h[1]["reps"] == 5
-    # the first only lost its last rep (239 < 0.98 × 245 W, −8 %): 邊界, repeat step 0;
-    # the second hit every rep: 達標 -> step 1
+    # judged against the Zone 3 rungs (3×8 @ 88–95 % CP, then 4×8): both sessions' first reps
+    # are above 0.98 × 88 % CP → 達標 twice → step 2
     d = QG.dose_step(h)
-    assert d["step"] == 1 and [x["outcome"] for x in h] == ["border", "met"] and d["outcome"] == "met"
+    assert d["step"] == 2 and [x["outcome"] for x in h] == ["met", "met"] and d["outcome"] == "met"
 
 
 def _b(*ps, at60=None):
@@ -290,7 +318,8 @@ def _b(*ps, at60=None):
 
 
 def test_interval_outcome_state_machine_rows():
-    spec = QG.DOSE[0]                  # 5×1′ at 98–101 % CP; floor = 0.98 × 0.98 × 250 = 240 W
+    # a 5×1′ spec at 98–101 % CP (the old first rung); floor = 0.98 × 0.98 × 250 = 240 W
+    spec = ("d1", "短間歇 5×1 分", 5, 1, 2, 0.98, 1.01, False, "test")
     cp = 250.0
     met = QG.interval_outcome(_b(250, 250, 249, 248, 247), spec, cp)
     assert met["outcome"] == "met"
@@ -313,27 +342,32 @@ def test_interval_outcome_state_machine_rows():
 
 def test_dose_step_replays_outcomes():
     cp = 250.0
-    good = {"bouts": _b(250, 250, 250, 250, 250, 250), "cp": cp}
-    bad = {"bouts": _b(250, 230, 230, 230, 230), "cp": cp}
+    good = {"bouts": _b(*[250] * 6), "cp": cp}
+    bad = {"bouts": _b(250, 190, 190, 190), "cp": cp}      # rep 2 below 0.98 × 88 % CP = 216 W
     assert QG.dose_step([good, good])["step"] == 2
     d = QG.dose_step([good, bad])                         # step 1 未適應 once: hold + rest +1
     assert d["step"] == 1 and d["adjust"] == {"rest_add": 1} and d["faded"]
     d = QG.dose_step([good, bad, bad])                    # twice in a row: back one
     assert d["step"] == 0 and d["adjust"] == {}
-    # a recovery fartlek done at step 2 (4×3′ uphill @ 105–110 %): neutral, not "too high"
+    # a recovery fartlek done at step 2: neutral, not judged
     fart = {"bouts": _b(248, 248, 248, 248), "cp": cp, "title": QG.RECOVERY[1]}
-    d = QG.dose_step([good, {**good, "title": QG.DOSE[1][1]}, fart])
+    d = QG.dose_step([good, {**good, "title": QG.Z3[1][1]}, fart])
     assert d["step"] == 2 and d.get("adjust") == {} and fart["outcome"] == "neutral"
-    sub = {"bouts": _b(230, 230, 230), "cp": cp, "title": QG.SUB[1]}       # ramp-week 3×8′ before the ladder got there
-    assert QG.dose_step([good, sub])["step"] == 1
-    assert QG.planned_spec(QG.AFTER[0][1], len(QG.DOSE)) == (QG.AFTER[0], False)
-    d = QG.dose_step([{"bouts": _b(200, 250, 250, 250, 250), "cp": cp}])
+    # a ramp-week SUB (3×8′) when the ladder stands further on: neutral
+    sub = {"bouts": _b(190, 190, 190), "cp": cp, "title": QG.SUB[1]}
+    assert QG.dose_step([good, sub])["step"] == 1 and sub["outcome"] == "neutral"
+    # Zone 3 maintenance while Zone 5 is paused (step ≥ 3): neutral, the Z5 step waits
+    assert QG.planned_spec(QG.Z3[2][1], 4) == (QG.Z3[2], True)
+    assert QG.planned_spec(QG.Z5[1][1], 4) == (QG.Z5[1], False)
+    # the old ladder's titles don't count any more
+    assert QG.planned_spec("短間歇 5×1 分", 0)[1] is True
+    d = QG.dose_step([{"bouts": _b(150, 250, 250, 250, 250), "cp": cp}])
     assert d["step"] == 0 and d["adjust"] == {"power": QG.TARGET_DOWN}
-    spec = QG.adjusted_spec(QG.DOSE[0], {"power": 0.95})
-    assert spec[5] == round(0.98 * 0.95, 3) and spec[1] == QG.DOSE[0][1]
+    spec = QG.adjusted_spec(QG.Z3[0], {"power": 0.95})
+    assert spec[5] == round(0.88 * 0.95, 3) and spec[1] == QG.Z3[0][1]
     g = {"state": "none", "guard": {}, "dose": {"done": 2, "step": 1, "adjust": {"rest_add": 1}}}
     sp = QG.week_decision(g, "base", "base")["spec"]
-    assert sp[4] == QG.DOSE[1][4] + 1
+    assert sp[4] == QG.Z3[1][4] + 1
     s = QG.session(sp, {"cp": cp})
     assert f"休 {sp[4]} 分鐘" in s["detail"]
 
@@ -360,12 +394,15 @@ def test_status_i_gate_and_week_plan_schedule_the_dose():
     wp = O.week_plan(ds, st, TODAY)
     g = wp["quality_gate"]
     assert g["mode"] == "auto" and g["resolved"] == "none"
-    q = [s for s in wp["sessions"] if s["kind"] in ("quality", "test")]
-    assert g["allowed"] and not g["aet_test"]["due"]
+    q = [s for s in wp["sessions"] if s["kind"] == "quality"]
+    assert g["allowed"]
+    if g["aet_test"]["due"] and wp["mode"] != "recovery_week":
+        # B3: no aggregate yet → the AeT test is due; auto = 徐國峰 90 min in place of the long run
+        assert any(s["id"] == "test_aet" and s["minutes"] == 90 for s in wp["sessions"])
     if wp["mode"] == "recovery_week":                           # flat weeks = 3 builds → 3:1
         assert [s["title"] for s in q] == ["恢復週 fartlek 4×1 分"]
     else:
-        assert [s["title"] for s in q] == ["短間歇 5×1 分"] and "80/20" in q[0]["detail"]
+        assert [s["title"] for s in q] == ["閾值 3×8 分"] and "80/20" in q[0]["detail"]
     # forced mode with missing data: the same guardrail plan, never locked
     st2 = Status(ds, plan, TODAY, prefs=PP.Prefs(quality_gate="ua_gap")).compute()
     gate = next(i for i in st2.indicators if i.id == "gate")
@@ -379,15 +416,19 @@ def test_projection_advances_the_dose_and_evaluates_weeks_per_week():
     cur["history"] = [{"start": "x", "hours": 5.0, "tss": 250} for _ in range(8)]    # flat: no 3:1 yet
     cur["quality_gate"] = {"state": "locked", "mode": "weeks", "resolved": "weeks", "verdict": "基礎期第 7 週 / 8 週",
                            "base_start": "2026-08-17", "weeks_need": 8, "levels": {"intensity": "good"},
-                           "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}, "aet": {"date": "2026-09-01"}}
+                           "guard": {}, "dose": {"step": 3, "done": 3, "faded": False}, "aet": {"date": "2026-09-01"},
+                           "z5": {"open": False}}
     phases = [{"kind": "base", "start": "2026-08-17", "end": "2026-12-31"}]
     weeks = P.project_weeks(cur, phases, date(2026, 11, 22))
     first_q = {w["start"]: [s["title"] for s in w["sessions"] if s["kind"] == "quality"] for w in weeks}
-    # base week 8 (10/5) still locked; from week 9 (10/12) the dose starts at 5×1 and steps on
-    assert first_q["2026-10-05"] == []
+    # Zone 3 keeps going while the weeks method keeps Zone 5 closed (base week 8, 10/5);
+    # from week 9 (10/12) Zone 5 opens and the ladder moves on to 5×2′, 4×3′
+    pre = [v[0] for k, v in sorted(first_q.items()) if v and k < "2026-10-12"
+           and next(w for w in weeks if w["start"] == k)["mode"] != "recovery_week"]
+    assert all(x.startswith("閾值") for x in pre)
     built = [v[0] for k, v in sorted(first_q.items()) if v and k >= "2026-10-12"
              and next(w for w in weeks if w["start"] == k)["mode"] != "recovery_week"]
-    assert built[:2] == ["短間歇 5×1 分", "短間歇 6×1 分"]
+    assert built[:2] == ["VO2max 5×2 分", "VO2max 4×3 分"]
 
 
 # ---------------------------------------------------------------------------
@@ -545,9 +586,10 @@ def test_aet_test_session_steps_and_payload_without_coros():
     # no weekday cap: the standard 15 + 60 + 5 (the short 50′ one: test_aet_weekday.py)
     s = {**AT.session(th, 140.0, AT.start_power(250.0)), "day": "2026-10-07"}
     assert s["kind"] == "test" and s["id"] == "test_aet" and s["minutes"] == 80
-    assert "冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線" in s["detail"]
+    assert "冷氣房跑步機 2–3%＋電扇（首選），或平路環線" in s["detail"]
     assert "暖身 15 分到開始流汗" in s["detail"] and "測試 60 分固定功率不要調" in s["detail"] and "中途不停" in s["detail"]
-    assert "< 25 °C" not in s["detail"] and "記下溫度；熱的時候結果會偏高" in s["detail"]
+    # the heat condition as a temperature (徐國峰; user decision), not 「太陽出來前」
+    assert "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真" in s["detail"] and "太陽" not in s["detail"]
     assert "主課第 10 分鐘心率已經比起始高 10 下還在升" in s["detail"] and "evokeendurance.com" in s["source"]
     assert "If you only have 40 minutes" in s["source"]
     steps = CW.session_steps(s, CW.Thresholds.of(th))
@@ -569,14 +611,97 @@ def test_aet_test_session_steps_and_payload_without_coros():
     assert CW.session_workout(short, th, "2026-10-01").payload["estimatedTime"] == 50 * 60
 
 
-def test_aet_test_due_cadence():
-    assert AT.due(date(2026, 7, 6), "base", "2026-06-29", None, None)          # base week 2
-    assert not AT.due(date(2026, 7, 13), "base", "2026-06-29", None, None)     # week 3
-    assert AT.due(date(2026, 8, 10), "base", "2026-06-29", None, None)         # week 7
-    assert not AT.due(date(2026, 7, 6), "base", "2026-06-29", "2026-06-20", None)       # fresh AeT
-    assert not AT.due(date(2026, 7, 6), "base", "2026-06-29", None, "2026-06-25")       # tested < 4 weeks
-    assert not AT.due(date(2026, 7, 6), "specific", "2026-06-29", None, None)
+def test_aet_test_due_only_for_a_reason():
+    # B3: no fixed cadence — the test is due when quality_gate.aet_test_reason gives a reason
+    why = {"code": "se", "text": "聚合估計還不夠準"}
+    assert AT.due(date(2026, 7, 6), "base", "2026-06-29", why, None)
+    assert AT.due(date(2026, 7, 13), "base", "2026-06-29", why, None)         # any week, not week 2 / 7 …
+    assert not AT.due(date(2026, 7, 6), "base", "2026-06-29", None, None)     # no reason, no test
+    assert not AT.due(date(2026, 7, 6), "base", "2026-06-29", "2026-06-20", None)       # the old date arg
+    assert not AT.due(date(2026, 7, 6), "base", "2026-06-29", why, "2026-06-25")       # tested < 4 weeks
+    assert not AT.due(date(2026, 7, 6), "specific", "2026-06-29", why, None)
     assert AT.start_hr(None, 160.0) == pytest.approx(0.89 * 160 - 5)
+
+
+def test_aet_test_reasons(valid_aet, monkeypatch):
+    from backend.engine import drift_agg as DA
+    monkeypatch.setattr(DA, "aet_points", lambda ds, today, days=180: [{"hr1": 140, "drift": 0.03, "se": 0.04}])
+    # valid estimate 150 ± 2, plan AeT 150: nothing to test
+    g = _gate(plan=_plan(aethr=150, lthr=165))
+    assert g["aet_test_reason"] is None
+    # the estimate moved by more than its SE (≈ 3 bpm): confirm with a test
+    g = _gate(plan=_plan(aethr=142, lthr=165))
+    assert g["aet_test_reason"]["code"] == "moved" and "UA" in g["aet_test_reason"]["text"]
+    # a shift in the last 6 points
+    monkeypatch.setattr(DA, "aet_validity", lambda ds, today, lthr=None: {
+        "valid": False, "value": 150.0, "se": 2.0, "n": 8, "shift_bpm": -6.0, "reason": "最近 6 次一致偏低 6 bpm",
+        "points": 8})
+    assert _gate(plan=_plan(aethr=150, lthr=165))["aet_test_reason"]["code"] == "shift"
+
+
+@pytest.mark.parametrize("pref, cap_w, cap_l, want", [
+    ("auto", None, None, "xu90"), ("auto", 50, None, "xu90"), ("auto", 50, 80, "ua40"),
+    ("ua60", None, None, "ua60"), ("ua60", 50, None, "ua40"), ("evoke60", None, None, "evoke60"),
+    ("friel", 50, 60, "friel"), ("xu90", None, 60, "ua40"), ("bogus", None, None, "xu90")])
+def test_aet_protocol_resolution(pref, cap_w, cap_l, want):
+    # auto = the standard 徐國峰 90 min on the long day; UA 40 when the long-day cap can't fit it
+    assert AT.resolve_protocol(pref, cap_w, cap_l) == want
+
+
+@pytest.mark.parametrize("key", ["xu90", "ua60", "ua40", "evoke60", "friel"])
+def test_each_protocol_session_title_steps_and_hover(key):
+    th = {"cp": 250.0, "lthr": 165.0, "aet": 145.0}
+    s = AT.session(th, 140.0, 190.0, None, key)
+    p = AT.PROTOCOLS[key]
+    assert s["title"] == p["title"] and AT.protocol_of_title(s["title"]) == key and AT.is_aet_session(s)
+    assert s["minutes"] == p["warm"] + p["main"] + p["cool"]
+    assert "氣溫 25 °C 以下時開始" in s["detail"]
+    steps = CW.session_steps(s, CW.Thresholds.of(th))
+    assert steps[0].seconds == p["warm"] * 60 and steps[1].seconds == p["main"] * 60
+    if key in ("xu90", "friel"):
+        assert steps[1].intensity[0] == "hr"                       # the pace / HR is held, no power range
+    else:
+        assert steps[1].intensity[0] == "power"
+    tip = AT.protocol_tip(key)
+    assert f"共 {s['minutes']} 分" in tip and "場地" in tip and "固定" in tip and "判讀" in tip and "來源" in tip
+    assert "徐國峰" in AT.protocol_tip("auto") and "UA" in AT.protocol_tip("auto")
+
+
+def _xu_series(rise, minutes=95, stop_at=None, stop_s=0):
+    t = np.arange(minutes * 60 + 1, dtype=float)
+    hr = 135.0 + rise * np.clip((t - 600) / 4800, 0, 1)
+    v = np.full(len(t), 10.0)
+    if stop_at:
+        v[stop_at:stop_at + stop_s] = 0.0
+    return t, hr, v
+
+
+def test_xu90_analysis_is_minute_10_vs_minute_90_not_halves():
+    t, h, v = _xu_series(rise=135.0 * 0.06)                 # HR 135 → 143.1 at minute 90: 6 %
+    r = AT.analyze(t, h, v, None, judge="xu")
+    assert r["ok"] and r["band"] == "base_ok" and r["drift"] == pytest.approx(0.06, abs=0.003)
+    assert r["hr1"] == pytest.approx(135.0, abs=0.2) and "徐國峰" in " ".join(AT.lines(r))
+    bad = AT.analyze(*_xu_series(rise=135.0 * 0.12), None, judge="xu")
+    assert bad["ok"] and bad["band"] == "base_not" and "還不夠" in " ".join(AT.lines(bad))
+    short = AT.analyze(*_xu_series(rise=5, minutes=80), None, judge="xu")
+    assert not short["ok"] and "第 91 分鐘" in short["reason"]
+    stop = AT.analyze(*_xu_series(rise=5, stop_at=3000, stop_s=60), None, judge="xu")
+    assert not stop["ok"] and "30 秒" in stop["reason"]
+    hot = AT.analyze(*_xu_series(rise=5), None, judge="xu", temp_c=27.0, temp_src="watch")
+    assert not hot["ok"] and "25 °C" in hot["reason"]
+    assert AT.band_of(0.04, "evoke") == "at" and AT.band_of(0.06, "evoke") == "above"
+    assert AT.band_of(0.04, "friel") == "base_ok" and AT.band_of(0.08, "friel") == "base_mid"
+
+
+def test_aet_test_protocol_pref_round_trip():
+    p = PP.from_body({"aet_test_protocol": "evoke60"})
+    assert p.aet_test_protocol == "evoke60" and not p.active
+    assert PP.Prefs().aet_test_protocol == "auto" and SR.DEFAULTS["plan.prefs.aet_test_protocol"] == "auto"
+    SR.validate("plan.prefs.aet_test_protocol", "xu90")
+    with pytest.raises(ValueError):
+        SR.validate("plan.prefs.aet_test_protocol", "maf")
+    with pytest.raises(ValueError):
+        PP.check(PP.Prefs(aet_test_protocol="maf"))
 
 
 def test_apply_writes_the_test_day_to_a_temp_plan(tmp_path, monkeypatch):
@@ -594,9 +719,12 @@ def test_apply_writes_the_test_day_to_a_temp_plan(tmp_path, monkeypatch):
     back = real_load(PL.Plan, path)
     assert [(t.date, t.aethr) for t in back.thresholds] == [("2026-09-20", 146)]
     info = QG.aet_info(back, TODAY)
-    assert info["measured"] and info["fresh"] and info["label"] == "AeT 146（2026-09-20 飄移測試）"
-    # auto switches to the gap method once LTHR is measured too
+    assert info["measured"] and info["label"] == "AeT 146（2026-09-20 飄移測試）"
+    # auto switches to the gap method once LTHR is measured too — and the AeT is valid (B3)
     back.thresholds.append(Threshold("2026-09-01", lthr=165.0))
+    from backend.engine import drift_agg as DA
+    monkeypatch.setattr(DA, "aet_validity", lambda ds, today, lthr=None: {
+        "valid": True, "value": 146.0, "se": 2.0, "n": 8, "shift_bpm": 0.0, "reason": "", "points": 8})
     g = QG.evaluate(_ds([], back), back, TODAY, PP.Prefs(), GOOD_BY, BASE)
     assert g["resolved"] == "ua_gap+friel_drift" and g["gap"] == pytest.approx(165 / 146 - 1)
     with pytest.raises(Exception):

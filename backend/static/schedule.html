@@ -513,9 +513,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="standard"><span><b>標準：12 分＋休 30 分＋3 分</b><span class="meta">約 70 分；兩點 CP＋W′，最準，休息不能縮短</span></span></label>
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="race"><span><b>用比賽：5–10 K 比賽或計時跑</b><span class="meta">不另外排；Riegel 換算（外插），不測 W′</span></span></label>
     </fieldset>
-    <fieldset class="pf-sec" id="pf-aet"><legend>AeT 飄移測試</legend>
+    <fieldset class="pf-sec" id="pf-aet"><legend>AeT／有氧基礎測試</legend>
+      <div class="pf-row"><span class="lbl" id="pf-aetp-l">測試方式</span><span class="gopts" id="pf-aetp" role="radiogroup" aria-labelledby="pf-aetp-l"></span></div>
       <div class="pf-row"><span class="lbl">排在</span><label class="rb"><input type="radio" name="aet_test_days" value="weekday">平日（週一到週五）</label><label class="rb"><input type="radio" name="aet_test_days" value="any">和間歇一樣（週二優先，週末也可以）</label></div>
-      <div class="meta">50 分：暖身 10 分＋40 分固定功率（Uphill Athlete 最短版本，不建議更短）；冷氣房跑步機＋電扇最好。離長跑至少 2 天，不和 CP 測試同一週。</div>
+      <div class="meta">「測試方式」決定排什麼、怎麼判讀；上面的「間歇門檻」決定什麼時候開 5 區。徐國峰 90 分排在週末長跑日（就是那次 LSD），其他方式照「排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。</div>
     </fieldset>
     <fieldset class="pf-sec" id="pf-heat"><legend>熱適應 <span class="badge watch">推估</span></legend>
       <div class="pf-row"><span class="lbl">熱適應課</span><label class="rb"><input type="radio" name="heat" value="auto">自動（只在 30 天內有熱天 A / B 賽時）</label><label class="rb"><input type="radio" name="heat" value="off">不排</label></div>
@@ -1292,8 +1293,16 @@ dayBoxes("pf-sdays", "pf-sday");
 // ---- 間歇門檻 (engine/quality_gate.py): chips; each ? says what the method is, how it is
 // computed, what to do, and whether it runs on your data now (GET /prefs/gate)
 const GATE_MODES = [["auto", "自動"], ["ua_gap", "UA 差距"], ["friel_drift", "Friel 飄移"], ["xu_drift", "徐國峰 90′"],
-  ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
-let PF_GATE = {}, PF_AVAIL = null;
+  ["xu_signals", "三訊號"], ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
+let PF_GATE = {}, PF_AVAIL = null, PF_AETP = {};
+// ---- AeT 測試方式 (engine/aet_test.py PROTOCOLS): chips; each ? = duration, terrain, held, judging, source
+const AET_PROTOCOLS = [["auto", "自動"], ["xu90", "徐國峰 90′"], ["ua60", "UA 60′"], ["ua40", "UA 40′"],
+  ["evoke60", "Evoke 60′"], ["friel", "Friel 1 h"]];
+function aetpRender(sel) {
+  $("pf-aetp").innerHTML = AET_PROTOCOLS.map(([k, lb]) =>
+    `<span class="gopt"><label><input type="radio" name="aet_test_protocol" value="${k}"${k === sel ? " checked" : ""}>${lb}</label>` +
+    `<button type="button" class="qtip" aria-label="${esc(lb)} 的說明" data-tip="${esc((PF_AETP[k] || {}).tip || "")}">?</button></span>`).join("");
+}
 function gateTip(m) {
   const base = (PF_GATE[m] || {}).tip || "";
   const a = PF_AVAIL && PF_AVAIL[m];
@@ -1354,6 +1363,7 @@ function pfFill(p) {
   PFF.querySelector(`input[name="interval_target"][value="${p.interval_target}"]`).checked = true;
   (PFF.querySelector(`input[name="cp_test_protocol"][value="${p.cp_test_protocol || "quick"}"]`) || {}).checked = true;
   (PFF.querySelector(`input[name="aet_test_days"][value="${p.aet_test_days || "weekday"}"]`) || {}).checked = true;
+  aetpRender(p.aet_test_protocol || "auto");
   gateRender(p.quality_gate || "auto");
   PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
   (PFF.querySelector(`input[name="heat"][value="${p.heat || "auto"}"]`) || {}).checked = true;
@@ -1377,6 +1387,7 @@ function pfRead() {
     terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
     interval_target: radioVal("interval_target"), cp_test_protocol: radioVal("cp_test_protocol") || "quick",
     aet_test_days: radioVal("aet_test_days") || "weekday",
+    aet_test_protocol: radioVal("aet_test_protocol") || "auto",
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
     heat: radioVal("heat") || "auto", heat_method: E.heat_method.value || "run" };
 }
@@ -1408,6 +1419,7 @@ function pfSync() {
   if (p.weekly_hours) parts.push(`每週最多 <b>${p.weekly_hours}</b> 小時`);
   if (p.quality_gate !== "auto") parts.push(`間歇門檻：<b>${esc((PF_GATE[p.quality_gate] || {}).label || p.quality_gate)}</b>` +
     (p.quality_gate === "weeks" ? `（基礎期滿 ${p.quality_gate_weeks} 週）` : ""));
+  if ((p.aet_test_protocol || "auto") !== "auto") parts.push(`AeT 測試方式：<b>${esc((PF_AETP[p.aet_test_protocol] || {}).label || p.aet_test_protocol)}</b>`);
   if (p.heat === "off") parts.push("不排熱適應課");
   else if (p.heat_method !== "run") parts.push(`熱適應方式：<b>${esc(PFF.elements.heat_method.selectedOptions[0]?.textContent || p.heat_method)}</b>`);
   $("pf-sum").innerHTML = parts.join("；");
@@ -1422,6 +1434,7 @@ async function openPrefs() {
   try { b = await sj("GET", `${PAPI}/prefs`); } catch (e) { return errMsg("讀取課表偏好", e); }
   PF_DEF = b.defaults;
   PF_GATE = b.gate_options || {};
+  PF_AETP = b.aet_options || {};
   pfFill(b.prefs);
   $("pf").showModal();
   if (PF_AVAIL == null) gateAvail();          // needs the dataset: filled in when it arrives

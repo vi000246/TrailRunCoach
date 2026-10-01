@@ -1030,6 +1030,35 @@ class Evaluator:
         WR._flush(self.ds)
         return out
 
+    def fn_drift_avg(self, n, ctx):
+        """drift_avg("pace" | "power", stat): the mean ± SE of the last 6 runs
+        drift() plots (both tiers) up to each run, within 8 weeks
+        (engine/drift_agg.rolling; drift v2: one run is ±4–6 pp, so the season
+        charts show the aggregate next to the single runs). stat "mean"
+        (default), "lo" (mean − SE) or "hi" (mean + SE). NaN where fewer than 2."""
+        from backend.engine import drift_agg as DA
+        from backend.engine import workout_review as WR
+        basis = str(self.arg(n, 0, ctx)).strip().lower() if n.args else "pace"
+        if basis not in ("pace", "power"):
+            raise EvalError(f'drift_avg() basis must be "pace" or "power", got {basis!r}')
+        stat = str(self.arg(n, 1, ctx)).strip().lower() if len(n.args) > 1 else "mean"
+        if stat not in ("mean", "lo", "hi"):
+            raise EvalError(f'drift_avg() stat must be "mean", "lo" or "hi", got {stat!r}')
+        memo = self.__dict__.setdefault("_drift_avg", {})
+        if basis not in memo:
+            memo[basis] = DA.rolling(self.ds, basis)
+        roll = memo[basis]
+
+        def one(w):
+            a = roll.get(w.idx)
+            if not a:
+                return math.nan
+            return float(a["mean"] + {"mean": 0.0, "lo": -a["se"], "hi": a["se"]}[stat])
+        if ctx.workout is not None:
+            return one(ctx.workout)
+        WR._flush(self.ds)
+        return WS({w.idx: one(w) for w in self.wlist})
+
     def fn_has(self, n, ctx):
         s, sub = self.arg(n, 0, ctx), str(self.arg(n, 1, ctx)).lower()
         if isinstance(s, WS):

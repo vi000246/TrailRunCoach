@@ -1,0 +1,266 @@
+"""
+停訓後的恢復期 (re-entry) — docs/research/detraining.md §4.1, §4.2, §6.
+
+A break = consecutive days without a run (Daniels' tables use it; the impact
+load has to be re-learnt, so hikes / rides don't shorten it — detraining.md
+§5.2). The re-entry block by break length (Daniels table 9.2, coach; the
+period lasts as long as the break):
+
+  1–5 days    back to 100 %, no make-up (Daniels cat. 1; Friel ≤ 3 days)
+  6–13 days   first half 50 %, second half 75 % of the previous volume; no
+              Zone 3 / Zone 5 inside it; then 1 Zone 3 session before Zone 5
+              (徐國峰: Zone 3 first; 1 session 推估)
+  14–28 days  as above; Zone 3 / Zone 5 targets × FVDOT (0.973–0.931); the
+              last long run of the block is a drift check (UA: re-read after
+              a layoff); 2 Zone 3 sessions before Zone 5 (推估)
+  29–56 days  three stages 33 / 50 / 75 % (Daniels cat. 3); Zone 5 only after
+              the aerobic base is re-confirmed after the break (90-min drift
+              or 三訊號; Mujika & Padilla 2000: recent gains are lost
+              after > 4 weeks); AeT counts as stale (UA)
+  > 56 days   restart: 15 weeks, 3-week steps 33 → 50 → 70 → 85 → 100 %
+              (Daniels cat. 4); Zone 3 from week 13 (推估 mapping of his T at
+              step 5); CP and AeT retests
+
+FVDOT (VDOT O2, "VDOT Adjustments For Time Off From Running", 2018 — coach):
+FVDOT-1 without cross-training, FVDOT-2 with it (≥ half the break's days
+with ≥ 45 min of hiking / riding / walking — 推估, Daniels doesn't define it).
+The FVDOT-2 42-day cell reads 0.994 on the web page — a typo for 0.944 by
+its neighbours (未驗證, to check against the book). Between rows: linear
+(推估). Power targets × FVDOT too (推估: VDOT ↔ CP not verified).
+
+"The previous volume" = the mean weekly endurance time of the 4 weeks before
+the break (推估). Planned breaks come from 不排課日期 (engine/blackouts.py)
+≥ 6 days with no run inside; unplanned ones from the activity data (the
+current gap counts as a break returning today).
+"""
+from __future__ import annotations
+
+import datetime as dt
+import math
+from typing import Optional
+
+MIN_BREAK = 6                         # Daniels cat. 2 starts at 6 days
+CAT2_MAX, CAT3_MAX = 28, 56           # days
+CROSS_MIN = 45                        # 推估: minutes of hiking / riding / walking that count as cross-training
+CROSS_SHARE = 0.5                     # 推估: on ≥ half the break's days
+LONG_CAP_MIN = 90                     # 推估: 6–13-day block long-run cap (徐國峰's 90-min check length)
+TARGETS_AFTER_DAYS = 14               # 推估: Zone 3 targets × FVDOT also for 2 weeks after the block
+CAT4_STEPS = (0.33, 0.50, 0.70, 0.85, 1.00)
+CAT4_Z3_WEEKS = 12                    # 推估: Zone 3 from week 13 (Daniels' T at step 5)
+SRC = ("Daniels 表 9.2（停練後回來的調整；你的筆記）；VDOT O2 FVDOT 表（2018）；"
+       "Mujika & Padilla 2000；Uphill Athlete（中斷後用飄移測試重新讀）；徐國峰（先 3 區後 5 區）")
+
+FVDOT1 = ((5, 1.000), (6, 0.997), (7, 0.994), (10, 0.985), (14, 0.973), (21, 0.952), (28, 0.931), (35, 0.910),
+          (42, 0.889), (49, 0.868), (56, 0.847), (63, 0.826), (70, 0.805), (72, 0.800))
+FVDOT2 = ((5, 1.000), (6, 0.998), (7, 0.997), (10, 0.992), (14, 0.986), (21, 0.976), (28, 0.965), (35, 0.955),
+          (42, 0.944), (49, 0.934), (56, 0.923), (63, 0.913), (70, 0.902), (72, 0.900))
+
+
+def fvdot(days: int, cross: bool = False) -> float:
+    tab = FVDOT2 if cross else FVDOT1
+    if days <= tab[0][0]:
+        return 1.0
+    if days >= tab[-1][0]:
+        return tab[-1][1]
+    for (a, fa), (b, fb) in zip(tab, tab[1:]):
+        if a <= days <= b:
+            return fa + (fb - fa) * (days - a) / (b - a)
+    return tab[-1][1]
+
+
+def category(days: int) -> str:
+    """"short" (1–5), "6-13", "14-28", "29-56", "long" (> 56)."""
+    if days < MIN_BREAK:
+        return "short"
+    if days <= 13:
+        return "6-13"
+    if days <= CAT2_MAX:
+        return "14-28"
+    if days <= CAT3_MAX:
+        return "29-56"
+    return "long"
+
+
+def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False,
+         prev_hours: Optional[float] = None, prev_long_min: Optional[float] = None,
+         ongoing: bool = False) -> Optional[dict]:
+    """The re-entry block for a break from the day after `last` (the last run)
+    to the day before `ret` (the first run back, or the day after a blackout).
+    None for a break < 6 days."""
+    days = (ret - last).days - 1
+    cat = category(days)
+    if cat == "short":
+        return None
+    segs: list[tuple[str, str, float]] = []
+
+    def seg(a: dt.date, n: int, f: float) -> dt.date:
+        b = a + dt.timedelta(days=n)
+        segs.append((a.isoformat(), b.isoformat(), f))
+        return b
+
+    if cat in ("6-13", "14-28"):
+        h = math.ceil(days / 2)
+        end = seg(seg(ret, h, 0.50), days - h, 0.75)
+        q_from = end
+    elif cat == "29-56":
+        a = days // 3
+        end = seg(seg(seg(ret, a, 0.33), a, 0.50), days - 2 * a, 0.75)
+        q_from = end
+    else:
+        d = ret
+        for f in CAT4_STEPS:
+            d = seg(d, 21, f)
+        end = d
+        q_from = ret + dt.timedelta(weeks=CAT4_Z3_WEEKS)
+    return {"last_run": last.isoformat(), "return": ret.isoformat(), "days": days, "category": cat,
+            "end": end.isoformat(), "quality_from": q_from.isoformat(), "segments": segs,
+            "fvdot": round(fvdot(days, cross), 4), "cross": cross, "planned": planned, "ongoing": ongoing,
+            "prev_hours": prev_hours, "prev_long_min": prev_long_min,
+            "z3_before_z5": 1 if cat == "6-13" else 2,
+            "drift_check": cat == "14-28", "reconfirm": cat in ("29-56", "long"),
+            "aet_stale": cat in ("29-56", "long"), "cp_retest": cat == "long" or days >= 50,
+            "restart_base": cat == "long", "text": text_of(days, cat, ret, end)}
+
+
+def text_of(days: int, cat: str, ret: dt.date, end: dt.date) -> str:
+    how = {"6-13": "前半 50%、後半 75%", "14-28": "前半 50%、後半 75%，強度目標打折",
+           "29-56": "三段 33／50／75%，5 區要重新確認有氧基礎", "long": "15 週重新打底（33→50→70→85→100%）"}[cat]
+    return (f"停跑 {days} 天：{ret.isoformat()} 起恢復期到 {(end - dt.timedelta(days=1)).isoformat()}（{how}；"
+            "Daniels 表 9.2，恢復期＝停訓天數）")
+
+
+def frac_on(p: Optional[dict], day: dt.date) -> Optional[float]:
+    """The block's volume fraction on `day`; None outside the block."""
+    if not p:
+        return None
+    iso = day.isoformat()
+    for a, b, f in p["segments"]:
+        if a <= iso < b:
+            return f
+    return None
+
+
+def in_block(p: Optional[dict], day: dt.date) -> bool:
+    return bool(p) and p["return"] <= day.isoformat() < p["end"]
+
+
+def quality_ok(p: Optional[dict], day: dt.date) -> bool:
+    """No Zone 3 / Zone 5 in the break or inside the block (Daniels: E days only)."""
+    return not p or not (p["last_run"] < day.isoformat() < p["quality_from"])
+
+
+def week_factor(p: dict, monday: dt.date, last_break_day: Optional[dt.date] = None) -> Optional[float]:
+    """Σ fractions over the week's 7 days ÷ 7: break days count 0, block days
+    their %, days after the block 1. None when the week doesn't touch the block."""
+    days = [monday + dt.timedelta(days=i) for i in range(7)]
+    if not any(in_block(p, d) for d in days):
+        return None
+    ret = dt.date.fromisoformat(p["return"])
+    tot = 0.0
+    for d in days:
+        f = frac_on(p, d)
+        if f is not None:
+            tot += f
+        elif d >= ret:
+            tot += 1.0
+    return tot / 7.0
+
+
+def _run_days(ds) -> list[dt.date]:
+    from backend.engine import workout_review as WR
+    return sorted({WR._wdate(w) for w in ds.workouts if w.sport == "run"})
+
+
+def _cross(ds, a: dt.date, b: dt.date) -> bool:
+    """≥ half the break's days [a, b] with ≥ 45 min of hiking / riding / walking (推估)."""
+    from backend.engine import workout_review as WR
+    from backend.engine.overview import category as cat_of, moving_s
+    if b < a:
+        return False
+    days = {}
+    for w in ds.workouts:
+        d = WR._wdate(w)
+        if a <= d <= b and w.sport != "run" and cat_of(w) in ("hike", "bike", "walk", "trail", "road"):
+            days[d] = days.get(d, 0.0) + moving_s(w) / 60.0
+    n = (b - a).days + 1
+    return sum(1 for v in days.values() if v >= CROSS_MIN) >= CROSS_SHARE * n
+
+
+def prev_volume(ds, last: dt.date) -> tuple[float, float]:
+    """(mean weekly endurance hours, longest session minutes) of the 4 weeks before `last` (推估)."""
+    from backend.engine import workout_review as WR
+    from backend.engine.overview import ENDURANCE, category as cat_of, moving_s
+    a = last - dt.timedelta(days=27)
+    tot, longest = 0.0, 0.0
+    for w in ds.workouts:
+        d = WR._wdate(w)
+        if a <= d <= last and cat_of(w) in ENDURANCE:
+            tot += moving_s(w)
+            longest = max(longest, moving_s(w) / 60.0)
+    return tot / 3600.0 / 4.0, longest
+
+
+def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182) -> list[dict]:
+    """Every re-entry block within reach, oldest first: breaks ≥ 6 days whose
+    return is ≤ `horizon_days` ago, planned (a 不排課日期 range ≥ 6 days with
+    no run inside, now or ahead) or unplanned (from the runs; the current gap
+    counts, returning today)."""
+    runs = _run_days(ds)
+    runs_past = [d for d in runs if d <= today]
+    cands = []
+    for a, b in zip(runs_past, runs_past[1:]):
+        if (b - a).days - 1 >= MIN_BREAK and (today - b).days <= horizon_days:
+            cands.append((a, b, False, False))
+    if runs_past and (today - runs_past[-1]).days - 1 >= MIN_BREAK:
+        cands.append((runs_past[-1], today, False, True))         # still off: as if back today
+    from backend.engine import blackouts as BL
+    for lo, hi in BL._runs(sorted(dt.date.fromisoformat(k) for k in BL.blocked(blackouts or ()))):
+        n = (hi - lo).days + 1
+        if n < MIN_BREAK or any(lo <= d <= hi for d in runs):
+            continue
+        ret = hi + dt.timedelta(days=1)
+        if lo > today:
+            last = lo - dt.timedelta(days=1)          # ahead: assume running up to the range
+        else:
+            last = max([d for d in runs if d < lo] or [lo - dt.timedelta(days=1)])
+        if (ret - today).days <= 7 * 26 and (today - ret).days <= horizon_days:
+            cands.append((last, ret, True, False))
+    out = []
+    for last, ret, planned, ongoing in sorted(set(cands), key=lambda c: c[1]):
+        ph, pl = prev_volume(ds, last)
+        p = plan(last, ret, _cross(ds, last + dt.timedelta(days=1), ret - dt.timedelta(days=1)), planned, ph, pl,
+                 ongoing)
+        if p is not None:
+            out.append(p)
+    return out
+
+
+def planned_ahead(blackouts, after: dt.date, prev_hours: Optional[float], prev_long_min: Optional[float]) -> list[dict]:
+    """Blocks for 不排課日期 ranges ≥ 6 days that start after `after` (the
+    projected weeks; no data yet — the athlete is assumed to run up to them)."""
+    from backend.engine import blackouts as BL
+    out = []
+    for lo, hi in BL._runs(sorted(dt.date.fromisoformat(k) for k in BL.blocked(blackouts or ()))):
+        if lo <= after or (hi - lo).days + 1 < MIN_BREAK:
+            continue
+        p = plan(lo - dt.timedelta(days=1), hi + dt.timedelta(days=1), False, True, prev_hours, prev_long_min)
+        if p is not None:
+            out.append(p)
+    return out
+
+
+def block_on(blocks: list[dict], monday: dt.date) -> Optional[dict]:
+    """The block whose period touches the week of `monday` (the latest)."""
+    hit = [p for p in blocks if week_factor(p, monday) is not None]
+    return hit[-1] if hit else None
+
+
+def find(ds, today: dt.date, blackouts=(), horizon_days: int = 182) -> Optional[dict]:
+    """The block that matters on `today`: the one in progress, else the
+    latest that started on or before today, else the next planned one."""
+    ps = find_all(ds, today, blackouts, horizon_days)
+    iso = today.isoformat()
+    past = [p for p in ps if p["return"] <= iso]
+    if past:
+        return past[-1]
+    return ps[0] if ps else None
