@@ -126,7 +126,7 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:741`).
    activity and `done_by.date` its day — the same match as the CP test's done_by.
    `scheduled_test` skips AeT sessions, so a done AeT test is never read as a CP
    test (before, any done kind-`test` row matched and the activity became `test_cp`).
-   `plan_store.test_sessions` returns `gen_key` for this (`backend/engine/plan_store.py:323`);
+   `plan_store.test_sessions` returns `gen_key` for this (`backend/engine/plan_store.py:367`);
    generated AeT sessions now carry `protocol: "aet"` (`backend/engine/aet_test.py:283`,
    kept by `projection._bq`).
 2. `test_cp`: plan threshold record with a CP on that date, a title matching
@@ -138,7 +138,7 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:741`).
       the same day **and** a ≥ 3-min bout ≥ 1.05 × the CP in effect
       (`backend/engine/workout_review.py:753`). The sessions come from
       `plan_store.test_sessions` (read-only sqlite, cached on the DB mtime,
-      `backend/engine/plan_store.py:320`); a dataset may carry its own list.
+      `backend/engine/plan_store.py:364`); a dataset may carry its own list.
    2. a 5–10 K race or TT (protocol `race`): 15–90 min moving and a race / TT
       title or a plan race event that day of 4–11 km (`backend/engine/workout_review.py:794`).
    3. the power pattern — `looks_like_cp_test` (standard), else a 20′ window
@@ -280,7 +280,7 @@ Unknown section or no samples → an `empty` card.
 | `drift_series` | `status.i_drift` (`backend/engine/status.py:451`, `ref=True`), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; each point has `tier`; strict by default (`drift_streak`), `ref=True` keeps reference-tier drifts; runs drift_of refuses (< 30 min after the warm-up, fast finish, > 25 °C, …) are kept with drift None | `backend/engine/workout_review.py:1137` |
 | `drift_streak` / `STREAK_NEED` | legacy only (the removed 「連續 3 次」 rule) | consecutive most recent fair drifts < 5 % | `backend/engine/workout_review.py:980`, `backend/engine/workout_review.py:70` |
 | `quality_gate` | thin wrapper over `quality_gate.week_decision`; a legacy bool / None gate = no method | outside base: intensity and drift not bad | `backend/engine/workout_review.py:594` |
-| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:182`, `backend/engine/quality_gate.py:228`, `backend/engine/quality_gate.py:281`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (its > 25 °C check is now drift_of's heat rule, `backend/engine/quality_gate.py:228`); dose: `quality` class or ≥ 4 short reps at ≥ 95 % CP | — |
+| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:186`, `backend/engine/quality_gate.py:232`, `backend/engine/quality_gate.py:303`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (its > 25 °C check is now drift_of's heat rule, `backend/engine/quality_gate.py:232`); dose: `quality` class or ≥ 4 short reps at ≥ 95 % CP | — |
 | `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:660`) | Latest run classified `test_aet` in 120 days: `analyze` result, `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:187`, `backend/engine/aet_test.py:215`, `backend/engine/aet_test.py:223` |
 | `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:580`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:976`, `backend/engine/workout_review.py:996` |
 
@@ -380,14 +380,14 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | Pw:HR halves and refusals, no-power text, power-mode verdicts and card | `backend/tests/test_drift_basis.py:47`, `backend/tests/test_drift_basis.py:68`, `backend/tests/test_drift_basis.py:84`, `backend/tests/test_drift_basis.py:114`, `backend/tests/test_drift_basis.py:127` |
 | Drift v8: 40 min counted after a synthetic warm-up (and after a stop), hot run refused with the source named, archive before watch in `measure`, the archive file read, fast finish on pace and on power refused (+3 % kept), Pa/Pw on one window and the coverage refusal | `backend/tests/test_workout_review.py:157`, `backend/tests/test_workout_review.py:179`, `backend/tests/test_workout_review.py:196`, `backend/tests/test_workout_review.py:213`, `backend/tests/test_workout_review.py:234`, `backend/tests/test_workout_review.py:252` |
 | Golden: the fair real run (2025-06-30) against `plain_card`, the 3 older runs refused, stored pahr / pwhr against the whole-run recomputation, both season charts equal the card on 3 real runs; chart definitions | `backend/tests/test_drift_basis.py:391`, `backend/tests/test_drift_basis.py:422`, `backend/tests/test_drift_basis.py:435`, `backend/tests/test_drift_basis.py:226` |
-| AeT test from the plan: done_by on protocol aet / legacy gen_key / custom title (and not CP), wrong index / state / day, fallbacks title → plan row → ≥ 55′ steady, a short planned test found and refused, `protocol: "aet"` on the session | `backend/tests/test_quality_gate.py:414`, `backend/tests/test_quality_gate.py:429`, `backend/tests/test_quality_gate.py:441`, `backend/tests/test_quality_gate.py:457`, `backend/tests/test_quality_gate.py:466` |
+| AeT test from the plan: done_by on protocol aet / legacy gen_key / custom title (and not CP), wrong index / state / day, fallbacks title → plan row → ≥ 55′ steady, a short planned test found and refused, `protocol: "aet"` on the session | `backend/tests/test_quality_gate.py:464`, `backend/tests/test_quality_gate.py:479`, `backend/tests/test_quality_gate.py:491`, `backend/tests/test_quality_gate.py:507`, `backend/tests/test_quality_gate.py:516` |
 | CP-test detection: done_by, wrong index / day, same day, pattern standard (no overlap) / quick, race | `backend/tests/test_cp_protocols.py:146`, `backend/tests/test_cp_protocols.py:156`, `backend/tests/test_cp_protocols.py:164`, `backend/tests/test_cp_protocols.py:174`, `backend/tests/test_cp_protocols.py:187`, `backend/tests/test_cp_protocols.py:195` |
 | CP analysis per protocol, the real 2026-09-30 file, same-method comparison, card button, apply-cp API | `backend/tests/test_cp_protocols.py:215`, `backend/tests/test_cp_protocols.py:264`, `backend/tests/test_cp_protocols.py:293`, `backend/tests/test_cp_protocols.py:308`, `backend/tests/test_cp_protocols.py:341`, `backend/tests/test_cp_protocols.py:369` |
 | Informational aerobic lines (no streak), UA three bands on test_aet, the gate wrapper | `backend/tests/test_workout_review.py:148`, `backend/tests/test_workout_review.py:212` |
 | Drift tiers: 35′ → ref, 45′ → test, 25′ → refused, hot refused in both, other refusals on ref, gates (Friel / 徐國峰 / steady AeT test) ignore ref, i_drift shows ref but never BAD on it, card label + hover, AeT bands strict | `backend/tests/test_drift_tiers.py` |
 | AeT test length / day: standard 80′ vs UA's 50′ under a weekday cap (detail says why, COROS steps), both lengths analysed strict, `warm_for`, weekday placement ≥ 2 days from the long run in projection / week_plan / PP.place, weekend only for the 80′ test, titled 50′ test marked done | `backend/tests/test_aet_weekday.py` |
 | CP-test pattern alone → `cp_hint`, not test_cp; a titled test still takes the pattern's protocol | `backend/tests/test_cp_protocols.py:174`, `backend/tests/test_cp_protocols.py:187` |
-| AeT test: analysis bands, refusals (short / hot / fast finish / hills), `latest_aet_test`, 「AeT」 title → test_aet, the card's apply action, COROS steps, apply on a temp plan | `backend/tests/test_quality_gate.py:350`, `backend/tests/test_quality_gate.py:360`, `backend/tests/test_quality_gate.py:381`, `backend/tests/test_quality_gate.py:401`, `backend/tests/test_quality_gate.py:430` |
+| AeT test: analysis bands, refusals (short / hot / fast finish / hills), `latest_aet_test`, 「AeT」 title → test_aet, the card's apply action, COROS steps, apply on a temp plan | `backend/tests/test_quality_gate.py:400`, `backend/tests/test_quality_gate.py:410`, `backend/tests/test_quality_gate.py:431`, `backend/tests/test_quality_gate.py:451`, `backend/tests/test_quality_gate.py:480` |
 
 ## Domain Model
 
