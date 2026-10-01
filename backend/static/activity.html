@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>活動編輯</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --soft: #e8efff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px;
+  display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+h1 { font-size: 16px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 6px; }
+.meta { color: var(--muted); font-size: 12.5px; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; }
+button { padding: 3px 10px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--err); border-color: var(--err); }
+button:disabled { opacity: .5; cursor: default; }
+input, select { padding: 3px 6px; }
+textarea { padding: 5px 7px; width: 100%; resize: vertical; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+main { display: grid; grid-template-columns: minmax(320px, 440px) minmax(0, 1fr); gap: 14px;
+  padding: 14px 16px; max-width: 1280px; margin: 0 auto; align-items: start; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+
+.filters { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; margin-bottom: 8px; }
+.filters label { display: flex; flex-direction: column; font-size: 11.5px; color: var(--muted); gap: 2px; min-width: 0; }
+.filters label > * { color: var(--text); font-size: 13px; width: 100%; }
+.filters .wide { grid-column: 1 / -1; }
+.listhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin: 4px 0; }
+.list { max-height: calc(100vh - 330px); min-height: 240px; overflow: auto; border-top: 1px solid var(--line); }
+@media (max-width: 860px) { .list { max-height: 55vh; } }
+.row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; padding: 7px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.row.on { background: var(--soft); }
+.row input[type=checkbox] { margin: 3px 0 0; }
+.row .t { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.row .t b { white-space: nowrap; font-size: 12.5px; }
+.row .t span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .s { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 3px 6px; align-items: center; }
+.row.excl .t span { text-decoration: line-through; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; padding: 0 7px; border-radius: 10px;
+  border: 1px solid var(--line); color: var(--text); background: var(--bg); white-space: nowrap; }
+.chip.m { border-color: var(--accent); }
+.chip.ex { color: var(--err); border-color: var(--err); background: none; }
+.chip.tag { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border-color: transparent; }
+.chip button { border: 0; background: none; padding: 0 0 0 2px; line-height: 1; color: var(--muted); }
+
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 9px; margin-left: 4px; white-space: nowrap; }
+.badge.man { background: var(--accent); color: #fff; }
+.badge.auto { border: 1px solid var(--line); color: var(--muted); }
+.ed h2 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.fld { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+.fld > .lab { color: var(--muted); font-size: 13px; padding-top: 4px; }
+.fld .ctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.fld .ctl input[type=text] { flex: 1 1 220px; min-width: 0; }
+.fld .why { grid-column: 2; font-size: 12px; color: var(--muted); }
+@media (max-width: 480px) { .fld { grid-template-columns: 1fr; } .fld .why { grid-column: 1; } }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.bulk { position: sticky; bottom: 0; background: var(--panel); border: 1px solid var(--accent); border-radius: 8px;
+  padding: 8px 10px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.msg { font-size: 12px; color: var(--muted); min-height: 1.3em; }
+.msg.err { color: var(--err); }
+.msg.ok { color: var(--ok); }
+.qtip { display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; margin: 0 0 0 5px;
+  border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif;
+  cursor: help; vertical-align: 1px; }
+.qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
+.empty { color: var(--muted); padding: 24px 6px; text-align: center; }
+.loading { color: var(--muted); padding: 12px 6px; }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="activity"></script>
+<header>
+  <h1>活動編輯<button type="button" class="qtip" aria-label="說明" data-tip="每筆活動的名稱、活動類型、努力度、標籤、備註、地形與排除。
+自動判定的值標「自動」，滑過標記可看判定理由；你改過的標「手動」，選回「自動」或清空就回到自動。
+努力度的優先順序：你的標記 ＞ 手錶記錄的 RPE（運動後自評）＞ 心率規則。
+勾選多筆可以一次設定類型、努力度或標籤。">?</button></h1>
+  <span class="meta" id="hdr"></span>
+</header>
+<main>
+  <section class="panel" aria-label="活動清單">
+    <div class="filters">
+      <label>從<input type="date" id="f-from"></label>
+      <label>到<input type="date" id="f-to"></label>
+      <label>運動<select id="f-sport"><option value="">全部</option></select></label>
+      <label>活動類型<select id="f-type"><option value="">全部</option></select></label>
+      <label>努力度<select id="f-effort"><option value="">全部</option></select></label>
+      <label>排除<select id="f-ex">
+        <option value="">全部</option><option value="no">不含已排除</option><option value="yes">只看已排除</option>
+      </select></label>
+      <label class="wide">搜尋<input type="search" id="f-q" placeholder="名稱、標籤、備註、日期…"></label>
+    </div>
+    <div class="listhead">
+      <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="all"> 全選（篩選結果）</label>
+      <span id="count">讀取中…</span>
+    </div>
+    <div class="list" id="list" role="listbox" aria-label="活動"><div class="loading">讀取中…</div></div>
+    <div class="bulk" id="bulk" hidden>
+      <b id="bulk-n"></b>
+      <select id="b-type" aria-label="一次設定活動類型"><option value="">設定類型…</option></select>
+      <select id="b-effort" aria-label="一次設定努力度"><option value="">設定努力度…</option></select>
+      <input type="text" id="b-tag" placeholder="標籤" list="tag-list" style="width:7em" aria-label="標籤">
+      <button id="b-tag-add">加標籤</button><button id="b-tag-rm">移除標籤</button>
+      <button id="b-clear">取消選取</button>
+      <span class="msg" id="b-msg"></span>
+    </div>
+  </section>
+  <section class="panel ed" id="ed" aria-live="polite"><div class="empty">從左邊選一筆活動</div></section>
+</main>
+<datalist id="tag-list"></datalist>
+<script>
+const API = "/api/v1/wko5";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const hms = (s) => { if (s == null) return "—"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}` : `${m}:${String(s % 60).padStart(2, "0")}`; };
+const SPORT_ZH = { "running": "路跑", "trail running": "越野跑", "indoor running": "跑步機", "treadmill running": "跑步機",
+  "hiking": "健行", "mountaineering": "登山", "walking": "走路", "cycling": "騎車", "strength training": "肌力" };
+const sportZh = (a) => SPORT_ZH[a.sport_type] || a.sport_type || a.sport || "";
+const PREF = "activityedit.filters";
+const S = { acts: [], auto: null, types: {}, efforts: {}, sel: null, checked: new Set(), detail: null };
+
+async function j(url, opt) {
+  const r = await fetch(url, opt);
+  let body = null;
+  try { body = await r.json(); } catch {}
+  if (!r.ok) throw new Error((body && (body.detail || body.error)) || `HTTP ${r.status}`);
+  return body;
+}
+const send = (url, method, data) => j(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+
+// ---- effective values: the user's mark, else the auto value (once /activities/auto has answered)
+function autoOf(a) { return S.auto ? S.auto[a.key] || null : null; }
+function effType(a) { return a.user_type || autoOf(a)?.activity_type || null; }
+function effEffort(a) { return a.user_effort || autoOf(a)?.effort || null; }
+function title(a) { return a.name || a.title_original || a.label; }
+
+// ---- filters --------------------------------------------------------------
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREF) || "{}"); } catch { return {}; }
+}
+function savePrefs() {
+  const p = {}; for (const k of ["f-from", "f-to", "f-sport", "f-type", "f-effort", "f-ex"]) p[k] = $(k).value;
+  try { localStorage.setItem(PREF, JSON.stringify(p)); } catch {}
+}
+function fillFilterOptions() {
+  const sports = [...new Set(S.acts.map((a) => a.sport_type).filter(Boolean))].sort();
+  $("f-sport").innerHTML = `<option value="">全部</option>` + sports.map((s) => `<option value="${esc(s)}">${esc(SPORT_ZH[s] || s)}</option>`).join("");
+  const opts = (o) => Object.entries(o).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+  $("f-type").innerHTML = `<option value="">全部</option>` + opts(S.types);
+  $("f-effort").innerHTML = `<option value="">全部</option>` + opts(S.efforts) + `<option value="_manual">只看手動標記</option>`;
+  $("b-type").innerHTML = `<option value="">設定類型…</option>` + opts(S.types) + `<option value="_auto">回到自動</option>`;
+  $("b-effort").innerHTML = `<option value="">設定努力度…</option>` + opts(S.efforts) + `<option value="_auto">回到自動</option>`;
+  const tags = [...new Set(S.acts.flatMap((a) => a.tags || []))].sort();
+  $("tag-list").innerHTML = tags.map((t) => `<option value="${esc(t)}">`).join("");
+}
+function filtered() {
+  const from = $("f-from").value, to = $("f-to").value, sp = $("f-sport").value, ty = $("f-type").value,
+    ef = $("f-effort").value, ex = $("f-ex").value, q = $("f-q").value.trim().toLowerCase();
+  return S.acts.filter((a) => {
+    const d = a.start.slice(0, 10);
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    if (sp && a.sport_type !== sp) return false;
+    if (ty && effType(a) !== ty) return false;
+    if (ef === "_manual") { if (!a.user_effort && !a.user_type) return false; }
+    else if (ef && effEffort(a) !== ef) return false;
+    if (ex === "yes" && !a.excluded) return false;
+    if (ex === "no" && a.excluded) return false;
+    if (q) {
+      const hay = [title(a), a.title_original, a.note, ...(a.tags || []), a.start.slice(0, 16).replace("T", " "), sportZh(a)].join(" ").toLowerCase();
+      if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
+    }
+    return true;
+  });
+}
+
+// ---- list -----------------------------------------------------------------
+function renderList() {
+  const rows = filtered();
+  const waiting = !S.auto && ($("f-type").value || ($("f-effort").value && $("f-effort").value !== "_manual"));
+  $("count").textContent = `${rows.length} / ${S.acts.length} 筆` + (S.auto ? "" : "（自動判定計算中…）") + (waiting ? "：類型／努力度篩選先只看手動標記" : "");
+  if (!rows.length) { $("list").innerHTML = `<div class="empty">沒有符合的活動</div>`; syncAll(rows); return; }
+  const MAX = 400;
+  $("list").innerHTML = rows.slice(0, MAX).map((a) => {
+    const t = effType(a), e = effEffort(a);
+    return `<div class="row ${a.key === S.sel ? "on" : ""} ${a.excluded ? "excl" : ""}" role="option" aria-selected="${a.key === S.sel}" data-k="${esc(a.key)}">
+      <input type="checkbox" aria-label="選取" ${S.checked.has(a.key) ? "checked" : ""} data-ck="${esc(a.key)}">
+      <div style="min-width:0">
+        <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span title="${esc(title(a))}">${esc(title(a))}</span></div>
+        <div class="s">${esc(sportZh(a))} · ${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(1) + " km" : "—"}
+          ${t ? `<span class="chip ${a.user_type ? "m" : ""}" title="${a.user_type ? "手動" : "自動"}">${esc(S.types[t] || t)}</span>` : ""}
+          ${e ? `<span class="chip ${a.user_effort ? "m" : ""}" title="${a.user_effort ? "手動" : "自動"}">${esc(S.efforts[e] || e)}</span>` : ""}
+          ${(a.tags || []).map((x) => `<span class="chip tag">${esc(x)}</span>`).join("")}
+          ${a.excluded ? `<span class="chip ex">已排除</span>` : ""}</div>
+      </div></div>`;
+  }).join("") + (rows.length > MAX ? `<div class="empty">只列前 ${MAX} 筆，請縮小篩選</div>` : "");
+  syncAll(rows);
+}
+function syncAll(rows) {
+  const keys = rows.map((a) => a.key);
+  $("all").checked = keys.length > 0 && keys.every((k) => S.checked.has(k));
+  $("all").indeterminate = !$("all").checked && keys.some((k) => S.checked.has(k));
+  $("bulk").hidden = S.checked.size === 0;
+  $("bulk-n").textContent = `已選 ${S.checked.size} 筆`;
+}
+$("list").addEventListener("click", (ev) => {
+  const ck = ev.target.closest("input[data-ck]");
+  if (ck) { ck.checked ? S.checked.add(ck.dataset.ck) : S.checked.delete(ck.dataset.ck); syncAll(filtered()); return; }
+  const r = ev.target.closest(".row[data-k]");
+  if (r) select(r.dataset.k, true);
+});
+$("all").addEventListener("change", () => {
+  const rows = filtered();
+  for (const a of rows) $("all").checked ? S.checked.add(a.key) : S.checked.delete(a.key);
+  renderList();
+});
+for (const id of ["f-from", "f-to", "f-sport", "f-type", "f-effort", "f-ex"]) $(id).addEventListener("change", () => { savePrefs(); renderList(); });
+$("f-q").addEventListener("input", renderList);
+
+async function loadList() {
+  const r = await j(`${API}/activities`);
+  S.acts = r.activities; S.types = r.types; S.efforts = r.efforts; S.source = r.source;
+  $("hdr").textContent = `資料來源：${{ wko5: "WKO5", coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source} · ${S.acts.length} 筆`;
+  const cur = { ...Object.fromEntries(["f-sport", "f-type", "f-effort"].map((k) => [k, $(k).value])) };
+  fillFilterOptions();
+  for (const [k, v] of Object.entries(cur)) if (v) $(k).value = v;
+  renderList();
+}
+async function loadAuto() {
+  try { S.auto = await j(`${API}/activities/auto`); } catch (e) { S.auto = {}; $("count").textContent += `（自動判定失敗：${e.message}）`; }
+  renderList();
+  if (S.sel) renderEditor();
+}
+
+// ---- editor ---------------------------------------------------------------
+const actOf = (k) => S.acts.find((a) => a.key === k);
+async function select(key, user) {
+  S.sel = key; S.detail = null;
+  document.querySelectorAll(".row").forEach((r) => { r.classList.toggle("on", r.dataset.k === key); r.setAttribute("aria-selected", String(r.dataset.k === key)); });
+  try { history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(key)}`); } catch {}
+  renderEditor();
+  const a = actOf(key);
+  if (a && a.index != null) {
+    try {
+      const d = await j(`${API}/workouts/${a.index}/activity`);
+      if (S.sel === key) { S.detail = d; renderEditor(); }
+    } catch (e) { if (S.sel === key) setMsg("讀取詳細資料失敗：" + e.message, "err"); }
+  }
+  if (user && matchMedia("(max-width: 860px)").matches) $("ed").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+const qt = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
+// 「?」 help: hover shows it, a tap / click pins it (touch has no hover); fixed on <body> so nothing clips it
+const QTIP = { el: null, pinned: null };
+function qtipShow(btn) {
+  qtipHide();
+  const d = document.createElement("div");
+  d.className = "qtip-pop"; d.textContent = btn.dataset.tip;
+  document.body.appendChild(d);
+  const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  QTIP.el = d;
+}
+function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QTIP.pinned) qtipShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".qtip");
+  if (t && QTIP.pinned !== t) { QTIP.pinned = t; qtipShow(t); e.stopPropagation(); e.preventDefault(); return; }
+  QTIP.pinned = null; qtipHide();
+}, true);
+addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(QTIP.pinned); }, { passive: true, capture: true });
+const badge = (manual, why) => manual ? `<span class="badge man" title="你設定的值">手動</span>` : `<span class="badge auto" title="${esc(why || "依規則自動判定")}">自動</span>`;
+function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
+
+function renderEditor() {
+  const a = actOf(S.sel);
+  if (!a) { $("ed").innerHTML = `<div class="empty">從左邊選一筆活動</div>`; return; }
+  const d = S.detail, au = autoOf(a);
+  const tAuto = d ? d.activity_type_auto : au?.activity_type, tWhy = d ? d.activity_type_reason : au?.activity_type_reason;
+  const eAuto = d ? d.effort_auto : au?.effort, eWhy = d ? d.effort_reason : au?.effort_reason;
+  const sel = (f, opts, cur, autoV) => `<select data-f="${f}">` +
+    `<option value="" ${cur ? "" : "selected"}>自動（${esc(autoV ? opts[autoV] : S.auto || d ? "—" : "計算中…")}）</option>` +
+    Object.entries(opts).map(([k, v]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(v)}</option>`).join("") + `</select>`;
+  const ed = d?.effort_detail || {};
+  const rc = d?.recorded;
+  const recTxt = rc && (rc.rpe != null || rc.feel != null)
+    ? `手錶記錄：${rc.rpe != null ? `RPE ${rc.rpe}` : ""}${rc.rpe != null && rc.feel_label ? "、" : ""}${rc.feel_label ? `感覺「${rc.feel_label}」` : ""}` : "";
+  const nums = ed.hr_frac != null ? `移動心率 ${(ed.hr_frac * 100).toFixed(0)}% LTHR` +
+    (ed.above_aet != null ? `・AeT 以上 ${(ed.above_aet * 100).toFixed(0)}%` : "") +
+    (ed.rest_share != null ? `・長休息（≥ 5 分）${(ed.rest_share * 100).toFixed(0)}%` : "") : "";
+  const tr = a.terrain || {};
+  const terrainCtl = tr.editable
+    ? `<select data-terrain="1"><option value="auto" ${tr.overridden ? "" : "selected"}>自動（${tr.overridden ? "規則判定" : tr.value === "trail" ? "越野" : "路跑"}）</option>
+        <option value="road" ${tr.overridden && tr.value === "road" ? "selected" : ""}>路跑</option>
+        <option value="trail" ${tr.overridden && tr.value === "trail" ? "selected" : ""}>越野</option></select>${badge(tr.overridden)}`
+    : `<span>${tr.value === "trail" ? "越野" : "路跑"}</span><span class="meta">（${esc(tr.why || "不能在這裡改")}）</span>`;
+  const x = a.excluded, ov = a.user_exclusion, flagged = d?.exclusion_state?.flagged;
+  const exBtn = (v, t, cls = "") => `<button data-ex="${v}" class="${cls}">${t}</button>`;
+  const exCtl = x
+    ? `<span class="chip ex">已排除</span><span>${esc(x.reason || x.label || "")}</span>` +
+      (x.auto ? exBtn("keep", "這筆是正常的，不要排除") : exBtn("auto", "取消手動排除"))
+    : ov === "keep"
+      ? `<span>你標成正常（不要排除）${flagged ? "；規則判定：" + esc(flagged) : ""}</span>${exBtn("auto", "恢復自動判定")}`
+      : `<span>沒有排除</span>${exBtn("exclude", "手動排除", "danger")}`;
+  const p = d?.power;
+  $("ed").innerHTML = `
+    <h2><span>${esc(title(a))}</span><span class="meta">${esc(a.start.slice(0, 16).replace("T", " "))} · ${esc(sportZh(a))} · ${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"}${a.climbing != null ? ` · ↑${Math.round(a.climbing)} m` : ""}</span></h2>
+    <div class="fld"><span class="lab">名稱${qt("留空或按「還原原名」就用原本的名稱（WKO5 的標題，沒有標題時是日期＋運動＋距離）。")}</span>
+      <div class="ctl"><input type="text" data-name maxlength="200" value="${esc(a.name || "")}" placeholder="${esc(a.title_original || a.label)}" aria-label="名稱">
+        ${a.name ? `<button data-name-clear>還原原名</button>` : ""}${badge(!!a.name, "原本的名稱")}</div>
+      ${a.name ? `<div class="why">原名：${esc(a.title_original || a.label)}</div>` : ""}</div>
+    <div class="fld"><span class="lab">活動類型</span>
+      <div class="ctl">${sel("activity_type", S.types, a.user_type, tAuto)}${badge(!!a.user_type, tWhy)}</div>
+      <div class="why">${a.user_type ? `自動判定：${esc(S.types[tAuto] || "—")}（${esc(tWhy || "")}）` : esc(tWhy || (S.auto ? "" : "自動判定計算中…"))}</div></div>
+    <div class="fld"><span class="lab">努力度${qt("優先順序：你的標記 ＞ 手錶記錄的 RPE（運動後自評，FIT 檔的 workout_rpe；目前只有 Garmin 手錶寫入）＞ 心率規則。\nRPE 換算（推估）：1–4 輕鬆、5–8 一般、9–10 全力（長休息 > 10% 時為有拼但有休息）。\n心率規則看移動時的心率佔 LTHR、AeT 以上的比例與長休息。")}</span>
+      <div class="ctl">${sel("effort", S.efforts, a.user_effort, eAuto)}${badge(!!a.user_effort, eWhy)}</div>
+      <div class="why">${a.user_effort ? `自動判定：${esc(S.efforts[eAuto] || "—")}（${esc(eWhy || "")}）` : esc(eWhy || (S.auto ? "" : "自動判定計算中…"))}${nums ? `<br>${esc(nums)}` : ""}${recTxt ? `<br>${esc(recTxt)}` : ""}</div></div>
+    <div class="fld"><span class="lab">標籤${qt("自由輸入，可以多個（每個最多 30 字、最多 20 個）；輸入後按 Enter。左邊清單的搜尋也會找標籤。")}</span>
+      <div class="ctl tags">${(a.tags || []).map((t) => `<span class="chip tag">${esc(t)}<button data-tag-rm="${esc(t)}" aria-label="移除標籤 ${esc(t)}">×</button></span>`).join("")}
+        <input type="text" data-tag-in list="tag-list" placeholder="加標籤，Enter" style="width:10em" aria-label="加標籤"></div></div>
+    <div class="fld"><span class="lab">備註</span>
+      <div class="ctl" style="display:block"><textarea data-note rows="3" aria-label="備註">${esc(a.note || "")}</textarea></div></div>
+    <div class="fld"><span class="lab">地形${qt("路跑或越野。自動 = 依距離與爬升判定；選路跑／越野會蓋過規則，選回「自動」就恢復。WKO5 來源的地形是 WKO5 的活動類型，要在 WKO5 改。")}</span><div class="ctl">${terrainCtl}</div></div>
+    <div class="fld"><span class="lab">排除${qt("排除的活動留在清單（標「已排除」），但不算進 PMC、功率曲線、比賽功率和圖表。規則會自動排除疑似交通工具或不可能的功率；你可以手動排除，或把規則排除的標成正常。")}</span><div class="ctl">${exCtl}</div></div>
+    <div class="fld"><span class="lab">功率來源${qt("唯讀。Stryd 功率一律採用；手錶推估功率要在「設定」打開才採用，沒採用時功率模型和功率 TSS 不用它，心率與配速照常使用。")}</span><div class="ctl">${a.index == null ? "—" : !d ? "讀取中…"
+      : p && p.source && p.source !== "none" ? esc(p.label || p.source) + (p.used ? "" : "（未採用）") : "沒有功率"}</div></div>
+    ${d?.capacity ? `<div class="fld"><span class="lab">能力樣本</span><div class="ctl">${d.capacity.ok ? "是" : "否"}</div><div class="why">${esc(d.capacity.reason || "")}</div></div>` : ""}
+    <div class="msg" id="msg"></div>`;
+  wireEditor(a);
+}
+
+function patchLocal(a, r) {
+  // r: the single-activity JSON (PATCH /workouts/{i}/activity) or a patch we sent
+  if ("activity_type_overridden" in r) a.user_type = r.activity_type_overridden ? r.activity_type : null;
+  if ("effort_overridden" in r) a.user_effort = r.effort_overridden ? r.effort : null;
+  for (const k of ["note", "name", "tags"]) if (k in r) a[k] = r[k];
+}
+async function saveFields(a, patch) {
+  setMsg("儲存中…");
+  try {
+    if (a.index != null) {
+      const r = await send(`${API}/workouts/${a.index}/activity`, "PATCH", patch);
+      patchLocal(a, r);
+      if (S.sel === a.key) S.detail = r;
+    } else {
+      await send(`${API}/activities`, "PATCH", { items: [{ key: a.key, file: a.file }], ...patch });
+      if ("activity_type" in patch) a.user_type = patch.activity_type;
+      if ("effort" in patch) a.user_effort = patch.effort;
+      for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
+    }
+    if ("tags" in patch) fillFilterOptions(), restoreFilters();
+    renderList(); renderEditor(); setMsg("已儲存", "ok");
+  } catch (e) { setMsg("儲存失敗：" + e.message, "err"); }
+}
+function restoreFilters() { const p = loadPrefs(); for (const [k, v] of Object.entries(p)) if (v && $(k)) $(k).value = v; }
+
+// exclusion / terrain rebuild the dataset: indices shift, so reload the list and reselect by key
+async function rebuildAndReselect(key, okText) {
+  setMsg("已儲存，重新整理資料中…");
+  await loadList();
+  S.auto = null; loadAuto();
+  await select(key, false);
+  setMsg(okText || "已儲存", "ok");
+}
+function wireEditor(a) {
+  const ed = $("ed");
+  ed.querySelectorAll("select[data-f]").forEach((el) => el.addEventListener("change", () => saveFields(a, { [el.dataset.f]: el.value || null })));
+  const nm = ed.querySelector("input[data-name]");
+  nm.addEventListener("change", () => saveFields(a, { name: nm.value.trim() || null }));
+  ed.querySelector("button[data-name-clear]")?.addEventListener("click", () => saveFields(a, { name: null }));
+  const note = ed.querySelector("textarea[data-note]");
+  note.addEventListener("change", () => saveFields(a, { note: note.value }));
+  const tin = ed.querySelector("input[data-tag-in]");
+  const addTag = () => {
+    const v = tin.value.trim();
+    if (!v) return;
+    if (v.length > 30) { setMsg("標籤最多 30 字", "err"); return; }
+    if ((a.tags || []).some((t) => t.toLowerCase() === v.toLowerCase())) { tin.value = ""; return; }
+    saveFields(a, { tags: [...(a.tags || []), v] });
+  };
+  tin.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); addTag(); } });
+  ed.querySelectorAll("button[data-tag-rm]").forEach((b) => b.addEventListener("click", () =>
+    saveFields(a, { tags: (a.tags || []).filter((t) => t !== b.dataset.tagRm) })));
+  ed.querySelector("select[data-terrain]")?.addEventListener("change", async (ev) => {
+    setMsg("儲存中…");
+    try {
+      await send(`/api/v1/workouts/${a.terrain.workout_file_id}/classification`, "PATCH", { trail_classification: ev.target.value });
+      await rebuildAndReselect(a.key);
+    } catch (e) { setMsg("儲存失敗：" + e.message, "err"); }
+  });
+  ed.querySelectorAll("button[data-ex]").forEach((b) => b.addEventListener("click", async () => {
+    const v = b.dataset.ex === "auto" ? null : b.dataset.ex;
+    if (v === "exclude" && !confirm("排除這筆活動？它會留在清單（標「已排除」），但不再算進 PMC、功率曲線、比賽功率和圖表。之後可以在這裡取消。")) return;
+    setMsg("儲存中…");
+    try {
+      await send(`${API}/exclusions`, "PUT", { key: a.key, file: a.file, exclusion: v });
+      await rebuildAndReselect(a.key);
+    } catch (e) { setMsg("儲存失敗：" + e.message, "err"); }
+  }));
+}
+
+// ---- bulk -----------------------------------------------------------------
+async function bulk(patch, label) {
+  const items = S.acts.filter((a) => S.checked.has(a.key)).map((a) => ({ key: a.key, file: a.file }));
+  if (!items.length) return;
+  $("b-msg").textContent = "儲存中…"; $("b-msg").className = "msg";
+  try {
+    const r = await send(`${API}/activities`, "PATCH", { items, ...patch });
+    await loadList();
+    if (S.sel) { S.detail = null; await select(S.sel, false); }
+    $("b-msg").textContent = `${label}：${r.n} 筆已儲存`; $("b-msg").className = "msg ok";
+  } catch (e) { $("b-msg").textContent = "儲存失敗：" + e.message; $("b-msg").className = "msg err"; }
+}
+$("b-type").addEventListener("change", (e) => {
+  const v = e.target.value; e.target.value = "";
+  if (v) bulk({ activity_type: v === "_auto" ? null : v }, v === "_auto" ? "類型回到自動" : `類型設為「${S.types[v]}」`);
+});
+$("b-effort").addEventListener("change", (e) => {
+  const v = e.target.value; e.target.value = "";
+  if (v) bulk({ effort: v === "_auto" ? null : v }, v === "_auto" ? "努力度回到自動" : `努力度設為「${S.efforts[v]}」`);
+});
+$("b-tag-add").addEventListener("click", () => { const v = $("b-tag").value.trim(); if (v) bulk({ add_tags: [v] }, `加上標籤「${v}」`); });
+$("b-tag-rm").addEventListener("click", () => { const v = $("b-tag").value.trim(); if (v) bulk({ remove_tags: [v] }, `移除標籤「${v}」`); });
+$("b-clear").addEventListener("click", () => { S.checked.clear(); renderList(); });
+
+// ---- start ----------------------------------------------------------------
+(async () => {
+  const want = new URLSearchParams(location.search).get("key");
+  try { await loadList(); } catch (e) { $("list").innerHTML = `<div class="empty">讀取失敗：${esc(e.message)}</div>`; return; }
+  restoreFilters();
+  if (!$("f-from").value && !$("f-to").value && S.acts.length) {
+    // default: the last 12 months
+    const d = new Date(S.acts[0].start.slice(0, 10)); d.setFullYear(d.getFullYear() - 1);
+    $("f-from").value = d.toISOString().slice(0, 10);
+  }
+  if (want && actOf(want)) {
+    const d = actOf(want).start.slice(0, 10);
+    if ($("f-from").value && d < $("f-from").value) $("f-from").value = d;
+    if ($("f-to").value && d > $("f-to").value) $("f-to").value = d;
+  }
+  renderList();
+  if (want && actOf(want)) {
+    await select(want, false);
+    document.querySelector(`.row[data-k="${CSS.escape(want)}"]`)?.scrollIntoView({ block: "center" });
+  }
+  loadAuto();
+})();
+</script>
+</body>
+</html>

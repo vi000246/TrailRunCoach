@@ -48,6 +48,7 @@ async def _get_workout_or_404(workout_id: int, db: AsyncSession) -> WorkoutFile:
 
 
 VALID_CLASSIFICATIONS = ("road", "trail", "unknown")
+AUTO_CLASSIFICATION = "auto"       # clears the override: back to the classify_trail rule
 
 
 class ClassificationUpdate(BaseModel):
@@ -60,20 +61,27 @@ async def update_classification(
     body: ClassificationUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    if body.trail_classification not in VALID_CLASSIFICATIONS:
+    """Set the trail / road class of a workout_files row (a user override);
+    "auto" clears the override and re-applies the rule (classify_trail)."""
+    if body.trail_classification not in VALID_CLASSIFICATIONS + (AUTO_CLASSIFICATION,):
         raise HTTPException(400, "INVALID_CLASSIFICATION")
     wf = (await db.execute(
         select(WorkoutFile).where(WorkoutFile.id == workout_id)
     )).scalar_one_or_none()
     if not wf:
         raise HTTPException(404, "WORKOUT_NOT_FOUND")
-    wf.trail_classification = body.trail_classification
-    wf.classification_overridden = True
+    if body.trail_classification == AUTO_CLASSIFICATION:
+        from backend.engine.algorithms.classify import classify_trail
+        wf.classification_overridden = False
+        wf.trail_classification = classify_trail(wf.sport, wf.total_distance_m, wf.elevation_gain_m)
+    else:
+        wf.trail_classification = body.trail_classification
+        wf.classification_overridden = True
     await db.commit()
     return {
         "id": wf.id,
         "trail_classification": wf.trail_classification,
-        "classification_overridden": True,
+        "classification_overridden": bool(wf.classification_overridden),
     }
 
 
@@ -87,9 +95,13 @@ class ActivityUpdate(BaseModel):
     # bad activity files (engine/bad_activity.py): "keep" 這筆是正常的，不要排除 /
     # "exclude" 手動排除 / null = the auto rule
     exclusion: Optional[str] = None
+    # 活動編輯 page: the user's title (null / "" = the original) and the
+    # free-form tag list (replaces the stored list)
+    name: Optional[str] = None
+    tags: Optional[list[str]] = None
 
 
-TAG_FIELDS = ("activity_type", "effort", "note", "exclusion")
+TAG_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags")
 
 
 async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
@@ -99,7 +111,9 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
     sent = body.model_fields_set
     err = AT.validate(body.activity_type if "activity_type" in sent else None,
                       body.effort if "effort" in sent else None,
-                      body.exclusion if "exclusion" in sent else None)
+                      body.exclusion if "exclusion" in sent else None,
+                      body.name if "name" in sent else None,
+                      body.tags if "tags" in sent else None)
     if err:
         raise HTTPException(400, err)
     row = (await db.execute(select(ActivityTag).where(ActivityTag.athlete_id == athlete_id,
@@ -128,7 +142,9 @@ def _tag_json(t: Optional[ActivityTag]) -> dict:
     return {"activity_type": ty, "activity_type_label": AT.TYPES.get(ty), "activity_type_overridden": ty is not None,
             "effort": ef, "effort_label": AT.EFFORTS.get(ef), "effort_overridden": ef is not None,
             "note": t.note if t else None, "key": t.start_local if t else None,
-            "exclusion": AT.user_exclusion({"exclusion": t.exclusion}) if t else None}
+            "exclusion": AT.user_exclusion({"exclusion": t.exclusion}) if t else None,
+            "name": AT.name_of({"name": t.name}) if t else None,
+            "tags": AT.tags_of({"tags_json": t.tags_json}) if t else []}
 
 
 def _local_start(wf: WorkoutFile) -> Optional[str]:
