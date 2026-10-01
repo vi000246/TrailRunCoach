@@ -122,12 +122,15 @@ def _db_path(db_path=None) -> Optional[Path]:
 
 _memo: dict = {}
 COLS = ("id", "athlete_id", "start_local", "source", "file", "workout_id", "distance_km", "label",
-        "activity_type", "activity_type_overridden", "effort", "effort_overridden", "note")
+        "activity_type", "activity_type_overridden", "effort", "effort_overridden", "note", "exclusion")
+EXCLUSIONS = ("keep", "exclude")    # bad_activity.KEEP / EXCLUDE; None = the auto rule
 
 
 def load(db_path=None, athlete_id: int = 1) -> list[dict]:
     """Every stored user tag (sync, read-only, memoised on the DB file's
-    mtime). [] when the DB or the table is missing."""
+    mtime). [] when the DB or the table is missing. A table from before a
+    column was added (e.g. `exclusion`, until init_db migrates it) still
+    loads: the missing columns read as None."""
     p = _db_path(db_path)
     if p is None or not p.exists():
         return []
@@ -141,8 +144,11 @@ def load(db_path=None, athlete_id: int = 1) -> list[dict]:
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
         try:
-            cur = con.execute(f"SELECT {', '.join(COLS)} FROM activity_tags WHERE athlete_id=?", (athlete_id,))
-            rows = [dict(zip(COLS, r)) for r in cur.fetchall()]
+            have = {r[1] for r in con.execute("PRAGMA table_info(activity_tags)").fetchall()}
+            cols = [c for c in COLS if c in have]
+            cur = con.execute(f"SELECT {', '.join(cols)} FROM activity_tags WHERE athlete_id=?", (athlete_id,)) \
+                if cols else None
+            rows = [{**dict.fromkeys(COLS), **dict(zip(cols, r))} for r in cur.fetchall()] if cur else []
         finally:
             con.close()
     except sqlite3.Error:
@@ -197,11 +203,18 @@ def user_type(u: Optional[dict]) -> Optional[str]:
         else None
 
 
-def validate(activity_type=None, effort=None) -> Optional[str]:
+def user_exclusion(u: Optional[dict]) -> Optional[str]:
+    """The user's bad-file override: "keep" / "exclude" / None (auto rule)."""
+    return u["exclusion"] if u and u.get("exclusion") in EXCLUSIONS else None
+
+
+def validate(activity_type=None, effort=None, exclusion=None) -> Optional[str]:
     if activity_type is not None and activity_type not in TYPES:
         return "INVALID_ACTIVITY_TYPE"
     if effort is not None and effort not in EFFORTS:
         return "INVALID_EFFORT"
+    if exclusion is not None and exclusion not in EXCLUSIONS:
+        return "INVALID_EXCLUSION"
     return None
 
 
@@ -209,19 +222,26 @@ _UNSET = object()
 
 
 def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=None, workout_id=None,
-           distance_km=None, label=None, activity_type=_UNSET, effort=_UNSET, note=_UNSET) -> dict:
+           distance_km=None, label=None, activity_type=_UNSET, effort=_UNSET, note=_UNSET,
+           exclusion=_UNSET) -> dict:
     """Write one user tag (sync; the seed script and tests). For each of
     activity_type / effort: a value sets it and its *_overridden flag; None
-    clears it (back to auto); left out = unchanged. Creates the table when
-    missing. Returns the stored row."""
+    clears it (back to auto); left out = unchanged. `exclusion`: "keep" /
+    "exclude" / None (auto). Creates the table when missing. Returns the
+    stored row."""
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import Session
     from backend.db.models import ActivityTag
-    err = validate(None if activity_type is _UNSET else activity_type, None if effort is _UNSET else effort)
+    err = validate(None if activity_type is _UNSET else activity_type, None if effort is _UNSET else effort,
+                   None if exclusion is _UNSET else exclusion)
     if err:
         raise ValueError(err)
     eng = create_engine(f"sqlite:///{Path(db_path)}")
     ActivityTag.__table__.create(eng, checkfirst=True)
+    from sqlalchemy import text
+    with eng.begin() as c:                     # a table from before `exclusion` (database._migrate_schema)
+        if "exclusion" not in {r[1] for r in c.execute(text("PRAGMA table_info(activity_tags)"))}:
+            c.execute(text("ALTER TABLE activity_tags ADD COLUMN exclusion TEXT"))
     with Session(eng) as s:
         row = s.execute(select(ActivityTag).where(ActivityTag.athlete_id == athlete_id,
                                                   ActivityTag.start_local == start_local)).scalar_one_or_none()
@@ -229,7 +249,7 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
             row = ActivityTag(athlete_id=athlete_id, start_local=start_local,
                               activity_type_overridden=False, effort_overridden=False)
             s.add(row)
-        apply_update(row, activity_type=activity_type, effort=effort, note=note)
+        apply_update(row, activity_type=activity_type, effort=effort, note=note, exclusion=exclusion)
         for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
                      ("distance_km", distance_km), ("label", label)):
             if v is not None:
@@ -241,9 +261,12 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
     return out
 
 
-def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET) -> None:
+def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclusion=_UNSET) -> None:
     """Set the user fields of an ActivityTag row (shared by upsert and the
-    async API): value → set + overridden; None → cleared, back to auto."""
+    async API): value → set + overridden; None → cleared, back to auto.
+    `exclusion` (bad_activity.py): "keep" / "exclude", None = the auto rule."""
+    if exclusion is not _UNSET:
+        row.exclusion = exclusion
     if activity_type is not _UNSET:
         row.activity_type = activity_type
         row.activity_type_overridden = activity_type is not None
@@ -380,4 +403,5 @@ def merge(auto: dict, user: Optional[dict]) -> dict:
             "effort": e, "effort_label": EFFORTS.get(e, ""), "effort_overridden": ue is not None,
             "effort_auto": ae, "effort_auto_label": EFFORTS.get(ae, ""), "effort_reason": auto.get("effort_reason"),
             "note": (user or {}).get("note"), "stored": user is not None,
+            "exclusion": user_exclusion(user),
             "key": (user or {}).get("start_local")}

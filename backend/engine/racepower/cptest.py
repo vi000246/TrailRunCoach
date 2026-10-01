@@ -253,9 +253,86 @@ def power_sources(home: Path, paths: list[str]) -> dict[str, str]:
     return out
 
 
+BAD_CACHE_NAME = "racepower_bad_activity.json"   # {path: [size, mtime, local start, group, features]}
+
+
+def _bad_entry(p: Path) -> list:
+    """[local start 'YYYY-MM-DDTHH:MM:SS', sport group, bad_activity.features]."""
+    from backend.engine import bad_activity as BA
+    from backend.engine.wko5expr.datasource import athlete_tz
+    from backend.engine.wko5expr.fitdataset import sport_of
+    from backend.files.fit_to_channels import fit_to_channels
+    try:
+        fc = fit_to_channels(p.read_bytes())
+    except Exception:                       # noqa: BLE001
+        return [None, None, None]
+    start = fc.start_time
+    if start is not None:
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=dt.timezone.utc)
+        start = start.astimezone(athlete_tz()).replace(tzinfo=None).isoformat()
+    sport_raw, sub = (fc.sport or "", getattr(fc, "sub_sport", None))
+    if isinstance(sport_raw, str) and "/" in sport_raw:
+        sport_raw, sub = sport_raw.split("/", 1)
+    group = sport_of(sport_raw, sub)[0]
+    return [start, group, BA.features(fc.elapsedtime, fc.channels.get("elapseddistance"),
+                                      fc.channels.get("power"))]
+
+
+def bad_files(home: Path, paths: list[str], enabled: Optional[bool] = None,
+              tags: Optional[list] = None) -> dict[str, str]:
+    """{path: reason} of the given FIT files that are bad activity files
+    (backend/engine/bad_activity.py: a car / bike segment, impossible power),
+    with the user's keep / exclude overrides (activity_tags, matched by the
+    file's local start) and the setting activities.exclude_bad. The features
+    are cached per file stamp in their own file."""
+    from backend.engine import activity_tags as AT
+    from backend.engine import bad_activity as BA
+    enabled = BA.read_setting(True) if enabled is None else enabled
+    rows = AT.load() if tags is None else tags
+    if not enabled and not any(AT.user_exclusion(r) for r in rows):
+        return {}
+    cache_p = home / BAD_CACHE_NAME
+    try:
+        cache = json.loads(cache_p.read_text("utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    root, out, dirty = home / "fit", {}, False
+    for key in paths:
+        p = root / key
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        stamp = [st.st_size, int(st.st_mtime)]
+        hit = cache.get(key)
+        if not hit or hit[:2] != stamp:
+            hit = stamp + _bad_entry(p)
+            cache[key] = hit
+            dirty = True
+        start, group, feats = hit[2], hit[3], hit[4]
+        when = dt.datetime.fromisoformat(start) if start else None
+        ov = AT.user_exclusion(AT.find(rows, when, None)) if rows and when else None
+        ex = BA.decide(BA.judge(feats, group or ""), ov, enabled)
+        if ex:
+            out[key] = ex["reason"]
+    if dirty:
+        try:
+            cache_p.parent.mkdir(parents=True, exist_ok=True)
+            cache_p.write_text(json.dumps(cache), "utf-8")
+        except OSError:
+            pass
+    return out
+
+
 def _usable(home: Path, files: list[dict], accept_watch: bool) -> list[dict]:
-    """Drop the files whose power is watch-estimated (unless accepted)."""
+    """Drop bad activity files (bad_files) and the files whose power is
+    watch-estimated (unless accepted)."""
     from backend.engine import power_source as PS
+    if not files:
+        return files
+    bad = bad_files(home, [f["path"] for f in files])
+    files = [f for f in files if f["path"] not in bad]
     if accept_watch or not files:
         return files
     src = power_sources(home, [f["path"] for f in files])

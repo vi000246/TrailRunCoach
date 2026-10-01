@@ -60,6 +60,58 @@ power feeds no power-based model and no power TSS; HR and pace paths still use t
 reads every power (WKO5 does not tell them apart). The channel itself is never hidden (charts and
 the activity view still show it).
 
+## Bad activity files (`backend/engine/bad_activity.py`, 2026-10-01)
+
+A "run" that was not a run — the watch left recording on a bike or in a car (TP 2025-12-14
+`tp_2025_12_14_3477204875.fit`: 12.28 km in 17.3 min ≈ 43 km/h, 899 W average, HR 66) — is
+**excluded**: it stays in the DB and the activity list, marked
+「已排除：疑似交通工具／騎車（均速 43 km/h）」, and leaves `ds.workouts`, so no model reads it
+(PMC / TSS, mean-max / PD / CP, race-power samples and back-tests, drift / AeT, plan matching,
+charts).
+
+**Rules** (foot sports only: sport group `run` / `walk`; a hike can include running, so walk uses
+the running limits). Distance resampled to 1 s; a second faster than 144 km/h (`fit_to_channels.
+MAX_SPEED_KMH`, WKO5's GPS-spike rule) counts as no distance, so a GPS jump never flags a file.
+`limit(T)` = men's world-record average speed at duration T (World Athletics: 400 m 43.03 van
+Niekerk 2016, 1500 m 3:26.00 El Guerrouj 1998, 10 000 m 26:11.00 Cheptegei 2020, marathon 2:00:35
+Kiptum 2023; log-interpolated, clamped outside) × 1.15 (推估 margin: GPS error, steep descents;
+chosen on the real-data scan below):
+1. average moving speed > limit(moving time) → 「疑似交通工具／騎車（均速 N km/h）」;
+2. a sustained 60 s / 5 min / 20 min window > limit(window) (≈ 36.7 / 29.4 / 26.9 km/h) — a bike /
+   car segment inside a real run → 「疑似交通工具／騎車（第 a–b 分鐘連續 … N km/h，全程均速 M km/h）」;
+3. average of the non-zero power samples > 10 W/kg × weight (推估: Stryd-style power ≈ speed in m/s
+   × ~1 W/kg, so the 1500 m record pace is ~7–8 W/kg; weight 70 kg 推估 when unknown).
+Windows, never single samples: a fast descent, a sprint or a GPS spike is not flagged. Cadence is
+not used (the car file's 54 reads like a slow hike's 56).
+
+**Trim vs exclude: exclude the whole file.** Trimming would have to recompute duration, distance,
+TSS / NP and moving time, and the WKO5 source takes those from WKO5's own index, so a trimmed file
+would disagree with itself; the run's remaining load is small next to a broken PD fit. The reason
+names the bad segment, and the user can keep the file (segment included).
+
+**Overrides** — `activity_tags.exclusion` (same user-value store as type / effort; migration adds
+the column; `load` reads an older table): `keep` 這筆是正常的，不要排除, `exclude` 手動排除,
+NULL = the rule. Setting `activities.exclude_bad` (default true; 設定 → 資料校正) switches the
+auto rule off; manual exclusions still apply. Parity mode excludes nothing (WKO5 reads every file),
+like the corrections.
+
+**Where it applies.** `Dataset._apply_exclusion_policy` (WKO5: filtered and renumbered before any
+index-keyed cache; features disk-cached per `.wko4` stamp in `~/.wko5coach/bad_activity_v1.json`)
+and `FitFolderDataset` (decided while loading). `ds.excluded` / `ds.exclusion_kept` list them.
+`cptest.curves` / `scan` (synced FIT files read beside the dataset) drop them via
+`cptest.bad_files` (`racepower_bad_activity.json`). `source_stamp` includes the setting and an
+overrides hash, so a change rebuilds the cached datasets. The legacy DB-row APIs
+(`/api/v1/pmc`, `/api/v1/analytics/*`, the unbuilt React `frontend/`) are not covered.
+
+Review scan: `python -m backend.scripts.scan_bad_activities` (read-only; flagged files and the
+closest calls). 2026-10-01 on this athlete (WKO5 682, COROS 515, TP 692 foot activities; ratio =
+speed ÷ limit at 1.25): flagged files — 2025-12-14 run 12.28 km avg 45.5 km/h, 917 W (WKO5 + TP;
+not in COROS); 2021-05-16 "hiking" 57.0 km avg 26.6 km/h (car; WKO5); 2021-04-10 hiking 10.9 km,
+minutes at 28–50 km/h at the end (WKO5); with 1.15 also 2024-03-18 run 6.67 km, 7 min at 25–38
+km/h (all three sources) and 2021-07-17 hiking 4.83 km, 5 min at 31 km/h (WKO5) — all checked
+minute by minute as vehicle segments. The fastest genuine activity: ratio 0.60 (2024-06-14
+treadmill 4 km at 17.9 km/h); 2024-08-25 28.4 km run 0.56. No race or long run is flagged.
+
 ## API
 
 | Method | Path | Body / result |
@@ -68,7 +120,11 @@ the activity view still show it).
 | GET | `/api/v1/workouts`, `/api/v1/workouts/{id}` | each item now has `trail_classification`, `classification_overridden` and `activity` (the stored user values: `activity_type`, `effort`, labels, `*_overridden`, `note`, `key`) |
 | GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`) |
 | GET | `/api/v1/wko5/workouts` | each item also has `power_source` and `power_label` (「手錶推估功率（未採用）」 for unused watch power); `tss_source` is no longer `power` for a blocked watch run |
-| PATCH | `/api/v1/wko5/workouts/{idx}/activity` | as above; keyed by start minute + file, so it applies across sources |
+| PATCH | `/api/v1/wko5/workouts/{idx}/activity` | as above; keyed by start minute + file, so it applies across sources; also `exclusion` (`keep` / `exclude` / null); the GET has `exclusion_state` {override, flagged, enabled} |
+| GET | `/api/v1/wko5/workouts` (excluded rows) | an excluded file is listed with `index: null` and `excluded` {key, label, reason, rule, auto, manual, override, avg_kmh} |
+| GET | `/api/v1/wko5/exclusions` | `{enabled, setting, source, excluded: […], kept: […]}` of the current source |
+| PUT | `/api/v1/wko5/exclusions` | `{key, file?, exclusion}`: override any activity by its start minute; 400 bad key / value |
+| PUT | `/api/v1/sync/settings` | `exclude_bad_activities` ↔ `activities.exclude_bad` |
 
 ## UI
 
@@ -78,6 +134,13 @@ way as `segments_card.js`: a 「活動資訊」 card first in the grid with two 
 「功率來源：手錶推估功率（未採用）（功率模型、功率 TSS 不採用；心率／配速照常使用）」.
 No served static page edited the terrain classification (only the unbuilt React `frontend/` has a
 hook), so the single-activity view is where both live.
+
+Bad activity files: the card's 「排除：」 line has 「手動排除」 (or, for a file the rule flags that the
+user kept, the rule's reason and 「恢復自動判定」); a change drops the selection and reloads the list
+(indices shift). The viewer's activity list shows an excluded file greyed, not openable, with
+「已排除：…」 and 「這筆是正常的，不要排除」 (「取消手動排除」 for a manual one). 設定 → 資料校正 →
+「排除壞掉的活動檔」: the toggle (default on), the excluded files with reasons and the same button,
+and the files the user marked normal (「恢復自動判定」).
 
 ## Consumers
 
@@ -103,6 +166,11 @@ unless `--db`. Dry run by default.
 `backend/tests/test_activity_tags.py`: rules, rest spells, merge, tmp-DB store, the migration,
 the PATCH / list API on an in-memory DB, capacity gating with user marks, the seed matcher and
 idempotence, the trail HR model and the planner estimate.
+`backend/tests/test_bad_activity.py`: the limits, car / vehicle-segment / power rules, descents /
+sprints / GPS spikes / pauses not flagged, overrides, the FIT dataset leaving files out (contiguous
+indices), keep / manual exclude through a tmp tags DB, the WKO5 policy renumbering, parity and the
+setting off, `source_stamp`, `cptest.bad_files`, the list / exclusions / PUT endpoints, the old-table
+load and the setting key (synthetic FITs, `fit_builder.build_run(speeds_m_s=…)`).
 
 ## Change History
 
@@ -110,4 +178,5 @@ idempotence, the trail HR model and the planner estimate.
 |------|------|-------------|---------|
 | 2026-10-01 | feature | user request | Activity tags (type / effort / note), auto + user override, API, 活動資訊 card, seed script |
 | 2026-10-01 | feature | user request (COROS vs TP back-test) | Power source per workout (stryd / watch / none), `power.accept_watch_power` (default false), API fields and the 功率來源 line on the activity card; tests `backend/tests/test_power_source.py` |
+| 2026-10-01 | feature | user request (bad activity files) | Bad activity files excluded from every model (vehicle / bike speed vs world-record limits, impossible power), whole-file exclusion, keep / exclude overrides in `activity_tags.exclusion`, setting `activities.exclude_bad`, API, list / card / settings UI; tests `backend/tests/test_bad_activity.py` |
 | 2026-10-01 | bugfix | docs/research/unsourced-rules.md §0.10 step 0 | Seed matches COROS / TP races by the WKO5 start (±3 min), `--source` defaults to the data source; documented that the tags live in the app DB (table created on first write) |
