@@ -366,8 +366,10 @@ def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: di
             warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；沒有跑步資料可建能力模型，用 Tobler 步行函數")
     used["eph"] = _src(eph, src)
     days = max(1, body.days or 1)
-    pack = body.pack_kg if body.pack_kg is not None else (12.0 if days >= 2 else 6.0)
-    used["pack_kg"] = _src(pack, "手動" if body.pack_kg is not None else ("預設 2–3 天 12 kg" if days >= 2 else "預設單日 6 kg"))
+    from backend.engine.racepower import capacity as _cap
+    default_pack = _cap.PACK_DEFAULT_MULTI if days >= 2 else _cap.PACK_DEFAULT_SINGLE
+    pack = body.pack_kg if body.pack_kg is not None else default_pack
+    used["pack_kg"] = _src(pack, "手動" if body.pack_kg is not None else f"預設背負 {default_pack:g} kg")
     used["hist_pack_kg"] = _src(body.hist_pack_kg, "假設：過去登山日多為輕裝（約 5 kg）")
     plan = PR.split_days(days, body.distance_km, body.gain_m, body.loss_m,
                          [x.model_dump() for x in body.day_plan] if body.day_plan else None)

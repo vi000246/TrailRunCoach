@@ -283,7 +283,7 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
 ### 百岳 walking capacity (`backend/engine/racepower/capacity.py`)
 
 Design: `docs/research/baiyue-from-running.md`. User decisions 2026-09-30: pack 9 kg on day 1
-(multi-day; single-day history keeps the doc's 6 kg), −0.7 kg/day food (自組, labelled), 3-day
+(2026-10-01: single-day trips without a recorded pack also default to 9 kg), −0.7 kg/day food (自組, labelled), 3-day
 trips, 跟團 as the default trip kind, altitude width from the literature, solo detection as a
 suggestion.
 
@@ -292,7 +292,7 @@ suggestion.
   自組). Trail walk windows: trail runs, running share < 0.5, grade ≥ 10 %, ≥ 3 consecutive, first
   window dropped, 300 m centred grade, VAM ≤ 2000 m/h. 百岳 windows: `hikehr`'s HR ≥ AeT windows,
   re-cut the same way. Pack per trip: `racepower_hike_meta.json` (`GET/POST /hike-meta`); none
-  recorded → 9 kg multi-day / 6 kg single-day (預設背負). Solo trips are no longer excluded.
+  recorded → 9 kg (預設背負, multi-day and single-day). Solo trips are no longer excluded.
 - **B1** Ė_AeT = W(1.5 + 3.6·v_run,AeT); v_run,AeT = median flat (|g| ≤ 2 %) road running windows
   with HR within AeT ± 3 bpm (as-of AeT), 90 days; falls back to ± 5 bpm, then 365 days (自組).
 - **B2** v₀ = Pandolf⁻¹(Ė; W, L, 100g, η) by bisection; **B3** pack ratio Pandolf⁻¹(L)/Pandolf⁻¹(L₀)
