@@ -114,15 +114,19 @@ def dist_to_path(p: np.ndarray, q: np.ndarray, chunk: int = 256) -> np.ndarray:
         return np.full(len(p), np.inf)
     if len(q) == 1:
         return np.hypot(*(p - q[0]).T)
-    a, b = q[:-1], q[1:]
-    ab = b - a
-    ab2 = np.maximum((ab ** 2).sum(axis=1), 1e-12)
+    # per coordinate on 2-D (k, m-1) arrays: the same arithmetic as on
+    # (k, m-1, 2) arrays, ~10x faster (no axis-2 reductions / temporaries)
+    ax, ay = q[:-1, 0][None, :], q[:-1, 1][None, :]
+    bx, by = (q[1:, 0] - q[:-1, 0])[None, :], (q[1:, 1] - q[:-1, 1])[None, :]
+    ab2 = np.maximum(bx * bx + by * by, 1e-12)
     out = np.empty(len(p))
     for s in range(0, len(p), chunk):
-        pp = p[s:s + chunk][:, None, :]                       # (k, 1, 2)
-        t = np.clip(((pp - a) * ab).sum(axis=2) / ab2, 0.0, 1.0)  # (k, m-1)
-        proj = a + t[..., None] * ab
-        out[s:s + chunk] = np.sqrt(((pp - proj) ** 2).sum(axis=2)).min(axis=1)
+        dx = p[s:s + chunk, 0][:, None] - ax                   # (k, m-1)
+        dy = p[s:s + chunk, 1][:, None] - ay
+        t = np.clip((dx * bx + dy * by) / ab2, 0.0, 1.0)
+        dx -= t * bx
+        dy -= t * by
+        out[s:s + chunk] = np.sqrt((dx * dx + dy * dy).min(axis=1))
     return out
 
 
@@ -397,3 +401,131 @@ def along_residual(ref: np.ndarray, pts: np.ndarray, window: int = 12, tol: floa
 def along(ref: np.ndarray, pts: np.ndarray) -> np.ndarray:
     """Distance along `ref` (m) of each point's in-order projection onto it."""
     return along_residual(ref, pts)[0]
+
+
+# ---------------------------------------------------------------------------
+# whole-track similarity (route clustering)
+# ---------------------------------------------------------------------------
+
+def resample_even(xy: np.ndarray, step: float = STEP_M) -> np.ndarray:
+    """Points every `step` metres along the polyline (interpolated, both ends
+    kept). On evenly spaced points a share of points is a share of length,
+    so `overlap_ratio` on them is the length share of one track lying inside
+    the other's tol-buffer."""
+    if len(xy) < 2:
+        return np.asarray(xy, dtype=float)
+    cum = path_length(xy)
+    L = float(cum[-1])
+    if L <= 0:
+        return xy[:1].astype(float)
+    s = np.arange(0.0, L, step)
+    s = np.append(s, L)
+    return np.column_stack((np.interp(s, cum, xy[:, 0]), np.interp(s, cum, xy[:, 1])))
+
+
+def cover_share(p: np.ndarray, q: np.ndarray, tol: float = TOL_M, step: float = STEP_M) -> float:
+    """Length share of polyline p lying within tol of polyline q (q's
+    tol-buffer), on p resampled every `step` m. One way: a short track inside
+    a long one covers 1.0 of itself and a small share of the long one."""
+    return overlap_ratio(resample_even(p, step), q, tol)
+
+
+def direction_shares(ref: np.ndarray, pts: np.ndarray, tol: float = TOL_M,
+                     cos_min: float = 0.5) -> tuple[float, float]:
+    """(forward, reverse) — start-point free. For each point of pts within
+    tol of ref, its heading (pts[i+1] − pts[i−1]) is compared with every ref
+    segment within tol: forward when one of them points the same way
+    (cos >= 0.5, i.e. within 60°), reverse when one points the opposite way.
+    The shares are over those on-path points, so a member's own warm-up or
+    car-park spur says nothing. A loop run the other way round scores high
+    only on reverse; an out-and-back, whose legs lie on each other, on both."""
+    if len(pts) < 3 or len(ref) < 2:
+        return 0.0, 0.0
+    head = np.zeros_like(pts, dtype=float)
+    head[1:-1] = pts[2:] - pts[:-2]
+    head[0], head[-1] = pts[1] - pts[0], pts[-1] - pts[-2]
+    hn = np.hypot(head[:, 0], head[:, 1])
+    a, b = ref[:-1], ref[1:]
+    ab = b - a
+    ab2 = np.maximum((ab ** 2).sum(axis=1), 1e-12)
+    abn = ab / np.sqrt(ab2)[:, None]
+    fwd = rev = on_n = 0
+    for s in range(0, len(pts), 256):
+        pp = pts[s:s + 256][:, None, :]
+        t = np.clip(((pp - a) * ab).sum(axis=2) / ab2, 0.0, 1.0)
+        d = np.sqrt(((pp - (a + t[..., None] * ab)) ** 2).sum(axis=2))      # (k, m-1)
+        near = d <= tol
+        h = head[s:s + 256]
+        hnk = np.maximum(hn[s:s + 256], 1e-9)
+        cos = (h @ abn.T) / hnk[:, None]                                      # (k, m-1)
+        ok = near.any(axis=1) & (hn[s:s + 256] > 0)
+        on_n += int(ok.sum())
+        fwd += int((ok & (near & (cos >= cos_min)).any(axis=1)).sum())
+        rev += int((ok & (near & (cos <= -cos_min)).any(axis=1)).sum())
+    if on_n == 0:
+        return 0.0, 0.0
+    return fwd / on_n, rev / on_n
+
+
+# ---------------------------------------------------------------------------
+# thumbnails
+# ---------------------------------------------------------------------------
+
+def simplify(xy: np.ndarray, eps: float) -> np.ndarray:
+    """Douglas–Peucker (Douglas & Peucker, Cartographica 10(2), 1973): indices
+    of the points kept so that every dropped point lies within eps of the
+    simplified line. Iterative (no recursion limit on long tracks)."""
+    n = len(xy)
+    if n <= 2:
+        return np.arange(n)
+    keep = np.zeros(n, dtype=bool)
+    keep[0] = keep[-1] = True
+    stack = [(0, n - 1)]
+    while stack:
+        a, b = stack.pop()
+        if b <= a + 1:
+            continue
+        seg = xy[b] - xy[a]
+        L2 = float((seg ** 2).sum())
+        rel = xy[a + 1:b] - xy[a]
+        if L2 <= 1e-12:
+            d = np.hypot(rel[:, 0], rel[:, 1])
+        else:
+            t = np.clip((rel @ seg) / L2, 0.0, 1.0)
+            d = np.hypot(*(rel - t[:, None] * seg).T)
+        k = int(np.argmax(d))
+        if d[k] > eps:
+            m = a + 1 + k
+            keep[m] = True
+            stack.append((a, m))
+            stack.append((m, b))
+    return np.flatnonzero(keep)
+
+
+def thumbnail(lat: Sequence, lon: Sequence, w: float = 64.0, h: float = 40.0, pad: float = 3.0,
+              eps_px: float = 0.35) -> Optional[dict]:
+    """An SVG path of the track's shape, north up, true aspect ratio.
+
+    Projection: local equirectangular about the box's mid latitude
+    (x = R·Δλ·cos φm, y = R·Δφ) — on a few km the same shape Web Mercator /
+    Leaflet shows. One scale for both axes (the longer side fills the box,
+    the other is centred), y flipped because SVG y grows downwards, and
+    Douglas–Peucker at `eps_px` of a pixel so the drawn line stays within
+    a third of a pixel of every GPS point."""
+    pts = [(a, b) for a, b in zip(lat, lon) if valid_fix(a, b)]
+    if len(pts) < 2:
+        return None
+    la = np.array([p[0] for p in pts], dtype=float)
+    lo = np.array([p[1] for p in pts], dtype=float)
+    lat_m = (la.min() + la.max()) / 2.0
+    xy = project(la, lo, lat_m, (lo.min() + lo.max()) / 2.0)
+    x0, y0 = xy.min(axis=0)
+    x1, y1 = xy.max(axis=0)
+    scale = min((w - 2 * pad) / max(x1 - x0, 1e-9), (h - 2 * pad) / max(y1 - y0, 1e-9))
+    px = (xy[:, 0] - x0) * scale + (w - (x1 - x0) * scale) / 2.0
+    py = (y1 - xy[:, 1]) * scale + (h - (y1 - y0) * scale) / 2.0      # north up
+    sc = np.column_stack((px, py))
+    keep = simplify(sc, eps_px)
+    d = "M" + "L".join(f"{sc[i, 0]:.1f},{sc[i, 1]:.1f}" for i in keep)
+    return {"w": w, "h": h, "d": d, "start": [round(float(px[0]), 1), round(float(py[0]), 1)],
+            "end": [round(float(px[-1]), 1), round(float(py[-1]), 1)]}

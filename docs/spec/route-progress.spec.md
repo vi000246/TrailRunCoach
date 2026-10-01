@@ -1,6 +1,6 @@
 # Module Spec: route-progress
 
-> Last Updated: 2026-09-30 · Status: implemented (feat/route-progress, feat/routes-weather-hr)
+> Last Updated: 2026-10-01 · Status: implemented (feat/route-progress, feat/routes-weather-hr, fix/routes-dedup-thumbs)
 
 ## Overview
 
@@ -39,7 +39,9 @@ achievements page) is unchanged.
 
 `ALGO_VERSION` 3 (per-interval peaks) makes every tier-A stamp stale, so the
 first build after upgrading parses every file again; kept points, climbs and
-therefore segment ids are unchanged by it.
+therefore segment ids are unchanged by it. The index has its own
+`INDEX_VERSION` (4: route clustering, merged segments): bumping it rebuilds
+the index from the cached tracks without parsing any file, ids carried over.
 
 A second server on the same machine (e.g. a worktree) must set
 `WKO5COACH_ROUTES_DIR`: two builds of different versions sharing one index
@@ -124,21 +126,84 @@ Tracks are processed oldest first. For each track:
 A new segment is matched at once against every processed track. The oldest
 traversal is the reference; the id is `s` + sha1(kind|file|raw start|raw end)[:10].
 
-**Routes**: an activity joins the route whose reference it matches best —
-mutual overlap ≥ 0.8, start and end within 200 m, and ≥ 80 % of its points
-within 60 m of their in-order projection (same direction). Otherwise it starts
-a route; id `r` + sha1(route|file|0|raw end)[:10].
+### Routes (`cluster_routes`, every build, over all tracks)
+
+Until 2026-10-01 an activity joined the route whose reference (its oldest
+run) it matched: mutual overlap ≥ 0.8, start **and** end within 200 m, same
+direction. On the real data that listed one loop as several routes: a loop
+started at another point, run the other way round, or a first run with its own
+car-park spur all started new routes, and a run over part of a route became a
+route of its own (43 listed routes; the 143-run loop was 7 of them).
+
+Now, start- and direction-free:
+
+1. **Length share** (`route_match.cover_share`): the share of track a's length
+   inside the 30 m buffer of track b's polyline, on a resampled every 25 m
+   (`resample_even`; point-to-segment distance). One way, so containment shows.
+   Pairs are bounded first: the share of a's 25 m points inside b's *halo*
+   (b's 100 m cells and their 8 neighbours; a point within 30 m of b is within
+   42.5 m of one of b's 25 m points, so inside it) is an upper bound, and a pair
+   whose bound is < 0.8 either way is never measured. Results are cached by
+   file pair in the builder, so an incremental build measures only its new
+   tracks' pairs.
+2. **Same route**: both shares ≥ 0.8 (the old mutual-overlap threshold).
+3. **Clusters**, leader style (lazy greedy): the track with the most
+   unassigned same-route neighbours (ties: higher summed share, older, file)
+   takes them all; every member is within the threshold of its leader, so a
+   chain of slowly drifting runs cannot grow into one route.
+4. **Canonical path** = the maximal common part: the reference's kept points
+   from the first to the last 25 m point that more than half of the members
+   pass within 30 m (`ROUTE_COMMON` 0.5, 推估). Spurs of single runs trim away.
+   Clusters whose canonical paths are the same route (both shares ≥ 0.8) are
+   merged into the larger, until none is (≤ 4 passes).
+5. **Reference / id**: the previous index's reference when it is in the
+   cluster (the id and the comparison axis stay), the largest old route first;
+   other old listed routes whose reference landed in the cluster become its
+   `aliases`. Otherwise the leader, id `r` + sha1(route|file|0|raw end)[:10].
+6. **Direction** per member (`direction_shares`, start-free): for each
+   member point within 30 m of the canonical path, its heading against every
+   canonical segment within 30 m — forward when one is within 60° (cos ≥ 0.5),
+   reverse when one is within 60° of the opposite. ≥ 0.8 forward = `same`
+   (an out-and-back, whose legs lie on each other, is `same`), else ≥ 0.8
+   reverse = `reversed`, else `mixed`. Reversed runs stay in the route; ranks
+   are per direction (the climbs differ) and the comparison needs one.
+7. **Parts** (`_link_parts`): a cluster lying ≥ 0.8 (`ROUTE_PART`, 推估)
+   inside a longer repeated route's canonical path, that route not ≥ 0.8 inside
+   it, and at most 0.9 × its length (`ROUTE_PART_LEN`, 推估: two variants of one
+   length sharing 80 % are siblings) gets `parent`. A single run there is that
+   route's `partials` entry (not a route); several are a sub-route, listed under
+   the parent and counted apart (`counts.sub_route`).
+
+Single runs that are no part of anything stay in `pending_routes`.
 
 ### What is listed (`_finish`)
 
 - Segments / routes done by ≥ 2 distinct activities.
 - A segment ≥ 80 % inside a longer segment done by exactly the same activities
   is dropped (a climb / descent only by one of its kind; a stretch by any).
-- A stretch whose activities are a route's members and whose path is that
-  route is dropped.
+- The other way round: a longer segment whose activities are ≥ 80 %
+  (`CHAIN_PIECE_ACTS`, 推估) among those of a shorter one of its kind lying
+  ≥ 80 % on it, done by more activities, is dropped — the same hill or path
+  with its ends detected a little differently is listed once, as the part
+  more activities do.
+- A stretch lying ≥ 0.8 (`STRETCH_ON_ROUTE`, 推估) inside a repeated route's
+  canonical path with ≥ 0.8 (`STRETCH_ROUTE_ACTS`, 推估) of its activities being
+  that route's runs (members, partials, sub-route runs) is folded into the
+  route (`route.stretches`; its id is an alias of the route).
 - Stretch suppression: climbs / descents are kept; stretches in order of
   activities × length (ties by id), each dropped if ≥ 50 % of it lies on an
   already kept segment. One busy path otherwise yields many overlapping pieces.
+  A folded stretch takes its place in that order and suppresses as before,
+  without being listed.
+- **Chains** (`_merge_chains`): two listed stretches sharing ≥ 0.6 of their
+  activities (Jaccard, `CHAIN_JACCARD`, 推估) whose efforts on the oldest
+  activity doing both overlap or are ≤ 250 m apart (`CHAIN_GAP_M`, 推估) are
+  links of one corridor. Per chain the host is the activity doing most links;
+  their efforts on it merged where they touch give one stretch (`derived`,
+  `merged_from`), matched against the chain's activities; links with ≥ 80 % of
+  their activities on it are dropped. Kept only when it replaces ≥ 2 links.
+  Derived stretches are rebuilt by every build and never loaded as
+  references, so incremental and full builds agree.
 - Dropped and single-activity segments stay in `index.json` as `pending`, so an
   incremental build sees the same references as a full one.
 
@@ -146,8 +211,9 @@ a route; id `r` + sha1(route|file|0|raw end)[:10].
 
 `Builder.build` parses only new / changed files (tier A stamps), drops efforts
 of removed / changed files, and runs `detect` with the old tracks as already
-processed — the same result as a full build over the same tracks (tested).
-Existing ids and references never change. `POST /rebuild {"full": true}`
+processed — the same segments as a full build over the same tracks, and the
+same route memberships (tested). Existing segment ids and references never
+change; a route keeps its id while its reference is in it. `POST /rebuild {"full": true}`
 recomputes everything; a new segment that is the same path as an old one
 (same kind, ends within 60 m, mutual overlap ≥ 0.8) takes the old id, so
 renames and links survive (`carry_over`).
@@ -245,15 +311,18 @@ past an effort's own first / last projection it holds its end value: the
 endpoint tolerance of the match).
 Pace = Δt over the trailing 100 m. `gap_s = t_b − t_a` at the same distance
 (positive: B behind); at the end it equals the elapsed difference (tested).
+Routes: both runs must have the same direction (a reversed pair walks the
+reference backwards) and start within 200 m of the reference's start; else
+400 with the reason (a loop started elsewhere has no common distance axis).
 
 ## API
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/v1/routes` | `kind` (segment/route/climb/descent/stretch), `direction` (up/down/flat), `sport`, `limit`; rows sorted by effort count then recency; `status`, `counts`, `sports` |
+| GET | `/api/v1/routes` | `kind` (segment/route/climb/descent/stretch), `direction` (up/down/flat), `sport`, `limit`; rows sorted by effort count then recency, sub-routes right under their parent (`depth`); each row has `thumb` (below), `n_reversed`, `n_partials`, `parent`; `status`, `counts` (sub-routes as `sub_route`), `sports` |
 | GET | `/api/v1/routes/status` | build progress `{state, phase, done, total, …}` |
 | POST | `/api/v1/routes/rebuild` | `{"full": false}`; returns at once, builds in a thread |
-| GET | `/api/v1/routes/{id}` | detail with efforts (+ `workout` index, `phase`) |
+| GET | `/api/v1/routes/{id}` | detail with efforts (+ `workout` index, `phase`, `dir`), `parent`, `sub_routes`, `partials`; an id merged away (route alias, folded stretch, chain link) answers with the item holding it now |
 | PATCH | `/api/v1/routes/{id}` | `{"name": ""}` clears the rename |
 | GET | `/api/v1/routes/{id}/compare?a=&b=` | effort ids from the detail |
 | GET | `/api/v1/routes/page` | the page |
@@ -267,9 +336,20 @@ new file: none; full recompute from cached tracks: ~40 s.
 
 ## Page
 
-- List: kind badge, name, length, gain, effort count, best / last time and
-  date, sparkline of the last 20 times (up = faster; green = best). Filters:
-  全部/路段/路線, 上坡/下坡/平路, sport. Remembered per browser.
+- List: path thumbnail, kind badge, name, length, gain, effort count, best /
+  last time and date, sparkline of the last 20 times (up = faster; green =
+  best). Filters: 全部/路段/路線, 上坡/下坡/平路, sport. Remembered per browser.
+  Sub-routes indented under their parent (⊂).
+- **Thumbnail** (`route_match.thumbnail`, server side, 64 × 40): local
+  equirectangular about the path's mid latitude (x = R·Δλ·cos φm, y = R·Δφ —
+  on a few km the shape Leaflet's Web Mercator shows), one scale for both axes
+  (the longer side fills the box, the other centred), y flipped (north up),
+  Douglas–Peucker (Cartographica 10(2), 1973) at 0.35 px so the line stays
+  within a third of a pixel of every point; green dot = start. Until
+  2026-10-01 the list had **no** shape at all: the only graphic on a row was
+  the time sparkline (the last 20 times, inverted so up = faster), which looks
+  like a small track but is a time series — the "thumbnail that does not match
+  the GPX".
 - Detail: rename (click the title); Leaflet map with the settings-page basemap
   default and the viewer's layers (`basemaps.js`); trend (time / VAM / pace over
   date, below it HR ÷ VAM for climbs, avg HR otherwise; click a point to make
@@ -277,6 +357,10 @@ new file: none; full recompute from cached tracks: ~40 s.
   hover moves A's and B's markers on the map — B's marker is where B was at
   A's elapsed time); effort table (newest 20 + A/B/best, 「顯示全部」),
   date links open the activity in the viewer (via the viewer's saved state).
+  Under the title: parent route, sub-routes, runs over only a part (dates
+  link to the viewer), reversed-run count, merged pieces; reversed / mixed
+  runs carry a 反向 / 混合 tag in the table, rank among their own direction,
+  and the default A / B pair is of the main direction.
 - Phone (< 900 px): list and detail are separate views with a back button.
 - Single-activity card in the viewer: segments matched with 「第 N 快 / M 次」
   and Δ best, linking to `/api/v1/routes/page#<id>`.
@@ -303,6 +387,21 @@ call for that point only; the Hadley sum and hot flag; after a version bump
 the old index's ids are carried over (renames kept); detection gives the same
 result under three hash seeds (a guard only: the synthetic set does not show
 the old seed dependence, which was found and checked on the real tracks, below).
+Route clustering and dedup (2026-10-01): a reversed loop joins the route as
+`reversed`; a loop started at another corner, an out-and-back walked from the
+far end, and runs with their own car-park / cool-down spurs are one route,
+whose canonical path is the shared 6 km loop; a run over half the loop is a
+partial, two such runs a sub-route; old route ids carry over and a merged one
+becomes an alias; start-free direction shares; a stretch that is a route is
+folded into it; a longer climb whose activities all do a more-done inner one
+is dropped; a chain of two stretches merges into its 3 km common part
+(derived, not a reference); incremental and full builds give the same route
+memberships; the API rows carry thumbnails, ranks are per direction, a merged
+id opens its route and compare refuses runs of different direction.
+Thumbnails: an L (1 km east, 1 km north) at 24 °N has equal legs on screen
+(raw degrees would make the east leg 1.095 ×), east right and north up, the
+box filled by one scale; a 3 × 1 km loop stays 3 : 1 and every point lies
+within 0.5 px of the simplified line.
 
 Real-data verification (2026-09-30): per-effort metrics of 小油坑 → 七星山主峰
 (13 efforts) recomputed from raw samples by an independent plain-loop script
@@ -335,6 +434,21 @@ follows Python's per-process hash seed. The candidate loops are now sorted
 (by activity start, then file); two builds with different `PYTHONHASHSEED`
 are identical.
 
+Real-data check of the dedup (2026-10-01, a copy of the 612 cached tracks,
+the live store untouched): listed items 187 → 145 — routes 43 → 33 (24
+top-level + 9 sub-routes), stretches 77 → 54, climbs 32 → 29, descents
+35 → 29. The 143-run 5.3 km loop had been 7 routes (114 + 12 + 11 + 3 + 2 + 2
++ 2 runs, the 3.8 / 4.5 / 4.6 km "routes" being the same loop with other
+start points or spurs); the 4.2 km loop 4 (122 + 3 + 3 + 2); the 4.7 km route
+3 (13 + 12 + 11). Its six busiest stretches (0.6–3.4 km, 111–156 activities)
+were pieces of those two loops and are now folded into them. 13 stretches
+folded into routes, 5 merged in 4 chains, the rest dropped as longer variants
+or overlaps. Route clustering on all 612 tracks: ~25 s (19 k pairs
+measured after the halo bound), cached per pair for incremental builds; a full
+detect ~35 s. Thumbnails of 6 items (4 routes, a climb, a merged stretch)
+drawn next to their raw kept points in Web Mercator: same shape, aspect and
+orientation.
+
 ## Domain Model
 
 ### Bounded Context
@@ -349,7 +463,10 @@ are identical.
 | Segment | A repeated path: a climb, a descent, or a stretch ≥ 500 m, defined by its reference effort |
 | Climb / descent | A segment seeded by `detect_climbs` on the elevation / negated elevation; direction is part of its identity |
 | Stretch | A segment seeded by a same-direction common run of two activities |
-| Route | A set of whole activities overlapping each other ≥ 80 %, same start / end (200 m) and direction |
+| Route | Whole activities each lying ≥ 80 % (length) inside the leader's 30 m buffer and it inside theirs — any start point, any direction |
+| Canonical path | A route's maximal common part: the reference's stretch more than half of the runs pass |
+| Partial / sub-route | One run / several runs lying ≥ 80 % inside a longer repeated route (≤ 0.9 × its length) — linked to it, not a route of its own |
+| Derived stretch | The common part of a chain of listed stretches, rebuilt each build |
 | Reference | The oldest traversal, whose path defines the segment or route; never replaced incrementally |
 | Effort | One traversal of a segment (or one member activity of a route) with its metrics |
 | Overlap ratio | Share of one path's points within 30 m of the other; mutual = min of both ways |
@@ -368,3 +485,4 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 |------|------|-------------|---------|
 | 2026-09-30 | feature | — | Initial: automatic segments / routes, effort metrics, 路線 page, viewer card |
 | 2026-09-30 | feature | — | Per-effort historical weather (Open-Meteo archive, batched per day × 0.25° cell, cached), Hadley heat flag, trend coloured by temperature; max HR and max 30 s power per effort (ALGO_VERSION 3); deterministic detection; ids carried over across a version bump; independent verification script |
+| 2026-10-01 | bugfix | — | One route per path: clustering by length share (start / direction free), canonical common part, partials / sub-routes, reversed runs ranked apart; stretches folded into routes, longer variants dropped, chains merged; real path thumbnails (the row graphic was a time sparkline); INDEX_VERSION 4 |

@@ -53,12 +53,23 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--soft); color: var(--accent); font-weight: 600; }
 .list { max-height: calc(100vh - var(--shell-top, 53px) - 150px); overflow-y: auto; }
-.row { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .row:hover { background: var(--soft); }
 .row.on { background: var(--soft); box-shadow: inset 3px 0 0 var(--accent); }
-.row .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row .sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.row .sp { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+.row.d1 { padding-left: 30px; }
+.row.d2 { padding-left: 46px; }
+.row .nm { grid-column: 2; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.row .sub { grid-column: 2; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.row .sp { grid-row: 1 / span 2; grid-column: 3; align-self: center; }
+/* the path's shape: north up, true aspect (server-side projection, route_match.thumbnail) */
+.row .th { grid-row: 1 / span 2; grid-column: 1; align-self: center; display: block;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel)); border: 1px solid var(--line); border-radius: 5px; }
+.row .th path { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.row .th .s { fill: var(--ok); }
+.rel { font-size: 12px; color: var(--muted); }
+.rel a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.rel a:hover { text-decoration: underline; }
+.dirtag { font-size: 11px; padding: 0 5px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); margin-left: 4px; }
 .kb { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; margin-right: 5px; vertical-align: 1px; font-weight: 500; }
 .kb.up { background: color-mix(in srgb, var(--up) 16%, transparent); color: var(--up); }
 .kb.down { background: color-mix(in srgb, var(--down) 16%, transparent); color: var(--down); }
@@ -172,6 +183,13 @@ function spark(pts) {
     <circle cx="${xs[xs.length - 1]}" cy="${ys[ys.length - 1]}" r="2.4" fill="var(--accent)"/></svg>`;
 }
 
+// ---- the path's shape, drawn from the server's projected path (north up, true aspect)
+function thumb(t) {
+  if (!t) return `<svg class="th" width="64" height="40" aria-hidden="true"></svg>`;
+  return `<svg class="th" width="${t.w}" height="${t.h}" viewBox="0 0 ${t.w} ${t.h}" role="img" aria-label="路線形狀（北方朝上）">
+    <path d="${t.d}"/><circle class="s" cx="${t.start[0]}" cy="${t.start[1]}" r="2.2"/></svg>`;
+}
+
 // ---- status / list
 function showStatus(st, built) {
   $("builtinfo").textContent = built ? `更新於 ${built.replace("T", " ").slice(0, 16)}` : "";
@@ -203,14 +221,17 @@ async function loadList(keepDetail) {
   if (sel.options.length <= 1 && res.sports?.length) sel.insertAdjacentHTML("beforeend", res.sports.map((s) => `<option>${esc(s)}</option>`).join(""));
   S.rows = res.rows;
   const c = res.counts || {};
-  $("count").textContent = res.built_at ? `${res.total} 筆 · 爬坡 ${c.climb || 0}、下坡 ${c.descent || 0}、路段 ${c.stretch || 0}、路線 ${c.route || 0}` : "";
+  $("count").textContent = res.built_at ? `${res.total} 筆 · 爬坡 ${c.climb || 0}、下坡 ${c.descent || 0}、路段 ${c.stretch || 0}、路線 ${c.route || 0}` +
+    (c.sub_route ? `（另 ${c.sub_route} 條是其他路線的一段）` : "") : "";
   if (!res.rows.length) {
     $("list").innerHTML = `<div class="empty">${res.built_at ? "沒有符合的路段" : "第一次整理 GPS 紀錄中，找到的路段會陸續出現"}</div>`;
   } else {
-    $("list").innerHTML = res.rows.map((r) => `<div class="row ${r.id === S.cur ? "on" : ""}" data-id="${r.id}">
-      <div class="nm">${badge(r)}${esc(r.name)}</div>
+    const nameOf = Object.fromEntries(res.rows.map((r) => [r.id, r.name]));
+    $("list").innerHTML = res.rows.map((r) => `<div class="row ${r.id === S.cur ? "on" : ""} ${r.depth ? `d${Math.min(2, r.depth)}` : ""}" data-id="${r.id}">
+      ${thumb(r.thumb)}
+      <div class="nm">${r.depth ? "⊂ " : ""}${badge(r)}${esc(r.name)}</div>
       ${spark(r.spark)}
-      <div class="sub">${km(r.length_m)} ${gainTxt(r)} · ${r.n_efforts} 次 · 最佳 ${hms(r.best_s)} · 最近 ${hms(r.last_s)}（${day(r.last_date)}）</div>
+      <div class="sub">${km(r.length_m)} ${gainTxt(r)} · ${r.n_efforts} 次${r.n_reversed ? `（反向 ${r.n_reversed}）` : ""} · 最佳 ${hms(r.best_s)} · 最近 ${hms(r.last_s)}（${day(r.last_date)}）${r.parent && !r.depth && nameOf[r.parent] ? ` · ⊂ ${esc(nameOf[r.parent])}` : ""}${r.n_partials ? ` · 另 ${r.n_partials} 次只跑一段` : ""}</div>
     </div>`).join("");
     $("list").querySelectorAll(".row").forEach((el) => el.onclick = () => openDetail(el.dataset.id, true));
   }
@@ -242,20 +263,26 @@ async function openDetail(id, push) {
   let d;
   try { d = await j(`${API}/${id}`); } catch (e) { $("detail").innerHTML = `<div class="panel empty">找不到這個路段（可能已在更新後合併）</div>`; return; }
   S.detail = d;
+  if (d.id !== id) {          // an old id, merged into this one
+    S.cur = d.id;
+    history.replaceState({ id: d.id }, "", `#${d.id}`);
+    document.querySelectorAll(".row").forEach((x) => x.classList.toggle("on", x.dataset.id === d.id));
+  }
   S.showAll = false;
-  document.querySelector(`.row[data-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
-  const timed = d.efforts.filter((e) => e[d.time_key] != null);
+  document.querySelector(`.row[data-id="${d.id}"]`)?.scrollIntoView({ block: "nearest" });
+  // default comparison: the best effort vs the latest one, both the main direction
+  const main = d.efforts.filter((e) => (e.dir || "same") === "same");
+  const timed = main.filter((e) => e[d.time_key] != null);
   const byTime = [...timed].sort((x, y) => x[d.time_key] - y[d.time_key]);
-  // default comparison: the best effort vs the latest one
   S.a = byTime[0]?.id || null;
-  S.b = (d.efforts[d.efforts.length - 1]?.id !== S.a ? d.efforts[d.efforts.length - 1]?.id : byTime[1]?.id) || null;
+  S.b = (main[main.length - 1]?.id !== S.a ? main[main.length - 1]?.id : byTime[1]?.id) || null;
   renderDetail();
 }
 
 function renderDetail() {
   disposeCharts();
   const d = S.detail, tk = d.time_key, up = d.direction === "up", down = d.direction === "down";
-  const best = d.efforts.find((e) => e.rank === 1);
+  const best = d.efforts.find((e) => e.rank === 1 && (e.dir || "same") === "same");
   const last = d.efforts[d.efforts.length - 1];
   const hasPw = d.efforts.some((e) => e.avg_power != null);
   const hasWx = d.efforts.some((e) => e.wx);
@@ -271,9 +298,10 @@ function renderDetail() {
       <span><b>${d.n_efforts}</b> 次 · ${d.n_activities} 個活動</span>
       <span>最佳 <b>${hms(best?.[tk])}</b>（${day(best?.start)}）</span><span>最近 <b>${hms(last?.[tk])}</b>（${day(last?.start)}）</span>
       ${d.renamed ? `<span class="meta">自動名稱：${esc(d.auto_name)}</span>` : ""}</div>
+    ${relations(d)}
   </div>
   <div class="panel card"><div id="map"></div>
-    <div class="note">藍線：這個${d.kind === "route" ? "路線（第一次跑的軌跡）" : "路段（第一次經過的軌跡）"}，<span style="color:var(--ok)">●</span> 起點、<span style="color:var(--err,#b91c1c)">●</span> 終點。比較圖上移動游標，地圖上的點跟著走。</div></div>
+    <div class="note">藍線：這個${d.kind === "route" ? "路線（過半數的那幾次都有跑到的共同部分）" : d.derived ? "路段（相連的幾段合併後的共同部分）" : "路段（第一次經過的軌跡）"}，<span style="color:var(--ok)">●</span> 起點、<span style="color:var(--err,#b91c1c)">●</span> 終點。比較圖上移動游標，地圖上的點跟著走。</div></div>
   <div class="panel card"><h3>趨勢 <span class="seg" id="tmode"><button data-v="time" class="on">${timeName}</button>${up ? '<button data-v="vam">VAM</button>' : ""}${d.kind === "route" ? "" : '<button data-v="pace">配速</button>'}</span>
     ${hasWx ? `<button class="tog ${S.colorTemp ? "on" : ""}" id="ctemp" title="點的顏色 = 當時氣溫（Open-Meteo 歷史資料）；外圈 = 熱（Hadley > 150）">依氣溫上色</button>` : ""}
     <span class="meta">${up ? "下圖：同樣爬升速度下的心率（HR ÷ VAM，越低越省力）" : "下圖：平均心率"}</span></h3>
@@ -289,6 +317,8 @@ function renderDetail() {
     ${wxNote ? `<div class="note">${wxNote}</div>` : ""}</div>`;
   $("back").onclick = () => { document.body.classList.remove("has-detail"); history.pushState({}, "", location.pathname); };
   $("dname").onclick = rename;
+  document.querySelectorAll(".rel a[data-go]").forEach((a) => a.onclick = () => openDetail(a.dataset.go, true));
+  document.querySelectorAll(".rel a[data-w]").forEach((a) => a.onclick = () => openWorkout(+a.dataset.w));
   drawMap();
   S.tmode = "time";
   drawTrend(S.tmode);
@@ -302,6 +332,19 @@ function renderDetail() {
   $("cmode").querySelectorAll("button").forEach((b) => b.onclick = () => {
     $("cmode").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); S.cmode = b.dataset.v; drawCompare(); });
   loadCompare();
+}
+
+// parent route, sub-routes, runs that covered only a part, merged pieces
+function relations(d) {
+  const link = (r) => `<a data-go="${esc(r.id)}">${esc(r.name)}</a>（${km(r.length_m)}，${r.n_efforts} 次）`;
+  const out = [];
+  if (d.parent) out.push(`這條是 ${link(d.parent)} 的一段`);
+  if (d.sub_routes?.length) out.push(`包含的較短路線：${d.sub_routes.map(link).join("、")}`);
+  if (d.partials?.length) out.push(`另有 ${d.partials.length} 次只跑了其中一段：` + d.partials.map((p) =>
+    p.workout != null ? `<a data-w="${p.workout}">${day(p.start)}</a>` : day(p.start)).join("、"));
+  if (d.n_reversed) out.push(`${d.n_reversed} 次反方向（排名與比較各自分開）`);
+  if (d.derived && d.merged_from?.length) out.push(`由 ${d.merged_from.length} 段相連的路段合併`);
+  return out.length ? `<div class="rel" style="flex-basis:100%">${out.join(" · ")}</div>` : "";
 }
 
 async function rename() {
@@ -428,7 +471,7 @@ function drawTable() {
     ${hasWx ? "<th title='Open-Meteo 歷史資料，當時當地，依海拔修正'>氣溫</th><th>露點</th><th>濕度</th><th title='Hadley：氣溫 °F + 露點 °F；> 150 標紅點（配速約慢 4.5% 以上）'>熱</th>" : ""}
     ${hasT ? "<th title='手錶溫度感測器（受體溫、日照影響）'>錶溫</th>" : ""}<th class="l">周期</th><th class="l">運動</th></tr></thead><tbody>` +
     rows.map((e) => `<tr class="${e.rank === 1 ? "best" : ""}">
-      <td class="l">${f2i(e) != null ? `<a class="act" href="#" data-w="${f2i(e)}" title="在圖表分析打開這個活動">${e.start.slice(0, 10)}</a>` : e.start.slice(0, 10)}</td>
+      <td class="l">${f2i(e) != null ? `<a class="act" href="#" data-w="${f2i(e)}" title="在圖表分析打開這個活動">${e.start.slice(0, 10)}</a>` : e.start.slice(0, 10)}${e.dir && e.dir !== "same" ? `<span class="dirtag" title="${e.dir === "reversed" ? "反方向跑這條路線：名次只和同方向的比" : "部分正向、部分反向"}">${e.dir === "reversed" ? "反向" : "混合"}</span>` : ""}</td>
       <td class="pick"><label><input type="radio" name="pa" value="${e.id}" ${e.id === S.a ? "checked" : ""}>A</label><label><input type="radio" name="pb" value="${e.id}" ${e.id === S.b ? "checked" : ""}>B</label></td>
       <td>${e.rank ?? "—"}</td><td>${hms(e[tk])}</td><td>${dhms(e.delta_best_s)}</td>
       ${tk === "elapsed_s" ? `<td>${hms(e.moving_s)}</td>` : ""}<td>${pace(e.pace_min_km)}</td>
@@ -459,7 +502,16 @@ async function loadCompare() {
   const d = S.detail;
   if (!S.a || !S.b || S.a === S.b) { $("cmpbar").innerHTML = `<span class="hint">選兩次不同的成績來比較</span>`; return; }
   const token = S.cmpToken = Math.random();
-  const c = await j(`${API}/${d.id}/compare?a=${S.a}&b=${S.b}`);
+  let c;
+  try { c = await j(`${API}/${d.id}/compare?a=${S.a}&b=${S.b}`); }
+  catch (e) {
+    if (token !== S.cmpToken) return;
+    S.cmp = null;
+    for (const id of ["cmp", "gap"]) echarts.getInstanceByDom($(id))?.dispose();
+    const msg = (() => { try { return JSON.parse(e.message.replace(/^\d+ /, "")).detail; } catch { return e.message; } })();
+    $("cmpbar").innerHTML = `<span class="hint">${esc(msg)}</span>`;
+    return;
+  }
   if (token !== S.cmpToken) return;
   S.cmp = c;
   const ea = c.a.effort, eb = c.b.effort, tk = d.time_key;
