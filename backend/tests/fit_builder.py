@@ -84,7 +84,8 @@ def _ts(t: datetime) -> int:
 def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0,
               speed_m_s: float = 3.0, climb_m_per_s: float = 0.0, total_ascent: int | None = None,
               sport: int = 1, sub_sport: int | None = None, stryd: bool = False,
-              stryd_device: bool = False, speeds_m_s: list | None = None) -> bytes:
+              stryd_device: bool = False, speeds_m_s: list | None = None,
+              workout_feel: int | None = None, workout_rpe: int | None = None) -> bytes:
     """A 1 Hz run starting at `start` (aware UTC). power=0 → no power channel;
     a list gives the power of each second (its length sets the duration).
     FIT enums: sport 1 running, 2 cycling, 10 training; sub_sport 0 generic,
@@ -146,6 +147,13 @@ def build_run(start: datetime, seconds: int = 600, hr: int = 140, power: int = 0
     if sub_sport is not None:
         ses.append((6, ENUM))
         ses_vals.append(sub_sport)
+    # the post-workout self-rating a Garmin watch writes (session 192 workout_feel, 193 workout_rpe = RPE × 10)
+    if workout_feel is not None:
+        ses.append((192, UINT8))
+        ses_vals.append(workout_feel)
+    if workout_rpe is not None:
+        ses.append((193, UINT8))
+        ses_vals.append(workout_rpe)
     body += _definition(2, 18, ses) + _data(2, ses, ses_vals)
 
     header = struct.pack("<BBHI4s", 14, 0x20, 2132, len(body), b".FIT")

@@ -28,6 +28,8 @@ async def _migrate_schema():
         ("workout_files", "classification_overridden", "INTEGER"),
         ("workout_files", "start_time_utc", "DATETIME"),
         ("workout_files", "duplicate_of", "INTEGER"),
+        ("workout_files", "rpe", "REAL"),
+        ("workout_files", "feel", "INTEGER"),
         ("sync_state", "coros_access_token", "TEXT"),
         ("sync_state", "tp_web_cookie", "TEXT"),
         ("sync_state", "coros_token_expires", "DATETIME"),
@@ -50,6 +52,8 @@ async def _migrate_schema():
         ("plan_sessions", "climb_m", "REAL"),
         ("plan_sessions", "protocol", "TEXT"),
         ("activity_tags", "exclusion", "TEXT"),
+        ("activity_tags", "name", "TEXT"),
+        ("activity_tags", "tags_json", "TEXT"),
     ]
     async with engine.begin() as conn:
         for table, col, col_type in new_cols:

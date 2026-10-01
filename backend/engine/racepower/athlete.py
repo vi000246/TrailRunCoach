@@ -561,7 +561,7 @@ def effort_stats(ds, w, th: dict) -> dict:
 
 
 def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list] = None,
-                     tests: Optional[dict] = None) -> dict[int, dict]:
+                     tests: Optional[dict] = None, recorded: Optional[list] = None) -> dict[int, dict]:
     """{idx: {"ok", "kind", "reason", "tags", ...}} for every outdoor run: is it
     a capacity sample? (2026-10-01, user: what matters is whether the effort
     was MAXIMAL, not whether it was a race.)
@@ -575,11 +575,15 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
     duration rule (≥ 10 km, ≥ 90 min: maximal.trail_maximal's km / time).
     Plan races are activity type 比賽 but no longer samples by themselves.
     `tags` = activity_tags.load() rows (default: the app DB); `tests` =
-    {idx: reason} of runs workout_review marks as tests."""
+    {idx: reason} of runs workout_review marks as tests. `recorded` =
+    activity_tags.load_recorded() rows (default: the app DB): a watch-
+    recorded RPE outranks the HR rule for the auto effort (a user mark
+    outranks both)."""
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import maximal as MX
     events = plan_race_runs(ds)
     tags = AT.load() if tags is None else tags
+    recorded = AT.load_recorded() if recorded is None else recorded
     tests = tests or {}
     peaks, held = [], []
     for w in ds.workouts:
@@ -608,6 +612,8 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             r = MX.trail_maximal({"km": km, "moving_s": st.get("moving_s"), "hr_avg": st.get("hr_avg"),
                                   "above_aet": es["above_aet"]}, th.get("lthr"), th.get("aet"), title, w.tags)
             eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"))
+            rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
+            eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
             long_ok = all(c["ok"] for c in r["checks"] if c["id"] in ("km", "time"))
             auto_ok = eff["effort"] == "max" and long_ok
         else:
@@ -623,6 +629,8 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
                                 th.get("lthr"), hrmax)
             r["hrmax"] = hrmax
             eff = AT.effort_road(r, es, th.get("aet"))
+            rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
+            eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
             auto_ok = eff["effort"] == "max"
         typ, typ_reason = AT.auto_type(plan_race=ev, test=tests.get(w.idx), sport=w.sport, sport_type=w.sport_type,
                                        title=title, trail=trail)
@@ -674,17 +682,78 @@ def auto_tags(ds, w) -> dict:
     if outdoor(w):
         r = capacity_samples(ds, [w], tests={w.idx: test} if test else None)[w.idx]
         out = dict(r["tags"])
-        out.update(effort_detail=r["effort"], capacity={"ok": r["ok"], "kind": r["kind"], "reason": r["reason"]})
+        out.update(effort_detail=r["effort"], capacity={"ok": r["ok"], "kind": r["kind"], "reason": r["reason"]},
+                   recorded=AT.recorded_json(AT.recorded_of(AT.load_recorded(), w.entry.start, w.entry.file)))
         return out
     th = thresholds_as_of(ds, w.entry.start.date())
     es = effort_stats(ds, w, th)
     eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"))
+    rec = AT.recorded_of(AT.load_recorded(), w.entry.start, w.entry.file)
+    eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
     typ, why = AT.auto_type(test=test, sport=w.sport, sport_type=w.sport_type,
                             title=getattr(w.entry, "title", "") or "", trail=is_trail(w),
                             baiyue_event=baiyue_on(ds, w.entry.start.date()))
     out = AT.merge({"activity_type": typ, "activity_type_reason": why, "effort": eff["effort"],
                     "effort_reason": eff["reason"]}, AT.user_of(w))
     out["effort_detail"] = eff
+    out["recorded"] = AT.recorded_json(rec)
+    return out
+
+
+def _test_reason(ds, w) -> Optional[str]:
+    from backend.engine import workout_review as WR
+    try:
+        if w.sport == "run":
+            c = WR.classify(ds, w)
+            if c.get("type") in ("test_cp", "test_aet") and c.get("test_match") not in (None, "pattern", "user"):
+                return f"{c.get('type_label')}（{c.get('test_match')}）"
+    except Exception:                       # noqa: BLE001
+        return None
+    return None
+
+
+def auto_tags_all(ds) -> dict[int, dict]:
+    """{idx: {activity_type, activity_type_reason, effort, effort_reason}} —
+    the AUTO values only (no user mark) of every dataset workout, the same
+    rules as auto_tags in one pass (the 活動編輯 list's filters). Memoised on
+    the Dataset (a rebuilt Dataset recomputes)."""
+    from backend.engine import activity_tags as AT
+    recorded = AT.load_recorded()
+    stamp = (len(recorded), sum(r.get("rpe") or 0 for r in recorded), sum(r.get("feel") or 0 for r in recorded))
+    memo = getattr(ds, "_activity_auto", None)
+    if memo is not None and memo[0] == stamp:        # a backfilled RPE recomputes
+        return memo[1]
+    runs = [w for w in ds.workouts if outdoor(w)]
+    tests = {w.idx: t for w in runs if (t := _test_reason(ds, w))}
+    caps = capacity_samples(ds, runs, tags=[], tests=tests, recorded=recorded) if runs else {}
+    out: dict[int, dict] = {}
+    for w in ds.workouts:
+        c = caps.get(w.idx)
+        if c is not None:
+            tg = c["tags"]
+            out[w.idx] = {"activity_type": tg["activity_type_auto"], "activity_type_reason": tg["activity_type_reason"],
+                          "effort": tg["effort_auto"], "effort_reason": tg["effort_reason"]}
+            continue
+        try:
+            th = thresholds_as_of(ds, w.entry.start.date())
+            es = effort_stats(ds, w, th)
+            eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"))
+        except Exception:                   # noqa: BLE001 — one bad file never breaks the list
+            es, eff = {}, {"effort": None, "reason": "無法計算"}
+        rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
+        eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
+        typ, why = AT.auto_type(test=_test_reason(ds, w), sport=w.sport, sport_type=w.sport_type,
+                                title=getattr(w.entry, "title", "") or "", trail=is_trail(w),
+                                baiyue_event=baiyue_on(ds, w.entry.start.date()))
+        out[w.idx] = {"activity_type": typ, "activity_type_reason": why, "effort": eff["effort"],
+                      "effort_reason": eff["reason"]}
+    flush = getattr(ds, "flush_series", None)
+    if flush:
+        flush()
+    try:
+        ds._activity_auto = (stamp, out)
+    except AttributeError:
+        pass
     return out
 
 
