@@ -157,11 +157,12 @@ def test_week_plan_auto_puts_xu90_on_the_weekend_in_place_of_the_long_run(monkey
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     monkeypatch.setattr(AT, "due", lambda *a, **k: True)
     wp = O.week_plan(ds, st, TODAY, prefs=PP.Prefs())
-    (t,) = [s for s in wp["sessions"] if s["id"] == "test_aet"]
-    assert t["title"] == AT.PROTOCOLS["xu90"]["title"] and t["minutes"] == 90
-    assert dt.date.fromisoformat(t["day"]).weekday() >= 5
-    assert not any(s["kind"] == "long" for s in wp["sessions"])
-    assert "氣溫 25 °C 以下時開始" in t["detail"]
+    # suggested, not scheduled (the user, 2026-10-01): the long run stays until the athlete picks a day
+    assert not any(s["id"] == "test_aet" for s in wp["sessions"])
+    (t,) = [x for x in wp["test_suggestions"] if x["kind"] == "aet"]
+    assert t["title"] == AT.PROTOCOLS["xu90"]["title"] and t["minutes"] == 90 and t["replaces_long"]
+    assert any(s["kind"] == "long" for s in wp["sessions"])
+    assert "氣溫 25 °C 以下時開始" in t["session"]["detail"]
 
 
 @pytest.mark.parametrize("prefs, minutes", [(PP.Prefs(aet_test_protocol="ua60"), 80),
@@ -172,12 +173,11 @@ def test_week_plan_puts_this_weeks_test_on_a_weekday(monkeypatch, prefs, minutes
     monkeypatch.setattr(AT, "due", lambda *a, **k: True)
     wp = O.week_plan(ds, st, TODAY, prefs=prefs)
     assert wp["mode"] != "recovery_week"
-    (t,) = [s for s in wp["sessions"] if s["id"] == "test_aet"]
-    assert t["minutes"] == minutes and t["day"] is not None and not t["done"]   # 52′ easy runs aren't the test
-    d = dt.date.fromisoformat(t["day"])
-    assert d.weekday() < 5 and d >= TODAY                              # Wed 9/30 – Fri 10/2
-    long_day = next(dt.date.fromisoformat(s["day"]) for s in wp["sessions"] if s["kind"] == "long" and s["day"])
-    assert long_day.weekday() >= 5 and abs((d - long_day).days) >= 2
+    assert not any(s["id"] == "test_aet" for s in wp["sessions"])      # suggested, never scheduled
+    (t,) = [x for x in wp["test_suggestions"] if x["kind"] == "aet"]
+    assert t["minutes"] == minutes and not t["replaces_long"]
+    # the week keeps its interval instead of giving it up for the test
+    assert any(s["kind"] == "quality" for s in wp["sessions"]) or not wp["quality_gate"]["allowed"]
 
 
 def test_a_titled_50_minute_test_is_marked_done_and_analysed(monkeypatch):
@@ -188,9 +188,7 @@ def test_a_titled_50_minute_test_is_marked_done_and_analysed(monkeypatch):
     prefs = PP.Prefs(cap_weekday=50)
     st = Status(ds, plan, TODAY, prefs=prefs).compute()
     monkeypatch.setattr(AT, "due", lambda *a, **k: True)
-    wp = O.week_plan(ds, st, TODAY, prefs=prefs)
-    (t,) = [s for s in wp["sessions"] if s["id"] == "test_aet"]
-    assert t["done"] and t["day"] == tday.isoformat()
+    O.week_plan(ds, st, TODAY, prefs=prefs)
     w = next(x for x in ds.workouts if x.entry.start.date() == tday)
     assert R.classify(ds, w)["type"] == "test_aet"
     r = AT.analyze_workout(ds, w)
