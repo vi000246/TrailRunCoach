@@ -27,9 +27,9 @@ Two questions, answered separately:
 
 2. Can this week take one (the *guardrails*, §4.4; base phase, every mode)?
      low-intensity time share ≥ 75 % (and run power < 80 % CP ≥ 75 % when known)
-     CTL ramp: ≥ 5 /week → sub-threshold only; ≥ 7 → none
-     last week's volume step: > 20 % → none; 10–20 % → hold the dose
-     TSB −30…−20 → hold the dose (< −30 is already a recovery week)
+     CTL ramp: ≥ 5 /week → sub-threshold only; ≥ 8 → none (Friel 5–8, coach)
+     last week's volume step: > 20 % → none (Nielsen 2014, Damsted 2019); 10–20 % → hold the dose (推估)
+     TSB −30…−20 → hold the dose (Friel / TrainingPeaks; < −30 is already a recovery week)
      3:1 recovery week → a 4×1′ fartlek instead of intervals (Palladino)
      48 h from the long run / other hard days → plan_prefs.place() / week_plan
    Base phase gets at most one interval session a week.
@@ -81,9 +81,9 @@ XU_HEAT_C = 25.0
 PLATEAU_WEEKS = 8              # 自訂
 EF_PLATEAU = 0.02              # status.EF_TREND
 LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD (Seiler, by time)
-RAMP_SUB, RAMP_BLOCK = 5.0, 7.0            # status.RAMP elite / short (Palladino)
-STEP_HOLD, STEP_BLOCK = 0.10, 0.20         # status.VOLUME_STEP_WATCH (UA 10 %)
-TSB_HOLD = -20.0
+RAMP_SUB, RAMP_BLOCK = 5.0, 8.0            # status.RAMP elite / short: Friel 5–8, 10 the ceiling (coach; B2)
+STEP_HOLD, STEP_BLOCK = 0.10, 0.20         # > 20 % block: Nielsen 2014, Damsted 2019 (peer-reviewed); 10–20 % hold 推估
+TSB_HOLD = -20.0                           # Friel / TrainingPeaks TSB bands (coach)
 ZONE3_SESSIONS = 3             # 自訂: ua_gap unlock → this many Zone 3 sessions, then the dose table
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
 FADE = 0.05                    # workout_review.FADE
@@ -370,15 +370,16 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
         say("intensity", f"本週不排間歇：跑步功率 < 80% CP 只有 {power_low_share * 100:.0f}%（< 75%）",
             f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
     if ramp is not None and ramp >= RAMP_BLOCK:
-        say("ramp", f"CTL 每週 +{ramp:.1f}（≥ 7）：本週不排間歇", "先穩住量", block=True)
+        say("ramp", f"CTL 每週 +{ramp:.1f}（≥ {RAMP_BLOCK:.0f}，Friel）：本週不排間歇", "先穩住量", block=True)
     elif ramp is not None and ramp >= RAMP_SUB:
-        say("ramp", f"CTL 每週 +{ramp:.1f}，本週只排閾值下", "先穩住量", sub=True)
+        say("ramp", f"CTL 每週 +{ramp:.1f}（≥ {RAMP_SUB:.0f}，Friel）：本週只排閾值下", "先穩住量", sub=True)
     if step is not None and step > STEP_BLOCK:
-        say("volume", f"上週量增 {step * 100:+.0f}%（> 20%）：本週不排間歇", "本週維持上週的量", block=True)
+        say("volume", f"上週量增 {step * 100:+.0f}%（> 20%，Nielsen 2014／Damsted 2019）：本週不排間歇",
+            "本週維持上週的量", block=True)
     elif step is not None and step > STEP_HOLD:
-        say("volume", f"上週量增 {step * 100:+.0f}%（10–20%）：間歇維持上次的量，不往上加", "", hold=True)
+        say("volume", f"上週量增 {step * 100:+.0f}%（10–20%，推估）：間歇維持上次的量，不往上加", "", hold=True)
     if tsb is not None and -30.0 <= tsb < TSB_HOLD:
-        say("tsb", f"TSB {tsb:+.0f}（−30～−20）：間歇維持上次的量，不往上加", "", hold=True)
+        say("tsb", f"TSB {tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
     return out
 
 

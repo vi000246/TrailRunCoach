@@ -299,7 +299,8 @@ def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float
 # ---------------------------------------------------------------------------
 
 SRC_RAMP = "Palladino CTL ramp（每週 +1～3 可長期維持，3～5 菁英）"
-SRC_TEN = "Uphill Athlete：週量增幅 ≤ 10%"
+SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；「10% 法則」本身沒有證據）；受傷風險線 > 20–30%："
+           "Nielsen 2014、Damsted 2019（同儕審查）")
 SRC_31 = "3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法）"
 SRC_BOSQUET = "Bosquet 2007：減量 2 週、量減 41–60%、強度與次數維持"
 SRC_UA = "Uphill Athlete"

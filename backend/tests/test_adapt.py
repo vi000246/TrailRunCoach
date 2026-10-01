@@ -114,9 +114,13 @@ def test_missed_long_moved_off_a_quality_neighbour_or_cancelled():
 # ---- D. easy run done too hard ---------------------------------------------
 
 def test_overhard_detection_thresholds():
-    assert A.overhard(36, {"avg_hr": 154, "aet": 150}) .startswith("平均心率 154")
-    assert A.overhard(36, {"avg_hr": 152, "aet": 150}) is None
-    assert "時間 20%" in A.overhard(36, {"over_aet_s": 600, "hr_s": 3000})
+    # unsourced-rules.md B5: the HR condition needs both avg > AeT+3 AND > 10 % of the time above it
+    both = {"avg_hr": 154, "aet": 150, "over_aet_s": 600, "hr_s": 3000}
+    assert A.overhard(36, both).startswith("平均心率 154") and "20%" in A.overhard(36, both)
+    assert A.overhard(36, {"avg_hr": 154, "aet": 150}) is None                       # avg alone: no
+    assert A.overhard(36, {"avg_hr": 154, "aet": 150, "over_aet_s": 200, "hr_s": 3000}) is None
+    assert A.overhard(36, {"avg_hr": 152, "aet": 150, "over_aet_s": 600, "hr_s": 3000}) is None
+    assert A.overhard(36, {"over_aet_s": 600, "hr_s": 3000}) is None                 # share alone: no
     assert "功率" in A.overhard(36, {"avg_power": 250, "cp": 300})
     assert A.overhard(36, {"avg_power": 230, "cp": 300}) is None
     assert "TSS" in A.overhard(36, {"tss": 45})
@@ -133,11 +137,11 @@ def _overhard_week(today="2026-09-30"):
 
 def test_overhard_easy_stays_done_moves_quality_trims_easy_and_notes():
     gw = _overhard_week()
-    reviews = {7: {"avg_hr": 158, "aet": 150, "tss": 60}}
+    reviews = {7: {"avg_hr": 158, "aet": 150, "tss": 60, "over_aet_s": 900, "hr_s": 2700}}
     out, adj, notes = A.adapt(gw, [], ctx(today="2026-09-30", reviews=reviews))
     s = ids(out)
     assert s["easy1"]["done"] is True                         # never voided
-    assert notes[7].startswith("輕鬆跑偏強（平均心率 158 > AeT+3（153））")
+    assert notes[7].startswith("輕鬆跑偏強（平均心率 158 > AeT+3（153），且超過的時間 33% > 10%）")
     # quality 1 day after: moved to Thu (≥ 2 days after Tue and from Sun's long)… Thu-Sun = 3 ✓
     assert s["quality"]["day"] == "2026-10-01" or s["quality"]["day"] == "2026-10-02"
     # long run and quality never trimmed; the easy runs absorb the 24 TSS excess
@@ -178,7 +182,7 @@ def test_overhard_drops_the_last_easy_below_the_floor():
 def test_fatigue_ramp_removes_quality_and_cuts_easy():
     gw = week([g("quality", "quality", "2026-10-01", 60), g("easy1", "easy", "2026-10-02", 50),
                g("long", "long", "2026-10-04", 120)])
-    out, adj, _ = A.adapt(gw, [], ctx(load={"ramp": 7.5}))
+    out, adj, _ = A.adapt(gw, [], ctx(load={"ramp": 8.5}))          # Friel: ≥ 8 (B2)
     s = ids(out)
     assert "quality" not in s and s["easy1"]["minutes"] == 40 and s["long"]["minutes"] == 120
     assert all(a["rule"] == "fatigue" for a in adj)
@@ -228,7 +232,7 @@ def test_overhard_note_lands_on_the_done_session_and_is_idempotent():
     act = {"index": 7, "date": "2026-09-29", "category": "road", "tss": 60, "moving_s": 2700}
     gen = [g("easy1", "easy", "2026-09-29", 45, tss=36, done=True, done_by=act),
            g("easy2", "easy", "2026-10-02", 50, tss=40), g("easy3", "easy", "2026-10-03", 40, tss=32)]
-    inp = _inputs(gen, [act], reviews={7: {"avg_hr": 158, "aet": 150}})
+    inp = _inputs(gen, [act], reviews={7: {"avg_hr": 158, "aet": 150, "over_aet_s": 900, "hr_s": 2700}})
     new, ch = PS.reconcile_with_adapt([], inp)
     done = next(s for s in new if s["gen_key"] == "easy1")
     assert done["state"] == "done" and done["note"].startswith("輕鬆跑偏強")

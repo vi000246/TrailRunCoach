@@ -27,7 +27,12 @@ GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 
 # ---- thresholds, each with its source --------------------------------------
 SRC_PALLADINO = "Palladino（你的筆記：PMC 訓練負荷 / Ramp rate）"
-SRC_TP_TSB = "TrainingPeaks / Friel TSB 區間；Palladino A/B/C 賽 TSB"
+SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）TSB 區間：−10～−30 有效訓練、< −30 過度（教練）；Palladino A/B/C 賽 TSB"
+# weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
+# Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10–20 % hold = 推估, conservative.
+# The 「10 % 法則」 itself has no evidence (unsourced-rules.md §B2)
+SRC_VOLUME = ("週增量 > 20%：Nielsen 2014、Damsted 2019（同儕審查：增 20–30% 以上受傷風險升高）；"
+              "10–20% 先維持：推估（保守）")
 SRC_UA = "Uphill Athlete"
 SRC_SEILER = "Seiler 2006 強度分配；Palladino 金字塔 70–90% 輕鬆"
 SRC_BOSQUET = "Bosquet 2007 減量統合分析"
@@ -35,13 +40,16 @@ SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
 SRC_CHIANG = "江晏慶（你的筆記：越野跑周期化訓練）"
 SRC_NOTES = "你的筆記"
 
-RAMP = {"sustain": 3.0, "elite": 5.0, "short": 7.0}          # CTL/week (Palladino)
+# CTL/week. warn 5 / block 8: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits
+# most athletes, 10 is the ceiling; unsourced-rules.md §B2). "sustain" 3 = Palladino's 1–3 long-term (display)
+RAMP = {"sustain": 3.0, "elite": 5.0, "short": 8.0}
+SRC_RAMP_FRIEL = "Friel：CTL ramp 每週 5–8 適合多數人、10 是上限（教練）；Palladino：每週 +1–3 可長期維持"
 TSB_A = (10.0, 20.0)                                        # A race, taper end (Palladino)
 TSB_PRODUCTIVE = (-30.0, -10.0)                             # Friel: productive training
 TSB_OVERREACH = -30.0
 TSB_STALE = 25.0
 LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # Seiler / Palladino
-VOLUME_STEP_WATCH = 0.10                                    # UA: >10%/week
+VOLUME_STEP_WATCH = 0.10                                    # 推估 hold band 10–20 %; > 20 % block (SRC_VOLUME)
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
 DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # Friel (<5%), 徐國峰 (90' E <10%)
 SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）"
@@ -295,9 +303,10 @@ class Status:
                     level, verdict, action = WATCH, "減量期 CTL 還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
             else:
                 if ramp >= RAMP["short"]:
-                    level, verdict, action = BAD, f"每週 +{ramp:.1f}，≥7 是受傷與生病的風險區", "本週維持或減量，不要再加"
+                    level, verdict, action = (BAD, f"每週 +{ramp:.1f}，≥ {RAMP['short']:.0f} 超過 Friel 建議的 5–8",
+                                              "本週維持或減量，不要再加")
                 elif ramp >= RAMP["elite"]:
-                    level, verdict, action = WATCH, f"每週 +{ramp:.1f}，只能撐一兩週的增幅", "下週安排恢復週"
+                    level, verdict, action = WATCH, f"每週 +{ramp:.1f}（5–8：Friel 的上段），只能撐一兩週", "下週安排恢復週"
                 elif ramp >= 1:
                     level, verdict = GOOD, f"每週 +{ramp:.1f}，可長期維持的增幅（1–3；菁英 3–5）"
                 elif ramp > -1:
@@ -305,7 +314,7 @@ class Status:
                     action = "訓練期體能沒有成長：檢查每週時數是否卡住" if k in ("base", "specific") else ""
                 else:
                     level, verdict, action = WATCH, f"每週 {ramp:+.1f}，體能在下降", "補回訓練量，或確認是否在恢復"
-        return Indicator("fitness", "體能 CTL", level, txt, verdict, why, action, SRC_PALLADINO, now, spark,
+        return Indicator("fitness", "體能 CTL", level, txt, verdict, why, action, SRC_RAMP_FRIEL, now, spark,
                          {"ramp_week": ramp, "delta_28d": None if mo is None else now - mo})
 
     def i_form(self) -> Indicator:
@@ -368,14 +377,15 @@ class Status:
             lvl, v, act = (GOOD, "量降下來了", "") if last <= base6 * 0.7 else (WATCH, "恢復期量還太多", "本週再降")
         else:
             if step is not None and step > VOLUME_STEP_WATCH * 2:
-                lvl, v, act = BAD, f"上週比前一週多 {step * 100:+.0f}%，遠超過 10%", "本週維持上週的量，不要再加"
+                lvl, v, act = (BAD, f"上週比前一週多 {step * 100:+.0f}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）",
+                               "本週維持上週的量，不要再加")
             elif step is not None and step > VOLUME_STEP_WATCH:
-                lvl, v, act = WATCH, f"上週比前一週多 {step * 100:+.0f}%（建議 ≤ 10%）", "本週維持，下週再加"
+                lvl, v, act = WATCH, f"上週比前一週多 {step * 100:+.0f}%（10–20%：先維持，推估）", "本週維持，下週再加"
             elif last < avg4 * 0.6 and avg4 > 1:
                 lvl, v, act = WATCH, f"上週只有前 4 週平均的 {last / avg4 * 100:.0f}%", "如果不是刻意恢復，本週補回來"
             else:
                 lvl, v, act = GOOD, "量穩定" if step is None or abs(step) < 0.1 else f"週增幅 {step * 100:+.0f}%，在範圍內", ""
-        return Indicator("volume", "每週時數", lvl, txt, v, why, act, SRC_UA if k not in ("taper",) else SRC_BOSQUET,
+        return Indicator("volume", "每週時數", lvl, txt, v, why, act, SRC_VOLUME if k not in ("taper",) else SRC_BOSQUET,
                          last, spark, {"this_week": this, "last_week": last, "avg4": avg4, "step": step})
 
     def i_intensity(self) -> Indicator:
