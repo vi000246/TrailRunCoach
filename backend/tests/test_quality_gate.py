@@ -313,6 +313,86 @@ def test_count_reps_finds_one_minute_reps_and_the_history_counts_them():
     assert d["step"] == 2 and [x["outcome"] for x in h] == ["met", "met"] and d["outcome"] == "met"
 
 
+def _z3_run(day, reps=3, work_min=8, rest_min=2, on=230.0, title=""):
+    """Zone 3 session (interval-prescription.md S0): 12′ easy @ 70 % CP, reps × work @ `on`
+    (230 W = 92 % of CP 250) with jog rests @ 64 %, 5′ cool-down. The reps are more than
+    half the moving time, so the session median ≈ the rep power."""
+    p = [175.0] * 720
+    for k in range(reps):
+        p += [on] * (work_min * 60)
+        if k < reps - 1:
+            p += [160.0] * (rest_min * 60)
+    p += [160.0] * 300
+    t = np.arange(len(p), dtype=float)
+    ch = {"elapsedtime": list(t), "heartrate": [150.0] * len(t), "speed": [10.0] * len(t), "power": p,
+          "elapseddistance": list(t * 10 / 3600)}
+    return FakeWorkout(start=dt.datetime.combine(day, dt.time(7)), sport="run", tags=["running"], sport_type="running",
+                       channels=ch, title=title,
+                       metrics={"duration": float(len(t)), "movingduration": float(len(t)),
+                                "distance": len(t) / 360.0, "climbing": 10.0})
+
+
+def test_zone3_reps_are_found_and_not_judged_too_high():
+    # bug (b), interval-prescription.md §A5.2-2: count_reps needs ≥ 95 % CP and detect_efforts'
+    # threshold max(0.85 CP, 1.12 × median) sits above 92 % reps → no bouts → 「第 1 趟就沒到」
+    ds = _ds([_z3_run(TODAY - dt.timedelta(days=4))])
+    h = QG.dose_history(ds, TODAY)
+    assert len(h) == 1
+    assert len(h[0]["bouts"]) == 3 and all(b["power"] == pytest.approx(230.0, abs=1) for b in h[0]["bouts"])
+    o = QG.interval_outcome(h[0]["bouts"], QG.Z3[0], 250.0)
+    assert o["outcome"] != "too_high" and o["outcome"] == "met"
+    assert h[0]["rep_source"] == "z3"
+    # with no bouts at all the session can't be judged: unknown, never 「目標太高」
+    d = QG.dose_step([{"bouts": [], "cp": 250.0}])
+    assert d["outcome"] == "unknown" and d.get("adjust") == {}
+
+
+def test_unplanned_hard_runs_are_not_ladder_steps_once_the_plan_is_in_use(monkeypatch):
+    # real data 2026-10-01: 43 steady runs at ~95 % CP in 8 weeks, none a planned session, were
+    # judged against 3×8′ (13 「目標太高」, 18 未適應) and moved the ladder to step 3
+    from backend.engine import plan_store as PS
+    ds = _ds([_z3_run(TODAY - dt.timedelta(days=4)), _z3_run(TODAY - dt.timedelta(days=2))])
+    monkeypatch.setattr(PS, "plan_in_use", lambda db_path=None: True)
+    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {1: {"title": QG.Z3[0][1], "state": "done"}})
+    h = QG.dose_history(ds, TODAY)
+    assert [x.get("unplanned", False) for x in h] == [True, False]
+    d = QG.dose_step(h)
+    assert h[0]["outcome"] == "neutral" and h[1]["outcome"] == "met" and d["step"] == 1 and d["done"] == 1
+
+
+def test_planned_zone3_reps_come_from_the_coros_laps(monkeypatch):
+    # interval-prescription.md §B3: a pushed workout has one lap per step — the laps whose
+    # duration is the planned rep (±5 s) are the reps; power only when there are no laps
+    from backend.engine import interval_reps as IR
+    from backend.engine import plan_store as PS
+    day = TODAY - dt.timedelta(days=4)
+    w = _z3_run(day)
+    ds = _ds([w])
+    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {0: {"title": QG.Z3[0][1], "state": "done"}})
+    laps = [{"start_s": 0.0, "duration_s": 720.0, "power": 175.0}]
+    t = 720.0
+    for k in range(3):
+        laps.append({"start_s": t, "duration_s": 481.0, "power": 230.0})
+        t += 480
+        if k < 2:
+            laps.append({"start_s": t, "duration_s": 120.0, "power": 160.0})
+            t += 120
+    laps.append({"start_s": t, "duration_s": 300.0, "power": 160.0})
+    ds.laps = lambda idx: laps
+    h = QG.dose_history(ds, TODAY)
+    assert h[0]["rep_source"] == "lap" and len(h[0]["bouts"]) == 3
+    assert [round(b["start_s"]) for b in h[0]["bouts"]] == [720, 1320, 1920]
+    # 1-km auto laps (≈ 6′, the wrong length) are not reps: back to the power pattern
+    ds2 = _ds([_z3_run(day)])
+    ds2.laps = lambda idx: [{"start_s": 360.0 * i, "duration_s": 360.0, "power": 200.0} for i in range(10)]
+    h2 = QG.dose_history(ds2, TODAY)
+    assert h2[0]["rep_source"] == "power" and len(h2[0]["bouts"]) == 3
+    assert IR.lap_bouts(laps, [480, 480, 480], 0.88, 250.0, 120)[0]["source"] == "lap"
+    # the user's real 1-km auto laps are ≈ 8′ (482–485 s) back to back: never a 3×8′ set
+    auto = [{"start_s": 483.0 * i, "duration_s": 483.0, "power": 230.0} for i in range(6)]
+    assert IR.lap_bouts(auto, [480, 480, 480], 0.88, 250.0, 120) == []
+
+
 def _b(*ps, at60=None):
     return [{"power": p, "hr_at60": at60} for p in ps]
 
