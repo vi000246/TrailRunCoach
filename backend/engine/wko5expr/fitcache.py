@@ -224,7 +224,8 @@ class FitStore:
         e = self.files.get(rel)
         if not e or e.get("stamp") != stamp or e.get("parse") != self.v["parse"]:
             return None
-        if not e["meta"].get("error") and e["meta"].get("start") and not self.npz(rel).exists():
+        m = e["meta"]
+        if not m.get("error") and m.get("start") and m.get("n") and not self.npz(rel).exists():
             return None
         return e
 

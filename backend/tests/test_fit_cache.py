@@ -5,6 +5,7 @@ import datetime as dt
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -77,6 +78,26 @@ def test_a_changed_file_is_the_only_one_parsed_again(tmp_path, monkeypatch):
     ds = _build(root)
     assert len(calls) == 1
     assert ds.workouts[1].metrics["duration"] == pytest.approx(1200, abs=2)
+
+
+def test_a_file_without_samples_is_not_parsed_again(tmp_path, monkeypatch):
+    root = _folder(tmp_path)
+    monkeypatch.setattr(fitcache, "parse_file", _no_samples(fitcache.parse_file))
+    _build(root)
+    calls = _count_parses(monkeypatch)
+    _build(root)
+    assert calls == []
+
+
+def _no_samples(real):
+    """parse_file, but 0.fit comes back as a session without records (start, no samples)."""
+    def f(path, npz):
+        out = real(path, npz)
+        if path.endswith("0.fit"):
+            Path(npz).unlink(missing_ok=True)
+            out = {"meta": {**out["meta"], "n": 0, "duration": None, "channels": []}, "parse": out["parse"]}
+        return out
+    return f
 
 
 def test_a_deleted_file_leaves_the_cache(tmp_path):
