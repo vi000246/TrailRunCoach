@@ -75,31 +75,82 @@ def _headers(token: Optional[str] = None, user_id: Optional[str] = None) -> dict
     return h
 
 
-async def _detect_data_base(token: str, user_id: str) -> str:
-    """After login, find which base URL accepts the token for activity queries."""
+async def _probe(base: str, token: str, user_id: str, timeout: float = 10) -> tuple[bool, str]:
+    """(token accepted for activity queries on `base`, why not)."""
     today = datetime.now(timezone.utc).date()
     params = {"size": 1, "pageNumber": 1,
               "startDay": (today - timedelta(days=30)).strftime("%Y%m%d"),
               "endDay": today.strftime("%Y%m%d")}
-    for base in COROS_BASES.values():
-        try:
-            async with http.client(timeout=10) as client:
-                resp = await client.get(
-                    f"{base}/activity/query",
-                    headers=_headers(token, user_id),
-                    params=params,
-                )
-            if resp.status_code == 200 and resp.json().get("result") == "0000":
-                log.info("Coros data server detected: %s", base)
-                return base
-        except Exception:
-            continue
-    log.warning("Could not detect data server, defaulting to US")
-    return COROS_BASES["us"]
+    try:
+        async with http.client(timeout=timeout) as client:
+            resp = await client.get(f"{base}/activity/query", headers=_headers(token, user_id), params=params)
+    except Exception as e:                       # noqa: BLE001 — a probe never raises
+        return False, type(e).__name__
+    if resp.status_code != 200:
+        return False, f"HTTP {resp.status_code}"
+    try:
+        body = resp.json()
+    except ValueError:
+        return False, "not JSON"
+    if body.get("result") == "0000":
+        return True, ""
+    return False, f"result={body.get('result')} {body.get('message') or ''}".strip()
+
+
+async def _detect_data_base(token: str, user_id: str, login_base: Optional[str] = None) -> str:
+    """After login, find which base URL accepts the token for activity
+    queries: the server that issued the token first, then the others. When
+    no probe answers (network trouble, a busy event loop timing the probes
+    out) the LOGIN server is kept — the old default "US" sent an EU / CN
+    account's token to the wrong server, which COROS answers with
+    "Access token is invalid"."""
+    order = ([login_base] if login_base else []) + [b for b in COROS_BASES.values() if b != login_base]
+    why = []
+    for base in order:
+        ok, reason = await _probe(base, token, user_id)
+        if ok:
+            log.info("Coros data server detected: %s", base)
+            return base
+        why.append(f"{base.split('//')[-1]}: {reason}")
+    fallback = login_base or COROS_BASES["us"]
+    log.warning("Could not detect the COROS data server (%s); using the login server %s",
+                "; ".join(why), fallback)
+    return fallback
+
+
+# one login at a time: COROS keeps only the latest token of an account, so a
+# second login (a double click, a retry) silently invalidates the first one's
+# token — and whichever request commits last decides which token is stored
+_LOGIN_LOCKS: dict = {}
+
+
+def _login_lock():
+    import asyncio
+    loop = asyncio.get_running_loop()
+    lk = _LOGIN_LOCKS.get(id(loop))
+    if lk is None:
+        lk = _LOGIN_LOCKS[id(loop)] = asyncio.Lock()
+    return lk
+
+
+class LoginBusy(RuntimeError):
+    pass
 
 
 async def login(email: str, password: str, db: AsyncSession, athlete_id: int = 1) -> dict:
-    """MD5-hash password, try all regions, detect data server, persist to sync_state."""
+    """MD5-hash password, try the regions until one accepts the account,
+    detect the data server, persist to sync_state. Exactly ONE successful
+    login per call (COROS accepts only the latest token): after a region
+    accepts, nothing logs in again, and a concurrent login is refused
+    (LoginBusy -> HTTP 409)."""
+    lk = _login_lock()
+    if lk.locked():
+        raise LoginBusy("COROS_LOGIN_BUSY: a COROS login is already running")
+    async with lk:
+        return await _login(email, password, db, athlete_id)
+
+
+async def _login(email: str, password: str, db: AsyncSession, athlete_id: int) -> dict:
     payload = {"account": email, "accountType": 2, "pwd": _md5(password)}
 
     last_error = None
@@ -118,74 +169,159 @@ async def login(email: str, password: str, db: AsyncSession, athlete_id: int = 1
             if data.get("result") != "0000":
                 last_error = data.get("message", f"result={data.get('result')}")
                 continue
-
-            result = data["data"]
-            token = result["accessToken"]
-            user_id = str(result.get("userId", ""))
-            expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-
-            # Detect which server actually accepts this token for data calls
-            data_base = await _detect_data_base(token, user_id)
-
-            state_res = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
-            state = state_res.scalar_one_or_none()
-            if not state:
-                state = SyncState(athlete_id=athlete_id)
-                db.add(state)
-            state.coros_access_token = seal(token)
-            state.coros_token_expires = expires_at
-            state.coros_email = email
-            state.coros_base_url = data_base
-            state.coros_user_id = user_id
-
-            # Persist FTP/LTHR from Coros profile as AthleteSettings
-            zone_data = result.get("zoneData") or {}
-            ftp = zone_data.get("ftp")
-            lthr = zone_data.get("lthr")
-            weight = result.get("weight")
-            if ftp or lthr or weight:
-                today = datetime.now(timezone.utc).date()
-                settings_res = await db.execute(
-                    select(AthleteSettings).where(
-                        AthleteSettings.athlete_id == athlete_id,
-                        AthleteSettings.effective_date == today,
-                    )
-                )
-                settings = settings_res.scalar_one_or_none()
-                if not settings:
-                    settings = AthleteSettings(athlete_id=athlete_id, effective_date=today)
-                    db.add(settings)
-                if ftp:
-                    settings.ftp_w = float(ftp)
-                if lthr:
-                    settings.lthr = int(lthr)
-                if weight:
-                    settings.weight_kg = float(weight)
-                log.info("Coros profile: FTP=%s LTHR=%s weight=%s", ftp, lthr, weight)
-
-            await db.commit()
-
-            log.info("Coros login OK region=%s data_base=%s user_id=%s", region, data_base, user_id)
-            return {
-                "authenticated": True,
-                "coros_user_id": user_id,
-                "email": email,
-                "region": region,
-                "ftp_w": ftp,
-                "lthr": lthr,
-                "token_expires": expires_at.isoformat(),
-            }
-        except SecretError:
-            raise                      # SECRET_KEY_MISSING: not a login failure
         except Exception as e:
-            last_error = str(e)
+            last_error = str(e) or type(e).__name__
             continue
+        # this region issued a token: never log in again below (it would
+        # invalidate this token); a failure from here on is an error
+        return await _store_login(data["data"], email, region, base, db, athlete_id)
 
     raise ValueError(f"Coros login failed on all regions: {last_error}")
 
 
-async def _get_token_and_base(db: AsyncSession, athlete_id: int = 1) -> tuple[str, str, str]:
-    """Return (token, base_url, user_id) from DB, raise if missing or expired."""
+async def _store_login(result: dict, email: str, region: str, base: str, db: AsyncSession,
+                       athlete_id: int) -> dict:
+    token = result["accessToken"]
+    user_id = str(result.get("userId", ""))
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
+    # Detect which server actually accepts this token for data calls
+    data_base = await _detect_data_base(token, user_id, login_base=base)
+
+    state_res = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
+    state = state_res.scalar_one_or_none()
+    if not state:
+        state = SyncState(athlete_id=athlete_id)
+        db.add(state)
+    state.coros_access_token = seal(token)      # SecretError (SECRET_KEY_MISSING) propagates
+    state.coros_token_expires = expires_at
+    state.coros_email = email
+    state.coros_base_url = data_base
+    state.coros_user_id = user_id
+
+    # Persist FTP/LTHR from Coros profile as AthleteSettings
+    zone_data = result.get("zoneData") or {}
+    ftp = zone_data.get("ftp")
+    lthr = zone_data.get("lthr")
+    weight = result.get("weight")
+    if ftp or lthr or weight:
+        today = datetime.now(timezone.utc).date()
+        settings_res = await db.execute(
+            select(AthleteSettings).where(
+                AthleteSettings.athlete_id == athlete_id,
+                AthleteSettings.effective_date == today,
+            )
+        )
+        settings = settings_res.scalar_one_or_none()
+        if not settings:
+            settings = AthleteSettings(athlete_id=athlete_id, effective_date=today)
+            db.add(settings)
+        if ftp:
+            settings.ftp_w = float(ftp)
+        if lthr:
+            settings.lthr = int(lthr)
+        if weight:
+            settings.weight_kg = float(weight)
+        log.info("Coros profile: FTP=%s LTHR=%s weight=%s", ftp, lthr, weight)
+
+    await db.commit()
+
+    log.info("Coros login OK region=%s data_base=%s user_id=%s", region, data_base, user_id)
+    return {
+        "authenticated": True,
+        "coros_user_id": user_id,
+        "email": email,
+        "region": region,
+        "data_server": data_base,
+        "ftp_w": ftp,
+        "lthr": lthr,
+        "token_expires": expires_at.isoformat(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 記住密碼 + automatic re-login (user-approved 2026-10-01)
+#
+# Only when the user ticked 「記住密碼」: the password is stored sealed
+# (secrets.seal, Fernet with the local key) in sync_state.coros_password_sealed;
+# never in plaintext, never logged, never returned by an API (the status says
+# only password_saved). Unticking or logging out deletes it.
+# When the token has expired (24 h) or COROS answers "Access token is invalid"
+# (result 1019), ONE automatic login is made and the request retried ONCE.
+# The login lock serialises it: concurrent callers wait for that one login
+# and reuse its token (COROS honours only the latest login), and a failed
+# re-login is reported, never retried in a loop.
+# ---------------------------------------------------------------------------
+
+TOKEN_INVALID_RESULTS = ("1019", "1030")
+RELOGIN_REUSE_S = 120          # a re-login this recent is reused by the next caller (no second login)
+_LAST_RELOGIN: dict = {}       # athlete_id -> monotonic time of the last automatic login
+
+
+class CorosTokenInvalid(ValueError):
+    """COROS rejected the stored token ("Access token is invalid")."""
+
+
+def token_invalid(body: dict) -> bool:
+    msg = str(body.get("message") or "").lower()
+    return str(body.get("result")) in TOKEN_INVALID_RESULTS or ("token" in msg and "invalid" in msg)
+
+
+async def save_password(db: AsyncSession, athlete_id: int, password: Optional[str]) -> None:
+    """Store (sealed) or delete the remembered password; commits."""
+    state = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
+    if state is None:
+        if not password:
+            return
+        state = SyncState(athlete_id=athlete_id)
+        db.add(state)
+    state.coros_password_sealed = seal(password) if password else None
+    await db.commit()
+
+
+async def password_saved(db: AsyncSession, athlete_id: int = 1) -> bool:
+    state = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
+    return bool(state is not None and state.coros_password_sealed)
+
+
+async def relogin(db: AsyncSession, athlete_id: int = 1, since: Optional[float] = None) -> bool:
+    """One automatic login with the remembered password. True when a fresh
+    token is stored (by this call, or by another caller's login after
+    `since`, a time.monotonic() value). False without a remembered password
+    or when COROS refuses: the caller reports COROS_AUTH_REQUIRED."""
+    import time
+    async with _login_lock():
+        last = _LAST_RELOGIN.get(athlete_id)
+        if last is not None and since is not None and last >= since:
+            return True                      # someone logged in while we waited: use that token
+        if last is not None and time.monotonic() - last < RELOGIN_REUSE_S and since is None:
+            return True
+        state = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
+        if state is None or not state.coros_password_sealed or not state.coros_email:
+            return False
+        try:
+            password = unseal(state.coros_password_sealed)
+        except SecretError:
+            return False
+        if not password:
+            return False
+        try:
+            await _login(state.coros_email, password, db, athlete_id)
+        except SecretError:
+            raise
+        except Exception as e:               # noqa: BLE001 — reported, not retried
+            log.warning("COROS automatic re-login failed: %s", type(e).__name__)
+            return False
+        _LAST_RELOGIN[athlete_id] = time.monotonic()
+        log.warning("COROS token renewed with the remembered password")
+        return True
+
+
+async def _get_token_and_base(db: AsyncSession, athlete_id: int = 1,
+                              auto_relogin: bool = True) -> tuple[str, str, str]:
+    """Return (token, base_url, user_id) from DB, raise if missing or expired.
+    An expired token is renewed first when a password is remembered."""
+    import time
     res = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
     state = res.scalar_one_or_none()
     if not state or not state.coros_access_token:
@@ -193,6 +329,9 @@ async def _get_token_and_base(db: AsyncSession, athlete_id: int = 1) -> tuple[st
     exp = as_utc(state.coros_token_expires)
     if exp and datetime.now(timezone.utc) >= exp:
         # COROS tokens last 24 h and there is no refresh grant: log in again
+        if auto_relogin and state.coros_password_sealed and await relogin(db, athlete_id, since=time.monotonic()):
+            await db.refresh(state)
+            return await _get_token_and_base(db, athlete_id, auto_relogin=False)
         raise ValueError("COROS_AUTH_REQUIRED: token expired, please login again")
     base = state.coros_base_url or COROS_BASES["us"]
     user_id = state.coros_user_id or ""
@@ -215,6 +354,8 @@ async def _list_page(
         raise ValueError(f"Coros list_activities HTTP {resp.status_code}: {resp.text[:200]!r}")
     body = resp.json()
     if body.get("result") != "0000":
+        if token_invalid(body):
+            raise CorosTokenInvalid(f"Coros list_activities error: {body.get('message')!r}")
         raise ValueError(f"Coros list_activities error: {body.get('message')!r}")
     inner = body.get("data") or {}
     return inner.get("dataList") or inner.get("list") or []
@@ -294,9 +435,23 @@ async def sync_workouts(
     total_downloaded = 0
     errors: list[str] = []
 
+    relogged = False
     while True:
+        import time as _time
+        t0 = _time.monotonic()
         try:
             activities = await _list_page(token, base, user_id, since_day, end_day, page, PAGE_SIZE)
+        except CorosTokenInvalid as e:
+            # "Access token is invalid": one automatic login with the
+            # remembered password, then this page once more; never a loop
+            if not relogged and await relogin(db, athlete_id, since=t0):
+                relogged = True
+                token, base, user_id = await _get_token_and_base(db, athlete_id, auto_relogin=False)
+                yield {"status": "relogin", "detail": "COROS token renewed (remembered password)"}
+                continue
+            yield {"status": "error", "error": "COROS_AUTH_REQUIRED", "detail": str(e),
+                   "hint": "請到設定頁重新登入 COROS"}
+            return
         except Exception as e:
             yield {"status": "error", "error": "COROS_API_ERROR", "detail": str(e)}
             return
@@ -337,7 +492,8 @@ async def sync_workouts(
             # sub_sport); the COROS code only when the FIT can't say
             tmp = dest_dir / f".{label_id}.download"
             tmp.write_bytes(fit_bytes)
-            fit_sport, fit_sub = fit_session_sport(tmp)
+            import asyncio as _asyncio
+            fit_sport, fit_sub = await _asyncio.to_thread(fit_session_sport, tmp)   # FIT parsing: off the loop
             sport_name = sport_token(fit_sport, fit_sub, sport_type)
             filename = f"{label_id}_{date_str}_{sport_name}.fit"
             dest = dest_dir / filename
