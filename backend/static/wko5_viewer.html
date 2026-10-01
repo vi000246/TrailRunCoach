@@ -1305,7 +1305,7 @@ function pzThresholdText(res) {
   if (t.length === 1) return `門檻：${t[0].text}`;
   const vals = [...new Set(t.map((r) => r.value))];
   if (vals.length === 1) return `門檻：${vals[0]}（${t.length} 個來源，見下方）`;
-  return `門檻依每次活動當天：${t[0].value} → ${t[t.length - 1].value}（${t.length} 組，見下方）`;
+  return `門檻依每次活動當天：${vals.length <= 3 ? vals.join("、") : `${t[0].value} → ${t[t.length - 1].value}`}（${t.length} 組，見下方）`;
 }
 function pzSkipText(res) {
   const s = res.skipped || [];
