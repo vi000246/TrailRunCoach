@@ -952,6 +952,7 @@ function drawInto(box, res) {
   else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)
   else if (res.grade_profile) drawGradeProfile(box, res);     // 坡度分組: one row per grade bin
   else if (res.form_profile) drawFormProfile(box, res);       // 跑姿依坡度／隨疲勞 (form_grades / form_work)
+  else if (res.cadence_profile) drawCadenceProfile(box, res); // 步頻與衝擊 (form_cadence)
   else draw(box, res);
 }
 
@@ -2898,6 +2899,80 @@ function drawFormProfile(card, res) {
     showCad = FP_IMPACT.has(metric) && keys.includes("cadence");
     cadLeg.style.display = showCad ? "" : "none";
     if (work) paintWork(g); else paintGrade(g);
+  }
+  paint();
+  new ResizeObserver(() => paint()).observe(el);
+}
+
+// ---- 步頻與衝擊 (workout_review form_cadence; res.cadence_profile): this run's steady 30-s windows, ILR
+// adjusted to the run's median speed and grade with the athlete's own within-run coefficients, against
+// cadence; the personal trend line (solid over the cadences seen, dashed out to +10 %) and the +5–10 %
+// range (Heiderscheit 2011) as a band. One y-scale. Explanations behind the card's 「?」.
+function drawCadenceProfile(card, res) {
+  cpStyle();
+  const D = res.cadence_profile, F = D.fit, pts = D.points || [];
+  const wrap = cpFrame(card, res, "");
+  if (D.weak || !pts.length) return;           // weak / no personal trend: the rows say so, no chart
+  const bar = document.createElement("div");
+  bar.className = "cpbar";
+  const leg = document.createElement("div");
+  leg.className = "cpleg";
+  leg.innerHTML = `<span><i class="dot" style="background:var(--cp-line);opacity:.6"></i>這次每 30 秒（換算到同速度、同坡度）</span>`
+    + `<span><i class="ln" style="border-color:var(--cp-ink2)"></i>你的趨勢（推估）</span>`
+    + `<span><i style="background:var(--cp-base)"></i>建議 +5–10%（Heiderscheit 2011）</span>`;
+  bar.appendChild(leg);
+  const cap = document.createElement("p");
+  cap.className = "cpcap";
+  cap.innerHTML = `<b>ILR</b>（BW/s，同速度 ${cpN(D.speed_ref, 1)} km/h）· 橫軸 = 步頻 spm`;
+  const el = document.createElement("div");
+  el.className = "plot cpcad";
+  el.style.flex = "none";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", "步頻與衝擊：這次每 30 秒的 ILR 對步頻，和你自己的趨勢線");
+  wrap.append(bar, cap, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  function paint() {
+    const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
+    el.style.height = el.style.minHeight = `${narrow ? 240 : 280}px`;
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const cmin = Math.min(...xs), cmax = Math.max(...xs);
+    const [cx, cy] = D.center, line = (x) => cy + F.b_cad * (x - cx);
+    const xEnd = Math.max(cmax, D.suggest[1]);
+    const xn = cpNice(Math.min(cmin, D.median_cad) - 2, xEnd + 2, narrow ? 4 : 6);
+    const yv = [...ys, line(xEnd), line(cmin)];
+    const yl = pctl(yv, 0.01), yh = pctl(yv, 0.99), pad = (yh - yl || 1) * 0.12;
+    const yn = cpNice(yl - pad, yh + pad, 4);
+    const muted = css("--muted"), lineC = css("--line"), ink2 = css("--cp-ink2");
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => {
+        if (p.seriesId !== "me") return "";
+        const q = pts[p.dataIndex];
+        return cpTipBox(`步頻 <b>${cpN(q[0])}</b> spm<br>ILR <b>${cpN(q[2], 1)}</b> BW/s（${cpN(q[3], 1)} km/h、坡度 ${cpN(q[4], 1)}%）`
+          + `<br>換算到 ${cpN(D.speed_ref, 1)} km/h、坡度 ${cpN(D.grade_ref, 1)}%：<b>${cpN(q[1], 1)}</b>（推估）`);
+      } },
+      grid: [{ left: 48, right: narrow ? 14 : 24, top: 14, bottom: 30 }],
+      xAxis: [{ type: "value", min: xn.min, max: xn.max, interval: xn.interval, axisLine: { lineStyle: { color: lineC } },
+        axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => cpN(v) }, splitLine: { show: false } }],
+      yAxis: [{ type: "value", min: yn.min, max: yn.max, interval: yn.interval, axisLine: { show: false },
+        axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => cpN(v, yn.interval >= 1 ? 0 : 1) }, splitLine: { lineStyle: { color: lineC } } }],
+      series: [
+        { id: "sug", type: "line", silent: true, data: [], markArea: { silent: true, itemStyle: { color: css("--cp-base"), opacity: 0.7 },
+            label: { show: true, position: "insideTop", color: muted, fontSize: 10.5, formatter: "+5–10%" },
+            data: [[{ xAxis: D.suggest[0] }, { xAxis: D.suggest[1] }]] },
+          markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: [2, 3], width: 1 },
+            label: { color: muted, fontSize: 10, formatter: `這次中位 ${cpN(D.median_cad)}`, position: "insideEndTop" },
+            data: [{ xAxis: D.median_cad }] } },
+        { id: "me", type: "scatter", z: 3, symbolSize: 7, data: pts.map((p) => [p[0], p[1]]),
+          itemStyle: { color: css("--cp-line"), opacity: 0.6, borderColor: css("--panel"), borderWidth: 1 } },
+        { id: "trend", type: "line", silent: true, z: 4, symbol: "none", lineStyle: { color: ink2, width: 2 },
+          data: [[cmin, line(cmin)], [cmax, line(cmax)]] },
+        { id: "extra", type: "line", silent: true, z: 4, symbol: "none", lineStyle: { color: ink2, width: 2, type: [5, 4] },
+          data: cmax < xEnd ? [[cmax, line(cmax)], [xEnd, line(xEnd)]] : [] },
+      ],
+    }, { replaceMerge: ["series"] });
   }
   paint();
   new ResizeObserver(() => paint()).observe(el);

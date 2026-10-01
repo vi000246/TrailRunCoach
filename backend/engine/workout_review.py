@@ -77,7 +77,8 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # `grade_bins` per workout (the 坡度分組 baseline)
 # v14: two branches — the interval library's reps, and `form_bins` (跑姿分組: form metrics per grade bin and
 # per 10 % of the work done); v15 = both merged, plus form_bins' `impact_km` (每公里衝擊量, impact_per_km)
-CACHE_KEY = "workout_review_v15"
+# v16: `cad_windows` (steady 30-s ILR / cadence / speed / grade windows, the 步頻與衝擊 card)
+CACHE_KEY = "workout_review_v16"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -175,7 +176,7 @@ EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test",
                   "interval_verdict", "interval_reps", "interval_power", "interval_battery", "interval_tiz",
                   "interval_hr",
                   # 跑姿依坡度／隨疲勞 (form_bins)
-                  "form_grades", "form_work")
+                  "form_grades", "form_work", "form_cadence")
 SUGGESTED = {"easy": 1, "long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
 
 
@@ -1175,6 +1176,90 @@ def form_bins(t, speed, chans: dict, cadence=None, power=None, grade=None,
     return {"split": split, "grade": rows, "work": work}
 
 
+# 步頻與衝擊 (docs/research/impact-cadence.md): steady 30-s windows for ILR ~ cadence at matched speed / grade
+CW_WIN_S = 30                 # 推估: window length (long enough to average ~80 steps, short enough to be steady)
+CW_SPEED_CV = 0.08            # 推估: steady = speed CV inside the window < 8 %
+CW_GRADE_RANGE = 4.0          # 推估: and grade range < 4 pp
+CW_MIN_RUNS = 5               # personal trend needs ≥ 5 past runs with ≥ 10 windows each
+CW_MIN_WIN = 10
+
+
+def cadence_windows(t, speed, cadence, ilr, grade=None, impact_g=None) -> list[list]:
+    """[[ILR, cadence spm, speed km/h, grade %, impact G or None], …] — one row per steady 30-s window
+    of running (form_drift's running steps: moving, ≥ 130 spm). `cadence` in strides/min (the FIT
+    channel), `grade` a fraction. [] without ILR or cadence."""
+    if ilr is None or cadence is None or speed is None or not _has(ilr) or not _has(cadence):
+        return []
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    d = _dt(t)
+    mov, _, _ = _run_work(t, speed, cadence, None)
+    il, cad, sp = _arr(ilr, n), _arr(cadence, n) * 2.0, _arr(speed, n)
+    g = _arr(grade, n) * 100.0 if grade is not None else np.zeros(n)     # no altitude (treadmill): flat
+    ig = _arr(impact_g, n) if impact_g is not None else np.full(n, np.nan)
+    ok = mov & np.isfinite(il) & (il > 0) & np.isfinite(cad) & np.isfinite(sp) & (sp > STOP_KMH)
+    fin = np.isfinite(t)
+    if not ok.any() or not fin.any():
+        return []
+    k = ((t - t[fin][0]) // CW_WIN_S).astype(int)
+    rows = []
+    for kk in np.unique(k[ok]):
+        m = ok & (k == kk)
+        if d[m].sum() < CW_WIN_S - 5 or m.sum() < 20:
+            continue
+        s = sp[m]
+        if s.std() / s.mean() > CW_SPEED_CV:
+            continue
+        gg = g[m][np.isfinite(g[m])]
+        if len(gg) < 10 or gg.max() - gg.min() > CW_GRADE_RANGE:
+            continue
+        igm = ig[m][np.isfinite(ig[m])]
+        rows.append([round(float(il[m].mean()), 2), round(float(cad[m].mean()), 1), round(float(s.mean()), 2),
+                     round(float(gg.mean()), 1), round(float(igm.mean()), 3) if len(igm) else None])
+    return rows
+
+
+def cadence_fit(runs: list[list[list]]) -> Optional[dict]:
+    """Within-run regression ILR ~ cadence + speed + grade (each run demeaned = a per-run fixed effect),
+    SE clustered by run. `runs` = cadence_windows() of each past run; runs with < CW_MIN_WIN windows are
+    left out. {b_cad, se_cad, b_speed, b_grade, n_runs, n_windows, partial_r, r2}; None with < CW_MIN_RUNS
+    runs. Coefficients per spm, per km/h, per % grade (BW/s)."""
+    Xs, ys, gs = [], [], []
+    for i, rows in enumerate(runs):
+        if len(rows) < CW_MIN_WIN:
+            continue
+        a = np.array([r[:4] for r in rows], dtype=float)
+        X = a[:, 1:4] - a[:, 1:4].mean(axis=0)
+        Xs.append(X); ys.append(a[:, 0] - a[:, 0].mean()); gs.append(np.full(len(a), i))
+    if len(Xs) < CW_MIN_RUNS:
+        return None
+    X, y, g = np.vstack(Xs), np.concatenate(ys), np.concatenate(gs)
+    keep = X.std(axis=0) > 1e-9
+    if not keep[0]:
+        return None
+    X = X[:, keep]
+    XtX = np.linalg.pinv(X.T @ X)
+    b = XtX @ X.T @ y
+    u = y - X @ b
+    meat = np.zeros((X.shape[1], X.shape[1]))
+    for gid in np.unique(g):
+        sg = X[g == gid].T @ u[g == gid]
+        meat += np.outer(sg, sg)
+    G = len(Xs)
+    se = np.sqrt(np.diag(XtX @ meat @ XtX * G / max(1, G - 1)))
+    full = np.zeros(3)
+    full[keep] = b
+    oth = X[:, 1:]
+    if oth.shape[1]:
+        res = lambda v: v - oth @ np.linalg.lstsq(oth, v, rcond=None)[0]
+        pr = float(np.corrcoef(res(y), res(X[:, 0]))[0, 1])
+    else:
+        pr = float(np.corrcoef(y, X[:, 0])[0, 1])
+    tot = float(y @ y)
+    return {"b_cad": float(full[0]), "se_cad": float(se[0]), "b_speed": float(full[1]), "b_grade": float(full[2]),
+            "n_runs": G, "n_windows": int(len(y)), "partial_r": pr, "r2": 1 - float(u @ u) / tot if tot > 0 else None}
+
+
 def form_drift(t, speed, chans: dict, cadence=None, power=None) -> dict:
     """{name: {first, last, change}} over the first half vs the second half of
     the work done (kJ, power·dt) on the running steps; without power, of the
@@ -1534,6 +1619,8 @@ def _measure(ds, w) -> Optional[dict]:
     bchans["impact_km"] = impact_per_km(fchans.get("impact_g"), fchans.get("cadence"), s["speed"])
     out["form_bins"] = (form_bins(t, s["speed"], bchans, s["cadence"], s["power"], rg)
                         if w.sport == "run" else {})
+    out["cad_windows"] = (cadence_windows(t, s["speed"], s["cadence"], s["ilr"], rg, fchans.get("impact_g"))
+                          if w.sport == "run" and stryd else [])
     return out
 
 
@@ -2766,6 +2853,67 @@ def _form_work(ds, w, m, c, base):
                              "note": None if m.get("stryd") else NO_STRYD_NOTE}}
 
 
+CW_SUGGEST = (1.05, 1.10)     # Heiderscheit 2011: +5 % / +10 % step rate (at the same speed)
+
+
+def _cad_pool(ds, w) -> tuple[list[list[list]], int]:
+    """(past runs' cad_windows, weeks): every running category (the within-run slope is about the
+    runner, not the terrain) over the last 26 weeks. Not 8 → 12 → 26 like the usual bands: a slope
+    needs more data than a median — on the user's runs 8-week slopes swing between −0.4 and −0.9 BW/s
+    per +5 spm with CIs near 0 (docs/research/impact-cadence.md §3.3); 26 weeks is 推估."""
+    items = []
+    lo = math.floor(w.day) - 7 * POOL_WEEKS[-1]
+    for p in ds.workouts:
+        if p.idx == w.idx or p.day >= w.day or math.floor(p.day) < lo or p.sport != "run":
+            continue
+        pm = measure(ds, p)
+        cw = (pm or {}).get("cad_windows") or []
+        if len(cw) >= CW_MIN_WIN:
+            items.append((w.day - p.day, cw))
+    _flush(ds)
+    return [cw for _, cw in items], POOL_WEEKS[-1]
+
+
+def _form_cadence(ds, w, m, c, base):
+    if w.sport != "run":
+        return {**base, "empty": "參考：只有跑步才有這一張"}
+    if not m.get("stryd"):
+        return {**base, "empty": "這次沒有 Stryd：ILR（衝擊負荷率）是 Stryd 腳掌感測器算的，手錶沒有，所以不畫步頻與衝擊"}
+    cw = m.get("cad_windows") or []
+    if len(cw) < CW_MIN_WIN:
+        return {**base, "empty": f"這次穩定跑的 30 秒段只有 {len(cw)} 段（< {CW_MIN_WIN}），看不出步頻和衝擊的關係"}
+    pool, weeks = _cad_pool(ds, w)
+    fit = cadence_fit(pool)
+    a = np.array([r[:4] for r in cw], dtype=float)
+    med_cad, v_ref, g_ref = (float(np.median(a[:, i])) for i in (1, 2, 3))
+    if fit is None:
+        return {**base, "series": [_row("步頻與衝擊", f"過去的穩定跑不夠（{len(pool)} 次，要 ≥ {CW_MIN_RUNS} 次、"
+                                                f"每次 ≥ {CW_MIN_WIN} 段），還算不出你自己的趨勢")],
+                "cadence_profile": {"weak": True, "points": []}}
+    lo_ci, hi_ci = (fit["b_cad"] - 1.96 * fit["se_cad"]) * 5, (fit["b_cad"] + 1.96 * fit["se_cad"]) * 5
+    rel = (f"同速度、同坡度下，步頻每 +5 spm，ILR {fit['b_cad'] * 5:+.1f} BW/s（95% CI {lo_ci:+.1f}～{hi_ci:+.1f}；"
+           f"{fit['n_runs']} 次跑步、{fit['n_windows']} 段 30 秒，近 {weeks} 週；推估）")
+    if hi_ci >= 0 or abs(fit["partial_r"]) < 0.1:
+        # weak or not clearly negative: say so, no trend chart (it would mislead)
+        why = "95% CI 碰到 0" if hi_ci >= 0 else f"偏相關只有 {fit['partial_r']:+.2f}（|r| < 0.1）"
+        return {**base, "series": [_row("步頻與衝擊", rel), _row("判讀（參考）", f"關係不明顯（{why}）：在你的資料裡，同速度下"
+                                                                      "步頻高低和衝擊沒有清楚的關係，不畫趨勢線")],
+                "cadence_profile": {"weak": True, "points": [], "fit": fit, "weeks": weeks}}
+    adj = a[:, 0] - fit["b_speed"] * (a[:, 2] - v_ref) - fit["b_grade"] * (a[:, 3] - g_ref)
+    pts = [[round(float(x), 1), round(float(y), 2), r[0], r[2], r[3]] for x, y, r in zip(a[:, 1], adj, cw)]
+    cx, cy = float(a[:, 1].mean()), float(adj.mean())
+    sug = [med_cad * CW_SUGGEST[0], med_cad * CW_SUGGEST[1]]
+    pred5 = fit["b_cad"] * med_cad * 0.05
+    sd = float(np.std(a[:, 1]))
+    rows = [_row("步頻與衝擊", rel),
+            _row("這次", f"中位步頻 {med_cad:.0f} spm；+5–10% = {sug[0]:.0f}–{sug[1]:.0f} spm（Heiderscheit 2011）"),
+            _row("預估（推估）", f"照你的趨勢，步頻 +5% 約讓 ILR {pred5:+.1f} BW/s（{pred5 / cy * 100:+.0f}%）；你這次的步頻"
+                              f"只在 ±{sd:.0f} spm 內變化，+5% 是外推")]
+    return {**base, "series": rows,
+            "cadence_profile": {"points": pts, "fit": fit, "weeks": weeks, "center": [cx, cy],
+                                "speed_ref": v_ref, "grade_ref": g_ref, "median_cad": med_cad, "suggest": sug}}
+
+
 def _apply_action(ev: dict) -> dict:
     """The review card's 「套用這次的 CP」 button (viewer draw(): res.action)."""
     a = ev["apply"]
@@ -2972,4 +3120,4 @@ _SECTIONS = {"summary": _summary, "aerobic": _aerobic, "intervals": _intervals, 
              "interval_battery": _iv_battery, "interval_tiz": _iv_tiz, "interval_hr": _iv_hr,
              "durability": _durability, "form": _form, "grades": _grades, "pacing": _pacing,
              "durability_curve": _durability_curve, "cp_test": _cp,
-             "form_grades": _form_grades, "form_work": _form_work}
+             "form_grades": _form_grades, "form_work": _form_work, "form_cadence": _form_cadence}
