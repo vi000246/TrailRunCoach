@@ -73,7 +73,7 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # v10: adaptive start — drift_of's window starts after the last stop in the first 20 min (`warmup_s`, `start_shift`)
 # v11: drift v2 (docs/research/drift-algorithm.md) — trailing idle cut, return-leg city tail as cool-down, VI /
 # walk / halves-power gate on the window, SE (drift_se / pw_drift_se), ramp-free comparison (`ramps`)
-CACHE_KEY = "workout_review_v11"
+CACHE_KEY = "workout_review_v12"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -1054,10 +1054,14 @@ def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
 RUN_CADENCE = 65.0            # strides/min (130 spm): below that you're walking
 
 
-def form_drift(t, speed, chans: dict, cadence=None) -> dict:
-    """{name: {first, last, change}} over the first ⅓ vs the last ⅓ of the
-    moving time. With `cadence` (strides/min) only running steps count —
-    walking a steep climb would otherwise read as a collapse in stiffness."""
+def form_drift(t, speed, chans: dict, cadence=None, power=None) -> dict:
+    """{name: {first, last, change}} over the first half vs the second half of
+    the work done (kJ, power·dt) on the running steps; without power, of the
+    moving time. Splitting by work (user request, 2026-10-01; 推估) keeps a
+    trail run's long slow climbs from filling one half: each half holds the
+    same effort, not the same minutes. With `cadence` (strides/min) only
+    running steps count — walking a steep climb would otherwise read as a
+    collapse in stiffness. `split` says which basis was used."""
     t = np.asarray(t, dtype=float)
     n = len(t)
     d = _dt(t)
@@ -1065,11 +1069,19 @@ def form_drift(t, speed, chans: dict, cadence=None) -> dict:
     if cadence is not None and _has(cadence):
         c = _arr(cadence, n)
         mov &= np.isfinite(c) & (c >= RUN_CADENCE)
-    cum = np.cumsum(np.where(mov, d, 0.0))
+    w = np.where(mov, d, 0.0)
+    split = "time"
+    if power is not None and _has(power):
+        p = _arr(power, n)
+        ok = mov & np.isfinite(p) & (p > 0)
+        if w[ok].sum() >= 0.9 * w.sum() > 0:          # power on (almost) all running steps
+            w = np.where(ok, p * d, 0.0)
+            split = "work"
+    cum = np.cumsum(w)
     if not len(cum) or cum[-1] <= 0:
         return {}
-    a, b = mov & (cum <= cum[-1] / 3), mov & (cum > cum[-1] * 2 / 3)
-    out = {}
+    a, b = mov & (cum <= cum[-1] / 2), mov & (cum > cum[-1] / 2)
+    out = {"_split": split}
     for name, x in chans.items():
         if x is None or not _has(x):
             continue
@@ -1363,7 +1375,7 @@ def _measure(ds, w) -> Optional[dict]:
     if w.sport == "run" and s["gct"] is not None:
         fchans["kleg"] = _eval(ds, w, "kleg")
         fchans["impact_g"] = _eval(ds, w, "fmax/(metric(weight)*g)")
-    out["form"] = form_drift(t, s["speed"], fchans, s["cadence"]) if w.sport == "run" else {}
+    out["form"] = form_drift(t, s["speed"], fchans, s["cadence"], s["power"]) if w.sport == "run" else {}
     return out
 
 
@@ -2236,7 +2248,8 @@ def _form(ds, w, m, c, base):
         last.append(_num(v["last"], d))
         chg.append(_pct(v.get("change"), 1, sign=True))
         basecol.append(_base_text(b, lambda x: _pct(x, 1, sign=True)))
-    cols = [_col("指標（參考）", names), _col("前 ⅓", first), _col("後 ⅓", last),
+    half = "作功" if f.get("_split") == "work" else "移動時間"
+    cols = [_col("指標（參考）", names), _col(f"前半（{half}）", first), _col(f"後半（{half}）", last),
             _col("變化", chg), _col("同類課表變化基準", basecol)]
     s = _samples(ds, w)
     g = _eval(ds, w, "rgrade")

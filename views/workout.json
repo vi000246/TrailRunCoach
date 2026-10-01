@@ -130,8 +130,8 @@
       "title": "跑姿與膝蓋負荷（參考）",
       "description": "參考用，不是傷害預測：衝擊與剛性在跑步中的漂移、陡下坡佔比、和自己同類課表的基準比。沒有 Stryd 的活動只看步頻、觸地、振幅、kleg、衝擊 G。WKO5 版本：「WKO5 Workout View」→ 爬坡分析「LSS and LIS- Stryd」「LSS飄移率 by坡度」「步頻 vs 垂直比」、訓練效果「Running Dynamics」。",
       "charts": [
-        {"title": "前 ⅓ 對後 ⅓（參考）", "kind": "review", "section": "form",
-         "description": "只算跑步步頻（≥ 130 spm）的時間。基準 = 同類課表 8–12 週的變化 median 與 IQR，少於 5 次不比較。左右平衡：目前沒有這個通道。"},
+        {"title": "前半對後半（依作功切分，參考）", "kind": "review", "section": "form",
+         "description": "依總作功（功率 × 時間，kJ）切成前後兩半：每一半做的功一樣多，越野的長慢坡不會擠在同一半（推估）。沒有功率（或功率缺超過 10%）時改用移動時間切半。只算跑步步頻（≥ 130 spm）的時間。基準 = 同類課表 8–12 週的變化 median 與 IQR，少於 5 次不比較。左右平衡：目前沒有這個通道。"},
         {"title": "衝擊負荷 ILR 對坡度（參考）",
          "kind": "workout",
          "axes": [{"id": "NONE"}],
