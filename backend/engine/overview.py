@@ -578,9 +578,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     from backend.engine import cp_protocols as CPP
     protocol = CPP.norm(getattr(prefs, "cp_test_protocol", None))
     test_s = CPP.session_for(protocol) if test_due else None      # race: nothing scheduled
-    # the AeT drift test: base phase, no (fresh) measured AeT, never the CP-test week
+    # the AeT test: base phase, a reason (quality_gate.aet_test_reason — B3 and the Z5
+    # lifecycle; no fixed cadence), never the CP-test week; its protocol from 課表偏好
     aet_due = test_s is None and (days_to is None or days_to > 10) and AT.due(
-        today, kind, gate.get("base_start"), tx.get("aet_date"), tx.get("aet_last_test"))
+        today, kind, gate.get("base_start"), gate.get("aet_test_reason"), tx.get("aet_last_test"))
+    aet_proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
+                                    getattr(prefs, "cap_weekday", None),
+                                    getattr(prefs, "long_cap", None) if prefs is not None else None)
+    xu_test = aet_due and kind == "base" and aet_proto == "xu90" and mode != "recovery_week"
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 
     def add(**kw):
@@ -594,18 +599,24 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         long_min = min(long_min, 0.5 * minutes_total) if minutes_total >= 120 else long_min
         terrain = (f"挑每公里爬升 ≥ {goal_d * 0.7:.0f} m 的路線" if goal_d else
                    "有山路就走山路，陡坡用走的" if mountain_goal else "平路或緩坡")
-        add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
-            minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
-            detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
-            source=SRC_KOOP if kind == "specific" else SRC_UA,
-            tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
+        if xu_test:
+            # 徐國峰's 90-min test IS the weekend LSD: it replaces this week's long run
+            # (flat, constant E pace); the week's interval stays
+            add(**AT.session(tt, None, None, getattr(prefs, "cap_weekday", None), "xu90", None))
+        else:
+            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
+                minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
+                detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
+                source=SRC_KOOP if kind == "specific" else SRC_UA,
+                tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
         if test_s is not None:
             add(**{**test_s, "detail": test_s["detail"] + "。門檻過期或沒測過：區間、TSS、賽事功率都靠它"})
-        elif aet_due and kind == "base":
-            # AeT drift test in place of this week's interval (engine/aet_test.py); its
-            # length by the 課表偏好 weekday cap: 80′ standard, or UA's 50′ minimum
+        elif aet_due and kind == "base" and not xu_test:
+            # AeT test in place of this week's interval (engine/aet_test.py): the chosen
+            # protocol (UA 60 / 40, Evoke, Friel), or UA 40 as the backup of the 90-min standard
             add(**AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
-                             AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None)))
+                             AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None),
+                             aet_proto, getattr(prefs, "long_cap", None) if prefs is not None else None))
         elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
                 target=tgt.get("supra", ""), detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
@@ -671,8 +682,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             # workout's name; untitled only from 55 min (workout_review.TEST_AET_MIN_S),
             # so the athlete's ordinary 41–52′ road runs are not taken for the test (自組)
             from backend.engine import workout_review as WR
-            w = take(lambda w: category(w) == "road" and moving_s(w) >= AT.WARM_S + AT.MAIN_MIN_S - 2 * 60
-                     and (bool(WR.AET_TITLE.search(WR._title(w))) or moving_s(w) >= WR.TEST_AET_MIN_S))
+            if AT.is_xu(asdict(s)):
+                # 徐國峰's test = any ≥ 88-min flat road run that week (the LSD itself; 2′ slack)
+                w = take(lambda w: category(w) == "road" and moving_s(w) >= AT.XU_MIN * 60 - 2 * 60)
+            else:
+                w = take(lambda w: category(w) == "road" and moving_s(w) >= AT.WARM_S + AT.MAIN_MIN_S - 2 * 60
+                         and (bool(WR.AET_TITLE.search(WR._title(w))) or moving_s(w) >= WR.TEST_AET_MIN_S))
         elif s.kind in ("quality", "test"):
             need = QG.hard_need(s.title, HARD_SESSION_S)       # 5×1′ never reaches 10 min at threshold
             w = take(lambda w: hard.get(w.idx, 0) >= need)
@@ -715,13 +730,23 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # keep one rest day when there is room
         keep_rest = len(avail) > len(main_todo) + 0
     aet_days = AT.test_days(prefs)            # 課表偏好 aet_test_days; Mon–Fri without prefs too
-    for s in sorted(main_todo, key=lambda s: {"long": 0, "test": 1, "quality": 1}.get(s.kind, 2)):
+    for s in sorted(main_todo, key=lambda s: -1 if AT.is_xu(asdict(s)) else
+                    {"long": 0, "test": 1, "quality": 1}.get(s.kind, 2)):
         if not avail:
             break
         if s.kind == "long":
             pick = next((d for d in avail if d.weekday() == long_wd), avail[-1])
+        elif s.kind == "test" and AT.is_xu(asdict(s)):
+            d = AT.pick_day_xu(avail, long_wd, getattr(prefs, "cap_weekday", None))
+            if d is None:
+                notes.append({"level": "info", "text": "徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測"})
+                continue
+            put(s, d)
+            avail.remove(d)
+            continue
         elif s.kind == "test" and aet_days is not None and AT.is_aet_session(asdict(s)):
-            long_day = next((dt.date.fromisoformat(x.day) for x in sessions if x.kind == "long" and x.day), None)
+            long_day = next((dt.date.fromisoformat(x.day) for x in sessions
+                             if (x.kind == "long" or AT.is_xu(asdict(x))) and x.day), None)
             hard_days = [dt.date.fromisoformat(x.day) for x in sessions
                          if x.kind in ("quality", "test") and x.day and x is not s]
             r = AT.pick_day(avail, long_day, hard_days, aet_days, weekend_ok=not AT.is_short(asdict(s)))
@@ -732,7 +757,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             avail.remove(r["day"])
             continue
         elif s.kind in ("quality", "test"):
-            long_day = next((dt.date.fromisoformat(x.day) for x in sessions if x.kind == "long" and x.day), None)
+            long_day = next((dt.date.fromisoformat(x.day) for x in sessions
+                             if (x.kind == "long" or AT.is_xu(asdict(x))) and x.day), None)
             cands = [d for d in avail if long_day is None or abs((d - long_day).days) >= 2]
             if not cands and lost and any(abs((d - long_day).days) <= 1 for d in avail):
                 continue          # 不排課日期 left no room: drop it rather than stack two hard days

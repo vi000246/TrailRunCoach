@@ -87,6 +87,8 @@ DEFAULTS: dict[str, Any] = {
     # AeT 飄移測試 (engine/aet_test.py, 50 min): weekday = Mon–Fri only (the athlete
     # trail-runs on weekends) | any = the interval days (Tue first)
     "plan.prefs.aet_test_days": "weekday",
+    # AeT 測試方式 (engine/aet_test.py PROTOCOLS): auto = 徐國峰 90 分 (backup UA 40) | xu90 | ua60 | ua40 | evoke60 | friel
+    "plan.prefs.aet_test_protocol": "auto",
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
@@ -115,8 +117,9 @@ PREF_ENUMS = {
     "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
     "plan.prefs.heat": ("auto", "off"),
     "plan.prefs.heat_method": ("run", "overdress", "bath", "sauna", "mixed"),
-    "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"),
+    "plan.prefs.quality_gate": ("auto", "ua_gap", "friel_drift", "xu_drift", "xu_signals", "plateau", "weeks", "none"),
     "plan.prefs.aet_test_days": ("weekday", "any"),
+    "plan.prefs.aet_test_protocol": ("auto", "xu90", "ua60", "ua40", "evoke60", "friel"),
 }
 PREF_INTS = {                                 # key -> (lo, hi); None always allowed
     "plan.prefs.cap_weekday": (20, 300),

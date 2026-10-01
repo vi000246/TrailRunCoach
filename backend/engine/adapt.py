@@ -72,7 +72,7 @@ FATIGUE_CUT = 0.80         # 自組: easy minutes × 0.8
 RED_STREAK = 2             # 自組: two red sessions in a row
 
 SRC_SEILER = "Seiler：easy days easy；不補課屬自組"
-SRC_SPACING = "plan_prefs.place() 48 小時間隔"
+SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練"
 SRC_OVER = ("workout_review 平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
             "TrainingPeaks ±20%；組合方式推估（unsourced-rules.md B5）")
 SRC_FATIGUE = "Friel CTL ramp ≥ 8（5–8 上限）；TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估"
@@ -201,7 +201,7 @@ def _r5(x: float) -> int:
 
 def _dose_index(title: str) -> Optional[int]:
     from backend.engine import quality_gate as QG
-    for i, s in enumerate(QG.DOSE):
+    for i, s in enumerate(QG.LADDER):
         if s[1] == title:
             return i
     return None
@@ -212,7 +212,7 @@ def _downgrade(g: dict, th: dict) -> str:
     from backend.engine import quality_gate as QG
     i = _dose_index(g.get("title") or "") if g.get("kind") == "quality" else None
     if i is not None and i > 0:
-        s = QG.session(QG.DOSE[i - 1], th or {})
+        s = QG.session(QG.LADDER[i - 1], th or {})
         g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")})
         return s["title"]
     rate = 50.0 / 60.0

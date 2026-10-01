@@ -102,7 +102,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   allow_quality: bool, strength_tss: float, aet: Optional[float],
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
                   notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
-                  aet_test_days: Optional[str] = None) -> list[dict]:
+                  aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `base_quality`: the base-phase session the gate picked for this week
     (engine/quality_gate.py dose step, the recovery-week fartlek, or the AeT
@@ -121,11 +121,14 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     if kind in ("base", "specific") and mode != "recovery_week":
         long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
         long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
-        add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain else ""),
-            minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
-            detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
-            + f"；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
-            source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
+        if xu_test and kind == "base":
+            add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
+        else:
+            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain else ""),
+                minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
+                detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
+                + f"；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
+                source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
         if allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60, target=tgt.get("supra", ""),
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
@@ -189,9 +192,17 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
     free = [d for d in days if d.isoformat() not in blocked]
     main = [s for s in ss if s["kind"] != "strength"]
     long_day = None
-    for s in sorted(main, key=lambda s: {"long": 0, "quality": 1, "test": 1}.get(s["kind"], 2)):
+    for s in sorted(main, key=lambda s: -1 if AT.is_xu(s) else {"long": 0, "quality": 1, "test": 1}.get(s["kind"], 2)):
         if not free:
             break
+        if s["kind"] == "test" and AT.is_xu(s):
+            pick = AT.pick_day_xu(free, long_wd)
+            if pick is None:
+                continue
+            s["day"] = pick.isoformat()
+            free.remove(pick)
+            long_day = pick
+            continue
         if s["kind"] == "long":
             pick = days[long_wd] if days[long_wd] in free else free[-1]
             long_day = pick
@@ -326,13 +337,20 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 why = why + [f"不排課 {BL.range_text(lost)}：少 {len(lost)} 個可練日，週量 × {f:.0%}"]
                 notes.append(BL.week_note(bmap, lost, lost_h))
         dec = allow_quality(kind, gate, week, step, mode)
-        base_q = None
-        if kind == "base" and mode != "recovery_week" and \
-                AT.due(week, kind, gate.get("base_start"), (gate.get("aet") or {}).get("date"), last_aet):
-            base_q = AT.session(th, AT.start_hr(None, th.get("lthr")), AT.start_power(th.get("cp")),
-                                getattr(prefs, "cap_weekday", None))     # 80′, or 50′ under a weekday cap
+        base_q, xu_q = None, None
+        proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
+                                    getattr(prefs, "cap_weekday", None), getattr(prefs, "long_cap", None))
+        due = kind == "base" and mode != "recovery_week" and \
+            AT.due(week, kind, gate.get("base_start"), gate.get("aet_test_reason"), last_aet)
+        if due and proto == "xu90":
+            # 徐國峰's 90-min test replaces that week's long run; the interval stays
+            xu_q = AT.session(th, None, None, getattr(prefs, "cap_weekday", None), "xu90")
             last_aet = week.isoformat()          # suggested, not done: keeps the next one ≥ 4 weeks away
-        elif kind == "base" and dec["allow"] and dec["spec"] is not None:
+        elif due:
+            base_q = AT.session(th, AT.start_hr(None, th.get("lthr")), AT.start_power(th.get("cp")),
+                                getattr(prefs, "cap_weekday", None), proto, getattr(prefs, "long_cap", None))
+            last_aet = week.isoformat()
+        if base_q is None and kind == "base" and dec["allow"] and dec["spec"] is not None:
             base_q = O._gate_session(gate, dec, th, hours)
             if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB):
                 step += 1
@@ -340,7 +358,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
-                           aet_test_days=getattr(prefs, "aet_test_days", None))
+                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q)
         heat_w = None
         if events is not None:
             try:
