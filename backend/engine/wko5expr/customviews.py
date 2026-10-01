@@ -76,8 +76,9 @@ def _chart(raw: dict, where: str) -> dict:
     if "title" not in raw:
         raise CustomViewError(f"{where}: chart needs a title")
     kind = raw.get("kind", "athlete")
-    if kind not in ("athlete", "workout", "zones", "targets", "review"):
-        raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets' or 'review'")
+    # z5gate: the Zone 5 opening process over the season (quality_gate.z5_history)
+    if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate"):
+        raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets', 'review' or 'z5gate'")
     out = {
         "title": raw["title"],
         "description": raw.get("description"),
