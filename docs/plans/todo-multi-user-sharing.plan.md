@@ -478,6 +478,13 @@ COROS OAuth 可以當 (b) 的帳號身分嗎？
 
 ### 9.2 Garmin
 
+> **2026-10-01 更新**：完整研究見 `docs/research/garmin.md`，hub 替代方案見 `docs/research/data-hubs.md`。本節有三點要更正：
+> - Developer Program 從 2026 春起**暫停受理新申請**。
+> - Health API 的「commercial use requires a license fee」只標在 Beat-To-Beat Interval 這一項。
+> - `garminconnect` 0.3.x（2026-04 起）已不依賴 garth，也恢復登入。
+>
+> 另外，intervals.icu 可以當 Garmin＋COROS 的官方中繼，含原始 FIT 與課表推送。
+
 官方：**Garmin Connect Developer Program**。
 
 - 可用的 API：
