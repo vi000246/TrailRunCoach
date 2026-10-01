@@ -40,9 +40,10 @@ CR0 = minetti.FLAT_RUN          # 3.6 J/kg/m, Minetti 2002 polynomial constant (
 STAND_W_PER_KG = 1.5            # Pandolf's standing term 1.5·W
 L_TRAIL = 2.0                   # vest on a trail run (kg), baiyue-from-running.md §2.2 (定義, adjustable)
 # pack defaults for a trip without a recorded pack. User decision 2026-09-30:
-# 9 kg for a multi-day 百岳 trip; single-day stays the doc's 6 kg. Labelled 預設背負.
+# 9 kg for a multi-day 百岳 trip; user decision 2026-10-01: single-day is 9 kg too
+# (replaces the doc's 6 kg). Labelled 預設背負.
 PACK_DEFAULT_MULTI = 9.0
-PACK_DEFAULT_SINGLE = 6.0
+PACK_DEFAULT_SINGLE = 9.0
 PACK_DAILY_DROP = 0.7           # food eaten per day (自組, baiyue-from-running.md §3.2, user kept it)
 TRIP_DAYS_DEFAULT = 3           # user decision 2026-09-30
 TRIP_KIND_DEFAULT = "group"     # 跟團 (user decision 2026-09-30)

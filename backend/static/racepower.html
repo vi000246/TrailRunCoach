@@ -1152,7 +1152,7 @@ function renderHikeMeta() {
   let t = `<div class="note">跟團的速度不代表你的能力：百岳時間改用<b>你的步行能力模型</b>（越野跑走路窗 + 百岳心率 ≥ AeT 的爬升窗）。
     「看起來是自己走」是自動判斷的<b>建議</b>（自組規則：自己走的段 ≥ 60 %、被限制的段 ≤ 15 %），要你按「確認」才會寫進自己走的清單。
     ${esc(v.rule || "")}：目前手動標記 自己走 ${v.n_solo ?? 0} 天、跟團 ${v.n_group ?? 0} 天${v.agreement != null ? `，符合率 ${pct(v.agreement)}` : ""}，${v.validated ? "已可自動套用" : "還只是建議"}。
-    背負填了才準；沒填用預設（多日 9 kg、單日 6 kg）。</div>`;
+    背負填了才準；沒填用預設 9 kg。</div>`;
   t += `<div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">移動</th><th class="n">EP/h</th><th>背負 kg</th><th>建議</th><th>目前</th></tr></thead><tbody>` +
     rows.map((d) => { const sg = d.suggest || {};
       const sug = sg.suggest ? `${sg.suggest === "solo" ? "看起來是自己走" : "看起來是跟團"}（${pct(sg.own_share)}）` : '<span class="faint">–</span>';
