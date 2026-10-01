@@ -176,17 +176,19 @@ def test_friel_pace_without_enough_runs_says_why(tmp_path):
 
 # ---- item 1: trail rows of 課表建議強度 -----------------------------------------------
 
-def test_trail_targets_are_power_first(tmp_path):
+def test_trail_rows_hr_first_hills_power_first(tmp_path):
+    # 2026-10-01: trail long days by HR, hill repeats by power, long climbs are
+    # suggestions only, downhill practice by feel (docs/research/vo2max-gate-and-trail-metric.md)
     from backend.engine.zones import training_targets
     plan = Plan(thresholds=[Threshold(date="2026-09-01", cp=200.0, lthr=160.0)])
     ds = _ds(tmp_path, [dict(start=datetime(2026, 9, 5, 0, tzinfo=UTC), seconds=1200)], plan)
     tt = training_targets(ds, int(date_to_day(TODAY)))
     rows = {r["id"]: r for r in tt["rows"]}
-    for tid in ("trail", "hill"):
-        assert rows[tid]["primary"] == "功率"
-        assert all(v is not None for v in rows[tid]["power"])
-    assert rows["trail"]["power"] == [pytest.approx(150), pytest.approx(176)]
-    assert rows["trail"]["hr"][1] is not None                     # HR stays as the second number
+    assert rows["trail"]["primary"] == "心率" and rows["trail"]["hr"][1] is not None
+    assert rows["trail"]["power"] == [pytest.approx(150), pytest.approx(176)]   # power kept as a reference
+    assert rows["hill"]["primary"] == "功率" and all(v is not None for v in rows["hill"]["power"])
+    assert rows["climb"]["primary"] == "建議" and "推估" in rows["climb"]["source"]
+    assert rows["downhill"]["primary"] == "體感" and rows["downhill"]["power"] == [None, None]
     assert "推估" in rows["hill"]["source"]
     assert "下坡" in tt["terrain_note"] and tt["cp_source"] == "你的測試 2026-09-01"
 
