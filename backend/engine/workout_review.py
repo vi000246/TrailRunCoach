@@ -75,7 +75,7 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # walk / halves-power gate on the window, SE (drift_se / pw_drift_se), ramp-free comparison (`ramps`)
 # v13: climbs carry start/end km, elevations, avg power, moving pace and GAP (the 爬坡段 profile);
 # `grade_bins` per workout (the 坡度分組 baseline)
-CACHE_KEY = "workout_review_v13"
+CACHE_KEY = "workout_review_v14"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
