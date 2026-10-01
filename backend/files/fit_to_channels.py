@@ -109,6 +109,7 @@ class FitChannels:
     elapsedtime: list[float]
     channels: dict[str, list[Optional[float]]]
     one_second: bool = False
+    sub_sport: Optional[str] = None     # session sub_sport (trail / treadmill / ...), when the device writes one
 
 
 def _read_messages(raw: bytes):
@@ -351,4 +352,5 @@ def channels_from_messages(records: list[dict], sessions: list[dict],
 
     return FitChannels(start_time=records[0].get("timestamp") if records else None,
                        sport=session.get("sport"), elapsedtime=times,
-                       channels=channels, one_second=one_second)
+                       channels=channels, one_second=one_second,
+                       sub_sport=None if session.get("sub_sport") is None else str(session.get("sub_sport")))

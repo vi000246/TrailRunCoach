@@ -58,11 +58,106 @@ SPORTS = {
 }
 
 
-def sport_of(sport: Optional[str], sub_sport: Optional[str]) -> tuple[str, str]:
+def sport_of(sport: Optional[str], sub_sport: Optional[str],
+             classification: Optional[str] = None) -> tuple[str, str]:
+    """(sport group, sport type). `classification` = the app DB's
+    workout_files.trail_classification of the file (incl. a user override):
+    "trail" / "road" decide a run's terrain; None / "unknown" fall back to the
+    FIT sub_sport (COROS FITs carry no trail sub_sport, so without the DB value
+    every COROS trail run was a road run). A treadmill / indoor run stays
+    indoor when the DB says "road" (the climb-rate rule cannot tell indoor)."""
     sub = str(sub_sport or "").lower()
-    if str(sport or "").lower() == "running" and sub in ("trail", "treadmill", "track"):
+    sp = str(sport or "").lower()
+    if sp == "running" and classification == "trail":
+        return SPORTS["trail"]
+    if sp == "running" and classification == "road":
+        return SPORTS["treadmill"] if sub == "treadmill" else SPORTS["running"]
+    if sp == "running" and sub in ("trail", "treadmill", "track"):
         return SPORTS[sub]
-    return SPORTS.get(str(sport or "").lower(), ("other", str(sport or "other").lower()))
+    return SPORTS.get(sp, ("other", str(sport or "other").lower()))
+
+
+# ---------------------------------------------------------------------------
+# the app DB (read-only): classification, duplicates, athlete_settings
+# ---------------------------------------------------------------------------
+
+def _app_db() -> Optional[Path]:
+    """The app DB (datasource._db_path; tests patch it to None)."""
+    from backend.engine.wko5expr import datasource
+    p = datasource._db_path()
+    return p if p is not None and Path(p).exists() else None
+
+
+def _ro(db: Path):
+    import sqlite3
+    return sqlite3.connect(f"file:{Path(db).as_posix()}?mode=ro", uri=True)
+
+
+def _norm(p) -> str:
+    import os
+    return os.path.normcase(os.path.abspath(str(p)))
+
+
+def load_classifications(db: Optional[Path] = None) -> dict:
+    """{normalised file path: row} of every workout_files row, row = {id,
+    trail_classification, classification_overridden, duplicate_of}, plus
+    "_by_id" and "_by_name" indexes. {} when the DB / table is missing.
+    Read-only (the sync may be writing)."""
+    import sqlite3
+    db = _app_db() if db is None else db
+    if db is None:
+        return {}
+    try:
+        con = _ro(db)
+        try:
+            cur = con.execute("SELECT id, file_path, trail_classification, classification_overridden, "
+                              "duplicate_of FROM workout_files")
+            raw = cur.fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return {}
+    out: dict = {"_by_id": {}, "_by_name": {}, "_dups": {}}
+    for i, fp, tc, ov, dup in raw:
+        r = {"id": i, "file_path": fp, "trail_classification": tc, "classification_overridden": bool(ov),
+             "duplicate_of": dup}
+        out["_by_id"][i] = r
+        if fp:
+            out[_norm(fp)] = r
+            out["_by_name"].setdefault(Path(str(fp).replace("\\", "/")).name, []).append(r)
+        if dup:
+            out["_dups"].setdefault(dup, []).append(r)
+    return out
+
+
+def classification_for(path, rows: dict) -> Optional[str]:
+    """The trail / road classification of one FIT file from the app DB.
+    Cross-source duplicates (dedup.py: the same activity from COROS and TP,
+    `duplicate_of` -> the canonical row) are one activity, so the group shares
+    one classification: a user override on any row of the group wins (this
+    file's row first, then the canonical row, then the other duplicates);
+    otherwise this row's own auto value, else the canonical row's. None when
+    the file has no row or every value is "unknown"."""
+    if not rows:
+        return None
+    r = rows.get(_norm(path))
+    if r is None:
+        cand = rows["_by_name"].get(Path(str(path)).name) or []
+        r = cand[0] if len(cand) == 1 else None
+    if r is None:
+        return None
+    canon_id = r["duplicate_of"] or r["id"]
+    canon = rows["_by_id"].get(canon_id)
+    group = [r] + ([canon] if canon is not None and canon is not r else []) + \
+        [x for x in rows["_dups"].get(canon_id, []) if x is not r]
+    ok = ("trail", "road")
+    for x in group:
+        if x["classification_overridden"] and x["trail_classification"] in ok:
+            return x["trail_classification"]
+    for x in (r, canon):
+        if x is not None and x["trail_classification"] in ok:
+            return x["trail_classification"]
+    return None
 
 
 def _arr(vals) -> np.ndarray:
@@ -151,7 +246,7 @@ class FitFolderDataset(Dataset):
     def __init__(self, fit_dir: str | Path, settings_dir: Optional[str | Path] = None,
                  today: Optional[dt.date] = None, config: Optional[EngineConfig] = None,
                  corrections: Optional[CorrectionStore] = None, source: str = "fit",
-                 tz: Optional[dt.tzinfo] = None):
+                 tz: Optional[dt.tzinfo] = None, classifications: Optional[dict] = None):
         from backend.engine.planning import Plan
         from backend.engine.wko5expr.datasource import athlete_tz
         from backend.files.fit_to_channels import fit_to_channels
@@ -194,11 +289,14 @@ class FitFolderDataset(Dataset):
             start = start.astimezone(self.tz).replace(tzinfo=None)
             entries.append((start, p, fc))
         entries.sort(key=lambda x: x[0])
+        # trail / road from the app DB (workout_files.trail_classification,
+        # user overrides included), the FIT sub_sport only as a fallback
+        self._classes = load_classifications() if classifications is None else classifications
         for start, p, fc in entries:
-            sport_raw, sub = (fc.sport or "", None)
+            sport_raw, sub = (fc.sport or "", getattr(fc, "sub_sport", None))
             if isinstance(sport_raw, str) and "/" in sport_raw:
                 sport_raw, sub = sport_raw.split("/", 1)
-            group, stype = sport_of(sport_raw, sub)
+            group, stype = sport_of(sport_raw, sub, classification_for(p, self._classes))
             rel = p.relative_to(self.dir).as_posix()
             idx = len(self.workouts)
             chans = {"elapsedtime": Channel("elapsedtime", list(fc.elapsedtime), 1.0, base=0.0)}
@@ -209,7 +307,11 @@ class FitFolderDataset(Dataset):
                                         channels=chans, ranges=[], info=None)
             entry = WorkoutEntry(file=rel, sport=stype.title(), sport_group=group.title(), start=start,
                                  ftp=None, metrics={}, record=None)
-            w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=[])
+            # WKO5 marks trail runs with the "runningtrail" tag; several
+            # engine paths (thresholds, quality gate, status, achievements)
+            # read only the tag, so a FIT trail run carries it too
+            tags = ["runningtrail"] if stype == "trail running" else []
+            w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags)
             self.workouts.append(w)
             t = _arr(fc.elapsedtime)
             ch = {k: _arr(v) for k, v in fc.channels.items()}
