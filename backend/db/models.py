@@ -180,6 +180,18 @@ class PlanSession(Base):
     # CP-test protocol of a kind "test" session (engine/cp_protocols.py:
     # quick / standard / race); None = legacy row (read from the title)
     protocol: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    # the interval library (engine/interval_library.py; interval-prescription.md §C5.4): the
+    # variant, the ladder step it serves, whether it counts for progression (equiv), who
+    # chose it (auto / user / cap) and why; fewer reps, the warm-up level, the state
+    # machine's tweak (JSON). None = not a library session (legacy rows: the title).
+    variant_key: Mapped[Optional[str]] = mapped_column(String(12), nullable=True)
+    rung_key: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    equiv: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    swap: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    swap_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    variant_reps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    variant_blocks: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    variant_adj: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

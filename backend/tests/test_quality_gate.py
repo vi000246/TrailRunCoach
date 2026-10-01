@@ -397,7 +397,25 @@ def _b(*ps, at60=None):
     return [{"power": p, "hr_at60": at60} for p in ps]
 
 
-@pytest.mark.xfail(strict=True, reason="bug (a) reproduced: dose_step judges titles — fixed in S3")
+def test_variant_fields_are_stored_and_regenerated():
+    from backend.db.models import PlanSession
+    from backend.engine import plan_store as PS
+    from backend.engine import reconcile as R
+    g = {"id": "quality", "kind": "quality", "title": "閾值 3×8 分", "minutes": 45, "day": "2026-10-07",
+         "variant_key": "t2a", "rung_key": "z3b", "equiv": True, "swap": "cap", "swap_reason": "平日上限 45 分 → 標準版",
+         "variant_reps": None, "variant_blocks": "std", "variant_adj": {"rest_add": 1}}
+    s = R.session_from_gen(g, "2026-10-05", False, "u1")
+    assert {k: s[k] for k in ("variant_key", "rung_key", "equiv", "swap", "variant_blocks", "variant_adj")} == \
+        {"variant_key": "t2a", "rung_key": "z3b", "equiv": True, "swap": "cap", "variant_blocks": "std",
+         "variant_adj": {"rest_add": 1}}
+    r = PlanSession(athlete_id=1, uid="u1")
+    PS._fill(r, s)
+    back = PS.to_dict(r)
+    assert back["variant_key"] == "t2a" and back["variant_adj"] == {"rest_add": 1} and back["equiv"] is True
+    p = PS.push_dict(back)
+    assert p["variant_key"] == "t2a" and p["variant_blocks"] == "std"
+
+
 def test_bug_a_a_shortened_session_still_moves_the_ladder():
     # bug (a), interval-prescription.md §A5.2-1: under a 45/50-min weekday cap the old
     # trim_quality turned 4×8′ into 「閾值 3×8 分」; dose_step matched the *title* to the first

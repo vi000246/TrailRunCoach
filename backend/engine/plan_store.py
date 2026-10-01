@@ -54,21 +54,34 @@ def to_dict(r: PlanSession) -> dict:
             done_by = json.loads(r.done_by)
         except ValueError:
             done_by = None
+    adj = None
+    if getattr(r, "variant_adj", None):
+        try:
+            adj = json.loads(r.variant_adj)
+        except ValueError:
+            adj = None
     return {"uid": r.uid, "week_start": r.week_start, "gen_key": r.gen_key, "day": r.day, "kind": r.kind,
             "title": r.title, "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
             "source": r.source or "", "tss": r.tss or 0.0, "origin": r.origin, "edited": bool(r.edited),
             "provisional": bool(r.provisional), "state": r.state, "done_by": done_by, "note": r.note,
             "terrain": r.terrain, "distance_km": r.distance_km, "climb_m": r.climb_m,
-            "protocol": r.protocol}
+            "protocol": r.protocol,
+            "variant_key": r.variant_key, "rung_key": r.rung_key,
+            "equiv": None if r.equiv is None else bool(r.equiv), "swap": r.swap, "swap_reason": r.swap_reason,
+            "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj}
+
+
+VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks")
 
 
 def _fill(r: PlanSession, d: dict) -> None:
     for k in ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
               "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
-              "protocol"):
+              "protocol") + VARIANT_FIELDS:
         setattr(r, k, d.get(k))
     r.minutes = int(d.get("minutes") or 0)
     r.done_by = json.dumps(d["done_by"], ensure_ascii=False) if d.get("done_by") else None
+    r.variant_adj = json.dumps(d["variant_adj"]) if d.get("variant_adj") else None
     r.updated_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
 
 
@@ -354,7 +367,10 @@ def push_dict(s: dict) -> dict:
     return {"id": s["uid"], "key": s["uid"], "week_start": s["week_start"], "kind": s["kind"],
             "title": s["title"], "minutes": s["minutes"], "target": s.get("target") or "",
             "detail": s.get("detail") or "", "source": s.get("source") or "", "day": s.get("day"),
-            "done": s["state"] == "done", "protocol": s.get("protocol")}
+            "done": s["state"] == "done", "protocol": s.get("protocol"),
+            # a library variant is pushed from its own steps (coros_workouts._variant_steps)
+            **{k: s.get(k) for k in ("variant_key", "variant_reps", "variant_blocks", "variant_adj")
+               if s.get(k) is not None}}
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +383,8 @@ _TEST_CACHE: dict = {}
 _TITLE_CACHE: dict = {}
 _VARIANT_CACHE: dict = {}
 # the interval-library columns (engine/interval_library.py; interval-prescription.md §C5.4)
-VARIANT_COLS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks")
+VARIANT_COLS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
+                "variant_adj")
 
 
 def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
@@ -405,6 +422,11 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
                         d["done_by"] = None
                     if "equiv" in d and d["equiv"] is not None:
                         d["equiv"] = bool(d["equiv"])
+                    if d.get("variant_adj"):
+                        try:
+                            d["variant_adj"] = json.loads(d["variant_adj"])
+                        except (TypeError, ValueError):
+                            d["variant_adj"] = None
                     out.append(d)
         finally:
             con.close()
