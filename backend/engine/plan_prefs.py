@@ -66,6 +66,7 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.terrain_long": "terrain_long",
     "plan.prefs.terrain_quality": "terrain_quality",
     "plan.prefs.interval_target": "interval_target",
+    "plan.prefs.target_basis": "target_basis",
     "plan.prefs.cp_test_protocol": "cp_test_protocol",
     "plan.prefs.heat": "heat",
     "plan.prefs.heat_method": "heat_method",
@@ -75,6 +76,8 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.aet_test_protocol": "aet_test_protocol",
     "plan.prefs.warmup_commute_min": "warmup_commute_min",
     "plan.prefs.cooldown_min": "cooldown_min",
+    "plan.prefs.pref_days": "pref_days",
+    "plan.prefs.pref_keep": "pref_keep",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
@@ -87,7 +90,11 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # (engine/interval_library.py blocks) — read for every interval session, not shaping
 NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
                "warmup_commute_min", "cooldown_min") + GATE_FIELDS
-LONG_WD = {"sat": 5, "sun": 6}
+WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+WD_ZH = "一二三四五六日"
+LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
+PREF_KINDS = ("quality", "aet_test", "cp_test", "strides")
+PREF_LABEL = {"long": "長跑", "quality": "間歇", "aet_test": "AeT 測試", "cp_test": "CP 測試", "strides": "坡道衝刺／加速跑"}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
 
@@ -120,7 +127,10 @@ class Prefs:
     terrain_easy: str = "any"
     terrain_long: str = "auto"
     terrain_quality: str = "any"
-    interval_target: str = "power"
+    interval_target: str = "power"     # legacy 「間歇目標」: hr reads as target_basis = hr (from_settings)
+    # 目標依據 (engine/target_policy.py): auto = by session type (HR for easy / long / trail days,
+    # power for intervals and 3–8 % hill repeats), hr = HR zones, power = power zones
+    target_basis: str = "auto"
     # CP 測試方式 (engine/cp_protocols.py). Not part of `active`: choosing a
     # protocol only changes the test session, not the shaping of the week.
     cp_test_protocol: str = "quick"
@@ -142,6 +152,11 @@ class Prefs:
     # city to the riverside (never cut) and the cool-down (10 when running home). Not `active`.
     warmup_commute_min: int = 10
     cooldown_min: int = 5
+    # 偏好的星期 per session type (the long run is long_day, any weekday now): ((kind, (wd1, wd2)), …)
+    # for quality / aet_test / cp_test / strides; () = 不指定. pref_keep = the conflict codes
+    # (day_conflicts) the athlete chose to keep anyway.
+    pref_days: tuple = ()
+    pref_keep: tuple = ()
 
     @property
     def active(self) -> bool:
@@ -160,7 +175,13 @@ class Prefs:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["days"], d["strength_days"] = list(self.days), list(self.strength_days)
+        d["pref_days"] = {k: list(v) for k, v in self.pref_days}
+        d["pref_keep"] = list(self.pref_keep)
         return d
+
+    def pref_of(self, kind: str) -> tuple:
+        """The preferred weekdays (first choice, second choice) of a session type; () = 不指定."""
+        return next((tuple(v) for k, v in self.pref_days if k == kind), ())
 
     def stamp(self) -> str:
         return json.dumps(self.to_dict(), sort_keys=True)
@@ -183,14 +204,22 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
         v = values.get(k)
         if v is None:
             continue
-        if f in ("days", "strength_days"):
+        if f in ("days", "strength_days", "pref_keep"):
             v = tuple(v)
+        if f == "pref_days":
+            v = tuple(sorted((str(k), tuple(int(x) for x in (d or [])[:2])) for k, d in dict(v).items()
+                             if k in PREF_KINDS and d))
         if f == "weekly_hours":
             v = float(v)
         if f == "quality_gate" and lenient:
             from backend.engine.quality_gate import MODES
             v = v if v in MODES else "auto"
         kw[f] = v
+    # migration: the old 「間歇目標 = 心率」 is 目標依據 = 心率 now (both stay readable)
+    if kw.get("interval_target") == "hr" and kw.get("target_basis") in (None, "auto"):
+        kw["target_basis"] = "hr"
+    if lenient and kw.get("target_basis") not in (None, "auto", "hr", "power"):
+        kw["target_basis"] = "auto"
     return Prefs(**kw)
 
 
@@ -411,8 +440,12 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
         if not s.get("variant_key"):
             # a library variant already carries its terrain (interval_library.terrains)
             _quality_terrain(s, p)
-        if p.interval_target == "hr" and s["kind"] == "quality":
-            s["target"] = _hr_part(s.get("target", ""))
+    from backend.engine import target_policy as TP
+    for s in hard + rest + ([long_s] if long_s is not None else []):
+        # 目標依據 (engine/target_policy.py, the one rule): the target text of the chosen basis
+        pol = TP.target_policy(s, p)
+        if pol["chosen"] in ("hr", "power") and s["kind"] in ("quality", "long", "hike", "mountain"):
+            s["target"] = TP.target_text(s.get("target", ""), pol["basis"])
     if p.cap_weekday is not None:
         for s in hard:
             if s.get("variant_key"):
@@ -495,6 +528,86 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 QUALITY_ORDER = (1, 2, 3, 0, 4, 5, 6)          # Tue, Wed, Thu, Mon, Fri, Sat, Sun
+SRC_GAP = "台灣教練：5 區一週最多兩次、兩次之間至少隔兩天；強度課與長跑隔 ≥ 48 小時"
+LONG_MIN_TYPICAL = 90                            # 推估: an LSD rarely fits under 90 min
+
+
+def _gap(a: int, b: int) -> int:
+    """Days between two weekdays, week over week (a Sunday long run and a Monday interval: 1)."""
+    d = abs(a - b)
+    return min(d, 7 - d)
+
+
+def _better_day(p: Prefs, long_wd: int, taken: tuple = ()) -> Optional[int]:
+    for wd in QUALITY_ORDER:
+        if p.days[wd] and wd != long_wd and _gap(wd, long_wd) >= 2 and all(_gap(wd, t) >= 2 for t in taken):
+            return wd
+    return None
+
+
+def day_conflicts(p: Prefs, auto_long_wd: int = 5) -> list[dict]:
+    """Where the preferred weekdays break the default rules: [{"code", "kind", "wd", "rule",
+    "source", "text", "action", "keep"}]. `keep` = the athlete chose 照我的偏好 for that code
+    (pref_keep): the planner then keeps the preference; otherwise it moves the session and
+    says so. Codes: gap48, after_long, not_allowed, cap_long, z5_twice, aet_weekday, aet_gap."""
+    out = []
+    lw = long_weekday(p, auto_long_wd)
+    q = p.pref_of("quality")
+
+    def add(code, kind, wd, rule, source, text, action):
+        out.append({"code": code, "kind": kind, "wd": wd, "rule": rule, "source": source, "text": text,
+                    "action": action, "keep": code in p.pref_keep})
+    for kind in PREF_KINDS:
+        for wd in p.pref_of(kind):
+            if not p.days[wd]:
+                add(f"not_allowed:{kind}:{wd}", kind, wd, "可練日", "課表偏好", f"{PREF_LABEL[kind]}偏好週{WD_ZH[wd]}，但週{WD_ZH[wd]}不是可練日",
+                    "改排在可練的日子")
+    for wd in q[:1]:
+        g = _gap(wd, lw)
+        alt = _better_day(p, lw)
+        alt_t = f"週{WD_ZH[alt]}" if alt is not None else "別天"
+        if (wd - lw) % 7 == 1:
+            add("after_long", "quality", wd, "長跑隔天不排強度課", SRC_GAP,
+                f"間歇排在長跑（週{WD_ZH[lw]}）的隔天：長跑後腿還沒恢復（建議 ≥ 2 天，徐國峰）：要改到{alt_t}嗎？",
+                f"改到{alt_t}" if alt is not None else "改到離長跑最遠的一天")
+        elif g < 2:
+            add("gap48", "quality", wd, "強度課與長跑隔 ≥ 48 小時", SRC_GAP,
+                f"間歇和 LSD 只隔 {g} 天（建議 ≥ 2 天，徐國峰）：要改到{alt_t}嗎？",
+                f"改到{alt_t}" if alt is not None else "改到離長跑最遠的一天")
+    if len(q) >= 2 and _gap(q[0], q[1]) < 2:
+        add("z5_twice", "quality", q[1], "5 區每週最多 2 次、間隔 ≥ 2 天", SRC_GAP,
+            f"兩個間歇偏好日週{WD_ZH[q[0]]}、週{WD_ZH[q[1]]}只隔 {_gap(q[0], q[1])} 天（徐國峰：至少隔兩天）",
+            "第二堂改到隔 ≥ 2 天的日子")
+    if lw < 5 and p.cap_long is None and p.cap_weekday is not None and p.cap_weekday < LONG_MIN_TYPICAL:
+        add("cap_long", "long", lw, "平日時間上限", "課表偏好（單次時間上限）",
+            f"長跑排在週{WD_ZH[lw]}，但平日上限只有 {p.cap_weekday} 分，LSD 放不下（通常 ≥ {LONG_MIN_TYPICAL} 分，推估）："
+            "設定「長跑日上限」或改到週末", "長跑照平日上限縮短")
+    for kind in ("aet_test",):
+        for wd in p.pref_of(kind)[:1]:
+            if p.aet_test_days == "weekday" and wd >= 5:
+                add("aet_weekday", kind, wd, "AeT 測試只排平日（課表偏好 AeT 測試日）", "課表偏好；aet_test.pick_day",
+                    f"AeT 測試偏好週{WD_ZH[wd]}，但「AeT 測試日」設成只排平日", "改排平日（或把 AeT 測試日改成「任何一天」）")
+            if _gap(wd, lw) < 2 or (q and _gap(wd, q[0]) < 1):
+                add("aet_gap", kind, wd, "測試前後不排長跑／強度課", "aet_test.pick_day（測試前一天輕鬆）",
+                    f"AeT 測試偏好週{WD_ZH[wd]}，離長跑（週{WD_ZH[lw]}）或間歇太近：測出來的飄移會失真", "建議日期會避開，偏好日排在後面")
+    return out
+
+
+def blocked_pref_notes(p: Prefs, monday: dt.date, blocked) -> list[dict]:
+    """A preferred weekday that falls on a 不排課日期 this week: say so (the session moves)."""
+    out = []
+    for kind in PREF_KINDS:
+        for wd in p.pref_of(kind)[:1]:
+            d = (monday + dt.timedelta(days=wd)).isoformat()
+            if d in (blocked or ()):
+                out.append({"level": "info", "src": "prefs",
+                            "text": f"{PREF_LABEL[kind]}偏好的週{WD_ZH[wd]}（{int(d[5:7])}/{int(d[8:10])}）是不排課日期：這週改排別天"})
+    return out
+
+
+def _pref_ok(p: Prefs, kind: str, wd: int, conflicts: list[dict]) -> bool:
+    """A preferred weekday is used unless one of its conflicts wasn't kept."""
+    return not any(c["kind"] == kind and c["wd"] == wd and not c["keep"] for c in conflicts)
 
 
 def long_weekday(p: Prefs, auto_wd: int) -> int:
@@ -564,8 +677,30 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             if s.get("prefer_days"):
                 # interval_library.fit moved it to a day with a bigger cap (§C5.3-4)
                 cands = sorted(cands, key=lambda d: d.weekday() not in s["prefer_days"])
-            pick = next((d for d in cands if ok(d)), None) or next(
+            pref = p.pref_of("quality") if s["kind"] == "quality" and not s.get("prefer_days") else ()
+            if s["kind"] == "test" and not AT.is_aet_session(s):
+                pref = p.pref_of("cp_test")
+            pick = None
+            if pref:
+                conf = day_conflicts(p, long_day.weekday() if long_day else 5)
+                for wd in pref:
+                    d = next((x for x in avail if x.weekday() == wd), None)
+                    if d is None:
+                        continue            # past, blocked (不排課日期; see blocked_pref_notes) or taken
+                    kept = any(c["kind"] == "quality" and c["wd"] == wd and c["keep"] for c in conf)
+                    if ok(d) or kept:
+                        pick = d
+                        break
+                    if notes is not None:
+                        why = next((c["text"] for c in conf if c["kind"] == "quality" and c["wd"] == wd),
+                                   f"週{WD_ZH[wd]}離長跑或另一堂強度課不到 2 天（徐國峰）")
+                        notes.append({"level": "watch", "src": "prefs", "text": f"{why} → 這週改排別天（要照偏好排，到課表偏好選「照我的偏好」）"})
+            pick = pick or next((d for d in cands if ok(d)), None) or next(
                 (d for d in cands if long_day is None or abs((d - long_day).days) >= 1), cands[0])
+        elif s["kind"] == "easy" and "衝刺" in (s.get("title") or "") and p.pref_of("strides"):
+            # 坡道衝刺／加速跑 on its preferred weekday (not the day before the long run)
+            pick = next((d for wd in p.pref_of("strides") for d in avail if d.weekday() == wd
+                         and (long_day is None or d != long_day - dt.timedelta(days=1))), avail[0])
         else:
             pick = avail[0]
         s["day"] = pick.isoformat()

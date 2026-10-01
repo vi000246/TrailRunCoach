@@ -371,6 +371,13 @@ def suggestion_days(sg: dict, stored: list[dict], today: str, prefs, blocked: di
         if near:
             continue
         out.append({"day": iso, "note": ""})
+    # 課表偏好 偏好的星期: the preferred weekday(s) first
+    pref = prefs.pref_of("aet_test" if sg["kind"] == "aet" else "cp_test") if prefs is not None else ()
+    if pref:
+        for d in out:
+            if dt.date.fromisoformat(d["day"]).weekday() in pref:
+                d["note"] = (d["note"] + " · " if d["note"] else "") + "你偏好的日子"
+        out.sort(key=lambda d: (dt.date.fromisoformat(d["day"]).weekday() not in pref, d["day"]))
     return out
 
 
@@ -417,6 +424,27 @@ async def schedule_test(body: dict = Body(...), db: AsyncSession = Depends(get_d
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
+
+
+@router.post("/steps-preview")
+async def steps_preview(body: dict = Body(...)):
+    """The editor's 「目標用：自動／心率／功率」 preview: each step with its resolved target
+    (engine/target_policy.py → sync/coros_workouts steps), nothing stored or sent."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine import target_policy as TP
+    inp = await _inputs()
+    th = inp.get("thresholds") or {}
+    s = {k: body.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "terrain", "protocol",
+                                  "variant_key", "variant_reps", "variant_blocks", "variant_adj", "heat")}
+    tb = body.get("target_basis")
+    s["target_basis"] = tb if tb in ("hr", "power") else None
+    pol = TP.target_policy(s, PP.load(), th)
+    s["basis"] = pol["basis"]
+    try:
+        lines = CW.step_lines(CW.session_steps({**s, "minutes": int(s.get("minutes") or 0)}, CW.Thresholds.of(th)))
+    except CW.Unsupported as e:
+        lines = [f"不推送：{e}"]
+    return {"policy": pol, "lines": lines, "label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）"}
 
 
 @router.get("/variants")
@@ -572,6 +600,8 @@ def _prefs_body(p) -> dict:
     from backend.engine import aet_test as AT
     # aet_options: the AeT 測試方式 hover texts (duration, terrain, what is held, judging, source)
     return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
+            # 偏好的星期 vs the default rules (shown when the prefs are saved; 照我的偏好 = pref_keep)
+            "day_conflicts": PP.day_conflicts(p),
             "gate_options": QG.option_texts(),
             "aet_options": {k: {"label": "自動（標準：徐國峰 90 分；備案 UA 40 分）" if k == "auto"
                                 else AT.PROTOCOLS[k]["label"], "tip": AT.protocol_tip(k)}

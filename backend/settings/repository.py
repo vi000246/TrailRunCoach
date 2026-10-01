@@ -78,7 +78,8 @@ DEFAULTS: dict[str, Any] = {
     "plan.prefs.terrain_easy": "any",         # road | trail | any
     "plan.prefs.terrain_long": "auto",        # road | trail | hike | auto
     "plan.prefs.terrain_quality": "any",      # flat | hill | any
-    "plan.prefs.interval_target": "power",    # power | hr
+    "plan.prefs.interval_target": "power",    # power | hr (legacy; hr reads as target_basis = hr)
+    "plan.prefs.target_basis": "auto",        # 目標依據 (engine/target_policy.py): auto | hr | power
     # CP 測試方式 (engine/cp_protocols.py): quick 20 min all-out | standard 12′ +
     # 30′ + 3′ | race (a 5–10 K race instead). The athlete chose quick as the default.
     "plan.prefs.cp_test_protocol": "quick",
@@ -97,6 +98,9 @@ DEFAULTS: dict[str, Any] = {
     # and the cool-down (10 when running home)
     "plan.prefs.warmup_commute_min": 10,
     "plan.prefs.cooldown_min": 5,
+    # 偏好的星期 (engine/plan_prefs.py day_conflicts / place): {kind: [first, second]}; [] / missing = 不指定
+    "plan.prefs.pref_days": {},
+    "plan.prefs.pref_keep": [],               # conflict codes kept anyway (照我的偏好)
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
@@ -116,12 +120,13 @@ AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan
 MAP_BASEMAPS = ("rudy", "google-terrain", "nlsc-emap", "nlsc-photo", "osm")
 MAP_OVERLAYS = ("contour", "google-roads", "nlsc-roads")
 PREF_ENUMS = {
-    "plan.prefs.long_day": ("sat", "sun", "auto"),
+    "plan.prefs.long_day": ("sat", "sun", "auto", "mon", "tue", "wed", "thu", "fri"),
     "plan.prefs.cap_mode": ("soft", "hard"),
     "plan.prefs.terrain_easy": ("road", "trail", "any"),
     "plan.prefs.terrain_long": ("road", "trail", "hike", "auto"),
     "plan.prefs.terrain_quality": ("flat", "hill", "any"),
     "plan.prefs.interval_target": ("power", "hr"),
+    "plan.prefs.target_basis": ("auto", "hr", "power"),
     "plan.prefs.cp_test_protocol": ("quick", "standard", "race"),
     "plan.prefs.heat": ("auto", "off"),
     "plan.prefs.heat_method": ("run", "overdress", "bath", "sauna", "mixed"),
@@ -239,6 +244,17 @@ def _validate_pref(key: str, value: Any) -> None:
             isinstance(value, list) and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 6
                                             for v in value) and len(set(value)) == len(value)):
         raise ValueError("plan.prefs.strength_days must be distinct weekdays 0-6")
+    if key == "plan.prefs.pref_days" and value is not None:
+        kinds = ("quality", "aet_test", "cp_test", "strides")
+        ok = isinstance(value, dict) and all(
+            k in kinds and isinstance(v, list) and len(v) <= 2 and len(set(v)) == len(v)
+            and all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 6 for x in v)
+            for k, v in value.items())
+        if not ok:
+            raise ValueError(f"plan.prefs.pref_days must be {{kind: [weekday 0-6, (second)]}} for {kinds}")
+    if key == "plan.prefs.pref_keep" and value is not None and not (
+            isinstance(value, list) and all(isinstance(x, str) and len(x) <= 40 for x in value)):
+        raise ValueError("plan.prefs.pref_keep must be a list of conflict codes")
     if key == "plan.prefs.weekly_hours" and value is not None and (
             isinstance(value, bool) or not isinstance(value, (int, float)) or not 1 <= value <= 40):
         raise ValueError("plan.prefs.weekly_hours must be 1-40 hours or null")

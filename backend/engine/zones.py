@@ -242,17 +242,18 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
 # the practical tool (docs/research/coaching-dashboards-mountain.md §1.1). The
 # power bands themselves are Palladino's (% CP); applying them uphill above
 # ~8 % grade is 推估 (Stryd is validated to ~8 %).
-TERRAIN_NOTE = ("山路、爬坡看功率（心率約慢 1 分鐘才反應，短坡上來不及；Stryd 功率在 0–8% 坡≈固定代謝負荷，"
-                "van Rassel 2026），心率當上限檢查。陡的技術下坡不看功率（Stryd：陡峭、技術地形不能用單一功率數字），"
-                "照感覺與安全；陡坡負重健行仍以心率為主（Uphill Athlete）。超過 8% 坡套用功率區間是推估。")
+TERRAIN_NOTE = ("山路長天、越野輕鬆看心率（≤ AeT）；爬坡重複（3–8% 坡）看功率（心率約慢 1 分鐘才反應，短坡上來不及；"
+                "Stryd 功率在 0–8% 坡≈固定代謝負荷，van Rassel 2026），心率當上限檢查。長爬坡只給建議；陡的技術下坡"
+                "不看功率（Stryd：陡峭、技術地形不能用單一功率數字），照感覺與安全。規則在 engine/target_policy.py。")
 WORKOUT_TARGETS = [
     # (id, name, power lo, power hi, hr lo (×LTHR or "aet"), hr hi, primary, example, source)
     ("recovery", "恢復跑", None, 0.75, None, 0.85, "心率", "20–40 分鐘，隔天有強度課時", "Palladino 1A–1B；Friel Z1"),
     ("z2", "輕鬆跑（Zone 2）", 0.75, 0.80, None, "aet", "心率", "大部分的跑步；心率不超過 AeT", "Palladino 1C；Uphill Athlete AeT"),
     ("long", "長跑（路跑）", 0.80, 0.88, None, "aet", "心率", "60 分鐘以上；心率壓在 AeT", "Palladino Z2；Uphill Athlete"),
-    ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "功率",
-     "上坡把功率壓在範圍內（可以走），心率不超過 AeT 當上限；陡的技術下坡不看功率",
-     "Palladino 1C–Z2（% CP）；心率延遲 Hunt 2015；Stryd 6879554；坡度 > 8% 為推估"),
+    # primary = engine/target_policy.py (vo2max-gate-and-trail-metric.md §2.5: long trail days by HR)
+    ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "心率",
+     "心率不超過 AeT（長天後段的保護）；功率只當參考，陡的技術下坡不看功率",
+     "Uphill Athlete（AeT 以下）；Palladino 1C–Z2（% CP，參考）；Stryd 6879554；坡度 > 8% 為推估"),
     ("hill", "爬坡重複", 0.95, 1.06, 0.95, 1.03, "功率",
      "4–6×4 分鐘上坡，走或慢跑下來恢復；看 30 秒平均功率，心率只當參考（短坡上還沒升上來）",
      "Palladino 3B–Z4（% CP）；心率延遲 Hunt 2015；坡度 > 8% 為推估"),

@@ -192,6 +192,8 @@ class PlanSession(Base):
     variant_reps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     variant_blocks: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     variant_adj: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 目標用 (engine/target_policy.py): the user's per-session hr / power; None = 自動
+    target_basis: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
