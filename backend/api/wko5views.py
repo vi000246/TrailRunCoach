@@ -341,6 +341,48 @@ def workout_review(i: int, section: Optional[str] = None, parity: Optional[bool]
             "suggested_dashboard": head.get("suggested_dashboard"), "sections": cards}
 
 
+def _activity_json(ds, w) -> dict:
+    from backend.engine import activity_tags as AT
+    from backend.engine.racepower import athlete as A
+    t = A.auto_tags(ds, w)
+    return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
+            "types": AT.TYPES, "efforts": AT.EFFORTS, **t}
+
+
+@router.get("/workouts/{i}/activity")
+def get_activity(i: int):
+    """Activity tags of one dataset workout (engine/activity_tags.py): the
+    effective activity type / effort, the auto values with their reasons,
+    the user's overrides and note."""
+    ds = _dataset()
+    if not 0 <= i < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    return _activity_json(ds, ds.workouts[i])
+
+
+@router.patch("/workouts/{i}/activity")
+async def patch_activity(i: int, body: dict):
+    """Set / clear the user's activity type, effort or note (a key present
+    with null = back to auto). Keyed by the activity's local start minute
+    and file, so it applies whatever the data source."""
+    from backend.api.workouts import ActivityUpdate, save_activity_tag
+    from backend.db.database import AsyncSessionLocal
+    from backend.engine import activity_tags as AT
+    ds = _dataset()
+    if not 0 <= i < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    w = ds.workouts[i]
+    upd = ActivityUpdate(**{k: v for k, v in body.items() if k in ("activity_type", "effort", "note")})
+    from backend.engine.wko5expr import datasource as DSRC
+    cur = AT.user_of(w)                     # an existing tag (maybe set from another source ±3 min)
+    key = (cur or {}).get("start_local") or AT.key_of(w.entry.start)
+    async with AsyncSessionLocal() as db:
+        await save_activity_tag(db, upd, start_local=key, source=DSRC.current_source(),
+                                file=w.entry.file, distance_km=w.metrics.get("distance"),
+                                label=f"{w.entry.start:%Y-%m-%d} {w.sport_type}")
+    return _activity_json(ds, w)
+
+
 @router.get("/sports")
 def sports_list():
     """Sport groups present in the athlete, with counts (RHE sport filter)."""

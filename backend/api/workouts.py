@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import numpy as np
 
 from backend.db.database import get_db
-from backend.db.models import WorkoutFile, WorkoutMetric, MmpCache, AthleteSettings
+from backend.db.models import WorkoutFile, WorkoutMetric, MmpCache, AthleteSettings, ActivityTag
 from backend.engine.algorithms.mmp import compute_mmp
 from backend.engine.algorithms.trail import (
     compute_grade, compute_gap, segment_climbs, compute_vam, compute_hr_drift,
@@ -77,6 +77,89 @@ async def update_classification(
     }
 
 
+class ActivityUpdate(BaseModel):
+    """PATCH body of the activity tags (engine/activity_tags.py). A field that
+    is present sets the user value (and its *_overridden flag); present with
+    null clears it (back to the auto value); absent = unchanged."""
+    activity_type: Optional[str] = None
+    effort: Optional[str] = None
+    note: Optional[str] = None
+
+
+async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
+                            source=None, file=None, workout_id=None, distance_km=None, label=None) -> ActivityTag:
+    """Upsert the user tag of one activity (key: local start minute)."""
+    from backend.engine import activity_tags as AT
+    sent = body.model_fields_set
+    err = AT.validate(body.activity_type if "activity_type" in sent else None,
+                      body.effort if "effort" in sent else None)
+    if err:
+        raise HTTPException(400, err)
+    row = (await db.execute(select(ActivityTag).where(ActivityTag.athlete_id == athlete_id,
+                                                      ActivityTag.start_local == start_local))).scalar_one_or_none()
+    if row is None:
+        row = ActivityTag(athlete_id=athlete_id, start_local=start_local,
+                          activity_type_overridden=False, effort_overridden=False)
+        db.add(row)
+    kw = {k: getattr(body, k) for k in ("activity_type", "effort", "note") if k in sent}
+    AT.apply_update(row, **kw)
+    for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
+                 ("distance_km", distance_km), ("label", label)):
+        if v is not None:
+            setattr(row, k, v)
+    await db.commit()
+    AT._memo.clear()
+    return row
+
+
+def _tag_json(t: Optional[ActivityTag]) -> dict:
+    """The stored user tag fields of a workout_files row (auto values need the
+    dataset: GET /api/v1/wko5/workouts/{idx}/activity)."""
+    from backend.engine import activity_tags as AT
+    ty = t.activity_type if t and t.activity_type_overridden else None
+    ef = t.effort if t and t.effort_overridden else None
+    return {"activity_type": ty, "activity_type_label": AT.TYPES.get(ty), "activity_type_overridden": ty is not None,
+            "effort": ef, "effort_label": AT.EFFORTS.get(ef), "effort_overridden": ef is not None,
+            "note": t.note if t else None, "key": t.start_local if t else None}
+
+
+def _local_start(wf: WorkoutFile) -> Optional[str]:
+    from backend.engine import activity_tags as AT
+    if wf.start_time_utc is None:
+        return None
+    import datetime as _dt
+    from backend.engine.wko5expr.datasource import athlete_tz
+    loc = wf.start_time_utc.replace(tzinfo=_dt.timezone.utc).astimezone(athlete_tz()).replace(tzinfo=None)
+    return AT.key_of(loc)
+
+
+@router.patch("/{workout_id}/activity")
+async def update_activity(workout_id: int, body: ActivityUpdate, db: AsyncSession = Depends(get_db)):
+    """Set the activity type / effort / note of a workout_files row — the
+    same pattern as update_classification: user values with *_overridden
+    flags that auto re-classification never touches."""
+    wf = (await db.execute(select(WorkoutFile).where(WorkoutFile.id == workout_id))).scalar_one_or_none()
+    if not wf:
+        raise HTTPException(404, "WORKOUT_NOT_FOUND")
+    key = _local_start(wf)
+    if key is None:
+        raise HTTPException(422, "NO_START_TIME")
+    row = await save_activity_tag(db, body, start_local=key, athlete_id=wf.athlete_id, source=wf.source,
+                                  workout_id=wf.id,
+                                  distance_km=(wf.total_distance_m or 0) / 1000.0 if wf.total_distance_m else None)
+    return {"id": wf.id, **_tag_json(row)}
+
+
+async def _tags_by_start(db: AsyncSession, workouts) -> dict:
+    keys = {w.id: _local_start(w) for w in workouts}
+    want = {k for k in keys.values() if k}
+    if not want:
+        return {}
+    rows = (await db.execute(select(ActivityTag).where(ActivityTag.start_local.in_(want)))).scalars().all()
+    by = {r.start_local: r for r in rows}
+    return {i: by.get(k) for i, k in keys.items()}
+
+
 @router.get("")
 async def list_workouts(
     athlete_id: int = 1,
@@ -102,10 +185,11 @@ async def list_workouts(
     q = q.options(selectinload(WorkoutFile.metrics))
     result = await db.execute(q)
     workouts = result.scalars().all()
+    tags = await _tags_by_start(db, workouts)
 
     return {
         "total": total, "page": page, "per_page": per_page,
-        "items": [_workout_summary(w) for w in workouts],
+        "items": [_workout_summary(w, tags.get(w.id)) for w in workouts],
     }
 
 
@@ -116,7 +200,8 @@ async def get_workout(workout_id: int, db: AsyncSession = Depends(get_db)):
     w = result.scalar_one_or_none()
     if not w:
         raise HTTPException(404, "WORKOUT_NOT_FOUND")
-    return _workout_detail(w)
+    tags = await _tags_by_start(db, [w])
+    return _workout_detail(w, tags.get(w.id))
 
 
 @router.get("/{workout_id}/mmp")
@@ -340,7 +425,7 @@ async def get_workout_trail(workout_id: int, db: AsyncSession = Depends(get_db))
     }
 
 
-def _workout_summary(w: WorkoutFile) -> dict:
+def _workout_summary(w: WorkoutFile, tag: Optional[ActivityTag] = None) -> dict:
     metrics = {m.metric_key: m.value for m in w.metrics}
     return {
         "id": w.id,
@@ -350,8 +435,11 @@ def _workout_summary(w: WorkoutFile) -> dict:
         "file_format": w.file_format,
         "source": w.source,
         "metrics": metrics,
+        "trail_classification": w.trail_classification,
+        "classification_overridden": bool(w.classification_overridden),
+        "activity": _tag_json(tag),
     }
 
 
-def _workout_detail(w: WorkoutFile) -> dict:
-    return {**_workout_summary(w), "file_path": w.file_path}
+def _workout_detail(w: WorkoutFile, tag: Optional[ActivityTag] = None) -> dict:
+    return {**_workout_summary(w, tag), "file_path": w.file_path}
