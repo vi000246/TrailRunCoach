@@ -552,7 +552,17 @@ def _activity_json(ds, w) -> dict:
                                 "enabled": bool(getattr(ds, "exclude_bad", False))},
             "power": {"source": src, "used": A.power_ok(ds, w) if src != PS.NONE else False,
                       "label": PS.label(src, bool(getattr(ds, "accept_watch_power", True))),
-                      "setting": PS.SETTING_KEY}}
+                      "setting": PS.SETTING_KEY},
+            # the pack carried (engine/loaded_carry.activity_pack; racepower_hike_meta.json)
+            "pack": _pack_json(w)}
+
+
+def _pack_json(w) -> Optional[dict]:
+    try:
+        from backend.engine import loaded_carry as LC
+        return LC.activity_pack(w)
+    except Exception:                       # noqa: BLE001 — never breaks the activity card
+        return None
 
 
 @router.get("/workouts/{i}/activity")
@@ -579,15 +589,34 @@ async def patch_activity(i: int, body: dict):
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     w = ds.workouts[i]
-    upd = ActivityUpdate(**{k: v for k, v in body.items() if k in ("activity_type", "effort", "note", "exclusion")})
-    from backend.engine.wko5expr import datasource as DSRC
-    cur = AT.user_of(w)                     # an existing tag (maybe set from another source ±3 min)
-    key = (cur or {}).get("start_local") or AT.key_of(w.entry.start)
-    async with AsyncSessionLocal() as db:
-        await save_activity_tag(db, upd, start_local=key, source=DSRC.current_source(),
-                                file=w.entry.file, distance_km=w.metrics.get("distance"),
-                                label=f"{w.entry.start:%Y-%m-%d} {w.sport_type}")
+    if "pack_kg" in body:
+        # the pack carried (loaded-carry-training.md §5.1): racepower_hike_meta.json, null = cleared
+        await run_in_threadpool(_set_pack, w, body.get("pack_kg"))
+    tag_keys = {k: v for k, v in body.items() if k in ("activity_type", "effort", "note", "exclusion")}
+    if tag_keys or "pack_kg" not in body:
+        upd = ActivityUpdate(**tag_keys)
+        from backend.engine.wko5expr import datasource as DSRC
+        cur = AT.user_of(w)                     # an existing tag (maybe set from another source ±3 min)
+        key = (cur or {}).get("start_local") or AT.key_of(w.entry.start)
+        async with AsyncSessionLocal() as db:
+            await save_activity_tag(db, upd, start_local=key, source=DSRC.current_source(),
+                                    file=w.entry.file, distance_km=w.metrics.get("distance"),
+                                    label=f"{w.entry.start:%Y-%m-%d} {w.sport_type}")
     return await run_in_threadpool(_activity_json, ds, w)
+
+
+def _set_pack(w, kg) -> None:
+    from backend.engine.racepower import athlete as A
+    try:
+        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, str(e) or "背負要在 0–40 kg")
+    try:                                     # the race-power walking model reads the packs too
+        from backend.api import racepower as RP
+        with RP._lock:
+            RP._cache.pop("grade", None)
+    except Exception:                       # noqa: BLE001
+        pass
 
 
 @router.get("/sports")
