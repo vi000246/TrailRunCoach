@@ -152,8 +152,10 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
   (`backend/engine/overview.py:563`) and asks `week_decision`
   (`backend/engine/quality_gate.py:665`) for this week:
   - **Method** (`plan.prefs.quality_gate`, `evaluate`, `backend/engine/quality_gate.py:490`):
-    `auto` → `ua_gap` + `friel_drift` when the plan has a measured AeT row ≤ 16 weeks old
-    (`aet_info`, `backend/engine/quality_gate.py:141`) and LTHR is not WKO5's default
+    `auto` → `ua_gap` + `friel_drift` when the plan has a measured AeT row that is **valid**
+    (B3, `unsourced-rules.md`: the aggregated drift estimate's SE ≤ 3 bpm and no shift > 5 bpm
+    over the last 6 points — `drift_agg.aet_validity`, 推估; no fixed 16-week expiry; stale after
+    a break ≥ 4 weeks) (`aet_info`, `backend/engine/quality_gate.py:141`) and LTHR is not WKO5's default
     (`lthr_info`, `backend/engine/quality_gate.py:153`), else `none`. `ua_gap`: LTHR / AeT − 1
     ≤ 10 %; `friel_drift`: one run in 8 weeks, avg HR AeT−5…AeT+3, ≥ 70 min, fair drift < 5 %
     (`friel_check`, `backend/engine/quality_gate.py:186`); `xu_drift`: flat ≥ 90-min run,
@@ -165,17 +167,27 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
     the guardrail plan (our own choice: never a permanent lock).
   - **Guardrails** (`guard`, `backend/engine/quality_gate.py:350`), base phase, every mode:
     low-intensity time share < 75 % (or run power < 80 % CP share < 75 %) → none; CTL ramp ≥ 5
-    → sub-threshold 3×8 only, ≥ 7 → none; last week's step > 20 % → none, 10–20 % → hold the
-    dose; TSB −30…−20 → hold. Projected weeks keep only the intensity block.
-  - **Dose** (`DOSE`, `backend/engine/quality_gate.py:93`; `dose_step`,
-    `backend/engine/quality_gate.py:475`): step = interval sessions in the last 8 weeks
-    (`dose_history`, `backend/engine/quality_gate.py:303`, counting ≥ 4 short reps at ≥ 95 % CP
-    with `count_reps`, `backend/engine/quality_gate.py:262`, since 1′ reps never reach
-    10 min at threshold): 5×1′ → 6×1′ → 4×3′ uphill → 5×3′ → 4×4′, then 閾值下 3×8′ / 4×8′
-    alternating. The step moves by the progression state machine (`interval_outcome` /
-    `dose_step`, plan-auto.spec.md): 達標 forward, 邊界 repeat, 未適應 rest +1 min then back
-    one, first rep short = target −5 %. The old 5 % fade rule is gone; `ua_gap` unlock → 3 Zone 3 sessions
-    (AeT–LTHR, ≈ 5 % of the week) first. Session text keeps the COROS / trim tokens
+    → threshold only, ≥ 8 → none (Friel, coach); last week's step > 20 % → none (Nielsen 2014,
+    Damsted 2019), 10–20 % → hold the dose (推估); TSB −30…−20 → hold (Friel / TrainingPeaks).
+    Projected weeks keep only the intensity block.
+  - **Two gates** (台灣教練): Zone 3 whenever the guardrails pass — a locked
+    method no longer stops it; Zone 5 only while the base is confirmed (`gate["z5"]`,
+    `base_check.z5_status`: 三訊號 / the 90-min test / a measured AeT passing UA gap or Friel;
+    maintenance and re-entry rules in plan-auto.spec.md).
+  - **Dose** (`Z3` / `Z5` / `LADDER`, `dose_spec(step, z5_open)`; `dose_step`): step = 達標
+    sessions in the last 8 weeks (`dose_history`, counting ≥ 4 short reps at ≥ 95 % CP with
+    `count_reps`): 閾值 3×8′ → 4×8′ → 3×10′, then (Zone 5 open) 5×2′ → 4×3′ → 5×3′ → 4×4′,
+    then 4×4′ / 3×10′ alternating; Zone 5 closed → the top Zone 3 rungs and the step waits.
+    The step moves by the progression state machine (`interval_outcome` / `dose_step`,
+    plan-auto.spec.md): 達標 forward, 邊界 / 無法判定 repeat, 未適應 rest +1 min then back one,
+    first rep short = target −5 %.
+  - **停訓後恢復期** (`reentry.find`, mode `reentry`): a break ≥ 6 days without running — a
+    blackout range or from the runs — gives Daniels' block (week hours = the 4 weeks before the
+    break × the block's %; no quality, no strides, no test inside; long-run cap; targets ×
+    FVDOT). It replaces `blackouts.step_cap` (plan-auto.spec.md).
+  - **AeT test** (`aet_test.due(today, kind, base_start, gate["aet_test_reason"], last)`): only
+    for a reason (B3 / the Z5 lifecycle), its protocol from `plan.prefs.aet_test_protocol`
+    (auto = 徐國峰 90′ on the weekend in place of the long run, UA 40′ backup). Session text keeps the COROS / trim tokens
     (`session`, `backend/engine/quality_gate.py:715`); the detail prefix names the rule
     (`prefix`, `backend/engine/quality_gate.py:747`). In guardrail mode `plan_prefs.shape`
     gets `quality_cap=1` (`backend/engine/overview.py:641`).
@@ -346,12 +358,12 @@ plan). Read synchronously by `load()` (`backend/engine/blackouts.py:120`); bad d
 3. **Week note** (`week_note`, `backend/engine/blackouts.py:176`):
    「9/30–10/4 不排課（連假出遊），本週少 X 小時」, plus 「剩下的日子排不下 N 堂課」 when sessions
    were dropped.
-4. **The step after**: the week after a week that lost days is capped at
-   `max(1.10 × done, done + 0.5 h)` of what that week **actually** had (`step_cap`,
-   `backend/engine/blackouts.py:188`) — actual moving hours in `week_plan`, the planned minutes
-   in the projection — so the volume doesn't jump back, with the note
-   「上週 … 不排課，實際只練了 X 小時：本週依「週量增幅 ≤ 10%（至少 +0.5 h）」從實際量起算…」
-   (`backend/engine/projection.py:274`).
+4. **The step after** (2026-10-01, detraining.md §6.6): the old `step_cap` (the week after a
+   blocked week capped at `max(1.10 × done, done + 0.5 h)` — 0.5 h after a fully blocked week,
+   far slower than Daniels) is no longer applied. A blackout ≥ 6 days with no run inside gets
+   the re-entry block (`engine/reentry.py`, Daniels table 9.2: 50 % / 75 % … of the 4 weeks
+   before, mode `reentry`, no quality inside); a shorter one is Daniels' category 1 — back to
+   100 %, and the projection doesn't let that week lower the base it ramps from.
 5. **Stored sessions** on a blocked day from today on (reconcile rule 6,
    `_clear_blackouts`, `backend/engine/reconcile.py:213`): unedited auto sessions follow the
    regenerated week (the change says 「在不排課日期內（label），移到 m/d」,
@@ -632,6 +644,17 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   > 10 % → bad (輕鬆跑太快) **only on ≥ 2 strict runs whose own median is ≥ 10 %** (the level
   feeds the base-phase guardrail), otherwise info; the text says 「飄移是 AeT 測試用的，
   不是間歇門檻」. Source Friel (< 5 %) and 徐國峰 (90′ < 10 %), not Uphill Athlete.
+  **drift v2**: one run is ±4–6 pp, so the number shown and judged is the **inverse-variance
+  mean ± SE of the last 6 fair runs** (`drift_agg.aggregate`; text 「3.1% ±1.8」, `extra.agg`);
+  the median stays in `why` / `extra.median`, the single runs in the spark. The BAD level still
+  needs ≥ 2 strict runs whose median is ≥ 10 % (strict tier only, as before).
+- **`i_testing`**: AeT age no longer sets the level (B3); 「建議 AeT 測試：…」 comes from
+  `gate["aet_test_reason"]`; after a break ≥ ~8 weeks (re-entry `cp_retest`) the CP test is due
+  once the block ends (WKO5 seminar notes). `i_fitness`: CTL ramp ≥ 8 bad, 5–8 watch (Friel).
+  `i_volume`: > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估).
+- **`i_gate`** hover adds the Zone 5 state (「Zone 5：未確認／已確認（日期、路徑）／暫停（原因）／
+  恢復期」, 徐國峰: 3 區先、5 區後) and 「建議測試：…」; a locked method reads 「5 區未開」 and
+  still names this week's Zone 3 session.
 - **`i_heat`** 「熱適應」 (`Status.i_heat`; design `docs/research/heat-acclimation.md` §5.3): the
   heat-acclimation index S (`engine/heat.py`) from the per-activity exposure
   (`heat_data.exposures`, route_weather `activity_weather.json`) plus ticked heat_passive sessions
@@ -840,4 +863,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | bugfix | N/A | Thresholds never apply backwards: `Plan.threshold_on` returns None before a row's date (the 2026-09-30 CP 204 / LTHR 155 row had leaked into every earlier date); past days use WKO5's dated settings; today's values unchanged |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |
 | 2026-10-01 | feat/auto-replan | N/A | Adaptive plan: `adapt.py` (missed easy / quality / long, easy run too hard, fatigue guard) applied before reconcile on every path. The interval progression state machine (`interval_outcome` / `dose_step`) replaces the 5 % fade rule. Actual TSS for done sessions. Kind `notice`. Automatic run after sync with hold / approve / reject / 復原 and the `plan_change_log` table. Details in plan-auto.spec.md |
+| 2026-10-01 | feat/drift-v2-planning | docs/research/drift-algorithm.md, unsourced-rules.md, xu-guofeng-reply.md, detraining.md | `i_drift` = 6-run mean ± SE; season drift charts add 「6 次平均」 ± SE (`drift_avg()`); guardrail sources (ramp 5/8 Friel, volume step Nielsen/Damsted, TSB Friel/TP); AeT valid by the aggregate (B3) and the test by reason; ladder Z3 → Z5 with the Zone 5 lifecycle (base_check); AeT test protocols (`plan.prefs.aet_test_protocol`, 徐國峰 90′ standard on the weekend, UA 40′ backup); re-entry block after breaks ≥ 6 days replaces `blackouts.step_cap`; easy targets from the recent EF (推估) |
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 自組), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
