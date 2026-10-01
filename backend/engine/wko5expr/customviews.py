@@ -78,9 +78,10 @@ def _chart(raw: dict, where: str) -> dict:
     kind = raw.get("kind", "athlete")
     # z5gate: the Zone 5 opening process over the season (quality_gate.z5_history)
     # activity: a single-activity chart computed in panels/activity_charts.py ({"chart": "hrpower"})
-    if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity"):
+    # periodzones: time in zone over a period (panels/period_zones.py, {"view": "total" | "weekly"})
+    if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity", "periodzones"):
         raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets', 'review', "
-                              "'z5gate' or 'activity'")
+                              "'z5gate', 'activity' or 'periodzones'")
     out = {
         "title": raw["title"],
         "description": raw.get("description"),
@@ -137,6 +138,10 @@ def _chart(raw: dict, where: str) -> dict:
         if raw.get("chart") not in CHARTS:
             raise CustomViewError(f"{where}/{raw['title']}: chart must be one of {list(CHARTS)}")
         out["chart"] = raw["chart"]
+    if kind == "periodzones":
+        if raw.get("view", "total") not in ("total", "weekly"):
+            raise CustomViewError(f"{where}/{raw['title']}: view must be 'total' or 'weekly'")
+        out["view"] = raw.get("view", "total")
     if kind == "zones":
         # a WKO5-style zone table: {"kind": "zones", "system": "frielhr", "days": 30}
         from backend.engine.zones import SYSTEMS
