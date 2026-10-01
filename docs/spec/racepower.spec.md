@@ -560,13 +560,14 @@ Back-test 2026-10-01 (WKO5 source, read-only, the seed applied to a scratch DB c
 |---|---|---|---|
 | road capacity n / median \|time err\| | 2 / 13.0 % | 2 / 13.0 % (2025-10-18 still passes the road rules) | 1 / 6.5 % |
 | trail capacity (power envelope) n / power / time | 2 / +46 % / −35 % (2025-11-02, 2026-07-27) | 0 (both now 有拼但有休息) | 4 / +37 % / 40.6 % \|err\| |
-| trail HR model, 7 diary races, race level | – | – | 9.5 % \|err\|, bias −0.9 % (no durability 9.4 %) |
+| trail HR model, 7 diary races, race level | – | – | 7.6 % \|err\|, bias −0.9 % (no durability 5.5 %) |
 | trail HR model, 7 races, given HR | – | – | 9.9 % (no durability 8.8 %) |
 | trail HR model, all trail cases, given HR | – | n 35: 6.9 % | n 41: 7.3 % |
 | terrain mode B, trail | 10.3 % | 10.3 % | 10.3 % |
 
-Durability does not improve the races yet (δ hits the 0.15 /h clamp), so it stays 推估. 2025-07-26
-is the worst race (−21 % at race level): its x = 1.11 sits on the WKO5 default LTHR of 160.
+Durability does not improve the races (δ hits the 0.15 /h clamp; 7.6 % with it vs 5.5 % without),
+so it stays 推估. 2025-07-26 is the worst race (−27 % at race level): its x = 1.11 sits on the
+WKO5 default LTHR of 160.
 
 **HR-based capacity** (推估; `hrcap.py`, `hr_capacity` at `backend/engine/racepower/athlete.py:1279`).
 - **Points**: per outdoor road run of the 90 days, the flat (|g| ≤ 2 %) running windows 10–60 min
