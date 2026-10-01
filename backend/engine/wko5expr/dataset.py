@@ -292,6 +292,13 @@ class Dataset:
                 m["hrtss_moving"] = v
 
     # ---- settings ---------------------------------------------------------
+    settings_from = "wko5"           # FitFolderDataset: "app" (plan / DB / estimates) unless opted in
+
+    def setting_label(self, name: str, default: str = "WKO5 設定") -> str:
+        """Where the athlete's dated setting `name` comes from (UI labels).
+        Here: the WKO5 athlete file; FitFolderDataset overrides it."""
+        return default
+
     def setting(self, name: str, day: float) -> Optional[float]:
         name = name.lower()
         if name == "weight":
