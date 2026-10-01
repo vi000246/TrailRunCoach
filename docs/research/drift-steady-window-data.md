@@ -17,7 +17,7 @@
 
 ## 1. 方法
 
-- 資料：WKO5 athlete 資料夾（`Dataset(~/WKO5/Athlete)`），唯讀；磁碟快取寫入全部關掉。門檻（AeT 142.4、CP 175.6）用各活動日期當時的值（`_thresholds`）。
+- 資料：WKO5 athlete 資料夾（`Dataset(ATHLETE_DIR)`，`backend.api.wko5views` 的預設 WKO5 資料夾），唯讀；磁碟快取寫入全部關掉。門檻（AeT 142.4、CP 175.6）用各活動日期當時的值（`_thresholds`）。
 - 1 秒網格（線性內插，> 30 秒的缺口設 NaN）。
 - **停等**：速度 ≤ 1.6 km/h（WKO5 的移動門檻）。
 - **(a) 起點**：max(10 分, 第一個 20 分鐘內開始的最後一次停等結束 + 60 秒)。
