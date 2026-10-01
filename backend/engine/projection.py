@@ -25,6 +25,7 @@ import statistics
 from typing import Optional
 
 from backend.engine import aet_test as AT
+from backend.engine import b2b as B2B
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
 from backend.engine.zones import WORKOUT_TARGETS
@@ -102,8 +103,11 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   allow_quality: bool, strength_tss: float, aet: Optional[float],
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
                   notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
-                  aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None) -> list[dict]:
+                  aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
+                  b2b: Optional[dict] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
+    `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
+    week's B2B is decided here and written back as b2b["info"].
     `base_quality`: the base-phase session the gate picked for this week
     (engine/quality_gate.py dose step, the recovery-week fartlek, or the AeT
     test, kind "test"); None in base with `allow_quality` = 閾值 3×10.
@@ -118,9 +122,15 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         ss.append({"target": "", "detail": "", "source": "", "tss": 0.0, "day": None,
                    "done": False, "done_by": None, **kw})
 
+    long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
+    long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
+    info = None
+    if b2b is not None:
+        info = b2b["info"] = B2B.projected(kind, mode, monday, b2b.get("event"), b2b.get("prev_mode"),
+                                           b2b.get("state") or {}, round(long_min / 5) * 5, longest, total)
+        if info.get("post"):
+            allow_quality = False                   # the easy days after a B2B (engine/b2b.py)
     if kind in ("base", "specific") and mode != "recovery_week":
-        long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
-        long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
         if xu_test and kind == "base":
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
         else:
@@ -129,6 +139,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                 detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
                 + f"；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
                 source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
+            if info is not None and info.get("due"):
+                ss.extend(B2B.followers(ss[-1], info))     # out of the easy minutes (Koop)
         if allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60, target=tgt.get("supra", ""),
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
@@ -168,11 +180,24 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                      quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
         PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs, notes=ctx.notes)
-        return ss
+        return _b2b_finish(ss, info, b2b, monday, aet, blocked, prefs, ctx.notes)
     # the raw 課表偏好 value: aet_test_days isn't part of `active`, so `prefs` may be None here
     aet_days = AT.TEST_DAYS.get(aet_test_days or getattr(prefs, "aet_test_days", None) or "weekday")
     _place(ss, monday, long_wd, blocked, aet_days, notes)
-    return ss
+    return _b2b_finish(ss, info, b2b, monday, aet, blocked, None, notes)
+
+
+def _b2b_finish(ss: list[dict], info: Optional[dict], b2b: Optional[dict], monday: dt.date, aet, blocked,
+                prefs, notes) -> list[dict]:
+    """engine/b2b.py after the shaping and the placement: texts / caps, then
+    the B2B days on consecutive days (課表偏好: allowed days, the caps)."""
+    if not info or not info.get("due"):
+        return ss
+    B2B.decorate(ss, info, aet, prefs.long_cap if prefs is not None else None, (b2b or {}).get("weight"))
+    kept = B2B.place(ss, monday, monday, set(blocked or ()), prefs.allowed if prefs is not None else None, notes,
+                     prefs.cap_weekday if prefs is not None else None)
+    B2B.placed(info, kept)
+    return kept
 
 
 def _bq(b: dict) -> dict:
@@ -314,6 +339,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     blocks = ([cur["reentry"]] if cur.get("reentry") else []) + RE.planned_ahead(
         blackouts or (), monday + dt.timedelta(days=6),
         (sum(hist[-5:-1]) / 4.0) if len(hist) >= 5 else (hist[-1] if hist else None), longest)
+    cb = cur.get("b2b") or {}
+    b2b_state = B2B.next_state(cb, monday, cur_s)          # 連續兩天長天 (engine/b2b.py)
+    prev_mode = cur.get("mode")
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
@@ -368,11 +396,16 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             base_q = O._gate_session(gate, dec, th, hours)
             if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB):
                 step += 1
+        b2b = {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode, "weight": cb.get("weight")}
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
-                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q)
+                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b)
+        b2b_info = b2b.get("info") or {}
+        if b2b_info.get("post"):
+            notes.append(B2B.post_note(b2b_info))
+        b2b_state, prev_mode = B2B.next_state(b2b_info, week, ss), mode
         heat_w = None
         if events is not None:
             try:
@@ -404,12 +437,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "tss": sum(planned), "ctl_start": ctl0, "ctl_end": ctl,
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
-                    **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active") else {}),
+                    **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
+                       or b2b_info.get("post") or b2b_info.get("due") else {}),
+                    **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None)
         if long_n:
-            longest = float(long_n["minutes"])
+            # a B2B day 1 shortened to fit the pair (engine/b2b.py) doesn't lower the long-run base
+            longest = max(longest, float(long_n["minutes"])) if b2b_info.get("due") else float(long_n["minutes"])
         if PR is not None or lost:
             # what the preferences / 不排課日期 actually let through (a hard cap or
             # too few days can leave less)
