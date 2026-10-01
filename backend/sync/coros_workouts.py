@@ -142,7 +142,48 @@ def _num(pat: str, text: str, default: Optional[int] = None, group: int = 1) -> 
     return int(m.group(group)) if m and m.group(group) else default
 
 
+WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
+REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
+
+
+def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
+    """A library variant (engine/interval_library.py) from its own timed steps:
+    the warm-up blocks (city run, riverside, drills, strides), every rep and rest
+    as its own lap (walk rests have no target), the cool-down. None when the
+    session carries no known variant."""
+    from backend.engine import interval_library as IL
+    v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj"))
+    if v is None:
+        return None
+    work_int = power(th, v.lo, v.hi)
+    target = s.get("target", "")
+    hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", target)
+    if hm and "功率" not in target:
+        work_int = ("hr", int(hm.group(1)), int(hm.group(2)))      # 課表偏好 間歇目標 = 心率
+    out: list[StepLike] = []
+    for st in IL.steps(v, s.get("variant_blocks") or "std"):
+        k = st["kind"]
+        if k == "warm" and st["code"] == "strides":
+            n = max(1, st["s"] // 60)
+            out.append(Repeat(n, [Step(EX_TRAIN, 20, None, "快步跑 20 秒"), Step(EX_REST, 40, None, "慢跑")],
+                              f"快步跑 {n}×20 秒"))
+        elif k == "warm":
+            out.append(Step(EX_WARMUP, st["s"], None if st["code"] == "drills" else easy_hr(th),
+                            WARM_NAME.get(st["code"], "暖身")))
+        elif k == "work":
+            out.append(Step(EX_TRAIN, st["s"], work_int, st["text"]))
+        elif k == "rest":
+            out.append(Step(EX_REST, st["s"], easy_hr(th) if st.get("mode") == "jog" else None,
+                            REST_NAME.get(st.get("mode"), "恢復")))
+        else:
+            out.append(Step(EX_COOLDOWN, st["s"], easy_hr(th), "緩和"))
+    return out
+
+
 def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
+    vs = _variant_steps(s, th) if s.get("variant_key") else None
+    if vs is not None:
+        return vs
     title, detail, target = s.get("title", ""), s.get("detail", ""), s.get("target", "")
     m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*分", title)
     if not m:

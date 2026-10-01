@@ -443,6 +443,14 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         pre = (dose.get("note") or "上次間歇沒有達標：") + pre
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
     tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}
+    if spec is QG.SUB:
+        # a ramp week (CTL ≥ +5): the first rung's content, never a ladder step (neutral)
+        f = IL.fit("z3a", cap, (), prefs, mountain)
+        s = IL.session_for({**f, "equiv": False, "progress": False, "rung": "sub",
+                            "reason": "CTL 每週 ≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
+        s["title"] = QG.SUB[1]
+        s["source"] = QG.source(gate, spec)
+        return s
     if spec[0] in IL.LIBRARY:
         f = IL.fit(spec[0], cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"))
         by_cap = f["level"] != "full" or f["action"] != "ok" or f.get("reps") is not None

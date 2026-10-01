@@ -34,9 +34,11 @@ Two questions, answered separately:
      48 h from the long run / other hard days → plan_prefs.place() / week_plan
    Base phase gets at most one interval session a week.
 
-The dose (§4.5) steps through DOSE, one step per interval session done in the
-last 8 weeks: 5×1′ → 6×1′ → 4×3′ uphill → 5×3′ → 4×4′, then sub-threshold 3×8′ /
-4×8′ alternating. The recovery-week fartlek is not a step. A held week repeats
+The dose steps through the ladder (interval-prescription.md §A5.3), one step
+per planned interval session 達標 in the last 8 weeks: Zone 3 3×6′ → 3×8′ →
+2×12′, then (Zone 5 open) 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 / T+
+maintenance. Each step is a library variant fitted to the day
+(engine/interval_library.py). The recovery-week fartlek is not a step. A held week repeats
 the last step. The step moves by the progression state machine of
 docs/research/interval-adaptation.md §4.3 (interval_outcome / dose_step):
 達標 forward, 邊界 repeat, 未適應 rest +1 min then back one step, first rep
@@ -66,7 +68,6 @@ SRC_SEILER = "Seiler 2010；Seiler & Tønnessen 2009（整個週期都有少量�
 SRC_PALLADINO = "Palladino 基礎期（你的筆記：palladino基礎期訓練）"
 SRC_KOOP = "Koop／CTS（6×3 分 RI、上坡）"
 SRC_HELGERUD = "Helgerud 2007（4×4 分）"
-SRC_SEILER13 = "Seiler 2013（4×8 分）"
 SRC_OWN = "自訂"
 
 # ---- numbers (the doc's §7 lists which are ours) ----------------------------
@@ -94,37 +95,42 @@ FADE = 0.05                    # workout_review.FADE
 # Zone 5 reps ≥ 2 min, ≤ 2 sessions a week, ≥ 2 days apart (徐國峰). Zone 5 also needs the
 # aerobic base confirmed (engine/base_check.z5_status). The old ladder started with 5×1′ @ 98–101 % CP —
 # in his terms too short to train VO2max yet a Zone 5 load (xu-guofeng-reply.md §3).
-# key, title, reps, work min, rest min, %CP lo, hi, uphill, source
-Z3 = (
-    ("z3a", "閾值 3×8 分", 3, 8, 2, 0.88, 0.95, False,
-     "徐國峰：先練 3 區（私訊）；88–95% CP = Palladino 3A"),
-    ("z3b", "閾值 4×8 分", 4, 8, 2, 0.88, 0.95, False, "徐國峰：先練 3 區；Seiler 2013：4×8 分對休閒選手效果最好"),
-    ("z3c", "閾值 3×10 分", 3, 10, 3, 0.95, 1.01, False, "徐國峰：先練 3 區；Palladino 3B（95–101% CP、3×10 分）"),
-)
-Z5 = (
-    ("z5a", "VO2max 5×2 分", 5, 2, 2, 1.06, 1.12, False,
-     "徐國峰：5 區每趟最短 2 分鐘（私訊）；106–112% CP = Palladino Z5 的下段（推估）"),
-    ("z5b", "VO2max 4×3 分", 4, 3, 3, 1.05, 1.10, False, "Koop 3 分 RI；105–110% CP 取自 Palladino 後期"),
-    ("z5c", "VO2max 5×3 分", 5, 3, 3, 1.05, 1.10, False, "Koop 12–24 分總量"),
-    ("z5d", "VO2max 4×4 分", 4, 4, 3, 1.03, 1.07, False, "Helgerud 2007 4×4（約 105% CP 的換算推估）"),
-)
+# key, title, reps, work min, rest min, %CP lo, hi, uphill, source — each rung's standard
+# session (the canonical variant of engine/interval_library.py; interval-prescription.md §A5.3,
+# corrected 2026-10-01): Zone 3 3×6 → 3×8 → 2×12 at 90–95 % CP (Haugen 2022 / Palladino / Daniels —
+# not Seiler 2013, whose 4×8′ ran at ~90 % HRpeak, 9.6 mmol/L: severe, not Zone 3); Zone 5 5×2
+# (106–112 %, 2′ walk) → 4×3 (3′ jog) → 5×3 (2.5′ walk) → 4×4 (104–108 %, 3′ jog; Helgerud 2007).
+# Rests < 2–3 min are walks (Buchheit & Laursen 2013: passive recovery below 2–3 min).
+from backend.engine import interval_library as _IL  # noqa: E402
+
+
+def _rung_row(rung: str) -> tuple:
+    v = _IL.canonical(rung)
+    return (rung, _IL.title(v), v.n, v.work_s / 60.0, v.rest_s / 60.0, v.lo, v.hi, v.terrain == "hill", v.src)
+
+
+Z3 = tuple(_rung_row(r) for r in ("z3a", "z3b", "z3c"))
+Z5 = tuple(_rung_row(r) for r in ("z5a", "z5b", "z5c", "z5d"))
+TP = _rung_row("tp")             # T+ near-threshold: maintenance once the Z5 rungs are done (§A5.3)
 LADDER = Z3 + Z5
 Z3_MET_FOR_Z5 = len(Z3)        # 推估: 3 sessions 達標 at Zone 3 (the Z3 rungs) = 「3 區跑順了」
-# legacy titles of the old ladder: not counted as steps any more (neutral in planned_spec)
+# legacy titles of the old ladders: not counted as steps any more (neutral in planned_spec).
+# The old z3a 「閾值 3×8 分」 is the new second rung's title: a title-only row reads as z3b now.
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
-                 "閾值下 3×8 分", "閾值下 4×8 分")
+                 "閾值下 3×8 分", "閾值下 4×8 分", "閾值 4×8 分", "閾值 3×10 分")
 DOSE = Z3                      # kept for callers that read the first rungs (adapt._downgrade)
 RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
 # the ramp-week session (CTL ramp ≥ 5: threshold only) — Z3[0]'s content under its own key / title so
 # it is never mistaken for the ladder's first rung (planned_spec: neutral)
-SUB = ("sub", "閾值 3×8 分（只排閾值）", 3, 8, 2, 0.88, 0.95, False, "CTL ramp ≥ 5（Friel）：只排閾值；88–95% CP")
+SUB = ("sub", "閾值 3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp ≥ 5（Friel）：只排閾值；90–95% CP")
 ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
 
 
 def dose_spec(step: int, z5_open: bool = True) -> tuple:
     """The ladder rung for `step` (達標 count): Z3 rungs first; from step 3
     Z5 rungs only while Zone 5 is open — else the top Z3 rungs alternating
-    (Zone 3 continues; 徐國峰). After the Z5 rungs: 4×4 and 3×10 alternating."""
+    (Zone 3 continues; 徐國峰). After the Z5 rungs: maintenance rotating V3, V4
+    and T+ (near-threshold) — T+ every 3rd week (interval-prescription.md §C5.2-4, 推估)."""
     step = max(0, int(step))
     if step < len(Z3):
         return Z3[step]
@@ -133,7 +139,7 @@ def dose_spec(step: int, z5_open: bool = True) -> tuple:
     k = step - len(Z3)
     if k < len(Z5):
         return Z5[k]
-    return (Z5[-1], Z3[-1])[(k - len(Z5)) % 2]
+    return (Z5[2], Z5[3], TP)[(k - len(Z5)) % 3]
 
 
 def _f(v) -> Optional[float]:
@@ -1256,11 +1262,15 @@ def session(spec: tuple, th: dict, prefix: str = "", hours: Optional[float] = No
         elif key in _HR_FRAC and use_hr:
             a, b = _HR_FRAC[key]
             parts.append(f"心率 {a * lthr:.0f}–{b * lthr:.0f} bpm")
+    fmt = lambda x: f"{x:g}"
+    # Buchheit & Laursen 2013: rests < 2–3 min passive — a Zone 5 rest ≤ 2.5 min is a walk
+    how = "走路或極慢跑" if key.startswith("z5") and rest <= 2.5 else "慢跑"
     if uphill:
-        body = f"上坡 {work} 分鐘（6–10% 坡），慢跑或走下來恢復；{what}；休 {rest} 分鐘"
+        body = f"上坡 {fmt(work)} 分鐘（6–10% 坡），慢跑或走下來恢復；{what}；休 {fmt(rest)} 分鐘"
     else:
-        body = f"{what}；休 {rest} 分鐘（慢跑）"
-    minutes = 15 + reps * (work + rest) + 10
+        body = f"{what}；休 {fmt(rest)} 分鐘（{how}）"
+    # no rest after the last rep (interval-prescription.md §A5.2-3)
+    minutes = int(round(15 + reps * work + (reps - 1) * rest + 10))
     rate = {"z3": 60.0, "z3a": 65.0, "z3b": 65.0, "sub": 65.0, "z3c": 68.0, "r1": 55.0}.get(key, 72.0)
     return {"id": "quality", "kind": "quality", "title": title, "minutes": minutes,
             "target": " · ".join(parts), "detail": f"{prefix}{body}；暖身 15 分、緩和 10 分",
@@ -1414,7 +1424,8 @@ OPTION_INFO = {
     "none": {"source": "Seiler 2010、Seiler & Tønnessen 2009、Koop／CTS",
              "rule": "不設門檻：整個週期都有少量高強度。基礎期每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5（≥ 5 只排閾值下）、"
                      "週增量 ≤ 20%（10–20% 維持）、3:1 恢復週改 4×1 分 fartlek、TSB、離長跑 ≥ 2 天。"
-                     "劑量 3 區 3×8 → 4×8 → 3×10，5 區 5×2 → 4×3 → 5×3 → 4×4（徐國峰：3 區先）。",
+                     "劑量 3 區 3×6 → 3×8 → 2×12（90–95% CP），5 區 5×2 → 4×3 → 5×3 → 4×4（徐國峰：3 區先）；"
+                     "時間足夠排標準版，平日上限放不下時換同等較短版（interval-prescription.md）。",
              "todo": "不用測試。"},
 }
 
