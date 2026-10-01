@@ -282,7 +282,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
-    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets"):
+    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     pinfo = winfo = binfo = None
     if v.get("source") == "custom" and BS.basis_spec(ch):
@@ -295,6 +295,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
             # 近 7／14／28 天新高 (recentbests.py): ?window=14
             ch, winfo = RB.apply_window(ch, request.query_params.get("window"))
     params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
+    if ch.get("kind") == "z5gate":
+        # the replay follows the 間歇門檻 preference (課表偏好) and the stored test / interval
+        # sessions: both in the key so a changed preference isn't served from the cache
+        from backend.engine import plan_prefs as PP
+        params = {**params, "_prefs": PP.load().stamp()}
     # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
@@ -340,6 +345,29 @@ def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bo
                    "buckets": PD.buckets(b, e, chosen), "range_note": note}
 
 
+Z5GATE_MAX_DAYS = 365       # the replay is day by day: at most a year back from the range's end
+
+
+def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
+    """The 5 區開放流程 panel: quality_gate.z5_history over the selected range
+    (capped at a year), with the 間歇門檻 preference the planner uses."""
+    import math
+    from backend.engine import quality_gate as QG
+    from backend.engine.overview import day_to_date
+    if prefs is None:
+        from backend.engine import plan_prefs as PP
+        prefs = PP.load()
+    end = min(day_to_date(int(math.floor(e))), day_to_date(int(math.floor(ds.today))))
+    begin = max(day_to_date(int(math.floor(b))), end - dt.timedelta(days=Z5GATE_MAX_DAYS))
+    plan = getattr(ds, "plan", None)
+    if plan is None:
+        from backend.engine.planning import Plan
+        plan = Plan.load()
+    h = QG.z5_history(ds, plan, begin, end, prefs)
+    return {"title": ch.get("title"), "description": ch.get("description"), "kind": "z5gate", "z5": h,
+            "range_note": f"重播 {begin.isoformat()} 起（最多 1 年）" if begin > day_to_date(int(math.floor(b))) else None}
+
+
 def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
@@ -350,6 +378,8 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w)
         return render_chart(ch, ds, b, e, workout=w)
     if _panel_kind(ch) == "map":
         return render_map(ch, ds, w)
+    if ch.get("kind") == "z5gate":
+        return z5gate_panel(ch, ds, b, e)
     if ch.get("kind") in ("zones", "targets"):
         import math
         from backend.engine.zones import training_targets, zone_table

@@ -226,6 +226,21 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 .maphint button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
   border-radius: 4px; padding: 1px 8px; cursor: pointer; }
 .lmap .leaflet-tooltip.hovtip { font-size: 11px; line-height: 1.35; padding: 3px 6px; }
+/* 5 區開放流程 (kind z5gate): status colours (fixed, always with a text label), one series hue */
+:root { --z5-none: #b9b8b1; --z5-good: #0ca30c; --z5-warn: #fab219; --z5-serious: #ec835a; --z5-bar: #2a78d6;
+  --z5-band: rgba(27,175,122,.13); --z5-ink: #0b0b0b; --z5-ink2: #52514e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --z5-none: #5a5954; --z5-bar: #3987e5;
+  --z5-band: rgba(25,158,112,.20); --z5-ink: #ffffff; --z5-ink2: #c3c2b7; } }
+:root[data-theme="dark"] { --z5-none: #5a5954; --z5-bar: #3987e5; --z5-band: rgba(25,158,112,.20); --z5-ink: #ffffff; --z5-ink2: #c3c2b7; }
+.z5now { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin: 2px 0 6px; font-size: 12.5px; }
+.z5now b { font-size: 13.5px; }
+.z5leg { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 11.5px; color: var(--muted); margin: 0 0 2px; }
+.z5leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.z5leg i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; }
+.z5leg i.ln { height: 0; border-top: 2px dashed var(--z5-ink2); border-radius: 0; }
+.z5leg .sym { font-style: normal; color: var(--text); font-size: 12px; width: auto; height: auto; }
+.plot.z5 { height: 340px; }
+table.z5ev td { white-space: normal; }
 </style>
 </head>
 <body class="aside-closed" data-mode="season">
@@ -725,7 +740,8 @@ async function load() {
     while (queue.length) {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
-      if (!["athlete", "workout", "zones", "targets", "map"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
+      if (c.kind === "z5gate") card.classList.add("wide");
+      if (!["athlete", "workout", "zones", "targets", "map", "z5gate"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
       if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
       await renderCard(card, v, di, c, q, token);
     }
@@ -883,6 +899,7 @@ function drawInto(box, res) {
   }
   if (res.kind === "zones") drawZones(box, res);
   else if (res.kind === "targets") drawTargets(box, res);
+  else if (res.kind === "z5gate") drawZ5Gate(box, res);
   else if (res.kind === "map") drawMap(box, res);
   else draw(box, res);
 }
@@ -1092,6 +1109,145 @@ function drawTargets(card, res) {
     <tbody>${T.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
       <td class="num">${w(r.power)}</td><td class="num">${w(r.hr)}</td><td>${esc(r.primary)}</td>
       <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
+}
+
+// ---- 5 區開放流程 (kind z5gate, quality_gate.z5_history): a state band over time on top, the
+// weekly Zone 1 minutes below (150–210 target band, the 2/3 pause line), event markers in a lane
+// between them. One value axis (minutes); the band and the lane are category lanes, not a scale.
+const Z5_STATE = {
+  unconfirmed: { label: "未確認", v: "--z5-none" }, confirmed: { label: "已確認", v: "--z5-good" },
+  open: { label: "不設門檻", v: "--z5-good" }, paused: { label: "暫停", v: "--z5-warn" },
+  reentry: { label: "恢復期", v: "--z5-serious" },
+};
+const Z5_EV = {   // shape carries identity (never colour alone)
+  confirm: { sym: "diamond", ch: "◆", label: "確認有氧基礎" },
+  xu_run: { sym: "circle", ch: "●", label: "90 分鐘長跑（實心＝通過、空心＝沒過）" },
+  aet: { sym: "triangle", ch: "▲", label: "實測 AeT" },
+  pause: { sym: "triangle", rot: 180, ch: "▼", label: "5 區暫停" },
+  break: { sym: "rect", ch: "■", label: "停跑（恢復期開始）" },
+};
+function drawZ5Gate(card, res) {
+  card.querySelector(".loading")?.remove();
+  const H = res.z5, cur = H.current || {};
+  const st = (k) => Z5_STATE[k] || Z5_STATE.unconfirmed;
+  const ms = (iso) => Date.parse(iso + "T00:00:00Z");
+  const DAY = 86400000;
+  const ink = css("--z5-ink"), ink2 = css("--z5-ink2"), line = css("--line"), panel = css("--panel");
+  const fill = (k) => css(st(k).v);
+  // readable text on a status fill: black or white by the fill's luminance
+  const onFill = (hex) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5 ? "#0b0b0b" : "#ffffff"; };
+  const z5txt = cur.state === "confirmed" ? `已確認（${cur.since}，${cur.path_label}）` : st(cur.state).label;
+  card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}</p>
+    <div class="z5now"><span>今天：<b>${esc(z5txt)}</b></span><span class="meta">${esc(["paused", "reentry"].includes(cur.state) ? cur.reason || "" : "")}</span>
+      <span class="meta">間歇門檻：${esc(H.mode_label)}</span></div>
+    ${H.note ? `<p class="badge" style="margin:0 0 6px">${esc(H.note)}</p>` : ""}
+    <div class="z5leg" aria-label="圖例">
+      ${["unconfirmed", "confirmed", "paused", "reentry"].map((k) => `<span><i style="background:${fill(k)}"></i>${st(k).label}</span>`).join("")}
+      <span><i style="background:var(--z5-bar)"></i>每週 1 區分鐘</span>
+      <span><i style="background:var(--z5-band);outline:1px solid ${line}"></i>目標 ${H.target[0]}–${H.target[1]} 分（徐國峰）</span>
+      <span><i class="ln"></i>暫停線＝確認時的 2/3（Hickson 1982）</span>
+      ${Object.values(Z5_EV).map((e) => `<span><i class="sym">${e.ch}</i>${esc(e.label)}</span>`).join("")}
+    </div>`);
+  const el = document.createElement("div");
+  el.className = "plot z5";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `5 區開放流程：今天 ${z5txt}；下方表格列出每次狀態改變與事件`);
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const x0 = ms(H.begin), x1 = ms(H.end) + DAY;
+  // lane 1 = state band, lane 0 = events
+  const segData = H.segments.map((s) => ({ value: [ms(s.start), ms(s.end), 1], s }));
+  const evData = H.events.map((e) => {
+    const k = Z5_EV[e.kind] || Z5_EV.break, hollow = e.kind === "xu_run" && !e.ok;
+    return { value: [ms(e.date) + DAY / 2, 0], e, symbol: k.sym, symbolRotate: k.rot || 0, symbolSize: 11,
+      itemStyle: { color: hollow ? panel : ink, borderColor: ink, borderWidth: hollow ? 1.5 : 1 } };
+  });
+  const wk = H.weeks.map((w) => ({ value: [ms(w.monday), ms(w.monday) + 7 * DAY, w.z1_min], w }));
+  // the pause line: flat across each week that has one, broken where there is none
+  const keep = [];
+  for (const w of H.weeks) {
+    if (w.keep_min == null) { keep.push([ms(w.monday), null]); continue; }
+    keep.push([ms(w.monday), w.keep_min], [ms(w.monday) + 7 * DAY - 1, w.keep_min]);
+  }
+  const ymax = Math.max(H.target[1] * 1.15, ...H.weeks.map((w) => w.z1_min * 1.1));
+  const fmtD = (t) => { const d = new Date(t); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+  const lastDay = (iso) => new Date(ms(iso) - DAY).toISOString().slice(0, 10);
+  const tip = (p) => {
+    if (p.seriesId === "state") {
+      const s = p.data.s;
+      return `<b>${esc(st(s.state).label)}</b> ${esc(s.start)} ～ ${esc(lastDay(s.end))}`
+        + (s.state === "confirmed" || (s.state === "paused" && s.since) ? `<br>確認：${esc(s.since)}（${esc(s.path_label)}）` : "")
+        + (s.reason ? `<br><span style="opacity:.85">${esc(s.reason)}</span>` : "");
+    }
+    if (p.seriesId === "ev") {
+      const e = p.data.e;
+      return `<b>${esc(e.date)}</b> ${esc((Z5_EV[e.kind] || {}).ch || "")}<br>${esc(e.label)}`;
+    }
+    if (p.seriesId === "z1") {
+      const w = p.data.w, [lo, hi] = H.target;
+      const vs = w.z1_min >= hi ? `達到 ${hi} 分` : w.z1_min >= lo ? `在 ${lo}–${hi} 分之間` : `比 ${lo} 分少 ${Math.round(lo - w.z1_min)} 分`;
+      return `<b>${esc(bucketLabel(w.monday, "week", true))}${w.complete ? "" : "（本週未完）"}</b><br>1 區 ${Math.round(w.z1_min)} 分（${vs}）`
+        + (w.keep_min != null ? `<br>暫停線 ${Math.round(w.keep_min)} 分（確認時 ${Math.round(w.level_min)} 分的 2/3）${w.z1_min < w.keep_min ? "：低於" : ""}` : "");
+    }
+    if (p.seriesId === "keep") return `暫停線 ${Math.round(p.value[1])} 分（確認時水準的 2/3，Hickson 1982；連 3 週低於才暫停，3 週推估）`;
+    return "";
+  };
+  const lbl = { color: css("--muted"), fontSize: 10, hideOverlap: true };
+  chart.setOption({
+    animation: false,
+    tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: css("--text") },
+      formatter: (p) => `<div style="font-size:11.5px;max-width:320px;white-space:normal">${tip(p)}</div>` },
+    grid: [{ left: 64, right: 16, top: 4, height: 50 }, { left: 64, right: 16, top: 70, bottom: 28 }],
+    xAxis: [
+      { type: "time", gridIndex: 0, min: x0, max: x1, show: false },
+      { type: "time", gridIndex: 1, min: x0, max: x1, axisLine: { lineStyle: { color: line } },
+        axisLabel: { ...lbl, formatter: { year: "{yyyy}", month: "{M}月", day: "{M}/{d}" } } },
+    ],
+    yAxis: [
+      { type: "category", gridIndex: 0, data: ["事件", "5 區狀態"], axisTick: { show: false }, axisLine: { show: false },
+        axisLabel: { color: css("--muted"), fontSize: 10.5 } },
+      { type: "value", gridIndex: 1, min: 0, max: Math.ceil(ymax / 50) * 50, interval: 50,
+        axisLabel: { ...lbl, formatter: (v) => `${v} 分` }, splitLine: { lineStyle: { color: line } } },
+    ],
+    series: [
+      { id: "state", type: "custom", xAxisIndex: 0, yAxisIndex: 0, data: segData, encode: { x: [0, 1], y: 2 },
+        renderItem: (params, api) => {
+          const s = segData[params.dataIndex].s;
+          const a = api.coord([api.value(0), 1]), b = api.coord([api.value(1), 1]);
+          const h = api.size([0, 1])[1] * 0.78, w = Math.max(1, b[0] - a[0] - 2), col = fill(s.state);
+          const text = st(s.state).label + (s.state === "confirmed" && w > 150 ? `（${s.path_label}）` : "");
+          return { type: "group", children: [
+            { type: "rect", shape: { x: a[0] + 1, y: a[1] - h / 2, width: w, height: h, r: 4 }, style: { fill: col } },
+            { type: "text", silent: true, style: { text: w > 40 ? text : "", x: a[0] + 7, y: a[1], fill: onFill(col),
+              font: "600 11px system-ui, sans-serif", verticalAlign: "middle", width: w - 10, overflow: "truncate" } }] };
+        } },
+      { id: "ev", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, data: evData, z: 3 },
+      { id: "z1", type: "custom", xAxisIndex: 1, yAxisIndex: 1, data: wk, encode: { x: [0, 1], y: 2 },
+        renderItem: (params, api) => {
+          const w = wk[params.dataIndex].w;
+          const a = api.coord([api.value(0), api.value(2)]), b = api.coord([api.value(1), 0]);
+          return { type: "rect", shape: { x: a[0] + 1, y: a[1], width: Math.max(1, b[0] - a[0] - 2), height: Math.max(0, b[1] - a[1]), r: [4, 4, 0, 0] },
+            style: { fill: css("--z5-bar"), opacity: w.complete ? 1 : 0.45 } };
+        },
+        markArea: { silent: true, itemStyle: { color: css("--z5-band") }, label: { show: true, position: "insideTopLeft", color: ink2, fontSize: 10,
+          formatter: `目標 ${H.target[0]}–${H.target[1]} 分` }, data: [[{ yAxis: H.target[0] }, { yAxis: H.target[1] }]] } },
+      { id: "keep", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: keep, showSymbol: false, connectNulls: false,
+        lineStyle: { color: ink2, type: "dashed", width: 2 }, z: 4 },
+    ],
+  });
+  new ResizeObserver(() => chart.resize()).observe(el);
+  // the table view: every state change and event, in order
+  const rows = [
+    ...H.segments.map((s) => ({ d: s.start, k: `狀態：${st(s.state).label}`, t: s.reason || (s.path_label ? `確認（${s.path_label}）` : "") })),
+    ...H.events.map((e) => ({ d: e.date, k: `${(Z5_EV[e.kind] || {}).ch || ""} ${(Z5_EV[e.kind] || {}).label?.split("（")[0] || e.kind}`, t: e.label })),
+  ].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0);
+  card.insertAdjacentHTML("beforeend", `<details><summary>狀態變化與事件（${rows.length}）</summary>
+    <table class="z5ev"><thead><tr><th>日期</th><th>項目</th><th>說明</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td class="num">${esc(r.d)}</td><td>${esc(r.k)}</td><td class="meta">${esc(r.t)}</td></tr>`).join("")}
+    </tbody></table>
+    <p class="desc" style="max-height:none;margin-top:6px">來源：${Object.values(H.sources || {}).map(esc).join("；")}</p></details>`);
 }
 
 // ---- workout samples: one downsampled index shared by the map and every time / distance chart

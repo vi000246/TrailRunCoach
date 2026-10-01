@@ -147,6 +147,11 @@ neutral.
 - **Faster at the same HR**: the easy targets show pace / power at the AeT HR from the median
   EF of the last 6 easy road runs (`base_check.easy_targets`, 推估); the AeT HR is unchanged and
   needs no retest. CP drives the Zone 3 / 5 power targets (the CP-test track is unchanged).
+- **History** (`quality_gate.z5_history`): the lifecycle replayed on every day of a range with
+  the inputs evaluate() would have had that day (the plan's AeT / LTHR in effect, `reentry.find`
+  on that day, the interval sessions of the 8 weeks before it) through the same `_z5`, so the
+  last day equals the gate. plateau / weeks unlock by their own method and are not replayed
+  (noted). Shown on 總覽 (card, `z5_card`) and in 基礎期 (chart, view kind `z5gate`).
 - **Visibility**: the gate hover and the overview show 「Zone 5：未確認／已確認（日期、路徑）／
   暫停（原因）／恢復期」 and 「建議測試：…」.
 

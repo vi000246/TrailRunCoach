@@ -44,6 +44,8 @@ TSS/min, ≈ 4.1 TSS per RQ point → 30–42 points ≈ 120–170 TSS.
 """
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import datetime as dt
 import math
 from typing import Optional
@@ -103,6 +105,38 @@ def _f(v) -> Optional[float]:
     except (TypeError, ValueError):
         return None
     return None if math.isnan(x) or math.isinf(x) else x
+
+
+# ---- a per-run memo for the history replay (quality_gate.z5_history) ----------------
+# Replaying z5_status day by day re-reads the same runs hundreds of times; inside
+# replay_memo() the per-run results (measure, the 90-min test, the long-run halves)
+# are kept for the replay only. Outside it nothing is cached here — the rules are the
+# same either way, only the speed differs.
+_MEMO: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("base_check_memo", default=None)
+
+
+@contextlib.contextmanager
+def replay_memo():
+    tok = _MEMO.set({}) if _MEMO.get() is None else None
+    try:
+        yield
+    finally:
+        if tok is not None:
+            _MEMO.reset(tok)
+
+
+def _memo(key: tuple, fn):
+    memo = _MEMO.get()
+    if memo is None:
+        return fn()
+    if key not in memo:
+        memo[key] = fn()
+    return memo[key]
+
+
+def _measure(ds, w) -> Optional[dict]:
+    from backend.engine import workout_review as WR
+    return _memo(("m", id(ds), w.idx), lambda: WR.measure(ds, w))
 
 
 def monday(d: dt.date) -> dt.date:
@@ -203,7 +237,7 @@ def xu_runs(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         dur = _f(w.metrics.get("duration")) or 0.0
         if dur < XU_MIN_S:
             continue
-        r = xu_run(ds, w)
+        r = _memo(("xu", id(ds), w.idx), lambda: xu_run(ds, w))
         if r is not None:
             out.append(r)
     WR._flush(ds)
@@ -240,7 +274,7 @@ def weekly(ds, today: dt.date, weeks: int) -> list[dict]:
     m0 = monday(today) - dt.timedelta(weeks=weeks - 1)
     rows = {m0 + dt.timedelta(weeks=i): {"z1_s": 0.0, "run_s": 0.0} for i in range(weeks)}
     for w in _runs(ds, today, (today - m0).days + 1):
-        m = WR.measure(ds, w)
+        m = _measure(ds, w)
         if not m:
             continue
         k = monday(WR._wdate(w))
@@ -321,13 +355,17 @@ def long_check(ds, today: dt.date, days: int = LONG_DAYS) -> dict:
     for w in _runs(ds, today, days):
         if category(w) != "road" or (_f(w.metrics.get("duration")) or 0) < LONG_MIN_S:
             continue
-        m = WR.measure(ds, w)
+        m = _measure(ds, w)
         if not m or (m.get("moving_s") or 0) < LONG_MIN_S:
             continue
-        s = WR._samples(ds, w)
-        r = long_late_vs_early(s["t"], s["hr"], s["speed"]) if s is not None else None
+
+        def halves(w=w):
+            s = WR._samples(ds, w)
+            return long_late_vs_early(s["t"], s["hr"], s["speed"]) if s is not None else None
+        r = _memo(("long", id(ds), w.idx), halves)
         if r is None:
             continue
+        r = dict(r)
         r.update(idx=w.idx, date=WR._wdate(w).isoformat(),
                  ok=r["hr_rise"] <= LONG_HR_RISE and r["pace_drop"] <= LONG_PACE_DROP)
         runs.append(r)
