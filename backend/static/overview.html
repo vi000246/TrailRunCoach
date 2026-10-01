@@ -180,6 +180,11 @@ ol.z5steps > li > div { min-width: 0; }
 .z5dots i { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--accent); }
 .z5dots i.on { background: var(--accent); }
 .z5note { font-size: 12.5px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.b2bw { border-top: 1px solid var(--line); padding: 6px 0 4px; font-size: 13px; }
+.b2bw:first-child { border-top: 0; }
+.b2bw .row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.b2bw .num { font-variant-numeric: tabular-nums; }
+.b2bgrid { display: grid; grid-template-columns: auto auto auto; gap: 1px 10px; font-size: 12px; color: var(--muted); margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -203,6 +208,8 @@ ol.z5steps > li > div { min-width: 0; }
     <section>
       <h2>還缺什麼 <span class="meta">依周期排優先順序</span></h2>
       <div id="actions"><div class="loading">…</div></div>
+      <!-- due CP / AeT tests: suggested, the athlete picks the day (never auto-scheduled) -->
+      <div id="tsug" hidden></div>
     </section>
     <!-- Zone 5 opening process (quality_gate.z5_card): next to the week plan, whose interval
          session is Zone 3 or Zone 5 because of it; the season history is the 基礎期 chart -->
@@ -210,6 +217,11 @@ ol.z5steps > li > div { min-width: 0; }
       <h2 id="z5-h">5 區（最大攝氧量間歇）狀態
         <a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">看歷程圖 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
+    </section>
+    <!-- 連續兩天長天 (engine/b2b.py card): only before a multi-day / ≥ 6 h A event, or once B2B weekends exist -->
+    <section id="b2bcard" aria-labelledby="b2b-h" hidden>
+      <h2 id="b2b-h">連續兩天長天（B2B） <span class="meta" id="b2b-sub"></span></h2>
+      <div id="b2b"><div class="loading">…</div></div>
     </section>
     </div>
     <section data-sec id="s-week">
@@ -418,18 +430,20 @@ async function loadZ5() {
   if (c.history_href) $("z5-hist").href = c.history_href;
   // 未確認: the checklist below is the reason; 暫停 / 恢復期 say why in one line
   const sub = c.state === "confirmed" ? `${esc(c.since)} · ${esc(c.path_label)}`
-    : c.state === "paused" || c.state === "reentry" ? esc(c.reason || "") : "還沒有任何一條確認路徑做到";
+    : c.state === "paused" || c.state === "reentry" ? esc(c.reason || "") : "還沒確認有氧基礎";
   const top = `<div class="z5top"><span class="z5st ${esc(c.state)}"><span aria-hidden="true">${Z5_ICON[c.state] || "–"}</span>${esc(c.label)}</span>
     <span class="meta">${sub}</span></div>`;
   const R = c.reentry;
   const reentry = R && c.state === "reentry"
     ? `<div class="z5note"><b>恢復期還有 ${R.days_left} 天</b>（停跑 ${R.days} 天，到 ${esc(R.quality_from)} 前只排輕鬆跑，3 區、5 區都不排）；
        之後先完成 ${R.z3_before_z5} 堂 3 區${R.drift_check ? "，並通過長跑飄移檢查" : ""}${R.reconfirm ? "，而且要重新確認有氧基礎" : ""}${src(R.src)}</div>` : "";
-  const paths = c.paths.map((p) => `<div class="z5path"><b>${mark(p.ok)} ${esc(p.label)}</b>${src(p.src)}
-    ${p.items.length ? p.items.map((i) => `<div class="z5item">${mark(i.ok)}<div>${esc(i.label)}${src(i.src)}
-      <div class="val">${esc(i.value)} <span class="faint">／ 需要 ${esc(i.need)}</span>${i.why ? `<br>${esc(i.why)}` : ""}</div></div></div>`).join("")
-      : `<div class="z5item">${mark(null)}<div class="val">${esc(p.empty || "")}</div></div>`}</div>`).join("");
-  const base = c.state === "confirmed" || c.state === "open" || (c.state === "paused" && c.since);
+  // one step, the three tests (三選一，做了且達標); the 90-min test appears once
+  const B = c.base || { tests: [] };
+  const paths = `<div class="z5path">${B.tests.length ? B.tests.map((i) => `<div class="z5item">${mark(i.ok)}<div>${esc(i.label)}${src(i.src)}
+      <div class="val">${esc(i.value)}${i.need ? ` <span class="faint">／ 需要 ${esc(i.need)}</span>` : ""}</div></div></div>`).join("")
+      : `<div class="z5item">${mark(null)}<div class="val">${esc(B.empty || "")}</div></div>`}</div>`;
+  const base = B.ok;
+  const next = c.next?.text ? `<div class="z5note" role="status" style="margin:0 0 8px;padding-top:0;border-top:0"><b>${esc(c.next.text)}</b></div>` : "";
   const z3 = c.z3;
   const dots = Array.from({ length: z3.need }, (_, i) => `<i class="${i < z3.done ? "on" : ""}"></i>`).join("");
   const z5ok = c.open && z3.ok;
@@ -438,14 +452,49 @@ async function loadZ5() {
      ／ 暫停線 <b class="num">${Math.round(K.line_min)}</b> 分（確認時 ${Math.round(K.level_min)} 分的 2/3，連 3 週低於才暫停）${src(K.src)}
      ${K.why ? `<br><span class="lvl watch">${esc(K.why)}</span>` : ""}</div>` : "";
   const test = c.test ? `<div class="z5note"><span class="lvl watch">建議測試</span> ${esc(c.test.text)}</div>` : "";
-  $("z5").innerHTML = `${top}
+  $("z5").innerHTML = `${top}${next}
     <ol class="z5steps">
-      <li class="${base ? "ok" : ""}"><div><b>確認有氧基礎</b> <span class="meta">（下面任一條做到就算）</span>
+      <li class="${base ? "ok" : ""}"><div><b>${esc(B.label || "確認有氧基礎")}</b>
         ${c.state === "reentry" ? `<div class="meta">恢復期內不判斷</div>` : paths}</div></li>
       <li class="${z3.ok ? "ok" : ""}"><div><b>3 區達標 ${z3.done} / ${z3.need}</b><span class="z5dots" role="img" aria-label="3 區達標 ${z3.done} / ${z3.need}">${dots}</span>${src(z3.src)}
         <div class="meta">3 區只要護欄通過就照排；跑順 3 堂才進 5 區</div></div></li>
       <li class="${z5ok ? "ok" : ""}"><div><b>排 5 區間歇</b> <span class="meta">${z5ok ? "可以排：每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天" : "還不行：本週的間歇是 3 區"}</span>${src("台灣教練")}</div></li>
     </ol>${reentry}${keep}${test}`;
+}
+
+// ---------------- 連續兩天長天（B2B） (GET /b2b = engine/b2b.card) ----------------
+// day 2 vs day 1 without RPE: ΔHR at the same VAM, VAM at the same HR (AeT − 10 … AeT) → 2 × 2
+const pctS = (v) => v == null ? "–" : (v >= 0 ? "+" : "−") + Math.abs(Math.round(v * 100)) + "%";
+async function loadB2B() {
+  const c = await j(`${API}/b2b`);
+  if (!c.active) return;
+  $("b2bcard").hidden = false;
+  const E = c.event;
+  $("b2b-sub").textContent = E ? `${E.name} ${md(E.start)}（${E.days > 1 ? E.days + " 天" : "單日"}）` : "";
+  const W = c.this_week, out = [];
+  if (W && W.due) out.push(`<div class="z5note"><span class="lvl good">本週</span> B2B 第 ${W.index} 次（${W.days} 天：${(W.minutes || []).join(" ＋ ")} 分）· ${esc((W.why || []).join("；"))}${src(c.rules.when)}</div>`);
+  else if (W && W.post) out.push(`<div class="z5note"><span class="lvl info">本週</span> B2B 後的輕鬆日到 ${md(W.post.until)}：不排間歇、不改恢復週${src(c.rules.post)}</div>`);
+  else if (W && W.blocked && W.blocked.length && E && E.qualifies) out.push(`<div class="meta">本週不排：${esc(W.blocked[0])}${src(c.rules.when)}</div>`);
+  const ahead = c.planned.filter((p) => !p.this_week);
+  if (ahead.length) out.push(`<div class="meta" style="margin-top:4px">之後排了：${ahead.map((p) =>
+    `${p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")}（${p.days} 天）`).join("、")} <span class="faint">（暫定，每週重算）</span></div>`);
+  const rows = c.done.map((d, i) => {
+    const r = d.eval || {}, n = r.n || {}, d1 = r.day1 || {}, d2 = r.day2 || {};
+    const share = (x) => x.over_aet_share == null ? "–" : Math.round(x.over_aet_share * 100) + "%";
+    return `<div class="b2bw"><div class="row"><b>第 ${i + 1} 次 ${md(d.start)}–${md(d.end)}</b>
+        <span class="meta num">${d.minutes.join(" ＋ ")} 分</span>
+        <span class="lvl ${esc(r.level || "na")}">${esc(r.label || "–")}</span></div>
+      <div class="meta">${esc(r.text || "")}</div>
+      <div class="b2bgrid"><span>同 VAM 的心率</span><span class="num">${r.hr_shift_bpm == null ? "–" : sgn(r.hr_shift_bpm, (v) => v.toFixed(1)) + " bpm"}</span><span>±${(r.thresholds || {}).hr_bpm ?? 3} bpm 內＝差不多</span>
+        <span>同心率的 VAM</span><span class="num">${r.vam_ratio == null ? "–" : pctS(r.vam_ratio - 1)}</span><span>±${Math.round(((r.thresholds || {}).vam ?? 0.05) * 100)}% 內＝差不多</span>
+        <span>心率 > AeT+3 的時間</span><span class="num">${share(d1)} → ${share(d2)}</span><span>≤ 10%＝達標</span>
+        <span>爬坡段（第 1／2 天）</span><span class="num">${n.day1 ?? 0} ／ ${n.day2 ?? 0}</span><span>每段 100 m、坡度 ≥ 10%</span></div></div>`;
+  }).join("");
+  const T = c.trend || {};
+  out.push(rows ? `<div style="margin-top:6px">${rows}</div>` : `<p class="meta">這個周期還沒有做過 B2B（連續兩天、每天 ≥ 90 分）。</p>`);
+  if (c.done.length) out.push(`<div class="z5note"><b>趨勢</b> ${esc(T.text || "")}${T.durable_share != null ? ` · 耐久性好 ${Math.round(T.durable_share * 100)}%（${T.judged} 次有判讀）` : ""}</div>`);
+  out.push(`<div class="meta" style="margin-top:6px"><span class="lvl watch">推估</span> 判讀門檻 ±3 bpm、±5%、趨勢 ±2 個百分點都沒有來源${src(c.rules.eval)}</div>`);
+  $("b2b").innerHTML = out.join("");
 }
 
 // ---------------- this week ----------------
@@ -689,10 +738,33 @@ document.addEventListener("click", (e) => {
 })();
 
 const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：${esc(e.message)}</p>`; };
+// due CP / AeT tests (api/plan_sessions test-suggestions): pick a suitable day, then 排入
+async function loadSug() {
+  const r = await sj("GET", `${PAPI}/test-suggestions`);
+  const box = $("tsug"), sg = r.suggestions || [];
+  box.hidden = !sg.length;
+  const wdz = (iso) => "日一二三四五六"[new Date(iso + "T00:00:00").getDay()];
+  box.innerHTML = sg.map((x) => `<div class="loadbox" style="margin-top:8px"><b>🧪 ${esc(x.label)}</b><br>${x.days.length
+    ? `<select aria-label="測試日期">${x.days.map((d) => `<option value="${esc(d.day)}">${md(d.day)}（週${wdz(d.day)}）${d.note ? " · " + esc(d.note) : ""}</option>`).join("")}</select>
+       <button type="button" data-sug="${esc(x.kind)}">排入</button>` : `<span class="meta">兩週內沒有適合的日子</span>`}
+    <span class="meta">${esc(x.title)} · ${x.minutes} 分</span></div>`).join("");
+}
+$("tsug").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-sug]");
+  if (!b) return;
+  b.disabled = true;
+  try {
+    const day = b.parentElement.querySelector("select").value;
+    const s = await sj("POST", `${PAPI}/test-suggestions/schedule`, { kind: b.dataset.sug, day });
+    b.parentElement.innerHTML = `✓ 已排入「${esc(s.title)}」到 ${md(day)}（<a href="/api/v1/overview/plan/schedule/page">到課表看</a>）`;
+  } catch (err) { b.disabled = false; b.insertAdjacentHTML("afterend", ` <span class="err">${esc(err.message)}</span>`); }
+});
 (async () => {
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   await loadStatus().catch(fail("hero"));
   loadZ5().catch(fail("z5"));
+  loadSug().catch(() => {});
+  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
 })();
 </script>

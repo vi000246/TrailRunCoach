@@ -95,15 +95,10 @@ STRYD_ZONES = [
     ("4", "Interval", 1.00, 1.15),
     ("5", "Repetition", 1.15, None),
 ]
-# Five zones of HRmax, the watch default (Garmin / Polar: 50–60–70–80–90 %);
-# below 60 % folded into zone 1.
-HRMAX5_ZONES = [
-    ("1", "Warm up", 0.0, 0.60),
-    ("2", "Easy", 0.60, 0.70),
-    ("3", "Aerobic", 0.70, 0.80),
-    ("4", "Threshold", 0.80, 0.90),
-    ("5", "Maximum", 0.90, None),
-]
+# No %HRmax zones (user decision 2026-10-01): a fixed % of HRmax puts LT
+# anywhere from 60 to 90 % HRmax and MLSS at 75–97 % (Iannetta et al. 2020,
+# MSSE 52:466; docs/research/zones-and-thresholds.md §2.1, §3.1). HR zones
+# are Friel % LTHR, power zones Palladino % CP; HRmax is only a data check.
 # 徐國峰 RQ 跑力 heart-rate-reserve zones (% HRR): T = 84–88 % HRR
 # (runningquotient.com/article/single/52); the other edges are RQ's zone table
 # as the athlete's notes have it — not checked edge by edge against RQ (推估).
@@ -192,10 +187,12 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
                     "wprime_source": "測試（兩點法）" if rows[-1].wprime else None}
         return {**out, "value": ds.cp(ref), "source": "WKO5 mFTP" if ds.settings_from == "wko5" else None}
     if basis == "lthr":
-        t = ds.plan.threshold_on("lthr", day)
-        if t is not None:
-            d = max(x.date[:10] for x in ds.plan.thresholds if x.lthr is not None and x.date[:10] <= day.isoformat())
-            return {**out, "value": t, "source": f"你的測試 {d}", "date": d}
+        # an applied estimate is labelled as one, not 「你的測試」 (zones-and-thresholds.md §3.4 change 1)
+        from backend.engine.planning import threshold_row
+        r = threshold_row(ds.plan, "lthr", day)
+        if r is not None:
+            return {**out, "value": r["value"], "source": r["label"], "date": r["date"],
+                    "method": r["method"], "measured": r["measured"]}
         return {**out, "value": ds.sport_setting("thr", ref), "source": ds.setting_label("runthr", "WKO5 設定")}
     # threshold pace: a dated setting, else the estimate
     v = ds.sport_setting("tpace", ref)
@@ -285,14 +282,16 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
 # the practical tool (docs/research/coaching-dashboards-mountain.md §1.1). The
 # power bands themselves are Palladino's (% CP); applying them uphill above
 # ~8 % grade is 推估 (Stryd is validated to ~8 %).
-TERRAIN_NOTE = ("山路長天看心率（≤ AeT）；越野地形變化大，只有約 9% 時間在 Stryd 驗證過的 3–8% 坡，功率只當參考。"
-                "爬坡重複選 3–8% 的坡看功率（心率約慢 1 分鐘才反應，Hunt 2015；van Rassel 2026）。"
-                "長爬坡不設強制目標，能跑的坡參考功率、陡坡參考心率＋VAM。陡的技術下坡不看功率（Stryd），照感覺與安全。")
+TERRAIN_NOTE = ("山路長天、越野輕鬆看心率（≤ AeT）；越野只有約 9% 時間在 Stryd 驗證過的 3–8% 坡，功率只當參考。"
+                "爬坡重複（3–8% 坡）看功率（心率約慢 1 分鐘才反應，Hunt 2015；van Rassel 2026），心率當上限檢查。"
+                "長爬坡不設強制目標，能跑的坡參考功率、陡坡參考心率＋VAM。陡的技術下坡不看功率（Stryd），照感覺與安全。"
+                "規則在 engine/target_policy.py。")
 WORKOUT_TARGETS = [
     # (id, name, power lo, power hi, hr lo (×LTHR or "aet"), hr hi, primary, example, source)
     ("recovery", "恢復跑", None, 0.75, None, 0.85, "心率", "20–40 分鐘，隔天有強度課時", "Palladino 1A–1B；Friel Z1"),
     ("z2", "輕鬆跑（Zone 2）", 0.75, 0.80, None, "aet", "心率", "大部分的跑步；心率不超過 AeT", "Palladino 1C；Uphill Athlete AeT"),
     ("long", "長跑（路跑）", 0.80, 0.88, None, "aet", "心率", "60 分鐘以上；心率壓在 AeT", "Palladino Z2；Uphill Athlete"),
+    # primary = engine/target_policy.py (vo2max-gate-and-trail-metric.md §2.5: long trail days by HR)
     ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "心率",
      "心率不超過 AeT（可以走）；功率只當參考，陡坡、下坡不看功率",
      "Uphill Athlete（AeT 心率）；越野只有約 9% 時間在 Stryd 驗證的 3–8% 坡（docs/research/vo2max-gate-and-trail-metric.md）"),
@@ -322,18 +321,25 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     cp = ds.cp(ref) if ref else None
     lthr = ds.sport_setting("thr", ref) if ref else None
     hist = ds.athlete.settings.get("runthr") or []
+    from backend.engine.planning import threshold_row
     from backend.files.wko5_athlete import day_to_date
-    planned = ref is not None and ds.plan.threshold_on("lthr", day_to_date(ref.day)) is not None
-    lthr_src = "你的測試" if planned else ds.setting_label("runthr", "WKO5 設定")
+    # where each value comes from, said as it is: a test, or an applied estimate
+    # (zones-and-thresholds.md §3.4 change 1 — LTHR 155 was an applied estimate shown as 「你的測試」)
+    lr = threshold_row(ds.plan, "lthr", day_to_date(ref.day)) if ref is not None else None
+    planned = lr is not None
+    lthr_src = lr["label"] if planned else ds.setting_label("runthr", "WKO5 設定")
+    lthr_measured = bool(lr and lr["measured"])
     if not planned and hist and all(d == dt.date(1980, 1, 1) for d, _ in hist) and lthr_est:
         lthr, lthr_src = float(lthr_est), "自動估算（尚未套用）"
-    aet_planned = ref is not None and ds.plan.threshold_on("aethr", day_to_date(ref.day)) is not None
-    if aet_planned:
-        aet, aet_src = ds.aethr(ref), "你的測試"
+    ar = threshold_row(ds.plan, "aethr", day_to_date(ref.day)) if ref is not None else None
+    aet_measured = bool(ar and ar["measured"])
+    if ar is not None:
+        # the easy cap: a measured AeT; an applied estimate is used (the user approved it) but says so
+        aet, aet_src = ds.aethr(ref), ar["label"] + ("" if aet_measured else "（推估）")
     elif aet_est:
         aet, aet_src = float(aet_est), "自動估算（尚未套用）"
     else:
-        aet, aet_src = (None if lthr is None else 0.89 * lthr), "0.89 × LTHR（Friel Z2 上限）"
+        aet, aet_src = (None if lthr is None else 0.89 * lthr), "0.89 × LTHR（Friel Z2 上限，推估）"
     rows = []
     for tid, name, plo, phi, hlo, hhi, primary, example, src in WORKOUT_TARGETS:
         def hr(x):
@@ -347,7 +353,9 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     return {"cp": cp, "cp_source": ci.get("source") or ("WKO5 mFTP" if ds.settings_from == "wko5"
                                                         else ds.setting_label("runftp")),
             "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
-            "lthr": lthr, "lthr_source": lthr_src, "aet": aet, "aet_source": aet_src, "rows": rows}
+            "lthr": lthr, "lthr_source": lthr_src, "lthr_measured": lthr_measured,
+            "aet": aet, "aet_source": aet_src, "aet_measured": aet_measured,
+            "hr_zones": "Friel % LTHR", "power_zones": "Palladino % CP", "rows": rows}
 
 
 def zones_json(cp: float | None) -> list[dict]:

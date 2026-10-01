@@ -25,6 +25,7 @@ import statistics
 from typing import Optional
 
 from backend.engine import aet_test as AT
+from backend.engine import b2b as B2B
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
 from backend.engine.zones import WORKOUT_TARGETS
@@ -102,8 +103,11 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   allow_quality: bool, strength_tss: float, aet: Optional[float],
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
                   notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
-                  aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None) -> list[dict]:
+                  aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
+                  b2b: Optional[dict] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
+    `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
+    week's B2B is decided here and written back as b2b["info"].
     `base_quality`: the base-phase session the gate picked for this week
     (engine/quality_gate.py dose step, the recovery-week fartlek, or the AeT
     test, kind "test"); None in base with `allow_quality` = 閾值 3×10.
@@ -118,9 +122,15 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         ss.append({"target": "", "detail": "", "source": "", "tss": 0.0, "day": None,
                    "done": False, "done_by": None, **kw})
 
+    long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
+    long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
+    info = None
+    if b2b is not None:
+        info = b2b["info"] = B2B.projected(kind, mode, monday, b2b.get("event"), b2b.get("prev_mode"),
+                                           b2b.get("state") or {}, round(long_min / 5) * 5, longest, total)
+        if info.get("post"):
+            allow_quality = False                   # the easy days after a B2B (engine/b2b.py)
     if kind in ("base", "specific") and mode != "recovery_week":
-        long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
-        long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
         if xu_test and kind == "base":
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
         else:
@@ -129,7 +139,11 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                 detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
                 + f"；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
                 source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
-        if allow_quality and kind == "specific":
+            if info is not None and info.get("due"):
+                ss.extend(B2B.followers(ss[-1], info))     # out of the easy minutes (Koop)
+        if allow_quality and kind == "specific" and base_quality:
+            add(**_bq(base_quality))                # Zone 3 ladder: Zone 5 not confirmed yet
+        elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60, target=tgt.get("supra", ""),
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=O.SRC_PALLADINO + "（Supra-threshold）", tss=75.0)
@@ -167,12 +181,35 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
                      quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
+        ctx.notes.extend(PP.blocked_pref_notes(prefs, monday, blocked))
         PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs, notes=ctx.notes)
-        return ss
+        return _b2b_finish(ss, info, b2b, monday, aet, blocked, prefs, ctx.notes)
     # the raw 課表偏好 value: aet_test_days isn't part of `active`, so `prefs` may be None here
     aet_days = AT.TEST_DAYS.get(aet_test_days or getattr(prefs, "aet_test_days", None) or "weekday")
     _place(ss, monday, long_wd, blocked, aet_days, notes)
-    return ss
+    return _b2b_finish(ss, info, b2b, monday, aet, blocked, None, notes)
+
+
+def _b2b_finish(ss: list[dict], info: Optional[dict], b2b: Optional[dict], monday: dt.date, aet, blocked,
+                prefs, notes) -> list[dict]:
+    """engine/b2b.py after the shaping and the placement: texts / caps, then
+    the B2B days on consecutive days (課表偏好: allowed days, the caps)."""
+    if not info or not info.get("due"):
+        return ss
+    B2B.decorate(ss, info, aet, prefs.long_cap if prefs is not None else None, (b2b or {}).get("weight"))
+    kept = B2B.place(ss, monday, monday, set(blocked or ()), prefs.allowed if prefs is not None else None, notes,
+                     prefs.cap_weekday if prefs is not None else None)
+    B2B.placed(info, kept)
+    return kept
+
+
+VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
+                  "variant_adj", "progress", "prefer_days", "terrain")
+
+
+def PP_long(prefs, auto_wd: int) -> int:
+    from backend.engine import plan_prefs as PP
+    return PP.long_weekday(prefs, auto_wd) if prefs is not None else auto_wd
 
 
 def _bq(b: dict) -> dict:
@@ -181,7 +218,9 @@ def _bq(b: dict) -> dict:
     return {"id": b.get("id") or ("test_aet" if kind == "test" else "quality"), "kind": kind, "title": b["title"],
             "minutes": b["minutes"], "target": b.get("target", ""), "detail": b.get("detail", ""),
             "source": b.get("source", ""), "tss": float(b.get("tss") or 65.0),
-            **({"protocol": b["protocol"]} if b.get("protocol") else {})}   # the AeT test: "aet"
+            **({"protocol": b["protocol"]} if b.get("protocol") else {}),   # the AeT test: "aet"
+            # the interval library variant (engine/interval_library.py)
+            **{k: b[k] for k in VARIANT_FIELDS if b.get(k) is not None}}
 
 
 def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
@@ -297,10 +336,21 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     rates = cur.get("tss_per_category") if PR is not None else None
     gate = _gate_inputs(cur)
     step = int((gate.get("dose") or {}).get("step") or 0)
-    if cur.get("phase") == "base" and (gate.get("allowed") and (gate.get("this_week") or "") not in
-                                       ("", QG.RECOVERY[1], QG.SUB[1])):
+    cur_q = next((s for s in cur_s if s.get("kind") == "quality"), None)
+    ladder_now = (cur.get("phase") == "base" and gate.get("allowed") and (gate.get("this_week") or "") not in
+                  ("", QG.RECOVERY[1], QG.SUB[1])) or \
+        (cur.get("phase") == "specific" and cur_q is not None and cur_q.get("rung_key") in QG.ladder_keys())
+    if ladder_now and not (cur_q is not None and cur_q.get("progress") is False):
         step += 1                              # this week's interval is one step of the dose
+        # (a 縮量版 / the step before under a tight cap is maintenance: no step — §C5.3)
     last_aet = (gate.get("aet_test") or {}).get("last")
+    # the interval library's rotation (engine/interval_library.fit): the stored variants done
+    # before this week, then this week's pick and each projected week's
+    vhist = O.variant_history(monday, gate)
+    this_q = next((s for s in cur_s if s.get("kind") == "quality" and s.get("variant_key")), None)
+    if this_q is not None:
+        vhist.append({"day": monday.isoformat(), "rung_key": this_q.get("rung_key"),
+                      "variant_key": this_q["variant_key"], "state": "done", "outcome": None})
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
     strength_tss = float(st["tss"]) if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]
@@ -314,6 +364,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     blocks = ([cur["reentry"]] if cur.get("reentry") else []) + RE.planned_ahead(
         blackouts or (), monday + dt.timedelta(days=6),
         (sum(hist[-5:-1]) / 4.0) if len(hist) >= 5 else (hist[-1] if hist else None), longest)
+    cb = cur.get("b2b") or {}
+    b2b_state = B2B.next_state(cb, monday, cur_s)          # 連續兩天長天 (engine/b2b.py)
+    prev_mode = cur.get("mode")
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
@@ -356,23 +409,42 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                                     getattr(prefs, "cap_weekday", None), getattr(prefs, "long_cap", None))
         due = kind == "base" and mode not in ("recovery_week", "reentry") and \
             AT.due(week, kind, gate.get("base_start"), gate.get("aet_test_reason"), last_aet)
-        if due and proto == "xu90":
-            # 徐國峰's 90-min test replaces that week's long run; the interval stays
-            xu_q = AT.session(th, None, None, getattr(prefs, "cap_weekday", None), "xu90")
-            last_aet = week.isoformat()          # suggested, not done: keeps the next one ≥ 4 weeks away
-        elif due:
-            base_q = AT.session(th, AT.start_hr(None, th.get("lthr")), AT.start_power(th.get("cp")),
-                                getattr(prefs, "cap_weekday", None), proto, getattr(prefs, "long_cap", None))
+        if due:
+            # tests are suggested for the current week only (overview.week_plan test_suggestions),
+            # never put into the plan — projected weeks keep their long run and interval
             last_aet = week.isoformat()
+        z5g = gate.get("z5") or {}
+        if base_q is None and kind == "specific" and dec["allow"] and not z5g.get("open") and z5g.get("state") != "open" \
+                and mode not in ("recovery_week", "reentry"):
+            # 專項期 without a confirmed base: the Zone 3 ladder instead of the 5×4′ hill set (徐國峰)
+            dz = QG.week_decision({**gate, "z5": {**z5g, "open": False}}, "base", "base", week, step, first=False)
+            if dz["allow"] and dz["spec"] is not None:
+                q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
+                base_q = O._gate_session(gate, dz, th, hours, prefs, vhist, True, q_cap, q_alt)
+                if base_q.get("variant_key"):
+                    vhist.append({"day": week.isoformat(), "rung_key": base_q.get("rung_key"),
+                                  "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
+                if dz["advance"] and base_q.get("progress", True) is not False:
+                    step += 1
         if base_q is None and kind == "base" and dec["allow"] and dec["spec"] is not None:
-            base_q = O._gate_session(gate, dec, th, hours)
-            if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB):
+            q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
+            base_q = O._gate_session(gate, dec, th, hours, prefs, vhist, mountain, q_cap, q_alt)
+            if base_q.get("variant_key"):
+                # this week's pick joins the rotation history of the weeks after it
+                vhist.append({"day": week.isoformat(), "rung_key": base_q.get("rung_key"),
+                              "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
+            if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB) and base_q.get("progress", True) is not False:
                 step += 1
+        b2b = {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode, "weight": cb.get("weight")}
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
-                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q)
+                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b)
+        b2b_info = b2b.get("info") or {}
+        if b2b_info.get("post"):
+            notes.append(B2B.post_note(b2b_info))
+        b2b_state, prev_mode = B2B.next_state(b2b_info, week, ss), mode
         heat_w = None
         if events is not None:
             try:
@@ -404,12 +476,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "tss": sum(planned), "ctl_start": ctl0, "ctl_end": ctl,
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
-                    **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active") else {}),
+                    **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
+                       or b2b_info.get("post") or b2b_info.get("due") else {}),
+                    **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None)
         if long_n:
-            longest = float(long_n["minutes"])
+            # a B2B day 1 shortened to fit the pair (engine/b2b.py) doesn't lower the long-run base
+            longest = max(longest, float(long_n["minutes"])) if b2b_info.get("due") else float(long_n["minutes"])
         if PR is not None or lost:
             # what the preferences / 不排課日期 actually let through (a hard cap or
             # too few days can leave less)

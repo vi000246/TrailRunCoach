@@ -47,6 +47,10 @@ Rules (thresholds: source or 自組):
      20 % cut is 推估. TSB < −30 itself is
      week_plan's existing recovery-week rule and ramp ≥ 8 is quality_gate's
      existing block: those are not repeated when they already acted.
+     Exception (engine/b2b.py, user-approved): during a planned B2B week and
+     the easy days after one, TSB < −30 alone is the expected drop and does
+     nothing (an adjustment "note" logs why); the red streak and the ramp
+     still act — they are signs beyond the expected drop.
 """
 from __future__ import annotations
 
@@ -76,6 +80,12 @@ SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練"
 SRC_OVER = ("workout_review 平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
             "TrainingPeaks ±20%；組合方式推估（unsourced-rules.md B5）")
 SRC_FATIGUE = "Friel CTL ramp ≥ 8（5–8 上限）；TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估"
+SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估（engine/b2b.py）"
+
+
+def _b2b_exempt(info: Optional[dict], today: str) -> Optional[str]:
+    from backend.engine import b2b as B2B
+    return B2B.fatigue_exempt(info, today)
 
 
 def wd(day: str) -> str:
@@ -209,8 +219,19 @@ def _dose_index(title: str) -> Optional[int]:
 
 def _downgrade(g: dict, th: dict) -> str:
     """One dose step down (quality_gate.DOSE), else an easy run. Returns what it became."""
+    from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
-    i = _dose_index(g.get("title") or "") if g.get("kind") == "quality" else None
+    rung = g.get("rung_key") if g.get("kind") == "quality" else None
+    if rung in IL.RUNG_ORDER and IL.RUNG_ORDER.index(rung) > 0:
+        # a library variant: the rung before's standard session, as maintenance (not progress)
+        prev = IL.RUNG_ORDER[IL.RUNG_ORDER.index(rung) - 1]
+        f = IL.fit(prev, g.get("minutes") or None)
+        s = IL.session_for({**f, "equiv": False, "progress": False,
+                            "reason": f"自動調整：降一階到 {IL.RUNG_NAME[prev]}（不算進階）"}, th or {}, swap="auto")
+        g.update({k: s.get(k) for k in ("title", "minutes", "target", "detail", "tss", "variant_key", "rung_key",
+                                        "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks", "variant_adj")})
+        return s["title"]
+    i = _dose_index(g.get("title") or "") if g.get("kind") == "quality" and not g.get("variant_key") else None
     if i is not None and i > 0:
         s = QG.session(QG.LADDER[i - 1], th or {})
         g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")})
@@ -218,14 +239,18 @@ def _downgrade(g: dict, th: dict) -> str:
     rate = 50.0 / 60.0
     m = min(int(g.get("minutes") or 45), 45)
     g.update(kind="easy", title="輕鬆跑", minutes=m, target="", detail="心率不超過 AeT（原本的強度課改成輕鬆跑）",
-             tss=round(m * rate, 1), protocol=None)
+             tss=round(m * rate, 1), protocol=None, **NO_VARIANT)
     return "輕鬆跑"
+
+
+NO_VARIANT = {k: None for k in ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps",
+                                "variant_blocks", "variant_adj")}
 
 
 def _to_recovery(g: dict, th: dict) -> str:
     from backend.engine import quality_gate as QG
     s = QG.session(QG.RECOVERY, th or {})
-    g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")})
+    g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")}, **NO_VARIANT)
     return s["title"]
 
 
@@ -356,7 +381,13 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
     tsb, ramp = load.get("tsb"), load.get("ramp")
     rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "reentry")
     why, remove = None, False
-    if tsb is not None and tsb < TSB_FLOOR and not rest_week:
+    tsb_hit = tsb is not None and tsb < TSB_FLOOR and not rest_week
+    # a planned B2B (engine/b2b.py): its TSB drop is expected — only the ramp / red streak still act
+    b2b_why = _b2b_exempt(ctx.get("b2b"), wk.today) if tsb_hit else None
+    if b2b_why:
+        _adj(out, "b2b", wk, {"day": wk.today}, "note",
+             f"TSB {tsb:+.0f} < {TSB_FLOOR:.0f}，但{b2b_why}：這是預期中的下降，不減量（推估）", SRC_B2B)
+    if tsb_hit and not b2b_why:
         why, remove = f"TSB {tsb:+.0f} < {TSB_FLOOR:.0f}", True
     elif ramp is not None and ramp >= RAMP_SHORT and ctx.get("mode") != "reentry":
         # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)

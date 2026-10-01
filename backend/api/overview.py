@@ -116,6 +116,34 @@ def z5_card():
     return {"today": today.isoformat(), **QG.z5_card(gate, today), "history_href": _z5_chart_href()}
 
 
+@router.get("/b2b")
+def b2b_card():
+    """The 「連續兩天長天（B2B）」 card (engine/b2b.card): the target event, this
+    week's B2B state, the planned B2B weekends (the stored-plan inputs: this
+    week + the projection), each done B2B with its day-2-vs-day-1 reading and
+    the trend across the block."""
+    from backend.engine import b2b as B2B
+    ds = _dataset()
+    today = O.day_to_date(ds.today)
+    st = _status(ds, today)
+    cur, weeks = None, []
+    try:
+        from backend.api.plan_sessions import _compute_inputs
+        inp = _compute_inputs()
+        cur, weeks = inp.get("cur"), inp.get("weeks") or []
+    except Exception:                          # noqa: BLE001 — the card still shows what was done
+        pass
+    aet_now = ((cur or {}).get("thresholds") or {}).get("aet")
+
+    def aet_of(day: dt.date):
+        try:
+            from backend.engine.racepower.athlete import thresholds_as_of
+            return thresholds_as_of(ds, day).get("aet") or aet_now
+        except Exception:                      # noqa: BLE001
+            return aet_now
+    return B2B.card(ds, today, st.plan.events, st.phase, cur, weeks, aet_of)
+
+
 def _z5_chart_href() -> str:
     """The viewer deep link of the first z5gate panel in the custom views (the 基礎期 chart)."""
     from urllib.parse import urlencode
