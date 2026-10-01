@@ -50,8 +50,10 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     today = O.day_to_date(ds.today)
     prefs = PP.load()
     bos = BL.load() if blackouts is None else BL.from_list(blackouts)
+    from backend.engine.wko5expr.datasource import read_setting
+    auto_on = read_setting("plan.auto.enabled", True) is not False
     # saving 課表偏好 or 不排課日期 regenerates
-    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos))
+    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on)
     with _lock:
         hit = _cache.get(key)
     if hit is not None:
@@ -81,12 +83,39 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
            "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant, "prefs": prefs.to_dict(),
-           "blackouts": [b.to_dict() for b in bos]}
+           "blackouts": [b.to_dict() for b in bos],
+           "days_to_next_a": (st.goals or {}).get("days_to_next_a"),
+           "adapt": _adapt_ctx(ds, st, cur, monday, today, auto_on)}
     with _lock:
         while len(_cache) >= 3:                 # the stored plan + a preview or two
             _cache.pop(next(iter(_cache)))
         _cache[key] = out
     return out
+
+
+def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool) -> dict:
+    """engine/adapt.py's context: per-run review numbers of this week's runs
+    (workout_review.measure, disk-memoised), the actual CTL ramp (status
+    fitness indicator), TSB today and the first day sessions can still go on."""
+    from backend.engine import overview as O
+    reviews: dict = {}
+    if enabled:
+        try:
+            from backend.engine import workout_review as WR
+            for w in O.workouts_between(ds, monday, today + dt.timedelta(days=1)):
+                if O.category(w) not in ("road", "trail"):
+                    continue
+                m = WR.measure(ds, w) or {}
+                reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "over_aet_s", "hr_s", "avg_power", "cp")}
+                reviews[w.idx]["tss"] = O._n(w.metrics.get("tss"))
+            WR._flush(ds)
+        except Exception:                   # noqa: BLE001 — a review failure never breaks the plan
+            pass
+    ramp = next(((i.extra or {}).get("ramp_week") for i in st.indicators if i.id == "fitness"), None)
+    load = cur.get("load") or {}
+    done_today = any(a.get("date") == today.isoformat() for a in (cur.get("done") or {}).get("activities") or [])
+    return {"enabled": enabled, "reviews": reviews, "ramp": ramp, "tsb": load.get("tsb_today"),
+            "first_free": (today + dt.timedelta(days=1 if done_today else 0)).isoformat()}
 
 
 async def _covered(db: AsyncSession, last_activity: Optional[str]) -> Optional[str]:
@@ -548,10 +577,13 @@ def tss_rates(tph: Optional[dict], sessions: list[dict], fallback: float = 50.0)
         if k in out:
             out[k] = round(statistics.median(v), 1)
     out["heat_passive"] = 0.0          # a bath / sauna: no TSS conversion was found (heat-acclimation.md §5.4)
+    out["notice"] = 0.0                # 課表待確認 reminder (engine/plan_auto.py): not training
     return out
 
 
 def est_tss(s: dict, rates: dict) -> float:
+    if s.get("kind") in PS.NOT_LOAD:
+        return 0.0
     return float(s.get("tss") or 0.0) or (s.get("minutes") or 0) / 60.0 * rates.get(s.get("kind"), 50.0)
 
 
@@ -567,7 +599,8 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
     last = dt.date.fromisoformat(end)
     while d <= last:
         a, b = d.isoformat(), (d + dt.timedelta(days=6)).isoformat()
-        ss = [s for s in sessions if s.get("day") and a <= s["day"] <= b and s["state"] in ("active", "done", "missed")]
+        ss = [s for s in sessions if s.get("day") and a <= s["day"] <= b and s["state"] in ("active", "done", "missed")
+              and s["kind"] not in PS.NOT_LOAD]
         mins = sum(s["minutes"] or 0 for s in ss if s["kind"] != "strength")
         tss = sum(est_tss(s, rates) for s in ss)
         aa = [x for x in acts if a <= (x.get("date") or "") <= b]

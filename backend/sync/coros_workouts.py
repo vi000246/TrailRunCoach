@@ -229,6 +229,10 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
         raise Unsupported("COROS 肌力課要從動作庫挑動作，先不推")
     if kind == "heat_passive":
         raise Unsupported("被動熱適應不推")
+    if kind == "notice":
+        # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is
+        # obviously not a real session; the summary goes in the overview (detail)
+        return [Step(EX_WARMUP, 60, None, "課表待確認：到總覽頁同意／拒絕")]
     if kind in ("quality",):
         return _quality_steps(s, th)
     if kind == "test":
