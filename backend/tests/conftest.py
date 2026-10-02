@@ -72,6 +72,19 @@ def _no_real_heat_history(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_activity_weather(monkeypatch, tmp_path_factory):
+    """The drift's temperature band (workout_review.activity_temp) never reads
+    the real ~/.wko5coach/routes/activity_weather.json: it matches by date
+    too, so a fake run on a real date would pick up the real weather. Tests
+    pass `ds.activity_temps` or point routes.HOME at their own folder."""
+    from backend.engine import routes, workout_review
+    monkeypatch.setattr(routes, "HOME", tmp_path_factory.mktemp("routes_home"))
+    workout_review._WX_CACHE.clear()
+    yield
+    workout_review._WX_CACHE.clear()
+
+
+@pytest.fixture(autouse=True)
 def _no_auto_plan_after_sync(monkeypatch):
     """A sync test that imports an activity must not start an automatic plan
     run on the real DB (engine/plan_auto.py); test_plan_auto calls it itself."""

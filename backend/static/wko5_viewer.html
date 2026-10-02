@@ -1070,6 +1070,13 @@ function draw(card, res) {
     if (seg) seg.insertAdjacentHTML("beforebegin", badge);
     else card.querySelector("h2")?.insertAdjacentHTML("beforeend", badge);
   }
+  // a small chip in the header (the drift card's temperature band 「🌡 25–28 °C」); the why on hover
+  if (res.chip && res.chip.text && !res.empty) {
+    const chip = ` <span class="badge" title="${esc(res.chip.tip || "")}">${esc(res.chip.text)}</span>`;
+    const seg = card.querySelector("h2 > .seg");
+    if (seg) seg.insertAdjacentHTML("beforebegin", chip);
+    else card.querySelector("h2")?.insertAdjacentHTML("beforeend", chip);
+  }
   // the description sits behind a ? icon (hover / tap) to keep cards clean; the enlarge
   // overlay has room, so it shows the text in full
   if (res.description) {
