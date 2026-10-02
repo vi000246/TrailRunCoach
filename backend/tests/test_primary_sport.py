@@ -115,6 +115,12 @@ def test_list_views_carries_the_tags(monkeypatch):
     cs = {c["id"]: c for d in v["dashboards"] for c in d["charts"]}
     assert cs["uphill-vam"]["sports"] == ["trail"] and cs["mp-weekly"]["sports"] == ["road"]
     assert cs["weekly-volume"]["order"] == {"road": -1} and "sports" not in cs["pmc-all"]
+    # the 專項期 page has a 路跑 text (the viewer shows it instead of the trail one)
+    pv = next(x for x in W.list_views() if x["name"] == _view("periodization")["name"])
+    build = next(d for d in pv["dashboards"] if d["id"] == "build")
+    assert "馬拉松" in build["descriptions"]["road"] and "越野" in build["description"]
+    with pytest.raises(CustomViewError):
+        parse_view({"name": "x", "dashboards": [{"title": "d", "descriptions": {"bike": "x"}, "charts": []}]})
 
 
 # ---- the road charts' expressions (synthetic FITs) ----------------------------------
@@ -204,6 +210,8 @@ def test_road_week_marathon_pace_long_run_no_b2b_no_steep_walk():
     assert "馬拉松配速" in lg["title"] and lg["terrain"] == "road" and "山路" not in lg["title"]
     mp = int(lg["title"].split("馬拉松配速")[1].split("分")[0])
     assert O.MP_MIN <= mp <= O.MP_MAX and mp <= lg["minutes"] - 25 and "Pfitzinger" in lg["source"]
+    # the A marathon's 預估移動時間 3.5 h over 42.195 km = the MP segment's goal pace
+    assert wp["mp_goal_pace_s"] == pytest.approx(3.5 * 3600 / 42.195) and "目標配速 4:59/km" in lg["detail"]
     assert not any("爬坡" in s["title"] or "坡道" in s["title"] for s in wp["sessions"])
     assert wp["b2b_suggestion"] is None and not (wp["b2b"] or {}).get("candidate")
     assert not (wp["steep_hill"] or {}).get("active")
@@ -274,10 +282,25 @@ def test_mp_long_run_steps_editor_and_coros():
     assert s["minutes"] == 150 and WS.mp_minutes(s) == O.mp_minutes(150) == 60
     items = WS.derive(s)["items"]
     assert [it["dur"]["value"] for it in items] == [80 * 60, 60 * 60, 10 * 60]
-    assert items[1]["target"] == {"type": "hr", "mode": "pct", "lo": WS.MP_HR[0], "hi": WS.MP_HR[1]}
+    assert items[1]["target"] == {"type": "pace", "mode": "pct", "lo": WS.MP_PACE[0], "hi": WS.MP_PACE[1],
+                                  "hrp": list(WS.MP_HR)}
+    assert WS.normalize(WS.derive(s))["items"][1]["target"]["hrp"] == list(WS.MP_HR)     # survives a save
+    # threshold pace known: a pace target (s/km); none: the HR band with the 沒有閾值配速 warning
+    r = WS.resolve(items[1], WS.Ctx(lthr=165.0, tpace=280.0))
+    assert r.type == "pace" and r.intensity == ("pace", round(1.04 * 280), round(1.08 * 280))
+    r = WS.resolve(items[1], WS.Ctx(lthr=165.0))
+    assert r.type == "hr" and r.intensity == ("hr", round(0.88 * 165), round(0.95 * 165))
+    assert r.need == "tpace" and r.warn == WS.no_tpace_text()
     steps = CW.session_steps(s, CW.Thresholds(cp=250.0, lthr=165.0, aet=145.0))
     assert [st.seconds for st in steps] == [80 * 60, 60 * 60, 10 * 60]
     assert steps[1].intensity == ("hr", round(0.88 * 165), round(0.95 * 165))
+    steps = CW.session_steps(s, CW.Thresholds(cp=250.0, lthr=165.0, aet=145.0, tpace=280.0))
+    assert steps[1].intensity == ("pace", round(1.04 * 280), round(1.08 * 280))
+    # the race's goal pace wins (± 1.5 %), with or without a threshold pace
+    g = O.road_long_session(150, "specific", 145.0, 50.0, goal_pace=300.0)
+    assert "目標配速 5:00/km" in g["detail"] and WS.mp_goal_pace(g) == 300
+    assert WS.derive(g)["items"][1]["target"] == {"type": "pace", "mode": "abs", "lo": 296, "hi": 304}
+    assert CW.session_steps(g, CW.Thresholds(lthr=165.0))[1].intensity == ("pace", 296, 304)
     base = O.road_long_session(100, "base", 145.0, 50.0)
     assert base["title"] == "長時間輕鬆（路跑）" and WS.mp_minutes(base) is None
     # 課表偏好 長跑地形 = 路跑 keeps the MP segment

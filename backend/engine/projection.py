@@ -107,7 +107,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
                   aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
                   b2b: Optional[dict] = None, long_min: Optional[float] = None,
-                  sport: str = "trail") -> list[dict]:
+                  sport: str = "trail", goal_pace: Optional[float] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `long_min`: the 專項期 long day (engine/specific_phase.long_minutes); None = the base rule.
     `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
@@ -143,7 +143,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         if xu_test and kind == "base":
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
         elif road:
-            add(**O.road_long_session(long_min, kind, aet, tph), target=tgt.get("long", ""))
+            add(**O.road_long_session(long_min, kind, aet, tph, goal_pace), target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
@@ -466,7 +466,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
                            aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
-                           long_min=sp_long, sport=sport)
+                           long_min=sp_long, sport=sport, goal_pace=cur.get("mp_goal_pace_s"))
         if sp_info and sp_info.get("active"):
             try:
                 SP.decorate(ss, sp_info)

@@ -408,8 +408,15 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
     from backend.engine import workout_steps as WS
     mp = WS.mp_minutes(s) if kind == "long" else None
     if mp and secs - mp * 60 - WS.MP_TAIL_S >= 10 * 60:
-        # 主要訓練項目 = 路跑: easy, marathon pace (an HR band), easy (workout_steps.derive)
-        mp_t = ("hr", round(WS.MP_HR[0] * th.lthr), round(WS.MP_HR[1] * th.lthr)) if th.lthr else None
+        # 主要訓練項目 = 路跑: easy, marathon pace, easy (workout_steps.derive / mp_target): the goal pace,
+        # else threshold pace × 1.04–1.08 (intensityType 3, s/km), else an HR band
+        tg, g = WS.mp_target(s), WS.mp_goal_pace(s)
+        if g:
+            mp_t = ("pace", tg["lo"], tg["hi"])
+        elif th.tpace:
+            mp_t = ("pace", round(WS.MP_PACE[0] * th.tpace), round(WS.MP_PACE[1] * th.tpace))
+        else:
+            mp_t = ("hr", round(WS.MP_HR[0] * th.lthr), round(WS.MP_HR[1] * th.lthr)) if th.lthr else None
         return [Step(EX_TRAIN, secs - mp * 60 - WS.MP_TAIL_S, easy_target(s, th, (0.80, 0.88)), "輕鬆"),
                 Step(EX_TRAIN, mp * 60, mp_t, "馬拉松配速"),
                 Step(EX_COOLDOWN, WS.MP_TAIL_S, easy_target(s, th), "輕鬆收操")]
