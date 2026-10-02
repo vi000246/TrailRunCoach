@@ -6,8 +6,7 @@ Time in zone over a period (圖表分析 → 強度; views kind "periodzones").
     (view "weekly").
 
 Reuse, not a copy:
-  * the zone models are activity_charts.MODELS (zones.py's tables + WKO5
-    iLevels), minus the ones the user rejected (%HRmax) or the app can't
+  * the zone models are activity_charts.MODELS (zones.py's tables), minus the ones the user rejected (%HRmax) or the app can't
     compute (RQ %HRR: no resting HR). Default HR Friel, power Palladino.
   * an activity's zone boundaries are activity_charts._bounds on that
     activity: the thresholds in effect on ITS day (workout_review._thresholds
@@ -46,7 +45,7 @@ from backend.engine.panels import activity_charts as A
 HIST_KEY = "period_zone_hist_v1"
 
 HR_IDS = ("frielhr", "classichr", "seiler3")
-POWER_IDS = ("palladino", "ilevels", "palladino3")         # Palladino everywhere (owner 2026-10-02)
+POWER_IDS = ("palladino", "palladino3")         # Palladino everywhere, no WKO5 iLevels (owner 2026-10-02)
 MODEL_IDS = {"hr": HR_IDS, "power": POWER_IDS}
 DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 SUMMARY_MODEL = {"hr": "seiler3", "power": "palladino3"}      # the 3 zones the targets are written in
@@ -206,7 +205,7 @@ def _pct_text(m: dict) -> list[Optional[str]]:
     if "zones" not in m or m["basis"] not in ("lthr", "cp"):
         if m["id"] == "seiler3":
             return ["< AeT", "AeT–LTHR", "≥ LTHR"]
-        return [None] * len(A.ILEVEL_NAMES)
+        return [None] * (len(m["zones"]()) if "zones" in m else 0)
     b = "LTHR" if m["basis"] == "lthr" else "CP"
     out = []
     zs = m["zones"]()
@@ -323,13 +322,6 @@ def _per_activity(ds, ws, kind: str, m: dict, sm: dict) -> list[dict]:
             continue
         wt = _as_run(w)
         ctx = {"thr": _thresholds(ds, wt)}
-        if m["id"] == "ilevels":
-            # the PD fit of the 90 days before the activity: in-process memo (the render
-            # cache keeps the chart; a past file added later changes the data fingerprint)
-            k = ("period_zone_ilevels", w.entry.file)
-            if k not in ds.memo:
-                ds.memo[k] = A.ilevels_for(ds, wt)
-            ctx["ilevels"] = ds.memo[k]
         for name, mm in (("main", m), ("sum", sm)):
             if name == "sum" and mm is m:
                 item["sum"] = item.get("main")
@@ -394,8 +386,6 @@ def _zone_rows(items: list[dict], m: dict, kind: str) -> tuple[list[dict], float
         zs = used[0]["main"]["rows"]
     elif "zones" in m:
         zs = m["zones"]()
-    elif m["id"] == "ilevels":
-        zs = [(i, n, None, None) for i, n in A.ILEVEL_NAMES]
     else:                                   # seiler3: the names _bounds gives its rows
         zs = [("1", "低強度（< AeT）", None, None), ("2", "中強度（AeT–LTHR）", None, None),
               ("3", "高強度（≥ LTHR）", None, None)]

@@ -142,16 +142,18 @@ DEFAULTS: dict[str, Any] = {
     # [{start, index}] — never auto-matched again (start: the activity's local start)
     "plan.match.unlinked": [],
     # 備份 (engine/backup.py, api/backup.py): target folder (absolute; None = not set up),
-    # daily automatic backup, include the synced FIT originals (進階), encryption
-    # (進階: {salt, n, r, p, key} with the scrypt-derived key sealed — never the password),
-    # outcome of the last attempt {at, trigger, status, name, size, error} and the last good one
+    # daily automatic backup, include the synced FIT originals (進階),
+    # outcome of the last attempt {at, trigger, status, name, size, error} and the last good one.
+    # Backups are not encrypted (owner 2026-10-02).
     "backup.dir": None,
     "backup.auto": True,
     "backup.include_fit": False,
-    "backup.encryption": None,
     "backup.last_result": None,
     "backup.last_ok": None,
 }
+# keys that were removed: db/database.py init_db deletes any stored row
+# (backup.encryption held the sealed scrypt-derived backup key)
+RETIRED_KEYS = ("backup.encryption",)
 AUTO_NOTIFY = ("watch", "overview")
 AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan.auto.confirm_big",
              "plan.auto.notify")
@@ -284,9 +286,6 @@ def validate(key: str, value: Any) -> None:
         raise ValueError("backup.dir must be an absolute folder path or null")
     if key in ("backup.auto", "backup.include_fit") and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
-    if key == "backup.encryption" and value is not None and not (
-            isinstance(value, dict) and {"salt", "n", "r", "p", "key"} <= set(value)):
-        raise ValueError("backup.encryption must be {salt, n, r, p, key} or null")
     if key in ("backup.last_result", "backup.last_ok") and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")
     if key == "plan.match.unlinked" and not (isinstance(value, list) and all(
