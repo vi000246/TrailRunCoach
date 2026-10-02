@@ -24,7 +24,8 @@ def _db(tmp_path, value):
     return db
 
 
-@pytest.mark.parametrize("stored,expect", [(None, "wko5"), ("coros", "coros"), ("tp", "tp"), ("garmin", "wko5")])
+@pytest.mark.parametrize("stored,expect", [(None, "synced"), ("coros", "coros"), ("tp", "tp"), ("wko5", "wko5"),
+                                           ("synced", "synced"), ("garmin", "synced")])
 def test_current_source(tmp_path, monkeypatch, stored, expect):
     db = _db(tmp_path, stored)
     monkeypatch.setattr(DS, "_db_path", lambda: db)

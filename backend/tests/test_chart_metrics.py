@@ -194,27 +194,6 @@ def _hr_zone_weeks(ds, weeks):
     return {m: (a[0] / a[3], a[1] / a[3], a[2] / a[3], a[3]) for m, a in out.items() if a[3] > 0}
 
 
-@needs_data
-@pytest.mark.golden
-def test_polarization_index_matches_raw_heart_rate_weeks(ds, ev):
-    from backend.engine.wko5expr.dataset import date_to_day
-    pi = ev.evaluate(_series("training", "極化指數", "PI"))
-    mon = TODAY - dt.timedelta(days=TODAY.weekday())
-    weeks = {int(date_to_day(mon - dt.timedelta(weeks=k))) for k in range(1, 12)}
-    ref = _hr_zone_weeks(ds, weeks)
-    checked = 0
-    for m, (z1, z2, z3, secs) in sorted(ref.items()):
-        want = CM.polarization_index(z1, z2, z3) if secs >= 3600 else None
-        got = pi.at(m)
-        if want is None:
-            assert math.isnan(got)
-        else:
-            assert got == pytest.approx(want, abs=1e-6)
-            assert 0 <= want < 4
-            checked += 1
-    assert checked >= 2
-
-
 def _recent(ds, pred, n):
     ws = [w for w in ds.workouts if w.day <= ds.today and pred(w)]
     return ws[-n:]

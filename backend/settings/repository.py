@@ -28,9 +28,13 @@ SOURCES = ("coros", "trainingpeaks", "local")
 DEFAULTS: dict[str, Any] = {
     # IANA zone for local workout dates; None = WKO5COACH_TZ env, then the system zone
     "athlete.timezone": None,
-    # which source wins when the same activity arrives from several; None =
-    # the first one imported
-    "sync.primary_source": None,
+    # 主要資料來源 (backend/sync/primary.py): which source an activity is read
+    # from when COROS and TP both have it — the DB de-dup, the merged chart
+    # Dataset ("synced") and the sync order. "auto" = the source with the most
+    # recent complete data; None (the old default) reads as "auto"
+    "sync.primary_source": "auto",
+    # 進階: automatic syncs (page open, daily) also sync the non-primary source
+    "sync.secondary.auto": False,
     "sync.coros.enabled": True,
     "sync.trainingpeaks.enabled": True,
     # log in with WKO5's OAuth client credentials (ToS risk, see
@@ -46,8 +50,10 @@ DEFAULTS: dict[str, Any] = {
     # sync when a page is opened and the last sync is older than N hours
     "sync.auto_on_open.enabled": True,
     "sync.auto_on_open.hours": 6,
-    # which data the charts / overview / race power read: wko5 | coros | tp
-    "charts.data_source": "wko5",
+    # which data the charts / overview / race power read: synced (both synced
+    # folders, one file per activity from the primary source, the other only for
+    # activities the primary lacks) | coros | tp (one folder only) | wko5 (cross-check)
+    "charts.data_source": "synced",
     # COROS / TP source: read thresholds / weight from the WKO5 athlete file
     # (opt-in cross-check; default = plan → athlete_settings → estimates, fitdataset.py)
     "charts.fit_settings_from_wko5": False,
@@ -128,6 +134,9 @@ DEFAULTS: dict[str, Any] = {
     "injury.pattern_alerts": False,
     "injury.reentry_step_up": True,
     "injury.custom_areas": [],
+    # activities the user unlinked from a planned session (engine/plan_match.py):
+    # [{start, index}] — never auto-matched again (start: the activity's local start)
+    "plan.match.unlinked": [],
 }
 AUTO_NOTIFY = ("watch", "overview")
 AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan.auto.confirm_big",
@@ -204,7 +213,7 @@ class SettingsRepository:
 def validate(key: str, value: Any) -> None:
     if key == "athlete.timezone" and value is not None:
         resolve_tz(value, strict=True)
-    if key == "sync.primary_source" and value not in (None, *SOURCES):
+    if key == "sync.primary_source" and value not in (None, "auto", *SOURCES):
         raise ValueError(f"primary source must be one of {SOURCES}")
     if key == "sync.schedule.daily_time" and value is not None:
         import re
@@ -212,8 +221,8 @@ def validate(key: str, value: Any) -> None:
             raise ValueError("daily sync time must be HH:MM (24 h) or null")
     if key == "sync.auto_on_open.hours" and not (isinstance(value, (int, float)) and 0 < value <= 168):
         raise ValueError("auto-sync threshold must be 1-168 hours")
-    if key == "charts.data_source" and value not in ("wko5", "coros", "tp"):
-        raise ValueError("chart data source must be wko5, coros or tp")
+    if key == "charts.data_source" and value not in ("synced", "wko5", "coros", "tp"):
+        raise ValueError("chart data source must be synced, wko5, coros or tp")
     if key == "charts.map.basemap" and value not in MAP_BASEMAPS:
         raise ValueError(f"map basemap must be one of {MAP_BASEMAPS}")
     if key == "charts.map.overlays" and not (
@@ -222,7 +231,8 @@ def validate(key: str, value: Any) -> None:
         raise ValueError(f"map overlays must be a list of distinct {MAP_OVERLAYS}")
     if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
         raise ValueError(f"{key} must be true/false/null")
-    if key in ("charts.fit_settings_from_wko5", "power.accept_watch_power", "activities.exclude_bad") \
+    if key in ("charts.fit_settings_from_wko5", "power.accept_watch_power", "activities.exclude_bad",
+               "sync.secondary.auto") \
             and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
     if key.endswith(".enabled") and not isinstance(value, bool):
@@ -255,6 +265,9 @@ def validate(key: str, value: Any) -> None:
             raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.auto.state must be an object or null")
+    if key == "plan.match.unlinked" and not (isinstance(value, list) and all(
+            isinstance(e, dict) and isinstance(e.get("start"), str) for e in value)):
+        raise ValueError("plan.match.unlinked must be a list of {start, index}")
 
 
 def _validate_pref(key: str, value: Any) -> None:

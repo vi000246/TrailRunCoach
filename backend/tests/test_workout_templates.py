@@ -10,29 +10,55 @@ from backend.engine import workout_templates as WT
 FULL = {"cp": 250.0, "lthr": 168.0, "aet": 150.0, "tpace": 270.0}
 
 
+def band(lo, hi, hrp=None):
+    """An auto band (the generated sessions' targets), optionally with its own % LTHR."""
+    t = {"type": "auto", "intent": "band", "lo": lo, "hi": hi, "cls": ""}
+    if hrp:
+        t["hrp"] = list(hrp)
+    return t
+
+
 def _ctx(basis, **sp):
     return WS.Ctx.of(FULL, basis, speeds=sp or None)
 
 
-def test_every_template_has_a_source_a_warm_up_and_switches_power_hr():
+NATIVE = {"pal_ez": "power", "pal_supra": "power", "stryd_cp_3_12": "power", "ronnestad_3015": "power",
+          "friel_cruise": "hr", "ua_z2": "hr", "pfitz_lt": "hr", "dsw_classic": "hr", "steep_10": "hr",
+          "daniels_cruise": "pace", "daniels_r": "pace", "canova_specific": "pace", "billat_3030": "pace"}
+
+
+def test_every_template_has_a_source_a_warm_up_and_its_own_basis():
     seen = set()
     for t in WT.TEMPLATES:
         assert t.key not in seen and t.src and t.url.startswith("http") and t.cat in ("easy", "quality", "test", "trail")
+        assert t.cat != "quality" or t.sub in ("z3", "z4", "z5"), t.key
         seen.add(t.key)
         d = WS.normalize({"items": WT.items_of(t)})
         assert d["items"][0]["kind"] == "warm", t.key
-        n_targets = 0
+        main, every = [], []
         for row in WS.flat(d["items"]):
             st = row["st"]
             tg = st["target"]
-            if tg.get("type") != "auto" or tg.get("intent") == "open":
+            if tg.get("type") == "auto":
+                assert tg.get("intent") == "open", (t.key, st)     # no step follows a top-level switch
                 continue
-            n_targets += 1
-            p = WS.resolve(st, _ctx("power"))
-            h = WS.resolve(st, _ctx("hr"))
-            assert p.type == "power" and h.type == "hr", (t.key, st)
-            assert not p.err and not h.err, (t.key, p.err, h.err)
-        assert n_targets, t.key                      # at least the warm-up switches
+            p, h = WS.resolve(st, _ctx("power")), WS.resolve(st, _ctx("hr"))
+            assert (p.type, p.lo, p.hi) == (h.type, h.lo, h.hi), (t.key, st)   # the basis doesn't change it
+            assert p.type == tg["type"] and not p.err, (t.key, p.err)
+            every.append(p.type)
+            if st["kind"] == "work":
+                main.append(p.type)
+        main = main or every                         # e.g. an EZ run with no work step
+        if t.key in NATIVE:
+            assert main and set(main) <= {NATIVE[t.key]}, (t.key, main)
+        if main:
+            assert t.basis in main, (t.key, t.basis, main)
+
+
+def test_no_loaded_carry_template_and_steep_grades():
+    assert not any("負重爬坡" in t.title or "背包" in t.title for t in WT.TEMPLATES)
+    g = [float(WT.BY_KEY[k].title.split("%")[0].split()[-1]) for k in ("steep_5", "steep_10", "steep_15")]
+    assert 12 < g[0] < g[1] < g[2] <= 15.0
 
 
 def test_template_rows_and_categories():
@@ -55,8 +81,9 @@ def test_template_rows_and_categories():
     assert [x["kind"] for x in main] == ["repeat"]
 
 
-def test_hrp_is_kept_and_used_on_hr():
-    st = {"kind": "work", "dur": {"type": "time", "value": 480}, "target": WT.band(1.02, 1.08, (1.00, 1.05))}
+def test_hrp_band_is_kept_and_used_on_hr():
+    # (the auto band's own % LTHR stays for structures saved by the first template version)
+    st = {"kind": "work", "dur": {"type": "time", "value": 480}, "target": band(1.02, 1.08, (1.00, 1.05))}
     d = WS.normalize({"items": [st]})
     assert d["items"][0]["target"]["hrp"] == [1.0, 1.05]
     r = WS.resolve(d["items"][0], _ctx("hr"))
@@ -82,12 +109,12 @@ def _dist(m, target):
 
 
 def test_distance_time_from_the_athletes_speeds():
-    easy = WT.band(0.76, 0.80)              # mid 0.78 = the easy anchor
-    thr = WT.band(0.98, 1.02)               # mid 1.00 = threshold pace
+    easy = band(0.76, 0.80)              # mid 0.78 = the easy anchor
+    thr = band(0.98, 1.02)               # mid 1.00 = threshold pace
     c = _ctx("power", v_easy=10.0)          # 10 km/h easy, 4:30/km threshold
     assert WS.totals(_dist(10000, easy), c)["sec"] == pytest.approx(3600, abs=2)
     assert WS.totals(_dist(1000, thr), c)["sec"] == pytest.approx(270, abs=2)
-    mid = WS.totals(_dist(1000, WT.band(0.87, 0.91)), c)["sec"]
+    mid = WS.totals(_dist(1000, band(0.87, 0.91)), c)["sec"]
     assert 270 < mid < 360
     # HR basis: the same steps through hr_to_p, still between the anchors
     hr = WS.totals(_dist(1000, thr), _ctx("hr", v_easy=10.0))["sec"]
