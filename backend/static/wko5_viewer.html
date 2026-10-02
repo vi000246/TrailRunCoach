@@ -881,6 +881,31 @@ function saveWindow(k, w) { try { localStorage.setItem(WINDOW_KEY, JSON.stringif
 const BASIS_KEY = "wko5viewer.basis";
 function basisPrefs() { try { return JSON.parse(localStorage.getItem(BASIS_KEY) || "{}"); } catch { return {}; } }
 function saveBasis(k, b) { try { localStorage.setItem(BASIS_KEY, JSON.stringify({ ...basisPrefs(), [k]: b })); } catch {} }
+// chart variants (views "variants", wko5expr/variants.py): e.g. 每日 TSS ↔ % CTL. Generic: any chart whose
+// JSON says variant_toggle gets a segmented toggle in its header; the choice is remembered per chart and
+// sent as ?variant=<key>. Self-contained: variantQuery() in the fetch URL + variantToggle() after the fetch.
+const VARIANT_KEY = "wko5viewer.variant";
+function variantPrefs() { try { return JSON.parse(localStorage.getItem(VARIANT_KEY) || "{}"); } catch { return {}; } }
+function variantQuery(pkey) { const k = variantPrefs()[pkey]; return k ? `&variant=${encodeURIComponent(k)}` : ""; }
+function variantToggle(card, res, pkey, rerender) {
+  if (!res.variant_toggle || !(res.variant_choices?.length > 1)) return;
+  const seg = document.createElement("div");
+  seg.className = "seg period";          // .seg.period: the zoom overlay forwards its clicks (fillZoom)
+  seg.dataset.kind = "variant";
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "圖表顯示方式");
+  seg.innerHTML = res.variant_choices.map(({ key, label }) => `<button data-p="${esc(key)}" class="${key === res.variant ? "on" : ""}"
+    aria-pressed="${key === res.variant}">${esc(label)}</button>`).join("");
+  seg.onclick = async (e) => {
+    const b = e.target.closest("button[data-p]");
+    if (!b || b.dataset.p === card._res?.variant) return;
+    try { localStorage.setItem(VARIANT_KEY, JSON.stringify({ ...variantPrefs(), [pkey]: b.dataset.p })); } catch {}
+    card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+    await rerender();
+    if (ZOOM.card === card) fillZoom();
+  };
+  card.querySelector("h2").appendChild(seg);
+}
 function disposeCardCharts(card) {
   for (const el of card.querySelectorAll(".plot")) {
     if (el._lmap) { el._lmap.remove(); el._lmap = null; continue; }
@@ -901,7 +926,7 @@ async function renderCard(card, v, di, c, q, token) {
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
       + (win && c.kind === "athlete" ? `&window=${win}` : "")
       + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : "")
-      + (c.kind === "periodzones" ? pzQuery(c) : ""));
+      + (c.kind === "periodzones" ? pzQuery(c) : "") + variantQuery(pkey));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -971,6 +996,7 @@ async function renderCard(card, v, di, c, q, token) {
       };
       card.querySelector("h2").appendChild(seg);
     }
+    variantToggle(card, res, pkey, () => renderCard(card, v, di, c, q, loadToken));
     drawInto(card, res);
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
   } catch (e) {
