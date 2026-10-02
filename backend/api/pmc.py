@@ -9,6 +9,7 @@ from backend.db.database import get_db
 from backend.db.models import WorkoutMetric, WorkoutFile, AthleteSettings
 from backend.engine.algorithms.metrics import compute_pmc
 from backend.api.analytics import _sport_clause
+from backend.sync.dedup import in_use
 
 router = APIRouter(prefix="/api/v1/pmc", tags=["pmc"])
 
@@ -32,7 +33,7 @@ async def get_pmc(
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutMetric.metric_key == "tss",
-            _sport_clause(sports),
+            _sport_clause(sports, await in_use(db, athlete_id)),
             WorkoutFile.workout_date.isnot(None),
         )
     )

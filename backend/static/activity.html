@@ -72,7 +72,6 @@ main { display: grid; grid-template-columns: minmax(320px, 440px) minmax(0, 1fr)
 .badge.man { background: var(--accent); color: #fff; }
 .badge.auto { border: 1px solid var(--line); color: var(--muted); }
 .badge.src { border: 1px solid var(--line); color: var(--muted); font-weight: 400; vertical-align: middle; }
-.badge.src.fill { border-style: dashed; }
 .ed h2 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .fld { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
 .fld > .lab { color: var(--muted); font-size: 13px; padding-top: 4px; }
@@ -268,9 +267,8 @@ $("f-q").addEventListener("input", renderList);
 async function loadList() {
   const r = await j(`${API}/activities`);
   S.acts = r.activities; S.types = r.types; S.efforts = r.efforts; S.source = r.source;
-  S.merge = r.merge || null; S.originLabels = r.origin_labels || {};
-  const prim = S.merge && S.merge.primary ? `（主要：${({ coros: "COROS", trainingpeaks: "TrainingPeaks" })[S.merge.primary] || S.merge.primary}${S.merge.auto ? "，自動" : ""}）` : "";
-  $("hdr").textContent = `資料來源：${{ synced: "同步資料", wko5: "WKO5", coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source}${prim} · ${S.acts.length} 筆`;
+  S.originLabels = r.origin_labels || {};
+  $("hdr").textContent = `資料來源：${{ wko5: "WKO5", coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source} · ${S.acts.length} 筆`;
   const cur = { ...Object.fromEntries(["f-sport", "f-type", "f-effort"].map((k) => [k, $(k).value])) };
   fillFilterOptions();
   for (const [k, v] of Object.entries(cur)) if (v) $(k).value = v;
@@ -321,13 +319,11 @@ document.addEventListener("click", (e) => {
 }, true);
 addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(QTIP.pinned); }, { passive: true, capture: true });
 const badge = (manual, why) => manual ? `<span class="badge man" title="你設定的值">手動</span>` : `<span class="badge auto" title="${esc(why || "依規則自動判定")}">自動</span>`;
-// which source this activity's file came from (主要資料來源 merge: the other source only fills activities the primary lacks)
+// which source this activity's file came from (the one 資料來源 in use)
 const SRC_SHORT = { coros: "COROS", tp: "TP", wko5: "WKO5" };
 function srcBadge(a) {
   if (!a.origin) return "";
-  const fill = S.merge && S.merge.primary && ({ coros: "coros", trainingpeaks: "tp" })[S.merge.primary] !== a.origin && a.origin !== "wko5";
-  const tip = `資料來自 ${(S.originLabels || {})[a.origin] || a.origin}` + (fill ? "（主要資料來源沒有這筆，才用這個來源補上）" : "");
-  return `<span class="badge src${fill ? " fill" : ""}" title="${esc(tip)}">${esc(SRC_SHORT[a.origin] || a.origin)}</span>`;
+  return `<span class="badge src" title="${esc(`資料來自 ${(S.originLabels || {})[a.origin] || a.origin}`)}">${esc(SRC_SHORT[a.origin] || a.origin)}</span>`;
 }
 function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
 

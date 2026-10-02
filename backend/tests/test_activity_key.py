@@ -1,6 +1,7 @@
 """Stored per-activity data resolves by start time (engine/activity_key.py),
-so it holds in the merged 同步資料 source and across a source switch; the
-chart-source read-time migration; cptest.curves following the 主要資料來源.
+so it holds across a 資料來源 switch (and for keys stored with the old merged
+source's "coros/" prefix); the chart source; cptest.curves reading only the
+資料來源's folder.
 Synthetic data only."""
 import asyncio
 import datetime as dt
@@ -121,16 +122,7 @@ def test_weather_by_start_for_another_source():
     assert ZE.weather_of(ds, acts) == {0: {"temp_c": 18.5, "hadley": 110.0}}   # two rows that day: by start
 
 
-# ---- 圖表資料來源: the old "coros" reads as 同步資料 --------------------------------
-
-def test_effective_source_migration():
-    from backend.engine.wko5expr.datasource import effective_source
-    assert effective_source("coros", False) == "synced"          # the pre-同步資料 value, never picked
-    assert effective_source("coros", True) == "coros"            # picked in 進階設定
-    assert effective_source("tp", False) == "tp" and effective_source("wko5", False) == "wko5"
-    assert effective_source(None, False) == "synced" and effective_source("x", False) == "synced"
-    assert effective_source("coros", False, default="wko5") == "coros"     # no app DB: unchanged
-
+# ---- 圖表資料來源: the 資料來源's folder, old values follow it ------------------
 
 def test_current_source_and_settings_api(tmp_path, monkeypatch):
     import sqlite3
@@ -138,34 +130,34 @@ def test_current_source_and_settings_api(tmp_path, monkeypatch):
     db = tmp_path / "w.db"
     con = sqlite3.connect(db)
     con.execute("CREATE TABLE user_settings (id INTEGER PRIMARY KEY, user_id INT, key TEXT, value_json TEXT, updated_at TEXT)")
-    con.execute("INSERT INTO user_settings (user_id, key, value_json) VALUES (1, 'charts.data_source', '\"coros\"')")
+    con.execute("INSERT INTO user_settings (user_id, key, value_json) VALUES (1, 'charts.data_source', '\"tp\"')")
     con.commit()
     monkeypatch.setattr(DS, "_db_path", lambda: db)
-    assert DS.current_source() == "synced"
-    con.execute("INSERT INTO user_settings (user_id, key, value_json) VALUES (1, 'charts.data_source.chosen', 'true')")
+    assert DS.current_source() == "coros"                       # an old per-folder pick follows the 資料來源
+    con.execute("INSERT INTO user_settings (user_id, key, value_json) VALUES (1, 'sync.primary_source', '\"trainingpeaks\"')")
     con.commit()
     con.close()
-    assert DS.current_source() == "coros"
+    assert DS.current_source() == "tp"
 
     from backend.api.sync import SyncSettingsBody, get_sync_settings, put_sync_settings
     from backend.tests.test_sync_e2e import make_session
 
     async def go():
-        s = await make_session(tmp_path, charts__data_source="coros")
+        s = await make_session(tmp_path)
+        from backend.db.models import UserSetting
+        s.add(UserSetting(user_id=1, key="charts.data_source", value_json=json.dumps("synced")))
+        await s.commit()
         got = await get_sync_settings(1, s)
-        assert got["chart_data_source"] == "synced" and got["chart_data_source_stored"] == "coros"
-        r = await put_sync_settings(SyncSettingsBody(chart_data_source="coros"), 1, s)
-        assert r["chart_data_source"] == "coros"                 # an explicit pick sticks
+        assert got["chart_data_source"] == "source" and got["chart_data_source_stored"] == "synced"
+        r = await put_sync_settings(SyncSettingsBody(chart_data_source="source"), 1, s)
+        assert r["chart_data_source"] == "source"
     asyncio.new_event_loop().run_until_complete(go())
 
 
-# ---- cptest follows the 主要資料來源 ---------------------------------------------
+# ---- cptest reads only the 資料來源 ----------------------------------------------
 
 def test_cptest_curves_follow_the_primary(tmp_path, monkeypatch, _fit_root_in_tmp):
     from backend.engine.racepower import cptest as T
-    from backend.engine.wko5expr import datasource as DS
-    from backend.engine.wko5expr.config import EngineConfig
-    from backend.engine.wko5expr.fitdataset import FitFolderDataset
     from backend.tests.fit_builder import build_run
     monkeypatch.setenv("WKO5COACH_TZ", "UTC")
     t0 = datetime(2025, 12, 15, 1, 0, tzinfo=timezone.utc)
@@ -178,14 +170,11 @@ def test_cptest_curves_follow_the_primary(tmp_path, monkeypatch, _fit_root_in_tm
         p = tmp_path / "fit" / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
-    for f in ("coros", "tp"):                                   # fills the FIT cache index (the starts)
-        FitFolderDataset(tmp_path / "fit" / f, config=EngineConfig(parity=True), classifications={},
-                         athlete_settings=[], estimate_thresholds=False, tz=timezone.utc, source=f)
     span = (dt.date(2025, 12, 1), dt.date(2025, 12, 31))
-    monkeypatch.setattr(DS, "primary_info", lambda user_id=1: ("coros", {}))
+    monkeypatch.setattr(T, "unused_folder", lambda: "tp")
     got = sorted(c["path"].replace("\\", "/") for c in T.curves(tmp_path, *span))
-    assert got == ["coros/2025/1_2025-12-15_run.fit", "tp/2025/tp_2025_12_16_78.fit"]
-    monkeypatch.setattr(DS, "primary_info", lambda user_id=1: ("trainingpeaks", {}))
+    assert got == ["coros/2025/1_2025-12-15_run.fit"]           # the TP-only run is not back-filled
+    monkeypatch.setattr(T, "unused_folder", lambda: "coros")
     got = sorted(c["path"].replace("\\", "/") for c in T.curves(tmp_path, *span))
     assert got == ["tp/2025/tp_2025_12_15_77.fit", "tp/2025/tp_2025_12_16_78.fit"]
     assert T._file_date(tmp_path / "tp_2025_12_16_78.fit") == dt.date(2025, 12, 16)

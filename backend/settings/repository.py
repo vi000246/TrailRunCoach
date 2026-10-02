@@ -37,13 +37,10 @@ DEFAULTS: dict[str, Any] = {
     # 主要訓練項目 (engine/primary_sport.py): auto (follow the suggestion from the data / the
     # next A race) | trail (越野跑, the original behaviour) | road (路跑／馬拉松)
     "athlete.primary_sport": "auto",
-    # 主要資料來源 (backend/sync/primary.py): which source an activity is read
-    # from when COROS and TP both have it — the DB de-dup, the merged chart
-    # Dataset ("synced") and the sync order. "auto" = the source with the most
-    # recent complete data; None (the old default) reads as "auto"
-    "sync.primary_source": "auto",
-    # 進階: automatic syncs (page open, daily) also sync the non-primary source
-    "sync.secondary.auto": False,
+    # 資料來源 (backend/sync/primary.py): the ONE synced source in use — charts,
+    # automatic syncs, CP scan and totals read only it. coros | trainingpeaks;
+    # None / an old "auto" is migrated on first read (primary.current)
+    "sync.primary_source": None,
     "sync.coros.enabled": True,
     "sync.trainingpeaks.enabled": True,
     # log in with WKO5's OAuth client credentials (ToS risk, see
@@ -59,13 +56,12 @@ DEFAULTS: dict[str, Any] = {
     # sync when a page is opened and the last sync is older than N hours
     "sync.auto_on_open.enabled": True,
     "sync.auto_on_open.hours": 6,
-    # which data the charts / overview / race power read: synced (both synced
-    # folders, one file per activity from the primary source, the other only for
-    # activities the primary lacks) | coros | tp (one folder only) | wko5 (cross-check)
-    "charts.data_source": "synced",
-    # set when the user picks the chart source (設定 → 進階設定, the viewer's source chip).
-    # Unset + a stored "coros" = the pre-同步資料 setup (the old UI had no merged
-    # source): read as "synced" (wko5expr/datasource.effective_source)
+    # which data the charts / overview / race power read: source (the 資料來源
+    # above, its folder only) | wko5 (cross-check). Old values (synced / coros /
+    # tp) read as source (wko5expr/datasource.current_source)
+    "charts.data_source": "source",
+    # set when the user picks the chart source (設定 → 進階設定, the viewer's source chip);
+    # no longer read (single 資料來源), kept so stored rows stay valid
     "charts.data_source.chosen": False,
     # COROS / TP source: read thresholds / weight from the WKO5 athlete file
     # (opt-in cross-check; default = plan → athlete_settings → estimates, fitdataset.py)
@@ -267,16 +263,16 @@ def validate(key: str, value: Any) -> None:
         resolve_tz(value, strict=True)
     if key == "athlete.primary_sport" and value not in ("auto", "trail", "road"):
         raise ValueError("primary sport must be auto, trail or road")
-    if key == "sync.primary_source" and value not in (None, "auto", *SOURCES):
-        raise ValueError(f"primary source must be one of {SOURCES}")
+    if key == "sync.primary_source" and value not in ("coros", "trainingpeaks"):
+        raise ValueError("data source must be coros or trainingpeaks")
     if key == "sync.schedule.daily_time" and value is not None:
         import re
         if not (isinstance(value, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value)):
             raise ValueError("daily sync time must be HH:MM (24 h) or null")
     if key == "sync.auto_on_open.hours" and not (isinstance(value, (int, float)) and 0 < value <= 168):
         raise ValueError("auto-sync threshold must be 1-168 hours")
-    if key == "charts.data_source" and value not in ("synced", "wko5", "coros", "tp"):
-        raise ValueError("chart data source must be synced, wko5, coros or tp")
+    if key == "charts.data_source" and value not in ("source", "wko5"):
+        raise ValueError("chart data source must be source or wko5")
     if key == "charts.map.basemap" and value is not None and value not in MAP_BASEMAPS:
         raise ValueError(f"map basemap must be one of {MAP_BASEMAPS}")
     if key == "charts.map.overlays" and not (
@@ -286,7 +282,7 @@ def validate(key: str, value: Any) -> None:
     if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
         raise ValueError(f"{key} must be true/false/null")
     if key in ("charts.fit_settings_from_wko5", "power.accept_watch_power", "activities.exclude_bad", "athlete.setup.done",
-               "sync.secondary.auto", "charts.data_source.chosen") \
+               "charts.data_source.chosen") \
             and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
     if key.endswith(".enabled") and not isinstance(value, bool) and not (key == "charts.power.enabled" and value is None):
