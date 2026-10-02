@@ -76,6 +76,11 @@ async def _migrate_schema():
                 await conn.execute(
                     text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
                 )
+        # settings that no longer exist (settings/repository.py RETIRED_KEYS), e.g. the
+        # sealed backup-encryption key: deleted, not left behind in the DB
+        from backend.settings.repository import RETIRED_KEYS
+        for key in RETIRED_KEYS:
+            await conn.execute(text("DELETE FROM user_settings WHERE key = :k"), {"k": key})
 
 
 async def init_db():
