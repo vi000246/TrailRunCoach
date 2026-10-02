@@ -30,7 +30,7 @@
     {"zh": ["恢復期"], "en": "Recovery", "accept": ["recovery"], "check": true},
     {"zh": ["課表"], "en": "Schedule (the page) / workout (one session)", "accept": ["schedule", "workout", "session", "plan"], "check": false},
     {"zh": ["賽事周期"], "en": "Season plan", "accept": ["season plan"], "check": true},
-    {"zh": ["賽事功率"], "en": "Race power", "accept": ["race power"], "check": true},
+    {"zh": ["賽事計算機"], "en": "Race calculator", "accept": ["race calculator"], "check": true},
     {"zh": ["百岳"], "en": "Taiwan's 100 Peaks (Baiyue)", "accept": ["Baiyue"], "check": true,
      "note": "written in full on the first mention per page — zh 「百岳（Taiwan's 100 Peaks）」, en \"Taiwan's 100 Peaks (Baiyue)\" — then Baiyue (owner decision 2026-10-02)"},
     {"zh": ["百岳跟團"], "en": "guided Baiyue trip", "accept": ["guided"], "check": true},

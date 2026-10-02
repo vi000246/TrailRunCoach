@@ -1,5 +1,5 @@
 """
-賽事功率 read-only share links (engine/racepower/share.py, /share/<id>):
+賽事計算機 read-only share links (engine/racepower/share.py, /share/<id>):
 a frozen, whitelisted snapshot; no weight unless asked; delete and expiry.
 """
 from __future__ import annotations

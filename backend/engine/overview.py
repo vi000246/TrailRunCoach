@@ -1158,7 +1158,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         ti = by.get("testing")
         test_suggestions.append({
             "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
-            "reason": (getattr(ti, "verdict", "") or "門檻過期或沒測過") + "：區間、TSS、賽事功率都靠 CP",
+            "reason": (getattr(ti, "verdict", "") or "門檻過期或沒測過") + "：區間、TSS、賽事計算機都靠 CP",
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     if aet_due:
