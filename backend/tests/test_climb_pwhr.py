@@ -178,6 +178,21 @@ def test_panel_keeps_reversed_runs_apart_and_says_when_there_is_nothing():
     assert empty["points"] == [] and empty["empty"]
 
 
+def test_panel_matches_another_sources_files_by_start_time():
+    # the route index and the weather are keyed by WKO5 .wko4 names; the charts read FITs
+    acts = [_fw(dt.date(2026, 9, 1)), _fw(dt.date(2026, 9, 8))]
+    ds = DS(acts)
+    idx = {"routes": [{"id": "rA", "auto_name": "A", "members": ["2026/X_2026_09_01_07_00.wko4", "2026/X_2026_09_08_07_01.wko4"],
+                       "dirs": {}, "efforts": [{"file": "2026/X_2026_09_01_07_00.wko4", "start": "2026-09-01T07:00:30"},
+                                               {"file": "2026/X_2026_09_08_07_01.wko4", "start": "2026-09-08T07:01:40"}]}]}
+    wx = {"2026/X_2026_09_08_07_01.wko4": {"hadley": 120.0, "temp_c": 20.0}}
+    b, e = date_to_day(dt.date(2026, 6, 1)), date_to_day(TODAY)
+    res = PANEL.compute(ds, b, e, {}, route_index=idx, weather=wx, names={})
+    assert res["route"]["id"] == "rA" and res["route"]["runs"] == 2
+    assert [p["hadley"] for p in res["points"]] == [None, 120.0]
+    assert res["points"][1]["hr_adj"] == pytest.approx(150.0, abs=0.05)
+
+
 def test_view_wiring_puts_the_chart_in_ability_and_the_api_renders_it():
     from backend.api.wko5views import _render
     from backend.engine.wko5expr.customviews import REPO_VIEWS, load_custom_views
