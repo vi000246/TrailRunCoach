@@ -55,7 +55,7 @@ log = logging.getLogger(__name__)
 
 SPORT_RUN = 1
 EX_GROUP, EX_WARMUP, EX_TRAIN, EX_COOLDOWN, EX_REST = 0, 1, 2, 3, 4
-TARGET_OPEN, TARGET_TIME = 1, 2
+TARGET_OPEN, TARGET_TIME, TARGET_DIST = 1, 2, 5
 INT_NONE, INT_HR, INT_POWER = 0, 2, 6
 HR_TYPE_LTHR = 3
 REST_NONE = 3
@@ -96,6 +96,7 @@ class Step:
     seconds: int                  # 0 = open (ends with the lap button)
     intensity: Optional[tuple] = None   # ("hr", lo, hi) | ("power", lo, hi)
     name: str = ""
+    meters: int = 0               # > 0: a distance step (targetType 5, cm) — engine/workout_steps.py
 
 
 @dataclass
@@ -372,6 +373,15 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
         raise Unsupported("COROS 肌力課要從動作庫挑動作，先不推")
     if kind == "heat_passive":
         raise Unsupported("被動熱適應不推")
+    if s.get("steps") and kind != "notice":
+        # the structure the user saved in the editor (engine/workout_steps.py) wins over the text
+        from backend.engine import workout_steps as WS
+        try:
+            st = WS.normalize(s["steps"])
+        except WS.StepsError as e:
+            raise Unsupported(f"課表結構有誤：{e}")
+        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, basis=_basis(s))
+        return WS.steps_to_coros(st, c)
     if kind == "notice":
         # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is
         # obviously not a real session; the summary goes in the overview (detail)
@@ -414,7 +424,8 @@ def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds)
     ex = {
         "id": ex_id, "name": st.name or STEP_NAME[st.kind], "overview": OVERVIEW[st.kind],
         "exerciseType": st.kind, "sportType": SPORT_RUN,
-        "targetType": TARGET_TIME if st.seconds else TARGET_OPEN, "targetValue": st.seconds,
+        "targetType": TARGET_DIST if st.meters else TARGET_TIME if st.seconds else TARGET_OPEN,
+        "targetValue": int(st.meters) * 100 if st.meters else st.seconds,
         "targetDisplayUnit": 0,
         "intensityType": INT_NONE, "intensityValue": 0, "intensityValueExtend": 0,
         "intensityDisplayUnit": 0, "hrType": 0, "isIntensityPercent": False,
