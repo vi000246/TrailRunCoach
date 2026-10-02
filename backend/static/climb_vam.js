@@ -167,7 +167,7 @@ details.cvdet table { margin-top: 4px; font-size: 11.5px; }`;
       grid: b.grid, xAxis: b.xAxis, legend: b.legend,
       tooltip: { ...b.tooltip, formatter: (p) => p.seriesIndex === 0 ? tip(p.data.q)
         : `${esc(p.data.q.date)}<br>近 8 週中位數 <b>${f2(p.value[1])} m/h/bpm</b>` },
-      yAxis: { type: "value", name: "m/h/bpm", min: Math.max(0, Math.floor((lo - pad) * 10) / 10), max: Math.ceil((hi + pad) * 10) / 10,
+      yAxis: { type: "value", name: "m/h/bpm", min: Math.max(0, Math.floor((lo - pad) * 2) / 2), max: Math.ceil((hi + pad) * 2) / 2,
         nameTextStyle: { color: b.muted, fontSize: 10 }, axisLabel: { color: b.muted, fontSize: 10, formatter: (v) => v.toFixed(1) },
         splitLine: { lineStyle: { color: b.line } } },
       series: [
