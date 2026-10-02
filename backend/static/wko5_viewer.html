@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
+<script src="/api/v1/static/painpicker.js"></script>
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
@@ -331,6 +332,18 @@ table.z5ev td { white-space: normal; }
 .rv-chip.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
 .rv-chip .qtip { margin: 0; width: 16px; height: 16px; }
 .ddesc-q { margin: 0 0 2px; grid-column: 1 / -1; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 2px; }
+/* 疼痛 chip + popover (傷病紀錄) */
+.pain-wrap { position: relative; display: inline-flex; }
+.pain-wrap[hidden], .pain-pop[hidden] { display: none; }
+.chip.pain-unset { color: var(--muted); border-style: dashed; }
+.chip.pain-sore { color: var(--warn); border-color: var(--warn); }
+.chip.pain-hurt { color: #fff; background: var(--err); border-color: var(--err); }
+.pain-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 70; width: min(360px, calc(100vw - 24px));
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18); font-size: 13px; }
+.pain-pop .pain-h { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 8px; }
+.pain-pop .pain-f { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+@media (max-width: 699px) { .pain-pop { position: fixed; left: 12px; right: 12px; top: auto; bottom: calc(70px + env(safe-area-inset-bottom)); width: auto; } }
 </style>
 </head>
 <body class="aside-closed" data-mode="season">
@@ -366,6 +379,8 @@ table.z5ev td { white-space: normal; }
     <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
     <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
     <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動編輯」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
+    <span class="w-only pain-wrap" id="pain-wrap" hidden><button class="chip" id="pain-chip" aria-haspopup="dialog" aria-expanded="false" title="這次有沒有痛（傷病紀錄）">疼痛？</button>
+      <div class="pain-pop" id="pain-pop" role="dialog" aria-label="疼痛" hidden></div></span>
   </div>
 </div>
 <div class="wrap">
@@ -753,7 +768,64 @@ function renderActChip() {
   if (a?.key) S.workoutKey = [S.workout, a.key];      // the 活動編輯 link: the shown activity's start minute
   const wk = S.workoutKey && S.workoutKey[0] === S.workout ? S.workoutKey[1] : null;
   $("edit-act").href = `/api/v1/wko5/activities/page${wk ? "?key=" + encodeURIComponent(wk) : ""}`;
+  loadPain();
 }
+
+// ---- 疼痛 chip + popover (傷病紀錄; static/painpicker.js). Hidden in the demo mode (meta 404).
+const PAIN = { meta: undefined, idx: null, st: null };
+const PAIN_ZH = { 0: "沒痛", 1: "痠", 2: "痛", 3: "中斷" };
+async function loadPain() {
+  const wrap = $("pain-wrap"), i = S.workout;
+  if (!window.PainPicker || i == null) { wrap.hidden = true; return; }
+  if (PAIN.meta === undefined) PAIN.meta = await PainPicker.meta();
+  if (!PAIN.meta) { wrap.hidden = true; return; }
+  if (PAIN.idx === i && PAIN.st) return;
+  PAIN.idx = i; PAIN.st = null;
+  try {
+    const r = await fetch(`${API}/workouts/${i}/pain`);
+    if (!r.ok || S.workout !== i) return;
+    PAIN.st = await r.json();
+  } catch (_) { return; }
+  paintPainChip();
+}
+function paintPainChip() {
+  const st = PAIN.st, c = $("pain-chip");
+  if (!st) return;
+  $("pain-wrap").hidden = false;
+  const area = st.pain_area ? (PAIN.meta.areas.find((a) => a.key === st.pain_area)?.label || st.pain_area) : "";
+  const side = st.injury?.side ? ({ left: "左", right: "右", both: "雙側" }[st.injury.side] || "") : "";
+  c.textContent = st.pain == null ? "疼痛？" : PAIN_ZH[st.pain] + (st.pain >= 1 && area ? `・${side}${area}` : "");
+  c.classList.toggle("pain-hurt", st.pain >= 2);
+  c.classList.toggle("pain-sore", st.pain === 1);
+  c.classList.toggle("pain-unset", st.pain == null);
+  if (!$("pain-pop").hidden) renderPainPop();
+}
+function renderPainPop() {
+  const pop = $("pain-pop");
+  pop.innerHTML = `<div class="pain-h">這次有沒有痛？<button class="iconbtn" id="pain-x" aria-label="關閉">✕</button></div>` +
+    PainPicker.html({ pain: PAIN.st.pain, pain_area: PAIN.st.pain_area, injury: PAIN.st.injury, reentry: PAIN.st.reentry }, PAIN.meta) +
+    `<div class="pain-f">選「痛」或「中斷」會開一筆傷病紀錄，細節之後補。這不是診斷。</div>`;
+  $("pain-x").onclick = () => togglePainPop(false);
+  PainPicker.wire(pop, { ...PAIN.st, side: PAIN.st.injury?.side }, PAIN.meta, async (patch) => {
+    const i = PAIN.idx;
+    const r = await fetch(`${API}/workouts/${i}/activity`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : `HTTP ${r.status}`);
+    if (patch.pain_area && !PAIN.meta.areas.some((a) => a.key === patch.pain_area)) PAIN.meta = (await PainPicker.meta(true)) || PAIN.meta;
+    PAIN.st = { ...PAIN.st, ...(j.pain_state || {}) };
+    paintPainChip();
+  });
+}
+function togglePainPop(open) {
+  const pop = $("pain-pop");
+  open = open ?? pop.hidden;
+  pop.hidden = !open;
+  $("pain-chip").setAttribute("aria-expanded", String(open));
+  if (open) renderPainPop();
+}
+$("pain-chip").addEventListener("click", (e) => { e.stopPropagation(); togglePainPop(); });
+document.addEventListener("click", (e) => { if (!$("pain-pop").hidden && !e.target.closest("#pain-wrap")) togglePainPop(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("pain-pop").hidden) togglePainPop(false); });
 
 async function loadActs() {
   const q = `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}&${tpParam()}`;

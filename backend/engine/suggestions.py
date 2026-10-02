@@ -15,6 +15,10 @@ Kinds (the `type` of a row):
                scheduled here) and a day.
   zone_update  a test applied in the last 14 days: the zones were recomputed
                (zone_events.applied_events) — information, ✕ only.
+  injury_rest  an open 重（停跑） injury: the next 7 days as 不排課日期 (confirm).
+  injury_hold  a 痛 mark inside a re-entry block: hold the volume (information).
+  injury_pattern 「跟受傷前很像」 (engine/injury_exposure.py; off by default,
+               only with ≥ 5 analysed injuries) — information, ✕ only.
 
 Ids (the dismissal key): `b2b:<week>`, `test:<kind>:<week>` (both per week:
 「不要」 holds for that week), `zone:<detector id>`, `zone_update:<field>:<date>`.
@@ -107,6 +111,40 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
         out.append({"id": f"zone_update:{ev.get('field')}:{ev.get('date')}", "type": "zone_update",
                     "title": "區間已更新", "reason": ev.get("text") or "", "pick": None,
                     "help": "套用新的測試後，從那天起的區間、TSS 都用新門檻重算（不會改到之前的日子）。"})
+    return out
+
+
+REST_DAYS = 7                         # plan §4.2: 「要不要把今天起 7 天設成不排課日期？」
+
+
+def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict], marks: list[dict]) -> list[dict]:
+    """傷病紀錄 (engine/injuries.py, plan §4.2–§4.3):
+      injury_rest  an open 重（停跑） event and the next 7 days not all blocked:
+                   offer them as 不排課日期 (accepting writes them; never automatic);
+      injury_hold  a 痛 / 中斷 mark inside a re-entry block: keep this week's
+                   volume (information, ✕ only)."""
+    from backend.engine import injuries as INJ
+    d = dt.date.fromisoformat(today)
+    out = []
+    days = [(d + dt.timedelta(days=i)).isoformat() for i in range(REST_DAYS)]
+    for e in INJ.active_on(events, d):
+        if e.get("severity") != "severe" or all(x in blocked for x in days):
+            continue
+        lab = INJ.full_label(e.get("area"), e.get("side"))
+        out.append({"id": f"injury_rest:{e['id']}", "type": "injury_rest", "pick": "confirm",
+                    "accept_label": "設成不排課", "injury_id": e["id"], "start": days[0], "end": days[-1],
+                    "title": f"要不要把 {_md(days[0])} 起 {REST_DAYS} 天設成不排課日期？",
+                    "reason": f"{lab}：重（停跑），傷病紀錄 #{e['id']} 進行中。",
+                    "help": "按「設成不排課」才會寫入不排課日期（課表頁可以再改）；不會自動改。"
+                            "好了以後回來跑，恢復期會照停跑天數排。"})
+    if rp and rp.get("return", "9999") <= today < rp.get("end", ""):
+        hit = [m for m in marks if m["pain"] >= 2 and rp["return"] <= m["date"] <= today]
+        if hit:
+            out.append({"id": f"injury_hold:{rp['return']}", "type": "injury_hold", "pick": None,
+                        "title": "恢復期內又痛了：先維持這週的量，不要往上加",
+                        "reason": f"{hit[-1]['date']} 記了「{INJ.PAIN.get(hit[-1]['pain'], '痛')}」"
+                                  f"{('・' + INJ.area_label(hit[-1]['area'])) if hit[-1].get('area') else ''}。",
+                        "help": INJ.SILBERNAGEL["text"] + "\n" + INJ.DISCLAIMER})
     return out
 
 

@@ -82,16 +82,28 @@ def category(days: int) -> str:
     return "long"
 
 
+STEP_UP_MIN = {"6-13": 14, "14-28": 29, "29-56": 57}   # 推估: an injury layoff uses the next block
+
+
 def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False,
          prev_hours: Optional[float] = None, prev_long_min: Optional[float] = None,
-         ongoing: bool = False) -> Optional[dict]:
+         ongoing: bool = False, injury: Optional[dict] = None, step_up: bool = False) -> Optional[dict]:
     """The re-entry block for a break from the day after `last` (the last run)
     to the day before `ret` (the first run back, or the day after a blackout).
-    None for a break < 6 days."""
+    None for a break < 6 days. `injury` (engine/injuries.py): the 傷病紀錄 the
+    break overlaps — the text says 傷停; `step_up` (injury.reentry_step_up,
+    推估): the block of the next-longer break (停 10 天 → the 14–28-day rules
+    and length) — after an injury the tissue, not only the fitness, has to
+    re-adapt. FVDOT stays the one of the real break (it is a fitness loss)."""
     days = (ret - last).days - 1
     cat = category(days)
     if cat == "short":
         return None
+    real_days = days
+    stepped = bool(injury) and step_up and cat in STEP_UP_MIN
+    if stepped:
+        days = STEP_UP_MIN[cat]
+        cat = category(days)
     segs: list[tuple[str, str, float]] = []
 
     def seg(a: dt.date, n: int, f: float) -> dt.date:
@@ -113,21 +125,29 @@ def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False
             d = seg(d, 21, f)
         end = d
         q_from = ret + dt.timedelta(weeks=CAT4_Z3_WEEKS)
-    return {"last_run": last.isoformat(), "return": ret.isoformat(), "days": days, "category": cat,
+    inj = None
+    if injury:
+        from backend.engine import injuries as INJ
+        inj = {"id": injury.get("id"), "label": INJ.full_label(injury.get("area"), injury.get("side"))}
+    return {"last_run": last.isoformat(), "return": ret.isoformat(), "days": real_days, "category": cat,
             "end": end.isoformat(), "quality_from": q_from.isoformat(), "segments": segs,
-            "fvdot": round(fvdot(days, cross), 4), "cross": cross, "planned": planned, "ongoing": ongoing,
+            "fvdot": round(fvdot(real_days, cross), 4), "cross": cross, "planned": planned, "ongoing": ongoing,
             "prev_hours": prev_hours, "prev_long_min": prev_long_min,
             "z3_before_z5": 1 if cat == "6-13" else 2,
             "drift_check": cat == "14-28", "reconfirm": cat in ("29-56", "long"),
-            "aet_stale": cat in ("29-56", "long"), "cp_retest": cat == "long" or days >= 50,
-            "restart_base": cat == "long", "text": text_of(days, cat, ret, end)}
+            "aet_stale": cat in ("29-56", "long"), "cp_retest": cat == "long" or real_days >= 50,
+            "restart_base": cat == "long", "injury": inj, "stepped_up": stepped, "days_effective": days,
+            "text": text_of(real_days, cat, ret, end, inj, stepped)}
 
 
-def text_of(days: int, cat: str, ret: dt.date, end: dt.date) -> str:
+def text_of(days: int, cat: str, ret: dt.date, end: dt.date, injury: Optional[dict] = None,
+            stepped: bool = False) -> str:
     how = {"6-13": "前半 50%、後半 75%", "14-28": "前半 50%、後半 75%，強度目標打折",
            "29-56": "三段 33／50／75%，5 區要重新確認有氧基礎", "long": "15 週重新打底（33→50→70→85→100%）"}[cat]
-    return (f"停跑 {days} 天：{ret.isoformat()} 起恢復期到 {(end - dt.timedelta(days=1)).isoformat()}（{how}；"
-            "Daniels 表 9.2，恢復期＝停訓天數）")
+    head = f"傷停 {days} 天（{injury['label']}，傷病紀錄 #{injury['id']}）" if injury else f"停跑 {days} 天"
+    up = "；傷後往上一級排（推估）" if stepped else ""
+    return (f"{head}：{ret.isoformat()} 起恢復期到 {(end - dt.timedelta(days=1)).isoformat()}（{how}；"
+            f"Daniels 表 9.2，恢復期＝停訓天數{up}）")
 
 
 def frac_on(p: Optional[dict], day: dt.date) -> Optional[float]:
@@ -201,11 +221,32 @@ def prev_volume(ds, last: dt.date) -> tuple[float, float]:
     return tot / 3600.0 / 4.0, longest
 
 
-def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182) -> list[dict]:
+def _injuries(injuries, step_up) -> tuple[list, bool]:
+    """The 傷病紀錄 events and the injury.reentry_step_up setting (default on)."""
+    if injuries is None:
+        try:
+            from backend.engine import injuries as INJ
+            injuries = INJ.load_events()
+        except Exception:                   # noqa: BLE001
+            injuries = []
+    if step_up is None:
+        try:
+            from backend.engine.wko5expr.datasource import read_setting
+            step_up = read_setting("injury.reentry_step_up", True) is not False
+        except Exception:                   # noqa: BLE001
+            step_up = True
+    return list(injuries or []), bool(step_up)
+
+
+def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries=None,
+             step_up: Optional[bool] = None) -> list[dict]:
     """Every re-entry block within reach, oldest first: breaks ≥ 6 days whose
     return is ≤ `horizon_days` ago, planned (a 不排課日期 range ≥ 6 days with
     no run inside, now or ahead) or unplanned (from the runs; the current gap
-    counts, returning today)."""
+    counts, returning today). A break that overlaps a 傷病紀錄 event is a 傷停
+    (`injuries`: the events, default the app DB's)."""
+    injuries, step_up = _injuries(injuries, step_up)
+    from backend.engine import injuries as INJ
     runs = _run_days(ds)
     runs_past = [d for d in runs if d <= today]
     cands = []
@@ -229,8 +270,10 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182) -> list[
     out = []
     for last, ret, planned, ongoing in sorted(set(cands), key=lambda c: c[1]):
         ph, pl = prev_volume(ds, last)
+        inj = INJ.overlapping(injuries, last + dt.timedelta(days=1), ret - dt.timedelta(days=1), today) \
+            if injuries else None
         p = plan(last, ret, _cross(ds, last + dt.timedelta(days=1), ret - dt.timedelta(days=1)), planned, ph, pl,
-                 ongoing)
+                 ongoing, injury=inj, step_up=step_up)
         if p is not None:
             out.append(p)
     return out
@@ -256,10 +299,11 @@ def block_on(blocks: list[dict], monday: dt.date) -> Optional[dict]:
     return hit[-1] if hit else None
 
 
-def find(ds, today: dt.date, blackouts=(), horizon_days: int = 182) -> Optional[dict]:
+def find(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries=None,
+         step_up: Optional[bool] = None) -> Optional[dict]:
     """The block that matters on `today`: the one in progress, else the
     latest that started on or before today, else the next planned one."""
-    ps = find_all(ds, today, blackouts, horizon_days)
+    ps = find_all(ds, today, blackouts, horizon_days, injuries, step_up)
     iso = today.isoformat()
     past = [p for p in ps if p["return"] <= iso]
     if past:

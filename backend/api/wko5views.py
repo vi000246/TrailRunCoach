@@ -577,7 +577,44 @@ def _activity_json(ds, w) -> dict:
                       "label": PS.label(src, bool(getattr(ds, "accept_watch_power", True))),
                       "setting": PS.SETTING_KEY},
             # the pack carried (engine/loaded_carry.activity_pack; racepower_hike_meta.json)
-            "pack": _pack_json(w)}
+            "pack": _pack_json(w),
+            # 疼痛 (engine/injuries.py): the mark, its event and the re-entry prompt; hidden in the demo mode
+            "pain_state": _pain_state(ds, w, t)}
+
+
+def _pain_part(u: Optional[dict]) -> dict:
+    """The pain mark of a stored tag (the 活動編輯 list); nothing in the demo mode."""
+    from backend.engine import injuries as INJ
+    if INJ.demo_mode():
+        return {}
+    return {"pain": (u or {}).get("pain"), "pain_area": (u or {}).get("pain_area"),
+            "injury_id": (u or {}).get("injury_id")}
+
+
+def _pain_state(ds, w, t: dict) -> Optional[dict]:
+    from backend.engine import injuries as INJ
+    from backend.engine import activity_tags as AT
+    if INJ.demo_mode():
+        return None
+    t = AT.user_of(w) or {}                 # the stored mark (auto_tags may be memoised)
+    try:
+        today = dt.date.today()
+        evs = INJ.load_events()
+        ev = next((e for e in evs if e["id"] == t.get("injury_id")), None) if t.get("injury_id") else None
+        out = {"pain": t.get("pain"), "pain_area": t.get("pain_area"),
+               "area_label": INJ.area_label(t.get("pain_area")) if t.get("pain_area") else None,
+               "injury": INJ.summary(ev, today), "reentry": None}
+        # inside a re-entry block (engine/reentry.py): 「記一下有沒有痛」 (plan §4.3)
+        from backend.engine import reentry as RE
+        from backend.engine import workout_review as WR
+        day = WR._wdate(w)
+        if w.sport == "run" and (today - day).days <= 120:
+            rp = RE.find(ds, day)
+            if rp and RE.in_block(rp, day):
+                out["reentry"] = {"text": rp.get("text"), "monitor": INJ.SILBERNAGEL["text"]}
+        return out
+    except Exception:                       # noqa: BLE001 — never breaks the activity card
+        return {"pain": t.get("pain"), "pain_area": t.get("pain_area"), "injury": None, "reentry": None}
 
 
 def _pack_json(w) -> Optional[dict]:
@@ -597,6 +634,20 @@ def get_activity(i: int):
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     return _activity_json(ds, ds.workouts[i])
+
+
+@router.get("/workouts/{i}/pain")
+def get_pain(i: int):
+    """The 疼痛 mark of one dataset workout (the chart page's chip; light: no
+    auto tags). 404 in the demo mode (傷病紀錄 hidden)."""
+    from backend.engine import injuries as INJ
+    if INJ.demo_mode():
+        raise HTTPException(404, "Not Found")
+    ds = _dataset()
+    if not 0 <= i < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    w = ds.workouts[i]
+    return {"workout": i, "sport": w.sport, **(_pain_state(ds, w, {}) or {})}
 
 
 @router.patch("/workouts/{i}/activity")
@@ -686,7 +737,7 @@ def activities_list():
     def user_part(u):
         return {"name": AT.name_of(u), "tags": AT.tags_of(u), "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
-                "user_exclusion": AT.user_exclusion(u)}
+                "user_exclusion": AT.user_exclusion(u), **_pain_part(u)}
 
     for w in ds.workouts:
         u = AT.find(tags, w.entry.start, w.entry.file)
@@ -751,6 +802,10 @@ class BulkBody(BaseModel):
     tags: Optional[list[str]] = None
     add_tags: Optional[list[str]] = None
     remove_tags: Optional[list[str]] = None
+    # 疼痛 (engine/injuries.py): bulk 「設為沒痛」 (0) or a single key-based mark
+    pain: Optional[int] = None
+    pain_area: Optional[str] = None
+    pain_side: Optional[str] = None
 
 
 BULK_MAX = 500
@@ -769,7 +824,8 @@ async def patch_activities(body: BulkBody):
     if len(body.items) > BULK_MAX:
         raise HTTPException(400, "TOO_MANY_ITEMS")
     sent = body.model_fields_set
-    base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags") if k in sent}
+    base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags",
+                                          "pain", "pain_area", "pain_side") if k in sent}
     for k in ("add_tags", "remove_tags"):
         v = getattr(body, k)
         if v is not None and AT.validate(tags=v):

@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>傷病紀錄</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --soft: #e8efff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  --bar: #cfd5dd; --band: #dfe3e8; --whisk: #aab3be;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --bar: #39424d; --band: #2b333d; --whisk: #5b6673;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+  --bar: #39424d; --band: #2b333d; --whisk: #5b6673;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+button { padding: 3px 10px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--err); border-color: var(--err); }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; gap: 10px 14px;
+  align-items: center; flex-wrap: wrap; }
+h1 { font-size: 16px; margin: 0; }
+h2 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 4px; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.spacer { flex: 1; }
+main { max-width: 1180px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.ph { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); padding: 3px 10px; font-size: 12.5px; background: var(--panel); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.qtip { display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; margin: 0 0 0 4px; border-radius: 50%;
+  border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; flex: none; }
+.qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 400 12px/1.55 system-ui, sans-serif;
+  box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
+.tip { position: fixed; z-index: 900; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 9px; font-size: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.18); max-width: 260px; }
+svg text { fill: var(--muted); font: 11px system-ui, sans-serif; }
+.chart { width: 100%; overflow: hidden; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.legend i { display: inline-block; width: 12px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: grid; gap: 4px; background: var(--panel); position: relative; }
+.card.draft { border: 2px solid var(--warn); }
+.card.on { box-shadow: 0 0 0 2px var(--accent); }
+.card .t { display: flex; align-items: center; gap: 7px; font-weight: 600; }
+.card .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.card .s { font-size: 12.5px; color: var(--muted); display: flex; gap: 4px 10px; flex-wrap: wrap; }
+.card .act { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.card .act button { font-size: 12.5px; }
+.sev { font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 9px; color: #fff; }
+.sev.mild { background: color-mix(in srgb, var(--warn) 70%, var(--panel)); }
+.sev.moderate { background: var(--warn); }
+.sev.severe { background: var(--err); }
+.badge { font-size: 11px; padding: 0 7px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); }
+.empty { color: var(--muted); padding: 18px 6px; text-align: center; }
+.caution { font-size: 12px; color: var(--muted); border-left: 3px solid var(--warn); padding: 2px 8px; margin: 4px 0 10px; }
+.tier { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 9px; background: var(--soft); color: var(--accent); }
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.chips button { border-radius: 12px; font-size: 12px; padding: 2px 9px; }
+.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--soft); }
+.dp-row text.lab { fill: var(--text); font-size: 12px; }
+.dp-row text.gray { fill: var(--muted); }
+.dp-row.off text.lab { fill: var(--muted); }
+.ev { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 10px; }
+.top { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
+.top span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; }
+.foot { font-size: 12px; color: var(--muted); text-align: center; }
+.set { display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+.set label { display: inline-flex; gap: 6px; align-items: center; }
+.set .dis { color: var(--muted); }
+dialog { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); padding: 0;
+  width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 40px); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog form { padding: 14px 16px; display: grid; gap: 10px; }
+.fr { display: grid; grid-template-columns: 6em minmax(0, 1fr); gap: 4px 10px; align-items: start; }
+.fr > span { color: var(--muted); font-size: 13px; padding-top: 3px; }
+.fr .c { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+.fr input[type=date] { padding: 2px 6px; }
+.fr input[type=range] { flex: 1 1 140px; }
+.fr textarea { width: 100%; padding: 5px 7px; resize: vertical; }
+.fr .x { border: 0; background: none; color: var(--muted); padding: 0 2px; }
+@media (max-width: 520px) { .fr { grid-template-columns: 1fr; } }
+.dact { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; }
+.msg { font-size: 12px; color: var(--muted); min-height: 1.2em; }
+.msg.err { color: var(--err); }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="injuries"></script>
+<header>
+  <h1>傷病紀錄<button type="button" class="qtip" aria-label="說明" data-tip="在活動上點「痛」或「中斷」會自動開一筆紀錄（草稿），細節在這裡補。
+嚴重度用「對訓練的影響」：輕＝照練、中＝減量或改練、重＝停跑（推估的分法）。
+好了按「好了」。好了之後同部位又痛，會開新的一筆並標「復發」。
+資料只存在這台電腦：不同步、不會出現在分享連結，也不會送給 AI 教練。">?</button></h1>
+  <span class="meta" id="hdr"></span>
+  <span class="spacer"></span>
+  <button class="primary" id="add">＋ 新增</button>
+</header>
+<main>
+  <section class="panel" aria-label="時間軸">
+    <div class="ph">
+      <h2>時間軸<button type="button" class="qtip" aria-label="說明" data-tip="灰色長條＝每週的量（可切換），線＝CTL。
+色帶＝傷病期間：顏色是部位，越深越嚴重；斜線＝還沒好。
+下面的刻度＝活動上點的「痠」（黃）、「痛／中斷」（紅），看得出痛之前有沒有連續痠。
+細線 ACWR 只參考，不預測受傷（Lövdal 2021）。">?</button></h2>
+      <div class="seg" id="tl-metric" role="group" aria-label="長條">
+        <button data-m="run_h" aria-pressed="true">跑步時間</button><button data-m="desc">下降</button><button data-m="climb">爬升</button><button data-m="trail_h">越野</button>
+      </div>
+      <div class="seg" id="tl-range" role="group" aria-label="期間">
+        <button data-r="6">6 個月</button><button data-r="12">1 年</button><button data-r="18" aria-pressed="true">18 個月</button><button data-r="36">3 年</button>
+      </div>
+      <label class="meta" style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" id="tl-acwr"> ACWR</label>
+    </div>
+    <div class="chart" id="tl"><div class="empty">讀取中…</div></div>
+    <div class="legend" id="tl-leg"></div>
+  </section>
+
+  <section class="panel" aria-label="清單">
+    <div class="ph"><h2>紀錄</h2><span class="meta" id="list-n"></span></div>
+    <div class="cards" id="cards"><div class="empty">讀取中…</div></div>
+    <div class="ev" id="ev" hidden></div>
+  </section>
+
+  <section class="panel" aria-label="分析">
+    <div class="ph">
+      <h2>受傷前 vs 平常<button type="button" class="qtip" aria-label="說明" data-tip="每次受傷前 21 天（不含開始痛那天），跟你自己其他時間的 21 天比（每 7 天取一段；傷前後 28 天、傷病期間到好了後 42 天、量太少的段不算）。
+灰帶＝平常的中間一半（P25–P75），細線＝P10–P90，直線＝中位。彩色點＝每次受傷（顏色＝部位），點越靠右＝受傷前越高。
+次數少於 5 次只畫點，不算統計；5–14 次加「中位百分位、幾次高於中位」；15 次以上才加 OR（探索性）。
+「高於平常」＝第 75 百分位以上（推估）。急性傷（跌倒、扭到）、草稿、復發不算進來。">?</button></h2>
+      <span class="tier" id="an-tier"></span>
+      <span class="spacer"></span>
+      <span class="chips" id="an-sev" role="group" aria-label="嚴重度"></span>
+      <select id="an-area" aria-label="部位"><option value="">全部部位</option></select>
+      <label class="meta" style="display:inline-flex;gap:4px;align-items:center" title="只跟同一季（± 3 個月）的平常比，避免夏季、比賽季的差異"><input type="checkbox" id="an-season"> 只比同一季</label>
+    </div>
+    <div class="caution" id="an-caution">同一個人、次數很少，只能看出巧合還是規律的方向，不能證明因果。推估。</div>
+    <div class="chart" id="dp"><div class="empty">讀取中…</div></div>
+    <div class="meta" id="an-foot"></div>
+  </section>
+
+  <section class="panel" aria-label="設定">
+    <div class="ph"><h2>設定</h2></div>
+    <div class="set">
+      <label id="set-pat-l"><input type="checkbox" id="set-pat"> 「跟受傷前很像」提醒<button type="button" class="qtip" aria-label="說明" data-tip="打開後，如果這 3 週（含課表上未來 7 天）的某個指標跟你受傷前的型態很像，建議框會出現一則提醒。
+只是提醒，不會改課表，也不會擋課。要有 5 次以上進分析的受傷紀錄才能打開。ACWR、單調度不會觸發。">?</button></label>
+      <label><input type="checkbox" id="set-up"> 傷停後恢復期往上一級<button type="button" class="qtip" aria-label="說明" data-tip="停跑的空檔跟傷病紀錄重疊時，恢復期照下一級排（例如停 10 天照 14–28 天那一級）：傷後回來不只體能，組織也還沒適應（推估）。">?</button></label>
+      <span class="msg" id="set-msg"></span>
+    </div>
+  </section>
+  <div class="foot" id="disc">這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。</div>
+</main>
+
+<dialog id="dlg" aria-label="傷病紀錄">
+  <form method="dialog" id="fm">
+    <h2 id="dlg-h">傷病紀錄</h2>
+    <div class="fr"><span>部位</span><div class="c chips" id="f-area"></div></div>
+    <div class="fr" id="f-side-r"><span>側邊</span><div class="c chips" id="f-side"></div></div>
+    <div class="fr"><span>嚴重度<button type="button" class="qtip" aria-label="說明" data-tip="用對訓練的影響分：輕＝照練、中＝減量或改練、重＝停跑（推估的分法）。">?</button></span><div class="c chips" id="f-sev"></div></div>
+    <div class="fr"><span>類型</span><div class="c chips" id="f-kind"></div></div>
+    <div class="fr"><span>最痛（選填）</span><div class="c"><input type="range" id="f-pain" min="0" max="10" step="1"><b id="f-pain-v">—</b><button type="button" class="x" id="f-pain-x" aria-label="清掉">✕</button></div></div>
+    <div class="fr"><span>開始</span><div class="c"><input type="date" id="f-onset" required></div></div>
+    <div class="fr"><span>好了</span><div class="c"><input type="date" id="f-res"><button type="button" id="f-today">今天好了</button><button type="button" class="x" id="f-res-x" aria-label="清掉">✕</button></div></div>
+    <div class="fr"><span>停跑天數</span><div class="c"><input type="number" id="f-days" min="0" max="730" style="width:6em"><span class="meta" id="f-days-auto"></span></div></div>
+    <div class="fr"><span>強度課</span><div class="c"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="f-pause"> 受傷期間暫停強度課</label>
+      <button type="button" class="qtip" aria-label="說明" data-tip="勾了之後，這筆還沒好以前課表不排間歇（每一週、每個階段）。預設不勾：「輕」的痛照練是常態。">?</button></div></div>
+    <div class="fr"><span>備註</span><div class="c"><textarea id="f-note" rows="2" maxlength="1000" placeholder="例如：下坡右膝外側；看過復健科"></textarea></div></div>
+    <div class="msg" id="f-msg"></div>
+    <div class="dact">
+      <button type="button" class="danger" id="f-del">刪除</button>
+      <span style="display:flex;gap:8px"><button type="button" id="f-cancel">取消</button><button type="submit" class="primary" id="f-save">儲存</button></span>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const API = "/api/v1/wko5/injuries";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const S = { meta: null, list: [], tl: null, an: null, metric: "run_h", months: 18, acwr: false, sev: new Set(["mild", "moderate", "severe"]),
+  area: "", season: false, sel: null, edit: null };
+const AREA_COL = { knee: "#e4572e", shin_calf: "#2e86ab", achilles: "#7b2cbf", ankle: "#f4a259", foot: "#3bb273",
+  hip: "#c44569", thigh: "#4c6ef5", low_back: "#8d6e63", other: "#6c757d", unknown: "#9aa3ad" };
+const SEV_A = { mild: 0.35, moderate: 0.6, severe: 0.9 };
+function areaCol(a) {
+  if (AREA_COL[a]) return AREA_COL[a];
+  let h = 0; for (const c of String(a || "")) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return `hsl(${h} 55% 50%)`;
+}
+async function j(url, opt) {
+  const r = await fetch(url, opt);
+  let b = null; try { b = await r.json(); } catch {}
+  if (!r.ok) { const e = new Error((b && (typeof b.detail === "string" ? b.detail : b.error)) || `HTTP ${r.status}`); e.status = r.status; throw e; }
+  return b;
+}
+const send = (url, method, data) => j(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data ?? {}) });
+const md = (iso) => iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : "";
+const ymd = (iso) => iso ? iso.replaceAll("-", "/") : "";
+const todayIso = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const ERR = { INVALID_AREA: "部位不對（自訂部位最多 12 字）", INVALID_DATE: "日期不對（不能是未來）", RESOLVED_BEFORE_ONSET: "好了的日期不能比開始早",
+  INVALID_SEVERITY: "要選嚴重度", INVALID_PAIN_MAX: "疼痛 0–10", INVALID_DAYS_MISSED: "停跑天數 0–730" };
+const errText = (e) => ERR[e.message] || e.message;
+
+// ---- 「?」 help (hover; tap pins it) -------------------------------------------
+const QT = { el: null, pin: null };
+function qShow(b) { qHide(); const d = document.createElement("div"); d.className = "qtip-pop"; d.textContent = b.dataset.tip; document.body.appendChild(d);
+  const r = b.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`; QT.el = d; }
+function qHide() { QT.el?.remove(); QT.el = null; }
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QT.pin) qShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QT.pin) qHide(); });
+document.addEventListener("click", (e) => { const t = e.target.closest(".qtip");
+  if (t && QT.pin !== t) { QT.pin = t; qShow(t); e.stopPropagation(); e.preventDefault(); return; } QT.pin = null; qHide(); }, true);
+// chart tooltip
+const TIP = document.createElement("div"); TIP.className = "tip"; TIP.hidden = true; document.body.appendChild(TIP);
+function tipAt(ev, html) { TIP.innerHTML = html; TIP.hidden = false;
+  const w = TIP.offsetWidth, h = TIP.offsetHeight, x = ev.clientX + 12, y = ev.clientY + 12;
+  TIP.style.left = `${Math.min(x, innerWidth - w - 8)}px`; TIP.style.top = `${y + h > innerHeight - 8 ? ev.clientY - h - 10 : y}px`; }
+function tipOff() { TIP.hidden = true; }
+function hoverable(root) {
+  root.querySelectorAll("[data-tip-html]").forEach((el) => {
+    el.addEventListener("mousemove", (e) => tipAt(e, el.dataset.tipHtml));
+    el.addEventListener("mouseleave", tipOff);
+    el.addEventListener("click", (e) => { tipAt(e, el.dataset.tipHtml); if (el.dataset.ev) pick(+el.dataset.ev); });
+  });
+}
+
+// ---- timeline -------------------------------------------------------------
+async function loadTimeline() {
+  const end = todayIso(); const b = new Date(end); b.setMonth(b.getMonth() - S.months);
+  try { S.tl = await j(`${API}/timeline?begin=${b.toISOString().slice(0, 10)}&end=${end}`); }
+  catch (e) { $("tl").innerHTML = `<div class="empty">讀取失敗：${esc(e.message)}</div>`; return; }
+  drawTimeline();
+}
+function drawTimeline() {
+  const t = S.tl; if (!t) return;
+  const W = Math.max(300, $("tl").clientWidth), H = W < 520 ? 190 : 230, L = 34, R = 34, T = 8, B = 44;
+  const x0 = new Date(t.begin).getTime(), x1 = new Date(t.end).getTime() + 86400000;
+  const X = (iso) => L + (new Date(iso).getTime() - x0) / (x1 - x0) * (W - L - R);
+  const ws = t.weeks || [];
+  const unit = { run_h: "h", desc: "m", climb: "m", trail_h: "h" }[S.metric];
+  const vmax = Math.max(1, ...ws.map((w) => w[S.metric] || 0));
+  const cmax = Math.max(1, ...ws.map((w) => w.ctl || 0));
+  const plotB = H - B, Y = (v) => plotB - v / vmax * (plotB - T), YC = (v) => plotB - v / cmax * (plotB - T);
+  const bw = Math.max(1.5, (W - L - R) / Math.max(1, ws.length) * 0.75);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="傷病時間軸">
+    <defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="rgba(255,255,255,.45)"/></pattern></defs>`;
+  for (const b of t.bands) {
+    const a = Math.max(L, X(b.start)), z = Math.min(W - R, X(b.end) + 2);
+    const tip = `<b>${esc(b.label)}・${esc(b.severity_label)}</b><br>${ymd(b.start)} – ${b.open ? "還沒好" : ymd(b.end)}${b.kind === "acute" ? "<br>急性" : ""}`;
+    s += `<g data-tip-html="${esc(tip)}" data-ev="${b.id}" style="cursor:pointer"><rect x="${a}" y="${T}" width="${Math.max(3, z - a)}" height="${plotB - T}" fill="${areaCol(b.area)}" opacity="${SEV_A[b.severity] || .4}"/>
+      ${b.open ? `<rect x="${a}" y="${T}" width="${Math.max(3, z - a)}" height="${plotB - T}" fill="url(#hatch)"/>` : ""}
+      <circle cx="${X(b.start)}" cy="${T + 5}" r="4" fill="${areaCol(b.area)}" stroke="var(--panel)" stroke-width="1.5"/></g>`;
+  }
+  for (const w of ws) {
+    const v = w[S.metric] || 0; if (!v) continue;
+    const tip = `${ymd(w.week)} 那週<br>${{ run_h: "跑步", desc: "下降", climb: "爬升", trail_h: "越野" }[S.metric]} ${unit === "h" ? v.toFixed(1) : Math.round(v)} ${unit}<br>CTL ${w.ctl ?? "—"}`;
+    s += `<rect x="${X(w.week) + 1}" y="${Y(v)}" width="${bw}" height="${plotB - Y(v)}" fill="var(--bar)" data-tip-html="${esc(tip)}"/>`;
+  }
+  const line = ws.filter((w) => w.ctl != null).map((w) => `${X(w.week) + bw / 2},${YC(w.ctl)}`).join(" ");
+  if (line) s += `<polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.8"/>`;
+  if (S.acwr) {
+    const am = 2.0, YA = (v) => plotB - Math.min(v, am) / am * (plotB - T);
+    const al = ws.filter((w) => w.acwr != null).map((w) => `${X(w.week) + bw / 2},${YA(w.acwr)}`).join(" ");
+    if (al) s += `<polyline points="${al}" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 2"/>`;
+  }
+  // pain ticks (rug)
+  for (const k of t.ticks) {
+    const x = X(k.date), col = k.pain >= 2 ? "var(--err)" : "var(--warn)";
+    s += `<rect x="${x - 1}" y="${plotB + 6}" width="2.5" height="${k.pain >= 2 ? 12 : 8}" fill="${col}" data-tip-html="${esc(`${ymd(k.date)}：${["", "痠", "痛", "中斷"][k.pain]}${k.area_label ? "・" + k.area_label : ""}`)}"/>`;
+  }
+  // axes
+  s += `<line x1="${L}" x2="${W - R}" y1="${plotB}" y2="${plotB}" stroke="var(--line)"/>`;
+  s += `<text x="${L - 4}" y="${T + 9}" text-anchor="end">${unit === "h" ? vmax.toFixed(0) : Math.round(vmax)}</text><text x="${L - 4}" y="${plotB}" text-anchor="end">0</text>`;
+  s += `<text x="${W - R + 4}" y="${T + 9}" style="fill:var(--accent)">${Math.round(cmax)}</text><text x="${W - R + 4}" y="${T + 22}" style="fill:var(--accent)">CTL</text>`;
+  const step = S.months > 18 ? 6 : S.months > 6 ? 3 : 1;
+  const d = new Date(t.begin); d.setDate(1); d.setMonth(d.getMonth() + 1);
+  while (d.getTime() < x1) {
+    if (d.getMonth() % step === 0) {
+      const iso = d.toISOString().slice(0, 10);
+      s += `<text x="${X(iso)}" y="${H - 6}" text-anchor="middle">${d.getMonth() === 0 ? d.getFullYear() : (d.getMonth() + 1) + "月"}</text>`;
+    }
+    d.setMonth(d.getMonth() + 1);
+  }
+  s += `<text x="${L}" y="${plotB + 30}" style="font-size:10px">疼痛</text></svg>`;
+  $("tl").innerHTML = s;
+  hoverable($("tl"));
+  const used = [...new Set(t.bands.map((b) => b.area))];
+  $("tl-leg").innerHTML = `<span><i style="background:var(--bar)"></i>每週${{ run_h: "跑步時間", desc: "下降", climb: "爬升", trail_h: "越野時間" }[S.metric]}</span>
+    <span><i style="background:var(--accent);height:3px"></i>CTL</span>` +
+    used.map((a) => `<span><i style="background:${areaCol(a)}"></i>${esc(areaLabel(a))}</span>`).join("") +
+    `<span><i style="background:var(--warn);width:3px"></i>痠</span><span><i style="background:var(--err);width:3px"></i>痛／中斷</span>`;
+}
+const areaLabel = (a) => (S.meta?.areas || []).find((x) => x.key === a)?.label || (a === "unknown" ? "未指定部位" : a);
+
+// ---- list -----------------------------------------------------------------
+async function loadList() {
+  try { S.list = (await j(API)).injuries; } catch (e) { $("cards").innerHTML = `<div class="empty">讀取失敗：${esc(e.message)}</div>`; return; }
+  renderList();
+}
+function renderList() {
+  const L = S.list;
+  const open = L.filter((x) => x.open).length;
+  $("hdr").textContent = L.length ? `${L.length} 筆${open ? `・${open} 筆還沒好` : ""}` : "";
+  $("list-n").textContent = L.some((x) => x.status === "draft") ? "黃框＝草稿：補完細節才會進分析" : "";
+  if (!L.length) {
+    $("cards").innerHTML = `<div class="empty">還沒有紀錄。<br>跑完在「活動編輯」或單次活動圖表點「痛」，或按右上「＋ 新增」。</div>`;
+    return;
+  }
+  $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">
+      <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}<span class="sev ${x.severity}" title="${esc((S.meta?.severity_help || {})[x.severity] || "")}">${esc(x.severity_label)}</span>
+        ${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
+      <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : "還沒好"}</span><span>${x.day_n} 天</span>
+        ${x.days_off != null ? `<span>停跑 ${x.days_off} 天${x.days_missed == null ? "（自動）" : ""}</span>` : ""}
+        ${x.linked ? `<span>${x.linked} 次活動</span>` : ""}${x.pain_max != null ? `<span>最痛 ${x.pain_max}/10</span>` : ""}${x.pause_quality ? `<span>暫停強度課</span>` : ""}</div>
+      ${x.note ? `<div class="s" title="${esc(x.note)}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">${esc(x.note)}</div>` : ""}
+      <div class="act">${x.status === "draft" ? `<button class="primary" data-a="edit">補細節</button>` : `<button data-a="edit">編輯</button>`}
+        ${x.open ? `<button data-a="resolve">好了</button>` : ""}<button data-a="days">前 21 天</button></div></div>`).join("");
+}
+$("cards").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-a]"), c = e.target.closest(".card");
+  if (!c) return;
+  const id = +c.dataset.id;
+  if (!b) { pick(id); return; }
+  if (b.dataset.a === "edit") openDlg(S.list.find((x) => x.id === id));
+  if (b.dataset.a === "days") pick(id);
+  if (b.dataset.a === "resolve") {
+    b.disabled = true;
+    try { await send(`${API}/${id}/resolve`, "POST", { date: todayIso() }); await refreshAll(); } catch (er) { alert("儲存失敗：" + errText(er)); b.disabled = false; }
+  }
+});
+
+// ---- single event: the 21 days before ---------------------------------------
+async function pick(id) {
+  S.sel = id; renderList();
+  const x = S.list.find((v) => v.id === id); if (!x) return;
+  const ev = $("ev"); ev.hidden = false; ev.innerHTML = `<div class="meta">讀取中…</div>`;
+  let days = [];
+  try { days = (await j(`${API}/${id}/days`)).days; } catch (e) { ev.innerHTML = `<div class="meta">讀取失敗：${esc(e.message)}</div>`; return; }
+  const top = (S.an?.cases || []).find((c) => c.id === id)?.top || [];
+  const W = Math.max(280, ev.clientWidth), H = 120, L = 30, R = 30, T = 8, B = 20;
+  const mmax = Math.max(30, ...days.map((d) => d.run_min)), dmax = Math.max(100, ...days.map((d) => d.desc));
+  const bw = (W - L - R) / days.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="受傷前 21 天">`;
+  days.forEach((d, i) => {
+    const x = L + i * bw, h = d.run_min / mmax * (H - T - B);
+    if (d.onset) s += `<line x1="${x + bw / 2}" x2="${x + bw / 2}" y1="${T}" y2="${H - B}" stroke="var(--err)" stroke-width="2"/>`;
+    else if (h) s += `<rect x="${x + 1}" y="${H - B - h}" width="${Math.max(1, bw - 2)}" height="${h}" fill="var(--bar)" data-tip-html="${esc(`${ymd(d.date)}<br>跑 ${d.run_min} 分・下降 ${d.desc} m`)}"/>`;
+  });
+  s += `<polyline points="${days.map((d, i) => `${L + i * bw + bw / 2},${H - B - d.desc / dmax * (H - T - B)}`).join(" ")}" fill="none" stroke="${areaCol(x.area)}" stroke-width="1.6"/>`;
+  s += `<text x="${L - 4}" y="${T + 9}" text-anchor="end">${mmax}′</text><text x="${W - R + 4}" y="${T + 9}" style="fill:${areaCol(x.area)}">${dmax}m</text>`;
+  s += `<text x="${L}" y="${H - 5}">${md(days[0]?.date)}</text><text x="${W - R}" y="${H - 5}" text-anchor="end" style="fill:var(--err)">${md(x.onset_date)} 開始痛</text></svg>`;
+  ev.innerHTML = `<div class="ph"><b>${esc(x.label)}・受傷前 21 天</b><span class="meta">長條＝每天跑步分鐘，線＝下降</span><span class="spacer"></span><button id="ev-x" class="qtip" style="width:22px;height:22px;cursor:pointer" aria-label="關閉">✕</button></div>${s}
+    ${top.length ? `<div class="top">${top.map((t) => `<span>${esc(t.label)} P${Math.round(t.pct)}</span>`).join("")}</div>` :
+      `<div class="meta">${x.status === "draft" ? "補完細節才會進分析" : x.kind === "acute" ? "急性傷不比負荷" : "這筆沒有進分析（看分析區的說明）"}</div>`}`;
+  hoverable(ev);
+  $("ev-x").onclick = () => { ev.hidden = true; S.sel = null; renderList(); };
+}
+
+// ---- analysis: dot plot -----------------------------------------------------
+function anQuery() {
+  return `severities=${[...S.sev].join(",")}&season=${S.season ? 1 : 0}${S.area ? "&area=" + encodeURIComponent(S.area) : ""}`;
+}
+async function loadAnalysis() {
+  $("dp").innerHTML = `<div class="empty">計算中…（第一次會逐筆讀活動）</div>`;
+  try { S.an = await j(`${API}/analysis?${anQuery()}`); } catch (e) { $("dp").innerHTML = `<div class="empty">計算失敗：${esc(e.message)}</div>`; return; }
+  drawAnalysis();
+  syncSettings();
+}
+const TIER = ["還沒有可分析的紀錄", "描述：1–4 次（推估）", "5–14 次：加中位與次數（推估）", "15 次以上：加 OR（探索性）"];
+function fmtV(m, v) {
+  if (v == null) return "未知";
+  const s = v.toFixed(m.dec);
+  return m.unit === "%" ? `${s}%` : `${s}${m.unit ? " " + m.unit : ""}`;
+}
+function drawAnalysis() {
+  const a = S.an;
+  $("an-tier").textContent = `${a.n} 次・${TIER[a.tier]}`;
+  const exc = a.excluded || [];
+  $("an-foot").innerHTML = [
+    a.controls ? `平常＝${a.controls} 段 21 天${a.few_controls ? "（對照少，百分位不穩）" : ""}` : "",
+    exc.length ? `沒算進來：${exc.map((x) => `${esc(x.label)} ${md(x.onset_date)}（${esc(x.why)}）`).join("、")}` : "",
+    a.pending ? `還有 ${a.pending} 筆活動的逐秒資料沒讀（陡下坡、步頻等），重新整理會更完整` : ""].filter(Boolean).join("<br>");
+  if (a.tier === 0) {
+    $("dp").innerHTML = `<div class="empty">還沒有足夠的紀錄。<br>跑完點「痛」、在這裡補細節（部位、嚴重度），按「好了」結束；累積 1 次以上就會畫出受傷前的點。</div>`;
+    return;
+  }
+  const rows = a.metrics;
+  const W = Math.max(300, $("dp").clientWidth), narrow = W < 560;
+  const LW = narrow ? 96 : 150, RW = a.tier >= 2 ? (narrow ? 62 : 150) : 8, rh = 26, T = 18;
+  const H = T + rows.length * rh + 22;
+  const X = (p) => LW + p / 100 * (W - LW - RW);
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="受傷前 vs 平常">`;
+  s += `<rect x="${X(75)}" y="${T - 4}" width="${X(100) - X(75)}" height="${rows.length * rh + 4}" fill="var(--err)" opacity=".06"/>`;
+  for (const p of [0, 25, 50, 75, 100]) s += `<line x1="${X(p)}" x2="${X(p)}" y1="${T - 4}" y2="${T + rows.length * rh}" stroke="var(--line)" ${p === 50 ? "" : 'stroke-dasharray="2 3"'}/><text x="${X(p)}" y="${T - 7}" text-anchor="middle">P${p}</text>`;
+  rows.forEach((m, i) => {
+    const y = T + i * rh + rh / 2;
+    const off = !m.enough;
+    s += `<g class="dp-row ${off ? "off" : ""}"><text class="lab" x="${LW - 8}" y="${y + 4}" text-anchor="end" data-tip-html="${esc(`<b>${m.label}</b>${m.relevant ? "（跟這個部位有關，推估）" : ""}<br>${m.help}${m.control.p50 != null ? `<br>平常中位 ${fmtV(m, m.control.p50)}` : ""}${off ? "<br>資料不夠（有值的段 < 60%）" : ""}`)}" style="cursor:help">${m.relevant ? "● " : ""}${esc(narrow && m.label.length > 6 ? m.label.slice(0, 6) + "…" : m.label)}</text>`;
+    if (!off) {
+      // the controls: P10–P90 whisker, P25–P75 band, median
+      s += `<line x1="${X(10)}" x2="${X(90)}" y1="${y}" y2="${y}" stroke="var(--whisk)"/><rect x="${X(25)}" y="${y - 6}" width="${X(75) - X(25)}" height="12" rx="3" fill="var(--band)"/>
+        <line x1="${X(50)}" x2="${X(50)}" y1="${y - 7}" y2="${y + 7}" stroke="var(--whisk)" stroke-width="2"/>`;
+      m.cases.forEach((c, k) => {
+        if (c.pct == null) return;
+        const jit = (k % 3 - 1) * 4;
+        const tip = `<b>${esc(c.label)}</b> ${ymd(c.date)}（${esc(c.severity === "mild" ? "輕" : c.severity === "moderate" ? "中" : "重")}）<br>${esc(m.label)} ${fmtV(m, c.value)}<br>你自己的第 ${Math.round(c.pct)} 百分位${c.few ? "（對照少）" : ""}`;
+        s += `<circle cx="${X(c.pct)}" cy="${y + jit}" r="${narrow ? 5 : 6}" fill="${areaCol(c.area)}" stroke="var(--panel)" stroke-width="1.5" opacity="${S.sev.size < 3 || c.severity !== "mild" ? 1 : .75}" data-tip-html="${esc(tip)}" data-ev="${c.id}" style="cursor:pointer"/>`;
+      });
+    } else {
+      s += `<text class="gray" x="${X(50)}" y="${y + 4}" text-anchor="middle">資料不夠</text>`;
+    }
+    if (a.tier >= 2 && !off && m.median_pct != null) {
+      const txt = narrow ? `P${Math.round(m.median_pct)}` : `中位 P${Math.round(m.median_pct)}・${m.k_above}/${m.k_known} 高於中位`;
+      s += `<text class="gray" x="${W - RW + 6}" y="${y + 4}">${esc(txt)}</text>`;
+      if (a.tier >= 3 && m.or != null && !narrow) s += `<text class="gray" x="${W - RW + 6}" y="${y + 15}" style="font-size:10px">OR ${m.or}（${m.ci[0]}–${m.ci[1]}）探索性</text>`;
+    }
+    s += `</g>`;
+  });
+  s += `<text x="${X(0)}" y="${H - 4}">比平常低</text><text x="${X(100)}" y="${H - 4}" text-anchor="end" style="fill:var(--err)">比平常高 →</text></svg>`;
+  $("dp").innerHTML = s;
+  hoverable($("dp"));
+}
+
+// ---- filters ----------------------------------------------------------------
+function renderFilters() {
+  const sv = S.meta.severities;
+  $("an-sev").innerHTML = Object.entries(sv).map(([k, v]) => `<button data-s="${k}" aria-pressed="${S.sev.has(k)}" title="${esc(S.meta.severity_help[k])}">${esc(v)}</button>`).join("");
+  $("an-area").innerHTML = `<option value="">全部部位</option>` + S.meta.areas.map((a) => `<option value="${esc(a.key)}">${esc(a.label)}</option>`).join("");
+  $("an-area").value = S.area;
+}
+$("an-sev").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-s]"); if (!b) return;
+  const k = b.dataset.s;
+  if (S.sev.has(k) && S.sev.size === 1) return;          // at least one
+  S.sev.has(k) ? S.sev.delete(k) : S.sev.add(k);
+  renderFilters(); loadAnalysis();
+});
+$("an-area").addEventListener("change", (e) => { S.area = e.target.value; loadAnalysis(); });
+$("an-season").addEventListener("change", (e) => { S.season = e.target.checked; loadAnalysis(); });
+$("tl-metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return;
+  S.metric = b.dataset.m; $("tl-metric").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); drawTimeline(); });
+$("tl-range").addEventListener("click", (e) => { const b = e.target.closest("button[data-r]"); if (!b) return;
+  S.months = +b.dataset.r; $("tl-range").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); loadTimeline(); });
+$("tl-acwr").addEventListener("change", (e) => { S.acwr = e.target.checked; drawTimeline(); });
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { drawTimeline(); if (S.an) drawAnalysis(); }, 150); });
+
+// ---- settings ---------------------------------------------------------------
+function syncSettings() {
+  const st = S.meta.settings, n = S.an?.n ?? 0, need = S.meta.pattern_min_n;
+  $("set-pat").checked = st.pattern_alerts;
+  $("set-pat").disabled = !st.pattern_alerts && n < need;
+  $("set-pat-l").classList.toggle("dis", $("set-pat").disabled);
+  $("set-pat-l").title = $("set-pat").disabled ? `要有 ${need} 次以上進分析的受傷紀錄才能打開（目前 ${n} 次）` : "";
+  $("set-up").checked = st.reentry_step_up;
+}
+async function putSetting(k, v) {
+  $("set-msg").textContent = "儲存中…"; $("set-msg").className = "msg";
+  try { S.meta.settings = await send(`${API}/settings`, "PUT", { [k]: v }); $("set-msg").textContent = "已儲存"; }
+  catch (e) { $("set-msg").textContent = errText(e); $("set-msg").className = "msg err"; }
+  syncSettings();
+}
+$("set-pat").addEventListener("change", (e) => putSetting("pattern_alerts", e.target.checked));
+$("set-up").addEventListener("change", (e) => putSetting("reentry_step_up", e.target.checked));
+
+// ---- edit dialog -------------------------------------------------------------
+const F = { area: null, side: null, severity: "mild", kind: "overuse", pain_max: null };
+function chipRow(el, opts, cur, key, extra = "") {
+  el.innerHTML = opts.map(([k, v, custom]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${cur === k}">${esc(v)}${custom ? ` <span class="x" data-rm="${esc(k)}" title="從選單移除" aria-label="移除 ${esc(v)}">×</span>` : ""}</button>`).join("") + extra;
+  el.dataset.key = key;
+}
+function renderDlg() {
+  const m = S.meta;
+  chipRow($("f-area"), m.areas.map((a) => [a.key, a.label, a.custom]), F.area, "area",
+    `<input type="text" id="f-area-new" maxlength="12" placeholder="＋其他部位" style="width:7em;border-radius:12px;font-size:12px;padding:2px 7px" aria-label="新增部位，Enter">`);
+  $("f-side-r").hidden = !F.area || m.no_side.includes(F.area);
+  chipRow($("f-side"), Object.entries(m.sides), F.side, "side");
+  chipRow($("f-sev"), Object.entries(m.severities).map(([k, v]) => [k, `${v}・${m.severity_help[k]}`]), F.severity, "severity");
+  chipRow($("f-kind"), Object.entries(m.kinds), F.kind, "kind");
+  $("f-pain-v").textContent = F.pain_max == null ? "—" : `${F.pain_max}/10`;
+  $("f-pain").value = F.pain_max ?? 0;
+  $("f-pain").style.opacity = F.pain_max == null ? .45 : 1;
+  $("f-area-new").addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    e.preventDefault();
+    const v = e.target.value.trim(); if (!v) return;
+    try { const a = await send(`${API}/areas`, "POST", { label: v }); S.meta = await j(`${API}/meta`); F.area = a.key; renderDlg(); renderFilters(); }
+    catch (er) { $("f-msg").textContent = errText(er); $("f-msg").className = "msg err"; }
+  });
+}
+document.querySelectorAll("#f-area, #f-side, #f-sev, #f-kind").forEach((el) => el.addEventListener("click", async (e) => {
+  const rm = e.target.closest("[data-rm]");
+  if (rm) {
+    e.stopPropagation(); e.preventDefault();
+    if (!confirm(`從部位選單移除「${rm.dataset.rm}」？已經記的紀錄不會改。`)) return;
+    await j(`${API}/areas/${encodeURIComponent(rm.dataset.rm)}`, { method: "DELETE" });
+    S.meta = await j(`${API}/meta`); renderDlg(); renderFilters(); return;
+  }
+  const b = e.target.closest("button[data-k]"); if (!b) return;
+  const key = el.dataset.key;
+  F[key] = key === "side" && F.side === b.dataset.k ? null : b.dataset.k;
+  renderDlg();
+}));
+$("f-pain").addEventListener("input", (e) => { F.pain_max = +e.target.value; $("f-pain-v").textContent = `${F.pain_max}/10`; $("f-pain").style.opacity = 1; });
+$("f-pain-x").addEventListener("click", () => { F.pain_max = null; renderDlg(); });
+$("f-today").addEventListener("click", () => { $("f-res").value = todayIso(); });
+$("f-res-x").addEventListener("click", () => { $("f-res").value = ""; });
+$("f-cancel").addEventListener("click", () => $("dlg").close());
+function openDlg(x) {
+  S.edit = x || null;
+  Object.assign(F, x ? { area: x.area === "unknown" ? null : x.area, side: x.side, severity: x.severity, kind: x.kind, pain_max: x.pain_max }
+    : { area: null, side: null, severity: "mild", kind: "overuse", pain_max: null });
+  $("dlg-h").textContent = x ? `傷病紀錄 #${x.id}${x.status === "draft" ? "（補細節）" : ""}` : "新增傷病紀錄";
+  $("f-onset").value = x?.onset_date || todayIso();
+  $("f-onset").max = todayIso(); $("f-res").max = todayIso();
+  $("f-res").value = x?.resolved_date || "";
+  $("f-days").value = x?.days_missed ?? "";
+  $("f-days").placeholder = x?.days_off_auto != null ? String(x.days_off_auto) : "";
+  $("f-days-auto").textContent = x?.days_off_auto != null ? `自動 ${x.days_off_auto} 天（空白＝用自動）` : "空白＝自動算";
+  $("f-pause").checked = !!x?.pause_quality;
+  $("f-note").value = x?.note || "";
+  $("f-del").hidden = !x;
+  $("f-msg").textContent = ""; $("f-msg").className = "msg";
+  renderDlg();
+  $("dlg").showModal();
+}
+$("add").addEventListener("click", () => openDlg(null));
+$("fm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { area: F.area || "unknown", side: F.area && !S.meta.no_side.includes(F.area) ? F.side : null, severity: F.severity, kind: F.kind,
+    pain_max: F.pain_max, onset_date: $("f-onset").value, resolved_date: $("f-res").value || null,
+    days_missed: $("f-days").value === "" ? null : +$("f-days").value, pause_quality: $("f-pause").checked, note: $("f-note").value };
+  if (!body.onset_date) { $("f-msg").textContent = "要填開始的日期"; $("f-msg").className = "msg err"; return; }
+  if (body.resolved_date) body.status = "resolved"; else if (S.edit && S.edit.status === "resolved") body.status = "active";
+  $("f-save").disabled = true;
+  try {
+    if (S.edit) await send(`${API}/${S.edit.id}`, "PATCH", body); else await send(API, "POST", body);
+    $("dlg").close(); await refreshAll();
+  } catch (er) { $("f-msg").textContent = "儲存失敗：" + errText(er); $("f-msg").className = "msg err"; }
+  $("f-save").disabled = false;
+});
+$("f-del").addEventListener("click", async () => {
+  if (!S.edit || !confirm(`刪除傷病紀錄 #${S.edit.id}？活動上的疼痛標記會留著。`)) return;
+  try { await j(`${API}/${S.edit.id}`, { method: "DELETE" }); $("dlg").close(); if (S.sel === S.edit.id) { S.sel = null; $("ev").hidden = true; } await refreshAll(); }
+  catch (er) { $("f-msg").textContent = "刪除失敗：" + errText(er); $("f-msg").className = "msg err"; }
+});
+
+async function refreshAll() { await loadList(); loadTimeline(); loadAnalysis(); }
+
+(async () => {
+  try { S.meta = await j(`${API}/meta`); }
+  catch (e) { document.querySelector("main").innerHTML = `<div class="panel empty">${e.status === 404 ? "這個功能沒有開放。" : "讀取失敗：" + esc(e.message)}</div>`; $("add").hidden = true; return; }
+  $("disc").textContent = S.meta.disclaimer;
+  renderFilters(); syncSettings();
+  await loadList();
+  const want = +new URLSearchParams(location.search).get("id");
+  loadTimeline();
+  await loadAnalysis();
+  if (want && S.list.some((x) => x.id === want)) {
+    const x = S.list.find((v) => v.id === want);
+    pick(want);
+    document.querySelector(`.card[data-id="${want}"]`)?.scrollIntoView({ block: "center" });
+    if (x.status === "draft") openDlg(x);
+  }
+})();
+</script>
+</body>
+</html>

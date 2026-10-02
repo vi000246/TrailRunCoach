@@ -535,6 +535,35 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
                                 "protocol": src.get("protocol_stored") if t["key"] == "aet" else src["protocol"]}
                 t["label"] = f"{t['label']}：{src['title']}（{src['minutes']} 分）"
             t["replaces_long"] = t["key"] == "aet" and aet_p == "xu90"
+    rows += await run_in_threadpool(_injury_suggestions, inp, today, set(bl), stored)
+    return rows
+
+
+def _injury_suggestions(inp: dict, today: str, blocked: set, stored: list[dict]) -> list[dict]:
+    """傷病紀錄 rows of the box (engine/suggestions.injury_rows) and, when the
+    user turned it on, 「跟受傷前很像」 (engine/injury_exposure.alerts)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine import injuries as INJ
+    from backend.engine import suggestions as SG
+    if INJ.demo_mode():
+        return []
+    try:
+        events = INJ.load_events()
+        rows = SG.injury_rows(events, today, blocked, (inp.get("cur") or {}).get("reentry"),
+                              INJ.pain_marks(AT.load()))
+    except Exception:                       # noqa: BLE001 — the box must still load
+        return []
+    try:
+        from backend.engine.wko5expr.datasource import read_setting
+        if events and read_setting(INJ.SETTING_PATTERN, False) is True:
+            from backend.api.overview import _dataset
+            from backend.engine import injury_exposure as IE
+            end = (dt.date.fromisoformat(today) + dt.timedelta(days=7)).isoformat()
+            planned = [s for s in stored if s.get("state") == "active" and today <= (s.get("day") or "") < end
+                       and s.get("kind") not in ("strength", "rest")]
+            rows += IE.alerts(_dataset(), events, dt.date.fromisoformat(today), planned)
+    except Exception:                       # noqa: BLE001
+        pass
     return rows
 
 
@@ -587,6 +616,8 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
         out = {"sessions": [await _schedule_test(db, inp, {"days": [{"day": o["day"]} for o in t["options"]],
                                                            "session": t["session"],
                                                            "replaces_long": t.get("replaces_long")}, day)]}
+    elif sg["type"] == "injury_rest":
+        out = await _accept_injury_rest(db, sg)
     else:
         raise HTTPException(400, "這個建議沒有可以排的東西")
     week = sid.split(":")[-1] if sid.startswith(("b2b:", "test:")) else None
@@ -1150,6 +1181,33 @@ async def put_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_d
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
     return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+
+
+async def _accept_injury_rest(db: AsyncSession, sg: dict) -> dict:
+    """「設成不排課」 of an injury_rest suggestion: the days of [start, end] not
+    blocked yet become 不排課日期 (label 傷停), then the plan reconciles as a
+    PUT /blackouts without decisions (edited sessions are reported, not moved)."""
+    from backend.engine import blackouts as BL
+    from backend.settings.repository import SettingsRepository
+    cur = BL.normalize(await SettingsRepository(db).get(BL.KEY) or [])
+    have = set(BL.blocked(BL.from_list(cur)))
+    a, b = dt.date.fromisoformat(sg["start"]), dt.date.fromisoformat(sg["end"])
+    free = [a + dt.timedelta(days=i) for i in range((b - a).days + 1)
+            if (a + dt.timedelta(days=i)).isoformat() not in have]
+    added = [{"id": BL.new_id(), "start": lo.isoformat(), "end": hi.isoformat(), "label": "傷停"}
+             for lo, hi in BL._runs(free)]
+    cand = BL.normalize(cur + added)
+    try:
+        await SettingsRepository(db).set(BL.KEY, cand)
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(400, str(e))
+    await db.commit()
+    inp = await _inputs(db, blackouts=cand)
+    async with _wlock():
+        await _ensure(db, inp)
+        _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions={})
+    return {"sessions": [], "blackouts": added, "changes": changes}
 
 
 _eq_lock = threading.Lock()
