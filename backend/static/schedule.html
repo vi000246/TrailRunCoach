@@ -465,9 +465,8 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
     <div class="var-box" id="sd-tb">
-      <label>目標用<select name="target_basis" id="sd-tbsel" aria-describedby="sd-tbwhy"><option value="auto">自動</option><option value="hr">心率</option><option value="power">功率</option></select></label>
-      <div class="hint" id="sd-tbwhy" aria-live="polite"></div>
-      <!-- the structured editor (static/workout_editor.js, engine/workout_steps.py): chart, steps, per-step targets, watch preview -->
+      <!-- the structured editor (static/workout_editor.js, engine/workout_steps.py): chart, steps, per-step targets
+           (each step picks power / HR / pace; 自動 steps follow target_policy by session type), watch preview -->
       <div id="sd-we"></div>
     </div>
     <div class="var-box" id="sd-test" hidden>
@@ -565,15 +564,15 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </fieldset>
     <fieldset class="pf-sec"><legend>地形與目標</legend>
       <div class="pf-row"><label class="il"><span>輕鬆跑</span><select name="terrain_easy"><option value="any">都可</option><option value="road">路跑</option><option value="trail">越野（只看心率）</option></select></label></div>
-      <div class="pf-row"><label class="il"><span>長跑</span><select name="terrain_long"><option value="auto">自動（依目標賽事）</option><option value="road">路跑</option><option value="trail">山路越野</option><option value="hike">登山（以時間為主）</option></select></label></div>
+      <div class="pf-row"><label class="il"><span>長跑</span><select name="terrain_long"><option value="auto">自動（依目標賽事）</option><option value="road">路跑</option><option value="trail">越野跑</option></select></label></div>
       <div class="pf-row"><label class="il"><span>品質課</span><select name="terrain_quality"><option value="any">都可</option><option value="flat">平路間歇</option><option value="hill">爬坡間歇</option></select></label></div>
       <div class="pf-row"><label class="il" title="暖身裡一定要跑的那段（從家裡跑到河濱），間歇課表不會砍這段"><span>間歇暖身：市區段</span><input type="number" name="warmup_commute_min" min="0" max="30" step="1" inputmode="numeric"> 分</label>
         <label class="il" title="緩和；跑回家的話設 10"><span>緩和</span><input type="number" name="cooldown_min" min="0" max="20" step="1" inputmode="numeric"> 分</label></div>
       <div class="pf-row"><span class="lbl" id="pf-tb-lbl">目標依據 <button type="button" class="qtip" aria-label="說明" data-tip="課表的目標用心率還是功率。
-自動：輕鬆跑、長跑、山路長天、恢復跑用心率（≤ AeT）；3 區／5 區間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡只給建議、不設目標；下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
+自動：路跑的輕鬆跑、長跑用功率，心率 ≤ AeT 當上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ AeT）；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
 心率：全部用心率區間（Friel % LTHR，輕鬆跑上限 AeT）。
 功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
-每次課表也可以在編輯時改「目標用：自動／心率／功率」，只影響這次課表。">?</button></span><label class="rb"><input type="radio" name="target_basis" value="auto">自動</label><label class="rb"><input type="radio" name="target_basis" value="hr">心率</label><label class="rb"><input type="radio" name="target_basis" value="power">功率</label></div>
+只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button></span><label class="rb"><input type="radio" name="target_basis" value="auto">自動</label><label class="rb"><input type="radio" name="target_basis" value="hr">心率</label><label class="rb"><input type="radio" name="target_basis" value="power">功率</label></div>
     </fieldset>
     <fieldset class="pf-sec" id="pf-cpt"><legend>CP 測試方式</legend>
       <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="quick"><span><b>快速：20 分全力</b><span class="meta">約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測 W′</span></span></label>
@@ -1300,12 +1299,12 @@ function tgtHint() {
   stepsPreview();
 }
 
-// 「目標用：自動／心率／功率」 and the structured editor (static/workout_editor.js): every step
-// shows what it resolves to (engine/target_policy.py → engine/workout_steps.py); one step can be
-// overridden by clicking its target. Nothing is stored until 儲存.
+// The structured editor (static/workout_editor.js): every step shows what it resolves to — its own
+// basis (power / HR / pace), or 自動 = engine/target_policy.py by session type; one step is changed
+// by clicking its target. Nothing is stored until 儲存.
 function weSession() {
   return { kind: kindVal(), title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
-    target_basis: F.target_basis.value, day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
+    day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
     // trail: the climb per km for the effort distance of distance steps (the panel's, else the goal race's)
     climb_per_km: eqOn() && terVal() === "trail" ? EQS.d : kindVal() === "hike" ? (D.goal_climb_per_km ?? null) : null,
     protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
@@ -1331,7 +1330,6 @@ function minLock(v) {
   if (+F.minutes.value !== m) { F.minutes.value = m; if (eqOn()) eqRecalc("minutes"); tssHint(); }
 }
 const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onView: (v, we) => {
-  if (v && v.basis_label) $("sd-tbwhy").textContent = v.basis_label;
   const mine = we.dirty || we.stored;
   minLock(v);
   // a structure of your own: the target text and the TSS estimate come from it
@@ -1350,7 +1348,6 @@ function stepsPreview() {
   $("sd-tb").hidden = false;
   WE.refresh();
 }
-$("sd-tbsel").addEventListener("change", stepsPreview);
 
 // ---- 測試: which test first (CP / AeT), then its protocol; the steps are filled in ----
 $("sd-tkind").addEventListener("change", () => {
@@ -1469,8 +1466,7 @@ function openDlg(s, day) {
   F.minutes.value = s ? s.minutes : 45;
   F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";
   F.detail.value = s ? s.detail || "" : "";
-  F.target_basis.value = s && s.target_basis ? s.target_basis : "auto";
-  F.querySelectorAll("input, textarea, select[name=target_basis]").forEach((x) => { x.disabled = !!ro; });
+  F.querySelectorAll("input, textarea").forEach((x) => { x.disabled = !!ro; });
   $("sd-err").textContent = "";
   $("sd-save").hidden = !!ro;
   $("sd-cancel").textContent = ro ? "關閉" : "取消";
@@ -1514,8 +1510,8 @@ F.addEventListener("submit", async (e) => {
     tss: Math.round(estDialog().tss * 10) / 10 };
   if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
   if (dlg.test && body.kind === "test") body.protocol = dlg.test.protocol;          // 測試 → which protocol
-  // 目標用 (a user edit only when it changes from what the session had)
-  if (!dlg.uid || F.target_basis.value !== ((dlg.orig || {}).target_basis || "auto")) body.target_basis = F.target_basis.value;
+  // no session-level 目標用: each step picks its own basis in the structure (a stored
+  // target_basis from before stays as it was)
   if (eqOn()) {
     const f = eqF();
     Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });
