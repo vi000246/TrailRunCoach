@@ -774,14 +774,10 @@ ORIGIN_LABELS = {"coros": "COROS", "tp": "TrainingPeaks", "wko5": "WKO5"}
 
 def _origin(ds, w=None, file: Optional[str] = None) -> Optional[str]:
     """Which source an activity's file came from (the 活動編輯 badge): coros /
-    tp on a FIT dataset (the merged "synced" one: the folder that won,
-    sync/primary.py), wko5 on the WKO5 dataset."""
+    tp on a FIT dataset (the 資料來源's folder), wko5 on the WKO5 dataset."""
     if w is not None and hasattr(ds, "file_origin"):
         return ds.file_origin(w)
     src = getattr(ds, "source", None) or "wko5"
-    if src == "synced":
-        head = str(file or "").split("/", 1)[0]
-        return head if head in ("coros", "tp") else None
     return src if src in ORIGIN_LABELS else None
 
 
@@ -858,7 +854,7 @@ def activities_list():
                     "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
-            "merge": getattr(ds, "merge_info", None), "types": AT.TYPES, "efforts": AT.EFFORTS,
+            "types": AT.TYPES, "efforts": AT.EFFORTS,
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 

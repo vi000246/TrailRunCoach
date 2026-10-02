@@ -145,8 +145,12 @@ def test_auto_sync_starts_stale_sources_only(tmp_path, monkeypatch):
                         coros_last_sync_at=datetime.utcnow() - timedelta(hours=1),
                         last_sync_at=datetime.utcnow() - timedelta(hours=30)))
         await s.commit()
+        # COROS (the 資料來源, the default) is fresh; TP is stale but not in use
         r = await auto_sync(1, s)
-        assert r["started"] == ["tp"] and r["skipped"] == {"coros": "fresh"}
+        assert r["started"] == [] and r["skipped"] == {"coros": "fresh", "tp": "not_in_use"}
+        await SettingsRepository(s, 1).set("sync.primary_source", "trainingpeaks")
+        r = await auto_sync(1, s)
+        assert r["started"] == ["tp"] and r["skipped"] == {"coros": "not_in_use"}
         assert started == [("tp", "open")]
         await SettingsRepository(s, 1).set("sync.auto_on_open.enabled", False)
         assert (await auto_sync(1, s))["started"] == []
@@ -196,18 +200,17 @@ def test_delete_tp_files_keeps_coros_and_wko5_and_rebuilds_dedup(tmp_path, _fit_
         files, wko5_file = await _two_sources(s, _fit_root_in_tmp)
         coros_row = (await s.execute(select(WorkoutFile).where(WorkoutFile.source == "coros"))).scalar_one()
         assert coros_row.duplicate_of is not None               # TP was canonical
-        await SettingsRepository(s, 1).set("charts.data_source", "tp")
         r = await purge.delete_source_files(s, "tp", 1)
         assert r["rows_deleted"] == 1 and r["files_deleted"] == 1 and r["files_refused"] == 0
-        assert r["chart_source_switched_to_wko5"] is True
+        assert r["chart_source_switched_to_wko5"] is has_wko5
         assert not files["tp"].exists() and files["coros"].exists() and wko5_file.exists()
         rows = (await s.execute(select(WorkoutFile))).scalars().all()
         assert [x.source for x in rows] == ["coros"] and rows[0].duplicate_of is None   # now canonical
         assert (await s.execute(select(WorkoutMetric))).scalars().all()[0].workout_id == rows[0].id
         st = (await s.execute(select(SyncState))).scalar_one()
         assert st.last_sync_cursor is None and st.last_sync_at is None and st.coros_last_sync_at is not None
-        # without a WKO5 folder the charts go to the merged synced FITs
-        assert await SettingsRepository(s, 1).get("charts.data_source") == ("wko5" if has_wko5 else "synced")
+        # without a WKO5 folder the charts stay on the (now empty) 資料來源; never the other source
+        assert await SettingsRepository(s, 1).get("charts.data_source") == ("wko5" if has_wko5 else "source")
     run(go())
 
 
@@ -296,9 +299,9 @@ def test_sources_endpoint_and_new_settings(tmp_path, _fit_root_in_tmp):
         assert c["last_result"]["downloaded"] == 1 and c["last_sync_at"]
         assert out["tp"]["logged_in"] is False and out["tp"]["stats"]["files"] == 0
         r = await put_sync_settings(SyncSettingsBody(daily_sync_time="05:45", auto_on_open=False,
-                                                     auto_on_open_hours=12, chart_data_source="coros"), 1, s)
+                                                     auto_on_open_hours=12, chart_data_source="wko5"), 1, s)
         assert r["daily_sync_time"] == "05:45" and r["auto_on_open"] is False
-        assert r["auto_on_open_hours"] == 12 and r["chart_data_source"] == "coros"
+        assert r["auto_on_open_hours"] == 12 and r["chart_data_source"] == "wko5"
         assert r["tp_client_file_exists"] is False
         with pytest.raises(HTTPException):
             await put_sync_settings(SyncSettingsBody(chart_data_source="garmin"), 1, s)

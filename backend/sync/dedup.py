@@ -6,11 +6,12 @@ folder. Rows whose start times are within `WINDOW` of each other are one
 activity; exactly one of them is canonical and the others get
 `duplicate_of = <canonical id>`, which the PMC / analytics queries skip.
 
-Canonical choice: the row from the primary source (`sync.primary_source`,
-自動 = sync/primary.py choose_auto), else the earliest imported (lowest id).
-With 自動 the pick can change after a sync, so runner.stream rebuilds the
-groups at the end of a run that downloaded something. Stubs of
-corrupt files never count as canonical while a readable row exists.
+Canonical choice: the row from the 資料來源 in use (`sync.primary_source`,
+sync/primary.py), else the earliest imported (lowest id); switching the
+source rebuilds the groups. Stubs of corrupt files never count as canonical
+while a readable row exists. Totals use `in_use_clause`: canonical rows of
+the 資料來源 (and local imports), never the other synced source's rows —
+also not the activities only that source has (no back-fill).
 """
 from __future__ import annotations
 
@@ -30,6 +31,20 @@ def canonical_clause():
     return WorkoutFile.duplicate_of.is_(None)
 
 
+def in_use_clause(primary: str):
+    """`.where(...)` predicate for every total: canonical rows that are not
+    from the synced source NOT in use (primary = "coros" | "trainingpeaks")."""
+    from sqlalchemy import and_
+    from backend.sync import primary as P
+    other = P.to_db(P.other_folder(primary))
+    return and_(canonical_clause(), WorkoutFile.source != other)
+
+
+async def in_use(db: AsyncSession, user_id: int = 1):
+    """in_use_clause of the athlete's 資料來源."""
+    return in_use_clause(await _primary(db, user_id))
+
+
 def choose_canonical(rows: Sequence, primary: Optional[str]):
     """rows: objects with id, source, file_format. Pure; unit tested."""
     readable = [r for r in rows if r.file_format != "corrupt"] or list(rows)
@@ -40,11 +55,10 @@ def choose_canonical(rows: Sequence, primary: Optional[str]):
     return min(readable, key=lambda r: r.id)
 
 
-async def _primary(db: AsyncSession, user_id: int) -> Optional[str]:
-    """The primary source in effect (sync/primary.py: the setting, or 自動's
-    pick — the source with the most recent complete data)."""
+async def _primary(db: AsyncSession, user_id: int) -> str:
+    """The 資料來源 in use (sync/primary.py)."""
     from backend.sync import primary as P
-    return (await P.resolve_db(db, user_id))["source"]
+    return await P.current(db, user_id)
 
 
 async def resolve(db: AsyncSession, wf: WorkoutFile, primary: Optional[str] = None,
@@ -77,7 +91,7 @@ async def resolve(db: AsyncSession, wf: WorkoutFile, primary: Optional[str] = No
 
 
 async def rebuild(db: AsyncSession, athlete_id: int) -> dict:
-    """Recompute every group (after changing the primary source or a backfill)."""
+    """Recompute every group (after switching the 資料來源 or a backfill)."""
     primary = await _primary(db, athlete_id)
     res = await db.execute(select(WorkoutFile).where(
         WorkoutFile.athlete_id == athlete_id).order_by(WorkoutFile.start_time_utc))

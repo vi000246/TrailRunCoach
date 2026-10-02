@@ -1,5 +1,6 @@
 /*
- * Chart data-source chip: 資料來源 WKO5 / COROS / TP.
+ * Chart data-source chip: 資料來源 (the one synced source in use, COROS or
+ * TrainingPeaks — chosen in 設定 → 資料同步) or the WKO5 folder (cross-check).
  *
  * One line in a page (e.g. wko5_viewer.html, next to the other header chips):
  *     <span id="source-chip"></span><script src="/api/v1/static/sourcechip.js" defer></script>
@@ -9,8 +10,6 @@
  */
 (function () {
   "use strict";
-  // synced = both synced folders, the 主要資料來源's file per activity (設定 → 資料同步)
-  const LABEL = { synced: "同步資料", coros: "只用 COROS", tp: "只用 TrainingPeaks", wko5: "WKO5 資料夾" };
 
   async function mount() {
     let host = document.getElementById("source-chip");
@@ -19,13 +18,15 @@
       host.id = "source-chip";
       (document.querySelector("header") || document.body).appendChild(host);
     }
-    let cur = "synced";
-    try { cur = (await (await fetch("/api/v1/sync/settings")).json()).chart_data_source || "synced"; } catch (_) {}
+    let ss = {};
+    try { ss = await (await fetch("/api/v1/sync/settings")).json(); } catch (_) {}
+    const cur = ss.chart_data_source === "wko5" ? "wko5" : "source";
+    const LABEL = { source: ss.primary_label || "COROS", wko5: "WKO5 資料夾（比對用）" };
     host.innerHTML = "";
     const lab = document.createElement("label");
     lab.style.cssText = "display:inline-flex;gap:6px;align-items:center;font-size:12.5px;padding:2px 8px;"
       + "border:1px solid currentColor;border-radius:12px;opacity:.85";
-    lab.title = "圖表、總覽和功率計算機讀取的資料來源";
+    lab.title = "圖表、總覽和功率計算機讀取的資料來源。COROS／TrainingPeaks 一次只用一個，在 設定 → 資料同步 切換";
     const sel = document.createElement("select");
     sel.style.cssText = "font:inherit;border:0;background:transparent;color:inherit";
     for (const k of Object.keys(LABEL)) {
