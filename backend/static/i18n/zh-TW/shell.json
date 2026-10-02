@@ -12,9 +12,9 @@
   "page.charts.name": "圖表分析",
   "page.charts.short": "圖表",
   "page.charts.purpose": "趨勢與單次活動圖表",
-  "page.activity.name": "活動編輯",
+  "page.activity.name": "活動列表",
   "page.activity.short": "活動",
-  "page.activity.purpose": "名稱・類型・標籤・排除",
+  "page.activity.purpose": "搜尋・篩選・單筆編輯",
   "page.injuries.name": "傷病紀錄",
   "page.injuries.short": "傷病",
   "page.injuries.purpose": "疼痛・受傷前的訓練",
@@ -38,5 +38,7 @@
   "build.failed": "資料處理失敗：{error}",
   "lang.title": "切換語言（Language）",
   "lang.zh-TW": "中文",
-  "lang.en": "EN"
+  "lang.en": "EN",
+  "nav.more": "更多",
+  "nav.more_title": "活動列表、路線、成就、傷病紀錄、設定"
 }

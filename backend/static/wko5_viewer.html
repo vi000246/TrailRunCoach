@@ -48,24 +48,24 @@ svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
   font: inherit; font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
 .seg button .sub { font-weight: 400; font-size: 11.5px; }
 .seg button.on { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
-/* 趨勢／單次活動: the page's main switch, dark orange so it stands out (owner's call) */
-/* same text colours as the top menu (shell.js .appnav): names in --text, the current one in
-   the accent with a light tint — the accent here is dark orange */
-/* a pill switch: a recessed track and a raised dark-orange thumb under the current mode */
-.seg.mode { --mode-acc: #b4530f; --mode-acc2: #8f3f0a; border: 0; border-radius: 999px; padding: 3px; gap: 2px;
-  background: color-mix(in srgb, var(--text) 7%, var(--bg));
-  box-shadow: inset 0 1px 3px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.06); }
-.seg.mode button { color: var(--text); font-weight: 600; border-radius: 999px; padding: 5px 14px;
-  transition: background .18s, color .18s, box-shadow .18s, transform .1s; }
-.seg.mode button .sub { color: var(--muted); font-weight: 400; }
-.seg.mode button:hover { color: var(--mode-acc); background: color-mix(in srgb, var(--mode-acc) 8%, transparent); }
-.seg.mode button:active { transform: translateY(1px); }
-.seg.mode button.on, .seg.mode button.on:hover { color: #fff;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--mode-acc) 82%, #fff) 0%, var(--mode-acc) 45%, var(--mode-acc2) 100%);
-  box-shadow: 0 2px 5px rgba(143,63,10,.35), 0 1px 1px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.3);
-  text-shadow: 0 1px 1px rgba(0,0,0,.25); }
-.seg.mode button.on .sub { color: #fff; opacity: .85; }
-.seg.mode button:focus-visible { outline: 2px solid var(--mode-acc); outline-offset: 2px; }
+/* 趨勢 / 單次活動: the page's first choice, as two big mode cards so it reads as "pick one of
+   these two views" (owner's call): icon + title + one line; the current one filled dark orange */
+.modesw { display: inline-flex; gap: 6px; flex: none; padding: 4px; border-radius: 12px;
+  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; border: 0; cursor: pointer; text-align: left;
+  font: inherit; padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
+.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
+.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
+.modesw .mcard:active { transform: translateY(1px); }
+.modesw .mcard.on { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff;
+  box-shadow: 0 3px 8px rgba(143,63,10,.35); }
+.modesw .mcard.on svg, .modesw .mcard.on small { color: #fff; }
+.modesw .mcard.on small { opacity: .85; }
+.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
 .crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
 .crumb b { color: var(--text); font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
 .crumb .sep { opacity: .45; }
@@ -356,9 +356,13 @@ table.z5ev td { white-space: normal; }
 <div class="tb">
   <div class="tb1">
     <button class="iconbtn only-narrow" id="treebtn" aria-controls="side" aria-expanded="false"><svg class="i"><use href="#i-tree"/></svg>目錄</button>
-    <div class="seg mode" role="group" aria-label="圖表類型">
-      <button id="m-season" class="on" title="一段期間內多次活動的趨勢">趨勢<span class="sub">（多次活動）</span></button>
-      <button id="m-workout" title="一筆活動的逐秒圖表">單次活動</button>
+    <div class="modesw" role="group" aria-label="選擇看法">
+      <button id="m-season" class="mcard on" title="一段期間內多次活動的趨勢">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+        <span><b>趨勢</b><small>一段期間的變化</small></span></button>
+      <button id="m-workout" class="mcard" title="一筆活動的逐秒圖表">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v4"/><path d="M6 12l3-3 4 1 3 3 3-1"/></svg>
+        <span><b>單次活動</b><small>某一次的逐秒細節</small></span></button>
     </div>
     <div class="crumb" id="crumb"></div>
     <span class="spacer"></span>
@@ -372,7 +376,7 @@ table.z5ev td { white-space: normal; }
     <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
     <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
     <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
-    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動編輯」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
+    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動列表」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
     <span class="w-only pain-wrap" id="pain-wrap" hidden><button class="chip" id="pain-chip" aria-haspopup="dialog" aria-expanded="false" title="這次有沒有痛（傷病紀錄）">疼痛？</button>
       <div class="pain-pop" id="pain-pop" role="dialog" aria-label="疼痛" hidden></div></span>
   </div>

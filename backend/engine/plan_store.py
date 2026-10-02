@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import PlanSession
 from backend.engine import reconcile as R
+from backend.i18n import _
 
 KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test": "測試",
          "hike": "越野跑", "strength": "肌力", "heat_passive": "被動熱適應",
@@ -366,12 +367,69 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     return d
 
 
-async def delete(db: AsyncSession, uid: str, athlete_id: int = 1) -> dict:
+# a past session that was never done, deleted by the user (課表 page: 刪除 /
+# 刪除所有過期未完成). Kept as a tombstone whatever its origin, so nothing brings
+# it back: reconcile never generates a past day, plan_match only looks at active /
+# missed rows, and plan_auto.undo never restores over it.
+USER_DELETED = "user_deleted_expired"
+
+
+def is_expired_open(s: dict, today: str) -> bool:
+    """Missed, or still open on a day before today (the data doesn't cover it yet).
+    The 課表待確認 notice is plan_auto's own and isn't counted."""
+    if s.get("kind") in NOT_LOAD or not s.get("day") or s["day"] >= today:
+        return False
+    return s.get("state") == "missed" or s.get("state") == "active"
+
+
+def off_watch(s: dict) -> bool:
+    """A pushed copy of this session comes off the watch's calendar whatever its day
+    (push_sessions missed_keys): missed, or an expired one the user deleted (when the
+    immediate removal failed, e.g. the login had expired, the next push does it)."""
+    return s.get("state") == "missed" or (s.get("state") == "deleted" and s.get("note") == USER_DELETED)
+
+
+def _tombstone_expired(r: PlanSession) -> dict:
+    r.state = "deleted"
+    r.note = USER_DELETED
+    # no gen_key: the tombstone must not block the generator's re-placed copy of a
+    # missed session later in the week (reconcile rule 3 blocks a deleted gen_key);
+    # its own past day is never generated again anyway (rule 2: days from today on)
+    r.gen_key = None
+    r.updated_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    return {**to_dict(r), "state": "deleted"}
+
+
+async def delete_expired(db: AsyncSession, today: str, uids: Optional[list] = None,
+                         athlete_id: int = 1) -> list[dict]:
+    """Tombstone the expired open sessions (`uids`: only these; None: all of them).
+    A uid that isn't an expired open session raises PlanError (nothing is changed)."""
+    rows = await _rows(db, athlete_id)
+    if uids is None:
+        pick = [r for r in rows.values() if is_expired_open(to_dict(r), today)]
+    else:
+        pick = []
+        for u in dict.fromkeys(str(x) for x in uids):
+            r = rows.get(u)
+            if r is None or not is_expired_open(to_dict(r), today):
+                raise PlanError(_("這堂課不是過期未完成的課：{uid}", uid=u))
+            pick.append(r)
+    out = [_tombstone_expired(r) for r in pick]
+    await db.commit()
+    return out
+
+
+async def delete(db: AsyncSession, uid: str, athlete_id: int = 1, today: Optional[str] = None) -> dict:
     rows = await _rows(db, athlete_id)
     r = rows.get(uid)
     if r is None:
         raise PlanError("找不到這堂課")
     d = to_dict(r)
+    if today and is_expired_open(d, today):
+        d = _tombstone_expired(r)            # any origin: never regenerated / restored
+        await db.commit()
+        d["expired"] = True
+        return d
     if r.origin == "auto":
         r.state = "deleted"                  # tombstone: regeneration won't bring it back
         d["state"] = "deleted"
