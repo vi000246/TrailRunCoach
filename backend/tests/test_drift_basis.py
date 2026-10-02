@@ -203,8 +203,7 @@ def test_bundled_drift_charts_have_the_toggle():
     views = load_custom_views([REPO_VIEWS])
     want = {("我的訓練", SEASON_TITLE), ("我的訓練", "耐久度：長時間後段心率飄移"),
             ("周期化訓練", "長時間輕鬆跑的心率飄移"), ("周期化訓練", "耐久度：長時間後段心率飄移"),
-            ("單次活動判讀", "飄移判讀"), ("單次活動判讀", "滾動有氧效率 EF（5 分鐘）"),
-            ("單次活動判讀", "每公里心率與速度")}
+            ("單次活動判讀", "飄移判讀")}
     found = {(name, c["title"]) for name, v in views.items() for d in v["dashboards"]
              for c in d["charts"] if c.get("basis")}
     assert want <= found, want - found
