@@ -208,13 +208,13 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
         if s.get("id") == "steep":
             return ss
     hard = [_d(s["day"]) for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "race")
-                                                         or s.get("id") in ("long", "long2", "long3"))]
+                                                         or s.get("id") in ("long", "long2", "long3", "climb"))]
     post = (b2b or {}).get("post") or {}
     until = _d(post.get("until")) if post else None
     cap = getattr(prefs, "cap_weekday", None) if prefs is not None and getattr(prefs, "active", False) else None
     cands = []
     for s in ss:
-        if s.get("kind") != "easy" or s.get("done") or not s.get("day"):
+        if s.get("kind") != "easy" or s.get("done") or not s.get("day") or s.get("id") == "climb":
             continue
         d = _d(s["day"])
         if start is not None and (start - d).days <= NO_DAYS:
@@ -236,7 +236,8 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
     delta = m - int(s.get("minutes") or 0)
     if delta:
         # the week's total is unchanged: the other easy runs give / take the difference
-        for x in sorted((x for x in ss if x is not s and x.get("kind") == "easy" and not x.get("done")),
+        for x in sorted((x for x in ss if x is not s and x.get("kind") == "easy" and not x.get("done")
+                         and x.get("id") != "climb"),
                         key=lambda x: -(x.get("minutes") or 0)):
             r = _rate(x)
             new = max(20, int(x["minutes"]) - delta)

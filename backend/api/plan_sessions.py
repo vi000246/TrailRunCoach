@@ -65,7 +65,8 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     if hit is not None:
         return hit
     st = _status(ds, today)
-    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc)
+    from backend.engine.panels.race_refs import calculator_hours
+    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc, race_predict=calculator_hours)
     monday = dt.date.fromisoformat(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=P.MAX_WEEKS, days=6)
     ph = st.phase
@@ -563,6 +564,13 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
                                 _busy_days(stored, sg["week"]), sg.get("long_day"))
 
     rows = SG.b2b_rows(inp, today, pairs)
+
+    def sim_opts(sg: dict) -> list[dict]:
+        from backend.engine import specific_phase as SP
+        return SP.sim_day_options(sg, first, set(bl), PR.allowed if PR is not None else None,
+                                  PR.cap_weekday if PR is not None else None, lambda w: _busy_days(stored, w))
+
+    rows += SG.race_sim_rows(inp, sim_opts, stored)          # 賽事模擬 (engine/specific_phase.py)
     tests = await _suggestions(db, inp, dismissed={})
     rows += SG.test_rows(tests, R.monday_of(today))
     tpl = _test_templates(inp.get("thresholds") or {}, prefs)
@@ -660,6 +668,8 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
         raise HTTPException(400, "現在沒有這個建議（可能已經排入或關掉了）")
     if sg["type"] == "b2b":
         out = await _accept_b2b(db, inp, sg, day)
+    elif sg["type"] == "race_sim":
+        out = await _accept_race_sim(db, inp, sg, day)
     elif sg["type"] == "test":
         tests = await _suggestions(db, inp, dismissed={})
         t = next((x for x in tests if x["kind"] == sg["kind"]), None)
@@ -741,6 +751,34 @@ async def _accept_b2b(db: AsyncSession, inp: dict, sg: dict, day: Optional[str])
         await _save_setting(db, B2B.ACCEPTED_KEY, acc)
         raise _err(e)
     return {"sessions": added, "accepted": entry}
+
+
+async def _accept_race_sim(db: AsyncSession, inp: dict, sg: dict, day: Optional[str]) -> dict:
+    """賽事模擬 (engine/specific_phase.py): the day (or day pair) becomes the user's
+    session(s); the generator's long day (and B2B day 2) of that week is tombstoned —
+    the simulation is that week's long day."""
+    from backend.engine import plan_auto as PA
+    opt = next((o for o in sg.get("options") or [] if o["day"] == day), None)
+    if opt is None:
+        raise HTTPException(400, "這天不適合排賽事模擬（不是可練日、在不排課日期內，或已經有你自己的課）")
+    days = [opt["day"]] + ([opt["end"]] if sg.get("multi") and opt.get("end") else [])
+    week = R.monday_of(days[0])
+    end = (dt.date.fromisoformat(week) + dt.timedelta(days=6)).isoformat()
+    added = []
+    try:
+        async with _wlock():
+            for s, d in zip(sg.get("sessions") or [], days):
+                data = {k: v for k, v in s.items() if v is not None}
+                added.append(await PS.add(db, {**data, "day": d}, _today(inp), blocked=PS.blocked_map(inp)))
+            for s in await PS.load(db):
+                if (s["state"] == "active" and s.get("origin") == "auto" and s.get("gen_key") in ("long", "long2")
+                        and s.get("day") and week <= s["day"] <= end):
+                    await PS.delete(db, s["uid"])
+            if await PA.pending(db) is None:
+                await PS.plan_reconcile(db, inp, apply=True)
+    except PS.PlanError as e:
+        raise _err(e)
+    return {"sessions": added}
 
 
 async def _b2b_cancelled(db: AsyncSession, uid: str) -> Optional[dict]:
