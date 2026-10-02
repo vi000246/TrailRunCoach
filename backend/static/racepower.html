@@ -95,6 +95,15 @@ input.small { width: 90px; }
 .stoptbl .x:hover { color: var(--bad); }
 .sched td.act { white-space: normal; min-width: 220px; }
 .sched tr.k-aid td { background: var(--soft); }
+.tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.tcard { border: 1px solid var(--line); border-left: 4px solid var(--c-f); border-radius: 8px; padding: 7px 10px; font-size: 13px; cursor: pointer; }
+.tcard.hl { border-color: var(--accent); }
+.tcard .th { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.tcard .th b { font-size: 14px; }
+.tcard .tc { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 3px; }
+.tcard .tc span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tcard .tc span.main { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.tcard .fa { font-size: 12px; color: var(--muted); margin-top: 3px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .chip { border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chip b { color: var(--text); font-weight: 600; }
@@ -327,6 +336,7 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <button class="btn" id="coros">匯出到 COROS</button><span class="meta" id="coros-meta"></span>
       <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span></div>
     <div class="profile" id="profile"></div>
+    <div id="segtargets"></div>
     <div class="segtable tablewrap" id="segtable"></div>
     <div class="segcards" id="segcards"></div>
   </section>
@@ -819,7 +829,7 @@ async function run() {
     PLAN = await post(`${API}/plan`, planBody());
     LAST = PLAN.v1;
     STOP_SUGG = PLAN.stop_suggestions || [];
-    renderResults(); renderFuel(); renderProfile(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
+    renderResults(); renderFuel(); renderProfile(); renderSegTargets(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
     renderStops();
     if (LAST.type !== "baiyue") renderRiegel();
   } catch (e) {
@@ -1125,7 +1135,11 @@ function renderProfile() {
     const y = hike ? s.speed_kmh : paceMode ? s.pace_s_per_km / 60 : s.power;
     step.push([s.start_km, y], [s.end_km, y]);
   });
-  const areas = P.segments.map((s) => [{ xAxis: s.start_km, itemStyle: { color: segColor(s.cls), opacity: HL === s.i ? 0.45 : 0.18 } }, { xAxis: s.end_km }]);
+  // trail / 百岳: each band carries its ①② mark (only where it is wide enough to read)
+  const minW = P.summary.km * 0.025;
+  const areas = P.segments.map((s) => [{ xAxis: s.start_km, itemStyle: { color: segColor(s.cls), opacity: HL === s.i ? 0.45 : 0.18 },
+    ...(s.target && s.end_km - s.start_km >= minW ? { name: s.target.mark, label: { show: true, position: "insideTop", color: css("--text"), fontSize: 12, fontWeight: 600 } } : {}) },
+    { xAxis: s.end_km }]);
   const series = [];
   if (pr) series.push({ name: "海拔", type: "line", data: pr.km.map((x, i) => [x, pr.z[i]]), symbol: "none", lineStyle: { color: css("--muted"), width: 1.2 },
     areaStyle: { color: css("--bar"), opacity: 0.35 }, markArea: { silent: true, data: areas },
@@ -1182,6 +1196,26 @@ function renderProfile() {
     if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +km.toFixed(2)].sort((a, b) => a - b); schedule(); return; }
     const s = segAt(km); if (s) { HL = s.i; renderProfile(); renderSegments(); const row = document.querySelector(`[data-seg="${s.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
   });
+}
+// trail / 百岳: the executable target per segment (engine/racepower/seg_targets.py)
+function renderSegTargets() {
+  const T = PLAN?.seg_targets;
+  if (!T || !T.length) { $("segtargets").innerHTML = ""; return; }
+  const hike = PLAN.type === "baiyue";
+  const fuelIcon = (a) => !a ? "" : /補給站|水站|醫護|自備/.test(a) ? "🚩" : /出發/.test(a) ? "🏁" : hike ? "🍙" : "🍬";
+  let h = `<h3>分段目標${help(hike ? "百岳揹重：每段看心率 ≤ AeT，爬坡加上預計的垂直爬升速度 VAM（m/h）和分段時間；配速受地形和背負影響，不當目標。下坡只求控制、安全。" :
+    "依坡度選目標：3–8 % 可以跑的坡看功率範圍（± 3 %），心率只當上限；> 8 % 或要走的陡坡看心率上限和 VAM（每小時爬升公尺）；下坡不看功率也不看心率，求控制、安全，時間和配速只是參考；平路看功率。滑過每張卡看依據。")}</h3><div class="tcards">`;
+  for (const t of T) {
+    const s = PLAN.segments.find((x) => x.i === t.i && (x.day || 1) === (t.day || 1)) || {};
+    const chips = t.chips.map((c) => `<span class="${c.role === "main" ? "main" : ""}">${c.icon} ${esc(c.text)}</span>`).join("");
+    h += `<div class="tcard ${HL === t.i ? "hl" : ""}" data-tseg="${t.i}" title="${esc(t.src)}${t.hr_cap_src ? "；心率上限：" + esc(t.hr_cap_src) : ""}" style="border-left-color:${segColor(s.cls)}">
+      <div class="th"><b>${t.mark} ${esc(t.label)}</b><span class="meta">${hike && t.day ? `D${t.day} · ` : ""}${f1(t.start_km)}–${f1(t.end_km)} km · ↑${n0(t.gain_m)} ↓${n0(t.loss_m)} · ${f1(t.grade * 100)}%</span></div>
+      <div class="tc">${chips || '<span>—</span>'}${t.badge ? ` <span class="badge watch">${esc(t.badge)}</span>` : ""}</div>
+      <div class="meta">⏱ ${dur(t.t)} · 累計 ${dur(t.cum_s)}${t.eta ? ` · ETA ${esc(t.eta)}` : ""}${t.ref.length ? " · " + esc(t.ref.join(" · ")) : ""}</div>
+      ${t.fuel_action ? `<div class="fa">${fuelIcon(t.fuel_action)} ${esc(t.fuel_action)}</div>` : ""}</div>`;
+  }
+  $("segtargets").innerHTML = h + `</div>`;
+  document.querySelectorAll("#segtargets .tcard").forEach((e) => e.addEventListener("click", () => { HL = +e.dataset.tseg; renderProfile(); renderSegments(); renderSegTargets(); }));
 }
 function segAt(km) { return PLAN.segments.find((s) => km >= s.start_km && km <= s.end_km); }
 function segNote(s) { return (s.notes || []).concat(s.walk && !(s.notes || []).includes(s.walk) ? [s.walk] : []).join("、"); }

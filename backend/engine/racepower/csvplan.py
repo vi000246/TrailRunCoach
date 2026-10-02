@@ -26,7 +26,8 @@ USED_ROWS = (("cp", "CP", "W"), ("cp2", "CP（20 分鐘內）", "W"), ("w_prime"
 COLUMNS = ("段", "天", "起點 km", "終點 km", "距離 m", "爬升 m", "下降 m", "坡度 %", "類別",
            "目標功率 W", "% CP", "區間", "配速 /km", "速度 km/h", "分段時間", "累計時間", "ETA（含補給）",
            "M", "溫度 °C", "露點 °C", "熱修正 %", "熱修正時刻", "備註", "標記",
-           "熱量 kcal", "累積 kcal", "碳水 g", "水 ml", "鈉 mg", "補給動作")
+           "熱量 kcal", "累積 kcal", "碳水 g", "水 ml", "鈉 mg", "補給動作", "目標類型", "執行目標")
+BASIS_LABEL = {"power": "功率", "hr": "心率", "none": "不設目標"}
 FUEL_METHOD = {"power": "功率法", "minetti": "Minetti × Fletcher", "minetti_walk": "Minetti 走路", "keytel": "心率 Keytel",
                "pandolf": "Pandolf", "yamamoto": "Yamamoto"}
 
@@ -175,7 +176,10 @@ def segment_row(s: dict, hike: bool) -> list:
             _r(s.get("temp_c"), 1), _r(s.get("dew_c"), 1), _r(s.get("heat_pct"), 2), s.get("heat_clock") or "",
             "、".join(s.get("notes") or ([s["walk"]] if s.get("walk") else [])), s.get("badge") or "",
             _r(s.get("kcal"), 0), _r(s.get("cum_kcal"), 0), _r(s.get("cho_g"), 0), _r(s.get("water_ml"), 0),
-            _r(s.get("na_mg"), 0), s.get("fuel_action") or ""]
+            _r(s.get("na_mg"), 0), s.get("fuel_action") or "",
+            BASIS_LABEL.get((s.get("target") or {}).get("basis"), "") if s.get("target") else "",
+            " · ".join([(s.get("target") or {}).get("text") or ""] + ((s.get("target") or {}).get("ref") or []))
+            .strip(" ·") if s.get("target") else ""]
 
 
 def plan_csv(plan: dict, *, name: str, date: Optional[str] = None, computed_at: Optional[dt.datetime] = None,
@@ -202,6 +206,6 @@ def plan_csv(plan: dict, *, name: str, date: Optional[str] = None, computed_at: 
                _r(s["km"] / (s["time_s"] / 3600.0), 2) if s.get("time_s") else "", hms(s.get("time_s")),
                hms(s.get("time_s")), s.get("finish_eta") or "", _r(s.get("M"), 4), "", "", "", "", "", ""]
         tsum = (lambda k: _r(sum(x.get(k) or 0 for x in segs), 0) if any(x.get(k) is not None for x in segs) else "")
-        tot += [tsum("kcal"), "", tsum("cho_g"), tsum("water_ml"), tsum("na_mg"), ""]
+        tot += [tsum("kcal"), "", tsum("cho_g"), tsum("water_ml"), tsum("na_mg"), "", "", ""]
         w.writerow(tot)
     return buf.getvalue()
