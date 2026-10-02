@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-01
+> **Last Updated**: 2026-10-02
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -667,6 +667,15 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   mean ± SE of the last 6 fair runs** (`drift_agg.aggregate`; text 「3.1% ±1.8」, `extra.agg`);
   the median stays in `why` / `extra.median`, the single runs in the spark. The BAD level still
   needs ≥ 2 strict runs whose median is ≥ 10 % (strict tier only, as before).
+  **Heat bands** (2026-10-02, `workout-review.spec.md` §Heat bands): runs above 25 °C are no
+  longer refused; each point carries its temperature band (< 25 / 25–28 / > 28 °C, 28 推估 /
+  溫度不明) and the indicator **compares only within one band** — the band of the latest fair run
+  when it has ≥ 2 runs in 8 weeks, else the band with the most (`drift_agg.pick_band`). The text
+  ends 「· 🌡 25–28 °C」; `extra` adds `band`, `band_label`, `chip`, `heat`, `bands` (every band's
+  `{n, agg, label}`) and `band_tip`; `why` lists the other bands' counts and, in heat,
+  「熱環境，結果可能偏高」. In a heat band (> 25 °C) the level never turns BAD — heat inflates the
+  drift (Lafrenz 2008), so > 10 % there reads 「…不當警示…涼一點的日子再看」. The Friel / 徐國峰
+  gate methods count heat runs: a pass unlocks (conservative), a fail says 「可能是熱造成的」.
 - **`i_testing`**: AeT age no longer sets the level (B3); 「建議 AeT 測試：…」 comes from
   `gate["aet_test_reason"]`; after a break ≥ ~8 weeks (re-entry `cp_retest`) the CP test is due
   once the block ends (WKO5 seminar notes). `i_fitness`: CTL ramp ≥ 8 bad, 5–8 watch (Friel).
@@ -730,8 +739,9 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   UA's minimum (暖身 10 到開始流汗 + 測試 40, 緩和可省略; "If you only have 40 minutes, do
   that."). The detail starts with which and why (「平日上限 50 分 → 用 UA 最短 40 分版本」 /
   「沒有平日時間上限 → 標準版 80 分」), then 冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線，不要山路;
-  中途不停; 記下溫度；熱的時候結果會偏高 (the < 25 °C condition left the text; the analysis
-  still refuses > 25 °C); Evoke's early abort 「主課第 10 分鐘心率已經比起始高 10 下還在升 →
+  中途不停; 「氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真）」 as advice (`aet_test.HEAT_TEXT`);
+  記下溫度 (heat bands, 2026-10-02: the analysis no longer refuses > 25 °C — a pass in heat
+  counts, 「熱環境，結果可能偏高」, a fail may be the heat); Evoke's early abort 「主課第 10 分鐘心率已經比起始高 10 下還在升 →
   起始太高，停掉改天降 5 bpm 再測」. Placed by `aet_test.pick_day` (weekday first, see 課表偏好
   AeT 飄移測試). Never the CP-test week. Marked done by a ≥ 48-min road run titled AeT, or an
   untitled one ≥ 55 min (so ordinary 41–52′ easy runs aren't the test). COROS steps in
@@ -887,3 +897,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feat/z5-gate-viz | N/A | Zone 5 opening process: `quality_gate.z5_history` replays the lifecycle day by day through the same `_z5` evaluate() uses (`ua_gap_method`, `_break_on` shared; `base_check.replay_memo` per-run memo inside a replay only); `z5_card` + GET `/overview/z5` card on 總覽; `z5gate` panel in 基礎期; auto-mode hover text corrected to 2/3 × 3 weeks and re-entry ≥ 6 days |
 | 2026-10-01 | feat/z5-unlock-simplify | docs/research/aerobic-base-readiness.md | Zone 5 opens on one of three tests (90-min test, UA gap, Friel drift); 三訊號 and the `xu_signals` mode removed (stored value reads as auto); the late long-run check no longer pauses Zone 5 (kept as the post-break drift check); `z5_card` gives one 三選一 step, `steps` and the 「還缺什麼」 `next` line, shared with the 基礎期 chart (`z5_progress`); the chart redrawn as tracker + simple history |
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 自組), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
+| 2026-10-02 | feat/heat-bands | user-approved | `i_drift` compares within one temperature band (< 25 / 25–28 / > 28 °C / 溫度不明; `drift_agg.pick_band`), chip 「· 🌡 …」 in the text, `extra.bands`; never BAD in a heat band; Friel / 徐國峰 gate methods count heat runs (pass unlocks, fail 「可能是熱造成的」); AeT test text keeps 「氣溫 25 °C 以下時開始」 as advice |
