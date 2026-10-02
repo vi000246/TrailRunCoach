@@ -443,7 +443,9 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             lo = lo_of(spec)
             hi = getattr(spec, "hi", None) if hasattr(spec, "hi") else spec[6]
             plan_tiz = sum(works_of(spec))
-            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, lo >= 1.02)
+            # Zone 5 by the band middle on Palladino (≥ 106 % CP; interval_library.CLASS_RANGE)
+            z5 = (lo + (hi if hi is not None else lo)) / 2 >= _IL.CLASS_RANGE["Z5"][0]
+            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, z5)
             tiz_ratio = (t_in / plan_tiz) if t_in is not None and plan_tiz else None
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
                     **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",

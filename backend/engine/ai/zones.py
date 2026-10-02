@@ -1,19 +1,14 @@
 """Compute power/HR training zone boundaries from settings.
 
-Percentages mirror the Coggan/Palladino zone definitions used elsewhere
-(`backend/api/workouts.py`) so the coach and the per-workout zone charts agree.
+Power: Palladino's running zones (% CP, engine/zones.py — the app's only power zone set,
+owner 2026-10-02); HR: Friel % LTHR collapsed to 5. Same tables as `backend/api/workouts.py`
+so the coach and the per-workout zone charts agree.
 """
 from typing import Optional
 
-POWER_ZONES = [
-    (1, "Recovery", 0.00, 0.55),
-    (2, "Endurance", 0.55, 0.75),
-    (3, "Tempo", 0.75, 0.90),
-    (4, "Threshold", 0.90, 1.05),
-    (5, "VO2max", 1.05, 1.20),
-    (6, "Anaerobic", 1.20, 1.50),
-    (7, "Neuromuscular", 1.50, 99.0),
-]
+from backend.engine.zones import palladino_rows
+
+POWER_ZONES = palladino_rows()
 HR_ZONES = [
     (1, "Recovery", 0.00, 0.85),
     (2, "Aerobic", 0.85, 0.90),

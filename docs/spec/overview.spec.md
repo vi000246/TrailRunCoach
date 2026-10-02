@@ -223,7 +223,12 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
 minutes; the AeT test ← a road run ≥ 55 min (`backend/engine/overview.py:666`); quality / test
 ← a session with ≥ 10 min at ≥ LTHR or ≥ 0.95 CP run power, or 60 % of the planned work for
 short reps (`hard_need`, `backend/engine/quality_gate.py:769`, `backend/engine/overview.py:669`);
-easy ← any other endurance session.
+a planned **Zone 5** session (library class Z5, or rung `z5*`; `quality_gate.is_z5_variant`)
+← only a run classified 「Z5 間歇」 (`workout_review.classify` stimulus `z5`, owner 2026-10-02);
+easy ← any other endurance session. Week activities and `done_by` rows carry `session`
+(`overview.session_of`: type, label, stimulus, dashicon), shown on the 本週 tiles / 課表 chips.
+**Done hard days** (Z5 / Z3 / 高強度長跑 / CP test, planned or not; `workout_review.HARD_TYPES`)
+keep the remaining interval 48 h away (`plan_prefs.place(hard_done=…)` and the no-prefs path).
 
 **Placement**: remaining days from today (tomorrow when something is already logged today)
 to Sunday. The long session goes on the athlete's usual long-day weekday (mode over 12 weeks,
@@ -898,3 +903,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feat/z5-unlock-simplify | docs/research/aerobic-base-readiness.md | Zone 5 opens on one of three tests (90-min test, UA gap, Friel drift); 三訊號 and the `xu_signals` mode removed (stored value reads as auto); the late long-run check no longer pauses Zone 5 (kept as the post-break drift check); `z5_card` gives one 三選一 step, `steps` and the 「還缺什麼」 `next` line, shared with the 基礎期 chart (`z5_progress`); the chart redrawn as tracker + simple history |
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 自組), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
 | 2026-10-02 | feat/heat-bands | user-approved | `i_drift` compares within one temperature band (< 25 / 25–28 / > 28 °C / 溫度不明; `drift_agg.pick_band`), chip 「· 🌡 …」 in the text, `extra.bands`; never BAD in a heat band; Friel / 徐國峰 gate methods count heat runs (pass unlocks, fail 「可能是熱造成的」); AeT test text keeps 「氣溫 25 °C 以下時開始」 as advice |
+| 2026-10-02 | feat/session-classifier | docs/research/vo2max-session-detection.md, user-approved | Weekly Zone 5 slot ticked only by a 「Z5 間歇」 run; done hard days (Z5 / Z3 / 高強度長跑 / CP test) keep the next interval 48 h away; activity rows carry `session` (label + dashicon). Power zones are Palladino everywhere: interval_library classes 3A 88–95 / 3B 95–101 / Z4 101–106 / Z5 ≥ 106 % CP by band middle (was Z5 ≥ 102 %), the editor's 5 區 time ≥ 106 %, time-in-zone charts / zone APIs Palladino 10 zones (Coggan / Stryd sets removed; iLevels kept as the WKO5 cross-check) |

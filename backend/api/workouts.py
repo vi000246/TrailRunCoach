@@ -18,15 +18,10 @@ from backend.files.fit_reader import parse_fit
 
 router = APIRouter(prefix="/api/v1/workouts", tags=["workouts"])
 
-POWER_ZONES_DEF = [
-    (1, "Recovery",      0.00, 0.55),
-    (2, "Endurance",     0.55, 0.75),
-    (3, "Tempo",         0.75, 0.90),
-    (4, "Threshold",     0.90, 1.05),
-    (5, "VO2max",        1.05, 1.20),
-    (6, "Anaerobic",     1.20, 1.50),
-    (7, "Neuromuscular", 1.50, 99.0),
-]
+# Palladino's running power zones (% CP; engine/zones.py) — not Coggan's cycling 7 (owner 2026-10-02)
+from backend.engine.zones import palladino_rows  # noqa: E402
+
+POWER_ZONES_DEF = palladino_rows()
 
 HR_ZONES_DEF = [
     (1, "Recovery",  0.00, 0.85),
