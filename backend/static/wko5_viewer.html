@@ -49,10 +49,11 @@ svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
 .seg button .sub { font-weight: 400; font-size: 11.5px; }
 .seg button.on { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 /* 趨勢／單次活動: the page's main switch, dark orange so it stands out (owner's call) */
-.seg.mode { border-color: #b4530f; background: rgba(180, 83, 15, .08); }
-.seg.mode button { color: #b4530f; font-weight: 600; }
-.seg.mode button.on { background: #b4530f; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
-.seg.mode button.on .sub { color: rgba(255,255,255,.85); }
+.seg.mode { border-color: #b4530f; background: #b4530f; }
+.seg.mode button { color: rgba(255,255,255,.78); font-weight: 600; }
+.seg.mode button:hover { color: #fff; }
+.seg.mode button.on { background: #7f3a09; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+.seg.mode button .sub { color: inherit; opacity: .85; }
 .crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
 .crumb b { color: var(--text); font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
 .crumb .sep { opacity: .45; }
