@@ -4,6 +4,7 @@ from sqlalchemy import select, delete
 from datetime import date, timedelta
 from typing import Optional
 
+from backend.engine.localtime import today_local
 from backend.db.database import get_db
 from backend.db.models import WorkoutMetric, WorkoutFile, AthleteSettings
 from backend.engine.algorithms.metrics import compute_pmc
@@ -21,7 +22,7 @@ async def get_pmc(
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
-        date_to = date.today()
+        date_to = today_local()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
 

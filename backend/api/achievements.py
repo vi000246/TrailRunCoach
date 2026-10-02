@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from backend.engine.localtime import today_local
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -214,7 +215,7 @@ def export_text(kind: Optional[str] = None, mclass: Optional[str] = None, q: Opt
             bits.append(f"上河 {r['shang_he_ratio']:.2f}")
         lines.append(f"{i:>2}. " + "｜".join(bits))
     lines.append("")
-    lines.append(f"（資料來源：個人 GPS 紀錄，產生於 {dt.date.today().isoformat()}）")
+    lines.append(f"（資料來源：個人 GPS 紀錄，產生於 {today_local().isoformat()}）")
     return "\n".join(lines)
 
 

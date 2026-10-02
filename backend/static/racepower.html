@@ -204,11 +204,11 @@ td select.terr { width: 80px; padding: 2px 5px; }
     <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
     <div class="toolbar">
       <label class="meta">目標賽事 <select id="event" style="width:auto;max-width:320px"></select></label>
-      <div class="seg" id="type"><button data-t="road">路跑</button><button data-t="trail">越野</button><button data-t="baiyue">百岳</button></div>
+      <div class="seg" id="type"><button data-t="road">路跑</button><button data-t="trail">越野</button><button data-t="baiyue" data-intl-text="多日登山">百岳</button></div>
       <span class="meta">快速：</span>
       <button class="btn" data-preset="10k">10K</button><button class="btn" data-preset="half">半馬</button>
       <button class="btn" data-preset="full">全馬</button><button class="btn" data-preset="trail30">越野 30K</button>
-      <button class="btn" data-preset="yushan">玉山 2 日</button>
+      <button class="btn" data-preset="yushan" data-tw-only>玉山 2 日</button>
     </div>
     <div id="sticky">
       <div class="seg big" id="mode"><button data-m="time">⏱ 目標時間</button><button data-m="power">⚡ <span class="rf">目標功率</span><span class="bf">目標速度</span></button><button data-m="auto">✨ 通通幫我算</button></div>
@@ -307,8 +307,8 @@ td select.terr { width: 80px; padding: 2px 5px; }
         <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
         <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
         <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
-      <label>地點（山名，天氣用）<input id="peak" list="peaklist" placeholder="例：玉山"></label>
-      <label>或 緯度, 經度<input id="latlon" placeholder="23.47, 120.957"></label>
+      <label data-tw-only>地點（山名，天氣用）<input id="peak" list="peaklist" placeholder="例：玉山"></label>
+      <label>或 緯度, 經度<input id="latlon" placeholder="23.47, 120.957" data-intl-placeholder="46.55, 7.98"></label>
     </div>
     <datalist id="peaklist"></datalist>
     <div class="stops-box" id="stops-box">
@@ -343,7 +343,7 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <h2>🔗 分享計算結果 <span class="meta">唯讀，不會重新計算</span>
         <span class="help" tabindex="0">?<span class="tip">把目前的結果（剖面、分段、分段目標、補給）凍結成一份快照，產生一個無法猜到的連結。拿到連結的人只看得到這份快照，看不到你的活動、設定或其他資料。不勾「包含體重」時，體重和會透露體重的數字（W/kg、超補的公克數）都不會出現；身高、年齡、性別一律不會出現。外面的人要經過你的 Cloudflare tunnel，tunnel 的密碼保護要放行 /share/ 開頭的路徑。</span></span></h2>
       <div class="form" style="grid-template-columns:1fr 1fr">
-        <label style="grid-column:1/-1">標題<input id="share-title" maxlength="80" placeholder="例 台北馬 半馬 計畫"></label>
+        <label style="grid-column:1/-1">標題<input id="share-title" maxlength="80" placeholder="例 春季半馬 計畫"></label>
         <label>有效期限<select id="share-exp"><option value="">不過期</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
         <label class="f" style="align-self:end"><span><input type="checkbox" id="share-weight"> 包含體重</span></label>
       </div>
@@ -384,7 +384,7 @@ td select.terr { width: 80px; padding: 2px 5px; }
       </div>
       <div class="kv" id="env-kv" style="margin-top:8px"></div>
       <div id="wx-tried" class="note"></div>
-      <details><summary>中央氣象署授權碼（登山預報，選填）</summary>
+      <details data-tw-only><summary>中央氣象署授權碼（登山預報，選填）</summary>
         <div class="toolbar" style="margin-top:6px"><input id="cwakey" placeholder="CWA-XXXXXXXX-…" style="max-width:260px" autocomplete="off">
           <button class="btn" id="cwasave">儲存</button><span class="meta" id="cwastatus"></span></div>
         <div class="note">到 opendata.cwa.gov.tw 免費註冊 → 會員 → API 授權碼。只存在本機 ~/.wko5coach/weather.json。沒有授權碼會改用 Open-Meteo。</div>

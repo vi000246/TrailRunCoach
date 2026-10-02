@@ -201,6 +201,20 @@
   sg.defer = true;
   document.head.appendChild(sg);
 
+  // 地區 tw | intl (engine/region.py): hides the Taiwan-only parts outside Taiwan
+  const rg = document.createElement("script");
+  rg.src = "/api/v1/static/region.js";
+  document.head.appendChild(rg);
+
+  // the browser's time zone, once per browser: one input of the automatic zone (engine/localtime.py)
+  try {
+    const z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (z && localStorage.getItem("tz.sent") !== z) {
+      fetch("/api/v1/sync/timezone/browser", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zone: z }) }).then((r) => { if (r.ok) localStorage.setItem("tz.sent", z); }).catch(() => {});
+    }
+  } catch (e) { /* storage blocked: skip */ }
+
   // first run: the 一般設定 精靈 (weight / sex / height / birth year / power source), once
   const sw = document.createElement("script");
   sw.src = "/api/v1/static/setup_wizard.js";

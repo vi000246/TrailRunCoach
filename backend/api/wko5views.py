@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from backend.engine.localtime import today_local
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -477,7 +478,7 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         if ch["kind"] == "zones":
             return {**base, "zones": zone_table(ds, ch["system"], end_day, ch.get("days", 30))}
         from backend.engine.thresholds import estimate
-        est = estimate(ds, dt.date.today()) if not ds.config.parity else {}
+        est = estimate(ds, today_local()) if not ds.config.parity else {}
         return {**base, "targets": training_targets(
             ds, end_day, (est.get("lthr") or {}).get("value"), (est.get("aethr") or {}).get("value"))}
     if ch.get("kind") != "athlete":
@@ -645,7 +646,7 @@ def _pain_state(ds, w, t: dict) -> Optional[dict]:
         return None
     t = AT.user_of(w) or {}                 # the stored mark (auto_tags may be memoised)
     try:
-        today = dt.date.today()
+        today = today_local()
         evs = INJ.load_events()
         ev = next((e for e in evs if e["id"] == t.get("injury_id")), None) if t.get("injury_id") else None
         out = {"pain": t.get("pain"), "pain_area": t.get("pain_area"),
