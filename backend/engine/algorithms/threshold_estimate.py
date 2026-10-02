@@ -164,6 +164,7 @@ class AetEstimate:
     slope_per_10bpm: Optional[float]     # drift change per +10 bpm
     below: Optional[int]                 # highest first-half HR among runs with drift < 5%
     reason: str
+    se: Optional[float] = None           # bpm: the crossing's SE (delta method on the fit's covariance)
 
 
 def estimate_aet(points: Iterable[DriftPoint], lthr: Optional[float] = None,
@@ -190,8 +191,18 @@ def estimate_aet(points: Iterable[DriftPoint], lthr: Optional[float] = None,
     if not lo <= aet <= hi:
         return AetEstimate(None, len(pts), float(slope * 10), hi_ok,
                            f"推算值 {aet:.0f} 超出資料範圍（{x.min():.0f}–{x.max():.0f} bpm），先不採用")
+    se = None
+    try:
+        # the crossing's SE for the 「± N bpm」 badge: aet = (5 % − c) / b, delta method
+        _, cov = np.polyfit(x, y, 1, cov=True)
+        g = np.array([-aet / slope, -1.0 / slope])
+        v = float(g @ cov @ g)
+        se = float(np.sqrt(v)) if np.isfinite(v) and v >= 0 else None
+    except (ValueError, np.linalg.LinAlgError):
+        se = None
     return AetEstimate(round(aet), len(pts), float(slope * 10), hi_ok,
-                       f"{len(pts)} 次穩定輕鬆跑：心率每 +10 bpm 飄移 +{slope * 1000:.1f}%，在 {aet:.0f} bpm 達到 5%")
+                       f"{len(pts)} 次穩定輕鬆跑：心率每 +10 bpm 飄移 +{slope * 1000:.1f}%，在 {aet:.0f} bpm 達到 5%",
+                       se)
 
 
 # ---------------------------------------------------------------------------

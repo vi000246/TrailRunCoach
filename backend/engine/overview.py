@@ -1079,7 +1079,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
         "long_weekday": WEEKDAYS[long_wd],
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
-                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": tt.get("aet_source")},
+                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": tt.get("aet_source"), "aet_pm": tt.get("aet_pm")},
         "notes": notes,
         # the quality gate (engine/quality_gate.py), so projection.project_weeks can
         # re-evaluate it for each projected week instead of copying this week's answer

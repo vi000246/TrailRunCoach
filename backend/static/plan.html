@@ -41,6 +41,11 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .card .k { color: var(--muted); font-size: 12px; }
 .card .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .card .s { color: var(--muted); font-size: 12px; }
+/* 「± N bpm」 on an estimated AeT; the why on hover / long-press (title) */
+.pm { display: inline-block; font-size: 11px; font-weight: 500; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line);
+  color: var(--muted); cursor: help; vertical-align: 2px; white-space: nowrap; }
+.pm b { display: inline-grid; place-items: center; width: 13px; height: 13px; margin-left: 3px; border-radius: 50%;
+  border: 1px solid currentColor; font-size: 9px; }
 /* timeline */
 .tl { position: relative; height: 54px; margin: 18px 0 26px; }
 .tl .seg { position: absolute; top: 14px; height: 22px; border-radius: 3px; opacity: .85;
@@ -191,6 +196,8 @@ const fmt = (v, d = 0) => v == null ? "–" : Number(v).toLocaleString("zh-TW", 
 const day = (s) => new Date(s + "T00:00:00");
 const ddiff = (a, b) => Math.round((day(b) - day(a)) / 86400000);
 const PCOL = (k) => `var(--p-${k})`;
+// 「± N bpm」 badge for an estimated AeT (zones.aet_uncertainty: {pm, tip}); nothing when measured
+const pmBadge = (p) => p && p.pm ? ` <span class="pm" tabindex="0" title="${esc(p.tip)}" aria-label="誤差 ±${p.pm} bpm：${esc(p.tip)}">±${p.pm} bpm<b>?</b></span>` : "";
 
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 1800); }
 async function call(method, path, body) {
@@ -209,7 +216,7 @@ async function loadEstimate() {
     const ok = est && est.value != null;
     const same = ok && curV != null && Math.abs(est.value - curV) < 1;
     return `<div class="card"><div class="k">${label}（自動估算）</div>
-      <div class="v">${ok ? est.value + " bpm" : "–"} <small>${ok && curV != null ? `目前用 ${fmt(curV)}` : ""}</small></div>
+      <div class="v">${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? `目前用 ${fmt(curV)}` : ""}</small></div>
       <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? `；中間一半落在 ${est.spread[0]}–${est.spread[1]}` : ""}${est && est.days ? `（近 ${est.days} 天）` : ""}</div>
       ${help ? `<div class="s">${help}</div>` : ""}
       ${ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">套用 ${est.value}</button>` : ok ? `<div class="s">✓ 已經在用</div>` : ""}</div>`;
@@ -249,7 +256,7 @@ function renderNow() {
   if (c && c.dashboard) cards.push(`<div class="card"><div class="k">現在該看的圖</div><div class="v" style="font-size:16px">${esc(c.dashboard)}</div>
     <div class="s"><a href="/api/v1/wko5/viewer?view=${encodeURIComponent("周期化訓練")}&dash=${encodeURIComponent(c.dashboard)}">圖表分析 → 我的圖表 → 周期化訓練</a></div></div>`);
   const t = S.effective_thresholds;
-  cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(t.aethr.value)} / LTHR ${fmt(t.lthr.value)} / CP ${fmt(t.cp.value)} W</div>
+  cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(t.aethr.value)}${pmBadge(t.aethr.pm)} / LTHR ${fmt(t.lthr.value)} / CP ${fmt(t.cp.value)} W</div>
     <div class="s ${t.lthr.wko5_default ? "warn" : ""}">${t.lthr.wko5_default ? "⚠ LTHR 是 WKO5 預設值，請到下方填測試結果" : t.lthr.source === "plan" ? `LTHR：${esc(t.lthr.label || "季計畫")}` : "心率來自 WKO5 設定"}；AeT：${esc(t.aethr.label || "")}；CP ${t.cp.source === "plan" ? "來自你的測試" : "＝WKO5 的 mFTP"}</div></div>`);
   $("#now").innerHTML = cards.join("");
 }
