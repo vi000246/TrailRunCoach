@@ -284,6 +284,8 @@ def _with_variant(data: dict, inp: dict, rung: Optional[str], day: Optional[str]
 async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
     data = _with_variant(data, inp, None, data.get("day"))
+    if data.get("steps"):
+        data = await _with_steps(data, inp, {})
     try:
         async with _wlock():
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
@@ -297,6 +299,9 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
     if patch.get("variant_key"):
         cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
         patch = _with_variant(patch, inp, (cur or {}).get("rung_key"), patch.get("day") or (cur or {}).get("day"))
+    if patch.get("steps"):
+        cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
+        patch = await _with_steps(patch, inp, cur or {})
     try:
         async with _wlock():
             return await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
@@ -445,6 +450,179 @@ async def steps_preview(body: dict = Body(...)):
     except CW.Unsupported as e:
         lines = [f"不推送：{e}"]
     return {"policy": pol, "lines": lines, "label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）"}
+
+
+# ---------------------------------------------------------------------------
+# the structured editor (engine/workout_steps.py; docs/plans/workout-editor.plan.md)
+#
+#   POST /api/v1/overview/plan/steps/derive          {uid?, session fields} -> the stored
+#        structure, or one derived from the kind / variant / text (nothing stored) + context
+#        (thresholds, zones with today's numbers, 目標用 policy, the day's cap)
+#   POST /api/v1/overview/plan/steps/check           {session fields, steps} -> resolved
+#        targets, run order for the chart, totals / TSS 估, issues, the watch preview
+#   GET  /api/v1/overview/plan/steps/templates       插入範本: library main sets, tests, strides
+#   GET  /api/v1/overview/plan/sessions/{uid}/coros-preview   「推到手錶會長這樣」
+#   PATCH /sessions/{uid} {steps, steps_force?}: errors → 422 {"errors": [...]} unless forced
+# ---------------------------------------------------------------------------
+
+STEP_FIELDS = ("kind", "title", "minutes", "target", "detail", "source", "terrain", "protocol", "day",
+               "variant_key", "variant_reps", "variant_blocks", "variant_adj", "rung_key", "heat", "target_basis")
+_tp_cache: dict = {}
+
+
+def _tpace() -> Optional[float]:
+    """Threshold pace in s/km (thresholds.estimate_tpace: 推估), cached per dataset day; None
+    when it can't be estimated (tests replace this)."""
+    try:
+        from backend.api.overview import _dataset
+        from backend.engine import overview as O
+        from backend.engine import thresholds as T
+        ds = _dataset()
+        today = O.day_to_date(ds.today)
+        key = (id(ds), today)
+        if key not in _tp_cache:
+            v = (T.estimate_tpace(ds, today) or {}).get("value")
+            _tp_cache.clear()
+            _tp_cache[key] = float(v) * 60.0 if v else None
+        return _tp_cache[key]
+    except Exception:                       # noqa: BLE001 — pace is optional
+        return None
+
+
+def _session_of(body: dict, stored: Optional[dict]) -> dict:
+    s = dict(stored or {})
+    for k in STEP_FIELDS:
+        if k in body and body[k] is not None:
+            s[k] = body[k]
+    if body.get("target_basis") in ("auto", "", None) and "target_basis" in body:
+        s["target_basis"] = None
+    s["minutes"] = int(s.get("minutes") or 0)
+    return s
+
+
+async def _steps_env(s: dict, inp: dict) -> dict:
+    from backend.engine import interval_library as IL
+    from backend.engine import plan_prefs as PP
+    from backend.engine import target_policy as TP
+    from backend.engine import workout_steps as WS
+    prefs = PP.load()
+    th = dict(inp.get("thresholds") or {})
+    th["tpace"] = await run_in_threadpool(_tpace)
+    pol = TP.target_policy(s, prefs, th)
+    c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")))
+    rung = None
+    if s.get("kind") == "quality":
+        rung = s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)
+    cap = day_cap(prefs, s.get("day")) if s.get("kind") not in ("test",) else None
+    return {"ctx": c, "th": th, "policy": pol, "cap": cap, "cap_mode": getattr(prefs, "cap_mode", "soft"),
+            "rung": rung if rung in IL.LIBRARY else None}
+
+
+def _context(env: dict) -> dict:
+    from backend.engine import target_policy as TP
+    from backend.engine import workout_steps as WS
+    th, pol = env["th"], env["policy"]
+    return {"thresholds": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source")},
+            "zones": WS.zones_table(env["ctx"]), "policy": pol,
+            "basis_label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）",
+            "cap": env["cap"], "cap_mode": env["cap_mode"], "rung": env["rung"],
+            "kinds": WS.KIND_LABEL, "types": WS.TYPE_LABEL,
+            "rules": {"z5_min_rep_s": WS.Z5_MIN_REP_S, "z3_min_rep_s": WS.Z3_MIN_REP_S,
+                      "z5_max_rest_s": WS.Z5_MAX_REST_S, "coros_max_steps": WS.COROS_MAX_STEPS}}
+
+
+@router.post("/steps/derive")
+async def steps_derive(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import workout_steps as WS
+    inp = await _inputs()
+    stored = next((x for x in await PS.load(db) if x["uid"] == body.get("uid")), None) if body.get("uid") else None
+    s = _session_of(body, stored)
+    env = await _steps_env(s, inp)
+    if stored and stored.get("steps") and not body.get("rederive"):
+        return {"steps": stored["steps"], "derived": False, "context": _context(env)}
+    d = WS.derive(s, env["th"])
+    return {"steps": d, "derived": True, "context": _context(env),
+            "reason": "" if d else "這種課不推到手錶，或標題看不出結構（用「＋ 步驟」自己排）"}
+
+
+def _norm_or_400(steps):
+    from backend.engine import workout_steps as WS
+    try:
+        return WS.normalize(steps)
+    except WS.StepsError as e:
+        raise HTTPException(400, {"errors": e.errors})
+
+
+@router.post("/steps/check")
+async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import workout_steps as WS
+    inp = await _inputs()
+    stored = next((x for x in await PS.load(db) if x["uid"] == body.get("uid")), None) if body.get("uid") else None
+    s = _session_of(body, stored)
+    st = _norm_or_400(body.get("steps"))
+    env = await _steps_env(s, inp)
+    return {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
+            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
+
+
+@router.get("/steps/templates")
+async def steps_templates():
+    from backend.engine import workout_steps as WS
+    return {"groups": WS.templates()}
+
+
+@router.get("/sessions/{uid}/coros-preview")
+async def coros_preview(uid: str, db: AsyncSession = Depends(get_db)):
+    """「推到手錶會長這樣」 for a stored session: what COROS would get (nothing is sent)."""
+    from backend.engine import workout_steps as WS
+    inp = await _inputs()
+    s = next((x for x in await PS.load(db) if x["uid"] == uid), None)
+    if s is None:
+        raise HTTPException(404, "找不到這堂課")
+    env = await _steps_env(s, inp)
+    st = s.get("steps") or WS.derive(s, env["th"])
+    if not st:
+        return {"uid": uid, "pushed": False, "reason": "這種課不推到手錶"}
+    return {"uid": uid, "pushed": True, "derived": not s.get("steps"), "name": CW.workout_name(s) if s.get("day") else "",
+            **WS.watch_preview(WS.normalize(st), env["ctx"], overview=s.get("detail") or "")}
+
+
+def _same_shape(a: dict, b: dict) -> bool:
+    def strip(items):
+        out = []
+        for x in items:
+            y = {k: v for k, v in x.items() if k != "id"}
+            if "items" in y:
+                y["items"] = strip(y["items"])
+            out.append(y)
+        return out
+    return strip(a.get("items") or []) == strip(b.get("items") or [])
+
+
+async def _with_steps(patch: dict, inp: dict, cur: dict) -> dict:
+    """A body that saves a structure: validated, the training rules checked (errors
+    refused unless steps_force), and the minutes / target / TSS taken from it unless
+    the body sets them. The origin stays template:<key> only while the structure is
+    the session's own library variant as is."""
+    from backend.engine import interval_library as IL
+    from backend.engine import workout_steps as WS
+    st = _norm_or_400(patch["steps"])
+    s = _session_of(patch, cur)
+    env = await _steps_env(s, inp)
+    v = WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"])
+    errs = [i["text"] for i in v["issues"] if i["level"] == "err"]
+    if errs and not patch.get("steps_force"):
+        raise HTTPException(422, {"errors": errs})
+    var = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj")) if s.get("variant_key") else None
+    tpl = WS.from_variant(var, s.get("variant_blocks") or "std", s.get("target") or "") if var else None
+    st["origin"] = f"template:{var.key}" if tpl and _same_shape(st, tpl) else "user"
+    out = {k: v_ for k, v_ in patch.items() if k != "steps_force"}
+    out["steps"] = st
+    out.setdefault("minutes", max(1, round(v["totals"]["sec"] / 60.0)))
+    if "target" not in patch and v["summary"]:
+        out["target"] = v["summary"]
+    out.setdefault("tss", v["totals"]["tss"])
+    return out
 
 
 @router.get("/variants")
