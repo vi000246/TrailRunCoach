@@ -757,8 +757,10 @@ function chipHtml(s, big) {
   const tss = `TSS ${n0(est)}${done && s.done_by.tss != null ? ` → ${n0(s.done_by.tss)}` : ""}`;
   const dist = s.distance_km ? `${(+s.distance_km).toFixed(1)} km${s.climb_m ? ` ↑${Math.round(s.climb_m)} m` : ""}` : "";
   const meta = [s.minutes ? s.minutes + "′" : "", dist, tss].filter(Boolean).join(" · ");
-  // done: what was actually run that day (the planned title stays the chip's title)
-  const line = done ? `實際 ${esc(s.done_by.category_label || "完成")} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}` : esc(s.target || "");
+  // done: what was actually run that day (the planned title stays the chip's title), with its
+  // session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …)
+  const sl = done && s.done_by.session && s.done_by.session.type_label ? ` · ${s.done_by.session.type_label}` : "";
+  const line = done ? `實際 ${esc((s.done_by.category_label || "完成") + sl)} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}` : esc(s.target || "");
   const off = done && s.vs && s.vs.off_plan;
   const cp = s.compliance;
   const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : "");
@@ -773,8 +775,10 @@ function chipHtml(s, big) {
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s4", bike: "--s7", strength: "--s5", walk: "--s6", other: "--bar" };
 // an activity no session holds: 沒排課的活動 (click: summary, open it, pair it with a session)
 function actHtml(a) {
-  return `<button type="button" class="chip act" data-act="${a.index}" style="--k:var(${CAT_VAR[a.category] || "--bar"})" aria-label="${esc(`沒排課的活動：${a.category_label} ${hm(a.moving_s)}`)}" title="${esc(`沒排課的活動：${a.category_label} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}\n點一下看摘要或配對到課表`)}">
-    <span class="c-t">${esc(a.category_label)}</span><span class="c-r">${hm(a.moving_s)}</span>
+  // + the session class (workout_review.classify): Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …
+  const lab = a.session && a.session.type_label ? `${a.category_label} · ${a.session.type_label}` : a.category_label;
+  return `<button type="button" class="chip act" data-act="${a.index}" style="--k:var(${CAT_VAR[a.category] || "--bar"})" aria-label="${esc(`沒排課的活動：${lab} ${hm(a.moving_s)}`)}" title="${esc(`沒排課的活動：${lab} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}\n點一下看摘要或配對到課表`)}">
+    <span class="c-t">${esc(lab)}</span><span class="c-r">${hm(a.moving_s)}</span>
     ${a.tss != null ? `<span class="c-x">TSS ${n0(a.tss)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}</span>` : ""}</button>`;
 }
 function byDay() {

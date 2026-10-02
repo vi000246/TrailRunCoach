@@ -61,16 +61,11 @@ async def get_settings(athlete_id: int, db: AsyncSession = Depends(get_db)):
 
     power_zones = []
     if ftp:
-        # Coggan 7-zone collapsed to 5: breakpoints at 55/75/90/105 % FTP
-        breakpoints = [int(ftp * p) for p in (0.55, 0.75, 0.90, 1.05)]
-        labels = ["Recovery", "Endurance", "Tempo", "Threshold", "VO2max+"]
-        for i in range(5):
-            power_zones.append({
-                "zone": i + 1,
-                "label": labels[i],
-                "min_w": breakpoints[i - 1] if i > 0 else 0,
-                "max_w": breakpoints[i] - 1 if i < 4 else None,
-            })
+        # Palladino's running power zones (% CP; engine/zones.py), the app's only power set
+        from backend.engine.zones import palladino_rows
+        for zid, name, lo, hi in palladino_rows():
+            power_zones.append({"zone": zid, "label": name, "min_w": int(ftp * lo),
+                                "max_w": int(ftp * hi) - 1 if hi < 10 else None})
 
     hr_zones = []
     if lthr:

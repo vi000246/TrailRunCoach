@@ -96,6 +96,19 @@ def test_missed_quality_respects_a_done_hard_day():
     assert ids(out)["quality"]["day"] == "2026-10-04"
 
 
+def test_missed_quality_respects_an_unplanned_hard_run():
+    # an unplanned 高強度長跑 / Z5 run on Thu (ctx hard_days, plan_sessions._adapt_ctx): not Fri
+    gw = week([g("quality", "quality", "2026-10-02", 60), g("easy1", "easy", "2026-10-03"),
+               g("long", "long", "2026-10-06", 120)])
+    gw[0]["sessions"][2]["day"] = None
+    stored = [st("quality", "quality", "2026-09-30", state="missed")]
+    out, _, _ = A.adapt(gw, stored, ctx(today="2026-10-02", hard_days=["2026-10-01"]))
+    assert ids(out)["quality"]["day"] not in ("2026-10-02",)
+    # without it Fri is fine
+    out2, _, _ = A.adapt(copy.deepcopy(gw), stored, ctx(today="2026-10-02"))
+    assert ids(out2)["quality"]["day"] == "2026-10-02"
+
+
 # ---- C. missed long --------------------------------------------------------
 
 def test_missed_long_moved_off_a_quality_neighbour_or_cancelled():

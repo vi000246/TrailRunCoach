@@ -263,7 +263,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     newRep() {
       const w = this.newStep("work");
       w.dur.value = this.isQ() ? 180 : 20;
-      if (this.isQ()) w.target = { type: "auto", intent: "band", lo: 1.05, hi: 1.1, cls: "Z5" };
+      if (this.isQ()) w.target = { type: "auto", intent: "band", lo: 1.06, hi: 1.12, cls: "Z5" };   // Palladino 5 區
       else { w.kind = "other"; w.target = { type: "auto", intent: "open" }; w.note = "快步跑"; }
       const r = this.newStep("rest"); r.dur.value = this.isQ() ? 180 : 40; r.note = "慢跑";
       return { id: nid(), kind: "repeat", times: 4, last_rest: true, note: "", items: [w, r] };
@@ -397,7 +397,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const cap = c.cap ? `${Math.round(c.cap)} 分（${c.cap_mode === "hard" ? "硬上限" : "軟上限"}）` : "不限";
       this.$("we-stats").innerHTML = t.sec == null ? "" :
         `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋按圈" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
-        `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>≥ 102% CP <b>${mmss(t.z5_s)}</b></span>` : "") +
+        `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>≥ 106% CP（Palladino 5 區）<b>${mmss(t.z5_s)}</b></span>` : "") +
         `<span>TSS 估 <b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
     }
     issues() {

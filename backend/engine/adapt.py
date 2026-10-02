@@ -131,6 +131,9 @@ class _Week:
         self.blocked = ctx.get("blocked") or {}
         self.allowed = ctx.get("allowed_days")
         self.first = ctx.get("first_free") or self.today
+        # done hard days of this week from the activities (workout_review.HARD_TYPES: Z5 / Z3 /
+        # 高強度長跑 / CP test), planned or not — an unplanned hard run spaces the rest too
+        self.hard_done = [d for d in (ctx.get("hard_days") or []) if str(d)[:10] >= self.ws]
         self.st = [s for s in stored if s.get("week_start") == self.ws]
         self.locked = {s["gen_key"] for s in self.st if s.get("gen_key") and (
             s["state"] in ("deleted", "superseded", "done") or (s["state"] == "active" and s.get("edited")))}
@@ -163,6 +166,7 @@ class _Week:
                and (g.get("done") or g["id"] not in self.locked)]
         out += [s["day"] for s in self.st if s["kind"] in HARD and s.get("day")
                 and (s["state"] == "done" or (s["state"] == "active" and (s.get("edited") or s.get("origin") == "custom")))]
+        out += [d for d in self.hard_done if d not in out]
         return out
 
     def long_days(self, skip=None) -> list[str]:

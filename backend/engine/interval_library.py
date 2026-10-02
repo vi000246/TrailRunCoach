@@ -44,8 +44,15 @@ from typing import Optional
 # the variants
 # ---------------------------------------------------------------------------
 
-CLASS_LABEL = {"Z3sub": "閾值", "Z3near": "近閾值", "Z5": "VO2max"}
-CLASS_RANGE = {"Z3sub": (0.88, 0.955), "Z3near": (0.955, 1.02), "Z5": (1.02, 1.25)}   # band middle → class
+CLASS_LABEL = {"Z3sub": "閾值", "Z3near": "近閾值", "Z4": "超閾值", "Z5": "VO2max"}
+# band middle → class, on Palladino's running power zones (engine/zones.py; owner 2026-10-02:
+# Palladino everywhere — the editor templates' 三區 88–101 / 四區 101–106 / 五區 ≥ 106 % CP):
+# Z3sub = 3A 88–95, Z3near = 3B 95–101, Z4 = 4 101–106 (supra-threshold, not a ladder class),
+# Z5 = 5 and above ≥ 106. The old split put Zone 5 at ≥ 102 % CP. The Zone 5 rungs' bands
+# (105–110, 104–108) all have their middle at ≥ 106 %, so every one stays Zone 5.
+from backend.engine.zones import Z3_LO as _Z3, Z4_LO as _Z4, Z5_LO as _Z5  # noqa: E402
+
+CLASS_RANGE = {"Z3sub": (_Z3, 0.95), "Z3near": (0.95, _Z4), "Z4": (_Z4, _Z5), "Z5": (_Z5, 1.50)}
 REST_LABEL = {"walk": "走路或極慢跑", "jog": "慢跑", "jog_down": "慢跑／走下坡", "none": ""}
 
 
@@ -368,7 +375,7 @@ def describe(v: Variant, cp: Optional[float] = None) -> dict:
 ROTATE_N = 2                     # 推估 (§C5.2-3): skip a variant used in the last 2 sessions of its rung
 STD_LEN = 0.9                    # 推估: main set ≥ 90 % of the canonical's = 「標準長度」; shorter = cap fallback
 EQUIV_TIZ = 1.0 - TIZ_TOL        # fewer reps with ≥ 85 % of the TIZ still count as equivalent (§C5.3-3)
-MIN_REPS = {"Z5": 3, "Z3sub": 2, "Z3near": 2}
+MIN_REPS = {"Z5": 3, "Z4": 2, "Z3sub": 2, "Z3near": 2}
 BAD = ("unadapted", "too_high")
 
 
@@ -516,8 +523,8 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
                        need_min=need, reduced=True, warn=True)
 
 
-HR_LTHR = {"Z3near": (0.95, 1.00), "Z5": (1.00, 1.05)}    # × LTHR; Z5 only on reps ≥ 3 min (Buchheit)
-RATE = {"Z3sub": 65.0, "Z3near": 68.0, "Z5": 72.0}        # TSS / h of a session (the old ladder's rates)
+HR_LTHR = {"Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}    # × LTHR; Z5 only on reps ≥ 3 min (Buchheit)
+RATE = {"Z3sub": 65.0, "Z3near": 68.0, "Z4": 70.0, "Z5": 72.0}        # TSS / h of a session (the old ladder's rates)
 
 
 def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False, prefs=None,

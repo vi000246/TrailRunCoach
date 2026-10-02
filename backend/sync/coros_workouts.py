@@ -153,7 +153,7 @@ def _basis(s: dict) -> Optional[str]:
     return TP.target_policy(s)["basis"]
 
 
-HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z5": (1.00, 1.05)}   # × LTHR (aet = the AeT)
+HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}   # × LTHR (aet = the AeT)
 
 
 def _work_hr(s: dict, th: Thresholds, cls: Optional[str]) -> Optional[tuple]:

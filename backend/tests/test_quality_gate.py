@@ -367,6 +367,23 @@ def test_zone3_reps_are_found_and_not_judged_too_high():
     assert d["outcome"] == "unknown" and d.get("adjust") == {}
 
 
+def test_a_hard_long_run_is_not_an_interval_session():
+    # 90′ with 3×8′ at 92 % CP inside: 高強度長跑 (Zone 3 ≥ 10′, ≥ 75′) — a hard day, not an interval
+    from backend.engine import workout_review as WR
+    w = _z3_run(TODAY - dt.timedelta(days=4))
+    p = [175.0] * 2700 + list(w.channels["power"])
+    t = np.arange(len(p), dtype=float)
+    w.channels.update({"elapsedtime": list(t), "power": p, "heartrate": [150.0] * len(t), "speed": [10.0] * len(t),
+                       "elapseddistance": list(t * 10 / 3600)})
+    w.metrics.update({"duration": float(len(t)), "movingduration": float(len(t)), "distance": len(t) / 360.0})
+    ds = _ds([w])
+    c = WR.classify(ds, ds.workouts[0])
+    assert c["type"] == "hard_long" and c["stimulus"] == "z3" and c["type_label"] == "高強度長跑"
+    assert QG.dose_history(ds, TODAY) == []
+    assert O.session_of(ds, ds.workouts[0])["type"] == "hard_long"
+    assert QG.is_z5_variant("v1a") and not QG.is_z5_variant("t1a") and not QG.is_z5_variant(None)
+
+
 def test_unplanned_hard_runs_are_not_ladder_steps_once_the_plan_is_in_use(monkeypatch):
     # real data 2026-10-01: 43 steady runs at ~95 % CP in 8 weeks, none a planned session, were
     # judged against 3×8′ (13 「目標太高」, 18 未適應) and moved the ladder to step 3

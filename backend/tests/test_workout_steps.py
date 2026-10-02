@@ -216,12 +216,16 @@ def test_variant_from_steps_equivalence():
             it["times"] = 6
     eq = WS.equivalence(d, "z5a")
     assert not eq["ok"] and any("15%" in w for w in eq["why"])
-    # HR-only: class estimated (推估)
-    v = WS.variant_from_steps(WS.normalize({"items": [
-        {"kind": "repeat", "times": 5, "items": [
-            {"kind": "work", "dur": {"type": "time", "value": 120}, "target": {"type": "hr", "mode": "pct", "lo": 1.0, "hi": 1.04}},
-            {"kind": "rest", "dur": {"type": "time", "value": 120}, "target": {"type": "none"}}]}]}), "z5a")
+    # HR-only: class estimated (推估) through Friel ↔ Palladino: 5b (103–106 % LTHR) = Zone 5,
+    # 5a (100–103 %) = Zone 4 supra-threshold (Palladino everywhere, owner 2026-10-02)
+    def hr_reps(lo, hi):
+        return WS.variant_from_steps(WS.normalize({"items": [
+            {"kind": "repeat", "times": 5, "items": [
+                {"kind": "work", "dur": {"type": "time", "value": 120}, "target": {"type": "hr", "mode": "pct", "lo": lo, "hi": hi}},
+                {"kind": "rest", "dur": {"type": "time", "value": 120}, "target": {"type": "none"}}]}]}), "z5a")
+    v = hr_reps(1.03, 1.06)
     assert v.cls == "Z5" and v.src_kind == "推估"
+    assert hr_reps(1.0, 1.04).cls == "Z4"
 
 
 def test_rescale_abs_power():

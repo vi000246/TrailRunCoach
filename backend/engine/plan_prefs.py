@@ -618,7 +618,8 @@ def long_weekday(p: Prefs, auto_wd: int) -> int:
 
 
 def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
-          notes: Optional[list] = None, long_done: Optional[dt.date] = None) -> list[dict]:
+          notes: Optional[list] = None, long_done: Optional[dt.date] = None,
+          hard_done: Optional[list] = None) -> list[dict]:
     """Put `ss` (not done, day None) on `free` days. Main sessions only on
     allowed days, one per day; strength on the chosen weekdays, else with an
     easy run / on an allowed day, never the day before the long session.
@@ -674,7 +675,8 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
         elif s["kind"] in ("quality", "test"):
             # ≥ 2 days between hard days: 台灣教練— Zone 5 at most twice a week, ≥ 2 days apart
             hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
-            ok = lambda d: (long_day is None or abs((d - long_day).days) >= 2) and \
+            hard_days += list(hard_done or [])   # done hard days this week (workout_review.HARD_TYPES)
+            ok = lambda d:(long_day is None or abs((d - long_day).days) >= 2) and \
                 all(abs((d - h).days) >= 2 for h in hard_days)
             cands = sorted(avail, key=lambda d: QUALITY_ORDER.index(d.weekday()))
             if s.get("prefer_days"):
