@@ -1,11 +1,14 @@
 """
-Target-race reference lines on 「每次路線難度（コース定数）」 (views/training.json, chart key
+Target-race reference line on 「每次路線難度（コース定数）」 (views/training.json, chart key
 "race_refs": "course_constant").
 
-For each upcoming A / B event of the season plan (the same pool as planning.goals: A events
-up to the next one, B events within ~6 months) one dashed horizontal line at the race's own
-course constant, with the formula the chart's points use (chart_metrics.course_constant,
-山本正嘉: 1.8 × h + 0.3 × km + 10 × climb km + 0.6 × descent km):
+ONE dashed line (owner 2026-10-02: too many lines, 「我到底要看哪一條」): the next A race's
+single-day target — a single-day race's own course constant, a multi-day trip's per-day
+average. The whole-trip number, the per-day breakdown, the hardest day and the other
+upcoming A / B races (the same pool as planning.goals: A events up to the next one, B events
+within ~6 months) are in the line's hover and the chart's ?, not drawn. No A race: the next
+B race's line. Every race's constant uses the formula the chart's points use
+(chart_metrics.course_constant, 山本正嘉: 1.8 × h + 0.3 × km + 10 × climb km + 0.6 × descent km):
   * course = the GPX stored with the event (engine/event_gpx.py: real km / climb / descent,
              per day at the stored day ends), else the event's km / climb with descent = climb
              (same start and finish assumed — 推估)
@@ -19,13 +22,11 @@ course constant of the total time / km / climb / descent, e.g. 裏銀座 113 →
 total = the sum of its days. ITRA does the same for stage races (one km-effort for the sum
 of all stages, then one point less for the rest between stages). Because the chart's points
 are single activities and 山本's bands (≈20 一般, 30 健脚, 40+ = 日帰り困難) are per day, the
-trip also gets a lighter line at its per-day average (= total / days); the hover lists every
-day and the hardest one. No recovery / overnight factor: no source gives one (the multi-stage
-fatigue studies show day 2+ is harder, not by how much).
+line of a trip is its per-day average (= total / days). No recovery / overnight factor: no
+source gives one (the multi-stage fatigue studies show day 2+ is harder, not by how much).
 
-Plus a lighter line at 50 % of the A race: 推估 guidance for the longest training day (no
-published ratio for the course constant). The viewer labels each point 「＝ 目標賽事的 X%」
-against `race_ref.target` (multi-day: of the trip and of its per-day average).
+The viewer labels each point 「＝ 單日目標的 X%」 against `race_ref.target.goal`. (The old
+50 % line — 推估 guidance for the longest training day — is gone with the rest.)
 """
 from __future__ import annotations
 
@@ -35,25 +36,15 @@ from typing import Callable, Optional
 
 from backend.engine.algorithms.chart_metrics import course_constant
 
-HALF = 0.5                       # 推估: the longest training day ≈ half of the A race
 COLOR = {"A": "#7c3aed", "B": "#a78bfa"}
-HALF_COLOR = "#c4b5fd"
-DAY_COLOR = {"A": "#a78bfa", "B": "#c4b5fd"}
+BAND_LO = 0.8                    # 推估: 「close enough」 = 80–100 % of the single-day target
 CALC_TYPE = {"race": "trail", "road": "road", "baiyue": "baiyue", "other": "trail"}   # = racepower.html KIND
 
-NOTE_NONE = ("賽季計畫沒有未來的 A／B 賽事（或賽事沒填距離），所以沒有目標賽事參考線。"
-             "在「賽季計畫」加賽事的距離和爬升，這裡就會畫出每場賽事的定數。")
-NOTE_LINES = ("目標賽事參考線：虛線＝每場未來 A／B 賽事的コース定數，用同一個公式代入賽事的距離、爬升、下降，"
-              "時間用賽事計算器預測的完賽時間（算不出來時用賽季計畫填的預估時間）。"
-              "賽事有存 GPX 就用 GPX 的距離、爬升、下降；沒有 GPX 時下降當成和爬升一樣（同起終點，推估）。"
-              "淡線＝A 賽事的 50%：最長一次訓練的參考（推估，沒有研究依據）。滑過每個點會顯示它是目標賽事的幾 %。")
-NOTE_MULTI = ("多天行程（百岳縱走、分站賽）用「整趟」一個數字：長野縣・信州山岳グレーディング對多天縱走就是用整條路線的"
-              "ルート定數（整趟時間、距離、爬升、下降代入同一個公式，例：裏銀座 113 → 體力度 10），"
-              "公式是線性的，所以整趟＝每天相加；ITRA 的分站賽也是把各站距離、爬升加總算一個 km-effort。"
-              "體力度 ≈ 整趟定數 ÷ 10 無條件進位（1–10，推估：官方表沒印分界，對照維基百科與官方路線表）。"
-              "圖上的點是單次活動、山本正嘉的分級（約 20 一般、30 健腳、40 以上一天走不完）是「每天」的，"
-              "所以多天行程另畫一條淡虛線＝每天平均（整趟 ÷ 天數），滑過線看每一天和最難的一天。"
-              "沒有加「隔天疲勞」係數：多日超馬研究顯示第二天後會更累，但沒有可用的倍數。")
+NOTE_NONE = ("賽季計畫沒有未來的 A／B 賽事（或賽事沒填距離），所以沒有目標線。"
+             "在「賽季計畫」加賽事的距離和爬升，這裡就會畫出來。")
+NOTE_MULTI = ("多天行程的整趟定數＝每天相加（信州山岳グレーディング的ルート定數；ITRA 分站賽同理），"
+              "但山本正嘉的分級（約 20 一般、30 健腳、40 以上一天走不完）是「每天」的，所以目標線用每天平均。"
+              "沒有加「隔天疲勞」係數：沒有可用的倍數。")
 
 
 def upcoming(plan, today: dt.date) -> list:
@@ -164,10 +155,46 @@ def tip(ln: dict) -> str:
             f"每天平均 {ln['day_mean']:.0f}・最難一天 {ln['day_max']:.0f}\n分日：{split.get(ln.get('split_source'), '—')}\n{rows}")
 
 
+def goal_of(ln: dict) -> float:
+    """The single-day target of a race line: a multi-day trip's per-day average, else its constant."""
+    return ln["day_mean"] if ln.get("multi") else ln["cc"]
+
+
+def line_name(ln: dict) -> str:
+    """「大小霸 每天 22（單日目標）」 / 「鳶嘴稍來 定數 31（單日目標）」."""
+    return (f"{ln['name']} 每天 {ln['day_mean']:.0f}（單日目標）" if ln.get("multi")
+            else f"{ln['name']} 定數 {ln['cc']:.0f}（單日目標）")
+
+
+def guide(target: dict) -> str:
+    """The chart's ?: how to read and use the line (owner 2026-10-02: ~4 short lines; the
+    formula on the last one). Sourcing (docs/research/back-to-back-and-long-day.md §2.2):
+    the specific phase = 賽前 10–3 週 (planning: 8-week specific + 14-day taper); 80–100 % at
+    6–3 weeks is 推估 (江晏慶 「抓比賽距離爬升的七成」 about 1.5 months out, CTS's longest
+    block 4–6 weeks out, Koop: don't force it in the last 2–3 weeks); taper 2 weeks: UA / Koop."""
+    multi = f"（整趟 {target['cc']:.0f} ÷ {target['days']} 天）" if target.get("multi") else ""
+    return "\n".join([
+        f"線＝下一場 {target['priority']} 賽事一天的難度（單日目標）：{target['name']} {goal_of(target):.0f}{multi}；滑過虛線看整趟、每一天和其他賽事",
+        "專項期（賽前約 10–3 週）每 1–2 週排一次長天，點要一步步靠近這條線（推估）",
+        f"賽前 6–3 週至少 1–2 次做到線的 {round(BAND_LO * 100)}–100%（淺色帶；推估，參考江晏慶「抓比賽的七成」、CTS 賽前 4–6 週的最長一段）",
+        "賽前 2 週不再做接近線的長天（減量期；UA、Koop）",
+        "定數＝時間 h×1.8＋距離 km×0.3＋爬升 km×10＋下降 km×0.6（山本正嘉）",
+    ])
+
+
+def others_text(lines: list, target: dict) -> str:
+    rest = [x for x in lines if x is not target]
+    if not rest:
+        return ""
+    return "\n\n其他賽事：\n" + "\n".join(
+        f"{x['priority']} {x['name']} {x['date']}：" + (f"每天 {x['day_mean']:.0f}（整趟 {x['cc']:.0f}）" if x.get("multi")
+                                                    else f"定數 {x['cc']:.0f}") for x in rest)
+
+
 def course_constant_refs(plan, today: dt.date,
                          predict: Callable = calculator_hours, gpx: Callable = stored_course) -> dict:
-    """{"lines": [race line], "target": the A race's (else the first) line, "half": 50 % of
-    the A race or None, "note"}."""
+    """{"lines": [every upcoming A / B race line], "target": the next A race's line (else the
+    first B's) with "goal" = its single-day target, "note"}."""
     lines = []
     for e in upcoming(plan, today):
         c = course_of(e, gpx)
@@ -177,39 +204,33 @@ def course_constant_refs(plan, today: dt.date,
             lines.append(ln)
     a = next((x for x in lines if x["priority"] == "A"), None)
     target = a or (lines[0] if lines else None)
-    note = NOTE_LINES + ("\n\n" + NOTE_MULTI if any(x.get("multi") for x in lines) else "") if lines else NOTE_NONE
-    return {"lines": lines, "target": target,
-            "half": round(HALF * a["cc"], 1) if a else None, "note": note}
+    if target is not None:
+        target["goal"] = round(goal_of(target), 1)
+    return {"lines": lines, "target": target, "note": guide(target) if target else NOTE_NONE}
 
 
 def apply(res: dict, plan, today: dt.date, predict=calculator_hours, gpx=stored_course) -> dict:
-    """The rendered chart with the reference lines added as dashed hline series (labelled
-    at the right edge, hover = the line's breakdown) and `race_ref` for the point hover; no
-    races = the chart as it was, with the why behind its ?."""
+    """The rendered chart with ONE dashed reference line (the target's single-day goal,
+    labelled at the right edge; hover = the whole trip, every day, the other races), a light
+    80–100 % band under it, the how-to-use guide as its ?, and `race_ref` for the point
+    hover; no races = the chart as it was, with the why behind its ?."""
     refs = course_constant_refs(plan, today, predict, gpx)
     series = list(res.get("series") or [])
+    tg = refs["target"]
+    desc = (res.get("description") or "").rstrip()
+    if tg is None:
+        return {**res, "series": series, "description": f"{desc}\n\n{refs['note']}" if desc else refs["note"],
+                "race_ref": {"target": None, "lines": refs["lines"]}}
     like = next((s for s in series if (s.get("data") or {}).get("kind") == "points"), None) or \
         next(iter(series), {})
     base = {"type": "line", "y_axis": like.get("y_axis") or "NONE", "unit": like.get("unit"),
-            "x_unit": like.get("x_unit"), "expression": "", "role": "race_ref", "label_end": True}
-    for ln in refs["lines"]:
-        t = tip(ln)
-        if ln.get("multi"):
-            series.append({**base, "name": f"{ln['name']} · 整趟 {ln['days']} 天 定數 {ln['cc']:.0f}",
-                           "color": COLOR.get(ln["priority"], COLOR["B"]), "line_style": "dash", "line_width": "medium",
-                           "data": {"kind": "hline", "y": ln["cc"]}, "tip": t})
-            series.append({**base, "name": f"{ln['name']} · 每天平均 {ln['day_mean']:.0f}",
-                           "color": DAY_COLOR.get(ln["priority"], DAY_COLOR["B"]), "line_style": "dash",
-                           "line_width": "thin", "data": {"kind": "hline", "y": ln["day_mean"]}, "tip": t})
-        else:
-            series.append({**base, "name": f"{ln['name']} · 定數 {ln['cc']:.0f}", "color": COLOR.get(ln["priority"], COLOR["B"]),
-                           "line_style": "dash", "line_width": "medium", "data": {"kind": "hline", "y": ln["cc"]},
-                           "tip": t})
-    if refs["half"] is not None:
-        series.append({**base, "name": f"{refs['target']['name']} 的 50% · {refs['half']:.0f}（推估）",
-                       "color": HALF_COLOR, "line_style": "dash", "line_width": "thin",
-                       "data": {"kind": "hline", "y": refs["half"]},
-                       "tip": "最長一次訓練的參考：A 賽事（多天＝整趟）定數的一半（推估，沒有研究依據）"})
-    desc = (res.get("description") or "").rstrip()
-    return {**res, "series": series, "description": f"{desc}\n\n{refs['note']}" if desc else refs["note"],
-            "race_ref": {"target": refs["target"], "lines": refs["lines"], "half": refs["half"]}}
+            "x_unit": like.get("x_unit"), "expression": "", "role": "race_ref"}
+    color = COLOR.get(tg["priority"], COLOR["B"])
+    goal = tg["goal"]
+    series.append({**base, "name": f"單日目標的 {round(BAND_LO * 100)}–100%", "color": color,
+                   "data": {"kind": "band", "range": [round(BAND_LO * goal, 1), goal]}})
+    series.append({**base, "name": line_name(tg), "color": color, "line_style": "dash", "line_width": "medium",
+                   "label_end": True, "data": {"kind": "hline", "y": goal},
+                   "tip": tip(tg) + others_text(refs["lines"], tg) + ("\n\n" + NOTE_MULTI if tg.get("multi") else "")})
+    return {**res, "series": series, "description": guide(tg),
+            "race_ref": {"target": tg, "lines": refs["lines"]}}
