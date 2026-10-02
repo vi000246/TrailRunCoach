@@ -424,6 +424,8 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
         "climbs": climbs,
         "wpts": wpts,
         "warnings": warnings,
+        # where the course starts: the race-day weather's location when nothing else gives one
+        "start": {"lat": float(lat[0]), "lon": float(lon[0]), "z": float(zs[0])} if len(lat) else None,
         "opts": {"sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m, "flat_pct": flat_pct,
                  "split": split, "official_gain_m": official_gain_m},
         "source": "gpx",
