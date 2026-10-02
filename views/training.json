@@ -121,24 +121,42 @@
           ]
         },
         {
-          "title": "每週跑量",
-          "description": "距離（km），依類別堆疊。點圖例可以只看某一類（例如拿掉登山只看跑步）。",
-          "axes": [{"id": "KM", "min": 0}],
+          "title": "每週訓練量（跑量／爬升／EP）",
+          "description": "同一張圖切換三種看法。只跑越野的週，跑量會變低、爬升變高，切到 EP 才看得出總量其實沒少。點圖例可以只看某一類。",
           "period": "week",
-          "series": [
-            {"name": "路跑", "type": "stackedbar", "y_axis": "KM", "color": "#2a78d6", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), distance), startofweek(date))"},
-            {"name": "越野跑", "type": "stackedbar", "y_axis": "KM", "color": "#eb6834", "expression": "sum(if(hastag(\"runningtrail\"), distance), startofweek(date))"},
-            {"name": "登山健行", "type": "stackedbar", "y_axis": "KM", "color": "#1baf7a", "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), distance), startofweek(date))"}
-          ]
-        },
-        {
-          "title": "每週爬升／下降",
-          "description": "兩個長條並排：爬升是垂直訓練量，下降是離心負荷（越野跑肌肉損傷的主因，心率看不出來）。點圖例可以只看爬升或只看下降。總量本身沒有劑量反應，要對照比賽看「每公里爬升」。",
-          "axes": [{"id": "METERS", "min": 0}],
-          "period": "week",
-          "series": [
-            {"name": "爬升", "type": "bar", "y_axis": "METERS", "color": "#1baf7a", "expression": "sum(climbing, startofweek(date))"},
-            {"name": "下降", "type": "bar", "y_axis": "METERS", "color": "#eb6834", "expression": "sum(descending, startofweek(date))"}
+          "variants": [
+            {
+              "key": "km",
+              "label": "跑量",
+              "description": "距離（km），依類別堆疊。",
+              "axes": [{"id": "KM", "min": 0}],
+              "series": [
+                {"name": "路跑", "type": "stackedbar", "y_axis": "KM", "color": "#2a78d6", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), distance), startofweek(date))"},
+                {"name": "越野跑", "type": "stackedbar", "y_axis": "KM", "color": "#eb6834", "expression": "sum(if(hastag(\"runningtrail\"), distance), startofweek(date))"},
+                {"name": "登山健行", "type": "stackedbar", "y_axis": "KM", "color": "#1baf7a", "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), distance), startofweek(date))"}
+              ]
+            },
+            {
+              "key": "climb",
+              "label": "爬升／下降",
+              "description": "兩個長條並排：爬升是垂直訓練量，下降是離心負荷（越野跑肌肉損傷的主因，心率看不出來）。總量本身沒有劑量反應，要對照比賽看「每公里爬升」。",
+              "axes": [{"id": "METERS", "min": 0}],
+              "series": [
+                {"name": "爬升", "type": "bar", "y_axis": "METERS", "color": "#1baf7a", "expression": "sum(climbing, startofweek(date))"},
+                {"name": "下降", "type": "bar", "y_axis": "METERS", "color": "#eb6834", "expression": "sum(descending, startofweek(date))"}
+              ]
+            },
+            {
+              "key": "ep",
+              "label": "EP",
+              "description": "努力距離 EP = 距離 km + 爬升 m ÷ 100（健行筆記／ITRA 的算法），把爬升換算成等值的平路距離，路跑、越野、登山可以放在一起比。",
+              "axes": [{"id": "KM", "min": 0}],
+              "series": [
+                {"name": "路跑", "type": "stackedbar", "y_axis": "KM", "color": "#2a78d6", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), distance + climbing/100), startofweek(date))"},
+                {"name": "越野跑", "type": "stackedbar", "y_axis": "KM", "color": "#eb6834", "expression": "sum(if(hastag(\"runningtrail\"), distance + climbing/100), startofweek(date))"},
+                {"name": "登山健行", "type": "stackedbar", "y_axis": "KM", "color": "#1baf7a", "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), distance + climbing/100), startofweek(date))"}
+              ]
+            }
           ]
         },
         {
