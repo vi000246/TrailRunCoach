@@ -285,7 +285,8 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
-    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones"):
+    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones",
+                                                    "climbpwhr"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     pinfo = winfo = binfo = None
     if v.get("source") == "custom" and BS.basis_spec(ch):
@@ -307,6 +308,17 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         tests = [[s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol")]
                  for s in test_sessions()]
         params = {**params, "_prefs": PP.load().stamp(), "_tests": json.dumps(tests, default=str)}
+    if ch.get("kind") == "climbpwhr":
+        # the route index, the renames and the per-activity weather are inputs too
+        from backend.engine.routes import RouteStore
+        st = RouteStore()
+        stamp = []
+        for p in (st.index_path, st.names_path, st.root / "activity_weather.json"):
+            try:
+                stamp.append(p.stat().st_mtime_ns)
+            except OSError:
+                stamp.append(None)
+        params = {**params, "_routes": json.dumps(stamp)}
     # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
@@ -402,6 +414,10 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         # come from the query (all part of the render-cache key); the RHE sport filter is not used
         from backend.engine.panels.period_zones import render as render_period_zones
         return render_period_zones(ds, ch, b, e, params or {})
+    if ch.get("kind") == "climbpwhr":
+        # trail steady-climb Pw:HR; ?route=<route id> (part of the render-cache key)
+        from backend.engine.panels.climb_pwhr import render as render_climb_pwhr
+        return render_climb_pwhr(ds, ch, b, e, params or {})
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
         return {**review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace"),

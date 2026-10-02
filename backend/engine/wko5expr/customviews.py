@@ -79,9 +79,11 @@ def _chart(raw: dict, where: str) -> dict:
     # z5gate: the Zone 5 opening process over the season (quality_gate.z5_history)
     # activity: a single-activity chart computed in panels/activity_charts.py ({"chart": "hrpower"})
     # periodzones: time in zone over a period (panels/period_zones.py, {"view": "total" | "weekly"})
-    if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity", "periodzones"):
+    # climbpwhr: trail steady-climb Pw:HR per route (panels/climb_pwhr.py)
+    if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity", "periodzones",
+                    "climbpwhr"):
         raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets', 'review', "
-                              "'z5gate', 'activity' or 'periodzones'")
+                              "'z5gate', 'activity', 'periodzones' or 'climbpwhr'")
     out = {
         "title": raw["title"],
         "description": raw.get("description"),
