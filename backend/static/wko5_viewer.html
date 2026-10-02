@@ -2377,8 +2377,10 @@ function drawPlot(card, res, series) {
       continue;
     }
     if (s.data.kind === "hline") {
+      // label_end (目標賽事參考線, panels/race_refs.py): the line's name at its right end
+      const lab = s.label_end ? { show: true, position: "insideEndTop", formatter: s.name, color: color || muted, fontSize: 10 } : { show: false };
       put({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
-        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ yAxis: s.data.y }] } }, s);
+        markLine: { silent: true, symbol: "none", label: lab, lineStyle: { color, type: lineType, width: s.line_width === "thin" ? 0.8 : 1 }, data: [{ yAxis: s.data.y }] } }, s);
       continue;
     }
     if (s.data.kind === "band") {
@@ -2494,7 +2496,10 @@ function drawPlot(card, res, series) {
     const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
       : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
-    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>`);
+    // 目標賽事參考線 (res.race_ref, panels/race_refs.py): each point as a share of the target race
+    const tgt = res.race_ref?.target;
+    const share = (p) => tgt && tgt.cc > 0 && Number.isFinite(+yOf(p)) ? `<br><span style="opacity:.8">＝ 目標賽事的 ${Math.round(+yOf(p) / tgt.cc * 100)}%（${esc(tgt.name)}）</span>` : "";
+    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>${share(p)}`);
     if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
     // stacked series (依類別堆疊): add the stack's total — only the series shown in the
     // legend are in `ps`, so hiding a category takes it out of the total too

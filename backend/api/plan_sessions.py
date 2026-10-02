@@ -801,6 +801,7 @@ async def steps_preview(body: dict = Body(...)):
 #   POST /api/v1/overview/plan/steps/check           {session fields, steps} -> resolved
 #        targets, run order for the chart, totals / TSS 估, issues, the watch preview
 #   GET  /api/v1/overview/plan/steps/templates       插入範本: library main sets, tests, strides
+#   GET  /api/v1/overview/plan/steps/templates/recs  its 「推薦」 block for one session (template_recs.py)
 #   GET  /api/v1/overview/plan/sessions/{uid}/coros-preview   「推到手錶會長這樣」
 #   PATCH /sessions/{uid} {steps, steps_force?}: errors → 422 {"errors": [...]} unless forced
 # ---------------------------------------------------------------------------
@@ -942,6 +943,44 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
 async def steps_templates():
     from backend.engine import workout_steps as WS
     return WS.templates()
+
+
+def _phase_on(inp: dict, day: Optional[str]) -> Optional[str]:
+    """The training phase of `day`: its projected week's, else today's."""
+    if day:
+        for w in inp.get("weeks") or []:
+            try:
+                ws = dt.date.fromisoformat(w["start"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if ws <= dt.date.fromisoformat(day) < ws + dt.timedelta(days=7) and w.get("phase"):
+                return w["phase"]
+    return (inp.get("phase") or {}).get("kind")
+
+
+@router.get("/steps/templates/recs")
+async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid: Optional[str] = None,
+                              minutes: Optional[float] = None, terrain: Optional[str] = None,
+                              db: AsyncSession = Depends(get_db)):
+    """插入範本's 「推薦」 block for one session (engine/template_recs.py): per category, the
+    3 best templates with a reason; 強度課's first is the interval ladder's next step (the
+    old 間歇範本 ★ 推薦: interval_library.fit for the current rung and the day's cap)."""
+    from backend.engine import quality_gate as QG
+    from backend.engine import template_recs as TR
+    from backend.engine import workout_steps as WS
+    inp = await _inputs()
+    s = next((x for x in await PS.load(db) if x["uid"] == uid), None) if uid else None
+    day = day or (s or {}).get("day")
+    ctx = _variant_ctx(inp, day)
+    gate = ctx["gate"]
+    dec = QG.week_decision(gate, "base", "base") if gate.get("state") else {"spec": None}
+    rung_now = (dec.get("spec") or (None,))[0]
+    key, why = TR.ladder_pick(rung_now, ctx["cap"], ctx["history"], ctx["prefs"])
+    ter = terrain or (s or {}).get("terrain")
+    ter = "trail" if kind == "hike" or ter in ("trail", "hike") else "road"
+    return TR.recommend(WS.templates(), kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
+                        phase=_phase_on(inp, day), z5_open=bool((gate.get("z5") or {}).get("open")),
+                        rung=rung_now, ladder_key=key, ladder_reason=why)
 
 
 @router.get("/sessions/{uid}/coros-preview")
