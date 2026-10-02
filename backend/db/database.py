@@ -67,6 +67,7 @@ async def _migrate_schema():
         ("activity_tags", "pain", "INTEGER"),          # 傷病紀錄 (engine/injuries.py)
         ("activity_tags", "pain_area", "TEXT"),
         ("activity_tags", "injury_id", "INTEGER"),
+        ("coros_plan_push", "provider", "TEXT DEFAULT 'coros'"),   # sync/workout_targets
     ]
     async with engine.begin() as conn:
         for table, col, col_type in new_cols:

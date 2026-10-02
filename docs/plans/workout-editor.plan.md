@@ -320,7 +320,7 @@ def target_policy(session: dict, prefs, step_kind: str) -> str:
 | dur climb | Trail Run 編輯器有「Elev. Gain」 | **未驗證**：程式 sportType 目前送 1（跑步），越野的 program sportType 值不知道 |
 | target power | `intensityType 6`，`intensityValue / Extend` = W，`isIntensityPercent false` | 已在用；Run 編輯器的選項只有絕對「Power」，**沒有 % CP**，所以一律送換算後的瓦數 |
 | target hr | `intensityType 2`，`hrType 3`（% LTHR），送 bpm＋`intensityPercent`（% × 1000） | 已在用；catalog 另有 hrType 1（% 最大心率）、2（% 儲備心率） |
-| target pace | `intensityType 3`，`intensityDisplayUnit`，值的單位 | **未驗證**：程式註解寫 ms/km，catalog 的範例數值（186411–223694、417000–452000）和顯示單位對不起來；S8 先手動送一堂測試課再讀回 detail |
+| target pace | `intensityType 3`，`intensityValue`＝快的那端、`intensityValueExtend`＝慢的那端，單位**秒／公里**，`intensityDisplayUnit 1` | **已驗證**（2026-10-02，使用者手錶）：270–285 顯示 4'30"–4'45"/km；送 270000（ms/km）會顯示 4500'00"。已接上：絕對、% 閾值配速、Friel 配速區都送真正的配速目標 |
 | target pace（坡度修正） | `intensityType 8`「Effort Pace」 | 存在；手錶怎麼算未驗證，不在 v1 |
 | cadence | `intensityType 7` | 存在；v1 不開放 |
 | none | `intensityType 0` | 已在用 |
@@ -387,8 +387,8 @@ COROS 表示不了的東西（UI 要先講）：
 - 重複多一個 `last_rest`（最後一趟不休息）：間歇庫的課都是這樣，COROS 群組做不到，推送時攤平成一段一段，
   和原本 `_variant_steps` 送的完全一樣（golden 測試）。
 - S8 **沒有做人工驗證**（不呼叫 COROS live）：距離段照 catalog 送 `targetType 5`、公分，預覽標「未驗證」；
-  配速目標可以在編輯器設，但推送時那段不設目標（配速寫在步驟名稱），預覽也標出來。等送一堂 `TRC TEST`
-  讀回 detail 確認單位後，再把 `workout_steps._one` 的配速接上 `intensityType 3`。
+  配速：2026-10-02 使用者在手錶上驗證過（`intensityType 3`、秒／公里、`intensityDisplayUnit 1`），
+  已接上；「配速只寫在步驟名稱」的權宜做法拿掉，Daniels／Canova／Billat 範本推真正的配速目標。
 
 ## 4.2 範本、類型、總時間（2026-10-02，`feat/editor-templates`）
 
@@ -418,7 +418,7 @@ COROS 表示不了的東西（UI 要先講）：
 
 ## 5. 未決
 
-- COROS 巢狀重複、步驟數上限、`name` 長度、pace 單位、越野 sportType：全部**未驗證**，S8 一起確認。
+- COROS 巢狀重複、步驟數上限、`name` 長度、越野 sportType（pace 單位已驗證）：全部**未驗證**，S8 一起確認。
 - 山路主指標（功率還是心率）：等 `docs/research/vo2max-gate-and-trail-metric.md`。
 - 心率段在區段圖上的高度換算（Friel 心率區 → Palladino 功率區）是推估，只影響畫面。
 - TSS 公式對跑步的誤差未驗證；顯示時加「估」字。

@@ -32,6 +32,7 @@ from backend.engine import plan_store as PS
 from backend.engine import projection as P
 from backend.engine import reconcile as R
 from backend.sync import coros_workouts as CW
+from backend.sync import workout_targets as WT
 
 router = APIRouter(prefix="/api/v1/overview/plan", tags=["overview"])
 
@@ -83,7 +84,9 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     acts = activity_rows(ds, since, today + dt.timedelta(days=1))
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
-           "horizon_end": horizon.isoformat(), "thresholds": cur.get("thresholds") or {},
+           "horizon_end": horizon.isoformat(),
+           # + threshold pace (s/km, 推估): % / zone pace targets reach the watch (COROS intensityType 3)
+           "thresholds": {**(cur.get("thresholds") or {}), "tpace": _tpace()},
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
@@ -244,12 +247,14 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
     return today, inp["phase_push_end"]
 
 
-def _view(s: dict, inp: dict, rows: dict, today: str) -> dict:
+def _view(s: dict, inp: dict, rows: dict, today: str, prov=None) -> dict:
+    """`coros` keeps its name in the API: the push status at the active provider."""
+    prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
     if s["state"] == "active":
-        v["coros"] = CW.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
+        v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
     elif s["uid"] in rows:
-        v["coros"] = {"status": "pushed_" + s["state"], **CW._row_view(rows[s["uid"]])}
+        v["coros"] = {"status": "pushed_" + s["state"], **prov.row_view(rows[s["uid"]])}
     return v
 
 
@@ -275,9 +280,10 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]
     today = _today(inp)
-    rows = await CW.all_rows(db)
+    prov = await WT.active(db)
+    rows = await prov.all_rows(db)
     return {**_meta(inp), "summary": _summary(every, inp),
-            "sessions": [_view(s, inp, rows, today) for s in ss if s["state"] != "deleted"
+            "sessions": [_view(s, inp, rows, today, prov) for s in ss if s["state"] != "deleted"
                          and s["state"] != "superseded"]}
 
 
@@ -1162,9 +1168,10 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
     async with _wlock():
         await _ensure(db, inp)
         new, changes = await PS.plan_reconcile(db, inp, apply=False)
-    rows = await CW.all_rows(db)
+    prov = await WT.active(db)
+    rows = await prov.all_rows(db)
     bl = PS.blocked_map(inp)
-    todo = [_view(s, inp, rows, today) for s in _in_range(new, a, b, bl)]
+    todo = [_view(s, inp, rows, today, prov) for s in _in_range(new, a, b, bl)]
     pushable = [s for s in todo if s["coros"]["status"] not in ("skipped", "done")]
     will = [s for s in pushable if s["coros"]["status"] != "pushed"]
     missed = [s for s in new if s["state"] == "missed" and s["uid"] in rows]
@@ -1180,8 +1187,10 @@ def _on_blocked(ss: list[dict], blocked: dict, today: str) -> list[dict]:
     return [s for s in ss if s["state"] == "active" and s.get("day") and s["day"] >= today and s["day"] in blocked]
 
 
-def _auth(e: CW.CorosAuthError):
-    return HTTPException(401, {"error": "COROS_AUTH_REQUIRED", "detail": str(e), "hint": "到設定頁重新登入 COROS"})
+def _auth(e: WT.SyncAuthError, prov=None):
+    label = getattr(prov, "label", "COROS")
+    code = "COROS_AUTH_REQUIRED" if getattr(prov, "id", "coros") == "coros" else "SYNC_AUTH_REQUIRED"
+    return HTTPException(401, {"error": code, "detail": str(e), "hint": f"到設定頁重新登入 {label}"})
 
 
 @router.post("/push-coros")
@@ -1193,7 +1202,8 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         await _ensure(db, inp)
         new, changes = await PS.plan_reconcile(db, inp, apply=True)
         live = {s["uid"] for s in new if s["state"] in ("active", "done", "missed")}
-        rows = await CW.all_rows(db)
+        prov = await WT.active(db)
+        rows = await prov.all_rows(db)
         # pushed sessions gone from the plan (deleted / superseded / regenerated away);
         # past-day ones stay, see push_sessions. Missed ones are removed separately.
         stale = [k for k in rows if k not in live]
@@ -1202,10 +1212,10 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         stale += [s["uid"] for s in _on_blocked(new, bl, today) if s["uid"] in rows]
         missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
         try:
-            res = await CW.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
-                                         today, stale_keys=stale, missed_keys=missed)
-        except CW.CorosAuthError as e:
-            raise _auth(e)
+            res = await prov.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
+                                           today, stale_keys=stale, missed_keys=missed)
+        except WT.SyncAuthError as e:
+            raise _auth(e, prov)
     return {"scope": scope, "start": a, "end": b, "changes": changes, **res}
 
 
@@ -1214,12 +1224,13 @@ async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSessio
     inp = await _inputs()
     a, b = _range(scope, day, inp)
     async with _wlock():
-        rows = await CW.all_rows(db)
+        prov = await WT.active(db)
+        rows = await prov.all_rows(db)
         keys = [k for k, r in rows.items() if r.day and a <= r.day <= b]
         try:
-            return {"scope": scope, "start": a, "end": b, "removed": await CW.remove_keys(db, keys)}
-        except CW.CorosAuthError as e:
-            raise _auth(e)
+            return {"scope": scope, "start": a, "end": b, "removed": await prov.remove_keys(db, keys)}
+        except WT.SyncAuthError as e:
+            raise _auth(e, prov)
 
 
 # ---------------------------------------------------------------------------
@@ -1528,10 +1539,12 @@ async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
     if authed and exp is not None:
         exp = exp if exp.tzinfo else exp.replace(tzinfo=dt.timezone.utc)
         authed = dt.datetime.now(dt.timezone.utc) < exp
-    rows = await CW.all_rows(db)
+    prov = await WT.active(db)
+    rows = await prov.all_rows(db)
     last = max((r.pushed_at for r in rows.values() if r.pushed_at), default=None)
     n = lambda k: sum(1 for s in views if s["state"] == "active" and (s.get("coros") or {}).get("status") == k)
-    return {"authenticated": authed, "last_pushed_at": last.isoformat() if last else None,
+    return {"provider": prov.id, "provider_label": prov.label,
+            "authenticated": authed, "last_pushed_at": last.isoformat() if last else None,
             "outdated": n("outdated"), "failed": n("failed"), "pushed": n("pushed") + n("updated"),
             "not_pushed": n("not_pushed")}
 
