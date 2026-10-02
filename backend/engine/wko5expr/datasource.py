@@ -1,9 +1,10 @@
 """
-Which data the charts read (settings key `charts.data_source`: wko5 | coros |
-tp) — synchronous helpers for the Dataset factory in api/wko5views.py, which
-is not async.
+Which data the charts read (settings key `charts.data_source`: synced | wko5 |
+coros | tp) — synchronous helpers for the Dataset factory in api/wko5views.py,
+which is not async. "synced" = the COROS and TP folders merged, the
+主要資料來源's file per activity (backend/sync/primary.py).
 
-    source = current_source()                 # "wko5" by default
+    source = current_source()                 # "synced" by default ("wko5" without an app DB)
     stamp  = source_stamp(source, ATHLETE_DIR)
     ds     = dataset_for_source(source, ATHLETE_DIR, config)   (fitdataset.py)
 
@@ -17,7 +18,12 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-SOURCES = ("wko5", "coros", "tp")
+SOURCES = ("synced", "wko5", "coros", "tp")
+# "synced" = both synced folders merged, one file per activity from the 主要資料來源
+# (backend/sync/primary.py); the default once the app has a DB. Without one
+# (tests, a bare checkout) the default stays "wko5".
+DEFAULT_SOURCE = "synced"
+FIT_SOURCES = ("synced", "coros", "tp")
 
 
 def _db_path() -> Optional[Path]:
@@ -52,8 +58,19 @@ def read_setting(key: str, default=None, user_id: int = 1):
 
 
 def current_source(user_id: int = 1) -> str:
-    v = read_setting("charts.data_source", "wko5", user_id)
-    return v if v in SOURCES else "wko5"
+    db = _db_path()
+    default = DEFAULT_SOURCE if db is not None and db.exists() else "wko5"
+    v = read_setting("charts.data_source", default, user_id)
+    return v if v in SOURCES else default
+
+
+def primary_info(user_id: int = 1) -> tuple[str, dict]:
+    """(主要資料來源 setting — "auto" | a source —, {db source: last sync
+    status}) from the settings store, read-only; ("auto", {}) without a DB."""
+    from backend.sync import primary as P
+    setting = P.normalize(read_setting(P.SETTING_KEY, None, user_id))
+    status = {s: P.last_status(read_setting(f"sync.{s}.last_result", None, user_id)) for s in P.DB_SOURCES}
+    return setting, status
 
 
 def athlete_tz(user_id: int = 1):
@@ -101,6 +118,13 @@ def source_stamp(source: str, wko5_dir: Path) -> str:
 
 
 def _files_stamp(source: str, wko5_dir: Path) -> str:
+    if source == "synced":
+        # both folders + the primary setting and the last sync statuses
+        # (自動's pick reads them; its other input, the newest activity, is in
+        # the folders' stamps)
+        setting, status = primary_info()
+        st = ",".join(f"{k}={v}" for k, v in sorted(status.items()))
+        return f"synced[{setting};{st}]|{_files_stamp('coros', wko5_dir)}|{_files_stamp('tp', wko5_dir)}"
     if source in ("coros", "tp"):
         from backend.sync import storage
         root = storage.source_dir(source)
