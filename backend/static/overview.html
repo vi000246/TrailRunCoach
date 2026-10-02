@@ -724,6 +724,13 @@ function stype(s) {
   if (k === "notice") return "notice";
   return "easy";
 }
+// an activity's session class -> the .ty-* colour (the icon comes from the server)
+function actTy(se) {
+  if (se.type === "quality") return se.stimulus === "z5" ? "z5" : "z3";
+  if (se.type === "hard_long" || se.type === "long") return "long";
+  if ((se.type || "").startsWith("test")) return "test";
+  return "easy";
+}
 const CB = { pushed: "COROS ✓", updated: "COROS ✓", outdated: "COROS 需更新", failed: "COROS 失敗" };
 function sessHtml(s, today) {
   const ty = stype(s), done = s.state === "done", missed = s.state === "missed";
@@ -731,7 +738,7 @@ function sessHtml(s, today) {
   const est = s.tss_est ?? s.tss, cp = done ? s.compliance : null;
   const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分" : ""}${est ? ` · ${n0(est)}` : ""}`;
   const tip = [s.title, `${TYPES[ty]}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
-    done && s.done_by ? `完成：${s.done_by.category_label || ""} ${hm(s.done_by.moving_s)} · TSS 計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
+    done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · TSS 計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
     cp ? `完成度：${cp.label}${cp.pct != null ? ` ${cp.pct}%` : ""}（實際 ÷ 計畫${cp.tss_pct != null ? `：TSS ${cp.tss_pct}%` : ""}${cp.duration_pct != null ? ` · 時間 ${cp.duration_pct}%` : ""}；綠 ±20%、黃 20–50%、紅 > 50% 或類型不符）` : "",
     missed ? "未完成" : "", s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "",
     live && s.coros?.status ? `COROS：${CB[s.coros.status] || s.coros.status}${s.coros.status === "failed" ? " " + (s.coros.error || "") : s.coros.status === "outdated" ? " " + (s.coros.reason || "課表改過，到課表頁再同步一次") : ""}` : ""].filter(Boolean).join("\n");
@@ -741,8 +748,12 @@ function sessHtml(s, today) {
 }
 function dayHtml(iso, ss, extra, today) {
   const past = iso < today, isT = iso === today;
-  const items = ss.map((s) => sessHtml(s, today)).concat(extra.map((a) => `<button type="button" class="sx extra" data-tip="${esc(`課表外：${a.category_label} ${hm(a.moving_s)} · TSS ${n0(a.tss)}`)}">
-      <span class="ic">${I("check")}<span class="ok" aria-hidden="true">✓</span></span><span class="tl">${esc(a.category_label)}</span><span class="mn num">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></button>`));
+  // 課表外 activities carry their session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …)
+  const items = ss.map((s) => sessHtml(s, today)).concat(extra.map((a) => {
+    const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
+    return `<button type="button" class="sx extra ${se.icon ? "ty-" + esc(actTy(se)) : ""}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · TSS ${n0(a.tss)}`)}">
+      <span class="ic">${I(se.icon || "check")}<span class="ok" aria-hidden="true">✓</span></span><span class="tl">${esc(lab)}</span><span class="mn num">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></button>`;
+  }));
   return `<div class="dc ${isT ? "today" : ""} ${past ? "past" : ""}"><div class="dh"><b>週${wd(iso)}</b><span class="num">${md(iso)}</span>${isT ? `<span class="now">今天</span>` : ""}</div>
     <div class="sxs">${items.join("") || `<span class="rest">${I(past ? "na" : "rest")}${past ? "沒有活動" : "休息"}</span>`}</div></div>`;
 }

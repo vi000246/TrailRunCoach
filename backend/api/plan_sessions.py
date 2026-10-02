@@ -77,7 +77,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
                             blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc)
     since = monday - dt.timedelta(weeks=4)
-    acts = [O.activity_row(w) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
+    acts = [O.activity_row(w, ds) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
            "horizon_end": horizon.isoformat(), "thresholds": cur.get("thresholds") or {},
@@ -1220,7 +1220,7 @@ def _range_extras(start: str, end: str) -> dict:
     ds = _dataset()
     today = O.day_to_date(ds.today)
     a, b = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
-    acts = [O.activity_row(w) for w in O.workouts_between(ds, a, b + dt.timedelta(days=1))]
+    acts = [O.activity_row(w, ds) for w in O.workouts_between(ds, a, b + dt.timedelta(days=1))]
     st = _status(ds, today)
     lo, hi = min(a, today) - dt.timedelta(days=400), max(b, today) + dt.timedelta(days=400)
     phases = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end}

@@ -733,7 +733,8 @@ function chipHtml(s, big) {
   const tss = `TSS ${n0(est)}${done && s.done_by.tss != null ? ` → ${n0(s.done_by.tss)}` : ""}`;
   const dist = s.distance_km ? `${(+s.distance_km).toFixed(1)} km${s.climb_m ? ` ↑${Math.round(s.climb_m)} m` : ""}` : "";
   const meta = [s.minutes ? s.minutes + "′" : "", dist, tss].filter(Boolean).join(" · ");
-  const line = done ? `${esc(s.done_by.category_label || "完成")} ${hm(s.done_by.moving_s)}` : esc(s.target || "");
+  const sl = done && s.done_by.session && s.done_by.session.type_label ? ` · ${s.done_by.session.type_label}` : "";
+  const line = done ? `${esc((s.done_by.category_label || "完成") + sl)} ${hm(s.done_by.moving_s)}` : esc(s.target || "");
   const cp = s.compliance;
   const cpTip = cp ? `\n${compTip(cp)}` : "";
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
@@ -746,8 +747,10 @@ function chipHtml(s, big) {
 }
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s4", bike: "--s7", strength: "--s5", walk: "--s6", other: "--bar" };
 function actHtml(a) {
-  return `<div class="chip act" style="--k:var(${CAT_VAR[a.category] || "--bar"})" title="${esc(`${a.category_label} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}`)}">
-    <span class="c-t">${esc(a.category_label)}</span><span class="c-r">${hm(a.moving_s)}</span>
+  // the session class (workout_review.classify): Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …
+  const lab = a.session && a.session.type_label ? `${a.category_label} · ${a.session.type_label}` : a.category_label;
+  return `<div class="chip act" style="--k:var(${CAT_VAR[a.category] || "--bar"})" title="${esc(`${lab} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}`)}">
+    <span class="c-t">${esc(lab)}</span><span class="c-r">${hm(a.moving_s)}</span>
     ${a.tss != null ? `<span class="c-x">TSS ${n0(a.tss)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}</span>` : ""}</div>`;
 }
 function byDay() {
