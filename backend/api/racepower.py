@@ -530,6 +530,27 @@ def heat_status_for(date: Optional[str]) -> dict:
     return HD.status(dt.date.today(), rd, passive_dates=passive)
 
 
+def _hrc_test() -> Optional[dict]:
+    """The HRC slope test (racepower/heatacc.py) on the last 84 days' hot
+    steady segments, cached per day; None when it cannot be computed (no
+    weather file, no dataset) — the calculator then credits no acclimation."""
+    from backend.engine import heat as HT
+    from backend.engine import heat_data as HD
+    from backend.engine.racepower import heatacc as HA
+    key = dt.date.today()
+    hit = _cache.get("hrc_test")
+    if hit and hit[0] == key:
+        return hit[1]
+    try:
+        acts, _meta = HD.exposures()
+        rows = HT.hr_cost(HD.steady_segments(_dataset(), key, acts))["rows"] if acts else []
+        out = HA.hrc_slope_test(rows)
+    except Exception:                       # noqa: BLE001
+        out = None
+    _cache["hrc_test"] = (key, out)
+    return out
+
+
 @router.get("/heat-status")
 def heat_status(date: Optional[str] = None):
     """The heat-acclimation index S (engine/heat.py): today, its last 120
@@ -769,7 +790,7 @@ def make_plan(body: PlanIn) -> dict:
     opts["stops"] = [x.model_dump() for x in body.stops]
     opts["hourly"] = [x.model_dump() for x in body.hourly or []]
     if body.heat_acclimatisation:
-        opts["heat_status"] = heat_status_for(body.date)
+        opts["heat_status"] = {**heat_status_for(body.date), "hrc_test": _hrc_test()}
     if body.type == "baiyue" and body.heat_ref_alt_m is None and (body.env_to is None or body.env_to.temp_c is None):
         # no race-day temperature: env.resolve copied the training one, which
         # belongs to the training altitude — lapse from there, not from the peak
@@ -817,7 +838,8 @@ def _fuel(body: PlanIn, out: dict) -> dict:
     th = (out.get("summary") or {}).get("trail_hr")
     lthr = (inp.get("aet") or {}).get("lthr")
     if th and th.get("x") and lthr:
-        hr = th["x"] * lthr                 # the race HR the trail model predicts
+        # the race HR the trail model predicts (x_star = the measured level, before the heat shift)
+        hr = (th.get("x_star") or th["x"]) * lthr
     return FU.plan_fuel(out, weight=out["used"]["weight"]["value"], stops=[x.model_dump() for x in body.stops],
                         start_time=body.start_time, hr_bpm=hr, body=_body(inp))
 

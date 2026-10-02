@@ -144,9 +144,12 @@ def test_planner_heat_acclimation_resolves_modes():
     from backend.engine.racepower import planner as PL
     assert PL.heat_acclimation({}) is None
     h = PL.heat_acclimation({"heat_acclimatisation": {"mode": "partial"}})
-    assert h["s"] == 0.5 and h["a"] == HT.A_RECOVER
+    # a = 0 until an HRC slope test supports acclimation (racepower/heatacc.py, unsourced-rules.md §A8)
+    assert h["s"] == 0.5 and h["a"] == 0.0 and h["a_literature"] == HT.A_RECOVER
     auto = PL.heat_acclimation({"heat_acclimatisation": {"mode": "auto"},
-                                "heat_status": {"s_race": {"center": 0.72, "low": 0.6, "high": 0.75}, "s_from": 0.3}})
+                                "heat_status": {"s_race": {"center": 0.72, "low": 0.6, "high": 0.75}, "s_from": 0.3,
+                                                "hrc_test": {"supported": True}}})
     assert auto["s"] == 0.72 and auto["s_from"] == 0.3 and auto["scenarios"]["low"] == (0.35, 0.6)
+    assert auto["a"] == HT.A_RECOVER
     c = PL.heat_acclimation({"heat_acclimatisation": {"mode": "custom", "s": 1.4}})
     assert c["s"] == 1.0

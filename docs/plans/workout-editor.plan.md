@@ -379,6 +379,17 @@ COROS 表示不了的東西（UI 要先講）：
 
 合計約 9–11 天（推估）。S0–S1 可以在 interval-library merge 前先做；S2 之後依賴它。
 
+## 4.1 實作狀態（2026-10-02，`feat/workout-editor`）
+
+- S0–S7 完成：`engine/workout_steps.py`、`api/plan_sessions.py` 的 `/steps/*`、`static/workout_editor.js`。
+  整堂的目標仍是既有的「目標用：自動／心率／功率」（`target_basis`），沒有另外的 `default_target`；
+  每段的 `target.type = auto` 依它換算，點某一段的目標可以只改那一段。
+- 重複多一個 `last_rest`（最後一趟不休息）：間歇庫的課都是這樣，COROS 群組做不到，推送時攤平成一段一段，
+  和原本 `_variant_steps` 送的完全一樣（golden 測試）。
+- S8 **沒有做人工驗證**（不呼叫 COROS live）：距離段照 catalog 送 `targetType 5`、公分，預覽標「未驗證」；
+  配速目標可以在編輯器設，但推送時那段不設目標（配速寫在步驟名稱），預覽也標出來。等送一堂 `TRC TEST`
+  讀回 detail 確認單位後，再把 `workout_steps._one` 的配速接上 `intensityType 3`。
+
 ## 5. 未決
 
 - COROS 巢狀重複、步驟數上限、`name` 長度、pace 單位、越野 sportType：全部**未驗證**，S8 一起確認。

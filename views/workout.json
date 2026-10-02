@@ -5,8 +5,8 @@
       "title": "本次重點",
       "description": "這次是什麼課、有沒有照目的練到。判讀卡依課表類型（輕鬆跑／長跑／間歇／測試／越野）自動選規則，並指出該看哪個分頁。肌力、騎車只有這一頁。原始圖表在 WKO5 匯入的「WKO5 Workout View」→ Workout（Power chart、Heart Rate、Workout Graph）。",
       "charts": [
-        {"title": "判讀", "kind": "review", "section": "summary",
-         "description": "課表類型用活動當天的周期、plan 的測試紀錄、標題與功率判斷；每頁最多 3 行結論。"},
+        {"title": "重點數字", "kind": "review", "section": "summary",
+         "description": "課表類型用活動當天的周期、plan 的測試紀錄、標題與功率判斷。每張小卡的 ? 有它的判讀與門檻；飄移、耐久、間歇的細節在各自的分頁。"},
         {"title": "心率與功率（拖曳選一段看統計）", "kind": "activity", "chart": "hrpower",
          "description": "上面是心率、下面是 30 秒功率，共用同一條時間軸（兩種單位不放在同一個刻度上）。在圖上左右拖曳選一段，下方會算出這段的時間、距離、移動配速、平均／最高心率、平均功率、NP、Pw:HR（平均功率 ÷ 平均心率，每下心跳推出幾瓦）、EF（NP ÷ 平均心率）和這段前後半的 Pw:HR 飄移（WKO5 的定義：從這段的一半切開）。虛線是 AeT、LTHR 和 CP。平均功率含停下來的 0 W；NP 用整趟的 30 秒滾動功率。統計精度到圖上的一個點（長活動每點幾秒）。"},
         {"title": "三區時間（AeT／LTHR）",
@@ -27,7 +27,8 @@
            {"name": "越野賽分級", "type": "line", "expression": "@ep:=distance + climbing / 100, if(@ep < 25, \"XXS\", if(@ep < 45, \"XS\", if(@ep < 75, \"S\", if(@ep < 115, \"M\", if(@ep < 155, \"L\", if(@ep < 210, \"XL\", \"XXL\"))))))"}
          ]},
         {"title": "CP 測試結果（3 分／12 分）", "kind": "review", "section": "cp_test",
-         "description": "CP = (P12·720 − P3·180) / 540，W′ = (P3 − CP)·180。和目前 CP 差 > 3% 建議更新。不是測試課時留白。"}
+         "description": "CP = (P12·720 − P3·180) / 540，W′ = (P3 − CP)·180。和目前 CP 差 > 3% 建議更新。不是測試課時留白。"},
+        {"title": "W′ 電池", "kind": "review", "section": "wprime_battery"}
       ]
     },
     {
@@ -75,10 +76,10 @@
     },
     {
       "title": "間歇",
-      "description": "這堂間歇有沒有達到這次課表的目標。",
+      "description": "這堂間歇有沒有達到這次課表的目標；CP／AeT 測試照流程看每段配速；其他跑步可以按「當作間歇判讀」。功率電池（W′ 剩多少）每次有功率的跑步都有。",
       "charts": [
         {"title": "間歇判讀", "kind": "review", "section": "interval_verdict",
-         "description": "達到＝逐趟判定達標且目標區時間 ≥ 計畫的 85%；部分達到＝邊界或 60–85%；未達到＝未適應、目標太高或 < 60%（門檻推估）。這個判定也決定下一階。"},
+         "description": "間歇課：達到＝逐趟判定達標且目標區時間 ≥ 計畫的 85%；部分達到＝邊界或 60–85%；未達到＝未適應、目標太高或 < 60%（門檻推估）。這個判定也決定下一階。CP／AeT 測試：流程的每一段當作一趟，看配速分配（後半和前半差 ±5%（AeT ±3%）內、最後 1 分 ≤ 該段 × 1.08 算平均，推估），不判「達標」。不是間歇課的跑步：按「當作間歇判讀」會在活動加上標籤「當作間歇」並用偵測到的趟判讀；到活動編輯頁移除標籤可以取消。"},
         {"title": "每趟功率 vs 目標帶", "kind": "review", "section": "interval_reps"},
         {"title": "功率與每趟（簡化版 VO2max & FRC）", "kind": "review", "section": "interval_power",
          "description": "WKO5「WKO5 Workout View」→ 間歇 的 Run VO2max & FRC Chart – 5 Min PDC & Skiba 簡化版：只留 CP 和目標帶，5 分鐘 PDC 在說明裡。"},

@@ -199,7 +199,12 @@ def test_trail_technicality_applies_on_flats_and_descents_only():
     f, which = g.for_trail("race").tech_factor()
     assert which == "race" and f == approx(0.9 / g.run.re(0.0), rel=1e-6)
     tg = g.for_trail("race")
-    assert tg.re(0.0) == approx(g.re(0.0) * f) and tg.re(0.10) == approx(g.re(0.10))
+    # 2026-10-02: on trail the grade bin's factor (shrunk n/(n+30) to 1) is used where the bin has windows
+    fb = g.tech_bins["±2%"]
+    assert fb["f"] == approx((60 * f + 30) / 90, rel=1e-6) and tg.tech_at(0.0) == (fb["f"], "bin")
+    assert tg.re(0.0) == approx(g.re(0.0) * fb["f"]) and tg.re(0.10) == approx(g.re(0.10))
+    # no window in a bin → the single per-class factor
+    assert tg.tech_at(-0.10) == (f, "race")
 
 
 def test_tobler_eph_fallback():

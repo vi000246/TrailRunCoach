@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
+import re
 from statistics import median
 from typing import Optional
 
@@ -585,6 +586,7 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
     outranks both)."""
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import maximal as MX
+    from backend.engine.racepower import trailhr as TH
     events = plan_race_runs(ds)
     tags = AT.load() if tags is None else tags
     recorded = AT.load_recorded() if recorded is None else recorded
@@ -615,7 +617,9 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
         if trail:
             r = MX.trail_maximal({"km": km, "moving_s": st.get("moving_s"), "hr_avg": st.get("hr_avg"),
                                   "above_aet": es["above_aet"]}, th.get("lthr"), th.get("aet"), title, w.tags)
-            eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"))
+            mvs = es.get("moving_s") or st.get("moving_s")
+            eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"),
+                               max_frac=TH.auto_max_frac(mvs / 3600.0 if mvs else None))
             rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
             eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
             long_ok = all(c["ok"] for c in r["checks"] if c["id"] in ("km", "time"))
@@ -1572,12 +1576,62 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
             "classes": cmap}
 
 
-TRAILHR_DUR_KEY = "racepower_trailhr_dur_v1"
+TRAILHR_DUR_KEY = "racepower_trailhr_dur_v2"   # v2 (2026-10-02): δ on the drift-v2-cleaned window
+
+
+def durability_clean_mask(t, kmh, hr, es_rel=None) -> tuple[np.ndarray, dict]:
+    """The samples the trail durability may use (docs/research/unsourced-
+    rules.md §0.6: "用 DRIFT §8.1 的視窗規則"), from workout_review's drift v2
+    rules: the adaptive start (steady_start), the return-leg cool-down
+    (steady_end), the trailing idle (trailing_idle), DRIFT_SETTLE_S after
+    every stop ≥ 60 s (re-acceleration), and — when `es_rel` (effort-km speed
+    per sample) is given — slow stretches: 30-s mean < WALK_FRAC × the
+    median for ≥ WALK_SEG_S (queues, photo stops; DRIFT §4.3 on the effort-km
+    speed instead of the pace, 推估). Returns (mask, record of the cuts)."""
+    from backend.engine import workout_review as WR
+    t = np.asarray(t, float)
+    n = len(t)
+    s = np.asarray(kmh, float)[:n]
+    fin = np.isfinite(t)
+    rel = t - t[fin][0] if fin.any() else np.zeros(n)
+    end, idle = WR.trailing_idle(t, s)
+    end2, tail = WR.steady_end(t, s, end)
+    start, _rec = WR.steady_start(t, hr, s, end2)
+    keep = fin & (rel >= start) & (rel < end2)
+    stop = fin & np.isfinite(s) & (s <= WR.STOP_KMH)
+    settle = np.zeros(n, bool)
+    n_settle = 0
+    for a_, b_ in WR._stop_segments(rel, stop):
+        if b_ - a_ >= 60.0:
+            settle |= (rel > b_) & (rel <= b_ + WR.DRIFT_SETTLE_S)
+            n_settle += 1
+    keep &= ~settle
+    slow_s = 0.0
+    if es_rel is not None:
+        from backend.engine.panels.workout import rolling_mean
+        e = np.asarray(es_rel, float)[:n]
+        ok = keep & np.isfinite(e) & (e > 0)
+        if ok.sum() > 100:
+            med = float(np.median(e[ok]))
+            r30 = rolling_mean(t, np.where(ok, e, np.nan), 30.0)
+            slow = ok & np.isfinite(r30) & (r30 < WR.WALK_FRAC * med)
+            dtv = np.diff(t, prepend=t[0])
+            for a_, b_ in WR._runs_of(slow):
+                dur = float(rel[b_ - 1] - rel[a_]) if b_ - 1 > a_ else 0.0
+                if dur >= WR.WALK_SEG_S:
+                    keep[a_:b_] = False
+                    slow_s += float(np.clip(dtv[a_:b_], 0, 30).sum())
+    return keep, {"start_s": float(start), "end_s": float(end2), "idle_s": float(idle),
+                  "tail_s": float((tail or {}).get("excluded_s") or 0.0), "settle_stops": n_settle,
+                  "slow_s": slow_s}
 
 
 def _trail_durability(ds, w) -> Optional[dict]:
     """trailhr step 2 for one run: durability() on the moving-time axis with
-    effort-km speed as output; δ per hour after T0."""
+    effort-km speed as output, only on the drift-v2-cleaned samples
+    (durability_clean_mask; the moving-time axis itself keeps every moving
+    second, so "hours after T0" still counts from the start); δ per hour
+    after T0."""
     from backend.engine.panels.workout import durability
     from backend.engine.racepower import trailhr as TH
     a = activity_arrays(ds, w)
@@ -1587,15 +1641,64 @@ def _trail_durability(ds, w) -> Optional[dict]:
     tm, es, m = TH.effort_speed_series(a["t"], a["d"], a["z"], mv)
     if len(tm) < 100 or tm[-1] < TH.TRAILHR["dur_min_s"]:
         return {"delta": None, "moving_s": float(tm[-1]) if len(tm) else 0.0}
-    r = durability(tm, es, a["hr"][m])
+    es_all = np.full(len(a["t"]), np.nan)
+    es_all[m] = es
+    keep, cuts = durability_clean_mask(a["t"], a["kmh"], a["hr"], es_all)
+    es_clean = np.where(keep[m], es, np.nan)
+    r = durability(tm, es_clean, a["hr"][m])
+    raw = durability(tm, es, a["hr"][m])
     return {"delta": TH.durability_delta((r or {}).get("points")), "moving_s": float(tm[-1]),
-            "end_pct": (r or {}).get("end_pct")}
+            "end_pct": (r or {}).get("end_pct"), "delta_uncleaned": TH.durability_delta((raw or {}).get("points")),
+            "clean": cuts, "kept_share": float(keep[m].mean()) if len(m) else None}
 
 
-def trail_hr_points(ds, runs, exclude: Optional[set] = None) -> list[dict]:
-    """trailhr run points (own-date LTHR) of the given outdoor trail runs."""
+def activity_hadley(ds) -> dict[int, float]:
+    """{workout idx: the activity's Hadley sum} from route_weather's
+    activity_weather.json (heat_data.exposures): by file name, else (a TP /
+    COROS FIT file of an activity the weather file knows under its WKO5
+    name) by local start time within MATCH_TOL_MIN (activity_tags). Memoised
+    on the dataset; {} without the weather file."""
+    memo = getattr(ds, "_hadley_by_idx", None)
+    if memo is not None:
+        return memo
+    out: dict[int, float] = {}
+    try:
+        from backend.engine import activity_tags as AT
+        from backend.engine import heat_data as HD
+        acts, _meta = HD.exposures()
+        by_file = {a.get("file"): a.get("hadley") for a in acts if a.get("hadley") is not None}
+        by_day: dict = {}
+        for f, h in by_file.items():
+            m = re.search(r"(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})", str(f))
+            if m:
+                t = dt.datetime(*(int(x) for x in m.groups()))
+                by_day.setdefault(t.date(), []).append((t, h))
+        tol = dt.timedelta(minutes=AT.MATCH_TOL_MIN + 2)
+        for w in ds.workouts:
+            h = by_file.get(w.entry.file)
+            if h is None:
+                st = w.entry.start.replace(tzinfo=None) if w.entry.start.tzinfo else w.entry.start
+                cand = [(abs(t - st), hh) for t, hh in by_day.get(st.date(), [])]
+                cand = [c for c in cand if c[0] <= tol]
+                h = min(cand)[1] if cand else None
+            if h is not None:
+                out[w.idx] = float(h)
+    except Exception:                       # noqa: BLE001 — no weather → no heat shift
+        out = {}
+    try:
+        ds._hadley_by_idx = out
+    except AttributeError:
+        pass
+    return out
+
+
+def trail_hr_points(ds, runs, exclude: Optional[set] = None, heat: bool = True) -> list[dict]:
+    """trailhr run points (own-date LTHR) of the given outdoor trail runs;
+    with `heat`, x moved to Hadley 120 with the athlete's β (trailhr.heat_adjust;
+    x_raw keeps the measured HR level)."""
     from backend.engine.racepower import trailhr as TH
     exclude = exclude or set()
+    had = activity_hadley(ds) if heat else {}
     out = []
     for w in runs:
         if w.idx in exclude or not (outdoor(w) and is_trail(w)):
@@ -1606,42 +1709,132 @@ def trail_hr_points(ds, runs, exclude: Optional[set] = None) -> list[dict]:
                          st.get("hr_avg"), th.get("lthr"))
         if p:
             p.update(idx=w.idx, date=w.entry.start.date().isoformat(), label=label(w))
+            if heat:
+                TH.heat_adjust(p, had.get(w.idx))
             out.append(p)
     return out
 
 
+def xstar_points(ds, runs, exclude: Optional[set] = None) -> list[dict]:
+    """x*(T) samples (trailhr.fit_xstar): the outdoor road and trail runs
+    given (the caller's races / 全力 set), x = moving HR ÷ own-date LTHR (the
+    measured level, no heat shift), T = moving hours; trail ≥ 90 min
+    (maximal.trail_min_s), road ≥ 15 min (XSTAR road_min_s)."""
+    from backend.engine.racepower import trailhr as TH
+    exclude = exclude or set()
+    out = []
+    for w in runs:
+        if w.idx in exclude or not outdoor(w):
+            continue
+        st = intensity_stats(ds, w) or {}
+        mv, hr = st.get("moving_s"), st.get("hr_avg")
+        trail = is_trail(w)
+        need = TH.TRAILHR["race_min_s"] if trail else TH.XSTAR["road_min_s"]
+        if not mv or not hr or mv < need:
+            continue
+        th = thresholds_as_of(ds, w.entry.start.date())
+        if not th.get("lthr"):
+            continue
+        out.append({"T_h": mv / 3600.0, "x": hr / th["lthr"], "idx": w.idx, "category": "trail" if trail else "road",
+                    "date": w.entry.start.date().isoformat(), "label": label(w)})
+    return out
+
+
+NONMOVING_KEY = "racepower_nonmoving_v1"
+
+
+def _nonmoving_row(ds, w) -> Optional[dict]:
+    from backend.engine.racepower import nonmoving as NM
+    a = activity_arrays(ds, w)
+    if a is None:
+        return None
+    r = NM.run_row(a["t"], np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH)
+    return r
+
+
+def nonmoving_row(ds, w) -> Optional[dict]:
+    """nonmoving.run_row of one activity (disk-memoised)."""
+    return ds.cached_series(NONMOVING_KEY, w, lambda: _nonmoving_row(ds, w))
+
+
+def _fuel_tags(tags, w) -> Optional[bool]:
+    from backend.engine import activity_tags as AT
+    from backend.engine.racepower import trailhr as TH
+    if not tags:
+        return None
+    u = AT.find(tags, w.entry.start, w.entry.file)
+    if not u:
+        return None
+    words = AT.tags_of(u) + [str(u.get("note") or "")]
+    return TH.fuel_of(words)
+
+
 def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] = None,
-                   race_idx: Optional[set] = None) -> dict:
+                   race_idx: Optional[set] = None, tags: Optional[list] = None) -> dict:
     """The trail HR pace model (trailhr.py) as of `today`: the trail runs of
-    the RE window before `today` without `exclude`; durability from the
-    runs ≥ 2 h; the race HR level from earlier `race_idx` runs (activity type
-    比賽 or 全力 ≥ 90 min; default: capacity_samples' effective tags)."""
+    the RE window before `today` without `exclude` (x heat-shifted to Hadley
+    120); durability from the runs ≥ 2 h on their drift-v2-cleaned windows,
+    shrunk to the 0.05 /h prior, split by the user's fuelling tags when both
+    groups are big enough; the full-effort curve x*(T) from earlier `race_idx`
+    runs (activity type 比賽 or 全力, road and trail; default:
+    capacity_samples' effective tags); the non-moving profile from the
+    earlier race / 全力 trail runs ≥ 90 min. `tags` = activity_tags rows
+    (default: activity_tags.load(); only the fuelling covariate reads them)."""
+    from backend.engine.racepower import nonmoving as NM
     from backend.engine.racepower import trailhr as TH
     from backend.engine.wko5expr.dataset import date_to_day
     today = today or dt.date.today()
     tday = date_to_day(today)
     exclude = exclude or set()
+    if tags is None:
+        try:
+            from backend.engine import activity_tags as AT
+            tags = AT.load()
+        except Exception:                   # noqa: BLE001 — no tag store: no fuelling split
+            tags = []
     runs = [w for w in ds.workouts if outdoor(w) and is_trail(w) and w.idx not in exclude
             and tday - TH.TRAILHR["window_days"] < w.day < tday + 1]
     pts = trail_hr_points(ds, runs)
-    deltas = []
+    drows = []
     for p in pts:
         if p["T_h"] * 3600.0 >= TH.TRAILHR["dur_min_s"]:
             w = ds.workouts[p["idx"]]
             r = ds.cached_series(TRAILHR_DUR_KEY, w, lambda w=w: _trail_durability(ds, w))
             if r and r.get("delta") is not None:
-                deltas.append(r["delta"])
                 p["delta"] = r["delta"]
+                p["delta_uncleaned"] = r.get("delta_uncleaned")
+                p["fuel"] = _fuel_tags(tags, w)
+                drows.append({"delta": r["delta"], "fuel": p["fuel"]})
     ds.flush_series()
-    m = TH.fit(pts, float(median(deltas)) if deltas else None)
-    m["n_durability"] = len(deltas)
+    dinfo = TH.delta_by_fuel(drows)
+    dinfo["gate"] = TH.choose_delta(pts, dinfo)
+    m = TH.fit(pts, dinfo["gate"]["delta"])
+    m["delta_raw"] = dinfo["all"]["raw_median"]
+    m["delta_info"] = dinfo
+    m["n_durability"] = len(drows)
     if race_idx is None:
-        caps = capacity_samples(ds, [w for w in ds.workouts if outdoor(w) and is_trail(w) and w.day < tday])
+        caps = capacity_samples(ds, [w for w in ds.workouts if outdoor(w) and w.day < tday], tags=tags)
         race_idx = {i for i, c in caps.items() if c["tags"]["activity_type"] == "race" or c.get("ok")}
-    allx = trail_hr_points(ds, [w for w in ds.workouts if w.idx in race_idx and w.day < tday and w.idx not in exclude])
+    earlier = [w for w in ds.workouts if w.idx in race_idx and w.day < tday and w.idx not in exclude]
+    allx = trail_hr_points(ds, [w for w in earlier if is_trail(w)], heat=False)
     xs = [p["x"] for p in allx if p["T_h"] * 3600.0 >= TH.TRAILHR["race_min_s"]]
-    m["x_race"], m["x_race_source"] = TH.race_level(xs)
+    m["x_race_median"], m["x_race_median_source"] = TH.race_level(xs)
     m["x_race_n"] = len(xs)
+    m["xstar"] = TH.fit_xstar(xstar_points(ds, earlier))
+    # the planner's x_race: the curve at the old "race" length (shown as the HR level); the
+    # prediction itself solves x*(T) at the predicted T (trailhr.predict_race)
+    m["x_race"] = TH.xstar_at(m["xstar"], 3.0)
+    m["x_race_source"] = (f"全力心率曲線 x*(T)（{m['xstar']['n']} 次比賽／全力跑，收縮到文獻先驗）"
+                          if m["xstar"]["n"] else "沒有之前的比賽／全力跑：用文獻先驗 x*(T)")
+    nm_rows = []
+    for w in earlier:
+        if not is_trail(w):
+            continue
+        r = nonmoving_row(ds, w)
+        if r and r["moving_s"] >= TH.TRAILHR["race_min_s"]:
+            nm_rows.append(r)
+    ds.flush_series()
+    m["nonmoving"] = NM.profile(nm_rows)
     m["today"] = today.isoformat()
     m["points"] = pts
     return m

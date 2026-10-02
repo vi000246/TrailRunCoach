@@ -24,14 +24,33 @@
         {
           "title": "每日 TSS（跟體能比）",
           "description": "長條 = 每天的 TSS，顏色是跟前一天的 CTL（你目前每天平均吃得下的負荷）比：灰 = 低於 CTL（這天體能會小降，恢復日正常）；綠 = CTL 到 CTL+30（推進體能的有效負荷）；黃 = CTL+30 到 +60（大負荷日）；紅 = 超過 CTL+60（很重，後面要安排恢復）。依據 Couzens：加量期每天大約 CTL+30。藍線 = CTL（體能），橘線 = ATL（近 7 天的疲勞）：橘線高過藍線代表這陣子練得比平常多。y 軸最高 150：多日百岳那幾天（幾百 TSS）的紅色長條會頂到最上面，實際數字看 hover。",
-          "axes": [{"id": "TSS", "min": 0, "max": 150}],
-          "series": [
-            {"name": "低於 CTL", "type": "stackedbar", "y_axis": "TSS", "color": "#8a8984", "expression": "if(sum(tss, trunc(date)) > 0 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1), sum(tss, trunc(date)))"},
-            {"name": "推進 CTL～+30", "type": "stackedbar", "y_axis": "TSS", "color": "#1baf7a", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 30, sum(tss, trunc(date)))"},
-            {"name": "大負荷 +30～+60", "type": "stackedbar", "y_axis": "TSS", "color": "#eda100", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 30 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)))"},
-            {"name": "很重 > +60", "type": "stackedbar", "y_axis": "TSS", "color": "#e34948", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)))"},
-            {"name": "CTL 體能", "type": "line", "y_axis": "TSS", "color": "#2a78d6", "line_width": "thick", "expression": "tl(tss, ctlconstant)"},
-            {"name": "ATL 疲勞", "type": "line", "y_axis": "TSS", "color": "#eb6834", "expression": "tl(tss, atlconstant)"}
+          "variants": [
+            {
+              "key": "tss",
+              "label": "TSS",
+              "axes": [{"id": "TSS", "min": 0, "max": 150}],
+              "series": [
+                {"name": "低於 CTL", "type": "stackedbar", "y_axis": "TSS", "color": "#8a8984", "expression": "if(sum(tss, trunc(date)) > 0 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1), sum(tss, trunc(date)))"},
+                {"name": "推進 CTL～+30", "type": "stackedbar", "y_axis": "TSS", "color": "#1baf7a", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 30, sum(tss, trunc(date)))"},
+                {"name": "大負荷 +30～+60", "type": "stackedbar", "y_axis": "TSS", "color": "#eda100", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 30 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)))"},
+                {"name": "很重 > +60", "type": "stackedbar", "y_axis": "TSS", "color": "#e34948", "expression": "if(sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)))"},
+                {"name": "CTL 體能", "type": "line", "y_axis": "TSS", "color": "#2a78d6", "line_width": "thick", "expression": "tl(tss, ctlconstant)"},
+                {"name": "ATL 疲勞", "type": "line", "y_axis": "TSS", "color": "#eb6834", "expression": "tl(tss, atlconstant)"}
+              ]
+            },
+            {
+              "key": "pct",
+              "label": "% CTL",
+              "description": "長條 = 每天的 TSS ÷ 前一天的 CTL（全部運動加在一起），100% = 剛好等於你目前每天平均吃得下的負荷（虛線）。類似 WKO5 的 Daily % of CTL，但 WKO5 那張只算跑步。顏色跟 TSS 圖完全一樣，同一天一定同一色：區間是每天用當天的 CTL 把 CTL+30、CTL+60 換算成百分比。灰 = 低於 100%（這天體能會小降，恢復日正常）；綠 = 100% 到 (CTL+30) ÷ CTL（推進體能的有效負荷）；黃 = 到 (CTL+60) ÷ CTL（大負荷日）；紅 = 超過（很重，後面要安排恢復）。所以綠色的上緣會跟著體能移動：CTL 40 時是 175%，CTL 60 時是 150%，CTL 100 時是 130%；體能越高，同樣 +30 TSS 佔的比例越小。依據 Couzens：加量期每天大約 CTL+30。y 軸自動縮放，不裁掉資料：CTL 低的時期或多日百岳會衝很高，實際數字看 hover。",
+              "axes": [{"id": "PERCENT", "min": 0}],
+              "series": [
+                {"name": "低於 CTL（< 100%）", "type": "stackedbar", "y_axis": "PERCENT", "color": "#8a8984", "expression": "if(shift(tl(tss, ctlconstant), 1) > 0 and sum(tss, trunc(date)) > 0 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1), sum(tss, trunc(date)) / shift(tl(tss, ctlconstant), 1))"},
+                {"name": "推進 CTL～+30", "type": "stackedbar", "y_axis": "PERCENT", "color": "#1baf7a", "expression": "if(shift(tl(tss, ctlconstant), 1) > 0 and sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 30, sum(tss, trunc(date)) / shift(tl(tss, ctlconstant), 1))"},
+                {"name": "大負荷 +30～+60", "type": "stackedbar", "y_axis": "PERCENT", "color": "#eda100", "expression": "if(shift(tl(tss, ctlconstant), 1) > 0 and sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 30 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)) / shift(tl(tss, ctlconstant), 1))"},
+                {"name": "很重 > +60", "type": "stackedbar", "y_axis": "PERCENT", "color": "#e34948", "expression": "if(shift(tl(tss, ctlconstant), 1) > 0 and sum(tss, trunc(date)) >= shift(tl(tss, ctlconstant), 1) + 60, sum(tss, trunc(date)) / shift(tl(tss, ctlconstant), 1))"},
+                {"name": "100% = CTL", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,1)"}
+              ]
+            }
           ]
         },
         {

@@ -174,7 +174,7 @@ SECTIONS = ("summary", "aerobic", "intervals", "climbs", "durability", "form")
 EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test",
                   # 間歇判讀 (engine/interval_eval.py)
                   "interval_verdict", "interval_reps", "interval_power", "interval_battery", "interval_tiz",
-                  "interval_hr",
+                  "interval_hr", "wprime_battery",
                   # 跑姿依坡度／隨疲勞 (form_bins)
                   "form_grades", "form_work", "form_cadence")
 SUGGESTED = {"easy": 1, "long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
@@ -2209,6 +2209,274 @@ def _streak_for(ds, w) -> Optional[int]:
         return None
 
 
+# ---------------------------------------------------------------------------
+# dashboard cards (wko5_viewer drawReviewCards; res.cards): the 本次重點 and
+# 飄移判讀 cards as small visual tiles. `series` keeps the text rows (tests,
+# the AI context); the viewer shows only the cards, long text behind each
+# card's ? (`tip`). Card kinds:
+#   stat   {icon, label, value, unit, sub}             one big number
+#   status {icon, label, value, sub, level}            ✓ / ⚠ / ✕ + a few words
+#   zones  {zones: [{key, label, seconds, share}]}     the 3-zone split bar
+#   chip   {icon, text, level}                         icon + a few words
+#   tag    {icon, text}                                the session's type / terrain / phase
+# level: good / warn / bad / na / info
+# ---------------------------------------------------------------------------
+
+def _card(kind: str, **kw) -> dict:
+    return {"kind": kind, **{k: v for k, v in kw.items() if v is not None and v != ""}}
+
+
+def drift_level(d: Optional[float]) -> str:
+    return "na" if d is None else "good" if d < DRIFT_GOOD else "warn" if d < DRIFT_WATCH else "bad"
+
+
+def short_reason(dr: dict, basis: str = "pace") -> str:
+    """≤ 8 words for a refused drift: 「太短（28 分）」, 「有坡」, 「太熱（29 °C）」 …"""
+    why = (dr.get("pw_reason") if basis == "power" and (dr.get("ok") or dr.get("ref_ok")) else dr.get("reason")) or ""
+    ms = _f(dr.get("measured_s"))
+    if dr.get("hot") and dr.get("temp_c") is not None:
+        return f"太熱（{dr['temp_c']:.0f} °C）"
+    for key, text in (("沒有心率或速度", "沒有心率或速度"), ("不是跑步", "不是跑步"), ("有坡", "有坡（越野）"),
+                      ("中途停了", "停太久"), ("明顯放慢", "跑走交替"), ("功率起伏大", "功率起伏大"),
+                      ("% CP", "強度太高"), ("強度沒有維持", "前後半強度不同"), ("快速結尾", "結尾加速"),
+                      ("沒有功率", "沒有功率"), ("功率只涵蓋", "功率不完整"), ("功率資料不夠", "功率不夠"),
+                      ("有效資料不夠", "資料不夠")):
+        if key in why:
+            return text
+    if "暖身後只有" in why:
+        return f"太短（{int((ms or 0) // 60)} 分）" if ms is not None else "太短"
+    return "不採用"
+
+
+def _tier_word(dr: dict) -> str:
+    t = drift_tier(dr)
+    return "測試級" if t == "test" else "參考級" if t == "ref" else "不採用"
+
+
+def _drift_tip(dr: dict, basis: str, lines: list[str]) -> str:
+    power = basis == "power"
+    parts = list(lines)
+    if dr.get("hr1") is not None and not power:
+        parts.append(f"前半／後半心率 {dr['hr1']:.0f} → {dr['hr2']:.0f} bpm；速度 {dr['v1']:.2f} → {dr['v2']:.2f} km/h")
+    if dr.get("pw_hr1") is not None and power:
+        parts.append(f"前半／後半心率 {dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm；功率 {dr['p1']:.0f} → {dr['p2']:.0f} W")
+    if dr.get("drift") is not None or dr.get("pw_drift") is not None:
+        parts.append(start_text(dr))
+    parts.append(("Pw:HR = 功率／心率" if power else "Pa:HR = 速度／心率") +
+                 "，比較前後半；< 5% 穩、5–10% 後段往上跑、> 10% 有氧基礎不足或跑太快。"
+                 "暖身後 ≥ 40 分是測試級（UA 測試標準），30–40 分只當參考級。")
+    if drift_tier(dr) == "ref":
+        parts.append(REF_TIP)
+    if dr.get("drift_se") is not None or dr.get("pw_drift_se") is not None:
+        parts.append(SE_TIP)
+    return "\n".join(p for p in parts if p)
+
+
+def drift_card(dr: dict, basis: str, lines: list[str], judged: bool = True, typ_label: str = "") -> dict:
+    """The main drift card: 「Pa:HR 3.2% ±2.1」 + tier, or 「不採用：原因」."""
+    power = basis == "power"
+    d, why = basis_drift(dr, basis, ref=True)
+    name = "Pw:HR 飄移" if power else "Pa:HR 飄移"
+    if d is None:
+        return _card("status", id="drift", icon="drift", label=name, value="不採用", sub=short_reason(dr, basis),
+                     level="na", tip="\n".join([why] + [x for x in lines if x != why]))
+    se = dr.get("pw_drift_se" if power else "drift_se")
+    sub = _tier_word(dr) if judged else f"{typ_label}不判讀"
+    return _card("status", id="drift", icon="drift", label=name, value=_pct(d),
+                 pm=None if se is None else f"±{se * 100:.1f}", sub=sub,
+                 level=drift_level(d) if judged else "info", tip=_drift_tip(dr, basis, lines))
+
+
+def _over_aet(m: dict) -> Optional[float]:
+    over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
+    return over / tot if over is not None and tot > 0 else None
+
+
+def _stat_cards(w, m: dict) -> list[dict]:
+    mt = w.metrics or {}
+    dist, climb, tss = _f(mt.get("distance")), _f(mt.get("climbing")), _f(mt.get("tss"))
+    aet, lthr = m.get("aet"), m.get("lthr")
+    out = [_card("stat", id="time", icon="time", label="移動時間", value=_hms(m.get("moving_s")),
+                 sub=f"全程 {_hms(m.get('elapsed_s'))}")]
+    if dist:
+        out.append(_card("stat", id="distance", icon="distance", label="距離", value=_num(dist, 1 if dist < 100 else 0), unit="km"))
+    if climb is not None and (climb >= 1 or dist):
+        out.append(_card("stat", id="gain", icon="gain", label="爬升", value=f"{climb:,.0f}", unit="m"))
+    if tss is not None:
+        out.append(_card("stat", id="tss", icon="tss", label="TSS", value=_num(tss)))
+    if m.get("avg_hr"):
+        out.append(_card("stat", id="hr", icon="hr", label="平均心率", value=_num(m["avg_hr"]), unit="bpm",
+                         sub=f"AeT {_num(aet)} · LTHR {_num(lthr)}" if aet or lthr else None))
+    if m.get("avg_power"):
+        out.append(_card("stat", id="power", icon="power", label="平均功率", value=_num(m["avg_power"]), unit="W",
+                         sub=f"CP {_num(m.get('cp'))}" if m.get("cp") else None))
+    return out
+
+
+def _zones_card(m: dict) -> Optional[dict]:
+    z = m.get("zones")
+    if not z or sum(z.values()) <= 0:
+        return None
+    tot = sum(z.values())
+    aet, lthr = m.get("aet"), m.get("lthr")
+    return _card("zones", id="zones", icon="zones", label="三區時間", zones=[
+        {"key": "low", "label": "低", "name": f"< AeT {_num(aet)}", "seconds": z["low"], "share": z["low"] / tot},
+        {"key": "mid", "label": "中", "name": f"AeT–LTHR {_num(aet)}–{_num(lthr)}", "seconds": z["mid"], "share": z["mid"] / tot},
+        {"key": "high", "label": "高", "name": f"≥ LTHR {_num(lthr)}", "seconds": z["high"], "share": z["high"] / tot}],
+        tip=f"只算有心率的移動時間：< AeT（{_num(aet)} bpm）是低強度，AeT–LTHR 是中強度（灰色地帶），"
+            f"≥ LTHR（{_num(lthr)} bpm）是高強度。")
+
+
+def _durability_card(ds, w) -> Optional[dict]:
+    last = _last20(ds, w)
+    if last is None:
+        return None
+    lvl = "good" if last >= 0.95 else "warn" if last >= LAST20_MIN else "bad"
+    word = "後段撐得住" if lvl == "good" else "後段開始累" if lvl == "warn" else "後段明顯掉了"
+    return _card("status", id="durability", icon="durability", label="耐久", value=f"{last * 100:.0f}%", sub=word, level=lvl,
+                 tip=f"最後 20% 的時間裡，同樣心率的輸出（功率，沒有功率時用速度）和暖身後相比。"
+                     f"≥ 95% 撐得住；90–95% 開始累（95% 推估）；< 90% 補給或配速要調整。詳細在「配速與耐久」。")
+
+
+def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]) -> list[dict]:
+    typ = c["type"]
+    cards = [_card("tag", id="type", icon=("z5" if typ == "quality" else "test" if typ.startswith("test") else
+                                          "long" if typ == "long" else "strength" if typ == "strength" else "easy"),
+                   text=c["type_label"])]
+    if c.get("terrain_label"):
+        cards.append(_card("tag", id="terrain", icon="climb" if c["terrain"] in ("trail", "hike") else "distance",
+                           text=c["terrain_label"]))
+    if c.get("phase_label"):
+        cards.append(_card("tag", id="phase", icon="flag", text=c["phase_label"]))
+    cards += _stat_cards(w, m)
+    zc = _zones_card(m)
+    if zc:
+        cards.append(zc)
+    if typ in ("strength", "bike", "walk", "other"):
+        cards.append(_card("chip", id="only", icon="info", text="只看時間與心率", level="info",
+                           tip=f"{c['type_label']}：只看時間與心率，沒有其他判讀"))
+        return cards
+    dr = m.get("drift") or {}
+    sport_run = m.get("category") in ("road", "trail")
+    # 飄移 (easy / long / AeT test judged; other runs shown, not judged)
+    if typ in ("easy", "long", "test_aet"):
+        cards.append(drift_card(dr, "pace", [x for x in lines if "飄移" in x or "AeT" in x], True))
+    elif sport_run and basis_drift(dr, "pace", ref=True)[0] is not None:
+        cards.append(drift_card(dr, "pace", [], False, c["type_label"]))
+    # 耐久
+    dc = _durability_card(ds, w)
+    if dc:
+        cards.append(dc)
+    # 強度 / 間歇 / CP 測試
+    if typ in ("easy", "long"):
+        sh = _over_aet(m)
+        if sh is not None:
+            high = sh > OVER_AET_SHARE
+            cards.append(_card("status", id="intensity", icon="intensity", label="強度",
+                               value=f"{sh * 100:.0f}%", sub="太高：下次放慢" if high else "AeT+3 以下",
+                               level="warn" if high else "good",
+                               tip=f"心率超過 AeT+3（{_num((m.get('aet') or 0) + AET_MARGIN)} bpm）的時間佔 {sh * 100:.0f}%；"
+                                   f"輕鬆跑、長跑 ≤ 10% 才算壓在有氧區。"))
+    elif typ == "quality":
+        iv = m.get("intervals") or {}
+        n, inb = iv.get("n") or 0, iv.get("in_band")
+        lvl = "na" if not n else "info" if inb is None or not iv.get("band") else "good" if inb == n else "warn"
+        cards.append(_card("status", id="intervals", icon="z3", label="間歇",
+                           value=f"{inb}/{n}" if n and iv.get("band") else str(n) if n else "–",
+                           sub=(f"組在 {iv['band'][0]} 帶" if n and iv.get("band") else "組" if n else "沒有偵測到"),
+                           level=lvl, tip="\n".join(interval_lines(m)) + "\n詳細在「間歇」。"))
+    elif typ == "test_cp":
+        cp = (ev or {}).get("cp")
+        dlt = (ev or {}).get("delta")
+        cards.append(_card("status", id="cp", icon="test", label="CP 測試", value=_num(cp) if cp else "–", unit="W" if cp else None,
+                           sub=("已套用" if (ev or {}).get("applied") else "建議更新" if dlt is not None and abs(dlt) > CP_DELTA
+                                else "不用改" if dlt is not None else "算不出" if not ev else None),
+                           level="na" if not ev else "warn" if dlt is not None and abs(dlt) > CP_DELTA and not ev.get("applied") else "good",
+                           tip="\n".join(lines)))
+    # 爬坡（越野、健行）
+    if c["terrain"] in ("trail", "hike"):
+        cl = m.get("climbs") or []
+        if cl:
+            cards.append(_card("stat", id="climbs", icon="climb", label="爬坡段", value=str(len(cl)), unit="段",
+                               sub=f"共 {sum(x['gain_m'] for x in cl):.0f} m · 每 100 m {_num(m.get('hr_per_100m'))} 下",
+                               tip="\n".join(_trail_lines(ds, w, m)) or None))
+    if c.get("cp_hint"):
+        cards.append(_card("chip", id="cp_hint", icon="test", text="像 CP 測試？", level="info", tip=CP_HINT))
+    return cards
+
+
+def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> list[dict]:
+    """The 飄移判讀 card as small cards: the drift (main), then chips only when they apply."""
+    dr = m.get("drift") or {}
+    power = basis == "power"
+    judged = c["type"] in ("easy", "long", "test_aet")
+    main = drift_card(dr, basis, lines, judged, c["type_label"])
+    if c["type"] == "test_aet" and main.get("value") not in (None, "不採用"):
+        d = basis_drift(dr, basis, ref=True)[0]
+        main["sub"] = ("AeT 可以再高" if d < 0.035 else "前半心率＝AeT" if d <= DRIFT_GOOD else "AeT 設太高") + f" · {_tier_word(dr)}"
+    cards = [main]
+    if main.get("value") == "不採用":
+        return cards
+    chip = lambda **kw: cards.append(_card("chip", **kw))           # noqa: E731
+    # the other basis
+    od, owhy = basis_drift(dr, "pace" if power else "power", ref=True)
+    oname = "Pa:HR" if power else "Pw:HR"
+    chip(id="other", icon="power" if not power else "distance", text=f"{oname} {_pct(od)}" if od is not None else f"{oname} —",
+         level=drift_level(od) if od is not None and judged else "na", tip=None if od is not None else owhy)
+    # the start / return-leg / idle cut
+    cut = []
+    r = dr.get("start_shift")
+    if r and not r.get("fallback"):
+        cut.append(f"前段 {_hms(r.get('shifted_s'))}")
+    t = dr.get("tail")
+    if t:
+        cut.append(f"回程 {_hms(t.get('excluded_s'))}")
+    if _f(dr.get("idle_s")):
+        cut.append(f"結尾 {_hms(dr.get('idle_s'))}")
+    ex = excluded_text(dr)
+    if cut or ex:
+        chip(id="cut", icon="scissors", text="已排除 " + "・".join(cut) if cut else "已排除", level="info",
+             tip="\n".join(x for x in (ex, START_TIP, TAIL_TIP) if x))
+    elif abs((_f(dr.get("warmup_s")) or WARMUP_S) - WARMUP_S) >= 1:
+        chip(id="cut", icon="scissors", text=start_text(dr), level="info", tip=START_TIP)
+    # ramps: the ramp-free comparison
+    rp = dr.get("ramps")
+    if rp:
+        wo = rp.get("pw_drift" if power else "drift")
+        chip(id="ramps", icon="ramp", text=f"去坡道 {_pct(wo)}" if wo is not None else "去坡道 —", level="info",
+             tip="\n".join(x for x in (ramps_text(dr, power), RAMP_TIP) if x))
+    # heat
+    tc = dr.get("temp_c")
+    if tc is not None:
+        chip(id="heat", icon="temp", text=f"{tc:.0f} °C", level="good" if tc <= DRIFT_HEAT_C else "warn",
+             tip=f"{TEMP_SRC_LABEL.get(dr.get('temp_src'), '溫度')} {tc:.0f} °C；> {DRIFT_HEAT_C:.0f} °C 熱會讓心率飄，飄移不採用"
+                 "（徐國峰 < 25 °C；Lafrenz 2008）")
+    elif m.get("category") in ("road", "trail"):
+        chip(id="heat", icon="temp", text="沒有溫度", level="na",
+             tip=f"沒有溫度資料：> {DRIFT_HEAT_C:.0f} °C 的熱檢查不到")
+    # stability (road)
+    st = stability_text(dr, power)
+    if st and m.get("category") == "road" and dr.get("vi") is not None:
+        chip(id="stability", icon="gauge", text=f"VI {dr['vi']:.2f}", level="info", tip=f"{st}\n{STABILITY_TIP}")
+    # precision
+    se = dr.get("pw_drift_se" if power else "drift_se")
+    if se is not None and se > DRIFT_NOISY_SE:
+        chip(id="noisy", icon="noise", text="這次很吵", level="warn",
+             tip=f"這次 {se_text(se)} > ±{DRIFT_NOISY_SE * 100:.0f} pp：只當多次平均的一個點（門檻推估）\n{SE_TIP}")
+    # over AeT+3
+    sh = _over_aet(m)
+    if sh is not None:
+        chip(id="over", icon="intensity", text=f"AeT+3 以上 {sh * 100:.0f}%", level="warn" if sh > OVER_AET_SHARE and judged else "info",
+             tip=f"心率超過 AeT+3 的時間 {_hms(m.get('over_aet_s'))}（{sh * 100:.0f}%）；輕鬆跑、長跑 ≤ 10%")
+    # the same-type baseline
+    if judged:
+        b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis, ref=True)[0])
+        if b.get("ok"):
+            chip(id="baseline", icon="baseline", text=f"同類中位 {_pct(b['median'])}", level="info",
+                 tip="同類課表基準：" + _base_text(b, lambda x: _pct(x)))
+    return cards
+
+
 def _summary(ds, w, m, c, base):
     typ = c["type"]
     rows = [_row("課表", f"{c['type_label']}" + (f" · {c['terrain_label']}" if c["terrain_label"] else "")
@@ -2223,7 +2491,9 @@ def _summary(ds, w, m, c, base):
         rows.append(_row("三區", f"< AeT {z['low'] / tot * 100:.0f}% · AeT–LTHR {z['mid'] / tot * 100:.0f}% · "
                                  f"≥ LTHR {z['high'] / tot * 100:.0f}%"))
     if typ in ("strength", "bike", "walk", "other"):
-        return {**base, "series": rows + _verdict_rows([f"{c['type_label']}：只看時間與心率，沒有其他判讀"])}
+        return {**base, "series": rows + _verdict_rows([f"{c['type_label']}：只看時間與心率，沒有其他判讀"]),
+                "cards": _summary_cards(ds, w, m, c, [], None)}
+    ev = None
     if typ == "test_aet":
         lines = _aet_test_lines(ds, w, m, base) or aerobic_lines(typ, m)
     elif typ in ("easy", "long"):
@@ -2235,6 +2505,7 @@ def _summary(ds, w, m, c, base):
         lines = cp_lines(ev, m.get("avg_power") is not None)
         if ev and ev.get("apply"):
             base = {**base, "action": _apply_action(ev)}
+    cards = _summary_cards(ds, w, m, c, lines, ev)
     if c["terrain"] in ("trail", "hike"):
         cl = m.get("climbs") or []
         if cl:
@@ -2243,9 +2514,8 @@ def _summary(ds, w, m, c, base):
         lines = (_trail_lines(ds, w, m) + lines)[:3]
     if c.get("cp_hint"):
         rows.append(_row("CP 測試？", CP_HINT))
-    rows.append(_row("建議分頁", ["本次重點", "有氧／心率飄移", "間歇", "爬坡與地形", "配速與耐久",
-                                "跑姿與膝蓋負荷（參考）"][base["suggested_dashboard"]]))
-    return {**base, "series": rows + _verdict_rows(lines)}
+    # (the 「建議分頁」 row is gone: the user asked for it to be removed; `suggested_dashboard` stays in the JSON)
+    return {**base, "series": rows + _verdict_rows(lines), "cards": cards}
 
 
 def _aerobic(ds, w, m, c, base):
@@ -2303,7 +2573,7 @@ def _aerobic(ds, w, m, c, base):
         lines = _aet_test_lines(ds, w, m, base) or aerobic_lines("test_aet", m)
     else:
         lines = aerobic_lines(c["type"], m, None, basis)
-    return {**base, "series": rows + _verdict_rows(lines)}
+    return {**base, "series": rows + _verdict_rows(lines), "cards": _aerobic_cards(ds, w, m, c, basis, lines)}
 
 
 def _aet_test_lines(ds, w, m, base: dict) -> Optional[list[str]]:
@@ -2951,21 +3221,37 @@ def _cp(ds, w, m, c, base):
 
 
 # ---------------------------------------------------------------------------
-# 間歇判讀 (engine/interval_eval.py; interval-prescription.md Part B) — six cards,
-# hidden on activities that aren't interval / quality sessions
+# 間歇判讀 (engine/interval_eval.py; interval-prescription.md Part B) — the 間歇
+# dashboard is shown for every run (interval_eval.card): a plan / detected interval
+# session or a CP / AeT test fills every card; otherwise the verdict card says why
+# (不是間歇課 + 「當作間歇判讀」, or no power) and the battery still shows W′; the
+# per-rep cards (reps, power, TIZ, HR) only drop out when there are no reps to show.
 # ---------------------------------------------------------------------------
 
-GOOD, BAD, SERIES1, SERIES2, MUTED = "#0ca30c", "#d03b3b", "#2a78d6", "#eb6834", "#898781"
+GOOD, BAD, WARN, SERIES1, SERIES2, MUTED = "#0ca30c", "#d03b3b", "#c98a00", "#2a78d6", "#eb6834", "#898781"
 
 
 def _ie(ds, w, base):
+    """(evaluation, None) or (None, the card to return instead). Only the
+    verdict card shows the not-an-interval / no-power text; the per-rep cards
+    drop out then, so the dashboard reads as one short card."""
     from backend.engine import interval_eval as IE
-    e = IE.cached(ds, w)
-    if not e:
-        return None, {**base, "hide": True, "empty": "不是間歇課"}
+    e = IE.card_cached(ds, w)
     if not e.get("ok"):
-        return None, {**base, "empty": e.get("why") or "無法判讀"}
+        return None, {**base, "hide": True}
     return e, None
+
+
+def _offer_action(w) -> dict:
+    """「當作間歇判讀」: adds the activity tag interval_eval.FLAG_TAG (PATCH
+    /api/v1/wko5/activities, the 活動編輯 page's key-based edit), then the
+    viewer reloads the dashboard (`reload`)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.interval_eval import FLAG_TAG
+    return {"kind": "flag_interval", "label": "當作間歇判讀", "method": "PATCH", "url": "/api/v1/wko5/activities",
+            "body": {"items": [{"key": AT.key_of(w.entry.start), "file": getattr(w.entry, "file", None)}],
+                     "add_tags": [FLAG_TAG]},
+            "done": f"已標記「{FLAG_TAG}」，重新判讀中…（到活動編輯頁移除這個標籤可以取消）", "reload": True}
 
 
 def _thin(xs: list, ys: list, n: int = 1800) -> list:
@@ -2975,10 +3261,32 @@ def _thin(xs: list, ys: list, n: int = 1800) -> list:
 
 
 def _iv_verdict(ds, w, m, c, base):
-    e, bad = _ie(ds, w, base)
-    if bad:
-        return bad
-    sub = f"{e['label']}" + ("" if e["planned"] else "（沒有對應的課表：用偵測到的趟）")
+    from backend.engine import interval_eval as IE
+    e = IE.card_cached(ds, w)
+    if not e.get("ok"):
+        if e.get("state") != "offer":
+            return {**base, "empty": e.get("why") or "無法判讀"}
+        n = e.get("n_bouts") or 0
+        rows = [_row("間歇", e["why"])]
+        if e.get("flagged"):
+            return {**base, "series": rows}
+        rows.append(_row("偵測", f"偵測到 {n} 趟用力段，可以當作間歇判讀" if n else "沒有偵測到用力段，當作間歇也沒有趟可判讀",
+                         "用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段"))
+        head = "找不到趟" if c["type"] == "quality" else "這次不是間歇課"
+        out = {**base, "badge": {"text": head, "level": "", "sub": e.get("type_label") or ""}, "series": rows}
+        if n:
+            out["action"] = _offer_action(w)
+        return out
+    if e.get("kind") == "test":
+        rows = [_row("判定", e["verdict_label"], "測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）"),
+                _row("流程", e["label"])]
+        for i, r in enumerate(e["reasons"]):
+            rows.append(_row("各段" if i == 0 else "", r))
+        rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
+                         f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證"))
+        return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": e["label"]}, "series": rows}
+    sub = f"{e['label']}" + ("" if e["planned"] else
+                             "（你標了「當作間歇」：用偵測到的趟）" if e.get("flagged") else "（沒有對應的課表：用偵測到的趟）")
     rows = [_row("判定", e["verdict_label"], "對照「這次選的課表」本身的計畫；同等與否在選課時已決定"),
             _row("課表", sub)]
     for i, r in enumerate(e["reasons"]):
@@ -2999,6 +3307,8 @@ def _iv_reps(ds, w, m, c, base):
     wu = U.meta("WATTS")
     xu = {"id": "REP", "label": "趟", "kind": "number", "dec": [[0, 0]]}
     cp = e["cp"]
+    if e.get("kind") == "test":
+        return _iv_reps_test(e, base, wu, xu)
     ok = [[r["k"], round(r["power"])] for r in e["reps"] if r["in_band"]]
     no = [[r["k"], round(r["power"])] for r in e["reps"] if not r["in_band"]]
     lab = lambda rs, t: [f"{t} {round(r['power'])} W" for r in rs]
@@ -3016,6 +3326,34 @@ def _iv_reps(ds, w, m, c, base):
     return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
 
 
+def _iv_reps_test(e, base, wu, xu):
+    """A test's bouts: bar = the bout's mean (green = even, amber = not), the
+    marker = all-out by the CP model (CP test only, 推估). No target band."""
+    cp = e["cp"]
+    ev = [r for r in e["reps"] if r["even"]]
+    un = [r for r in e["reps"] if not r["even"]]
+    lab = lambda rs, t: [f"{t} {r['name']} {round(r['power'])} W" for r in rs]
+    s = [{"name": "✓ 配速平均", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": GOOD,
+          "bar_width": 28, "labels": lab(ev, "✓"), "data": {"kind": "points", "x": "value",
+                                                           "points": [[r["k"], round(r["power"])] for r in ev]}},
+         {"name": "◐ 不平均", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": WARN,
+          "bar_width": 28, "labels": lab(un, "◐"), "data": {"kind": "points", "x": "value",
+                                                           "points": [[r["k"], round(r["power"])] for r in un]}},
+         {"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
+          "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}}]
+    exp = [[r["k"], round(r["expected"])] for r in e["reps"] if r.get("expected")]
+    if exp:
+        s.append({"name": "預期全力（CP + W′/t，推估）", "type": "line", "line_style": "none", "expression": "",
+                  "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": SERIES1,
+                  "labels": [f"預期 {p[1]} W" for p in exp], "data": {"kind": "points", "x": "value", "points": exp}})
+    desc = (f"{e['label']}：每段一根柱子（綠＝前後半配速平均，黃＝不平均）。"
+            + ("點＝這段長度的預期全力功率，用測試前的 CP 和 W′ 依 CP 模型 P = CP + W′/t 算"
+               f"（Monod & Scherrer 1965；{e['wprime_src']}）。" if exp else "")
+            + "平均＝後半和前半差 ±" + ("5" if e.get("intent") == "max" else "3")
+            + "% 內、最後 1 分 ≤ 該段 × 1.08（推估）。測試不用目標帶判「達標」。")
+    return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
+
+
 def _iv_power(ds, w, m, c, base):
     """A simplified 「Run VO2max & FRC Chart – 5 Min PDC & Skiba」: power with the reps,
     CP and the target band only; the 5-min PDC and W′ in the hover text."""
@@ -3028,29 +3366,44 @@ def _iv_power(ds, w, m, c, base):
     p = np.asarray(ser["power"], float)
     p30 = np.convolve(np.nan_to_num(p), np.ones(30) / 30, "same") if len(p) else p
     cp = e["cp"]
+    test = e.get("kind") == "test"
     s = [{"name": "功率（30 秒）", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
-          "line_width": "thin", "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], list(p30))}},
-         {"name": "目標帶", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
-          "data": {"kind": "band", "range": [round(e["lo"] * cp), round(e["hi"] * cp)]}},
-         {"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
-          "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}}]
+          "line_width": "thin", "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], list(p30))}}]
+    if not test:
+        s.append({"name": "目標帶", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
+                  "data": {"kind": "band", "range": [round(e["lo"] * cp), round(e["hi"] * cp)]}})
+    s.append({"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
+              "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}})
     for r in e["reps"]:
-        s.append({"name": "✓ 達標的趟（開始）" if r["in_band"] else "✕ 沒到的趟（開始）", "type": "line",
-                  "expression": "", "y_axis": "WATTS", "unit": wu,
-                  "color": GOOD if r["in_band"] else BAD, "line_style": "dot",
-                  "data": {"kind": "vline", "x": r["start_s"]}})
+        if test:
+            nm, col = ("✓ 平均的段（開始）", GOOD) if r["even"] else ("◐ 不平均的段（開始）", WARN)
+        else:
+            nm, col = ("✓ 達標的趟（開始）", GOOD) if r["in_band"] else ("✕ 沒到的趟（開始）", BAD)
+        s.append({"name": nm, "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu,
+                  "color": col, "line_style": "dot", "data": {"kind": "vline", "x": r["start_s"]}})
     pdc = e.get("pdc5")
-    desc = (f"CP {cp:.0f} W；目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP。"
+    desc = (f"CP {cp:.0f} W" + ("；測試沒有目標帶。" if test else f"；目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP。")
             + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，WKO5 的 5 Min PDC 參考）。" if pdc else "")
-            + "虛線 = 每趟開始（綠＝達標、紅＝沒到）。W′ 剩多少見「功率電池」。")
+            + ("虛線 = 每段開始（綠＝配速平均、黃＝不平均）。" if test else "虛線 = 每趟開始（綠＝達標、紅＝沒到）。")
+            + "W′ 剩多少見「功率電池」。")
     return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
 
 
-def _iv_battery(ds, w, m, c, base):
-    """「dFRC Run」as a battery: the W′ left over time (WKO5 dFRC), Skiba for comparison."""
-    e, bad = _ie(ds, w, base)
-    if bad:
-        return bad
+def _battery_of(ds, w):
+    """The card's battery numbers: the evaluation's (rep-aware τ), else the
+    not-an-interval card's (every run with power). None without power / CP."""
+    from backend.engine import interval_eval as IE
+    e = IE.card_cached(ds, w)
+    return e if e.get("series") and e["series"].get("t") and e.get("dfrc_min_pct") is not None else None
+
+
+def _iv_battery(ds, w, m, c, base, compact: bool = False):
+    """「dFRC Run」as a battery: the W′ left over time (WKO5 dFRC), Skiba for
+    comparison — every run with power (long and trail runs too). `compact`
+    (本次重點): dFRC only, with a one-line subtitle."""
+    e = _battery_of(ds, w)
+    if e is None:
+        return {**base, "hide": True}
     from backend.engine.wko5expr import units as U
     pct = U.meta("PERCENT")
     ser = e["series"]
@@ -3063,16 +3416,29 @@ def _iv_battery(ds, w, m, c, base):
          {"name": "最低", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "labels": [f"最低 {lo_v * 100:.0f}%"], "data": {"kind": "points", "x": "seconds",
                                                           "points": [[round(lo_t, 1), round(lo_v, 4)]]}}]
-    desc = (f"電池 = 還剩多少 W′（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP 就耗電，休息時回充。"
-            f"dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），Skiba 用跑步的 τ（Vassallo 2020）；兩者都只是推估，"
-            f"跑步沒驗證。{e['wprime_src']}")
-    return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc}
+    desc = (f"電池 = 還剩多少 W′（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP（{e['cp']:.0f} W）就耗電，"
+            f"休息或低於 CP 時回充。dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），Skiba 用跑步的 τ（Vassallo 2020）；"
+            f"兩者都只是推估，跑步沒驗證。{e['wprime_src']}")
+    sub = (f"整趟高於 CP 的功 {e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′，"
+           f"含回充後再用），電池最低 {lo_v * 100:.0f}%（{_hms(lo_t)}）")
+    if compact:
+        s = [x for x in s if not x["name"].startswith("Skiba")]
+        desc = "W′ 電池：dFRC（WKO5）剩多少，100% = 滿。Skiba 對照和逐趟數字在「間歇」分頁。" + desc
+    return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc,
+            "subtitle": sub}
+
+
+def _wprime_battery(ds, w, m, c, base):
+    """本次重點's small W′ card (the same numbers as 間歇 → 功率電池)."""
+    return _iv_battery(ds, w, m, c, base, compact=True)
 
 
 def _iv_tiz(ds, w, m, c, base):
     e, bad = _ie(ds, w, base)
     if bad:
         return bad
+    if e.get("kind") == "test":
+        return {**base, "hide": True}           # a test has no target zone
     from backend.engine.wko5expr import units as U
     du = U.meta("HHMMSS")
     xu = {"id": "BAR", "label": "", "kind": "number", "dec": [[0, 0]]}
@@ -3094,6 +3460,8 @@ def _iv_hr(ds, w, m, c, base):
     e, bad = _ie(ds, w, base)
     if bad:
         return bad
+    if e.get("kind") == "test":
+        return {**base, "hide": True}           # tests aren't compared with interval sessions
     from backend.engine.wko5expr import units as U
     bu = U.meta("BPM")
     ps = e.get("peers") or []
@@ -3118,6 +3486,7 @@ def _iv_hr(ds, w, m, c, base):
 _SECTIONS = {"summary": _summary, "aerobic": _aerobic, "intervals": _intervals, "climbs": _climbs,
              "interval_verdict": _iv_verdict, "interval_reps": _iv_reps, "interval_power": _iv_power,
              "interval_battery": _iv_battery, "interval_tiz": _iv_tiz, "interval_hr": _iv_hr,
+             "wprime_battery": _wprime_battery,
              "durability": _durability, "form": _form, "grades": _grades, "pacing": _pacing,
              "durability_curve": _durability_curve, "cp_test": _cp,
              "form_grades": _form_grades, "form_work": _form_work, "form_cadence": _form_cadence}

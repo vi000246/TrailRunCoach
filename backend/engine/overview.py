@@ -504,13 +504,16 @@ def quality_caps(prefs, long_wd: int) -> tuple[Optional[float], list]:
     return float(prefs.cap_weekday), alt
 
 
-def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None) -> dict:
+def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
+              b2b_accepted: Optional[list] = None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
 
     `status` is a computed `backend.engine.status.Status` (phase, goals and the
     indicators steer the plan). `prefs`: engine.plan_prefs.Prefs (課表偏好);
     None or the defaults keep the original rules untouched. `blackouts`:
-    engine.blackouts ranges (不排課日期); None / empty = none."""
+    engine.blackouts ranges (不排課日期); None / empty = none. `b2b_accepted`:
+    the accepted B2B entries (engine/b2b.load_accepted); None = none — a due
+    B2B is then only a suggestion (`b2b_suggestion`)."""
     from backend.engine import b2b as B2B
     from backend.engine import blackouts as BL
     from backend.engine import plan_prefs as PP
@@ -564,7 +567,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             why.append(f"但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last_h:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h")
         # B2B (engine/b2b.py): a planned B2B's TSB drop doesn't make this / next week a recovery week
         b2b = B2B.plan_context(ds, status, today, monday, [h for _, h, _ in hist], ctl_s, atl_s, d_prev_sun, by,
-                               "recovery_week" if build3 else kind)
+                               "recovery_week" if build3 else kind, accepted=b2b_accepted)
         b2b_exempt = B2B.tsb_exempt(b2b, tsb_today, b2b.get("ramp"))
         if b2b_exempt:
             why.append(b2b_exempt)
@@ -739,8 +742,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             source=SRC_KOOP if kind == "specific" else SRC_UA,
             tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
         if b2b.get("candidate") and not in_reentry:
+            # a due B2B is a SUGGESTION (b2b_suggestion below); only an accepted one is planned
             B2B.finalize(b2b, sessions[-1].minutes, b2b.get("longest_before") or 0.0, minutes_total)
-        if b2b.get("due"):            # day 2 (and 3): out of the easy minutes below (Koop: total unchanged)
+        if b2b.get("due"):            # accepted: day 2 out of the easy minutes below (Koop: total unchanged)
             ls = asdict(sessions[-1])
             fol = B2B.followers(ls, b2b)
             sessions[-1] = Session(**ls)
@@ -951,11 +955,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if not keep_rest and free:
         notes.append({"level": "info", "text": "剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息"})
     if b2b.get("due"):
-        # B2B days on consecutive days around the long run (engine/b2b.py place)
+        # the accepted B2B on the user's two days (engine/b2b.py place, fixed): the rest moves around them
         dd = [asdict(s) for s in sessions]
-        kept = B2B.place(dd, monday, first, set(bmap), allowed_fn, notes, PR.cap_weekday if PR is not None else None)
+        kept = B2B.place(dd, monday, first, set(bmap), allowed_fn, notes, PR.cap_weekday if PR is not None else None,
+                         fixed=b2b.get("pair"))
         sessions = [Session(**d) for d in kept]
         B2B.placed(b2b, kept)
+    b2b_suggestion = B2B.suggestion(b2b, monday, next((s.day for s in sessions if s.id == "long"), None),
+                                    enabled=getattr(prefs, "b2b", True) is not False)
     # ---- 負重訓練 (engine/loaded_carry.py): the long day's pack, the weekday machine session,
     # ME instead of strength1, the taper's short carry — on the placed sessions
     from backend.engine import loaded_carry as LC
@@ -1066,6 +1073,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "reentry": rp,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card
         "b2b": B2B.public(b2b),
+        # a due B2B, suggested (never scheduled until accepted: api/plan_sessions suggestions)
+        "b2b_suggestion": b2b_suggestion,
         # 負重訓練 (engine/loaded_carry.py): this week's stage / loaded sessions, for projection and the card
         "loaded_carry": LC.public(lc),
     }

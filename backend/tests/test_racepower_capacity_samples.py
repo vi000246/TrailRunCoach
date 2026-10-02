@@ -127,8 +127,13 @@ def test_trail_race_like_rules():
     assert MX.trail_maximal(s, lthr, aet)["ok"]
     assert not MX.trail_maximal({**s, "km": 9.9}, lthr, aet)["ok"]
     assert not MX.trail_maximal({**s, "moving_s": 89 * 60.0}, lthr, aet)["ok"]
-    assert not MX.trail_maximal({**s, "hr_avg": 0.90 * lthr - 0.1}, lthr, aet)["ok"]
-    assert not MX.trail_maximal({**s, "above_aet": 0.66}, lthr, aet)["ok"]
+    # 2026-10-02 (§A2): the HR threshold is x*_prior(T) − 0.03 for the moving time, no AeT share
+    from backend.engine.racepower import trailhr as TH
+    need = TH.auto_max_frac(232 / 60.0)
+    assert need == pytest.approx(0.9625 - 0.0476 * math.log(232 / 60.0) - 0.03, abs=1e-3)
+    assert not MX.trail_maximal({**s, "hr_avg": need * lthr - 0.1}, lthr, aet)["ok"]
+    assert MX.trail_maximal({**s, "hr_avg": need * lthr + 0.1}, lthr, aet)["ok"]
+    assert MX.trail_maximal({**s, "above_aet": 0.5}, lthr, aet)["ok"]
     # a positive split is never a reason (no split rule for trail)
     assert "split" not in {c["id"] for c in MX.trail_maximal(s, lthr, aet)["checks"]}
     # a race word in the title: only km / time apply
