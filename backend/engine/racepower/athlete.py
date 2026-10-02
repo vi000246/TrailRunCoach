@@ -15,7 +15,7 @@ from typing import Optional
 
 import numpy as np
 
-from backend.engine.algorithms.effort import SIMPLE_FORMULAS
+from backend.engine.algorithms.effort import SIMPLE_FORMULAS, divisor_of
 from backend.engine.racepower import cp as CP
 from backend.engine.racepower import difficulty as DF
 from backend.engine.racepower import re as RE
@@ -507,7 +507,8 @@ def race_dates(ds) -> set[str]:
 
 
 def is_trail(w) -> bool:
-    return "runningtrail" in w.tags or w.sport_type == "trail running"
+    from backend.engine.algorithms.classify import is_trail as _it
+    return _it(w)
 
 
 def outdoor(w) -> bool:
@@ -1198,7 +1199,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         if row["trail"]:
             if (climb or 0) >= TRAIL_MIN_CLIMB_M and m["moving_s"] >= TRAIL_MIN_MOVING_S and km:
                 row["re_trail"] = {f: RE.trail_re(km, climb, m["moving_s"], m["avg_power"], weight,
-                                                  SIMPLE_FORMULAS[f][0]) for f in ("fitted_run", "itra", "scarf")}
+                                                  divisor_of(f)) for f in ("fitted_run", "itra", "scarf")}
                 trail_rows.append(row)
         elif c is not None and c < ROAD_MAX_CVI_ADJ and m["moving_s"] >= ROAD_MIN_MOVING_S \
                 and w.sport_type != "indoor running" and "runningtreadmill" not in w.tags:

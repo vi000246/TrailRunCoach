@@ -96,6 +96,21 @@ AUTO = {"easy": ("power", "power_easy"), "long": ("power", "power_easy"), "trail
         "aet_test": (None, "aet"), "other": ("hr", "hr_base")}
 
 
+def _auto_power_ok() -> bool:
+    """False when the 一般設定 power source is watch (not accepted) or none;
+    unset = the data decides (no CP falls back to HR below)."""
+    try:
+        from backend.engine import athlete_profile as AP
+        from backend.engine.planning import Plan
+        src = AP.profile_power_source(Plan.load().profile)
+        if src is None or src == "stryd":
+            return True
+        from backend.engine.power_source import read_setting
+        return src == "watch" and bool(read_setting())
+    except Exception:                       # noqa: BLE001
+        return True
+
+
 def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     """{"basis": hr | power | none, "chosen": auto | hr | power (where it came from),
         "type", "why", "source", "hr_cap": bool (an HR cap note on power sessions),
@@ -113,6 +128,10 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
         why = ("這次課表你選了" if own in ("hr", "power") else "課表偏好：") + LABEL[chosen]
     fb = ""
     th = th or {}
+    # generalize-athlete P12 / owner decision: auto power only for a Stryd runner — the
+    # 一般設定 power source watch / none means HR (watch power only when 進階 accepts it)
+    if basis == "power" and chosen not in ("hr", "power") and not _auto_power_ok():
+        basis, fb = "hr", "功率來源不是 Stryd：用心率"
     if basis == "power" and th and not th.get("cp"):
         basis, fb = "hr", "沒有 CP：改用心率"
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):

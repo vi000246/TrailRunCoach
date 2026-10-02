@@ -65,6 +65,7 @@ class Item:
     digits: int = 2
     help: str = ""                              # what the number does (hover)
     default_is_literature: bool = False         # chip: 預設（文獻） vs 預設（推估）
+    manual_only: bool = False                   # 進階 C 類: no fit, a default you may override by hand
 
 
 REGISTRY: dict[str, Item] = {}
@@ -92,6 +93,10 @@ def _load_items() -> None:
     """Import the modules that register items (idempotent)."""
     from backend.engine import drift_agg  # noqa: F401  (aet_heat_beta)
     from backend.engine import heat_calib  # noqa: F401  (hadley_hr_beta, humidity_default, home_*)
+    from backend.engine import effort_calib  # noqa: F401  (trail_max_min_km, trail_max_min_min, effort_rest_max)
+    from backend.engine import terrain_calib  # noqa: F401  (climb_divisor_run)
+    from backend.engine import advanced_params  # noqa: F401  (進階 C 類: heat_partial_hadley, pack_daily_drop_kg)
+    from backend.engine import drift_calib  # noqa: F401  (drift windows)
 
 
 def validate_entry(v) -> None:
@@ -147,7 +152,8 @@ def chip(item: Item, entry: dict) -> dict:
     else:
         text = "預設（文獻）" if item.default_is_literature else "預設（推估）"
         tip = (f"{item.label} {fmt.format(item.default)} {item.unit}：{item.default_src}。"
-               f"本人資料 {entry.get('n') or 0} 筆，滿 {item.min_n} 筆才會自己擬合。")
+               + ("只有確定時才手動指定。" if item.manual_only
+                  else f"本人資料 {entry.get('n') or 0} 筆，滿 {item.min_n} 筆才會自己擬合。"))
     if item.help:
         tip += " " + item.help
     return {"text": text, "tip": tip}
@@ -165,10 +171,25 @@ def describe(name: str, stored: Optional[dict]) -> dict:
 # reading (sync) and fitting
 # ---------------------------------------------------------------------------
 
+_READ_MEMO: dict = {}
+_READ_TTL_S = 10.0          # engine loops read the same entry per activity: one DB read per 10 s
+
+
 def stored_entry(name: str, user_id: int = 1) -> Optional[dict]:
-    from backend.engine.wko5expr.datasource import read_setting
+    import time
+    from backend.engine.wko5expr.datasource import _db_path, read_setting
+    mk = (name, user_id, str(_db_path()))
+    hit = _READ_MEMO.get(mk)
+    if hit and time.monotonic() - hit[0] < _READ_TTL_S:
+        return hit[1]
     v = read_setting(key(name), None, user_id)
-    return v if isinstance(v, dict) else None
+    v = v if isinstance(v, dict) else None
+    _READ_MEMO[mk] = (time.monotonic(), v)
+    return v
+
+
+def forget_reads() -> None:
+    _READ_MEMO.clear()
 
 
 def entry(name: str, user_id: int = 1) -> dict:
@@ -213,6 +234,7 @@ async def calibrate(db, athlete_id: int = 1, ds=None, today: Optional[dt.date] =
         from backend.api.wko5views import _dataset
         ds = await asyncio.to_thread(_dataset, False)
     updates, skipped = await asyncio.to_thread(run, ds, stored, today)
+    forget_reads()
     for n, e in updates.items():
         await repo.set(key(n), e)
     await db.commit()

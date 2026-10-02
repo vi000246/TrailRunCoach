@@ -294,7 +294,7 @@ def test_dose_sessions_parse_for_coros_and_the_cap():
     ls = IL.session_for(f, th)
     cs = CW.session_steps({**ls, "day": "2026-10-07"}, CW.Thresholds.of(th))
     names = [x.name for x in cs]
-    assert names[:3] == ["市區輕鬆跑到河濱", "動態伸展／drill", "快步跑 3×20 秒"] and names[-1] == "緩和"
+    assert names[:3] == ["輕鬆跑暖身", "動態伸展／drill", "快步跑 3×20 秒"] and names[-1] == "緩和"
     work = [x for x in cs if isinstance(x, CW.Step) and x.kind == CW.EX_TRAIN]
     rest = [x for x in cs if isinstance(x, CW.Step) and x.kind == CW.EX_REST]
     assert len(work) == 5 and len(rest) == 4 and all(r.intensity is None and r.name == "走路或極慢跑" for r in rest)

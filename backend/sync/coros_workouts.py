@@ -183,7 +183,7 @@ def easy_target(s: dict, th: Thresholds, frac: tuple = (0.75, 0.80)) -> Optional
     return easy_hr(th)
 
 
-WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
+WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
 
 

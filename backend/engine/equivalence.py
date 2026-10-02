@@ -87,7 +87,8 @@ EP_M_PER_KM = SIMPLE_FORMULAS["itra"][0]          # 100 m of climb = 1 effort km
 LANGMUIR_H_PER_M = 10.0 / 60.0 / 300.0           # 10 min per 300 m
 GENTLE_DEG, STEEP_DEG = 5.0, 12.0
 ESTIMATE_MAPE = 15.0           # above: shown as 推估
-DEFAULT_V_FLAT = 8.0           # km/h, only when there is no road run at all
+DEFAULT_V_FLAT = 8.0           # km/h, only when there is no road run and no threshold pace
+TPACE_EASY_FRAC = 0.75         # 推估: easy speed ≈ 75 % of the threshold-pace speed
 MODES = ("road", "trail", "hike")
 HIKE_NOTE = "百岳多為跟團，速度不代表個人能力：登山換算只用你標記為自己走的登山，不足時用 EP（推估）"
 SOURCES = [
@@ -182,7 +183,8 @@ def _speed(s: Sample) -> float:
     return s.km / (s.minutes / 60.0)
 
 
-def _flat_speed(road_all: list[Sample], aet: Optional[float]) -> tuple[float, str, int]:
+def _flat_speed(road_all: list[Sample], aet: Optional[float],
+                tpace_min_per_km: Optional[float] = None) -> tuple[float, str, int]:
     flat = [s for s in road_all if s.km > 0 and s.gain / s.km <= FLAT_M_PER_KM and s.minutes >= MIN_MINUTES]
     easy = [s for s in flat if s.hr is not None and aet is not None and s.hr <= aet + EASY_HR_TOL]
     if len(easy) >= MIN_ROAD:
@@ -198,7 +200,11 @@ def _flat_speed(road_all: list[Sample], aet: Optional[float]) -> tuple[float, st
                 return my + b * (aet - mx), f"{len(hr_ok)} 次路跑的速度－心率迴歸，取 AeT 的速度", len(hr_ok)
     if flat:
         return statistics.median(_speed(s) for s in flat), f"{len(flat)} 次路跑的中位數（沒有心率可篩）", len(flat)
-    return DEFAULT_V_FLAT, "沒有路跑資料，暫用 8 km/h", 0
+    if tpace_min_per_km and tpace_min_per_km > 0:
+        # generalize-athlete G1: no road run at all — easy ≈ 75 % of the threshold speed (推估)
+        v = 60.0 / tpace_min_per_km * TPACE_EASY_FRAC
+        return v, f"沒有路跑資料：閾值配速的 {TPACE_EASY_FRAC:.0%} 速度（推估）", 0
+    return DEFAULT_V_FLAT, "沒有路跑資料，暫用 8 km/h（推估）", 0
 
 
 def _ep_speed(ss: list[Sample]) -> Optional[float]:
@@ -241,13 +247,13 @@ def _fit_hike(ss: list[Sample]) -> Optional[tuple[float, float]]:
 
 
 def fit(samples: list[Sample], aet: Optional[float], grade_cost: Optional[Callable[[float], float]] = None,
-        method: str = "auto") -> Model:
+        method: str = "auto", tpace_min_per_km: Optional[float] = None) -> Model:
     """`method`: history (Naismith / Langmuir terms when there are enough
     samples), ep, or auto — with enough samples, the one with the lower
     leave-one-out error on this terrain's samples (both are fitted to the
     athlete; EP has one parameter, the athlete's own EP speed)."""
     road_all = [s for s in samples if s.mode == "road"]
-    v, vsrc, rn = _flat_speed(road_all, aet)
+    v, vsrc, rn = _flat_speed(road_all, aet, tpace_min_per_km)
     model = Model(v_flat_kmh=v, v_flat_source=vsrc, road_n=rn, grade_cost=grade_cost)
     easy = [s for s in samples if s.mode in ("trail", "hike")]
     pooled_ep = _ep_speed(easy)
@@ -365,7 +371,12 @@ def samples_from(ds, today: dt.date, aet: Optional[float], weeks: int = WINDOW_W
 def summary(ds, today: dt.date, aet: Optional[float]) -> dict:
     """What GET /plan/equivalence returns: model parameters, backtest, sources."""
     ss = samples_from(ds, today, aet)
-    model = fit(ss, aet)
+    try:
+        from backend.engine.wko5expr.dataset import date_to_day
+        tp = ds.setting("runtpace", date_to_day(today))
+    except Exception:                       # noqa: BLE001
+        tp = None
+    model = fit(ss, aet, tpace_min_per_km=tp)
     bt = backtest(ss, aet)
     return {"model": model.to_dict(), "backtest": bt, "aet": aet, "window_weeks": WINDOW_WEEKS,
             "easy_hr_max": None if aet is None else aet + EASY_HR_TOL, "min_samples": MIN_SAMPLES,

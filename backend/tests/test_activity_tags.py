@@ -280,7 +280,8 @@ def test_planner_trail_hr_estimate():
     from backend.engine.racepower import planner as PL
     m = {"kind": "ols", "a": 2.0, "b": 4.0, "c": 6.0, "delta": 0.05, "x_race": 1.0, "x_race_source": "t", "n": 9}
     e = PL.trail_hr_estimate(m, 12.0, 700.0, 1.0)
-    assert e["eff_km"] == pytest.approx(12.0 + 700.0 / 153.0)
+    from backend.engine.algorithms.effort import divisor_of
+    assert e["eff_km"] == pytest.approx(12.0 + 700.0 / divisor_of("fitted_run"))   # per athlete (ITRA 100 here)
     assert e["time_s"] > e["time_no_durability_s"] > 0
     assert PL.trail_hr_estimate(m, 12.0, 700.0, 0.9)["time_s"] > e["time_s"]   # easier effort → slower
     assert PL.trail_hr_estimate(None, 12.0, 700.0) is None

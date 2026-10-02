@@ -410,7 +410,7 @@ def effort_from_rpe(rpe: Optional[float], rest_share: Optional[float] = None,
         return None
     eff = next((e for top, e in RPE_EFFORT if rpe <= top), "max")
     rest = rest_share if rest_share is not None else (base or {}).get("rest_share")
-    if eff == "max" and rest is not None and rest > AUTO_EFFORT["rest_max"]:
+    if eff == "max" and rest is not None and rest > _rest_max():
         eff = "hard_with_rests"
     why = f"手錶記錄的 RPE {rpe:g}（運動後自評）→ {EFFORTS[eff]}"
     if base and base.get("effort") and base["effort"] != eff:
@@ -551,6 +551,15 @@ def rest_spells(t, moving, min_rest_s: float = None, max_dt: float = 30.0) -> di
             "rest_share": rest / elapsed if elapsed > 0 else None}
 
 
+def _rest_max() -> float:
+    """AUTO_EFFORT["rest_max"] per athlete (engine/effort_calib.py, plan P9)."""
+    try:
+        from backend.engine.effort_calib import rest_max
+        return rest_max()
+    except Exception:                       # noqa: BLE001
+        return AUTO_EFFORT["rest_max"]
+
+
 def effort_hr(s: dict, lthr: Optional[float], aet: Optional[float],
               max_frac: Optional[float] = None) -> dict:
     """Trail / hike effort from HR on moving time. s = {hr_avg (moving),
@@ -579,9 +588,9 @@ def effort_hr(s: dict, lthr: Optional[float], aet: Optional[float],
         hard, need = frac >= k["max_hr_frac"] and ab >= k["above_aet"], f"≥ {k['max_hr_frac']:.0%}"
     ab_txt = f"、AeT 以上 {ab:.0%}" if ab is not None else ""
     if hard:
-        if rest is not None and rest > k["rest_max"]:
+        if rest is not None and rest > _rest_max():
             out.update(effort="hard_with_rests",
-                       reason=f"移動心率 {frac:.0%} LTHR{ab_txt}，但{rest_txt}（> {k['rest_max']:.0%}）")
+                       reason=f"移動心率 {frac:.0%} LTHR{ab_txt}，但{rest_txt}（> {_rest_max():.0%}）")
         elif max_frac is not None:
             out.update(effort="max", reason=f"移動心率 {frac:.0%} LTHR（{need}）、{rest_txt}")
         else:

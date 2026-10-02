@@ -153,9 +153,11 @@ def trail_maximal(s: dict, lthr: Optional[float], aet: Optional[float], title: s
     """s = {km, moving_s, hr_avg, above_aet}. See the module docstring (rule 4)."""
     k = MAXIMAL
     word = bool(RACE_WORDS.search(title or "") or any(RACE_WORDS.search(str(t)) for t in tags or ()))
-    checks = [_check("km", (s.get("km") or 0) >= k["trail_min_km"], f"{s.get('km') or 0:.1f} km（≥ {k['trail_min_km']:.0f}）"),
-              _check("time", (s.get("moving_s") or 0) >= k["trail_min_s"],
-                     f"移動 {(s.get('moving_s') or 0) / 60:.0f} 分（≥ {k['trail_min_s'] / 60:.0f}）")]
+    from backend.engine import effort_calib as EC      # per athlete (generalize-athlete P8)
+    mkm, ms = EC.trail_min_km(), EC.trail_min_s()
+    checks = [_check("km", (s.get("km") or 0) >= mkm, f"{s.get('km') or 0:.1f} km（≥ {mkm:.0f}）"),
+              _check("time", (s.get("moving_s") or 0) >= ms,
+                     f"移動 {(s.get('moving_s') or 0) / 60:.0f} 分（≥ {ms / 60:.0f}）")]
     if not word:
         # 2026-10-02 (unsourced-rules.md §A2): the full-effort HR level depends on the
         # duration — x*(T) − 0.03 (trailhr.auto_max_frac) instead of 0.90 × LTHR + 2/3 above AeT

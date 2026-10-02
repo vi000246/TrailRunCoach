@@ -623,7 +623,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="pf-row"><label class="il"><span>輕鬆跑</span><select name="terrain_easy"><option value="any">都可</option><option value="road">路跑</option><option value="trail">越野（只看心率）</option></select></label></div>
       <div class="pf-row"><label class="il"><span>長跑</span><select name="terrain_long"><option value="auto">自動（依目標賽事）</option><option value="road">路跑</option><option value="trail">越野跑</option></select></label></div>
       <div class="pf-row"><label class="il"><span>品質課</span><select name="terrain_quality"><option value="any">都可</option><option value="flat">平路間歇</option><option value="hill">爬坡間歇</option></select></label></div>
-      <div class="pf-row"><label class="il" title="暖身裡一定要跑的那段（從家裡跑到河濱），間歇課表不會砍這段"><span>間歇暖身：市區段</span><input type="number" name="warmup_commute_min" min="0" max="30" step="1" inputmode="numeric"> 分</label>
+      <div class="pf-row"><label class="il" title="暖身裡一定要跑的輕鬆跑（例如從家裡跑到間歇地點），間歇課表不會砍這段"><span>間歇暖身：市區段</span><input type="number" name="warmup_commute_min" min="0" max="30" step="1" inputmode="numeric"> 分</label>
         <label class="il" title="緩和；跑回家的話設 10"><span>緩和</span><input type="number" name="cooldown_min" min="0" max="20" step="1" inputmode="numeric"> 分</label></div>
       <div class="pf-row"><span class="lbl" id="pf-tb-lbl">目標依據 <button type="button" class="qtip" aria-label="說明" data-tip="課表的目標用心率還是功率。
 自動：路跑的輕鬆跑、長跑用功率，心率 ≤ AeT 當上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ AeT）；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
