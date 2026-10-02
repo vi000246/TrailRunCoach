@@ -377,15 +377,57 @@ dialog.sd .pd-row select { width: auto; max-width: 100%; padding: 4px 8px; font-
 /* ---- 課表偏好 dialog ---- */
 dialog.sd.wide { width: min(580px, 96vw); }
 dialog.sd form { max-height: calc(100vh - 40px); overflow: auto; }
-.pf-sec { border: 1px solid var(--line); border-radius: 9px; padding: 6px 11px 10px; margin: 0; display: grid; gap: 8px; min-width: 0; }
-.pf-sec > legend { font-size: 12.5px; font-weight: 700; color: var(--text); padding: 0 5px; }
-.pf-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; min-width: 0; }
-.pf-row .lbl { min-width: 7.5em; color: var(--muted); font-size: 12.5px; }
-dialog.sd .pf-row label.il { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: var(--muted); }
-dialog.sd .pf-row label.il > span:first-child { min-width: 7.5em; }
-dialog.sd .pf-row select, dialog.sd .pf-row input[type="number"], dialog.sd .eq select { width: auto; max-width: 100%; padding: 4px 8px; }
-dialog.sd .pf-row input[type="number"] { width: 6.5em; }
+dialog.sd .eq select { width: auto; max-width: 100%; padding: 4px 8px; }
 dialog.sd input[type="checkbox"], dialog.sd input[type="radio"] { width: auto; }
+/* sections: a short heading, then one setting per line (label · ? · control on the right) */
+#pf { width: min(540px, 96vw); }
+#pf form { gap: 4px; }
+.pf-ttl { display: flex; align-items: center; gap: 2px; }
+.pf-g { display: grid; padding: 8px 0 6px; border-top: 1px solid var(--line); min-width: 0; }
+.pf-g h4 { display: flex; align-items: center; gap: 4px; margin: 0 0 2px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--faint); min-height: 26px; }
+.pf-g h4 .btn.sm { margin-left: auto; padding: 2px 10px; font-size: 12px; letter-spacing: 0; text-transform: none; }
+.pf-g h4 .meta { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.pf-g h4 .qtip { text-transform: none; letter-spacing: 0; }
+.pf-r { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 38px; padding: 3px 0; font-size: 13.5px; min-width: 0; }
+dialog.sd .pf-l { display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; color: var(--text); }
+.pf-c { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+dialog.sd .pf-c select { width: auto; max-width: 100%; padding: 5px 8px; font-size: 13.5px; }
+.pf-r .u { color: var(--muted); font-size: 12.5px; }
+.stp-w .u { align-self: center; padding-right: 2px; white-space: nowrap; }
+.stp-w input:placeholder-shown + .u { display: none; }
+.pf-wide { display: grid; gap: 6px; }
+.pf-wide .gopts { margin-left: 0; }
+.pf-st:empty { display: none; }
+.pf-st { font-size: 12px; padding-bottom: 4px; }
+/* number stepper: − [n] + (the − below min clears a nullable one to its placeholder: 不限 / 同平日) */
+.stp { display: inline-flex; align-items: center; gap: 6px; }
+.stp-w { display: inline-flex; align-items: stretch; width: 136px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+dialog.sd .stp-w input[type="number"] { flex: 1 1 0; min-width: 0; width: auto; border: 0; border-radius: 0; padding: 4px 2px; text-align: center; background: none;
+  -moz-appearance: textfield; font-variant-numeric: tabular-nums; }
+.stp-w input::-webkit-outer-spin-button, .stp-w input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stp-w button { width: 30px; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 0; }
+.stp-w button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--text); }
+.stp-w button:disabled { opacity: .35; cursor: default; background: none; }
+.stp-w:focus-within { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+dialog.sd .stp-w input:focus { outline: 0; }
+.stp-w:has(input:disabled) { opacity: .5; }
+/* switch */
+dialog.sd input.sw { appearance: none; -webkit-appearance: none; width: 38px; height: 22px; padding: 0; margin-left: auto; border-radius: 999px;
+  border: 0; background: color-mix(in srgb, var(--faint) 55%, var(--line)); position: relative; cursor: pointer; flex: none; transition: background .15s; }
+dialog.sd input.sw::before { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+dialog.sd input.sw:checked { background: var(--accent); }
+dialog.sd input.sw:checked::before { transform: translateX(16px); }
+dialog.sd input.sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 進階: collapsed */
+.pf-adv > summary { list-style: none; cursor: pointer; }
+.pf-adv > summary::-webkit-details-marker { display: none; }
+.pf-adv > summary h4::after { content: "▸"; margin-left: 4px; font-size: 11px; }
+.pf-adv[open] > summary h4::after { content: "▾"; }
+#pf .tseg label { padding: 4px 10px; font-size: 13px !important; flex: none; }
+#pf .tseg label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff !important; }
+#pf .daychk label { width: 32px; height: 30px; }
 dialog.sd label.rb { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-size: 13px; cursor: pointer; }
 .daychk { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 dialog.sd .daychk label { display: inline-grid; place-items: center; width: 34px; height: 30px; border: 1px solid var(--line); border-radius: 7px;
@@ -408,13 +450,6 @@ dialog.sd .gopt label:has(input:checked) { background: var(--accent); border-col
 .qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
   background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
   font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
-dialog.sd label.pf-opt { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer;
-  padding: 5px 7px; border-radius: 7px; }
-dialog.sd label.pf-opt:has(input:checked) { background: var(--bg); }
-dialog.sd label.pf-opt input { margin-top: 3px; flex: none; }
-dialog.sd label.pf-opt .meta { display: block; font-size: 12px; }
-.pf-sum { font-size: 12.5px; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 7px 10px; }
-.pf-sum b { color: var(--text); }
 
 /* ---- same-load conversion (session dialog) ---- */
 .eq { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 9px; padding: 6px 11px 10px; margin: 0;
@@ -499,7 +534,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <a class="btn login" id="login-link" href="/api/v1/wko5/settings" hidden>COROS 未登入 · 到設定頁登入 →</a>
       <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成未完成，之後的課重排（你改過的保留）">
         <span class="lbl-long">依實際進度重排</span><span class="lbl-short">重排</span></button>
-      <button class="btn" id="pf-btn" type="button" title="課表偏好：可練日、單次時間上限、次數、地形" aria-haspopup="dialog">⚙<span class="lbl-long"> 課表偏好</span></button>
+      <button class="btn" id="pf-btn" type="button" title="課表偏好：可練日、時間上限、課表內容、自動調整" data-i18n-attr="title:schedule.pf.btn_title" aria-haspopup="dialog">⚙<span class="lbl-long" data-i18n="schedule.pf.btn"> 課表偏好</span></button>
       <div class="more">
         <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
         <div class="menu right" id="more-menu" role="menu" aria-label="更多" hidden>
@@ -519,7 +554,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div id="sync-msg" role="status" aria-live="polite"></div>
   </section>
 
-  <div id="autoplan" data-settings data-limit="5" data-log="collapsible" style="margin-bottom:8px"></div>
+  <div id="autoplan" data-limit="5" data-log="collapsible" style="margin-bottom:8px"></div>
   <script src="/api/v1/static/autoplan.js" defer></script>
   <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
   <div class="tsug" id="tsug" aria-label="建議的測試" hidden></div>
@@ -616,73 +651,122 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 
 <dialog class="sd wide" id="pf" aria-labelledby="pf-h">
   <form id="pf-form" novalidate>
-    <div class="dh"><div><h3 id="pf-h">⚙ 課表偏好</h3><span class="meta">只改自動產生、還沒做、你沒改過的課；存檔後先預覽變動再套用</span></div>
-      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
-    <fieldset class="pf-sec"><legend>哪幾天、多久</legend>
-      <div class="pf-row"><span class="lbl" id="pf-days-l">可練日</span><span class="daychk" id="pf-days" role="group" aria-labelledby="pf-days-l"></span></div>
-      <div class="pf-row pd-head"><span class="lbl" data-i18n="schedule.pd.label">固定星期</span>
-        <span class="meta" id="pf-pd-auto" data-i18n="schedule.pd.auto">自動（排課程式自己挑）</span>
+    <div class="dh"><div class="pf-ttl"><h3 id="pf-h" data-i18n="schedule.pf.title">⚙ 課表偏好</h3>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.title_tip" aria-label="說明"
+          data-tip="只改自動產生、還沒做、你沒改過的課；存檔後先預覽變動再套用。">?</button></div>
+      <button class="x" type="button" data-close data-i18n-attr="aria-label:schedule.pf.close" aria-label="關閉">✕</button></div>
+
+    <section class="pf-g" aria-labelledby="pf-g1"><h4 id="pf-g1" data-i18n="schedule.pf.g.time">每週時間</h4>
+      <div class="pf-r"><span class="pf-l" id="pf-days-l" data-i18n="schedule.pf.days">可練日</span>
+        <span class="pf-c daychk" id="pf-days" role="group" aria-labelledby="pf-days-l"></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-runs" data-i18n="schedule.pf.runs">每週跑步</label>
+        <span class="pf-c"><select id="pf-runs" name="runs"><option value="" data-i18n="schedule.pf.auto">自動</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-whm" data-i18n="schedule.pf.wh">每週時數</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.wh_tip" aria-label="說明" data-tip="自動：照 CTL 爬升規則加量。自訂：每週最多幾小時。">?</button>
+        <span class="pf-c"><select id="pf-whm" name="wh_mode"><option value="auto" data-i18n="schedule.pf.auto">自動</option><option value="custom" data-i18n="schedule.pf.custom">自訂上限</option></select>
+          <span class="stp" id="pf-wh-stp"><input type="number" name="weekly_hours" min="1" max="40" step="0.5" data-start="6" inputmode="decimal" data-i18n-attr="aria-label:schedule.pf.wh"><span class="u" data-i18n="schedule.pf.u_h">小時</span></span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-capw" data-i18n="schedule.pf.cap_w">平日單次上限</label>
+        <span class="pf-c stp"><input id="pf-capw" type="number" name="cap_weekday" min="20" max="300" step="5" data-start="60" data-null placeholder="不限" data-i18n-attr="placeholder:schedule.pf.no_cap" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-capl" data-i18n="schedule.pf.cap_l">長跑日上限</label>
+        <span class="pf-c stp"><input id="pf-capl" type="number" name="cap_long" min="20" max="600" step="5" data-start="120" data-null placeholder="同平日" data-i18n-attr="placeholder:schedule.pf.same_wd" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-capm-l" data-i18n="schedule.pf.cap_mode">超過上限時</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.cap_mode_tip" aria-label="說明"
+          data-tip="盡量不超過：放不下的量先加在長跑日。&#10;絕對不超過：放不下的量這週就少練，會提醒你。">?</button>
+        <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-capm-l"><label><input type="radio" name="cap_mode" value="soft"><span data-i18n="schedule.pf.soft">盡量不超過</span></label><label><input type="radio" name="cap_mode" value="hard"><span data-i18n="schedule.pf.hard">絕對不超過</span></label></span></div>
+    </section>
+
+    <section class="pf-g" aria-labelledby="pf-g2"><h4 id="pf-g2" class="pd-head"><span data-i18n="schedule.pf.g.days">偏好的星期</span>
         <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pd.tip_aria;data-tip:schedule.pd.tip" aria-label="固定星期的說明"
           data-tip="想讓某種課固定在某幾天就加一列。沒加的課照預設規則排（長跑排你最常長跑的那天）。一天只能給一種課；可以選兩天的課，先點的是第一選擇。和預設規則衝突時會在那一列提醒。">?</button>
-        <button type="button" class="btn sm" id="pf-pd-add" data-i18n="schedule.pd.add">＋ 新增</button></div>
+        <span class="meta" id="pf-pd-auto" data-i18n="schedule.pd.auto">自動（排課程式自己挑）</span>
+        <button type="button" class="btn sm" id="pf-pd-add" data-i18n="schedule.pd.add">＋ 新增</button></h4>
       <div class="pd-list" id="pf-pdays" aria-live="polite"></div>
       <div class="pf-dw" id="pf-dw" aria-live="polite"></div>
-      <div class="pf-row"><label class="il"><span>單次時間上限（平日）</span><input type="number" name="cap_weekday" min="20" max="300" step="5" placeholder="不限" inputmode="numeric"> 分</label></div>
-      <div class="pf-row"><label class="il"><span>長跑日上限</span><input type="number" name="cap_long" min="20" max="600" step="5" placeholder="同平日" inputmode="numeric"> 分</label></div>
-      <div class="pf-row"><span class="lbl">上限模式</span><label class="rb"><input type="radio" name="cap_mode" value="soft">盡量不超過</label><label class="rb"><input type="radio" name="cap_mode" value="hard">絕對不超過</label></div>
-    </fieldset>
-    <fieldset class="pf-sec"><legend>每週次數與量</legend>
-      <div class="pf-row"><label class="il"><span>每週跑步次數</span><select name="runs"><option value="">自動</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label></div>
-      <div class="pf-row"><label class="il"><span>每週品質課</span><select name="quality"><option value="">自動（最多 1）</option><option>0</option><option>1</option><option>2</option></select></label>
-        <span class="meta">基礎期依下面的間歇門檻</span></div>
-      <div class="pf-row"><span class="lbl" id="pf-gate-l">間歇門檻</span><span class="gopts" id="pf-gate" role="radiogroup" aria-labelledby="pf-gate-l"></span></div>
-      <div class="pf-row" id="pf-gw-row"><label class="il"><span>週數法：基礎期滿</span><input type="number" name="quality_gate_weeks" min="2" max="16" step="1" inputmode="numeric"> 週</label></div>
-      <div class="pf-row"><label class="il"><span>每週肌力</span><select name="strength"><option value="">自動</option><option>0</option><option>1</option><option>2</option><option>3</option></select></label></div>
-      <div class="pf-row"><span class="lbl" id="pf-sdays-l">肌力排在</span><span class="daychk" id="pf-sdays" role="group" aria-labelledby="pf-sdays-l"></span><span class="meta">都不選＝跟輕鬆跑同一天</span></div>
-      <div class="pf-row"><label class="il"><span>每週時數</span><select name="wh_mode"><option value="auto">自動（CTL 爬升規則）</option><option value="custom">自訂上限</option></select></label>
-        <label class="il"><input type="number" name="weekly_hours" min="1" max="40" step="0.5" inputmode="decimal"> 小時</label></div>
-    </fieldset>
-    <fieldset class="pf-sec"><legend>地形與目標</legend>
-      <div class="pf-row"><label class="il"><span>輕鬆跑</span><select name="terrain_easy"><option value="any">都可</option><option value="road">路跑</option><option value="trail">越野（只看心率）</option></select></label></div>
-      <div class="pf-row"><label class="il"><span>長跑</span><select name="terrain_long"><option value="auto">自動（依目標賽事）</option><option value="road">路跑</option><option value="trail">越野跑</option></select></label></div>
-      <div class="pf-row"><label class="il"><span>品質課</span><select name="terrain_quality"><option value="any">都可</option><option value="flat">平路間歇</option><option value="hill">爬坡間歇</option></select></label></div>
-      <div class="pf-row"><label class="il" title="暖身裡一定要跑的輕鬆跑（例如從家裡跑到間歇地點），間歇課表不會砍這段"><span>間歇暖身：市區段</span><input type="number" name="warmup_commute_min" min="0" max="30" step="1" inputmode="numeric"> 分</label>
-        <label class="il" title="緩和；跑回家的話設 10"><span>緩和</span><input type="number" name="cooldown_min" min="0" max="20" step="1" inputmode="numeric"> 分</label></div>
-      <div class="pf-row"><span class="lbl" id="pf-tb-lbl">目標依據 <button type="button" class="qtip" aria-label="說明" data-tip="課表的目標用心率還是功率。
+    </section>
+
+    <section class="pf-g" aria-labelledby="pf-g3"><h4 id="pf-g3" data-i18n="schedule.pf.g.content">課表內容／目標</h4>
+      <div class="pf-r"><label class="pf-l" for="pf-q" data-i18n="schedule.pf.quality">每週品質課</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.quality_tip" aria-label="說明" data-tip="自動：最多 1 堂。基礎期什麼時候開始排，看「進階」的間歇門檻。">?</button>
+        <span class="pf-c"><select id="pf-q" name="quality"><option value="" data-i18n="schedule.pf.auto_q">自動（最多 1）</option><option>0</option><option>1</option><option>2</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-st" data-i18n="schedule.pf.strength">每週肌力</label>
+        <span class="pf-c"><select id="pf-st" name="strength"><option value="" data-i18n="schedule.pf.auto">自動</option><option>0</option><option>1</option><option>2</option><option>3</option></select></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-sdays-l" data-i18n="schedule.pf.sdays">肌力排在</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.sdays_tip" aria-label="說明" data-tip="都不選＝跟輕鬆跑同一天。">?</button>
+        <span class="pf-c daychk" id="pf-sdays" role="group" aria-labelledby="pf-sdays-l"></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-tb-l" data-i18n="schedule.pf.basis">目標依據</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.basis_tip" aria-label="說明" data-tip="課表的目標用心率還是功率。
 自動：路跑的輕鬆跑、長跑用功率，心率 ≤ AeT 當上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ AeT）；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
 心率：全部用心率區間（Friel % LTHR，輕鬆跑上限 AeT）。
 功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
-只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button></span><label class="rb"><input type="radio" name="target_basis" value="auto">自動</label><label class="rb"><input type="radio" name="target_basis" value="hr">心率</label><label class="rb"><input type="radio" name="target_basis" value="power">功率</label></div>
-    </fieldset>
-    <fieldset class="pf-sec" id="pf-cpt"><legend>CP 測試方式</legend>
-      <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="quick"><span><b>快速：20 分全力</b><span class="meta">約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測 W′</span></span></label>
-      <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="standard"><span><b>標準：12 分＋休 30 分＋3 分</b><span class="meta">約 70 分；兩點 CP＋W′，最準，休息不能縮短</span></span></label>
-      <label class="pf-opt"><input type="radio" name="cp_test_protocol" value="race"><span><b>用比賽：5–10 K 比賽或計時跑</b><span class="meta">不另外排；Riegel 換算（外插），不測 W′</span></span></label>
-    </fieldset>
-    <fieldset class="pf-sec" id="pf-aet"><legend>AeT／有氧基礎測試</legend>
-      <div class="pf-row"><span class="lbl" id="pf-aetp-l">測試方式</span><span class="gopts" id="pf-aetp" role="radiogroup" aria-labelledby="pf-aetp-l"></span></div>
-      <div class="pf-row"><span class="lbl">排在</span><label class="rb"><input type="radio" name="aet_test_days" value="weekday">平日（週一到週五）</label><label class="rb"><input type="radio" name="aet_test_days" value="any">和間歇一樣（週二優先，週末也可以）</label></div>
-      <div class="meta">「測試方式」決定排什麼、怎麼判讀；上面的「間歇門檻」決定什麼時候開 5 區。徐國峰 90 分排在週末長跑日（就是那次 LSD），其他方式照「排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。</div>
-    </fieldset>
-    <fieldset class="pf-sec" id="pf-b2b"><legend>連續兩天長天（B2B）</legend>
-      <div class="pf-row"><span class="lbl">建議 B2B</span><label class="rb"><input type="radio" name="b2b" value="on">要（到時候跳出建議，我挑兩天再排入）</label><label class="rb"><input type="radio" name="b2b" value="off">不要建議</label></div>
-      <div class="meta">只在專項期、多日或 ≥ 6 小時的 A 賽事前、恢復週後的第一個加量週建議；不會自動排進課表，要在右下角的建議框挑連續兩天按「排入」。排入後那兩天是你自己的課，自動調整不會動它們；刪掉其中一天就整組取消。</div>
-    </fieldset>
-    <fieldset class="pf-sec" id="pf-heat"><legend>熱適應 <span class="badge watch">推估</span></legend>
-      <div class="pf-row"><span class="lbl">熱適應課</span><label class="rb"><input type="radio" name="heat" value="auto">自動（只在 30 天內有熱天 A / B 賽時）</label><label class="rb"><input type="radio" name="heat" value="off">不排</label></div>
-      <div class="pf-row"><label class="il"><span>方式</span><select name="heat_method">
-        <option value="run">熱天輕鬆跑（60 分、心率 ≤ AeT）</option><option value="overdress">多穿衣服跑（涼爽天）</option>
-        <option value="bath">跑後熱水浴 40 °C ≤ 40 分</option><option value="sauna">跑後桑拿約 30 分</option><option value="mixed">跑步與熱水浴輪流</option></select></label></div>
-      <div class="meta" id="pf-heat-s"></div>
-      <div class="meta">比賽前 21–8 天誘導（5–10 天）、前 7–3 天每 4 天維持一次；熱適應跑需要 ≥ 60 分鐘（Racinais 2015），不受單次上限；上限設「絕對不超過」時改成跑 40 分＋熱水浴（Zurawlew 2016）。熱水浴 / 桑拿不推到 COROS，做完請在課表打勾。</div>
-    </fieldset>
-    <div class="pf-sum" id="pf-sum" aria-live="polite"></div>
+只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
+        <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-te" data-i18n="schedule.pf.t_easy">輕鬆跑地形</label>
+        <span class="pf-c"><select id="pf-te" name="terrain_easy"><option value="any" data-i18n="schedule.pf.any">都可</option><option value="road" data-i18n="schedule.pf.road">路跑</option><option value="trail" data-i18n="schedule.pf.trail_hr">越野（只看心率）</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-tl" data-i18n="schedule.pf.t_long">長跑地形</label>
+        <span class="pf-c"><select id="pf-tl" name="terrain_long"><option value="auto" data-i18n="schedule.pf.auto_race">自動（依目標賽事）</option><option value="road" data-i18n="schedule.pf.road">路跑</option><option value="trail" data-i18n="schedule.pf.trail">越野跑</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-tq" data-i18n="schedule.pf.t_quality">間歇地形</label>
+        <span class="pf-c"><select id="pf-tq" name="terrain_quality"><option value="any" data-i18n="schedule.pf.any">都可</option><option value="flat" data-i18n="schedule.pf.flat">平路間歇</option><option value="hill" data-i18n="schedule.pf.hill">爬坡間歇</option></select></span></div>
+    </section>
+
+    <section class="pf-g" aria-labelledby="pf-g4"><h4 id="pf-g4"><span data-i18n="schedule.pf.g.auto">自動調整</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.auto_tip" aria-label="說明"
+          data-tip="同步後依實際完成狀況調整之後的課。減量（疲勞保護、沒跑的課不補、輕鬆跑偏強後縮短）直接套用並推送；你改過的課、自己加的課、不排課日期都不會動。「立即重算」會先存這一區再跑。">?</button>
+        <button type="button" class="btn sm" id="ap-run" data-i18n="schedule.pf.ap_run">立即重算</button></h4>
+      <div class="pf-r"><label class="pf-l" for="ap-en" data-i18n="schedule.pf.ap_enabled">同步後自動調整</label>
+        <input type="checkbox" class="sw pf-c" id="ap-en" name="ap_enabled" role="switch"></div>
+      <div class="pf-r ap-co"><label class="pf-l" for="ap-pu" data-i18n="schedule.pf.ap_push">自動推送到手錶</label>
+        <input type="checkbox" class="sw pf-c" id="ap-pu" name="ap_push" role="switch"></div>
+      <div class="pf-r ap-co"><label class="pf-l" for="ap-pd" data-i18n="schedule.pf.ap_days">推送範圍</label>
+        <span class="pf-c stp"><input id="ap-pd" type="number" name="ap_push_days" min="1" max="14" step="1" data-start="7" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_days">天</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="ap-cb" data-i18n="schedule.pf.ap_big">大變動先等我確認</label>
+        <button type="button" class="qtip" id="ap-big-q" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.ap_big_tip" aria-label="說明"
+          data-tip="加量超過 20%、A 賽前 14 天拿掉長跑／強度課、周期改變、推送範圍內超過 3 堂非減量的改變，會先等你同意（門檻推估）。">?</button>
+        <input type="checkbox" class="sw pf-c" id="ap-cb" name="ap_confirm_big" role="switch"></div>
+      <div class="pf-r ap-co"><label class="pf-l" for="ap-nt" data-i18n="schedule.pf.ap_notify">待確認通知</label>
+        <span class="pf-c"><select id="ap-nt" name="ap_notify"><option value="watch" data-i18n="schedule.pf.ap_watch">手錶</option><option value="overview" data-i18n="schedule.pf.ap_overview">只在總覽頁</option></select></span></div>
+      <div class="pf-r ap-nc meta" data-i18n="schedule.pf.ap_login">登入 COROS 後可以自動推到手錶</div>
+      <div class="err" id="ap-err" role="alert"></div>
+    </section>
+
+    <details class="pf-g pf-adv" id="pf-adv"><summary><h4 data-i18n="schedule.pf.g.adv">進階</h4></summary>
+      <div class="pf-r pf-wide"><span class="pf-l" id="pf-gate-l" data-i18n="schedule.pf.gate">間歇門檻</span>
+        <span class="gopts" id="pf-gate" role="radiogroup" aria-labelledby="pf-gate-l"></span></div>
+      <div class="pf-r" id="pf-gw-row"><label class="pf-l" for="pf-gw" data-i18n="schedule.pf.gate_weeks">週數法：基礎期滿</label>
+        <span class="pf-c stp"><input id="pf-gw" type="number" name="quality_gate_weeks" min="2" max="16" step="1" data-start="8" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_wk">週</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-wu" data-i18n="schedule.pf.warmup">間歇暖身：市區段</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.warmup_tip" aria-label="說明" data-tip="暖身裡一定要跑的輕鬆跑（例如從家裡跑到間歇地點），間歇課表不會砍這段。">?</button>
+        <span class="pf-c stp"><input id="pf-wu" type="number" name="warmup_commute_min" min="0" max="30" step="1" data-start="10" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-cd" data-i18n="schedule.pf.cooldown">間歇緩和</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.cooldown_tip" aria-label="說明" data-tip="跑回家的話設 10。">?</button>
+        <span class="pf-c stp"><input id="pf-cd" type="number" name="cooldown_min" min="0" max="20" step="1" data-start="5" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r pf-wide" id="pf-cpt"><span class="pf-l" id="pf-cpt-l" data-i18n="schedule.pf.cp">CP 測試方式</span>
+        <span class="gopts" id="pf-cptp" role="radiogroup" aria-labelledby="pf-cpt-l"></span></div>
+      <div class="pf-r pf-wide" id="pf-aet"><span class="pf-l" id="pf-aetp-l"><span data-i18n="schedule.pf.aet">AeT 測試方式</span>
+          <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.aet_tip" aria-label="說明" data-tip="「測試方式」決定排什麼、怎麼判讀；「間歇門檻」決定什麼時候開 5 區。徐國峰 90 分排在週末長跑日（就是那次 LSD），其他方式照「AeT 排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。">?</button></span>
+        <span class="gopts" id="pf-aetp" role="radiogroup" aria-labelledby="pf-aetp-l"></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-aetd-l" data-i18n="schedule.pf.aet_days">AeT 排在</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.aet_days_tip" aria-label="說明" data-tip="平日：週一到週五。&#10;同間歇：週二優先，週末也可以。">?</button>
+        <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-aetd-l"><label><input type="radio" name="aet_test_days" value="weekday"><span data-i18n="schedule.pf.weekday">平日</span></label><label><input type="radio" name="aet_test_days" value="any"><span data-i18n="schedule.pf.like_q">同間歇</span></label></span></div>
+      <div class="pf-r" id="pf-b2b"><label class="pf-l" for="pf-b2bx" data-i18n="schedule.pf.b2b">建議 B2B 長天</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.b2b_tip" aria-label="說明" data-tip="連續兩天長天。只在專項期、多日或 ≥ 6 小時的 A 賽事前、恢復週後的第一個加量週建議；不會自動排進課表，要在建議框挑連續兩天按「排入」。排入後那兩天是你自己的課，自動調整不會動它們；刪掉其中一天就整組取消。">?</button>
+        <input type="checkbox" class="sw pf-c" id="pf-b2bx" name="b2b" role="switch"></div>
+      <div class="pf-r" id="pf-heat"><label class="pf-l" for="pf-heatx"><span data-i18n="schedule.pf.heat">熱適應課</span> <span class="badge watch" data-i18n="schedule.pf.est">推估</span></label>
+        <button type="button" class="qtip" id="pf-heat-q" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_tip" aria-label="說明" data-tip="開：只在 30 天內有熱天 A / B 賽時自動排。比賽前 21–8 天誘導（5–10 天）、前 7–3 天每 4 天維持一次；熱適應跑需要 ≥ 60 分鐘（Racinais 2015），不受單次上限；上限設「絕對不超過」時改成跑 40 分＋熱水浴（Zurawlew 2016）。熱水浴 / 桑拿不推到 COROS，做完請在課表打勾。">?</button>
+        <input type="checkbox" class="sw pf-c" id="pf-heatx" name="heat" role="switch"></div>
+      <div class="pf-r"><label class="pf-l" for="pf-hm" data-i18n="schedule.pf.heat_m">熱適應方式</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_m_tip" aria-label="說明" data-tip="熱天輕鬆跑：60 分、心率 ≤ AeT。&#10;多穿衣服跑：涼爽天用。&#10;熱水浴：跑後 40 °C ≤ 40 分。&#10;桑拿：跑後約 30 分。&#10;輪流：跑步與熱水浴交替。">?</button>
+        <span class="pf-c"><select id="pf-hm" name="heat_method">
+          <option value="run" data-i18n="schedule.pf.hm.run">熱天輕鬆跑 60 分</option><option value="overdress" data-i18n="schedule.pf.hm.overdress">多穿衣服跑</option>
+          <option value="bath" data-i18n="schedule.pf.hm.bath">跑後熱水浴</option><option value="sauna" data-i18n="schedule.pf.hm.sauna">跑後桑拿</option><option value="mixed" data-i18n="schedule.pf.hm.mixed">跑步與熱水浴輪流</option></select></span></div>
+      <div class="meta pf-st" id="pf-heat-s"></div>
+    </details>
+
     <div class="err" id="pf-err" role="alert"></div>
     <div class="btns">
-      <button class="btn" type="button" id="pf-reset">恢復預設</button>
+      <button class="btn" type="button" id="pf-reset" data-i18n="schedule.pf.reset">恢復預設</button>
       <span class="spacer"></span>
-      <button class="btn" type="button" data-close>取消</button>
-      <button class="btn primary" type="submit" id="pf-save">儲存並預覽重排</button>
+      <button class="btn" type="button" data-close data-i18n="schedule.pf.cancel">取消</button>
+      <button class="btn primary" type="submit" id="pf-save" data-i18n="schedule.pf.save">儲存並預覽重排</button>
     </div>
   </form>
 </dialog>
@@ -1740,36 +1824,67 @@ $("sd-push").addEventListener("click", () => { const s = findS(dlg.uid); if (!s)
 // ---------------- 課表偏好 (engine/plan_prefs.py) ----------------
 const PFF = $("pf-form");
 let PF_DEF = null;
-const dayBoxes = (id, name) => { $(id).innerHTML = [...WD].map((x, i) =>
-  `<label title="週${x}"><input type="checkbox" name="${name}" value="${i}" aria-label="週${x}">${x}</label>`).join(""); };
+const dayBoxes = (id, name) => { const z = I18N.fmt.weekdays("narrow"), w = I18N.fmt.weekdays("short");
+  $(id).innerHTML = [...z].map((x, i) =>
+    `<label title="${esc(w[i])}"><input type="checkbox" name="${name}" value="${i}" aria-label="${esc(w[i])}">${esc(x)}</label>`).join(""); };
 dayBoxes("pf-days", "pf-day");
 dayBoxes("pf-sdays", "pf-sday");
+// ---- number steppers: − [n] + around each input of a .stp; a data-null input (placeholder
+// 不限 / 同平日) goes back to empty when − passes its min, + from empty starts at data-start
+PFF.querySelectorAll(".stp input[type=number]").forEach((inp) => {
+  const w = document.createElement("span");
+  w.className = "stp-w";
+  inp.replaceWith(w);
+  const b = (d) => `<button type="button" data-stp="${d}" tabindex="-1" aria-hidden="true">${d < 0 ? "−" : "+"}</button>`;
+  const u = w.nextElementSibling?.classList.contains("u") ? w.nextElementSibling : null;   // the unit sits in the box
+  w.insertAdjacentHTML("beforeend", b(-1));
+  w.appendChild(inp);
+  if (u) w.appendChild(u);
+  w.insertAdjacentHTML("beforeend", b(1));
+});
+PFF.addEventListener("click", (e) => {
+  const bt = e.target.closest("[data-stp]");
+  if (!bt) return;
+  const inp = bt.parentElement.querySelector("input"), d = +bt.dataset.stp;
+  if (inp.disabled) return;
+  const st = +inp.step || 1, lo = +inp.min, hi = +inp.max, nul = inp.hasAttribute("data-null");
+  let v = inp.value === "" ? null : +inp.value;
+  if (v == null) { if (d < 0) return; v = +inp.dataset.start || lo; }
+  else {
+    v = Math.round((v + d * st) / st) * st;
+    if (v < lo) v = nul ? null : lo;
+    if (v > hi) v = hi;
+  }
+  inp.value = v == null ? "" : String(+v.toFixed(2));
+  inp.dispatchEvent(new Event("input", { bubbles: true }));
+});
 // ---- 間歇門檻 (engine/quality_gate.py): chips; each ? says what the method is, how it is
 // computed, what to do, and whether it runs on your data now (GET /prefs/gate)
-const GATE_MODES = [["auto", "自動"], ["ua_gap", "UA 差距"], ["friel_drift", "Friel 飄移"], ["xu_drift", "徐國峰 90′"],
-  ["plateau", "有氧停滯"], ["weeks", "週數"], ["none", "不設門檻"]];
+const GATE_MODES = ["auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"];
 let PF_GATE = {}, PF_AVAIL = null, PF_AETP = {};
 // ---- AeT 測試方式 (engine/aet_test.py PROTOCOLS): chips; each ? = duration, terrain, held, judging, source
-const AET_PROTOCOLS = [["auto", "自動"], ["xu90", "徐國峰 90′"], ["ua60", "UA 60′"], ["ua40", "UA 40′"],
-  ["evoke60", "Evoke 60′"], ["friel", "Friel 1 h"]];
+const AET_PROTOCOLS = ["auto", "xu90", "ua60", "ua40", "evoke60", "friel"];
+// ---- CP 測試方式 (engine/cp_protocols.py): chips, the details behind ?
+const CP_PROTOCOLS = ["quick", "standard", "race"];
+const chipsHtml = (name, keys, sel, lab, tip, off) => keys.map((k) =>
+  `<span class="gopt${off && off(k) ? " off" : ""}"><label><input type="radio" name="${name}" value="${k}"${k === sel ? " checked" : ""}>${esc(lab(k))}</label>` +
+  `<button type="button" class="qtip" aria-label="${esc(tt("pf.about_x", { x: lab(k) }))}" data-tip="${esc(tip(k))}">?</button></span>`).join("");
 function aetpRender(sel) {
-  $("pf-aetp").innerHTML = AET_PROTOCOLS.map(([k, lb]) =>
-    `<span class="gopt"><label><input type="radio" name="aet_test_protocol" value="${k}"${k === sel ? " checked" : ""}>${lb}</label>` +
-    `<button type="button" class="qtip" aria-label="${esc(lb)} 的說明" data-tip="${esc((PF_AETP[k] || {}).tip || "")}">?</button></span>`).join("");
+  $("pf-aetp").innerHTML = chipsHtml("aet_test_protocol", AET_PROTOCOLS, sel, (k) => tt("pf.aetp." + k), (k) => (PF_AETP[k] || {}).tip || "");
+}
+function cptRender(sel) {
+  $("pf-cptp").innerHTML = chipsHtml("cp_test_protocol", CP_PROTOCOLS, sel, (k) => tt("pf.cpp." + k), (k) => tt("pf.cpp_tip." + k));
 }
 function gateTip(m) {
   const base = (PF_GATE[m] || {}).tip || "";
   const a = PF_AVAIL && PF_AVAIL[m];
-  const now = !PF_AVAIL ? "你現在的資料：讀取中…" : !a ? "你現在的資料：算不出來" :
-    `你現在的資料：${a.usable ? "✓ 可以用" : "✗ 還不能用"}——${a.why}`;
+  const now = !PF_AVAIL ? tt("pf.gate_loading") : !a ? tt("pf.gate_na") :
+    tt(a.usable ? "pf.gate_ok" : "pf.gate_no", { why: a.why });
   return `${base}\n\n${now}`;
 }
 function gateRender(sel) {
-  $("pf-gate").innerHTML = GATE_MODES.map(([m, lb]) => {
-    const a = PF_AVAIL && PF_AVAIL[m];
-    return `<span class="gopt ${a && !a.usable ? "off" : ""}"><label><input type="radio" name="quality_gate" value="${m}"${m === sel ? " checked" : ""}>${lb}</label>` +
-      `<button type="button" class="qtip" aria-label="${esc(lb)} 的說明" data-tip="${esc(gateTip(m))}">?</button></span>`;
-  }).join("");
+  $("pf-gate").innerHTML = chipsHtml("quality_gate", GATE_MODES, sel, (m) => tt("pf.gate." + m), gateTip,
+    (m) => PF_AVAIL && PF_AVAIL[m] && !PF_AVAIL[m].usable);
 }
 async function gateAvail() {
   try { PF_AVAIL = (await sj("GET", `${PAPI}/prefs/gate`)).options || {}; } catch { PF_AVAIL = {}; }
@@ -1804,7 +1919,7 @@ function pfFill(p) {
   PFF.querySelectorAll('input[name="pf-sday"]').forEach((b) => { b.checked = (p.strength_days || []).includes(+b.value); });
   PFF.elements.cap_weekday.value = p.cap_weekday ?? "";
   PFF.elements.cap_long.value = p.cap_long ?? "";
-  PFF.querySelector(`input[name="cap_mode"][value="${p.cap_mode}"]`).checked = true;
+  (PFF.querySelector(`input[name="cap_mode"][value="${p.cap_mode || "soft"}"]`) || {}).checked = true;
   PFF.elements.runs.value = p.runs ?? "";
   PFF.elements.quality.value = p.quality ?? "";
   PFF.elements.strength.value = p.strength ?? "";
@@ -1817,27 +1932,28 @@ function pfFill(p) {
   pdaysRender(p);
   PFF.elements.warmup_commute_min.value = p.warmup_commute_min ?? 10;
   PFF.elements.cooldown_min.value = p.cooldown_min ?? 5;
-  (PFF.querySelector(`input[name="cp_test_protocol"][value="${p.cp_test_protocol || "quick"}"]`) || {}).checked = true;
+  cptRender(p.cp_test_protocol || "quick");
   (PFF.querySelector(`input[name="aet_test_days"][value="${p.aet_test_days || "weekday"}"]`) || {}).checked = true;
   aetpRender(p.aet_test_protocol || "auto");
   gateRender(p.quality_gate || "auto");
   PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
-  (PFF.querySelector(`input[name="heat"][value="${p.heat || "auto"}"]`) || {}).checked = true;
+  PFF.elements.heat.checked = (p.heat || "auto") !== "off";
   PFF.elements.heat_method.value = p.heat_method || "run";
-  (PFF.querySelector(`input[name="b2b"][value="${p.b2b === false ? "off" : "on"}"]`) || {}).checked = true;
+  PFF.elements.b2b.checked = p.b2b !== false;
   pfHeatLine();
   pfSync();
 }
 async function pfHeatLine() {                 // current S and race-day S (racepower /heat-status)
   try {
     const h = await sj("GET", `/api/v1/racepower/heat-status`);
-    $("pf-heat-s").textContent = `目前熱適應 S ${Math.round(h.s * 100)} %（${h.level?.label || ""}）· ${h.source || ""}${h.warning ? " · " + h.warning : ""}`;
+    $("pf-heat-s").textContent = tt("pf.heat_now", { s: Math.round(h.s * 100), level: h.level?.label || "" }) +
+      (h.warning ? ` · ${h.warning}` : "");
   } catch { $("pf-heat-s").textContent = ""; }
 }
 function pfRead() {
   const E = PFF.elements;
   return { days: [...PFF.querySelectorAll('input[name="pf-day"]')].map((b) => b.checked), long_day: pdLong(),
-    cap_weekday: numOrNull(E.cap_weekday.value), cap_long: numOrNull(E.cap_long.value), cap_mode: radioVal("cap_mode"),
+    cap_weekday: numOrNull(E.cap_weekday.value), cap_long: numOrNull(E.cap_long.value), cap_mode: radioVal("cap_mode") || "soft",
     runs: numOrNull(E.runs.value), quality: numOrNull(E.quality.value), strength: numOrNull(E.strength.value),
     strength_days: [...PFF.querySelectorAll('input[name="pf-sday"]:checked')].map((b) => +b.value),
     weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
@@ -1850,47 +1966,95 @@ function pfRead() {
     aet_test_days: radioVal("aet_test_days") || "weekday",
     aet_test_protocol: radioVal("aet_test_protocol") || "auto",
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
-    heat: radioVal("heat") || "auto", heat_method: E.heat_method.value || "run",
-    b2b: radioVal("b2b") !== "off" };
+    heat: E.heat.checked ? "auto" : "off", heat_method: E.heat_method.value || "run",
+    b2b: E.b2b.checked };
 }
 function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
   const n = p.days.filter(Boolean).length;
-  if (!n) return "至少要有一天可以練";
-  if (p.runs && p.runs > n) return `每週跑步次數 ${p.runs} 比可練日（${n} 天）多`;
-  if (p.runs && p.quality != null && p.quality >= p.runs) return "品質課次數要比每週跑步次數少";
-  if (p.cap_weekday != null && !(p.cap_weekday >= 20 && p.cap_weekday <= 300)) return "單次時間上限要在 20–300 分";
-  if (p.cap_long != null && !(p.cap_long >= 20 && p.cap_long <= 600)) return "長跑日上限要在 20–600 分";
-  if (p.cap_weekday != null && p.cap_long != null && p.cap_long < p.cap_weekday) return "長跑日上限不能比平日上限短";
-  if (PFF.elements.wh_mode.value === "custom" && !(p.weekly_hours >= 1 && p.weekly_hours <= 40)) return "每週時數上限要在 1–40 小時";
-  if (!(Number.isInteger(p.quality_gate_weeks) && p.quality_gate_weeks >= 2 && p.quality_gate_weeks <= 16)) return "週數法的週數要在 2–16 週";
+  if (!n) return tt("pf.e.no_day");
+  if (p.runs && p.runs > n) return tt("pf.e.runs_days", { runs: p.runs, n });
+  if (p.runs && p.quality != null && p.quality >= p.runs) return tt("pf.e.quality_runs");
+  if (p.cap_weekday != null && !(p.cap_weekday >= 20 && p.cap_weekday <= 300)) return tt("pf.e.cap_w");
+  if (p.cap_long != null && !(p.cap_long >= 20 && p.cap_long <= 600)) return tt("pf.e.cap_l");
+  if (p.cap_weekday != null && p.cap_long != null && p.cap_long < p.cap_weekday) return tt("pf.e.cap_lw");
+  if (PFF.elements.wh_mode.value === "custom" && !(p.weekly_hours >= 1 && p.weekly_hours <= 40)) return tt("pf.e.wh");
+  if (!(Number.isInteger(p.quality_gate_weeks) && p.quality_gate_weeks >= 2 && p.quality_gate_weeks <= 16)) return tt("pf.e.gate_weeks");
+  const a = apRead();
+  if (a.push_days != null && !(Number.isInteger(a.push_days) && a.push_days >= 1 && a.push_days <= 14)) return tt("pf.e.push_days");
   return "";
 }
 function pfSync() {
   const E = PFF.elements;
-  E.weekly_hours.disabled = E.wh_mode.value !== "custom";
-  E.cap_long.placeholder = E.cap_weekday.value ? `同 ${E.cap_weekday.value}` : "同平日";
+  const custom = E.wh_mode.value === "custom";
+  E.weekly_hours.disabled = !custom;
+  $("pf-wh-stp").hidden = !custom;
+  if (custom && !E.weekly_hours.value) E.weekly_hours.value = E.weekly_hours.dataset.start;
+  E.cap_long.placeholder = E.cap_weekday.value ? tt("pf.same_n", { n: E.cap_weekday.value }) : tt("pf.same_wd");
   $("pf-gw-row").hidden = radioVal("quality_gate") !== "weeks";
-  const p = pfRead(), rest = [...WD].filter((_, i) => !p.days[i]);
-  const parts = [`一週 <b>${7 - rest.length}</b> 天可練${rest.length ? `（休息：${rest.map((x) => "週" + x).join("、")}）` : ""}`,
-    p.runs ? `跑 <b>${p.runs}</b> 次` : "次數自動"];
-  if (p.cap_weekday || p.cap_long) {
-    const lc = p.cap_long ?? p.cap_weekday;
-    parts.push(`${p.cap_weekday ? `平日每次 ≤ <b>${p.cap_weekday}</b> 分` : "平日不限"}、長跑日 ≤ <b>${lc ?? "不限"}</b>${lc ? " 分" : ""}` +
-      `（${p.cap_mode === "hard" ? "絕對不超過：放不下的量這週就少練，會提醒你" : "盡量不超過：放不下的量先加在長跑日"}）`);
-  }
-  if (p.weekly_hours) parts.push(`每週最多 <b>${p.weekly_hours}</b> 小時`);
-  if (p.quality_gate !== "auto") parts.push(`間歇門檻：<b>${esc((PF_GATE[p.quality_gate] || {}).label || p.quality_gate)}</b>` +
-    (p.quality_gate === "weeks" ? `（基礎期滿 ${p.quality_gate_weeks} 週）` : ""));
-  if ((p.aet_test_protocol || "auto") !== "auto") parts.push(`AeT 測試方式：<b>${esc((PF_AETP[p.aet_test_protocol] || {}).label || p.aet_test_protocol)}</b>`);
-  if (p.b2b === false) parts.push("不建議 B2B");
-  if (p.heat === "off") parts.push("不排熱適應課");
-  else if (p.heat_method !== "run") parts.push(`熱適應方式：<b>${esc(PFF.elements.heat_method.selectedOptions[0]?.textContent || p.heat_method)}</b>`);
-  $("pf-sum").innerHTML = parts.join("；");
-  $("pf-err").textContent = pfError(p);
+  E.heat_method.disabled = !E.heat.checked;
+  apSync();
+  $("pf-err").textContent = pfError(pfRead());
   pdCheckSoon();
 }
 PFF.addEventListener("input", pfSync);
 PFF.addEventListener("change", pfSync);
+// ---- 自動調整 (engine/plan_auto.py, PUT /overview/plan/auto/settings): the plan.auto.* keys.
+// Saved with the dialog (only the keys you changed); push / push_days / notify only when the
+// push provider is connected (otherwise they stay as stored).
+const AAPI = "/api/v1/overview/plan/auto";
+let AP = null;                                        // the settings as loaded
+function apFill(s, th) {
+  AP = s || null;
+  const E = PFF.elements, sec = $("pf-g4").parentElement;
+  sec.hidden = !AP;
+  if (!AP) return;
+  E.ap_enabled.checked = !!AP.enabled;
+  E.ap_push.checked = !!AP.push;
+  E.ap_push_days.value = AP.push_days ?? 7;
+  E.ap_confirm_big.checked = !!AP.confirm_big;
+  E.ap_notify.value = AP.notify || "overview";
+  const tx = th && th.texts ? Object.values(th.texts) : [];
+  if (tx.length) $("ap-big-q").dataset.tip = `${tt("pf.ap_big_tip")}\n\n${tx.map((x) => "• " + x).join("\n")}`;
+  $("ap-err").textContent = "";
+  apSync();
+}
+function apSync() {
+  if (!AP) return;
+  const co = !!AP.coros_logged_in, E = PFF.elements;
+  PFF.querySelectorAll(".ap-co").forEach((r) => { r.hidden = !co; });
+  PFF.querySelectorAll(".ap-nc").forEach((r) => { r.hidden = co; });
+  E.ap_push_days.disabled = !E.ap_push.checked;
+}
+function apRead() {
+  if (!AP) return {};
+  const E = PFF.elements, out = { enabled: E.ap_enabled.checked, confirm_big: E.ap_confirm_big.checked };
+  if (AP.coros_logged_in) Object.assign(out, { push: E.ap_push.checked, push_days: numOrNull(E.ap_push_days.value), notify: E.ap_notify.value });
+  return out;
+}
+function apChanges() {                               // only the keys you changed: nothing stored gets rewritten
+  const a = apRead(), out = {};
+  for (const [k, v] of Object.entries(a)) if (AP && AP[k] !== v) out[k] = v;
+  return out;
+}
+async function apSave() {
+  const ch = apChanges();
+  if (!Object.keys(ch).length) return true;
+  try { AP = { ...AP, ...(await sj("PUT", `${AAPI}/settings`, ch)).settings }; return true; }
+  catch (x) { $("ap-err").textContent = tt("pf.ap_save_err", { msg: x.message }); return false; }
+}
+$("ap-run").onclick = async () => {
+  if (pfError(pfRead())) return;
+  const bt = $("ap-run");
+  bt.disabled = true;
+  try {
+    if (!(await apSave())) return;
+    await sj("POST", `${AAPI}/run`);
+    $("ap-err").textContent = "";
+    window.autoPlanRefresh?.();
+    load();
+  } catch (x) { $("ap-err").textContent = tt("pf.ap_run_err", { msg: x.message }); }
+  finally { bt.disabled = false; }
+};
 // ---- 固定星期: a row per session type (engine/plan_prefs.py day_owners / overlaps /
 // day_conflicts / place). long -> long_day (one day); the others -> pref_days (≤ 2 days,
 // the first clicked = first choice). One type per row, one type per weekday; no rows = 自動.
@@ -2015,10 +2179,14 @@ async function openPrefs() {
   PF_WARNED = null;
   $("pf-err").textContent = "";
   let b;
-  try { b = await sj("GET", `${PAPI}/prefs`); } catch (e) { return errMsg("讀取課表偏好", e); }
+  let a = null;
+  try {
+    [b, a] = await Promise.all([sj("GET", `${PAPI}/prefs`), sj("GET", `${AAPI}?limit=1`).catch(() => null)]);
+  } catch (e) { return errMsg(tt("pf.load_what"), e); }
   PF_DEF = b.defaults;
   PF_GATE = b.gate_options || {};
   PF_AETP = b.aet_options || {};
+  apFill(a && a.settings, a && a.thresholds);
   pfFill({ ...b.prefs, _conflicts: b.day_conflicts || [], _dropped: b.pref_dropped || [] });
   $("pf").showModal();
   if (PF_AVAIL == null) gateAvail();          // needs the dataset: filled in when it arrives
@@ -2032,7 +2200,10 @@ PFF.addEventListener("submit", async (e) => {
   if (err) { $("pf-err").textContent = err; return; }
   $("pf-save").disabled = true;
   let saved;
-  try { saved = await sj("PUT", `${PAPI}/prefs`, p); }
+  try {
+    if (!(await apSave())) return;                  // 自動調整: only the keys you changed
+    saved = await sj("PUT", `${PAPI}/prefs`, p);
+  }
   catch (x) { $("pf-err").textContent = x.message; return; }
   finally { $("pf-save").disabled = false; }
   // 偏好的星期 vs the default rules: show them once, with 照我的偏好, before replanning
@@ -2041,16 +2212,15 @@ PFF.addEventListener("submit", async (e) => {
   if (open.length && PF_WARNED !== sig) {
     PF_WARNED = sig;
     PD_CONF = saved.day_conflicts; PD_DROP = []; pdDraw();
-    $("pf-err").textContent = "已儲存。上面有偏好和預設規則衝突：勾「照我的偏好」再按一次儲存，或直接再按儲存讓課表照規則移動。";
+    $("pf-err").textContent = tt("pf.saved_conflicts");
     return;
   }
   PF_WARNED = null;
   $("pf").close();
   PF_AVAIL = null;                                   // the gate's state depends on the mode
   if (D) D.prefs = p;
-  await reconcile({ title: "依新的課表偏好重排",
-    intro: "偏好已儲存。下面是之後還沒做、你沒改過的自動課會怎麼變；你改過或自己加的課不會動。",
-    cancelMsg: "偏好已儲存，課表還沒重排——之後按「依實際進度重排」就會套用" });
+  window.autoPlanRefresh?.();
+  await reconcile({ title: tt("pf.rc_title"), intro: tt("pf.rc_intro"), cancelMsg: tt("pf.rc_cancel") });
 });
 $("pf-btn").onclick = openPrefs;
 

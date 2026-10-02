@@ -1,7 +1,7 @@
 // 自動調整課表 (engine/plan_auto.py): the pending proposal banner (同意／拒絕),
-// the last change-log entries (each with 復原) and, with data-settings, the
-// plan.auto.* toggles. Mounts into the element with id="autoplan".
-//   <div id="autoplan" data-settings data-log="collapsible"></div>
+// the last change-log entries (each with 復原). Mounts into the element with id="autoplan".
+// The plan.auto.* settings live in 課表 › 課表偏好 › 自動調整 (schedule.html), not here.
+//   <div id="autoplan" data-log="collapsible"></div>
 // data-log: "" = the change log as a box, "none" = no log (總覽), "collapsible" = a <details>,
 // collapsed by default, open state in localStorage autoplan.log.open (課表).
 //   <script src="/api/v1/static/autoplan.js"></script>
@@ -29,9 +29,6 @@
   #autoplan details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   #autoplan details.ap-log > summary { padding: 1px 0; }
   #autoplan details.ap-log[open] > summary { margin-bottom: 4px; }
-  #autoplan .ap-set { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
-  #autoplan .ap-set label { display: inline-flex; gap: 5px; align-items: center; }
-  #autoplan .ap-set input[type=number] { width: 52px; }
   #autoplan .meta { color: var(--muted); font-size: 12px; }`;
   const st = document.createElement("style");
   st.textContent = css;
@@ -74,23 +71,6 @@
     return `<span class="meta">${esc(t)}${p.sent ? `（${p.sent} 堂）` : ""}</span>${err ? ` <span class="ap-err">${esc(err)}</span>` : ""}`;
   }
 
-  function settingsHtml(s, th) {
-    const tip = th && th.texts ? Object.values(th.texts).join("\n") : "";
-    return `<details${root.dataset.open != null ? " open" : ""}><summary>自動調整設定</summary>
-      <div class="ap-set">
-        <label><input type="checkbox" data-k="enabled" ${s.enabled ? "checked" : ""}> 同步後自動調整課表</label>
-        ${s.coros_logged_in ? `<label><input type="checkbox" data-k="push" ${s.push ? "checked" : ""}> 自動推送到 COROS</label>
-        <label>推送未來 <input type="number" min="1" max="14" data-k="push_days" value="${esc(s.push_days)}"> 天</label>` : ""}
-        <label title="${esc("大變動先等你同意：\n" + tip)}"><input type="checkbox" data-k="confirm_big" ${s.confirm_big ? "checked" : ""}> 大變動先等我確認 ⓘ</label>
-        ${s.coros_logged_in ? `<label>通知 <select data-k="notify"><option value="watch" ${s.notify === "watch" ? "selected" : ""}>手錶（推一堂「課表待確認」）</option>
-          <option value="overview" ${s.notify === "overview" ? "selected" : ""}>只在總覽頁</option></select></label>`
-          : `<span class="meta">登入 COROS 後可以自動把課表推到手錶</span>`}
-        <button type="button" data-run>立即重算</button>
-      </div>
-      <p class="meta">減量（疲勞保護、沒跑的課不補、輕鬆跑偏強後縮短）會直接套用並推送；加量超過 20%、A 賽前 14 天拿掉長跑／強度課、周期改變、推送範圍內超過 3 堂非減量的改變，會先等你確認（門檻推估）。你改過的課、自己加的課、不排課日期，自動調整都不會動。</p>
-    </details>`;
-  }
-
   async function render() {
     let b;
     try { b = await sj("GET", `${API}?limit=${root.dataset.limit || 5}`); } catch (e) { root.innerHTML = ""; return; }
@@ -118,7 +98,6 @@
         out.push(`<div class="ap-box"><div class="meta" style="margin-bottom:4px">${esc(T("common.autoplan.log_title"))}</div>${list}</div>`);
       }
     }
-    if (root.dataset.settings != null) out.push(`<div class="ap-box">${settingsHtml(b.settings, b.thresholds)}</div>`);
     root.innerHTML = out.join("");
   }
 
@@ -134,14 +113,6 @@
     if (t.dataset.approve) act(() => sj("POST", `${API}/proposal/${t.dataset.approve}/approve`), "同意");
     else if (t.dataset.reject) act(() => sj("POST", `${API}/proposal/${t.dataset.reject}/reject`), "拒絕");
     else if (t.dataset.undo && confirm("把這次自動調整動到的課還原，並重新推送到手錶？")) act(() => sj("POST", `${API}/log/${t.dataset.undo}/undo`), "復原");
-    else if (t.hasAttribute("data-run")) act(() => sj("POST", `${API}/run`), "重算");
-  });
-  root.addEventListener("change", (e) => {
-    const t = e.target.closest("[data-k]");
-    if (!t) return;
-    const k = t.dataset.k;
-    const v = t.type === "checkbox" ? t.checked : k === "push_days" ? parseInt(t.value, 10) : t.value;
-    act(() => sj("PUT", `${API}/settings`, { [k]: v }), "儲存設定");
   });
   window.autoPlanRefresh = render;
   render();
