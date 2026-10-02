@@ -52,6 +52,10 @@ def _source():
     from backend.engine.wko5expr.config import EngineConfig
     from backend.engine.wko5expr.dataset import Dataset
     from backend.api.wko5views import ATHLETE_DIR
+    from backend.engine.wko5expr.datasource import wko5_available
+    if not wko5_available(ATHLETE_DIR):
+        # the route builder reads .wko4 tracks only: no WKO5 folder = no routes yet
+        return [], (lambda f, p, meta: None)
     ds = Dataset(ATHLETE_DIR, config=EngineConfig.load())
     return _workouts(ds), (lambda f, p, meta: R.read_track(f, p, meta, ds.corrections))
 
