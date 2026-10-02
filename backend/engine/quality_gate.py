@@ -949,7 +949,8 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
     if v is not None and se is not None and se <= 3.0 and val.get("shift_bpm") is not None and \
             abs(val["shift_bpm"]) > 5.0:
         return {"code": "shift", "text": val.get("reason") or "最近 6 次的飄移有系統性偏移"}
-    if ae.get("measured") and v is not None and se is not None and se <= 3.0 and \
+    # a lower bound (val["lower_bound"], se None) never fires shift / moved: it is not a point estimate
+    if ae.get("measured") and not val.get("lower_bound") and v is not None and se is not None and se <= 3.0 and \
             abs(v - float(ae["value"])) > max(se, 3.0):
         return {"code": "moved", "text": f"聚合估計 AeT {v:.0f} ± {se:.1f} bpm，和目前 {ae['value']:.0f} 差 "
                                          f"{v - float(ae['value']):+.0f}（> 標準誤）：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）"}
@@ -1473,6 +1474,9 @@ def indicator(gate: dict) -> dict:
     why_parts = [f"模式：{gate['mode_label']}" + ("（" + ("差距法＋飄移法" if gate["resolved"] != "none" else "不設門檻") + "）"
                                                    if gate["mode"] == "auto" else "")]
     why_parts.append(ae["label"] if ae.get("measured") else "AeT 沒有實測（用 0.89×LTHR 估）")
+    if (ae.get("validity") or {}).get("lower_bound"):
+        # the temporary lower bound (drift_agg.aet_validity): valid, said as a bound with its rule
+        why_parts.append(ae["validity"]["reason"])
     if gate.get("stale_aet"):
         why_parts.append(f"AeT 目前不算有效：{(ae.get('validity') or {}).get('reason') or '聚合估計還不夠準'}"
                          "（標準誤 ≤ 3 bpm、最近 6 次沒有偏移才算；推估），改用不設門檻")
