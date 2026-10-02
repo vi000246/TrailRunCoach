@@ -4,7 +4,7 @@ docs/research/heat-acclimation.md §6.2. Reads the route index (efforts with
 `wx`, filled by a weather-enabled routes build) and activity_weather.json
 (per-activity exposure → S), both under routes.HOME (WKO5COACH_ROUTES_DIR).
 
-Model (OLS, route fixed effects by demeaning, 自組):
+Model (OLS, route fixed effects by demeaning, 推估):
     HR = route FE + b_p·P + b_m·moving min + time-of-day + β_season·(Hadley − 120)
 Test A: β > 0 (heat raises HR at a given power — context only).
 Test B (the main one): the HR–Hadley slope in late summer (Aug–Sep) is

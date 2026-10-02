@@ -32,7 +32,7 @@ def exposures(root: Optional[Path] = None) -> tuple[list[dict], dict]:
                   "missing": not doc}
 
 
-MORNING_H = (5, 6, 7)            # local hours 05:00–07:59: when a dawn test would run [自組]
+MORNING_H = (5, 6, 7)            # local hours 05:00–07:59: when a dawn test would run [推估]
 
 
 def morning_weather(dates: Iterable, root: Optional[Path] = None) -> dict:
@@ -153,7 +153,7 @@ HRC_FLAT_G, HRC_MIN_S, HRC_SKIP_S, HRC_CV = 0.03, 600.0, 600.0, 0.10
 def steady_segments(ds, today: dt.date, acts: list[dict]) -> list[dict]:
     """heat.hr_cost input (§2.3): per run of the last 84 days, stretches of
     consecutive flat (|g| < 3 %) running windows after the first 10 minutes,
-    ≥ 10 min moving with power CV < 10 % [自組]; each with the activity's
+    ≥ 10 min moving with power CV < 10 % [推估]; each with the activity's
     Hadley (activity_weather)."""
     import numpy as np
     from backend.engine.racepower import athlete as A
@@ -192,7 +192,7 @@ def steady_segments(ds, today: dt.date, acts: list[dict]) -> list[dict]:
 
 
 def month_is_hot(acts: list[dict], day: dt.date) -> Optional[bool]:
-    """auto rule for Event.heat (自組): the athlete's outdoor activities within
+    """auto rule for Event.heat (推估): the athlete's outdoor activities within
     ±15 calendar days of that date in earlier years — median Hadley > 150 →
     hot. None without data."""
     hs = []

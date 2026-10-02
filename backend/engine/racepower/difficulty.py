@@ -44,7 +44,7 @@ def p_sus(t_s: float, cp: float, w_prime: Optional[float], tte: float, k: float,
     F2 (T ≤ b): CP·M + W′/T — the 2-parameter CP model (Jones & Vanhatalo 2017,
        Sports Med 47:65–78). 已驗證 (V-F2: CP 285, W′ 10800, 600 s → 303 W).
     F3 (b < T < TTE): linear in log T between F2(b) and F1(TTE) — our own
-       bridge that removes the W′/TTE step between F1 and F2 (自組, 待驗證;
+       bridge that removes the W′/TTE step between F1 and F2 (推估, 待驗證;
        V-F3 checks continuity). b = min(1200 s, TTE/2).
     Without W′ the F1 power law is used for every T (v1 behaviour).
 
@@ -90,7 +90,7 @@ def t_lim(power: float, cp: float, w_prime: Optional[float], tte: float, k: floa
 
 def label_of(f: float) -> dict:
     """Effort label for f (§5.2 cut-points 80 / 90 / 97 / 100 %). The
-    cut-points are our own (自組) — anchored on Smyth & Muniz-Pumares 2020
+    cut-points are our own (推估) — anchored on Smyth & Muniz-Pumares 2020
     (amateur marathoners finish at 84.8 % ± 13.6 % of critical speed) and the
     ±0.01 k band — and stay 待驗證 until the §3B A-race check passes."""
     if f > 1.0 + _OVER_EPS:
@@ -116,7 +116,7 @@ def effort(p_train: float, t_s: float, cp: float, w_prime: Optional[float], tte:
            cp2: Optional[float] = None) -> dict:
     """F5: f = P̄_train / P_sus,train(T) — race-day power converted back to
     training conditions (Σ(Pᵢ/Mᵢ)tᵢ/T, done by the caller) against the curve in
-    the same conditions. 自組, 待驗證 (§3B: race-like efforts should land at
+    the same conditions. 推估, 待驗證 (§3B: race-like efforts should land at
     0.97–1.03). Returns f, the label, F6's multiple, t_lim and the band.
 
     Band: with `cp_spread` (the CPs the data supports — every CP source and

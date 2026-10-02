@@ -158,7 +158,7 @@ def _warmup_run(minutes, warm_hr=110.0, warm_kmh=8.0):
 
 def test_drift_counts_the_40_minutes_after_the_warmup():
     # 48′ = 10′ warm-up + 38′: the old floor (40′ total) took it, UA's 40′ after the warm-up doesn't —
-    # strict refused; the 參考 tier (≥ 30′ after the warm-up, 自組) keeps the number
+    # strict refused; the 參考 tier (≥ 30′ after the warm-up, 推估) keeps the number
     t, hr, v = _warmup_run(48)
     r = R.drift_of(t, hr, v)
     assert not r["ok"] and r["ref_ok"] and r["tier"] == "ref" and r["drift"] is not None
@@ -280,7 +280,7 @@ def test_drift_refuses_a_fast_finish(channel):
     assert not r["ok"] and "快速結尾" in r["reason"] and "8%" in r["reason"]
     assert ("配速" if channel == "speed" else "功率") in r["reason"]
     assert r["finish"] == pytest.approx(0.08, abs=0.005)
-    # +3 %: within the 5 % (自組) — a fair run
+    # +3 %: within the 5 % (推估) — a fair run
     t, hr, v = _warmup_run(60)
     p = np.full(len(t), 200.0)
     (v if channel == "speed" else p)[last] *= 1.03

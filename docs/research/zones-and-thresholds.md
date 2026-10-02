@@ -362,7 +362,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 6. **最大心率清理**：
    - `maximal.hrmax_observed` 已經用「撐 120 秒的前 5 名中位數」。前 5 名大多是越野賽，可能混入光學尖峰。
    - 建議再排除「心率 > 前 30 秒中位數 + 15 bpm 的跳變」（推估），並在 UI 標「觀測值，非實測」。
-7. **文件／程式用字**：`fitdataset.py:68`、`racepower/intensity.py:9,27,38`、`racepower/maximal.py:69,74-75` 的「自組」依本專案用語改成「推估」。這只是用字，不影響行為。
+7. **文件／程式用字**：`fitdataset.py:68`、`racepower/intensity.py:9,27,38`、`racepower/maximal.py:69,74-75` 的「推估」依本專案用語改成「推估」。這只是用字，不影響行為。
 
 ### 3.5 一句話總結
 

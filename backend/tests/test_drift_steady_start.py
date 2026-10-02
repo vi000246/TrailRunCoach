@@ -1,4 +1,4 @@
-"""drift_of's adaptive start (workout_review.steady_start, 自組): a city
+"""drift_of's adaptive start (workout_review.steady_start, 推估): a city
 section with crossings before the steady path moves the window's start to
 60 s after the last stop that begins in the first 20 min — never earlier
 than the 10-min warm-up, never at the cost of a tier. Ramps and strides are
@@ -62,7 +62,7 @@ def test_a_city_start_with_crossings_in_10_to_20_min_moves_the_start():
     # the halves start at the new start: HR at 20:39 on the 140 → 147 ramp
     assert fixed["hr1"] > 140.0 + 7.0 * (start - 600) / (70 * 60 - 600)
     txt = R.excluded_text(fixed)
-    assert "前段路口停等 7 次" in txt and "4:40" in txt and "20:39" in txt and "自組" in txt
+    assert "前段路口停等 7 次" in txt and "4:40" in txt and "20:39" in txt and "推估" in txt
     assert R.start_text(fixed) == "前 20:39 不算"
 
 
@@ -203,7 +203,7 @@ def test_the_card_says_what_the_adaptive_start_left_out():
     ds.activity_temps = {}
     text = _card_text(R.review(ds, ds.workouts[0], "aerobic"))
     assert "前 16:24 不算" in text.get("Pa:HR 飄移", ""), text
-    assert text["已排除"].startswith("前段路口停等 3 次") and "自組" in text["已排除"]
+    assert text["已排除"].startswith("前段路口停等 3 次") and "推估" in text["已排除"]
     power = _card_text(R.review(ds, ds.workouts[0], "aerobic", basis="power"))
     assert "前 16:24 不算" in power["Pw:HR 飄移"]
     # a plain run has no 已排除 row and the old wording

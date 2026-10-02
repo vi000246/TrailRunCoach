@@ -2,7 +2,7 @@
 熱適應課 — docs/research/heat-acclimation.md §3.3, §3.4, §5.4. Applied after a
 week's sessions are placed (overview.week_plan, projection.week_sessions).
 
-When (all of them, 自組 from §3.4):
+When (all of them, 推估 from §3.4):
   1. plan.prefs.heat ≠ off;
   2. an A or B event within 30 days that is hot (Event.heat hot, or auto →
      heat_data.event_is_hot);
@@ -108,7 +108,7 @@ def passive(s: dict, kind: str) -> dict:
     n = PASSIVE_MIN[kind]
     title = "跑後熱水浴 40 °C ≤ 40 分" if kind == "bath" else "跑後桑拿 80–90 °C 約 30 分"
     return {"id": f"heat_passive_{s['id']}", "kind": "heat_passive", "title": title, "minutes": n, "target": "",
-            "detail": ("第一次縮短（熱水浴 ≤ 20 分、桑拿 ≤ 15 分，自組）；旁邊要有人、慢慢起身、事後補水。" + SAFETY),
+            "detail": ("第一次縮短（熱水浴 ≤ 20 分、桑拿 ≤ 15 分，推估）；旁邊要有人、慢慢起身、事後補水。" + SAFETY),
             "source": SRC_BATH if kind == "bath" else SRC_SAUNA, "tss": 0.0, "day": s.get("day"),
             "done": False, "done_by": None, "heat": True}
 

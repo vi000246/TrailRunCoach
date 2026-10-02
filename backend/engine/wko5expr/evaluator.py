@@ -1096,7 +1096,7 @@ class Evaluator:
         stored pahr / pwhr (whole recording, warm-up and stops included).
 
         drift(basis, tier): "test" (default) = the strict tier, ≥ 40 min after
-        the warm-up (UA); "ref" = only the 參考 tier, 30–40 min after it (自組,
+        the warm-up (UA); "ref" = only the 參考 tier, 30–40 min after it (推估,
         workout_review.DRIFT_REF_MIN_S — display only); "all" = either.
         drift(basis, tier, band): only runs of that temperature band ("cool"
         < 25 °C, "warm" 25–28, "hot" > 28, "none" no temperature;

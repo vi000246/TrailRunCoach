@@ -45,7 +45,7 @@
 | **Polarization Index** | 強度分布有多極化 | Treff 2019：PI = log10(Z1/Z2 × Z3 × 100)，Z 是三區時間占比。Z2 = 0 時改用 log10(Z1/Z3 × 100)；Z3 = 0 時 PI = 0；S3 > S1 時回傳 null。PI > 2.00 算極化 | 同一個數出現在活動摘要、週摘要、列表欄位和趨勢圖 | https://forum.intervals.icu/t/polarization-index-added/49877 ；https://www.frontiersin.org/articles/10.3389/fphys.2019.00707/full |
 | Compliance | 計畫的完成度 | 實際負荷 × 100 / 計畫負荷，沒有負荷時改用時間 | 80–120% 綠、50–150% 橘、其他紅，標在日曆上 | https://forum.intervals.icu/t/compliance-activity-field/47805 |
 | Normalised HRV | 用靜息心率修正的 rMSSD | HRV:HR = rMSSD × RHR / 600 | /fitness 頁的綠點 | https://forum.intervals.icu/t/normalised-hrv-added-to-fitness-page/106679 |
-| Wellness / Custom charts | 睡眠、HRV、RHR、體重，以及從 70 多個指標自組的圖 | — | 每張圖有兩個色槽，一條線、一條線周圍的 band；可設背景區帶；可搜尋別人分享的圖 | https://www.intervals.icu/features/wellness/ ；https://www.intervals.icu/features/custom-charts/ |
+| Wellness / Custom charts | 睡眠、HRV、RHR、體重，以及從 70 多個指標推估的圖 | — | 每張圖有兩個色槽，一條線、一條線周圍的 band；可設背景區帶；可搜尋別人分享的圖 | https://www.intervals.icu/features/wellness/ ；https://www.intervals.icu/features/custom-charts/ |
 | Routes（CDM §6.1） | 自動辨識重複路線，看同一路線的進步 | 未公開 | — | https://www.intervals.icu/features/track/ |
 
 ### 1.2 TrainingPeaks

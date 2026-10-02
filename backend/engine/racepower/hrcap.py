@@ -17,7 +17,7 @@ Method (推估 until the back-test validates it):
    the power produced at a fixed submaximal HR tracks performance (Lamberts
    et al. 2011, Br J Sports Med 45:797–804, LSCT: mean power in stages 2–3
    vs performance r = 0.80–0.94). Extrapolating to LTHR (instead of HRmax)
-   and reading that power as a threshold is our own use: 自組.
+   and reading that power as a threshold is our own use: 推估.
 3. P_LTHR = a + b·LTHR, with a bootstrap over runs (10–90 %).
 
 Anchor (stated, not resolved): Friel's LTHR is the HR of the last 20 min of a
@@ -31,7 +31,7 @@ are dropped and windows after 60 min are not used; HR lags power (60 s lag
 applied, the first 10 min dropped); a run's point sits at its own intensity,
 so the extrapolation distance (LTHR − the highest run HR) is reported — the
 farther it is, the less it is worth. Needs ≥ 8 runs spanning ≥ 15 bpm, a
-positive slope and R² ≥ 0.5 (自組): when the runs are all at about the same
+positive slope and R² ≥ 0.5 (推估): when the runs are all at about the same
 power, HR differences come from heat / drift / fatigue and the line says
 nothing about capacity (this athlete, 2026-10-01: slope 0.18 W/bpm, R² 0.01).
 The combined rule in the back-test uses only a valid fit.
@@ -46,18 +46,18 @@ HRCAP = {
     "flat_g": 0.02,          # course.py flat band
     "run_share": 0.5,        # a running window (cadence ≥ 130 spm for ≥ half of it)
     "t_min_s": 600.0,        # HR lag / warm-up (workout_review drift excludes the first 10 min)
-    "t_max_s": 3600.0,       # 自組: limit cardiac drift
-    "min_windows": 5,        # 自組
-    "min_runs": 8,           # 自組
-    "min_span_bpm": 15.0,    # 自組
-    "min_r2": 0.5,           # 自組: HR must explain at least half of the between-run power variance
+    "t_max_s": 3600.0,       # 推估: limit cardiac drift
+    "min_windows": 5,        # 推估
+    "min_runs": 8,           # 推估
+    "min_span_bpm": 15.0,    # 推估
+    "min_r2": 0.5,           # 推估: HR must explain at least half of the between-run power variance
     "drift_max": 0.05,       # Uphill Athlete Pw:HR decoupling < 5 % = aerobic
     "window_days": 90,       # as the CP window (athlete.CP_WINDOW_DAYS)
     "boot": 300,
     "tt_s": 1800.0,          # Friel's 30-min TT
 }
 SOURCE = ("心率–功率個人回歸外插到 LTHR（Åstrand & Ryhming 1954 原理；Lamberts 2011 LSCT："
-          "固定次大心率下的功率對應表現）；外插到 LTHR 當閾值為自組，推估")
+          "固定次大心率下的功率對應表現）；外插到 LTHR 當閾值為推估")
 
 
 def run_point(windows: list[dict]) -> Optional[dict]:

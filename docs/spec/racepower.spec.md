@@ -102,9 +102,9 @@ decisions on the workbook's ambiguities (D1–D10) are in
     covers the bound. `/predict` re-checks the bound for the k it actually uses
     (`enforce_lower_bound`, `backend/engine/racepower/athlete.py:435`).
 - **CP tests** (`backend/engine/racepower/cptest.py:49`): laps of 150–210 s and 660–780 s, each
-  ≥ 1.3 × the other laps' median power (自組). The mean-max is taken inside the lap. A bout is
+  ≥ 1.3 × the other laps' median power (推估). The mean-max is taken inside the lap. A bout is
   non-maximal when the 3′ power is not above the 12′ power (the workbook's "falling" check) or
-  its peak HR is ≥ 10 bpm below the other bout's (自組; 2026-09-30: 146 vs 171 bpm). With one
+  its peak HR is ≥ 10 bpm below the other bout's (推估; 2026-09-30: 146 vs 171 bpm). With one
   maximal bout, CP = P − W′/t, with the W′ prior 13.1 ± 4.0 kJ for men and 6.4 ± 2.2 kJ for
   women (Ruiz-Alias et al. 2025, amateur Stryd 9/3) and the range at ± 1 SD. For 2026-09-30:
   12′ 220.9 W → CP 202.7 W (197.1–208.3). `workout_review.cp_test` now takes non-overlapping
@@ -137,7 +137,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
   0.89 × LTHR. In that estimate each run is measured
   against `cp_as_of` its own date (`backend/engine/racepower/athlete.py:324`): a plan CP row on
   or before the date, else WKO5's PD model refitted on the 90-day mean-max up to the date, else
-  the last valid refit of the 30 days before (自組). It never uses a later CP or today's WKO5
+  the last valid refit of the 30 days before (推估). It never uses a later CP or today's WKO5
   snapshot (`thresholds.estimate(cp_of=…)`, `backend/engine/thresholds.py:50`). CP for the class
   comes from a dated plan test, else the lower bound from the earlier runs (demotion only). A
   plan race is the one activity matched to a past season-plan event
@@ -260,8 +260,8 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
     RE_flat·Cr(0)/Cr(g) with the 0.9 downhill floor.
   - Walked windows fit `walk`, towards Minetti's walking prior RE_flat·Cr(0)/Cw(g) (same paper;
     that Stryd follows walking cost is 待驗證).
-  - Per bin, the athlete's majority gait picks the curve (自組).
-  - Trail technicality factor (自組): on flats and descents (g ≤ +2 %), the median actual ÷
+  - Per bin, the athlete's majority gait picks the curve (推估).
+  - Trail technicality factor (推估): on flats and descents (g ≤ +2 %), the median actual ÷
     predicted RE over the athlete's own trail running windows. It is computed per intensity class
     when there are ≥ 30 windows, bounded 0.6–1.2, and applied only to trail plans (race class).
   - v_max(g) is the p90 speed of the downhill running bins. For road plans RE(0) is v1's
@@ -277,7 +277,7 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   are used for:
   - VAM per HR band × grade band (定義);
   - the personal altitude factor: ln VAM on elevation with grade × HR-cell fixed effects,
-    compared with Wehrlin's −6.3 %/1000 m (自組, needs ≥ 30 windows over ≥ 800 m);
+    compared with Wehrlin's −6.3 %/1000 m (推估, needs ≥ 30 windows over ≥ 800 m);
   - multi-day fatigue: HR at the same VAM, day n − day 1 (F17, no external source);
   - the walking model's steep bins.
   Group-paced total times and EP/h stay out.
@@ -297,7 +297,7 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   (`backend/engine/racepower/env.py:119`, default for 百岳), partial = their midpoint (推估).
   Bassett 1999's two curves (`backend/engine/racepower/env.py:133`) are a cross-check quoted above
   2800 m.
-- **Per-segment, time-of-day heat** (road / trail, `backend/engine/racepower/planner.py:177`; 自組,
+- **Per-segment, time-of-day heat** (road / trail, `backend/engine/racepower/planner.py:177`; 推估,
   labelled 推估):
   - `segment_factors(…, heat=[(temp, rh)…])` (`backend/engine/racepower/env.py:157`) replaces
     H_to with Hadley's penalty at each segment's own conditions. The altitude term keeps the To
@@ -323,29 +323,29 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
 ### 百岳 walking capacity (`backend/engine/racepower/capacity.py`)
 
 Design: `docs/research/baiyue-from-running.md`. User decisions 2026-09-30: pack 9 kg on day 1
-(2026-10-01: single-day trips without a recorded pack also default to 9 kg), −0.7 kg/day food (自組, labelled), 3-day
+(2026-10-01: single-day trips without a recorded pack also default to 9 kg), −0.7 kg/day food (推估, labelled), 3-day
 trips, 跟團 as the default trip kind, altitude width from the literature, solo detection as a
 suggestion.
 
 - **Windows** (caches v3: `racepower_v3_grade_hr_kt`, `racepower_v3_hike_hr_t`): every 100 m window
   carries k, cumulative moving seconds t and the HR read 60 s later (`grade_model.windows(hr_lag_s)`,
-  自組). Trail walk windows: trail runs, running share < 0.5, grade ≥ 10 %, ≥ 3 consecutive, first
+  推估). Trail walk windows: trail runs, running share < 0.5, grade ≥ 10 %, ≥ 3 consecutive, first
   window dropped, 300 m centred grade, VAM ≤ 2000 m/h. 百岳 windows: `hikehr`'s HR ≥ AeT windows,
   re-cut the same way. Pack per trip: `racepower_hike_meta.json` (`GET/POST /hike-meta`); none
   recorded → 9 kg (預設背負, multi-day and single-day). Solo trips are no longer excluded.
 - **B1** Ė_AeT = W(1.5 + 3.6·v_run,AeT); v_run,AeT = median flat (|g| ≤ 2 %) road running windows
-  with HR within AeT ± 3 bpm (as-of AeT), 90 days; falls back to ± 5 bpm, then 365 days (自組).
+  with HR within AeT ± 3 bpm (as-of AeT), 90 days; falls back to ± 5 bpm, then 365 days (推估).
 - **B2** v₀ = Pandolf⁻¹(Ė; W, L, 100g, η) by bisection; **B3** pack ratio Pandolf⁻¹(L)/Pandolf⁻¹(L₀)
-  uphill, (W+L₀)/(W+L) downhill (B3', 自組).
+  uphill, (W+L₀)/(W+L) downhill (B3', 推估).
 - **B4** ln v = ln v₀ + δ(g) + α·Δz + γ·h: δ(g) = δ̄ + n/(n+30)·(bin mean − δ̄) — a personal level δ̄
-  over every window plus each 2 % bin's shrunk deviation (自組; shrinking bins straight to 0 pulled
+  over every window plus each 2 % bin's shrunk deviation (推估; shrinking bins straight to 0 pulled
   the held-out trail segments +7.7 % slow). β (HR band) fitted at the run level inside grade-bin
   cells, fixed at 0 unless |β/SE| ≥ 2. γ fitted on the trail windows (activity × bin cells), shrunk
   to 0 with τ_γ 0.03/h. f_day = 1.0 (β unreliable), warned.
 - **B7 altitude**: α = the athlete's trip-fixed-effect slope (cluster-bootstrap SE by trip) shrunk
   to Wehrlin −6.3 %/1000 m by precision weighting. τ = √(1.02² + 1.25²) = 1.61 points: Wehrlin's 8
   athletes span 4.6–7.5 (range ÷ 2.847 = 1.02; the n = 8 range-to-SD step is ours) plus half the
-  Wehrlin–Coffman gap (VO2max vs fixed-HR speed, 1.25; 自組). A(z) = exp(b/100·max(0, z−300)/1000);
+  Wehrlin–Coffman gap (VO2max vs fixed-HR speed, 1.25; 推估). A(z) = exp(b/100·max(0, z−300)/1000);
   acclimatised × Bassett acclimatised ÷ unacclimatised (推估). Partial acclimatisation is treated as
   unacclimatised, warned.
 - **Flat / descent** (§3.4): v_flat = min(median walked flat speed of trail runs × p(L), Pandolf⁻¹
@@ -355,12 +355,12 @@ suggestion.
 - **B8** per segment v = cap.v(g, L_day, η, z, h, n) × Hᵢ; Hᵢ = 1 − scale·Hadley(Tᵢ, RH)/100 with
   Tᵢ = T₀ − 0.0065·(zᵢ − z₀) (`env.segment_temp`, `env.heat_term`); z₀ = `heat_ref_alt_m`, else the
   race-day altitude, else the training altitude when no race-day temperature was given; scale =
-  1 − a·S. 能力上限 band = exp(p75 − mean of the residuals) (自組, ≤ 3 h).
+  1 − a·S. 能力上限 band = exp(p75 − mean of the residuals) (推估, ≤ 3 h).
 - **Group time** = EP ÷ past group days' EP/h (p25 / p50 / p75, ≥ 3 days); clock time uses the group
   or solo moving ratio by trip kind; `summary.main` = group (跟團, default) or capacity.
 - **Band** (§3.8): σ² = σ_LOO² + σ_pack² + σ_alt² + σ_time² + σ_day² (time-weighted per component,
-  independence 自組); σ_LOO = the stored back-test's segment log-error SD; shares are shown.
-- **Solo suggestion** (`classify_day`, §2.6, 自組): own ≥ 60 %, limited ≤ 15 % (stops per km not
+  independence 推估); σ_LOO = the stored back-test's segment log-error SD; shares are shown.
+- **Solo suggestion** (`classify_day`, §2.6, 推估): own ≥ 60 %, limited ≤ 15 % (stops per km not
   computed yet); applies only after ≥ 5 manually marked days per class with ≥ 80 % agreement
   (`classifier_validation`); the 登山紀錄 table shows the suggestion and a confirm button.
 - **Gate** `validated["hike_capacity"]` (`backtest.capacity_backtest`, `store_capacity`; script
@@ -394,10 +394,10 @@ Design: `docs/research/heat-acclimation.md`.
 - Per-activity exposure: `route_weather.fill_activities` (Open-Meteo archive at each GPS activity's
   mean point, same batching and cache as the efforts; `activity_weather.json` next to the route
   index; the app's routes builder runs it). hot_min = moving minutes per archive hour × weight
-  (Hadley ≥ 150 → 1, 130–150 linear, 自組).
+  (Hadley ≥ 150 → 1, 130–150 linear, 推估).
 - S: dose = min(1, hot_min/60) (+1 for a ticked heat_passive session); S += 0.214·dose·(1 − S),
   else × (1 − 0.025) (Pandolf 1998 calibration, Daanen 2018); projection with three sets (a 1.0 /
-  2.3 %, 0.75 / 2.5 %, 0.35 / "1 day lost per 2 days off"). Levels 0.75 / 0.35 (自組).
+  2.3 %, 0.75 / 2.5 %, 0.35 / "1 day lost per 2 days off"). Levels 0.75 / 0.35 (推估).
 - M: `env.multiplier` / `segment_factors(heat_s=(S_from, S_to), a)` scale each side's Hadley
   penalty by (1 − a·S); S_from = mean S over the 90-day training window; None = v1 bit for bit.
 - Calculator: `#heat-accl` (自動 / 未適應 / 部分 0.5 / 已適應 0.9 / 自訂), `heat_acclimatisation` in
@@ -458,10 +458,10 @@ the one constant `INTENSITY`:
 | power_low / power_high | 0.80 / 0.95 × CP | Palladino three zones (`zones.PALLADINO_3ZONE`) |
 | drift_easy | 0.05 | Pw:HR decoupling < 5 % = aerobic (Uphill Athlete, `status.DRIFT_GOOD`) |
 | run_cadence | 65 strides/min | 130 spm walk/run (`workout_review.RUN_CADENCE`) |
-| race_min_f | 0.90 | the effort bar's 吃力 cut (自組), P_sus by F1 with k −0.07, TTE 3000 s |
-| majority | 0.5 | 自組 |
+| race_min_f | 0.90 | the effort bar's 吃力 cut (推估), P_sus by F1 with k −0.07, TTE 3000 s |
+| majority | 0.5 | 推估 |
 
-Rule (our composite, 自組):
+Rule (our composite, 推估):
 - **race**: a season-plan race; or ≥ 50 % of the moving time at ≥ 0.95·LTHR, provided the power
   reaches 90 % of the sustainable power for that duration. HR high with power below that is a
   conflict and is classed steady. It guards against an LTHR that is set too low: on this athlete
@@ -497,8 +497,8 @@ effective effort (the user's mark, else the auto rule) is 全力 and its activit
 - a user effort mark always wins: ≠ 全力 always excludes, 全力 always includes;
 - auto, road: the self-paced maximal road rules below (item 3);
 - auto, trail: `activity_tags.effort_hr` — moving HR ≥ 0.90 × own-date LTHR (Friel Z3 lower
-  bound), ≥ 2/3 of the HR time above AeT (自組), and long rests (stops ≥ 5 min, a recording gap
-  counts) ≤ 10 % of the elapsed time (自組). Same HR with more long rests is 有拼但有休息, not 全力.
+  bound), ≥ 2/3 of the HR time above AeT (推估), and long rests (stops ≥ 5 min, a recording gap
+  counts) ≤ 10 % of the elapsed time (推估). Same HR with more long rests is 有拼但有休息, not 全力.
   An auto trail sample also needs ≥ 10 km and ≥ 90 min moving (item 4). The rest cut comes from
   this athlete's data: on the 7 diary trail races 22–48 % of the elapsed time is "not moving" by
   the speed rule (aid stations, queues, GPS speed dropouts on steep climbs), but only 0–5 % is in
@@ -516,7 +516,7 @@ This brings in the diary races of 2024–2025.
 The rules the auto effort uses:
 1. **plan race**: a past season-plan event of any priority (路跑賽 → non-trail run, 越野賽 → trail
    run), matched by date and distance. The watch km must be within ±25 % (else no match;
-   `km_ok` flags ±10 %; 自組). When several runs fall on that day, the nearest in distance is
+   `km_ok` flags ±10 %; 推估). When several runs fall on that day, the nearest in distance is
    taken; without a distance, the longest (`match_events`, `backend/engine/racepower/maximal.py:169`).
    Since the effort revision this sets activity type 比賽 only.
 2. **CP test bout**: the maximal bouts of a FIT-detected 3′/12′ test (cptest). Also a
@@ -527,23 +527,23 @@ The rules the auto effort uses:
    - distance within ±10 % of 5K / 10K / HM / M (the user's rule);
    - last-quarter HR ≥ 1.00 × LTHR for 5K / 10K, ≥ 0.95 for HM, ≥ 0.90 for M. The anchor is Friel's
      LTHR, the average HR of the last 20 min of a solo 30-min TT; the 0.95 / 0.90 are the
-     Friel Z4 / Z3 lower bounds. The mapping is 自組;
+     Friel Z4 / Z3 lower bounds. The mapping is 推估;
    - 5K / 10K only: the 30-s peak HR ≥ observed HRmax − 10 bpm. Near-maximal HR is a criterion
      of a maximal effort (Howley, Bassett & Welch 1995, MSSE 27:1292–1301). The tolerance and
      the observed HRmax (median of the top-5 per-run peaks held ≥ 120 s in the 365 days) are
-     自組;
+     推估;
    - an even or negative split: second-half speed ≥ 0.98 × first half (Abbiss & Laursen 2008;
-     the tolerance is 自組);
+     the tolerance is 推估);
    - power–duration monotonicity: the moving power is not below the best moving power of any
      earlier road run (365 days) ≥ 1.5 × as long. A mean-max curve is non-increasing by
-     definition; the 1.5 × is 自組. This rule is needed because heat alone pushes this
+     definition; the 1.5 × is 推估. This rule is needed because heat alone pushes this
      athlete's HR to "maximal" on summer 5 km runs: 150–158 W at a 30-s peak of 181–183 bpm,
      against 184 W held for 141 min in the half marathon.
 4. **race-like trail effort** (the user's correction: their trail races are > 10 km, not standard
    distances, and always slow down in the second half, so there is no distance bucket and no
    split rule). It needs ≥ 10 km and ≥ 90 min moving, plus either:
    - average HR ≥ 0.90 × LTHR (Friel Z3) and ≥ 2/3 of the HR time above AeT (Seiler boundary;
-     2/3 is 自組), or
+     2/3 is 推估), or
    - a race word in the title or tags (賽 / race / 馬拉松 / marathon), with only the duration
      rule. Since the effort revision these HR checks are reported only; the auto trail effort is
      `effort_hr` above, and a race word only sets activity type 比賽.
@@ -556,7 +556,7 @@ The rules the auto effort uses:
 No rule uses the model's own P_sus, because selecting samples with the model under test would be
 circular.
 
-**Trail HR pace model** (推估, all 自組; `backend/engine/racepower/trailhr.py`, `trail_hr_model`
+**Trail HR pace model** (推估, all 推估; `backend/engine/racepower/trailhr.py`, `trail_hr_model`
 in `backend/engine/racepower/athlete.py`). Trail capacity from the power envelope was +46 % power
 / −35 % time off, so for trail races the planner's whole-race time (mode auto) comes from HR and
 terrain; the power-based time is kept only as `crosscheck.power_envelope`, and
@@ -599,8 +599,8 @@ WKO5 default LTHR of 160.
   bootstrap 10–90 %. This extrapolates the individual submaximal HR–work-rate line, the
   Åstrand & Ryhming 1954 principle (J Appl Physiol 7:218–221). Lamberts et al. 2011 (Br J Sports
   Med 45:797–804, LSCT) found that the power at a fixed submaximal HR tracks performance
-  (r 0.80–0.94). Reading P at LTHR as a threshold is 自組.
-- **Valid** only with ≥ 8 runs, an HR span ≥ 15 bpm, a positive slope and R² ≥ 0.5 (自組).
+  (r 0.80–0.94). Reading P at LTHR as a threshold is 推估.
+- **Valid** only with ≥ 8 runs, an HR span ≥ 15 bpm, a positive slope and R² ≥ 0.5 (推估).
 - **Anchors**: P_LTHR is used as the F1 anchor at TTE 1800 s (Friel's 30-min TT, `tt30`) and at
   the as-of TTE (`tte`), single anchor, with the Ruiz-Alias W′ prior.
 - **Combined**: max(power envelope, HR `tte`) when there are < 3 capacity samples in the year
@@ -621,7 +621,7 @@ WKO5 default LTHR of 160.
 2. **地形模型回測 (terrain)**: mode B with the actual power, then time and per-segment speed.
    This tests only the RE(g) physics.
    - Stratified by class × grade bin (±2 %, 8 % Stryd range, 15 % walk label).
-   - Trail is split into running and walking-heavy groups (≥ 50 % of the time < 130 spm, 自組).
+   - Trail is split into running and walking-heavy groups (≥ 50 % of the time < 130 spm, 推估).
    - Compared: the per-class RE(g) fit (LOO) against the pooled fit, and gait against no gait.
 
 A category is validated (drops 推估, v2 segment sum) when capacity passes AND the race-like
@@ -920,4 +920,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-01 | bugfix | docs/research/unsourced-rules.md §0.10 step 0 | COROS / TP back-test prerequisites: the FIT dataset reads trail / road from the app DB (overrides, duplicates), takes thresholds / weight from plan → athlete_settings → as-of estimates (no WKO5 by default), and the activity-tag seed matches COROS / TP races by start time |
 | 2026-10-01 | bugfix | user request (COROS vs TP back-test) | Cause of the COROS / TP difference (one TP-only junk watch-power file); power models use Stryd power only by default (`power.accept_watch_power`), watch-power runs are no-power back-test cases, `power_source` in derive / back-test rows; cp_as_of prefers usable power (推估) |
 | 2026-10-01 | feature | user request (bad activity files) | Bad activity files (car / bike speed, impossible power) are no run, envelope point, capacity sample or back-test case (not in `ds.workouts`); the synced FIT curves / CP-test scan drop them (`cptest.bad_files`) |
-| 2026-09-30 | feature | user request | CSV export (`POST /export/csv`, `csvplan.py`, UTF-8 BOM, header block + one row per segment, 「匯出 CSV」 button); per-segment, time-of-day heat (road / trail): /weather returns hourly rows, the plan maps each segment's ETA to the forecast hour and applies Hadley there (自組, 推估), iterating to max |Δ cumulative time| < 1 s; falls back to the single value with a warning; °C axis on the profile, 熱 column in the table |
+| 2026-09-30 | feature | user request | CSV export (`POST /export/csv`, `csvplan.py`, UTF-8 BOM, header block + one row per segment, 「匯出 CSV」 button); per-segment, time-of-day heat (road / trail): /weather returns hourly rows, the plan maps each segment's ETA to the forecast hour and applies Hadley there (推估), iterating to max |Δ cumulative time| < 1 s; falls back to the single value with a warning; °C axis on the profile, 熱 column in the table |
