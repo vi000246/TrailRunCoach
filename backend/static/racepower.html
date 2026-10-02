@@ -283,7 +283,7 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <div class="seg" id="heat-accl"><button data-h="auto">自動</button><button data-h="none">未適應</button><button data-h="partial">部分</button><button data-h="acclimatised">已適應</button><button data-h="custom">自訂 %</button></div>
       <input id="heat-s" type="number" min="0" max="100" step="5" style="width:64px" class="hidden" placeholder="S %">
       <span class="badge watch">推估</span>
-      <span class="help" tabindex="0">?<span class="tip">熱適應指數 S（0–100 %）：近期每天在 Hadley ≥ 150（例如 28 °C / 75 %）的移動分鐘，每天 ≥ 60 分算滿劑量，連續 5 天約 70 %（Pandolf 1998），停止後每天掉約 2.5 %（Daanen 2018）。比賽的熱懲罰乘上 (1 − 0.75 × S)（Racinais 2015 兩週拿回約 77 %；0.75 是自組）。自動 = 從你的紀錄推算到比賽日。部分 = 50 %、已適應 = 90 % 是自組的固定值。你自己的心率資料目前不支持「夏末熱懲罰比較小」，所以一律標推估。</span></span>
+      <span class="help" tabindex="0">?<span class="tip">熱適應指數 S（0–100 %）：近期每天在 Hadley ≥ 150（例如 28 °C / 75 %）的移動分鐘，每天 ≥ 60 分算滿劑量，連續 5 天約 70 %（Pandolf 1998），停止後每天掉約 2.5 %（Daanen 2018）。比賽的熱懲罰乘上 (1 − 0.75 × S)（Racinais 2015 兩週拿回約 77 %；0.75 是推估）。自動 = 從你的紀錄推算到比賽日。部分 = 50 %、已適應 = 90 % 是推估的固定值。你自己的心率資料目前不支持「夏末熱懲罰比較小」，所以一律標推估。</span></span>
       <span class="meta" id="heat-accl-line"></span>
     </div>
     <div class="row bf"><span class="lbl">行程</span>
@@ -292,7 +292,7 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <label class="meta">天數 <input id="tripdays" type="number" min="1" max="10" step="1" value="3" style="width:52px"></label>
       <label class="meta">每天背負 kg <input id="packdays" placeholder="例 9, 8.3, 7.6" style="width:120px"></label>
       <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
-      <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，自組）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
+      <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
     </div>
     <div class="row rf"><span class="lbl">顯示</span>
       <div class="seg" id="unit"><button data-u="power">功率</button><button data-u="pace">配速</button></div>
@@ -921,7 +921,7 @@ function renderResults() {
     const bd = ha.band;
     h += `<div class="note">熱影響（對訓練條件）：未適應 ${spct(-bd.raw_penalty_pct / 100)} → 適應後 <b>${spct(-bd.center.penalty_pct / 100)}</b>
       （範圍 ${spct(-bd.high.penalty_pct / 100)} ~ ${spct(-bd.low.penalty_pct / 100)}；完賽 ${hms(ha.time_s.high)}–${hms(ha.time_s.low)}）
-      · S ${Math.round(ha.s * 100)} %（${esc(ha.source)}）、訓練期 S ${Math.round((ha.s_from || 0) * 100)} %、a ${ha.a} <span class="badge watch">推估</span>${help(`a 是熱適應能抵掉多少熱懲罰。文獻的族群平均是 ${ha.a_literature ?? 0.75}（Racinais 2015），但你自己的心率資料看不到熱適應（夏末的熱係數比初夏大），所以預設 a = 0：S 照算、照顯示，但不折抵熱懲罰。只有近 84 天熱天穩定段的心率成本（HRC）隨時間顯著下降（單尾 p < 0.1，自組檢定）才用文獻的 a。目前：${esc(ha.a_reason || "")}`)}</div>`;
+      · S ${Math.round(ha.s * 100)} %（${esc(ha.source)}）、訓練期 S ${Math.round((ha.s_from || 0) * 100)} %、a ${ha.a} <span class="badge watch">推估</span>${help(`a 是熱適應能抵掉多少熱懲罰。文獻的族群平均是 ${ha.a_literature ?? 0.75}（Racinais 2015），但你自己的心率資料看不到熱適應（夏末的熱係數比初夏大），所以預設 a = 0：S 照算、照顯示，但不折抵熱懲罰。只有近 84 天熱天穩定段的心率成本（HRC）隨時間顯著下降（單尾 p < 0.1，推估檢定）才用文獻的 a。目前：${esc(ha.a_reason || "")}`)}</div>`;
   }
   // effort bar
   const mult = e.multiple, tl = e.t_lim_s;
@@ -1035,7 +1035,7 @@ function renderBaiyueCapacity() {
   h += `</div>`;
   // uncertainty decomposition
   const sh = b.shares || {};
-  h += `<h3>不確定帶 ±${pct1(Math.exp(1.2816 * b.sigma) - 1)}（p10–p90）${help("對數尺度相加（假設彼此獨立，自組）。模型 = 回測的留一誤差；背負只在超出你資料的背負範圍時加 8 %（Looney 2022、Weyand 2021）；海拔 = 海拔斜率的不確定 × 路線平均高度差；日內 = 0.05 × 小時 ÷ 1.5（Nuuttila 2025 量級）；多日 = 每多一天 3 %（沒有來源）。")}</h3>`;
+  h += `<h3>不確定帶 ±${pct1(Math.exp(1.2816 * b.sigma) - 1)}（p10–p90）${help("對數尺度相加（假設彼此獨立，推估）。模型 = 回測的留一誤差；背負只在超出你資料的背負範圍時加 8 %（Looney 2022、Weyand 2021）；海拔 = 海拔斜率的不確定 × 路線平均高度差；日內 = 0.05 × 小時 ÷ 1.5（Nuuttila 2025 量級）；多日 = 每多一天 3 %（沒有來源）。")}</h3>`;
   h += `<div class="zbar" title="σ 各分量占比">${Object.entries(sh).filter(([, v]) => v > 0.001).map(([k, v], i) =>
     `<div style="width:${(v * 100).toFixed(1)}%;background:${css(["--s1", "--s2", "--s4", "--s5", "--s7"][i % 5])}" title="${SIGMA_ZH[k] || k} ${pct(v)}"></div>`).join("")}</div>`;
   h += `<div class="meta">${Object.entries(sh).filter(([, v]) => v > 0.001).map(([k, v]) => `${SIGMA_ZH[k] || k} ${pct(v)}（σ ${f2(b.components[k])}）`).join(" · ")}</div>`;
@@ -1475,7 +1475,7 @@ function renderHikeMeta() {
   const H = HIKEMETA, v = H.validation || {};
   const rows = H.days.slice().reverse();
   let t = `<div class="note">跟團的速度不代表你的能力：百岳時間改用<b>你的步行能力模型</b>（越野跑走路窗 + 百岳心率 ≥ AeT 的爬升窗）。
-    「看起來是自己走」是自動判斷的<b>建議</b>（自組規則：自己走的段 ≥ 60 %、被限制的段 ≤ 15 %），要你按「確認」才會寫進自己走的清單。
+    「看起來是自己走」是自動判斷的<b>建議</b>（推估規則：自己走的段 ≥ 60 %、被限制的段 ≤ 15 %），要你按「確認」才會寫進自己走的清單。
     ${esc(v.rule || "")}：目前手動標記 自己走 ${v.n_solo ?? 0} 天、跟團 ${v.n_group ?? 0} 天${v.agreement != null ? `，符合率 ${pct(v.agreement)}` : ""}，${v.validated ? "已可自動套用" : "還只是建議"}。
     背負填了才準；沒填用預設 9 kg。</div>`;
   t += `<div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">移動</th><th class="n">EP/h</th><th>背負 kg</th><th>建議</th><th>目前</th></tr></thead><tbody>` +

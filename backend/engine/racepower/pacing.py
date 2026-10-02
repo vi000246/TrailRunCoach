@@ -11,7 +11,7 @@ Modes: power (λ so that P̄ = P*, F16), time (λ so that T = T*), auto (λ so
 that P̄_train = f*·P_sus(T), §4.3). λ is found by bisection on log λ; T is
 monotone in λ.
 
-Every allocation rule here is our own combination (自組) and 待驗證 until the
+Every allocation rule here is our own combination (推估) and 待驗證 until the
 §3B back-test passes for the course's category; the page labels segment
 targets 推估 until then. The W′ budget (F11b) is plain algebra of the CP model
 and 已驗證. The optional W′ curve defaults to WKO5's own dfrc (a port, so it
@@ -50,7 +50,7 @@ def hill_factor(g: float, alpha: float = ALPHA_DEFAULT, beta: float = BETA_DEFAU
     Swain 1997 (MSSE 29:1104–1108) — varying power with grade saves time;
     Townshend et al. 2010 (MSSE 42:160–169) — runners spontaneously go to
     100.4 % VT uphill vs 89.3 % level vs 78.9 % downhill (ratios 1.124 /
-    0.884). Our rule (自組), 待驗證: cycling / VO2 evidence, not Stryd power."""
+    0.884). Our rule (推估), 待驗證: cycling / VO2 evidence, not Stryd power."""
     if g > 0:
         return 1.0 + alpha * min(g / UP_REF_GRADE, 1.0)
     if g < 0:
@@ -138,7 +138,7 @@ def _bisect(fn, lo: float, hi: float, iters: int = 200) -> float:
 
 def solve_power_mode(p_target: float, segs, model: RunModel, **kw) -> dict:
     """Mode B / F16: λ so that the time-weighted average power equals the
-    target (conservation error < 0.1 W, V-F16). F16 is 自組 (Liedl 1999: same
+    target (conservation error < 0.1 W, V-F16). F16 is 推估 (Liedl 1999: same
     mean, ±5 % → same physiology), 待驗證 by §3B."""
     lam = _bisect(lambda l: course_time(l, segs, model, **kw)["P"] - p_target, 0.05 * p_target, 20 * p_target)
     return course_time(lam, segs, model, **kw)

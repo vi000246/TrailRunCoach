@@ -70,7 +70,7 @@ log = logging.getLogger(__name__)
 
 F_DESCENDING, F_WORK, F_VAM = 4225, 4218, 4224
 
-# 自組: how often the as-of LTHR / CP estimate is refreshed for a FIT source
+# 推估: how often the as-of LTHR / CP estimate is refreshed for a FIT source
 # (a value estimated on a grid day applies until the next one). 30 days keeps
 # a full-history load to ~one estimate per month; the thresholds.estimate
 # windows (90 / 180 days) are much longer, so a finer grid changes little.

@@ -12,8 +12,8 @@ Pure functions, no I/O (the per-activity weather is read by route_weather).
               the S model; never drives the race maths)
 
 Every constant names its source and status (the env.py convention):
-[已驗證] read in the paper, [二手] quoted by another paper, [自組] our own
-composition, [待驗證] still to be checked. The S model's structure is 自組 —
+[已驗證] read in the paper, [二手] quoted by another paper, [推估] our own
+composition, [待驗證] still to be checked. The S model's structure is 推估 —
 the page labels S 推估 until two summers cross-validate it (§6.2 point 8).
 """
 from __future__ import annotations
@@ -28,14 +28,14 @@ from typing import Iterable, Optional, Sequence
 # slower), shared so the overview and the routes page flag the same days.
 HOT_HADLEY = 150.0
 # 130–150 counts linearly 0 → 1 (Taipei summer evenings; Brown 2022 shows
-# everyday outdoor activity acclimatises seasonally) [自組]
+# everyday outdoor activity acclimatises seasonally) [推估]
 PARTIAL_HADLEY = 130.0
 # ≥ 60 min/day of heat exposure (Racinais et al. 2015 consensus, BJSM
 # 49:1164–73, [已驗證·全文] PMC4602249): a full day's dose
 MIN_DOSE_MIN = 60.0
 # k_in calibrated so 5 consecutive full doses give S = 0.70: Pandolf 1998
 # (Int J Sports Med 19 S2:S157–60) 2/3–75 % of the adaptation in 4–6 days
-# [已驗證 摘要]; the calibration itself is [自組]
+# [已驗證 摘要]; the calibration itself is [推估]
 K_IN = 1.0 - 0.3 ** (1.0 / 5.0)
 # decay per day without exposure: Daanen, Racinais & Périard 2018 (Sports Med
 # 48:409–30, [已驗證·全文] PMC5775394) HR 2.3 %/day, Tc 2.6 %/day; 2.5 % is
@@ -47,26 +47,26 @@ DECAY_RANGE = (0.023, 0.026)
 # Périard, Karlsen & Nybo 2015 (MSSE 47:601–6, [已驗證·全文] PMC4342312) power
 # deficit −48 → −11 W after 2 weeks = 77 %; range 0.35 (Lorenzo 2010 on the
 # pre-acclimation cool baseline) – 1.0 (Racinais by time). Using it as a
-# constant multiplier on Hadley's penalty is [自組].
+# constant multiplier on Hadley's penalty is [推估].
 A_RECOVER = 0.75
 A_RANGE = (0.35, 1.0)
-MAINTAIN_EVERY_D = 4          # every 3–5 days (Pryor 2019; Benjamin 2022; Sekiguchi 2022) → 4 [自組, in range]
-# level cut-offs [自組]: 0.75 ≈ Pandolf's 75 %
+MAINTAIN_EVERY_D = 4          # every 3–5 days (Pryor 2019; Benjamin 2022; Sekiguchi 2022) → 4 [推估, in range]
+# level cut-offs [推估]: 0.75 ≈ Pandolf's 75 %
 LEVELS = (("acclimatised", 0.75, "已適應"), ("partial", 0.35, "部分"), ("none", 0.0, "未適應"))
-# fixed choices of the race-calculator selector (heat-acclimation.md §5.5) [自組]
+# fixed choices of the race-calculator selector (heat-acclimation.md §5.5) [推估]
 PRESET_S = {"none": 0.0, "partial": 0.5, "acclimatised": 0.9}
 # the three parameter sets of §4.4 (optimistic / centre / conservative)
 SCENARIOS = {"high": {"a": A_RANGE[1], "rule": "exp", "decay": DECAY_RANGE[0]},
              "center": {"a": A_RECOVER, "rule": "exp", "decay": DECAY},
              "low": {"a": A_RANGE[0], "rule": "day_loss", "decay": None}}
-EVIDENCE = "Pandolf 1998；Racinais 2015 共識；Daanen 2018；Racinais 2015 MSSE（a）；模型結構 [自組]"
+EVIDENCE = "Pandolf 1998；Racinais 2015 共識；Daanen 2018；Racinais 2015 MSSE（a）；模型結構 [推估]"
 # The athlete's own heat coefficient of HR at a given power: the heat
 # back-test (backend/scripts/heat_backtest.py, 271 running route efforts,
 # route FE + power + moving min + time of day + β·(Hadley − 120), OLS) gave
 # β = 0.224 ± 0.036 bpm per Hadley unit (docs/spec/racepower.spec.md,
 # 2026-10-01; docs/research/unsourced-rules.md §A5). Linear and centred on
 # Hadley 120, as it was fitted. The fit is the athlete's own [本人資料]; using
-# it to move one run's HR to Hadley 120 is [自組].
+# it to move one run's HR to Hadley 120 is [推估].
 HR_BETA = 0.224
 HR_BETA_SE = 0.036
 HR_BETA_REF = 120.0
@@ -209,7 +209,7 @@ def mean_s(series: Sequence[tuple], lo: dt.date, hi: dt.date) -> Optional[float]
 
 # ---- HRC: HR cost of heat at a steady power (§2.3, an observation) ------------
 
-HRC_BASE_DAYS = 42           # [自組] keeps up with fitness
+HRC_BASE_DAYS = 42           # [推估] keeps up with fitness
 HRC_COOL, HRC_HOT = 120.0, 150.0
 
 

@@ -15,7 +15,7 @@ Safety
     only takes the done / missed part, the watch keeps what was pushed, and the
     user approves / rejects on the overview / 課表 page. With
     plan.auto.notify = watch a 1-minute「課表待確認」 workout is pushed too.
-    Big (thresholds 自組):
+    Big (thresholds 推估):
       - a week's planned TSS + > 20 % vs the stored (= last pushed) version
         (reductions are the safe direction and apply on their own)
       - a long / quality / test removed within 14 days before an A race
@@ -55,14 +55,14 @@ from backend.db.models import PlanChangeLog, PlanSession
 
 log = logging.getLogger(__name__)
 
-# 自組 thresholds for "big" (labelled in the UI hover text too)
+# 推估 thresholds for "big" (labelled in the UI hover text too)
 BIG_TSS_UP = 0.20           # a week's planned TSS + > 20 %
 RACE_GUARD_DAYS = 14        # removing a long / quality / test this close to an A race
 MAX_CHANGED = 3             # > 3 non-reducing changes in the push window
-BIG_TEXT = {"tss": "單週計畫 TSS 比上次推送 +20% 以上（自組）",
-            "race": "A 賽前 14 天內拿掉長跑／強度課／測試（自組）",
-            "phase": "訓練周期改變（自組）",
-            "many": "推送範圍內超過 3 堂課改變、而且不是單純減量（自組）"}
+BIG_TEXT = {"tss": "單週計畫 TSS 比上次推送 +20% 以上（推估）",
+            "race": "A 賽前 14 天內拿掉長跑／強度課／測試（推估）",
+            "phase": "訓練周期改變（推估）",
+            "many": "推送範圍內超過 3 堂課改變、而且不是單純減量（推估）"}
 HARD_LONG = ("long", "quality", "test")
 CMP = ("day", "kind", "title", "minutes", "target", "detail", "tss", "terrain", "protocol")
 NOTICE_KIND = "notice"

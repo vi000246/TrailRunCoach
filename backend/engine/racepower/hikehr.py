@@ -19,7 +19,7 @@ Uses, each with its n and evidence status:
               elevation inside cells of the same grade band and HR band
               (cell-demeaned, i.e. fixed effects) → % per 1000 m, compared
               with Wehrlin & Hallén 2006 (−6.3 % VO2max per 1000 m, 已驗證 in
-              env.py). 自組; needs ≥ 30 windows over ≥ 800 m of elevation.
+              env.py). 推估; needs ≥ 30 windows over ≥ 800 m of elevation.
     fatigue   multi-day: HR at the same VAM, day n vs day 1 — per trip a
               least-squares line HR ~ VAM on day 1, the median residual on
               day n (bpm). No external source (F17), personal data only;
@@ -45,9 +45,9 @@ FAT_MIN_N = 5
 WEHRLIN_PER_KM = 0.063
 EVIDENCE = {
     "vam": "定義（描述統計）",
-    "altitude": "自組（個人資料），對照 Wehrlin & Hallén 2006 −6.3 %/1000 m（已驗證）",
+    "altitude": "推估（個人資料），對照 Wehrlin & Hallén 2006 −6.3 %/1000 m（已驗證）",
     "fatigue": "無外部來源（F17），僅個人資料",
-    "walking": "Tobler 1993 形狀為先驗（經驗法則），個人陡坡分箱為自組",
+    "walking": "Tobler 1993 形狀為先驗（經驗法則），個人陡坡分箱為推估",
 }
 
 
