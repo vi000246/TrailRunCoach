@@ -1,5 +1,8 @@
 """
-Fatigue band (COROS style) and training monotony / strain (Foster).
+Fatigue band (COROS style).
+
+Foster monotony / strain was removed (2026-10): docs/research/validation-lovdal.md
+found monotony > 2 not predictive, and the chart was dropped from 負荷 PMC.
 
 Fatigue band
     ratio = ATL / CTL * 100 with the athlete's own time constants (7 d / 42 d
@@ -12,13 +15,6 @@ Fatigue band
 
     The band edges are COROS's published ones [vendor]; the ratio itself is
     the classic acute:chronic workload ratio.
-
-Monotony / strain (Foster 1998, Med Sci Sports Exerc 30:1164)
-    monotony = mean(daily load over a week) / sd(daily load over the week)
-    strain   = weekly load * monotony
-    Rest days count as 0. Foster reported illness clustering at monotony > 2
-    together with high strain. sd uses the population form (ddof=0) as Foster
-    did; a week with identical loads every day has no defined monotony (None).
 """
 from __future__ import annotations
 
@@ -32,7 +28,6 @@ BANDS = (  # (lower bound inclusive, key, label, colour)
     (80.0, "maintaining", "維持", "#2563eb"),
     (-math.inf, "recovery", "恢復", "#94a3b8"),
 )
-MONOTONY_HIGH = 2.0
 
 
 def pmc(daily_load: Sequence[float], ctl_days: float = 42.0, atl_days: float = 7.0,
@@ -72,29 +67,6 @@ def band_edges() -> list[dict]:
         out.append({"lo": None if lo == -math.inf else lo, "hi": hi,
                     "key": key, "label": label, "color": color})
         hi = lo
-    return out
-
-
-def monotony_strain(week: Sequence[float]) -> dict:
-    """One week (7 daily loads; missing days = 0)."""
-    xs = [0.0 if v is None else float(v) for v in week]
-    total = sum(xs)
-    n = len(xs) or 1
-    mean = total / n
-    sd = math.sqrt(sum((x - mean) ** 2 for x in xs) / n)
-    mono = mean / sd if sd > 1e-9 else None
-    return {"load": total, "monotony": mono,
-            "strain": total * mono if mono is not None else None}
-
-
-def weekly_monotony(daily: dict[dt.date, float], begin: dt.date, end: dt.date) -> list[dict]:
-    """Monday-based weeks covering [begin, end]; each {week, load, monotony, strain}."""
-    start = begin - dt.timedelta(days=begin.weekday())
-    out = []
-    while start <= end:
-        days = [daily.get(start + dt.timedelta(days=i), 0.0) for i in range(7)]
-        out.append({"week": start.isoformat(), **monotony_strain(days)})
-        start += dt.timedelta(days=7)
     return out
 
 

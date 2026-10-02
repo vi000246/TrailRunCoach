@@ -40,6 +40,7 @@ from backend.engine.wko5expr import periods as PD
 from backend.engine.wko5expr import basis as BS
 from backend.engine.wko5expr import variants as VR
 from backend.engine.wko5expr import recentbests as RB
+from backend.engine.wko5expr import power_use as PU
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
@@ -241,6 +242,10 @@ def list_views():
             {"index": i, "title": d["title"], "description": d.get("description"),
              "charts": [{"index": j, "title": c.get("title"), "kind": _panel_kind(c),
                          "series": len(c.get("series", [])),
+                         # 「使用功率」 off (charts.power.enabled): the viewer hides power-only charts
+                         # and locks 配速／功率 toggles to pace (power_use.py)
+                         "power": PU.chart_needs_power(c), "power_basis": PU.power_basis(c),
+                         **({"zoned": c["zoned"]} if c.get("zoned") else {}),
                          **({"view": c.get("view")} if c.get("kind") == "periodzones" else {})}
                         for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
