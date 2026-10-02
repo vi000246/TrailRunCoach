@@ -129,8 +129,28 @@ def test_resolve_overrides():
     r = WS.resolve(_one({"type": "hr", "mode": "abs", "lo": 150, "hi": 160})["items"][0], c)
     assert (r.lo, r.hi, r.intensity) == (150, 160, ("hr", 150, 160))
     r = WS.resolve(_one({"type": "pace", "mode": "zone", "zone": "4"})["items"][0], c)
-    assert r.type == "pace" and r.intensity is None and "未驗證" in r.warn
+    assert r.type == "pace" and r.intensity == ("pace", round(r.lo), round(r.hi)) and not r.warn
     assert r.text == "4:40–4:57 /km"
+
+
+def test_pace_targets_push_as_intensity_type_3_seconds_per_km():
+    # verified on the owner's watch 2026-10-02: value 270 / extend 285, displayUnit 1 → 4'30"–4'45"/km
+    c = WS.Ctx.of({**FULL, "tpace": 280}, "hr")
+    st = _one({"type": "pace", "mode": "abs", "lo": 285, "hi": 270})
+    prog = CW.build_program("TRC p", WS.steps_to_coros(WS.normalize(st), c), CW.Thresholds.of(FULL))
+    ex = prog["exercises"][0]
+    assert (ex["intensityType"], ex["intensityValue"], ex["intensityValueExtend"], ex["intensityDisplayUnit"]) == (3, 270, 285, 1)
+    assert ex["name"] == "第 1 趟 5 分"                       # no 「配速 …」 name workaround any more
+    pv = WS.watch_preview(WS.normalize(st), c)
+    assert pv["lines"][0]["target"] == "配速 4:30–4:45 /km" and not any("配速" in x for x in pv["lost"])
+    # pct × threshold pace (a Daniels T template) reaches the payload too, through session_steps
+    s = {"kind": "quality", "title": "T", "minutes": 30, "day": "2026-10-07",
+         "steps": _one({"type": "pace", "mode": "pct", "lo": 0.99, "hi": 1.01})}
+    steps = CW.session_steps(s, CW.Thresholds.of({**FULL, "tpace": 280}))
+    assert steps[0].intensity == ("pace", round(0.99 * 280), round(1.01 * 280))
+    assert CW.step_lines(steps)[0].endswith("配速 4:37–4:43 /km")
+    # without a threshold pace: an error, no target (never a made-up number)
+    assert CW.session_steps(s, CW.Thresholds.of(FULL))[0].intensity is None
     # no CP: a power override is an error; an auto band falls back to HR with the reason
     nc = WS.Ctx.of({"lthr": 168, "aet": 150}, "power")
     r = WS.resolve(_one({"type": "power", "mode": "pct", "lo": 1.0, "hi": 1.05})["items"][0], nc)

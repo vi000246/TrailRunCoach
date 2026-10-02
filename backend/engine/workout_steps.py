@@ -587,7 +587,7 @@ class Resolved:
     auto: bool = True               # the step follows 目標用 (not overridden)
     warn: str = ""
     err: str = ""
-    intensity: Optional[tuple] = None    # what COROS gets (power / hr only)
+    intensity: Optional[tuple] = None    # what COROS gets: ("power" | "hr" | "pace", lo, hi)
 
     def as_dict(self) -> dict:
         return {"type": self.type, "lo": self.lo, "hi": self.hi, "frac": self.frac, "text": self.text,
@@ -676,8 +676,9 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         a, b = min(lo, hi), max(lo, hi)
         f = 1.0 / ((a + b) / 2 / c.tpace) if c.tpace else 0.8
         sub = f"{a / c.tpace * 100:.0f}–{b / c.tpace * 100:.0f}% 閾值配速（推估）" if c.tpace else ""
+        # COROS intensityType 3, s/km (verified 2026-10-02): lo = the faster bound
         r = Resolved("pace", a, b, f, f"{mmss(a)}–{mmss(b)} /km", sub, False,
-                     "COROS 配速單位未驗證：手錶上這段不設目標")
+                     intensity=("pace", round(a), round(b)))
     if r.lo is not None and r.hi is not None and r.lo > r.hi and r.type != "pace":
         r.err = "下限比上限高"
     if r.type == "power" and c.cp and (r.lo < 0.4 * c.cp or r.hi > 2.0 * c.cp):
@@ -1026,8 +1027,6 @@ def _name(st: dict, r: Resolved, em: _Emit, grouped: bool) -> str:
     tg = st.get("target") or {}
     if st["kind"] == "work" and tg.get("type") == "auto" and tg.get("intent") == "easy" and tg.get("plo") is not None:
         return "心率 ≤ AeT" if r.type == "hr" else "功率區間" if r.type == "power" else "照感覺"
-    if r.type == "pace":
-        return f"配速 {r.text}"
     if st["kind"] == "work" and not grouped:
         em.n_work += 1
         return f"第 {em.n_work} 趟 {fmt_dur(st['dur'])}"
@@ -1119,6 +1118,8 @@ def _ex_line(ex: dict) -> dict:
         tgt = f"功率 {ex['intensityValue']}–{ex['intensityValueExtend']} W"
     elif it == 2:
         tgt = f"心率 {ex['intensityValue']}–{ex['intensityValueExtend']} bpm"
+    elif it == 3:
+        tgt = f"配速 {mmss(ex['intensityValue'])}–{mmss(ex['intensityValueExtend'])} /km"
     else:
         tgt = "不設目標"
     return {"kind": EX_LABEL.get(ex["exerciseType"], "訓練"), "dur": dur, "target": tgt, "name": ex.get("name") or ""}
@@ -1144,7 +1145,6 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     rows = flat(steps["items"])
     res = [(row["st"], resolve(row["st"], c)) for row in rows]
     has_power = any(r.type == "power" for _, r in res)
-    has_pace = any(r.type == "pace" for _, r in res)
     unrolled = any(it.get("kind") == "repeat" and (not it.get("last_rest", True) or not _plain(it["items"]))
                    for it in steps["items"])
     dist = any(st["dur"]["type"] == "distance" for st, _ in res)
@@ -1156,8 +1156,6 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
         {"key": "ramp", "hit": False, "text": "沒有漸進（ramp）步驟：漸進只寫在步驟名稱"},
     ]
     lost = []
-    if has_pace:
-        lost.append("配速目標：COROS 配速單位還沒驗證，手錶上這段不設目標（配速寫在步驟名稱）")
     if unrolled:
         lost.append("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段")
     if dist:
