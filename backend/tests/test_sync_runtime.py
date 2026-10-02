@@ -171,7 +171,7 @@ async def _two_sources(s, root):
         await s.flush()
         s.add(WorkoutMetric(workout_id=wf.id, metric_key="tss", value=50.0))
     wko5 = root.parent / "WKO5" / "Me" / "2026"
-    wko5.mkdir(parents=True)
+    wko5.mkdir(parents=True, exist_ok=True)
     (wko5 / "x.wko4").write_bytes(b"wko4")
     s.add(SyncState(athlete_id=1, coros_last_sync_at=datetime.utcnow(), last_sync_cursor="2026-09-01",
                     last_sync_at=datetime.utcnow()))
@@ -182,7 +182,15 @@ async def _two_sources(s, root):
     return files, wko5 / "x.wko4"
 
 
-def test_delete_tp_files_keeps_coros_and_wko5_and_rebuilds_dedup(tmp_path, _fit_root_in_tmp):
+@pytest.mark.parametrize("has_wko5", [True, False])
+def test_delete_tp_files_keeps_coros_and_wko5_and_rebuilds_dedup(tmp_path, _fit_root_in_tmp, monkeypatch, has_wko5):
+    if has_wko5:
+        (tmp_path / "wko5athlete").mkdir()
+        (tmp_path / "wko5athlete" / "A.wko5athlete").write_bytes(b"")
+        monkeypatch.setenv("WKO5_ATHLETE_DIR", str(tmp_path / "wko5athlete"))
+    else:
+        monkeypatch.delenv("WKO5_ATHLETE_DIR", raising=False)
+
     async def go():
         s = await make_session(tmp_path, sync__primary_source="trainingpeaks")
         files, wko5_file = await _two_sources(s, _fit_root_in_tmp)
@@ -198,7 +206,8 @@ def test_delete_tp_files_keeps_coros_and_wko5_and_rebuilds_dedup(tmp_path, _fit_
         assert (await s.execute(select(WorkoutMetric))).scalars().all()[0].workout_id == rows[0].id
         st = (await s.execute(select(SyncState))).scalar_one()
         assert st.last_sync_cursor is None and st.last_sync_at is None and st.coros_last_sync_at is not None
-        assert await SettingsRepository(s, 1).get("charts.data_source") == "wko5"
+        # without a WKO5 folder the charts go to the merged synced FITs
+        assert await SettingsRepository(s, 1).get("charts.data_source") == ("wko5" if has_wko5 else "synced")
     run(go())
 
 

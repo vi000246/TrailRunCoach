@@ -1066,7 +1066,9 @@ def interval_summary(efforts: list[dict]) -> dict:
 
 
 # W′ prior for a single-bout estimate: Ruiz-Alias et al. 2025 (EJSS,
-# PMC11770271), amateur men's Stryd 9/3 two-point W′ 13.1 ± 4.0 kJ
+# PMC11770271), amateur Stryd 9/3 two-point W′ by sex (cp_protocols.WPRIME_PRIOR).
+# The cached result uses the men's value; measure() re-derives it on read for
+# the athlete's sex (cp_test_for_sex), so a sex entered later needs no rebuild.
 CP_TEST_WPRIME_PRIOR = (13100.0, 4000.0)
 CP_TEST_GAP_S = 600           # the 3′ window starts ≥ 10 min away from the 12′ bout
 
@@ -1103,10 +1105,25 @@ def cp_test(t, power) -> Optional[dict]:
         cp = (p12 * 720 - p3 * 180) / 540.0
         return {"p3": p3, "p12": p12, "cp": cp, "wprime": (p3 - cp) * 180.0, "separate": True,
                 "method": "2pt", "cp_range": [cp, cp]}
-    w, sd = CP_TEST_WPRIME_PRIOR
+    return _cp_test_1pt(p3, p12, *CP_TEST_WPRIME_PRIOR)
+
+
+def _cp_test_1pt(p3: float, p12: float, w: float, sd: float) -> dict:
     return {"p3": p3, "p12": p12, "cp": p12 - w / 720.0, "wprime": w, "separate": True, "method": "1pt_prior",
             "cp_range": [p12 - (w + sd) / 720.0, p12 - (w - sd) / 720.0],
-            "note": f"3 分段 {p3:.0f} W 不高於 12 分段 {p12:.0f} W（不是全力）：只用 12 分段，W′ 用先驗 13.1 kJ"}
+            "note": f"3 分段 {p3:.0f} W 不高於 12 分段 {p12:.0f} W（不是全力）：只用 12 分段，W′ 用先驗 {w / 1000:.1f} kJ"}
+
+
+def cp_test_for_sex(res: Optional[dict], sex: Optional[str]) -> Optional[dict]:
+    """A cached cp_test() result with its single-bout W′ prior set for the
+    athlete's sex (cp_protocols.wprime_prior; unchanged for men / no sex)."""
+    if not res or res.get("method") != "1pt_prior":
+        return res
+    from backend.engine import cp_protocols as CPP
+    w, sd, _ = CPP.wprime_prior(sex)
+    if res.get("wprime") == w:
+        return res
+    return {**res, **_cp_test_1pt(res["p3"], res["p12"], w, sd)}
 
 
 def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
@@ -1781,6 +1798,11 @@ def measure(ds, w) -> Optional[dict]:
         m = cache(CACHE_KEY, w, lambda: _nan_free(_measure(ds, w)))
     if m and isinstance(m.get("drift"), dict):
         m = {**m, "drift": heat_band(m["drift"], *activity_temp(ds, w, m))}
+    if m and m.get("cp_test"):
+        from backend.engine import cp_protocols as CPP
+        ct = cp_test_for_sex(m["cp_test"], CPP.athlete_sex(ds))
+        if ct is not m["cp_test"]:
+            m = {**m, "cp_test": ct}
     return m
 
 
@@ -2151,7 +2173,7 @@ def cp_eval(ds, w, m: dict, c: dict) -> Optional[dict]:
     method (cp_protocols.reference), and the 「套用這次的 CP」 payload."""
     from backend.engine import cp_protocols as CPP
     plan = getattr(ds, "plan", None)
-    sex = (getattr(plan, "profile", None) or {}).get("sex")
+    sex = CPP.athlete_sex(ds)
     res = CPP.result(m.get("cp_bouts"), c.get("protocol"), m.get("lthr"), sex)
     if res is None:
         return None

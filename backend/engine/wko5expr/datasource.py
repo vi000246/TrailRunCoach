@@ -57,11 +57,28 @@ def read_setting(key: str, default=None, user_id: int = 1):
         return default
 
 
-def current_source(user_id: int = 1) -> str:
+def wko5_available(wko5_dir: Optional[Path] = None) -> bool:
+    """A WKO5 athlete file (*.wko5athlete) is there. A runner without WKO5
+    (COROS / TP only) has none: the charts then read the synced FITs."""
+    if wko5_dir is None:
+        from backend.settings.paths import athlete_dir
+        wko5_dir = athlete_dir()
+    try:
+        return any(Path(wko5_dir).glob("*.wko5athlete"))
+    except OSError:
+        return False
+
+
+def current_source(user_id: int = 1, wko5_dir: Optional[Path] = None) -> str:
+    """charts.data_source; "wko5" (stored, or the no-DB default) only while a
+    WKO5 athlete file exists — otherwise "synced" (generalize-athlete S6)."""
     db = _db_path()
     default = DEFAULT_SOURCE if db is not None and db.exists() else "wko5"
     v = read_setting("charts.data_source", default, user_id)
-    return v if v in SOURCES else default
+    v = v if v in SOURCES else default
+    if v == "wko5" and not wko5_available(wko5_dir):
+        return DEFAULT_SOURCE
+    return v
 
 
 def primary_info(user_id: int = 1) -> tuple[str, dict]:

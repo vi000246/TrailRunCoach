@@ -51,6 +51,7 @@ from typing import Callable, Optional
 
 from sqlalchemy import select
 
+from backend.db.current import current_athlete_id
 from backend.db.models import PlanChangeLog, PlanSession
 
 log = logging.getLogger(__name__)
@@ -375,7 +376,7 @@ async def _add_entry(db, **kw) -> PlanChangeLog:
         if k in kw:
             v = kw.pop(k)
             kw[f"{k}_json"] = None if v is None else json.dumps(v, ensure_ascii=False, default=str)
-    r = PlanChangeLog(athlete_id=1, created_at=dt.datetime.utcnow(), **kw)
+    r = PlanChangeLog(athlete_id=current_athlete_id(), created_at=dt.datetime.utcnow(), **kw)
     db.add(r)
     await db.commit()
     return r

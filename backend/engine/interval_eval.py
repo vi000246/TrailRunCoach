@@ -60,7 +60,6 @@ TIZ_GOAL = 0.85                  # 推估 (§C2 ±15 %)
 TIZ_PART = 0.60                  # 推估
 TIZ_RUN_S = 30                   # 推估: a stretch in the zone counts from 30 s
 TIZ_HI_TOL = 1.05                # doc §B3 #4: up to hi × 1.05
-WPRIME_PRIOR = 13100.0           # workout_review.CP_TEST_WPRIME_PRIOR (Ruiz-Alias 2025)
 TAU_WALK, TAU_JOG = 119.0, 190.0  # Vassallo 2020 (running, abstract)
 MATCH_PCT = 0.03                 # Buchheit 2014: HRex CV ≈ 3 %
 PEER_N, PEER_DAYS = 5, 120
@@ -71,7 +70,6 @@ VERDICT = {"met": ("達到訓練目標", "good"), "partial": ("部分達到", "w
 FLAG_TAG = "當作間歇"            # the activity tag the 「當作間歇判讀」 button adds
 EVEN_TOL = 0.05                  # 推估: a CP-test bout's 2nd-half power within ±5 % of the 1st = even
 EVEN_TOL_AET = 0.03              # 推估: the AeT test's block is fixed power
-WPRIME_SRC_PRIOR = "W′ 先驗 13.1 kJ（Ruiz-Alias 2025；推估）"
 
 
 def _grid(t, x):
@@ -165,6 +163,18 @@ def _hr_last_half(t, hr, a: float, b: float) -> Optional[float]:
     return float(seg.mean()) if len(seg) else None
 
 
+def _wprime(ds) -> tuple[float, str]:
+    """(W′ J, its source label): the dataset's own W′, else the single-bout
+    prior for the athlete's sex (cp_protocols.wprime_prior; the men's value
+    without a sex on file)."""
+    own = getattr(ds, "wprime_j", None)
+    if own:
+        return float(own), "W′（資料集）"
+    from backend.engine import cp_protocols as CPP
+    w, _sd, label = CPP.wprime_prior(CPP.athlete_sex(ds))
+    return w, label
+
+
 def battery(ds, w, s: Optional[dict], cp: Optional[float], tau: float = TAU_JOG) -> Optional[dict]:
     """W′ over the whole activity: WKO5's dFRC and Skiba's W′bal, as a share of W′
     (the 「功率電池」 card) — every run with power, not only intervals. None
@@ -176,11 +186,11 @@ def battery(ds, w, s: Optional[dict], cp: Optional[float], tau: float = TAU_JOG)
     grid, pg = _grid(s["t"], s["power"])
     if grid is None or len(pg) < 2:
         return None
-    wprime = float(getattr(ds, "wprime_j", None) or WPRIME_PRIOR)
+    wprime, wsrc = _wprime(ds)
     dfrc = _dfrc(np.nan_to_num(pg), np.ones(len(pg)), wprime, cp) * 1000.0
     sk = skiba(pg, cp, wprime, tau)
     i_min = int(np.nanargmin(dfrc)) if np.isfinite(dfrc).any() else 0
-    return {"wprime_j": wprime, "wprime_src": WPRIME_SRC_PRIOR if not getattr(ds, "wprime_j", None) else "W′（資料集）",
+    return {"wprime_j": wprime, "wprime_src": wsrc,
             "tau": tau, "cp": cp, "dfrc_min_pct": float(dfrc[i_min] / wprime) if len(dfrc) else None,
             "dfrc_min_t": float(i_min),
             # the whole session's work above CP (reps, strides, a hard climb home)
@@ -283,7 +293,7 @@ def evaluate(ds, w, with_peers: bool = True, as_interval: bool = False) -> Optio
            "tiz_s": tiz, "tiz_plan_s": plan_tiz, "tiz_ratio": ratio, "z5": is5,
            "verdict": ver, "verdict_label": VERDICT[ver][0], "level": VERDICT[ver][1], "reasons": reasons,
            "kind": "detected" if spec[0] == "detected" else "plan", "flagged": bool(as_interval),
-           **(_public(bat) if bat else {"wprime_j": WPRIME_PRIOR, "wprime_src": WPRIME_SRC_PRIOR, "tau": tau,
+           **(_public(bat) if bat else {"wprime_j": _wprime(ds)[0], "wprime_src": _wprime(ds)[1], "tau": tau,
                                         "dfrc_min_pct": None, "dfrc_min_t": 0.0, "wprime_used_j": 0.0,
                                         "series": {"t": [], "power": [], "dfrc_pct": [], "skiba_pct": []}})}
     out["cp"] = cp

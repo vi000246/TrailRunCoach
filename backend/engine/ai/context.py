@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.db.models import AthleteSettings, PmcCache, WorkoutFile, WorkoutMetric
-from backend.engine.ai.knowledge import build_knowledge
+from backend.engine.ai.knowledge import athlete_traits, build_knowledge
 from backend.engine.ai.zones import compute_zones
 
 
@@ -19,6 +19,51 @@ SYSTEM_PROMPT = f"""你是一位專業的越野跑教練AI助理。請一律用�
 (2) 建議今天 / 近期該做的 zone（附功率 W 或心率 bpm 範圍）
 (3) 若需間歇，給出處方（時間 × 目標瓦數或 zone × 組數 × 恢復）
 使用條列式、簡潔清晰。"""
+
+TRAIL_DAYS = 90
+
+
+async def trait_inputs(db: AsyncSession, athlete_id: int, today: date | None = None, plan=None) -> dict:
+    """athlete_traits() inputs from the athlete's own data: the season plan's
+    latest CP / W′ (a measured two-point W′ only) / LTHR / AeT, else the app
+    DB's threshold settings; sex from the settings-page profile; the trail
+    runs' average climbing rate over the last TRAIL_DAYS days."""
+    from backend.engine.planning import Plan
+    today = today or date.today()
+    plan = plan if plan is not None else Plan.load()
+    cp = plan.threshold_on("cp", today)
+    lthr = plan.threshold_on("lthr", today)
+    aethr = plan.threshold_on("aethr", today)
+    wprime = next((t.wprime for t in sorted(plan.thresholds, key=lambda t: t.date, reverse=True)
+                   if t.wprime and t.cp and t.date <= today.isoformat()), None)
+    s = (await db.execute(select(AthleteSettings).where(AthleteSettings.athlete_id == athlete_id)
+                          .order_by(AthleteSettings.effective_date.desc()))).scalars().first()
+    if s is not None:
+        cp = cp or s.run_ftp_w
+        lthr = lthr or s.lthr
+    rows = (await db.execute(select(WorkoutFile).where(
+        WorkoutFile.athlete_id == athlete_id, WorkoutFile.duplicate_of.is_(None),
+        WorkoutFile.trail_classification == "trail",
+        WorkoutFile.workout_date >= today - timedelta(days=TRAIL_DAYS)))).scalars().all()
+    rows = [r for r in rows if r.duration_s and r.elevation_gain_m]
+    hours = sum(r.duration_s for r in rows) / 3600.0
+    hr = []
+    for r in rows:
+        m = (await db.execute(select(WorkoutMetric).where(WorkoutMetric.workout_id == r.id,
+                                                           WorkoutMetric.metric_key == "avg_hr_bpm"))).scalars().first()
+        if m is not None and m.value:
+            hr.append(m.value)
+    return {"cp": cp, "wprime_j": wprime, "lthr": lthr, "aethr": aethr,
+            "sex": (plan.profile or {}).get("sex"),
+            "trail_climb_m_per_h": (sum(r.elevation_gain_m for r in rows) / hours) if hours > 0.5 else None,
+            "trail_hr": (sum(hr) / len(hr)) if hr else None, "trail_n": len(rows)}
+
+
+async def build_system_prompt(db: AsyncSession, athlete_id: int, plan=None) -> str:
+    """SYSTEM_PROMPT plus the athlete's own traits (knowledge.athlete_traits);
+    just SYSTEM_PROMPT when there is no data yet."""
+    traits = athlete_traits(**await trait_inputs(db, athlete_id, plan=plan))
+    return SYSTEM_PROMPT if not traits else SYSTEM_PROMPT + "\n\n" + traits
 
 
 async def build_context(db: AsyncSession, athlete_id: int) -> str:
