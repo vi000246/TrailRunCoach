@@ -238,6 +238,18 @@
       "description": "進步的證據：有氧效率、心率飄移、爬坡速度、爬升密度、長時間與耐久度。",
       "charts": [
         {
+          "id": "run-power-recent-bests",
+          "title": "跑步功率曲線：近 7 天新高",
+          "description": "黃線 = 所選範圍每個時長的最佳平均功率（MMP）。紅色區塊 = 最近 N 天跑出比以前更高的時長，也就是最近進步的地方。「以前」至少往回比 90 天（所選範圍更長就用整個範圍）：功率曲線要有夠長的資料才準，Stryd 自動 CP 和 WKO5 的功率模型都看近 90 天；只拿幾週比，很多時長都會變成「新高」，那不是真的進步。可切換 7／14／28 天；同 WKO5 PDC 的 New Bests 算法。",
+          "window": {"default": 7, "choices": [7, 14, 28]},
+          "axes": [{"id": "WATTS", "min": 0}],
+          "series": [
+            {"name": "MMP 曲線", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#c9a227", "line_width": "medium", "expression": "meanmax(runpower)"},
+            {"name": "近 7 天新高", "type": "area", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#e8431c", "line_width": "medium", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent)"},
+            {"name": "進步幅度", "role": "recent_gain", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent - @historic)"}
+          ]
+        },
+        {
           "id": "long-easy-drift-ability",
           "title": "長時間輕鬆跑的心率飄移",
           "description": "每根長條＝一次長時間的平路路跑：後段心率比前段多飄了幾 %。綠＝穩定（< 5%）、橘＝有點飄（5–10%）、紅＝飄很多（> 10%）。\n怎麼用：基礎期要看到綠色越來越多、長條越來越矮；紅色多代表輕鬆跑跑太快，或太熱、沒補給。\n一次會有誤差，看最近幾根的走向，不要只看一根；熱天本來就會偏高，滑過長條看當天溫度。\n5% 是 Uphill Athlete 有氧閾值測試的標準，10% 是徐國峰 90 分鐘測試的標準。只算暖身後還有 30 分鐘以上、沒有爬坡和停頓的穩定路跑，和總覽「心率飄移」同一個算法。",
@@ -371,18 +383,6 @@
             {"name": "飄移 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pwhr) <= 0.3, pwhr)"},
             {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "15% 掉很多", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.15)"}
-          ]
-        },
-        {
-          "id": "run-power-recent-bests",
-          "title": "跑步功率曲線：近 7 天新高",
-          "description": "黃線 = 所選範圍每個時長的最佳平均功率（MMP）。紅色區塊 = 最近 N 天跑出比以前更高的時長，也就是最近進步的地方。「以前」至少往回比 90 天（所選範圍更長就用整個範圍）：功率曲線要有夠長的資料才準，Stryd 自動 CP 和 WKO5 的功率模型都看近 90 天；只拿幾週比，很多時長都會變成「新高」，那不是真的進步。可切換 7／14／28 天；同 WKO5 PDC 的 New Bests 算法。",
-          "window": {"default": 7, "choices": [7, 14, 28]},
-          "axes": [{"id": "WATTS", "min": 0}],
-          "series": [
-            {"name": "MMP 曲線", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#c9a227", "line_width": "medium", "expression": "meanmax(runpower)"},
-            {"name": "近 7 天新高", "type": "area", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#e8431c", "line_width": "medium", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent)"},
-            {"name": "進步幅度", "role": "recent_gain", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent - @historic)"}
           ]
         }
       ]
