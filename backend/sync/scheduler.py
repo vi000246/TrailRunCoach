@@ -41,13 +41,15 @@ async def tick(session_factory: Callable, now: Optional[datetime] = None, athlet
             return []
         await repo.set("sync.schedule.last_run", today)
         await db.commit()
-        ready = await runner.ready_sources(db, athlete_id)
+        # the primary source first; the other only with sync.secondary.auto
+        todo, skipped = await runner.auto_plan(db, athlete_id)
     started = []
-    for src, state in ready.items():
-        if state == "ready" and start(src, athlete_id, "schedule", session_factory) is not None:
+    for src in todo:
+        if start(src, athlete_id, "schedule", session_factory) is not None:
             started.append(src)
-    log.warning("scheduled sync %s: started=%s skipped=%s", today, started,
-                {k: v for k, v in ready.items() if k not in started})
+        else:
+            skipped[src] = "busy"
+    log.warning("scheduled sync %s: started=%s skipped=%s", today, started, skipped)
     return started
 
 
