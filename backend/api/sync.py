@@ -207,6 +207,7 @@ class SyncSettingsBody(BaseModel):
     map_overlays: Optional[list[str]] = None      # workout map default overlay ids
     exclude_bad_activities: Optional[bool] = None  # engine/bad_activity.py (設定 → 資料校正)
     use_power: Optional[bool] = None              # 使用功率 (wko5expr/power_use.py); off = HR only
+    primary_sport: Optional[str] = None           # 主要訓練項目: auto | trail | road (engine/primary_sport.py)
 
 
 _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
@@ -219,7 +220,7 @@ _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_so
                  "auto_on_open_hours": "sync.auto_on_open.hours",
                  "chart_data_source": "charts.data_source",
                  "map_basemap": "charts.map.basemap", "map_overlays": "charts.map.overlays",
-                 "use_power": "charts.power.enabled"}
+                 "use_power": "charts.power.enabled", "primary_sport": "athlete.primary_sport"}
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:

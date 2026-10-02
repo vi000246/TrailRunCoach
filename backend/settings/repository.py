@@ -28,6 +28,9 @@ SOURCES = ("coros", "trainingpeaks", "local")
 DEFAULTS: dict[str, Any] = {
     # IANA zone for local workout dates; None = WKO5COACH_TZ env, then the system zone
     "athlete.timezone": None,
+    # 主要訓練項目 (engine/primary_sport.py): auto (follow the suggestion from the data / the
+    # next A race) | trail (越野跑, the original behaviour) | road (路跑／馬拉松)
+    "athlete.primary_sport": "auto",
     # 主要資料來源 (backend/sync/primary.py): which source an activity is read
     # from when COROS and TP both have it — the DB de-dup, the merged chart
     # Dataset ("synced") and the sync order. "auto" = the source with the most
@@ -229,6 +232,8 @@ class SettingsRepository:
 def validate(key: str, value: Any) -> None:
     if key == "athlete.timezone" and value is not None:
         resolve_tz(value, strict=True)
+    if key == "athlete.primary_sport" and value not in ("auto", "trail", "road"):
+        raise ValueError("primary sport must be auto, trail or road")
     if key == "sync.primary_source" and value not in (None, "auto", *SOURCES):
         raise ValueError(f"primary source must be one of {SOURCES}")
     if key == "sync.schedule.daily_time" and value is not None:

@@ -105,7 +105,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
                   notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
                   aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
-                  b2b: Optional[dict] = None) -> list[dict]:
+                  b2b: Optional[dict] = None, sport: str = "trail") -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
     week's B2B is decided here and written back as b2b["info"].
@@ -115,7 +115,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
     `rates` = TSS / h per category for it, `notes` collects its notes.
-    `blocked`: ISO days of 不排課日期 (engine/blackouts.py) — never a candidate day."""
+    `blocked`: ISO days of 不排課日期 (engine/blackouts.py) — never a candidate day.
+    `sport` (主要訓練項目, engine/primary_sport.py): road = the week_plan() road template (flat long
+    run with a marathon-pace segment in the 專項期, flat threshold interval, flat strides)."""
+    road = sport == "road"
     total = hours * 60.0
     ss: list[dict] = []
 
@@ -135,6 +138,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     if kind in ("base", "specific") and mode != "recovery_week":
         if xu_test and kind == "base":
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
+        elif road:
+            add(**O.road_long_session(long_min, kind, aet, tph), target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
@@ -145,6 +150,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                 ss.extend(B2B.followers(ss[-1], info))     # out of the easy minutes (Koop)
         if allow_quality and kind == "specific" and base_quality:
             add(**_bq(base_quality))                # Zone 3 ladder: Zone 5 not confirmed yet
+        elif allow_quality and kind == "specific" and road:
+            add(**O.ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
         elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60, target=tgt.get("supra", ""),
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
@@ -170,9 +177,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     for i in range(n_easy):
         m = left / n_easy
         strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
-        add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + ("＋坡道衝刺 8×10 秒" if strides else ""),
+        st_t, st_d, _st_s = O.ROAD_STRIDES if road else O.HILL_STRIDES
+        add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
-            detail="心率不超過 AeT" + ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else ""),
+            detail="心率不超過 AeT" + (st_d if strides else ""),
             source=O.SRC_UA, tss=m / 60.0 * tph)
     if prefs is not None and prefs.active:
         from backend.engine import plan_prefs as PP
@@ -337,6 +345,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     long_s = next((s for s in cur_s if s.get("id", s.get("gen_key")) == "long" or s["kind"] == "long"), None)
     longest = float(long_s["minutes"]) if long_s else 60.0
     mountain = bool(long_s and "山路" in long_s["title"])
+    # 主要訓練項目 (engine/primary_sport.py): the sport week_plan() used; road = no B2B, no steep walk
+    sport = cur.get("primary_sport") or "trail"
+    road = sport == "road"
     rates = cur.get("tss_per_category") if PR is not None else None
     gate = _gate_inputs(cur)
     step = int((gate.get("dose") or {}).get("step") or 0)
@@ -425,7 +436,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             dz = QG.week_decision({**gate, "z5": {**z5g, "open": False}}, "base", "base", week, step, first=False)
             if dz["allow"] and dz["spec"] is not None:
                 q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
-                base_q = O._gate_session(gate, dz, th, hours, prefs, vhist, True, q_cap, q_alt)
+                base_q = O._gate_session(gate, dz, th, hours, prefs, vhist, not road, q_cap, q_alt)
                 if base_q.get("variant_key"):
                     vhist.append({"day": week.isoformat(), "rung_key": base_q.get("rung_key"),
                                   "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
@@ -440,14 +451,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                               "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
             if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB) and base_q.get("progress", True) is not False:
                 step += 1
-        b2b = {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode, "weight": cb.get("weight"),
-               "accepted": b2b_accepted}
+        b2b = None if road else {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode,
+                                 "weight": cb.get("weight"), "accepted": b2b_accepted}
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
-                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b)
-        b2b_info = b2b.get("info") or {}
+                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
+                           sport=sport)
+        b2b_info = (b2b or {}).get("info") or {}
         b2b_sug = B2B.suggestion(b2b_info, week, next((s["day"] for s in ss if s.get("id") == "long"), None),
                                  enabled=getattr(prefs, "b2b", True) is not False)
         if b2b_info.get("post"):
