@@ -118,6 +118,9 @@ DEFAULTS: dict[str, Any] = {
     "plan.auto.notify": "watch",              # watch (a 課表待確認 workout on COROS) | overview (banner only)
     # internal: {stamp, phase, rejected: [fingerprint]} of the last automatic run
     "plan.auto.state": None,
+    # activities the user unlinked from a planned session (engine/plan_match.py):
+    # [{start, index}] — never auto-matched again (start: the activity's local start)
+    "plan.match.unlinked": [],
 }
 AUTO_NOTIFY = ("watch", "overview")
 AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan.auto.confirm_big",
@@ -238,6 +241,9 @@ def validate(key: str, value: Any) -> None:
         raise ValueError("plan.suggestions.dismissed must be {id: {action, at}}")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.auto.state must be an object or null")
+    if key == "plan.match.unlinked" and not (isinstance(value, list) and all(
+            isinstance(e, dict) and isinstance(e.get("start"), str) for e in value)):
+        raise ValueError("plan.match.unlinked must be a list of {start, index}")
 
 
 def _validate_pref(key: str, value: Any) -> None:

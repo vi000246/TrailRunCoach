@@ -552,6 +552,12 @@ async function init() {
     if (/^\d+$/.test(qc ?? "")) { S.zoomAfter = +qc; S.focusChart = +qc; }
     history.replaceState(null, "", location.pathname);
   }
+  // deep link from the 課表 page: ?workout=<activity index>&label=<shown name> opens that activity
+  const qw = qp.get("workout");
+  if (/^\d+$/.test(qw ?? "")) {
+    S.workout = +qw; S.workoutLabel = qp.get("label") || null; r.mode = "workout";
+    history.replaceState(null, "", location.pathname);
+  }
   $("m-season").onclick = () => setMode("season");
   $("m-workout").onclick = () => setMode("workout");
   $("begin").onchange = $("end").onchange = onFilter;
