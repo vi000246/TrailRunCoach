@@ -128,6 +128,12 @@ DEFAULTS: dict[str, Any] = {
     "plan.auto.notify": "watch",              # watch (a 課表待確認 workout on COROS) | overview (banner only)
     # internal: {stamp, phase, rejected: [fingerprint]} of the last automatic run
     "plan.auto.state": None,
+    # 傷病紀錄 (engine/injuries.py; docs/plans/injury-tracking.plan.md §4): 「跟受傷前很像」
+    # 提醒 (off; can be turned on only with ≥ 5 analysed injuries), 傷停後恢復期往上一級 (on,
+    # 推估), the user's own body areas (reused in the picker)
+    "injury.pattern_alerts": False,
+    "injury.reentry_step_up": True,
+    "injury.custom_areas": [],
     # activities the user unlinked from a planned session (engine/plan_match.py):
     # [{start, index}] — never auto-matched again (start: the activity's local start)
     "plan.match.unlinked": [],
@@ -250,6 +256,13 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.suggestions.dismissed" and not (isinstance(value, dict) and all(
             isinstance(k, str) and isinstance(v, dict) for k, v in value.items())):
         raise ValueError("plan.suggestions.dismissed must be {id: {action, at}}")
+    if key in ("injury.pattern_alerts", "injury.reentry_step_up") and not isinstance(value, bool):
+        raise ValueError(f"{key} must be true/false")
+    if key == "injury.custom_areas":
+        from backend.engine import injuries as INJ
+        if not (isinstance(value, list) and len(value) <= INJ.CUSTOM_MAX
+                and all(INJ.clean_custom(v) == v for v in value) and len(set(value)) == len(value)):
+            raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.auto.state must be an object or null")
     if key == "plan.match.unlinked" and not (isinstance(value, list) and all(

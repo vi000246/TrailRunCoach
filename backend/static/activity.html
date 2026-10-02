@@ -63,6 +63,8 @@ main { display: grid; grid-template-columns: minmax(320px, 440px) minmax(0, 1fr)
   border: 1px solid var(--line); color: var(--text); background: var(--bg); white-space: nowrap; }
 .chip.m { border-color: var(--accent); }
 .chip.ex { color: var(--err); border-color: var(--err); background: none; }
+.chip.pn { color: #fff; background: var(--err); border-color: var(--err); }
+.chip.so { color: var(--warn); border-color: var(--warn); background: none; }
 .chip.tag { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border-color: transparent; }
 .chip button { border: 0; background: none; padding: 0 0 0 2px; line-height: 1; color: var(--muted); }
 
@@ -114,6 +116,10 @@ main { display: grid; grid-template-columns: minmax(320px, 440px) minmax(0, 1fr)
       <label>排除<select id="f-ex">
         <option value="">全部</option><option value="no">不含已排除</option><option value="yes">只看已排除</option>
       </select></label>
+      <label data-pain-only hidden>疼痛<select id="f-pain">
+        <option value="">全部</option><option value="hurt">有痛（痛、中斷）</option><option value="sore">痠</option>
+        <option value="none">沒痛</option><option value="unset">沒填</option>
+      </select></label>
       <label class="wide">搜尋<input type="search" id="f-q" placeholder="名稱、標籤、備註、日期…"></label>
     </div>
     <div class="listhead">
@@ -127,6 +133,7 @@ main { display: grid; grid-template-columns: minmax(320px, 440px) minmax(0, 1fr)
       <select id="b-effort" aria-label="一次設定努力度"><option value="">設定努力度…</option></select>
       <input type="text" id="b-tag" placeholder="標籤" list="tag-list" style="width:7em" aria-label="標籤">
       <button id="b-tag-add">加標籤</button><button id="b-tag-rm">移除標籤</button>
+      <button id="b-nopain" data-pain-only hidden title="把選取中「疼痛沒填」的活動標成沒痛（已經標過的不改）">設為沒痛</button>
       <button id="b-clear">取消選取</button>
       <span class="msg" id="b-msg"></span>
     </div>
@@ -134,6 +141,7 @@ main { display: grid; grid-template-columns: minmax(320px, 440px) minmax(0, 1fr)
   <section class="panel ed" id="ed" aria-live="polite"><div class="empty">從左邊選一筆活動</div></section>
 </main>
 <datalist id="tag-list"></datalist>
+<script src="/api/v1/static/painpicker.js"></script>
 <script>
 const API = "/api/v1/wko5";
 const $ = (id) => document.getElementById(id);
@@ -145,7 +153,10 @@ const SPORT_ZH = { "running": "路跑", "trail running": "越野跑", "indoor ru
 const sportZh = (a) => SPORT_ZH[a.sport_type] || a.sport_type || a.sport || "";
 const PREF = "activityedit.filters";
 // usePower: settings 「使用功率」 (charts.power.enabled); off = the 功率來源 field is hidden
-const S = { acts: [], auto: null, types: {}, efforts: {}, sel: null, checked: new Set(), detail: null, usePower: true };
+// pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 row / filter / bulk button)
+const S = { acts: [], auto: null, types: {}, efforts: {}, sel: null, checked: new Set(), detail: null, usePower: true, pain: null };
+const PAIN_ZH = { 0: "沒痛", 1: "痠", 2: "痛", 3: "中斷" };
+const areaZh = (k) => (S.pain?.areas || []).find((x) => x.key === k)?.label || (k === "unknown" ? "" : k || "");
 
 async function j(url, opt) {
   const r = await fetch(url, opt);
@@ -167,7 +178,7 @@ function loadPrefs() {
   try { return JSON.parse(localStorage.getItem(PREF) || "{}"); } catch { return {}; }
 }
 function savePrefs() {
-  const p = {}; for (const k of ["f-from", "f-to", "f-sport", "f-type", "f-effort", "f-ex"]) p[k] = $(k).value;
+  const p = {}; for (const k of ["f-from", "f-to", "f-sport", "f-type", "f-effort", "f-ex", "f-pain"]) p[k] = $(k).value;
   try { localStorage.setItem(PREF, JSON.stringify(p)); } catch {}
 }
 function fillFilterOptions() {
@@ -194,6 +205,11 @@ function filtered() {
     else if (ef && effEffort(a) !== ef) return false;
     if (ex === "yes" && !a.excluded) return false;
     if (ex === "no" && a.excluded) return false;
+    const pf = $("f-pain").value;
+    if (pf === "hurt" && !(a.pain >= 2)) return false;
+    if (pf === "sore" && a.pain !== 1) return false;
+    if (pf === "none" && a.pain !== 0) return false;
+    if (pf === "unset" && a.pain != null) return false;
     if (q) {
       const hay = [title(a), a.title_original, a.note, ...(a.tags || []), a.start.slice(0, 16).replace("T", " "), sportZh(a)].join(" ").toLowerCase();
       if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
@@ -222,6 +238,7 @@ function renderList() {
           ${t ? `<span class="chip ${a.user_type ? "m" : ""}" title="${a.user_type ? "手動" : "自動"}">${esc(S.types[t] || t)}</span>` : ""}
           ${e ? `<span class="chip ${a.user_effort ? "m" : ""}" title="${a.user_effort ? "手動" : "自動"}">${esc(S.efforts[e] || e)}</span>` : ""}
           ${(a.tags || []).map((x) => `<span class="chip tag">${esc(x)}</span>`).join("")}
+          ${S.pain && a.pain >= 1 ? `<span class="chip ${a.pain >= 2 ? "pn" : "so"}" title="疼痛">${PAIN_ZH[a.pain]}${a.pain_area ? "・" + esc(areaZh(a.pain_area)) : ""}</span>` : ""}
           ${a.excluded ? `<span class="chip ex">已排除</span>` : ""}</div>
       </div></div>`;
   }).join("") + (rows.length > MAX ? `<div class="empty">只列前 ${MAX} 筆，請縮小篩選</div>` : "");
@@ -245,7 +262,7 @@ $("all").addEventListener("change", () => {
   for (const a of rows) $("all").checked ? S.checked.add(a.key) : S.checked.delete(a.key);
   renderList();
 });
-for (const id of ["f-from", "f-to", "f-sport", "f-type", "f-effort", "f-ex"]) $(id).addEventListener("change", () => { savePrefs(); renderList(); });
+for (const id of ["f-from", "f-to", "f-sport", "f-type", "f-effort", "f-ex", "f-pain"]) $(id).addEventListener("change", () => { savePrefs(); renderList(); });
 $("f-q").addEventListener("input", renderList);
 
 async function loadList() {
@@ -357,6 +374,7 @@ function renderEditor() {
     <div class="fld"><span class="lab">努力度${qt("優先順序：你的標記 ＞ 手錶記錄的 RPE（運動後自評，FIT 檔的 workout_rpe；目前只有 Garmin 手錶寫入）＞ 心率規則。\nRPE 換算（推估）：1–4 輕鬆、5–8 一般、9–10 全力（長休息 > 10% 時為有拼但有休息）。\n心率規則看移動時的心率佔 LTHR、AeT 以上的比例與長休息。")}</span>
       <div class="ctl">${sel("effort", S.efforts, a.user_effort, eAuto)}${badge(!!a.user_effort, eWhy)}</div>
       <div class="why">${a.user_effort ? `自動判定：${esc(S.efforts[eAuto] || "—")}（${esc(eWhy || "")}）` : esc(eWhy || (S.auto ? "" : "自動判定計算中…"))}${nums ? `<br>${esc(nums)}` : ""}${recTxt ? `<br>${esc(recTxt)}` : ""}</div></div>
+    ${S.pain ? `<div class="fld"><span class="lab">疼痛${qt(PAIN_HELP)}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
     <div class="fld"><span class="lab">標籤${qt("自由輸入，可以多個（每個最多 30 字、最多 20 個）；輸入後按 Enter。左邊清單的搜尋也會找標籤。")}</span>
       <div class="ctl tags">${(a.tags || []).map((t) => `<span class="chip tag">${esc(t)}<button data-tag-rm="${esc(t)}" aria-label="移除標籤 ${esc(t)}">×</button></span>`).join("")}
         <input type="text" data-tag-in list="tag-list" placeholder="加標籤，Enter" style="width:10em" aria-label="加標籤"></div></div>
@@ -371,11 +389,18 @@ function renderEditor() {
   wireEditor(a);
 }
 
+const PAIN_HELP = "這次跑步有沒有痛。「痠」是練完正常的痠，不算受傷；「痛」是會影響跑姿、配速，或跑完還在痛；「中斷」是痛到停下來。\n" +
+  "選「痛」或「中斷」會自動開一筆傷病紀錄，細節到「傷病紀錄」頁補。\n沒填和「沒痛」不一樣：分析只把「沒痛」當確定沒事。\n這不是診斷，持續痛請看醫師或物理治療師。";
+function painState(a) {
+  const ps = S.detail && S.detail.workout === a.index ? S.detail.pain_state : null;
+  return { pain: a.pain ?? null, pain_area: a.pain_area ?? null, injury: ps?.injury || null, reentry: ps?.reentry || null };
+}
 function patchLocal(a, r) {
   // r: the single-activity JSON (PATCH /workouts/{i}/activity) or a patch we sent
   if ("activity_type_overridden" in r) a.user_type = r.activity_type_overridden ? r.activity_type : null;
   if ("effort_overridden" in r) a.user_effort = r.effort_overridden ? r.effort : null;
   for (const k of ["note", "name", "tags"]) if (k in r) a[k] = r[k];
+  if (r.pain_state) { a.pain = r.pain_state.pain; a.pain_area = r.pain_state.pain_area; a.injury_id = r.pain_state.injury?.id ?? null; }
 }
 async function saveFields(a, patch) {
   setMsg("儲存中…");
@@ -389,6 +414,8 @@ async function saveFields(a, patch) {
       if ("activity_type" in patch) a.user_type = patch.activity_type;
       if ("effort" in patch) a.user_effort = patch.effort;
       for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
+      if ("pain" in patch) { a.pain = patch.pain; if (!(patch.pain >= 1)) a.pain_area = null; }
+      if ("pain_area" in patch) a.pain_area = patch.pain_area;
     }
     if ("tags" in patch) fillFilterOptions(), restoreFilters();
     renderList(); renderEditor(); setMsg("已儲存", "ok");
@@ -406,6 +433,13 @@ async function rebuildAndReselect(key, okText) {
 }
 function wireEditor(a) {
   const ed = $("ed");
+  const pc = ed.querySelector("#pain-ctl");
+  if (pc) PainPicker.wire(pc, painState(a), S.pain, async (patch) => {
+    await saveFields(a, patch);
+    if (patch.pain_area && !S.pain.areas.some((x) => x.key === patch.pain_area || x.label === patch.pain_area)) {
+      S.pain = (await PainPicker.meta(true)) || S.pain; renderList(); renderEditor();   // a new body area joins the picker
+    }
+  });
   ed.querySelectorAll("select[data-f]").forEach((el) => el.addEventListener("change", () => saveFields(a, { [el.dataset.f]: el.value || null })));
   const nm = ed.querySelector("input[data-name]");
   nm.addEventListener("change", () => saveFields(a, { name: nm.value.trim() || null }));
@@ -464,11 +498,24 @@ $("b-effort").addEventListener("change", (e) => {
 $("b-tag-add").addEventListener("click", () => { const v = $("b-tag").value.trim(); if (v) bulk({ add_tags: [v] }, `加上標籤「${v}」`); });
 $("b-tag-rm").addEventListener("click", () => { const v = $("b-tag").value.trim(); if (v) bulk({ remove_tags: [v] }, `移除標籤「${v}」`); });
 $("b-clear").addEventListener("click", () => { S.checked.clear(); renderList(); });
+$("b-nopain").addEventListener("click", async () => {
+  // only the unmarked ones: a 痛 / 痠 is never overwritten by a bulk 沒痛
+  const items = S.acts.filter((a) => S.checked.has(a.key) && a.pain == null).map((a) => ({ key: a.key, file: a.file }));
+  if (!items.length) { $("b-msg").textContent = "選取的活動都已經有疼痛標記"; $("b-msg").className = "msg"; return; }
+  $("b-msg").textContent = "儲存中…"; $("b-msg").className = "msg";
+  try {
+    const r = await send(`${API}/activities`, "PATCH", { items, pain: 0 });
+    await loadList();
+    $("b-msg").textContent = `設為沒痛：${r.n} 筆已儲存`; $("b-msg").className = "msg ok";
+  } catch (e) { $("b-msg").textContent = "儲存失敗：" + e.message; $("b-msg").className = "msg err"; }
+});
 
 // ---- start ----------------------------------------------------------------
 (async () => {
   const want = new URLSearchParams(location.search).get("key");
   S.usePower = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
+  S.pain = await PainPicker.meta();        // null in the demo mode: no pain row, filter or bulk button
+  document.querySelectorAll("[data-pain-only]").forEach((el) => { el.hidden = !S.pain; });
   try { await loadList(); } catch (e) { $("list").innerHTML = `<div class="empty">讀取失敗：${esc(e.message)}</div>`; return; }
   restoreFilters();
   if (!$("f-from").value && !$("f-to").value && S.acts.length) {
@@ -483,7 +530,7 @@ $("b-clear").addEventListener("click", () => { S.checked.clear(); renderList(); 
       const shift = (n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
       $("f-from").value = shift(-45); $("f-to").value = shift(45);
     }
-    if (!filtered().some((a) => a.key === want)) for (const k of ["f-sport", "f-type", "f-effort", "f-ex"]) $(k).value = "";
+    if (!filtered().some((a) => a.key === want)) for (const k of ["f-sport", "f-type", "f-effort", "f-ex", "f-pain"]) $(k).value = "";
   }
   renderList();
   if (want && actOf(want)) {

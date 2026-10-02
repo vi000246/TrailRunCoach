@@ -46,6 +46,19 @@ class ShareError(ValueError):
     pass
 
 
+HEALTH_KEY = re.compile(r"injur|pain|傷病|疼痛", re.I)    # 傷病紀錄 (engine/injuries.py) never leaves the machine
+
+
+def scrub_health(v):
+    """Drop every injury / pain key at any depth — a second fence behind the
+    whitelists, so a later change to them can't leak the injury log."""
+    if isinstance(v, dict):
+        return {k: scrub_health(x) for k, x in v.items() if not (isinstance(k, str) and HEALTH_KEY.search(k))}
+    if isinstance(v, list):
+        return [scrub_health(x) for x in v]
+    return v
+
+
 def new_id() -> str:
     return secrets.token_urlsafe(16)
 
@@ -81,7 +94,7 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
     prof = plan.get("profile") or None
     stops = [{k: st.get(k) for k in ("km", "type", "name", "minutes")} for st in req.get("stops") or []]
     env_to = ((plan.get("env") or {}).get("to") or {})
-    return {
+    return scrub_health({
         "v": VERSION, "title": (title or "").strip()[:80] or "賽事計畫",
         "created": now.isoformat(), "expires": (now + dt.timedelta(days=expires_days)).isoformat() if expires_days else None,
         "type": plan.get("type"),
@@ -96,7 +109,7 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
         "days": [{k: d.get(k) for k in ("day", "km", "gain_m", "loss_m", "moving_h", "clock_h")} for d in plan.get("days") or []],
         "profile": {"km": prof["km"], "z": prof["z"]} if prof and prof.get("km") else None,
         "fuel": fuel,
-    }
+    })
 
 
 def _path(sid: str, root: Optional[Path] = None) -> Path:

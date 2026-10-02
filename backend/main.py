@@ -17,6 +17,7 @@ from backend.api import racepower as racepower_api
 from backend.api import plan_sessions as plan_sessions_api
 from backend.api import plan_auto as plan_auto_api
 from backend.api import routes as routes_api
+from backend.api import injuries as injuries_api
 
 
 @asynccontextmanager
@@ -81,6 +82,7 @@ app.include_router(racepower_api.router)
 app.include_router(racepower_api.share_router)      # /share/<id>: the only path meant to skip the tunnel's password
 app.include_router(routes_api.router)
 app.include_router(routes_api.workout_router)
+app.include_router(injuries_api.router)          # 傷病紀錄 (404 in the demo mode)
 
 # shared page assets (shell.js: the app-wide navigation every page includes)
 app.mount("/api/v1/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="pages-static")

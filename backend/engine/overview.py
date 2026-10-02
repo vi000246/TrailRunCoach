@@ -602,6 +602,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         rp = RE.find(ds, today, blackouts or ())
     except Exception:                       # noqa: BLE001 — the plan must still build
         rp = None
+    try:                                    # 傷病紀錄 (engine/injuries.py): 「右膝進行中（第 5 天）」
+        from backend.engine import injuries as INJ
+        notes.extend(INJ.week_notes(INJ.load_events(), monday, today))
+    except Exception:                       # noqa: BLE001
+        pass
     re_f = RE.week_factor(rp, monday) if rp and kind in ("base", "specific") else None
     if re_f is not None and rp.get("prev_hours"):
         hours = rp["prev_hours"] * re_f
