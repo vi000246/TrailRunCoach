@@ -46,7 +46,7 @@ async def sync_inventory(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
         select(func.count(WorkoutFile.id)).where(base, WorkoutFile.duplicate_of.isnot(None)))).scalar() or 0
     return {
         "total": total,
-        "duplicates": duplicates,     # same activity from a non-primary source (not in totals)
+        "duplicates": duplicates,     # same activity from the source not in use (not in totals)
         "by_source": by_source,
         "by_sport": by_sport,
         "date_min": dr[0].isoformat() if dr and dr[0] else None,
@@ -133,7 +133,7 @@ async def auto_sync(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
         return {"started": [], "skipped": {s: "auto_off" for s in runner.SOURCES}}
     hours = float(await repo.get("sync.auto_on_open.hours"))
     now = datetime.now(timezone.utc)
-    # the primary source first; the other only with sync.secondary.auto (進階)
+    # only the 資料來源 in use (sync/primary.py)
     todo, skipped = await runner.auto_plan(db, athlete_id)
     started = []
     for src in todo:
@@ -193,8 +193,7 @@ async def sync_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
 
 
 class SyncSettingsBody(BaseModel):
-    primary_source: Optional[str] = None          # 主要資料來源: auto | coros | trainingpeaks (sync/primary.py)
-    secondary_auto: Optional[bool] = None         # 進階: auto syncs also sync the other source
+    primary_source: Optional[str] = None          # 資料來源 (the only one used): coros | trainingpeaks (sync/primary.py)
     timezone: Optional[str] = None
     coros_enabled: Optional[bool] = None
     trainingpeaks_enabled: Optional[bool] = None
@@ -202,7 +201,7 @@ class SyncSettingsBody(BaseModel):
     daily_sync_time: Optional[str] = None         # "HH:MM" or null (off)
     auto_on_open: Optional[bool] = None
     auto_on_open_hours: Optional[float] = None
-    chart_data_source: Optional[str] = None       # wko5 | coros | tp
+    chart_data_source: Optional[str] = None       # source (the 資料來源) | wko5
     map_basemap: Optional[str] = None             # workout map default basemap id
     map_overlays: Optional[list[str]] = None      # workout map default overlay ids
     exclude_bad_activities: Optional[bool] = None  # engine/bad_activity.py (設定 → 資料校正)
@@ -214,7 +213,7 @@ class SyncSettingsBody(BaseModel):
 
 
 _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
-                 "secondary_auto": "sync.secondary.auto", "timezone": "athlete.timezone",
+                 "timezone": "athlete.timezone",
                  "coros_enabled": "sync.coros.enabled",
                  "trainingpeaks_enabled": "sync.trainingpeaks.enabled",
                  "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client",
@@ -256,11 +255,10 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     if out["use_power"] is None:
         from backend.engine import athlete_profile as AP
         out["use_power"] = AP.use_power(out["power_source"], bool(out["accept_watch_power"]))
-    # 主要資料來源: the setting ("auto" for the old null) and the source in effect
-    eff = await P.resolve_db(repo.db, repo.user_id)
-    out["primary_source"] = eff["setting"]
-    out["primary_effective"] = eff["source"]
-    out["primary_effective_label"] = P.LABELS.get(eff["source"] or "", None)
+    # 資料來源: the one source in use (an old 自動 / unset value is migrated here)
+    out["primary_source"] = await P.current(repo.db, repo.user_id)
+    out["primary_label"] = P.LABELS[out["primary_source"]]
+    out["primary_folder"] = P.FOLDER[out["primary_source"]]
     # 地區 (engine/region.py): the map default follows it while none is chosen
     from backend.engine import region as RG
     out["region"], out["region_how"] = RG.region(repo.user_id)
@@ -274,10 +272,11 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["timezone_effective"] = getattr(tz, "key", None) or str(tz)
     out["timezone_offset_min"] = None if off is None else int(off.total_seconds() // 60)
     out["timezone_auto"] = await repo.get("athlete.timezone.auto")
-    # the chart source in effect: a never-picked old "coros" reads as 同步資料
-    from backend.engine.wko5expr.datasource import CHOSEN_KEY, effective_source
+    # the chart source: the 資料來源, or the WKO5 folder (cross-check); old values read as source
     out["chart_data_source_stored"] = out["chart_data_source"]
-    out["chart_data_source"] = effective_source(out["chart_data_source"], await repo.get(CHOSEN_KEY))
+    out["chart_data_source"] = "wko5" if out["chart_data_source"] == "wko5" else "source"
+    from backend.engine.wko5expr.datasource import wko5_available
+    out["wko5_available"] = wko5_available()
     from backend.sync import workout_targets as WT
     out["push_provider"] = WT.resolve(out["push_provider"]).id
     out["push_providers"] = WT.available()
@@ -302,20 +301,14 @@ async def get_sync_settings(athlete_id: int = 1, db: AsyncSession = Depends(get_
 @router.put("/settings")
 async def put_sync_settings(body: SyncSettingsBody, athlete_id: int = 1,
                             db: AsyncSession = Depends(get_db)):
-    """Only the fields sent are changed. Changing the primary source re-runs
-    the cross-source de-dup so totals switch to that source immediately; the
-    merged chart Dataset (data source "synced") picks it up through its
-    source stamp. primary_source "auto" (or null) = the source with the most
-    recent complete data (sync/primary.py)."""
+    """Only the fields sent are changed. Switching the 資料來源 re-runs the
+    de-dup so totals switch to that source immediately; the chart Dataset
+    follows through datasource.current_source (that source's folder only)."""
     repo = SettingsRepository(db, athlete_id)
     sent = body.model_dump(exclude_unset=True)
     try:
         for k, v in sent.items():
             await repo.set(_SETTING_KEYS[k], v)
-        if "chart_data_source" in sent:
-            # an explicit pick: no longer read through the old-default migration
-            from backend.engine.wko5expr.datasource import CHOSEN_KEY
-            await repo.set(CHOSEN_KEY, True)
     except ValueError as e:
         raise HTTPException(400, str(e))
     rebuilt = await dedup.rebuild(db, athlete_id) if "primary_source" in sent else None

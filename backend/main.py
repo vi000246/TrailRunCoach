@@ -48,6 +48,14 @@ async def lifespan(app: FastAPI):
     from backend.sync import scheduler
     await init_db()
     await _ensure_athlete()
+    # 資料來源: an old 自動 / unset setting becomes the source it picked, before
+    # the synchronous readers (chart Dataset, CP scan) look at it
+    try:
+        from backend.sync import primary as P
+        await P.migrate()
+    except Exception as e:               # noqa: BLE001 — readers fall back to COROS
+        import logging
+        logging.getLogger(__name__).warning("data source migration failed: %s", type(e).__name__)
     # Sync endpoints run in AnyIO's worker threads (40 by default). While a
     # Dataset builds, every chart request of a page waits in one (single
     # flight, wko5views._dataset); with 40 the static files and the other
