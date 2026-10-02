@@ -80,6 +80,20 @@ def test_apply_adds_labelled_dashed_lines_and_the_target():
     assert res["description"].startswith("原本的說明。") and "目標賽事參考線" in res["description"]
 
 
+def test_multi_day_a_trip_has_no_half_line_its_day_mean_is_the_target():
+    # owner 2026-10-02: for a multi-day trip the per-day average is the single-day target
+    hike = Event("h", "南湖大山", "2026-12-10", kind="baiyue", priority="A", days=3, distance_km=36, climbing_m=3000)
+    res = RR.apply(chart(), plan(hike), TODAY, fake({"h": [5.0, 8.0, 4.0]}))
+    refs = [s for s in res["series"] if s.get("role") == "race_ref"]
+    assert not any("50%" in s["name"] for s in refs) and res["race_ref"]["half"] is None
+    day = next(s for s in refs if "每天平均（單日目標）" in s["name"])
+    assert day["data"]["y"] == res["race_ref"]["lines"][0]["day_mean"]
+    assert len(refs) == 2                                               # the trip + its per-day average
+    # a single-day A race keeps its 50 % line
+    one = RR.apply(chart(), plan(A), TODAY, fake({"a": [8.0]}))
+    assert any("50%" in s["name"] for s in one["series"]) and one["race_ref"]["half"] is not None
+
+
 def test_no_races_leaves_the_chart_and_says_why():
     before = chart()
     res = RR.apply(before, plan(C), TODAY, fake({}))
