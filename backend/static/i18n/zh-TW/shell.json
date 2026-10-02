@@ -38,5 +38,7 @@
   "build.failed": "資料處理失敗：{error}",
   "lang.title": "切換語言（Language）",
   "lang.zh-TW": "中文",
-  "lang.en": "EN"
+  "lang.en": "EN",
+  "nav.more": "更多",
+  "nav.more_title": "活動列表、路線、成就、傷病紀錄、設定"
 }
