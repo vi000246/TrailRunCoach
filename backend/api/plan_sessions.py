@@ -83,7 +83,9 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     acts = activity_rows(ds, since, today + dt.timedelta(days=1))
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
-           "horizon_end": horizon.isoformat(), "thresholds": cur.get("thresholds") or {},
+           "horizon_end": horizon.isoformat(),
+           # + threshold pace (s/km, 推估): % / zone pace targets reach the watch (COROS intensityType 3)
+           "thresholds": {**(cur.get("thresholds") or {}), "tpace": _tpace()},
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
