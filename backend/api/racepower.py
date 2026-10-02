@@ -799,6 +799,9 @@ def make_plan(body: PlanIn) -> dict:
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
                course_id=body.course.course_id if body.course else None, course_name=course.get("name"))
     out["fuel"] = _fuel(body, out)
+    from backend.engine.racepower import seg_targets as ST
+    aet_d = inputs().get("aet") or {}
+    out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
