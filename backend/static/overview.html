@@ -368,7 +368,7 @@ const m0 = (v) => v == null ? "–" : Math.round(v).toLocaleString() + " m";
 const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
 const sgn = (v, f = n0) => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "±") + f(Math.abs(v));
 const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
-const WD = "一二三四五六日";
+const WD = I18N.fmt.weekdays("narrow");     // i18n.js: 一…日 / M…S, Monday first
 const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
 const wd = (iso) => WD[(new Date(iso + "T00:00:00").getDay() + 6) % 7];
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s3", bike: "--s4", strength: "--s5", walk: "--s6", other: "--s7" };

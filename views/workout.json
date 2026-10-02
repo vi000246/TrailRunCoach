@@ -2,14 +2,15 @@
   "name": "單次活動判讀",
   "dashboards": [
     {
+      "id": "highlights",
       "title": "本次重點",
       "description": "這次是什麼課、有沒有照目的練到。判讀卡依課表類型（輕鬆跑／長跑／間歇／測試／越野）自動選規則，並指出該看哪個分頁。肌力、騎車只有這一頁。原始圖表在 WKO5 匯入的「WKO5 Workout View」→ Workout（Power chart、Heart Rate、Workout Graph）。",
       "charts": [
-        {"title": "重點數字", "kind": "review", "section": "summary",
+        {"id": "summary", "title": "重點數字", "kind": "review", "section": "summary",
          "description": "課表類型用活動當天的周期、plan 的測試紀錄、標題與功率判斷。每張小卡的 ? 有它的判讀與門檻；飄移、耐久、間歇的細節在各自的分頁。"},
-        {"title": "心率與功率（拖曳選一段看統計）", "kind": "activity", "chart": "hrpower",
+        {"id": "hr-power", "title": "心率與功率（拖曳選一段看統計）", "kind": "activity", "chart": "hrpower",
          "description": "上面是心率、下面是 30 秒功率，共用同一條時間軸（兩種單位不放在同一個刻度上）。在圖上左右拖曳選一段，下方會算出這段的時間、距離、移動配速、平均／最高心率、平均功率、NP、Pw:HR（平均功率 ÷ 平均心率，每下心跳推出幾瓦）、EF（NP ÷ 平均心率）和這段前後半的 Pw:HR 飄移（WKO5 的定義：從這段的一半切開）。虛線是 AeT、LTHR 和 CP。平均功率含停下來的 0 W；NP 用整趟的 30 秒滾動功率。統計精度到圖上的一個點（長活動每點幾秒）。"},
-        {"title": "路線難度",
+        {"id": "route-difficulty", "title": "路線難度",
          "kind": "workout",
          "description": "コース定数（日本登山界的路線難度，把時間、距離、爬升、下降換成體力消耗）：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。原本要代入地圖上的標準路線時間，這裡代入你實際的移動時間，所以走得比標準快時數字會偏低。km-effort = 距離 km + 爬升 m ÷ 100，分級照越野賽的 XXS < 25、XS 25–44、S 45–74、M 75–114、L 115–154、XL 155–209、XXL ≥ 210。",
          "axes": [{"id": "NONE"}],
@@ -18,75 +19,80 @@
            {"name": "km-effort", "type": "line", "y_axis": "NONE", "expression": "distance + climbing / 100"},
            {"name": "越野賽分級", "type": "line", "expression": "@ep:=distance + climbing / 100, if(@ep < 25, \"XXS\", if(@ep < 45, \"XS\", if(@ep < 75, \"S\", if(@ep < 115, \"M\", if(@ep < 155, \"L\", if(@ep < 210, \"XL\", \"XXL\"))))))"}
          ]},
-        {"title": "CP 測試結果（3 分／12 分）", "kind": "review", "section": "cp_test",
+        {"id": "cp-test", "title": "CP 測試結果（3 分／12 分）", "kind": "review", "section": "cp_test",
          "description": "CP = (P12·720 − P3·180) / 540，W′ = (P3 − CP)·180。和目前 CP 差 > 3% 建議更新。不是測試課時留白。"},
-        {"title": "W′ 電池", "kind": "review", "section": "wprime_battery"}
+        {"id": "wprime-battery", "title": "W′ 電池", "kind": "review", "section": "wprime_battery"}
       ]
     },
     {
+      "id": "aerobic-drift",
       "title": "有氧／心率飄移",
       "description": "有沒有壓在 AeT 以下、Pa:HR 飄移多少。適用輕鬆跑、長跑、AeT 測試；基礎期最重要：飄移連續 3 次 < 5% 才加閾值下間歇。WKO5 版本：「WKO5 Workout View」→ Zone & Variation →「Heart Rate vs. Power by % of work」，以及 Workout →「PWHR 心飄移」。",
       "charts": [
-        {"title": "飄移判讀", "kind": "review", "section": "aerobic",
+        {"id": "drift-verdict", "title": "飄移判讀", "kind": "review", "section": "aerobic",
          "basis": {"default": "pace", "choices": ["pace", "power"]},
          "description": "Pa:HR = 速度／心率，前 10 分鐘不算（前 20 分鐘內有路口停等時，從最後一次停等後 1 分鐘起算，推估），比較前後半。有坡（越野、每公里爬升 ≥ 20 m）、停頓 > 5%、功率起伏 > 15%、強度 > 90% CP 的跑步不採用。連續 3 次 < 5% 的次數只看配速。"},
-        {"title": "心率變化與趨勢", "kind": "activity", "chart": "hrtrend",
+        {"id": "hr-trend", "title": "心率變化與趨勢", "kind": "activity", "chart": "hrtrend",
          "description": "WKO5「Heart Rate Variation and Trend」的簡化版：線是 1 分鐘平均心率，虛線是整趟心率對時間的直線迴歸（WKO5 的 slr），色帶是平均 ± 1 個標準差。變異 = 標準差 ÷ 平均（WKO5：< 0.33 穩定、< 0.66 混合、其他變化大）；趨勢 = 迴歸斜率（WKO5：每秒 ±0.0005 bpm 以內算持平，等於每小時 ±1.8 bpm）。Pw:HR 是 WKO5 的定義：整段從一半切開、含暖身和停頓，所以和上面「飄移判讀」（去掉暖身、只算移動時間）的數字不同。數字都用原始樣本算（WKO5 的算法）。"},
-        {"title": "心率區間時間", "kind": "activity", "chart": "hrzones",
+        {"id": "hr-zones", "title": "心率區間時間", "kind": "activity", "chart": "hrzones",
          "description": "這次每個心率區間的時間，區間模型可以換（每個教練定義不同），選擇會記住。只算有心率的秒數。門檻用活動當天有效的 LTHR／AeT／最大心率。"},
-        {"title": "功率區間時間", "kind": "activity", "chart": "powerzones",
+        {"id": "power-zones", "title": "功率區間時間", "kind": "activity", "chart": "powerzones",
          "description": "這次每個功率區間的時間，區間模型可以換，選擇會記住。只算功率 > 0 的秒數（1 秒原始功率，和 WKO5 的 Time in iLevels 一樣）。WKO5 iLevels 用前 90 天的功率擬合 PD 模型，資料不夠時改選其他模型。"}
       ]
     },
     {
+      "id": "intervals",
       "title": "間歇",
       "description": "這堂間歇有沒有達到這次課表的目標；CP／AeT 測試照流程看每段配速；其他跑步可以按「當作間歇判讀」。功率電池（W′ 剩多少）每次有功率的跑步都有。",
       "charts": [
-        {"title": "間歇判讀", "kind": "review", "section": "interval_verdict",
+        {"id": "interval-verdict", "title": "間歇判讀", "kind": "review", "section": "interval_verdict",
          "description": "間歇課：達到＝逐趟判定達標且目標區時間 ≥ 計畫的 85%；部分達到＝邊界或 60–85%；未達到＝未適應、目標太高或 < 60%（門檻推估）。這個判定也決定下一階。CP／AeT 測試：流程的每一段當作一趟，看配速分配（後半和前半差 ±5%（AeT ±3%）內、最後 1 分 ≤ 該段 × 1.08 算平均，推估），不判「達標」。不是間歇課的跑步：按「當作間歇判讀」會在活動加上標籤「當作間歇」並用偵測到的趟判讀；到活動編輯頁移除標籤可以取消。"},
-        {"title": "每趟功率 vs 目標帶", "kind": "review", "section": "interval_reps"},
-        {"title": "功率與每趟（簡化版 VO2max & FRC）", "kind": "review", "section": "interval_power",
+        {"id": "interval-reps", "title": "每趟功率 vs 目標帶", "kind": "review", "section": "interval_reps"},
+        {"id": "interval-power", "title": "功率與每趟（簡化版 VO2max & FRC）", "kind": "review", "section": "interval_power",
          "description": "WKO5「WKO5 Workout View」→ 間歇 的 Run VO2max & FRC Chart – 5 Min PDC & Skiba 簡化版：只留 CP 和目標帶，5 分鐘 PDC 在說明裡。"},
-        {"title": "功率電池（W′ 剩多少）", "kind": "review", "section": "interval_battery"},
-        {"title": "目標區時間 vs 計畫", "kind": "review", "section": "interval_tiz"},
-        {"title": "同功率下的心率（和之前的同類課比）", "kind": "review", "section": "interval_hr"},
-        {"title": "每組", "kind": "review", "section": "intervals",
+        {"id": "interval-battery", "title": "功率電池（W′ 剩多少）", "kind": "review", "section": "interval_battery"},
+        {"id": "interval-tiz", "title": "目標區時間 vs 計畫", "kind": "review", "section": "interval_tiz"},
+        {"id": "interval-hr", "title": "同功率下的心率（和之前的同類課比）", "kind": "review", "section": "interval_hr"},
+        {"id": "interval-sets", "title": "每組", "kind": "review", "section": "intervals",
          "description": "用力段 = 30 秒功率 ≥ max(85% CP, 1.12 × 這次中位功率) 且 ≥ 1 分鐘。目標帶取各組 %CP 的中位（閾值下 88–95%、閾值 95–101%、超閾值 101–106%、VO2max 106–116%）。"}
       ]
     },
     {
+      "id": "climbing",
       "title": "爬坡與地形",
       "description": "爬坡段、每 100 m 爬升的心跳數、每個坡度的心率／功率（坡度分組）。越野、登山；專項期最重要。WKO5 版本：「WKO5 Workout View」→ Workout「Elevation over Distance Colored Gradient」、爬坡分析「VAM Analysis」「Hilly Run Summary」「Elevation Corrected Power」、Zone & Variation「Heart Rate vs. Power by grade」。",
       "charts": [
-        {"title": "爬坡段", "kind": "review", "section": "climbs",
+        {"id": "climbs", "title": "爬坡段", "kind": "review", "section": "climbs",
          "description": "上：一張圖疊兩條：背景淺色面積 = 海拔（右軸，m），粗線 = 選的指標 VAM／功率／%CP／心率／GAP（左軸，60 秒滾動，推估視窗）。爬坡段標 ①②③ 與爬升／距離／坡度，下坡段畫斜線、標 ↓。爬坡段 = 連續爬升 ≥ 80 m、坡度 ≥ 3%（小起伏併入）；下坡段用同一個規則反過來找。段上的短橫線 = 那段的平均；滑過任何一點看那裡的數值，滑過爬坡段看整段的時間、VAM、心率、功率、%CP、配速／GAP 和平常比。下：每段和平常比，平常 = 同類活動近 8 週（不足 5 段放寬到 12、26 週）坡度相差 ±4 pp 內的爬坡中位數與中間 50%（推估）。每 100 m 心跳數越低越經濟；整次和近 8 週的爬坡中位數比，低 > 5% = 變好。表格在「詳細數字」。"},
-        {"title": "坡度分組", "kind": "review", "section": "grades",
+        {"id": "grades", "title": "坡度分組", "kind": "review", "section": "grades",
          "description": "每列一個坡度區間（上 = 上坡、下 = 下坡）。左邊灰條 = 這次在該坡度的時間佔比；右邊點 = 這次的配速／VAM／功率／心率／效率，灰條 = 平常的中間 50%、直線 = 中位數。平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度待 ≥ 60 秒的那幾次（推估）；這次不到 60 秒的坡度畫空心點，只供參考。停頓不算。表格在「詳細數字」。"}
       ]
     },
     {
+      "id": "pacing-durability",
       "title": "配速與耐久",
       "description": "後段有沒有掉、移動與停留時間、補給。長跑、越野、登山。",
       "charts": [
-        {"title": "耐久判讀", "kind": "review", "section": "durability",
+        {"id": "durability", "title": "耐久判讀", "kind": "review", "section": "durability",
          "description": "耐久 = 10 分鐘滾動（功率或速度）／心率，和暖身後第一個 10 分鐘相比。最後 20% < 90% 代表補給或配速要調整。"},
-        {"title": "耐久曲線", "kind": "review", "section": "durability_curve",
+        {"id": "durability-curve", "title": "耐久曲線", "kind": "review", "section": "durability_curve",
          "description": "怎麼看：線代表「同樣的心率能推出多少功率（或速度）」，暖身完那 10 分鐘 = 100%。線平平的在 100% 附近 = 後段還撐得住；線往下掉 = 同樣心跳推不出同樣的力，也就是累了。掉到 95% 以下開始累（推估），掉到 90% 以下（Maunder 2021 的耐久度概念；90% 是推估門檻）代表補給或配速要調。橫軸是經過時間（小時）。"},
-        {"title": "每 10% 距離的配速與心率", "kind": "review", "section": "pacing",
+        {"id": "pacing", "title": "每 10% 距離的配速與心率", "kind": "review", "section": "pacing",
          "description": "移動配速（停頓不算）。"}
       ]
     },
     {
+      "id": "form-knee",
       "title": "跑姿與膝蓋負荷（參考）",
       "description": "參考用，不是傷害預測：衝擊與剛性在跑步中的漂移、陡下坡佔比、和自己同類課表的基準比。沒有 Stryd 的活動只看步頻、觸地、振幅、kleg、衝擊 G。WKO5 版本：「WKO5 Workout View」→ 爬坡分析「LSS and LIS- Stryd」「LSS飄移率 by坡度」「步頻 vs 垂直比」、訓練效果「Running Dynamics」。",
       "charts": [
-        {"title": "前半對後半（依作功切分，參考）", "kind": "review", "section": "form",
+        {"id": "form-halves", "title": "前半對後半（依作功切分，參考）", "kind": "review", "section": "form",
          "description": "依總作功（功率 × 時間，kJ）切成前後兩半：每一半做的功一樣多，越野的長慢坡不會擠在同一半（推估）。沒有功率（或功率缺超過 10%）時改用移動時間切半。只算跑步步頻（≥ 130 spm）的時間。基準 = 同類課表 8–12 週的變化 median 與 IQR，少於 5 次不比較。左右平衡：目前沒有這個通道。"},
-        {"title": "跑姿依坡度（參考）", "kind": "review", "section": "form_grades",
+        {"id": "form-grades", "title": "跑姿依坡度（參考）", "kind": "review", "section": "form_grades",
          "description": "每列一個坡度區間（上 = 上坡、下 = 下坡）。左邊灰條 = 這次跑步時間在該坡度的佔比；右邊點 = 這次該坡度的平均值，灰條 = 平常的中間 50%、直線 = 中位數。上方切換指標：ILR、衝擊 G、LSS、kleg、觸地時間、步頻、垂直振幅（這次有的才出現；ILR、LSS 要有 Stryd）。只算跑步步頻（≥ 130 spm）的時間，走路和停頓不算。平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度跑 ≥ 60 秒的那幾次（推估）；這次不到 60 秒的坡度畫空心點，只供參考。衝擊 G = fmax ／（體重 × g），fmax 用 WKO5 的 Maximum Force（Morin 2005）。選 ILR、衝擊 G 或每公里衝擊量時，右欄數字是同一坡度的步頻（spm，↑↓ = 高／低於平常），看衝擊高的時候步頻是高還是低。步頻和膝蓋負荷：步頻提高 5% 或 10%（速度不變），膝關節吸收的能量明顯減少（Heiderscheit 2011，MSSE 43:296）；提高 10% 髕股關節峰值力約少 14%（Lenhart 2014，MSSE 46:557）。每公里衝擊量 = 衝擊 G × 每公里步數，是推估：每公里累積負荷的比法來自 Willson 2014（Clin Biomech 29:243，步幅縮短 10%，每步髕股壓力 −22%、每英里累積 −7.5%），但把全身衝擊乘上步數當膝蓋負荷是我們自己的近似，不是量到的膝蓋力。步頻高、每步衝擊小時，步數多會讓這個數字被抵銷一部分。判讀只在「衝擊高於平常的中間 50%、而且步頻低於平常的中間 50%」時出現（該坡度跑 ≥ 60 秒）。表格在「詳細數字」。"},
-        {"title": "跑姿隨疲勞的變化（依作功，參考）", "kind": "review", "section": "form_work",
+        {"id": "form-work", "title": "跑姿隨疲勞的變化（依作功，參考）", "kind": "review", "section": "form_work",
          "description": "橫軸 = 累積作功（功率 × 時間，kJ）的 0–10%、10–20% … 90–100%，和「前半對後半」用同一種切法；沒有功率（或功率缺超過 10%）時改用移動時間。藍線 = 這次每一段的平均值，灰帶 = 平常同一段的中間 50%、虛線 = 中位數；線比灰帶越往後越偏，代表疲勞讓跑姿變了。上方可只看一種坡度（例如平路 −3～+3%），排除坡度的影響；預設全部坡度。只算跑步步頻（≥ 130 spm）的時間。平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在同一段跑 ≥ 60 秒的那幾次（推估）；這次不到 60 秒的段畫空心點。選 ILR、衝擊 G 或每公里衝擊量時，橫軸下方第二行是該段的步頻（spm，↑↓ = 高／低於平常）：疲勞時衝擊變高，是不是因為步頻掉了。步頻提高 5–10% 可減少膝關節負荷（Heiderscheit 2011；Lenhart 2014）。每公里衝擊量 = 衝擊 G × 每公里步數（推估，比法參考 Willson 2014 的每英里累積髕股壓力；不是量到的膝蓋力）。判讀只在「衝擊高於平常、步頻低於平常」的段（≥ 60 秒，全部坡度）出現。表格在「詳細數字」。"},
-        {"title": "步頻與衝擊（參考）", "kind": "review", "section": "form_cadence",
+        {"id": "form-cadence", "title": "步頻與衝擊（參考）", "kind": "review", "section": "form_cadence",
          "description": "每個點 = 這次一段穩定跑的 30 秒（跑步步頻 ≥ 130 spm、速度變化 < 8%、坡度變化 < 4 個百分點；門檻推估）。縱軸是 Stryd 的 ILR，換算到這次的中位速度與坡度：ILR 隨速度上升很多（你的資料：每 +1 km/h 約 +6～7.5 BW/s），不換算的話步頻高的點多半只是跑得快。換算用的係數和趨勢線都來自你自己近 26 週的跑步（至少 5 次；斜率要比中位數多的資料，所以不用 8 週，推估）：每次跑步內比較（每次各自扣掉平均，回歸 ILR ~ 步頻 + 速度 + 坡度，標準誤依跑步分群）。這是推估：只看得到相關，不是控制實驗。實線 = 你平常步頻範圍內的趨勢，虛線 = 外推；灰帶 = 這次中位步頻 +5–10%：Heiderscheit 2011（MSSE 43:296）在同速度下把步頻提高 5%／10%，膝關節吸收的能量減少約 20%／34%；Lenhart 2014（MSSE 46:557）提高 10% 髕股關節峰值力 −14%；Schubert 2014 回顧（Sports Health 6:210，10 篇研究）：步頻提高時，質心垂直位移、垂直地面反作用力峰值與髖、膝吸收的能量多半下降。ILR 是 Stryd 用腳掌加速度估的，目前找不到它對測力板負荷率的公開驗證，只拿來和自己比。趨勢不明顯時不畫圖、只寫一句。詳見 docs/research/impact-cadence.md。"}
       ]
     }

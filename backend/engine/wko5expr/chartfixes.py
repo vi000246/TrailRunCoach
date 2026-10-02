@@ -11,8 +11,10 @@ File shape::
 
     {
       "fixes": [
-        {"view": "WKO5 Workout View", "chart": "Palladino Run Summary Report",
-         "dashboard": "Workout",            # optional, when titles repeat
+        {"view": "WKO5 Workout View",
+         "chart_id": "palladino-run-summary-report",   # viewids.py; "chart": "<title>" also works
+         "chart": "Palladino Run Summary Report",      # with an id: only a reminder for the reader
+         "dashboard_id": "workout",         # optional, when titles repeat (or "dashboard": "<title>")
          "series": "Distance (mi)",         # optional: series name ...
          "series_index": 3,                 # ... or position
          "set": {"y_axis": "KM", "name": "Distance (km)"},
@@ -57,8 +59,8 @@ def load_fixes(path: Optional[Path] = None) -> list[dict]:
     if not isinstance(fixes, list):
         raise FixError(f"{p}: expected an object with a 'fixes' list")
     for i, f in enumerate(fixes):
-        if not isinstance(f, dict) or not f.get("view") or not f.get("chart"):
-            raise FixError(f"{p}: fix #{i} needs 'view' and 'chart'")
+        if not isinstance(f, dict) or not f.get("view") or not (f.get("chart_id") or f.get("chart")):
+            raise FixError(f"{p}: fix #{i} needs 'view' and 'chart_id' (or 'chart')")
         if "axis" in f and ("series" in f or "series_index" in f):
             raise FixError(f"{p}: fix #{i} targets both an axis and a series")
         bad = set(f.get("set") or {}) - (AXIS_KEYS if "axis" in f else SERIES_KEYS)
@@ -100,6 +102,15 @@ def _apply_one(chart: dict, f: dict) -> bool:
     return changed
 
 
+def _hit(obj: dict, f: dict, what: str, required: bool = False) -> bool:
+    """Match by `<what>_id` (viewids.py) when the fix has one, else by the title `<what>`."""
+    if f.get(f"{what}_id"):
+        return obj.get("id") == f[f"{what}_id"]
+    if f.get(what):
+        return obj.get("title") == f[what]
+    return not required
+
+
 def apply_fixes(views: dict[str, dict], fixes: Iterable[dict]) -> dict[str, dict]:
     """Copy of `views` with the fixes applied. Unmatched fixes are ignored
     (reported by `unmatched()`), so a renamed WKO5 chart can't break a view."""
@@ -109,10 +120,10 @@ def apply_fixes(views: dict[str, dict], fixes: Iterable[dict]) -> dict[str, dict
         if v is None:
             continue
         for d in v.get("dashboards", []):
-            if f.get("dashboard") and d.get("title") != f["dashboard"]:
+            if not _hit(d, f, "dashboard"):
                 continue
             for c in d.get("charts", []):
-                if c.get("title") != f["chart"]:
+                if not _hit(c, f, "chart", required=True):
                     continue
                 if _apply_one(c, f):
                     note = f.get("note") or "已修正單位"

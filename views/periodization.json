@@ -2,10 +2,12 @@
   "name": "周期化訓練",
   "dashboards": [
     {
+      "id": "transition",
       "title": "① 轉換期",
       "description": "目標：恢復、重建習慣、打肌力底子（Uphill Athlete：2–4 週）。要看的不是體能有沒有進步，而是有沒有真的恢復。成功的樣子：疲勞 ATL 下降、TSB 回到正值、每週時數低但穩定、有固定肌力訓練。",
       "charts": [
         {
+          "id": "weekly-hours",
           "title": "每週訓練時數（應該低而穩定）",
           "description": "轉換期不追量。深色線是 4 週平滑後的每週時數，看得出整體是否在低檔。",
           "axes": [{"id": "HHMMSS", "min": 0}],
@@ -16,6 +18,7 @@
           ]
         },
         {
+          "id": "fatigue-form",
           "title": "疲勞與狀況（應該往恢復走）",
           "description": "ATL 往下、TSB 爬回正值 = 恢復中。如果 TSB 還是很負（紅、綠），代表還沒休息夠。TSB 長條的顏色和「我的訓練 → 負荷 PMC」同一套（TSB ÷ CTL）：紅 過度疲勞、綠 有效訓練、淺紫 持平、紫 比賽狀態、黃 休息過久。",
           "axes": [{"id": "TSSPERDAY"}],
@@ -30,6 +33,7 @@
           ]
         },
         {
+          "id": "weekly-strength-count",
           "title": "每週肌力訓練次數",
           "description": "Uphill Athlete 的轉換期每週兩次核心與肌力訓練。這是為基礎期打底。",
           "axes": [{"id": "CUSTOM次", "min": 0}],
@@ -42,10 +46,12 @@
       ]
     },
     {
+      "id": "base",
       "title": "② 基礎期",
       "description": "目標：練有氧引擎，佔全年最大比例（Uphill Athlete：基礎期是訓練年的主體）。成功的樣子：同樣心率跑更快（EF 上升）、長時間輕鬆跑心率不飄（< 5%）、訓練量穩定成長、大部分時間在低強度。",
       "charts": [
         {
+          "id": "ef-easy-road",
           "title": "有氧效率 EF（輕鬆路跑）",
           "description": "每下心跳換到的速度。往上走 = 有氧引擎變強。基礎期最重要的一張圖。只看 ≥ 30 分鐘、平均心率 ≤ AeT + 3 的路跑（和總覽「有氧效率」指標同一個條件）才公平。",
           "axes": [{"id": "CUSTOMm/min/bpm", "min": 0}],
@@ -54,6 +60,7 @@
           ]
         },
         {
+          "id": "long-easy-drift",
           "title": "長時間輕鬆跑的心率飄移",
           "description": "Uphill Athlete 的有氧閾值測試：暖身後 40–60 分鐘穩定跑，飄移 < 5% 代表在有氧閾值以下。長期壓在 5% 以下代表有氧基礎穩固；> 10% 代表有氧基礎不足或跑太快。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，只看路跑；有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾的跑步不採用（不畫點）。淺色點 = 參考（暖身後 30–40 分，未達 UA 測試標準）：其他條件都通過、只是不到 40 分；30 分是推估的門檻（未找到來源；心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001），只當參考，不解鎖間歇、不算 AeT 測試、不寫進門檻。總覽「心率飄移」指標是同一個算法，另外只算平均心率 ≤ AeT+3 的輕鬆跑（總覽用配速）。單次跑步誤差約 ±4–6 個百分點，所以深色線是最近 6 次（8 週內）的加權平均、淺色點是同一溫度區平均的 ± 標準誤，判讀看平均（drift-algorithm.md §1.3、§5.4；權重 1/SE² 推估）；溫度分區：熱天不再不採用，改成分 🌡 < 25 °C、25–28 °C、> 28 °C 與溫度不明四區，平均只和同一區的跑步算，每區一條線（25 °C 是徐國峰的條件；28 °C 是推估的分界，Beiter 2025 的熱組 28.7 °C；溫度先用 Open-Meteo 路線天氣，沒有時用手錶溫度扣掉手腕偏差 3.7 °C）；回程市區段當緩和排除、結尾靜止裁掉，跑走、VI > 1.04、前後半功率差 > 5% 的不採用。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點。",
           "basis": {"default": "pace", "choices": ["pace", "power"]},
@@ -80,11 +87,13 @@
           ]
         },
         {
+          "id": "z5-gate",
           "title": "5 區（最大攝氧量間歇）開放流程",
           "kind": "z5gate",
           "description": "三步：① 確認有氧基礎（三種測試選一，做了且達標：徐國峰 90 分鐘飄移 < 10%、實測 AeT 的 UA 差距 ≤ 10%、或 AeT 附近 ≥ 60 分鐘 Friel 飄移 < 5%）→ ② 3 區達標 3 堂 → ③ 5 區開放。下面的色帶是每天的 5 區狀態，用課表引擎同一套規則逐日重播（quality_gate.z5_history）：未確認 → 已確認 → 暫停（1 區時間連 3 週低於確認時的 2/3，Hickson 1982）→ 恢復期（停跑 ≥ 6 天，期間不排 3 區、5 區）。確認之後才畫每週 1 區時間和暫停線。標記：◆ 確認、● 90 分鐘測試（實心＝通過、空心＝沒過）、▲ 實測 AeT。3 區只要護欄通過就照排。"
         },
         {
+          "id": "intensity-distribution",
           "title": "強度分配：低強度時間佔比",
           "description": "每根長條 = 那一週有心率的時間，分成三段：綠 = 低強度（心率 < AeT）、黃 = 中強度（AeT–LTHR）、紅 = 高強度（≥ LTHR）。虛線是目標：綠色要長到虛線以上，也就是至少 75% 的時間是輕鬆的（頂尖耐力選手約 75–80%）。綠色掉到 65% 以下時，總覽會提醒「太多時間在中強度」。",
           "axes": [{"id": "PERCENT", "min": 0, "max": 1}],
@@ -97,6 +106,7 @@
           ]
         },
         {
+          "id": "weekly-volume-change",
           "title": "訓練量週增幅",
           "description": "近 4 週平均每週時數（所有運動的移動時間）比上一週的近 4 週平均多多少。Uphill Athlete 說的是「平均」每週增加超過 10%、持續約 8 週會出問題，所以看 4 週平均的變化（docs/research/coaching-dashboards-mountain.md 的設計），連續 3 週以上超過 +10% 才要注意。單週對單週會被一次百岳、一週休息放大成 +100%～+800%，不拿來比 10%。沒有活動的週算 0 小時。只看趨勢，不當受傷預測（ACWR 預測受傷的說法已被推翻）。",
           "axes": [{"id": "PERCENT"}],
@@ -110,10 +120,12 @@
       ]
     },
     {
+      "id": "build",
       "title": "③ 專項期",
       "description": "目標：練目標賽事需要的能力（Koop：越接近比賽，訓練越像比賽）。越野與百岳就是爬坡能力、長時間耐久、背對背長天。成功的樣子：同樣心率爬得更快、爬升密度接近比賽、最長訓練接近比賽時間、長時間後段不掉速。",
       "charts": [
         {
+          "id": "longest-session",
           "title": "最長單次訓練",
           "description": "Koop：訓練周期的最後，要跑得比比賽前任何時候都長、都慢。最長一次應該逐步逼近比賽預估時間。",
           "axes": [{"id": "HHMMSS", "min": 0}],
@@ -123,6 +135,7 @@
           ]
         },
         {
+          "id": "climb-density-vs-race",
           "title": "爬升密度 vs 目標賽事",
           "description": "Koop：拿每公里爬升對照比賽，而不是追求週總爬升（總量本身沒有劑量反應）。紅虛線 = 「賽事周期」頁裡接下來 A / B 賽事中最陡的一場。",
           "axes": [{"id": "CUSTOMm/km", "min": 0}],
@@ -132,6 +145,7 @@
           ]
         },
         {
+          "id": "uphill-vam",
           "title": "上坡腳程（每小時爬升，心率 < LTHR）",
           "description": "越野與百岳都是爬坡能力，合在一起看。只算坡度 ≥ 5% 而且在移動的時間，每小時爬了多少公尺；心率 ≥ LTHR 的時間不算（沒有心率的活動全部算），上坡時間少於 10 分鐘的活動不畫。往上 = 爬坡變快。和「我的訓練 → 能力」的同一張圖。",
           "axes": [{"id": "METERSPERHOUR", "min": 0}],
@@ -141,6 +155,7 @@
           ]
         },
         {
+          "id": "durability-drift",
           "title": "耐久度：長時間後段心率飄移",
           "description": "超過 90 分鐘的越野跑，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。登山的 Pa:HR 混了休息時間、會亂跳，所以不算；|飄移| > 30% 當成壞資料（和總覽「耐久度」指標同一個條件，總覽用配速）。這張圖用 WKO5 存的 Pa:HR（全程前半對後半、含暖身和停頓），不是單次活動判讀卡的算法：判讀卡把有坡的跑步（越野都是）判為不採用，換過去這張圖會一個點都沒有。",
           "basis": {"default": "pace", "choices": ["pace", "power"],
@@ -154,6 +169,7 @@
           ]
         },
         {
+          "id": "ramp-rate",
           "title": "Ramp rate（CTL 每週變化）",
           "description": "每週 CTL 增加多少。專項期可以比基礎期快，但太快代表負荷堆太急。長條顏色 = 風險：綠 < 5 安全、黃 5–7 只能撐一兩週、紅 ≥ 7 受傷與生病風險（TrainingPeaks；Friel）；灰 = 下降。藍線 = 近 4 週平均，Couzens 建議長期 3–5。和「我的訓練 → 負荷 PMC」的同一張圖。",
           "axes": [{"id": "TSSPERDAYPERWEEK"}],
@@ -168,10 +184,12 @@
       ]
     },
     {
+      "id": "taper",
       "title": "④ 減量期",
       "description": "目標：比賽前恢復新鮮度、保住體能。Bosquet 2007 統合分析（27 篇研究）：減量 2 週，訓練量逐步減少 41–60%、強度與頻率維持，平均進步 2.2%。成功的樣子：時數落在減量帶內、高強度還在、TSB 回到正值。",
       "charts": [
         {
+          "id": "weekly-hours-vs-taper",
           "title": "每週時數 vs 減量目標帶",
           "description": "綠色帶是減量後的目標（平常訓練量的 40–59%）。注意：平常訓練量用 6 週平滑估算，減量期間基準會跟著緩慢下降。",
           "axes": [{"id": "HHMMSS", "min": 0}],
@@ -184,6 +202,7 @@
           ]
         },
         {
+          "id": "intensity-kept",
           "title": "高強度仍要保留",
           "description": "減量是減「量」不是減「強度」。每週高強度（> LTHR）時數不該歸零。",
           "axes": [{"id": "HHMMSS", "min": 0}],
@@ -193,6 +212,7 @@
           ]
         },
         {
+          "id": "form-pct",
           "title": "新鮮度 Form%（TSB ÷ CTL）",
           "description": "比賽前應該爬進紫色的「比賽狀態」區（+5～+25%），不要掉到黃色的「休息過久」（體能在掉）。線的顏色 = 那天落在哪一區，最右邊標出最新的值。和「我的訓練 → 負荷 PMC → 狀況 Form%」同一張圖、同一套區間。沒有任何登山越野賽事公開過經驗證的「最佳 TSB 區間」，只當方向參考。",
           "zoned": {"line": "Form%"},
@@ -210,13 +230,14 @@
       ]
     },
     {
+      "id": "zones-targets",
       "title": "區間與課表強度",
       "description": "每種課表該跑多少功率、心率，以及最近 30 天在各區間的時間。",
       "charts": [
-        {"title": "課表建議強度", "kind": "targets", "description": "路上的輕鬆跑、長跑看心率（不超過 AeT）；山路、爬坡和間歇看功率（心率約慢 1 分鐘才反應，短坡和短間歇上來不及），心率當第二個數字。陡的技術下坡不看功率。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
-        {"title": "Palladino 功率區間（跑步）", "kind": "zones", "system": "palladino", "days": 30, "description": "官方表（% CP）。"},
-        {"title": "Friel 心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30, "description": "WKO5 的 Friel 心率區間。"},
-        {"title": "Friel 配速區間（跑步）", "kind": "zones", "system": "frielpace", "days": 30, "description": "依閾值配速；山路配速不準，路跑才有參考價值。"}
+        {"id": "workout-targets", "title": "課表建議強度", "kind": "targets", "description": "路上的輕鬆跑、長跑看心率（不超過 AeT）；山路、爬坡和間歇看功率（心率約慢 1 分鐘才反應，短坡和短間歇上來不及），心率當第二個數字。陡的技術下坡不看功率。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
+        {"id": "palladino-power-zones", "title": "Palladino 功率區間（跑步）", "kind": "zones", "system": "palladino", "days": 30, "description": "官方表（% CP）。"},
+        {"id": "friel-hr-zones", "title": "Friel 心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30, "description": "WKO5 的 Friel 心率區間。"},
+        {"id": "friel-pace-zones", "title": "Friel 配速區間（跑步）", "kind": "zones", "system": "frielpace", "days": 30, "description": "依閾值配速；山路配速不準，路跑才有參考價值。"}
       ]
     }
   ]
