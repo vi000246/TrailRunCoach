@@ -46,7 +46,7 @@ SEED = [
     ("2024-04-13", "Athlete_2024_04_13_08_46.wko4"),
     ("2024-01-06", "Athlete_2024_01_06_08_45.wko4"),
 )]
-KM_TOL = 0.10        # 自組: the watch distance within ±10 % of the stated one
+KM_TOL = 0.10        # 推估: the watch distance within ±10 % of the stated one
 
 
 def _trail(w) -> bool:

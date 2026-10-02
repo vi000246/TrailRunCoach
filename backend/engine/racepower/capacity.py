@@ -13,12 +13,12 @@ docs/research/baiyue-from-running.md §3 (B1–B8), §3.8, §2.4, §2.6.
 
 Status of every piece (the doc's tags): B1 is our composition of Minetti
 2002's flat running cost (已驗證, test_minetti) and Pandolf's standing term
-(已驗證 second-hand) — 自組, 待驗證 by the leave-one-out back-test; B2/B3 are
+(已驗證 second-hand) — 推估, 待驗證 by the leave-one-out back-test; B2/B3 are
 Pandolf 1977 (已驗證 second-hand, G ≥ 0) and agree with Ludlow & Weyand 2017's
-proportionality to total mass on steep grades; B3' is 自組; B4 and the
-shrinkage are 自組; B7's prior is Wehrlin & Hallén 2006 (已驗證) with a width
+proportionality to total mass on steep grades; B3' is 推估; B4 and the
+shrinkage are 推估; B7's prior is Wehrlin & Hallén 2006 (已驗證) with a width
 from Wehrlin's inter-individual range (see ALT_TAU); the descent cap uses
-Tobler's shape (經驗法則) × a personal p75 (自組). Tobler is no longer the
+Tobler's shape (經驗法則) × a personal p75 (推估). Tobler is no longer the
 prior — only the descent cap's shape and a cross-check.
 """
 from __future__ import annotations
@@ -44,13 +44,13 @@ L_TRAIL = 2.0                   # vest on a trail run (kg), baiyue-from-running.
 # (replaces the doc's 6 kg). Labelled 預設背負.
 PACK_DEFAULT_MULTI = 9.0
 PACK_DEFAULT_SINGLE = 9.0
-PACK_DAILY_DROP = 0.7           # food eaten per day (自組, baiyue-from-running.md §3.2, user kept it)
+PACK_DAILY_DROP = 0.7           # food eaten per day (推估, baiyue-from-running.md §3.2, user kept it)
 TRIP_DAYS_DEFAULT = 3           # user decision 2026-09-30
 TRIP_KIND_DEFAULT = "group"     # 跟團 (user decision 2026-09-30)
 Z_REF = 300.0                   # every window normalised to 300 m (Wehrlin's linear range starts there)
 FLAT_G = 0.05                   # below 5 % the walking speed comes from the flat model (§3.4)
 DOWN_CAP_G = -0.10              # descent-cap windows (§3.4)
-DOWN_CAP_Q = 75                 # p75 of speed ÷ Tobler (自組)
+DOWN_CAP_Q = 75                 # p75 of speed ÷ Tobler (推估)
 STEEP_MIN_G = 0.10              # windows that feed δ(g)
 MIN_RUN = 3                     # ≥ 3 consecutive 100 m windows (≥ 300 m)
 PER_ACT_CAP = 100               # windows per activity at most (one long outing must not dominate)
@@ -63,11 +63,11 @@ FLAT_RUN_G = 0.02
 # width τ (user decision 2026-09-30: "decided by the literature"):
 #   1. inter-individual spread: Wehrlin's 8 athletes span 4.6–7.5 %/1000 m;
 #      the expected range of 8 normal draws is 2.847 σ (range → SD
-#      conversion, our step, 自組), so σ_ind = 2.9 / 2.847 = 1.02 points;
+#      conversion, our step, 推估), so σ_ind = 2.9 / 2.847 = 1.02 points;
 #   2. quantity mismatch: Wehrlin measures VO2max, the personal slope is
 #      speed at a fixed HR; the one fixed-HR study (Coffman et al. 2020,
 #      loaded self-paced 5 km) implies −3.8 %/1000 m (our conversion) —
-#      2.5 points from Wehrlin; half of that as one SD (自組) = 1.25;
+#      2.5 points from Wehrlin; half of that as one SD (推估) = 1.25;
 #   τ = √(1.02² + 1.25²) = 1.61 points.
 # The diagnostics (spec, "百岳 capacity") show the athlete's own slope has no
 # within-trip leverage (trip fixed effects: SE ≈ 28 points), so the posterior
@@ -80,24 +80,24 @@ ALT_TAU_IND = (WEHRLIN_RANGE[1] - WEHRLIN_RANGE[0]) / RANGE_TO_SD_N8
 ALT_TAU_MISMATCH = abs(ALT_PRIOR_PCT - COFFMAN_PCT) / 2.0
 ALT_TAU = math.sqrt(ALT_TAU_IND ** 2 + ALT_TAU_MISMATCH ** 2)
 # ---- hour-of-day decay (B5) and multi-day (B6) --------------------------------
-GAMMA_TAU = 0.03                # per hour, Nuuttila 2025's order (−5.5 % / 90 min), 自組
-SIGMA_TIME_PER_15H = 0.05       # σ_time = 0.05·h/1.5, cap 0.10 (外插, 自組)
+GAMMA_TAU = 0.03                # per hour, Nuuttila 2025's order (−5.5 % / 90 min), 推估
+SIGMA_TIME_PER_15H = 0.05       # σ_time = 0.05·h/1.5, cap 0.10 (外插, 推估)
 SIGMA_TIME_CAP = 0.10
 SIGMA_DAY = 0.03                # per day after the first (no source)
-SIGMA_PACK = 0.08               # Looney 2022 / Weyand 2021 ±15 % order (自組)
+SIGMA_PACK = 0.08               # Looney 2022 / Weyand 2021 ±15 % order (推估)
 SIGMA_LOO_DEFAULT = 0.10        # until the back-test gives one
 BAND_Z = 1.2816                 # p10–p90
 HR_BANDS = ("aet", "cap")       # β ≈ 0 → only AeT and the capacity ceiling (§2.2 finding 1)
 CAP_BAND_MAX_H = 3.0
-BETA_MIN_T = 2.0                # |β/SE| below this → β fixed at 0 (自組)
+BETA_MIN_T = 2.0                # |β/SE| below this → β fixed at 0 (推估)
 EVIDENCE = {
-    "prior": "B1 自組（Minetti 2002 平地跑步成本 + Pandolf 站立項）；B2 Pandolf 1977 已驗證（二手核對，G ≥ 0）",
-    "pack": "B3 Pandolf 比值（已驗證二手核對；陡坡與 Ludlow & Weyand 2017 一致）；下坡 B3' 線性（自組）",
-    "delta": "個人 2 % 坡度箱修正，往 0 收縮 n/(n + 30)（自組）",
-    "altitude": "Wehrlin & Hallén 2006 −6.3 %/1000 m 先驗，寬度依 Wehrlin 個體範圍 4.6–7.5 與 Coffman 2020（自組）",
-    "time": "當天第幾小時：個人斜率往 0 收縮，τ 0.03/h（Nuuttila 2025 量級，自組）",
+    "prior": "B1 推估（Minetti 2002 平地跑步成本 + Pandolf 站立項）；B2 Pandolf 1977 已驗證（二手核對，G ≥ 0）",
+    "pack": "B3 Pandolf 比值（已驗證二手核對；陡坡與 Ludlow & Weyand 2017 一致）；下坡 B3' 線性（推估）",
+    "delta": "個人 2 % 坡度箱修正，往 0 收縮 n/(n + 30)（推估）",
+    "altitude": "Wehrlin & Hallén 2006 −6.3 %/1000 m 先驗，寬度依 Wehrlin 個體範圍 4.6–7.5 與 Coffman 2020（推估）",
+    "time": "當天第幾小時：個人斜率往 0 收縮，τ 0.03/h（Nuuttila 2025 量級，推估）",
     "day": "多日：心率差 × β；β 不可靠時 1.0（無來源）",
-    "down": "下坡：個人走路窗 × 背負線性 ÷ η，上限 c_cap × Tobler（經驗法則 + 自組）",
+    "down": "下坡：個人走路窗 × 背負線性 ÷ η，上限 c_cap × Tobler（經驗法則 + 推估）",
 }
 
 
@@ -265,7 +265,7 @@ def prepare(runs: Sequence[list], source: str) -> list[dict]:
     """Per consecutive run: drop the first window (HR still in transition),
     give every remaining window the 300 m centred mean grade (single-window
     grade is too noisy on short steep stretches, §2.2 finding 2), and the
-    run-level HR read 60 s late (`hr_lag`). 自組."""
+    run-level HR read 60 s late (`hr_lag`). 推估."""
     out = []
     for seg_i, run in enumerate(runs):
         body = run[1:]
@@ -512,7 +512,7 @@ def _fit_gamma(trail, e_aet, weight) -> dict:
     b = sum(x * y for x, y in zip(xs, ys)) / sxx
     res = [y - b * x for x, y in zip(xs, ys)]
     acts = len({k[0] for k in cells})
-    # activity-level dependence: inflate by the windows per activity (design effect, 自組)
+    # activity-level dependence: inflate by the windows per activity (design effect, 推估)
     deff = max(1.0, len(xs) / max(1, acts))
     se = math.sqrt(sum(r * r for r in res) / max(1, len(xs) - 1) / sxx * deff)
     s = shrink(b, se, 0.0, GAMMA_TAU)
@@ -592,7 +592,7 @@ def fit_walk_capacity(*, weight: float, v_run: dict, trail: Sequence[dict], hike
     # difference is shared across grades) over every window, then each 2 %
     # bin's deviation from δ̄ shrunk to 0 with n/(n + 30). Shrinking each bin
     # straight to 0 would pull every prediction towards a biased prior (the
-    # first back-test: +7.7 % slow on held-out trail segments). 自組.
+    # first back-test: +7.7 % slow on held-out trail segments). 推估.
     n_all = len(pool)
     d_bar = float(np.mean([w["r"] for w in pool])) * n_all / (n_all + SHRINK_N) if pool else 0.0
     delta = {}
@@ -643,7 +643,7 @@ def fit_walk_capacity(*, weight: float, v_run: dict, trail: Sequence[dict], hike
 
 def course_eph(cap: WalkCapacity, km: float, gain_m: float, loss_m: Optional[float], load: float) -> float:
     """EP/h the capacity model implies on a course known only by its totals
-    (the same two-segment split as hike.tobler_eph, 自組) — the v1 /predict
+    (the same two-segment split as hike.tobler_eph, 推估) — the v1 /predict
     百岳 rate when there are no solo days."""
     loss_m = gain_m if loss_m is None else loss_m
     if km <= 0:
@@ -676,9 +676,9 @@ def band(t_s: float, sigma: float) -> dict:
 # solo-day suggestion (§2.6)
 # ---------------------------------------------------------------------------
 
-SOLO_SHARE_MIN = 0.60          # 自組
-GROUP_SHARE_MAX = 0.15         # 自組
-STOPS_PER_KM_MAX = 1.0         # 自組
+SOLO_SHARE_MIN = 0.60          # 推估
+GROUP_SHARE_MAX = 0.15         # 推估
+STOPS_PER_KM_MAX = 1.0         # 推估
 LOW_HR_MARGIN = 5.0
 SLOW_FACTOR = 1.15
 PLATEAU_N, PLATEAU_CV, PLATEAU_DG = 5, 0.05, 0.10
@@ -690,7 +690,7 @@ VALIDATE_MIN_AGREE = 0.80
 def classify_day(wins: Sequence[dict], aet: Optional[float], cap: Optional[WalkCapacity],
                  load: float, stops_per_km: Optional[float] = None) -> dict:
     """Suggest solo vs group for one hiking day from its moving windows
-    ({"g", "v", "hr", "k", "z"}). Rules (自組, §2.6): among steep (≥ 10 %)
+    ({"g", "v", "hr", "k", "z"}). Rules (推估, §2.6): among steep (≥ 10 %)
     windows, "limited" = HR < AeT − 5 while the model predicts > 1.15 × the
     actual speed, or a plateau (≥ 5 windows, speed CV < 5 % while the grade
     spans > 10 points); "own" = HR ≥ AeT and |model residual| < 15 %. Solo

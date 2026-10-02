@@ -10,7 +10,7 @@ Per bout the power is the mean-max over the bout's own duration from the
 Non-maximal bout (a bout that was not all-out):
   * the workbook's "falling" rule (cp.validity): the shorter bout must have
     the higher power — a 3′ at or below the 12′ power was not maximal;
-  * 自組: its peak HR is ≥ HR_GAP_BPM below the other bout's peak. Evidence:
+  * 推估: its peak HR is ≥ HR_GAP_BPM below the other bout's peak. Evidence:
     the 2026-09-30 test, 3′ 217 W peak 146 bpm vs 12′ 221 W peak 171 bpm.
 With both bouts maximal: the 2-parameter model through the two points
 (work = CP·t + W′, Jones & Vanhatalo 2017). With one maximal bout: the
@@ -31,8 +31,8 @@ from backend.engine.racepower import cp as CP
 
 SHORT_S = (150.0, 210.0)       # 3′ ± 30 s
 LONG_S = (660.0, 780.0)        # 12′ ± 60 s
-BOUT_MIN_RATIO = 1.3           # 自組: a bout is ≥ 1.3 × the median power of the other laps
-HR_GAP_BPM = 10.0              # 自組, see the module docstring
+BOUT_MIN_RATIO = 1.3           # 推估: a bout is ≥ 1.3 × the median power of the other laps
+HR_GAP_BPM = 10.0              # 推估, see the module docstring
 FRESH_DAYS = 90                # as PLAN_CP_MAX_AGE_DAYS
 CACHE_NAME = "racepower_cptests.json"
 _KEY_VERSION = 2

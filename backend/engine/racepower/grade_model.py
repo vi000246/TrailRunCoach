@@ -39,7 +39,7 @@ def re_prior(g: float, re_flat: float, walking: bool = False) -> float:
     (test_minetti). Using it for Stryd power assumes Stryd ∝ metabolic power:
     已驗證 for 0–8 % (van Rassel et al. 2026, IJSPP 21:597–603), 待驗證 above
     8 % — those segments rely on the personal bins (F7) or are labelled 推估.
-    The 0.9 downhill floor (≈ +11 % speed at most) is our choice (自組).
+    The 0.9 downhill floor (≈ +11 % speed at most) is our choice (推估).
 
     walking=True: the walking prior RE_flat · Cr(0)/Cw(g) with Minetti's
     walking cost Cw(i) = 280.5i⁵ − 58.7i⁴ − 76.8i³ + 51.9i² + 19.6i + 2.5 (same
@@ -55,10 +55,10 @@ def re_prior(g: float, re_flat: float, walking: bool = False) -> float:
 
 @dataclass
 class GradeRE:
-    """F7: personal RE(g) — our own data-driven model (自組, 待驗證 by the §3B
+    """F7: personal RE(g) — our own data-driven model (推估, 待驗證 by the §3B
     leave-one-out segment errors). Individual RE is strongly correlated across
     grades (Breiner, Ortiz & Kram 2019), which is why the flat RE is a sound
-    prior. v_max is F9 (自組; Townshend et al. 2010 found free-paced descents
+    prior. v_max is F9 (推估; Townshend et al. 2010 found free-paced descents
     only 13.8 % faster than level; Vernillo et al. 2017 on eccentric load)."""
     re_flat: float
     bins: dict = field(default_factory=dict)       # bin -> {"n", "re", "v90"}
@@ -146,9 +146,9 @@ def fit_grade_re(samples: Sequence[dict], re_flat: float, walking: bool = False)
 
 # ---- gait-aware RE(g) + trail technicality ------------------------------------
 
-WALK_MAJORITY = 0.5            # 自組: a window / bin is walked when ≥ half its moving time is < 130 spm
+WALK_MAJORITY = 0.5            # 推估: a window / bin is walked when ≥ half its moving time is < 130 spm
 TECH_MIN_N = 30                # windows for a per-class technicality factor (= SHRINK_N)
-TECH_BOUNDS = (0.6, 1.2)       # 自組 sanity range for the factor
+TECH_BOUNDS = (0.6, 1.2)       # 推估 sanity range for the factor
 # technicality by grade bin (2026-10-02, unsourced-rules.md §A4: the one factor on g ≤ +2 %
 # missed the steep descents, ≤ −15 % ran 20–23 % too fast): the back-test's downhill bins,
 # each shrunk n/(n + 30) towards 1 (推估)
@@ -173,10 +173,10 @@ class GaitRE:
     window, workout_review.RUN_CADENCE) fit `run` (Minetti running prior);
     walked windows fit `walk` (Minetti walking prior). For each 2 % bin the
     athlete's own majority gait decides which curve predicts that grade
-    (自組; Minetti's running cost does not describe walking — Minetti 2002,
+    (推估; Minetti's running cost does not describe walking — Minetti 2002,
     Giovanelli 2016 on the walk/run crossover). `tech` is the trail
     technicality factor on flats and descents (g ≤ +2 %): median of actual ÷
-    predicted RE over the athlete's own trail running windows there (自組,
+    predicted RE over the athlete's own trail running windows there (推估,
     per intensity class when ≥ 30 windows), applied only with `trail=True`.
     Duck-compatible with GradeRE for the planner and the back-test."""
     run: GradeRE
@@ -320,7 +320,7 @@ def tobler_kmh(g: float) -> float:
 @dataclass
 class HikeSpeed:
     """F13: personal walking speed per grade bin, shrunk towards Tobler
-    (Tobler's shape is 經驗法則; the personal fit is 自組, 待驗證 by the §3B
+    (Tobler's shape is 經驗法則; the personal fit is 推估, 待驗證 by the §3B
     hiking-day back-test). ref_alt_m = median elevation of the samples, so
     the altitude factor is applied relative to where the speeds were walked."""
     bins: dict = field(default_factory=dict)       # bin -> {"n", "v"} (m/s)
@@ -384,7 +384,7 @@ def windows(t: np.ndarray, d_m: np.ndarray, z: np.ndarray, p: Optional[np.ndarra
     at the window start). With `hr_lag_s` > 0 each row also carries `hr_lag`:
     the time-weighted HR of the same window read `hr_lag_s` seconds later on
     the elapsed clock (HR responds 1–2 min after a pace change;
-    baiyue-from-running.md §2.2 finding 1 — the 60 s shift is 自組).
+    baiyue-from-running.md §2.2 finding 1 — the 60 s shift is 推估).
     Returns [{"g", "v", "p", "z", "k", "t", "hr"?, "hr_lag"?, "run"?}]."""
     n = len(t)
     if n < 10:

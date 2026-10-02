@@ -9,7 +9,7 @@ Course segmentation — docs/research/racepower-v2.md §6.5 (GPX) and §4 step 2
 Status per step (§3A): Douglas–Peucker is an established algorithm (Douglas
 & Peucker 1973, Cartographica 10(2):112–122; the reference is cited from
 memory) and is 已驗證 by its property test (V-DP). The smoothing / hysteresis
-recipe is our own (自組) and 待驗證 against barometric gain (V-SM checks the
+recipe is our own (推估) and 待驗證 against barometric gain (V-SM checks the
 synthetic case). The class thresholds (±2 %, ±15 %) are our own; the 15 % /
 28 % walk labels follow Giovanelli et al. 2016 (J Appl Physiol 120:370–375,
 walking cheaper at all angles other than 9.4°) and Ortiz, Giovanelli & Kram
@@ -118,7 +118,7 @@ def _median5(z: np.ndarray) -> np.ndarray:
 
 def smooth(z: np.ndarray, step_m: float = STEP_M, sigma_m: float = DEFAULT_SIGMA_M) -> np.ndarray:
     """5-point running median (spikes), then a distance-domain Gaussian with
-    σ = sigma_m (§6.5 step 4, 自組)."""
+    σ = sigma_m (§6.5 step 4, 推估)."""
     m = _median5(np.asarray(z, float))
     s = sigma_m / step_m
     if s <= 0.3 or len(m) < 3:

@@ -30,7 +30,7 @@ PLAN_CP_MAX_AGE_DAYS = 90
 DEFAULT_TTE_S = 3000.0
 TRAIL_MIN_CLIMB_M, TRAIL_MIN_MOVING_S = 150.0, 45 * 60
 ROAD_MAX_CVI, ROAD_MIN_MOVING_S = 25.0, 20 * 60
-ROAD_MAX_CVI_ADJ = 51.0         # 自組: CVI-adjust road runs up to 小丘 (category ≤ 3), no further extrapolation
+ROAD_MAX_CVI_ADJ = 51.0         # 推估: CVI-adjust road runs up to 小丘 (category ≤ 3), no further extrapolation
 DEFAULT_K = -0.07               # ≈ Stryd's race-power table (k −0.069, V-F1)
 HIKE_MIN_MOVING_S = 3600.0
 HIKE_HEAVY_GAIN_M, HIKE_HEAVY_WEIGHT = 600.0, 3.0
@@ -354,7 +354,7 @@ def _aet(ds, today: dt.date) -> dict:
 INTENSITY_KEY = "racepower_intensity_v1"
 _est_memo: dict = {}
 _cp_memo: dict = {}
-CP_ASOF_BACK_DAYS = 30          # 自組: an invalid PD fit on a day → the last valid fit up to 30 days earlier
+CP_ASOF_BACK_DAYS = 30          # 推估: an invalid PD fit on a day → the last valid fit up to 30 days earlier
 
 
 def _pd_mftp(ds, day: dt.date) -> Optional[float]:
@@ -1286,7 +1286,7 @@ GRADE_KEY = "racepower_v3_grade_hr_kt"   # rows [g, v, p, z, hr, running share, 
 HIKE_KEY = "racepower_v3_hike_hr_t"      # rows [g, v, z, hr, window index, day, t, hr_lag]
 RUN_MOVING_KMH = 1.0
 HIKE_REST_MS = 0.3
-HR_LAG_S = 60.0                          # 自組 (baiyue-from-running.md §2.2 finding 1)
+HR_LAG_S = 60.0                          # 推估 (baiyue-from-running.md §2.2 finding 1)
 
 
 def activity_arrays(ds, w) -> Optional[dict]:
