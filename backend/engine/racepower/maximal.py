@@ -43,9 +43,11 @@ A capacity sample is one of (in this order):
    second half — no distance bucket, no split rule), all of:
    * ≥ 10 km and ≥ 90 min moving (the user's description of their races;
      the user allowed 60–90 min, 90 taken as their races all exceed 10 km);
-   * average HR ≥ 0.90 × LTHR (Friel Z3 lower bound) and ≥ 2/3 of the HR
-     time above AeT (Seiler three-zone boundary; 2/3 is 自組) — a sustained
-     race effort, not a hike-paced outing;
+   * average HR ≥ x*(T) − 0.03 × LTHR (2026-10-02, unsourced-rules.md §A2:
+     the literature prior of the full-effort HR curve, trailhr.auto_max_frac
+     — 0.90 at 2 h, 0.83 at 8 h; it replaced 0.90 × LTHR and ≥ 2/3 of the
+     time above AeT, which a full-effort race of ≥ 8 h cannot meet,
+     Fornasiero 2018) — a sustained race effort, not a hike-paced outing;
    * or a race word in the title / tags (賽, race, 越野賽, 馬拉松, marathon)
      — then only the duration rule applies.
 
@@ -155,11 +157,14 @@ def trail_maximal(s: dict, lthr: Optional[float], aet: Optional[float], title: s
               _check("time", (s.get("moving_s") or 0) >= k["trail_min_s"],
                      f"移動 {(s.get('moving_s') or 0) / 60:.0f} 分（≥ {k['trail_min_s'] / 60:.0f}）")]
     if not word:
-        avg, ab = s.get("hr_avg"), s.get("above_aet")
-        checks.append(_check("hr_avg", bool(avg and lthr and avg >= k["trail_avg_frac"] * lthr),
-                             f"平均心率 {avg or 0:.0f} vs {k['trail_avg_frac']:.2f} × LTHR {lthr or 0:.0f}"))
-        checks.append(_check("above_aet", ab is not None and ab >= k["trail_above_aet"],
-                             f"AeT 以上時間 {(ab or 0):.0%}（≥ {k['trail_above_aet']:.0%}）"))
+        # 2026-10-02 (unsourced-rules.md §A2): the full-effort HR level depends on the
+        # duration — x*(T) − 0.03 (trailhr.auto_max_frac) instead of 0.90 × LTHR + 2/3 above AeT
+        from backend.engine.racepower import trailhr as TH
+        avg = s.get("hr_avg")
+        mv = s.get("moving_s")
+        f = TH.auto_max_frac(mv / 3600.0 if mv else None)
+        checks.append(_check("hr_avg", bool(avg and lthr and avg >= f * lthr),
+                             f"平均心率 {avg or 0:.0f} vs x*(T) − 0.03 = {f:.2f} × LTHR {lthr or 0:.0f}（推估）"))
     ok = all(c["ok"] for c in checks)
     return {"ok": ok, "kind": "trail_race_like", "category": "trail", "checks": checks, "title_word": word,
             "reason": ("標題／標籤是比賽" if word else "心率顯示持續比賽強度") if ok else
