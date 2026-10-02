@@ -946,7 +946,8 @@ function qtipShow(btn) {
   const d = document.createElement("div");
   d.className = "qtip-pop";
   d.textContent = btn.dataset.tip;
-  document.body.appendChild(d);
+  // inside the enlarge <dialog> (top layer) a popup on <body> would sit behind it
+  (btn.closest("dialog[open]") || document.body).appendChild(d);
   const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
   const left = Math.max(12, Math.min(r.left - 8, innerWidth - w - 12));
   const top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
@@ -1272,11 +1273,11 @@ function draw(card, res) {
     if (seg) seg.insertAdjacentHTML("beforebegin", t);
     else card.querySelector("h2")?.insertAdjacentHTML("beforeend", t);
   }
-  // the description sits behind a ? icon (hover / tap) to keep cards clean; the enlarge
-  // overlay has room, so it shows the text in full
+  // the description sits behind a ? icon (hover / tap) to keep cards clean — in the enlarge
+  // overlay too (owner 2026-10-02: no block of text there either)
   if (res.description) {
-    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
-    else {
+    // enlarged: no inline text — the title row is cloned from the card's h2, ? included
+    if (!res._zoom) {
       const h2 = card.querySelector("h2");
       const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
       const zb = h2?.querySelector(".zbtn");
@@ -1592,8 +1593,8 @@ function drawPeriodZones(card, res) {
   pzStyle();
   card.querySelector(".loading")?.remove();
   if (res.description) {
-    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
-    else {
+    // enlarged: no inline text — the title row is cloned from the card's h2, ? included
+    if (!res._zoom) {
       const h2 = card.querySelector("h2"), zb = h2?.querySelector(".zbtn");
       const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
       if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);
@@ -2510,13 +2511,11 @@ function drawPlot(card, res, series) {
     const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
       : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
-    // 目標賽事參考線 (res.race_ref, panels/race_refs.py): each point as a share of the target race
-    const tgt = res.race_ref?.target;
-    // a multi-day target: the share of the whole trip and of its per-day average
-    const share = (p) => !(tgt && tgt.cc > 0 && Number.isFinite(+yOf(p))) || srcOf[p.seriesIndex]?.role === "race_ref" ? ""
-      : tgt.multi && tgt.day_mean > 0
-        ? `<br><span style="opacity:.8">＝ ${esc(tgt.name)} 整趟的 ${Math.round(+yOf(p) / tgt.cc * 100)}%、每天平均的 ${Math.round(+yOf(p) / tgt.day_mean * 100)}%</span>`
-        : `<br><span style="opacity:.8">＝ 目標賽事的 ${Math.round(+yOf(p) / tgt.cc * 100)}%（${esc(tgt.name)}）</span>`;
+    // 目標線 (res.race_ref, panels/race_refs.py): each point as a share of the single-day target
+    // (a single-day race's constant, a multi-day trip's per-day average)
+    const tgt = res.race_ref?.target, goal = +(tgt?.goal ?? tgt?.cc);
+    const share = (p) => !(goal > 0 && Number.isFinite(+yOf(p))) || srcOf[p.seriesIndex]?.role === "race_ref" ? ""
+      : `<br><span style="opacity:.8">＝ 單日目標的 ${Math.round(+yOf(p) / goal * 100)}%</span>`;
     const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>${share(p)}`);
     if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
     // stacked series (依類別堆疊): add the stack's total — only the series shown in the
@@ -2593,8 +2592,8 @@ const ACT = {
 function drawActivity(card, res) {
   card.querySelector(".loading")?.remove();
   if (res.description) {
-    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
-    else {
+    // enlarged: no inline text — the title row is cloned from the card's h2, ? included
+    if (!res._zoom) {
       const h2 = card.querySelector("h2"), zb = h2?.querySelector(".zbtn");
       const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
       if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);

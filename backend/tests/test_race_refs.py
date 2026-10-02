@@ -54,7 +54,7 @@ def test_calculator_time_first_then_the_plans_estimate():
     a = next(x for x in r["lines"] if x["priority"] == "A")
     assert a["hours"] == 9 and a["time_source"] == "賽季計畫的預估移動時間"
     assert [x["priority"] for x in r["lines"]] == ["B", "A"]           # by date
-    assert r["target"]["event_id"] == "a" and r["half"] == pytest.approx(round(0.5 * a["cc"], 1))
+    assert r["target"]["event_id"] == "a" and r["target"]["goal"] == a["cc"]     # single day: its constant
 
 
 def test_multi_day_is_the_whole_trip_with_the_hardest_day_in_the_breakdown():
@@ -67,17 +67,35 @@ def test_multi_day_is_the_whole_trip_with_the_hardest_day_in_the_breakdown():
     assert ln["day_max"] == pytest.approx(round(CM.course_constant(8.0, 12, 1000, 1000), 1)) and ln["hardest_day"] == 2
 
 
-def test_apply_adds_labelled_dashed_lines_and_the_target():
+def test_apply_draws_one_line_for_the_next_a_race_plus_an_80_band():
+    # owner 2026-10-02: one line (the A race's single-day target), no 50 % / B / whole-trip lines
     res = RR.apply(chart(), plan(A, B), TODAY, fake({"a": [8.0], "b": [3.0]}))
     refs = [s for s in res["series"] if s.get("role") == "race_ref"]
-    assert len(refs) == 3                                               # A, B, 50 % of A
-    a = next(s for s in refs if s["name"].startswith("大霸尖山 · 定數"))
-    assert a["line_style"] == "dash" and a["label_end"] and a["data"]["kind"] == "hline"
+    lines = [s for s in refs if s["data"]["kind"] == "hline"]
+    assert len(lines) == 1 and not any("50%" in s["name"] for s in refs)
+    a = lines[0]
+    cc = res["race_ref"]["target"]["cc"]
+    assert a["name"] == f"大霸尖山 定數 {cc:.0f}（單日目標）" and a["data"]["y"] == cc
+    assert a["line_style"] == "dash" and a["label_end"]
     assert a["unit"] == {"id": "NONE"} and a["y_axis"] == "NONE"
-    half = next(s for s in refs if "50%" in s["name"])
-    assert "推估" in half["name"] and half["data"]["y"] == res["race_ref"]["half"]
-    assert res["race_ref"]["target"]["name"] == "大霸尖山"
-    assert res["description"].startswith("原本的說明。") and "目標賽事參考線" in res["description"]
+    assert "鳶嘴稍來" in a["tip"]                                         # the other race: in the hover only
+    band = next(s for s in refs if s["data"]["kind"] == "band")
+    assert band["data"]["range"] == [round(0.8 * cc, 1), cc] and not band.get("label_end")
+    assert res["race_ref"]["target"]["goal"] == cc
+    # the ?: a short guide, the formula on its last line
+    g = res["description"].split("\n")
+    assert len(g) == 5 and g[0].startswith("線＝下一場 A 賽事一天的難度（單日目標）") and "山本正嘉" in g[-1]
+    assert "推估" in g[2] and "80–100%" in g[2]
+
+
+def test_multi_day_trip_line_is_its_per_day_average():
+    hike = Event("h", "南湖大山", "2026-12-10", kind="baiyue", priority="A", days=3, distance_km=36, climbing_m=3000)
+    res = RR.apply(chart(), plan(hike), TODAY, fake({"h": [5.0, 8.0, 4.0]}))
+    lines = [s for s in res["series"] if s.get("role") == "race_ref" and s["data"]["kind"] == "hline"]
+    tg = res["race_ref"]["target"]
+    assert len(lines) == 1 and lines[0]["data"]["y"] == tg["day_mean"] == tg["goal"]
+    assert lines[0]["name"] == f"南湖大山 每天 {tg['day_mean']:.0f}（單日目標）"
+    assert f"整趟 3 天コース定數 {tg['cc']:.0f}" in lines[0]["tip"] and "（最難）" in lines[0]["tip"]
 
 
 def test_no_races_leaves_the_chart_and_says_why():
@@ -86,7 +104,8 @@ def test_no_races_leaves_the_chart_and_says_why():
     assert res["series"] == before["series"] and res["race_ref"]["target"] is None
     assert RR.NOTE_NONE in res["description"]
     only_b = RR.apply(chart(), plan(B), TODAY, fake({"b": [3.0]}))
-    assert only_b["race_ref"]["half"] is None and only_b["race_ref"]["target"]["event_id"] == "b"
+    assert only_b["race_ref"]["target"]["event_id"] == "b"               # no A race: the next B's line
+    assert only_b["description"].startswith("線＝下一場 B 賽事")
 
 
 def test_the_view_turns_it_on_and_validates_it():
