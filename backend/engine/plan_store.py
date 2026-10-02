@@ -109,6 +109,10 @@ async def _rows(db: AsyncSession, athlete_id: int) -> dict[str, PlanSession]:
 async def load(db: AsyncSession, athlete_id: int = 1, start: Optional[str] = None,
                end: Optional[str] = None) -> list[dict]:
     out = [to_dict(r) for r in (await _rows(db, athlete_id)).values()]
+    # done_by["index"] -> the current data source's index of the same start
+    # (engine/activity_key.py: a source switch / 同步資料 renumbers activities)
+    from backend.engine import activity_key as AK
+    AK.rebase_stored(out)
     if start or end:
         out = [s for s in out if s.get("day") and (not start or s["day"] >= start) and (not end or s["day"] <= end)]
     return sorted(out, key=lambda s: (s.get("day") or "9999", s["kind"] == "strength", s["uid"]))
@@ -386,11 +390,13 @@ UNLINKED_KEY = "plan.match.unlinked"
 
 def unlinked_indexes(entries: list, activities: list[dict]) -> set:
     """The stored unlinks ([{start, index}]) as current activity indexes (by start,
-    so a late-synced older activity that shifts the indexes keeps them right)."""
-    by_start = {a.get("start"): a.get("index") for a in activities if a.get("start")}
+    so a late-synced older activity that shifts the indexes keeps them right; the
+    nearest start within ±3 min, so the same run from another source matches too)."""
+    from backend.engine import activity_key as AK
+    idx = AK.StartIndex((a.get("start"), a.get("index")) for a in activities if a.get("start"))
     out = set()
     for e in entries or []:
-        i = by_start.get(e.get("start"))
+        i = idx.find(e.get("start"))
         if i is not None:
             out.add(i)
     return out
@@ -549,9 +555,10 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
         mt = p.stat().st_mtime_ns
     except OSError:
         return []
+    from backend.engine import activity_key as AK
     hit = cache.get((str(p), kinds))
     if hit and hit[0] == mt:
-        return hit[1]
+        return AK.rebase_stored(hit[1])        # the current source's indexes (activity_key.py)
     out: list[dict] = []
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
@@ -582,7 +589,7 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
     except sqlite3.Error:
         return []
     cache[(str(p), kinds)] = (mt, out)
-    return out
+    return AK.rebase_stored(out)
 
 
 def done_plan(db_path=None) -> dict:
@@ -639,9 +646,10 @@ def test_sessions(db_path=None) -> list[dict]:
         mt = p.stat().st_mtime_ns
     except OSError:
         return []
+    from backend.engine import activity_key as AK
     hit = _TEST_CACHE.get(str(p))
     if hit and hit[0] == mt:
-        return hit[1]
+        return AK.rebase_stored(hit[1])
     out: list[dict] = []
     try:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
@@ -665,4 +673,4 @@ def test_sessions(db_path=None) -> list[dict]:
     except sqlite3.Error:
         return []
     _TEST_CACHE[str(p)] = (mt, out)
-    return out
+    return AK.rebase_stored(out)

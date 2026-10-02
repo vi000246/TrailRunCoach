@@ -228,6 +228,10 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["primary_source"] = eff["setting"]
     out["primary_effective"] = eff["source"]
     out["primary_effective_label"] = P.LABELS.get(eff["source"] or "", None)
+    # the chart source in effect: a never-picked old "coros" reads as 同步資料
+    from backend.engine.wko5expr.datasource import CHOSEN_KEY, effective_source
+    out["chart_data_source_stored"] = out["chart_data_source"]
+    out["chart_data_source"] = effective_source(out["chart_data_source"], await repo.get(CHOSEN_KEY))
     creds, source = lookup_client_creds()
     out["tp_client_credentials_configured"] = creds is not None      # never the values
     out["tp_client_credentials_source"] = source                     # env|file|sealed|wko5_exe|none
@@ -259,6 +263,10 @@ async def put_sync_settings(body: SyncSettingsBody, athlete_id: int = 1,
     try:
         for k, v in sent.items():
             await repo.set(_SETTING_KEYS[k], v)
+        if "chart_data_source" in sent:
+            # an explicit pick: no longer read through the old-default migration
+            from backend.engine.wko5expr.datasource import CHOSEN_KEY
+            await repo.set(CHOSEN_KEY, True)
     except ValueError as e:
         raise HTTPException(400, str(e))
     rebuilt = await dedup.rebuild(db, athlete_id) if "primary_source" in sent else None

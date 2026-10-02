@@ -54,6 +54,10 @@ DEFAULTS: dict[str, Any] = {
     # folders, one file per activity from the primary source, the other only for
     # activities the primary lacks) | coros | tp (one folder only) | wko5 (cross-check)
     "charts.data_source": "synced",
+    # set when the user picks the chart source (設定 → 進階設定, the viewer's source chip).
+    # Unset + a stored "coros" = the pre-同步資料 setup (the old UI had no merged
+    # source): read as "synced" (wko5expr/datasource.effective_source)
+    "charts.data_source.chosen": False,
     # COROS / TP source: read thresholds / weight from the WKO5 athlete file
     # (opt-in cross-check; default = plan → athlete_settings → estimates, fitdataset.py)
     "charts.fit_settings_from_wko5": False,
@@ -226,7 +230,7 @@ def validate(key: str, value: Any) -> None:
     if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
         raise ValueError(f"{key} must be true/false/null")
     if key in ("charts.fit_settings_from_wko5", "power.accept_watch_power", "activities.exclude_bad",
-               "sync.secondary.auto") \
+               "sync.secondary.auto", "charts.data_source.chosen") \
             and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
     if key.endswith(".enabled") and not isinstance(value, bool):

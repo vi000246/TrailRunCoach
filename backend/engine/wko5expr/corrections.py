@@ -76,7 +76,10 @@ class CorrectionStore:
         return False
 
     def for_file(self, file: str, channel: str) -> list[Correction]:
-        return [c for c in self.items if c.file == file and c.channel == channel]
+        # the same FIT file in the 同步資料 source ("coros/…" prefix) too; never another
+        # source's file of the activity — a correction's times are offsets into its own file
+        from backend.engine.activity_key import same_file
+        return [c for c in self.items if same_file(c.file, file) and c.channel == channel]
 
     def apply(self, file: str, channel: str, times, values: list) -> list:
         """Return `values` with approved corrections applied (blanked)."""

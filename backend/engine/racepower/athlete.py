@@ -237,21 +237,29 @@ def is_hike(w) -> bool:
 
 
 def solo_hikes(path=None) -> set[str]:
-    """Hikes the user opted in as solo (paced by the athlete): their .wko4
-    file names. Everything else tagged hiking / mountaineering is treated as
-    group-paced and kept out of every target-time calibration."""
+    """Hikes the user opted in as solo (paced by the athlete): their file
+    names (+ "starts": {file: local start}). Everything else tagged hiking /
+    mountaineering is treated as group-paced and kept out of every
+    target-time calibration. A ByStartSet (engine/activity_key.py): `file in
+    solo` also matches the same trip under another source's file name."""
+    from backend.engine.activity_key import ByStartSet
     try:
-        return set(json.loads((path or SOLO_HIKES).read_text("utf-8")).get("files") or [])
+        d = json.loads((path or SOLO_HIKES).read_text("utf-8"))
+        return ByStartSet(d.get("files") or [], d.get("starts") or {})
     except (OSError, ValueError):
-        return set()
+        return ByStartSet()
 
 
 def set_solo_hikes(files, path=None) -> set[str]:
+    from backend.engine import activity_key as AK
     p = path or SOLO_HIKES
     p.parent.mkdir(parents=True, exist_ok=True)
     s = sorted({str(f) for f in files if f})
-    p.write_text(json.dumps({"files": s}, ensure_ascii=False), "utf-8")
-    return set(s)
+    old = solo_hikes(p)
+    starts = {f: old.starts.get(f) or AK.key_of(AK.start_of_file(f)) for f in s}
+    starts = {f: v for f, v in starts.items() if v}
+    p.write_text(json.dumps({"files": s, "starts": starts}, ensure_ascii=False), "utf-8")
+    return AK.ByStartSet(s, starts)
 
 
 def hiking_days(ds, today: dt.date, solo: Optional[set] = None) -> list[dict]:
@@ -1439,27 +1447,48 @@ HIKE_META = WX.HOME / "racepower_hike_meta.json"
 
 
 def hike_meta(path=None) -> dict:
-    """Per-trip records ({.wko4 file: {"pack_kg": float}}): the pack the
-    athlete carried (baiyue-from-running.md §5.1 point 3)."""
+    """Per-trip records ({file: {"pack_kg": float, "start": local start}}): the
+    pack the athlete carried (baiyue-from-running.md §5.1 point 3). A
+    ByStartDict (engine/activity_key.py): `.get(file)` also finds the trip
+    stored under another source's file name, by start time."""
+    from backend.engine.activity_key import ByStartDict
     try:
         d = json.loads((path or HIKE_META).read_text("utf-8"))
-        return {str(k): v for k, v in (d.get("trips") or {}).items() if isinstance(v, dict)}
+        return ByStartDict({str(k): v for k, v in (d.get("trips") or {}).items() if isinstance(v, dict)})
     except (OSError, ValueError):
-        return {}
+        return ByStartDict()
 
 
-def set_hike_meta(file: str, pack_kg: Optional[float], path=None) -> dict:
+def set_hike_meta(file: str, pack_kg: Optional[float], path=None, start=None) -> dict:
+    """Set / clear one trip's pack. The record of the same activity stored
+    under another source's file stays the one updated; new records carry the
+    local start (`start`, else the registered dataset's) so any source finds
+    them."""
+    from backend.engine import activity_key as AK
     p = path or HIKE_META
     trips = hike_meta(p)
+    key = trips.key_for(str(file), start)
     if pack_kg is None:
-        trips.pop(str(file), None)
+        trips.pop(key, None)
     else:
         if not 0 <= float(pack_kg) <= 40:
             raise ValueError("背負要在 0–40 kg")
-        trips[str(file)] = {**trips.get(str(file), {}), "pack_kg": float(pack_kg)}
+        rec = {**dict.get(trips, key, {}), "pack_kg": float(pack_kg)}
+        st = AK.key_of(start) if start is not None else AK.key_of(AK.start_of_file(str(file)))
+        if st and not rec.get("start"):
+            rec["start"] = st
+        trips[key] = rec
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"trips": trips}, ensure_ascii=False), "utf-8")
+    p.write_text(json.dumps({"trips": dict(trips)}, ensure_ascii=False), "utf-8")
     return trips
+
+
+def _trip_of(meta, w) -> Optional[dict]:
+    """The hike_meta record of a workout: by file, else by its start (activity_key.py)."""
+    f = getattr(w.entry, "file", None)
+    if hasattr(meta, "find"):
+        return meta.find(f, getattr(w.entry, "start", None))
+    return meta.get(f)
 
 
 def activity_pack(w, meta: Optional[dict] = None) -> dict:
@@ -1467,7 +1496,7 @@ def activity_pack(w, meta: Optional[dict] = None) -> dict:
     workout — the activity card's 「這次背多少」 (the 百岳 prediction uses it)."""
     if meta is None:
         meta = hike_meta()
-    rec = (meta.get(getattr(w.entry, "file", None)) or {}).get("pack_kg")
+    rec = (_trip_of(meta, w) or {}).get("pack_kg")
     return {"pack_kg": None if rec is None else float(rec), "recorded": rec is not None,
             "default_kg": None if rec is None else float(rec), "range": [0, 40], "file": w.entry.file,
             "note": "這次背多少（kg）：寫進 racepower_hike_meta.json，百岳預測會用；空白 = 沒記錄"}
@@ -1506,14 +1535,14 @@ def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs
 
     def pack_of(trip):
         w = by_idx.get(trip)
-        rec = meta.get(w.entry.file) if w is not None else None
+        rec = _trip_of(meta, w) if w is not None else None
         if rec and rec.get("pack_kg") is not None:
             return float(rec["pack_kg"])
         return CAP.PACK_DEFAULT_MULTI if days_of.get(trip, 1) > 1 else CAP.PACK_DEFAULT_SINGLE
     lo = (today - dt.timedelta(days=CAP_AET_DAYS)).isoformat()
     vr = CAP.run_speed_at_aet(gs, aet.get, lo)
     packs = {w.idx: pack_of(w.idx) for w in hikes}
-    recorded = {w.idx for w in hikes if (meta.get(w.entry.file) or {}).get("pack_kg") is not None}
+    recorded = {w.idx for w in hikes if (_trip_of(meta, w) or {}).get("pack_kg") is not None}
     return {"trail": CAP.trail_walk_windows(gs), "flat": CAP.flat_walk_windows(gs),
             "hike": CAP.hike_steep_windows(hr_wins), "hike_all": all_h,
             "hike_down": [x for x in all_h if x["g"] <= CAP.DOWN_CAP_G], "v_run": vr, "aet": aet,

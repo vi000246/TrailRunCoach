@@ -75,6 +75,11 @@ def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "") -> Datase
         raise
     st.finish()
     _LIVE.add(ds)
+    try:                            # stored plan rows find their activities by start (activity_key.py)
+        from backend.engine import activity_key as AK
+        AK.register_dataset(ds)
+    except Exception:               # noqa: BLE001
+        pass
     return ds
 
 
@@ -654,7 +659,7 @@ async def patch_activity(i: int, body: dict):
 def _set_pack(w, kg) -> None:
     from backend.engine.racepower import athlete as A
     try:
-        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg))
+        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg), start=w.entry.start)
     except (TypeError, ValueError) as e:
         raise HTTPException(400, str(e) or "背負要在 0–40 kg")
     try:                                     # the race-power walking model reads the packs too
