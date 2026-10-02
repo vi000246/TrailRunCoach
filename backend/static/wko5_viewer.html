@@ -2366,7 +2366,9 @@ function drawPlot(card, res, series) {
   // reference lines (hline: race_refs' 目標賽事 lines) don't stretch an ECharts axis by themselves:
   // widen the axis so a race far above the training points (大小霸 67 vs ~20) stays in view
   axisIds.forEach((id, i) => {
-    const ys = series.filter((s) => s.data?.kind === "hline" && Math.max(0, axisIds.indexOf(s.y_axis || "NONE")) === i)
+    // only the race lines: fixed guide lines (e.g. コース定数 「40 要過夜」) must not stretch the axis
+    const ys = series.filter((s) => s.data?.kind === "hline" && s.role === "race_ref"
+        && Math.max(0, axisIds.indexOf(s.y_axis || "NONE")) === i)
       .map((s) => +s.data.y).filter(Number.isFinite);
     if (!ys.length || (axisCfg[id] || {}).max != null) return;
     const top = Math.max(...ys) * 1.08, prev = yAxis[i].max;
