@@ -440,6 +440,7 @@ def card(ds, w) -> dict:
     bat = battery(ds, w, s, cp)
     n = len(IR.find_reps(ds, w, s, cp, None)["bouts"])
     why = ("標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）" if fl else
+           "高強度時間夠算品質課，但找不到一趟一趟的用力段（例如一路爬坡），沒有趟可判讀" if c["type"] == "quality" else
            f"這次不是間歇課（{c['type_label']}，課表也沒有對應的間歇）")
     return {"ok": False, "state": "offer", "why": why, "flagged": fl, "n_bouts": n, "type_label": c["type_label"],
             **(_public(bat) if bat else {})}
