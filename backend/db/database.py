@@ -60,6 +60,7 @@ async def _migrate_schema():
         ("plan_sessions", "variant_blocks", "TEXT"),
         ("plan_sessions", "variant_adj", "TEXT"),
         ("plan_sessions", "target_basis", "TEXT"),
+        ("plan_sessions", "steps", "TEXT"),
         ("activity_tags", "exclusion", "TEXT"),
         ("activity_tags", "name", "TEXT"),
         ("activity_tags", "tags_json", "TEXT"),

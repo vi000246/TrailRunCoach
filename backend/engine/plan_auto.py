@@ -281,7 +281,13 @@ def rescale_sessions(stored: list[dict], old: float, new: float, today: str) -> 
             continue
         t2, d2 = rescale_watts(s.get("target"), old, new), rescale_watts(s.get("detail"), old, new)
         x = {**s, "target": t2 or "", "detail": d2 or ""}
-        if t2 != s.get("target") or d2 != s.get("detail") or _has_power(x, new):
+        if s.get("steps"):
+            # a structure saved in the editor (engine/workout_steps.py): % CP / zone steps follow
+            # the new CP by themselves; the absolute watt overrides are rescaled like the text
+            from backend.engine import workout_steps as WS
+            x["steps"] = WS.rescale_abs_power(s["steps"], old, new)
+        if t2 != s.get("target") or d2 != s.get("detail") or x.get("steps") is not s.get("steps") or \
+                _has_power(x, new):
             before = {k: s.get(k) for k in ("target", "detail") if s.get(k) != x.get(k)}
             items.append({"action": "changed", "uid": s["uid"], "day": s.get("day"), "kind": s.get("kind"),
                           "title": s.get("title"), "minutes": s.get("minutes"), "tss": s.get("tss"),
