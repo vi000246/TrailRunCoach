@@ -2357,6 +2357,15 @@ function drawPlot(card, res, series) {
       splitLine: { show: i === 0, lineStyle: { color: line } },
     };
   });
+  // reference lines (hline: race_refs' 目標賽事 lines) don't stretch an ECharts axis by themselves:
+  // widen the axis so a race far above the training points (大小霸 67 vs ~20) stays in view
+  axisIds.forEach((id, i) => {
+    const ys = series.filter((s) => s.data?.kind === "hline" && Math.max(0, axisIds.indexOf(s.y_axis || "NONE")) === i)
+      .map((s) => +s.data.y).filter(Number.isFinite);
+    if (!ys.length || (axisCfg[id] || {}).max != null) return;
+    const top = Math.max(...ys) * 1.08, prev = yAxis[i].max;
+    yAxis[i].max = (e) => Math.max(typeof prev === "function" ? prev(e) : e.max, top);
+  });
   // workout charts over time (or distance) join the synced hover with the map and each other;
   // x-y scatters (HR vs power, LSS vs grade) and tables don't
   const hx = res.workout == null || cat ? null
