@@ -21,6 +21,14 @@ aet_points / aet_validity
     The drift points (first-half HR, drift, SE) of road runs in the last
     AET_DAYS, and aet_aggregate on them: valid = SE ≤ 3 bpm and no shift
     > 5 bpm over the last 6 (推估, B3).
+
+Heat bands (workout_review.temp_band: < 25 / 25–28 / > 28 °C, 推估 cut-offs):
+runs are aggregated only with runs of the same band — heat inflates the drift
+(Lafrenz 2008; Beiter 2025), so a mean across bands mixes the season into
+the number. rolling() = each run with the earlier runs of its own band;
+aet_points keeps the cool band (and runs without a temperature, as before
+the bands): the AeT regression compares across runs, and a heat covariate
+(unsourced-rules.md §B6) is not built yet.
 """
 from __future__ import annotations
 
@@ -76,6 +84,31 @@ def text(a: Optional[dict]) -> str:
     return f"{a['mean'] * 100:.1f}% ± {a['se'] * 100:.1f} pp（{a['n']} 次平均）"
 
 
+AET_BANDS = ("cool", "none")   # the bands the AeT aggregate reads (see the module doc)
+
+
+def band_of(dr: dict) -> str:
+    from backend.engine import workout_review as WR
+    return dr.get("temp_band") or WR.temp_band(dr.get("temp_c"))
+
+
+def pick_band(points: list[dict]) -> Optional[str]:
+    """The band to report for a list of points ({"band", "drift"}, oldest
+    first): the latest point's band when it has ≥ AGG_MIN points, else the
+    band with the most points (ties: the latest seen). None without any."""
+    pts = [p for p in points if p.get("drift") is not None]
+    if not pts:
+        return None
+    n: dict = {}
+    for p in pts:
+        n[p.get("band") or "none"] = n.get(p.get("band") or "none", 0) + 1
+    last = pts[-1].get("band") or "none"
+    if n[last] >= AGG_MIN:
+        return last
+    order = [p.get("band") or "none" for p in pts]
+    return max(n, key=lambda b: (n[b], max(i for i, x in enumerate(order) if x == b)))
+
+
 def _basis_point(w, m: dict, basis: str) -> Optional[dict]:
     from backend.engine import workout_review as WR
     dr = (m or {}).get("drift") or {}
@@ -84,13 +117,14 @@ def _basis_point(w, m: dict, basis: str) -> Optional[dict]:
         return None
     se = dr.get("pw_drift_se" if basis == "power" else "drift_se")
     return {"idx": w.idx, "date": WR._wdate(w).isoformat(), "day": math.floor(w.day), "drift": d, "se": se,
-            "tier": WR.drift_tier(dr)}
+            "tier": WR.drift_tier(dr), "band": band_of(dr)}
 
 
 def rolling(ds, basis: str = "pace", n: int = AGG_N, days: int = AGG_DAYS) -> dict:
     """{workout index: aggregate()} for each run the season drift charts plot
     (drift(basis, "all"): road, test or reference tier): that run and the
-    eligible runs in the `days` before it, the last `n`. Only where ≥ AGG_MIN."""
+    eligible runs of the same temperature band in the `days` before it, the
+    last `n` (`band` on each). Only where ≥ AGG_MIN."""
     from backend.engine import workout_review as WR
     pts = []
     for w in sorted(ds.workouts, key=lambda x: x.day):
@@ -105,17 +139,18 @@ def rolling(ds, basis: str = "pace", n: int = AGG_N, days: int = AGG_DAYS) -> di
     WR._flush(ds)
     out = {}
     for i, p in enumerate(pts):
-        win = [q for q in pts[:i + 1] if p["day"] - days < q["day"]]
+        win = [q for q in pts[:i + 1] if p["day"] - days < q["day"] and q["band"] == p["band"]]
         a = aggregate(win, n)
         if a and a["n"] >= AGG_MIN:
-            out[p["idx"]] = a
+            out[p["idx"]] = {**a, "band": p["band"]}
     return out
 
 
 def aet_points(ds, today: dt.date, days: int = AET_DAYS) -> list[dict]:
     """(first-half HR, drift, SE) of the road runs in `days` up to `today`
-    whose drift_of passed (test or reference tier), oldest first: Pw:HR when
-    the run has it (the AeT test's basis), else Pa:HR."""
+    whose drift_of passed (test or reference tier) in the cool band or
+    without a temperature (AET_BANDS), oldest first: Pw:HR when the run has
+    it (the AeT test's basis), else Pa:HR."""
     from backend.engine import workout_review as WR
     from backend.engine.overview import category
     from backend.engine.wko5expr.dataset import date_to_day
@@ -129,7 +164,7 @@ def aet_points(ds, today: dt.date, days: int = AET_DAYS) -> list[dict]:
             continue
         m = WR.measure(ds, w)
         dr = (m or {}).get("drift") or {}
-        if WR.drift_tier(dr) is None:
+        if WR.drift_tier(dr) is None or band_of(dr) not in AET_BANDS:
             continue
         if dr.get("pw_drift") is not None and (dr.get("pw_ok") or dr.get("pw_ref_ok")):
             hr1, d, se, basis = dr.get("pw_hr1"), dr["pw_drift"], dr.get("pw_drift_se"), "power"

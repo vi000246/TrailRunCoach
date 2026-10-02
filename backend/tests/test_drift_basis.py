@@ -245,8 +245,14 @@ def test_season_drift_charts_use_the_card_definition():
                 assert f'drift_avg("{s["basis"]}"' in s["expression"], s
             else:
                 assert f'drift("{s["basis"]}")' in s["expression"], s
-        assert sum("平均" in s["name"] for s in drawn) == 6
+        # heat bands: one 6-run mean per temperature band and basis (4 × 2), + the ± SE markers (4)
+        means = [s for s in drawn if s["name"].startswith("6 次平均")]
+        assert len(means) == 8 and sum("平均" in s["name"] for s in drawn) == 12
+        for b in ("cool", "warm", "hot", "none"):
+            assert sum(f'"mean", "{b}")' in s["expression"] for s in means) == 2
+        assert all("🌡" in s["name"] for s in means)
         assert sum(s["name"].startswith("參考") for s in drawn) == 2
+        assert "溫度分區" in c["description"] and "> 25 °C 的" not in c["description"]
         assert "參考（暖身後 30–40 分，未達 UA 測試標準）" in c["description"] and "推估" in c["description"]
         assert "6 次" in c["description"] and "標準誤" in c["description"]
         assert "判讀卡" in c["description"] and "WKO5 存的 Pa:HR" in c["description"]
