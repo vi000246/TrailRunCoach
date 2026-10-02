@@ -337,6 +337,13 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
 
     def compute():
         res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None, params=params)
+        if ch.get("race_refs") == "course_constant" and not needs_workout:
+            # 目標賽事參考線 (panels/race_refs.py): the plan and the dataset are in the cache key
+            import math
+            from backend.engine.panels import race_refs as RR
+            from backend.engine.planning import Plan
+            from backend.files.wko5_athlete import day_to_date
+            res = RR.apply(res, getattr(ds, "plan", None) or Plan(), day_to_date(int(math.floor(ds.today))))
         if winfo:
             rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
             res = {**res, **winfo, "recent_bests": rb}
