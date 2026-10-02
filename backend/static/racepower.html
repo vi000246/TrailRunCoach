@@ -1304,14 +1304,14 @@ function renderFuel() {
     const fk = F.food_kg_mean, diff = ok(fk) ? fk - F.food_check.default_kg : 0;
     h += ftile("🎒", "糧食", ok(fk) ? `${fk.toFixed(2)} kg/天` : "–", `背負預設 −${F.food_check.default_kg} kg/天${badge("推估")}`,
       "每天糧食 = 每日合計（取 Pandolf / Yamamoto 較高者）× 補回 85 % ÷ 4.4 kcal/g。4.4 kcal/g 是 thru-hiker 每盎司 125 kcal 的原則；每天有約 500 kcal 赤字，3–5 天可以接受。跟團時晚餐通常由嚮導負責，自己背的會少一些。",
-      "§5.2：0.7 kg × 4.4 kcal/g ≈ 3080 kcal；筆記 輕量化食物.md:124-132（125 kcal/oz）", Math.abs(diff) > 0.15 ? "warnt" : "");
+      "§5.2：0.7 kg × 4.4 kcal/g ≈ 3080 kcal（125 kcal/oz）", Math.abs(diff) > 0.15 ? "warnt" : "");
   } else {
     if (ld.g_day) h += ftile("🍚", "賽前超補", rng(ld.g_day, n0, "g"), esc(ld.label),
       `早餐：賽前 1–4 h 吃 ${rng(ld.breakfast_g, n0, "g")}（1–4 g/kg）。${ld.drink}。咖啡因（選用）${rng(ld.caffeine_mg, n0, "mg")}，賽前 30–90 分鐘。`,
       `${ld.src}；${ld.breakfast_src}；${ld.caffeine_src}；${ld.drink_src}`);
     if (!w.thirst && ok(w.dehydration)) h += ftile("⚖️", "預估脫水", pct1(Math.max(0, w.dehydration)), `流汗約 ${f1(w.sweat_l)} L${badge("推估")}`,
       "流汗率沒有個人紀錄：比賽配速時涼天約 1.0 L/h、30 °C 約 1.75 L/h，再依該段每小時消耗 ÷ 700 kcal 調整（走得慢流得少，推估），減去照建議喝的水；建議水量也不超過這個流汗率。超過體重 2 % 表現會下降；但不要為了補滿而喝到體重增加。",
-      "ACSM 2007（Sawka）：脫水不超過體重 2 %；Baker 2017 流汗率 0.5–2.0 L/h；筆記 補水補碳:36-37", w.dehydration > 0.02 ? "warnt" : "");
+      "ACSM 2007（Sawka）：脫水不超過體重 2 %；Baker 2017 流汗率 0.5–2.0 L/h", w.dehydration > 0.02 ? "warnt" : "");
   }
   h += `</div>`;
   if (!hike && ok(F.intake_kcal)) h += `<div class="chips"><span class="chip">攝取約 <b>${n0(F.intake_kcal)}</b> kcal</span><span class="chip">缺口約 <b>${n0(F.deficit_kcal)}</b> kcal（身體肝醣補上）</span>` +

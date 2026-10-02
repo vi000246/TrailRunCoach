@@ -52,7 +52,7 @@ CHO_RULES = {
              "src": "Jeukendrup 2014；Burke 2011；Vitale & Getzin 2019（< 2.5 h：30–60 g/h）"},
     "long": {"lo": 60.0, "hi": 90.0, "dose_g": 30.0, "every": (20, 30), "label": "全馬／越野 2–6 h：葡萄糖＋果糖",
              "src": "Jeukendrup 2014；Burke 2011（> 2.5 h 最多 90 g/h，混合醣）；Vitale & Getzin 2019；"
-                    "筆記「> 3 h 至少 60 g/h」"},
+                    "> 3 h 至少 60 g/h（常見建議，推估）"},
     "ultra": {"lo": 30.0, "hi": 90.0, "dose_g": 25.0, "every": (30, 45), "label": "超過 6 h：30–50 起步，能吃就往 60–90",
               "src": "Tiller 2019 ISSN 超馬立場（30–50 g/h、150–400 kcal/h）；Jeukendrup 2014（超耐力約 90 g/h）"},
     "hike": {"lo": 30.0, "hi": 50.0, "dose_g": 40.0, "every": (45, 60), "label": "百岳行進間（推估）",
@@ -65,9 +65,9 @@ WATER = {"long": (400.0, 800.0, "Vitale & Getzin 2019：400–800 ml/h；上限�
 WATER_WIDTH = 200.0              # the band at one temperature: 400–600 cool … 600–800 hot (推估)
 T_COOL, T_HOT = 10.0, 30.0       # °C ends of the temperature shift (推估)
 HOT_HALF_C = 25.0                # a half marathon this hot: planned drinking (Kenefick 2018)
-SODIUM = {"long": (300.0, 600.0, "Vitale & Getzin 2019：300–600 mg/h（> 2 h、流汗多）；筆記 400 mg/h"),
+SODIUM = {"long": (300.0, 600.0, "Vitale & Getzin 2019：300–600 mg/h（> 2 h、流汗多）；取 400 mg/h（推估）"),
           "ultra": (300.0, 600.0, "Vitale 2019 300–600 mg/h；ISSN 超馬：飲料 ≥ 575 mg/L（Tiller 2019）"),
-          "hike": (200.0, 300.0, "推估：筆記健行 200 mg/h ＋ Vitale 下限 300 mg/h"),
+          "hike": (200.0, 300.0, "推估：健行 200 mg/h ＋ Vitale 下限 300 mg/h"),
           "half": (0.0, 0.0, "< 90 min：通常不必另外補鈉（§4.2）")}
 ULTRA_NA_PER_L = 575.0           # ISSN: drink sodium > 575 mg/L
 CARRY_SPARE = 1.2                # 筆記：補給多帶 20 %（補水補碳:178）
@@ -326,7 +326,7 @@ def loading(weight: float, hours: float, cls: str) -> dict:
     return {"kind": "load", "g_day": g, "label": lab, "src": src, "badge": None,
             "breakfast_g": [1.0 * weight, 4.0 * weight], "breakfast_src": "Vitale & Getzin 2019：賽前 1–4 h 吃 1–4 g/kg",
             "caffeine_mg": [3.0 * weight, 6.0 * weight], "caffeine_src": "Vitale & Getzin 2019：3–6 mg/kg，賽前 30–90 min",
-            "drink": "賽前 2–3 h 喝 500 ml，10 分鐘前再 300 ml", "drink_src": "筆記 補水補碳:13-14"}
+            "drink": "賽前 2–3 h 喝 500 ml，10 分鐘前再 300 ml", "drink_src": "教練常見做法（推估）"}
 
 
 # ---------------------------------------------------------------------------

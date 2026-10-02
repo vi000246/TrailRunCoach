@@ -262,7 +262,7 @@ HR_MODELS = [
     {"id": "rqhrr", "title": "徐國峰 RQ 儲備心率（% HRR）", "basis": "hrr", "zones": lambda: Z.RQ_HRR_ZONES,
      "estimate": True,
      "source": "RQ 跑力（徐國峰）儲備心率法；T 區 84–88% HRR 出自 runningquotient.com/article/single/52，"
-               "其他區界照你的筆記，沒有逐一對過 RQ 原文（推估）"},
+               "其他區界沒有逐一對過 RQ 原文（推估）"},
 ]
 POWER_MODELS = [
     {"id": "palladino", "title": "Palladino 10 區（% CP）", "basis": "cp", "zones": lambda: Z.PALLADINO_POWER_ZONES,

@@ -1720,7 +1720,7 @@ function openDlg(s, day) {
   const pastOpen = s && s.state === "active" && s.day <= D.today && (s.link_options || []).length;
   db.hidden = !(s && (s.state === "done" || s.state === "missed" || pastOpen));
   if (s && s.state === "done") db.innerHTML = vsHtml(s) +
-    (s.note ? `<br><span class="adapt-note" title="自動調整（engine/adapt.py）：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬推估）">⚠ ${esc(s.note)}</span>` : "");
+    (s.note ? `<br><span class="adapt-note" title="自動調整：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬推估）">⚠ ${esc(s.note)}</span>` : "");
   else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}${linkSel(s, "配對活動…")}`;
   else if (pastOpen) db.innerHTML = `<span class="meta">還沒配到活動</span>${linkSel(s, "配對活動…")}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);

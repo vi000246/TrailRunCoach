@@ -86,16 +86,16 @@ def fit_rest_max(ds, today):
 def _register() -> None:
     CAL.register(CAL.Item(
         name="trail_max_min_km", label="越野全力的最短距離", unit="km", default=10.0,
-        default_src="推估（作者的規則：他的比賽都超過 10 km）", k=3, min_n=3, fit=fit_trail_km,
+        default_src="推估（越野賽通常超過 10 km）", k=3, min_n=3, fit=fit_trail_km,
         bounds=(3.0, 60.0), digits=1,
         help="越野跑要多長才可能算全力（給比賽功率／心率模型當全力樣本）。本人值 = 你標記全力的越野比賽距離的第 10 百分位。"))
     CAL.register(CAL.Item(
         name="trail_max_min_min", label="越野全力的最短時間", unit="分", default=90.0,
-        default_src="推估（作者的規則）", k=3, min_n=3, fit=fit_trail_min, bounds=(20.0, 600.0), digits=0,
+        default_src="推估", k=3, min_n=3, fit=fit_trail_min, bounds=(20.0, 600.0), digits=0,
         help="越野跑要多久才可能算全力。本人值 = 你標記全力的越野比賽移動時間的第 10 百分位。"))
     CAL.register(CAL.Item(
         name="effort_rest_max", label="全力時最多的長休息比例", unit="比例", default=0.10,
-        default_src="推估（作者 7 場比賽 0–5 %，留餘裕）", k=3, min_n=3, fit=fit_rest_max,
+        default_src="推估（7 場比賽 0–5 %，留餘裕）", k=3, min_n=3, fit=fit_rest_max,
         bounds=(0.02, 0.30), digits=2,
         help="停下 ≥ 5 分鐘的時間佔總時間超過這個比例，強度再高也算「有拼但有休息」。本人值 = 你的全力活動長休息比例的 p90 × 1.5。"))
 

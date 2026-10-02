@@ -38,7 +38,7 @@ SRC = {
     "hr_base": "Uphill Athlete（AeT 以下累積有氧基礎）；長天後段心率飄移（Coyle & González-Alonso 2001）",
     "power_easy": "路跑輕鬆／長跑看功率（Palladino Z1–Z2 % CP），心率 ≤ AeT 當上限：天熱、疲勞時心率先到就放慢",
     "power_iv":"Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）",
-    "climb": "長爬坡：> 8% 功率低估、心率在 20 分以上才準（vo2max-gate-and-trail-metric.md §2）",
+    "climb": "長爬坡：> 8% 功率低估、心率在 20 分以上才準（推估）",
     "down": "下坡：Stryd 功率低估離心負荷（Kipp 2023），看下降量與技術",
     "cp": "CP 測試：全力段不設上下限，事後用功率算 CP",
     "aet": "AeT 測試：依方式（徐國峰 90／Friel 看心率；UA／Evoke 固定功率）",

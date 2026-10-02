@@ -115,15 +115,15 @@ def _none(ds=None, today=None):
 
 CAL.register(CAL.Item(
     name="drift_early_s", label="飄移：暖身段（前段停等）", unit="秒", default=1200.0,
-    default_src="推估（作者的市區段 20 分）", k=20, min_n=MIN_RUNS, fit=fit_early, bounds=(600.0, 1500.0), digits=0,
+    default_src="推估（市區路跑的典型值 20 分）", k=20, min_n=MIN_RUNS, fit=fit_early, bounds=(600.0, 1500.0), digits=0,
     help="跑步開頭這段時間裡的停等（紅綠燈、等人）都當暖身，飄移從最後一次停等後才開始算。本人值 = 你路跑前段最後一次停等時間的 p95。"))
 CAL.register(CAL.Item(
     name="drift_tail_s", label="飄移：回程段（結尾停等）", unit="秒", default=720.0,
-    default_src="推估（作者 8 週 15/15 校正）", k=20, min_n=MIN_RUNS, fit=fit_tail, bounds=(300.0, 900.0), digits=0,
+    default_src="推估（8 週路跑資料校正）", k=20, min_n=MIN_RUNS, fit=fit_tail, bounds=(300.0, 900.0), digits=0,
     help="結尾這段時間裡的一群停等當回程緩和，不算進飄移。本人值 = 你路跑結尾那群停等起點距結束的 p95。"))
 CAL.register(CAL.Item(
     name="drift_max_vi", label="飄移：功率起伏上限（VI）", unit="", default=1.04,
-    default_src="推估（作者的跑步校正）", k=1, min_n=10 ** 9, fit=_none, bounds=(1.01, 1.15), digits=2,
+    default_src="推估（單一跑者資料校正）", k=1, min_n=10 ** 9, fit=_none, bounds=(1.01, 1.15), digits=2,
     manual_only=True, help="穩定段的 VI（NP ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。"))
 CAL.register(CAL.Item(
     name="drift_tau_s", label="飄移：心率延遲 τ", unit="秒", default=60.0,

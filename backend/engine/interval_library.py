@@ -103,16 +103,16 @@ def _v(key, rung, cls, reps, work_s, rest_s, rest_mode, lo, hi, terrain="flat", 
 
 
 HAUGEN = "Haugen 2022（threshold intervals 3–15 分、休 1–2 分）"
-PALLADINO_NT = "Palladino near-threshold（工休比 3:1–4:1，你的筆記）"
+PALLADINO_NT = "Palladino near-threshold（工休比 3:1–4:1）"
 LIBRARY: dict[str, tuple[Variant, ...]] = {
     # ---- Zone 3 (Z3sub 90–95 % CP) -------------------------------------------
     "z3a": (
         _v("t1a", "z3a", "Z3sub", 3, 360, 90, "jog", 0.90, 0.95, canonical=True,
-           src=f"{HAUGEN}；{PALLADINO_NT}；徐國峰：先練 3 區（私訊）"),
+           src=f"{HAUGEN}；{PALLADINO_NT}；徐國峰（教練）：先練 3 區"),
         _v("t1b", "z3a", "Z3sub", 6, 180, 60, "jog", 0.92, 0.97, src=f"{HAUGEN}；短趟強度略高：推估"),
         _v("t1c", "z3a", "Z3sub", 3, 360, 120, "jog_down", 0.90, 0.95, "hill", grade="4–6%",
            src="Haugen 2022（坡 5–10%）；Koop／CTS 上坡"),
-        _v("t1d", "z3a", "Z3sub", 1, 1200, 0, "none", 0.88, 0.92, src="Daniels：20 分 T 節奏跑（你的筆記）",
+        _v("t1d", "z3a", "Z3sub", 1, 1200, 0, "none", 0.88, 0.92, src="Daniels：20 分 T 節奏跑",
            src_kind="coach"),
     ),
     "z3b": (
@@ -126,15 +126,15 @@ LIBRARY: dict[str, tuple[Variant, ...]] = {
     ),
     "z3c": (
         _v("t3a", "z3c", "Z3sub", 2, 720, 120, "jog", 0.90, 0.95, canonical=True,
-           src="WKO 研討會 FR:214-218（閾值以下先延長時間）；CTS TempoRun 每趟 8–20 分", src_kind="coach"),
-        _v("t3b", "z3c", "Z3sub", 1, 1440, 0, "none", 0.88, 0.92, src="Daniels 節奏跑（你的筆記）", src_kind="coach"),
+           src="WKO 研討會（閾值以下先延長時間）；CTS TempoRun 每趟 8–20 分", src_kind="coach"),
+        _v("t3b", "z3c", "Z3sub", 1, 1440, 0, "none", 0.88, 0.92, src="Daniels 節奏跑", src_kind="coach"),
         _v("t3c", "z3c", "Z3sub", 2, 720, 180, "jog_down", 0.90, 0.95, "hill", grade="長坡 4–6%",
            src="Koop／CTS：長上坡穩定爬升（越野專項）", src_kind="coach"),
     ),
     # ---- T+ (Z3near 97–100 % CP): maintenance once Zone 5 is open -------------
     "tp": (
         _v("tpa", "tp", "Z3near", 3, 420, 120, "jog", 0.97, 1.00, canonical=True,
-           src="Palladino near-threshold 每趟 7–10 分、3:1–4:1（你的筆記）", src_kind="coach"),
+           src="Palladino near-threshold 每趟 7–10 分、3:1–4:1", src_kind="coach"),
         _v("tpb", "tp", "Z3near", 4, 300, 90, "jog", 0.98, 1.01,
            src="Palladino near-threshold；Stryd Cruise Intervals 94–100% CP", src_kind="coach"),
         _v("tpc", "tp", "Z3near", 3, 420, 120, "jog_down", 0.97, 1.00, "hill", grade="4–6%",
@@ -143,17 +143,17 @@ LIBRARY: dict[str, tuple[Variant, ...]] = {
     # ---- Zone 5 --------------------------------------------------------------------
     "z5a": (
         _v("v1a", "z5a", "Z5", 5, 120, 120, "walk", 1.06, 1.12, canonical=True,
-           src="徐國峰：5 區每趟 ≥ 2 分（私訊）；Buchheit & Laursen 2013：休 < 2–3 分用被動恢復、約 10 分 T@VO2max"),
-        _v("v1b", "z5a", "Z5", 4, 150, 120, "walk", 1.05, 1.10, src="Palladino MAP 每趟 2.5–3 分（你的筆記）",
+           src="徐國峰（教練）：5 區每趟 ≥ 2 分；Buchheit & Laursen 2013：休 < 2–3 分用被動恢復、約 10 分 T@VO2max"),
+        _v("v1b", "z5a", "Z5", 4, 150, 120, "walk", 1.05, 1.10, src="Palladino MAP 每趟 2.5–3 分",
            src_kind="coach"),
         _v("v1c", "z5a", "Z5", 5, 120, 120, "jog_down", 1.06, 1.12, "hill", grade="6–10%",
            src="Haugen 2022；Barnes 2013（上坡間歇）；Koop"),
         _v("v1d", "z5a", "Z5", 4, 120, 120, "walk", 1.05, 1.10, pattern=(120, 180, 180, 120),
-           src="你的筆記「Pyramid／Fartlek」；結構屬推估", src_kind="推估"),
+           src="Pyramid／Fartlek；結構屬推估", src_kind="推估"),
     ),
     "z5b": (
         _v("v2a", "z5b", "Z5", 4, 180, 180, "jog", 1.05, 1.10, canonical=True,
-           src="Koop／CTS 6×3 分、休 3 分；Palladino MAP 1:1（你的筆記）", src_kind="coach"),
+           src="Koop／CTS 6×3 分、休 3 分；Palladino MAP 1:1", src_kind="coach"),
         _v("v2b", "z5b", "Z5", 6, 120, 120, "walk", 1.06, 1.12, src="Buchheit & Laursen 2013 Part II 表 1（6–10×2 分）"),
         _v("v2c", "z5b", "Z5", 4, 180, 180, "jog_down", 1.05, 1.10, "hill", grade="6–10%",
            src="Koop：「uphill if possible」", src_kind="coach"),
@@ -161,10 +161,10 @@ LIBRARY: dict[str, tuple[Variant, ...]] = {
     ),
     "z5c": (
         _v("v3a", "z5c", "Z5", 5, 180, 150, "walk", 1.05, 1.10, canonical=True,
-           src="Palladino：加組數＋縮短休息（你的筆記）；Wen 2019：每堂 ≥ 15 分效果較大"),
+           src="Palladino：加組數＋縮短休息；Wen 2019：每堂 ≥ 15 分效果較大"),
         _v("v3b", "z5c", "Z5", 5, 180, 120, "walk", 1.05, 1.10, pattern=(120, 180, 240, 180, 120),
-           src="你的筆記「Pyramid」；結構屬推估", src_kind="推估"),
-        _v("v3c", "z5c", "Z5", 6, 150, 120, "walk", 1.05, 1.10, src="Palladino MAP 每趟 2.5–3 分（你的筆記）",
+           src="Pyramid；結構屬推估", src_kind="推估"),
+        _v("v3c", "z5c", "Z5", 6, 150, 120, "walk", 1.05, 1.10, src="Palladino MAP 每趟 2.5–3 分",
            src_kind="coach"),
         _v("v3d", "z5c", "Z5", 5, 180, 150, "jog_down", 1.05, 1.10, "hill", grade="6–10%",
            src="Haugen 2022；Koop（上坡）"),
