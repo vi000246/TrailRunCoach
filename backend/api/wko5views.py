@@ -255,6 +255,10 @@ def list_views():
                          # and locks 配速／功率 toggles to pace (power_use.py)
                          "power": PU.chart_needs_power(c), "power_basis": PU.power_basis(c),
                          **({"zoned": c["zoned"]} if c.get("zoned") else {}),
+                         # 主要訓練項目 (engine/primary_sport.py): the viewer hides charts whose
+                         # `sports` doesn't list the athlete's sport and sorts by `order`
+                         **({"sports": c["sports"]} if c.get("sports") else {}),
+                         **({"order": c["order"]} if c.get("order") else {}),
                          **({"view": c.get("view")} if c.get("kind") == "periodzones" else {})}
                         for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
@@ -942,6 +946,19 @@ def athlete_summary(parity: Optional[bool] = None):
         "wko5_pmc_snapshot": a.pmc_snapshot,
         "settings": {k: [[d.isoformat(), val] for d, val in v] for k, v in a.settings.items()},
     }
+
+
+@router.get("/primary-sport")
+def primary_sport():
+    """主要訓練項目 (engine/primary_sport.py): the setting (auto | trail | road), the sport in
+    effect and the suggestion from the data / the next A race (shown next to the control)."""
+    from backend.engine import primary_sport as PS
+    import math
+    from backend.engine.planning import Plan
+    from backend.files.wko5_athlete import day_to_date
+    ds = _dataset()
+    plan = Plan.load()                 # the season plan's events (ds.plan is empty in parity mode)
+    return PS.resolve(ds, plan.events, day_to_date(int(math.floor(ds.today))))
 
 
 # ---------------------------------------------------------------------------

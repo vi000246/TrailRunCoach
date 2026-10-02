@@ -58,7 +58,10 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     from backend.engine.wko5expr.datasource import read_setting
     auto_on = read_setting("plan.auto.enabled", True) is not False
     # saving 課表偏好 or 不排課日期, or accepting / cancelling a B2B, regenerates
-    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc))
+    # 主要訓練項目 (engine/primary_sport.py): switching it regenerates too
+    from backend.engine import primary_sport as PSP
+    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
+           PSP.stored())
     with _lock:
         hit = _cache.get(key)
     if hit is not None:
@@ -982,7 +985,8 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
     ter = "trail" if kind == "hike" or ter in ("trail", "hike") else "road"
     return TR.recommend(WS.templates(), kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
                         phase=_phase_on(inp, day), z5_open=bool((gate.get("z5") or {}).get("open")),
-                        rung=rung_now, ladder_key=key, ladder_reason=why)
+                        rung=rung_now, ladder_key=key, ladder_reason=why,
+                        sport=(inp.get("cur") or {}).get("primary_sport") or "trail")
 
 
 @router.get("/sessions/{uid}/coros-preview")

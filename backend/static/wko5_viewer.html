@@ -522,7 +522,14 @@ const CUSTOM_ORDER = ["我的訓練", "周期化訓練"];  // flat tab list orde
 const MODE_LABEL = { season: "趨勢", workout: "單次活動" };
 const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || viewsOf(S.mode)[0];
 // charts shown under the 使用功率 setting (the list's `power` flag, wko5expr/power_use.py)
-function visCharts(d) { return S.usePower === false ? d.charts.filter((c) => !c.power) : d.charts; }
+// …and under 主要訓練項目 (engine/primary_sport.py): a chart tagged `sports` shows only in those modes,
+// `order` ({road: n}) moves it up in that mode (untagged charts keep the file order)
+function visCharts(d) {
+  const sp = S.sport || "trail";
+  const cs = d.charts.filter((c) => (S.usePower !== false || !c.power) && (!c.sports || c.sports.includes(sp)));
+  const rank = (c, i) => (c.order && c.order[sp] != null ? c.order[sp] : i);
+  return cs.map((c, i) => [c, i]).sort((a, b) => rank(...a) - rank(...b) || a[1] - b[1]).map((x) => x[0]);
+}
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
 function sportsParam() { const s = selectedSports(); return s.length === S.sports.length ? "" : s.join(","); }
 function tpParam() { return `parity=${S.parity}`; }
@@ -538,9 +545,10 @@ async function init0() {
 }
 
 async function init() {
-  const [views, sports, cfg, us] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
-    j("/api/v1/sync/settings").catch(() => ({}))]);
+  const [views, sports, cfg, us, ps] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
+    j("/api/v1/sync/settings").catch(() => ({})), j(`${API}/primary-sport`).catch(() => ({}))]);
   S.views = views; S.sports = sports;
+  S.sport = ps.sport || "trail";       // 主要訓練項目 (設定): which charts show (visCharts)
   // workout map defaults (settings page); the map's own switch overrides them per browser
   S.mapDefault = { base: BASE_BY_ID[us.map_basemap] ? us.map_basemap : "rudy",
     overlays: (us.map_overlays || []).filter((id) => OVL_BY_ID[id]) };
@@ -903,7 +911,9 @@ async function load() {
   // render sequentially-ish (4 at a time) so heavy charts don't block the rest
   const focus = S.focusChart; S.focusChart = null;
   if (!visCharts(d).length) {
-    grid.insertAdjacentHTML("beforeend", `<div class="empty">這一頁都是功率的圖。設定裡「使用功率」關掉了，所以不顯示；要看請到 <a href="/api/v1/wko5/settings#power">設定</a> 打開。</div>`);
+    grid.insertAdjacentHTML("beforeend", d.charts.every((c) => c.power)
+      ? `<div class="empty">這一頁都是功率的圖。設定裡「使用功率」關掉了，所以不顯示；要看請到 <a href="/api/v1/wko5/settings#power">設定</a> 打開。</div>`
+      : `<div class="empty">這一頁的圖不適用你的主要訓練項目，可以到 <a href="/api/v1/wko5/settings#sport">設定</a> 切換。</div>`);
     return;
   }
   const queue = visCharts(d).map((c) => {

@@ -341,6 +341,25 @@ def _aet_test(s: dict, c: Ctx, ids) -> list:
     return out
 
 
+# 主要訓練項目 = 路跑 (engine/overview.road_long_session): 「長跑＋馬拉松配速 N 分」 = easy, then N
+# minutes at marathon pace, then MP_TAIL_S easy. The MP segment is an HR band on the watch (COROS pace
+# targets are unverified): Pfitzinger's MP 79–88 % HRmax ÷ 0.9 → 88–98 % LTHR, top capped at 95 % (推估)
+MP_HR = (0.88, 0.95)
+MP_TAIL_S = 600
+
+
+def mp_minutes(s: dict) -> Optional[int]:
+    """The marathon-pace minutes of a road long run, from its title; None = an all-easy long run."""
+    return _num(r"馬拉松配速\s*(\d+)\s*分", s.get("title") or "")
+
+
+def strides_names(title: str, sprint: int, n: int) -> tuple[str, str, str]:
+    """(work, recovery, repeat) step names: flat strides (路跑, 「加速跑」) or hill sprints."""
+    if "加速跑" in (title or ""):
+        return f"{sprint} 秒加速跑（平路）", "慢跑回來", f"加速跑 {n}×{sprint} 秒"
+    return f"{sprint} 秒上坡衝刺", "走下來", f"衝刺 {n}×{sprint} 秒"
+
+
 def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
     """The steps of a session that has none (the editor's starting point), or None
     for what isn't pushed (race, rest, strength, passive heat) and unreadable text."""
@@ -365,6 +384,12 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
         return doc(items) if items else None
     if secs <= 0:
         return None
+    mp = mp_minutes(s) if kind == "long" else None
+    if mp and secs - mp * 60 - MP_TAIL_S >= 10 * 60:
+        return doc([step(ids, "work", secs - mp * 60 - MP_TAIL_S, _easy(0.80, 0.88), "輕鬆"),
+                    step(ids, "work", mp * 60, {"type": "hr", "mode": "pct", "lo": MP_HR[0], "hi": MP_HR[1]},
+                         "馬拉松配速（心率帶，推估）"),
+                    step(ids, "cool", MP_TAIL_S, _easy(0.75, 0.80), "輕鬆收操")])
     if kind in ("long", "mountain", "hike"):
         lo, hi = (0.80, 0.88) if kind == "long" else (0.75, 0.88)
         return doc([step(ids, "work", secs, _easy(lo, hi))])
@@ -378,9 +403,10 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
             n, sprint = int(m.group(1)), int(m.group(2))
             base = secs - n * (sprint + 60)
             if base >= 10 * 60:
+                w_name, r_name, rep_name = strides_names(s.get("title") or "", sprint, n)
                 return doc([step(ids, "work", base, _easy(0.75, 0.80), "心率 ≤ AeT"),
-                            rep(ids, n, [step(ids, "work", sprint, OPEN, f"{sprint} 秒上坡衝刺"),
-                                         step(ids, "rest", 60, OPEN, "走下來")], True, f"衝刺 {n}×{sprint} 秒")])
+                            rep(ids, n, [step(ids, "work", sprint, OPEN, w_name),
+                                         step(ids, "rest", 60, OPEN, r_name)], True, rep_name)])
         return doc([step(ids, "work", secs, _easy(0.75, 0.80))])
     return None
 

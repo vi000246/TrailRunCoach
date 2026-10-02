@@ -393,6 +393,14 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
         return _aet_test_steps(s, th) if is_aet_session(s) else _test_steps(s, th)
     if secs <= 0:
         raise Unsupported("沒有時間長度")
+    from backend.engine import workout_steps as WS
+    mp = WS.mp_minutes(s) if kind == "long" else None
+    if mp and secs - mp * 60 - WS.MP_TAIL_S >= 10 * 60:
+        # 主要訓練項目 = 路跑: easy, marathon pace (an HR band), easy (workout_steps.derive)
+        mp_t = ("hr", round(WS.MP_HR[0] * th.lthr), round(WS.MP_HR[1] * th.lthr)) if th.lthr else None
+        return [Step(EX_TRAIN, secs - mp * 60 - WS.MP_TAIL_S, easy_target(s, th, (0.80, 0.88)), "輕鬆"),
+                Step(EX_TRAIN, mp * 60, mp_t, "馬拉松配速"),
+                Step(EX_COOLDOWN, WS.MP_TAIL_S, easy_target(s, th), "輕鬆收操")]
     if kind in ("long", "mountain", "hike"):
         it = easy_target(s, th, (0.80, 0.88) if kind == "long" else (0.75, 0.88))
         return [Step(EX_TRAIN, secs, it, "心率 ≤ AeT" if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
@@ -408,9 +416,10 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
             recover = 60
             base = secs - n * (sprint + recover)
             if base >= 10 * 60:
+                w_name, r_name, rep_name = WS.strides_names(s.get("title") or "", sprint, n)
                 return [Step(EX_TRAIN, base, easy_target(s, th), "心率 ≤ AeT"),
-                        Repeat(n, [Step(EX_TRAIN, sprint, None, f"{sprint} 秒上坡衝刺"),
-                                   Step(EX_REST, recover, None, "走下來")], f"衝刺 {n}×{sprint} 秒")]
+                        Repeat(n, [Step(EX_TRAIN, sprint, None, w_name),
+                                   Step(EX_REST, recover, None, r_name)], rep_name)]
         it = easy_target(s, th)
         return [Step(EX_TRAIN, secs, it, "心率 ≤ AeT" if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
     raise Unsupported(f"不支援的課表類型 {kind}")

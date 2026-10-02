@@ -154,6 +154,21 @@ def _chart(raw: dict, where: str) -> dict:
         if raw["race_refs"] not in ("course_constant",) or kind != "athlete":
             raise CustomViewError(f"{where}/{raw['title']}: race_refs must be 'course_constant' on an athlete chart")
         out["race_refs"] = raw["race_refs"]
+    if raw.get("sports") is not None:
+        # 主要訓練項目 (engine/primary_sport.py): ["trail"] / ["road"] = shown only in that mode
+        from backend.engine.primary_sport import chart_sports
+        try:
+            out["sports"] = chart_sports(raw["sports"])
+        except ValueError as e:
+            raise CustomViewError(f"{where}/{raw['title']}: {e}")
+    if raw.get("order") is not None:
+        # {"road": 0}: the chart's place in its dashboard in that mode (lower first; others keep file order)
+        from backend.engine.primary_sport import SPORTS
+        o = raw["order"]
+        if not isinstance(o, dict) or any(k not in SPORTS or isinstance(v, bool) or not isinstance(v, (int, float))
+                                          for k, v in o.items()):
+            raise CustomViewError(f"{where}/{raw['title']}: order must be {{sport: number}} for {list(SPORTS)}")
+        out["order"] = dict(o)
     for s in [s for v in out.get("variants", []) for s in v["series"]] or out["series"]:
         if s["basis"] is not None and s["basis"] not in out.get("basis", {}).get("choices", ()):
             raise CustomViewError(f"{where}/{raw['title']}/{s['name']}: series basis needs a chart basis that lists it")

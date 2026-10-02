@@ -109,6 +109,15 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     </div>
   </section>
 
+  <section id="sport">
+    <h2>主要訓練項目</h2>
+    <div class="row" style="margin-top:4px">
+      <label>主要訓練項目 <select id="u-sport"><option value="auto">自動</option><option value="trail">越野跑</option><option value="road">路跑／馬拉松</option></select></label>
+      <button type="button" class="q" aria-label="說明" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。自動 = 依下一場 A 賽的類型，沒有 A 賽就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。">?</button>
+      <span class="meta" id="u-sport-note"></span>
+    </div>
+  </section>
+
   <section id="power">
     <h2>功率</h2>
     <div class="row" style="margin-top:4px">
@@ -525,6 +534,22 @@ $("m-save").onclick = async () => {
   try { await putSetting(body); toast("已儲存地圖設定"); loadSyncSettings(); }
   catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 };
+
+// 主要訓練項目 (engine/primary_sport.py): the setting, the sport in effect and the suggestion
+async function loadSport() {
+  const ps = await j("/api/v1/wko5/primary-sport").catch(() => null);
+  if (!ps) return;
+  $("u-sport").value = ps.setting || "auto";
+  const sug = ps.suggested || {};
+  $("u-sport-note").textContent = ps.setting === "auto" ? `目前：${ps.label}（${sug.reason || ""}）`
+    : (sug.sport && sug.sport !== ps.sport ? `資料建議：${sug.sport === "road" ? "路跑／馬拉松" : "越野跑"}（${sug.reason || ""}）` : "");
+}
+$("u-sport").onchange = async (e) => {
+  try { await putSetting({ primary_sport: e.target.value }); toast("已更新主要訓練項目：重新整理其他頁面就會套用"); loadSport(); }
+  catch (err) { toast("失敗：" + err.message.slice(0, 80)); loadSport(); }
+};
+document.querySelector("#sport button.q").onclick = (e) => { $("u-sport-note").textContent = e.currentTarget.title; };
+loadSport();
 
 async function putSetting(body) {
   await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
