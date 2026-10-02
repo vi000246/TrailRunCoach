@@ -1,4 +1,30 @@
-import pytest
+"""Shared fixtures. Before anything else: the real-data guard (_guard.py) -
+home is a temp folder and nothing may open, list or write the real ~/WKO5 or
+~/.wko5coach. The real-data comparisons are the opt-in realdata/ suite."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from backend.tests import _guard  # noqa: E402  (stdlib only; must run before any backend import)
+
+_guard.install()
+
+import pytest  # noqa: E402
+
+collect_ignore = [] if _guard.REALDATA else ["realdata"]
+
+
+@pytest.fixture(autouse=True)
+def _no_real_data_folders():
+    """Fails a test that opened / listed / wrote anything under the real
+    ~/WKO5 or ~/.wko5coach (the audit hook raises; this catches the cases the
+    code under test swallowed, e.g. a best-effort cache write)."""
+    _guard.take_violations()
+    yield
+    got = _guard.take_violations()
+    if got:
+        pytest.fail("real data folder touched:\n  " + "\n  ".join(got[:10]), pytrace=False)
+
 
 FAKE_TP_CLIENT = ("fake-client-id", "fake-client-secret-for-tests")
 

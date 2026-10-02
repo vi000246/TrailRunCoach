@@ -2,11 +2,9 @@
 Same-load conversion (engine/equivalence.py): the Naismith / Langmuir time
 model recovers known parameters, the EP fallback, the design inverse, the
 leave-one-out backtest harness and the method choice, the grade-cost hook,
-and the API. Synthetic samples only (a golden test runs the real data).
+and the API. Synthetic samples only (the real-data backtest is realdata/test_real_equivalence.py).
 """
-import math
 import random
-from datetime import date
 
 import pytest
 from fastapi import FastAPI
@@ -143,22 +141,3 @@ def test_api_design(monkeypatch):
     assert b["km"] == E.design(E.fit(ss, AET), "trail", 60, 100)["km"] and b["estimate"] is False
     assert c.post("/api/v1/overview/plan/equivalence/design", json={"mode": "swim", "minutes": 60}).status_code == 400
     assert c.get("/api/v1/overview/plan/equivalence").json()["backtest"]["trail"]["n"] == 8
-
-
-@pytest.mark.golden
-def test_backtest_on_the_athletes_own_trail_and_hike_activities():
-    from backend.settings.paths import athlete_dir
-    d = athlete_dir()
-    if not any(d.glob("*.wko5athlete")):
-        pytest.skip("no WKO5 athlete folder")
-    from backend.api.overview import _dataset, _status
-    from backend.engine import overview as O
-    ds = _dataset()
-    today = O.day_to_date(ds.today)
-    aet = O.week_plan(ds, _status(ds, today), today)["thresholds"]["aet"]
-    s = E.summary(ds, today, aet)
-    t = s["backtest"]["trail"]
-    if t["n"] < E.MIN_SAMPLES:
-        pytest.skip(f"only {t['n']} easy trail runs in the window")
-    assert t["mape_pct"] is not None and len(t["rows"]) == t["n"]
-    assert t["estimate"] == (t["mape_pct"] > E.ESTIMATE_MAPE)          # the 推估 label follows the error
