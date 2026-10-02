@@ -2209,7 +2209,7 @@ function drawCalendar(card, s) {
     calendar: { range: [iso(begin), iso(end)], top: 24, left: 34, right: 12, cellSize: ["auto", 14],
       splitLine: { show: false },
       itemStyle: { color: css("--line") || "#e5e5e5", borderColor: css("--panel") || "#fff", borderWidth: 2 },
-      dayLabel: { firstDay: 1, nameMap: ["日", "一", "二", "三", "四", "五", "六"], color: css("--muted"), fontSize: 10 },
+      dayLabel: { firstDay: 1, nameMap: I18N.fmt.weekdays("narrow", { sundayFirst: true }), color: css("--muted"), fontSize: 10 },
       monthLabel: { nameMap: "cn", color: css("--muted"), fontSize: 10 }, yearLabel: { show: false } },
     series: [{ type: "heatmap", coordinateSystem: "calendar",
       data: s.data.points.filter((p) => p[1] != null).map((p) => [p[0], p[1] > 0 ? 1 : 0]) }],

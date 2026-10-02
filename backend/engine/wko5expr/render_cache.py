@@ -125,6 +125,9 @@ def data_fingerprint(ds) -> str:
 
 def chart_key(chart: dict, request: dict, fingerprint: str) -> str:
     body = {"chart": chart, "request": request, "data": fingerprint, "code": code_signature()}
+    from backend.i18n import DEFAULT_LOCALE, current_locale
+    if current_locale() != DEFAULT_LOCALE:      # the engine's text follows the request language (zh-TW keys unchanged)
+        body["locale"] = current_locale()
     return hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
 
 

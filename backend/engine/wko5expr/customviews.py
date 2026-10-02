@@ -86,6 +86,7 @@ def _chart(raw: dict, where: str) -> dict:
         raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets', 'review', "
                               "'z5gate', 'activity', 'periodzones' or 'climbvam'")
     out = {
+        "id": raw.get("id"),            # stable id (viewids.py); filled in by parse_view when missing
         "title": raw["title"],
         "description": raw.get("description"),
         "kind": kind,
@@ -191,13 +192,15 @@ def parse_view(data: dict, source_path: Optional[Path] = None) -> dict:
         if "title" not in d:
             raise CustomViewError(f"{where}: dashboard needs a title")
         dashboards.append({
+            "id": d.get("id"),
             "title": d["title"],
             "description": d.get("description"),
             "class": "CustomDashboard",
             "charts": [_chart(c, f"{where}/{d['title']}") for c in d.get("charts", [])],
         })
-    return {"view": data["name"], "dashboards": dashboards,
-            "source": "custom", "path": str(source_path) if source_path else None}
+    from backend.engine.wko5expr.viewids import ensure_ids
+    return ensure_ids({"view": data["name"], "dashboards": dashboards,
+                       "source": "custom", "path": str(source_path) if source_path else None})
 
 
 def view_dirs() -> list[Path]:

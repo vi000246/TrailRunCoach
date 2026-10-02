@@ -79,7 +79,9 @@ async def _migrate_schema():
         # settings that no longer exist (settings/repository.py RETIRED_KEYS), e.g. the
         # sealed backup-encryption key: deleted, not left behind in the DB
         from backend.settings.repository import RETIRED_KEYS
-        for key in RETIRED_KEYS:
+        has_settings = (await conn.execute(
+            text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_settings'"))).first()
+        for key in RETIRED_KEYS if has_settings else ():
             await conn.execute(text("DELETE FROM user_settings WHERE key = :k"), {"k": key})
 
 

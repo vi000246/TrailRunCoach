@@ -27,6 +27,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Literal, Optional
 
+from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -388,7 +389,7 @@ def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: di
 
 @router.get("/page", include_in_schema=False)
 def page():
-    return FileResponse(STATIC / "racepower.html")
+    return render_page("racepower")
 
 
 # ---------------------------------------------------------------------------
@@ -1064,7 +1065,7 @@ SHARE_HEADERS = {"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow
 
 @share_router.get("/{sid}")
 def share_page(sid: str):
-    return FileResponse(STATIC / "share.html", headers=SHARE_HEADERS)
+    return render_page("share", headers=SHARE_HEADERS)
 
 
 @share_router.get("/{sid}/data")
