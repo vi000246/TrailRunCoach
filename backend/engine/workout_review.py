@@ -1739,6 +1739,18 @@ def _archive_temps() -> dict:
 
 
 _BY_DATE = "__by_date__"
+_BY_START_MEMO: dict = {}
+
+
+def _by_start(arch: dict):
+    """A ByStartDict over the archive's file keys (memoised per archive dict)."""
+    from backend.engine.activity_key import ByStartDict
+    hit = _BY_START_MEMO.get(id(arch))
+    if hit is None or hit[0] is not arch:
+        hit = (arch, ByStartDict({x: y for x, y in arch.items() if x != _BY_DATE}))
+        _BY_START_MEMO.clear()
+        _BY_START_MEMO[id(arch)] = hit
+    return hit[1]
 
 
 def watch_air(t_watch: Optional[float]) -> Optional[float]:
@@ -1759,6 +1771,10 @@ def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Opt
         arch = _archive_temps()
     f = getattr(getattr(w, "entry", None), "file", None)
     v = _f(arch.get(f)) if f is not None else None
+    if v is None:
+        # the same activity under another source's file (engine/activity_key.py: by start)
+        k = _by_start(arch).key_for(f, getattr(getattr(w, "entry", None), "start", None)) if f is not None else None
+        v = _f(arch.get(k)) if k is not None and k != f else None
     if v is None and isinstance(arch.get(_BY_DATE), dict):
         try:
             v = _f(arch[_BY_DATE].get(_wdate(w).isoformat()))
