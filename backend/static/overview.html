@@ -224,6 +224,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .ind { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
 .ic { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px 8px; border-top: 3px solid var(--lc, var(--line)); display: grid; gap: 2px; min-width: 0; align-content: start; }
 .ic.good { --lc: var(--good); } .ic.watch { --lc: var(--watch); } .ic.bad { --lc: var(--bad); }
+.ic .v.vl-good { color: var(--good); } .ic .v.vl-warn { color: var(--watch); } .ic .v.vl-bad { color: var(--bad); }
 .ic .top { display: flex; justify-content: space-between; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
 .ic .top > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ic .vr { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }
@@ -453,8 +454,8 @@ async function loadStatus() {
     const more = [i.why ? `<div>${gl(i.why)}</div>` : "", driftTier(i), i.action ? `<div class="act">→ ${gl(i.action)}</div>` : "", heatExtra(i),
       i.source ? `<div class="faint">來源：${esc(i.source)}</div>` : ""].filter(Boolean).join("");
     return `<div class="ic ${i.level}">
-      <div class="top"><span>${gl(i.title)}</span>${stw(i.level)}</div>
-      <div class="vr"><div class="v">${esc(i.text)}</div>${spark(i.spark, i.level)}</div>
+      <div class="top"><span>${gl(i.title)}${i.extra && i.extra.tip ? q(i.extra.tip) : ""}</span>${stw(i.level)}</div>
+      <div class="vr"><div class="v${i.extra && i.extra.verdict_level ? " vl-" + esc(i.extra.verdict_level) : ""}">${esc(i.text)}</div>${spark(i.spark, i.level)}</div>
       ${i.verdict ? `<div class="vd" title="${esc(i.verdict)}">${gl(i.verdict)}</div>` : ""}
       ${applyCpBtn(i)}${aetApply(i)}
       ${more ? `<details class="more"><summary>詳細</summary><div class="body">${more}</div></details>` : ""}</div>`;
@@ -473,11 +474,13 @@ function heatExtra(i) {
   return `${bars}${r}${h}<div><span class="st watch">推估</span> a = ${x.a}（${(x.a_range || []).join("–")}）</div>`;
 }
 
-// 心率飄移 card (status.i_drift): runs on the 參考 tier are counted for display — say so, why on hover
+// 心率飄移 card (status.i_drift): runs on the 參考 tier are counted for display — say so in plain
+// words (no tier names), why on hover
+const tD = (k, s, p) => (window.I18N ? I18N.t(k, s, p) : s.replace(/\{(\w+)\}/g, (m, a) => (p && p[a] != null ? p[a] : m)));
 function driftTier(i) {
   const x = i.id === "drift" && i.extra;
   if (!x || !x.ref) return "";
-  return `<div><span class="st watch">參考</span> ${esc(x.ref)} 次是${esc(x.ref_label || "")}${x.test ? `、${esc(x.test)} 次嚴格` : ""} ${q(x.ref_tip)}</div>`;
+  return `<div><span class="st watch">${esc(tD("overview.drift.ref_badge", "只當參考"))}</span> ${esc(tD("overview.drift.ref_runs", "{n} 次暖身後不到 40 分鐘", { n: x.ref }))} ${q(x.ref_tip)}</div>`;
 }
 
 // 測試 card: 「套用這次的 AeT」 when the latest AeT drift test is in UA's 3.5–5 % band
@@ -486,7 +489,8 @@ function aetApply(i) {
   const at = i.id === "testing" && i.extra && i.extra.aet_test;
   if (!at || !at.apply) return "";
   return `<div class="act"><button type="button" class="btn" data-aet-apply>套用這次的 AeT（${esc(at.apply.aethr)} bpm）</button>
-    <span class="meta" data-apply-msg>${esc(at.date)} ${at.drift != null ? (at.drift * 100).toFixed(1) + "%" : ""}</span>${q(at.basis)}</div>`;
+    <span class="meta" data-apply-msg>${esc(at.date)} ${at.drift != null ? esc(tD("overview.drift.value", "心率飄移 {v}%", { v: (at.drift * 100).toFixed(1) })) : ""}</span>${q(at.basis === "Pw:HR"
+      ? tD("overview.drift.basis_power", "用功率算的心率飄移（功率÷心率，Pw:HR）") : tD("overview.drift.basis_pace", "用配速算的心率飄移（速度÷心率，Pa:HR）"))}</div>`;
 }
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-aet-apply]");

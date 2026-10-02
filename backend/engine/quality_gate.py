@@ -55,6 +55,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import _
+
 # "xu_signals" (三訊號) was dropped 2026-10-01: stored prefs that still say it fall back to
 # auto (plan_prefs.from_settings; evaluate() maps any unknown mode to auto too)
 MODES = ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none")
@@ -996,8 +998,9 @@ def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], va
     # a lower bound (val["lower_bound"], se None) never fires shift / moved: it is not a point estimate
     if ae.get("measured") and not val.get("lower_bound") and v is not None and se is not None and se <= 3.0 and \
             abs(v - float(ae["value"])) > max(se, 3.0):
-        return {"code": "moved", "text": f"聚合估計 AeT {v:.0f} ± {se:.1f} bpm，和目前 {ae['value']:.0f} 差 "
-                                         f"{v - float(ae['value']):+.0f}（> 標準誤）：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）"}
+        return {"code": "moved", "text": _("從最近的輕鬆跑推估 AeT 約 {v:.0f} bpm，和目前 {now:.0f} 差 {d:+.0f}："
+                                           "測一次確認（UA：基礎變好 AeT 會往 AnT 靠）",
+                                           v=v, now=float(ae["value"]), d=v - float(ae["value"]))}
     if passive:
         return None
     if not recent and not xu_recent:
@@ -1704,8 +1707,8 @@ def indicator(gate: dict) -> dict:
         # the temporary lower bound (drift_agg.aet_validity): valid, said as a bound with its rule
         why_parts.append(ae["validity"]["reason"])
     if gate.get("stale_aet"):
-        why_parts.append(f"AeT 目前不算有效：{(ae.get('validity') or {}).get('reason') or '聚合估計還不夠準'}"
-                         "（標準誤 ≤ 3 bpm、最近 6 次沒有偏移才算；推估），改用不設門檻")
+        why_parts.append(f"AeT 目前不算有效：{(ae.get('validity') or {}).get('reason') or '推估的 AeT 還不夠準'}"
+                         + _("（推估的 AeT 要夠準、最近幾次沒有往同一邊偏才算；推估），改用不設門檻"))
     d = gate.get("dose") or {}
     why_parts.append(f"8 週內 {d.get('done', 0)} 次間歇")
     z5 = gate.get("z5") or {}
@@ -1767,15 +1770,15 @@ OPTION_INFO = {
                      "② 實測 AeT 的 UA 差距法（LTHR ÷ AeT − 1 ≤ 10%）、③ 實測 AeT 的 Friel 飄移（AeT 附近 ≥ 60 分鐘，前後半 < 5%）。"
                      "確認後沒有到期日，每週檢查：1 區時間連 3 週 < 確認時的 2/3 就暫停，到下次確認為止（Hickson 1982；3 週推估）；"
                      "停跑 ≥ 6 天進恢復期（Daniels 表 9.2），期間 3 區、5 區都不排，之後先 3 區；暫停時 3 區照排。"
-                     "AeT 有效＝聚合估計標準誤 ≤ 3 bpm、最近 6 次沒偏移（推估），有效時才用差距法。",
+                     "AeT 有效＝從輕鬆跑推估的 AeT 誤差 ≤ 3 bpm、最近 6 次沒有往同一邊偏（推估），有效時才用差距法。",
              "todo": "週末的 LSD 改成 90 分鐘平路 1 區、配速不變，跑完就自動確認；不用另外測。"},
     "ua_gap": {"source": "Uphill Athlete：When to add intensity",
                "rule": "AnT ÷ AeT − 1 ≤ 10%（Uphill Athlete）：用 LTHR 當 AnT、實測 AeT。差距越小代表有氧基礎越好。"
                        "解鎖後先排 Zone 3（AeT–LTHR），每週 1 次，約週有氧時數的 5%。",
-               "todo": "需要一次 AeT 測試（和 LTHR 測試）；之後只在聚合估計標準誤 > 3 bpm、有偏移或約 6 週沒有可判讀的跑步時再測（推估）。"},
+               "todo": "需要一次 AeT 測試（和 LTHR 測試）；之後只在推估的 AeT 不夠準（誤差 > 3 bpm）、有偏移或約 6 週沒有可判讀的跑步時再測（推估）。"},
     "friel_drift": {"source": "Friel（TrainingPeaks：Aerobic decoupling）",
                     "rule": "8 週內有一次在 AeT 附近（平均心率 AeT−5～AeT+3，範圍自訂）、暖身後 ≥ 60 分鐘的平路穩定跑，"
-                            "前後半 Pa:HR 飄移 < 5%。一次就夠。",
+                            "前後半心率飄移 < 5%。一次就夠。",
                     "todo": "需要實測 AeT，並排一次 60–90 分鐘平路跑，心率壓在 AeT 附近、不停、不加速。"},
     "xu_drift": {"source": "徐國峰（你的筆記：跑者都該懂的跑步數據）",
                  "rule": "平地、< 25 °C、E 配速 90 分鐘：(第 90 分心率 − 第 10 分心率) ÷ 第 10 分心率 < 10% 就可以練間歇（< 5% 是國家級）。",

@@ -3,6 +3,7 @@
 thresholds read only the strict tier; display shows the reference tier,
 labelled. Synthetic data only — never the user's plan or DB."""
 import datetime as dt
+import re
 
 import numpy as np
 import pytest
@@ -127,24 +128,33 @@ def test_the_drift_indicator_shows_the_reference_tier_but_never_warns_on_it():
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     d = next(i for i in st.indicators if i.id == "drift")
     assert d.extra["ref"] == 3 and d.extra["test"] == 0 and d.extra["ref_label"] == R.REF_LABEL
-    assert "（參考）" in d.text and R.REF_LABEL in d.why and "推估" in d.extra["ref_tip"]
+    # plain words (owner 2026-10-02): 「飄很多 · 12.0%」, the caveat in words, the method only in the ?
+    assert d.text.startswith("飄很多 · ") and d.text.endswith("%") and "±" not in d.text
+    assert "都是比較短的跑步，只當參考" in d.why and "推估" in d.extra["ref_tip"]
+    assert d.extra["verdict_level"] == "bad" and "方法：" in d.extra["tip"]
+    for word in ("Pa:HR", "±", "pp", "標準誤", "參考級"):
+        assert word not in d.text + d.verdict + d.why, word
     assert d.level != "bad" and not d.action                               # gate levels read strict only
 
 
 def test_the_card_labels_a_reference_drift_with_a_hover():
     ds = _ds([_run(TODAY - dt.timedelta(days=2), minutes=45, power=200.0)])
     w = ds.workouts[0]
-    for basis, name in (("pace", "Pa:HR 飄移"), ("power", "Pw:HR 飄移")):
+    for basis, name in (("pace", "心率飄移（配速）"), ("power", "心率飄移（功率）")):
         rows = {s["name"]: s["data"] for s in R.review(ds, w, "aerobic", basis=basis)["series"]}
-        assert rows[name]["value"].endswith("（參考）") and rows[name]["tip"] == R.REF_TIP
-        assert rows["飄移等級"]["value"] == R.REF_LABEL == "參考（暖身後 30–40 分，未達 UA 測試標準）"
+        # 「穩定 · 0.0%（…）」: verdict word + %, the caveat in its own plain row, the method last in the ?
+        assert re.match(r"(穩定|有點飄|飄很多) · -?\d+\.\d%（", rows[name]["value"]) and "±" not in rows[name]["value"]
+        assert rows[name]["tip"].startswith(R.REF_TIP) and rows[name]["tip"].split("\n")[-1].startswith("方法：")
+        assert rows["可信度"]["value"] == R.REF_LABEL == "暖身後不到 40 分鐘，只當參考"
         verdict = " ".join(s["data"]["value"] for s in R.review(ds, w, "aerobic", basis=basis)["series"]
                            if s["name"] in ("判讀", ""))
-        assert "（參考）" in verdict
+        assert "只當參考" in verdict
     ds = _ds([_run(TODAY - dt.timedelta(days=2), minutes=52)])
     rows = {s["name"]: s["data"] for s in R.review(ds, ds.workouts[0], "aerobic")["series"]}
-    # the strict tier's hover is the precision note (drift v2: ±4–6 pp per run)
-    assert rows["Pa:HR 飄移"]["tip"] == R.SE_TIP and rows["飄移等級"]["value"].startswith("嚴格")
+    # the strict tier's hover: the plain precision note, then the method with this run's ± (drift v2)
+    tip = rows["心率飄移（配速）"]["tip"]
+    assert tip.startswith(R.SE_TIP.split("\n")[0]) and "方法：" in tip and "個百分點" in tip
+    assert rows["可信度"]["value"] == "暖身後跑滿 40 分鐘，可以判讀"
 
 
 def test_aerobic_lines_keep_the_aet_test_bands_strict():
@@ -154,4 +164,4 @@ def test_aerobic_lines_keep_the_aet_test_bands_strict():
     assert not any("就是 AeT" in ln for ln in R.aerobic_lines("test_aet", ref))
     assert any("< 40 分" in ln for ln in R.aerobic_lines("test_aet", ref))
     easy = R.aerobic_lines("easy", ref)
-    assert any("飄移（參考） 4.2%" in ln for ln in easy) and any(R.REF_LABEL in ln for ln in easy)
+    assert any("心率飄移 穩定 · 4.2%" in ln for ln in easy) and any(R.REF_LABEL in ln for ln in easy)

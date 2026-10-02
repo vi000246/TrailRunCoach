@@ -665,7 +665,8 @@ def test_latest_aet_test_review_card_and_the_apply_button():
     assert at["band"] == "at" and at["aethr_suggest"] == round(at["hr1"])
     body = AT.apply_body(at)
     assert body["date"] == day.isoformat() and body["aethr"] == at["aethr_suggest"]
-    assert body["note"].startswith(f"AeT 飄移測試 {day.isoformat()}：Pw:HR ")
+    assert body["note"].startswith(f"AeT 飄移測試 {day.isoformat()}：心率飄移 ")      # plain words, no Pw:HR
+    assert at["basis"] == "Pw:HR"                                        # the data field keeps the basis
     card = R.review(ds, w, "summary")                                # the viewer's drawAction hook
     assert card["action"]["body"] == body and card["action"]["label"].startswith("套用這次的 AeT")
     assert card["action"]["url"] == "/api/v1/plan/thresholds/apply-estimate" and card["action"]["method"] == "POST"
