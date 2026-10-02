@@ -1363,10 +1363,10 @@ function pzHex(L, C, h) {             // OKLCH → sRGB hex
 // HR is the red family, power the orange family on every chart (palette red #e34948 / orange #eb6834)
 const PZ_HUE = { hr: 25, power: 55 };
 function pzRamp(n, kind) {
-  // light: L .76 (≥ 2:1 on the surface) → .17; dark: L .43 (≥ 2:1 on the dark surface) → .98.
+  // light: L .80 → .30 (the dark end stays a colour, not near-black); dark: L .43 (≥ 2:1 on the dark surface) → .98.
   // One hue per kind: HR red (25°), power orange (55°).
   const hue = PZ_HUE[kind] ?? PZ_HUE.hr;
-  const [L0, L1] = pzDark() ? [0.43, 0.98] : [0.76, 0.17];
+  const [L0, L1] = pzDark() ? [0.43, 0.98] : [0.80, 0.30];
   return Array.from({ length: n }, (_, i) => {
     const L = n === 1 ? (L0 + L1) / 2 : L0 + (L1 - L0) * i / (n - 1);
     const C = 0.15 * Math.max(0.25, 1 - Math.abs((L - 0.55) / 0.45) ** 2);
@@ -2164,7 +2164,10 @@ function zonedSetup(out, srcOf, zoned) {
   const lineColor = (b) => zMix(b.color, text, 0.2);
   for (const b of bands) {
     b.o.markArea = { silent: true, itemStyle: { color: b.color, opacity: dark ? 0.22 : 0.15 },
-      label: { show: true, position: "insideTopRight", color: muted, fontSize: 10, distance: 3 },
+      // the band's short name in the right margin, beside its band (never under the line); the
+      // full range is in the hover and the ? text
+      label: { show: true, position: "right", color: muted, fontSize: 10.5, distance: 4,
+        formatter: (p) => String(p.name || "").split(" ")[0] },
       data: [[{ yAxis: b.lo, name: b.name }, { yAxis: b.hi }]] };
     b.o.markLine = { silent: true, symbol: "none", label: { show: false },
       lineStyle: { color: b.color, type: "solid", width: 1, opacity: 0.8 }, data: [{ yAxis: b.lo }, { yAxis: b.hi }] };
@@ -2406,7 +2409,7 @@ function drawPlot(card, res, series) {
   const legendRows = zoom ? Math.ceil(out.length / Math.max(1, Math.floor((el.clientWidth || 900) / 170))) : 1;
   chart.setOption({
     animation: false,
-    grid: { left: 52, right: 20 + Math.max(0, axisIds.length - 1) * 46, top: 26,
+    grid: { left: 52, right: (Z ? 64 : 20) + Math.max(0, axisIds.length - 1) * 46, top: 26,
       bottom: Z ? (zoom ? 40 : 26) : zoom ? 64 + legendRows * 22 : 54 },
     tooltip,
     // a zoned chart labels its bands in place and has one data line: no legend box
