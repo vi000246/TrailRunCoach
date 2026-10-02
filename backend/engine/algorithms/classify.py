@@ -22,3 +22,13 @@ def classify_trail(
         return "unknown"
     climb_rate = elevation_gain_m / (distance_m / 1000.0)
     return "trail" if climb_rate >= TRAIL_CLIMB_RATE_M_PER_KM else "road"
+
+
+def is_trail(w) -> bool:
+    """One trail-run test for every engine module (generalize-athlete G12): the
+    runningtrail tag or the trail-running sport type. A synced FIT gets the
+    tag from the DB classification (classify_trail on its climb rate at
+    import, user overrides kept; wko5expr/fitdataset.py), so a COROS / Garmin
+    runner without TrainingPeaks tags is classified the same way."""
+    st = (getattr(w, "sport_type", "") or "").lower()
+    return "runningtrail" in (getattr(w, "tags", None) or ()) or st == "trail running"
