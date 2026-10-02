@@ -524,7 +524,7 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
             why_not = f"離行程不到 {LAST_LONG_DAYS} 天：最後一次背包長天要在賽前 ≥ 14 天（推估）"
         elif last_long is not None and (L - last_long).days < LONG_SPACING_DAYS:
             why_not = (f"上一次背包長天 {md(last_long)} 不到 {LONG_SPACING_DAYS} 天（Orr 2021：每 10–14 天最多一次）"
-                       + ("：B2B 這次不背" if b2b_due else "：這週改排平日機器課"))
+                       + ("：B2B 這次不背" if b2b_due else "：長天不背，改排平日機器課（有空位時）"))
         elif not room(L):
             why_not = "28 天內負重課已 4 次（Orr 2021）"
         if long_s.get("done"):
