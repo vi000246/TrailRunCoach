@@ -806,31 +806,17 @@ def test_T15_hike_plan_and_coros_preview(client):
     j = r.json()
     assert len(j["days"]) == 2 and j["summary"]["acclimatisation"] == "partial"
     assert any("部分適應" in w for w in j["warnings"])
+    from backend.api import racepower as RP
+    from backend.tests.test_coros_workouts import make_db, run
+    db = run(make_db())
+
+    async def _dep():
+        yield db
+    client.app.dependency_overrides[RP._db] = _dep
     ex = client.post("/api/v1/racepower/export/coros", json={"type": "trail", "course": {"course_id": cid}})
     assert ex.status_code == 200, ex.text
-    exs = ex.json()["payload"]["exercises"]
-    assert ex.json()["pushed"] is None and len(exs) >= 2
-    assert all(e["intensityType"] == 6 and e["targetType"] == 2 for e in exs)
-    assert "30 秒" in ex.json()["payload"]["overview"]
-
-
-def test_coros_push_is_mocked_and_schedules_future_dates():
-    """Never touches the network: the existing Training Hub client against
-    test_coros_workouts' FakeHub through httpx.MockTransport."""
-    import httpx
-    from backend.api import racepower as RP
-    from backend.sync import http
-    from backend.tests.test_coros_workouts import FakeHub, make_db, run
-    from backend.sync import coros_workouts as CW
-    steps = [CW.Step(CW.EX_TRAIN, 600, ("power", 240, 260), "0.0-2.0k 平")]
-    payload = CW.build_program("TRC 比賽配速", steps, CW.Thresholds(cp=300))
-    db = run(make_db())
-    fake = FakeHub()
-    with http.use_transport(httpx.MockTransport(fake)):
-        out = run(RP.push_to_coros(db, payload, "2099-01-01"))
-    assert out["program_id"] in fake.programs and out["scheduled"]
-    assert fake.adds() == 1 and [e["happenDay"] for e in fake.entities] == [20990101]
-    fake2 = FakeHub()
-    with http.use_transport(httpx.MockTransport(fake2)):
-        out2 = run(RP.push_to_coros(run(make_db()), payload, "2000-01-01"))
-    assert out2["scheduled"] is None and fake2.entities == [] and fake2.adds() == 1
+    j = ex.json()
+    # trail: lap-button steps with the leg's target (power on runnable legs, HR cap on the steep ones)
+    assert j["pushed"] is None and j["mode"] == "lap" and len(j["lines"]) >= 1
+    assert all(ln["dur"] == "按圈結束" for ln in j["lines"])
+    # (the full push / idempotency is test_race_calculator.py, against a faked COROS)

@@ -651,7 +651,7 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
                                                  "err_th_race_median", "err_th_total", "err_c",
                                                  "err_p", "error")}
                           | {"th": r.get("th")} for r in sorted(races, key=lambda r: r["date"])],
-            "source": "trailhr.py（越野心率配速模型，推估）", "threshold": THRESHOLDS["trail"],
+            "source": "越野心率配速模型（推估）", "threshold": THRESHOLDS["trail"],
             "target": TARGETS["trail"]}
 
 
@@ -899,7 +899,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
                               "intensity": "race", "intensity_reason": "正式 CP 測試（全力段）",
                               "cap_sample": True, "cap_kind": "cp_test",
                               "cap_reason": "FIT 偵測的 3′/12′ 測試" if t.get("source") != "workout_review"
-                              else "workout_review 判定的 CP 測試"})
+                              else "活動判讀認定的 CP 測試"})
     cap_idx_dates = {w.idx: w.entry.start.date() for w in all_runs
                      if (classes.get(w.idx, {}).get("capacity") or {}).get("ok")}
     derived: dict = {}

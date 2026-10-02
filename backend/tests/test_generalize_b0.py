@@ -184,3 +184,31 @@ def test_system_prompt_from_the_athletes_data(tmp_path, monkeypatch):
         assert p.startswith(C.SYSTEM_PROMPT)
         assert "230 W" in p and "165 bpm" in p and "400 m" in p and "3 次" in p
     _run(go())
+
+
+# ---- routes without WKO5: tracks from the synced FITs ------------------------------
+
+def test_routes_read_fit_tracks_without_wko5(tmp_path, monkeypatch):
+    from backend.api import routes as RA
+    from backend.engine.wko5expr import datasource
+    from backend.files.wko4_file import Channel, Wko4File
+    (tmp_path / "coros").mkdir()
+    (tmp_path / "coros" / "a.fit").write_bytes(b"x")
+    n = 900
+    ch = {"elapsedtime": Channel("elapsedtime", [float(i) for i in range(n)], 1.0, base=0.0),
+          "latitude": Channel("latitude", [46.5 + i * 2e-5 for i in range(n)], 1.0),
+          "longitude": Channel("longitude", [8.0 + i * 2e-5 for i in range(n)], 1.0),
+          "elapseddistance": Channel("elapseddistance", [i * 0.0028 for i in range(n)], 1.0),
+          "heartrate": Channel("heartrate", [140.0] * n, 1.0)}
+    wf = Wko4File(path="a.fit", sport="running", start_time="2026-09-01T06:00:00", device=None, weight_kg=None,
+                  original_type="fit", original_bytes=None, channels=ch, ranges=[], info=None)
+    w = SimpleNamespace(idx=0, sport="run", sport_type="running", metrics={"climbing": 0},
+                        entry=SimpleNamespace(file="coros/a.fit", start=dt.datetime(2026, 9, 1, 6)))
+    ds = SimpleNamespace(dir=tmp_path, workouts=[w], corrections=None, wko4=lambda i: wf,
+                         sport_setting=lambda name, w_: 170.0)
+    monkeypatch.setattr(datasource, "wko5_available", lambda d=None: False)
+    monkeypatch.setattr(RA, "_ds", lambda: ds)
+    rows, reader = RA._source()
+    assert [r[0] for r in rows] == ["coros/a.fit"]
+    tr = reader(*rows[0])
+    assert tr is not None and tr["file"] == "coros/a.fit"

@@ -1,15 +1,15 @@
 """
 Where a workout's running power came from (2026-10-01).
 
-The athlete's history mixes two kinds of running power under the same FIT
+A runner's history can mix two kinds of running power under the same FIT
 `power` field:
 
-* **stryd** — a Stryd foot pod. Since 2025-03-19 the COROS watch forwards the
+* **stryd** — a Stryd foot pod. A COROS watch forwards the
   pod's developer fields (Form Power, Air Power, Leg Spring Stiffness; the FIT
   developer_data_id is COROS's, not Stryd's), and a Garmin / other head unit
   may list the pod in `device_info` (manufacturer "stryd");
-* **watch** — power estimated by the watch from the wrist (2023-04…2024-09 on
-  Garmin / COROS watches, and the odd later run with the pod not paired):
+* **watch** — power estimated by the watch from the wrist (Garmin / COROS
+  watches, or a run with the pod not paired):
   `power` present, no Stryd field, no Stryd device;
 * **none** — no power above 0.
 

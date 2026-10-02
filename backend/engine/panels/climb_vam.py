@@ -30,7 +30,8 @@ def is_trail_run(w) -> bool:
     if w.sport != "run" or "treadmill" in st or "indoor" in st or "runningtreadmill" in w.tags \
             or "runningindoor" in w.tags:
         return False
-    return "runningtrail" in w.tags or st == "trail running"
+    from backend.engine.algorithms.classify import is_trail
+    return is_trail(w)
 
 
 def is_hike(w) -> bool:

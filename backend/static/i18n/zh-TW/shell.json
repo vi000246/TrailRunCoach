@@ -14,7 +14,7 @@
   "page.charts.purpose": "趨勢與單次活動圖表",
   "page.activity.name": "活動列表",
   "page.activity.short": "活動",
-  "page.activity.purpose": "搜尋・篩選・單筆編輯",
+  "page.activity.purpose": "搜尋・篩選・編輯・成就",
   "page.injuries.name": "傷病紀錄",
   "page.injuries.short": "傷病",
   "page.injuries.purpose": "疼痛・受傷前的訓練",
@@ -24,12 +24,9 @@
   "page.plan.name": "賽事周期",
   "page.plan.short": "周期",
   "page.plan.purpose": "目標賽事・周期・門檻",
-  "page.racepower.name": "賽事功率",
-  "page.racepower.short": "功率",
-  "page.racepower.purpose": "比賽功率與完賽時間預估",
-  "page.achievements.name": "成就",
-  "page.achievements.short": "成就",
-  "page.achievements.purpose": "百岳與越野紀錄",
+  "page.racepower.name": "賽事計算機",
+  "page.racepower.short": "計算機",
+  "page.racepower.purpose": "完賽時間・分段配速／功率／心率・補給",
   "page.settings.name": "設定",
   "page.settings.short": "設定",
   "page.settings.purpose": "計算模式・體重・資料校正",
@@ -38,5 +35,7 @@
   "build.failed": "資料處理失敗：{error}",
   "lang.title": "切換語言（Language）",
   "lang.zh-TW": "中文",
-  "lang.en": "EN"
+  "lang.en": "EN",
+  "nav.more": "更多",
+  "nav.more_title": "活動列表、路線、傷病紀錄、設定"
 }

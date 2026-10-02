@@ -48,7 +48,7 @@ LONG_CAP_MIN = 90                     # 推估: 6–13-day block long-run cap (�
 TARGETS_AFTER_DAYS = 14               # 推估: Zone 3 targets × FVDOT also for 2 weeks after the block
 CAT4_STEPS = (0.33, 0.50, 0.70, 0.85, 1.00)
 CAT4_Z3_WEEKS = 12                    # 推估: Zone 3 from week 13 (Daniels' T at step 5)
-SRC = ("Daniels 表 9.2（停練後回來的調整；你的筆記）；VDOT O2 FVDOT 表（2018）；"
+SRC = ("Daniels 表 9.2（停練後回來的調整）；VDOT O2 FVDOT 表（2018）；"
        "Mujika & Padilla 2000；Uphill Athlete（中斷後用飄移測試重新讀）；徐國峰（先 3 區後 5 區）")
 
 FVDOT1 = ((5, 1.000), (6, 0.997), (7, 0.994), (10, 0.985), (14, 0.973), (21, 0.952), (28, 0.931), (35, 0.910),

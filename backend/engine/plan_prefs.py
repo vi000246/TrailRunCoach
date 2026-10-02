@@ -241,8 +241,41 @@ def from_body(body: dict) -> Prefs:
     return from_settings({k: body.get(f) for k, f in KEY_FIELDS.items()}, lenient=False)
 
 
+def day_owners(p: Prefs) -> list[tuple]:
+    """(kind, weekday) of every chosen 偏好的星期, in priority order: the long run first,
+    then PREF_KINDS, each type's first choice before its second."""
+    out = [("long", LONG_WD[p.long_day])] if p.long_day in LONG_WD else []
+    return out + [(k, wd) for k in PREF_KINDS for wd in p.pref_of(k)]
+
+
+def overlaps(p: Prefs) -> list[dict]:
+    """Weekdays given to two session types: [{"kind", "wd", "owner"}] for each later one
+    (`owner` = the type that has the day first, day_owners order)."""
+    seen, out = {}, []
+    for k, wd in day_owners(p):
+        if wd in seen and seen[wd] != k:
+            out.append({"kind": k, "wd": wd, "owner": seen[wd]})
+        seen.setdefault(wd, k)
+    return out
+
+
+def drop_overlaps(p: Prefs) -> tuple:
+    """Stored values from before the one-type-per-weekday rule: keep the first type of a
+    shared weekday (day_owners order), drop it from the others. -> (Prefs, overlaps(p))."""
+    bad = overlaps(p)
+    if not bad:
+        return p, []
+    drop = {(b["kind"], b["wd"]) for b in bad}
+    pd = tuple((k, tuple(wd for wd in v if (k, wd) not in drop)) for k, v in p.pref_days)
+    return replace(p, pref_days=tuple(x for x in pd if x[1])), bad
+
+
 def check(p: Prefs) -> None:
     """Cross-field rules the per-key validation can't see."""
+    for b in overlaps(p):
+        from backend.i18n import _
+        raise ValueError(_("週{day}已給{owner}，不能再排{kind}（一天只能指定一種課）", day=WD_ZH[b["wd"]],
+                           owner=PREF_LABEL[b["owner"]], kind=PREF_LABEL[b["kind"]]))
     n_days = sum(bool(x) for x in p.days)
     if p.runs is not None and p.runs > n_days:
         raise ValueError(f"每週跑步次數 {p.runs} 比可練日（{n_days} 天）多")
@@ -271,7 +304,7 @@ def load(user_id: int = 1) -> Prefs:
     from backend.engine.wko5expr.datasource import read_setting
     vals = {k: read_setting(k, None, user_id) for k in KEY_FIELDS}
     try:
-        return from_settings(vals)
+        return drop_overlaps(from_settings(vals))[0]
     except (TypeError, ValueError):
         return Prefs()
 
@@ -531,7 +564,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 QUALITY_ORDER = (1, 2, 3, 0, 4, 5, 6)          # Tue, Wed, Thu, Mon, Fri, Sat, Sun
-SRC_GAP = "台灣教練：5 區一週最多兩次、兩次之間至少隔兩天；強度課與長跑隔 ≥ 48 小時"
+SRC_GAP = "徐國峰（教練）：5 區一週最多兩次、兩次之間至少隔兩天；強度課與長跑隔 ≥ 48 小時"
 LONG_MIN_TYPICAL = 90                            # 推估: an LSD rarely fits under 90 min
 
 
@@ -588,10 +621,10 @@ def day_conflicts(p: Prefs, auto_long_wd: int = 5) -> list[dict]:
     for kind in ("aet_test",):
         for wd in p.pref_of(kind)[:1]:
             if p.aet_test_days == "weekday" and wd >= 5:
-                add("aet_weekday", kind, wd, "AeT 測試只排平日（課表偏好 AeT 測試日）", "課表偏好；aet_test.pick_day",
+                add("aet_weekday", kind, wd, "AeT 測試只排平日（課表偏好 AeT 測試日）", "課表偏好",
                     f"AeT 測試偏好週{WD_ZH[wd]}，但「AeT 測試日」設成只排平日", "改排平日（或把 AeT 測試日改成「任何一天」）")
             if _gap(wd, lw) < 2 or (q and _gap(wd, q[0]) < 1):
-                add("aet_gap", kind, wd, "測試前後不排長跑／強度課", "aet_test.pick_day（測試前一天輕鬆）",
+                add("aet_gap", kind, wd, "測試前後不排長跑／強度課", "測試前一天輕鬆（推估）",
                     f"AeT 測試偏好週{WD_ZH[wd]}，離長跑（週{WD_ZH[lw]}）或間歇太近：測出來的飄移會失真", "建議日期會避開，偏好日排在後面")
     return out
 
@@ -673,7 +706,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             avail.remove(r["day"])
             continue
         elif s["kind"] in ("quality", "test"):
-            # ≥ 2 days between hard days: 台灣教練— Zone 5 at most twice a week, ≥ 2 days apart
+            # ≥ 2 days between hard days: 徐國峰（教練）— Zone 5 at most twice a week, ≥ 2 days apart
             hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
             hard_days += list(hard_done or [])   # done hard days this week (workout_review.HARD_TYPES)
             ok = lambda d:(long_day is None or abs((d - long_day).days) >= 2) and \

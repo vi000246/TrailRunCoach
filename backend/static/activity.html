@@ -8,16 +8,19 @@
 :root {
   --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
   --accent: #2563eb; --soft: #e8efff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  --baiyue: #b45309; --mid: #0f766e; --low: #64748b;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
     --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --baiyue: #f59e0b; --mid: #2dd4bf; --low: #94a3b8;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
   --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+  --baiyue: #f59e0b; --mid: #2dd4bf; --low: #94a3b8;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
@@ -134,33 +137,118 @@ dialog#ed::backdrop { background: rgba(10,14,20,.45); }
   font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
 .edlinks { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; padding-top: 8px; }
 .edlinks a { color: var(--accent); }
+
+/* tabs: 活動 | 成就 (the old 成就 page, merged 2026-10-02) */
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.tabs button { border: 0; border-radius: 0; padding: 4px 14px; color: var(--muted); background: none; }
+.tabs button + button { border-left: 1px solid var(--line); }
+.tabs button[aria-selected="true"] { background: var(--soft); color: var(--accent); font-weight: 600; }
+body.tab-ach [data-acts-only], body.tab-acts [data-ach-only] { display: none !important; }
+.badge.cls-baiyue, .cls.cls-baiyue { color: var(--baiyue); border-color: color-mix(in srgb, var(--baiyue) 55%, var(--line)); }
+.badge.cls-mid, .cls.cls-mid { color: var(--mid); border-color: color-mix(in srgb, var(--mid) 55%, var(--line)); }
+.cls.cls-low { color: var(--low); }
+.cls { display: inline-block; font-size: 11.5px; padding: 0 7px; border-radius: 9px; border: 1px solid var(--line); line-height: 1.6; }
+.badge.pk { color: var(--baiyue); border-color: color-mix(in srgb, var(--baiyue) 55%, var(--line)); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin-top: 10px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.kpi .k { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .v { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.kpi .v small { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+details.peaks { margin-top: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+details.peaks summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+details.peaks .pk { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0 2px; }
+details.peaks .pk span { font-size: 12.5px; padding: 0 8px; border-radius: 10px; color: var(--baiyue);
+  background: color-mix(in srgb, var(--baiyue) 13%, transparent); white-space: nowrap; }
+.achbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 8px; }
+.achbar .cnt { margin-left: auto; color: var(--muted); font-size: 13px; }
+.cchip { padding: 1px 10px; border-radius: 12px; font-size: 12.5px; color: var(--muted); }
+.cchip[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); color: var(--accent); }
+#a-tbody .nm[contenteditable] { cursor: text; border-bottom: 1px dashed transparent; }
+#a-tbody .nm[contenteditable]:hover { border-bottom-color: var(--muted); }
+#a-tbody .pkl { display: block; color: var(--baiyue); font-size: 12px; white-space: normal; }
+#a-tbody .kd { display: block; color: var(--muted); font-size: 12px; }
+#a-tbody .rep { border: 0; background: none; padding: 0 2px; font-size: 11px; color: var(--accent); }
+#a-tbody .tg { border: 0; background: none; padding: 0 4px 0 0; color: var(--muted); width: 1.3em; }
+#a-tbody tr.hid td { opacity: .45; }
+#a-tbody tr.day td { background: var(--bg); color: var(--muted); font-size: 12px; }
+#a-tbody input.sh { width: 4.6em; padding: 1px 4px; text-align: right; }
+#a-tbody .x { border: 0; background: none; padding: 0 4px; color: var(--muted); }
+#a-tbody .clsm { display: none; }
+@media (max-width: 699px) {
+  .c-mv, .c-vam, .c-sh, .c-top, .c-cls { display: none; }
+  #a-tbody .clsm { display: inline-block; margin-left: 4px; }
+  .achbar .cnt { margin-left: 0; flex: 1 1 100%; }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .kpi { padding: 5px 8px; }
+  .kpi .v { font-size: 16px; }
+}
+dialog#exp { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+  width: min(680px, calc(100vw - 24px)); }
+dialog#exp::backdrop { background: rgba(10,14,20,.45); }
+dialog#exp textarea { height: 300px; font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--bg); }
+dialog#exp .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+dialog#exp .row .sp { flex: 1; }
 </style>
 </head>
-<body>
+<body class="tab-acts">
 <script src="/api/v1/static/shell.js" data-page="activity"></script>
 <main>
   <div class="head">
     <h1><span data-i18n="activity.title">活動列表</span><button type="button" class="qtip" aria-label="?"
       data-i18n-attr="data-tip:activity.help.page" data-tip="">?</button></h1>
+    <div class="tabs" role="tablist" data-i18n-attr="aria-label:activity.tab.label" aria-label="">
+      <button type="button" role="tab" id="tab-acts" data-tab="acts" aria-selected="true" aria-controls="acts-view" data-i18n="activity.tab.acts">活動</button>
+      <button type="button" role="tab" id="tab-ach" data-tab="ach" aria-selected="false" aria-controls="ach" data-i18n="activity.tab.ach">成就</button>
+    </div>
     <span class="meta" id="hdr"></span>
     <span class="meta" id="autost" role="status" aria-live="polite" hidden></span>
   </div>
   <div class="filters" role="search">
     <input type="search" id="f-q" class="q" data-i18n-attr="placeholder:activity.f.q;aria-label:activity.f.q_label" placeholder="" aria-label="">
     <span class="range"><input type="date" id="f-from" data-i18n-attr="aria-label:activity.f.from" aria-label="">–<input type="date" id="f-to" data-i18n-attr="aria-label:activity.f.to" aria-label=""></span>
-    <select id="f-type" data-i18n-attr="aria-label:activity.f.type" aria-label=""></select>
-    <select id="f-src" data-i18n-attr="aria-label:activity.f.src" aria-label=""></select>
-    <label class="ck" data-pain-only hidden><input type="checkbox" id="f-pain"><span data-i18n="activity.f.pain">只看有疼痛</span></label>
+    <select id="f-type" data-acts-only data-i18n-attr="aria-label:activity.f.type" aria-label=""></select>
+    <select id="f-src" data-acts-only data-i18n-attr="aria-label:activity.f.src" aria-label=""></select>
+    <label class="ck" data-pain-only data-acts-only hidden><input type="checkbox" id="f-pain"><span data-i18n="activity.f.pain">只看有疼痛</span></label>
+    <label class="ck" data-acts-only><input type="checkbox" id="f-ach"><span data-i18n="activity.f.ach">有成就</span></label><button type="button" class="qtip" aria-label="?"
+      data-acts-only data-i18n-attr="data-tip:activity.help.f_ach" data-tip="" style="margin-left:-4px">?</button>
     <button type="button" class="reset" id="f-reset" data-i18n="activity.f.reset">清除篩選</button>
   </div>
-  <div class="tablewrap">
-    <table id="tbl">
-      <thead><tr id="thead"></tr></thead>
-      <tbody id="tbody"><tr><td class="loading" colspan="13" data-i18n="activity.loading">讀取中…</td></tr></tbody>
-    </table>
+  <div id="acts-view" role="tabpanel" aria-labelledby="tab-acts" data-acts-only>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"><tr><td class="loading" colspan="13" data-i18n="activity.loading">讀取中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager" id="pager"></div>
   </div>
-  <div class="pager" id="pager"></div>
+  <section id="ach" role="tabpanel" aria-labelledby="tab-ach" data-ach-only>
+    <div class="kpis" id="a-kpis"></div>
+    <details class="peaks" id="a-peaks" open hidden><summary></summary><div class="pk"></div></details>
+    <div class="achbar">
+      <select id="a-kind" data-i18n-attr="aria-label:activity.ach.kind" aria-label=""></select>
+      <span id="a-cls"></span>
+      <label class="ck"><input type="checkbox" id="a-hidden"><span data-i18n="activity.ach.show_hidden">含隱藏</span></label>
+      <button type="button" class="primary" id="a-copy" data-i18n="activity.ach.copy">複製給登山團</button>
+      <button type="button" class="qtip" aria-label="?" data-i18n-attr="data-tip:activity.ach.help" data-tip="">?</button>
+      <span class="cnt" id="a-cnt"></span>
+    </div>
+    <div class="tablewrap">
+      <table id="a-tbl">
+        <thead><tr id="a-thead"></tr></thead>
+        <tbody id="a-tbody"><tr><td class="loading" colspan="11" data-i18n="activity.loading">讀取中…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
 </main>
+<dialog id="exp" aria-labelledby="exp-title">
+  <div class="row"><b id="exp-title" data-i18n="activity.ach.copy">複製給登山團</b><span class="sp"></span>
+    <select id="exp-limit" data-i18n-attr="aria-label:activity.ach.top" aria-label=""></select></div>
+  <div class="meta" id="exp-msg"></div>
+  <textarea id="exp-text" data-i18n-attr="aria-label:activity.ach.copy" aria-label=""></textarea>
+  <div class="row"><span class="sp"></span><button type="button" id="exp-recopy" data-i18n="activity.ach.recopy">再複製一次</button>
+    <button type="button" id="exp-close" data-i18n="activity.close">關閉</button></div>
+</dialog>
 <dialog id="ed" aria-labelledby="ed-title"></dialog>
 <datalist id="tag-list"></datalist>
 <script src="/api/v1/static/painpicker.js"></script>
@@ -178,8 +266,31 @@ const SRC_SHORT = { coros: "COROS", tp: "TP", wko5: "WKO5" };
 const PREF = "activitylist.filters", PER = 50;
 // usePower: settings 「使用功率」 (off = no 平均功率 column, no 功率來源 row)
 // pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 column / filter / row)
+// ach: the 成就 records (GET /api/v1/achievements, loaded once; null until then) — the 成就 tab and
+// the per-activity badges / 「有成就」 filter all read this one copy
 const S = { acts: [], stats: {}, auto: null, types: {}, efforts: {}, usePower: true, pain: null,
-  sort: { k: "date", dir: -1 }, page: 0, sel: null, detail: null, merge: null, originLabels: {} };
+  sort: { k: "date", dir: -1 }, page: 0, sel: null, detail: null, merge: null, originLabels: {},
+  tab: "acts", ach: null, achErr: null, achMin: new Map(), actMin: new Map(),
+  asort: { k: "date", dir: -1 }, aopen: new Set(), acls: new Set(["baiyue", "mid", "low"]) };
+let TW = true;                 // 地區 (engine/region.py): 百岳 (peaks, the 百岳 count) only in Taiwan
+const ACH = "/api/v1/achievements";
+const CLS_IDS = ["baiyue", "mid", "low"];
+// an activity <-> its 成就 record: the same local start minute, else the nearest within ±3 min
+// (activity_key.MATCH_TOL_MIN — the record may come from another data source's file)
+const minOf = (k) => { const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/.exec(k || "");
+  return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) / 60000 : null; };
+function nearest(map, key) {
+  const m = minOf(key);
+  if (m == null) return null;
+  for (const d of [0, -1, 1, -2, 2, -3, 3]) { const x = map.get(m + d); if (x) return x; }
+  return null;
+}
+const achOf = (a) => nearest(S.achMin, a.key);
+const actOfAch = (r) => nearest(S.actMin, r.key);
+const clsName = (id) => T((TW ? "ach.cls." : "ach.cls_intl.") + id);
+const peaksOf = (r) => (TW && r ? r.peaks || [] : []);
+const hm = (s) => { if (!s) return "—"; s = Math.round(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}`; };
+const big = (v) => (v == null ? "—" : Math.round(v).toLocaleString());
 
 async function j(url, opt) {
   const r = await fetch(url, opt);
@@ -230,7 +341,8 @@ $("thead").addEventListener("click", (e) => {
 const FIDS = ["f-q", "f-from", "f-to", "f-type", "f-src"];
 function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF) || "{}"); } catch { return {}; } }
 function savePrefs() {
-  const p = { sort: S.sort, pain: $("f-pain").checked };
+  const p = { sort: S.sort, pain: $("f-pain").checked, ach: $("f-ach").checked,
+    asort: S.asort, akind: $("a-kind").value, acls: [...S.acls], ahid: $("a-hidden").checked };
   for (const k of FIDS) p[k] = $(k).value;
   try { localStorage.setItem(PREF, JSON.stringify(p)); } catch {}
 }
@@ -238,7 +350,12 @@ function restorePrefs() {
   const p = loadPrefs();
   for (const k of FIDS) if (p[k] && $(k)) { $(k).value = p[k]; if ($(k).value !== p[k]) $(k).value = ""; }
   $("f-pain").checked = !!p.pain;
+  $("f-ach").checked = !!p.ach;
   if (p.sort && COLS.some((c) => c.k === p.sort.k)) S.sort = { k: p.sort.k, dir: p.sort.dir > 0 ? 1 : -1 };
+  if (p.asort && ACOLS.some((c) => c.k === p.asort.k && c.get)) S.asort = { k: p.asort.k, dir: p.asort.dir > 0 ? 1 : -1 };
+  if (p.akind) { $("a-kind").value = p.akind; if ($("a-kind").value !== p.akind) $("a-kind").value = ""; }
+  if (Array.isArray(p.acls)) S.acls = new Set(p.acls.filter((c) => CLS_IDS.includes(c)));
+  $("a-hidden").checked = !!p.ahid;
 }
 function fillFilterOptions() {
   const sports = [...new Set(S.acts.map((a) => a.sport_type || a.sport).filter(Boolean))]
@@ -255,7 +372,7 @@ function fillFilterOptions() {
 }
 function filtered() {
   const from = $("f-from").value, to = $("f-to").value, ty = $("f-type").value, src = $("f-src").value,
-    pain = S.pain && $("f-pain").checked, q = $("f-q").value.trim().toLowerCase();
+    pain = S.pain && $("f-pain").checked, q = $("f-q").value.trim().toLowerCase(), achOnly = $("f-ach").checked;
   return S.acts.filter((a) => {
     const d = a.start.slice(0, 10);
     if (from && d < from) return false;
@@ -263,8 +380,11 @@ function filtered() {
     if (ty && (a.sport_type || a.sport) !== ty) return false;
     if (src && a.origin !== src) return false;
     if (pain && !(a.pain >= 1)) return false;
+    const r = (achOnly || q) ? achOf(a) : null;
+    if (achOnly && !(r && !r.hidden)) return false;
     if (q) {
-      const hay = [title(a), a.title_original, a.note, ...(a.tags || []), d, sportName(a)].join(" ").toLowerCase();
+      const hay = [title(a), a.title_original, a.note, ...(a.tags || []), d, sportName(a),
+        r ? r.name : "", ...peaksOf(r).map((p) => p.name)].join(" ").toLowerCase();
       if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
     }
     return true;
@@ -278,12 +398,13 @@ function sorted(rows) {
     return (x < y ? -1 : x > y ? 1 : 0) * dir || (a.start < b.start ? 1 : -1);
   }).map(([a]) => a);
 }
-for (const id of ["f-from", "f-to", "f-type", "f-src", "f-pain"]) $(id).addEventListener("change", () => { S.page = 0; savePrefs(); render(); });
+const refresh = () => { render(); renderAch(); };
+for (const id of ["f-from", "f-to", "f-type", "f-src", "f-pain", "f-ach"]) $(id).addEventListener("change", () => { S.page = 0; savePrefs(); refresh(); });
 let qTimer = null;
-$("f-q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { S.page = 0; savePrefs(); render(); }, 120); });
+$("f-q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { S.page = 0; savePrefs(); refresh(); }, 120); });
 $("f-reset").addEventListener("click", () => {
   for (const k of FIDS) $(k).value = "";
-  $("f-pain").checked = false; S.page = 0; savePrefs(); render();
+  $("f-pain").checked = false; $("f-ach").checked = false; S.page = 0; savePrefs(); refresh();
 });
 
 // ---- table ------------------------------------------------------------------
@@ -306,7 +427,7 @@ function cell(c, a) {
     case "date": return `<span class="yr">${esc(a.start.slice(0, 5))}</span>${esc(a.start.slice(5, 10))}<small>${esc(a.start.slice(11, 16))}</small>`;
     case "name": {
       const sub = [sportName(a), hms(a.duration), a.climbing != null ? `↑${Math.round(a.climbing)} m` : ""].filter(Boolean).join(" · ");
-      return `<span class="nm">${esc(title(a))}</span>${a.excluded ? ` <span class="badge ex">${esc(T("excluded"))}</span>` : ""}` +
+      return `<span class="nm">${esc(title(a))}</span>${a.excluded ? ` <span class="badge ex">${esc(T("excluded"))}</span>` : ""}${achBadge(a)}` +
         `<span class="sub">${esc(sub)} ${painBadge(a)}</span>`;
     }
     case "type": return esc(sportName(a));
@@ -358,6 +479,8 @@ async function loadList() {
   const r = await j(`${API}/activities`);
   S.acts = r.activities; S.types = r.types; S.efforts = r.efforts;
   S.merge = r.merge || null; S.originLabels = r.origin_labels || {};
+  S.actMin = new Map();
+  for (const a of S.acts) { const m = minOf(a.key); if (m != null && (!S.actMin.has(m) || a.index != null)) S.actMin.set(m, a); }
   const src = { synced: T("source.synced"), wko5: "WKO5", coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source;
   const prim = S.merge && S.merge.primary ? T("source.primary", { src: ({ coros: "COROS", trainingpeaks: "TrainingPeaks" })[S.merge.primary] || S.merge.primary }) : "";
   $("hdr").textContent = T("source.line", { src: src + prim, n: S.acts.length });
@@ -420,7 +543,7 @@ async function openEditor(key) {
   if (!actOf(key)) return;
   S.sel = key; S.detail = null;
   document.querySelectorAll("#tbody tr").forEach((r) => r.classList.toggle("on", r.dataset.k === key));
-  try { history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(key)}`); } catch {}
+  try { history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(key)}${location.hash}`); } catch {}
   renderEditor();
   if (!$("ed").open) $("ed").showModal();
   const a = actOf(key);
@@ -434,7 +557,7 @@ async function openEditor(key) {
 $("ed").addEventListener("close", () => {
   S.sel = null; qtipHide(); QTIP.pinned = null;
   document.querySelectorAll("#tbody tr.on").forEach((r) => r.classList.remove("on"));
-  try { history.replaceState(null, "", location.pathname); } catch {}
+  try { history.replaceState(null, "", location.pathname + location.hash); } catch {}
 });
 $("ed").addEventListener("click", (e) => {
   if (e.target === $("ed") || e.target.closest("[data-close]")) $("ed").close();   // the backdrop or ×
@@ -593,17 +716,258 @@ function wireEditor(a) {
   }));
 }
 
+// ---- 成就 tab (the old 成就 page): trail runs and mountain days -------------------------
+function achBadge(a) {
+  const r = achOf(a);
+  if (!r || r.hidden) return "";
+  const pk = peaksOf(r);
+  if (pk.length) return ` <span class="badge pk" title="${esc(pk.map((p) => `${p.name} ${p.elevation_m} m`).join(T("ach.sep")))}">▲ ${esc(pk[0].name)}${pk.length > 1 ? ` +${pk.length - 1}` : ""}</span>`;
+  return r.class_id === "low" ? "" : ` <span class="badge cls-${esc(r.class_id)}" title="${esc(T("ach.badge_tip", { m: big(r.top_m) }))}">${esc(clsName(r.class_id))}</span>`;
+}
+// k: the column; get: its sort value (no get = not sortable); srv: the export's sort key
+const ACOLS = [
+  { k: "date", cl: "c-date", get: (r) => r.start, srv: "date" },
+  { k: "name", cl: "c-name" },
+  { k: "cls", cl: "c-cls" },
+  { k: "dist", cl: "c-dist num", get: (r) => r.distance_km, srv: "distance" },
+  { k: "climb", cl: "c-aclimb num", get: (r) => r.climbing_m, srv: "climbing" },
+  { k: "mv", cl: "c-mv num", get: (r) => r.moving_s, srv: "moving" },
+  { k: "top", cl: "c-top num", get: (r) => r.top_m, srv: "top" },
+  { k: "vam", cl: "c-vam num", get: (r) => r.best_climb?.vam_m_per_h, srv: "vam", tip: "help_vam" },
+  { k: "sh", cl: "c-sh num", get: (r) => r.shang_he_ratio, asc: true, tip: "help_sh" },
+];
+function achFiltered() {
+  if (!S.ach) return [];
+  const from = $("f-from").value, to = $("f-to").value, kind = $("a-kind").value, hid = $("a-hidden").checked,
+    q = $("f-q").value.trim().toLowerCase();
+  return S.ach.filter((r) => {
+    const d = r.start.slice(0, 10);
+    if ((from && d < from) || (to && d > to)) return false;
+    if (kind && r.kind_id !== kind) return false;
+    if (!S.acls.has(r.class_id)) return false;
+    if (r.hidden && !hid) return false;
+    if (q) {
+      const hay = [r.name, r.auto_name, r.route_name, r.note, d, ...peaksOf(r).map((p) => p.name)].join(" ").toLowerCase();
+      if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
+    }
+    return true;
+  });
+}
+function achSorted(rows) {
+  const c = ACOLS.find((x) => x.k === S.asort.k && x.get) || ACOLS[0], dir = S.asort.dir;
+  return rows.map((r) => [r, c.get(r)]).sort(([a, x], [b, y]) => {
+    const nx = x == null || x === "", ny = y == null || y === "";
+    if (nx || ny) return nx === ny ? (a.start < b.start ? 1 : -1) : nx ? 1 : -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * dir || (a.start < b.start ? 1 : -1);
+  }).map(([r]) => r);
+}
+function renderAchBar() {
+  const v = $("a-kind").value;
+  $("a-kind").innerHTML = `<option value="">${esc(T("ach.kind_all"))}</option>` +
+    ["trail", "hike"].map((k) => `<option value="${k}">${esc(T("ach.kind." + k))}</option>`).join("");
+  $("a-kind").value = v;
+  $("a-cls").innerHTML = CLS_IDS.map((id) => `<button type="button" class="cchip" data-cls="${id}" aria-pressed="${S.acls.has(id)}">${esc(clsName(id))}</button>`).join(" ");
+}
+function renderKpis(rows) {
+  const peaks = new Map(), by = { baiyue: 0, mid: 0, low: 0 };
+  for (const r of rows) {
+    by[r.class_id] = (by[r.class_id] || 0) + 1;
+    for (const p of peaksOf(r)) {
+      const x = peaks.get(p.name) || { name: p.name, el: p.elevation_m, first: r.start.slice(0, 10), times: 0 };
+      x.times += 1; if (r.start.slice(0, 10) < x.first) x.first = r.start.slice(0, 10);
+      peaks.set(p.name, x);
+    }
+  }
+  const sum = (f) => rows.reduce((s, r) => s + (r[f] || 0), 0), mx = (f) => rows.reduce((m, r) => Math.max(m, r[f] || 0), 0);
+  const tile = (k, v, u, sub) => `<div class="kpi"><div class="k" title="${esc(sub || k)}">${esc(k)}</div><div class="v">${v}${u ? `<small>${esc(u)}</small>` : ""}</div></div>`;
+  $("a-kpis").innerHTML = [
+    TW ? tile(T("ach.kpi.peaks"), peaks.size, T("ach.kpi.peaks_u")) : "",
+    tile(T("ach.kpi.count"), rows.length, "", CLS_IDS.map((id) => `${clsName(id)} ${by[id]}`).join(" · ")),
+    tile(T("ach.kpi.climb"), big(sum("climbing_m")), "m"),
+    tile(T("ach.kpi.dist"), big(sum("distance_km")), "km"),
+    tile(T("ach.kpi.top"), mx("top_m") ? big(mx("top_m")) : "—", "m"),
+    tile(T("ach.kpi.big"), mx("climbing_m") ? big(mx("climbing_m")) : "—", "m"),
+  ].join("");
+  const pk = [...peaks.values()].sort((a, b) => (b.el || 0) - (a.el || 0));
+  $("a-peaks").hidden = !(TW && pk.length);
+  $("a-peaks").querySelector("summary").textContent = T("ach.peaks_sum", { n: pk.length });
+  $("a-peaks").querySelector(".pk").innerHTML = pk.map((p) =>
+    `<span title="${esc(T(p.times > 1 ? "ach.peak_tip_n" : "ach.peak_tip", { d: p.first, n: p.times }))}">${esc(p.name)} ${p.el ?? ""}${p.times > 1 ? ` ×${p.times}` : ""}</span>`).join("");
+}
+function renderAch() {
+  if (S.tab !== "ach") return;
+  $("a-thead").innerHTML = ACOLS.map((c) => {
+    const lab = esc(T("ach.col." + c.k));
+    if (!c.get) return `<th class="${c.cl}" scope="col">${lab}</th>`;
+    const s = S.asort.k === c.k ? (S.asort.dir > 0 ? "ascending" : "descending") : "none";
+    return `<th class="${c.cl}" aria-sort="${s}" scope="col"><button type="button" class="sort" data-asort="${c.k}">${lab}</button>${c.tip ? qt(T("ach." + c.tip)) : ""}</th>`;
+  }).join("") + `<th class="c-act" scope="col"></th>`;
+  const span = ACOLS.length + 1;
+  if (!S.ach) {
+    $("a-kpis").innerHTML = ""; $("a-peaks").hidden = true; $("a-cnt").textContent = "";
+    $("a-tbody").innerHTML = `<tr><td class="${S.achErr ? "empty" : "loading"}" colspan="${span}">${esc(S.achErr ? T("load_failed", { err: S.achErr }) : T("ach.computing"))}</td></tr>`;
+    return;
+  }
+  const rows = achSorted(achFiltered());
+  renderKpis(rows);
+  $("a-cnt").textContent = T("count", { n: rows.length, total: S.ach.length });
+  if (!rows.length) { $("a-tbody").innerHTML = `<tr><td class="empty" colspan="${span}">${esc(T(S.ach.length ? "empty" : "ach.none"))}</td></tr>`; return; }
+  $("a-tbody").innerHTML = rows.map((r) => {
+    const open = S.aopen.has(r.id), act = actOfAch(r), href = act ? viewerHref(act) : null, pk = peaksOf(r), bc = r.best_climb || {};
+    const rep = r.route_count > 1 ? ` <button type="button" class="rep" data-route="${esc(r.route_key)}" title="${esc(T("ach.rep_tip", { n: r.route_count }))}">×${r.route_count}</button>` : "";
+    const kd = [T("ach.kind." + r.kind_id), r.days.length ? T("ach.days", { n: r.days.length }) : "", hm(r.moving_s),
+      r.top_m ? `▲${big(r.top_m)} m` : ""].filter((x) => x && x !== "—").join(" · ");
+    const days = open ? r.days.map((d, i) => `<tr class="day"><td class="c-date">${esc(T("ach.day", { n: i + 1, d: d.date.slice(5) }))}</td><td class="c-name"></td><td class="c-cls"></td>` +
+      `<td class="c-dist num">${num(d.distance_km, 1)}</td><td class="c-aclimb num">${big(d.climbing_m)}</td><td class="c-mv num">${hm(d.moving_s)}</td>` +
+      `<td class="c-top num">${d.top_m ? big(d.top_m) : "—"}</td><td class="c-vam"></td><td class="c-sh"></td><td></td></tr>`).join("") : "";
+    const hideT = T(r.hidden ? "ach.unhide" : "ach.hide");
+    return `<tr data-id="${esc(r.id)}" class="${r.hidden ? "hid" : ""}">` +
+      `<td class="c-date">${r.days.length ? `<button type="button" class="tg" data-tg aria-expanded="${open}" aria-label="${esc(T("ach.days_toggle"))}">${open ? "▾" : "▸"}</button>` : ""}` +
+        `<span class="yr">${esc(r.start.slice(0, 5))}</span>${esc(r.start.slice(5, 10))}</td>` +
+      `<td class="c-name"><span class="nm" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="${esc(T("ach.rename"))}" title="${esc(T("ach.rename"))}">${esc(r.name)}</span>${rep}<span class="cls clsm cls-${esc(r.class_id)}">${esc(clsName(r.class_id))}</span>` +
+        `${pk.length ? `<span class="pkl">▲ ${esc(pk.map((p) => p.name).join(T("ach.sep")))}</span>` : ""}<span class="kd">${esc(kd)}</span></td>` +
+      `<td class="c-cls"><span class="cls cls-${esc(r.class_id)}">${esc(clsName(r.class_id))}</span></td>` +
+      `<td class="c-dist num">${num(r.distance_km, 1)}</td><td class="c-aclimb num">${big(r.climbing_m)}</td>` +
+      `<td class="c-mv num">${hm(r.moving_s)}</td><td class="c-top num">${r.top_m ? big(r.top_m) : "—"}</td>` +
+      `<td class="c-vam num" title="${bc.gain_m ? esc(T("ach.vam_tip", { gain: bc.gain_m, grade: Math.round(bc.grade * 100) })) : ""}">${bc.vam_m_per_h ? big(bc.vam_m_per_h) : "—"}</td>` +
+      `<td class="c-sh num"><input type="number" class="sh" min="0" step="10" inputmode="numeric" value="${r.shang_he_min ?? ""}" placeholder="${esc(T("ach.sh_ph"))}" aria-label="${esc(T("ach.sh_label"))}" title="${esc(T("ach.sh_label"))}">${r.shang_he_ratio ? ` <b>${r.shang_he_ratio.toFixed(2)}</b>` : ""}</td>` +
+      `<td class="c-act"><span class="acts"><a class="iconlink${href ? "" : " off"}" ${href ? `href="${esc(href)}"` : 'aria-hidden="true" tabindex="-1"'} title="${esc(T("open_chart"))}" aria-label="${esc(T("open_chart"))}">${CHART_ICON}</a>` +
+        `<button type="button" class="x" data-hide title="${esc(hideT)}" aria-label="${esc(hideT)}">${r.hidden ? "↺" : "✕"}</button></span></td></tr>${days}`;
+  }).join("");
+}
+const achById = (id) => (S.ach || []).find((r) => r.id === id);
+const annotate = (id, body) => send(`${ACH}/records/${encodeURIComponent(id)}`, "PUT", body);
+async function loadAch(p) {
+  try { S.ach = (await (p || j(`${ACH}?include_hidden=true`))).rows || []; S.achErr = null; }
+  catch (e) { S.ach = null; S.achErr = e.message; }
+  S.achMin = new Map();
+  for (const r of S.ach || []) { const m = minOf(r.key); if (m != null && !S.achMin.has(m)) S.achMin.set(m, r); }
+  refresh();
+}
+$("a-thead").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-asort]");
+  if (!b) return;
+  const c = ACOLS.find((x) => x.k === b.dataset.asort);
+  S.asort = S.asort.k === c.k ? { k: c.k, dir: -S.asort.dir } : { k: c.k, dir: c.asc ? 1 : -1 };
+  savePrefs(); renderAch();
+});
+$("a-cls").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-cls]");
+  if (!b) return;
+  S.acls.has(b.dataset.cls) ? S.acls.delete(b.dataset.cls) : S.acls.add(b.dataset.cls);
+  savePrefs(); renderAchBar(); renderAch();
+});
+for (const id of ["a-kind", "a-hidden"]) $(id).addEventListener("change", () => { savePrefs(); renderAch(); });
+$("a-tbody").addEventListener("click", async (e) => {
+  const tr = e.target.closest("tr[data-id]"), r = tr && achById(tr.dataset.id);
+  if (!r) return;
+  if (e.target.closest("[data-tg]")) { S.aopen.has(r.id) ? S.aopen.delete(r.id) : S.aopen.add(r.id); renderAch(); }
+  if (e.target.closest("[data-hide]")) {
+    try { await annotate(r.id, { hidden: !r.hidden }); r.hidden = !r.hidden; refresh(); } catch (err) { alert(T("save_failed", { err: err.message })); }
+  }
+  const rep = e.target.closest("button[data-route]");
+  if (rep) {
+    const name = prompt(T("ach.route_prompt"), r.route_name || "");
+    if (name == null) return;
+    try { await send(`${ACH}/routes/${encodeURIComponent(rep.dataset.route)}`, "PUT", { name }); await loadAch(); }
+    catch (err) { alert(T("save_failed", { err: err.message })); }
+  }
+});
+$("a-tbody").addEventListener("keydown", (e) => {
+  if (e.target.classList.contains("nm") && e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.target.blur(); }
+});
+$("a-tbody").addEventListener("focusout", async (e) => {
+  const tr = e.target.closest("tr[data-id]"), r = tr && achById(tr.dataset.id);
+  if (!r || !e.target.classList.contains("nm")) return;
+  const v = e.target.textContent.trim();
+  if (v === r.name) return;
+  try {
+    await annotate(r.id, { name: v });       // "" = back to the route / automatic name
+    r.name = v || r.route_name || r.auto_name;
+    if (!v) e.target.textContent = r.name;
+  } catch (err) { e.target.textContent = r.name; alert(T("save_failed", { err: err.message })); }
+});
+$("a-tbody").addEventListener("change", async (e) => {
+  const tr = e.target.closest("tr[data-id]"), r = tr && achById(tr.dataset.id);
+  if (!r || !e.target.classList.contains("sh")) return;
+  const v = e.target.value.trim() === "" ? null : +e.target.value;
+  if (v != null && !(v > 0)) return;
+  try {
+    await annotate(r.id, { shang_he_min: v });
+    r.shang_he_min = v;
+    r.shang_he_ratio = v && r.moving_s ? Math.round(r.moving_s / 60 / v * 100) / 100 : null;
+    renderAch();
+  } catch (err) { alert(T("save_failed", { err: err.message })); }
+});
+// 複製給登山團: the server's plain text (GET /achievements/export) of what the tab shows
+function exportParams() {
+  const p = new URLSearchParams();
+  if (S.acls.size < CLS_IDS.length) p.set("mclass", [...S.acls].join(","));
+  const kind = $("a-kind").value, q = $("f-q").value.trim(), from = $("f-from").value, to = $("f-to").value;
+  if (kind) p.set("kind", kind);
+  if (q) p.set("q", q);
+  if (from) p.set("date_from", from);
+  if (to) p.set("date_to", to);
+  p.set("sort", (ACOLS.find((c) => c.k === S.asort.k) || {}).srv || "climbing");
+  p.set("limit", $("exp-limit").value || "10");
+  return p;
+}
+async function loadExport() {
+  $("exp-msg").textContent = T("loading");
+  try {
+    const r = await fetch(`${ACH}/export?${exportParams()}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    $("exp-text").value = await r.text();
+    try { await navigator.clipboard.writeText($("exp-text").value); $("exp-msg").textContent = T("ach.copied"); }
+    catch { $("exp-msg").textContent = T("ach.copy_manual"); }
+  } catch (e) { $("exp-msg").textContent = T("load_failed", { err: e.message }); }
+}
+$("exp-limit").innerHTML = [10, 20, 50, 1000].map((n) => `<option value="${n}">${esc(n === 1000 ? T("ach.top_all") : T("ach.top_n", { n }))}</option>`).join("");
+$("a-copy").addEventListener("click", () => { if (!$("exp").open) $("exp").showModal(); loadExport(); });
+$("exp-limit").addEventListener("change", loadExport);
+$("exp-recopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("exp-text").value); $("exp-msg").textContent = T("ach.copied"); } catch { $("exp-text").select(); }
+});
+$("exp-close").addEventListener("click", () => $("exp").close());
+$("exp").addEventListener("click", (e) => { if (e.target === $("exp")) $("exp").close(); });
+
+// ---- tabs: 活動 | 成就 (#achievements; the old /api/v1/achievements/page redirects there) ----
+function setTab(t) {
+  S.tab = t === "ach" ? "ach" : "acts";
+  document.body.classList.toggle("tab-ach", S.tab === "ach");
+  document.body.classList.toggle("tab-acts", S.tab !== "ach");
+  document.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
+  const h = S.tab === "ach" ? "#achievements" : "";
+  if (location.hash !== h) { try { history.replaceState(null, "", location.pathname + location.search + h); } catch {} }
+  renderAch();
+}
+document.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); });
+document.querySelector(".tabs").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  setTab(S.tab === "ach" ? "acts" : "ach"); document.querySelector(`[data-tab="${S.tab}"]`).focus();
+});
+addEventListener("hashchange", () => setTab(location.hash === "#achievements" ? "ach" : "acts"));
+
 // ---- start ------------------------------------------------------------------
 (async () => {
   const want = new URLSearchParams(location.search).get("key");
+  const achP = j(`${ACH}?include_hidden=true`);     // started now, read once (the tab, badges and filter share it)
+  achP.catch(() => {});
+  setTab(location.hash === "#achievements" ? "ach" : "acts");
   restorePrefs();
-  S.usePower = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
-  S.pain = await PainPicker.meta();          // null in the demo mode: no pain column, filter or row
+  const [usePower, pain, region] = await Promise.all([
+    j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true),
+    PainPicker.meta(),                       // null in the demo mode: no pain column, filter or row
+    j("/api/v1/region").then((x) => x.region !== "intl").catch(() => true),
+  ]);
+  S.usePower = usePower; S.pain = pain; TW = region;
   document.querySelectorAll("[data-pain-only]").forEach((el) => { el.hidden = !S.pain; });
+  renderAchBar(); renderAch();
   try { await loadList(); } catch (e) {
     $("tbody").innerHTML = `<tr><td class="empty" colspan="13">${esc(T("load_failed", { err: e.message }))}</td></tr>`; return;
   }
   restorePrefs(); render();
+  loadAch(achP);
   if (want && actOf(want)) {
     // a link from 圖表分析 (編輯活動): show its page of the table, then open it
     if (!filtered().some((a) => a.key === want)) { for (const k of FIDS) $(k).value = ""; $("f-pain").checked = false; }

@@ -74,17 +74,27 @@ def test_the_cards_render_and_hide_on_easy_runs():
     v = WR.review(ds, w, "interval_verdict")
     assert v["badge"]["text"] == "達到訓練目標" and v["badge"]["level"] == "good"
     reps = WR.review(ds, w, "interval_reps")
-    names = [s["name"] for s in reps["series"]]
-    assert names == ["目標帶", "✓ 達標", "✕ 沒到"] and reps["series"][1]["labels"][0].startswith("✓ ")
+    rp = reps["rep_profile"]
+    assert rp["mode"] == "plan" and rp["band"][0] < rp["band"][1] and len(rp["reps"]) == rp["n_plan"]
+    assert all(r["status"] == "in" for r in rp["reps"]) and reps["subtitle"] == f"{rp['n_plan']} 趟中 {rp['n_plan']} 趟在目標內"
     pw = WR.review(ds, w, "interval_power")
-    hl = [s for s in pw["series"] if s["data"]["kind"] in ("hline", "band")]
-    assert len(hl) == 2                                       # CP and the target band only
+    tr = pw["iv_trace"]
+    assert tr["band"] == rp["band"] and len(tr["reps"]) == len(rp["reps"])
+    assert len(tr["x"]) == len(tr["power"]) == len(tr["dfrc"]) == len(tr["hr"]) and max(v for v in tr["hr"] if v) == 140
+    assert 0 < tr["dfrc_min"]["pct"] < 1 and pw["subtitle"].startswith("W′ 最低 ")
     bat = WR.review(ds, w, "interval_battery")
     assert bat["series"][-1]["labels"][0].startswith("最低 ")
     tiz = WR.review(ds, w, "interval_tiz")
     assert [s["data"]["points"][0][1] for s in tiz["series"]][0] == 600
     easy = _ds([_run(TODAY - dt.timedelta(days=2), power=150.0)])
     assert WR.review(easy, easy.workouts[0], "interval_reps").get("hide") is True
+
+
+def test_a_rep_is_in_band_above_or_below_with_the_tolerances():
+    floor, ceil = 0.98 * 250.0, 270.0 * WR.REP_HI_TOL          # band 250–270 W
+    st = lambda p: WR._rep_status({"power": p}, floor, ceil)
+    assert [st(p) for p in (244.0, 246.0, 270.0, 275.0, 276.0)] == ["low", "in", "in", "in", "high"]
+    assert WR._rep_status({"power": 400.0}, floor, None) == "in"          # an open-ended band has no ceiling
 
 
 def _cp_test_run(day, fade=True):
@@ -119,11 +129,11 @@ def test_the_interval_tab_shows_on_a_cp_test_with_its_protocol_as_the_plan():
     assert v["badge"]["text"].startswith("測試配速分配") and not v.get("hide")
     assert all("達標" not in x["data"]["value"] for x in v["series"][2:] if x["data"]["kind"] == "value")
     reps = WR.review(ds, w, "interval_reps")
-    names = [s["name"] for s in reps["series"]]
-    assert "目標帶" not in names and names[:2] == ["✓ 配速平均", "◐ 不平均"]
-    assert any(n.startswith("預期全力") and "推估" in n for n in names)
+    rp = reps["rep_profile"]
+    assert rp["mode"] == "test" and rp["band"] is None and [r["status"] for r in rp["reps"]] == ["even", "uneven"]
+    assert all(r["expected"] for r in rp["reps"]) and "推估" in reps["description"] and reps["subtitle"] == "2 段中 1 段配速平均"
     pw = WR.review(ds, w, "interval_power")
-    assert not pw.get("hide") and not any(s["data"]["kind"] == "band" for s in pw["series"])
+    assert not pw.get("hide") and pw["iv_trace"]["band"] is None and pw["iv_trace"]["test"]
     bat = WR.review(ds, w, "interval_battery")
     assert not bat.get("hide") and bat["subtitle"].startswith("整趟高於 CP")
     assert WR.review(ds, w, "interval_tiz").get("hide") and WR.review(ds, w, "interval_hr").get("hide")
@@ -151,6 +161,9 @@ def test_an_unplanned_run_offers_the_interval_reading_and_remembers_it(tmp_path,
     assert WR.review(ds, w, "interval_reps").get("hide")         # no reps to draw until the mark
     bat = WR.review(ds, w, "interval_battery")                  # the battery still shows
     assert not bat.get("hide") and bat["series"][0]["name"] == "dFRC（WKO5）"
+    assert not any(s["name"].startswith("Skiba") for s in bat["series"])     # dFRC only (owner 2026-10-02)
+    pw = WR.review(ds, w, "interval_power")                     # power / W′ / HR: every run with power
+    assert not pw.get("hide") and pw["iv_trace"]["reps"] == [] and pw["iv_trace"]["band"] is None
     small = WR.review(ds, w, "wprime_battery")
     assert not small.get("hide") and not any(s["name"].startswith("Skiba") for s in small["series"])
     # the mark (activity tag) → evaluated on the detected bouts

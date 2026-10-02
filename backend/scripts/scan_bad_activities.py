@@ -1,12 +1,12 @@
 """
 Read-only scan for bad activity files (backend/engine/bad_activity.py):
-every foot-sport activity of the WKO5 folder and the synced COROS / TP FIT
-folders, with its features, the auto verdict, and the closest calls (the
+every foot-sport activity of the 資料來源 in use (COROS or TP FIT folder,
+backend/sync/primary.py; --source picks another one or the WKO5 folder), with its features, the auto verdict, and the closest calls (the
 highest speed ratio to the limit) so the thresholds can be reviewed.
 
-    python -m backend.scripts.scan_bad_activities [--source wko5|coros|tp|all] [--top 15]
+    python -m backend.scripts.scan_bad_activities [--source primary|wko5|coros|tp|all] [--top 15]
 
-Nothing is written (no cache, no DB). The app DB is not opened.
+Nothing is written (no cache, no DB). The app DB is only read for the 資料來源 setting.
 """
 from __future__ import annotations
 
@@ -85,11 +85,14 @@ def scan_wko5() -> list[dict]:
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", default="all", choices=("all", "wko5", "coros", "tp"))
+    ap.add_argument("--source", default="primary", choices=("primary", "all", "wko5", "coros", "tp"))
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--weight", type=float, default=None)
     a = ap.parse_args(argv)
     rows = []
+    if a.source == "primary":
+        from backend.engine.wko5expr.datasource import primary_folder
+        a.source = primary_folder()
     for src in (("wko5", "coros", "tp") if a.source == "all" else (a.source,)):
         rows += scan_wko5() if src == "wko5" else scan_fit(src)
     groups = {}

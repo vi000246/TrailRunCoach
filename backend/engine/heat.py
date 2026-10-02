@@ -70,7 +70,7 @@ EVIDENCE = "Pandolf 1998；Racinais 2015 共識；Daanen 2018；Racinais 2015 MS
 HR_BETA = 0.224              # the author's fit; in use: heat_calib.hr_beta() (per athlete)
 HR_BETA_SE = 0.036
 HR_BETA_REF = 120.0
-HR_BETA_SRC = "本人 HEAT 回測 β 0.224 ± 0.036 bpm／Hadley（271 段路線 effort，docs/spec/racepower.spec.md）"
+HR_BETA_SRC = "單一跑者回測 β 0.224 ± 0.036 bpm／Hadley（271 段路線，推估）"
 
 
 def hr_heat_adjust(hr: float, hadley: float, beta: Optional[float] = None) -> float:
@@ -82,15 +82,25 @@ def hr_heat_adjust(hr: float, hadley: float, beta: Optional[float] = None) -> fl
     return float(hr) - beta * (float(hadley) - HR_BETA_REF)
 
 
+def _partial() -> float:
+    """PARTIAL_HADLEY, or the 進階 manual value (engine/advanced_params.py)."""
+    try:
+        from backend.engine.advanced_params import partial_hadley
+        return float(partial_hadley())
+    except Exception:                       # noqa: BLE001
+        return PARTIAL_HADLEY
+
+
 def minute_weight(hadley: Optional[float]) -> float:
     """Weight of one minute at this Hadley sum: 0 below 130, 1 from 150."""
     if hadley is None or not math.isfinite(hadley):
         return 0.0
     if hadley >= HOT_HADLEY:
         return 1.0
-    if hadley <= PARTIAL_HADLEY:
+    lo = _partial()
+    if hadley <= lo:
         return 0.0
-    return (hadley - PARTIAL_HADLEY) / (HOT_HADLEY - PARTIAL_HADLEY)
+    return (hadley - lo) / (HOT_HADLEY - lo)
 
 
 def hadley_sum(temp_c: float, rh_pct: float) -> float:

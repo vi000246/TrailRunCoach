@@ -55,7 +55,7 @@ def test_repo_views_hide_only_power_charts():
     views = load_custom_views([REPO_VIEWS])
     hidden = {(n, c["title"]) for n, v in views.items() for d in v["dashboards"] for c in d["charts"]
               if PU.chart_needs_power(c)}
-    assert ("我的訓練", "跑步功率曲線：近 7 天新高") in hidden
+    assert ("我的訓練", "跑步功率曲線") in hidden
     assert ("周期化訓練", "Palladino 功率區間（跑步）") in hidden
     assert ("單次活動判讀", "功率區間時間") in hidden
     assert ("單次活動判讀", "CP 測試結果（3 分／12 分）") in hidden

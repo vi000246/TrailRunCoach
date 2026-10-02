@@ -27,7 +27,7 @@ from backend.i18n import _
 GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 
 # ---- thresholds, each with its source --------------------------------------
-SRC_PALLADINO = "Palladino（你的筆記：PMC 訓練負荷 / Ramp rate）"
+SRC_PALLADINO = "Palladino（PMC 訓練負荷／Ramp rate）"
 SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）TSB 區間：−10～−30 有效訓練、< −30 過度（教練）；Palladino A/B/C 賽 TSB"
 # weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
 # Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10–20 % hold = 推估, conservative.
@@ -38,8 +38,8 @@ SRC_UA = "Uphill Athlete"
 SRC_SEILER = "Seiler 2006 強度分配；Palladino 金字塔 70–90% 輕鬆"
 SRC_BOSQUET = "Bosquet 2007 減量統合分析"
 SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
-SRC_CHIANG = "江晏慶（你的筆記：越野跑周期化訓練）"
-SRC_NOTES = "你的筆記"
+SRC_CHIANG = "江晏慶（越野跑周期化訓練）"
+SRC_NOTES = "教練常見做法（推估）"
 
 # CTL/week. warn 5 / block 8: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits
 # most athletes, 10 is the ceiling; unsourced-rules.md §B2). "sustain" 3 = Palladino's 1–3 long-term (display)
@@ -152,7 +152,8 @@ class Status:
 
     @staticmethod
     def is_trail(w):
-        return bool(TRAIL_TAGS & set(w.tags))
+        from backend.engine.algorithms.classify import is_trail
+        return is_trail(w)
 
     @staticmethod
     def is_hike(w):
@@ -766,7 +767,7 @@ class Status:
                 (cp is None or cp.isoformat() < brk["return"]):
             cp_due = True
             worst = WATCH if worst == GOOD else worst
-            why += f"；停跑 {brk['days']} 天：恢復期結束後重測 CP（WKO5 研討會筆記）"
+            why += f"；停跑 {brk['days']} 天：恢復期結束後重測 CP（WKO5 研討會）"
         from backend.engine import cp_protocols as CPP
         proto = self._cp_protocol()
         if worst != GOOD:

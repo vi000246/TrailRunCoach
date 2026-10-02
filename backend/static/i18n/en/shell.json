@@ -14,7 +14,7 @@
   "page.charts.purpose": "Trends and single-activity charts",
   "page.activity.name": "Activities",
   "page.activity.short": "Activity",
-  "page.activity.purpose": "Search · filter · edit one",
+  "page.activity.purpose": "Search · filter · edit · achievements",
   "page.injuries.name": "Injury log",
   "page.injuries.short": "Injuries",
   "page.injuries.purpose": "Pain · training before an injury",
@@ -24,12 +24,9 @@
   "page.plan.name": "Season plan",
   "page.plan.short": "Season",
   "page.plan.purpose": "Goal races · phases · thresholds",
-  "page.racepower.name": "Race power",
-  "page.racepower.short": "Power",
-  "page.racepower.purpose": "Race power and finish-time estimate",
-  "page.achievements.name": "Achievements",
-  "page.achievements.short": "Records",
-  "page.achievements.purpose": "Taiwan's 100 Peaks (Baiyue) and trail records",
+  "page.racepower.name": "Race calculator",
+  "page.racepower.short": "Race",
+  "page.racepower.purpose": "Finish time · per-segment pace / power / HR · fuelling",
   "page.settings.name": "Settings",
   "page.settings.short": "Settings",
   "page.settings.purpose": "Calculation mode · weight · data fixes",
@@ -38,5 +35,7 @@
   "build.failed": "Data processing failed: {error}",
   "lang.title": "Language",
   "lang.zh-TW": "中文",
-  "lang.en": "EN"
+  "lang.en": "EN",
+  "nav.more": "More",
+  "nav.more_title": "Activities, routes, injury log, settings"
 }

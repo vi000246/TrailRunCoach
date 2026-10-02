@@ -64,6 +64,9 @@ def _no_real_event_gpx(monkeypatch, tmp_path_factory):
     monkeypatch.setattr(event_gpx, "_default_db", lambda: None)
     monkeypatch.setattr(event_gpx, "ROOT", tmp_path_factory.mktemp("event_gpx"))
     event_gpx._memo.clear()
+    # nor the race calculator's saved inputs (engine/race_calc_store.py)
+    from backend.engine import race_calc_store
+    monkeypatch.setattr(race_calc_store, "_default_db", lambda: None)
 
 
 @pytest.fixture(autouse=True)

@@ -1,5 +1,5 @@
 """
-賽事功率 補給: energy from Stryd power (van Rassel 2026) with Minetti ×
+賽事計算機 補給: energy from Stryd power (van Rassel 2026) with Minetti ×
 Fletcher / Keytel / Pandolf fallbacks, carbohydrate / water / sodium by event
 type, the generic schedule on the predicted splits, aid-station types, the
 百岳 daily budget, and the CSV columns (docs/research/fueling-and-energy.md §7.5).

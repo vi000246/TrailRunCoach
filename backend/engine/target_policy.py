@@ -38,7 +38,7 @@ SRC = {
     "hr_base": "Uphill Athlete（AeT 以下累積有氧基礎）；長天後段心率飄移（Coyle & González-Alonso 2001）",
     "power_easy": "路跑輕鬆／長跑看功率（Palladino Z1–Z2 % CP），心率 ≤ AeT 當上限：天熱、疲勞時心率先到就放慢",
     "power_iv":"Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）",
-    "climb": "長爬坡：> 8% 功率低估、心率在 20 分以上才準（vo2max-gate-and-trail-metric.md §2）",
+    "climb": "長爬坡：> 8% 功率低估、心率在 20 分以上才準（推估）",
     "down": "下坡：Stryd 功率低估離心負荷（Kipp 2023），看下降量與技術",
     "cp": "CP 測試：全力段不設上下限，事後用功率算 CP",
     "aet": "AeT 測試：依方式（徐國峰 90／Friel 看心率；UA／Evoke 固定功率）",
@@ -96,6 +96,21 @@ AUTO = {"easy": ("power", "power_easy"), "long": ("power", "power_easy"), "trail
         "aet_test": (None, "aet"), "other": ("hr", "hr_base")}
 
 
+def _auto_power_ok() -> bool:
+    """False when the 一般設定 power source is watch (not accepted) or none;
+    unset = the data decides (no CP falls back to HR below)."""
+    try:
+        from backend.engine import athlete_profile as AP
+        from backend.engine.planning import Plan
+        src = AP.profile_power_source(Plan.load().profile)
+        if src is None or src == "stryd":
+            return True
+        from backend.engine.power_source import read_setting
+        return src == "watch" and bool(read_setting())
+    except Exception:                       # noqa: BLE001
+        return True
+
+
 def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     """{"basis": hr | power | none, "chosen": auto | hr | power (where it came from),
         "type", "why", "source", "hr_cap": bool (an HR cap note on power sessions),
@@ -113,6 +128,10 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
         why = ("這次課表你選了" if own in ("hr", "power") else "課表偏好：") + LABEL[chosen]
     fb = ""
     th = th or {}
+    # generalize-athlete P12 / owner decision: auto power only for a Stryd runner — the
+    # 一般設定 power source watch / none means HR (watch power only when 進階 accepts it)
+    if basis == "power" and chosen not in ("hr", "power") and not _auto_power_ok():
+        basis, fb = "hr", "功率來源不是 Stryd：用心率"
     if basis == "power" and th and not th.get("cp"):
         basis, fb = "hr", "沒有 CP：改用心率"
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):

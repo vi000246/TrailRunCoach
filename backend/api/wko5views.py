@@ -155,6 +155,23 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             ds = _dataset()
             from backend.api import overview as OV
             OV._status(ds, OV.O.day_to_date(ds.today))
+            # 每人校正 (engine/calibrate.py): fit what was never fitted (a new
+            # install, a new item) now instead of waiting for the next sync
+            from backend.engine import calibrate as CAL
+            if any(CAL.stored_entry(n) is None for n, it in CAL._registry().items() if not it.manual_only):
+                import asyncio
+
+                async def fit_once():
+                    # its own engine: this thread runs its own event loop
+                    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+                    from backend.db.database import DATABASE_URL
+                    eng = create_async_engine(DATABASE_URL)
+                    try:
+                        async with async_sessionmaker(eng, expire_on_commit=False)() as db:
+                            await CAL.calibrate(db, ds=ds)
+                    finally:
+                        await eng.dispose()
+                asyncio.run(fit_once())
             # the 活動列表's auto type / effort: started now (its own thread),
             # read from disk when nothing changed
             from backend.api import activity_auto as AA
@@ -761,14 +778,10 @@ ORIGIN_LABELS = {"coros": "COROS", "tp": "TrainingPeaks", "wko5": "WKO5"}
 
 def _origin(ds, w=None, file: Optional[str] = None) -> Optional[str]:
     """Which source an activity's file came from (the 活動編輯 badge): coros /
-    tp on a FIT dataset (the merged "synced" one: the folder that won,
-    sync/primary.py), wko5 on the WKO5 dataset."""
+    tp on a FIT dataset (the 資料來源's folder), wko5 on the WKO5 dataset."""
     if w is not None and hasattr(ds, "file_origin"):
         return ds.file_origin(w)
     src = getattr(ds, "source", None) or "wko5"
-    if src == "synced":
-        head = str(file or "").split("/", 1)[0]
-        return head if head in ("coros", "tp") else None
     return src if src in ORIGIN_LABELS else None
 
 
@@ -845,7 +858,7 @@ def activities_list():
                     "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
-            "merge": getattr(ds, "merge_info", None), "types": AT.TYPES, "efforts": AT.EFFORTS,
+            "types": AT.TYPES, "efforts": AT.EFFORTS,
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 

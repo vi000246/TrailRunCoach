@@ -242,7 +242,7 @@ def test_shell_catalogs_cover_every_page_and_the_switch():
     assert set(zh) == set(en)
     js = (P.STATIC / "shell.js").read_text("utf-8")
     ids = re.findall(r'\{ id: "(\w+)"', js)
-    assert len(ids) == 10
+    assert len(ids) == 9                     # 成就 became a tab of 活動列表
     for i in ids:
         for f in ("name", "short", "purpose"):
             assert f"page.{i}.{f}" in zh
