@@ -1335,7 +1335,7 @@ def templates(prefs=None) -> dict:
                     continue
                 ok, _why = IL.equivalent(v)
                 ladder.append({"key": v.key, "label": f"{IL.RUNG_NAME[rung]} {IL.title(v)} · {IL.rest_text(v)}" + ("（標準）" if v.canonical else ""),
-                               "title": f"{IL.CLASS_LABEL[v.cls]} {IL.structure(v)}", "src": f"間歇庫 {IL.RUNG_NAME[rung]}（interval-prescription.md）",
+                               "title": f"{IL.CLASS_LABEL[v.cls]} {IL.structure(v)}", "src": f"間歇庫 {IL.RUNG_NAME[rung]}",
                                "items": main_set(v), "equiv": ok, "src_kind": v.src_kind, "full": from_variant(v, "std")["items"],
                                "variant": True, "rung": v.rung})
         for v in IL.NON_EQUIV:
@@ -1353,7 +1353,7 @@ def templates(prefs=None) -> dict:
         if d:
             main = [x for x in d["items"] if x["kind"] in ("work", "rest")]
             other.append({"key": f"cp_{p}", "label": f"CP 測試：{s['title']}", "title": s["title"], "items": main,
-                          "full": d["items"], "equiv": None, "src_kind": "peer", "src": "這個 app 的 CP 測試（cp-test-protocols.md）"})
+                          "full": d["items"], "equiv": None, "src_kind": "peer", "src": "這個 app 的 CP 測試"})
     g("test", "這個 app 的 CP 測試", other)
     g("trail", "有出處的課表", [r for t, r in lib if t.cat == "trail"])
     g("trail", "附加", [hills])

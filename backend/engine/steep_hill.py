@@ -45,7 +45,7 @@ TSB_MIN = -20.0                   # week_plan's 維持量 line
 NO_DAYS = 7                       # nothing in the last 7 days (doc §2.5, 推估)
 DEFAULT_PCT = 0.13                # 9 kg / 68 kg (the doc's example) when there is no body weight
 SRC = ("Pandolf 1977（同代謝率的坡度）；Ludlow & Weyand 2017（代謝量和總重成正比）；"
-       "UA trekking：跑步機坡度可以替代、5 → 10% 體重 → 行程背包；loaded-carry-training.md §1.1、§3.2")
+       "UA trekking：跑步機坡度可以替代、5 → 10% 體重 → 行程背包")
 
 
 def _d(x) -> Optional[dt.date]:

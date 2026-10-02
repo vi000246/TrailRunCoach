@@ -70,7 +70,7 @@ EVIDENCE = "Pandolf 1998；Racinais 2015 共識；Daanen 2018；Racinais 2015 MS
 HR_BETA = 0.224              # the author's fit; in use: heat_calib.hr_beta() (per athlete)
 HR_BETA_SE = 0.036
 HR_BETA_REF = 120.0
-HR_BETA_SRC = "本人 HEAT 回測 β 0.224 ± 0.036 bpm／Hadley（271 段路線 effort，docs/spec/racepower.spec.md）"
+HR_BETA_SRC = "單一跑者回測 β 0.224 ± 0.036 bpm／Hadley（271 段路線，推估）"
 
 
 def hr_heat_adjust(hr: float, hadley: float, beta: Optional[float] = None) -> float:
