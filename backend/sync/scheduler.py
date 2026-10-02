@@ -6,11 +6,14 @@ shares the per-source lock with the button and auto-on-open).
 
 Missed times (app not running) are caught up the first minute the app is up
 after the time on that day; there is no catch-up for earlier days.
+
+The same loop also runs the daily automatic backup (api/backup.auto_tick).
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import datetime, time, timezone
 from typing import Callable, Optional
 
@@ -63,4 +66,14 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
             raise
         except Exception as e:           # never kill the loop
             log.warning("sync scheduler tick failed: %s", type(e).__name__)
+        # daily automatic backup (api/backup.py): the first pass runs at app
+        # start; afterwards only when > 24 h since the last good backup
+        try:
+            from backend.api import backup as backup_api
+            if not os.getenv("WKO5COACH_NO_AUTO_BACKUP"):
+                await backup_api.auto_tick(session_factory)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning("backup tick failed: %s", type(e).__name__)
         await asyncio.sleep(interval)

@@ -199,6 +199,55 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     </div>
   </section>
 
+  <section id="backup">
+    <h2>備份 <button type="button" class="q" aria-label="說明" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）打包成一個 zip，存到你選的資料夾。選雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）裡的資料夾，就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
+      <span class="pill" id="b-pill" hidden></span></h2>
+    <div class="row" id="b-cloud"></div>
+    <div class="row">
+      <input type="text" id="b-dir" placeholder="備份資料夾的完整路徑" autocomplete="off" style="flex:1;min-width:240px">
+      <button id="b-dir-save">使用這個資料夾</button>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="b-auto"> 每天自動備份</label>
+      <button type="button" class="q" aria-label="說明" title="App 開著時，距離上次成功備份超過 24 小時就自動備份一次（開啟 App 時也會檢查）。失敗的話一小時後再試。">?</button>
+    </div>
+    <dl class="kv" id="b-kv"></dl>
+    <div class="row">
+      <button class="primary" id="b-run">立即備份</button>
+      <button id="b-restore">還原…</button>
+      <button type="button" class="q" aria-label="說明" title="選一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫另存一份到 ~/.wko5coach/backups，然後換成備份裡的資料，完成後請重新啟動 App。這台電腦的備份設定（資料夾、加密）不會被覆蓋。COROS／TrainingPeaks 記住的密碼和登入憑證是用這台電腦的金鑰加密的，金鑰不在備份裡，所以在別台電腦還原後要重新登入一次。">?</button>
+      <span class="meta" id="b-msg" role="status"></span>
+    </div>
+    <details style="margin-top:6px"><summary class="meta">進階設定</summary>
+      <div class="row">
+        <label><input type="checkbox" id="b-fit"> 同時備份 FIT 原始檔</label>
+        <button type="button" class="q" aria-label="說明" title="同步下來的 FIT 檔（~/.wko5coach/fit）以 gzip 壓縮放進備份，備份檔會大很多。不勾也沒關係：FIT 檔之後可以從 COROS／TrainingPeaks 重新同步。還原時只補回這台電腦沒有的檔案，不會覆蓋。">?</button>
+      </div>
+      <div class="row">
+        <span>加密 <span class="pill" id="b-enc">關閉</span></span>
+        <input type="password" id="b-pw1" placeholder="備份密碼（至少 8 個字）" autocomplete="new-password">
+        <input type="password" id="b-pw2" placeholder="再輸入一次" autocomplete="new-password">
+        <button id="b-pw-save">設定密碼</button>
+        <button id="b-pw-off" hidden>關閉加密</button>
+        <button type="button" class="q" aria-label="說明" title="用你設的密碼加密之後的備份檔（AES-256，scrypt 金鑰推導）。密碼本身不會儲存；這台電腦只保存由密碼推導出的金鑰（再用本機金鑰加密），讓每日自動備份也能加密。忘記密碼就沒辦法還原，任何人都救不回來，請記在密碼管理器。已經建立的備份不會改變。">?</button>
+      </div>
+    </details>
+    <p class="meta" id="b-note"></p>
+  </section>
+
+  <dialog id="restore-dlg">
+    <h2>還原備份</h2>
+    <p class="meta">目前的資料會被備份裡的資料取代（還原前會先自動另存一份）。</p>
+    <div class="row"><label>備份資料夾裡的檔案 <select id="r-list"></select></label></div>
+    <div class="row"><label>或選其他檔案 <input type="file" id="r-file" accept=".zip,.enc"></label></div>
+    <div class="row" id="r-pwrow" hidden><input type="password" id="r-pw" placeholder="備份密碼" autocomplete="off"></div>
+    <div class="row"><button id="r-check">檢查備份</button></div>
+    <div class="meta" id="r-info"></div>
+    <p class="meta">確認無誤後請輸入 <b>還原</b>：</p>
+    <div class="row"><input type="text" id="r-confirm" autocomplete="off">
+      <button class="danger primary" id="r-ok" disabled>還原</button><button id="r-cancel">取消</button></div>
+  </dialog>
+
   <dialog id="purge-dlg">
     <h2 id="pd-title">刪除同步檔案</h2>
     <p id="pd-body" class="meta"></p>
@@ -669,7 +718,126 @@ for (const src of ["coros", "tp"]) {
   });
 }
 
-loadMode(); loadApplied(); loadProfile(); loadExclusions();
+// ---- 備份 (api/backup.py) -------------------------------------------------
+const BK = "/api/v1/backup";
+const bytes = (n) => n == null ? "–" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB`
+  : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1073741824).toFixed(2)} GB`;
+const jput = (url, body, method = "PUT") => j(url, { method, headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body) });
+let BS = null;
+function renderBackup(s) {
+  BS = s;
+  $("b-dir").value = s.dir || "";
+  $("b-auto").checked = !!s.auto; $("b-fit").checked = !!s.include_fit;
+  $("b-enc").textContent = s.encrypted ? "已開啟" : "關閉"; $("b-enc").className = "pill" + (s.encrypted ? " ok" : "");
+  $("b-pw-off").hidden = !s.encrypted; $("b-pw-save").textContent = s.encrypted ? "更換密碼" : "設定密碼";
+  $("b-cloud").innerHTML = (s.cloud.length ? `<span class="meta">偵測到：</span>` : `<span class="meta">沒偵測到雲端硬碟資料夾，可以直接輸入路徑。</span>`)
+    + s.cloud.map((c, i) => `<button data-i="${i}" class="${s.dir === c.path ? "primary" : ""}" title="${esc(c.path)}">${esc(c.label)}</button>`).join("");
+  const r = s.last_result, ok = s.last_ok;
+  const pill = $("b-pill");
+  pill.hidden = !s.dir;
+  pill.className = "pill " + (!r ? "" : r.status === "ok" ? "ok" : "err");
+  pill.textContent = !r ? "還沒備份" : r.status === "ok" ? "正常" : "上次失敗";
+  $("b-kv").innerHTML = !s.dir ? `<dt>狀態</dt><dd>還沒選備份資料夾</dd>` :
+    `<dt>上次成功</dt><dd>${ok ? `${fmtTime(ok.at)}・${bytes(ok.size)}` : "–"}</dd>`
+    + (r && r.status !== "ok" ? `<dt>上次嘗試</dt><dd class="err-text">${fmtTime(r.at)} 失敗：${esc(r.error || "")}</dd>` : "")
+    + `<dt>資料夾裡</dt><dd>${s.backups.length} 份備份（${bytes(s.backups.reduce((a, b) => a + b.size, 0))}）</dd>`;
+  $("b-run").disabled = !s.dir;
+}
+async function loadBackup() {
+  try { renderBackup(await j(`${BK}/status`)); }
+  catch (e) { $("b-msg").textContent = "備份狀態載入失敗：" + reason(e); }
+}
+async function setBackupDir(path) {
+  try { renderBackup(await jput(`${BK}/settings`, { dir: path })); toast(path ? "已設定備份資料夾" : "已取消備份資料夾"); $("b-msg").className = "meta"; $("b-msg").textContent = ""; }
+  catch (e) { $("b-msg").textContent = "不能用這個資料夾：" + reason(e); $("b-msg").className = "meta err-text"; }
+}
+$("b-cloud").onclick = (e) => { const i = e.target.dataset.i; if (i != null) setBackupDir(BS.cloud[+i].path); };
+$("b-dir-save").onclick = () => setBackupDir($("b-dir").value.trim() || null);
+$("b-auto").onchange = (e) => jput(`${BK}/settings`, { auto: e.target.checked }).then(renderBackup).then(() => toast("已更新"));
+$("b-fit").onchange = (e) => jput(`${BK}/settings`, { include_fit: e.target.checked }).then(renderBackup).then(() => toast("已更新"));
+$("b-run").onclick = async (e) => {
+  const msg = $("b-msg"); msg.className = "meta"; msg.textContent = "備份中…";
+  try {
+    const r = await busy(e.currentTarget, "備份中…", () => j(`${BK}/run`, { method: "POST" }));
+    renderBackup(r.status_all);
+    if (r.status === "ok") { msg.className = "meta ok-text"; msg.textContent = `已備份 ${r.name}（${bytes(r.size)}）`; toast("備份完成"); }
+    else { msg.className = "meta err-text"; msg.textContent = "備份失敗：" + (r.error || ""); }
+  } catch (err) { msg.className = "meta err-text"; msg.textContent = "備份失敗：" + reason(err); }
+};
+$("b-pw-save").onclick = async () => {
+  const a = $("b-pw1").value, b = $("b-pw2").value;
+  if (a.length < 8) { toast("密碼至少 8 個字"); return; }
+  if (a !== b) { toast("兩次輸入的密碼不一樣"); return; }
+  if (!confirm("忘記這個密碼就沒辦法還原加密的備份，也沒有人能幫你找回。確定要用這個密碼？")) return;
+  try { renderBackup(await jput(`${BK}/password`, { password: a })); toast("已開啟備份加密"); }
+  catch (e) { toast("失敗：" + reason(e)); }
+  $("b-pw1").value = ""; $("b-pw2").value = "";
+};
+$("b-pw-off").onclick = async () => {
+  if (!confirm("之後的備份不再加密（已經建立的加密備份還是需要原本的密碼才能還原）。確定？")) return;
+  try { renderBackup(await j(`${BK}/password`, { method: "DELETE" })); toast("已關閉備份加密"); }
+  catch (e) { toast("失敗：" + reason(e)); }
+};
+// ? on touch (no hover): show the explanation under the section
+$("backup").addEventListener("click", (e) => { const q = e.target.closest("button.q"); if (q) $("b-note").textContent = q.title; });
+
+// restore: pick -> 檢查 (upload, inspect; asks for the password when encrypted) -> type 還原 -> restore
+let RSRC = null, RINFO = null;
+function restoreReady() { $("r-ok").disabled = !(RINFO && $("r-confirm").value.trim() === "還原"); }
+function resetRestoreInfo() { RSRC = null; RINFO = null; $("r-info").textContent = ""; restoreReady(); }
+$("b-restore").onclick = () => {
+  const list = (BS && BS.backups) || [];
+  $("r-list").innerHTML = `<option value="">（選一個）</option>` + list.map((b) =>
+    `<option value="${esc(b.name)}">${esc(b.created_local.replace("T", " "))}・${bytes(b.size)}${b.encrypted ? "・加密" : ""}</option>`).join("");
+  $("r-file").value = ""; $("r-pw").value = ""; $("r-pwrow").hidden = true; $("r-confirm").value = "";
+  resetRestoreInfo(); $("restore-dlg").showModal();
+};
+$("r-list").onchange = () => { if ($("r-list").value) $("r-file").value = ""; resetRestoreInfo(); };
+$("r-file").onchange = () => { if ($("r-file").files.length) $("r-list").value = ""; resetRestoreInfo(); };
+$("r-confirm").oninput = restoreReady;
+$("r-cancel").onclick = () => $("restore-dlg").close();
+$("r-check").onclick = async (e) => {
+  const info = $("r-info"); RINFO = null; restoreReady();
+  try {
+    await busy(e.currentTarget, "檢查中…", async () => {
+      if (!RSRC) {
+        const file = $("r-file").files[0], name = $("r-list").value;
+        if (file) {
+          info.textContent = "上傳中…";
+          const r = await fetch(`${BK}/upload`, { method: "POST", body: file });
+          if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+          RSRC = { upload_id: (await r.json()).upload_id };
+        } else if (name) RSRC = { name };
+        else { info.textContent = "請先選一個備份檔"; return; }
+      }
+      info.textContent = "檢查中…";
+      const pw = $("r-pw").value;
+      const r = await jput(`${BK}/inspect`, { ...RSRC, password: pw || null }, "POST");
+      if (r.needs_password) { $("r-pwrow").hidden = false; info.textContent = "這個備份有加密，請輸入備份密碼再按一次「檢查備份」"; return; }
+      RINFO = r;
+      const c = r.row_counts || {};
+      info.innerHTML = `<span class="ok-text">檢查通過</span>：建立於 ${fmtTime(r.created_at)}（App ${esc(r.app_version || "?")}）`
+        + `・活動 ${c.workout_files ?? "–"} 筆・課表 ${c.plan_sessions ?? "–"} 筆`
+        + (r.fit && r.fit.included ? `・含 ${r.fit.files} 個 FIT 檔` : "");
+    });
+  } catch (err) { info.innerHTML = `<span class="err-text">不能還原：${esc(reason(err))}</span>`; }
+  restoreReady();
+};
+$("r-ok").onclick = async (e) => {
+  const info = $("r-info");
+  try {
+    const r = await busy(e.currentTarget, "還原中…", () => jput(`${BK}/restore`, { ...RSRC, password: $("r-pw").value || null }, "POST"));
+    $("restore-dlg").close();
+    $("b-msg").className = "meta ok-text";
+    $("b-msg").textContent = `已還原（${fmtTime(r.created_at)} 的備份）`
+      + (r.fit_restored ? `，補回 ${r.fit_restored} 個 FIT 檔` : "")
+      + `。還原前的資料已另存在 ${r.pre_restore || "–"}。請重新啟動 App；在別台電腦建立的備份，COROS／TrainingPeaks 要重新登入。`;
+    toast("已還原，請重新啟動 App"); loadBackup();
+  } catch (err) { info.innerHTML = `<span class="err-text">還原失敗：${esc(reason(err))}</span>`; }
+};
+
+loadMode(); loadApplied(); loadProfile(); loadExclusions(); loadBackup();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>
