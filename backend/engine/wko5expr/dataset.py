@@ -236,7 +236,11 @@ class Dataset:
         # settings outside parity mode.
         from backend.engine.planning import Plan
         self.plan = Plan() if self.config.parity else Plan.load()
-        path = next(self.dir.glob("*.wko5athlete"))
+        path = next(self.dir.glob("*.wko5athlete"), None)
+        if path is None:
+            # no WKO5 folder (a COROS / TP-only runner): datasource.current_source
+            # sends the charts to the synced FITs; only an explicit source=wko5 gets here
+            raise FileNotFoundError(f"no *.wko5athlete in {self.dir}")
         self.athlete: Athlete = read_athlete(path)
         self._tp_tss = _load_tp_tss(self.dir) if self.config.tp_tss else {}
         self._moving_hrtss: dict[str, float] = {}

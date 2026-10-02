@@ -105,9 +105,18 @@ class EngineConfig:
     def load(cls, path: Optional[Path] = None) -> "EngineConfig":
         p = path or CONFIG_PATH
         try:
-            return cls.from_dict(json.loads(p.read_text("utf-8")))
+            data = json.loads(p.read_text("utf-8"))
         except (OSError, ValueError):
-            return cls()
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        if "parity" not in data:
+            # WKO5 parity (verification mode) is only the default when there is
+            # a WKO5 folder to compare against; a COROS / TP-only runner gets
+            # the project's own formulas (generalize-athlete plan S6)
+            from backend.engine.wko5expr.datasource import wko5_available
+            data = {**data, "parity": wko5_available()}
+        return cls.from_dict(data)
 
     def save(self, path: Optional[Path] = None) -> None:
         p = path or CONFIG_PATH

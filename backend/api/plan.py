@@ -33,9 +33,20 @@ PHASE_DASHBOARD = {
 }
 
 
+def _wko5_athlete():
+    """The WKO5 athlete file, or None for a runner without a WKO5 folder."""
+    try:
+        f = next(Path(ATHLETE_DIR).glob("*.wko5athlete"), None)
+        return None if f is None else read_athlete(f)
+    except OSError:
+        return None
+
+
 @lru_cache(maxsize=1)
 def _wko5_settings() -> dict:
-    ath = read_athlete(next(ATHLETE_DIR.glob("*.wko5athlete")))
+    ath = _wko5_athlete()
+    if ath is None:
+        return {"runthr": None, "runmhr": None, "bikethr": None, "runtpace": None, "mftp": None}
     out = {}
     for name in ("runthr", "runmhr", "bikethr", "runtpace"):
         hist = ath.settings.get(name) or []
@@ -209,7 +220,9 @@ def put_phases(body: list[PhaseIn]):
 @lru_cache(maxsize=1)
 def _wko5_profile() -> dict:
     """What WKO5 has on file, shown next to the editable profile."""
-    ath = read_athlete(next(ATHLETE_DIR.glob("*.wko5athlete")))
+    ath = _wko5_athlete()
+    if ath is None:
+        return {"weights": [], "height_cm": None, "sex": None}
     prof = ath.root.get(3001)
     sex = prof.get(3017) if prof is not None else None
     height = (ath.settings.get("height") or [(None, None)])[-1][1]
@@ -234,7 +247,7 @@ def get_profile():
         "profile": plan.profile,
         "wko5": wk,
         "effective": {
-            "weight": eff_w, "weight_source": "設定頁" if plan.weights else "WKO5",
+            "weight": eff_w, "weight_source": "設定頁" if plan.weights else ("WKO5" if wk["weights"] else None),
             "height_cm": plan.profile.get("height_cm") or wk["height_cm"],
             "sex": plan.profile.get("sex") or wk["sex"],
             "power_meter": plan.profile.get("power_meter"),

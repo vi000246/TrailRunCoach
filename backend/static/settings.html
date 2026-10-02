@@ -682,7 +682,7 @@ function openPurge(src) {
   $("pd-body").innerHTML = `會刪除 <b>${esc(name)}</b> 的 <b>${st.files}</b> 個 FIT 檔（<b>${esc(st.size)}</b>，${esc(st.folder)}），`
     + `以及資料庫裡的 ${st.rows} 筆活動紀錄，並重設同步進度（之後重新同步會重新下載）。`
     + `WKO5 資料夾和另一個來源的檔案不受影響。`
-    + (SS.chart_data_source === src ? `<br><b>圖表目前使用這個來源，刪除後會改回 WKO5 資料夾。</b>` : "");
+    + (SS.chart_data_source === src ? `<br><b>圖表目前使用這個來源，刪除後會改回 WKO5 資料夾（沒有 WKO5 時改用合併的同步資料）。</b>` : "");
   $("pd-word").textContent = name; $("pd-input").value = ""; $("pd-from").value = ""; $("pd-to").value = "";
   $("pd-ok").disabled = true; $("purge-dlg").showModal();
 }

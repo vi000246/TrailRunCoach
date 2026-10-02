@@ -57,6 +57,18 @@ def read_setting(key: str, default=None, user_id: int = 1):
         return default
 
 
+def wko5_available(wko5_dir: Optional[Path] = None) -> bool:
+    """A WKO5 athlete file (*.wko5athlete) is there. A runner without WKO5
+    (COROS / TP only) has none: the charts then read the synced FITs."""
+    if wko5_dir is None:
+        from backend.settings.paths import athlete_dir
+        wko5_dir = athlete_dir()
+    try:
+        return any(Path(wko5_dir).glob("*.wko5athlete"))
+    except OSError:
+        return False
+
+
 CHOSEN_KEY = "charts.data_source.chosen"
 LEGACY_DEFAULT = "coros"     # what the pre-同步資料 setup stored (the old UI had no merged source)
 
@@ -71,11 +83,17 @@ def effective_source(stored, chosen, default: str = DEFAULT_SOURCE) -> str:
     return stored if stored in SOURCES else default
 
 
-def current_source(user_id: int = 1) -> str:
+def current_source(user_id: int = 1, wko5_dir: Optional[Path] = None) -> str:
+    """effective_source of charts.data_source; "wko5" (stored, or the no-DB
+    default) only while a WKO5 athlete file exists — otherwise "synced"
+    (generalize-athlete S6)."""
     db = _db_path()
     default = DEFAULT_SOURCE if db is not None and db.exists() else "wko5"
-    return effective_source(read_setting("charts.data_source", None, user_id),
-                            read_setting(CHOSEN_KEY, False, user_id) is True, default)
+    v = effective_source(read_setting("charts.data_source", None, user_id),
+                         read_setting(CHOSEN_KEY, False, user_id) is True, default)
+    if v == "wko5" and not wko5_available(wko5_dir):
+        return DEFAULT_SOURCE
+    return v
 
 
 def primary_info(user_id: int = 1) -> tuple[str, dict]:

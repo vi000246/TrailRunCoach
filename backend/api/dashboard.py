@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 
+from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.db.models import DashboardConfig
 
@@ -66,7 +67,7 @@ async def save_dashboard(config_id: int, body: DashboardSave, db: AsyncSession =
         cfg.is_default = body.is_default
     else:
         cfg = DashboardConfig(
-            id=config_id, athlete_id=1, name=body.name,
+            id=config_id, athlete_id=current_athlete_id(), name=body.name,
             layout_json=json.dumps(body.layout), is_default=body.is_default,
         )
         db.add(cfg)
