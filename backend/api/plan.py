@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n.pages import render_page
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -492,4 +493,4 @@ def apply_cp(body: ApplyCP):
 
 @router.get("/page", include_in_schema=False)
 def page():
-    return FileResponse(STATIC / "plan.html")
+    return render_page("plan")

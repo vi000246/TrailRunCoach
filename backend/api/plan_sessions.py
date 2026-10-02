@@ -20,6 +20,7 @@ import functools
 import threading
 from typing import Optional
 
+from backend.i18n.pages import render_page
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -1628,6 +1629,4 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/schedule/page", include_in_schema=False)
 def schedule_page():
-    from fastapi.responses import FileResponse
-    from backend.api.overview import STATIC
-    return FileResponse(STATIC / "schedule.html")
+    return render_page("schedule")

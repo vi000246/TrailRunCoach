@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
 from backend.engine import backup as B
+from backend.i18n import _
 from backend.settings.repository import SettingsRepository
 
 log = logging.getLogger(__name__)
@@ -180,7 +181,7 @@ async def post_upload(request: Request):
             f.write(chunk)
     if not size:
         dst.unlink()
-        raise HTTPException(400, "檔案是空的")
+        raise HTTPException(400, _("檔案是空的"))
     if B.is_legacy_encrypted(dst):
         dst.unlink()
         raise HTTPException(400, B.LEGACY_ENCRYPTED)
@@ -207,7 +208,7 @@ async def _source(body: SourceBody, repo: SettingsRepository) -> Path:
     else:
         raise HTTPException(400, "請選擇備份檔")
     if not p.is_file():
-        raise HTTPException(404, "找不到備份檔")
+        raise HTTPException(404, _("找不到備份檔"))
     return p
 
 

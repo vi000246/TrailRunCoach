@@ -33,6 +33,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
+from backend.i18n import fmt
+
 KEY = "plan.suggestions.dismissed"
 ACTIONS = ("accepted", "declined", "dismissed")
 ZONE_TESTS = ("aet", "cp")            # schedulable from the box (tt30: described only)
@@ -44,8 +46,7 @@ def _monday(day: str) -> str:
 
 
 def _md(day: str) -> str:
-    d = dt.date.fromisoformat(day[:10])
-    return f"{d.month}/{d.day}（週{'一二三四五六日'[d.weekday()]}）"
+    return fmt.date(day, "mdw")                 # 10/2（週四） / Thu 10/2 (backend/i18n/fmt.py)
 
 
 def day_options(days: list[dict]) -> list[dict]:

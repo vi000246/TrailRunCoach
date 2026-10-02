@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -26,6 +27,8 @@ from pydantic import BaseModel
 from dataclasses import asdict
 
 from backend.engine.wko5expr.chartfixes import FIXES_PATH, apply_fixes, load_fixes
+from backend.engine.wko5expr.viewids import ensure_ids
+from backend.engine.wko5expr import viewi18n as VI
 from backend.engine.wko5expr.config import CONFIG_PATH, MOUNTAIN_PRESET, EngineConfig
 from backend.engine.wko5expr.corrections import (
     CorrectionStore, detect_spikes, proposals_to_corrections,
@@ -179,7 +182,7 @@ def _wko5_views_raw() -> dict[str, dict]:
     for p in sorted(VIEWS_DIR.rglob("*.wko5chart")):
         if ".venv" in p.parts or "node_modules" in p.parts:
             continue
-        v = read_view(p)
+        v = ensure_ids(read_view(p))     # chart ids from the titles: wko5_fixes.json matches on them
         v["source"] = "wko5"
         out[p.stem] = v
     return out
@@ -214,7 +217,8 @@ def _views(parity: Optional[bool] = None) -> dict[str, dict]:
     cached, so editing a file and reloading the page picks it up."""
     if parity is None:
         parity = EngineConfig.load().parity
-    return {**_wko5_views(parity), **load_custom_views()}
+    # translations (views/i18n/<locale>.json) go on after the fixes, by chart id; zh-TW: as written
+    return VI.translate_views({**_wko5_views(parity), **load_custom_views()})
 
 
 def _view(name: str, parity: Optional[bool] = None) -> dict:
@@ -244,8 +248,8 @@ def list_views():
         {"name": name, "source": v.get("source", "wko5"), "path": v.get("path"),
          "error": v.get("error"),
          "dashboards": [
-            {"index": i, "title": d["title"], "description": d.get("description"),
-             "charts": [{"index": j, "title": c.get("title"), "kind": _panel_kind(c),
+            {"index": i, "id": d.get("id"), "title": d["title"], "description": d.get("description"),
+             "charts": [{"index": j, "id": c.get("id"), "title": c.get("title"), "kind": _panel_kind(c),
                          "series": len(c.get("series", [])),
                          # 「使用功率」 off (charts.power.enabled): the viewer hides power-only charts
                          # and locks 配速／功率 toggles to pace (power_use.py)
@@ -913,7 +917,7 @@ async def patch_activities(body: BulkBody):
 
 @router.get("/activities/page", include_in_schema=False)
 def activities_page():
-    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "activity.html")
+    return render_page("activity")
 
 
 @router.get("/sports")
@@ -1058,9 +1062,9 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
 
 @router.get("/viewer", include_in_schema=False)
 def viewer():
-    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html")
+    return render_page("wko5_viewer")
 
 
 @router.get("/settings", include_in_schema=False)
 def settings_page():
-    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "settings.html")
+    return render_page("settings")

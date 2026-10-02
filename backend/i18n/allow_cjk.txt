@@ -1,0 +1,9 @@
+# Chinese that is intentional, not UI text (backend/scripts/i18n_extract.py skips it).
+#   file <glob>     every string of the matching files (repo-relative, forward slashes)
+#   re <regex>      any string the regex finds a match in
+#
+# Add entries only for text that must stay Chinese in every language: regexes
+# that match the user's own activity names, the 百岳 peak names, Chinese
+# knowledge fed to the AI coach. UI text goes through _() / t() instead.
+#
+# (none yet: the first phases will move the matching rules here as they find them)
