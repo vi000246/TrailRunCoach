@@ -83,6 +83,8 @@ svg text { fill: var(--muted); font: 11px system-ui, sans-serif; }
 .top { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
 .top span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; }
 .foot { font-size: 12px; color: var(--muted); text-align: center; }
+.adv summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--muted); }
+.adv[open] summary { color: var(--text); }
 .set { display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: center; font-size: 13px; }
 .set label { display: inline-flex; gap: 6px; align-items: center; }
 .set .dis { color: var(--muted); }
@@ -156,15 +158,15 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
     <div class="meta" id="an-foot"></div>
   </section>
 
-  <section class="panel" aria-label="設定">
-    <div class="ph"><h2>設定</h2></div>
-    <div class="set">
+  <details class="panel adv" aria-label="進階設定">
+    <summary>進階設定</summary>
+    <div class="set" style="margin-top:8px">
       <label id="set-pat-l"><input type="checkbox" id="set-pat"> 「跟受傷前很像」提醒<button type="button" class="qtip" aria-label="說明" data-tip="打開後，如果這 3 週（含課表上未來 7 天）的某個指標跟你受傷前的型態很像，建議框會出現一則提醒。
 只是提醒，不會改課表，也不會擋課。要有 5 次以上進分析的受傷紀錄才能打開。ACWR、單調度不會觸發。">?</button></label>
       <label><input type="checkbox" id="set-up"> 傷停後恢復期往上一級<button type="button" class="qtip" aria-label="說明" data-tip="停跑的空檔跟傷病紀錄重疊時，恢復期照下一級排（例如停 10 天照 14–28 天那一級）：傷後回來不只體能，組織也還沒適應（推估）。">?</button></label>
       <span class="msg" id="set-msg"></span>
     </div>
-  </section>
+  </details>
   <div class="foot" id="disc">這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。</div>
 </main>
 
