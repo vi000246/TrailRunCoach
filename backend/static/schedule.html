@@ -513,6 +513,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       </div>
       <label>爬升比例 <span><b id="eq-d-v" class="num">0</b> m/km</span>
         <input type="range" id="eq-d" min="0" max="150" step="5" value="0" aria-describedby="eq-sum"></label>
+      <div class="hint eq-grade" id="eq-grade" aria-live="polite"></div>
       <div class="hint" id="eq-goal-row"><button type="button" id="eq-goal"></button></div>
       <div class="row3">
         <label>距離 km<input type="number" id="eq-km" min="0" max="500" step="0.1" inputmode="decimal"></label>
@@ -1171,12 +1172,36 @@ function eqSet({ min, km, gain, d, tss }) {
   if (d != null) { $("eq-d").value = Math.max(0, Math.min(150, Math.round(d / 5) * 5)); $("eq-d-v").textContent = Math.round(d); }
   if (tss != null) $("eq-tss").value = Math.max(0, Math.round(tss));
 }
+// grade readout: average = climb ÷ distance; trail (out-and-back / loop) ≈ half the distance
+// uphill, so the climbing sections ≈ 2 × average (推估). 陡坡健走 has its own target grade.
+const GRADE_TIP = "平均坡度＝爬升 ÷ 距離。越野多半是去回或繞圈，大約一半距離在上坡，所以爬坡段的坡度約是平均的 2 倍（推估；實際看路線）。" +
+  "陡坡健走有目標坡度：填距離會帶出預期爬升（距離 × 坡度），填爬升會帶出距離。";
+const gradeOf = (km, gain, trail) => km > 0 && gain > 0 ? { avg: gain / (km * 10), climb: trail ? gain / (km * 5) : null } : null;
+// the 陡坡健走 target grade (engine/steep_hill.py title 「陡坡健走 13.5%（…）」), else null
+const steepGrade = () => { const m = (F.title.value || "").match(/陡坡健走\s*([\d.]+)\s*%/); return m ? +m[1] : null; };
+function gradeRender() {
+  const f = eqF(), sg = steepGrade(), g = gradeOf(f.km, f.gain, terVal() !== "road" && !sg);   // a steep walk is all uphill
+  $("eq-grade").innerHTML = !g ? (sg ? `目標坡度 <b class="num">${sg}%</b>：填距離會帶出爬升 ${qb(GRADE_TIP)}` : "") :
+    g.avg > 100 ? `坡度 ${g.avg.toFixed(0)}%：距離或爬升可能填錯 ${qb(GRADE_TIP)}` :
+    `平均坡度 <b class="num">${g.avg.toFixed(1)}%</b>` + (g.climb != null ? ` · 爬坡段約 <b class="num">${g.climb.toFixed(0)}%</b>（推估）` : "") +
+    (sg ? ` · 目標 ${sg}%` : "") + ` ${qb(GRADE_TIP)}`;
+}
+const qb = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
 // `changed`: the field the user just edited; the lock decides what stays fixed
 function eqRecalc(changed, exactD) {
   if (!eqOn()) return;
   if (!EQ) return eqRender();
   const mode = terVal(), free = $("eq-free").checked, lock = $("eq-lock").value, r = EQS.rate || 1;
   let { min, km, gain, tss } = eqF();
+  const sg = steepGrade();
+  if (sg && (changed === "km" || changed === "gain")) {
+    // 陡坡健走: the grade is given — distance ↔ climb, the time stays the structure's
+    if (changed === "km") gain = km * sg * 10; else km = gain / (sg * 10);
+    EQS.d = sg * 10;
+    eqSet({ km: changed === "km" ? null : km, gain: changed === "gain" ? null : gain, d: EQS.d });
+    eqRender();
+    return;
+  }
   let d = changed === "d" ? (exactD ?? +$("eq-d").value) : EQS.d;
   if (changed === "km" || changed === "gain") d = km > 0 ? gain / km : 0;
   // the locked field is the anchor: editing it re-anchors, editing anything else keeps it
@@ -1226,6 +1251,7 @@ function eqRender() {
   $("eq-goal-row").hidden = !g || terVal() === "road" || ro;
   if (g) $("eq-goal").textContent = `套用目標賽事的爬升比例 ${Math.round(g)} m/km`;
   if (!EQ) { $("eq-sum").textContent = "載入你的速度模型中…"; $("eq-warn").textContent = ""; $("eq-note").textContent = ""; return; }
+  gradeRender();
   const mode = terVal(), f = eqF();
   const pct = EQS.tss0 > 0 ? (f.tss / EQS.tss0 - 1) * 100 : 0;
   const diff = Math.abs(pct) < 1 ? `<span class="same">和原本一樣</span>` : `<span class="${pct > 0 ? "up" : "down"}">比原本${pct > 0 ? "多" : "少"} ${Math.abs(Math.round(pct))} %</span>`;
@@ -1362,6 +1388,8 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   const defs = Object.values(D.default_titles || {});
   if (!dlg.titleTouched && (!F.title.value || defs.includes(F.title.value) || AUTO_TITLE_RE.test(F.title.value.trim()) || dlg.tplTitle === F.title.value))
     F.title.value = dlg.tplTitle = row.title || row.label;
+  if (eqOn() && steepGrade() && +$("eq-km").value > 0) eqRecalc("km");   // 陡坡健走: the climb from the distance
+  else if (eqOn()) gradeRender();
 } });
 F.minutes.addEventListener("click", () => { if (dlg.minLock) WE.openBox(); });
 function stepsPreview() {
@@ -1590,7 +1618,7 @@ F.addEventListener("change", (e) => {
   tgtHint();
 });
 F.target.addEventListener("input", () => { dlg.targetTouched = true; tgtHint(); });
-F.title.addEventListener("input", () => { dlg.titleTouched = true; tgtHint(); });
+F.title.addEventListener("input", () => { dlg.titleTouched = true; tgtHint(); if (eqOn()) gradeRender(); });
 F.minutes.addEventListener("input", () => { if (eqOn()) eqRecalc("minutes"); tssHint(); });
 F.detail.addEventListener("input", tgtHint);
 $("sd").addEventListener("click", (e) => {
