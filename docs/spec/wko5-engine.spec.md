@@ -192,7 +192,7 @@ dashboard was dropped in favour of the period toggle):
 
 | File | View | Dashboards |
 |---|---|---|
-| `views/training.json` | 我的訓練 | 負荷 PMC (PMC, 每日 TSS, CTL 每週增加); 訓練量 (每週移動時間 stacked by category, 本週 − 上週, 每週跑量 and 每週努力距離 EP stacked 路跑 / 越野跑 / 登山健行, 每週爬升／下降 in one chart, 肌力訓練日曆 as a day calendar); 強度 (HR distribution, low-intensity share, Palladino power zones); 能力 (EF, Pa:HR, VAM, 每公里爬升, per-session moving time, durability) |
+| `views/training.json` | 我的訓練 | 負荷 PMC (PMC with TSB bars coloured by Form% zone, 每日 TSS, TSS 合計, Ramp rate, Form% and 負荷比 as `zoned` charts); 訓練量 (每週移動時間 stacked by category, 每週跑量 stacked 路跑 / 越野跑 / 登山健行, 每週爬升／下降 in one chart, 每週下坡衝擊負荷, 肌力訓練日曆 as a day calendar); 強度 (periodzones total + weekly — HR red ramp, power orange ramp — and 極化指數); 能力 (EF, Pa:HR, 上坡腳程, VAM:HR, 下坡腳程, コース定数, 每公里爬升, per-session moving time, durability, power curve) |
 | `views/periodization.json` | 周期化訓練 | ① 轉換期, ② 基礎期, ③ 專項期, ④ 減量期, 區間與課表強度 (zone / target tables last) |
 | `views/workout.json` | 單次活動判讀 | 本次重點, 有氧／心率飄移, 間歇, 爬坡與地形, 配速與耐久, 跑姿與膝蓋負荷（參考） — see [workout-review.spec.md](./workout-review.spec.md) |
 
@@ -268,10 +268,9 @@ toggle.
   (`views/training.json:253-256`, `views/training.json:325-326`), 長時間輕鬆跑的心率飄移
   and 耐久度 in 周期化訓練 (`views/periodization.json:58-59`,
   `views/periodization.json:151-152`), and the 有氧／心率飄移 dashboard of
-  單次活動判讀: 飄移判讀, 滾動有氧效率 EF, 每公里心率與速度
-  (`views/workout.json:46`, `views/workout.json:62-63`, `views/workout.json:72-73`).
+  單次活動判讀: 飄移判讀 (`views/workout.json`). 滾動有氧效率 EF and 每公里心率與速度 were
+  dropped in 2026-10 (covered by 耐久曲線 and 每 10% 距離的配速與心率).
   Season charts plot WKO5's stored `pahr` / `pwhr` (`backend/engine/wko5expr/dataset.py:376-377`);
-  the rolling EF leaves out the first 10 minutes, like the review card.
 - **Trail caveat**: the trail drift charts' `power_note` says Pw:HR is only a
   reference off-road because Stryd power is validated only up to about 8 %
   grade (user-supplied figure; not checked against a Stryd source here).
@@ -560,3 +559,26 @@ mode (`backend/tests/test_drift_basis.py:340`).
 | 2026-09-30 | feat/competitor-charts | N/A | `chart_metrics.py` reference implementations + charts (Form% bands, ATL/CTL, monotony/strain, PI, downhill impact load and 7:28 ratio, up/downhill m/h, コース定数 / ITRA); 總覽 `descent` indicator |
 | 2026-10-01 | perf/dataset-load | user request (site frozen during a COROS build) | Persistent per-file FIT cache with per-field versions, lazy channels, disk `cached_series` / as-of estimates / PD refits for `FitFolderDataset`; process-pool parsing; single-flight `_dataset`; `GET /dataset/status` + shell.js progress; warm-up at startup and after a sync |
 | 2026-09-30 | feat/drift-basis | N/A | 配速／功率 basis toggle (`basis.py`, chart `basis` spec, tagged series, `?basis=`, viewer control, 這次沒有功率) on the drift charts; rolling EF skips the first 10 min |
+
+
+## Banded charts and the 使用功率 setting (2026-10)
+
+- **`zoned`** (`backend/engine/wko5expr/customviews.py`): a chart option
+  `{"line": "<series name>"}`. The viewer (`zonedSetup` in
+  `backend/static/wko5_viewer.html`) turns the chart's `{lo:hi}` band series into
+  shaded bands labelled in place with solid edges, draws reference lines solid,
+  colours the named line by the band it is in (ECharts piecewise visualMap,
+  the band hue pulled 20 % toward the text ink, a surface halo) and labels the
+  latest value with its band's first word (「1.12 正常」). No legend box. Used by
+  狀況 Form%, 負荷比 and 減量期 新鮮度 Form%. The Form% zones (過度疲勞 / 在練 /
+  維持 / 新鮮 / 過度新鮮) also colour the PMC TSB bars, so a day has one colour
+  in both charts.
+- **使用功率** (`charts.power.enabled`, default on; `use_power` in
+  `GET/PUT /api/v1/sync/settings`): `backend/engine/wko5expr/power_use.py`
+  marks each chart in `GET /views` with `power` (every data series reads power
+  / CP, or a power-only panel: watt zone tables, power zones, CP test, W′ and
+  interval cards) and `power_basis` (a 配速／功率 toggle). With the setting off
+  the viewer hides `power` charts (and pages left empty), locks `power_basis`
+  charts to pace, shows HR zones only in periodzones and the HR panel only in
+  心率與功率; the overview drops the CP threshold and 套用 CP button, the
+  activity page the 功率來源 field. Models and calculations are unchanged.

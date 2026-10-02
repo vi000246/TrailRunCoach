@@ -261,10 +261,10 @@ ol.z5trk .tests .y { color: var(--ok); font-weight: 700; } ol.z5trk .tests .n { 
 .plot.z5 { height: 92px; } .plot.z5.bars { height: 210px; }
 table.z5ev td { white-space: normal; }
 /* single-activity charts (kind "activity": 心率與功率, 區間時間, 心率變化與趨勢) — one hue per measure */
-:root { --ac-hr: #eb6834; --ac-pw: #2a78d6; --ac-ink: #0b0b0b; --ac-ink2: #52514e; --ac-brush: rgba(42,120,214,.10); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ac-hr: #d95926; --ac-pw: #3987e5;
+:root { --ac-hr: #e34948; --ac-pw: #eb6834; --ac-ink: #0b0b0b; --ac-ink2: #52514e; --ac-brush: rgba(42,120,214,.10); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ac-hr: #e66767; --ac-pw: #d95926;
   --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); } }
-:root[data-theme="dark"] { --ac-hr: #d95926; --ac-pw: #3987e5; --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); }
+:root[data-theme="dark"] { --ac-hr: #e66767; --ac-pw: #d95926; --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); }
 .card.ac-wide { grid-column: 1 / -1; }
 .ac-leg { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 11.5px; color: var(--muted); margin: 0 0 2px; align-items: center; }
 .ac-leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -504,6 +504,8 @@ const SOURCE_LABEL = { custom: "我的圖表", wko5: "WKO5 對照" };
 const CUSTOM_ORDER = ["我的訓練", "周期化訓練"];  // flat tab list order (views/*.json names)
 const MODE_LABEL = { season: "趨勢", workout: "單次活動" };
 const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || viewsOf(S.mode)[0];
+// charts shown under the 使用功率 setting (the list's `power` flag, wko5expr/power_use.py)
+function visCharts(d) { return S.usePower === false ? d.charts.filter((c) => !c.power) : d.charts; }
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
 function sportsParam() { const s = selectedSports(); return s.length === S.sports.length ? "" : s.join(","); }
 function tpParam() { return `parity=${S.parity}`; }
@@ -526,6 +528,8 @@ async function init() {
   S.mapDefault = { base: BASE_BY_ID[us.map_basemap] ? us.map_basemap : "rudy",
     overlays: (us.map_overlays || []).filter((id) => OVL_BY_ID[id]) };
   S.parity = !!cfg.config.parity;   // switched on the settings page
+  // 使用功率 (settings, charts.power.enabled): off = power-only charts hidden, 配速／功率 toggles on pace
+  S.usePower = us.use_power !== false;
   const pill = $("modepill");
   pill.innerHTML = `<svg class="i"><use href="#i-calc"/></svg><span>算式：${S.parity ? "比照 WKO5" : "我的"}</span>`;
   pill.title = (S.parity ? "WKO5 對照模式：完全比照 WKO5 的公式，不套用資料校正與你的測試值"
@@ -605,6 +609,9 @@ function renderTree() {
   const q = $("q").value.trim();
   const v = curView();
   if (v && S.dash[S.mode] >= v.dashboards.length) S.dash[S.mode] = 0;
+  // a page of power-only charts is hidden under 使用功率 off: land on the first page that has charts
+  if (v && !visCharts(v.dashboards[S.dash[S.mode]]).length)
+    S.dash[S.mode] = Math.max(0, v.dashboards.findIndex((d) => visCharts(d).length));
   renderCrumb();
   if (q) return renderSearch(q);
   const vs = viewsOf(S.mode);
@@ -617,9 +624,10 @@ function renderTree() {
       const rank = (x) => (CUSTOM_ORDER.indexOf(x.name) + 1 || 99);
       return `<div class="grp flat">` + [...group].sort((a, b) => rank(a) - rank(b)).map((view) =>
         `<ul class="vw open" data-v="${esc(view.name)}">${view.dashboards.map((d, i) => {
+          if (!visCharts(d).length) return "";
           const on = view === v && i === S.dash[S.mode];
           return `<li><button class="db ${on ? "on" : ""}" data-i="${i}" title="${esc(d.title)}" ${on ? 'aria-current="page"' : ""}>
-            <span class="nm">${esc(d.title)}</span><span class="n" title="${d.charts.length} 張圖">${d.charts.length}</span></button></li>`;
+            <span class="nm">${esc(d.title)}</span><span class="n" title="${visCharts(d).length} 張圖">${visCharts(d).length}</span></button></li>`;
         }).join("")}</ul>`).join("") + `</div>`;
     }
     return `<div class="grp"><div class="grp-h">${SOURCE_LABEL[src]}${src === "wko5"
@@ -628,8 +636,8 @@ function renderTree() {
         const open = treeOpen(view, v);
         return `<div class="vw ${open ? "open" : ""} ${view === v ? "has-cur" : ""}" data-v="${esc(view.name)}">
           <button class="vw-h" aria-expanded="${open}"><span class="nm">${esc(view.name)}</span><span class="n" title="${view.dashboards.length} 個頁面">${view.dashboards.length}</span></button>
-          <ul>${view.dashboards.map((d, i) => `<li><button class="db ${view === v && i === S.dash[S.mode] ? "on" : ""}" data-i="${i}" title="${esc(d.title)}"
-            ${view === v && i === S.dash[S.mode] ? 'aria-current="page"' : ""}><span class="nm">${esc(d.title)}</span><span class="n" title="${d.charts.length} 張圖">${d.charts.length}</span></button></li>`).join("")}</ul></div>`;
+          <ul>${view.dashboards.map((d, i) => !visCharts(d).length ? "" : `<li><button class="db ${view === v && i === S.dash[S.mode] ? "on" : ""}" data-i="${i}" title="${esc(d.title)}"
+            ${view === v && i === S.dash[S.mode] ? 'aria-current="page"' : ""}><span class="nm">${esc(d.title)}</span><span class="n" title="${visCharts(d).length} 張圖">${visCharts(d).length}</span></button></li>`).join("")}</ul></div>`;
       }).join("") + `</div>`;
   }).join("") || `<div class="none">沒有${MODE_LABEL[S.mode]}的 view</div>`;
   $("tree").querySelectorAll(".vw").forEach((el) => {
@@ -653,7 +661,7 @@ function renderSearch(q) {
   for (const mode of [S.mode, S.mode === "season" ? "workout" : "season"])
     for (const v of viewsOf(mode)) v.dashboards.forEach((d, di) => {
       if (d.title.toLowerCase().includes(ql)) hits.push({ mode, v, di, ci: null, label: d.title, where: `${v.name} · 頁面` });
-      for (const c of d.charts) if ((c.title || "").toLowerCase().includes(ql))
+      for (const c of visCharts(d)) if ((c.title || "").toLowerCase().includes(ql))
         hits.push({ mode, v, di, ci: c.index, label: c.title, where: `${v.name} › ${d.title}` });
     });
   const shown = hits.slice(0, 80);
@@ -666,7 +674,7 @@ function renderCrumb() {
   const v = curView(), d = v?.dashboards[S.dash[S.mode]];
   $("crumb").innerHTML = !v ? "" : `<span class="c1">${SOURCE_LABEL[v.source || "wko5"]}</span><span class="sep">›</span>
     <span class="c2" title="${esc(v.name)}">${esc(v.name)}</span><span class="sep">›</span><b title="${esc(d?.title || "")}">${esc(d?.title || "")}</b>
-    <span class="n">${d ? d.charts.length + " 張圖" : ""}</span>`;
+    <span class="n">${d ? visCharts(d).length + " 張圖" : ""}</span>`;
 }
 
 // ---- page chrome: directory drawer, filter / activity panel --------------
@@ -814,7 +822,11 @@ async function load() {
   }
   // render sequentially-ish (4 at a time) so heavy charts don't block the rest
   const focus = S.focusChart; S.focusChart = null;
-  const queue = d.charts.map((c) => {
+  if (!visCharts(d).length) {
+    grid.insertAdjacentHTML("beforeend", `<div class="empty">這一頁都是功率的圖。設定裡「使用功率」關掉了，所以不顯示；要看請到 <a href="/api/v1/wko5/settings#power">設定</a> 打開。</div>`);
+    return;
+  }
+  const queue = visCharts(d).map((c) => {
     const card = document.createElement("section");
     card.className = "card";
     card.dataset.ci = c.index;
@@ -921,7 +933,7 @@ async function renderCard(card, v, di, c, q, token) {
   const pkey = `${v.name}|${di}|${c.index}`;
   const period = periodPrefs()[pkey];
   const win = windowPrefs()[pkey];
-  const basis = basisPrefs()[pkey];
+  const basis = !S.usePower && c.power_basis ? "pace" : basisPrefs()[pkey];
   try {
     const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
@@ -979,6 +991,8 @@ async function renderCard(card, v, di, c, q, token) {
       };
       card.querySelector("h2").appendChild(seg);
     }
+    if (!S.usePower && c.power_basis) { res.basis_toggle = false; res.basis_note = null; }
+    if (c.zoned) res.zoned = c.zoned;      // banded chart (負荷比, Form%): drawPlot colours the line by band
     if (res.basis_toggle && res.basis_choices?.length) {
       // 配速／功率: Pa:HR or Pw:HR (remembered per chart)
       const seg = document.createElement("div");
@@ -1313,7 +1327,7 @@ const PZ = { KEY: "wko5viewer.pzone",
 function pzPrefs() { try { return JSON.parse(localStorage.getItem(PZ.KEY) || "{}"); } catch { return {}; } }
 function pzSave(patch) { try { localStorage.setItem(PZ.KEY, JSON.stringify({ ...pzPrefs(), ...patch })); } catch {} }
 function pzQuery(c) {
-  const p = pzPrefs(), kind = p.kind === "power" ? "power" : "hr", q = new URLSearchParams({ zkind: kind });
+  const p = pzPrefs(), kind = p.kind === "power" && S.usePower ? "power" : "hr", q = new URLSearchParams({ zkind: kind });
   const m = (p.model || {})[kind];
   if (m) q.set("zmodel", m);
   if (p.sports?.length) q.set("zsports", p.sports.join(","));
@@ -1346,13 +1360,17 @@ function pzHex(L, C, h) {             // OKLCH → sRGB hex
   return "#" + enc(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s) + enc(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
     + enc(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
 }
-function pzRamp(n) {
-  // light: L .76 (≥ 2:1 on the surface) → .17; dark: L .43 (≥ 2:1 on the dark surface) → .98. Hue 255 (the palette blue).
+// HR is the red family, power the orange family on every chart (palette red #e34948 / orange #eb6834)
+const PZ_HUE = { hr: 25, power: 55 };
+function pzRamp(n, kind) {
+  // light: L .76 (≥ 2:1 on the surface) → .17; dark: L .43 (≥ 2:1 on the dark surface) → .98.
+  // One hue per kind: HR red (25°), power orange (55°).
+  const hue = PZ_HUE[kind] ?? PZ_HUE.hr;
   const [L0, L1] = pzDark() ? [0.43, 0.98] : [0.76, 0.17];
   return Array.from({ length: n }, (_, i) => {
     const L = n === 1 ? (L0 + L1) / 2 : L0 + (L1 - L0) * i / (n - 1);
     const C = 0.15 * Math.max(0.25, 1 - Math.abs((L - 0.55) / 0.45) ** 2);
-    return { hex: pzHex(L, C, 255), ink: L < 0.62 ? "#ffffff" : "#0b0b0b" };
+    return { hex: pzHex(L, C, hue), ink: L < 0.62 ? "#ffffff" : "#0b0b0b" };
   });
 }
 function pzStyle() {
@@ -1409,7 +1427,7 @@ function pzBar(card, res) {
   const seg = (k, items, cur, label) => `<div class="seg" role="group" aria-label="${label}" data-k="${k}">${items.map(([id, t]) =>
     `<button type="button" data-v="${esc(id)}" class="${id === cur ? "on" : ""}" aria-pressed="${id === cur}">${esc(t)}</button>`).join("")}</div>`;
   const ms = res.models[kind];
-  bar.innerHTML = seg("kind", [["hr", "心率"], ["power", "功率"]], kind, "心率或功率區間")
+  bar.innerHTML = (S.usePower ? seg("kind", [["hr", "心率"], ["power", "功率"]], kind, "心率或功率區間") : "")
     + `<label>模型 <select aria-label="區間模型">${ms.map((m) => `<option value="${esc(m.id)}"${m.id === res.model.id ? " selected" : ""}>${esc(m.title)}${m.estimate ? "（推估）" : ""}</option>`).join("")}</select></label>`
     + `<span class="sp" role="group" aria-label="運動">${res.sport_choices.map((s) => `<button type="button" data-s="${s.id}" aria-pressed="${res.sports.includes(s.id)}">${esc(s.label)}</button>`).join(" ")}</span>`
     + (weekly ? seg("group", [["auto", "自動"], ["week", "週"], ["month", "月"]], res.group_choice, "每週或每月")
@@ -1480,7 +1498,7 @@ function drawPeriodZones(card, res) {
     ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}${per.note ? ` · ${esc(per.note)}` : ""}</p>`);
   if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
   // 3-zone summary against the phase target (the verdict's basis)
-  const S_ = res.summary, tg = res.target, c3 = pzRamp(3);
+  const S_ = res.summary, tg = res.target, c3 = pzRamp(3, res.zone_kind);
   if (S_?.total_s) {
     const tip = [`3 區摘要（${S_.title}）`, ...S_.rows.map((r) => `${r.name}（${r.pct}）${fmtDur(r.seconds, "hm")} · ${pzPct(r.share)}`),
       `低強度至少 ${pzPct(tg.low_floor)}${tg.low_target ? `；${ph?.label || ""}目標 ≥ ${pzPct(tg.low_target)}` : ""}`, ...tg.sources].join("\n");
@@ -1493,7 +1511,7 @@ function drawPeriodZones(card, res) {
         ${tg.low_target ? `<em class="tgt" style="left:${tg.low_target * 100}%"><span>目標 ${pzPct(tg.low_target)}</span></em>` : ""}
       </div></div>`);
   }
-  const rows = res.rows, col = pzRamp(rows.length), max = Math.max(1, ...rows.map((r) => r.seconds));
+  const rows = res.rows, col = pzRamp(rows.length, res.zone_kind), max = Math.max(1, ...rows.map((r) => r.seconds));
   const el = document.createElement("div");
   el.className = "plot pzt";
   el.setAttribute("role", "img");
@@ -1534,7 +1552,7 @@ function drawPeriodZones(card, res) {
     </tbody></table></details>`);
 }
 function pzWeekly(card, res) {
-  const G = res.groups, Z = res.zones, col = pzRamp(Z.length), month = res.group_by === "month";
+  const G = res.groups, Z = res.zones, col = pzRamp(Z.length, res.zone_kind), month = res.group_by === "month";
   const lab = (g) => { const [y, m, d] = g.start.split("-").map(Number); return month ? `${y}/${m}` : `${m}/${d}`; };
   card.insertAdjacentHTML("beforeend", `<p class="pzhead">${esc(res.range.begin)} – ${esc(res.range.end)} · 每${month ? "月" : "週"}一根 · ${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
     ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}</p>`);
@@ -2126,6 +2144,56 @@ function drawGauges(card, gauges) {
   card.appendChild(box);
 }
 
+// ---- banded charts (views "zoned": {"line": name} — 負荷比, Form%): the {lo:hi} band series become
+// labelled shaded bands with solid edges, reference lines turn solid, and the named line is coloured
+// by the band it is in (a surface halo keeps it readable on its own band's tint), with the latest
+// value labelled「1.12 正常」. Text stays in text tokens; the band colour is only on marks.
+function zHex(h) { const m = /^#?([0-9a-f]{6})$/i.exec(String(h || "").trim()); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; }
+function zMix(a, b, t) {
+  const A = zHex(a), B = zHex(b);
+  if (!A || !B) return a;
+  return "#" + A.map((x, i) => Math.round(x + (B[i] - x) * t).toString(16).padStart(2, "0")).join("");
+}
+function zonedSetup(out, srcOf, zoned) {
+  const text = css("--text"), muted = css("--muted"), panel = css("--panel") || css("--bg");
+  const dark = pzDark();
+  const bands = out.map((o, i) => ({ o, s: srcOf[i] })).filter((x) => x.s?.data.kind === "band")
+    .map((x) => ({ ...x, lo: Math.min(...x.s.data.range), hi: Math.max(...x.s.data.range), name: x.s.name, color: x.s.color }))
+    .sort((a, b) => a.lo - b.lo);
+  // the line on its band: the band hue pulled 20 % toward the text ink (darker on light, lighter on dark)
+  const lineColor = (b) => zMix(b.color, text, 0.2);
+  for (const b of bands) {
+    b.o.markArea = { silent: true, itemStyle: { color: b.color, opacity: dark ? 0.22 : 0.15 },
+      label: { show: true, position: "insideTopRight", color: muted, fontSize: 10, distance: 3 },
+      data: [[{ yAxis: b.lo, name: b.name }, { yAxis: b.hi }]] };
+    b.o.markLine = { silent: true, symbol: "none", label: { show: false },
+      lineStyle: { color: b.color, type: "solid", width: 1, opacity: 0.8 }, data: [{ yAxis: b.lo }, { yAxis: b.hi }] };
+  }
+  out.forEach((o, i) => {
+    if (srcOf[i]?.data.kind === "hline" && o.markLine) o.markLine.lineStyle = { ...o.markLine.lineStyle, type: "solid", color: muted, width: 1 };
+  });
+  const zoneOf = (y) => bands.find((b, k) => (k === 0 || y >= b.lo) && (k === bands.length - 1 || y < b.hi)) || null;
+  const li = out.findIndex((o, i) => o.name === zoned.line && srcOf[i]?.data.kind === "points");
+  if (li < 0 || !bands.length) return { visualMap: [], zoneOf };
+  const L = out[li];
+  L.lineStyle = { ...(L.lineStyle || {}), width: 2.5, shadowColor: panel, shadowBlur: 5 };
+  L.z = 5;
+  // latest value, labelled with its band
+  const pts = (L.data || []).filter((p) => Array.isArray(p) && p[1] != null);
+  const last = pts[pts.length - 1];
+  if (last) {
+    const b = zoneOf(last[1]), u = srcOf[li].unit;
+    L.markPoint = { silent: true, symbol: "circle", symbolSize: 9, data: [{ coord: last, value: last[1],
+      itemStyle: { color: b ? lineColor(b) : text, borderColor: panel, borderWidth: 2 },
+      label: { show: true, position: "left", distance: 8, color: text, fontSize: 11, fontWeight: 600,
+        backgroundColor: panel, borderColor: b ? b.color : muted, borderWidth: 1, borderRadius: 4, padding: [2, 5],
+        formatter: () => `${fmtU(last[1], u, { label: false })} ${b ? b.name.split(" ")[0] : ""}` } }] };
+  }
+  const pieces = bands.map((b, k) => ({ ...(k > 0 ? { gte: b.lo } : {}), ...(k < bands.length - 1 ? { lt: b.hi } : {}),
+    color: lineColor(b) }));
+  return { visualMap: [{ type: "piecewise", show: false, seriesIndex: li, dimension: 1, pieces }], zoneOf };
+}
+
 function drawPlot(card, res, series) {
   const el = document.createElement("div");
   el.className = "plot";
@@ -2325,17 +2393,29 @@ function drawPlot(card, res, series) {
   } };
   // enlarged: the whole legend (click a name to hide / show it) and a zoom slider under the x axis
   const zoom = !!res._zoom;
+  const Z = res.zoned ? zonedSetup(out, srcOf, res.zoned) : null;
+  if (Z) {
+    // the zoned line's hover row also names its band
+    const f0 = tooltip.formatter;
+    tooltip.formatter = (ps) => {
+      const h = f0(ps), p = [].concat(ps).find((q) => q.seriesName === res.zoned.line);
+      const y = p && (Array.isArray(p.value) ? p.value[1] : p.value), b = y != null ? Z.zoneOf(y) : null;
+      return b && h ? h.replace(/<\/div>$/, `<br><span style="opacity:.8">區間：${esc(b.name)}</span></div>`) : h;
+    };
+  }
   const legendRows = zoom ? Math.ceil(out.length / Math.max(1, Math.floor((el.clientWidth || 900) / 170))) : 1;
   chart.setOption({
     animation: false,
     grid: { left: 52, right: 20 + Math.max(0, axisIds.length - 1) * 46, top: 26,
-      bottom: zoom ? 64 + legendRows * 22 : 54 },
+      bottom: Z ? (zoom ? 40 : 26) : zoom ? 64 + legendRows * 22 : 54 },
     tooltip,
-    legend: zoom ? { type: "plain", bottom: 0, textStyle: { color: text, fontSize: 11.5 } }
+    // a zoned chart labels its bands in place and has one data line: no legend box
+    legend: Z ? { show: false } : zoom ? { type: "plain", bottom: 0, textStyle: { color: text, fontSize: 11.5 } }
       : { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } },
+    ...(Z ? { visualMap: Z.visualMap } : {}),
     xAxis, yAxis, series: out,
     dataZoom: zoom
-      ? [{ type: "inside" }, { type: "slider", bottom: 8 + legendRows * 22, height: 18, borderColor: line,
+      ? [{ type: "inside" }, { type: "slider", bottom: Z ? 6 : 8 + legendRows * 22, height: 18, borderColor: line,
           textStyle: { color: muted, fontSize: 10 },
           labelFormatter: xKind === "duration" ? (v) => durTick(Math.round(v)) : undefined }]
       : [{ type: "inside" }],
@@ -2409,11 +2489,14 @@ ACT.stats = (r, ka, kb) => {
 };
 function drawActHrPower(card, res) {
   const T = ACT.theme(), K = res.x.length, span = res.n, iv = ACT.interval(span);
+  // 使用功率 off (settings): the HR panel alone, no power stats
+  const pwOn = S.usePower !== false, usePw = res.has_power && pwOn;
+  if (!pwOn) { const h = card.querySelector("h2"); if (h?.firstChild?.nodeType === 3) h.firstChild.textContent = h.firstChild.textContent.replace("心率與功率", "心率"); }
   if (!res._zoom) card.classList.add("ac-wide");
   card.insertAdjacentHTML("beforeend", `<div class="ac-leg" aria-label="圖例">
-      ${res.has_hr ? `<span><i style="border-color:${T.hr}"></i>心率 bpm（上）</span>` : ""}
-      ${res.has_power ? `<span><i style="border-color:${T.pw}"></i>功率 W，30 秒平均（下）</span>` : `<span>這筆沒有可用的功率</span>`}
-      <span><i class="dash" style="border-color:${T.ink2}"></i>AeT／LTHR／CP</span>
+      ${res.has_hr ? `<span><i style="border-color:${T.hr}"></i>心率 bpm${pwOn ? "（上）" : ""}</span>` : ""}
+      ${usePw ? `<span><i style="border-color:${T.pw}"></i>功率 W，30 秒平均（下）</span>` : pwOn ? `<span>這筆沒有可用的功率</span>` : ""}
+      <span><i class="dash" style="border-color:${T.ink2}"></i>${usePw ? "AeT／LTHR／CP" : "AeT／LTHR"}</span>
       <span class="hint">左右拖曳選一段 <button type="button" class="ac-clear" hidden>清除選取</button></span></div>`);
   const chart = actChart(card, "ac-hp", "心率與功率隨時間；拖曳選一段看那段的統計，統計列在圖下方");
   const head = document.createElement("p"); head.className = "ac-head"; card.appendChild(head);
@@ -2426,10 +2509,10 @@ function drawActHrPower(card, res) {
       tile("時間", fmtDur(s.elapsed)), tile("移動時間", fmtDur(s.moving)),
       res.has_dist ? tile("距離", f(s.km, 2), "km") : "", res.has_dist ? tile("移動配速", ACT.pace(s.pace), "/km") : "",
       res.has_hr ? tile("平均心率", f(s.hr), "bpm", "hr") : "", res.has_hr ? tile("最高心率", f(s.hmax), "bpm", "hr") : "",
-      res.has_power ? tile("平均功率", f(s.p), "W", "pw") : "", res.has_power ? tile("NP", f(s.np), "W", "pw") : "",
-      res.has_power && res.has_hr ? tile("Pw:HR 平均功率÷心率", f(s.pwhr, 2), "W/bpm") : "",
-      res.has_power && res.has_hr ? tile("EF NP÷心率", f(s.ef, 2), "W/bpm") : "",
-      res.has_power && res.has_hr ? tile("前後半 Pw:HR 飄移", s.drift == null ? "—" : (s.drift * 100).toFixed(1), s.drift == null ? "" : "%") : "",
+      usePw ? tile("平均功率", f(s.p), "W", "pw") : "", usePw ? tile("NP", f(s.np), "W", "pw") : "",
+      usePw && res.has_hr ? tile("Pw:HR 平均功率÷心率", f(s.pwhr, 2), "W/bpm") : "",
+      usePw && res.has_hr ? tile("EF NP÷心率", f(s.ef, 2), "W/bpm") : "",
+      usePw && res.has_hr ? tile("前後半 Pw:HR 飄移", s.drift == null ? "—" : (s.drift * 100).toFixed(1), s.drift == null ? "" : "%") : "",
     ].join("");
   };
   show(0, K, false);
@@ -2444,42 +2527,44 @@ function drawActHrPower(card, res) {
     splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } };
   chart.setOption({
     animation: false,
-    grid: [{ left: 62, right: 16, top: 10, height: "40%" }, { left: 62, right: 16, top: "53%", bottom: 26 }],
+    grid: pwOn ? [{ left: 62, right: 16, top: 10, height: "40%" }, { left: 62, right: 16, top: "53%", bottom: 26 }]
+      : [{ left: 62, right: 16, top: 10, bottom: 26 }],
     axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: T.ink2 } },
     tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
       formatter: (pp) => {
         pp = [].concat(pp); if (!pp.length) return "";
         const i = pp[0].dataIndex, rows = [`<b>${fmtDur(res.x[i])}</b>`];
         if (res.hr) rows.push(`<span style="color:${T.hr}">●</span> 心率 <b>${ACT.num(res.hr[i])}</b> bpm`);
-        if (res.power) rows.push(`<span style="color:${T.pw}">●</span> 功率（30 秒） <b>${ACT.num(res.power[i])}</b> W`);
+        if (usePw && res.power) rows.push(`<span style="color:${T.pw}">●</span> 功率（30 秒） <b>${ACT.num(res.power[i])}</b> W`);
         return ACT.tipBox(rows.join("<br>"));
       } },
-    brush: { xAxisIndex: [0, 1], brushType: "lineX", brushMode: "single", brushLink: "all", transformable: true,
+    brush: { xAxisIndex: pwOn ? [0, 1] : [0], brushType: "lineX", brushMode: "single", brushLink: "all", transformable: true,
       throttleType: "debounce", throttleDelay: 80, removeOnClick: true,
       brushStyle: { color: T.brush, borderColor: T.pw, borderWidth: 1 }, outOfBrush: { colorAlpha: 0.3 } },
     toolbox: { show: false },
-    xAxis: [{ ...xBase, gridIndex: 0, axisLabel: { show: false }, axisTick: { show: false } },
-      { ...xBase, gridIndex: 1, axisLabel: { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v, span) } }],
+    xAxis: pwOn ? [{ ...xBase, gridIndex: 0, axisLabel: { show: false }, axisTick: { show: false } },
+      { ...xBase, gridIndex: 1, axisLabel: { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v, span) } }]
+      : [{ ...xBase, gridIndex: 0, axisLabel: { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v, span) } }],
     yAxis: [
       { type: "value", gridIndex: 0, min: Math.floor((hrLo - 5) / 10) * 10, max: Math.ceil((hrHi + 5) / 10) * 10,
         axisLabel: { ...lbl, formatter: (v) => `${v} bpm` }, splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } },
-      { type: "value", gridIndex: 1, min: 0, max: Math.ceil((pHi * 1.08) / 50) * 50,
-        axisLabel: { ...lbl, formatter: (v) => `${v} W` }, splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } },
+      ...(pwOn ? [{ type: "value", gridIndex: 1, min: 0, max: Math.ceil((pHi * 1.08) / 50) * 50,
+        axisLabel: { ...lbl, formatter: (v) => `${v} W` }, splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } }] : []),
     ],
     series: [
       { name: "心率", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(res.hr), showSymbol: false, connectNulls: false,
         lineStyle: { color: T.hr, width: 1.5 }, itemStyle: { color: T.hr },
         markLine: mark([ref(res.ref.aet, "AeT"), ref(res.ref.lthr, "LTHR")]) },
-      { name: "功率", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(res.power), showSymbol: false, connectNulls: false,
+      ...(pwOn ? [{ name: "功率", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(usePw ? res.power : null), showSymbol: false, connectNulls: false,
         lineStyle: { color: T.pw, width: 1.5 }, itemStyle: { color: T.pw },
-        markLine: mark([res.has_power ? ref(res.ref.cp, "CP") : null]) },
+        markLine: mark([usePw ? ref(res.ref.cp, "CP") : null]) }] : []),
     ],
   });
   chart.dispatchAction({ type: "takeGlobalCursor", key: "brush", brushOption: { brushType: "lineX", brushMode: "single" } });
   const clearBtn = card.querySelector(".ac-clear");
   const toK = (x) => Math.max(0, Math.min(K, Math.round(x / res.step)));
   // the brush rectangle sits in the panel it was drawn in; the other panel gets the same span as a tint
-  const mirror = (panel, x0, x1) => chart.setOption({ series: [0, 1].map((i) => ({
+  const mirror = (panel, x0, x1) => chart.setOption({ series: (pwOn ? [0, 1] : [0]).map((i) => ({
     markArea: { silent: true, itemStyle: { color: T.brush, borderColor: T.pw, borderWidth: 1, borderType: "dashed" },
       data: panel != null && panel !== i ? [[{ xAxis: x0 }, { xAxis: x1 }]] : [] } })) });
   chart.on("brushSelected", (e) => {

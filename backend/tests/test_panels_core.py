@@ -30,28 +30,6 @@ def test_ratio_needs_positive_ctl():
     assert F.ratio(12, 10) == pytest.approx(120)
 
 
-def test_monotony_strain_foster():
-    week = [100, 0, 100, 0, 100, 0, 100]
-    mean = 400 / 7
-    sd = math.sqrt(sum((x - mean) ** 2 for x in week) / 7)
-    r = F.monotony_strain(week)
-    assert r["load"] == 400
-    assert r["monotony"] == pytest.approx(mean / sd)
-    assert r["strain"] == pytest.approx(400 * mean / sd)
-
-
-def test_monotony_undefined_for_identical_days():
-    assert F.monotony_strain([50] * 7)["monotony"] is None
-
-
-def test_weekly_monotony_is_monday_based():
-    d0 = dt.date(2026, 9, 2)  # Wednesday
-    weeks = F.weekly_monotony({d0: 80.0}, d0, d0 + dt.timedelta(days=6))
-    assert weeks[0]["week"] == "2026-08-31"
-    assert weeks[0]["load"] == 80.0
-    assert len(weeks) == 2
-
-
 # ---- load focus -------------------------------------------------------------
 
 def test_split_by_power_matches_tss_integrand():

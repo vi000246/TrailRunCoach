@@ -15,6 +15,11 @@ import pytest
 from backend.engine.algorithms import chart_metrics as CM
 
 ROOT = Path(__file__).resolve().parents[2]
+# the 7-day ÷ 28-day downhill load the 總覽「下坡負荷」 card computes, as an expression (the
+# chart of it was dropped from 訓練量 — the weekly bars show the same spikes)
+DOWNHILL_RATIO_EXPR = ('@x:=tl(sum(if(sport = "run" or sport = "walk" or hastag("hiking") or hastag("mountaineering"), '
+                       + CM.DOWNHILL_EXPR + '), trunc(date)), 1), ((cumsum(@x) - shift(cumsum(@x), 7)) / 7) / '
+                       '((cumsum(@x) - shift(cumsum(@x), 28)) / 28)')
 
 
 def _view(name):
@@ -50,19 +55,6 @@ def test_polarization_index_special_cases():
     assert CM.polarization_index(0.8, 0.2, 0.0) == 0.0       # Z3 = 0: zero by definition
     # percentages instead of fractions would add +2 to every value
     assert CM.polarization_index(0.68, 0.06, 0.26) == pytest.approx(math.log10(0.68 / 0.06 * 0.26 * 100))
-
-
-def test_foster_monotony_and_strain_by_hand():
-    # mean 300/7, population SD sqrt(25000/7 - (300/7)^2) = 41.6497
-    m, s = CM.monotony_strain([100, 0, 50, 0, 100, 0, 50])
-    assert m == pytest.approx(42.857142 / 41.649656, rel=1e-5)
-    assert s == pytest.approx(300 * m)
-    # one session in seven days: 1/sqrt(6) — the floor Runalyze's newer
-    # avg/(SD+avg) = 0.29 implies, i.e. the population SD
-    m1, _ = CM.monotony_strain([0, 0, 0, 120, 0, 0, 0])
-    assert m1 == pytest.approx(1 / math.sqrt(6))
-    assert 1 / (1 + 1 / m1) == pytest.approx(0.29, abs=0.005)
-    assert CM.monotony_strain([50] * 7)[0] is None             # SD 0
 
 
 def test_course_constant_and_itra():
@@ -106,7 +98,6 @@ def test_downhill_expression_constants_match_the_reference():
     # the weekly chart uses the same per-workout sum as the overview card
     for name in ("路跑", "越野跑", "登山健行"):
         assert CM.DOWNHILL_EXPR in _series("training", "每週下坡衝擊負荷", name)
-    assert CM.DOWNHILL_EXPR in _series("training", "下坡負荷 近 7 天", "7 天")
 
 
 def test_acute_chronic():
@@ -176,25 +167,6 @@ def test_form_pct_and_load_ratio_match_an_independent_pmc(ds, ev):
         i = d - first
         assert form.at(d) == pytest.approx(CM.form_pct(ctl[i - 1], atl[i - 1]), rel=1e-6)
         assert ratio.at(d) == pytest.approx(atl[i] / ctl[i], rel=1e-6)
-
-
-@needs_data
-@pytest.mark.golden
-def test_monotony_and_strain_match_foster_on_real_weeks(ds, ev):
-    first, x = _daily_tss(ds)
-    mono = ev.evaluate(_series("training", "單調度", "Monotony"))
-    strain = ev.evaluate(_series("training", "單調度", "Strain"))
-    checked = 0
-    for d in _days(ds):
-        i = d - first
-        m, s = CM.monotony_strain(x[i - 6:i + 1])
-        if m is None:
-            continue
-        assert mono.at(d) == pytest.approx(m, rel=1e-6)
-        assert strain.at(d) == pytest.approx(s, rel=1e-6)
-        assert 0.3 < m < 5
-        checked += 1
-    assert checked >= 2
 
 
 def _hr_zone_weeks(ds, weeks):
@@ -305,12 +277,12 @@ def test_sample_metrics_match_numpy_on_real_activities(ds, ev):
 
 @needs_data
 @pytest.mark.golden
-def test_descent_indicator_uses_the_chart_ratio(ds):
+def test_descent_indicator_matches_the_expression_ratio(ds):
     from backend.engine.status import Status
     s = Status(ds, today=TODAY).compute()
     ind = next(i for i in s.indicators if i.id == "descent")
     assert ind.level in ("info", "watch", "na")
     if ind.value is not None:
         from backend.engine.wko5expr.evaluator import Evaluator
-        r = Evaluator(ds, ds.today - 60, ds.today).evaluate(_series("training", "下坡負荷 近 7 天", "7 天"))
+        r = Evaluator(ds, ds.today - 60, ds.today).evaluate(DOWNHILL_RATIO_EXPR)
         assert ind.value == pytest.approx(r.at(int(math.floor(ds.today))), rel=1e-6)
