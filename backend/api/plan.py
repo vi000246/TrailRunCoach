@@ -9,7 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -98,6 +98,8 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
 def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
     today = dt.date.today()
     plan = P.Plan.load()
+    from backend.engine import event_gpx as EG
+    gpx = EG.all_rows()
     b = P._d(begin) or today - dt.timedelta(days=120)
     ev_last = max((e.end for e in plan.events), default=today)
     e = P._d(end) or max(today, ev_last) + dt.timedelta(days=42)
@@ -106,7 +108,8 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
     return {
         "today": today.isoformat(),
         "begin": b.isoformat(), "end": e.isoformat(),
-        "events": [P.event_json(x, today) for x in sorted(plan.events, key=lambda x: x.date)],
+        "events": [{**P.event_json(x, today), "gpx": EG.meta(gpx.get(x.id))}
+                   for x in sorted(plan.events, key=lambda x: x.date)],
         "phases": [P.phase_json(p) for p in phases],
         "manual_phases": bool(plan.phases),
         "b_windows": P.b_event_windows(plan.events),
@@ -157,6 +160,95 @@ def delete_event(eid: str):
     if not plan.delete_event(eid):
         raise HTTPException(404, "no such event")
     plan.save()
+    from backend.engine import event_gpx as EG
+    try:
+        EG.delete(eid)                      # the event's stored GPX goes with it
+    except EG.EventGpxError:
+        pass
+    _notify(False)
+    return {"removed": eid}
+
+
+# ---- the event's GPX (engine/event_gpx.py) --------------------------------
+
+def _plan_event(eid: str) -> P.Event:
+    for e in P.Plan.load().events:
+        if e.id == eid:
+            return e
+    raise HTTPException(404, "no such event")
+
+
+@router.get("/events/{eid}/gpx")
+def get_event_gpx(eid: str):
+    from backend.engine import event_gpx as EG
+    e = _plan_event(eid)
+    try:
+        row = EG.get(eid)
+    except EG.EventGpxError as x:
+        raise HTTPException(400, str(x))
+    if row is None:
+        raise HTTPException(404, "這場賽事沒有 GPX")
+    return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1)}
+
+
+@router.post("/events/{eid}/gpx")
+async def put_event_gpx(eid: str, file: UploadFile = File(...)):
+    """Upload (or replace) the event's GPX / FIT course; stored gzipped."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.engine import event_gpx as EG
+    from backend.engine.racepower import gpx as GPX
+    e = _plan_event(eid)
+    data = await file.read(GPX.MAX_BYTES + 1)
+    try:
+        row = await run_in_threadpool(EG.save, eid, data, file.filename or "")
+    except EG.EventGpxError as x:
+        raise HTTPException(400, str(x))
+    _notify(False)
+    return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1)}
+
+
+class SplitsIn(BaseModel):
+    day_splits_km: list[float] = []
+
+
+@router.put("/events/{eid}/gpx/splits")
+def put_event_gpx_splits(eid: str, body: SplitsIn):
+    """The day ends (km) of a multi-day trip, as clicked on the race calculator's profile."""
+    from backend.engine import event_gpx as EG
+    e = _plan_event(eid)
+    try:
+        row = EG.set_splits(eid, body.day_splits_km)
+    except EG.EventGpxError as x:
+        raise HTTPException(404 if "沒有 GPX" in str(x) else 400, str(x))
+    _notify(False)
+    return {"gpx": EG.meta(row), "days": EG.day_stats(eid, e.days or 1)}
+
+
+@router.get("/events/{eid}/gpx/file")
+def get_event_gpx_file(eid: str):
+    """The stored file itself (un-gzipped), to download."""
+    from urllib.parse import quote
+
+    from fastapi.responses import Response
+
+    from backend.engine import event_gpx as EG
+    _plan_event(eid)
+    row = EG.get(eid)
+    data = EG.read_bytes(eid) if row else None
+    if data is None:
+        raise HTTPException(404, "這場賽事沒有 GPX")
+    name = row.get("filename") or "course.gpx"
+    mt = "application/gpx+xml" if not name.lower().endswith(".fit") else "application/octet-stream"
+    return Response(content=data, media_type=mt,
+                    headers={"Content-Disposition": f"attachment; filename=\"course\"; filename*=UTF-8''{quote(name)}"})
+
+
+@router.delete("/events/{eid}/gpx")
+def delete_event_gpx(eid: str):
+    from backend.engine import event_gpx as EG
+    _plan_event(eid)
+    if not EG.delete(eid):
+        raise HTTPException(404, "這場賽事沒有 GPX")
     _notify(False)
     return {"removed": eid}
 

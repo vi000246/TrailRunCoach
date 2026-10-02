@@ -301,6 +301,28 @@ class InjuryEvent(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class EventGpx(Base):
+    """The GPX stored with a season-plan event (engine/event_gpx.py, which reads
+    and writes it with plain sqlite3 and the same DDL). The file itself is
+    <HOME>/event_gpx/<event_id>.gz; events live in plan.json, so event_id is
+    the plan's event id (no FK). New table: created by init_db's create_all."""
+    __tablename__ = "event_gpx"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), unique=True)
+    filename: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    sha1: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    bytes_raw: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bytes_gz: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gain_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    loss_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    z_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    z_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    day_splits_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # [km, …] the user's day ends
+    camp_km_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # camp / hut waypoints' km
+    uploaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class UserSetting(Base):
     """Per-user key/value settings (backend/settings/repository.py)."""
     __tablename__ = "user_settings"

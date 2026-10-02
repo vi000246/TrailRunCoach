@@ -451,17 +451,63 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
     except GPX.GpxError as e:
         raise HTTPException(400, str(e))
     cid = hashlib.sha1(data).hexdigest()
-    with _courses_lock:
-        _courses[cid] = track
-        _courses.move_to_end(cid)
-        while len(_courses) > COURSE_CACHE_MAX:
-            _courses.popitem(last=False)
+    _cache_course(cid, track)
     c = await run_in_threadpool(_build, track, _course_opts({
         "sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m, "flat_pct": flat_pct, "split": split,
         "official_gain_m": official_gain_m}))
     from backend.engine.racepower import fuel as FU
     sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
     return _py({"course_id": cid, "name": track.name or file.filename, **c, "stop_suggestions": sug})
+
+
+def _cache_course(cid: str, track) -> None:
+    with _courses_lock:
+        _courses[cid] = track
+        _courses.move_to_end(cid)
+        while len(_courses) > COURSE_CACHE_MAX:
+            _courses.popitem(last=False)
+
+
+def _event_track(eid: str):
+    """(course_id, Track, row) of the GPX stored with a plan event (engine/event_gpx.py), cached
+    like an upload; None when the event has none."""
+    from backend.engine import event_gpx as EG
+    try:
+        got = EG.track(eid)
+    except EG.EventGpxError:
+        return None
+    if got is None:
+        return None
+    track, row = got
+    _cache_course(row["sha1"], track)
+    return row["sha1"], track, row
+
+
+class EventCourseIn(BaseModel):
+    split: Optional[Literal["grade", "km", "none"]] = None
+    sigma_m: Optional[float] = None
+    eps_m: Optional[float] = None
+    min_len_m: Optional[float] = None
+    flat_pct: Optional[float] = None
+    official_gain_m: Optional[float] = None
+
+
+@router.post("/course/event/{eid}")
+def event_course(eid: str, body: Optional[EventCourseIn] = None):
+    """The course of the GPX stored with a plan event — the race calculator's upload
+    response, without uploading again; + `event_id` and the stored day splits."""
+    from backend.engine import event_gpx as EG
+    from backend.engine.racepower import fuel as FU
+    e = _event(eid)
+    got = _event_track(eid)
+    if got is None:
+        raise HTTPException(404, "這場賽事沒有 GPX")
+    cid, track, row = got
+    c = _build(track, _course_opts((body or EventCourseIn()).model_dump()))
+    sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
+    splits = EG.splits_for(row, e.days or 1) if (e.days or 1) > 1 else []
+    return _py({"course_id": cid, "event_id": eid, "name": track.name or row.get("filename"), **c,
+                "stop_suggestions": sug, "day_splits_km": splits, "gpx": EG.meta(row)})
 
 
 def _grade_models() -> dict:
@@ -639,6 +685,7 @@ def post_solo_hikes(body: SoloHikesIn):
 
 class CourseRef(BaseModel):
     course_id: Optional[str] = None
+    event_id: Optional[str] = None          # the course is a plan event's stored GPX: reloaded after a restart
     split: Optional[Literal["grade", "km", "none"]] = None
     sigma_m: Optional[float] = None
     eps_m: Optional[float] = None
@@ -704,9 +751,12 @@ class PlanIn(PredictIn):
 def _resolve_course(body: PlanIn) -> dict:
     from backend.engine.racepower import course as CO
     c = body.course
-    if c and c.course_id:
+    if c and (c.course_id or c.event_id):
         with _courses_lock:
-            track = _courses.get(c.course_id)
+            track = _courses.get(c.course_id) if c.course_id else None
+        if track is None and c.event_id:
+            got = _event_track(c.event_id)
+            track = got[1] if got else None
         if track is None:
             raise HTTPException(410, "路線已過期（伺服器重啟過），請重新上傳 GPX")
         return {**_build(track, _course_opts(c.model_dump())), "name": track.name}
