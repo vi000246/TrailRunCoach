@@ -67,11 +67,12 @@
     return `<details${root.dataset.open != null ? " open" : ""}><summary>自動調整設定</summary>
       <div class="ap-set">
         <label><input type="checkbox" data-k="enabled" ${s.enabled ? "checked" : ""}> 同步後自動調整課表</label>
-        <label><input type="checkbox" data-k="push" ${s.push ? "checked" : ""}> 自動推送到 COROS</label>
-        <label>推送未來 <input type="number" min="1" max="14" data-k="push_days" value="${esc(s.push_days)}"> 天</label>
+        ${s.coros_logged_in ? `<label><input type="checkbox" data-k="push" ${s.push ? "checked" : ""}> 自動推送到 COROS</label>
+        <label>推送未來 <input type="number" min="1" max="14" data-k="push_days" value="${esc(s.push_days)}"> 天</label>` : ""}
         <label title="${esc("大變動先等你同意：\n" + tip)}"><input type="checkbox" data-k="confirm_big" ${s.confirm_big ? "checked" : ""}> 大變動先等我確認 ⓘ</label>
-        <label>通知 <select data-k="notify"><option value="watch" ${s.notify === "watch" ? "selected" : ""}>手錶（推一堂「課表待確認」）</option>
-          <option value="overview" ${s.notify === "overview" ? "selected" : ""}>只在總覽頁</option></select></label>
+        ${s.coros_logged_in ? `<label>通知 <select data-k="notify"><option value="watch" ${s.notify === "watch" ? "selected" : ""}>手錶（推一堂「課表待確認」）</option>
+          <option value="overview" ${s.notify === "overview" ? "selected" : ""}>只在總覽頁</option></select></label>`
+          : `<span class="meta">登入 COROS 後可以自動把課表推到手錶</span>`}
         <button type="button" data-run>立即重算</button>
       </div>
       <p class="meta">減量（疲勞保護、沒跑的課不補、輕鬆跑偏強後縮短）會直接套用並推送；加量超過 20%、A 賽前 14 天拿掉長跑／強度課、周期改變、推送範圍內超過 3 堂非減量的改變，會先等你確認（門檻推估）。你改過的課、自己加的課、不排課日期，自動調整都不會動。</p>

@@ -354,6 +354,15 @@ async def settings(db) -> dict:
     repo = SettingsRepository(db)
     out = {k.split(".")[-1]: await repo.get(k) for k in AUTO_KEYS}
     out["state"] = await repo.get("plan.auto.state") or {}
+    # 推課表到手錶 only with COROS logged in (generalize-athlete S4): push and
+    # notify None = auto -> on / "watch" with COROS, off / "overview" without
+    from backend.sync import runner
+    coros = await runner.logged_in(db, "coros", current_athlete_id())
+    out["coros_logged_in"] = coros
+    if out["push"] is None:
+        out["push"] = coros
+    if out["notify"] is None:
+        out["notify"] = "watch" if coros else "overview"
     return out
 
 

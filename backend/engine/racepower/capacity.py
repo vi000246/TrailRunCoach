@@ -44,6 +44,23 @@ L_TRAIL = 2.0                   # vest on a trail run (kg), baiyue-from-running.
 # (replaces the doc's 6 kg). Labelled 預設背負.
 PACK_DEFAULT_MULTI = 9.0
 PACK_DEFAULT_SINGLE = 9.0
+# generalize-athlete P3: the default follows the body weight — 13 % (Uphill Athlete's
+# trekking example, 推估), rounded to 0.5 kg; 9 kg only when the weight is unknown.
+# The author's 68 kg gives 8.84 -> 9.0, i.e. the same default as before.
+PACK_PCT = 0.13
+
+
+def pack_default(weight: Optional[float] = None, days: int = 1) -> float:
+    """The trip pack (kg, day 1) when none was entered: weight × PACK_PCT to
+    the nearest 0.5 kg, else PACK_DEFAULT_MULTI / _SINGLE."""
+    if weight and weight > 0:
+        return round(weight * PACK_PCT * 2) / 2
+    return PACK_DEFAULT_MULTI if (days or 1) > 1 else PACK_DEFAULT_SINGLE
+
+
+def pack_default_text(weight: Optional[float] = None) -> str:
+    return (f"體重 {weight:.0f} kg × 13 % ≈ {pack_default(weight):g} kg（推估）" if weight and weight > 0
+            else f"{PACK_DEFAULT_SINGLE:g} kg（沒有體重時的預設）")
 PACK_DAILY_DROP = 0.7           # food eaten per day (推估, baiyue-from-running.md §3.2, user kept it)
 TRIP_DAYS_DEFAULT = 3           # user decision 2026-09-30
 TRIP_KIND_DEFAULT = "group"     # 跟團 (user decision 2026-09-30)
