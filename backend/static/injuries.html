@@ -324,7 +324,7 @@ function renderList() {
   $("hdr").textContent = L.length ? `${L.length} 筆${open ? `・${open} 筆還沒好` : ""}` : "";
   $("list-n").textContent = L.some((x) => x.status === "draft") ? "黃框＝草稿：補完細節才會進分析" : "";
   if (!L.length) {
-    $("cards").innerHTML = `<div class="empty">還沒有紀錄。<br>跑完在「活動編輯」或單次活動圖表點「痛」，或按右上「＋ 新增」。</div>`;
+    $("cards").innerHTML = `<div class="empty">還沒有紀錄。<br>跑完在「活動列表」或單次活動圖表點「痛」，或按右上「＋ 新增」。</div>`;
     return;
   }
   $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">

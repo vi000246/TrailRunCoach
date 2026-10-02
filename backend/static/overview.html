@@ -248,7 +248,8 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   <span class="meta" id="asof"></span>
 </header>
 <main>
-  <div id="autoplan" data-limit="3"></div>
+  <!-- the pending 課表待確認 proposal only; the change log lives on 課表 (data-log="none") -->
+  <div id="autoplan" data-limit="3" data-log="none"></div>
   <script src="/api/v1/static/autoplan.js" defer></script>
 
   <!-- KPI row: CTL, TSB, this week's volume, countdown to the next A race -->
@@ -877,7 +878,8 @@ $("wk-ic").innerHTML = I("time");
   USE_POWER = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
   await loadStatus().catch(fail("kpis"));
   loadZ5().catch(fail("z5"));
-  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
+  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
+  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
 })();
 </script>
 </body>

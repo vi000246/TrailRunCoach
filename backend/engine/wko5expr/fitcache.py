@@ -62,7 +62,7 @@ ENV_ROOT = "WKO5COACH_FIT_CACHE"
 ENV_WORKERS = "WKO5COACH_FIT_WORKERS"
 POOL_MIN_FILES = 12           # fewer stale files than this: parse inline (no pool start-up)
 
-PARSE_V, POWER_V, BAD_V, FIELDS_V, HR_V = 1, 1, 1, 1, 1
+PARSE_V, POWER_V, BAD_V, FIELDS_V, HR_V, AVG_V = 1, 1, 1, 1, 1, 1
 
 
 def root() -> Path:
@@ -104,6 +104,8 @@ def versions() -> dict[str, str]:
             "bad": f"{BAD_V}:{_h(BA.features, BA._arr, (BA.SPIKE_KMH, BA.MOVING_KMH, BA.WINDOWS_S))}",
             "fields": f"{FIELDS_V}:{_h(FD.workout_fields, FD._rolling, FD._smooth, FD._arr, minetti, MOVING_SPEED_KMH)}",
             "hr": f"{HR_V}:{_h(wko5_hr)}",
+            # the 活動列表 avg HR / avg power columns (fitdataset.averages_of)
+            "avg": f"{AVG_V}:{_h(FD.averages_of)}",
         })
     return _VERSIONS
 
