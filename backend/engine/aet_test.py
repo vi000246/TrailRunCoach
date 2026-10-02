@@ -53,6 +53,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import N_, _
+
 # (warm-up, main, cool-down) minutes per length
 VARIANTS = {"standard": (15, 60, 5),      # 80′: UA 40–60′ after a 10–15′ warm-up; Evoke 60′
             "short": (10, 40, 0)}         # 50′: UA's minimum ("If you only have 40 minutes, do that.")
@@ -99,9 +101,10 @@ PROTOCOLS = {
                 "title": "AeT 飄移測試 Evoke 60 分", "terrain": "跑步機 2% 或平的環線（每 1.6 km 爬升 < 30 m、不要折返）",
                 "hold": "固定速度（\"DO NOT TOUCH THE SPEED CONTROL\"）", "rule": "1 小時內心率升 > 5% → 起始在 AeT 以上；第 10 分鐘已高 10 下還在升 → 提早放棄",
                 "source": "Evoke（https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/）"},
-    "friel": {"label": "Friel 1 小時 decoupling", "warm": 10, "main": 60, "cool": 5, "judge": "friel",
+    "friel": {"label": N_("Friel 1 小時心率飄移"), "warm": 10, "main": 60, "cool": 5, "judge": "friel",
               "title": "AeT 飄移測試 Friel 60 分", "terrain": "穩定的平路",
-              "hold": "在 AeT 心率附近穩定跑（1–2 小時取下限 1 小時）", "rule": "前後半 Pa:HR／Pw:HR < 5% 有氧耐力夠、5–10% 還在進步、> 10% 不足",
+              "hold": "在 AeT 心率附近穩定跑（1–2 小時取下限 1 小時）",
+              "rule": N_("前後半心率飄移 < 5% 有氧耐力夠、5–10% 還在進步、> 10% 不足"),
               "source": "Friel（https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/，教練）"},
 }
 STANDARD = "xu90"               # the auto choice — justification in aerobic-base-readiness.md §6.3
@@ -360,18 +363,18 @@ def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
         head = f"徐國峰 90 分鐘：第 10 分 {h1:.0f} → 第 90 分 {r['hr2']:.0f} bpm，飄移 {d * 100:.1f}%"
         if r["band"] == "base_ok":
             return [f"{head} < 10%：有氧基礎夠（5% 內國家級），可以加 5 區（徐國峰）",
-                    "這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由多次飄移的聚合估計"]
+                    _("這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由平常多次輕鬆跑的飄移推估")]
         return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑（徐國峰）", "5 區先不排；3 區照排"]
     if judge == "friel":
-        head = f"{r['basis']} 飄移 {d * 100:.1f}%（Friel 1 小時）"
+        head = _("心率飄移 {d:.1f}%（Friel 1 小時）", d=d * 100)
         return [{"base_ok": f"{head} < 5%：有氧耐力夠", "base_mid": f"{head}（5–10%）：有氧耐力還在進步",
                  "base_not": f"{head} > 10%：有氧耐力不足"}[r["band"]]]
     if judge == "evoke":
-        head = f"{r['basis']} 飄移 {d * 100:.1f}%（Evoke 60 分）"
+        head = _("心率飄移 {d:.1f}%（Evoke 60 分）", d=d * 100)
         if r["band"] == "at":
             return [f"{head} ≤ 5%：起始心率 {h1:.0f} bpm 在 AeT 或以下", "可以按「套用這次的 AeT」（保守：取起始心率）"]
         return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", f"下次起始心率 −5 bpm（約 {h1 - 5:.0f}）再測一次"]
-    head = f"{r['basis']} 飄移 {d * 100:.1f}%（暖身後 {r['main_s'] / 60:.0f} 分）"
+    head = _("心率飄移 {d:.1f}%（暖身後 {m:.0f} 分）", d=d * 100, m=r["main_s"] / 60)
     now = f"（目前 {aet_now:.0f}）" if aet_now else ""
     if r["band"] == "below":
         return [f"{head} < 3.5%：前半心率 {h1:.0f} bpm 還在 AeT 以下", f"下次起始心率 +5 bpm（約 {h1 + 5:.0f}）再測一次{now}"]
@@ -452,7 +455,7 @@ def apply_body(t: dict) -> Optional[dict]:
     if not t or t.get("aethr_suggest") is None:
         return None
     return {"aethr": t["aethr_suggest"], "date": t["date"],
-            "note": f"AeT 飄移測試 {t['date']}：{t.get('basis') or 'Pw:HR'} {t['drift'] * 100:.1f}%"}
+            "note": _("AeT 飄移測試 {date}：心率飄移 {d:.1f}%", date=t["date"], d=t["drift"] * 100)}
 
 
 def applied(plan, t: dict) -> bool:

@@ -202,13 +202,13 @@ def test_the_card_says_what_the_adaptive_start_left_out():
     ds = FakeDataset([_fake_run(today, t, hr, v, p)], today, settings={"runthr": 165.0, "runftp": 300.0})
     ds.activity_temps = {}
     text = _card_text(R.review(ds, ds.workouts[0], "aerobic"))
-    assert "前 16:24 不算" in text.get("Pa:HR 飄移", ""), text
+    assert "前 16:24 不算" in text.get("心率飄移（配速）", ""), text
     assert text["已排除"].startswith("前段路口停等 3 次") and "推估" in text["已排除"]
     power = _card_text(R.review(ds, ds.workouts[0], "aerobic", basis="power"))
-    assert "前 16:24 不算" in power["Pw:HR 飄移"]
+    assert "前 16:24 不算" in power["心率飄移（功率）"]
     # a plain run has no 已排除 row and the old wording
     t, hr, v, p = _steady(60)
     ds = FakeDataset([_fake_run(today, t, hr, v, p)], today, settings={"runthr": 165.0, "runftp": 300.0})
     ds.activity_temps = {}
     text = _card_text(R.review(ds, ds.workouts[0], "aerobic"))
-    assert "已排除" not in text and "前 10 分鐘不算" in text["Pa:HR 飄移"]
+    assert "已排除" not in text and "前 10 分鐘不算" in text["心率飄移（配速）"]

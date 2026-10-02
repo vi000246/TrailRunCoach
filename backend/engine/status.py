@@ -22,6 +22,7 @@ from backend.engine.planning import KINDS, PHASES, Plan, goals, phase_on
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day
 from backend.engine.wko5expr.evaluator import WS, Evaluator
 from backend.files.wko5_athlete import day_to_date
+from backend.i18n import _
 
 GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 
@@ -491,51 +492,59 @@ class Status:
         heat = WR.is_heat(band)
         n_ref = sum(1 for p in fair if p.get("tier") == "ref")
         spark = [[p["date"], round(p["drift"], 4)] for p in fair]
-        note = "飄移是 AeT 測試用的，不是間歇門檻"
-        ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": WR.REF_LABEL, "ref_tip": WR.REF_TIP,
+        note = _("飄移是 AeT 測試用的，不是間歇門檻")
+        # plain wording (owner 2026-10-02, the drift_bars chart's style): 「穩定 · 3.2%」, a plain caveat,
+        # the method (mean ± SE, median, the rules) only in extra["tip"] (the card's ?), one line at the end
+        ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": _(WR.REF_LABEL), "ref_tip": _(WR.REF_TIP),
                      "band": band, "band_label": WR.TEMP_BAND_LABEL.get(band) if band else None, "chip": chip,
                      "heat": heat, "bands": bands, "band_tip": WR.HEAT_TIP}
+        rules = _("只算暖身後還有 30 分鐘以上、平路、沒有停、配速穩、心率在 AeT 附近以下的輕鬆路跑，"
+                  "而且只和同樣溫度的跑步比。")
         agg = DA.aggregate(fair)
         if len(fair) < DA.AGG_MIN:
-            other = (f"；分溫度區：" + "、".join(f"{WR.TEMP_BAND_LABEL.get(b, b)} {x['n']} 次" for b, x in bands.items())
+            other = (_("；分溫度區：{bands}", bands="、".join(f"{WR.TEMP_BAND_LABEL.get(b, b)} {x['n']} 次"
+                                                           for b, x in bands.items()))
                      if len(bands) > 1 else "")
+            tip = _("方法：前 10 分鐘暖身不算、回程市區段當緩和；有坡、停頓、跑走、功率起伏（VI > 1.04）、"
+                                   "前後半功率差 > 5%、快速結尾的不採用；溫度分 < 25／25–28／> 28 °C（推估）。")
             return Indicator("drift", "心率飄移", NA, "–",
-                             f"8 週內同一溫度區可判讀的輕鬆路跑不到 2 次（{len(pts)} 次符合條件{other}）",
-                             "只算路跑、暖身後還有 ≥ 40 分鐘（30–40 分算參考）、平均心率 ≤ AeT+3；回程市區段當緩和、"
-                             "結尾靜止裁掉；有坡、有停頓、跑走、功率起伏（VI > 1.04）、前後半功率差 > 5%、快速結尾"
-                             "的不採用；只和同一溫度區（< 25／25–28／> 28 °C，推估）的跑步比",
-                             "", SRC_FRIEL, spark=spark,
-                             extra={"fair": len(fair), "median": None, "agg": agg, **ref_extra})
+                             _("8 週內同樣溫度、可以判讀的輕鬆路跑不到 2 次（{n} 次符合條件{other}）", n=len(pts), other=other),
+                             rules, "", SRC_FRIEL, spark=spark,
+                             extra={"fair": len(fair), "median": None, "agg": agg, "tip": tip, **ref_extra})
         med = _median([p["drift"] for p in fair])
         mean = agg["mean"]
-        txt = (_pct(mean, 1) + f" ±{agg['se'] * 100:.1f}" +
-               ("（參考）" if n_ref == len(fair) else "（含參考）" if n_ref else "") + f" · {chip}")
-        mix = (f"，其中 {n_ref} 次是{WR.REF_LABEL}" if n_ref else "")
+        word_lvl = "good" if mean < DRIFT_GOOD else "warn" if mean < DRIFT_WATCH else "bad"
+        txt = WR.drift_plain(mean)
+        caveat = (_("都是比較短的跑步，只當參考") if n_ref == len(fair) else
+                  _("其中 {n} 次比較短，只當參考", n=n_ref) if n_ref else "")
         others = [f"{x['label']} {x['n']} 次" for b, x in bands.items() if b != band]
-        why = (f"8 週內 {chip} 有 {len(fair)} 次可判讀的輕鬆路跑{mix}；最近 {agg['n']} 次平均 Pa:HR {DA.text(agg)}"
-               f"（單次 ±4–6 個百分點，所以看平均，不判單次；中位數 {_pct(med, 1)}）"
-               + (f"；只和同一溫度區比，其他區另計（{'、'.join(others)}）" if others else "")
+        why = (_("最近 {n} 次輕鬆路跑（{chip}）的平均；一次跑步會有誤差，所以看平均", n=agg["n"], chip=chip)
+               + (_("；{c}", c=caveat) if caveat else "")
+               + (_("；其他溫度另外算（{o}）", o="、".join(others)) if others else "")
                + (f"；{WR.HEAT_NOTE}" if heat else "") + f"；{note}")
+        tip = (rules + "\n" + _("方法：8 週內 {k} 次、取最近 {n} 次加權平均 {agg}，中位數 {med}；"
+                               "速度÷心率（Pa:HR）前後半比較（Friel）。", k=len(fair), n=agg["n"], agg=DA.text(agg),
+                               med=_pct(med, 1)))
         med = mean
         if med < DRIFT_GOOD:
-            lvl, v, act = INFO, "< 5%：輕鬆跑後段心率穩", ""
+            lvl, v, act = INFO, _("輕鬆跑後段心率很穩"), ""
         elif med < DRIFT_WATCH:
-            lvl, v, act = INFO, "5–10%：長跑後段心率往上跑", ""
+            lvl, v, act = INFO, _("後段心率有點往上跑"), ""
         else:
-            lvl, v, act = BAD, "> 10%：輕鬆跑太快（或太熱、沒補給）", "所有輕鬆跑壓在 AeT 以下"
+            lvl, v, act = BAD, _("後段心率飄很多：輕鬆跑太快（或太熱、沒補給）"), _("所有輕鬆跑壓在 AeT 以下")
         # the level feeds the base-phase guardrail (overview gate levels,
         # quality_gate): BAD only on the strict tier's own median (≥ 2 test runs), and
         # not in a heat band — heat inflates the drift (Lafrenz 2008), so > 10 % there may be the heat
         test = [p["drift"] for p in fair if p.get("tier") != "ref"]
         if lvl == BAD and not (len(test) >= 2 and _median(test) >= DRIFT_WATCH):
             lvl, act = INFO, ""
-            v = "> 10%（參考值為主，不當警示）：輕鬆跑可能太快"
+            v = _("飄很多，但多是比較短的跑步，只當參考：輕鬆跑可能太快")
         elif lvl == BAD and heat:
             lvl, act = INFO, ""
-            v = f"> 10%（{WR.HEAT_NOTE}，不當警示）：輕鬆跑可能太快，涼一點的日子再看"
+            v = _("飄很多，但天熱本來就會偏高，只當參考：涼一點的日子再看")
         return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_FRIEL, med, spark,
                          {"fair": len(fair), "median": _median([p["drift"] for p in fair]), "agg": agg,
-                          **ref_extra})
+                          "verdict_level": word_lvl, "tip": tip, **ref_extra})
 
     def i_gate(self) -> Indicator:
         # 間歇門檻 (engine/quality_gate.py; docs/research/aerobic-base-readiness.md §4)
