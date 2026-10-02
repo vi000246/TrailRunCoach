@@ -128,7 +128,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     info = None
     if b2b is not None:
         info = b2b["info"] = B2B.projected(kind, mode, monday, b2b.get("event"), b2b.get("prev_mode"),
-                                           b2b.get("state") or {}, round(long_min / 5) * 5, longest, total)
+                                           b2b.get("state") or {}, round(long_min / 5) * 5, longest, total,
+                                           accepted=b2b.get("accepted"))
         if info.get("post"):
             allow_quality = False                   # the easy days after a B2B (engine/b2b.py)
     if kind in ("base", "specific") and mode != "recovery_week":
@@ -199,7 +200,7 @@ def _b2b_finish(ss: list[dict], info: Optional[dict], b2b: Optional[dict], monda
         return ss
     B2B.decorate(ss, info, aet, prefs.long_cap if prefs is not None else None, (b2b or {}).get("weight"))
     kept = B2B.place(ss, monday, monday, set(blocked or ()), prefs.allowed if prefs is not None else None, notes,
-                     prefs.cap_weekday if prefs is not None else None)
+                     prefs.cap_weekday if prefs is not None else None, fixed=info.get("pair"))
     B2B.placed(info, kept)
     return kept
 
@@ -309,8 +310,10 @@ def allow_quality(kind: str, gate: dict, monday: Optional[dt.date] = None, step:
 
 def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
                   atlconstant: float = 7.0, prefs=None, blackouts=None, events=None,
-                  heat_acts: Optional[list] = None) -> list[dict]:
+                  heat_acts: Optional[list] = None, b2b_accepted: Optional[list] = None) -> list[dict]:
     """Weeks after cur['week'] (a week_plan() result) up to `until` (≤ MAX_WEEKS).
+    `b2b_accepted`: the accepted B2B entries (engine/b2b.py); a due B2B in a
+    week without one is only a suggestion (the week's `b2b_suggestion`).
     `ctlconstant` / `atlconstant`: the athlete's (ds.athlete), as for the PMC.
     `prefs`: the 課表偏好 week_plan() used (None / defaults = the original rules).
     `blackouts`: the 不排課日期 ranges week_plan() used (engine/blackouts.py).
@@ -438,13 +441,16 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                               "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
             if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB) and base_q.get("progress", True) is not False:
                 step += 1
-        b2b = {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode, "weight": cb.get("weight")}
+        b2b = {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode, "weight": cb.get("weight"),
+               "accepted": b2b_accepted}
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
                            aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b)
         b2b_info = b2b.get("info") or {}
+        b2b_sug = B2B.suggestion(b2b_info, week, next((s["day"] for s in ss if s.get("id") == "long"), None),
+                                 enabled=getattr(prefs, "b2b", True) is not False)
         if b2b_info.get("post"):
             notes.append(B2B.post_note(b2b_info))
         b2b_state, prev_mode = B2B.next_state(b2b_info, week, ss), mode
@@ -492,6 +498,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
                        or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
+                    **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),
                     **({"loaded_carry": LC.public(lc_info)} if lc_info and lc_info.get("active") else {}),
                     **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
