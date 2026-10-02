@@ -767,8 +767,37 @@ async def steps_preview(body: dict = Body(...)):
 # ---------------------------------------------------------------------------
 
 STEP_FIELDS = ("kind", "title", "minutes", "target", "detail", "source", "terrain", "protocol", "day",
-               "variant_key", "variant_reps", "variant_blocks", "variant_adj", "rung_key", "heat", "target_basis")
+               "variant_key", "variant_reps", "variant_blocks", "variant_adj", "rung_key", "heat", "target_basis",
+               "climb_per_km", "distance_km", "climb_m")
 _tp_cache: dict = {}
+
+
+def _speeds() -> dict:
+    """The athlete's easy road speed and trail EP speed (engine/equivalence.py, the same
+    model as 同負荷換算) for the time of a distance step; {} when unavailable (tests
+    replace this)."""
+    try:
+        m = (_equivalence() or {}).get("model") or {}
+        tr = (m.get("modes") or {}).get("trail") or {}
+        return {"v_easy": m.get("v_flat_kmh"), "v_easy_src": m.get("v_flat_source") or "",
+                "ep_kmh": tr.get("ep_kmh")}
+    except Exception:                       # noqa: BLE001 — speeds are optional
+        return {}
+
+
+def _climb_per_km(s: dict) -> Optional[float]:
+    for k in ("climb_per_km",):
+        try:
+            if s.get(k) is not None:
+                return float(s[k])
+        except (TypeError, ValueError):
+            pass
+    try:
+        if s.get("distance_km") and s.get("climb_m") is not None:
+            return float(s["climb_m"]) / float(s["distance_km"])
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass
+    return None
 
 
 def _tpace() -> Optional[float]:
@@ -810,7 +839,11 @@ async def _steps_env(s: dict, inp: dict) -> dict:
     th = dict(inp.get("thresholds") or {})
     th["tpace"] = await run_in_threadpool(_tpace)
     pol = TP.target_policy(s, prefs, th)
-    c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")))
+    sp = dict(await run_in_threadpool(_speeds))
+    # 越野跑 (kind hike) and trail sessions: effort distance with the session's climb
+    sp["terrain"] = "trail" if s.get("kind") == "hike" or s.get("terrain") in ("trail", "hike") else "road"
+    sp["climb_per_km"] = _climb_per_km(s)
+    c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")), sp)
     rung = None
     if s.get("kind") == "quality":
         rung = s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)
@@ -869,7 +902,7 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
 @router.get("/steps/templates")
 async def steps_templates():
     from backend.engine import workout_steps as WS
-    return {"groups": WS.templates()}
+    return WS.templates()
 
 
 @router.get("/sessions/{uid}/coros-preview")
