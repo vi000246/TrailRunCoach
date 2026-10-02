@@ -1500,7 +1500,7 @@ async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSessio
 #   POST /api/v1/overview/plan/equivalence/design {mode, minutes, climb_per_km} -> km / gain
 # ---------------------------------------------------------------------------
 
-def _prefs_body(p) -> dict:
+def _prefs_body(p, dropped=()) -> dict:
     from backend.engine import plan_prefs as PP
     from backend.engine import quality_gate as QG
     # gate_options: the 間歇門檻 hover texts (the page adds "usable with your data"
@@ -1510,6 +1510,9 @@ def _prefs_body(p) -> dict:
     return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
             # 偏好的星期 vs the default rules (shown when the prefs are saved; 照我的偏好 = pref_keep)
             "day_conflicts": PP.day_conflicts(p),
+            # stored 偏好的星期 that shared a weekday with an earlier type (drop_overlaps):
+            # removed on load, shown next to their row until the athlete saves
+            "pref_dropped": list(dropped),
             "gate_options": QG.option_texts(),
             "aet_options": {k: {"label": "自動（標準：徐國峰 90 分；備案 UA 40 分）" if k == "auto"
                                 else AT.PROTOCOLS[k]["label"], "tip": AT.protocol_tip(k)}
@@ -1533,7 +1536,18 @@ async def get_prefs(db: AsyncSession = Depends(get_db)):
     from backend.engine import plan_prefs as PP
     from backend.settings.repository import SettingsRepository
     repo = SettingsRepository(db)
-    return _prefs_body(PP.from_settings({k: await repo.get(k) for k in PP.KEY_FIELDS}))
+    return _prefs_body(*PP.drop_overlaps(PP.from_settings({k: await repo.get(k) for k in PP.KEY_FIELDS})))
+
+
+@router.post("/prefs/conflicts")
+def post_prefs_conflicts(body: dict = Body(...)):
+    """偏好的星期 conflicts of an unsaved preference set (the dialog's live hints); nothing is stored."""
+    from backend.engine import plan_prefs as PP
+    try:
+        p = PP.from_body(body)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+    return {"day_conflicts": PP.day_conflicts(p), "overlaps": PP.overlaps(p)}
 
 
 @router.put("/prefs")
