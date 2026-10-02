@@ -322,6 +322,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         tests = [[s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol")]
                  for s in test_sessions()]
         params = {**params, "_prefs": PP.load().stamp(), "_tests": json.dumps(tests, default=str)}
+    if ch.get("race_refs") == "course_constant":
+        # the events' stored GPX (engine/event_gpx.py) changes the reference lines, not plan.json
+        from backend.engine import event_gpx as EG
+        params = {**params, "_event_gpx": json.dumps(sorted((k, r.get("sha1"), r.get("day_splits"))
+                                                             for k, r in EG.all_rows().items()), default=str)}
     if ch.get("kind") == "climbvam":
         # the route index, the renames and the per-activity weather are inputs too
         from backend.engine.routes import RouteStore

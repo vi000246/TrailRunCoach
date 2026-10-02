@@ -543,9 +543,50 @@ function heatAcclBody() {
   return m === "custom" ? { mode: m, s: Math.max(0, Math.min(100, num("heat-s") ?? 0)) / 100 } : { mode: m };
 }
 function courseLine() {
-  if (S.csrc === "gpx" && COURSE) $("course-line").textContent = `${COURSE.name || "GPX"} · ${f1(COURSE.km)} km ↑${n0(COURSE.gain_m)} m · ${COURSE.segments ?? "?"} 段`;
+  const evId = $("event").value, ev = (INP?.events || []).find((e) => e.id === evId);
+  if (S.csrc === "gpx" && COURSE) {
+    $("course-line").innerHTML = esc(`${COURSE.name || "GPX"} · ${f1(COURSE.km)} km ↑${n0(COURSE.gain_m)} m · ${COURSE.segments ?? "?"} 段`) +
+      (COURSE.event_id ? ` <span class="badge good" title="存在賽季計畫的這場賽事，下次選這場賽事會自動載入；在賽季計畫頁可以換檔或刪除">已存在賽事</span>`
+        : ev ? ` <button class="btn" id="gpx-attach" title="把這個 GPX 存到賽季計畫的「${esc(ev.name)}」，之後不用再上傳">存到「${esc(ev.name)}」</button>` : "");
+    const b = $("gpx-attach"); if (b) b.onclick = () => attachGpx(evId);
+  }
   else if (S.csrc === "gpx") $("course-line").textContent = "尚未上傳";
   else $("course-line").textContent = "";
+}
+// ---------------- the plan event's stored GPX (engine/event_gpx.py) ----------------
+let LAST_FILE = null;                      // the last uploaded file, so it can be attached to the event
+async function loadEventGpx(eid) {
+  try {
+    const c = await post(`${API}/course/event/${encodeURIComponent(eid)}`, { split: S.split, ...Object.fromEntries(courseOpts(false)) });
+    COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments };
+    ls.set("course", COURSE); LOCKS = {}; TERRAIN = {}; SPLITS = c.day_splits_km || [];
+    $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    STOP_SUGG = c.stop_suggestions || [];
+    S.csrc = "gpx"; saveUI(); syncForm(); renderStops();
+    return true;
+  } catch (e) {
+    if (COURSE?.event_id) { COURSE = null; ls.set("course", null); }
+    return false;                          // 404: the event has no GPX — the manual numbers stay
+  }
+}
+async function attachGpx(eid) {
+  if (!LAST_FILE) { alert("請重新選一次 GPX 檔案"); return; }
+  const fd = new FormData(); fd.append("file", LAST_FILE);
+  try {
+    const r = await fetch(`/api/v1/plan/events/${encodeURIComponent(eid)}/gpx`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.text()).slice(0, 300));
+    if (await loadEventGpx(eid)) schedule();
+  } catch (e) { $("course-line").insertAdjacentHTML("beforeend", ` <span class="err">${esc(e.message)}</span>`); }
+}
+let splitTimer = null;
+function saveEventSplits() {
+  // the day ends clicked on the profile belong to the event's stored GPX: kept for next time
+  // and for the コース定数 reference line's per-day breakdown
+  if (!COURSE?.event_id || type !== "baiyue") return;
+  const eid = COURSE.event_id, body = { day_splits_km: SPLITS };
+  clearTimeout(splitTimer);
+  splitTimer = setTimeout(() => fetch(`/api/v1/plan/events/${encodeURIComponent(eid)}/gpx/splits`,
+    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {}), 800);
 }
 function applyPreset(p) {
   S.csrc = "manual"; setType(p.type); $("dist").value = p.dist; $("gain").value = p.gain; $("loss").value = ""; $("days").value = p.days;
@@ -593,6 +634,7 @@ async function uploadGpx(file) {
     const r = await fetch(`${API}/course`, { method: "POST", body: fd });
     if (!r.ok) throw new Error((await r.text()).slice(0, 300));
     const c = await r.json();
+    LAST_FILE = file;
     COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments };
     ls.set("course", COURSE); LOCKS = {}; SPLITS = (c.wpts || []).filter((w) => w.camp).map((w) => +w.km.toFixed(2)); TERRAIN = {};
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
@@ -821,7 +863,7 @@ function planBody(extra = {}) {
     body.power_is_training = $("ptrain").checked;
   }
   if (S.csrc === "gpx" && COURSE) {
-    body.course = { course_id: COURSE.course_id, split: S.split, ...Object.fromEntries(courseOpts(false)) };
+    body.course = { course_id: COURSE.course_id, event_id: COURSE.event_id || null, split: S.split, ...Object.fromEntries(courseOpts(false)) };
     if (type === "baiyue") body.days = Math.max(1, num("tripdays") || 1);
   } else {
     body.distance_km = num("dist"); body.gain_m = num("gain") || 0; body.loss_m = num("loss");
@@ -1224,7 +1266,7 @@ function renderProfile() {
     if (!c.containPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY])) return;
     const p = c.convertFromPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY]); if (!p) return;
     const km = p[0]; if (!(km >= 0 && km <= P.summary.km)) return;
-    if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +km.toFixed(2)].sort((a, b) => a - b); schedule(); return; }
+    if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +km.toFixed(2)].sort((a, b) => a - b); saveEventSplits(); schedule(); return; }
     const s = segAt(km); if (s) { HL = s.i; renderProfile(); renderSegments(); const row = document.querySelector(`[data-seg="${s.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
   });
 }
@@ -1609,7 +1651,11 @@ function renderEvents() {
     $("days").value = e.days || 1; $("date").value = e.date; $("loss").value = "";
     if (e.est_hours && type === "baiyue") $("target").value = hms(e.est_hours * 3600);
     if (e.peak) { $("peak").value = e.peak.name; $("latlon").value = ""; }
-    renderDayPlan(); schedule(); getWeather();
+    if ((e.days || 1) > 1) $("tripdays").value = e.days;
+    renderDayPlan();
+    // the event's stored GPX (賽季計畫): load it instead of asking for an upload
+    loadEventGpx(e.id).then(() => { courseLine(); schedule(); });
+    getWeather();
   };
 }
 async function keyStatus() {
@@ -1652,7 +1698,7 @@ const drop = $("drop");
 drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); uploadGpx(e.dataTransfer.files[0]); });
-$("clearsplits").onclick = () => { SPLITS = []; schedule(); };
+$("clearsplits").onclick = () => { SPLITS = []; saveEventSplits(); schedule(); };
 $("unlock").onclick = () => { LOCKS = {}; schedule(); };
 $("coros").onclick = () => corosExport(false);
 $("csv").onclick = csvExport;
