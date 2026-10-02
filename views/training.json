@@ -195,16 +195,6 @@
           "kind": "periodzones",
           "view": "weekly",
           "description": "每根長條 = 一週（範圍超過 26 週時改成一個月）的移動時間，依區間堆疊，顏色和上一張圖一樣（區間越高顏色越深）。區間模型、運動、門檻的算法都跟上一張圖共用。下方的小圖是每週低強度（3 區摘要的第 1 區）佔比：灰帶 = 75% 護欄到那一週階段的目標（基礎期 90%），實心圓 = 達標、空心三角 = 沒達標；不到 1 小時的週不判斷。"
-        },
-        {
-          "title": "極化指數 PI",
-          "description": "把每週心率三區（< AeT／AeT–LTHR／≥ LTHR）的比例濃縮成一個數：低強度和高強度都多、中強度少時變高。> 2 = 極化（兩頭多、中間少）；1–2 大致是金字塔型。高強度比低強度還多的那週不算（空白），完全沒有高強度的那週是 0。只算有心率、而且當週至少 1 小時的資料。這裡的三區用 AeT／LTHR 切，跟研究用的換氣閾值接近但不相同。",
-          "axes": [{"id": "NONE", "min": 0}],
-          "period": "week",
-          "series": [
-            {"name": "PI", "type": "bar", "y_axis": "NONE", "color": "#e34948", "expression": "@t:=sum(sum(if(heartrate > 0, deltatime)), startofweek(date)), @z1:=sum(sum(if(heartrate > 0 and heartrate < aethr, deltatime)), startofweek(date)) / @t, @z2:=sum(sum(if(heartrate >= aethr and heartrate < lthr, deltatime)), startofweek(date)) / @t, @z3:=sum(sum(if(heartrate >= lthr, deltatime)), startofweek(date)) / @t, if(@t >= 3600 and @z3 <= @z1, if(@z3 > 0, if(@z2 > 0, log10(@z1 / @z2 * @z3 * 100), if(@z3 > 0.01, log10(@z1 / 0.01 * (@z3 - 0.01) * 100), 0)), 0))"},
-            {"name": "2 = 極化門檻", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,2)"}
-          ]
         }
       ]
     },
