@@ -12,7 +12,8 @@
           "series": [
             {"name": "CTL 體能", "type": "line", "y_axis": "TSSPERDAY", "color": "#2a78d6", "line_width": "thick", "expression": "ctl"},
             {"name": "ATL 疲勞", "type": "line", "y_axis": "TSSPERDAY", "color": "#eb6834", "expression": "atl"},
-            {"name": "TSB 狀況", "type": "line", "y_axis": "TSSPERDAY", "color": "#1baf7a", "expression": "tsb"},
+            {"name": "TSB 正（新鮮）", "type": "bar", "y_axis": "TSSPERDAY", "color": "#1baf7a", "expression": "if(tsb>=0, tsb)"},
+            {"name": "TSB 負（疲勞）", "type": "bar", "y_axis": "TSSPERDAY", "color": "#e34948", "expression": "if(tsb<0, tsb)"},
             {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#8a8984", "line_style": "dash", "expression": "(,0)"},
             {"name": "TSB −30 過度訓練", "type": "line", "y_axis": "TSSPERDAY", "color": "#e34948", "line_style": "dash", "expression": "(,-30)"},
             {"name": "TSB −10 有效訓練上緣", "type": "line", "y_axis": "TSSPERDAY", "color": "#8a8984", "line_style": "dash", "expression": "(,-10)"},
