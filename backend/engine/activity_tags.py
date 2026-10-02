@@ -122,8 +122,46 @@ def _db_path(db_path=None) -> Optional[Path]:
 
 _memo: dict = {}
 COLS = ("id", "athlete_id", "start_local", "source", "file", "workout_id", "distance_km", "label",
-        "activity_type", "activity_type_overridden", "effort", "effort_overridden", "note", "exclusion")
+        "activity_type", "activity_type_overridden", "effort", "effort_overridden", "note", "exclusion",
+        "name", "tags_json")
 EXCLUSIONS = ("keep", "exclude")    # bad_activity.KEEP / EXCLUDE; None = the auto rule
+# columns added after the table first shipped (database._migrate_schema; upsert adds them too)
+LATE_COLS = {"exclusion": "TEXT", "name": "TEXT", "tags_json": "TEXT"}
+NAME_MAX = 200
+TAG_MAX_LEN = 30
+TAGS_MAX = 20
+
+
+def clean_tags(tags) -> list[str]:
+    """Free-form tags as stored: stripped, empty ones dropped, duplicates
+    (case-insensitive) dropped keeping the first spelling, order kept."""
+    out, seen = [], set()
+    for t in tags or []:
+        s = str(t).strip()
+        if s and s.lower() not in seen:
+            seen.add(s.lower())
+            out.append(s)
+    return out
+
+
+def tags_of(row: Optional[dict]) -> list[str]:
+    """The stored free-form tags of a tag row ([] when none / unreadable)."""
+    import json
+    raw = (row or {}).get("tags_json")
+    if not raw:
+        t = (row or {}).get("tags")
+        return clean_tags(t) if isinstance(t, list) else []
+    try:
+        v = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    return clean_tags(v) if isinstance(v, list) else []
+
+
+def name_of(row: Optional[dict]) -> Optional[str]:
+    """The user's title of an activity (None = keep the original)."""
+    n = (row or {}).get("name")
+    return n.strip() if isinstance(n, str) and n.strip() else None
 
 
 def load(db_path=None, athlete_id: int = 1) -> list[dict]:
@@ -156,6 +194,8 @@ def load(db_path=None, athlete_id: int = 1) -> list[dict]:
     for r in rows:
         r["activity_type_overridden"] = bool(r["activity_type_overridden"])
         r["effort_overridden"] = bool(r["effort_overridden"])
+        r["tags"] = tags_of(r)
+        r["name"] = name_of(r)
     _memo.update(stamp=stamp, rows=rows)
     return rows
 
@@ -208,13 +248,21 @@ def user_exclusion(u: Optional[dict]) -> Optional[str]:
     return u["exclusion"] if u and u.get("exclusion") in EXCLUSIONS else None
 
 
-def validate(activity_type=None, effort=None, exclusion=None) -> Optional[str]:
+def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=None) -> Optional[str]:
     if activity_type is not None and activity_type not in TYPES:
         return "INVALID_ACTIVITY_TYPE"
     if effort is not None and effort not in EFFORTS:
         return "INVALID_EFFORT"
     if exclusion is not None and exclusion not in EXCLUSIONS:
         return "INVALID_EXCLUSION"
+    if name is not None and (not isinstance(name, str) or len(name.strip()) > NAME_MAX):
+        return "INVALID_NAME"
+    if tags is not None:
+        if not isinstance(tags, (list, tuple)) or not all(isinstance(t, str) for t in tags):
+            return "INVALID_TAGS"
+        ct = clean_tags(tags)
+        if len(ct) > TAGS_MAX or any(len(t) > TAG_MAX_LEN for t in ct):
+            return "INVALID_TAGS"
     return None
 
 
@@ -223,25 +271,28 @@ _UNSET = object()
 
 def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=None, workout_id=None,
            distance_km=None, label=None, activity_type=_UNSET, effort=_UNSET, note=_UNSET,
-           exclusion=_UNSET) -> dict:
+           exclusion=_UNSET, name=_UNSET, tags=_UNSET) -> dict:
     """Write one user tag (sync; the seed script and tests). For each of
     activity_type / effort: a value sets it and its *_overridden flag; None
     clears it (back to auto); left out = unchanged. `exclusion`: "keep" /
-    "exclude" / None (auto). Creates the table when missing. Returns the
-    stored row."""
+    "exclude" / None (auto). `name`: the user's title, None / "" = back to
+    the original. `tags`: the free-form tag list (replaces the stored one).
+    Creates the table when missing. Returns the stored row."""
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import Session
     from backend.db.models import ActivityTag
-    err = validate(None if activity_type is _UNSET else activity_type, None if effort is _UNSET else effort,
-                   None if exclusion is _UNSET else exclusion)
+    un = lambda v: None if v is _UNSET else v       # noqa: E731
+    err = validate(un(activity_type), un(effort), un(exclusion), un(name), un(tags))
     if err:
         raise ValueError(err)
     eng = create_engine(f"sqlite:///{Path(db_path)}")
     ActivityTag.__table__.create(eng, checkfirst=True)
     from sqlalchemy import text
-    with eng.begin() as c:                     # a table from before `exclusion` (database._migrate_schema)
-        if "exclusion" not in {r[1] for r in c.execute(text("PRAGMA table_info(activity_tags)"))}:
-            c.execute(text("ALTER TABLE activity_tags ADD COLUMN exclusion TEXT"))
+    with eng.begin() as c:                     # a table from before the late columns (database._migrate_schema)
+        have = {r[1] for r in c.execute(text("PRAGMA table_info(activity_tags)"))}
+        for col, typ in LATE_COLS.items():
+            if col not in have:
+                c.execute(text(f"ALTER TABLE activity_tags ADD COLUMN {col} {typ}"))
     with Session(eng) as s:
         row = s.execute(select(ActivityTag).where(ActivityTag.athlete_id == athlete_id,
                                                   ActivityTag.start_local == start_local)).scalar_one_or_none()
@@ -249,7 +300,8 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
             row = ActivityTag(athlete_id=athlete_id, start_local=start_local,
                               activity_type_overridden=False, effort_overridden=False)
             s.add(row)
-        apply_update(row, activity_type=activity_type, effort=effort, note=note, exclusion=exclusion)
+        apply_update(row, activity_type=activity_type, effort=effort, note=note, exclusion=exclusion,
+                     name=name, tags=tags)
         for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
                      ("distance_km", distance_km), ("label", label)):
             if v is not None:
@@ -258,15 +310,25 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
         out = {c: getattr(row, c) for c in COLS}
     eng.dispose()
     _memo.clear()
+    out["tags"] = tags_of(out)
     return out
 
 
-def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclusion=_UNSET) -> None:
+def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclusion=_UNSET,
+                 name=_UNSET, tags=_UNSET) -> None:
     """Set the user fields of an ActivityTag row (shared by upsert and the
     async API): value → set + overridden; None → cleared, back to auto.
-    `exclusion` (bad_activity.py): "keep" / "exclude", None = the auto rule."""
+    `exclusion` (bad_activity.py): "keep" / "exclude", None = the auto rule.
+    `name`: None / blank = back to the original title. `tags`: the whole
+    list (cleaned; [] / None = no tags)."""
+    import json
     if exclusion is not _UNSET:
         row.exclusion = exclusion
+    if name is not _UNSET:
+        row.name = (name or "").strip() or None
+    if tags is not _UNSET:
+        ct = clean_tags(tags)
+        row.tags_json = json.dumps(ct, ensure_ascii=False) if ct else None
     if activity_type is not _UNSET:
         row.activity_type = activity_type
         row.activity_type_overridden = activity_type is not None
@@ -276,6 +338,129 @@ def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclu
     if note is not _UNSET:
         row.note = (note or "").strip() or None
     row.updated_at = dt.datetime.utcnow()
+
+
+# ---------------------------------------------------------------------------
+# the watch's own post-workout rating (FIT session workout_rpe / workout_feel)
+# ---------------------------------------------------------------------------
+#
+# Read-only scan of this athlete's 809 COROS-folder FITs (2026-10-02): the
+# COROS APEX 2 Pro files (359) carry NO RPE / feel field (no session field
+# 192 / 193, no developer field); the Garmin fenix 7 files the COROS account
+# imported (259, 2023-12 … 2025-03) carry both, 32 with a value (RPE 1–4,
+# feel 25–100). So the RPE is used wherever a FIT has it, whatever the
+# watch. Stored per workout_files row at import (file_service) and by
+# scripts/backfill_rpe.py; read here by start time.
+
+FEELS = {0: "很差", 25: "差", 50: "普通", 75: "好", 100: "很好"}   # FIT workout_feel (Garmin: Very Weak … Very Strong)
+RPE_EFFORT = ((4.0, "easy"), (8.0, "moderate"))   # 推估: RPE ≤ 4 輕鬆, ≤ 8 一般, 9–10 全力 (Borg CR10 words: 4 "somewhat hard", 9–10 "extremely hard")
+
+
+def recorded_from_session(session: Optional[dict]) -> tuple[Optional[float], Optional[int]]:
+    """(RPE 1–10, feel 0–100) from a FIT session message's fields. FIT
+    workout_rpe is RPE × 10 (Garmin writes 10 … 100); workout_feel is 0 …
+    100 in steps of 25. (None, None) when the watch recorded neither.
+    Session fields 193 / 192: fitdecode names them workout_rpe / workout_feel,
+    python-fitparse's older profile (fit_reader's primary parser) only
+    unknown_193 / unknown_192."""
+    s = session or {}
+
+    def num(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f == f else None
+    r = num(s.get("workout_rpe", s.get("unknown_193")))
+    f = num(s.get("workout_feel", s.get("unknown_192")))
+    rpe = round(r / 10.0, 1) if r is not None and 0 < r <= 100 else None
+    feel = int(round(f)) if f is not None and 0 <= f <= 100 else None
+    return rpe, feel
+
+
+def feel_label(feel: Optional[int]) -> Optional[str]:
+    if feel is None:
+        return None
+    return FEELS[min(FEELS, key=lambda k: abs(k - feel))]
+
+
+def effort_from_rpe(rpe: Optional[float], rest_share: Optional[float] = None,
+                    base: Optional[dict] = None) -> Optional[dict]:
+    """The auto effort from the watch's RPE (it outranks the HR rule; a user
+    mark outranks both). 9–10 with long rests > AUTO_EFFORT["rest_max"] =
+    有拼但有休息, as the HR rule. `base` = the HR rule's result (its numbers
+    are kept for display). None without an RPE."""
+    if rpe is None:
+        return None
+    eff = next((e for top, e in RPE_EFFORT if rpe <= top), "max")
+    rest = rest_share if rest_share is not None else (base or {}).get("rest_share")
+    if eff == "max" and rest is not None and rest > AUTO_EFFORT["rest_max"]:
+        eff = "hard_with_rests"
+    why = f"手錶記錄的 RPE {rpe:g}（運動後自評）→ {EFFORTS[eff]}"
+    if base and base.get("effort") and base["effort"] != eff:
+        why += f"；心率規則會判為「{EFFORTS.get(base['effort'], '?')}」"
+    return {**(base or {}), "effort": eff, "reason": why, "basis": "rpe", "rpe": rpe,
+            "hr_effort": (base or {}).get("effort")}
+
+
+RECORDED_COLS = ("file_path", "start_time_utc", "rpe", "feel")
+_rec_memo: dict = {}
+
+
+def load_recorded(db_path=None) -> list[dict]:
+    """The workout_files rows with a recorded RPE / feel, as {start_local,
+    file, rpe, feel} (start_local = the athlete-local start minute, the tag
+    key). Read-only, memoised on the DB file; [] without a DB, the table or
+    the columns (a DB from before the migration)."""
+    p = _db_path(db_path)
+    if p is None or not p.exists():
+        return []
+    try:
+        stt = os.stat(p)
+        stamp = (str(p), stt.st_mtime_ns, stt.st_size)
+    except OSError:
+        return []
+    if _rec_memo.get("stamp") == stamp:
+        return _rec_memo["rows"]
+    try:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            have = {r[1] for r in con.execute("PRAGMA table_info(workout_files)").fetchall()}
+            raw = con.execute("SELECT file_path, start_time_utc, rpe, feel FROM workout_files "
+                              "WHERE rpe IS NOT NULL OR feel IS NOT NULL").fetchall() \
+                if {"rpe", "feel", "start_time_utc"} <= have else []
+        finally:
+            con.close()
+    except sqlite3.Error:
+        raw = []
+    rows = []
+    if raw:
+        from backend.engine.wko5expr.datasource import athlete_tz
+        tz = athlete_tz()
+        for fp, st, rpe, feel in raw:
+            try:
+                t = dt.datetime.fromisoformat(str(st)).replace(tzinfo=dt.timezone.utc).astimezone(tz)
+            except (TypeError, ValueError):
+                continue
+            rows.append({"start_local": key_of(t.replace(tzinfo=None)), "file": Path(str(fp).replace("\\", "/")).name,
+                         "rpe": rpe, "feel": feel})
+    _rec_memo.update(stamp=stamp, rows=rows)
+    return rows
+
+
+def recorded_of(rows: list[dict], start: Optional[dt.datetime], file: Optional[str] = None) -> Optional[dict]:
+    """The recorded RPE / feel of one activity: the same FIT file name, else
+    the start minute ±MATCH_TOL_MIN (the WKO5 copy of a synced activity)."""
+    if not rows:
+        return None
+    name = Path(str(file).replace("\\", "/")).name if file else None
+    return find(rows, start, name)
+
+
+def recorded_json(r: Optional[dict]) -> Optional[dict]:
+    if not r:
+        return None
+    return {"rpe": r.get("rpe"), "feel": r.get("feel"), "feel_label": feel_label(r.get("feel"))}
 
 
 # ---------------------------------------------------------------------------
@@ -404,4 +589,5 @@ def merge(auto: dict, user: Optional[dict]) -> dict:
             "effort_auto": ae, "effort_auto_label": EFFORTS.get(ae, ""), "effort_reason": auto.get("effort_reason"),
             "note": (user or {}).get("note"), "stored": user is not None,
             "exclusion": user_exclusion(user),
+            "name": name_of(user), "tags": tags_of(user),
             "key": (user or {}).get("start_local")}

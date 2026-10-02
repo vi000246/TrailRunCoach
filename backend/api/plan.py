@@ -122,6 +122,7 @@ class EventIn(BaseModel):
     est_hours: Optional[float] = None
     note: str = ""
     heat: str = "auto"                      # auto | hot | cool (heat-acclimation.md §5.4)
+    pack_kg: Optional[float] = None         # trip pack kg; None = 9 kg (loaded-carry-training.md §5.1)
 
 
 @router.put("/events")
@@ -130,7 +131,7 @@ def put_event(body: EventIn):
     try:
         ev = plan.upsert_event(body.model_dump())
     except ValueError as e:
-        raise HTTPException(400, f"bad date: {e}")
+        raise HTTPException(400, str(e) if "背包" in str(e) else f"bad date: {e}")
     plan.save()
     _notify(False)
     return {"event": P.event_json(ev, dt.date.today())}

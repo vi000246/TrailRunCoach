@@ -345,6 +345,10 @@ class Session:
     variant_adj: Optional[dict] = None
     progress: Optional[bool] = None     # not stored: this week's pick moves the projected ladder
     prefer_days: Optional[list] = None  # not stored: weekdays the cap rule moved it to (plan_prefs.place)
+    # 負重訓練 (engine/loaded_carry.py): the planned pack (kg; also in the title 「· 背 X kg」), and the
+    # long day's minutes before the first-at-a-new-weight cut (the long-run base is not lowered)
+    pack_kg: Optional[float] = None
+    pack_from: Optional[int] = None
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -507,9 +511,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     indicators steer the plan). `prefs`: engine.plan_prefs.Prefs (課表偏好);
     None or the defaults keep the original rules untouched. `blackouts`:
     engine.blackouts ranges (不排課日期); None / empty = none."""
+    from backend.engine import b2b as B2B
     from backend.engine import blackouts as BL
     from backend.engine import plan_prefs as PP
     PR = prefs if prefs is not None and prefs.active else None
+    b2b: dict = {}
     bmap = BL.blocked(blackouts or ())
     allowed_fn = PR.allowed if PR is not None else None
     today = today or day_to_date(ds.today)
@@ -556,10 +562,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         why.append(f"CTL {ctl0:.0f} 要每週 +{ramp_goal:.0f}，需要約 {need_tss:.0f} TSS（≈ {need_h:.1f} h）")
         if need_h > cap:
             why.append(f"但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last_h:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h")
-        if tsb_today < -30:
+        # B2B (engine/b2b.py): a planned B2B's TSB drop doesn't make this / next week a recovery week
+        b2b = B2B.plan_context(ds, status, today, monday, [h for _, h, _ in hist], ctl_s, atl_s, d_prev_sun, by,
+                               "recovery_week" if build3 else kind)
+        b2b_exempt = B2B.tsb_exempt(b2b, tsb_today, b2b.get("ramp"))
+        if b2b_exempt:
+            why.append(b2b_exempt)
+        if tsb_today < -30 and not b2b_exempt:
             mode, hours = "recovery_week", 0.6 * base4
             why.append(f"TSB {tsb_today:+.0f} < −30：改成恢復週（近 4 週的 60%）")
-        elif tsb_today < -20:
+        elif tsb_today < -20 and not b2b_exempt:
             hours = min(hours, base4)
             why.append(f"TSB {tsb_today:+.0f} < −20：先維持量，不加")
         elif build3:
@@ -726,6 +738,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
             source=SRC_KOOP if kind == "specific" else SRC_UA,
             tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
+        if b2b.get("candidate") and not in_reentry:
+            B2B.finalize(b2b, sessions[-1].minutes, b2b.get("longest_before") or 0.0, minutes_total)
+        if b2b.get("due"):            # day 2 (and 3): out of the easy minutes below (Koop: total unchanged)
+            ls = asdict(sessions[-1])
+            fol = B2B.followers(ls, b2b)
+            sessions[-1] = Session(**ls)
+            for f in fol:
+                add(**f)
         if allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
                 and (gate.get("z5") or {}).get("state") != "open":
             # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (徐國峰: Zone 3
@@ -754,6 +774,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     elif kind == "event":
         add(id="race", kind="race", title="比賽", minutes=0, detail="賽前 2 天 20–30 分輕鬆跑＋幾趟加速",
             source="你的筆記")
+    if b2b.get("post"):
+        # the days after a B2B: easy only (UA / Johnston); the minutes go to the easy runs
+        sessions = [s for s in sessions if s.kind not in ("quality", "test")]
+        notes.append(B2B.post_note(b2b))
     for i in range(strength_n):
         add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
             detail="膝主導＋臀中肌；安排在輕鬆日或跑完後", source=SRC_UA,
@@ -779,6 +803,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             flag = d.pop("long_day", False)
             sessions.append(Session(**d))
             sessions[-1]._long_day = flag          # soft cap: this easy run carries the excess
+    if b2b.get("due"):
+        # B2B texts / caps after the 課表偏好 shaping (it may rename, re-kind or cap the long run)
+        flags = {s.id: getattr(s, "_long_day", False) for s in sessions}
+        dd = [asdict(s) for s in sessions]
+        B2B.decorate(dd, b2b, aet, PR.long_cap if PR is not None else None, b2b.get("weight"))
+        sessions = [Session(**d) for d in dd]
+        for s in sessions:
+            s._long_day = flags.get(s.id, False)
 
     # ---- mark what is done ----------------------------------------------
     pool = sorted(week_ws, key=lambda w: w.day)
@@ -798,6 +830,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             w = take(lambda w: category(w) == "strength")
         elif s.id == "long":                      # kind long, or hike (課表偏好 登山)
             w = take(lambda w: category(w) in ENDURANCE and moving_s(w) / 60 >= 0.8 * s.minutes)
+        elif s.id in B2B.FOLLOWERS:               # B2B day 2 / 3: the day after the one before
+            w = take(lambda w: category(w) in ENDURANCE and moving_s(w) / 60 >= 0.8 * s.minutes
+                     and B2B.done_follow(sessions, s, wdate(w)))
         elif s.id == "test_aet":
             # the 50-min test: a ≥ 48-min road run (2′ slack) titled AeT — the COROS
             # workout's name; untitled only from 55 min (workout_review.TEST_AET_MIN_S),
@@ -915,6 +950,25 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 avail.remove(d)
     if not keep_rest and free:
         notes.append({"level": "info", "text": "剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息"})
+    if b2b.get("due"):
+        # B2B days on consecutive days around the long run (engine/b2b.py place)
+        dd = [asdict(s) for s in sessions]
+        kept = B2B.place(dd, monday, first, set(bmap), allowed_fn, notes, PR.cap_weekday if PR is not None else None)
+        sessions = [Session(**d) for d in kept]
+        B2B.placed(b2b, kept)
+    # ---- 負重訓練 (engine/loaded_carry.py): the long day's pack, the weekday machine session,
+    # ME instead of strength1, the taper's short carry — on the placed sessions
+    from backend.engine import loaded_carry as LC
+    lc = LC.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate)
+    if lc.get("active"):
+        try:
+            pack_of = LC.meta_pack_of()
+            dd = [asdict(s) for s in sessions]
+            LC.apply(dd, lc, aet=aet, prefs=prefs, th={"aet": aet, "lthr": tt.get("lthr"), "cp": tt.get("cp")},
+                     b2b=b2b, notes=notes, week_packs={w.idx: pack_of(w) for w in week_ws}, rates=tph)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+        except Exception as e:              # noqa: BLE001 — the plan must still build
+            lc = {**lc, "error": type(e).__name__}
 
     # ---- 熱適應課 (engine/heat_plan.py): only before a hot A/B race ---------
     heat_info = {"active": False}
@@ -1010,4 +1064,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "test_suggestions": test_suggestions,
         # 停訓後的恢復期 (engine/reentry.py): the block in effect / ahead, for projection and the log
         "reentry": rp,
+        # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card
+        "b2b": B2B.public(b2b),
+        # 負重訓練 (engine/loaded_carry.py): this week's stage / loaded sessions, for projection and the card
+        "loaded_carry": LC.public(lc),
     }

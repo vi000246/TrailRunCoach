@@ -27,6 +27,7 @@ def _no_real_activity_tags(monkeypatch):
     monkeypatch.delenv(activity_tags.TAGS_DB_ENV, raising=False)
     monkeypatch.setattr(activity_tags, "_default_db", lambda: None)
     activity_tags._memo.clear()
+    activity_tags._rec_memo.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +79,14 @@ def _no_auto_plan_after_sync(monkeypatch):
     monkeypatch.setattr(plan_auto, "after_sync", lambda *a, **k: None)
     # nor a threshold edit through the plan API (a CP change re-pushes to COROS)
     monkeypatch.setattr(plan_auto, "after_thresholds", lambda *a, **k: None)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_hike_meta(monkeypatch, tmp_path_factory):
+    """The per-activity pack (racepower_hike_meta.json; engine/loaded_carry.py)
+    is never read from or written to ~/.wko5coach in tests."""
+    from backend.engine.racepower import athlete
+    monkeypatch.setattr(athlete, "HIKE_META", tmp_path_factory.mktemp("hikemeta") / "racepower_hike_meta.json")
 
 
 @pytest.fixture

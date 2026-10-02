@@ -51,10 +51,18 @@ EVIDENCE = {
 }
 
 
-def filter_windows(rows: Sequence[dict], aet: float) -> list[dict]:
-    """rows = consecutive 100 m windows of one day ({"k", "g", "v", "hr", …})."""
+def filter_windows(rows: Sequence[dict], aet: float, hr_band: Optional[tuple] = None) -> list[dict]:
+    """rows = consecutive 100 m windows of one day ({"k", "g", "v", "hr", …}).
+    `hr_band` = (lo, hi) bpm around AeT replaces the HR ≥ AeT floor: the
+    loaded-carry training sessions are kept below AeT by design, so their
+    evaluation uses AeT − 15 … AeT + 3 (engine/loaded_carry.TRAIN_HR_BAND;
+    docs/research/loaded-carry-training.md §5.4). None = the 百岳 filter."""
     f = HIKE_FILTER
-    ok = [r for r in rows if r.get("hr") is not None and r["v"] * 3.6 > f["min_kmh"] and r["hr"] >= aet]
+    if hr_band is None:
+        hr_ok = lambda hr: hr >= aet
+    else:
+        hr_ok = lambda hr: aet + hr_band[0] <= hr <= aet + hr_band[1]
+    ok = [r for r in rows if r.get("hr") is not None and r["v"] * 3.6 > f["min_kmh"] and hr_ok(r["hr"])]
     out, run = [], []
     for r in ok:
         if run and r.get("k") != run[-1].get("k", -10) + 1:
