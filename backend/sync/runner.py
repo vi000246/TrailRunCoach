@@ -100,16 +100,6 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
             await db.commit()
         except Exception as e:
             log.warning("could not store %s sync result: %s", source, type(e).__name__)
-        # 主要資料來源 自動 (sync/primary.py): new data can change the pick, so the
-        # cross-source groups are re-decided (a cheap pass over workout_files)
-        if int(result.get("downloaded") or 0) > 0:
-            try:
-                from backend.sync import dedup, primary
-                if (await primary.resolve_db(db, athlete_id))["auto"]:
-                    await dedup.rebuild(db, athlete_id)
-                    await db.commit()
-            except Exception as e:       # noqa: BLE001 — the sync result stands
-                log.warning("de-dup rebuild after sync failed: %s", type(e).__name__)
         # 自動調整課表 (engine/plan_auto.py): ≥ 1 new activity -> reconcile, adapt and
         # push in a background task with its own DB session; it never raises here
         try:
@@ -191,14 +181,15 @@ async def last_sync_at(db: AsyncSession, source: str, athlete_id: int = 1) -> Op
 
 
 async def auto_plan(db: AsyncSession, athlete_id: int = 1) -> tuple[list, dict]:
-    """What an automatic sync (page open, daily schedule) starts: the
-    primary source first (sync/primary.py), the other one only with
-    sync.secondary.auto (進階設定). Returns (sources to start, skipped)."""
+    """What an automatic sync (page open, daily schedule) starts: only the
+    資料來源 in use (sync/primary.py); the other source is never synced
+    automatically. Returns (sources to start, skipped)."""
     from backend.sync import primary as P
     ready = await ready_sources(db, athlete_id)
-    prim = (await P.resolve_db(db, athlete_id))["source"]
-    second = bool(await SettingsRepository(db, athlete_id).get(P.SECONDARY_AUTO_KEY))
-    return P.sync_order(ready, prim, second)
+    use = P.FOLDER[await P.current(db, athlete_id)]
+    start = [s for s in ready if s == use and ready[s] == "ready"]
+    skipped = {s: ("not_in_use" if s != use else ready[s]) for s in ready if s not in start}
+    return start, skipped
 
 
 async def ready_sources(db: AsyncSession, athlete_id: int = 1) -> dict[str, str]:

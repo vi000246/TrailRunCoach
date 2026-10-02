@@ -92,6 +92,45 @@ def test_a_conflict_moves_the_session_unless_kept():
     assert PP.day_conflicts(kept)[0]["keep"]
 
 
+def test_one_session_type_per_weekday():
+    p = PP.Prefs(long_day="sat", pref_days=(("quality", (5, 1)), ("strides", (1, 3)), ("cp_test", (3,))))
+    assert PP.day_owners(p)[0] == ("long", 5)
+    # priority: long, then PREF_KINDS order (quality, aet_test, cp_test, strides)
+    assert PP.overlaps(p) == [{"kind": "quality", "wd": 5, "owner": "long"},
+                              {"kind": "strides", "wd": 1, "owner": "quality"},
+                              {"kind": "strides", "wd": 3, "owner": "cp_test"}]
+    with pytest.raises(ValueError, match="週六已給長跑"):
+        PP.check(p)
+    # stored before the rule: the first type keeps the day, the later ones lose it (and are named)
+    fixed, dropped = PP.drop_overlaps(p)
+    assert fixed.pref_of("quality") == (1,) and fixed.pref_of("strides") == () and fixed.pref_of("cp_test") == (3,)
+    assert fixed.long_day == "sat" and PP.overlaps(fixed) == [] and len(dropped) == 3
+    PP.check(fixed)
+    ok = PP.Prefs(long_day="sat", pref_days=(("quality", (1, 3)),))
+    assert PP.drop_overlaps(ok) == (ok, []) and PP.overlaps(PP.Prefs(long_day="auto", pref_days=(("quality", (5,)),))) == []
+
+
+def test_api_prefs_migrate_overlaps_and_check_unsaved(monkeypatch):
+    from backend.settings.repository import SettingsRepository
+    from backend.tests.test_coros_workouts import run
+    from backend.tests.test_plan_store import API, Env
+    with Env(monkeypatch) as e:
+        async def store():
+            repo = SettingsRepository(e.db)
+            await repo.set("plan.prefs.long_day", "sun")
+            await repo.set("plan.prefs.pref_days", {"quality": [6, 2], "strides": [2]})
+            await e.db.commit()
+        run(store())
+        got = e.c.get(f"{API}/prefs").json()
+        assert got["prefs"]["long_day"] == "sun" and got["prefs"]["pref_days"] == {"quality": [2]}
+        assert {(d["kind"], d["wd"], d["owner"]) for d in got["pref_dropped"]} == {("quality", 6, "long"), ("strides", 2, "quality")}
+        bad = e.c.put(f"{API}/prefs", json={"long_day": "sun", "pref_days": {"quality": [6]}})
+        assert bad.status_code == 400 and "週日已給長跑" in bad.text
+        r = e.c.post(f"{API}/prefs/conflicts", json={"long_day": "thu", "pref_days": {"quality": [4]}}).json()
+        assert [c["code"] for c in r["day_conflicts"]] == ["after_long"] and r["overlaps"] == []
+        assert e.c.get(f"{API}/prefs").json()["prefs"]["long_day"] == "sun"      # nothing stored
+
+
 def test_a_preferred_day_on_a_blackout_says_so():
     p = PP.Prefs(pref_days=(("quality", (1,)),))
     ns = PP.blocked_pref_notes(p, MON, {"2026-10-06": "出差"})

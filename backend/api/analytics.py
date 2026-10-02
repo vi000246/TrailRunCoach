@@ -7,23 +7,26 @@ from typing import Optional
 from backend.engine.localtime import today_local
 from backend.db.database import get_db
 from backend.db.models import WorkoutFile, WorkoutMetric, AthleteSettings, PmcCache
-from backend.sync.dedup import canonical_clause
+from backend.sync.dedup import canonical_clause, in_use
 from backend.engine.algorithms.metrics import compute_run_pmc, compute_intensity_load_series
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 
 
-def _sport_clause(sports: Optional[list[str]]):
-    """Filter predicate for an optional list of sports, restricted to
-    canonical rows (the same activity synced from a second source is skipped,
-    see backend/sync/dedup.py).
+def _sport_clause(sports: Optional[list[str]], use=None):
+    """Filter predicate for an optional list of sports, restricted to the
+    rows in use (`use` = dedup.in_use: canonical rows of the 資料來源; the
+    other synced source never counts, see backend/sync/dedup.py; None =
+    canonical rows only).
 
     ``None`` (or empty) means "all sports", so callers can always
-    ``.where(_sport_clause(sports))`` without branching.
+    ``.where(_sport_clause(sports, use))`` without branching.
     """
+    if use is None:
+        use = canonical_clause()
     if not sports:
-        return canonical_clause()
-    return and_(canonical_clause(), WorkoutFile.sport.in_(sports))
+        return use
+    return and_(use, WorkoutFile.sport.in_(sports))
 
 
 @router.get("/dashboard-summary")
@@ -79,7 +82,7 @@ async def dashboard_summary(
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.workout_date >= week_start,
-            _sport_clause(sports),
+            _sport_clause(sports, await in_use(db, athlete_id)),
         )
     )
     week_row = week_q.first()
@@ -87,7 +90,7 @@ async def dashboard_summary(
     # Last workout (within the selected sports)
     last_q = await db.execute(
         select(WorkoutFile)
-        .where(WorkoutFile.athlete_id == athlete_id, _sport_clause(sports))
+        .where(WorkoutFile.athlete_id == athlete_id, _sport_clause(sports, await in_use(db, athlete_id)))
         .order_by(WorkoutFile.workout_date.desc())
         .limit(1)
     )
@@ -134,7 +137,7 @@ async def weekly_load(
             (func.sum(WorkoutFile.duration_s) / 3600.0).label("hours"),
             func.count(WorkoutFile.id).label("count"),
         )
-        .where(WorkoutFile.athlete_id == athlete_id, _sport_clause(sports))
+        .where(WorkoutFile.athlete_id == athlete_id, _sport_clause(sports, await in_use(db, athlete_id)))
     )
     if date_from:
         q = q.where(WorkoutFile.workout_date >= date_from)
@@ -190,7 +193,7 @@ async def run_load(
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutMetric.metric_key == "tss",
-            _sport_clause(sports),
+            _sport_clause(sports, await in_use(db, athlete_id)),
             WorkoutFile.workout_date.isnot(None),
         )
     )
@@ -237,7 +240,7 @@ async def trail_load(
                 WorkoutFile.athlete_id == athlete_id,
                 WorkoutMetric.metric_key == metric_key,
                 WorkoutFile.trail_classification == "trail",
-                canonical_clause(),
+                await in_use(db, athlete_id),
                 WorkoutFile.workout_date.isnot(None),
             )
         )
@@ -319,7 +322,7 @@ async def achievements(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
-            canonical_clause(),
+            await in_use(db, athlete_id),
         )
         .order_by(func.coalesce(load_subq, 0.0).desc())
         .limit(max(1, min(limit, 50)))
@@ -408,7 +411,7 @@ async def trail_summary(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.trail_classification == "trail",
             WorkoutFile.workout_date.isnot(None),
-            canonical_clause(),
+            await in_use(db, athlete_id),
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
         )
@@ -460,7 +463,7 @@ async def intensity_load(
             .where(
                 WorkoutFile.athlete_id == athlete_id,
                 WorkoutMetric.metric_key == metric_key,
-                _sport_clause(sports),
+                _sport_clause(sports, await in_use(db, athlete_id)),
                 WorkoutFile.workout_date.isnot(None),
             )
         )
@@ -529,7 +532,7 @@ async def run_volume(
         )
         .where(
             WorkoutFile.athlete_id == athlete_id,
-            _sport_clause(sports),
+            _sport_clause(sports, await in_use(db, athlete_id)),
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
         )
@@ -548,7 +551,7 @@ async def run_volume(
         )
         .where(
             WorkoutFile.athlete_id == athlete_id,
-            _sport_clause(sports),
+            _sport_clause(sports, await in_use(db, athlete_id)),
             WorkoutFile.workout_date >= date_from,
             WorkoutFile.workout_date <= date_to,
         )

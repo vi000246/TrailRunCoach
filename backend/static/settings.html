@@ -52,6 +52,12 @@ table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .list .x { float: right; }
 [hidden] { display: none !important; }
 .src { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg label { padding: 5px 14px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.seg label + label { border-left: 1px solid var(--line); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--soft); color: var(--accent); font-weight: 600; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
 .src h3 { font-size: 14px; margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pill { font-size: 11.5px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
 .pill.ok { color: var(--ok); border-color: var(--ok); }
@@ -162,19 +168,19 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <input type="number" id="s-open-h" min="1" max="168" step="1" style="width:64px"> <label>小時</label>
     </div>
     <div class="row">
-      <label>主要資料來源 <select id="s-primary"><option value="auto">自動</option><option value="coros">COROS</option>
-        <option value="trainingpeaks">TrainingPeaks</option></select></label>
-      <button type="button" class="q" aria-label="說明" title="同一筆活動 COROS 和 TrainingPeaks 都有時，用這個來源的檔案；另一個來源只補主要來源沒有的活動。主要來源算不出來的數字（例如那筆沒有功率）不會拿另一個來源補。自動＝最近資料最新、上次同步完整的那個來源。開網站和每日的自動同步只同步主要來源；另一個來源還是可以按「立即同步」。">?</button>
-      <span class="meta" id="s-primary-eff"></span>
+      <span>資料來源</span>
+      <div class="seg" role="radiogroup" aria-label="資料來源" id="s-source">
+        <label><input type="radio" name="s-src" value="coros"> COROS</label>
+        <label><input type="radio" name="s-src" value="trainingpeaks"> TrainingPeaks</label>
+      </div>
+      <button type="button" class="q" aria-label="說明" title="一次只用一個來源：圖表、總覽、功率計算機、CP 測試、自動同步都只用這個來源的資料，另一個來源的活動不會拿來補。切換後圖表會用新來源的資料重新計算；另一個來源的檔案和登入資料會保留，隨時可以切回來。活動的標籤、RPE、疼痛、背包重量和課表配對是用開始時間對應的，切換後都還在。">?</button>
       <button class="primary" id="s-save">儲存同步設定</button>
     </div>
     <details style="margin:4px 0 8px"><summary class="meta">進階設定</summary>
       <div class="row">
-        <label>圖表資料來源 <select id="s-chart"><option value="synced">同步資料（主要來源優先，預設）</option>
-          <option value="coros">只用 COROS</option><option value="tp">只用 TrainingPeaks</option>
+        <label>圖表資料來源 <select id="s-chart"><option value="source" id="s-chart-src">資料來源（預設）</option>
           <option value="wko5">WKO5 資料夾（比對用）</option></select></label>
       </div>
-      <div class="row"><label><input type="checkbox" id="s-second"> 自動同步時也同步另一個來源</label></div>
       <div class="row"><label>時區 <input id="s-tz" placeholder="自動" style="width:160px" list="s-tz-list"></label>
         <datalist id="s-tz-list"><option value="Asia/Taipei"><option value="Asia/Tokyo"><option value="Asia/Hong_Kong"><option value="Europe/London"><option value="Europe/Berlin"><option value="America/New_York"><option value="America/Los_Angeles"></datalist>
         <label>地區 <select id="s-region"><option value="">自動</option><option value="tw">台灣</option><option value="intl">台灣以外</option></select></label>
@@ -185,9 +191,6 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
         （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
     </details>
-    <div class="row" hidden>
-    </div>
-
     <div class="src" id="src-coros">
       <h3>COROS <span class="pill" data-f="login">…</span> <span class="pill" data-f="busy" hidden>同步中</span>
         <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> 啟用</label></h3>
@@ -276,6 +279,12 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     <p class="meta">確認無誤後請輸入 <b>還原</b>：</p>
     <div class="row"><input type="text" id="r-confirm" autocomplete="off">
       <button class="danger primary" id="r-ok" disabled>還原</button><button id="r-cancel">取消</button></div>
+  </dialog>
+
+  <dialog id="src-dlg">
+    <h2 id="sd-title">切換資料來源</h2>
+    <p id="sd-body" class="meta"></p>
+    <div class="row"><button class="primary" id="sd-ok">切換</button><button id="sd-cancel">取消</button></div>
   </dialog>
 
   <dialog id="purge-dlg">
@@ -501,11 +510,9 @@ async function loadSyncSettings() {
   $("s-daily-on").checked = !!SS.daily_sync_time;
   $("s-open").checked = !!SS.auto_on_open;
   $("s-open-h").value = SS.auto_on_open_hours ?? 6;
-  $("s-primary").value = SS.primary_source || "auto";
-  $("s-primary-eff").textContent = SS.primary_source === "auto"
-    ? (SS.primary_effective_label ? `目前用 ${SS.primary_effective_label}` : "還沒有同步資料") : "";
-  $("s-chart").value = SS.chart_data_source || "synced";
-  $("s-second").checked = !!SS.secondary_auto;
+  showSource(SS.primary_source || "coros");
+  $("s-chart-src").textContent = `${SS.primary_label || "COROS"}（資料來源，預設）`;
+  $("s-chart").value = SS.chart_data_source === "wko5" ? "wko5" : "source";
   // 時區 / 地區: blank = automatic (engine/localtime.py, engine/region.py)
   $("s-tz").value = SS.timezone || ""; $("s-region").value = SS.region_override || "";
   const RL = { tw: "台灣", intl: "台灣以外" };
@@ -563,13 +570,42 @@ $("s-save").onclick = async () => {
   const body = {
     daily_sync_time: $("s-daily-on").checked ? $("s-daily").value : null,
     auto_on_open: $("s-open").checked, auto_on_open_hours: Number($("s-open-h").value) || 6,
-    primary_source: $("s-primary").value || "auto", chart_data_source: $("s-chart").value,
-    secondary_auto: $("s-second").checked, push_provider: $("s-push").value || "coros",
+    chart_data_source: $("s-chart").value, push_provider: $("s-push").value || "coros",
     timezone: $("s-tz").value.trim() || null, region_override: $("s-region").value || null,
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast("已儲存同步設定"); loadSyncSettings(); }
   catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+};
+
+// 資料來源: one source at a time; only its panel (login, sync, status) is shown
+function showSource(src) {
+  document.querySelectorAll('input[name="s-src"]').forEach((r) => r.checked = r.value === src);
+  box("coros").hidden = src !== "coros";
+  box("tp").hidden = src !== "trainingpeaks";
+}
+let SWITCH_TO = null;
+$("s-source").addEventListener("change", (e) => {
+  const to = e.target.value;
+  if (!SS || to === SS.primary_source) return;
+  SWITCH_TO = to;
+  const name = { coros: "COROS", trainingpeaks: "TrainingPeaks" }, from = name[SS.primary_source] || "";
+  $("sd-title").textContent = `改用 ${name[to]} 當資料來源？`;
+  $("sd-body").innerHTML = `圖表、總覽、功率計算機和 CP 測試會<b>只用 ${esc(name[to])} 的資料重新計算</b>`
+    + `（第一次要讀完所有 FIT 檔，會比較久），自動同步也只同步 ${esc(name[to])}。`
+    + `${esc(from)} 的活動不會拿來補。<br>${esc(from)} 的同步檔案和登入資料都會保留，隨時可以切回來；`
+    + `活動的標籤、RPE、疼痛、背包重量和課表配對也都會保留。`;
+  showSource(SS.primary_source);                 // the radio moves only once confirmed
+  $("src-dlg").showModal();
+});
+$("sd-cancel").onclick = () => $("src-dlg").close();
+$("sd-ok").onclick = async (e) => {
+  try {
+    await busy(e.currentTarget, "切換中…", () => putSetting({ primary_source: SWITCH_TO }));
+    $("src-dlg").close();
+    toast("已切換資料來源：圖表會用新來源重新計算");
+    await loadSyncSettings(); loadSources();
+  } catch (err) { toast("切換失敗：" + reason(err)); }
 };
 
 $("m-save").onclick = async () => {
@@ -750,7 +786,8 @@ function openPurge(src) {
   $("pd-body").innerHTML = `會刪除 <b>${esc(name)}</b> 的 <b>${st.files}</b> 個 FIT 檔（<b>${esc(st.size)}</b>，${esc(st.folder)}），`
     + `以及資料庫裡的 ${st.rows} 筆活動紀錄，並重設同步進度（之後重新同步會重新下載）。`
     + `WKO5 資料夾和另一個來源的檔案不受影響。`
-    + (SS.chart_data_source === src ? `<br><b>圖表目前使用這個來源，刪除後會改回 WKO5 資料夾（沒有 WKO5 時改用合併的同步資料）。</b>` : "");
+    + (SS.chart_data_source !== "wko5" && SS.primary_folder === src
+      ? `<br><b>這是目前的資料來源：刪除後圖表沒有資料${SS.wko5_available ? "，會改用 WKO5 資料夾" : ""}，重新同步才會回來。</b>` : "");
   $("pd-word").textContent = name; $("pd-input").value = ""; $("pd-from").value = ""; $("pd-to").value = "";
   $("pd-ok").disabled = true; $("purge-dlg").showModal();
 }

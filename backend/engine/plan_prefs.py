@@ -241,8 +241,41 @@ def from_body(body: dict) -> Prefs:
     return from_settings({k: body.get(f) for k, f in KEY_FIELDS.items()}, lenient=False)
 
 
+def day_owners(p: Prefs) -> list[tuple]:
+    """(kind, weekday) of every chosen 偏好的星期, in priority order: the long run first,
+    then PREF_KINDS, each type's first choice before its second."""
+    out = [("long", LONG_WD[p.long_day])] if p.long_day in LONG_WD else []
+    return out + [(k, wd) for k in PREF_KINDS for wd in p.pref_of(k)]
+
+
+def overlaps(p: Prefs) -> list[dict]:
+    """Weekdays given to two session types: [{"kind", "wd", "owner"}] for each later one
+    (`owner` = the type that has the day first, day_owners order)."""
+    seen, out = {}, []
+    for k, wd in day_owners(p):
+        if wd in seen and seen[wd] != k:
+            out.append({"kind": k, "wd": wd, "owner": seen[wd]})
+        seen.setdefault(wd, k)
+    return out
+
+
+def drop_overlaps(p: Prefs) -> tuple:
+    """Stored values from before the one-type-per-weekday rule: keep the first type of a
+    shared weekday (day_owners order), drop it from the others. -> (Prefs, overlaps(p))."""
+    bad = overlaps(p)
+    if not bad:
+        return p, []
+    drop = {(b["kind"], b["wd"]) for b in bad}
+    pd = tuple((k, tuple(wd for wd in v if (k, wd) not in drop)) for k, v in p.pref_days)
+    return replace(p, pref_days=tuple(x for x in pd if x[1])), bad
+
+
 def check(p: Prefs) -> None:
     """Cross-field rules the per-key validation can't see."""
+    for b in overlaps(p):
+        from backend.i18n import _
+        raise ValueError(_("週{day}已給{owner}，不能再排{kind}（一天只能指定一種課）", day=WD_ZH[b["wd"]],
+                           owner=PREF_LABEL[b["owner"]], kind=PREF_LABEL[b["kind"]]))
     n_days = sum(bool(x) for x in p.days)
     if p.runs is not None and p.runs > n_days:
         raise ValueError(f"每週跑步次數 {p.runs} 比可練日（{n_days} 天）多")
@@ -271,7 +304,7 @@ def load(user_id: int = 1) -> Prefs:
     from backend.engine.wko5expr.datasource import read_setting
     vals = {k: read_setting(k, None, user_id) for k in KEY_FIELDS}
     try:
-        return from_settings(vals)
+        return drop_overlaps(from_settings(vals))[0]
     except (TypeError, ValueError):
         return Prefs()
 
