@@ -122,8 +122,9 @@ HEAT_NOTE = "熱環境，結果可能偏高"
 HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是徐國峰的條件"
             "（Lafrenz 2008：35 °C 心率升 11%、22 °C 升 2%）；28 °C 是推估的分界（Beiter 2025：28.7 對 19.2 °C，"
             "最高心率 +16 bpm）。熱會讓飄移偏高：熱天通過門檻仍算數（保守），沒通過可能是熱造成的。"
-            "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差 3.7 °C（較不準）。"
-            "不做「熱校正後的飄移」：本人的 β 0.224 bpm／Hadley 是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度。")
+            "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差（本人有 10 對以上用本人的，"
+            "否則用單一使用者的 3.7 °C，推估；較不準）。"
+            "不做「熱校正後的飄移」：熱 β（bpm／Hadley）是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度。")
 # watch temperature → air: the wrist warms the sensor (zone_events.WATCH_BIAS_C: the athlete's 72 paired
 # route efforts, watch − Open-Meteo median +3.7 °C, SD 2.7; no literature source — 推估)
 from backend.engine.zone_events import WATCH_BIAS_C  # noqa: E402

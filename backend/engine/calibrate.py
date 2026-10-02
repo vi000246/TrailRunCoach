@@ -91,6 +91,7 @@ def _registry() -> dict[str, Item]:
 def _load_items() -> None:
     """Import the modules that register items (idempotent)."""
     from backend.engine import drift_agg  # noqa: F401  (aet_heat_beta)
+    from backend.engine import heat_calib  # noqa: F401  (hadley_hr_beta, humidity_default, home_*)
 
 
 def validate_entry(v) -> None:

@@ -157,13 +157,14 @@ def run_point(km, gain_m, moving_s, hr_avg, lthr) -> Optional[dict]:
 
 def heat_shift(hadley: Optional[float], lthr: Optional[float]) -> float:
     """The HR-level shift of heat, in LTHR units: β·(Hadley − 120)/LTHR with
-    the athlete's own β = 0.224 bpm per Hadley unit (heat back-test, 271
-    route efforts). 0 without a Hadley or an LTHR, or with the switch off.
+    the athlete's own β (engine/heat_calib.hr_beta: the route efforts' fit
+    shrunk toward 0.3 bpm per Hadley unit). 0 without a Hadley or an LTHR, or with the switch off.
     Using it to move the HR model's x is 推估 (推估)."""
     if not TRAILHR["heat_beta"] or hadley is None or not lthr or not math.isfinite(hadley):
         return 0.0
     from backend.engine import heat as HT
-    return HT.HR_BETA * (float(hadley) - HT.HR_BETA_REF) / float(lthr)
+    from backend.engine.heat_calib import hr_beta
+    return hr_beta()["beta"] * (float(hadley) - HT.HR_BETA_REF) / float(lthr)
 
 
 def heat_adjust(p: dict, hadley: Optional[float]) -> dict:

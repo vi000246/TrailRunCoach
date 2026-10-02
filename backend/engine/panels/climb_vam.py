@@ -241,9 +241,11 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
     routes.sort(key=lambda r: (-r["runs"], -r["segments"], tuple(-ord(c) for c in r["last"]), r["id"]))
     want = params.get("route")
     route = next((r for r in routes if r["id"] == want), routes[0] if routes else None)
+    from backend.engine.heat_calib import hr_beta
+    _hb = hr_beta()
     out = {"kind": "climbvam", "routes": routes, "route": route, "counts": counts,
-           "window_days": WINDOW_DAYS, "beta": HT.HR_BETA, "beta_ref": HT.HR_BETA_REF,
-           "beta_src": HT.HR_BETA_SRC, "heat_basis": "beta", "points": [], "median": [], "median_adj": [],
+           "window_days": WINDOW_DAYS, "beta": _hb["beta"], "beta_ref": HT.HR_BETA_REF,
+           "beta_src": _hb["src"], "heat_basis": "beta", "points": [], "median": [], "median_adj": [],
            "runs_longest": runs_longest, "min_seg_s": CV.MIN_SEG_S, "grade_min": CV.GRADE_MIN}
     if route is None:
         top = max((x["longest_s"] or 0 for x in runs_longest), default=0)
