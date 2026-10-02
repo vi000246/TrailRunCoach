@@ -202,13 +202,16 @@ def load(db_path=None, athlete_id: int = 1) -> list[dict]:
 
 def find(rows: list[dict], start: Optional[dt.datetime], file: Optional[str] = None,
          tol_min: int = MATCH_TOL_MIN) -> Optional[dict]:
-    """The stored tag of an activity: same dataset file, else the same start
-    minute, else the nearest start within ±tol_min minutes."""
+    """The stored tag of an activity: same dataset file (also without the
+    同步資料 source's "coros/" / "tp/" prefix: engine/activity_key.py), else the
+    same start minute, else the nearest start within ±tol_min minutes — so a
+    tag set on one source (incl. the 「當作間歇」 tag) holds on every other."""
     if not rows:
         return None
     if file:
+        from backend.engine.activity_key import same_file
         for r in rows:
-            if r.get("file") and r["file"] == file:
+            if r.get("file") and same_file(r["file"], file):
                 return r
     k = key_of(start)
     if k is None:

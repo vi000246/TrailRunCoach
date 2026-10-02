@@ -162,6 +162,10 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
     Returns the changes (done / missed / unmatched)."""
     unlinked = set(unlinked or ())
     changes: list[dict] = []
+    # stored done_by indexes -> these activities' indexes by start (activity_key.py:
+    # a source switch / 同步資料 / a late-synced older run renumbers the dataset)
+    from backend.engine import activity_key as AK
+    AK.rebase_done_by(out, activities)
     by_index = {a.get("index"): a for a in activities}
     dedupe(out, by_index, today, covered, changes)
     used = {i for i in (_done_index(s) for s in out) if i is not None}

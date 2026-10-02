@@ -175,8 +175,10 @@ def _doy_gap(a: dt.date, b: dt.date) -> int:
 
 def weather_of(ds, acts: list[dict]) -> dict:
     """{workout idx: {"temp_c", "hadley"}} from activity_weather rows: by file,
-    else the only row of that date (COROS file names don't always match)."""
-    by_file = {a.get("file"): a for a in acts if a.get("file")}
+    else the same activity by start (engine/activity_key.py: another source's
+    file, a WKO5 name's start), else the only row of that date."""
+    from backend.engine.activity_key import ByStartDict
+    by_file = ByStartDict({a.get("file"): a for a in acts if a.get("file")})
     by_date: dict = {}
     for a in acts:
         if a.get("date"):
@@ -184,7 +186,7 @@ def weather_of(ds, acts: list[dict]) -> dict:
     out = {}
     for w in ds.workouts:
         f = getattr(getattr(w, "entry", None), "file", None)
-        a = by_file.get(f)
+        a = by_file.find(f, getattr(getattr(w, "entry", None), "start", None))
         if a is None:
             try:
                 d = w.entry.start.date().isoformat()
