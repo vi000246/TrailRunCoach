@@ -62,6 +62,23 @@ Model (all 自組, 推估 until the back-test validates it):
    Fuelling covariate: when the user's free-form tags mark runs as
    fuelled / unfuelled and both groups have ≥ 2 runs, the fuelled group's δ
    predicts races (Clark: carbohydrate offsets the CP loss); else no split.
+7. Terrain-matched δ (2026-10-02, owner decision: measure δ dynamically but
+   without the terrain confound). The rolling effort-km-speed / HR ratio of
+   step 2 compares a climb early in the run with a descent late in it, so
+   its slope is the course's order, not fatigue (0.2–0.4 /h on this
+   athlete's runs). Instead, per run: 100 m windows (terrain_windows) on the
+   drift-v2-cleaned samples, and the within-run regression
+       ln v = f(g) + c·(HR_lag − mean) − d·(t − T0)⁺
+   with f a linear spline in grade (knots at the back-test's grade edges;
+   the terrain model) fitted only on the grades BOTH halves of the run cover
+   (the overlap of their p10–p90 grade ranges: like-for-like terrain, so a
+   climb-first / descend-later course cannot pose as fatigue), HR read 60 s
+   later (HR lag, athlete.HR_LAG_S), t = moving hours. d is the
+   loss of speed per hour at the same grade and the same HR — the run's δ,
+   with its OLS standard error (within_run_delta, 推估). Across runs: the
+   random-effects mean (DerSimonian–Laird) with a 95 % CI (pool_deltas),
+   then the same n/(n+3) shrinkage to 0.05 /h and the LOO gate. Steps 2's
+   ratio stays only as `delta_uncleaned` for comparison.
 """
 from __future__ import annotations
 
@@ -104,6 +121,17 @@ SOURCE = ("越野心率配速模型：effort km（km + 爬升/153）÷ 移動時
 XSTAR_SOURCE = ("全力心率曲線 x*(T) = x₀ − s·ln(T)：先驗錨點 0.5 h 1.00（5K 最後 1/4 ≥ LTHR）、3 h 0.90"
                 "（Friel Z3 下緣）、12 h 0.85（Fornasiero 2018 77 % HRmax 換算）；你的比賽／全力跑以當天 LTHR 擬合，"
                 "錨點當 3 場虛擬比賽收縮；推估")
+# terrain-matched within-run δ (module docstring step 7), all 推估
+DUR = {
+    "win_m": 100.0,            # window length along the distance (grade_model.windows)
+    "knots": (-0.15, -0.08, -0.02, 0.02, 0.08, 0.15),   # grade-spline knots (backtest GRADE_EDGES)
+    "overlap_q": 10.0,         # the grades both halves cover: overlap of their p10–p90 ranges
+    "min_windows": 30,         # usable windows per run
+    "keep_min": 0.8,           # a window needs ≥ 80 % of its moving time in the cleaned samples
+    "late_min_h": 0.5,         # moving time after T0 the slope needs
+    "hr_lag_s": 60.0,          # athlete.HR_LAG_S
+    "g_max": 0.40,
+}
 FUEL_YES = ("有補給", "補給", "吃膠", "能量膠", "fuelled", "fueled", "fuel", "gel")
 FUEL_NO = ("沒補給", "無補給", "不補給", "沒吃", "空腹", "unfuelled", "unfueled", "no fuel", "fasted")
 
@@ -160,6 +188,120 @@ def durability_delta(points, t0: float = TRAILHR["t0_h"]) -> Optional[float]:
     x, y = p[m, 0] - t0, p[m, 1]
     b, a = np.polyfit(x, y, 1)
     return float(-b / a) if a > 0 else None
+
+
+def terrain_windows(t, d_m, z, hr, moving, keep=None, win_m: float = DUR["win_m"],
+                    hr_lag_s: float = DUR["hr_lag_s"]) -> list[dict]:
+    """100 m windows along the distance (moving samples only): grade g,
+    speed v (m/s), HR read hr_lag_s later on the elapsed clock, t_h = moving
+    hours at the window start (every moving second counts, cleaned or not,
+    so "hours after T0" is the run's own clock), keep = the share of the
+    window's moving time inside `keep` (the cleaned samples)."""
+    t = np.asarray(t, float)
+    n = len(t)
+    if n < 10:
+        return []
+    dt_ = np.diff(t, prepend=t[0])
+    dt_[~np.isfinite(dt_) | (dt_ < 0) | (dt_ > 30)] = 0.0
+    mv = np.asarray(moving, bool)[:n] & (dt_ > 0)
+    kp = np.ones(n, bool) if keep is None else np.asarray(keep, bool)[:n]
+    ct = np.cumsum(np.where(mv, dt_, 0.0))
+    ck = np.cumsum(np.where(mv & kp, dt_, 0.0))
+    hv = np.asarray(hr, float)[:n] if hr is not None else np.full(n, np.nan)
+    okt = np.isfinite(t) & np.isfinite(hv) & (hv > 40)
+    if okt.sum() < 10:
+        return []
+    lag = np.interp(t + hr_lag_s, t[okt], hv[okt])
+    okh = mv & okt
+    ch = np.cumsum(np.where(okh, lag * dt_, 0.0))
+    chn = np.cumsum(np.where(okh, dt_, 0.0))
+    d = np.maximum.accumulate(np.nan_to_num(np.asarray(d_m, float)[:n]))
+    zz = np.asarray(z, float)[:n]
+    ok = np.isfinite(zz)
+    if ok.sum() < 10 or d[-1] < 2 * win_m:
+        return []
+    zf = np.interp(np.arange(n), np.nonzero(ok)[0], zz[ok])
+    j = np.clip(np.searchsorted(d, np.arange(0.0, d[-1], win_m)), 0, n - 1)
+    out = []
+    for a, b in zip(j[:-1], j[1:]):
+        tm, dd = ct[b] - ct[a], d[b] - d[a]
+        if b <= a or tm <= 0 or dd <= 0.5 * win_m or chn[b] - chn[a] < 0.5 * tm:
+            continue
+        out.append({"g": float((zf[b] - zf[a]) / dd), "v": float(dd / tm), "t_h": float(ct[a]) / 3600.0,
+                    "hr": float((ch[b] - ch[a]) / (chn[b] - chn[a])), "keep": float((ck[b] - ck[a]) / tm)})
+    return out
+
+
+def within_run_delta(wins, t0: float = TRAILHR["t0_h"]) -> Optional[dict]:
+    """One run's terrain-matched δ (module docstring step 7): OLS of ln v on
+    grade-bin intercepts, centred HR and the moving hours after T0, on the
+    cleaned windows of the bins present both before and after the run's
+    midpoint. {delta (per hour, + = slowing), se, n, bins, hr_coef} or None
+    (too few windows, no time after T0, no shared terrain)."""
+    k = DUR
+    w = [x for x in wins or [] if x.get("keep", 1.0) >= k["keep_min"] and x.get("v", 0) > 0
+         and x.get("hr") and abs(x["g"]) <= k["g_max"]]
+    if len(w) < k["min_windows"]:
+        return None
+    th = np.array([x["t_h"] for x in w])
+    if th.max() - t0 < k["late_min_h"]:
+        return None
+    mid = float(np.median(th))
+    g = np.array([x["g"] for x in w])
+    # like-for-like terrain: only the grades both halves of the run cover (the overlap of
+    # their p10–p90 grade ranges) — a climb-first / descend-later course has little overlap
+    e, l_ = g[th <= mid], g[th > mid]
+    if len(e) < 5 or len(l_) < 5:
+        return None
+    lo = max(np.percentile(e, k["overlap_q"]), np.percentile(l_, k["overlap_q"]))
+    hi = min(np.percentile(e, 100 - k["overlap_q"]), np.percentile(l_, 100 - k["overlap_q"]))
+    sel = (g >= lo) & (g <= hi)
+    if hi <= lo or sel.sum() < k["min_windows"] or (sel & (th <= mid)).sum() < 10 or (sel & (th > mid)).sum() < 10:
+        return None
+    th, gg = th[sel], g[sel]
+    y = np.log([x["v"] for x, s in zip(w, sel) if s])
+    hr = np.array([x["hr"] for x, s in zip(w, sel) if s])
+    late = np.clip(th - t0, 0.0, None)
+    if np.ptp(late) < k["late_min_h"]:
+        return None
+    # the terrain model: a linear spline in grade (knots inside the covered range only)
+    knots = [q for q in k["knots"] if lo < q < hi]
+    ub = knots
+    hcol = [hr - hr.mean()] if np.ptp(hr) > 1.0 else []      # a flat HR trace carries no HR term
+    X = np.column_stack([np.ones_like(gg), gg] + [np.clip(gg - q, 0.0, None) for q in knots]
+                        + hcol + [late])
+    coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+    res = y - X @ coef
+    dof = len(y) - X.shape[1]
+    if dof < 5:
+        return None
+    s2 = float(res @ res) / dof
+    try:
+        cov = s2 * np.linalg.inv(X.T @ X)
+    except np.linalg.LinAlgError:
+        return None
+    se = float(math.sqrt(max(cov[-1, -1], 0.0)))
+    return {"delta": float(-coef[-1]), "se": se, "n": int(len(y)), "bins": len(ub) + 1, "hr_coef": float(coef[-2]) if hcol else None,
+            "g_range": [float(lo), float(hi)]}
+
+
+def pool_deltas(rows) -> Optional[dict]:
+    """Random-effects mean of per-run δ ± SE (DerSimonian–Laird): {mean, se,
+    ci95, tau, n}; None without rows. One run → its own value and SE."""
+    r = [x for x in rows or [] if x and x.get("delta") is not None and x.get("se") and x["se"] > 0]
+    if not r:
+        return None
+    d = np.array([x["delta"] for x in r])
+    v = np.array([x["se"] ** 2 for x in r])
+    w = 1.0 / v
+    m_fe = float((w * d).sum() / w.sum())
+    q = float((w * (d - m_fe) ** 2).sum())
+    c = float(w.sum() - (w ** 2).sum() / w.sum())
+    tau2 = max(0.0, (q - (len(r) - 1)) / c) if len(r) > 1 and c > 0 else 0.0
+    wr = 1.0 / (v + tau2)
+    m = float((wr * d).sum() / wr.sum())
+    se = float(math.sqrt(1.0 / wr.sum()))
+    return {"mean": m, "se": se, "ci95": [m - 1.96 * se, m + 1.96 * se], "tau": math.sqrt(tau2), "n": len(r)}
 
 
 def effort_speed_series(t, d_m, z, moving, divisor: float = TRAILHR["divisor"]):
@@ -336,13 +478,18 @@ def predict_race(m: dict, eff_km: float, xs: Optional[dict], f: float = 1.0,
 
 # ---- durability δ: prior shrinkage and the fuelling covariate ---------------
 
-def shrink_delta(deltas) -> dict:
-    """δ = (n·median + k·prior)/(n + k), clamped to 0…delta_max; with the raw
-    median, n and a warning when the raw δ exceeds 3 × the prior."""
+def shrink_delta(deltas, ses=None) -> dict:
+    """δ = (n·raw + k·prior)/(n + k), clamped to 0…delta_max; raw = the
+    random-effects mean when per-run SEs are given (pool_deltas, with its
+    95 % CI), else the median; with n and a warning when the raw δ exceeds
+    3 × the prior."""
     k = TRAILHR
-    v = [float(d) for d in deltas or [] if d is not None and math.isfinite(d)]
+    pairs = [(float(d), s) for d, s in zip(deltas or [], ses if ses is not None else [None] * len(deltas or []))
+             if d is not None and math.isfinite(d)]
+    v = [d for d, _ in pairs]
     prior = k["delta_prior"]
-    raw = float(median(v)) if v else None
+    pool = pool_deltas([{"delta": d, "se": s} for d, s in pairs]) if ses is not None else None
+    raw = pool["mean"] if pool else (float(median(v)) if v else None)
     n = len(v)
     d = prior if raw is None else (n * raw + k["delta_k"] * prior) / (n + k["delta_k"])
     d = float(min(k["delta_max"], max(0.0, d)))
@@ -350,7 +497,9 @@ def shrink_delta(deltas) -> dict:
     if raw is not None and raw > k["delta_warn_ratio"] * prior:
         warn = (f"量到的耐久衰減 {raw:.0%}/h 超過先驗 {prior:.0%}/h 的 {k['delta_warn_ratio']:g} 倍：長跑裡可能還有"
                 "停等、走路或回程沒清掉（推估）")
-    return {"delta": d, "raw_median": raw, "n": n, "prior": prior, "k": k["delta_k"], "warning": warn}
+    return {"delta": d, "raw_median": raw, "n": n, "prior": prior, "k": k["delta_k"], "warning": warn,
+            "raw_ci95": pool["ci95"] if pool else None, "raw_se": pool["se"] if pool else None,
+            "tau": pool["tau"] if pool else None, "method": "pooled" if pool else "median"}
 
 
 def loo_error(points, delta: float) -> Optional[float]:
@@ -398,13 +547,18 @@ def fuel_of(tags) -> Optional[bool]:
 def delta_by_fuel(rows) -> dict:
     """rows [{delta, fuel}] → the shrunk δ overall and, when both fuelling
     groups have ≥ fuel_min_runs runs, per group; `use` = the δ a race
-    prediction should take (fuelled when split, races are fuelled)."""
-    allv = shrink_delta([r["delta"] for r in rows])
-    yes = [r["delta"] for r in rows if r.get("fuel") is True]
-    no = [r["delta"] for r in rows if r.get("fuel") is False]
+    prediction should take (fuelled when split, races are fuelled). Rows
+    with an "se" (terrain-matched δ) are pooled by random effects."""
+    has_se = bool(rows) and all(r.get("se") for r in rows)
+
+    def sh(rs):
+        return shrink_delta([r["delta"] for r in rs], [r["se"] for r in rs] if has_se else None)
+    allv = sh(rows)
+    yes = [r for r in rows if r.get("fuel") is True]
+    no = [r for r in rows if r.get("fuel") is False]
     out = {"all": allv, "split": False, "use": allv["delta"], "n_fuelled": len(yes), "n_unfuelled": len(no)}
     mn = TRAILHR["fuel_min_runs"]
     if len(yes) >= mn and len(no) >= mn:
-        fy, fn = shrink_delta(yes), shrink_delta(no)
+        fy, fn = sh(yes), sh(no)
         out.update(split=True, fuelled=fy, unfuelled=fn, use=fy["delta"])
     return out
