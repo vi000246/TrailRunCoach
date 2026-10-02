@@ -463,9 +463,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
     <div class="var-box" id="sd-tb">
-      <label>目標用<select name="target_basis" id="sd-tbsel"><option value="auto">自動</option><option value="hr">心率</option><option value="power">功率</option></select></label>
+      <label>目標用<select name="target_basis" id="sd-tbsel" aria-describedby="sd-tbwhy"><option value="auto">自動</option><option value="hr">心率</option><option value="power">功率</option></select></label>
       <div class="hint" id="sd-tbwhy" aria-live="polite"></div>
-      <ol class="steps-prev" id="sd-steps" aria-label="每一段的目標"></ol>
+      <!-- the structured editor (static/workout_editor.js, engine/workout_steps.py): chart, steps, per-step targets, watch preview -->
+      <div id="sd-we"></div>
     </div>
     <div class="var-box" id="sd-test" hidden>
       <div class="row2">
@@ -522,6 +523,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </div>
   </form>
 </dialog>
+<script src="/api/v1/static/workout_editor.js"></script>
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
 <dialog class="sd wide" id="vd" aria-labelledby="vd-h">
@@ -580,6 +582,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="pf-row"><span class="lbl" id="pf-aetp-l">測試方式</span><span class="gopts" id="pf-aetp" role="radiogroup" aria-labelledby="pf-aetp-l"></span></div>
       <div class="pf-row"><span class="lbl">排在</span><label class="rb"><input type="radio" name="aet_test_days" value="weekday">平日（週一到週五）</label><label class="rb"><input type="radio" name="aet_test_days" value="any">和間歇一樣（週二優先，週末也可以）</label></div>
       <div class="meta">「測試方式」決定排什麼、怎麼判讀；上面的「間歇門檻」決定什麼時候開 5 區。徐國峰 90 分排在週末長跑日（就是那次 LSD），其他方式照「排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。</div>
+    </fieldset>
+    <fieldset class="pf-sec" id="pf-b2b"><legend>連續兩天長天（B2B）</legend>
+      <div class="pf-row"><span class="lbl">建議 B2B</span><label class="rb"><input type="radio" name="b2b" value="on">要（到時候跳出建議，我挑兩天再排入）</label><label class="rb"><input type="radio" name="b2b" value="off">不要建議</label></div>
+      <div class="meta">只在專項期、多日或 ≥ 6 小時的 A 賽事前、恢復週後的第一個加量週建議；不會自動排進課表，要在右下角的建議框挑連續兩天按「排入」。排入後那兩天是你自己的課，自動調整不會動它們；刪掉其中一天就整組取消。</div>
     </fieldset>
     <fieldset class="pf-sec" id="pf-heat"><legend>熱適應 <span class="badge watch">推估</span></legend>
       <div class="pf-row"><span class="lbl">熱適應課</span><label class="rb"><input type="radio" name="heat" value="auto">自動（只在 30 天內有熱天 A / B 賽時）</label><label class="rb"><input type="radio" name="heat" value="off">不排</label></div>
@@ -843,8 +849,9 @@ function renderNotes() {
 }
 $("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
 // due CP / AeT tests: suggested with a day picker, never put into the plan by the generator
+// superseded by the floating suggestion box (suggestions.js); kept hidden to avoid showing them twice
 function renderSug() {
-  const sg = D.test_suggestions || [];
+  const sg = [];
   const box = $("tsug");
   box.hidden = !sg.length;
   box.innerHTML = sg.map((x) => `<div class="tsug-row" data-kind="${esc(x.kind)}"><span>🧪 ${esc(x.label)}</span>
@@ -1282,25 +1289,33 @@ function tgtHint() {
   stepsPreview();
 }
 
-// 「目標用：自動／心率／功率」: what each step of this session gets (engine/target_policy.py)
-let SP_T = null;
+// 「目標用：自動／心率／功率」 and the structured editor (static/workout_editor.js): every step
+// shows what it resolves to (engine/target_policy.py → engine/workout_steps.py); one step can be
+// overridden by clicking its target. Nothing is stored until 儲存.
+function weSession() {
+  return { kind: kindVal(), title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+    target_basis: F.target_basis.value, day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
+    protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
+    ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
+      variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
+      variant_adj: dlg.orig.variant_adj, rung_key: dlg.orig.rung_key } : {}) };
+}
+const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onView: (v, we) => {
+  if (v && v.basis_label) $("sd-tbwhy").textContent = v.basis_label;
+  const mine = we.dirty || we.stored;
+  // a structure of your own: minutes, the target text and the TSS estimate come from it
+  F.minutes.readOnly = mine && !dlg.ro;
+  if (v && v.totals && we.dirty) {
+    F.minutes.value = Math.max(1, Math.round(v.totals.sec / 60));
+    if (v.summary) F.target.value = v.summary;
+  }
+  if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+} });
 function stepsPreview() {
-  clearTimeout(SP_T);
-  SP_T = setTimeout(async () => {
-    const k = kindVal();
-    if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
-    $("sd-tb").hidden = false;
-    const body = { kind: k, title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
-      target_basis: F.target_basis.value, terrain: (dlg.orig || {}).terrain, protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
-      ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
-        variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
-        variant_adj: dlg.orig.variant_adj } : {}) };
-    try {
-      const r = await sj("POST", `${PAPI}/steps-preview`, body);
-      $("sd-tbwhy").textContent = r.label;
-      $("sd-steps").innerHTML = r.lines.map((l) => `<li>${esc(l)}</li>`).join("");
-    } catch (e) { $("sd-tbwhy").textContent = ""; $("sd-steps").innerHTML = ""; }
-  }, 250);
+  const k = kindVal();
+  if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
+  $("sd-tb").hidden = false;
+  WE.refresh();
 }
 $("sd-tbsel").addEventListener("change", stepsPreview);
 
@@ -1360,6 +1375,7 @@ $("sd-tpl").addEventListener("change", () => {
   $("sd-tpl-info").textContent = `${v.split}。心率備用：${v.hr || "—"}。來源（${SRC_KIND[v.source_kind] || v.source_kind}）：${v.source}` +
     (v.equiv ? "" : `。${v.consequence}`);
   tgtHint();
+  WE.rederive({ variant_key: v.key });          // the editor shows the template's own steps
 });
 function vdRow(v, cur) {
   const meta = [v.structure, v.power, v.rest, `目標區 ${v.tiz_min} 分`, v.terrain === "hill" ? `⛰ 上坡 ${v.grade}` : "平路",
@@ -1410,7 +1426,7 @@ function openDlg(s, day) {
   db.hidden = !(s && (s.state === "done" || s.state === "missed"));
   if (s && s.state === "done") db.innerHTML = `<b class="ok">✓ 已完成</b>${s.done_by ? `：${esc(s.done_by.category_label || "")} ${hm(s.done_by.moving_s)}${s.done_by.tss != null ? ` · TSS ${n0(s.done_by.tss)}` : ""}` : ""}` +
     (s.compliance ? `<br><span class="cp-${esc(s.compliance.level)}"><span class="cpw">${esc(compTip(s.compliance))}</span></span>` : "") +
-    (s.note ? `<br><span class="adapt-note" title="自動調整（engine/adapt.py）：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬自組）">⚠ ${esc(s.note)}</span>` : "");
+    (s.note ? `<br><span class="adapt-note" title="自動調整（engine/adapt.py）：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬推估）">⚠ ${esc(s.note)}</span>` : "");
   else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
   F.day.value = d;
@@ -1427,8 +1443,10 @@ function openDlg(s, day) {
   const del = $("sd-del"); del.hidden = !s || ro; del.classList.remove("armed"); del.textContent = "刪除";
   $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
   dlg.titleTouched = false;
+  F.minutes.readOnly = false;
   eqInit(s);
   tgtHint();
+  WE.open({ uid: s ? s.uid : null, ro, kind: s ? s.kind : "easy" });
   $("sd").showModal();
   (ro ? $("sd-cancel") : F.title).focus();
 }
@@ -1468,9 +1486,22 @@ F.addEventListener("submit", async (e) => {
     const f = eqF();
     Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });
   }
+  // the structure: saved only when you changed it (a user edit — 自動重排不會再改它)
+  const wp = WE.payload();
+  if (wp) Object.assign(body, wp);
   $("sd-save").disabled = true;
   try {
-    await sj(dlg.uid ? "PATCH" : "POST", dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, body);
+    const url = dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, method = dlg.uid ? "PATCH" : "POST";
+    if (wp && wp.steps) {
+      let r = await WorkoutEditor.request(method, url, body);
+      if (r.status === 422) {
+        const errs = ((r.body.detail || {}).errors || []);
+        if (!(await ask("結構有錯誤", `<ul style="margin:0;padding-left:18px">${errs.map((x) => `<li class="err">${esc(x)}</li>`).join("")}</ul>
+          <p class="meta" style="margin:0">仍要照這樣儲存？</p>`, "仍要儲存", { danger: true }))) return;
+        r = await WorkoutEditor.request(method, url, { ...body, steps_force: true });
+      }
+      if (!r.ok) throw new Error(typeof r.body.detail === "string" ? r.body.detail : JSON.stringify(r.body.detail || r.body).slice(0, 200));
+    } else await sj(method, url, body);
     $("sd").close();
     S.sel = body.day;
     await load();
@@ -1582,6 +1613,7 @@ function pfFill(p) {
   PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
   (PFF.querySelector(`input[name="heat"][value="${p.heat || "auto"}"]`) || {}).checked = true;
   PFF.elements.heat_method.value = p.heat_method || "run";
+  (PFF.querySelector(`input[name="b2b"][value="${p.b2b === false ? "off" : "on"}"]`) || {}).checked = true;
   pfHeatLine();
   pfSync();
 }
@@ -1607,7 +1639,8 @@ function pfRead() {
     aet_test_days: radioVal("aet_test_days") || "weekday",
     aet_test_protocol: radioVal("aet_test_protocol") || "auto",
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
-    heat: radioVal("heat") || "auto", heat_method: E.heat_method.value || "run" };
+    heat: radioVal("heat") || "auto", heat_method: E.heat_method.value || "run",
+    b2b: radioVal("b2b") !== "off" };
 }
 function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
   const n = p.days.filter(Boolean).length;
@@ -1638,6 +1671,7 @@ function pfSync() {
   if (p.quality_gate !== "auto") parts.push(`間歇門檻：<b>${esc((PF_GATE[p.quality_gate] || {}).label || p.quality_gate)}</b>` +
     (p.quality_gate === "weeks" ? `（基礎期滿 ${p.quality_gate_weeks} 週）` : ""));
   if ((p.aet_test_protocol || "auto") !== "auto") parts.push(`AeT 測試方式：<b>${esc((PF_AETP[p.aet_test_protocol] || {}).label || p.aet_test_protocol)}</b>`);
+  if (p.b2b === false) parts.push("不建議 B2B");
   if (p.heat === "off") parts.push("不排熱適應課");
   else if (p.heat_method !== "run") parts.push(`熱適應方式：<b>${esc(PFF.elements.heat_method.selectedOptions[0]?.textContent || p.heat_method)}</b>`);
   $("pf-sum").innerHTML = parts.join("；");

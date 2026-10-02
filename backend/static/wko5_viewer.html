@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/api/v1/static/dashicons.js"></script>
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
@@ -288,6 +289,48 @@ table.z5ev td { white-space: normal; }
 .ac-zbar select { font-size: 12px; max-width: 100%; }
 .ac-src { font-size: 11px; color: var(--muted); margin: 2px 0 0; }
 @media (max-width: 640px) { ol.z5trk { grid-template-columns: 1fr; } }
+/* 本次重點 / 飄移判讀 as small cards (workout_review res.cards; drawReviewCards). Status = icon + word,
+   never colour alone; explanations behind each card's 「?」 */
+:root { --rv-lo: #1baf7a; --rv-mid: #eda100; --rv-hi: #e34948; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --rv-lo: #199e70; --rv-mid: #c98500; --rv-hi: #e66767; } }
+:root[data-theme="dark"] { --rv-lo: #199e70; --rv-mid: #c98500; --rv-hi: #e66767; }
+.di { width: 1em; height: 1em; flex: none; vertical-align: -.14em; }
+.card.rv-wide { grid-column: 1 / -1; }
+.rv-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+.rv-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 10px 2px 8px;
+  border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.rv-tag + .rv-tag { background: var(--code); color: var(--text); font-weight: 500; }
+.rv { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 8px; }
+.rv-c { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px; min-width: 0; display: grid; gap: 1px; align-content: start; }
+.rv-c .k { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); padding-right: 20px; white-space: nowrap; overflow: hidden; }
+.rv-c .k .di { font-size: 14px; }
+.rv-c .v { font-size: 22px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
+.rv-c .v small { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+.rv-c .s { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rv-c > .qtip { position: absolute; top: 7px; right: 7px; margin: 0; }
+.rv-c.st { border-left: 4px solid var(--lc, var(--line)); }
+.rv-c.good { --lc: var(--ok); } .rv-c.warn { --lc: var(--warn); } .rv-c.bad { --lc: var(--err); } .rv-c.na, .rv-c.info { --lc: var(--line); }
+.rv-c.st .s { display: flex; align-items: center; gap: 4px; font-weight: 600; color: var(--lc); }
+.rv-c.na .s, .rv-c.info .s { color: var(--muted); font-weight: 500; }
+.rv-c.st .k .di { color: var(--lc); } .rv-c.na .k .di, .rv-c.info .k .di { color: var(--muted); }
+.rv-c.na .v { font-size: 17px; color: var(--muted); }
+.rv-c.zn { grid-column: span 2; }
+@media (max-width: 420px) { .rv { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-c.zn { grid-column: 1 / -1; } .rv-c .v { font-size: 19px; } }
+.rv-zbar { display: flex; height: 22px; gap: 2px; border-radius: 6px; overflow: hidden; margin: 6px 0 5px; }
+.rv-zbar i { display: grid; place-items: center; color: #fff; font: 700 11px/1 system-ui, sans-serif; font-style: normal; min-width: 0; overflow: hidden; white-space: nowrap; }
+.rv-zleg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.rv-zleg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.rv-zleg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.rv-zleg b { font-weight: 700; }
+.rv-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rv-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; border: 1px solid var(--line); border-radius: 14px;
+  padding: 2px 4px 2px 9px; white-space: nowrap; background: var(--panel); }
+.rv-chip:not(:has(.qtip)) { padding-right: 10px; }
+.rv-chip .di { font-size: 13px; color: var(--muted); }
+.rv-chip.good .di { color: var(--ok); } .rv-chip.warn .di { color: var(--warn); } .rv-chip.bad .di { color: var(--err); }
+.rv-chip.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.rv-chip .qtip { margin: 0; width: 16px; height: 16px; }
+.ddesc-q { margin: 0 0 2px; grid-column: 1 / -1; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 2px; }
 </style>
 </head>
 <body class="aside-closed" data-mode="season">
@@ -766,8 +809,8 @@ async function load() {
     : `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}`)
     + "&" + tpParam();
   if (d.description) {
-    grid.insertAdjacentHTML("beforeend", `<p class="ddesc" title="點一下展開">${esc(d.description)}</p>`);
-    grid.lastElementChild.onclick = (e) => e.currentTarget.classList.toggle("full");
+    // the dashboard's description: behind a ? (hover / tap), not a caption paragraph
+    grid.insertAdjacentHTML("beforeend", `<p class="ddesc-q">這一頁看什麼<button type="button" class="qtip" aria-label="這一頁看什麼" data-tip="${esc(d.description)}">?</button></p>`);
   }
   // render sequentially-ish (4 at a time) so heavy charts don't block the rest
   const focus = S.focusChart; S.focusChart = null;
@@ -839,6 +882,31 @@ function saveWindow(k, w) { try { localStorage.setItem(WINDOW_KEY, JSON.stringif
 const BASIS_KEY = "wko5viewer.basis";
 function basisPrefs() { try { return JSON.parse(localStorage.getItem(BASIS_KEY) || "{}"); } catch { return {}; } }
 function saveBasis(k, b) { try { localStorage.setItem(BASIS_KEY, JSON.stringify({ ...basisPrefs(), [k]: b })); } catch {} }
+// chart variants (views "variants", wko5expr/variants.py): e.g. 每日 TSS ↔ % CTL. Generic: any chart whose
+// JSON says variant_toggle gets a segmented toggle in its header; the choice is remembered per chart and
+// sent as ?variant=<key>. Self-contained: variantQuery() in the fetch URL + variantToggle() after the fetch.
+const VARIANT_KEY = "wko5viewer.variant";
+function variantPrefs() { try { return JSON.parse(localStorage.getItem(VARIANT_KEY) || "{}"); } catch { return {}; } }
+function variantQuery(pkey) { const k = variantPrefs()[pkey]; return k ? `&variant=${encodeURIComponent(k)}` : ""; }
+function variantToggle(card, res, pkey, rerender) {
+  if (!res.variant_toggle || !(res.variant_choices?.length > 1)) return;
+  const seg = document.createElement("div");
+  seg.className = "seg period";          // .seg.period: the zoom overlay forwards its clicks (fillZoom)
+  seg.dataset.kind = "variant";
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "圖表顯示方式");
+  seg.innerHTML = res.variant_choices.map(({ key, label }) => `<button data-p="${esc(key)}" class="${key === res.variant ? "on" : ""}"
+    aria-pressed="${key === res.variant}">${esc(label)}</button>`).join("");
+  seg.onclick = async (e) => {
+    const b = e.target.closest("button[data-p]");
+    if (!b || b.dataset.p === card._res?.variant) return;
+    try { localStorage.setItem(VARIANT_KEY, JSON.stringify({ ...variantPrefs(), [pkey]: b.dataset.p })); } catch {}
+    card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+    await rerender();
+    if (ZOOM.card === card) fillZoom();
+  };
+  card.querySelector("h2").appendChild(seg);
+}
 function disposeCardCharts(card) {
   for (const el of card.querySelectorAll(".plot")) {
     if (el._lmap) { el._lmap.remove(); el._lmap = null; continue; }
@@ -859,7 +927,7 @@ async function renderCard(card, v, di, c, q, token) {
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
       + (win && c.kind === "athlete" ? `&window=${win}` : "")
       + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : "")
-      + (c.kind === "periodzones" ? pzQuery(c) : "")
+      + (c.kind === "periodzones" ? pzQuery(c) : "") + variantQuery(pkey)
       + (c.kind === "climbpwhr" && window.cpwQuery ? cpwQuery(c) : ""));   // climb_pwhr.js
     if (token !== loadToken) return;
     card._res = res;
@@ -930,6 +998,7 @@ async function renderCard(card, v, di, c, q, token) {
       };
       card.querySelector("h2").appendChild(seg);
     }
+    variantToggle(card, res, pkey, () => renderCard(card, v, di, c, q, loadToken));
     drawInto(card, res);
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
   } catch (e) {
@@ -1107,7 +1176,9 @@ function draw(card, res) {
   if (cols.length && !res.empty) drawValuesTable(card, cols);
   // single numbers; a chart of only constant-per-range lines (MMP Peaks and Clusters Report)
   // has nothing to plot them against, so they are listed here too
-  const values = res.empty ? [] : S_.filter((s) => s.type !== "gauge" && (s.data.kind === "value"
+  // review cards (本次重點 / 飄移判讀): small visual cards replace the text rows (res.series keeps them for the AI)
+  if (res.cards?.length && !res.empty) drawReviewCards(card, res);
+  const values = res.empty || res.cards?.length ? [] : S_.filter((s) => s.type !== "gauge" && (s.data.kind === "value"
     || (!hasPoints && s.data.kind === "hline" && s.data.y != null)));
   if (values.length) {
     if (values.length > 8) card.classList.add("wide");
@@ -1123,8 +1194,59 @@ function draw(card, res) {
   // unsupported, fixes).
 }
 
+// ---- review cards (workout_review `cards`, see its "dashboard cards" block): stat / status / zones / chip / tag.
+// One glance: icon + label, a big number, a status word (✓ / ⚠ / ✕ + text); the explanation behind each card's ?
+const RV_LVL = { good: "good", warn: "watch", bad: "bad", na: "na", info: "info" };
+const rvI = (n) => window.DI ? DI(n) : "";
+const rvQ = (t) => t ? `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(t)}">?</button>` : "";
+function drawReviewCards(card, res) {
+  const C = res.cards;
+  if (res.section === "summary" && !res._zoom) card.classList.add("rv-wide");
+  const tags = C.filter((c) => c.kind === "tag"), chips = C.filter((c) => c.kind === "chip");
+  const main = C.filter((c) => !["tag", "chip"].includes(c.kind));
+  const ZC = { low: "var(--rv-lo)", mid: "var(--rv-mid)", high: "var(--rv-hi)" };
+  const one = (c) => {
+    if (c.kind === "zones") {
+      const Z = c.zones || [];
+      const tip = [c.tip, ...Z.map((z) => `${z.label}（${z.name}）${Math.round(z.share * 100)}% · ${hms(z.seconds)}`)].filter(Boolean).join("\n");
+      return `<div class="rv-c zn"><div class="k">${rvI(c.icon || "zones")}${esc(c.label || "三區時間")}</div>${rvQ(tip)}
+        <div class="rv-zbar" role="img" aria-label="${esc(Z.map((z) => `${z.label} ${Math.round(z.share * 100)}%`).join("，"))}">${Z.filter((z) => z.share > 0).map((z) =>
+          `<i style="flex:${z.share.toFixed(4)} 1 0;background:${ZC[z.key]}">${z.share >= 0.12 ? Math.round(z.share * 100) + "%" : ""}</i>`).join("")}</div>
+        <div class="rv-zleg">${Z.map((z) => `<span><i style="background:${ZC[z.key]}"></i>${esc(z.label)} <b>${Math.round(z.share * 100)}%</b> · ${hms(z.seconds)}</span>`).join("")}</div></div>`;
+    }
+    const val = `${esc(c.value ?? "–")}${c.pm ? `<small>${esc(c.pm)}</small>` : ""}${c.unit ? `<small>${esc(c.unit)}</small>` : ""}`;
+    if (c.kind === "status") {
+      const lv = c.level || "na";
+      const ico = { good: "good", warn: "watch", bad: "bad", info: "info" }[lv] || "na";
+      return `<div class="rv-c st ${esc(lv)}"><div class="k">${rvI(c.icon)}${esc(c.label)}</div>${rvQ(c.tip)}
+        <div class="v">${val}</div>${c.sub ? `<div class="s">${rvI(ico)}${esc(c.sub)}</div>` : ""}</div>`;
+    }
+    return `<div class="rv-c"><div class="k">${rvI(c.icon)}${esc(c.label)}</div>${rvQ(c.tip)}<div class="v">${val}</div>
+      ${c.sub ? `<div class="s" title="${esc(c.sub)}">${esc(c.sub)}</div>` : ""}</div>`;
+  };
+  card.insertAdjacentHTML("beforeend",
+    (tags.length ? `<div class="rv-tags">${tags.map((t) => `<span class="rv-tag">${rvI(t.icon)}${esc(t.text)}</span>`).join("")}</div>` : "")
+    + `<div class="rv">${main.map(one).join("")}</div>`
+    + (chips.length ? `<div class="rv-chips">${chips.map((c) => `<span class="rv-chip ${esc(c.level || "")}">${rvI(c.icon)}${esc(c.text)}${rvQ(c.tip)}</span>`).join("")}</div>` : ""));
+}
+// append text to a card's title ? (creating it): chart explanations live there, not in caption paragraphs
+function addTip(card, text) {
+  if (!text) return;
+  const h2 = card.querySelector("h2");
+  if (!h2) return;
+  let q = h2.querySelector(".qtip");
+  if (!q) {
+    q = document.createElement("button");
+    q.type = "button"; q.className = "qtip"; q.textContent = "?"; q.setAttribute("aria-label", "說明");
+    const zb = h2.querySelector(".zbtn");
+    if (zb) zb.before(q); else h2.appendChild(q);
+  }
+  q.dataset.tip = [q.dataset.tip, text].filter(Boolean).join("\n\n");
+}
+
 // a review card's action button (workout_review: 「套用這次的 CP」 -> POST apply-cp;
-// 「套用這次的 AeT」 -> POST apply-estimate with the test date)
+// 「套用這次的 AeT」 -> POST apply-estimate with the test date; 「當作間歇判讀」 -> PATCH
+// activities add_tags, then `reload` redraws the dashboard)
 function drawAction(card, a) {
   const wrap = document.createElement("p");
   wrap.className = "card-action";
@@ -1139,6 +1261,8 @@ function drawAction(card, a) {
       if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
       btn.remove();
       msg.textContent = a.done || "已套用";
+      // 「當作間歇判讀」 (interval_eval.FLAG_TAG): the dashboard's cards change, so redraw them
+      if (a.reload) load();
     } catch (e) { btn.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
   };
   card.appendChild(wrap);
@@ -1155,7 +1279,9 @@ function drawZones(card, res) {
   const pct = (r) => `${r.lo == null ? "" : Math.round(r.lo * 100)}${r.hi == null ? "+" : (r.lo == null ? "<" : "–") + Math.round(r.hi * 100)}%`;
   const maxShare = Math.max(0.0001, ...Z.rows.map((r) => r.share || 0));
   const basis = { lthr: "LTHR", cp: "CP", tpace: "閾值配速" }[Z.basis];
-  card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}
+  // the description and the source sit behind the title's ?; one short threshold line stays
+  addTip(card, [res.description, Z.source ? "來源：" + Z.source : ""].filter(Boolean).join("\n\n"));
+  card.insertAdjacentHTML("beforeend", `<p class="meta" style="margin:0 0 6px">
     ${basis} ${Z.threshold == null ? "未設定" : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · W′ ${(Z.wprime / 1000).toFixed(1)} kJ（${esc(Z.wprime_source || "")}）` : ""} · 最近 ${Z.days} 天 ${Z.runs} 次跑步</p>
     ${Z.no_data_reason ? `<p class="badge" style="margin:0 0 6px">沒有資料：${esc(Z.no_data_reason)}</p>` : ""}
     ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${basis} 是 WKO5 出廠預設值，這張表的區間不準${Z.basis === "lthr" ? "——到「賽事周期」頁套用自動估算的 LTHR" : "——山路配速本來就不準，建議看功率區間"}</p>` : ""}
@@ -1163,8 +1289,7 @@ function drawZones(card, res) {
       <th style="width:34%">時間</th></tr></thead><tbody>${Z.rows.map((r, i) => `<tr>
       <td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="num">${range(r)}</td><td class="num meta">${pct(r)}</td>
       <td><div class="zbar"><i style="width:${((r.share || 0) / maxShare * 100).toFixed(1)}%;background:${ZCOL(i, Z.rows.length)}"></i>
-        <span>${r.share == null ? "" : Math.round(r.share * 100) + "% · " + hms(r.seconds)}</span></div></td></tr>`).join("")}</tbody></table>
-    <p class="desc" style="margin-top:6px">${esc(Z.source)}</p>`);
+        <span>${r.share == null ? "" : Math.round(r.share * 100) + "% · " + hms(r.seconds)}</span></div></td></tr>`).join("")}</tbody></table>`);
 }
 const ZCOL = (i, n) => `hsl(${140 - 140 * i / Math.max(1, n - 1)} 65% 45%)`;   // green → red
 
@@ -1479,9 +1604,8 @@ function drawTargets(card, res) {
   card.querySelector(".loading")?.remove();
   const T = res.targets;
   const w = (a) => a[0] == null && a[1] == null ? "–" : a[0] == null ? `< ${Math.round(a[1])}` : a[1] == null ? `${Math.round(a[0])}+` : `${Math.round(a[0])}–${Math.round(a[1])}`;
-  card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description || "")}</p>
-    ${T.terrain_note ? `<p class="desc" style="margin:0 0 4px">${esc(T.terrain_note)}</p>` : ""}
-    <div class="meta" style="margin-bottom:4px">CP ${T.cp ? Math.round(T.cp) + " W" : "未設定"}（${esc(T.cp_source)}）· LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
+  addTip(card, [res.description, T.terrain_note].filter(Boolean).join("\n\n"));
+  card.insertAdjacentHTML("beforeend", `<div class="meta" style="margin-bottom:4px">CP ${T.cp ? Math.round(T.cp) + " W" : "未設定"}（${esc(T.cp_source)}）· LTHR ${Math.round(T.lthr || 0)}（${esc(T.lthr_source)}）· AeT ${Math.round(T.aet || 0)}（${esc(T.aet_source)}）</div>
     <table class="zt"><thead><tr><th>課表</th><th class="num">功率 W</th><th class="num">心率</th><th>看哪個</th><th>怎麼練</th></tr></thead>
     <tbody>${T.rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td>
       <td class="num">${w(r.power)}</td><td class="num">${w(r.hr)}</td><td>${esc(r.primary)}</td>
@@ -1921,7 +2045,7 @@ async function drawMap(card, res) {
   el.addEventListener("mouseleave", () => hoverEmit(m, null));
   HOVER.members.add(m);
   const n = s.gps.length;
-  card.insertAdjacentHTML("beforeend", `<p class="desc" style="margin-top:4px">GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · 滑鼠移到路線上，其他圖表會同步標出同一時間</p>`);
+  addTip(card, `GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · 滑鼠移到路線上，其他圖表會同步標出同一時間`);
   new ResizeObserver(() => { if (el._lmap) map.invalidateSize(); }).observe(el);
 }
 
@@ -2289,7 +2413,7 @@ function drawActHrPower(card, res) {
   const box = document.createElement("div"); box.className = "ac-stats"; card.appendChild(box);
   const show = (ka, kb, picked) => {
     const s = ACT.stats(res, ka, kb), f = ACT.num;
-    head.innerHTML = picked ? `<b>選取</b><span>${fmtDur(s.t0)} – ${fmtDur(s.t1)}</span>` : `<b>整趟</b><span class="meta">拖曳圖表選一段，只看那段</span>`;
+    head.innerHTML = picked ? `<b>選取</b><span>${fmtDur(s.t0)} – ${fmtDur(s.t1)}</span>` : `<b>整趟</b>`;
     const tile = (k, v, u, cls = "") => `<div class="s ${cls}"><div class="k">${k}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div></div>`;
     box.innerHTML = [
       tile("時間", fmtDur(s.elapsed)), tile("移動時間", fmtDur(s.moving)),
@@ -2373,7 +2497,8 @@ function drawActZones(card, res) {
   const cur = asked?.available ? asked : (models.find((m) => m.id === res.default && m.available) || avail[0]);
   const bar = document.createElement("div"); bar.className = "ac-zbar";
   bar.innerHTML = `<label>區間模型 <select aria-label="區間模型">${models.map((m) => `<option value="${esc(m.id)}"${m.available ? "" : " disabled"}${m.id === cur.id ? " selected" : ""}>${esc(m.title)}${m.available ? (m.estimate ? "（推估）" : "") : "（這次無法使用）"}</option>`).join("")}</select></label>
-    <span class="meta">${esc(cur.basis_text || "")}</span>${cur.estimate ? ` <span class="badge">推估</span>` : ""}`;
+    ${cur.estimate ? ` <span class="badge">推估</span>` : ""}<span class="meta">合計 ${fmtDur(cur.total_s)}</span>
+    ${rvQ([cur.basis_text, cur.source ? "來源：" + cur.source : ""].filter(Boolean).join("\n"))}`;
   card.appendChild(bar);
   if (asked && !asked.available) card.insertAdjacentHTML("beforeend", `<p class="nodata small">你選的「${esc(asked.title)}」這次無法使用：${esc(asked.reason)}；先顯示「${esc(cur.title)}」。</p>`);
   bar.querySelector("select").onchange = (e) => {
@@ -2405,7 +2530,7 @@ function drawActZones(card, res) {
   });
   card.insertAdjacentHTML("beforeend", `<details><summary>表格（${esc(cur.title)}）</summary><table class="zt"><thead><tr><th>區</th><th>名稱</th><th class="num">${unit}</th><th class="num">時間</th><th class="num">比例</th></tr></thead><tbody>
     ${rows.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="num">${esc(rng(r))}</td><td class="num">${fmtDur(r.seconds)}</td><td class="num">${r.share == null ? "—" : (r.share * 100).toFixed(0) + "%"}</td></tr>`).join("")}
-    </tbody></table></details><p class="ac-src">${esc(cur.source)} · 合計 ${fmtDur(cur.total_s)}</p>`);
+    </tbody></table></details>`);
 }
 function drawActHrTrend(card, res) {
   const T = ACT.theme(), f = ACT.num;

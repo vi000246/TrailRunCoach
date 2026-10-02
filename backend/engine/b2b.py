@@ -1,16 +1,35 @@
 """
 連續兩天長天（Back-to-Back，B2B） — docs/research/back-to-back-and-long-day.md.
 
+A SUGGESTION, not an auto-scheduled block (the user, 2026-10-02: not every
+weekend has both days free). When a B2B week is due under the rules below,
+the planner emits a suggestion (why, a day pair, the two durations); the
+plan only contains a B2B once the user accepts it. Accepting stores the two
+days as the user's own sessions (api/plan_sessions suggestions/accept) and
+an entry in `plan.b2b.accepted` ({week, days, minutes, uids}); the generator
+then plans the rest of that week around them (day 2 out of the easy minutes,
+quality ≥ 48 h away, the 4 easy days after) but never emits the two days
+into the stored plan itself (plan_store.gen_weeks drops them), so the
+auto-replan treats them like any user edit. Declining / dismissing is
+recorded per week (engine/suggestions.py). 課表偏好 `b2b` off = no
+suggestions at all. Always 2 days (the 3-day version was dropped).
+
 Hooks (small, so the planner files stay readable):
 
   * overview.week_plan  — week_context() at the volume step (the TSB exception),
-    finalize() + followers() in the session template, decorate() after the
-    課表偏好 shaping, done_follow() when marking what is done, place() after
-    the placement.
+    finalize() (→ the suggestion) or the accepted entry + followers() in the
+    session template, decorate() after the 課表偏好 shaping, done_follow()
+    when marking what is done, place(fixed=the accepted days) after the
+    placement.
   * projection.project_weeks — the same per projected week (no TSB there:
     re-checked when the week comes).
-  * adapt._fatigue — fatigue_exempt(): TSB < −30 alone after a planned B2B
+  * adapt._fatigue — fatigue_exempt(): TSB < −30 alone after an accepted B2B
     does not cut the week.
+
+States of one week's info: `candidate` (the rules allow it, before the base
+check), `suggest` (+ base built and the minutes fit → a suggestion), `due`
+(accepted: the B2B is in the plan this week), `post` (an accepted B2B ended
+just before this week: the 4 easy days).
 
 When (doc §2.4):
   * only in the 專項期 (`specific`) before the next A event that is multi-day
@@ -18,10 +37,6 @@ When (doc §2.4):
     races」, CTS, Koop;
   * the last B2B ends ≥ 3 weeks before the event (搜尋摘要「3 weeks」未驗證;
     Koop: nothing hard in the last 2–3 weeks);
-  * the 3-day version once, 4–6 weeks before a multi-day event of ≥ 3 days
-    (CTS Jones-Wilkins「four to six weeks in advance」; doc §2.5 ties it to the
-    3-day 百岳 — a 2-day trip keeps the 2-day B2B); if no recovery-week
-    trigger lands in that window, the window's last week takes it (推估);
   * at most one per 3:1 cycle, on the first build week after the recovery week
     (Johnston「slightly below-average」week before, Koop「after rest」); the
     number of weekends (≈ 2 in an 8-week block) is 推估;
@@ -41,7 +56,7 @@ Structure (doc §2.5):
     capacity.PACK_DEFAULT_MULTI); day 1 practises race fuelling 30–60 g/h
     (Burke 2011).
 
-The exception (doc §2.5, user-approved): a planned B2B pushes TSB below −30 /
+The exception (doc §2.5, user-approved): an accepted B2B pushes TSB below −30 /
 −20. week_plan would make the next week a recovery week (3:1 → 2:2); instead
 the B2B week and the week after keep their volume, the 4 days after the B2B are
 easy only (no quality / test; UA「three or four light days」, 4 推估), and the
@@ -65,12 +80,12 @@ import datetime as dt
 from statistics import median
 from typing import Callable, Iterable, Optional
 
-FOLLOWERS = ("long2", "long3")
+FOLLOWERS = ("long2",)         # always 2 days (the 3-day version was dropped, 2026-10-02)
+ACCEPTED_KEY = "plan.b2b.accepted"   # user_settings: [{week, days: [d1, d2], minutes: [m1, m2], uids, at}]
+SUGGEST_AHEAD_DAYS = 13        # suggestions for this week and the next (推估: enough notice to free a weekend)
 
 # ---- when ------------------------------------------------------------------
 LAST_BEFORE_DAYS = 21          # last B2B day ≥ 3 weeks before the event (未驗證 summary; Koop 2–3 wk)
-THREE_DAY_WINDOW = (28, 42)    # CTS: the 3-day block 4–6 weeks before
-THREE_DAY_MIN_TRIP = 3         # doc §2.5: the 3-day block before a ≥ 3-day trip (2-day trip: 2-day B2B)
 SPACING_DAYS = 14              # 推估: never two B2B weekends < 2 weeks apart
 RECOVERY_SHARE = 0.85          # 推估: last week ≤ 85 % of the 3 before = the 3:1 recovery week (0.65)
 LONGEST_FRAC = 0.87            # base built: longest 28 d ≥ day 1 × 0.87 (1 / 1.15, the app's +15 % step)
@@ -92,9 +107,9 @@ VAM_SAME = 0.05                # 推估 (UA 5 %)
 AET_BAND_BPM = 10.0            # ΔVAM@AeT: windows at AeT − 10 … AeT (vo2max-gate-and-trail-metric.md §2.4 (a) ③)
 TREND_STEP = 0.02              # 推估: the day-2 VAM ratio moved ≥ 2 points = 變好 / 變差
 
-SRC_WHEN = ("UA（專項期、longer races）；CTS Jones-Wilkins（3 天版本賽前 4–6 週）；Koop（最後 2–3 週不硬塞）；"
+SRC_WHEN = ("UA（專項期、longer races）；Koop（最後 2–3 週不硬塞）；"
             "賽前 ≥ 3 週為搜尋摘要（未驗證）；每個 3:1 週期一次、次數為推估")
-SRC_DAYS = ("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30＋20＋20；"
+SRC_DAYS = ("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30:20；"
             "UA：兩天都 ≤ AeT；Burke 2011：補給 30–60 g/h；第 2 天比例 0.67、背負進度對應次數為推估")
 SRC_POST = "Johnston（UA）「three or four light days」；4 天、不改恢復週為推估"
 SRC_EVAL = ("hikehr.fatigue（同 VAM 的心率差，無外部來源 F17）；ΔVAM@AeT（vo2max-gate-and-trail-metric.md）；"
@@ -176,10 +191,61 @@ def detect(rows: Iterable[tuple]) -> list[dict]:
 
 
 def history(done: list[dict], since: Optional[dt.date], before: dt.date) -> dict:
-    """The block's B2B record before `before`: last end, 3-day done, count."""
-    blk = [b for b in done if (since is None or _d(b["start"]) >= since) and _d(b["end"]) < before]
-    return {"last": blk[-1]["end"] if blk else None, "three_done": any(b["days"] >= 3 for b in blk),
-            "count": len(blk), "done": blk}
+    """The block's B2B record before `before`: last end, count. `done`: detect()
+    rows and accepted entries (as {start, end}); the same weekend counts once."""
+    blk, seen = [], set()
+    for b in sorted(done, key=lambda b: str(b["start"])):
+        if (since is not None and _d(b["start"]) < since) or _d(b["end"]) >= before:
+            continue
+        if any(abs((_d(b["start"]) - s).days) <= 1 for s in seen):
+            continue
+        seen.add(_d(b["start"]))
+        blk.append(b)
+    return {"last": max((b["end"] for b in blk), default=None), "count": len(blk), "done": blk}
+
+
+# ---------------------------------------------------------------------------
+# accepted B2B weekends (the user's own sessions; api/plan_sessions)
+# ---------------------------------------------------------------------------
+
+def load_accepted(user_id: int = 1) -> list[dict]:
+    """The stored accepted entries (read-only sqlite, like plan_prefs.load)."""
+    from backend.engine.wko5expr.datasource import read_setting
+    v = read_setting(ACCEPTED_KEY, [], user_id)
+    return [e for e in v if isinstance(e, dict) and e.get("week") and len(e.get("days") or []) == 2] \
+        if isinstance(v, list) else []
+
+
+def accepted_stamp(acc: Optional[list]) -> str:
+    import json
+    return json.dumps([{k: e.get(k) for k in ("week", "days", "minutes")} for e in acc or []], sort_keys=True)
+
+
+def accepted_for(acc: Optional[list], monday: dt.date) -> Optional[dict]:
+    """The accepted entry of the week starting `monday` (or None)."""
+    m = _d(monday).isoformat()
+    return next((e for e in acc or () if e.get("week") == m), None)
+
+
+def accepted_spans(acc: Optional[list]) -> list[dict]:
+    """Accepted entries as history() / post rows {start, end}."""
+    return [{"start": min(e["days"]), "end": max(e["days"]), "accepted": True} for e in acc or ()]
+
+
+def accepted_post(acc: Optional[list], monday: dt.date) -> Optional[dict]:
+    """The accepted B2B that ended in the 3 days before `monday` (→ the 4 easy days)."""
+    rows = [r for r in accepted_spans(acc) if monday - dt.timedelta(days=3) <= _d(r["end"]) < monday]
+    return max(rows, key=lambda r: r["end"]) if rows else None
+
+
+def apply_accepted(info: dict, entry: Optional[dict]) -> dict:
+    """An accepted entry for this week: the B2B is in the plan (due), with the
+    user's days and minutes, whatever the rules say now (it is the user's)."""
+    if not entry:
+        return info
+    info.update(due=True, accepted=True, suggest=False, days=2, pair=list(entry["days"]),
+                minutes=[int(m) for m in entry.get("minutes") or []] or info.get("minutes"))
+    return info
 
 
 # ---------------------------------------------------------------------------
@@ -202,11 +268,11 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     the long-run minutes: finalize()). `event`: event_json(); `state`:
     history(); `tsb`: TSB at the start of the week (Monday's, so the answer
     doesn't change mid-week after day 1); `post_from`: the B2B that ended just
-    before this week (detect() row or a projected one)."""
+    before this week (an accepted one, or a projected one)."""
     sunday = monday + dt.timedelta(days=6)
-    info = {"event": event, "candidate": False, "due": False, "days": 2, "index": int(state.get("count") or 0) + 1,
-            "why": [], "blocked": [], "last": state.get("last"), "three_done": bool(state.get("three_done")),
-            "count": int(state.get("count") or 0), "post": None, "src": SRC_WHEN}
+    info = {"event": event, "candidate": False, "suggest": False, "due": False, "accepted": False, "days": 2,
+            "index": int(state.get("count") or 0) + 1, "why": [], "blocked": [], "last": state.get("last"),
+            "count": int(state.get("count") or 0), "post": None, "src": SRC_WHEN, "week": monday.isoformat()}
     if post_from and kind == "specific" and qualifies(event):
         end = _d(post_from["end"])
         if monday - dt.timedelta(days=3) <= end < monday:
@@ -227,21 +293,11 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
         info["blocked"].append(f"離賽事不到 3 週（{days_before} 天）：最後一次 B2B 要在賽前 ≥ 3 週")
         return info
     multi = int(event.get("days") or 1) > 1
-    # the 3-day block is for a ≥ 3-day trip (doc §2.5 「百岳 3 天」; CTS 30 + 20 + 20); a 2-day trip keeps 2 days
-    three_left = int(event.get("days") or 1) >= THREE_DAY_MIN_TRIP and not info["three_done"]
-    in_three = three_left and THREE_DAY_WINDOW[0] <= days_before <= THREE_DAY_WINDOW[1]
-    if three_left and THREE_DAY_WINDOW[1] < days_before < THREE_DAY_WINDOW[1] + SPACING_DAYS + 7:
-        # a 2-day now would sit < 2 weeks before the 3-day window: keep the slot for the 3-day (推估)
-        info["blocked"].append("這次留給 3 天版本（賽前 4–6 週），兩次 B2B 至少隔 2 週")
-        return info
     last = _d(state.get("last"))
     if last is not None and (monday - last).days < SPACING_DAYS:
         info["blocked"].append(f"上一次 B2B（{md(last)}）不到 2 週")
         return info
-    if in_three:
-        # the 3-day block once, 4–6 weeks out: the first week of the window that can take it (推估)
-        info["why"].append("3 天版本要在賽前 4–6 週做一次")
-    elif last_recovery:
+    if last_recovery:
         info["why"].append("上週是恢復週：3:1 的第一個加量週")
     else:
         info["blocked"].append("每個 3:1 週期最多一次，排在恢復週後的第一個加量週")
@@ -256,7 +312,6 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
         info["blocked"].append("間歇門檻的護欄沒過（低強度比例或飄移）")
         return info
     info["candidate"] = True
-    info["days"] = 3 if in_three else 2
     info["weeks_out"] = -(-(days_before + 6) // 7)          # 賽前第 n 週 (the week's Monday)
     info["why"].append(f"賽前 {days_before} 天（{event.get('name') or 'A 賽事'}，"
                        f"{'多日' if multi else '單日 ≥ 6 小時'}）")
@@ -264,24 +319,26 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
 
 
 def finalize(info: dict, long_min: float, longest_before: float, total_min: float) -> dict:
-    """The base-built check and the day minutes. Sets info["due"] / ["minutes"]."""
-    if not info.get("candidate"):
+    """The base-built check and the day minutes. Sets info["suggest"] /
+    ["minutes"] (a suggestion: nothing is scheduled until it is accepted)."""
+    if not info.get("candidate") or info.get("accepted"):
         return info
     if longest_before < LONGEST_FRAC * long_min:
         info["blocked"].append(f"基礎還不夠：近 28 天最長 {longest_before:.0f} 分 < 第 1 天 {long_min:.0f} 分 × {LONGEST_FRAC}")
         return info
-    mins = minutes(long_min, total_min, info["days"], info.get("event") or {})
+    mins = minutes(long_min, total_min, 2, info.get("event") or {})
     if mins is None:
         info["blocked"].append("本週的量排不下兩天長天（第 2 天會少於 60 分）")
         return info
-    info["due"] = True
+    info["suggest"] = True
     info["minutes"] = mins
     return info
 
 
 def minutes(long_min: float, total_min: float, days: int, event: dict) -> Optional[list[int]]:
-    """[day 1, day 2(, day 3)] minutes; None when day 2 would be < MIN_DAY2."""
-    n = days - 1
+    """[day 1, day 2] minutes; None when day 2 would be < MIN_DAY2. `days`: 2
+    (kept as a parameter for the callers; the 3-day version was dropped)."""
+    n = 1
     d1 = float(long_min)
     single = int(event.get("days") or 1) <= 1
     d2 = DAY2_RATIO * d1
@@ -316,10 +373,11 @@ def pack_kg(weeks_out: int, weight: Optional[float], event: Optional[dict]) -> O
 # ---------------------------------------------------------------------------
 
 def plan_context(ds, status, today: dt.date, monday: dt.date, hist_hours: list[float], ctl_s, atl_s,
-                 d_prev_sun: int, by: dict, mode: str) -> dict:
+                 d_prev_sun: int, by: dict, mode: str, accepted: Optional[list] = None) -> dict:
     """week_context() from week_plan()'s data: the next A event, the B2B
-    weekends done in this 專項期, last week's hours (3:1 position), TSB at the
-    start of the week, the status ramp and the gate's guardrails. Never
+    weekends done / accepted in this 專項期, last week's hours (3:1 position),
+    TSB at the start of the week, the status ramp and the gate's guardrails;
+    then this week's accepted entry (`accepted`: load_accepted()). Never
     raises: a failure is just "no B2B"."""
     try:
         from backend.engine import overview as O
@@ -330,7 +388,7 @@ def plan_context(ds, status, today: dt.date, monday: dt.date, hist_hours: list[f
                 for w in O.workouts_between(ds, min(since, monday - dt.timedelta(days=28)), monday)
                 if O.category(w) in O.ENDURANCE]
         done = [b for b in detect(rows) if _d(b["start"]) >= since]
-        state = history(done, since, monday)
+        state = history(done + accepted_spans(accepted), since, monday)
         lo = monday - dt.timedelta(days=28)
         longest = max((m for d, m, _ in rows if d >= lo), default=0.0)
         tsb = O._n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun))
@@ -338,30 +396,25 @@ def plan_context(ds, status, today: dt.date, monday: dt.date, hist_hours: list[f
         guard = ((getattr(by.get("gate"), "extra", None) or {}).get("guard") or {}) if by else {}
         info = week_context(kind=status.kind or "base", mode=mode, monday=monday, event=ev,
                             last_recovery=last_was_recovery(hist_hours), state=state, tsb=tsb, ramp=ramp,
-                            guard_ok=not guard.get("block"), post_from=done[-1] if done else None)
+                            guard_ok=not guard.get("block"), post_from=accepted_post(accepted, monday))
         info.update(longest_before=longest, ramp=ramp, tsb_week_start=tsb,
                     weight=status.plan.weight_on(today) if getattr(status, "plan", None) else None)
-        return info
+        return apply_accepted(info, accepted_for(accepted, monday))
     except Exception as e:                  # noqa: BLE001 — the plan must still build
-        return {"due": False, "candidate": False, "post": None, "error": type(e).__name__}
+        return apply_accepted({"due": False, "candidate": False, "suggest": False, "post": None,
+                               "error": type(e).__name__}, accepted_for(accepted, monday))
 
 
 def placed(info: dict, kept: list[dict]) -> None:
-    """After place(): no day 2 left = no B2B this week; a 3-day block that
-    fell back to 2 days counts as 2 (the 3-day stays to do)."""
-    n = sum(1 for s in kept if s.get("id") in FOLLOWERS)
-    if info.get("due") and not n:
-        info["due"] = False
-        info.setdefault("blocked", []).append("本週沒有連續的日子可以排")
-    elif info.get("due"):
-        info["days"] = 1 + n
+    """After place(): the B2B days' real minutes (the caps may have cut day 2)."""
+    if info.get("due"):
         days = sorted((s for s in kept if s.get("id") in ("long",) + FOLLOWERS), key=lambda s: s["id"])
-        info["minutes"] = [s["minutes"] for s in days]
-        days[0]["detail"] = (days[0].get("detail") or "").replace("（共 3 天）", f"（共 {1 + n} 天）")
+        if days:
+            info["minutes"] = [s["minutes"] for s in days]
 
 
-PUBLIC = ("event", "candidate", "due", "days", "index", "why", "blocked", "last", "three_done", "count",
-          "post", "minutes", "src", "error", "weight", "weeks_out")
+PUBLIC = ("event", "candidate", "suggest", "due", "accepted", "pair", "days", "index", "why", "blocked", "last",
+          "count", "post", "minutes", "src", "error", "weight", "weeks_out", "week")
 
 
 def public(info: Optional[dict]) -> Optional[dict]:
@@ -375,24 +428,82 @@ def next_state(info: Optional[dict], monday: dt.date, ss: Optional[list] = None)
     """The block state carried into the next week (projection). `ss`: the
     week's sessions — the B2B's real days (else Sat–Sun / Fri–Sun)."""
     info = info or {}
-    st = {"last": info.get("last"), "three_done": bool(info.get("three_done")), "count": int(info.get("count") or 0)}
+    st = {"last": info.get("last"), "count": int(info.get("count") or 0)}
     if info.get("due"):
-        n = int(info.get("days") or 2)
-        days = sorted(s["day"] for s in ss or [] if s.get("id") in ("long",) + FOLLOWERS and s.get("day"))
+        days = sorted(s["day"] for s in ss or [] if s.get("id") in ("long",) + FOLLOWERS and s.get("day")) \
+            or sorted(info.get("pair") or [])
         end = _d(days[-1]) if days else monday + dt.timedelta(days=6)
-        start = _d(days[0]) if days else end - dt.timedelta(days=n - 1)
-        st = {"last": end.isoformat(), "three_done": st["three_done"] or n >= 3, "count": st["count"] + 1,
+        start = _d(days[0]) if days else end - dt.timedelta(days=1)
+        st = {"last": end.isoformat(), "count": st["count"] + 1,
               "post_from": {"start": start.isoformat(), "end": end.isoformat()}}
     return st
 
 
 def projected(kind: str, mode: str, monday: dt.date, event: Optional[dict], prev_mode: Optional[str],
-              state: dict, long_min: float, longest: float, total_min: float) -> dict:
+              state: dict, long_min: float, longest: float, total_min: float,
+              accepted: Optional[list] = None) -> dict:
     """week_context() + finalize() for a projected week (TSB / ramp re-checked
-    when the week comes). `state`: next_state() of the week before."""
+    when the week comes), then the week's accepted entry. `state`:
+    next_state() of the week before (its post_from: the week before's accepted
+    B2B, if any)."""
     info = week_context(kind=kind, mode=mode, monday=monday, event=event, last_recovery=prev_mode == "recovery_week",
-                        state=state, post_from=state.get("post_from"))
-    return finalize(info, long_min, longest, total_min)
+                        state=state, post_from=state.get("post_from") or accepted_post(accepted, monday))
+    entry = accepted_for(accepted, monday)
+    if entry is None:
+        finalize(info, long_min, longest, total_min)
+    return apply_accepted(info, entry)
+
+
+def suggestion(info: Optional[dict], monday: dt.date, long_day: Optional[str] = None,
+               enabled: bool = True) -> Optional[dict]:
+    """The B2B suggestion of a week (None when nothing is suggested or 課表偏好
+    b2b is off): why, the durations and the generator's long day (the day pair
+    options come from api/plan_sessions, which knows the stored plan)."""
+    if not enabled or not info or not info.get("suggest") or info.get("due") or not info.get("minutes"):
+        return None
+    ev = info.get("event") or {}
+    m1, m2 = info["minutes"][:2]
+    return {"id": f"b2b:{monday.isoformat()}", "type": "b2b", "week": monday.isoformat(),
+            "title": f"建議這週做一次 B2B（連續兩天長天）：第 1 天 {m1} 分、第 2 天 {m2} 分",
+            "reason": "；".join(info.get("why") or []), "minutes": [m1, m2], "long_day": long_day,
+            "event": ev.get("name"), "event_days": int(ev.get("days") or 1), "event_kind": ev.get("kind"),
+            "weeks_out": info.get("weeks_out"), "index": info.get("index"),
+            "help": (f"專項期、恢復週後的第一個加量週，下一場 A 賽事（{ev.get('name') or 'A 賽事'}）"
+                     f"{'是多日' if int(ev.get('days') or 1) > 1 else '≥ 6 小時'}。第 1 天是這週的長天，第 2 天約 2/3"
+                     f"（CTS 30:20），兩天都心率 ≤ AeT；第 2 天從輕鬆跑的時間扣，這週總量不變（Koop）。"
+                     f"排入後之後 {POST_EASY_DAYS} 天只排輕鬆跑（UA），TSB 下降不改成恢復週（推估）。"
+                     f"你選的兩天會變成你自己的課，自動調整不會動它們。"),
+            "src": f"{SRC_WHEN}；{SRC_DAYS}"}
+
+
+def pair_options(monday: dt.date, first: dt.date, minutes: list, blocked=frozenset(),
+                 allowed: Optional[Callable] = None, weekday_cap: Optional[int] = None,
+                 busy: Optional[set] = None, long_day: Optional[str] = None) -> list[dict]:
+    """Consecutive day pairs (d, d + 1) inside the week for a suggested B2B:
+    both from `first`, not blocked, allowed by 課表偏好, a weekday only when
+    its minutes fit the weekday cap, and neither day `busy` (a done session,
+    or one of the user's own hard / long sessions). Weekend first, then the
+    pairs that keep the generator's long day; the weekend pair is marked."""
+    week = [monday + dt.timedelta(days=i) for i in range(7)]
+    busy = busy or set()
+    out = []
+    for d1, d2 in zip(week, week[1:]):
+        ok = True
+        for d, m in ((d1, minutes[0]), (d2, minutes[1])):
+            iso = d.isoformat()
+            if d < first or iso in blocked or iso in busy or (allowed is not None and not allowed(d)):
+                ok = False
+            elif weekday_cap is not None and d.weekday() < 5 and m > weekday_cap:
+                ok = False
+        if not ok:
+            continue
+        wknd = d1.weekday() == 5
+        keeps = long_day in (d1.isoformat(), d2.isoformat())
+        note = "週末" if wknd else ("週五＋週六：可能要請一天假" if d1.weekday() == 4 else "平日")
+        out.append(((not wknd, not keeps, d1.isoformat()),
+                    {"day": d1.isoformat(), "end": d2.isoformat(),
+                     "label": f"{md(d1)}（{wd(d1)}）＋{md(d2)}（{wd(d2)}）", "note": note}))
+    return [o for _, o in sorted(out, key=lambda x: x[0])]
 
 
 # ---------------------------------------------------------------------------
@@ -407,7 +518,7 @@ def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float]
     if ramp is not None and ramp >= RAMP_MAX:
         return None
     if info.get("due"):
-        return f"TSB {tsb:+.0f}：本週是計畫中的 B2B，TSB 下降是預期的，不改成恢復週、量不砍（推估）"
+        return f"TSB {tsb:+.0f}：本週有你排入的 B2B，TSB 下降是預期的，不改成恢復週、量不砍（推估）"
     if info.get("post"):
         p = info["post"]
         return (f"TSB {tsb:+.0f}：上週末 B2B（{md(p['start'])}–{md(p['end'])}）造成的預期下降，"
@@ -416,12 +527,12 @@ def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float]
 
 
 def fatigue_exempt(info: Optional[dict], today: str) -> Optional[str]:
-    """adapt rule E: the TSB < −30 trigger alone is skipped during a planned
+    """adapt rule E: the TSB < −30 trigger alone is skipped during an accepted
     B2B week and the easy days after one (the red streak and the ramp still act)."""
     if not info:
         return None
     if info.get("due"):
-        return "本週是計畫中的 B2B"
+        return "本週有你排入的 B2B"
     p = info.get("post")
     if p and today <= p["until"]:
         return f"上週末 B2B（{md(p['start'])}–{md(p['end'])}）後的輕鬆日"
@@ -442,9 +553,9 @@ def post_note(info: dict) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def followers(long_s: dict, info: dict) -> list[dict]:
-    """long2 (and long3) for the template, minutes from finalize(). The long
-    session's own minutes are set to day 1's. Text: decorate()."""
-    mins = info["minutes"]
+    """long2 for the template, minutes from the accepted entry (or finalize()).
+    The long session's own minutes are set to day 1's. Text: decorate()."""
+    mins = list(info["minutes"])[:2]
     rate = _rate(long_s)
     long_s["minutes"] = mins[0]
     long_s["tss"] = round(rate * mins[0], 1)
@@ -463,7 +574,7 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
              weight: Optional[float] = None) -> None:
     """Titles, details (Chinese, with sources) and HR-only targets of the B2B
     days, after the 課表偏好 shaping (which may rename / re-kind the long run or
-    cap it): day 2 / 3 follow day 1's kind and terrain, ≤ the long-day cap and
+    cap it): day 2 follows day 1's kind and terrain, ≤ the long-day cap and
     ≤ 2/3 of day 1 (or the single-day clamp)."""
     long_s = next((s for s in ss if s.get("id") == "long"), None)
     fol = [s for s in ss if s.get("id") in FOLLOWERS]
@@ -518,12 +629,10 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
 
 
 def done_follow(ss: list, s, day: dt.date) -> bool:
-    """Mark-done helper: a long2 / long3 activity must be the day after the
-    previous B2B day when that one is done (objects or dicts)."""
+    """Mark-done helper: a long2 activity must be the day after day 1 when
+    that one is done (objects or dicts)."""
     get = (lambda x, k: x.get(k)) if isinstance(s, dict) else getattr
-    sid = get(s, "id")
-    prev_id = "long" if sid == "long2" else "long2"
-    prev = next((x for x in ss if get(x, "id") == prev_id), None)
+    prev = next((x for x in ss if get(x, "id") == "long"), None)
     if prev is None or not get(prev, "done") or not get(prev, "day"):
         return True
     return (day - _d(get(prev, "day"))).days == 1
@@ -531,22 +640,20 @@ def done_follow(ss: list, s, day: dt.date) -> bool:
 
 def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=frozenset(),
           allowed: Optional[Callable] = None, notes: Optional[list] = None,
-          weekday_cap: Optional[int] = None) -> list[dict]:
+          weekday_cap: Optional[int] = None, fixed: Optional[list] = None) -> list[dict]:
     """Put the B2B days on consecutive days around the placed long run:
-    (L, L+1[, L+2]) or (L−1, L[, L+1]) — inside the week, from `first`, not
-    blocked, allowed by 課表偏好, no done or hard session on them, and a
-    weekday only when its B2B minutes fit 課表偏好's weekday cap (weekends:
-    the long-day cap, applied by decorate()). Easy runs on those days swap to
-    the days the B2B left; a quality session closer than 2 days moves or is
-    dropped (48 h rule). A 3-day block that doesn't fit falls back to 2 days
-    with a note (「請一天假」— never squeezed into a capped weekday, doc §3.2);
-    no 2 days → day 2 dropped (the long run stays: an ordinary long day).
-    Returns the kept sessions (a new list; the dicts are edited in place)."""
-    long_s = next((s for s in ss if s.get("id") == "long" and s.get("day")), None)
+    (L, L+1) or (L−1, L) — inside the week, from `first`, not blocked,
+    allowed by 課表偏好, no done or hard session on them, and a weekday only
+    when its B2B minutes fit 課表偏好's weekday cap (weekends: the long-day
+    cap, applied by decorate()). `fixed`: the accepted pair (the user's days —
+    taken as they are). Easy runs on those days swap to the days the B2B
+    left; a quality session closer than 2 days moves or is dropped (48 h
+    rule). No 2 days → day 2 dropped (the long run stays: an ordinary long
+    day). Returns the kept sessions (a new list; the dicts are edited in place)."""
+    long_s = next((s for s in ss if s.get("id") == "long" and (s.get("day") or fixed)), None)
     fol = sorted([s for s in ss if s.get("id") in FOLLOWERS], key=lambda s: s["id"])
     if not fol:
         return ss
-    gone: list[dict] = []
 
     def note(text: str) -> None:
         if notes is not None:
@@ -558,7 +665,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
     if not any(not s.get("done") for s in fol):
         return ss
     week = [monday + dt.timedelta(days=i) for i in range(7)]
-    L = _d(long_s["day"])
+    L = _d(long_s.get("day") or fixed[0])
     block_ids = {id(long_s)} | {id(s) for s in fol}
     others = [s for s in ss if id(s) not in block_ids]
 
@@ -586,21 +693,12 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
                 return c
         return None
 
-    block = find(fol)
-    if block is None and len(fol) == 2 and not fol[1].get("done"):
-        block = find(fol[:1])
-        if block is not None:
-            gone.append(fol[1])
-            cap_t = f"（平日上限 {weekday_cap} 分）" if weekday_cap is not None else ""
-            note(f"3 天版本要連續 3 天，這週排不下{cap_t}：先排 2 天；要做 3 天就請一天假（週五或週一），"
-                 f"在課表偏好打開那天或放寬上限（CTS 4–6 週前的 3 天區塊）")
-            fol = fol[:1]
+    block = sorted(_d(x) for x in fixed)[:2] if fixed else find(fol)
     if block is None:
-        n = 1 + len(fol)
-        note(f"本週沒有連續 {n} 天可以練：B2B 第 2{'、3' if n == 3 else ''} 天取消，這週照一般長天（推估）")
+        note("本週沒有連續 2 天可以練：B2B 第 2 天取消，這週照一般長天（推估）")
         return [s for s in ss if s not in fol or s.get("done")]
     pending = [s for s in fol if not s.get("done")]
-    old = {long_s["day"]} | {s["day"] for s in pending + gone if s.get("day")}
+    old = ({long_s.get("day")} | {s["day"] for s in pending if s.get("day")}) - {None}
     if not long_s.get("done"):
         long_s["day"] = block[0].isoformat()
     for s, d in zip(fol, block[1:]):
@@ -613,7 +711,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
     free = [d.isoformat() for d in week if d.isoformat() not in taken and d.isoformat() not in main_days
             and d.isoformat() not in blocked and (allowed is None or allowed(d)) and (first is None or d >= first)]
     spare = vacated + [d for d in free if d not in vacated]
-    kept = [s for s in ss if not any(s is g for g in gone)]
+    kept = list(ss)
     for x in others:
         if x.get("done") or x.get("day") not in taken:
             continue
@@ -826,7 +924,8 @@ def card(ds, today: dt.date, events, phase=None, cur: Optional[dict] = None, wee
                                          for s in w.get("sessions") or [] if s.get("id") in ("long",) + FOLLOWERS]})
     evs = [d["eval"] for d in done if d.get("eval")]
     return {"today": today.isoformat(), "event": event_json(ev), "active": qualifies(event_json(ev)) or bool(done),
-            "this_week": {k: cb.get(k) for k in ("due", "days", "index", "why", "blocked", "post", "minutes")} if cb else None,
+            "this_week": {k: cb.get(k) for k in ("due", "suggest", "accepted", "pair", "days", "index", "why", "blocked",
+                                                 "post", "minutes")} if cb else None,
             "planned": planned, "done": done, "trend": trend(evs),
             "rules": {"when": SRC_WHEN, "days": SRC_DAYS, "post": SRC_POST, "eval": SRC_EVAL},
             "cells": {k: {"label": v[0], "level": v[1], "text": v[2]} for k, v in CELLS.items()}}

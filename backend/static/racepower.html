@@ -904,7 +904,13 @@ function renderResults() {
   const MODE = { time: "目標時間", power: "目標功率", auto: "通通幫我算" }[s.mode];
   let h = `<h2>預估結果 <span class="meta">${trail ? "越野" : "路跑"} · ${MODE}${s.total_method === "trail_hr" ? " · 整場用你的越野心率配速模型（推估），功率只當參考" : s.total_method === "v1" ? " · 整場用已驗證的方法（Riegel + 你的 RE），分段是推估" : " · 分段加總"}</span></h2>`;
   h += `<div class="tiles">`;
-  h += tile("預估完賽", hms(s.time_s), `${f1(s.km)} km${s.stops_s ? ` · 含補給 ${Math.round(s.stops_s / 60)} 分 → ${s.finish_eta || ""}` : s.finish_eta ? " · 抵達 " + s.finish_eta : ""}`, true);
+  h += tile(s.time_total_s ? `預估移動時間${help("越野心率配速模型預估的是「移動時間」（速度 > 1 km/h 的時間），回測驗證的就是這個數字。補給站、排隊、零碎停頓另外預估，列在「含停留總時間」。")}` : "預估完賽",
+    hms(s.time_s), `${f1(s.km)} km${s.stops_s ? ` · 含補給 ${Math.round(s.stops_s / 60)} 分 → ${s.finish_eta || ""}` : s.finish_eta ? " · 抵達 " + s.finish_eta : ""}`, true);
+  if (s.time_total_s && s.nonmoving) {
+    const nm = s.nonmoving, rg = s.time_total_range_s;
+    h += tile(`含停留總時間${badge("推估")}${help(`總時間 = 移動時間 + 非移動時間。非移動時間用你之前 ${nm.n_runs} 場比賽／全力越野跑的停留：≥ 60 秒算補給站／排隊，其餘算零碎停頓。${esc(nm.why)}。範圍是你過去每移動小時停留的 25–75 百分位。補給站停留沒有文獻數字，所以是推估；在補給站編輯器填「分鐘」會改用你填的。`)}`,
+      hms(s.time_total_s), `停留約 ${Math.round(nm.total_s / 60)} 分${rg ? `（${hms(rg[0])}–${hms(rg[1])}）` : ""}`);
+  }
   h += tile("平均功率", W(s.power), `${pct(s.pct_cp)} CP · ${wkg(s.w_per_kg)}`, true);
   h += tile("平均配速", pace(s.pace_s_per_km), trail ? "實際距離" : "");
   h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} 可持續功率`);
@@ -915,7 +921,7 @@ function renderResults() {
     const bd = ha.band;
     h += `<div class="note">熱影響（對訓練條件）：未適應 ${spct(-bd.raw_penalty_pct / 100)} → 適應後 <b>${spct(-bd.center.penalty_pct / 100)}</b>
       （範圍 ${spct(-bd.high.penalty_pct / 100)} ~ ${spct(-bd.low.penalty_pct / 100)}；完賽 ${hms(ha.time_s.high)}–${hms(ha.time_s.low)}）
-      · S ${Math.round(ha.s * 100)} %（${esc(ha.source)}）、訓練期 S ${Math.round((ha.s_from || 0) * 100)} %、a ${ha.a} <span class="badge watch">推估</span></div>`;
+      · S ${Math.round(ha.s * 100)} %（${esc(ha.source)}）、訓練期 S ${Math.round((ha.s_from || 0) * 100)} %、a ${ha.a} <span class="badge watch">推估</span>${help(`a 是熱適應能抵掉多少熱懲罰。文獻的族群平均是 ${ha.a_literature ?? 0.75}（Racinais 2015），但你自己的心率資料看不到熱適應（夏末的熱係數比初夏大），所以預設 a = 0：S 照算、照顯示，但不折抵熱懲罰。只有近 84 天熱天穩定段的心率成本（HRC）隨時間顯著下降（單尾 p < 0.1，自組檢定）才用文獻的 a。目前：${esc(ha.a_reason || "")}`)}</div>`;
   }
   // effort bar
   const mult = e.multiple, tl = e.t_lim_s;
@@ -940,7 +946,7 @@ function otherCalcs() {
   items.push(`<li>v1 整場預估（effort 距離 × RE，不分段）：${hms(cc.v1?.time_s)} @ ${W(cc.v1?.power)}</li>`);
   if (cc.power_envelope) items.push(`<li>功率能力（CP / Riegel，越野只供對照）：${hms(cc.power_envelope.time_s)} @ ${W(cc.power_envelope.power)}</li>`);
   const th = P.summary?.trail_hr;
-  if (th) items.push(`<li>越野心率配速模型（推估）：比賽心率 ${(th.x * 100).toFixed(0)}% LTHR、effort ${th.eff_km.toFixed(1)} km → ${hms(th.time_s)}（不含耐久衰減 ${hms(th.time_no_durability_s)}）</li>`);
+  if (th) items.push(`<li>越野心率配速模型（推估）：全力心率 ${((th.x_star ?? th.x) * 100).toFixed(0)}% LTHR${th.heat_beta && th.heat_shift > 0 ? `（熱 −${(th.heat_shift * 100).toFixed(1)}%）` : ""}、effort ${th.eff_km.toFixed(1)} km → ${hms(th.time_s)}（不含耐久衰減 ${hms(th.time_no_durability_s)}）${help(`全力心率會隨比賽時長下降：x*(T) = x₀ − s·ln(T)。形狀先驗來自文獻（Fornasiero 2018：65 km 全力賽平均 77% HRmax；Kerhervé 2015：106 km 心率隨進度下降），錨點 0.5 小時 1.00、3 小時 0.90、12 小時 0.85 × LTHR；${th.xstar ? `你之前 ${th.xstar.n} 次比賽／全力跑（用當天的 LTHR）擬合成 ${th.xstar.x0?.toFixed(3)} − ${th.xstar.s?.toFixed(3)}·ln(T)` : "沒有你的比賽資料，只用先驗"}，樣本少時往先驗收縮。耐久衰減每小時 ${((th.delta || 0) * 100).toFixed(1)}%：只在清過的視窗（去暖身、回程、停等後 60 秒）上量，往 Clark 2019 的 5%/h 先驗收縮。熱：用你的 β 0.224 bpm／Hadley 把心率水準移到比賽日的熱度，不再另外套 Hadley 時間懲罰。`)}</li>`);
   if (cc.stryd_table) items.push(`<li>Stryd 比賽功率表（由你的 10K 功率 ${W(cc.stryd_table.p10k)} 換算）：${W(cc.stryd_table.power)} → ${hms(cc.stryd_table.time_s)}</li>`);
   if (cc.cvi) items.push(`<li>CVI 法（平路 RE ${r3(cc.cvi.road_re)} ${cc.cvi.adjust >= 0 ? "+" : "−"}${Math.abs(cc.cvi.adjust).toFixed(2)}）：${hms(cc.cvi.time_s)} @ ${W(cc.cvi.power)}</li>`);
   const T = v1.tasks || {};

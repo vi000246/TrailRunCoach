@@ -423,7 +423,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             tiz_ratio = (t_in / plan_tiz) if t_in is not None and plan_tiz else None
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
                     **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",
-                                               "variant_adj", "variant_blocks")
+                                               "variant_adj", "variant_blocks", "steps")
                        if row.get(k) is not None},
                     "reps": len(reps) or (m.get("intervals") or {}).get("n") or 0,
                     # informational only now: dose_step judges the bouts (interval_outcome)
@@ -442,6 +442,16 @@ def planned_variant_spec(row: dict):
     there is one, else the ladder row by title; None for an unplanned activity."""
     if not row:
         return None
+    if user_steps(row):
+        # the structure the user edited: its reps / band are what the reps are matched against
+        try:
+            from backend.engine import interval_library as IL
+            from backend.engine import workout_steps as WS
+            v = WS.variant_from_steps(row["steps"], row.get("rung_key") or getattr(IL.get(row.get("variant_key")), "rung", None))
+            if v is not None:
+                return v
+        except Exception:                       # noqa: BLE001
+            pass
     if row.get("variant_key"):
         try:
             from backend.engine import interval_library as IL
@@ -552,7 +562,12 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
         if h.get("unplanned"):
             h["outcome"] = "neutral"           # not one of the plan's quality sessions
             continue
-        if h.get("variant_key"):
+        by_steps = steps_spec(h, step)
+        if by_steps is not None:
+            # a structure the user edited in the 課表 editor (engine/workout_steps.py): judged by
+            # its own reps / band, counted only when it is an equivalent of the rung (§C2)
+            spec, neutral, counted = by_steps
+        elif h.get("variant_key"):
             # judged by the stored variant (interval-prescription.md §C5.4) — not by the title,
             # which a shortened session changed (bug a: the 4×8′ / 3×10′ steps never moved)
             spec, neutral, counted = variant_spec(h, step)
@@ -625,6 +640,39 @@ def variant_spec(h: dict, step: int) -> tuple[tuple, bool, bool]:
     rung = h.get("rung_key") or v.rung
     neutral = rung != want[0]
     return variant_tuple(v), neutral, h.get("equiv") is not False
+
+
+def user_steps(h: dict) -> Optional[dict]:
+    st = h.get("steps")
+    return st if isinstance(st, dict) and st.get("origin") == "user" and st.get("items") else None
+
+
+def steps_spec(h: dict, step: int) -> Optional[tuple[tuple, bool, bool]]:
+    """(spec, neutral, counted) of a row whose structure the user edited
+    (workout_steps.variant_from_steps), or None (no such structure / no timed work
+    step with an intensity: the variant / title path decides). The rung is the
+    session's own (rung_key / its variant's); a structure without one is judged at
+    the ladder's current rung when it is the same class, else neutral. An HR-only
+    structure's band is the class's (推估: h["steps_estimated"])."""
+    st = user_steps(h)
+    if st is None:
+        return None
+    from backend.engine import interval_library as IL
+    from backend.engine import workout_steps as WS
+    rung = h.get("rung_key") or getattr(IL.get(h.get("variant_key")), "rung", None)
+    v = WS.variant_from_steps(st, rung)
+    if v is None:
+        return None
+    want = dose_spec(step, True)
+    if not rung or rung not in IL.LIBRARY:
+        c = IL.canonical(want[0])
+        if c is None or c.cls != v.cls:
+            return variant_tuple(v), True, False
+        rung = want[0]
+    ok = IL.equivalent(v, IL.canonical(rung))[0]
+    h["steps_equiv"] = ok
+    h["steps_estimated"] = v.src_kind == "推估"
+    return variant_tuple(v), rung != want[0], ok
 
 
 def planned_spec(title: Optional[str], step: int) -> tuple[tuple, bool]:

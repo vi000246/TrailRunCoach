@@ -687,7 +687,8 @@ def test_V_BT_capacity_pass_rule():
     assert not few["categories"]["trail"]["passed"] and few["message"] == BT.NO_CAPACITY_MSG
     ok = BT.summarise_capacity([_bt_row("trail", 0.01)] * 6, [])
     assert ok["categories"]["trail"]["passed"] and ok["effort"]["passed"] and ok["message"] is None
-    slow = BT.summarise_capacity([_bt_row("trail", 0.01, err_c=0.08)] * 6, [])
+    # trail threshold 8 % since 2026-10-02 (unsourced-rules.md §0.9)
+    slow = BT.summarise_capacity([_bt_row("trail", 0.01, err_c=0.09)] * 6, [])
     assert not slow["categories"]["trail"]["passed"]
     # one run above the model's sustainable power fails the category
     lb = [{"category": "trail", "f": 1.05, "date": "2026-01-01"}]

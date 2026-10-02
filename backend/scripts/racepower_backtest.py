@@ -128,13 +128,24 @@ def main(argv=None) -> int:
               f"a {mn.get('a')} b {mn.get('b')} delta/h {mn.get('delta')} raw {mn.get('delta_raw')} "
               f"(n_dur {mn.get('n_durability')}) "
               f"x_race {mn.get('x_race')} ({mn.get('x_race_source')})")
+        xs = mn.get("xstar") or {}
+        if xs:
+            print(f"  x*(T) = {xs.get('x0', 0):.3f} − {xs.get('s', 0):.3f}·ln T ({xs.get('kind')}, n {xs.get('n')}); "
+                  f"prior {xs.get('prior')}; delta info {(mn.get('delta_info') or {}).get('all')}")
+        if mn.get("nonmoving"):
+            print(f"  non-moving profile: {mn['nonmoving']}")
         for name in ("all", "races", "max_effort"):
             b = th[name]
-            print(f"  {name:10s} n={b['n']:3d} given {_st(b['given'])}")
+            print(f"  {name:10s} n={b['n']:3d} given {_st(b['given'])} ub80 {_abs(b['given'].get('boot_ub80'))}")
             print(f"  {'':10s}       no-dur {_st(b['no_durability'])}")
-            print(f"  {'':10s}       race-x {_st(b['race_level'])}")
+            print(f"  {'':10s}       race-x {_st(b['race_level'])} ub80 {_abs(b['race_level'].get('boot_ub80'))}")
             print(f"  {'':10s}  race-x no-dur {_st(b['race_level_no_durability'])}")
+            if b.get("race_level_median"):
+                print(f"  {'':10s}  race-x median {_st(b['race_level_median'])}")
+            if b.get("total"):
+                print(f"  {'':10s} total (+stops) {_st(b['total'])}")
             print(f"  {'':10s}  power envelope (mode C) {_st(b['power_envelope'])}")
+        print("  pass rule:", th.get("pass_rule"))
         for r in th["race_rows"]:
             t = r.get("th") or {}
             mv = t.get("moving_s") or 0

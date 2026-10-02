@@ -23,7 +23,7 @@ KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test
          "notice": "課表待確認"}
 NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
-            "target_basis")
+            "target_basis", "steps")
 TERRAINS = ("road", "trail", "hike")
 DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
                   "hike": "健行", "strength": "肌力（下肢單腳＋核心）"}
@@ -70,7 +70,19 @@ def to_dict(r: PlanSession) -> dict:
             "variant_key": r.variant_key, "rung_key": r.rung_key,
             "equiv": None if r.equiv is None else bool(r.equiv), "swap": r.swap, "swap_reason": r.swap_reason,
             "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj,
-            "target_basis": getattr(r, "target_basis", None)}
+            "target_basis": getattr(r, "target_basis", None), "steps": _steps_of(getattr(r, "steps", None))}
+
+
+def _steps_of(raw) -> Optional[dict]:
+    if not raw:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    try:
+        d = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return d if isinstance(d, dict) else None
 
 
 VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
@@ -85,6 +97,7 @@ def _fill(r: PlanSession, d: dict) -> None:
     r.minutes = int(d.get("minutes") or 0)
     r.done_by = json.dumps(d["done_by"], ensure_ascii=False) if d.get("done_by") else None
     r.variant_adj = json.dumps(d["variant_adj"]) if d.get("variant_adj") else None
+    r.steps = json.dumps(d["steps"], ensure_ascii=False) if d.get("steps") else None
     r.updated_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
 
 
@@ -117,12 +130,21 @@ async def save(db: AsyncSession, new: list[dict], athlete_id: int = 1) -> None:
     await db.commit()
 
 
+def _own_b2b(w: dict) -> list[dict]:
+    """A week's generated sessions without the accepted B2B days (engine/b2b.py):
+    those are the user's own stored sessions; the generator only plans around them."""
+    if not (w.get("b2b") or {}).get("accepted"):
+        return w["sessions"]
+    from backend.engine.b2b import FOLLOWERS
+    return [s for s in w["sessions"] if s.get("id") not in ("long",) + FOLLOWERS]
+
+
 def gen_weeks(inputs: dict) -> list[dict]:
     cur = inputs["cur"]
     first = {"start": cur["week"]["start"], "mode": cur.get("mode"), "provisional": False,
-             "sessions": cur["sessions"]}
+             "sessions": _own_b2b(cur)}
     return [first] + [{"start": w["start"], "mode": w["mode"], "provisional": w["provisional"],
-                       "sessions": w["sessions"]} for w in inputs.get("weeks", [])]
+                       "sessions": _own_b2b(w)} for w in inputs.get("weeks", [])]
 
 
 def blocked_map(inputs: dict) -> dict:
@@ -217,6 +239,19 @@ def _clean(patch: dict, today: str) -> dict:
             v = v or None
             if v is not None and v not in TERRAINS:
                 raise PlanError(f"不支援的地形：{v!r}")
+        elif k == "steps":
+            # the editor's structure (engine/workout_steps.py): None / {} clears it (back to
+            # the text); a saved structure is the user's (origin user unless a template as is)
+            if v in (None, "", {}):
+                v = None
+            else:
+                from backend.engine import workout_steps as WS
+                try:
+                    v = WS.normalize(v)
+                except WS.StepsError as e:
+                    raise PlanError(f"課表結構有誤：{e}")
+                if v["origin"] == "derived":
+                    v["origin"] = "user"
         elif k == "target_basis":
             v = None if v in (None, "", "auto") else v       # 自動 = None
             if v is not None and v not in ("hr", "power"):
@@ -266,8 +301,10 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
     # a library variant chosen in the swap drawer / the editor's templates (api/plan_sessions
     # builds it with interval_library.variant_patch): a user edit, kept by reconcile (rule 3)
     ch.update(patch.get("_variant") or {})
+    if patch.get("_variant") and "steps" not in ch:
+        ch["steps"] = None                  # a new library variant: its own steps, not the old structure
     if patch.get("_variant") is None and ch and d.get("variant_key") and \
-            any(k in ch for k in ("title", "minutes", "detail")) and "variant_key" not in ch:
+            (any(k in ch for k in ("title", "minutes", "detail")) or ch.get("steps")) and "variant_key" not in ch:
         ch["swap"] = "user"                 # hand-edited text: the variant stays, marked as the user's
     if not ch:
         return d
@@ -314,6 +351,8 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     if d["kind"] == "test":
         d["protocol"] = data.get("protocol")
         d["source"] = str(data.get("source") or "")
+    elif data.get("source"):
+        d["source"] = str(data["source"])[:2000]     # an accepted suggestion keeps the generator's sources
     r = PlanSession(athlete_id=athlete_id, uid=d["uid"])
     db.add(r)
     _fill(r, d)
@@ -386,7 +425,7 @@ def push_dict(s: dict) -> dict:
             "done": s["state"] == "done", "protocol": s.get("protocol"),
             # a library variant is pushed from its own steps (coros_workouts._variant_steps)
             **{k: s.get(k) for k in ("variant_key", "variant_reps", "variant_blocks", "variant_adj", "terrain",
-                                     "target_basis")
+                                     "target_basis", "steps")
                if s.get(k) is not None},
             # 目標用: the session's own choice, else 課表偏好 目標依據, else 自動 (engine/target_policy.py)
             "basis": _basis_for(s)}
@@ -413,7 +452,7 @@ _TITLE_CACHE: dict = {}
 _VARIANT_CACHE: dict = {}
 # the interval-library columns (engine/interval_library.py; interval-prescription.md §C5.4)
 VARIANT_COLS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
-                "variant_adj")
+                "variant_adj", "steps")
 
 
 def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
@@ -456,6 +495,8 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
                             d["variant_adj"] = json.loads(d["variant_adj"])
                         except (TypeError, ValueError):
                             d["variant_adj"] = None
+                    if "steps" in d:
+                        d["steps"] = _steps_of(d["steps"])
                     out.append(d)
         finally:
             con.close()

@@ -78,6 +78,7 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.cooldown_min": "cooldown_min",
     "plan.prefs.pref_days": "pref_days",
     "plan.prefs.pref_keep": "pref_keep",
+    "plan.prefs.b2b": "b2b",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
@@ -88,8 +89,9 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # (aet_test.pick_day) whether or not the other preferences are set
 # warmup_commute_min / cooldown_min: the interval warm-up's city part and the cool-down
 # (engine/interval_library.py blocks) — read for every interval session, not shaping
+# b2b: whether a due B2B weekend is suggested at all (engine/b2b.py) — a suggestion, not shaping
 NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
-               "warmup_commute_min", "cooldown_min") + GATE_FIELDS
+               "warmup_commute_min", "cooldown_min", "b2b") + GATE_FIELDS
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
@@ -157,6 +159,9 @@ class Prefs:
     # (day_conflicts) the athlete chose to keep anyway.
     pref_days: tuple = ()
     pref_keep: tuple = ()
+    # 建議 B2B（連續兩天長天，engine/b2b.py）: on = a due B2B weekend is suggested (the user
+    # picks the days, 排入 / 不要); off = never suggested. Not part of `active`.
+    b2b: bool = True
 
     @property
     def active(self) -> bool:
@@ -245,6 +250,8 @@ def check(p: Prefs) -> None:
     from backend.engine.quality_gate import MODES, WEEKS_RANGE
     if p.quality_gate not in MODES:
         raise ValueError(f"間歇門檻要是 {MODES} 其中之一")
+    if not isinstance(p.b2b, bool):
+        raise ValueError("建議 B2B 要是 true／false")
     if p.aet_test_days not in ("weekday", "any"):
         raise ValueError("AeT 測試日要是 weekday 或 any")
     from backend.engine.aet_test import PROTOCOL_CHOICES
