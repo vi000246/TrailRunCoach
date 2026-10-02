@@ -176,6 +176,8 @@ td code { background: var(--code); padding: 1px 4px; border-radius: 4px; word-br
   font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; }
 .st-ok { color: var(--ok); } .st-err { color: var(--err); } .st-none { color: var(--muted); }
 .badge { display: inline-block; font-size: 10.5px; padding: 0 6px; border-radius: 10px; border: 1px solid var(--warn); color: var(--warn); }
+.badge.plt { background: none; border-color: var(--line); color: var(--muted); cursor: pointer; margin-left: 6px; vertical-align: 1px; font: inherit; font-size: 10.5px; font-weight: 400; }
+.badge.plt.on { border-color: var(--accent); color: var(--accent); }
 .badge.fix { border-color: var(--accent); color: var(--accent); font-weight: 400; margin-left: 6px; cursor: help; vertical-align: 1px; }
 table.zt td, table.zt th { padding: 4px 6px; white-space: nowrap; }
 table.zt th.num { text-align: right; }
@@ -972,6 +974,25 @@ function saveWindow(k, w) { try { localStorage.setItem(WINDOW_KEY, JSON.stringif
 const BASIS_KEY = "wko5viewer.basis";
 function basisPrefs() { try { return JSON.parse(localStorage.getItem(BASIS_KEY) || "{}"); } catch { return {}; } }
 function saveBasis(k, b) { try { localStorage.setItem(BASIS_KEY, JSON.stringify({ ...basisPrefs(), [k]: b })); } catch {} }
+// the optional mFTP plateau line on power-duration charts (render.mftp_plateau): one on/off for all
+// charts, off by default; the 「mFTP 線」 button and the legend entry both flip it, no refetch
+const PLATEAU_KEY = "wko5viewer.plateau", PLATEAU_NAME = "mFTP";
+function plateauOn() { try { return localStorage.getItem(PLATEAU_KEY) === "1"; } catch { return false; } }
+function setPlateau(on) {
+  try { localStorage.setItem(PLATEAU_KEY, on ? "1" : "0"); } catch {}
+  document.querySelectorAll("[data-plateau-toggle]").forEach((b) => { b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+  document.querySelectorAll(".plot").forEach((el) => {
+    const c = echarts.getInstanceByDom(el);
+    if (c && (c.getOption().series || []).some((s) => s.name === PLATEAU_NAME))
+      c.dispatchAction({ type: on ? "legendSelect" : "legendUnSelect", name: PLATEAU_NAME });
+  });
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest?.("[data-plateau-toggle]");
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  setPlateau(!plateauOn());
+});
 // chart variants (views "variants", wko5expr/variants.py): e.g. 每日 TSS ↔ % CTL. Generic: any chart whose
 // JSON says variant_toggle gets a segmented toggle in its header; the choice is remembered per chart and
 // sent as ?variant=<key>. Self-contained: variantQuery() in the fetch URL + variantToggle() after the fetch.
@@ -1240,6 +1261,16 @@ function draw(card, res) {
     const seg = card.querySelector("h2 > .seg");
     if (seg) seg.insertAdjacentHTML("beforebegin", chip);
     else card.querySelector("h2")?.insertAdjacentHTML("beforeend", chip);
+  }
+  // the optional mFTP plateau line on a power-duration chart (render.mftp_plateau): off by
+  // default, one toggle for every chart (remembered in this browser)
+  if (res.plateau && !res.empty) {
+    const on = plateauOn();
+    const t = ` <button type="button" class="badge plt${on ? " on" : ""}" data-plateau-toggle aria-pressed="${on}"
+      title="${esc(res.plateau.tip || "")}">mFTP 線</button>`;
+    const seg = card.querySelector("h2 > .seg");
+    if (seg) seg.insertAdjacentHTML("beforebegin", t);
+    else card.querySelector("h2")?.insertAdjacentHTML("beforeend", t);
   }
   // the description sits behind a ? icon (hover / tap) to keep cards clean; the enlarge
   // overlay has room, so it shows the text in full
@@ -2346,8 +2377,10 @@ function drawPlot(card, res, series) {
       continue;
     }
     if (s.data.kind === "hline") {
+      // label_end (目標賽事參考線, panels/race_refs.py): the line's name at its right end
+      const lab = s.label_end ? { show: true, position: "insideEndTop", formatter: s.name, color: color || muted, fontSize: 10 } : { show: false };
       put({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
-        markLine: { silent: true, symbol: "none", label: { show: false }, lineStyle: { color, type: lineType, width: 1 }, data: [{ yAxis: s.data.y }] } }, s);
+        markLine: { silent: true, symbol: "none", label: lab, lineStyle: { color, type: lineType, width: s.line_width === "thin" ? 0.8 : 1 }, data: [{ yAxis: s.data.y }] } }, s);
       continue;
     }
     if (s.data.kind === "band") {
@@ -2408,6 +2441,15 @@ function drawPlot(card, res, series) {
         areaStyle: s.type === "area" ? { opacity: 0.25 } : undefined }, s);
     }
   }
+  // the optional mFTP plateau (render.mftp_plateau): a dashed line at the PD model's FTP,
+  // shown / hidden through the legend so the 「mFTP 線」 toggle needs no redraw
+  const PL = xKind === "duration" && res.plateau ? res.plateau : null;
+  if (PL) {
+    put({ name: PLATEAU_NAME, type: "line", yAxisIndex: Math.max(0, axisIds.indexOf(PL.y_axis || "NONE")), data: [], color: muted,
+      markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: "dashed", width: 1.2 },
+        label: { show: true, position: "insideEndTop", color: muted, fontSize: 10, formatter: PL.label },
+        data: [{ yAxis: PL.y }] } }, null);
+  }
   const lbl = { color: muted, fontSize: 10, hideOverlap: true };
   const axLine = { lineStyle: { color: line } };
   let xAxis;
@@ -2454,7 +2496,10 @@ function drawPlot(card, res, series) {
     const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
       : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
-    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>`);
+    // 目標賽事參考線 (res.race_ref, panels/race_refs.py): each point as a share of the target race
+    const tgt = res.race_ref?.target;
+    const share = (p) => tgt && tgt.cc > 0 && Number.isFinite(+yOf(p)) ? `<br><span style="opacity:.8">＝ 目標賽事的 ${Math.round(+yOf(p) / tgt.cc * 100)}%（${esc(tgt.name)}）</span>` : "";
+    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>${share(p)}`);
     if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
     // stacked series (依類別堆疊): add the stack's total — only the series shown in the
     // legend are in `ps`, so hiding a category takes it out of the total too
@@ -2491,8 +2536,9 @@ function drawPlot(card, res, series) {
       bottom: Z ? (zoom ? 40 : 26) : zoom ? 64 + legendRows * 22 : 54 },
     tooltip,
     // a zoned chart labels its bands in place and has one data line: no legend box
-    legend: Z ? { show: false } : zoom ? { type: "plain", bottom: 0, textStyle: { color: text, fontSize: 11.5 } }
-      : { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } },
+    legend: { ...(Z ? { show: false } : zoom ? { type: "plain", bottom: 0, textStyle: { color: text, fontSize: 11.5 } }
+      : { type: "scroll", bottom: 0, textStyle: { color: text, fontSize: 10.5 } }),
+      ...(PL ? { selected: { [PLATEAU_NAME]: plateauOn() } } : {}) },
     ...(Z ? { visualMap: Z.visualMap } : {}),
     xAxis, yAxis, series: out,
     dataZoom: zoom
@@ -2502,6 +2548,10 @@ function drawPlot(card, res, series) {
       : [{ type: "inside" }],
   });
   new ResizeObserver(() => chart.resize()).observe(el);
+  // clicking 「mFTP」 in the legend is the same toggle as the header button
+  if (PL) chart.on("legendselectchanged", (e) => {
+    if (e.name === PLATEAU_NAME && !!e.selected[PLATEAU_NAME] !== plateauOn()) setPlateau(!!e.selected[PLATEAU_NAME]);
+  });
   if (hx) samplesFor(res.workout).then((s) => { if (!chart.isDisposed()) hoverChart(chart, s, hx, DIST_X[xUnit.id] || 1); })
     .catch((e) => console.warn("hover sync off:", e.message));
 }

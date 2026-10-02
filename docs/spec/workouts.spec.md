@@ -23,7 +23,7 @@ existing rules; a user value always wins and is never overwritten by auto re-cla
 no column migration). Only the user's values are stored, each with `*_overridden`; auto values
 are computed at read time and merged (`merge`). Key: the local start minute
 (`YYYY-MM-DDTHH:MM`, Dataset `entry.start`). The dataset file (e.g. a `.wko4` name) is matched
-first, then the minute, then ±3 min (another source, 自組). The key is not a `workout_files` row
+first, then the minute, then ±3 min (another source, 推估). The key is not a `workout_files` row
 because the race-power engine reads the WKO5 / COROS / TP datasets, and most WKO5 activities
 have no row (the app DB holds only the synced COROS / TP files). The engine reads the table
 sync and read-only (`load`, like `datasource.read_setting`); `WKO5COACH_TAGS_DB` points it at
@@ -35,7 +35,7 @@ was presumably a `--db` / `--tags-db` scratch run (推定). On a COROS / TP
 dataset a tag written from the WKO5 source (file = a `.wko4` name) matches by the local start
 minute ±3 min (`backend/tests/test_fit_dataset_prereqs.py:210`).
 
-**Auto activity type** (first match, 自組 order): a matched season-plan road / 越野賽 event →
+**Auto activity type** (first match, 推估 order): a matched season-plan road / 越野賽 event →
 比賽; a test the plan / title says (`workout_review.classify`, not the power pattern) → 測試; a
 race word in the title → 比賽; hiking / mountaineering with a plan 百岳 event that day →
 百岳跟團; hiking / mountaineering, or a trail run with a hike word in the title → 爬山; any run →
@@ -43,9 +43,9 @@ race word in the title → 比賽; hiking / mountaineering with a plan 百岳 ev
 
 **Auto effort.**
 - trail / hike (`effort_hr`): moving HR ÷ own-date LTHR (`athlete.thresholds_as_of`) ≥ 0.90
-  (Friel HR Z3 lower bound) and ≥ 2/3 of the HR time above AeT (自組) → 全力 when the long rests
-  (`rest_spells`: stops ≥ 5 min incl. recording gaps, 自組) are ≤ 10 % of the elapsed time
-  (自組), else 有拼但有休息. Otherwise ≥ half the HR time below AeT and average < AeT + 3 bpm
+  (Friel HR Z3 lower bound) and ≥ 2/3 of the HR time above AeT (推估) → 全力 when the long rests
+  (`rest_spells`: stops ≥ 5 min incl. recording gaps, 推估) are ≤ 10 % of the elapsed time
+  (推估), else 有拼但有休息. Otherwise ≥ half the HR time below AeT and average < AeT + 3 bpm
   (intensity.py's easy rule) → 輕鬆, else 一般.
 - road (`effort_road`): `maximal.road_maximal` passes → 全力; else the easy rule → 輕鬆, else 一般.
 

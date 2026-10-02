@@ -187,6 +187,10 @@ ol.steps li.cur .n { border-color: var(--accent); color: var(--accent); }
 ol.steps .lb { font-size: 12.5px; font-weight: 600; }
 ol.steps .sb { font-size: 11.5px; color: var(--muted); display: flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .tests { display: inline-flex; gap: 3px; }
+.pmb { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 0 2px 0 6px; border-radius: 10px;
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pmb .q { width: 14px; height: 14px; font-size: 9.5px; border: 0; }
+.tests.pre { align-items: center; margin-right: 6px; font-size: 11px; color: var(--muted); }
 .tests span { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); color: var(--faint); cursor: help; }
 .tests span.y { background: var(--good); border-color: var(--good); color: #fff; } .tests span.n { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
 .dots { display: inline-flex; gap: 3px; }
@@ -563,7 +567,7 @@ async function loadZ5() {
   const cur = !base ? 0 : !z3.ok ? 1 : 2;
   const steps = `<ol class="steps">
     <li class="${base ? "ok" : ""} ${cur === 0 ? "cur" : ""}"><span class="n">${base ? "✓" : 1}</span><span class="lb">有氧基礎</span>
-      <span class="sb">${c.state === "reentry" ? "恢復期內不判斷" : B.tests.length ? `<span class="tests" aria-label="三種測試">${B.tests.map(tmark).join("")}</span>` : esc(B.empty || "")}${q(B.label)}</span></li>
+      <span class="sb">${c.state === "reentry" ? "恢復期內不判斷" : B.tests.length ? `${B.pre ? `<span class="tests pre" aria-label="前提：週量穩定">量${tmark(B.pre)}</span>` : ""}<span class="tests" aria-label="三種測試">${B.tests.map(tmark).join("")}</span>` : esc(B.empty || "")}${q(B.label + (B.pre ? `\n\n${B.pre.label}：測試前的週量要穩定，測試才算（${B.pre.src}）` : ""))}</span></li>
     <li class="${z3.ok ? "ok" : ""} ${cur === 1 ? "cur" : ""}"><span class="n">${z3.ok ? "✓" : 2}</span><span class="lb">3 區 ${z3.done}/${z3.need}</span>
       <span class="sb"><span class="dots" role="img" aria-label="3 區達標 ${z3.done} / ${z3.need}">${dots}</span>${q("3 區只要護欄通過就照排；跑順 3 堂才進 5 區" + (z3.src ? "\n來源：" + z3.src : ""))}</span></li>
     <li class="${z5ok ? "ok" : ""} ${cur === 2 && !z5ok ? "cur" : ""}"><span class="n">${z5ok ? "✓" : 3}</span><span class="lb">5 區間歇</span>
@@ -720,7 +724,7 @@ async function loadWeek() {
       <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
       <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
       <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">下週一 TSB <b>${sgn(L.tsb_next)}</b></span></div>
-      <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${gl("AeT")} ${n0(w.thresholds.aet)} bpm（${esc(w.thresholds.aet_source)}）</div>
+      <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${gl("AeT")} ${n0(w.thresholds.aet)} bpm${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, "AeT 誤差")}</span>` : ""}（${esc(w.thresholds.aet_source)}）</div>
       <div id="later"></div></div></details>`;
   renderKpis();
   // Not shown (sources live in backend/engine/overview.py SRC_*; w.rules still carries them):

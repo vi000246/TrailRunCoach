@@ -21,7 +21,7 @@ never clobber it. Tags are keyed by the activity's local start minute
 power engine reads the WKO5 / COROS / TP datasets, and most WKO5 activities
 have no workout_files row.
 
-Auto rules (each 自組 unless a source is named; numbers in AUTO_EFFORT):
+Auto rules (each 推估 unless a source is named; numbers in AUTO_EFFORT):
 
 activity_type, first match:
   1. a season-plan road / 越野賽 event matched to the run (maximal.match_events:
@@ -49,10 +49,10 @@ effort, trail / hike (`effort_hr`, HR on MOVING time only):
     speed rule (aid stations, queues, GPS speed dropouts on steep climbs),
     but only 0–5 % is in stops ≥ 5 min;
   1. hr_frac ≥ 0.90 (Friel Z3 lower bound, as maximal.trail_avg_frac) and
-     above_aet ≥ 2/3 (Seiler AeT boundary; 2/3 自組):
+     above_aet ≥ 2/3 (Seiler AeT boundary; 2/3 推估):
        rest_share ≤ 0.10 → max; rest_share > 0.10 → hard_with_rests
        (a hard mountain day with long stops is not a maximal effort; 0.10
-       自組, see AUTO_EFFORT);
+       推估, see AUTO_EFFORT);
   2. ≥ half the HR time below AeT and average < AeT + 3 bpm (intensity.py's
      easy rule) → easy;
   3. otherwise → moderate.
@@ -77,15 +77,15 @@ EFFORTS = {"max": "全力", "hard_with_rests": "有拼但有休息", "moderate":
 
 AUTO_EFFORT = {
     "max_hr_frac": 0.90,        # Friel HR Z3 lower bound (zones.FRIEL_HR), as maximal.MAXIMAL["trail_avg_frac"]
-    "above_aet": 2.0 / 3.0,     # 自組 (Seiler three-zone AeT boundary; the 2/3 share is ours)
-    "rest_min_s": 300.0,        # 自組: a LONG rest = a stop of ≥ 5 min (shorter: aid stations, gates, GPS dropouts)
-    "rest_max": 0.10,           # 自組: long rests ≤ 10 % of the elapsed time = a continuous effort. This
+    "above_aet": 2.0 / 3.0,     # 推估 (Seiler three-zone AeT boundary; the 2/3 share is ours)
+    "rest_min_s": 300.0,        # 推估: a LONG rest = a stop of ≥ 5 min (shorter: aid stations, gates, GPS dropouts)
+    "rest_max": 0.10,           # 推估: long rests ≤ 10 % of the elapsed time = a continuous effort. This
                                 # athlete's 7 diary trail races: 0.00–0.05; hard mountain days with real
                                 # breaks (2026-07-27, 2025-11-02, 2024-07-27/-08-18): 0.12–0.17
-    "easy_low_share": 0.50,     # intensity.INTENSITY["majority"] (自組)
+    "easy_low_share": 0.50,     # intensity.INTENSITY["majority"] (推估)
     "easy_tol_bpm": 3.0,        # intensity.INTENSITY["easy_tol_bpm"] (workout_review.AET_MARGIN)
 }
-MATCH_TOL_MIN = 3               # 自組: the same activity in two sources starts within 3 min
+MATCH_TOL_MIN = 3               # 推估: the same activity in two sources starts within 3 min
 RACE_WORDS = re.compile(r"賽|馬拉松|race|marathon", re.I)
 HIKE_WORDS = re.compile(r"爬山|登山|健行|郊山|百岳|縱走|hike|hiking|trek", re.I)
 HIKE_SPORTS = ("hiking", "mountaineering")
@@ -203,13 +203,16 @@ def load(db_path=None, athlete_id: int = 1) -> list[dict]:
 
 def find(rows: list[dict], start: Optional[dt.datetime], file: Optional[str] = None,
          tol_min: int = MATCH_TOL_MIN) -> Optional[dict]:
-    """The stored tag of an activity: same dataset file, else the same start
-    minute, else the nearest start within ±tol_min minutes."""
+    """The stored tag of an activity: same dataset file (also without the
+    同步資料 source's "coros/" / "tp/" prefix: engine/activity_key.py), else the
+    same start minute, else the nearest start within ±tol_min minutes — so a
+    tag set on one source (incl. the 「當作間歇」 tag) holds on every other."""
     if not rows:
         return None
     if file:
+        from backend.engine.activity_key import same_file
         for r in rows:
-            if r.get("file") and r["file"] == file:
+            if r.get("file") and same_file(r["file"], file):
                 return r
     k = key_of(start)
     if k is None:

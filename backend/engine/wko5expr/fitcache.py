@@ -194,13 +194,22 @@ def stamp_of(p: Path) -> list:
     return [st.st_size, st.st_mtime_ns]
 
 
+def home_of(fit_dir: Path, base: Optional[Path] = None) -> Path:
+    """The cache folder of one FIT folder."""
+    key = hashlib.sha1(os.path.normcase(os.path.abspath(str(Path(fit_dir)))).encode()).hexdigest()[:12]
+    return (base or root()) / key
+
+
+def index_path_of(fit_dir: Path, base: Optional[Path] = None) -> Path:
+    return home_of(fit_dir, base) / "index.json"
+
+
 class FitStore:
     """The cache of one FIT folder."""
 
     def __init__(self, fit_dir: Path, base: Optional[Path] = None):
         self.dir = Path(fit_dir)
-        key = hashlib.sha1(os.path.normcase(os.path.abspath(str(self.dir))).encode()).hexdigest()[:12]
-        self.home = (base or root()) / key
+        self.home = home_of(self.dir, base)
         self.index_path = self.home / "index.json"
         self.lock = _lock_for(str(self.home))
         self.v = versions()

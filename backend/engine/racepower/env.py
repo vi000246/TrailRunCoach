@@ -99,14 +99,14 @@ def side(c: Conditions) -> dict:
 
 def _heat_eff(h_pct: float, s: Optional[float], a: float) -> float:
     """heat-acclimation.md §4.3: H_eff = H·(1 − a·S) (engine/heat.py
-    effective_heat; 自組). S None = the v1 penalty unchanged."""
+    effective_heat; 推估). S None = the v1 penalty unchanged."""
     if s is None:
         return h_pct
     s = min(1.0, max(0.0, float(s)))
     return max(0.0, h_pct * (1.0 - a * s))
 
 
-A_RECOVER = 0.75                 # engine/heat.A_RECOVER (Racinais et al. 2015 MSSE, 77 % in 2 weeks; 自組 use)
+A_RECOVER = 0.75                 # engine/heat.A_RECOVER (Racinais et al. 2015 MSSE, 77 % in 2 weeks; 推估 use)
 
 
 def multiplier(frm=None, to=None, heat_s=None, a: float = A_RECOVER) -> dict:
@@ -205,7 +205,7 @@ def segment_factors(zs, frm, to, mode: str = "acclimatised", heat=None, heat_s=N
     workbook's `v4 Calcs` formula, docs/research/superpower-calculator.md
     §1.1); only its input changes. The altitude term keeps the To temperature,
     so a heat list equal to the To conditions gives exactly the single-heat
-    Mᵢ. Mapping forecast hours to segments is our own composition (自組); the
+    Mᵢ. Mapping forecast hours to segments is our own composition (推估); the
     page labels it 推估.
 
     mode: "acclimatised" = this module's pressure polynomial (v1; the same
@@ -214,12 +214,12 @@ def segment_factors(zs, frm, to, mode: str = "acclimatised", heat=None, heat_s=N
     source, 待驗證; numerically it stays within 1 point of Bassett et al. 1999's
     acclimatised curve over 0–4000 m, see `bassett_pct`), "unacclimatised" =
     Wehrlin linear (已驗證 ≤ 2800 m), "partial" = the midpoint of the two — our
-    own choice with no quantitative study behind it (自組, labelled 推估).
+    own choice with no quantitative study behind it (推估, labelled 推估).
     With every zᵢ equal to the race altitude and mode "acclimatised" each Mᵢ is
     exactly v1's single M (T14).
 
     heat_s = (S_from, S_to): heat acclimation on each side, every Hᵢ and H_from
-    become H·(1 − a·S) (heat-acclimation.md §4.3, 自組). None = unchanged."""
+    become H·(1 − a·S) (heat-acclimation.md §4.3, 推估). None = unchanged."""
     fa, b = resolve(frm, to)
     sa, sb = side(fa), side(b)
     a_from = _alt_factor(fa.altitude_m, fa.temp_c, mode)

@@ -341,7 +341,10 @@ class Annotations:
             self.data = json.loads(self.path.read_text("utf-8"))
         except (OSError, ValueError):
             self.data = {}
-        self.data.setdefault("records", {})
+        # records keyed by the record id (= the activity file): a ByStartDict
+        # (engine/activity_key.py) also finds a name stored under another source's file
+        from backend.engine.activity_key import ByStartDict
+        self.data["records"] = ByStartDict(self.data.get("records") or {})
         self.data.setdefault("routes", {})
 
     def save(self) -> None:
@@ -352,11 +355,17 @@ class Annotations:
         return self.data["records"].get(rid, {})
 
     def set_record(self, rid: str, **fields) -> dict:
+        from backend.engine import activity_key as AK
+        key = self.data["records"].key_for(rid)        # the same activity under another file keeps its key
         cur = {**self.record(rid), **{k: v for k, v in fields.items() if v is not None}}
         for k, v in fields.items():
             if v == "" or v is False:
                 cur.pop(k, None)
-        self.data["records"][rid] = cur
+        if not cur.get("start"):
+            st = AK.key_of(AK.start_of_file(rid))
+            if st:
+                cur["start"] = st
+        self.data["records"][key] = cur
         self.save()
         return cur
 

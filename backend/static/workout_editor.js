@@ -64,6 +64,10 @@ dialog.sd.we-wide { width: min(880px, 96vw); }
 .we-pop .mode { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 8px 6px; font-size: 12.5px; border-top: 1px solid var(--line); margin-top: 4px; }
 .we-pop .mode label { display: inline-flex !important; gap: 4px; align-items: center; color: var(--text) !important; font-size: 12.5px !important; }
 .we-pop .empty { color: var(--muted); font-size: 12.5px; padding: 8px; }
+.we-pop .g.rec { color: var(--accent); font-weight: 700; display: flex; gap: 6px; align-items: center; }
+.we-pop button.t .src.why { color: var(--text); }
+.we-pop details.more { border-top: 1px solid var(--line); margin-top: 4px; }
+.we-pop details.more > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 6px 8px; }
 .we-lap { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .we-list { display: grid; gap: 5px; }
 .we-row { display: grid; grid-template-columns: 18px 84px 150px minmax(0, 1fr) minmax(0, .8fr) auto; gap: 6px; align-items: center; padding: 5px 6px;
@@ -138,7 +142,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     rules: "即時檢查：5 區每趟至少 2 分鐘（徐國峰）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
     lastRest: "最後一趟做完不休息、直接接下一段。COROS 的間歇群組做不到，推送時會攤平成一段一段（每段一個 lap）。",
     watch: "COROS 手錶的限制：跑步的功率只收絕對瓦數（沒有 % CP）；每段只能設一個目標；沒有漸進（ramp）步驟。下面是實際會送出的步驟。",
-    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再依主課目標的中點分：三區 88–101% CP、四區 101–106%、五區 ≥ 106%（Palladino 功率區 3／4／5，也是區段圖的顏色）。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。",
+    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再依主課目標的中點分：三區 88–101% CP、四區 101–106%、五區 ≥ 106%（Palladino 功率區 3／4／5，也是區段圖的顏色）。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。每一類最上面是這堂課的「推薦」前三名（強度課第一名＝間歇階梯的下一步），其他收在下面。",
     total: "總時間由下面的步驟加總：要改時間就改步驟（點這格會打開結構）。",
     pacePct: "配速的 % 是閾值配速的倍數：數字大＝慢（例：114–129% 是 Friel 2 區）。",
   };
@@ -632,23 +636,52 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         const r = await req("GET", `${this.o.api}/steps/templates`);
         this.tpls = r.ok ? r.body : { cats: [], groups: [] };
       }
+      await this.loadRecs();
       const k = this.sess().kind;
       if (!this.tplCat || this.tplKind !== k) { this.tplCat = this.catOf(k); this.tplSub = null; this.tplKind = k; }
       this.menuHtml();
       pop.hidden = false; btn.setAttribute("aria-expanded", "true");
     }
+    // the 推薦 block: per tab the 3 best templates for this session (GET /steps/templates/recs,
+    // engine/template_recs.py), fetched again when the day / type / minutes / terrain change
+    async loadRecs() {
+      const s = this.sess();
+      const q = new URLSearchParams({ kind: s.kind || "easy" });
+      if (s.day) q.set("day", s.day);
+      if (this.uid) q.set("uid", this.uid);
+      if (s.minutes) q.set("minutes", s.minutes);
+      if (s.terrain) q.set("terrain", s.terrain);
+      const key = q.toString();
+      if (this.recsKey === key && this.recs) return;
+      const r = await req("GET", `${this.o.api}/steps/templates/recs?${key}`);
+      this.recs = r.ok ? r.body : null;
+      this.recsKey = key;
+    }
     menuHtml() {
       const T = this.tpls, cat = this.tplCat, cats = T.cats || [];
       const subs = (cats.find((c) => c.id === cat) || {}).subs || [];
       if (subs.length && !subs.some((s) => s.id === this.tplSub)) this.tplSub = subs[0].id;
+      const where = {};                                      // row key -> "gi.i" in this tab
+      (T.groups || []).forEach((g, gi) => { if (g.cat === cat) g.rows.forEach((r, i) => { where[r.key] ??= `${gi}.${i}`; }); });
+      const recs = ((this.recs || {}).cats || {})[cat]?.filter((x) => where[x.key]) || [];
+      const recKeys = new Set(recs.map((x) => x.key));
       const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub));
       const tab = (k, id, l, on, tip) => `<button type="button" data-${k}="${esc(id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${tip ? ` title="${esc(tip)}"` : ""}>${esc(l)}</button>`;
+      const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}</span><span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
+      const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
+      const rec = recs.length ? `<div class="g rec">推薦 ${q((this.recs || {}).tip || "")}</div>` +
+        recs.map((x, n) => btn(rowAt(where[x.key]), where[x.key], `${n + 1}. ${x.reason}`)).join("") : "";
+      const others = gs.map(({ g, gi }) => {
+        const rows = g.rows.map((r, i) => [r, i]).filter(([r]) => !recKeys.has(r.key));
+        return rows.length ? (gs.length > 1 || g.title ? `<div class="g">${esc(g.title || g.group)}</div>` : "") + rows.map(([r, i]) => btn(r, `${gi}.${i}`)).join("") : "";
+      }).join("");
+      const subTabs = subs.length ? `<div class="tabs sub" role="group" aria-label="強度">${subs.map((s) => tab("sub", s.id, s.label, s.id === this.tplSub, s.tip)).join("")}</div>` : "";
+      const list = subTabs + (others || `<p class="empty">${gs.length ? "都在上面的推薦裡" : "這一類還沒有範本"}</p>`);
+      const n = (T.groups || []).filter((g) => g.cat === cat).reduce((a, g) => a + g.rows.filter((r) => !recKeys.has(r.key)).length, 0);
       this.$("we-pop").innerHTML = `<div class="tabs" role="group" aria-label="類型">${cats.map((c) => tab("cat", c.id, c.label, c.id === cat)).join("")}</div>` +
-        (subs.length ? `<div class="tabs sub" role="group" aria-label="強度">${subs.map((s) => tab("sub", s.id, s.label, s.id === this.tplSub, s.tip)).join("")}</div>` : "") +
-        (gs.length ? gs.map(({ g, gi }) => (gs.length > 1 || g.title ? `<div class="g">${esc(g.title || g.group)}</div>` : "") + g.rows.map((r, i) =>
-          `<button type="button" class="t" data-t="${gi}.${i}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}</span><span class="src">${esc(r.src || "")}</span></button>`).join("")).join("")
-          : `<p class="empty">這一類還沒有範本</p>`) +
+        (rec ? rec + `<details class="more" id="we-more"${this.tplMore ? " open" : ""}><summary>其他範本（${n}）</summary>${list}</details>` : list) +
         `<div class="mode" role="radiogroup" aria-label="插入方式"><label><input type="radio" name="we-tm" value="full"${this.tplFull ? " checked" : ""}>整份換（含暖身、緩和）</label><label><input type="radio" name="we-tm" value="main"${this.tplFull ? "" : " checked"}>只換主課</label></div>`;
+      this.$("we-more")?.addEventListener("toggle", (e) => { this.tplMore = e.target.open; });
     }
     // a template's structure as a 96×26 sparkline: width = time, height + colour = intensity
     mini(items) {

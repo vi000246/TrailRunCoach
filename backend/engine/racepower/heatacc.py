@@ -9,7 +9,7 @@ here: the athlete's own heat back-test found β larger in late summer than in
 early summer (0.260 vs 0.149 bpm per Hadley unit) and a best a_hr of 0, i.e.
 no visible acclimation. The calculator credits a only when the athlete's own
 HRC observations (heat.hr_cost: the HR cost of heat at a steady power, the
-last 84 days) fall over time with a one-sided p < 0.1 (自組 test; the
+last 84 days) fall over time with a one-sided p < 0.1 (推估 test; the
 literature has no threshold for an individual).
 """
 from __future__ import annotations

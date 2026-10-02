@@ -903,9 +903,19 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         "dose": {**dose, "history": hist[-8:]},
         "kind": kind, "week_hours": _extra(by, "volume").get("last_week"),
         "z5": z5, "aet_test_reason": test_reason, "reentry": brk,
+        "volume": (test_reason or {}).get("volume") or _volume(ds, today),
     }
     out["options"] = options(out, ae, lt, cache, friel, xu, base_weeks, ef, need_weeks)
     return out
+
+
+def _volume(ds, today: dt.date) -> Optional[dict]:
+    """base_check.volume_stable for today (the Z5 card's precondition item), None on failure."""
+    from backend.engine import base_check as BC
+    try:
+        return BC.volume_stable(ds, today)
+    except Exception:                       # noqa: BLE001
+        return None
 
 
 def _injury_pause(today: dt.date) -> Optional[str]:
@@ -959,6 +969,21 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
         recent, xu_recent = [], []
     passive = z5.get("state") == "confirmed" and z5.get("path") == "xu90" and z5.get("since") and \
         (today - dt.date.fromisoformat(z5["since"])).days <= BC.NO_DATA_DAYS
+    r = _aet_test_reason(today, ae, z5, brk, val, recent, xu_recent, passive)
+    if r is None:
+        return None
+    # the stable-volume precondition (base_check.volume_stable, 推估): a test taken now would
+    # not count, so the suggestion waits (aet_test.due) and says why
+    vol = BC.volume_stable(ds, today)
+    r = {**r, "volume": vol}
+    if vol.get("ok") is False:
+        r.update(wait=True, text=r["text"] + f"；先讓週量穩定 {BC.VOL_WEEKS} 週再測（現在 {vol['value']}；推估）")
+    return r
+
+
+def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], val: dict, recent, xu_recent,
+                     passive) -> Optional[dict]:
+    from backend.engine import base_check as BC
     v, se = val.get("value"), val.get("se")
     if brk and brk.get("aet_stale") and brk["end"] <= today.isoformat() and not (
             z5.get("state") == "confirmed" and (z5.get("since") or "") >= brk["return"]):
@@ -1190,9 +1215,16 @@ def z5_card(gate: dict, today: dt.date) -> dict:
         method = {"key": "method", "label": LABEL[mode], "ok": gate.get("state") == "unlocked",
                   "value": gate.get("verdict") or "", "need": "", "src": source_of_mode(mode)}
         tests.append(method)
+    # the stable-volume precondition (base_check.volume_stable, 推估): a checklist item, shown while
+    # a test is still needed (unconfirmed / a Z1 pause); evaluate() stores today's check in gate["volume"]
+    vol = gate.get("volume")
+    pre = None
+    if vol and tests and not base_done and state != "reentry":
+        pre = {"key": "volume", "label": vol.get("label") or "前提：週量穩定", "ok": vol.get("ok"),
+               "value": vol.get("value") or "—", "need": vol.get("need") or "", "src": vol.get("src") or ""}
     out["base"] = {"label": "確認有氧基礎（三選一，做了且達標）" if len(tests) > 1 else
                    f"確認有氧基礎（{tests[0]['label'].split('：')[0]}）" if tests else "確認有氧基礎",
-                   "ok": bool(base_done), "tests": tests,
+                   "ok": bool(base_done), "tests": tests, "pre": pre,
                    "empty": ("恢復期內不判斷" if state == "reentry" else
                              "不設門檻（Seiler）" if state == "open" else "" if tests else "這個間歇門檻不開 5 區")}
     d = gate.get("dose") or {}
@@ -1280,6 +1312,10 @@ def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
         elif "aet_friel_drift" in by:
             lo, hi = float(ae["value"]) + FRIEL_HR_BAND[0], float(ae["value"]) + FRIEL_HR_BAND[1]
             parts.append(f"在 AeT 附近（{lo:.0f}–{hi:.0f} bpm）跑一次 ≥ 60 分鐘平路穩定跑，前後半飄移 < 5%")
+    if (gate.get("volume") or {}).get("ok") is False:
+        # the stable-volume precondition (推估): a test now wouldn't count
+        from backend.engine.base_check import VOL_WEEKS
+        pre = (pre + "，" if pre else "") + f"先讓週量穩定 {VOL_WEEKS} 週，再"
     if not parts:
         return {"kind": "missing", "text": f"還缺：{z.get('reason') or '確認有氧基礎'}"}
     return {"kind": "missing", "text": "還缺：" + pre + "；或".join(parts)}

@@ -583,8 +583,9 @@ class Dataset:
         narrows it; None covers every channel (for derived series)."""
         if self.corrections is None:
             return ""
+        from backend.engine.activity_key import same_file
         rules = [c for c in self.corrections.items
-                 if c.file == file and (channel is None or c.channel == channel)]
+                 if same_file(c.file, file) and (channel is None or c.channel == channel)]
         return ";".join(sorted(f"{r.channel}:{r.t_start}-{r.t_end}" for r in rules))
 
     def cached_series(self, key: str, w: Workout, compute):
