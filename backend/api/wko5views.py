@@ -40,6 +40,7 @@ from backend.engine.wko5expr import periods as PD
 from backend.engine.wko5expr import basis as BS
 from backend.engine.wko5expr import variants as VR
 from backend.engine.wko5expr import recentbests as RB
+from backend.engine.wko5expr import power_use as PU
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
@@ -241,6 +242,10 @@ def list_views():
             {"index": i, "title": d["title"], "description": d.get("description"),
              "charts": [{"index": j, "title": c.get("title"), "kind": _panel_kind(c),
                          "series": len(c.get("series", [])),
+                         # 「使用功率」 off (charts.power.enabled): the viewer hides power-only charts
+                         # and locks 配速／功率 toggles to pace (power_use.py)
+                         "power": PU.chart_needs_power(c), "power_basis": PU.power_basis(c),
+                         **({"zoned": c["zoned"]} if c.get("zoned") else {}),
                          **({"view": c.get("view")} if c.get("kind") == "periodzones" else {})}
                         for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
@@ -584,6 +589,7 @@ def _activity_json(ds, w) -> dict:
     return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
             "title_original": title or A.label(w), "title_from": "activity" if title else "label",
             "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
+            "origin": _origin(ds, w),
             "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
             # bad activity files (engine/bad_activity.py): an excluded file is not
             # in ds.workouts; `flagged` = the rule's reason when the user kept it
@@ -592,14 +598,51 @@ def _activity_json(ds, w) -> dict:
             "power": {"source": src, "used": A.power_ok(ds, w) if src != PS.NONE else False,
                       "label": PS.label(src, bool(getattr(ds, "accept_watch_power", True))),
                       "setting": PS.SETTING_KEY},
-            # the pack carried (engine/loaded_carry.activity_pack; racepower_hike_meta.json)
-            "pack": _pack_json(w)}
+            # the pack carried (racepower athlete.activity_pack; racepower_hike_meta.json)
+            "pack": _pack_json(w),
+            # 疼痛 (engine/injuries.py): the mark, its event and the re-entry prompt; hidden in the demo mode
+            "pain_state": _pain_state(ds, w, t)}
+
+
+def _pain_part(u: Optional[dict]) -> dict:
+    """The pain mark of a stored tag (the 活動編輯 list); nothing in the demo mode."""
+    from backend.engine import injuries as INJ
+    if INJ.demo_mode():
+        return {}
+    return {"pain": (u or {}).get("pain"), "pain_area": (u or {}).get("pain_area"),
+            "injury_id": (u or {}).get("injury_id")}
+
+
+def _pain_state(ds, w, t: dict) -> Optional[dict]:
+    from backend.engine import injuries as INJ
+    from backend.engine import activity_tags as AT
+    if INJ.demo_mode():
+        return None
+    t = AT.user_of(w) or {}                 # the stored mark (auto_tags may be memoised)
+    try:
+        today = dt.date.today()
+        evs = INJ.load_events()
+        ev = next((e for e in evs if e["id"] == t.get("injury_id")), None) if t.get("injury_id") else None
+        out = {"pain": t.get("pain"), "pain_area": t.get("pain_area"),
+               "area_label": INJ.area_label(t.get("pain_area")) if t.get("pain_area") else None,
+               "injury": INJ.summary(ev, today), "reentry": None}
+        # inside a re-entry block (engine/reentry.py): 「記一下有沒有痛」 (plan §4.3)
+        from backend.engine import reentry as RE
+        from backend.engine import workout_review as WR
+        day = WR._wdate(w)
+        if w.sport == "run" and (today - day).days <= 120:
+            rp = RE.find(ds, day)
+            if rp and RE.in_block(rp, day):
+                out["reentry"] = {"text": rp.get("text"), "monitor": INJ.SILBERNAGEL["text"]}
+        return out
+    except Exception:                       # noqa: BLE001 — never breaks the activity card
+        return {"pain": t.get("pain"), "pain_area": t.get("pain_area"), "injury": None, "reentry": None}
 
 
 def _pack_json(w) -> Optional[dict]:
     try:
-        from backend.engine import loaded_carry as LC
-        return LC.activity_pack(w)
+        from backend.engine.racepower import athlete as RA
+        return RA.activity_pack(w)
     except Exception:                       # noqa: BLE001 — never breaks the activity card
         return None
 
@@ -613,6 +656,20 @@ def get_activity(i: int):
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     return _activity_json(ds, ds.workouts[i])
+
+
+@router.get("/workouts/{i}/pain")
+def get_pain(i: int):
+    """The 疼痛 mark of one dataset workout (the chart page's chip; light: no
+    auto tags). 404 in the demo mode (傷病紀錄 hidden)."""
+    from backend.engine import injuries as INJ
+    if INJ.demo_mode():
+        raise HTTPException(404, "Not Found")
+    ds = _dataset()
+    if not 0 <= i < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    w = ds.workouts[i]
+    return {"workout": i, "sport": w.sport, **(_pain_state(ds, w, {}) or {})}
 
 
 @router.patch("/workouts/{i}/activity")
@@ -630,7 +687,7 @@ async def patch_activity(i: int, body: dict):
     w = ds.workouts[i]
     from backend.api.workouts import TAG_FIELDS
     if "pack_kg" in body:
-        # the pack carried (loaded-carry-training.md §5.1): racepower_hike_meta.json, null = cleared
+        # the pack carried (the 百岳 prediction's per-trip pack): racepower_hike_meta.json, null = cleared
         await run_in_threadpool(_set_pack, w, body.get("pack_kg"))
     tag_keys = {k: v for k, v in body.items() if k in TAG_FIELDS}
     if tag_keys or "pack_kg" not in body:
@@ -663,6 +720,22 @@ def _set_pack(w, kg) -> None:
 # 活動編輯 page (static/activity.html): every activity with its stored user
 # values, the auto values in a second (slower) call, key-based and bulk edits
 # ---------------------------------------------------------------------------
+
+ORIGIN_LABELS = {"coros": "COROS", "tp": "TrainingPeaks", "wko5": "WKO5"}
+
+
+def _origin(ds, w=None, file: Optional[str] = None) -> Optional[str]:
+    """Which source an activity's file came from (the 活動編輯 badge): coros /
+    tp on a FIT dataset (the merged "synced" one: the folder that won,
+    sync/primary.py), wko5 on the WKO5 dataset."""
+    if w is not None and hasattr(ds, "file_origin"):
+        return ds.file_origin(w)
+    src = getattr(ds, "source", None) or "wko5"
+    if src == "synced":
+        head = str(file or "").split("/", 1)[0]
+        return head if head in ("coros", "tp") else None
+    return src if src in ORIGIN_LABELS else None
+
 
 def _terrain(ds, file: Optional[str], trail: bool) -> dict:
     """Road / trail of one activity and whether it can be changed here: a
@@ -702,7 +775,7 @@ def activities_list():
     def user_part(u):
         return {"name": AT.name_of(u), "tags": AT.tags_of(u), "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
-                "user_exclusion": AT.user_exclusion(u)}
+                "user_exclusion": AT.user_exclusion(u), **_pain_part(u)}
 
     for w in ds.workouts:
         u = AT.find(tags, w.entry.start, w.entry.file)
@@ -715,7 +788,7 @@ def activities_list():
                     "tss": m.get("tss"), "trail": A.is_trail(w),
                     "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
                     "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
-                    "excluded": None, **user_part(u)})
+                    "origin": _origin(ds, w), "excluded": None, **user_part(u)})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
         u = AT.find(tags, start, x["file"])
@@ -726,9 +799,11 @@ def activities_list():
                     "duration": x.get("duration"), "distance": km, "climbing": None, "tss": None,
                     "trail": x["sport_type"] == "trail running",
                     "terrain": _terrain(ds, x["file"], x["sport_type"] == "trail running"),
-                    "power_label": None, "excluded": _exclusion_json(x), **user_part(u)})
+                    "power_label": None, "origin": _origin(ds, file=x["file"]),
+                    "excluded": _exclusion_json(x), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
-    return {"source": getattr(ds, "source", None) or "wko5", "types": AT.TYPES, "efforts": AT.EFFORTS,
+    return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
+            "merge": getattr(ds, "merge_info", None), "types": AT.TYPES, "efforts": AT.EFFORTS,
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 
@@ -767,6 +842,10 @@ class BulkBody(BaseModel):
     tags: Optional[list[str]] = None
     add_tags: Optional[list[str]] = None
     remove_tags: Optional[list[str]] = None
+    # 疼痛 (engine/injuries.py): bulk 「設為沒痛」 (0) or a single key-based mark
+    pain: Optional[int] = None
+    pain_area: Optional[str] = None
+    pain_side: Optional[str] = None
 
 
 BULK_MAX = 500
@@ -785,7 +864,8 @@ async def patch_activities(body: BulkBody):
     if len(body.items) > BULK_MAX:
         raise HTTPException(400, "TOO_MANY_ITEMS")
     sent = body.model_fields_set
-    base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags") if k in sent}
+    base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags",
+                                          "pain", "pain_area", "pain_side") if k in sent}
     for k in ("add_tags", "remove_tags"):
         v = getattr(body, k)
         if v is not None and AT.validate(tags=v):

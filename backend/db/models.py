@@ -264,6 +264,40 @@ class ActivityTag(Base):
     # and free-form tags (a JSON list of strings, NULL = none)
     name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     tags_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # 疼痛 (engine/injuries.py, docs/plans/injury-tracking.plan.md §1.1): NULL = 沒填,
+    # 0 = 沒痛, 1 = 痠, 2 = 痛, 3 = 痛到中斷; the body area (injuries.AREAS key or a
+    # user-added area) and the injury_events row the mark is attached to
+    pain: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pain_area: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    injury_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class InjuryEvent(Base):
+    """One injury (傷病紀錄, engine/injuries.py): a period with an onset, an
+    area, a severity defined by the training impact (輕 照練 / 中 減量或改練 /
+    重 停跑) and an end. Local only: never synced, shared or sent to the AI
+    coach. No FK to an activity: the onset activity is the activity_tags key
+    (start minute) plus the dataset file, as activity_tags. New table:
+    created by init_db's create_all."""
+    __tablename__ = "injury_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    area: Mapped[str] = mapped_column(String(40), default="unknown")
+    side: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    kind: Mapped[str] = mapped_column(String(10), default="overuse")
+    severity: Mapped[str] = mapped_column(String(10), default="mild")
+    pain_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    onset_date: Mapped[str] = mapped_column(String(10), index=True)
+    onset_key: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    onset_file: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    status: Mapped[str] = mapped_column(String(10), default="draft")
+    resolved_date: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    days_missed: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pause_quality: Mapped[bool] = mapped_column(Boolean, default=False)
+    recurrence_of: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

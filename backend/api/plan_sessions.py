@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from backend.db.database import get_db
+from backend.engine import plan_match as PM
 from backend.engine import plan_store as PS
 from backend.engine import projection as P
 from backend.engine import reconcile as R
@@ -77,7 +78,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
                             blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc)
     since = monday - dt.timedelta(weeks=4)
-    acts = [O.activity_row(w, ds) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
+    acts = activity_rows(ds, since, today + dt.timedelta(days=1))
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
            "horizon_end": horizon.isoformat(), "thresholds": cur.get("thresholds") or {},
@@ -99,17 +100,46 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     return out
 
 
+def activity_rows(ds, a: dt.date, b: dt.date) -> list[dict]:
+    """overview.activity_row for the workouts in [a, b) plus `hard_s`: seconds at /
+    above threshold (power ≥ 95 % CP or HR ≥ LTHR, the generator's done rule for
+    a quality session) — engine/plan_match.py tells an interval run from an easy one."""
+    from backend.engine import overview as O
+    ws = O.workouts_between(ds, a, b)
+    hard: dict = {}
+    runs = [w for w in ws if O.category(w) in ("road", "trail", "hike")]
+    if runs:
+        try:
+            hard = O._hard_seconds(ds, runs, int(O.date_to_day(a)), int(O.date_to_day(b)))
+        except Exception:                   # noqa: BLE001 — no intensity verdict, still matched
+            hard = {}
+    out = []
+    for w in ws:
+        r = O.activity_row(w, ds)          # + `session` (workout_review.classify: type, label, icon)
+        if w in runs:
+            r["hard_s"] = hard.get(w.idx, 0.0) if hard else None
+        out.append(r)
+    return out
+
+
 def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool) -> dict:
     """engine/adapt.py's context: per-run review numbers of this week's runs
     (workout_review.measure, disk-memoised), the actual CTL ramp (status
     fitness indicator), TSB today and the first day sessions can still go on."""
     from backend.engine import overview as O
     reviews: dict = {}
+    hard_days: set = set()
     if enabled:
         try:
             from backend.engine import workout_review as WR
             for w in O.workouts_between(ds, monday, today + dt.timedelta(days=1)):
-                if O.category(w) not in ("road", "trail"):
+                if O.category(w) not in ("road", "trail", "hike"):
+                    continue
+                # a hard day done this week, planned or not (Z5 / Z3 / 高強度長跑 / CP test):
+                # adapt keeps the remaining hard sessions 48 h away from it
+                if O.session_of(ds, w).get("type") in WR.HARD_TYPES:
+                    hard_days.add(O.wdate(w).isoformat())
+                if O.category(w) == "hike":
                     continue
                 m = WR.measure(ds, w) or {}
                 reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "over_aet_s", "hr_s", "avg_power", "cp")}
@@ -121,6 +151,7 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     load = cur.get("load") or {}
     done_today = any(a.get("date") == today.isoformat() for a in (cur.get("done") or {}).get("activities") or [])
     return {"enabled": enabled, "reviews": reviews, "ramp": ramp, "tsb": load.get("tsb_today"),
+            "hard_days": sorted(hard_days),
             "first_free": (today + dt.timedelta(days=1 if done_today else 0)).isoformat()}
 
 
@@ -143,8 +174,19 @@ async def _inputs(db: Optional[AsyncSession] = None, blackouts: Optional[list] =
     else:
         inp = await run_in_threadpool(functools.partial(_compute_inputs, blackouts))
     if db is not None:
-        inp = {**inp, "covered": await _covered(db, inp.get("last_activity"))}
+        inp = {**inp, "covered": await _covered(db, inp.get("last_activity")),
+               "unlinked": await _unlinked(db, inp.get("activities") or [])}
     return inp
+
+
+async def _unlinked(db: AsyncSession, acts: list[dict]) -> set:
+    """Activity indexes the user unlinked from a session (plan_match: never auto-matched)."""
+    from backend.settings.repository import SettingsRepository
+    try:
+        entries = await SettingsRepository(db).get(PS.UNLINKED_KEY)
+    except Exception:                        # noqa: BLE001 — a missing table in an old DB
+        entries = []
+    return PS.unlinked_indexes(entries or [], acts)
 
 
 # one writer at a time: two tabs / a preview racing a push must not generate
@@ -223,6 +265,11 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     async with _wlock():
         await _ensure(db, inp)
         every = await PS.load(db)
+        # a run synced since the last reconcile shows on its session right away
+        new, ch = PS.match_only(every, inp)
+        if ch:
+            await PS.save(db, new)
+            every = await PS.load(db)
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]
     today = _today(inp)
@@ -535,6 +582,35 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
                                 "protocol": src.get("protocol_stored") if t["key"] == "aet" else src["protocol"]}
                 t["label"] = f"{t['label']}：{src['title']}（{src['minutes']} 分）"
             t["replaces_long"] = t["key"] == "aet" and aet_p == "xu90"
+    rows += await run_in_threadpool(_injury_suggestions, inp, today, set(bl), stored)
+    return rows
+
+
+def _injury_suggestions(inp: dict, today: str, blocked: set, stored: list[dict]) -> list[dict]:
+    """傷病紀錄 rows of the box (engine/suggestions.injury_rows) and, when the
+    user turned it on, 「跟受傷前很像」 (engine/injury_exposure.alerts)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine import injuries as INJ
+    from backend.engine import suggestions as SG
+    if INJ.demo_mode():
+        return []
+    try:
+        events = INJ.load_events()
+        rows = SG.injury_rows(events, today, blocked, (inp.get("cur") or {}).get("reentry"),
+                              INJ.pain_marks(AT.load()))
+    except Exception:                       # noqa: BLE001 — the box must still load
+        return []
+    try:
+        from backend.engine.wko5expr.datasource import read_setting
+        if events and read_setting(INJ.SETTING_PATTERN, False) is True:
+            from backend.api.overview import _dataset
+            from backend.engine import injury_exposure as IE
+            end = (dt.date.fromisoformat(today) + dt.timedelta(days=7)).isoformat()
+            planned = [s for s in stored if s.get("state") == "active" and today <= (s.get("day") or "") < end
+                       and s.get("kind") not in ("strength", "rest")]
+            rows += IE.alerts(_dataset(), events, dt.date.fromisoformat(today), planned)
+    except Exception:                       # noqa: BLE001
+        pass
     return rows
 
 
@@ -587,6 +663,8 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
         out = {"sessions": [await _schedule_test(db, inp, {"days": [{"day": o["day"]} for o in t["options"]],
                                                            "session": t["session"],
                                                            "replaces_long": t.get("replaces_long")}, day)]}
+    elif sg["type"] == "injury_rest":
+        out = await _accept_injury_rest(db, sg)
     else:
         raise HTTPException(400, "這個建議沒有可以排的東西")
     week = sid.split(":")[-1] if sid.startswith(("b2b:", "test:")) else None
@@ -963,6 +1041,44 @@ async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
     return out
 
 
+@router.post("/sessions/{uid}/link")
+async def link_session(uid: str, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """{index}: the user pairs this session with an activity (engine/plan_match.py)."""
+    from backend.settings.repository import SettingsRepository
+    inp = await _inputs(db)
+    a = next((x for x in inp.get("activities") or [] if x.get("index") == body.get("index")), None)
+    if a is None:
+        raise HTTPException(404, "找不到這筆活動")
+    try:
+        async with _wlock():
+            out = await PS.link(db, uid, a, _today(inp))
+            repo = SettingsRepository(db)
+            left = [e for e in (await repo.get(PS.UNLINKED_KEY) or []) if e.get("start") != a.get("start")]
+            await repo.set(PS.UNLINKED_KEY, left)
+            await db.commit()
+    except PS.PlanError as e:
+        raise HTTPException(400, str(e))
+    return out
+
+
+@router.delete("/sessions/{uid}/link")
+async def unlink_session(uid: str, db: AsyncSession = Depends(get_db)):
+    """Undo the pairing; the activity becomes an unplanned run (not auto-matched again)."""
+    from backend.settings.repository import SettingsRepository
+    inp = await _inputs(db)
+    try:
+        async with _wlock():
+            out, a = await PS.unlink(db, uid, _today(inp))
+            if a and a.get("start"):
+                repo = SettingsRepository(db)
+                ents = [e for e in (await repo.get(PS.UNLINKED_KEY) or []) if e.get("start") != a["start"]]
+                await repo.set(PS.UNLINKED_KEY, (ents + [{"start": a["start"], "index": a.get("index")}])[-200:])
+                await db.commit()
+    except PS.PlanError as e:
+        raise HTTPException(400, str(e))
+    return out
+
+
 @router.get("/reconcile")
 async def reconcile_preview(db: AsyncSession = Depends(get_db)):
     inp = await _inputs(db)
@@ -1159,7 +1275,7 @@ async def get_blackouts(db: AsyncSession = Depends(get_db)):
 async def preview_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     cand = _bl_body(body)
     saved = await _inputs(db)
-    inp = {**(await _inputs(blackouts=cand)), "covered": saved.get("covered")}
+    inp = {**(await _inputs(blackouts=cand)), "covered": saved.get("covered"), "unlinked": saved.get("unlinked")}
     async with _wlock():
         await _ensure(db, saved)                  # first visit: generate with what is stored
         _, changes = await PS.plan_reconcile(db, inp, apply=False)
@@ -1183,6 +1299,33 @@ async def put_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_d
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
     return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+
+
+async def _accept_injury_rest(db: AsyncSession, sg: dict) -> dict:
+    """「設成不排課」 of an injury_rest suggestion: the days of [start, end] not
+    blocked yet become 不排課日期 (label 傷停), then the plan reconciles as a
+    PUT /blackouts without decisions (edited sessions are reported, not moved)."""
+    from backend.engine import blackouts as BL
+    from backend.settings.repository import SettingsRepository
+    cur = BL.normalize(await SettingsRepository(db).get(BL.KEY) or [])
+    have = set(BL.blocked(BL.from_list(cur)))
+    a, b = dt.date.fromisoformat(sg["start"]), dt.date.fromisoformat(sg["end"])
+    free = [a + dt.timedelta(days=i) for i in range((b - a).days + 1)
+            if (a + dt.timedelta(days=i)).isoformat() not in have]
+    added = [{"id": BL.new_id(), "start": lo.isoformat(), "end": hi.isoformat(), "label": "傷停"}
+             for lo, hi in BL._runs(free)]
+    cand = BL.normalize(cur + added)
+    try:
+        await SettingsRepository(db).set(BL.KEY, cand)
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(400, str(e))
+    await db.commit()
+    inp = await _inputs(db, blackouts=cand)
+    async with _wlock():
+        await _ensure(db, inp)
+        _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions={})
+    return {"sessions": [], "blackouts": added, "changes": changes}
 
 
 _eq_lock = threading.Lock()
@@ -1253,7 +1396,7 @@ def _range_extras(start: str, end: str) -> dict:
     ds = _dataset()
     today = O.day_to_date(ds.today)
     a, b = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
-    acts = [O.activity_row(w, ds) for w in O.workouts_between(ds, a, b + dt.timedelta(days=1))]
+    acts = activity_rows(ds, a, b + dt.timedelta(days=1))
     st = _status(ds, today)
     lo, hi = min(a, today) - dt.timedelta(days=400), max(b, today) + dt.timedelta(days=400)
     phases = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end}
@@ -1370,6 +1513,32 @@ def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
     return out
 
 
+def _fresh_done_by(s: dict, acts_by: dict) -> dict:
+    """A done session's stored activity, completed with today's fields (hard_s for
+    rows matched before it existed); the match kind stays the stored one."""
+    d = s.get("done_by")
+    if s.get("state") != "done" or not isinstance(d, dict):
+        return s
+    a = acts_by.get(d.get("index"))
+    if a is None or a.get("start") != d.get("start"):
+        return s
+    return {**s, "done_by": {**d, **a, "match": d.get("match")}}
+
+
+def _link_options(ss: list[dict], every: list[dict], acts: list[dict], today: str) -> None:
+    """`link_options` (activity indexes, closest first) on the sessions the user may
+    pair by hand: open or missed up to today, or done (re-link); same week, ± 1 day."""
+    used = {s["done_by"].get("index") for s in every
+            if s["state"] == "done" and isinstance(s.get("done_by"), dict)}
+    for s in ss:
+        if s["state"] not in ("active", "missed", "done") or (s.get("day") or "9999") > today:
+            continue
+        mine = (s.get("done_by") or {}).get("index") if s["state"] == "done" else None
+        opts = [a for a in PM.candidates(s, acts, used - {mine}) if a.get("index") != mine
+                and R.monday_of(a["date"]) == s["week_start"]]
+        s["link_options"] = [a["index"] for a in opts]
+
+
 @router.get("/calendar")
 async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     """Everything the 課表 calendar needs for [start, end] (≤ 120 days)."""
@@ -1390,10 +1559,15 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     rates = tss_rates(extras.get("tph"), every, tph)
     from backend.engine import compliance as C
     ss = []
+    acts_by = {x.get("index"): x for x in extras["activities"]}
     for s in every:
         if s.get("day") and start <= s["day"] <= end:
             est = est_tss(s, rates)
-            ss.append({**s, "tss_est": round(est, 1), "compliance": C.session_compliance(s, est)})
+            s = _fresh_done_by(s, acts_by)
+            vs = PM.compare(s)
+            ss.append({**s, "tss_est": round(est, 1), "vs": vs,
+                       "compliance": C.with_plan_check(C.session_compliance(s, est), vs)})
+    _link_options(ss, every, extras["activities"], body["today"])
     tt = P.target_texts(inp["thresholds"] or {})
     return {**{k: v for k, v in body.items() if k != "sessions"}, "start": start, "end": end,
             "sessions": ss, "activities": extras["activities"], "phases": extras["phases"],

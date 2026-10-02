@@ -123,10 +123,11 @@ def _db_path(db_path=None) -> Optional[Path]:
 _memo: dict = {}
 COLS = ("id", "athlete_id", "start_local", "source", "file", "workout_id", "distance_km", "label",
         "activity_type", "activity_type_overridden", "effort", "effort_overridden", "note", "exclusion",
-        "name", "tags_json")
+        "name", "tags_json", "pain", "pain_area", "injury_id")
 EXCLUSIONS = ("keep", "exclude")    # bad_activity.KEEP / EXCLUDE; None = the auto rule
 # columns added after the table first shipped (database._migrate_schema; upsert adds them too)
-LATE_COLS = {"exclusion": "TEXT", "name": "TEXT", "tags_json": "TEXT"}
+LATE_COLS = {"exclusion": "TEXT", "name": "TEXT", "tags_json": "TEXT",
+             "pain": "INTEGER", "pain_area": "TEXT", "injury_id": "INTEGER"}   # pain*: engine/injuries.py
 NAME_MAX = 200
 TAG_MAX_LEN = 30
 TAGS_MAX = 20
@@ -248,7 +249,8 @@ def user_exclusion(u: Optional[dict]) -> Optional[str]:
     return u["exclusion"] if u and u.get("exclusion") in EXCLUSIONS else None
 
 
-def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=None) -> Optional[str]:
+def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=None,
+             pain=None, pain_area=None) -> Optional[str]:
     if activity_type is not None and activity_type not in TYPES:
         return "INVALID_ACTIVITY_TYPE"
     if effort is not None and effort not in EFFORTS:
@@ -263,6 +265,11 @@ def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=No
         ct = clean_tags(tags)
         if len(ct) > TAGS_MAX or any(len(t) > TAG_MAX_LEN for t in ct):
             return "INVALID_TAGS"
+    if pain is not None or pain_area is not None:
+        from backend.engine import injuries as INJ
+        err = INJ.validate_pain(pain, pain_area)
+        if err:
+            return err
     return None
 
 
@@ -271,7 +278,7 @@ _UNSET = object()
 
 def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=None, workout_id=None,
            distance_km=None, label=None, activity_type=_UNSET, effort=_UNSET, note=_UNSET,
-           exclusion=_UNSET, name=_UNSET, tags=_UNSET) -> dict:
+           exclusion=_UNSET, name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET) -> dict:
     """Write one user tag (sync; the seed script and tests). For each of
     activity_type / effort: a value sets it and its *_overridden flag; None
     clears it (back to auto); left out = unchanged. `exclusion`: "keep" /
@@ -282,7 +289,7 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
     from sqlalchemy.orm import Session
     from backend.db.models import ActivityTag
     un = lambda v: None if v is _UNSET else v       # noqa: E731
-    err = validate(un(activity_type), un(effort), un(exclusion), un(name), un(tags))
+    err = validate(un(activity_type), un(effort), un(exclusion), un(name), un(tags), un(pain), un(pain_area))
     if err:
         raise ValueError(err)
     eng = create_engine(f"sqlite:///{Path(db_path)}")
@@ -301,7 +308,7 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
                               activity_type_overridden=False, effort_overridden=False)
             s.add(row)
         apply_update(row, activity_type=activity_type, effort=effort, note=note, exclusion=exclusion,
-                     name=name, tags=tags)
+                     name=name, tags=tags, pain=pain, pain_area=pain_area)
         for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
                      ("distance_km", distance_km), ("label", label)):
             if v is not None:
@@ -315,7 +322,7 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
 
 
 def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclusion=_UNSET,
-                 name=_UNSET, tags=_UNSET) -> None:
+                 name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET) -> None:
     """Set the user fields of an ActivityTag row (shared by upsert and the
     async API): value → set + overridden; None → cleared, back to auto.
     `exclusion` (bad_activity.py): "keep" / "exclude", None = the auto rule.
@@ -337,6 +344,12 @@ def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclu
         row.effort_overridden = effort is not None
     if note is not _UNSET:
         row.note = (note or "").strip() or None
+    if pain is not _UNSET:                    # 疼痛 (engine/injuries.py); the event link is set by attach()
+        row.pain = pain
+        if pain is None or pain == 0:
+            row.pain_area = None
+    if pain_area is not _UNSET:
+        row.pain_area = (pain_area or "").strip() or None if (getattr(row, "pain", None) or 0) >= 1 else None
     row.updated_at = dt.datetime.utcnow()
 
 
@@ -606,4 +619,6 @@ def merge(auto: dict, user: Optional[dict]) -> dict:
             "note": (user or {}).get("note"), "stored": user is not None,
             "exclusion": user_exclusion(user),
             "name": name_of(user), "tags": tags_of(user),
+            "pain": (user or {}).get("pain"), "pain_area": (user or {}).get("pain_area"),
+            "injury_id": (user or {}).get("injury_id"),
             "key": (user or {}).get("start_local")}

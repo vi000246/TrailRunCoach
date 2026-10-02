@@ -96,7 +96,7 @@ def _no_auto_plan_after_sync(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _no_real_hike_meta(monkeypatch, tmp_path_factory):
-    """The per-activity pack (racepower_hike_meta.json; engine/loaded_carry.py)
+    """The per-activity pack (racepower_hike_meta.json; racepower/athlete.py)
     is never read from or written to ~/.wko5coach in tests."""
     from backend.engine.racepower import athlete
     monkeypatch.setattr(athlete, "HIKE_META", tmp_path_factory.mktemp("hikemeta") / "racepower_hike_meta.json")

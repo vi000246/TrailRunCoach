@@ -94,9 +94,15 @@ class ActivityUpdate(BaseModel):
     # free-form tag list (replaces the stored list)
     name: Optional[str] = None
     tags: Optional[list[str]] = None
+    # 疼痛 (engine/injuries.py): null 沒填 / 0 沒痛 / 1 痠 / 2 痛 / 3 中斷; the area (a fixed
+    # key or the user's own label) and the side (only carried to a new draft event)
+    pain: Optional[int] = None
+    pain_area: Optional[str] = None
+    pain_side: Optional[str] = None
 
 
-TAG_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags")
+TAG_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "pain_side")
+STORED_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area")
 
 
 async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
@@ -108,7 +114,16 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
                       body.effort if "effort" in sent else None,
                       body.exclusion if "exclusion" in sent else None,
                       body.name if "name" in sent else None,
-                      body.tags if "tags" in sent else None)
+                      body.tags if "tags" in sent else None,
+                      body.pain if "pain" in sent else None,
+                      body.pain_area if "pain_area" in sent else None)
+    painish = bool({"pain", "pain_area", "pain_side"} & sent)
+    if painish:
+        from backend.engine import injuries as INJ
+        if INJ.demo_mode():
+            raise HTTPException(404, "NOT_FOUND")
+        if not err and body.pain_side is not None and body.pain_side not in INJ.SIDES:
+            err = "INVALID_SIDE"
     if err:
         raise HTTPException(400, err)
     row = (await db.execute(select(ActivityTag).where(ActivityTag.athlete_id == athlete_id,
@@ -117,15 +132,60 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
         row = ActivityTag(athlete_id=athlete_id, start_local=start_local,
                           activity_type_overridden=False, effort_overridden=False)
         db.add(row)
-    kw = {k: getattr(body, k) for k in TAG_FIELDS if k in sent}
+    kw = {k: getattr(body, k) for k in STORED_FIELDS if k in sent}
+    if kw.get("pain_area") is not None:
+        from backend.engine import injuries as INJ
+        kw["pain_area"] = INJ.norm_area(kw["pain_area"])
     AT.apply_update(row, **kw)
     for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
                  ("distance_km", distance_km), ("label", label)):
         if v is not None:
             setattr(row, k, v)
+    if "pain" in sent or "pain_area" in sent:
+        await _attach_injury(db, row, body.pain_side if "pain_side" in sent else None)
+        from backend.engine import injuries as INJ
+        if INJ.is_custom(row.pain_area):
+            from backend.api.injuries import remember_area
+            await remember_area(db, row.pain_area)
     await db.commit()
     AT._memo.clear()
     return row
+
+
+async def _attach_injury(db: AsyncSession, row: ActivityTag, side: Optional[str]) -> None:
+    """The pain mark → the injury events (engine/injuries.attach): join an open
+    event of the same area, open a draft, or drop this activity's orphan draft."""
+    import datetime as _dt
+    from backend.db.models import InjuryEvent
+    from backend.engine import injuries as INJ
+    await db.flush()
+    evs = (await db.execute(select(InjuryEvent).where(InjuryEvent.athlete_id == row.athlete_id))).scalars().all()
+    cnt = dict((await db.execute(select(ActivityTag.injury_id, func.count()).where(
+        ActivityTag.injury_id.is_not(None)).group_by(ActivityTag.injury_id))).all())
+    dicts = [{c: getattr(e, c) for c in INJ.EVENT_COLS} for e in evs]
+    try:
+        day = _dt.date.fromisoformat(row.start_local[:10])
+    except (TypeError, ValueError):
+        return
+    res = INJ.attach(row.pain, row.pain_area, side, day, row.start_local, row.file, row.injury_id, dicts, cnt)
+    by = {e.id: e for e in evs}
+    now = _dt.datetime.utcnow()
+    if res["update"]:
+        e = by[res["update"]["id"]]
+        for k, v in res["update"]["fields"].items():
+            setattr(e, k, v)
+        e.updated_at = now
+    new_id = res["injury_id"]
+    if res["create"]:
+        e = InjuryEvent(athlete_id=row.athlete_id, created_at=now, updated_at=now, pause_quality=False,
+                        **res["create"])
+        db.add(e)
+        await db.flush()
+        new_id = e.id
+    row.injury_id = new_id
+    if res["delete"] is not None and res["delete"] != new_id:
+        await db.delete(by[res["delete"]])
+    INJ._memo.clear()
 
 
 def _tag_json(t: Optional[ActivityTag]) -> dict:
@@ -139,7 +199,9 @@ def _tag_json(t: Optional[ActivityTag]) -> dict:
             "note": t.note if t else None, "key": t.start_local if t else None,
             "exclusion": AT.user_exclusion({"exclusion": t.exclusion}) if t else None,
             "name": AT.name_of({"name": t.name}) if t else None,
-            "tags": AT.tags_of({"tags_json": t.tags_json}) if t else []}
+            "tags": AT.tags_of({"tags_json": t.tags_json}) if t else [],
+            "pain": t.pain if t else None, "pain_area": t.pain_area if t else None,
+            "injury_id": t.injury_id if t else None}
 
 
 def _local_start(wf: WorkoutFile) -> Optional[str]:
