@@ -876,9 +876,21 @@ def make_plan(body: PlanIn) -> dict:
             capacity = {"spread": cpd.get("spread"), "lower_bound": cpd.get("lower_bound"),
                         "message": cpd.get("lower_bound_message"),
                         "lthr": (inp.get("aet") or {}).get("lthr"), "aet": (inp.get("aet") or {}).get("aet")}
-            out = PL.plan_run(v1=v1, course=course, grade_re=gre, opts=opts, validated=validated,
-                              effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
-                              capacity=capacity, trail_hr=_trail_hr() if body.type == "trail" else None)
+            th = _trail_hr() if body.type == "trail" else None
+
+            def run(o: dict, v: dict) -> dict:
+                return PL.plan_run(v1=v, course=course, grade_re=gre, opts=o, validated=validated,
+                                   effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
+                                   capacity=capacity, trail_hr=th)
+            out = run(opts, v1)
+            if body.mode in ("time", "power"):
+                # the goal against the model's own prediction (auto, 100 %), same course and conditions
+                from backend.engine.racepower import goal as GOAL
+                ref = body.model_copy(update={"mode": "auto", "effort_target": 1.0})
+                model = run({**opts, "mode": "auto", "effort_target": 1.0}, _v1_for(ref, course))
+                out["goal"] = GOAL.check(out["summary"]["time_s"], model["summary"]["time_s"], body.mode)
+                out["goal"].update(model_power=model["summary"]["power"],
+                                   model_pace_s_per_km=model["summary"]["pace_s_per_km"])
     except ValueError as e:
         raise HTTPException(400, str(e))
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
@@ -933,6 +945,27 @@ def _body(inp: dict) -> Optional[dict]:
     except (OSError, ValueError, StopIteration):
         pass
     return b
+
+
+def _goal_settings() -> tuple[Optional[str], Optional[bool], bool]:
+    """(課表偏好 target_basis, 使用功率 stored or None = auto, accept_watch_power)."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine.wko5expr.datasource import read_setting
+    return (PP.load().target_basis, read_setting("charts.power.enabled", None),
+            bool(read_setting("power.accept_watch_power", False)))
+
+
+@router.get("/goal-basis")
+async def goal_basis():
+    """Which goal the page offers (engine/racepower/goal.py): hr → a target
+    pace, power → a target power."""
+    from backend.engine import athlete_profile as AP
+    from backend.engine.racepower import goal as GOAL
+    tb, up, watch = _goal_settings()
+    if up is None and tb not in ("hr", "power"):
+        from backend.api.sync import _power_source
+        up = AP.use_power((await _power_source())[0], watch)
+    return GOAL.basis(tb, up)
 
 
 @router.post("/plan")
