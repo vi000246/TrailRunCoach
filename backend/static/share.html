@@ -180,7 +180,7 @@ function drawProfile(S) {
   c.setOption({ animation: false, grid: { left: 46, right: 16, top: 20, bottom: 28 },
     tooltip: { trigger: "axis", confine: true, formatter: (ps) => { const k = ps[0].value[0]; const s = segs.find((x) => k >= x.start_km && k <= x.end_km);
       return s ? `<b>${s.target ? s.target.mark + " " : ""}${esc(s.cls_label || "")}</b> ${f1(s.start_km)}–${f1(s.end_km)} km<br>${esc(s.target ? s.target.text : (ok(s.power) ? n0(s.power) + " W" : ""))}<br>⏱ ${dur(s.t)}${s.eta ? " · " + esc(s.eta) : ""}` : ""; } },
-    xAxis: { type: "value", min: 0, max: km, name: "km", ...ax() }, yAxis: { type: "value", scale: true, name: pr ? "m" : "W", ...ax() }, series });
+    xAxis: { type: "value", min: 0, max: km, name: "km", ...ax(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => +v.toFixed(1), showMaxLabel: false } }, yAxis: { type: "value", scale: true, name: pr ? "m" : "W", ...ax() }, series });
   new ResizeObserver(() => c.resize()).observe($("profile"));
 }
 init();
