@@ -198,6 +198,19 @@
           "series": [
             {"name": "肌力", "type": "calendar", "y_axis": "CUSTOM次", "color": "#e87ba4", "expression": "count(if(sport=\"strength\", duration), trunc(date))"}
           ]
+        },
+        {
+          "id": "route-difficulty", "sports": ["trail"],
+          "title": "每次路線難度（コース定数）",
+          "description": "每次越野、登山的コース定数：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。用實際移動時間代入，走得比標準路線時間快時會偏低。拿來對照目標行程：要走的百岳算出來是多少，訓練裡有沒有做到相近的日子。",
+          "race_refs": "course_constant",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "越野跑", "type": "line", "y_axis": "NONE", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
+            {"name": "登山健行", "type": "line", "y_axis": "NONE", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
+            {"name": "20 一般", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,20)"},
+            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,40)"}
+          ]
         }
       ]
     },
@@ -240,13 +253,13 @@
         {
           "id": "run-power-recent-bests",
           "title": "跑步功率曲線",
-          "description": "黃線 = 所選範圍每個時長的最佳平均功率（MMP）；藍色虛線 = WKO5 的 PD 模型曲線（用 MMP 擬合出來的功率－時間模型，看得出哪些時長還沒全力跑過：MMP 低於虛線的地方）。紅色區塊 = 最近 N 天跑出比以前更高的時長，也就是最近進步的地方。「以前」至少往回比 90 天（所選範圍更長就用整個範圍）：功率曲線要有夠長的資料才準，Stryd 自動 CP 和 WKO5 的功率模型都看近 90 天；只拿幾週比，很多時長都會變成「新高」，那不是真的進步。可切換 7／14／28 天；同 WKO5 PDC 的 New Bests 算法。",
+          "description": "黃線 = 所選範圍每個時長的最佳平均功率（MMP）；紅色粗線 = WKO5 的 PD 模型曲線（用 MMP 擬合出來的功率－時間模型，看得出哪些時長還沒全力跑過：黃線低於紅線的地方）。橘色區塊 = 最近 N 天跑出比以前更高的時長，也就是最近進步的地方。「以前」至少往回比 90 天（所選範圍更長就用整個範圍）：功率曲線要有夠長的資料才準，Stryd 自動 CP 和 WKO5 的功率模型都看近 90 天；只拿幾週比，很多時長都會變成「新高」，那不是真的進步。可切換 7／14／28 天；同 WKO5 PDC 的 New Bests 算法。",
           "window": {"default": 7, "choices": [7, 14, 28]},
           "axes": [{"id": "WATTS", "min": 0}],
           "series": [
             {"name": "MMP 曲線", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#c9a227", "line_width": "medium", "expression": "meanmax(runpower)"},
-            {"name": "近 7 天新高", "type": "area", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#e8431c", "line_width": "medium", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent)"},
-            {"name": "PD 模型曲線", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#2a78d6", "line_style": "dash", "line_width": "medium", "expression": "pdcurve(meanmax(runpower))"},
+            {"name": "近 7 天新高", "type": "area", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#f2a03d", "line_width": "medium", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent)"},
+            {"name": "PD 模型曲線", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#d62828", "line_width": "thick", "expression": "pdcurve(meanmax(runpower))"},
             {"name": "進步幅度", "role": "recent_gain", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent - @historic)"}
           ]
         },
@@ -336,19 +349,6 @@
           "series": [
             {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) >= 600, -sum(if(rgrade <= -0.05 and speed > 0.5, delta(_elevation))) / sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) * 3600)"},
             {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) >= 600, -sum(if(rgrade <= -0.05 and speed > 0.5, delta(_elevation))) / sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) * 3600)"}
-          ]
-        },
-        {
-          "id": "route-difficulty", "sports": ["trail"],
-          "title": "每次路線難度（コース定数）",
-          "description": "每次越野、登山的コース定数：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。用實際移動時間代入，走得比標準路線時間快時會偏低。拿來對照目標行程：要走的百岳算出來是多少，訓練裡有沒有做到相近的日子。",
-          "race_refs": "course_constant",
-          "axes": [{"id": "NONE", "min": 0}],
-          "series": [
-            {"name": "越野跑", "type": "line", "y_axis": "NONE", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
-            {"name": "登山健行", "type": "line", "y_axis": "NONE", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
-            {"name": "20 一般", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,20)"},
-            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,40)"}
           ]
         },
         {
