@@ -9,6 +9,11 @@ from backend.engine.ai.knowledge import athlete_traits, build_knowledge
 from backend.engine.ai.zones import compute_zones
 
 
+async def _in_use(db, athlete_id):
+    from backend.sync.dedup import in_use
+    return await in_use(db, athlete_id)
+
+
 SYSTEM_PROMPT = f"""你是一位專業的越野跑教練AI助理。請一律用繁體中文回覆。
 
 {build_knowledge()}
@@ -42,7 +47,7 @@ async def trait_inputs(db: AsyncSession, athlete_id: int, today: date | None = N
         cp = cp or s.run_ftp_w
         lthr = lthr or s.lthr
     rows = (await db.execute(select(WorkoutFile).where(
-        WorkoutFile.athlete_id == athlete_id, WorkoutFile.duplicate_of.is_(None),
+        WorkoutFile.athlete_id == athlete_id, await _in_use(db, athlete_id),
         WorkoutFile.trail_classification == "trail",
         WorkoutFile.workout_date >= today - timedelta(days=TRAIL_DAYS)))).scalars().all()
     rows = [r for r in rows if r.duration_s and r.elevation_gain_m]
@@ -112,7 +117,7 @@ async def build_context(db: AsyncSession, athlete_id: int) -> str:
         .where(
             WorkoutFile.athlete_id == athlete_id,
             WorkoutFile.workout_date >= week_start,
-            WorkoutFile.duplicate_of.is_(None),   # same activity from a 2nd source
+            await _in_use(db, athlete_id),   # the 資料來源 only (sync/dedup.py)
         )
         .order_by(WorkoutFile.workout_date.desc())
     )

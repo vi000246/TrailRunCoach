@@ -93,9 +93,13 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
         repo = SettingsRepository(db, athlete_id)
         await repo.set(f"sync.{runner.SETTING_NAME[source]}.last_result", None)
         switched = False
-        from backend.engine.wko5expr.datasource import CHOSEN_KEY, effective_source, wko5_available
-        if effective_source(await repo.get("charts.data_source"), await repo.get(CHOSEN_KEY)) == source:
-            await repo.set("charts.data_source", "wko5" if wko5_available() else "synced")
+        # the charts read the 資料來源: deleting its files sends them to the WKO5
+        # folder when there is one (the other source is never used instead)
+        from backend.engine.wko5expr.datasource import wko5_available
+        from backend.sync import primary as P
+        if (await repo.get("charts.data_source") != "wko5" and P.FOLDER[await P.current(db, athlete_id)] == source
+                and wko5_available()):
+            await repo.set("charts.data_source", "wko5")
             switched = True
         rebuilt = await dedup.rebuild(db, athlete_id)
         await db.commit()
