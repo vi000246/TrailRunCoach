@@ -487,11 +487,13 @@ def catalog_problems(scans: dict[str, FileScan]) -> dict[str, list[str]]:
 def frontend_coverage() -> dict[str, dict]:
     cats = frontend_catalogs()
     base = cats.get("zh-TW", {})
+    fmeta = load_json(LOCALES / "en.frontend.meta.json", {})
     out = {}
     for ns, keys in base.items():
         en = cats.get("en", {}).get(ns, {})
         out[ns] = {"keys": len(keys), "en_missing": sorted(k for k in keys if not en.get(k)),
-                   "en_extra": sorted(k for k in en if k not in keys)}
+                   "en_extra": sorted(k for k in en if k not in keys),
+                   "draft": sum(1 for k in keys if (fmeta.get(f"{ns}.{k}") or {}).get("draft"))}
     return out
 
 
@@ -581,9 +583,16 @@ def write_catalogs(scans: dict[str, FileScan]) -> tuple[int, int]:
 def load_baseline() -> dict:
     b = load_json(BASELINE, {})
     b.setdefault("enforce", False)
+    b.setdefault("enforce_files", [])
     b.setdefault("complete", [])
     b.setdefault("files", {})
     return b
+
+
+def enforced(path: str, baseline: dict) -> bool:
+    """Is the ratchet a failure (not just a report) for this file? enforce=true
+    = every file; else the finished pages' files listed in enforce_files."""
+    return bool(baseline.get("enforce")) or any(fnmatch.fnmatch(path, g) for g in baseline.get("enforce_files", []))
 
 
 def write_baseline(scans: dict[str, FileScan]) -> dict:

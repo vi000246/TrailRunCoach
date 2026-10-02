@@ -23,6 +23,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine.algorithms import minetti
+from backend.i18n import N_, _
 from backend.engine.racepower import difficulty as DF
 from backend.engine.racepower import env as ENV
 from backend.engine.racepower import hike as HK
@@ -45,7 +46,7 @@ MAX_COROS_STEPS = 50
 # page (it disagrees with the table by 1.8 points at 21.1 km) is 不採用 and
 # deliberately absent here.
 STRYD_TABLE = ((10.0, 100.0), (21.1, 94.6), (42.2, 89.9))
-HINT_30S = "看 30 秒平均功率"
+HINT_30S = N_("看 30 秒平均功率")
 STEEP_POWER_GRADE = 0.08       # Stryd ≈ metabolic power validated to 8 % (van Rassel 2026)
 HR_FIRST_SHARE = 0.30          # 推估: above this share of steep distance, HR targets come first
 
@@ -88,8 +89,9 @@ def altitude_note(segs: list[dict], accl: str) -> Optional[str]:
     if not zs or max(zs) <= 2800:
         return None
     top = max(s.get("z_max") or s["z_mean"] for s in segs)
-    return (f"最高約 {top:.0f} m：超過 2800 m 的海拔修正是外插（推估）。對照：Bassett 1999 在這個高度"
-            f"已適應 {ENV.bassett_pct(top, True):.1f}%、未適應 {ENV.bassett_pct(top, False):.1f}% 的海平面有氧能力")
+    return _("最高約 {top:.0f} m：超過 2800 m 的海拔修正是外插（推估）。對照：Bassett 1999 在這個高度"
+             "已適應 {acc:.1f}%、未適應 {unacc:.1f}% 的海平面有氧能力",
+             top=top, acc=ENV.bassett_pct(top, True), unacc=ENV.bassett_pct(top, False))
 
 
 def solve_whole(d_m: float, re: float, weight: float, f_target: float, m: float, psus) -> float:
@@ -99,7 +101,7 @@ def solve_whole(d_m: float, re: float, weight: float, f_target: float, m: float,
     def g(t):
         return t - d_m / (re * f_target * m * psus(t) / weight)
     lo, hi = 10.0, 1e7
-    for _ in range(300):
+    for _it in range(300):
         mid = math.sqrt(lo * hi)
         if g(mid) > 0:
             hi = mid
@@ -178,7 +180,7 @@ def _heat_context(opts: dict) -> tuple[Optional[list], Optional[dt.datetime], Op
     """(hourly rows, start clock, None) when per-segment heat applies, else
     (None, None, the reason the single value is used)."""
     if opts.get("hourly_heat") is False:
-        return None, None, "逐時熱修正已關閉"
+        return None, None, _("逐時熱修正已關閉")
     rows = []
     for r in opts.get("hourly") or []:
         x = WX._hour_row(r.get("t"), r.get("temp_c"), r.get("rh_pct"), r.get("dew_c"))
@@ -186,14 +188,14 @@ def _heat_context(opts: dict) -> tuple[Optional[list], Optional[dt.datetime], Op
             rows.append(x)
     rows.sort(key=lambda r: r["t"])
     if not rows:
-        return None, None, "沒有逐時預報：比賽日超出預報範圍、離線，或還沒取得比賽日天氣"
+        return None, None, _("沒有逐時預報：比賽日超出預報範圍、離線，或還沒取得比賽日天氣")
     start = _start_datetime(opts.get("date"), opts.get("start_time"))
     if start is None:
-        return None, None, "逐時熱修正需要比賽日期與起跑時間"
+        return None, None, _("逐時熱修正需要比賽日期與起跑時間")
     lo = start - dt.timedelta(hours=WX.HOURLY_EDGE_H)
     hi = start + dt.timedelta(hours=HEAT_WINDOW_H)
     if not any(lo <= dt.datetime.fromisoformat(r["t"]) <= hi for r in rows):
-        return None, None, "逐時預報沒有涵蓋比賽時間"
+        return None, None, _("逐時預報沒有涵蓋比賽時間")
     return rows, start, None
 
 
@@ -253,22 +255,22 @@ def heat_acclimation(opts: dict) -> Optional[dict]:
     if mode == "auto":
         if race.get("center") is None:
             s = s_lo = s_hi = 0.0
-            src = "沒有熱暴露資料：當作未適應"
+            src = _("沒有熱暴露資料：當作未適應")
         else:
             s, s_lo, s_hi = race["center"], race.get("low", race["center"]), race.get("high", race["center"])
-            src = st.get("source") or "近期熱暴露推算到比賽日"
+            src = st.get("source") or _("近期熱暴露推算到比賽日")
     elif mode == "custom":
         s = min(1.0, max(0.0, float(ha.get("s") or 0.0)))
         s_lo = s_hi = s
-        src = "自訂"
+        src = _("自訂")
     else:
         s = s_lo = s_hi = HT.PRESET_S.get(mode, 0.0)
-        src = {"none": "未適應", "partial": "部分（S 0.5，推估）", "acclimatised": "已適應（S 0.9，推估）"}.get(mode, mode)
+        src = {"none": _("未適應"), "partial": _("部分（S 0.5，推估）"), "acclimatised": _("已適應（S 0.9，推估）")}.get(mode, mode)
     s_from = st.get("s_from")
     a, a_why = HA.acclimation_a(st.get("hrc_test"), HT.SCENARIOS["center"]["a"])
     supported = a > 0
     if mode in ("partial", "acclimatised", "custom") and not supported:
-        src += "（你的資料不支持熱適應：S 只顯示，不折抵熱懲罰）"
+        src += _("（你的資料不支持熱適應：S 只顯示，不折抵熱懲罰）")
     return {"mode": mode, "s": s, "s_from": s_from if s_from is not None else 0.0, "a": a,
             "a_literature": HT.A_RECOVER, "a_reason": a_why, "a_supported": supported,
             "hrc_test": st.get("hrc_test"),
@@ -276,7 +278,7 @@ def heat_acclimation(opts: dict) -> Optional[dict]:
                           # conservative: no credit, lowest S
                           "low": (HT.SCENARIOS["low"]["a"] if supported else 0.0, s_lo),
                           "high": (HT.SCENARIOS["high"]["a"], s_hi)},   # optimistic: the literature's a
-            "source": src, "badge": "推估"}
+            "source": src, "badge": _("推估")}
 
 
 def _heat_band(segs: list, ts: list, h_from_pct: float, hacc: dict) -> dict:
@@ -345,7 +347,7 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
     xs = model.get("xstar")
     if xs:
         t, x = TH.predict_race(model, e, xs, f=f_target, x_shift=sh)
-        tn, _ = TH.predict_race(model, e, xs, f=f_target, delta=0.0, x_shift=sh)
+        tn, _x0 = TH.predict_race(model, e, xs, f=f_target, delta=0.0, x_shift=sh)
     else:
         # an older stored model without the curve: its single race level
         x = f_target * (model.get("x_race") or TH.TRAILHR["x_default"]) - sh
@@ -370,7 +372,7 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
             "heat_beta": bool(TH.TRAILHR["heat_beta"] and hadley is not None and lthr),
             "heat_shift": sh, "hadley": hadley,
             "nonmoving": nm, "time_total_s": t + nm["total_s"] if nm else None,
-            "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
+            "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": _("推估")}
 
 
 def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
@@ -430,7 +432,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     amount = min(PC.SIGMA_MAX, max(0.0, float(amount)))
     sigma = STRATEGY_SIGN.get(skind, 0.0) * amount
     if amount >= 0.04:
-        warnings.append("配速幅度 ≥ 4 %：過去的比賽資料顯示，前後差距小的配速通常比較快")
+        warnings.append(_("配速幅度 ≥ 4 %：過去的比賽資料顯示，前後差距小的配速通常比較快"))
     locks = {int(x["seg"]) - 1: float(x["power"]) for x in opts.get("locks") or []
              if x.get("power") and 0 < int(x["seg"]) <= len(segs)}
 
@@ -470,14 +472,14 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             if not t_star and opts.get("target_pace_s_per_km"):
                 t_star = opts["target_pace_s_per_km"] * course["totals"]["km"]
             if not t_star:
-                raise ValueError("模式「目標時間」需要時間或配速")
+                raise ValueError(_("模式「目標時間」需要時間或配速"))
             t_whole, p_whole = float(t_star), d_eff_m / float(t_star) / re_v1 * weight
         elif mode == "power":
             p_star = opts.get("target_power")
             if not p_star and opts.get("target_pct_cp"):
                 p_star = opts["target_pct_cp"] * cp
             if not p_star:
-                raise ValueError("模式「目標功率」需要功率或 %CP")
+                raise ValueError(_("模式「目標功率」需要功率或 %CP"))
             p_star = float(p_star) * (mbar if opts.get("power_is_training") else 1.0)
             t_whole, p_whole = d_eff_m * weight / (re_v1 * p_star), p_star
         elif hr_est is not None:
@@ -504,7 +506,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             # the whole-race M must be the one the effort uses (time-weighted
             # Σ(Pᵢ/Mᵢ)tᵢ, not the distance-weighted mean): a couple of fixed-point
             # passes make f come out at f* exactly
-            for _ in range(6):
+            for _pass in range(6):
                 sc = _scale(res, t_whole)
                 pt = sum(r["P"] / s["M"] * r["t"] for r, s in zip(sc["rows"], segs)) / sc["T"]
                 m_eff = p_whole / pt
@@ -547,32 +549,36 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             if delta < HEAT_TOL_S:
                 break
         out_n = sum(1 for h in seg_heat if h is None)
-        heat_info.update(mode="hourly", outside=out_n, badge="推估")
+        heat_info.update(mode="hourly", outside=out_n, badge=_("推估"))
         if not heat_info["converged"]:
-            warnings.append(f"逐時熱修正沒有收斂（{HEAT_MAX_PASSES} 次後 ETA 仍差 {heat_info['delta_s']:.1f} 秒）：分段溫度是近似值")
+            warnings.append(_("逐時熱修正沒有收斂（{n} 次後 ETA 仍差 {delta:.1f} 秒）：分段溫度是近似值",
+                                   n=HEAT_MAX_PASSES, delta=heat_info["delta_s"]))
         if out_n:
-            warnings.append(f"{out_n} 段的 ETA 超出逐時預報範圍：這些段用單一溫度 {to['temp_c']:.1f} °C")
+            warnings.append(_("{n} 段的 ETA 超出逐時預報範圍：這些段用單一溫度 {temp:.1f} °C", n=out_n, temp=to["temp_c"]))
     elif heat_reason and opts.get("hourly_heat", True):
-        warnings.append(f"熱修正用單一溫度 {to['temp_c']:.1f} °C / 濕度 {to['rh_pct']:.0f} %（{heat_reason}）")
+        warnings.append(_("熱修正用單一溫度 {temp:.1f} °C / 濕度 {rh:.0f} %（{reason}）",
+                           temp=to["temp_c"], rh=to["rh_pct"], reason=heat_reason))
     res, alpha_used, runs = st["res"], st["alpha_used"], st["runs"]
     t_whole, p_whole, t_c, p_c, mbar = st["t_whole"], st["p_whole"], st["t_c"], st["p_c"], st["mbar"]
     if alpha_used < alpha - 1e-9:
-        warnings.append(f"上坡彈性從 +{alpha:.0%} 縮到 +{alpha_used:.1%}：否則有坡段超過 CP 太久（W′ 用超過 75 %）")
+        warnings.append(_("上坡彈性從 +{alpha:.0%} 縮到 +{alpha_used:.1%}：否則有坡段超過 CP 太久（W′ 用超過 75 %）",
+                           alpha=alpha, alpha_used=alpha_used))
     T = res["T"]
     rows = res["rows"]
     p_bar = sum(r["P"] * r["t"] for r in rows) / T
     # the bisection clamps silently when a target is out of reach (locks,
     # absurd targets): say so instead of showing a confident wrong number
     if mode == "time" and abs(T - t_whole) > 1.0:
-        warnings.append(f"達不到目標時間：最接近的是 {T / 3600:.2f} h（鎖定的分段或目標超出範圍）")
+        warnings.append(_("達不到目標時間：最接近的是 {h:.2f} h（鎖定的分段或目標超出範圍）", h=T / 3600))
     if (mode == "power" or not v2_primary) and abs(p_bar - p_whole) > 0.5:
-        warnings.append(f"平均功率只能到 {p_bar:.0f} W（目標 {p_whole:.0f} W）：鎖定的分段或下坡上限限制了配置")
+        warnings.append(_("平均功率只能到 {p:.0f} W（目標 {target:.0f} W）：鎖定的分段或下坡上限限制了配置",
+                           p=p_bar, target=p_whole))
     p_train = sum(r["P"] / s["M"] * r["t"] for r, s in zip(rows, segs)) / T
     eff = DF.effort(p_train, T, cp, w_prime, tte, k, cp_spread=capacity.get("spread"),
                     lower_bound=(capacity.get("lower_bound") or {}).get("cp_min"), cp2=cp2)
-    eff["badge"] = None if effort_validated else "推估"
+    eff["badge"] = None if effort_validated else _("推估")
     if eff.get("inconsistent"):
-        eff["warning"] = capacity.get("message") or "模型 CP 低於你實際撐過的功率，請重測"
+        eff["warning"] = capacity.get("message") or _("模型 CP 低於你實際撐過的功率，請重測")
         warnings.append(eff["warning"])
     over_idx = {i for c in runs if c["over"] for i in range(c["from"], c["to"] + 1)}
     wb = None
@@ -582,10 +588,10 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         wmodel = "wko5"
     if wmodel in ("wko5", "skiba_run") and w_prime:
         if wmodel == "wko5":
-            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "WKO5 算法 dFRC（70 % τ 300 s + 30 % τ 25 s）"
+            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), _("WKO5 算法 dFRC（70 % τ 300 s + 30 % τ 25 s）")
         else:
-            vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "running"), "τ = 372·e^(−0.02·D) + 102（跑步擬合）"
-        wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",
+            vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "running"), _("τ = 372·e^(−0.02·D) + 102（跑步擬合）")
+        wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else _("推估"),
               "w_prime": w_prime}
     zs = zones_json(cp)
     out_segs = []
@@ -597,13 +603,13 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         if s.get("walk"):
             notes.append(s["walk"])
         if r["capped"]:
-            notes.append("下坡上限")
+            notes.append(_("下坡上限"))
         if i in over_idx or r["P"] > cp_w * s["M"] * 1.0001:
-            notes.append("超 CP")
+            notes.append(_("超 CP"))
         if r.get("locked"):
-            notes.append("已鎖定")
+            notes.append(_("已鎖定"))
         if gpx and getattr(grade_re, "walked", None) and grade_re.walked(s["grade"]):
-            notes.append("走（你在這個坡度多半走）")
+            notes.append(_("走（你在這個坡度多半走）"))
         gf = minetti.grade_factor(s["grade"])
         v = r["v"]
         trusted = grade_re.trusted(s["grade"]) if gpx else True
@@ -611,12 +617,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         out_segs.append({
             **{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade", "max_grade",
                                      "z_start", "z_end", "z_mean", "z_max", "cls", "cls_label", "walk", "climb_no")},
-            "M": s["M"], "power": r["P"], "pct_cp": r["P"] / cp, "zone": z["id"] if z else "1A 以下",
+            "M": s["M"], "power": r["P"], "pct_cp": r["P"] / cp, "zone": z["id"] if z else _("1A 以下"),
             "speed_ms": v, "pace_s_per_km": _pace(v), "gap_pace_s_per_km": _pace(v * gf) if trail else None,
             "vert_m_per_h": v * s["grade"] * 3600.0 if abs(s["grade"]) >= 0.15 else None,
             "t": r["t"], "cum_s": cum, "eta": _clock(opts.get("start_time"), cum + _stops_before(stops, s["end_km"])),
             "capped": r["capped"], "locked": r.get("locked", False), "notes": notes,
-            "badge": None if (v2_primary and trusted) else "推估", "trusted": trusted, "hint": HINT_30S,
+            "badge": None if (v2_primary and trusted) else _("推估"), "trusted": trusted, "hint": _(HINT_30S),
             **_heat_fields(seg_heat[i] if seg_heat else None, env["to"]),
         })
     if wb:
@@ -634,9 +640,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     km = course["totals"]["km"]
     tl = eff["t_lim_s"]
     if eff["f"] > 1.0 + 1e-9:
-        warnings.append(f"努力度 {eff['f']:.0%} 超出模型可持續範圍：這個平均功率大約只撐得了 {tl / 3600:.1f} h")
+        warnings.append(_("努力度 {f:.0%} 超出模型可持續範圍：這個平均功率大約只撐得了 {h:.1f} h", f=eff["f"], h=tl / 3600))
     if longest_s and T > EXTRAP_FACTOR * longest_s and mode == "auto" and f_target > 0.95:
-        warnings.append(f"預估時間超過你最長有效紀錄的 {EXTRAP_FACTOR} 倍：建議把努力目標降到 95 %（吃力）")
+        warnings.append(_("預估時間超過你最長有效紀錄的 {x} 倍：建議把努力目標降到 95 %（吃力）", x=EXTRAP_FACTOR))
     dmg = PC.damage_index(rows, lambda p: DF.t_lim(p / mbar, cp, w_prime, tte, k, cp2=cp2))
     hr_first = None
     if trail and gpx:
@@ -644,17 +650,17 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         share = steep / dsum if dsum else 0.0
         if share > HR_FIRST_SHARE:
             hr_first = {"steep_share": share, "lthr": capacity.get("lthr"), "aet": capacity.get("aet")}
-            cap_txt = f"上限 LTHR {capacity['lthr']:.0f} bpm" if capacity.get("lthr") else "上限 LTHR"
-            warnings.append(f"{share:.0%} 的路段坡度超過 8 %（Stryd 功率驗證的範圍外）：以心率為主（{cap_txt}，"
-                            f"長距離壓在 AeT 附近），功率為輔（推估）")
+            cap_txt = _("上限 LTHR {lthr:.0f} bpm", lthr=capacity["lthr"]) if capacity.get("lthr") else _("上限 LTHR")
+            warnings.append(_("{share:.0%} 的路段坡度超過 8 %（Stryd 功率驗證的範圍外）：以心率為主（{cap}，"
+                              "長距離壓在 AeT 附近），功率為輔（推估）", share=share, cap=cap_txt))
     if dmg > DAMAGE_NOTE:
-        warnings.append(f"逐段耗損指數 {dmg:.2f} > {DAMAGE_NOTE}：這只是診斷數字，短時間的起伏會被高估")
+        warnings.append(_("逐段耗損指數 {dmg:.2f} > {limit}：這只是診斷數字，短時間的起伏會被高估", dmg=dmg, limit=DAMAGE_NOTE))
     if not gpx:
-        warnings.append("手動路線沒有坡度剖面：整場時間用 v1 方法，分段只是平均切開")
+        warnings.append(_("手動路線沒有坡度剖面：整場時間用 v1 方法，分段只是平均切開"))
     if gpx and not v2_primary and hr_est is None:
-        warnings.append("分段目標是推估：回測通過前，整場時間照 v1 方法算，分段只負責分配")
+        warnings.append(_("分段目標是推估：回測通過前，整場時間照 v1 方法算，分段只負責分配"))
     if any(not s["trusted"] for s in out_segs):
-        warnings.append("有坡度超過 8 % 的段，你在這個坡度的資料不足：該段目標是外插")
+        warnings.append(_("有坡度超過 8 % 的段，你在這個坡度的資料不足：該段目標是外插"))
     an = altitude_note(segs, accl) if gpx else None
     if an:
         warnings.append(an)
@@ -675,12 +681,13 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     else:
         crosscheck["cvi"] = r1.get("cvi_crosscheck")
         if hr_est is not None:
-            crosscheck["power_envelope"] = {"time_s": t_c, "power": p_c, "method": "功率能力（CP/Riegel，僅供對照）"}
-            warnings.append(f"越野整場移動時間用心率配速模型（推估）：全力心率 {hr_est['x_star']:.0%} LTHR"
-                            f"（{hr_est['x_race_source']}）"
-                            + (f"，熱 −{hr_est['heat_shift']:.1%}（你的 β）" if hr_est.get("heat_beta") and hr_est["heat_shift"] > 0 else "")
-                            + f"，effort km {hr_est['eff_km']:.1f}，耐久每小時 −"
-                            f"{(hr_est['delta'] or 0):.1%}（1 小時後）；功率只當參考")
+            crosscheck["power_envelope"] = {"time_s": t_c, "power": p_c, "method": _("功率能力（CP/Riegel，僅供對照）")}
+            warnings.append(_("越野整場移動時間用心率配速模型（推估）：全力心率 {x:.0%} LTHR（{src}）",
+                              x=hr_est["x_star"], src=hr_est["x_race_source"])
+                            + (_("，熱 −{shift:.1%}（你的 β）", shift=hr_est["heat_shift"])
+                               if hr_est.get("heat_beta") and hr_est["heat_shift"] > 0 else "")
+                            + _("，effort km {km:.1f}，耐久每小時 −{delta:.1%}（1 小時後）；功率只當參考",
+                                km=hr_est["eff_km"], delta=hr_est["delta"] or 0))
             if hr_est.get("delta_warning"):
                 warnings.append(hr_est["delta_warning"])
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp, "w_per_kg": p_bar / weight,
@@ -695,7 +702,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                if hr_est and hr_est.get("nonmoving") else None,
                "category": cat, "mode": mode, "effort_target": f_target if mode == "auto" else None,
                "finish_eta": _clock(opts.get("start_time"), T + _stops_before(stops, km + 1)),
-               "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
+               "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else _("推估"),
                "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg, "hr_first": hr_first,
                "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None,
                "strategy": skind, "strategy_amount": amount, "alpha": alpha, "heat": heat_info,
@@ -706,7 +713,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             "compare": ctrl, "crosscheck": crosscheck, "wbal": wb, "wprime_runs": runs,
             "profile": course.get("profile"), "climbs": course.get("climbs"), "wpts": course.get("wpts"),
             "course_totals": course["totals"], "course_warnings": course.get("warnings") or [],
-            "zones": zs, "warnings": warnings, "validated": validated, "hint": HINT_30S}
+            "zones": zs, "warnings": warnings, "validated": validated, "hint": _(HINT_30S)}
 
 
 # ---------------------------------------------------------------------------
@@ -769,7 +776,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
     if mode == "time":
         t_star = opts.get("target_time_s")
         if not t_star:
-            raise ValueError("模式「目標時間」需要移動時間")
+            raise ValueError(_("模式「目標時間」需要移動時間"))
         lam = t1 / float(t_star)
     elif mode == "power":
         lam = float(opts.get("speed_factor") or 1.0)
@@ -777,7 +784,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
         lam = 1.0
     T = t1 / lam
     he = DF.hike_effort(lam, cuts)
-    he["badge"] = "推估"
+    he["badge"] = _("推估")
     out = []
     cum = 0.0
     day = 1
@@ -795,7 +802,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
                     "terrain": s["terrain"], "eta_factor": r["eta"], "f_day": r["f_day"], "A": a,
                     "speed_kmh": v * 3.6, "pace_s_per_km": _pace(v),
                     "vert_m_per_h": v * s["grade"] * 3600.0 if s["grade"] > 0.05 else None,
-                    "t": t, "cum_s": cum, "eta": clock, "badge": None if v2_primary else "推估"})
+                    "t": t, "cum_s": cum, "eta": clock, "badge": None if v2_primary else _("推估")})
     days = []
     if gpx:
         for n in sorted({s.get("day", 1) for s in out}):
@@ -823,27 +830,27 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
     if gpx:
         cross["langmuir_s"] = HK.langmuir_h(segs) * 3600.0
     if accl == "partial":
-        warnings.append("部分適應是推估：取已適應與未適應兩條海拔曲線的中間，沒有定量研究")
+        warnings.append(_("部分適應是推估：取已適應與未適應兩條海拔曲線的中間，沒有定量研究"))
     an = altitude_note(segs, accl) if gpx else None
     if an:
         warnings.append(an)
     if gpx and not v2_primary:
-        warnings.append("分段時間是推估：回測通過前，整趟移動時間照 v1 EP/h 模型算，分段只負責分配")
+        warnings.append(_("分段時間是推估：回測通過前，整趟移動時間照 v1 EP/h 模型算，分段只負責分配"))
     hk = inp.get("hiking") or {}
     if not hk.get("solo_n"):
-        warnings.append((hk.get("note") or "百岳多為跟團，速度不代表個人能力，不列入目標時間推算") +
-                        "：步行速度用 Tobler 先驗加上你心率 ≥ AeT 的陡坡爬升窗（推估）")
-    warnings.append(f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）")
-    warnings.append("背負係數是 v1 的線性假設（(體重 + 5 kg) ÷ (體重 + 背負)）；Pandolf 公式尚未對過原文")
+        warnings.append((hk.get("note") or _("百岳多為跟團，速度不代表個人能力，不列入目標時間推算")) +
+                        _("：步行速度用 Tobler 先驗加上你心率 ≥ AeT 的陡坡爬升窗（推估）"))
+    warnings.append(_("時鐘時間 = 移動時間 ÷ {ratio:.2f}（{src}）", ratio=ratio, src=ratio_src))
+    warnings.append(_("背負係數是 v1 的線性假設（(體重 + 5 kg) ÷ (體重 + 背負)）；Pandolf 公式尚未對過原文"))
     summary = {"time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1), "speed_factor": lam, "km": km,
                "gain_m": gain, "loss_m": course["totals"].get("loss_m"), "M": m_v1, "pack_factor": pack,
                "eph_personal": eph, "ep_per_h": (km + gain / 100.0) / (T / 3600.0), "kcal": kcal,
                "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "v2" if v2_primary else "v1", "category": "hike", "mode": mode,
-               "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else "推估",
+               "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else _("推估"),
                # racepower-v2.md §8: Hadley only on running segments → 百岳 keeps one heat value
                "heat": {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
-                        "reason": "百岳用單一溫度（逐時熱修正只用在跑步）", "badge": None}}
+                        "reason": _("百岳用單一溫度（逐時熱修正只用在跑步）"), "badge": None}}
     return {"type": "baiyue", "summary": summary, "effort": he, "segments": out, "days": days,
             "crosscheck": cross, "fatigue": fat, "profile": course.get("profile"), "wpts": course.get("wpts"),
             "course_totals": course["totals"], "course_warnings": course.get("warnings") or [],
@@ -855,9 +862,9 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
 
 TRIP_KINDS = ("group", "solo")
 AMS_TOP_M = 3500.0
-LIMITS_NOTE = ("沒有背 10–15 kg、每天 6–10 h、連走多天的跑步資料；背負與多日效應靠公式（誤差約 ±15 %，"
-               "Looney 2022、Weyand 2021），所以帶比越野寬")
-AMS_NOTE = "高山症會讓速度與行程失準，出現症狀以下撤為先"
+LIMITS_NOTE = N_("沒有背 10–15 kg、每天 6–10 h、連走多天的跑步資料；背負與多日效應靠公式（誤差約 ±15 %，"
+                  "Looney 2022、Weyand 2021），所以帶比越野寬")
+AMS_NOTE = N_("高山症會讓速度與行程失準，出現症狀以下撤為先")
 
 
 def _cap_band_factor(cap) -> float:
@@ -900,7 +907,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     ratio, ratio_src = (ratio_grp, ratio_grp_src) if kind == "group" else (ratio_solo, ratio_solo_src)
     v2_primary = bool(validated.get("hike_capacity")) and gpx
     hacc = heat_acclimation(opts)
-    heat_status = {"scale": HT.scale(hacc["s"], hacc["a"]), "badge": "推估"} if hacc else None
+    heat_status = {"scale": HT.scale(hacc["s"], hacc["a"]), "badge": _("推估")} if hacc else None
     z0 = opts.get("heat_ref_alt_m") if opts.get("heat_ref_alt_m") is not None else to["altitude_m"]
     band_f = _cap_band_factor(cap) if band_id == "cap" else 1.0
     q = _quantiles([d["ep_per_h"] for d in hdays])
@@ -918,8 +925,10 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         segs = []
     if pack1 is None:
         pack1 = CAP.PACK_DEFAULT_MULTI if n_days > 1 else CAP.PACK_DEFAULT_SINGLE
-    pack_src = "手動" if opts.get("pack_kg") is not None else \
-        (f"預設 {pack1:g} kg（{'多日' if n_days > 1 else '單日'}）")
+    # pack_src_kind: the code the page and this function test (the label is translated)
+    pack_src_kind = "manual" if opts.get("pack_kg") is not None else "default"
+    pack_src = _("手動") if pack_src_kind == "manual" else \
+        _("預設 {kg:g} kg（{days}）", kg=pack1, days=_("多日") if n_days > 1 else _("單日"))
 
     def load_of(n):
         if len(pack_by_day) >= n:
@@ -944,11 +953,11 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         flags = []
         lo, hi = cap.pack_range
         if L > hi + 0.5:
-            flags.append("背負超出資料")
+            flags.append(_("背負超出資料"))
         if s["grade"] >= CAP.STEEP_MIN_G and cap.data_n(s["grade"]) < SHRINK_N_TRUST:
-            flags.append("坡度箱 n < 30")
+            flags.append(_("坡度箱 n < 30"))
         if z is not None and z > cap.z_range[1] + 1:
-            flags.append("海拔超出資料")
+            flags.append(_("海拔超出資料"))
         rows.append({"s": s, "v": v, "t": t, "L": L, "eta": eta, "A": cap.A(z, accl), "f_time": cap.f_time(h),
                      "f_day": cap.f_day(n), "H": ht["H"], "temp_c": t_c, "heat_pct": ht["penalty_pct"],
                      "heat_eff_pct": ht["penalty_eff_pct"], "sigma": sp, "flags": flags, "h": h})
@@ -961,7 +970,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     if mode == "time":
         t_star = opts.get("target_time_s")
         if not t_star:
-            raise ValueError("模式「目標時間」需要移動時間")
+            raise ValueError(_("模式「目標時間」需要移動時間"))
         lam = t1 / float(t_star)
     elif mode == "power":
         lam = float(opts.get("speed_factor") or 1.0)
@@ -969,7 +978,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         lam = 1.0
     T = t1 / lam
     he = DF.hike_effort(lam, cuts)
-    he["badge"] = "推估"
+    he["badge"] = _("推估")
     # uncertainty (§3.8): each component time-weighted over the segments, the
     # components added in quadrature (independence is 推估)
     if rows:
@@ -1003,7 +1012,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                     "heat_pct": r["heat_pct"], "heat_eff_pct": r["heat_eff_pct"], "sigma": sig,
                     "extrapolated": r["flags"], "speed_kmh": v * 3.6, "pace_s_per_km": _pace(v),
                     "vert_m_per_h": v * s["grade"] * 3600.0 if s["grade"] > 0.05 else None,
-                    "t": t, "cum_s": cum, "eta": clock, "badge": None if v2_primary else "推估"})
+                    "t": t, "cum_s": cum, "eta": clock, "badge": None if v2_primary else _("推估")})
     days = []
     if gpx:
         for n in sorted({s.get("day", 1) for s in out}):
@@ -1039,35 +1048,37 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     # ---- warnings ------------------------------------------------------------
     bs = cap.basis
     if accl_in == "partial":
-        warnings.append("部分適應沒有定量研究，已改用未適應（個人海拔斜率本身就是上山第 1–2 天的未適應狀態）")
+        warnings.append(_("部分適應沒有定量研究，已改用未適應（個人海拔斜率本身就是上山第 1–2 天的未適應狀態）"))
     if accl == "acclimatised":
-        warnings.append("已適應：個人斜率 × Bassett 1999 已適應 ÷ 未適應的比（推估）")
+        warnings.append(_("已適應：個人斜率 × Bassett 1999 已適應 ÷ 未適應的比（推估）"))
     an = altitude_note(segs, accl) if gpx else None
     if an:
         warnings.append(an)
     top = max((s.get("z_max") or s.get("z_mean") or 0 for s in segs), default=to["altitude_m"] or 0)
     if top >= AMS_TOP_M:
-        warnings.append(AMS_NOTE)
-    warnings.append(LIMITS_NOTE)
+        warnings.append(_(AMS_NOTE))
+    warnings.append(_(LIMITS_NOTE))
     if n_days > 1:
-        warnings.append("多日疲勞沒有研究與足夠個人資料（心率–速度斜率 β 不可靠），每天都用 1.0")
-    base_txt = (f"以你的越野走路窗與百岳心率窗為主（{bs.get('trail_windows', 0) + bs.get('hike_windows', 0)} 窗、"
-                f"{bs.get('trail_activities', 0)} 次越野 + {bs.get('hike_trips', 0)} 趟登山）")
-    warnings.append(base_txt + ("，回測通過" if v2_primary else "，待回測（推估）"))
+        warnings.append(_("多日疲勞沒有研究與足夠個人資料（心率–速度斜率 β 不可靠），每天都用 1.0"))
+    base_txt = _("以你的越野走路窗與百岳心率窗為主（{windows} 窗、{trail} 次越野 + {trips} 趟登山）",
+                 windows=bs.get("trail_windows", 0) + bs.get("hike_windows", 0),
+                 trail=bs.get("trail_activities", 0), trips=bs.get("hike_trips", 0))
+    warnings.append(base_txt + (_("，回測通過") if v2_primary else _("，待回測（推估）")))
     if band_id == "cap":
-        warnings.append(f"能力上限：你在陡坡窗較快的四分之一（× {band_f:.2f}，推估），只適合 ≤ {CAP.CAP_BAND_MAX_H:g} h")
+        warnings.append(_("能力上限：你在陡坡窗較快的四分之一（× {f:.2f}，推估），只適合 ≤ {h:g} h",
+                           f=band_f, h=CAP.CAP_BAND_MAX_H))
         if T / 3600.0 / max(1, n_days) > CAP.CAP_BAND_MAX_H:
-            warnings.append(f"每天超過 {CAP.CAP_BAND_MAX_H:g} h：能力上限撐不住，建議用 AeT")
+            warnings.append(_("每天超過 {h:g} h：能力上限撐不住，建議用 AeT", h=CAP.CAP_BAND_MAX_H))
     if not (cap.beta or {}).get("reliable"):
-        warnings.append("心率帶只有「AeT」與「能力上限」兩檔：處理心率落後後，陡坡速度仍不隨心率帶改變（β ≈ 0）")
+        warnings.append(_("心率帶只有「AeT」與「能力上限」兩檔：處理心率落後後，陡坡速度仍不隨心率帶改變（β ≈ 0）"))
     if grp is None:
-        warnings.append(f"跟團時間需要 ≥ 3 天過去的跟團紀錄（目前 {len(group_days)} 天）")
-    warnings.append(f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）")
+        warnings.append(_("跟團時間需要 ≥ 3 天過去的跟團紀錄（目前 {n} 天）", n=len(group_days)))
+    warnings.append(_("時鐘時間 = 移動時間 ÷ {ratio:.2f}（{src}）", ratio=ratio, src=ratio_src))
     if hacc:
-        warnings.append(f"熱：每段溫度由 {to['temp_c']:.1f} °C（{z0:.0f} m）以 0.0065 K/m 遞減率推算；"
-                        f"熱適應 S {hacc['s']:.0%}（{hacc['source']}，推估）")
-    if pack_src.startswith("預設"):
-        warnings.append(f"背負{pack_src}，之後每天 −{CAP.PACK_DAILY_DROP:g} kg（糧食，推估）")
+        warnings.append(_("熱：每段溫度由 {temp:.1f} °C（{z0:.0f} m）以 0.0065 K/m 遞減率推算；"
+                          "熱適應 S {s:.0%}（{src}，推估）", temp=to["temp_c"], z0=z0, s=hacc["s"], src=hacc["source"]))
+    if pack_src_kind == "default":
+        warnings.append(_("背負{pack}，之後每天 −{drop:g} kg（糧食，推估）", pack=pack_src, drop=CAP.PACK_DAILY_DROP))
     main = "group" if (kind == "group" and grp) else "capacity"
     summary = {"time_s": T, "capacity_time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1),
                "group_time_s": ({"p25": grp["p25_s"], "p50": grp["p50_s"], "p75": grp["p75_s"], "n": grp["n"],
@@ -1075,14 +1086,14 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                "main": main, "trip_kind": kind, "hr_band": band_id, "band": bnd,
                "speed_factor": lam, "km": km, "gain_m": gain, "loss_m": course["totals"].get("loss_m"),
                "M": (sum(r["t"] * r["A"] for r in rows) / sum(r["t"] for r in rows)) if rows else r1.get("M"),
-               "pack_kg": pack1, "pack_src": pack_src, "pack_by_day": [load_of(n) for n in range(1, n_days + 1)],
+               "pack_kg": pack1, "pack_src": pack_src, "pack_src_kind": pack_src_kind, "pack_by_day": [load_of(n) for n in range(1, n_days + 1)],
                "eph_personal": ep / (T / 3600.0) if T else None, "ep_per_h": ep / (T / 3600.0) if T else None,
                "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "capacity", "category": "hike", "mode": mode, "acclimatisation": accl,
                "moving_ratio": ratio, "moving_ratio_group": ratio_grp, "moving_ratio_solo": ratio_solo,
-               "badge": None if v2_primary else "推估", "days": n_days,
+               "badge": None if v2_primary else _("推估"), "days": n_days,
                "heat": {"mode": "lapse", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
-                        "reason": "百岳：登山口／測站溫度依遞減率推算到每段", "badge": "推估", "ref_alt_m": z0},
+                        "reason": _("百岳：登山口／測站溫度依遞減率推算到每段"), "badge": _("推估"), "ref_alt_m": z0},
                "heat_accl": ({k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge", "a_literature",
                                                    "a_reason", "a_supported")} if hacc else None)}
     capj = cap.to_json()

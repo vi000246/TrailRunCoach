@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 from typing import Optional
+from backend.i18n import _, N_
 
 A_DEFAULT = 0.0                # 推估: no credit until the athlete's own data show acclimation
 MIN_ROWS = 8                   # 推估: hot steady segments needed for the slope test
@@ -47,14 +48,14 @@ def hrc_slope_test(rows) -> dict:
             pts.append((d, h))
     out = {"n": len(pts), "slope_per_30d": None, "se": None, "t": None, "t_crit": None, "supported": False}
     if len(pts) < MIN_ROWS:
-        out["why"] = f"熱天穩定段 {len(pts)} 段（需 ≥ {MIN_ROWS}）：無法檢定，熱適應不折抵熱懲罰"
+        out["why"] = _("熱天穩定段 {n} 段（需 ≥ {need}）：無法檢定，熱適應不折抵熱懲罰", n=len(pts), need=MIN_ROWS)
         return out
     n = len(pts)
     mx = sum(p for p, _ in pts) / n
     my = sum(h for _, h in pts) / n
     sxx = sum((p - mx) ** 2 for p, _ in pts)
     if sxx <= 0:
-        out["why"] = "熱天穩定段都在同一天：無法檢定"
+        out["why"] = _("熱天穩定段都在同一天：無法檢定")
         return out
     b = sum((p - mx) * (h - my) for p, h in pts) / sxx
     res = [h - (my + b * (p - mx)) for p, h in pts]
@@ -64,8 +65,8 @@ def hrc_slope_test(rows) -> dict:
     tc = _t_crit(n - 2)
     ok = b < 0 and t < -tc
     out.update(slope_per_30d=b * 30.0, se=se * 30.0, t=t, t_crit=tc, supported=bool(ok),
-               why=("熱天心率成本隨時間下降（單尾 p < 0.1）：照文獻折抵熱懲罰" if ok else
-                    "熱天心率成本沒有顯著下降：你的資料不支持熱適應，不折抵熱懲罰"))
+               why=(_("熱天心率成本隨時間下降（單尾 p < 0.1）：照文獻折抵熱懲罰") if ok else
+                    _("熱天心率成本沒有顯著下降：你的資料不支持熱適應，不折抵熱懲罰")))
     return out
 
 
@@ -73,6 +74,6 @@ def acclimation_a(test: Optional[dict], a_lit: float) -> tuple[float, str]:
     """(a, reason): the literature a (heat.A_RECOVER) only when the HRC test
     supports acclimation; else A_DEFAULT (0)."""
     if test and test.get("supported"):
-        return a_lit, test.get("why") or "HRC 檢定支持熱適應"
-    why = (test or {}).get("why") or "沒有 HRC 觀測：熱適應不折抵熱懲罰"
+        return a_lit, test.get("why") or _("HRC 檢定支持熱適應")
+    why = (test or {}).get("why") or _("沒有 HRC 觀測：熱適應不折抵熱懲罰")
     return A_DEFAULT, why

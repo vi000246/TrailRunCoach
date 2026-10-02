@@ -41,6 +41,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+from backend.i18n import _, N_
 
 HRCAP = {
     "flat_g": 0.02,          # course.py flat band
@@ -56,8 +57,8 @@ HRCAP = {
     "boot": 300,
     "tt_s": 1800.0,          # Friel's 30-min TT
 }
-SOURCE = ("心率–功率個人回歸外插到 LTHR（Åstrand & Ryhming 1954 原理；Lamberts 2011 LSCT："
-          "固定次大心率下的功率對應表現）；外插到 LTHR 當閾值為推估")
+SOURCE = N_("心率–功率個人回歸外插到 LTHR（Åstrand & Ryhming 1954 原理；Lamberts 2011 LSCT："
+            "固定次大心率下的功率對應表現）；外插到 LTHR 當閾值為推估")
 
 
 def run_point(windows: list[dict]) -> Optional[dict]:
@@ -103,15 +104,15 @@ def capacity(points: list[dict], lthr: Optional[float], boot: int = HRCAP["boot"
     k = HRCAP
     pts = [q for q in points if q]
     out = {"n_runs": len(pts), "lthr": lthr, "p_lthr": None, "range": None, "fit": None,
-           "valid": False, "reasons": [], "source": SOURCE, "label": "推估"}
+           "valid": False, "reasons": [], "source": _(SOURCE), "label": _("推估")}
     if len(pts) < 2 or not lthr:
-        out["reasons"].append(f"只有 {len(pts)} 次穩定平路跑" if lthr else "沒有 LTHR")
+        out["reasons"].append(_("只有 {n} 次穩定平路跑", n=len(pts)) if lthr else _("沒有 LTHR"))
         return out
     x = np.array([q["hr"] for q in pts])
     y = np.array([q["p"] for q in pts])
     f = ols(x, y)
     if f is None:
-        out["reasons"].append("心率沒有變化，無法回歸")
+        out["reasons"].append(_("心率沒有變化，無法回歸"))
         return out
     span = float(np.ptp(x))
     out.update(fit=f, p_lthr=f["a"] + f["b"] * lthr, hr_lo=float(x.min()), hr_hi=float(x.max()),
@@ -119,7 +120,7 @@ def capacity(points: list[dict], lthr: Optional[float], boot: int = HRCAP["boot"
     if len(pts) >= 3 and boot:
         rng = np.random.default_rng(seed)
         vals = []
-        for _ in range(boot):
+        for _b in range(boot):
             i = rng.integers(0, len(pts), len(pts))
             g = ols(x[i], y[i])
             if g is not None:
@@ -127,19 +128,19 @@ def capacity(points: list[dict], lthr: Optional[float], boot: int = HRCAP["boot"
         if vals:
             out["range"] = [float(np.percentile(vals, 10)), float(np.percentile(vals, 90))]
     if len(pts) < k["min_runs"]:
-        out["reasons"].append(f"穩定平路跑 {len(pts)} 次 < {k['min_runs']}")
+        out["reasons"].append(_("穩定平路跑 {n} 次 < {need}", n=len(pts), need=k["min_runs"]))
     if span < k["min_span_bpm"]:
-        out["reasons"].append(f"心率範圍 {span:.0f} bpm < {k['min_span_bpm']:.0f}")
+        out["reasons"].append(_("心率範圍 {span:.0f} bpm < {need:.0f}", span=span, need=k["min_span_bpm"]))
     if f["b"] <= 0:
-        out["reasons"].append("功率不隨心率上升（斜率 ≤ 0）")
+        out["reasons"].append(_("功率不隨心率上升（斜率 ≤ 0）"))
     elif f["r2"] < k["min_r2"]:
-        out["reasons"].append(f"心率只解釋 {f['r2']:.0%} 的功率差異（R² < {k['min_r2']:.0%}）：跑步功率幾乎固定，"
-                              "心率差異多半來自熱、飄移或疲勞")
+        out["reasons"].append(_("心率只解釋 {r2:.0%} 的功率差異（R² < {need:.0%}）：跑步功率幾乎固定，"
+                                "心率差異多半來自熱、飄移或疲勞", r2=f["r2"], need=k["min_r2"]))
     out["valid"] = not out["reasons"]
     return out
 
 
-ZONES = ((0.80, "低（< 80 %）"), (0.95, "中（80–95 %）"), (None, "高（≥ 95 %）"))   # Palladino three zones
+ZONES = ((0.80, N_("低（< 80 %）")), (0.95, N_("中（80–95 %）")), (None, N_("高（≥ 95 %）")))   # Palladino three zones
 
 
 def intensity_distribution(runs: list[dict], p_lthr: Optional[float]) -> Optional[dict]:
@@ -157,7 +158,7 @@ def intensity_distribution(runs: list[dict], p_lthr: Optional[float]) -> Optiona
     lo = 0.0
     for hi, name in ZONES:
         sel = [r for r in rows if r["pct"] >= lo and (hi is None or r["pct"] < hi)]
-        bands.append({"label": name, "runs": len(sel), "share_runs": len(sel) / len(rows),
+        bands.append({"label": _(name), "runs": len(sel), "share_runs": len(sel) / len(rows),
                       "share_time": sum(r.get("moving_s") or 0 for r in sel) / tot_t})
         lo = hi or lo
     pct = [r["pct"] for r in rows]

@@ -28,12 +28,27 @@ def test_ratchet_new_untranslated_ui_strings(scans):
     over = X.over_baseline(scans, b)
     if not over:
         return
-    msg = ("new Chinese UI strings not wrapped in _() / t() / data-i18n (or update the baseline with "
-           "`python -m backend.scripts.i18n_extract --update-baseline` once they are):\n  "
-           + "\n  ".join(f"{p}: {now} > {allowed}  e.g. {scans[p].unwrapped[-1][1][:50]!r}" for p, now, allowed in over))
-    if b.get("enforce"):
-        pytest.fail(msg, pytrace=False)
-    warnings.warn("[report only] " + msg)
+
+    def msg(rows):
+        return ("new Chinese UI strings not wrapped in _() / t() / data-i18n (or update the baseline with "
+                "`python -m backend.scripts.i18n_extract --update-baseline` once they are):\n  "
+                + "\n  ".join(f"{p}: {now} > {allowed}  e.g. {scans[p].unwrapped[-1][1][:50]!r}" for p, now, allowed in rows))
+    hard = [r for r in over if X.enforced(r[0], b)]
+    soft = [r for r in over if not X.enforced(r[0], b)]
+    if soft:
+        warnings.warn("[report only] " + msg(soft))
+    if hard:                           # the finished pages' files (baseline enforce_files)
+        pytest.fail(msg(hard), pytrace=False)
+
+
+def test_finished_pages_are_enforced():
+    """P1 overview, P2 race power: their files fail the ratchet (not just report)."""
+    b = X.load_baseline()
+    for p in ("backend/static/overview.html", "backend/static/racepower.html", "backend/static/share.html",
+              "backend/engine/status.py", "backend/engine/racepower/planner.py"):
+        assert X.enforced(p, b), p
+    assert not X.enforced("backend/static/schedule.html", b)
+    assert {"overview", "autoplan", "suggestions", "racepower", "share"} <= set(b["complete"])
 
 
 def test_scanner_finds_and_skips_the_right_things():
@@ -66,11 +81,12 @@ def test_complete_namespaces_have_english():
     en_backend = X.load_json(X.LOCALES / "en.json", {})
     scans = None
     for item in b["complete"]:
-        if item.endswith(".py"):
+        if item.endswith((".py", ".html", ".js")):
             scans = scans or X.scan_repo()
             fs = scans[item]
-            assert not fs.unwrapped, f"{item}: {len(fs.unwrapped)} unwrapped"
-            assert all(en_backend.get(m) for _l, m in fs.msgids), item
+            assert not fs.unwrapped, f"{item}: {len(fs.unwrapped)} unwrapped, e.g. {fs.unwrapped[:3]}"
+            missing = [m for _l, m in fs.msgids if not en_backend.get(m)]
+            assert not missing, f"{item}: no en for {missing[:5]}"
         else:
             zh = cats["zh-TW"][item]
             en = cats["en"].get(item, {})

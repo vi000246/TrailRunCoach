@@ -33,7 +33,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from backend.i18n import fmt
+from backend.i18n import _, fmt
 
 KEY = "plan.suggestions.dismissed"
 ACTIONS = ("accepted", "declined", "dismissed")
@@ -75,11 +75,12 @@ def test_rows(tests: list[dict], monday: str) -> list[dict]:
     for sg in tests:
         name = "AeT" if sg["kind"] == "aet" else "CP"
         out.append({"id": f"test:{sg['kind']}:{monday}", "type": "test", "week": monday, "kind": sg["kind"],
-                    "title": f"建議做一次 {name} 測試：{sg['title']}（{sg['minutes']} 分）",
+                    "title": _("建議做一次 {name} 測試：{title}（{minutes} 分）", name=name, title=sg["title"],
+                               minutes=sg["minutes"]),
                     "reason": sg.get("reason") or "", "minutes": sg.get("minutes"),
-                    "help": ("測試是建議，不會自動排進課表：挑一天按「排入」。"
-                             + ("徐國峰 90 分鐘測試就是那週的長跑，會取代那天的長跑。" if sg.get("replaces_long") else
-                                "建議的日子避開長跑、強度課的前後一天。")),
+                    "help": (_("測試是建議，不會自動排進課表：挑一天按「排入」。")
+                             + (_("徐國峰 90 分鐘測試就是那週的長跑，會取代那天的長跑。") if sg.get("replaces_long") else
+                                _("建議的日子避開長跑、強度課的前後一天。"))),
                     "pick": "day", "options": day_options(sg.get("days") or [])})
     return out
 
@@ -101,17 +102,17 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
         manual = [ZE.TEST_LABEL[t] for t in sg.get("tests") or [] if t not in ZONE_TESTS]
         if not tests and not manual:
             continue
-        help_ = "；".join(sg.get("conditions") or [])
+        help_ = _("；").join(sg.get("conditions") or [])
         if manual:
-            help_ += f"。{'、'.join(manual)}請自己在課表新增（這裡不排）"
+            help_ += _("。{tests}請自己在課表新增（這裡不排）", tests=_("、").join(manual))
         out.append({"id": f"zone:{sg['id']}", "type": "zone_test", "title": sg["title"], "reason": sg.get("text") or "",
-                    "help": (help_ + "。" + (sg.get("caveat") or "")).strip("。") + "。觸發規則為推估。",
+                    "help": (help_ + _("。") + (sg.get("caveat") or "")).strip(_("。")) + _("。觸發規則為推估。"),
                     "src": sg.get("source"), "pick": "test_day" if tests else None, "tests": tests,
                     "detected": sg.get("detected"), "earliest": sg.get("earliest")})
     for ev in zone.get("events") or []:
         out.append({"id": f"zone_update:{ev.get('field')}:{ev.get('date')}", "type": "zone_update",
-                    "title": "區間已更新", "reason": ev.get("text") or "", "pick": None,
-                    "help": "套用新的測試後，從那天起的區間、TSS 都用新門檻重算（不會改到之前的日子）。"})
+                    "title": _("區間已更新"), "reason": ev.get("text") or "", "pick": None,
+                    "help": _("套用新的測試後，從那天起的區間、TSS 都用新門檻重算（不會改到之前的日子）。")})
     return out
 
 
@@ -133,18 +134,19 @@ def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict]
             continue
         lab = INJ.full_label(e.get("area"), e.get("side"))
         out.append({"id": f"injury_rest:{e['id']}", "type": "injury_rest", "pick": "confirm",
-                    "accept_label": "設成不排課", "injury_id": e["id"], "start": days[0], "end": days[-1],
-                    "title": f"要不要把 {_md(days[0])} 起 {REST_DAYS} 天設成不排課日期？",
-                    "reason": f"{lab}：重（停跑），傷病紀錄 #{e['id']} 進行中。",
-                    "help": "按「設成不排課」才會寫入不排課日期（課表頁可以再改）；不會自動改。"
-                            "好了以後回來跑，恢復期會照停跑天數排。"})
+                    "accept_label": _("設成不排課"), "injury_id": e["id"], "start": days[0], "end": days[-1],
+                    "title": _("要不要把 {day} 起 {n} 天設成不排課日期？", day=_md(days[0]), n=REST_DAYS),
+                    "reason": _("{label}：重（停跑），傷病紀錄 #{id} 進行中。", label=lab, id=e["id"]),
+                    "help": _("按「設成不排課」才會寫入不排課日期（課表頁可以再改）；不會自動改。"
+                              "好了以後回來跑，恢復期會照停跑天數排。")})
     if rp and rp.get("return", "9999") <= today < rp.get("end", ""):
         hit = [m for m in marks if m["pain"] >= 2 and rp["return"] <= m["date"] <= today]
         if hit:
             out.append({"id": f"injury_hold:{rp['return']}", "type": "injury_hold", "pick": None,
-                        "title": "恢復期內又痛了：先維持這週的量，不要往上加",
-                        "reason": f"{hit[-1]['date']} 記了「{INJ.PAIN.get(hit[-1]['pain'], '痛')}」"
-                                  f"{('・' + INJ.area_label(hit[-1]['area'])) if hit[-1].get('area') else ''}。",
+                        "title": _("恢復期內又痛了：先維持這週的量，不要往上加"),
+                        "reason": _("{date} 記了「{pain}」{area}。", date=hit[-1]["date"],
+                                    pain=INJ.PAIN.get(hit[-1]["pain"], _("痛")),
+                                    area=("・" + INJ.area_label(hit[-1]["area"])) if hit[-1].get("area") else ""),
                         "help": INJ.SILBERNAGEL["text"] + "\n" + INJ.DISCLAIMER})
     return out
 

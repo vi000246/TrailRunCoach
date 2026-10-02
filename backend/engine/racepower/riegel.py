@@ -98,7 +98,7 @@ def distance_category(d_m: float) -> Optional[str]:
     """Largest standard threshold ≤ d; None when below 5k or 'non-standard'
     (above 1.03 × the category's standard)."""
     cat = None
-    for c, (_, lo, _) in STD_DISTANCES.items():
+    for c, (_lab, lo, _hi) in STD_DISTANCES.items():
         if d_m >= lo:
             cat = c
     if cat is None or d_m > STD_DISTANCES[cat][2]:

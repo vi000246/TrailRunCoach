@@ -53,24 +53,37 @@ import datetime as dt
 import math
 from typing import Optional
 
+import re
+
 import numpy as np
+
+from backend.i18n import _, N_
+
+# i18n (docs/plans/i18n.plan.md P1): the gate's verdicts, the Z5 card and the
+# hover texts are translated when they are built (`_()`, the request's locale).
+# The texts of the generated sessions — session(), adjusted_spec(), source(),
+# prefix(), the methods' "prefix", dose_step's "note", interval_outcome's
+# "why" and the ladder / RECOVERY / SUB titles — are stored in the plan and
+# parsed (COROS steps, trim_quality, spec_by_title), so they stay the zh-TW
+# original until P3 makes them read-time generated.
 
 # "xu_signals" (三訊號) was dropped 2026-10-01: stored prefs that still say it fall back to
 # auto (plan_prefs.from_settings; evaluate() maps any unknown mode to auto too)
 MODES = ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none")
 WEEKS_RANGE = (2, 16)
-LABEL = {"auto": "自動", "ua_gap": "Uphill Athlete 差距法", "friel_drift": "Friel 飄移法",
-         "xu_drift": "徐國峰 90 分鐘法", "plateau": "有氧停滯法", "weeks": "週數法",
-         "none": "不設門檻（Seiler）"}
+# msgids: _(LABEL[m]) where shown (prefix() keeps the original: it goes into a stored session)
+LABEL = {"auto": N_("自動"), "ua_gap": N_("Uphill Athlete 差距法"), "friel_drift": N_("Friel 飄移法"),
+         "xu_drift": N_("徐國峰 90 分鐘法"), "plateau": N_("有氧停滯法"), "weeks": N_("週數法"),
+         "none": N_("不設門檻（Seiler）")}
 
-SRC_UA = "Uphill Athlete：When to add intensity（AnT/AeT − 1 ≤ 10%，先加 Zone 3）"
-SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%，跑步在 AeT 1–2 小時）"
-SRC_XU = "徐國峰（你的筆記：跑者都該懂的跑步數據）"
-SRC_SEILER = "Seiler 2010；Seiler & Tønnessen 2009（整個週期都有少量高強度，每週 1–3 次）"
-SRC_PALLADINO = "Palladino 基礎期（你的筆記：palladino基礎期訓練）"
-SRC_KOOP = "Koop／CTS（6×3 分 RI、上坡）"
-SRC_HELGERUD = "Helgerud 2007（4×4 分）"
-SRC_OWN = "自訂"
+SRC_UA = N_("Uphill Athlete：When to add intensity（AnT/AeT − 1 ≤ 10%，先加 Zone 3）")
+SRC_FRIEL = N_("Friel（TrainingPeaks：Aerobic decoupling < 5%，跑步在 AeT 1–2 小時）")
+SRC_XU = N_("徐國峰（你的筆記：跑者都該懂的跑步數據）")
+SRC_SEILER = N_("Seiler 2010；Seiler & Tønnessen 2009（整個週期都有少量高強度，每週 1–3 次）")
+SRC_PALLADINO = N_("Palladino 基礎期（你的筆記：palladino基礎期訓練）")
+SRC_KOOP = N_("Koop／CTS（6×3 分 RI、上坡）")
+SRC_HELGERUD = N_("Helgerud 2007（4×4 分）")
+SRC_OWN = N_("自訂")
 
 # ---- numbers (the doc's §7 lists which are ours) ----------------------------
 UA_GAP_MAX = 0.10
@@ -121,11 +134,11 @@ Z3_MET_FOR_Z5 = len(Z3)        # 推估: 3 sessions 達標 at Zone 3 (the Z3 run
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
                  "閾值下 3×8 分", "閾值下 4×8 分", "閾值 4×8 分", "閾值 3×10 分")
 DOSE = Z3                      # kept for callers that read the first rungs (adapt._downgrade)
-RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
+RECOVERY = ("r1", N_("恢復週 fartlek 4×1 分"), 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
 # the ramp-week session (CTL ramp ≥ 5: threshold only) — Z3[0]'s content under its own key / title so
 # it is never mistaken for the ladder's first rung (planned_spec: neutral)
-SUB = ("sub", "閾值 3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp ≥ 5（Friel）：只排閾值；90–95% CP")
-ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
+SUB = ("sub", N_("閾值 3×6 分（只排閾值）"), 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp ≥ 5（Friel）：只排閾值；90–95% CP")
+ZONE3 = ("z3", N_("Zone 3 間歇"), 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
 
 
 def dose_spec(step: int, z5_open: bool = True) -> tuple:
@@ -175,9 +188,11 @@ def aet_info(plan, today: dt.date) -> dict:
     d = dt.date.fromisoformat(r.date)
     age = (today - d).days
     note = r.note or ""
-    how = "活動資料估算" if "自動估算" in note else f"{r.date} 飄移測試" if "飄移測試" in note else f"{r.date} 實測"
+    # the stored note's markers (engine-written, zh-TW) tell how the row was measured
+    how = _("活動資料估算") if "自動估算" in note else _("{date} 飄移測試", date=r.date) if "飄移測試" in note \
+        else _("{date} 實測", date=r.date)
     return {"value": float(r.aethr), "date": r.date, "measured": True, "fresh": age <= AET_FRESH_DAYS,
-            "age_days": age, "label": f"AeT {r.aethr:.0f}（{how}）"}
+            "age_days": age, "label": _("AeT {aet:.0f}（{how}）", aet=r.aethr, how=how)}
 
 
 def lthr_info(ds, plan, today: dt.date) -> dict:
@@ -207,16 +222,17 @@ def ua_gap_method(ae: dict, lt: dict) -> dict:
     """The ua_gap method on aet_info / lthr_info: unlocked / locked / missing
     (evaluate's method("ua_gap") and the Zone 5 path aet_ua_gap)."""
     if not ae.get("measured"):
-        return {"state": "missing", "verdict": "沒有實測 AeT，差距法算不出來"}
+        return {"state": "missing", "verdict": _("沒有實測 AeT，差距法算不出來")}
     if lt.get("value") is None or lt.get("default"):
-        return {"state": "missing", "verdict": "LTHR 還是 WKO5 預設值，差距法算不出來"}
+        return {"state": "missing", "verdict": _("LTHR 還是 WKO5 預設值，差距法算不出來")}
     g = ua_gap(ae["value"], lt["value"])
-    txt = f"AeT {ae['value']:.0f} / LTHR {lt['value']:.0f}：差距 {g * 100:.0f}%"
+    txt = _("AeT {aet:.0f} / LTHR {lthr:.0f}：差距 {gap:.0f}%", aet=ae["value"], lthr=lt["value"], gap=g * 100)
     if g <= UA_GAP_MAX:
-        return {"state": "unlocked", "verdict": f"{txt} ≤ 10%：可以加 Zone 3",
+        return {"state": "unlocked", "verdict": _("{txt} ≤ 10%：可以加 Zone 3", txt=txt),
+                # stored in the session detail (see the module note): the original
                 "prefix": f"AeT–LTHR 差距 {g * 100:.0f}% ≤ 10%：", "gap": g}
-    return {"state": "locked", "verdict": f"{txt}（> 10%，有氧不足）",
-            "action": "繼續基礎：輕鬆跑壓在 AeT 以下＋坡衝刺（3 區照排）；聚合估計不準或偏移時再測 AeT", "gap": g}
+    return {"state": "locked", "verdict": _("{txt}（> 10%，有氧不足）", txt=txt),
+            "action": _("繼續基礎：輕鬆跑壓在 AeT 以下＋坡衝刺（3 區照排）；聚合估計不準或偏移時再測 AeT"), "gap": g}
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +249,8 @@ def _band_fields(dr: dict) -> dict:
     """The run's temperature band for the gate texts (workout_review.temp_band)."""
     from backend.engine import workout_review as WR
     band = dr.get("temp_band") or WR.temp_band(dr.get("temp_c"))
-    return {"band": band, "heat": WR.is_heat(band), "chip": "🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明"),
+    return {"band": band, "heat": WR.is_heat(band), "chip": "🌡 " + (_(WR.TEMP_BAND_LABEL[band]) if band in WR.TEMP_BAND_LABEL
+                                                                    else _("溫度不明")),
             "temp_c": dr.get("temp_c")}
 
 
@@ -245,8 +262,8 @@ def heat_suffix(run: dict, passed: bool) -> str:
     if not run.get("heat"):
         return ""
     from backend.engine import workout_review as WR
-    return (f"（{run['chip']}，{WR.HEAT_NOTE}；熱天通過仍算數）" if passed
-            else f"（{run['chip']}，{WR.HEAT_NOTE}，可能是熱造成的）")
+    return (_("（{chip}，{note}；熱天通過仍算數）", chip=run["chip"], note=_(WR.HEAT_NOTE)) if passed
+            else _("（{chip}，{note}，可能是熱造成的）", chip=run["chip"], note=_(WR.HEAT_NOTE)))
 
 
 def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
@@ -255,7 +272,7 @@ def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
     temperature band counts (heat_suffix: a pass in heat unlocks)."""
     from backend.engine import workout_review as WR
     if not aet:
-        return {"state": "missing", "reason": "沒有實測 AeT，飄移法沒有基準"}
+        return {"state": "missing", "reason": _("沒有實測 AeT，飄移法沒有基準")}
     lo, hi = aet + FRIEL_HR_BAND[0], aet + FRIEL_HR_BAND[1]
     cands = []
     for w in _runs(ds, today):
@@ -271,7 +288,8 @@ def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
                       **_band_fields(dr)})
     WR._flush(ds)
     if not cands:
-        return {"state": "missing", "reason": f"8 週內沒有 ≥ 60 分鐘、平均心率 {lo:.0f}–{hi:.0f} 的平路穩定跑"}
+        return {"state": "missing", "reason": _("8 週內沒有 ≥ 60 分鐘、平均心率 {lo:.0f}–{hi:.0f} 的平路穩定跑",
+                                                lo=lo, hi=hi)}
     good = [c for c in cands if c["drift"] < FRIEL_GOOD]
     if good:
         return {"state": "unlocked", "run": good[-1]}
@@ -320,7 +338,7 @@ def xu_check(ds, today: dt.date) -> dict:
             last = {"idx": w.idx, "date": WR._wdate(w).isoformat(), **r, **_band_fields(m["drift"])}
     WR._flush(ds)
     if last is None:
-        return {"state": "missing", "reason": "8 週內沒有 ≥ 90 分鐘、平路、不停的 E 配速跑"}
+        return {"state": "missing", "reason": _("8 週內沒有 ≥ 90 分鐘、平路、不停的 E 配速跑")}
     return {"state": "unlocked" if last["drift"] < XU_GOOD else "locked", "run": last}
 
 
@@ -510,24 +528,28 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
             out.update(rule=rule, verdict=verdict, action=action)
         out.update(flags)
     if injury:
-        say("injury", injury, "傷病紀錄按「好了」後恢復", block=True)
+        say("injury", injury, _("傷病紀錄按「好了」後恢復"), block=True)
     if low_share is not None and low_share < LOW_SHARE_MIN:
-        say("intensity", f"本週不排間歇：低強度只有 {low_share * 100:.0f}%（< 75%）",
-            f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
+        say("intensity", _("本週不排間歇：低強度只有 {pct:.0f}%（< 75%）", pct=low_share * 100),
+            _("輕鬆跑壓在 {aet} 以下，下週再看", aet=aet_t), block=True)
     if power_low_share is not None and power_low_share < LOW_SHARE_MIN:
-        say("intensity", f"本週不排間歇：跑步功率 < 80% CP 只有 {power_low_share * 100:.0f}%（< 75%）",
-            f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
+        say("intensity", _("本週不排間歇：跑步功率 < 80% CP 只有 {pct:.0f}%（< 75%）", pct=power_low_share * 100),
+            _("輕鬆跑壓在 {aet} 以下，下週再看", aet=aet_t), block=True)
     if ramp is not None and ramp >= RAMP_BLOCK:
-        say("ramp", f"CTL 每週 +{ramp:.1f}（≥ {RAMP_BLOCK:.0f}，Friel）：本週不排間歇", "先穩住量", block=True)
+        say("ramp", _("CTL 每週 +{ramp:.1f}（≥ {limit:.0f}，Friel）：本週不排間歇", ramp=ramp, limit=RAMP_BLOCK),
+            _("先穩住量"), block=True)
     elif ramp is not None and ramp >= RAMP_SUB:
-        say("ramp", f"CTL 每週 +{ramp:.1f}（≥ {RAMP_SUB:.0f}，Friel）：本週只排閾值下", "先穩住量", sub=True)
+        say("ramp", _("CTL 每週 +{ramp:.1f}（≥ {limit:.0f}，Friel）：本週只排閾值下", ramp=ramp, limit=RAMP_SUB),
+            _("先穩住量"), sub=True)
     if step is not None and step > STEP_BLOCK:
-        say("volume", f"上週量增 {step * 100:+.0f}%（> 20%，Nielsen 2014／Damsted 2019）：本週不排間歇",
-            "本週維持上週的量", block=True)
+        say("volume", _("上週量增 {step:+.0f}%（> 20%，Nielsen 2014／Damsted 2019）：本週不排間歇", step=step * 100),
+            _("本週維持上週的量"), block=True)
     elif step is not None and step > STEP_HOLD:
-        say("volume", f"上週量增 {step * 100:+.0f}%（10–20%，推估）：間歇維持上次的量，不往上加", "", hold=True)
+        say("volume", _("上週量增 {step:+.0f}%（10–20%，推估）：間歇維持上次的量，不往上加", step=step * 100), "",
+            hold=True)
     if tsb is not None and -30.0 <= tsb < TSB_HOLD:
-        say("tsb", f"TSB {tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
+        say("tsb", _("TSB {tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", tsb=tsb), "",
+            hold=True)
     return out
 
 
@@ -541,8 +563,8 @@ TARGET_DOWN = 0.95      # ROLE:499「下修 5～10%」: first rep already short 
 AET60_MIN_SHARE = 0.5   # 推估 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
 LAST_FADE = 0.05        # 推估 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
 TIZ_GOAL = 0.85         # 推估 (interval_eval.TIZ_GOAL): time in zone ≥ 85 % of the chosen variant's plan
-OUTCOME_LABEL = {"met": "達標", "border": "邊界", "unadapted": "未適應", "too_high": "未適應（目標太高）",
-                 "unknown": "無法判定"}
+OUTCOME_LABEL = {"met": N_("達標"), "border": N_("邊界"), "unadapted": N_("未適應"), "too_high": N_("未適應（目標太高）"),
+                 "unknown": N_("無法判定")}
 
 
 def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: Optional[float] = None) -> dict:
@@ -784,7 +806,8 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     if brk and brk.get("aet_stale") and brk["return"] <= today.isoformat() and ae.get("measured") and \
             str(ae.get("date") or "") < brk["return"]:
         # a break ≥ 4 weeks: the AeT from before it is stale (UA: re-read after a layoff)
-        val = {**val, "valid": False, "reason": f"停跑 {brk['days']} 天（≥ 4 週）：之前的 AeT 視同過期（Uphill Athlete）"}
+        val = {**val, "valid": False, "reason": _("停跑 {days} 天（≥ 4 週）：之前的 AeT 視同過期（Uphill Athlete）",
+                                                  days=brk["days"])}
     ae = {**ae, "valid": bool(val.get("valid")), "fresh": bool(ae["measured"] and val.get("valid")),
           "validity": val}
     gap = ua_gap(ae["value"], lt["value"]) if ae["measured"] and lthr_ok else None
@@ -815,43 +838,53 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         if m == "friel_drift":
             r = friel()
             if r["state"] == "missing":
-                return {"state": "missing", "verdict": r["reason"] + "，飄移法算不出來"}
+                return {"state": "missing", "verdict": _("{reason}，飄移法算不出來", reason=r["reason"])}
             run = r["run"]
             if r["state"] == "unlocked":
-                return {"state": "unlocked", "verdict": f"{run['date']} 在 AeT 附近跑 ≥ 60 分鐘，飄移 {run['drift'] * 100:.1f}% < 5%"
-                                                        + heat_suffix(run, True),
+                return {"state": "unlocked",
+                        "verdict": _("{date} 在 AeT 附近跑 ≥ 60 分鐘，飄移 {drift:.1f}% < 5%", date=run["date"],
+                                     drift=run["drift"] * 100) + heat_suffix(run, True),
                         "prefix": f"Friel 飄移 {run['drift'] * 100:.1f}% < 5%（{run['date']}）：", "run": run}
-            return {"state": "locked", "verdict": f"8 週內在 AeT 附近 ≥ 60 分鐘的平路跑，飄移都 ≥ 5%（最近 {run['drift'] * 100:.1f}%）"
-                                                  + heat_suffix(run, False),
-                    "action": "排一次 60–90 分鐘平路跑，心率壓在 AeT 附近" + ("，選氣溫 25 °C 以下的時段" if run.get("heat") else ""),
+            return {"state": "locked",
+                    "verdict": _("8 週內在 AeT 附近 ≥ 60 分鐘的平路跑，飄移都 ≥ 5%（最近 {drift:.1f}%）",
+                                 drift=run["drift"] * 100) + heat_suffix(run, False),
+                    "action": _("排一次 60–90 分鐘平路跑，心率壓在 AeT 附近，選氣溫 25 °C 以下的時段") if run.get("heat")
+                    else _("排一次 60–90 分鐘平路跑，心率壓在 AeT 附近"),
                     "run": run}
         if m == "xu_drift":
             r = xu()
             if r["state"] == "missing":
-                return {"state": "missing", "verdict": r["reason"] + "，90 分鐘法算不出來"}
+                return {"state": "missing", "verdict": _("{reason}，90 分鐘法算不出來", reason=r["reason"])}
             run = r["run"]
             if r["state"] == "unlocked":
-                return {"state": "unlocked", "verdict": f"{run['date']} 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%"
-                                                        + heat_suffix(run, True),
+                return {"state": "unlocked",
+                        "verdict": _("{date} 90 分鐘 E 跑飄移 {drift:.0f}% < 10%", date=run["date"],
+                                     drift=run["drift"] * 100) + heat_suffix(run, True),
                         "prefix": f"90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%：", "run": run}
-            return {"state": "locked", "verdict": f"最近一次 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}%（≥ 10%）"
-                                                  + heat_suffix(run, False),
-                    "action": "繼續低強度長跑，下次選 < 25 °C 的日子再測", "run": run}
+            return {"state": "locked",
+                    "verdict": _("最近一次 90 分鐘 E 跑飄移 {drift:.0f}%（≥ 10%）", drift=run["drift"] * 100)
+                    + heat_suffix(run, False),
+                    "action": _("繼續低強度長跑，下次選 < 25 °C 的日子再測"), "run": run}
         if m == "plateau":
             if base_weeks is None or ef is None:
-                return {"state": "missing", "verdict": "沒有基礎期起點或 EF 趨勢（輕鬆路跑不夠多），停滯法算不出來"}
+                return {"state": "missing", "verdict": _("沒有基礎期起點或 EF 趨勢（輕鬆路跑不夠多），停滯法算不出來")}
             if base_weeks < PLATEAU_WEEKS:
-                return {"state": "locked", "info": True, "verdict": f"基礎期第 {base_weeks} 週（停滯法至少 {PLATEAU_WEEKS} 週）"}
+                return {"state": "locked", "info": True,
+                        "verdict": _("基礎期第 {week} 週（停滯法至少 {need} 週）", week=base_weeks, need=PLATEAU_WEEKS)}
             if ef >= EF_PLATEAU:
-                return {"state": "locked", "info": True, "verdict": f"EF 還在進步（{ef * 100:+.0f}%）：基礎還在長，先不加"}
-            return {"state": "unlocked", "verdict": f"基礎期第 {base_weeks} 週、EF 持平（{ef * 100:+.1f}%）：可以加間歇",
+                return {"state": "locked", "info": True,
+                        "verdict": _("EF 還在進步（{ef:+.0f}%）：基礎還在長，先不加", ef=ef * 100)}
+            return {"state": "unlocked",
+                    "verdict": _("基礎期第 {week} 週、EF 持平（{ef:+.1f}%）：可以加間歇", week=base_weeks, ef=ef * 100),
                     "prefix": "EF 持平，基礎差不多了："}
         if m == "weeks":
             if base_weeks is None:
-                return {"state": "missing", "verdict": "沒有基礎期起點，週數法算不出來"}
+                return {"state": "missing", "verdict": _("沒有基礎期起點，週數法算不出來")}
             if base_weeks <= need_weeks:
-                return {"state": "locked", "info": True, "verdict": f"基礎期第 {base_weeks} 週 / {need_weeks} 週"}
-            return {"state": "unlocked", "verdict": f"基礎期第 {base_weeks} 週 > {need_weeks} 週：可以加間歇",
+                return {"state": "locked", "info": True,
+                        "verdict": _("基礎期第 {week} 週 / {need} 週", week=base_weeks, need=need_weeks)}
+            return {"state": "unlocked",
+                    "verdict": _("基礎期第 {week} 週 > {need} 週：可以加間歇", week=base_weeks, need=need_weeks),
                     "prefix": f"基礎期已過 {need_weeks} 週："}
         return {"state": "none"}
 
@@ -893,7 +926,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     z5 = _z5(ds, today, mode, state, ae, lt, brk, [h.get("date") for h in hist], friel)
     test_reason = aet_test_reason(ds, today, ae, z5, brk)
     out = {
-        "mode": mode, "mode_label": LABEL[mode], "resolved": resolved, "state": state,
+        "mode": mode, "mode_label": _(LABEL[mode]), "resolved": resolved, "state": state,
         "via": r.get("via"), "verdict": r.get("verdict", ""), "action": r.get("action", ""),
         "prefix": r.get("prefix", ""), "info": bool(r.get("info")),
         "fallback": state == "missing",        # forced mode, data missing → the guardrails (自訂)
@@ -943,9 +976,9 @@ def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
                 paths["aet_friel_drift"] = f["run"]["date"]
         return {**BC.z5_status(ds, today, mode, state, paths, brk, quality_dates), "aet_paths": paths}
     except Exception as e:                  # noqa: BLE001 — Z5 stays closed, the plan still builds
-        return {"state": "unconfirmed", "label": BC.STATE_LABEL["unconfirmed"], "open": False, "since": None,
-                "path": None, "path_label": "", "reason": f"算不出來（{type(e).__name__}）",
-                "text": f"Zone 5：未確認（算不出來：{type(e).__name__}）"}
+        return {"state": "unconfirmed", "label": _(BC.STATE_LABEL["unconfirmed"]), "open": False, "since": None,
+                "path": None, "path_label": "", "reason": _("算不出來（{error}）", error=type(e).__name__),
+                "text": _("Zone 5：未確認（算不出來：{error}）", error=type(e).__name__)}
 
 
 def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] = None) -> Optional[dict]:
@@ -977,7 +1010,8 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
     vol = BC.volume_stable(ds, today)
     r = {**r, "volume": vol}
     if vol.get("ok") is False:
-        r.update(wait=True, text=r["text"] + f"；先讓週量穩定 {BC.VOL_WEEKS} 週再測（現在 {vol['value']}；推估）")
+        r.update(wait=True, text=r["text"] + _("；先讓週量穩定 {weeks} 週再測（現在 {now}；推估）",
+                                               weeks=BC.VOL_WEEKS, now=vol["value"]))
     return r
 
 
@@ -989,21 +1023,24 @@ def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], va
             z5.get("state") == "confirmed" and (z5.get("since") or "") >= brk["return"]):
         # after the re-entry block of a break ≥ 4 weeks (UA: re-read after a layoff); a
         # passive re-confirmation after the break stands in for it
-        return {"code": "break", "text": f"停跑 {brk['days']} 天（≥ 4 週）：恢復期結束後重新讀一次 AeT（Uphill Athlete）"}
+        return {"code": "break", "text": _("停跑 {days} 天（≥ 4 週）：恢復期結束後重新讀一次 AeT（Uphill Athlete）",
+                                           days=brk["days"])}
     if v is not None and se is not None and se <= 3.0 and val.get("shift_bpm") is not None and \
             abs(val["shift_bpm"]) > 5.0:
-        return {"code": "shift", "text": val.get("reason") or "最近 6 次的飄移有系統性偏移"}
+        return {"code": "shift", "text": val.get("reason") or _("最近 6 次的飄移有系統性偏移")}
     # a lower bound (val["lower_bound"], se None) never fires shift / moved: it is not a point estimate
     if ae.get("measured") and not val.get("lower_bound") and v is not None and se is not None and se <= 3.0 and \
             abs(v - float(ae["value"])) > max(se, 3.0):
-        return {"code": "moved", "text": f"聚合估計 AeT {v:.0f} ± {se:.1f} bpm，和目前 {ae['value']:.0f} 差 "
-                                         f"{v - float(ae['value']):+.0f}（> 標準誤）：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）"}
+        return {"code": "moved", "text": _("聚合估計 AeT {v:.0f} ± {se:.1f} bpm，和目前 {aet:.0f} 差 {diff:+.0f}"
+                                           "（> 標準誤）：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）",
+                                           v=v, se=se, aet=ae["value"], diff=v - float(ae["value"]))}
     if passive:
         return None
     if not recent and not xu_recent:
-        return {"code": "no_data", "text": f"{BC.NO_DATA_DAYS // 7} 週內沒有可判讀的跑步（UA 4–6 週重測；推估 6 週）"}
+        return {"code": "no_data", "text": _("{weeks} 週內沒有可判讀的跑步（UA 4–6 週重測；推估 6 週）",
+                                             weeks=BC.NO_DATA_DAYS // 7)}
     if not val.get("valid"):
-        return {"code": "se", "text": val.get("reason") or "AeT 聚合估計還不夠準"}
+        return {"code": "se", "text": val.get("reason") or _("AeT 聚合估計還不夠準")}
     return None
 
 
@@ -1011,17 +1048,23 @@ def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], va
 # the Zone 5 opening process: history replay and the overview card
 # ---------------------------------------------------------------------------
 
+# msgids (the original); shown through _(SRC_Z5[k]) / z5_sources()
 SRC_Z5 = {
-    "week": "台灣教練：一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）"
-            "——圖上的參考帶，不是解鎖條件",
-    "xu90": "台灣教練：平路、≤ 25 °C、停 ≤ 30 秒、心率 1 區，飄移 < 10%",
+    "week": N_("台灣教練：一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）"
+               "——圖上的參考帶，不是解鎖條件"),
+    "xu90": N_("台灣教練：平路、≤ 25 °C、停 ≤ 30 秒、心率 1 區，飄移 < 10%"),
     "ua": SRC_UA,
     "friel": SRC_FRIEL,
-    "z3": "台灣教練：先 3 區、跑順了再加 5 區；「3 堂達標」是推估",
-    "keep": "Hickson 1982：1 區時間保有 2/3 就維持耐力；連 3 週是推估",
-    "reentry": "Daniels 表 9.2（恢復期＝停訓天數，期間只有 E 日）；先 3 區：徐國峰；堂數推估；"
-               "≥ 4 週要重新確認：Mujika & Padilla 2000",
+    "z3": N_("台灣教練：先 3 區、跑順了再加 5 區；「3 堂達標」是推估"),
+    "keep": N_("Hickson 1982：1 區時間保有 2/3 就維持耐力；連 3 週是推估"),
+    "reentry": N_("Daniels 表 9.2（恢復期＝停訓天數，期間只有 E 日）；先 3 區：徐國峰；堂數推估；"
+                  "≥ 4 週要重新確認：Mujika & Padilla 2000"),
 }
+
+
+def z5_sources() -> dict:
+    """SRC_Z5 in the request's language."""
+    return {k: _(v) for k, v in SRC_Z5.items()}
 
 
 def _z5_day(ds, plan, day: dt.date, mode: str, method_state: Optional[str], dates: list) -> dict:
@@ -1118,11 +1161,11 @@ def z5_history(ds, plan, begin: dt.date, end: dt.date, prefs=None, method_state:
             seen.add((r["since"], r["path"]))
             if r["since"] >= begin.isoformat():
                 events.append({"date": r["since"], "kind": "confirm", "path": r["path"],
-                               "label": f"確認有氧基礎（{r['path_label']}）"})
+                               "label": _("確認有氧基礎（{path}）", path=r["path_label"])})
     prev = None
     for r in days:
         if r["state"] == "paused" and prev != "paused":
-            events.append({"date": r["date"], "kind": "pause", "label": f"5 區暫停：{r['reason']}"})
+            events.append({"date": r["date"], "kind": "pause", "label": _("5 區暫停：{reason}", reason=r["reason"])})
         prev = r["state"]
     for x in xs:
         events.append({"date": x["date"], "kind": "xu_run", "ok": bool(x.get("ok")), "drift": x.get("drift"),
@@ -1133,21 +1176,21 @@ def z5_history(ds, plan, begin: dt.date, end: dt.date, prefs=None, method_state:
         events.append({"date": (dt.date.fromisoformat(b["last_run"]) + dt.timedelta(days=1)).isoformat(),
                        "kind": "break", "days": b["days"], "return": b["return"], "end": b["end"],
                        "quality_from": b["quality_from"], "reconfirm": bool(b.get("reconfirm")),
-                       "label": b["text"] + ("；≥ 4 週：之前的確認不算" if b.get("reconfirm") else "")})
+                       "label": b["text"] + (_("；≥ 4 週：之前的確認不算") if b.get("reconfirm") else "")})
     for t in sorted((t for t in (getattr(plan, "thresholds", None) or []) if t.aethr is not None),
                     key=lambda t: t.date):
         if begin.isoformat() <= t.date <= end.isoformat():
             events.append({"date": t.date, "kind": "aet", "value": float(t.aethr),
-                           "label": f"AeT {t.aethr:.0f} bpm（{t.note or '實測'}）"})
+                           "label": _("AeT {aet:.0f} bpm（{note}）", aet=t.aethr, note=t.note or _("實測"))})
     events.sort(key=lambda e: e["date"])
-    note = ("停滯法／週數法用自己的條件解鎖，過去的狀態沒辦法重播，只有最後一天是當天的結果"
+    note = (_("停滯法／週數法用自己的條件解鎖，過去的狀態沒辦法重播，只有最後一天是當天的結果")
             if mode in ("plateau", "weeks") else "")
-    return {"begin": begin.isoformat(), "end": end.isoformat(), "mode": mode, "mode_label": LABEL[mode],
+    return {"begin": begin.isoformat(), "end": end.isoformat(), "mode": mode, "mode_label": _(LABEL[mode]),
             "days": days, "segments": segs, "weeks": weeks, "events": events,
             "target": list(z1_target_min()),
             "current": {k: current.get(k) for k in ("state", "label", "open", "since", "path", "path_label",
                                                     "reason", "text")},
-            "note": note, "sources": SRC_Z5}
+            "note": note, "sources": z5_sources()}
 
 
 def z5_card(gate: dict, today: dt.date) -> dict:
@@ -1160,10 +1203,10 @@ def z5_card(gate: dict, today: dt.date) -> dict:
     from backend.engine import base_check as BC
     z = gate.get("z5") or {}
     state = z.get("state") or "unconfirmed"
-    out = {"state": state, "label": z.get("label") or BC.STATE_LABEL.get(state, state), "open": bool(z.get("open")),
+    out = {"state": state, "label": z.get("label") or _(BC.STATE_LABEL.get(state, state)), "open": bool(z.get("open")),
            "since": z.get("since"), "path": z.get("path"), "path_label": z.get("path_label") or "",
            "reason": z.get("reason") or "", "text": z.get("text") or "", "mode": gate.get("mode"),
-           "mode_label": LABEL.get(gate.get("mode") or "auto", ""), "test": gate.get("aet_test_reason"),
+           "mode_label": _(LABEL.get(gate.get("mode") or "auto", "")), "test": gate.get("aet_test_reason"),
            "reentry": None, "keep": None}
     brk = z.get("reentry") or None
     if brk:
@@ -1173,7 +1216,7 @@ def z5_card(gate: dict, today: dt.date) -> dict:
                           "quality_from": brk["quality_from"], "days_left": max(0, left),
                           "z3_before_z5": int(brk.get("z3_before_z5") or 1), "reconfirm": bool(brk.get("reconfirm")),
                           "drift_check": bool(brk.get("drift_check")), "text": brk.get("text") or "",
-                          "src": SRC_Z5["reentry"]}
+                          "src": _(SRC_Z5["reentry"])}
     mode = gate.get("mode") or "auto"
     pause = z.get("pause") or {}
     ae = gate.get("aet") or {}
@@ -1192,27 +1235,28 @@ def z5_card(gate: dict, today: dt.date) -> dict:
     if mode_has(mode, "xu90"):
         x = z.get("xu_last")
         cur = z.get("path") == "xu90" and base_done
-        tests.append({"key": "xu90", "label": "徐國峰 90 分鐘測試：平路 1 區跑 90 分鐘，第 90 分 vs 第 10 分心率飄移 < 10%",
+        tests.append({"key": "xu90", "label": _("徐國峰 90 分鐘測試：平路 1 區跑 90 分鐘，第 90 分 vs 第 10 分心率飄移 < 10%"),
                       "ok": True if cur else (bool(x.get("ok")) and counts(x.get("date"))) if x else None,
-                      "value": (f"確認於 {z.get('since')}" if cur and not (x and x.get("ok")) else
-                                BC.xu_text(x) if x else "—（還沒做過：半年內沒有 ≥ 90 分鐘的跑步）"),
-                      "need": "< 10%（≤ 25 °C、補給停 ≤ 30 秒）", "src": SRC_Z5["xu90"]})
+                      "value": (_("確認於 {date}", date=z.get("since")) if cur and not (x and x.get("ok")) else
+                                BC.xu_text(x) if x else _("—（還沒做過：半年內沒有 ≥ 90 分鐘的跑步）")),
+                      "need": _("< 10%（≤ 25 °C、補給停 ≤ 30 秒）"), "src": _(SRC_Z5["xu90"])})
     g = gate.get("gap")
     ap = z.get("aet_paths") or {}
     if mode_has(mode, "aet_ua_gap"):
-        tests.append({"key": "aet_ua_gap", "label": "UA 差距法：實測 AeT，LTHR ÷ AeT − 1 ≤ 10%",
+        tests.append({"key": "aet_ua_gap", "label": _("UA 差距法：實測 AeT，LTHR ÷ AeT − 1 ≤ 10%"),
                       "ok": (g <= UA_GAP_MAX and counts(ae.get("date"))) if g is not None else None,
                       "value": (f"AeT {ae['value']:.0f} / LTHR {lt['value']:.0f} → {g * 100:.0f}%" if g is not None
-                                else "—（還沒做過：沒有實測 AeT）" if not ae.get("measured") else "—（LTHR 還是預設值）"),
-                      "need": "≤ 10%", "src": SRC_Z5["ua"]})
+                                else _("—（還沒做過：沒有實測 AeT）") if not ae.get("measured")
+                                else _("—（LTHR 還是預設值）")),
+                      "need": "≤ 10%", "src": _(SRC_Z5["ua"])})
     if mode_has(mode, "aet_friel_drift"):
         fr = (gate.get("options") or {}).get("friel_drift") or {}
-        tests.append({"key": "aet_friel_drift", "label": "Friel 飄移：實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%",
+        tests.append({"key": "aet_friel_drift", "label": _("Friel 飄移：實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%"),
                       "ok": (("aet_friel_drift" in ap) and counts(ap.get("aet_friel_drift"))) if fr.get("usable") else None,
-                      "value": fr.get("why") or "—", "need": "< 5%", "src": SRC_Z5["friel"]})
+                      "value": fr.get("why") or "—", "need": "< 5%", "src": _(SRC_Z5["friel"])})
     method = None
     if mode in ("plateau", "weeks"):
-        method = {"key": "method", "label": LABEL[mode], "ok": gate.get("state") == "unlocked",
+        method = {"key": "method", "label": _(LABEL[mode]), "ok": gate.get("state") == "unlocked",
                   "value": gate.get("verdict") or "", "need": "", "src": source_of_mode(mode)}
         tests.append(method)
     # the stable-volume precondition (base_check.volume_stable, 推估): a checklist item, shown while
@@ -1220,43 +1264,46 @@ def z5_card(gate: dict, today: dt.date) -> dict:
     vol = gate.get("volume")
     pre = None
     if vol and tests and not base_done and state != "reentry":
-        pre = {"key": "volume", "label": vol.get("label") or "前提：週量穩定", "ok": vol.get("ok"),
+        pre = {"key": "volume", "label": vol.get("label") or _("前提：週量穩定"), "ok": vol.get("ok"),
                "value": vol.get("value") or "—", "need": vol.get("need") or "", "src": vol.get("src") or ""}
-    out["base"] = {"label": "確認有氧基礎（三選一，做了且達標）" if len(tests) > 1 else
-                   f"確認有氧基礎（{tests[0]['label'].split('：')[0]}）" if tests else "確認有氧基礎",
+    out["base"] = {"label": _("確認有氧基礎（三選一，做了且達標）") if len(tests) > 1 else
+                   # the test's name: its label before the first colon (zh「：」, en ": ")
+                   _("確認有氧基礎（{test}）", test=re.split(r"：|: ", tests[0]["label"], maxsplit=1)[0]) if tests
+                   else _("確認有氧基礎"),
                    "ok": bool(base_done), "tests": tests, "pre": pre,
-                   "empty": ("恢復期內不判斷" if state == "reentry" else
-                             "不設門檻（Seiler）" if state == "open" else "" if tests else "這個間歇門檻不開 5 區")}
+                   "empty": (_("恢復期內不判斷") if state == "reentry" else
+                             _("不設門檻（Seiler）") if state == "open" else "" if tests else _("這個間歇門檻不開 5 區"))}
     d = gate.get("dose") or {}
     step = int(d.get("step") or 0)
     z3 = out["z3"] = {"done": min(step, Z3_MET_FOR_Z5), "need": Z3_MET_FOR_Z5, "ok": step >= Z3_MET_FOR_Z5,
-                      "src": SRC_Z5["z3"]}
+                      "src": _(SRC_Z5["z3"])}
     mt = z.get("maintenance") or {}
     if state in ("confirmed", "paused") and mt.get("z1_level_min"):
         wk = mt.get("weeks") or []
         last = wk[-1] if wk else None
         out["keep"] = {"level_min": mt["z1_level_min"], "line_min": mt["z1_level_min"] * BC.Z1_KEEP,
                        "last_week": last, "ok": bool(mt.get("ok", True)), "why": mt.get("why") or "",
-                       "src": SRC_Z5["keep"]}
+                       "src": _(SRC_Z5["keep"])}
     out["next"] = _z5_next(out, z, gate, tests)
     z5_ok = out["open"] and z3["ok"]
     out["steps"] = [
-        {"key": "base", "label": "確認有氧基礎（三選一）" if len(tests) > 1 else "確認有氧基礎",
+        {"key": "base", "label": _("確認有氧基礎（三選一）") if len(tests) > 1 else _("確認有氧基礎"),
          "status": "done" if base_done else "wait" if state == "reentry" else "active"},
-        {"key": "z3", "label": f"3 區達標 {z3['done']}/{z3['need']}",
+        {"key": "z3", "label": _("3 區達標 {done}/{need}", done=z3["done"], need=z3["need"]),
          "status": "done" if z3["ok"] else "active" if base_done else "todo"},
-        {"key": "z5", "label": "5 區開放",
+        {"key": "z5", "label": _("5 區開放"),
          "status": "done" if z5_ok else "paused" if state in ("paused", "reentry") else "todo"},
     ]
-    out["headline"] = {
-        "confirmed": f"已確認（{z.get('since')}，{out['path_label']}）",
-        "paused": "暫停", "reentry": "恢復期", "open": "不設門檻",
-    }.get(state, "未確認")
+    if state == "confirmed":
+        out["headline"] = _("已確認（{since}，{path}）", since=z.get("since"), path=out["path_label"])
+    else:
+        out["headline"] = {"paused": _("暫停"), "reentry": _("恢復期"), "open": _("不設門檻")}.get(state) or _("未確認")
     return out
 
 
 def source_of_mode(mode: str) -> str:
-    return OPTION_INFO.get(mode, {}).get("source", "")
+    s = OPTION_INFO.get(mode, {}).get("source", "")
+    return _(s) if s else ""
 
 
 def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:

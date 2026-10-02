@@ -361,7 +361,7 @@ def predict_time(m: dict, eff_km: float, x: float, delta: Optional[float] = None
         return None
     d = m["delta"] if delta is None else delta
     T = eff_km / v
-    for _ in range(100):
+    for _it in range(100):
         T2 = eff_km / (v * dbar(T, d))
         if abs(T2 - T) < 1e-6:
             break
@@ -463,7 +463,7 @@ def predict_race(m: dict, eff_km: float, xs: Optional[dict], f: float = 1.0,
     HR level (planner / back-test, β·ΔHadley / LTHR)."""
     T = 3.0
     x = None
-    for _ in range(60):
+    for _it in range(60):
         x = f * xstar_at(xs, T) - x_shift
         t = predict_time(m, eff_km, x, delta)
         if not t:

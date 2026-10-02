@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>訓練總覽</title>
+<title data-i18n="overview.page_title">訓練總覽</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
 <style>
@@ -258,9 +258,9 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 <body>
 <script src="/api/v1/static/shell.js" data-page="home"></script>
 <header>
-  <h1>總覽</h1>
-  <nav class="jump" id="jump" aria-label="本頁段落">
-    <a href="#s-status">狀況</a><a href="#s-week">本週</a><a href="#s-todo">待辦</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a>
+  <h1 data-i18n="overview.h1">總覽</h1>
+  <nav class="jump" id="jump" aria-label="本頁段落" data-i18n-attr="aria-label:overview.jump.label">
+    <a href="#s-status" data-i18n="overview.jump.status">狀況</a><a href="#s-week" data-i18n="overview.jump.week">本週</a><a href="#s-todo" data-i18n="overview.jump.todo">待辦</a><a href="#s-log" data-i18n="overview.jump.log">紀錄</a><a href="#s-ind" data-i18n="overview.jump.ind">指標</a>
   </nav>
   <span class="spacer" style="flex:1"></span>
   <span class="meta" id="asof"></span>
@@ -271,55 +271,55 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 
   <!-- KPI row: CTL, TSB, this week's volume, countdown to the next A race -->
   <div data-sec id="s-status" style="display:grid;gap:10px">
-    <div class="kpis" id="kpis"><div class="kpi"><div class="loading">計算訓練狀況中…</div></div></div>
+    <div class="kpis" id="kpis"><div class="kpi"><div class="loading" data-i18n="overview.loading.status">計算訓練狀況中…</div></div></div>
     <div class="strip" id="strip"></div>
   </div>
 
   <section data-sec id="s-week" aria-labelledby="wk-h">
-    <h2 id="wk-h"><span id="wk-ic"></span>本週 <span class="meta num" id="wk-sub"></span><span id="wk-cp"></span>
-      <a class="to-sched" href="/api/v1/overview/plan/schedule/page">課表編輯 →</a></h2>
-    <div class="week" id="wk-days"><div class="loading">排本週課表中…</div></div>
+    <h2 id="wk-h"><span id="wk-ic"></span><span data-i18n="overview.week.h">本週</span> <span class="meta num" id="wk-sub"></span><span id="wk-cp"></span>
+      <a class="to-sched" href="/api/v1/overview/plan/schedule/page" data-i18n="overview.week.edit">課表編輯 →</a></h2>
+    <div class="week" id="wk-days"><div class="loading" data-i18n="overview.loading.week">排本週課表中…</div></div>
     <div class="legend" id="wk-legend"></div>
     <div id="week"></div>
   </section>
 
   <div class="cards" data-sec id="s-todo">
     <section aria-labelledby="todo-h">
-      <h2 id="todo-h">待辦與警示 <span class="meta" id="todo-sub"></span></h2>
+      <h2 id="todo-h"><span data-i18n="overview.todo.h">待辦與警示</span> <span class="meta" id="todo-sub"></span></h2>
       <div class="alerts" id="actions"><div class="loading">…</div></div>
       <!-- due CP / AeT tests, B2B weekends, zone retests: the shared floating box (static/suggestions.js) -->
     </section>
     <!-- Zone 5 opening process (quality_gate.z5_card); the season history is the 基礎期 chart -->
     <section id="z5card" aria-labelledby="z5-h">
-      <h2 id="z5-h">5 區間歇 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">歷程 →</a></h2>
+      <h2 id="z5-h"><span data-i18n="overview.z5.h">5 區間歇</span> <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer" data-i18n="overview.z5.history">歷程 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
     </section>
     <!-- 連續兩天長天 (engine/b2b.py card): only before a multi-day / ≥ 6 h A event, or once B2B weekends exist -->
     <section id="b2bcard" aria-labelledby="b2b-h" hidden>
-      <h2 id="b2b-h">B2B 連續長天 <span class="meta" id="b2b-sub"></span><span id="b2b-q"></span></h2>
+      <h2 id="b2b-h"><span data-i18n="overview.b2b.h">B2B 連續長天</span> <span class="meta" id="b2b-sub"></span><span id="b2b-q"></span></h2>
       <div id="b2b"><div class="loading">…</div></div>
     </section>
   </div>
 
   <section data-sec id="s-log">
-    <h2>做了什麼 <span class="meta" id="per-sub"></span></h2>
+    <h2><span data-i18n="overview.log.h">做了什麼</span> <span class="meta" id="per-sub"></span></h2>
     <div class="toolbar">
-      <div class="seg" id="unit"><button data-u="week">週</button><button data-u="month">月</button><button data-u="year">年</button></div>
-      <button class="btn" id="prev" aria-label="上一期">◀</button>
+      <div class="seg" id="unit"><button data-u="week" data-i18n="overview.log.unit.week">週</button><button data-u="month" data-i18n="overview.log.unit.month">月</button><button data-u="year" data-i18n="overview.log.unit.year">年</button></div>
+      <button class="btn" id="prev" aria-label="上一期" data-i18n-attr="aria-label:overview.log.prev">◀</button>
       <b id="per-label" class="num"></b>
-      <button class="btn" id="next" aria-label="下一期">▶</button>
-      <button class="btn" id="now">回到現在</button>
-      <button type="button" class="q" aria-label="說明" data-tip="點長條切換期間；上圖是移動時間（依類別堆疊），下圖是爬升。">?</button>
+      <button class="btn" id="next" aria-label="下一期" data-i18n-attr="aria-label:overview.log.next">▶</button>
+      <button class="btn" id="now" data-i18n="overview.log.now">回到現在</button>
+      <button type="button" class="q" aria-label="說明" data-tip="點長條切換期間；上圖是移動時間（依類別堆疊），下圖是爬升。" data-i18n-attr="aria-label:overview.help;data-tip:overview.log.tip">?</button>
     </div>
     <div class="legend" id="cat-legend" style="margin:0 0 4px"></div>
     <div class="plot" id="trend"></div>
-    <div class="meta" style="margin:4px 0 0">爬升（m）</div>
+    <div class="meta" style="margin:4px 0 0" data-i18n="overview.log.climb_axis">爬升（m）</div>
     <div class="plot small" id="trend-climb"></div>
     <div id="period"><div class="loading">…</div></div>
   </section>
 
   <section data-sec id="s-ind">
-    <h2>指標 <span class="meta" id="ind-sub"></span></h2>
+    <h2><span data-i18n="overview.ind.h">指標</span> <span class="meta" id="ind-sub"></span></h2>
     <div class="ind" id="ind"><div class="loading">…</div></div>
   </section>
 </main>
@@ -330,32 +330,25 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const I = (n, c) => window.DI ? DI(n, c) : "";
+const tr = (k, p) => t("overview." + k, p);     // this page's catalog (static/i18n/<locale>/overview.json)
 // ? help button: the text lives in data-tip (plain text, newlines kept)
-const q = (s, label = "說明") => s ? `<button type="button" class="q" aria-label="${esc(label)}" data-tip="${esc(s)}">?</button>` : "";
-// glossary: terms in engine text get a hover (tap on touch) explanation
-const GLOSS = {
-  "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
-    "怎麼測（心率飄移測試）：\n" +
-    "1. 平日排 50 分：冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線（不要山路）；記下溫度，熱的時候結果會偏高；先暖身 10 分鐘到開始流汗\n" +
-    "2. 從你猜的 AeT 心率起跑，固定功率跑 40 分鐘（Uphill Athlete：只有 40 分就做 40 分，不建議更短），中途不停、不加速；主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）\n" +
-    "3. 比較前 20 分與後 20 分的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
-    "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
-  "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
-    "怎麼測（課表偏好選一種）：\n" +
-    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分；CP ≈ 0.95 × 20 分平均功率\n" +
-    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分；" +
-    "CP = (12 分功率×720 − 3 分功率×180) ÷ 540，W′ = (3 分功率 − CP) × 180\n" +
-    "• 用比賽：5–10 K 比賽或計時跑，以 30 分為錨點換算\n" +
-    "測完在活動判讀卡按「套用這次的 CP」；每 4–6 週測一次，賽前 10 天內不要測",
-  "間歇門檻": "間歇門檻：基礎期什麼時候可以排間歇（課表偏好可以選方法，每個選項的 ? 有說明）。\n\n" +
-    "自動（預設）：有實測 AeT（16 週內）而且 LTHR 不是預設值 → Uphill Athlete 差距法（LTHR ÷ AeT − 1 ≤ 10%），" +
-    "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5、週增量 ≤ 10%、" +
-    "3:1 恢復週改 fartlek、TSB。劑量 5×1 分 → 6×1 → 4×3 上坡 → 5×3 → 4×4，之後閾值下 3×8／4×8 交替。\n\n" +
-    "選了某個方法但缺資料時不會永久鎖住，改照護欄排（自訂）。",
-};
-const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
-const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
-async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`); return r.json(); }
+const q = (s, label = tr("help")) => s ? `<button type="button" class="q" aria-label="${esc(label)}" data-tip="${esc(s)}">?</button>` : "";
+// glossary: terms in engine text get a hover (tap on touch) explanation; the term is
+// matched as the engine writes it in the page's language (AeT / CP 測試 = CP test / 間歇門檻 = interval gate)
+const GLOSS = Object.fromEntries(["aet", "cp_test", "i_gate"].map((k) => [tr(`gloss.${k}.term`).toLowerCase(), tr(`gloss.${k}.tip`)]));
+const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi");
+const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m.toLowerCase()])}">${m}</span>`);
+// an error response's text: a UserError's translated {"detail": {"message"}}, a plain detail string, else status + body
+async function errText(r) {
+  const txt = await r.text();
+  try {
+    const d = JSON.parse(txt).detail;
+    if (d && typeof d === "object" && d.message) return d.message;
+    if (typeof d === "string") return d;
+  } catch {}
+  return `${r.status} ${txt.slice(0, 200)}`;
+}
+async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(await errText(r)); return r.json(); }
 const ls = { get(k, d) { try { const v = localStorage.getItem("overview." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("overview." + k, JSON.stringify(v)); } catch {} } };
 
@@ -363,17 +356,17 @@ const ls = { get(k, d) { try { const v = localStorage.getItem("overview." + k); 
 const hm = (s) => { if (s == null) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
 const hrs = (h) => h == null ? "–" : (h >= 10 ? h.toFixed(0) : h.toFixed(1)) + " h";
 const hrN = (h) => h == null ? "–" : (h >= 10 ? h.toFixed(0) : h.toFixed(1));
-const km = (v) => v == null ? "–" : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(1)) + " km";
-const m0 = (v) => v == null ? "–" : Math.round(v).toLocaleString() + " m";
-const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
+const km = (v) => v == null ? "–" : (v >= 100 ? I18N.fmt.num(v, 0) : v.toFixed(1)) + " km";
+const m0 = (v) => v == null ? "–" : I18N.fmt.num(v, 0) + " m";
+const n0 = (v) => v == null ? "–" : I18N.fmt.num(v, 0);
 const sgn = (v, f = n0) => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "±") + f(Math.abs(v));
 const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
-const WD = I18N.fmt.weekdays("narrow");     // i18n.js: 一…日 / M…S, Monday first
-const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
-const wd = (iso) => WD[(new Date(iso + "T00:00:00").getDay() + 6) % 7];
+const md = (iso) => I18N.fmt.date(iso, "md");
+const wd = (iso) => I18N.fmt.weekday(iso, "short");      // 週四 / Thu
+const mins = (n) => tr("unit.min", { n });               // 40 分 / 40 min
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s3", bike: "--s4", strength: "--s5", walk: "--s6", other: "--s7" };
 const catColor = (k) => css(CAT_VAR[k] || "--s7");
-const LEVEL = { good: "良好", watch: "注意", bad: "要處理", info: "參考", na: "資料不足" };
+const LEVEL = Object.fromEntries(["good", "watch", "bad", "info", "na"].map((k) => [k, tr("level." + k)]));
 const stw = (lvl, word) => `<span class="st ${esc(lvl)}">${I(lvl)}${esc(word ?? LEVEL[lvl] ?? "")}</span>`;
 
 const charts = {};
@@ -393,8 +386,8 @@ function spark(pts, level, last) {
   const col = level === "bad" ? "var(--bad)" : level === "watch" ? "var(--watch)" : level === "good" ? "var(--good)" : "var(--accent)";
   const lx = X(xs[xs.length - 1]), ly = Y(ys[ys.length - 1]);
   const zero = y0 < 0 && y1 > 0 ? `<line x1="0" x2="200" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--line)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : "";
-  return `<svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none" role="img" aria-label="近 90 天走勢">
-    <title>近 90 天：${esc(P[0][0])} ${Math.round(ys[0])} → ${esc(P[P.length - 1][0])} ${Math.round(ys[ys.length - 1])}</title>${zero}
+  return `<svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none" role="img" aria-label="${esc(tr("spark.label"))}">
+    <title>${esc(tr("spark.title", { d0: P[0][0], v0: Math.round(ys[0]), d1: P[P.length - 1][0], v1: Math.round(ys[ys.length - 1]) }))}</title>${zero}
     <polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"
       points="${P.map((p, i) => `${X(xs[i]).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join(" ")}"/>
     <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3.2" fill="${col}" stroke="var(--panel)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
@@ -402,7 +395,7 @@ function spark(pts, level, last) {
 // progress ring (done ÷ target)
 function ring(f, col = "var(--accent)") {
   const r = 19, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, f || 0));
-  return `<svg class="ring" viewBox="0 0 46 46" role="img" aria-label="完成 ${Math.round((f || 0) * 100)}%">
+  return `<svg class="ring" viewBox="0 0 46 46" role="img" aria-label="${esc(tr("ring.label", { pct: Math.round((f || 0) * 100) }))}">
     <circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--line)" stroke-width="5"/>
     <circle cx="23" cy="23" r="${r}" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round"
       stroke-dasharray="${(c * v).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 23 23)"/>
@@ -413,71 +406,84 @@ const bar = (label, done, tgt, fmt) => `<div class="b"><span>${label}</span>
 
 // ---------------- KPI tiles ----------------
 const ind = (id) => (STATUS?.indicators || []).find((x) => x.id === id);
-const tipOf = (i) => i ? [i.verdict, i.why, i.action ? "→ " + i.action : "", i.source ? "來源：" + i.source : ""].filter(Boolean).join("\n") : "";
+const srcTip = (s) => s ? tr("source", { src: s }) : "";
+const tipOf = (i) => i ? [i.verdict, i.why, i.action ? "→ " + i.action : "", srcTip(i.source)].filter(Boolean).join("\n") : "";
+const hoursNote = (tph) => tr("week.hours_note", { tph: n0(tph) });
 function renderKpis() {
   if (!STATUS) return;
   const F = ind("fitness"), T = ind("form"), ph = ind("phase"), g = STATUS.goals;
   const out = [];
   const ramp = F?.extra?.ramp_week;
-  out.push(`<div class="kpi"><div class="k">${I("fitness")}體能 CTL${q(tipOf(F))}</div>
+  out.push(`<div class="kpi"><div class="k">${I("fitness")}${esc(tr("kpi.fitness"))}${q(tipOf(F))}</div>
     <div class="row"><div class="v">${esc(F?.text ?? "–")}</div>${spark(F?.spark, F?.level)}</div>
-    <div class="sub"><span class="num">${ramp == null ? "" : `本週 ${sgn(ramp, (v) => v.toFixed(1))}/週`}</span>${F ? stw(F.level, kpiWord(F)) : ""}</div></div>`);
-  out.push(`<div class="kpi"><div class="k">${I("form")}狀況 TSB${q(tipOf(T))}</div>
+    <div class="sub"><span class="num">${ramp == null ? "" : esc(tr("kpi.ramp", { ramp: sgn(ramp, (v) => v.toFixed(1)) }))}</span>${F ? stw(F.level, kpiWord(F)) : ""}</div></div>`);
+  // a word of the verdict, else the Form zone's name (TrainingPeaks' names in English, status extra.zone)
+  const zone = T?.extra?.zone;
+  out.push(`<div class="kpi"><div class="k">${I("form")}${esc(tr("kpi.form"))}${q(tipOf(T))}</div>
     <div class="row"><div class="v">${esc(T?.text ?? "–")}</div>${spark(T?.spark, T?.level)}</div>
-    <div class="sub"><span class="num">${T?.why ? esc(T.why.replace(/^TSB [^（]*/, "").replace(/[（）]/g, "")) : ""}</span>${T ? stw(T.level, kpiWord(T)) : ""}</div></div>`);
+    <div class="sub"><span class="num">${T?.why ? esc(T.why.replace(/^TSB [^（(]*/, "").replace(/[（）()]/g, "")) : ""}</span>${T ? stw(T.level, kpiWord(T, zone && tr("zone." + zone))) : ""}</div></div>`);
   // this week: from the stored plan once loaded (the user's edits), else the generated targets
   const S = SP?.summary, D = PLAN?.done;
   const th = S?.hours ?? PLAN?.target?.hours, tt = S?.tss ?? PLAN?.target?.tss;
   if (PLAN) {
     const f = th > 0 ? D.hours / th : 0;
-    const wtip = [...(PLAN.why || []), "時數不含肌力；TSS 以你近 6 週每小時 " + n0(PLAN.target.tss_per_hour) + " TSS 換算"].join("\n");
-    out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量${q(wtip)}</div>
+    const wtip = [...(PLAN.why || []), hoursNote(PLAN.target.tss_per_hour)].join("\n");
+    out.push(`<div class="kpi"><div class="k">${I("volume")}${esc(tr("kpi.volume"))}${q(wtip)}</div>
       <div class="row"><div class="v">${hrN(D.hours)}<small>/ ${hrs(th)}</small></div>${ring(f, f >= 1 ? "var(--good)" : "var(--accent)")}</div>
-      <div class="sub"><span class="num">TSS ${n0(D.tss)} / ${n0(tt)}</span>${stw(f >= 1 ? "good" : "info", f >= 1 ? "達成" : f >= 0.5 ? "過半" : "進行中")}</div></div>`);
-  } else out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量</div><div class="loading">…</div></div>`);
+      <div class="sub"><span class="num">TSS ${n0(D.tss)} / ${n0(tt)}</span>${stw(f >= 1 ? "good" : "info", tr(f >= 1 ? "kpi.vol_done" : f >= 0.5 ? "kpi.vol_half" : "kpi.vol_going"))}</div></div>`);
+  } else out.push(`<div class="kpi"><div class="k">${I("volume")}${esc(tr("kpi.volume"))}</div><div class="loading">…</div></div>`);
   const name = ph?.extra?.next_a;
-  out.push(`<div class="kpi"><div class="k">${I("flag")}下一場 A 賽${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
-    ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>天</small></div></div>
+  out.push(`<div class="kpi"><div class="k">${I("flag")}${esc(tr("kpi.next_a"))}${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
+    ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>${esc(tr("unit.days_small", { n: g.days_to_next_a }))}</small></div></div>
       <div class="sub"><span>${esc(name || "")}</span>${STATUS.phase ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>`
-      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/plan/page">新增目標賽事 →</a></div>`}</div>`);
+      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/plan/page">${esc(tr("kpi.add_event"))}</a></div>`}</div>`);
   $("kpis").innerHTML = out.join("");
 }
 // one word for a KPI tile: the verdict before its first punctuation when short, else the level word
-function kpiWord(i) {
-  const v = String(i.verdict || "").split(/[，、：（()）；]/).map((x) => x.trim()).find((x) => x && !/\d/.test(x) && x.length <= 6);
-  return v || LEVEL[i.level];
+// (zh: ≤ 6 characters; en: ≤ 3 words)
+function kpiWord(i, fallback) {
+  const short = (x) => I18N.locale === "zh-TW" ? x.length <= 6 : x.length <= 24 && x.split(/\s+/).length <= 3;
+  const v = String(i.verdict || "").split(/[，、：（()）；,;:]|\s[–—-]\s/).map((x) => x.trim()).find((x) => x && !/\d/.test(x) && short(x));
+  return v || fallback || LEVEL[i.level];
 }
 
 // ---------------- status: strip, to-do, indicators ----------------
 async function loadStatus() {
   const s = STATUS = await j(`${API}/status`);
-  $("asof").textContent = `資料到 ${s.today}`;
+  $("asof").textContent = tr("asof", { day: s.today });
   const p = s.phase, c = s.counts;
-  $("strip").innerHTML = `<span class="chip">${I("flag")}<b>${esc(p ? p.label : "未設定周期")}</b>${p ? `<span class="faint num">${md(p.start)}–${md(p.end)}</span>` : ""}${p ? q("這個周期的目標：" + p.goal) : ""}</span>
+  $("strip").innerHTML = `<span class="chip">${I("flag")}<b>${esc(p ? p.label : tr("no_phase"))}</b>${p ? `<span class="faint num">${md(p.start)}–${md(p.end)}</span>` : ""}${p ? q(tr("phase_goal", { goal: p.goal })) : ""}</span>
     <span class="chip counts" title="${esc(s.headline)}"><span class="st bad">${I("bad")}${c.bad}</span><span class="st watch">${I("watch")}${c.watch}</span><span class="st good">${I("good")}${c.good}</span>${q(s.headline)}</span>`;
   renderKpis();
   // to-do: icon + short title; the detail opens on click
   const lvl = (a) => (ind((a.because || [])[0]) || {}).level || "info";
-  $("todo-sub").textContent = s.actions.length ? `${s.actions.length} 項` : "";
+  $("todo-sub").textContent = s.actions.length ? tr("n_items", { n: s.actions.length }) : "";
   $("actions").innerHTML = s.actions.length ? s.actions.map((a) => {
-    const [t, ...rest] = String(a.title).split("：");
+    const [t, rest] = headRest(a.title);
     const l = lvl(a);
-    return `<details class="al ${l}"><summary>${I(l)}<b>${gl(t)}</b><span class="s">${gl(rest.join("："))}</span></summary>
-      <div class="body">${gl(a.detail)}${a.source ? ` ${q("來源：" + a.source)}` : ""}</div></details>`;
-  }).join("") : `<p class="meta">${I("good")} 沒有需要處理的項目</p>`;
+    return `<details class="al ${l}"><summary>${I(l)}<b>${gl(t)}</b><span class="s">${gl(rest)}</span></summary>
+      <div class="body">${gl(a.detail)}${a.source ? ` ${q(srcTip(a.source))}` : ""}</div></details>`;
+  }).join("") : `<p class="meta">${I("good")} ${esc(tr("todo.none"))}</p>`;
   const order = { bad: 0, watch: 1, good: 2, info: 3, na: 4 };
   const inds = [...s.indicators].sort((a, b) => order[a.level] - order[b.level]);
-  $("ind-sub").textContent = `${inds.length} 項 · 全部運動一起算`;
+  $("ind-sub").textContent = tr("ind.sub", { n: inds.length });
   $("ind").innerHTML = inds.map((i) => {
     const more = [i.why ? `<div>${gl(i.why)}</div>` : "", driftTier(i), i.action ? `<div class="act">→ ${gl(i.action)}</div>` : "", heatExtra(i),
-      i.source ? `<div class="faint">來源：${esc(i.source)}</div>` : ""].filter(Boolean).join("");
+      i.source ? `<div class="faint">${esc(srcTip(i.source))}</div>` : ""].filter(Boolean).join("");
     return `<div class="ic ${i.level}">
       <div class="top"><span>${gl(i.title)}</span>${stw(i.level)}</div>
       <div class="vr"><div class="v">${esc(i.text)}</div>${spark(i.spark, i.level)}</div>
       ${i.verdict ? `<div class="vd" title="${esc(i.verdict)}">${gl(i.verdict)}</div>` : ""}
       ${applyCpBtn(i)}${aetApply(i)}
-      ${more ? `<details class="more"><summary>詳細</summary><div class="body">${more}</div></details>` : ""}</div>`;
+      ${more ? `<details class="more"><summary>${esc(tr("more"))}</summary><div class="body">${more}</div></details>` : ""}</div>`;
   }).join("");
+}
+// an engine line 「標題：說明」 / "Title: detail" -> [title, detail] (the first full-width colon, else ": ")
+function headRest(s) {
+  s = String(s ?? "");
+  let i = s.indexOf("："), n = 1;
+  if (i < 0) { i = s.indexOf(": "); n = 2; }
+  return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + n)];
 }
 
 // 熱適應 card (status.i_heat, engine/heat.py): daily heat dose bars under the S line,
@@ -485,18 +491,19 @@ async function loadStatus() {
 function heatExtra(i) {
   if (i.id !== "heat" || !i.extra) return "";
   const x = i.extra, doses = x.doses || [];
-  const bars = doses.length ? `<div class="heatbars" title="每天的熱劑量（近 60 天，1 = ≥ 60 分鐘 Hadley ≥ 150）">${doses.slice(-60).map(([d, v]) =>
+  const bars = doses.length ? `<div class="heatbars" title="${esc(tr("heat.bars"))}">${doses.slice(-60).map(([d, v]) =>
     `<i style="height:${Math.max(2, v * 18)}px" title="${esc(d)} ${Math.round(v * 100)}%"></i>`).join("")}</div>` : "";
-  const r = x.s_race ? `<div>${esc(x.s_race.event)}（${esc(x.s_race.date)}）比賽日預估 S ${Math.round(x.s_race.center * 100)} %（${Math.round(x.s_race.low * 100)}–${Math.round(x.s_race.high * 100)} %）</div>` : "";
-  const h = x.hrc && x.hrc.recent != null ? `<div>熱天心率成本 HRC：近 4 週 ${x.hrc.recent.toFixed(1)}、前 4 週 ${x.hrc.before != null ? x.hrc.before.toFixed(1) : "–"} bpm / 10 Hadley${x.hrc.disagrees ? " · <b>觀測不支持模型</b>" : ""}</div>` : "";
-  return `${bars}${r}${h}<div><span class="st watch">推估</span> a = ${x.a}（${(x.a_range || []).join("–")}）</div>`;
+  const r = x.s_race ? `<div>${esc(tr("heat.race", { event: x.s_race.event, date: x.s_race.date, s: Math.round(x.s_race.center * 100),
+    lo: Math.round(x.s_race.low * 100), hi: Math.round(x.s_race.high * 100) }))}</div>` : "";
+  const h = x.hrc && x.hrc.recent != null ? `<div>${esc(tr("heat.hrc", { recent: x.hrc.recent.toFixed(1), before: x.hrc.before != null ? x.hrc.before.toFixed(1) : "–" }))}${x.hrc.disagrees ? ` · <b>${esc(tr("heat.disagrees"))}</b>` : ""}</div>` : "";
+  return `${bars}${r}${h}<div><span class="st watch">${esc(tr("estimate"))}</span> a = ${x.a}（${(x.a_range || []).join("–")}）</div>`;
 }
 
 // 心率飄移 card (status.i_drift): runs on the 參考 tier are counted for display — say so, why on hover
 function driftTier(i) {
   const x = i.id === "drift" && i.extra;
   if (!x || !x.ref) return "";
-  return `<div><span class="st watch">參考</span> ${esc(x.ref)} 次是${esc(x.ref_label || "")}${x.test ? `、${esc(x.test)} 次嚴格` : ""} ${q(x.ref_tip)}</div>`;
+  return `<div><span class="st watch">${esc(tr("level.info"))}</span> ${esc(tr("drift.ref", { n: x.ref, label: x.ref_label || "" }))}${x.test ? esc(tr("drift.strict", { n: x.test })) : ""} ${q(x.ref_tip)}</div>`;
 }
 
 // 測試 card: 「套用這次的 AeT」 when the latest AeT drift test is in UA's 3.5–5 % band
@@ -504,7 +511,7 @@ function driftTier(i) {
 function aetApply(i) {
   const at = i.id === "testing" && i.extra && i.extra.aet_test;
   if (!at || !at.apply) return "";
-  return `<div class="act"><button type="button" class="btn" data-aet-apply>套用這次的 AeT（${esc(at.apply.aethr)} bpm）</button>
+  return `<div class="act"><button type="button" class="btn" data-aet-apply>${esc(tr("aet.apply", { hr: at.apply.aethr }))}</button>
     <span class="meta" data-apply-msg>${esc(at.date)} ${at.drift != null ? (at.drift * 100).toFixed(1) + "%" : ""}</span>${q(at.basis)}</div>`;
 }
 document.addEventListener("click", async (ev) => {
@@ -513,15 +520,15 @@ document.addEventListener("click", async (ev) => {
   const at = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).aet_test;
   if (!at || !at.apply) return;
   const a = at.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
-  if (!confirm(`把 ${a.date} 的 AeT 設成 ${a.aethr} bpm？區間和間歇門檻會重新計算`)) return;
+  if (!confirm(tr("aet.confirm", { date: a.date, hr: a.aethr }))) return;
   b.disabled = true;
   try {
     const r = await fetch("/api/v1/plan/thresholds/apply-estimate", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(a) });
-    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+    if (!r.ok) throw new Error(await errText(r));
     b.remove();
-    msg.textContent = `已套用：${a.date} AeT ${a.aethr} bpm`;
-  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+    msg.textContent = tr("aet.applied", { date: a.date, hr: a.aethr });
+  } catch (e) { b.disabled = false; msg.textContent = tr("apply_failed", { msg: e.message }); }
 });
 
 // 測試 indicator: 「套用這次的 CP」 (status.i_testing extra.cp_test.apply -> POST /api/v1/plan/thresholds/apply-cp)
@@ -530,7 +537,7 @@ function applyCpBtn(i) {
   const ct = i.id === "testing" && i.extra && i.extra.cp_test;
   if (!ct || !ct.apply) return "";
   return `<div class="act"><button type="button" class="btn" data-apply-cp="${esc(ct.idx)}">${esc(ct.apply.label)}</button>
-    <span class="meta" data-apply-msg>${esc(ct.date)}</span>${q(`${ct.method_label || ""} · 品質 ${ct.quality || ""}`)}</div>`;
+    <span class="meta" data-apply-msg>${esc(ct.date)}</span>${q(tr("cp.method_quality", { method: ct.method_label || "", quality: ct.quality || "" }))}</div>`;
 }
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-apply-cp]");
@@ -538,48 +545,48 @@ document.addEventListener("click", async (ev) => {
   const ct = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).cp_test;
   if (!ct || !ct.apply) return;
   const a = ct.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
-  if (!confirm(`把 ${a.date} 的 CP 設成 ${a.cp} W（${ct.method_label}，品質 ${ct.quality}）？區間和 TSS 會重新計算`)) return;
+  if (!confirm(tr("cp.confirm", { date: a.date, cp: a.cp, method: ct.method_label, quality: ct.quality }))) return;
   b.disabled = true;
   try {
     const r = await fetch("/api/v1/plan/thresholds/apply-cp", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ date: a.date, cp: a.cp, wprime: a.wprime, cp_method: a.cp_method, activity_index: a.activity_index, note: a.note }) });
-    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+    if (!r.ok) throw new Error(await errText(r));
     b.remove();
-    msg.textContent = `已套用：${a.date} CP ${a.cp} W`;
-  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+    msg.textContent = tr("cp.applied", { date: a.date, cp: a.cp });
+  } catch (e) { b.disabled = false; msg.textContent = tr("apply_failed", { msg: e.message }); }
 });
 
 // ---------------- 5 區 opening (GET /z5 = quality_gate.z5_card) ----------------
 // the 3-step tracker + the single 「還缺：…」 line; everything else is behind ? / 詳細
 const Z5_ICON = { confirmed: "good", open: "good", paused: "watch", reentry: "bad", unconfirmed: "na" };
-const src = (s) => q(s ? "來源：" + s : "", "來源");
+const src = (s) => q(srcTip(s), tr("source_label"));
 async function loadZ5() {
   const c = await j(`${API}/z5`);
   if (c.history_href) $("z5-hist").href = c.history_href;
   const sub = c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}`
-    : c.state === "paused" || c.state === "reentry" ? (c.reason || "") : (c.reason || "還沒確認有氧基礎");
+    : c.state === "paused" || c.state === "reentry" ? (c.reason || "") : (c.reason || tr("z5.unconfirmed"));
   $("z5-st").innerHTML = `<span class="z5st ${esc(c.state)}" title="${esc(sub)}">${I(Z5_ICON[c.state] || "na")}${esc(c.label)}</span>`;
   const B = c.base || { tests: [] }, z3 = c.z3, z5ok = c.open && z3.ok, base = B.ok, R = c.reentry;
   const need = c.next?.text ? `<p class="z5need" role="status">${I("chev")}<span>${esc(c.next.text)}</span></p>` : "";
   const tmark = (i) => `<span class="${i.ok === true ? "y" : i.ok === false ? "n" : ""}" tabindex="0"
-    data-tip="${esc(`${i.label}\n${i.value}${i.need ? `\n需要 ${i.need}` : ""}${i.src ? `\n來源：${i.src}` : ""}`)}">${i.ok === true ? "✓" : i.ok === false ? "✕" : "–"}</span>`;
+    data-tip="${esc(`${i.label}\n${i.value}${i.need ? "\n" + tr("z5.need", { need: i.need }) : ""}${i.src ? "\n" + srcTip(i.src) : ""}`)}">${i.ok === true ? "✓" : i.ok === false ? "✕" : "–"}</span>`;
   const dots = Array.from({ length: z3.need }, (_, i) => `<i class="${i < z3.done ? "on" : ""}"></i>`).join("");
   const cur = !base ? 0 : !z3.ok ? 1 : 2;
   const steps = `<ol class="steps">
-    <li class="${base ? "ok" : ""} ${cur === 0 ? "cur" : ""}"><span class="n">${base ? "✓" : 1}</span><span class="lb">有氧基礎</span>
-      <span class="sb">${c.state === "reentry" ? "恢復期內不判斷" : B.tests.length ? `${B.pre ? `<span class="tests pre" aria-label="前提：週量穩定">量${tmark(B.pre)}</span>` : ""}<span class="tests" aria-label="三種測試">${B.tests.map(tmark).join("")}</span>` : esc(B.empty || "")}${q(B.label + (B.pre ? `\n\n${B.pre.label}：測試前的週量要穩定，測試才算（${B.pre.src}）` : ""))}</span></li>
-    <li class="${z3.ok ? "ok" : ""} ${cur === 1 ? "cur" : ""}"><span class="n">${z3.ok ? "✓" : 2}</span><span class="lb">3 區 ${z3.done}/${z3.need}</span>
-      <span class="sb"><span class="dots" role="img" aria-label="3 區達標 ${z3.done} / ${z3.need}">${dots}</span>${q("3 區只要護欄通過就照排；跑順 3 堂才進 5 區" + (z3.src ? "\n來源：" + z3.src : ""))}</span></li>
-    <li class="${z5ok ? "ok" : ""} ${cur === 2 && !z5ok ? "cur" : ""}"><span class="n">${z5ok ? "✓" : 3}</span><span class="lb">5 區間歇</span>
-      <span class="sb">${z5ok ? "可以排" : "還不行"}${q((z5ok ? "可以排：每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天" : "還不行：本週的間歇是 3 區") + "\n來源：台灣教練")}</span></li>
+    <li class="${base ? "ok" : ""} ${cur === 0 ? "cur" : ""}"><span class="n">${base ? "✓" : 1}</span><span class="lb">${esc(tr("z5.step.base"))}</span>
+      <span class="sb">${c.state === "reentry" ? esc(tr("z5.reentry_no_judge")) : B.tests.length ? `${B.pre ? `<span class="tests pre" aria-label="${esc(tr("z5.pre_label"))}">${esc(tr("z5.pre_short"))}${tmark(B.pre)}</span>` : ""}<span class="tests" aria-label="${esc(tr("z5.tests_label"))}">${B.tests.map(tmark).join("")}</span>` : esc(B.empty || "")}${q(B.label + (B.pre ? "\n\n" + tr("z5.pre_tip", { label: B.pre.label, src: B.pre.src }) : ""))}</span></li>
+    <li class="${z3.ok ? "ok" : ""} ${cur === 1 ? "cur" : ""}"><span class="n">${z3.ok ? "✓" : 2}</span><span class="lb">${esc(tr("z5.step.z3", { done: z3.done, need: z3.need }))}</span>
+      <span class="sb"><span class="dots" role="img" aria-label="${esc(tr("z5.z3_dots", { done: z3.done, need: z3.need }))}">${dots}</span>${q(tr("z5.z3_tip") + (z3.src ? "\n" + srcTip(z3.src) : ""))}</span></li>
+    <li class="${z5ok ? "ok" : ""} ${cur === 2 && !z5ok ? "cur" : ""}"><span class="n">${z5ok ? "✓" : 3}</span><span class="lb">${esc(tr("z5.step.z5"))}</span>
+      <span class="sb">${esc(tr(z5ok ? "z5.can" : "z5.cannot"))}${q(tr(z5ok ? "z5.can_tip" : "z5.cannot_tip") + "\n" + tr("z5.src_hsu"))}</span></li>
   </ol>`;
   const K = c.keep, more = [];
-  if (R && c.state === "reentry") more.push(`<div><b>恢復期還有 ${R.days_left} 天</b>（停跑 ${R.days} 天，到 ${esc(R.quality_from)} 前只排輕鬆跑）；之後先完成 ${R.z3_before_z5} 堂 3 區${R.drift_check ? "，並通過長跑飄移檢查" : ""}${R.reconfirm ? "，而且要重新確認有氧基礎" : ""}${src(R.src)}</div>`);
-  if (K) more.push(`<div>維持條件：${K.last_week ? `上週 1 區 <b class="num">${Math.round(K.last_week.z1_min)}</b> 分` : "確認後還沒有完整的一週"}
-     ／ 暫停線 <b class="num">${Math.round(K.line_min)}</b> 分（確認時 ${Math.round(K.level_min)} 分的 2/3，連 3 週低於才暫停）${src(K.src)}
+  if (R && c.state === "reentry") more.push(`<div>${tr("z5.reentry", { left: R.days_left, days: R.days, from: esc(R.quality_from), z3: R.z3_before_z5 })}${R.drift_check ? esc(tr("z5.reentry_drift")) : ""}${R.reconfirm ? esc(tr("z5.reentry_reconfirm")) : ""}${src(R.src)}</div>`);
+  if (K) more.push(`<div>${esc(tr("z5.keep"))}${K.last_week ? tr("z5.keep_last", { min: `<b class="num">${Math.round(K.last_week.z1_min)}</b>` }) : esc(tr("z5.keep_none"))}
+     ／ ${tr("z5.keep_line", { line: `<b class="num">${Math.round(K.line_min)}</b>`, level: Math.round(K.level_min) })}${src(K.src)}
      ${K.why ? `<br><span class="st watch">${esc(K.why)}</span>` : ""}</div>`);
-  if (c.test) more.push(`<div><span class="st watch">${I("test")}建議測試</span> ${esc(c.test.text)}</div>`);
-  $("z5").innerHTML = `${need}${steps}${more.length ? `<details class="more"><summary>詳細</summary><div class="body">${more.join("")}</div></details>` : ""}`;
+  if (c.test) more.push(`<div><span class="st watch">${I("test")}${esc(tr("z5.test"))}</span> ${esc(c.test.text)}</div>`);
+  $("z5").innerHTML = `${need}${steps}${more.length ? `<details class="more"><summary>${esc(tr("more"))}</summary><div class="body">${more.join("")}</div></details>` : ""}`;
 }
 
 // ---------------- B2B (GET /b2b = engine/b2b.card): numbers + icons, the rest on click ----------------
@@ -590,51 +597,53 @@ async function loadB2B() {
   $("b2bcard").hidden = false;
   const E = c.event, W = c.this_week || {}, T = c.trend || {};
   $("b2b-sub").textContent = E ? `${E.name} ${md(E.start)}` : "";
-  $("b2b-q").innerHTML = q(`B2B = 連續兩天、每天 ≥ 90 分的長天。\n判讀：第 2 天和第 1 天比，同 VAM 的心率差、同心率的 VAM 差。\n推估：判讀門檻 ±3 bpm、±5%、趨勢 ±2 個百分點都沒有來源。\n\n何時排：${c.rules.when}\n\n怎麼排：${c.rules.days}\n\n判讀：${c.rules.eval}`);
+  $("b2b-q").innerHTML = q(tr("b2b.tip", { when: c.rules.when, days: c.rules.days, eval: c.rules.eval }));
+  const minsJoin = (a) => mins((a || []).join(I18N.locale === "zh-TW" ? "＋" : " + "));
   let now;
-  if (W.due) now = [I("b2b"), `本週第 ${W.index} 次 · ${(W.minutes || []).join("＋")} 分`, (W.why || []).join("；")];
-  else if (W.suggest) now = [I("b2b"), `本週建議 B2B（${(W.minutes || []).join("＋")} 分）`, "還沒排：在建議框挑兩天再排入"];
-  else if (W.post) now = [I("rest"), `B2B 後輕鬆日到 ${md(W.post.until)}`, c.rules.post];
-  else if ((W.blocked || []).length && E && E.qualifies) now = [I("na"), "本週不排", W.blocked[0]];
+  if (W.due) now = [I("b2b"), tr("b2b.due", { i: W.index, mins: minsJoin(W.minutes) }), (W.why || []).join(tr("list_sep"))];
+  else if (W.suggest) now = [I("b2b"), tr("b2b.suggest", { mins: minsJoin(W.minutes) }), tr("b2b.suggest_tip")];
+  else if (W.post) now = [I("rest"), tr("b2b.post", { until: md(W.post.until) }), c.rules.post];
+  else if ((W.blocked || []).length && E && E.qualifies) now = [I("na"), tr("b2b.not_this_week"), W.blocked[0]];
   const ahead = c.planned.filter((p) => !p.this_week);
   const out = [];
   if (now) out.push(`<p class="now-l">${now[0]}<span>${esc(now[1])}</span>${q(now[2])}</p>`);
   out.push(`<div class="stats">
-    <div class="stat"><div class="k">${I("check")}做過</div><div class="v">${c.done.length}<small> 次</small></div></div>
-    <div class="stat"><div class="k">${I("b2b")}下次</div><div class="v">${ahead.length ? esc(ahead[0].sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")) : "–"}</div></div>
-    <div class="stat"><div class="k">${I("durability")}耐久性好</div><div class="v">${T.durable_share != null ? Math.round(T.durable_share * 100) + "<small>%</small>" : "–"}</div></div>
-    <div class="stat"><div class="k">${I("flag")}賽事</div><div class="v">${E ? (E.days > 1 ? E.days + "<small> 天</small>" : "單日") : "–"}</div></div></div>`);
+    <div class="stat"><div class="k">${I("check")}${esc(tr("b2b.done"))}</div><div class="v">${c.done.length}<small> ${esc(tr("unit.times_small", { n: c.done.length }))}</small></div></div>
+    <div class="stat"><div class="k">${I("b2b")}${esc(tr("b2b.next"))}</div><div class="v">${ahead.length ? esc(ahead[0].sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")) : "–"}</div></div>
+    <div class="stat"><div class="k">${I("durability")}${esc(tr("b2b.durable"))}</div><div class="v">${T.durable_share != null ? Math.round(T.durable_share * 100) + "<small>%</small>" : "–"}</div></div>
+    <div class="stat"><div class="k">${I("flag")}${esc(tr("b2b.event"))}</div><div class="v">${E ? (E.days > 1 ? E.days + `<small> ${esc(tr("unit.days_small", { n: E.days }))}</small>` : esc(tr("b2b.single_day"))) : "–"}</div></div></div>`);
   const rows = c.done.map((d, i) => {
     const r = d.eval || {}, n = r.n || {}, d1 = r.day1 || {}, d2 = r.day2 || {};
     const share = (x) => x.over_aet_share == null ? "–" : Math.round(x.over_aet_share * 100) + "%";
     const lv = { good: "good", watch: "watch", bad: "bad" }[r.level] || "na";
     return `<details class="rw"><summary><b>#${i + 1}</b><span class="num">${md(d.start)}–${md(d.end)}</span>
-        <span class="meta num">${d.minutes.join("＋")} 分</span>${stw(lv, r.label || "–")}</summary>
+        <span class="meta num">${esc(minsJoin(d.minutes))}</span>${stw(lv, r.label || "–")}</summary>
       <div class="body">${esc(r.text || "")}
-      <div class="grid2"><span>同 VAM 的心率</span><span class="num">${r.hr_shift_bpm == null ? "–" : sgn(r.hr_shift_bpm, (v) => v.toFixed(1)) + " bpm"}</span><span>±${(r.thresholds || {}).hr_bpm ?? 3} bpm 內＝差不多</span>
-        <span>同心率的 VAM</span><span class="num">${r.vam_ratio == null ? "–" : pctS(r.vam_ratio - 1)}</span><span>±${Math.round(((r.thresholds || {}).vam ?? 0.05) * 100)}% 內＝差不多</span>
-        <span>心率 > AeT+3</span><span class="num">${share(d1)} → ${share(d2)}</span><span>≤ 10%＝達標</span>
-        <span>爬坡段（第 1／2 天）</span><span class="num">${n.day1 ?? 0} ／ ${n.day2 ?? 0}</span><span>每段 100 m、坡度 ≥ 10%</span></div></div></details>`;
+      <div class="grid2"><span>${esc(tr("b2b.hr_same_vam"))}</span><span class="num">${r.hr_shift_bpm == null ? "–" : sgn(r.hr_shift_bpm, (v) => v.toFixed(1)) + " bpm"}</span><span>${esc(tr("b2b.hr_band", { bpm: (r.thresholds || {}).hr_bpm ?? 3 }))}</span>
+        <span>${esc(tr("b2b.vam_same_hr"))}</span><span class="num">${r.vam_ratio == null ? "–" : pctS(r.vam_ratio - 1)}</span><span>${esc(tr("b2b.vam_band", { pct: Math.round(((r.thresholds || {}).vam ?? 0.05) * 100) }))}</span>
+        <span>${esc(tr("b2b.over_aet"))}</span><span class="num">${share(d1)} → ${share(d2)}</span><span>${esc(tr("b2b.over_aet_ok"))}</span>
+        <span>${esc(tr("b2b.climbs"))}</span><span class="num">${n.day1 ?? 0} ／ ${n.day2 ?? 0}</span><span>${esc(tr("b2b.climbs_def"))}</span></div></div></details>`;
   }).join("");
   if (rows) out.push(`<div class="rows">${rows}</div>`);
-  if (c.done.length) out.push(`<p class="meta" style="margin:6px 0 0">${I("fitness")} ${esc(T.text || "")}${T.judged ? ` · ${T.judged} 次有判讀` : ""}</p>`);
-  if (ahead.length > 1) out.push(`<p class="meta" style="margin:4px 0 0">之後：${ahead.slice(1).map((p) => p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")).join("、")} <span class="faint">暫定</span></p>`);
+  if (c.done.length) out.push(`<p class="meta" style="margin:6px 0 0">${I("fitness")} ${esc(T.text || "")}${T.judged ? " · " + esc(tr("b2b.judged", { n: T.judged })) : ""}</p>`);
+  if (ahead.length > 1) out.push(`<p class="meta" style="margin:4px 0 0">${esc(tr("b2b.later", { days: ahead.slice(1).map((p) => p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")).join(tr("list_comma")) }))} <span class="faint">${esc(tr("b2b.tentative"))}</span></p>`);
   $("b2b").innerHTML = out.join("");
 }
 
 // ---------------- this week ----------------
 // session type -> icon + colour + label (identity is icon + word, never colour alone)
 const TYPES = {
-  easy: "輕鬆", z3: "3 區間歇", z5: "5 區間歇", long: "長跑", hike: "健行", b2b: "B2B", loaded: "負重", test: "測試",
-  strength: "肌力", race: "比賽", heat: "熱適應", notice: "提醒", rest: "休息" };
+  easy: tr("type.easy"), z3: tr("type.z3"), z5: tr("type.z5"), long: tr("type.long"), hike: tr("type.hike"), b2b: "B2B",
+  loaded: tr("type.loaded"), test: tr("type.test"), strength: tr("type.strength"), race: tr("type.race"), heat: tr("type.heat"),
+  notice: tr("type.notice"), rest: tr("type.rest") };
 function stype(s) {
   const k = s.kind, t = s.title || "";
   if (k === "test") return "test";
   if (k === "quality") return /^z5/i.test(s.rung_key || "") || /VO2max|5 區|Z5/i.test(t) ? "z5" : "z3";
   if (k === "race") return "race";
-  if (k === "strength") return /ME|肌耐力/.test(t) ? "loaded" : "strength";
+  if (k === "strength") return /ME|肌耐力|muscular endurance/i.test(t) ? "loaded" : "strength";
   if (/^B2B/.test(t) || /^long[23]$/.test(s.gen_key || "")) return "b2b";
-  if (/背\s*[\d.]+\s*kg|背包/.test(t) || /^(carry|me)$/.test(s.gen_key || "")) return "loaded";
+  if (/背\s*[\d.]+\s*kg|背包|[\d.]+\s*kg pack|backpack/i.test(t) || /^(carry|me)$/.test(s.gen_key || "")) return "loaded";
   if (k === "long" || k === "mountain") return "long";
   if (k === "hike") return "hike";
   if (k === "heat_passive" || (s.heat && k !== "easy")) return "heat";
@@ -648,22 +657,25 @@ function actTy(se) {
   if ((se.type || "").startsWith("test")) return "test";
   return "easy";
 }
-const CB = { pushed: "COROS ✓", updated: "COROS ✓", outdated: "COROS 需更新", failed: "COROS 失敗" };
+const CB = { pushed: "COROS ✓", updated: "COROS ✓", outdated: tr("coros.outdated"), failed: tr("coros.failed") };
 function sessHtml(s, today) {
   const ty = stype(s), done = s.state === "done", missed = s.state === "missed";
   const live = s.state === "active" && s.day >= today;
   const est = s.tss_est ?? s.tss, cp = done ? s.compliance : null;
-  const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分" : ""}${est ? ` · ${n0(est)}` : ""}`;
-  const tip = [s.title, `${TYPES[ty]}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
-    done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · TSS 計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
-    cp ? `完成度：${cp.label}${cp.pct != null ? ` ${cp.pct}%` : ""}（實際 ÷ 計畫${cp.tss_pct != null ? `：TSS ${cp.tss_pct}%` : ""}${cp.duration_pct != null ? ` · 時間 ${cp.duration_pct}%` : ""}；綠 ±20%、黃 20–50%、紅 > 50% 或類型不符）` : "",
-    done && s.vs?.off_plan ? `≠ ${s.vs.text}` : "", done ? "點一下看計畫 vs 實際、開啟活動" : "",
-    missed ? "未完成" : "", s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "",
-    live && s.coros?.status ? `COROS：${CB[s.coros.status] || s.coros.status}${s.coros.status === "failed" ? " " + (s.coros.error || "") : s.coros.status === "outdated" ? " " + (s.coros.reason || "課表改過，到課表頁再同步一次") : ""}` : ""].filter(Boolean).join("\n");
+  const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` : `${s.minutes ? mins(s.minutes) : ""}${est ? ` · ${n0(est)}` : ""}`;
+  const db = s.done_by;
+  const tip = [s.title, `${TYPES[ty]}${s.origin === "custom" ? " · " + tr("sess.custom") : s.edited ? " · " + tr("sess.edited") : ""}`,
+    done && db ? tr("sess.done", { cat: `${db.category_label || ""}${db.session && db.session.type_label ? " · " + db.session.type_label : ""}`,
+      time: hm(db.moving_s), plan: n0(est), actual: n0(db.tss) }) : `${s.minutes ? tr("unit.minutes", { n: s.minutes }) : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
+    cp ? tr("sess.compliance", { label: cp.label, pct: cp.pct != null ? ` ${cp.pct}%` : "", tss: cp.tss_pct != null ? tr("sess.cp_tss", { pct: cp.tss_pct }) : "",
+      dur: cp.duration_pct != null ? tr("sess.cp_dur", { pct: cp.duration_pct }) : "" }) : "",
+    done && s.vs?.off_plan ? `≠ ${s.vs.text}` : "", done ? tr("sess.click_done") : "",
+    missed ? tr("sess.missed") : "", s.target ? tr("sess.target", { target: s.target }) : "", live && s.detail ? s.detail : "",
+    live && s.coros?.status ? `COROS: ${CB[s.coros.status] || s.coros.status}${s.coros.status === "failed" ? " " + (s.coros.error || "") : s.coros.status === "outdated" ? " " + (s.coros.reason || tr("coros.outdated_tip")) : ""}` : ""].filter(Boolean).join("\n");
   const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
-  return `<button type="button" class="sx ty-${ty} ${missed ? "missed" : ""} ${cp ? "cp-" + esc(cp.level) : ""}" data-tip="${esc(tip)}"${go} aria-label="${esc(tip.split("\n").slice(0, 3).join("，"))}">
+  return `<button type="button" class="sx ty-${ty} ${missed ? "missed" : ""} ${cp ? "cp-" + esc(cp.level) : ""}" data-tip="${esc(tip)}"${go} aria-label="${esc(tip.split("\n").slice(0, 3).join(tr("list_sep_aria")))}">
     <span class="ic">${I(ty)}${done ? `<span class="ok" aria-hidden="true">✓</span>` : ""}</span>
-    <span class="tl">${esc(s.title)}</span><span class="mn num">${done && s.vs?.off_plan ? `<b class="offp" aria-label="沒照課表">≠</b> ` : ""}${info}${cp && cp.level !== "green" && cp.pct != null ? ` · ${cp.pct}%` : ""}</span></button>`;
+    <span class="tl">${esc(s.title)}</span><span class="mn num">${done && s.vs?.off_plan ? `<b class="offp" aria-label="${esc(tr("sess.off_plan"))}">≠</b> ` : ""}${info}${cp && cp.level !== "green" && cp.pct != null ? ` · ${cp.pct}%` : ""}</span></button>`;
 }
 const SCHED = "/api/v1/overview/plan/schedule/page";
 // a done session / an activity outside the plan: open it on the 課表 page (planned vs actual, the activity link)
@@ -842,8 +854,8 @@ const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d
 async function sj(method, url, body) {
   const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
   const b = await r.json().catch(() => ({}));
-  if (r.status === 401) throw new Error("COROS 未登入或登入過期，請到設定頁重新登入");
-  if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
+  if (r.status === 401) throw new Error(tr("coros_login"));
+  if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : b.detail?.message || `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
   return b;
 }
 async function loadPlan() {

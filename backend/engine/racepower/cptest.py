@@ -28,6 +28,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine.racepower import cp as CP
+from backend.i18n import _, N_
 
 SHORT_S = (150.0, 210.0)       # 3′ ± 30 s
 LONG_S = (660.0, 780.0)        # 12′ ± 60 s
@@ -73,13 +74,13 @@ def detect(laps: list[dict]) -> Optional[dict]:
                       "maximal": True, "why": ""})
     s, lo = bouts
     if s["p"] <= lo["p"]:
-        s.update(maximal=False, why=f"3′ {s['p']:.0f} W 不高於 12′ {lo['p']:.0f} W（功率應隨時間遞減）")
+        s.update(maximal=False, why=_("3′ {p3:.0f} W 不高於 12′ {p12:.0f} W（功率應隨時間遞減）", p3=s["p"], p12=lo["p"]))
     if s.get("hr_max") and lo.get("hr_max"):
         gap = lo["hr_max"] - s["hr_max"]
         if gap >= HR_GAP_BPM:
-            s.update(maximal=False, why=(s["why"] + "；" if s["why"] else "") + f"最高心率 {s['hr_max']:.0f} 比 12′ 的 {lo['hr_max']:.0f} 低 {gap:.0f} bpm")
+            s.update(maximal=False, why=(s["why"] + "；" if s["why"] else "") + _("最高心率 {hr3:.0f} 比 12′ 的 {hr12:.0f} 低 {gap:.0f} bpm", hr3=s["hr_max"], hr12=lo["hr_max"], gap=gap))
         elif -gap >= HR_GAP_BPM:
-            lo.update(maximal=False, why=f"最高心率 {lo['hr_max']:.0f} 比 3′ 的 {s['hr_max']:.0f} 低 {-gap:.0f} bpm")
+            lo.update(maximal=False, why=_("最高心率 {hr12:.0f} 比 3′ 的 {hr3:.0f} 低 {gap:.0f} bpm", hr12=lo["hr_max"], hr3=s["hr_max"], gap=-gap))
     return {"bouts": bouts}
 
 
@@ -96,7 +97,8 @@ def w_prime_prior(weight: float, sex: str = "male", wind: bool = False) -> dict:
     m, sd = W_PRIME_PRIOR_KJ[sex]
     bands = CP.RWC_BANDS[(sex, bool(wind), "jkg")]
     return {"lo": (m - sd) * 1000.0, "hi": (m + sd) * 1000.0, "mid": m * 1000.0,
-            "source": f"Ruiz-Alias 2025 業餘{'男' if sex == 'male' else '女'}性 Stryd 9/3 測試 W′ {m} ± {sd} kJ",
+            "source": (_("Ruiz-Alias 2025 業餘男性 Stryd 9/3 測試 W′ {m} ± {sd} kJ", m=m, sd=sd) if sex == "male"
+                       else _("Ruiz-Alias 2025 業餘女性 Stryd 9/3 測試 W′ {m} ± {sd} kJ", m=m, sd=sd)),
             "rwc_band_j": [bands[1] * weight, bands[2] * weight]}
 
 
@@ -106,16 +108,16 @@ def estimate(test: dict, weight: float, sex: str = "male", wind: bool = False) -
     if len(mx) == 2:
         f = CP.fit_cp([(b["t"], b["p"]) for b in mx])
         return {"method": "two_point", "cp": f["cp"], "w_prime": f["w_prime"], "cp_range": [f["cp"], f["cp"]],
-                "label": "3′ / 12′ 兩點（CP 模型）"}
+                "label": _("3′ / 12′ 兩點（CP 模型）")}
     if not mx:
-        return {"method": None, "cp": None, "w_prime": None, "cp_range": None, "label": "兩段都不是全力"}
+        return {"method": None, "cp": None, "w_prime": None, "cp_range": None, "label": _("兩段都不是全力")}
     b = mx[0]
     pr = w_prime_prior(weight, sex, wind)
     cp = b["p"] - pr["mid"] / b["t"]
     return {"method": "single_bout", "cp": cp, "w_prime": pr["mid"],
             "cp_range": [b["p"] - pr["hi"] / b["t"], b["p"] - pr["lo"] / b["t"]], "w_prime_prior": pr,
             "bout_s": b["t"], "bout_p": b["p"],
-            "label": f"只有 {b['nominal_s'] // 60:.0f}′ 是全力：CP = P − W′/t，W′ 用先驗"}
+            "label": _("只有 {mins:.0f}′ 是全力：CP = P − W′/t，W′ 用先驗", mins=b["nominal_s"] // 60)}
 
 
 # ---------------------------------------------------------------------------

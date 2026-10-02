@@ -33,9 +33,12 @@ from backend import i18n
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 CATALOG_DIR = STATIC / "i18n"
-ALWAYS_NS = ("common", "shell")
-# page file stem -> its catalog namespaces (default: the stem itself)
-PAGE_NS = {"wko5_viewer": ("viewer",), "share": ("share", "racepower")}
+# shell.js loads suggestions.js (the floating suggestion box) on every page
+ALWAYS_NS = ("common", "shell", "suggestions")
+# page file stem -> its catalog namespaces (default: the stem itself);
+# autoplan.js is included by the overview and the schedule page
+PAGE_NS = {"wko5_viewer": ("viewer",), "share": ("share", "racepower"),
+           "overview": ("overview", "autoplan"), "schedule": ("schedule", "autoplan")}
 I18N_JS = "/api/v1/static/i18n/i18n.js"
 
 

@@ -16,6 +16,7 @@ import io
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from typing import Optional
+from backend.i18n import _, N_
 
 MAX_BYTES = 20 * 1024 * 1024
 
@@ -57,18 +58,18 @@ def _parse_time(s: Optional[str]) -> Optional[dt.datetime]:
 def parse(data: bytes, filename: str = "") -> Track:
     """Bytes of a .gpx (or .fit course) file → Track. Raises GpxError."""
     if len(data) > MAX_BYTES:
-        raise GpxError(f"檔案超過 {MAX_BYTES // (1024 * 1024)} MB")
+        raise GpxError(_("檔案超過 {mb} MB", mb=MAX_BYTES // (1024 * 1024)))
     if filename.lower().endswith(".fit") or data[8:12] == b".FIT":
         return parse_fit_course(data)
     head = data[:4096].lower()
     if b"<!doctype" in data.lower() or b"<!entity" in head or b"<!entity" in data.lower():
-        raise GpxError("GPX 含 DOCTYPE / ENTITY 宣告，基於安全不解析")
+        raise GpxError(_("GPX 含 DOCTYPE / ENTITY 宣告，基於安全不解析"))
     try:
         root = ET.fromstring(data)
     except ET.ParseError as e:
-        raise GpxError(f"不是有效的 GPX：{e}") from None
+        raise GpxError(_("不是有效的 GPX：{err}", err=e)) from None
     if _local(root.tag) != "gpx":
-        raise GpxError("不是 GPX 檔（根元素不是 <gpx>）")
+        raise GpxError(_("不是 GPX 檔（根元素不是 <gpx>）"))
     lat, lon, ele, times = [], [], [], []
     name = ""
     wpts = []
@@ -120,9 +121,9 @@ def parse(data: bytes, filename: str = "") -> Track:
                 if _local(pt.tag) == "rtept":
                     take(pt)
     if len(lat) < 2:
-        raise GpxError("GPX 裡沒有軌跡點（trkpt / rtept）" if not trk_found else "軌跡點少於 2 個")
+        raise GpxError(_("GPX 裡沒有軌跡點（trkpt / rtept）") if not trk_found else _("軌跡點少於 2 個"))
     if all(e is None for e in ele):
-        raise GpxError("GPX 沒有海拔（ele）：請改用手動輸入距離與爬升")
+        raise GpxError(_("GPX 沒有海拔（ele）：請改用手動輸入距離與爬升"))
     t0 = next((t for t in times if t is not None), None)
     tt = None
     if t0 is not None:
@@ -136,7 +137,7 @@ def parse_fit_course(data: bytes) -> Track:
     try:
         import fitdecode
     except ImportError:                     # pragma: no cover
-        raise GpxError("伺服器沒有 FIT 解析器") from None
+        raise GpxError(_("伺服器沒有 FIT 解析器")) from None
     lat, lon, ele, times = [], [], [], []
     wpts = []
     t0 = None
@@ -171,11 +172,11 @@ def parse_fit_course(data: bytes) -> Track:
                         wpts.append({"name": str(nm or ""), "lat": la * 180.0 / 2 ** 31,
                                      "lon": lo * 180.0 / 2 ** 31})
     except Exception as e:                  # noqa: BLE001
-        raise GpxError(f"FIT 解析失敗：{str(e)[:80]}") from None
+        raise GpxError(_("FIT 解析失敗：{err}", err=str(e)[:80])) from None
     if len(lat) < 2:
-        raise GpxError("FIT 裡沒有帶座標的紀錄點")
+        raise GpxError(_("FIT 裡沒有帶座標的紀錄點"))
     if all(e is None for e in ele):
-        raise GpxError("FIT 沒有海拔：請改用手動輸入距離與爬升")
+        raise GpxError(_("FIT 沒有海拔：請改用手動輸入距離與爬升"))
     return Track(lat, lon, ele, times if any(t is not None for t in times) else None, wpts)
 
 

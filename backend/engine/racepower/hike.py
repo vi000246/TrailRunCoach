@@ -14,13 +14,14 @@ from __future__ import annotations
 import math
 from statistics import median
 from typing import Optional, Sequence
+from backend.i18n import _, N_
 
 # Terrain speed divisors, user-chosen per segment (經驗法則 / 外插): Soule &
 # Goldman 1972's η is light brush 1.2, heavy brush 1.5 (箭竹 sits between),
 # loose sand 2.1; 碎石 1.3 is our own pick; 無路 1.67 = Tobler's off-path 3/5.
 # Snow η and other single-source values are not offered.
 TERRAIN_ETA = {"normal": 1.0, "gravel": 1.3, "bamboo": 1.35, "offpath": 1.67}
-TERRAIN_LABEL = {"normal": "一般", "gravel": "碎石", "bamboo": "箭竹", "offpath": "無路"}
+TERRAIN_LABEL = {"normal": N_("一般"), "gravel": N_("碎石"), "bamboo": N_("箭竹"), "offpath": N_("無路")}
 MIN_TRIPS = 3
 DEFAULT_MOVING_RATIO = 0.8
 
@@ -35,7 +36,7 @@ def pandolf(weight: float, load: float, v: float, grade_pct: float, eta: float =
     original data is unverified, and it under-predicts heavy modern loads
     (Looney 2022), so the page still uses the v1 linear pack factor."""
     if grade_pct < 0:
-        raise ValueError("Pandolf 只適用上坡與平地（下坡修正未驗證）")
+        raise ValueError(_("Pandolf 只適用上坡與平地（下坡修正未驗證）"))
     return 1.5 * weight + 2.0 * (weight + load) * (load / weight) ** 2 + \
         eta * (weight + load) * (1.5 * v * v + 0.35 * v * grade_pct)
 
@@ -74,7 +75,7 @@ def day_fatigue(hdays: Sequence[dict]) -> dict:
     trips = {k: v for k, v in trips.items() if 1 in v and len(v) >= 2}
     if len(trips) < MIN_TRIPS:
         return {"factors": {}, "trips": len(trips),
-                "warning": f"多日行程只有 {len(trips)} 趟（需要 ≥ {MIN_TRIPS}）：沒有研究或個人資料可估多日疲勞，每天都用 1.0"}
+                "warning": _("多日行程只有 {n} 趟（需要 ≥ {need}）：沒有研究或個人資料可估多日疲勞，每天都用 1.0", n=len(trips), need=MIN_TRIPS)}
     by_n: dict[int, list] = {}
     for v in trips.values():
         for n, e in v.items():
@@ -150,5 +151,5 @@ def moving_ratio(achievements_rows: Sequence[dict]) -> tuple[float, str]:
           if r.get("moving_s") and r.get("elapsed_s") and r["elapsed_s"] < 20 * 3600 and r["elapsed_s"] > 0]
     rs = [x for x in rs if 0.3 < x <= 1.0]
     if len(rs) < 3:
-        return DEFAULT_MOVING_RATIO, "假設 80 %（登山紀錄不足）"
-    return float(median(rs)), f"你過去 {len(rs)} 次單日登山的移動 ÷ 總時間中位數"
+        return DEFAULT_MOVING_RATIO, _("假設 80 %（登山紀錄不足）")
+    return float(median(rs)), _("你過去 {n} 次單日登山的移動 ÷ 總時間中位數", n=len(rs))

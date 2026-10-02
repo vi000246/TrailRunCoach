@@ -46,7 +46,7 @@ def cvi_category(v: float) -> int:
     if r < 0:
         return 0
     idx = 1
-    for i, (_, lo) in enumerate(CVI_CATEGORIES):
+    for i, (_lab, lo) in enumerate(CVI_CATEGORIES):
         if i >= 1 and r >= lo:
             idx = i
     return idx

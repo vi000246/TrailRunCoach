@@ -77,7 +77,9 @@ import datetime as dt
 from statistics import median
 from typing import Callable, Iterable, Optional
 
-from backend.i18n import fmt
+import re
+
+from backend.i18n import _, N_, fmt
 
 FOLLOWERS = ("long2",)         # always 2 days (the 3-day version was dropped, 2026-10-02)
 ACCEPTED_KEY = "plan.b2b.accepted"   # user_settings: [{week, days: [d1, d2], minutes: [m1, m2], uids, at}]
@@ -105,13 +107,13 @@ VAM_SAME = 0.05                # 推估 (UA 5 %)
 AET_BAND_BPM = 10.0            # ΔVAM@AeT: windows at AeT − 10 … AeT (vo2max-gate-and-trail-metric.md §2.4 (a) ③)
 TREND_STEP = 0.02              # 推估: the day-2 VAM ratio moved ≥ 2 points = 變好 / 變差
 
-SRC_WHEN = ("UA（專項期、longer races）；Koop（最後 2–3 週不硬塞）；"
-            "賽前 ≥ 3 週為搜尋摘要（未驗證）；每個 3:1 週期一次、次數為推估")
-SRC_DAYS = ("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30:20；"
-            "UA：兩天都 ≤ AeT；Burke 2011：補給 30–60 g/h；第 2 天比例 0.67、背負進度對應次數為推估")
-SRC_POST = "Johnston（UA）「three or four light days」；4 天、不改恢復週為推估"
-SRC_EVAL = ("hikehr.fatigue（同 VAM 的心率差，無外部來源 F17）；ΔVAM@AeT（vo2max-gate-and-trail-metric.md）；"
-            "2×2 判讀依 UA、Le Meur 2013、Coyle 2001；±3 bpm、±5 % 為推估")
+SRC_WHEN = N_("UA（專項期、longer races）；Koop（最後 2–3 週不硬塞）；"
+              "賽前 ≥ 3 週為搜尋摘要（未驗證）；每個 3:1 週期一次、次數為推估")
+SRC_DAYS = N_("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30:20；"
+              "UA：兩天都 ≤ AeT；Burke 2011：補給 30–60 g/h；第 2 天比例 0.67、背負進度對應次數為推估")
+SRC_POST = N_("Johnston（UA）「three or four light days」；4 天、不改恢復週為推估")
+SRC_EVAL = N_("hikehr.fatigue（同 VAM 的心率差，無外部來源 F17）；ΔVAM@AeT（vo2max-gate-and-trail-metric.md）；"
+              "2×2 判讀依 UA、Le Meur 2013、Coyle 2001；±3 bpm、±5 % 為推估")
 
 
 def _d(x) -> Optional[dt.date]:
@@ -270,49 +272,49 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     sunday = monday + dt.timedelta(days=6)
     info = {"event": event, "candidate": False, "suggest": False, "due": False, "accepted": False, "days": 2,
             "index": int(state.get("count") or 0) + 1, "why": [], "blocked": [], "last": state.get("last"),
-            "count": int(state.get("count") or 0), "post": None, "src": SRC_WHEN, "week": monday.isoformat()}
+            "count": int(state.get("count") or 0), "post": None, "src": _(SRC_WHEN), "week": monday.isoformat()}
     if post_from and kind == "specific" and qualifies(event):
         end = _d(post_from["end"])
         if monday - dt.timedelta(days=3) <= end < monday:
             until = end + dt.timedelta(days=POST_EASY_DAYS)
             info["post"] = {"start": post_from["start"], "end": post_from["end"], "until": until.isoformat(),
-                            "src": SRC_POST}
+                            "src": _(SRC_POST)}
     if kind != "specific":
-        info["blocked"].append("只在專項期排")
+        info["blocked"].append(_("只在專項期排"))
         return info
     if not qualifies(event):
-        info["blocked"].append("下一場 A 賽事不是多日、也不到 6 小時" if event else "沒有下一場 A 賽事")
+        info["blocked"].append(_("下一場 A 賽事不是多日、也不到 6 小時") if event else _("沒有下一場 A 賽事"))
         return info
     if mode in ("recovery_week", "reentry"):
-        info["blocked"].append("恢復週／停訓後恢復期不排")
+        info["blocked"].append(_("恢復週／停訓後恢復期不排"))
         return info
     days_before = (_d(event["start"]) - sunday).days
     if days_before < LAST_BEFORE_DAYS:
-        info["blocked"].append(f"離賽事不到 3 週（{days_before} 天）：最後一次 B2B 要在賽前 ≥ 3 週")
+        info["blocked"].append(_("離賽事不到 3 週（{n} 天）：最後一次 B2B 要在賽前 ≥ 3 週", n=days_before))
         return info
     multi = int(event.get("days") or 1) > 1
     last = _d(state.get("last"))
     if last is not None and (monday - last).days < SPACING_DAYS:
-        info["blocked"].append(f"上一次 B2B（{md(last)}）不到 2 週")
+        info["blocked"].append(_("上一次 B2B（{day}）不到 2 週", day=md(last)))
         return info
     if last_recovery:
-        info["why"].append("上週是恢復週：3:1 的第一個加量週")
+        info["why"].append(_("上週是恢復週：3:1 的第一個加量週"))
     else:
-        info["blocked"].append("每個 3:1 週期最多一次，排在恢復週後的第一個加量週")
+        info["blocked"].append(_("每個 3:1 週期最多一次，排在恢復週後的第一個加量週"))
         return info
     if tsb is not None and tsb < TSB_MIN:
-        info["blocked"].append(f"週初 TSB {tsb:+.0f} < {TSB_MIN:.0f}：先恢復")
+        info["blocked"].append(_("週初 TSB {tsb:+.0f} < {min:.0f}：先恢復", tsb=tsb, min=TSB_MIN))
         return info
     if ramp is not None and ramp >= RAMP_MAX:
-        info["blocked"].append(f"CTL 每週 +{ramp:.1f}（≥ {RAMP_MAX:.0f}）")
+        info["blocked"].append(_("CTL 每週 +{ramp:.1f}（≥ {max:.0f}）", ramp=ramp, max=RAMP_MAX))
         return info
     if not guard_ok:
-        info["blocked"].append("間歇門檻的護欄沒過（低強度比例或飄移）")
+        info["blocked"].append(_("間歇門檻的護欄沒過（低強度比例或飄移）"))
         return info
     info["candidate"] = True
     info["weeks_out"] = -(-(days_before + 6) // 7)          # 賽前第 n 週 (the week's Monday)
-    info["why"].append(f"賽前 {days_before} 天（{event.get('name') or 'A 賽事'}，"
-                       f"{'多日' if multi else '單日 ≥ 6 小時'}）")
+    info["why"].append(_("賽前 {n} 天（{name}，{kind}）", n=days_before, name=event.get("name") or _("A 賽事"),
+                         kind=_("多日") if multi else _("單日 ≥ 6 小時")))
     return info
 
 
@@ -322,11 +324,12 @@ def finalize(info: dict, long_min: float, longest_before: float, total_min: floa
     if not info.get("candidate") or info.get("accepted"):
         return info
     if longest_before < LONGEST_FRAC * long_min:
-        info["blocked"].append(f"基礎還不夠：近 28 天最長 {longest_before:.0f} 分 < 第 1 天 {long_min:.0f} 分 × {LONGEST_FRAC}")
+        info["blocked"].append(_("基礎還不夠：近 28 天最長 {longest:.0f} 分 < 第 1 天 {day1:.0f} 分 × {frac}",
+                                 longest=longest_before, day1=long_min, frac=LONGEST_FRAC))
         return info
     mins = minutes(long_min, total_min, 2, info.get("event") or {})
     if mins is None:
-        info["blocked"].append("本週的量排不下兩天長天（第 2 天會少於 60 分）")
+        info["blocked"].append(_("本週的量排不下兩天長天（第 2 天會少於 60 分）"))
         return info
     info["suggest"] = True
     info["minutes"] = mins
@@ -447,16 +450,17 @@ def suggestion(info: Optional[dict], monday: dt.date, long_day: Optional[str] = 
     ev = info.get("event") or {}
     m1, m2 = info["minutes"][:2]
     return {"id": f"b2b:{monday.isoformat()}", "type": "b2b", "week": monday.isoformat(),
-            "title": f"建議這週做一次 B2B（連續兩天長天）：第 1 天 {m1} 分、第 2 天 {m2} 分",
-            "reason": "；".join(info.get("why") or []), "minutes": [m1, m2], "long_day": long_day,
+            "title": _("建議這週做一次 B2B（連續兩天長天）：第 1 天 {m1} 分、第 2 天 {m2} 分", m1=m1, m2=m2),
+            "reason": _("；").join(info.get("why") or []), "minutes": [m1, m2], "long_day": long_day,
             "event": ev.get("name"), "event_days": int(ev.get("days") or 1), "event_kind": ev.get("kind"),
             "weeks_out": info.get("weeks_out"), "index": info.get("index"),
-            "help": (f"專項期、恢復週後的第一個加量週，下一場 A 賽事（{ev.get('name') or 'A 賽事'}）"
-                     f"{'是多日' if int(ev.get('days') or 1) > 1 else '≥ 6 小時'}。第 1 天是這週的長天，第 2 天約 2/3"
-                     f"（CTS 30:20），兩天都心率 ≤ AeT；第 2 天從輕鬆跑的時間扣，這週總量不變（Koop）。"
-                     f"排入後之後 {POST_EASY_DAYS} 天只排輕鬆跑（UA），TSB 下降不改成恢復週（推估）。"
-                     f"你選的兩天會變成你自己的課，自動調整不會動它們。"),
-            "src": f"{SRC_WHEN}；{SRC_DAYS}"}
+            "help": _("專項期、恢復週後的第一個加量週，下一場 A 賽事（{name}）{kind}。第 1 天是這週的長天，第 2 天約 2/3"
+                      "（CTS 30:20），兩天都心率 ≤ AeT；第 2 天從輕鬆跑的時間扣，這週總量不變（Koop）。"
+                      "排入後之後 {n} 天只排輕鬆跑（UA），TSB 下降不改成恢復週（推估）。"
+                      "你選的兩天會變成你自己的課，自動調整不會動它們。",
+                      name=ev.get("name") or _("A 賽事"),
+                      kind=_("是多日") if int(ev.get("days") or 1) > 1 else _("≥ 6 小時"), n=POST_EASY_DAYS),
+            "src": _(SRC_WHEN) + _("；") + _(SRC_DAYS)}
 
 
 def pair_options(monday: dt.date, first: dt.date, minutes: list, blocked=frozenset(),
@@ -482,10 +486,11 @@ def pair_options(monday: dt.date, first: dt.date, minutes: list, blocked=frozens
             continue
         wknd = d1.weekday() == 5
         keeps = long_day in (d1.isoformat(), d2.isoformat())
-        note = "週末" if wknd else ("週五＋週六：可能要請一天假" if d1.weekday() == 4 else "平日")
+        note = _("週末") if wknd else (_("週五＋週六：可能要請一天假") if d1.weekday() == 4 else _("平日"))
         out.append(((not wknd, not keeps, d1.isoformat()),
                     {"day": d1.isoformat(), "end": d2.isoformat(),
-                     "label": f"{md(d1)}（{wd(d1)}）＋{md(d2)}（{wd(d2)}）", "note": note}))
+                     "label": _("{d1}（{w1}）＋{d2}（{w2}）", d1=md(d1), w1=wd(d1), d2=md(d2), w2=wd(d2)),
+                     "note": note}))
     return [o for _, o in sorted(out, key=lambda x: x[0])]
 
 
@@ -501,11 +506,12 @@ def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float]
     if ramp is not None and ramp >= RAMP_MAX:
         return None
     if info.get("due"):
-        return f"TSB {tsb:+.0f}：本週有你排入的 B2B，TSB 下降是預期的，不改成恢復週、量不砍（推估）"
+        return _("TSB {tsb:+.0f}：本週有你排入的 B2B，TSB 下降是預期的，不改成恢復週、量不砍（推估）", tsb=tsb)
     if info.get("post"):
         p = info["post"]
-        return (f"TSB {tsb:+.0f}：上週末 B2B（{md(p['start'])}–{md(p['end'])}）造成的預期下降，"
-                f"只把之後 {POST_EASY_DAYS} 天排輕鬆、不改成恢復週，3:1 照常（推估）")
+        return _("TSB {tsb:+.0f}：上週末 B2B（{start}–{end}）造成的預期下降，"
+                 "只把之後 {n} 天排輕鬆、不改成恢復週，3:1 照常（推估）",
+                 tsb=tsb, start=md(p["start"]), end=md(p["end"]), n=POST_EASY_DAYS)
     return None
 
 
@@ -515,10 +521,10 @@ def fatigue_exempt(info: Optional[dict], today: str) -> Optional[str]:
     if not info:
         return None
     if info.get("due"):
-        return "本週有你排入的 B2B"
+        return _("本週有你排入的 B2B")
     p = info.get("post")
     if p and today <= p["until"]:
-        return f"上週末 B2B（{md(p['start'])}–{md(p['end'])}）後的輕鬆日"
+        return _("上週末 B2B（{start}–{end}）後的輕鬆日", start=md(p["start"]), end=md(p["end"]))
     return None
 
 
@@ -527,8 +533,9 @@ def post_note(info: dict) -> Optional[dict]:
     if not p:
         return None
     return {"level": "info", "src": "b2b",
-            "text": f"上週末 B2B（{md(p['start'])}–{md(p['end'])}）：到 {md(p['until'])} 只排輕鬆跑和肌力、不排間歇和測試；"
-                    f"TSB 下降是預期的，不改成恢復週，3:1 照常（{SRC_POST}）"}
+            "text": _("上週末 B2B（{start}–{end}）：到 {until} 只排輕鬆跑和肌力、不排間歇和測試；"
+                      "TSB 下降是預期的，不改成恢復週，3:1 照常（{src}）",
+                      start=md(p["start"]), end=md(p["end"]), until=md(p["until"]), src=_(SRC_POST))}
 
 
 # ---------------------------------------------------------------------------
@@ -542,8 +549,8 @@ def followers(long_s: dict, info: dict) -> list[dict]:
     rate = _rate(long_s)
     long_s["minutes"] = mins[0]
     long_s["tss"] = round(rate * mins[0], 1)
-    return [{"id": f"long{i}", "kind": "long", "title": f"B2B 第 {i} 天", "minutes": m, "target": "",
-             "detail": "", "source": SRC_DAYS, "tss": round(rate * m, 1), "day": None, "done": False,
+    return [{"id": f"long{i}", "kind": "long", "title": _("B2B 第 {i} 天", i=i), "minutes": m, "target": "",
+             "detail": "", "source": _(SRC_DAYS), "tss": round(rate * m, 1), "day": None, "done": False,
              "done_by": None, "terrain": long_s.get("terrain")}
             for i, m in enumerate(mins[1:], 2)]
 
@@ -566,7 +573,7 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
     n = 1 + len(fol)
     ev = info.get("event") or {}
     aet_t = f" {aet:.0f} bpm" if aet else ""
-    hr_t = f"心率 ≤ AeT{aet_t}" if aet else "心率 ≤ AeT"
+    hr_t = _("心率 ≤ AeT{bpm}", bpm=aet_t) if aet else _("心率 ≤ AeT")
     rate = _rate(long_s)
     single = int(ev.get("days") or 1) <= 1
     for s in fol:
@@ -582,27 +589,28 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
         s["tss"] = round(rate * s["minutes"], 1)
         s["target"] = hr_t
     pack = ""                    # no pack in training (engine/steep_hill.py simulates it with grade)
-    fuel = "練比賽補給：每小時 30–60 g 醣，超過 2.5 小時可到 90 g/h；當晚要吃回來，第 2 天才是在練「接續的一天」（Burke 2011）。"
+    fuel = _("練比賽補給：每小時 30–60 g 醣，超過 2.5 小時可到 90 g/h；當晚要吃回來，第 2 天才是在練「接續的一天」（Burke 2011）。")
     if long_s["minutes"] < FUEL_MIN_H * 60:
-        fuel += f"Koop：練補給的長跑至少 {FUEL_MIN_H:.0f} 小時，本週先練到 {long_s['minutes']} 分。"
+        fuel += _("Koop：練補給的長跑至少 {h:.0f} 小時，本週先練到 {m} 分。", h=FUEL_MIN_H, m=long_s["minutes"])
     base_title = long_s["title"].split("｜", 1)[-1]
     # the generator's / 課表偏好's terrain hint (e.g. 「挑每公里爬升 ≥ 56 m 的路線」) stays a suggestion
     old = long_s.get("detail") or ""
-    terrain = "" if old.startswith("B2B") else old.split("；", 1)[0].strip()
-    climb = f"建議挑爬升比較多的路線（{terrain}；建議，不強制）" if terrain else "建議挑爬升比較多的路線（建議，不強制）"
-    long_s["title"] = f"B2B 第 1 天｜{base_title}"
+    terrain = "" if old.startswith("B2B") else re.split(r"；|; ", old, maxsplit=1)[0].strip()
+    climb = _("建議挑爬升比較多的路線（{terrain}；建議，不強制）", terrain=terrain) if terrain \
+        else _("建議挑爬升比較多的路線（建議，不強制）")
+    long_s["title"] = _("B2B 第 1 天｜{title}", title=base_title)
     long_s["target"] = hr_t
-    long_s["detail"] = (f"B2B 第 1 天（共 {n} 天）：這週最長的一天，{climb}；全程{hr_t}，爬坡用走的守住上限，"
-                        f"不放間歇。{fuel}{pack}").rstrip()
-    long_s["source"] = SRC_DAYS
+    long_s["detail"] = (_("B2B 第 1 天（共 {n} 天）：這週最長的一天，{climb}；全程{hr}，爬坡用走的守住上限，不放間歇。",
+                          n=n, climb=climb, hr=hr_t) + f"{fuel}{pack}").rstrip()
+    long_s["source"] = _(SRC_DAYS)
     for s in fol:
         i = int(s["id"][-1])
-        share = "約第 1 天的 2/3（CTS 30:20）" if not single else "1.5–2.5 小時輕鬆（推估）"
-        s["title"] = f"B2B 第 {i} 天｜{base_title}"
-        s["detail"] = (f"B2B 第 {i} 天：{share}，{s['minutes']} 分；{hr_t}，不加速；建議下坡多一點（不強制），練多日下坡"
-                       f"（Bontemps 2025 重複負荷效應）。"
-                       + "跟第 1 天比同樣爬坡速度的心率、同樣心率的爬坡速度，總覽的 B2B 卡會判讀。")
-        s["source"] = SRC_DAYS
+        share = _("約第 1 天的 2/3（CTS 30:20）") if not single else _("1.5–2.5 小時輕鬆（推估）")
+        s["title"] = _("B2B 第 {i} 天｜{title}", i=i, title=base_title)
+        s["detail"] = (_("B2B 第 {i} 天：{share}，{m} 分；{hr}，不加速；建議下坡多一點（不強制），練多日下坡"
+                         "（Bontemps 2025 重複負荷效應）。", i=i, share=share, m=s["minutes"], hr=hr_t)
+                       + _("跟第 1 天比同樣爬坡速度的心率、同樣心率的爬坡速度，總覽的 B2B 卡會判讀。"))
+        s["source"] = _(SRC_DAYS)
 
 
 def done_follow(ss: list, s, day: dt.date) -> bool:
@@ -637,7 +645,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
             notes.append({"level": "info", "src": "b2b", "text": text})
 
     if long_s is None:
-        note("B2B 第 1 天本週排不進去：第 2 天也取消（推估）")
+        note(_("B2B 第 1 天本週排不進去：第 2 天也取消（推估）"))
         return [s for s in ss if s not in fol or s.get("done")]
     if not any(not s.get("done") for s in fol):
         return ss
@@ -672,7 +680,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
 
     block = sorted(_d(x) for x in fixed)[:2] if fixed else find(fol)
     if block is None:
-        note("本週沒有連續 2 天可以練：B2B 第 2 天取消，這週照一般長天（推估）")
+        note(_("本週沒有連續 2 天可以練：B2B 第 2 天取消，這週照一般長天（推估）"))
         return [s for s in ss if s not in fol or s.get("done")]
     pending = [s for s in fol if not s.get("done")]
     old = ({long_s.get("day")} | {s["day"] for s in pending if s.get("day")}) - {None}
@@ -701,7 +709,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
             if nxt is None:
                 kept.remove(x)
                 if notes is not None:
-                    notes.append({"level": "info", "src": "b2b", "text": f"B2B 佔了週末：{wd(x['day'])}的輕鬆跑排不下，不用補"})
+                    notes.append({"level": "info", "src": "b2b", "text": _("B2B 佔了週末：{wd}的輕鬆跑排不下，不用補", wd=wd(x["day"]))})
             else:
                 x["day"] = nxt
     # 48 h between hard days and the B2B days
@@ -719,7 +727,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
             kept.remove(q)
             if notes is not None:
                 notes.append({"level": "info", "src": "b2b",
-                              "text": f"{q['title']}離 B2B 不到 48 小時、本週沒有別的空日：這週先不排"})
+                              "text": _("{title}離 B2B 不到 48 小時、本週沒有別的空日：這週先不排", title=q["title"])})
     return kept
 
 
@@ -764,12 +772,19 @@ def day_stats(rows: list[dict], aet: Optional[float]) -> dict:
 
 
 CELLS = {
-    "durable": ("耐久性好", "good", "第 2 天同樣的爬坡速度心率差不多、同樣心率的爬坡速度也沒掉"),
-    "muscular": ("肌肉疲勞", "watch", "心率被壓住、腿出不了力（UA；Le Meur 2013、Kerhervé 2015 都看到心率下降）→ 下一次第 2 天縮短"),
-    "cardio": ("心血管漂移或補給不足", "watch", "同樣的速度要更高的心率（Coyle 2001）→ 檢查第 1 天和當晚的補給、熱、睡眠"),
-    "uncommon": ("不常見：第 2 天心率較低、速度沒掉", "info", "可能是第 1 天熱或脫水 → 先看第 1 天的 Hadley"),
-    "insufficient": ("爬坡段不夠，不判讀", "na", "第 1 天和第 2 天都要有 ≥ 5 段 100 m 的爬坡（坡度 ≥ 10%）"),
+    "durable": (N_("耐久性好"), "good", N_("第 2 天同樣的爬坡速度心率差不多、同樣心率的爬坡速度也沒掉")),
+    "muscular": (N_("肌肉疲勞"), "watch",
+                 N_("心率被壓住、腿出不了力（UA；Le Meur 2013、Kerhervé 2015 都看到心率下降）→ 下一次第 2 天縮短")),
+    "cardio": (N_("心血管漂移或補給不足"), "watch", N_("同樣的速度要更高的心率（Coyle 2001）→ 檢查第 1 天和當晚的補給、熱、睡眠")),
+    "uncommon": (N_("不常見：第 2 天心率較低、速度沒掉"), "info", N_("可能是第 1 天熱或脫水 → 先看第 1 天的 Hadley")),
+    "insufficient": (N_("爬坡段不夠，不判讀"), "na", N_("第 1 天和第 2 天都要有 ≥ 5 段 100 m 的爬坡（坡度 ≥ 10%）")),
 }
+
+
+def _cell(key: str) -> tuple[str, str, str]:
+    """(label, level, text) of a 2 × 2 cell in the request's language."""
+    label, level, text = CELLS[key]
+    return _(label), level, _(text)
 
 
 def _vam_at(wins: list[dict], hr: float) -> Optional[float]:
@@ -819,13 +834,13 @@ def evaluate(day1: list[dict], day2: list[dict], aet: Optional[float]) -> dict:
                 if m1 > 0:
                     vam_ratio, method = float(m2 / m1), "median"
     cell = classify(hr_shift, vam_ratio)
-    label, level, text = CELLS[cell]
+    label, level, text = _cell(cell)
     return {"cell": cell, "label": label, "level": level, "text": text,
             "hr_shift_bpm": None if hr_shift is None else round(hr_shift, 1),
             "vam_ratio": None if vam_ratio is None else round(vam_ratio, 3), "vam_method": method,
             "n": {"day1": len(w1), "day2": len(w2), "aet_band_day1": len(b1), "aet_band_day2": len(b2)},
             "day1": day_stats(day1, aet), "day2": day_stats(day2, aet),
-            "thresholds": {"hr_bpm": HR_SAME_BPM, "vam": VAM_SAME, "label": "推估"}, "src": SRC_EVAL}
+            "thresholds": {"hr_bpm": HR_SAME_BPM, "vam": VAM_SAME, "label": _("推估")}, "src": _(SRC_EVAL)}
 
 
 def trend(evals: list[dict]) -> dict:
@@ -836,16 +851,17 @@ def trend(evals: list[dict]) -> dict:
     out = {"n": len(evals), "judged": len(judged),
            "durable_share": (sum(e["cell"] == "durable" for e in judged) / len(judged)) if judged else None,
            "first": pts[0]["vam_ratio"] if pts else None, "last": pts[-1]["vam_ratio"] if pts else None,
-           "direction": None, "text": "", "label": "推估"}
+           "direction": None, "text": "", "label": _("推估")}
     if len(pts) < 2:
-        out["text"] = "還要至少兩次有判讀的 B2B 才看得出趨勢"
+        out["text"] = _("還要至少兩次有判讀的 B2B 才看得出趨勢")
         return out
     ch = pts[-1]["vam_ratio"] - pts[0]["vam_ratio"]
     out["change"] = round(ch, 3)
     out["direction"] = "better" if ch >= TREND_STEP else "worse" if ch <= -TREND_STEP else "flat"
-    out["text"] = {"better": "第 2 天的爬坡速度掉得比較少了：耐久性在進步",
-                   "worse": "第 2 天掉得比上次多：看睡眠、補給，下一次第 2 天縮短",
-                   "flat": "第 2 天的衰退差不多"}[out["direction"]] + f"（{pts[0]['vam_ratio']:.0%} → {pts[-1]['vam_ratio']:.0%}）"
+    out["text"] = {"better": _("第 2 天的爬坡速度掉得比較少了：耐久性在進步"),
+                   "worse": _("第 2 天掉得比上次多：看睡眠、補給，下一次第 2 天縮短"),
+                   "flat": _("第 2 天的衰退差不多")}[out["direction"]] \
+        + _("（{a:.0%} → {b:.0%}）", a=pts[0]["vam_ratio"], b=pts[-1]["vam_ratio"])
     return out
 
 
@@ -883,7 +899,7 @@ def card(ds, today: dt.date, events, phase=None, cur: Optional[dict] = None, wee
         try:
             r = evaluate_pair(ds, w1, w2, aet) if w1 is not None and w2 is not None else None
         except Exception as e:             # noqa: BLE001 — one broken file never breaks the card
-            r = {"cell": "insufficient", **dict(zip(("label", "level", "text"), CELLS["insufficient"])),
+            r = {"cell": "insufficient", **dict(zip(("label", "level", "text"), _cell("insufficient"))),
                  "error": type(e).__name__}
         done.append({**b, "aet": aet, "eval": r})
     planned = []
@@ -904,5 +920,5 @@ def card(ds, today: dt.date, events, phase=None, cur: Optional[dict] = None, wee
             "this_week": {k: cb.get(k) for k in ("due", "suggest", "accepted", "pair", "days", "index", "why", "blocked",
                                                  "post", "minutes")} if cb else None,
             "planned": planned, "done": done, "trend": trend(evs),
-            "rules": {"when": SRC_WHEN, "days": SRC_DAYS, "post": SRC_POST, "eval": SRC_EVAL},
-            "cells": {k: {"label": v[0], "level": v[1], "text": v[2]} for k, v in CELLS.items()}}
+            "rules": {"when": _(SRC_WHEN), "days": _(SRC_DAYS), "post": _(SRC_POST), "eval": _(SRC_EVAL)},
+            "cells": {k: dict(zip(("label", "level", "text"), _cell(k))) for k in CELLS}}

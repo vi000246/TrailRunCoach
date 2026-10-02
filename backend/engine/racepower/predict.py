@@ -61,7 +61,7 @@ def solve_riegel_re(d_m: float, cp: float, tte: float, k: float, re: float, weig
         t = t2
     lo, hi = 1.0, 1e7
     f = lambda x: x - nxt(x)       # noqa: E731
-    for _ in range(200):
+    for _it in range(200):
         mid = math.sqrt(lo * hi)
         if f(mid) > 0:
             hi = mid

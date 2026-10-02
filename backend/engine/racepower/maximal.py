@@ -89,7 +89,7 @@ def race_category(km: Optional[float], tol: float = MAXIMAL["dist_tol"]) -> Opti
     """5k / 10k / half / marathon when `km` is within ±tol of the standard."""
     if not km:
         return None
-    for cat, (std, _, _) in R.STD_DISTANCES.items():
+    for cat, (std, _lo, _hi) in R.STD_DISTANCES.items():
         if abs(km * 1000.0 / std - 1.0) <= tol:
             return cat
     return None
