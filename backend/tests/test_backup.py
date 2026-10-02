@@ -35,7 +35,7 @@ def test_create_backup_zip_manifest_and_counts(tmp_path):
     db = make_db(tmp_path / "app.db")
     out = tmp_path / "cloud" / "TrailRunCoach Backups"
     r = B.create_backup(db, out, now=datetime(2026, 10, 2, 6, 30, tzinfo=timezone.utc))
-    assert B.NAME_RE.match(r["name"]) and not r["encrypted"]
+    assert B.NAME_RE.match(r["name"]) and r["name"].endswith(".zip") and "encrypted" not in r
     assert r["row_counts"]["workout_files"] == 3
     files = [p.name for p in out.iterdir()]
     assert files == [r["name"]]                       # no .partial left behind
@@ -59,45 +59,27 @@ def test_backup_while_another_connection_writes(tmp_path):
     assert r["row_counts"]["workout_files"] == 3      # a consistent snapshot without the open write
 
 
-def test_encrypted_round_trip_wrong_password_and_truncation(tmp_path):
-    db = make_db(tmp_path / "app.db", rows=50)
-    k = B.new_key("correct horse")
-    r = B.create_backup(db, tmp_path / "out", key=k)
-    p = Path(r["path"])
-    assert r["name"].endswith(".zip.enc") and B.is_encrypted(p)
-    assert b"workout_files" not in p.read_bytes()
-    info = B.inspect(p, tmp_path, "correct horse")
-    assert info["row_counts"]["workout_files"] == 50
-    with pytest.raises(B.BackupError, match="密碼"):
-        B.inspect(p, tmp_path, "wrong password")
-    with pytest.raises(B.BackupError, match="密碼"):
-        B.inspect(p, tmp_path, None)
-    cut = tmp_path / "cut.enc"
-    cut.write_bytes(p.read_bytes()[:-20])
-    with pytest.raises(B.BackupError):
-        B.inspect(cut, tmp_path, "correct horse")
+def _legacy_encrypted(path: Path) -> Path:
+    """An older version's encrypted backup: its header, then opaque bytes."""
+    path.write_bytes(B.LEGACY_MAGIC + bytes([15, 8, 1]) + b"s" * 23 + b"\x00\x00\x00\x10" + b"x" * 16)
+    return path
 
 
-def test_multi_chunk_encryption(tmp_path, monkeypatch):
-    monkeypatch.setattr(B, "CHUNK", 1000)
-    src = tmp_path / "plain.bin"
-    src.write_bytes(bytes(range(256)) * 20)            # 5120 bytes = 6 chunks
-    salt = b"s" * 16
-    key = B.derive_key("pw-pw-pw-pw", salt, n=1 << 10)
-    B.encrypt_file(src, tmp_path / "x.enc", key, salt, 1 << 10, 8, 1)
-    B.decrypt_file(tmp_path / "x.enc", tmp_path / "back.bin", "pw-pw-pw-pw")
-    assert (tmp_path / "back.bin").read_bytes() == src.read_bytes()
-    # dropping the last chunk is detected
-    raw = (tmp_path / "x.enc").read_bytes()
-    head = len(B.MAGIC) + 26
-    chunks, i = [], head
-    while i < len(raw):
-        n = int.from_bytes(raw[i:i + 4], "big")
-        chunks.append(raw[i:i + 4 + n])
-        i += 4 + n
-    (tmp_path / "short.enc").write_bytes(raw[:head] + b"".join(chunks[:-1]))
-    with pytest.raises(B.BackupError, match="不完整"):
-        B.decrypt_file(tmp_path / "short.enc", tmp_path / "o.bin", "pw-pw-pw-pw")
+def test_no_encryption_left_and_legacy_encrypted_backups_are_rejected(tmp_path):
+    # backups are never encrypted (owner 2026-10-02): no key / password API in the engine
+    for gone in ("new_key", "derive_key", "encrypt_file", "decrypt_file", "SCRYPT", "is_encrypted"):
+        assert not hasattr(B, gone), gone
+    assert not B.NAME_RE.match("trailruncoach-backup-20260101-000000.zip.enc")
+    live = make_db(tmp_path / "live.db")
+    old = _legacy_encrypted(tmp_path / "trailruncoach-backup-20260101-000000.zip.enc")
+    assert B.is_legacy_encrypted(old)
+    with pytest.raises(B.BackupError, match="加密備份.*不能還原"):
+        B.inspect(old, tmp_path)
+    with pytest.raises(B.BackupError, match="不再支援加密"):
+        B.restore(old, live, local_dir=tmp_path / "local")
+    assert count(live) == 3 and not list((tmp_path / "local").glob("trailruncoach-prerestore-*"))
+    # an old .zip.enc in the folder is neither listed nor pruned
+    assert B.list_backups(tmp_path) == [] and B.prune(tmp_path) == [] and old.exists()
 
 
 def test_fit_originals_gzip_and_restore_only_missing(tmp_path):
@@ -285,27 +267,24 @@ def test_run_backup_auto_tick_and_settings(tmp_path, monkeypatch):
         async with factory() as db:
             s = await A.status(SettingsRepository(db, 1))
             assert s["last_ok"]["name"] == r["name"] and len(s["backups"]) == 1
-            # encryption: the password is not stored, only a sealed key
-            s = await A.put_password(A.PasswordBody(password="long enough pw"), 1, db)
-            assert s["encrypted"]
-            enc = await SettingsRepository(db, 1).get("backup.encryption")
-            assert "long enough pw" not in json.dumps(enc) and enc["key"].startswith("enc:v1:")
+            assert "encrypted" not in s
             r2 = await A.run_backup(db, "manual")
-            assert r2["status"] == "ok" and r2["encrypted"]
+            assert r2["status"] == "ok" and r2["name"].endswith(".zip") and "encrypted" not in r2
             info = await A.post_inspect(A.SourceBody(name=r2["name"]), 1, db)
-            assert info["needs_password"]
-            info = await A.post_inspect(A.SourceBody(name=r2["name"], password="long enough pw"), 1, db)
-            assert info["row_counts"]["user_settings"] >= 1
+            assert info["row_counts"]["user_settings"] >= 1 and "needs_password" not in info
+            # an old encrypted backup in the folder: a clear 400, not 「只能還原…」
+            from fastapi import HTTPException
+            with pytest.raises(HTTPException) as ei:
+                await A._source(A.SourceBody(name="trailruncoach-backup-20260101-000000.zip.enc"),
+                                SettingsRepository(db, 1))
+            assert ei.value.status_code == 400 and "加密" in ei.value.detail
             # a missing folder is reported as a failed attempt, not an exception
             await SettingsRepository(db, 1).set("backup.dir", str(tmp_path / "gone" / "x"))
             r3 = await A.run_backup(db, "manual")
             assert r3["status"] == "failed" and r3["error"]
             assert (await SettingsRepository(db, 1).get("backup.last_ok"))["name"] == r2["name"]
-            from fastapi import HTTPException
             with pytest.raises(HTTPException):
                 await A.put_settings(A.BackupSettingsBody(dir="not/absolute"), 1, db)
-            with pytest.raises(HTTPException):
-                await A.put_password(A.PasswordBody(password="short"), 1, db)
             with pytest.raises(HTTPException):
                 await A._source(A.SourceBody(name="../wko5coach.db"), SettingsRepository(db, 1))
         await engine.dispose()
@@ -320,5 +299,57 @@ def test_repository_validates_backup_keys(tmp_path):
         validate("backup.dir", "relative")
     with pytest.raises(ValueError):
         validate("backup.auto", "yes")
-    with pytest.raises(ValueError):
-        validate("backup.encryption", {"salt": "00"})
+
+
+
+def test_no_password_endpoints_and_upload_rejects_legacy_encrypted(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+    from backend.api import backup as A
+    assert not hasattr(A, "put_password") and not hasattr(A, "delete_password")
+    assert not any("/password" in getattr(r, "path", "") for r in A.router.routes)
+    assert "password" not in A.SourceBody.model_fields
+    monkeypatch.setattr(A, "_local_dir", lambda: tmp_path / "local")
+
+    class Req:
+        def __init__(self, data):
+            self.data = data
+
+        async def stream(self):
+            yield self.data
+    raw = _legacy_encrypted(tmp_path / "old.zip.enc").read_bytes()
+
+    async def go():
+        with pytest.raises(HTTPException) as ei:
+            await A.post_upload(Req(raw))
+        assert ei.value.status_code == 400 and "不再支援加密" in ei.value.detail
+        assert not list((tmp_path / "local" / "staging").glob("*.bin"))     # not kept
+        ok = await A.post_upload(Req(b"PK\x03\x04 a zip"))
+        assert set(ok) == {"upload_id", "size"}
+    asyncio.run(go())
+
+
+def test_retired_backup_encryption_setting_is_deleted_on_start(tmp_path, monkeypatch):
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from backend.db import database
+    from backend.settings.repository import DEFAULTS, RETIRED_KEYS, SettingsRepository, UnknownSetting
+    assert "backup.encryption" in RETIRED_KEYS and "backup.encryption" not in DEFAULTS
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'wko5coach.db'}")
+    monkeypatch.setattr(database, "engine", engine)
+
+    async def go():
+        await database.init_db()
+        async with engine.begin() as conn:
+            await conn.execute(text("INSERT INTO user_settings (user_id, key, value_json, updated_at) VALUES "
+                                    "(1, 'backup.encryption', '{\"key\": \"enc:v1:sealed\"}', '2026-10-01'), "
+                                    "(1, 'backup.dir', '\"/x\"', '2026-10-01')"))
+        await database.init_db()
+        async with engine.begin() as conn:
+            keys = [r[0] for r in await conn.execute(text("SELECT key FROM user_settings"))]
+        assert keys == ["backup.dir"]
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+        async with async_sessionmaker(engine)() as db:
+            with pytest.raises(UnknownSetting):
+                await SettingsRepository(db, 1).get("backup.encryption")
+        await engine.dispose()
+    asyncio.run(go())
