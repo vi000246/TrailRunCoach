@@ -535,11 +535,17 @@ def rest_spells(t, moving, min_rest_s: float = None, max_dt: float = 30.0) -> di
             "rest_share": rest / elapsed if elapsed > 0 else None}
 
 
-def effort_hr(s: dict, lthr: Optional[float], aet: Optional[float]) -> dict:
+def effort_hr(s: dict, lthr: Optional[float], aet: Optional[float],
+              max_frac: Optional[float] = None) -> dict:
     """Trail / hike effort from HR on moving time. s = {hr_avg (moving),
     above_aet, low_share (below AeT), moving_s, elapsed_s, rest_share (long
     rests ÷ elapsed, rest_spells)}. Returns {effort, reason, hr_frac,
-    above_aet, rest_share, ...}."""
+    above_aet, rest_share, ...}. `max_frac` (trail runs, 2026-10-02,
+    unsourced-rules.md §A2): the duration-dependent full-effort threshold
+    x*(T) − 0.03 (racepower.trailhr.auto_max_frac) replaces the fixed 0.90 ×
+    LTHR and the 2/3-above-AeT share — Fornasiero 2018: a full-effort 12 h
+    race spends 86 % of its time below VT1, so the share rule cannot hold
+    for long races."""
     k = AUTO_EFFORT
     hr, ab, mv, el = s.get("hr_avg"), s.get("above_aet"), s.get("moving_s"), s.get("elapsed_s")
     rest = s.get("rest_share")
@@ -547,17 +553,27 @@ def effort_hr(s: dict, lthr: Optional[float], aet: Optional[float]) -> dict:
     out = {"effort": None, "reason": "", "hr_frac": frac, "above_aet": ab, "rest_share": rest,
            "stopped_share": s.get("stopped_share"),
            "hr_avg": hr, "lthr": lthr, "aet": aet, "moving_s": mv, "elapsed_s": el, "basis": "hr"}
-    if frac is None or ab is None:
+    if frac is None or (ab is None and max_frac is None):
         out.update(effort="moderate", reason="沒有心率或門檻：無法判定，當一般", basis=None)
         return out
     rest_txt = f"長休息 {rest:.0%}" if rest is not None else "長休息 ?"
-    if frac >= k["max_hr_frac"] and ab >= k["above_aet"]:
+    if max_frac is not None:
+        hard, need = frac >= max_frac, f"≥ x*(T) − 0.03 = {max_frac:.0%}，推估"
+    else:
+        hard, need = frac >= k["max_hr_frac"] and ab >= k["above_aet"], f"≥ {k['max_hr_frac']:.0%}"
+    ab_txt = f"、AeT 以上 {ab:.0%}" if ab is not None else ""
+    if hard:
         if rest is not None and rest > k["rest_max"]:
             out.update(effort="hard_with_rests",
-                       reason=f"移動心率 {frac:.0%} LTHR、AeT 以上 {ab:.0%}，但{rest_txt}（> {k['rest_max']:.0%}）")
+                       reason=f"移動心率 {frac:.0%} LTHR{ab_txt}，但{rest_txt}（> {k['rest_max']:.0%}）")
+        elif max_frac is not None:
+            out.update(effort="max", reason=f"移動心率 {frac:.0%} LTHR（{need}）、{rest_txt}")
         else:
-            out.update(effort="max", reason=f"移動心率 {frac:.0%} LTHR（≥ {k['max_hr_frac']:.0%}）、"
+            out.update(effort="max", reason=f"移動心率 {frac:.0%} LTHR（{need}）、"
                                             f"AeT 以上 {ab:.0%}（≥ {k['above_aet']:.0%}）、{rest_txt}")
+        return out
+    if ab is None:
+        out.update(effort="moderate", reason=f"移動心率 {frac:.0%} LTHR（全力需 {need}）、{rest_txt}")
         return out
     if _easy(hr, s.get("low_share"), aet):
         out.update(effort="easy", reason=f"{s['low_share']:.0%} 時間低於 AeT，平均 {hr:.0f} bpm")
