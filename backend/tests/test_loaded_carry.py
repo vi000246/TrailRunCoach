@@ -426,3 +426,75 @@ def test_projection_respects_preferred_weekdays_for_the_machine_session():
     for _, s, _ in _loaded(rows):
         assert date.fromisoformat(s["day"]).weekday() in (1, 3, 5, 6)
 
+
+# ---------------------------------------------------------------------------
+# evaluation: HR at the same VAM, 負重效率 (Pandolf), within a stage
+# ---------------------------------------------------------------------------
+
+AET = 142.0
+
+
+def _wins(shift=0.0, vams=None, grade=0.20, k0=0):
+    """100 m windows on a 20 % climb; HR = 90 + 0.08 × VAM (+ shift)."""
+    vams = list(vams if vams is not None else np.linspace(380, 800, 40))
+    return [{"k": k0 + i, "g": grade, "v": vam / (grade * 3600.0), "hr": 90.0 + 0.08 * vam + shift, "z": 1000 + 20.0 * i}
+            for i, vam in enumerate(vams)]
+
+
+def test_evaluate_hr_at_the_same_vam_and_pack_efficiency():
+    ref = _wins()
+    r = LC.evaluate(_wins(shift=6.0), ref, 9.0, 68.0, AET)
+    assert r["hr_shift_bpm"] == pytest.approx(6.0, abs=0.2) and r["label"] == "推估"
+    b = r["bands"][0]
+    assert b["band"] == "20%–30%" and 0.85 < b["pred"] < 0.95              # Pandolf: 9 kg on 68 kg ≈ −10 %
+    # same HR band, the loaded VAM is lower: observed ratio ÷ Pandolf's = 負重效率
+    assert r["e_l"] == pytest.approx(b["vam_ratio"] / b["pred"], abs=0.01)
+    assert "負重效率" in r["text"]
+    # exactly Pandolf's slowdown at the same HR → E_L ≈ 1
+    from backend.engine.racepower import capacity as CAP
+    pred = CAP.pack_ratio(0.20, 9.0, 0.0, 68.0, CAP.aet_power(68.0, LC.V_RUN_DEFAULT))
+    same = [dict(w, v=w["v"] * pred) for w in ref]                         # the same HR, VAM × Pandolf
+    assert LC.evaluate(same, ref, 9.0, 68.0, AET)["e_l"] == pytest.approx(1.0, abs=0.03)
+    # windows outside AeT − 15 … AeT + 3 don't count; too few → only time and pack
+    r = LC.evaluate(_wins(vams=[900] * 6), ref, 9.0, 68.0, AET)
+    assert not r["enough"] and "不夠" in r["text"]
+
+
+def test_evaluate_late_drift_and_downhill_ratio():
+    ref = _wins() + [{"k": 200 + i, "g": -0.2, "v": 1.2, "hr": 120.0} for i in range(8)]
+    late = _wins(vams=np.linspace(380, 800, 30)) + _wins(shift=6.0, vams=np.linspace(380, 800, 30), k0=100)
+    loaded = late + [{"k": 300 + i, "g": -0.2, "v": 1.0, "hr": 120.0} for i in range(8)]
+    r = LC.evaluate(loaded, ref, 9.0, 68.0, AET)
+    assert r["late_drift_bpm"] >= 3.0
+    assert r["down_ratio"] == pytest.approx(1.0 / 1.2, abs=0.01)
+
+
+def test_stage_trend_compares_only_within_a_weight():
+    s = lambda stage, hr, e: {"stage": stage, "eval": {"enough": True, "hr_shift_bpm": hr, "e_l": e}}
+    t = LC.stage_trend([s(2, 6.0, 0.95), s(3, 8.0, 0.90), s(2, 2.0, 1.02)])
+    by = {x["stage"]: x for x in t}
+    assert by[2]["direction"] == "better" and by[2]["change"]["hr_bpm"] == -4.0
+    assert by[3]["direction"] is None                                       # one session at 9 kg
+    assert LC.stage_trend([s(2, 2.0, 1.0), s(2, 6.0, 0.9)])[0]["direction"] == "worse"
+
+
+def test_card_reads_the_loaded_sessions_against_the_unloaded_climbs():
+    from backend.tests.test_b2b import TODAY, _climb_day
+    from backend.tests.test_workout_review import SETTINGS
+    from backend.tests.wko5_fakes import FakeDataset
+    ws = [_climb_day(date(2026, 8, 29), 150), _climb_day(date(2026, 9, 5), 150),
+          _climb_day(date(2026, 9, 12), 150, hr_shift=6.0), _climb_day(date(2026, 9, 26), 150, hr_shift=1.0)]
+    ds = FakeDataset(ws, TODAY, settings=SETTINGS)
+    A.set_hike_meta("fake/2.wko4", 7.0)
+    A.set_hike_meta("fake/3.wko4", 7.0)
+    ev = Event(id="e1", name="嘉明湖", date="2026-12-06", kind="baiyue", days=3)
+    c = LC.card(ds, TODAY, [ev], None, None, [], aet_of=lambda d: AET, weight=70.0)
+    assert c["active"] and c["trip_kg"] == 9.0 and c["kgs"] == [3.5, 7.0, 9.0]
+    assert [d["kg"] for d in c["done"]] == [7.0, 7.0] and all(d["stage"] == 2 for d in c["done"])
+    e1, e2 = (d["eval"] for d in c["done"])
+    assert e1["hr_shift_bpm"] == pytest.approx(6.0, abs=0.5) and e2["hr_shift_bpm"] == pytest.approx(1.0, abs=0.5)
+    assert c["trend"][0]["direction"] == "better"
+    assert {r["idx"] for r in c["recent"]} >= {3}                            # the pack field's rows (last 21 days)
+    assert c["rules"]["eval"] and c["thresholds"]["label"] == "推估"
+
+

@@ -910,6 +910,12 @@ def card(ds, today: dt.date, events, phase=None, cur: Optional[dict] = None, wee
     pack_of = pack_of or meta_pack_of()
     lc = (cur or {}).get("loaded_carry") or {}
     weight = weight or lc.get("weight")
+    if not weight:
+        try:
+            from backend.engine.wko5expr.dataset import date_to_day
+            weight = ds.setting("weight", date_to_day(today))
+        except Exception:                  # noqa: BLE001
+            weight = None
     trip = trip_kg(ev) if ev else None
     kgs = stage_kgs(weight, trip) if trip else [None, None, None]
     lo = today - dt.timedelta(days=CARD_DAYS)
