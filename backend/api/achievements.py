@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
@@ -219,4 +220,4 @@ def export_text(kind: Optional[str] = None, mclass: Optional[str] = None, q: Opt
 
 @router.get("/page", include_in_schema=False)
 def page():
-    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "achievements.html")
+    return render_page("achievements")

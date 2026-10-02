@@ -946,7 +946,8 @@ function qtipShow(btn) {
   const d = document.createElement("div");
   d.className = "qtip-pop";
   d.textContent = btn.dataset.tip;
-  document.body.appendChild(d);
+  // inside the enlarge <dialog> (top layer) a popup on <body> would sit behind it
+  (btn.closest("dialog[open]") || document.body).appendChild(d);
   const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
   const left = Math.max(12, Math.min(r.left - 8, innerWidth - w - 12));
   const top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
@@ -1272,11 +1273,11 @@ function draw(card, res) {
     if (seg) seg.insertAdjacentHTML("beforebegin", t);
     else card.querySelector("h2")?.insertAdjacentHTML("beforeend", t);
   }
-  // the description sits behind a ? icon (hover / tap) to keep cards clean; the enlarge
-  // overlay has room, so it shows the text in full
+  // the description sits behind a ? icon (hover / tap) to keep cards clean — in the enlarge
+  // overlay too (owner 2026-10-02: no block of text there either)
   if (res.description) {
-    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
-    else {
+    // enlarged: no inline text — the title row is cloned from the card's h2, ? included
+    if (!res._zoom) {
       const h2 = card.querySelector("h2");
       const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
       const zb = h2?.querySelector(".zbtn");
@@ -1592,8 +1593,8 @@ function drawPeriodZones(card, res) {
   pzStyle();
   card.querySelector(".loading")?.remove();
   if (res.description) {
-    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
-    else {
+    // enlarged: no inline text — the title row is cloned from the card's h2, ? included
+    if (!res._zoom) {
       const h2 = card.querySelector("h2"), zb = h2?.querySelector(".zbtn");
       const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
       if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);
@@ -2209,7 +2210,7 @@ function drawCalendar(card, s) {
     calendar: { range: [iso(begin), iso(end)], top: 24, left: 34, right: 12, cellSize: ["auto", 14],
       splitLine: { show: false },
       itemStyle: { color: css("--line") || "#e5e5e5", borderColor: css("--panel") || "#fff", borderWidth: 2 },
-      dayLabel: { firstDay: 1, nameMap: ["日", "一", "二", "三", "四", "五", "六"], color: css("--muted"), fontSize: 10 },
+      dayLabel: { firstDay: 1, nameMap: I18N.fmt.weekdays("narrow", { sundayFirst: true }), color: css("--muted"), fontSize: 10 },
       monthLabel: { nameMap: "cn", color: css("--muted"), fontSize: 10 }, yearLabel: { show: false } },
     series: [{ type: "heatmap", coordinateSystem: "calendar",
       data: s.data.points.filter((p) => p[1] != null).map((p) => [p[0], p[1] > 0 ? 1 : 0]) }],
@@ -2357,6 +2358,15 @@ function drawPlot(card, res, series) {
       splitLine: { show: i === 0, lineStyle: { color: line } },
     };
   });
+  // reference lines (hline: race_refs' 目標賽事 lines) don't stretch an ECharts axis by themselves:
+  // widen the axis so a race far above the training points (大小霸 67 vs ~20) stays in view
+  axisIds.forEach((id, i) => {
+    const ys = series.filter((s) => s.data?.kind === "hline" && Math.max(0, axisIds.indexOf(s.y_axis || "NONE")) === i)
+      .map((s) => +s.data.y).filter(Number.isFinite);
+    if (!ys.length || (axisCfg[id] || {}).max != null) return;
+    const top = Math.max(...ys) * 1.08, prev = yAxis[i].max;
+    yAxis[i].max = (e) => Math.max(typeof prev === "function" ? prev(e) : e.max, top);
+  });
   // workout charts over time (or distance) join the synced hover with the map and each other;
   // x-y scatters (HR vs power, LSS vs grade) and tables don't
   const hx = res.workout == null || cat ? null
@@ -2379,8 +2389,13 @@ function drawPlot(card, res, series) {
     if (s.data.kind === "hline") {
       // label_end (目標賽事參考線, panels/race_refs.py): the line's name at its right end
       const lab = s.label_end ? { show: true, position: "insideEndTop", formatter: s.name, color: color || muted, fontSize: 10 } : { show: false };
+      // s.tip (race_refs: the race's numbers, a multi-day trip's per-day breakdown): hover the line
+      const tipHtml = s.tip ? `<div style="font-size:11.5px;max-width:360px;white-space:normal"><b>${esc(s.name)}</b><br>${esc(s.tip).replace(/\n/g, "<br>")}</div>` : null;
       put({ name: s.name, type: "line", yAxisIndex: yi, data: [], color,
-        markLine: { silent: true, symbol: "none", label: lab, lineStyle: { color, type: lineType, width: s.line_width === "thin" ? 0.8 : 1 }, data: [{ yAxis: s.data.y }] } }, s);
+        markLine: { silent: !tipHtml, symbol: "none", label: lab, lineStyle: { color, type: lineType, width: s.line_width === "thin" ? 0.8 : 1 },
+          emphasis: tipHtml ? { lineStyle: { width: 2.5 } } : undefined,
+          tooltip: tipHtml ? { show: true, trigger: "item", confine: true, formatter: () => tipHtml } : undefined,
+          data: [{ yAxis: s.data.y }] } }, s);
       continue;
     }
     if (s.data.kind === "band") {
@@ -2496,10 +2511,15 @@ function drawPlot(card, res, series) {
     const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
       : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
-    // 目標賽事參考線 (res.race_ref, panels/race_refs.py): each point as a share of the target race
-    const tgt = res.race_ref?.target;
-    const share = (p) => tgt && tgt.cc > 0 && Number.isFinite(+yOf(p)) ? `<br><span style="opacity:.8">＝ 目標賽事的 ${Math.round(+yOf(p) / tgt.cc * 100)}%（${esc(tgt.name)}）</span>` : "";
-    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>${share(p)}`);
+    // 目標線 (res.race_ref, panels/race_refs.py): each point as a share of the nearest race's
+    // single-day target (a single-day race's constant, a multi-day trip's per-day average)
+    const tgt = res.race_ref?.target, goal = +(tgt?.goal ?? tgt?.cc);
+    const share = (p) => !(goal > 0 && Number.isFinite(+yOf(p))) || srcOf[p.seriesIndex]?.role === "race_ref" ? ""
+      : `<br><span style="opacity:.8">＝ ${esc(tgt.name || "")} 單日目標的 ${Math.round(+yOf(p) / goal * 100)}%</span>`;
+    // s.tips (panels/drift_bars.py): one hover line per point (date, duration, temperature…)
+    const ptip = (p) => { const t = srcOf[p.seriesIndex]?.tips?.[p.dataIndex];
+      return t ? `<br><span style="opacity:.8">${esc(t).replace(/\n/g, "<br>")}</span>` : ""; };
+    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>${share(p)}${ptip(p)}`);
     if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
     // stacked series (依類別堆疊): add the stack's total — only the series shown in the
     // legend are in `ps`, so hiding a category takes it out of the total too
@@ -2575,8 +2595,8 @@ const ACT = {
 function drawActivity(card, res) {
   card.querySelector(".loading")?.remove();
   if (res.description) {
-    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
-    else {
+    // enlarged: no inline text — the title row is cloned from the card's h2, ? included
+    if (!res._zoom) {
       const h2 = card.querySelector("h2"), zb = h2?.querySelector(".zbtn");
       const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
       if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);

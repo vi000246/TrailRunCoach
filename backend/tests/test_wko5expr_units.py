@@ -233,7 +233,10 @@ def test_repo_fixes_file_is_valid_and_matches_wko5_charts():
     from backend.files.wko5chart_reader import read_view
     fixes = load_fixes()
     root = Path(__file__).resolve().parents[2]
-    views = {p.stem: read_view(p) for p in root.glob("*/*.wko5chart")}
+    from backend.engine.wko5expr.viewids import ensure_ids
+    # as wko5views._wko5_views_raw reads them: with the title-derived chart ids the fixes match on
+    views = {p.stem: ensure_ids(read_view(p)) for p in root.glob("*/*.wko5chart")}
+    assert all(f.get("chart_id") for f in fixes)
     if not views:
         pytest.skip("no .wko5chart files")
     assert FIXES_PATH.name == "wko5_fixes.json"

@@ -226,7 +226,21 @@ def test_season_drift_charts_use_the_card_definition():
     (trail runs are all refused by drift_of) and say that too."""
     views = load_custom_views([REPO_VIEWS])
     charts = {(name, c["title"]): c for name, v in views.items() for d in v["dashboards"] for c in d["charts"]}
-    for key in (("我的訓練", SEASON_TITLE), ("周期化訓練", "長時間輕鬆跑的心率飄移")):
+    # periodization ②: verdict bars of drift() over both tiers (owner 2026-10-02: plain words, no SE)
+    c = charts[("周期化訓練", "長時間輕鬆跑的心率飄移")]
+    assert c.get("drift_bars") is True
+    drawn = [s for s in c["series"] if s.get("basis")]
+    assert {s["basis"] for s in drawn} == {"pace", "power"} and all(s["type"] == "bar" for s in drawn)
+    for s in drawn:
+        assert f'drift("{s["basis"]}", "all")' in s["expression"] and "pahr" not in s["expression"], s
+        assert "drift_avg" not in s["expression"]
+    assert [s["name"] for s in drawn if s["basis"] == "pace"] == ["穩定（< 5%）", "有點飄（5–10%）", "飄很多（> 10%）"]
+    refs = [s for s in c["series"] if not s.get("basis")]
+    assert len(refs) == 1 and refs[0]["expression"] == "(,0.05)" and refs[0]["line_style"] == "dash"
+    for word in ("標準誤", "SE", "回歸", "信賴", "Pa:HR"):
+        assert word not in c["description"], word
+    assert "怎麼用" in c["description"] and "Uphill Athlete" in c["description"]
+    for key in (("我的訓練", SEASON_TITLE),):
         c = charts[key]
         drawn = [s for s in c["series"] if s.get("basis")]
         assert {s["basis"] for s in drawn} == {"pace", "power"}

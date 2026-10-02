@@ -132,11 +132,16 @@ class SyncState(Base):
 
 class CorosPlanPush(Base):
     """A week-plan session pushed to COROS Training Hub (sync/coros_workouts.py):
-    session key -> COROS program (library) id + schedule (calendar) ids."""
+    session key -> COROS program (library) id + schedule (calendar) ids. The push record of
+    the workout-sync providers (sync/workout_targets): `provider` = the provider id (added
+    2026-10-02, existing rows = "coros"). The unique key is still (athlete, session key):
+    only one provider is active; enabling a second one needs (athlete, provider, key)."""
     __tablename__ = "coros_plan_push"
     __table_args__ = (UniqueConstraint("athlete_id", "session_key"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    provider: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="coros",
+                                                    server_default="coros")
     session_key: Mapped[str] = mapped_column(String(80))        # the stored plan session's uid (plan_store.push_dict)
     week_start: Mapped[str] = mapped_column(String(10), index=True)
     session_id: Mapped[str] = mapped_column(String(40))
@@ -299,6 +304,28 @@ class InjuryEvent(Base):
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class EventGpx(Base):
+    """The GPX stored with a season-plan event (engine/event_gpx.py, which reads
+    and writes it with plain sqlite3 and the same DDL). The file itself is
+    <HOME>/event_gpx/<event_id>.gz; events live in plan.json, so event_id is
+    the plan's event id (no FK). New table: created by init_db's create_all."""
+    __tablename__ = "event_gpx"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), unique=True)
+    filename: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    sha1: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    bytes_raw: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bytes_gz: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gain_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    loss_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    z_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    z_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    day_splits_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # [km, …] the user's day ends
+    camp_km_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)      # camp / hut waypoints' km
+    uploaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class UserSetting(Base):

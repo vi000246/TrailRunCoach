@@ -1,0 +1,352 @@
+{
+  "_about": "English for the bundled views (views/*.json), by view file and chart id; null = not translated yet (the original is shown). Format: backend/engine/wko5expr/viewi18n.py. Glossary: backend/i18n/glossary.json.",
+  "training": {
+    "name": null,
+    "dashboards": {
+      "load-pmc": {
+        "title": null,
+        "description": null
+      },
+      "volume": {
+        "title": null,
+        "description": null
+      },
+      "intensity": {
+        "title": null,
+        "description": null
+      },
+      "capacity": {
+        "title": null,
+        "description": null
+      }
+    },
+    "charts": {
+      "pmc-all": {
+        "title": null,
+        "description": null
+      },
+      "daily-tss": {
+        "title": null,
+        "description": null
+      },
+      "tss-total": {
+        "title": null,
+        "description": null
+      },
+      "ramp-rate": {
+        "title": null,
+        "description": null
+      },
+      "form-pct": {
+        "title": null,
+        "description": null
+      },
+      "load-ratio": {
+        "title": null,
+        "description": null
+      },
+      "weekly-moving-time": {
+        "title": null,
+        "description": null
+      },
+      "weekly-volume": {
+        "title": null,
+        "description": null
+      },
+      "weekly-downhill-load": {
+        "title": null,
+        "description": null
+      },
+      "strength-calendar": {
+        "title": null,
+        "description": null
+      },
+      "zone-hours": {
+        "title": null,
+        "description": null
+      },
+      "weekly-zone-hours": {
+        "title": null,
+        "description": null
+      },
+      "ef-easy-road": {
+        "title": null,
+        "description": null
+      },
+      "hr-drift-pahr": {
+        "title": null,
+        "description": null
+      },
+      "uphill-vam": {
+        "title": null,
+        "description": null
+      },
+      "steady-climb-vam-hr": {
+        "title": null,
+        "description": null
+      },
+      "downhill-rate": {
+        "title": null,
+        "description": null
+      },
+      "route-difficulty": {
+        "title": null,
+        "description": null
+      },
+      "climb-density": {
+        "title": null,
+        "description": null
+      },
+      "moving-time-per-activity": {
+        "title": null,
+        "description": null
+      },
+      "durability-drift": {
+        "title": null,
+        "description": null
+      },
+      "run-power-recent-bests": {
+        "title": null,
+        "description": null
+      }
+    }
+  },
+  "periodization": {
+    "name": null,
+    "dashboards": {
+      "transition": {
+        "title": null,
+        "description": null
+      },
+      "base": {
+        "title": null,
+        "description": null
+      },
+      "build": {
+        "title": null,
+        "description": null
+      },
+      "taper": {
+        "title": null,
+        "description": null
+      },
+      "zones-targets": {
+        "title": null,
+        "description": null
+      }
+    },
+    "charts": {
+      "weekly-hours": {
+        "title": null,
+        "description": null
+      },
+      "fatigue-form": {
+        "title": null,
+        "description": null
+      },
+      "weekly-strength-count": {
+        "title": null,
+        "description": null
+      },
+      "ef-easy-road": {
+        "title": null,
+        "description": null
+      },
+      "long-easy-drift": {
+        "title": null,
+        "description": null
+      },
+      "z5-gate": {
+        "title": null,
+        "description": null
+      },
+      "intensity-distribution": {
+        "title": null,
+        "description": null
+      },
+      "weekly-volume-change": {
+        "title": null,
+        "description": null
+      },
+      "longest-session": {
+        "title": null,
+        "description": null
+      },
+      "climb-density-vs-race": {
+        "title": null,
+        "description": null
+      },
+      "uphill-vam": {
+        "title": null,
+        "description": null
+      },
+      "durability-drift": {
+        "title": null,
+        "description": null
+      },
+      "ramp-rate": {
+        "title": null,
+        "description": null
+      },
+      "weekly-hours-vs-taper": {
+        "title": null,
+        "description": null
+      },
+      "intensity-kept": {
+        "title": null,
+        "description": null
+      },
+      "form-pct": {
+        "title": null,
+        "description": null
+      },
+      "workout-targets": {
+        "title": null,
+        "description": null
+      },
+      "palladino-power-zones": {
+        "title": null,
+        "description": null
+      },
+      "friel-hr-zones": {
+        "title": null,
+        "description": null
+      },
+      "friel-pace-zones": {
+        "title": null,
+        "description": null
+      }
+    }
+  },
+  "workout": {
+    "name": null,
+    "dashboards": {
+      "highlights": {
+        "title": null,
+        "description": null
+      },
+      "aerobic-drift": {
+        "title": null,
+        "description": null
+      },
+      "intervals": {
+        "title": null,
+        "description": null
+      },
+      "climbing": {
+        "title": null,
+        "description": null
+      },
+      "pacing-durability": {
+        "title": null,
+        "description": null
+      },
+      "form-knee": {
+        "title": null,
+        "description": null
+      }
+    },
+    "charts": {
+      "summary": {
+        "title": null,
+        "description": null
+      },
+      "hr-power": {
+        "title": null,
+        "description": null
+      },
+      "route-difficulty": {
+        "title": null,
+        "description": null
+      },
+      "cp-test": {
+        "title": null,
+        "description": null
+      },
+      "wprime-battery": {
+        "title": null,
+        "description": null
+      },
+      "drift-verdict": {
+        "title": null,
+        "description": null
+      },
+      "hr-trend": {
+        "title": null,
+        "description": null
+      },
+      "hr-zones": {
+        "title": null,
+        "description": null
+      },
+      "power-zones": {
+        "title": null,
+        "description": null
+      },
+      "interval-verdict": {
+        "title": null,
+        "description": null
+      },
+      "interval-reps": {
+        "title": null,
+        "description": null
+      },
+      "interval-power": {
+        "title": null,
+        "description": null
+      },
+      "interval-battery": {
+        "title": null,
+        "description": null
+      },
+      "interval-tiz": {
+        "title": null,
+        "description": null
+      },
+      "interval-hr": {
+        "title": null,
+        "description": null
+      },
+      "interval-sets": {
+        "title": null,
+        "description": null
+      },
+      "climbs": {
+        "title": null,
+        "description": null
+      },
+      "grades": {
+        "title": null,
+        "description": null
+      },
+      "durability": {
+        "title": null,
+        "description": null
+      },
+      "durability-curve": {
+        "title": null,
+        "description": null
+      },
+      "pacing": {
+        "title": null,
+        "description": null
+      },
+      "form-halves": {
+        "title": null,
+        "description": null
+      },
+      "form-grades": {
+        "title": null,
+        "description": null
+      },
+      "form-work": {
+        "title": null,
+        "description": null
+      },
+      "form-cadence": {
+        "title": null,
+        "description": null
+      }
+    }
+  }
+}

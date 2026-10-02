@@ -58,7 +58,8 @@ import copy
 import datetime as dt
 from typing import Optional
 
-WEEKDAYS = "一二三四五六日"
+from backend.i18n import fmt
+
 HARD = ("quality", "test")
 SIDE = ("strength", "heat_passive", "notice")
 
@@ -89,7 +90,7 @@ def _b2b_exempt(info: Optional[dict], today: str) -> Optional[str]:
 
 
 def wd(day: str) -> str:
-    return "週" + WEEKDAYS[dt.date.fromisoformat(day).weekday()]
+    return fmt.weekday(day)                     # 週一 / Mon (backend/i18n/fmt.py)
 
 
 def _d(day: str) -> dt.date:

@@ -15,9 +15,9 @@ hrpower
 hrzones / powerzones
     Time in zones of this activity under a zone model the viewer picks (and
     remembers; defaults Friel % LTHR and Palladino % CP, no %HRmax model).
-    The tables are zones.py's (Friel, Classic, Palladino, Stryd, RQ) plus the evaluator's (WKO5 Classic power, iLevels from the
-    PD model of the previous 90 days' mean-max power — the WKO5 chart
-    「Time in iLevels」's own expression).
+    The tables are zones.py's (Friel, WKO5 Classic HR, Seiler 3, RQ HRR;
+    Palladino 10 / 3 zones of % CP). WKO5 iLevels were dropped (owner
+    2026-10-02): power zones are Palladino, HR zones Friel.
 hrtrend
     WKO5 「Heart Rate Variation and Trend」 (WKO5 Workout View → Zone &
     Variation, docs/wko5-views/workout-view.json): heart rate, its least-
@@ -250,12 +250,6 @@ def range_stats(res: dict, ka: int, kb: int) -> dict:
 # time in zones
 # ---------------------------------------------------------------------------
 
-ILEVEL_NAMES = [("1", "Recovery"), ("2", "Endurance"), ("3", "Tempo"), ("4a", "Sweet Spot"), ("4", "FTP"),
-                ("5", "FTP/FRC"), ("6", "FRC"), ("7a", "FRC/Pmax"), ("7", "Pmax")]
-# WKO5 「Time in iLevels」 (WKO5 Workout View → Zone & Variation): level i's top
-ILEVEL_EXPR = "levelto(athleterange(date-89,date,(meanmax(power))),{i})"
-
-
 HR_MODELS = [
     {"id": "frielhr", "title": "Friel 7 區（% LTHR）", "basis": "lthr", "zones": lambda: Z.FRIEL_HR,
      "source": "Friel 心率區間（WKO5 的 Friel HR 表，% LTHR）"},
@@ -271,14 +265,11 @@ HR_MODELS = [
                "其他區界照你的筆記，沒有逐一對過 RQ 原文（推估）"},
 ]
 POWER_MODELS = [
-    {"id": "ilevels", "title": "WKO5 iLevels", "basis": "ilevels",
-     "source": "WKO5 iLevels：前 90 天所有活動 mean-max 功率的 PD 模型（mFTP、FRC、Pmax；"
-               "docs/wko5-internals/formulas.md §6.9），和 WKO5「Time in iLevels」同一條式子"},
     {"id": "palladino", "title": "Palladino 10 區（% CP）", "basis": "cp", "zones": lambda: Z.PALLADINO_POWER_ZONES,
      "source": Z.SOURCE},
     # power zones are Palladino's everywhere (owner 2026-10-02): the Coggan (cycling % FTP) and
-    # Stryd sets are gone; a remembered choice falls back to the default. iLevels stays as the
-    # WKO5 cross-check (its own PD model, not a fixed % table).
+    # Stryd sets are gone, and so are WKO5 iLevels (owner 2026-10-02); a remembered choice falls
+    # back to the default.
     {"id": "palladino3", "title": "3 區（Palladino 80／95% CP）", "basis": "cp",
      "zones": lambda: [("1", "低強度", 0.0, Z.PALLADINO_3ZONE["low"]),
                        ("2", "中強度", Z.PALLADINO_3ZONE["low"], Z.PALLADINO_3ZONE["high"]),
@@ -299,39 +290,12 @@ def _threshold_text(ds, w, basis: str) -> Optional[str]:
     return i.get("source")
 
 
-def ilevels_for(ds, w) -> Optional[list[tuple]]:
-    """[(id, name, from W, to W)] of WKO5 iLevels on the workout date; None
-    when the PD model can't be fitted (no power in the last 90 days, or the
-    fit fails WKO5's validity gate)."""
-    from backend.engine.wko5expr.evaluator import Evaluator
-    d = int(math.floor(w.day))
-    try:
-        ev = Evaluator(ds, d, d)
-        tops = [_f(ev.evaluate(ILEVEL_EXPR.format(i=i), w)) for i in range(len(ILEVEL_NAMES) - 1)]
-    except Exception:            # noqa: BLE001 — no model
-        return None
-    if any(v is None for v in tops):
-        return None
-    out, lo = [], 0.0
-    for (zid, nm), hi in zip(ILEVEL_NAMES, tops + [None]):
-        out.append((zid, nm, lo, hi))
-        lo = hi
-    return out
-
-
 def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
     """{"rows": [(id, name, from, to)] in bpm / W, "basis_text", "estimate"}
     or {"reason"} when the model can't be used for this activity."""
     b = model["basis"]
     est = bool(model.get("estimate"))
     aet, lthr, cp = ctx["thr"]
-    if b == "ilevels":
-        # a caller may pass the levels in ctx (period_zones memoises them per file)
-        lv = ctx["ilevels"] if "ilevels" in ctx else ctx.setdefault("ilevels", ilevels_for(ds, w))
-        if lv is None:
-            return {"reason": "算不出 iLevels：前 90 天的功率不夠擬合 PD 模型（WKO5 的有效性門檻）"}
-        ftp = lv[4][3] / 1.05 if lv[4][3] else None
-        return {"rows": lv, "basis_text": f"mFTP {ftp:.0f} W（前 90 天 PD 模型）" if ftp else None, "estimate": est}
     if b == "aet_lthr":
         if not aet or not lthr:
             return {"reason": "沒有 AeT 或 LTHR"}

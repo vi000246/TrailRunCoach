@@ -132,6 +132,9 @@ DEFAULTS: dict[str, Any] = {
     "plan.auto.enabled": True,
     "plan.auto.push": None,                   # push the window to COROS automatically; None = auto: on when COROS is logged in
     "plan.auto.push_days": 7,                 # 1-14 days from today
+    # where the plan is pushed (sync/workout_targets): one active provider; 進階設定.
+    # Only enabled providers can be chosen (Garmin / intervals.icu are stubs for now)
+    "plan.push.provider": "coros",
     "plan.auto.confirm_big": True,            # hold big changes for the user's approval
     "plan.auto.notify": None,                 # watch (a 課表待確認 workout on COROS) | overview (banner only); None = auto (watch with COROS)
     # internal: {stamp, phase, rejected: [fingerprint]} of the last automatic run
@@ -146,16 +149,18 @@ DEFAULTS: dict[str, Any] = {
     # [{start, index}] — never auto-matched again (start: the activity's local start)
     "plan.match.unlinked": [],
     # 備份 (engine/backup.py, api/backup.py): target folder (absolute; None = not set up),
-    # daily automatic backup, include the synced FIT originals (進階), encryption
-    # (進階: {salt, n, r, p, key} with the scrypt-derived key sealed — never the password),
-    # outcome of the last attempt {at, trigger, status, name, size, error} and the last good one
+    # daily automatic backup, include the synced FIT originals (進階),
+    # outcome of the last attempt {at, trigger, status, name, size, error} and the last good one.
+    # Backups are not encrypted (owner 2026-10-02).
     "backup.dir": None,
     "backup.auto": True,
     "backup.include_fit": False,
-    "backup.encryption": None,
     "backup.last_result": None,
     "backup.last_ok": None,
 }
+# keys that were removed: db/database.py init_db deletes any stored row
+# (backup.encryption held the sealed scrypt-derived backup key)
+RETIRED_KEYS = ("backup.encryption",)
 AUTO_NOTIFY = ("watch", "overview")
 AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan.auto.confirm_big",
              "plan.auto.notify")
@@ -285,6 +290,10 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.auto.push_days" and (isinstance(value, bool) or not isinstance(value, int)
                                          or not 1 <= value <= 14):
         raise ValueError("plan.auto.push_days must be an integer 1-14")
+    if key == "plan.push.provider":
+        from backend.sync import workout_targets as WT
+        if value not in WT.enabled_ids():
+            raise ValueError(f"plan.push.provider must be one of {WT.enabled_ids()} (others are not enabled yet)")
     if key == "plan.auto.notify" and value is not None and value not in AUTO_NOTIFY:
         raise ValueError(f"plan.auto.notify must be one of {AUTO_NOTIFY}")
     if key == "plan.b2b.accepted" and not (isinstance(value, list) and all(
@@ -308,9 +317,6 @@ def validate(key: str, value: Any) -> None:
         raise ValueError("backup.dir must be an absolute folder path or null")
     if key in ("backup.auto", "backup.include_fit") and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
-    if key == "backup.encryption" and value is not None and not (
-            isinstance(value, dict) and {"salt", "n", "r", "p", "key"} <= set(value)):
-        raise ValueError("backup.encryption must be {salt, n, r, p, key} or null")
     if key in ("backup.last_result", "backup.last_ok") and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")
     if key == "plan.match.unlinked" and not (isinstance(value, list) and all(

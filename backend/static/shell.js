@@ -10,30 +10,27 @@
  *   < 700 px   : bottom tab bar, icon + short name
  */
 (() => {
+  // text from the shell catalog (backend/static/i18n/<locale>/shell.json, inlined by the server);
+  // captured here so a page's own global `t` can't replace it later
+  const L = window.I18N || { locale: "zh-TW", t: (k, fb) => fb ?? k, setLocale: () => {} };
+  const T = (k, p) => L.t("shell." + k, p);
   const I = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
   const PAGES = [
-    { id: "home", href: "/api/v1/overview/page", name: "總覽", short: "總覽", purpose: "狀況・待辦・本週課表",
-      icon: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>') },
-    { id: "schedule", href: "/api/v1/overview/plan/schedule/page", name: "課表", short: "課表", purpose: "日曆排課・同步 COROS",
-      icon: I('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>') },
-    { id: "charts", href: "/api/v1/wko5/viewer", name: "圖表分析", short: "圖表", purpose: "趨勢與單次活動圖表",
-      icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
-    { id: "activity", href: "/api/v1/wko5/activities/page", name: "活動編輯", short: "活動", purpose: "名稱・類型・標籤・排除",
-      icon: I('<path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>') },
+    { id: "home", href: "/api/v1/overview/page", icon: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>') },
+    { id: "schedule", href: "/api/v1/overview/plan/schedule/page", icon: I('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>') },
+    { id: "charts", href: "/api/v1/wko5/viewer", icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
+    { id: "activity", href: "/api/v1/wko5/activities/page", icon: I('<path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>') },
     // 傷病紀錄 (engine/injuries.py): hidden when its API answers 404 (the demo mode)
-    { id: "injuries", href: "/api/v1/wko5/injuries/page", name: "傷病紀錄", short: "傷病", purpose: "疼痛・受傷前的訓練",
-      feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
-    { id: "routes", href: "/api/v1/routes/page", name: "路線", short: "路線", purpose: "重複路段與路線的進步",
-      icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
-    { id: "plan", href: "/api/v1/plan/page", name: "賽事周期", short: "周期", purpose: "目標賽事・周期・門檻",
-      icon: I('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3"/>') },
-    { id: "racepower", href: "/api/v1/racepower/page", name: "賽事功率", short: "功率", purpose: "比賽功率與完賽時間預估",
-      icon: I('<path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/>') },
-    { id: "achievements", href: "/api/v1/achievements/page", name: "成就", short: "成就", purpose: "百岳與越野紀錄",
-      icon: I('<path d="M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5z"/><path d="M9 8V3.5l3 1.2-3 1.2"/>') },
-    { id: "settings", href: "/api/v1/wko5/settings", name: "設定", short: "設定", purpose: "計算模式・體重・資料校正",
-      icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
+    { id: "injuries", href: "/api/v1/wko5/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
+    { id: "routes", href: "/api/v1/routes/page", icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
+    { id: "plan", href: "/api/v1/plan/page", icon: I('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3"/>') },
+    { id: "racepower", href: "/api/v1/racepower/page", icon: I('<path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/>') },
+    { id: "achievements", href: "/api/v1/achievements/page", icon: I('<path d="M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5z"/><path d="M9 8V3.5l3 1.2-3 1.2"/>') },
+    { id: "settings", href: "/api/v1/wko5/settings", icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
   ];
+  for (const p of PAGES) {      // name / short / purpose: shell.json "page.<id>.*"
+    p.name = T(`page.${p.id}.name`); p.short = T(`page.${p.id}.short`); p.purpose = T(`page.${p.id}.purpose`);
+  }
 
   const me = document.currentScript;
   const path = location.pathname.replace(/\/+$/, "");
@@ -87,6 +84,11 @@
     body { padding-bottom: calc(57px + env(safe-area-inset-bottom)) !important; }
   }
   @media (min-width: 700px) { .appnav .an-name .an-short { display: none; } }
+  .appnav .an-lang { margin-left: auto; align-self: center; flex: none; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line, #e1e5ea); background: none; color: var(--muted, #667); font: inherit; font-size: 12px; font-weight: 600; }
+  .appnav .an-lang:hover { color: var(--an-acc); border-color: var(--an-acc); }
+  .appnav .an-lang:focus-visible { outline: 2px solid var(--an-acc); outline-offset: 1px; }
+  @media (max-width: 699px) { .appnav .an-lang { margin: 0 4px; padding: 3px 6px; font-size: 11px; } }
   @media print { .appnav { display: none; } }
   `;
   const st = document.createElement("style");
@@ -96,10 +98,14 @@
 
   const nav = document.createElement("nav");
   nav.className = "appnav";
-  nav.setAttribute("aria-label", "主選單");
-  nav.innerHTML = `<a class="an-brand" href="${PAGES[0].href}" title="回首頁"><i>${PAGES[1].icon}</i><span>訓練教練</span></a>` +
-    PAGES.map((p) => `<a class="an-item" href="${p.href}" title="${p.name}：${p.purpose}"${p.feature ? ` data-feature="${p.feature}"` : ""}${p === cur ? ' aria-current="page"' : ""}>
-      ${p.icon}<span class="an-name"><span class="an-long">${p.name}</span><span class="an-short">${p.short}</span></span><span class="an-purpose">${p.purpose}</span></a>`).join("");
+  nav.setAttribute("aria-label", T("nav.label"));
+  // the language switch shows the other language; remembered in the `lang` cookie (i18n.js setLocale)
+  const other = L.locale === "en" ? "zh-TW" : "en";
+  nav.innerHTML = `<a class="an-brand" href="${PAGES[0].href}" title="${T("brand.title")}"><i>${PAGES[1].icon}</i><span>${T("brand")}</span></a>` +
+    PAGES.map((p) => `<a class="an-item" href="${p.href}" title="${T("nav.item_title", { name: p.name, purpose: p.purpose })}"${p.feature ? ` data-feature="${p.feature}"` : ""}${p === cur ? ' aria-current="page"' : ""}>
+      ${p.icon}<span class="an-name"><span class="an-long">${p.name}</span><span class="an-short">${p.short}</span></span><span class="an-purpose">${p.purpose}</span></a>`).join("") +
+    `<button type="button" class="an-lang" lang="${other}" data-lang="${other}" title="${T("lang.title")}">${T("lang." + other)}</button>`;
+  nav.querySelector(".an-lang").addEventListener("click", (e) => L.setLocale(e.currentTarget.dataset.lang));
 
   // optional pages: drop the link when the feature is off (傷病紀錄 in the demo mode); remembered per tab
   (async () => {
@@ -114,7 +120,7 @@
   })();
   const mount = () => document.body.prepend(nav);
   if (document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
-  if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · 訓練教練`;
+  if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · ${T("brand")}`;
   window.AppShell = { pages: PAGES, current: cur };
 
   // ---- dataset build progress -------------------------------------------
@@ -152,14 +158,14 @@
       wasBuilding = true;
       const p = bar.querySelector("progress");
       if (s.n_total) { p.max = s.n_total; p.value = Math.min(s.n_done, s.n_total); } else p.removeAttribute("value");
-      bar.querySelector(".an-b-msg").textContent = s.message || "正在準備資料…";
-      bar.querySelector(".an-b-sub").textContent = s.elapsed_s != null ? `已 ${Math.round(s.elapsed_s)} 秒` : "";
+      bar.querySelector(".an-b-msg").textContent = s.message || T("build.preparing");
+      bar.querySelector(".an-b-sub").textContent = s.elapsed_s != null ? T("build.elapsed", { s: Math.round(s.elapsed_s) }) : "";
       bar.hidden = false;
       for (const el of placeholders()) {
         // the page has written its own text meanwhile: leave it alone
         if (el.dataset.buildWait && el.textContent !== el.dataset.buildMsg) { delete el.dataset.buildWait; continue; }
         if (!el.dataset.buildWait) el.dataset.buildWait = el.textContent;
-        el.textContent = el.dataset.buildMsg = s.message || "正在準備資料…";
+        el.textContent = el.dataset.buildMsg = s.message || T("build.preparing");
       }
       setTimeout(poll, 1000);
       return;
@@ -173,7 +179,7 @@
       }
       if (s && s.state === "error") {
         bar.hidden = false; bar.querySelector("progress").hidden = true;
-        bar.querySelector(".an-b-msg").textContent = "資料處理失敗：" + (s.error || "");
+        bar.querySelector(".an-b-msg").textContent = T("build.failed", { error: s.error || "" });
         bar.querySelector(".an-b-sub").textContent = "";
       }
     }

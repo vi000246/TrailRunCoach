@@ -77,6 +77,8 @@ import datetime as dt
 from statistics import median
 from typing import Callable, Iterable, Optional
 
+from backend.i18n import fmt
+
 FOLLOWERS = ("long2",)         # always 2 days (the 3-day version was dropped, 2026-10-02)
 ACCEPTED_KEY = "plan.b2b.accepted"   # user_settings: [{week, days: [d1, d2], minutes: [m1, m2], uids, at}]
 SUGGEST_AHEAD_DAYS = 13        # suggestions for this week and the next (推估: enough notice to free a weekend)
@@ -123,7 +125,7 @@ def _r5(x: float) -> int:
 
 
 def wd(day) -> str:
-    return "週" + "一二三四五六日"[_d(day).weekday()]
+    return fmt.weekday(_d(day))                 # 週一 / Mon (backend/i18n/fmt.py)
 
 
 def md(day) -> str:

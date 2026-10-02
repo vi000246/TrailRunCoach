@@ -120,9 +120,10 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
     <p class="meta">A = 主要目標（周期從它往回排）；B = 次要（前 5 天小減量、後 3 天恢復，不改周期）；C = 當訓練。</p>
     <div class="tablewrap"><table>
       <thead><tr><th></th><th>日期</th><th>名稱</th><th>類型</th><th class="num">天數</th><th class="num">距離 km</th>
-        <th class="num">爬升 m</th><th class="num">m/km</th><th class="num">預估時間 h</th><th class="num">倒數</th><th>備註</th><th></th></tr></thead>
+        <th class="num">爬升 m</th><th class="num">m/km</th><th class="num">預估時間 h</th><th class="num">倒數</th><th>備註</th><th>路線 GPX</th><th></th></tr></thead>
       <tbody id="events"></tbody>
     </table></div>
+    <input type="file" id="gpxpick" accept=".gpx,.fit,application/gpx+xml" hidden>
     <form class="form" id="evform">
       <input type="hidden" name="id">
       <label>名稱<input name="name" required placeholder="例：玉山前峰～主峰"></label>
@@ -311,7 +312,7 @@ function renderEvents() {
   const done = (e) => e.days_to + Math.max(1, e.days || 1) - 1 < 0;
   const past = S.events.filter(done);
   const shown = S.showPast ? S.events : S.events.filter((e) => !done(e));
-  const toggle = past.length ? `<tr><td colspan="12" class="meta"><button class="link" id="togglepast">${S.showPast
+  const toggle = past.length ? `<tr><td colspan="13" class="meta"><button class="link" id="togglepast">${S.showPast
     ? "隱藏已完賽" : `顯示已完賽（${past.length} 場）`}</button></td></tr>` : "";
   $("#events").innerHTML = (shown.map((e) => `<tr style="${done(e) ? "opacity:.55" : ""}">
     <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? "～" + e.end.slice(5) : ""}</td>
@@ -319,11 +320,32 @@ function renderEvents() {
     <td class="num">${fmt(e.distance_km, 1)}</td><td class="num">${fmt(e.climbing_m)}</td><td class="num">${fmt(e.climb_per_km)}</td>
     <td class="num">${fmt(e.est_hours, 1)}</td><td class="num">${e.days_to >= 0 ? e.days_to + " 天" : "已過"}</td>
     <td class="meta">${esc(e.note)}</td>
+    <td>${gpxCell(e)}</td>
     <td><button class="link" data-edit="${e.id}">編輯</button><button class="link" data-del="${e.id}">刪除</button></td></tr>`).join("")
-    || `<tr><td colspan="12" class="meta">${past.length ? "沒有接下來的賽事。" : "還沒有賽事。"}在下面填一場。</td></tr>`) + toggle;
+    || `<tr><td colspan="13" class="meta">${past.length ? "沒有接下來的賽事。" : "還沒有賽事。"}在下面填一場。</td></tr>`) + toggle;
   const t = $("#togglepast");
   if (t) t.onclick = () => { S.showPast = !S.showPast; renderEvents(); };
 }
+
+// the event's GPX (engine/event_gpx.py): upload once here or in 賽事計算器; the calculator, the
+// コース定数 reference lines and share links reuse it
+function gpxCell(e) {
+  const g = e.gpx;
+  if (!g) return `<button class="link" data-gpxup="${e.id}" title="上傳這場賽事的 .gpx / .fit 路線；存起來之後賽事計算器、コース定数參考線都會用它">上傳</button>`;
+  const t = `${g.filename}\n${fmt(g.km, 1)} km ↑${fmt(g.gain_m)} m ↓${fmt(g.loss_m)} m（平滑後）\n存成 ${Math.max(1, Math.round(g.bytes_gz / 1024))} KB（原檔 ${Math.max(1, Math.round(g.bytes_raw / 1024))} KB）・${g.uploaded_at || ""}`;
+  return `<span class="meta" title="${esc(t)}">📍 ${fmt(g.km, 1)} km ↑${fmt(g.gain_m)}</span>
+    <a class="link" href="${API}/events/${encodeURIComponent(e.id)}/gpx/file" title="下載原檔">下載</a>
+    <button class="link" data-gpxup="${e.id}" title="換一個 GPX">換檔</button><button class="link" data-gpxdel="${e.id}">刪除</button>`;
+}
+let gpxFor = null;
+$("#gpxpick").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0]; ev.target.value = "";
+  if (!f || !gpxFor) return;
+  const fd = new FormData(); fd.append("file", f);
+  const r = await fetch(`${API}/events/${encodeURIComponent(gpxFor)}/gpx`, { method: "POST", body: fd });
+  if (!r.ok) { toast("GPX 失敗：" + (await r.text()).slice(0, 120)); return; }
+  toast("GPX 已存"); load();
+});
 
 function renderPhases() {
   const rows = manual || S.phases;
@@ -394,6 +416,8 @@ $("#events").addEventListener("click", async (ev) => {
     for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "note"]) f[k].value = e[k] ?? "";
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }
+  if (ev.target.dataset.gpxup) { gpxFor = ev.target.dataset.gpxup; $("#gpxpick").click(); }
+  if (ev.target.dataset.gpxdel && confirm("刪除這場賽事的 GPX？")) { await call("DELETE", `/events/${encodeURIComponent(ev.target.dataset.gpxdel)}/gpx`); toast("GPX 已刪除"); load(); }
   if (del && confirm("刪除這場賽事？")) { await call("DELETE", "/events/" + del); toast("已刪除"); load(); }
 });
 

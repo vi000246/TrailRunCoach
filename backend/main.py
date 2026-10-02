@@ -2,12 +2,15 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db.database import init_db
+from backend.i18n import UserError
+from backend.i18n.pages import STATIC as PAGES_DIR, render_page
+from backend.request_context import RequestContextMiddleware
 from backend.api import workouts, pmc, expr, dashboard, scan, sync, auth, athletes, analytics
 from backend.api import ai, sports, wko5views
 from backend.api import achievements as achievements_api
@@ -79,6 +82,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# the request's language (and later its tenant) in contextvars: backend/request_context.py
+app.add_middleware(RequestContextMiddleware)
+
+
+@app.exception_handler(UserError)
+async def _user_error(request, exc: UserError):
+    """UserError (backend/i18n): {"detail": {"code", "message" (translated), "params"}}."""
+    return JSONResponse(status_code=exc.status, content={"detail": exc.detail()})
 
 app.include_router(workouts.router)
 app.include_router(pmc.router)
@@ -104,6 +115,17 @@ app.include_router(routes_api.workout_router)
 app.include_router(injuries_api.router)          # 傷病紀錄 (404 in the demo mode)
 app.include_router(backup_api.router)            # 備份 (settings page)
 app.include_router(calib_api.router)             # 每人校正 (settings page, 進階設定)
+
+
+
+@app.get("/api/v1/static/{name}.html", include_in_schema=False)
+def _static_page(name: str):
+    """A page opened by its file name (compare.html): rendered like the routed pages
+    (language, inlined catalog), not served raw by the mount below."""
+    if not name.replace("_", "").isalnum() or not (PAGES_DIR / f"{name}.html").is_file():
+        raise HTTPException(404, "page not found")
+    return render_page(name)
+
 
 # shared page assets (shell.js: the app-wide navigation every page includes)
 app.mount("/api/v1/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="pages-static")
