@@ -1146,6 +1146,8 @@ function drawInto(box, res) {
   else if (res.grade_profile) drawGradeProfile(box, res);     // 坡度分組: one row per grade bin
   else if (res.form_profile) drawFormProfile(box, res);       // 跑姿依坡度／隨疲勞 (form_grades / form_work)
   else if (res.cadence_profile) drawCadenceProfile(box, res); // 步頻與衝擊 (form_cadence)
+  else if (res.rep_profile) drawRepProfile(box, res);         // 間歇 → 每趟功率 vs 目標帶 (interval_reps)
+  else if (res.iv_trace) drawIntervalTrace(box, res);         // 間歇 → 功率、W′ 與心率 (interval_power)
   else draw(box, res);
 }
 
@@ -3299,6 +3301,237 @@ function drawGradeProfile(card, res) {
   }
   paint();
   new ResizeObserver(() => paint()).observe(el);
+}
+
+// ---- 間歇 tab (workout_review interval_reps / interval_power). Self-contained; reuses ACT / cp* helpers.
+// 每趟功率 vs 目標帶 (res.rep_profile): one column per rep in time order, the target band as a shaded range
+//   per column and the rep's mean power as one bold marker. Status = colour + shape + icon (● in band,
+//   ▲ above, ▼ below) so it never rests on colour alone; only off-band reps get a direct label.
+// 功率、W′ 與心率 (res.iv_trace): top panel = power as a soft area (W, left) + dFRC as a solid blue line
+//   (%, right, 0–100 — the owner's choice of one extra scale), bottom thin panel = heart rate; one time
+//   axis, one linked crosshair. Status / series colours validated with dataviz validate_palette.
+function ivStyle() {
+  if (document.getElementById("iv-style")) return;
+  const dark = "--iv-wp: #4a95ee; --iv-in: #2fbf2f; --iv-lo: #fab219; --iv-hi: #e66767; --iv-band: rgba(170,176,186,.20); --iv-rep: rgba(170,176,186,.07); --iv-ink2: #c3c2b7;";
+  const st = document.createElement("style");
+  st.id = "iv-style";
+  st.textContent = `:root { --iv-wp: #2a78d6; --iv-in: #0ca30c; --iv-lo: #e0a000; --iv-hi: #d03b3b; --iv-band: rgba(110,118,130,.16); --iv-rep: rgba(110,118,130,.06); --iv-ink2: #52514e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${dark} } }
+:root[data-theme="dark"] { ${dark} }
+.iv-head { margin: 4px 0 6px; font-size: 13px; color: var(--text); }
+.iv-head b { font-weight: 650; }
+.iv-head .meta { margin-left: 4px; }
+.iv-leg { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 11.5px; color: var(--muted); margin: 0 0 2px; align-items: center; }
+.iv-leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.iv-leg i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
+.iv-leg i.thin { border-top-width: 1px; }
+.iv-leg i.dash { border-top-style: dashed; border-top-width: 1px; }
+.iv-leg i.area { height: 10px; border: 0; border-top: 1px solid; border-radius: 2px 2px 0 0; }
+.iv-leg i.band { height: 10px; border: 0; border-radius: 3px; background: var(--iv-band); }
+.iv-leg b.sym { font-size: 12px; line-height: 1; }
+.plot.iv-reps { height: 240px; }
+.plot.iv-trace { height: 380px; }
+@media (max-width: 560px) { .plot.iv-trace { height: 330px; } .plot.iv-reps { height: 220px; } }`;
+  document.head.appendChild(st);
+}
+const IV_ST = {
+  in: { sym: "circle", rot: 0, icon: "●", word: "在目標內", c: "--iv-in" },
+  high: { sym: "triangle", rot: 0, icon: "▲", word: "偏高", c: "--iv-hi" },
+  low: { sym: "triangle", rot: 180, icon: "▼", word: "偏低", c: "--iv-lo" },
+  even: { sym: "circle", rot: 0, icon: "●", word: "配速平均", c: "--iv-in" },
+  uneven: { sym: "rect", rot: 0, icon: "■", word: "不平均", c: "--iv-lo" },
+};
+function drawRepProfile(card, res) {
+  ivStyle();
+  const P = res.rep_profile, test = P.mode === "test";
+  draw(card, { ...res, series: [], subtitle: null });
+  if (!card.isConnected || res.empty) return;
+  card.querySelector(".loading")?.remove();
+  const col = (st) => css(IV_ST[st].c);
+  const reps = P.reps || [];
+  // planned reps that weren't done: an empty column with 「沒做」 (the count says how many)
+  const cols = [...reps];
+  for (let k = reps.length + 1; !test && k <= P.n_plan; k++) cols.push({ k, label: String(k), missing: true });
+  const head = document.createElement("p");
+  head.className = "iv-head";
+  const allIn = test ? P.counts.uneven === 0 : P.counts.in === cols.length;
+  head.innerHTML = `<b style="color:${allIn ? col("in") : "var(--text)"}">${allIn ? "✓ " : ""}${esc(res.subtitle || "")}</b>`
+    + (test ? "" : `<span class="meta">目標 ${P.band[1] != null ? `${Math.round(P.band[0])}–${Math.round(P.band[1])}` : `≥ ${Math.round(P.band[0])}`} W</span>`);
+  const leg = document.createElement("div");
+  leg.className = "iv-leg";
+  leg.setAttribute("aria-label", "圖例");
+  const sw = (st) => `<span><b class="sym" style="color:${col(st)}">${IV_ST[st].icon}</b>${IV_ST[st].word}</span>`;
+  leg.innerHTML = test
+    ? `${sw("even")}${sw("uneven")}${reps.some((r) => r.expected) ? `<span><b class="sym" style="color:var(--iv-wp)">◇</b>預期全力（推估）</span>` : ""}<span><i class="dash" style="border-color:var(--iv-ink2)"></i>CP ${Math.round(P.cp)} W</span>`
+    : `<span><i class="band"></i>目標帶（淡邊 = ±2% 容許）</span>${sw("in")}${sw("high")}${sw("low")}`;
+  const el = document.createElement("div");
+  el.className = "plot iv-reps";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `每趟平均功率和目標帶：${res.subtitle || ""}`);
+  card.append(head, leg, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const vals = [...reps.map((r) => r.power), ...reps.map((r) => r.expected).filter(Boolean),
+    ...(P.band ? P.band.filter((v) => v != null) : [P.cp])];
+  const lo0 = Math.min(...vals), hi0 = Math.max(...vals), pad = Math.max((hi0 - lo0) * 0.18, 12);
+  const yn = cpNice(Math.max(0, lo0 - pad), hi0 + pad, 4);
+  const bandHi = P.band ? (P.band[1] ?? yn.max) : null;
+  const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+  // direct labels only when each column has room for 「+12 W」 (phones with many reps: hover only)
+  const few = (el.clientWidth || card.clientWidth || 600) / Math.max(1, cols.length) >= 46;
+  const tip = (r) => {
+    if (r.missing) return cpTipBox(`<b>第 ${r.k} 趟</b><br>沒做（計畫 ${P.n_plan} 趟）`);
+    const st = IV_ST[r.status];
+    const vs = !test && P.band ? (r.status === "low" ? `，比下限少 ${Math.round(P.band[0] - r.power)} W`
+      : r.status === "high" && P.band[1] != null ? `，比上限多 ${Math.round(r.power - P.band[1])} W` : "") : "";
+    return cpTipBox(`<b>${test ? esc(r.label) : `第 ${r.k} 趟`}</b> · ${cpDur(r.duration_s)}`
+      + `<br>平均功率 <b>${Math.round(r.power)} W</b>（${cpPct(r.pct_cp)} CP）`
+      + `<br><span style="color:${col(r.status)}">${st.icon}</span> ${st.word}${esc(vs)}`
+      + (test && r.pacing ? `（${esc(r.pacing)}）` : "")
+      + (!test && P.band ? `<br>目標 ${P.band[1] != null ? `${Math.round(P.band[0])}–${Math.round(P.band[1])}` : `≥ ${Math.round(P.band[0])}`} W` : "")
+      + (r.expected ? `<br>預期全力 ${Math.round(r.expected)} W（做到 ${Math.round(r.power / r.expected * 100)}%，推估）` : "")
+      + (r.hr_end != null ? `<br>後半心率 ${Math.round(r.hr_end)} bpm` : ""));
+  };
+  chart.setOption({
+    animation: false,
+    grid: { left: 52, right: 14, top: 14, bottom: 28 },
+    tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => tip(cols[p.dataIndex] || {}) },
+    xAxis: { type: "category", data: cols.map((r) => r.label), axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
+      name: test ? "" : "趟", nameLocation: "end", nameGap: 4, nameTextStyle: { color: muted, fontSize: 10 },
+      axisLabel: { color: ink, fontSize: 11, interval: 0, hideOverlap: true } },
+    yAxis: { type: "value", min: yn.min, max: yn.max, interval: yn.interval, splitLine: { lineStyle: { color: line, opacity: 0.6 } },
+      axisLabel: { color: muted, fontSize: 10, formatter: (v) => `${v} W` } },
+    series: [
+      // the target band per column (and a wide hit target for the hover)
+      { type: "custom", z: 1, data: cols.map((r, i) => [i, r.power ?? yn.min]), encode: { x: 0, y: 1 },
+        renderItem: (params, api) => {
+          const i = params.dataIndex, r = cols[i], xc = api.coord([i, 0])[0], bw = api.size([1, 0])[0];
+          const w = Math.max(10, Math.min(46, bw * 0.62));
+          const kids = [{ type: "rect", shape: { x: xc - bw / 2, y: api.coord([0, yn.max])[1], width: bw, height: api.coord([0, yn.min])[1] - api.coord([0, yn.max])[1] },
+            style: { fill: "rgba(0,0,0,0.001)" } }];
+          if (P.band) {
+            // the ±2 % tolerance (floor = lo × 0.98, ceil = hi × 1.02) as a fainter rim, so a green dot
+            // just outside the core band still reads as inside what counts
+            if (P.floor != null) {
+              const t0 = api.coord([0, P.floor])[1], t1 = api.coord([0, P.ceil ?? bandHi])[1];
+              kids.push({ type: "rect", silent: true, shape: { x: xc - w / 2, y: t1, width: w, height: Math.max(2, t0 - t1), r: 4 },
+                style: { fill: css("--iv-band"), opacity: 0.45 } });
+            }
+            const y0 = api.coord([0, P.band[0]])[1], y1 = api.coord([0, bandHi])[1];
+            kids.push({ type: "rect", silent: true, shape: { x: xc - w / 2, y: y1, width: w, height: Math.max(2, y0 - y1), r: 4 },
+              style: { fill: css("--iv-band") } });
+          }
+          if (r.missing) kids.push({ type: "text", silent: true, style: { text: "沒做", x: xc, y: api.coord([0, P.band ? (P.band[0] + bandHi) / 2 : P.cp])[1],
+            fill: muted, font: "11px system-ui, sans-serif", align: "center", verticalAlign: "middle" } });
+          return { type: "group", children: kids };
+        } },
+      ...(test ? [{ type: "line", data: [], silent: true, markLine: { silent: true, symbol: "none", label: { show: false },
+        lineStyle: { color: css("--iv-ink2"), type: "dashed", width: 1 }, data: [{ yAxis: P.cp }] } }] : []),
+      // the expected all-out (CP test): a hollow diamond
+      ...(reps.some((r) => r.expected) ? [{ type: "scatter", z: 3, symbol: "diamond", symbolSize: 12, silent: true,
+        data: cols.map((r) => r.expected ?? "-"),
+        itemStyle: { color: panel, borderColor: css("--iv-wp"), borderWidth: 1.5 } }] : []),
+      // the rep's mean power: the bold marker
+      { type: "scatter", z: 4, data: cols.map((r) => r.missing ? "-" : {
+          value: r.power, symbol: IV_ST[r.status].sym, symbolRotate: IV_ST[r.status].rot,
+          symbolSize: IV_ST[r.status].sym === "circle" ? 14 : 16,
+          itemStyle: { color: col(r.status), borderColor: panel, borderWidth: 2 },
+          // direct labels only where it's off: 「+12 W」 / 「−20 W」 against the band edge
+          label: few && !test && P.band && r.status !== "in" ? { show: true, position: r.status === "high" ? "top" : "bottom", distance: 6,
+            color: ink, fontSize: 10.5, formatter: () => r.status === "high" ? `+${Math.round(r.power - P.band[1])} W` : `−${Math.round(P.band[0] - r.power)} W` } : { show: false } }) },
+    ],
+  });
+  new ResizeObserver(() => chart.resize()).observe(el);
+}
+function drawIntervalTrace(card, res) {
+  ivStyle();
+  const R = res.iv_trace, T = ACT.theme(), x = R.x || [], span = x.length ? x[x.length - 1] : 0, iv = ACT.interval(span);
+  draw(card, { ...res, series: [], subtitle: null });
+  if (!card.isConnected || res.empty || !x.length) return;
+  card.querySelector(".loading")?.remove();
+  if (!res._zoom) card.classList.add("ac-wide");
+  if (res.subtitle) card.insertAdjacentHTML("beforeend", `<p class="iv-head">${esc(res.subtitle)}</p>`);
+  const hasHr = Array.isArray(R.hr) && R.hr.some((v) => v != null);
+  const wp = css("--iv-wp"), bandC = css("--iv-band"), repC = css("--iv-rep"), ink2 = css("--iv-ink2");
+  const word = R.test ? "段" : "趟";
+  const leg = document.createElement("div");
+  leg.className = "iv-leg";
+  leg.setAttribute("aria-label", "圖例");
+  leg.innerHTML = `<span><i class="area" style="background:${cpRgba(T.pw, 0.28)};border-color:${T.pw}"></i>功率 W（30 秒，左軸）</span>`
+    + `<span><i style="border-color:${wp};border-top-width:2.5px"></i>W′ 剩多少 %（dFRC，右軸）</span>`
+    + (hasHr ? `<span><i class="thin" style="border-color:${T.hr}"></i>心率 bpm（下）</span>` : "")
+    + `<span><i class="dash" style="border-color:${ink2}"></i>CP ${Math.round(R.cp)} W</span>`
+    + (R.band ? `<span><i class="band"></i>目標帶</span>` : "");
+  const el = document.createElement("div");
+  el.className = "plot iv-trace";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `功率、W′ 剩多少與心率隨時間；${res.subtitle || ""}`);
+  card.append(leg, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ps = R.power.filter((v) => v != null), pHi = Math.max(...ps, R.cp, R.band?.[1] ?? 0);
+  const pn = cpNice(0, pHi * 1.06, 4);
+  const hrs = hasHr ? R.hr.filter((v) => v != null) : [];
+  const hn = hasHr ? cpNice(pctl(hrs, 0.05) - 4, Math.max(...hrs) + 4, 2) : null;   // the warm-up's first minutes don't set the scale
+  const pts = (ys) => x.map((t, i) => [t, ys[i]]);
+  const repAt = (t) => (R.reps || []).find((r) => t >= r.a && t <= r.b);
+  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  const xBase = { type: "value", min: 0, max: span, interval: iv, axisLine: { lineStyle: { color: T.line } },
+    splitLine: { lineStyle: { color: T.line, opacity: 0.5 } } };
+  const pct = (v) => v == null ? "—" : `${Math.round(v * 100)}%`;
+  const end = x.length - 1;
+  const narrow = (el.clientWidth || card.clientWidth || 800) < 520;
+  chart.setOption({
+    animation: false,
+    grid: hasHr ? [{ left: 52, right: 44, top: 18, height: "62%" }, { left: 52, right: 44, top: "77%", bottom: 24 }]
+      : [{ left: 52, right: 44, top: 18, bottom: 24 }],
+    axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: T.ink2 } },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
+      formatter: (pp) => {
+        pp = [].concat(pp); if (!pp.length) return "";
+        const i = pp[0].dataIndex, t = x[i], r = repAt(t);
+        const rows = [`<b>${fmtDur(t)}</b>${r ? ` · 第 ${esc(R.test ? r.label : r.k)} ${word}` : ""}`,
+          `<span style="color:${T.pw}">■</span> 功率 <b>${ACT.num(R.power[i])}</b> W`,
+          `<span style="color:${wp}">━</span> W′ 剩 <b>${pct(R.dfrc[i])}</b>`];
+        if (hasHr) rows.push(`<span style="color:${T.hr}">─</span> 心率 <b>${ACT.num(R.hr[i])}</b> bpm`);
+        return ACT.tipBox(rows.join("<br>"));
+      } },
+    xAxis: hasHr ? [{ ...xBase, gridIndex: 0, axisLabel: { show: false }, axisTick: { show: false } },
+      { ...xBase, gridIndex: 1, axisLabel: { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v, span) } }]
+      : [{ ...xBase, gridIndex: 0, axisLabel: { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v, span) } }],
+    yAxis: [
+      { type: "value", gridIndex: 0, min: 0, max: pn.max, interval: pn.interval, axisLabel: { ...lbl, formatter: (v) => `${v} W` },
+        splitLine: { lineStyle: { color: T.line, opacity: 0.6 } } },
+      { type: "value", gridIndex: 0, min: 0, max: 1, interval: 0.25, position: "right", splitLine: { show: false },
+        axisLabel: { ...lbl, color: wp, formatter: (v) => `${Math.round(v * 100)}%` } },
+      ...(hasHr ? [{ type: "value", gridIndex: 1, min: hn.min, max: hn.max, interval: hn.interval,
+        axisLabel: { ...lbl, formatter: (v) => `${v}` }, splitLine: { lineStyle: { color: T.line, opacity: 0.5 } } }] : []),
+    ],
+    series: [
+      { name: "功率", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(R.power), showSymbol: false, connectNulls: false, z: 2,
+        lineStyle: { color: T.pw, width: 1 }, itemStyle: { color: T.pw }, areaStyle: { color: cpRgba(T.pw, 0.26) },
+        markLine: { silent: true, symbol: "none", lineStyle: { color: ink2, type: "dashed", width: 1 },
+          label: { formatter: "CP", position: "insideStartTop", color: T.muted, fontSize: 10 }, data: [{ yAxis: R.cp }] },
+        // the target band (y range) and each rep's span (a faint tint numbered at the top — not a vertical line)
+        markArea: { silent: true, data: [
+          ...(R.band ? [[{ yAxis: R.band[0], itemStyle: { color: bandC } }, { yAxis: R.band[1] ?? pn.max }]] : []),
+          ...(R.reps || []).map((r) => [{ xAxis: r.a, itemStyle: { color: repC },
+            label: { show: !narrow || (R.reps.length <= 10), position: "insideTop", distance: 2, formatter: String(R.test ? r.label : r.k),
+              color: T.muted, fontSize: 10 } }, { xAxis: r.b }]),
+        ] } },
+      { name: "W′ 剩多少", type: "line", xAxisIndex: 0, yAxisIndex: 1, data: pts(R.dfrc), showSymbol: false, connectNulls: false, z: 4,
+        lineStyle: { color: wp, width: 2.25 }, itemStyle: { color: wp },
+        // labelled once each: the lowest point and the end
+        markPoint: { silent: true, symbol: "circle", symbolSize: 7, itemStyle: { color: wp, borderColor: T.panel, borderWidth: 1.5 },
+          label: { color: T.text, fontSize: 10.5, fontWeight: 600 },
+          data: [{ coord: [R.dfrc_min.t, R.dfrc_min.pct], label: { formatter: `最低 ${pct(R.dfrc_min.pct)}`, position: "bottom", distance: 5 } },
+            ...(R.dfrc_end != null && Math.abs(x[end] - R.dfrc_min.t) > span * 0.08
+              ? [{ coord: [x[end], R.dfrc_end], label: { formatter: `結束 ${pct(R.dfrc_end)}`, position: "top", align: "right", distance: 8 } }] : [])] } },
+      ...(hasHr ? [{ name: "心率", type: "line", xAxisIndex: 1, yAxisIndex: 2, data: pts(R.hr), showSymbol: false, connectNulls: false,
+        lineStyle: { color: T.hr, width: 1.1 }, itemStyle: { color: T.hr } }] : []),
+    ],
+  });
+  new ResizeObserver(() => chart.resize()).observe(el);
 }
 
 // ---- 跑姿與膝蓋負荷 (workout_review form_grades / form_work; res.form_profile). Self-contained; reuses the
