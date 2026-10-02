@@ -149,8 +149,39 @@ def test_pace_targets_push_as_intensity_type_3_seconds_per_km():
     steps = CW.session_steps(s, CW.Thresholds.of({**FULL, "tpace": 280}))
     assert steps[0].intensity == ("pace", round(0.99 * 280), round(1.01 * 280))
     assert CW.step_lines(steps)[0].endswith("配速 4:37–4:43 /km")
-    # without a threshold pace: an error, no target (never a made-up number)
+    # without a threshold pace: no target (never a made-up number)
     assert CW.session_steps(s, CW.Thresholds.of(FULL))[0].intensity is None
+
+
+def test_no_threshold_pace_warns_on_pct_and_zone_pace_steps_only():
+    c = WS.Ctx.of(FULL, "hr")                                        # no tpace
+    for tg in ({"type": "pace", "mode": "pct", "lo": 0.99, "hi": 1.01}, {"type": "pace", "mode": "zone", "zone": "4"}):
+        r = WS.resolve(_one(tg)["items"][0], c)
+        assert r.type == "none" and not r.err and r.need == "tpace" and r.warn == WS.NO_TPACE
+        st = WS.normalize(_one(tg))
+        assert WS.needs_tpace(st)
+        assert WS.NO_TPACE in WS.watch_preview(st, c)["lost"]
+        assert any(i["level"] == "warn" and i["text"] == WS.NO_TPACE for i in WS.issues(st, c))
+    ab = WS.normalize(_one({"type": "pace", "mode": "abs", "lo": 270, "hi": 285}))
+    assert not WS.needs_tpace(ab) and WS.resolve(ab["items"][0], c).need == ""
+    assert WS.NO_TPACE not in WS.watch_preview(ab, c)["lost"]
+    # the template list flags the Daniels / Canova / Billat rows (their pace is × threshold pace)
+    T = WS.templates()
+    rows = [r for g in T["groups"] for r in g["rows"]]
+    flagged = {r["key"] for r in rows if r["needs_tpace"]}
+    assert flagged and T["no_tpace_text"] == WS.NO_TPACE
+    assert all(not r["needs_tpace"] for r in rows if r["key"] in ("strides", "hill_sprints"))
+
+
+def test_push_preview_note_and_the_link_to_threshold_pace():
+    from backend.api import plan_sessions as API
+    steps = _one({"type": "pace", "mode": "pct", "lo": 0.99, "hi": 1.01})
+    assert API.pace_note({"steps": steps}, FULL) == WS.NO_TPACE
+    assert API.pace_note({"steps": steps}, {**FULL, "tpace": 280}) is None
+    assert API.pace_note({"steps": _one({"type": "pace", "mode": "abs", "lo": 270, "hi": 285})}, FULL) is None
+    assert API.pace_note({}, FULL) is None
+    link = API.tpace_link()
+    assert link.startswith("/api/v1/static/wko5_viewer.html?view=") and "chart=" in link
     # no CP: a power override is an error; an auto band falls back to HR with the reason
     nc = WS.Ctx.of({"lthr": 168, "aet": 150}, "power")
     r = WS.resolve(_one({"type": "power", "mode": "pct", "lo": 1.0, "hi": 1.05})["items"][0], nc)
