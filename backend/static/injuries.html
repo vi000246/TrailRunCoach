@@ -407,9 +407,9 @@ function drawAnalysis() {
   }
   const rows = a.metrics;
   const W = Math.max(300, $("dp").clientWidth), narrow = W < 560;
-  const LW = narrow ? 96 : 150, RW = a.tier >= 2 ? (narrow ? 62 : 150) : 8, rh = 26, T = 18;
+  const LW = narrow ? 96 : 150, RW = a.tier >= 2 ? (narrow ? 62 : 150) : 22, rh = 26, T = 18, PAD = 12;
   const H = T + rows.length * rh + 22;
-  const X = (p) => LW + p / 100 * (W - LW - RW);
+  const X = (p) => LW + PAD + p / 100 * (W - LW - RW - PAD);
   let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="受傷前 vs 平常">`;
   s += `<rect x="${X(75)}" y="${T - 4}" width="${X(100) - X(75)}" height="${rows.length * rh + 4}" fill="var(--err)" opacity=".06"/>`;
   for (const p of [0, 25, 50, 75, 100]) s += `<line x1="${X(p)}" x2="${X(p)}" y1="${T - 4}" y2="${T + rows.length * rh}" stroke="var(--line)" ${p === 50 ? "" : 'stroke-dasharray="2 3"'}/><text x="${X(p)}" y="${T - 7}" text-anchor="middle">P${p}</text>`;
