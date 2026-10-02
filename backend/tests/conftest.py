@@ -61,6 +61,8 @@ def _fit_cache_in_tmp(monkeypatch, tmp_path_factory):
     monkeypatch.setenv(fitcache.ENV_WORKERS, "0")
     # an app started by a test (TestClient lifespan) never builds a Dataset in the background
     monkeypatch.setenv("WKO5COACH_NO_WARMUP", "1")
+    # nor runs the daily automatic backup (it would read the real DB's backup folder)
+    monkeypatch.setenv("WKO5COACH_NO_AUTO_BACKUP", "1")
 
 
 @pytest.fixture(autouse=True)
