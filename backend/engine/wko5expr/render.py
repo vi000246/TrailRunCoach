@@ -363,6 +363,10 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
         entry["ms"] = round((time.perf_counter() - t0) * 1000)
         out_series.append(entry)
     empty = empty_reason(chart, out_series, ds, ev.begin, ev.end, workout)
+    notice = None if empty or workout is not None else pd_notice(out_series, ds, ev.begin, ev.end)
+    est = estimate_notice(ev)
+    if est and not empty:
+        notice = f"{notice}；{est}" if notice else est
     return {
         "title": chart.get("title"),
         "description": chart.get("description"),
@@ -376,8 +380,30 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
         "series": out_series,
         "unsupported": sorted(ev.unsupported),
         "empty": empty,
-        "notice": None if empty or workout is not None else pd_notice(out_series, ds, ev.begin, ev.end),
+        "notice": notice,
+        "estimates": {k: {"value": v["value"], "date": _day_iso(v["day"]), "reason": v.get("reason"),
+                          "fitted": v.get("fitted", True)}
+                      for k, v in ev.estimates.items()},
     }
+
+
+def estimate_notice(ev: Evaluator) -> Optional[str]:
+    """「閾值配速 6:29 /km 是推估：…」 when a series used an estimated setting
+    (Evaluator._setting: no threshold-pace setting on this source)."""
+    out = []
+    e = ev.estimates.get("runtpace")
+    if e:
+        mm, ss = divmod(int(round(e["value"] * 60)), 60)
+        why = e.get("reason") or "推估"
+        if not why.startswith("推估"):
+            why = "推估：" + why
+        out.append(f"沒有閾值配速設定，用 {mm}:{ss:02d} /km（{why}；{_day_iso(e['day'])}）")
+    e = ev.estimates.get("runftp")
+    if e:
+        older = ("；較早的日期用 Stryd 功率 PD 模型擬合的 CP（推估）"
+                 if e.get("fitted") and not e["reason"].startswith("推估") else "")
+        out.append(f"沒有 Run FTP 設定，用當時的 CP（{_day_iso(e['day'])}：{e['value']:.0f} W，{e['reason']}{older}）")
+    return "；".join(out) or None
 
 
 def render_map(chart: dict, ds: Dataset, workout) -> dict:

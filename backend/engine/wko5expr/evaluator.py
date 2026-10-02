@@ -514,6 +514,103 @@ class Evaluator:
         self.full_span = (min(ds.first_day, self.begin),
                           max(ds.last_day, int(ds.today), self.end) + 1)
         self.wlist = [w for w in ds.workouts if sports is None or w.sport in sports]
+        # settings a chart read from an estimate (推估) instead of a dated
+        # setting: name -> {"value", "date", "reason"} of the latest use
+        self.estimates: dict[str, dict] = {}
+
+    # ---- dated settings, with the chart-only estimates ----------------------
+    def _setting(self, name: str, day: float) -> Optional[float]:
+        """ds.setting, except `runtpace` without any setting (a COROS / FIT
+        source whose athlete_settings has no threshold pace): the as-of
+        estimate thresholds.estimate_tpace (推估; the same value the zones
+        table shows), outside parity mode only. Charts only — rTSS reads
+        ds.sport_setting directly and is unchanged."""
+        v = self.ds.setting(name, day)
+        if v is not None:
+            return v
+        if name == "runtpace":
+            return self._est_tpace(day)
+        if name == "runftp":
+            return self._cp_as_runftp(day)
+        return None
+
+    def _sport_setting(self, kind: str, w: Workout) -> Optional[float]:
+        v = self.ds.sport_setting(kind, w)
+        if v is not None or w.sport != "run":
+            return v
+        if kind == "tpace":
+            return self._est_tpace(w.day)
+        if kind == "ftp":
+            return self._cp_as_runftp(w.day)
+        return v
+
+    def _parity(self) -> bool:
+        return bool(getattr(getattr(self.ds, "config", None), "parity", True))
+
+    def _cp_as_runftp(self, day: float) -> Optional[float]:
+        """`runftp` without any Run FTP setting (COROS / FIT: athlete_settings
+        has no run_ftp_w, and the account-level ftp_w is ignored on purpose):
+        the running CP in effect that day, as Dataset.cp / the `cp` identifier
+        use it — the plan's dated CP test, else the FIT dataset's Stryd-only
+        PD fit (推估). The app treats CP as the run FTP (Dataset.cp). Charts
+        only, outside parity mode; power TSS still reads ds.sport_setting."""
+        if self._parity():
+            return None
+        try:
+            d = int(math.floor(float(day)))
+        except (TypeError, ValueError):
+            return None
+        memo = self.ds.memo.setdefault("cp_as_runftp", {})
+        if d not in memo:
+            from backend.engine.wko5expr.dataset import day_to_date
+            date = day_to_date(d)
+            hit = None
+            plan = getattr(self.ds, "plan", None)
+            rows = sorted((t for t in getattr(plan, "thresholds", None) or []
+                           if t.cp is not None and t.date[:10] <= date.isoformat()), key=lambda t: t.date)
+            if rows:
+                hit = {"value": float(rows[-1].cp), "reason": f"CP 測試 {rows[-1].date[:10]}（CP 當 Run FTP）"}
+            else:
+                fit_on = getattr(self.ds, "_cp_fit_on", None)
+                fit = fit_on(date) if fit_on is not None else None
+                if fit:
+                    hit = {"value": float(fit["cp"]),
+                           "reason": f"推估：Stryd 功率 PD 模型 {fit['date'].isoformat()}（CP 當 Run FTP）"}
+            memo[d] = hit
+        hit = memo[d]
+        if hit is None:
+            return None
+        prev = self.estimates.get("runftp")
+        fitted = hit["reason"].startswith("推估") or bool(prev and prev.get("fitted"))
+        if prev is None or d >= prev["day"]:
+            self.estimates["runftp"] = {**hit, "day": d, "fitted": fitted}
+        else:
+            prev["fitted"] = fitted
+        return hit["value"]
+
+    def _est_tpace(self, day: float) -> Optional[float]:
+        if self._parity():
+            return None
+        try:
+            d = int(math.floor(float(day)))
+        except (TypeError, ValueError):
+            return None
+        memo = self.ds.memo.setdefault("est_tpace", {})
+        if d not in memo:
+            from backend.engine.thresholds import estimate_tpace
+            from backend.engine.wko5expr.dataset import day_to_date
+            try:
+                memo[d] = estimate_tpace(self.ds, day_to_date(d))
+            except Exception as e:           # noqa: BLE001 — no estimate = the old blank chart
+                memo[d] = {"value": None, "reason": f"{type(e).__name__}: {e}"}
+        est = memo[d]
+        v = est.get("value")
+        if v is None:
+            return None
+        prev = self.estimates.get("runtpace")
+        if prev is None or d >= prev["day"]:
+            self.estimates["runtpace"] = {"value": float(v), "day": d, "reason": est.get("reason")}
+        return float(v)
 
     # entry point
     def evaluate(self, expr: str, workout: Optional[Workout] = None):
@@ -701,8 +798,8 @@ class Evaluator:
         # dated settings: runftp, runthr, weight, ...
         if ds.athlete.settings.get(name) is not None or name.endswith(("ftp", "thr", "mhr", "tpace")):
             k = SETTING_UNIT_SCALE.get(name)
-            get = ds.setting if k is None else (
-                lambda nm, d: None if (v := ds.setting(nm, d)) is None else v * k)
+            get = self._setting if k is None else (
+                lambda nm, d: None if (v := self._setting(nm, d)) is None else v * k)
             if ctx.workout is not None:
                 return get(name, ctx.workout.day)
             return WS({w.idx: get(name, w.day) for w in self.wlist})
@@ -1136,8 +1233,18 @@ class Evaluator:
             memo = self.ds.memo.setdefault(key, {}) if key else {}
             cached_series = getattr(self.ds, "cached_series", None) if cacheable else None
             disk_key = f"agg:{kind}:{repr(node)}"
+            # runftp / runtpace may come from the chart-only fallbacks (_setting):
+            # a separate disk key, so a value cached while they were na is not
+            # served. runftp's fallback is the CP in effect, already part of the
+            # per-file settings signature; runtpace's is the as-of estimate for
+            # that past day (only earlier runs feed it).
+            est_names = sorted({x.name for x in P.walk(node) if isinstance(x, P.Ident)
+                                and x.name in ("runftp", "runtpace")}) if not self._parity() else []
+            if est_names:
+                disk_key += ":est1"
+            wl = list(self._workouts_in(ctx))
             out = WS()
-            for w in self._workouts_in(ctx):
+            for w in wl:
                 if w.idx in memo:
                     r = memo[w.idx]
                 else:
@@ -1151,6 +1258,10 @@ class Evaluator:
                     memo[w.idx] = r
                 if not _is_na(r):
                     out[w.idx] = r
+            # a memo / disk hit skips _setting: note the fallbacks used (the notice)
+            for nm in est_names:
+                for w in (wl[:1] + wl[-1:]):
+                    self._setting(nm, w.day)
             flush = getattr(self.ds, "flush_series", None)
             if flush is not None:
                 flush()
@@ -2034,9 +2145,9 @@ class Evaluator:
         its date; at the athlete level the Run setting at the range end
         (PROVISIONAL — the athlete's own sport)."""
         if ctx.workout is not None:
-            v = self.ds.sport_setting(kind, ctx.workout)
+            v = self._sport_setting(kind, ctx.workout)
         else:
-            v = self.ds.setting("run" + kind, float(min(ctx.end, math.floor(self.ds.today))))
+            v = self._setting("run" + kind, float(min(ctx.end, math.floor(self.ds.today))))
         return math.nan if v is None else float(v)
 
     def _levels_for(self, spec, ctx):
@@ -2214,7 +2325,7 @@ class Evaluator:
         node = n.args[0]
         if self._is_setting_ident(node):
             # a dated setting is a (date, value) set: the value in effect on q
-            return _map_scalar(_unwrap(q), lambda x: _num(self.ds.setting(node.name, x)))
+            return _map_scalar(_unwrap(q), lambda x: _num(self._setting(node.name, x)))
         c = _as_curve(_unwrap(self.arg(n, 0, ctx)), self.ds, ctx.workout)
         if c is None:
             return math.nan
