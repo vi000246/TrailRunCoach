@@ -150,7 +150,7 @@ def test_custom_pd_chart_highlights_and_lists_the_improvements(api):
     write(28, RECENT, "2_2026-09-28_run.fit")
     j = _get(client)
     names = [s["name"] for s in j["series"]]
-    assert names == ["MMP 曲線", "近 7 天新高"]           # the gain series is not drawn
+    assert names == ["MMP 曲線", "近 7 天新高", "PD 模型曲線"]   # the gain series is not drawn
     assert j["window"] == 7 and j["window_toggle"] and j["window_choices"] == [7, 14, 28]
     rb = j["recent_bests"]
     got = {i["secs"]: i["gain"] for i in rb["items"]}
@@ -170,7 +170,7 @@ def test_window_toggle_changes_the_recent_range(api):
     assert j7["series"][1]["data"]["points"] == []
     assert j7["recent_bests"]["note"] == "近 7 天沒有新活動（資料到 9/20）"
     j14 = _get(client, 14)
-    assert j14["window"] == 14 and j14["title"].endswith("近 14 天新高")
+    assert j14["window"] == 14 and j14["title"] == "跑步功率曲線"      # the title stays plain
     assert j14["series"][1]["name"] == "近 14 天新高"
     assert {i["secs"]: i["gain"] for i in j14["recent_bests"]["items"]}[60] == 20
     assert _get(client, 5)["window"] == 7                    # not a choice: the default
