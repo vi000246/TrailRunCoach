@@ -288,6 +288,21 @@ def hiking_days(ds, today: dt.date, solo: Optional[set] = None) -> list[dict]:
     return sorted(rows, key=lambda r: r["date"])
 
 
+def fallback_training() -> dict:
+    """The training conditions when the last 90 days have no weather (plan P5):
+    temperature / RH = the athlete's own medians over every activity with
+    weather (engine/heat_calib home_temp_c / home_rh_pct, ≥ 10 activities),
+    else racepower/env.py's reference conditions; altitude 200 m (env.py)."""
+    from backend.engine import heat_calib as HC
+    t, rh = HC.current("home_temp_c"), HC.current("home_rh_pct")
+    own = t.get("source") == "fitted" and rh.get("source") == "fitted"
+    wx = (f"本人 {t.get('n')} 次活動的中位 {t['value']:.0f} °C／{rh['value']:.0f} %" if own
+          else f"預設 {t['value']:.0f} °C／{rh['value']:.0f} %（env.py 參考條件）")
+    alt = HC.HOME_DEFAULTS["home_alt_m"]
+    return {"altitude_m": alt, "temp_c": float(t["value"]), "rh_pct": float(rh["value"]), "label_wx": wx,
+            "label": f"{alt:.0f} m（預設）／{wx}"}
+
+
 def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) -> dict:
     """Median elevation of the last 90 days of power runs + Open-Meteo archive
     T / RH over those activities at the median start location (cached daily)."""
@@ -295,12 +310,13 @@ def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) 
     elevs = [m["elev_median"] for _, m in ms if m.get("elev_median") is not None]
     lats = [m["lat"] for _, m in ms if m.get("lat")]
     lons = [m["lon"] for _, m in ms if m.get("lon")]
-    base = {"altitude_m": float(median(elevs)) if elevs else FALLBACK_TRAINING["altitude_m"],
-            "temp_c": FALLBACK_TRAINING["temp_c"], "rh_pct": FALLBACK_TRAINING["rh_pct"],
-            "provider": "fallback", "label": "預設（100 m / 25 °C / 75 %）", "runs": len(ms),
+    fb = fallback_training()
+    base = {"altitude_m": float(median(elevs)) if elevs else fb["altitude_m"],
+            "temp_c": fb["temp_c"], "rh_pct": fb["rh_pct"],
+            "provider": "fallback", "label": fb["label"], "runs": len(ms),
             "lat": float(median(lats)) if lats else None, "lon": float(median(lons)) if lons else None}
     if elevs:
-        base["label"] = f"近 {CP_WINDOW_DAYS} 天 {len(elevs)} 次跑步的中位海拔；溫濕度為預設值"
+        base["label"] = f"近 {CP_WINDOW_DAYS} 天 {len(elevs)} 次跑步的中位海拔；溫濕度：{fb['label_wx']}"
     if base["lat"] is None or not fetch:
         return base
     stamp = f"{today.isoformat()}|{len(ms)}|{base['lat']:.3f},{base['lon']:.3f}"
