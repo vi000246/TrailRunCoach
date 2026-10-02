@@ -3,15 +3,15 @@
 Runs against a real WKO5 athlete folder (set WKO5_ATHLETE_DIR); skipped otherwise.
 """
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 from pathlib import Path
 
 import pytest
 
+from backend.tests.realdata._paths import ATHLETE_DIR
+
 from backend.files.wko4_file import read_wko4, workout_average, window_average
 
-ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
 VERIFIED = ("heartrate", "speed", "cadence", "elevation", "latitude",
             "longitude", "temperature", "power")
 

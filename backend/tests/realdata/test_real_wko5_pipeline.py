@@ -10,16 +10,16 @@ End-to-end golden tests against the user's real WKO5 data:
 Skipped when the athlete folder / view exports are absent.
 """
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../.."))
 import datetime as dt
 import warnings
 from pathlib import Path
 
 import pytest
 
-ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
-ROOT = Path(__file__).resolve().parents[2]
+from backend.tests.realdata._paths import ATHLETE_DIR
+
+ROOT = Path(__file__).resolve().parents[3]
 SEASON = ROOT / "WKO5 Season View" / "WKO5 Season View.wko5chart"
 TODAY = dt.date(2026, 9, 29)
 

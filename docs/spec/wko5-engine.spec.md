@@ -494,15 +494,16 @@ The library moved there on 2026-10-01, when `Projects/TrailRunCoach` became the 
 
 ## Testing
 
-`pytest.ini` registers a `golden` marker.
-
 | Kind | Run | What it proves |
 |---|---|---|
-| Synthetic | `pytest -m "not golden"` (~45 s) | Each rule in isolation, on hand-built data |
-| Golden | `pytest -m golden` (~5 min) | Parity with the athlete's real WKO5 data |
+| Synthetic | `pytest backend/tests` | Each rule in isolation, on hand-built data and small frozen fixtures (`backend/tests/fixtures/`) |
+| Golden | `WKO5COACH_REALDATA=1 pytest backend/tests/realdata` (~5 min) | Parity with the athlete's real WKO5 data |
 
-Golden tests skip automatically when `WKO5_ATHLETE_DIR` is absent. The
-end-to-end golden test (`backend/tests/test_wko5_pipeline_golden.py`) goes
+The default run never reads `~/WKO5` or `~/.wko5coach`: `backend/tests/_guard.py`
+points home at a temp folder and fails any test that opens, lists or writes a
+path under either. The golden tests (marker `golden`) live in
+`backend/tests/realdata/` (README there) and skip when no athlete folder is
+found. The end-to-end golden test (`backend/tests/realdata/test_real_wko5_pipeline.py`) goes
 FIT → channels → NP/hrTSS → TSS → CTL and checks each against WKO5, including
 the athlete-bar snapshot.
 
