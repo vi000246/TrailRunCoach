@@ -132,11 +132,16 @@ class SyncState(Base):
 
 class CorosPlanPush(Base):
     """A week-plan session pushed to COROS Training Hub (sync/coros_workouts.py):
-    session key -> COROS program (library) id + schedule (calendar) ids."""
+    session key -> COROS program (library) id + schedule (calendar) ids. The push record of
+    the workout-sync providers (sync/workout_targets): `provider` = the provider id (added
+    2026-10-02, existing rows = "coros"). The unique key is still (athlete, session key):
+    only one provider is active; enabling a second one needs (athlete, provider, key)."""
     __tablename__ = "coros_plan_push"
     __table_args__ = (UniqueConstraint("athlete_id", "session_key"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    provider: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="coros",
+                                                    server_default="coros")
     session_key: Mapped[str] = mapped_column(String(80))        # the stored plan session's uid (plan_store.push_dict)
     week_start: Mapped[str] = mapped_column(String(10), index=True)
     session_id: Mapped[str] = mapped_column(String(40))
