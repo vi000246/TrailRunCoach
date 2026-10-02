@@ -849,8 +849,9 @@ function renderNotes() {
 }
 $("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
 // due CP / AeT tests: suggested with a day picker, never put into the plan by the generator
+// superseded by the floating suggestion box (suggestions.js); kept hidden to avoid showing them twice
 function renderSug() {
-  const sg = D.test_suggestions || [];
+  const sg = [];
   const box = $("tsug");
   box.hidden = !sg.length;
   box.innerHTML = sg.map((x) => `<div class="tsug-row" data-kind="${esc(x.kind)}"><span>🧪 ${esc(x.label)}</span>
