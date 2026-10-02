@@ -6,11 +6,14 @@ Sources: 台灣教練and the user's notes on 徐國峰's book
 (跑者都該懂的跑步數據 L58–L77). Our proxies / interpretations are 推估.
 
 xu_run(ds, w)
-    徐國峰's 90-min test on one run: ≥ 90 min, flat, ≤ 25 °C, every stop
-    ≤ 30 s, HR in Z1, drift = (HR@90′ − HR@10′) / HR@10′ < 10 % (his own
-    definition — minute 10 vs minute 90, ±1 min means; NOT drift_of's
-    half-vs-half Pa:HR). The test "就是你週末那一次 LSD": any qualifying run
-    counts, scheduled or not.
+    徐國峰's 90-min test on one run: ≥ 90 min, flat, every stop ≤ 30 s, HR
+    in Z1, drift = (HR@90′ − HR@10′) / HR@10′ < 10 % (his own definition —
+    minute 10 vs minute 90, ±1 min means; NOT drift_of's half-vs-half
+    Pa:HR). The test "就是你週末那一次 LSD": any qualifying run counts,
+    scheduled or not. His ≤ 25 °C is advice in the session text, not a
+    refusal (heat bands): the run carries its temperature band; a pass in
+    heat counts (heat only inflates the drift — conservative), a fail in
+    heat is marked 「熱環境，結果可能偏高」.
 z5_status(ds, today, …)
     Zone 5 opens only once the base is confirmed (徐國峰: Zone 3 first, then
     Zone 5) by ONE of three tests, done and passed (2026-10-01 使用者決定):
@@ -52,7 +55,7 @@ XU_MIN_S = 90 * 60
 XU_A_S, XU_B_S = 600.0, 5400.0       # HR at minute 10 (A) and minute 90 (B)
 XU_GOOD = 0.10                       # < 10 % = 有氧基礎夠（5 % 內國家級）
 XU_STOP_S = 30.0                     # 補給每次停不超過 30 秒
-XU_HEAT_C = 25.0                     # 當天氣溫 25 °C 以下
+XU_HEAT_C = 25.0                     # 當天氣溫 25 °C 以下（課表文字的建議；不再拒絕，heat bands）
 XU_FLAT_M_PER_KM = 20.0              # 「全程平坦」 = drift_of's flat rule (推估 mapping)
 SRC_XU = "台灣教練"
 SRC_Z3_FIRST = "台灣教練：入門轉進階先練 3 區，3 區跑順、恢復跟得上再加 5 區"
@@ -208,15 +211,18 @@ def xu_run(ds, w, m: Optional[dict] = None) -> Optional[dict]:
         why.append("不是平路（越野或每公里爬升 ≥ 20 m）")
     if not _z1(m):
         why.append("心率不是全程 1 區（平均 ≤ AeT+3、超過的時間 ≤ 10%）")
+    # heat bands: the temperature is a band, not a refusal (> 25 °C was one before). Heat inflates
+    # the drift, so a pass in heat is conservative and counts; a fail in heat says it may be the heat
     tc, src = WR.activity_temp(ds, w, m)
-    out["temp_c"] = tc
-    if tc is not None and tc > XU_HEAT_C:
-        why.append(f"氣溫 {tc:.0f} °C（> 25 °C）")
+    band = WR.temp_band(tc)
+    out.update(temp_c=tc, temp_src=src, band=band, heat=WR.is_heat(band),
+               chip="🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明"))
     stop = longest_stop(s["t"], s["speed"])
     if stop > XU_STOP_S:
         why.append(f"第 10–90 分鐘停了 {stop:.0f} 秒（每次 ≤ 30 秒）")
     if r is not None and r["drift"] >= XU_GOOD:
-        why.append(f"飄移 {r['drift'] * 100:.1f}%（≥ 10%）")
+        why.append(f"飄移 {r['drift'] * 100:.1f}%（≥ 10%）" + (f"（{out['chip']}，{WR.HEAT_NOTE}，可能是熱造成的）"
+                                                              if out["heat"] else ""))
     out["ok"] = r is not None and not why
     return out
 
@@ -240,7 +246,8 @@ def xu_text(r: dict) -> str:
         return f"{r['date']} 90 分鐘跑：" + "；".join(r["why"])
     head = (f"{r['date']} 90 分鐘：第 10 分 {r['hr10']:.0f} → 第 90 分 {r['hr90']:.0f} bpm，"
             f"飄移 {r['drift'] * 100:.1f}%")
-    return head + ("（< 10%：有氧基礎夠）" if r["ok"] else "：" + "；".join(r["why"]))
+    heat = f"（{r['chip']}，熱環境，結果可能偏高；熱天通過仍算數）" if r["ok"] and r.get("heat") else ""
+    return head + ("（< 10%：有氧基礎夠）" + heat if r["ok"] else "：" + "；".join(r["why"]))
 
 
 # ---------------------------------------------------------------------------
