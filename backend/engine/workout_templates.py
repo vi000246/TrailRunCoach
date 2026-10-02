@@ -162,6 +162,10 @@ TEMPLATES: list[Template] = [
     Template("pfitz_long", "easy", "Pfitzinger 長跑 2 小時", PFITZ, PFITZ_URL, lambda b: [
         b.warm(15, target=hr(0.75, 0.85)), b.t("work", 95 * 60, hr(0.82, 0.90), "74–84% HRmax"),
         b.cool(10, target=hr(0.70, 0.80))], conv=HRMAX + "（上緣壓在 90%）"),
+    # 主要訓練項目 = 路跑 (engine/overview.road_long_session): Pfitzinger's marathon-pace long run
+    Template("pfitz_mp_long", "easy", "Pfitzinger 馬拉松配速長跑（16 km MP）", PFITZ, PFITZ_URL, lambda b: [
+        b.warm(20, target=hr(0.75, 0.85)), b.d("work", 16000, pace(1.04, 1.08), "馬拉松配速"),
+        b.cool(10, target=hr(0.70, 0.80))], basis="pace", conv="馬拉松配速 ≈ 閾值配速 × 1.06（推估）"),
     Template("daniels_e", "easy", "Daniels E 輕鬆跑 50′", DANIELS, DANIELS_URL, lambda b: [
         b.warm(10), b.t("work", 35 * 60, hr(0.72, 0.88), "E：65–79% HRmax"), b.cool(5)], conv=HRMAX),
     Template("xu_e90", "easy", "徐國峰 E 強度 90′（看心率飄移）",

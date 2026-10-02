@@ -40,6 +40,11 @@ SUB_LABEL = {"z3": "三區", "z4": "四區", "z5": "五區"}
 TRAIL_SPECIFIC = {"lib:dsw_classic", "lib:koop_uphill", "lib:long_climb", "lib:downhill_ecc", "lib:steep_10",
                   "lib:steep_15"}
 TRAIL_BASE = {"lib:long_climb", "lib:ua_hill_sprints", "lib:steep_5", "lib:dsw_endurance", "hill_sprints"}
+# 主要訓練項目 = 路跑 (engine/primary_sport.py): marathon-specific sessions for the 專項期 (Pfitzinger's
+# LT and MP runs, Daniels' T, Canova's specific block) and the long runs of a marathon plan
+ROAD_SPECIFIC = {"lib:pfitz_lt", "lib:daniels_cruise", "lib:canova_specific", "lib:pfitz_mp_long"}
+ROAD_LONG = {"lib:pfitz_long", "lib:pfitz_mp_long"}
+ROAD_NO_TRAIL = -100.0
 # near-duplicates: at most one of each family in the 推薦 block
 FAMILY = {"lib:steep_5": "steep", "lib:steep_10": "steep", "lib:steep_15": "steep",
           "lib:ua_hill_sprints": "hills", "hill_sprints": "hills", "cp_quick": "cp", "cp_standard": "cp"}
@@ -48,7 +53,8 @@ EXPLAIN = ("推薦依這堂課排序（權重是推估）：① 強度課的第�
            "同一階的同等課表接在後面，換它們不影響進階。② 5 區還沒開放時不推薦 5 區課表（徐國峰：先練 3 區）。"
            "③ 階段：基礎期偏 3 區和有氧、專項期偏賽道的爬升和下坡、減量期偏短的課（Koop；Uphill Athlete 由一般到專項）。"
            "④ 時間：超過這天上限的往後排，接近這堂原本分鐘數的往前。⑤ 地形：越野日偏上坡版，路跑日不推需要找坡的課。"
-           "⑥ 類型：長跑日偏 90 分以上的課。其他範本收在下面，照原本的順序。")
+           "⑥ 類型：長跑日偏 90 分以上的課。⑦ 主要訓練項目是路跑時：不推越野範本，專項期偏馬拉松專項課"
+           "（Pfitzinger 乳酸閾值／馬拉松配速長跑、Daniels T、Canova）。其他範本收在下面，照原本的順序。")
 
 
 def row_minutes(row: dict) -> float:
@@ -179,6 +185,14 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
                 sc.add(-10, "長跑日嫌短")
         elif kind == "easy" and mins <= 70 and key != "strides":
             sc.add(8, "輕鬆跑的長度")
+    # ⑦ 主要訓練項目 = 路跑
+    if s.get("sport") == "road":
+        if cat == "trail":
+            sc.add(ROAD_NO_TRAIL, "主要訓練項目是路跑")
+        elif phase in ("specific", "build") and key in ROAD_SPECIFIC:
+            sc.add(20, f"{PHASE_LABEL[phase]}：馬拉松專項")
+        if kind == "long" and key in ROAD_LONG:
+            sc.add(10, "馬拉松的長跑")
     return sc
 
 
@@ -200,13 +214,14 @@ def ladder_pick(rung: Optional[str], cap: Optional[float], history=(), prefs=Non
 
 def recommend(tpl: dict, *, kind: str, cap: Optional[float] = None, minutes: Optional[float] = None,
               terrain: str = "road", phase: Optional[str] = None, z5_open: bool = False,
-              rung: Optional[str] = None, ladder_key: Optional[str] = None, ladder_reason: str = "") -> dict:
+              rung: Optional[str] = None, ladder_key: Optional[str] = None, ladder_reason: str = "",
+              sport: str = "trail") -> dict:
     """{"cats": {cat id: [{"key", "reason"}] best first, ≤ 3}, "inputs": {...}, "tip"}
     over workout_steps.templates() output `tpl`."""
     ph = PHASE_OF.get(phase or "", "base")
     s = {"kind": kind or "easy", "cap": cap, "minutes": float(minutes or 0) or None, "terrain": terrain or "road",
          "phase": ph, "z5_open": bool(z5_open), "rung": rung if rung in IL.LIBRARY else None,
-         "ladder_key": ladder_key, "ladder_reason": ladder_reason}
+         "ladder_key": ladder_key, "ladder_reason": ladder_reason, "sport": sport}
     out = {}
     for c in tpl.get("cats") or []:
         cid = c["id"]
@@ -242,5 +257,5 @@ def recommend(tpl: dict, *, kind: str, cap: Optional[float] = None, minutes: Opt
     return {"cats": out, "tip": EXPLAIN,
             "inputs": {"phase": ph, "phase_label": PHASE_LABEL[ph], "z5_open": s["z5_open"], "cap": cap,
                        "minutes": s["minutes"], "terrain": s["terrain"], "kind": s["kind"],
-                       "rung": s["rung"], "rung_name": IL.RUNG_NAME.get(s["rung"] or "", None),
+                       "rung": s["rung"], "rung_name": IL.RUNG_NAME.get(s["rung"] or "", None), "sport": sport,
                        "ladder_key": ladder_key}}
