@@ -256,12 +256,6 @@ ILEVEL_NAMES = [("1", "Recovery"), ("2", "Endurance"), ("3", "Tempo"), ("4a", "S
 ILEVEL_EXPR = "levelto(athleterange(date-89,date,(meanmax(power))),{i})"
 
 
-def _classic_power():
-    from backend.engine.wko5expr.evaluator import LEVEL_TABLES
-    _, rows = LEVEL_TABLES["classicpower"]
-    return [(str(i + 1), nm, 0.0 if lo is None else lo, hi) for i, (nm, lo, hi) in enumerate(rows)]
-
-
 HR_MODELS = [
     {"id": "frielhr", "title": "Friel 7 區（% LTHR）", "basis": "lthr", "zones": lambda: Z.FRIEL_HR,
      "source": "Friel 心率區間（WKO5 的 Friel HR 表，% LTHR）"},
@@ -282,11 +276,9 @@ POWER_MODELS = [
                "docs/wko5-internals/formulas.md §6.9），和 WKO5「Time in iLevels」同一條式子"},
     {"id": "palladino", "title": "Palladino 10 區（% CP）", "basis": "cp", "zones": lambda: Z.PALLADINO_POWER_ZONES,
      "source": Z.SOURCE},
-    {"id": "stryd", "title": "Stryd 5 區（% CP）", "basis": "cp", "zones": lambda: Z.STRYD_ZONES,
-     "source": "Stryd 功率區間（Easy 65–80、Moderate 80–90、Threshold 90–100、Interval 100–115、"
-               "Repetition 115–130% CP）；低於 65% 併入 1 區、高於 130% 併入 5 區"},
-    {"id": "coggan", "title": "Coggan 經典 6 區（% CP）", "basis": "cp", "zones": _classic_power, "estimate": True,
-     "source": "Coggan 經典功率區間（WKO5 Classic Power，騎車的 % FTP）；跑步拿 CP 當 FTP 用是推估"},
+    # power zones are Palladino's everywhere (owner 2026-10-02): the Coggan (cycling % FTP) and
+    # Stryd sets are gone; a remembered choice falls back to the default. iLevels stays as the
+    # WKO5 cross-check (its own PD model, not a fixed % table).
     {"id": "palladino3", "title": "3 區（Palladino 80／95% CP）", "basis": "cp",
      "zones": lambda: [("1", "低強度", 0.0, Z.PALLADINO_3ZONE["low"]),
                        ("2", "中強度", Z.PALLADINO_3ZONE["low"], Z.PALLADINO_3ZONE["high"]),

@@ -28,6 +28,22 @@ PALLADINO_POWER_ZONES = [
 
 PALLADINO_3ZONE = {"low": 0.80, "high": 0.95}
 
+# The app's running power zones are Palladino's everywhere (owner 2026-10-02): the editor's
+# 三區 / 四區 / 五區 split, interval_library's classes, the ladder's Zone 3 / Zone 5, the weekly
+# Zone 5 slot and the session classifier all read these edges (no Coggan / cycling sets).
+Z3_LO = 0.88          # 3A: threshold stimulus from here
+Z4_LO = 1.01          # 4: supra-threshold (above CP)
+Z5_LO = 1.06          # 5: maximal aerobic power (VO2max)
+
+
+def palladino_rows(open_hi: float = 99.0) -> list[tuple]:
+    """[(id, name, lo, hi)] for time-in-zone tables: the first zone from 0, the last
+    open zone up to `open_hi` (so every sample falls in one zone)."""
+    rows = []
+    for i, (zid, name, lo, hi) in enumerate(PALLADINO_POWER_ZONES):
+        rows.append((zid, name, 0.0 if i == 0 else lo, open_hi if hi is None else hi))
+    return rows
+
 SOURCE = "Palladino Power Project zone table (2017/2019)"
 
 

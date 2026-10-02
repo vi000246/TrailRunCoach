@@ -126,7 +126,7 @@ def test_power_models_skip_watch_power_and_default_to_palladino():
     s = _rows(res)
     assert s["1A"] == 300 and s["2"] == 300 and res["total_s"] == 600
     assert res["skipped"] == [{"reason": "手錶推估功率不採用", "n": 1}]
-    assert [m["id"] for m in res["models"]["power"]] == ["palladino", "ilevels", "stryd", "palladino3", "coggan"]
+    assert [m["id"] for m in res["models"]["power"]] == ["palladino", "ilevels", "palladino3"]   # Palladino everywhere
     assert [m["id"] for m in res["models"]["hr"]] == ["frielhr", "classichr", "seiler3"]   # no %HRmax
 
 

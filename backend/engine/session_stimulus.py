@@ -41,7 +41,13 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-P_LO, P_HI = 1.03, 1.06
+from backend.engine import zones as _Z
+
+# Palladino's running power zones (owner 2026-10-02: Palladino everywhere): a VO2 bout is
+# zone 5 (≥ 106 % CP) for ≥ 2 min, or the upper part of zone 4 (supra-threshold, 103–106 %)
+# held ≥ 5 min — above CP VO2 keeps rising to its max (Poole 1988; your note's 100–105 % for
+# 5–8 min); 103 % (not 101 %) is the 推估 margin for CP error. Zone 3 = 3A–3B from 88 %.
+P_LO, P_HI = 1.03, _Z.Z5_LO
 P_HI_MIN_S, P_LO_MIN_S = 120, 300
 LAG_HI_S, LAG_FIRST_S, LAG_LO_S = 60, 30, 180
 BRIDGE_S = 5
@@ -50,7 +56,7 @@ HR_FACTOR = 1.6
 HR_MIN_S = 60
 Z5_MIN_S = 240
 Z5_GOAL_S = 600
-Z3_P = 0.88
+Z3_P = _Z.Z3_LO
 Z3_HR = 0.95
 Z3_MIN_S = 150
 Z3_HR_SKIP_S = 180
@@ -64,8 +70,9 @@ HRPEAK_RANK, HRPEAK_DAYS = 3, 365
 SRC = {
     "t_vo2": "Buchheit & Laursen 2013（Sports Med 43:313）：每堂 ≥ 90% VO2max「at least several minutes」，目標約 10 分",
     "z5_min": "推估：等效 T@VO2max ≥ 4 分（「幾分鐘」；5×2 分做完是 4.5 分）",
-    "bouts": "你的筆記「如何進入VO2max」：106–120% CP 2–5 分、100–105% 5–8 分（作者未標）；徐國峰：每趟 ≥ 2 分；"
-             "103% 是 Palladino MAP 下限，比 CP 高 3% 的緩衝是推估",
+    "bouts": "VO2 段：Palladino 5 區（≥ 106% CP）撐 ≥ 2 分，或 4 區上段（103–106%）撐 ≥ 5 分。"
+             "你的筆記「如何進入VO2max」：106–120% CP 2–5 分、100–105% 5–8 分（作者未標）；徐國峰：每趟 ≥ 2 分；"
+             "103% 比 CP 高 3% 是推估的緩衝（CP 本身有誤差），也是 Palladino MAP 間歇的下限",
     "lag": "Buchheit §3.1.1.2：攝氧量 1:20–2:20 才到最大；每段扣 60／90／180 秒是推估",
     "hr": "手腕心率只當替代：≥ 93% 最高心率（推估；Swain 1994 換算 90% VO2max ≈ 95% HRmax、Daniels T 上緣 92%），"
           "時間 ÷ 1.6（Fleckenstein 2025：胸帶心率 > 90% 的時間是攝氧量的 1.7 倍）",
@@ -165,13 +172,14 @@ def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
     bouts, t_p, first = [], 0.0, True
     best = None
     if pvalid.any():
-        p10 = _roll(p1, 10)
-        raw_on = np.nan_to_num(p1) >= P_LO * cp
-        for a, b in runs_of(pvalid & (p10 >= P_LO * cp), BRIDGE_S):
-            # the smoothing trims each edge: extend over the raw seconds still ≥ 1.03 CP
-            while a > 0 and raw_on[a - 1] and pvalid[a - 1]:
+        # found on 30-s power (Stryd's second-to-second dips would split a rep: real data, a
+        # 6.4′ rep came out as 2.6′ + 2′ on 10-s power), then the edges the 30-s window trims
+        # are given back while the 1-s power is still ≥ 1.03 CP
+        on1 = np.nan_to_num(p1) >= P_LO * cp
+        for a, b in runs_of(pvalid & (p30 >= P_LO * cp), BRIDGE_S):
+            while a > 0 and on1[a - 1] and pvalid[a - 1]:
                 a -= 1
-            while b < n and raw_on[b] and pvalid[b]:
+            while b < n and on1[b] and pvalid[b]:
                 b += 1
             d = b - a
             pm = float(np.nanmean(p1[a:b])) / cp

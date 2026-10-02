@@ -164,15 +164,13 @@ def test_power_zone_models_and_ilevels_unavailable_without_a_model(monkeypatch):
     ds = _ds(_run(t, np.full(len(p), 150.0), p))
     monkeypatch.setattr(A, "ilevels_for", lambda ds, w: None)
     res = A.zone_times(ds, ds.workouts[0], "power")
-    assert [m["id"] for m in res["models"]] == ["ilevels", "palladino", "stryd", "coggan", "palladino3"]
+    # power zones are Palladino's everywhere (owner 2026-10-02): no Coggan / Stryd sets
+    assert [m["id"] for m in res["models"]] == ["ilevels", "palladino", "palladino3"]
     assert res["default"] == "palladino"          # Palladino % CP (zones-and-thresholds.md §3.2)
     il = _model(res, "ilevels")
     assert not il["available"] and "iLevels" in il["reason"]
-    st = _model(res, "stryd")       # 0.8 / 0.9 / 1.0 / 1.15 × 250 = 200 / 225 / 250 / 287.5
-    assert [r["seconds"] for r in st["rows"]] == [300.0, 300.0, 300.0, 300.0, 300.0]
     p3 = _model(res, "palladino3")  # 80 % / 95 % CP = 200 / 237.5
     assert [r["seconds"] for r in p3["rows"]] == [300.0, 300.0, 900.0]
-    assert _model(res, "coggan")["estimate"] is True
     # Palladino's table starts at 50 % CP; below that counts as 1A, so every second has a zone
     pal = _model(res, "palladino")
     assert pal["rows"][0]["from"] == 0 and pal["total_s"] == len(p)

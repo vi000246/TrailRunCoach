@@ -73,7 +73,7 @@ ZONES = {"power": POWER_ZONES, "hr": HR_ZONES, "pace": PACE_ZONES}
 # Z5 / Z3 rules (interval_library §C2): 徐國峰 ≥ 2 min; Buchheit rest; Haugen ≥ 3 min
 Z5_MIN_REP_S, Z3_MIN_REP_S, Z5_MAX_REST_S = IL.Z5_MIN_REP_S, IL.Z3_MIN_REP_S, IL.Z5_MAX_REST_S
 Z5_FRAC = IL.CLASS_RANGE["Z5"][0]
-HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z5": (1.00, 1.05)}    # = coros_workouts.HR_WORK
+HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}    # = coros_workouts.HR_WORK
 
 WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
@@ -839,7 +839,7 @@ def _is_z3(st: dict, r: Resolved) -> bool:
         m = r.frac
     else:
         return False
-    return IL.CLASS_RANGE["Z3sub"][0] <= m < Z5_FRAC
+    return IL.CLASS_RANGE["Z3sub"][0] <= m < IL.CLASS_RANGE["Z3near"][1]     # Palladino 3A–3B (88–101 %)
 
 
 def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft",
@@ -913,7 +913,7 @@ def _has_rest_after(rows: list, st: dict) -> bool:
 # progression: the steps as a library Variant (interval_library.equivalent)
 # ---------------------------------------------------------------------------
 
-HR_CLASS_BAND = {"Z5": (1.05, 1.10), "Z3near": (0.97, 1.00), "Z3sub": (0.90, 0.95)}   # 推估
+HR_CLASS_BAND = {"Z5": (1.06, 1.12), "Z4": (1.02, 1.05), "Z3near": (0.97, 1.00), "Z3sub": (0.90, 0.95)}   # 推估
 
 
 def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
@@ -941,7 +941,8 @@ def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
             m = (tg["lo"] + tg["hi"]) / 2 / c.lthr
         else:
             return None
-        cls = "Z5" if m >= 1.0 else "Z3near" if m >= 0.95 else "Z3sub" if m >= 0.88 else None
+        # Friel ↔ Palladino (workout_templates.HRP, 推估): 5b ≥ 103 % LTHR ↔ Zone 5, 5a ≥ 100 % ↔ Zone 4
+        cls = "Z5" if m >= 1.03 else "Z4" if m >= 1.0 else "Z3near" if m >= 0.95 else "Z3sub" if m >= 0.88 else None
         if cls is None:
             return None
         return (*HR_CLASS_BAND[cls], True)

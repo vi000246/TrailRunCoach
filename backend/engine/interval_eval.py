@@ -251,7 +251,8 @@ def evaluate(ds, w, with_peers: bool = True, as_interval: bool = False) -> Optio
                      "source": b.get("source") or found["source"]})
     o = QG.interval_outcome([{"power": r["power"]} for r in reps], spec, cp, m.get("aet")) if reps else \
         {"outcome": "unknown", "why": "找不到趟"}
-    is5 = (v.cls == "Z5") if v is not None else lo >= 1.02
+    from backend.engine import interval_library as IL
+    is5 = (v.cls == "Z5") if v is not None else (lo + (hi if hi is not None else lo)) / 2 >= IL.CLASS_RANGE["Z5"][0]
     tiz = tiz_seconds(t, p, cp, lo, hi, is5)
     plan_tiz = (sum(v.works) if v is not None else n_plan * spec[3] * 60.0)
     ratio = (tiz / plan_tiz) if tiz is not None and plan_tiz else None
