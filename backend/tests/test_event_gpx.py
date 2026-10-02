@@ -114,12 +114,12 @@ def test_multi_day_is_one_trip_number_with_the_per_day_breakdown():
     assert ln["cc"] == pytest.approx(round(course_constant(17.0, 36, 3000, 3000), 1))  # = the whole-route constant
     assert ln["day_mean"] == pytest.approx(round(ln["cc"] / 3, 1)) and ln["hardest_day"] == 2
     assert ln["taiyokudo"] == math.ceil(ln["cc"] / 10)
-    refs = [s for s in res["series"] if s.get("role") == "race_ref"]
-    names = [s["name"] for s in refs]
-    assert any("整趟 3 天" in n for n in names) and any("每天平均" in n for n in names)
-    trip = next(s for s in refs if "整趟" in s["name"])
+    # one line: the per-day average (the single-day target); the trip and its days in the hover
+    refs = [s for s in res["series"] if s.get("role") == "race_ref" and s["data"]["kind"] == "hline"]
+    assert len(refs) == 1 and refs[0]["name"].startswith("南湖大山 每天") and "單日目標" in refs[0]["name"]
+    trip = refs[0]
     assert "第 2 天" in trip["tip"] and "（最難）" in trip["tip"] and "體力度" in trip["tip"]
-    assert "信州" in res["description"] and "推估" in res["description"]
+    assert "信州" in trip["tip"] and "推估" in res["description"]
 
 
 def test_multi_day_plan_estimate_is_spread_by_km_effort():
