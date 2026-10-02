@@ -52,7 +52,7 @@ DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 SUMMARY_MODEL = {"hr": "seiler3", "power": "palladino3"}      # the 3 zones the targets are written in
 
 SPORTS = (("road", "路跑"), ("trail", "越野跑"), ("hike", "登山健行"))
-DEFAULT_SPORTS = ("road",)
+DEFAULT_SPORTS = ("road", "trail")   # all running by default; hiking (walk + hiking tag) is opt-in
 HIKE_TAGS = {"hiking", "mountaineering"}
 
 PERIODS = (("range", "日期範圍"), ("week", "本週"), ("lastweek", "上週"), ("4w", "近 4 週"),
