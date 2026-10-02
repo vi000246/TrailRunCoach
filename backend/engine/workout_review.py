@@ -3679,7 +3679,7 @@ def _iv_reps(ds, w, m, c, base):
         head += f"，少做 {n - len(reps)} 趟"
     band = (f"{e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）" if hi_w is not None
             else f"≥ {e['lo'] * 100:.0f}% CP（≥ {lo_w:.0f} W）")
-    desc = (f"每一欄是一趟（照順序）。灰帶 = 目標帶 {band}；點 = 那趟的平均功率："
+    desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端落在綠色帶裡 = 達標："
             f"綠 ✓ 在目標內、黃 ▼ 偏低（< {e['floor']:.0f} W = 下限 × 0.98）"
             + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else "")
             + "。偏高在判讀裡仍算達標，只是提醒做太重。"
@@ -3703,8 +3703,8 @@ def _iv_reps_test(e, base):
     k_even = sum(1 for r in reps if r["status"] == "even")
     head = f"{len(reps)} 段中 {k_even} 段配速平均"
     exp = any(r["expected"] for r in reps)
-    desc = (f"{e['label']}：每一欄是一段。點 = 那段的平均功率（綠 ✓ 前後半配速平均、黃 ■ 不平均）。"
-            + ("空心菱形 = 這段長度的預期全力功率，用測試前的 CP 和 W′ 依 CP 模型 P = CP + W′/t 算"
+    desc = (f"{e['label']}：每段一根長條，頂端 = 那段的平均功率（綠 ✓ 前後半配速平均、黃 ■ 不平均）。"
+            + ("滑過看這段長度的預期全力功率，用測試前的 CP 和 W′ 依 CP 模型 P = CP + W′/t 算"
                f"（Monod & Scherrer 1965；{e['wprime_src']}，推估）。" if exp else "")
             + "平均＝後半和前半差 ±" + ("5" if e.get("intent") == "max" else "3")
             + "% 內、最後 1 分 ≤ 該段 × 1.08（推估）。測試不用目標帶判「達標」。")
