@@ -155,6 +155,23 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             ds = _dataset()
             from backend.api import overview as OV
             OV._status(ds, OV.O.day_to_date(ds.today))
+            # 每人校正 (engine/calibrate.py): fit what was never fitted (a new
+            # install, a new item) now instead of waiting for the next sync
+            from backend.engine import calibrate as CAL
+            if any(CAL.stored_entry(n) is None for n in CAL._registry()):
+                import asyncio
+
+                async def fit_once():
+                    # its own engine: this thread runs its own event loop
+                    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+                    from backend.db.database import DATABASE_URL
+                    eng = create_async_engine(DATABASE_URL)
+                    try:
+                        async with async_sessionmaker(eng, expire_on_commit=False)() as db:
+                            await CAL.calibrate(db, ds=ds)
+                    finally:
+                        await eng.dispose()
+                asyncio.run(fit_once())
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__)
     t = threading.Thread(target=run, name=f"dataset-warmup-{reason}", daemon=True)

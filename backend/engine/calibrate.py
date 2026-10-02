@@ -93,6 +93,7 @@ def _load_items() -> None:
     from backend.engine import drift_agg  # noqa: F401  (aet_heat_beta)
     from backend.engine import heat_calib  # noqa: F401  (hadley_hr_beta, humidity_default, home_*)
     from backend.engine import effort_calib  # noqa: F401  (trail_max_min_km, trail_max_min_min, effort_rest_max)
+    from backend.engine import terrain_calib  # noqa: F401  (climb_divisor_run)
 
 
 def validate_entry(v) -> None:

@@ -89,7 +89,7 @@ from typing import Optional
 import numpy as np
 
 TRAILHR = {
-    "divisor": 153.0,          # SIMPLE_FORMULAS["fitted_run"]
+    "divisor": None,           # None = the athlete's own (effort.divisor_of("fitted_run")); a number overrides
     "min_moving_s": 45 * 60.0,  # athlete.TRAIL_MIN_MOVING_S
     "dur_min_s": 2 * 3600.0,   # 推估: durability only from runs ≥ 2 h moving
     "t0_h": 1.0,               # 推估: the decline starts after 1 h
@@ -147,7 +147,7 @@ def run_point(km, gain_m, moving_s, hr_avg, lthr) -> Optional[dict]:
     k = TRAILHR
     if not km or not moving_s or moving_s < k["min_moving_s"] or not hr_avg or not lthr:
         return None
-    e = km + (gain_m or 0.0) / k["divisor"]
+    e = km + (gain_m or 0.0) / (k["divisor"] or effort_divisor())
     T = moving_s / 3600.0
     return {"x": hr_avg / lthr, "x_raw": hr_avg / lthr, "v": e / T, "T_h": T, "eff_km": e,
             "hr": float(hr_avg), "lthr": float(lthr)}
@@ -305,9 +305,16 @@ def pool_deltas(rows) -> Optional[dict]:
     return {"mean": m, "se": se, "ci95": [m - 1.96 * se, m + 1.96 * se], "tau": math.sqrt(tau2), "n": len(r)}
 
 
-def effort_speed_series(t, d_m, z, moving, divisor: float = TRAILHR["divisor"]):
+def effort_divisor() -> float:
+    """The effort-km ascent divisor in use (TRAILHR override, else per athlete)."""
+    from backend.engine.algorithms.effort import divisor_of
+    return TRAILHR["divisor"] or divisor_of("fitted_run")
+
+
+def effort_speed_series(t, d_m, z, moving, divisor: Optional[float] = None):
     """(moving-time axis s, effort-km speed m/s) for durability(): only
     moving samples, so rests do not count as time."""
+    dv = divisor or effort_divisor()
     t = np.asarray(t, float)
     dt = np.diff(t, prepend=t[0])
     dt[~np.isfinite(dt) | (dt < 0) | (dt > 30)] = 0.0
@@ -317,7 +324,7 @@ def effort_speed_series(t, d_m, z, moving, divisor: float = TRAILHR["divisor"]):
     tm = np.cumsum(np.where(mv, dt, 0.0))
     with np.errstate(divide="ignore", invalid="ignore"):
         # effort metres: d + gain·1000/divisor (E km = km + gain m / divisor)
-        es = (np.clip(dd, 0, None) + np.clip(dz, 0, None) * 1000.0 / divisor) / dt
+        es = (np.clip(dd, 0, None) + np.clip(dz, 0, None) * 1000.0 / dv) / dt
     es = np.where(mv & np.isfinite(es), es, np.nan)
     return tm[mv], es[mv], mv
 
