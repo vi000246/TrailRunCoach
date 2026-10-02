@@ -551,6 +551,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     tph = _tss_per_hour(ds, today)
     tot_h = sum(h for _, h, _ in hist[-6:])
     r_all = (sum(t for _, _, t in hist[-6:]) / tot_h) if tot_h > 1 else 50.0
+    if not r_all > 0:
+        r_all = 50.0        # hours but no TSS yet (HR-only runs before any LTHR / CP is known)
 
     cc, ac = ds.athlete.ctlconstant, ds.athlete.atlconstant
     ev = Evaluator(ds, int(date_to_day(monday)) - 1, int(date_to_day(sunday)))

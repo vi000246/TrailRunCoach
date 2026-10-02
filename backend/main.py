@@ -24,11 +24,28 @@ from backend.api import injuries as injuries_api
 from backend.api import backup as backup_api
 
 
+async def _ensure_athlete() -> None:
+    """A runner without a WKO5 folder gets an empty athlete row on first start
+    (db/current.py); with WKO5 the rows come from /athletes/bootstrap as before."""
+    from backend.settings.paths import athlete_dir
+    from backend.db.database import AsyncSessionLocal
+    from backend.db.current import ensure_athlete
+    try:
+        if any(athlete_dir().glob("*.wko5athlete")):
+            return
+    except OSError:
+        pass
+    async with AsyncSessionLocal() as db:
+        if await ensure_athlete(db):
+            await db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
     from backend.sync import scheduler
     await init_db()
+    await _ensure_athlete()
     # Sync endpoints run in AnyIO's worker threads (40 by default). While a
     # Dataset builds, every chart request of a page waits in one (single
     # flight, wko5views._dataset); with 40 the static files and the other

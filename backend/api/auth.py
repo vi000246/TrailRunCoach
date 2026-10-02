@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
+from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.sync.tp_client import get_auth_url, exchange_code, login_password, fetch_tp_settings
 from backend.sync import coros_client
@@ -192,5 +193,5 @@ async def tp_oauth_redirect():
 
 @router.get("/tp/callback")
 async def tp_callback(code: str, db: AsyncSession = Depends(get_db)):
-    await exchange_code(code, db, athlete_id=1)
+    await exchange_code(code, db, athlete_id=current_athlete_id())
     return RedirectResponse("/?sync=authenticated")

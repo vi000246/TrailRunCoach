@@ -29,12 +29,34 @@ def _db(tmp_path, value):
 def test_current_source(tmp_path, monkeypatch, stored, expect):
     db = _db(tmp_path, stored)
     monkeypatch.setattr(DS, "_db_path", lambda: db)
+    _wko5_folder(tmp_path, monkeypatch)
     assert DS.current_source() == expect
+
+
+def _wko5_folder(tmp_path, monkeypatch):
+    d = tmp_path / "wko5"
+    d.mkdir()
+    (d / "Someone.wko5athlete").write_bytes(b"")      # only its presence is checked
+    monkeypatch.setenv("WKO5_ATHLETE_DIR", str(d))
+    return d
 
 
 def test_current_source_without_db(monkeypatch, tmp_path):
     monkeypatch.setattr(DS, "_db_path", lambda: tmp_path / "missing.db")
+    _wko5_folder(tmp_path, monkeypatch)
     assert DS.current_source() == "wko5"
+
+
+@pytest.mark.parametrize("stored", [None, "wko5"])
+def test_current_source_without_a_wko5_folder_is_synced(tmp_path, monkeypatch, stored):
+    """A COROS / TP-only runner (generalize-athlete S6): "wko5" — stored, or
+    the no-DB default — falls back to the synced FITs."""
+    monkeypatch.delenv("WKO5_ATHLETE_DIR", raising=False)
+    monkeypatch.setattr(DS, "_db_path", lambda: tmp_path / "missing.db")
+    assert DS.current_source(wko5_dir=tmp_path / "no-wko5") == "synced"
+    db = _db(tmp_path, stored)
+    monkeypatch.setattr(DS, "_db_path", lambda: db)
+    assert DS.current_source(wko5_dir=tmp_path / "no-wko5") == "synced"
 
 
 def test_source_stamp_changes_with_files(_fit_root_in_tmp, tmp_path):

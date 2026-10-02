@@ -23,10 +23,16 @@ async def list_athletes(db: AsyncSession = Depends(get_db)):
 
 @router.post("/bootstrap")
 async def bootstrap_athletes(db: AsyncSession = Depends(get_db)):
-    """Auto-detect athlete directories in ~/WKO5/ and create DB records."""
+    """Auto-detect athlete directories in ~/WKO5/ and create DB records.
+    Without a WKO5 folder (a COROS / TP-only runner) one empty athlete is
+    created instead, so the sync state and settings have a row to belong to."""
+    from backend.db.current import ensure_athlete
     created = []
     if not WKO5_ROOT.exists():
-        return {"created": [], "error": f"~/WKO5 not found at {WKO5_ROOT}"}
+        if await ensure_athlete(db):
+            await db.commit()
+            created.append("athlete")
+        return {"created": created, "wko5": False}
     for item in WKO5_ROOT.iterdir():
         if not item.is_dir() or item.name.startswith("."):
             continue
@@ -41,8 +47,11 @@ async def bootstrap_athletes(db: AsyncSession = Depends(get_db)):
         athlete = Athlete(name=item.name, data_dir=str(item))
         db.add(athlete)
         created.append(item.name)
+    await db.flush()
+    if not (await db.execute(select(Athlete))).scalars().first() and await ensure_athlete(db):
+        created.append("athlete")       # a ~/WKO5 without any athlete folder
     await db.commit()
-    return {"created": created}
+    return {"created": created, "wko5": True}
 
 
 @router.get("/{athlete_id}/settings")

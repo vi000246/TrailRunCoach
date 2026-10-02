@@ -25,6 +25,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.engine import plan_match as PM
 from backend.engine import plan_store as PS
@@ -162,7 +163,7 @@ async def _covered(db: AsyncSession, last_activity: Optional[str]) -> Optional[s
     from sqlalchemy import select
     from backend.db.models import SyncState
     days = [last_activity] if last_activity else []
-    st = (await db.execute(select(SyncState).where(SyncState.athlete_id == 1))).scalar_one_or_none()
+    st = (await db.execute(select(SyncState).where(SyncState.athlete_id == current_athlete_id()))).scalar_one_or_none()
     for t in (getattr(st, "coros_last_sync_at", None), getattr(st, "last_sync_at", None)):
         if t is not None:
             days.append((t.date() - dt.timedelta(days=1)).isoformat())
@@ -1521,7 +1522,7 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
 async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
     from sqlalchemy import select
     from backend.db.models import SyncState
-    st = (await db.execute(select(SyncState).where(SyncState.athlete_id == 1))).scalar_one_or_none()
+    st = (await db.execute(select(SyncState).where(SyncState.athlete_id == current_athlete_id()))).scalar_one_or_none()
     authed = bool(st and st.coros_access_token)
     exp = getattr(st, "coros_token_expires", None) if st else None
     if authed and exp is not None:

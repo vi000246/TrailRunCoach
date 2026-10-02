@@ -5,8 +5,12 @@ A backup is one file in a folder the user picks (usually inside a cloud-sync
 folder — iCloud Drive / OneDrive / Google Drive / Dropbox; the sync client does
 the uploading, the app never logs in anywhere):
 
-    trailruncoach-backup-YYYYMMDD-HHMMSS.zip        plain
-    trailruncoach-backup-YYYYMMDD-HHMMSS.zip.enc    the same zip, encrypted
+    trailruncoach-backup-YYYYMMDD-HHMMSS.zip
+
+Backups are not encrypted (owner 2026-10-02: the option, its stored derived
+key and the settings UI were removed). An encrypted backup made by an older
+version (`.zip.enc`, starts with LEGACY_MAGIC) is rejected with a clear
+message; it is neither listed nor pruned.
 
 The zip holds
     manifest.json     app / app_version / format / schema_version / created_at /
@@ -15,16 +19,10 @@ The zip holds
                       API (safe while the app is writing)
     fit/<source>/<year>/<file>.gz   only with "include FIT originals"
 
-Encryption: scrypt(password, salt) -> 256-bit key -> AES-256-GCM over 1 MiB
-chunks (nonce = random 7-byte prefix + chunk counter + last-chunk flag, header
-as associated data, so a reordered / truncated file fails to decrypt). The
-password is never stored; the app keeps only the derived key, sealed with the
-machine key (settings/secrets.py), so the daily automatic backup can encrypt.
-
 Retention (`prune`) only ever looks at files whose name matches NAME_RE exactly,
 so nothing else in the folder can be deleted.
 
-Restore: decrypt (if needed) -> check the manifest -> extract the DB -> sha256
+Restore: check the manifest -> extract the DB -> sha256
 and PRAGMA integrity_check -> back up the current DB (local pre-restore file) ->
 copy the backup into the live DB with the sqlite3 backup API (works while the
 app has the file open; a plain file swap does not on Windows) -> keep this
@@ -39,7 +37,6 @@ import os
 import re
 import shutil
 import sqlite3
-import struct
 import sys
 import tempfile
 import threading
@@ -50,7 +47,7 @@ from typing import Iterable, Optional
 
 APP = "TrailRunCoach"
 FORMAT = 1
-NAME_RE = re.compile(r"^trailruncoach-backup-(\d{8})-(\d{6})\.(zip|zip\.enc)$")
+NAME_RE = re.compile(r"^trailruncoach-backup-(\d{8})-(\d{6})\.zip$")
 PRE_RE = re.compile(r"^trailruncoach-prerestore-(\d{8})-(\d{6})\.zip$")
 MANIFEST = "manifest.json"
 DB_ENTRY = "wko5coach.db"
@@ -62,10 +59,11 @@ RETRY_AFTER_FAIL = timedelta(hours=1)
 SUGGESTED_SUBDIR = "TrailRunCoach Backups"
 PRESERVED_KEYS = "backup.%"          # this machine's backup settings survive a restore
 
-# encryption
-MAGIC = b"TRCBAK\x00\x01"
 CHUNK = 1 << 20
-SCRYPT = {"n": 1 << 15, "r": 8, "p": 1}
+# the header of an older version's encrypted backup (.zip.enc) — only to reject it
+LEGACY_MAGIC = b"TRCBAK\x00\x01"
+LEGACY_ENCRYPTED = ("這是舊版建立的加密備份（.zip.enc），現在的版本不再支援加密備份，不能還原。"
+                    "請改選未加密的備份檔（.zip）")
 
 _LOCK = threading.Lock()
 
@@ -132,93 +130,15 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-# ---------------------------------------------------------------- encryption
-def derive_key(password: str, salt: bytes, n: int = SCRYPT["n"], r: int = SCRYPT["r"],
-               p: int = SCRYPT["p"]) -> bytes:
-    from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-    if not password:
-        raise BackupError("密碼不能是空的")
-    return Scrypt(salt=salt, length=32, n=n, r=r, p=p).derive(password.encode("utf-8"))
-
-
-def new_key(password: str) -> dict:
-    """What the settings keep: the salt, scrypt params and the derived key
-    (the caller seals `key`). The password itself is never kept."""
-    salt = os.urandom(16)
-    return {"salt": salt.hex(), **SCRYPT, "key": derive_key(password, salt).hex()}
-
-
-def _header(salt: bytes, n: int, r: int, p: int, prefix: bytes) -> bytes:
-    return MAGIC + bytes([n.bit_length() - 1, r, p]) + salt + prefix
-
-
-def is_encrypted(path: Path) -> bool:
+def is_legacy_encrypted(path: Path) -> bool:
+    """An older version's encrypted backup (.zip.enc) — no longer restorable."""
     with open(path, "rb") as f:
-        return f.read(len(MAGIC)) == MAGIC
-
-
-def encrypt_file(src: Path, dst: Path, key: bytes, salt: bytes, n: int, r: int, p: int) -> None:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    aes, prefix = AESGCM(key), os.urandom(7)
-    head = _header(salt, n, r, p, prefix)
-    with open(src, "rb") as fi, open(dst, "wb") as fo:
-        fo.write(head)
-        i, cur = 0, fi.read(CHUNK)
-        while True:
-            nxt = fi.read(CHUNK)
-            last = not nxt
-            nonce = prefix + struct.pack(">IB", i, 1 if last else 0)
-            ct = aes.encrypt(nonce, cur, head)
-            fo.write(struct.pack(">I", len(ct)) + ct)
-            if last:
-                break
-            i, cur = i + 1, nxt
-
-
-def decrypt_file(src: Path, dst: Path, password: Optional[str]) -> None:
-    from cryptography.exceptions import InvalidTag
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    if not password:
-        raise BackupError("這個備份有加密，請輸入備份密碼")
-    with open(src, "rb") as fi, open(dst, "wb") as fo:
-        head = fi.read(len(MAGIC) + 3 + 16 + 7)
-        if len(head) < len(MAGIC) + 26 or head[:len(MAGIC)] != MAGIC:
-            raise BackupError("不是這個 App 的加密備份檔")
-        logn, r, p = head[8], head[9], head[10]
-        if not (10 <= logn <= 20 and 1 <= r <= 32 and 1 <= p <= 16):
-            raise BackupError("加密參數不正確，檔案可能損毀")
-        salt, prefix = head[11:27], head[27:34]
-        aes = AESGCM(derive_key(password, salt, 1 << logn, r, p))
-        i, done = 0, False
-        while True:
-            ln = fi.read(4)
-            if not ln:
-                break
-            if done:
-                raise BackupError("加密備份檔尾端有多餘資料，檔案可能損毀")
-            (size,) = struct.unpack(">I", ln)
-            if size > CHUNK + 16:
-                raise BackupError("加密備份檔損毀")
-            ct = fi.read(size)
-            pt = None
-            for last in (0, 1):
-                try:
-                    pt = aes.decrypt(prefix + struct.pack(">IB", i, last), ct, head)
-                    done = bool(last)
-                    break
-                except InvalidTag:
-                    continue
-            if pt is None:
-                raise BackupError("密碼錯誤，或檔案已損毀")
-            fo.write(pt)
-            i += 1
-        if not done:
-            raise BackupError("加密備份檔不完整（可能還沒同步完）")
+        return f.read(len(LEGACY_MAGIC)) == LEGACY_MAGIC
 
 
 # ---------------------------------------------------------------- create
-def backup_name(now: datetime, encrypted: bool) -> str:
-    return f"trailruncoach-backup-{now:%Y%m%d-%H%M%S}.zip" + (".enc" if encrypted else "")
+def backup_name(now: datetime) -> str:
+    return f"trailruncoach-backup-{now:%Y%m%d-%H%M%S}.zip"
 
 
 def _fit_files(fit_root: Optional[Path]) -> Iterable[tuple[Path, str]]:
@@ -271,11 +191,9 @@ def _zip_time(p: Path) -> tuple:
 
 
 def create_backup(db_path: Path, dest_dir: Path, *, fit_root: Optional[Path] = None,
-                  include_fit: bool = False, key: Optional[dict] = None,
-                  now: Optional[datetime] = None) -> dict:
+                  include_fit: bool = False, now: Optional[datetime] = None) -> dict:
     """Write one backup file into dest_dir (atomically: a hidden .partial file
-    renamed at the end, so a cloud client never uploads half a backup).
-    key: {salt, n, r, p, key} (hex, unsealed) to encrypt."""
+    renamed at the end, so a cloud client never uploads half a backup)."""
     if not _LOCK.acquire(blocking=False):
         raise Busy("另一個備份或還原正在進行中")
     try:
@@ -284,31 +202,23 @@ def create_backup(db_path: Path, dest_dir: Path, *, fit_root: Optional[Path] = N
             raise BackupError("找不到資料庫檔案")
         dest_dir.mkdir(parents=True, exist_ok=True)
         local = (now or datetime.now(timezone.utc)).astimezone()
-        name = backup_name(local, key is not None)
+        name = backup_name(local)
         final = dest_dir / name
         while final.exists():             # two backups in the same second
             local += timedelta(seconds=1)
-            name = backup_name(local, key is not None)
+            name = backup_name(local)
             final = dest_dir / name
-        tmp_zip = dest_dir / f".{name}.zip.partial"
-        tmp_out = dest_dir / f".{name}.partial"
+        tmp = dest_dir / f".{name}.partial"
         try:
-            manifest = build_zip(db_path, tmp_zip, fit_root=fit_root, include_fit=include_fit, now=local)
-            if key is not None:
-                encrypt_file(tmp_zip, tmp_out, bytes.fromhex(key["key"]), bytes.fromhex(key["salt"]),
-                             key["n"], key["r"], key["p"])
-                tmp_zip.unlink()
-            else:
-                os.replace(tmp_zip, tmp_out)
-            os.replace(tmp_out, final)
+            manifest = build_zip(db_path, tmp, fit_root=fit_root, include_fit=include_fit, now=local)
+            os.replace(tmp, final)
         finally:
-            for t in (tmp_zip, tmp_out):
-                try:
-                    t.unlink()
-                except FileNotFoundError:
-                    pass
+            try:
+                tmp.unlink()
+            except FileNotFoundError:
+                pass
         return {"name": name, "path": str(final), "size": final.stat().st_size,
-                "created_at": manifest["created_at"], "encrypted": key is not None,
+                "created_at": manifest["created_at"],
                 "row_counts": manifest["row_counts"], "fit_files": manifest["fit"]["files"]}
     finally:
         _LOCK.release()
@@ -338,8 +248,8 @@ def _ours(folder: Path, pattern: re.Pattern) -> list[tuple[datetime, Path]]:
 
 
 def list_backups(folder: Path) -> list[dict]:
-    return [{"name": p.name, "size": p.stat().st_size, "created_local": t.isoformat(timespec="seconds"),
-             "encrypted": p.name.endswith(".enc")} for t, p in _ours(folder, NAME_RE)]
+    return [{"name": p.name, "size": p.stat().st_size, "created_local": t.isoformat(timespec="seconds")}
+            for t, p in _ours(folder, NAME_RE)]
 
 
 def retention(stamps: list[datetime], keep_daily: int = KEEP_DAILY,
@@ -507,16 +417,15 @@ def _safe_fit_target(fit_root: Path, entry: str) -> Optional[Path]:
     return target
 
 
-def open_backup(path: Path, work: Path, password: Optional[str] = None) -> dict:
-    """Decrypt / unzip / validate into `work`. Returns {manifest, db, zip}."""
+def open_backup(path: Path, work: Path) -> dict:
+    """Unzip / validate into `work`. Returns {manifest, db, zip}."""
     path, work = Path(path), Path(work)
     if not path.is_file():
         raise BackupError("找不到備份檔")
     work.mkdir(parents=True, exist_ok=True)
     zpath = path
-    if is_encrypted(path):
-        zpath = work / "backup.zip"
-        decrypt_file(path, zpath, password)
+    if is_legacy_encrypted(path):
+        raise BackupError(LEGACY_ENCRYPTED)
     if not zipfile.is_zipfile(zpath):
         raise BackupError("不是有效的備份檔（zip 打不開）")
     with zipfile.ZipFile(zpath) as z:
@@ -573,8 +482,7 @@ def _write_db_into(src: Path, live: Path) -> None:
         s.close()
 
 
-def restore(path: Path, live_db: Path, *, local_dir: Path, password: Optional[str] = None,
-            fit_root: Optional[Path] = None, now: Optional[datetime] = None) -> dict:
+def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Path] = None, now: Optional[datetime] = None) -> dict:
     """Validate the backup, save the current DB to local_dir first, then copy
     the backup into the live DB. FIT originals in the backup that are missing
     locally are written into fit_root (existing files are never overwritten)."""
@@ -584,7 +492,7 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, password: Optional[st
         live_db, local_dir = Path(live_db), Path(local_dir)
         local_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=local_dir, prefix=".trc-restore-") as td:
-            info = open_backup(path, Path(td), password)
+            info = open_backup(path, Path(td))
             pre = None
             if live_db.exists():
                 local = (now or datetime.now(timezone.utc)).astimezone()
@@ -614,10 +522,10 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, password: Optional[st
         _LOCK.release()
 
 
-def inspect(path: Path, work: Path, password: Optional[str] = None) -> dict:
+def inspect(path: Path, work: Path) -> dict:
     """Validate without restoring (for the confirmation dialog)."""
     with tempfile.TemporaryDirectory(dir=work, prefix=".trc-inspect-") as td:
-        info = open_backup(path, Path(td), password)
+        info = open_backup(path, Path(td))
         m = info["manifest"]
         return {"created_at": m.get("created_at"), "app_version": m.get("app_version"),
                 "schema_version": m.get("schema_version"), "row_counts": info["row_counts"],
