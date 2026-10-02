@@ -103,7 +103,7 @@ def _get_routes():
 
 def test_new_user_every_page_and_data_route(client):
     from backend.engine.wko5expr.datasource import current_source
-    assert current_source() == "synced"           # no WKO5 folder: charts read the synced FITs
+    assert current_source() == "coros"            # no WKO5 folder: charts read the 資料來源 (COROS by default)
     r = client.post("/api/v1/athletes/bootstrap")
     assert r.status_code == 200, r.text
     athletes = client.get("/api/v1/athletes").json()

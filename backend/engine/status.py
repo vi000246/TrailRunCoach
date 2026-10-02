@@ -152,7 +152,8 @@ class Status:
 
     @staticmethod
     def is_trail(w):
-        return bool(TRAIL_TAGS & set(w.tags))
+        from backend.engine.algorithms.classify import is_trail
+        return is_trail(w)
 
     @staticmethod
     def is_hike(w):

@@ -1840,15 +1840,49 @@ def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Opt
     return (wt, "watch") if wt is not None else (None, None)
 
 
+_CAL_INT = ("DRIFT_EARLY_S", "DRIFT_TAIL_S", "WALK_MAX_S")
+_CAL_DEFAULTS: dict = {}
+_CAL_MEMO = {"at": -1e9, "suffix": ""}
+
+
+def apply_calibration() -> str:
+    """The drift windows in effect (engine/drift_calib.py: fitted / manual /
+    default) into this module's constants, re-read every 10 s; returns the
+    measure() cache-key suffix ("" while every value is today's default, so
+    an uncalibrated install keeps its cache)."""
+    import time
+    now = time.monotonic()
+    if now - _CAL_MEMO["at"] < 10.0:
+        return _CAL_MEMO["suffix"]
+    g = globals()
+    if not _CAL_DEFAULTS:
+        from backend.engine.drift_calib import NAMES
+        _CAL_DEFAULTS.update({k: g[k] for k in NAMES})
+    try:
+        from backend.engine.drift_calib import values
+        vals = values()
+    except Exception:                       # noqa: BLE001
+        vals = dict(_CAL_DEFAULTS)
+    diff = []
+    for k, v in vals.items():
+        v = int(round(v)) if k in _CAL_INT else float(v)
+        g[k] = v
+        if v != _CAL_DEFAULTS[k]:
+            diff.append(f"{k}={v}")
+    _CAL_MEMO.update(at=now, suffix=("|" + ",".join(diff)) if diff else "")
+    return _CAL_MEMO["suffix"]
+
+
 def measure(ds, w) -> Optional[dict]:
-    """Per-workout measurements (disk-memoised on CACHE_KEY), with drift_of's
-    temperature band applied on read (heat_band + activity_temp: the archive
-    is not part of the cache stamp)."""
+    """Per-workout measurements (disk-memoised on CACHE_KEY + the drift
+    calibration in effect), with drift_of's temperature band applied on read
+    (heat_band + activity_temp: the archive is not part of the cache stamp)."""
+    suffix = apply_calibration()
     cache = getattr(ds, "cached_series", None)
     if cache is None:
         m = _nan_free(_measure(ds, w))
     else:
-        m = cache(CACHE_KEY, w, lambda: _nan_free(_measure(ds, w)))
+        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w)))
     if m and isinstance(m.get("drift"), dict):
         m = {**m, "drift": heat_band(m["drift"], *activity_temp(ds, w, m))}
     if m and m.get("cp_test"):

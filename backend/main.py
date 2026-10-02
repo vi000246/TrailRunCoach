@@ -48,6 +48,14 @@ async def lifespan(app: FastAPI):
     from backend.sync import scheduler
     await init_db()
     await _ensure_athlete()
+    # 資料來源: an old 自動 / unset setting becomes the source it picked, before
+    # the synchronous readers (chart Dataset, CP scan) look at it
+    try:
+        from backend.sync import primary as P
+        await P.migrate()
+    except Exception as e:               # noqa: BLE001 — readers fall back to COROS
+        import logging
+        logging.getLogger(__name__).warning("data source migration failed: %s", type(e).__name__)
     # Sync endpoints run in AnyIO's worker threads (40 by default). While a
     # Dataset builds, every chart request of a page waits in one (single
     # flight, wko5views._dataset); with 40 the static files and the other
@@ -130,7 +138,17 @@ def _static_page(name: str):
 
 
 # shared page assets (shell.js: the app-wide navigation every page includes)
-app.mount("/api/v1/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="pages-static")
+class _RevalidatingStatic(StaticFiles):
+    """Page scripts / styles: the browser must revalidate on every load (ETag → 304 when
+    unchanged), so a deploy is never hidden behind a heuristically cached old shell.js."""
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
+app.mount("/api/v1/static", _RevalidatingStatic(directory=str(Path(__file__).parent / "static")), name="pages-static")
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

@@ -155,6 +155,23 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             ds = _dataset()
             from backend.api import overview as OV
             OV._status(ds, OV.O.day_to_date(ds.today))
+            # 每人校正 (engine/calibrate.py): fit what was never fitted (a new
+            # install, a new item) now instead of waiting for the next sync
+            from backend.engine import calibrate as CAL
+            if any(CAL.stored_entry(n) is None for n, it in CAL._registry().items() if not it.manual_only):
+                import asyncio
+
+                async def fit_once():
+                    # its own engine: this thread runs its own event loop
+                    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+                    from backend.db.database import DATABASE_URL
+                    eng = create_async_engine(DATABASE_URL)
+                    try:
+                        async with async_sessionmaker(eng, expire_on_commit=False)() as db:
+                            await CAL.calibrate(db, ds=ds)
+                    finally:
+                        await eng.dispose()
+                asyncio.run(fit_once())
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__)
     t = threading.Thread(target=run, name=f"dataset-warmup-{reason}", daemon=True)
@@ -757,14 +774,10 @@ ORIGIN_LABELS = {"coros": "COROS", "tp": "TrainingPeaks", "wko5": "WKO5"}
 
 def _origin(ds, w=None, file: Optional[str] = None) -> Optional[str]:
     """Which source an activity's file came from (the 活動編輯 badge): coros /
-    tp on a FIT dataset (the merged "synced" one: the folder that won,
-    sync/primary.py), wko5 on the WKO5 dataset."""
+    tp on a FIT dataset (the 資料來源's folder), wko5 on the WKO5 dataset."""
     if w is not None and hasattr(ds, "file_origin"):
         return ds.file_origin(w)
     src = getattr(ds, "source", None) or "wko5"
-    if src == "synced":
-        head = str(file or "").split("/", 1)[0]
-        return head if head in ("coros", "tp") else None
     return src if src in ORIGIN_LABELS else None
 
 
@@ -801,12 +814,18 @@ def activities_list():
     from backend.engine.racepower import athlete as A
     ds = _dataset()
     tags = AT.load()
+    rec = AT.load_recorded()
     out = []
 
     def user_part(u):
         return {"name": AT.name_of(u), "tags": AT.tags_of(u), "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
                 "user_exclusion": AT.user_exclusion(u), **_pain_part(u)}
+
+    def rpe_part(start, file):
+        # the watch's post-workout RPE / feel (FIT session workout_rpe / workout_feel), read only
+        r = AT.recorded_of(rec, start, file) or {}
+        return {"rpe": r.get("rpe"), "feel": r.get("feel")}
 
     for w in ds.workouts:
         u = AT.find(tags, w.entry.start, w.entry.file)
@@ -819,7 +838,8 @@ def activities_list():
                     "tss": m.get("tss"), "trail": A.is_trail(w),
                     "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
                     "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
-                    "origin": _origin(ds, w), "excluded": None, **user_part(u)})
+                    "origin": _origin(ds, w), "excluded": None, **rpe_part(w.entry.start, w.entry.file),
+                    **user_part(u)})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
         u = AT.find(tags, start, x["file"])
@@ -831,10 +851,10 @@ def activities_list():
                     "trail": x["sport_type"] == "trail running",
                     "terrain": _terrain(ds, x["file"], x["sport_type"] == "trail running"),
                     "power_label": None, "origin": _origin(ds, file=x["file"]),
-                    "excluded": _exclusion_json(x), **user_part(u)})
+                    "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
-            "merge": getattr(ds, "merge_info", None), "types": AT.TYPES, "efforts": AT.EFFORTS,
+            "types": AT.TYPES, "efforts": AT.EFFORTS,
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 
@@ -852,6 +872,41 @@ async def activities_auto():
         ds = _dataset()
         auto = A.auto_tags_all(ds)
         return {AT.key_of(w.entry.start): auto.get(w.idx) for w in ds.workouts}
+    return await run_in_threadpool(work)
+
+
+def _averages(ds, w) -> dict:
+    """{avg_hr, avg_power} of one workout: a FIT dataset's sample means
+    (fitdataset.averages, cached per file); a WKO5 workout's stored fields
+    (avg power = NP / vi 4222, avg HR = NP / ef 4247 — power files only)."""
+    if hasattr(ds, "averages"):
+        try:
+            return ds.averages(w)
+        except Exception:                   # noqa: BLE001 — a missing cache file: no numbers, not a 500
+            return {"avg_hr": None, "avg_power": None}
+    m = getattr(w.entry, "metrics", None) or {}
+    np_, vi, ef = m.get(4219), m.get(4222), m.get(4247)
+    return {"avg_hr": np_ / ef if np_ and ef else None, "avg_power": np_ / vi if np_ and vi else None}
+
+
+@router.get("/activities/stats")
+async def activities_stats():
+    """{key: {avg_hr, avg_power}} of every dataset activity (the 活動列表
+    columns). Asked after the list: the first call reads every activity's
+    samples once; later calls come from the FIT cache."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.engine import activity_tags as AT
+
+    def work():
+        ds = _dataset()
+        out = {}
+        for w in ds.workouts:
+            a = _averages(ds, w)
+            out[AT.key_of(w.entry.start)] = {k: None if a.get(k) is None else round(a[k], 1)
+                                            for k in ("avg_hr", "avg_power")}
+        if hasattr(ds, "save_cache"):
+            ds.save_cache()
+        return out
     return await run_in_threadpool(work)
 
 

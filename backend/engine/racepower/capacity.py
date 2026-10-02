@@ -157,7 +157,17 @@ def pack_ratio(g: float, load: float, load0: float, weight: float, e_aet: float)
     return prior_speed(g, load, e_aet, weight) / a if a > 0 else 1.0
 
 
-def day_pack(pack_day1: float, day: int, drop: float = PACK_DAILY_DROP) -> float:
+def daily_drop() -> float:
+    """PACK_DAILY_DROP, or the 進階 manual value (engine/advanced_params.py)."""
+    try:
+        from backend.engine.advanced_params import pack_daily_drop
+        return float(pack_daily_drop())
+    except Exception:                       # noqa: BLE001
+        return PACK_DAILY_DROP
+
+
+def day_pack(pack_day1: float, day: int, drop: Optional[float] = None) -> float:
+    drop = daily_drop() if drop is None else drop
     return max(0.0, pack_day1 - drop * (max(1, int(day)) - 1))
 
 

@@ -255,10 +255,10 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 /* 5 區開放流程 (kind z5gate): the stage flow's styles live in static/z5flow.js */
 table.z5ev td { white-space: normal; }
 /* single-activity charts (kind "activity": 心率與功率, 區間時間, 心率變化與趨勢) — one hue per measure */
-:root { --ac-hr: #e34948; --ac-pw: #eb6834; --ac-ink: #0b0b0b; --ac-ink2: #52514e; --ac-brush: rgba(42,120,214,.10); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ac-hr: #e66767; --ac-pw: #d95926;
+:root { --ac-hr: #e34948; --ac-pw: #d99c00; --ac-ink: #0b0b0b; --ac-ink2: #52514e; --ac-brush: rgba(42,120,214,.10); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ac-hr: #e66767; --ac-pw: #f5b700;
   --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); } }
-:root[data-theme="dark"] { --ac-hr: #e66767; --ac-pw: #d95926; --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); }
+:root[data-theme="dark"] { --ac-hr: #e66767; --ac-pw: #f5b700; --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); }
 .card.ac-wide { grid-column: 1 / -1; }
 .ac-leg { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 11.5px; color: var(--muted); margin: 0 0 2px; align-items: center; }
 .ac-leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
@@ -366,7 +366,7 @@ table.z5ev td { white-space: normal; }
     </div>
     <div class="crumb" id="crumb"></div>
     <span class="spacer"></span>
-    <!-- charts.data_source: WKO5 folder / COROS / TP; changing it saves the setting and reloads -->
+    <!-- charts.data_source: the 資料來源 (COROS or TP) / WKO5 folder; changing it saves the setting and reloads -->
     <span id="source-chip"></span><script src="/api/v1/static/sourcechip.js" defer></script>
     <a class="pill" id="modepill" href="/api/v1/wko5/settings#mode"></a>
   </div>
@@ -376,7 +376,7 @@ table.z5ev td { white-space: normal; }
     <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
     <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
     <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
-    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動編輯」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
+    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動列表」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
     <span class="w-only pain-wrap" id="pain-wrap" hidden><button class="chip" id="pain-chip" aria-haspopup="dialog" aria-expanded="false" title="這次有沒有痛（傷病紀錄）">疼痛？</button>
       <div class="pain-pop" id="pain-pop" role="dialog" aria-label="疼痛" hidden></div></span>
   </div>
@@ -2535,7 +2535,7 @@ function drawActHrPower(card, res) {
   const box = document.createElement("div"); box.className = "ac-stats"; card.appendChild(box);
   const show = (ka, kb, picked) => {
     const s = ACT.stats(res, ka, kb), f = ACT.num;
-    head.innerHTML = picked ? `<b>選取</b><span>${fmtDur(s.t0)} – ${fmtDur(s.t1)}</span>` : `<b>整趟</b>`;
+    head.innerHTML = picked ? `<b>框選範圍：${fmtDur(s.t0)}–${fmtDur(s.t1)}</b><span class="meta">統計只算這段</span>` : `<b>整趟</b>`;
     const tile = (k, v, u, cls = "") => `<div class="s ${cls}"><div class="k">${k}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div></div>`;
     box.innerHTML = [
       tile("時間", fmtDur(s.elapsed)), tile("移動時間", fmtDur(s.moving)),
@@ -2595,21 +2595,31 @@ function drawActHrPower(card, res) {
   chart.dispatchAction({ type: "takeGlobalCursor", key: "brush", brushOption: { brushType: "lineX", brushMode: "single" } });
   const clearBtn = card.querySelector(".ac-clear");
   const toK = (x) => Math.max(0, Math.min(K, Math.round(x / res.step)));
-  // the brush rectangle sits in the panel it was drawn in; the other panel gets the same span as a tint
-  const mirror = (panel, x0, x1) => chart.setOption({ series: (pwOn ? [0, 1] : [0]).map((i) => ({
-    markArea: { silent: true, itemStyle: { color: T.brush, borderColor: T.pw, borderWidth: 1, borderType: "dashed" },
-      data: panel != null && panel !== i ? [[{ xAxis: x0 }, { xAxis: x1 }]] : [] } })) });
-  chart.on("brushSelected", (e) => {
-    const a = e.batch?.[0]?.areas?.[0];
-    const none = () => { show(0, K, false); clearBtn.hidden = true; mirror(null); };
-    if (!a || !a.coordRange) return none();
-    const r = Array.isArray(a.coordRange[0]) ? a.coordRange[0] : a.coordRange;
-    const ka = toK(Math.min(r[0], r[1])), kb = toK(Math.max(r[0], r[1]));
-    if (kb - ka < 1) return none();
-    show(ka, kb, true); clearBtn.hidden = false;
-    mirror(/1$/.test(String(a.panelId || "")) ? 1 : 0, Math.min(r[0], r[1]), Math.max(r[0], r[1]));
+  const panels = pwOn ? [0, 1] : [0];
+  // two-way brush: whichever panel the range is drawn (or dragged) in, the same span is put
+  // in every panel as a real brush area — so either panel can move it, and a click clears both
+  let cur = null;   // the [x0, x1] last mirrored into all panels
+  const rangeOf = (a) => { const r = a?.coordRange; if (!r) return null; const q = Array.isArray(r[0]) ? r[0] : r;
+    return [Math.min(q[0], q[1]), Math.max(q[0], q[1])]; };
+  const same = (p, q) => p && q && Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
+  // the area the user just made or moved: the one that differs from the mirrored span
+  const pick = (areas) => { const rs = (areas || []).map(rangeOf).filter(Boolean); return rs.find((r) => !same(r, cur)) || rs[0] || null; };
+  const stats = (r) => {
+    const ka = r ? toK(r[0]) : 0, kb = r ? toK(r[1]) : K;
+    if (!r || kb - ka < 1) { show(0, K, false); clearBtn.hidden = true; return false; }
+    show(ka, kb, true); clearBtn.hidden = false; return true;
+  };
+  chart.on("brushSelected", (e) => { if (!stats(pick(e.batch?.[0]?.areas))) cur = null; });
+  // mirror on release only — re-dispatching mid-drag would cut the drag short
+  chart.on("brushEnd", (e) => {
+    const r = pick(e.areas);
+    if (!r || toK(r[1]) - toK(r[0]) < 1) { cur = null; if ((e.areas || []).length) chart.dispatchAction({ type: "brush", areas: [] }); return; }
+    if (same(r, cur) && (e.areas || []).length === panels.length) return;
+    cur = r;
+    setTimeout(() => chart.isDisposed() || chart.dispatchAction({ type: "brush",
+      areas: panels.map((i) => ({ brushType: "lineX", xAxisIndex: i, coordRange: r.slice() })) }), 0);
   });
-  clearBtn.onclick = () => chart.dispatchAction({ type: "brush", areas: [] });
+  clearBtn.onclick = () => { cur = null; chart.dispatchAction({ type: "brush", areas: [] }); };
 }
 function actZonePrefs() { try { return JSON.parse(localStorage.getItem(ACT.ZKEY) || "{}"); } catch { return {}; } }
 function drawActZones(card, res) {

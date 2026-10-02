@@ -457,6 +457,35 @@ def suggestion_days(sg: dict, stored: list[dict], today: str, prefs, blocked: di
     return out
 
 
+def day_reason(sg: dict, stored: list[dict], today: str, prefs, blocked: dict, day: str,
+               earliest: Optional[str] = None) -> str:
+    """Why suggestion_days doesn't offer `day` for this test (the same rules, in words)."""
+    from backend.i18n import _
+    d = dt.date.fromisoformat(day)
+    d0 = dt.date.fromisoformat(today)
+    if day < today:
+        return _("過去的日子")
+    if (d - d0).days >= SUGGEST_DAYS:
+        return _("超出建議的 {n} 天內", n=SUGGEST_DAYS)
+    if earliest and day < earliest:
+        return _("要等到 {day} 以後（重測的條件）", day=f"{int(earliest[5:7])}/{int(earliest[8:10])}")
+    if day in (blocked or {}):
+        return _("不排課日期／休息日")
+    if prefs is not None and not prefs.allowed(d):
+        return _("不是可練日（課表偏好）")
+    hard = {s["day"]: s for s in stored if s["state"] == "active" and s.get("day") and s["kind"] in ("long", "quality", "test")}
+    near = [hard[x] for x in ((d + dt.timedelta(days=k)).isoformat() for k in (-1, 0, 1)) if x in hard]
+    if sg.get("replaces_long"):
+        if d.weekday() < 5 and day not in {x for x, s in hard.items() if s["kind"] == "long"}:
+            return _("徐國峰 90 分測試排在週末或長跑那天")
+        near = [s for s in near if s["kind"] in ("quality", "test")]
+    elif sg.get("kind") == "aet" and getattr(prefs, "aet_test_days", "weekday") == "weekday" and d.weekday() >= 5:
+        return _("AeT 測試排在週一到週五（課表偏好）")
+    if near:
+        return _("前後一天有長跑／強度課／測試：{titles}", titles="、".join(s.get("title") or "" for s in near[:2]))
+    return _("這天不適合")
+
+
 async def _suggestions(db: AsyncSession, inp: dict, dismissed: Optional[dict] = None) -> list[dict]:
     """This week's due CP / AeT tests with their days. `dismissed` (the floating box's
     「不要」 / ✕, engine/suggestions.py): None = read it; {} = keep every one."""
@@ -498,10 +527,73 @@ async def schedule_test(body: dict = Body(...), db: AsyncSession = Depends(get_d
     return await _schedule_test(db, inp, sg, day)
 
 
-async def _schedule_test(db: AsyncSession, inp: dict, sg: dict, day: Optional[str]) -> dict:
+# 排入測試 from the 課表 calendar's context menu: the template library's 測試 entries
+# (engine/workout_steps.templates, group cat "test") per suggested test kind, the
+# template_recs 推薦 first. protocol: how engine/cp_protocols reads the result
+# (two-point = standard, one 20′ bout = quick, a 30′ time trial = race; None = 課表偏好's).
+TEST_TEMPLATES = {
+    "cp": ("lib:stryd_cp_3_12", "lib:stryd_9_3", "cp_standard", "cp_quick", "lib:pal_test20", "lib:pal_test10",
+           "lib:pal_test3", "lib:friel_lthr30"),
+    "aet": ("lib:xu_e_drift", "lib:ua_aet_drift"),
+}
+TEMPLATE_PROTOCOL = {"lib:stryd_cp_3_12": "standard", "lib:stryd_9_3": "standard", "cp_standard": "standard",
+                     "cp_quick": "quick", "lib:pal_test20": "quick", "lib:friel_lthr30": "race",
+                     "lib:xu_e_drift": "aet", "lib:ua_aet_drift": "aet"}
+
+
+def _test_rows() -> dict:
+    from backend.engine import workout_steps as WS
+    return {r["key"]: r for g in WS.templates()["groups"] if g.get("cat") == "test" for r in g.get("rows") or []}
+
+
+async def test_templates_for(kind: str, day: Optional[str], db: AsyncSession) -> list[dict]:
+    """[{key, title, minutes, src, url, reason, recommended}] for a test kind (cp / aet), 推薦 first."""
+    from backend.engine import template_recs as TR
+    rows = _test_rows()
+    keys = [k for k in TEST_TEMPLATES.get(kind, ()) if k in rows]
+    try:
+        recs = (await steps_template_recs(kind="test", day=day, db=db))["cats"].get("test") or []
+    except Exception:                         # noqa: BLE001 — the order is only a nicety
+        recs = []
+    why = {r["key"]: r.get("reason") or "" for r in recs}
+    order = [k for k in why if k in keys] + [k for k in keys if k not in why]
+    return [{"key": k, "title": rows[k].get("title") or rows[k].get("label"), "minutes": round(TR.row_minutes(rows[k])),
+             "src": rows[k].get("src") or "", "url": rows[k].get("url"), "reason": why.get(k, ""),
+             "recommended": k in why} for k in order]
+
+
+@router.get("/test-templates/for")
+async def get_test_templates_for(kind: str, day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    if kind not in TEST_TEMPLATES:
+        raise HTTPException(400, "kind must be cp or aet")
+    return {"kind": kind, "templates": await test_templates_for(kind, day, db)}
+
+
+async def _template_session(inp: dict, key: str, kind: str) -> dict:
+    """A test session from a template: its title, its structure (the user's steps), the
+    minutes / target / TSS computed from them (_with_steps)."""
+    if key not in TEST_TEMPLATES.get(kind, ()):
+        raise HTTPException(400, "這個範本不是這種測試")
+    row = _test_rows().get(key)
+    if row is None:
+        raise HTTPException(400, "找不到這個範本")
+    body = {"kind": "test", "title": row.get("title") or row.get("label"), "source": row.get("src") or "",
+            "protocol": TEMPLATE_PROTOCOL.get(key),
+            "steps": {"items": row.get("full") or row.get("items") or [], "origin": "user"}, "steps_force": True}
+    out = await _with_steps(body, inp, {})
+    return {k: v for k, v in out.items() if v is not None}
+
+
+async def _schedule_test(db: AsyncSession, inp: dict, sg: dict, day: Optional[str],
+                         template: Optional[str] = None, kind: Optional[str] = None) -> dict:
     if day not in {d["day"] for d in sg["days"]}:
         raise HTTPException(400, "這天不適合排測試（太靠近長跑或強度課、不是可練日，或在不排課日期內）")
-    data = {**{k: v for k, v in sg["session"].items() if v is not None}, "day": day, "kind": "test"}
+    if template:
+        data = {**(await _template_session(inp, template, kind or "cp")), "day": day}
+        # 徐國峰's 90′ is that week's long run; another AeT template doesn't replace it
+        sg = {**sg, "replaces_long": bool(sg.get("replaces_long")) and template == "lib:xu_e_drift"}
+    else:
+        data = {**{k: v for k, v in sg["session"].items() if v is not None}, "day": day, "kind": "test"}
     try:
         async with _wlock():
             if sg.get("replaces_long"):
@@ -667,6 +759,7 @@ async def dismiss_suggestion(body: dict = Body(...), db: AsyncSession = Depends(
 async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     from backend.engine import suggestions as SG
     sid, day = str(body.get("id") or ""), body.get("day")
+    tpl = body.get("template") or None          # 排入測試 ▸ a template (the calendar's context menu)
     inp = await _inputs(db)
     rows = await _all_suggestions(db, inp)
     sg = next((r for r in SG.visible(rows, await _dismissed(db)) if r["id"] == sid), None)
@@ -679,14 +772,15 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
     elif sg["type"] == "test":
         tests = await _suggestions(db, inp, dismissed={})
         t = next((x for x in tests if x["kind"] == sg["kind"]), None)
-        out = {"sessions": [await _schedule_test(db, inp, t, day)]}
+        out = {"sessions": [await _schedule_test(db, inp, t, day, tpl, sg["kind"])]}
     elif sg["type"] == "zone_test":
         t = next((x for x in sg.get("tests") or [] if x["key"] == body.get("test")), None)
         if t is None or not t.get("session"):
             raise HTTPException(400, "要選一個測試")
         out = {"sessions": [await _schedule_test(db, inp, {"days": [{"day": o["day"]} for o in t["options"]],
                                                            "session": t["session"],
-                                                           "replaces_long": t.get("replaces_long")}, day)]}
+                                                           "replaces_long": t.get("replaces_long")}, day,
+                                                 tpl, t["key"])]}
     elif sg["type"] == "injury_rest":
         out = await _accept_injury_rest(db, sg)
     else:
@@ -694,6 +788,41 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
     week = sid.split(":")[-1] if sid.startswith(("b2b:", "test:")) else None
     await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), sid, "accepted", dt.datetime.now(), week))
     return {"id": sid, **out}
+
+
+@router.get("/test-options")
+async def test_options(day: str, db: AsyncSession = Depends(get_db)):
+    """排入測試 ▸ on an empty calendar day: the active test suggestions (the floating box's
+    CP / AeT / zone retest items), each with ok / the reason this day doesn't suit it, and
+    its templates (推薦 first). Accept = POST /suggestions/accept {id, day, test?, template}."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine import suggestions as SG
+    day = _iso_day(day)
+    inp = await _inputs(db)
+    today = _today(inp)
+    stored = await PS.load(db)
+    prefs = PP.load()
+    bl = PS.blocked_map(inp)
+    vis = SG.visible(await _all_suggestions(db, inp), await _dismissed(db))
+    due = {t["kind"]: t for t in await _suggestions(db, inp, dismissed={})}
+    out = []
+    for r in vis:
+        if r["type"] == "test":
+            ents = [(r["kind"], None, r["title"], r.get("options") or [], bool((due.get(r["kind"]) or {}).get("replaces_long")),
+                     None)]
+        elif r["type"] == "zone_test":
+            ents = [(t["key"], t["key"], t.get("label") or t["key"], t.get("options") or [], bool(t.get("replaces_long")),
+                     r.get("earliest")) for t in r.get("tests") or [] if t.get("session")]
+        else:
+            continue
+        for kind, test, label, opts, rl, earliest in ents:
+            ok = day in {o["day"] for o in opts}
+            out.append({"id": r["id"], "type": r["type"], "kind": kind, "test": test, "label": label, "ok": ok,
+                        "reason": "" if ok else day_reason({"kind": kind, "replaces_long": rl}, stored, today, prefs, bl,
+                                                           day, earliest),
+                        "note": next((o.get("note") or "" for o in opts if o["day"] == day), ""),
+                        "templates": await test_templates_for(kind, day, db)})
+    return {"day": day, "options": out}
 
 
 def _b2b_generated(inp: dict, week: str) -> list[dict]:
@@ -1149,16 +1278,60 @@ async def variants(uid: Optional[str] = None, day: Optional[str] = None, db: Asy
     return out
 
 
-@router.delete("/sessions/{uid}")
-async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
+async def _unpush_expired(db: AsyncSession, deleted: list[dict]) -> dict:
+    """Deleted expired sessions still on the watch's calendar come off it (a past-day
+    push row is otherwise kept, see push_sessions). Through the active workout-sync
+    provider; a login problem doesn't undo the delete, it is reported."""
+    prov = await WT.active(db)
+    rows = await prov.all_rows(db)
+    keys = [s["uid"] for s in deleted if s["uid"] in rows]
+    if not keys:
+        return {"status": "none", "removed": 0}
+    try:
+        res = await prov.remove_keys(db, keys)
+    except WT.SyncAuthError as e:
+        return {"status": "auth", "removed": 0, "pending": len(keys), "error": str(e), "provider_label": prov.label}
+    except Exception as e:                   # noqa: BLE001 — the delete itself is done
+        return {"status": "failed", "removed": 0, "pending": len(keys), "error": f"{type(e).__name__}: {e}"[:300],
+                "provider_label": prov.label}
+    n = sum(1 for r in res or [] if (r or {}).get("status") == "removed")
+    return {"status": "ok" if n == len(keys) else "partial", "removed": n, "pending": len(keys) - n,
+            "provider_label": prov.label}
+
+
+@router.post("/sessions/expired/delete")
+async def delete_expired_sessions(body: Optional[dict] = Body(None), db: AsyncSession = Depends(get_db)):
+    """{uids?}: delete the past sessions that weren't done (missed / still open on a past
+    day); without uids all of them. Tombstones (never regenerated); pushed copies are
+    removed from the provider's calendar."""
+    uids = (body or {}).get("uids")
+    if uids is not None and (not isinstance(uids, list) or len(uids) > 2000):
+        raise HTTPException(400, "uids must be a list")
+    inp = await _inputs()
+    today = _today(inp)
     try:
         async with _wlock():
-            out = await PS.delete(db, uid)
+            out = await PS.delete_expired(db, today, uids)
+    except PS.PlanError as e:
+        raise HTTPException(400, str(e))
+    coros = await _unpush_expired(db, out)
+    return {"deleted": len(out), "uids": [s["uid"] for s in out], "coros": coros}
+
+
+@router.delete("/sessions/{uid}")
+async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
+    inp = await _inputs()
+    try:
+        async with _wlock():
+            out = await PS.delete(db, uid, today=_today(inp))
             # deleting either day of an accepted B2B cancels it (both days; declined for that week)
-            if await _b2b_cancelled(db, uid) is not None:
+            if not out.get("expired") and await _b2b_cancelled(db, uid) is not None:
                 out["b2b_cancelled"] = True
     except PS.PlanError as e:
         raise HTTPException(404, str(e))
+    if out.get("expired"):                            # a past session never done: off the watch now
+        out["coros"] = await _unpush_expired(db, [out])
+        return out
     if out.get("b2b_cancelled"):
         from backend.engine import plan_auto as PA
         inp = await _inputs(db)                       # the week without the B2B
@@ -1254,7 +1427,7 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
     todo = [_view(s, inp, rows, today, prov) for s in _in_range(new, a, b, bl)]
     pushable = [s for s in todo if s["coros"]["status"] not in ("skipped", "done")]
     will = [s for s in pushable if s["coros"]["status"] != "pushed"]
-    missed = [s for s in new if s["state"] == "missed" and s["uid"] in rows]
+    missed = [s for s in new if PS.off_watch(s) and s["uid"] in rows]
     on_bl = [s for s in _on_blocked(new, bl, today) if s["uid"] in rows]
     return {**_meta(inp), "scope": scope, "start": a, "end": b, "sessions": todo,
             "count": len(pushable), "to_send": len(will), "unchanged": len(pushable) - len(will),
@@ -1294,7 +1467,7 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         bl = PS.blocked_map(inp)
         # an edited session still on a 不排課日期 (no decision yet) comes off COROS
         stale += [s["uid"] for s in _on_blocked(new, bl, today) if s["uid"] in rows]
-        missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
+        missed = [s["uid"] for s in new if PS.off_watch(s) and s["uid"] in rows]
         try:
             res = await prov.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
                                            today, stale_keys=stale, missed_keys=missed)
@@ -1327,7 +1500,7 @@ async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSessio
 #   POST /api/v1/overview/plan/equivalence/design {mode, minutes, climb_per_km} -> km / gain
 # ---------------------------------------------------------------------------
 
-def _prefs_body(p) -> dict:
+def _prefs_body(p, dropped=()) -> dict:
     from backend.engine import plan_prefs as PP
     from backend.engine import quality_gate as QG
     # gate_options: the 間歇門檻 hover texts (the page adds "usable with your data"
@@ -1337,6 +1510,9 @@ def _prefs_body(p) -> dict:
     return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
             # 偏好的星期 vs the default rules (shown when the prefs are saved; 照我的偏好 = pref_keep)
             "day_conflicts": PP.day_conflicts(p),
+            # stored 偏好的星期 that shared a weekday with an earlier type (drop_overlaps):
+            # removed on load, shown next to their row until the athlete saves
+            "pref_dropped": list(dropped),
             "gate_options": QG.option_texts(),
             "aet_options": {k: {"label": "自動（標準：徐國峰 90 分；備案 UA 40 分）" if k == "auto"
                                 else AT.PROTOCOLS[k]["label"], "tip": AT.protocol_tip(k)}
@@ -1360,7 +1536,18 @@ async def get_prefs(db: AsyncSession = Depends(get_db)):
     from backend.engine import plan_prefs as PP
     from backend.settings.repository import SettingsRepository
     repo = SettingsRepository(db)
-    return _prefs_body(PP.from_settings({k: await repo.get(k) for k in PP.KEY_FIELDS}))
+    return _prefs_body(*PP.drop_overlaps(PP.from_settings({k: await repo.get(k) for k in PP.KEY_FIELDS})))
+
+
+@router.post("/prefs/conflicts")
+def post_prefs_conflicts(body: dict = Body(...)):
+    """偏好的星期 conflicts of an unsaved preference set (the dialog's live hints); nothing is stored."""
+    from backend.engine import plan_prefs as PP
+    try:
+        p = PP.from_body(body)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+    return {"day_conflicts": PP.day_conflicts(p), "overlaps": PP.overlaps(p)}
 
 
 @router.put("/prefs")
@@ -1435,6 +1622,70 @@ async def put_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_d
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
     return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+
+
+# 休息日 (the 課表 calendar's context menu on an empty day): a one-day 不排課日期 of
+# kind "rest" — the planner skips the day and puts the week's volume on its other
+# days (engine/blackouts.lost_days). Undo = the same menu.
+#   POST   /api/v1/overview/plan/rest-days        {day}
+#   DELETE /api/v1/overview/plan/rest-days/{day}
+REST_LABEL = "休息日"
+
+
+async def _save_blackouts(db: AsyncSession, cand: list[dict], dec: Optional[dict] = None) -> dict:
+    from backend.engine import blackouts as BL
+    from backend.settings.repository import SettingsRepository
+    try:
+        await SettingsRepository(db).set(BL.KEY, cand)
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(400, str(e))
+    await db.commit()
+    inp = await _inputs(db, blackouts=cand)
+    async with _wlock():
+        await _ensure(db, inp)
+        _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec or {})
+    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+
+
+def _iso_day(day) -> str:
+    try:
+        return dt.date.fromisoformat(str(day or "")[:10]).isoformat()
+    except ValueError:
+        raise HTTPException(400, "day must be YYYY-MM-DD")
+
+
+@router.post("/rest-days")
+async def add_rest_day(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import blackouts as BL
+    from backend.i18n import _
+    from backend.settings.repository import SettingsRepository
+    day = _iso_day((body or {}).get("day"))
+    inp = await _inputs(db)
+    if day < _today(inp):
+        raise HTTPException(400, _("過去的日子不能設成休息日"))
+    cur = list(await SettingsRepository(db).get(BL.KEY) or [])
+    if day in BL.blocked(BL.from_list(cur)):
+        raise HTTPException(400, _("這天已經是不排課日期或休息日"))
+    cand = BL.normalize(cur + [{"start": day, "end": day, "label": REST_LABEL, "kind": BL.REST}])
+    # the user chose to rest that day: their own sessions there move to another day of the week
+    stored = await PS.load(db)
+    dec = {s["uid"]: "move" for s in stored if s.get("day") == day and s["state"] == "active"
+           and (s.get("edited") or s.get("origin") != "auto")}
+    return await _save_blackouts(db, cand, dec)
+
+
+@router.delete("/rest-days/{day}")
+async def remove_rest_day(day: str, db: AsyncSession = Depends(get_db)):
+    from backend.engine import blackouts as BL
+    from backend.i18n import _
+    from backend.settings.repository import SettingsRepository
+    day = _iso_day(day)
+    cur = list(await SettingsRepository(db).get(BL.KEY) or [])
+    keep = [r for r in cur if not (r.get("kind") == BL.REST and r.get("start") == day)]
+    if len(keep) == len(cur):
+        raise HTTPException(404, _("這天不是休息日"))
+    return await _save_blackouts(db, BL.normalize(keep))
 
 
 async def _accept_injury_rest(db: AsyncSession, sg: dict) -> dict:
@@ -1677,6 +1928,24 @@ def _link_options(ss: list[dict], every: list[dict], acts: list[dict], today: st
         s["link_options"] = [a["index"] for a in opts]
 
 
+def _decorate(every: list[dict], acts: list[dict], rates: dict, start: str, end: str) -> list[dict]:
+    """The stored sessions in [start, end] with tss_est, planned vs actual (vs) and
+    compliance (engine/compliance.py) — the calendar's and the dashboard's shape."""
+    from backend.engine import activity_key as AK
+    from backend.engine import compliance as C
+    acts_by = {x.get("index"): x for x in acts}
+    AK.rebase_done_by(every, acts)                  # done_by -> this source's indexes, by start
+    out = []
+    for s in every:
+        if s.get("day") and start <= s["day"] <= end:
+            est = est_tss(s, rates)
+            s = _fresh_done_by(s, acts_by)
+            vs = PM.compare(s)
+            out.append({**s, "tss_est": round(est, 1), "vs": vs,
+                        "compliance": C.with_plan_check(C.session_compliance(s, est), vs)})
+    return out
+
+
 @router.get("/calendar")
 async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     """Everything the 課表 calendar needs for [start, end] (≤ 120 days)."""
@@ -1696,17 +1965,7 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
     rates = tss_rates(extras.get("tph"), every, tph)
     from backend.engine import compliance as C
-    ss = []
-    acts_by = {x.get("index"): x for x in extras["activities"]}
-    from backend.engine import activity_key as AK
-    AK.rebase_done_by(every, extras["activities"])         # done_by -> this source's indexes, by start
-    for s in every:
-        if s.get("day") and start <= s["day"] <= end:
-            est = est_tss(s, rates)
-            s = _fresh_done_by(s, acts_by)
-            vs = PM.compare(s)
-            ss.append({**s, "tss_est": round(est, 1), "vs": vs,
-                       "compliance": C.with_plan_check(C.session_compliance(s, est), vs)})
+    ss = _decorate(every, extras["activities"], rates, start, end)
     _link_options(ss, every, extras["activities"], body["today"])
     tt = P.target_texts(inp["thresholds"] or {})
     return {**{k: v for k, v in body.items() if k != "sessions"}, "start": start, "end": end,
@@ -1721,9 +1980,61 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
             "plan_notes": _plan_notes(inp, start, end),
             "test_suggestions": await _suggestions(db, inp),
             "test_templates": _test_templates(inp["thresholds"] or {}, None),
+            # 刪除所有過期未完成: how many past sessions were never done (whole plan, not just the range)
+            "expired_open": sum(1 for s in every if PS.is_expired_open(s, body["today"])),
             "coros": await _coros_state(db, every)}
 
 
 @router.get("/schedule/page", include_in_schema=False)
 def schedule_page():
     return render_page("schedule")
+
+
+# ---------------------------------------------------------------------------
+# 課表達成率 (engine/compliance.dashboard)
+#
+#   GET /api/v1/overview/plan/compliance?start=&end=   the due sessions of [start, end]
+#       with status and %, totals, weeks (planned vs actual TSS / hours, completion),
+#       the streak, per kind, and the current phase's progress
+#   GET /api/v1/overview/plan/compliance/page          the page (a tab of 課表)
+# ---------------------------------------------------------------------------
+
+MAX_COMPLIANCE_DAYS = 371
+
+
+@router.get("/compliance")
+async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
+    from backend.engine import compliance as C
+    try:
+        a, b = dt.date.fromisoformat(start[:10]), dt.date.fromisoformat(end[:10])
+    except ValueError:
+        raise HTTPException(400, "start / end must be YYYY-MM-DD")
+    if b < a:
+        raise HTTPException(400, "end before start")
+    if (b - a).days > MAX_COMPLIANCE_DAYS:
+        raise HTTPException(400, f"at most {MAX_COMPLIANCE_DAYS} days")
+    body = await sessions(start=None, end=None, db=db)      # reconciles (done / missed) like the calendar
+    every = body["sessions"]
+    today = body["today"]
+    inp = await _inputs()
+    ph = inp.get("phase")
+    lo = min(a.isoformat(), ph["start"]) if ph else a.isoformat()
+    hi = max(b.isoformat(), ph["end"]) if ph else b.isoformat()
+    # activities: the range and the phase so far (the phase may reach into the future)
+    extras = await run_in_threadpool(_range_extras, lo, min(hi, max(today, b.isoformat())))
+    tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
+    rates = tss_rates(extras.get("tph"), every, tph)
+    allss = _decorate(every, extras["activities"], rates, lo, hi)
+    start, end = a.isoformat(), b.isoformat()
+    ss = [s for s in allss if start <= s["day"] <= end]
+    acts = [x for x in extras["activities"] if start <= (x.get("date") or "") <= end]
+    phases = [p for p in extras["phases"] if p["end"] >= start and p["start"] <= end]
+    weeks = _week_rows(start, end, ss, acts, phases, inp["weeks"], rates, today)
+    out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss)
+    return {**out, "phases": phases, "current_phase": ph, "kinds": PS.KINDS,
+            "plan_start": min((s["day"] for s in every if s.get("day")), default=None)}
+
+
+@router.get("/compliance/page", include_in_schema=False)
+def compliance_page():
+    return render_page("compliance")

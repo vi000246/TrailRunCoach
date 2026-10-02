@@ -70,7 +70,8 @@ Z3_EXPR = "sum(if(runpower >= 0.85*cp, deltatime))"
 
 def category(w: Workout) -> str:
     tags, st = set(w.tags), (w.sport_type or "")
-    if "runningtrail" in tags or st == "trail running":
+    from backend.engine.algorithms.classify import is_trail
+    if is_trail(w):
         return "trail"
     if w.sport == "run":
         return "road"

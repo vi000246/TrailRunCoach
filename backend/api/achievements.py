@@ -10,14 +10,15 @@ from pathlib import Path
 from typing import Optional
 
 from backend.engine.localtime import today_local
-from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from pydantic import BaseModel
 
 from backend.engine.achievements import (
-    CLASS_BAIYUE, Annotations, build_achievements, load_peaks, to_row,
+    CLASS_BAIYUE, CLASS_LOW, CLASS_MID, KIND_HIKE, KIND_TRAIL, Annotations,
+    build_achievements, load_peaks, to_row,
 )
+from backend.engine.activity_key import key_of
 from backend.engine.wko5expr.config import EngineConfig
 from backend.engine.wko5expr.dataset import Dataset
 from backend.settings.paths import athlete_dir
@@ -54,9 +55,21 @@ def _dataset():
     return shared()
 
 
+# language-neutral ids of the engine's (Chinese) kind / class values: the
+# 活動列表 page's 成就 tab translates and filters by them
+CLASS_IDS = {CLASS_BAIYUE: "baiyue", CLASS_MID: "mid", CLASS_LOW: "low"}
+KIND_IDS = {KIND_TRAIL: "trail", KIND_HIKE: "hike"}
+_CLASS_BY_ID = {v: k for k, v in CLASS_IDS.items()}
+
+
 def _rows(include_hidden: bool = False) -> list[dict]:
     ann = Annotations()
-    rows = [to_row(r, ann) for r in build_achievements(_dataset())]
+    rows = []
+    for rec in build_achievements(_dataset()):
+        r = to_row(rec, ann)
+        # key: the activity's local start minute (activity_key.key_of) = its 活動列表 row
+        r.update(key=key_of(rec.start), class_id=CLASS_IDS.get(rec.mclass), kind_id=KIND_IDS.get(rec.kind))
+        rows.append(r)
     return rows if include_hidden else [r for r in rows if not r["hidden"]]
 
 
@@ -68,7 +81,9 @@ def _matches(r: dict, q: str) -> bool:
 
 def _filter(rows, kind, mclass, q, min_km, max_km, min_climb, max_climb, min_top,
             date_from, date_to):
-    classes = {c.strip() for c in mclass.split(",")} if mclass else None
+    classes = ({_CLASS_BY_ID.get(c.strip(), c.strip()) for c in mclass.split(",")}   # names or ids
+               if mclass else None)
+    kind = {v: k for k, v in KIND_IDS.items()}.get(kind, kind)
     out = []
     for r in rows:
         if kind and r["kind"] != kind:
@@ -147,7 +162,9 @@ class RecordAnnotation(BaseModel):
 @router.put("/records/{rid:path}")
 def annotate_record(rid: str, body: RecordAnnotation):
     ann = Annotations()
-    return {"id": rid, "annotation": ann.set_record(rid, **body.model_dump())}
+    # a field sent as null clears it (set_record drops "" / False); a field not sent is unchanged
+    fields = {k: ("" if v is None else v) for k, v in body.model_dump(exclude_unset=True).items()}
+    return {"id": rid, "annotation": ann.set_record(rid, **fields)}
 
 
 class RouteName(BaseModel):
@@ -193,11 +210,14 @@ def export_text(kind: Optional[str] = None, mclass: Optional[str] = None, q: Opt
     s = _summary(all_rows)
     lines = ["【登山 / 越野紀錄】"]
     lines.append(_period_line(all_rows, date_from, date_to))
-    peaks = s["baiyue_peaks"]
+    from backend.engine import region as RG
+    peaks = s["baiyue_peaks"] if RG.is_tw() else []          # 百岳 only in Taiwan (engine/region.py)
     if peaks:
         lines.append(f"已登百岳 {len(peaks)} 座：" + "、".join(
             f"{p['name']}({p['elevation_m']})" for p in peaks))
     cls = s["by_class"]
+    if not RG.is_tw() and CLASS_BAIYUE in cls:                # outside Taiwan the ≥ 3000 m class has no 百岳 name
+        cls = {("3000 m+" if k == CLASS_BAIYUE else k): v for k, v in cls.items()}
     lines.append("累計：" + "，".join(f"{k} {v} 次" for k, v in cls.items())
                  + f"；總爬升 {s['total_climb_m']:,} m")
     if s["highest"]:
@@ -221,4 +241,5 @@ def export_text(kind: Optional[str] = None, mclass: Optional[str] = None, q: Opt
 
 @router.get("/page", include_in_schema=False)
 def page():
-    return render_page("achievements")
+    """The 成就 page is now the 成就 tab of 活動列表 (2026-10-02)."""
+    return RedirectResponse("/api/v1/wko5/activities/page#achievements", status_code=307)

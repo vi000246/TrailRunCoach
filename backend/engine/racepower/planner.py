@@ -340,7 +340,7 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
     from backend.engine.racepower import trailhr as TH
     if not model or not (model.get("a") or model.get("c")) or not km:
         return None
-    e = km + (gain_m or 0.0) / TH.TRAILHR["divisor"]
+    e = km + (gain_m or 0.0) / TH.effort_divisor()
     sh = TH.heat_shift(hadley, lthr)
     xs = model.get("xstar")
     if xs:
@@ -1067,7 +1067,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         warnings.append(f"熱：每段溫度由 {to['temp_c']:.1f} °C（{z0:.0f} m）以 0.0065 K/m 遞減率推算；"
                         f"熱適應 S {hacc['s']:.0%}（{hacc['source']}，推估）")
     if pack_src.startswith("預設"):
-        warnings.append(f"背負{pack_src}，之後每天 −{CAP.PACK_DAILY_DROP:g} kg（糧食，推估）")
+        warnings.append(f"背負{pack_src}，之後每天 −{CAP.daily_drop():g} kg（糧食，推估）")
     main = "group" if (kind == "group" and grp) else "capacity"
     summary = {"time_s": T, "capacity_time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1),
                "group_time_s": ({"p25": grp["p25_s"], "p50": grp["p50_s"], "p75": grp["p75_s"], "n": grp["n"],
