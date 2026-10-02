@@ -25,7 +25,8 @@
   const ls = { get() { try { const v = localStorage.getItem(LS); return v == null ? narrow() : v === "1"; } catch (_) { return narrow(); } },
     set(v) { try { localStorage.setItem(LS, v ? "1" : "0"); } catch (_) {} } };
   const ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>`;
-  const KIND = { b2b: "B2B", test: "測試", zone_test: "重測", zone_update: "區間" };
+  const KIND = { b2b: "B2B", test: "測試", zone_test: "重測", zone_update: "區間",
+    injury_rest: "傷病", injury_hold: "傷病", injury_pattern: "傷病" };
 
   const CSS = `
   .sugbox { --sg-acc: var(--accent, #2563eb); position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 340px;
@@ -108,7 +109,7 @@
 
   function item(r) {
     const canPick = (r.pick === "pair" || r.pick === "day") ? (r.options || []).length > 0
-      : r.pick === "test_day" ? (r.tests || []).some((t) => (t.options || []).length) : false;
+      : r.pick === "test_day" ? (r.tests || []).some((t) => (t.options || []).length) : r.pick === "confirm";
     return `<div class="sg-item" data-id="${esc(r.id)}">
       <div class="sg-tools">
         ${r.help ? `<button type="button" class="sg-ico" data-act="help" aria-expanded="false" aria-label="說明" title="說明">?</button>` : ""}
@@ -118,7 +119,7 @@
       ${r.reason ? `<div class="sg-reason">${esc(r.reason)}</div>` : ""}
       ${r.help ? `<div class="sg-help" hidden>${esc(r.help)}</div>` : ""}
       ${r.pick ? `<div class="sg-act">${picker(r)}
-        ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">排入</button>` : ""}
+        ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">${esc(r.accept_label || "排入")}</button>` : ""}
         <button type="button" class="sg-btn" data-act="decline">不要</button></div>` : ""}
     </div>`;
   }
@@ -171,7 +172,10 @@
         const test = el.querySelector("select[data-role=test]")?.value || ((rows.find((x) => x.id === id) || {}).tests || [])[0]?.key;
         const out = await post(`${API}/accept`, { id, day, test });
         const ss = out.sessions || [];
-        el.querySelector(".sg-act").outerHTML = `<div class="sg-ok">已排入 ${ss.map((s) => `${md(s.day)}「${esc(s.title)}」`).join("、")}（<a href="${SCHEDULE}">到課表看</a>）</div>`;
+        const bl = out.blackouts || [];
+        el.querySelector(".sg-act").outerHTML = bl.length
+          ? `<div class="sg-ok">已設成不排課 ${bl.map((b) => `${md(b.start)}–${md(b.end)}`).join("、")}（<a href="${SCHEDULE}">到課表看</a>）</div>`
+          : `<div class="sg-ok">已排入 ${ss.map((s) => `${md(s.day)}「${esc(s.title)}」`).join("、")}（<a href="${SCHEDULE}">到課表看</a>）</div>`;
         window.dispatchEvent(new CustomEvent("suggestions:changed", { detail: { id, sessions: ss } }));
         drop(id, 6000);
       } else {

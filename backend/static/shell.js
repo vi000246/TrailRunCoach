@@ -20,6 +20,9 @@
       icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
     { id: "activity", href: "/api/v1/wko5/activities/page", name: "活動編輯", short: "活動", purpose: "名稱・類型・標籤・排除",
       icon: I('<path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>') },
+    // 傷病紀錄 (engine/injuries.py): hidden when its API answers 404 (the demo mode)
+    { id: "injuries", href: "/api/v1/wko5/injuries/page", name: "傷病紀錄", short: "傷病", purpose: "疼痛・受傷前的訓練",
+      feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
     { id: "routes", href: "/api/v1/routes/page", name: "路線", short: "路線", purpose: "重複路段與路線的進步",
       icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
     { id: "plan", href: "/api/v1/plan/page", name: "賽事周期", short: "周期", purpose: "目標賽事・周期・門檻",
@@ -95,9 +98,20 @@
   nav.className = "appnav";
   nav.setAttribute("aria-label", "主選單");
   nav.innerHTML = `<a class="an-brand" href="${PAGES[0].href}" title="回首頁"><i>${PAGES[1].icon}</i><span>訓練教練</span></a>` +
-    PAGES.map((p) => `<a class="an-item" href="${p.href}" title="${p.name}：${p.purpose}"${p === cur ? ' aria-current="page"' : ""}>
+    PAGES.map((p) => `<a class="an-item" href="${p.href}" title="${p.name}：${p.purpose}"${p.feature ? ` data-feature="${p.feature}"` : ""}${p === cur ? ' aria-current="page"' : ""}>
       ${p.icon}<span class="an-name"><span class="an-long">${p.name}</span><span class="an-short">${p.short}</span></span><span class="an-purpose">${p.purpose}</span></a>`).join("");
 
+  // optional pages: drop the link when the feature is off (傷病紀錄 in the demo mode); remembered per tab
+  (async () => {
+    const FK = "appshell.feature.injuries";
+    let on = null;
+    try { on = sessionStorage.getItem(FK); } catch (_) {}
+    if (on == null) {
+      try { on = (await fetch("/api/v1/wko5/injuries/meta", { cache: "no-store" })).status === 404 ? "0" : "1"; } catch (_) { on = "1"; }
+      try { sessionStorage.setItem(FK, on); } catch (_) {}
+    }
+    if (on === "0") nav.querySelectorAll('[data-feature="injuries"]').forEach((a) => a.remove());
+  })();
   const mount = () => document.body.prepend(nav);
   if (document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
   if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · 訓練教練`;
