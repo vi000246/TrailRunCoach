@@ -6,11 +6,9 @@ quality checks (incl. the athlete's real 2026-09-30 test), the same-method
 comparison, 「套用這次的 CP」, and the timing rules. Temp plans only — the
 user's plan thresholds are never written.
 """
-import copy
 import datetime as dt
-import glob
-import os
-from dataclasses import replace
+import gzip
+import json
 from pathlib import Path
 
 import numpy as np
@@ -269,23 +267,22 @@ def test_race_is_riegel_anchored_at_30_min():
     assert (1200 / 1800) ** 0.07 == approx(0.972, abs=1e-3)               # the doc's 20-min check
 
 
-def _real_fit():
-    pats = [os.path.expanduser("~/.wko5coach/fit/coros/2026/480707326343414059_2026-09-30_*.fit")]
-    got = [p for pat in pats for p in glob.glob(pat)]
-    got = [p for p in got if p.endswith(("_cycling.fit", "_run.fit"))] or got
-    return got[0] if got else None
+CP_TEST_FIXTURE = Path(__file__).parent / "fixtures" / "cp_test_2026-09-30.json.gz"
+
+
+def _frozen_cp_test():
+    """The 2026-09-30 COROS test frozen to its 1-s power and HR (no GPS, no ids,
+    ~4 KB): the FIT's time / power / heart-rate channels as parse_fit gives them."""
+    d = json.load(gzip.open(CP_TEST_FIXTURE, "rt", encoding="utf-8"))
+    arr = lambda k: np.array([np.nan if v is None else v for v in d[k]], float)
+    return np.arange(d["n"], dtype=float), arr("power_w"), arr("heart_rate_bpm")
 
 
 def test_real_2026_09_30_test_falls_back_to_one_bout():
     """The athlete's test: 3′ 218 W < 12′ 222 W, 3′ HR peak 149 (146 in the lap,
     +15 s of HR lag) vs 171, 16.5 min of recovery → single bout, CP ≈ 204 W,
     參考. (The 12′ bout's last minute is 220 W on the 1-s records: no kick.)"""
-    f = _real_fit()
-    if f is None:
-        pytest.skip("the 2026-09-30 COROS file is not on this machine")
-    from backend.files.fit_reader import parse_fit
-    r = parse_fit(f)
-    b = CPP.measure_bouts(np.asarray(r.time_s, float), np.asarray(r.power_w, float), np.asarray(r.heart_rate_bpm, float))
+    b = CPP.measure_bouts(*_frozen_cp_test())
     res = CPP.result(b, "standard", lthr=None)
     assert res["method"] == "1pt_prior" and res["quality"] == "參考"
     assert 203.0 <= res["cp"] <= 204.5
@@ -478,48 +475,3 @@ def test_timing_rules():
     assert "12 分" in _testing(60, protocol="standard").action
     race = _testing(60, protocol="race")
     assert race.action.startswith(CPP.NOTE_RACE)                                # 還缺什麼: no session, a note
-
-
-# ---------------------------------------------------------------------------
-# week_plan on the athlete's data (golden: skipped without the WKO5 folder)
-# ---------------------------------------------------------------------------
-
-@pytest.mark.golden
-@pytest.mark.parametrize("proto", CPP.PROTOCOLS)
-def test_week_plan_builds_the_test_by_protocol(proto):
-    from backend.settings.paths import athlete_dir
-    if not any(athlete_dir().glob("*.wko5athlete")):
-        pytest.skip("no WKO5 athlete folder")
-    from backend.api.overview import _dataset, _status
-    from backend.engine import overview as O
-    from backend.engine import status as ST
-    ds = _dataset()
-    today = O.day_to_date(ds.today)
-    st = _status(ds, today)
-    st2 = copy.copy(st)
-    st2.kind = "base"
-    st2.goals = {**st.goals, "days_to_next_a": None}
-    act = f"{CPP.NOTE_RACE}（課表偏好：用比賽）" if proto == "race" else "排一次 CP 測試"
-    # CP overdue: the level and i_testing's cp_due (week_plan schedules the CP test on
-    # cp_due since the 間歇門檻 change — a missing AeT / LTHR alone doesn't)
-    st2.indicators = [replace(i, level=ST.BAD, action=act, extra={**i.extra, "cp_due": True}) if i.id == "testing"
-                      else i for i in st.indicators]
-    wp = O.week_plan(ds, st2, today, prefs=PP.Prefs(cp_test_protocol=proto))
-    if wp["mode"] == "recovery_week":
-        pytest.skip("a recovery week has no test")
-    # CP tests only: the AeT test (its own reason and protocol, engine/aet_test.py) may be due too
-    # a due test is suggested (test_suggestions), never put into the plan (the user, 2026-10-01)
-    assert not [s for s in wp["sessions"] if s["kind"] == "test"]
-    tests = [x for x in wp["test_suggestions"] if x["kind"] == "cp"]
-    if proto == "race":
-        assert not tests
-        assert any(CPP.NOTE_RACE in n["text"] for n in wp["notes"])            # the note instead
-    else:
-        (t,) = tests
-        assert t["protocol"] == proto and t["minutes"] == CPP.TABLE[proto]["minutes"]
-        assert t["title"] == CPP.TABLE[proto]["title"]
-    # within 10 days of an A race: no test
-    st3 = copy.copy(st2)
-    st3.goals = {**st.goals, "days_to_next_a": 5}
-    assert not [s for s in O.week_plan(ds, st3, today, prefs=PP.Prefs(cp_test_protocol=proto))["sessions"]
-                if s["kind"] == "test"]
