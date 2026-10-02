@@ -463,9 +463,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
     <div class="var-box" id="sd-tb">
-      <label>目標用<select name="target_basis" id="sd-tbsel"><option value="auto">自動</option><option value="hr">心率</option><option value="power">功率</option></select></label>
+      <label>目標用<select name="target_basis" id="sd-tbsel" aria-describedby="sd-tbwhy"><option value="auto">自動</option><option value="hr">心率</option><option value="power">功率</option></select></label>
       <div class="hint" id="sd-tbwhy" aria-live="polite"></div>
-      <ol class="steps-prev" id="sd-steps" aria-label="每一段的目標"></ol>
+      <!-- the structured editor (static/workout_editor.js, engine/workout_steps.py): chart, steps, per-step targets, watch preview -->
+      <div id="sd-we"></div>
     </div>
     <div class="var-box" id="sd-test" hidden>
       <div class="row2">
@@ -522,6 +523,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </div>
   </form>
 </dialog>
+<script src="/api/v1/static/workout_editor.js"></script>
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
 <dialog class="sd wide" id="vd" aria-labelledby="vd-h">
@@ -1282,25 +1284,33 @@ function tgtHint() {
   stepsPreview();
 }
 
-// 「目標用：自動／心率／功率」: what each step of this session gets (engine/target_policy.py)
-let SP_T = null;
+// 「目標用：自動／心率／功率」 and the structured editor (static/workout_editor.js): every step
+// shows what it resolves to (engine/target_policy.py → engine/workout_steps.py); one step can be
+// overridden by clicking its target. Nothing is stored until 儲存.
+function weSession() {
+  return { kind: kindVal(), title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+    target_basis: F.target_basis.value, day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
+    protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
+    ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
+      variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
+      variant_adj: dlg.orig.variant_adj, rung_key: dlg.orig.rung_key } : {}) };
+}
+const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onView: (v, we) => {
+  if (v && v.basis_label) $("sd-tbwhy").textContent = v.basis_label;
+  const mine = we.dirty || we.stored;
+  // a structure of your own: minutes, the target text and the TSS estimate come from it
+  F.minutes.readOnly = mine && !dlg.ro;
+  if (v && v.totals && we.dirty) {
+    F.minutes.value = Math.max(1, Math.round(v.totals.sec / 60));
+    if (v.summary) F.target.value = v.summary;
+  }
+  if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+} });
 function stepsPreview() {
-  clearTimeout(SP_T);
-  SP_T = setTimeout(async () => {
-    const k = kindVal();
-    if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
-    $("sd-tb").hidden = false;
-    const body = { kind: k, title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
-      target_basis: F.target_basis.value, terrain: (dlg.orig || {}).terrain, protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
-      ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
-        variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
-        variant_adj: dlg.orig.variant_adj } : {}) };
-    try {
-      const r = await sj("POST", `${PAPI}/steps-preview`, body);
-      $("sd-tbwhy").textContent = r.label;
-      $("sd-steps").innerHTML = r.lines.map((l) => `<li>${esc(l)}</li>`).join("");
-    } catch (e) { $("sd-tbwhy").textContent = ""; $("sd-steps").innerHTML = ""; }
-  }, 250);
+  const k = kindVal();
+  if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
+  $("sd-tb").hidden = false;
+  WE.refresh();
 }
 $("sd-tbsel").addEventListener("change", stepsPreview);
 
@@ -1360,6 +1370,7 @@ $("sd-tpl").addEventListener("change", () => {
   $("sd-tpl-info").textContent = `${v.split}。心率備用：${v.hr || "—"}。來源（${SRC_KIND[v.source_kind] || v.source_kind}）：${v.source}` +
     (v.equiv ? "" : `。${v.consequence}`);
   tgtHint();
+  WE.rederive({ variant_key: v.key });          // the editor shows the template's own steps
 });
 function vdRow(v, cur) {
   const meta = [v.structure, v.power, v.rest, `目標區 ${v.tiz_min} 分`, v.terrain === "hill" ? `⛰ 上坡 ${v.grade}` : "平路",
@@ -1410,7 +1421,7 @@ function openDlg(s, day) {
   db.hidden = !(s && (s.state === "done" || s.state === "missed"));
   if (s && s.state === "done") db.innerHTML = `<b class="ok">✓ 已完成</b>${s.done_by ? `：${esc(s.done_by.category_label || "")} ${hm(s.done_by.moving_s)}${s.done_by.tss != null ? ` · TSS ${n0(s.done_by.tss)}` : ""}` : ""}` +
     (s.compliance ? `<br><span class="cp-${esc(s.compliance.level)}"><span class="cpw">${esc(compTip(s.compliance))}</span></span>` : "") +
-    (s.note ? `<br><span class="adapt-note" title="自動調整（engine/adapt.py）：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬自組）">⚠ ${esc(s.note)}</span>` : "");
+    (s.note ? `<br><span class="adapt-note" title="自動調整（engine/adapt.py）：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬推估）">⚠ ${esc(s.note)}</span>` : "");
   else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
   F.day.value = d;
@@ -1427,8 +1438,10 @@ function openDlg(s, day) {
   const del = $("sd-del"); del.hidden = !s || ro; del.classList.remove("armed"); del.textContent = "刪除";
   $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
   dlg.titleTouched = false;
+  F.minutes.readOnly = false;
   eqInit(s);
   tgtHint();
+  WE.open({ uid: s ? s.uid : null, ro, kind: s ? s.kind : "easy" });
   $("sd").showModal();
   (ro ? $("sd-cancel") : F.title).focus();
 }
@@ -1468,9 +1481,22 @@ F.addEventListener("submit", async (e) => {
     const f = eqF();
     Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });
   }
+  // the structure: saved only when you changed it (a user edit — 自動重排不會再改它)
+  const wp = WE.payload();
+  if (wp) Object.assign(body, wp);
   $("sd-save").disabled = true;
   try {
-    await sj(dlg.uid ? "PATCH" : "POST", dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, body);
+    const url = dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, method = dlg.uid ? "PATCH" : "POST";
+    if (wp && wp.steps) {
+      let r = await WorkoutEditor.request(method, url, body);
+      if (r.status === 422) {
+        const errs = ((r.body.detail || {}).errors || []);
+        if (!(await ask("結構有錯誤", `<ul style="margin:0;padding-left:18px">${errs.map((x) => `<li class="err">${esc(x)}</li>`).join("")}</ul>
+          <p class="meta" style="margin:0">仍要照這樣儲存？</p>`, "仍要儲存", { danger: true }))) return;
+        r = await WorkoutEditor.request(method, url, { ...body, steps_force: true });
+      }
+      if (!r.ok) throw new Error(typeof r.body.detail === "string" ? r.body.detail : JSON.stringify(r.body.detail || r.body).slice(0, 200));
+    } else await sj(method, url, body);
     $("sd").close();
     S.sel = body.day;
     await load();

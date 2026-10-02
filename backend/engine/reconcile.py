@@ -44,7 +44,10 @@ HARD_KINDS = {"long", "quality", "test"}
 FIELDS = ("day", "kind", "title", "minutes", "target", "detail", "source", "tss", "terrain", "distance_km",
           "climb_m", "protocol",
           # the interval library variant (engine/interval_library.py): regenerated with the session
-          "variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks", "variant_adj")
+          "variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks", "variant_adj",
+          # a structure (engine/workout_steps.py): only the user's edits store one, so an
+          # unedited auto row gets the generator's (None = derived from the text)
+          "steps")
 SHOWN = ("day", "kind", "title", "minutes", "target", "detail", "terrain")
 
 

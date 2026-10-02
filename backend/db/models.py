@@ -199,6 +199,9 @@ class PlanSession(Base):
     variant_adj: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # 目標用 (engine/target_policy.py): the user's per-session hr / power; None = 自動
     target_basis: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    # the structure the user saved in the 課表 editor (engine/workout_steps.py, JSON);
+    # None = derived from the kind / variant / text when opened or pushed
+    steps: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
