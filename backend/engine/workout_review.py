@@ -75,7 +75,10 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # walk / halves-power gate on the window, SE (drift_se / pw_drift_se), ramp-free comparison (`ramps`)
 # v13: climbs carry start/end km, elevations, avg power, moving pace and GAP (the 爬坡段 profile);
 # `grade_bins` per workout (the 坡度分組 baseline)
-CACHE_KEY = "workout_review_v14"
+# v14: two branches — the interval library's reps, and `form_bins` (跑姿分組: form metrics per grade bin and
+# per 10 % of the work done); v15 = both merged, plus form_bins' `impact_km` (每公里衝擊量, impact_per_km)
+# v16: `cad_windows` (steady 30-s ILR / cadence / speed / grade windows, the 步頻與衝擊 card)
+CACHE_KEY = "workout_review_v16"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -171,7 +174,9 @@ SECTIONS = ("summary", "aerobic", "intervals", "climbs", "durability", "form")
 EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test",
                   # 間歇判讀 (engine/interval_eval.py)
                   "interval_verdict", "interval_reps", "interval_power", "interval_battery", "interval_tiz",
-                  "interval_hr")
+                  "interval_hr",
+                  # 跑姿依坡度／隨疲勞 (form_bins)
+                  "form_grades", "form_work", "form_cadence")
 SUGGESTED = {"easy": 1, "long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
 
 
@@ -1059,14 +1064,11 @@ def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
 RUN_CADENCE = 65.0            # strides/min (130 spm): below that you're walking
 
 
-def form_drift(t, speed, chans: dict, cadence=None, power=None) -> dict:
-    """{name: {first, last, change}} over the first half vs the second half of
-    the work done (kJ, power·dt) on the running steps; without power, of the
-    moving time. Splitting by work (user request, 2026-10-01; 推估) keeps a
-    trail run's long slow climbs from filling one half: each half holds the
-    same effort, not the same minutes. With `cadence` (strides/min) only
-    running steps count — walking a steep climb would otherwise read as a
-    collapse in stiffness. `split` says which basis was used."""
+def _run_work(t, speed, cadence=None, power=None) -> tuple[np.ndarray, np.ndarray, str]:
+    """(running mask, cumulative work, basis) — form_drift's split, shared with
+    form_bins. Running = moving and, with a cadence channel, ≥ 130 spm. The
+    cumulative weight is power·dt (J) over the running steps when power covers
+    ≥ 90 % of them ("work"), else the running time ("time")."""
     t = np.asarray(t, dtype=float)
     n = len(t)
     d = _dt(t)
@@ -1082,7 +1084,194 @@ def form_drift(t, speed, chans: dict, cadence=None, power=None) -> dict:
         if w[ok].sum() >= 0.9 * w.sum() > 0:          # power on (almost) all running steps
             w = np.where(ok, p * d, 0.0)
             split = "work"
-    cum = np.cumsum(w)
+    return mov, np.cumsum(w), split
+
+
+# 跑姿分組 (form_bins): the form metrics per grade bin and per 10 % of the work done
+FORM_KEYS = ("ilr", "impact_g", "impact_km", "lss", "kleg", "gct", "cadence", "vo")
+IMPACT_KEYS = ("ilr", "impact_g")       # the per-step impact metrics the cadence hint checks
+
+
+def impact_per_km(impact_g, cadence_spm, speed_kmh) -> Optional[np.ndarray]:
+    """每公里衝擊量 (推估): impact G × steps per km = G × spm × 60 / (km/h), per
+    sample, NaN when stopped. Cumulative-per-distance load is how Willson 2014
+    (Clin Biomech 29:243) compared step lengths for the patellofemoral joint;
+    multiplying a whole-body impact by the step count is our own proxy, not a
+    measured knee load."""
+    if impact_g is None or cadence_spm is None or speed_kmh is None:
+        return None
+    n = len(np.asarray(impact_g))
+    g, c, v = _arr(impact_g, n), _arr(cadence_spm, n), _arr(speed_kmh, n)
+    with np.errstate(all="ignore"):
+        out = np.where(np.isfinite(v) & (v > STOP_KMH) & (c > 0), g * c * 60.0 / v, np.nan)
+    return out
+STRYD_ONLY = ("ilr", "lss")
+FORM_BANDS = (("all", None, None), ("flat", -0.03, 0.03), ("up", 0.03, None), ("down", None, -0.03))
+WORK_DECILES = 10
+
+
+def _form_means(chans: dict, d: np.ndarray, m: np.ndarray) -> tuple[float, dict]:
+    """(running time in `m`, {metric: time-weighted mean}) — None for an absent metric."""
+    out = {}
+    for k, x in chans.items():
+        out[k] = _wmean(x, d, m) if x is not None else None
+    return float(d[m].sum()), out
+
+
+def form_bins(t, speed, chans: dict, cadence=None, power=None, grade=None,
+              edges: Sequence[float] = None) -> dict:
+    """The form metrics (`chans`, sample-aligned, display units) on the running
+    steps (form_drift's mask), grouped two ways:
+      * `grade`: one row per grade bin (panels.workout GRADE_EDGES, %, the
+        坡度分組 rows), steepest downhill first — {label, lo, hi, time_s, m};
+      * `work`: per FORM_BANDS band (all / flat −3…+3 % / up ≥ 3 % / down
+        < −3 %), ten rows by the cumulative work done (form_drift's basis:
+        kJ over the running steps, or the running time without power) —
+        {k, time_s, m}. The deciles are cut on all running steps, then each
+        band keeps only its own samples, so a band's decile k is the same
+        stretch of the run as the others'.
+    `m` = {metric: mean}; `split` = "work" / "time". {} without running steps."""
+    from backend.engine.panels.workout import GRADE_EDGES, _label
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    d = _dt(t)
+    mov, cum, split = _run_work(t, speed, cadence, power)
+    if not len(cum) or cum[-1] <= 0:
+        return {}
+    ch = {k: (_arr(x, n) if x is not None and _has(x) else None) for k, x in chans.items()}
+    g = _arr(grade, n) if grade is not None else None
+    has_g = g is not None and bool(np.isfinite(g).any())
+    rows = []
+    if has_g:
+        gp = g * 100.0
+        bounds = [None, *(edges or GRADE_EDGES), None]
+        for lo, hi in zip(bounds[:-1], bounds[1:]):
+            m = mov & np.isfinite(gp)
+            if lo is not None:
+                m &= gp >= lo
+            if hi is not None:
+                m &= gp < hi
+            secs, mm = _form_means(ch, d, m)
+            if secs > 0:
+                rows.append({"label": _label(lo, hi), "lo": lo, "hi": hi, "time_s": secs, "m": mm})
+    k = np.minimum((cum / cum[-1] * WORK_DECILES).astype(int), WORK_DECILES - 1)
+    k = np.where(mov, k, -1)
+    work = {}
+    for band, lo, hi in FORM_BANDS:
+        if band != "all" and not has_g:
+            continue
+        sel = mov.copy()
+        if band != "all":
+            sel &= np.isfinite(g)
+            if lo is not None:
+                sel &= g >= lo
+            if hi is not None:
+                sel &= g < hi
+        out = []
+        for i in range(WORK_DECILES):
+            secs, mm = _form_means(ch, d, sel & (k == i))
+            out.append({"k": i, "time_s": secs, "m": mm})
+        if any(r["time_s"] > 0 for r in out):
+            work[band] = out
+    return {"split": split, "grade": rows, "work": work}
+
+
+# 步頻與衝擊 (docs/research/impact-cadence.md): steady 30-s windows for ILR ~ cadence at matched speed / grade
+CW_WIN_S = 30                 # 推估: window length (long enough to average ~80 steps, short enough to be steady)
+CW_SPEED_CV = 0.08            # 推估: steady = speed CV inside the window < 8 %
+CW_GRADE_RANGE = 4.0          # 推估: and grade range < 4 pp
+CW_MIN_RUNS = 5               # personal trend needs ≥ 5 past runs with ≥ 10 windows each
+CW_MIN_WIN = 10
+
+
+def cadence_windows(t, speed, cadence, ilr, grade=None, impact_g=None) -> list[list]:
+    """[[ILR, cadence spm, speed km/h, grade %, impact G or None], …] — one row per steady 30-s window
+    of running (form_drift's running steps: moving, ≥ 130 spm). `cadence` in strides/min (the FIT
+    channel), `grade` a fraction. [] without ILR or cadence."""
+    if ilr is None or cadence is None or speed is None or not _has(ilr) or not _has(cadence):
+        return []
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    d = _dt(t)
+    mov, _, _ = _run_work(t, speed, cadence, None)
+    il, cad, sp = _arr(ilr, n), _arr(cadence, n) * 2.0, _arr(speed, n)
+    g = _arr(grade, n) * 100.0 if grade is not None else np.zeros(n)     # no altitude (treadmill): flat
+    ig = _arr(impact_g, n) if impact_g is not None else np.full(n, np.nan)
+    ok = mov & np.isfinite(il) & (il > 0) & np.isfinite(cad) & np.isfinite(sp) & (sp > STOP_KMH)
+    fin = np.isfinite(t)
+    if not ok.any() or not fin.any():
+        return []
+    k = ((t - t[fin][0]) // CW_WIN_S).astype(int)
+    rows = []
+    for kk in np.unique(k[ok]):
+        m = ok & (k == kk)
+        if d[m].sum() < CW_WIN_S - 5 or m.sum() < 20:
+            continue
+        s = sp[m]
+        if s.std() / s.mean() > CW_SPEED_CV:
+            continue
+        gg = g[m][np.isfinite(g[m])]
+        if len(gg) < 10 or gg.max() - gg.min() > CW_GRADE_RANGE:
+            continue
+        igm = ig[m][np.isfinite(ig[m])]
+        rows.append([round(float(il[m].mean()), 2), round(float(cad[m].mean()), 1), round(float(s.mean()), 2),
+                     round(float(gg.mean()), 1), round(float(igm.mean()), 3) if len(igm) else None])
+    return rows
+
+
+def cadence_fit(runs: list[list[list]]) -> Optional[dict]:
+    """Within-run regression ILR ~ cadence + speed + grade (each run demeaned = a per-run fixed effect),
+    SE clustered by run. `runs` = cadence_windows() of each past run; runs with < CW_MIN_WIN windows are
+    left out. {b_cad, se_cad, b_speed, b_grade, n_runs, n_windows, partial_r, r2}; None with < CW_MIN_RUNS
+    runs. Coefficients per spm, per km/h, per % grade (BW/s)."""
+    Xs, ys, gs = [], [], []
+    for i, rows in enumerate(runs):
+        if len(rows) < CW_MIN_WIN:
+            continue
+        a = np.array([r[:4] for r in rows], dtype=float)
+        X = a[:, 1:4] - a[:, 1:4].mean(axis=0)
+        Xs.append(X); ys.append(a[:, 0] - a[:, 0].mean()); gs.append(np.full(len(a), i))
+    if len(Xs) < CW_MIN_RUNS:
+        return None
+    X, y, g = np.vstack(Xs), np.concatenate(ys), np.concatenate(gs)
+    keep = X.std(axis=0) > 1e-9
+    if not keep[0]:
+        return None
+    X = X[:, keep]
+    XtX = np.linalg.pinv(X.T @ X)
+    b = XtX @ X.T @ y
+    u = y - X @ b
+    meat = np.zeros((X.shape[1], X.shape[1]))
+    for gid in np.unique(g):
+        sg = X[g == gid].T @ u[g == gid]
+        meat += np.outer(sg, sg)
+    G = len(Xs)
+    se = np.sqrt(np.diag(XtX @ meat @ XtX * G / max(1, G - 1)))
+    full = np.zeros(3)
+    full[keep] = b
+    oth = X[:, 1:]
+    if oth.shape[1]:
+        res = lambda v: v - oth @ np.linalg.lstsq(oth, v, rcond=None)[0]
+        pr = float(np.corrcoef(res(y), res(X[:, 0]))[0, 1])
+    else:
+        pr = float(np.corrcoef(y, X[:, 0])[0, 1])
+    tot = float(y @ y)
+    return {"b_cad": float(full[0]), "se_cad": float(se[0]), "b_speed": float(full[1]), "b_grade": float(full[2]),
+            "n_runs": G, "n_windows": int(len(y)), "partial_r": pr, "r2": 1 - float(u @ u) / tot if tot > 0 else None}
+
+
+def form_drift(t, speed, chans: dict, cadence=None, power=None) -> dict:
+    """{name: {first, last, change}} over the first half vs the second half of
+    the work done (kJ, power·dt) on the running steps; without power, of the
+    moving time. Splitting by work (user request, 2026-10-01; 推估) keeps a
+    trail run's long slow climbs from filling one half: each half holds the
+    same effort, not the same minutes. With `cadence` (strides/min) only
+    running steps count — walking a steep climb would otherwise read as a
+    collapse in stiffness. `split` says which basis was used."""
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    d = _dt(t)
+    mov, cum, split = _run_work(t, speed, cadence, power)
     if not len(cum) or cum[-1] <= 0:
         return {}
     a, b = mov & (cum <= cum[-1] / 2), mov & (cum > cum[-1] / 2)
@@ -1327,11 +1516,19 @@ def _climb_dict(c, dist, p: np.ndarray, d: np.ndarray, mov: np.ndarray, walking:
             "pace_s_per_km": pace, "gap_s_per_km": (pace / f) if pace and f else None}
 
 
-def _grade_rows(ds, w, s: dict) -> list:
+def _rgrade(ds, w, s: dict) -> Optional[np.ndarray]:
+    """rgrade (fraction) when there is distance and altitude, else None."""
+    if s["dist"] is None or s["elev"] is None:
+        return None
+    return _eval(ds, w, "rgrade")
+
+
+def _grade_rows(ds, w, s: dict, g: Optional[np.ndarray] = None) -> list:
     """grade_bins (rgrade) for the cache: the 坡度分組 card and its baseline."""
     if s["dist"] is None or s["elev"] is None:
         return []
-    g = _eval(ds, w, "rgrade")
+    if g is None:
+        g = _eval(ds, w, "rgrade")
     if g is None:
         return []
     keep = ("label", "lo", "hi", "time_s", "distance_km", "pace_s_per_km", "power", "hr", "vam", "time_pct")
@@ -1403,7 +1600,8 @@ def _measure(ds, w) -> Optional[dict]:
         except Exception:
             climbs = []
     out["climbs"] = climbs
-    out["grade_bins"] = _grade_rows(ds, w, s)
+    rg = _rgrade(ds, w, s)
+    out["grade_bins"] = _grade_rows(ds, w, s, rg)
     hp = [c["hr_per_100m"] for c in climbs if c.get("hr_per_100m")]
     out["hr_per_100m"] = statistics.median(hp) if hp else None
     stryd = s["ilr"] is not None or s["lss"] is not None
@@ -1416,6 +1614,13 @@ def _measure(ds, w) -> Optional[dict]:
         fchans["kleg"] = _eval(ds, w, "kleg")
         fchans["impact_g"] = _eval(ds, w, "fmax/(metric(weight)*g)")
     out["form"] = form_drift(t, s["speed"], fchans, s["cadence"], s["power"]) if w.sport == "run" else {}
+    # 跑姿分組: ILR / LSS only from Stryd (as the 前半對後半 table)
+    bchans = {k: fchans.get(k) for k in FORM_KEYS if stryd or k not in STRYD_ONLY}
+    bchans["impact_km"] = impact_per_km(fchans.get("impact_g"), fchans.get("cadence"), s["speed"])
+    out["form_bins"] = (form_bins(t, s["speed"], bchans, s["cadence"], s["power"], rg)
+                        if w.sport == "run" else {})
+    out["cad_windows"] = (cadence_windows(t, s["speed"], s["cadence"], s["ilr"], rg, fchans.get("impact_g"))
+                          if w.sport == "run" and stryd else [])
     return out
 
 
@@ -2530,6 +2735,185 @@ def _form(ds, w, m, c, base):
     return {**base, "series": cols + rows + _verdict_rows(lines, "判讀（參考）")}
 
 
+# 跑姿分組 (wko5_viewer drawFormProfile; res.form_profile): the form metrics per grade bin
+# (form_grades) and per 10 % of the work done (form_work), each against the athlete's usual
+# for that bin — the same pool as 坡度分組 (_pool + pooled: same category, 8 → 12 → 26 weeks
+# until ≥ 5 activities that spent ≥ BIN_MIN_S running in the bin; 推估)
+FORM_DEC = {"ilr": 1, "impact_g": 2, "impact_km": 0, "lss": 1, "kleg": 1, "gct": 0, "cadence": 0, "vo": 1}
+FORM_LABEL = {"ilr": "ILR", "impact_g": "衝擊 G", "impact_km": "每公里衝擊量（推估）", "lss": "LSS", "kleg": "kleg",
+              "gct": "觸地時間", "cadence": "步頻", "vo": "垂直振幅"}
+CADENCE_HINT = "衝擊高於平常、步頻低於平常 → 可試著把步頻提高 5–10%（Heiderscheit 2011）"
+
+
+def cadence_hint(rows: list[dict], names: list[str]) -> Optional[str]:
+    """「−10 ~ −5%、0–10%：衝擊高於平常、步頻低於平常 → …」 for the rows (≥ BIN_MIN_S) where ILR or
+    impact G is above the usual's middle 50 % and the cadence below it; None when there is none.
+    Heiderscheit 2011 (MSSE 43:296): +5 / +10 % step rate cut the energy absorbed at the knee."""
+    hit = []
+    for r, name in zip(rows, names):
+        if (r.get("time_s") or 0) < BIN_MIN_S:
+            continue
+        m, b = r.get("m") or {}, r.get("base") or {}
+        high = any(compare(m.get(k), b.get(k) or {}) == "high" for k in IMPACT_KEYS)
+        if high and compare(m.get("cadence"), b.get("cadence") or {}) == "low":
+            hit.append(name)
+    return f"{'、'.join(hit)}：{CADENCE_HINT}" if hit else None
+
+
+def _hint_rows(hint: Optional[str]) -> list[dict]:
+    return _verdict_rows([hint], "判讀（參考）") if hint else []
+BAND_LABEL = {"all": "全部坡度", "flat": "平路 −3～+3%", "up": "上坡 ≥ 3%", "down": "下坡 < −3%"}
+NO_STRYD_NOTE = ("這次沒有 Stryd：ILR（衝擊負荷率）和 LSS（腿部剛性）是 Stryd 腳掌感測器算的，手錶沒有，"
+                 "所以只看步頻、觸地時間、垂直振幅、kleg、衝擊 G")
+
+
+def _form_base(items: list[tuple[float, Optional[dict]]]) -> dict:
+    """{metric: pooled()} over past rows (age, row) that spent ≥ BIN_MIN_S running in the bin."""
+    ok = [(age, r) for age, r in items if r and (r.get("time_s") or 0) >= BIN_MIN_S]
+    return {k: pooled([(age, (r.get("m") or {}).get(k)) for age, r in ok]) for k in FORM_KEYS}
+
+
+def _form_keys(rows: list[dict], stryd: bool) -> list[str]:
+    return [k for k in FORM_KEYS if (stryd or k not in STRYD_ONLY)
+            and any((r.get("m") or {}).get(k) is not None for r in rows)]
+
+
+def _form_cell(v, b: dict, k: str) -> str:
+    d = FORM_DEC[k]
+    s = _num(v, d)
+    return f"{s}（平常 {_num(b['median'], d)}）" if v is not None and b.get("ok") else s
+
+
+def _form_note_rows(m: dict) -> list[dict]:
+    return [] if m.get("stryd") else [_row("說明", NO_STRYD_NOTE)]
+
+
+def _form_grades(ds, w, m, c, base):
+    fb = m.get("form_bins") or {}
+    rows = fb.get("grade") or []
+    if w.sport != "run" or not fb:
+        return {**base, "empty": "參考：只有跑步、而且有跑步動態資料時才有這一張"}
+    if not rows:
+        return {**base, "empty": "沒有距離或海拔，算不出坡度"}
+    keys = _form_keys(rows, bool(m.get("stryd")))
+    if not keys:
+        return {**base, "empty": "這次沒有跑步動態資料（步頻、觸地時間…）"}
+    pool = _pool(ds, w)
+    total = sum(r["time_s"] for r in rows) or 1.0
+    bins = []
+    for r in rows:
+        past = [(age, next((x for x in ((pm.get("form_bins") or {}).get("grade") or []) if x["label"] == r["label"]), None))
+                for age, pm in pool]
+        b = _form_base(past)
+        bins.append({**{k: r[k] for k in ("label", "lo", "hi", "time_s")}, "time_pct": r["time_s"] / total * 100.0,
+                     "m": {k: r["m"].get(k) for k in keys}, "base": {k: b[k] for k in keys}})
+    cols = [_col("坡度", [b["label"] for b in bins]), _col("跑步時間", [_hms(b["time_s"]) for b in bins]),
+            _col("佔比", [f"{b['time_pct']:.0f}%" for b in bins])]
+    cols += [_col(f"{FORM_LABEL[k]}（平常）", [_form_cell(b["m"][k], b["base"][k], k) for b in bins]) for k in keys]
+    hint = cadence_hint(bins, [f"坡度 {b['label']}" for b in bins])
+    return {**base, "series": cols + _form_note_rows(m) + _hint_rows(hint),
+            "form_profile": {"mode": "grade", "bins": bins, "keys": keys, "min_s": BIN_MIN_S,
+                             "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
+                             "note": None if m.get("stryd") else NO_STRYD_NOTE}}
+
+
+def _form_work(ds, w, m, c, base):
+    fb = m.get("form_bins") or {}
+    work = fb.get("work") or {}
+    if w.sport != "run" or not work.get("all"):
+        return {**base, "empty": "參考：只有跑步、而且有跑步動態資料時才有這一張"}
+    keys = _form_keys(work["all"], bool(m.get("stryd")))
+    if not keys:
+        return {**base, "empty": "這次沒有跑步動態資料（步頻、觸地時間…）"}
+    pool = _pool(ds, w)
+    bands = {}
+    for band, rows in work.items():
+        out = []
+        for r in rows:
+            past = []
+            for age, pm in pool:
+                pr = ((pm.get("form_bins") or {}).get("work") or {}).get(band) or []
+                past.append((age, pr[r["k"]] if r["k"] < len(pr) else None))
+            b = _form_base(past)
+            out.append({"k": r["k"], "label": f"{r['k'] * 10}–{r['k'] * 10 + 10}%", "time_s": r["time_s"],
+                        "m": {k: r["m"].get(k) for k in keys}, "base": {k: b[k] for k in keys}})
+        bands[band] = out
+    split = fb.get("split") or "time"
+    cols = [_col("坡度", [BAND_LABEL[b] for b, rows in bands.items() for _ in rows]),
+            _col("作功段" if split == "work" else "移動時間段", [r["label"] for rows in bands.values() for r in rows]),
+            _col("跑步時間", [_hms(r["time_s"]) for rows in bands.values() for r in rows])]
+    cols += [_col(f"{FORM_LABEL[k]}（平常）", [_form_cell(r["m"][k], r["base"][k], k)
+                                              for rows in bands.values() for r in rows]) for k in keys]
+    word = "作功" if split == "work" else "時間"
+    hint = cadence_hint(bands["all"], [f"{word} {r['label']}" for r in bands["all"]])
+    return {**base, "series": cols + _form_note_rows(m) + _hint_rows(hint),
+            "form_profile": {"mode": "work", "split": split, "bands": bands,
+                             "band_labels": {b: BAND_LABEL[b] for b in bands}, "keys": keys, "min_s": BIN_MIN_S,
+                             "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
+                             "note": None if m.get("stryd") else NO_STRYD_NOTE}}
+
+
+CW_SUGGEST = (1.05, 1.10)     # Heiderscheit 2011: +5 % / +10 % step rate (at the same speed)
+
+
+def _cad_pool(ds, w) -> tuple[list[list[list]], int]:
+    """(past runs' cad_windows, weeks): every running category (the within-run slope is about the
+    runner, not the terrain) over the last 26 weeks. Not 8 → 12 → 26 like the usual bands: a slope
+    needs more data than a median — on the user's runs 8-week slopes swing between −0.4 and −0.9 BW/s
+    per +5 spm with CIs near 0 (docs/research/impact-cadence.md §3.3); 26 weeks is 推估."""
+    items = []
+    lo = math.floor(w.day) - 7 * POOL_WEEKS[-1]
+    for p in ds.workouts:
+        if p.idx == w.idx or p.day >= w.day or math.floor(p.day) < lo or p.sport != "run":
+            continue
+        pm = measure(ds, p)
+        cw = (pm or {}).get("cad_windows") or []
+        if len(cw) >= CW_MIN_WIN:
+            items.append((w.day - p.day, cw))
+    _flush(ds)
+    return [cw for _, cw in items], POOL_WEEKS[-1]
+
+
+def _form_cadence(ds, w, m, c, base):
+    if w.sport != "run":
+        return {**base, "empty": "參考：只有跑步才有這一張"}
+    if not m.get("stryd"):
+        return {**base, "empty": "這次沒有 Stryd：ILR（衝擊負荷率）是 Stryd 腳掌感測器算的，手錶沒有，所以不畫步頻與衝擊"}
+    cw = m.get("cad_windows") or []
+    if len(cw) < CW_MIN_WIN:
+        return {**base, "empty": f"這次穩定跑的 30 秒段只有 {len(cw)} 段（< {CW_MIN_WIN}），看不出步頻和衝擊的關係"}
+    pool, weeks = _cad_pool(ds, w)
+    fit = cadence_fit(pool)
+    a = np.array([r[:4] for r in cw], dtype=float)
+    med_cad, v_ref, g_ref = (float(np.median(a[:, i])) for i in (1, 2, 3))
+    if fit is None:
+        return {**base, "series": [_row("步頻與衝擊", f"過去的穩定跑不夠（{len(pool)} 次，要 ≥ {CW_MIN_RUNS} 次、"
+                                                f"每次 ≥ {CW_MIN_WIN} 段），還算不出你自己的趨勢")],
+                "cadence_profile": {"weak": True, "points": []}}
+    lo_ci, hi_ci = (fit["b_cad"] - 1.96 * fit["se_cad"]) * 5, (fit["b_cad"] + 1.96 * fit["se_cad"]) * 5
+    rel = (f"同速度、同坡度下，步頻每 +5 spm，ILR {fit['b_cad'] * 5:+.1f} BW/s（95% CI {lo_ci:+.1f}～{hi_ci:+.1f}；"
+           f"{fit['n_runs']} 次跑步、{fit['n_windows']} 段 30 秒，近 {weeks} 週；推估）")
+    if hi_ci >= 0 or abs(fit["partial_r"]) < 0.1:
+        # weak or not clearly negative: say so, no trend chart (it would mislead)
+        why = "95% CI 碰到 0" if hi_ci >= 0 else f"偏相關只有 {fit['partial_r']:+.2f}（|r| < 0.1）"
+        return {**base, "series": [_row("步頻與衝擊", rel), _row("判讀（參考）", f"關係不明顯（{why}）：在你的資料裡，同速度下"
+                                                                      "步頻高低和衝擊沒有清楚的關係，不畫趨勢線")],
+                "cadence_profile": {"weak": True, "points": [], "fit": fit, "weeks": weeks}}
+    adj = a[:, 0] - fit["b_speed"] * (a[:, 2] - v_ref) - fit["b_grade"] * (a[:, 3] - g_ref)
+    pts = [[round(float(x), 1), round(float(y), 2), r[0], r[2], r[3]] for x, y, r in zip(a[:, 1], adj, cw)]
+    cx, cy = float(a[:, 1].mean()), float(adj.mean())
+    sug = [med_cad * CW_SUGGEST[0], med_cad * CW_SUGGEST[1]]
+    pred5 = fit["b_cad"] * med_cad * 0.05
+    sd = float(np.std(a[:, 1]))
+    rows = [_row("步頻與衝擊", rel),
+            _row("這次", f"中位步頻 {med_cad:.0f} spm；+5–10% = {sug[0]:.0f}–{sug[1]:.0f} spm（Heiderscheit 2011）"),
+            _row("預估（推估）", f"照你的趨勢，步頻 +5% 約讓 ILR {pred5:+.1f} BW/s（{pred5 / cy * 100:+.0f}%）；你這次的步頻"
+                              f"只在 ±{sd:.0f} spm 內變化，+5% 是外推")]
+    return {**base, "series": rows,
+            "cadence_profile": {"points": pts, "fit": fit, "weeks": weeks, "center": [cx, cy],
+                                "speed_ref": v_ref, "grade_ref": g_ref, "median_cad": med_cad, "suggest": sug}}
+
+
 def _apply_action(ev: dict) -> dict:
     """The review card's 「套用這次的 CP」 button (viewer draw(): res.action)."""
     a = ev["apply"]
@@ -2735,4 +3119,5 @@ _SECTIONS = {"summary": _summary, "aerobic": _aerobic, "intervals": _intervals, 
              "interval_verdict": _iv_verdict, "interval_reps": _iv_reps, "interval_power": _iv_power,
              "interval_battery": _iv_battery, "interval_tiz": _iv_tiz, "interval_hr": _iv_hr,
              "durability": _durability, "form": _form, "grades": _grades, "pacing": _pacing,
-             "durability_curve": _durability_curve, "cp_test": _cp}
+             "durability_curve": _durability_curve, "cp_test": _cp,
+             "form_grades": _form_grades, "form_work": _form_work, "form_cadence": _form_cadence}
