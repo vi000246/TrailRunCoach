@@ -113,6 +113,15 @@ from backend.engine.panels import climb_vam as PANEL           # noqa: E402
 from backend.engine.wko5expr.dataset import date_to_day         # noqa: E402
 from backend.tests.wko5_fakes import FakeDataset, FakeWorkout   # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _author_beta(monkeypatch):
+    """These synthetic runs follow the author's fitted heat β 0.224 ± 0.036 bpm/Hadley
+    (engine/heat_calib.hr_beta; a new athlete starts from the 0.3 default)."""
+    from backend.engine import heat_calib as HC
+    monkeypatch.setattr(HC, "hr_beta", lambda: {"beta": 0.224, "se": 0.036, "n": 271, "source": "fitted",
+                                                "src": "熱 β 0.224 bpm／Hadley（測試：作者的擬合）"})
+
 TODAY = dt.date(2026, 9, 30)
 
 

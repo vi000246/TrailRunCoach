@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import date
 
+from backend.engine.localtime import today_local
 from backend.db.database import get_db
 from backend.db.models import Athlete, AthleteSettings, WorkoutFile, WorkoutMetric
 
@@ -122,7 +123,7 @@ class SettingsUpdate(BaseModel):
 
 @router.put("/{athlete_id}/settings")
 async def update_settings(athlete_id: int, body: SettingsUpdate, db: AsyncSession = Depends(get_db)):
-    eff_date = body.effective_date or date.today()
+    eff_date = body.effective_date or today_local()
     result = await db.execute(
         select(AthleteSettings).where(
             AthleteSettings.athlete_id == athlete_id,

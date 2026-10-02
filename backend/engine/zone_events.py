@@ -14,7 +14,7 @@ Detectors (numbers 推估 unless a source is named):
                 in Taiwan days < 25 °C are a minority of the year, and a
                 filter on them left the detector without runs most months.
                 Each run's median steady HR is moved to Hadley 120 with the
-                athlete's own β = 0.224 ± 0.036 bpm per Hadley unit (heat.HR_BETA,
+                athlete's own β (engine/heat_calib.hr_beta; the author's fit 0.224 ± 0.036 bpm per Hadley unit,
                 the heat back-test): HR' = HR − β·(Hadley − 120). Reference
                 line HR' = a + b·P over the steady runs of the 365 days before
                 the recent ones (≥ 8 runs); recent = the last 6–8 steady runs
@@ -124,7 +124,9 @@ POWER_RANGE_W = 10.0          # 推估: compare only within the reference runs' 
 # 2026-10-02): watch − air median +3.7 °C, SD 2.7 °C. A dataset with ≥ 10 pairs
 # of its own uses those instead. No literature source (heat-acclimation.md §2.4).
 WATCH_BIAS_C, WATCH_BIAS_SD_C, WATCH_PAIR_MIN = 3.7, 2.7, 10
-RH_DEFAULT, RH_SD = 83.0, 10.0  # median RH of the athlete's 608 archive activities; ±10 % 推估
+# RH when a season has too few archive days: the athlete's own median (engine/heat_calib
+# humidity_default, ≥ 20 activities; the author's 608 gave 83 %), else 60 % (推估); ±10 % 推估
+RH_DEFAULT, RH_SD = 60.0, 10.0
 CLIMATE_WIN_D, CLIMATE_MIN = 15, 5   # 推估 (heat_data.HOT_MONTH_WINDOW_D)
 BREAK_DAYS = 28               # ≥ 4 weeks (detraining.md; reentry 29–56 / long blocks)
 SPELL_DAYS = 3                # 推估: activity days in a row with a cool dawn
@@ -243,14 +245,24 @@ def watch_bias(pairs: list[tuple[float, float]]) -> dict:
     if len(pairs) >= WATCH_PAIR_MIN:
         d = [wt - air for air, wt in pairs]
         return {"bias_c": statistics.median(d), "sd_c": statistics.pstdev(d), "n": len(d), "src": "dataset"}
-    return {"bias_c": WATCH_BIAS_C, "sd_c": WATCH_BIAS_SD_C, "n": 72, "src": "route_efforts"}
+    # not enough pairs of the athlete's own: one runner's 72 pairs (推估, single user)
+    return {"bias_c": WATCH_BIAS_C, "sd_c": WATCH_BIAS_SD_C, "n": 72, "src": "default_single_user"}
+
+
+def rh_default() -> float:
+    """The RH to assume without a season of archive days (engine/heat_calib humidity_default)."""
+    try:
+        from backend.engine.heat_calib import current
+        return float(current("humidity_default")["value"])
+    except Exception:                       # noqa: BLE001
+        return RH_DEFAULT
 
 
 def heat_from_watch(t_watch: float, day: dt.date, acts: list[dict], bias: dict) -> dict:
     """Hadley from a watch temperature: minus the wrist bias, with the RH of the
     athlete's archive days of that season; σ_H from the bias SD and RH ±10 %."""
     rhs = _season_rows(acts, day, "rh_pct")
-    rh = statistics.median(rhs) if len(rhs) >= CLIMATE_MIN else RH_DEFAULT
+    rh = statistics.median(rhs) if len(rhs) >= CLIMATE_MIN else rh_default()
     t = t_watch - bias["bias_c"]
     h = HT.hadley_sum(t, rh)
     dh_t = HT.hadley_sum(t + bias["sd_c"], rh) - h
@@ -427,12 +439,17 @@ def heat_confidence(recent: list[dict]) -> str:
 CONF_ZH = {"high": "高", "medium": "中", "low": "低"}
 
 
-def hr_shift(points: list[dict], today: dt.date, beta: float = HT.HR_BETA, beta_se: float = HT.HR_BETA_SE) -> dict:
+def hr_shift(points: list[dict], today: dt.date, beta: Optional[float] = None,
+             beta_se: Optional[float] = None) -> dict:
     """The heat-adjusted HR-at-power shift (module doc): {"fired", "shift_bpm",
     "se_bpm", "threshold_bpm", "direction" (up / down), "n", "same_side",
     "need_same_side", "noise_bpm", "line", "recent", "heat", "seasonal",
     "reason"}. `points` are steady runs (steady_points), any order; a point
     without "hadley" is left out (no temperature of any kind)."""
+    from backend.engine.heat_calib import hr_beta
+    hb = hr_beta()
+    beta = hb["beta"] if beta is None else beta
+    beta_se = hb["se"] if beta_se is None else beta_se
     allp = sorted(points, key=lambda p: p["date"])
     pts = []
     for p in allp:
@@ -442,7 +459,7 @@ def hr_shift(points: list[dict], today: dt.date, beta: float = HT.HR_BETA, beta_
         pts.append({**p, "hadley": h, "sigma_h": _f(p.get("sigma_h")) or 0.0,
                     "hr_adj": HT.hr_heat_adjust(p["hr"], h, beta)})
     heat = {"adjusted": True, "beta": beta, "beta_se": beta_se, "ref_hadley": HT.HR_BETA_REF,
-            "source": HT.HR_BETA_SRC, "n_no_temp": len(allp) - len(pts), "confidence": None,
+            "source": hb["src"], "beta_source": hb["source"] if beta == hb["beta"] else "given", "n_no_temp": len(allp) - len(pts), "confidence": None,
             "recent_sources": {}, "base_sources": {}}
     out = {"fired": False, "shift_bpm": None, "se_bpm": None, "threshold_bpm": None, "direction": None, "n": 0,
            "same_side": 0, "need_same_side": None, "noise_bpm": None, "line": None, "recent": [], "heat": heat,
@@ -523,8 +540,8 @@ def heat_note(sh: dict) -> str:
     h = sh.get("heat") or {}
     srcs = "、".join(f"{SRC_LABEL.get(k, k)} {v} 次" for k, v in sorted((h.get("recent_sources") or {}).items(),
                                                                        key=lambda kv: -kv[1]))
-    return (f"已依熱指數校正（β {h.get('beta', HT.HR_BETA):.2f} ± {h.get('beta_se', HT.HR_BETA_SE):.2f} bpm/Hadley，"
-            f"本人回測；天氣：{srcs or '—'}；校正信心{CONF_ZH.get(h.get('confidence'), '—')}）")
+    return (f"已依熱指數校正（β {h.get('beta', 0.0):.2f} ± {h.get('beta_se', 0.0):.2f} bpm/Hadley，"
+            f"{'本人回測' if h.get('beta_source') == 'fitted' else '手動' if h.get('beta_source') == 'user' else '預設，推估'}；天氣：{srcs or '—'}；校正信心{CONF_ZH.get(h.get('confidence'), '—')}）")
 
 
 def day_weather(rows: list[dict], mornings: Optional[dict] = None) -> list[tuple[dt.date, float, Optional[float], str]]:
@@ -704,7 +721,7 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
                 + ("：可能累積疲勞或體能下降，先確認恢復再測" if up else "：體能可能進步了，CP／AeT 可能偏低"),
                 last, None, {k: sh[k] for k in ("shift_bpm", "se_bpm", "threshold_bpm", "n", "same_side",
                                                  "noise_bpm", "line", "recent", "heat", "seasonal")},
-                SRC + "；" + HT.HR_BETA_SRC))
+                SRC + "；" + (sh.get("heat") or {}).get("source", "")))
     # the first cool spell of the season (the dawn at home, not the run's hour)
     if mornings is None:
         mornings = {}

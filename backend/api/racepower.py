@@ -27,6 +27,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Literal, Optional
 
+from backend.engine.localtime import today_local
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -66,7 +67,7 @@ def inputs(refresh: bool = False) -> dict:
     """derive() for today, memoised per dataset / plan / day for 10 minutes."""
     from backend.engine.racepower.athlete import derive
     ds = _dataset()
-    today = dt.date.today()
+    today = today_local()
     key = (id(ds), today, _plan_stamp())
     with _lock:
         hit = _cache.get("inputs")
@@ -516,7 +517,7 @@ def _grade_models() -> dict:
     from backend.engine.achievements import KIND_HIKE, build_achievements
     from backend.engine.racepower import athlete as A
     ds = _dataset()
-    today = dt.date.today()
+    today = today_local()
     key = (id(ds), today)
     with _lock:
         hit = _cache.get("grade")
@@ -574,7 +575,7 @@ def heat_status_for(date: Optional[str]) -> dict:
         passive = HD.completed_passive_dates()
     except Exception:                       # noqa: BLE001
         passive = []
-    return HD.status(dt.date.today(), rd, passive_dates=passive)
+    return HD.status(today_local(), rd, passive_dates=passive)
 
 
 def _hrc_test() -> Optional[dict]:
@@ -584,7 +585,7 @@ def _hrc_test() -> Optional[dict]:
     from backend.engine import heat as HT
     from backend.engine import heat_data as HD
     from backend.engine.racepower import heatacc as HA
-    key = dt.date.today()
+    key = today_local()
     hit = _cache.get("hrc_test")
     if hit and hit[0] == key:
         return hit[1]
@@ -616,7 +617,7 @@ def _hike_rows() -> list[dict]:
     from backend.engine.racepower import athlete as A
     from backend.engine.racepower import capacity as CAP
     ds = _dataset()
-    today = dt.date.today()
+    today = today_local()
     gm = _grade_models()
     cap = gm.get("walk_capacity")
     meta = A.hike_meta()
@@ -807,7 +808,7 @@ def _trail_hr() -> Optional[dict]:
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import athlete as A
     AT.load()
-    key = (id(_dataset()), dt.date.today(), _plan_stamp(), AT._memo.get("stamp"))
+    key = (id(_dataset()), today_local(), _plan_stamp(), AT._memo.get("stamp"))
     hit = _cache.get("trail_hr")
     if hit and hit[0] == key:
         return hit[1]
@@ -913,7 +914,7 @@ def _body(inp: dict) -> Optional[dict]:
         f = next(athlete_dir().glob("*.wko5athlete"), None)
         if f is not None:
             plan = type("P", (), {"profile": {}})()
-            w = A.body_profile(type("D", (), {"plan": plan, "athlete": read_athlete(f)})(), dt.date.today())
+            w = A.body_profile(type("D", (), {"plan": plan, "athlete": read_athlete(f)})(), today_local())
             for k in ("height_cm", "sex", "age"):
                 if b.get(k) is None and w.get(k) is not None:
                     b[k], b[k + "_src"] = w[k], w[k + "_src"]
@@ -971,7 +972,7 @@ async def push_to_coros(db, payload: dict, day: Optional[str]) -> dict:
     hub = await CW.TrainingHub.from_db(db)
     pid = await hub.add_program(payload)
     out = {"program_id": pid, "scheduled": None}
-    if day and day[:10] >= dt.date.today().isoformat():
+    if day and day[:10] >= today_local().isoformat():
         detail = await hub.program_detail(pid)
         out["scheduled"] = await hub.schedule(detail, day[:10])
     return out

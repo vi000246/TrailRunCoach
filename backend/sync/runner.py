@@ -117,6 +117,13 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
             plan_auto.after_sync(source, result)
         except Exception as e:           # noqa: BLE001 — the sync result stands
             log.warning("auto plan trigger failed: %s", type(e).__name__)
+        # the athlete's time zone from the newest FIT (engine/localtime.py)
+        if int(result.get("downloaded") or 0) > 0:
+            try:
+                from backend.engine import localtime
+                await localtime.refresh_from_fits(db, athlete_id)
+            except Exception as e:       # noqa: BLE001
+                log.warning("time zone detection failed: %s", type(e).__name__)
         # 每人校正 (engine/calibrate.py): the same trigger re-fits the per-athlete
         # parameters in the background
         try:

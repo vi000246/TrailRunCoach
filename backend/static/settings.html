@@ -166,6 +166,10 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
           <option value="wko5">WKO5 資料夾（比對用）</option></select></label>
       </div>
       <div class="row"><label><input type="checkbox" id="s-second"> 自動同步時也同步另一個來源</label></div>
+      <div class="row"><label>時區 <input id="s-tz" placeholder="自動" style="width:160px" list="s-tz-list"></label>
+        <datalist id="s-tz-list"><option value="Asia/Taipei"><option value="Asia/Tokyo"><option value="Asia/Hong_Kong"><option value="Europe/London"><option value="Europe/Berlin"><option value="America/New_York"><option value="America/Los_Angeles"></datalist>
+        <label>地區 <select id="s-region"><option value="">自動</option><option value="tw">台灣</option><option value="intl">台灣以外</option></select></label>
+        <span class="meta" id="s-tz-eff"></span></div>
       <div class="row"><label>課表推送到 <select id="s-push"></select></label>
         <button type="button" class="q" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
@@ -279,14 +283,14 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     <p class="meta">單次活動的路線地圖一開始用的底圖和疊圖。在地圖右上角可以臨時切換，這台瀏覽器會記住；這裡的預設改了之後，會回到新的預設。</p>
     <div class="row">
       <label>預設底圖 <select id="m-base">
-        <option value="rudy">魯地圖</option><option value="google-terrain">Google 地形</option>
-        <option value="nlsc-emap">NLSC 電子地圖</option><option value="nlsc-photo">正射影像</option>
+        <option value="rudy" data-tw-only>魯地圖</option><option value="google-terrain">Google 地形</option>
+        <option value="nlsc-emap" data-tw-only>NLSC 電子地圖</option><option value="nlsc-photo" data-tw-only>正射影像</option>
         <option value="osm">OSM</option></select></label>
     </div>
     <div class="row">預設疊圖
-      <label><input type="checkbox" name="m-ovl" value="contour"> 等高線</label>
+      <label data-tw-only><input type="checkbox" name="m-ovl" value="contour"> 等高線</label>
       <label><input type="checkbox" name="m-ovl" value="google-roads"> Google 道路</label>
-      <label><input type="checkbox" name="m-ovl" value="nlsc-roads"> NLSC 道路</label>
+      <label data-tw-only><input type="checkbox" name="m-ovl" value="nlsc-roads"> NLSC 道路</label>
       <button class="primary" id="m-save">儲存地圖設定</button>
     </div>
     <p class="meta">魯地圖和等高線的主機有時不回應，地圖載不出來時換個底圖就好。</p>
@@ -493,6 +497,10 @@ async function loadSyncSettings() {
     ? (SS.primary_effective_label ? `目前用 ${SS.primary_effective_label}` : "還沒有同步資料") : "";
   $("s-chart").value = SS.chart_data_source || "synced";
   $("s-second").checked = !!SS.secondary_auto;
+  // 時區 / 地區: blank = automatic (engine/localtime.py, engine/region.py)
+  $("s-tz").value = SS.timezone || ""; $("s-region").value = SS.region_override || "";
+  const RL = { tw: "台灣", intl: "台灣以外" };
+  $("s-tz-eff").textContent = `目前：${SS.timezone_effective || "–"}、${RL[SS.region] || "–"}（${SS.region_how || "–"}）`;
   $("s-push").innerHTML = (SS.push_providers || [{ id: "coros", label: "COROS", enabled: true }])
     .map((p) => `<option value="${esc(p.id)}"${p.enabled ? "" : " disabled"}>${esc(p.label)}</option>`).join("");
   $("s-push").value = SS.push_provider || "coros";
@@ -548,6 +556,7 @@ $("s-save").onclick = async () => {
     auto_on_open: $("s-open").checked, auto_on_open_hours: Number($("s-open-h").value) || 6,
     primary_source: $("s-primary").value || "auto", chart_data_source: $("s-chart").value,
     secondary_auto: $("s-second").checked, push_provider: $("s-push").value || "coros",
+    timezone: $("s-tz").value.trim() || null, region_override: $("s-region").value || null,
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast("已儲存同步設定"); loadSyncSettings(); }

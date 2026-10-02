@@ -11,6 +11,15 @@ import pytest
 from backend.engine import zone_events as ZE
 from backend.engine.planning import Plan, Threshold
 
+
+@pytest.fixture(autouse=True)
+def _author_beta(monkeypatch):
+    """These synthetic runs follow the author's fitted heat β 0.224 ± 0.036 bpm/Hadley
+    (engine/heat_calib.hr_beta; a new athlete starts from the 0.3 default)."""
+    from backend.engine import heat_calib as HC
+    monkeypatch.setattr(HC, "hr_beta", lambda: {"beta": 0.224, "se": 0.036, "n": 271, "source": "fitted",
+                                                "src": "熱 β 0.224 bpm／Hadley（測試：作者的擬合）"})
+
 TODAY = dt.date(2026, 11, 20)
 
 
@@ -206,7 +215,7 @@ def test_run_heat_prefers_route_weather_then_watch_then_season():
     assert h[0]["src"] == "route_weather" and h[0]["hadley"] == 156.0 and h[0]["sigma_h"] == 0.0
     w = h[1]
     assert w["src"] == "watch" and w["temp_c"] == pytest.approx(33.7 - ZE.WATCH_BIAS_C, abs=0.05)
-    assert w["rh_pct"] == 80 and w["sigma_h"] > 5.0 and w["bias"]["src"] == "route_efforts"
+    assert w["rh_pct"] == 80 and w["sigma_h"] > 5.0 and w["bias"]["src"] == "default_single_user"
     from backend.engine.heat import hadley_sum
     assert w["hadley"] == pytest.approx(hadley_sum(30.0, 80.0), abs=0.2)
     assert h[2]["src"] == "season" and 149.0 <= h[2]["hadley"] <= 152.0 and h[2]["sigma_h"] > 2.0

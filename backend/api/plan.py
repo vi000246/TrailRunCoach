@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from backend.engine.localtime import today_local
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -64,6 +65,13 @@ def _wko5_settings() -> dict:
     return out
 
 
+def _kinds() -> dict:
+    """Event kind labels; outside Taiwan (engine/region.py) 百岳 reads 多日登山
+    (same stored kind, old data reads the same)."""
+    from backend.engine import region as RG
+    return P.KINDS if RG.is_tw() else {**P.KINDS, "baiyue": "多日登山"}
+
+
 def _notify(thresholds: bool) -> None:
     from backend.api.wko5views import plan_changed
     plan_changed(thresholds)
@@ -101,7 +109,7 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
 
 @router.get("")
 def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
-    today = dt.date.today()
+    today = today_local()
     plan = P.Plan.load()
     from backend.engine import event_gpx as EG
     gpx = EG.all_rows()
@@ -126,7 +134,7 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
         "effective_thresholds": (eff := _effective(plan, today)),
         "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"])},
         "wko5_settings": _wko5_settings(),
-        "phase_labels": P.PHASES, "kinds": P.KINDS,
+        "phase_labels": P.PHASES, "kinds": _kinds(),
         "rules": {"taper_days": P.TAPER_DAYS, "specific_weeks": P.SPECIFIC_WEEKS,
                   "mini_taper_days": P.MINI_TAPER_DAYS, "long_event_hours": P.LONG_EVENT_HOURS},
     }
@@ -156,7 +164,7 @@ def put_event(body: EventIn):
         raise HTTPException(400, str(e) if "背包" in str(e) else f"bad date: {e}")
     plan.save()
     _notify(False)
-    return {"event": P.event_json(ev, dt.date.today())}
+    return {"event": P.event_json(ev, today_local())}
 
 
 @router.delete("/events/{eid}")
@@ -334,7 +342,7 @@ def _wko5_profile() -> dict:
 @router.get("/profile")
 def get_profile():
     plan = P.Plan.load()
-    today = dt.date.today()
+    today = today_local()
     wk = _wko5_profile()
     eff_w = plan.weight_on(today)
     app_w = _app_weight()
@@ -470,7 +478,7 @@ def _estimate_dataset():
 def threshold_estimate():
     """Suggested LTHR / AeT from recent runs. Nothing is saved."""
     from backend.engine.thresholds import estimate
-    return estimate(_estimate_dataset(), dt.date.today())
+    return estimate(_estimate_dataset(), today_local())
 
 
 class ApplyEstimate(BaseModel):
@@ -493,7 +501,7 @@ def apply_estimate(body: ApplyEstimate):
     if body.lthr_method not in (None, *P.LTHR_METHODS) or body.aethr_method not in (None, *P.AETHR_METHODS):
         raise HTTPException(400, "unknown lthr_method / aethr_method")
     plan = P.Plan.load()
-    today = dt.date.today().isoformat()
+    today = today_local().isoformat()
     if body.date:
         try:
             d = dt.date.fromisoformat(body.date[:10]).isoformat()
@@ -537,7 +545,7 @@ def apply_cp(body: ApplyCP):
         d = P._d(body.date)
     except (TypeError, ValueError) as e:
         raise HTTPException(400, f"bad date: {e}")
-    if d is None or d > dt.date.today():
+    if d is None or d > today_local():
         raise HTTPException(400, "測試日期不能在未來")
     if body.cp_method not in CPP.METHOD_LABEL:
         raise HTTPException(400, f"cp_method must be one of {tuple(CPP.METHOD_LABEL)}")

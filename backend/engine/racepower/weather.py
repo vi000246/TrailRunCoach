@@ -41,7 +41,7 @@ OM_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 OM_HORIZON_DAYS = 16
 LAPSE_C_PER_M = -0.0065
 DAY_HOURS = range(6, 18)          # daytime 06:00–17:59 local
-TZ = dt.timezone(dt.timedelta(hours=8))
+TZ = dt.timezone(dt.timedelta(hours=8))    # CWA (Taiwan) timestamps; Open-Meteo answers in the location's zone ("auto")
 ATTRIBUTION = "Weather data by Open-Meteo.com (CC BY 4.0)"
 
 PROVIDER_LABEL = {"cwa_hourly": "中央氣象署 登山三天預報", "cwa_weekly": "中央氣象署 登山一週預報",
@@ -448,7 +448,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     cache_dir: Path = HOME, use_cwa: bool = True) -> dict:
     """Run the provider chain. Returns {provider, label, values|None, tried,
     location, fetched_at}."""
-    today = today or dt.datetime.now(TZ).date()
+    from backend.engine.localtime import today_local
+    today = today or today_local()
     lead = (date - today).days
     tried = []
     loc = {"name": name, "lat": lat, "lon": lon, "elevation_m": elevation_m}
@@ -510,7 +511,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
             q_end = end + dt.timedelta(days=1) if (end - today).days + 1 < OM_HORIZON_DAYS else end
             params = {"latitude": lat, "longitude": lon,
                       "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure",
-                      "timezone": "Asia/Taipei", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
+                      "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
             if elevation_m is not None:
                 params["elevation"] = elevation_m
             js = get(OM_FORECAST, params, 10.0)
@@ -536,7 +537,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
         window = {lo + dt.timedelta(days=i) for i in range((hi - lo).days + 1)}
         try:
             js = get(OM_ARCHIVE, {"latitude": lat, "longitude": lon, "start_date": lo.isoformat(),
-                                  "end_date": hi.isoformat(), "timezone": "Asia/Taipei",
+                                  "end_date": hi.isoformat(), "timezone": "auto",
                                   "hourly": "temperature_2m,relative_humidity_2m"}, 10.0)
             years.append(parse_open_meteo(js, window))
         except Exception as e:               # noqa: BLE001
@@ -579,6 +580,6 @@ def fetch_activities_conditions(lat: float, lon: float, windows, get: Callable =
     lo = min(a for a, _ in windows).date()
     hi = max(b for _, b in windows).date()
     js = get(OM_ARCHIVE, {"latitude": lat, "longitude": lon, "start_date": lo.isoformat(),
-                          "end_date": hi.isoformat(), "timezone": "Asia/Taipei",
+                          "end_date": hi.isoformat(), "timezone": "auto",
                           "hourly": "temperature_2m,relative_humidity_2m"}, 15.0)
     return activities_conditions(js, windows)

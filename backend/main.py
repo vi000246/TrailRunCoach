@@ -23,6 +23,7 @@ from backend.api import routes as routes_api
 from backend.api import injuries as injuries_api
 from backend.api import backup as backup_api
 from backend.api import calib as calib_api
+from backend.api import region as region_api
 
 
 async def _ensure_athlete() -> None:
@@ -115,6 +116,7 @@ app.include_router(routes_api.workout_router)
 app.include_router(injuries_api.router)          # 傷病紀錄 (404 in the demo mode)
 app.include_router(backup_api.router)            # 備份 (settings page)
 app.include_router(calib_api.router)             # 每人校正 (settings page, 進階設定)
+app.include_router(region_api.router)            # 地區 tw | intl (static/region.js)
 
 
 
