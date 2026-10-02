@@ -225,6 +225,9 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
         kw["target_basis"] = "hr"
     if lenient and kw.get("target_basis") not in (None, "auto", "hr", "power"):
         kw["target_basis"] = "auto"
+    # 長跑地形「登山」 is gone (hiking is not a workout): a stored one reads as 越野跑 (trail)
+    if kw.get("terrain_long") == "hike":
+        kw["terrain_long"] = "trail"
     return Prefs(**kw)
 
 
@@ -351,7 +354,7 @@ class Ctx:
 
 
 def _terrain_long(s: dict, p: Prefs, c: Ctx) -> None:
-    t = p.terrain_long
+    t = "trail" if p.terrain_long == "hike" else p.terrain_long      # the old 登山 = 越野跑
     if t == "auto":
         return
     aet_txt = f" {c.aet:.0f} bpm" if c.aet else ""
@@ -359,15 +362,10 @@ def _terrain_long(s: dict, p: Prefs, c: Ctx) -> None:
     if t == "road":
         s["title"] = "長時間輕鬆（路跑）"
         s["detail"] = f"平路或緩坡；全程心率壓在 AeT{aet_txt} 以下"
-    elif t == "trail":
+    else:
         s["title"] = "長時間輕鬆（山路越野）"
         s["target"] = easy_hr_text(c.aet)
         s["detail"] = f"山路越野，陡坡用走的；只看心率（≤ AeT{aet_txt}），山路的配速和功率不準"
-    else:
-        s["kind"] = "hike"
-        s["title"] = "登山健行（長時間）"
-        s["target"] = easy_hr_text(c.aet)
-        s["detail"] = f"以時間為主：走滿 {s['minutes']} 分鐘，不看配速；上坡慢慢走，心率 ≤ AeT{aet_txt}"
 
 
 def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) -> dict:
@@ -525,8 +523,6 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
         _terrain_long(long_s, p, c)
         cat = {"trail": "trail", "hike": "hike", "road": "road"}.get(long_s.get("terrain"))
         long_s["tss"] = long_s["minutes"] / 60.0 * (c.rate(cat) if cat else long_rate)
-        if long_s["kind"] == "hike":
-            long_s["detail"] = re.sub(r"走滿 \d+ 分鐘", f"走滿 {long_s['minutes']} 分鐘", long_s["detail"])
     return ([long_s] if long_s is not None else []) + hard + rest + strength + easies
 
 
