@@ -37,6 +37,11 @@ the WKO5 athlete folder.
   developer fields / a Stryd device_info row), watch (power without them) or
   none, from the parsed FIT; watch power scores no power TSS unless
   power.accept_watch_power (Dataset._apply_power_policy).
+* source "synced" (merge=("coros", "tp")): both folders, one file per
+  activity — the 主要資料來源's (backend/sync/primary.py; 自動 = the source
+  with the most recent complete data) when both have it (starts within 2 min),
+  the other only for activities the primary lacks; entry.file is
+  "<folder>/<rel>", file_origin(w) says which. No per-value back-fill.
 * the app DB is opened read-only (a sync may be writing it).
 * parity mode / own-formula config flags behave as for the WKO5 Dataset.
 """
@@ -463,12 +468,24 @@ class FitFolderDataset(Dataset):
                  corrections: Optional[CorrectionStore] = None, source: str = "fit",
                  tz: Optional[dt.tzinfo] = None, classifications: Optional[dict] = None,
                  athlete_settings: Optional[list] = None, estimate_thresholds: Optional[bool] = None,
-                 accept_watch_power: Optional[bool] = None, exclude_bad: Optional[bool] = None):
+                 accept_watch_power: Optional[bool] = None, exclude_bad: Optional[bool] = None,
+                 merge: Optional[tuple] = None, primary: Optional[str] = None,
+                 primary_status: Optional[dict] = None):
+        """merge = sub-folders of `fit_dir` to merge (("coros", "tp"): the
+        "synced" source): one file per activity, the primary source's when
+        both have it (sync/primary.py merge), the other only for activities
+        the primary lacks. primary = "auto" | "coros" | "trainingpeaks" (or
+        the folder name "tp"); None = the 主要資料來源 setting.
+        primary_status = {db source: last sync status} for 自動 (None = the
+        settings store)."""
         from backend.engine.planning import Plan
         from backend.engine.wko5expr import buildstate, fitcache
         from backend.engine.wko5expr.datasource import athlete_tz
         self.dir = Path(fit_dir)
         self.source = source
+        self.merge = tuple(merge) if merge else None
+        self._origin: dict[int, str] = {}           # workout idx -> folder (coros / tp) it was read from
+        self.merge_info: Optional[dict] = None
         # same zone as the sync's local workout dates: athlete.timezone setting
         # -> WKO5COACH_TZ -> system
         self.tz = tz or athlete_tz()
@@ -506,10 +523,18 @@ class FitFolderDataset(Dataset):
         # pool when there are many. Channels are loaded lazily (LazyFiles).
         prog = buildstate.get(source)
         prog.phase("scan")
-        self._store = fitcache.FitStore(self.dir)
+        if self.merge:
+            self._store = fitcache.MultiFitStore(self.dir, self.merge)
+            paths = []
+            for f in self.merge:
+                sub = self.dir / f
+                paths += [p for p in sorted(list(sub.rglob("*.fit")) + list(sub.rglob("*.fit.gz")))
+                          if not p.is_symlink()]
+        else:
+            self._store = fitcache.FitStore(self.dir)
+            paths = [p for p in sorted(list(self.dir.rglob("*.fit")) + list(self.dir.rglob("*.fit.gz")))
+                     if not p.is_symlink()]
         self._files = fitcache.LazyFiles(self._store)
-        paths = [p for p in sorted(list(self.dir.rglob("*.fit")) + list(self.dir.rglob("*.fit.gz")))
-                 if not p.is_symlink()]
         self._store.ensure(paths, progress=prog)
         entries = []
         for p in paths:
@@ -524,8 +549,12 @@ class FitFolderDataset(Dataset):
             # FIT times are UTC; WKO5 dates are the athlete's local wall clock
             if start.tzinfo is None:
                 start = start.replace(tzinfo=dt.timezone.utc)
+            utc = start
             start = start.astimezone(self.tz).replace(tzinfo=None)
-            entries.append((start, p, meta))
+            entries.append((start, p, meta, utc))
+        if self.merge:
+            entries = self._merge_entries(entries, primary, primary_status)
+        entries = [(s, p, m) for s, p, m, _ in entries]
         entries.sort(key=lambda x: x[0])
         # trail / road from the app DB (workout_files.trail_classification,
         # user overrides included), the FIT sub_sport only as a fallback
@@ -554,6 +583,8 @@ class FitFolderDataset(Dataset):
                 continue
             self._files.add(idx, p, rel, stype, start.isoformat())
             self.workouts.append(w)
+            if self.merge:
+                self._origin[idx] = rel.split("/", 1)[0]
             # stryd / watch / none (power_source.py)
             self._power_src[idx] = self._store.power(rel, lambda rel=rel, m=meta: self._classify_power(rel, m))
             if not self.accept_watch_power and self._power_src[idx] == "watch":
@@ -585,6 +616,47 @@ class FitFolderDataset(Dataset):
     # FIT data: channels come from the parsed files, not .wko4
     def wko4(self, idx: int) -> Optional[Wko4File]:
         return self._files.get(idx)
+
+    # ---- the merged "synced" source (backend/sync/primary.py) ---------------
+    def _merge_entries(self, entries: list, primary: Optional[str], status: Optional[dict]) -> list:
+        """One readable file per activity: the primary's when both folders
+        have one starting within 2 min (sync/dedup.py's window), the other
+        folder's only for activities the primary lacks; two files of one
+        activity in the same folder keep the one with more samples. Nothing per value:
+        a primary file without power, or one excluded as a bad file, is never
+        replaced by the other source's (「算不出來就不要補了」). 自動 = the folder
+        with the most recent complete data (primary.choose_auto)."""
+        from backend.sync import primary as P
+        if primary is None or status is None:
+            from backend.engine.wko5expr.datasource import primary_info
+            setting, st = primary_info()
+            primary = setting if primary is None else primary
+            status = st if status is None else status
+        setting = P.normalize(P.to_db(primary))
+        by_src: dict[str, list] = {}
+        for s, p, m, utc in entries:
+            by_src.setdefault(P.to_db(p.relative_to(self.dir).parts[0]), []).append(utc)
+        stats = {s: P.stats_from_starts(v, (status or {}).get(s)) for s, v in by_src.items()}
+        chosen = P.resolve(setting, stats)
+        items = [(utc, P.to_db(p.relative_to(self.dir).parts[0]), (s, p, m, utc)) for s, p, m, utc in entries]
+        # several files of one activity in the same source: the most samples, then the longest
+        kept, dropped = P.merge(items, chosen, quality=lambda x: (x[2].get("n") or 0, x[2].get("duration") or 0))
+        counts = {}
+        for _, src, _ in kept:
+            counts[src] = counts.get(src, 0) + 1
+        self.merge_info = {"setting": setting, "primary": chosen, "auto": setting == P.AUTO,
+                           "kept": counts, "replaced": sum(1 for _, s, _ in dropped if s != chosen),
+                           "duplicates": sum(1 for _, s, _ in dropped if s == chosen),
+                           "stats": {s: {**v, "latest": v["latest"].isoformat() if v["latest"] else None}
+                                     for s, v in stats.items()}}
+        return [x for _, _, x in kept]
+
+    def file_origin(self, w: Workout) -> Optional[str]:
+        """Which synced source this workout's file came from: "coros" / "tp"
+        (the folder), for a single-folder dataset its source."""
+        if self.merge:
+            return self._origin.get(w.idx)
+        return self.source if self.source in ("coros", "tp") else None
 
     # ---- per-file results, from the persistent cache (fitcache.py) ---------
     def _arrays(self, rel: str):
@@ -1002,11 +1074,15 @@ def dataset_for_source(source: str, wko5_dir: Path, config: Optional[EngineConfi
     TP source takes its thresholds / weight from the app (plan, DB,
     estimates); the WKO5 athlete file only when the user opted in
     (setting charts.fit_settings_from_wko5 = true) — WKO5 is a cross-check
-    reference, not the default data path."""
-    if source in ("coros", "tp"):
+    reference, not the default data path. "synced" = both synced folders,
+    the 主要資料來源's file per activity (FitFolderDataset merge)."""
+    if source in ("synced", "coros", "tp"):
         from backend.sync import storage
         from backend.engine.wko5expr.datasource import read_setting
         use_wko5 = read_setting(WKO5_OPT_IN_KEY, False) is True
+        if source == "synced":
+            return FitFolderDataset(storage.FIT_ROOT, settings_dir=wko5_dir if use_wko5 else None,
+                                    config=config, today=today, source=source, merge=tuple(storage.SOURCES))
         return FitFolderDataset(storage.source_dir(source), settings_dir=wko5_dir if use_wko5 else None,
                                 config=config, today=today, source=source)
     return Dataset(wko5_dir, today=today, config=config)

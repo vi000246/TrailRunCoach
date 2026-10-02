@@ -129,15 +129,23 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <input type="number" id="s-open-h" min="1" max="168" step="1" style="width:64px"> <label>小時</label>
     </div>
     <div class="row">
-      <label>同一筆活動兩邊都有時以 <select id="s-primary"><option value="">先匯入的</option><option value="coros">COROS</option>
-        <option value="trainingpeaks">TrainingPeaks</option></select> 為準</label>
-      <label>圖表資料來源 <select id="s-chart"><option value="wko5">WKO5 資料夾（預設）</option><option value="coros">COROS</option>
-        <option value="tp">TrainingPeaks</option></select></label>
+      <label>主要資料來源 <select id="s-primary"><option value="auto">自動</option><option value="coros">COROS</option>
+        <option value="trainingpeaks">TrainingPeaks</option></select></label>
+      <button type="button" class="q" aria-label="說明" title="同一筆活動 COROS 和 TrainingPeaks 都有時，用這個來源的檔案；另一個來源只補主要來源沒有的活動。主要來源算不出來的數字（例如那筆沒有功率）不會拿另一個來源補。自動＝最近資料最新、上次同步完整的那個來源。開網站和每日的自動同步只同步主要來源；另一個來源還是可以按「立即同步」。">?</button>
+      <span class="meta" id="s-primary-eff"></span>
       <button class="primary" id="s-save">儲存同步設定</button>
     </div>
-    <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
-      （圖表頁右上角的「資料來源」也可以直接切換）。COROS / TrainingPeaks 第一次載入要讀完所有 FIT 檔，會比較久。
-      想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
+    <details style="margin:4px 0 8px"><summary class="meta">進階設定</summary>
+      <div class="row">
+        <label>圖表資料來源 <select id="s-chart"><option value="synced">同步資料（主要來源優先，預設）</option>
+          <option value="coros">只用 COROS</option><option value="tp">只用 TrainingPeaks</option>
+          <option value="wko5">WKO5 資料夾（比對用）</option></select></label>
+      </div>
+      <div class="row"><label><input type="checkbox" id="s-second"> 自動同步時也同步另一個來源</label></div>
+      <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
+        （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
+        想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
+    </details>
     <div class="row" hidden>
     </div>
 
@@ -413,8 +421,11 @@ async function loadSyncSettings() {
   $("s-daily-on").checked = !!SS.daily_sync_time;
   $("s-open").checked = !!SS.auto_on_open;
   $("s-open-h").value = SS.auto_on_open_hours ?? 6;
-  $("s-primary").value = SS.primary_source || "";
-  $("s-chart").value = SS.chart_data_source || "wko5";
+  $("s-primary").value = SS.primary_source || "auto";
+  $("s-primary-eff").textContent = SS.primary_source === "auto"
+    ? (SS.primary_effective_label ? `目前用 ${SS.primary_effective_label}` : "還沒有同步資料") : "";
+  $("s-chart").value = SS.chart_data_source || "synced";
+  $("s-second").checked = !!SS.secondary_auto;
   $("m-base").value = SS.map_basemap || "rudy";
   $("u-power").checked = SS.use_power !== false;
   $("u-power-note").textContent = SS.use_power === false ? "已關閉：只顯示心率／配速的圖" : "";
@@ -460,7 +471,8 @@ $("s-save").onclick = async () => {
   const body = {
     daily_sync_time: $("s-daily-on").checked ? $("s-daily").value : null,
     auto_on_open: $("s-open").checked, auto_on_open_hours: Number($("s-open-h").value) || 6,
-    primary_source: $("s-primary").value || null, chart_data_source: $("s-chart").value,
+    primary_source: $("s-primary").value || "auto", chart_data_source: $("s-chart").value,
+    secondary_auto: $("s-second").checked,
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast("已儲存同步設定"); loadSyncSettings(); }

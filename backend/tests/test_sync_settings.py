@@ -16,7 +16,7 @@ def test_repository_defaults_validation_and_unknown_keys(tmp_path):
     async def go():
         s = await make_session(tmp_path)
         repo = SettingsRepository(s, 1)
-        assert await repo.get("sync.primary_source") is None
+        assert await repo.get("sync.primary_source") == "auto"
         assert await repo.get("sync.coros.enabled") is True
         with pytest.raises(ValueError):
             await repo.set("sync.primary_source", "garmin")

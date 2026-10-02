@@ -6,8 +6,10 @@ folder. Rows whose start times are within `WINDOW` of each other are one
 activity; exactly one of them is canonical and the others get
 `duplicate_of = <canonical id>`, which the PMC / analytics queries skip.
 
-Canonical choice: the row from the user's primary source
-(`sync.primary_source`), else the earliest imported (lowest id). Stubs of
+Canonical choice: the row from the primary source (`sync.primary_source`,
+自動 = sync/primary.py choose_auto), else the earliest imported (lowest id).
+With 自動 the pick can change after a sync, so runner.stream rebuilds the
+groups at the end of a run that downloaded something. Stubs of
 corrupt files never count as canonical while a readable row exists.
 """
 from __future__ import annotations
@@ -39,8 +41,10 @@ def choose_canonical(rows: Sequence, primary: Optional[str]):
 
 
 async def _primary(db: AsyncSession, user_id: int) -> Optional[str]:
-    from backend.settings.repository import SettingsRepository
-    return await SettingsRepository(db, user_id).get("sync.primary_source")
+    """The primary source in effect (sync/primary.py: the setting, or 自動's
+    pick — the source with the most recent complete data)."""
+    from backend.sync import primary as P
+    return (await P.resolve_db(db, user_id))["source"]
 
 
 async def resolve(db: AsyncSession, wf: WorkoutFile, primary: Optional[str] = None,
