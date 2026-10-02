@@ -36,16 +36,28 @@ SIMPLE_FORMULAS: dict[str, tuple[float, Optional[float]]] = {
     "scarf": (126.0, None),          # Scarf's equivalence — best fit to our data
     "itra": (100.0, None),           # ITRA km-effort, used by 健行筆記
     "swiss_lk": (100.0, 150.0),      # Swiss Leistungskilometer
-    "fitted_run": (153.0, None),     # least squares on this athlete's runs
+    "fitted_run": (153.0, None),     # the author's fit; in use: divisor_of() -> engine/terrain_calib (per athlete)
     "fitted_hike": (111.0, None),    # ... and hikes
 }
+
+
+def divisor_of(formula: str) -> float:
+    """Metres of ascent per effort km: the table's, except fitted_run = the
+    athlete's own (engine/terrain_calib.divisor, ITRA 100 until fitted)."""
+    if formula == "fitted_run":
+        try:
+            from backend.engine.terrain_calib import divisor
+            return divisor()
+        except Exception:                   # noqa: BLE001
+            pass
+    return SIMPLE_FORMULAS[formula][0]
 
 
 def effort_distance(distance_km: float, gain_m: float, loss_m: float = 0.0,
                     formula: str = "scarf") -> float:
     """Summary-level effort distance in km. Use when there is no elevation
     stream; prefer `equivalent_flat_distance` when there is."""
-    up, down = SIMPLE_FORMULAS[formula]
+    up, down = divisor_of(formula), SIMPLE_FORMULAS[formula][1]
     efd = distance_km + gain_m / up
     if down:
         efd += loss_m / down

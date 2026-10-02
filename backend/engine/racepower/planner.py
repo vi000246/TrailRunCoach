@@ -340,7 +340,7 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
     from backend.engine.racepower import trailhr as TH
     if not model or not (model.get("a") or model.get("c")) or not km:
         return None
-    e = km + (gain_m or 0.0) / TH.TRAILHR["divisor"]
+    e = km + (gain_m or 0.0) / TH.effort_divisor()
     sh = TH.heat_shift(hadley, lthr)
     xs = model.get("xstar")
     if xs:

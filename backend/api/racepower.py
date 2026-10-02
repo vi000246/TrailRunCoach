@@ -254,7 +254,8 @@ def predict(body: PredictIn):
     # effort distance & RE
     trail = body.type == "trail"
     fx = body.effort_formula if body.effort_formula in SIMPLE_FORMULAS else "fitted_run"
-    divisor = SIMPLE_FORMULAS[fx][0] if trail else None
+    from backend.engine.algorithms.effort import divisor_of
+    divisor = divisor_of(fx) if trail else None
     d_eff_km = RE.effort_km(body.distance_km, body.gain_m, divisor) if trail else body.distance_km
     race_cvi = RE.cvi(body.gain_m, body.distance_km)
     if body.re:
