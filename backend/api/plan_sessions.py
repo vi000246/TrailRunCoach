@@ -253,6 +253,9 @@ def _view(s: dict, inp: dict, rows: dict, today: str, prov=None) -> dict:
     v = dict(s)
     if s["state"] == "active":
         v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
+        note = pace_note(s, inp["thresholds"])
+        if note:
+            v["coros"] = {**v["coros"], "pace_note": note, "tpace_link": tpace_link()}
     elif s["uid"] in rows:
         v["coros"] = {"status": "pushed_" + s["state"], **prov.row_view(rows[s["uid"]])}
     return v
@@ -867,6 +870,40 @@ def _tpace() -> Optional[float]:
         return None
 
 
+TPACE_CHART = "friel-pace-zones"           # views/periodization.json: Friel pace zones (shows the estimate)
+
+
+@functools.lru_cache(maxsize=1)
+def tpace_link() -> Optional[str]:
+    """The viewer deep link to where threshold pace is estimated and shown (the Friel
+    pace-zone chart, enlarged); None when the view isn't there."""
+    import json
+    from pathlib import Path
+    from urllib.parse import urlencode
+    try:
+        p = Path(__file__).resolve().parents[2] / "views" / "periodization.json"
+        v = json.loads(p.read_text("utf-8"))
+        for di, d in enumerate(v.get("dashboards") or []):
+            for ci, c in enumerate(d.get("charts") or []):
+                if c.get("id") == TPACE_CHART:
+                    return "/api/v1/static/wko5_viewer.html?" + urlencode({"view": v["name"], "dash": di, "chart": ci})
+    except (OSError, ValueError, KeyError):
+        pass
+    return None
+
+
+def pace_note(s: dict, thresholds: Optional[dict]) -> Optional[str]:
+    """The push preview's note for a session whose stored steps have % / zone pace targets
+    while there is no threshold pace (those steps reach the watch with no pace target)."""
+    from backend.engine import workout_steps as WS
+    if (thresholds or {}).get("tpace") or not s.get("steps"):
+        return None
+    try:
+        return WS.no_tpace_text() if WS.needs_tpace(WS.normalize(s["steps"])) else None
+    except WS.StepsError:
+        return None
+
+
 def _session_of(body: dict, stored: Optional[dict]) -> dict:
     s = dict(stored or {})
     for k in STEP_FIELDS:
@@ -905,6 +942,7 @@ def _context(env: dict) -> dict:
     from backend.engine import workout_steps as WS
     th, pol = env["th"], env["policy"]
     return {"thresholds": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source")},
+            "tpace_link": tpace_link(),
             "zones": WS.zones_table(env["ctx"]), "policy": pol,
             "basis_label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）",
             "cap": env["cap"], "cap_mode": env["cap_mode"], "rung": env["rung"],
@@ -1180,6 +1218,10 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
             "count": len(pushable), "to_send": len(will), "unchanged": len(pushable) - len(will),
             "skipped": [s for s in todo if s["coros"]["status"] == "skipped"],
             "missed_to_remove": len(missed), "blackout_to_remove": len(on_bl),
+            # sessions whose % / zone pace steps go out with no pace target (no threshold pace)
+            "pace_notes": [{"uid": s["uid"], "title": s.get("title"), "day": s.get("day"), "text": s["coros"]["pace_note"]}
+                           for s in pushable if s["coros"].get("pace_note")],
+            "tpace_link": tpace_link(),
             "changes": changes, "by_day": R.by_day(changes)}
 
 
