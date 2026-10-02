@@ -19,11 +19,6 @@ Metrics and sources
 * Load ratio = ATL / CTL (7- and 42-day exponentially weighted loads). Bands
   0.8 / 1.3 / 1.5 are Runalyze's A:C ratio bands, which cite Gabbett 2016 (BJSM
   50:273) — Gabbett's ratio is rolling means 7:28, so the bands are borrowed.
-* Monotony = mean / SD of the last 7 daily loads (rest days = 0); Strain =
-  7-day load x monotony. Foster 1998, MSSE 30:1164 ("monotony (daily
-  mean/standard deviation), strain (load x monotony)"). SD is the population SD
-  (divide by 7): Foster does not say; Runalyze's newer monotony floor of 0.29
-  = 1/(1+sqrt(6)) is only reached with the population SD.
 * Polarization Index. Treff et al. 2019, Front Physiol 10:707, Eq. 1
   log10(Z1/Z2 x Z3 x 100) with zone shares as fractions; Eq. 2 when Z2 = 0:
   log10(Z1/0.01 x (Z3 - 0.01) x 100); Z3 = 0 -> 0; Z3 > Z1 -> not valid.
@@ -84,20 +79,6 @@ def form_zone(f: float) -> str:
         if f < hi:
             return name
     return "transition"
-
-
-# ---- Foster monotony / strain ---------------------------------------------------
-def monotony_strain(loads7: Sequence[float]) -> tuple[Optional[float], float]:
-    """(monotony, strain) of seven daily loads (rest day = 0). Monotony is
-    None when the SD is 0 (every day the same)."""
-    x = np.asarray(loads7, dtype=float)
-    if len(x) != 7:
-        raise ValueError("Foster monotony is over 7 days")
-    mean, sd = float(x.mean()), float(x.std())      # population SD
-    if sd <= 1e-12:
-        return None, float("nan")
-    m = mean / sd
-    return m, float(x.sum()) * m
 
 
 # ---- Treff Polarization Index ----------------------------------------------------

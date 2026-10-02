@@ -9,7 +9,8 @@
  */
 (function () {
   "use strict";
-  const LABEL = { wko5: "WKO5 資料夾", coros: "COROS", tp: "TrainingPeaks" };
+  // synced = both synced folders, the 主要資料來源's file per activity (設定 → 資料同步)
+  const LABEL = { synced: "同步資料", coros: "只用 COROS", tp: "只用 TrainingPeaks", wko5: "WKO5 資料夾" };
 
   async function mount() {
     let host = document.getElementById("source-chip");
@@ -18,8 +19,8 @@
       host.id = "source-chip";
       (document.querySelector("header") || document.body).appendChild(host);
     }
-    let cur = "wko5";
-    try { cur = (await (await fetch("/api/v1/sync/settings")).json()).chart_data_source || "wko5"; } catch (_) {}
+    let cur = "synced";
+    try { cur = (await (await fetch("/api/v1/sync/settings")).json()).chart_data_source || "synced"; } catch (_) {}
     host.innerHTML = "";
     const lab = document.createElement("label");
     lab.style.cssText = "display:inline-flex;gap:6px;align-items:center;font-size:12.5px;padding:2px 8px;"

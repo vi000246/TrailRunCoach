@@ -173,10 +173,12 @@ def reconcile_with_adapt(stored: list[dict], inputs: dict, decisions: Optional[d
             "today": inputs["today"], "first_free": ctx.get("first_free"), "blocked": blocked,
             "allowed_days": days, "thresholds": inputs.get("thresholds") or {}, "mode": cur.get("mode"),
             "load": {"tsb": ctx.get("tsb", load.get("tsb_today")), "ramp": ctx.get("ramp")},
-            "reviews": ctx.get("reviews") or {}, "b2b": cur.get("b2b")})
+            "reviews": ctx.get("reviews") or {}, "b2b": cur.get("b2b"),
+            "hard_days": ctx.get("hard_days") or []})     # done hard days, planned or not (48 h)
     new, changes = R.reconcile(stored, gw, inputs.get("activities") or [],
                                inputs["today"], inputs.get("horizon_end"), covered=inputs.get("covered"),
-                               blocked=blocked, allowed_days=days, decisions=decisions)
+                               blocked=blocked, allowed_days=days, decisions=decisions,
+                               unlinked=set(inputs.get("unlinked") or ()))
     if ctx and ctx.get("enabled", True):
         A.apply_notes(new, notes)
         A.annotate(changes, adj, new, stored)
@@ -374,6 +376,84 @@ async def delete(db: AsyncSession, uid: str, athlete_id: int = 1) -> dict:
         d["state"] = "removed"
     await db.commit()
     return d
+
+
+# ---------------------------------------------------------------------------
+# planned session <-> activity (engine/plan_match.py)
+# ---------------------------------------------------------------------------
+
+UNLINKED_KEY = "plan.match.unlinked"
+
+
+def unlinked_indexes(entries: list, activities: list[dict]) -> set:
+    """The stored unlinks ([{start, index}]) as current activity indexes (by start,
+    so a late-synced older activity that shifts the indexes keeps them right)."""
+    by_start = {a.get("start"): a.get("index") for a in activities if a.get("start")}
+    out = set()
+    for e in entries or []:
+        i = by_start.get(e.get("start"))
+        if i is not None:
+            out.add(i)
+    return out
+
+
+def match_only(stored: list[dict], inputs: dict) -> tuple[list[dict], list[dict]]:
+    """The done part of reconcile (plan_match.assign) without regenerating or
+    marking anything missed: the page shows a run on its planned session as
+    soon as it is synced, also while a 課表待確認 proposal waits. Pure."""
+    import copy
+    from backend.engine import plan_match as PM
+    out = [copy.deepcopy(s) for s in stored]
+    gen_done = {(w["start"], g["id"]): g for w in gen_weeks(inputs) for g in w["sessions"] if g.get("done")} \
+        if inputs.get("cur") else {}
+    changes = PM.assign(out, inputs.get("activities") or [], inputs["today"], gen_done,
+                        set(inputs.get("unlinked") or ()), covered="0000-00-00")   # nothing becomes missed
+    return out, [c for c in changes if c["action"] in ("done", "unmatched")]
+
+
+def _used_by(ss: list[dict], index, but: Optional[str] = None) -> Optional[dict]:
+    return next((s for s in ss if s["uid"] != but and s["state"] == "done" and isinstance(s.get("done_by"), dict)
+                 and s["done_by"].get("index") == index), None)
+
+
+async def link(db: AsyncSession, uid: str, activity: dict, today: str, athlete_id: int = 1) -> dict:
+    """The user's own pairing: `uid` was done by `activity` (an activity_row). The
+    session moves to the activity's day (same week only); a session already done
+    by another activity is re-linked."""
+    rows = await _rows(db, athlete_id)
+    r = rows.get(uid)
+    if r is None or r.state not in ("active", "missed", "done"):
+        raise PlanError("找不到這堂課")
+    d = to_dict(r)
+    if d["kind"] in ("notice", "heat_passive"):
+        raise PlanError("這種課不用配對活動")
+    day = activity.get("date")
+    if not day or day > today:
+        raise PlanError("活動日期不對")
+    if R.monday_of(day) != d["week_start"]:
+        raise PlanError("只能配對同一週的活動")
+    other = _used_by([to_dict(x) for x in rows.values()], activity.get("index"), but=uid)
+    if other is not None:
+        raise PlanError(f"這筆活動已經配給「{other['title']}」，先取消那邊的配對")
+    d.update(state="done", day=day, done_by={**activity, "match": "manual"})
+    _fill(r, d)
+    await db.commit()
+    return d
+
+
+async def unlink(db: AsyncSession, uid: str, today: str, athlete_id: int = 1) -> tuple[dict, Optional[dict]]:
+    """Undo a match: the session is open again (missed on a past day) and the
+    activity is not auto-matched again. Returns (session, the activity it had)."""
+    rows = await _rows(db, athlete_id)
+    r = rows.get(uid)
+    if r is None or r.state != "done":
+        raise PlanError("這堂課沒有配對的活動")
+    d = to_dict(r)
+    a = d.get("done_by") if isinstance(d.get("done_by"), dict) else None
+    d.update(state="missed" if (d.get("day") or today) < today else "active", done_by=None)
+    _fill(r, d)
+    await db.commit()
+    return d, a
 
 
 def session_tss(s: dict) -> float:

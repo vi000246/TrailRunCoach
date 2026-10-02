@@ -139,6 +139,14 @@ def _chart(raw: dict, where: str) -> dict:
         out["basis"] = {"default": bs["default"], "choices": list(choices)}
         if bs.get("power_note"):
             out["basis"]["power_note"] = str(bs["power_note"])
+    if raw.get("zoned") is not None:
+        # banded chart (負荷比, Form%): {"line": "<series name>"} — the viewer colours that line by the
+        # band ({lo:hi} series) it is in, draws the band edges and labels the latest value with its band
+        z = raw["zoned"]
+        names = {s["name"] for s in out["series"]}
+        if not isinstance(z, dict) or z.get("line") not in names:
+            raise CustomViewError(f"{where}/{raw['title']}: zoned needs a line that is one of the series")
+        out["zoned"] = {"line": z["line"]}
     for s in [s for v in out.get("variants", []) for s in v["series"]] or out["series"]:
         if s["basis"] is not None and s["basis"] not in out.get("basis", {}).get("choices", ()):
             raise CustomViewError(f"{where}/{raw['title']}/{s['name']}: series basis needs a chart basis that lists it")

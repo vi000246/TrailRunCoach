@@ -17,12 +17,16 @@
         },
         {
           "title": "疲勞與狀況（應該往恢復走）",
-          "description": "ATL 往下、TSB 爬回正值 = 恢復中。如果 TSB 還是很負，代表還沒休息夠。",
+          "description": "ATL 往下、TSB 爬回正值 = 恢復中。如果 TSB 還是很負（紅、綠），代表還沒休息夠。TSB 長條的顏色和「我的訓練 → 負荷 PMC」同一套（TSB ÷ CTL）：紅 過度疲勞、綠 有效訓練、淺紫 持平、紫 比賽狀態、黃 休息過久。",
           "axes": [{"id": "TSSPERDAY"}],
           "series": [
-            {"name": "疲勞 ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#dc2626", "expression": "tl(tss, atlconstant)"},
-            {"name": "狀況 TSB", "type": "bar", "y_axis": "TSSPERDAY", "color": "#94a3b8", "expression": "tsb"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#64748b", "line_style": "dash", "expression": "(,0)"}
+            {"name": "疲勞 ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#eb6834", "expression": "tl(tss, atlconstant)"},
+            {"name": "TSB 過度疲勞", "type": "bar", "y_axis": "TSSPERDAY", "color": "#e34948", "expression": "if(tsb / shift(ctl, 1) < -0.3, tsb)"},
+            {"name": "TSB 有效訓練", "type": "bar", "y_axis": "TSSPERDAY", "color": "#1baf7a", "expression": "if(tsb / shift(ctl, 1) >= -0.3 and tsb / shift(ctl, 1) < -0.1, tsb)"},
+            {"name": "TSB 持平", "type": "bar", "y_axis": "TSSPERDAY", "color": "#a9a1e6", "expression": "if(tsb / shift(ctl, 1) >= -0.1 and tsb / shift(ctl, 1) < 0.05, tsb)"},
+            {"name": "TSB 比賽狀態", "type": "bar", "y_axis": "TSSPERDAY", "color": "#6a5cc9", "expression": "if(tsb / shift(ctl, 1) >= 0.05 and tsb / shift(ctl, 1) < 0.25, tsb)"},
+            {"name": "TSB 休息過久", "type": "bar", "y_axis": "TSSPERDAY", "color": "#eda100", "expression": "if(tsb / shift(ctl, 1) >= 0.25, tsb)"},
+            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#52514e", "expression": "(,0)"}
           ]
         },
         {
@@ -93,30 +97,6 @@
           ]
         },
         {
-          "title": "每週強度分布（時數）",
-          "description": "低 / 中 / 高三區間的時數（低 < 有氧閾值、中 = 有氧閾值到 LTHR、高 ≥ LTHR，對應 WKO5 Friel 心率區間 Z1–2 / Z3–4 / Z5）。基礎期應該幾乎都是綠色。",
-          "axes": [{"id": "HHMMSS", "min": 0}],
-          "period": "week",
-          "series": [
-            {"name": "低", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#16a34a", "expression": "sum(sum(if(heartrate > 0 and heartrate < aethr and (speed > 1.6 or !isvalid(speed)), deltatime)), startofweek(date))"},
-            {"name": "中", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#f59e0b", "expression": "sum(sum(if(heartrate >= aethr and heartrate < lthr and (speed > 1.6 or !isvalid(speed)), deltatime)), startofweek(date))"},
-            {"name": "高", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#dc2626", "expression": "sum(sum(if(heartrate >= lthr and (speed > 1.6 or !isvalid(speed)), deltatime)), startofweek(date))"}
-          ]
-        },
-        {
-          "title": "每週跑步功率區間（Palladino）",
-          "description": "Palladino 官方功率區間（% CP）：Z1 < 80%、Z2 80–88%、Z3 88–101%（3A+3B，閾值刺激）、Z4 101–106%（Supra）、Z5+ ≥ 106%。只算有功率的跑步。基礎期大部分應在 Z1–Z2，Z3 約 15%（Palladino 基礎中期）。",
-          "axes": [{"id": "HHMMSS", "min": 0}],
-          "period": "week",
-          "series": [
-            {"name": "Z1 <80%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#16a34a", "expression": "sum(sum(if(runpower > 0 and runpower < 0.80*cp, deltatime)), startofweek(date))"},
-            {"name": "Z2 80–88%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#65a30d", "expression": "sum(sum(if(runpower >= 0.80*cp and runpower < 0.88*cp, deltatime)), startofweek(date))"},
-            {"name": "Z3 88–101%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#f59e0b", "expression": "sum(sum(if(runpower >= 0.88*cp and runpower < 1.01*cp, deltatime)), startofweek(date))"},
-            {"name": "Z4 101–106%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#ea580c", "expression": "sum(sum(if(runpower >= 1.01*cp and runpower < 1.06*cp, deltatime)), startofweek(date))"},
-            {"name": "Z5+ ≥106%", "type": "stackedbar", "y_axis": "HHMMSS", "color": "#dc2626", "expression": "sum(sum(if(runpower >= 1.06*cp, deltatime)), startofweek(date))"}
-          ]
-        },
-        {
           "title": "訓練量週增幅",
           "description": "近 4 週平均每週時數（所有運動的移動時間）比上一週的近 4 週平均多多少。Uphill Athlete 說的是「平均」每週增加超過 10%、持續約 8 週會出問題，所以看 4 週平均的變化（docs/research/coaching-dashboards-mountain.md 的設計），連續 3 週以上超過 +10% 才要注意。單週對單週會被一次百岳、一週休息放大成 +100%～+800%，不拿來比 10%。沒有活動的週算 0 小時。只看趨勢，不當受傷預測（ACWR 預測受傷的說法已被推翻）。",
           "axes": [{"id": "PERCENT"}],
@@ -152,12 +132,12 @@
           ]
         },
         {
-          "title": "爬坡速度 VAM（越野 + 登山合併）",
-          "description": "越野與百岳都是爬坡能力，合在一起看資料才夠。固定心率下 VAM 上升 = 爬坡進步。",
+          "title": "上坡腳程（每小時爬升，心率 < LTHR）",
+          "description": "越野與百岳都是爬坡能力，合在一起看。只算坡度 ≥ 5% 而且在移動的時間，每小時爬了多少公尺；心率 ≥ LTHR 的時間不算（沒有心率的活動全部算），上坡時間少於 10 分鐘的活動不畫。往上 = 爬坡變快。和「我的訓練 → 能力」的同一張圖。",
           "axes": [{"id": "METERSPERHOUR", "min": 0}],
           "series": [
-            {"name": "越野", "type": "line", "y_axis": "METERSPERHOUR", "color": "#16a34a", "expression": "if(hastag(\"runningtrail\") and climbing > 200, vam)"},
-            {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#a16207", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and climbing > 200, vam)"}
+            {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) >= 600, sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), delta(_elevation))) / sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) * 3600)"},
+            {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) >= 600, sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), delta(_elevation))) / sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) * 3600)"}
           ]
         },
         {
@@ -174,15 +154,15 @@
           ]
         },
         {
-          "title": "體能成長速度（CTL 每週增加）",
-          "description": "每週 CTL 增加多少。專項期可以比基礎期快，但太快代表負荷堆太急。",
+          "title": "Ramp rate（CTL 每週變化）",
+          "description": "每週 CTL 增加多少。專項期可以比基礎期快，但太快代表負荷堆太急。長條顏色 = 風險：綠 < 5 安全、黃 5–7 只能撐一兩週、紅 ≥ 7 受傷與生病風險（TrainingPeaks；Friel）；灰 = 下降。藍線 = 近 4 週平均，Couzens 建議長期 3–5。和「我的訓練 → 負荷 PMC」的同一張圖。",
           "axes": [{"id": "TSSPERDAYPERWEEK"}],
           "series": [
-            {"name": "CTL 週變化", "type": "bar", "y_axis": "TSSPERDAYPERWEEK", "color": "#2563eb", "expression": "tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7)"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#64748b", "line_style": "dash", "expression": "(,0)"},
-            {"name": "+3 可長期", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#16a34a", "line_style": "dash", "expression": "(,3)"},
-            {"name": "+5 只撐一兩週", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#f59e0b", "line_style": "dash", "expression": "(,5)"},
-            {"name": "+7 受傷風險", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#dc2626", "line_style": "dash", "expression": "(,7)"}
+            {"name": "下降（恢復）", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#8a8984", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) < 0, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "安全 < 5", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#1baf7a", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) >= 0 and tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) < 5, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "偏快 5–7", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#eda100", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) >= 5 and tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) < 7, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "風險 ≥ 7", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#e34948", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) >= 7, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
+            {"name": "近 4 週平均", "type": "line", "y_axis": "TSSPERDAYPERWEEK", "color": "#2a78d6", "line_width": "thick", "expression": "(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 28)) / 4"}
           ]
         }
       ]
@@ -213,23 +193,18 @@
           ]
         },
         {
-          "title": "新鮮度 TSB",
-          "description": "比賽前 TSB 應該爬回正值。注意：沒有任何登山越野賽事公開過經驗證的「最佳 TSB 區間」，只當方向參考。",
-          "axes": [{"id": "TSSPERDAY"}],
+          "title": "新鮮度 Form%（TSB ÷ CTL）",
+          "description": "比賽前應該爬進紫色的「比賽狀態」區（+5～+25%），不要掉到黃色的「休息過久」（體能在掉）。線的顏色 = 那天落在哪一區，最右邊標出最新的值。和「我的訓練 → 負荷 PMC → 狀況 Form%」同一張圖、同一套區間。沒有任何登山越野賽事公開過經驗證的「最佳 TSB 區間」，只當方向參考。",
+          "zoned": {"line": "Form%"},
+          "axes": [{"id": "PERCENT", "min": -0.6, "max": 0.4}],
           "series": [
-            {"name": "TSB", "type": "bar", "y_axis": "TSSPERDAY", "color": "#94a3b8", "expression": "tsb"},
-            {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#64748b", "line_style": "dash", "expression": "(,0)"},
-            {"name": "A 賽 +10", "type": "line", "y_axis": "TSSPERDAY", "color": "#16a34a", "line_style": "dash", "expression": "(,10)"},
-            {"name": "A 賽 +20", "type": "line", "y_axis": "TSSPERDAY", "color": "#16a34a", "line_style": "dash", "expression": "(,20)"}
-          ]
-        },
-        {
-          "title": "體能保留 CTL",
-          "description": "減量期間 CTL 會小幅下降，這是正常的；只要不掉太多，新鮮度的好處大於體能的小損失。",
-          "axes": [{"id": "TSSPERDAY", "min": 0}],
-          "series": [
-            {"name": "CTL", "type": "line", "y_axis": "TSSPERDAY", "color": "#2563eb", "expression": "tl(tss, ctlconstant)"},
-            {"name": "ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#f59e0b", "expression": "tl(tss, atlconstant)"}
+            {"name": "過度疲勞 < −30%", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "{-0.6:-0.3}"},
+            {"name": "有效訓練 −30～−10%", "type": "line", "y_axis": "PERCENT", "color": "#1baf7a", "expression": "{-0.3:-0.1}"},
+            {"name": "持平 −10～+5%", "type": "line", "y_axis": "PERCENT", "color": "#a9a1e6", "expression": "{-0.1:0.05}"},
+            {"name": "比賽狀態 +5～+25%", "type": "line", "y_axis": "PERCENT", "color": "#6a5cc9", "expression": "{0.05:0.25}"},
+            {"name": "休息過久 > +25%", "type": "line", "y_axis": "PERCENT", "color": "#eda100", "expression": "{0.25:0.4}"},
+            {"name": "0", "type": "line", "y_axis": "PERCENT", "color": "#52514e", "expression": "(,0)"},
+            {"name": "Form%", "type": "line", "y_axis": "PERCENT", "color": "#1d232b", "line_width": "thick", "expression": "tsb / shift(ctl, 1)"}
           ]
         }
       ]
@@ -241,7 +216,6 @@
         {"title": "課表建議強度", "kind": "targets", "description": "路上的輕鬆跑、長跑看心率（不超過 AeT）；山路、爬坡和間歇看功率（心率約慢 1 分鐘才反應，短坡和短間歇上來不及），心率當第二個數字。陡的技術下坡不看功率。LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
         {"title": "Palladino 功率區間（跑步）", "kind": "zones", "system": "palladino", "days": 30, "description": "官方表（% CP）。"},
         {"title": "Friel 心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30, "description": "WKO5 的 Friel 心率區間。"},
-        {"title": "Classic 心率區間（跑步）", "kind": "zones", "system": "classichr", "days": 30, "description": "WKO5 的 Classic（Coggan）心率區間。"},
         {"title": "Friel 配速區間（跑步）", "kind": "zones", "system": "frielpace", "days": 30, "description": "依閾值配速；山路配速不準，路跑才有參考價值。"}
       ]
     }

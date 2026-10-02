@@ -64,6 +64,9 @@ async def _migrate_schema():
         ("activity_tags", "exclusion", "TEXT"),
         ("activity_tags", "name", "TEXT"),
         ("activity_tags", "tags_json", "TEXT"),
+        ("activity_tags", "pain", "INTEGER"),          # 傷病紀錄 (engine/injuries.py)
+        ("activity_tags", "pain_area", "TEXT"),
+        ("activity_tags", "injury_id", "INTEGER"),
     ]
     async with engine.begin() as conn:
         for table, col, col_type in new_cols:

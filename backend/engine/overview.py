@@ -361,10 +361,6 @@ class Session:
     variant_adj: Optional[dict] = None
     progress: Optional[bool] = None     # not stored: this week's pick moves the projected ladder
     prefer_days: Optional[list] = None  # not stored: weekdays the cap rule moved it to (plan_prefs.place)
-    # 負重訓練 (engine/loaded_carry.py): the planned pack (kg; also in the title 「· 背 X kg」), and the
-    # long day's minutes before the first-at-a-new-weight cut (the long-run base is not lowered)
-    pack_kg: Optional[float] = None
-    pack_from: Optional[int] = None
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -622,6 +618,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         rp = RE.find(ds, today, blackouts or ())
     except Exception:                       # noqa: BLE001 — the plan must still build
         rp = None
+    try:                                    # 傷病紀錄 (engine/injuries.py): 「右膝進行中（第 5 天）」
+        from backend.engine import injuries as INJ
+        notes.extend(INJ.week_notes(INJ.load_events(), monday, today))
+    except Exception:                       # noqa: BLE001
+        pass
     re_f = RE.week_factor(rp, monday) if rp and kind in ("base", "specific") else None
     if re_f is not None and rp.get("prev_hours"):
         hours = rp["prev_hours"] * re_f
@@ -989,16 +990,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         B2B.placed(b2b, kept)
     b2b_suggestion = B2B.suggestion(b2b, monday, next((s.day for s in sessions if s.id == "long"), None),
                                     enabled=getattr(prefs, "b2b", True) is not False)
-    # ---- 負重訓練 (engine/loaded_carry.py): the long day's pack, the weekday machine session,
-    # ME instead of strength1, the taper's short carry — on the placed sessions
-    from backend.engine import loaded_carry as LC
-    lc = LC.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate)
+    # ---- 陡坡健走（模擬負重） (engine/steep_hill.py): before a 百岳 / multi-day trip, one weekday
+    # easy run of a 專項期 week becomes a steep walk at the grade that costs what the pack would
+    from backend.engine import steep_hill as SH
+    lc = SH.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate)
     if lc.get("active"):
         try:
-            pack_of = LC.meta_pack_of()
             dd = [asdict(s) for s in sessions]
-            LC.apply(dd, lc, aet=aet, prefs=prefs, th={"aet": aet, "lthr": tt.get("lthr"), "cp": tt.get("cp")},
-                     b2b=b2b, notes=notes, week_packs={w.idx: pack_of(w) for w in week_ws}, rates=tph)
+            SH.apply(dd, lc, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph)
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             lc = {**lc, "error": type(e).__name__}
@@ -1101,6 +1100,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "b2b": B2B.public(b2b),
         # a due B2B, suggested (never scheduled until accepted: api/plan_sessions suggestions)
         "b2b_suggestion": b2b_suggestion,
-        # 負重訓練 (engine/loaded_carry.py): this week's stage / loaded sessions, for projection and the card
-        "loaded_carry": LC.public(lc),
+        # 陡坡健走（模擬負重） (engine/steep_hill.py): this week's stage / session, for the projection
+        "steep_hill": SH.public(lc),
     }

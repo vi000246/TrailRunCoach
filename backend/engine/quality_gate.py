@@ -496,9 +496,12 @@ def planned_variant_spec(row: dict):
 
 def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = None,
           ramp: Optional[float] = None, step: Optional[float] = None, tsb: Optional[float] = None,
-          aet: Optional[float] = None) -> dict:
+          aet: Optional[float] = None, injury: Optional[str] = None) -> dict:
     """This week's check: {"block", "sub", "hold", "verdict", "action"} — the
-    first failing rule speaks. Missing numbers don't block."""
+    first failing rule speaks. Missing numbers don't block. `injury`: an open
+    傷病紀錄 with 「受傷期間暫停強度課」 ticked (engine/injuries.pause_reason)
+    blocks intervals until it is resolved — the user's own choice, so it
+    speaks first."""
     out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": ""}
     aet_t = f"{aet:.0f} bpm" if aet else "AeT"
 
@@ -506,6 +509,8 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
         if not out["rule"]:
             out.update(rule=rule, verdict=verdict, action=action)
         out.update(flags)
+    if injury:
+        say("injury", injury, "傷病紀錄按「好了」後恢復", block=True)
     if low_share is not None and low_share < LOW_SHARE_MIN:
         say("intensity", f"本週不排間歇：低強度只有 {low_share * 100:.0f}%（< 75%）",
             f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
@@ -876,7 +881,8 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     ie = _extra(by, "intensity")
     g = guard(low_share=ie.get("low_share"), power_low_share=ie.get("power_low_share"),
               ramp=_extra(by, "fitness").get("ramp_week"), step=_extra(by, "volume").get("step"),
-              tsb=_value(by, "form"), aet=ae["value"] if ae["measured"] else None)
+              tsb=_value(by, "form"), aet=ae["value"] if ae["measured"] else None,
+              injury=_injury_pause(today))
     hist = []
     try:
         hist = dose_history(ds, today)
@@ -900,6 +906,14 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     }
     out["options"] = options(out, ae, lt, cache, friel, xu, base_weeks, ef, need_weeks)
     return out
+
+
+def _injury_pause(today: dt.date) -> Optional[str]:
+    try:
+        from backend.engine import injuries as INJ
+        return INJ.pause_reason(INJ.load_events(), today)
+    except Exception:                       # noqa: BLE001 — the gate must still evaluate
+        return None
 
 
 def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
@@ -1335,6 +1349,10 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
     intensity guard — ramp, volume and TSB are re-checked when the week comes."""
     kind = kind or "base"
     levels = gate.get("levels") or {}
+    gi = gate.get("guard") or {}
+    if gi.get("rule") == "injury" and gi.get("block"):
+        # 傷病紀錄「受傷期間暫停強度課」: every phase, every week until the event is resolved
+        return {"allow": False, "spec": None, "advance": False, "note": gi.get("verdict", "")}
     if kind != "base":
         ok = levels.get("intensity") != "bad" and levels.get("drift") != "bad"
         return {"allow": ok, "spec": None, "advance": False, "note": ""}

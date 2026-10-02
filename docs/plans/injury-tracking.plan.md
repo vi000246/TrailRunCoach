@@ -157,7 +157,7 @@
 | 低強度佔比 | 心率 < AeT 的時間（既有的強度分配） | 21 天合計 | 手腕光學：見 §3.2 |
 | 長跑天 | 單次 ≥ 90 分（徐國峰 90 分鐘檢查長度；推估）或 ≥ 該週 30% | 0／1 | |
 | B2B 天 | `engine/b2b.py` 的判定（連兩天長天） | 0／1 | |
-| 負重天 | `loaded_carry.activity_pack`（`pack_kg` > 0） | 0／1、kg·時 | |
+| 負重天 | `racepower/athlete.activity_pack`（`pack_kg` > 0） | 0／1、kg·時 | |
 | 登山／健行時間 | sport_type hiking / mountaineering | 加總 | 不算進跑步時間，但下降公尺要算 |
 | 努力度「全力」天、RPE | `activity_tags` effort、手錶 RPE（`load_recorded`） | 0／1、平均 | RPE 很少（只有舊的 Garmin 檔有），有就用 |
 | 痠的次數 | `pain = 1` | 次數 | 「痛之前是不是先痠了好幾次」 |

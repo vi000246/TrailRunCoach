@@ -10,10 +10,12 @@ A stored session:
   state ('active' | 'done' | 'missed' | 'deleted' | 'superseded'), done_by, note
 
 Rules:
-  1. active sessions on days up to today that match an activity (the
-     generator's own match for auto sessions, else same day + same kind of
-     activity) become done; the rest on past days become missed (kept as
-     history, leave the active plan).
+  1. active sessions on days up to today that match an activity become done
+     (engine/plan_match.py: same day + the planned sport first, one activity
+     per session; long / quality / test also by the generator's week-wide
+     match); the rest on past days become missed (kept as history, leave the
+     active plan). A run the generator counts for a session another row (or
+     nothing) holds never removes or adds a row.
   2. per generated week, unedited auto sessions from today on are replaced by
      the regenerated ones (same gen_key → changed, gone → removed, new → added).
   3. edited and custom sessions are kept. An edited long / quality / test is
@@ -73,14 +75,6 @@ SIDE_KINDS = ("strength", "heat_passive", "notice")
 NOTICE = "notice"
 
 
-def _matches(s: dict, a: dict) -> bool:
-    if s["kind"] in ("heat_passive", NOTICE):
-        return False                              # a bath / sauna has no FIT: the user ticks it
-    if s["kind"] == "strength":
-        return a.get("category") == "strength"
-    return a.get("category") in ENDURANCE
-
-
 def _change(action: str, s: dict, reason: str = "", before: Optional[dict] = None) -> dict:
     c = {"action": action, "uid": s["uid"], "day": s.get("day"), "title": s.get("title"),
          "kind": s.get("kind"), "minutes": s.get("minutes"), "origin": s.get("origin"),
@@ -96,7 +90,8 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
               horizon_end: Optional[str] = None, uid_fn: Callable[[], str] = new_uid,
               covered: Optional[str] = None, blocked: Optional[dict] = None,
               allowed_days: Optional[list] = None,
-              decisions: Optional[dict] = None) -> tuple[list[dict], list[dict]]:
+              decisions: Optional[dict] = None,
+              unlinked: Optional[set] = None) -> tuple[list[dict], list[dict]]:
     """(new stored list, changes). `gen_weeks`: [{start, mode, provisional, sessions}],
     the current week from week_plan() (with done flags) then projected weeks.
     `covered`: last day the synced data is known to cover; a past session is
@@ -104,45 +99,24 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
     workout into a missed one). Missed rows are re-checked every time.
     `blocked`: ISO day -> label of the 不排課日期; `allowed_days`: 7 bools
     (課表偏好 可練日) for moving off them; `decisions`: {uid: 'move' | 'delete'}
-    for edited / custom sessions on a blocked day (rule 6)."""
+    for edited / custom sessions on a blocked day (rule 6). `unlinked`: activity
+    indexes the user unlinked from a session (never auto-matched again)."""
+    from backend.engine import plan_match as PM
     blocked = blocked or {}
     allowed = (lambda d: bool(allowed_days[d.weekday()])) if allowed_days else None
     out = [copy.deepcopy(s) for s in stored]
-    changes: list[dict] = []
-    used = {s["done_by"]["index"] for s in out
-            if s["state"] == "done" and isinstance(s.get("done_by"), dict) and "index" in s["done_by"]}
+    unlinked = set(unlinked or ())
     gen_done = {(w["start"], g["id"]): g for w in gen_weeks for g in w["sessions"] if g.get("done")}
 
-    # ---- 1. done / missed ------------------------------------------------
-    for s in sorted([s for s in out if s["state"] in ("active", "missed") and s["kind"] != NOTICE],
-                    key=lambda s: s.get("day") or "9999"):
-        g = gen_done.get((s["week_start"], s["gen_key"])) if s.get("gen_key") else None
-        if g is not None and (not g.get("done_by") or g["done_by"].get("index") not in used):
-            s["state"], s["done_by"] = "done", g.get("done_by")
-            if g.get("day"):
-                s["day"] = g["day"]
-            if g.get("done_by"):
-                used.add(g["done_by"].get("index"))
-            changes.append(_change("done", s))
-            continue
-        if s.get("day") and s["day"] <= today:
-            a = next((a for a in activities if a.get("date") == s["day"] and a.get("index") not in used
-                      and _matches(s, a)), None)
-            if a is not None:
-                s["state"], s["done_by"] = "done", a
-                used.add(a.get("index"))
-                changes.append(_change("done", s))
-                continue
-        if (s["state"] == "active" and s.get("day") and s["day"] < today
-                and (covered is None or s["day"] <= covered)):
-            s["state"] = "missed"
-            changes.append(_change("missed", s, "沒有對應的活動"))
+    # ---- 1. done / missed (engine/plan_match.py) ---------------------------
+    changes: list[dict] = PM.assign(out, activities, today, gen_done, unlinked, covered)
+    held = {i: s for s in out for i in [_done_index(s)] if i is not None}
 
     # ---- 2–4. regenerate each generated week -------------------------------
     for w in gen_weeks:
         ws, prov = w["start"], bool(w.get("provisional"))
         olds = [s for s in out if s["week_start"] == ws]
-        gens = {g["id"]: g for g in w["sessions"]}
+        gens = _align(w["sessions"], olds, held)
         consumed: set[str] = set()
         block = {s["gen_key"] for s in olds if s.get("gen_key") and
                  (s["state"] in ("deleted", "superseded", "done") or (s["state"] == "active" and s["edited"]))}
@@ -153,6 +127,8 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
                 continue
             g = gens.get(s["gen_key"])
             consumed.add(s["gen_key"])
+            if g is not None and g.get("done") and not _gen_owns(g, s, held, unlinked):
+                continue                           # the generator counted a run another session has
             if g is None or g.get("done") or not g.get("day") or g["day"] < today:
                 out.remove(s)
                 changes.append(_change("removed", s, "重新計算後不需要"))
@@ -173,8 +149,16 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
             if gid in consumed or gid in block:
                 continue
             if g.get("done"):
-                if not any(s.get("gen_key") == gid for s in olds):
-                    out.append(session_from_gen(g, ws, prov, uid_fn()))
+                i = (g.get("done_by") or {}).get("index")
+                # only when the week is generated the first time: later, a run the
+                # generator counts for a session the table never had is an unplanned run
+                if not olds and i not in held and i not in unlinked:
+                    s = session_from_gen(g, ws, prov, uid_fn())
+                    if isinstance(s.get("done_by"), dict):
+                        s["done_by"] = {**s["done_by"], "match": "plan"}
+                    out.append(s)
+                    if i is not None:
+                        held[i] = s
                 continue
             if not g.get("day") or g["day"] < today:
                 continue
@@ -202,6 +186,71 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
                 out.remove(s)
                 changes.append(_change("removed", s, "超出排程範圍"))
     return out, changes
+
+
+def _done_index(s: dict):
+    d = s.get("done_by")
+    return d.get("index") if s.get("state") == "done" and isinstance(d, dict) else None
+
+
+def _align(gen: list[dict], olds: list[dict], held: dict) -> dict:
+    """{gen id: generated session} with the generator's done labels lined up
+    with the stored matches: week_plan takes the week's runs in its own order
+    (easy1 = the first run), plan_match by day — when the stored easy1 holds
+    the run the generator calls easy3, the two generated easys swap ids, so
+    the done one blocks the done row and the open one updates the open row."""
+    gens = {g["id"]: g for g in gen}
+    owner = {i: s for s in olds for i in [_done_index(s)] if i is not None and s.get("gen_key")}
+    for _ in range(len(gens)):
+        swapped = False
+        for gid in list(gens):
+            g = gens[gid]
+            i = (g.get("done_by") or {}).get("index") if g.get("done") else None
+            s = owner.get(i)
+            if s is None or s["gen_key"] == gid or s["gen_key"] not in gens:
+                continue
+            other = gens[s["gen_key"]]
+            if other.get("kind") != g.get("kind") or other.get("done") and \
+                    (other.get("done_by") or {}).get("index") == i:
+                continue
+            gens[s["gen_key"]], gens[gid] = {**g, "id": s["gen_key"]}, {**other, "id": gid}
+            swapped = True
+        if not swapped:
+            break
+    # a run the generator counted that no stored row of this week holds (an unplanned
+    # run, one held elsewhere, or unlinked): the stored open row of that id takes an
+    # open generated session of the same kind no stored row has, so the week keeps
+    # its remaining sessions instead of gaining a duplicate
+    keys = {s.get("gen_key") for s in olds if s.get("gen_key")}
+    open_keys = {s.get("gen_key") for s in olds if s.get("gen_key") and s["state"] == "active"
+                 and s.get("origin") == "auto" and not s.get("edited")}
+    for gid in list(gens):
+        g = gens[gid]
+        if not g.get("done") or gid not in open_keys or _owned(g, gid, olds, held):
+            continue
+        alt = next((x for x in gens.values() if not x.get("done") and x.get("kind") == g.get("kind")
+                    and x["id"] not in keys), None)
+        if alt is not None:
+            aid = alt["id"]
+            gens[gid], gens[aid] = {**alt, "id": gid}, {**g, "id": aid}
+    return gens
+
+
+def _owned(g: dict, gid: str, olds: list[dict], held: dict) -> bool:
+    o = held.get((g.get("done_by") or {}).get("index"))
+    return o is not None and o.get("gen_key") == gid and any(o is x for x in olds)
+
+
+def _gen_owns(g: dict, s: dict, held: dict, unlinked: set) -> bool:
+    """The generator's done `g` is the stored session's own (same gen_key holds
+    the run): then the open row `s` is a leftover. Otherwise the generator
+    counted a run another session holds, an unlinked one, or one plan_match
+    left as an unplanned run — `s` stays as it is."""
+    i = (g.get("done_by") or {}).get("index")
+    if i is None:
+        return True
+    o = held.get(i)
+    return o is not None and o.get("gen_key") == s.get("gen_key") and o.get("week_start") == s.get("week_start")
 
 
 def _why(label: str) -> str:
