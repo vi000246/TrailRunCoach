@@ -275,7 +275,7 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
             "threshold_source": info.get("source"), "threshold_date": info.get("date"),
             "wprime": info.get("wprime"), "wprime_source": info.get("wprime_source"),
             "no_data_reason": None if total else _no_data_reason(spec["basis"], T, len(runs), days),
-            "source": SOURCE if system == "palladino" else "WKO5 level tables (docs/wko5-internals/functions.md §4)"}
+            "source": SOURCE if system == "palladino" else "WKO5 level tables"}
 
 
 # What to run by, per workout type. Power from Palladino's table; HR caps from
@@ -301,7 +301,7 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
 TERRAIN_NOTE = ("山路長天、越野輕鬆看心率（≤ AeT）；越野只有約 9% 時間在 Stryd 驗證過的 3–8% 坡，功率只當參考。"
                 "爬坡重複（3–8% 坡）看功率（心率約慢 1 分鐘才反應，Hunt 2015；van Rassel 2026），心率當上限檢查。"
                 "長爬坡不設強制目標，能跑的坡參考功率、陡坡參考心率＋VAM。陡的技術下坡不看功率（Stryd），照感覺與安全。"
-                "規則在 engine/target_policy.py。")
+                "")
 WORKOUT_TARGETS = [
     # (id, name, power lo, power hi, hr lo (×LTHR or "aet"), hr hi, primary, example, source)
     ("recovery", "恢復跑", None, 0.75, None, 0.85, "心率", "20–40 分鐘，隔天有強度課時", "Palladino 1A–1B；Friel Z1"),
@@ -310,18 +310,18 @@ WORKOUT_TARGETS = [
     # primary = engine/target_policy.py (vo2max-gate-and-trail-metric.md §2.5: long trail days by HR)
     ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "心率",
      "心率不超過 AeT（可以走）；功率只當參考，陡坡、下坡不看功率",
-     "Uphill Athlete（AeT 心率）；越野只有約 9% 時間在 Stryd 驗證的 3–8% 坡（docs/research/vo2max-gate-and-trail-metric.md）"),
+     "Uphill Athlete（AeT 心率）；越野只有約 9% 時間在 Stryd 驗證的 3–8% 坡（依活動資料統計）"),
     ("climb", "長爬坡（自由練，建議值）", 0.88, 1.00, 0.90, 1.00, "建議",
      "不設強制目標：能跑的坡參考功率，陡到要走的坡參考心率＋VAM（每小時爬升）；自己決定練法",
-     "功率 Palladino Z2–3B（% CP）、心率 Friel Z3–Z4；陡坡用心率＋VAM：docs/research/vo2max-gate-and-trail-metric.md（推估）"),
+     "功率 Palladino Z2–3B（% CP）、心率 Friel Z3–Z4；陡坡用心率＋VAM（推估）"),
     ("downhill", "下坡練習", None, None, None, None, "體感",
      "控制下降公尺數，練技術與步頻；不看功率也不看心率（離心負荷，量要慢慢加）",
-     "docs/research/vo2max-gate-and-trail-metric.md；下降量的上限是推估"),
+     "Uphill Athlete；下降量的上限是推估"),
     ("hill", "爬坡重複", 0.95, 1.06, 0.95, 1.03, "功率",
      "4–6×4 分鐘上坡，走或慢跑下來恢復；看 30 秒平均功率，心率只當參考（短坡上還沒升上來）",
      "Palladino 3B–Z4（% CP）；心率延遲 Hunt 2015；坡度 > 8% 為推估"),
     ("threshold", "閾值（Near threshold）", 0.95, 1.01, 0.95, 1.00, "功率", "3×10 分鐘 或 2×15 分鐘，休 2–3 分鐘", "Palladino 3B；Friel Z4"),
-    ("supra", "Supra threshold", 1.01, 1.06, 1.00, 1.03, "功率", "4–6×5 分鐘，休 2:45（你的筆記）", "Palladino Z4；Friel Z5a"),
+    ("supra", "Supra threshold", 1.01, 1.06, 1.00, 1.03, "功率", "4–6×5 分鐘，休 2:45", "Palladino Z4；Friel Z5a"),
     ("vo2", "VO2max", 1.06, 1.16, 1.03, 1.06, "功率", "5×3 分鐘，休 3 分鐘；FTP 紮實後、賽前 4–6 週", "Palladino Z5；Friel Z5b"),
 ]
 
