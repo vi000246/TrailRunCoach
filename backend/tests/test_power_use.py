@@ -70,9 +70,10 @@ def test_repo_views_hide_only_power_charts():
         assert bool(left) is (d["title"] != "間歇"), d["title"]
 
 
-def test_setting_defaults_on_and_is_a_bool(tmp_path):
-    assert DEFAULTS[PU.SETTING_KEY] is True
+def test_setting_defaults_to_auto_and_is_a_bool(tmp_path):
+    assert DEFAULTS[PU.SETTING_KEY] is None          # auto: from the power source (engine/athlete_profile.py)
     validate(PU.SETTING_KEY, False)
+    validate(PU.SETTING_KEY, None)
     with pytest.raises(ValueError):
         validate(PU.SETTING_KEY, "off")
 
@@ -82,7 +83,11 @@ def test_settings_api_round_trip(tmp_path):
 
     async def go():
         s = await make_session(tmp_path)
-        assert (await get_sync_settings(1, s))["use_power"] is True
+        g = await get_sync_settings(1, s)
+        # auto: no data and no power source entered -> no power meter -> HR only
+        assert g["use_power_stored"] is None and g["use_power"] is (g["power_source"] == "stryd")
+        r = await put_sync_settings(SyncSettingsBody(use_power=True), 1, s)
+        assert r["use_power"] is True
         r = await put_sync_settings(SyncSettingsBody(use_power=False), 1, s)
         assert r["use_power"] is False
         assert (await get_sync_settings(1, s))["use_power"] is False

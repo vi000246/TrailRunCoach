@@ -429,7 +429,7 @@ def _no_power_why(ds, w, s) -> str:
             return "只有手錶推估功率（未採用，設定可改）：不判讀間歇、不算 W′"
     except Exception:                       # noqa: BLE001
         pass
-    return "沒有功率（沒戴 Stryd）：不判讀間歇、不算 W′"
+    return "沒有功率：不判讀間歇、不算 W′（間歇用心率看）"
 
 
 def card(ds, w) -> dict:

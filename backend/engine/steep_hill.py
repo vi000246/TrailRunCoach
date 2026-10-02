@@ -63,12 +63,12 @@ def qualifies(ev) -> bool:
     return kind == "baiyue" or days > 1
 
 
-def trip_kg(ev: Optional[dict]) -> float:
-    """Event.pack_kg, else capacity.PACK_DEFAULT_MULTI / _SINGLE (9 kg)."""
-    from backend.engine.racepower.capacity import PACK_DEFAULT_MULTI, PACK_DEFAULT_SINGLE
+def trip_kg(ev: Optional[dict], weight: Optional[float] = None) -> float:
+    """Event.pack_kg, else capacity.pack_default (body weight × 13 %, 9 kg without one)."""
+    from backend.engine.racepower.capacity import pack_default
     if ev and ev.get("pack_kg") is not None:
         return float(ev["pack_kg"])
-    return PACK_DEFAULT_MULTI if int((ev or {}).get("days") or 1) > 1 else PACK_DEFAULT_SINGLE
+    return pack_default(weight, int((ev or {}).get("days") or 1))
 
 
 def weeks_out(start: dt.date, monday: dt.date) -> int:
@@ -132,7 +132,7 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     if tsb is not None and tsb < TSB_MIN:
         info["why"].append(f"週初 TSB {tsb:+.0f} < {TSB_MIN:.0f}：這週不排")
         return info
-    trip = trip_kg(event)
+    trip = trip_kg(event, weight)
     st = stage_of(w)
     pct = stage_pct(st, weight, trip)
     info.update(active=True, step=st, trip_kg=trip, pct=pct, kg=round(pct * weight, 1) if weight else None,

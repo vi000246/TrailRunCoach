@@ -134,7 +134,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <label>距離 km<input type="number" name="distance_km" step="0.1" min="0"></label>
       <label>爬升 m<input type="number" name="climbing_m" step="10" min="0"></label>
       <label>預估移動時間 h<input type="number" name="est_hours" step="0.5" min="0"></label>
-      <label title="百岳／多日行程第 1 天的背包重量；空白 = 9 kg。百岳預測用它，賽前的陡坡健走也用它算模擬負重的坡度">行程背包 kg<input type="number" name="pack_kg" step="0.5" min="0" max="40" placeholder="9"></label>
+      <label title="百岳／多日行程第 1 天的背包重量；空白 = 體重 × 13 %（沒有體重時 9 kg，推估）。百岳預測用它，賽前的陡坡健走也用它算模擬負重的坡度">行程背包 kg<input type="number" name="pack_kg" step="0.5" min="0" max="40" placeholder="9"></label>
       <label>備註<input name="note"></label>
       <button class="primary" type="submit" id="evsubmit">新增</button>
       <button type="button" id="evcancel" hidden>取消編輯</button>
