@@ -6,7 +6,7 @@
 
 ## Overview
 
-The 賽事功率 page: a port of the Palladino/Stryd "SuperPower Calculator" spreadsheet that
+The 賽事計算機 page: a port of the Palladino/Stryd "SuperPower Calculator" spreadsheet that
 takes its inputs from the athlete's own activities instead of typed numbers, extended to
 trail races (effort distance + a personal trail RE) and 百岳 (a walking model on personal
 EP/h), with race-day weather from 中央氣象署 / Open-Meteo. The formulas, the task list and the
@@ -761,7 +761,7 @@ hour). References stay out of the page.
 
 `POST /export/csv` runs `make_plan` and formats it with `csvplan.plan_csv`, so no maths is
 duplicated. The body is UTF-8 with a BOM, CRLF rows. The file is named
-`賽事功率_<course>_<date>.csv`. The course is the page's event name, else the GPX track name, else
+`賽事計算機_<course>_<date>.csv`. The course is the page's event name, else the GPX track name, else
 type + km. The date is the race date, else the day computed.
 - Header block (`key, value[, source]`): course, race date, type, km, gain, loss, segments, top
   elevation, mode (with the effort target), total method + 推估, finish time and ETA, average
@@ -839,7 +839,7 @@ the version-2 store.
 ## Domain Model
 
 ### Bounded Context
-- **Context Name**: RacePrediction（賽事功率預估）
+- **Context Name**: RacePrediction（賽事計算機預估）
 - **Domain Layer**: Core Domain
 - **Parent Module**: N/A (consumes `wko5-engine`, `planning`, `achievements`)
 

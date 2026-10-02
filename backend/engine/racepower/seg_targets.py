@@ -88,6 +88,56 @@ def fuel_summary(plan: dict, seg: dict) -> str:
     return "；".join(parts)
 
 
+def _walked(seg: dict, k: str) -> bool:
+    return k == "steep_climb" or bool(seg.get("walk")) or any("走" in str(n) for n in seg.get("notes") or [])
+
+
+def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None) -> list[dict]:
+    """One row per segment for the race calculator's main chart and its table, every
+    plan type: the pace, power and heart-rate target that segment is run by, null where
+    that measure is not a valid target there —
+      power  road: every segment; trail: flat / runnable climbs only (Stryd ≈ metabolic
+             load on 0–8 %, van Rassel 2026; > 8 % under-reads, descents too, Kipp 2023);
+             百岳: none
+      hr     the race cap (hr_cap: LTHR ≤ 3 h, AeT beyond, the trail HR model's race HR;
+             百岳 AeT); none on trail / 百岳 descents (控制、安全)
+      pace   every segment (the model's pace, already grade / walk / technical adjusted)
+    plus the split, cumulative time, ETA, walk flag and the fuelling in the segment.
+    Run after plan_targets (reads each segment's `target` when there is one)."""
+    kind = plan.get("type")
+    hike = kind == "baiyue"
+    cp = ((plan.get("used") or {}).get("cp") or {}).get("value")
+    cap, cap_src = hr_cap(plan, aet, lthr)
+    out = []
+    for n, s in enumerate(plan.get("segments") or [], 1):
+        k = kind_of(s)
+        tg = s.get("target") or {}
+        pace = s.get("pace_s_per_km")
+        if not pace and s.get("speed_kmh"):
+            pace = 3600.0 / s["speed_kmh"]
+        p = s.get("power") if (not hike and cp and s.get("power")) else None
+        if kind == "trail" and k not in ("flat", "run_climb"):
+            p = None
+        hr = cap if cap and not (k == "descent" and kind != "road") else None
+        walk = _walked(s, k) and kind != "road"
+        basis = tg.get("basis") if tg.get("basis") not in (None, "none") else None
+        if kind == "road":
+            basis = "power" if p else "pace"
+        elif basis is None and k == "descent":
+            basis = "safe"
+        out.append({
+            "n": n, "mark": mark(n), "i": s.get("i"), "day": s.get("day"),
+            "start_km": s.get("start_km"), "end_km": s.get("end_km"), "dist_m": s.get("dist_m"),
+            "gain_m": s.get("gain_m"), "loss_m": s.get("loss_m"), "grade": s.get("grade"),
+            "kind": k, "label": tg.get("label") or KIND_LABEL[k], "basis": basis or "pace",
+            "pace_s_per_km": pace, "power": p, "power_band": [p * (1 - POWER_BAND), p * (1 + POWER_BAND)] if p else None,
+            "hr_cap": hr, "hr_cap_src": cap_src if hr else None, "walk": walk,
+            "t": s.get("t"), "cum_s": s.get("cum_s"), "eta": s.get("eta"),
+            "temp_c": s.get("temp_c"), "fuel": fuel_summary(plan, s), "badge": tg.get("badge") or s.get("badge"),
+        })
+    return out
+
+
 def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None) -> Optional[list[dict]]:
     """Adds `target` {n, mark, kind, basis, chips, text, badge, src} to every
     segment of a trail / 百岳 plan and returns the list; None for road."""

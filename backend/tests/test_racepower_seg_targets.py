@@ -1,5 +1,5 @@
 """
-賽事功率: per-segment executable targets for trail and 百岳 plans
+賽事計算機: per-segment executable targets for trail and 百岳 plans
 (engine/racepower/seg_targets.py; vo2max-gate-and-trail-metric.md §2.3).
 """
 from __future__ import annotations

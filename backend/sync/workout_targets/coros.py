@@ -39,6 +39,9 @@ class CorosProvider(WorkoutProvider):
     async def push_sessions(self, db, sessions, thresholds, today, *, stale_keys=(), missed_keys=()) -> dict:
         return await CW.push_sessions(db, sessions, thresholds, today, stale_keys=stale_keys, missed_keys=missed_keys)
 
+    async def push_workout(self, db, session, thresholds, today) -> dict:
+        return await CW.push_workout(db, session, thresholds, today)
+
     async def remove_keys(self, db, keys) -> list[dict]:
         return await CW.remove_keys(db, keys)
 

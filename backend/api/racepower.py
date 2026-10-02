@@ -1,5 +1,5 @@
 """
-Race-power API — the 賽事功率 page (docs/research/superpower-calculator.md).
+Race calculator API — the 賽事計算機 page (docs/research/superpower-calculator.md).
 
     GET  /inputs        athlete-derived inputs (CP / W′ / TTE sources, RE, k, EP/h, conditions)
     GET  /peaks         百岳 / 小百岳 list (backend/data/baiyue.json)
@@ -15,6 +15,7 @@ v2 (docs/research/racepower-v2.md §10.2):
     GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
     POST /export/coros  plan → COROS structured workout (preview, or push=true)
     POST /export/csv    plan → CSV (UTF-8 BOM), header block + one row per segment
+    GET/PUT/DELETE /saved/{event_id}   the page's inputs + last result per plan event
 """
 from __future__ import annotations
 
@@ -126,6 +127,14 @@ def weather(date: Optional[str] = None, days: int = 1, event_id: Optional[str] =
         lat = pk["lat"] if lat is None else lat
         lon = pk["lon"] if lon is None else lon
         elevation = pk["elevation_m"] if elevation is None else elevation
+    if event_id and (lat is None or lon is None):
+        # no peak / coordinates: the start of the event's stored GPX
+        got = _event_track(event_id)
+        if got is not None and got[1].lat:
+            tr = got[1]
+            lat, lon = float(tr.lat[0]), float(tr.lon[0])
+            z0 = next((z for z in tr.ele if z is not None), None)
+            elevation = z0 if elevation is None else elevation
     if not date:
         raise HTTPException(400, "date is required")
     try:
@@ -878,6 +887,8 @@ def make_plan(body: PlanIn) -> dict:
     from backend.engine.racepower import seg_targets as ST
     aet_d = inputs().get("aet") or {}
     out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
+    # the main chart / table: pace, power and HR target per segment, null where not valid
+    out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
@@ -944,39 +955,42 @@ def backtest_run():
 class ExportIn(PlanIn):
     push: bool = False
     name: Optional[str] = None
+    event_id: Optional[str] = None          # the plan event: one workout per event (re-export updates it)
+    # lap = open steps ended with the lap button (trail / 百岳 default: watch GPS drifts on trails);
+    # distance = distance steps (road default)
+    step_mode: Optional[Literal["lap", "distance"]] = None
 
 
-def coros_payload(body: ExportIn, p: dict) -> dict:
-    """Plan → COROS program through the existing mapping (coros_workouts
-    Step / build_program): one time-based step per segment, power ± 3 %
-    (百岳: heart rate ≤ AeT)."""
+def _thresholds(p: dict) -> dict:
+    a = inputs().get("aet") or {}
+    return {"cp": (p["used"].get("cp") or {}).get("value"), "lthr": a.get("lthr"),
+            "aet": (p["used"].get("aet") or {}).get("value") or a.get("aet")}
+
+
+def race_session(body: ExportIn, p: dict) -> tuple[dict, dict]:
+    """(the session dict the workout provider pushes, the watch_export legs) for a plan:
+    key racecalc:<event id> (or :manual), named 「賽事 <name>」, on the race date."""
     from backend.engine.racepower import planner as PL
+    from backend.engine.racepower import watch_export as WE
     from backend.sync import coros_workouts as CW
-    th = CW.Thresholds(cp=(p["used"].get("cp") or {}).get("value"),
-                       aet=(p["used"].get("aet") or {}).get("value"))
-    if p["type"] == "baiyue":
-        hr = CW.easy_hr(th)
-        steps = [CW.Step(CW.EX_TRAIN, max(1, int(round(s["t"]))), hr,
-                         f"{s['start_km']:.1f}-{s['end_km']:.1f}k {s['cls_label']}") for s in p["segments"]] \
-            or [CW.Step(CW.EX_TRAIN, int(p["summary"]["time_s"]), hr, "心率 ≤ AeT")]
+    eid = body.event_id or (body.course.event_id if body.course else None)
+    if eid:
+        try:
+            ev = _event(eid)
+        except HTTPException:
+            ev = None
     else:
-        steps = PL.coros_steps(p["segments"])
+        ev = None
+    name = body.name or (ev.name if ev else None) or p.get("course_name") or f"{p['summary']['km']:.0f} km"
+    ex = WE.steps_for(p, p.get("chart_rows") or [], mode=body.step_mode, stops=[x.model_dump() for x in body.stops],
+                      day_splits_km=body.day_splits_km if p["type"] == "baiyue" else None)
     badge = "（推估）" if p["summary"].get("badge") else ""
-    name = body.name or f"{CW.NAME_PREFIX} 比賽配速 {p['summary']['km']:.0f}k"
-    return CW.build_program(name, steps, th, f"{PL.HINT_30S}；分段目標{badge}")
-
-
-async def push_to_coros(db, payload: dict, day: Optional[str]) -> dict:
-    """Add the workout to the COROS library and, for a date not in the past,
-    put it on that day (the existing Training Hub client)."""
-    from backend.sync import coros_workouts as CW
-    hub = await CW.TrainingHub.from_db(db)
-    pid = await hub.add_program(payload)
-    out = {"program_id": pid, "scheduled": None}
-    if day and day[:10] >= today_local().isoformat():
-        detail = await hub.program_detail(pid)
-        out["scheduled"] = await hub.schedule(detail, day[:10])
-    return out
+    hint = "每段按圈結束" if ex["mode"] == "lap" else "每段依距離"
+    detail = f"{hint}；{PL.HINT_30S}；分段目標{badge}" if p["type"] != "baiyue" else f"{hint}；心率 ≤ AeT；分段目標{badge}"
+    sid = (eid or "manual")[:40]
+    s = {"id": sid, "key": CW.RACE_KEY_PREFIX + (eid or "manual"), "kind": "race_plan", "title": f"賽事 {name}",
+         "day": (body.date or "")[:10] or None, "steps": ex["doc"], "detail": detail}
+    return s, ex
 
 
 async def _db():
@@ -1090,17 +1104,85 @@ def share_data(sid: str):
 
 @router.post("/export/coros")
 async def export_coros(body: ExportIn, db=Depends(_db)):
+    """The plan as a watch workout through the active workout provider (sync/workout_targets,
+    default COROS). push=false: the preview (steps as the watch gets them, where it goes,
+    whether this event was exported before). push=true: send it — on the race date when
+    that is today or later, else into the library; one workout per event, so exporting
+    again replaces it."""
     from starlette.concurrency import run_in_threadpool
+    from backend.engine import workout_steps as WS
     from backend.sync import coros_workouts as CW
-    p = await run_in_threadpool(make_plan, body)      # reads the Dataset: never on the event loop
-    payload = coros_payload(body, p)
-    payload = _py(payload)
-    out = {"payload": payload, "steps": len(payload["exercises"]), "pushed": None}
+    from backend.sync import workout_targets as WT
+    p = _py(await run_in_threadpool(make_plan, body))      # reads the Dataset: never on the event loop
+    s, ex = race_session(body, p)
+    th = _thresholds(p)
+    try:
+        steps = WS.normalize(s["steps"])
+    except WS.StepsError as e:
+        raise HTTPException(400, f"分段轉成手錶步驟失敗：{e}")
+    c = WS.Ctx(cp=th["cp"], lthr=th["lthr"], aet=th["aet"])
+    today = today_local().isoformat()
+    scheduled = bool(s["day"] and s["day"] >= today)
+    name = CW.workout_name(s) if scheduled else CW.library_name(s)
+    pv = WS.watch_preview(steps, c, name, s["detail"])
+    prov = await WT.active(db)
+    prev = None
+    try:
+        row = (await prov.rows_by_key(db, [s["key"]])).get(s["key"])
+        if row is not None:
+            prev = prov.row_view(row)
+    except Exception:                       # noqa: BLE001 — a preview never fails on the record lookup
+        prev = None
+    out = {"provider": prov.id, "provider_label": prov.label, "name": name, "day": s["day"] if scheduled else None,
+           "scheduled": scheduled, "mode": ex["mode"], "legs": ex["legs"], "merged": ex["merged"], "limit": ex["limit"],
+           "notes": ex["notes"] + pv["lost"], "lines": pv["lines"], "steps": pv["n"], "previous": prev, "pushed": None}
     if body.push:
         try:
-            out["pushed"] = await push_to_coros(db, payload, body.date)
-        except CW.CorosAuthError as e:
-            raise HTTPException(401, f"COROS 未登入：{e}")
-        except CW.CorosError as e:
-            raise HTTPException(502, f"COROS 回應錯誤：{e}")
+            out["pushed"] = _py(await prov.push_workout(db, s, th, today))
+        except WT.SyncAuthError as e:
+            raise HTTPException(401, f"{prov.label} 未登入：{e}")
+        except WT.ProviderDisabled as e:
+            raise HTTPException(400, str(e))
+        except WT.Unsupported as e:
+            raise HTTPException(400, str(e))
+        except WT.SyncError as e:
+            raise HTTPException(502, f"{prov.label} 回應錯誤：{e}")
     return out
+
+
+# ---------------------------------------------------------------------------
+# saved inputs + result per plan event (engine/race_calc_store.py)
+# ---------------------------------------------------------------------------
+
+class SavedIn(BaseModel):
+    inputs: dict
+    result: Optional[dict] = None
+
+
+@router.get("/saved/{eid}")
+def get_saved(eid: str):
+    from backend.engine import race_calc_store as RC
+    try:
+        return {"saved": RC.get(eid)}
+    except RC.RaceCalcError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.put("/saved/{eid}")
+def put_saved(eid: str, body: SavedIn):
+    from backend.engine import race_calc_store as RC
+    _event(eid)                             # 404 for an event that is not in the plan
+    try:
+        r = RC.save(eid, body.inputs, body.result)
+    except RC.RaceCalcError as e:
+        raise HTTPException(400, str(e))
+    return {"event_id": eid, "saved_at": r["saved_at"] if r else None}
+
+
+@router.delete("/saved/{eid}")
+def delete_saved(eid: str):
+    from backend.engine import race_calc_store as RC
+    try:
+        return {"deleted": RC.delete(eid)}
+    except RC.RaceCalcError as e:
+        raise HTTPException(400, str(e))

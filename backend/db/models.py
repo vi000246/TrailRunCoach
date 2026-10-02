@@ -328,6 +328,18 @@ class EventGpx(Base):
     uploaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class RaceCalc(Base):
+    """The race calculator's saved inputs + last result per season-plan event
+    (engine/race_calc_store.py, plain sqlite3 with the same DDL). New table:
+    created by init_db's create_all (additive)."""
+    __tablename__ = "race_calc"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(64), unique=True)
+    inputs_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    result_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    saved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class UserSetting(Base):
     """Per-user key/value settings (backend/settings/repository.py)."""
     __tablename__ = "user_settings"

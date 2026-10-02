@@ -1,5 +1,5 @@
 """
-Read-only share links for the 賽事功率 result (「分享」).
+Read-only share links for the 賽事計算機 result (「分享」).
 
 A share is a frozen snapshot of one /plan result: the course profile, the
 predicted splits, the per-segment targets and the 補給 card — only the
