@@ -41,6 +41,31 @@ DEFAULT = "quick"
 # W′ prior for a single bout: Ruiz-Alias et al. 2025 (EJSS, PMC11770271),
 # amateur Stryd 9/3 two-point W′ — men 13.1 ± 4.0 kJ, women 6.4 ± 2.2 kJ
 WPRIME_PRIOR = {"male": (13100.0, 4000.0), "female": (6400.0, 2200.0)}
+SEX_LABEL = {"male": "男", "female": "女"}
+
+
+def athlete_sex(ds) -> Optional[str]:
+    """"male" / "female" from the settings-page profile (plan.profile), else
+    the WKO5 athlete file (3001/3017); None when neither has it."""
+    prof = getattr(getattr(ds, "plan", None), "profile", None) or {}
+    if prof.get("sex") in WPRIME_PRIOR:
+        return prof["sex"]
+    try:
+        root = ds.athlete.root.get(3001)
+        s = root.get(3017) if root is not None else None
+    except AttributeError:
+        s = None
+    return s if s in WPRIME_PRIOR else None
+
+
+def wprime_prior(sex: Optional[str]) -> tuple[float, float, str]:
+    """(W′ J, SD J, label) of the single-bout prior for this sex. Without a
+    sex on file the men's value is used (the long-standing default) and the
+    label says so."""
+    key = sex if sex in WPRIME_PRIOR else "male"
+    w, sd = WPRIME_PRIOR[key]
+    who = f"業餘{SEX_LABEL[key]}性" if sex in WPRIME_PRIOR else "未填性別，用男性值"
+    return w, sd, f"W′ 先驗 {w / 1000:.1f} kJ（Ruiz-Alias 2025，{who}；推估）"
 TT20_FACTOR = 0.95                 # CP ≈ 0.95 × P20 (Ñancupil-Andrade 2024)
 RIEGEL_K = -0.07                   # racepower/riegel.py; Stryd table 10–42 km implies −0.069
 RACE_ANCHOR_S = 1800.0             # CP ≈ 30-min power

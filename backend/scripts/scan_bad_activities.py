@@ -57,7 +57,10 @@ def scan_wko5() -> list[dict]:
     from backend.files.wko5_athlete import read_athlete
     from backend.settings.paths import athlete_dir
     d = Path(athlete_dir())
-    a = read_athlete(next(d.glob("*.wko5athlete")))
+    f = next(d.glob("*.wko5athlete"), None)
+    if f is None:
+        return []                       # no WKO5 folder: only the synced sources are scanned
+    a = read_athlete(f)
     out = []
     for e in a.workouts:
         group = (e.sport_group or "").lower()

@@ -158,6 +158,9 @@ async def compare_sources_api(a: str = "wko5", b: str = "coros", since: Optional
     from backend.engine.wko5expr.sourcecompare import compare
     if a not in ("wko5", "coros", "tp") or b not in ("wko5", "coros", "tp") or a == b:
         raise HTTPException(400, "a and b must be two different sources of wko5, coros, tp")
+    from backend.engine.wko5expr.datasource import wko5_available
+    if "wko5" in (a, b) and not wko5_available(ATHLETE_DIR):
+        raise HTTPException(404, "NO_WKO5_FOLDER")
     return await asyncio.to_thread(compare, a, b, ATHLETE_DIR, since)
 
 
