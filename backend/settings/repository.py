@@ -188,6 +188,20 @@ class UnknownSetting(KeyError):
     pass
 
 
+CALIB_PREFIX = "athlete.calib."
+
+
+def known(key: str) -> bool:
+    """A declared key, or `athlete.calib.<name>` for a registered calibration
+    item (engine/calibrate.py; default None = not fitted yet)."""
+    if key in DEFAULTS:
+        return True
+    if key.startswith(CALIB_PREFIX):
+        from backend.engine import calibrate
+        return calibrate.is_key(key)
+    return False
+
+
 class SettingsRepository:
     def __init__(self, db: AsyncSession, user_id: int = DEFAULT_USER):
         self.db, self.user_id = db, user_id
@@ -198,13 +212,13 @@ class SettingsRepository:
         return res.scalar_one_or_none()
 
     async def get(self, key: str) -> Any:
-        if key not in DEFAULTS:
+        if not known(key):
             raise UnknownSetting(key)
         row = await self._row(key)
-        return DEFAULTS[key] if row is None else json.loads(row.value_json)
+        return DEFAULTS.get(key) if row is None else json.loads(row.value_json)
 
     async def set(self, key: str, value: Any) -> None:
-        if key not in DEFAULTS:
+        if not known(key):
             raise UnknownSetting(key)
         validate(key, value)
         row = await self._row(key)
@@ -225,6 +239,10 @@ class SettingsRepository:
 
 
 def validate(key: str, value: Any) -> None:
+    if key.startswith(CALIB_PREFIX):
+        from backend.engine import calibrate
+        calibrate.validate_entry(value)
+        return
     if key == "athlete.timezone" and value is not None:
         resolve_tz(value, strict=True)
     if key == "sync.primary_source" and value not in (None, "auto", *SOURCES):

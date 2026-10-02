@@ -81,6 +81,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="settings"></script>
+<script src="/api/v1/static/calib_chip.js"></script>
 <header>
   <h1>設定</h1>
 </header>
@@ -291,6 +292,14 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <button class="primary" id="m-save">儲存地圖設定</button>
     </div>
     <p class="meta">魯地圖和等高線的主機有時不回應，地圖載不出來時換個底圖就好。</p>
+  </section>
+
+  <section id="calib" hidden>
+    <details><summary class="meta">進階設定：自動估算的參數</summary>
+      <p class="meta">這些數字會用你的資料自動估算（每次同步到新活動後重算），資料不夠時用文獻或推估的預設值。滑到標籤上看說明；只有確定時才手動指定。</p>
+      <table class="wt"><tbody id="calib-rows"></tbody></table>
+      <div class="row"><button id="calib-run">現在重新估算</button><span class="meta" id="calib-msg"></span></div>
+    </details>
   </section>
 
   <section>
@@ -837,7 +846,40 @@ $("r-ok").onclick = async (e) => {
   } catch (err) { info.innerHTML = `<span class="err-text">還原失敗：${esc(reason(err))}</span>`; }
 };
 
-loadMode(); loadApplied(); loadProfile(); loadExclusions(); loadBackup();
+// 自動估算的參數 (engine/calibrate.py, api/calib.py)
+const CAL = "/api/v1/calib";
+function calibRows(items) {
+  $("calib").hidden = !items.length;
+  $("calib-rows").innerHTML = items.map((it) => `<tr data-n="${esc(it.name)}">
+    <td>${esc(it.label)}</td>
+    <td>${Number(it.value).toFixed(it.digits)} ${esc(it.unit)} ${calibChip(it.chip, it.source)}</td>
+    <td><input type="number" step="any" style="width:80px" placeholder="手動" ${it.source === "user" ? `value="${it.value}"` : ""}
+      ${it.bounds ? `min="${it.bounds[0]}" max="${it.bounds[1]}"` : ""}>
+      <button data-a="set">指定</button>${it.source === "user" ? ' <button data-a="auto">改回自動</button>' : ""}</td></tr>`).join("");
+}
+async function loadCalib() { try { calibRows((await j(CAL)).items); } catch (e) { $("calib").hidden = true; } }
+$("calib-rows").onclick = async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const tr = b.closest("tr"), name = tr.dataset.n;
+  try {
+    if (b.dataset.a === "auto") await j(`${CAL}/${name}`, { method: "DELETE" });
+    else {
+      const v = parseFloat(tr.querySelector("input").value);
+      if (!Number.isFinite(v)) return toast("請輸入數字");
+      await j(`${CAL}/${name}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: v }) });
+    }
+    toast("已儲存"); loadCalib();
+  } catch (err) { toast("儲存失敗：" + err.message.slice(0, 80)); }
+};
+$("calib-run").onclick = async (e) => {
+  const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = "估算中…";
+  try { const r = await j(`${CAL}/run`, { method: "POST" }); calibRows(r.items);
+    $("calib-msg").textContent = r.written.length ? `更新了 ${r.written.length} 項` : "資料還不夠，維持原值"; }
+  catch (err) { $("calib-msg").textContent = "失敗：" + err.message.slice(0, 80); }
+  b.disabled = false;
+};
+
+loadMode(); loadApplied(); loadProfile(); loadExclusions(); loadBackup(); loadCalib();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>

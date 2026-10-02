@@ -162,39 +162,79 @@ def shrink_beta(fit: dict) -> dict:
             "default": BETA_DEFAULT, "src": src}
 
 
-def heat_beta(ds, today: dt.date, days: int = BETA_DAYS) -> dict:
-    """shrink_beta(fit_heat_beta(…)) on the road runs of the last `days`
-    with a drift tier and a temperature (any band). Never raises: the
-    default on any failure."""
+def _beta_rows(ds, today: dt.date, days: int = BETA_DAYS) -> tuple[list, Optional[str]]:
+    """(rows, basis) for fit_heat_beta: the road runs of the last `days` with
+    a drift tier and a temperature (any band); power-based when there are at
+    least as many power rows as pace rows."""
     from backend.engine import workout_review as WR
     from backend.engine.overview import category
     from backend.engine.wko5expr.dataset import date_to_day
+    tday = math.floor(date_to_day(today))
+    power, pace = [], []
+    for w in ds.workouts:
+        if not (tday - days < math.floor(w.day) <= tday) or w.sport != "run" or "runningtrail" in w.tags:
+            continue
+        dur = WR._f(w.metrics.get("duration"))
+        if dur is None or dur < WR.WARMUP_S + WR.DRIFT_REF_MIN_S or category(w) != "road":
+            continue
+        dr = (WR.measure(ds, w) or {}).get("drift") or {}
+        tc = WR._f(dr.get("temp_c"))
+        if tc is None or WR.drift_tier(dr) is None:
+            continue
+        if dr.get("pw_hr1") is not None and WR._f(dr.get("p1")) is not None:
+            power.append({"hr": dr["pw_hr1"], "x": WR._f(dr["p1"]), "temp_c": tc})
+        if dr.get("hr1") is not None and WR._f(dr.get("v1")) is not None:
+            pace.append({"hr": dr["hr1"], "x": WR._f(dr["v1"]), "temp_c": tc})
+    WR._flush(ds)
+    return (power, "power") if len(power) >= len(pace) else (pace, "pace")
+
+
+def heat_beta(ds, today: dt.date, days: int = BETA_DAYS) -> dict:
+    """shrink_beta(fit_heat_beta(…)) on the road runs of the last `days`
+    with a drift tier and a temperature (any band). A manual value (設定 →
+    進階設定 → 自動估算的參數: athlete.calib.aet_heat_beta, source user)
+    replaces it. Never raises: the default on any failure."""
     try:
-        tday = math.floor(date_to_day(today))
-        power, pace = [], []
-        for w in ds.workouts:
-            if not (tday - days < math.floor(w.day) <= tday) or w.sport != "run" or "runningtrail" in w.tags:
-                continue
-            dur = WR._f(w.metrics.get("duration"))
-            if dur is None or dur < WR.WARMUP_S + WR.DRIFT_REF_MIN_S or category(w) != "road":
-                continue
-            dr = (WR.measure(ds, w) or {}).get("drift") or {}
-            tc = WR._f(dr.get("temp_c"))
-            if tc is None or WR.drift_tier(dr) is None:
-                continue
-            if dr.get("pw_hr1") is not None and WR._f(dr.get("p1")) is not None:
-                power.append({"hr": dr["pw_hr1"], "x": WR._f(dr["p1"]), "temp_c": tc})
-            if dr.get("hr1") is not None and WR._f(dr.get("v1")) is not None:
-                pace.append({"hr": dr["hr1"], "x": WR._f(dr["v1"]), "temp_c": tc})
-        WR._flush(ds)
-        rows, basis = (power, "power") if len(power) >= len(pace) else (pace, "pace")
+        from backend.engine import calibrate as CAL
+        e = CAL.stored_entry(CALIB_NAME)
+        if e and e.get("source") == "user" and e.get("value") is not None:
+            return {"beta": float(e["value"]), "w": 1.0, "personal": None, "se": None, "n": 0, "sd_c": None,
+                    "default": BETA_DEFAULT, "src": "user", "basis": None}
+    except Exception:           # noqa: BLE001
+        pass
+    try:
+        rows, basis = _beta_rows(ds, today, days)
         return {**shrink_beta(fit_heat_beta(rows)), "basis": basis}
     except Exception:           # noqa: BLE001 — the gate must not break on one bad file
         return {**shrink_beta({}), "basis": None}
 
 
+# the same β in the calibration store (engine/calibrate.py): the settings page's
+# chip and 手動指定; shrinkage and bounds identical to shrink_beta
+CALIB_NAME = "aet_heat_beta"
+
+
+def _calib_fit(ds, today: dt.date):
+    from backend.engine.calibrate import Fit
+    f = fit_heat_beta(_beta_rows(ds, today)[0])
+    return None if f.get("personal") is None else Fit(f["personal"], f.get("se"), int(f["n"]))
+
+
+def _register() -> None:
+    from backend.engine import calibrate as CAL
+    CAL.register(CAL.Item(
+        name=CALIB_NAME, label="AeT 熱 β", unit="bpm／°C", default=BETA_DEFAULT, default_src=BETA_DEFAULT_SRC,
+        k=BETA_K, min_n=BETA_MIN_N, fit=_calib_fit, bounds=BETA_BOUNDS, digits=2, default_is_literature=True,
+        help="氣溫每高 1 °C，輕鬆跑前半段心率多幾 bpm；AeT 飄移在 25–28 °C 時先扣掉這一段。"))
+
+
+_register()
+
+
 def beta_text(b: dict) -> str:
     """「β 0.85 bpm／°C（本人 24 次 × 0.55 ＋ 文獻 1.0）」."""
+    if b.get("src") == "user":
+        return f"β {b['beta']:.2f} bpm／°C（你在進階設定手動指定）"
     if b.get("src") == "personal":
         return (f"β {b['beta']:.2f} bpm／°C（本人 {b['n']} 次跑步擬合 {b['personal']:.2f}，"
                 f"權重 {b['w']:.0%}，其餘用文獻 {BETA_DEFAULT:.1f}）")
