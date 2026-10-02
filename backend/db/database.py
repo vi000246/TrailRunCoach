@@ -73,7 +73,8 @@ async def _migrate_schema():
         for table, col, col_type in new_cols:
             result = await conn.execute(text(f"PRAGMA table_info({table})"))
             existing = {row[1] for row in result.fetchall()}
-            if col not in existing:
+            # no columns = no such table (a partial schema, e.g. a test DB): create_all owns it
+            if existing and col not in existing:
                 await conn.execute(
                     text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
                 )
