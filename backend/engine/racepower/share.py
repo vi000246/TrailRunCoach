@@ -34,7 +34,7 @@ VERSION = 1
 
 SUMMARY_KEYS = ("time_s", "clock_s", "capacity_time_s", "power", "pct_cp", "pace_s_per_km", "km", "gain_m", "loss_m",
                 "finish_eta", "stops_s", "mode", "total_method", "badge", "days", "hr_cap", "M", "speed_factor",
-                "ep_per_h", "trip_kind", "category")
+                "ep_per_h", "trip_kind", "category", "time_total_s", "time_total_range_s")
 SEG_KEYS = ("i", "day", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade", "cls", "cls_label", "walk",
             "power", "pct_cp", "zone", "pace_s_per_km", "speed_kmh", "vert_m_per_h", "t", "cum_s", "eta", "temp_c",
             "kcal", "cum_kcal", "cho_g", "water_ml", "na_mg", "fuel_action", "target", "badge")
