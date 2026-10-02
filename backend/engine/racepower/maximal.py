@@ -19,16 +19,16 @@ A capacity sample is one of (in this order):
      30-min all-out time trial (docs/research/uphill-athlete-mountain-
      metrics.md §161), so a maximal 20–60 min effort ends at or above LTHR;
      the 0.95 / 0.90 for the longer races are Friel's Z4 / Z3 lower bounds
-     (zones.FRIEL_HR) — the mapping is 自組;
+     (zones.FRIEL_HR) — the mapping is 推估;
    * 5K / 10K only: the 30-s peak HR ≥ the observed HRmax − 10 bpm. Reaching
      near-maximal HR is a classic criterion of a maximal effort (Howley,
      Bassett & Welch 1995, MSSE 27:1292–1301: "some percentage of an
      age-adjusted estimate of maximal heart rate"); the 10-bpm tolerance and
      the observed (not age-predicted) HRmax — median of the top-5 per-run
-     peaks held ≥ 120 s in the 365 days up to the run — are 自組;
+     peaks held ≥ 120 s in the 365 days up to the run — are 推估;
    * an even or negative split: second-half speed ≥ 0.98 × first half
      (pacing taxonomy: Abbiss & Laursen 2008, Sports Med 38:239–252; the 2 %
-     tolerance is 自組);
+     tolerance is 推估);
    * power-duration monotonicity: the moving average power is not below the
      best moving average of any earlier road run (365 days) at least 1.5 ×
      as long. A mean-max power–duration curve is non-increasing by
@@ -37,7 +37,7 @@ A capacity sample is one of (in this order):
      maximal. Needed because heat alone drives HR to "maximal" values on
      this athlete's summer 5 km runs (150–158 W at 30-s peak HR 181–183, vs
      184 W held for 141 min in the 2025-12-21 half). It reads raw past
-     activities, not the fitted model; the 1.5 × is 自組;
+     activities, not the fitted model; the 1.5 × is 推估;
 4. a race-like TRAIL effort (`trail_maximal`; user correction 2026-10-01:
    trail races are > 10 km, never standard distances, and always slow in the
    second half — no distance bucket, no split rule), all of:
@@ -68,18 +68,18 @@ from backend.engine.racepower import riegel as R
 MAXIMAL = {
     "dist_tol": 0.10,                       # user rule (±10 % of a standard distance)
     "q4_frac": {"5k": 1.00, "10k": 1.00, "half": 0.95, "marathon": 0.90},
-    "hrmax_tol_bpm": 10.0,                  # 自組 (Howley 1995 criterion, tolerance ours)
+    "hrmax_tol_bpm": 10.0,                  # 推估 (Howley 1995 criterion, tolerance ours)
     "hrmax_cats": ("5k", "10k"),
-    "split_min": 0.98,                      # 自組 tolerance on "even or negative"
-    "longer_ratio": 1.5,                    # 自組: "much longer" = ≥ 1.5 × the effort's moving time
-    "peak_hold_s": 30.0,                    # 自組: a run's peak HR = highest bpm held ≥ 30 s (cumulative)
-    "hrmax_hold_s": 120.0,                  # 自組: for HRmax the per-run peak must be held ≥ 120 s (strap spikes)
-    "hrmax_top_n": 5,                       # 自組: observed HRmax = median of the top-5 per-run peaks
+    "split_min": 0.98,                      # 推估 tolerance on "even or negative"
+    "longer_ratio": 1.5,                    # 推估: "much longer" = ≥ 1.5 × the effort's moving time
+    "peak_hold_s": 30.0,                    # 推估: a run's peak HR = highest bpm held ≥ 30 s (cumulative)
+    "hrmax_hold_s": 120.0,                  # 推估: for HRmax the per-run peak must be held ≥ 120 s (strap spikes)
+    "hrmax_top_n": 5,                       # 推估: observed HRmax = median of the top-5 per-run peaks
     "trail_min_km": 10.0,
     "trail_min_s": 90 * 60.0,
     "trail_avg_frac": 0.90,                 # Friel Z3 lower bound
-    "trail_above_aet": 2.0 / 3.0,           # 自組
-    "event_km_tol": 0.10,                   # 自組: plan event distance vs the watch
+    "trail_above_aet": 2.0 / 3.0,           # 推估
+    "event_km_tol": 0.10,                   # 推估: plan event distance vs the watch
 }
 RACE_WORDS = re.compile(r"賽|馬拉松|race|marathon", re.I)
 EVENT_KINDS = {"road": "road", "race": "trail"}   # planning.KINDS → activity category
@@ -176,7 +176,7 @@ def match_events(events, runs: list[dict]) -> dict[int, dict]:
     distance_km, priority, name, id; runs: [{idx, date, km, trail}]. Same
     date; road events take non-trail runs and 越野賽 (kind race) trail runs;
     with a distance, the watch distance within ±event_km_tol (else the
-    nearest run that day, when it is within ±25 %, 自組 for a shortened
+    nearest run that day, when it is within ±25 %, 推估 for a shortened
     course). Several runs that day: the one nearest the distance (else the
     longest). 百岳 / other events are never runs."""
     out: dict[int, dict] = {}

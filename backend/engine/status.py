@@ -210,7 +210,7 @@ class Status:
         """熱適應 (docs/research/heat-acclimation.md §5.3): the index S from
         the per-activity heat exposure (engine/heat.py, heat_data.py). Level:
         acclimatised good, partial watch, none info; bad only when a hot A/B
-        race is within 30 days and its projected S < 0.75 (自組)."""
+        race is within 30 days and its projected S < 0.75 (推估)."""
         from backend.engine import heat as HT
         from backend.engine import heat_data as HD
         from backend.engine import heat_plan as HP
@@ -257,8 +257,8 @@ class Status:
         return Indicator("heat", "熱適應", level, f"{s:.0%}（{lv['label']}）", verdict,
                          f"每天 Hadley ≥ {HT.HOT_HADLEY:.0f} 的移動分鐘（130–150 部分計入），≥ {HT.MIN_DOSE_MIN:.0f} 分 = 滿劑量；"
                          f"有暴露 S += {HT.K_IN:.3f}·劑量·(1 − S)，沒有 S × (1 − {HT.DECAY})（Daanen 2018 每天 2.3–2.6 %）。"
-                         "S 的模型是自組、推估；你的心率資料目前不支持「夏末熱懲罰比初夏小」",
-                         action, source="Pandolf 1998；Racinais 2015 共識；Daanen 2018；模型 [自組]", value=s,
+                         "S 的模型是推估；你的心率資料目前不支持「夏末熱懲罰比初夏小」",
+                         action, source="Pandolf 1998；Racinais 2015 共識；Daanen 2018；模型 [推估]", value=s,
                          spark=spark,
                          extra={"s_race": s_race, "hrc": hrc, "a": HT.A_RECOVER, "a_range": list(HT.A_RANGE), "doses": doses,
                                 "badge": "推估", "source": meta.get("attribution"), "passive": passive[-20:],
@@ -468,7 +468,7 @@ class Status:
         # fast-finish runs refused; heat is a band, not a refusal). It is not
         # the interval gate any more — that is i_gate (engine/quality_gate.py).
         # Display only, so the 參考 tier counts too (workout_review.DRIFT_REF_MIN_S:
-        # 30–40 min after the warm-up, 自組), labelled; the gate reads the strict tier.
+        # 30–40 min after the warm-up, 推估), labelled; the gate reads the strict tier.
         # drift v2 (docs/research/drift-algorithm.md §1.3, §5.4): one run is ±4–6 pp, so the
         # number shown is the mean ± SE of the last 6 fair runs (engine/drift_agg.py), not a
         # verdict on one run; the single runs stay in the spark.

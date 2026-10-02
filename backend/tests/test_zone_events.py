@@ -317,7 +317,7 @@ def test_hr_shift_suggestion_and_tests_done_since():
     assert s["tests"] == ["tt30", "aet"] and s["earliest"] is None and "升高" in s["title"]
     assert "已熱校正" in s["title"] and "已依熱指數校正（β 0.22 ± 0.04 bpm/Hadley" in s["text"]
     assert "校正信心高" in s["text"] and "推估" in s["text"] and "±" in s["text"] and "腕" in s["caveat"]
-    assert "自組" not in s["text"]
+    assert "\u81ea\u7d44" not in s["text"]
     assert out["checks"]["hr_shift"]["fired"] and out["checks"]["hr_shift"]["heat"]["confidence"] == "high"
     # watch-only recent runs say so, with the lower confidence
     wpts = _pts(BASE) + _pts([50, 40, 30, 20, 10, 2], offset=9.0, src="watch", sigma_h=8.0)

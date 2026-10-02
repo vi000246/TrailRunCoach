@@ -11,9 +11,9 @@ adjustments are idempotent by construction.
 Only the current week is adjusted. Sessions the user edited, added, deleted or
 that are done are never touched (their gen_key is "locked").
 
-Rules (thresholds: source or 自組):
+Rules (thresholds: source or 推估):
   A. missed easy run -> its make-up is dropped (the generator would re-place it
-     on a later day). Seiler「easy days easy」; not making it up is 自組.
+     on a later day). Seiler「easy days easy」; not making it up is 推估.
   B. missed quality / test -> kept on the generator's new day only when it is
      ≥ 2 days from the long run and every other hard day (plan_prefs.place()'s
      48-h rule); else moved to a free day that keeps the spacing; else
@@ -34,9 +34,9 @@ Rules (thresholds: source or 自組):
           CTL/ATL already come from the real data);
        2. a hard session < 2 days after it moves later in the week if the 48-h
           spacing allows, else steps down one dose step, else becomes an easy
-          run (自組);
+          run (推估);
        3. the remaining easy runs this week lose the excess TSS (actual −
-          planned), each ≥ 20 min, else the last easy is dropped (自組); the
+          planned), each ≥ 20 min, else the last easy is dropped (推估); the
           long run and the quality session are never trimmed for this;
        4. a note on that day:「輕鬆跑偏強（…）：已調整之後的課表」.
   E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py)
@@ -67,15 +67,15 @@ OVER_HR_BPM = 3.0          # workout_review.AET_MARGIN: "easy" = avg HR ≤ AeT 
 OVER_SHARE = 0.10          # workout_review.OVER_AET_SHARE: > 10 % of the time above AeT + 3
 EASY_POWER_CAP = 0.80      # zones.py z2 upper bound (Palladino 1C: 75–80 % CP)
 OVER_TSS = 0.20            # compliance.COMPLIANCE["green"] (TrainingPeaks ±20 %)
-MIN_EASY_MIN = 20          # 自組: a trimmed easy run is never shorter than this
+MIN_EASY_MIN = 20          # 推估: a trimmed easy run is never shorter than this
 SPACING_DAYS = 2           # plan_prefs.place(): 48 h between hard days / the long run
 # E. fatigue guard
 TSB_FLOOR = -30.0          # week_plan(): TSB < −30 -> recovery week
 RAMP_SHORT = 8.0           # status.RAMP["short"]: Friel 5–8, 10 the ceiling (coach; unsourced-rules.md §B2)
-FATIGUE_CUT = 0.80         # 自組: easy minutes × 0.8
-RED_STREAK = 2             # 自組: two red sessions in a row
+FATIGUE_CUT = 0.80         # 推估: easy minutes × 0.8
+RED_STREAK = 2             # 推估: two red sessions in a row
 
-SRC_SEILER = "Seiler：easy days easy；不補課屬自組"
+SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
 SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練"
 SRC_OVER = ("workout_review 平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
             "TrainingPeaks ±20%；組合方式推估（unsourced-rules.md B5）")
@@ -294,7 +294,7 @@ def _missed(wk: _Week, stored_missed: list[dict], out: list) -> None:
             if pick is None:
                 wk.remove(g)
                 _adj(out, "missed_long", wk, {**g, "day": was}, "removed",
-                     f"{wd(was)}長跑沒跑；本週沒有不靠著強度課的空日：取消，不移到下週", SRC_SPACING + "；不跨週屬自組")
+                     f"{wd(was)}長跑沒跑；本週沒有不靠著強度課的空日：取消，不移到下週", SRC_SPACING + "；不跨週屬推估")
                 continue
             g["day"] = pick
             _adj(out, "missed_long", wk, g, "moved", f"長跑延到{wd(pick)}：{wd(was)}沒跑；不和強度課相鄰",

@@ -128,7 +128,7 @@ def tobler_eph(km: float, gain_m: float, loss_m: Optional[float] = None) -> floa
     """EP/h (EP = km + gain/100) that Tobler's hiking function implies on a
     course known only by its totals: the distance split into an up and a
     down part in proportion to gain and loss, both at the mean grade
-    (gain + loss) / distance (a two-segment approximation, 自組; Tobler 1993
+    (gain + loss) / distance (a two-segment approximation, 推估; Tobler 1993
     W = 6·e^(−3.5·|S + 0.05|) km/h, grade_model.tobler_kmh). The 百岳
     fallback when there are no solo hikes — group hikes are not the
     athlete's pace. Labelled 推估."""
