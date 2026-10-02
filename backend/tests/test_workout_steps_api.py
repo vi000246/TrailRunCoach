@@ -15,6 +15,7 @@ from backend.tests.test_plan_store import API, Env
 def _pin(monkeypatch):
     monkeypatch.setattr(CW, "real_today", lambda: date(2026, 9, 30))
     monkeypatch.setattr(plan_sessions, "_tpace", lambda: 280.0)
+    monkeypatch.setattr(plan_sessions, "_speeds", lambda: {"v_easy": 10.0, "v_easy_src": "t", "ep_kmh": 7.0})
 
 
 def _quality(e):
