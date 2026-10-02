@@ -56,7 +56,7 @@ def test_default_prefs_are_inactive_and_change_nothing():
 def test_settings_round_trip():
     p = PP.Prefs(days=(True, False, True, False, True, False, True), long_day="sun", cap_weekday=50,
                  cap_mode="hard", runs=4, quality=1, strength=2, strength_days=(0, 3), weekly_hours=6.0,
-                 terrain_easy="trail", terrain_long="hike", terrain_quality="hill", interval_target="hr")
+                 terrain_easy="trail", terrain_long="trail", terrain_quality="hill", interval_target="hr")
     s = p.settings()
     for k, v in s.items():
         SR.validate(k, v)                                   # every stored value is valid
@@ -211,12 +211,14 @@ def test_trail_easy_is_hr_only_and_uses_the_trail_rate():
     assert all(s["tss"] == pytest.approx(s["minutes"] / 60 * RATES["trail"]) for s in e)
 
 
-def test_hike_long_day_is_time_based():
-    ss = week(PP.Prefs(terrain_long="hike"))
-    h = next(s for s in ss if s["id"] == "long")
-    assert h["kind"] == "hike" and h["terrain"] == "hike"
-    assert f"走滿 {h['minutes']} 分鐘" in h["detail"] and "功率" not in h["target"]
-    assert CW.session_steps(h, CW.Thresholds.of({"lthr": 170, "aet": 150}))[0].seconds == h["minutes"] * 60
+def test_old_hike_long_terrain_is_a_trail_long_run():
+    # 長跑地形「登山」 is gone: a stored "hike" builds the 越野跑 long run, never 登山健行
+    trail = week(PP.Prefs(terrain_long="trail"))
+    for p in (PP.Prefs(terrain_long="hike"), PP.from_settings({"plan.prefs.terrain_long": "hike"})):
+        h = next(s for s in week(p) if s["id"] == "long")
+        assert h["kind"] == "long" and h["terrain"] == "trail" and "登山" not in h["title"]
+        assert h == next(s for s in trail if s["id"] == "long")
+    assert PP.from_settings({"plan.prefs.terrain_long": "hike"}).terrain_long == "trail"
 
 
 def test_quality_terrain_and_hr_target():
@@ -326,8 +328,8 @@ def test_week_plan_with_prefs_on_the_athletes_data():
     capped = O.week_plan(ds, st, today, prefs=PP.Prefs(cap_weekday=50, cap_mode="hard"))
     # a hot A/B race in the plan adds heat sessions; a hard cap turns them into run + bath (heat_plan.py)
     kinds = lambda wp: sorted({s["id"].rstrip("0123456789") for s in wp["sessions"]
-                               if s["kind"] != "heat_passive"} - {"easy", "carry"})
-    # (carry = an easy run turned into the loaded-carry machine session, engine/loaded_carry.py:
+                               if s["kind"] != "heat_passive"} - {"easy", "steep"})
+    # (steep = an easy run turned into the 陡坡健走 session, engine/steep_hill.py:
     # whether one fits depends on where the cap puts the easy runs)
     assert kinds(capped) == kinds(base)                   # nothing but easy runs is lost
     for s in capped["sessions"]:

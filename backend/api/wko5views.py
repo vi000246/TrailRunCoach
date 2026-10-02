@@ -597,14 +597,14 @@ def _activity_json(ds, w) -> dict:
             "power": {"source": src, "used": A.power_ok(ds, w) if src != PS.NONE else False,
                       "label": PS.label(src, bool(getattr(ds, "accept_watch_power", True))),
                       "setting": PS.SETTING_KEY},
-            # the pack carried (engine/loaded_carry.activity_pack; racepower_hike_meta.json)
+            # the pack carried (racepower athlete.activity_pack; racepower_hike_meta.json)
             "pack": _pack_json(w)}
 
 
 def _pack_json(w) -> Optional[dict]:
     try:
-        from backend.engine import loaded_carry as LC
-        return LC.activity_pack(w)
+        from backend.engine.racepower import athlete as RA
+        return RA.activity_pack(w)
     except Exception:                       # noqa: BLE001 — never breaks the activity card
         return None
 
@@ -635,7 +635,7 @@ async def patch_activity(i: int, body: dict):
     w = ds.workouts[i]
     from backend.api.workouts import TAG_FIELDS
     if "pack_kg" in body:
-        # the pack carried (loaded-carry-training.md §5.1): racepower_hike_meta.json, null = cleared
+        # the pack carried (the 百岳 prediction's per-trip pack): racepower_hike_meta.json, null = cleared
         await run_in_threadpool(_set_pack, w, body.get("pack_kg"))
     tag_keys = {k: v for k, v in body.items() if k in TAG_FIELDS}
     if tag_keys or "pack_kg" not in body:

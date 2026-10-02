@@ -202,19 +202,12 @@ ol.steps .sb { font-size: 11.5px; color: var(--muted); display: flex; gap: 4px; 
 .now-l { display: flex; gap: 6px; align-items: center; font-size: 13px; margin: 0 0 8px; min-width: 0; }
 .now-l .di { color: var(--accent); font-size: 16px; }
 .now-l span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.lcsteps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
-.lcsteps > div { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: 11.5px; color: var(--muted); }
-.lcsteps > div b { display: block; font-size: 15px; color: var(--text); font-variant-numeric: tabular-nums; }
-.lcsteps > div.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.lcsteps > div.ok b::after { content: " ✓"; color: var(--good); font-size: 13px; }
 .rows { display: grid; gap: 4px; margin-top: 8px; }
 details.rw { border-top: 1px solid var(--line); }
 details.rw > summary { list-style: none; cursor: pointer; display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 12.5px; flex-wrap: wrap; }
 details.rw > summary::-webkit-details-marker { display: none; }
 details.rw .body { font-size: 12px; color: var(--muted); padding: 0 0 6px; }
 .grid2 { display: grid; grid-template-columns: auto auto auto; gap: 1px 10px; font-size: 12px; color: var(--muted); margin-top: 3px; }
-.lcpack { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 12.5px; padding: 3px 0; }
-.lcpack input { width: 64px; font: inherit; }
 
 /* ---- 紀錄 ---- */
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
@@ -301,11 +294,6 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
     <section id="b2bcard" aria-labelledby="b2b-h" hidden>
       <h2 id="b2b-h">B2B 連續長天 <span class="meta" id="b2b-sub"></span><span id="b2b-q"></span></h2>
       <div id="b2b"><div class="loading">…</div></div>
-    </section>
-    <!-- 負重訓練 (engine/loaded_carry.py card): only before a 百岳 / multi-day A event, or once loaded sessions exist -->
-    <section id="lccard" aria-labelledby="lc-h" hidden>
-      <h2 id="lc-h">負重訓練 <span class="meta" id="lc-sub"></span><span id="lc-q"></span></h2>
-      <div id="lc"><div class="loading">…</div></div>
     </section>
   </div>
 
@@ -630,85 +618,6 @@ async function loadB2B() {
   $("b2b").innerHTML = out.join("");
 }
 
-// ---------------- 負重訓練 (GET /loaded-carry = engine/loaded_carry.card) ----------------
-// loaded vs unloaded climbs in the AeT − 15 … AeT + 3 band: ΔHR at the same VAM, 負重效率 = VAM ratio ÷ Pandolf
-const kgS = (v) => v == null ? "–" : (Math.round(v * 10) / 10) + " kg";
-const LC_HELP = {
-  stage: "背包重量分三階段，每階段約 2 週：體重的 5% → 10% → 行程背包（UA 健行訓練）。上一階段做過一次才升級，不跳級；" +
-    "新重量的第一次長天時間 × 0.75（最多 3 小時），一次只加重量或時間其中一樣（推估）。",
-  freq: "每 28 天最多 4 次負重課（Orr 2021；Schuh-Renner 2017：每月 ≥ 5 次受傷風險 OR 2.11）；背包長天至少隔 10 天。" +
-    "沒有背包長天的那週，從輕鬆跑換一次 40–50 分跑步機坡度／樓梯機背包課；B2B 那週不排（推估）。",
-  dhr: "同 VAM 心率：同一段坡度、同樣爬坡速度（VAM）時，背包比不背包多幾下心率：用近 8 週不背包爬坡（AeT −15 到 +3 bpm）擬合心率～VAM 直線，" +
-    "再看背包課的殘差中位數。±3 bpm 內＝差不多（推估）。Simpson 2011：自選速度時背包的代價常常出現在速度、不在心率，所以要配負重效率一起看。",
-  eff: "負重效率 = 背包 VAM ÷ 不背包 VAM（同坡度帶、同心率帶），再除以 Pandolf 1977 預測的比例。1 = 和物理預測一樣；> 1 = 背得比預測好。" +
-    "只和同一重量比：不同重量間 Pandolf 本身誤差約 ±8–15%（推估的判讀；AeT 跑速 2.6 m/s 推估）。",
-  drift: "後段：背包長天最後 1/3 對最前 1/3 的同 VAM 心率差（耐久性；推估）。",
-  down: "下坡：坡度 −30% 到 −10% 的移動速度，背包 ÷ 不背包（描述統計；Pandolf 不能用在下坡）。",
-  pack: "這次背多少 kg：寫進 racepower_hike_meta.json，負重課的評估和百岳預測都會用。計畫裡是負重課的那天，預設帶入計畫重量。",
-};
-async function loadLC() {
-  const c = await j(`${API}/loaded-carry`);
-  if (!c.active) return;
-  $("lccard").hidden = false;
-  const E = c.event, W = c.this_week || {}, out = [];
-  $("lc-sub").textContent = E ? `${E.name} ${md(E.start)} · 行程 ${kgS(c.trip_kg)}${E.pack_kg == null ? "（預設）" : ""}` : "";
-  $("lc-q").innerHTML = q(`${LC_HELP.stage}\n\n${LC_HELP.freq}\n\n推估：心率帶 AeT −15…+3、±3 bpm、±5%、週數對應、1.15 倍都沒有來源。${c.rules.eval ? "\n判讀：" + c.rules.eval : ""}${c.rules.cap ? "\n機器課上限：" + c.rules.cap : ""}${c.rules.me ? "\nME：" + c.rules.me : ""}`);
-  const st = typeof W.step === "number" ? W.step : 0, done = Math.max(0, ...c.done.map((d) => d.stage || 0));
-  const lab = ["5%", "10%", "行程"];
-  out.push(`<div class="lcsteps" role="list">${(c.kgs || []).map((kg, i) => `<div role="listitem" class="${st === i + 1 ? "on" : ""} ${done >= i + 1 ? "ok" : ""}">
-    ${i + 1}・${lab[i]}<b>${kgS(kg)}</b></div>`).join("")}</div>`);
-  const wk = W.week || {};
-  let now = "", why = (W.why || []).join("\n");
-  if (W.step === "me") now = "基礎後期：只做 ME 健身房版";
-  else if (W.step === "taper") now = wk.taper ? `減量：${md(wk.taper.day)} 背包短課 30 分 ${kgS(wk.taper.kg)}` : "減量期：不背包";
-  else if (wk.long) now = `背包長天 ${md(wk.long.day)}（${wd(wk.long.day)}）${kgS(wk.long.kg)}${wk.long.first ? " · 時間縮短" : ""}`;
-  else if (wk.machine) now = `機器背包課 ${md(wk.machine.day)}（${wd(wk.machine.day)}）${wk.machine.minutes} 分 · ${kgS(wk.machine.kg)}`;
-  else if ((W.blocked || []).length) { now = "本週不背包"; why = W.blocked[0]; }
-  else if ((wk.notes || []).length || wk.long_blocked) { now = "本週不背包"; why = wk.long_blocked || wk.notes[0]; }
-  const me = W.me ? `ME 肌耐力第 ${W.me.n + 1} 次（Johnston：腿限、還能講話，心率可以超過 AeT）${c.rules.me ? "\n來源：" + c.rules.me : ""}`
-    : W.me_why && (W.step === "me" || typeof W.step === "number") ? W.me_why : "";
-  if (now) out.push(`<p class="now-l">${I("loaded")}<span>${esc(now)}</span>${q([why, me].filter(Boolean).join("\n\n"))}</p>`);
-  const ahead = c.planned.filter((p) => !p.this_week && p.day);
-  out.push(`<div class="stats">
-    <div class="stat"><div class="k">28 天${q(LC_HELP.freq)}</div><div class="v">${W.count28 ?? "–"}<small> / 4</small></div></div>
-    <div class="stat"><div class="k">上次長天</div><div class="v">${W.last_long ? md(W.last_long) : "–"}</div></div>
-    <div class="stat"><div class="k">機器上限${src(c.rules.cap)}</div><div class="v">${c.machine_cap == null ? "–" : (Math.round(c.machine_cap * 10) / 10) + "<small> kg</small>"}</div></div>
-    <div class="stat"><div class="k">下次</div><div class="v" title="${esc(ahead.slice(0, 4).map((p) => `${md(p.day)} ${kgS(p.kg)}`).join("、") + "（暫定）")}">${ahead.length ? md(ahead[0].day) : "–"}</div></div></div>`);
-  const f = (v, fmt) => v == null ? "–" : fmt(v);
-  const rows = c.done.map((d) => {
-    const r = d.eval || {};
-    return `<details class="rw"><summary><b class="num">${md(d.day)}</b><span class="num">${kgS(d.kg)}</span><span class="meta num">${d.minutes} 分${d.long ? " · 長天" : ""}</span>
-        <span class="meta num">${f(r.hr_shift_bpm, (v) => sgn(v, (x) => x.toFixed(1)) + " bpm")} · 效率 ${f(r.e_l, (v) => v.toFixed(2))}</span></summary>
-      <div class="body">${esc(r.text || "")}<div class="grid2" style="grid-template-columns:auto auto">
-        <span>同 VAM 心率${q(LC_HELP.dhr)}</span><span class="num">${f(r.hr_shift_bpm, (v) => sgn(v, (x) => x.toFixed(1)) + " bpm")}</span>
-        <span>負重效率${q(LC_HELP.eff)}</span><span class="num">${f(r.e_l, (v) => v.toFixed(2))}</span>
-        ${r.late_drift_bpm != null ? `<span>後段${q(LC_HELP.drift)}</span><span class="num">${sgn(r.late_drift_bpm, (x) => x.toFixed(1))} bpm</span>` : ""}
-        ${r.down_ratio != null ? `<span>下坡${q(LC_HELP.down)}</span><span class="num">${pctS(r.down_ratio - 1)}</span>` : ""}
-        ${d.pct ? `<span>體重比</span><span class="num">${Math.round(d.pct * 100)}%</span>` : ""}</div></div></details>`;
-  }).join("");
-  if (rows) out.push(`<div class="rows">${rows}</div>`);
-  const T = (c.trend || []).filter((t) => t.judged);
-  if (T.length) out.push(`<p class="meta" style="margin:6px 0 0">${I("fitness")} ${T.map((t) => `專項 ${t.stage}：${esc(t.text)}`).join("；")}</p>`);
-  if ((c.recent || []).length) out.push(`<details class="more"><summary>記錄背包重量</summary><div class="body">${q(LC_HELP.pack)}
-    ${c.recent.map((a) => `<div class="lcpack"><span class="num">${md(a.day)}（${wd(a.day)}）${a.minutes} 分</span>
-      <input type="number" min="0" max="40" step="0.5" data-lc-pack="${a.idx}" value="${a.pack_kg ?? ""}" placeholder="${a.planned_kg ?? "kg"}" aria-label="${md(a.day)} 背包 kg">
-      <span class="meta">kg${a.planned_kg != null && a.pack_kg == null ? `（計畫 ${kgS(a.planned_kg)}）` : ""}</span><span class="meta" data-lc-msg></span></div>`).join("")}</div></details>`);
-  else if (!c.done.length) out.push(`<p class="meta" style="margin:6px 0 0">還沒有記錄背包重量的訓練</p>`);
-  $("lc").innerHTML = out.join("");
-}
-document.addEventListener("change", async (ev) => {
-  const inp = ev.target.closest("[data-lc-pack]");
-  if (!inp) return;
-  const msg = inp.parentElement.querySelector("[data-lc-msg]");
-  const v = inp.value === "" ? null : Number(inp.value);
-  try {
-    const r = await fetch(`/api/v1/wko5/workouts/${inp.dataset.lcPack}/activity`, { method: "PATCH",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pack_kg: v }) });
-    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 120)}`);
-    msg.textContent = v == null ? "已清除" : "已存";
-  } catch (e) { msg.textContent = `存檔失敗：${e.message}`; }
-});
-
 // ---------------- this week ----------------
 // session type -> icon + colour + label (identity is icon + word, never colour alone)
 const TYPES = {
@@ -986,9 +895,7 @@ $("wk-ic").innerHTML = I("time");
   USE_POWER = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
   await loadStatus().catch(fail("kpis"));
   loadZ5().catch(fail("z5"));
-  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
-  loadLC().catch(() => {});                   // 負重訓練: likewise
-  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
+  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
 })();
 </script>
 </body>

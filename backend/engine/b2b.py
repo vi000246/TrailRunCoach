@@ -50,11 +50,8 @@ Structure (doc §2.5):
     (vo2max-gate-and-trail-metric.md: trail pace / power unreliable);
   * the week's total does not grow (Koop「Do not increase the total」): day 2
     comes out of the easy runs; the pair ≤ 70 % of the week (推估);
-  * 百岳: pack 5 → 10 → 15 % of body weight by weeks before the trip (UA
-    trekking, ≈ 2 weeks a step; weeks 10–9 / 8–7 / 6–3 as in
-    loaded-carry-training.md, 推估), ≤ the trip pack (9 kg,
-    capacity.PACK_DEFAULT_MULTI); day 1 practises race fuelling 30–60 g/h
-    (Burke 2011).
+  * no pack (the load is simulated by grade: engine/steep_hill.py); day 1
+    practises race fuelling 30–60 g/h (Burke 2011).
 
 The exception (doc §2.5, user-approved): an accepted B2B pushes TSB below −30 /
 −20. week_plan would make the next week a recovery week (3:1 → 2:2); instead
@@ -97,7 +94,6 @@ SINGLE_DAY2 = (90, 150)        # single-day ≥ 6 h event: day 2 1.5–2.5 h eas
 PAIR_SHARE = 0.70              # 推估: the B2B days ≤ 70 % of the week's minutes
 MIN_DAY2 = 60                  # 推估: a "long" day 2 is ≥ 60 min, else no B2B this week
 FUEL_MIN_H = 4.0               # Koop: a fuelling long run is ≥ 4 h
-PACK_STEPS = (0.05, 0.10, 0.15)  # UA trekking: 5 → 10 → 15 % of body weight
 POST_EASY_DAYS = 4             # UA / Johnston「three or four light days」; 4 推估
 # ---- detection of a done B2B --------------------------------------------------
 DETECT_MIN = 90.0              # 推估: a day counts as a long day from 90 moving minutes
@@ -353,21 +349,6 @@ def minutes(long_min: float, total_min: float, days: int, event: dict) -> Option
     return [_r5(d1)] + [_r5(d2)] * n
 
 
-def pack_kg(weeks_out: int, weight: Optional[float], event: Optional[dict]) -> Optional[dict]:
-    """百岳 pack on a B2B weekend `weeks_out` weeks before the trip: UA
-    trekking 5 → 10 → 15 % of body weight, each step ≈ 2 weeks, placed like
-    loaded-carry-training.md's table (weeks 10–9: 5 %, 8–7: 10 %, 6–3: the
-    trip pack), never above the trip pack (Event.pack_kg when the plan has
-    it, else capacity.PACK_DEFAULT_MULTI 9 kg)."""
-    if not event or event.get("kind") != "baiyue":
-        return None
-    from backend.engine.racepower.capacity import PACK_DEFAULT_MULTI
-    trip = float(event.get("pack_kg") or PACK_DEFAULT_MULTI)
-    pct = PACK_STEPS[0] if weeks_out >= 9 else PACK_STEPS[1] if weeks_out >= 7 else PACK_STEPS[2]
-    kg = min(trip, weight * pct) if weight else None
-    return {"pct": pct, "kg": None if kg is None else round(kg, 1), "max": trip, "weeks_out": weeks_out}
-
-
 # ---------------------------------------------------------------------------
 # week_plan / projection glue
 # ---------------------------------------------------------------------------
@@ -598,13 +579,7 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
         s["terrain"] = long_s.get("terrain")
         s["tss"] = round(rate * s["minutes"], 1)
         s["target"] = hr_t
-    pk = pack_kg(int(info.get("weeks_out") or 6), weight, ev)
-    pack = ""
-    if pk:
-        what = f"{pk['kg']:g} kg（體重的 {pk['pct'] * 100:.0f}%）" if pk["kg"] is not None else f"體重的 {pk['pct'] * 100:.0f}%"
-        pack = (f"百岳背包：賽前第 {pk['weeks_out']} 週，第 1 天背 {what}；"
-                f"UA 健行訓練 5 → 10 → 15%、每階段約 2 週，不超過行程背包 {pk['max']:g} kg"
-                f"（對應週數依 loaded-carry-training.md，推估）。")
+    pack = ""                    # no pack in training (engine/steep_hill.py simulates it with grade)
     fuel = "練比賽補給：每小時 30–60 g 醣，超過 2.5 小時可到 90 g/h；當晚要吃回來，第 2 天才是在練「接續的一天」（Burke 2011）。"
     if long_s["minutes"] < FUEL_MIN_H * 60:
         fuel += f"Koop：練補給的長跑至少 {FUEL_MIN_H:.0f} 小時，本週先練到 {long_s['minutes']} 分。"
@@ -623,7 +598,7 @@ def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optiona
         share = "約第 1 天的 2/3（CTS 30:20）" if not single else "1.5–2.5 小時輕鬆（推估）"
         s["title"] = f"B2B 第 {i} 天｜{base_title}"
         s["detail"] = (f"B2B 第 {i} 天：{share}，{s['minutes']} 分；{hr_t}，不加速；建議下坡多一點（不強制），練多日下坡"
-                       f"（Bontemps 2025 重複負荷效應）。" + ("背包和第 1 天一樣或更輕。" if pk else "")
+                       f"（Bontemps 2025 重複負荷效應）。"
                        + "跟第 1 天比同樣爬坡速度的心率、同樣心率的爬坡速度，總覽的 B2B 卡會判讀。")
         s["source"] = SRC_DAYS
 
