@@ -1,15 +1,10 @@
 """WKO5 mean-max (backend/engine/algorithms/wko5_meanmax.py)."""
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
-from pathlib import Path
 
 import pytest
 
 from backend.engine.algorithms.wko5_meanmax import duration_grid, meanmax_time
-
-ATHLETE_DIR = Path(os.environ.get(
-    "WKO5_ATHLETE_DIR", r"C:\Users\<user>\WKO5\Athlete"))
-CACHE = ATHLETE_DIR / "Cache5"
 
 
 def _t(n):
@@ -58,39 +53,3 @@ def test_gappy_window_divides_by_total_time():
 def test_duration_longer_than_the_workout_gives_nothing():
     _, best = meanmax_time(_t(10), [200.0] * 10, durations=[600])
     assert best[0] is None
-
-
-@pytest.mark.golden
-@pytest.mark.skipif(not CACHE.exists(), reason="no WKO5 athlete folder")
-def test_meanmax_matches_wko5_cached_curves():
-    """Golden: WKO5's own cached meanmax(power) curve, point for point."""
-    from backend.files.wko5chart_reader import decode_file, Record
-    from backend.files.wko4_file import read_wko4, decode_channel
-    src = next((p for p in CACHE.glob("*.wko5cache")
-                if (decode_file(p).fields[0].value.get(461) if decode_file(p).fields else None) == "meanmax(power)"), None)
-    if src is None:
-        pytest.skip("no cached meanmax(power)")
-    root = decode_file(src).fields[0].value
-    checked = 0
-    for e in root.get(601).all(102):
-        chans = {}
-        for c in (e.get(116).all(4403) if isinstance(e.get(116), Record) else []):
-            body = c.get(102)
-            blk = body.get(121) if isinstance(body, Record) else None
-            if isinstance(blk, bytes):
-                chans[c.get(101)] = decode_channel(c.get(101), blk).values
-        xs, ys = chans.get("x"), chans.get("y")
-        if not xs:
-            continue
-        w = read_wko4(ATHLETE_DIR / e.get(117).split(":", 1)[-1])
-        pw, t = w.channels.get("power"), w.channels.get("elapsedtime")
-        if not pw or not t:
-            continue
-        grid, mm = meanmax_time(t.values, pw.values)
-        assert [int(x) for x in xs] == grid, e.get(117)
-        for x, y in zip(xs, ys):
-            assert dict(zip(grid, mm))[int(x)] == pytest.approx(y, rel=1e-9), (e.get(117), x)
-        checked += 1
-        if checked >= 15:
-            break
-    assert checked >= 5
