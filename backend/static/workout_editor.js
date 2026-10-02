@@ -132,13 +132,13 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const q = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
   const OPEN_W = 90;
   const TIP = {
-    basis: "每段的目標先跟「目標用：自動／心率／功率」走（標「自動」）；點某一段的目標可以只改那一段（標「改過」），選功率／心率／配速／無，數字依目前的 CP、LTHR、AeT、閾值配速自動帶入，再自己改。",
+    basis: "每一段自己決定用功率、心率還是配速：點那一段的目標就能改（標「指定」）。標「自動」的段依課表類型（路跑輕鬆／長跑看功率、心率 ≤ AeT 當上限；越野看心率；間歇看功率）。數字依目前的 CP、LTHR、AeT、閾值配速帶入。",
     chart: "橫軸是時間（按圈結束的段畫成固定寬度、斜線），高度和顏色都是強度（約當 % CP）。心率段換算成功率高度是推估，只影響這張圖。點一段可以選到下面那一步。",
     tss: "TSS 估＝Σ 秒 × IF² × 100 ÷ 3600，IF＝目標中點 ÷ CP；心率段用 Friel 心率區對到 Palladino 功率區，沒有目標的段依類型給固定值。都是推估，跑步 rTSS 和這個公式的差距未驗證。",
     rules: "即時檢查：5 區每趟至少 2 分鐘（徐國峰）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
     lastRest: "最後一趟做完不休息、直接接下一段。COROS 的間歇群組做不到，推送時會攤平成一段一段（每段一個 lap）。",
     watch: "COROS 手錶的限制：跑步的功率只收絕對瓦數（沒有 % CP）；每段只能設一個目標；沒有漸進（ramp）步驟。下面是實際會送出的步驟。",
-    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再依主課目標的中點分：三區 88–101% CP、四區 101–106%、五區 ≥ 106%（Palladino 功率區 3／4／5，也是區段圖的顏色）。每段同時有功率（% CP）和心率（% LTHR）目標，跟著「目標用」切換。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。",
+    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再依主課目標的中點分：三區 88–101% CP、四區 101–106%、五區 ≥ 106%（Palladino 功率區 3／4／5，也是區段圖的顏色）。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。",
     total: "總時間由下面的步驟加總：要改時間就改步驟（點這格會打開結構）。",
     pacePct: "配速的 % 是閾值配速的倍數：數字大＝慢（例：114–129% 是 Friel 2 區）。",
   };
@@ -345,7 +345,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         : dt === "distance" ? `<input class="num" type="number" step="0.1" min="0.05" data-f="km" value="${st.dur.value / 1000}" aria-label="距離 km"${dis}><span class="faint">km</span>`
         : st.dur.est ? `<span class="we-lap" title="按圈結束；總時間用課表寫的最短時間估">≈ ${mmss(st.dur.est)}</span>` : "";
       const ov = st.target && st.target.type !== "auto";
-      const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "改過" : "自動"}</span><b>${r.type === "none" ? "不設目標" : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
+      const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "指定" : "自動"}</span><b>${r.type === "none" ? "不設目標" : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
         (r.err ? `<span class="e">✕ ${esc(r.err)}</span>` : r.warn ? `<span class="w">⚠ ${esc(r.warn)}</span>` : "") : `<span class="s">…</span>`;
       return `<div class="we-row${this.sel === st.id ? " sel" : ""}" draggable="${!this.ro}" tabindex="0" data-id="${st.id}" style="--zc:${this.zc(r, st)}">
         <span class="grip" aria-hidden="true" title="拖曳排序">⋮⋮</span>
@@ -362,7 +362,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const zones = (ctx.zones || {})[ty] || [];
       const miss = { power: !th.cp && "沒有 CP", hr: !(th.lthr || th.aet) && "沒有 LTHR／AeT", pace: !th.tpace && "沒有閾值配速" };
       let h = `<div class="we-tg" data-tg="${st.id}"><select data-f="ttype" aria-label="目標類型">` +
-        opt("auto", `自動（跟目標用）`, ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? `（${miss[k]}）` : ""), ty)).join("") + opt("none", "無", ty) + `</select>`;
+        opt("auto", `自動（依課表類型）`, ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? `（${miss[k]}）` : ""), ty)).join("") + opt("none", "無", ty) + `</select>`;
       if (["power", "hr", "pace"].includes(ty)) {
         h += `<select data-f="tmode" aria-label="填法">${opt("zone", "區間", t.mode)}${opt("pct", ty === "power" ? "% CP" : ty === "hr" ? "% LTHR" : "% 閾值配速", t.mode)}${opt("abs", "自訂數字", t.mode)}</select>`;
         if (t.mode === "zone") h += `<select data-f="tzone" aria-label="區間">${zones.map((z) => opt(z.id, `${z.label}${z.text ? " · " + z.text : ""}`, t.zone)).join("")}</select>`;
@@ -668,6 +668,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         if (t.type === "auto" && t.intent === "band") return (t.lo + t.hi) / 2;
         if (t.type === "auto" && t.intent === "easy") return t.plo != null ? (t.plo + t.phi) / 2 : 0.75;
         if (t.type === "power" && t.mode === "pct") return (t.lo + t.hi) / 2;
+        if (t.type === "hr" && t.mode === "pct") { const m = (t.lo + t.hi) / 2; return m < .85 ? .7 : m < .9 ? .8 : m < .95 ? .88 : m < 1 ? .96 : m < 1.03 ? 1.03 : 1.1; }  // Friel → Palladino (推估, height only)
+        if (t.type === "hr" && t.mode === "zone") return 0.75;
+        if (t.type === "pace" && t.mode === "pct") return 2 / (t.lo + t.hi);
         return null;
       };
       const sec = (x) => x.dur.type === "time" ? x.dur.value : x.dur.type === "distance" ? x.dur.value * 0.36 : (x.dur.est || 60);

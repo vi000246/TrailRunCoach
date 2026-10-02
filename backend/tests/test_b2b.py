@@ -140,15 +140,6 @@ def test_day_minutes_two_thirds_pair_cap_and_single_day_clamp():
     assert B2B.minutes(80, 150, 2, {"days": 2}) is None                     # day 2 < 60 min
 
 
-def test_pack_progression_5_10_15_percent_up_to_9_kg():
-    e = {"kind": "baiyue"}
-    # weeks before the trip: 10–9 → 5 %, 8–7 → 10 %, 6–3 → 15 % (loaded-carry-training.md table)
-    assert [B2B.pack_kg(w, 60.0, e)["kg"] for w in (10, 9, 8, 7, 6, 3)] == [3.0, 3.0, 6.0, 6.0, 9.0, 9.0]
-    assert B2B.pack_kg(4, 70.0, e)["kg"] == 9.0                              # 10.5 kg → the 9 kg trip pack
-    assert B2B.pack_kg(4, 70.0, {**e, "pack_kg": 7.0})["kg"] == 7.0          # the event's own pack
-    assert B2B.pack_kg(8, None, e)["kg"] is None and B2B.pack_kg(8, 60.0, {"kind": "race"}) is None
-
-
 def _wk(long_day="2026-10-03", easy=("2026-09-29", "2026-10-01", "2026-10-04"), quality="2026-09-30"):
     ss = [{"id": "long", "kind": "long", "title": "長時間輕鬆（山路）", "minutes": 180, "tss": 180.0,
            "day": long_day, "done": False, "target": "功率 200 W", "detail": "", "source": ""},
@@ -203,7 +194,7 @@ def test_decorate_texts_targets_caps_and_sources():
     assert l1["title"].startswith("B2B 第 1 天｜") and l2["title"].startswith("B2B 第 2 天｜")
     assert l1["target"] == l2["target"] == "心率 ≤ AeT 142 bpm"           # HR only (trail)
     assert "30–60 g" in l1["detail"] and "Burke 2011" in l1["detail"]
-    assert "6.2 kg" in l1["detail"] and "10%" in l1["detail"]                # week 8: 10 % of 62 kg
+    assert "背" not in l1["detail"] and "kg" not in l1["detail"]             # no pack (engine/steep_hill.py)
     assert "2/3" in l2["detail"] and "下坡" in l2["detail"]
     assert "推估" in l1["source"] and "Koop" in l1["source"]
     # a 課表偏好 long-day cap: day 2 ≤ the cap and ≤ 2/3 of a capped day 1
@@ -361,7 +352,7 @@ def test_week_plan_accepted_b2b_on_the_users_days_volume_unchanged():
     assert by["long"]["minutes"] == 180 and by["long2"]["minutes"] == 120
     assert by["long"]["title"].startswith("B2B 第 1 天") and "30–60 g" in by["long"]["detail"]
     assert "（共 2 天）" in by["long"]["detail"] and by["long"]["target"].startswith("心率 ≤ AeT")
-    assert wp["b2b"]["weeks_out"] == 10 and "3.1 kg" in by["long"]["detail"]         # week 10: 5 % of 62 kg
+    assert wp["b2b"]["weeks_out"] == 10 and "kg" not in by["long"]["detail"]            # no pack in training
     # Koop: the week's total is the same as without B2B (day 2 came out of the easy runs)
     main = sum(s["minutes"] for s in wp["sessions"] if s["kind"] not in ("strength",))
     assert main == pytest.approx(wp["target"]["hours"] * 60, abs=30)
