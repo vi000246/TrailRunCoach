@@ -3002,7 +3002,8 @@ def _iv_verdict(ds, w, m, c, base):
             return {**base, "series": rows}
         rows.append(_row("偵測", f"偵測到 {n} 趟用力段，可以當作間歇判讀" if n else "沒有偵測到用力段，當作間歇也沒有趟可判讀",
                          "用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段"))
-        out = {**base, "badge": {"text": "這次不是間歇課", "level": "", "sub": e.get("type_label") or ""}, "series": rows}
+        head = "找不到趟" if c["type"] == "quality" else "這次不是間歇課"
+        out = {**base, "badge": {"text": head, "level": "", "sub": e.get("type_label") or ""}, "series": rows}
         if n:
             out["action"] = _offer_action(w)
         return out
