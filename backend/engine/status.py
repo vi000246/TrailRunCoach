@@ -830,7 +830,8 @@ class Status:
             # B3: the test is due for a reason, not a date (quality_gate.aet_test_reason)
             worst = WATCH if worst == GOOD else worst
             v = f"建議 AeT 測試：{tr['text']}"
-            act = "排一次 AeT 測試（課表偏好的測試方式）" + (f"；{act}" if act else "")
+            act = ("先維持週量穩定，穩定 3 週後再排 AeT 測試（推估）" if tr.get("wait")
+                   else "排一次 AeT 測試（課表偏好的測試方式）") + (f"；{act}" if act else "")
         # event-driven zone updates (engine/zone_events.py): suggestions only — they never
         # set cp_due, so week_plan schedules nothing from them; the 「建議做測試」 UI renders them
         try:

@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.engine import planning as P
-from backend.engine.zones import SOURCE, zones_json
+from backend.engine.zones import SOURCE, aet_uncertainty, zones_json
 from backend.files.wko5_athlete import pd_snapshot, read_athlete
 from backend.settings.paths import athlete_dir
 
@@ -76,7 +76,10 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
         "aethr": {"value": aet if aet is not None else (None if lthr_v is None else round(0.89 * lthr_v, 1)),
                   "source": "plan" if aet is not None else "friel_0.89",
                   "method": (ar or {}).get("method"),
-                  "label": (ar or {}).get("label") or "0.89 × LTHR（Friel Z2 上限，推估）"},
+                  "label": (ar or {}).get("label") or "0.89 × LTHR（Friel Z2 上限，推估）",
+                  # the 「± N bpm」 badge on an estimated AeT (zones.aet_uncertainty); None when measured
+                  "pm": None if aet is None and lthr_v is None else aet_uncertainty(
+                      "measured" if ar and ar.get("measured") else "estimate" if aet is not None else "friel")},
     }
 
 

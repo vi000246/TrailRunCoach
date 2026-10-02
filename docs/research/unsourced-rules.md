@@ -375,6 +375,8 @@
   - 起始心率：聚合估計值（有 SE）；沒有時維持 0.89 × LTHR − 5。
 - **校正**：DRIFT 的 W1 視窗 ＋ 1/SE² 權重；app DB 一年的路跑足夠。
 - **程式**：`quality_gate.py` `AET_FRESH_DAYS`（改成讀估計的 SE）；`aet_test.py` `STALE_DAYS`、`EVERY_WEEKS`、`START_BELOW`；`threshold_estimate.estimate_aet` 回傳 SE。
+- **週量穩定前提（2026-10-02 加，全部推估）**：測試（90 分鐘測試、AeT 測試）前 3 個「算數」的週（恢復／減量／比賽週跳過，最多往回 6 週），每週跑步時間都在平均 ±15% 內，測試才算確認；不穩定時 AeT 測試建議先等（`aet_test.due` 不排）。沒有跑步資料時不判斷、不擋。Uphill Athlete 式的想法，**docs/research 裡沒有原文出處**；3 週、±15% 自訂。程式：`base_check.volume_stable`（`VOL_WEEKS`、`VOL_TOL`、`VOL_LOOK`）。
+- **AeT 的「± N bpm」標示（2026-10-02）**：研究裡的 ±16 bpm **不是**飄移／回歸法的誤差，是 Micheli 2025 的 CP 心率 vs MLSS 心率 95% 一致性界限（−15.84～+17.05 bpm，`zones-and-thresholds.md` §2.2）。AeT 估計（0.89 × LTHR、沒有 SE 的自動估算）沒有驗證過的誤差，借用 ±16 當量級（推估）；回歸估計有 SE 時顯示 ±2·SE，下限 ±3（日間變異，Lamberts 2009）。程式：`zones.aet_uncertainty`。
 
 ### B4 間歇進階的狀態機
 
