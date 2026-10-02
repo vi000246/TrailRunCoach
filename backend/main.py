@@ -18,6 +18,7 @@ from backend.api import plan_sessions as plan_sessions_api
 from backend.api import plan_auto as plan_auto_api
 from backend.api import routes as routes_api
 from backend.api import injuries as injuries_api
+from backend.api import backup as backup_api
 
 
 @asynccontextmanager
@@ -83,6 +84,7 @@ app.include_router(racepower_api.share_router)      # /share/<id>: the only path
 app.include_router(routes_api.router)
 app.include_router(routes_api.workout_router)
 app.include_router(injuries_api.router)          # 傷病紀錄 (404 in the demo mode)
+app.include_router(backup_api.router)            # 備份 (settings page)
 
 # shared page assets (shell.js: the app-wide navigation every page includes)
 app.mount("/api/v1/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="pages-static")
