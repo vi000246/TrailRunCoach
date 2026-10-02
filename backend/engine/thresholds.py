@@ -107,8 +107,11 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
         ws, lts, dps = pick(days)
         ae = estimate_aet(dps, lthr=lthr_v)
         if ae.value is not None or days == WINDOWS[-1]:
+            from backend.engine.zones import aet_uncertainty
             out["aethr"] = {**asdict(ae), "days": days,
-                            "points": [[round(p.hr1, 1), round(p.drift, 4)] for p in dps]}
+                            "points": [[round(p.hr1, 1), round(p.drift, 4)] for p in dps],
+                            "pm": None if ae.value is None else aet_uncertainty(
+                                "regression" if ae.se else "estimate", ae.se)}
             break
     return out
 

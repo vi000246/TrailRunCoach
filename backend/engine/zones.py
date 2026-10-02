@@ -326,6 +326,36 @@ WORKOUT_TARGETS = [
 ]
 
 
+# ---- the 「± N bpm」 badge on an AeT that is an estimate, not a test --------------------
+# docs/research/zones-and-thresholds.md §2.1–2.2: the ±16 bpm in the research is NOT the
+# drift / regression method's error — it is Micheli 2025's 95 % limits of agreement of the
+# HR at CP vs the HR at MLSS (−15.84 … +17.05 bpm, PeerJ 13:e19060). No validated error
+# exists for an AeT from 0.89 × LTHR or from drift; ±16 is borrowed as the field-estimate
+# magnitude (推估). A regression estimate with a standard error shows ±2·SE instead, never
+# below the ~3 bpm day-to-day HR variation (Lamberts & Lambert 2009).
+AET_PM_BORROWED = 16                 # Micheli 2025 LoA magnitude, borrowed (推估)
+AET_PM_FLOOR = 3                     # Lamberts & Lambert 2009: day-to-day HR 3 ± 1 bpm
+_PM_SRC = ("±16 bpm 借用 Micheli 2025（PeerJ 13:e19060）：CP 時的心率和 MLSS 心率的 95% 一致性界限"
+           " −15.8～+17.1 bpm。AeT 本身沒有驗證過的誤差，所以是推估")
+
+
+def aet_uncertainty(kind: Optional[str], se: Optional[float] = None) -> Optional[dict]:
+    """{"pm": N bpm, "tip"} for an AeT estimate; None for a measured AeT (kind
+    None / "measured"). kind: "regression" (drift regression with its SE),
+    "estimate" (an estimate whose SE isn't kept), "friel" (0.89 × LTHR)."""
+    if kind in (None, "measured"):
+        return None
+    if kind == "regression" and se is not None and se > 0:
+        n = max(AET_PM_FLOOR, int(round(2 * se)))
+        return {"pm": n, "tip": f"推估的誤差約 ±{n} bpm：多次穩定跑的飄移回歸，95% 範圍 ≈ 2 × 標準誤（{se:.1f}）；"
+                                f"至少 ±{AET_PM_FLOOR}（每天的心率本來就差約 3 bpm，Lamberts 2009）。"
+                                "單次飄移的標準誤可能被低估 2–3 倍（Golden Cheetah 驗證），實際可能更大。"
+                                "做一次 AeT 測試最準。"}
+    head = ("0.89 × LTHR 是 Friel 區間的慣例，不是量出來的 AeT。" if kind == "friel" else
+            "這是自動估算，不是測試。")
+    return {"pm": AET_PM_BORROWED, "tip": f"推估的誤差約 ±{AET_PM_BORROWED} bpm。{head}{_PM_SRC}。做一次 AeT 測試最準。"}
+
+
 def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     """Suggested HR / power ranges per workout type. Uses the thresholds in
     effect; when LTHR is still WKO5's untouched default and an estimate
@@ -371,6 +401,8 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
             "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
             "lthr": lthr, "lthr_source": lthr_src, "lthr_measured": lthr_measured,
             "aet": aet, "aet_source": aet_src, "aet_measured": aet_measured,
+            "aet_pm": None if aet is None else aet_uncertainty(
+                "measured" if aet_measured else "estimate" if (ar is not None or aet_est) else "friel"),
             "hr_zones": "Friel % LTHR", "power_zones": "Palladino % CP", "rows": rows}
 
 
