@@ -248,7 +248,9 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.trip.tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是你的能力時間（在 AeT 的步行能力：越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗）。</span></span>
     </div>
     <div id="sticky">
-      <div class="seg big" id="mode"><button data-m="time">⏱ 目標時間</button><button data-m="power">⚡ <span class="rf">目標功率</span><span class="bf">目標速度</span></button><button data-m="auto">✨ 通通幫我算</button></div>
+      <div class="seg big" id="mode"><button data-m="time">⏱ <span class="bf" data-i18n="racepower.goal.time">目標時間</span><span class="rf" data-i18n="racepower.goal.pace">目標配速</span></button><button data-m="power">⚡ <span class="rf" data-i18n="racepower.goal.power">目標功率</span><span class="bf">目標速度</span></button><button data-m="auto">✨ <span class="bf">通通幫我算</span><span class="rf" data-i18n="racepower.goal.model">模型預測</span></button></div>
+      <span class="meta rf" id="goal-basis"></span>
+      <span class="help rf" tabindex="0">?<span class="tip" data-i18n="racepower.goal.tip">目標跟著你的訓練基準：課表偏好的「目標基準」是心率，或關閉「使用功率」→ 目標是配速（平均配速或完賽時間）；功率 → 目標是平均功率（W 或 %CP）。每公里／分段的目標由坡度模型從你的目標分配。沒有設目標就用模型自己的預測。</span></span>
     </div>
     <div class="row" id="mode-time">
       <div class="seg" id="tunit"><button data-u="time">時間</button><button data-u="pace">配速</button></div>
@@ -559,17 +561,25 @@ function setType(t) {
   renderDayPlan(); syncForm();
 }
 function accl() { return S.accl || (type === "baiyue" ? "unacclimatised" : "acclimatised"); }
+// the goal follows the training basis (/goal-basis): hr → a target pace, power → a target power;
+// 百岳 keeps its three modes. A saved goal of the other kind falls back to the model (it is kept in S).
+let BASIS = null;
+function goalOk(m) { return type === "baiyue" || !BASIS || m === "auto" || m === (BASIS.basis === "hr" ? "time" : "power"); }
+function mode() { return goalOk(S.mode) ? S.mode : "auto"; }
 function syncForm() {
-  segOn("mode", "m", S.mode); segOn("tunit", "u", S.tunit); segOn("punit", "u", S.punit); segOn("effort", "e", S.effort);
+  const md = mode();
+  document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("hidden", !goalOk(b.dataset.m)));
+  $("goal-basis").textContent = BASIS && type !== "baiyue" ? T(BASIS.basis === "hr" ? "goal.basis_hr" : "goal.basis_power") : "";
+  segOn("mode", "m", md); segOn("tunit", "u", S.tunit); segOn("punit", "u", S.punit); segOn("effort", "e", S.effort);
   segOn("csrc", "c", S.csrc); segOn("split", "s", S.split); segOn("strategy", "k", S.strategy); segOn("measure", "m", measure());
   segOn("accl", "a", accl());
   segOn("heat-accl", "h", S.heatAccl?.mode || "auto"); segOn("tripkind", "k", S.trip); segOn("hrband", "b", S.hrband);
   $("heat-s").classList.toggle("hidden", S.heatAccl?.mode !== "custom");
   if (S.heatAccl?.s != null && $("heat-s").value === "") $("heat-s").value = Math.round(S.heatAccl.s * 100);
   heatAcclLabel();
-  $("mode-time").classList.toggle("hidden", S.mode !== "time");
-  $("mode-power").classList.toggle("hidden", S.mode !== "power");
-  $("mode-auto").classList.toggle("hidden", S.mode !== "auto");
+  $("mode-time").classList.toggle("hidden", md !== "time");
+  $("mode-power").classList.toggle("hidden", md !== "power");
+  $("mode-auto").classList.toggle("hidden", md !== "auto");
   $("tt-time").classList.toggle("hidden", S.tunit !== "time" && type !== "baiyue");
   $("tt-pace").classList.toggle("hidden", S.tunit !== "pace" || type === "baiyue");
   $("tunit").classList.toggle("hidden", type === "baiyue");
@@ -596,11 +606,11 @@ function missing() {
   if (S.csrc === "gpx" && !COURSE) out.push(["drop", T("req.gpx")]);
   if (S.csrc === "manual" && !(num("dist") > 0)) out.push(["dist", T("req.dist")]);
   if (type === "baiyue" && !S.trip) out.push(["trip-box", T("req.trip")]);
-  if (S.mode === "time") {
+  if (mode() === "time") {
     const paceMode = type !== "baiyue" && S.tunit === "pace";
     if (paceMode ? !parseMs($("tpace").value) : !parseHms($("target").value)) out.push([paceMode ? "tpace" : "target", paceMode ? T("req.pace") : T("req.time")]);
   }
-  if (S.mode === "power" && type !== "baiyue" && !(num("tpower") > 0)) out.push(["tpower", T("req.power")]);
+  if (mode() === "power" && type !== "baiyue" && !(num("tpower") > 0)) out.push(["tpower", T("req.power")]);
   return out;
 }
 function markRequired() {
@@ -985,7 +995,7 @@ let timer = null;
 function schedule() { clearTimeout(timer); timer = setTimeout(run, 250); saveForm(); saveUI(); }
 function planBody(extra = {}) {
   const { f, t } = envBody();
-  const body = { type, mode: S.mode, date: $("date").value || null, pack_kg: num("pack"), effort_formula: $("formula").value,
+  const body = { type, mode: mode(), date: $("date").value || null, pack_kg: num("pack"), effort_formula: $("formula").value,
     env_from: f, env_to: t, start_time: $("start").value || null, stops: stopsOf(),
     strategy: { kind: S.strategy, amount: S.strategy === "even" ? 0 : Number($("amount").value) / 100 },
     hills: { up: (num("hup") ?? 5) / 100, down: (num("hdown") ?? 10) / 100 }, acclimatisation: accl(),
@@ -999,11 +1009,11 @@ function planBody(extra = {}) {
     body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
     if (num("heatz") != null) body.heat_ref_alt_m = num("heatz");
   }
-  if (S.mode === "time") {
+  if (body.mode === "time") {
     if (type !== "baiyue" && S.tunit === "pace") body.target_pace_s_per_km = parseMs($("tpace").value);
     else body.target_time_s = parseHms($("target").value);
   }
-  if (S.mode === "power") {
+  if (body.mode === "power") {
     if (type === "baiyue") body.speed_factor = (num("tspeed") || 100) / 100;
     else if (S.punit === "pct") body.target_pct_cp = (num("tpower") || 0) / 100;
     else body.target_power = num("tpower");
@@ -1090,11 +1100,18 @@ function zoneBar(p, cp) {
   return h + `<div class="needle" style="left:${X(p / cp)}%"></div></div><div class="meta">絕對強度：平均 ${pct(p / cp)} CP，落在 Palladino ${esc(zoneOf(p, cp))} 區</div>`;
 }
 
+// the goal against the model's own prediction (100 %): one line, a warning when it is clearly faster
+function goalLine(g) {
+  const f = g.faster, cls = g.level === "too_fast" ? "err" : g.level === "fast" ? "wn" : "";
+  const msg = ok(f) && g.level !== "ok" ? T("goal." + g.level, { pct: Math.round(Math.abs(f) * 100) }) : ok(f) ? T("goal.near", { pct: (f >= 0 ? "+" : "−") + Math.round(Math.abs(f) * 100) }) : "";
+  return `<div class="note" id="goal-line">🎯 ${esc(T("goal.vs", { goal: hms(g.goal_time_s), model: hms(g.model_time_s), pace: pace(g.model_pace_s_per_km) }))}
+    ${msg ? ` · <b class="${cls}">${esc(msg)}</b>` : ""}${badge(g.badge)}${help(T("goal.vs_tip"))}</div>`;
+}
 function renderResults() {
   const P = PLAN, s = P.summary, e = P.effort;
   if (P.type === "baiyue") return renderBaiyue();
   const trail = P.type === "trail", cp = P.used.cp.value, wt = P.used.weight.value;
-  const MODE = { time: "目標時間", power: "目標功率", auto: "通通幫我算" }[s.mode];
+  const MODE = { time: T("goal.pace"), power: T("goal.power"), auto: T("goal.model") }[s.mode];
   let h = `<h2>預估結果 <span class="meta">${trail ? "越野" : "路跑"} · ${MODE}${s.total_method === "trail_hr" ? " · 整場用你的越野心率配速模型（推估），功率只當參考" : s.total_method === "v1" ? " · 整場用已驗證的方法（Riegel + 你的 RE），分段是推估" : " · 分段加總"}</span></h2>`;
   h += `<div class="tiles">`;
   h += tile(s.time_total_s ? `預估移動時間${help("越野心率配速模型預估的是「移動時間」（速度 > 1 km/h 的時間），回測驗證的就是這個數字。補給站、排隊、零碎停頓另外預估，列在「含停留總時間」。")}` : "預估完賽",
@@ -1124,8 +1141,9 @@ function renderResults() {
     `這個平均功率大約只撐得了 <b>${hm(tl)}</b>，比預計時間短`}</div>`;
   h += zoneBar(s.power, cp);
   // compare
-  const cmp = P.compare?.auto;
-  if (cmp && s.mode !== "auto") h += `<div class="note">對照「通通幫我算」（100%）：${hms(cmp.time_s)} @ ${W(cmp.power)}</div>`;
+  const cmp = P.compare?.auto, g = P.goal;
+  if (g) h += goalLine(g);
+  else if (cmp && s.mode !== "auto") h += `<div class="note">對照「通通幫我算」（100%）：${hms(cmp.time_s)} @ ${W(cmp.power)}</div>`;
   if (P.target) h += `<div class="tiles">${tile("要把這個目標變成你的 100%", W(P.target.cp_required), `CP ${spct(P.target.pct_change)}（目前 ${W(cp)}）`, true)}</div>`;
   h += warnList(P.warnings.concat(P.course_warnings || []));
   // other calcs (v1)
@@ -1974,7 +1992,8 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
 
 (async function init() {
   if (!loadForm()) { $("dist").value = 21.0975; $("gain").value = 0; }
-  const ps = await j("/api/v1/wko5/primary-sport").catch(() => null);
+  const [ps, gb] = await Promise.all([j("/api/v1/wko5/primary-sport").catch(() => null), j(`${API}/goal-basis`).catch(() => null)]);
+  BASIS = gb;
   SPORT = ps?.sport || "trail";
   if (SPORT === "road" && type !== "road") { type = "road"; $("gain").value = 0; }
   STOPS = parseStops($("stops").value); sortStops(); renderStops();
