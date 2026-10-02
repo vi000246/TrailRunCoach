@@ -19,13 +19,13 @@
     { id: "home", href: "/api/v1/overview/page", icon: I('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>') },
     { id: "schedule", href: "/api/v1/overview/plan/schedule/page", icon: I('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>') },
     { id: "charts", href: "/api/v1/wko5/viewer", icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
-    { id: "activity", href: "/api/v1/wko5/activities/page", icon: I('<path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>') },
-    // 傷病紀錄 (engine/injuries.py): hidden when its API answers 404 (the demo mode)
-    { id: "injuries", href: "/api/v1/wko5/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
-    { id: "routes", href: "/api/v1/routes/page", icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
     { id: "plan", href: "/api/v1/plan/page", icon: I('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3"/>') },
+    { id: "activity", href: "/api/v1/wko5/activities/page", icon: I('<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>') },
+    { id: "routes", href: "/api/v1/routes/page", icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
     { id: "racepower", href: "/api/v1/racepower/page", icon: I('<path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/>') },
     { id: "achievements", href: "/api/v1/achievements/page", icon: I('<path d="M2.5 19.5 9 8l4 6.5 2.5-3.5 6 8.5z"/><path d="M9 8V3.5l3 1.2-3 1.2"/>') },
+    // 傷病紀錄 (engine/injuries.py): hidden when its API answers 404 (the demo mode)
+    { id: "injuries", href: "/api/v1/wko5/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
     { id: "settings", href: "/api/v1/wko5/settings", icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
   ];
   for (const p of PAGES) {      // name / short / purpose: shell.json "page.<id>.*"

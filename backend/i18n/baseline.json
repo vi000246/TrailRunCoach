@@ -2,7 +2,8 @@
   "_about": "Ratchet of backend/tests/test_i18n_coverage.py. files = unwrapped Chinese strings per file; a file may only go down (after translating: python -m backend.scripts.i18n_extract --update-baseline). enforce=false = report only, until the pages are translated. complete = finished frontend namespaces ('overview') and backend modules ('backend/engine/status.py') whose every string must have en.",
   "enforce": false,
   "complete": [
-    "shell"
+    "shell",
+    "activity"
   ],
   "files": {
     "backend/api/achievements.py": 16,
@@ -112,7 +113,7 @@
     "backend/engine/zones.py": 63,
     "backend/settings/repository.py": 1,
     "backend/static/achievements.html": 71,
-    "backend/static/activity.html": 159,
+    "backend/static/activity.html": 0,
     "backend/static/autoplan.js": 37,
     "backend/static/autosync.js": 3,
     "backend/static/basemaps.js": 13,
