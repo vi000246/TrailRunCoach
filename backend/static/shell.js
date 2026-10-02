@@ -28,6 +28,9 @@
     { id: "injuries", href: "/api/v1/wko5/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
     { id: "settings", href: "/api/v1/wko5/settings", icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
   ];
+  // less-used pages sit under 「更多」 (owner, 2026-10-02: the bar was too crowded)
+  const MORE = new Set(["activity", "routes", "achievements", "injuries", "settings"]);
+  for (const p of PAGES) p.more = MORE.has(p.id);
   for (const p of PAGES) {      // name / short / purpose: shell.json "page.<id>.*"
     p.name = T(`page.${p.id}.name`); p.short = T(`page.${p.id}.short`); p.purpose = T(`page.${p.id}.purpose`);
   }
@@ -48,24 +51,24 @@
     letter-spacing: .02em; white-space: nowrap; }
   .appnav .an-brand i { width: 22px; height: 22px; border-radius: 6px; background: var(--an-acc); display: grid; place-items: center; }
   .appnav .an-brand i svg { width: 15px; height: 15px; color: #fff; }
-  .appnav a.an-item { position: relative; display: grid; grid-template-columns: 20px auto; grid-template-rows: auto auto;
+  .appnav .an-item { position: relative; display: grid; grid-template-columns: 20px auto; grid-template-rows: auto auto;
     column-gap: 8px; align-content: center; padding: 7px 12px; min-height: var(--an-h); text-decoration: none;
     color: var(--muted, #667); border-radius: 8px 8px 0 0; }
-  .appnav a.an-item svg { grid-row: 1 / span 2; width: 20px; height: 20px; align-self: center; }
+  .appnav .an-item svg { grid-row: 1 / span 2; width: 20px; height: 20px; align-self: center; }
   .appnav .an-name { font-weight: 600; color: var(--text, #111); white-space: nowrap; }
   .appnav .an-purpose { font-size: 11px; color: var(--muted, #667); white-space: nowrap; }
-  .appnav a.an-item:hover { background: color-mix(in srgb, var(--an-acc) 8%, transparent); }
-  .appnav a.an-item[aria-current="page"] { color: var(--an-acc); background: color-mix(in srgb, var(--an-acc) 10%, transparent); }
-  .appnav a.an-item[aria-current="page"] .an-name { color: var(--an-acc); }
-  .appnav a.an-item[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0;
+  .appnav .an-item:hover { background: color-mix(in srgb, var(--an-acc) 8%, transparent); }
+  .appnav .an-item[aria-current="page"] { color: var(--an-acc); background: color-mix(in srgb, var(--an-acc) 10%, transparent); }
+  .appnav .an-item[aria-current="page"] .an-name { color: var(--an-acc); }
+  .appnav .an-item[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0;
     height: 3px; border-radius: 3px 3px 0 0; background: var(--an-acc); }
-  .appnav a.an-item:focus-visible, .appnav .an-brand:focus-visible { outline: 2px solid var(--an-acc); outline-offset: -2px; }
+  .appnav .an-item:focus-visible, .appnav .an-brand:focus-visible { outline: 2px solid var(--an-acc); outline-offset: -2px; }
   .appnav .an-sep { flex: 1; }
   /* nine pages: the one-line purposes fit only on a wide screen (else the bar overflowed at 1360 px) */
   @media (max-width: 1599px) { .appnav .an-purpose { display: none; } }
   @media (max-width: 1100px) {
-    .appnav a.an-item { grid-template-columns: 20px auto; grid-template-rows: auto; padding: 0 11px; }
-    .appnav a.an-item svg { grid-row: 1; }
+    .appnav .an-item { grid-template-columns: 20px auto; grid-template-rows: auto; padding: 0 11px; }
+    .appnav .an-item svg { grid-row: 1; }
     .appnav .an-purpose { display: none; }
     .appnav .an-brand span { display: none; }
   }
@@ -73,14 +76,14 @@
     .appnav { position: fixed; top: auto; bottom: 0; left: 0; right: 0; padding: 0 2px env(safe-area-inset-bottom);
       border-bottom: 0; border-top: 1px solid var(--line, #e1e5ea); gap: 0; box-shadow: 0 -4px 16px rgba(0,0,0,.08); }
     .appnav .an-brand, .appnav .an-sep { display: none; }
-    .appnav a.an-item { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    .appnav .an-item { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 2px; padding: 6px 0 5px; min-height: 56px; border-radius: 0; }
-    .appnav a.an-item svg { width: 22px; height: 22px; }
+    .appnav .an-item svg { width: 22px; height: 22px; }
     .appnav .an-name { font-size: 11px; font-weight: 500; color: inherit; }
     .appnav .an-name .an-long { display: none; }
-    .appnav a.an-item[aria-current="page"] { background: none; }
-    .appnav a.an-item[aria-current="page"] .an-name { font-weight: 700; }
-    .appnav a.an-item[aria-current="page"]::after { top: 0; bottom: auto; left: 28%; right: 28%; border-radius: 0 0 3px 3px; }
+    .appnav .an-item[aria-current="page"] { background: none; }
+    .appnav .an-item[aria-current="page"] .an-name { font-weight: 700; }
+    .appnav .an-item[aria-current="page"]::after { top: 0; bottom: auto; left: 28%; right: 28%; border-radius: 0 0 3px 3px; }
     body { padding-bottom: calc(57px + env(safe-area-inset-bottom)) !important; }
   }
   @media (min-width: 700px) { .appnav .an-name .an-short { display: none; } }
@@ -89,6 +92,22 @@
   .appnav .an-lang:hover { color: var(--an-acc); border-color: var(--an-acc); }
   .appnav .an-lang:focus-visible { outline: 2px solid var(--an-acc); outline-offset: 1px; }
   @media (max-width: 699px) { .appnav .an-lang { margin: 0 4px; padding: 3px 6px; font-size: 11px; } }
+  /* 更多: a dropdown for the less-used pages */
+  .appnav .an-more { position: relative; display: flex; }
+  .appnav .an-more > summary { list-style: none; cursor: pointer; }
+  .appnav .an-more > summary::-webkit-details-marker { display: none; }
+  .appnav .an-more .an-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 60; min-width: 210px; padding: 6px;
+    background: var(--panel, #fff); border: 1px solid var(--line, #e1e5ea); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
+    display: grid; gap: 2px; }
+  .appnav .an-menu a.an-item { border-radius: 7px; min-height: 40px; }
+  .appnav .an-menu a.an-item[aria-current="page"]::after { display: none; }
+  .appnav .an-menu .an-purpose { display: block !important; }
+  @media (max-width: 699px) {
+    .appnav .an-more { flex: 1 1 0; min-width: 0; }
+    .appnav .an-more > summary { width: 100%; }
+    .appnav .an-more .an-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 4px; }
+    .appnav .an-menu a.an-item { flex-direction: row; justify-content: flex-start; padding: 6px 10px; min-height: 44px; }
+  }
   @media print { .appnav { display: none; } }
   `;
   const st = document.createElement("style");
@@ -96,16 +115,25 @@
   st.textContent = CSS;
   document.head.appendChild(st);
 
+  const item = (p) => `<a class="an-item" href="${p.href}" title="${T("nav.item_title", { name: p.name, purpose: p.purpose })}"${p.feature ? ` data-feature="${p.feature}"` : ""}${p === cur ? ' aria-current="page"' : ""}>
+      ${p.icon}<span class="an-name"><span class="an-long">${p.name}</span><span class="an-short">${p.short}</span></span><span class="an-purpose">${p.purpose}</span></a>`;
+  const MORE_ICON = I('<circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/>');
   const nav = document.createElement("nav");
   nav.className = "appnav";
   nav.setAttribute("aria-label", T("nav.label"));
   // the language switch shows the other language; remembered in the `lang` cookie (i18n.js setLocale)
   const other = L.locale === "en" ? "zh-TW" : "en";
   nav.innerHTML = `<a class="an-brand" href="${PAGES[0].href}" title="${T("brand.title")}"><i>${PAGES[1].icon}</i><span>${T("brand")}</span></a>` +
-    PAGES.map((p) => `<a class="an-item" href="${p.href}" title="${T("nav.item_title", { name: p.name, purpose: p.purpose })}"${p.feature ? ` data-feature="${p.feature}"` : ""}${p === cur ? ' aria-current="page"' : ""}>
-      ${p.icon}<span class="an-name"><span class="an-long">${p.name}</span><span class="an-short">${p.short}</span></span><span class="an-purpose">${p.purpose}</span></a>`).join("") +
+    PAGES.filter((p) => !p.more).map(item).join("") +
+    `<details class="an-more"><summary class="an-item"${cur && cur.more ? ' aria-current="page"' : ""} title="${T("nav.more_title")}">
+      ${MORE_ICON}<span class="an-name"><span class="an-long">${cur && cur.more ? `${T("nav.more")} · ${cur.name}` : T("nav.more")}</span><span class="an-short">${T("nav.more")}</span></span></summary>
+      <div class="an-menu" role="menu">${PAGES.filter((p) => p.more).map(item).join("")}</div></details>` +
     `<button type="button" class="an-lang" lang="${other}" data-lang="${other}" title="${T("lang.title")}">${T("lang." + other)}</button>`;
   nav.querySelector(".an-lang").addEventListener("click", (e) => L.setLocale(e.currentTarget.dataset.lang));
+  // close 更多 on an outside click / Esc
+  const more = nav.querySelector(".an-more");
+  document.addEventListener("click", (e) => { if (more.open && !more.contains(e.target)) more.open = false; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") more.open = false; });
 
   // optional pages: drop the link when the feature is off (傷病紀錄 in the demo mode); remembered per tab
   (async () => {

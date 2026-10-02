@@ -38,5 +38,7 @@
   "build.failed": "Data processing failed: {error}",
   "lang.title": "Language",
   "lang.zh-TW": "中文",
-  "lang.en": "EN"
+  "lang.en": "EN",
+  "nav.more": "More",
+  "nav.more_title": "Activities, routes, achievements, injuries, settings"
 }
