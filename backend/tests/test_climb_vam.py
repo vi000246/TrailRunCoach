@@ -89,6 +89,11 @@ def test_steep_slow_hiking_still_counts_as_moving():
     assert s["vam"] == pytest.approx(420, abs=10)
 
 
+def test_more_height_than_distance_is_a_glitch():
+    r = _ex([FLAT, (900, 1.5, 1.2, 150, 50), DOWN])
+    assert r["segments"] == [] and r["rejected"][0]["reason"] == "glitch"
+
+
 def test_missing_hr_says_why():
     a = _act([FLAT, HIKE])
     r = CV.extract_climbs(a["t"], a["dist_m"], a["elev"], None, a["cadence"])
@@ -166,16 +171,20 @@ def test_panel_takes_trail_runs_and_hikes_by_route_and_defaults_to_the_most_done
 
 
 def test_panel_keeps_reversed_runs_apart_and_falls_back_when_nothing_compares():
-    acts = [_fw(dt.date(2026, 9, 1)), _fw(dt.date(2026, 9, 8))]
+    acts = [_fw(dt.date(2026, 9, 1) + dt.timedelta(days=k)) for k in range(5)]
     ds = DS(acts)
     f = [w.entry.file for w in ds.workouts]
     b, e = date_to_day(dt.date(2026, 6, 1)), date_to_day(TODAY)
-    res = PANEL.compute(ds, b, e, {}, route_index=_routes([("rA", "A", f, {f[1]: "reversed"})]),
-                        weather={}, names={"rA": "我的 A"})
+    # 2 the usual way, 2 reversed, 1 mixed (left out); route B has a single activity: not listed
+    idx = _routes([("rA", "A", f[:4] + [f[4]], {f[2]: "reversed", f[3]: "reversed", f[4]: "mixed"})])
+    res = PANEL.compute(ds, b, e, {}, route_index=idx, weather={}, names={"rA": "我的 A"})
     keys = {r["id"]: r for r in res["routes"]}
     assert set(keys) == {"rA", "rA~rev"} and keys["rA"]["name"] == "我的 A" and "反向" in keys["rA~rev"]["name"]
+    assert keys["rA"]["runs"] == 2 and keys["rA~rev"]["runs"] == 2
+    one = PANEL.compute(ds, b, e, {}, route_index=_routes([("rB", "B", f[:1], {})]), weather={}, names={})
+    assert one["routes"] == [] and "2 次以上" in one["empty"]
     lone = PANEL.compute(ds, b, e, {}, route_index={"routes": []}, weather={}, names={})
-    assert lone["points"] == [] and "重複路線" in lone["empty"] and len(lone["runs_longest"]) == 2
+    assert lone["points"] == [] and lone["empty"] and len(lone["runs_longest"]) == 5
     empty = PANEL.compute(DS([]), b, e, {}, route_index={"routes": []}, weather={}, names={})
     assert empty["points"] == [] and empty["empty"]
 

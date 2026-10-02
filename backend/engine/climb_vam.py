@@ -47,6 +47,7 @@ RUN_CADENCE = 65.0              # strides/min (130 spm), workout_review.RUN_CADE
 CADENCE_SMOOTH_S = 10
 MOVING_MS = 0.3                 # racepower athlete.HIKE_REST_MS
 MIN_COVER = 0.9                 # share of measured seconds with HR
+MAX_GRADE = 1.0                 # 推估: a net grade above 100 % (45°) is a data glitch
 MAX_GAP_S = 30.0                # a sample gap longer than this is no data (workout_review.MAX_DT)
 
 REASONS = {
@@ -54,6 +55,7 @@ REASONS = {
     "no_elevation": "沒有高度",
     "short": "連續爬坡不到門檻",
     "coverage": "心率資料不足 90%",
+    "glitch": "淨坡度 > 100%（高度或 GPS 異常）",
 }
 
 
@@ -190,6 +192,10 @@ def extract_climbs(t, dist_m, elev, hr, cadence=None, speed_kmh=None, *,
         vam = float(dz) / meas * 3600.0
         dd = g["d"][b - 1] - g["d"][m0]
         gr = float(dz / dd) if np.isfinite(dd) and dd > 0 else float(np.nanmean(grade[m0:b]))
+        if not (gr <= MAX_GRADE):
+            # more height than distance: an elevation or GPS glitch, not a trail
+            out["rejected"].append({"reason": "glitch", "start_s": float(grid[a] - t0), "duration_s": dur})
+            continue
         rs = None
         if cad is not None:
             c = cad[m0:b]
