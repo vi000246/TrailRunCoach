@@ -20,7 +20,7 @@ from typing import Optional
 
 from backend.engine import climb_vam as CV
 
-SERIES_KEY = "climb_vam_v1"
+SERIES_KEY = "climb_vam_v2"      # v2: glitch rule
 WINDOW_DAYS = 56                 # 8-week rolling median
 SOURCES_OVERRIDE: Optional[dict] = None   # tests: {"route_index", "weather", "names"}
 
@@ -231,7 +231,8 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
     for key, pts in by_route.items():
         pts.sort(key=lambda p: (p["day"], p["at_min"]))
         rng = [p for p in pts if p["in_range"]]
-        if not rng:
+        # like for like needs at least two activities on the route (one direction) in the range
+        if len({p["file"] for p in rng}) < 2:
             continue
         routes.append({"id": key, "name": rname.get(key, key), "runs": len({p["file"] for p in rng}),
                        "segments": len(rng), "last": rng[-1]["date"],
@@ -254,8 +255,8 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
             out["empty"] = (f"這段期間 {n} 次越野跑／登山，都沒有符合條件的穩定爬坡段（{rule}）："
                             f"最長的一段只有 {top / 60:.1f} 分鐘。下圖是每次活動裡最長的一段，虛線 = 門檻。")
         else:
-            out["empty"] = (f"有 {counts['segments']} 段符合條件的爬坡，但都不在重複路線上"
-                            "（同一路線走過 2 次以上才能比較）。下圖是每次活動裡最長的一段。")
+            out["empty"] = (f"有 {counts['segments']} 段符合條件的爬坡，但沒有一條路線（同方向）在這段期間"
+                            "有 2 次以上的活動可以比較。下圖是每次活動裡最長的一段。")
         return out
     pts = by_route[route["id"]]
     med = CV.rolling_median([(p["day"], p["vam_hr"]) for p in pts], WINDOW_DAYS)
