@@ -1,0 +1,505 @@
+"""
+專項期 (the 8 weeks before the taper, 賽前第 10–3 週) built on the next A race's
+コース定数 (engine/panels/race_refs.py — the same numbers as the chart's target line).
+
+1. Long days. The target is the race's single-day target (a single-day race's own
+   constant, a multi-day trip's per-day average). Each week's long day aims at a share
+   of it (FRAC, 推估: rising from ~50 % to 85 % at week 6 and 90 % at week 4 — the
+   80–100 % band twice in weeks 6–3; 江晏慶「抓比賽距離爬升的七成」 about 1.5 months
+   out, Koop: longest run 20–80 % of the race distance, CTS's biggest block 4–6 weeks
+   out — back-to-back-and-long-day.md §2.2). The existing guardrails still cap it:
+   ≤ +15 % over the longest of the last 4 weeks, the week's volume, recovery weeks
+   (no long day), re-entry. The course constant is linear (1.8 h + 0.3 km + 10 climb
+   km + 0.6 descent km), so N % of the race day = N % of its time, km, climb and
+   descent at the athlete's own speeds (the race calculator's predicted day): the
+   session says the minutes and the route that gives that constant.
+2. The race GPX (engine/event_gpx.py): the longest continuous climb, the longest /
+   steepest descent and the total descent → one 長爬坡反覆 session a week (an easy
+   run of the week, like steep_hill.py) with the climb's grade and up to its duration,
+   running down at the race's descent grade; the long day asks for the race's per-km
+   climb and descent.
+3. The race simulation (Koop / Uphill Athlete: rehearse kit, fuelling and pacing on
+   race-like terrain) 4–3 weeks before: a SUGGESTION in the floating box (like B2B) —
+   one long day at the target (still ≤ +15 %) with the race's fuelling (racepower
+   fuel.py), kit and pacing notes; a multi-day trip gets two days.
+
+Planner hooks (overview.week_plan, projection.project_weeks): plan_context() /
+projected_context() → long_minutes() → decorate() / apply_climb(); sim_suggestion().
+Climb durations use the race day's hours per effort-km (km + climb / 100, ITRA) —
+推估.
+"""
+from __future__ import annotations
+
+import datetime as dt
+from typing import Callable, Optional
+
+WEEKS = (3, 10)                     # 專項期 weeks before the race (planning: 8-week specific + 14-day taper)
+FRAC = {10: 0.50, 9: 0.55, 8: 0.60, 7: 0.70, 6: 0.85, 5: 0.70, 4: 0.90, 3: 0.70}   # 推估
+SIM_WEEKS = (4, 3)                  # the race simulation (推估 inside Koop's 「not the last 2–3 weeks」)
+STEP = 1.15                         # ≤ +15 % over the longest of the last 4 weeks (the app's rule)
+FLOOR_MIN = 90.0                    # the 專項期 long day's old floor
+TSB_MIN = -20.0                     # week_plan's 維持量 line
+CLIMB_TOL_M = 30.0                  # 推估: a dip < 30 m doesn't end a continuous climb
+CLIMB_MIN_GAIN = 150.0              # 推估: a race whose longest climb is < 150 m gets no climb session
+STEEP_MIN_DROP = 100.0              # 推估: the steepest descent counts from 100 m of drop
+UP_MAX_MIN = 60.0                   # 推估: ≤ 60 min uphill in one session
+REP_MAX_MIN = 20.0                  # 推估: a repeat ≤ 20 min (a longer climb = several 20′ repeats)
+DOWN_SHARE = 0.6                    # 推估: running down takes ~60 % of the way up
+FLOOR_CLIMB = 45                    # 推估: under 45 min no climb session fits
+FUEL_MIN_H = 4.0                    # Koop: a fuelling long run is ≥ 4 h (b2b.FUEL_MIN_H)
+
+SRC = ("單日目標＝コース定數（山本正嘉；race_refs）；進度：江晏慶「抓比賽距離爬升的七成」（賽前約 1.5 個月）、"
+       "Koop 最長一次 20–80% 賽事距離、CTS 賽前 4–6 週最大量；每週比例為推估")
+SRC_CLIMB = ("Uphill Athlete／Koop：專項期練比賽的坡（坡度、長度）；下坡用跑的累積下坡耐受（重複負荷效應，"
+             "Bontemps 2025）；次數、長度上限為推估")
+SRC_SIM = ("Koop《Training Essentials for Ultrarunning》：賽前演練裝備、補給、配速；Uphill Athlete：在像比賽的地形演練；"
+           "賽前 4–3 週、目標定數為推估")
+
+
+def _d(x) -> Optional[dt.date]:
+    if x in (None, ""):
+        return None
+    return x if isinstance(x, dt.date) else dt.date.fromisoformat(str(x)[:10])
+
+
+def _r5(x: float) -> int:
+    return int(round(x / 5.0) * 5)
+
+
+def weeks_out(start: dt.date, monday: dt.date) -> int:
+    """賽前第 n 週 of the week starting `monday` (steep_hill.weeks_out)."""
+    return -(-(start - monday).days // 7)
+
+
+def frac(w: int) -> float:
+    return FRAC.get(w, FRAC[WEEKS[1]] if w > WEEKS[1] else FRAC[WEEKS[0]])
+
+
+# ---------------------------------------------------------------------------
+# the race: target, its day at the athlete's speeds, the GPX features
+# ---------------------------------------------------------------------------
+
+def legs(km: list, z: list, tol: float = CLIMB_TOL_M) -> list[dict]:
+    """Continuous climbs / descents of a profile: a zig-zag filter — a leg ends when the
+    elevation turns back by ≥ `tol` m (smaller dips stay inside it)."""
+    n = len(z)
+    if n < 2:
+        return []
+    out, d = [], 0
+    lo = hi = piv = ext = 0
+
+    def leg(a: int, b: int, sign: int) -> dict:
+        dist = max(1e-6, float(km[b]) - float(km[a]))
+        dz = abs(float(z[b]) - float(z[a]))
+        return {"dir": sign, "start_km": float(km[a]), "end_km": float(km[b]), "km": dist, "dz": dz,
+                "grade": dz / (dist * 1000.0) * 100.0}
+    for i in range(1, n):
+        if d == 0:
+            if z[i] < z[lo]:
+                lo = i
+            if z[i] > z[hi]:
+                hi = i
+            if z[i] - z[lo] >= tol:
+                d, piv, ext = 1, lo, i
+            elif z[hi] - z[i] >= tol:
+                d, piv, ext = -1, hi, i
+        elif d == 1:
+            if z[i] >= z[ext]:
+                ext = i
+            elif z[ext] - z[i] >= tol:
+                out.append(leg(piv, ext, 1))
+                d, piv, ext = -1, ext, i
+        else:
+            if z[i] <= z[ext]:
+                ext = i
+            elif z[i] - z[ext] >= tol:
+                out.append(leg(piv, ext, -1))
+                d, piv, ext = 1, ext, i
+    if d != 0 and ext != piv:
+        out.append(leg(piv, ext, d))
+    return out
+
+
+def features_of(profile: dict, totals: dict, h_per_ekm: Optional[float]) -> dict:
+    """{climb, descent, steep_descent, loss_m} from a course profile; durations (min)
+    at the race day's hours per effort-km."""
+    ls = legs(profile.get("km") or [], profile.get("z") or [])
+    ups = [x for x in ls if x["dir"] > 0]
+    downs = [x for x in ls if x["dir"] < 0]
+
+    def timed(x: Optional[dict], up: bool) -> Optional[dict]:
+        if x is None:
+            return None
+        r = {k: round(v, 2) if isinstance(v, float) else v for k, v in x.items()}
+        if h_per_ekm:
+            ekm = x["km"] + (x["dz"] / 100.0 if up else 0.0)
+            r["minutes"] = round(ekm * h_per_ekm * 60.0)
+        return r
+    climb = max(ups, key=lambda x: x["dz"], default=None)
+    desc = max(downs, key=lambda x: x["dz"], default=None)
+    steep = max((x for x in downs if x["dz"] >= STEEP_MIN_DROP), key=lambda x: x["grade"], default=None)
+    return {"climb": timed(climb, True), "descent": timed(desc, False), "steep_descent": timed(steep, False),
+            "loss_m": round(float(totals.get("loss_m") or 0.0)), "gain_m": round(float(totals.get("gain_m") or 0.0))}
+
+
+def gpx_features(event_id: str, h_per_ekm: Optional[float]) -> Optional[dict]:
+    """features_of() the event's stored GPX (engine/event_gpx.py), None = no GPX."""
+    from backend.engine import event_gpx as EG
+    from backend.engine.racepower import course as CO
+    try:
+        got = EG.track(event_id)
+        if got is None:
+            return None
+        tr, row = got
+        key = ("specific", event_id, row["sha1"])
+        if key not in EG._memo:
+            c = CO.build_course(tr, split="none")
+            EG._memo[key] = (c["profile"] or {}, c["totals"])
+        prof, tot = EG._memo[key]
+        return {**features_of(prof, tot, h_per_ekm), "gpx": row.get("filename")}
+    except Exception:                       # noqa: BLE001 — a broken file = no features
+        return None
+
+
+def race_day(plan, today: dt.date, predict: Optional[Callable] = None, gpx: Optional[Callable] = None) -> Optional[dict]:
+    """The next A race as the 專項期 needs it: race_refs' line (calculator time when
+    `predict` is given, else the plan's 預估移動時間), the single-day target, one
+    average race day (hours, km, climb, descent) and the GPX features."""
+    from backend.engine.panels import race_refs as RR
+    try:
+        evs = [e for e in RR.upcoming(plan, today) if e.priority == "A" and e.start > today]
+    except Exception:                       # noqa: BLE001
+        return None
+    if not evs:
+        return None
+    e = evs[0]
+    c = RR.course_of(e, gpx or RR.stored_course)
+    hs = None
+    if predict is not None:
+        try:
+            hs = predict(e, c)
+        except Exception:                   # noqa: BLE001
+            hs = None
+    ln = RR.race_line(e, hs, "賽事計算器預測的完賽時間", c)
+    if ln is None or not ln.get("hours"):
+        return None
+    n = max(1, int(ln["days"]))
+    day = {"hours": ln["hours"] / n, "km": ln["km"] / n, "climb_m": ln["climb_m"] / n, "descent_m": ln["descent_m"] / n}
+    ekm = day["km"] + day["climb_m"] / 100.0
+    hpe = day["hours"] / ekm if ekm > 0 else None
+    return {"id": e.id, "name": e.name, "start": e.start.isoformat(), "days": n, "kind": e.kind,
+            "pack_kg": e.pack_kg, "goal": round(RR.goal_of(ln), 1), "cc": ln["cc"], "time_source": ln["time_source"],
+            "hours": ln["hours"], "km": ln["km"], "climb_m": ln["climb_m"], "descent_m": ln["descent_m"],
+            "descent_assumed": ln.get("descent_assumed"), "day": day, "h_per_ekm": hpe,
+            "features": gpx_features(e.id, hpe) if not ln.get("descent_assumed") else None}
+
+
+# ---------------------------------------------------------------------------
+# the week
+# ---------------------------------------------------------------------------
+
+def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict], tsb: Optional[float] = None,
+                 longest28: Optional[float] = None) -> dict:
+    info = {"active": False, "race": race, "why": [], "src": SRC, "monday": monday.isoformat(),
+            "longest28": longest28}
+    if not race:
+        info["why"].append("沒有下一場有距離的 A 賽事")
+        return info
+    w = weeks_out(_d(race["start"]), monday)
+    info["weeks_out"] = w
+    if kind != "specific" or w < WEEKS[0]:
+        info["why"].append("只在專項期（賽前第 10–3 週）")
+        return info
+    info.update(active=True, frac=frac(w), sim_week=w in SIM_WEEKS)
+    f = race.get("features") or {}
+    cl = f.get("climb") or {}
+    if mode in ("recovery_week", "reentry"):
+        info["climb_why"] = "恢復週／停訓後恢復期：不排長爬坡"
+    elif tsb is not None and tsb < TSB_MIN:
+        info["climb_why"] = f"週初 TSB {tsb:+.0f} < {TSB_MIN:.0f}：這週不排長爬坡"
+    elif (cl.get("dz") or 0) < CLIMB_MIN_GAIN:
+        info["climb_why"] = "賽事沒有 GPX，或最長的爬坡不到 150 m"
+    else:
+        info["climb"] = True
+    return info
+
+
+def plan_context(status, today: dt.date, monday: dt.date, mode: str, tsb: Optional[float],
+                 longest28: Optional[float], predict: Optional[Callable] = None) -> dict:
+    """week_context() from week_plan()'s data. Never raises."""
+    try:
+        race = race_day(status.plan, today, predict)
+        return week_context(kind=status.kind or "base", mode=mode, monday=monday, race=race, tsb=tsb,
+                            longest28=longest28)
+    except Exception as e:                  # noqa: BLE001 — the plan must still build
+        return {"active": False, "error": type(e).__name__}
+
+
+def projected_context(kind: str, mode: str, monday: dt.date, cur: Optional[dict]) -> dict:
+    cur = cur or {}
+    return week_context(kind=kind, mode=mode, monday=monday, race=cur.get("race"))
+
+
+PUBLIC = ("active", "race", "weeks_out", "frac", "sim_week", "climb", "climb_why", "why", "src", "longest28",
+          "long", "planned", "error")
+
+
+def public(info: Optional[dict]) -> Optional[dict]:
+    if not info:
+        return None
+    return {k: info.get(k) for k in PUBLIC if k in info}
+
+
+def long_minutes(info: dict, longest: float) -> Optional[float]:
+    """This week's long day: frac × the race day's time, ≤ +15 % over `longest` (the
+    longest of the last 4 weeks); never below min(90 min, the aim)."""
+    if not info or not info.get("active"):
+        return None
+    want = info["frac"] * info["race"]["day"]["hours"] * 60.0
+    cap = max(float(longest or 0.0), 60.0) * STEP
+    return max(min(FLOOR_MIN, want), min(want, cap))
+
+
+def route(race: dict, minutes: float) -> dict:
+    """The share of the race day `minutes` is, and the route that gives that constant."""
+    day = race["day"]
+    f = minutes / (day["hours"] * 60.0) if day["hours"] else 0.0
+    km = f * day["km"]
+    return {"f": f, "cc": f * race["goal"], "km": km, "climb_m": f * day["climb_m"], "descent_m": f * day["descent_m"],
+            "climb_per_km": day["climb_m"] / day["km"] if day["km"] else 0.0,
+            "descent_per_km": day["descent_m"] / day["km"] if day["km"] else 0.0}
+
+
+def route_text(race: dict, minutes: float, capped: bool = False) -> str:
+    r = route(race, minutes)
+    s = (f"這次目標定數約 {r['cc']:.0f}（單日目標的 {r['f'] * 100:.0f}%）：約 {r['km']:.0f} km、"
+         f"↑{r['climb_m']:.0f} ↓{r['descent_m']:.0f} m 的路線")
+    if r["climb_per_km"] >= 10:
+        s += f"（每公里 ↑{r['climb_per_km']:.0f} ↓{r['descent_per_km']:.0f} m，像{race['name']}）"
+    if capped:
+        s += "；受「每次最多 +15%」限制"
+    return s
+
+
+_OLD_TERRAIN = ("挑每公里爬升", "有山路就走山路", "平路或緩坡")
+
+
+def decorate(ss: list[dict], info: Optional[dict]) -> None:
+    """The long day's 「這次目標定數約 N（單日目標的 X%）」 + route (in place), after the
+    課表偏好 shaping / B2B texts (they may cap or rename it)."""
+    if not info or not info.get("active"):
+        return
+    s = next((x for x in ss if x.get("id") == "long" and not x.get("done")), None)
+    if s is None or not s.get("minutes"):
+        return
+    race = info["race"]
+    m = float(s["minutes"])
+    want = info["frac"] * race["day"]["hours"] * 60.0
+    r = route(race, m)
+    parts = [p for p in (s.get("detail") or "").split("；") if p and not p.startswith(_OLD_TERRAIN)]
+    s["detail"] = "；".join([route_text(race, m, want > m + 5)] + parts)
+    s["distance_km"] = round(r["km"], 1)
+    s["climb_m"] = round(r["climb_m"])
+    s["source"] = ((s.get("source") or "") + "；" + SRC).lstrip("；")
+    info["long"] = {"minutes": int(m), "cc": round(r["cc"], 1), "pct": round(r["f"] * 100), "km": round(r["km"], 1),
+                    "climb_m": round(r["climb_m"]), "descent_m": round(r["descent_m"])}
+
+
+# ---------------------------------------------------------------------------
+# 長爬坡反覆 (one easy run of the week)
+# ---------------------------------------------------------------------------
+
+def climb_shape(feat: dict) -> Optional[dict]:
+    """Repeats of the race's longest climb: ≤ 20′ each, ≤ 60′ uphill (推估)."""
+    cl = feat.get("climb") or {}
+    if (cl.get("dz") or 0) < CLIMB_MIN_GAIN:
+        return None
+    cm = float(cl.get("minutes") or 20.0)
+    rep = max(5, _r5(min(cm, REP_MAX_MIN)))
+    # at least ~40′ uphill (a short climb = more repeats), at most 60′ (推估)
+    n = max(2, min(int(UP_MAX_MIN // rep), int(round(max(cm, 40.0) / rep))))
+    return {"rep": rep, "n": n, "grade": cl["grade"], "climb_dz": cl["dz"], "climb_min": cl.get("minutes")}
+
+
+def climb_minutes(sh: dict, n: Optional[int] = None) -> int:
+    n = sh["n"] if n is None else n
+    return _r5(15 + n * sh["rep"] * (1 + DOWN_SHARE) + 10)
+
+
+def climb_text(race: dict, sh: dict, n: int, aet: Optional[float]) -> tuple[str, str, str]:
+    f = race.get("features") or {}
+    g = sh["grade"]
+    dn = f.get("steep_descent") or f.get("descent") or {}
+    hr = f"心率約 AeT {aet:.0f} bpm" if aet else "心率約 AeT"
+    when = f"、你的速度約 {sh['climb_min']:.0f} 分" if sh.get("climb_min") else ""
+    title = f"長爬坡反覆 {n}×{sh['rep']} 分（{g:.0f}% 坡）"
+    down = (f"下坡用跑的：找接近 {dn['grade']:.0f}% 的坡（賽道最陡的長下坡 ↓{dn['dz']:.0f} m；整場下降 {f.get('loss_m', 0):.0f} m）"
+            if dn else "下坡用跑的，練下坡")
+    detail = (f"{race['name']}最長的爬坡 ↑{sh['climb_dz']:.0f} m、平均 {g:.0f}%{when}：找 {max(0, g - 2):.0f}–{g + 2:.0f}% 的坡，"
+              f"上坡 {sh['rep']} 分 × {n} 趟，用比賽的走／跑方式、{hr}；{down}。暖身 15 分、緩和 10 分")
+    return title, detail, hr
+
+
+def apply_climb(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, prefs=None,
+                b2b: Optional[dict] = None, notes: Optional[list] = None, rates: Optional[dict] = None) -> list[dict]:
+    """Turn one easy run into 長爬坡反覆 (in place; the week's easy minutes unchanged):
+    never within a day of the long day / quality, the easy days after a B2B, or the last
+    7 days before the race; a weekday only when it fits the weekday cap."""
+    if not info or not info.get("active") or not info.get("climb"):
+        return ss
+    race = info["race"]
+    sh = climb_shape(race.get("features") or {})
+    if sh is None or any(s.get("id") == "climb" for s in ss):
+        return ss
+    start = _d(race["start"])
+    hard = [_d(s["day"]) for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "race")
+                                                         or s.get("id") in ("long", "long2", "steep"))]
+    post = (b2b or {}).get("post") or {}
+    until = _d(post.get("until")) if post else None
+    cap = getattr(prefs, "cap_weekday", None) if prefs is not None and getattr(prefs, "active", False) else None
+    cands = []
+    for s in ss:
+        if s.get("kind") != "easy" or s.get("done") or not s.get("day") or s.get("id") in ("steep",) or s.get("heat"):
+            continue
+        d = _d(s["day"])
+        if (start - d).days <= 7 or any(abs((d - h).days) < 2 for h in hard) or (until is not None and d <= until):
+            continue
+        n = sh["n"]
+        lim = None if d.weekday() >= 5 else cap
+        while lim is not None and n > 2 and climb_minutes(sh, n) > lim:
+            n -= 1
+        m = climb_minutes(sh, n)
+        if (lim is not None and m > lim) or m < FLOOR_CLIMB:
+            continue
+        cands.append((d.weekday() >= 5, d, s, n, m))
+    if not cands:
+        if notes is not None:
+            notes.append({"level": "info", "src": "climb", "text": "這週沒有可以放長爬坡反覆的輕鬆日（長天、強度課的前後一天不放）"})
+        return ss
+    cands.sort(key=lambda c: (c[0], c[1]))
+    _, d, s, n, m = cands[0]
+    delta = m - int(s.get("minutes") or 0)
+    for x in sorted((x for x in ss if x is not s and x.get("kind") == "easy" and not x.get("done")
+                     and x.get("id") != "steep"), key=lambda x: -(x.get("minutes") or 0)):
+        if delta <= 0:
+            break
+        r = (x.get("tss") or 0.0) / x["minutes"] if x.get("minutes") else 0.0
+        new = max(20, int(x["minutes"]) - delta)
+        delta -= int(x["minutes"]) - new
+        x["minutes"], x["tss"] = new, round(r * new, 1)
+    rate = (rates or {}).get("trail") or (rates or {}).get("road") or 55.0
+    title, detail, hr = climb_text(race, sh, n, aet)
+    s.update(id="climb", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail, source=SRC_CLIMB,
+             tss=round(rate * 1.1 * m / 60.0, 1), target=hr,
+             climb_m=round(n * sh["rep"] / sh["climb_min"] * sh["climb_dz"]) if sh.get("climb_min") else None)
+    info["planned"] = [{"day": s["day"], "minutes": m, "n": n, "rep": sh["rep"], "grade": round(sh["grade"], 1)}]
+    return ss
+
+
+# ---------------------------------------------------------------------------
+# the race simulation (a suggestion)
+# ---------------------------------------------------------------------------
+
+def sim_weeks(start: dt.date) -> list[dt.date]:
+    """The Mondays of 賽前第 4 and 3 週."""
+    rm = start - dt.timedelta(days=start.weekday())
+    return sorted(m for m in (rm - dt.timedelta(weeks=k) for k in range(8)) if weeks_out(start, m) in SIM_WEEKS)
+
+
+def fuel_text(race: dict) -> str:
+    """The race's fuelling (racepower fuel.py §3.2 / §4.2 rows) at the race's class."""
+    from backend.engine.racepower import fuel as F
+    n = max(1, int(race.get("days") or 1))
+    cls = F.event_class(race.get("kind") or "race", race["hours"] / n, race["km"] / n)
+    c = F.carb_target(cls)
+    s = f"每小時 {c['lo']:.0f}–{c['hi']:.0f} g 醣"
+    if c.get("every_min"):
+        s += f"（每 {c['every_min'][0]}–{c['every_min'][1]} 分吃一次）"
+    w = F.water_band(cls, None, False)
+    if w:
+        s += f"、水 {w[0]:.0f}–{w[1]:.0f} ml/h"
+    na = F.sodium_band(cls, None, False)
+    if na and na[1] > 0:
+        s += f"、鈉 {na[0]:.0f}–{na[1]:.0f} mg/h"
+    return s
+
+
+def sim_sessions(race: dict, minutes: list[int], aet: Optional[float], rate: float) -> list[dict]:
+    """The simulation day(s) as the user's sessions."""
+    hr = f"心率 ≤ AeT {aet:.0f} bpm" if aet else "心率 ≤ AeT"
+    multi = int(race.get("days") or 1) > 1
+    kit = ("背行程的背包和裝備（演練打包、重量照行程）" if multi or race.get("kind") == "baiyue"
+           else "穿比賽的鞋、衣褲、背心，帶強制裝備（頭燈、雨衣…）")
+    out = []
+    for i, m in enumerate(minutes, 1):
+        head = route_text(race, m)
+        r = route(race, m)
+        tail = ("" if not multi else ("第 1 天，" if i == 1 else "第 2 天：接續的一天，同樣的背包，"))
+        detail = (f"{head}。{tail}{kit}；補給照比賽：{fuel_text(race)}，早餐也照比賽吃；"
+                  f"配速照比賽計畫，前段刻意保守，爬坡照比賽的走／跑方式，{hr}")
+        if i == 1 and m < FUEL_MIN_H * 60:
+            detail += f"（Koop：練補給至少 {FUEL_MIN_H:.0f} 小時，這次先練到 {m} 分）"
+        out.append({"kind": "long", "title": f"賽事模擬｜{race['name']}" + (f" 第 {i} 天" if multi else ""),
+                    "minutes": int(m), "target": hr, "detail": detail, "source": SRC_SIM, "terrain": "trail",
+                    "tss": round(rate * m / 60.0, 1), "distance_km": round(r["km"], 1), "climb_m": round(r["climb_m"])})
+    return out
+
+
+def sim_day_options(sg: dict, first: dt.date, blocked=frozenset(), allowed: Optional[Callable] = None,
+                    weekday_cap: Optional[int] = None, busy_for: Optional[Callable] = None) -> list[dict]:
+    """The days of the simulation's two weeks it can take (a day pair for a trip:
+    b2b.pair_options): from `first`, not blocked, allowed by 課表偏好, a weekday only
+    when the minutes fit its cap, not a day of the user's own hard / long sessions
+    (`busy_for(week ISO)` → set of ISO days). Weekends first."""
+    from backend.engine import b2b as B2B
+    out = []
+    for w in sg.get("weeks") or []:
+        m = _d(w)
+        busy = busy_for(w) if busy_for else set()
+        if sg.get("multi"):
+            out += B2B.pair_options(m, first, sg["minutes"], blocked, allowed, weekday_cap, busy)
+            continue
+        for i in range(7):
+            d = m + dt.timedelta(days=i)
+            iso = d.isoformat()
+            if d < first or iso in blocked or iso in busy or (allowed is not None and not allowed(d)):
+                continue
+            if d.weekday() < 5 and weekday_cap is not None and sg["minutes"][0] > weekday_cap:
+                continue
+            out.append({"day": iso, "label": f"{d.month}/{d.day}（{B2B.wd(d)}）",
+                        "note": "週末" if d.weekday() >= 5 else "平日"})
+    if not sg.get("multi"):
+        out.sort(key=lambda o: (o["note"] != "週末", o["day"]))
+    return out
+
+
+def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: Optional[float] = None,
+                   rate: float = 55.0) -> Optional[dict]:
+    """The race simulation, suggested from the week before its window (this week or the
+    next) until the window ends: {id, type race_sim, weeks, minutes, sessions, pick…}.
+    `longest`: the longest of the last 4 weeks / this week's long day (the +15 % cap)."""
+    race = (info or {}).get("race")
+    if not race or not info.get("active"):
+        return None
+    start = _d(race["start"])
+    weeks = sim_weeks(start)
+    if not weeks or monday > weeks[-1] or weeks[0] > monday + dt.timedelta(days=7):
+        return None
+    day_min = race["day"]["hours"] * 60.0
+    cap = max(float(longest or 0.0), 60.0) * STEP
+    d1 = _r5(min(day_min, cap))
+    multi = int(race.get("days") or 1) > 1
+    from backend.engine.b2b import DAY2_RATIO, MIN_DAY2
+    mins = [d1] + ([max(MIN_DAY2, _r5(DAY2_RATIO * d1))] if multi else [])
+    r = route(race, d1)
+    ws = "、".join(f"{w.month}/{w.day}" for w in weeks)
+    return {"id": f"race_sim:{race['id']}", "type": "race_sim", "event_id": race["id"], "event": race["name"],
+            "weeks": [w.isoformat() for w in weeks], "minutes": mins, "multi": multi,
+            "title": (f"建議做一次賽事模擬：{race['name']}，{'連續兩天，' if multi else ''}{d1} 分"
+                      f"（定數約 {r['cc']:.0f}＝單日目標的 {r['f'] * 100:.0f}%）"),
+            "reason": f"賽前第 4–3 週（{ws} 那兩週）：用比賽的裝備、補給、配速，在像比賽的地形跑一次",
+            "help": ("Koop、Uphill Athlete：賽前在像比賽的地形演練裝備、補給和配速，問題在比賽前就發現。"
+                     f"這天換掉那週的長天；長度一樣守「每次最多 +15%」。補給：{fuel_text(race)}。"
+                     + ("多日行程做連續兩天，第 2 天約第 1 天的 2/3（CTS 30:20）。" if multi else "")
+                     + "選一天按「排入」才會進課表；不排也不影響其他課。時間點與目標比例為推估。"),
+            "src": SRC_SIM, "sessions": sim_sessions(race, mins, aet, rate)}
