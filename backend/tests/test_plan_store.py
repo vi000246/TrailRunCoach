@@ -406,7 +406,7 @@ def test_api_swap_a_variant_is_a_user_edit_and_pushes_its_steps(monkeypatch):
         e.c.post(f"{API}/push-coros?scope=day&day={q['day']}")
         prog = next(p for p in e.fake.programs.values() if "6×2:30" in p["name"])
         names = [x["name"] for x in prog["exercises"]]
-        assert "市區輕鬆跑到河濱" in names and names.count("走路或極慢跑") == 5
+        assert "輕鬆跑暖身" in names and names.count("走路或極慢跑") == 5
 
 
 def test_api_tests_are_suggested_and_put_in_by_the_user(monkeypatch):

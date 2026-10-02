@@ -158,7 +158,7 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             # 每人校正 (engine/calibrate.py): fit what was never fitted (a new
             # install, a new item) now instead of waiting for the next sync
             from backend.engine import calibrate as CAL
-            if any(CAL.stored_entry(n) is None for n in CAL._registry()):
+            if any(CAL.stored_entry(n) is None for n, it in CAL._registry().items() if not it.manual_only):
                 import asyncio
 
                 async def fit_once():

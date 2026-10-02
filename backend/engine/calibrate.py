@@ -65,6 +65,7 @@ class Item:
     digits: int = 2
     help: str = ""                              # what the number does (hover)
     default_is_literature: bool = False         # chip: 預設（文獻） vs 預設（推估）
+    manual_only: bool = False                   # 進階 C 類: no fit, a default you may override by hand
 
 
 REGISTRY: dict[str, Item] = {}
@@ -94,6 +95,7 @@ def _load_items() -> None:
     from backend.engine import heat_calib  # noqa: F401  (hadley_hr_beta, humidity_default, home_*)
     from backend.engine import effort_calib  # noqa: F401  (trail_max_min_km, trail_max_min_min, effort_rest_max)
     from backend.engine import terrain_calib  # noqa: F401  (climb_divisor_run)
+    from backend.engine import advanced_params  # noqa: F401  (進階 C 類: heat_partial_hadley, pack_daily_drop_kg)
 
 
 def validate_entry(v) -> None:
@@ -149,7 +151,8 @@ def chip(item: Item, entry: dict) -> dict:
     else:
         text = "預設（文獻）" if item.default_is_literature else "預設（推估）"
         tip = (f"{item.label} {fmt.format(item.default)} {item.unit}：{item.default_src}。"
-               f"本人資料 {entry.get('n') or 0} 筆，滿 {item.min_n} 筆才會自己擬合。")
+               + ("只有確定時才手動指定。" if item.manual_only
+                  else f"本人資料 {entry.get('n') or 0} 筆，滿 {item.min_n} 筆才會自己擬合。"))
     if item.help:
         tip += " " + item.help
     return {"text": text, "tip": tip}
