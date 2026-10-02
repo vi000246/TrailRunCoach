@@ -8,7 +8,7 @@ from sse_starlette.sse import EventSourceResponse
 from backend.db.database import get_db
 from backend.db.models import AthleteSettings
 from backend.engine.ai.client import get_ai_client, CLAUDE_MODELS, OPENAI_MODELS, GEMINI_MODELS
-from backend.engine.ai.context import build_context, SYSTEM_PROMPT
+from backend.engine.ai.context import build_context, build_system_prompt
 from backend.engine.ai.zones import compute_zones
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
@@ -67,6 +67,7 @@ async def chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="AI_NOT_CONFIGURED")
 
     context_text = await build_context(db, body.athlete_id)
+    system = await build_system_prompt(db, body.athlete_id)
     user_prompt = f"{context_text}\n\n=== 問題 ===\n{body.message}"
 
     ai_client = get_ai_client(
@@ -77,7 +78,7 @@ async def chat(body: ChatRequest, db: AsyncSession = Depends(get_db)):
 
     async def generate():
         try:
-            async for chunk in ai_client.stream(system=SYSTEM_PROMPT, user=user_prompt):
+            async for chunk in ai_client.stream(system=system, user=user_prompt):
                 yield {"data": json.dumps({"chunk": chunk})}
             yield {"data": json.dumps({"done": True})}
         except Exception as e:

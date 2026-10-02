@@ -506,9 +506,12 @@ class FitFolderDataset(Dataset):
         self.settings_ignored: list[dict] = []
         if settings_dir:
             try:
-                self.athlete = read_athlete(next(Path(settings_dir).glob("*.wko5athlete")))
+                f = next(Path(settings_dir).glob("*.wko5athlete"), None)
+                if f is None:
+                    raise FileNotFoundError(settings_dir)
+                self.athlete = read_athlete(f)
                 self.settings_from = "wko5"
-            except (StopIteration, OSError) as e:
+            except OSError as e:
                 log.warning("FIT dataset: no WKO5 athlete settings (%s); using defaults", type(e).__name__)
         if self.settings_from == "app":
             self._load_db_settings(athlete_settings)

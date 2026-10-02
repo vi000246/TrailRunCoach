@@ -26,7 +26,7 @@ C = Event("c", "練跑", "2026-10-11", kind="race", priority="C", distance_km=15
 
 
 def fake(hours):
-    return lambda e: hours.get(e.id)
+    return lambda e, c=None: hours.get(e.id)
 
 
 def chart(series=None):
@@ -57,12 +57,14 @@ def test_calculator_time_first_then_the_plans_estimate():
     assert r["target"]["event_id"] == "a" and r["half"] == pytest.approx(round(0.5 * a["cc"], 1))
 
 
-def test_multi_day_takes_the_hardest_day():
+def test_multi_day_is_the_whole_trip_with_the_hardest_day_in_the_breakdown():
+    # one number for the trip (信州 grading: the whole route's constant), per day in the hover
     hike = Event("h", "南湖大山", "2026-12-10", kind="baiyue", priority="A", days=3, distance_km=36, climbing_m=3000)
     r = RR.course_constant_refs(plan(hike), TODAY, fake({"h": [5.0, 8.0, 4.0]}))
     ln = r["lines"][0]
-    assert ln["days"] == 3 and ln["hours"] == 8.0
-    assert ln["cc"] == pytest.approx(round(CM.course_constant(8.0, 12, 1000, 1000), 1))
+    assert ln["days"] == 3 and ln["hours"] == 17.0
+    assert ln["cc"] == pytest.approx(round(CM.course_constant(17.0, 36, 3000, 3000), 1))
+    assert ln["day_max"] == pytest.approx(round(CM.course_constant(8.0, 12, 1000, 1000), 1)) and ln["hardest_day"] == 2
 
 
 def test_apply_adds_labelled_dashed_lines_and_the_target():

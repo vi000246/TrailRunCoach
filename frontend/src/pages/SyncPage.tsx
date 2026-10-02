@@ -23,7 +23,7 @@ export function SyncPage() {
   const [tpErr, setTpErr] = useState<string | null>(null)
 
   const tpSync = (since?: string): Promise<ReadableStream | null | undefined> =>
-    fetch(`/api/v1/sync/start?athlete_id=1${since ? `&since=${since}` : ''}`, { method: 'POST' })
+    fetch(`/api/v1/sync/start${since ? `?since=${since}` : ''}`, { method: 'POST' })
       .then(r => r.body)
 
   return (

@@ -93,9 +93,9 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
         repo = SettingsRepository(db, athlete_id)
         await repo.set(f"sync.{runner.SETTING_NAME[source]}.last_result", None)
         switched = False
-        from backend.engine.wko5expr.datasource import CHOSEN_KEY, effective_source
+        from backend.engine.wko5expr.datasource import CHOSEN_KEY, effective_source, wko5_available
         if effective_source(await repo.get("charts.data_source"), await repo.get(CHOSEN_KEY)) == source:
-            await repo.set("charts.data_source", "wko5")
+            await repo.set("charts.data_source", "wko5" if wko5_available() else "synced")
             switched = True
         rebuilt = await dedup.rebuild(db, athlete_id)
         await db.commit()

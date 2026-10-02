@@ -31,6 +31,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.db.models import ActivityTag, InjuryEvent
 from backend.engine import injuries as INJ
@@ -98,7 +99,7 @@ def _runs() -> tuple[list[tuple], Optional[dt.date]]:
 
 async def _list_json(db: AsyncSession, with_days: bool = True) -> list[dict]:
     from starlette.concurrency import run_in_threadpool
-    evs = (await db.execute(select(InjuryEvent).where(InjuryEvent.athlete_id == 1)
+    evs = (await db.execute(select(InjuryEvent).where(InjuryEvent.athlete_id == current_athlete_id())
                             .order_by(InjuryEvent.onset_date.desc(), InjuryEvent.id.desc()))).scalars().all()
     linked = await _linked(db)
     runs = []
@@ -256,7 +257,7 @@ async def create_injury(body: dict = Body(...), db: AsyncSession = Depends(get_d
         f["recurrence_of"] = rec["recurrence_of"]
         f["note"] = "；".join(x for x in (f.get("note"), rec["note"]) if x)
     now = dt.datetime.utcnow()
-    e = InjuryEvent(athlete_id=1, created_at=now, updated_at=now, pause_quality=bool(f.pop("pause_quality", False)), **f)
+    e = InjuryEvent(athlete_id=current_athlete_id(), created_at=now, updated_at=now, pause_quality=bool(f.pop("pause_quality", False)), **f)
     db.add(e)
     await remember_area(db, f.get("area"))
     await db.commit()

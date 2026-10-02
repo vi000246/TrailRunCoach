@@ -37,7 +37,7 @@
         {"id": "hr-zones", "title": "心率區間時間", "kind": "activity", "chart": "hrzones",
          "description": "這次每個心率區間的時間，區間模型可以換（每個教練定義不同），選擇會記住。只算有心率的秒數。門檻用活動當天有效的 LTHR／AeT／最大心率。"},
         {"id": "power-zones", "title": "功率區間時間", "kind": "activity", "chart": "powerzones",
-         "description": "這次每個功率區間的時間，區間模型可以換，選擇會記住。只算功率 > 0 的秒數（1 秒原始功率，和 WKO5 的 Time in iLevels 一樣）。WKO5 iLevels 用前 90 天的功率擬合 PD 模型，資料不夠時改選其他模型。"}
+         "description": "這次每個功率區間的時間，區間模型可以換（Palladino 10 區或 3 區，% CP），選擇會記住。只算功率 > 0 的秒數（1 秒原始功率）。門檻用活動當天有效的 CP。"}
       ]
     },
     {

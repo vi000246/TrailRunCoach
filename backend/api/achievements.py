@@ -37,10 +37,20 @@ SORT_KEYS = {
 
 
 @lru_cache(maxsize=1)
-def _dataset() -> Dataset:
+def _wko5_dataset() -> Dataset:
     # distance / climbing / time come from WKO5's index and don't depend on
     # the TSS policy, so the parity config is fine here.
     return Dataset(ATHLETE_DIR, config=EngineConfig())
+
+
+def _dataset():
+    """The WKO5 folder's Dataset; without one (a COROS / TP-only runner) the
+    charts' shared Dataset of the synced FITs."""
+    from backend.engine.wko5expr.datasource import wko5_available
+    if wko5_available(ATHLETE_DIR):
+        return _wko5_dataset()
+    from backend.api.wko5views import _dataset as shared
+    return shared()
 
 
 def _rows(include_hidden: bool = False) -> list[dict]:

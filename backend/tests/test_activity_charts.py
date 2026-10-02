@@ -158,46 +158,20 @@ def test_no_hrmax_model_even_with_an_hrmax_setting():
     assert not hasattr(A.Z, "HRMAX5_ZONES")
 
 
-def test_power_zone_models_and_ilevels_unavailable_without_a_model(monkeypatch):
+def test_power_zone_models_are_palladino_only():
     p = np.repeat([150.0, 210.0, 240.0, 260.0, 300.0], 300)     # CP 250
     t = np.arange(len(p), dtype=float)
     ds = _ds(_run(t, np.full(len(p), 150.0), p))
-    monkeypatch.setattr(A, "ilevels_for", lambda ds, w: None)
     res = A.zone_times(ds, ds.workouts[0], "power")
-    # power zones are Palladino's everywhere (owner 2026-10-02): no Coggan / Stryd sets
-    assert [m["id"] for m in res["models"]] == ["ilevels", "palladino", "palladino3"]
+    # power zones are Palladino's everywhere (owner 2026-10-02): no Coggan / Stryd sets, no WKO5 iLevels
+    assert [m["id"] for m in res["models"]] == ["palladino", "palladino3"]
     assert res["default"] == "palladino"          # Palladino % CP (zones-and-thresholds.md §3.2)
-    il = _model(res, "ilevels")
-    assert not il["available"] and "iLevels" in il["reason"]
+    assert not hasattr(A, "ilevels_for") and not hasattr(A, "ILEVEL_NAMES")
     p3 = _model(res, "palladino3")  # 80 % / 95 % CP = 200 / 237.5
     assert [r["seconds"] for r in p3["rows"]] == [300.0, 300.0, 900.0]
     # Palladino's table starts at 50 % CP; below that counts as 1A, so every second has a zone
     pal = _model(res, "palladino")
     assert pal["rows"][0]["from"] == 0 and pal["total_s"] == len(p)
-
-
-def test_ilevels_rows_come_from_the_wko5_levelto_expression(monkeypatch):
-    tops = [109.5, 148.6, 172.1, 185.8, 205.3, 266.0, 370.0, 518.9]
-    seen = []
-
-    class Ev:
-        def __init__(self, *a, **k):
-            pass
-
-        def evaluate(self, expr, w=None):
-            seen.append(expr)
-            return tops[int(expr.rsplit(",", 1)[1].rstrip(")"))]
-    import backend.engine.wko5expr.evaluator as E
-    monkeypatch.setattr(E, "Evaluator", Ev)
-    t = np.arange(0, 600, 1.0)
-    ds = _ds(_run(t, np.full(len(t), 150.0), np.full(len(t), 200.0)))
-    lv = A.ilevels_for(ds, ds.workouts[0])
-    assert [r[0] for r in lv] == ["1", "2", "3", "4a", "4", "5", "6", "7a", "7"]
-    assert lv[0][2:] == (0.0, 109.5) and lv[4][2:] == (185.8, 205.3) and lv[-1][2:] == (518.9, None)
-    assert seen[0] == "levelto(athleterange(date-89,date,(meanmax(power))),0)"
-    m = _model(A.zone_times(ds, ds.workouts[0], "power"), "ilevels")
-    assert m["available"] and m["rows"][4]["seconds"] == 600.0       # 200 W is in FTP (185.8–205.3)
-    assert "mFTP 196 W" in m["basis_text"]                            # 205.3 / 1.05
 
 
 # ---------------------------------------------------------------------------
