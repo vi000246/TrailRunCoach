@@ -28,6 +28,10 @@ SOURCES = ("coros", "trainingpeaks", "local")
 DEFAULTS: dict[str, Any] = {
     # IANA zone for local workout dates; None = WKO5COACH_TZ env, then the system zone
     "athlete.timezone": None,
+    # detected zone (engine/localtime.py): {"fit": {"offset_min", "file", "at"}, "browser": IANA}
+    "athlete.timezone.auto": None,
+    # 地區 (engine/region.py): tw | intl; None = auto from the home weather grid
+    "athlete.region": None,
     # the first-run 精靈 (一般設定) was saved or dismissed (engine/athlete_profile.py)
     "athlete.setup.done": False,
     # 主要資料來源 (backend/sync/primary.py): which source an activity is read
@@ -79,7 +83,7 @@ DEFAULTS: dict[str, Any] = {
     "activities.exclude_bad": True,
     # workout route map (viewer 單次活動): default basemap id and overlay ids;
     # the map can switch them temporarily (remembered per browser)
-    "charts.map.basemap": "rudy",
+    "charts.map.basemap": None,               # None = by 地區 (engine/region.py): tw 魯地圖, intl OSM
     "charts.map.overlays": [],
     # 課表偏好 (engine/plan_prefs.py). Every default reproduces the planner's
     # own behaviour, so an athlete who never opens the panel gets today's plan.
@@ -244,7 +248,7 @@ class SettingsRepository:
         return {k: stored.get(k, v) for k, v in DEFAULTS.items()}
 
     async def timezone(self) -> tzinfo:
-        return resolve_tz(await self.get("athlete.timezone"))
+        return resolve_tz(await self.get("athlete.timezone"), auto=await self.get("athlete.timezone.auto"))
 
 
 def validate(key: str, value: Any) -> None:
@@ -252,6 +256,10 @@ def validate(key: str, value: Any) -> None:
         from backend.engine import calibrate
         calibrate.validate_entry(value)
         return
+    if key == "athlete.timezone.auto" and value is not None and not isinstance(value, dict):
+        raise ValueError("athlete.timezone.auto must be an object or null")
+    if key == "athlete.region" and value not in (None, "tw", "intl"):
+        raise ValueError("athlete.region must be tw, intl or null (auto)")
     if key == "athlete.timezone" and value is not None:
         resolve_tz(value, strict=True)
     if key == "sync.primary_source" and value not in (None, "auto", *SOURCES):
@@ -264,7 +272,7 @@ def validate(key: str, value: Any) -> None:
         raise ValueError("auto-sync threshold must be 1-168 hours")
     if key == "charts.data_source" and value not in ("synced", "wko5", "coros", "tp"):
         raise ValueError("chart data source must be synced, wko5, coros or tp")
-    if key == "charts.map.basemap" and value not in MAP_BASEMAPS:
+    if key == "charts.map.basemap" and value is not None and value not in MAP_BASEMAPS:
         raise ValueError(f"map basemap must be one of {MAP_BASEMAPS}")
     if key == "charts.map.overlays" and not (
             isinstance(value, list) and all(v in MAP_OVERLAYS for v in value)
@@ -358,8 +366,11 @@ def _validate_pref(key: str, value: Any) -> None:
         raise ValueError("plan.prefs.weekly_hours must be 1-40 hours or null")
 
 
-def resolve_tz(name: Optional[str], strict: bool = False) -> tzinfo:
-    """Setting -> WKO5COACH_TZ env -> the machine's local zone."""
+def resolve_tz(name: Optional[str], strict: bool = False, auto: Optional[dict] = None) -> tzinfo:
+    """Setting -> WKO5COACH_TZ env -> the detected zone (`auto`, the
+    athlete.timezone.auto setting: engine/localtime.py — the latest FIT's
+    local-time offset, the browser's zone when it agrees) -> the machine's
+    local zone."""
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
     for cand in (name, None if strict else os.getenv("WKO5COACH_TZ")):
         if not cand:
@@ -369,4 +380,9 @@ def resolve_tz(name: Optional[str], strict: bool = False) -> tzinfo:
         except (ZoneInfoNotFoundError, ValueError):
             if strict:
                 raise ValueError(f"unknown time zone {cand!r}")
+    if not strict and auto:
+        from backend.engine.localtime import zone_of_auto
+        z = zone_of_auto(auto)
+        if z is not None:
+            return z
     return datetime.now().astimezone().tzinfo

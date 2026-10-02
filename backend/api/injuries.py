@@ -25,6 +25,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from backend.engine.localtime import today_local
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -108,7 +109,7 @@ async def _list_json(db: AsyncSession, with_days: bool = True) -> list[dict]:
             runs, _ = await run_in_threadpool(_runs)
         except Exception:                   # noqa: BLE001 — the list still shows without the dataset
             runs = []
-    today = dt.date.today()
+    today = today_local()
     out = []
     for e in evs:
         d = _row_dict(e)
@@ -250,7 +251,7 @@ async def create_injury(body: dict = Body(...), db: AsyncSession = Depends(get_d
     f.setdefault("severity", "mild")
     f.setdefault("status", "resolved" if f.get("resolved_date") else "active")
     if f["status"] == "resolved" and not f.get("resolved_date"):
-        f["resolved_date"] = dt.date.today().isoformat()
+        f["resolved_date"] = today_local().isoformat()
     evs = [_row_dict(e) for e in (await db.execute(select(InjuryEvent))).scalars().all()]
     rec = INJ.recurrence(f, evs)
     if rec:
@@ -262,7 +263,7 @@ async def create_injury(body: dict = Body(...), db: AsyncSession = Depends(get_d
     await remember_area(db, f.get("area"))
     await db.commit()
     _plan_changed()
-    return INJ.event_json(_row_dict(e), dt.date.today(), 0)
+    return INJ.event_json(_row_dict(e), today_local(), 0)
 
 
 @router.patch("/{eid}")
@@ -271,7 +272,7 @@ async def patch_injury(eid: int, body: dict = Body(...), db: AsyncSession = Depe
     f = _clean_body(body or {}, partial=True)
     onset = f.get("onset_date", e.onset_date)
     if f.get("status") == "resolved" and not f.get("resolved_date", e.resolved_date):
-        f["resolved_date"] = dt.date.today().isoformat()
+        f["resolved_date"] = today_local().isoformat()
     if f.get("status") in ("active", "draft") and "resolved_date" not in f:
         f["resolved_date"] = None
     if f.get("resolved_date") and "status" not in f:
@@ -290,20 +291,20 @@ async def patch_injury(eid: int, body: dict = Body(...), db: AsyncSession = Depe
     await db.commit()
     _plan_changed()
     linked = await _linked(db)
-    return INJ.event_json(_row_dict(e), dt.date.today(), linked.get(e.id, 0))
+    return INJ.event_json(_row_dict(e), today_local(), linked.get(e.id, 0))
 
 
 @router.post("/{eid}/resolve")
 async def resolve_injury(eid: int, body: Optional[dict] = Body(None), db: AsyncSession = Depends(get_db)):
     e = await _get(db, eid)
-    day = (body or {}).get("date") or dt.date.today().isoformat()
+    day = (body or {}).get("date") or today_local().isoformat()
     err = INJ.validate_event({"resolved_date": day}) or INJ.check_dates(e.onset_date, day)
     if err:
         raise HTTPException(400, err)
     e.status, e.resolved_date, e.updated_at = "resolved", day, dt.datetime.utcnow()
     await db.commit()
     _plan_changed()
-    return INJ.event_json(_row_dict(e), dt.date.today(), (await _linked(db)).get(e.id, 0))
+    return INJ.event_json(_row_dict(e), today_local(), (await _linked(db)).get(e.id, 0))
 
 
 @router.delete("/{eid}")

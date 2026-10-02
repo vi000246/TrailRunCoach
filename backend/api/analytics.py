@@ -4,6 +4,7 @@ from sqlalchemy import select, func, and_
 from datetime import date, timedelta
 from typing import Optional
 
+from backend.engine.localtime import today_local
 from backend.db.database import get_db
 from backend.db.models import WorkoutFile, WorkoutMetric, AthleteSettings, PmcCache
 from backend.sync.dedup import canonical_clause
@@ -31,7 +32,7 @@ async def dashboard_summary(
     sports: Optional[list[str]] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    today = date.today()
+    today = today_local()
     week_start = today - timedelta(days=7)
 
     # Latest PMC row
@@ -166,7 +167,7 @@ async def run_load(
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
-        date_to = date.today()
+        date_to = today_local()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
 
@@ -224,7 +225,7 @@ async def trail_load(
     shown for reference because it under-credits technical terrain.
     """
     if date_to is None:
-        date_to = date.today()
+        date_to = today_local()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
 
@@ -293,7 +294,7 @@ async def achievements(
     text summary (sport · distance · climb · time) suitable for screenshots.
     """
     if date_to is None:
-        date_to = date.today()
+        date_to = today_local()
     if date_from is None:
         date_from = date_to - timedelta(days=90)
 
@@ -392,7 +393,7 @@ async def trail_summary(
 ):
     """Aggregate trail-running stats: total climb, activity count, recent climbs/VAM."""
     if date_to is None:
-        date_to = date.today()
+        date_to = today_local()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
 
@@ -446,7 +447,7 @@ async def intensity_load(
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
-        date_to = date.today()
+        date_to = today_local()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
 
@@ -502,7 +503,7 @@ async def run_volume(
     db: AsyncSession = Depends(get_db),
 ):
     if date_to is None:
-        date_to = date.today()
+        date_to = today_local()
     if date_from is None:
         date_from = date_to - timedelta(days=365)
 
