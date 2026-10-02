@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from backend.i18n.pages import render_page
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -290,7 +291,7 @@ def rebuild(body: Optional[RebuildBody] = None):
 
 @router.get("/page", include_in_schema=False)
 def page():
-    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "routes.html")
+    return render_page("routes")
 
 
 def _get(rid: str) -> dict:

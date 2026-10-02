@@ -26,7 +26,7 @@ C = Event("c", "練跑", "2026-10-11", kind="race", priority="C", distance_km=15
 
 
 def fake(hours):
-    return lambda e: hours.get(e.id)
+    return lambda e, c=None: hours.get(e.id)
 
 
 def chart(series=None):
@@ -46,45 +46,90 @@ def test_formula_is_the_charts_own():
 
 
 def test_calculator_time_first_then_the_plans_estimate():
-    r = RR.course_constant_refs(plan(A, B, C), TODAY, fake({"a": [8.0]}))
+    r = RR.course_constant_refs(plan(A, B), TODAY, fake({"a": [8.0]}))
     names = [x["name"] for x in r["lines"]]
-    assert names == ["大霸尖山"]                      # B has neither a prediction nor est_hours; C never counts
+    assert names == ["大霸尖山"]                      # B has neither a prediction nor est_hours
     assert r["lines"][0]["time_source"].startswith("賽事計算器")
     r = RR.course_constant_refs(plan(A, B), TODAY, fake({"b": [3.5]}))
     a = next(x for x in r["lines"] if x["priority"] == "A")
     assert a["hours"] == 9 and a["time_source"] == "賽季計畫的預估移動時間"
     assert [x["priority"] for x in r["lines"]] == ["B", "A"]           # by date
-    assert r["target"]["event_id"] == "a" and r["half"] == pytest.approx(round(0.5 * a["cc"], 1))
+    assert r["target"]["event_id"] == "b"                                # the nearest race
+    assert a["goal"] == a["cc"] and r["band"] is a                      # single day: its constant
 
 
-def test_multi_day_takes_the_hardest_day():
+def test_the_next_two_races_any_grade_nearest_first():
+    # owner 2026-10-02: two lines only, any grade (C counts), past races don't
+    past = Event("p", "已跑完", "2026-09-01", kind="race", priority="A", distance_km=10, est_hours=1)
+    r = RR.course_constant_refs(plan(A, B, C, past), TODAY, fake({"a": [8.0], "b": [3.0]}))
+    assert [x["event_id"] for x in r["lines"]] == ["c", "b"]            # 10-11, 10-25; A (11-28) is third
+    assert r["target"]["event_id"] == "c" and r["band"] is None          # no A among the two: no band
+
+
+def test_multi_day_is_the_whole_trip_with_the_hardest_day_in_the_breakdown():
+    # one number for the trip (信州 grading: the whole route's constant), per day in the hover
     hike = Event("h", "南湖大山", "2026-12-10", kind="baiyue", priority="A", days=3, distance_km=36, climbing_m=3000)
     r = RR.course_constant_refs(plan(hike), TODAY, fake({"h": [5.0, 8.0, 4.0]}))
     ln = r["lines"][0]
-    assert ln["days"] == 3 and ln["hours"] == 8.0
-    assert ln["cc"] == pytest.approx(round(CM.course_constant(8.0, 12, 1000, 1000), 1))
+    assert ln["days"] == 3 and ln["hours"] == 17.0
+    assert ln["cc"] == pytest.approx(round(CM.course_constant(17.0, 36, 3000, 3000), 1))
+    assert ln["day_max"] == pytest.approx(round(CM.course_constant(8.0, 12, 1000, 1000), 1)) and ln["hardest_day"] == 2
 
 
-def test_apply_adds_labelled_dashed_lines_and_the_target():
+def test_apply_draws_two_graded_lines_and_the_a_band():
+    # owner 2026-10-02: the next two races, grade in the label, A red / B orange / other blue,
+    # the 80–100 % band only under the A race
     res = RR.apply(chart(), plan(A, B), TODAY, fake({"a": [8.0], "b": [3.0]}))
     refs = [s for s in res["series"] if s.get("role") == "race_ref"]
-    assert len(refs) == 3                                               # A, B, 50 % of A
-    a = next(s for s in refs if s["name"].startswith("大霸尖山 · 定數"))
-    assert a["line_style"] == "dash" and a["label_end"] and a["data"]["kind"] == "hline"
+    lines = [s for s in refs if s["data"]["kind"] == "hline"]
+    assert len(lines) == 2
+    b, a = lines                                                          # nearest first
+    tg, band_ln = res["race_ref"]["target"], res["race_ref"]["band"]
+    assert tg["event_id"] == "b" and band_ln["event_id"] == "a"
+    cc = band_ln["cc"]
+    assert a["name"] == f"A 大霸尖山 {cc:.0f}" and a["data"]["y"] == cc and a["color"] == RR.COLOR["A"]
+    assert b["name"] == f"B 鳶嘴稍來 {tg['cc']:.0f}" and b["color"] == RR.COLOR["B"]
+    assert a["line_style"] == "dash" and a["label_end"]
     assert a["unit"] == {"id": "NONE"} and a["y_axis"] == "NONE"
-    half = next(s for s in refs if "50%" in s["name"])
-    assert "推估" in half["name"] and half["data"]["y"] == res["race_ref"]["half"]
-    assert res["race_ref"]["target"]["name"] == "大霸尖山"
-    assert res["description"].startswith("原本的說明。") and "目標賽事參考線" in res["description"]
+    assert "コース定數" in a["tip"] and "鳶嘴稍來" not in a["tip"]
+    band = [s for s in refs if s["data"]["kind"] == "band"]
+    assert len(band) == 1 and band[0]["data"]["range"] == [round(0.8 * cc, 1), cc]
+    assert band[0]["color"] == RR.COLOR["A"] and not band[0].get("label_end")
+    assert tg["goal"] == tg["cc"]                                         # the point hover reads the nearest
+    # the ?: a short guide, the formula on its last line
+    g = res["description"].split("\n")
+    assert len(g) == 5 and g[0].startswith("虛線＝接下來 2 場賽事") and "山本正嘉" in g[-1]
+    assert "推估" in g[2] and "80–100%" in g[2] and g[2].startswith("大霸尖山")
+
+
+def test_other_grades_are_blue_and_without_an_a_race_no_band():
+    res = RR.apply(chart(), plan(C, B), TODAY, fake({"b": [3.0]}))
+    lines = [s for s in res["series"] if s.get("role") == "race_ref" and s["data"]["kind"] == "hline"]
+    assert [s["name"].split()[0] for s in lines] == ["C", "B"]
+    assert lines[0]["color"] == RR.COLOR_OTHER
+    assert not any(s["data"]["kind"] == "band" for s in res["series"] if s.get("role") == "race_ref")
+    assert len(res["description"].split("\n")) == 4 and "80–100%" not in res["description"]
+
+
+def test_multi_day_trip_line_is_its_per_day_average():
+    hike = Event("h", "南湖大山", "2026-12-10", kind="baiyue", priority="A", days=3, distance_km=36, climbing_m=3000)
+    res = RR.apply(chart(), plan(hike), TODAY, fake({"h": [5.0, 8.0, 4.0]}))
+    lines = [s for s in res["series"] if s.get("role") == "race_ref" and s["data"]["kind"] == "hline"]
+    tg = res["race_ref"]["target"]
+    assert len(lines) == 1 and lines[0]["data"]["y"] == tg["day_mean"] == tg["goal"]
+    assert lines[0]["name"] == f"A 南湖大山 每天 {tg['day_mean']:.0f}"
+    assert f"整趟 3 天コース定數 {tg['cc']:.0f}" in lines[0]["tip"] and "（最難）" in lines[0]["tip"]
 
 
 def test_no_races_leaves_the_chart_and_says_why():
     before = chart()
-    res = RR.apply(before, plan(C), TODAY, fake({}))
+    past = Event("p", "已跑完", "2026-09-01", kind="race", priority="A", distance_km=10, est_hours=1)
+    res = RR.apply(before, plan(B, past), TODAY, fake({}))               # B: no time to compute it
     assert res["series"] == before["series"] and res["race_ref"]["target"] is None
     assert RR.NOTE_NONE in res["description"]
     only_b = RR.apply(chart(), plan(B), TODAY, fake({"b": [3.0]}))
-    assert only_b["race_ref"]["half"] is None and only_b["race_ref"]["target"]["event_id"] == "b"
+    assert only_b["race_ref"]["target"]["event_id"] == "b"
+    assert only_b["description"].startswith("虛線＝接下來 1 場賽事")
 
 
 def test_the_view_turns_it_on_and_validates_it():

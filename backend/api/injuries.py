@@ -25,6 +25,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n.pages import render_page
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
@@ -383,7 +384,7 @@ async def timeline(begin: Optional[str] = None, end: Optional[str] = None):
 
 @router.get("/page", include_in_schema=False)
 def page():
-    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "injuries.html")
+    return render_page("injuries")
 
 
 @router.get("/{eid}/days")

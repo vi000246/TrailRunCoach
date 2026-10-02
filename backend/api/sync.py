@@ -208,6 +208,7 @@ class SyncSettingsBody(BaseModel):
     exclude_bad_activities: Optional[bool] = None  # engine/bad_activity.py (設定 → 資料校正)
     use_power: Optional[bool] = None              # 使用功率 (wko5expr/power_use.py); off = HR only
     accept_watch_power: Optional[bool] = None     # 進階: watch-estimated power feeds the power models (engine/power_source.py)
+    push_provider: Optional[str] = None           # 進階: where the plan is pushed (sync/workout_targets)
 
 
 _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
@@ -220,7 +221,8 @@ _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_so
                  "auto_on_open_hours": "sync.auto_on_open.hours",
                  "chart_data_source": "charts.data_source",
                  "map_basemap": "charts.map.basemap", "map_overlays": "charts.map.overlays",
-                 "use_power": "charts.power.enabled", "accept_watch_power": "power.accept_watch_power"}
+                 "use_power": "charts.power.enabled", "accept_watch_power": "power.accept_watch_power",
+                 "push_provider": "plan.push.provider"}
 
 
 async def _power_source() -> tuple[str, str]:
@@ -260,6 +262,9 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     from backend.engine.wko5expr.datasource import CHOSEN_KEY, effective_source
     out["chart_data_source_stored"] = out["chart_data_source"]
     out["chart_data_source"] = effective_source(out["chart_data_source"], await repo.get(CHOSEN_KEY))
+    from backend.sync import workout_targets as WT
+    out["push_provider"] = WT.resolve(out["push_provider"]).id
+    out["push_providers"] = WT.available()
     creds, source = lookup_client_creds()
     out["tp_client_credentials_configured"] = creds is not None      # never the values
     out["tp_client_credentials_source"] = source                     # env|file|sealed|wko5_exe|none

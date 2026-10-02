@@ -21,13 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
 from backend.engine import backup as B
+from backend.i18n import _
 from backend.settings.repository import SettingsRepository
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/backup", tags=["backup"])
 UPLOAD_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_UPLOAD = 8 << 30
-MIN_PASSWORD = 8
 
 
 # paths are looked up at call time so tests can point them at tmp_path
@@ -54,24 +54,12 @@ def _err(e: Exception) -> HTTPException:
     return HTTPException(409 if isinstance(e, B.Busy) else 400, str(e))
 
 
-async def _key(repo: SettingsRepository) -> Optional[dict]:
-    enc = await repo.get("backup.encryption")
-    if not enc:
-        return None
-    from backend.settings.secrets import SecretError, unseal
-    try:
-        return {**enc, "key": unseal(enc["key"])}
-    except SecretError:
-        raise B.BackupError("備份加密金鑰解不開（可能換了電腦或金鑰），請在進階設定重新設定備份密碼")
-
-
 async def status(repo: SettingsRepository) -> dict:
     d = await repo.get("backup.dir")
     last_ok, last = await repo.get("backup.last_ok"), await repo.get("backup.last_result")
     backups = await asyncio.to_thread(B.list_backups, Path(d)) if d else []
     return {"dir": d, "auto": await repo.get("backup.auto"),
             "include_fit": await repo.get("backup.include_fit"),
-            "encrypted": bool(await repo.get("backup.encryption")),
             "last_result": last, "last_ok": last_ok,
             "auto_due": bool(d) and B.auto_due((last_ok or {}).get("at"), (last or {}).get("at")),
             "backups": backups, "keep": {"daily": B.KEEP_DAILY, "weekly": B.KEEP_WEEKLY},
@@ -89,12 +77,11 @@ async def run_backup(db: AsyncSession, trigger: str, athlete_id: int = 1) -> dic
         if not d:
             raise B.BackupError("還沒選備份資料夾")
         folder = await asyncio.to_thread(B.check_folder, d)
-        key = await _key(repo)
         made = await asyncio.to_thread(
             B.create_backup, _db_path(), folder, fit_root=_fit_root(),
-            include_fit=await repo.get("backup.include_fit"), key=key)
+            include_fit=await repo.get("backup.include_fit"))
         pruned = await asyncio.to_thread(B.prune, folder)
-        result.update(status="ok", name=made["name"], size=made["size"], encrypted=made["encrypted"],
+        result.update(status="ok", name=made["name"], size=made["size"],
                       fit_files=made["fit_files"], pruned=len(pruned))
         await repo.set("backup.last_ok", {"at": at, "name": made["name"], "size": made["size"]})
     except B.Busy:
@@ -155,33 +142,6 @@ async def put_settings(body: BackupSettingsBody, athlete_id: int = 1, db: AsyncS
     return await status(repo)
 
 
-class PasswordBody(BaseModel):
-    password: str
-
-
-@router.put("/password")
-async def put_password(body: PasswordBody, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
-    """Turn encryption on (or change the password). Only the derived key is
-    kept, sealed with this machine's key; the password can't be recovered."""
-    if len(body.password) < MIN_PASSWORD:
-        raise HTTPException(400, f"備份密碼至少 {MIN_PASSWORD} 個字")
-    from backend.settings.secrets import seal
-    enc = await asyncio.to_thread(B.new_key, body.password)
-    enc["key"] = seal(enc["key"])
-    repo = SettingsRepository(db, athlete_id)
-    await repo.set("backup.encryption", enc)
-    await db.commit()
-    return await status(repo)
-
-
-@router.delete("/password")
-async def delete_password(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
-    repo = SettingsRepository(db, athlete_id)
-    await repo.set("backup.encryption", None)
-    await db.commit()
-    return await status(repo)
-
-
 @router.post("/run")
 async def post_run(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     try:
@@ -221,14 +181,16 @@ async def post_upload(request: Request):
             f.write(chunk)
     if not size:
         dst.unlink()
-        raise HTTPException(400, "檔案是空的")
-    return {"upload_id": uid, "size": size, "encrypted": B.is_encrypted(dst)}
+        raise HTTPException(400, _("檔案是空的"))
+    if B.is_legacy_encrypted(dst):
+        dst.unlink()
+        raise HTTPException(400, B.LEGACY_ENCRYPTED)
+    return {"upload_id": uid, "size": size}
 
 
 class SourceBody(BaseModel):
     name: Optional[str] = None           # a backup in the configured folder
     upload_id: Optional[str] = None      # or one uploaded via /upload
-    password: Optional[str] = None
 
 
 async def _source(body: SourceBody, repo: SettingsRepository) -> Path:
@@ -238,29 +200,28 @@ async def _source(body: SourceBody, repo: SettingsRepository) -> Path:
         p = _local_dir() / "staging" / f"{body.upload_id}.bin"
     elif body.name:
         d = await repo.get("backup.dir")
+        if d and body.name.endswith(".zip.enc"):
+            raise HTTPException(400, B.LEGACY_ENCRYPTED)
         if not d or not B.NAME_RE.match(body.name):
             raise HTTPException(400, "只能還原備份資料夾裡由這個功能建立的檔案")
         p = Path(d) / body.name
     else:
         raise HTTPException(400, "請選擇備份檔")
     if not p.is_file():
-        raise HTTPException(404, "找不到備份檔")
+        raise HTTPException(404, _("找不到備份檔"))
     return p
 
 
 @router.post("/inspect")
 async def post_inspect(body: SourceBody, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     p = await _source(body, SettingsRepository(db, athlete_id))
-    enc = B.is_encrypted(p)
-    if enc and not body.password:
-        return {"encrypted": True, "needs_password": True}
     work = _local_dir()
     work.mkdir(parents=True, exist_ok=True)
     try:
-        info = await asyncio.to_thread(B.inspect, p, work, body.password)
+        info = await asyncio.to_thread(B.inspect, p, work)
     except B.BackupError as e:
         raise _err(e)
-    return {"encrypted": enc, "needs_password": False, **info}
+    return info
 
 
 async def after_restore() -> None:
@@ -284,7 +245,7 @@ async def post_restore(body: SourceBody, athlete_id: int = 1):
         p = await _source(body, SettingsRepository(db, athlete_id))
     try:
         r = await asyncio.to_thread(B.restore, p, _db_path(), local_dir=_local_dir(),
-                                    password=body.password, fit_root=_fit_root())
+                                    fit_root=_fit_root())
     except B.BackupError as e:
         raise _err(e)
     await after_restore()

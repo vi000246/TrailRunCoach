@@ -57,6 +57,16 @@ def _no_real_activity_tags(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_event_gpx(monkeypatch, tmp_path_factory):
+    """The engine never reads stored event GPX rows / files (engine/event_gpx.py)
+    unless a test passes its own DB path / root."""
+    from backend.engine import event_gpx
+    monkeypatch.setattr(event_gpx, "_default_db", lambda: None)
+    monkeypatch.setattr(event_gpx, "ROOT", tmp_path_factory.mktemp("event_gpx"))
+    event_gpx._memo.clear()
+
+
+@pytest.fixture(autouse=True)
 def _no_registered_dataset():
     """engine/activity_key.py's registry of the last built Dataset is per
     test: a dataset built by one test never re-indexes another's plan rows."""

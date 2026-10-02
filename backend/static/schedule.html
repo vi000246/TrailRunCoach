@@ -683,7 +683,7 @@ const ls = { get(k, d) { try { const v = localStorage.getItem("schedule." + k); 
   set(k, v) { try { localStorage.setItem("schedule." + k, JSON.stringify(v)); } catch {} } };
 
 // ---- dates ----
-const WD = "一二三四五六日";
+const WD = I18N.fmt.weekdays("narrow");     // i18n.js: 一…日 / M…S, Monday first
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const dOf = (iso) => new Date(iso + "T00:00:00");
 const addDays = (iso, n) => { const d = dOf(iso); d.setDate(d.getDate() + n); return isoOf(d); };
@@ -1825,7 +1825,7 @@ PFF.addEventListener("input", pfSync);
 PFF.addEventListener("change", pfSync);
 // ---- 偏好的星期 per session type (engine/plan_prefs.py day_conflicts / place) ----
 const PD_KINDS = [["quality", "間歇"], ["aet_test", "AeT 測試"], ["cp_test", "CP 測試"], ["strides", "坡道衝刺／加速跑"]];
-const WDZ = "一二三四五六日";
+const WDZ = I18N.fmt.weekdays("narrow");
 let PF_WARNED = null;
 function pdaysRender(p) {
   const pd = p.pref_days || {};
