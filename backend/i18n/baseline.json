@@ -120,7 +120,6 @@
     "backend/engine/zone_events.py": 48,
     "backend/engine/zones.py": 63,
     "backend/settings/repository.py": 1,
-    "backend/static/achievements.html": 72,
     "backend/static/autoplan.js": 39,
     "backend/static/autosync.js": 3,
     "backend/static/basemaps.js": 13,

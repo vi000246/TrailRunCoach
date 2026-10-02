@@ -386,8 +386,29 @@ def test_nav_order_and_activity_list_name():
     import re
     ids = re.findall(r'\{ id: "(\w+)"', shell)
     assert ids == ["home", "schedule", "charts", "plan", "activity", "routes", "racepower",
-                   "achievements", "injuries", "settings"]
+                   "injuries", "settings"]                                  # 成就 is a tab of 活動列表
     assert _catalog("zh-TW", "shell")["page.activity.name"] == "活動列表"
+    assert not any(k.startswith("page.achievements.") for k in _catalog("zh-TW", "shell"))
+
+
+def test_achievements_merged_into_the_activity_list():
+    """The 成就 page is the 成就 tab of 活動列表 (owner, 2026-10-02): one page, one
+    achievements fetch shared by the tab, the badges and the 「有成就」 filter."""
+    import re
+    assert not (STATIC / "achievements.html").exists()
+    from backend.api import achievements as AP
+    r = AP.page()
+    assert r.status_code == 307 and r.headers["location"] == "/api/v1/wko5/activities/page#achievements"
+    page = (STATIC / "activity.html").read_text(encoding="utf-8")
+    assert len(re.findall(r'j\(`\$\{ACH\}\?include_hidden=true`\)', page)) == 2   # the init prefetch + loadAch's fallback
+    assert 'location.hash === "#achievements"' in page and 'id="f-ach"' in page and 'id="tab-ach"' in page
+    assert "TW ? tile(" in page and "const peaksOf = (r) => (TW &&" in page              # 百岳 only in Taiwan
+    zh, en = _catalog("zh-TW"), _catalog("en")
+    used = {k for k in re.findall(r'\bT\("([\w.]+)"', page) if k[-1] not in "._"}
+    used |= {f"ach.col.{k}" for k in re.findall(r'\{ k: "(\w+)", cl: "c-', page[page.index("const ACOLS"):])}
+    used |= {f"ach.{p}.{c}" for p in ("cls", "cls_intl") for c in ("baiyue", "mid", "low")}
+    used |= {"ach.kind.trail", "ach.kind.hike", "ach.help_vam", "ach.help_sh"}
+    assert not sorted(k for k in used if k not in zh) and set(zh) == set(en)
 
 
 
