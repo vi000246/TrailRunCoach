@@ -76,7 +76,7 @@ POWER_OF_CP = 0.75              # 自訂: starting power when nothing better is 
 RECENT_DAYS = 28                # 推估: a test in the last 4 weeks → don't suggest another (minimum spacing)
 # B3 (unsourced-rules.md): no fixed expiry / cadence any more (16 weeks, 4–6 weeks, every 5 base
 # weeks: no source). The test is due only for a reason (quality_gate.aet_test_reason).
-HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；台灣教練、Lafrenz 2008）"
+HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；徐國峰（教練）、Lafrenz 2008）"
 
 SRC_UA_TEST = "Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/，教練）"
 
@@ -88,7 +88,7 @@ PROTOCOLS = {
     "xu90": {"label": "徐國峰 90 分鐘平路 1 區", "warm": 10, "main": 80, "cool": 0, "judge": "xu",
              "title": "AeT 飄移測試 徐國峰 90 分", "terrain": "平坦路段（就是週末那一次 LSD）",
              "hold": "配速固定在 E 配速，心率自然變", "rule": "第 10 分鐘心率 A、第 90 分鐘心率 B：(B − A) ÷ A < 10% 有氧基礎夠（5% 內國家級）",
-             "source": "台灣教練"},
+             "source": "徐國峰（教練）；徐國峰《跑者都該懂的跑步數據》"},
     "ua60": {"label": "Uphill Athlete 60 分", "warm": 15, "main": 60, "cool": 5, "judge": "ua",
              "title": "AeT 飄移測試 60 分", "terrain": "跑步機 2–3% 或平路環線（不要山路）",
              "hold": "固定功率（UA 原文固定配速；有 Stryd 用功率較穩）", "rule": "前半對後半：< 3.5% 低於 AeT、3.5–5% 前半心率就是 AeT、> 5% 起始太高",

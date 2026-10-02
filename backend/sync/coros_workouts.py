@@ -183,7 +183,7 @@ def easy_target(s: dict, th: Thresholds, frac: tuple = (0.75, 0.80)) -> Optional
     return easy_hr(th)
 
 
-WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
+WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
 
 
@@ -783,8 +783,69 @@ async def rows_by_key(db: AsyncSession, athlete_id: int, keys) -> dict[str, Coro
 
 
 async def all_rows(db: AsyncSession, athlete_id: int = 1) -> dict[str, CorosPlanPush]:
-    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id, _mine()))
+    """The week plan's pushed sessions. Workouts pushed from outside the plan (the race
+    calculator, RACE_KEY_PREFIX) are not the plan's: never listed here, so the plan's
+    push never takes them as stale and removes them."""
+    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id, _mine(),
+                                                       CorosPlanPush.session_key.notlike(RACE_KEY_PREFIX + "%")))
     return {r.session_key: r for r in res.scalars().all()}
+
+
+RACE_KEY_PREFIX = "racecalc:"     # coros_plan_push.session_key of a race-calculator workout (one per event)
+
+
+def library_name(s: dict) -> str:
+    return f"{NAME_PREFIX} {s['title']}"[:MAX_NAME]
+
+
+async def push_workout(db: AsyncSession, s: dict, thresholds: Optional[dict], today: str, *,
+                       athlete_id: int = 1, hub: Optional[TrainingHub] = None) -> dict:
+    """One workout outside the week plan (the race calculator's race plan): `s` is a
+    session dict with "key", "id", "title", "steps" and "day" (None = no date).
+    A day from today on: put on that day like a plan session (push_sessions, idempotent
+    per key). No day / a past day: only into the COROS library, replacing this key's
+    earlier workout. Either way exporting again updates the same workout."""
+    if s.get("day") and s["day"] >= today:
+        res = await push_sessions(db, [s], thresholds, today, athlete_id=athlete_id, hub=hub)
+        return {**res["sessions"][0], "scheduled": True}
+    th = Thresholds.of(thresholds)
+    steps = session_steps(s, th)
+    name = library_name(s)
+    payload = build_program(name, steps, th, s.get("detail") or "")
+    fp = hashlib.sha256(json.dumps({"day": None, "program": payload}, sort_keys=True,
+                                   ensure_ascii=False).encode()).hexdigest()
+    out = {"id": s["id"], "title": s.get("title"), "day": None, "name": name, "scheduled": False}
+    async with _push_lock:
+        hub = hub or await TrainingHub.from_db(db, athlete_id)
+        row = (await rows_by_key(db, athlete_id, [s["key"]])).get(s["key"])
+        if row is not None and row.status == "pushed" and row.fingerprint == fp and row.program_id:
+            return {**out, "status": "pushed", "changed": False, **_row_view(row)}
+        replacing = row is not None and (row.program_id or row.id_in_plan)
+        if replacing:
+            try:
+                await _remove_remote(hub, row)
+            except Executed:
+                pass                          # done on the watch: leave that entry, add the new one
+        if row is None:
+            row = CorosPlanPush(athlete_id=athlete_id, provider=PROVIDER, session_key=s["key"],
+                                week_start=_monday(today, today), session_id=s["id"])
+            db.add(row)
+        row.title, row.fingerprint, row.status, row.error, row.day = s.get("title"), fp, "failed", None, None
+        row.plan_id = row.id_in_plan = row.plan_program_id = None
+        try:
+            row.program_id = await hub.add_program(payload)
+            row.status = "pushed"
+            row.pushed_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+            await db.commit()
+        except CorosAuthError:
+            row.error = "COROS 登入過期，請重新登入"
+            await db.commit()
+            raise
+        except CorosError as e:
+            row.error = str(e)[:500]
+            await db.commit()
+            return {**out, "status": "failed", "error": row.error, **_row_view(row)}
+        return {**out, "status": "updated" if replacing else "pushed", "changed": True, **_row_view(row)}
 
 
 async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,

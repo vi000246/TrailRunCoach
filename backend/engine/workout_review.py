@@ -516,9 +516,9 @@ TAIL_TIP = ("回程市區段：從結尾往回，最後一群相隔 ≤ 6 分、
 STABILITY_TIP = ("穩定度只算量測視窗內移動中的樣本：VI = NP30／平均功率 ≤ 1.04（VI 是 Coggan 的定義，1.04 推估、用你的跑步校正）；"
                  "30 秒速度 < 中位速度 75% 連續 ≥ 3 分 = 跑走（推估）；後半功率和前半差 ≤ 5%（UA／Evoke 固定強度，5% 推估）。"
                  "舊的「30 秒功率變異 > 15%」沒有來源，只留數字參考。")
-RAMP_TIP = ("坡道不排除（你的決定）：|15 秒坡度| ≥ 3% 連續 ≥ 10 秒算一段。「去坡道」是把坡道和坡後 120 秒拿掉再算一次前後半，"
+RAMP_TIP = ("坡道不排除：|15 秒坡度| ≥ 3% 連續 ≥ 10 秒算一段。「去坡道」是把坡道和坡後 120 秒拿掉再算一次前後半，"
             "只當對照：河濱的小坡 Stryd 功率幾乎不升、心率會升，坡又多在後半，所以飄移會被往上推約 1–2 個百分點"
-            "（drift-algorithm.md §1.2，門檻推估）。")
+            "（門檻推估）。")
 
 
 def se_text(se: Optional[float]) -> str:
@@ -1840,15 +1840,49 @@ def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Opt
     return (wt, "watch") if wt is not None else (None, None)
 
 
+_CAL_INT = ("DRIFT_EARLY_S", "DRIFT_TAIL_S", "WALK_MAX_S")
+_CAL_DEFAULTS: dict = {}
+_CAL_MEMO = {"at": -1e9, "suffix": ""}
+
+
+def apply_calibration() -> str:
+    """The drift windows in effect (engine/drift_calib.py: fitted / manual /
+    default) into this module's constants, re-read every 10 s; returns the
+    measure() cache-key suffix ("" while every value is today's default, so
+    an uncalibrated install keeps its cache)."""
+    import time
+    now = time.monotonic()
+    if now - _CAL_MEMO["at"] < 10.0:
+        return _CAL_MEMO["suffix"]
+    g = globals()
+    if not _CAL_DEFAULTS:
+        from backend.engine.drift_calib import NAMES
+        _CAL_DEFAULTS.update({k: g[k] for k in NAMES})
+    try:
+        from backend.engine.drift_calib import values
+        vals = values()
+    except Exception:                       # noqa: BLE001
+        vals = dict(_CAL_DEFAULTS)
+    diff = []
+    for k, v in vals.items():
+        v = int(round(v)) if k in _CAL_INT else float(v)
+        g[k] = v
+        if v != _CAL_DEFAULTS[k]:
+            diff.append(f"{k}={v}")
+    _CAL_MEMO.update(at=now, suffix=("|" + ",".join(diff)) if diff else "")
+    return _CAL_MEMO["suffix"]
+
+
 def measure(ds, w) -> Optional[dict]:
-    """Per-workout measurements (disk-memoised on CACHE_KEY), with drift_of's
-    temperature band applied on read (heat_band + activity_temp: the archive
-    is not part of the cache stamp)."""
+    """Per-workout measurements (disk-memoised on CACHE_KEY + the drift
+    calibration in effect), with drift_of's temperature band applied on read
+    (heat_band + activity_temp: the archive is not part of the cache stamp)."""
+    suffix = apply_calibration()
     cache = getattr(ds, "cached_series", None)
     if cache is None:
         m = _nan_free(_measure(ds, w))
     else:
-        m = cache(CACHE_KEY, w, lambda: _nan_free(_measure(ds, w)))
+        m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w)))
     if m and isinstance(m.get("drift"), dict):
         m = {**m, "drift": heat_band(m["drift"], *activity_temp(ds, w, m))}
     if m and m.get("cp_test"):
@@ -3611,94 +3645,128 @@ def _iv_verdict(ds, w, m, c, base):
     return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": sub}, "series": rows}
 
 
+REP_HI_TOL = 2.0 - 0.98    # 推估: a rep is above the band past hi × 1.02 (the floor's 0.98, mirrored)
+
+
+def _rep_status(r: dict, floor: float, ceil: Optional[float]) -> str:
+    p = r["power"]
+    return "low" if p < floor else "high" if ceil is not None and p > ceil else "in"
+
+
 def _iv_reps(ds, w, m, c, base):
+    """每趟功率 vs 目標帶 (viewer: drawRepProfile, res.rep_profile): one column per rep in
+    order — the target band as a shaded range, the rep's mean power as a bold dot coloured
+    in band / below / above; a one-line count above (subtitle)."""
     e, bad = _ie(ds, w, base)
     if bad:
         return bad
-    from backend.engine.wko5expr import units as U
-    wu = U.meta("WATTS")
-    xu = {"id": "REP", "label": "趟", "kind": "number", "dec": [[0, 0]]}
     cp = e["cp"]
     if e.get("kind") == "test":
-        return _iv_reps_test(e, base, wu, xu)
-    ok = [[r["k"], round(r["power"])] for r in e["reps"] if r["in_band"]]
-    no = [[r["k"], round(r["power"])] for r in e["reps"] if not r["in_band"]]
-    lab = lambda rs, t: [f"{t} {round(r['power'])} W" for r in rs]
-    s = [{"name": "目標帶", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
-          "data": {"kind": "band", "range": [round(e["lo"] * cp), round(e["hi"] * cp)]}},
-         {"name": "✓ 達標", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": GOOD,
-          "bar_width": 28, "labels": lab([r for r in e["reps"] if r["in_band"]], "✓"),
-          "data": {"kind": "points", "x": "value", "points": ok}},
-         {"name": "✕ 沒到", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": BAD,
-          "bar_width": 28, "labels": lab([r for r in e["reps"] if not r["in_band"]], "✕"),
-          "data": {"kind": "points", "x": "value", "points": no}}]
-    desc = (f"目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{e['lo'] * cp:.0f}–{e['hi'] * cp:.0f} W）；"
-            f"達標 = 平均 ≥ {e['floor']:.0f} W（下限 × 0.98）。{e['hit']}/{e['n_plan']} 趟達標"
-            + (f"，掉速 {e['fade'] * 100:+.0f}%" if e.get("fade") is not None else ""))
-    return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
+        return _iv_reps_test(e, base)
+    lo_w = e["lo"] * cp
+    hi_w = e["hi"] * cp if e.get("hi") is not None else None
+    ceil = hi_w * REP_HI_TOL if hi_w is not None else None
+    reps = [{"k": r["k"], "label": str(r["k"]), "power": round(r["power"], 1), "pct_cp": round(r["pct_cp"], 4),
+             "start_s": r["start_s"], "duration_s": r["duration_s"],
+             "hr_end": None if r.get("hr_end") is None else round(r["hr_end"], 1),
+             "status": _rep_status(r, e["floor"], ceil)} for r in e["reps"]]
+    n = max(int(e["n_plan"] or 0), len(reps))
+    k_in = sum(1 for r in reps if r["status"] == "in")
+    k_hi = sum(1 for r in reps if r["status"] == "high")
+    k_lo = sum(1 for r in reps if r["status"] == "low")
+    head = f"{n} 趟中 {k_in} 趟在目標內" + (f"，{k_hi} 趟偏高" if k_hi else "") + (f"，{k_lo} 趟偏低" if k_lo else "")
+    if len(reps) < n:
+        head += f"，少做 {n - len(reps)} 趟"
+    band = (f"{e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）" if hi_w is not None
+            else f"≥ {e['lo'] * 100:.0f}% CP（≥ {lo_w:.0f} W）")
+    desc = (f"每一欄是一趟（照順序）。灰帶 = 目標帶 {band}；點 = 那趟的平均功率："
+            f"綠 ✓ 在目標內、黃 ▼ 偏低（< {e['floor']:.0f} W = 下限 × 0.98）"
+            + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else "")
+            + "。偏高在判讀裡仍算達標，只是提醒做太重。"
+            + (f"掉速 {e['fade'] * 100:+.0f}%（最後一趟比第一趟）。" if e.get("fade") is not None else "")
+            + "滑過點看那趟的時間長度、% CP 和後半心率。")
+    prof = {"mode": "plan", "cp": round(cp, 1), "band": [round(lo_w, 1), None if hi_w is None else round(hi_w, 1)],
+            "floor": round(e["floor"], 1), "ceil": None if ceil is None else round(ceil, 1), "n_plan": n, "reps": reps,
+            "counts": {"in": k_in, "high": k_hi, "low": k_lo, "missing": n - len(reps)}}
+    return {**base, "series": [], "rep_profile": prof, "subtitle": head, "description": desc}
 
 
-def _iv_reps_test(e, base, wu, xu):
-    """A test's bouts: bar = the bout's mean (green = even, amber = not), the
-    marker = all-out by the CP model (CP test only, 推估). No target band."""
+def _iv_reps_test(e, base):
+    """A test's bouts (no target band): the bout's mean as a dot (green = even pacing,
+    amber = not), the all-out by the CP model as a hollow marker (CP test only, 推估)."""
     cp = e["cp"]
-    ev = [r for r in e["reps"] if r["even"]]
-    un = [r for r in e["reps"] if not r["even"]]
-    lab = lambda rs, t: [f"{t} {r['name']} {round(r['power'])} W" for r in rs]
-    s = [{"name": "✓ 配速平均", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": GOOD,
-          "bar_width": 28, "labels": lab(ev, "✓"), "data": {"kind": "points", "x": "value",
-                                                           "points": [[r["k"], round(r["power"])] for r in ev]}},
-         {"name": "◐ 不平均", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": WARN,
-          "bar_width": 28, "labels": lab(un, "◐"), "data": {"kind": "points", "x": "value",
-                                                           "points": [[r["k"], round(r["power"])] for r in un]}},
-         {"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
-          "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}}]
-    exp = [[r["k"], round(r["expected"])] for r in e["reps"] if r.get("expected")]
-    if exp:
-        s.append({"name": "預期全力（CP + W′/t，推估）", "type": "line", "line_style": "none", "expression": "",
-                  "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": SERIES1,
-                  "labels": [f"預期 {p[1]} W" for p in exp], "data": {"kind": "points", "x": "value", "points": exp}})
-    desc = (f"{e['label']}：每段一根柱子（綠＝前後半配速平均，黃＝不平均）。"
-            + ("點＝這段長度的預期全力功率，用測試前的 CP 和 W′ 依 CP 模型 P = CP + W′/t 算"
-               f"（Monod & Scherrer 1965；{e['wprime_src']}）。" if exp else "")
+    reps = [{"k": r["k"], "label": r.get("name") or str(r["k"]), "power": round(r["power"], 1),
+             "pct_cp": round(r["pct_cp"], 4), "start_s": r["start_s"], "duration_s": r["duration_s"],
+             "hr_end": None if r.get("hr_end") is None else round(r["hr_end"], 1),
+             "expected": None if not r.get("expected") else round(r["expected"], 1), "pacing": r.get("pacing"),
+             "status": "even" if r["even"] else "uneven"} for r in e["reps"]]
+    k_even = sum(1 for r in reps if r["status"] == "even")
+    head = f"{len(reps)} 段中 {k_even} 段配速平均"
+    exp = any(r["expected"] for r in reps)
+    desc = (f"{e['label']}：每一欄是一段。點 = 那段的平均功率（綠 ✓ 前後半配速平均、黃 ■ 不平均）。"
+            + ("空心菱形 = 這段長度的預期全力功率，用測試前的 CP 和 W′ 依 CP 模型 P = CP + W′/t 算"
+               f"（Monod & Scherrer 1965；{e['wprime_src']}，推估）。" if exp else "")
             + "平均＝後半和前半差 ±" + ("5" if e.get("intent") == "max" else "3")
             + "% 內、最後 1 分 ≤ 該段 × 1.08（推估）。測試不用目標帶判「達標」。")
-    return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
+    prof = {"mode": "test", "cp": round(cp, 1), "band": None, "n_plan": len(reps), "reps": reps,
+            "counts": {"even": k_even, "uneven": len(reps) - k_even}}
+    return {**base, "series": [], "rep_profile": prof, "subtitle": head, "description": desc}
 
 
 def _iv_power(ds, w, m, c, base):
-    """A simplified 「Run VO2max & FRC Chart – 5 Min PDC & Skiba」: power with the reps,
-    CP and the target band only; the 5-min PDC and W′ in the hover text."""
-    e, bad = _ie(ds, w, base)
-    if bad:
-        return bad
-    from backend.engine.wko5expr import units as U
-    wu = U.meta("WATTS")
-    ser = e["series"]
+    """功率、W′ 與心率 (viewer: drawIntervalTrace, res.iv_trace): top panel = 30-s power as a
+    soft area (W, left) with CP and the target band, W′ left as dFRC (%, right); bottom thin
+    panel = heart rate. Every run with power (the old separate 功率電池 card folded in);
+    the band and the reps only on an evaluated interval / test."""
+    b = _battery_of(ds, w)
+    if b is None:
+        return {**base, "hide": True}
+    from backend.engine import interval_eval as IE
+    e = IE.card_cached(ds, w)
+    ok = bool(e.get("ok"))
+    ser = b["series"]
+    t = np.asarray(ser["t"], float)
     p = np.asarray(ser["power"], float)
     p30 = np.convolve(np.nan_to_num(p), np.ones(30) / 30, "same") if len(p) else p
-    cp = e["cp"]
-    test = e.get("kind") == "test"
-    s = [{"name": "功率（30 秒）", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
-          "line_width": "thin", "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], list(p30))}}]
-    if not test:
-        s.append({"name": "目標帶", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
-                  "data": {"kind": "band", "range": [round(e["lo"] * cp), round(e["hi"] * cp)]}})
-    s.append({"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
-              "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}})
-    for r in e["reps"]:
-        if test:
-            nm, col = ("✓ 平均的段（開始）", GOOD) if r["even"] else ("◐ 不平均的段（開始）", WARN)
-        else:
-            nm, col = ("✓ 達標的趟（開始）", GOOD) if r["in_band"] else ("✕ 沒到的趟（開始）", BAD)
-        s.append({"name": nm, "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu,
-                  "color": col, "line_style": "dot", "data": {"kind": "vline", "x": r["start_s"]}})
-    pdc = e.get("pdc5")
-    desc = (f"CP {cp:.0f} W" + ("；測試沒有目標帶。" if test else f"；目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP。")
-            + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，WKO5 的 5 Min PDC 參考）。" if pdc else "")
-            + ("虛線 = 每段開始（綠＝配速平均、黃＝不平均）。" if test else "虛線 = 每趟開始（綠＝達標、紅＝沒到）。")
-            + "W′ 剩多少見「功率電池」。")
-    return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
+    hr = np.asarray(ser.get("hr") or [np.nan] * len(t), float)
+    if len(hr) == len(t) and np.isfinite(hr).sum() >= 10:
+        fin = np.isfinite(hr)
+        h5 = np.convolve(np.nan_to_num(hr), np.ones(5) / 5, "same") / np.maximum(
+            np.convolve(fin.astype(float), np.ones(5) / 5, "same"), 1e-9)
+        hr = np.where(fin, h5, np.nan)
+    else:
+        hr = None
+    k = max(1, len(t) // 1800)
+    r1 = lambda a, d=0: [None if v is None or not math.isfinite(v) else round(float(v), d) for v in a[::k]]
+    cp = b["cp"]
+    i_min = int(min(max(b["dfrc_min_t"], 0), len(t) - 1)) if len(t) else 0
+    dfrc = np.asarray(ser["dfrc_pct"], float)
+    test = ok and e.get("kind") == "test"
+    band = None
+    if ok and not test:
+        band = [round(e["lo"] * cp, 1), None if e.get("hi") is None else round(e["hi"] * cp, 1)]
+    reps = []
+    if ok:
+        prof = _iv_reps(ds, w, m, c, {}).get("rep_profile") or {}
+        reps = [{"k": r["k"], "label": r["label"], "a": r["start_s"], "b": r["start_s"] + r["duration_s"],
+                 "power": r["power"], "status": r["status"]} for r in prof.get("reps", [])]
+    trace = {"x": r1(t, 1), "power": r1(p30), "dfrc": r1(dfrc, 4), "hr": r1(hr) if hr is not None else None,
+             "cp": round(cp, 1), "band": band, "reps": reps, "test": test,
+             "dfrc_min": {"t": float(t[i_min]) if len(t) else 0.0, "pct": round(b["dfrc_min_pct"], 4)},
+             "dfrc_end": None if not len(dfrc) or not math.isfinite(dfrc[-1]) else round(float(dfrc[-1]), 4),
+             "wprime_kj": round(b["wprime_j"] / 1000, 1)}
+    pdc = e.get("pdc5") if ok else None
+    desc = ("上：橘色面積 = 功率（30 秒平均，左軸 W），虛線 = CP"
+            + (f"，灰帶 = 目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP" if band and band[1] else
+               f"，灰帶 = 目標 ≥ {e['lo'] * 100:.0f}% CP" if band else "")
+            + (f"；淺色底 + 數字 = 第幾{'段' if test else '趟'}" if reps else "")
+            + f"。藍線 = W′ 剩多少（dFRC，右軸 %，{b['wprime_j'] / 1000:.1f} kJ = 100%）：高於 CP（{cp:.0f} W）就耗，"
+            "低於 CP 回充；dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
+            f"{b['wprime_src']}。下：心率（bpm，5 秒平均，手腕光學有延遲）。滑過任一處兩格一起看同一秒。"
+            + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，WKO5 的 5 Min PDC 參考）。" if pdc else ""))
+    sub = (f"W′ 最低 {b['dfrc_min_pct'] * 100:.0f}%（{_hms(trace['dfrc_min']['t'])}）· 整趟高於 CP 的功 "
+           f"{b['wprime_used_j'] / 1000:.1f} kJ（{b['wprime_used_j'] / b['wprime_j'] * 100:.0f}% W′，含回充後再用）")
+    return {**base, "series": [], "iv_trace": trace, "subtitle": sub, "description": desc}
 
 
 def _battery_of(ds, w):
@@ -3710,9 +3778,10 @@ def _battery_of(ds, w):
 
 
 def _iv_battery(ds, w, m, c, base, compact: bool = False):
-    """「dFRC Run」as a battery: the W′ left over time (WKO5 dFRC), Skiba for
-    comparison — every run with power (long and trail runs too). `compact`
-    (本次重點): dFRC only, with a one-line subtitle."""
+    """「dFRC Run」as a battery: the W′ left over time (WKO5 dFRC only; owner 2026-10-02
+    dropped the Skiba line) — every run with power (long and trail runs too). The 間歇
+    tab draws it inside 功率、W′ 與心率 (interval_power); this section stays for 本次重點
+    (`compact`) and older saved views."""
     e = _battery_of(ds, w)
     if e is None:
         return {**base, "hide": True}
@@ -3722,20 +3791,16 @@ def _iv_battery(ds, w, m, c, base, compact: bool = False):
     lo_t, lo_v = e["dfrc_min_t"], e["dfrc_min_pct"]
     s = [{"name": "dFRC（WKO5）", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], ser["dfrc_pct"])}},
-         {"name": f"Skiba W′bal（τ {e['tau']:.0f} 秒）", "type": "line", "expression": "", "y_axis": "PERCENT",
-          "unit": pct, "color": SERIES2, "line_width": "thin",
-          "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], ser["skiba_pct"])}},
          {"name": "最低", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "labels": [f"最低 {lo_v * 100:.0f}%"], "data": {"kind": "points", "x": "seconds",
                                                           "points": [[round(lo_t, 1), round(lo_v, 4)]]}}]
     desc = (f"電池 = 還剩多少 W′（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP（{e['cp']:.0f} W）就耗電，"
-            f"休息或低於 CP 時回充。dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），Skiba 用跑步的 τ（Vassallo 2020）；"
-            f"兩者都只是推估，跑步沒驗證。{e['wprime_src']}")
+            f"休息或低於 CP 時回充。dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），"
+            f"推估，跑步沒驗證。{e['wprime_src']}")
     sub = (f"整趟高於 CP 的功 {e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′，"
            f"含回充後再用），電池最低 {lo_v * 100:.0f}%（{_hms(lo_t)}）")
     if compact:
-        s = [x for x in s if not x["name"].startswith("Skiba")]
-        desc = "W′ 電池：dFRC（WKO5）剩多少，100% = 滿。Skiba 對照和逐趟數字在「間歇」分頁。" + desc
+        desc = "W′ 電池：dFRC（WKO5）剩多少，100% = 滿。和功率、心率疊在一起看在「間歇」分頁。" + desc
     return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc,
             "subtitle": sub}
 

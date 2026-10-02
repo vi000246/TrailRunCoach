@@ -44,7 +44,7 @@ async def tick(session_factory: Callable, now: Optional[datetime] = None, athlet
             return []
         await repo.set("sync.schedule.last_run", today)
         await db.commit()
-        # the primary source first; the other only with sync.secondary.auto
+        # only the 資料來源 in use (runner.auto_plan)
         todo, skipped = await runner.auto_plan(db, athlete_id)
     started = []
     for src in todo:

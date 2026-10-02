@@ -93,7 +93,7 @@ def filename(plan: dict, name: Optional[str], date: Optional[str], today: Option
     km = (plan.get("summary") or {}).get("km") or 0.0
     base = name or plan.get("course_name") or f"{TYPE_LABEL.get(plan.get('type'), '')}{km:.1f}km"
     day = (date or "")[:10] or (today or dt.date.today()).isoformat()
-    return f"賽事功率_{safe_name(base)}_{day}.csv"
+    return f"賽事計算機_{safe_name(base)}_{day}.csv"
 
 
 def _speed_kmh(s: dict):
@@ -107,7 +107,7 @@ def header_rows(plan: dict, *, name: str, date: Optional[str], computed_at: dt.d
     s = plan["summary"]
     ct = plan.get("course_totals") or {}
     used = plan.get("used") or {}
-    rows: list[list] = [["賽事功率 分段計畫"], ["路線", name], ["比賽日期", date or ""],
+    rows: list[list] = [["賽事計算機 分段計畫"], ["路線", name], ["比賽日期", date or ""],
                         ["類型", TYPE_LABEL.get(plan.get("type"), plan.get("type"))],
                         ["距離 km", _r(s.get("km"), 2)], ["爬升 m", _r(s.get("gain_m"), 0)],
                         ["下降 m", _r(s.get("loss_m"), 0)], ["分段數", len(plan.get("segments") or [])]]

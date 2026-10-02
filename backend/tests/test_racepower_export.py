@@ -1,5 +1,5 @@
 """
-賽事功率: CSV export of the plan, and the per-segment, time-of-day heat
+賽事計算機: CSV export of the plan, and the per-segment, time-of-day heat
 correction (weather hourly rows → segment ETA → Hadley penalty → Mᵢ, iterated
 to a fixed point).
 """
@@ -239,7 +239,7 @@ def test_csv_export_matches_the_plan(client):
     assert r.status_code == 200, r.text
     assert r.headers["content-type"].startswith("text/csv")
     fname = unquote(r.headers["x-filename"])
-    assert fname == f"賽事功率_台北_半馬_{DATE}.csv" and "filename*=UTF-8''" in r.headers["content-disposition"]
+    assert fname == f"賽事計算機_台北_半馬_{DATE}.csv" and "filename*=UTF-8''" in r.headers["content-disposition"]
     head, cols, rows = read_csv(r)
     kv = {x[0]: x[1:] for x in head if x}
     assert kv["路線"] == ["台北 半馬"] and kv["模式"][0].startswith("通通幫我算")
@@ -270,7 +270,7 @@ def test_csv_export_gpx_and_hike(client):
     t = client.post("/api/v1/racepower/export/csv", json={"type": "trail", "course": {"course_id": cid}})
     assert t.status_code == 200, t.text
     # named after the GPX track and (no race date given) the day computed
-    assert unquote(t.headers["x-filename"]) == f"賽事功率_玉山_測試_{dt.date.today().isoformat()}.csv"
+    assert unquote(t.headers["x-filename"]) == f"賽事計算機_玉山_測試_{dt.date.today().isoformat()}.csv"
     head, cols, rows = read_csv(t)
     assert len(rows) - 1 == len(client.post("/api/v1/racepower/plan",
                                             json={"type": "trail", "course": {"course_id": cid}}).json()["segments"])

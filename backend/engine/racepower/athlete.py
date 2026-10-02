@@ -15,7 +15,7 @@ from typing import Optional
 
 import numpy as np
 
-from backend.engine.algorithms.effort import SIMPLE_FORMULAS
+from backend.engine.algorithms.effort import SIMPLE_FORMULAS, divisor_of
 from backend.engine.racepower import cp as CP
 from backend.engine.racepower import difficulty as DF
 from backend.engine.racepower import re as RE
@@ -297,7 +297,7 @@ def fallback_training() -> dict:
     t, rh = HC.current("home_temp_c"), HC.current("home_rh_pct")
     own = t.get("source") == "fitted" and rh.get("source") == "fitted"
     wx = (f"本人 {t.get('n')} 次活動的中位 {t['value']:.0f} °C／{rh['value']:.0f} %" if own
-          else f"預設 {t['value']:.0f} °C／{rh['value']:.0f} %（env.py 參考條件）")
+          else f"預設 {t['value']:.0f} °C／{rh['value']:.0f} %（參考條件）")
     alt = HC.HOME_DEFAULTS["home_alt_m"]
     return {"altitude_m": alt, "temp_c": float(t["value"]), "rh_pct": float(rh["value"]), "label_wx": wx,
             "label": f"{alt:.0f} m（預設）／{wx}"}
@@ -507,7 +507,8 @@ def race_dates(ds) -> set[str]:
 
 
 def is_trail(w) -> bool:
-    return "runningtrail" in w.tags or w.sport_type == "trail running"
+    from backend.engine.algorithms.classify import is_trail as _it
+    return _it(w)
 
 
 def outdoor(w) -> bool:
@@ -1198,7 +1199,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         if row["trail"]:
             if (climb or 0) >= TRAIL_MIN_CLIMB_M and m["moving_s"] >= TRAIL_MIN_MOVING_S and km:
                 row["re_trail"] = {f: RE.trail_re(km, climb, m["moving_s"], m["avg_power"], weight,
-                                                  SIMPLE_FORMULAS[f][0]) for f in ("fitted_run", "itra", "scarf")}
+                                                  divisor_of(f)) for f in ("fitted_run", "itra", "scarf")}
                 trail_rows.append(row)
         elif c is not None and c < ROAD_MAX_CVI_ADJ and m["moving_s"] >= ROAD_MIN_MOVING_S \
                 and w.sport_type != "indoor running" and "runningtreadmill" not in w.tags:
@@ -1302,7 +1303,7 @@ def power_summary(ds, runs) -> dict:
     return {"accept_watch_power": accept, "setting": PS.SETTING_KEY, "counts": PS.counts(s for s in srcs if s),
             "unused": watch_unused(ds, runs)[-40:], "unused_label": PS.UNUSED_LABEL,
             "note": "只用 Stryd 功率（有 Form Power／Air Power／LSS 欄位）；手錶推估功率不進功率模型" if not accept
-            else "手錶推估功率也採用（power.accept_watch_power）"}
+            else "手錶推估功率也採用"}
 
 
 # ---- racepower v2: per-activity samples (docs/research/racepower-v2.md §10.1) ----
@@ -1527,7 +1528,7 @@ def activity_pack(w, meta: Optional[dict] = None) -> dict:
     rec = (_trip_of(meta, w) or {}).get("pack_kg")
     return {"pack_kg": None if rec is None else float(rec), "recorded": rec is not None,
             "default_kg": None if rec is None else float(rec), "range": [0, 40], "file": w.entry.file,
-            "note": "這次背多少（kg）：寫進 racepower_hike_meta.json，百岳預測會用；空白 = 沒記錄"}
+            "note": "這次背多少（kg）：記下來，百岳預測會用；空白 = 沒記錄"}
 
 
 def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs: Optional[list] = None,

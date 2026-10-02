@@ -77,11 +77,11 @@ FATIGUE_CUT = 0.80         # 推估: easy minutes × 0.8
 RED_STREAK = 2             # 推估: two red sessions in a row
 
 SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
-SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練"
-SRC_OVER = ("workout_review 平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
-            "TrainingPeaks ±20%；組合方式推估（unsourced-rules.md B5）")
+SRC_SPACING = "硬課之間隔 ≥ 2 天：徐國峰（教練；5 區一週最多兩次、至少隔兩天）"
+SRC_OVER = ("平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
+            "TrainingPeaks ±20%；組合方式推估")
 SRC_FATIGUE = "Friel CTL ramp ≥ 8（5–8 上限）；TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估"
-SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估（engine/b2b.py）"
+SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估"
 
 
 def _b2b_exempt(info: Optional[dict], today: str) -> Optional[str]:

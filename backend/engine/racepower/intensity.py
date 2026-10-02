@@ -73,7 +73,7 @@ SOURCES = {
     "aet": "AeT：測試 > 自動估算 > 0.89 × LTHR（Friel Z2 上緣）",
     "power": "Palladino 三區：低 < 80 % CP、高 ≥ 95 % CP",
     "drift": "Uphill Athlete：Pw:HR 飄移 < 5 % = 有氧",
-    "gait": "步頻 < 130 spm = 走路（workout_review）",
+    "gait": "步頻 < 130 spm = 走路（同活動判讀）",
     "rule": "組合規則為推估（多數時間所在的區）",
 }
 CLASSES = ("easy", "steady", "race")

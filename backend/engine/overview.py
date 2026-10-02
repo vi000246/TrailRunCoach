@@ -70,7 +70,8 @@ Z3_EXPR = "sum(if(runpower >= 0.85*cp, deltatime))"
 
 def category(w: Workout) -> str:
     tags, st = set(w.tags), (w.sport_type or "")
-    if "runningtrail" in tags or st == "trail running":
+    from backend.engine.algorithms.classify import is_trail
+    if is_trail(w):
         return "trail"
     if w.sport == "run":
         return "road"
@@ -886,7 +887,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             tss=45 / 60 * 65)
     elif kind == "event":
         add(id="race", kind="race", title="比賽", minutes=0, detail="賽前 2 天 20–30 分輕鬆跑＋幾趟加速",
-            source="你的筆記")
+            source="教練常見做法（推估）")
     if b2b.get("post"):
         # the days after a B2B: easy only (UA / Johnston); the minutes go to the easy runs
         sessions = [s for s in sessions if s.kind not in ("quality", "test")]
@@ -1157,7 +1158,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         ti = by.get("testing")
         test_suggestions.append({
             "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
-            "reason": (getattr(ti, "verdict", "") or "門檻過期或沒測過") + "：區間、TSS、賽事功率都靠 CP",
+            "reason": (getattr(ti, "verdict", "") or "門檻過期或沒測過") + "：區間、TSS、賽事計算機都靠 CP",
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     if aet_due:
