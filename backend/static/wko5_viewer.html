@@ -1121,7 +1121,8 @@ function draw(card, res) {
 }
 
 // a review card's action button (workout_review: 「套用這次的 CP」 -> POST apply-cp;
-// 「套用這次的 AeT」 -> POST apply-estimate with the test date)
+// 「套用這次的 AeT」 -> POST apply-estimate with the test date; 「當作間歇判讀」 -> PATCH
+// activities add_tags, then `reload` redraws the dashboard)
 function drawAction(card, a) {
   const wrap = document.createElement("p");
   wrap.className = "card-action";
@@ -1136,6 +1137,8 @@ function drawAction(card, a) {
       if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
       btn.remove();
       msg.textContent = a.done || "已套用";
+      // 「當作間歇判讀」 (interval_eval.FLAG_TAG): the dashboard's cards change, so redraw them
+      if (a.reload) load();
     } catch (e) { btn.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
   };
   card.appendChild(wrap);
