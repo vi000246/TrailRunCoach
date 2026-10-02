@@ -108,6 +108,18 @@
       "run-power-recent-bests": {
         "title": null,
         "description": null
+      },
+      "long-run-km": {
+        "title": "Long-run distance (road runs ≥ 90 min)",
+        "description": "Distance of every road run of 90 minutes or more: the long run is the key marathon session (Pfitzinger: the longest runs of the specific phase are about 32–35 km). The bars should step up, then come down in the taper."
+      },
+      "long-run-pace": {
+        "title": "Long-run pace (road runs ≥ 90 min)",
+        "description": "Average moving pace of every road run of 90 minutes or more. The same easy long run getting faster at the same heart rate = aerobic progress. Read the trend, not single runs."
+      },
+      "mp-weekly": {
+        "title": "Weekly marathon-pace time",
+        "description": "Time per week on road runs at marathon pace (threshold pace × 1.04–1.08, estimate: marathon pace ≈ threshold pace × 1.06). It should grow through the specific phase; near zero in the base phase is normal. Needs a threshold pace (set or estimated)."
       }
     }
   },
@@ -215,6 +227,18 @@
       "friel-pace-zones": {
         "title": null,
         "description": null
+      },
+      "long-run-km-specific": {
+        "title": "Long-run distance (road runs ≥ 90 min)",
+        "description": "Distance of every road run of 90 minutes or more: the long run is the key marathon session (Pfitzinger: the longest runs of the specific phase are about 32–35 km). The bars should step up, then come down in the taper. Red dashed line = the next target race's distance."
+      },
+      "long-run-pace-specific": {
+        "title": "Long-run pace (road runs ≥ 90 min)",
+        "description": "Average moving pace of every road run of 90 minutes or more. The same easy long run getting faster at the same heart rate = aerobic progress. Read the trend, not single runs."
+      },
+      "mp-weekly-specific": {
+        "title": "Weekly marathon-pace time",
+        "description": "Time per week on road runs at marathon pace (threshold pace × 1.04–1.08, estimate: marathon pace ≈ threshold pace × 1.06). It should grow through the specific phase; near zero in the base phase is normal. Needs a threshold pace (set or estimated)."
       }
     }
   },

@@ -159,6 +159,21 @@ def _chart(raw: dict, where: str) -> dict:
         if raw["drift_bars"] is not True or kind != "athlete":
             raise CustomViewError(f"{where}/{raw['title']}: drift_bars must be true on an athlete chart")
         out["drift_bars"] = True
+    if raw.get("sports") is not None:
+        # 主要訓練項目 (engine/primary_sport.py): ["trail"] / ["road"] = shown only in that mode
+        from backend.engine.primary_sport import chart_sports
+        try:
+            out["sports"] = chart_sports(raw["sports"])
+        except ValueError as e:
+            raise CustomViewError(f"{where}/{raw['title']}: {e}")
+    if raw.get("order") is not None:
+        # {"road": 0}: the chart's place in its dashboard in that mode (lower first; others keep file order)
+        from backend.engine.primary_sport import SPORTS
+        o = raw["order"]
+        if not isinstance(o, dict) or any(k not in SPORTS or isinstance(v, bool) or not isinstance(v, (int, float))
+                                          for k, v in o.items()):
+            raise CustomViewError(f"{where}/{raw['title']}: order must be {{sport: number}} for {list(SPORTS)}")
+        out["order"] = dict(o)
     for s in [s for v in out.get("variants", []) for s in v["series"]] or out["series"]:
         if s["basis"] is not None and s["basis"] not in out.get("basis", {}).get("choices", ()):
             raise CustomViewError(f"{where}/{raw['title']}/{s['name']}: series basis needs a chart basis that lists it")
@@ -196,10 +211,17 @@ def parse_view(data: dict, source_path: Optional[Path] = None) -> dict:
     for d in data.get("dashboards", []):
         if "title" not in d:
             raise CustomViewError(f"{where}: dashboard needs a title")
+        ds = d.get("descriptions")
+        if ds is not None:
+            # 主要訓練項目 (engine/primary_sport.py): {"road": "…"} = this mode's text instead of `description`
+            from backend.engine.primary_sport import SPORTS
+            if not isinstance(ds, dict) or any(k not in SPORTS or not isinstance(v, str) for k, v in ds.items()):
+                raise CustomViewError(f"{where}/{d['title']}: descriptions must be {{sport: text}} for {list(SPORTS)}")
         dashboards.append({
             "id": d.get("id"),
             "title": d["title"],
             "description": d.get("description"),
+            **({"descriptions": dict(ds)} if ds else {}),
             "class": "CustomDashboard",
             "charts": [_chart(c, f"{where}/{d['title']}") for c in d.get("charts", [])],
         })

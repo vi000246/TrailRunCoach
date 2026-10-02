@@ -1,4 +1,8 @@
 {
+  "下一場 A 賽「{name}」是{kind}": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:65"
+  },
   "找不到備份檔": {
     "draft": true,
     "src": "backend/api/backup.py:248"
@@ -6,5 +10,21 @@
   "檔案是空的": {
     "draft": true,
     "src": "backend/api/backup.py:225"
+  },
+  "越野跑": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:32"
+  },
+  "路跑／馬拉松": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:32"
+  },
+  "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:75"
+  },
+  "近 12 週越野＋登山佔跑步時間 {share:.0%}（≥ {min:.0%} 算越野跑，推估）": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:79"
   }
 }

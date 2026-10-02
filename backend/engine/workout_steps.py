@@ -364,6 +364,44 @@ def _aet_test(s: dict, c: Ctx, ids) -> list:
     return out
 
 
+# 主要訓練項目 = 路跑 (engine/overview.road_long_session): 「長跑＋馬拉松配速 N 分」 = easy, then N
+# minutes at marathon pace, then MP_TAIL_S easy. The MP segment is a pace target (COROS intensityType 3):
+# the race's goal pace ± MP_GOAL_BAND when the detail has 「目標配速 m:ss/km」, else threshold pace ×
+# MP_PACE (推估: MP ≈ threshold pace × 1.06). Without a threshold pace the step falls back to an HR band
+# (`hrp`, × LTHR: Pfitzinger's MP 79–88 % HRmax ÷ 0.9 → 88–98 % LTHR, top capped at 95 %, 推估) with the
+# 沒有閾值配速 warning.
+MP_PACE = (1.04, 1.08)
+MP_HR = (0.88, 0.95)
+MP_GOAL_BAND = 0.015                   # 推估: ± 1.5 % around the goal pace
+MP_TAIL_S = 600
+
+
+def mp_goal_pace(s: dict) -> Optional[float]:
+    """The goal pace (s/km) written in a road long run's detail, or None."""
+    m = re.search(r"目標配速\s*(\d+):(\d{2})\s*/km", s.get("detail") or "")
+    return int(m.group(1)) * 60 + int(m.group(2)) if m else None
+
+
+def mp_target(s: dict) -> dict:
+    """The MP step's target: the goal pace (absolute s/km), else % threshold pace with the HR fallback."""
+    g = mp_goal_pace(s)
+    if g:
+        return {"type": "pace", "mode": "abs", "lo": round(g * (1 - MP_GOAL_BAND)), "hi": round(g * (1 + MP_GOAL_BAND))}
+    return {"type": "pace", "mode": "pct", "lo": MP_PACE[0], "hi": MP_PACE[1], "hrp": list(MP_HR)}
+
+
+def mp_minutes(s: dict) -> Optional[int]:
+    """The marathon-pace minutes of a road long run, from its title; None = an all-easy long run."""
+    return _num(r"馬拉松配速\s*(\d+)\s*分", s.get("title") or "")
+
+
+def strides_names(title: str, sprint: int, n: int) -> tuple[str, str, str]:
+    """(work, recovery, repeat) step names: flat strides (路跑, 「加速跑」) or hill sprints."""
+    if "加速跑" in (title or ""):
+        return f"{sprint} 秒加速跑（平路）", "慢跑回來", f"加速跑 {n}×{sprint} 秒"
+    return f"{sprint} 秒上坡衝刺", "走下來", f"衝刺 {n}×{sprint} 秒"
+
+
 def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
     """The steps of a session that has none (the editor's starting point), or None
     for what isn't pushed (race, rest, strength, passive heat) and unreadable text."""
@@ -388,6 +426,11 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
         return doc(items) if items else None
     if secs <= 0:
         return None
+    mp = mp_minutes(s) if kind == "long" else None
+    if mp and secs - mp * 60 - MP_TAIL_S >= 10 * 60:
+        return doc([step(ids, "work", secs - mp * 60 - MP_TAIL_S, _easy(0.80, 0.88), "輕鬆"),
+                    step(ids, "work", mp * 60, mp_target(s), "馬拉松配速"),
+                    step(ids, "cool", MP_TAIL_S, _easy(0.75, 0.80), "輕鬆收操")])
     if kind in ("long", "mountain", "hike"):
         lo, hi = (0.80, 0.88) if kind == "long" else (0.75, 0.88)
         return doc([step(ids, "work", secs, _easy(lo, hi))])
@@ -401,9 +444,10 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
             n, sprint = int(m.group(1)), int(m.group(2))
             base = secs - n * (sprint + 60)
             if base >= 10 * 60:
+                w_name, r_name, rep_name = strides_names(s.get("title") or "", sprint, n)
                 return doc([step(ids, "work", base, _easy(0.75, 0.80), "心率 ≤ AeT"),
-                            rep(ids, n, [step(ids, "work", sprint, OPEN, f"{sprint} 秒上坡衝刺"),
-                                         step(ids, "rest", 60, OPEN, "走下來")], True, f"衝刺 {n}×{sprint} 秒")])
+                            rep(ids, n, [step(ids, "work", sprint, OPEN, w_name),
+                                         step(ids, "rest", 60, OPEN, r_name)], True, rep_name)])
         return doc([step(ids, "work", secs, _easy(0.75, 0.80))])
     return None
 
@@ -468,6 +512,9 @@ def _norm_target(t, errs: list) -> dict:
            ("power", "abs"): (20, 1500), ("hr", "abs"): (40, 230), ("pace", "abs"): (120, 1200)}[(ty, mode)]
     out["lo"] = _f(t.get("lo"), "目標下限", errs, *rng)
     out["hi"] = _f(t.get("hi"), "目標上限", errs, *rng)
+    if ty == "pace" and mode == "pct" and isinstance(t.get("hrp"), (list, tuple)) and len(t["hrp"]) == 2:
+        # the HR band (× LTHR) used when there is no threshold pace (the MP segment, mp_target)
+        out["hrp"] = [_f(t["hrp"][0], "心率 %", errs, 0.5, 1.2), _f(t["hrp"][1], "心率 %", errs, 0.5, 1.2)]
     return out
 
 
@@ -695,6 +742,12 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             lo, hi = _zone_of("pace", tg.get("zone"))
         if mode != "abs":
             if not c.tpace:
+                if tg.get("hrp") and c.lthr:
+                    # the step's HR fallback (the MP segment): an HR band, still with the warning
+                    r = _from_int(("hr", round(tg["hrp"][0] * c.lthr), round(tg["hrp"][1] * c.lthr)), c, auto=False,
+                                  warn=no_tpace_text())
+                    r.need = "tpace"
+                    return r
                 # a warning, not an error: the session can be saved and pushed, that step just
                 # has no pace target on the watch (absolute s/km steps never need it)
                 return Resolved("none", text=_("不設目標"), auto=False, warn=no_tpace_text(), need="tpace")

@@ -458,6 +458,14 @@ const axisStyle = () => ({ axisLabel: { color: css("--muted"), fontSize: 11 }, a
 let INP = null, PEAKS = [], LAST = null, PLAN = null, WX = null, GM = null;
 const ovr = {};          // user overrides of "your numbers": {cp, w_prime, tte, k, re, weight, eph, cp_source, k_source}
 let type = ls.get("type", "road");
+// 主要訓練項目 (設定; engine/primary_sport.py): road = 越野／百岳 buttons and presets hidden (a
+// season-plan 越野賽 / 百岳 picked from the event list still shows its own type)
+let SPORT = "trail";
+function applySport() {
+  const road = SPORT === "road";
+  document.querySelectorAll("#type button").forEach((b) => b.classList.toggle("hidden", road && b.dataset.t !== "road" && b.dataset.t !== type));
+  document.querySelectorAll('[data-preset="trail30"], [data-preset="yushan"]').forEach((b) => b.classList.toggle("hidden", road));
+}
 const S = Object.assign({ mode: "auto", tunit: "time", punit: "w", effort: 1, csrc: "manual", split: "grade", strategy: "even",
   amount: null, unit: "power", accl: null, hup: 5, hdown: 10, heatAccl: { mode: "auto", s: null }, trip: null, hrband: "aet" },   // trip: 跟團／自己走 has no default (must pick)
   ls.get("ui", {}));
@@ -482,7 +490,7 @@ const PRESETS = {
 function segOn(id, attr, val) { document.querySelectorAll(`#${id} button`).forEach((b) => b.classList.toggle("on", String(b.dataset[attr]) === String(val))); }
 function setType(t) {
   type = t; ls.set("type", t);
-  segOn("type", "t", t);
+  segOn("type", "t", t); applySport();
   const hike = t === "baiyue";
   document.querySelectorAll(".bf").forEach((e) => e.classList.toggle("hidden", !hike));
   document.querySelectorAll(".rf").forEach((e) => e.classList.toggle("hidden", hike));
@@ -1713,6 +1721,9 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
 
 (async function init() {
   if (!loadForm()) { $("dist").value = 21.0975; $("gain").value = 0; }
+  const ps = await j("/api/v1/wko5/primary-sport").catch(() => null);
+  SPORT = ps?.sport || "trail";
+  if (SPORT === "road" && type !== "road") { type = "road"; $("gain").value = 0; }
   STOPS = parseStops($("stops").value); sortStops(); renderStops();
   setType(type); syncForm();
   keyStatus();

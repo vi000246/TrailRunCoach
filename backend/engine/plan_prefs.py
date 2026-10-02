@@ -355,8 +355,8 @@ class Ctx:
 
 def _terrain_long(s: dict, p: Prefs, c: Ctx) -> None:
     t = "trail" if p.terrain_long == "hike" else p.terrain_long      # the old 登山 = 越野跑
-    if t == "auto":
-        return
+    if t == "auto" or (t == "road" and "馬拉松配速" in (s.get("title") or "")):
+        return                  # (a 路跑 專項期 long run with its marathon-pace segment is road already)
     aet_txt = f" {c.aet:.0f} bpm" if c.aet else ""
     s["terrain"] = t
     if t == "road":
@@ -372,7 +372,7 @@ def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) ->
     base = dict(template) if template else {
         "kind": "easy", "title": "輕鬆跑", "target": "", "detail": "心率不超過 AeT", "source": "Uphill Athlete",
         "day": None, "done": False, "done_by": None}
-    strides = i == 0 and "衝刺" in (template or {}).get("title", "")
+    strides = i == 0 and any(w in (template or {}).get("title", "") for w in ("衝刺", "加速跑"))
     s = {**base, "id": f"easy{i + 1}", "kind": "easy", "minutes": _r5(minutes), "day": None,
          "done": False, "done_by": None}
     if not strides:
@@ -702,7 +702,8 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
                         notes.append({"level": "watch", "src": "prefs", "text": f"{why} → 這週改排別天（要照偏好排，到課表偏好選「照我的偏好」）"})
             pick = pick or next((d for d in cands if ok(d)), None) or next(
                 (d for d in cands if long_day is None or abs((d - long_day).days) >= 1), cands[0])
-        elif s["kind"] == "easy" and "衝刺" in (s.get("title") or "") and p.pref_of("strides"):
+        elif s["kind"] == "easy" and any(w in (s.get("title") or "") for w in ("衝刺", "加速跑")) \
+                and p.pref_of("strides"):
             # 坡道衝刺／加速跑 on its preferred weekday (not the day before the long run)
             pick = next((d for wd in p.pref_of("strides") for d in avail if d.weekday() == wd
                          and (long_day is None or d != long_day - dt.timedelta(days=1))), avail[0])

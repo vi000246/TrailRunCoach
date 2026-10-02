@@ -130,7 +130,7 @@
           ]
         },
         {
-          "id": "weekly-volume",
+          "id": "weekly-volume", "order": {"road": -1},
           "title": "每週訓練量（跑量／爬升／EP）",
           "description": "同一張圖切換三種看法。只跑越野的週，跑量會變低、爬升變高，切到 EP 才看得出總量其實沒少。點圖例可以只看某一類。",
           "period": "week",
@@ -170,7 +170,16 @@
           ]
         },
         {
-          "id": "weekly-downhill-load",
+          "id": "long-run-km", "sports": ["road"],
+          "title": "每次長跑距離（≥ 90 分的路跑）",
+          "description": "每次 ≥ 90 分鐘的路跑的距離：長跑是馬拉松最重要的課（Pfitzinger：專項期最長約 32–35 km）。長條應該一段一段往上爬，減量期再下來。",
+          "axes": [{"id": "KM", "min": 0}],
+          "series": [
+            {"name": "長跑距離", "type": "bar", "y_axis": "KM", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and movingduration >= 5400, distance)"}
+          ]
+        },
+        {
+          "id": "weekly-downhill-load", "sports": ["trail"],
           "title": "每週下坡衝擊負荷（參考・自訂指標）",
           "description": "參考（自訂指標），沒有公開的標準公式。把下坡路段的距離加權：坡越陡、速度越快，每公里算越多。1 = 在平路用 3 m/s（約 5:33/km）跑 1 公里的衝擊；最陡、最快時一公里約算 2.4。只算坡度陡於 −3% 的路段，平路和上坡不算。用來看下山的膝蓋、股四頭肌負荷有沒有突然變多，心率看不出這個。點圖例可以只看某一類。",
           "axes": [{"id": "CUSTOM等效 km", "min": 0}],
@@ -203,6 +212,16 @@
           "kind": "periodzones",
           "view": "total",
           "description": "每根長條 = 選的這段時間裡，在這個區間的移動時間合計（h:mm）與佔比。期間預設跟著上方的日期範圍，也可以選本週、上週、近 4 週、本期（賽事周期目前的階段）或自訂。區間模型可選，會記住：心率 Friel（% LTHR，預設）、WKO5 Classic、Seiler 3 區（AeT／LTHR）；功率 Palladino（% CP，預設）、Palladino 3 區。每次活動用『那一天』有效的門檻切區間（賽事周期的測試、設定或當時的估算值），所以早幾週用的是當時的 CP／LTHR；圖下方寫出用到哪些門檻。只算移動時間（有速度時 > 1.6 km/h，和 WKO5 一樣）。預設只算路跑，可以加越野跑、登山健行（登山用跑步的門檻）。手錶推估的功率不算進功率區間，被排除的壞檔案也不算。上方的三段條是 3 區摘要（心率：< AeT／AeT–LTHR／≥ LTHR；功率：< 80%／80–95%／≥ 95% CP），拿來跟這個階段的目標比：所有階段低強度至少 75%（app 的強度護欄；Seiler 2006 約 75–80% 的課是低強度，依時間算菁英約 91%，Seiler & Tønnessen 2009）；基礎期 ≥ 90%（Uphill Athlete：90% 以上在 1–2 區）；減量期高強度要保留（Bosquet 2007）。高強度 < 1% 算『沒有』是推估。"
+        },
+        {
+          "id": "mp-weekly", "sports": ["road"],
+          "title": "每週馬拉松配速時間",
+          "description": "每週路跑中落在馬拉松配速（閾值配速 × 1.04–1.08，推估：馬拉松配速 ≈ 閾值配速 × 1.06）的時間。專項期應該逐步增加（Pfitzinger 的馬拉松配速長跑、Canova 的專項課）；基礎期接近 0 是正常的。需要閾值配速（設定或推估）。",
+          "axes": [{"id": "HHMMSS", "min": 0}],
+          "period": "week",
+          "series": [
+            {"name": "馬拉松配速", "type": "bar", "y_axis": "HHMMSS", "color": "#eb6834", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), sum(if(speed >= 60/(runtpace*1.08) and speed <= 60/(runtpace*1.04), deltatime))), startofweek(date))"}
+          ]
         },
         {
           "id": "weekly-zone-hours",
@@ -255,7 +274,16 @@
           ]
         },
         {
-          "id": "uphill-vam",
+          "id": "long-run-pace", "sports": ["road"],
+          "title": "長跑配速（≥ 90 分的路跑）",
+          "description": "每次 ≥ 90 分鐘的路跑的平均移動配速。同樣是輕鬆長跑，配速慢慢變快（心率不變）= 有氧進步；專項期加了馬拉松配速段，配速會再快一點。看趨勢，不比單次（天氣、路線會影響）。",
+          "axes": [{"id": "PACEKM"}],
+          "series": [
+            {"name": "長跑配速", "type": "line", "y_axis": "PACEKM", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and movingduration >= 5400, movingduration/distance)"}
+          ]
+        },
+        {
+          "id": "uphill-vam", "sports": ["trail"],
           "title": "上坡腳程（每小時爬升，心率 < LTHR）",
           "description": "只算坡度 ≥ 5% 而且在移動的時間，每小時爬了多少公尺，拿來推算百岳每段要走多久（上坡時間 ≈ 爬升 ÷ 腳程）。心率 ≥ LTHR 的時間不算，避免比賽或衝刺拉高數字；沒有心率的活動全部算。上坡時間少於 10 分鐘的活動不畫。參考：傳統的登山估算用每小時 600 m。",
           "axes": [{"id": "METERSPERHOUR", "min": 0}],
@@ -265,13 +293,13 @@
           ]
         },
         {
-          "id": "steady-climb-vam-hr",
+          "id": "steady-climb-vam-hr", "sports": ["trail"],
           "title": "穩定爬坡 VAM:HR（同一路線，參考）",
           "kind": "climbvam",
           "description": "爬坡的有氧效率：每下心跳換到多少垂直爬升（m/h ÷ bpm），往上 = 同樣心率爬得更快。用走的、用跑的都算，越野跑和登山健行（百岳）都算，不需要功率。只當參考，不當門檻、不解鎖任何課表。\n\n想法來自 Uphill Athlete 的基準爬坡：同一段坡用同樣心率爬，時間變快就是進步（教練經驗）。把 VAM 除以心率、變成一個數字是推估，沒有找到驗證過的研究。\n\n怎麼挑段：坡度 ≥ +8%、連續 ≥ 8 分鐘、一直在移動（水平速度 > 0.3 m/s，陡坡慢走也算），中間停 ≤ 30 秒不算斷、停更久就斷開。這三個門檻是用你自己的資料挑的（推估）：+8%、8 分鐘時有 5 條重複路線可比，10 分鐘剩 4 條，15 分鐘就沒有了。每段的前 2 分鐘不算，因為心率要約 1 分鐘才跟上（Hunt：時間常數 τ ≈ 60 秒；取 2 分鐘是推估）。VAM = 這段的淨爬升 ÷ 時間。走或跑看步頻：≥ 130 spm 的時間過半算「跑」（實心點），否則算「走」（空心點）；走和跑的效率不一樣，比較時看同一種。\n\n為什麼只比同一路線：坡度、路面、海拔不同，VAM 就不同，點放在一起會混到路線差異，所以一次只看一條路線（下拉選單，預設是符合條件的段最多次的路線；反方向另成一條）。路線用路線頁自動找出的重複路線。藍點 = 每一段，橘線 = 這條路線近 8 週的滾動中位數。沒有可比的段時，改畫每次活動裡最長的一段爬坡有多長。\n\n熱：天熱時同樣速度心率較高，VAM:HR 會變低。切到「熱調整」時，心率用你自己回測出的係數換算到 Hadley 120（每 1 Hadley 單位 0.224 bpm；這個係數是用跑步回測的，用在單次活動、登山都是推估），沒有天氣資料的點不畫。長時間爬坡心率會慢慢飄高（心血管飄移，Coyle & González-Alonso 2001），所以同一條路線上的第幾段也會影響數字，hover 看得到開始的分鐘。hover 也看得到溫度、Hadley、走／跑和心率落在哪個區（< AeT／AeT–LTHR／≥ LTHR；登山用最近一次跑步的門檻）。"
         },
         {
-          "id": "downhill-rate",
+          "id": "downhill-rate", "sports": ["trail"],
           "title": "下坡腳程（每小時下降）",
           "description": "只算坡度陡於 −5% 而且在移動的時間，每小時下降多少公尺。下坡通常卡在腿和技術，不是心肺，所以不用心率過濾。拿來推算下山時間（下坡時間 ≈ 下降 ÷ 腳程）；變快代表下坡技術或腿力進步。下坡時間少於 10 分鐘的活動不畫。",
           "axes": [{"id": "METERSPERHOUR", "min": 0}],
@@ -281,7 +309,7 @@
           ]
         },
         {
-          "id": "route-difficulty",
+          "id": "route-difficulty", "sports": ["trail"],
           "title": "每次路線難度（コース定数）",
           "description": "每次越野、登山的コース定数：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。用實際移動時間代入，走得比標準路線時間快時會偏低。拿來對照目標行程：要走的百岳算出來是多少，訓練裡有沒有做到相近的日子。",
           "race_refs": "course_constant",
@@ -294,7 +322,7 @@
           ]
         },
         {
-          "id": "climb-density",
+          "id": "climb-density", "sports": ["trail"],
           "title": "爬升密度（每公里爬升）",
           "description": "Koop：拿每公里爬升對照目標賽事，而不是追週總量。",
           "axes": [{"id": "CUSTOMm/km", "min": 0}],

@@ -210,6 +210,7 @@ class SyncSettingsBody(BaseModel):
     accept_watch_power: Optional[bool] = None     # 進階: watch-estimated power feeds the power models (engine/power_source.py)
     push_provider: Optional[str] = None           # 進階: where the plan is pushed (sync/workout_targets)
     region_override: Optional[str] = None         # 進階: tw | intl; null = auto (engine/region.py)
+    primary_sport: Optional[str] = None           # 主要訓練項目: auto | trail | road (engine/primary_sport.py)
 
 
 _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
@@ -223,7 +224,8 @@ _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_so
                  "chart_data_source": "charts.data_source",
                  "map_basemap": "charts.map.basemap", "map_overlays": "charts.map.overlays",
                  "use_power": "charts.power.enabled", "accept_watch_power": "power.accept_watch_power",
-                 "push_provider": "plan.push.provider", "region_override": "athlete.region"}
+                 "push_provider": "plan.push.provider", "region_override": "athlete.region",
+                 "primary_sport": "athlete.primary_sport"}
 
 
 async def _power_source() -> tuple[str, str]:
