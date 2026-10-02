@@ -110,7 +110,7 @@ SRC_WHEN = ("UA（專項期、longer races）；Koop（最後 2–3 週不硬塞
 SRC_DAYS = ("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30:20；"
             "UA：兩天都 ≤ AeT；Burke 2011：補給 30–60 g/h；第 2 天比例 0.67、背負進度對應次數為推估")
 SRC_POST = "Johnston（UA）「three or four light days」；4 天、不改恢復週為推估"
-SRC_EVAL = ("hikehr.fatigue（同 VAM 的心率差，無外部來源 F17）；ΔVAM@AeT（vo2max-gate-and-trail-metric.md）；"
+SRC_EVAL = ("同 VAM 的心率差（無外部來源，推估）；ΔVAM@AeT（推估）；"
             "2×2 判讀依 UA、Le Meur 2013、Coyle 2001；±3 bpm、±5 % 為推估")
 
 

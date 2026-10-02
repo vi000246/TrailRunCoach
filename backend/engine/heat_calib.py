@@ -217,7 +217,7 @@ def _register() -> None:
             ("home_rh_pct", "平常訓練的濕度", "%", ("rh_pct", "rh"), (5.0, 100.0))):
         CAL.register(CAL.Item(
             name=name, label=label, unit=unit, default=HOME_DEFAULTS[name],
-            default_src="racepower/env.py 的參考條件（200 m／12 °C／70 %）", k=5, min_n=HOME_MIN_N,
+            default_src="賽事計算機的參考條件（200 m／12 °C／70 %）", k=5, min_n=HOME_MIN_N,
             fit=fit_home(fields_), bounds=lo_hi, digits=0,
             help="比賽功率從你平常的訓練條件換算到比賽當天；比賽前 90 天沒有天氣資料時用這個。"))
 

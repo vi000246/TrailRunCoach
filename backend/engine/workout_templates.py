@@ -142,7 +142,7 @@ def _steep(pct: float):
 _S5, _S5B = _steep(0.05)
 _S10, _S10B = _steep(0.10)
 _S15, _S15B = _steep(0.15)
-STEEP_SRC = "Pandolf 1977（同代謝率的坡度）；UA trekking（跑步機坡度替代背包）；loaded-carry-training.md §1.1、§3.2"
+STEEP_SRC = "Pandolf 1977（同代謝率的坡度）；UA trekking（跑步機坡度替代背包）"
 STEEP_URL = "https://doi.org/10.1152/jappl.1977.43.4.577"
 STEEP_CONV = "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ AeT"
 

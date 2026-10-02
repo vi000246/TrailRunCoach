@@ -89,7 +89,7 @@ SETTING_LABELS = {
     "estimate": "自動估算（當天以前的跑步，Friel 30 分鐘段）",
     "unset": "未設定",
 }
-IGNORED_WHY = ("COROS 帳號 zoneData 的值（coros_client.login 寫入），沒有記錄是哪個運動；"
+IGNORED_WHY = ("COROS 帳號 zoneData 的值（登入時寫入），沒有記錄是哪個運動；"
                "不當跑步 LTHR／FTP 用")
 
 # FIT sport / sub_sport -> (sport group, sport type) like WKO5 uses them

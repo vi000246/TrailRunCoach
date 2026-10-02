@@ -2,7 +2,7 @@
 有氧基礎確認與 Zone 5 的生命週期 — 徐國峰's aerobic-base checks
 (docs/research/xu-guofeng-reply.md, aerobic-base-readiness.md §1.1, §4).
 
-Sources: 台灣教練and the user's notes on 徐國峰's book
+Sources: 徐國峰（教練）and the user's notes on 徐國峰's book
 (跑者都該懂的跑步數據 L58–L77). Our proxies / interpretations are 推估.
 
 xu_run(ds, w)
@@ -57,9 +57,9 @@ XU_GOOD = 0.10                       # < 10 % = 有氧基礎夠（5 % 內國家�
 XU_STOP_S = 30.0                     # 補給每次停不超過 30 秒
 XU_HEAT_C = 25.0                     # 當天氣溫 25 °C 以下（課表文字的建議；不再拒絕，heat bands）
 XU_FLAT_M_PER_KM = 20.0              # 「全程平坦」 = drift_of's flat rule (推估 mapping)
-SRC_XU = "台灣教練"
-SRC_Z3_FIRST = "台灣教練：入門轉進階先練 3 區，3 區跑順、恢復跟得上再加 5 區"
-SRC_Z5_LIMIT = "台灣教練：5 區每趟最短 2 分鐘；一週最多兩次、兩次之間至少隔兩天"
+SRC_XU = "徐國峰（教練）；徐國峰《跑者都該懂的跑步數據》"
+SRC_Z3_FIRST = "徐國峰（教練）：入門轉進階先練 3 區，3 區跑順、恢復跟得上再加 5 區"
+SRC_Z5_LIMIT = "徐國峰（教練）：5 區每趟最短 2 分鐘；一週最多兩次、兩次之間至少隔兩天"
 
 # ---- weekly Z1 volume (the chart's reference band; the pause rule's measure) -----
 RQ_E_PER_MIN = 0.2                   # Daniels E intensity points / min (RQ 訓練指數; 徐國峰 blog, verified)
@@ -95,8 +95,8 @@ NO_DATA_DAYS = 42                    # no interpretable data for ~6 weeks → sc
 VOL_WEEKS = 3                        # 推估
 VOL_TOL = 0.15                       # 推估: every week within ±15 % of the weeks' mean
 VOL_LOOK = 6                         # 推估: how far back the counted weeks are looked for
-SRC_VOL = ("推估：Uphill Athlete 式的前提（測試前的訓練量要穩定），docs/research 沒有找到原文；"
-           "3 週、±15% 是自訂。恢復週、減量週不算")
+SRC_VOL = ("推估：Uphill Athlete 式的前提（測試前的訓練量要穩定），沒有找到原文；"
+           "3 週、±15% 是推估。恢復週、減量週不算")
 
 STATE_LABEL = {"unconfirmed": "未確認", "confirmed": "已確認", "paused": "暫停", "open": "不設門檻",
                "reentry": "恢復期"}

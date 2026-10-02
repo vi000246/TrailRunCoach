@@ -67,9 +67,9 @@ LABEL = {"auto": "自動", "ua_gap": "Uphill Athlete 差距法", "friel_drift": 
 
 SRC_UA = "Uphill Athlete：When to add intensity（AnT/AeT − 1 ≤ 10%，先加 Zone 3）"
 SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%，跑步在 AeT 1–2 小時）"
-SRC_XU = "徐國峰（你的筆記：跑者都該懂的跑步數據）"
+SRC_XU = "徐國峰《跑者都該懂的跑步數據》"
 SRC_SEILER = "Seiler 2010；Seiler & Tønnessen 2009（整個週期都有少量高強度，每週 1–3 次）"
-SRC_PALLADINO = "Palladino 基礎期（你的筆記：palladino基礎期訓練）"
+SRC_PALLADINO = "Palladino 基礎期訓練"
 SRC_KOOP = "Koop／CTS（6×3 分 RI、上坡）"
 SRC_HELGERUD = "Helgerud 2007（4×4 分）"
 SRC_OWN = "自訂"
@@ -736,7 +736,7 @@ def adjusted_spec(spec: tuple, adjust: Optional[dict]) -> tuple:
     key, title, reps, work, rest, lo, hi, uphill, src = spec
     if adjust.get("rest_add"):
         rest = rest + int(adjust["rest_add"])
-        src = f"{src}；上次未適應：組休 +{int(adjust['rest_add'])} 分（interval-adaptation.md §4.3）"
+        src = f"{src}；上次未適應：組休 +{int(adjust['rest_add'])} 分"
     if adjust.get("power") and lo is not None:
         f = float(adjust["power"])
         lo, hi = round(lo * f, 3), round(hi * f, 3)
@@ -1015,12 +1015,12 @@ def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], va
 # ---------------------------------------------------------------------------
 
 SRC_Z5 = {
-    "week": "台灣教練：一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）"
+    "week": "徐國峰（教練）：一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）"
             "——圖上的參考帶，不是解鎖條件",
-    "xu90": "台灣教練：平路、≤ 25 °C、停 ≤ 30 秒、心率 1 區，飄移 < 10%",
+    "xu90": "徐國峰（教練）：平路、≤ 25 °C、停 ≤ 30 秒、心率 1 區，飄移 < 10%",
     "ua": SRC_UA,
     "friel": SRC_FRIEL,
-    "z3": "台灣教練：先 3 區、跑順了再加 5 區；「3 堂達標」是推估",
+    "z3": "徐國峰（教練）：先 3 區、跑順了再加 5 區；「3 堂達標」是推估",
     "keep": "Hickson 1982：1 區時間保有 2/3 就維持耐力；連 3 週是推估",
     "reentry": "Daniels 表 9.2（恢復期＝停訓天數，期間只有 E 日）；先 3 區：徐國峰；堂數推估；"
                "≥ 4 週要重新確認：Mujika & Padilla 2000",
@@ -1764,7 +1764,7 @@ def indicator(gate: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 OPTION_INFO = {
-    "auto": {"source": "台灣教練、Uphill Athlete、Friel、Seiler",
+    "auto": {"source": "徐國峰（教練）、Uphill Athlete、Friel、Seiler",
              "rule": "3 區（閾值）只要護欄通過就排；5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：徐國峰）要先確認有氧基礎："
                      "三種測試做了其中一種而且達標——① 徐國峰 90 分鐘測試（平路 1 區，第 90 分 vs 第 10 分心率飄移 < 10%）、"
                      "② 實測 AeT 的 UA 差距法（LTHR ÷ AeT − 1 ≤ 10%）、③ 實測 AeT 的 Friel 飄移（AeT 附近 ≥ 60 分鐘，前後半 < 5%）。"
@@ -1780,21 +1780,21 @@ OPTION_INFO = {
                     "rule": "8 週內有一次在 AeT 附近（平均心率 AeT−5～AeT+3，範圍自訂）、暖身後 ≥ 60 分鐘的平路穩定跑，"
                             "前後半心率飄移 < 5%。一次就夠。",
                     "todo": "需要實測 AeT，並排一次 60–90 分鐘平路跑，心率壓在 AeT 附近、不停、不加速。"},
-    "xu_drift": {"source": "徐國峰（你的筆記：跑者都該懂的跑步數據）",
+    "xu_drift": {"source": "徐國峰《跑者都該懂的跑步數據》",
                  "rule": "平地、< 25 °C、E 配速 90 分鐘：(第 90 分心率 − 第 10 分心率) ÷ 第 10 分心率 < 10% 就可以練間歇（< 5% 是國家級）。",
                  "todo": "排一次 90 分鐘平路 E 配速跑，選 < 25 °C 的日子，補給停不超過 30 秒。"},
     "plateau": {"source": "徐國峰（錶上 VO2max 不再提升）；Cusick（指標先到平台期）",
-                "rule": "基礎期 ≥ 8 週，而且有氧效率 EF 近 6 週和之前比 < +2%（持平）。用 EF 代替錶上 VO2max、8 週和 2% 都是自訂。"
+                "rule": "基礎期 ≥ 8 週，而且有氧效率 EF 近 6 週和之前比 < +2%（持平）。用 EF 代替錶上 VO2max、8 週和 2% 都是推估。"
                         "不叫「MAF 停滯」：Maffetone 把停滯當警訊。",
                 "todo": "繼續輕鬆路跑（心率 ≤ AeT、≥ 30 分鐘），EF 才算得出來。"},
     "weeks": {"source": "Palladino 基礎期分段；Cusick 第一階段 4–8 週",
-              "rule": "基礎期開始後滿 N 週（預設 8，範圍 2–16）才排間歇。8 週取中間值，屬自訂。",
+              "rule": "基礎期開始後滿 N 週（預設 8，範圍 2–16）才排間歇。8 週取中間值，屬推估。",
               "todo": "不用測試；只要基礎期有起點（賽事周期）。"},
     "none": {"source": "Seiler 2010、Seiler & Tønnessen 2009、Koop／CTS",
              "rule": "不設門檻：整個週期都有少量高強度。基礎期每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5（≥ 5 只排閾值下）、"
                      "週增量 ≤ 20%（10–20% 維持）、3:1 恢復週改 4×1 分 fartlek、TSB、離長跑 ≥ 2 天。"
                      "劑量 3 區 3×6 → 3×8 → 2×12（90–95% CP），5 區 5×2 → 4×3 → 5×3 → 4×4（徐國峰：3 區先）；"
-                     "時間足夠排標準版，平日上限放不下時換同等較短版（interval-prescription.md）。",
+                     "時間足夠排標準版，平日上限放不下時換同等較短版。",
              "todo": "不用測試。"},
 }
 
