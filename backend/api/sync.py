@@ -207,6 +207,7 @@ class SyncSettingsBody(BaseModel):
     map_overlays: Optional[list[str]] = None      # workout map default overlay ids
     exclude_bad_activities: Optional[bool] = None  # engine/bad_activity.py (設定 → 資料校正)
     use_power: Optional[bool] = None              # 使用功率 (wko5expr/power_use.py); off = HR only
+    accept_watch_power: Optional[bool] = None     # 進階: watch-estimated power feeds the power models (engine/power_source.py)
     push_provider: Optional[str] = None           # 進階: where the plan is pushed (sync/workout_targets)
 
 
@@ -220,13 +221,38 @@ _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_so
                  "auto_on_open_hours": "sync.auto_on_open.hours",
                  "chart_data_source": "charts.data_source",
                  "map_basemap": "charts.map.basemap", "map_overlays": "charts.map.overlays",
-                 "use_power": "charts.power.enabled", "push_provider": "plan.push.provider"}
+                 "use_power": "charts.power.enabled", "accept_watch_power": "power.accept_watch_power",
+                 "push_provider": "plan.push.provider"}
+
+
+async def _power_source() -> tuple[str, str]:
+    """(stryd | watch | none, how): the 一般設定 value, else detected on the
+    chart Dataset (the one every page reads anyway); ("stryd", "預設") when
+    detection fails, the long-standing behaviour."""
+    import asyncio
+    from backend.engine import athlete_profile as AP
+    from backend.engine.planning import Plan
+    prof = Plan.load().profile
+    if AP.profile_power_source(prof) is not None:
+        return AP.effective_power_source(prof)
+    try:
+        from backend.api.wko5views import _dataset
+        ds = await asyncio.to_thread(_dataset)
+        return AP.effective_power_source(prof, ds)
+    except Exception:                       # noqa: BLE001
+        return "stryd", "預設"
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:
     from backend.sync import primary as P
     from backend.sync.tp_client import lookup_client_creds
     out = {k: await repo.get(v) for k, v in _SETTING_KEYS.items()}
+    # 使用功率 None = auto: from the power source (一般設定, else detected; engine/athlete_profile.py)
+    out["use_power_stored"] = out["use_power"]
+    out["power_source"], out["power_source_how"] = await _power_source()
+    if out["use_power"] is None:
+        from backend.engine import athlete_profile as AP
+        out["use_power"] = AP.use_power(out["power_source"], bool(out["accept_watch_power"]))
     # 主要資料來源: the setting ("auto" for the old null) and the source in effect
     eff = await P.resolve_db(repo.db, repo.user_id)
     out["primary_source"] = eff["setting"]
