@@ -629,21 +629,21 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   projection come from the stored plan (`backend/static/overview.html:306`).
 - **5 區（最大攝氧量間歇）狀態** card (`#z5card`, left column under 還缺什麼, beside 本週該做什麼
   because it decides whether the week's interval is Zone 3 or Zone 5): the state pill (icon + text:
-  未確認 / 已確認（日期、路徑）/ 暫停（原因）/ 恢復期 / 不設門檻), the 「還缺：…」 line
-  (`z5_card.next`), three steps — 確認有氧基礎（三選一，做了且達標） (the mode's tests: 90-min test,
-  UA gap, Friel drift, each once, with ✓ / ✕ / – = not done and the current value vs
-  requirement), 3 區達標 n / 3, 排 5 區間歇 — then the re-entry days left, the 2/3 pause line vs
-  last week's Zone 1, and 建議測試. Every rule has an ⓘ with its source (推估 where ours).
-  「看歷程圖 →」 opens the 基礎期 chart below.
-- **5 區開放流程 chart** (viewer, 周期化訓練 → ② 基礎期, custom view `kind: "z5gate"`,
-  `wko5views.z5gate_panel` → `quality_gate.z5_history`, range capped at a year): on top the
-  3-step tracker (① 確認有氧基礎（三選一）with the three tests' ✓ / ✕ / – → ② 3 區達標 n/3 → ③ 5
-  區開放; icon + word per step) and the same 「還缺什麼」 line as the card (`z5.progress` =
-  `wko5views.z5_progress` = `z5_card` on the status gate); below a simple history: one state
-  band with text labels, a marker lane with only ◆ confirmation, ● 90-min test (hollow = failed)
-  and ▲ measured AeT, and — only once Zone 5 has been confirmed — weekly Zone 1 minutes with the
-  dashed 2/3 pause line. Item tooltips; a collapsible 細節 with the three tests, every state
-  change and event, the description and the sources. The render cache key adds the preference
+  未確認 / 已確認（日期、路徑）/ 暫停（原因）/ 恢復期 / 不設門檻), then the quest-style stage
+  flow (`z5_card.flow` = `quality_gate.z5_flow`, drawn by `static/z5flow.js`; full width of the
+  cards row): one 「你現在在這裡：<stage> · 下一步：…」 line (+「同時可以做」 for the parallel
+  stage; the full 「還缺：…」 `next` text behind ?) and five stage cards — 有氧基礎 → 3 區階梯
+  (the Z3 rungs) → 有氧基礎確認 (週量穩定 + 三選一 tests; the 2/3 維持 line once confirmed;
+  can run alongside the Z3 ladder) → 5 區解鎖 → 5 區階梯 (the Z5 rungs). Each card: badge (✓ /
+  number), tag word (已完成 / 現在 / 可同時做 / 未解鎖), checklist ☑ / ☐ with one short 「→ 下一步」
+  line, 「完成後：」 what it unlocks; sources behind ?. Vertical in a narrow box (done / locked
+  stages fold to their header, tap to open), horizontal from 860 px (container query).
+  Presentation only: every flag comes from `z5_card`. 「歷程 →」 opens the 基礎期 panel.
+- **5 區開放流程 panel** (viewer, 周期化訓練 → ② 基礎期, custom view `kind: "z5gate"`,
+  `wko5views.z5gate_panel`): the same stage flow as the card (`z5.progress.flow` =
+  `wko5views.z5_progress` = `z5_card` on the status gate) — no chart, no time axis — and a
+  collapsed 歷程 list (`quality_gate.z5_history`, range capped at a year: every state change and
+  event in order, the description and the sources). The render cache key adds the preference
   and test-session stamps.
 - Plan editing, drag-to-move, reconcile preview and COROS push by day / week / phase live on
   the 課表 page (`backend/static/schedule.html`: session dialog `backend/static/schedule.html:1152`,
@@ -901,6 +901,7 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feat/drift-v2-planning | docs/research/drift-algorithm.md, unsourced-rules.md, xu-guofeng-reply.md, detraining.md | `i_drift` = 6-run mean ± SE; season drift charts add 「6 次平均」 ± SE (`drift_avg()`); guardrail sources (ramp 5/8 Friel, volume step Nielsen/Damsted, TSB Friel/TP); AeT valid by the aggregate (B3) and the test by reason; ladder Z3 → Z5 with the Zone 5 lifecycle (base_check); AeT test protocols (`plan.prefs.aet_test_protocol`, 徐國峰 90′ standard on the weekend, UA 40′ backup); re-entry block after breaks ≥ 6 days replaces `blackouts.step_cap`; easy targets from the recent EF (推估) |
 | 2026-10-01 | feat/z5-gate-viz | N/A | Zone 5 opening process: `quality_gate.z5_history` replays the lifecycle day by day through the same `_z5` evaluate() uses (`ua_gap_method`, `_break_on` shared; `base_check.replay_memo` per-run memo inside a replay only); `z5_card` + GET `/overview/z5` card on 總覽; `z5gate` panel in 基礎期; auto-mode hover text corrected to 2/3 × 3 weeks and re-entry ≥ 6 days |
 | 2026-10-01 | feat/z5-unlock-simplify | docs/research/aerobic-base-readiness.md | Zone 5 opens on one of three tests (90-min test, UA gap, Friel drift); 三訊號 and the `xu_signals` mode removed (stored value reads as auto); the late long-run check no longer pauses Zone 5 (kept as the post-break drift check); `z5_card` gives one 三選一 step, `steps` and the 「還缺什麼」 `next` line, shared with the 基礎期 chart (`z5_progress`); the chart redrawn as tracker + simple history |
+| 2026-10-02 | feat/z5-flow-ui | owner request | 5 區開放流程 redrawn as a quest-style stage flow (`quality_gate.z5_flow`, `z5_card.flow`; `static/z5flow.js` shared by the 總覽 card and the 基礎期 panel): 有氧基礎 → 3 區階梯 → 有氧基礎確認 → 5 區解鎖 → 5 區階梯 with checklists and a 「你現在在這裡，下一步」 line; the 3-step tracker, the state band / marker / weekly-bar chart removed; presentation only (no gate logic change); UI chrome in `common.z5flow.*`, flow strings wrapped in `_()` |
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 推估), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
 | 2026-10-02 | feat/heat-bands | user-approved | `i_drift` compares within one temperature band (< 25 / 25–28 / > 28 °C / 溫度不明; `drift_agg.pick_band`), chip 「· 🌡 …」 in the text, `extra.bands`; never BAD in a heat band; Friel / 徐國峰 gate methods count heat runs (pass unlocks, fail 「可能是熱造成的」); AeT test text keeps 「氣溫 25 °C 以下時開始」 as advice |
 | 2026-10-02 | feat/session-classifier | docs/research/vo2max-session-detection.md, user-approved | Weekly Zone 5 slot ticked only by a 「Z5 間歇」 run; done hard days (Z5 / Z3 / 高強度長跑 / CP test) keep the next interval 48 h away; activity rows carry `session` (label + dashicon). Power zones are Palladino everywhere: interval_library classes 3A 88–95 / 3B 95–101 / Z4 101–106 / Z5 ≥ 106 % CP by band middle (was Z5 ≥ 102 %), the editor's 5 區 time ≥ 106 %, time-in-zone charts / zone APIs Palladino 10 zones (Coggan / Stryd sets removed; iLevels kept as the WKO5 cross-check) |

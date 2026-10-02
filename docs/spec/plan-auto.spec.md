@@ -142,7 +142,10 @@ neutral.
   the mode's tests (✓ / ✕ / – and the current value; after a Z1 pause or a ≥ 4-week break only
   results dated after it count); `steps` = ① base ② 3 區達標 n/3 ③ 5 區開放, each done / active /
   todo / paused / wait; `next` = the one 「還缺：…」 line (or 恢復期還剩 n 天 / 都做到了), computed
-  once and shown by the 總覽 card and the 基礎期 chart (`wko5views.z5_progress`).
+  once. `flow` (`quality_gate.z5_flow`, presentation only) = the same flags as five quest
+  stages 有氧基礎 → 3 區階梯 → 有氧基礎確認 → 5 區解鎖 → 5 區階梯 (status done / current /
+  parallel / locked, checklist items with a short `todo`) + `here` (「你現在在這裡，下一步」);
+  the 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
 - **Re-confirmation**: passive first — any qualifying run re-confirms. The AeT test is
   scheduled only for a reason (`quality_gate.aet_test_reason`): no interpretable run for ~6
   weeks (UA's 4–6-week retest, coach; wording 未驗證), the aggregated AeT estimate missing or
@@ -157,7 +160,7 @@ neutral.
   the inputs evaluate() would have had that day (the plan's AeT / LTHR in effect, `reentry.find`
   on that day, the interval sessions of the 8 weeks before it) through the same `_z5`, so the
   last day equals the gate. plateau / weeks unlock by their own method and are not replayed
-  (noted). Shown on 總覽 (card, `z5_card`) and in 基礎期 (chart, view kind `z5gate`).
+  (noted). Shown in 基礎期 (view kind `z5gate`) as the collapsed 歷程 list under the stage flow.
 - **Visibility**: the gate hover and the overview show 「Zone 5：未確認／已確認（日期、路徑）／
   暫停（原因）／恢復期」 and 「建議測試：…」.
 

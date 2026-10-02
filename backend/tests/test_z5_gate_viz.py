@@ -236,6 +236,71 @@ def test_card_in_a_reentry_block_counts_the_days_left():
 
 
 # ---------------------------------------------------------------------------
+# the stage flow (z5_card["flow"]): presentation of the same flags
+# ---------------------------------------------------------------------------
+
+def _st(f):
+    return {s["key"]: s["status"] for s in f["stages"]}
+
+
+def test_flow_unconfirmed_z3_is_current_and_the_test_runs_alongside():
+    ds = _ds(_easy(range(2, 40, 2)))
+    f = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)["flow"]
+    assert [s["key"] for s in f["stages"]] == ["base", "z3", "confirm", "unlock", "z5"]
+    assert _st(f) == {"base": "done", "z3": "current", "confirm": "parallel", "unlock": "locked", "z5": "locked"}
+    z3 = f["stages"][1]
+    assert [i["text"] for i in z3["items"]] == [r[1] for r in QG.Z3] and not any(i["ok"] for i in z3["items"])
+    assert f["here"]["stage"] == "z3" and QG.Z3[0][1] in f["here"]["next"]
+    conf = f["stages"][2]
+    assert [i["text"] for i in conf["any"]][0] == "90 分鐘飄移測試" and conf["any_label"]
+    assert all(i["todo"] for i in conf["any"])                   # each untried test says what to do
+    assert "AeT 測試" in f["here"]["also"] and f["here"]["also_title"] == "有氧基礎確認"
+    assert f["here"]["full"].startswith("還缺：")
+
+
+def test_flow_confirmed_ticks_the_confirmation_and_shows_the_keep_line():
+    ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(TODAY - dt.timedelta(days=10))])
+    c = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)
+    f = c["flow"]
+    assert _st(f) == {"base": "done", "z3": "current", "confirm": "done", "unlock": "locked", "z5": "locked"}
+    conf = f["stages"][2]
+    assert conf["items"][0]["ok"] is True and conf["any"] == []
+    assert any(i["text"].startswith("維持：每週 1 區 ≥") for i in conf["items"])
+    assert f["here"]["also"] == "" and [i["ok"] for i in f["stages"][3]["items"]] == [True, False]
+
+
+def test_flow_open_zone5_moves_to_the_z5_ladder():
+    gate = {"mode": "auto", "dose": {"step": 4}, "aet": {}, "lthr": {},
+            "z5": {"state": "confirmed", "label": "已確認", "open": True, "since": "2026-08-01", "path": "xu90",
+                   "path_label": "徐國峰 90 分鐘飄移", "xu_last": {"date": "2026-08-01", "ok": True, "drift": 0.05,
+                                                            "hr10": 128, "hr90": 134, "why": []}}}
+    f = QG.z5_card(gate, TODAY)["flow"]
+    assert _st(f) == {"base": "done", "z3": "done", "confirm": "done", "unlock": "done", "z5": "current"}
+    z5 = f["stages"][4]["items"]
+    assert [i["ok"] for i in z5] == [True, False, False, False] and QG.Z5[1][1] in z5[1]["todo"]
+    assert f["here"]["stage"] == "z5" and QG.Z5[1][1] in f["here"]["next"]
+
+
+def test_flow_paused_and_reentry():
+    gate = {"mode": "auto", "dose": {"step": 0}, "aet": {}, "lthr": {},
+            "z5": {"state": "paused", "label": "暫停", "open": False, "since": "2026-08-01", "path": "xu90",
+                   "path_label": "徐國峰 90 分鐘飄移", "reason": "連續 3 週…", "pause": {"kind": "z1", "at": "2026-09-14"},
+                   "xu_last": {"date": "2026-08-01", "ok": True, "drift": 0.05, "hr10": 128, "hr90": 134, "why": []},
+                   "maintenance": {"z1_level_min": 210.0, "weeks": [], "ok": False}}}
+    f = QG.z5_card(gate, TODAY)["flow"]
+    conf = f["stages"][2]
+    assert conf["status"] == "parallel" and "140 分" in conf["note"] and conf["any"][0]["ok"] is False
+    assert "再做 1 次 90 分鐘測試" in conf["any"][0]["todo"]
+    last, back = date(2026, 9, 18), date(2026, 9, 29)
+    ds = _ds(_with_break(last, back))
+    c = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)
+    f = c["flow"]
+    assert f["stages"][0]["status"] == "current" and f["here"]["stage"] == "base"
+    assert f"還剩 {c['reentry']['days_left']} 天" in f["here"]["next"]
+    assert all(s["status"] in ("locked", "done") for s in f["stages"][1:])
+
+
+# ---------------------------------------------------------------------------
 # the custom view panel
 # ---------------------------------------------------------------------------
 

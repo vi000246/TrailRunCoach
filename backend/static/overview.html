@@ -6,6 +6,7 @@
 <title>訓練總覽</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
+<script src="/api/v1/static/z5flow.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -173,29 +174,9 @@ details.al .body { padding: 0 10px 9px 35px; font-size: 12.5px; color: var(--mut
 /* 5 區 tracker */
 .z5st { display: inline-flex; align-items: center; gap: 5px; font-weight: 650; font-size: 13px; border-radius: 14px; padding: 1px 10px 1px 8px; border: 1px solid currentColor; }
 .z5st.confirmed, .z5st.open { color: var(--good); } .z5st.paused { color: var(--watch); } .z5st.reentry { color: var(--bad); } .z5st.unconfirmed { color: var(--muted); }
-.z5need { margin: 0 0 10px; font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: flex-start; }
-.z5need .di { color: var(--accent); margin-top: 3px; }
-ol.steps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; position: relative; }
-ol.steps > li { display: grid; justify-items: center; text-align: center; gap: 5px; position: relative; padding: 0 4px; min-width: 0; }
-ol.steps > li::before { content: ""; position: absolute; top: 14px; left: -50%; right: 50%; height: 2px; background: var(--line); z-index: 0; }
-ol.steps > li:first-child::before { display: none; }
-ol.steps > li.ok::before, ol.steps > li.ok + li::before { background: color-mix(in srgb, var(--good) 60%, var(--line)); }
-ol.steps .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px;
-  border: 2px solid var(--line); background: var(--panel); color: var(--muted); position: relative; z-index: 1; }
-ol.steps li.ok .n { border-color: var(--good); background: var(--good); color: #fff; }
-ol.steps li.cur .n { border-color: var(--accent); color: var(--accent); }
-ol.steps .lb { font-size: 12.5px; font-weight: 600; }
-ol.steps .sb { font-size: 11.5px; color: var(--muted); display: flex; gap: 4px; align-items: center; justify-content: center; flex-wrap: wrap; }
-.tests { display: inline-flex; gap: 3px; }
 .pmb { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 0 2px 0 6px; border-radius: 10px;
   border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .pmb .q { width: 14px; height: 14px; font-size: 9.5px; border: 0; }
-.tests.pre { align-items: center; margin-right: 6px; font-size: 11px; color: var(--muted); }
-.tests span { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); color: var(--faint); cursor: help; }
-.tests span.y { background: var(--good); border-color: var(--good); color: #fff; } .tests span.n { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
-.dots { display: inline-flex; gap: 3px; }
-.dots i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--accent); }
-.dots i.on { background: var(--accent); }
 
 /* compact stat blocks (B2B / 負重) */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
@@ -290,7 +271,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
       <!-- due CP / AeT tests, B2B weekends, zone retests: the shared floating box (static/suggestions.js) -->
     </section>
     <!-- Zone 5 opening process (quality_gate.z5_card); the season history is the 基礎期 chart -->
-    <section id="z5card" aria-labelledby="z5-h">
+    <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
       <h2 id="z5-h">5 區間歇 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">歷程 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
     </section>
@@ -550,36 +531,17 @@ document.addEventListener("click", async (ev) => {
 });
 
 // ---------------- 5 區 opening (GET /z5 = quality_gate.z5_card) ----------------
-// the 3-step tracker + the single 「還缺：…」 line; everything else is behind ? / 詳細
+// the stage flow (static/z5flow.js): 「你現在在這裡，下一步：…」 + one checklist card per stage
 const Z5_ICON = { confirmed: "good", open: "good", paused: "watch", reentry: "bad", unconfirmed: "na" };
-const src = (s) => q(s ? "來源：" + s : "", "來源");
 async function loadZ5() {
   const c = await j(`${API}/z5`);
   if (c.history_href) $("z5-hist").href = c.history_href;
   const sub = c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}`
     : c.state === "paused" || c.state === "reentry" ? (c.reason || "") : (c.reason || "還沒確認有氧基礎");
   $("z5-st").innerHTML = `<span class="z5st ${esc(c.state)}" title="${esc(sub)}">${I(Z5_ICON[c.state] || "na")}${esc(c.label)}</span>`;
-  const B = c.base || { tests: [] }, z3 = c.z3, z5ok = c.open && z3.ok, base = B.ok, R = c.reentry;
-  const need = c.next?.text ? `<p class="z5need" role="status">${I("chev")}<span>${esc(c.next.text)}</span></p>` : "";
-  const tmark = (i) => `<span class="${i.ok === true ? "y" : i.ok === false ? "n" : ""}" tabindex="0"
-    data-tip="${esc(`${i.label}\n${i.value}${i.need ? `\n需要 ${i.need}` : ""}${i.src ? `\n來源：${i.src}` : ""}`)}">${i.ok === true ? "✓" : i.ok === false ? "✕" : "–"}</span>`;
-  const dots = Array.from({ length: z3.need }, (_, i) => `<i class="${i < z3.done ? "on" : ""}"></i>`).join("");
-  const cur = !base ? 0 : !z3.ok ? 1 : 2;
-  const steps = `<ol class="steps">
-    <li class="${base ? "ok" : ""} ${cur === 0 ? "cur" : ""}"><span class="n">${base ? "✓" : 1}</span><span class="lb">有氧基礎</span>
-      <span class="sb">${c.state === "reentry" ? "恢復期內不判斷" : B.tests.length ? `${B.pre ? `<span class="tests pre" aria-label="前提：週量穩定">量${tmark(B.pre)}</span>` : ""}<span class="tests" aria-label="三種測試">${B.tests.map(tmark).join("")}</span>` : esc(B.empty || "")}${q(B.label + (B.pre ? `\n\n${B.pre.label}：測試前的週量要穩定，測試才算（${B.pre.src}）` : ""))}</span></li>
-    <li class="${z3.ok ? "ok" : ""} ${cur === 1 ? "cur" : ""}"><span class="n">${z3.ok ? "✓" : 2}</span><span class="lb">3 區 ${z3.done}/${z3.need}</span>
-      <span class="sb"><span class="dots" role="img" aria-label="3 區達標 ${z3.done} / ${z3.need}">${dots}</span>${q("3 區只要護欄通過就照排；跑順 3 堂才進 5 區" + (z3.src ? "\n來源：" + z3.src : ""))}</span></li>
-    <li class="${z5ok ? "ok" : ""} ${cur === 2 && !z5ok ? "cur" : ""}"><span class="n">${z5ok ? "✓" : 3}</span><span class="lb">5 區間歇</span>
-      <span class="sb">${z5ok ? "可以排" : "還不行"}${q((z5ok ? "可以排：每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天" : "還不行：本週的間歇是 3 區") + "\n來源：台灣教練")}</span></li>
-  </ol>`;
-  const K = c.keep, more = [];
-  if (R && c.state === "reentry") more.push(`<div><b>恢復期還有 ${R.days_left} 天</b>（停跑 ${R.days} 天，到 ${esc(R.quality_from)} 前只排輕鬆跑）；之後先完成 ${R.z3_before_z5} 堂 3 區${R.drift_check ? "，並通過長跑飄移檢查" : ""}${R.reconfirm ? "，而且要重新確認有氧基礎" : ""}${src(R.src)}</div>`);
-  if (K) more.push(`<div>維持條件：${K.last_week ? `上週 1 區 <b class="num">${Math.round(K.last_week.z1_min)}</b> 分` : "確認後還沒有完整的一週"}
-     ／ 暫停線 <b class="num">${Math.round(K.line_min)}</b> 分（確認時 ${Math.round(K.level_min)} 分的 2/3，連 3 週低於才暫停）${src(K.src)}
-     ${K.why ? `<br><span class="st watch">${esc(K.why)}</span>` : ""}</div>`);
-  if (c.test) more.push(`<div><span class="st watch">${I("test")}建議測試</span> ${esc(c.test.text)}</div>`);
-  $("z5").innerHTML = `${need}${steps}${more.length ? `<details class="more"><summary>詳細</summary><div class="body">${more.join("")}</div></details>` : ""}`;
+  // the quest-style stage flow (static/z5flow.js, shared with the 基礎期 panel)
+  Z5Flow.bind();
+  $("z5").innerHTML = Z5Flow.html(c.flow, { q: "q" });
 }
 
 // ---------------- B2B (GET /b2b = engine/b2b.card): numbers + icons, the rest on click ----------------
