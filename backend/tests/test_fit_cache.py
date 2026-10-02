@@ -187,6 +187,61 @@ def test_series_cache_survives_a_rebuild(tmp_path):
     assert b.cached_series("t_key", b.workouts[0], lambda: {"x": 2}) == {"x": 2}
 
 
+def _app(tmp_path, name, monkeypatch):
+    """An app home <name>/.wko5coach with the cache inside it (the real layout)."""
+    home = tmp_path / name / ".wko5coach"
+    monkeypatch.setattr(fitcache, "app_home", lambda: home)
+    monkeypatch.setenv(fitcache.ENV_ROOT, str(home / "cache" / "fit"))
+    fitcache._HOMES.clear()
+    return home
+
+
+def test_a_moved_app_home_with_new_mtimes_reads_no_fit(tmp_path, monkeypatch):
+    """A copied / moved ~/.wko5coach (another path, the copy tool resets the
+    mtimes): the cache is found by the folder's place in the app home and each
+    file by its content hash, so nothing is parsed again and the per-file
+    series memo still hits."""
+    import os
+    import shutil
+    h1 = _app(tmp_path, "a", monkeypatch)
+    _folder(h1)
+    a = _build(h1 / "fit" / "coros")
+    a.cached_series("t_key", a.workouts[0], lambda: {"x": 1.5})
+    a.flush_series()
+    h2 = tmp_path / "b" / ".wko5coach"
+    shutil.copytree(h1, h2)
+    shutil.rmtree(h1)
+    for p in (h2 / "fit").rglob("*.fit"):
+        os.utime(p, ns=(p.stat().st_atime_ns, p.stat().st_mtime_ns + 7_000_000_000))
+    _app(tmp_path, "b", monkeypatch)
+    fitcache._ALIASES.clear()
+    calls = _count_parses(monkeypatch)
+    b = _build(h2 / "fit" / "coros")
+    assert calls == []
+    assert _snapshot(b) == _snapshot(a)
+    assert b.cached_series("t_key", b.workouts[0], lambda: {"x": 9}) == {"x": 1.5}
+    # the same size but other bytes: parsed again
+    f = h2 / "fit" / "coros" / "2026" / "1.fit"
+    raw = bytearray(f.read_bytes())
+    raw[-3] ^= 0xFF
+    f.write_bytes(bytes(raw))
+    fitcache._HOMES.clear()
+    _build(h2 / "fit" / "coros")
+    assert len(calls) == 1
+
+
+def test_an_existing_cache_keeps_its_folder(tmp_path, monkeypatch):
+    """A cache written under the old absolute-path key is used as is (no re-parse after the upgrade)."""
+    h = _app(tmp_path, "a", monkeypatch)
+    root = _folder(h)
+    base = h / "cache" / "fit"
+    import hashlib
+    import os
+    legacy = base / hashlib.sha1(os.path.normcase(os.path.abspath(str(root))).encode()).hexdigest()[:12]
+    legacy.mkdir(parents=True)
+    assert fitcache.home_of(root) == legacy
+
+
 def test_estimate_memo_restores_the_estimated_settings(tmp_path, monkeypatch):
     root = _folder(tmp_path)
     runs = []

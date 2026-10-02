@@ -930,7 +930,9 @@ class FitFolderDataset(Dataset):
             return bool(hit["ret"])
         before = {k: list(v) for k, v in self.athlete.settings.items()}
         labels = dict(self._setting_labels)
-        ret = self._estimate_settings()
+        from backend.engine.wko5expr.dataset import batched_flush
+        with batched_flush(self):            # one estimate() per grid day each flushed every series file
+            ret = self._estimate_settings()
         self.pd_memo.flush()
         changed = {k: [(d.isoformat(), val) for d, val in v] for k, v in self.athlete.settings.items()
                    if before.get(k) != list(v)}
@@ -1080,7 +1082,9 @@ class FitFolderDataset(Dataset):
     def flush_series(self) -> None:
         import json
         import os
-        from backend.engine.wko5expr.dataset import _safe
+        from backend.engine.wko5expr.dataset import _safe, flush_held
+        if flush_held(self):
+            return
         memo = getattr(self, "pd_memo", None)
         if memo is not None:
             memo.flush()
