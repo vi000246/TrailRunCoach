@@ -26,6 +26,7 @@ from typing import Optional
 
 from backend.engine import aet_test as AT
 from backend.engine import b2b as B2B
+from backend.engine import specific_phase as SP
 from backend.engine import steep_hill as SH
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
@@ -105,8 +106,9 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   base_quality: Optional[dict] = None, prefs=None, rates: Optional[dict] = None,
                   notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
                   aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
-                  b2b: Optional[dict] = None) -> list[dict]:
+                  b2b: Optional[dict] = None, long_min: Optional[float] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
+    `long_min`: the 專項期 long day (engine/specific_phase.long_minutes); None = the base rule.
     `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
     week's B2B is decided here and written back as b2b["info"].
     `base_quality`: the base-phase session the gate picked for this week
@@ -123,7 +125,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         ss.append({"target": "", "detail": "", "source": "", "tss": 0.0, "day": None,
                    "done": False, "done_by": None, **kw})
 
-    long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
+    if long_min is None:
+        long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
     long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
     info = None
     if b2b is not None:
@@ -371,6 +374,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     cb = cur.get("b2b") or {}
     b2b_state = B2B.next_state(cb, monday, cur_s)          # 連續兩天長天 (engine/b2b.py)
     lc_cur = cur.get("steep_hill") or {}                    # 陡坡健走（模擬負重） (engine/steep_hill.py)
+    sp_cur = cur.get("specific") or {}                      # 專項期 (engine/specific_phase.py)
+    recent_long = [longest, float(sp_cur.get("longest28") or 0.0)]   # the long days of the last 4 weeks
     prev_mode = cur.get("mode")
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
@@ -442,11 +447,21 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 step += 1
         b2b = {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode, "weight": cb.get("weight"),
                "accepted": b2b_accepted}
+        sp_info = SP.projected_context(kind, mode, week, sp_cur) if sp_cur.get("race") else None
+        sp_long = SP.long_minutes(sp_info, max(recent_long[-4:])) if sp_info else None
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
                            dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
-                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b)
+                           aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
+                           long_min=sp_long)
+        if sp_info and sp_info.get("active"):
+            try:
+                SP.decorate(ss, sp_info)
+                SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=b2b.get("info"), notes=notes,
+                               rates=cur.get("tss_per_category"))
+            except Exception:              # noqa: BLE001 — never breaks the projection
+                pass
         b2b_info = b2b.get("info") or {}
         b2b_sug = B2B.suggestion(b2b_info, week, next((s["day"] for s in ss if s.get("id") == "long"), None),
                                  enabled=getattr(prefs, "b2b", True) is not False)
@@ -498,9 +513,11 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),
                     **({"steep_hill": SH.public(lc_info)} if lc_info and lc_info.get("active") else {}),
+                    **({"specific": SP.public(sp_info)} if sp_info and sp_info.get("active") else {}),
                     **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None)
+        recent_long.append(float(long_n["minutes"]) if long_n else 0.0)
         if long_n:
             # a B2B day 1 shortened to fit the pair (engine/b2b.py) doesn't lower the long-run base
             longest = max(longest, float(long_n["minutes"])) if b2b_info.get("due") else \
