@@ -1156,13 +1156,8 @@ function drawInto(box, res) {
   if (res.range_note) box.insertAdjacentHTML("beforeend", `<p class="meta range-note">${esc(res.range_note)}</p>`);
   if (res.basis_note) box.insertAdjacentHTML("beforeend", `<p class="meta basis-note">${esc(res.basis_note)}</p>`);
   const rb = res.recent_bests;
-  if (rb?.note) {
-    // 「近 7 天新高：12 分鐘 +18 W、…」 or why there is none
-    const body = rb.items?.length
-      ? `近 ${rb.window} 天新高：` + rb.items.map((i) => `<b>${esc(i.label)} +${esc(String(i.gain))} W</b>`).join("、")
-      : esc(rb.note);
-    box.insertAdjacentHTML("beforeend", `<p class="meta recent-note">${body}</p>`);
-  }
+  // the gains are read off the chart (owner: no list of 「+32 W」 under it); only say why there's none
+  if (rb?.note && !rb.items?.length) box.insertAdjacentHTML("beforeend", `<p class="meta recent-note">${esc(rb.note)}</p>`);
   if (res.kind === "zones") drawZones(box, res);
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "z5gate") drawZ5Gate(box, res);

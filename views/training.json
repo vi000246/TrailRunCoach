@@ -359,13 +359,13 @@
         {
           "id": "run-power-recent-bests",
           "title": "跑步功率曲線：近 7 天新高",
-          "description": "所選範圍的最大平均功率曲線（MMP，每個時長的最佳平均功率）。紅色區塊 = 最近 N 天（含今天）跑出比範圍內更早的紀錄還高的時長，也就是「最近進步的地方」；下方列出進步的時長和多了幾瓦。和 WKO5 PDC 耐力模型的「New Bests」同一個算法（最近 = 今天往回 N 天，更早 = 範圍開始到今天 −N 天），可切換 7／14／28 天。",
+          "description": "黃線 = 所選範圍每個時長的最佳平均功率（MMP）。紅色區塊 = 最近 N 天跑出比以前更高的時長，也就是最近進步的地方。「以前」至少往回比 90 天（所選範圍更長就用整個範圍）：功率曲線要有夠長的資料才準，Stryd 自動 CP 和 WKO5 的功率模型都看近 90 天；只拿幾週比，很多時長都會變成「新高」，那不是真的進步。可切換 7／14／28 天；同 WKO5 PDC 的 New Bests 算法。",
           "window": {"default": 7, "choices": [7, 14, 28]},
           "axes": [{"id": "WATTS", "min": 0}],
           "series": [
             {"name": "MMP 曲線", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#c9a227", "line_width": "medium", "expression": "meanmax(runpower)"},
-            {"name": "近 7 天新高", "type": "area", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#e8431c", "line_width": "medium", "expression": "@win := 7, @historic := athleterange(min({begindate,today-@win}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent)"},
-            {"name": "進步幅度", "role": "recent_gain", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "expression": "@win := 7, @historic := athleterange(min({begindate,today-@win}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent - @historic)"}
+            {"name": "近 7 天新高", "type": "area", "x_axis": "HMSSHORT", "y_axis": "WATTS", "color": "#e8431c", "line_width": "medium", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent)"},
+            {"name": "進步幅度", "role": "recent_gain", "type": "line", "x_axis": "HMSSHORT", "y_axis": "WATTS", "expression": "@win := 7, @historic := athleterange(min({begindate,today-90}), min({enddate,today-@win}), meanmax(runpower)), @recent := athleterange(today-@win+1, today, meanmax(runpower)), if(@recent > @historic, @recent - @historic)"}
           ]
         }
       ]
