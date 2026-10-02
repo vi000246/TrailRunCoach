@@ -1778,13 +1778,17 @@ def carry_over(old: dict, new: dict, store: RouteStore) -> None:
 # reading a .wko4 into a compact track
 # ---------------------------------------------------------------------------
 
-def read_track(file: str, path: Path, meta: dict, corrections=None) -> Optional[dict]:
-    """Parse one .wko4 (without Dataset's parse cache) into a compact track."""
+def read_track(file: str, path: Path, meta: dict, corrections=None, parsed=None) -> Optional[dict]:
+    """Parse one .wko4 (without Dataset's parse cache) into a compact track.
+    `parsed`: an already-parsed file with the same channels (a FIT dataset's
+    Wko4File, fitdataset.wko4) — how routes work without a WKO5 folder."""
     from backend.files.wko4_file import read_wko4
     fam = family_of(meta.get("sport", ""), meta.get("sport_type", ""))
     if fam is None:
         return None
-    f = read_wko4(path)
+    f = parsed if parsed is not None else read_wko4(path)
+    if f is None:
+        return None
     ch = f.channels
     t, lat, lon = ch.get("elapsedtime"), ch.get("latitude"), ch.get("longitude")
     if not t or not lat or not lon:

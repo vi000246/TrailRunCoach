@@ -47,6 +47,7 @@ async def set_manual(name: str, body: Manual, db: AsyncSession = Depends(get_db)
     await repo.set(CAL.key(name), {"value": body.value, "se": None, "n": int(prev.get("n") or 0),
                                    "fitted_at": today_local().isoformat(), "source": "user"})
     await db.commit()
+    CAL.forget_reads()
     return CAL.describe(name, await repo.get(CAL.key(name)))
 
 
@@ -57,6 +58,7 @@ async def clear_manual(name: str, db: AsyncSession = Depends(get_db)):
     repo = SettingsRepository(db, current_athlete_id())
     await repo.set(CAL.key(name), None)
     await db.commit()
+    CAL.forget_reads()
     return CAL.describe(name, None)
 
 

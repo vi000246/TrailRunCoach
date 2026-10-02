@@ -777,6 +777,28 @@ class FitFolderDataset(Dataset):
                     self.settings_ignored.append({"field": col, "value": r[col], "date": d.isoformat(),
                                                   "why": IGNORED_WHY})
 
+    def _coros_lthr_prior(self) -> list:
+        """generalize-athlete P7: without any hard run to estimate from, the
+        watch account's LTHR (COROS zoneData, kept in settings_ignored) is the
+        prior — applied from its date, labelled 「來自手錶」. With estimates
+        the runner's own data wins (the watch value can be far off: the
+        author's 182 vs a 171 bpm test peak) and the watch value stays ignored."""
+        rows = [r for r in self.settings_ignored if r.get("field") == "lthr" and r.get("value")]
+        if not rows:
+            return []
+        out = []
+        for r in sorted(rows, key=lambda r: r["date"]):
+            try:
+                out.append((dt.date.fromisoformat(r["date"]), float(r["value"])))
+            except (TypeError, ValueError):
+                continue
+        if out:
+            self.athlete.settings["runthr"] = [NOT_BEFORE] + out
+            self._setting_labels["runthr"] = "來自手錶（COROS 帳號的 LTHR；還沒有夠硬的跑步可以自己估）"
+            for r in rows:
+                r["why"] = "沒有硬的跑步可以估 LTHR：先用手錶的值（推估）"
+        return out
+
     def _estimate_settings(self) -> bool:
         """As-of running LTHR estimated from these FITs, on a grid of dates
         every ESTIMATE_STEP_DAYS: the value estimated on a grid day (only runs
@@ -820,6 +842,8 @@ class FitFolderDataset(Dataset):
         if thr:
             self.athlete.settings["runthr"] = [NOT_BEFORE] + thr
             self._setting_labels["runthr"] = SETTING_LABELS["estimate"]
+        else:
+            thr = self._coros_lthr_prior()
         self._estimate_cp(first, end)
         self.memo.clear()
         return bool(thr)

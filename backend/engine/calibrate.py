@@ -92,6 +92,7 @@ def _load_items() -> None:
     """Import the modules that register items (idempotent)."""
     from backend.engine import drift_agg  # noqa: F401  (aet_heat_beta)
     from backend.engine import heat_calib  # noqa: F401  (hadley_hr_beta, humidity_default, home_*)
+    from backend.engine import effort_calib  # noqa: F401  (trail_max_min_km, trail_max_min_min, effort_rest_max)
 
 
 def validate_entry(v) -> None:
@@ -165,10 +166,25 @@ def describe(name: str, stored: Optional[dict]) -> dict:
 # reading (sync) and fitting
 # ---------------------------------------------------------------------------
 
+_READ_MEMO: dict = {}
+_READ_TTL_S = 10.0          # engine loops read the same entry per activity: one DB read per 10 s
+
+
 def stored_entry(name: str, user_id: int = 1) -> Optional[dict]:
-    from backend.engine.wko5expr.datasource import read_setting
+    import time
+    from backend.engine.wko5expr.datasource import _db_path, read_setting
+    mk = (name, user_id, str(_db_path()))
+    hit = _READ_MEMO.get(mk)
+    if hit and time.monotonic() - hit[0] < _READ_TTL_S:
+        return hit[1]
     v = read_setting(key(name), None, user_id)
-    return v if isinstance(v, dict) else None
+    v = v if isinstance(v, dict) else None
+    _READ_MEMO[mk] = (time.monotonic(), v)
+    return v
+
+
+def forget_reads() -> None:
+    _READ_MEMO.clear()
 
 
 def entry(name: str, user_id: int = 1) -> dict:
@@ -213,6 +229,7 @@ async def calibrate(db, athlete_id: int = 1, ds=None, today: Optional[dt.date] =
         from backend.api.wko5views import _dataset
         ds = await asyncio.to_thread(_dataset, False)
     updates, skipped = await asyncio.to_thread(run, ds, stored, today)
+    forget_reads()
     for n, e in updates.items():
         await repo.set(key(n), e)
     await db.commit()
