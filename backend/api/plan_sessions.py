@@ -32,6 +32,7 @@ from backend.engine import plan_store as PS
 from backend.engine import projection as P
 from backend.engine import reconcile as R
 from backend.sync import coros_workouts as CW
+from backend.sync import workout_targets as WT
 
 router = APIRouter(prefix="/api/v1/overview/plan", tags=["overview"])
 
@@ -67,7 +68,8 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     if hit is not None:
         return hit
     st = _status(ds, today)
-    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc)
+    from backend.engine.panels.race_refs import calculator_hours
+    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc, race_predict=calculator_hours)
     monday = dt.date.fromisoformat(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=P.MAX_WEEKS, days=6)
     ph = st.phase
@@ -86,7 +88,9 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     acts = activity_rows(ds, since, today + dt.timedelta(days=1))
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
-           "horizon_end": horizon.isoformat(), "thresholds": cur.get("thresholds") or {},
+           "horizon_end": horizon.isoformat(),
+           # + threshold pace (s/km, 推估): % / zone pace targets reach the watch (COROS intensityType 3)
+           "thresholds": {**(cur.get("thresholds") or {}), "tpace": _tpace()},
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
@@ -247,12 +251,17 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
     return today, inp["phase_push_end"]
 
 
-def _view(s: dict, inp: dict, rows: dict, today: str) -> dict:
+def _view(s: dict, inp: dict, rows: dict, today: str, prov=None) -> dict:
+    """`coros` keeps its name in the API: the push status at the active provider."""
+    prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
     if s["state"] == "active":
-        v["coros"] = CW.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
+        v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
+        note = pace_note(s, inp["thresholds"])
+        if note:
+            v["coros"] = {**v["coros"], "pace_note": note, "tpace_link": tpace_link()}
     elif s["uid"] in rows:
-        v["coros"] = {"status": "pushed_" + s["state"], **CW._row_view(rows[s["uid"]])}
+        v["coros"] = {"status": "pushed_" + s["state"], **prov.row_view(rows[s["uid"]])}
     return v
 
 
@@ -278,9 +287,10 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]
     today = _today(inp)
-    rows = await CW.all_rows(db)
+    prov = await WT.active(db)
+    rows = await prov.all_rows(db)
     return {**_meta(inp), "summary": _summary(every, inp),
-            "sessions": [_view(s, inp, rows, today) for s in ss if s["state"] != "deleted"
+            "sessions": [_view(s, inp, rows, today, prov) for s in ss if s["state"] != "deleted"
                          and s["state"] != "superseded"]}
 
 
@@ -560,6 +570,13 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
                                 _busy_days(stored, sg["week"]), sg.get("long_day"))
 
     rows = SG.b2b_rows(inp, today, pairs)
+
+    def sim_opts(sg: dict) -> list[dict]:
+        from backend.engine import specific_phase as SP
+        return SP.sim_day_options(sg, first, set(bl), PR.allowed if PR is not None else None,
+                                  PR.cap_weekday if PR is not None else None, lambda w: _busy_days(stored, w))
+
+    rows += SG.race_sim_rows(inp, sim_opts, stored)          # 賽事模擬 (engine/specific_phase.py)
     tests = await _suggestions(db, inp, dismissed={})
     rows += SG.test_rows(tests, R.monday_of(today))
     tpl = _test_templates(inp.get("thresholds") or {}, prefs)
@@ -657,6 +674,8 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
         raise HTTPException(400, "現在沒有這個建議（可能已經排入或關掉了）")
     if sg["type"] == "b2b":
         out = await _accept_b2b(db, inp, sg, day)
+    elif sg["type"] == "race_sim":
+        out = await _accept_race_sim(db, inp, sg, day)
     elif sg["type"] == "test":
         tests = await _suggestions(db, inp, dismissed={})
         t = next((x for x in tests if x["kind"] == sg["kind"]), None)
@@ -738,6 +757,34 @@ async def _accept_b2b(db: AsyncSession, inp: dict, sg: dict, day: Optional[str])
         await _save_setting(db, B2B.ACCEPTED_KEY, acc)
         raise _err(e)
     return {"sessions": added, "accepted": entry}
+
+
+async def _accept_race_sim(db: AsyncSession, inp: dict, sg: dict, day: Optional[str]) -> dict:
+    """賽事模擬 (engine/specific_phase.py): the day (or day pair) becomes the user's
+    session(s); the generator's long day (and B2B day 2) of that week is tombstoned —
+    the simulation is that week's long day."""
+    from backend.engine import plan_auto as PA
+    opt = next((o for o in sg.get("options") or [] if o["day"] == day), None)
+    if opt is None:
+        raise HTTPException(400, "這天不適合排賽事模擬（不是可練日、在不排課日期內，或已經有你自己的課）")
+    days = [opt["day"]] + ([opt["end"]] if sg.get("multi") and opt.get("end") else [])
+    week = R.monday_of(days[0])
+    end = (dt.date.fromisoformat(week) + dt.timedelta(days=6)).isoformat()
+    added = []
+    try:
+        async with _wlock():
+            for s, d in zip(sg.get("sessions") or [], days):
+                data = {k: v for k, v in s.items() if v is not None}
+                added.append(await PS.add(db, {**data, "day": d}, _today(inp), blocked=PS.blocked_map(inp)))
+            for s in await PS.load(db):
+                if (s["state"] == "active" and s.get("origin") == "auto" and s.get("gen_key") in ("long", "long2")
+                        and s.get("day") and week <= s["day"] <= end):
+                    await PS.delete(db, s["uid"])
+            if await PA.pending(db) is None:
+                await PS.plan_reconcile(db, inp, apply=True)
+    except PS.PlanError as e:
+        raise _err(e)
+    return {"sessions": added}
 
 
 async def _b2b_cancelled(db: AsyncSession, uid: str) -> Optional[dict]:
@@ -864,6 +911,40 @@ def _tpace() -> Optional[float]:
         return None
 
 
+TPACE_CHART = "friel-pace-zones"           # views/periodization.json: Friel pace zones (shows the estimate)
+
+
+@functools.lru_cache(maxsize=1)
+def tpace_link() -> Optional[str]:
+    """The viewer deep link to where threshold pace is estimated and shown (the Friel
+    pace-zone chart, enlarged); None when the view isn't there."""
+    import json
+    from pathlib import Path
+    from urllib.parse import urlencode
+    try:
+        p = Path(__file__).resolve().parents[2] / "views" / "periodization.json"
+        v = json.loads(p.read_text("utf-8"))
+        for di, d in enumerate(v.get("dashboards") or []):
+            for ci, c in enumerate(d.get("charts") or []):
+                if c.get("id") == TPACE_CHART:
+                    return "/api/v1/static/wko5_viewer.html?" + urlencode({"view": v["name"], "dash": di, "chart": ci})
+    except (OSError, ValueError, KeyError):
+        pass
+    return None
+
+
+def pace_note(s: dict, thresholds: Optional[dict]) -> Optional[str]:
+    """The push preview's note for a session whose stored steps have % / zone pace targets
+    while there is no threshold pace (those steps reach the watch with no pace target)."""
+    from backend.engine import workout_steps as WS
+    if (thresholds or {}).get("tpace") or not s.get("steps"):
+        return None
+    try:
+        return WS.no_tpace_text() if WS.needs_tpace(WS.normalize(s["steps"])) else None
+    except WS.StepsError:
+        return None
+
+
 def _session_of(body: dict, stored: Optional[dict]) -> dict:
     s = dict(stored or {})
     for k in STEP_FIELDS:
@@ -902,6 +983,7 @@ def _context(env: dict) -> dict:
     from backend.engine import workout_steps as WS
     th, pol = env["th"], env["policy"]
     return {"thresholds": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source")},
+            "tpace_link": tpace_link(),
             "zones": WS.zones_table(env["ctx"]), "policy": pol,
             "basis_label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）",
             "cap": env["cap"], "cap_mode": env["cap_mode"], "rung": env["rung"],
@@ -1166,9 +1248,10 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
     async with _wlock():
         await _ensure(db, inp)
         new, changes = await PS.plan_reconcile(db, inp, apply=False)
-    rows = await CW.all_rows(db)
+    prov = await WT.active(db)
+    rows = await prov.all_rows(db)
     bl = PS.blocked_map(inp)
-    todo = [_view(s, inp, rows, today) for s in _in_range(new, a, b, bl)]
+    todo = [_view(s, inp, rows, today, prov) for s in _in_range(new, a, b, bl)]
     pushable = [s for s in todo if s["coros"]["status"] not in ("skipped", "done")]
     will = [s for s in pushable if s["coros"]["status"] != "pushed"]
     missed = [s for s in new if s["state"] == "missed" and s["uid"] in rows]
@@ -1177,6 +1260,10 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
             "count": len(pushable), "to_send": len(will), "unchanged": len(pushable) - len(will),
             "skipped": [s for s in todo if s["coros"]["status"] == "skipped"],
             "missed_to_remove": len(missed), "blackout_to_remove": len(on_bl),
+            # sessions whose % / zone pace steps go out with no pace target (no threshold pace)
+            "pace_notes": [{"uid": s["uid"], "title": s.get("title"), "day": s.get("day"), "text": s["coros"]["pace_note"]}
+                           for s in pushable if s["coros"].get("pace_note")],
+            "tpace_link": tpace_link(),
             "changes": changes, "by_day": R.by_day(changes)}
 
 
@@ -1184,8 +1271,10 @@ def _on_blocked(ss: list[dict], blocked: dict, today: str) -> list[dict]:
     return [s for s in ss if s["state"] == "active" and s.get("day") and s["day"] >= today and s["day"] in blocked]
 
 
-def _auth(e: CW.CorosAuthError):
-    return HTTPException(401, {"error": "COROS_AUTH_REQUIRED", "detail": str(e), "hint": "到設定頁重新登入 COROS"})
+def _auth(e: WT.SyncAuthError, prov=None):
+    label = getattr(prov, "label", "COROS")
+    code = "COROS_AUTH_REQUIRED" if getattr(prov, "id", "coros") == "coros" else "SYNC_AUTH_REQUIRED"
+    return HTTPException(401, {"error": code, "detail": str(e), "hint": f"到設定頁重新登入 {label}"})
 
 
 @router.post("/push-coros")
@@ -1197,7 +1286,8 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         await _ensure(db, inp)
         new, changes = await PS.plan_reconcile(db, inp, apply=True)
         live = {s["uid"] for s in new if s["state"] in ("active", "done", "missed")}
-        rows = await CW.all_rows(db)
+        prov = await WT.active(db)
+        rows = await prov.all_rows(db)
         # pushed sessions gone from the plan (deleted / superseded / regenerated away);
         # past-day ones stay, see push_sessions. Missed ones are removed separately.
         stale = [k for k in rows if k not in live]
@@ -1206,10 +1296,10 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         stale += [s["uid"] for s in _on_blocked(new, bl, today) if s["uid"] in rows]
         missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
         try:
-            res = await CW.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
-                                         today, stale_keys=stale, missed_keys=missed)
-        except CW.CorosAuthError as e:
-            raise _auth(e)
+            res = await prov.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
+                                           today, stale_keys=stale, missed_keys=missed)
+        except WT.SyncAuthError as e:
+            raise _auth(e, prov)
     return {"scope": scope, "start": a, "end": b, "changes": changes, **res}
 
 
@@ -1218,12 +1308,13 @@ async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSessio
     inp = await _inputs()
     a, b = _range(scope, day, inp)
     async with _wlock():
-        rows = await CW.all_rows(db)
+        prov = await WT.active(db)
+        rows = await prov.all_rows(db)
         keys = [k for k, r in rows.items() if r.day and a <= r.day <= b]
         try:
-            return {"scope": scope, "start": a, "end": b, "removed": await CW.remove_keys(db, keys)}
-        except CW.CorosAuthError as e:
-            raise _auth(e)
+            return {"scope": scope, "start": a, "end": b, "removed": await prov.remove_keys(db, keys)}
+        except WT.SyncAuthError as e:
+            raise _auth(e, prov)
 
 
 # ---------------------------------------------------------------------------
@@ -1532,10 +1623,12 @@ async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
     if authed and exp is not None:
         exp = exp if exp.tzinfo else exp.replace(tzinfo=dt.timezone.utc)
         authed = dt.datetime.now(dt.timezone.utc) < exp
-    rows = await CW.all_rows(db)
+    prov = await WT.active(db)
+    rows = await prov.all_rows(db)
     last = max((r.pushed_at for r in rows.values() if r.pushed_at), default=None)
     n = lambda k: sum(1 for s in views if s["state"] == "active" and (s.get("coros") or {}).get("status") == k)
-    return {"authenticated": authed, "last_pushed_at": last.isoformat() if last else None,
+    return {"provider": prov.id, "provider_label": prov.label,
+            "authenticated": authed, "last_pushed_at": last.isoformat() if last else None,
             "outdated": n("outdated"), "failed": n("failed"), "pushed": n("pushed") + n("updated"),
             "not_pushed": n("not_pushed")}
 

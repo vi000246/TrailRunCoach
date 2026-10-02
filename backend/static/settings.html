@@ -81,10 +81,29 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="settings"></script>
+<script src="/api/v1/static/calib_chip.js"></script>
 <header>
   <h1>設定</h1>
 </header>
 <main>
+  <section id="general">
+    <h2>一般設定 <button type="button" class="q" aria-label="說明" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每次量體重記一筆，圖表依日期套用當時的體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；出生年用在熱量估算。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <div class="row">
+      <label>性別 <select id="p-sex"><option value="">（未填）</option><option value="male">男</option><option value="female">女</option></select></label>
+      <label>身高 <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
+      <label>出生年 <input type="number" id="p-birth" min="1920" max="2020" step="1" style="width:80px"></label>
+      <label>功率來源 <select id="p-meter"><option value="">自動（依資料）</option><option value="stryd">Stryd</option>
+        <option value="watch">手錶推估功率</option><option value="none">沒有功率計</option></select></label>
+    </div>
+    <table class="wt"><thead><tr><th>日期</th><th>體重 kg</th><th></th></tr></thead><tbody id="weights"></tbody></table>
+    <div class="row">
+      <button id="addw">＋ 新增一筆體重</button>
+      <button class="primary" id="saveprof">儲存</button>
+      <span class="meta" id="profnow"></span>
+    </div>
+    <p class="meta" id="profwko5"></p>
+  </section>
+
   <section id="mode">
     <h2>計算模式</h2>
     <p class="meta">首頁、圖表分析和狀態判斷都會用這裡選的模式。</p>
@@ -122,9 +141,14 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     <h2>功率</h2>
     <div class="row" style="margin-top:4px">
       <label><input type="checkbox" id="u-power"> 使用功率</label>
-      <button type="button" class="q" aria-label="說明" title="只用心率訓練（沒有 Stryd 或不看功率）就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、W′ 電池、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
+      <button type="button" class="q" aria-label="說明" title="預設跟著「一般設定」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、W′ 電池、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
       <span class="meta" id="u-power-note"></span>
+      <button type="button" id="u-power-auto" hidden>改回自動</button>
     </div>
+    <details style="margin-top:6px"><summary class="meta">進階設定</summary>
+      <div class="row"><label><input type="checkbox" id="u-watch"> 功率模型也採用手錶推估功率</label>
+        <button type="button" class="q" aria-label="說明" title="預設只有 Stryd 的功率會進 CP、功率曲線、功率 TSS 和比賽功率；沒有 Stryd 的人用心率。打開後手錶推估功率也算（同一支手錶的功率量尺一致，但準度沒驗證過，數字都當推估）。">?</button></div>
+    </details>
   </section>
 
   <section id="sync">
@@ -151,6 +175,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
           <option value="wko5">WKO5 資料夾（比對用）</option></select></label>
       </div>
       <div class="row"><label><input type="checkbox" id="s-second"> 自動同步時也同步另一個來源</label></div>
+      <div class="row"><label>課表推送到 <select id="s-push"></select></label>
+        <button type="button" class="q" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
         （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
@@ -257,24 +283,6 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <button class="danger primary" id="pd-ok" disabled>確認刪除</button><button id="pd-cancel">取消</button></div>
   </dialog>
 
-  <section>
-    <h2>個人資料</h2>
-    <p class="meta">體重用在 W/kg、跑步效能 RE 和功率計算機。每次量體重記一筆，圖表會依日期套用當時的體重；沒填的就用 WKO5 裡的值。只在「我的算式」模式生效。</p>
-    <div class="row">
-      <label>性別 <select id="p-sex"><option value="">（沿用 WKO5）</option><option value="male">男</option><option value="female">女</option></select></label>
-      <label>身高 <input type="number" id="p-height" min="100" max="250" step="1" style="width:80px"> cm</label>
-      <label>功率計 <select id="p-meter"><option value="">（未設定）</option><option value="stryd">Stryd</option>
-        <option value="coros">COROS</option><option value="garmin">Garmin</option><option value="other">其他</option></select></label>
-    </div>
-    <table class="wt"><thead><tr><th>日期</th><th>體重 kg</th><th></th></tr></thead><tbody id="weights"></tbody></table>
-    <div class="row">
-      <button id="addw">＋ 新增一筆體重</button>
-      <button class="primary" id="saveprof">儲存個人資料</button>
-      <span class="meta" id="profnow"></span>
-    </div>
-    <p class="meta" id="profwko5"></p>
-  </section>
-
   <section id="map">
     <h2>地圖</h2>
     <p class="meta">單次活動的路線地圖一開始用的底圖和疊圖。在地圖右上角可以臨時切換，這台瀏覽器會記住；這裡的預設改了之後，會回到新的預設。</p>
@@ -291,6 +299,14 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <button class="primary" id="m-save">儲存地圖設定</button>
     </div>
     <p class="meta">魯地圖和等高線的主機有時不回應，地圖載不出來時換個底圖就好。</p>
+  </section>
+
+  <section id="calib" hidden>
+    <details><summary class="meta">進階設定：自動估算的參數</summary>
+      <p class="meta">這些數字會用你的資料自動估算（每次同步到新活動後重算），資料不夠時用文獻或推估的預設值。滑到標籤上看說明；只有確定時才手動指定。</p>
+      <table class="wt"><tbody id="calib-rows"></tbody></table>
+      <div class="row"><button id="calib-run">現在重新估算</button><span class="meta" id="calib-msg"></span></div>
+    </details>
   </section>
 
   <section>
@@ -421,19 +437,28 @@ let PROF = null;
 async function loadProfile() {
   PROF = await j("/api/v1/plan/profile");
   const p = PROF.profile, e = PROF.effective, wk = PROF.wko5;
-  $("p-sex").value = p.sex || ""; $("p-height").value = p.height_cm || ""; $("p-meter").value = p.power_meter || "";
+  $("p-sex").value = p.sex || ""; $("p-height").value = p.height_cm || ""; $("p-meter").value = e.power_source || "";
+  $("p-birth").value = p.birth_year || "";
   $("p-height").placeholder = wk.height_cm || "";
   renderWeights();
-  $("profnow").textContent = `目前使用：${e.weight ?? "–"} kg（${e.weight_source}）`;
-  $("profwko5").textContent = `WKO5 裡的資料：身高 ${wk.height_cm ?? "–"} cm、性別 ${({ male: "男", female: "女" })[wk.sex] || "–"}、體重紀錄 `
+  $("profnow").textContent = e.weight != null ? `目前使用：${e.weight} kg（${e.weight_source || "–"}）`
+    : "還沒有體重：請新增一筆（W/kg、功率計算機、背包預設都會用到）";
+  const hasWko5 = wk.height_cm || wk.sex || wk.weights.length;
+  $("profwko5").textContent = !hasWko5 ? "" : `WKO5 裡的資料：身高 ${wk.height_cm ?? "–"} cm、性別 ${({ male: "男", female: "女" })[wk.sex] || "–"}、體重紀錄 `
     + (wk.weights.length ? wk.weights.map((w) => `${w.date} ${w.kg} kg`).join("、") : "無");
+  // 功率來源 pre-fill: what the last 90 days of runs show (shown on the 自動 option)
+  j("/api/v1/plan/profile/detect").then((d) => {
+    const s = d.power_source && d.power_source.source;
+    $("p-meter").options[0].textContent = s ? `自動（偵測到：${d.labels[s]}）` : "自動（依資料）";
+    PROF.appWeight = d.weight;
+  }).catch(() => {});
 }
 function renderWeights() {
   $("weights").innerHTML = PROF.weights.map((w, i) => `<tr>
     <td><input type="date" data-i="${i}" data-f="date" value="${esc(w.date)}"></td>
     <td><input type="number" data-i="${i}" data-f="kg" step="0.1" min="25" max="250" value="${w.kg}" style="width:90px"></td>
     <td><button class="x" data-rm="${i}">移除</button></td></tr>`).join("")
-    || `<tr><td colspan="3" class="meta">還沒有紀錄（目前沿用 WKO5 的體重）</td></tr>`;
+    || `<tr><td colspan="3" class="meta">還沒有紀錄${PROF.wko5.weights.length ? "（目前沿用 WKO5 的體重）" : ""}</td></tr>`;
 }
 $("weights").addEventListener("change", (e) => {
   const i = e.target.dataset.i; if (i == null) return;
@@ -442,12 +467,14 @@ $("weights").addEventListener("change", (e) => {
 $("weights").addEventListener("click", (e) => { const i = e.target.dataset.rm; if (i == null) return; PROF.weights.splice(+i, 1); renderWeights(); });
 $("addw").onclick = () => {
   const last = PROF.weights.at(-1) || PROF.wko5.weights.at(-1);
-  PROF.weights.push({ date: new Date().toISOString().slice(0, 10), kg: last ? last.kg : 65 }); renderWeights();
+  const kg = last ? last.kg : (PROF.effective.weight ?? PROF.appWeight ?? "");
+  PROF.weights.push({ date: new Date().toISOString().slice(0, 10), kg }); renderWeights();
 };
 $("saveprof").onclick = async () => {
   const body = { weights: PROF.weights.filter((w) => w.date && w.kg),
     sex: $("p-sex").value || null, height_cm: $("p-height").value ? Number($("p-height").value) : null,
-    power_meter: $("p-meter").value || null };
+    birth_year: $("p-birth").value ? Number($("p-birth").value) : null,
+    power_source: $("p-meter").value || null };
   try {
     await j("/api/v1/plan/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast("已儲存，圖表會用新的體重重算"); loadProfile();
@@ -475,9 +502,17 @@ async function loadSyncSettings() {
     ? (SS.primary_effective_label ? `目前用 ${SS.primary_effective_label}` : "還沒有同步資料") : "";
   $("s-chart").value = SS.chart_data_source || "synced";
   $("s-second").checked = !!SS.secondary_auto;
+  $("s-push").innerHTML = (SS.push_providers || [{ id: "coros", label: "COROS", enabled: true }])
+    .map((p) => `<option value="${esc(p.id)}"${p.enabled ? "" : " disabled"}>${esc(p.label)}</option>`).join("");
+  $("s-push").value = SS.push_provider || "coros";
   $("m-base").value = SS.map_basemap || "rudy";
   $("u-power").checked = SS.use_power !== false;
-  $("u-power-note").textContent = SS.use_power === false ? "已關閉：只顯示心率／配速的圖" : "";
+  const PSL = { stryd: "Stryd", watch: "手錶推估功率", none: "沒有功率計" };
+  $("u-power-note").textContent = SS.use_power_stored == null
+    ? `自動：功率來源 ${PSL[SS.power_source] || "–"}（${SS.power_source_how || "–"}）`
+    : (SS.use_power === false ? "已關閉：只顯示心率／配速的圖" : "");
+  $("u-power-auto").hidden = SS.use_power_stored == null;
+  $("u-watch").checked = !!SS.accept_watch_power;
   document.querySelectorAll('input[name="m-ovl"]').forEach((c) => c.checked = (SS.map_overlays || []).includes(c.value));
   f("tp", "secretsrc").textContent = SRC_LABEL[SS.tp_client_credentials_source] || SS.tp_client_credentials_source;
   f("tp", "secretfile").textContent = SS.tp_client_file_exists ? "存在（內容不顯示）" : "不存在";
@@ -521,7 +556,7 @@ $("s-save").onclick = async () => {
     daily_sync_time: $("s-daily-on").checked ? $("s-daily").value : null,
     auto_on_open: $("s-open").checked, auto_on_open_hours: Number($("s-open-h").value) || 6,
     primary_source: $("s-primary").value || "auto", chart_data_source: $("s-chart").value,
-    secondary_auto: $("s-second").checked,
+    secondary_auto: $("s-second").checked, push_provider: $("s-push").value || "coros",
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast("已儲存同步設定"); loadSyncSettings(); }
@@ -559,6 +594,14 @@ document.querySelector("#power button.q").onclick = (e) => { $("u-power-note").t
 $("u-power").onchange = async (e) => {
   try { await putSetting({ use_power: e.target.checked });
     toast(e.target.checked ? "已開啟功率：重新整理其他頁面就會顯示功率的圖" : "已關閉功率：其他頁面重新整理後只顯示心率／配速"); loadSyncSettings(); }
+  catch (err) { toast("失敗：" + err.message.slice(0, 80)); e.target.checked = !e.target.checked; }
+};
+$("u-power-auto").onclick = async () => {
+  try { await putSetting({ use_power: null }); toast("已改回自動"); loadSyncSettings(); }
+  catch (err) { toast("失敗：" + err.message.slice(0, 80)); }
+};
+$("u-watch").onchange = async (e) => {
+  try { await putSetting({ accept_watch_power: e.target.checked }); toast("已更新：圖表會重算"); loadSyncSettings(); }
   catch (err) { toast("失敗：" + err.message.slice(0, 80)); e.target.checked = !e.target.checked; }
 };
 f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast("已更新"));
@@ -835,7 +878,40 @@ $("r-ok").onclick = async (e) => {
   } catch (err) { info.innerHTML = `<span class="err-text">還原失敗：${esc(reason(err))}</span>`; }
 };
 
-loadMode(); loadApplied(); loadProfile(); loadExclusions(); loadBackup();
+// 自動估算的參數 (engine/calibrate.py, api/calib.py)
+const CAL = "/api/v1/calib";
+function calibRows(items) {
+  $("calib").hidden = !items.length;
+  $("calib-rows").innerHTML = items.map((it) => `<tr data-n="${esc(it.name)}">
+    <td>${esc(it.label)}</td>
+    <td>${Number(it.value).toFixed(it.digits)} ${esc(it.unit)} ${calibChip(it.chip, it.source)}</td>
+    <td><input type="number" step="any" style="width:80px" placeholder="手動" ${it.source === "user" ? `value="${it.value}"` : ""}
+      ${it.bounds ? `min="${it.bounds[0]}" max="${it.bounds[1]}"` : ""}>
+      <button data-a="set">指定</button>${it.source === "user" ? ' <button data-a="auto">改回自動</button>' : ""}</td></tr>`).join("");
+}
+async function loadCalib() { try { calibRows((await j(CAL)).items); } catch (e) { $("calib").hidden = true; } }
+$("calib-rows").onclick = async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const tr = b.closest("tr"), name = tr.dataset.n;
+  try {
+    if (b.dataset.a === "auto") await j(`${CAL}/${name}`, { method: "DELETE" });
+    else {
+      const v = parseFloat(tr.querySelector("input").value);
+      if (!Number.isFinite(v)) return toast("請輸入數字");
+      await j(`${CAL}/${name}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: v }) });
+    }
+    toast("已儲存"); loadCalib();
+  } catch (err) { toast("儲存失敗：" + err.message.slice(0, 80)); }
+};
+$("calib-run").onclick = async (e) => {
+  const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = "估算中…";
+  try { const r = await j(`${CAL}/run`, { method: "POST" }); calibRows(r.items);
+    $("calib-msg").textContent = r.written.length ? `更新了 ${r.written.length} 項` : "資料還不夠，維持原值"; }
+  catch (err) { $("calib-msg").textContent = "失敗：" + err.message.slice(0, 80); }
+  b.disabled = false;
+};
+
+loadMode(); loadApplied(); loadProfile(); loadExclusions(); loadBackup(); loadCalib();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>

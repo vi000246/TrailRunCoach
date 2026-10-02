@@ -917,9 +917,9 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     else:
         segs = []
     if pack1 is None:
-        pack1 = CAP.PACK_DEFAULT_MULTI if n_days > 1 else CAP.PACK_DEFAULT_SINGLE
+        pack1 = CAP.pack_default(weight, n_days)
     pack_src = "手動" if opts.get("pack_kg") is not None else \
-        (f"預設 {pack1:g} kg（{'多日' if n_days > 1 else '單日'}）")
+        f"預設 {CAP.pack_default_text(weight)}"
 
     def load_of(n):
         if len(pack_by_day) >= n:

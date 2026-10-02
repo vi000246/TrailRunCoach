@@ -117,6 +117,13 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
             plan_auto.after_sync(source, result)
         except Exception as e:           # noqa: BLE001 — the sync result stands
             log.warning("auto plan trigger failed: %s", type(e).__name__)
+        # 每人校正 (engine/calibrate.py): the same trigger re-fits the per-athlete
+        # parameters in the background
+        try:
+            from backend.engine import calibrate
+            calibrate.after_sync(source, result, athlete_id)
+        except Exception as e:           # noqa: BLE001
+            log.warning("calibration trigger failed: %s", type(e).__name__)
         # new FIT files: rebuild the chart Dataset now (incremental: only the
         # new files are parsed), not on the next page load
         if int(result.get("downloaded") or 0) > 0:

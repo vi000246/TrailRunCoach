@@ -1065,6 +1065,7 @@ async function push(scope, day) {
       ${p.skipped.length ? `<p class="meta" style="margin:0">${p.skipped.length} 堂（肌力等）不推送。</p>` : ""}
       ${p.missed_to_remove ? `<p class="meta" style="margin:0">${p.missed_to_remove} 堂錯過的課會從 COROS 移除。</p>` : ""}
       ${p.blackout_to_remove ? `<p class="meta" style="margin:0">🏖 ${p.blackout_to_remove} 堂在不排課日期內的課會從 COROS 移除（課表裡保留，等你決定移動或刪除）。</p>` : ""}
+      ${(p.pace_notes || []).length ? `<p class="meta" style="margin:0;color:var(--watch)">⚠ ${esc(p.pace_notes[0].text)}：${p.pace_notes.map((n) => esc(`${md(n.day)} ${n.title || ""}`)).join("、")}${p.tpace_link ? ` <a href="${esc(p.tpace_link)}" target="_blank" rel="noopener">${esc((window.I18N ? I18N.t("workout.no_tpace_link", "看閾值配速怎麼估") : "看閾值配速怎麼估"))}</a>` : ""}</p>` : ""}
       ${scope === "phase" ? `<p class="meta" style="margin:0">最遠排到 ${md(p.end)}（最多 ${p.max_weeks} 週）。</p>` : ""}
       ${recN ? `<div><b style="font-size:13px">推送前會先依實際進度重排（${recN} 項）</b>${changesHtml(p.by_day)}</div>` : ""}`;
     if (!(await ask(`同步到 COROS · ${SCOPE_NAME[scope]}`, html, `推送 ${p.count} 堂`))) return;

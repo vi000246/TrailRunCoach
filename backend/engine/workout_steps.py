@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from backend.engine import interval_library as IL
+from backend.i18n import N_, _
 from backend.engine.zones import FRIEL_HR, FRIEL_PACE, PALLADINO_POWER_ZONES
 
 V = 1
@@ -77,6 +78,28 @@ HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "
 
 WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
+
+
+NO_TPACE = N_("沒有閾值配速：這段推到手錶不會有配速目標")
+
+
+def no_tpace_text() -> str:
+    return _(NO_TPACE)
+
+
+def needs_tpace(items) -> bool:
+    """A step whose pace target is % / zone of threshold pace (Daniels / Canova / Billat
+    templates); absolute s/km steps don't need one. `items`: a steps doc or its item list."""
+    items = items.get("items") if isinstance(items, dict) else items
+    for it in items or []:
+        if it.get("kind") == "repeat":
+            if needs_tpace(it.get("items")):
+                return True
+            continue
+        tg = it.get("target") or {}
+        if tg.get("type") == "pace" and tg.get("mode", "pct") in ("pct", "zone"):
+            return True
+    return False
 
 
 class StepsError(ValueError):
@@ -613,11 +636,12 @@ class Resolved:
     auto: bool = True               # the step follows 目標用 (not overridden)
     warn: str = ""
     err: str = ""
-    intensity: Optional[tuple] = None    # what COROS gets (power / hr only)
+    intensity: Optional[tuple] = None    # what COROS gets: ("power" | "hr" | "pace", lo, hi)
+    need: str = ""                       # "tpace": a % / zone pace target with no threshold pace
 
     def as_dict(self) -> dict:
         return {"type": self.type, "lo": self.lo, "hi": self.hi, "frac": self.frac, "text": self.text,
-                "sub": self.sub, "auto": self.auto, "warn": self.warn, "err": self.err,
+                "sub": self.sub, "auto": self.auto, "warn": self.warn, "err": self.err, "need": self.need,
                 "level": level(self.frac), "label": TYPE_LABEL.get(self.type, self.type)}
 
 
@@ -697,13 +721,16 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             lo, hi = _zone_of("pace", tg.get("zone"))
         if mode != "abs":
             if not c.tpace:
-                return Resolved("none", text="不設目標", auto=False, err="選了配速卻沒有閾值配速")
+                # a warning, not an error: the session can be saved and pushed, that step just
+                # has no pace target on the watch (absolute s/km steps never need it)
+                return Resolved("none", text=_("不設目標"), auto=False, warn=no_tpace_text(), need="tpace")
             lo, hi = lo * c.tpace, hi * c.tpace
         a, b = min(lo, hi), max(lo, hi)
         f = 1.0 / ((a + b) / 2 / c.tpace) if c.tpace else 0.8
         sub = f"{a / c.tpace * 100:.0f}–{b / c.tpace * 100:.0f}% 閾值配速（推估）" if c.tpace else ""
+        # COROS intensityType 3, s/km (verified 2026-10-02): lo = the faster bound
         r = Resolved("pace", a, b, f, f"{mmss(a)}–{mmss(b)} /km", sub, False,
-                     "COROS 配速單位未驗證：手錶上這段不設目標")
+                     intensity=("pace", round(a), round(b)))
     if r.lo is not None and r.hi is not None and r.lo > r.hi and r.type != "pace":
         r.err = "下限比上限高"
     if r.type == "power" and c.cp and (r.lo < 0.4 * c.cp or r.hi > 2.0 * c.cp):
@@ -1052,8 +1079,6 @@ def _name(st: dict, r: Resolved, em: _Emit, grouped: bool) -> str:
     tg = st.get("target") or {}
     if st["kind"] == "work" and tg.get("type") == "auto" and tg.get("intent") == "easy" and tg.get("plo") is not None:
         return "心率 ≤ AeT" if r.type == "hr" else "功率區間" if r.type == "power" else "照感覺"
-    if r.type == "pace":
-        return f"配速 {r.text}"
     if st["kind"] == "work" and not grouped:
         em.n_work += 1
         return f"第 {em.n_work} 趟 {fmt_dur(st['dur'])}"
@@ -1145,6 +1170,8 @@ def _ex_line(ex: dict) -> dict:
         tgt = f"功率 {ex['intensityValue']}–{ex['intensityValueExtend']} W"
     elif it == 2:
         tgt = f"心率 {ex['intensityValue']}–{ex['intensityValueExtend']} bpm"
+    elif it == 3:
+        tgt = f"配速 {mmss(ex['intensityValue'])}–{mmss(ex['intensityValueExtend'])} /km"
     else:
         tgt = "不設目標"
     return {"kind": EX_LABEL.get(ex["exerciseType"], "訓練"), "dur": dur, "target": tgt, "name": ex.get("name") or ""}
@@ -1170,7 +1197,6 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     rows = flat(steps["items"])
     res = [(row["st"], resolve(row["st"], c)) for row in rows]
     has_power = any(r.type == "power" for _, r in res)
-    has_pace = any(r.type == "pace" for _, r in res)
     unrolled = any(it.get("kind") == "repeat" and (not it.get("last_rest", True) or not _plain(it["items"]))
                    for it in steps["items"])
     dist = any(st["dur"]["type"] == "distance" for st, _ in res)
@@ -1182,8 +1208,8 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
         {"key": "ramp", "hit": False, "text": "沒有漸進（ramp）步驟：漸進只寫在步驟名稱"},
     ]
     lost = []
-    if has_pace:
-        lost.append("配速目標：COROS 配速單位還沒驗證，手錶上這段不設目標（配速寫在步驟名稱）")
+    if any(r.need == "tpace" for _st, r in res):
+        lost.append(no_tpace_text())
     if unrolled:
         lost.append("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段")
     if dist:
@@ -1305,7 +1331,11 @@ def templates(prefs=None) -> dict:
     g("trail", "有出處的課表", [r for t, r in lib if t.cat == "trail"])
     g("trail", "附加", [hills])
     from backend.engine.workout_templates import CATS
-    return {"cats": CATS, "groups": groups}
+    for gr in groups:
+        for r in gr["rows"]:
+            # the editor badges these when there is no threshold pace (their pace is × it)
+            r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
+    return {"cats": CATS, "groups": groups, "no_tpace_text": no_tpace_text()}
 
 
 def zones_table(c: Ctx) -> dict:

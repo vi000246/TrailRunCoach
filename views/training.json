@@ -318,7 +318,7 @@
             {"name": "越野跑", "type": "line", "y_axis": "NONE", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
             {"name": "登山健行", "type": "line", "y_axis": "NONE", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
             {"name": "20 一般", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,20)"},
-            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#e34948", "line_style": "dash", "expression": "(,40)"}
+            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,40)"}
           ]
         },
         {
