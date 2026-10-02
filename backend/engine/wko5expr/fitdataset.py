@@ -304,6 +304,20 @@ def workout_fields(t: np.ndarray, ch: dict[str, np.ndarray], group: str,
     return out
 
 
+def averages_of(hr: Optional[np.ndarray], power: Optional[np.ndarray]) -> dict:
+    """{avg_hr, avg_power} of one activity (the 活動列表 columns): the mean
+    of every valid sample, zeros included — WKO5's avg() (workout-metrics.md:
+    vi = NP / avg(power)). None without the channel or a positive sample."""
+    def mean(a):
+        if a is None:
+            return None
+        a = np.asarray(a, dtype=float)
+        ok = np.isfinite(a)
+        return float(a[ok].mean()) if ok.any() and np.nanmax(a) > 0 else None
+    hr_ok = None if hr is None else np.where(np.asarray(hr, dtype=float) > 0, hr, np.nan)   # 0 bpm = no reading
+    return {"avg_hr": mean(hr_ok), "avg_power": mean(power)}
+
+
 def _json_default(o):
     """numpy scalars / arrays in a cached_series value."""
     if isinstance(o, np.generic):
@@ -683,6 +697,28 @@ class FitFolderDataset(Dataset):
             d = ch.get("elapseddistance")
             return BA.features(tl, fitcache_list(d) if d is not None else None, pw)
         return self._store.derived(rel, "bad", sig, compute)
+
+    def averages(self, w: Workout) -> dict:
+        """{avg_hr, avg_power} of one workout (approved power corrections
+        applied), cached per file and corrections signature (field "avg")."""
+        rel = w.entry.file
+        sig = self._corr_sig(rel, "power")
+
+        def compute():
+            t, ch = self._arrays(rel)
+            pw = ch.get("power")
+            if pw is not None and self.corrections is not None:
+                vals = self.corrections.apply(rel, "power", t.tolist(), fitcache_list(pw))
+                pw = np.array([np.nan if v is None else v for v in vals], dtype=float)
+            return averages_of(ch.get("heartrate"), pw)
+        return self._store.derived(rel, "avg", sig, compute)
+
+    def save_cache(self) -> None:
+        """Write lazily computed per-file results (averages) to the cache index."""
+        try:
+            self._store.save()
+        except Exception:                       # noqa: BLE001 — a cache write never breaks a page
+            log.debug("fit cache save failed", exc_info=True)
 
     def _classify_power(self, rel: str, meta: dict) -> str:
         from backend.engine.power_source import classify

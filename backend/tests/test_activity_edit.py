@@ -297,7 +297,99 @@ def test_patch_activities_bulk_tags_type_and_excluded_by_key(tmp_path, monkeypat
     _run(_inner())
 
 
+# ---- 活動列表: avg HR / power, RPE, edits never touch the source files ---------------------
+
+def test_averages_of_sample_means():
+    import numpy as np
+    from backend.engine.wko5expr.fitdataset import averages_of
+    r = averages_of(np.array([0.0, 140.0, np.nan, 160.0]), np.array([0.0, 200.0, 400.0, np.nan]))
+    assert r == {"avg_hr": 150.0, "avg_power": 200.0}            # 0 bpm = no reading; 0 W counts (WKO5 avg)
+    assert averages_of(None, np.zeros(5)) == {"avg_hr": None, "avg_power": None}
+
+
+def test_activities_stats_and_recorded_rpe(tmp_path, no_plan, monkeypatch):
+    from backend.api import wko5views as V
+    monkeypatch.setattr(AT, "_default_db", lambda: tmp_path / "tags.db")
+    monkeypatch.setattr(AT, "load_recorded", lambda *a, **k: [
+        {"start_local": "2025-12-13T01:00", "file": "0.fit", "rpe": 4.0, "feel": 75}])
+    ds = _fit_ds(tmp_path)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    run = next(a for a in V.activities_list()["activities"] if a["file"] == "2025/0.fit")
+    assert run["rpe"] == 4.0 and run["feel"] == 75
+    st = _run(V.activities_stats())
+    assert st["2025-12-13T01:00"] == {"avg_hr": 140.0, "avg_power": None}     # build_run: 140 bpm, no power
+    assert _run(V.activities_stats()) == st                                     # second call: from the cache
+
+
+def test_edits_never_modify_the_source_files(tmp_path, no_plan, monkeypatch):
+    """Every edit of the 活動列表 editor is app data (activity_tags keyed by
+    start time, the pack in racepower_hike_meta.json); the FIT files keep
+    their bytes and mtime, and 排除 is a flag, not a deletion."""
+    import backend.db.database as D
+    from backend.api import wko5views as V
+    from backend.db.models import Base
+    from backend.engine.racepower import athlete as RA
+    monkeypatch.setattr(AT, "_default_db", lambda: tmp_path / "tags.db")
+    monkeypatch.setattr(RA, "HIKE_META", tmp_path / "hike_meta.json")
+    ds = _fit_ds(tmp_path)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    files = sorted((tmp_path / "fit").rglob("*.fit"))
+    before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in files}
+
+    async def _inner():
+        eng = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with eng.begin() as c:
+            await c.run_sync(Base.metadata.create_all)
+        monkeypatch.setattr(D, "AsyncSessionLocal", async_sessionmaker(eng, expire_on_commit=False))
+        i = next(w.idx for w in ds.workouts if w.entry.file == "2025/0.fit")
+        await V.patch_activity(i, {"name": "河濱", "tags": ["輕鬆跑"], "effort": "easy", "note": "n"})
+        await V.patch_activity(i, {"pack_kg": 6.5})
+        await V.put_exclusion(V.ExclusionBody(key="2025-12-13T01:00", file="2025/0.fit", exclusion="exclude"))
+        await V.patch_activities(V.BulkBody(items=[V.BulkItem(key="2025-12-14T01:00", file="2025/1.fit")], name="車"))
+        await eng.dispose()
+    _run(_inner())
+    assert sorted((tmp_path / "fit").rglob("*.fit")) == files                  # nothing deleted or added
+    assert {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in files} == before
+    assert RA.hike_meta(tmp_path / "hike_meta.json")                           # the pack went to the app's json
+
+
 # ---- pages ----------------------------------------------------------------------------
+
+def _catalog(loc, ns="activity"):
+    import json
+    return json.loads((STATIC / "i18n" / loc / f"{ns}.json").read_text(encoding="utf-8"))
+
+
+def test_activity_list_page_single_edit_and_i18n():
+    import re
+    page = (STATIC / "activity.html").read_text(encoding="utf-8")
+    # one activity at a time: no batch selection / bulk bar
+    assert 'id="bulk"' not in page and "S.checked" not in page and 'type="checkbox" aria-label' not in page
+    assert 'data-edit=' in page and 'id="ed"' in page and "/api/v1/wko5/viewer?" in page
+    assert "/activities/stats" in page and "S.usePower" in page
+    zh, en = _catalog("zh-TW"), _catalog("en")
+    used = {k for k in re.findall(r'\bT\("([\w.]+)"', page) if k[-1] not in "._"}   # T("key"); T("col." + k) below
+    used |= set(re.findall(r'"activity\.([\w.]+)"', page))                      # data-i18n="activity.key"
+    used |= set(re.findall(r':activity\.([\w.]+)', page))                       # data-i18n-attr
+    used |= {f"col.{k}" for k in re.findall(r'\{ k: "(\w+)", cls:', page)} | {"col.actions"}
+    used |= {f"sport.{s}" for s in re.findall(r'"([a-z ]+)"', page[page.index("const SPORTS"):page.index("const sportName")])}
+    used |= {f"pain.{i}" for i in range(4)} | {"terrain.road", "terrain.trail", "f_activity_type", "f_effort"}
+    assert not sorted(k for k in used if k not in zh)
+    assert set(zh) == set(en)
+    assert "原始 FIT 檔不會被改" in zh["help.editor"] and "原始 FIT 檔不會被改" in zh["help.page"]
+    old = chr(0x81EA) + chr(0x7D44)                                            # the retired label (relabel_estimate)
+    assert old not in page and old not in "".join(zh.values())
+
+
+def test_nav_order_and_activity_list_name():
+    shell = (STATIC / "shell.js").read_text(encoding="utf-8")
+    import re
+    ids = re.findall(r'\{ id: "(\w+)"', shell)
+    assert ids == ["home", "schedule", "charts", "plan", "activity", "routes", "racepower",
+                   "achievements", "injuries", "settings"]
+    assert _catalog("zh-TW", "shell")["page.activity.name"] == "活動列表"
+
+
 
 def test_viewer_drops_the_card_and_links_the_edit_page():
     html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
