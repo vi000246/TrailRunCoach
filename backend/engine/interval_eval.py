@@ -190,12 +190,19 @@ def battery(ds, w, s: Optional[dict], cp: Optional[float], tau: float = TAU_JOG)
     dfrc = _dfrc(np.nan_to_num(pg), np.ones(len(pg)), wprime, cp) * 1000.0
     sk = skiba(pg, cp, wprime, tau)
     i_min = int(np.nanargmin(dfrc)) if np.isfinite(dfrc).any() else 0
+    # heart rate on the same 1-s grid (the 間歇 tab's power / W′ / HR chart); 0 bpm = no reading
+    hg = np.full(len(grid), np.nan)
+    if s.get("hr") is not None:
+        g2, h2 = _grid(s["t"], s["hr"])
+        if g2 is not None:
+            h2 = np.where(h2 > 0, h2, np.nan)
+            hg = np.interp(grid, g2, h2, left=np.nan, right=np.nan)
     return {"wprime_j": wprime, "wprime_src": wsrc,
             "tau": tau, "cp": cp, "dfrc_min_pct": float(dfrc[i_min] / wprime) if len(dfrc) else None,
             "dfrc_min_t": float(i_min),
             # the whole session's work above CP (reps, strides, a hard climb home)
             "wprime_used_j": float(np.nansum(np.clip(np.nan_to_num(pg) - cp, 0, None))),
-            "series": {"t": grid.tolist(), "power": pg.tolist(),
+            "series": {"t": grid.tolist(), "power": pg.tolist(), "hr": hg.tolist(),
                        "dfrc_pct": (dfrc / wprime).tolist(), "skiba_pct": (sk / wprime).tolist()},
             "_dfrc": dfrc, "_pg": pg}
 
@@ -295,7 +302,7 @@ def evaluate(ds, w, with_peers: bool = True, as_interval: bool = False) -> Optio
            "kind": "detected" if spec[0] == "detected" else "plan", "flagged": bool(as_interval),
            **(_public(bat) if bat else {"wprime_j": _wprime(ds)[0], "wprime_src": _wprime(ds)[1], "tau": tau,
                                         "dfrc_min_pct": None, "dfrc_min_t": 0.0, "wprime_used_j": 0.0,
-                                        "series": {"t": [], "power": [], "dfrc_pct": [], "skiba_pct": []}})}
+                                        "series": {"t": [], "power": [], "hr": [], "dfrc_pct": [], "skiba_pct": []}})}
     out["cp"] = cp
     out["pdc5"] = best_5min(ds, w)
     if with_peers:
