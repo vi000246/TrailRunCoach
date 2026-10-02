@@ -880,7 +880,8 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
             arrays[(c["idx"], None)] = arr
             cases.append(c)
     weight = ds.setting("weight", tday)
-    sex = (ds.plan.profile or {}).get("sex") or "male"
+    from backend.engine import cp_protocols as CPP
+    sex = CPP.sex_or_default(ds)[0]
     from backend.engine.racepower import cptest as T
     w_prior = T.w_prime_prior(weight, sex)["mid"]
     fit_tests = A.cp_tests(ds, today, weight, sex)

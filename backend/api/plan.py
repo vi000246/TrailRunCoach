@@ -10,9 +10,13 @@ from pathlib import Path
 from typing import Optional
 
 from backend.i18n.pages import render_page
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.db.current import current_athlete_id
+from backend.db.database import get_db
 
 from backend.engine import planning as P
 from backend.engine.zones import SOURCE, aet_uncertainty, zones_json
@@ -333,20 +337,81 @@ def get_profile():
     today = dt.date.today()
     wk = _wko5_profile()
     eff_w = plan.weight_on(today)
+    app_w = _app_weight()
+    w_src = "設定頁" if eff_w is not None else None
     if eff_w is None and wk["weights"]:
-        eff_w = wk["weights"][-1]["kg"]
+        eff_w, w_src = wk["weights"][-1]["kg"], "WKO5"
+    sex = plan.profile.get("sex") or wk["sex"]
+    from backend.engine import athlete_profile as AP
+    from backend.engine.wko5expr.datasource import read_setting
     return {
         "weights": [w.__dict__ for w in sorted(plan.weights, key=lambda w: w.date)],
         "profile": plan.profile,
         "wko5": wk,
         "effective": {
-            "weight": eff_w, "weight_source": "設定頁" if plan.weights else ("WKO5" if wk["weights"] else None),
+            "weight": eff_w, "weight_source": w_src,
             "height_cm": plan.profile.get("height_cm") or wk["height_cm"],
-            "sex": plan.profile.get("sex") or wk["sex"],
+            "sex": sex,
+            "birth_year": plan.profile.get("birth_year"), "age": AP.age(plan.profile, today),
             "power_meter": plan.profile.get("power_meter"),
+            "power_source": AP.profile_power_source(plan.profile),
         },
-        "options": P.PROFILE_FIELDS,
+        # 首次精靈 (shell.js): asks for weight / sex until both are known, once
+        "setup": {"needed": AP.setup_needed(eff_w, sex),
+                  "done": read_setting(AP.SETUP_DONE_KEY, False) is True,
+                  "prefill": {"weight": None if eff_w is not None else app_w,
+                              "weight_source": "COROS" if eff_w is None and app_w else None}},
+        "options": {**P.PROFILE_FIELDS, "power_source": AP.POWER_SOURCES},
+        "power_labels": AP.POWER_LABEL,
     }
+
+
+def _app_weight() -> Optional[float]:
+    """The latest weight the app DB holds (the COROS login writes it,
+    sync/coros_client.py) — the 精靈's pre-fill; None without one."""
+    import sqlite3
+    from backend.engine.wko5expr.datasource import _db_path
+    db = _db_path()
+    if db is None or not db.exists():
+        return None
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            row = con.execute("SELECT weight_kg FROM athlete_settings WHERE weight_kg IS NOT NULL "
+                              "ORDER BY effective_date DESC LIMIT 1").fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    return round(float(row[0]), 1) if row and row[0] else None
+
+
+@router.get("/profile/detect")
+def detect_profile():
+    """What the data says, for the 一般設定 pre-fill: the power source over the
+    last 90 days of runs (engine/athlete_profile.detect_power_source) and the
+    app DB's weight (COROS)."""
+    from backend.engine import athlete_profile as AP
+    try:
+        from backend.api.wko5views import _dataset
+        power = AP.detect_power_source(_dataset())
+    except Exception as e:                  # noqa: BLE001 — no data yet
+        power = {"source": None, "error": type(e).__name__}
+    return {"power_source": power, "weight": _app_weight(), "labels": AP.POWER_LABEL}
+
+
+class SetupIn(BaseModel):
+    done: bool = True
+
+
+@router.post("/profile/setup")
+async def setup_done(body: SetupIn, db: AsyncSession = Depends(get_db)):
+    """The 精靈 was saved or dismissed (「稍後再說」): don't ask again."""
+    from backend.engine import athlete_profile as AP
+    from backend.settings.repository import SettingsRepository
+    await SettingsRepository(db, current_athlete_id()).set(AP.SETUP_DONE_KEY, bool(body.done))
+    await db.commit()
+    return {"done": bool(body.done)}
 
 
 class WeightIn(BaseModel):
@@ -358,11 +423,14 @@ class ProfileIn(BaseModel):
     weights: list[WeightIn] = []
     sex: Optional[str] = None
     height_cm: Optional[float] = None
-    power_meter: Optional[str] = None
+    birth_year: Optional[int] = None
+    power_source: Optional[str] = None
+    power_meter: Optional[str] = None      # legacy (stryd / coros / garmin / other)
 
 
 @router.put("/profile")
 def put_profile(body: ProfileIn):
+    from backend.engine import athlete_profile as AP
     for w in body.weights:
         try:
             P._d(w.date)
@@ -372,6 +440,10 @@ def put_profile(body: ProfileIn):
             raise HTTPException(400, f"體重 {w.kg} kg 不合理")
     if body.height_cm is not None and not 100 <= body.height_cm <= 250:
         raise HTTPException(400, f"身高 {body.height_cm} cm 不合理")
+    if not AP.birth_year_ok(body.birth_year):
+        raise HTTPException(400, f"出生年 {body.birth_year} 不合理")
+    if body.power_source is not None and body.power_source not in AP.POWER_SOURCES:
+        raise HTTPException(400, f"power_source must be one of {AP.POWER_SOURCES}")
     for k in ("sex", "power_meter"):
         v = getattr(body, k)
         if v is not None and v not in P.PROFILE_FIELDS[k]:
@@ -379,7 +451,9 @@ def put_profile(body: ProfileIn):
     plan = P.Plan.load()
     plan.weights = [P.Weight(w.date, round(w.kg, 1)) for w in body.weights]
     plan.profile = {k: v for k, v in (("sex", body.sex), ("height_cm", body.height_cm),
-                                      ("power_meter", body.power_meter)) if v is not None}
+                                      ("birth_year", body.birth_year), ("power_source", body.power_source),
+                                      ("power_meter", None if body.power_source else body.power_meter))
+                    if v is not None}
     plan.save()
     _notify(True)     # weight feeds W/kg everywhere
     return get_profile()

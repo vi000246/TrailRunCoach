@@ -368,9 +368,9 @@ def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: di
     used["eph"] = _src(eph, src)
     days = max(1, body.days or 1)
     from backend.engine.racepower import capacity as _cap
-    default_pack = _cap.PACK_DEFAULT_MULTI if days >= 2 else _cap.PACK_DEFAULT_SINGLE
+    default_pack = _cap.pack_default(weight, days)
     pack = body.pack_kg if body.pack_kg is not None else default_pack
-    used["pack_kg"] = _src(pack, "手動" if body.pack_kg is not None else f"預設背負 {default_pack:g} kg")
+    used["pack_kg"] = _src(pack, "手動" if body.pack_kg is not None else f"預設背負 {_cap.pack_default_text(weight)}")
     used["hist_pack_kg"] = _src(body.hist_pack_kg, "假設：過去登山日多為輕裝（約 5 kg）")
     plan = PR.split_days(days, body.distance_km, body.gain_m, body.loss_m,
                          [x.model_dump() for x in body.day_plan] if body.day_plan else None)
@@ -623,11 +623,13 @@ def _hike_rows() -> list[dict]:
     solo = A.solo_hikes()
     hikes = {w.entry.file: w for w in A.hike_workouts(ds, today)}
     days = inputs().get("hiking", {}).get("days") or []
+    from backend.engine.wko5expr.dataset import date_to_day
+    body_w = ds.setting("weight", date_to_day(today))
     out = []
     for d in days:
         w = hikes.get(d["file"])
         rec = meta.get(d["file"]) or {}
-        default = CAP.PACK_DEFAULT_MULTI if (d.get("days") or 1) > 1 else CAP.PACK_DEFAULT_SINGLE
+        default = CAP.pack_default(body_w, d.get("days") or 1)
         sug = None
         if w is not None:
             th = A.thresholds_as_of(ds, w.entry.start.date())
