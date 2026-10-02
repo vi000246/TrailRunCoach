@@ -27,6 +27,8 @@ from typing import Iterable, Optional, Sequence
 
 import numpy as np
 
+from backend.i18n import _
+
 FRIEL_WINDOW_S = 1800
 FRIEL_TAIL_S = 1200
 MIN_EFFORT_OF_CP = 0.95
@@ -321,14 +323,15 @@ def aet_lower_bound(points: Sequence[tuple], lthr: Optional[float] = None) -> di
         pts = [p for p in pts if p[0] <= cap]
     out = {"ok": False, "value": None, "n": len(pts), "top_n": 0, "mean": None, "upper": None, "broken": None}
     if len(pts) < AET_BOUND_MIN_RUNS:
-        return {**out, "reason": f"只有 {len(pts)} 次夠準的跑步（SE ≤ 5 pp、≤ LTHR − 3，要 ≥ {AET_BOUND_MIN_RUNS} 次）"}
+        return {**out, "reason": _("只有 {n} 次資料夠乾淨的輕鬆跑（心率 ≤ LTHR − 3，要 ≥ {k} 次）",
+                                   n=len(pts), k=AET_BOUND_MIN_RUNS)}
     pts.sort(key=lambda p: p[0])
     x = pts[-1][0]
     over = [p for p in pts if p[1] - max(p[2], AET_SE_FLOOR) >= AET_DRIFT]
     if over:
-        h, d, _ = over[0]
+        h, d, _se = over[0]
         return {**out, "value": x, "broken": {"hr1": h, "drift": d},
-                "reason": f"{h:.0f} bpm 那次飄移 {d * 100:.1f}%（扣掉雜訊仍 ≥ 5%）：下限不成立"}
+                "reason": _("{h:.0f} bpm 那次飄移 {d:.1f}%（扣掉誤差仍 ≥ 5%）：下限不成立", h=h, d=d * 100)}
     top_n = sum(1 for p in pts if p[0] >= x - AET_BOUND_TOP_BPM)
     top = pts[-AET_MIN_RUNS:]
     d = np.array([p[1] for p in top])
@@ -342,6 +345,7 @@ def aet_lower_bound(points: Sequence[tuple], lthr: Optional[float] = None) -> di
     if top_n < AET_BOUND_TOP_N:
         return {**out, "reason": f"{x:.0f} bpm 附近 5 bpm 內只有 {top_n} 次（要 ≥ {AET_BOUND_TOP_N}）"}
     if upper >= AET_DRIFT:
-        return {**out, "reason": f"最高 {k} 次的平均飄移 {mean * 100:.1f}% + 2×SE = {upper * 100:.1f}%（≥ 5%）：不夠確定"}
-    return {**out, "ok": True, "reason": f"≤ {x:.0f} bpm 的 {len(pts)} 次飄移都 < 5%（最高 {k} 次平均 {mean * 100:.1f}%，"
-                                         f"上界 {upper * 100:.1f}%）"}
+        return {**out, "reason": _("心率最高的 {k} 次平均飄移 {m:.1f}%，算上誤差可能到 {u:.1f}%（≥ 5%）：還不夠確定",
+                                   k=k, m=mean * 100, u=upper * 100)}
+    return {**out, "ok": True, "reason": _("≤ {x:.0f} bpm 的 {n} 次飄移都穩定（< 5%；心率最高的 {k} 次平均 {m:.1f}%，"
+                                           "算上誤差最多 {u:.1f}%）", x=x, n=len(pts), k=k, m=mean * 100, u=upper * 100)}
