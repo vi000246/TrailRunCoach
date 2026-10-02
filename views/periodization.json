@@ -190,13 +190,13 @@
         {
           "id": "durability-drift",
           "title": "耐久度：長時間後段心率飄移",
-          "description": "超過 90 分鐘的越野跑，後半段效率掉多少。飄移越小 = 越能撐住後段（耐久度，durability）。登山的 Pa:HR 混了休息時間、會亂跳，所以不算；|飄移| > 30% 當成壞資料（和總覽「耐久度」指標同一個條件，總覽用配速）。這張圖用 WKO5 存的 Pa:HR（全程前半對後半、含暖身和停頓），不是單次活動判讀卡的算法：判讀卡把有坡的跑步（越野都是）判為不採用，換過去這張圖會一個點都沒有。",
+          "description": "每個點＝一次超過 90 分鐘的越野跑：後半段的心率比前半段多飄了幾 %。越低越好，代表越能撐住後段（耐久度）；超過 15% 是後段掉很多。登山會混到休息時間、數字亂跳，所以不算；超過 30% 當成壞資料不畫。和總覽「耐久度」同一個條件。\n方法：用 WKO5 存的 Pa:HR（全程前半對後半、含暖身和停頓），不是單次活動判讀卡的算法——判讀卡會把有坡的跑步（越野都是）判為不採用。",
           "basis": {"default": "pace", "choices": ["pace", "power"],
-                    "power_note": "越野的 Pw:HR 只當參考：Stryd 功率只驗證到約 8% 坡度，陡坡上的功率不一定準。"},
+                    "power_note": "越野用功率算的心率飄移只當參考：Stryd 功率只驗證到約 8% 坡度，陡坡上的功率不一定準。"},
           "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "飄移 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pahr) <= 0.3, pahr)"},
-            {"name": "飄移 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pwhr) <= 0.3, pwhr)"},
+            {"name": "心率飄移", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pahr) <= 0.3, pahr)"},
+            {"name": "心率飄移", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(hastag(\"runningtrail\") and duration > 5400 and abs(pwhr) <= 0.3, pwhr)"},
             {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "15% 掉很多", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "line_style": "dash", "expression": "(,0.15)"}
           ]

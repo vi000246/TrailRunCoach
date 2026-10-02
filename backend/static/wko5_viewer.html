@@ -2693,9 +2693,9 @@ function drawActHrPower(card, res) {
       res.has_dist ? tile("距離", f(s.km, 2), "km") : "", res.has_dist ? tile("移動配速", ACT.pace(s.pace), "/km") : "",
       res.has_hr ? tile("平均心率", f(s.hr), "bpm", "hr") : "", res.has_hr ? tile("最高心率", f(s.hmax), "bpm", "hr") : "",
       usePw ? tile("平均功率", f(s.p), "W", "pw") : "", usePw ? tile("NP", f(s.np), "W", "pw") : "",
-      usePw && res.has_hr ? tile("Pw:HR 平均功率÷心率", f(s.pwhr, 2), "W/bpm") : "",
+      usePw && res.has_hr ? tile("平均功率÷心率", f(s.pwhr, 2), "W/bpm") : "",
       usePw && res.has_hr ? tile("EF NP÷心率", f(s.ef, 2), "W/bpm") : "",
-      usePw && res.has_hr ? tile("前後半 Pw:HR 飄移", s.drift == null ? "—" : (s.drift * 100).toFixed(1), s.drift == null ? "" : "%") : "",
+      usePw && res.has_hr ? tile("心率飄移（前後半）", s.drift == null ? "—" : (s.drift * 100).toFixed(1), s.drift == null ? "" : "%") : "",
     ].join("");
   };
   show(0, K, false);
@@ -2816,7 +2816,7 @@ function drawActHrTrend(card, res) {
       <div class="s" title="標準差 ÷ 平均；WKO5：< 0.33 穩定、< 0.66 混合"><div class="k">變異：${esc(res.variability_label || "—")}</div><div class="v">${res.cv == null ? "—" : (res.cv * 100).toFixed(1) + "%"}</div></div>
       <div class="s" title="直線迴歸斜率；WKO5：每秒 ±0.0005 bpm 以內算持平"><div class="k">趨勢：${esc(res.trend_label)}</div><div class="v">${sign(res.slope_bpm_h, 1)}<small>bpm/時</small></div></div>
       <div class="s"><div class="k">整趟趨勢變化</div><div class="v">${sign(res.change_bpm, 1)}<small>bpm</small></div></div>
-      <div class="s" title="WKO5 的定義：整段從一半切開，含暖身與停頓"><div class="k">${res.decoupling_basis === "pahr" ? "Pa:HR" : "Pw:HR"} 前後半</div><div class="v">${pwhr}</div></div>
+      <div class="s" title="整段從一半切開，含暖身與停頓（WKO5 的定義：${res.decoupling_basis === "pahr" ? "速度÷心率，Pa:HR" : "功率÷心率，Pw:HR"}）"><div class="k">心率飄移（前後半）</div><div class="v">${pwhr}</div></div>
     </div>
     <div class="ac-leg" aria-label="圖例"><span><i style="border-color:${T.hr}"></i>心率（1 分鐘平均）</span>
       <span><i class="dash" style="border-color:${T.ink}"></i>趨勢（直線迴歸）</span>

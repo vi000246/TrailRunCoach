@@ -3,6 +3,7 @@ cool-down, the trailing idle cut, the VI / walk / halves-power gate on the
 window's moving samples, the standard error and the multi-run aggregation.
 Synthetic series only — never the WKO5 folder or the app DB."""
 import datetime as dt
+import re
 
 import numpy as np
 import pytest
@@ -238,9 +239,11 @@ def test_the_card_shows_the_se_the_exclusions_and_the_stability():
                               "elapseddistance": list(np.cumsum(v / 3600.0))},
                     metrics={"duration": 70 * 60.0, "movingduration": 70 * 60.0, "distance": 11.0, "climbing": 20.0})
     ds = FakeDataset([w], day, settings={"runthr": 160.0, "runftp": 250.0})
-    for basis, name in (("pace", "Pa:HR 飄移"), ("power", "Pw:HR 飄移")):
+    for basis, name in (("pace", "心率飄移（配速）"), ("power", "心率飄移（功率）")):
         rows = {s["name"]: s["data"] for s in R.review(ds, ds.workouts[0], "aerobic", basis=basis)["series"]}
-        assert "pp" in rows[name]["value"] and "±" in rows[name]["value"]
+        # plain value (owner 2026-10-02); this run's ± only in the ?'s last 方法 line
+        assert "pp" not in rows[name]["value"] and "±" not in rows[name]["value"]
+        assert re.search(r"方法：.*這次誤差約 ±\d+\.\d 個百分點", rows[name]["tip"].split("\n")[-1])
         assert "回程市區段 10:00" in rows["已排除"]["value"] and "當緩和" in rows["已排除"]["value"]
         assert "VI" in rows["穩定度"]["value"] and "舊規則 30 秒變異" in rows["穩定度"]["value"]
 

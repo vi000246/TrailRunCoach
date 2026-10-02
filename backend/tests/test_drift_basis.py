@@ -38,7 +38,7 @@ from backend.engine.wko5expr import basis as BS
 from backend.engine.wko5expr.customviews import CustomViewError, REPO_VIEWS, load_custom_views, parse_view
 
 
-SEASON_TITLE = "心率飄移 Pa:HR（暖身後 ≥ 40 分鐘的路跑，30–40 分為參考）"       # views/training.json 能力
+SEASON_TITLE = "輕鬆路跑的心率飄移"       # views/training.json 能力
 
 
 def _t(minutes):
@@ -94,7 +94,7 @@ def test_aerobic_lines_power_mode_never_counts_the_streak():
     power = R.aerobic_lines("easy", m, streak=3, basis="power")
     # the unsourced 「連續 3 次」 streak is gone on both bases (engine/quality_gate.py is the gate)
     assert pace and not any("連續" in ln or "間歇" in ln for ln in pace)
-    assert power and "Pw:HR" in power[0] and not any("連續" in ln or "閾值下間歇" in ln for ln in power)
+    assert power and "心率飄移（功率）" in power[0] and not any("連續" in ln or "閾值下間歇" in ln for ln in power)
 
 
 # ---------------------------------------------------------------------------
@@ -125,8 +125,8 @@ def test_aerobic_card_shows_the_chosen_basis():
     w = ds.workouts[0]
     pace = _card_text(R.review(ds, w, "aerobic"))
     power = _card_text(R.review(ds, w, "aerobic", basis="power"))
-    assert "Pa:HR 飄移" in pace and "Pw:HR 飄移" not in pace and "前半／後半速度" in pace
-    assert "Pw:HR 飄移" in power and "Pa:HR 飄移" not in power and power["前半／後半功率"] == "200 → 200 W"
+    assert "心率飄移（配速）" in pace and "心率飄移（功率）" not in pace and "前半／後半速度" in pace
+    assert "心率飄移（功率）" in power and "心率飄移（配速）" not in power and power["前半／後半功率"] == "200 → 200 W"
     # the summary card (and so the overview) stays on pace
     assert R.review(ds, w, "summary", basis="power")["series"] == R.review(ds, w, "summary")["series"]
 
@@ -137,7 +137,7 @@ def test_aerobic_card_without_power_in_power_mode():
     ds = FakeDataset([_run(today)], today, settings={"runthr": 160.0, "runftp": 300.0})
     card = R.review(ds, ds.workouts[0], "aerobic", basis="power")
     text = _card_text(card)
-    assert text["Pw:HR 飄移"] == "這次沒有功率"
+    assert text["心率飄移（功率）"] == "這次沒有功率"
     assert not any("0.0%" in v for v in text.values())
 
 
@@ -226,47 +226,25 @@ def test_season_drift_charts_use_the_card_definition():
     (trail runs are all refused by drift_of) and say that too."""
     views = load_custom_views([REPO_VIEWS])
     charts = {(name, c["title"]): c for name, v in views.items() for d in v["dashboards"] for c in d["charts"]}
-    # periodization ②: verdict bars of drift() over both tiers (owner 2026-10-02: plain words, no SE)
-    c = charts[("周期化訓練", "長時間輕鬆跑的心率飄移")]
-    assert c.get("drift_bars") is True
-    drawn = [s for s in c["series"] if s.get("basis")]
-    assert {s["basis"] for s in drawn} == {"pace", "power"} and all(s["type"] == "bar" for s in drawn)
-    for s in drawn:
-        assert f'drift("{s["basis"]}", "all")' in s["expression"] and "pahr" not in s["expression"], s
-        assert "drift_avg" not in s["expression"]
-    assert [s["name"] for s in drawn if s["basis"] == "pace"] == ["穩定（< 5%）", "有點飄（5–10%）", "飄很多（> 10%）"]
-    refs = [s for s in c["series"] if not s.get("basis")]
-    assert len(refs) == 1 and refs[0]["expression"] == "(,0.05)" and refs[0]["line_style"] == "dash"
-    for word in ("標準誤", "SE", "回歸", "信賴", "Pa:HR"):
-        assert word not in c["description"], word
-    assert "怎麼用" in c["description"] and "Uphill Athlete" in c["description"]
-    for key in (("我的訓練", SEASON_TITLE),):
+    # periodization ② and the 能力 chart: verdict bars of drift() over both tiers (owner 2026-10-02:
+    # plain words, no SE / 6-run mean / Pa:HR anywhere drift is shown)
+    for key in (("周期化訓練", "長時間輕鬆跑的心率飄移"), ("我的訓練", SEASON_TITLE)):
         c = charts[key]
+        assert c.get("drift_bars") is True, key
         drawn = [s for s in c["series"] if s.get("basis")]
-        assert {s["basis"] for s in drawn} == {"pace", "power"}
+        assert {s["basis"] for s in drawn} == {"pace", "power"} and all(s["type"] == "bar" for s in drawn)
         for s in drawn:
-            assert "pahr" not in s["expression"] and "pwhr" not in s["expression"], s
-            if s["name"].startswith("參考"):
-                # v9: the 參考 tier as its own markers, labelled in the legend
-                assert f'drift("{s["basis"]}", "ref")' in s["expression"] and s["line_style"] == "none", s
-                assert "（暖身後 30–40 分，未達 UA 測試標準）" in s["name"]
-            elif "平均" in s["name"]:
-                # v11 (drift v2): the 6-run mean ± SE next to the single runs
-                assert f'drift_avg("{s["basis"]}"' in s["expression"], s
-            else:
-                assert f'drift("{s["basis"]}")' in s["expression"], s
-        # heat bands: one 6-run mean per temperature band and basis (4 × 2), + the ± SE markers (4)
-        means = [s for s in drawn if s["name"].startswith("6 次平均")]
-        assert len(means) == 8 and sum("平均" in s["name"] for s in drawn) == 12
-        for b in ("cool", "warm", "hot", "none"):
-            assert sum(f'"mean", "{b}")' in s["expression"] for s in means) == 2
-        assert all("🌡" in s["name"] for s in means)
-        assert sum(s["name"].startswith("參考") for s in drawn) == 2
-        assert "溫度分區" in c["description"] and "> 25 °C 的" not in c["description"]
-        assert "參考（暖身後 30–40 分，未達 UA 測試標準）" in c["description"] and "推估" in c["description"]
-        assert "6 次" in c["description"] and "標準誤" in c["description"]
-        assert "判讀卡" in c["description"] and "WKO5 存的 Pa:HR" in c["description"]
-        assert "WKO5 存的 Pw:HR" in BS.apply_basis(c, "power")[0]["description"]
+            assert f'drift("{s["basis"]}", "all")' in s["expression"] and "pahr" not in s["expression"], s
+            assert "drift_avg" not in s["expression"]
+        assert [s["name"] for s in drawn if s["basis"] == "pace"] == ["穩定（< 5%）", "有點飄（5–10%）", "飄很多（> 10%）"]
+        refs = [s for s in c["series"] if not s.get("basis")]
+        assert len(refs) == 1 and refs[0]["expression"] == "(,0.05)" and refs[0]["line_style"] == "dash"
+        for word in ("標準誤", "SE", "回歸", "信賴", "Pa:HR", "次平均"):
+            assert word not in c["description"] and word not in c["title"], word
+        assert "怎麼用" in c["description"] and "Uphill Athlete" in c["description"]
     for key in (("我的訓練", "耐久度：長時間後段心率飄移"), ("周期化訓練", "耐久度：長時間後段心率飄移")):
         c = charts[key]
+        # WKO5's stored value: named only in the description's last 方法 line; plain series names
         assert any("pahr" in s["expression"] for s in c["series"]) and "WKO5 存的 Pa:HR" in c["description"]
+        assert c["description"].split("\n")[-1].startswith("方法：")
+        assert all("Pa:HR" not in s["name"] and "Pw:HR" not in s["name"] for s in c["series"])

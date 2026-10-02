@@ -63,6 +63,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import N_, _
+
 AGG_N = 6            # Ikari 2026 (SportRxiv preprint, not peer-reviewed): ≥ 6 runs for reliability 0.80;
                      # = threshold_estimate.AET_MIN_RUNS
 AGG_MIN = 2          # 推估: a mean ± SE needs at least two runs (the indicator's old 「不到 2 次」 rule)
@@ -386,7 +388,7 @@ def aet_validity(ds, today: dt.date, lthr: Optional[float] = None) -> dict:
         if lb["ok"]:
             x = lb["value"]
             out.update(valid=True, value=x, se=None, shift_bpm=None, lower_bound=True, code="bound",
-                       reason=f"{bound_label(x)}：{lb['reason']}。{BOUND_TIP.format(x=x, lo=x - 20, hi=x - 10)}")
+                       reason=f"{bound_label(x)}：{lb['reason']}。{_(BOUND_TIP, x=x, lo=x - 20, hi=x - 10)}")
         elif lb.get("broken"):
             out["reason"] = f"{out['reason']}（AeT 下限也不成立：{lb['reason']}）"
     note = heat_note(pts, beta)
@@ -400,9 +402,9 @@ def bound_label(x: float) -> str:
     return f"AeT ≥ {x:.0f} bpm（下限，推估）"
 
 
-BOUND_TIP = ("暫時規則（推估）：輕鬆跑的心率都在 {x:.0f} bpm 附近、飄移都 < 5%，回歸找不到飄移到 5% 的心率，"
-             "所以只能說 AeT 至少 {x:.0f}。用 {x:.0f} 當 AeT 是保守的（真正的 AeT ≥ {x:.0f}）；區間仍照課表的 AeT。"
-             "只算參考級以上、SE ≤ 5 pp 的跑步，每次 SE 加倍（GC 驗證：單次 SE 低估 2–3 倍）；"
-             "之後只要 ≤ {x:.0f} bpm 有一次飄移明顯 ≥ 5%，下限就取消、改建議測試。"
-             "多跑幾次 {lo:.0f}–{hi:.0f} bpm 的真正輕鬆跑，回歸就能找出實際的 AeT；"
-             "在那之前每 8 週建議做一次 AeT 測試（可以關掉）")
+BOUND_TIP = N_("暫時規則（推估）：輕鬆跑的心率都在 {x:.0f} bpm 附近、心率飄移都穩定（< 5%），還找不到會飄到 5% 的心率，"
+               "所以只能說 AeT 至少 {x:.0f}。用 {x:.0f} 當 AeT 是保守的（真正的 AeT ≥ {x:.0f}）；區間仍照課表的 AeT。"
+               "之後只要 ≤ {x:.0f} bpm 有一次飄移明顯 ≥ 5%，下限就取消、改建議測試。"
+               "多跑幾次 {lo:.0f}–{hi:.0f} bpm 的真正輕鬆跑，就能找出實際的 AeT；"
+               "在那之前每 8 週建議做一次 AeT 測試（可以關掉）。"
+               "方法：多次飄移對心率的回歸，誤差太大的跑步不算、每次誤差加倍（GC 驗證）")

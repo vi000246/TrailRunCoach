@@ -64,6 +64,7 @@ from backend.engine.algorithms.threshold_estimate import (
     AET_MAX_OF_CP, AET_MAX_POWER_CV, WARMUP_S,
 )
 from backend.engine.panels.workout import MAX_DT, durability, grade_bins
+from backend.i18n import N_, _
 
 # cached_series keys on the file and the thresholds, not on this code: bump the
 # version whenever _measure's output changes
@@ -99,10 +100,12 @@ DRIFT_REF_MIN_S = 1800        # 推估 — the 參考 / reference tier: ≥ 30 m
                               # after the warm-up shows some of it; UA's 40 min is for a formal AeT test.
                               # Every other refusal (heat, hills, stops, fast finish, CV, intensity,
                               # power coverage) applies to both tiers. Display only, never a gate.
-REF_LABEL = "參考（暖身後 30–40 分，未達 UA 測試標準）"
-REF_TIP = ("暖身後只有 30–40 分鐘：Uphill Athlete 不建議用短於 40 分的測試判定 AeT，所以這個數字只當參考，"
-           "不拿來解鎖間歇、不算 AeT 測試、不寫進門檻。30 分是推估的門檻（未找到來源）：心血管飄移約在運動"
-           "10–20 分鐘後開始（Coyle & González-Alonso 2001），暖身後 30 分已看得到一部分。")
+# Plain wording (owner 2026-10-02, the drift_bars chart's style everywhere): a verdict word + the %,
+# 「只當參考」 instead of tiers / ± SE; the method only in the ?, one short line at the end.
+REF_LABEL = N_("暖身後不到 40 分鐘，只當參考")
+REF_TIP = N_("暖身後只跑了 30–40 分鐘，比有氧閾值測試要的 40 分鐘短：只當參考，不拿來開放間歇、不算 AeT 測試。\n"
+             "方法：30 分是推估的門檻（心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001；"
+             "40 分是 Uphill Athlete 的測試標準）。")
 START_TIP = ("出門先過市區路口、到河濱才開始穩定跑時，前 20 分鐘內的停等不算穩定跑：飄移從最後一次停等後 1 分鐘、"
              "而且至少第 10 分鐘起算。20 分鐘和 1 分鐘都是推估（未找到來源；UA／Friel 只說要排除暖身）。"
              "坡道、快步不排除：上坡後心率不一定回得來，排除會把真的影響藏起來。")
@@ -504,10 +507,9 @@ def excluded_text(dr: dict) -> Optional[str]:
     return "；".join(parts) or None
 
 
-SE_TIP = ("單次 30–40 分鐘的飄移，誤差大約 ±4–6 個百分點：心率樣本前後高度相關（1 秒自相關 0.995），等效只有 4–5 個"
-          "獨立觀測。± 是回歸法的標準誤（心率 = 截距 + 功率經 60 秒延遲 + 時間；τ = 60 s 落在文獻 55–70 s，"
-          "Hunt 2015／2019、Wang & Hunt 2021；把兩者接成一個回歸是推估）。UA 的 3.5／5% 帶只差 1.5 個百分點，"
-          "單次分不出，要看多次平均（總覽、賽季圖的「6 次平均」）。")
+SE_TIP = N_("一次跑步的飄移本來就會差個幾 %，看最近幾次的走向比只看一次準。\n"
+            "方法：單次誤差約 ±4–6 個百分點（心率樣本前後高度相關），用回歸法的標準誤估；"
+            "心率延遲 τ = 60 s 取自 Hunt 2015／2019、Wang & Hunt 2021，接成一個回歸是推估。")
 TAIL_TIP = ("回程市區段：從結尾往回，最後一群相隔 ≤ 6 分、離結束 ≤ 12 分、在第 20 分鐘之後的停等，從第一次停等起當緩和排除"
             "（UA／Friel 都說不含暖身和緩和；12／6 分是推估，用你的跑步校正）。錶沒按停的結尾靜止 ≥ 2 分整段裁掉，"
             "不算進 5% 停頓（推估）。")
@@ -522,6 +524,40 @@ RAMP_TIP = ("坡道不排除（你的決定）：|15 秒坡度| ≥ 3% 連續 �
 def se_text(se: Optional[float]) -> str:
     """「±4.2 pp」."""
     return "" if se is None else f"±{se * 100:.1f} pp"
+
+
+# --- plain drift words (owner 2026-10-02): the verdict + the %, never ± SE / Pa:HR / 參考級 on the surface ---
+DRIFT_WORDS = {"good": N_("穩定"), "warn": N_("有點飄"), "bad": N_("飄很多")}
+NOISY_NOTE = N_("這次資料比較雜，只當參考")
+
+
+def drift_word(d: Optional[float]) -> str:
+    """「穩定」 (< 5 %) / 「有點飄」 (5–10 %) / 「飄很多」 (> 10 %): DRIFT_GOOD / DRIFT_WATCH, the drift_bars chart."""
+    if d is None:
+        return ""
+    return _(DRIFT_WORDS["good" if d < DRIFT_GOOD else "warn" if d < DRIFT_WATCH else "bad"])
+
+
+def drift_plain(d: Optional[float]) -> str:
+    """「穩定 · 3.2%」."""
+    return "–" if d is None else _("{word} · {pct}", word=drift_word(d), pct=_pct(d))
+
+
+def drift_name(basis: Optional[str] = None) -> str:
+    """「心率飄移」, or 「心率飄移（配速）」/「心率飄移（功率）」 where both are on screen."""
+    if basis == "power":
+        return _("心率飄移（功率）")
+    if basis == "pace":
+        return _("心率飄移（配速）")
+    return _("心率飄移")
+
+
+def drift_method(basis: str = "pace", se: Optional[float] = None) -> str:
+    """The one technical line at the end of a drift ?: ratio, warm-up, this run's ± SE, the bands."""
+    ratio = _("功率÷心率（Pw:HR）") if basis == "power" else _("速度÷心率（Pa:HR）")
+    err = _("；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）", se=se * 100) if se is not None else ""
+    return _("方法：{ratio}前後半比較，前 10 分鐘暖身不算{err}；< 5% 穩定、5–10% 有點飄、> 10% 飄很多。",
+             ratio=ratio, err=err)
 
 
 def stability_text(dr: dict, power: bool = True) -> Optional[str]:
@@ -942,7 +978,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         out["pw_reason"] = "這次沒有功率"
     elif not pw_same:
         cover = float(d[m0 & np.isfinite(pw) & (pw > 0)].sum()) / max(1e-9, float(d[m0].sum()))
-        out["pw_reason"] = f"功率只涵蓋 {cover * 100:.0f}% 的時間（< {DRIFT_POWER_COVER * 100:.0f}%），Pw:HR 不採用"
+        out["pw_reason"] = f"功率只涵蓋 {cover * 100:.0f}% 的時間（< {DRIFT_POWER_COVER * 100:.0f}%），用功率算的心率飄移不採用"
     else:
         rp = _halves_drift(h, pw, d, win)
         if rp is None:
@@ -2256,34 +2292,36 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
             lines.append(why)
         return lines[:3]
     power = basis == "power"
-    name = ("Pw:HR 飄移" if power else "飄移") + ("（參考）" if drift_tier(dr) == "ref" else "")
+    name = drift_name("power" if power else None)
     hr1 = dr["pw_hr1"] if power else dr["hr1"]
-    heat = f"{band_chip(dr)}：{HEAT_NOTE}" if dr.get("heat") else None
+    heat = f"{band_chip(dr)}：{_(HEAT_NOTE)}" if dr.get("heat") else None
     if typ == "test_aet":
         # Uphill Athlete's three bands (engine/aet_test.py has the full analysis)
         if d < 0.035:
-            lines.append(f"{name} {_pct(d)} < 3.5%：前半段心率 {hr1:.0f} bpm 還在 AeT 以下，下次 +5 bpm 再測")
+            lines.append(_("{name} {pct}（< 3.5%）：前半段心率 {hr:.0f} bpm 還在 AeT 以下，下次 +5 bpm 再測",
+                           name=name, pct=_pct(d), hr=hr1))
         elif d <= DRIFT_GOOD:
-            lines.append(f"{name} {_pct(d)}（3.5–5%）：前半段心率 {hr1:.0f} bpm 就是 AeT")
+            lines.append(_("{name} {pct}（3.5–5%）：前半段心率 {hr:.0f} bpm 就是 AeT", name=name, pct=_pct(d), hr=hr1))
         else:
-            lines.append(f"{name} {_pct(d)} > 5%：AeT 低於前半段心率 {hr1:.0f} bpm，下次放慢 5 bpm 再測")
+            lines.append(_("{name} {pct}（> 5%）：AeT 低於前半段心率 {hr:.0f} bpm，下次放慢 5 bpm 再測",
+                           name=name, pct=_pct(d), hr=hr1))
         if heat:
             lines.append(heat)
         return lines[:3]
     # informational: the interval gate is engine/quality_gate.py, not this drift
     aet, hr = m.get("aet"), m.get("avg_hr")
     if d < DRIFT_GOOD and aet and hr and hr > aet + AET_MARGIN:
-        lines.append(f"{name} {_pct(d)} < 5%，但平均心率 {hr:.0f} > AeT+3，不是輕鬆跑")
+        lines.append(_("{name} {plain}，但平均心率 {hr:.0f} > AeT+3，不是輕鬆跑", name=name, plain=drift_plain(d), hr=hr))
     elif d < DRIFT_GOOD:
-        lines.append(f"{name} {_pct(d)} < 5%：有氧基礎穩")
+        lines.append(_("{name} {plain}：有氧基礎穩", name=name, plain=drift_plain(d)))
     elif d < DRIFT_WATCH:
-        lines.append(f"{name} {_pct(d)}（5–10%）：後段心率往上跑")
+        lines.append(_("{name} {plain}：後段心率往上跑", name=name, plain=drift_plain(d)))
     else:
-        lines.append(f"{name} {_pct(d)} > 10%：有氧基礎不足或跑太快")
+        lines.append(_("{name} {plain}：有氧基礎不足或跑太快", name=name, plain=drift_plain(d)))
     if heat:
         lines.append(heat)
     if drift_tier(dr) == "ref":
-        lines.append(f"{REF_LABEL}：只當參考，不是 AeT 測試")
+        lines.append(_("{note}（不算 AeT 測試）", note=_(REF_LABEL)))
     return lines[:3]
 
 
@@ -2483,42 +2521,49 @@ def short_reason(dr: dict, basis: str = "pace") -> str:
     return "不採用"
 
 
-def _tier_word(dr: dict) -> str:
-    t = drift_tier(dr)
-    return "測試級" if t == "test" else "參考級" if t == "ref" else "不採用"
+def drift_caveat(dr: dict, basis: str = "pace") -> Optional[str]:
+    """The one plain caveat a drift needs, or None: 「暖身後不到 40 分鐘，只當參考」 (the 參考 tier)
+    or 「這次資料比較雜，只當參考」 (SE > DRIFT_NOISY_SE)."""
+    if drift_tier(dr) == "ref":
+        return _(REF_LABEL)
+    se = dr.get("pw_drift_se" if basis == "power" else "drift_se")
+    if se is not None and se > DRIFT_NOISY_SE:
+        return _(NOISY_NOTE)
+    return None
 
 
 def _drift_tip(dr: dict, basis: str, lines: list[str]) -> str:
+    """Plain lines first (the verdict, the halves, what was cut), then one method line."""
     power = basis == "power"
     parts = list(lines)
     if dr.get("hr1") is not None and not power:
-        parts.append(f"前半／後半心率 {dr['hr1']:.0f} → {dr['hr2']:.0f} bpm；速度 {dr['v1']:.2f} → {dr['v2']:.2f} km/h")
+        parts.append(_("前半／後半心率 {a:.0f} → {b:.0f} bpm；速度 {v1:.2f} → {v2:.2f} km/h",
+                       a=dr["hr1"], b=dr["hr2"], v1=dr["v1"], v2=dr["v2"]))
     if dr.get("pw_hr1") is not None and power:
-        parts.append(f"前半／後半心率 {dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm；功率 {dr['p1']:.0f} → {dr['p2']:.0f} W")
+        parts.append(_("前半／後半心率 {a:.0f} → {b:.0f} bpm；功率 {p1:.0f} → {p2:.0f} W",
+                       a=dr["pw_hr1"], b=dr["pw_hr2"], p1=dr["p1"], p2=dr["p2"]))
     if dr.get("drift") is not None or dr.get("pw_drift") is not None:
         parts.append(start_text(dr))
-    parts.append(("Pw:HR = 功率／心率" if power else "Pa:HR = 速度／心率") +
-                 "，比較前後半；< 5% 穩、5–10% 後段往上跑、> 10% 有氧基礎不足或跑太快。"
-                 "暖身後 ≥ 40 分是測試級（UA 測試標準），30–40 分只當參考級。")
-    if drift_tier(dr) == "ref":
-        parts.append(REF_TIP)
-    if dr.get("drift_se") is not None or dr.get("pw_drift_se") is not None:
-        parts.append(SE_TIP)
+    cav = drift_caveat(dr, basis)
+    if cav and cav not in "\n".join(parts):
+        parts.append(cav)
+    parts.append(drift_method(basis, dr.get("pw_drift_se" if power else "drift_se")))
     return "\n".join(p for p in parts if p)
 
 
-def drift_card(dr: dict, basis: str, lines: list[str], judged: bool = True, typ_label: str = "") -> dict:
-    """The main drift card: 「Pa:HR 3.2% ±2.1」 + tier, or 「不採用：原因」."""
-    power = basis == "power"
+def drift_card(dr: dict, basis: str, lines: list[str], judged: bool = True, typ_label: str = "",
+               both: bool = False) -> dict:
+    """The main drift card: 「3.2%」 + 「穩定」 (coloured by drift_level), 「· 只當參考」 when it is the
+    參考 tier or noisy; or 「不採用：原因」. `both`: the label says which basis (the 飄移判讀 tab)."""
     d, why = basis_drift(dr, basis, ref=True)
-    name = "Pw:HR 飄移" if power else "Pa:HR 飄移"
+    name = drift_name(basis if both else None)
     if d is None:
-        return _card("status", id="drift", icon="drift", label=name, value="不採用", sub=short_reason(dr, basis),
+        return _card("status", id="drift", icon="drift", label=name, value=_("不採用"), sub=short_reason(dr, basis),
                      level="na", tip="\n".join([why] + [x for x in lines if x != why]))
-    se = dr.get("pw_drift_se" if power else "drift_se")
-    sub = _tier_word(dr) if judged else f"{typ_label}不判讀"
-    return _card("status", id="drift", icon="drift", label=name, value=_pct(d),
-                 pm=None if se is None else f"±{se * 100:.1f}", sub=sub,
+    sub = drift_word(d) if judged else _("{typ}不判讀", typ=typ_label)
+    if judged and drift_caveat(dr, basis):
+        sub = _("{word} · 只當參考", word=sub)
+    return _card("status", id="drift", icon="drift", label=name, value=_pct(d), sub=sub,
                  level=drift_level(d) if judged else "info", tip=_drift_tip(dr, basis, lines))
 
 
@@ -2661,19 +2706,23 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     dr = m.get("drift") or {}
     power = basis == "power"
     judged = c["type"] in ("easy", "long", "test_aet")
-    main = drift_card(dr, basis, lines, judged, c["type_label"])
-    if c["type"] == "test_aet" and main.get("value") not in (None, "不採用"):
+    main = drift_card(dr, basis, lines, judged, c["type_label"], both=True)
+    refused = main.get("level") == "na"
+    if c["type"] == "test_aet" and not refused:
         d = basis_drift(dr, basis, ref=True)[0]
-        main["sub"] = ("AeT 可以再高" if d < 0.035 else "前半心率＝AeT" if d <= DRIFT_GOOD else "AeT 設太高") + f" · {_tier_word(dr)}"
+        word = _("AeT 可以再高") if d < 0.035 else _("前半心率＝AeT") if d <= DRIFT_GOOD else _("AeT 設太高")
+        main["sub"] = _("{word} · 只當參考", word=word) if drift_caveat(dr, basis) else word
     cards = [main]
-    if main.get("value") == "不採用":
+    if refused:
         return cards
     chip = lambda **kw: cards.append(_card("chip", **kw))           # noqa: E731
     # the other basis
-    od, owhy = basis_drift(dr, "pace" if power else "power", ref=True)
-    oname = "Pa:HR" if power else "Pw:HR"
+    obasis = "pace" if power else "power"
+    od, owhy = basis_drift(dr, obasis, ref=True)
+    oname = drift_name(obasis)
     chip(id="other", icon="power" if not power else "distance", text=f"{oname} {_pct(od)}" if od is not None else f"{oname} —",
-         level=drift_level(od) if od is not None and judged else "na", tip=None if od is not None else owhy)
+         level=drift_level(od) if od is not None and judged else "na",
+         tip=drift_plain(od) if od is not None else owhy)
     # the start / return-leg / idle cut
     cut = []
     r = dr.get("start_shift")
@@ -2700,8 +2749,8 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     tc = dr.get("temp_c")
     if tc is not None:
         chip(id="heat", icon="temp", text=f"{tc:.0f} °C", level="good" if tc <= DRIFT_HEAT_C else "warn",
-             tip=f"{TEMP_SRC_LABEL.get(dr.get('temp_src'), '溫度')} {tc:.0f} °C；> {DRIFT_HEAT_C:.0f} °C 熱會讓心率飄，飄移不採用"
-                 "（徐國峰 < 25 °C；Lafrenz 2008）")
+             tip=_("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（徐國峰 < 25 °C；Lafrenz 2008）",
+                   src=TEMP_SRC_LABEL.get(dr.get("temp_src"), "溫度"), tc=tc, hot=DRIFT_HEAT_C))
     elif m.get("category") in ("road", "trail"):
         chip(id="heat", icon="temp", text="沒有溫度", level="na",
              tip=f"沒有溫度資料：> {DRIFT_HEAT_C:.0f} °C 的熱檢查不到")
@@ -2712,8 +2761,9 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     # precision
     se = dr.get("pw_drift_se" if power else "drift_se")
     if se is not None and se > DRIFT_NOISY_SE:
-        chip(id="noisy", icon="noise", text="這次很吵", level="warn",
-             tip=f"這次 {se_text(se)} > ±{DRIFT_NOISY_SE * 100:.0f} pp：只當多次平均的一個點（門檻推估）\n{SE_TIP}")
+        chip(id="noisy", icon="noise", text=_("資料比較雜"), level="warn",
+             tip=_("{note}：看最近幾次的走向比較準。\n方法：這次誤差 {se} > ±{lim:.0f} 個百分點（門檻推估）。",
+                   note=_(NOISY_NOTE), se=se_text(se), lim=DRIFT_NOISY_SE * 100))
     # over AeT+3
     sh = _over_aet(m)
     if sh is not None:
@@ -2779,25 +2829,23 @@ def _aerobic(ds, w, m, c, base):
     # test's own lines stay strict (_aet_test_lines / aerobic_lines)
     d, why = basis_drift(dr, basis, ref=True)
     ref = d is not None and drift_tier(dr) == "ref"
-    tag = "（參考）" if ref else ""
     rows = []
     se = dr.get("pw_drift_se" if power else "drift_se")
-    pm = f" {se_text(se)}" if d is not None and se is not None else ""
+    name = drift_name(basis)
+    if d is not None:
+        tip = "\n".join(x for x in (_(REF_TIP) if ref else _(SE_TIP).split("\n")[0], drift_method(basis, se)) if x)
+        rows.append(_row(name, _("{plain}（{start}）", plain=drift_plain(d), start=start_text(dr)), tip))
     if d is not None and power:
-        rows += [_row("Pw:HR 飄移", f"{_pct(d)}{pm}（{start_text(dr)}）{tag}", REF_TIP if ref else SE_TIP),
-                 _row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
+        rows += [_row("前半／後半心率", f"{dr['pw_hr1']:.0f} → {dr['pw_hr2']:.0f} bpm"),
                  _row("前半／後半功率", f"{dr['p1']:.0f} → {dr['p2']:.0f} W")]
     elif d is not None:
-        rows += [_row("Pa:HR 飄移", f"{_pct(d)}{pm}（{start_text(dr)}）{tag}", REF_TIP if ref else SE_TIP),
-                 _row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
+        rows += [_row("前半／後半心率", f"{dr['hr1']:.0f} → {dr['hr2']:.0f} bpm"),
                  _row("前半／後半速度", f"{dr['v1']:.2f} → {dr['v2']:.2f} km/h")]
-    if ref:
-        rows.append(_row("飄移等級", REF_LABEL, REF_TIP))
-    elif d is not None:
-        rows.append(_row("飄移等級", "嚴格（暖身後 ≥ 40 分，UA 測試標準）"))
-    if d is not None and se is not None and se > DRIFT_NOISY_SE:
-        rows.append(_row("精度", f"這次很吵（{se_text(se)} > ±{DRIFT_NOISY_SE * 100:.0f} pp）：只當多次平均的一個點（門檻推估）",
-                         SE_TIP))
+    if d is not None:
+        # one plain 「可信度」 row: the 參考 tier, a noisy run, or fine (the method only in the ?)
+        cav = drift_caveat(dr, basis)
+        rows.append(_row(_("可信度"), cav or _("暖身後跑滿 40 分鐘，可以判讀"),
+                         _(REF_TIP) if ref else _(SE_TIP) if cav else None))
     ex = excluded_text(dr)
     if ex and m.get("category") == "road":
         rows.append(_row("已排除", ex, START_TIP + " " + TAIL_TIP))
@@ -2809,7 +2857,7 @@ def _aerobic(ds, w, m, c, base):
         rows.append(_row("坡道", rt, RAMP_TIP))
     if d is None and power and (dr.get("ok") or dr.get("ref_ok") or m.get("avg_power") is None):
         # nothing to show on this basis (no power, or too little): say so, not 0 %
-        rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
+        rows.append(_row(drift_name("power"), _("這次沒有功率") if m.get("avg_power") is None else why))
     band = dr.get("temp_band") or temp_band(dr.get("temp_c"))
     if m.get("category") in ("road", "trail"):
         tc = dr.get("temp_c")

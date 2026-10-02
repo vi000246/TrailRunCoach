@@ -31,8 +31,10 @@ def test_summary_cards_easy_run_has_stats_zones_and_verdicts():
     z = C["zones"]["zones"]
     assert [x["key"] for x in z] == ["low", "mid", "high"]
     assert abs(sum(x["share"] for x in z) - 1.0) < 1e-6 and all(x["seconds"] >= 0 for x in z)
-    # constant HR, constant speed: no drift -> ✓, measured ≥ 40 min after the warm-up -> 測試級
-    assert C["drift"]["kind"] == "status" and C["drift"]["level"] == "good" and C["drift"]["sub"] == "測試級"
+    # constant HR, constant speed: no drift -> ✓ 「穩定」 (plain word, no tier / ± SE: owner 2026-10-02)
+    assert C["drift"]["kind"] == "status" and C["drift"]["level"] == "good" and C["drift"]["sub"] == "穩定"
+    assert C["drift"]["label"] == "心率飄移" and "pm" not in C["drift"]
+    assert C["drift"]["tip"].split("\n")[-1].startswith("方法：")
     assert C["intensity"]["level"] == "good"
     # every status card carries its explanation for the ? icon, never inline
     assert all(c.get("tip") for c in r["cards"] if c["kind"] == "status")
@@ -62,12 +64,16 @@ def test_drift_card_drifting_run_and_chips():
     r = R.review(ds, ds.workouts[0], "aerobic")
     C = _by_id(r["cards"])
     d = C["drift"]
-    assert d["label"] == "Pa:HR 飄移" and d["level"] in ("warn", "bad") and d["value"].endswith("%")
-    assert C["other"]["kind"] == "chip" and C["other"]["text"].startswith("Pw:HR")
+    assert d["label"] == "心率飄移（配速）" and d["level"] in ("warn", "bad") and d["value"].endswith("%")
+    assert d["sub"] in ("有點飄", "飄很多", "AeT 設太高")        # 60′ steady: classified as an AeT test
+    assert C["other"]["kind"] == "chip" and C["other"]["text"].startswith("心率飄移（功率）")
     # chips are a few words, never a paragraph
     assert all(len(c["text"]) <= 16 for c in r["cards"] if c["kind"] == "chip")
     pw = _by_id(R.review(ds, ds.workouts[0], "aerobic", basis="power")["cards"])
-    assert pw["drift"]["label"] == "Pw:HR 飄移" and pw["other"]["text"].startswith("Pa:HR")
+    assert pw["drift"]["label"] == "心率飄移（功率）" and pw["other"]["text"].startswith("心率飄移（配速）")
+    for c in r["cards"]:
+        for word in ("Pa:HR", "Pw:HR", "測試級", "參考級", "pp"):
+            assert word not in str(c.get("label", "")) + str(c.get("sub", "")) + str(c.get("text", "")), (word, c)
 
 
 def test_short_reason_maps_the_refusals():

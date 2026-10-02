@@ -223,7 +223,7 @@ def test_measure_uses_the_archive_first_then_the_watch():
     res = R.review(ds, w, "aerobic")
     rows = {s["name"]: s["data"]["value"] for s in res["series"]}
     assert res["chip"]["text"] == "🌡 > 28 °C" and res["chip"]["heat"]
-    assert "Pa:HR 飄移" in rows and R.HEAT_NOTE in rows["溫度"]
+    assert "心率飄移（配速）" in rows and R.HEAT_NOTE in rows["溫度"]
     assert any(R.HEAT_NOTE in s["data"]["value"] for s in res["series"] if s["name"] in ("判讀", ""))
 
 
