@@ -138,7 +138,8 @@ def test_the_interval_tab_shows_on_a_cp_test_with_its_protocol_as_the_plan():
 
 def test_an_unplanned_run_offers_the_interval_reading_and_remembers_it(tmp_path, monkeypatch):
     from backend.engine import activity_tags as AT
-    ds = _ds([_v1a_run(TODAY - dt.timedelta(days=3))])          # no plan row; avg HR ≤ AeT+3 → not quality
+    # 3×2′ @ 109 %: equivalent T@VO2max 2.5 min < 4 (session_stimulus) and avg HR ≤ AeT+3 → not quality
+    ds = _ds([_v1a_run(TODAY - dt.timedelta(days=3), reps=3)])
     w = ds.workouts[0]
     assert WR.classify(ds, w)["type"] != "quality"
     v = WR.review(ds, w, "interval_verdict")
@@ -146,7 +147,7 @@ def test_an_unplanned_run_offers_the_interval_reading_and_remembers_it(tmp_path,
     a = v["action"]
     assert a["label"] == "當作間歇判讀" and a["method"] == "PATCH" and a["reload"]
     assert a["body"]["add_tags"] == [IE.FLAG_TAG] and a["body"]["items"][0]["key"] == AT.key_of(w.entry.start)
-    assert "偵測到 5 趟" in v["series"][1]["data"]["value"]
+    assert "偵測到 3 趟" in v["series"][1]["data"]["value"]
     assert WR.review(ds, w, "interval_reps").get("hide")         # no reps to draw until the mark
     bat = WR.review(ds, w, "interval_battery")                  # the battery still shows
     assert not bat.get("hide") and bat["series"][0]["name"] == "dFRC（WKO5）"
@@ -158,9 +159,21 @@ def test_an_unplanned_run_offers_the_interval_reading_and_remembers_it(tmp_path,
     AT.upsert(db, start_local=AT.key_of(w.entry.start), file=w.entry.file, tags=[IE.FLAG_TAG])
     assert IE.flagged(w)
     e = IE.card_cached(ds, w)
-    assert e["ok"] and e["kind"] == "detected" and e["flagged"] and len(e["reps"]) == 5
+    assert e["ok"] and e["kind"] == "detected" and e["flagged"] and len(e["reps"]) == 3
     v = WR.review(ds, w, "interval_verdict")
     assert "當作間歇" in v["badge"]["sub"] and "action" not in v
+
+
+def test_five_two_minute_reps_are_zone5_even_with_an_easy_average_hr():
+    # avg HR 140 ≤ AeT+3 (145.4), but ≥ 4 min of power evidence (90 + 4 × 60 s) wins (owner 2026-10-02)
+    ds = _ds([_v1a_run(TODAY - dt.timedelta(days=3))])
+    w = ds.workouts[0]
+    c = WR.classify(ds, w)
+    assert c["type"] == "quality" and c["stimulus"] == "z5" and c["type_label"] == "Z5 間歇" and c["icon"] == "z5"
+    assert c["stim"]["t_vo2_eq_s"] == pytest.approx(270, abs=10) and c["stim"]["easy_hr"]
+    cards = {x.get("id"): x for x in WR.review(ds, w, "summary")["cards"]}
+    assert cards["type"]["text"] == "Z5 間歇" and "103%" in cards["type"]["tip"] and "推估" in cards["type"]["tip"]
+    assert cards["vo2"]["value"] == "4.5" and cards["vo2"]["level"] == "info"
 
 
 def test_a_run_without_bouts_or_power_says_so_in_one_card():

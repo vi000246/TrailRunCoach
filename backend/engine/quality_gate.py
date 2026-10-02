@@ -416,6 +416,8 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             category(w) == "road" or spec is not None) else {"bouts": [], "source": None}
         reps = found["bouts"]
         z3 = found["source"] == "z3" and len(reps) >= 2
+        if not row and c["type"] == "hard_long":
+            continue                           # 高強度長跑 / 長天: a hard day, not an interval session (owner 2026-10-02)
         if not row and c["type"] != "quality" and not z3 and \
                 (found["source"] != "short" or len(reps) < DOSE_MIN_REPS):
             continue
@@ -441,7 +443,9 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             lo = lo_of(spec)
             hi = getattr(spec, "hi", None) if hasattr(spec, "hi") else spec[6]
             plan_tiz = sum(works_of(spec))
-            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, lo >= 1.02)
+            # Zone 5 by the band middle on Palladino (≥ 106 % CP; interval_library.CLASS_RANGE)
+            z5 = (lo + (hi if hi is not None else lo)) / 2 >= _IL.CLASS_RANGE["Z5"][0]
+            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, z5)
             tiz_ratio = (t_in / plan_tiz) if t_in is not None and plan_tiz else None
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
                     **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",
@@ -451,6 +455,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
                     # informational only now: dose_step judges the bouts (interval_outcome)
                     "faded": fade is not None and fade < -FADE,
                     "bouts": bouts[:20], "cp": m.get("cp"), "rep_source": found["source"], "tiz_ratio": tiz_ratio,
+                    "stimulus": c.get("stimulus"),
                     # the stored plan is in use and this run matched none of its quality sessions:
                     # a hard run, not a ladder session (real data 2026-10-01: steady runs at
                     # ~95 % CP were judged 「目標太高」 against 3×8′ and moved the ladder)
@@ -1479,6 +1484,14 @@ def is_z3_variant(key: Optional[str]) -> bool:
     from backend.engine import interval_library as IL
     v = IL.get(key)
     return v is not None and v.cls == "Z3sub"
+
+
+def is_z5_variant(key: Optional[str]) -> bool:
+    """A planned Zone 5 session: only a run classified Z5 (workout_review stimulus "z5")
+    ticks it (owner 2026-10-02) — a threshold climb no longer does."""
+    from backend.engine import interval_library as IL
+    v = IL.get(key)
+    return v is not None and v.cls == "Z5"
 
 
 # ---------------------------------------------------------------------------

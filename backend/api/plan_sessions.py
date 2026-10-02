@@ -115,7 +115,7 @@ def activity_rows(ds, a: dt.date, b: dt.date) -> list[dict]:
             hard = {}
     out = []
     for w in ws:
-        r = O.activity_row(w)
+        r = O.activity_row(w, ds)          # + `session` (workout_review.classify: type, label, icon)
         if w in runs:
             r["hard_s"] = hard.get(w.idx, 0.0) if hard else None
         out.append(r)
@@ -128,11 +128,18 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     fitness indicator), TSB today and the first day sessions can still go on."""
     from backend.engine import overview as O
     reviews: dict = {}
+    hard_days: set = set()
     if enabled:
         try:
             from backend.engine import workout_review as WR
             for w in O.workouts_between(ds, monday, today + dt.timedelta(days=1)):
-                if O.category(w) not in ("road", "trail"):
+                if O.category(w) not in ("road", "trail", "hike"):
+                    continue
+                # a hard day done this week, planned or not (Z5 / Z3 / 高強度長跑 / CP test):
+                # adapt keeps the remaining hard sessions 48 h away from it
+                if O.session_of(ds, w).get("type") in WR.HARD_TYPES:
+                    hard_days.add(O.wdate(w).isoformat())
+                if O.category(w) == "hike":
                     continue
                 m = WR.measure(ds, w) or {}
                 reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "over_aet_s", "hr_s", "avg_power", "cp")}
@@ -144,6 +151,7 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     load = cur.get("load") or {}
     done_today = any(a.get("date") == today.isoformat() for a in (cur.get("done") or {}).get("activities") or [])
     return {"enabled": enabled, "reviews": reviews, "ramp": ramp, "tsb": load.get("tsb_today"),
+            "hard_days": sorted(hard_days),
             "first_free": (today + dt.timedelta(days=1 if done_today else 0)).isoformat()}
 
 

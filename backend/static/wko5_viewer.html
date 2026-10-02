@@ -1324,7 +1324,7 @@ function drawReviewCards(card, res) {
       ${c.sub ? `<div class="s" title="${esc(c.sub)}">${esc(c.sub)}</div>` : ""}</div>`;
   };
   card.insertAdjacentHTML("beforeend",
-    (tags.length ? `<div class="rv-tags">${tags.map((t) => `<span class="rv-tag">${rvI(t.icon)}${esc(t.text)}</span>`).join("")}</div>` : "")
+    (tags.length ? `<div class="rv-tags">${tags.map((t) => `<span class="rv-tag">${rvI(t.icon)}${esc(t.text)}${rvQ(t.tip)}</span>`).join("")}</div>` : "")
     + `<div class="rv">${main.map(one).join("")}</div>`
     + (chips.length ? `<div class="rv-chips">${chips.map((c) => `<span class="rv-chip ${esc(c.level || "")}">${rvI(c.icon)}${esc(c.text)}${rvQ(c.tip)}</span>`).join("")}</div>` : ""));
 }

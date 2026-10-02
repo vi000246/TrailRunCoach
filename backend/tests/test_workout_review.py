@@ -17,28 +17,30 @@ def _t(minutes):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("kw, expected", [
-    (dict(category="strength", moving_s=1800, hard_s=0), "strength"),
-    (dict(category="bike", moving_s=7200, hard_s=3000), "bike"),
-    (dict(category="road", moving_s=3000, hard_s=0, title="CP 3/12"), "test_cp"),
-    (dict(category="road", moving_s=3000, hard_s=0, title="12 分測試"), "test_cp"),
-    (dict(category="road", moving_s=3000, hard_s=0, plan_test={"cp": 250}), "test_cp"),
-    (dict(category="road", moving_s=3000, hard_s=0, cp_detected=True), "test_cp"),
-    (dict(category="road", moving_s=3000, hard_s=0, plan_test={"aethr": 140}), "test_aet"),
-    (dict(category="road", moving_s=3600, hard_s=0, aet_steady=True), "test_aet"),
-    (dict(category="road", moving_s=2700, hard_s=0, aet_steady=True), "easy"),      # < 55 min
-    (dict(category="road", moving_s=3000, hard_s=900, hard_power_s=900, n_efforts=3), "quality"),
-    # HR over LTHR but no work bout: an easy run that drifted, not intervals
-    (dict(category="road", moving_s=3000, hard_s=900, hard_power_s=100, n_efforts=0), "easy"),
-    (dict(category="road", moving_s=3000, hard_s=900), "quality"),                     # HR only, no power
-    (dict(category="road", moving_s=3000, hard_s=900, hard_power_s=900, easy_hr=True), "easy"),
-    (dict(category="hike", moving_s=3000, hard_s=1500), "quality"),                    # sustained climb above threshold counts
-    (dict(category="hike", moving_s=3000, hard_s=1500, easy_hr=True), "easy"),         # avg HR ≤ AeT+3: still easy
-    (dict(category="trail", moving_s=80 * 60, hard_s=0), "long"),
-    (dict(category="road", moving_s=50 * 60, hard_s=0, long_target_s=60 * 60), "long"),
-    (dict(category="road", moving_s=40 * 60, hard_s=0), "easy"),
+    (dict(category="strength", moving_s=1800), ("strength", None)),
+    (dict(category="bike", moving_s=7200, stimulus="z5"), ("bike", None)),
+    (dict(category="road", moving_s=3000, title="CP 3/12", stimulus="z5"), ("test_cp", None)),
+    (dict(category="road", moving_s=3000, title="12 分測試"), ("test_cp", None)),
+    (dict(category="road", moving_s=3000, plan_test={"cp": 250}), ("test_cp", None)),
+    (dict(category="road", moving_s=3000, cp_detected=True), ("test_cp", None)),
+    (dict(category="road", moving_s=3000, plan_test={"aethr": 140}), ("test_aet", None)),
+    (dict(category="road", moving_s=3600, aet_steady=True), ("test_aet", None)),
+    (dict(category="road", moving_s=2700, aet_steady=True), ("easy", None)),      # < 55 min
+    # the session classifier (docs/research/vo2max-session-detection.md §3.5)
+    (dict(category="road", moving_s=3000, stimulus="z5"), ("quality", "z5")),
+    (dict(category="road", moving_s=3000, stimulus="z3"), ("quality", "z3")),
+    (dict(category="road", moving_s=120 * 60, stimulus="z5"), ("quality", "z5")),  # a race: Z5 even when long
+    (dict(category="trail", moving_s=150 * 60, stimulus="z3"), ("hard_long", "z3")),  # threshold climbs in a long day
+    (dict(category="hike", moving_s=300 * 60, stimulus="z3"), ("hard_long", "z3")),
+    (dict(category="hike", moving_s=300 * 60, stimulus="z5"), ("long", None)),     # 百岳 never auto-Z5
+    (dict(category="hike", moving_s=50 * 60, stimulus="z3"), ("quality", "z3")),
+    (dict(category="trail", moving_s=80 * 60), ("long", None)),
+    (dict(category="road", moving_s=50 * 60, long_target_s=60 * 60), ("long", None)),
+    (dict(category="road", moving_s=40 * 60), ("easy", None)),
 ])
-def test_session_type(kw, expected):
-    assert R.session_type(**kw) == expected
+def test_session_class(kw, expected):
+    assert R.session_class(**kw) == expected
+    assert R.session_type(**kw) == expected[0]
 
 
 # ---------------------------------------------------------------------------
@@ -493,19 +495,35 @@ def _hike(day, minutes=60, hr=140.0, watts=None, climb_w=None, climb_s=0):
 HIKE_SETTINGS = {"otherthr": 160.0, "otherftp": 200.0}     # AeT 142.4, CP 200
 
 
-def test_hike_reaches_quality_through_power():
+def _hr_climb(w, hr_climb: float, climb_s: int):
+    """`w` with HR at `hr_climb` for `climb_s` seconds in the middle."""
+    h = np.asarray(w.channels["heartrate"], dtype=float)
+    a = len(h) // 2 - climb_s // 2
+    h[a:a + climb_s] = hr_climb
+    w.channels["heartrate"] = list(h)
+    return w
+
+
+def test_hike_reaches_zone3_through_hr_not_power():
     today = dt.date(2026, 9, 30)
-    # HR stays under LTHR (150 < 160) but above AeT+3; 15' at 100 % CP
+    # walking power is not comparable (UA): 15' at 100 % CP with HR under 0.95 LTHR (152) is not Zone 3
     ds = FakeDataset([_hike(today, hr=150.0, watts=120.0, climb_w=200.0, climb_s=900)], today,
                      settings=HIKE_SETTINGS)
     w = ds.workouts[0]
-    m = R.measure(ds, w)
-    assert m["hard_power_s"] == pytest.approx(900, abs=40)
-    assert len(m["efforts"]) >= 1
-    assert R.classify(ds, w, m)["type"] == "quality"
-    # the same hike without the climb is not quality
-    ds2 = FakeDataset([_hike(today, hr=150.0, watts=120.0)], today, settings=HIKE_SETTINGS)
-    assert R.classify(ds2, ds2.workouts[0])["type"] != "quality"
+    c = R.classify(ds, w)
+    assert c["type"] == "easy" and c["moderate"] and c["type_label"] == "中強度健行"
+    # 18' at 158 bpm (≥ 0.95 × 160): 18 − 3 (HR lag) = 15' of Zone 3 → a Z3 hike (< 75 min)
+    ds2 = FakeDataset([_hr_climb(_hike(today, hr=150.0), 158.0, 18 * 60)], today, settings=HIKE_SETTINGS)
+    c2 = R.classify(ds2, ds2.workouts[0])
+    assert c2["type"] == "quality" and c2["stimulus"] == "z3" and c2["type_label"] == "Z3 閾值"
+    assert c2["stim"]["z3_s"] == pytest.approx(15 * 60, abs=40)
+    # a long day with the same climb: 高強度長天, not an interval session
+    ds3 = FakeDataset([_hr_climb(_hike(today, minutes=240, hr=150.0), 158.0, 18 * 60)], today, settings=HIKE_SETTINGS)
+    c3 = R.classify(ds3, ds3.workouts[0])
+    assert c3["type"] == "hard_long" and c3["type_label"] == "高強度長天"
+    # 百岳 never auto-Z5, even with HR near max for a long time
+    ds4 = FakeDataset([_hr_climb(_hike(today, minutes=240, hr=150.0), 185.0, 40 * 60)], today, settings=HIKE_SETTINGS)
+    assert ds4.workouts and R.classify(ds4, ds4.workouts[0])["stimulus"] != "z5"
 
 
 def test_hard_hr_excludes_recording_gaps():
@@ -540,7 +558,7 @@ def test_last_quality_includes_hikes_and_sorts_by_date():
     run = FakeWorkout(start=dt.datetime.combine(today - dt.timedelta(days=6), dt.time(7)), sport="run",
                       tags=["running"], sport_type="running", channels=run_ch,
                       metrics={"duration": float(len(t)), "movingduration": float(len(t)), "distance": 8.0})
-    hike = _hike(today - dt.timedelta(days=2), hr=150.0, watts=120.0, climb_w=230.0, climb_s=900)
+    hike = _hr_climb(_hike(today - dt.timedelta(days=2), hr=150.0), 158.0, 18 * 60)     # a Z3 hike (HR path)
     ds = FakeDataset([run, hike], today,
                      settings={"runthr": 150.0, "runftp": 220.0, **HIKE_SETTINGS})
     hike_idx = next(w.idx for w in ds.workouts if w.sport == "hike")

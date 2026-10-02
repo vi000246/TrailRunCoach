@@ -82,7 +82,12 @@ def is_aet(s: dict) -> bool:
 
 def actual_intensity(a: dict, need: float = HARD_MIN_S) -> Optional[str]:
     """'hard' (≥ need seconds at/above threshold — the generator's own done
-    rule for a quality session) / 'easy' / None (not measured)."""
+    rule for a quality session) / 'easy' / None (not measured). With the session
+    classifier's row (`session`, overview.activity_row(w, ds)) its class decides:
+    Z5 / Z3 / 高強度長跑 / CP test = hard, the rest easy (vo2max-session-detection.md)."""
+    t = (a.get("session") or {}).get("type")
+    if t:
+        return "hard" if t in ("quality", "hard_long", "test_cp") else "easy"
     h = _f(a.get("hard_s"))
     if h is None:
         return None

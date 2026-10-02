@@ -8,7 +8,7 @@
 
 Single-activity review: the 判讀卡 (verdict cards) that lead each dashboard of
 the 單次活動判讀 view. For one workout it decides what kind of session it was
-(easy / long / quality / CP test / AeT test, or strength / bike / walk / other),
+(easy / 中強度 / long / 高強度長跑 / Z5 間歇 / Z3 閾值 / CP test / AeT test, or strength / bike / walk / other),
 on what terrain and in which training phase, then measures what one chart
 expression cannot — Pa:HR drift of a steady run, work bouts, climbs, durability,
 pacing by distance, and form drift — and writes at most three verdict lines per
@@ -83,7 +83,7 @@ and form drift.
   read with `activity_temp`, because the route_weather archive is not part of the cache stamp
   and a routes build can fill it later. `_measure` stores the watch's raw mean temperature
   over the drift window as `watch_temp_c`; the wrist bias is subtracted on read. Key
-  `workout_review_v17` since the heat bands (2026-10-02).
+  `workout_review_v18` since the session classifier (`stim`, 2026-10-02; v17 = the heat bands).
 
 ## Heat bands (2026-10-02, user-approved)
 
@@ -190,12 +190,33 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:741`).
    the 活動資訊 card) that no other rule made a test becomes `test_aet` when the title says AeT,
    else `test_cp`, with `test_match` "user" (accepted by the race-power back-test's
    `wko5_cp_tests` like a plan / title mark). Other tags do not demote an auto test.
-4. `quality`: road, trail or hike whose average HR is **not** ≤ AeT+3, and either
-   30-s power time ≥ 95 % CP reaches `HARD_SESSION_S` (600 s,
-   `backend/engine/overview.py:65`), or hard time reaches it **and**, when a power
-   stream exists, at least one detected effort. Hikes use both paths like runs.
+4. **the stimulus** (2026-10-02, `session_class`; design and sources
+   `docs/research/vo2max-session-detection.md`; per-run numbers in `measure()["stim"]`
+   from `engine/session_stimulus.py`, the verdict in `classify()["stim"]`):
+   - `quality` / `stimulus "z5"` 「Z5 間歇」: road or trail, equivalent T@VO2max ≥ 4 min.
+     T_p = VO2 bouts on power-trusted samples (road; trail −3…8 % grade; never hikes):
+     10-s power ≥ 1.03 CP extended over raw seconds ≥ 1.03 CP, mean ≥ 1.06 CP for ≥ 2 min
+     (minus 60 s, the day's first 90 s) or 1.03–1.06 CP for ≥ 5 min (minus 180 s), 5 s slack.
+     T_h = wrist HR ≥ 0.93 × HRpeak in runs ≥ 60 s where power is not trusted, moving, not
+     downhill, not cadence-locked (HR within 3 bpm of the cadence **and** following it:
+     r ≥ 0.8 with ≥ 1.5 spm of cadence SD, 60-s windows); counted ÷ 1.6. HRpeak = the plan's
+     最大心率 (`mhr`), else the 3rd-highest per-run 60-s peak of road / trail runs in 365 days
+     (`hr_peak`, memoised per dataset). Long runs too (a race is Z5).
+     ≥ 4 min of **power** evidence is Z5 even when the average HR stayed ≤ AeT+3.
+   - Zone 3 time: power-trusted 30-s power ≥ 0.88 CP in runs ≥ 150 s, plus HR-only samples
+     ≥ 0.95 LTHR minus the first 3 min of each run (≥ 150 s left). ≥ 10 min and avg HR not
+     ≤ AeT+3: moving ≥ 75 min → `hard_long` 「高強度長跑」 (hikes 「高強度長天」: a hard
+     day, not an interval session), else `quality` / `stimulus "z3"` 「Z3 閾值」.
+   - Hikes (百岳) never get Z5 automatically (the 「當作間歇判讀」 mark still works).
 5. `long`: moving ≥ 75 min, or ≥ 0.8 × a long-run target.
-6. `easy`.
+6. `easy` — with `moderate: true` and the label 「中強度跑」 (hikes 「中強度健行」) when the
+   average HR is above AeT+3 (informational; the drift is still judged).
+
+`classify` also returns `stimulus`, `moderate`, `stim` (equivalent / power / HR seconds,
+the bouts, Zone 3 seconds, HR threshold and HRpeak source, `easy_hr`) and `icon` (dashicons
+name: z5 / z3 / long / intensity / easy / test / strength, `type_icon`). The old rule (≥ 10 min
+HR ≥ LTHR or 30-s power ≥ 95 % CP) is gone: in the owner's last 12 months it made 100 of 188
+runs 「品質課（間歇）」 (backtest in the research doc §5).
 
 ## Verdicts and cards
 
@@ -300,7 +321,7 @@ card for 3 real runs, and the stored values match the whole-run definition to
 
 `review()` adds `classification` and `suggested_dashboard` to every card:
 dashboard 2 for `test_cp`, 3 for trail / hike terrain, otherwise `SUGGESTED`
-(easy / long / test_aet → 1, quality → 2, others 0)
+(easy / long / hard_long / test_aet → 1, quality → 2, others 0)
 (`backend/engine/workout_review.py:99-101`, `backend/engine/workout_review.py:979`).
 Unknown section or no samples → an `empty` card.
 
@@ -447,7 +468,7 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 |------|-----------|
 | 判讀卡 (review card) | A chart of kind `review`: rows, tables or a curve plus ≤ 3 verdict lines for one section |
 | Section | One of `summary`, `aerobic`, `intervals`, `climbs`, `durability`, `form` (dashboards) or `grades`, `pacing`, `durability_curve`, `cp_test` (extra cards) |
-| Session type | easy / long / quality / test_cp / test_aet, or strength / bike / walk / other |
+| Session type | easy (moderate flag) / long / hard_long / quality (stimulus z5 / z3) / test_cp / test_aet, or strength / bike / walk / other |
 | Terrain | road / trail / hike, from the workout category |
 | Phase | The plan phase on the activity date (base, specific, taper, …) |
 | Pa:HR drift | (r1 − r2)/r1, r = speed/HR, halves of moving time after 10 min; positive = HR drifted up |
@@ -489,6 +510,7 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-10-01 | feat/workout-hr-power-charts | user request | Chart kind `activity`: stacked HR / power with brushed-range stats (replaces the dual-axis chart on 本次重點), time in HR / power zones with a remembered model picker (iLevels, Palladino, Stryd, Coggan, Friel, Classic, Seiler 3, %HRmax, RQ), WKO5 Heart Rate Variation and Trend |
 | 2026-10-01 | fix/drift-steady-window | N/A | `drift_of` adaptive start (`steady_start`, 自組): 60 s after the last stop in the first 20 min, never below a tier the fixed 10 min reaches; recorded (`warmup_s`, `start_shift`) and shown (「前 m:ss 不算」, 「已排除」 row); ramps / strides not masked, 15 % CV unchanged (no source found — `docs/research/drift-steady-window-data.md` §6); measure cache `workout_review_v10` |
 | 2026-10-01 | feat/interval-library | docs/research/interval-prescription.md | 間歇判讀 (engine/interval_eval.py): reps from pushed-step laps else the planned band, hit rate, which-rep outcome, TIZ vs the chosen variant's plan, fade / Sdec, W′ by WKO5 dFRC + Skiba (Vassallo τ), HR at matched power vs 3–5 same-class sessions; verdict 達到／部分達到／未達到 (TIZ 85 % / 60 %, 推估) also drives dose_step. Sections interval_verdict / interval_reps / interval_power / interval_battery / interval_tiz / interval_hr in views/workout.json 間歇, hidden on non-interval activities |
+| 2026-10-02 | feat/session-classifier | user-approved | Session classifier (`engine/session_stimulus.py`, docs/research/vo2max-session-detection.md): Z5 間歇 = equivalent T@VO2max ≥ 4 min (power bouts ≥ 1.06 CP 2′ / 1.03 CP 5′ minus on-kinetics; wrist HR ≥ 0.93 HRpeak ÷ 1.6 where power isn't trusted), Z3 閾值 = Zone 3 ≥ 10′, 高強度長跑／長天 (`hard_long`, Z3 ≥ 10′ and ≥ 75′: hard day, not an interval), 中強度跑 (informational); hikes never auto-Z5; power evidence beats the AeT+3 rule; cadence lock must follow cadence; HRpeak = plan 最大心率 or the 3rd-highest 60-s peak in 365 d; type card icon + ? sources, 「VO2max 刺激」／「閾值刺激」 cards; `last_quality` no longer pre-filters on hard_s; measure cache `workout_review_v18` |
 | 2026-10-02 | feat/heat-bands | user-approved | Heat bands: no > 25 °C refusal; `temp_band` < 25 / 25–28 (28 推估) / > 28 °C / 溫度不明 on every drift; archive by date as a fallback, watch minus the 3.7 °C wrist bias; within-band comparison in i_drift, rolling / `drift_avg(…, band)` (one season-chart line per band), the card's baseline; AeT aggregate cool band only; gates count heat runs (pass unlocks, fail 「可能是熱造成的」); card chip `res.chip`; no heat-adjusted drift (β is between runs); measure cache `workout_review_v17` |
 | 2026-10-02 | feat/aet-heat-covariate | unsourced-rules.md §B6 | AeT aggregate takes the warm band with hr1 − β·(T − 25); β = Jenkins 2023 1.0 bpm/°C shrunk toward the athlete's own fit (`drift_agg.heat_beta`, n/(n+20), 0–2); cool / no-temperature runs unmoved, hot out, drift unadjusted; the validity reason says the warm runs were heat-adjusted. Real data: 180-d points 4 → 14, still 「需要測試」 (slope ≤ 0) |
 | 2026-10-02 | feat/aet-heat-covariate | owner-approved (temporary) | AeT lower bound when the regression finds no crossing (`AetAggregate.code` flat / slope / range_hi): `threshold_estimate.aet_lower_bound` — reference grade or better, SE ≤ 5 pp, each SE × 2 (GC validation), X = highest first-half HR ≤ LTHR − 3, ≥ 6 runs ≤ X and ≥ 3 within 5 bpm, the top 6's weighted mean + 2·SE < 5 %; any run ≤ X with drift − 2·SE ≥ 5 % drops it (all 推估). Valid, value X, se None: shift / moved never fire on it; zones still from the plan. Shown 「AeT ≥ X bpm（下限，推估）」 in the gate's why with the temporary-rule text; `zone_events` aet_bound: one AeT test every 8 weeks, priority low (box only, the testing indicator unchanged), id per cycle. Real data: the bound never held in 53 weeks (≤ 5 runs with SE ≤ 5 pp below LTHR − 3) — 53/53 still 「需要測試」 |

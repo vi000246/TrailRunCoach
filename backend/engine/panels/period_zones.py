@@ -46,7 +46,7 @@ from backend.engine.panels import activity_charts as A
 HIST_KEY = "period_zone_hist_v1"
 
 HR_IDS = ("frielhr", "classichr", "seiler3")
-POWER_IDS = ("palladino", "ilevels", "stryd", "palladino3", "coggan")
+POWER_IDS = ("palladino", "ilevels", "palladino3")         # Palladino everywhere (owner 2026-10-02)
 MODEL_IDS = {"hr": HR_IDS, "power": POWER_IDS}
 DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
 SUMMARY_MODEL = {"hr": "seiler3", "power": "palladino3"}      # the 3 zones the targets are written in
