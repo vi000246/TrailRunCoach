@@ -557,7 +557,7 @@ HILL_STRIDES = ("＋坡道衝刺 8×10 秒", "；最後 8 趟 10 秒上坡衝刺
 
 
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
-              b2b_accepted: Optional[list] = None, sport: Optional[str] = None) -> dict:
+              b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
 
     `status` is a computed `backend.engine.status.Status` (phase, goals and the
@@ -565,7 +565,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     None or the defaults keep the original rules untouched. `blackouts`:
     engine.blackouts ranges (不排課日期); None / empty = none. `b2b_accepted`:
     the accepted B2B entries (engine/b2b.load_accepted); None = none — a due
-    B2B is then only a suggestion (`b2b_suggestion`). `sport`: 主要訓練項目 (engine/primary_sport.py,
+    B2B is then only a suggestion (`b2b_suggestion`). `race_predict`: the race
+    calculator for the 專項期's コース定數 target (engine/specific_phase.py;
+    race_refs.calculator_hours); None = the plan's 預估移動時間.
+    `sport`: 主要訓練項目 (engine/primary_sport.py,
     trail | road); None = the setting (auto = the suggestion from the data / the next A race).
     Road: no B2B, no steep-hill walk, no mountain long run or uphill interval versions; the
     專項期 long run carries a marathon-pace segment and its interval is a flat threshold run."""
@@ -791,8 +794,15 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     def add(**kw):
         sessions.append(Session(**kw))
 
+    # 專項期 (engine/specific_phase.py): the long day follows the next A race's コース定數
+    from backend.engine import specific_phase as SP
+    sp = SP.plan_context(status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), longest28,
+                         race_predict, sport=sport) if kind == "specific" else {"active": False}
+
     if kind in ("base", "specific") and mode != "recovery_week":
-        if kind == "specific" and goal_h:
+        if kind == "specific" and sp.get("active"):
+            long_min = SP.long_minutes(sp, longest28)
+        elif kind == "specific" and goal_h:
             long_min = max(90.0, min(goal_h * 0.7 * 60.0, max(longest28, 60.0) * 1.15))
         else:
             long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * 1.15))
@@ -890,6 +900,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         flags = {s.id: getattr(s, "_long_day", False) for s in sessions}
         dd = [asdict(s) for s in sessions]
         B2B.decorate(dd, b2b, aet, PR.long_cap if PR is not None else None, b2b.get("weight"))
+        sessions = [Session(**d) for d in dd]
+        for s in sessions:
+            s._long_day = flags.get(s.id, False)
+    if sp.get("active"):
+        # 專項期: 「這次目標定數約 N（單日目標的 X%）」 + the route, after the caps above
+        flags = {s.id: getattr(s, "_long_day", False) for s in sessions}
+        dd = [asdict(s) for s in sessions]
+        SP.decorate(dd, sp)
         sessions = [Session(**d) for d in dd]
         for s in sessions:
             s._long_day = flags.get(s.id, False)
@@ -1053,6 +1071,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                                     enabled=getattr(prefs, "b2b", True) is not False)
     # ---- 陡坡健走（模擬負重） (engine/steep_hill.py): before a 百岳 / multi-day trip, one weekday
     # easy run of a 專項期 week becomes a steep walk at the grade that costs what the pack would
+    if sp.get("climb"):
+        # 長爬坡反覆 (engine/specific_phase.py): the race GPX's longest climb, one easy run
+        try:
+            dd = [asdict(s) for s in sessions]
+            SP.apply_climb(dd, sp, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+        except Exception as e:              # noqa: BLE001 — the plan must still build
+            sp = {**sp, "error": type(e).__name__}
+    race_sim = SP.sim_suggestion(sp, monday, max([longest28] + [s.minutes for s in sessions if s.id == "long"]),
+                                 aet, tph["trail"])
     from backend.engine import steep_hill as SH
     # (主要訓練項目 = 路跑: no steep walk — it simulates a mountain pack)
     lc = {"active": False, "why": "主要訓練項目：路跑"} if road else \
@@ -1167,4 +1195,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "b2b_suggestion": b2b_suggestion,
         # 陡坡健走（模擬負重） (engine/steep_hill.py): this week's stage / session, for the projection
         "steep_hill": SH.public(lc),
+        # 專項期 (engine/specific_phase.py): the race target, this week's share, the GPX features
+        "specific": SP.public(sp),
+        # the race simulation 4–3 weeks out, suggested (api/plan_sessions: the floating box)
+        "race_sim_suggestion": race_sim,
     }

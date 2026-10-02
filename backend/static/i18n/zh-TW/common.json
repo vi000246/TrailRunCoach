@@ -1,1 +1,5 @@
-{}
+{
+  "workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標",
+  "workout.no_tpace_badge": "沒有閾值配速",
+  "workout.no_tpace_link": "看閾值配速怎麼估"
+}

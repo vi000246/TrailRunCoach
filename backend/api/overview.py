@@ -103,8 +103,9 @@ def weekplan():
     from backend.engine import blackouts as BL
     from backend.engine import plan_prefs as PP
     # same 課表偏好, 不排課日期 and accepted B2B weekends as the 課表 page
+    from backend.engine.panels.race_refs import calculator_hours
     return O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load(),
-                       b2b_accepted=B2B.load_accepted())
+                       b2b_accepted=B2B.load_accepted(), race_predict=calculator_hours)
 
 
 @router.get("/z5")

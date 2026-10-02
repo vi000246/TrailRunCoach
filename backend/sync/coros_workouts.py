@@ -22,7 +22,9 @@ jgretz/coros-run-plan-mcp and wtcollote/coros-workout-mcp:
 Program codes: sportType 1 run, 2 bike, 4 strength. exerciseType 0 group,
 1 warm-up, 2 training, 3 cool-down, 4 rest. targetType 1 open (lap button),
 2 time (s), 5 distance (cm). intensityType 0 none, 2 heart rate, 3 pace
-(ms/km), 6 power (W). HR: isIntensityPercent false = absolute bpm in
+(seconds per km in intensityValue = the faster bound / intensityValueExtend = the slower,
+intensityDisplayUnit 1 — verified on the owner's watch 2026-10-02: 270 / 285 showed
+4'30"–4'45"/km; 270000 showed 4500'00"), 6 power (W). HR: isIntensityPercent false = absolute bpm in
 intensityValue/intensityValueExtend; hrType 3 = the LTHR zone scheme
 (intensityPercent = % of LTHR × 1000).
 
@@ -43,20 +45,23 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import CorosPlanPush
 from backend.engine.zones import WORKOUT_TARGETS
 from backend.sync import http
 from backend.sync.coros_client import _get_token_and_base, _headers
+# the provider interface's errors (sync/workout_targets/base.py); Unsupported is shared
+from backend.sync.workout_targets.base import SyncAuthError, SyncError, Unsupported  # noqa: F401
 
 log = logging.getLogger(__name__)
 
 SPORT_RUN = 1
 EX_GROUP, EX_WARMUP, EX_TRAIN, EX_COOLDOWN, EX_REST = 0, 1, 2, 3, 4
 TARGET_OPEN, TARGET_TIME, TARGET_DIST = 1, 2, 5
-INT_NONE, INT_HR, INT_POWER = 0, 2, 6
+INT_NONE, INT_HR, INT_PACE, INT_POWER = 0, 2, 3, 6
+PACE_DISPLAY_UNIT = 1            # min/km on the watch (verified 2026-10-02)
 HR_TYPE_LTHR = 3
 REST_NONE = 3
 SORT_TOP, SORT_CHILD = 16777216, 65536
@@ -74,16 +79,15 @@ _FRAC = {tid: (plo, phi, hlo, hhi) for tid, _n, plo, phi, hlo, hhi, *_ in WORKOU
 _push_lock = asyncio.Lock()
 
 
-class CorosError(Exception):
+PROVIDER = "coros"                # coros_plan_push.provider (sync/workout_targets)
+
+
+class CorosError(SyncError):
     """COROS answered with an error (HTTP or result != "0000")."""
 
 
-class CorosAuthError(CorosError):
+class CorosAuthError(CorosError, SyncAuthError):
     """No usable COROS token: log in again."""
-
-
-class Unsupported(Exception):
-    """This session is not pushed (reason in the message)."""
 
 
 # ---------------------------------------------------------------------------
@@ -114,12 +118,13 @@ class Thresholds:
     cp: Optional[float] = None
     lthr: Optional[float] = None
     aet: Optional[float] = None
+    tpace: Optional[float] = None      # threshold pace, s/km (pace targets in % / zones)
 
     @classmethod
     def of(cls, t: Optional[dict]) -> "Thresholds":
         t = t or {}
         f = lambda k: float(t[k]) if t.get(k) else None
-        return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"))
+        return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"))
 
 
 def easy_hr(th: Thresholds) -> Optional[tuple]:
@@ -318,7 +323,14 @@ def _int_text(it: Optional[tuple]) -> str:
     typ, lo, hi = it
     if typ == "hr":
         return f"心率 {lo:.0f}–{hi:.0f}" if lo else f"心率 ≤ {hi:.0f}"
+    if typ == "pace":
+        return f"配速 {_mmss(lo)}–{_mmss(hi)} /km"
     return f"功率 {lo:.0f}–{hi:.0f} W"
+
+
+def _mmss(sec: float) -> str:
+    s = int(round(sec))
+    return f"{s // 60}:{s % 60:02d}"
 
 
 def step_lines(steps: list[StepLike]) -> list[str]:
@@ -380,7 +392,7 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
             st = WS.normalize(s["steps"])
         except WS.StepsError as e:
             raise Unsupported(f"課表結構有誤：{e}")
-        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, basis=_basis(s))
+        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s))
         return WS.steps_to_coros(st, c)
     if kind == "notice":
         # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is
@@ -452,6 +464,11 @@ def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds)
                 ex["intensityPercentExtend"] = round(hi / th.lthr * 100000)
         elif typ == "power":
             ex["intensityType"] = INT_POWER
+        elif typ == "pace":
+            # s/km, value = faster (smaller) bound, extend = slower (the verified probe order)
+            a, b = sorted((int(round(lo)), int(round(hi))))
+            ex["intensityType"], ex["intensityDisplayUnit"] = INT_PACE, PACE_DISPLAY_UNIT
+            ex["intensityValue"], ex["intensityValueExtend"] = a, b
     return ex
 
 
@@ -744,17 +761,22 @@ def _monday(day: Optional[str], default: Optional[str]) -> Optional[str]:
     return (d - dt.timedelta(days=d.weekday())).isoformat()
 
 
+def _mine():
+    # rows written before the provider column (NULL) are COROS's
+    return or_(CorosPlanPush.provider == PROVIDER, CorosPlanPush.provider.is_(None))
+
+
 async def rows_by_key(db: AsyncSession, athlete_id: int, keys) -> dict[str, CorosPlanPush]:
     keys = list(keys)
     if not keys:
         return {}
-    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id,
+    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id, _mine(),
                                                        CorosPlanPush.session_key.in_(keys)))
     return {r.session_key: r for r in res.scalars().all()}
 
 
 async def all_rows(db: AsyncSession, athlete_id: int = 1) -> dict[str, CorosPlanPush]:
-    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id))
+    res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id, _mine()))
     return {r.session_key: r for r in res.scalars().all()}
 
 
@@ -789,7 +811,7 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
             await db.commit()
             return {**out, "status": "failed", "name": spec.name, "error": row.error, **_row_view(row)}
     if row is None:
-        row = CorosPlanPush(athlete_id=athlete_id, session_key=s["key"],
+        row = CorosPlanPush(athlete_id=athlete_id, provider=PROVIDER, session_key=s["key"],
                             week_start=_monday(spec.day, s.get("week_start")), session_id=s["id"])
         db.add(row)
     row.title, row.fingerprint, row.status, row.error = s.get("title"), spec.fingerprint, "failed", None

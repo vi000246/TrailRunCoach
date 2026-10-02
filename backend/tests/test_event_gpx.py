@@ -116,7 +116,7 @@ def test_multi_day_is_one_trip_number_with_the_per_day_breakdown():
     assert ln["taiyokudo"] == math.ceil(ln["cc"] / 10)
     # one line: the per-day average (the single-day target); the trip and its days in the hover
     refs = [s for s in res["series"] if s.get("role") == "race_ref" and s["data"]["kind"] == "hline"]
-    assert len(refs) == 1 and refs[0]["name"].startswith("南湖大山 每天") and "單日目標" in refs[0]["name"]
+    assert len(refs) == 1 and refs[0]["name"].startswith("A 南湖大山 每天")
     trip = refs[0]
     assert "第 2 天" in trip["tip"] and "（最難）" in trip["tip"] and "體力度" in trip["tip"]
     assert "信州" in trip["tip"] and "推估" in res["description"]

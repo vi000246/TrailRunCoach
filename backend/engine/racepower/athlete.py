@@ -936,6 +936,14 @@ def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
     return out
 
 
+def _power_label(prof: dict) -> str:
+    """The 一般設定 power source as shown on the race-power page; 未設定 when
+    the runner never picked one (the data decides then, engine/power_source.py)."""
+    from backend.engine import athlete_profile as AP
+    s = AP.profile_power_source(prof)
+    return AP.POWER_LABEL[s] if s else "未設定"
+
+
 def body_profile(ds, today: dt.date) -> dict:
     """Height / sex / age for the 百岳 daily REE (fuel.mifflin_ree): the
     settings-page profile first, then the WKO5 athlete file (height setting,
@@ -946,6 +954,9 @@ def body_profile(ds, today: dt.date) -> dict:
     out = {"height_cm": prof.get("height_cm"), "sex": prof.get("sex"), "age": None,
            "height_cm_src": "設定頁" if prof.get("height_cm") else None, "sex_src": "設定頁" if prof.get("sex") else None,
            "age_src": None}
+    from backend.engine import athlete_profile as AP
+    if AP.age(prof, today) is not None:
+        out["age"], out["age_src"] = AP.age(prof, today), "設定頁（出生年）"
     try:
         root = ath.root.get(3001) if ath is not None and getattr(ath, "root", None) is not None else None
         if out["height_cm"] is None and ath is not None:
@@ -956,7 +967,7 @@ def body_profile(ds, today: dt.date) -> dict:
             if out["sex"] is None and root.get(3017) in ("male", "female"):
                 out["sex"], out["sex_src"] = root.get(3017), "WKO5"
             b = root.get(3033)
-            if isinstance(b, str) and len(b) >= 10:
+            if out["age"] is None and isinstance(b, str) and len(b) >= 10:
                 bd = dt.date.fromisoformat(b[:10])
                 out["age"] = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
                 out["age_src"] = "WKO5 生日"
@@ -996,7 +1007,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
 
     # ---- CP sources ----------------------------------------------------------
     pd = {} if strict_as_of else pd_snapshot(ds.athlete.root)
-    sex = prof.get("sex") or "male"
+    from backend.engine import cp_protocols as CPP
+    sex, sex_src = CPP.sex_or_default(ds)
     plan_cp = _plan_cp(ds, today)
     tests = cp_tests(ds, today, weight, sex)
     test = tests[-1] if tests else None
@@ -1233,8 +1245,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         "today": today.isoformat(),
         "weight": {"value": weight, "source": weight_src},
         "body": body_profile(ds, today),
-        "profile": {"sex": sex, "sex_source": "賽季計畫" if prof.get("sex") else "預設（男）",
-                    "power_meter": prof.get("power_meter") or "stryd", "wind": wind_any,
+        "profile": {"sex": sex, "sex_source": sex_src,
+                    "power_meter": _power_label(prof), "wind": wind_any,
                     "wind_source": "資料中有 Stryd air power" if wind_any else "資料中沒有 air power"},
         "cp": {"sources": sources, "default": default_cp, "activities": acts, "plan": plan_cp,
                "dropped": dropped, "dropped_365": dropped365, "ref_cp": ref_cp,
@@ -1532,13 +1544,14 @@ def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs
     all_h = hike_samples(ds, hikes, exclude)
     for x in all_h:
         days_of[x["a"]] = max(days_of.get(x["a"], 1), x.get("day") or 1)
+    body_w = ds.setting("weight", tday)
 
     def pack_of(trip):
         w = by_idx.get(trip)
         rec = _trip_of(meta, w) if w is not None else None
         if rec and rec.get("pack_kg") is not None:
             return float(rec["pack_kg"])
-        return CAP.PACK_DEFAULT_MULTI if days_of.get(trip, 1) > 1 else CAP.PACK_DEFAULT_SINGLE
+        return CAP.pack_default(body_w, days_of.get(trip, 1))
     lo = (today - dt.timedelta(days=CAP_AET_DAYS)).isoformat()
     vr = CAP.run_speed_at_aet(gs, aet.get, lo)
     packs = {w.idx: pack_of(w.idx) for w in hikes}
@@ -1562,7 +1575,7 @@ def walk_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = 
                                 flat=x["flat"], hike_down=x["hike_down"], aet_of=x["aet"].get,
                                 pack_of=x["pack_of"], tech=tech, boot_reps=boot_reps, sigma_loo=sigma_loo)
     cap.basis.update(packs_recorded=len(x["packs_recorded"]), packs_default=len(x["packs"]) - len(x["packs_recorded"]),
-                     pack_default_rule=f"沒填的趟：多日 {CAP.PACK_DEFAULT_MULTI:g} kg、單日 {CAP.PACK_DEFAULT_SINGLE:g} kg（預設背負）")
+                     pack_default_rule=f"沒填的趟：{CAP.pack_default_text(x['weight'])}（預設背負）")
     return cap
 
 

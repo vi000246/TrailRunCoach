@@ -354,6 +354,20 @@ async def settings(db) -> dict:
     repo = SettingsRepository(db)
     out = {k.split(".")[-1]: await repo.get(k) for k in AUTO_KEYS}
     out["state"] = await repo.get("plan.auto.state") or {}
+    # 推課表到手錶 only when the push provider (sync/workout_targets, plan.push.provider)
+    # is connected (generalize-athlete S4): push and notify None = auto -> on /
+    # "watch" when connected, off / "overview" without. Today only COROS can be
+    # connected; the other providers are stubs.
+    from backend.sync import runner
+    from backend.sync import workout_targets as WT
+    prov = await WT.active(db, current_athlete_id())
+    connected = prov.enabled and prov.id == "coros" and await runner.logged_in(db, "coros", current_athlete_id())
+    out["coros_logged_in"] = connected            # the auto-plan panel's flag (name kept)
+    out["push_provider"] = prov.id
+    if out["push"] is None:
+        out["push"] = connected
+    if out["notify"] is None:
+        out["notify"] = "watch" if connected else "overview"
     return out
 
 
@@ -398,16 +412,17 @@ async def _remove_notice(db, uid: Optional[str], errors: list) -> None:
     automatic stale removal would keep a past-day one)."""
     if not uid:
         return
-    from backend.sync import coros_workouts as CW
+    from backend.sync import workout_targets as WT
     res = await db.execute(select(PlanSession).where(PlanSession.uid == uid))
     r = res.scalar_one_or_none()
     if r is not None:
         await db.delete(r)
         await db.commit()
     try:
-        rows = await CW.rows_by_key(db, 1, [uid])
+        prov = await WT.active(db)
+        rows = await prov.rows_by_key(db, [uid])
         if rows:
-            await CW.remove_keys(db, [uid])
+            await prov.remove_keys(db, [uid])
     except Exception as e:                  # noqa: BLE001 — logged, never fatal
         errors.append(f"移除課表待確認失敗：{type(e).__name__}: {e}"[:300])
 
@@ -441,10 +456,11 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
     on the watch already and must be re-sent too (a CP change: their watts)."""
     from backend.api import plan_sessions as API
     from backend.engine import plan_store as PS
-    from backend.sync import coros_workouts as CW
+    from backend.sync import workout_targets as WT
     end = (dt.date.fromisoformat(today) + dt.timedelta(days=max(1, days) - 1)).isoformat()
     try:
-        rows = await CW.all_rows(db)
+        prov = await WT.active(db)              # setting plan.push.provider (default COROS)
+        rows = await prov.all_rows(db)
         bl = PS.blocked_map(inp)
         live = {s["uid"] for s in new if s["state"] in ("active", "done", "missed")}
         stale = [k for k, r in rows.items() if k not in live and (r.day is None or r.day >= today)]
@@ -456,12 +472,12 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
             todo += [s for s in new if s["uid"] in extra_uids and s["uid"] in rows and s["uid"] not in have
                      and s["state"] == "active" and (s.get("day") or "") >= today and s.get("day") not in bl]
         th = inp.get("thresholds") or {}
-        need = [s for s in todo if CW.status_of(PS.push_dict(s), th, rows.get(s["uid"]), today)["status"]
+        need = [s for s in todo if prov.status_of(PS.push_dict(s), th, rows.get(s["uid"]), today)["status"]
                 in ("not_pushed", "outdated", "failed")]
         if not need and not stale and not missed:
             return {"status": "unchanged", "start": today, "end": end, "sent": 0, "removed": 0}
-        res = await CW.push_sessions(db, [PS.push_dict(s) for s in todo], th, today,
-                                     stale_keys=stale, missed_keys=missed)
+        res = await prov.push_sessions(db, [PS.push_dict(s) for s in todo], th, today,
+                                       stale_keys=stale, missed_keys=missed)
         sent = sum(1 for x in res.get("sessions") or [] if x.get("changed"))
         failed = [x for x in res.get("sessions") or [] if x.get("status") == "failed"]
         return {"status": "partial" if failed else "ok", "start": today, "end": end, "sent": sent,
@@ -478,9 +494,10 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
 
 async def _push_notice(db, s: dict, inp: dict, today: str) -> dict:
     from backend.engine import plan_store as PS
-    from backend.sync import coros_workouts as CW
+    from backend.sync import workout_targets as WT
     try:
-        res = await CW.push_sessions(db, [PS.push_dict(s)], inp.get("thresholds") or {}, today)
+        prov = await WT.active(db)
+        res = await prov.push_sessions(db, [PS.push_dict(s)], inp.get("thresholds") or {}, today)
         st = (res.get("sessions") or [{}])[0]
         return {"status": "ok" if st.get("status") in ("pushed", "updated") else "failed",
                 "error": st.get("error"), "notice": True}
@@ -557,17 +574,19 @@ async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out:
     push failed). Per session: 已重新推送 / 待推送 (on the watch with old watts) /
     只在 app (not on the watch yet: it is sent when it enters the push window)."""
     from backend.engine import plan_store as PS
-    from backend.sync import coros_workouts as CW
+    from backend.sync import workout_targets as WT
     cur = {s["uid"]: s for s in await PS.load(db)}
+    prov = WT.get(WT.DEFAULT)
     try:
-        rows = await CW.all_rows(db)
+        prov = await WT.active(db)
+        rows = await prov.all_rows(db)
     except Exception:                       # noqa: BLE001
         rows = {}
     marked = []
     for i in items:
         s = cur.get(i["uid"])
         if i["uid"] in rows and s is not None:
-            st = CW.status_of(PS.push_dict(s), th, rows[i["uid"]], today)["status"]
+            st = prov.status_of(PS.push_dict(s), th, rows[i["uid"]], today)["status"]
             label = "已重新推送" if st == "pushed" else "待推送"
         else:
             label = "只在 app"

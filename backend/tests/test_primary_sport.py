@@ -215,6 +215,28 @@ def test_road_week_marathon_pace_long_run_no_b2b_no_steep_walk():
     assert any("馬拉松配速" in s["title"] for w in weeks if w["phase"] == "specific" for s in w["sessions"])
 
 
+def test_road_specific_phase_follows_the_race_distance_not_the_course_constant():
+    from backend.engine import specific_phase as SP
+    _, plan, wp = _wp("road")
+    sp = wp["specific"]
+    assert sp["active"] and sp["sport"] == "road" and not sp.get("climb") and "路跑" in sp["climb_why"]
+    lg = next(s for s in wp["sessions"] if s["id"] == "long")
+    assert "賽事距離的" in lg["detail"] and "定數" not in lg["detail"] and "馬拉松配速" in lg["title"]
+    assert not any(s["id"] == "climb" for s in wp["sessions"])
+    race = {"day": {"hours": 3.5, "km": 42.195}}
+    info = {"active": True, "frac": 0.8, "race": race, "sport": "road"}
+    p = 3.5 * 60 / 42.195 * SP.ROAD_EASY_SLOW
+    assert SP.long_minutes(info, 1e9) == pytest.approx(min(min(0.8 * 42.195, 35.0) * p, 180.0))
+    assert SP.long_minutes(info, 100) == pytest.approx(115)                       # +15 % over the longest
+    # the race simulation stays: a flat long run in race kit, never the whole marathon
+    sg = SP.sim_suggestion({**info, "race": {**race, "id": "e1", "name": "台北馬", "start": "2026-12-05", "days": 1,
+                                             "kind": "road", "hours": 3.5, "km": 42.195}},
+                           date(2026, 11, 2), 170)
+    assert sg and sg["minutes"][0] <= 180 and sg["sessions"][0]["terrain"] == "road" and "km" in sg["title"]
+    weeks = P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 22))
+    assert all((w.get("specific") or {}).get("sport", "road") == "road" for w in weeks)
+
+
 def test_trail_setting_keeps_the_original_week_even_before_a_road_race():
     _, _, road = _wp("road")
     _, _, trail = _wp("road", sport="trail")

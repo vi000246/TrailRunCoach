@@ -7,6 +7,9 @@ records the choice server-side so the same suggestion doesn't come back.
 Kinds (the `type` of a row):
   b2b          連續兩天長天 (engine/b2b.py suggestion): a day pair this week or
                next; accepting stores the two days as the user's sessions.
+  race_sim     賽事模擬 (engine/specific_phase.py) 4–3 weeks before the A race: a
+               day (a day pair for a multi-day trip); accepting stores it as the
+               user's session(s) in place of that week's long day.
   test         a due CP / AeT test of this week (overview.week_plan
                test_suggestions; the interval-library merge) — a day.
   zone_test    a zone-update retest (engine/zone_events.py suggestions:
@@ -67,6 +70,19 @@ def b2b_rows(inp: dict, today: str, pair_opts) -> list[dict]:
             continue
         out.append({**sg, "pick": "pair", "options": pair_opts(sg)})
     return out
+
+
+def race_sim_rows(inp: dict, opts, stored: list[dict]) -> list[dict]:
+    """The race simulation (engine/specific_phase.sim_suggestion: 賽前第 4–3 週), unless a
+    「賽事模擬」 session is already in the plan. `opts(sg)`: the day (or day-pair) options."""
+    sg = (inp.get("cur") or {}).get("race_sim_suggestion")
+    if not sg:
+        return []
+    lo, hi = sg["weeks"][0], (dt.date.fromisoformat(sg["weeks"][-1]) + dt.timedelta(days=6)).isoformat()
+    if any(str(s.get("title") or "").startswith("賽事模擬") and s.get("state") in ("active", "done")
+           and lo <= (s.get("day") or "") <= hi for s in stored):
+        return []
+    return [{**sg, "pick": "pair" if sg.get("multi") else "day", "options": opts(sg)}]
 
 
 def test_rows(tests: list[dict], monday: str) -> list[dict]:
