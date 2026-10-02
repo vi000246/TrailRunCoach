@@ -96,6 +96,7 @@ def _load_items() -> None:
     from backend.engine import effort_calib  # noqa: F401  (trail_max_min_km, trail_max_min_min, effort_rest_max)
     from backend.engine import terrain_calib  # noqa: F401  (climb_divisor_run)
     from backend.engine import advanced_params  # noqa: F401  (進階 C 類: heat_partial_hadley, pack_daily_drop_kg)
+    from backend.engine import drift_calib  # noqa: F401  (drift windows)
 
 
 def validate_entry(v) -> None:
