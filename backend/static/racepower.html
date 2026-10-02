@@ -80,6 +80,36 @@ input.small { width: 90px; }
 .tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .tile .s { font-size: 11.5px; color: var(--muted); }
 .tile.main { border-color: var(--accent); }
+.tile .ic { font-size: 15px; margin-right: 4px; }
+.tile .v .u { font-size: 13px; font-weight: 500; color: var(--muted); }
+.tile.warnt { border-color: var(--watch); }
+.tile.warnt .v { color: var(--watch); }
+.stoptbl { width: auto; min-width: 320px; margin-top: 2px; }
+.stoptbl td { padding: 3px 6px; }
+.stoptbl input, .stoptbl select { width: auto; padding: 2px 6px; }
+.stoptbl input.km { width: 76px; text-align: right; }
+.stoptbl input.min { width: 60px; text-align: right; }
+.stoptbl input.nm { width: 150px; }
+.stoptbl input.bad { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
+.stoptbl .x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 6px; }
+.stoptbl .x:hover { color: var(--bad); }
+.sched td.act { white-space: normal; min-width: 220px; }
+.sched tr.k-aid td { background: var(--soft); }
+.tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.tcard { border: 1px solid var(--line); border-left: 4px solid var(--c-f); border-radius: 8px; padding: 7px 10px; font-size: 13px; cursor: pointer; }
+.tcard.hl { border-color: var(--accent); }
+.tcard .th { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.tcard .th b { font-size: 14px; }
+.tcard .tc { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 3px; }
+.tcard .tc span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tcard .tc span.main { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.tcard .fa { font-size: 12px; color: var(--muted); margin-top: 3px; }
+dialog#share-dlg { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(620px, 94vw); }
+dialog#share-dlg::backdrop { background: rgba(0,0,0,.35); }
+#share-list td { white-space: normal; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.chip { border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip b { color: var(--text); font-weight: 600; }
 .num { font-variant-numeric: tabular-nums; }
 .tablewrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -272,7 +302,6 @@ td select.terr { width: 80px; padding: 2px 5px; }
     <div class="form" style="margin-top:6px">
       <label>日期<input id="date" type="date"></label>
       <label>起跑 / 起登時間<input id="start" type="time"></label>
-      <label>補給站（km:分，逗號分隔）<input id="stops" placeholder="例 10:3, 21:5"></label>
       <label class="bf">背負 (kg)<input id="pack" type="number" step="0.5" min="0" placeholder="預設"></label>
       <label class="tf">effort km 公式<select id="formula">
         <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
@@ -282,6 +311,17 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <label>或 緯度, 經度<input id="latlon" placeholder="23.47, 120.957"></label>
     </div>
     <datalist id="peaklist"></datalist>
+    <div class="stops-box" id="stops-box">
+      <div class="row"><span class="lbl">補給站</span>
+        <button class="btn" id="stop-add" type="button">＋ 新增補給站</button>
+        <button class="btn hidden" id="stop-import" type="button">從路線匯入</button>
+        <span class="meta" id="stop-msg"></span>
+        <span class="help" tabindex="0">?<span class="tip">每一列一個補給站，依 km 自動排序。類型決定補給計畫：水站只補水；補給站有食物和水，附近的那一次碳水改在站上吃；大補給站再加電解質和熱食；醫護站不補給（水要從上一站帶夠）；自備補給點是自己的補給袋。停留分鐘留白時用預設（水站 0.5、補給站 2、大補給站 5、自備 2 分鐘，推估），會加進 ETA。GPX 的航點名稱像補給站（補給、水站、CP1、Aid…）時可以「從路線匯入」。</span></span>
+      </div>
+      <div class="tablewrap"><table class="stoptbl"><thead><tr><th class="n">km</th><th>類型</th><th>名稱（選填）</th><th class="n">停留 分</th><th></th></tr></thead>
+        <tbody id="stoprows"></tbody></table></div>
+      <input id="stops" type="hidden">
+    </div>
     <details class="bf" id="dayplan-box"><summary>逐日行程（手動路線；空白 = 平均分配）</summary>
       <div class="tablewrap"><table class="daytbl"><thead><tr><th>天</th><th>km</th><th>爬升 m</th><th>下降 m</th></tr></thead><tbody id="dayplan"></tbody></table></div>
     </details>
@@ -289,14 +329,31 @@ td select.terr { width: 80px; padding: 2px 5px; }
 
   <section id="results" class="tab-calc"><h2>預估結果</h2><div class="loading">讀取你的活動資料中（第一次約需一分鐘）…</div></section>
 
+  <section id="fuel-sec" class="tab-calc hidden"><div id="fuel"></div></section>
+
   <section id="profile-sec" class="tab-calc hidden">
     <h2>剖面與分段 <span class="meta" id="profile-sub"></span></h2>
     <div class="toolbar" id="daysplit-bar"><label class="meta bf"><input type="checkbox" id="splitmode"> 在剖面上點選分日點</label>
       <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
       <button class="btn" id="coros">匯出到 COROS</button><span class="meta" id="coros-meta"></span>
-      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span></div>
+      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span>
+      <button class="btn" id="share">🔗 分享</button></div>
+    <dialog id="share-dlg">
+      <h2>🔗 分享計算結果 <span class="meta">唯讀，不會重新計算</span>
+        <span class="help" tabindex="0">?<span class="tip">把目前的結果（剖面、分段、分段目標、補給）凍結成一份快照，產生一個無法猜到的連結。拿到連結的人只看得到這份快照，看不到你的活動、設定或其他資料。不勾「包含體重」時，體重和會透露體重的數字（W/kg、超補的公克數）都不會出現；身高、年齡、性別一律不會出現。外面的人要經過你的 Cloudflare tunnel，tunnel 的密碼保護要放行 /share/ 開頭的路徑。</span></span></h2>
+      <div class="form" style="grid-template-columns:1fr 1fr">
+        <label style="grid-column:1/-1">標題<input id="share-title" maxlength="80" placeholder="例 台北馬 半馬 計畫"></label>
+        <label>有效期限<select id="share-exp"><option value="">不過期</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
+        <label class="f" style="align-self:end"><span><input type="checkbox" id="share-weight"> 包含體重</span></label>
+      </div>
+      <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="share-go">建立連結</button><span class="meta" id="share-msg"></span></div>
+      <div class="toolbar hidden" id="share-out"><input id="share-link" readonly style="flex:1;min-width:240px"><button class="btn" id="share-copy">複製</button></div>
+      <h3>已分享</h3><div class="tablewrap"><table><tbody id="share-list"></tbody></table></div>
+      <div class="toolbar" style="justify-content:flex-end;margin-top:8px"><button class="btn" id="share-close">關閉</button></div>
+    </dialog>
     <div class="profile" id="profile"></div>
+    <div id="segtargets"></div>
     <div class="segtable tablewrap" id="segtable"></div>
     <div class="segcards" id="segcards"></div>
   </section>
@@ -539,7 +596,8 @@ async function uploadGpx(file) {
     COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments };
     ls.set("course", COURSE); LOCKS = {}; SPLITS = (c.wpts || []).filter((w) => w.camp).map((w) => +w.km.toFixed(2)); TERRAIN = {};
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
-    S.csrc = "gpx"; saveUI(); syncForm(); schedule();
+    STOP_SUGG = c.stop_suggestions || [];
+    S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); schedule();
   } catch (e) { $("course-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
 function courseOpts(asForm) {
@@ -548,10 +606,72 @@ function courseOpts(asForm) {
   if (asForm) o.push(["split", S.split]);
   return o;
 }
-function stopsOf() {
-  return $("stops").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean).map((s) => s.split(/[:：]/).map(Number))
-    .filter((p) => p.length >= 2 && p.every((x) => !isNaN(x))).map(([km, minutes]) => ({ km, minutes }));
+// ---------------- aid stations (one row each; stored as JSON in the hidden #stops) ----------------
+const STOP_TYPES = [["water", "水站", "💧"], ["aid", "補給站（食物＋水）", "🍌"], ["big", "大補給站（含電解質、熱食）", "🍲"],
+  ["medical", "醫護站", "⛑️"], ["self", "自備補給點", "🎒"]];
+const STOP_MIN = { water: 0.5, aid: 2, big: 5, medical: 0, self: 2 };   // default stop minutes (推估)
+const stopIcon = (t) => (STOP_TYPES.find((x) => x[0] === t) || STOP_TYPES[1])[2];
+const stopName = (t) => (STOP_TYPES.find((x) => x[0] === t) || STOP_TYPES[1])[1];
+let STOPS = [];
+let STOP_SUGG = [];                        // GPX waypoints that look like aid stations
+function parseStops(v) {
+  v = (v || "").trim(); if (!v) return [];
+  try {
+    const a = JSON.parse(v);
+    if (Array.isArray(a)) return a.map((r) => ({ km: ok(Number(r.km)) && r.km !== "" && r.km != null ? Number(r.km) : null,
+      type: STOP_MIN[r.type] != null ? r.type : "aid", name: String(r.name || "").slice(0, 40),
+      minutes: r.minutes === "" || r.minutes == null ? null : Number(r.minutes) }));
+  } catch {}
+  // the old 「km:分, km:分」 text
+  return v.split(/[,，]/).map((s) => s.trim()).filter(Boolean).map((s) => s.split(/[:：]/).map(Number))
+    .filter((p) => p.length >= 1 && p.every((x) => !isNaN(x))).map(([km, minutes]) => ({ km, type: "aid", name: "", minutes: minutes ?? null }));
 }
+function courseKm() { return S.csrc === "gpx" && COURSE ? COURSE.km : num("dist"); }
+function sortStops() { STOPS.sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9)); }
+function saveStops() { $("stops").value = JSON.stringify(STOPS); saveForm(); }
+function stopIssue(r, i) {
+  const km = courseKm();
+  if (r.km == null) return "填 km";
+  if (r.km <= 0 || (ok(km) && r.km >= km)) return `km 要在 0–${ok(km) ? f1(km) : "?"} 之間`;
+  if (STOPS.some((o, j) => j !== i && o.km != null && Math.abs(o.km - r.km) < 0.05)) return "重複的 km";
+  return null;
+}
+function renderStops() {
+  const issues = STOPS.map(stopIssue);
+  $("stoprows").innerHTML = STOPS.map((r, i) => `<tr><td class="n"><input class="km ${issues[i] ? "bad" : ""}" data-si="${i}" data-f="km" type="number" step="0.1" min="0" value="${r.km ?? ""}" title="${esc(issues[i] || "")}"></td>
+      <td><select data-si="${i}" data-f="type">${STOP_TYPES.map(([k, n, ic]) => `<option value="${k}" ${r.type === k ? "selected" : ""}>${ic} ${n}</option>`).join("")}</select></td>
+      <td><input class="nm" data-si="${i}" data-f="name" maxlength="40" value="${esc(r.name || "")}" placeholder="例 CP1"></td>
+      <td class="n"><input class="min" data-si="${i}" data-f="minutes" type="number" step="0.5" min="0" value="${r.minutes ?? ""}" placeholder="${STOP_MIN[r.type]}"></td>
+      <td><button class="x" data-rm="${i}" type="button" title="移除">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="5" class="meta">沒有補給站</td></tr>`;
+  const bad = issues.filter(Boolean);
+  $("stop-msg").innerHTML = bad.length ? `<span class="wn">⚠ ${bad.length} 列要修正：${esc([...new Set(bad)].join("、"))}（不會算進去）</span>` : "";
+  const fresh = STOP_SUGG.filter((s) => !STOPS.some((r) => r.km != null && Math.abs(r.km - s.km) < 0.1));
+  $("stop-import").classList.toggle("hidden", !(S.csrc === "gpx" && fresh.length));
+  $("stop-import").textContent = `從路線匯入（${fresh.length}）`;
+}
+function stopsOf() {
+  return STOPS.filter((r, i) => !stopIssue(r, i)).map((r) => ({ km: r.km, type: r.type, name: r.name || null,
+    minutes: r.minutes ?? STOP_MIN[r.type] ?? 0 }));
+}
+$("stoprows").addEventListener("change", (e) => {
+  const i = e.target.dataset.si; if (i == null) return;
+  const f = e.target.dataset.f, v = e.target.value;
+  STOPS[i][f] = f === "km" || f === "minutes" ? (v === "" ? null : Number(v)) : v;
+  sortStops(); saveStops(); renderStops(); schedule();
+});
+$("stoprows").addEventListener("click", (e) => { const i = e.target.dataset.rm; if (i == null) return; STOPS.splice(+i, 1); saveStops(); renderStops(); schedule(); });
+$("stop-add").onclick = () => {
+  const km = courseKm(), last = STOPS.filter((r) => r.km != null).at(-1);
+  const next = last ? Math.min(+(last.km + 5).toFixed(1), ok(km) ? +(km - 0.5).toFixed(1) : last.km + 5) : (ok(km) ? +Math.min(5, km / 2).toFixed(1) : 5);
+  STOPS.push({ km: next, type: "aid", name: "", minutes: null }); sortStops(); saveStops(); renderStops(); schedule();
+  const el = $("stoprows").querySelector(`input[data-f="km"][value="${next}"]`); if (el) el.focus();
+};
+$("stop-import").onclick = () => {
+  const fresh = STOP_SUGG.filter((s) => !STOPS.some((r) => r.km != null && Math.abs(r.km - s.km) < 0.1));
+  STOPS.push(...fresh.map((s) => ({ km: s.km, type: s.type, name: s.name || "", minutes: null })));
+  sortStops(); saveStops(); renderStops(); schedule();
+};
 
 // ---------------- your numbers ----------------
 function inputRow(label, key, value, fmt, source, extra = "", step = "any") {
@@ -725,11 +845,14 @@ async function run() {
   try {
     PLAN = await post(`${API}/plan`, planBody());
     LAST = PLAN.v1;
-    renderResults(); renderProfile(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
+    STOP_SUGG = PLAN.stop_suggestions || [];
+    renderResults(); renderFuel(); renderProfile(); renderSegTargets(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
+    renderStops();
     if (LAST.type !== "baiyue") renderRiegel();
   } catch (e) {
     if (e.status === 410) { COURSE = null; ls.set("course", null); syncForm(); $("results").innerHTML = `<h2>預估結果</h2><div class="err">GPX 路線已過期（伺服器重啟過），請重新上傳。</div>`; return; }
     $("results").innerHTML = `<h2>預估結果</h2><div class="err">${esc(e.message)}</div>`;
+    $("fuel-sec").classList.add("hidden");
   }
 }
 
@@ -926,6 +1049,90 @@ function renderBaiyueCapacity() {
 }
 function f2(x) { return ok(x) ? Number(x).toFixed(2) : "–"; }
 
+// ---------------- 補給 (engine/racepower/fuel.py) ----------------
+const rng = (v, fmt = n0, unit = "") => !v ? "–" : (fmt(v[0]) === fmt(v[1]) ? fmt(v[0]) : `${fmt(v[0])}–${fmt(v[1])}`) + (unit ? ` <span class="u">${unit}</span>` : "");
+const L1 = (ml) => ok(ml) ? (ml / 1000).toFixed(1) : "–";
+const FUEL_METHOD = { power: "功率法", minetti: "Minetti × Fletcher", minetti_walk: "Minetti 走路", keytel: "心率 Keytel", pandolf: "Pandolf", yamamoto: "Yamamoto" };
+function ftile(icon, k, v, s, tip, src, cls = "") {
+  return `<div class="tile ${cls}" title="${esc(src || "")}"><div class="k"><span class="ic">${icon}</span>${k}${tip ? help(tip) : ""}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
+}
+function renderFuel() {
+  const F = PLAN?.fuel, sec = $("fuel-sec");
+  if (!F || !F.kcal_band) { sec.classList.add("hidden"); return; }
+  sec.classList.toggle("hidden", ls.get("tab", "calc") !== "calc");
+  const hike = F.category === "hike", c = F.cho, w = F.water, na = F.sodium, ld = F.loading;
+  const meth = Object.keys(F.methods || {}).map((k) => FUEL_METHOD[k] || k).join("、");
+  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。滑過每個數字看來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2><div class="tiles">`;
+  const kTip = hike
+    ? "行動熱量 = Pandolf 公式（體重、當天背負、每段速度和坡度）逐段加總；下坡 Pandolf 不適用，改用 Minetti 走路曲線推估。範圍包含 Yamamoto（app 原本的百岳熱量）：Pandolf 對重背負常低估。"
+    : "功率法：每段 Stryd 功率 × 時間 ÷ (22.1 % × 4.184)，坡度 > 4 % 用 21.6 %。坡度 > 8 %、走路段和下坡改用 1.07 kcal/kg/km × Minetti 坡度比例。Stryd 自己的「kJ ≈ kcal」會少算約 8 %：跑步不能直接把 kJ 當 kcal。範圍 ±10–15 %：個人差異、疲勞、陡坡低估加起來。";
+  h += ftile("🔥", hike ? "行動熱量" : "消耗熱量", rng(F.kcal_band, n0, "kcal"),
+    `${esc(meth)} · ±${Math.round(F.band_rel * 100)}%${ok(F.kcal_per_h) ? ` · ${n0(F.kcal_per_h)} kcal/h` : ""}`, kTip,
+    hike ? `${F.src.pandolf}；${F.src.yamamoto}；${F.src.band}` : `${F.src.power}；${F.src.minetti}；誤差：${F.src.band}`, "main");
+  const cTip = hike ? "低強度、多日：取超馬建議的下限，每 45–60 分鐘吃一次行動糧，每次 30–50 g。重點是每天的總熱量。"
+    : F.category === "short" ? "不到 75 分鐘：漱口或少量碳水就有效。"
+    : F.category === "half" ? "2–2.5 小時以內：每小時 30–60 g。"
+    : F.category === "ultra" ? "超過 6 小時：先從 30–50 g/h 開始，吃得下再往 60–90 g/h 加。用葡萄糖＋果糖。"
+    : "2–6 小時：每小時 60–90 g，用葡萄糖＋果糖（例如 2:1 的膠）才吸收得到。沒有腸胃訓練紀錄，所以不超過 90 g/h；從 60 開始在長跑練。";
+  h += ftile("🍌", "碳水", rng(c.per_h, n0, "g/h"), `共 ${rng(c.total, n0, "g")}${c.mix ? " · 葡萄糖＋果糖" : ""}`, cTip, c.src);
+  if (hike) {
+    h += ftile("💧", "水", rng(w.total_ml.map((x) => x / 1000), (x) => x.toFixed(1), "L"), `全程 · 0.7–0.8 ml / kcal`,
+      "照 Yamamoto 的量喝（行動熱量的 70–80 % 毫升），不要刻意灌水；每天看尿色和體重。", `${w.src}；${w.caution}`);
+  } else if (w.thirst) {
+    h += ftile("💧", "水", "口渴再喝", "涼天、時間短 · 別喝到體重增加", "時間短、天氣涼的比賽，口渴時喝就夠；喝太多反而有低血鈉風險。", `${w.src}；${w.caution}`);
+  } else {
+    h += ftile("💧", "水", rng(w.per_h, n0, "ml/h"), `共 ${rng(w.total_ml.map((x) => x / 1000), (x) => x.toFixed(1), "L")} · 別喝到體重增加`,
+      "依各段氣溫在 400–800 ml/h 裡移動：涼的段靠下限、熱的段（最熱的四分之一或 ≥ 25 °C）靠上限。上限是自己的流汗率，比賽中體重不能增加。汗量不從熱量反推（1 L 汗 ≈ 580 kcal 是散掉的熱，不是消耗）。",
+      `${w.src}；${w.caution}`);
+  }
+  h += ftile("🧂", "鈉", na.per_h && na.per_h[1] > 0 ? rng(na.per_h, n0, "mg/h") : "不必另外補",
+    na.total_mg && na.total_mg[1] > 0 ? `共 ${rng(na.total_mg, n0, "mg")}` : "", hike ? "電解錠每小時約 200–300 mg，晚餐的湯和醬料也算。" :
+    "每小時 300–600 mg，熱的段往上限。補鈉可以減緩血鈉下降，但擋不住喝太多造成的低血鈉。", na.src);
+  if (hike) {
+    const tots = (F.daily || []).map((d) => d.total);
+    const lo = Math.min(...tots.map((t) => t[0])), hi = Math.max(...tots.map((t) => t[1]));
+    h += ftile("🏕️", "每日合計", tots.length ? rng([lo, hi], n0, "kcal") : "–", "行動 ＋ 休息（基礎代謝 × 1.3）",
+      `休息時間 = 24 h − 移動時間，用 Mifflin-St Jeor 基礎代謝 × 營地活動係數 1.3（推估）。身高 ${n0(F.body.height_cm)} cm（${esc(F.body_src.height_cm)}）、${n0(F.body.age)} 歲（${esc(F.body_src.age)}）、${F.body.sex === "female" ? "女" : "男"}（${esc(F.body_src.sex)}）。`,
+      F.src.ree);
+    const fk = F.food_kg_mean, diff = ok(fk) ? fk - F.food_check.default_kg : 0;
+    h += ftile("🎒", "糧食", ok(fk) ? `${fk.toFixed(2)} kg/天` : "–", `背負預設 −${F.food_check.default_kg} kg/天${badge("推估")}`,
+      "每天糧食 = 每日合計（取 Pandolf / Yamamoto 較高者）× 補回 85 % ÷ 4.4 kcal/g。4.4 kcal/g 是 thru-hiker 每盎司 125 kcal 的原則；每天有約 500 kcal 赤字，3–5 天可以接受。跟團時晚餐通常由嚮導負責，自己背的會少一些。",
+      "§5.2：0.7 kg × 4.4 kcal/g ≈ 3080 kcal；筆記 輕量化食物.md:124-132（125 kcal/oz）", Math.abs(diff) > 0.15 ? "warnt" : "");
+  } else {
+    if (ld.g_day) h += ftile("🍚", "賽前超補", rng(ld.g_day, n0, "g"), esc(ld.label),
+      `早餐：賽前 1–4 h 吃 ${rng(ld.breakfast_g, n0, "g")}（1–4 g/kg）。${ld.drink}。咖啡因（選用）${rng(ld.caffeine_mg, n0, "mg")}，賽前 30–90 分鐘。`,
+      `${ld.src}；${ld.breakfast_src}；${ld.caffeine_src}；${ld.drink_src}`);
+    if (!w.thirst && ok(w.dehydration)) h += ftile("⚖️", "預估脫水", pct1(Math.max(0, w.dehydration)), `流汗約 ${f1(w.sweat_l)} L${badge("推估")}`,
+      "流汗率沒有個人紀錄：比賽配速時涼天約 1.0 L/h、30 °C 約 1.75 L/h，再依該段每小時消耗 ÷ 700 kcal 調整（走得慢流得少，推估），減去照建議喝的水；建議水量也不超過這個流汗率。超過體重 2 % 表現會下降；但不要為了補滿而喝到體重增加。",
+      "ACSM 2007（Sawka）：脫水不超過體重 2 %；Baker 2017 流汗率 0.5–2.0 L/h；筆記 補水補碳:36-37", w.dehydration > 0.02 ? "warnt" : "");
+  }
+  h += `</div>`;
+  if (!hike && ok(F.intake_kcal)) h += `<div class="chips"><span class="chip">攝取約 <b>${n0(F.intake_kcal)}</b> kcal</span><span class="chip">缺口約 <b>${n0(F.deficit_kcal)}</b> kcal（身體肝醣補上）</span>` +
+    (w.legs && w.legs.length > 1 ? w.legs.map((lg) => `<span class="chip">💧 ${f1(lg.from_km)}→${f1(lg.to_km)} km 帶 <b>${rng(lg.carry_ml, n0, "ml")}</b></span>`).join("") : "") + `</div>`;
+  if (hike && F.daily?.length) {
+    h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">移動</th><th class="n">行動 kcal（Pandolf / Yamamoto）</th><th class="n">休息 kcal</th><th class="n">合計 kcal</th><th class="n">糧食</th><th class="n">碳水</th><th class="n">水</th><th class="n">鈉</th></tr></thead><tbody>` +
+      F.daily.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${hrs(d.moving_h)}</td><td class="n">${n0(d.kcal_pandolf)} / ${n0(d.kcal_yamamoto)}</td><td class="n">${n0(d.rest_kcal)}</td>
+        <td class="n">${rng(d.total)}</td><td class="n">${d.food_kg.toFixed(2)} kg</td><td class="n">${rng(d.cho_g, n0, "g")}</td><td class="n">${rng(d.water_ml.map((x) => x / 1000), (x) => x.toFixed(1), "L")}</td><td class="n">${rng(d.na_mg, n0, "mg")}</td></tr>`).join("") + `</tbody></table></div>`;
+  }
+  // the schedule on the predicted splits
+  const ev = F.schedule || [];
+  if (ev.length) {
+    const icon = (e) => e.kind === "start" ? "🏁" : e.kind === "aid" ? stopIcon(e.stop_type) : hike ? "🍙" : "🍬";
+    h += `<h3>補給時間表${badge("推估")}${help(hike ? "每天從出發算起，每 45–60 分鐘一次行動糧，盡量放在爬坡（走路時比較好吃）。" :
+      "每 20–30 分鐘一次（前半段可以吃固體，後半段改能量膠或飲料）；附近有補給站時改在站上吃；盡量放在走路或陡上坡，不放在陡下坡。補給站之間要帶的水 = 每小時水量 × 時間 × 1.2（多帶 20 %）。")}</h3>`;
+    h += `<div class="tablewrap"><table class="sched"><thead><tr>${hike ? "<th>天</th>" : ""}<th>時刻</th><th class="n">移動</th><th class="n">km</th><th></th><th>動作</th></tr></thead><tbody>` +
+      ev.map((e) => `<tr class="k-${e.kind}">${hike ? `<td>${e.day}</td>` : ""}<td class="num">${esc(e.eta || "–")}</td><td class="n">${dur(e.t_s)}</td><td class="n">${f1(e.km)}</td><td>${icon(e)}</td><td class="act">${esc(e.action)}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  }
+  h += warnList(F.warnings);
+  const cc = F.crosscheck || {};
+  if (!hike && cc.fletcher) h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
+    <li>Fletcher 2009（1.05–1.11 kcal/kg/km × 坡度調整 ${f1(cc.fletcher.adj_km)} km）：${rng(cc.fletcher.range, n0, "kcal")}</li>
+    <li>Stryd「kJ = kcal」：${n0(cc.stryd_kj)}（跑步會少算約 8 %）</li>
+    ${ok(cc.keytel) ? `<li>心率 Keytel 2005（${n0(cc.hr_bpm)} bpm）：${n0(cc.keytel)} kcal</li>` : ""}</ul></details>`;
+  $("fuel").innerHTML = h;
+}
+
 async function loadHikeMeta() {
   try { HIKEMETA = await j(`${API}/hike-meta`); } catch { HIKEMETA = null; }
   if (INP) renderHike();
@@ -945,11 +1152,23 @@ function renderProfile() {
     const y = hike ? s.speed_kmh : paceMode ? s.pace_s_per_km / 60 : s.power;
     step.push([s.start_km, y], [s.end_km, y]);
   });
-  const areas = P.segments.map((s) => [{ xAxis: s.start_km, itemStyle: { color: segColor(s.cls), opacity: HL === s.i ? 0.45 : 0.18 } }, { xAxis: s.end_km }]);
+  // trail / 百岳: each band carries its ①② mark (only where it is wide enough to read)
+  const minW = P.summary.km * 0.025;
+  const areas = P.segments.map((s) => [{ xAxis: s.start_km, itemStyle: { color: segColor(s.cls), opacity: HL === s.i ? 0.45 : 0.18 },
+    ...(s.target && s.end_km - s.start_km >= minW ? { name: s.target.mark, label: { show: true, position: "insideTop", color: css("--text"), fontSize: 12, fontWeight: 600 } } : {}) },
+    { xAxis: s.end_km }]);
   const series = [];
   if (pr) series.push({ name: "海拔", type: "line", data: pr.km.map((x, i) => [x, pr.z[i]]), symbol: "none", lineStyle: { color: css("--muted"), width: 1.2 },
     areaStyle: { color: css("--bar"), opacity: 0.35 }, markArea: { silent: true, data: areas },
     markLine: SPLITS.length ? { symbol: "none", silent: true, lineStyle: { color: css("--accent"), type: "dashed" }, label: { formatter: "分日", color: css("--accent") }, data: SPLITS.map((x) => ({ xAxis: x })) } : undefined });
+  const st = stopsOf();
+  if (pr && st.length) {
+    const zAt = (km) => { const i = pr.km.findIndex((x) => x >= km); return i <= 0 ? pr.z[Math.max(0, i)] : pr.z[i - 1] + (pr.z[i] - pr.z[i - 1]) * (km - pr.km[i - 1]) / ((pr.km[i] - pr.km[i - 1]) || 1); };
+    series.push({ name: "補給站", type: "scatter", data: st.map((s) => ({ value: [s.km, zAt(s.km)], name: `${stopIcon(s.type)} ${stopName(s.type)}${s.name ? " " + s.name : ""} · ${f1(s.km)} km` })),
+      symbol: "pin", symbolSize: 26, itemStyle: { color: css("--s3") }, z: 5,
+      label: { show: true, formatter: (p) => stopIcon(st[p.dataIndex].type), fontSize: 11, offset: [0, -3] },
+      tooltip: { trigger: "item", formatter: (p) => esc(p.name) } });
+  }
   series.push({ name: hike ? "速度" : paceMode ? "配速" : "目標功率", type: "line", yAxisIndex: pr ? 1 : 0, data: step, symbol: "none", step: false,
     lineStyle: { color: css("--accent"), width: 2 } });
   if (hike && P.capacity) {
@@ -994,6 +1213,26 @@ function renderProfile() {
     if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +km.toFixed(2)].sort((a, b) => a - b); schedule(); return; }
     const s = segAt(km); if (s) { HL = s.i; renderProfile(); renderSegments(); const row = document.querySelector(`[data-seg="${s.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
   });
+}
+// trail / 百岳: the executable target per segment (engine/racepower/seg_targets.py)
+function renderSegTargets() {
+  const T = PLAN?.seg_targets;
+  if (!T || !T.length) { $("segtargets").innerHTML = ""; return; }
+  const hike = PLAN.type === "baiyue";
+  const fuelIcon = (a) => !a ? "" : /補給站|水站|醫護|自備/.test(a) ? "🚩" : /出發/.test(a) ? "🏁" : hike ? "🍙" : "🍬";
+  let h = `<h3>分段目標${help(hike ? "百岳揹重：每段看心率 ≤ AeT，爬坡加上預計的垂直爬升速度 VAM（m/h）和分段時間；配速受地形和背負影響，不當目標。下坡只求控制、安全。" :
+    "依坡度選目標：3–8 % 可以跑的坡看功率範圍（± 3 %），心率只當上限；> 8 % 或要走的陡坡看心率上限和 VAM（每小時爬升公尺）；下坡不看功率也不看心率，求控制、安全，時間和配速只是參考；平路看功率。滑過每張卡看依據。")}</h3><div class="tcards">`;
+  for (const t of T) {
+    const s = PLAN.segments.find((x) => x.i === t.i && (x.day || 1) === (t.day || 1)) || {};
+    const chips = t.chips.map((c) => `<span class="${c.role === "main" ? "main" : ""}">${c.icon} ${esc(c.text)}</span>`).join("");
+    h += `<div class="tcard ${HL === t.i ? "hl" : ""}" data-tseg="${t.i}" title="${esc(t.src)}${t.hr_cap_src ? "；心率上限：" + esc(t.hr_cap_src) : ""}" style="border-left-color:${segColor(s.cls)}">
+      <div class="th"><b>${t.mark} ${esc(t.label)}</b><span class="meta">${hike && t.day ? `D${t.day} · ` : ""}${f1(t.start_km)}–${f1(t.end_km)} km · ↑${n0(t.gain_m)} ↓${n0(t.loss_m)} · ${f1(t.grade * 100)}%</span></div>
+      <div class="tc">${chips || '<span>—</span>'}${t.badge ? ` <span class="badge watch">${esc(t.badge)}</span>` : ""}</div>
+      <div class="meta">⏱ ${dur(t.t)} · 累計 ${dur(t.cum_s)}${t.eta ? ` · ETA ${esc(t.eta)}` : ""}${t.ref.length ? " · " + esc(t.ref.join(" · ")) : ""}</div>
+      ${t.fuel_action ? `<div class="fa">${fuelIcon(t.fuel_action)} ${esc(t.fuel_action)}</div>` : ""}</div>`;
+  }
+  $("segtargets").innerHTML = h + `</div>`;
+  document.querySelectorAll("#segtargets .tcard").forEach((e) => e.addEventListener("click", () => { HL = +e.dataset.tseg; renderProfile(); renderSegments(); renderSegTargets(); }));
 }
 function segAt(km) { return PLAN.segments.find((s) => km >= s.start_km && km <= s.end_km); }
 function segNote(s) { return (s.notes || []).concat(s.walk && !(s.notes || []).includes(s.walk) ? [s.walk] : []).join("、"); }
@@ -1079,6 +1318,48 @@ async function csvExport() {
     $("csv-meta").innerHTML = `<span class="ok">已下載 ✓</span> ${esc(fname)}`;
   } catch (e) { $("csv-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
+
+// ---------------- read-only share links ----------------
+const shareUrl = (u) => location.origin + u;
+async function loadShares() {
+  try {
+    const { shares } = await j(`${API}/shares`);
+    $("share-list").innerHTML = shares.length ? shares.map((s) => `<tr><td><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>
+        <div class="meta">${esc(s.created.slice(0, 16).replace("T", " "))}${s.date ? ` · 比賽 ${esc(s.date)}` : ""}${s.expires ? ` · ${s.expired ? "已過期" : "到期 " + esc(s.expires.slice(0, 10))}` : " · 不過期"}${s.weight ? " · 含體重" : ""}</div></td>
+        <td class="n"><button class="btn" data-copy="${esc(s.url)}">複製</button> <button class="btn" data-del="${esc(s.id)}">刪除分享</button></td></tr>`).join("")
+      : `<tr><td class="meta">還沒有分享</td></tr>`;
+  } catch (e) { $("share-list").innerHTML = `<tr><td class="err">${esc(e.message)}</td></tr>`; }
+}
+async function copyText(t, el) {
+  try { await navigator.clipboard.writeText(t); } catch { const i = document.createElement("textarea"); i.value = t; document.body.appendChild(i); i.select(); document.execCommand("copy"); i.remove(); }
+  if (el) { const was = el.textContent; el.textContent = "已複製 ✓"; setTimeout(() => el.textContent = was, 1500); }
+}
+$("share").onclick = () => {
+  const ev = (INP?.events || []).find((e) => e.id === $("event").value);
+  if (!$("share-title").value) $("share-title").value = ev ? ev.name : (PLAN?.course_name || "");
+  $("share-out").classList.add("hidden"); $("share-msg").textContent = "";
+  $("share-dlg").showModal(); loadShares();
+};
+$("share-close").onclick = () => $("share-dlg").close();
+$("share-go").onclick = async () => {
+  $("share-msg").textContent = "建立中…"; $("share-go").disabled = true;
+  try {
+    const r = await post(`${API}/share`, { ...planBody(), share_title: $("share-title").value || null,
+      include_weight: $("share-weight").checked, expires_days: $("share-exp").value ? Number($("share-exp").value) : null });
+    $("share-link").value = shareUrl(r.url); $("share-out").classList.remove("hidden");
+    $("share-msg").innerHTML = `<span class="ok">已建立 ✓</span>${r.expires ? " 到期 " + esc(r.expires.slice(0, 10)) : ""}`;
+    loadShares();
+  } catch (e) { $("share-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  $("share-go").disabled = false;
+};
+$("share-copy").onclick = (e) => copyText($("share-link").value, e.target);
+$("share-list").addEventListener("click", async (e) => {
+  if (e.target.dataset.copy) return copyText(shareUrl(e.target.dataset.copy), e.target);
+  const id = e.target.dataset.del; if (!id) return;
+  if (!confirm("刪除這個分享？拿到連結的人就看不到了。")) return;
+  try { await j(`${API}/shares/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch (err) { alert(err.message); }
+  loadShares();
+});
 
 // ---------------- analyses (v1 sections) ----------------
 function renderCP() {
@@ -1364,13 +1645,14 @@ $("csv").onclick = csvExport;
 $("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
 document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   const t = b.dataset.tab; segOn("tabs", "tab", t); ls.set("tab", t);
-  document.querySelectorAll(".tab-calc").forEach((e) => e.classList.toggle("hidden", t !== "calc" || (e.id === "profile-sec" && !PLAN?.segments?.length) || (e.dataset.hide === "1")));
+  document.querySelectorAll(".tab-calc").forEach((e) => e.classList.toggle("hidden", t !== "calc" || (e.id === "profile-sec" && !PLAN?.segments?.length) || (e.id === "fuel-sec" && !PLAN?.fuel?.kcal_band) || (e.dataset.hide === "1")));
   document.querySelectorAll(".tab-acc").forEach((e) => e.classList.toggle("hidden", t !== "acc"));
   if (t === "acc") renderBacktest(); else setType(type);
 });
 
 (async function init() {
   if (!loadForm()) { $("dist").value = 21.0975; $("gain").value = 0; }
+  STOPS = parseStops($("stops").value); sortStops(); renderStops();
   setType(type); syncForm();
   keyStatus();
   if (ls.get("tab", "calc") === "acc") document.querySelector('#tabs button[data-tab="acc"]').click();

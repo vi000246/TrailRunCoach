@@ -924,6 +924,35 @@ def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
     return out
 
 
+def body_profile(ds, today: dt.date) -> dict:
+    """Height / sex / age for the 百岳 daily REE (fuel.mifflin_ree): the
+    settings-page profile first, then the WKO5 athlete file (height setting,
+    3001/3017 sex, 3001/3033 birthday); missing = None (fuel uses labelled
+    推估 defaults)."""
+    prof = getattr(ds.plan, "profile", None) or {}
+    ath = getattr(ds, "athlete", None)
+    out = {"height_cm": prof.get("height_cm"), "sex": prof.get("sex"), "age": None,
+           "height_cm_src": "設定頁" if prof.get("height_cm") else None, "sex_src": "設定頁" if prof.get("sex") else None,
+           "age_src": None}
+    try:
+        root = ath.root.get(3001) if ath is not None and getattr(ath, "root", None) is not None else None
+        if out["height_cm"] is None and ath is not None:
+            h = (ath.settings.get("height") or [(None, None)])[-1][1]
+            if h:
+                out["height_cm"], out["height_cm_src"] = round(float(h) * 100.0), "WKO5"
+        if root is not None:
+            if out["sex"] is None and root.get(3017) in ("male", "female"):
+                out["sex"], out["sex_src"] = root.get(3017), "WKO5"
+            b = root.get(3033)
+            if isinstance(b, str) and len(b) >= 10:
+                bd = dt.date.fromisoformat(b[:10])
+                out["age"] = today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))
+                out["age_src"] = "WKO5 生日"
+    except (AttributeError, TypeError, ValueError, IndexError):
+        pass
+    return out
+
+
 def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
            exclude: Optional[set] = None, strict_as_of: bool = False,
            classes: Optional[dict] = None, hiking: bool = True) -> dict:
@@ -1191,6 +1220,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     return {
         "today": today.isoformat(),
         "weight": {"value": weight, "source": weight_src},
+        "body": body_profile(ds, today),
         "profile": {"sex": sex, "sex_source": "賽季計畫" if prof.get("sex") else "預設（男）",
                     "power_meter": prof.get("power_meter") or "stryd", "wind": wind_any,
                     "wind_source": "資料中有 Stryd air power" if wind_any else "資料中沒有 air power"},

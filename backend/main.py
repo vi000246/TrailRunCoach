@@ -78,6 +78,7 @@ app.include_router(plan_auto_api.router)
 app.include_router(plan_sessions_api.router)
 app.include_router(overview_api.router)
 app.include_router(racepower_api.router)
+app.include_router(racepower_api.share_router)      # /share/<id>: the only path meant to skip the tunnel's password
 app.include_router(routes_api.router)
 app.include_router(routes_api.workout_router)
 

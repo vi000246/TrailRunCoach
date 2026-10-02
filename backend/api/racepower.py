@@ -459,7 +459,9 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
     c = await run_in_threadpool(_build, track, _course_opts({
         "sigma_m": sigma_m, "eps_m": eps_m, "min_len_m": min_len_m, "flat_pct": flat_pct, "split": split,
         "official_gain_m": official_gain_m}))
-    return _py({"course_id": cid, "name": track.name or file.filename, **c})
+    from backend.engine.racepower import fuel as FU
+    sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
+    return _py({"course_id": cid, "name": track.name or file.filename, **c, "stop_suggestions": sug})
 
 
 def _grade_models() -> dict:
@@ -633,6 +635,9 @@ class LockIn(BaseModel):
 class StopIn(BaseModel):
     km: float
     minutes: float = 0.0
+    # aid-station editor (fuel.STOP_TYPES); the old 「km:分」 text has neither
+    type: Optional[Literal["water", "aid", "big", "medical", "self"]] = None
+    name: Optional[str] = Field(None, max_length=40)
 
 
 class HourIn(BaseModel):
@@ -793,7 +798,53 @@ def make_plan(body: PlanIn) -> dict:
         raise HTTPException(400, str(e))
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
                course_id=body.course.course_id if body.course else None, course_name=course.get("name"))
+    out["fuel"] = _fuel(body, out)
+    from backend.engine.racepower import seg_targets as ST
+    aet_d = inputs().get("aet") or {}
+    out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
+    if course.get("source") == "gpx":
+        from backend.engine.racepower import fuel as FU
+        out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
     return out
+
+
+def _fuel(body: PlanIn, out: dict) -> dict:
+    """The 補給 card (engine/racepower/fuel.py) on the predicted segments;
+    adds kcal / carbohydrate / water / sodium / fuel_action to each one."""
+    from backend.engine.racepower import fuel as FU
+    inp = inputs()
+    hr = None
+    th = (out.get("summary") or {}).get("trail_hr")
+    lthr = (inp.get("aet") or {}).get("lthr")
+    if th and th.get("x") and lthr:
+        hr = th["x"] * lthr                 # the race HR the trail model predicts
+    return FU.plan_fuel(out, weight=out["used"]["weight"]["value"], stops=[x.model_dump() for x in body.stops],
+                        start_time=body.start_time, hr_bpm=hr, body=_body(inp))
+
+
+def _body(inp: dict) -> Optional[dict]:
+    """inputs()["body"] (settings profile → the dataset's athlete); a COROS /
+    TP dataset has no WKO5 athlete, so missing fields come from the WKO5
+    athlete file itself when there is one. No "body" key (old cache, tests)
+    = nothing to fill: fuel uses its labelled defaults."""
+    b = inp.get("body")
+    if b is None or all(b.get(k) is not None for k in ("height_cm", "sex", "age")):
+        return b
+    b = dict(b)
+    try:
+        from backend.engine.racepower import athlete as A
+        from backend.files.wko5_athlete import read_athlete
+        from backend.settings.paths import athlete_dir
+        f = next(athlete_dir().glob("*.wko5athlete"), None)
+        if f is not None:
+            plan = type("P", (), {"profile": {}})()
+            w = A.body_profile(type("D", (), {"plan": plan, "athlete": read_athlete(f)})(), dt.date.today())
+            for k in ("height_cm", "sex", "age"):
+                if b.get(k) is None and w.get(k) is not None:
+                    b[k], b[k + "_src"] = w[k], w[k + "_src"]
+    except (OSError, ValueError, StopIteration):
+        pass
+    return b
 
 
 @router.post("/plan")
@@ -878,6 +929,86 @@ def export_csv(body: ExportIn):
     return Response(content=text.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f"attachment; filename=\"racepower.csv\"; filename*=UTF-8''{q}",
                              "X-Filename": q})
+
+
+# ---------------------------------------------------------------------------
+# read-only share links (engine/racepower/share.py)
+#
+#   POST   /api/v1/racepower/share          same body as /plan + title / include_weight /
+#                                            expires_days → freeze the result, return the link
+#   GET    /api/v1/racepower/shares         the athlete's shares
+#   DELETE /api/v1/racepower/shares/{id}    remove one
+#   GET    /share/{id}        (public)      the read-only page
+#   GET    /share/{id}/data   (public)      the frozen snapshot
+#
+# Only /share/ is meant to be reachable without the site password (the
+# Cloudflare tunnel's Basic-auth proxy exempts that prefix); it serves
+# nothing but stored snapshots.
+# ---------------------------------------------------------------------------
+
+class ShareIn(PlanIn):
+    share_title: Optional[str] = Field(None, max_length=80)
+    include_weight: bool = False
+    expires_days: Optional[int] = None
+
+
+@router.post("/share")
+def create_share(body: ShareIn):
+    from backend.engine.racepower import share as SH
+    p = _py(make_plan(body))
+    req = {"date": body.date, "start_time": body.start_time, "stops": [x.model_dump() for x in body.stops]}
+    title = body.share_title or p.get("course_name") or \
+        f"{ {'road': '路跑', 'trail': '越野', 'baiyue': '百岳'}.get(body.type, '')} {p['summary']['km']:.1f} km"
+    try:
+        snap = SH.snapshot(p, title=title, include_weight=body.include_weight, expires_days=body.expires_days,
+                           request=req)
+        sid = SH.save(snap)
+    except SH.ShareError as e:
+        raise HTTPException(400, str(e))
+    return {"id": sid, "url": f"/share/{sid}", "title": snap["title"], "created": snap["created"],
+            "expires": snap["expires"]}
+
+
+@router.get("/shares")
+def list_shares():
+    from backend.engine.racepower import share as SH
+    return {"shares": [{**r, "url": f"/share/{r['id']}"} for r in SH.listing()]}
+
+
+@router.delete("/shares/{sid}")
+def delete_share(sid: str):
+    from backend.engine.racepower import share as SH
+    try:
+        if not SH.delete(sid):
+            raise HTTPException(404, "找不到這個分享")
+    except SH.ShareError as e:
+        raise HTTPException(400, str(e))
+    return {"deleted": sid}
+
+
+share_router = APIRouter(prefix="/share", tags=["share"], include_in_schema=False)
+SHARE_HEADERS = {"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer"}
+
+
+@share_router.get("/{sid}")
+def share_page(sid: str):
+    return FileResponse(STATIC / "share.html", headers=SHARE_HEADERS)
+
+
+@share_router.get("/{sid}/data")
+def share_data(sid: str):
+    from fastapi.responses import JSONResponse
+
+    from backend.engine.racepower import share as SH
+    try:
+        snap = SH.load(sid)
+    except SH.ShareError:
+        snap = None
+    if snap is None:
+        raise HTTPException(404, "這個分享不存在或已刪除")
+    if SH.expired(snap):
+        raise HTTPException(410, "這個分享已過期")
+    return JSONResponse(snap, headers=SHARE_HEADERS)
 
 
 @router.post("/export/coros")
