@@ -1560,6 +1560,8 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     from backend.engine import compliance as C
     ss = []
     acts_by = {x.get("index"): x for x in extras["activities"]}
+    from backend.engine import activity_key as AK
+    AK.rebase_done_by(every, extras["activities"])         # done_by -> this source's indexes, by start
     for s in every:
         if s.get("day") and start <= s["day"] <= end:
             est = est_tss(s, rates)

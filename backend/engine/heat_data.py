@@ -158,10 +158,12 @@ def steady_segments(ds, today: dt.date, acts: list[dict]) -> list[dict]:
     import numpy as np
     from backend.engine.racepower import athlete as A
     from backend.engine.wko5expr.dataset import date_to_day
-    had = {a.get("file"): a.get("hadley") for a in acts}
+    from backend.engine.activity_key import ByStartDict
+    # by file, else the same activity by start (activity_key.py: the archive is keyed by WKO5 files)
+    had = ByStartDict({a.get("file"): a.get("hadley") for a in acts if a.get("file")})
     tday = date_to_day(today)
     runs = [w for w in ds.workouts if w.sport == "run" and tday - HRC_DAYS < w.day <= tday + 1
-            and had.get(w.entry.file) is not None]
+            and had.find(w.entry.file, w.entry.start) is not None]
     out = []
     for w in runs:
         ws = [x for x in A.grade_samples(ds, [w]) if x.get("k") is not None]
@@ -176,7 +178,7 @@ def steady_segments(ds, today: dt.date, acts: list[dict]) -> list[dict]:
             hrs = [x["hr"] for x in cur if x.get("hr")]
             if t >= HRC_MIN_S and hrs and np.std(ps) / max(1e-9, np.mean(ps)) < HRC_CV:
                 out.append({"date": w.entry.start.date().isoformat(), "p": float(np.mean(ps)),
-                            "hr": float(np.mean(hrs)), "hadley": had[w.entry.file]})
+                            "hr": float(np.mean(hrs)), "hadley": had.find(w.entry.file, w.entry.start)})
         for x in ws:
             ok = abs(x["g"]) < HRC_FLAT_G and (x.get("run") is None or x["run"] >= 0.5) and (x.get("t") or 0) >= HRC_SKIP_S \
                 and x.get("p")

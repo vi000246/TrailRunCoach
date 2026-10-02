@@ -300,10 +300,25 @@ def _get(rid: str) -> dict:
 
 
 def _file_to_idx() -> dict[str, int]:
+    """{file: workout index} of the current Dataset. The route index is built
+    from the WKO5 files: a ByStartDict (engine/activity_key.py) maps a WKO5
+    file name to the same activity of a COROS / TP / 同步資料 source by start."""
+    from backend.engine.activity_key import ByStartDict
     try:
-        return {w.entry.file: w.idx for w in _ds().workouts}
+        ws = _ds().workouts
+        return ByStartDict({w.entry.file: {"idx": w.idx, "start": w.entry.start.isoformat()} for w in ws})
     except Exception:      # noqa: BLE001
-        return {}
+        return ByStartDict()
+
+
+
+
+def _idx_of(f2i, file: Optional[str], start=None) -> Optional[int]:
+    """The current Dataset's index of a route effort (its WKO5 file, else its start)."""
+    if not file:
+        return None
+    hit = f2i.find(file, start) if hasattr(f2i, "find") else f2i.get(file)
+    return hit.get("idx") if isinstance(hit, dict) else hit
 
 
 def _phase_labels(days: list[dt.date]) -> list[Optional[str]]:
@@ -332,12 +347,12 @@ def detail(rid: str):
     labels = _phase_labels([dt.date.fromisoformat(e["start"][:10]) for e in efforts])
     for e, lab in zip(efforts, labels):
         e["phase"] = lab
-        e["workout"] = f2i.get(e["file"])
+        e["workout"] = _idx_of(f2i, e["file"], e.get("start"))
     out = {k: v for k, v in it.items() if k != "efforts"}
     out["name"] = names.get(rid) or it["auto_name"]
     out["renamed"] = rid in names
     out["efforts"] = efforts
-    out["partials"] = [dict(p, workout=f2i.get(p["file"])) for p in it.get("partials") or []]
+    out["partials"] = [dict(p, workout=_idx_of(f2i, p["file"], p.get("start"))) for p in it.get("partials") or []]
     items = _index()["items"]
     ref = lambda i: {"id": i, "name": names.get(i) or items[i]["auto_name"], "length_m": items[i]["length_m"],
                      "n_efforts": items[i]["n_efforts"]}
@@ -478,16 +493,23 @@ def workout_segments(idx: int):
     if not 0 <= idx < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     _ensure_fresh()
-    file = ds.workouts[idx].entry.file
+    w = ds.workouts[idx]
+    file = w.entry.file
     view = _index()
     names = STORE.names()
     out = []
     if view is not None:
+        # the route index is built from the WKO5 files: this activity's file there,
+        # by start when the current source names it otherwise (engine/activity_key.py)
+        from backend.engine.activity_key import ByStartDict
+        files = ByStartDict({e["file"]: {"start": e.get("start")} for it in view["items"].values()
+                             for e in it["efforts"] if e.get("file")})
+        rfile = files.key_for(file, w.entry.start)
         for it in view["items"].values():
             if it["n_activities"] < 2:
                 continue
             for e in it["efforts"]:
-                if e["file"] != file:
+                if e["file"] != rfile:
                     continue
                 n_timed = sum(1 for x in it["efforts"] if x.get(it["time_key"]))
                 out.append({"id": it["id"], "name": names.get(it["id"]) or it["auto_name"],
