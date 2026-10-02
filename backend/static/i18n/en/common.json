@@ -15,5 +15,7 @@
   "z5flow.tag.locked": "Locked",
   "workout.no_tpace": "No threshold pace: this step reaches the watch without a pace target",
   "workout.no_tpace_badge": "No threshold pace",
-  "workout.no_tpace_link": "How threshold pace is estimated"
+  "workout.no_tpace_link": "How threshold pace is estimated",
+  "autoplan.log_title": "Automatic adjustment log",
+  "autoplan.log_count": "({n})"
 }

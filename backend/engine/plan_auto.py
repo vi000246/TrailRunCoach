@@ -465,7 +465,7 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
         live = {s["uid"] for s in new if s["state"] in ("active", "done", "missed")}
         stale = [k for k, r in rows.items() if k not in live and (r.day is None or r.day >= today)]
         stale += [s["uid"] for s in API._on_blocked(new, bl, today) if s["uid"] in rows]
-        missed = [s["uid"] for s in new if s["state"] == "missed" and s["uid"] in rows]
+        missed = [s["uid"] for s in new if PS.off_watch(s) and s["uid"] in rows]
         todo = [s for s in API._in_range(new, today, end, bl) if s["kind"] != NOTICE_KIND]
         if extra_uids:
             have = {s["uid"] for s in todo}
@@ -750,12 +750,17 @@ async def undo(db, entry_id: int) -> dict:
         for s in after:
             if s["uid"] not in {b["uid"] for b in before} and s["uid"] in by:
                 x = by[s["uid"]]
+                if x.get("note") == PS.USER_DELETED and x.get("state") == "deleted":
+                    continue
                 if x["origin"] == "auto":
                     x["state"] = "deleted"           # tombstone: not regenerated
                     x["note"] = "復原自動調整"
                 else:
                     del by[s["uid"]]
         for b in before:
+            x = by.get(b["uid"])
+            if x is not None and x.get("state") == "deleted" and x.get("note") == PS.USER_DELETED:
+                continue                         # an expired session the user deleted stays deleted
             by[b["uid"]] = {**b, "edited": True if b["state"] == "active" else b.get("edited"),
                             "provisional": False}
         new = list(by.values())
