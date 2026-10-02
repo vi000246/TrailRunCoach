@@ -82,15 +82,25 @@ def hr_heat_adjust(hr: float, hadley: float, beta: Optional[float] = None) -> fl
     return float(hr) - beta * (float(hadley) - HR_BETA_REF)
 
 
+def _partial() -> float:
+    """PARTIAL_HADLEY, or the 進階 manual value (engine/advanced_params.py)."""
+    try:
+        from backend.engine.advanced_params import partial_hadley
+        return float(partial_hadley())
+    except Exception:                       # noqa: BLE001
+        return PARTIAL_HADLEY
+
+
 def minute_weight(hadley: Optional[float]) -> float:
     """Weight of one minute at this Hadley sum: 0 below 130, 1 from 150."""
     if hadley is None or not math.isfinite(hadley):
         return 0.0
     if hadley >= HOT_HADLEY:
         return 1.0
-    if hadley <= PARTIAL_HADLEY:
+    lo = _partial()
+    if hadley <= lo:
         return 0.0
-    return (hadley - PARTIAL_HADLEY) / (HOT_HADLEY - PARTIAL_HADLEY)
+    return (hadley - lo) / (HOT_HADLEY - lo)
 
 
 def hadley_sum(temp_c: float, rh_pct: float) -> float:

@@ -7,7 +7,7 @@ it; sync/coros_workouts pushes it.
     {"v": 1, "origin": "derived" | "template:<variant key>" | "user",
      "items": [
        {"id": "a1", "kind": "warm", "dur": {"type": "time", "value": 600},
-        "target": {"type": "auto", "intent": "easy"}, "note": "市區輕鬆跑到河濱"},
+        "target": {"type": "auto", "intent": "easy"}, "note": "輕鬆跑暖身（跑到間歇地點）"},
        {"id": "a2", "kind": "repeat", "times": 5, "last_rest": false, "note": "", "items": [
           {"id": "a3", "kind": "work", "dur": {"type": "time", "value": 120},
            "target": {"type": "auto", "intent": "band", "lo": 1.06, "hi": 1.12, "cls": "Z5"}},
@@ -76,7 +76,7 @@ Z5_MIN_REP_S, Z3_MIN_REP_S, Z5_MAX_REST_S = IL.Z5_MIN_REP_S, IL.Z3_MIN_REP_S, IL
 Z5_FRAC = IL.CLASS_RANGE["Z5"][0]
 HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}    # = coros_workouts.HR_WORK
 
-WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
+WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
 
 

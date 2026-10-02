@@ -241,9 +241,9 @@ def blocks(v: Variant, level: str = "std", prefs=None) -> dict:
     """{"warm": [(code, minutes, text)], "warm_min", "cool_min", "cool_text"} (§C3)."""
     c = commute_min(prefs)
     z5 = is_z5(v)
-    city = ("city", c, f"市區輕鬆跑到河濱 {c} 分（≤ 75% CP，最後 2 分漸進到約 85% CP）")
+    city = ("city", c, f"輕鬆跑暖身 {c} 分（可以就是跑到間歇地點；≤ 75% CP，最後 2 分漸進到約 85% CP）")
     if level == "full":
-        river = ("river", 5 if z5 else 3, f"河濱輕鬆跑 {5 if z5 else 3} 分，漸進")
+        river = ("river", 5 if z5 else 3, f"輕鬆跑 {5 if z5 else 3} 分，漸進")
         warm = [city, river] + ([("drills", 2, "動態伸展、跑姿 drill 2 分（擺腿、高抬腿、小步跑）")] if z5 else []) + \
             [("strides", 3 if z5 else 2, f"快步跑 {3 if z5 else 2}×15–20 秒（不是衝刺），間隔慢跑 40 秒")]
         cool = max(10, cooldown_floor(prefs))
@@ -597,7 +597,7 @@ def steps(v: Variant, level: str = "std", prefs=None) -> list[dict]:
 
 def _split(v: Variant, level: str, prefs=None) -> str:
     b = blocks(v, level, prefs)
-    name = {"city": "市區", "river": "河濱", "drills": "drill", "strides": "快步跑"}
+    name = {"city": "輕鬆跑", "river": "漸進", "drills": "drill", "strides": "快步跑"}
     warm = f"暖身 {b['warm_min']}（" + "＋".join(f"{name.get(c, c)} {m}" for c, m, _ in b["warm"]) + "）"
     return f"{warm} · 主課 {_mins(main_s(v))} · 緩和 {b['cool_min']} ＝ {total_min(v, level, prefs):.0f} 分"
 
