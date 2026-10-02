@@ -101,6 +101,11 @@ DEFAULTS: dict[str, Any] = {
     # 偏好的星期 (engine/plan_prefs.py day_conflicts / place): {kind: [first, second]}; [] / missing = 不指定
     "plan.prefs.pref_days": {},
     "plan.prefs.pref_keep": [],               # conflict codes kept anyway (照我的偏好)
+    "plan.prefs.b2b": True,                   # suggest a due B2B weekend (engine/b2b.py); off = never
+    # accepted B2B weekends (engine/b2b.py ACCEPTED_KEY): [{week, days, minutes, uids, at}]
+    "plan.b2b.accepted": [],
+    # the floating suggestion box (engine/suggestions.py): {suggestion id: {action, at, week}}
+    "plan.suggestions.dismissed": {},
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
@@ -224,11 +229,20 @@ def validate(key: str, value: Any) -> None:
         raise ValueError("plan.auto.push_days must be an integer 1-14")
     if key == "plan.auto.notify" and value not in AUTO_NOTIFY:
         raise ValueError(f"plan.auto.notify must be one of {AUTO_NOTIFY}")
+    if key == "plan.b2b.accepted" and not (isinstance(value, list) and all(
+            isinstance(e, dict) and isinstance(e.get("week"), str) and isinstance(e.get("days"), list)
+            and len(e["days"]) == 2 for e in value)):
+        raise ValueError("plan.b2b.accepted must be a list of {week, days: [d1, d2], minutes}")
+    if key == "plan.suggestions.dismissed" and not (isinstance(value, dict) and all(
+            isinstance(k, str) and isinstance(v, dict) for k, v in value.items())):
+        raise ValueError("plan.suggestions.dismissed must be {id: {action, at}}")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.auto.state must be an object or null")
 
 
 def _validate_pref(key: str, value: Any) -> None:
+    if key == "plan.prefs.b2b" and not isinstance(value, bool):
+        raise ValueError("plan.prefs.b2b must be true/false")
     if key in PREF_ENUMS and value not in PREF_ENUMS[key]:
         raise ValueError(f"{key} must be one of {PREF_ENUMS[key]}")
     if key in PREF_INTS and value is not None:

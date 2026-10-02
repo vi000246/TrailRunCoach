@@ -174,4 +174,10 @@
   as.src = "/api/v1/static/autosync.js";
   as.defer = true;
   document.head.appendChild(as);
+
+  // the floating suggestion box (B2B weekends, due tests, zone retests): every page shows it
+  const sg = document.createElement("script");
+  sg.src = "/api/v1/static/suggestions.js";
+  sg.defer = true;
+  document.head.appendChild(sg);
 })();

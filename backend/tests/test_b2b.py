@@ -77,32 +77,47 @@ def test_first_build_week_after_recovery_and_spacing():
     assert ctx(state={"last": "2026-09-06", "three_done": False, "count": 1})["index"] == 2
 
 
-def test_three_day_version_once_four_to_six_weeks_before_a_multi_day_event():
-    c = ctx(event=evj(start="2026-11-07", days=3))                      # 34 days after the Sunday
-    assert c["candidate"] and c["days"] == 3
-    assert ctx(event=evj(start="2026-11-07", days=3),
-               state={"last": "2026-09-06", "three_done": True, "count": 1})["days"] == 2
-    # 55 / 62 days: a 2-day now would sit < 2 weeks before the 3-day window → kept for the 3-day
-    for start in ("2026-11-28", "2026-12-05"):
+def test_always_two_days_no_three_day_version():
+    # the 3-day version was dropped (2026-10-02): a 3-day trip 4–6 weeks out is an ordinary 2-day B2B
+    for start in ("2026-11-07", "2026-11-28", "2026-12-06"):
         c = ctx(event=evj(start=start, days=3))
-        assert not c["candidate"] and any("留給 3 天版本" in b for b in c["blocked"])
-    c = ctx(event=evj(start="2026-12-06", days=3))                          # 63 days: 2-day, room after
-    assert c["candidate"] and c["days"] == 2
-    assert ctx(event=evj(start="2026-11-07", days=2))["days"] == 2      # a 2-day trip: 2-day B2B
-    assert ctx(event=evj(start="2026-11-07", days=1, est_hours=8))["days"] == 2   # single day: never 3
-    # inside the window: the first week that can take it, recovery week before or not (推估)
-    c = ctx(event=evj(start="2026-11-02", days=3), last_recovery=False)      # 29 days
-    assert c["candidate"] and c["days"] == 3
+        assert c["candidate"] and c["days"] == 2
+    assert not ctx(event=evj(start="2026-11-02", days=3), last_recovery=False)["candidate"]   # mid-cycle: no
+    assert B2B.FOLLOWERS == ("long2",) and not hasattr(B2B, "THREE_DAY_WINDOW")
 
 
-def test_guardrails_tsb_ramp_gate_and_base_built():
+def test_guardrails_tsb_ramp_gate_and_base_built_make_a_suggestion_not_a_plan():
     assert not ctx(tsb=-22.0)["candidate"]
     assert not ctx(ramp=8.5)["candidate"]
     assert not ctx(guard_ok=False)["candidate"]
     c = B2B.finalize(ctx(), long_min=180, longest_before=150, total_min=480)
-    assert not c["due"] and any("基礎還不夠" in b for b in c["blocked"])        # 150 < 0.87 × 180
+    assert not c["suggest"] and any("基礎還不夠" in b for b in c["blocked"])    # 150 < 0.87 × 180
     c = B2B.finalize(ctx(), long_min=180, longest_before=160, total_min=480)
-    assert c["due"] and c["minutes"] == [180, 120]
+    assert c["suggest"] and not c["due"] and c["minutes"] == [180, 120]       # suggested, not planned
+    sg = B2B.suggestion(c, MON, "2026-10-03")
+    assert sg["id"] == "b2b:2026-09-28" and sg["minutes"] == [180, 120] and sg["reason"]
+    assert "推估" in sg["help"] and sg["event_days"] == 2
+    assert B2B.suggestion(c, MON, enabled=False) is None                       # 課表偏好 b2b off
+    # accepted: in the plan with the user's days and minutes, whatever the rules say now
+    a = B2B.apply_accepted(ctx(tsb=-25.0), {"week": "2026-09-28", "days": ["2026-10-02", "2026-10-03"],
+                                            "minutes": [170, 110]})
+    assert a["due"] and a["accepted"] and a["pair"] == ["2026-10-02", "2026-10-03"] and a["minutes"] == [170, 110]
+    assert B2B.suggestion(a, MON) is None
+
+
+def test_pair_options_consecutive_free_days_weekend_first():
+    opts = B2B.pair_options(MON, date(2026, 9, 30), [180, 120], long_day="2026-10-03")
+    assert opts[0]["day"] == "2026-10-03" and opts[0]["end"] == "2026-10-04" and opts[0]["note"] == "週末"
+    assert opts[1]["day"] == "2026-10-02"                                      # keeps the long day (Fri + Sat)
+    assert all(o["day"] >= "2026-09-30" for o in opts)                         # never before the first free day
+    # 課表偏好: Tue / Thu / Sun only → no two consecutive days
+    assert B2B.pair_options(MON, MON, [180, 120], allowed=lambda d: d.weekday() in (1, 3, 6)) == []
+    # weekday cap 60: a weekday can't take a 120-min day 2 → only Sat + Sun
+    opts = B2B.pair_options(MON, MON, [180, 120], weekday_cap=60)
+    assert [o["day"] for o in opts] == ["2026-10-03"]
+    # a blocked Sunday or the user's own session on Saturday
+    assert "2026-10-03" not in [o["day"] for o in B2B.pair_options(MON, MON, [180, 120], blocked={"2026-10-04"})]
+    assert "2026-10-03" not in [o["day"] for o in B2B.pair_options(MON, MON, [180, 120], busy={"2026-10-03"})]
 
 
 def test_recovery_week_detection():
@@ -117,7 +132,6 @@ def test_recovery_week_detection():
 
 def test_day_minutes_two_thirds_pair_cap_and_single_day_clamp():
     assert B2B.minutes(180, 600, 2, {"days": 2}) == [180, 120]               # CTS 30:20
-    assert B2B.minutes(180, 600, 3, {"days": 3}) == [180, 120, 120]          # 30 + 20 + 20
     # the pair ≤ 70 % of the week: 300 + 200 > 0.7 × 480 → both scaled
     m = B2B.minutes(300, 480, 2, {"days": 2})
     assert sum(m) <= 0.7 * 480 + 5 and m[1] == pytest.approx(m[0] * 0.67, abs=5)
@@ -306,12 +320,12 @@ def _plan_with(event_start, days, today):
     return plan
 
 
-def _week(event_start="2026-12-05", days=2, today=TODAY, last_week="recovery", prefs=None):
+def _week(event_start="2026-12-05", days=2, today=TODAY, last_week="recovery", prefs=None, accepted=None):
     ds = _history(today, last_week)
     plan = _plan_with(event_start, days, today)
     ds.plan = plan
     st = Status(ds, plan, today, prefs=PP.Prefs()).compute()
-    return ds, plan, st, O.week_plan(ds, st, today, prefs=prefs)
+    return ds, plan, st, O.week_plan(ds, st, today, prefs=prefs, b2b_accepted=accepted)
 
 
 def _phases(plan, today):
@@ -320,83 +334,96 @@ def _phases(plan, today):
             for p in planning.phases(plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
 
 
-def test_week_plan_schedules_b2b_after_the_recovery_week_volume_unchanged():
+SAT_SUN = {"week": "2026-09-28", "days": ["2026-10-03", "2026-10-04"], "minutes": [180, 120], "uids": ["u1", "u2"]}
+
+
+def test_week_plan_suggests_b2b_after_the_recovery_week_never_schedules_it():
     _, _, _, wp = _week()
-    assert wp["phase"] == "specific" and wp["b2b"]["due"] and wp["b2b"]["days"] == 2
+    assert wp["phase"] == "specific" and not wp["b2b"]["due"] and wp["b2b"]["suggest"]
+    assert not any(s["id"] == "long2" for s in wp["sessions"])                    # nothing scheduled
+    sg = wp["b2b_suggestion"]
+    assert sg["id"] == "b2b:2026-09-28" and sg["type"] == "b2b" and len(sg["minutes"]) == 2
+    assert sg["minutes"][1] == pytest.approx(sg["minutes"][0] * 0.67, abs=5) and sg["reason"]
+    assert sg["long_day"] == next(s["day"] for s in wp["sessions"] if s["id"] == "long")
+    # 課表偏好 建議 B2B off: no suggestion at all
+    _, _, _, off = _week(prefs=PP.Prefs(b2b=False))
+    assert off["b2b_suggestion"] is None and not PP.Prefs(b2b=False).active
+    # no B2B for a short single-day race
+    _, _, _, short = _week(days=1)
+    assert not short["b2b"]["candidate"] and short["b2b_suggestion"] is None
+
+
+def test_week_plan_accepted_b2b_on_the_users_days_volume_unchanged():
+    _, _, _, wp = _week(accepted=[SAT_SUN])
+    assert wp["b2b"]["due"] and wp["b2b"]["accepted"] and wp["b2b_suggestion"] is None
     by = {s["id"]: s for s in wp["sessions"]}
-    assert (by["long"]["day"], by["long2"]["day"]) == ("2026-10-03", "2026-10-04")       # Sat + Sun
-    assert by["long2"]["minutes"] == pytest.approx(by["long"]["minutes"] * 0.67, abs=5)
+    assert (by["long"]["day"], by["long2"]["day"]) == ("2026-10-03", "2026-10-04")       # the user's Sat + Sun
+    assert by["long"]["minutes"] == 180 and by["long2"]["minutes"] == 120
     assert by["long"]["title"].startswith("B2B 第 1 天") and "30–60 g" in by["long"]["detail"]
-    assert by["long"]["target"].startswith("心率 ≤ AeT")
+    assert "（共 2 天）" in by["long"]["detail"] and by["long"]["target"].startswith("心率 ≤ AeT")
     assert wp["b2b"]["weeks_out"] == 10 and "3.1 kg" in by["long"]["detail"]         # week 10: 5 % of 62 kg
     # Koop: the week's total is the same as without B2B (day 2 came out of the easy runs)
     main = sum(s["minutes"] for s in wp["sessions"] if s["kind"] not in ("strength",))
     assert main == pytest.approx(wp["target"]["hours"] * 60, abs=30)
-    # no B2B for a short single-day race
-    _, _, _, short = _week(days=1)
-    assert not short["b2b"]["candidate"] and not any(s["id"] == "long2" for s in short["sessions"])
+    # nothing else on the two days; a quality session ≥ 48 h away
+    for s in wp["sessions"]:
+        if s["id"] not in ("long", "long2") and s["kind"] not in ("strength",) and s.get("day"):
+            assert s["day"] not in SAT_SUN["days"]
+        if s["kind"] in ("quality", "test") and s.get("day"):
+            assert all(abs((date.fromisoformat(s["day"]) - date.fromisoformat(d)).days) >= 2 for d in SAT_SUN["days"])
+    # the stored plan never gets the two days from the generator: they are the user's sessions
+    from backend.engine import plan_store as PS
+    gw = PS.gen_weeks({"cur": wp, "weeks": []})
+    assert not any(s["id"] in ("long", "long2") for s in gw[0]["sessions"])
+    # Fri + Sat (the user's choice): taken as they are
+    _, _, _, wp = _week(accepted=[{**SAT_SUN, "days": ["2026-10-02", "2026-10-03"]}])
+    by = {s["id"]: s["day"] for s in wp["sessions"]}
+    assert (by["long"], by["long2"]) == ("2026-10-02", "2026-10-03")
 
 
-def test_week_plan_three_day_block_and_weekday_cap_falls_back_to_two_days():
-    _, _, _, wp = _week(event_start="2026-11-07", days=3)
-    assert wp["b2b"]["days"] == 3
-    days = sorted(s["day"] for s in wp["sessions"] if s["id"] in ("long", "long2", "long3"))
-    assert days == ["2026-10-02", "2026-10-03", "2026-10-04"]                         # Fri–Sun
-    # 課表偏好 平日上限 50: the Friday can't hold a B2B day → 2 days + 「請一天假」
-    _, _, _, wp = _week(event_start="2026-11-07", days=3, prefs=PP.Prefs(cap_weekday=50, cap_long=300))
-    ids = {s["id"]: s["day"] for s in wp["sessions"] if s["id"] in ("long", "long2", "long3")}
-    assert set(ids) == {"long", "long2"} and ids["long"] == "2026-10-03"
-    assert wp["b2b"]["days"] == 2 and not wp["b2b"].get("three_done")
-    assert any("請一天假" in n["text"] for n in wp["notes"])
-
-
-def test_week_plan_respects_preferred_weekdays():
-    # only Tue / Thu / Sun allowed: no two consecutive days → an ordinary long day, with a note
-    _, _, _, wp = _week(prefs=PP.Prefs(days=(False, True, False, True, False, False, True)))
-    assert not any(s["id"] == "long2" for s in wp["sessions"]) and not wp["b2b"]["due"]
-    assert any(n.get("src") == "b2b" for n in wp["notes"])
-
-
-def test_week_after_b2b_easy_days_no_recovery_week():
+def test_week_after_an_accepted_b2b_easy_days_no_recovery_week():
     today = date(2026, 10, 7)
-    _, _, _, wp = _week(today=today, last_week="b2b")
+    last = {"week": "2026-09-28", "days": ["2026-10-03", "2026-10-04"], "minutes": [180, 120]}
+    _, _, _, wp = _week(today=today, last_week="b2b", accepted=[last])
     assert wp["b2b"]["post"]["until"] == "2026-10-08"
     assert wp["load"]["tsb_today"] < -20                           # the planned drop
     assert wp["mode"] == "specific"                                # not converted to a recovery week
     assert any("B2B" in w and "不改成恢復週" in w for w in wp["why"])
     assert not any(s["kind"] in ("quality", "test") for s in wp["sessions"])
     assert any(n.get("src") == "b2b" for n in wp["notes"])
+    # the same two long days done without accepting a B2B: no exception (accepted B2B only)
+    _, _, _, wp = _week(today=today, last_week="b2b")
+    assert not (wp.get("b2b") or {}).get("post")
 
 
-def test_projection_sample_plan_for_a_three_day_trip():
-    """The specific block before a 3-day 嘉明湖 on 12/06: B2B on the first build week after
-    the recovery week, the 3-day once 4–6 weeks out, none in the last 3 weeks, easy days after."""
+def test_projection_suggests_and_plans_only_accepted_weeks():
+    """The specific block before a 3-day 嘉明湖 on 12/06: projected weeks carry suggestions
+    (first build week after a recovery week, none in the last 3 weeks); only an accepted
+    week has the B2B days, and the week after it gets the easy days."""
     today = TODAY
     ds, plan, st, cur = _week(event_start="2026-12-06", days=3, today=today)
     weeks = P.project_weeks(cur, _phases(plan, today), date(2026, 12, 7))
-    rows = [(cur["week"]["start"], cur["mode"], cur.get("b2b") or {})] + \
-        [(w["start"], w["mode"], w.get("b2b") or {}) for w in weeks]
-    b2b_weeks = [(s, b["days"]) for s, _, b in rows if b.get("due")]
-    assert b2b_weeks[0] == ("2026-09-28", 2)
-    assert any(n == 3 for _, n in b2b_weeks)                                    # the 3-day block
-    ev_start = date(2026, 12, 6)
-    for s, n in b2b_weeks:
-        sunday = date.fromisoformat(s) + dt.timedelta(days=6)
-        assert (ev_start - sunday).days >= 21
-        if n == 3:
-            assert 28 <= (ev_start - sunday).days <= 42
-    for i, (s, mode, b) in enumerate(rows[:-1]):
-        if b.get("due"):
-            nxt = rows[i + 1]
-            assert nxt[1] != "recovery_week" and nxt[2].get("post")              # 3:1 continues
-            w = next(w for w in weeks if w["start"] == nxt[0])
-            assert not any(x["kind"] in ("quality", "test") for x in w["sessions"])
-    # each B2B week: the B2B days consecutive, day 2 ≈ 2/3 of day 1
-    for w in weeks:
-        if (w.get("b2b") or {}).get("due"):
-            ss = sorted((x for x in w["sessions"] if x["id"] in B2B.FOLLOWERS + ("long",)), key=lambda x: x["day"])
-            ds_ = [date.fromisoformat(x["day"]) for x in ss]
-            assert all((b - a).days == 1 for a, b in zip(ds_, ds_[1:])) and ss[0]["id"] == "long"
+    assert not any((w.get("b2b") or {}).get("due") for w in weeks)
+    assert not any(x["id"] == "long2" for w in weeks for x in w["sessions"])
+    sug = [w for w in weeks if w.get("b2b_suggestion")]
+    assert sug, "a later build week is suggested too"
+    for w in sug:
+        assert (date(2026, 12, 6) - date.fromisoformat(w["start"]) - dt.timedelta(days=6)).days >= 21
+    # accept one projected week: its B2B days are planned, the week after keeps its volume, easy only
+    wk = sug[0]["start"]
+    sat = (date.fromisoformat(wk) + dt.timedelta(days=5)).isoformat()
+    sun = (date.fromisoformat(wk) + dt.timedelta(days=6)).isoformat()
+    acc = [{"week": wk, "days": [sat, sun], "minutes": sug[0]["b2b_suggestion"]["minutes"]}]
+    weeks = P.project_weeks(cur, _phases(plan, today), date(2026, 12, 7), b2b_accepted=acc)
+    w = next(w for w in weeks if w["start"] == wk)
+    assert w["b2b"]["due"] and "b2b_suggestion" not in w
+    days = {x["id"]: x["day"] for x in w["sessions"] if x["id"] in ("long", "long2")}
+    assert days == {"long": sat, "long2": sun}
+    i = weeks.index(w)
+    if i + 1 < len(weeks):
+        nxt = weeks[i + 1]
+        assert nxt["mode"] != "recovery_week" and (nxt.get("b2b") or {}).get("post")
+        assert not any(x["kind"] in ("quality", "test") for x in nxt["sessions"])
 
 
 # ---------------------------------------------------------------------------

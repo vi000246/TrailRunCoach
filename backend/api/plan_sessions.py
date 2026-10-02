@@ -42,6 +42,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     of the last few weeks (for done / missed) and the current phase.
     `blackouts`: a candidate 不排課日期 list (preview before saving); None = the stored one."""
     from backend.api.overview import _dataset, _plan_stamp, _status
+    from backend.engine import b2b as B2B
     from backend.engine import blackouts as BL
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
@@ -50,16 +51,17 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     today = O.day_to_date(ds.today)
     prefs = PP.load()
     bos = BL.load() if blackouts is None else BL.from_list(blackouts)
+    acc = B2B.load_accepted()                    # accepted B2B weekends (the user's own days)
     from backend.engine.wko5expr.datasource import read_setting
     auto_on = read_setting("plan.auto.enabled", True) is not False
-    # saving 課表偏好 or 不排課日期 regenerates
-    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on)
+    # saving 課表偏好 or 不排課日期, or accepting / cancelling a B2B, regenerates
+    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc))
     with _lock:
         hit = _cache.get(key)
     if hit is not None:
         return hit
     st = _status(ds, today)
-    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos)
+    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc)
     monday = dt.date.fromisoformat(cur["week"]["start"])
     cap = monday + dt.timedelta(weeks=P.MAX_WEEKS, days=6)
     ph = st.phase
@@ -73,7 +75,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     except Exception:                       # noqa: BLE001
         heat_acts = []
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
-                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts)
+                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc)
     since = monday - dt.timedelta(weeks=4)
     acts = [O.activity_row(w) for w in O.workouts_between(ds, since, today + dt.timedelta(days=1))]
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
@@ -85,6 +87,10 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
            "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant, "prefs": prefs.to_dict(),
            "blackouts": [b.to_dict() for b in bos],
            "days_to_next_a": (st.goals or {}).get("days_to_next_a"),
+           # engine/zone_events.py (status 測試 indicator): retests suggested, zones recomputed
+           "zone": {"suggestions": list(getattr(st, "test_suggestions", None) or []),
+                    "events": next(((i.extra or {}).get("zone_events") or [] for i in st.indicators
+                                    if i.id == "testing"), [])},
            "adapt": _adapt_ctx(ds, st, cur, monday, today, auto_on)}
     with _lock:
         while len(_cache) >= 3:                 # the stored plan + a preview or two
@@ -304,9 +310,12 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
         patch = await _with_steps(patch, inp, cur or {})
     try:
         async with _wlock():
-            return await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
+            out = await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
+    if patch.get("day") and out.get("day"):
+        await _b2b_moved(db, uid, out["day"])         # an accepted B2B day moved: the entry follows
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -386,18 +395,25 @@ def suggestion_days(sg: dict, stored: list[dict], today: str, prefs, blocked: di
     return out
 
 
-async def _suggestions(db: AsyncSession, inp: dict) -> list[dict]:
+async def _suggestions(db: AsyncSession, inp: dict, dismissed: Optional[dict] = None) -> list[dict]:
+    """This week's due CP / AeT tests with their days. `dismissed` (the floating box's
+    「不要」 / ✕, engine/suggestions.py): None = read it; {} = keep every one."""
     from backend.engine import plan_prefs as PP
     stored = await PS.load(db)
     today = _today(inp)
     prefs = PP.load()
     bl = PS.blocked_map(inp)
+    if dismissed is None:
+        dismissed = await _dismissed(db)
+    mon = R.monday_of(today)
     out = []
     for sg in (inp.get("cur") or {}).get("test_suggestions") or []:
         from backend.engine.aet_test import is_aet_session
         # already put in by the athlete (this or a later day): no suggestion
         if any(s["kind"] == "test" and s["state"] in ("active", "done") and (s.get("day") or "") >= R.monday_of(today)
                and (is_aet_session(s) == (sg["kind"] == "aet")) for s in stored):
+            continue
+        if f"test:{sg['kind']}:{mon}" in dismissed:
             continue
         out.append({**sg, "days": suggestion_days(sg, stored, today, prefs, bl),
                     "label": f"建議做一次 {'AeT' if sg['kind'] == 'aet' else 'CP'} 測試（{sg['reason']}）— 要排在哪一天？"})
@@ -417,6 +433,10 @@ async def schedule_test(body: dict = Body(...), db: AsyncSession = Depends(get_d
     sg = next((x for x in await _suggestions(db, inp) if x["kind"] == kind), None)
     if sg is None:
         raise HTTPException(400, "現在沒有這個測試的建議")
+    return await _schedule_test(db, inp, sg, day)
+
+
+async def _schedule_test(db: AsyncSession, inp: dict, sg: dict, day: Optional[str]) -> dict:
     if day not in {d["day"] for d in sg["days"]}:
         raise HTTPException(400, "這天不適合排測試（太靠近長跑或強度課、不是可練日，或在不排課日期內）")
     data = {**{k: v for k, v in sg["session"].items() if v is not None}, "day": day, "kind": "test"}
@@ -429,6 +449,248 @@ async def schedule_test(body: dict = Body(...), db: AsyncSession = Depends(get_d
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
+
+
+# ---------------------------------------------------------------------------
+# the floating suggestion box (static/suggestions.js; engine/suggestions.py)
+#
+#   GET  /api/v1/overview/plan/suggestions                 every active, not dismissed suggestion
+#   POST /api/v1/overview/plan/suggestions/accept  {id, day, test?}   排入
+#   POST /api/v1/overview/plan/suggestions/dismiss {id, action: declined | dismissed}   不要 / ✕
+# ---------------------------------------------------------------------------
+
+async def _dismissed(db: AsyncSession) -> dict:
+    from backend.engine import suggestions as SG
+    from backend.settings.repository import SettingsRepository
+    v = await SettingsRepository(db).get(SG.KEY)
+    return v if isinstance(v, dict) else {}
+
+
+async def _save_setting(db: AsyncSession, key: str, value) -> None:
+    from backend.settings.repository import SettingsRepository
+    await SettingsRepository(db).set(key, value)
+    await db.commit()
+
+
+async def _accepted(db: AsyncSession) -> list[dict]:
+    from backend.engine import b2b as B2B
+    from backend.settings.repository import SettingsRepository
+    v = await SettingsRepository(db).get(B2B.ACCEPTED_KEY)
+    return [e for e in v if isinstance(e, dict)] if isinstance(v, list) else []
+
+
+def _busy_days(stored: list[dict], week: str) -> set:
+    """Days of a week a B2B can't take: a done session, or one of the user's own
+    (custom / edited) long, hard or hike sessions — the generator moves its own."""
+    end = (dt.date.fromisoformat(week) + dt.timedelta(days=6)).isoformat()
+    return {s["day"] for s in stored if s.get("day") and week <= s["day"] <= end and (
+        s["state"] == "done" or (s["state"] == "active" and (s["origin"] == "custom" or s["edited"])
+                                 and s["kind"] in ("long", "quality", "test", "hike")))}
+
+
+async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
+    """Every suggestion computed now (dismissed ones included)."""
+    from backend.engine import aet_test as AT
+    from backend.engine import b2b as B2B
+    from backend.engine import plan_prefs as PP
+    from backend.engine import suggestions as SG
+    stored = await PS.load(db)
+    today = _today(inp)
+    prefs = PP.load()
+    bl = PS.blocked_map(inp)
+    act = (inp.get("adapt") or {}).get("first_free") or today
+    first = dt.date.fromisoformat(max(act, today))
+    PR = prefs if prefs.active else None
+
+    def pairs(sg: dict) -> list[dict]:
+        return B2B.pair_options(dt.date.fromisoformat(sg["week"]), first, sg["minutes"], set(bl),
+                                PR.allowed if PR is not None else None, PR.cap_weekday if PR is not None else None,
+                                _busy_days(stored, sg["week"]), sg.get("long_day"))
+
+    rows = SG.b2b_rows(inp, today, pairs)
+    tests = await _suggestions(db, inp, dismissed={})
+    rows += SG.test_rows(tests, R.monday_of(today))
+    tpl = _test_templates(inp.get("thresholds") or {}, prefs)
+    aet_p = AT.resolve_protocol(prefs.aet_test_protocol, prefs.cap_weekday, prefs.long_cap)
+
+    def scheduled(kind: str, since: str) -> bool:
+        return any(s["kind"] == "test" and s["state"] in ("active", "done") and (s.get("day") or "") >= since
+                   and AT.is_aet_session(s) == (kind == "aet") for s in stored)
+
+    def days_for(kind: str, earliest: Optional[str]) -> list[dict]:
+        sg = {"kind": kind, "replaces_long": kind == "aet" and aet_p == "xu90"}
+        return [d for d in suggestion_days(sg, stored, today, prefs, bl) if not earliest or d["day"] >= earliest]
+
+    rows += SG.zone_rows(inp.get("zone") or {}, {t["kind"] for t in tests}, scheduled, days_for)
+    # the session a zone retest would put in (課表偏好 CP / AeT 測試方式)
+    for r in rows:
+        for t in r.get("tests") or []:
+            src = next((x for x in tpl["aet"] if x["protocol"] == aet_p), None) if t["key"] == "aet" else \
+                next((x for x in tpl["cp"] if x["protocol"] == prefs.cp_test_protocol and not x.get("none")),
+                     next((x for x in tpl["cp"] if not x.get("none")), None))
+            if src:
+                t["session"] = {"kind": "test", "title": src["title"], "minutes": src["minutes"],
+                                "target": src.get("target"), "detail": src.get("detail"), "source": src.get("source"),
+                                "tss": src.get("tss"),
+                                "protocol": src.get("protocol_stored") if t["key"] == "aet" else src["protocol"]}
+                t["label"] = f"{t['label']}：{src['title']}（{src['minutes']} 分）"
+            t["replaces_long"] = t["key"] == "aet" and aet_p == "xu90"
+    return rows
+
+
+@router.get("/suggestions")
+async def suggestions(db: AsyncSession = Depends(get_db)):
+    from backend.engine import suggestions as SG
+    inp = await _inputs(db)
+    rows = await _all_suggestions(db, inp)
+    dis = await _dismissed(db)
+    kept = SG.prune(dis, rows, _today(inp))
+    if kept != dis:
+        await _save_setting(db, SG.KEY, kept)
+    vis = SG.visible(rows, kept)
+    return {"today": _today(inp), "suggestions": vis, "count": len(vis)}
+
+
+@router.post("/suggestions/dismiss")
+async def dismiss_suggestion(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import suggestions as SG
+    sid, action = str(body.get("id") or ""), body.get("action") or "dismissed"
+    if action not in ("declined", "dismissed"):
+        raise HTTPException(400, "action must be declined or dismissed")
+    if not sid:
+        raise HTTPException(400, "id required")
+    inp = await _inputs(db)
+    week = sid.split(":")[-1] if sid.startswith(("b2b:", "test:")) else None
+    await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), sid, action, dt.datetime.now(), week))
+    return {"id": sid, "action": action, "today": _today(inp)}
+
+
+@router.post("/suggestions/accept")
+async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import suggestions as SG
+    sid, day = str(body.get("id") or ""), body.get("day")
+    inp = await _inputs(db)
+    rows = await _all_suggestions(db, inp)
+    sg = next((r for r in SG.visible(rows, await _dismissed(db)) if r["id"] == sid), None)
+    if sg is None:
+        raise HTTPException(400, "現在沒有這個建議（可能已經排入或關掉了）")
+    if sg["type"] == "b2b":
+        out = await _accept_b2b(db, inp, sg, day)
+    elif sg["type"] == "test":
+        tests = await _suggestions(db, inp, dismissed={})
+        t = next((x for x in tests if x["kind"] == sg["kind"]), None)
+        out = {"sessions": [await _schedule_test(db, inp, t, day)]}
+    elif sg["type"] == "zone_test":
+        t = next((x for x in sg.get("tests") or [] if x["key"] == body.get("test")), None)
+        if t is None or not t.get("session"):
+            raise HTTPException(400, "要選一個測試")
+        out = {"sessions": [await _schedule_test(db, inp, {"days": [{"day": o["day"]} for o in t["options"]],
+                                                           "session": t["session"],
+                                                           "replaces_long": t.get("replaces_long")}, day)]}
+    else:
+        raise HTTPException(400, "這個建議沒有可以排的東西")
+    week = sid.split(":")[-1] if sid.startswith(("b2b:", "test:")) else None
+    await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), sid, "accepted", dt.datetime.now(), week))
+    return {"id": sid, **out}
+
+
+def _b2b_generated(inp: dict, week: str) -> list[dict]:
+    """The generator's accepted B2B days of `week` (long / long2, pinned, decorated, with
+    the 負重訓練 pack) — what gets stored as the user's sessions."""
+    from backend.engine import b2b as B2B
+    for w in [inp.get("cur") or {}] + list(inp.get("weeks") or []):
+        ws = (w.get("week") or {}).get("start") or w.get("start")
+        if ws == week and (w.get("b2b") or {}).get("accepted"):
+            return sorted((s for s in w.get("sessions") or [] if s.get("id") in ("long",) + B2B.FOLLOWERS),
+                          key=lambda s: s["id"])
+    return []
+
+
+def _b2b_fallback(inp: dict, sg: dict, days: list[str]) -> list[dict]:
+    """The two days from the suggestion alone (the generator didn't plan the week)."""
+    from backend.engine import b2b as B2B
+    rate = float(((inp.get("cur") or {}).get("tss_per_category") or {}).get("trail") or 55.0) / 60.0
+    long_s = {"id": "long", "kind": "long", "title": "長時間輕鬆（山路）", "minutes": sg["minutes"][0],
+              "tss": round(rate * sg["minutes"][0], 1), "detail": "", "target": "", "source": "", "terrain": None}
+    ss = [long_s] + B2B.followers(long_s, {"minutes": sg["minutes"]})
+    B2B.decorate(ss, {"event": {"name": sg.get("event"), "days": sg.get("event_days") or 2,
+                                "kind": sg.get("event_kind")}, "weeks_out": sg.get("weeks_out")},
+                 (inp.get("thresholds") or {}).get("aet"))
+    for s, d in zip(ss, days):
+        s["day"] = d
+    return ss
+
+
+async def _accept_b2b(db: AsyncSession, inp: dict, sg: dict, day: Optional[str]) -> dict:
+    from backend.engine import b2b as B2B
+    from backend.engine import plan_auto as PA
+    opt = next((o for o in sg.get("options") or [] if o["day"] == day), None)
+    if opt is None:
+        raise HTTPException(400, "這兩天不適合排 B2B（不是連續的可練日、在不排課日期內，或已經有你自己的課）")
+    days = [opt["day"], opt["end"]]
+    acc = [e for e in await _accepted(db) if e.get("week") != sg["week"]]
+    entry = {"week": sg["week"], "days": days, "minutes": list(sg["minutes"]),
+             "at": dt.datetime.now().isoformat(timespec="seconds"), "uids": []}
+    await _save_setting(db, B2B.ACCEPTED_KEY, acc + [entry])
+    inp2 = await _inputs(db)                        # the generator plans the week around the two days
+    gen = _b2b_generated(inp2, sg["week"]) or _b2b_fallback(inp2, sg, days)
+    added = []
+    try:
+        async with _wlock():
+            for s, d in zip(gen, days):
+                data = {k: s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
+                                              "terrain") if s.get(k) is not None}
+                added.append(await PS.add(db, {**data, "day": d}, _today(inp2), blocked=PS.blocked_map(inp2)))
+            # the week's long run is B2B day 1 now: the user's edited copy of it goes too
+            end = (dt.date.fromisoformat(sg["week"]) + dt.timedelta(days=6)).isoformat()
+            for s in await PS.load(db):
+                if (s["state"] == "active" and s.get("gen_key") == "long" and s.get("edited")
+                        and s.get("day") and sg["week"] <= s["day"] <= end):
+                    await PS.delete(db, s["uid"])
+            entry["uids"] = [a["uid"] for a in added]
+            await _save_setting(db, B2B.ACCEPTED_KEY, acc + [entry])
+            if await PA.pending(db) is None:        # a 課表待確認 proposal is waiting: don't apply it here
+                await PS.plan_reconcile(db, inp2, apply=True)
+    except PS.PlanError as e:
+        await _save_setting(db, B2B.ACCEPTED_KEY, acc)
+        raise _err(e)
+    return {"sessions": added, "accepted": entry}
+
+
+async def _b2b_cancelled(db: AsyncSession, uid: str) -> Optional[dict]:
+    """A deleted B2B day cancels the accepted B2B: the other day goes too, the week is
+    regenerated, and the suggestion stays declined for that week."""
+    from backend.engine import b2b as B2B
+    from backend.engine import suggestions as SG
+    acc = await _accepted(db)
+    hit = next((e for e in acc if uid in (e.get("uids") or [])), None)
+    if hit is None:
+        return None
+    for other in hit.get("uids") or []:
+        if other != uid:
+            try:
+                await PS.delete(db, other)
+            except PS.PlanError:
+                pass
+    await _save_setting(db, B2B.ACCEPTED_KEY, [e for e in acc if e is not hit])
+    await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), f"b2b:{hit['week']}", "declined",
+                                              dt.datetime.now(), hit["week"]))
+    return hit
+
+
+async def _b2b_moved(db: AsyncSession, uid: str, day: str) -> None:
+    """A B2B day moved by the user: the accepted entry follows (the generator plans around it)."""
+    from backend.engine import b2b as B2B
+    acc = await _accepted(db)
+    for e in acc:
+        if uid in (e.get("uids") or []):
+            i = e["uids"].index(uid)
+            days = list(e["days"])
+            if i < len(days):
+                days[i] = day
+                e["days"] = days
+                await _save_setting(db, B2B.ACCEPTED_KEY, acc)
+            return
 
 
 @router.post("/steps-preview")
@@ -653,9 +915,19 @@ async def variants(uid: Optional[str] = None, day: Optional[str] = None, db: Asy
 async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
     try:
         async with _wlock():
-            return await PS.delete(db, uid)
+            out = await PS.delete(db, uid)
+            # deleting either day of an accepted B2B cancels it (both days; declined for that week)
+            if await _b2b_cancelled(db, uid) is not None:
+                out["b2b_cancelled"] = True
     except PS.PlanError as e:
         raise HTTPException(404, str(e))
+    if out.get("b2b_cancelled"):
+        from backend.engine import plan_auto as PA
+        inp = await _inputs(db)                       # the week without the B2B
+        async with _wlock():
+            if await PA.pending(db) is None:
+                await PS.plan_reconcile(db, inp, apply=True)
+    return out
 
 
 @router.get("/reconcile")

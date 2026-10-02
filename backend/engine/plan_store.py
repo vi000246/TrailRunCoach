@@ -130,12 +130,21 @@ async def save(db: AsyncSession, new: list[dict], athlete_id: int = 1) -> None:
     await db.commit()
 
 
+def _own_b2b(w: dict) -> list[dict]:
+    """A week's generated sessions without the accepted B2B days (engine/b2b.py):
+    those are the user's own stored sessions; the generator only plans around them."""
+    if not (w.get("b2b") or {}).get("accepted"):
+        return w["sessions"]
+    from backend.engine.b2b import FOLLOWERS
+    return [s for s in w["sessions"] if s.get("id") not in ("long",) + FOLLOWERS]
+
+
 def gen_weeks(inputs: dict) -> list[dict]:
     cur = inputs["cur"]
     first = {"start": cur["week"]["start"], "mode": cur.get("mode"), "provisional": False,
-             "sessions": cur["sessions"]}
+             "sessions": _own_b2b(cur)}
     return [first] + [{"start": w["start"], "mode": w["mode"], "provisional": w["provisional"],
-                       "sessions": w["sessions"]} for w in inputs.get("weeks", [])]
+                       "sessions": _own_b2b(w)} for w in inputs.get("weeks", [])]
 
 
 def blocked_map(inputs: dict) -> dict:
@@ -342,6 +351,8 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     if d["kind"] == "test":
         d["protocol"] = data.get("protocol")
         d["source"] = str(data.get("source") or "")
+    elif data.get("source"):
+        d["source"] = str(data["source"])[:2000]     # an accepted suggestion keeps the generator's sources
     r = PlanSession(athlete_id=athlete_id, uid=d["uid"])
     db.add(r)
     _fill(r, d)
