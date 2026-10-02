@@ -142,6 +142,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
           <option value="wko5">WKO5 資料夾（比對用）</option></select></label>
       </div>
       <div class="row"><label><input type="checkbox" id="s-second"> 自動同步時也同步另一個來源</label></div>
+      <div class="row"><label>課表推送到 <select id="s-push"></select></label>
+        <button type="button" class="q" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
         （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
@@ -466,6 +468,9 @@ async function loadSyncSettings() {
     ? (SS.primary_effective_label ? `目前用 ${SS.primary_effective_label}` : "還沒有同步資料") : "";
   $("s-chart").value = SS.chart_data_source || "synced";
   $("s-second").checked = !!SS.secondary_auto;
+  $("s-push").innerHTML = (SS.push_providers || [{ id: "coros", label: "COROS", enabled: true }])
+    .map((p) => `<option value="${esc(p.id)}"${p.enabled ? "" : " disabled"}>${esc(p.label)}</option>`).join("");
+  $("s-push").value = SS.push_provider || "coros";
   $("m-base").value = SS.map_basemap || "rudy";
   $("u-power").checked = SS.use_power !== false;
   $("u-power-note").textContent = SS.use_power === false ? "已關閉：只顯示心率／配速的圖" : "";
@@ -512,7 +517,7 @@ $("s-save").onclick = async () => {
     daily_sync_time: $("s-daily-on").checked ? $("s-daily").value : null,
     auto_on_open: $("s-open").checked, auto_on_open_hours: Number($("s-open-h").value) || 6,
     primary_source: $("s-primary").value || "auto", chart_data_source: $("s-chart").value,
-    secondary_auto: $("s-second").checked,
+    secondary_auto: $("s-second").checked, push_provider: $("s-push").value || "coros",
   };
   try { await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     toast("已儲存同步設定"); loadSyncSettings(); }

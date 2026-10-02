@@ -128,6 +128,9 @@ DEFAULTS: dict[str, Any] = {
     "plan.auto.enabled": True,
     "plan.auto.push": True,                   # push the window to COROS automatically
     "plan.auto.push_days": 7,                 # 1-14 days from today
+    # where the plan is pushed (sync/workout_targets): one active provider; 進階設定.
+    # Only enabled providers can be chosen (Garmin / intervals.icu are stubs for now)
+    "plan.push.provider": "coros",
     "plan.auto.confirm_big": True,            # hold big changes for the user's approval
     "plan.auto.notify": "watch",              # watch (a 課表待確認 workout on COROS) | overview (banner only)
     # internal: {stamp, phase, rejected: [fingerprint]} of the last automatic run
@@ -263,6 +266,10 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.auto.push_days" and (isinstance(value, bool) or not isinstance(value, int)
                                          or not 1 <= value <= 14):
         raise ValueError("plan.auto.push_days must be an integer 1-14")
+    if key == "plan.push.provider":
+        from backend.sync import workout_targets as WT
+        if value not in WT.enabled_ids():
+            raise ValueError(f"plan.push.provider must be one of {WT.enabled_ids()} (others are not enabled yet)")
     if key == "plan.auto.notify" and value not in AUTO_NOTIFY:
         raise ValueError(f"plan.auto.notify must be one of {AUTO_NOTIFY}")
     if key == "plan.b2b.accepted" and not (isinstance(value, list) and all(
