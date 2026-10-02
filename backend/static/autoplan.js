@@ -1,7 +1,9 @@
 // 自動調整課表 (engine/plan_auto.py): the pending proposal banner (同意／拒絕),
 // the last change-log entries (each with 復原) and, with data-settings, the
 // plan.auto.* toggles. Mounts into the element with id="autoplan".
-//   <div id="autoplan" data-settings></div>
+//   <div id="autoplan" data-settings data-log="collapsible"></div>
+// data-log: "" = the change log as a box, "none" = no log (總覽), "collapsible" = a <details>,
+// collapsed by default, open state in localStorage autoplan.log.open (課表).
 //   <script src="/api/v1/static/autoplan.js"></script>
 // After a decision it calls window.onAutoPlanChange() when the page defines it.
 (function () {
@@ -25,6 +27,8 @@
     border-radius: 6px; padding: 3px 10px; cursor: pointer; }
   #autoplan button.pri { background: var(--accent); color: #fff; border-color: var(--accent); }
   #autoplan details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  #autoplan details.ap-log > summary { padding: 1px 0; }
+  #autoplan details.ap-log[open] > summary { margin-bottom: 4px; }
   #autoplan .ap-set { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; align-items: center; }
   #autoplan .ap-set label { display: inline-flex; gap: 5px; align-items: center; }
   #autoplan .ap-set input[type=number] { width: 52px; }
@@ -41,6 +45,14 @@
   const ACTION = { added: "新增", removed: "取消", changed: "調整", done: "完成", missed: "沒跑", note: "備註", dropped: "不補" };
   const PUSH = { ok: "已推送到手錶", partial: "部分推送失敗", failed: "推送失敗", unchanged: "手錶上已是最新", off: "未推送（自動推送已關）",
     held: "等你確認，手錶維持原本的課", notice_removed: "已移除手錶上的提醒" };
+
+  const T = (k, p) => (window.I18N ? window.I18N.t(k, p) : k);
+  const LOG_KEY = "autoplan.log.open";
+  const logOpen = () => { try { return localStorage.getItem(LOG_KEY) === "1"; } catch (_) { return false; } };
+  root.addEventListener("toggle", (e) => {
+    if (!e.target.classList || !e.target.classList.contains("ap-log")) return;
+    try { localStorage.setItem(LOG_KEY, e.target.open ? "1" : "0"); } catch (_) { /* storage blocked */ }
+  }, true);
 
   async function sj(method, url, body) {
     const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -92,11 +104,19 @@
         <button type="button" data-reject="${p.id}">拒絕，維持原本的課</button></div></div>`);
     }
     const rows = (b.log || []).filter((e) => e.status !== "pending");
-    if (rows.length) {
-      out.push(`<div class="ap-box"><div class="meta" style="margin-bottom:4px">自動調整紀錄</div>${rows.map((e) => `<div class="ap-row">
+    // data-log="none": no change log (總覽 shows only the pending proposal);
+    // data-log="collapsible": a <details>, collapsed by default, remembered per browser (課表)
+    const logMode = root.dataset.log || "";
+    if (rows.length && logMode !== "none") {
+      const list = rows.map((e) => `<div class="ap-row">
         <span class="ap-at">${when(e.at)}</span><span class="ap-st">${esc(STATUS[e.status] || e.status)}</span>
         <span class="ap-sum">${esc(e.summary)}${itemsHtml(e.items, true)}${pushText(e.push)}</span>
-        ${e.can_undo ? `<button type="button" data-undo="${e.id}" title="把這次動到的課還原成調整前，並重新推送（還原的課會變成你的課，之後自動調整不再動它們）">復原</button>` : ""}</div>`).join("")}</div>`);
+        ${e.can_undo ? `<button type="button" data-undo="${e.id}" title="把這次動到的課還原成調整前，並重新推送（還原的課會變成你的課，之後自動調整不再動它們）">復原</button>` : ""}</div>`).join("");
+      if (logMode === "collapsible") {
+        out.push(`<details class="ap-box ap-log"${logOpen() ? " open" : ""}><summary>${esc(T("common.autoplan.log_title"))} <span class="meta">${esc(T("common.autoplan.log_count", { n: rows.length }))}</span></summary>${list}</details>`);
+      } else {
+        out.push(`<div class="ap-box"><div class="meta" style="margin-bottom:4px">${esc(T("common.autoplan.log_title"))}</div>${list}</div>`);
+      }
     }
     if (root.dataset.settings != null) out.push(`<div class="ap-box">${settingsHtml(b.settings, b.thresholds)}</div>`);
     root.innerHTML = out.join("");

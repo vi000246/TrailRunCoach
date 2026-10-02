@@ -3,9 +3,15 @@
 planned. Separate from the recurring 可練日 preference (plan.prefs.days).
 
 Stored as the user_settings key `plan.blackouts` (settings/repository.py):
-a list of {id, start, end, label}, validated there (ISO dates, start <= end,
+a list of {id, start, end, label[, kind]}, validated there (ISO dates, start <= end,
 at most MAX_SPAN days, no overlaps, label <= MAX_LABEL chars). Ranges can be
 past or future; only days from today on change the plan.
+
+kind "rest" = a 休息日 the user set on one day from the 課表 calendar's context
+menu (api/plan_sessions POST /rest-days). It blocks the day like any range, but
+the week keeps its volume: lost_days() skips it, so the generator places the
+week's hours on the other days (the placers' own rules) instead of cutting
+them — the athlete moved a day off, they didn't lose training time.
 
 Rules (callers: overview.week_plan, projection.project_weeks, reconcile):
 
@@ -33,6 +39,8 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Iterable, Optional
 
 KEY = "plan.blackouts"
+KINDS = ("", "rest")
+REST = "rest"
 MAX_RANGES = 60
 MAX_SPAN = 62                     # days in one range
 MAX_LABEL = 30
@@ -49,13 +57,17 @@ class Blackout:
     start: str
     end: str
     label: str = ""
+    kind: str = ""                    # "" = 不排課日期, "rest" = 休息日 (volume kept)
 
     def days(self) -> list[dt.date]:
         a, b = dt.date.fromisoformat(self.start), dt.date.fromisoformat(self.end)
         return [a + dt.timedelta(days=i) for i in range((b - a).days + 1)]
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        if not d["kind"]:
+            del d["kind"]                 # the stored shape (and stamp) of a plain range is unchanged
+        return d
 
 
 def new_id() -> str:
@@ -70,7 +82,7 @@ def validate(value) -> None:
         raise ValueError(f"最多 {MAX_RANGES} 段不排課日期")
     spans, ids = [], set()
     for r in value:
-        if not isinstance(r, dict) or set(r) - {"id", "start", "end", "label"}:
+        if not isinstance(r, dict) or set(r) - {"id", "start", "end", "label", "kind"}:
             raise ValueError("每段不排課日期是 {id, start, end, label}")
         try:
             a, b = dt.date.fromisoformat(str(r.get("start"))), dt.date.fromisoformat(str(r.get("end")))
@@ -85,6 +97,8 @@ def validate(value) -> None:
         lbl = r.get("label", "")
         if not isinstance(lbl, str) or len(lbl) > MAX_LABEL:
             raise ValueError(f"說明最多 {MAX_LABEL} 個字")
+        if r.get("kind", "") not in KINDS:
+            raise ValueError(f"不支援的不排課類型：{r.get('kind')!r}")
         rid = r.get("id")
         if not isinstance(rid, str) or not 1 <= len(rid) <= 32 or rid in ids:
             raise ValueError("每段不排課日期要有不重複的 id")
@@ -106,14 +120,16 @@ def normalize(body) -> list[dict]:
             raise ValueError("每段不排課日期是 {start, end, label}")
         out.append({"id": str(r.get("id") or new_id()), "start": str(r.get("start") or "")[:10],
                     "end": str(r.get("end") or r.get("start") or "")[:10],
-                    "label": str(r.get("label") or "").strip()})
+                    "label": str(r.get("label") or "").strip(),
+                    **({"kind": str(r["kind"])} if r.get("kind") else {})})
     out.sort(key=lambda r: (r["start"], r["end"]))
     validate(out)
     return out
 
 
 def from_list(values) -> tuple[Blackout, ...]:
-    return tuple(Blackout(id=r["id"], start=r["start"], end=r["end"], label=r.get("label") or "")
+    return tuple(Blackout(id=r["id"], start=r["start"], end=r["end"], label=r.get("label") or "",
+                           kind=r.get("kind") or "")
                  for r in (values or []))
 
 
@@ -162,10 +178,11 @@ def week_days(monday: dt.date) -> list[dt.date]:
 def lost_days(bmap: dict, monday: dt.date, allowed: Optional[Callable[[dt.date], bool]] = None,
               trained: Iterable[dt.date] = ()) -> list[dt.date]:
     """The week's blocked days that were available for training (allowed weekday,
-    and not a past day the athlete trained on anyway)."""
+    and not a past day the athlete trained on anyway). A 休息日 (kind rest) is not
+    lost: the week's volume goes to its other days."""
     tr = set(trained)
     return [d for d in week_days(monday) if d.isoformat() in bmap and (allowed is None or allowed(d))
-            and d not in tr]
+            and d not in tr and getattr(bmap[d.isoformat()], "kind", "") != REST]
 
 
 def factor(monday: dt.date, lost: list[dt.date], allowed: Optional[Callable[[dt.date], bool]] = None) -> float:
