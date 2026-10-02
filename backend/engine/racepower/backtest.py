@@ -39,9 +39,11 @@ applies a plan test to earlier dates (fixed 2026-10-01).
 Group hikes (hiking / mountaineering) are paced by the group: no hike is a
 case unless the user opted it in as solo (athlete.solo_hikes).
 
-Pass rule (user thresholds 2026-09-30) per category: capacity n ≥ 5 race-like
-or test efforts, median |mode C time error| ≤ road 3 % / trail 6 %, no
-lower-bound violation; terrain on the race-like rows median |err| ≤ the same
+Pass rule (user thresholds 2026-09-30; trail 8 % with a 6 % target and the
+bootstrap upper bound since 2026-10-02, unsourced-rules.md §0.9 / §0.5.6) per
+category: capacity n ≥ 5 race-like or test efforts, median |mode C time
+error| ≤ road 3 % / trail 8 % and its 80 % bootstrap upper bound ≤ the
+threshold + 2 pp (≤ the threshold from n ≥ 10), no lower-bound violation; terrain on the race-like rows median |err| ≤ the same
 threshold and downhill median speed error ≤ +5 %. The effort bar needs ≥ 5
 race-like / test efforts with median f in 0.97–1.03.
 """
@@ -67,8 +69,17 @@ from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
 
-THRESHOLDS = {"road": 0.03, "trail": 0.06, "hike": 0.10, "hike_capacity": 0.10}
+# trail 8 % pass / 6 % target (2026-10-02, docs/research/unsourced-rules.md §0.9: population
+# models reach 8–10 % MAPE, a 7-race median has a ±2–3 pp bootstrap interval, so 6 % cannot
+# separate 5.5 from 7.6 — 推估)
+THRESHOLDS = {"road": 0.03, "trail": 0.08, "hike": 0.10, "hike_capacity": 0.10}
+TARGETS = {"trail": 0.06}
 MIN_N = 5
+# §0.5.6 (推估): n ≥ 5 → median ≤ threshold AND the 80 % bootstrap upper bound of the median
+# |error| ≤ threshold + 2 pp; n ≥ 10 → the upper bound ≤ threshold
+BOOT_SLACK = 0.02
+BOOT_FULL_N = 10
+BOOT_REPS = 2000
 DOWNHILL_BIAS_MAX = 0.05
 A_RACE_F = (0.97, 1.03)
 MIN_MOVING_S = 20 * 60
@@ -180,6 +191,36 @@ def stats(xs) -> dict:
             "p10": float(np.percentile(v, 10)), "p90": float(np.percentile(v, 90))}
 
 
+def boot_ub(xs, q: float = 0.90, reps: int = BOOT_REPS, seed: int = 20261002) -> Optional[float]:
+    """The upper end of the 80 % bootstrap interval (90th percentile) of the
+    median |x|; None with fewer than 3 values. Seeded, so a re-run gives the
+    same number."""
+    v = np.abs(np.array([float(x) for x in xs if x is not None and math.isfinite(x)]))
+    if len(v) < 3:
+        return None
+    rng = np.random.default_rng(seed)
+    meds = np.median(v[rng.integers(0, len(v), size=(reps, len(v)))], axis=1)
+    return float(np.percentile(meds, q * 100.0))
+
+
+def pass_check(xs, thr: float, min_n: int = MIN_N) -> dict:
+    """§0.5.6 pass rule on errors xs: {passed, reasons, median_abs, ub80,
+    ub_limit}. n < min_n never passes (errors are shown only)."""
+    s = stats(xs)
+    ub = boot_ub(xs)
+    lim = thr if s["n"] >= BOOT_FULL_N else thr + BOOT_SLACK
+    reasons = []
+    if s["n"] < min_n:
+        reasons.append(f"樣本 {s['n']} < {min_n}：只顯示誤差，不判定通過")
+    else:
+        if s["median_abs"] is not None and s["median_abs"] > thr:
+            reasons.append(f"時間誤差中位數 {s['median_abs']:.1%} > {thr:.0%}")
+        if ub is not None and ub > lim:
+            reasons.append(f"中位數的 80 % bootstrap 上界 {ub:.1%} > {lim:.0%}")
+    return {"passed": not reasons, "reasons": reasons, "median_abs": s["median_abs"], "n": s["n"],
+            "ub80": ub, "ub_limit": lim, "threshold": thr}
+
+
 def _seg_errs(rows, key="err", sel=lambda s: True):
     return [s[key] for r in rows for s in r.get("segments") or [] if s.get(key) is not None and sel(s)]
 
@@ -258,10 +299,12 @@ def summarise_capacity(rows: list[dict], lb_rows: list[dict]) -> dict:
         t = stats(r.get("err_c") for r in rs)
         v = [r for r in viol if r["category"] == cat]
         reasons = []
+        pc = pass_check([r.get("err_c") for r in rs], thr)
         if len(rs) < MIN_N:
             reasons.append(f"比賽強度／測試 {len(rs)} 次 < {MIN_N}")
-        if t["median_abs"] is not None and t["median_abs"] > thr:
-            reasons.append(f"時間誤差中位數 {t['median_abs']:.1%} > {thr:.0%}")
+        else:
+            reasons += pc["reasons"]
+        t["boot_ub80"] = pc["ub80"]
         if v:
             reasons.append(f"{len(v)} 次跑步的功率高於模型可持續功率（下限檢查失敗）")
         out["categories"][cat] = {"label": CATEGORY_ZH[cat], "n": len(rs), "threshold": thr, "time": t,
@@ -540,21 +583,43 @@ def evaluate_trail_hr(case: dict, ctx: dict) -> dict:
     the case: moving time at the case's own moving HR ("given", tests the
     pace + durability model; also without durability) and at the athlete's
     race HR level from EARLIER races ("race", the prediction a race plan
-    would make). No power needed."""
+    would make). No power needed.
+
+    2026-10-02: "race" = the full-effort curve x*(T) solved at the predicted
+    T (trailhr.predict_race), the case's own heat moving the level by the
+    athlete's β (the race-day forecast in a real plan); "race_median" = the
+    old median race level with the same heat shift (comparison). "total" =
+    race moving time + the predicted non-moving time (nonmoving.py, earlier
+    races only) against the actual elapsed time — reported apart: moving
+    time stays the validated target."""
+    from backend.engine.racepower import nonmoving as NM
     from backend.engine.racepower import trailhr as TH
     pt, m = case.get("trail_pt"), ctx.get("trail_hr")
     if not pt or not m or not (m.get("a") or m.get("c")):
         return {}
     act = pt["T_h"] * 3600.0
+    sh = pt.get("heat_shift") or 0.0
     tg = TH.predict_time(m, pt["eff_km"], pt["x"])
     tn = TH.predict_time(m, pt["eff_km"], pt["x"], delta=0.0)
-    tr = TH.predict_time(m, pt["eff_km"], m["x_race"])
-    trn = TH.predict_time(m, pt["eff_km"], m["x_race"], delta=0.0)
-    return {"th": {"moving_s": act, "eff_km": pt["eff_km"], "x": pt["x"], "x_race": m["x_race"],
-                   "t_given": tg, "t_nodur": tn, "t_race": tr, "t_race_nodur": trn, "delta": m["delta"],
-                   "kind": m["kind"], "n_runs": m["n"], "x_race_n": m.get("x_race_n")},
+    tr, xr = TH.predict_race(m, pt["eff_km"], m.get("xstar"), x_shift=sh)
+    trn, _ = TH.predict_race(m, pt["eff_km"], m.get("xstar"), delta=0.0, x_shift=sh)
+    xm = m.get("x_race_median")
+    tm = TH.predict_time(m, pt["eff_km"], xm - sh) if xm else None
+    nm_act = case.get("nm_row") or {}
+    nm = NM.predict(m.get("nonmoving"), tr) if tr else None
+    el = nm_act.get("elapsed_s")
+    tot = (tr + nm["total_s"]) if (tr and nm) else None
+    return {"th": {"moving_s": act, "eff_km": pt["eff_km"], "x": pt["x"], "x_raw": pt.get("x_raw"),
+                   "heat_shift": sh, "hadley": pt.get("hadley"), "x_race": xr, "x_race_median": xm,
+                   "t_given": tg, "t_nodur": tn, "t_race": tr, "t_race_nodur": trn, "t_race_median": tm,
+                   "delta": m["delta"], "kind": m["kind"], "n_runs": m["n"], "x_race_n": m.get("x_race_n"),
+                   "xstar_n": (m.get("xstar") or {}).get("n"),
+                   "nonmoving_act_s": (el - nm_act["moving_s"]) if el and nm_act.get("moving_s") else None,
+                   "nonmoving_pred_s": nm["total_s"] if nm else None, "elapsed_s": el, "t_total": tot},
             "err_th_given": tg / act - 1.0 if tg else None, "err_th_nodur": tn / act - 1.0 if tn else None,
-            "err_th_race": tr / act - 1.0 if tr else None, "err_th_race_nodur": trn / act - 1.0 if trn else None}
+            "err_th_race": tr / act - 1.0 if tr else None, "err_th_race_nodur": trn / act - 1.0 if trn else None,
+            "err_th_race_median": tm / act - 1.0 if tm else None,
+            "err_th_total": tot / el - 1.0 if (tot and el) else None}
 
 
 def summarise_trail_hr(rows: list[dict]) -> dict:
@@ -564,20 +629,30 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
     races = [r for r in th if r.get("activity_type") == "race"]
     maxes = [r for r in th if r.get("effort_tag") == "max"]
 
+    def st_ub(xs):
+        xs = list(xs)
+        s = stats(xs)
+        s["boot_ub80"] = boot_ub(xs)
+        return s
+
     def blk(rs):
-        return {"n": len(rs), "given": stats(r.get("err_th_given") for r in rs),
+        return {"n": len(rs), "given": st_ub(r.get("err_th_given") for r in rs),
                 "no_durability": stats(r.get("err_th_nodur") for r in rs),
-                "race_level": stats(r.get("err_th_race") for r in rs),
+                "race_level": st_ub(r.get("err_th_race") for r in rs),
                 "race_level_no_durability": stats(r.get("err_th_race_nodur") for r in rs),
+                "race_level_median": stats(r.get("err_th_race_median") for r in rs),
+                "total": st_ub(r.get("err_th_total") for r in rs),
                 "power_envelope": stats(r.get("err_c") for r in rs)}
     return {"all": blk(th), "races": blk(races), "max_effort": blk(maxes),
             "race_rows": [{k: r.get(k) for k in ("date", "label", "file", "effort_tag", "effort_overridden",
                                                  "effort_reason", "rest_share", "no_power", "power_source",
                                                  "power_unused", "err_th_given",
-                                                 "err_th_nodur", "err_th_race", "err_th_race_nodur", "err_c",
+                                                 "err_th_nodur", "err_th_race", "err_th_race_nodur",
+                                                 "err_th_race_median", "err_th_total", "err_c",
                                                  "err_p", "error")}
                           | {"th": r.get("th")} for r in sorted(races, key=lambda r: r["date"])],
-            "source": "trailhr.py（越野心率配速模型，推估）", "threshold": THRESHOLDS["trail"]}
+            "source": "trailhr.py（越野心率配速模型，推估）", "threshold": THRESHOLDS["trail"],
+            "target": TARGETS["trail"]}
 
 
 def evaluate_hike(case: dict, ctx: dict) -> Optional[dict]:
@@ -729,8 +804,9 @@ def candidates(ds, today: dt.date, classes: Optional[dict] = None, marked: Optio
         tg = cs.get("tags") or {}
         try:
             pt = A.trail_hr_points(ds, [w]) if cat == "trail" else []
+            nm_row = A.nonmoving_row(ds, w) if cat == "trail" else None
         except Exception:                   # noqa: BLE001 — the HR pace model is optional per case
-            pt = []
+            pt, nm_row = [], None
         out.append({"idx": w.idx, "date": date, "category": cat, "label": A.label(w),
                     "priority_a": bool(ev and ev.get("priority") == "A"), "event": ev,
                     "intensity": c.get("cls"), "intensity_reason": c.get("reason"),
@@ -740,7 +816,7 @@ def candidates(ds, today: dt.date, classes: Optional[dict] = None, marked: Optio
                     "effort_tag": tg.get("effort"), "effort_overridden": tg.get("effort_overridden"),
                     "effort_reason": tg.get("effort_reason"), "file": w.entry.file,
                     "rest_share": (cs.get("effort") or {}).get("rest_share"),
-                    "trail_pt": pt[0] if pt else None, "marked": w.idx in marked})
+                    "trail_pt": pt[0] if pt else None, "nm_row": nm_row, "marked": w.idx in marked})
     solo = A.solo_hikes()
     for w in A.hike_workouts(ds, today):
         if w.day > tday or w.entry.file not in solo:
@@ -842,7 +918,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
         if c["category"] == "trail":
             if dk not in trailhr:
                 try:
-                    trailhr[dk] = A.trail_hr_model(ds, as_of, c["exclude"], race_idx=race_idx)
+                    trailhr[dk] = A.trail_hr_model(ds, as_of, c["exclude"], race_idx=race_idx, tags=tags)
                 except Exception as e:      # noqa: BLE001
                     trailhr[dk] = {"error": f"{type(e).__name__}: {str(e)[:120]}"}
             ctx["trail_hr"] = trailhr[dk]
@@ -949,13 +1025,17 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
     except Exception as e:                  # noqa: BLE001
         hr_now = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     try:
-        th_now = {k: v for k, v in A.trail_hr_model(ds, today, race_idx=race_idx).items() if k != "points"}
+        th_now = {k: v for k, v in A.trail_hr_model(ds, today, race_idx=race_idx, tags=tags).items() if k != "points"}
     except Exception as e:                  # noqa: BLE001
         th_now = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     trail_hr = summarise_trail_hr(rows)
     trail_hr["model_now"] = th_now
+    pc = pass_check([r.get("err_th_race") for r in rows if r.get("category") == "trail" and r.get("th")
+                     and r.get("activity_type") == "race"], THRESHOLDS["trail"])
     t_med = trail_hr["races"]["race_level"]["median_abs"]
-    trail_hr["passed"] = bool(trail_hr["races"]["n"] >= MIN_N and t_med is not None and t_med <= THRESHOLDS["trail"])
+    pc["target_met"] = bool(t_med is not None and t_med <= TARGETS["trail"] and pc["passed"])
+    trail_hr["pass_rule"] = pc
+    trail_hr["passed"] = bool(pc["passed"])
     validated["trail_hr"] = trail_hr["passed"]
     return {"computed_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"), "today": today.isoformat(),
             "seconds": round(time.time() - t0, 1), "version": 2, "rows": rows,
@@ -971,7 +1051,13 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
             "power_source": A.power_summary(ds, [w for w in all_runs if A.outdoor(w)]),
             "notes": [A.GROUP_HIKE_NOTE + "；只有你標記為自己走的登山才會成為回測案例",
                       "能力樣本看「努力度」不看「是不是比賽」：你標記的努力度優先（全力＝一定算、其他＝一定不算）；"
-                      "自動：路跑用全力路跑規則，越野用移動心率（≥ 0.90 × LTHR、AeT 以上 ≥ 2/3）＋長休息（≥ 5 分的停留 ≤ 10 %）",
+                      "自動：路跑用全力路跑規則，越野用移動心率（≥ x*(T) − 0.03 × LTHR，x*(T) 是文獻先驗的全力心率曲線，"
+                      "2 小時 0.90、8 小時 0.83，推估）＋長休息（≥ 5 分的停留 ≤ 10 %）",
+                      "越野心率模型的比賽心率 x*(T)：你之前的比賽／全力跑（路跑＋越野，當天 LTHR）擬合，收縮到"
+                      "Fornasiero 2018／Kerhervé 2015 的形狀先驗；耐久 δ 收縮到 0.05/h（Clark 2019），只在清過的視窗上量；"
+                      "熱用你的 β 0.224 bpm／Hadley 把心率移到 Hadley 120；推估",
+                      "越野通過門檻 8 %（目標 6 %）：n ≥ 5 且中位數 80 % bootstrap 上界 ≤ 門檻 + 2 個百分點（n ≥ 10 時 ≤ 門檻）",
+                      "總時間 = 移動時間（驗證目標）＋ 非移動時間（之前比賽的停留，另外預估、另外列）",
                       "你標記為比賽或全力的活動不受 365 天限制（每場仍用前一天的資料預測）；自動偵測的樣本只看近 365 天",
                       "越野心率配速模型（推估）：effort km ÷ 移動時間 對 移動心率/LTHR，加耐久衰減；不需要功率",
                       "每一場都用活動前一天的資料、排除該活動；不用 WKO5 今天存的 mFTP / TTE，"

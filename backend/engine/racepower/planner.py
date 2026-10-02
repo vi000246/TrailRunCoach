@@ -235,8 +235,15 @@ def heat_acclimation(opts: dict) -> Optional[dict]:
       heat_acclimatisation = {"mode": auto | none | partial | acclimatised | custom, "s"}
       heat_status = {"s_race": {"center", "low", "high"}, "s_from", "source"} (the API
                     projects it from the athlete's exposure history; auto uses it)
-    None (no choice) = v1 behaviour. Every S is 推估 (the S model is 自組)."""
+    None (no choice) = v1 behaviour. Every S is 推估 (the S model is 自組).
+
+    a (2026-10-02, unsourced-rules.md §A8; racepower/heatacc.py): 0 — S is
+    shown but does not discount the heat penalty — unless heat_status
+    carries an HRC slope test (`hrc_test`) that supports acclimation; then
+    heat.A_RECOVER. The band keeps a = 0 as its conservative end and the
+    literature's optimistic a as the other."""
     from backend.engine import heat as HT
+    from backend.engine.racepower import heatacc as HA
     ha = opts.get("heat_acclimatisation")
     if not ha:
         return None
@@ -258,10 +265,17 @@ def heat_acclimation(opts: dict) -> Optional[dict]:
         s = s_lo = s_hi = HT.PRESET_S.get(mode, 0.0)
         src = {"none": "未適應", "partial": "部分（S 0.5，自組）", "acclimatised": "已適應（S 0.9，自組）"}.get(mode, mode)
     s_from = st.get("s_from")
-    return {"mode": mode, "s": s, "s_from": s_from if s_from is not None else 0.0, "a": HT.A_RECOVER,
-            "scenarios": {"center": (HT.SCENARIOS["center"]["a"], s),
-                          "low": (HT.SCENARIOS["low"]["a"], s_lo),      # conservative: smallest a, lowest S
-                          "high": (HT.SCENARIOS["high"]["a"], s_hi)},
+    a, a_why = HA.acclimation_a(st.get("hrc_test"), HT.SCENARIOS["center"]["a"])
+    supported = a > 0
+    if mode in ("partial", "acclimatised", "custom") and not supported:
+        src += "（你的資料不支持熱適應：S 只顯示，不折抵熱懲罰）"
+    return {"mode": mode, "s": s, "s_from": s_from if s_from is not None else 0.0, "a": a,
+            "a_literature": HT.A_RECOVER, "a_reason": a_why, "a_supported": supported,
+            "hrc_test": st.get("hrc_test"),
+            "scenarios": {"center": (a, s),
+                          # conservative: no credit, lowest S
+                          "low": (HT.SCENARIOS["low"]["a"] if supported else 0.0, s_lo),
+                          "high": (HT.SCENARIOS["high"]["a"], s_hi)},   # optimistic: the literature's a
             "source": src, "badge": "推估"}
 
 
@@ -309,20 +323,45 @@ def _heat_profile(hourly: list, start: dt.datetime, out_segs: list, stops) -> li
 # road / trail
 # ---------------------------------------------------------------------------
 
-def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target: float = 1.0) -> Optional[dict]:
+def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target: float = 1.0,
+                      hadley: Optional[float] = None, lthr: Optional[float] = None,
+                      stops=None) -> Optional[dict]:
     """The primary trail estimate (2026-10-01, trailhr.py): moving time of a
-    course from the athlete's HR pace model at f_target × their race HR
-    level, with the durability decline. None without a usable model."""
+    course from the athlete's HR pace model at f_target × their full-effort
+    HR curve x*(T) (2026-10-02: solved at the predicted T), with the
+    durability decline. `hadley` (race-day Hadley sum) and `lthr`: the
+    athlete's heat β moves the HR level (trailhr.heat_shift; the model's x
+    is at Hadley 120), so the caller must not apply the Hadley time penalty
+    on top (`heat_beta` True). The non-moving time (aid stations, queues,
+    stops) is predicted apart (nonmoving.py) and never added to time_s —
+    the moving time stays the validated target; time_total_s = both. None
+    without a usable model."""
+    from backend.engine.racepower import nonmoving as NM
     from backend.engine.racepower import trailhr as TH
     if not model or not (model.get("a") or model.get("c")) or not km:
         return None
     e = km + (gain_m or 0.0) / TH.TRAILHR["divisor"]
-    x = f_target * (model.get("x_race") or TH.TRAILHR["x_default"])
-    t = TH.predict_time(model, e, x)
+    sh = TH.heat_shift(hadley, lthr)
+    xs = model.get("xstar")
+    if xs:
+        t, x = TH.predict_race(model, e, xs, f=f_target, x_shift=sh)
+        tn, _ = TH.predict_race(model, e, xs, f=f_target, delta=0.0, x_shift=sh)
+    else:
+        # an older stored model without the curve: its single race level
+        x = f_target * (model.get("x_race") or TH.TRAILHR["x_default"]) - sh
+        t, tn = TH.predict_time(model, e, x), TH.predict_time(model, e, x, delta=0.0)
     if not t:
         return None
-    return {"time_s": t, "time_no_durability_s": TH.predict_time(model, e, x, delta=0.0), "x": x, "eff_km": e,
+    nm = NM.predict(model.get("nonmoving"), t, stops)
+    di = model.get("delta_info") or {}
+    return {"time_s": t, "time_no_durability_s": tn, "x": x, "x_star": x + sh, "eff_km": e,
             "x_race": model.get("x_race"), "x_race_source": model.get("x_race_source"), "delta": model.get("delta"),
+            "delta_raw": model.get("delta_raw"), "delta_warning": (di.get("all") or {}).get("warning"),
+            "delta_fuel_split": bool(di.get("split")),
+            "xstar": {k: xs.get(k) for k in ("x0", "s", "n", "kind", "prior", "source")} if xs else None,
+            "heat_beta": bool(TH.TRAILHR["heat_beta"] and hadley is not None and lthr),
+            "heat_shift": sh, "hadley": hadley,
+            "nonmoving": nm, "time_total_s": t + nm["total_s"] if nm else None,
             "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
 
 
@@ -360,6 +399,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         """Mᵢ per segment; `heat` = one (temp_c, rh_pct) per segment or None
         (the single race-day value, exactly as before)."""
         if gpx or heat is not None or hs_pair is not None:
+            if hacc:
+                return ENV.segment_factors(zs, frm, to, accl, heat, heat_s=hs_pair, a=hacc["a"])
             return ENV.segment_factors(zs, frm, to, accl, heat, heat_s=hs_pair)
         return [env["M"] if accl == "acclimatised" else ENV.segment_factors([to["altitude_m"]], frm, to, accl)[0]] * len(segs)
 
@@ -389,8 +430,18 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     d_eff_m = (r1.get("effort_km") or r1["distance_km"]) * 1000.0
     cat = "trail" if trail else "road"
     f_target = float(opts.get("effort_target") or 1.0)
-    hr_est = trail_hr_estimate(trail_hr, course["totals"]["km"], course["totals"].get("gain_m") or 0.0, f_target) \
-        if trail and mode == "auto" else None
+
+    def hr_for(hadley):
+        """The HR-model total at a race-day Hadley (the athlete's β moves the HR level)."""
+        if not (trail and mode == "auto"):
+            return None
+        return trail_hr_estimate(trail_hr, course["totals"]["km"], course["totals"].get("gain_m") or 0.0, f_target,
+                                 hadley=hadley, lthr=capacity.get("lthr"), stops=opts.get("stops"))
+    hr_est = hr_for(env["to"].get("heat_index_sum_f"))
+    # the HR model is at Hadley 120 and its heat comes from β, so its time only takes the
+    # altitude part of M: every segment's heat set equal to the training side (推估)
+    m_alt = ENV.segment_factors(zs, frm, to, accl, [(frm["temp_c"], frm["rh_pct"])] * len(segs))
+    mbar_alt = sum(m * s["dist_m"] for m, s in zip(m_alt, segs)) / (sum(s["dist_m"] for s in segs) or 1.0)
     # the HR estimate gives the total; the segment model only distributes it
     v2_primary = bool(validated.get(cat)) and gpx and hr_est is None
 
@@ -422,8 +473,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             p_star = float(p_star) * (mbar if opts.get("power_is_training") else 1.0)
             t_whole, p_whole = d_eff_m * weight / (re_v1 * p_star), p_star
         elif hr_est is not None:
-            # heat / altitude: the HR model is in training conditions; M scales the speed (推估)
-            t_whole = hr_est["time_s"] / mbar
+            # altitude (and heat when no β applies): the HR model is in training conditions;
+            # M scales the speed (推估). With β the heat is already in hr_est's HR level.
+            t_whole = hr_est["time_s"] / (mbar_alt if hr_est.get("heat_beta") else mbar)
             p_whole = d_eff_m / t_whole / re_v1 * weight
         else:
             t_whole, p_whole = t_c, p_c
@@ -472,6 +524,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         prev = _cum_times(st["res"]["rows"])
         for n in range(1, HEAT_MAX_PASSES + 1):
             seg_heat = _segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops)
+            if hr_est is not None:
+                # the time-weighted race-day Hadley of the hours each segment is run
+                from backend.engine import heat as HT
+                tw = [(r["t"], HT.hadley_sum(h["temp_c"], h["rh_pct"])) for r, h in zip(st["res"]["rows"], seg_heat) if h]
+                if tw:
+                    hr_est = hr_for(sum(t * x for t, x in tw) / (sum(t for t, _ in tw) or 1.0)) or hr_est
             st = solve_all(factors([(h["temp_c"], h["rh_pct"]) if h else (to["temp_c"], to["rh_pct"])
                                     for h in seg_heat]))
             cur = _cum_times(st["res"]["rows"])
@@ -561,7 +619,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         for sg in out_segs:
             sg["heat_eff_pct"] = max(0.0, sg["heat_pct"] * (1.0 - hacc["a"] * hacc["s"]))
         hb = _heat_band(out_segs, [r["t"] for r in rows], env["from"]["heat_penalty_pct"], hacc)
-        heat_accl = {k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge")}
+        heat_accl = {k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge", "a_literature",
+                                          "a_reason", "a_supported")}
         heat_accl.update(band=hb, time_s={k: res["T"] * hb[k]["time_ratio"] for k in ("low", "center", "high")})
 
     km = course["totals"]["km"]
@@ -609,14 +668,23 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         crosscheck["cvi"] = r1.get("cvi_crosscheck")
         if hr_est is not None:
             crosscheck["power_envelope"] = {"time_s": t_c, "power": p_c, "method": "功率能力（CP/Riegel，僅供對照）"}
-            warnings.append(f"越野整場時間用心率配速模型（推估）：你的比賽心率 {hr_est['x']:.0%} LTHR"
-                            f"（{hr_est['x_race_source']}），effort km {hr_est['eff_km']:.1f}，耐久每小時 −"
-                            f"{(hr_est['delta'] or 0):.0%}（1 小時後）；功率只當參考")
+            warnings.append(f"越野整場移動時間用心率配速模型（推估）：全力心率 {hr_est['x_star']:.0%} LTHR"
+                            f"（{hr_est['x_race_source']}）"
+                            + (f"，熱 −{hr_est['heat_shift']:.1%}（你的 β）" if hr_est.get("heat_beta") and hr_est["heat_shift"] > 0 else "")
+                            + f"，effort km {hr_est['eff_km']:.1f}，耐久每小時 −"
+                            f"{(hr_est['delta'] or 0):.1%}（1 小時後）；功率只當參考")
+            if hr_est.get("delta_warning"):
+                warnings.append(hr_est["delta_warning"])
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp, "w_per_kg": p_bar / weight,
                "pace_s_per_km": T / km, "km": km, "gain_m": course["totals"].get("gain_m"),
                "loss_m": course["totals"].get("loss_m"), "M": mbar,
                "total_method": "trail_hr" if hr_est is not None else "v2" if v2_primary else "v1",
                "trail_hr": hr_est,
+               # moving time (T, the validated target) + the predicted non-moving time, shown apart
+               "nonmoving": (hr_est or {}).get("nonmoving"),
+               "time_total_s": T + hr_est["nonmoving"]["total_s"] if hr_est and hr_est.get("nonmoving") else None,
+               "time_total_range_s": [T + hr_est["nonmoving"]["p25_s"], T + hr_est["nonmoving"]["p75_s"]]
+               if hr_est and hr_est.get("nonmoving") else None,
                "category": cat, "mode": mode, "effort_target": f_target if mode == "auto" else None,
                "finish_eta": _clock(opts.get("start_time"), T + _stops_before(stops, km + 1)),
                "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
@@ -1007,7 +1075,8 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                "badge": None if v2_primary else "推估", "days": n_days,
                "heat": {"mode": "lapse", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                         "reason": "百岳：登山口／測站溫度依遞減率推算到每段", "badge": "推估", "ref_alt_m": z0},
-               "heat_accl": ({k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge")} if hacc else None)}
+               "heat_accl": ({k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge", "a_literature",
+                                                   "a_reason", "a_supported")} if hacc else None)}
     capj = cap.to_json()
     cur = ((cap.alpha.get("diagnostics") or {}).get("versions") or {}).get("current") or {}
     capj["alt_current"] = cur.get("pct_per_km")

@@ -90,19 +90,23 @@ class GradeRE:
         s = self.bins.get(_bin_of(g))
         return int(s["n"]) if s else 0
 
-    def v_max(self, g: float) -> Optional[float]:
-        """Downhill speed cap (m/s): the personal p90 speed of that bin (and
+    def v_max(self, g: float, q: int = 90) -> Optional[float]:
+        """Downhill speed cap (m/s): the personal p`q` speed of that bin (and
         its neighbours when thin); None when there is no data (then only the
-        0.9 floor of the prior limits the descent)."""
+        0.9 floor of the prior limits the descent). q = 90 (road) or 50
+        (trail, GaitRE.v_max: unsourced-rules.md §A4 — p90 is "the best
+        descent", not what a race holds; 推估)."""
         if g >= -0.02:
             return None
+        key = f"v{q}"
         b = _bin_of(g)
-        vs = [self.bins[x]["v90"] for x in (b,) if x in self.bins and self.bins[x]["n"] >= VMAX_MIN_N]
+        vs = [self.bins[x].get(key, self.bins[x]["v90"]) for x in (b,)
+              if x in self.bins and self.bins[x]["n"] >= VMAX_MIN_N]
         if not vs:
             near = [self.bins[x] for x in (b - 1, b + 1) if x in self.bins and self.bins[x]["n"] >= VMAX_MIN_N]
             if not near:
                 return None
-            return float(np.mean([s["v90"] for s in near]))
+            return float(np.mean([s.get(key, s["v90"]) for s in near]))
         return float(vs[0])
 
     def trusted(self, g: float) -> bool:
@@ -135,7 +139,8 @@ def fit_grade_re(samples: Sequence[dict], re_flat: float, walking: bool = False)
     for b, ss in by.items():
         res = np.array([s["re"] for s in ss])
         vs = np.array([s["v"] for s in ss])
-        bins[b] = {"n": len(ss), "re": float(np.median(res)), "v90": float(np.percentile(vs, 90))}
+        bins[b] = {"n": len(ss), "re": float(np.median(res)), "v90": float(np.percentile(vs, 90)),
+                   "v50": float(np.percentile(vs, 50))}
     return GradeRE(re_flat, bins, sum(len(v) for v in by.values()), len(acts), walking)
 
 
@@ -144,6 +149,22 @@ def fit_grade_re(samples: Sequence[dict], re_flat: float, walking: bool = False)
 WALK_MAJORITY = 0.5            # 自組: a window / bin is walked when ≥ half its moving time is < 130 spm
 TECH_MIN_N = 30                # windows for a per-class technicality factor (= SHRINK_N)
 TECH_BOUNDS = (0.6, 1.2)       # 自組 sanity range for the factor
+# technicality by grade bin (2026-10-02, unsourced-rules.md §A4: the one factor on g ≤ +2 %
+# missed the steep descents, ≤ −15 % ran 20–23 % too fast): the back-test's downhill bins,
+# each shrunk n/(n + 30) towards 1 (推估)
+TECH_BIN_EDGES = (-0.15, -0.08, -0.02, 0.02)
+TECH_BIN_LABELS = ("≤ −15%", "−15…−8%", "−8…−2%", "±2%")
+TRAIL_VMAX_Q = 50              # 推估: the trail descent cap = the personal median speed of the bin
+
+
+def tech_bin(g: float) -> Optional[str]:
+    """The technicality bin of grade g (None above +2 %)."""
+    if g > TECH_BIN_EDGES[-1]:
+        return None
+    for e, lab in zip(TECH_BIN_EDGES, TECH_BIN_LABELS):
+        if g < e or (e == TECH_BIN_EDGES[-1] and g <= e):
+            return lab
+    return TECH_BIN_LABELS[-1]
 
 
 @dataclass
@@ -168,6 +189,9 @@ class GaitRE:
     # efforts on a known route that overlaps the course (routes module); when
     # set it replaces the per-class factor. Nothing fills it yet.
     route_tech: Optional[dict] = None
+    # per grade bin (TECH_BIN_LABELS) -> {"f" (shrunk to 1), "raw", "n"}; used on trail
+    # instead of the single factor when its bin has windows (route_tech still wins)
+    tech_bins: dict = field(default_factory=dict)
 
     @property
     def re_flat(self) -> float:
@@ -200,14 +224,24 @@ class GaitRE:
             return t["f"], "all"
         return 1.0, "none"
 
+    def tech_at(self, g: float) -> tuple[float, str]:
+        """The trail technicality factor at grade g: the route's, else the
+        grade bin's (§A4), else the single per-class factor."""
+        if self.route_tech and self.route_tech.get("f"):
+            return float(self.route_tech["f"]), "route"
+        tb = self.tech_bins.get(tech_bin(g) or "")
+        if tb and tb.get("n"):
+            return float(tb["f"]), "bin"
+        return self.tech_factor()
+
     def re(self, g: float) -> float:
         v = self.walk.re(g) if self.walked(g) else self.run.re(g)
         if self.trail and g <= 0.02:
-            v *= self.tech_factor()[0]
+            v *= self.tech_at(g)[0]
         return v
 
     def v_max(self, g: float) -> Optional[float]:
-        return self.run.v_max(g)
+        return self.run.v_max(g, TRAIL_VMAX_Q if self.trail else 90)
 
     def trusted(self, g: float) -> bool:
         m = self.walk if self.walked(g) else self.run
@@ -232,7 +266,8 @@ class GaitRE:
             r.update(walk_n=w["n"], walk_re=w["re"], walk_median_re=w["median_re"], walk_prior_re=w["prior_re"],
                      walk_share=(wb[0] / wb[1]) if wb[1] else None, gait="walk" if self.walked(r["grade"]) else "run")
         f, which = self.tech_factor()
-        j.update(walk_samples=self.walk.n_samples, tech=self.tech, tech_used={"f": f, "class": which})
+        j.update(walk_samples=self.walk.n_samples, tech=self.tech, tech_used={"f": f, "class": which},
+                 tech_bins=self.tech_bins, trail_vmax_q=TRAIL_VMAX_Q)
         return j
 
 
@@ -255,18 +290,25 @@ def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict]
             x[0] += 1
     tech: dict = {}
     ratios: dict = {}
+    by_bin: dict = {}
     for s in run_s:
         if not s.get("trail") or s["g"] > 0.02 or not s.get("re"):
             continue
         r = s["re"] / run.re(s["g"])
         ratios.setdefault("all", []).append(r)
+        by_bin.setdefault(tech_bin(s["g"]), []).append(r)
         c = (classes or {}).get(s.get("a"))
         if c:
             ratios.setdefault(c, []).append(r)
     for c, rs in ratios.items():
         f = float(np.median(rs))
         tech[c] = {"f": min(TECH_BOUNDS[1], max(TECH_BOUNDS[0], f)), "raw": f, "n": len(rs)}
-    return GaitRE(run, walk, wb, tech)
+    tbins: dict = {}
+    for lab, rs in by_bin.items():
+        raw, n = float(np.median(rs)), len(rs)
+        f = (n * raw + SHRINK_N * 1.0) / (n + SHRINK_N)
+        tbins[lab] = {"f": min(TECH_BOUNDS[1], max(TECH_BOUNDS[0], f)), "raw": raw, "n": n}
+    return GaitRE(run, walk, wb, tech, tech_bins=tbins)
 
 
 def tobler_kmh(g: float) -> float:
