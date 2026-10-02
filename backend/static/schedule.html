@@ -268,6 +268,8 @@ dialog.sd .err:empty { display: none; }
 .kinds label:has(input:checked) { border-color: var(--k); background: color-mix(in srgb, var(--k) 15%, transparent); font-weight: 600; }
 .kinds label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .kinds label:has(input:disabled) { cursor: default; }
+.kinds label[hidden] { display: none !important; }
+dialog.sd input.locked { background: var(--soft); color: var(--muted); cursor: pointer; }
 .hint { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
 .hint button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
 .done-box { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
@@ -502,13 +504,13 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </div>
     <div class="row2">
       <label>日期<input type="date" name="day" required></label>
-      <label>分鐘<input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
+      <label><span><span id="sd-min-lbl">分鐘</span><button type="button" class="qtip" id="sd-min-q" aria-label="說明" data-tip="" hidden>?</button></span><input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
     </div>
     <div class="hint" id="sd-tss" aria-live="polite"></div>
     <fieldset class="eq" id="sd-eq" hidden>
       <legend>地形與同負荷換算</legend>
       <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形">
-        <label><input type="radio" name="terrain" value="road">路跑</label><label><input type="radio" name="terrain" value="trail">越野</label><label><input type="radio" name="terrain" value="hike">登山</label>
+        <label><input type="radio" name="terrain" value="road">路跑</label><label><input type="radio" name="terrain" value="trail">越野跑</label>
       </div>
       <label>爬升比例 <span><b id="eq-d-v" class="num">0</b> m/km</span>
         <input type="range" id="eq-d" min="0" max="150" step="5" value="0" aria-describedby="eq-sum"></label>
@@ -703,8 +705,11 @@ async function sj(method, url, body) {
   return b;
 }
 
-const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength", "heat_passive"];
-const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "健行／登山", strength: "肌力", heat_passive: "被動熱適應",
+// the dialog's 類型: hiking is not a workout type — the kind key "hike" is 越野跑 (trail
+// running, the editor's trail templates); 被動熱適應 is no longer offered (an existing one
+// still opens with its own radio)
+const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
+const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
   notice: "課表待確認" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
 // 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
 const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
@@ -1091,8 +1096,8 @@ async function unpush(scope) {
 
 // ---------------- session dialog ----------------
 let dlg = { uid: null, targetTouched: false };
-$("sd-kinds").insertAdjacentHTML("beforeend", KIND_ORDER.map((k) =>
-  `<label class="k-${k}"><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
+$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive"].map((k) =>
+  `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
 const F = $("sd-form");
 const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).value || "easy";
 // estimated TSS: an existing session keeps its own rate (the generator's) while the
@@ -1118,17 +1123,18 @@ function tssHint() {
 }
 
 // ---------------- terrain + same-load conversion (engine/equivalence.py) ----------------
-const TER = { road: "路跑", trail: "越野", hike: "登山" };
+// two terrains: 路跑 / 越野跑 (an old 登山 session opens as 越野跑)
+const TER = { road: "路跑", trail: "越野跑", hike: "越野跑" };
 const EQ_KINDS = new Set(["easy", "long", "hike"]);
 const AUTO_TITLE = { easy: { road: "輕鬆跑", trail: "輕鬆越野跑" }, long: { road: "長時間輕鬆（路跑）", trail: "長時間輕鬆（山路越野）" },
-  hike: { hike: "登山健行" } };
-const AUTO_TITLE_RE = /^(輕鬆跑|輕鬆跑（路跑）|輕鬆越野跑|長時間輕鬆(（[^）]*）)?|登山健行(（長時間）)?|健行)$/;
+  hike: { trail: "越野跑" } };
+const AUTO_TITLE_RE = /^(輕鬆跑|輕鬆跑（路跑）|輕鬆越野跑|長時間輕鬆(（[^）]*）)?|登山健行(（長時間）)?|健行|越野跑)$/;
 let EQ = null, eqReq = null;
 const loadEq = () => eqReq ||= sj("GET", `${PAPI}/equivalence`).then((b) => (EQ = b)).catch(() => { eqReq = null; return null; });
 const EQS = { rate: 50, tss0: 0, tssFix: 0, d: 0, needFill: false };
 const terVal = () => (F.querySelector('input[name="terrain"]:checked') || {}).value || "road";
 const eqOn = () => !$("sd-eq").hidden;
-const terOf = (s) => !s ? "road" : s.terrain || (s.kind === "hike" ? "hike" : /越野|山路/.test(s.title || "") ? "trail" : "road");
+const terOf = (s) => { if (!s) return "road"; const t = s.terrain || (s.kind === "hike" || /越野|山路/.test(s.title || "") ? "trail" : "road"); return t === "hike" ? "trail" : t; };
 const defaultD = () => Math.round(D.goal_climb_per_km || 80);
 const aetText = () => { const a = (D.thresholds || {}).aet; return a ? `心率 ≤ AeT ${Math.round(a)} bpm` : "心率 ≤ AeT"; };
 function capFor(kind) {
@@ -1157,7 +1163,10 @@ function bisect(f, lo, hi) {                       // f increasing: the x in [lo
 }
 const eqF = () => ({ min: +F.minutes.value || 0, km: +$("eq-km").value || 0, gain: +$("eq-gain").value || 0, tss: +$("eq-tss").value || 0 });
 function eqSet({ min, km, gain, d, tss }) {
-  if (min != null) F.minutes.value = Math.max(0, Math.round(min));
+  if (min != null) {
+    F.minutes.value = Math.max(0, Math.round(min));
+    if (dlg.minLock) WE.setTotal(+F.minutes.value);       // the time lives in the structure
+  }
   if (km != null) $("eq-km").value = km > 0 ? km.toFixed(1) : "0";
   if (gain != null) $("eq-gain").value = Math.max(0, Math.round(gain));
   if (d != null) { $("eq-d").value = Math.max(0, Math.min(150, Math.round(d / 5) * 5)); $("eq-d-v").textContent = Math.round(d); }
@@ -1194,14 +1203,16 @@ function eqRecalc(changed, exactD) {
   eqRender();
   tssHint();
 }
-function eqNote(mode) {
+// how km / climb turn into time (the ? next to 分鐘; plain text for the tooltip)
+function eqTip(mode) {
+  if (!EQ) return "";
   const M = EQ.model;
-  if (mode === "road") return `路跑：平路 ${M.v_flat_kmh.toFixed(1)} km/h（${esc(M.v_flat_source)}）；有坡時用努力距離 km + 爬升/100`;
+  if (mode === "road") return `距離 ↔ 時間：你的平路速度 ${M.v_flat_kmh.toFixed(1)} km/h（${M.v_flat_source}）；有坡時用努力距離 km + 爬升/100。`;
   const bt = (EQ.backtest || {})[mode] || {}, mm = M.modes[mode] || {}, est = (EQ.estimate || {})[mode];
-  const how = mm.method === "ep" ? `努力距離 EP = km + 爬升/100 × 你的 EP 速度 ${(mm.ep_kmh || 0).toFixed(1)} km/h`
+  const how = mm.method === "ep" ? `努力距離 EP = km + 爬升/100，用你的越野 EP 速度 ${(mm.ep_kmh || 0).toFixed(1)} km/h`
     : `平地 ${(mm.v_flat_kmh || 0).toFixed(1)} km/h＋上坡 ${Math.round(mm.vam_mh || 0)} m/h＋下坡修正（Naismith／Langmuir）`;
-  const err = bt.n ? `用你 ${bt.n} 次${TER[mode]}留一法回測：平均差 ${bt.mae_min} 分（${bt.mape_pct} %）` : `你的${TER[mode]}紀錄不夠，還不能回測`;
-  return `<span class="badge ${est ? "est" : "fit"}">${est ? "推估" : "依你的紀錄"}</span> ${how}；${err}`;
+  const err = bt.n ? `回測 ${bt.n} 次：平均差 ${bt.mae_min} 分（${bt.mape_pct} %）` : "紀錄還不夠回測";
+  return `距離 ↔ 時間：${how}；${err}${est ? "（推估）" : ""}。`;
 }
 function eqRender() {
   if (!eqOn()) return;
@@ -1209,6 +1220,7 @@ function eqRender() {
   $("eq-lock").disabled = ro || free;
   // nothing is disabled: the locked field is the anchor (editing it re-anchors)
   F.minutes.disabled = $("eq-km").disabled = $("eq-tss").disabled = $("eq-gain").disabled = $("eq-d").disabled = ro;
+  if (dlg.minLock) $("sd-min-q").dataset.tip = $("sd-min-q").dataset.tip.replace(/\n距離 ↔ 時間：.*$/s, "") + "\n" + eqTip(terVal());
   const anchor = free ? null : { time: F.minutes, tss: $("eq-tss"), dist: $("eq-km") }[lock];
   [F.minutes, $("eq-tss"), $("eq-km")].forEach((x) => x.classList.toggle("anchor", x === anchor));
   const g = D.goal_climb_per_km;
@@ -1228,7 +1240,8 @@ function eqRender() {
   if (mode !== "road" && mm && mm.density_range && (EQS.d < mm.density_range[0] - 10 || EQS.d > mm.density_range[1] + 10))
     warns.push(`爬升比例 ${Math.round(EQS.d)} m/km 在你的${TER[mode]}紀錄（${mm.density_range[0]}–${mm.density_range[1]} m/km）之外，誤差可能較大`);
   $("eq-warn").innerHTML = warns.map(esc).join("<br>");
-  $("eq-note").innerHTML = eqNote(mode);
+  $("eq-note").innerHTML = "";
+  if (mode === "trail" && WE.doc && !dlg.ro) WE.refreshSoon();     // distance steps: EP with this climb
 }
 function eqInit(s) {
   const k = s ? s.kind : kindVal();
@@ -1267,8 +1280,7 @@ function autoText() {
 }
 function onTerrain() {
   const t = terVal(), k = kindVal();
-  if (t === "hike" && k !== "hike") F.querySelector('input[name="kind"][value="hike"]').checked = true;
-  if (t !== "hike" && k === "hike") {
+  if (t === "road" && k === "hike") {                 // 越野跑 is trail: 路跑 goes back to a road kind
     const back = dlg.orig && dlg.orig.kind !== "hike" && EQ_KINDS.has(dlg.orig.kind) ? dlg.orig.kind : "long";
     F.querySelector(`input[name="kind"][value="${back}"]`).checked = true;
   }
@@ -1285,8 +1297,7 @@ function onKind() {
   if (!show) { F.minutes.disabled = !!dlg.ro; return; }
   if (!(dlg.orig && EQ_KINDS.has(dlg.orig.kind))) EQS.rate = rateOf(k);    // a different intensity class
   if (!was) { EQS.tss0 = (+F.minutes.value || 0) / 60 * EQS.rate; EQS.tssFix = EQS.tss0; }
-  if (k === "hike") F.querySelector('input[name="terrain"][value="hike"]').checked = true;
-  else if (terVal() === "hike") F.querySelector('input[name="terrain"][value="trail"]').checked = true;
+  if (k === "hike") F.querySelector('input[name="terrain"][value="trail"]').checked = true;
   autoText();
   eqFillLater();
   eqRecalc("terrain", EQS.d);
@@ -1317,22 +1328,44 @@ function tgtHint() {
 function weSession() {
   return { kind: kindVal(), title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
     target_basis: F.target_basis.value, day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
+    // trail: the climb per km for the effort distance of distance steps (the panel's, else the goal race's)
+    climb_per_km: eqOn() && terVal() === "trail" ? EQS.d : kindVal() === "hike" ? (D.goal_climb_per_km ?? null) : null,
     protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
     ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
       variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
       variant_adj: dlg.orig.variant_adj, rung_key: dlg.orig.rung_key } : {}) };
 }
+// 分鐘 follows the structure whenever there is one (locked, computed from the steps; click it
+// to open the structure). Distance / lap-button steps make it an estimate (約, ? = how).
+function minLock(v) {
+  const lock = !!(v && v.totals && WE.doc) && !dlg.ro;
+  dlg.minLock = lock;
+  F.minutes.readOnly = lock;
+  F.minutes.classList.toggle("locked", lock);
+  const est = lock && v.totals.est;
+  $("sd-min-lbl").textContent = est ? "約（分鐘）" : "分鐘";
+  const tip = !lock ? "" : (est ? `總時間是估的：步驟裡有距離或按圈段。${v.totals.est_note || ""}` : "") +
+    (est ? "\n" : "") + "時間由下面的結構加總；要改時間就改步驟（點這格會打開結構）。" + (eqOn() ? "\n" + eqTip(terVal()) : "");
+  $("sd-min-q").hidden = !lock;
+  $("sd-min-q").dataset.tip = tip;
+  if (!lock) return;
+  const m = Math.max(1, Math.round(v.totals.sec / 60));
+  if (+F.minutes.value !== m) { F.minutes.value = m; if (eqOn()) eqRecalc("minutes"); tssHint(); }
+}
 const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onView: (v, we) => {
   if (v && v.basis_label) $("sd-tbwhy").textContent = v.basis_label;
   const mine = we.dirty || we.stored;
-  // a structure of your own: minutes, the target text and the TSS estimate come from it
-  F.minutes.readOnly = mine && !dlg.ro;
-  if (v && v.totals && we.dirty) {
-    F.minutes.value = Math.max(1, Math.round(v.totals.sec / 60));
-    if (v.summary) F.target.value = v.summary;
-  }
+  minLock(v);
+  // a structure of your own: the target text and the TSS estimate come from it
+  if (v && v.totals && we.dirty && v.summary) F.target.value = v.summary;
   if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+}, onTemplate: (row) => {
+  // a template names the session while the title is still the default one
+  const defs = Object.values(D.default_titles || {});
+  if (!dlg.titleTouched && (!F.title.value || defs.includes(F.title.value) || AUTO_TITLE_RE.test(F.title.value.trim()) || dlg.tplTitle === F.title.value))
+    F.title.value = dlg.tplTitle = row.title || row.label;
 } });
+F.minutes.addEventListener("click", () => { if (dlg.minLock) WE.openBox(); });
 function stepsPreview() {
   const k = kindVal();
   if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
@@ -1528,6 +1561,7 @@ function openDlg(s, day) {
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
   F.day.value = d;
   (F.querySelector(`input[name="kind"][value="${s ? s.kind : "easy"}"]`) || {}).checked = true;
+  F.querySelector('#sd-kinds label.k-heat_passive').hidden = !(s && s.kind === "heat_passive");
   F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
   F.minutes.value = s ? s.minutes : 45;
   F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";

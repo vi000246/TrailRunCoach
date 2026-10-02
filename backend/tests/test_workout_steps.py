@@ -236,7 +236,7 @@ def test_rescale_abs_power():
 
 
 def test_templates_and_zones():
-    gs = WS.templates()
+    gs = WS.templates()["groups"]
     keys = {r["key"] for g in gs for r in g["rows"]}
     assert {"v1a", "t1a", "x3015", "cp_quick", "strides"} <= keys
     for g in gs:

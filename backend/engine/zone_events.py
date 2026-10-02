@@ -53,6 +53,13 @@ Detectors (numbers 推估 unless a source is named):
                 band (route_weather.HOT_HADLEY); 3 days / 60 days / the summer
                 test are 推估.
 
+  aet_bound     the AeT is only a lower bound (drift_agg.aet_validity: the
+                regression found no crossing, threshold_estimate.aet_lower_bound
+                holds): one AeT test every 8 weeks since the last AeT test
+                (推估), "priority": "low" — the box only, the testing indicator
+                stays as it is. Id aet_bound:<cycle start>: a dismissal holds
+                for that 8-week cycle.
+
 Temperature source per run (hr_shift), best first:
   route_weather  Open-Meteo archive at the run's place and hours
                  (activity_weather.json), Hadley from T + dew point. σ_H 0.
@@ -631,7 +638,8 @@ SHIFT_KEYS = ("fired", "shift_bpm", "se_bpm", "threshold_bpm", "direction", "n",
 
 
 def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Optional[dict] = None,
-                points: Optional[list] = None, mornings: Optional[dict] = None) -> dict:
+                points: Optional[list] = None, mornings: Optional[dict] = None,
+                aet_validity: Optional[dict] = None) -> dict:
     """{"suggestions": [...], "events": [...], "checks": {...}} — see the module doc.
     `acts`: activity_weather rows (heat_data.exposures); `brk`: reentry.find;
     `points`: steady_points; `mornings`: heat_data.morning_weather (tests
@@ -716,4 +724,42 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
                 f"（之前 {SUMMER_DAYS} 天有 {cs['summer_days']} 天 Hadley ≥ {HOT_HADLEY:.0f}）：夏天測的門檻受熱影響，"
                 f"清晨涼的時候重測比較準",
                 cs["start"], None, cs, SRC + "；徐國峰：等天氣轉涼再做（xu-guofeng-reply.md）；Hadley 150（route_weather）"))
+    # the AeT is only a lower bound (drift_agg.aet_validity): one AeT test every 8 weeks, low priority
+    val = aet_validity
+    if val is None and real:
+        try:
+            from backend.engine import drift_agg as DA
+            val = DA.aet_validity(ds, today)
+        except Exception:                           # noqa: BLE001
+            val = None
+    if val and val.get("lower_bound"):
+        due = bound_reminder_due(plan, today)
+        checks["aet_bound"] = {"value": val.get("value"), "due": due}
+        if due:
+            from backend.engine import drift_agg as DA
+            x = float(val["value"])
+            sg = _suggestion(
+                f"aet_bound:{due}", ["aet"], f"AeT 目前只知道下限（≥ {x:.0f} bpm）：有空做一次 AeT 測試",
+                f"{DA.bound_label(x)}。每 {BOUND_REMIND_DAYS // 7} 週建議一次（推估），不擋課表、可以關掉；"
+                f"多跑 {x - 20:.0f}–{x - 10:.0f} bpm 的輕鬆跑，回歸就能自己找出 AeT",
+                due, None, {"bound": val.get("bound"), "value": x},
+                SRC + "；下限規則與 8 週提醒為推估（drift_agg.aet_validity）")
+            out.append({**sg, "priority": "low"})
     return {"suggestions": out, "events": applied_events(plan, today), "checks": checks}
+
+
+BOUND_REMIND_DAYS = 56          # 推估: one AeT test every 8 weeks while the AeT is only a lower bound
+BOUND_EPOCH = dt.date(2026, 1, 5)   # a Monday: the 8-week cycles' anchor without any AeT test
+
+
+def bound_reminder_due(plan, today: dt.date) -> Optional[str]:
+    """The start of the current 8-week cycle (its id: one dismissal per cycle) since the last
+    AeT test — None while the last test is younger than BOUND_REMIND_DAYS."""
+    from backend.engine.planning import threshold_method
+    tests = [_date(t.date) for t in getattr(plan, "thresholds", None) or []
+             if t.aethr is not None and threshold_method(t, "aethr") != "estimate" and _date(t.date) <= today]
+    anchor = max(tests) if tests else BOUND_EPOCH
+    days = (today - anchor).days
+    if days < (BOUND_REMIND_DAYS if tests else 0):
+        return None
+    return (anchor + dt.timedelta(days=days // BOUND_REMIND_DAYS * BOUND_REMIND_DAYS)).isoformat()
