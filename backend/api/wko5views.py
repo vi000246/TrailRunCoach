@@ -38,6 +38,7 @@ from backend.engine.wko5expr import datasource as DSRC
 from backend.engine.wko5expr.fitdataset import dataset_for_source
 from backend.engine.wko5expr import periods as PD
 from backend.engine.wko5expr import basis as BS
+from backend.engine.wko5expr import variants as VR
 from backend.engine.wko5expr import recentbests as RB
 from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
@@ -287,7 +288,10 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
-    pinfo = winfo = binfo = None
+    pinfo = winfo = binfo = vinfo = None
+    if v.get("source") == "custom" and VR.variant_spec(ch):
+        # chart variants (variants.py): ?variant=pct — first, since it picks the axes and series
+        ch, vinfo = VR.apply_variant(ch, request.query_params.get("variant"))
     if v.get("source") == "custom" and BS.basis_spec(ch):
         # 配速／功率 (basis.py): ?basis=power — athlete, workout and review charts alike
         ch, binfo = BS.apply_basis(ch, request.query_params.get("basis"))
@@ -310,7 +314,8 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
-           "params": params, "workout_file": ds.workouts[workout].entry.file if needs_workout else None}
+           "params": params, "workout_file": ds.workouts[workout].entry.file if needs_workout else None,
+           "variant": vinfo["variant"] if vinfo else None}
     key = chart_key(ch, req, data_fingerprint(ds))
 
     def compute():
@@ -323,6 +328,8 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
                 from backend.engine.workout_review import _has
                 res = BS.no_power_note(res, ch, _has(ds.channel(ds.workouts[workout].idx, "power")))
             res = {**res, **binfo}
+        if vinfo:
+            res = {**res, **vinfo}
         return {**res, **pinfo} if pinfo else res
     return RENDER_CACHE.get_or_compute(key, compute)
 

@@ -31,7 +31,8 @@ A view file looks like:
     }
 
 Everything except `name`, `title` and `expression` is optional. `kind` defaults
-to "athlete" (season-level); set "workout" for per-activity charts.
+to "athlete" (season-level); set "workout" for per-activity charts. A chart may
+put several axes + series sets in `"variants"` instead (a toggle; variants.py).
 
 Files are read from, in order: the repo's `views/` directory, then
 ~/.wko5coach/views/. A later file with the same `name` replaces an earlier one,
@@ -89,6 +90,19 @@ def _chart(raw: dict, where: str) -> dict:
         "axes": raw.get("axes") or [],
         "series": [_series(s, f"{where}/{raw['title']}") for s in raw.get("series", [])],
     }
+    if raw.get("variants") is not None:
+        # chart variants (variants.py): a segmented toggle between several axes + series sets;
+        # the first is the default and also stands at the top level
+        from backend.engine.wko5expr.variants import VariantError, parse_variants
+        if raw.get("series") or raw.get("axes"):
+            raise CustomViewError(f"{where}/{raw['title']}: a chart with variants puts its axes and series "
+                                  "in the variants, not at the top level")
+        try:
+            out["variants"] = parse_variants(raw["variants"], f"{where}/{raw['title']}", _series)
+        except VariantError as e:
+            raise CustomViewError(str(e))
+        out["axes"] = out["variants"][0]["axes"]
+        out["series"] = out["variants"][0]["series"]
     if raw.get("min_days") is not None:
         # long-term charts (monthly / yearly buckets) look back at least this far,
         # whatever shorter range the viewer has selected
@@ -123,7 +137,7 @@ def _chart(raw: dict, where: str) -> dict:
         out["basis"] = {"default": bs["default"], "choices": list(choices)}
         if bs.get("power_note"):
             out["basis"]["power_note"] = str(bs["power_note"])
-    for s in out["series"]:
+    for s in [s for v in out.get("variants", []) for s in v["series"]] or out["series"]:
         if s["basis"] is not None and s["basis"] not in out.get("basis", {}).get("choices", ()):
             raise CustomViewError(f"{where}/{raw['title']}/{s['name']}: series basis needs a chart basis that lists it")
     if kind == "review":
