@@ -66,6 +66,20 @@ def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional
             "wrong_type": wrong, "label": "類型不符" if wrong else LEVEL_LABEL[level]}
 
 
+ORDER = ("green", "yellow", "red")
+
+
+def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
+    """A done session whose run was not the planned kind (engine/plan_match.compare:
+    planned intervals, ran easy — or the other way): 「沒照課表」, at least yellow
+    (推估: TrainingPeaks colours time / TSS only; the kind is our addition)."""
+    if not comp or not vs or not vs.get("off_plan") or comp.get("level") == "missed":
+        return comp
+    lv = comp["level"] if comp.get("level") in ORDER else "green"
+    level = ORDER[max(ORDER.index(lv), 1)]
+    return {**comp, "level": level, "off_plan": True, "label": "沒照課表", "off_text": vs.get("text") or ""}
+
+
 def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
                     done_hours: float) -> Optional[dict]:
     """Week 完成度 over the days so far: TSS when planned, else time."""
