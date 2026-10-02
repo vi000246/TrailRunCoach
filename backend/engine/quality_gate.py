@@ -1252,7 +1252,166 @@ def z5_card(gate: dict, today: dt.date) -> dict:
         "confirmed": f"已確認（{z.get('since')}，{out['path_label']}）",
         "paused": "暫停", "reentry": "恢復期", "open": "不設門檻",
     }.get(state, "未確認")
+    out["flow"] = z5_flow(out, z, gate, tests, step)
     return out
+
+
+def _test_todo(t: dict, gate: dict, z: dict) -> str:
+    """One short 「what to do next」 line for a confirmation test that isn't passed."""
+    from backend.i18n import _
+    if t.get("ok") is True:
+        return ""
+    k, ae, g = t["key"], gate.get("aet") or {}, gate.get("gap")
+    if k == "xu90":
+        return _("做 1 次 90 分鐘平路 1 區測試") if t.get("ok") is None else _("再做 1 次 90 分鐘測試（上次沒過）")
+    if k == "aet_ua_gap":
+        if not ae.get("measured"):
+            return _("做 1 次 AeT 測試")
+        if g is None:
+            return _("先做 1 次 LTHR 測試（現在是預設值）")
+        if g > UA_GAP_MAX:
+            return _("差距 {gap}% → 繼續打底，之後重測 AeT", gap=f"{g * 100:.0f}")
+        return _("重測 1 次 AeT（暫停前的不算）")
+    if k == "aet_friel_drift":
+        if not ae.get("measured"):
+            return _("先做 1 次 AeT 測試")
+        return _("在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%")
+    if k == "method":
+        return gate.get("verdict") or _("方法還沒解鎖")
+    return ""
+
+
+def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
+    """The 5 區開放流程 as a quest-style sequence of stages (presentation only:
+    every flag comes from z5_card / evaluate(); nothing is decided here).
+      here    {"stage", "title", "next", "also"}: 「你現在在這裡，下一步：…」
+      stages  [{"key", "title", "sub", "status": done | current | parallel | locked,
+                "items": [...], "any": [...] (one of them is enough), "any_label",
+                "note", "unlocks", "tip"}]
+    Every item: {"text", "ok" (True / False / None = unknown), "value", "todo", "tip"}.
+    Stage order (owner): 有氧基礎 → 3 區階梯 → 有氧基礎確認 → 5 區解鎖 → 5 區階梯;
+    the confirmation can be done alongside the Zone 3 ladder ("parallel")."""
+    from backend.i18n import _
+    from backend.engine.base_check import VOL_WEEKS
+    state, B, z3, R, K = card["state"], card["base"], card["z3"], card.get("reentry"), card.get("keep")
+    pause = z.get("pause") or {}
+    pk = pause.get("kind") if state == "paused" else None
+    z5ok = bool(card["open"] and z3["ok"])
+
+    def need_src(label, need, src):
+        return "\n".join(x for x in (label or "", _("需要 {x}", x=need) if need else "",
+                                     _("來源：{x}", x=src) if src else "") if x)
+
+    def item(text, ok, value="", todo="", tip=""):
+        return {"text": text, "ok": ok, "value": value or "", "todo": "" if ok is True else (todo or ""), "tip": tip or ""}
+
+    # 1 有氧基礎: easy running; a break's recovery block (and the long-run drift check after it) first
+    s1 = []
+    if state == "reentry" and R:
+        s1.append(item(_("停跑後的恢復期結束"), False, _("停跑 {d} 天", d=R["days"]),
+                       _("還剩 {n} 天：{date} 前只排輕鬆跑", n=R["days_left"], date=R["quality_from"]),
+                       (R.get("text") or "") + "\n" + _("來源：") + R["src"]))
+    else:
+        s1.append(item(_("不在停跑後的恢復期"), True))
+    if pk == "drift_check":
+        s1.append(item(_("恢復期後的長跑飄移檢查"), False, "",
+                       _("下一次 ≥ 75 分鐘路跑，後段心率、配速各在 ±5% 內"), _("推估")))
+    lo, hi = z1_target_min()
+    tip1 = _("輕鬆跑（1 區）打底。參考：每週約 {lo}–{hi} 分鐘 1 區", lo=f"{lo:.0f}", hi=f"{hi:.0f}") + \
+        "\n" + _("來源：") + SRC_Z5["week"]
+    if K and K.get("last_week"):
+        tip1 += "\n" + _("上週 1 區 {m} 分", m=f"{K['last_week']['z1_min']:.0f}")
+    done1 = state != "reentry" and pk != "drift_check"
+
+    # 2 3 區階梯: the Zone 3 rungs (dose step = 達標 count); a break adds its own Zone 3 sessions
+    s2 = [item(r[1], step > i, "", _("完成 1 堂「{t}」，達標就往上一階", t=r[1]) if step == i else "")
+          for i, r in enumerate(Z3)]
+    if pk == "reentry_z3":
+        left = max(0, int(pause.get("need") or 1) - int(pause.get("done") or 0))
+        s2.append(item(_("恢復期後的 3 區"), False, f"{pause.get('done', 0)}/{pause.get('need', 1)}",
+                       _("再 {n} 堂 3 區", n=left)))
+    done2 = bool(z3["ok"]) and pk != "reentry_z3"
+    tip2 = _("3 區只要護欄通過就照排；跑順 {n} 堂才進 5 區", n=z3["need"]) + "\n" + _("來源：") + z3["src"]
+
+    # 3 有氧基礎確認: the stable-volume precondition, then one of the tests
+    s3, any3, note3 = [], [], ""
+    pre = B.get("pre")
+    if pre:
+        s3.append(item(_("週量穩定 {n} 週", n=VOL_WEEKS), pre.get("ok"), pre.get("value"),
+                       _("先讓週量穩定 {n} 週，測試才算", n=VOL_WEEKS),
+                       need_src(pre.get("label"), pre.get("need"), pre.get("src"))))
+    short = {"xu90": _("90 分鐘飄移測試"), "aet_ua_gap": _("AeT 測試：UA 差距 ≤ 10%"),
+             "aet_friel_drift": _("AeT 附近 Friel 飄移 < 5%")}
+    for t in tests:
+        any3.append(item(short.get(t["key"], t["label"]), t.get("ok"), t.get("value"), _test_todo(t, gate, z),
+                         need_src(t["label"], t.get("need"), t.get("src"))))
+    if state == "confirmed" or (state == "paused" and B.get("ok")):
+        s3.insert(0, item(_("已確認"), True, f"{card.get('since') or ''} · {card.get('path_label') or ''}"))
+    if pk == "z1":
+        line = f"{K['line_min']:.0f}" if K and K.get("line_min") else "?"
+        note3 = _("暫停：每週 1 區時間連 3 週低於確認時的 2/3（{m} 分），要重新確認", m=line)
+    elif B.get("empty"):
+        note3 = B["empty"]
+    tip_note3 = ""
+    if card.get("test"):            # 建議測試: a short line, the reason (often long) behind ?
+        note3 = (note3 + "\n" if note3 else "") + _("建議做一次測試")
+        tip_note3 = card["test"].get("text") or ""
+    done3 = bool(B.get("ok")) or state == "open"
+    tip3 = B.get("label") or ""
+
+    # 4 5 區解鎖: both conditions
+    s4 = [item(_("不設門檻（Seiler）") if state == "open" else _("有氧基礎已確認"), done3),
+          item(_("3 區達標 {d}/{n}", d=z3["done"], n=z3["need"]), bool(z3["ok"]))]
+    note4 = card.get("reason") if state == "paused" else ""
+
+    # 5 5 區階梯: the Zone 5 rungs, then maintenance; only while Zone 5 is open
+    k5 = step - len(Z3) if z5ok else -1
+    s5 = [item(r[1], k5 > i, "", _("完成 1 堂「{t}」，達標就往上一階", t=r[1]) if k5 == i else "")
+          for i, r in enumerate(Z5)]
+    if K:  # keeping the confirmation: part of stage 3
+        lw = K.get("last_week")
+        s3.append(item(_("維持：每週 1 區 ≥ {m} 分", m=f"{K['line_min']:.0f}"), bool(K.get("ok")),
+                       _("上週 {m} 分", m=f"{lw['z1_min']:.0f}") if lw else "",
+                       _("1 區時間連 3 週低於這條線，5 區會暫停"), _("來源：") + K["src"]))
+
+    stages = [
+        {"key": "base", "title": _("有氧基礎"), "sub": _("輕鬆跑打底"), "items": s1, "done": done1,
+         "unlocks": _("可以開始排 3 區"), "tip": tip1, "note": ""},
+        {"key": "z3", "title": _("3 區階梯"), "sub": _("{d}/{n} 堂達標", d=z3["done"], n=z3["need"]), "items": s2,
+         "done": done2, "unlocks": _("3 區跑順了：5 區的條件之一"), "tip": tip2, "note": ""},
+        {"key": "confirm", "title": _("有氧基礎確認"), "sub": _("測試三選一") if len(tests) > 1 else "",
+         "items": s3, "any": [] if B.get("ok") else any3,
+         "any_label": _("三選一，做了且達標") if len(any3) > 1 else "", "done": done3,
+         "unlocks": _("有氧基礎夠了：5 區的另一個條件"), "tip": tip3, "note": note3, "note_tip": tip_note3},
+        {"key": "unlock", "title": _("5 區解鎖"), "sub": "", "items": s4, "done": z5ok,
+         "unlocks": _("5 區間歇可以排：每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天"),
+         "tip": _("來源：{x}", x=SRC_Z5["z3"].split("：")[0]), "note": note4},
+        {"key": "z5", "title": _("5 區階梯"), "sub": "", "items": s5, "done": False,
+         "unlocks": _("之後維持：V3／V4／T+ 輪替"), "tip": _("每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天"), "note": ""},
+    ]
+    cur = next(i for i, s in enumerate(stages) if not s["done"])
+    for i, s in enumerate(stages):
+        s["status"] = ("done" if s["done"] else "current" if i == cur else
+                       "parallel" if s["key"] == "confirm" and cur == 1 else "locked")
+    for s in stages:
+        del s["done"]
+
+    def first_todo(s):
+        for it in s["items"]:
+            if it["ok"] is not True and it["todo"]:
+                return it["todo"]
+        todos = [it["todo"] for it in s.get("any") or [] if it["todo"]]
+        return _("，或").join(todos[:2]) if todos else ""
+
+    c = stages[cur]
+    nxt = first_todo(c)
+    if c["key"] == "unlock":           # nothing to do here by itself: the missing condition's stage
+        nxt = card["next"]["text"]
+    par = next((s for s in stages if s["status"] == "parallel"), None)
+    return {"here": {"stage": c["key"], "title": c["title"], "next": nxt or card["next"]["text"],
+                     "also": first_todo(par) if par else "", "also_title": par["title"] if par else "",
+                     "full": card["next"]["text"]},
+            "stages": stages}
 
 
 def source_of_mode(mode: str) -> str:

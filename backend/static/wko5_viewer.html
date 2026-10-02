@@ -252,34 +252,7 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 .maphint button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
   border-radius: 4px; padding: 1px 8px; cursor: pointer; }
 .lmap .leaflet-tooltip.hovtip { font-size: 11px; line-height: 1.35; padding: 3px 6px; }
-/* 5 區開放流程 (kind z5gate): status colours (fixed, always with a text label), one series hue */
-:root { --z5-none: #b9b8b1; --z5-good: #0ca30c; --z5-warn: #fab219; --z5-serious: #ec835a; --z5-bar: #2a78d6;
-  --z5-band: rgba(27,175,122,.13); --z5-ink: #0b0b0b; --z5-ink2: #52514e; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --z5-none: #5a5954; --z5-bar: #3987e5;
-  --z5-band: rgba(25,158,112,.20); --z5-ink: #ffffff; --z5-ink2: #c3c2b7; } }
-:root[data-theme="dark"] { --z5-none: #5a5954; --z5-bar: #3987e5; --z5-band: rgba(25,158,112,.20); --z5-ink: #ffffff; --z5-ink2: #c3c2b7; }
-/* the 3-step tracker: state = icon + word (never colour alone) */
-ol.z5trk { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-ol.z5trk > li { display: grid; grid-template-columns: 26px 1fr; gap: 0 8px; align-items: start; padding: 8px 10px;
-  border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
-ol.z5trk > li.active { border-color: var(--accent); background: var(--accent-soft); }
-ol.z5trk .ic { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700;
-  font-size: 13px; border: 2px solid var(--muted); color: var(--muted); }
-ol.z5trk .done .ic { border-color: var(--z5-good); background: var(--z5-good); color: #fff; }
-ol.z5trk .active .ic { border-color: var(--accent); color: var(--accent); }
-ol.z5trk .paused .ic { border-color: var(--z5-warn); color: var(--text); }
-ol.z5trk .wait .ic { border-color: var(--z5-serious); color: var(--text); }
-ol.z5trk b.ttl { display: block; font-size: 13px; }
-ol.z5trk small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
-ol.z5trk .tests { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
-ol.z5trk .tests span { white-space: nowrap; }
-ol.z5trk .tests .y { color: var(--ok); font-weight: 700; } ol.z5trk .tests .n { color: var(--err); font-weight: 700; }
-.z5next { font-size: 14px; font-weight: 600; padding: 7px 10px; border-left: 3px solid var(--accent); background: var(--accent-soft);
-  border-radius: 0 6px 6px 0; margin: 0 0 8px; }
-.z5next.done, .z5next.open { border-left-color: var(--z5-good); }
-.z5next.paused { border-left-color: var(--z5-warn); } .z5next.reentry { border-left-color: var(--z5-serious); }
-.z5h { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
-.plot.z5 { height: 92px; } .plot.z5.bars { height: 210px; }
+/* 5 區開放流程 (kind z5gate): the stage flow's styles live in static/z5flow.js */
 table.z5ev td { white-space: normal; }
 /* single-activity charts (kind "activity": 心率與功率, 區間時間, 心率變化與趨勢) — one hue per measure */
 :root { --ac-hr: #e34948; --ac-pw: #eb6834; --ac-ink: #0b0b0b; --ac-ink2: #52514e; --ac-brush: rgba(42,120,214,.10); }
@@ -309,7 +282,6 @@ table.z5ev td { white-space: normal; }
 .ac-zbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 4px; font-size: 11.5px; }
 .ac-zbar select { font-size: 12px; max-width: 100%; }
 .ac-src { font-size: 11px; color: var(--muted); margin: 2px 0 0; }
-@media (max-width: 640px) { ol.z5trk { grid-template-columns: 1fr; } }
 /* 本次重點 / 飄移判讀 as small cards (workout_review res.cards; drawReviewCards). Status = icon + word,
    never colour alone; explanations behind each card's 「?」 */
 :root { --rv-lo: #1baf7a; --rv-mid: #eda100; --rv-hi: #e34948; }
@@ -370,6 +342,7 @@ table.z5ev td { white-space: normal; }
 <script src="/api/v1/static/shell.js" data-page="charts"></script>
 <script src="/api/v1/static/segments_card.js" defer></script>
 <script src="/api/v1/static/climb_vam.js" defer></script>
+<script src="/api/v1/static/z5flow.js" defer></script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
   <symbol id="i-sport" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="m6 21 3.5-6 3 2.5V22M9.5 15 11 9l3.5 2 3 .5M11 9 7 10.5 5.5 14"/></symbol>
@@ -1772,153 +1745,23 @@ function drawTargets(card, res) {
       <td class="meta" style="white-space:normal">${esc(r.example)}<br><span style="opacity:.8">${esc(r.source)}</span></td></tr>`).join("")}</tbody></table>`);
 }
 
-// ---- 5 區開放流程 (kind z5gate): on top the 3-step tracker and the 「還缺什麼」 line (H.progress =
-// quality_gate.z5_card, the same object as the 總覽 card); below a simple history
-// (quality_gate.z5_history): one state band with text labels, a few markers (confirmations and
-// test attempts) and — only once Zone 5 has been confirmed — the weekly Zone 1 minutes against the
-// pause line. Details live in the hover and in the collapsible table.
-const Z5_STATE = {
-  unconfirmed: { label: "未確認", v: "--z5-none" }, confirmed: { label: "已確認", v: "--z5-good" },
-  open: { label: "不設門檻", v: "--z5-good" }, paused: { label: "暫停", v: "--z5-warn" },
-  reentry: { label: "恢復期", v: "--z5-serious" },
-};
-const Z5_EV = {   // shape carries identity (never colour alone)
-  confirm: { sym: "diamond", ch: "◆", label: "確認有氧基礎" },
-  xu_run: { sym: "circle", ch: "●", label: "90 分鐘測試（實心＝通過、空心＝沒過）" },
-  aet: { sym: "triangle", ch: "▲", label: "實測 AeT" },
-  pause: { ch: "▼", label: "5 區暫停" },
-  break: { ch: "■", label: "停跑（恢復期開始）" },
-};
-const Z5_STEP = { done: ["✓", "完成"], active: ["●", "進行中"], todo: ["○", "還沒開始"], paused: ["‖", "暫停"],
-  wait: ["↺", "恢復期內不判斷"] };
-const Z5_TEST_SHORT = { xu90: "90 分鐘", aet_ua_gap: "UA 差距", aet_friel_drift: "Friel 飄移" };
-function z5Tracker(P) {
-  if (!P || !P.steps) return "";
-  const mk = (ok) => ok === true ? `<b class="y" aria-label="達標">✓</b>` : ok === false ? `<b class="n" aria-label="沒過">✕</b>`
-    : `<b aria-label="還沒做">–</b>`;
-  const tests = (P.base?.tests || []).map((t) => `<span title="${esc(t.label + "\n" + (t.value || ""))}">${mk(t.ok)} ${esc(Z5_TEST_SHORT[t.key] || t.label)}</span>`).join("");
-  const sub = { base: tests ? `<div class="tests">${tests}</div>` : "", z3: "", z5: "" };
-  const lis = P.steps.map((s, i) => { const [ic, word] = Z5_STEP[s.status] || Z5_STEP.todo;
-    return `<li class="${esc(s.status)}"><span class="ic" aria-hidden="true">${ic}</span><span><b class="ttl">${"①②③"[i]} ${esc(s.label)}</b>
-      <small>${esc(word)}</small>${sub[s.key] || ""}</span></li>`; }).join("");
-  const N = P.next || {};
-  return `<ol class="z5trk" aria-label="5 區開放的三步">${lis}</ol>
-    ${N.text ? `<div class="z5next ${esc(N.kind || "")}" role="status">${esc(N.text)}</div>` : ""}`;
-}
+// ---- 5 區開放流程 (kind z5gate): the quest-style stage flow (static/z5flow.js; H.progress =
+// quality_gate.z5_card, the same object as the 總覽 card — no chart, no time axis). The replayed
+// history (quality_gate.z5_history) stays a collapsed text list: state changes and events in order.
+const Z5_STATE_LABEL = { unconfirmed: "未確認", confirmed: "已確認", open: "不設門檻", paused: "暫停", reentry: "恢復期" };
+const Z5_EV_LABEL = { confirm: "確認有氧基礎", xu_run: "90 分鐘測試", aet: "實測 AeT", pause: "5 區暫停", break: "停跑" };
 function drawZ5Gate(card, res) {
   card.querySelector(".loading")?.remove();
-  const H = res.z5, cur = H.current || {};
-  const st = (k) => Z5_STATE[k] || Z5_STATE.unconfirmed;
-  const ms = (iso) => Date.parse(iso + "T00:00:00Z");
-  const DAY = 86400000;
-  const ink = css("--z5-ink"), ink2 = css("--z5-ink2"), line = css("--line"), panel = css("--panel");
-  const fill = (k) => css(st(k).v);
-  const onFill = (hex) => { const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
-    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.5 ? "#0b0b0b" : "#ffffff"; };
-  const z5txt = cur.state === "confirmed" ? `已確認（${cur.since}，${cur.path_label}）` : st(cur.state).label;
-  // the weekly bars only matter for the pause rule: shown once there is a pause line
-  const shown = H.weeks.filter((w) => w.keep_min != null);
-  const bars = shown.length > 0;
-  const marks = H.events.filter((e) => ["confirm", "xu_run", "aet"].includes(e.kind));
-  card.insertAdjacentHTML("beforeend", `${z5Tracker(H.progress)}
-    ${H.note ? `<p class="badge" style="margin:0 0 6px">${esc(H.note)}</p>` : ""}
-    <p class="z5h">歷程（間歇門檻：${esc(H.mode_label)}）· ◆ 確認 · ● 90 分鐘測試（空心＝沒過）· ▲ 實測 AeT${bars ? " · 長條＝每週 1 區分鐘，虛線＝暫停線" : ""}</p>`);
-  const el = document.createElement("div");
-  el.className = "plot z5" + (bars ? " bars" : "");
-  el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `5 區開放流程：今天 ${z5txt}；${H.progress?.next?.text || ""}；下方表格列出每次狀態改變與事件`);
-  card.appendChild(el);
-  const chart = echarts.init(el);
-  charts.push(chart);
-  const x0 = ms(H.begin), x1 = ms(H.end) + DAY;
-  // lane 1 = state band, lane 0 = the few markers above it
-  const segData = H.segments.map((s) => ({ value: [ms(s.start), ms(s.end), 1], s }));
-  const evData = marks.map((e) => {
-    const k = Z5_EV[e.kind], hollow = e.kind === "xu_run" && !e.ok;
-    return { value: [ms(e.date) + DAY / 2, 0], e, symbol: k.sym, symbolSize: 11,
-      itemStyle: { color: hollow ? panel : ink, borderColor: ink, borderWidth: hollow ? 1.5 : 1 } };
-  });
-  const wk = shown.map((w) => ({ value: [ms(w.monday), ms(w.monday) + 7 * DAY, w.z1_min], w }));
-  const keep = [];
-  for (const w of H.weeks) {
-    if (w.keep_min == null) { keep.push([ms(w.monday), null]); continue; }
-    keep.push([ms(w.monday), w.keep_min], [ms(w.monday) + 7 * DAY - 1, w.keep_min]);
-  }
-  const ymax = Math.max(50, ...shown.map((w) => Math.max(w.z1_min, w.keep_min || 0) * 1.1));
-  const lastDay = (iso) => new Date(ms(iso) - DAY).toISOString().slice(0, 10);
-  const tip = (p) => {
-    if (p.seriesId === "state") {
-      const s = p.data.s;
-      return `<b>${esc(st(s.state).label)}</b> ${esc(s.start)} ～ ${esc(lastDay(s.end))}`
-        + (s.state === "confirmed" || (s.state === "paused" && s.since) ? `<br>確認：${esc(s.since)}（${esc(s.path_label)}）` : "")
-        + (s.reason ? `<br><span style="opacity:.85">${esc(s.reason)}</span>` : "");
-    }
-    if (p.seriesId === "ev") {
-      const e = p.data.e;
-      return `<b>${esc(e.date)}</b> ${esc(Z5_EV[e.kind].ch)}<br>${esc(e.label)}`;
-    }
-    if (p.seriesId === "z1") {
-      const w = p.data.w;
-      return `<b>${esc(bucketLabel(w.monday, "week", true))}${w.complete ? "" : "（本週未完）"}</b><br>1 區 ${Math.round(w.z1_min)} 分`
-        + `<br>暫停線 ${Math.round(w.keep_min)} 分（確認時 ${Math.round(w.level_min)} 分的 2/3）${w.z1_min < w.keep_min ? "：低於" : ""}`
-        + `<br><span style="opacity:.85">連 3 週低於才暫停（Hickson 1982；3 週推估）</span>`;
-    }
-    if (p.seriesId === "keep") return `暫停線 ${Math.round(p.value[1])} 分（確認時水準的 2/3，Hickson 1982；連 3 週低於才暫停，3 週推估）`;
-    return "";
-  };
-  const lbl = { color: css("--muted"), fontSize: 10, hideOverlap: true };
-  const timeAxis = (gi, show) => ({ type: "time", gridIndex: gi, min: x0, max: x1, show,
-    axisLine: { lineStyle: { color: line } }, axisLabel: { ...lbl, formatter: { year: "{yyyy}", month: "{M}月", day: "{M}/{d}" } } });
-  const grid = [{ left: 64, right: 16, top: 4, height: 54 }];
-  const xAxis = [timeAxis(0, !bars)], yAxis = [
-    { type: "category", gridIndex: 0, data: ["測試", "5 區狀態"], axisTick: { show: false }, axisLine: { show: false },
-      axisLabel: { color: css("--muted"), fontSize: 10.5 } }];
-  const series = [
-    { id: "state", type: "custom", xAxisIndex: 0, yAxisIndex: 0, data: segData, encode: { x: [0, 1], y: 2 },
-      renderItem: (params, api) => {
-        const s = segData[params.dataIndex].s;
-        const a = api.coord([api.value(0), 1]), b = api.coord([api.value(1), 1]);
-        const h = api.size([0, 1])[1] * 0.8, w = Math.max(1, b[0] - a[0] - 2), col = fill(s.state);
-        return { type: "group", children: [
-          { type: "rect", shape: { x: a[0] + 1, y: a[1] - h / 2, width: w, height: h, r: 4 }, style: { fill: col } },
-          { type: "text", silent: true, style: { text: w > 36 ? st(s.state).label : "", x: a[0] + 7, y: a[1], fill: onFill(col),
-            font: "600 11px system-ui, sans-serif", verticalAlign: "middle", width: w - 10, overflow: "truncate" } }] };
-      } },
-    { id: "ev", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, data: evData, z: 3 },
-  ];
-  if (bars) {
-    grid.push({ left: 64, right: 16, top: 72, bottom: 24 });
-    xAxis.push(timeAxis(1, true));
-    yAxis.push({ type: "value", gridIndex: 1, min: 0, max: Math.ceil(ymax / 50) * 50, interval: 50,
-      axisLabel: { ...lbl, formatter: (v) => `${v} 分` }, splitLine: { lineStyle: { color: line } } });
-    series.push(
-      { id: "z1", type: "custom", xAxisIndex: 1, yAxisIndex: 1, data: wk, encode: { x: [0, 1], y: 2 },
-        renderItem: (params, api) => {
-          const w = wk[params.dataIndex].w;
-          const a = api.coord([api.value(0), api.value(2)]), b = api.coord([api.value(1), 0]);
-          return { type: "rect", shape: { x: a[0] + 1, y: a[1], width: Math.max(1, b[0] - a[0] - 2), height: Math.max(0, b[1] - a[1]), r: [4, 4, 0, 0] },
-            style: { fill: css("--z5-bar"), opacity: w.complete ? 1 : 0.45 } };
-        } },
-      { id: "keep", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: keep, showSymbol: false, connectNulls: false,
-        lineStyle: { color: ink2, type: "dashed", width: 2 }, z: 4 });
-  }
-  chart.setOption({
-    animation: false,
-    tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: css("--text") },
-      formatter: (p) => `<div style="font-size:11.5px;max-width:320px;white-space:normal">${tip(p)}</div>` },
-    grid, xAxis, yAxis, series,
-  });
-  new ResizeObserver(() => chart.resize()).observe(el);
-  // the table view: every state change and event, in order, plus the full description and sources
+  const H = res.z5, P = H.progress;
+  window.Z5Flow?.bind();
+  card.insertAdjacentHTML("beforeend", P && P.flow && window.Z5Flow ? Z5Flow.html(P.flow, { q: "qtip" })
+    : `<p class="meta">${esc(H.current?.text || H.current?.label || "")}</p>`);
+  if (H.note) card.insertAdjacentHTML("beforeend", `<p class="badge" style="margin:6px 0 0">${esc(H.note)}</p>`);
   const rows = [
-    ...H.segments.map((s) => ({ d: s.start, k: `狀態：${st(s.state).label}`, t: s.reason || (s.path_label ? `確認（${s.path_label}）` : "") })),
-    ...H.events.map((e) => ({ d: e.date, k: `${(Z5_EV[e.kind] || {}).ch || ""} ${(Z5_EV[e.kind] || {}).label?.split("（")[0] || e.kind}`, t: e.label })),
+    ...H.segments.map((s) => ({ d: s.start, k: `狀態：${Z5_STATE_LABEL[s.state] || s.state}`, t: s.reason || (s.path_label ? `確認（${s.path_label}）` : "") })),
+    ...H.events.map((e) => ({ d: e.date, k: Z5_EV_LABEL[e.kind] || e.kind, t: e.label })),
   ].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : 0);
-  const T = (H.progress?.base?.tests || []);
-  card.insertAdjacentHTML("beforeend", `<details><summary>細節：三種測試、狀態變化與事件（${rows.length}）</summary>
-    ${T.length ? `<table class="z5ev"><thead><tr><th>測試</th><th>結果</th><th>需要</th></tr></thead><tbody>
-      ${T.map((t) => `<tr><td>${esc(t.label)}</td><td class="meta">${t.ok === true ? "✓ " : t.ok === false ? "✕ " : "– "}${esc(t.value || "")}</td><td class="meta">${esc(t.need || "")}</td></tr>`).join("")}
-      </tbody></table>` : ""}
+  card.insertAdjacentHTML("beforeend", `<details style="margin-top:8px"><summary>歷程（間歇門檻：${esc(H.mode_label)}，${rows.length} 筆）</summary>
     <table class="z5ev"><thead><tr><th>日期</th><th>項目</th><th>說明</th></tr></thead><tbody>
     ${rows.map((r) => `<tr><td class="num">${esc(r.d)}</td><td>${esc(r.k)}</td><td class="meta">${esc(r.t)}</td></tr>`).join("")}
     </tbody></table>

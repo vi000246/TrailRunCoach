@@ -1,4 +1,18 @@
 {
+  "z5flow.aria": "5 區開放流程",
+  "z5flow.here": "你現在在這裡",
+  "z5flow.next": "下一步",
+  "z5flow.also": "同時可以做（{stage}）",
+  "z5flow.help": "說明",
+  "z5flow.ok": "已達成",
+  "z5flow.todo": "還沒達成",
+  "z5flow.unknown": "還沒做",
+  "z5flow.unlocks": "完成後：",
+  "z5flow.unlocked": "已解鎖：",
+  "z5flow.tag.done": "已完成",
+  "z5flow.tag.current": "現在",
+  "z5flow.tag.parallel": "可同時做",
+  "z5flow.tag.locked": "未解鎖",
   "workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標",
   "workout.no_tpace_badge": "沒有閾值配速",
   "workout.no_tpace_link": "看閾值配速怎麼估"

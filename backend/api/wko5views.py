@@ -426,7 +426,7 @@ def z5_progress(ds: Dataset) -> Optional[dict]:
     except Exception:                          # noqa: BLE001 — the history still draws
         return None
     return {"today": today.isoformat(), **{k: c.get(k) for k in (
-        "state", "label", "headline", "steps", "next", "base", "z3", "keep", "reentry", "open")}}
+        "state", "label", "headline", "steps", "next", "base", "z3", "keep", "reentry", "open", "flow")}}
 
 
 def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
