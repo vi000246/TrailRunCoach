@@ -209,6 +209,7 @@ class SyncSettingsBody(BaseModel):
     use_power: Optional[bool] = None              # 使用功率 (wko5expr/power_use.py); off = HR only
     accept_watch_power: Optional[bool] = None     # 進階: watch-estimated power feeds the power models (engine/power_source.py)
     push_provider: Optional[str] = None           # 進階: where the plan is pushed (sync/workout_targets)
+    region_override: Optional[str] = None         # 進階: tw | intl; null = auto (engine/region.py)
 
 
 _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
@@ -222,7 +223,7 @@ _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_so
                  "chart_data_source": "charts.data_source",
                  "map_basemap": "charts.map.basemap", "map_overlays": "charts.map.overlays",
                  "use_power": "charts.power.enabled", "accept_watch_power": "power.accept_watch_power",
-                 "push_provider": "plan.push.provider"}
+                 "push_provider": "plan.push.provider", "region_override": "athlete.region"}
 
 
 async def _power_source() -> tuple[str, str]:
@@ -258,6 +259,19 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["primary_source"] = eff["setting"]
     out["primary_effective"] = eff["source"]
     out["primary_effective_label"] = P.LABELS.get(eff["source"] or "", None)
+    # 地區 (engine/region.py): the map default follows it while none is chosen
+    from backend.engine import region as RG
+    out["region"], out["region_how"] = RG.region(repo.user_id)
+    out["map_basemap_stored"] = out["map_basemap"]
+    if out["map_basemap"] is None:
+        out["map_basemap"] = RG.default_basemap(out["region"])
+    # 時區 in effect (engine/localtime.py): the setting, else detected from the FITs / browser
+    import datetime as _dt
+    tz = await repo.timezone()
+    off = _dt.datetime.now(tz).utcoffset()
+    out["timezone_effective"] = getattr(tz, "key", None) or str(tz)
+    out["timezone_offset_min"] = None if off is None else int(off.total_seconds() // 60)
+    out["timezone_auto"] = await repo.get("athlete.timezone.auto")
     # the chart source in effect: a never-picked old "coros" reads as 同步資料
     from backend.engine.wko5expr.datasource import CHOSEN_KEY, effective_source
     out["chart_data_source_stored"] = out["chart_data_source"]
@@ -305,6 +319,21 @@ async def put_sync_settings(body: SyncSettingsBody, athlete_id: int = 1,
     rebuilt = await dedup.rebuild(db, athlete_id) if "primary_source" in sent else None
     await db.commit()
     return {**await _sync_settings(repo), "dedup": rebuilt}
+
+
+class BrowserZone(BaseModel):
+    zone: str
+
+
+@router.post("/timezone/browser")
+async def browser_timezone(body: BrowserZone, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The browser's Intl zone (shell.js sends it once): one input of the
+    automatic time zone (engine/localtime.py)."""
+    from backend.engine import localtime
+    try:
+        return await localtime.set_browser_zone(db, body.zone, athlete_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/dedup/rebuild")

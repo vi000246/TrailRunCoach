@@ -854,7 +854,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
 # ---- 百岳 on the athlete's walking capacity (baiyue-from-running.md §3.7, §5.2) --
 
 TRIP_KINDS = ("group", "solo")
-AMS_TOP_M = 3500.0
+AMS_TOP_M = 2500.0          # 高山症提示: WMS guideline (Luks 2019) — symptoms start above ~2500 m
 LIMITS_NOTE = ("沒有背 10–15 kg、每天 6–10 h、連走多天的跑步資料；背負與多日效應靠公式（誤差約 ±15 %，"
                "Looney 2022、Weyand 2021），所以帶比越野寬")
 AMS_NOTE = "高山症會讓速度與行程失準，出現症狀以下撤為先"

@@ -67,14 +67,18 @@ EVIDENCE = "Pandolf 1998；Racinais 2015 共識；Daanen 2018；Racinais 2015 MS
 # 2026-10-01; docs/research/unsourced-rules.md §A5). Linear and centred on
 # Hadley 120, as it was fitted. The fit is the athlete's own [本人資料]; using
 # it to move one run's HR to Hadley 120 is [推估].
-HR_BETA = 0.224
+HR_BETA = 0.224              # the author's fit; in use: heat_calib.hr_beta() (per athlete)
 HR_BETA_SE = 0.036
 HR_BETA_REF = 120.0
 HR_BETA_SRC = "本人 HEAT 回測 β 0.224 ± 0.036 bpm／Hadley（271 段路線 effort，docs/spec/racepower.spec.md）"
 
 
-def hr_heat_adjust(hr: float, hadley: float, beta: float = HR_BETA) -> float:
-    """HR moved to the reference heat (Hadley 120): HR − β·(Hadley − 120)."""
+def hr_heat_adjust(hr: float, hadley: float, beta: Optional[float] = None) -> float:
+    """HR moved to the reference heat (Hadley 120): HR − β·(Hadley − 120);
+    β = the athlete's own (engine/heat_calib.hr_beta) unless given."""
+    if beta is None:
+        from backend.engine.heat_calib import hr_beta
+        beta = hr_beta()["beta"]
     return float(hr) - beta * (float(hadley) - HR_BETA_REF)
 
 

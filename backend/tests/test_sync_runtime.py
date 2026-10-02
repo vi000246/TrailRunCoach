@@ -303,7 +303,7 @@ def test_sources_endpoint_and_new_settings(tmp_path, _fit_root_in_tmp):
         with pytest.raises(HTTPException):
             await put_sync_settings(SyncSettingsBody(chart_data_source="garmin"), 1, s)
         # workout map defaults
-        assert r["map_basemap"] == "rudy" and r["map_overlays"] == []
+        assert r["map_basemap"] == {"tw": "rudy", "intl": "osm"}[r["region"]] and r["map_overlays"] == []   # 地區 default
         r = await put_sync_settings(SyncSettingsBody(map_basemap="nlsc-emap", map_overlays=["contour"]), 1, s)
         assert r["map_basemap"] == "nlsc-emap" and r["map_overlays"] == ["contour"]
         with pytest.raises(HTTPException):

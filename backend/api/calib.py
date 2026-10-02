@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.engine.localtime import today_local
 from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.engine import calibrate as CAL
@@ -44,7 +45,7 @@ async def set_manual(name: str, body: Manual, db: AsyncSession = Depends(get_db)
     repo = SettingsRepository(db, current_athlete_id())
     prev = await repo.get(CAL.key(name)) or {}
     await repo.set(CAL.key(name), {"value": body.value, "se": None, "n": int(prev.get("n") or 0),
-                                   "fitted_at": dt.date.today().isoformat(), "source": "user"})
+                                   "fitted_at": today_local().isoformat(), "source": "user"})
     await db.commit()
     return CAL.describe(name, await repo.get(CAL.key(name)))
 

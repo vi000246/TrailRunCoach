@@ -108,7 +108,8 @@ def primary_info(user_id: int = 1) -> tuple[str, dict]:
 def athlete_tz(user_id: int = 1):
     """athlete.timezone setting -> WKO5COACH_TZ -> system zone (as the sync uses)."""
     from backend.settings.repository import resolve_tz
-    return resolve_tz(read_setting("athlete.timezone", None, user_id))
+    return resolve_tz(read_setting("athlete.timezone", None, user_id),
+                      auto=read_setting("athlete.timezone.auto", None, user_id))
 
 
 def db_stamp() -> str:
