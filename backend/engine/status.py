@@ -835,19 +835,23 @@ class Status:
         # set cp_due, so week_plan schedules nothing from them; the 「建議做測試」 UI renders them
         try:
             from backend.engine import zone_events as ZE
-            ze = ZE.suggestions(self.ds, self.plan, self.today, brk=brk)
+            ze = ZE.suggestions(self.ds, self.plan, self.today, brk=brk,
+                                aet_validity=((gate.get("aet") or {}).get("validity")))
         except Exception:                   # noqa: BLE001 — no detector, no suggestion
             ze = {"suggestions": [], "events": [], "checks": {}}
         self.test_suggestions = ze["suggestions"]
         extra["test_suggestions"] = ze["suggestions"]
         extra["zone_events"] = ze["events"]
         extra["zone_checks"] = ze["checks"]
-        if ze["suggestions"]:
+        # low-priority suggestions (the AeT lower bound's 8-week reminder) are in the box only:
+        # they don't turn the indicator WATCH
+        firm = [s for s in ze["suggestions"] if s.get("priority") != "low"]
+        if firm:
             worst = WATCH if worst == GOOD else worst
-            s0 = ze["suggestions"][0]
+            s0 = firm[0]
             if txt == "OK":
                 txt, v = "建議測", s0["title"]
-            why += "；" + "；".join(s["title"] for s in ze["suggestions"])
+            why += "；" + "；".join(s["title"] for s in firm)
             act = (act + "；" if act else "") + "建議（不會自動排課）：" + "、".join(
                 ZE.TEST_LABEL[t] for t in s0["tests"])
         extra["cp_due"] = cp_due

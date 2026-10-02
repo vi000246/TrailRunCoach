@@ -780,7 +780,7 @@ def test_aet_test_due_only_for_a_reason():
 
 def test_aet_test_reasons(valid_aet, monkeypatch):
     from backend.engine import drift_agg as DA
-    monkeypatch.setattr(DA, "aet_points", lambda ds, today, days=180: [{"hr1": 140, "drift": 0.03, "se": 0.04}])
+    monkeypatch.setattr(DA, "aet_points", lambda ds, today, days=180, **kw: [{"hr1": 140, "drift": 0.03, "se": 0.04}])
     # valid estimate 150 ± 2, plan AeT 150: nothing to test
     g = _gate(plan=_plan(aethr=150, lthr=165))
     assert g["aet_test_reason"] is None
