@@ -51,12 +51,21 @@ svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
 /* 趨勢／單次活動: the page's main switch, dark orange so it stands out (owner's call) */
 /* same text colours as the top menu (shell.js .appnav): names in --text, the current one in
    the accent with a light tint — the accent here is dark orange */
-.seg.mode { --mode-acc: #b4530f; border: 1.5px solid var(--mode-acc); }
-.seg.mode button { color: var(--text); font-weight: 600; }
+/* a pill switch: a recessed track and a raised dark-orange thumb under the current mode */
+.seg.mode { --mode-acc: #b4530f; --mode-acc2: #8f3f0a; border: 0; border-radius: 999px; padding: 3px; gap: 2px;
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.06); }
+.seg.mode button { color: var(--text); font-weight: 600; border-radius: 999px; padding: 5px 14px;
+  transition: background .18s, color .18s, box-shadow .18s, transform .1s; }
 .seg.mode button .sub { color: var(--muted); font-weight: 400; }
-.seg.mode button:hover { color: var(--mode-acc); }
-.seg.mode button.on, .seg.mode button.on:hover { color: #fff; background: var(--mode-acc); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.seg.mode button:hover { color: var(--mode-acc); background: color-mix(in srgb, var(--mode-acc) 8%, transparent); }
+.seg.mode button:active { transform: translateY(1px); }
+.seg.mode button.on, .seg.mode button.on:hover { color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mode-acc) 82%, #fff) 0%, var(--mode-acc) 45%, var(--mode-acc2) 100%);
+  box-shadow: 0 2px 5px rgba(143,63,10,.35), 0 1px 1px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.3);
+  text-shadow: 0 1px 1px rgba(0,0,0,.25); }
 .seg.mode button.on .sub { color: #fff; opacity: .85; }
+.seg.mode button:focus-visible { outline: 2px solid var(--mode-acc); outline-offset: 2px; }
 .crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
 .crumb b { color: var(--text); font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
 .crumb .sep { opacity: .45; }
