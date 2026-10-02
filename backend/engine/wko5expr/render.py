@@ -363,6 +363,7 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
         entry["ms"] = round((time.perf_counter() - t0) * 1000)
         out_series.append(entry)
     empty = empty_reason(chart, out_series, ds, ev.begin, ev.end, workout)
+    plateau = None if empty or workout is not None else mftp_plateau(ev, out_series)
     notice = None if empty or workout is not None else pd_notice(out_series, ds, ev.begin, ev.end)
     est = estimate_notice(ev)
     if est and not empty:
@@ -381,10 +382,45 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
         "unsupported": sorted(ev.unsupported),
         "empty": empty,
         "notice": notice,
+        "plateau": plateau,
         "estimates": {k: {"value": v["value"], "date": _day_iso(v["day"]), "reason": v.get("reason"),
                           "fitted": v.get("fitted", True)}
                       for k, v in ev.estimates.items()},
     }
+
+
+_PDCURVE = re.compile(r"^\s*pdcurve\s*\((.*)\)\s*$", re.I | re.S)
+_MEANMAX = re.compile(r"^\s*meanmax\s*\(", re.I)
+PLATEAU_TIP = ("mFTP：PD 模型（WKO5 的功率–時間模型，和 PD 曲線同一個擬合）的有氧平台，"
+               "約等於撐 30–60 分鐘的功率，是 CP 的同類量。開關在圖上，預設關。")
+
+
+def mftp_plateau(ev: Evaluator, series: list[dict]) -> Optional[dict]:
+    """The optional WKO5-style mFTP line on a power-duration chart: the first
+    duration-x series in W that is a mean-max or PD curve gives the curve;
+    ftp(curve) is its model plateau (the same fit as pdcurve()). {"y",
+    "y_axis", "label", "tip"} or None (not a PD chart / no valid fit / the
+    chart already draws ftp() itself)."""
+    if any(re.match(r"^\s*ftp\s*\(", s.get("expression") or "", re.I) for s in series):
+        return None
+    for s in series:
+        d = s.get("data") or {}
+        if d.get("kind") != "points" or d.get("x") != "duration" or (s.get("unit") or {}).get("id") != "WATTS":
+            continue
+        expr = (s.get("expression") or "").strip()
+        m = _PDCURVE.match(expr)
+        curve = m.group(1) if m else expr if _MEANMAX.match(expr) else None
+        if not curve:
+            continue
+        try:
+            y = _f(ev.evaluate(f"ftp({curve})"))
+        except Exception:                   # noqa: BLE001 — no fit, no line
+            y = None
+        if y is None or y <= 0:
+            return None
+        return {"y": round(y, 1), "y_axis": s.get("y_axis") or "NONE", "label": f"mFTP {y:.0f} W",
+                "tip": PLATEAU_TIP}
+    return None
 
 
 def estimate_notice(ev: Evaluator) -> Optional[str]:
