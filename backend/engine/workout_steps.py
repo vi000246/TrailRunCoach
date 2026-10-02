@@ -99,18 +99,30 @@ class Ctx:
     tpace: Optional[float] = None          # threshold pace, s/km (thresholds.estimate_tpace: 推估)
     basis: str = "hr"                       # hr | power | none (target_policy)
     hr_cap: bool = False                    # target_policy: an HR cap note on power sessions
+    # the athlete's own speeds, for the time of a distance step (estimate_secs)
+    v_easy: Optional[float] = None          # km/h, easy flat road running (equivalence.fit v_flat)
+    v_easy_src: str = ""
+    ep_kmh: Optional[float] = None          # km/h of effort distance on trail (equivalence trail EP)
+    terrain: str = "road"                   # road | trail
+    climb_per_km: float = 0.0               # m/km of the session (trail: EP = km + climb/100)
 
     @classmethod
-    def of(cls, th: Optional[dict], basis: Optional[str] = None, hr_cap: bool = False) -> "Ctx":
+    def of(cls, th: Optional[dict], basis: Optional[str] = None, hr_cap: bool = False,
+           speeds: Optional[dict] = None) -> "Ctx":
         th = th or {}
 
-        def f(k):
+        def f(k, d=None):
+            d = th if d is None else d
             try:
-                return float(th[k]) if th.get(k) else None
+                return float(d[k]) if d.get(k) else None
             except (TypeError, ValueError):
                 return None
+        sp = speeds or {}
+        ter = "trail" if sp.get("terrain") in ("trail", "hike") else "road"
         return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"),
-                   basis=basis if basis in ("hr", "power", "none") else "hr", hr_cap=hr_cap)
+                   basis=basis if basis in ("hr", "power", "none") else "hr", hr_cap=hr_cap,
+                   v_easy=f("v_easy", sp), v_easy_src=str(sp.get("v_easy_src") or ""), ep_kmh=f("ep_kmh", sp),
+                   terrain=ter, climb_per_km=max(0.0, f("climb_per_km", sp) or 0.0) if ter == "trail" else 0.0)
 
 
 def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
@@ -142,6 +154,8 @@ def _work_hr(c: Ctx, tg: dict) -> Optional[tuple]:
     """HR of a band step (coros_workouts._work_hr): the text's bpm, else the class's % LTHR."""
     if tg.get("hr"):
         return ("hr", int(tg["hr"][0]), int(tg["hr"][1]))
+    if tg.get("hrp") and c.lthr:                 # a template's own % LTHR (workout_templates)
+        return ("hr", round(tg["hrp"][0] * c.lthr), round(tg["hrp"][1] * c.lthr))
     a, b = HR_WORK.get(tg.get("cls") or "", (0.95, 1.00))
     if not c.lthr:
         return None
@@ -411,6 +425,10 @@ def _norm_target(t, errs: list) -> dict:
                 h = t["hr"]
                 if isinstance(h, (list, tuple)) and len(h) == 2:
                     out["hr"] = [int(_f(h[0], "心率", errs, 40, 230) or 0), int(_f(h[1], "心率", errs, 40, 230) or 0)]
+            if t.get("hrp"):
+                h = t["hrp"]
+                if isinstance(h, (list, tuple)) and len(h) == 2:
+                    out["hrp"] = [_f(h[0], "心率 %", errs, 0.5, 1.2), _f(h[1], "心率 %", errs, 0.5, 1.2)]
         return out
     mode = t.get("mode", "pct")
     if mode not in MODES:
@@ -490,7 +508,9 @@ def normalize(d) -> dict:
             v = _f(dur.get("value"), "距離", errs, 50, 100000)
             dur = {"type": "distance", "value": int(round(v))} if v else {"type": "open"}
         else:
-            dur = {"type": "open"}
+            est = dur.get("est") if isinstance(dur, dict) else None
+            v = _f(est, "按圈的預估時間", errs, 5, 6 * 3600) if est else None
+            dur = {"type": "open", "est": int(round(v))} if v else {"type": "open"}
         return {"id": iid, "kind": k, "dur": dur, "target": _norm_target(x.get("target"), errs), "note": note}
 
     items = [y for y in (item(x, 0) for x in d["items"]) if y]
@@ -696,21 +716,80 @@ def flat(items: list, ctx=None) -> list[dict]:
     return out
 
 
+EASY_F = 0.78        # ≈ % CP of an easy run (Palladino EZ ≤ 80 % CP; 推估 anchor of v_easy)
+WALK_KMH = 5.0       # a walk / rest step with no target (推估)
+
+
+def speed_kmh(f: Optional[float], c: Ctx) -> tuple[float, str]:
+    """(km/h on flat road at ≈ f × CP, how). Two anchors from the athlete's own data:
+    easy speed (equivalence: median easy road runs ≤ AeT) at EASY_F, threshold pace
+    (thresholds.estimate_tpace) at 100 % CP; linear between them (running power is about
+    proportional to flat speed — Stryd), one anchor scales by f, none 6:00/km. 推估."""
+    v_e = c.v_easy
+    v_t = 3600.0 / c.tpace if c.tpace else None
+    if f is None:
+        f = EASY_F
+    f = max(0.45, min(1.4, f))
+    if v_e and v_t and v_t > v_e:
+        v = v_e + (f - EASY_F) / (1.0 - EASY_F) * (v_t - v_e)
+        how = "easy+tpace"
+    elif v_e:
+        v = v_e * f / EASY_F
+        how = "easy"
+    elif v_t:
+        v = v_t * f
+        how = "tpace"
+    else:
+        return 3600.0 / DIST_PACE_DEFAULT, "default"
+    return max(v, 0.55 * (v_e or v_t)), how
+
+
 def _secs(st: dict, r: Resolved, c: Ctx) -> tuple[float, bool]:
-    """(seconds, estimated) of one step: distance by its pace target, else threshold
-    pace × 1.15 (easy) / × 1.0 (work), else 6:00/km — all 推估."""
+    """(seconds, estimated) of one step. Time as is; a lap-button step its protocol's
+    `est` (else 0); distance by its pace target, else the athlete's speed at the step's
+    intensity (speed_kmh); on trail the effort distance km × (1 + climb/100) at the
+    athlete's trail EP speed scaled the same way — all 推估."""
     d = st["dur"]
     if d["type"] == "time":
         return float(d["value"]), False
     if d["type"] == "distance":
+        km = d["value"] / 1000.0
         if r.type == "pace" and r.lo:
-            pace = (r.lo + r.hi) / 2
-        elif c.tpace:
-            pace = c.tpace * (1.0 if st["kind"] == "work" and (r.frac or 0) >= 0.88 else 1.15)
-        else:
-            pace = DIST_PACE_DEFAULT
-        return d["value"] / 1000.0 * pace, True
+            return km * (r.lo + r.hi) / 2, True
+        if r.frac is None and st["kind"] == "rest":
+            return km / WALK_KMH * 3600.0, True
+        f = r.frac if r.frac is not None else NONE_IF.get(st["kind"], EASY_F)
+        v, _how = speed_kmh(f, c)
+        if c.terrain == "trail":
+            ep = km * (1.0 + c.climb_per_km / 100.0)
+            if c.ep_kmh and c.v_easy:
+                return ep / (c.ep_kmh * v / c.v_easy) * 3600.0, True
+            return ep / v * 3600.0, True
+        return km / v * 3600.0, True
+    if d.get("est"):
+        return float(d["est"]), True
     return 0.0, False
+
+
+def estimate_note(steps: dict, c: Ctx) -> str:
+    """The ? text of an estimated total: how the distance / lap-button steps were timed."""
+    rows = [row["st"] for row in flat(steps["items"])]
+    dist = any(s["dur"]["type"] == "distance" for s in rows)
+    lap = any(s["dur"]["type"] == "open" and s["dur"].get("est") for s in rows)
+    parts = []
+    if dist:
+        _v, how = speed_kmh(EASY_F, c)
+        src = {"easy+tpace": f"你的輕鬆路跑速度 {c.v_easy:.1f} km/h（{c.v_easy_src or '近期紀錄'}）和閾值配速 {mmss(c.tpace or 0)}/km 之間，依每段的目標強度內插" if c.v_easy and c.tpace else "",
+               "easy": f"你的輕鬆路跑速度 {(c.v_easy or 0):.1f} km/h 依目標強度等比例放大" ,
+               "tpace": f"你的閾值配速 {mmss(c.tpace or 0)}/km 依目標強度換算",
+               "default": "沒有你的速度資料，先用 6:00/km"}[how]
+        parts.append("距離段：" + src)
+        if c.terrain == "trail":
+            parts.append(f"越野：努力距離 EP = km × (1 + 爬升 {c.climb_per_km:.0f} m/km ÷ 100)" +
+                         (f"，用你的越野 EP 速度 {c.ep_kmh:.1f} km/h" if c.ep_kmh else "，你的越野紀錄不夠，先用路跑速度"))
+    if lap:
+        parts.append("按圈段：用課表原本寫的最短時間")
+    return "；".join(parts) + "（推估）" if parts else ""
 
 
 NONE_IF = {"rest": 0.55, "warm": 0.65, "cool": 0.65, "other": 0.8, "work": 1.05}    # 推估
@@ -727,7 +806,7 @@ def totals(steps: dict, c: Ctx) -> dict:
         r = resolve(st, c)
         s, e = _secs(st, r, c)
         est = est or e
-        if st["dur"]["type"] == "open":
+        if st["dur"]["type"] == "open" and not s:
             n_open += 1
             continue
         sec += s
@@ -738,7 +817,7 @@ def totals(steps: dict, c: Ctx) -> dict:
         if r.frac is not None and r.frac >= Z5_FRAC and st["kind"] == "work":
             z5 += s
     return {"sec": round(sec), "open": n_open, "est": est, "tss": round(tss, 1), "hard_s": round(hard),
-            "z5_s": round(z5)}
+            "z5_s": round(z5), "est_note": estimate_note(steps, c) if est else ""}
 
 
 # ---------------------------------------------------------------------------
@@ -810,8 +889,6 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
             add("err" if hard else "warn", f"總時間 {mins:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{'硬上限' if hard else '軟上限，只提醒'}）")
     if t["open"]:
         add("info", f"{t['open']} 段「按圈結束」不算進總時間")
-    if t["est"]:
-        add("info", "距離段的時間用配速換算（推估）")
     for it in steps["items"]:
         if it.get("kind") == "repeat" and any(x.get("kind") == "repeat" for x in it["items"]):
             add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it["id"])
@@ -1142,22 +1219,51 @@ def template_steps(key: str, level: str = "std") -> Optional[dict]:
     return from_variant(v, level) if v is not None else None
 
 
-def templates(prefs=None) -> list[dict]:
-    """The editor's 插入範本 groups: every library variant's main set (by rung), the
-    CP tests, strides / hill sprints. {"group", "rows": [{key, label, items, total_s, note}]}."""
+def templates(prefs=None) -> dict:
+    """The editor's 插入範本 (static/workout_editor.js): {"cats": [{id, label, subs?}],
+    "groups": [{"group", "cat", "sub", "title", "rows": [{key, label, title, src, url,
+    src_kind, items (main set), full, equiv}]}]}. Each category: the published library
+    (engine/workout_templates.py) first; 強度課 also the interval ladder's variants (by
+    their band middle: 三區 / 四區 / 五區); 測試 also the app's CP protocols; strides /
+    hill sprints."""
     from backend.engine import cp_protocols as CPP
+    from backend.engine import workout_templates as WT
+    lib = [(t, WT.row(t)) for t in WT.TEMPLATES]
     groups = []
-    for rung in IL.RUNG_ORDER + ("tp",):
-        rows = []
-        for v in IL.LIBRARY[rung]:
-            ok, _why = IL.equivalent(v)
-            rows.append({"key": v.key, "label": f"{IL.title(v)} · {IL.rest_text(v)}" + ("（標準）" if v.canonical else ""),
-                         "items": main_set(v), "equiv": ok, "src_kind": v.src_kind,
-                         "full": from_variant(v, "std")["items"]})
-        groups.append({"group": f"{IL.RUNG_NAME[rung]}（{IL.CLASS_LABEL[IL.LIBRARY[rung][0].cls]}）", "rows": rows})
-    groups.append({"group": "非同等（不算進階）", "rows": [
-        {"key": v.key, "label": f"{IL.title(v)}（每趟 < 2 分）", "items": main_set(v), "equiv": False,
-         "src_kind": v.src_kind, "full": from_variant(v, "std")["items"]} for v in IL.NON_EQUIV]})
+
+    def g(cat, title, rows, sub=None):
+        if rows:
+            groups.append({"group": title, "title": title, "cat": cat, "sub": sub, "rows": rows})
+
+    ids = _Ids("t")
+    strides = {"key": "strides", "label": "快步跑 4×20 秒（間隔慢跑 40 秒）", "title": "快步跑 4×20 秒", "equiv": None,
+               "src_kind": "coach", "src": "常見的輕鬆跑附加（暖身用）",
+               "items": [rep(ids, 4, [step(ids, "other", 20, OPEN, "快步跑 20 秒"), step(ids, "rest", 40, OPEN, "慢跑")],
+                             True, "快步跑 4×20 秒")]}
+    hills = {"key": "hill_sprints", "label": "上坡衝刺 8×10 秒（走下來 60 秒）", "title": "上坡衝刺 8×10 秒", "equiv": None,
+             "src_kind": "coach", "src": "常見的輕鬆跑附加",
+             "items": [rep(ids, 8, [step(ids, "work", 10, OPEN, "10 秒上坡衝刺"), step(ids, "rest", 60, OPEN, "走下來")],
+                           True, "衝刺 8×10 秒")]}
+    g("easy", "有出處的課表", [r for t, r in lib if t.cat == "easy"])
+    g("easy", "附加（只換主課時插在中間）", [strides])
+    for sub in ("z3", "z4", "z5"):
+        g("quality", "有出處的課表", [r for t, r in lib if t.cat == "quality" and r["sub"] == sub], sub)
+        ladder = []
+        for rung in IL.RUNG_ORDER + ("tp",):
+            for v in IL.LIBRARY[rung]:
+                if WT.sub_of(v.mid) != sub:
+                    continue
+                ok, _why = IL.equivalent(v)
+                ladder.append({"key": v.key, "label": f"{IL.RUNG_NAME[rung]} {IL.title(v)} · {IL.rest_text(v)}" + ("（標準）" if v.canonical else ""),
+                               "title": f"{IL.CLASS_LABEL[v.cls]} {IL.structure(v)}", "src": f"間歇庫 {IL.RUNG_NAME[rung]}（interval-prescription.md）",
+                               "items": main_set(v), "equiv": ok, "src_kind": v.src_kind, "full": from_variant(v, "std")["items"]})
+        for v in IL.NON_EQUIV:
+            if WT.sub_of(v.mid) == sub:
+                ladder.append({"key": v.key, "label": f"{IL.title(v)}（每趟 < 2 分，不算進階）", "title": IL.title(v),
+                               "src": "間歇庫（非同等）", "items": main_set(v), "equiv": False, "src_kind": v.src_kind,
+                               "full": from_variant(v, "std")["items"]})
+        g("quality", "間歇庫（進階階梯）", ladder, sub)
+    g("test", "有出處的課表", [r for t, r in lib if t.cat == "test"])
     other = []
     for p in ("quick", "standard"):
         s = CPP.session_for(p)
@@ -1165,17 +1271,13 @@ def templates(prefs=None) -> list[dict]:
                     "protocol": p}) if s else None
         if d:
             main = [x for x in d["items"] if x["kind"] in ("work", "rest")]
-            other.append({"key": f"cp_{p}", "label": f"CP 測試：{s['title']}", "items": main, "full": d["items"],
-                          "equiv": None, "src_kind": "peer"})
-    ids = _Ids("t")
-    other.append({"key": "strides", "label": "快步跑 4×20 秒（間隔慢跑 40 秒）", "equiv": None, "src_kind": "coach",
-                  "items": [rep(ids, 4, [step(ids, "other", 20, OPEN, "快步跑 20 秒"), step(ids, "rest", 40, OPEN, "慢跑")],
-                                True, "快步跑 4×20 秒")]})
-    other.append({"key": "hill_sprints", "label": "上坡衝刺 8×10 秒（走下來 60 秒）", "equiv": None, "src_kind": "coach",
-                  "items": [rep(ids, 8, [step(ids, "work", 10, OPEN, "10 秒上坡衝刺"), step(ids, "rest", 60, OPEN, "走下來")],
-                                True, "衝刺 8×10 秒")]})
-    groups.append({"group": "測試／其他", "rows": other})
-    return groups
+            other.append({"key": f"cp_{p}", "label": f"CP 測試：{s['title']}", "title": s["title"], "items": main,
+                          "full": d["items"], "equiv": None, "src_kind": "peer", "src": "這個 app 的 CP 測試（cp-test-protocols.md）"})
+    g("test", "這個 app 的 CP 測試", other)
+    g("trail", "有出處的課表", [r for t, r in lib if t.cat == "trail"])
+    g("trail", "附加", [hills])
+    from backend.engine.workout_templates import CATS
+    return {"cats": CATS, "groups": groups}
 
 
 def zones_table(c: Ctx) -> dict:

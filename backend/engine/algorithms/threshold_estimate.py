@@ -20,6 +20,7 @@ The athlete-level estimate is the median over qualifying runs in a window
 """
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence
@@ -219,6 +220,9 @@ class AetAggregate:
     shift_bpm: Optional[float]           # the last `last` points: + = they put AeT higher than the fit
     valid: bool
     reason: str
+    # few / flat / slope / range_hi / range_lo / se / shift / ok — flat, slope and range_hi mean the
+    # regression found no 5 % crossing inside the data (aet_lower_bound may then apply)
+    code: str = ""
 
 
 def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_runs: int = AET_MIN_RUNS,
@@ -232,14 +236,14 @@ def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_run
     pts = [(float(h), float(d), max(float(se) if se is not None else AET_SE_DEFAULT, AET_SE_FLOOR))
            for h, d, se in points if h is not None and d is not None and abs(d) < 0.30]
     n = len(pts)
-    bad = lambda why, slope=None, est=None, se=None: AetAggregate(est, se, n, slope, None, False, why)
+    bad = lambda why, code, slope=None, est=None, se=None: AetAggregate(est, se, n, slope, None, False, why, code)
     if n < min_runs:
-        return bad(f"只有 {n} 次可用的穩定跑飄移（需要 ≥ {min_runs} 次）：AeT 需要測試")
+        return bad(f"只有 {n} 次可用的穩定跑飄移（需要 ≥ {min_runs} 次）：AeT 需要測試", "few")
     x = np.array([p[0] for p in pts])
     y = np.array([p[1] for p in pts])
     w = 1.0 / np.array([p[2] for p in pts]) ** 2
     if x.std() < 3:
-        return bad("這些跑步的心率都差不多，看不出飄移隨心率的變化：AeT 需要測試")
+        return bad("這些跑步的心率都差不多，看不出飄移隨心率的變化：AeT 需要測試", "flat")
     X = np.column_stack([np.ones(n), x])
     A = X.T @ (X * w[:, None])
     beta = np.linalg.solve(A, X.T @ (w * y))
@@ -248,7 +252,7 @@ def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_run
     cov = np.linalg.inv(A) * max(1.0, chi2)
     a, b = float(beta[0]), float(beta[1])
     if b <= 0:
-        return bad("心率越高飄移沒有跟著變大，找不出 AeT：需要測試", b * 10)
+        return bad("心率越高飄移沒有跟著變大，找不出 AeT：需要測試", "slope", b * 10)
     aet = (AET_DRIFT - a) / b
     lo, hi = x.min() - 5, x.max() + 5
     if lthr:
@@ -256,14 +260,77 @@ def aet_aggregate(points: Sequence[tuple], lthr: Optional[float] = None, min_run
     g = np.array([-1.0 / b, -aet / b])
     se = float(np.sqrt(max(0.0, g @ cov @ g)))
     if not lo <= aet <= hi:
-        return bad(f"推算值 {aet:.0f} 超出資料範圍（{x.min():.0f}–{x.max():.0f} bpm）：AeT 需要測試", b * 10, None, se)
+        return bad(f"推算值 {aet:.0f} 超出資料範圍（{x.min():.0f}–{x.max():.0f} bpm）：AeT 需要測試", "range_hi" if aet > hi else "range_lo",
+                   b * 10, None, se)
     shift = float(-np.mean(r[-last:]) / b)
     if se > AET_MAX_SE_BPM:
         why = f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（標準誤 > {AET_MAX_SE_BPM:.0f}）：還不夠準，需要測試"
-        return AetAggregate(aet, se, n, b * 10, shift, False, why)
+        return AetAggregate(aet, se, n, b * 10, shift, False, why, "se")
     if abs(shift) > AET_SHIFT_BPM:
         why = (f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm，但最近 {min(last, n)} 次一致偏"
                f"{'高' if shift > 0 else '低'} {abs(shift):.0f} bpm（> {AET_SHIFT_BPM:.0f}）：AeT 可能變了，需要測試")
-        return AetAggregate(aet, se, n, b * 10, shift, False, why)
-    return AetAggregate(aet, se, n, b * 10, shift, True,
+        return AetAggregate(aet, se, n, b * 10, shift, False, why, "shift")
+    return AetAggregate(aet, se, n, b * 10, shift, True, code="ok", reason=
                         f"{n} 次聚合估計 AeT {aet:.0f} ± {se:.1f} bpm（≤ {AET_MAX_SE_BPM:.0f}），最近 {min(last, n)} 次沒有偏移")
+
+
+# ---------------------------------------------------------------------------
+# a lower bound when the regression finds no crossing (temporary, 推估 — owner-approved 2026-10-02)
+#
+# Easy runs that all sit in a narrow HR band with low drift give the regression no slope: no
+# crossing, so no estimate. What they do say: up to the highest of them, the drift stays < 5 %
+# — AeT ≥ that HR. Safeguards (all 推估):
+#   * only reference grade or better with SE ≤ 5 pp (DRIFT_NOISY_SE: noisy runs don't count);
+#   * each run's SE × 2: single-run SE is underestimated 2–3× on other runners
+#     (validation-goldencheetah.md §2);
+#   * X = the highest such run's first-half HR, never above LTHR − 3; ≥ 6 runs ≤ X and ≥ 3 of
+#     them within 5 bpm of X;
+#   * the top 6 runs' weighted mean drift + 2·SE (SE = max(inverse-variance, empirical), the
+#     doubled SEs) < 5 %;
+#   * any run ≤ X clearly ≥ 5 % (drift − its doubled SE ≥ 5 %) drops the bound ("broken").
+# ---------------------------------------------------------------------------
+
+AET_BOUND_MIN_RUNS = 6
+AET_BOUND_TOP_N = 3
+AET_BOUND_TOP_BPM = 5.0
+AET_BOUND_SE_X = 2.0             # validation-goldencheetah.md: SE low by 2–3×
+AET_BOUND_Z = 2.0
+AET_BOUND_MAX_SE = 0.05          # = workout_review.DRIFT_NOISY_SE
+AET_BOUND_NO_CROSSING = ("flat", "slope", "range_hi")
+
+
+def aet_lower_bound(points: Sequence[tuple], lthr: Optional[float] = None) -> dict:
+    """`points`: (first-half HR, drift, SE or None, tier or None). {"ok", "value", "n", "top_n",
+    "mean", "upper", "broken" (the run that broke it or None), "reason"}."""
+    pts = [(float(h), float(d), float(se) * AET_BOUND_SE_X) for h, d, se, *rest in points
+           if h is not None and d is not None and abs(d) < 0.30 and se is not None
+           and float(se) <= AET_BOUND_MAX_SE and (not rest or rest[0] in (None, "test", "ref"))]
+    cap = lthr - 3 if lthr else None
+    if cap is not None:
+        pts = [p for p in pts if p[0] <= cap]
+    out = {"ok": False, "value": None, "n": len(pts), "top_n": 0, "mean": None, "upper": None, "broken": None}
+    if len(pts) < AET_BOUND_MIN_RUNS:
+        return {**out, "reason": f"只有 {len(pts)} 次夠準的跑步（SE ≤ 5 pp、≤ LTHR − 3，要 ≥ {AET_BOUND_MIN_RUNS} 次）"}
+    pts.sort(key=lambda p: p[0])
+    x = pts[-1][0]
+    over = [p for p in pts if p[1] - max(p[2], AET_SE_FLOOR) >= AET_DRIFT]
+    if over:
+        h, d, _ = over[0]
+        return {**out, "value": x, "broken": {"hr1": h, "drift": d},
+                "reason": f"{h:.0f} bpm 那次飄移 {d * 100:.1f}%（扣掉雜訊仍 ≥ 5%）：下限不成立"}
+    top_n = sum(1 for p in pts if p[0] >= x - AET_BOUND_TOP_BPM)
+    top = pts[-AET_MIN_RUNS:]
+    d = np.array([p[1] for p in top])
+    w = 1.0 / np.array([max(p[2], AET_SE_FLOOR) for p in top]) ** 2
+    mean = float(np.sum(w * d) / np.sum(w))
+    k = len(top)
+    se_emp = math.sqrt(float(np.sum(w * (d - mean) ** 2) / np.sum(w)) * k / (k - 1) / k)
+    se = max(math.sqrt(1.0 / float(np.sum(w))), se_emp)
+    upper = mean + AET_BOUND_Z * se
+    out = {**out, "value": x, "top_n": top_n, "mean": mean, "upper": upper}
+    if top_n < AET_BOUND_TOP_N:
+        return {**out, "reason": f"{x:.0f} bpm 附近 5 bpm 內只有 {top_n} 次（要 ≥ {AET_BOUND_TOP_N}）"}
+    if upper >= AET_DRIFT:
+        return {**out, "reason": f"最高 {k} 次的平均飄移 {mean * 100:.1f}% + 2×SE = {upper * 100:.1f}%（≥ 5%）：不夠確定"}
+    return {**out, "ok": True, "reason": f"≤ {x:.0f} bpm 的 {len(pts)} 次飄移都 < 5%（最高 {k} 次平均 {mean * 100:.1f}%，"
+                                         f"上界 {upper * 100:.1f}%）"}

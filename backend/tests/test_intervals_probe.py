@@ -18,10 +18,10 @@ def sess(kind, title, minutes, detail="", day="2026-10-01"):
 
 
 def test_easy_run_is_one_lthr_line():
-    ev = IP.session_event(sess("easy", "輕鬆跑", 45), TH)
+    ev = IP.session_event(sess("easy", "越野輕鬆跑", 45), TH)
     assert ev["category"] == "WORKOUT" and ev["type"] == "Run"
     assert ev["start_date_local"] == "2026-10-01T00:00:00"
-    assert ev["name"] == "TRC 輕鬆跑 10/1" and ev["external_id"] == "trc-easy"
+    assert ev["name"] == "TRC 越野輕鬆跑 10/1" and ev["external_id"] == "trc-easy"
     lo, hi = round(round(0.75 * 170) / 170 * 100), round(150 / 170 * 100)
     assert ev["description"] == f"- 主課 45m {lo}-{hi}% LTHR"
 
@@ -45,7 +45,7 @@ def test_power_can_be_left_out():
 
 
 def test_no_lthr_means_no_hr_target():
-    ev = IP.session_event(sess("long", "長跑", 90), {"cp": 300})
+    ev = IP.session_event(sess("long", "山路長跑", 90), {"cp": 300})
     assert ev["description"] == "- 主課 1h30m"
 
 

@@ -153,8 +153,15 @@ def _flat(payload):
     return payload["exercises"]
 
 
-def test_easy_run_is_hr_capped_at_aet():
-    spec = CW.session_workout(sess("easy1", "easy", "輕鬆跑", 45, "2026-10-02"), TH)
+def test_road_easy_run_is_power_first():
+    # road easy / long: power first (target_policy, 2026-10-02); the HR cap stays a note
+    spec = CW.session_workout(sess("easy0", "easy", "輕鬆跑", 45, "2026-10-02"), TH)
+    (e,) = _flat(spec.payload)
+    assert e["targetValue"] == 45 * 60 and e["intensityType"] == CW.INT_POWER
+
+
+def test_trail_easy_run_is_hr_capped_at_aet():
+    spec = CW.session_workout(sess("easy1", "easy", "越野輕鬆跑", 45, "2026-10-02"), TH)
     ex = _flat(spec.payload)
     assert len(ex) == 1
     e = ex[0]
@@ -166,11 +173,14 @@ def test_easy_run_is_hr_capped_at_aet():
     assert e["intensityPercentExtend"] == round(150 / 170 * 100000)
     p = spec.payload
     assert p["sportType"] == CW.SPORT_RUN and p["estimatedTime"] == 45 * 60
-    assert p["name"] == "TRC 輕鬆跑 10/2"
+    assert p["name"] == "TRC 越野輕鬆跑 10/2"
 
 
 def test_long_and_hike_time_based_hr():
-    for kind in ("long", "hike", "mountain"):
+    spec = CW.session_workout(sess("long", "long", "長時間輕鬆", 150, "2026-10-03"), TH)
+    (e,) = _flat(spec.payload)
+    assert e["targetValue"] == 150 * 60 and e["intensityType"] == CW.INT_POWER      # road long: power first
+    for kind in ("hike", "mountain"):
         spec = CW.session_workout(sess(kind, kind, "長時間輕鬆", 150, "2026-10-03"), TH)
         (e,) = _flat(spec.payload)
         assert e["targetValue"] == 150 * 60 and e["intensityType"] == CW.INT_HR
