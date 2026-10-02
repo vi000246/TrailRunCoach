@@ -114,6 +114,18 @@
       "description": "目標：練目標賽事需要的能力（Koop：越接近比賽，訓練越像比賽）。越野與百岳就是爬坡能力、長時間耐久、背對背長天。成功的樣子：同樣心率爬得更快、爬升密度接近比賽、最長訓練接近比賽時間、長時間後段不掉速。",
       "charts": [
         {
+          "title": "每次路線難度（コース定数）",
+          "description": "每次越野、登山的コース定数：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。用實際移動時間代入，走得比標準路線時間快時會偏低。拿來對照目標行程：要走的百岳算出來是多少，訓練裡有沒有做到相近的日子。",
+          "race_refs": "course_constant",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "越野跑", "type": "line", "y_axis": "NONE", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
+            {"name": "登山健行", "type": "line", "y_axis": "NONE", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
+            {"name": "20 一般", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,20)"},
+            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#e34948", "line_style": "dash", "expression": "(,40)"}
+          ]
+        },
+        {
           "title": "最長單次訓練",
           "description": "Koop：訓練周期的最後，要跑得比比賽前任何時候都長、都慢。最長一次應該逐步逼近比賽預估時間。",
           "axes": [{"id": "HHMMSS", "min": 0}],
