@@ -27,6 +27,7 @@ def _no_real_activity_tags(monkeypatch):
     monkeypatch.delenv(activity_tags.TAGS_DB_ENV, raising=False)
     monkeypatch.setattr(activity_tags, "_default_db", lambda: None)
     activity_tags._memo.clear()
+    activity_tags._rec_memo.clear()
 
 
 @pytest.fixture(autouse=True)

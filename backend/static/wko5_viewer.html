@@ -293,7 +293,6 @@ table.z5ev td { white-space: normal; }
 <body class="aside-closed" data-mode="season">
 <script src="/api/v1/static/shell.js" data-page="charts"></script>
 <script src="/api/v1/static/segments_card.js" defer></script>
-<script src="/api/v1/static/activity_tags_card.js" defer></script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
   <symbol id="i-sport" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="m6 21 3.5-6 3 2.5V22M9.5 15 11 9l3.5 2 3 .5M11 9 7 10.5 5.5 14"/></symbol>
@@ -323,6 +322,7 @@ table.z5ev td { white-space: normal; }
     <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
     <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
     <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
+    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動編輯」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
   </div>
 </div>
 <div class="wrap">
@@ -705,8 +705,11 @@ function filterSummary() {
 function renderActChip() {
   const a = S.workout == null ? null : (S.acts || []).find((x) => x.index === S.workout);   // excluded rows: index null
   // the picked activity may fall outside the current date filter; keep its last known label
-  if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.sport_type || a.sport} · ${hms(a.duration)}`;
+  if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.name || a.sport_type || a.sport} · ${hms(a.duration)}`;
   $("act-txt").textContent = S.workout == null ? "還沒選" : S.workoutLabel || `#${S.workout}`;
+  if (a?.key) S.workoutKey = [S.workout, a.key];      // the 活動編輯 link: the shown activity's start minute
+  const wk = S.workoutKey && S.workoutKey[0] === S.workout ? S.workoutKey[1] : null;
+  $("edit-act").href = `/api/v1/wko5/activities/page${wk ? "?key=" + encodeURIComponent(wk) : ""}`;
 }
 
 async function loadActs() {
@@ -2446,17 +2449,21 @@ function drawActHrTrend(card, res) {
 }
 
 // ---- 爬坡與地形 (workout_review climbs / grades). Self-contained: its own styles (cpStyle), toggles and
-// helpers (cp*). drawClimbProfile: the elevation profile against km with the detected climbs (①②…) and
-// descents (↓, hatched) as bands, and an aligned metric panel below on the same km axis (never a second
-// y-scale on the profile); then one row per climb against the athlete's usual. drawGradeProfile: one row
+// helpers (cp*). drawClimbProfile: ONE plot against km — the elevation as a light background area on the
+// right axis (m) and the selected metric as a thick line on the left axis (the user asked for the overlay,
+// 2026-10-02: a dual scale, so both axes and the legend name their series and units), with the detected
+// climbs (①②…) and descents (↓, hatched) as bands; then one row per climb against the athlete's usual.
+// Explanations go behind the card's 「?」, not into captions. drawGradeProfile: one row
 // per grade bin — time in it, and the metric against the usual for that bin. Tables sit in 「詳細數字」.
 const CP_KEYS = { climb: "wko5viewer.climbmetric", grade: "wko5viewer.grademetric" };
 function cpStyle() {
   if (document.getElementById("cp-style")) return;
-  const dark = "--cp-elev: #9a9890; --cp-up: #d95926; --cp-down: #199e70; --cp-line: #3987e5; --cp-base: #3b424c; --cp-ink2: #c3c2b7; --cp-bar: #5b616b;";
+  // --cp-metric: the climb overlay's metric line — saturated blue, far in hue and lightness from the
+  // neutral elevation area (validate_palette: ΔE 28 light / 22 dark against --cp-elev, contrast ≥ 3:1)
+  const dark = "--cp-elev: #9a9890; --cp-up: #d95926; --cp-down: #199e70; --cp-line: #3987e5; --cp-metric: #4a95ee; --cp-base: #3b424c; --cp-ink2: #c3c2b7; --cp-bar: #5b616b;";
   const st = document.createElement("style");
   st.id = "cp-style";
-  st.textContent = `:root { --cp-elev: #77756f; --cp-up: #eb6834; --cp-down: #1baf7a; --cp-line: #2a78d6; --cp-base: #d5d8dd; --cp-ink2: #52514e; --cp-bar: #a9adb4; }
+  st.textContent = `:root { --cp-elev: #77756f; --cp-up: #eb6834; --cp-down: #1baf7a; --cp-line: #2a78d6; --cp-metric: #1f5fbf; --cp-base: #d5d8dd; --cp-ink2: #52514e; --cp-bar: #a9adb4; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${dark} } }
 :root[data-theme="dark"] { ${dark} }
 .cpbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 2px 0 4px; }
@@ -2590,15 +2597,15 @@ function drawClimbProfile(card, res) {
   if (!P || !cpHas(P.alt)) return;
   const pctLine = cpHas(P.power) && cp ? P.power.map((v) => v == null ? null : v / cp * 100) : null;
   const M = {
-    vam: { label: "VAM", ys: P.vam, seg: (c) => c.vam, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), zero: true,
-      cap: "VAM 每小時爬升 m/h（60 秒滾動，推估）" },
-    power: { label: "功率", ys: P.power, seg: (c) => c.avg_power, segF: (v) => `${cpN(v)} W`, axisF: (v) => `${cpN(v)}`,
+    vam: { label: "VAM", unit: "m/h", ys: P.vam, seg: (c) => c.vam, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), zero: true,
+      cap: "VAM = 每小時爬升 m/h（60 秒滾動，推估）" },
+    power: { label: "功率", unit: "W", ys: P.power, seg: (c) => c.avg_power, segF: (v) => `${cpN(v)} W`, axisF: (v) => `${cpN(v)}`,
       cap: "功率 W（60 秒平均）" },
-    pct: { label: "%CP", ys: pctLine, seg: (c) => c.pct_cp == null ? null : c.pct_cp * 100, segF: (v) => `${cpN(v)}%`,
+    pct: { label: "%CP", unit: "%", ys: pctLine, seg: (c) => c.pct_cp == null ? null : c.pct_cp * 100, segF: (v) => `${cpN(v)}%`,
       axisF: (v) => `${cpN(v)}%`, cap: `功率佔 CP 的比例（CP ${cpN(cp)} W，60 秒平均）` },
-    hr: { label: "心率", ys: P.hr, seg: (c) => c.avg_hr, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), cap: "心率 bpm（60 秒平均）" },
-    pace: { label: "配速／GAP", ys: P.gap, ys2: P.pace, pace: true, seg: (c) => c.gap_s_per_km, segF: (v) => `GAP ${cpPace(v)}`,
-      axisF: cpPaceTick, cap: "GAP（坡度換算平地配速）與實際配速 /km，上 = 快" },
+    hr: { label: "心率", unit: "bpm", ys: P.hr, seg: (c) => c.avg_hr, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), cap: "心率 bpm（60 秒平均）" },
+    pace: { label: "配速／GAP", name: "GAP", unit: "/km", ys: P.gap, ys2: P.pace, pace: true, seg: (c) => c.gap_s_per_km, segF: (v) => `GAP ${cpPace(v)}`,
+      axisF: cpPaceTick, cap: "GAP（坡度換算平地配速）與實際配速 /km；左軸上下顛倒，越上面越快" },
   };
   const CMP = {
     vam: { key: "vam", f: (v) => `${cpN(v)} m/h`, axisF: (v) => cpN(v), scale: 1, name: "VAM（m/h）", hint: "越右爬得越快" },
@@ -2618,23 +2625,53 @@ function drawClimbProfile(card, res) {
   const leg = document.createElement("div");
   leg.className = "cpleg";
   leg.setAttribute("aria-label", "圖例");
+  // the overlay: elevation = light area on the RIGHT axis (m), the metric = thick line on the LEFT axis;
+  // the legend and both axis names say which is which (a dual scale the user asked for, made explicit)
+  const mName = (m) => m.name || m.label;
   const legend = () => {
     const m = M[metric];
-    leg.innerHTML = `<span><i style="background:${cpRgba(css("--cp-elev"), .28)}"></i>海拔</span>`
-      + (climbs.length ? `<span><i style="background:${cpRgba(css("--cp-up"), .22)};border-bottom:2px solid var(--cp-up)"></i>①② 爬坡段（≥ 80 m、≥ 3%）</span>` : "")
-      + ((D.descents || []).length ? `<span><i class="hatch"></i>↓ 下坡段（≥ 80 m）</span>` : "")
-      + `<span><i class="ln" style="border-color:var(--cp-line)"></i>${esc(m.pace ? "GAP" : m.label)}</span>`
-      + (m.ys2 ? `<span><i class="ln" style="border-color:var(--cp-elev)"></i>實際配速</span>` : "")
+    leg.innerHTML = `<span><i class="ln" style="border-top-width:3px;border-color:var(--cp-metric)"></i>${esc(mName(m))}（左軸，${esc(m.unit)}）</span>`
+      + `<span><i style="background:${cpRgba(css("--cp-elev"), .3)};border-top:1px solid var(--cp-elev)"></i>海拔（右軸，m）</span>`
+      + (m.ys2 ? `<span><i class="ln" style="border-top-style:dashed;border-color:var(--cp-ink2)"></i>實際配速（左軸）</span>` : "")
+      + (climbs.length ? `<span><i style="background:${cpRgba(css("--cp-up"), .22)};border-bottom:2px solid var(--cp-up)"></i>①② 爬坡段</span>` : "")
+      + ((D.descents || []).length ? `<span><i class="hatch"></i>↓ 下坡段</span>` : "")
       + (climbs.length ? `<span><i class="ln" style="border-color:var(--text)"></i>每段平均</span>` : "");
   };
-  bar.appendChild(cpSeg(avail, metric, "下方面板的指標", (k) => { metric = k; cpSave(CP_KEYS.climb, k); legend(); paint(); }));
+  // explanations live behind the card's 「?」 (no inline captions): the card description + this chart's notes
+  const qBtn = () => {
+    const h2 = card.querySelector("h2");
+    if (!h2) return null;
+    let q = h2.querySelector(".qtip");
+    if (!q) {
+      q = document.createElement("button");
+      q.type = "button"; q.className = "qtip"; q.textContent = "?"; q.setAttribute("aria-label", "說明"); q.dataset.base = "";
+      const zb = h2.querySelector(".zbtn");
+      if (zb) zb.before(q); else h2.appendChild(q);
+    }
+    if (q.dataset.base == null) q.dataset.base = q.dataset.tip || "";
+    return q;
+  };
+  const tipText = () => {
+    // the card description (views/workout.json) explains the layout; this adds the current metric's notes
+    const m = M[metric], cm = CMP[metric];
+    const t = [`目前的曲線（左軸）：${m.cap}。`];
+    if (climbs.length) t.push(`每段和平常比（${cm.name}）：${cm.hint}；點 = 這段，灰條 = 平常的中間 50%，直線 = 中位數。`);
+    return t.join("\n");
+  };
+  const setTip = () => {
+    const q = qBtn();
+    if (!q) return;
+    q.dataset.tip = [q.dataset.base, tipText()].filter(Boolean).join("\n\n");
+  };
+  bar.appendChild(cpSeg(avail, metric, "曲線的指標（左軸）", (k) => { metric = k; cpSave(CP_KEYS.climb, k); legend(); setTip(); paint(); }));
   bar.appendChild(leg);
   legend();
+  setTip();
   wrap.appendChild(bar);
   const el = document.createElement("div");
   el.className = "plot cprof";
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `高度圖：${climbs.length} 段爬坡、${(D.descents || []).length} 段下坡；數字在「詳細數字」表格`);
+  el.setAttribute("aria-label", `高度圖與指標曲線（左軸指標、右軸海拔）：${climbs.length} 段爬坡、${(D.descents || []).length} 段下坡；數字在「詳細數字」表格`);
   wrap.appendChild(el);
   const cmpCap = document.createElement("p");
   cmpCap.className = "cpcap";
@@ -2701,29 +2738,29 @@ function drawClimbProfile(card, res) {
   }
   const chart = echarts.init(el);
   charts.push(chart);
-  const hatchTop = cpHatch(css("--cp-down"), 0.45), hatchLow = cpHatch(css("--cp-down"), 0.25);
+  const hatchTop = cpHatch(css("--cp-down"), 0.3);    // light: the metric line must stay on top visually
 
   function paint() {
     const m = M[metric];
     const H = el.clientHeight || 390;
-    const top0 = bands.length ? 44 : 12, gap = 34, bottom = 28;
-    const h1 = Math.round((H - top0 - gap - bottom) * 0.38), h0 = H - top0 - gap - bottom - h1, top1 = top0 + h0 + gap;
+    const top0 = bands.length ? 44 : 12, bottom = 28, h0 = H - top0 - bottom;
     const ys = m.ys || [];
-    const yN1 = cpNice(...cpRange([...ys, ...(m.ys2 || [])], !!m.zero), 3, !!m.pace), y1min = yN1.min, y1max = yN1.max;
+    const yN1 = cpNice(...cpRange([...ys, ...(m.ys2 || [])], !!m.zero), 4, !!m.pace), y1min = yN1.min, y1max = yN1.max;
     const ink = css("--text"), muted = css("--muted"), line = css("--line"), up = css("--cp-up"), down = css("--cp-down");
-    const elev = css("--cp-elev"), blue = css("--cp-line");
+    const elev = css("--cp-elev"), metricC = css("--cp-metric"), ink2 = css("--cp-ink2");
     const lbl = { color: muted, fontSize: 10.5 };
+    // low = the metric layer (left axis): only the per-climb average rules; else the elevation layer
+    // (right axis): the band rects, the climb / descent stroke on the profile and the ①② labels
     const bandItem = (low) => (params, api) => {
       const b = bands[params.dataIndex];
       if (!low && (params.dataIndex === 0 || !b.lay)) layout(api);
-      const yA = low ? y1min : y0min, yB = low ? y1max : y0max;
-      const a = api.coord([b.x0, yA]), z = api.coord([b.x1, yB]);
+      const a = api.coord([b.x0, y0min]), z = api.coord([b.x1, y0max]);
       const yTop = Math.min(a[1], z[1]), hgt = Math.abs(a[1] - z[1]);
-      const kids = [{ type: "rect", silent: true, shape: { x: a[0], y: yTop, width: Math.max(1, z[0] - a[0]), height: hgt },
-        style: { fill: b.up ? cpRgba(up, low ? 0.08 : 0.16) : low ? hatchLow : hatchTop } }];
+      const kids = low ? [] : [{ type: "rect", silent: true, shape: { x: a[0], y: yTop, width: Math.max(1, z[0] - a[0]), height: hgt },
+        style: { fill: b.up ? cpRgba(up, 0.13) : hatchTop } }];
       if (!low) {
         if (b.pts.length > 1) kids.push({ type: "polyline", silent: true, shape: { points: b.pts.map((p) => api.coord(p)) },
-          style: { stroke: b.up ? up : down, lineWidth: 2.5, fill: null, lineJoin: "round", lineCap: "round" } });
+          style: { stroke: b.up ? up : down, lineWidth: 1.5, fill: null, lineJoin: "round", lineCap: "round" } });
         const L = b.lay || { full: false, x: (a[0] + z[0]) / 2, row: 0 };
         const gy = api.coord([x0, y0max])[1];
         if (L.full) {
@@ -2786,34 +2823,37 @@ function drawClimbProfile(card, res) {
           const b = bandAt(+x);
           return cpTipBox(tipRow(idxAt(+x)) + (b ? `<hr style="border:0;border-top:1px solid ${line};margin:5px 0">${tipBand(b)}` : ""));
         } },
-      grid: [{ left: 56, right: 18, top: top0, height: h0 }, { left: 56, right: 18, top: top1, height: h1 }],
-      xAxis: [
-        { type: "value", gridIndex: 0, min: x0, max: x1, axisLabel: { show: false }, axisTick: { show: false },
-          axisLine: { lineStyle: { color: line } }, splitLine: { lineStyle: { color: line } } },
-        { type: "value", gridIndex: 1, min: x0, max: x1, axisLine: { lineStyle: { color: line } }, splitLine: { lineStyle: { color: line } },
-          axisLabel: { ...lbl, showMinLabel: x0 === 0, showMaxLabel: false, formatter: (v) => `${cpN(v, v % 1 ? 1 : 0)} km` } },
-      ],
+      // one plot: the metric on the LEFT axis (yAxis 0), the elevation on the RIGHT axis (yAxis 1). The
+      // grid lines follow the left axis only; each axis is named with its unit next to its own swatch
+      grid: { left: 62, right: 60, top: top0, height: h0 },
+      xAxis: { type: "value", min: x0, max: x1, axisLine: { lineStyle: { color: line } }, splitLine: { show: false },
+        axisLabel: { ...lbl, showMinLabel: x0 === 0, showMaxLabel: false, formatter: (v) => `${cpN(v, v % 1 ? 1 : 0)} km` } },
       yAxis: [
-        { type: "value", gridIndex: 0, min: y0min, max: y0max, interval: yN0.interval, axisLabel: { ...lbl, formatter: (v) => `${v} m` },
-          splitLine: { lineStyle: { color: line } } },
-        { type: "value", gridIndex: 1, min: y1min, max: y1max, inverse: !!m.pace, interval: yN1.interval,
-          axisLabel: { ...lbl, formatter: (v) => m.axisF(v) }, splitLine: { lineStyle: { color: line } } },
+        { type: "value", position: "left", min: y1min, max: y1max, inverse: !!m.pace, interval: yN1.interval,
+          name: `{sw|━} ${mName(m)}（${m.unit}）`, nameLocation: "middle", nameGap: 44, nameRotate: 90,
+          nameTextStyle: { color: ink, fontSize: 11, fontWeight: 600, rich: { sw: { color: metricC, fontSize: 13, fontWeight: 700 } } },
+          axisLine: { show: true, lineStyle: { color: line } }, axisTick: { show: true, lineStyle: { color: line } },
+          axisLabel: { ...lbl, color: ink, formatter: (v) => m.axisF(v) }, splitLine: { lineStyle: { color: line } } },
+        { type: "value", position: "right", min: y0min, max: y0max, interval: yN0.interval,
+          name: `{sw|▇} 海拔（m）`, nameLocation: "middle", nameGap: 44, nameRotate: -90,
+          nameTextStyle: { color: muted, fontSize: 11, fontWeight: 600, rich: { sw: { color: cpRgba(elev, 0.45), fontSize: 11 } } },
+          axisLine: { show: true, lineStyle: { color: line } }, axisTick: { show: true, lineStyle: { color: line } },
+          axisLabel: { ...lbl, formatter: (v) => `${v}` }, splitLine: { show: false } },
       ],
-      graphic: [{ type: "text", left: 56, top: top1 - 19, silent: true,
-        style: { text: m.cap, fill: muted, font: F2, width: Math.max(80, (el.clientWidth || 600) - 74), overflow: "truncate" } }],
+      graphic: [],
       series: [
-        { id: "alt", name: "海拔", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(A), showSymbol: false, z: 2,
-          lineStyle: { color: elev, width: 1.5 }, itemStyle: { color: elev }, areaStyle: { color: cpRgba(elev, 0.13) } },
-        { id: "bands", type: "custom", xAxisIndex: 0, yAxisIndex: 0, clip: false, z: 3, silent: true,
+        { id: "alt", name: "海拔", type: "line", yAxisIndex: 1, data: pts(A), showSymbol: false, z: 1, silent: true,
+          lineStyle: { color: cpRgba(elev, 0.6), width: 1 }, itemStyle: { color: elev }, areaStyle: { color: cpRgba(elev, 0.16) } },
+        { id: "bands", type: "custom", yAxisIndex: 1, clip: false, z: 2, silent: true,
           data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(false) },
-        { id: "bandsLow", type: "custom", xAxisIndex: 1, yAxisIndex: 1, z: 1, silent: true,
+        { id: "bandsLow", type: "custom", yAxisIndex: 0, z: 4, silent: true,
           data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(true) },
-        { id: "m2", name: "實際配速", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: m.ys2 ? pts(m.ys2) : [], showSymbol: false,
-          connectNulls: false, lineStyle: { color: elev, width: 1 }, itemStyle: { color: elev }, z: 2 },
-        { id: "m", name: m.label, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(ys), showSymbol: false, connectNulls: false,
-          lineStyle: { color: blue, width: 1.5 }, itemStyle: { color: blue }, z: 3 },
+        { id: "m2", name: "實際配速", type: "line", yAxisIndex: 0, data: m.ys2 ? pts(m.ys2) : [], showSymbol: false,
+          connectNulls: false, lineStyle: { color: ink2, width: 1, type: "dashed", opacity: 0.8 }, itemStyle: { color: ink2 }, z: 3 },
+        { id: "m", name: mName(m), type: "line", yAxisIndex: 0, data: pts(ys), showSymbol: false, connectNulls: false,
+          lineStyle: { color: metricC, width: 2.75, cap: "round", join: "round" }, itemStyle: { color: metricC }, z: 5 },
       ],
-    }, { replaceMerge: ["series", "graphic"] });
+    }, { replaceMerge: ["series", "graphic", "xAxis", "yAxis", "grid"] });
     paintCmp();
   }
 
@@ -2829,9 +2869,8 @@ function drawClimbProfile(card, res) {
     }
     cmpEl.style.display = "";
     const nb = rows.filter((c) => c.base?.[cm.key]?.ok).length;
-    cmpCap.innerHTML = `<b>每段 ${esc(cm.name)} 和你平常比</b>（${esc(cm.hint)}）：點 = 這段；灰條 = 平常的中間 50%，直線 = 中位數。`
-      + `平常 = 同類活動近 8 週（不足 5 段放寬到 12、26 週）坡度相差 ±${Math.round(D.grade_match * 100)} pp 內的爬坡（推估）`
-      + (nb < rows.length ? `；${rows.length - nb} 段樣本不足，不比較` : "");
+    // a short heading only; how to read it is behind the card's 「?」 (tipText)
+    cmpCap.innerHTML = `<b>每段 ${esc(cm.name)} 和平常比</b>` + (nb < rows.length ? `（${rows.length - nb} 段樣本不足，不比較）` : "");
     const narrow = (cmpEl.clientWidth || card.clientWidth || 800) < 520;
     const h = rows.length * 30 + 34;
     cmpEl.style.height = cmpEl.style.minHeight = `${h}px`;

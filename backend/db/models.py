@@ -61,6 +61,11 @@ class WorkoutFile(Base):
     elevation_gain_m: Mapped[Optional[float]] = mapped_column(nullable=True)
     trail_classification: Mapped[Optional[str]] = mapped_column(String(20), default="unknown")
     classification_overridden: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
+    # the watch's post-workout self-rating from the FIT session (engine/
+    # activity_tags.recorded_from_session): workout_rpe as RPE 1–10, and
+    # workout_feel 0–100 (0 very weak … 100 very strong). NULL = not recorded
+    rpe: Mapped[Optional[float]] = mapped_column(nullable=True)
+    feel: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     athlete: Mapped["Athlete"] = relationship(back_populates="workouts")
     metrics: Mapped[list["WorkoutMetric"]] = relationship(back_populates="workout", cascade="all, delete-orphan")
@@ -252,6 +257,10 @@ class ActivityTag(Base):
     # bad activity files (engine/bad_activity.py): "keep" = 這筆是正常的，不要排除,
     # "exclude" = 手動排除, NULL = the auto rule
     exclusion: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    # 活動編輯 page (2026-10-02): the user's title (NULL = the original title)
+    # and free-form tags (a JSON list of strings, NULL = none)
+    name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    tags_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

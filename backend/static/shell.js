@@ -5,8 +5,8 @@
  * Put it as the first element inside <body>; it inserts the nav synchronously
  * (no flash) and styles it from the page's own tokens (--panel, --text, --muted,
  * --line, --accent), so dark mode follows each page.
- *   >= 1100 px : top bar, icon + name + one-line purpose
- *   700–1100   : top bar, icon + name (purpose in the tooltip)
+ *   >= 1600 px : top bar, icon + name + one-line purpose
+ *   700–1600   : top bar, icon + name (purpose in the tooltip)
  *   < 700 px   : bottom tab bar, icon + short name
  */
 (() => {
@@ -18,6 +18,8 @@
       icon: I('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/>') },
     { id: "charts", href: "/api/v1/wko5/viewer", name: "圖表分析", short: "圖表", purpose: "趨勢與單次活動圖表",
       icon: I('<path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/>') },
+    { id: "activity", href: "/api/v1/wko5/activities/page", name: "活動編輯", short: "活動", purpose: "名稱・類型・標籤・排除",
+      icon: I('<path d="M4 20h4L19 9a2.1 2.1 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>') },
     { id: "routes", href: "/api/v1/routes/page", name: "路線", short: "路線", purpose: "重複路段與路線的進步",
       icon: I('<circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/>') },
     { id: "plan", href: "/api/v1/plan/page", name: "賽事周期", short: "周期", purpose: "目標賽事・周期・門檻",
@@ -59,6 +61,8 @@
     height: 3px; border-radius: 3px 3px 0 0; background: var(--an-acc); }
   .appnav a.an-item:focus-visible, .appnav .an-brand:focus-visible { outline: 2px solid var(--an-acc); outline-offset: -2px; }
   .appnav .an-sep { flex: 1; }
+  /* nine pages: the one-line purposes fit only on a wide screen (else the bar overflowed at 1360 px) */
+  @media (max-width: 1599px) { .appnav .an-purpose { display: none; } }
   @media (max-width: 1100px) {
     .appnav a.an-item { grid-template-columns: 20px auto; grid-template-rows: auto; padding: 0 11px; }
     .appnav a.an-item svg { grid-row: 1; }
