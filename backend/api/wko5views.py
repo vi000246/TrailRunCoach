@@ -589,6 +589,7 @@ def _activity_json(ds, w) -> dict:
     return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
             "title_original": title or A.label(w), "title_from": "activity" if title else "label",
             "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
+            "origin": _origin(ds, w),
             "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
             # bad activity files (engine/bad_activity.py): an excluded file is not
             # in ds.workouts; `flagged` = the rule's reason when the user kept it
@@ -669,6 +670,22 @@ def _set_pack(w, kg) -> None:
 # values, the auto values in a second (slower) call, key-based and bulk edits
 # ---------------------------------------------------------------------------
 
+ORIGIN_LABELS = {"coros": "COROS", "tp": "TrainingPeaks", "wko5": "WKO5"}
+
+
+def _origin(ds, w=None, file: Optional[str] = None) -> Optional[str]:
+    """Which source an activity's file came from (the 活動編輯 badge): coros /
+    tp on a FIT dataset (the merged "synced" one: the folder that won,
+    sync/primary.py), wko5 on the WKO5 dataset."""
+    if w is not None and hasattr(ds, "file_origin"):
+        return ds.file_origin(w)
+    src = getattr(ds, "source", None) or "wko5"
+    if src == "synced":
+        head = str(file or "").split("/", 1)[0]
+        return head if head in ("coros", "tp") else None
+    return src if src in ORIGIN_LABELS else None
+
+
 def _terrain(ds, file: Optional[str], trail: bool) -> dict:
     """Road / trail of one activity and whether it can be changed here: a
     COROS / TP FIT has a workout_files row (PATCH /api/v1/workouts/{id}/
@@ -720,7 +737,7 @@ def activities_list():
                     "tss": m.get("tss"), "trail": A.is_trail(w),
                     "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
                     "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
-                    "excluded": None, **user_part(u)})
+                    "origin": _origin(ds, w), "excluded": None, **user_part(u)})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
         u = AT.find(tags, start, x["file"])
@@ -731,9 +748,11 @@ def activities_list():
                     "duration": x.get("duration"), "distance": km, "climbing": None, "tss": None,
                     "trail": x["sport_type"] == "trail running",
                     "terrain": _terrain(ds, x["file"], x["sport_type"] == "trail running"),
-                    "power_label": None, "excluded": _exclusion_json(x), **user_part(u)})
+                    "power_label": None, "origin": _origin(ds, file=x["file"]),
+                    "excluded": _exclusion_json(x), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
-    return {"source": getattr(ds, "source", None) or "wko5", "types": AT.TYPES, "efforts": AT.EFFORTS,
+    return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
+            "merge": getattr(ds, "merge_info", None), "types": AT.TYPES, "efforts": AT.EFFORTS,
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 

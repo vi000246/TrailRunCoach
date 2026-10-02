@@ -133,11 +133,10 @@ async def auto_sync(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
         return {"started": [], "skipped": {s: "auto_off" for s in runner.SOURCES}}
     hours = float(await repo.get("sync.auto_on_open.hours"))
     now = datetime.now(timezone.utc)
-    started, skipped = [], {}
-    for src, state in (await runner.ready_sources(db, athlete_id)).items():
-        if state != "ready":
-            skipped[src] = state
-            continue
+    # the primary source first; the other only with sync.secondary.auto (進階)
+    todo, skipped = await runner.auto_plan(db, athlete_id)
+    started = []
+    for src in todo:
         last = await runner.last_sync_at(db, src, athlete_id)
         if last and (now - last).total_seconds() < hours * 3600:
             skipped[src] = "fresh"
@@ -191,7 +190,8 @@ async def sync_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
 
 
 class SyncSettingsBody(BaseModel):
-    primary_source: Optional[str] = None
+    primary_source: Optional[str] = None          # 主要資料來源: auto | coros | trainingpeaks (sync/primary.py)
+    secondary_auto: Optional[bool] = None         # 進階: auto syncs also sync the other source
     timezone: Optional[str] = None
     coros_enabled: Optional[bool] = None
     trainingpeaks_enabled: Optional[bool] = None
@@ -206,7 +206,8 @@ class SyncSettingsBody(BaseModel):
     use_power: Optional[bool] = None              # 使用功率 (wko5expr/power_use.py); off = HR only
 
 
-_SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad","primary_source": "sync.primary_source", "timezone": "athlete.timezone",
+_SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
+                 "secondary_auto": "sync.secondary.auto", "timezone": "athlete.timezone",
                  "coros_enabled": "sync.coros.enabled",
                  "trainingpeaks_enabled": "sync.trainingpeaks.enabled",
                  "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client",
@@ -219,8 +220,14 @@ _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad","primary_sou
 
 
 async def _sync_settings(repo: SettingsRepository) -> dict:
+    from backend.sync import primary as P
     from backend.sync.tp_client import lookup_client_creds
     out = {k: await repo.get(v) for k, v in _SETTING_KEYS.items()}
+    # 主要資料來源: the setting ("auto" for the old null) and the source in effect
+    eff = await P.resolve_db(repo.db, repo.user_id)
+    out["primary_source"] = eff["setting"]
+    out["primary_effective"] = eff["source"]
+    out["primary_effective_label"] = P.LABELS.get(eff["source"] or "", None)
     creds, source = lookup_client_creds()
     out["tp_client_credentials_configured"] = creds is not None      # never the values
     out["tp_client_credentials_source"] = source                     # env|file|sealed|wko5_exe|none
@@ -243,8 +250,10 @@ async def get_sync_settings(athlete_id: int = 1, db: AsyncSession = Depends(get_
 async def put_sync_settings(body: SyncSettingsBody, athlete_id: int = 1,
                             db: AsyncSession = Depends(get_db)):
     """Only the fields sent are changed. Changing the primary source re-runs
-    the cross-source de-dup so totals switch to that source immediately.
-    (`null` primary_source = first imported wins.)"""
+    the cross-source de-dup so totals switch to that source immediately; the
+    merged chart Dataset (data source "synced") picks it up through its
+    source stamp. primary_source "auto" (or null) = the source with the most
+    recent complete data (sync/primary.py)."""
     repo = SettingsRepository(db, athlete_id)
     sent = body.model_dump(exclude_unset=True)
     try:
