@@ -30,9 +30,13 @@ the strict tier (≥ 40′ after the warm-up). UA's bands: < 3.5 % → below AeT
 The same three checks as workout_review.drift_of (the daily runs):
   * the 40-min floor counts *after* the warm-up;
   * a fast finish (last 10 % of the block > 5 % above the rest) is refused — 自訂;
-  * heat: a mean temperature > 25 °C is refused — 自訂. The route_weather
-    archive's air temperature when it has the activity, else the watch's
-    (workout_review.activity_temp); the reason says which.
+  * heat is a band, not a refusal (heat bands, 2026-10-02): the result
+    carries `temp_band` / `heat` (the route_weather archive's air
+    temperature when it has the activity, else the watch's minus the wrist
+    bias — workout_review.activity_temp / watch_air). In heat the verdict
+    adds 「熱環境，結果可能偏高」: a pass (or UA's 「at」 band, whose AeT is then
+    on the low side) still counts — conservative; a fail may be the heat.
+    The session text keeps 「氣溫 25 °C 以下時開始」 as advice (HEAT_TEXT).
 
 The activity is the AeT test when the plan says so first: a done test session
 that is the AeT test (is_aet_session: protocol / kind aet, gen_key test_aet)
@@ -62,7 +66,7 @@ UA_MIN_S = 40 * 60              # UA: "We don't recommend relying on tests less 
 UA_SLACK_S = 30                 # 自組: a few lost samples (GPS / Stryd dropouts) don't fail a 40′ test
 BAND_LOW, BAND_HIGH = 0.035, 0.05
 FAST_FINISH = 0.05              # 自訂
-HEAT_C = 25.0                   # 自訂 (徐國峰's condition applied to the analysis)
+HEAT_C = 25.0                   # 徐國峰's condition: the session text's advice (HEAT_TEXT), not a refusal
 MAX_STOPPED = 0.05
 MAX_CV = 0.15                   # the old unsourced 30-s CV rule: information only now (drift v2 uses VI)
 START_BELOW = 5.0               # 自訂: 0.89 × LTHR − 5 as the starting HR without an estimate
@@ -253,13 +257,8 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
         return out
     tp = series.get("temp")
     if temp_c is None and tp is not None and np.isfinite(tp[m]).any():
-        temp_c, temp_src = float(np.nanmean(tp[m])), "watch"
-    out["temp_c"], out["temp_src"] = temp_c, temp_src if temp_c is not None else None
-    if temp_c is not None and temp_c > HEAT_C:
-        from backend.engine.workout_review import TEMP_SRC_LABEL
-        out["reason"] = (f"{TEMP_SRC_LABEL.get(temp_src, '平均氣溫')} {temp_c:.0f} °C（> 25 °C）："
-                         "熱會讓心率飄，換涼一點的時段再測")
-        return out
+        temp_c, temp_src = _watch_air(float(np.nanmean(tp[m]))), "watch"
+    _tag_heat(out, temp_c, temp_src)
     cum = np.cumsum(m.astype(float))
     half = cum[-1] / 2.0
     a, b = m & (cum <= half), m & (cum > half)
@@ -286,8 +285,9 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
 
 def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = None, trail: bool = False,
                temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
-    """徐國峰's 90-minute test (notes L62–L67): flat, ≤ 25 °C, every stop ≤
-    30 s; HR at minute 10 (A) vs minute 90 (B), each the ±1-min mean;
+    """徐國峰's 90-minute test (notes L62–L67): flat, every stop ≤ 30 s (his
+    ≤ 25 °C: a temperature band on the result, _tag_heat); HR at minute 10
+    (A) vs minute 90 (B), each the ±1-min mean;
     drift = (B − A) ÷ A; < 10 % = the base is sufficient. Not halves."""
     from backend.engine import base_check as BC
     from backend.engine.quality_gate import xu_drift_of
@@ -309,20 +309,49 @@ def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = N
     if temp_c is None and temp is not None:
         tp = np.asarray(temp, dtype=float)
         if np.isfinite(tp).any():
-            temp_c, temp_src = float(np.nanmean(tp)), "watch"
-    out["temp_c"], out["temp_src"] = temp_c, temp_src if temp_c is not None else None
-    if temp_c is not None and temp_c > HEAT_C:
-        from backend.engine.workout_review import TEMP_SRC_LABEL
-        out["reason"] = (f"{TEMP_SRC_LABEL.get(temp_src, '平均氣溫')} {temp_c:.0f} °C（> 25 °C）：熱會讓心率偏高、"
-                         "飄移失真，換 25 °C 以下的時段（徐國峰）")
-        return out
+            temp_c, temp_src = _watch_air(float(np.nanmean(tp))), "watch"
+    _tag_heat(out, temp_c, temp_src)
     d = r["drift"]
     out.update(ok=True, drift=d, hr1=r["hr10"], hr2=r["hr90"], main_s=80 * 60.0, band=band_of(d, "xu"))
     return out
 
 
+def _watch_air(t: float) -> float:
+    from backend.engine.workout_review import watch_air
+    return watch_air(t)
+
+
+def _tag_heat(out: dict, temp_c: Optional[float], temp_src: Optional[str]) -> None:
+    """Heat bands: the temperature is a band on the result, not a refusal
+    (> 25 °C was one). `temp_band`, `heat` (warm / hot), `chip`."""
+    from backend.engine import workout_review as WR
+    band = WR.temp_band(temp_c)
+    out.update(temp_c=temp_c, temp_src=temp_src if temp_c is not None else None, temp_band=band,
+               heat=WR.is_heat(band), chip="🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明"))
+
+
 def lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
-    """The review card's verdict (UA's three bands)."""
+    """The review card's verdict (UA's three bands), with the heat note when
+    the test ran above 25 °C (heat_line)."""
+    out = _lines(r, aet_now)
+    if r.get("ok") and r.get("heat"):
+        out = out + [heat_line(r)]
+    return out
+
+
+def heat_line(r: dict) -> str:
+    """Heat bands and the AeT test: heat inflates the drift (Lafrenz 2008;
+    Beiter 2025). A result that passes / lands in UA's 「at」 band in heat
+    still counts — the true (cool) drift is lower, so the first-half HR as
+    AeT can only be on the low side (conservative); a fail / 「above」 in heat
+    may be the heat."""
+    from backend.engine.workout_review import HEAT_NOTE
+    passed = r.get("band") in ("at", "below", "base_ok")
+    return (f"{r.get('chip') or '🌡'}：{HEAT_NOTE}" +
+            ("；熱天通過仍算數（保守）" if passed else "，可能是熱造成的：涼一點（25 °C 以下）的日子再測"))
+
+
+def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
     if not r.get("ok"):
         return [r.get("reason") or "不是有效的 AeT 測試"]
     d, h1 = r["drift"], r["hr1"]
@@ -412,7 +441,7 @@ def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
         sug = round(r["hr1"]) if r.get("ok") and r["band"] == "at" else None
         found = {"idx": w.idx, "date": WR._wdate(w).isoformat(), **{k: r.get(k) for k in (
             "ok", "reason", "hr1", "drift", "pw_drift", "pa_drift", "band", "basis", "main_s", "judge",
-            "protocol")},
+            "protocol", "temp_c", "temp_band", "heat")},
             "aethr_suggest": sug, "aethr_now": now, "delta": (sug - now) if sug is not None and now else None}
     WR._flush(ds)
     return found

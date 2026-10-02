@@ -601,17 +601,31 @@ def test_aet_analysis_bands(rise, band, main, cool):
     assert {"below": "< 3.5%", "at": "3.5–5%", "above": "> 5%"}[band] in line
 
 
-def test_aet_analysis_refuses_short_hot_fast_finish_and_hills():
+def test_aet_analysis_refuses_short_fast_finish_and_hills():
     t, h, s, p, _ = _aet_series(12.9, main=35)
     assert "< 40 分" in AT.analyze(t, h, s, p)["reason"]
     t, h, s, p, _ = _aet_series(12.9, main=39)
     assert "暖身後只有 39 分鐘" in AT.analyze(t, h, s, p)["reason"]
-    t, h, s, p, tp = _aet_series(12.9, temp=28.0)
-    assert "25 °C" in AT.analyze(t, h, s, p, tp)["reason"]
     t, h, s, p, _ = _aet_series(12.9, finish=1.12)
     assert "快速結尾" in AT.analyze(t, h, s, p)["reason"]
     t, h, s, p, _ = _aet_series(12.9)
     assert "有坡" in AT.analyze(t, h, s, p, climb_m_per_km=30.0)["reason"]
+
+
+def test_aet_analysis_in_heat_counts_and_says_so():
+    # heat bands: a hot test is not refused. 「at」 in heat counts (the AeT can only be low:
+    # conservative); 「above」 in heat says it may be the heat
+    t, h, s, p, tp = _aet_series(12.9, temp=33.0)               # watch 33 °C − 3.7 = 29.3: hot
+    r = AT.analyze(t, h, s, p, tp)
+    assert r["ok"] and r["band"] == "at" and r["temp_band"] == "hot" and r["heat"]
+    assert r["temp_src"] == "watch" and r["temp_c"] == pytest.approx(33.0 - 3.7)
+    ln = AT.lines(r, 142.0)
+    assert "3.5–5%" in ln[0] and "熱環境，結果可能偏高" in ln[-1] and "熱天通過仍算數" in ln[-1]
+    up = AT.analyze(*_aet_series(25.0)[:4], temp_c=26.0, temp_src="route_weather")
+    assert up["ok"] and up["band"] == "above" and up["temp_band"] == "warm"
+    assert "可能是熱造成的" in AT.lines(up)[-1]
+    cool = AT.analyze(*_aet_series(12.9)[:4], temp_c=22.0, temp_src="route_weather")
+    assert cool["temp_band"] == "cool" and not any("熱環境" in x for x in AT.lines(cool))
 
 
 def _aet_workout(day, rise=12.9, title="WKO5 AeT 飄移測試 40 分", main=40):
@@ -828,8 +842,12 @@ def test_xu90_analysis_is_minute_10_vs_minute_90_not_halves():
     assert not short["ok"] and "第 91 分鐘" in short["reason"]
     stop = AT.analyze(*_xu_series(rise=5, stop_at=3000, stop_s=60), None, judge="xu")
     assert not stop["ok"] and "30 秒" in stop["reason"]
-    hot = AT.analyze(*_xu_series(rise=5), None, judge="xu", temp_c=27.0, temp_src="watch")
-    assert not hot["ok"] and "25 °C" in hot["reason"]
+    # heat bands: kept in heat; a pass counts, a fail may be the heat
+    hot = AT.analyze(*_xu_series(rise=5), None, judge="xu", temp_c=27.0, temp_src="route_weather")
+    assert hot["ok"] and hot["band"] == "base_ok" and hot["temp_band"] == "warm" and hot["heat"]
+    assert "熱天通過仍算數" in AT.lines(hot)[-1]
+    hot_bad = AT.analyze(*_xu_series(rise=135.0 * 0.12), None, judge="xu", temp_c=29.0, temp_src="route_weather")
+    assert hot_bad["ok"] and hot_bad["band"] == "base_not" and "可能是熱造成的" in AT.lines(hot_bad)[-1]
     assert AT.band_of(0.04, "evoke") == "at" and AT.band_of(0.06, "evoke") == "above"
     assert AT.band_of(0.04, "friel") == "base_ok" and AT.band_of(0.08, "friel") == "base_mid"
 

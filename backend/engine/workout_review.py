@@ -17,10 +17,12 @@ drift_of
     Athlete's 40–60 min is the test after the warm-up), unsteady (30-s
     power CV > 15 %, steady_drift's rule), too hard (> 90 % CP,
     steady_drift's rule), a fast finish (last 10 % of the measured time
-    > 5 % faster than the rest, power or pace — 自組, doc §6.2) or hot
-    (> 25 °C: the route_weather archive's air temperature, else the watch's
-    — 徐國峰's condition, applied here 自組; heat_gate, re-applied on every
-    measure() read so a later archive fill counts). Pw:HR (power / HR)
+    > 5 % faster than the rest, power or pace — 推估, doc §6.2). Heat is
+    not a refusal: every result carries its temperature band (< 25 /
+    25–28 / > 28 °C — the route_weather archive's air temperature, else
+    the watch's minus the wrist bias; heat_band, re-applied on every
+    measure() read so a later archive fill counts) and runs are compared
+    only within a band. Pw:HR (power / HR)
     comes out of the same call, with the same rules and the same samples
     and halves; the aerobic card shows the basis the viewer's 配速／功率
     toggle picked.
@@ -78,7 +80,9 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # v14: two branches — the interval library's reps, and `form_bins` (跑姿分組: form metrics per grade bin and
 # per 10 % of the work done); v15 = both merged, plus form_bins' `impact_km` (每公里衝擊量, impact_per_km)
 # v16: `cad_windows` (steady 30-s ILR / cadence / speed / grade windows, the 步頻與衝擊 card)
-CACHE_KEY = "workout_review_v16"
+# v17: heat bands — the drift is no longer refused above 25 °C (`temp_band` / `heat` applied on read);
+# bumped so no result computed under the refusal-era code is reused
+CACHE_KEY = "workout_review_v17"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -102,7 +106,25 @@ START_TIP = ("出門先過市區路口、到河濱才開始穩定跑時，前 20
              "坡道、快步不排除：上坡後心率不一定回得來，排除會把真的影響藏起來。")
 DRIFT_FINISH_SHARE = 0.10    # 自組 (doc §6.2 / §7): the last 10 % of the measured time …
 DRIFT_FAST_FINISH = 0.05      # … > 5 % above the rest (power or pace) = a fast finish, refused
-DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C); in drift_of 自組
+DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C): the cool band's top
+DRIFT_HOT_C = 28.0            # 推估: the warm / hot split. Beiter 2025 (Physiol Rep, doi 10.14814/phy2.70305): 28.7 vs
+                              # 19.2 °C, HR +16 bpm — the hot condition sits just above 28; no source gives a cut-off
+# Temperature bands (heat-bands, 2026-10-02 — replaces the > 25 °C refusal: in Taiwan most of the year is
+# above it). A drift is kept in every band and compared only with runs of its own band (the overview
+# indicator, the season charts' 6-run mean, the AeT aggregate takes the cool band only). Air temperature,
+# not Hadley: the drift sources (徐國峰, Lafrenz, Beiter) give °C, and the watch path has no humidity of its
+# own (Hadley there would rest on the season's RH). ≤ 25 cool (the old rule let 25.0 through), ≤ 28 warm.
+TEMP_BANDS = ("cool", "warm", "hot")
+TEMP_BAND_LABEL = {"cool": "< 25 °C", "warm": "25–28 °C", "hot": "> 28 °C", "none": "溫度不明"}
+HEAT_NOTE = "熱環境，結果可能偏高"
+HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是徐國峰的條件"
+            "（Lafrenz 2008：35 °C 心率升 11%、22 °C 升 2%）；28 °C 是推估的分界（Beiter 2025：28.7 對 19.2 °C，"
+            "最高心率 +16 bpm）。熱會讓飄移偏高：熱天通過門檻仍算數（保守），沒通過可能是熱造成的。"
+            "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差 3.7 °C（較不準）。"
+            "不做「熱校正後的飄移」：本人的 β 0.224 bpm／Hadley 是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度。")
+# watch temperature → air: the wrist warms the sensor (zone_events.WATCH_BIAS_C: the athlete's 72 paired
+# route efforts, watch − Open-Meteo median +3.7 °C, SD 2.7; no literature source — 推估)
+from backend.engine.zone_events import WATCH_BIAS_C  # noqa: E402
 DRIFT_POWER_COVER = 0.95      # 自組: Pw:HR only when power covers ≥ 95 % of the Pa:HR window (same samples)
 DRIFT_EARLY_S = 1200          # 自組 (adaptive start): stops that begin in the first 20 min are the city section
                               # before a steady path (crossings), not the steady run; no source gives 20 min
@@ -134,7 +156,7 @@ RAMP_GRADE = 0.03             # 推估 (DRIFT §1.2): |grade over a 15-s span| �
 RAMP_SPAN_S = 15              # ramp-free comparison also drops the 120 s after each (≈ 2τ). Ramps are NOT excluded
 RAMP_MIN_S = 10               # from the drift (the user's decision): the ramp-free value and the per-half counts
 RAMP_AFTER_S = 120            # are display only
-TEMP_SRC_LABEL = {"route_weather": "路線天氣（Open-Meteo 檔案）", "watch": "手錶溫度"}
+TEMP_SRC_LABEL = {"route_weather": "路線天氣（Open-Meteo 檔案）", "watch": "手錶溫度（扣手腕偏差，較不準）"}
 DRIFT_GOOD = 0.05
 DRIFT_WATCH = 0.10
 STREAK_NEED = 3               # legacy only: the old unsourced 「連續 3 次」 rule (gate: engine/quality_gate.py)
@@ -341,19 +363,37 @@ def fast_finish(x: np.ndarray, d: np.ndarray, m: np.ndarray,
     return (b / a - 1.0) if a and b else None
 
 
-def heat_gate(dr: dict, temp_c: Optional[float], src: Optional[str]) -> dict:
-    """drift_of's heat rule on its own: a fair result with a mean temperature
-    > DRIFT_HEAT_C becomes refused. Returns a new dict carrying `temp_c` /
-    `temp_src` (route_weather / watch / None) either way; idempotent, so
-    measure() re-applies it to the cached (pre-heat) result on every read."""
-    out = {**dr, "temp_c": temp_c, "temp_src": src if temp_c is not None else None}
-    if (dr.get("ok") or dr.get("ref_ok")) and temp_c is not None and temp_c > DRIFT_HEAT_C:
-        why = (f"{TEMP_SRC_LABEL.get(src, '溫度')} {temp_c:.0f} °C（> {DRIFT_HEAT_C:.0f} °C）："
-               "熱會讓心率飄，飄移不採用")
-        # both tiers: a hot run is not a reference either
-        out.update(ok=False, ref_ok=False, tier=None, reason=why, pw_ok=False, pw_ref_ok=False,
-                   pw_reason=why, hot=True)
-    return out
+def temp_band(temp_c: Optional[float]) -> str:
+    """"cool" (≤ 25 °C) / "warm" (≤ 28 °C) / "hot" / "none" (no temperature)."""
+    t = _f(temp_c)
+    if t is None:
+        return "none"
+    return "cool" if t <= DRIFT_HEAT_C else "warm" if t <= DRIFT_HOT_C else "hot"
+
+
+def is_heat(band: Optional[str]) -> bool:
+    """Above 徐國峰's 25 °C: the result may be heat-inflated."""
+    return band in ("warm", "hot")
+
+
+def band_chip(dr: dict) -> str:
+    """「🌡 25–28 °C」 — the band chip every drift value carries."""
+    return "🌡 " + TEMP_BAND_LABEL.get(dr.get("temp_band") or temp_band(dr.get("temp_c")), "溫度不明")
+
+
+def heat_band(dr: dict, temp_c: Optional[float], src: Optional[str]) -> dict:
+    """drift_of's heat rule on its own (heat-bands): the drift is kept in every
+    temperature band — no refusal any more — and tagged `temp_band` (cool /
+    warm / hot / none) and `heat` (warm or hot: 「熱環境，結果可能偏高」).
+    Returns a new dict carrying `temp_c` / `temp_src` (route_weather / watch /
+    None); idempotent, so measure() re-applies it to the cached result on
+    every read (the cache never holds the heat rule)."""
+    band = temp_band(temp_c)
+    return {**dr, "temp_c": temp_c, "temp_src": src if temp_c is not None else None,
+            "temp_band": band, "heat": is_heat(band)}
+
+
+heat_gate = heat_band       # the old name (callers, scripts)
 
 
 def _tier_rank(measured_s: float) -> int:
@@ -715,8 +755,9 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
     moving time after a 10-minute warm-up). Positive = HR drifted up for the
     same pace. `ok` False (with `reason`) when the run is not a fair test —
-    among others, < 40 min of moving time after the warm-up, a fast finish,
-    or `temp_c` > 25 °C (heat_gate).
+    among others, < 40 min of moving time after the warm-up or a fast
+    finish. Heat is not a refusal: `temp_c` tags the result with its
+    temperature band (heat_band: `temp_band`, `heat`).
 
     Pw:HR is the same measurement with power in place of speed — same
     fairness rules, same warm-up, and the *same samples* and halves: with
@@ -754,7 +795,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         `noisy` (SE > 5 pp); single runs are ±4–6 pp (DRIFT §1.3);
       * ramps stay in (the user's decision); `ramps` (ramp_contrast, with dist /
         elev) carries the per-half counts and the ramp-free comparison value.
-    Two tiers, the heat rule and the AeT test are unchanged."""
+    Two tiers and the AeT test are unchanged; the heat rule is the band tag."""
     out = {"drift": None, "ok": False, "ref_ok": False, "tier": None, "reason": "", "hr1": None, "hr2": None,
            "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_ref_ok": False, "pw_reason": "",
            "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None, "measured_s": None,
@@ -902,7 +943,7 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     if dist is not None and elev is not None:
         out["ramps"] = ramp_contrast(gh, gs, gp if out["pw_drift"] is not None else None,
                                      _at_grid(t, dist, grid), _at_grid(t, elev, grid), wg)
-    return heat_gate(out, temp_c, temp_src) if temp_c is not None else out
+    return heat_band(out, temp_c, temp_src) if temp_c is not None else out
 
 
 def basis_drift(dr: dict, basis: str = "pace", ref: bool = False) -> tuple[Optional[float], str]:
@@ -1579,7 +1620,7 @@ def _measure(ds, w) -> Optional[dict]:
     out["climb_m_per_km"] = cpm
     out["watch_temp_c"] = _watch_temp(ds, w, t, s["speed"])
     if w.sport == "run" or cat in ("road", "trail"):
-        # heat is left to heat_gate in measure(): the archive can fill after this is cached
+        # the temperature band is left to heat_band in measure(): the archive can fill after this is cached
         out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail",
                                 dist=s["dist"], elev=s["elev"])
     else:
@@ -1660,38 +1701,60 @@ def _archive_temps() -> dict:
         return hit[1]
     acts = (RW.load_activity_weather(HOME).get("activities") or {})
     out = {f: _f(v.get("temp_c")) for f, v in acts.items() if isinstance(v, dict) and _f(v.get("temp_c")) is not None}
+    # by date too: the archive is keyed by the WKO5 file, a COROS / TP dataset's files are named
+    # otherwise — the only row of that date then (zone_events.weather_of's rule)
+    days: dict = {}
+    for f, v in acts.items():
+        if isinstance(v, dict) and v.get("date"):
+            days.setdefault(str(v["date"])[:10], []).append(_f(v.get("temp_c")))
+    out[_BY_DATE] = {d: xs[0] for d, xs in days.items() if len(xs) == 1 and xs[0] is not None}
     _WX_CACHE[str(p)] = (mt, out)
     return out
 
 
+_BY_DATE = "__by_date__"
+
+
+def watch_air(t_watch: Optional[float]) -> Optional[float]:
+    """The watch's temperature as air: minus the wrist bias (WATCH_BIAS_C, 推估)."""
+    t = _f(t_watch)
+    return None if t is None else t - WATCH_BIAS_C
+
+
 def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Optional[str]]:
-    """(temperature °C, source) for drift_of's heat rule: the route_weather
-    archive's air temperature when it has this activity (the air is what
-    徐國峰's < 25 °C means; a wrist sensor is warmed by the body — doc §6.2),
-    else the watch's mean over the drift window; (None, None) without either.
+    """(temperature °C, source) for drift_of's temperature band: the
+    route_weather archive's air temperature when it has this activity — by
+    file, else the only archive row of that date (the air is what 徐國峰's
+    < 25 °C means) — else the watch's mean over the drift window minus the
+    wrist bias (watch_air, lower confidence); (None, None) without either.
     A dataset may carry its own {file: temp_c} (`activity_temps`, tests)."""
     arch = getattr(ds, "activity_temps", None)
     if arch is None:
         arch = _archive_temps()
     f = getattr(getattr(w, "entry", None), "file", None)
     v = _f(arch.get(f)) if f is not None else None
+    if v is None and isinstance(arch.get(_BY_DATE), dict):
+        try:
+            v = _f(arch[_BY_DATE].get(_wdate(w).isoformat()))
+        except Exception:                       # noqa: BLE001 — a test double without a date
+            v = None
     if v is not None:
         return v, "route_weather"
-    wt = _f((m or {}).get("watch_temp_c"))
+    wt = watch_air((m or {}).get("watch_temp_c"))
     return (wt, "watch") if wt is not None else (None, None)
 
 
 def measure(ds, w) -> Optional[dict]:
     """Per-workout measurements (disk-memoised on CACHE_KEY), with drift_of's
-    heat rule applied on read (heat_gate + activity_temp: the archive is not
-    part of the cache stamp)."""
+    temperature band applied on read (heat_band + activity_temp: the archive
+    is not part of the cache stamp)."""
     cache = getattr(ds, "cached_series", None)
     if cache is None:
         m = _nan_free(_measure(ds, w))
     else:
         m = cache(CACHE_KEY, w, lambda: _nan_free(_measure(ds, w)))
     if m and isinstance(m.get("drift"), dict):
-        m = {**m, "drift": heat_gate(m["drift"], *activity_temp(ds, w, m))}
+        m = {**m, "drift": heat_band(m["drift"], *activity_temp(ds, w, m))}
     return m
 
 
@@ -1936,7 +1999,8 @@ def drift_series(ds, today: dt.date, days: int = 56, upto_idx: Optional[int] = N
                  ref: bool = False) -> list[dict]:
     """The i_drift runs: road, ≥ 40 min on the clock, avg HR ≤ AeT+3 in the
     `days` up to `today` — oldest first, with the review's drift (refused ones
-    kept with drift None) and its `tier`. Strict by default (drift_streak);
+    kept with drift None), its `tier` and temperature `band` (callers compare
+    within a band). Strict by default (drift_streak);
     `ref=True` (the overview indicator, display only) also keeps the
     reference-tier drifts (30–40 min after the warm-up)."""
     from backend.engine.wko5expr.dataset import date_to_day
@@ -1958,7 +2022,8 @@ def drift_series(ds, today: dt.date, days: int = 56, upto_idx: Optional[int] = N
         use = tier == "test" or (ref and tier == "ref")
         out.append({"idx": w.idx, "date": _wdate(w).isoformat(),
                     "drift": dr.get("drift") if use else None, "tier": tier if use else None,
-                    "se": dr.get("drift_se") if use else None, "reason": dr.get("reason")})
+                    "se": dr.get("drift_se") if use else None, "reason": dr.get("reason"),
+                    "band": dr.get("temp_band") or temp_band(dr.get("temp_c")), "temp_c": dr.get("temp_c")})
     _flush(ds)
     return out
 
@@ -2071,6 +2136,7 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
     power = basis == "power"
     name = ("Pw:HR 飄移" if power else "飄移") + ("（參考）" if drift_tier(dr) == "ref" else "")
     hr1 = dr["pw_hr1"] if power else dr["hr1"]
+    heat = f"{band_chip(dr)}：{HEAT_NOTE}" if dr.get("heat") else None
     if typ == "test_aet":
         # Uphill Athlete's three bands (engine/aet_test.py has the full analysis)
         if d < 0.035:
@@ -2079,6 +2145,8 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
             lines.append(f"{name} {_pct(d)}（3.5–5%）：前半段心率 {hr1:.0f} bpm 就是 AeT")
         else:
             lines.append(f"{name} {_pct(d)} > 5%：AeT 低於前半段心率 {hr1:.0f} bpm，下次放慢 5 bpm 再測")
+        if heat:
+            lines.append(heat)
         return lines[:3]
     # informational: the interval gate is engine/quality_gate.py, not this drift
     aet, hr = m.get("aet"), m.get("avg_hr")
@@ -2090,6 +2158,8 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
         lines.append(f"{name} {_pct(d)}（5–10%）：後段心率往上跑")
     else:
         lines.append(f"{name} {_pct(d)} > 10%：有氧基礎不足或跑太快")
+    if heat:
+        lines.append(heat)
     if drift_tier(dr) == "ref":
         lines.append(f"{REF_LABEL}：只當參考，不是 AeT 測試")
     return lines[:3]
@@ -2557,16 +2627,27 @@ def _aerobic(ds, w, m, c, base):
     if d is None and power and (dr.get("ok") or dr.get("ref_ok") or m.get("avg_power") is None):
         # nothing to show on this basis (no power, or too little): say so, not 0 %
         rows.append(_row("Pw:HR 飄移", "這次沒有功率" if m.get("avg_power") is None else why))
+    band = dr.get("temp_band") or temp_band(dr.get("temp_c"))
     if m.get("category") in ("road", "trail"):
         tc = dr.get("temp_c")
-        rows.append(_row("溫度", f"{TEMP_SRC_LABEL.get(dr.get('temp_src'), '溫度')} {tc:.0f} °C" if tc is not None
-                         else f"沒有溫度資料（> {DRIFT_HEAT_C:.0f} °C 檢查不到）"))
+        rows.append(_row("溫度", (f"{TEMP_SRC_LABEL.get(dr.get('temp_src'), '溫度')} {tc:.0f} °C · {band_chip(dr)}"
+                                  + (f"（{HEAT_NOTE}）" if dr.get("heat") and d is not None else ""))
+                         if tc is not None else "沒有溫度資料（溫度不明，只和溫度不明的跑步比）", HEAT_TIP))
+        # the band chip (the viewer's card header): every drift value says its band
+        base = {**base, "chip": {"text": band_chip(dr), "tip": HEAT_TIP, "heat": bool(dr.get("heat")),
+                                 "band": band}}
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0:
         rows.append(_row("超過 AeT+3", f"{_hms(over)}（{over / tot * 100:.0f}%）"))
     if c["type"] in ("easy", "long", "test_aet") and d is not None:
-        b = baseline_for(ds, w, lambda pm: basis_drift(pm.get("drift") or {}, basis, ref=True)[0])
-        rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x))))
+        # compared only within the same temperature band
+        def same_band(pm):
+            pd = pm.get("drift") or {}
+            if (pd.get("temp_band") or temp_band(pd.get("temp_c"))) != band:
+                return None
+            return basis_drift(pd, basis, ref=True)[0]
+        b = baseline_for(ds, w, same_band)
+        rows.append(_row("同類課表基準", _base_text(b, lambda x: _pct(x)) + f"（同溫度區 {band_chip(dr)}）"))
     if c["type"] not in ("easy", "long", "test_aet"):
         lines = [f"這次是{c['type_label']}，飄移只在輕鬆跑、長跑、AeT 測試判讀"]
     elif c["type"] == "test_aet":

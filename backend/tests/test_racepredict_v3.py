@@ -105,6 +105,47 @@ def test_delta_shrinks_to_the_clark_prior():
     assert big["delta"] == TH.TRAILHR["delta_max"] and big["warning"]
 
 
+def _course_run(profile, delta, hours=3.0, hr=150.0, seed=0):
+    """A 1-Hz synthetic trail run: grade g(t) from `profile`, speed = the
+    grade speed × (1 − δ·(t − 1 h)⁺) × noise, constant HR."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(0, hours * 3600.0)
+    g = np.array([profile(x / 3600.0) for x in t])
+    v0 = np.where(g > 0, 2.8 * np.exp(-8 * g), 2.8 * np.exp(3 * g) + 0.3)
+    v = v0 * (1 - delta * np.clip(t / 3600.0 - 1.0, 0, None)) * np.exp(0.03 * rng.standard_normal(len(t)))
+    d = np.cumsum(v)
+    z = 500.0 + np.cumsum(v * g)
+    return t, d, z, np.full(len(t), hr), np.ones(len(t), bool)
+
+
+def test_terrain_matched_delta_recovers_fatigue_on_a_rolling_course():
+    rolling = lambda h: 0.10 * math.sin(2 * math.pi * h * 3)          # 20-min hills all run long
+    for true in (0.0, 0.08):
+        t, d, z, hr, mv = _course_run(rolling, true, seed=4)
+        r = TH.within_run_delta(TH.terrain_windows(t, d, z, hr, mv))
+        assert r is not None and r["delta"] == pytest.approx(true, abs=0.03) and r["se"] < 0.03
+
+
+def test_terrain_matched_delta_ignores_a_climb_first_course():
+    # up for 1.5 h, down after: no fatigue at all — the old effort-km/HR ratio reads a big decline,
+    # the terrain-matched δ finds no shared terrain (or a small value), never the course order
+    updown = lambda h: 0.12 if h < 1.5 else -0.12
+    t, d, z, hr, mv = _course_run(updown, 0.0, seed=5)
+    r = TH.within_run_delta(TH.terrain_windows(t, d, z, hr, mv))
+    assert r is None or abs(r["delta"]) < 0.05
+
+
+def test_pooled_delta_random_effects_and_ci():
+    p = TH.pool_deltas([{"delta": 0.05, "se": 0.02}, {"delta": 0.07, "se": 0.02}, {"delta": 0.06, "se": 0.04}])
+    assert 0.05 < p["mean"] < 0.07 and p["ci95"][0] < p["mean"] < p["ci95"][1] and p["tau"] == 0.0
+    het = TH.pool_deltas([{"delta": -0.3, "se": 0.05}, {"delta": 0.3, "se": 0.05}, {"delta": 0.0, "se": 0.05}])
+    assert het["tau"] > 0.2 and het["se"] > 0.1                        # disagreement widens the CI
+    s = TH.shrink_delta([0.05, 0.07, 0.06], [0.02, 0.02, 0.04])
+    assert s["method"] == "pooled" and s["delta"] == pytest.approx((3 * p["mean"] + 3 * 0.05) / 6)
+    assert s["raw_ci95"] == pytest.approx(p["ci95"])
+    assert TH.pool_deltas([]) is None
+
+
 def test_measured_delta_kept_only_when_it_lowers_the_loo_error():
     rng = np.random.default_rng(1)
     pts = []

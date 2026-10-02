@@ -45,17 +45,27 @@ def test_tier_by_minutes_after_the_warmup(after, tier):
         assert r["drift"] is None and ref[0] is None and "< 30 分" in r["reason"]
 
 
-def test_a_hot_run_is_refused_in_both_tiers():
+def test_a_hot_run_keeps_its_tier_and_carries_its_band():
+    # heat bands: a hot run is kept in both tiers, tagged with its temperature band
     for minutes, tier in ((45, "ref"), (55, "test")):
         t, hr, v = _warmup_run(minutes)
-        assert R.drift_of(t, hr, v, temp_c=24.0, temp_src="watch")["tier"] == tier
+        c = R.drift_of(t, hr, v, temp_c=24.0, temp_src="watch")
+        assert c["tier"] == tier and c["temp_band"] == "cool" and not c["heat"]
         r = R.drift_of(t, hr, v, temp_c=27.0, temp_src="watch")
-        assert r["tier"] is None and not r["ok"] and not r["ref_ok"] and r["hot"]
-        assert "27 °C" in r["reason"] and R.basis_drift(r, "pace", ref=True)[0] is None
-        # heat_gate re-applied on a cached (pre-heat) reference result
+        assert r["tier"] == tier and r["temp_band"] == "warm" and r["heat"]
+        assert R.basis_drift(r, "pace", ref=True)[0] == c["drift"]
+        # heat_band re-applied on a cached result: idempotent, the drift unchanged
         cool = R.drift_of(t, hr, v)
-        hot = R.heat_gate(cool, 30.0, "route_weather")
-        assert hot["tier"] is None and R.basis_drift(hot, "power", ref=True)[0] is None
+        hot = R.heat_band(cool, 30.0, "route_weather")
+        assert hot["tier"] == tier and hot["temp_band"] == "hot" and hot["temp_src"] == "route_weather"
+        assert R.heat_band(hot, 30.0, "route_weather") == hot
+
+
+@pytest.mark.parametrize("t, band", [(None, "none"), (18.0, "cool"), (25.0, "cool"), (25.1, "warm"),
+                                     (28.0, "warm"), (28.1, "hot"), (34.0, "hot")])
+def test_temperature_band_cut_offs(t, band):
+    assert R.temp_band(t) == band
+    assert R.is_heat(band) == (band in ("warm", "hot"))
 
 
 @pytest.mark.parametrize("kw, word", [(dict(climb_m_per_km=30.0), "有坡"), (dict(trail=True), "有坡")])
