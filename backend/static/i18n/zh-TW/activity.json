@@ -71,6 +71,8 @@
   "auto_tip": "依規則自動判定",
   "auto_opt": "自動（{v}）",
   "auto_was": "自動判定：{v}（{why}）",
+  "auto_progress": "自動分類計算中：{done}／{total} 筆",
+  "auto_failed": "自動分類暫時算不出來，稍後重新整理",
   "computing": "計算中…",
   "recorded": "手錶記錄：{v}",
   "feel": "感覺「{v}」",

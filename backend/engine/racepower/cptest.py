@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -237,49 +238,268 @@ def _primary_files(home: Path, since: dt.date, until: dt.date) -> list[dict]:
     return _files(home, since, until, skip)
 
 
-def _files(home: Path, since: dt.date, until: dt.date, skip: Optional[set] = None) -> list[dict]:
-    """Every running FIT file in home/fit/** dated since…until, cached per file;
-    `skip` = paths (relative to home/fit, "/"-separated) left out unread."""
-    cache_p = home / CACHE_NAME
+_LIST_MEMO: dict = {}
+POOL_MIN_READS = 12            # fewer unread files than this: read inline (no pool start-up)
+
+
+def _dir_sig(dirs: list[str], root: Path) -> Optional[tuple]:
+    """mtimes of the listed folders (a file added / removed / renamed changes
+    its folder's) and of the FIT dataset cache indexes (rewritten when a
+    rebuild sees a changed file)."""
+    from backend.engine.wko5expr import fitcache
+    out = []
+    try:
+        for d in dirs:
+            out.append(os.stat(d).st_mtime_ns)
+    except OSError:
+        return None
+    for f in ("coros", "tp"):
+        try:
+            out.append(fitcache.index_path_of(root / f).stat().st_mtime_ns)
+        except OSError:
+            out.append(None)
+    return tuple(out)
+
+
+def _listing(root: Path) -> list[tuple]:
+    """[(path, key, date, stamp)] of every *.fit under root (sorted). A PD
+    refit per day (the as-of LTHR estimates, the back-test) calls _files
+    hundreds of times; each call used to walk and stat the whole folder.
+    Reused while no folder changed (_dir_sig)."""
+    from backend.engine.wko5expr import fitcache
+    m = _LIST_MEMO.get(str(root))
+    if m is not None and _dir_sig(m[0], root) == m[1]:
+        return m[2]
+    rows, dirs = [], []
+    if root.exists():
+        stack = [str(root)]
+        while stack:
+            d = stack.pop()
+            dirs.append(d)
+            try:
+                with os.scandir(d) as it:
+                    for e in it:
+                        if e.is_dir():
+                            stack.append(e.path)
+                        elif (e.name.lower() if os.name == "nt" else e.name).endswith(".fit"):
+                            p = Path(e.path)
+                            fd = _file_date(p)
+                            if fd is None:
+                                continue
+                            try:
+                                st = e.stat()
+                            except OSError:
+                                continue
+                            rows.append((p, str(p.relative_to(root)), fd, fitcache.stamp_s(p, st)))
+            except OSError:
+                continue
+    rows.sort(key=lambda r: r[0])
+    _LIST_MEMO[str(root)] = (dirs, _dir_sig(dirs, root), rows)
+    return rows
+
+
+_CACHE_MEMO: dict = {}
+
+
+def _load_cache(cache_p: Path) -> dict:
+    """racepower_cptests.json, parsed once per file version (it is MBs)."""
+    try:
+        mt = cache_p.stat().st_mtime_ns
+    except OSError:
+        mt = None
+    m = _CACHE_MEMO.get(str(cache_p))
+    if m is not None and m[0] == mt and mt is not None:
+        return m[1]
     try:
         cache = json.loads(cache_p.read_text("utf-8"))
         if cache.get("v") != _KEY_VERSION:
             cache = {"v": _KEY_VERSION, "files": {}}
     except (OSError, ValueError):
         cache = {"v": _KEY_VERSION, "files": {}}
-    out, dirty = [], False
+    _CACHE_MEMO[str(cache_p)] = (mt, cache)
+    return cache
+
+
+def _prefetch_one(args: tuple) -> tuple:
+    """(_read, raw bad-file entry, power source) of one FIT file — what
+    _files, bad_files and power_sources would each parse it for, in one
+    pool task. `need_fc` False: the FIT dataset cache already has the bad /
+    power fields (no second parser run)."""
+    path, need_fc = args
+    p = Path(path)
+    bad = pw = None
+    if need_fc:
+        from backend.engine import bad_activity as BA
+        from backend.engine.wko5expr import fitcache
+        from backend.files.fit_to_channels import fit_to_channels
+        try:
+            fc = fit_to_channels(p.read_bytes())
+            st = fc.start_time
+            if st is not None and st.tzinfo is None:
+                st = st.replace(tzinfo=dt.timezone.utc)
+            bad = [st.isoformat() if st is not None else None, fitcache.group_of(fc.sport, fc.sub_sport),
+                   BA.features(fc.elapsedtime, fc.channels.get("elapseddistance"), fc.channels.get("power"))]
+            pw = fc.power_source
+        except Exception:                   # noqa: BLE001 — as _bad_entry / _classify_file
+            bad, pw = ["", None, None], None
+    return _read(p), bad, pw
+
+
+def _pool_map(fn, items: list) -> list:
+    """fn over items in a process pool like the dataset's FIT parse
+    (fitcache: spawn, at most _pool_size workers), inline when few or when
+    the pool fails."""
+    from backend.engine.wko5expr import fitcache
+    n = fitcache._pool_size(len(items)) if len(items) >= POOL_MIN_READS else 0
+    if n > 1:
+        try:
+            import multiprocessing as mp
+            from concurrent.futures import ProcessPoolExecutor
+            with ProcessPoolExecutor(max_workers=n, mp_context=mp.get_context("spawn"),
+                                     initializer=fitcache._worker_init) as ex:
+                return list(ex.map(fn, items, chunksize=4))
+        except Exception:                   # noqa: BLE001 — a pool failure: read inline
+            pass
+    return [fn(x) for x in items]
+
+
+def _prefetch(home: Path, rows: list, files: dict) -> None:
+    """A cold folder (a new user, a restored copy): read EVERY unread file
+    now, in the pool, and fill the bad-file and power-source caches from the
+    same pass. The as-of estimates walk the history one 90-day window at a
+    time, so file by file inline this was ~1900 single-threaded parses (2-3
+    parsers each) interleaved with rewriting the MB-sized caches."""
+    from backend.engine import power_source as PS
+    from backend.engine.wko5expr import fitcache
+    bad_p, pw_p = home / BAD_CACHE_NAME, home / POWER_CACHE_NAME
+    bad_c, pw_c = _load_json(bad_p), _load_json(pw_p)
+    jobs = []
+    for r in rows:
+        e = _fit_entry(home, r[1])
+        have = bool(e and (e.get("bad") or [None])[0] == fitcache.versions()["bad"]
+                    and (e.get("power") or [None])[0] == fitcache.versions()["power"])
+        fresh = (bad_c.get(r[1]) or [None, None])[:2] == r[3] and (pw_c.get(r[1]) or [None, None])[:2] == r[3]
+        jobs.append((str(r[0]), not (have or fresh)))
+    res = _pool_map(_prefetch_one, jobs)
+    bad_dirty = pw_dirty = False
+    for r, (v, bad, pw) in zip(rows, res):
+        files[r[1]] = [r[3], v]
+        if bad is not None:
+            if bad[0] == "":                    # unreadable: what _bad_entry / _classify_file record
+                bad_c[r[1]], pw_c[r[1]] = r[3] + [None, None, None], r[3] + [PS.NONE]
+            else:
+                start = dt.datetime.fromisoformat(bad[0]) if bad[0] else None
+                bad_c[r[1]] = r[3] + [_local_start(start), bad[1], bad[2]]
+                pw_c[r[1]] = r[3] + [pw]
+            bad_dirty = pw_dirty = True
+    if bad_dirty:
+        _save_json(bad_p, bad_c)
+    if pw_dirty:
+        _save_json(pw_p, pw_c)
+
+
+def _files(home: Path, since: dt.date, until: dt.date, skip: Optional[set] = None) -> list[dict]:
+    """Every running FIT file in home/fit/** dated since…until, cached per file;
+    `skip` = paths (relative to home/fit, "/"-separated) left out unread."""
+    cache_p = home / CACHE_NAME
+    cache = _load_cache(cache_p)
+    files = cache["files"]
     root = home / "fit"
-    for p in sorted(root.rglob("*.fit")) if root.exists() else []:
-        d = _file_date(p)
-        if d is None or not (since <= d <= until):
-            continue
-        key = str(p.relative_to(root))
-        if skip and key.replace("\\", "/") in skip:
-            continue
-        st = p.stat()
-        stamp = [st.st_size, int(st.st_mtime)]
-        hit = cache["files"].get(key)
-        if not hit or hit[0] != stamp:
-            hit = [stamp, _read(p)]
-            cache["files"][key] = hit
-            dirty = True
-        if hit[1] and hit[1].get("date") and since.isoformat() <= hit[1]["date"] <= until.isoformat():
-            out.append({**hit[1], "path": key})
-    if dirty:
+    listing = _listing(root)
+
+    def unread(r):
+        return not (files.get(r[1]) and files[r[1]][0] == r[3]) and not (skip and r[1].replace("\\", "/") in skip)
+    rows = [r for r in listing if since <= r[2] <= until and not (skip and r[1].replace("\\", "/") in skip)]
+    todo = [r for r in rows if unread(r)]
+    if todo:
+        cold = [r for r in listing if unread(r)]
+        if len(cold) >= POOL_MIN_READS:
+            _prefetch(home, cold, files)          # the whole folder at once, in the pool
+        else:
+            for r in todo:
+                files[r[1]] = [r[3], _read(r[0])]
         try:
             cache_p.parent.mkdir(parents=True, exist_ok=True)
-            cache_p.write_text(json.dumps(cache, ensure_ascii=False, default=float), "utf-8")
+            text = json.dumps(cache, ensure_ascii=False, default=float)
+            cache_p.write_text(text, "utf-8")
+            cache = json.loads(text)        # what a later call reads back (lists, plain floats)
+            files = cache["files"]
+            _CACHE_MEMO[str(cache_p)] = (cache_p.stat().st_mtime_ns, cache)
         except OSError:
             pass
+    lo, hi = since.isoformat(), until.isoformat()
+    out = []
+    for r in rows:
+        v = files[r[1]][1]
+        if v and v.get("date") and lo <= v["date"] <= hi:
+            out.append({**v, "path": r[1]})
     return sorted(out, key=lambda x: x["date"])
 
 
 POWER_CACHE_NAME = "racepower_power_source.json"   # {path: [size, mtime, stryd|watch|none]}
 
+_JSON_MEMO: dict = {}
 
-def _classify_file(p: Path) -> str:
+
+def _load_json(p: Path) -> dict:
+    """A per-file JSON cache, parsed once per file version."""
+    try:
+        mt = p.stat().st_mtime_ns
+    except OSError:
+        return {}
+    m = _JSON_MEMO.get(str(p))
+    if m is not None and m[0] == mt:
+        return m[1]
+    try:
+        v = json.loads(p.read_text("utf-8"))
+    except (OSError, ValueError):
+        v = {}
+    _JSON_MEMO[str(p)] = (mt, v)
+    return v
+
+
+def _save_json(p: Path, v: dict) -> None:
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(v), "utf-8")
+        _JSON_MEMO[str(p)] = (p.stat().st_mtime_ns, json.loads(json.dumps(v)))
+    except OSError:
+        pass
+
+
+_STORES: dict = {}
+
+
+def _fit_entry(home: Path, key: str) -> Optional[dict]:
+    """The FIT dataset cache's entry (fitcache.FitStore) of home/fit/<key>
+    when it is current: the dataset build already parsed the file, so its
+    power source / bad-file features need no second parse."""
+    from backend.engine.wko5expr import fitcache
+    head, _, rest = key.replace("\\", "/").partition("/")
+    if head not in ("coros", "tp") or not rest:
+        return None
+    d = Path(home) / "fit" / head
+    try:
+        mt = fitcache.index_path_of(d).stat().st_mtime_ns
+    except OSError:
+        return None
+    m = _STORES.get(str(d))
+    if m is None or m[0] != mt:
+        m = _STORES[str(d)] = (mt, fitcache.FitStore(d))
+    try:
+        return m[1].entry(d / rest)
+    except (OSError, ValueError):
+        return None
+
+
+def _classify_file(p: Path, home: Optional[Path] = None, key: Optional[str] = None) -> str:
     from backend.engine import power_source as PS
+    from backend.engine.wko5expr import fitcache
     from backend.files.fit_to_channels import fit_to_channels
+    e = _fit_entry(home, key) if home is not None and key else None
+    slot = (e or {}).get("power")
+    if slot and slot[0] == fitcache.versions()["power"]:
+        return slot[1]                      # the same fit_to_channels(...).power_source, from the dataset parse
     try:
         return fit_to_channels(p.read_bytes()).power_source
     except Exception:                       # noqa: BLE001
@@ -290,11 +510,9 @@ def power_sources(home: Path, paths: list[str]) -> dict[str, str]:
     """{path (relative to home/fit): stryd / watch / none} of the given FIT
     files (backend/engine/power_source.py), cached per file stamp in its own
     file (the curve cache's version is left alone)."""
+    from backend.engine.wko5expr import fitcache
     cache_p = home / POWER_CACHE_NAME
-    try:
-        cache = json.loads(cache_p.read_text("utf-8"))
-    except (OSError, ValueError):
-        cache = {}
+    cache = _load_json(cache_p)
     root, out, dirty = home / "fit", {}, False
     for key in paths:
         p = root / key
@@ -302,31 +520,48 @@ def power_sources(home: Path, paths: list[str]) -> dict[str, str]:
             st = p.stat()
         except OSError:
             continue
-        stamp = [st.st_size, int(st.st_mtime)]
+        stamp = fitcache.stamp_s(p, st)
         hit = cache.get(key)
         if not hit or hit[:2] != stamp:
-            hit = stamp + [_classify_file(p)]
+            hit = stamp + [_classify_file(p, home, key)]
             cache[key] = hit
             dirty = True
         out[key] = hit[2]
     if dirty:
-        try:
-            cache_p.parent.mkdir(parents=True, exist_ok=True)
-            cache_p.write_text(json.dumps(cache), "utf-8")
-        except OSError:
-            pass
+        _save_json(cache_p, cache)
     return out
 
 
 BAD_CACHE_NAME = "racepower_bad_activity.json"   # {path: [size, mtime, local start, group, features]}
 
 
-def _bad_entry(p: Path) -> list:
+def _local_start(start):
+    from backend.engine.wko5expr.datasource import athlete_tz
+    if start is None:
+        return None
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=dt.timezone.utc)
+    return start.astimezone(athlete_tz()).replace(tzinfo=None).isoformat()
+
+
+def _bad_entry(p: Path, home: Optional[Path] = None, key: Optional[str] = None) -> list:
     """[local start 'YYYY-MM-DDTHH:MM:SS', sport group, bad_activity.features]."""
     from backend.engine import bad_activity as BA
+    from backend.engine.wko5expr import fitcache
     from backend.engine.wko5expr.datasource import athlete_tz
     from backend.engine.wko5expr.fitdataset import sport_of
     from backend.files.fit_to_channels import fit_to_channels
+    e = _fit_entry(home, key) if home is not None and key else None
+    slot = (e or {}).get("bad")
+    m = (e or {}).get("meta") or {}
+    if slot and slot[0] == fitcache.versions()["bad"] and m.get("start") and "" in slot[1]:
+        # the dataset parse computed the same features from the same channels
+        try:
+            start = dt.datetime.fromisoformat(m["start"])
+        except ValueError:
+            start = None
+        if start is not None:
+            return [_local_start(start), fitcache.group_of(m.get("sport"), m.get("sub_sport")), slot[1][""]]
     try:
         fc = fit_to_channels(p.read_bytes())
     except Exception:                       # noqa: BLE001
@@ -353,15 +588,13 @@ def bad_files(home: Path, paths: list[str], enabled: Optional[bool] = None,
     are cached per file stamp in their own file."""
     from backend.engine import activity_tags as AT
     from backend.engine import bad_activity as BA
+    from backend.engine.wko5expr import fitcache
     enabled = BA.read_setting(True) if enabled is None else enabled
     rows = AT.load() if tags is None else tags
     if not enabled and not any(AT.user_exclusion(r) for r in rows):
         return {}
     cache_p = home / BAD_CACHE_NAME
-    try:
-        cache = json.loads(cache_p.read_text("utf-8"))
-    except (OSError, ValueError):
-        cache = {}
+    cache = _load_json(cache_p)
     root, out, dirty = home / "fit", {}, False
     for key in paths:
         p = root / key
@@ -369,10 +602,10 @@ def bad_files(home: Path, paths: list[str], enabled: Optional[bool] = None,
             st = p.stat()
         except OSError:
             continue
-        stamp = [st.st_size, int(st.st_mtime)]
+        stamp = fitcache.stamp_s(p, st)
         hit = cache.get(key)
         if not hit or hit[:2] != stamp:
-            hit = stamp + _bad_entry(p)
+            hit = stamp + _bad_entry(p, home, key)
             cache[key] = hit
             dirty = True
         start, group, feats = hit[2], hit[3], hit[4]
@@ -382,11 +615,7 @@ def bad_files(home: Path, paths: list[str], enabled: Optional[bool] = None,
         if ex:
             out[key] = ex["reason"]
     if dirty:
-        try:
-            cache_p.parent.mkdir(parents=True, exist_ok=True)
-            cache_p.write_text(json.dumps(cache), "utf-8")
-        except OSError:
-            pass
+        _save_json(cache_p, cache)
     return out
 
 

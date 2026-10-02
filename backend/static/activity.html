@@ -143,6 +143,7 @@ dialog#ed::backdrop { background: rgba(10,14,20,.45); }
     <h1><span data-i18n="activity.title">活動列表</span><button type="button" class="qtip" aria-label="?"
       data-i18n-attr="data-tip:activity.help.page" data-tip="">?</button></h1>
     <span class="meta" id="hdr"></span>
+    <span class="meta" id="autost" role="status" aria-live="polite" hidden></span>
   </div>
   <div class="filters" role="search">
     <input type="search" id="f-q" class="q" data-i18n-attr="placeholder:activity.f.q;aria-label:activity.f.q_label" placeholder="" aria-label="">
@@ -367,8 +368,23 @@ async function loadStats() {
   try { S.stats = await j(`${API}/activities/stats`); } catch { S.stats = {}; }
   S.statsReady = true; render();
 }
+// the auto type / effort is computed in the background on the server (minutes on a
+// first open): the reply carries what is known so far and the progress; poll until ready
 async function loadAuto() {
-  try { S.auto = await j(`${API}/activities/auto`); } catch { S.auto = {}; }
+  const gen = S.autoGen = (S.autoGen || 0) + 1;
+  let r = null;
+  try { r = await j(`${API}/activities/auto`); } catch { r = { state: "error", auto: {} }; }
+  if (gen !== S.autoGen) return;                          // a newer request took over (rebuild)
+  S.auto = r.auto || {}; S.autoState = r.state;
+  const st = $("autost");
+  if (r.state === "computing") {
+    st.hidden = false;
+    st.textContent = T("auto_progress", { done: r.n_done || 0, total: r.n_total || 0 });
+    setTimeout(() => { if (gen === S.autoGen) loadAuto(); }, 1500);
+  } else {
+    st.hidden = r.state !== "error";
+    st.textContent = r.state === "error" ? T("auto_failed") : "";
+  }
   if (S.sel && $("ed").open) renderEditor();
 }
 
@@ -430,7 +446,7 @@ function renderEditor() {
   const d = S.detail, au = autoOf(a);
   const tAuto = d ? d.activity_type_auto : au?.activity_type, tWhy = d ? d.activity_type_reason : au?.activity_type_reason;
   const eAuto = d ? d.effort_auto : au?.effort, eWhy = d ? d.effort_reason : au?.effort_reason;
-  const pending = !(S.auto || d);
+  const pending = !d && !au && S.autoState !== "ready" && S.autoState !== "error";
   const sel = (f, opts, cur, autoV) => `<select data-f="${f}" aria-label="${esc(T("f_" + f))}">` +
     `<option value="" ${cur ? "" : "selected"}>${esc(T("auto_opt", { v: autoV ? opts[autoV] : pending ? T("computing") : "—" }))}</option>` +
     Object.entries(opts).map(([k, v]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(v)}</option>`).join("") + `</select>`;
