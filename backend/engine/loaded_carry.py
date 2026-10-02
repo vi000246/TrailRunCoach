@@ -64,6 +64,7 @@ Thresholds ±3 bpm, ±5 % are 推估 (as in b2b.py).
 from __future__ import annotations
 
 import datetime as dt
+import math
 import re
 from statistics import median
 from typing import Callable, Iterable, Optional
@@ -131,7 +132,7 @@ def _r5(x: float) -> int:
 
 
 def _kg(x: Optional[float]) -> Optional[float]:
-    return None if x is None else round(float(x) * 2) / 2          # 0.5 kg steps
+    return None if x is None else round(float(x), 1)               # 0.1 kg, as b2b.pack_kg
 
 
 def md(day) -> str:
@@ -173,7 +174,7 @@ def machine_cap(weight: Optional[float], trip: float) -> float:
     hi = OVERLOAD * trip
     if weight:
         hi = min(hi, BW_MAX * weight)
-    return max(trip, _kg(hi))
+    return max(trip, math.floor(hi * 10 + 1e-9) / 10)        # a cap: rounded down to 0.1 kg
 
 
 def loaded_min(kgs: list) -> float:
@@ -273,7 +274,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
                 machine_cap=machine_cap(weight, trip), phase_kind=kind,
                 count28=sum(1 for r in rows if lo28 <= _d(r["day"]) < monday),
                 last_long=longs[-1]["day"] if longs else None, last_loaded=rows[-1]["day"] if rows else None,
-                max_done=max((r.get("stage") or 0 for r in rows), default=0), done_n=len(rows))
+                max_done=max((r.get("stage") or 0 for r in rows), default=0), done_n=len(rows),
+                loaded_days=[r["day"] for r in rows if _d(r["day"]) < monday])
     me_n = int(state.get("me_n") or 0)
     info["me_n"] = me_n
     me_week = (kind == "base" and BASE_ME_FROM <= w <= ME_WEEKS[1]) or (kind == "specific" and w >= ME_WEEKS[0])
@@ -458,15 +460,27 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
     step = info.get("step")
     if step in (None, "me"):
         return ss
-    count = int(info.get("count28") or 0)
+    taken = [_d(x) for x in info.get("loaded_days") or []]
 
-    def room() -> bool:
-        return count < MAX_PER_28
+    def room(d: Optional[dt.date]) -> bool:
+        """Adding `d` keeps every 28-day window that contains it at ≤ 4 loaded sessions
+        (the weeks after check theirs when they are planned)."""
+        if d is None:
+            return False
+        for i in range(28):
+            end = d + dt.timedelta(days=i)
+            if 1 + sum(1 for x in taken if end - dt.timedelta(days=27) <= x <= end) > MAX_PER_28:
+                return False
+        return True
+
+    def take(s: dict) -> None:
+        taken.append(_d(s["day"]))
 
     # ---- taper: one short carry 8–14 days out, nothing in the last 7 -----------
     if step == "taper":
         last = _d(info.get("last_loaded"))
         kg = info["trip_kg"]
+        full_taper = False
         for s in sorted((x for x in ss if x.get("kind") == "easy" and x.get("day")), key=lambda x: x["day"]):
             d = _d(s["day"])
             to = (start - d).days
@@ -482,15 +496,17 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
                 continue
             if last is not None and (d - last).days < TAPER_GAP_DAYS:
                 continue
-            if not room():
-                note("減量期：28 天內負重課已 4 次，不再加短課（Orr 2021）")
-                return ss
+            if not room(d):
+                full_taper = True
+                continue
             _carry_session(s, kg, TAPER_CARRY_MIN, info, aet, prefs, th, hike_rate, taper=True)
             info["planned"].append(_row(s, kg, False))
             wk["taper"] = {"day": s["day"], "kg": kg, "done": False}
             return ss
+        if full_taper:
+            note("減量期：28 天內負重課已 4 次，不再加短課（Orr 2021）")
         if (start - _d(info["monday"])).days <= NO_PACK_DAYS + 6:
-            wk["notes"].append(f"賽前 {NO_PACK_DAYS} 天內不背包、不做 ME（{SRC_TAPER}）")
+            wk["notes"].append(f"賽前 {NO_PACK_DAYS} 天內（{md(start - dt.timedelta(days=NO_PACK_DAYS))} 起）不背包、不做 ME（推估）")
         return ss
 
     # ---- specific: the loaded long day (B2B day 1) ----------------------------
@@ -509,19 +525,20 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
         elif last_long is not None and (L - last_long).days < LONG_SPACING_DAYS:
             why_not = (f"上一次背包長天 {md(last_long)} 不到 {LONG_SPACING_DAYS} 天（Orr 2021：每 10–14 天最多一次）"
                        + ("：B2B 這次不背" if b2b_due else "：這週改排平日機器課"))
-        elif not room():
+        elif not room(L):
             why_not = "28 天內負重課已 4 次（Orr 2021）"
         if long_s.get("done"):
             k = done_kg(long_s)
             if k:
                 long_loaded = True
-                count += 1
+                take(long_s)
                 info["planned"].append(_row(long_s, k, True, stage=stage_done(k, info["kgs"])))
                 wk["long"] = {"day": long_s["day"], "kg": k, "done": True}
         elif why_not is None:
             _long_session(long_s, stage_kg, info, b2b_due, weight)
+            long_s["target"] = _hr_target(long_s, aet, prefs, th)       # a pack day: HR ≤ AeT (target_policy)
             long_loaded = True
-            count += 1
+            take(long_s)
             info["planned"].append(_row(long_s, stage_kg, True, stage=info["step"]))
             wk["long"] = {"day": long_s["day"], "kg": stage_kg, "done": False, "minutes": long_s["minutes"],
                           "first": bool(long_s.get("pack_from"))}
@@ -532,24 +549,22 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
                 if s.get("done"):
                     k = done_kg(s)
                     if k:
-                        count += 1
+                        take(s)
                         info["planned"].append(_row(s, k, True, stage=stage_done(k, info["kgs"])))
                     continue
-                if not room():
+                if not s.get("day") or not room(_d(s["day"])):
                     note(f"{s.get('title', 'B2B')}：28 天內負重課已 4 次，這天不背包（Orr 2021）")
                     continue
                 _follow_session(s, stage_kg, info, weight)
-                count += 1
+                s["target"] = _hr_target(s, aet, prefs, th)
+                take(s)
                 info["planned"].append(_row(s, stage_kg, True, stage=info["step"]))
     # ---- the weekday machine session: weeks without a loaded long day, never a B2B week ----
     post = (b2b or {}).get("post") or {}
     if not long_loaded and not b2b_due and not hold and stage_kg is not None:
-        wk["machine"] = _machine(ss, info, count, post, aet, prefs, th, hike_rate, done_kg, note)
-        if wk["machine"]:
-            count += 1
+        wk["machine"] = _machine(ss, info, room, post, aet, prefs, th, hike_rate, done_kg, note)
     elif not long_loaded and not b2b_due and not hold and stage_kg is None:
         note("沒有體重資料：背包重量（體重的 %）算不出來，這週不排機器背包課")
-    info["count_week_end"] = count
     return ss
 
 
@@ -616,7 +631,7 @@ def _carry_session(s: dict, kg: float, minutes: int, info: dict, aet, prefs, th,
     s["target"] = _hr_target(s, aet, prefs, th)
 
 
-def _machine(ss: list[dict], info: dict, count: int, post: dict, aet, prefs, th, rate: float,
+def _machine(ss: list[dict], info: dict, room: Callable, post: dict, aet, prefs, th, rate: float,
              done_kg: Callable, note: Callable) -> Optional[dict]:
     """Turn one easy run into the 40–50 min machine session (minutes from the
     easy total: the week doesn't grow). A done easy run that carried the pack
@@ -629,18 +644,18 @@ def _machine(ss: list[dict], info: dict, count: int, post: dict, aet, prefs, th,
                 _carry_session(s, k, s["minutes"], info, aet, prefs, th, rate, keep=True)
                 info["planned"].append(_row(s, k, False, stage=stage_done(k, info["kgs"])))
                 return {"day": s["day"], "kg": k, "done": True, "minutes": s["minutes"]}
-    if count >= MAX_PER_28:
-        note("28 天內負重課已 4 次：這週不排機器背包課（Orr 2021）")
-        return None
     hard = [_d(s["day"]) for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "race")
                                                          or s.get("id") in ("long", "long2", "long3"))]
     until = _d(post.get("until")) if post else None
     cap = getattr(prefs, "cap_weekday", None) if prefs is not None and getattr(prefs, "active", False) else None
-    cands = []
+    cands, full = [], False
     for s in ss:
         if s.get("kind") != "easy" or s.get("done") or not s.get("day"):
             continue
         d = _d(s["day"])
+        if not room(d):
+            full = True
+            continue                                  # ≤ 4 loaded sessions in any 28 days (Orr 2021)
         if any(abs((d - h).days) < 2 for h in hard):
             continue                                  # 48 h from the long day / quality (plan_prefs hard-day rule)
         if until is not None and d <= until:
@@ -650,7 +665,8 @@ def _machine(ss: list[dict], info: dict, count: int, post: dict, aet, prefs, th,
             continue
         cands.append((d.weekday() >= 5, -min(abs((d - h).days) for h in hard) if hard else 0, d, s, m))
     if not cands:
-        note("這週沒有離長天和強度課 ≥ 2 天的輕鬆日：機器背包課不排（推估）")
+        note("28 天內負重課已 4 次：這週不排機器背包課（Orr 2021）" if full else
+             "這週沒有可以放機器背包課的輕鬆日（長天、強度課的前後一天和 B2B 後的輕鬆日都不放）：這週不排（推估）")
         return None
     cands.sort(key=lambda c: (c[0], c[1], c[2]))
     _, _, d, s, m = cands[0]
