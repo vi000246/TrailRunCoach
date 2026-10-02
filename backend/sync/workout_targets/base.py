@@ -80,6 +80,12 @@ class WorkoutProvider:
                             *, stale_keys=(), missed_keys=()) -> dict:
         raise ProviderDisabled(f"{self.label} 尚未開放，沒有送出任何東西")
 
+    async def push_workout(self, db, session: dict, thresholds: Optional[dict], today: str) -> dict:
+        """One workout outside the week plan (the race calculator), idempotent per
+        session["key"]: on session["day"] when that is today or later, else into the
+        provider's library only."""
+        raise ProviderDisabled(f"{self.label} 尚未開放，沒有送出任何東西")
+
     async def remove_keys(self, db, keys) -> list[dict]:
         raise ProviderDisabled(f"{self.label} 尚未開放")
 

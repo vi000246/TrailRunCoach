@@ -1,5 +1,5 @@
 """
-Energy and fuelling for the 賽事功率 page — docs/research/fueling-and-energy.md.
+Energy and fuelling for the 賽事計算機 page — docs/research/fueling-and-energy.md.
 
 Pure functions on the /plan payload (planner.plan_run / plan_hike segments);
 nothing here reads files, settings or the network. The page shows
