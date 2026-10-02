@@ -887,7 +887,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             tss=45 / 60 * 65)
     elif kind == "event":
         add(id="race", kind="race", title="比賽", minutes=0, detail="賽前 2 天 20–30 分輕鬆跑＋幾趟加速",
-            source="你的筆記")
+            source="教練常見做法（推估）")
     if b2b.get("post"):
         # the days after a B2B: easy only (UA / Johnston); the minutes go to the easy runs
         sessions = [s for s in sessions if s.kind not in ("quality", "test")]
