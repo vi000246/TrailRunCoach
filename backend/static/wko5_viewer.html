@@ -2420,6 +2420,11 @@ function drawPlot(card, res, series) {
     };
   }
   const legendRows = zoom ? Math.ceil(out.length / Math.max(1, Math.floor((el.clientWidth || 900) / 170))) : 1;
+  // the legend shows what the chart draws: a plain line for line series without point markers
+  // (ECharts' default line icon has a circle in the middle, which the chart itself doesn't have)
+  for (const o of out) {
+    if (o.type === "line" && !o.showSymbol && !o.areaStyle && !o.legendIcon) o.legendIcon = "path://M0,5 L26,5 L26,8 L0,8 Z";
+  }
   chart.setOption({
     animation: false,
     grid: { left: 52, right: (Z ? 64 : 20) + Math.max(0, axisIds.length - 1) * 46, top: 26,
