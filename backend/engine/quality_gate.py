@@ -81,7 +81,7 @@ FRIEL_MIN_S = 70 * 60          # ≥ 60 min after drift_of's 10-min warm-up
 FRIEL_GOOD = 0.05
 XU_MIN_S = 90 * 60
 XU_GOOD = 0.10
-XU_HEAT_C = 25.0
+XU_HEAT_C = 25.0               # 徐國峰's condition: advice in the session text, not a refusal (heat bands)
 PLATEAU_WEEKS = 8              # 自訂
 EF_PLATEAU = 0.02              # status.EF_TREND
 LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD (Seiler, by time)
@@ -229,9 +229,30 @@ def _runs(ds, today: dt.date, days: int = LOOKBACK_DAYS):
     return [w for w in ds.workouts if tday - days < math.floor(w.day) <= tday and w.sport == "run"]
 
 
+def _band_fields(dr: dict) -> dict:
+    """The run's temperature band for the gate texts (workout_review.temp_band)."""
+    from backend.engine import workout_review as WR
+    band = dr.get("temp_band") or WR.temp_band(dr.get("temp_c"))
+    return {"band": band, "heat": WR.is_heat(band), "chip": "🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明"),
+            "temp_c": dr.get("temp_c")}
+
+
+def heat_suffix(run: dict, passed: bool) -> str:
+    """Heat bands and the gates (Friel / 徐國峰 / AeT test): a hot-band run
+    still counts. Heat inflates the drift (Lafrenz 2008; Beiter 2025), so a
+    pass in heat is conservative and unlocks; a fail in heat is reported as
+    possibly heat-inflated (and stays a fail)."""
+    if not run.get("heat"):
+        return ""
+    from backend.engine import workout_review as WR
+    return (f"（{run['chip']}，{WR.HEAT_NOTE}；熱天通過仍算數）" if passed
+            else f"（{run['chip']}，{WR.HEAT_NOTE}，可能是熱造成的）")
+
+
 def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
     """Friel: one steady run near AeT, ≥ 60 min after the warm-up, fair drift < 5 %.
-    missing = no such run in 8 weeks; locked = runs there, all ≥ 5 %."""
+    missing = no such run in 8 weeks; locked = runs there, all ≥ 5 %. Every
+    temperature band counts (heat_suffix: a pass in heat unlocks)."""
     from backend.engine import workout_review as WR
     if not aet:
         return {"state": "missing", "reason": "沒有實測 AeT，飄移法沒有基準"}
@@ -246,7 +267,8 @@ def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
         hr, dr = m.get("avg_hr"), m.get("drift") or {}
         if hr is None or not lo <= hr <= hi or not dr.get("ok"):
             continue
-        cands.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "drift": dr["drift"], "hr": hr})
+        cands.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "drift": dr["drift"], "hr": hr,
+                      **_band_fields(dr)})
     WR._flush(ds)
     if not cands:
         return {"state": "missing", "reason": f"8 週內沒有 ≥ 60 分鐘、平均心率 {lo:.0f}–{hi:.0f} 的平路穩定跑"}
@@ -277,9 +299,9 @@ def xu_drift_of(t, hr, a_s: float = 600.0, b_s: float = 5400.0, half_s: float = 
 
 def xu_check(ds, today: dt.date) -> dict:
     """The latest flat ≥ 90-min E run in 8 weeks (drift_of's flat / stop / steady /
-    fast-finish checks must pass). Over 25 °C it doesn't count: drift_of's heat
-    rule (workout_review.heat_gate — the route_weather archive's air
-    temperature, else the watch's; XU_HEAT_C == WR.DRIFT_HEAT_C)."""
+    fast-finish checks must pass). Every temperature band counts (heat bands:
+    workout_review.heat_band; a pass in heat unlocks, a fail in heat is
+    marked possibly heat-inflated — heat_suffix)."""
     # the method stays strict-tier (drift_of's fairness, as before); the Zone 5 path uses
     # base_check.xu_run with 徐國峰's own conditions (stops ≤ 30 s, Zone 1, ≤ 25 °C)
     from backend.engine import workout_review as WR
@@ -295,7 +317,7 @@ def xu_check(ds, today: dt.date) -> dict:
             continue
         r = xu_drift_of(s["t"], s["hr"])
         if r is not None:
-            last = {"idx": w.idx, "date": WR._wdate(w).isoformat(), **r}
+            last = {"idx": w.idx, "date": WR._wdate(w).isoformat(), **r, **_band_fields(m["drift"])}
     WR._flush(ds)
     if last is None:
         return {"state": "missing", "reason": "8 週內沒有 ≥ 90 分鐘、平路、不停的 E 配速跑"}
@@ -786,19 +808,24 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
                 return {"state": "missing", "verdict": r["reason"] + "，飄移法算不出來"}
             run = r["run"]
             if r["state"] == "unlocked":
-                return {"state": "unlocked", "verdict": f"{run['date']} 在 AeT 附近跑 ≥ 60 分鐘，飄移 {run['drift'] * 100:.1f}% < 5%",
+                return {"state": "unlocked", "verdict": f"{run['date']} 在 AeT 附近跑 ≥ 60 分鐘，飄移 {run['drift'] * 100:.1f}% < 5%"
+                                                        + heat_suffix(run, True),
                         "prefix": f"Friel 飄移 {run['drift'] * 100:.1f}% < 5%（{run['date']}）：", "run": run}
-            return {"state": "locked", "verdict": f"8 週內在 AeT 附近 ≥ 60 分鐘的平路跑，飄移都 ≥ 5%（最近 {run['drift'] * 100:.1f}%）",
-                    "action": "排一次 60–90 分鐘平路跑，心率壓在 AeT 附近", "run": run}
+            return {"state": "locked", "verdict": f"8 週內在 AeT 附近 ≥ 60 分鐘的平路跑，飄移都 ≥ 5%（最近 {run['drift'] * 100:.1f}%）"
+                                                  + heat_suffix(run, False),
+                    "action": "排一次 60–90 分鐘平路跑，心率壓在 AeT 附近" + ("，選氣溫 25 °C 以下的時段" if run.get("heat") else ""),
+                    "run": run}
         if m == "xu_drift":
             r = xu()
             if r["state"] == "missing":
                 return {"state": "missing", "verdict": r["reason"] + "，90 分鐘法算不出來"}
             run = r["run"]
             if r["state"] == "unlocked":
-                return {"state": "unlocked", "verdict": f"{run['date']} 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%",
+                return {"state": "unlocked", "verdict": f"{run['date']} 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%"
+                                                        + heat_suffix(run, True),
                         "prefix": f"90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}% < 10%：", "run": run}
-            return {"state": "locked", "verdict": f"最近一次 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}%（≥ 10%）",
+            return {"state": "locked", "verdict": f"最近一次 90 分鐘 E 跑飄移 {run['drift'] * 100:.0f}%（≥ 10%）"
+                                                  + heat_suffix(run, False),
                     "action": "繼續低強度長跑，下次選 < 25 °C 的日子再測", "run": run}
         if m == "plateau":
             if base_weeks is None or ef is None:

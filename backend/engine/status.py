@@ -465,37 +465,57 @@ class Status:
         # Informational (docs/research/aerobic-base-readiness.md §4.3): the same
         # per-run drift the 單次活動 review card shows (workout_review: road, ≥ 40
         # min after the 10-min warm-up, avg HR ≤ AeT+3; hilly / stopped / unsteady /
-        # fast-finish / > 25 °C runs refused). It is not
+        # fast-finish runs refused; heat is a band, not a refusal). It is not
         # the interval gate any more — that is i_gate (engine/quality_gate.py).
         # Display only, so the 參考 tier counts too (workout_review.DRIFT_REF_MIN_S:
         # 30–40 min after the warm-up, 自組), labelled; the gate reads the strict tier.
         # drift v2 (docs/research/drift-algorithm.md §1.3, §5.4): one run is ±4–6 pp, so the
         # number shown is the mean ± SE of the last 6 fair runs (engine/drift_agg.py), not a
         # verdict on one run; the single runs stay in the spark.
+        # heat bands (workout_review.temp_band): runs are compared only within one temperature
+        # band (< 25 / 25–28 / > 28 °C, 推估 cut-offs) — the number is the aggregate of the band
+        # of the latest fair run (the season the athlete is in), or of the band with the most runs
+        # when that one has < 2; the other bands' aggregates ride along in extra["bands"].
         from backend.engine import drift_agg as DA
         from backend.engine import workout_review as WR
         pts = WR.drift_series(self.ds, self.today, ref=True)
-        fair = [p for p in pts if p["drift"] is not None]
+        all_fair = [p for p in pts if p["drift"] is not None]
+        by_band = {}
+        for p in all_fair:
+            by_band.setdefault(p.get("band") or "none", []).append(p)
+        band = DA.pick_band(all_fair)
+        fair = by_band.get(band, []) if band else []
+        bands = {b: {"n": len(v), "agg": DA.aggregate(v), "label": WR.TEMP_BAND_LABEL.get(b, b)}
+                 for b, v in by_band.items()}
+        chip = "🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明") if band else ""
+        heat = WR.is_heat(band)
         n_ref = sum(1 for p in fair if p.get("tier") == "ref")
         spark = [[p["date"], round(p["drift"], 4)] for p in fair]
         note = "飄移是 AeT 測試用的，不是間歇門檻"
-        ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": WR.REF_LABEL, "ref_tip": WR.REF_TIP}
+        ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": WR.REF_LABEL, "ref_tip": WR.REF_TIP,
+                     "band": band, "band_label": WR.TEMP_BAND_LABEL.get(band) if band else None, "chip": chip,
+                     "heat": heat, "bands": bands, "band_tip": WR.HEAT_TIP}
         agg = DA.aggregate(fair)
         if len(fair) < DA.AGG_MIN:
+            other = (f"；分溫度區：" + "、".join(f"{WR.TEMP_BAND_LABEL.get(b, b)} {x['n']} 次" for b, x in bands.items())
+                     if len(bands) > 1 else "")
             return Indicator("drift", "心率飄移", NA, "–",
-                             f"8 週內可判讀的輕鬆路跑不到 2 次（{len(pts)} 次符合條件）",
+                             f"8 週內同一溫度區可判讀的輕鬆路跑不到 2 次（{len(pts)} 次符合條件{other}）",
                              "只算路跑、暖身後還有 ≥ 40 分鐘（30–40 分算參考）、平均心率 ≤ AeT+3；回程市區段當緩和、"
-                             "結尾靜止裁掉；有坡、有停頓、跑走、功率起伏（VI > 1.04）、前後半功率差 > 5%、快速結尾、"
-                             "> 25 °C 的不採用",
+                             "結尾靜止裁掉；有坡、有停頓、跑走、功率起伏（VI > 1.04）、前後半功率差 > 5%、快速結尾"
+                             "的不採用；只和同一溫度區（< 25／25–28／> 28 °C，推估）的跑步比",
                              "", SRC_FRIEL, spark=spark,
                              extra={"fair": len(fair), "median": None, "agg": agg, **ref_extra})
         med = _median([p["drift"] for p in fair])
         mean = agg["mean"]
         txt = (_pct(mean, 1) + f" ±{agg['se'] * 100:.1f}" +
-               ("（參考）" if n_ref == len(fair) else "（含參考）" if n_ref else ""))
+               ("（參考）" if n_ref == len(fair) else "（含參考）" if n_ref else "") + f" · {chip}")
         mix = (f"，其中 {n_ref} 次是{WR.REF_LABEL}" if n_ref else "")
-        why = (f"8 週內 {len(fair)} 次可判讀的輕鬆路跑{mix}；最近 {agg['n']} 次平均 Pa:HR {DA.text(agg)}"
-               f"（單次 ±4–6 個百分點，所以看平均，不判單次；中位數 {_pct(med, 1)}）；{note}")
+        others = [f"{x['label']} {x['n']} 次" for b, x in bands.items() if b != band]
+        why = (f"8 週內 {chip} 有 {len(fair)} 次可判讀的輕鬆路跑{mix}；最近 {agg['n']} 次平均 Pa:HR {DA.text(agg)}"
+               f"（單次 ±4–6 個百分點，所以看平均，不判單次；中位數 {_pct(med, 1)}）"
+               + (f"；只和同一溫度區比，其他區另計（{'、'.join(others)}）" if others else "")
+               + (f"；{WR.HEAT_NOTE}" if heat else "") + f"；{note}")
         med = mean
         if med < DRIFT_GOOD:
             lvl, v, act = INFO, "< 5%：輕鬆跑後段心率穩", ""
@@ -504,11 +524,15 @@ class Status:
         else:
             lvl, v, act = BAD, "> 10%：輕鬆跑太快（或太熱、沒補給）", "所有輕鬆跑壓在 AeT 以下"
         # the level feeds the base-phase guardrail (overview gate levels,
-        # quality_gate): BAD only on the strict tier's own median (≥ 2 test runs)
+        # quality_gate): BAD only on the strict tier's own median (≥ 2 test runs), and
+        # not in a heat band — heat inflates the drift (Lafrenz 2008), so > 10 % there may be the heat
         test = [p["drift"] for p in fair if p.get("tier") != "ref"]
         if lvl == BAD and not (len(test) >= 2 and _median(test) >= DRIFT_WATCH):
             lvl, act = INFO, ""
             v = "> 10%（參考值為主，不當警示）：輕鬆跑可能太快"
+        elif lvl == BAD and heat:
+            lvl, act = INFO, ""
+            v = f"> 10%（{WR.HEAT_NOTE}，不當警示）：輕鬆跑可能太快，涼一點的日子再看"
         return Indicator("drift", "心率飄移", lvl, txt, v, why, act, SRC_FRIEL, med, spark,
                          {"fair": len(fair), "median": _median([p["drift"] for p in fair]), "agg": agg,
                           **ref_extra})

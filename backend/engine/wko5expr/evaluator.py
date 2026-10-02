@@ -1091,13 +1091,17 @@ class Evaluator:
         """drift("pace" | "power"): the 單次活動判讀卡's drift of a run
         (workout_review.drift_of through its cached measure: 10-min warm-up
         excluded, ≥ 40 min after it, and the fairness refusals — hills, stops,
-        unsteady, > 90 % CP, fast finish, > 25 °C). NaN (nothing plotted) for
+        unsteady, > 90 % CP, fast finish). NaN (nothing plotted) for
         a refused run, a non-run, or power mode without power. Not WKO5's
         stored pahr / pwhr (whole recording, warm-up and stops included).
 
         drift(basis, tier): "test" (default) = the strict tier, ≥ 40 min after
         the warm-up (UA); "ref" = only the 參考 tier, 30–40 min after it (自組,
-        workout_review.DRIFT_REF_MIN_S — display only); "all" = either."""
+        workout_review.DRIFT_REF_MIN_S — display only); "all" = either.
+        drift(basis, tier, band): only runs of that temperature band ("cool"
+        < 25 °C, "warm" 25–28, "hot" > 28, "none" no temperature;
+        workout_review.temp_band); "all" (default) = every band — heat is a
+        band, not a refusal."""
         from backend.engine import workout_review as WR
         basis = str(self.arg(n, 0, ctx)).strip().lower() if n.args else "pace"
         if basis not in ("pace", "power"):
@@ -1105,6 +1109,9 @@ class Evaluator:
         tier = str(self.arg(n, 1, ctx)).strip().lower() if len(n.args) > 1 else "test"
         if tier not in ("test", "ref", "all"):
             raise EvalError(f'drift() tier must be "test", "ref" or "all", got {tier!r}')
+        band = str(self.arg(n, 2, ctx)).strip().lower() if len(n.args) > 2 else "all"
+        if band not in WR.TEMP_BANDS + ("none", "all"):
+            raise EvalError(f'drift() band must be "cool", "warm", "hot", "none" or "all", got {band!r}')
 
         def one(w):
             # cheap pre-filter: drift_of refuses anything shorter anyway, and a
@@ -1113,9 +1120,11 @@ class Evaluator:
             floor = WR.DRIFT_MIN_S if tier == "test" else WR.DRIFT_REF_MIN_S
             if w.sport != "run" or dur is None or dur < WR.WARMUP_S + floor:
                 return math.nan
-            m = WR.measure(self.ds, w)         # disk-cached; heat_gate applied on read
+            m = WR.measure(self.ds, w)         # disk-cached; heat_band applied on read
             dr = (m or {}).get("drift") or {}
             if tier == "ref" and WR.drift_tier(dr) != "ref":
+                return math.nan
+            if band != "all" and (dr.get("temp_band") or WR.temp_band(dr.get("temp_c"))) != band:
                 return math.nan
             d = WR.basis_drift(dr, basis, ref=tier != "test")[0]
             return math.nan if d is None else float(d)
@@ -1132,7 +1141,11 @@ class Evaluator:
         drift() plots (both tiers) up to each run, within 8 weeks
         (engine/drift_agg.rolling; drift v2: one run is ±4–6 pp, so the season
         charts show the aggregate next to the single runs). stat "mean"
-        (default), "lo" (mean − SE) or "hi" (mean + SE). NaN where fewer than 2."""
+        (default), "lo" (mean − SE) or "hi" (mean + SE). NaN where fewer than 2.
+        Within one temperature band (heat bands): each run's mean is over the
+        runs of its own band; drift_avg(basis, stat, band) plots only the runs
+        of that band ("cool" / "warm" / "hot" / "none"; "same" = default, every
+        run with its own band's mean)."""
         from backend.engine import drift_agg as DA
         from backend.engine import workout_review as WR
         basis = str(self.arg(n, 0, ctx)).strip().lower() if n.args else "pace"
@@ -1141,6 +1154,9 @@ class Evaluator:
         stat = str(self.arg(n, 1, ctx)).strip().lower() if len(n.args) > 1 else "mean"
         if stat not in ("mean", "lo", "hi"):
             raise EvalError(f'drift_avg() stat must be "mean", "lo" or "hi", got {stat!r}')
+        band = str(self.arg(n, 2, ctx)).strip().lower() if len(n.args) > 2 else "same"
+        if band not in WR.TEMP_BANDS + ("none", "same"):
+            raise EvalError(f'drift_avg() band must be "cool", "warm", "hot", "none" or "same", got {band!r}')
         memo = self.__dict__.setdefault("_drift_avg", {})
         if basis not in memo:
             memo[basis] = DA.rolling(self.ds, basis)
@@ -1148,7 +1164,7 @@ class Evaluator:
 
         def one(w):
             a = roll.get(w.idx)
-            if not a:
+            if not a or (band != "same" and a.get("band") != band):
                 return math.nan
             return float(a["mean"] + {"mean": 0.0, "lo": -a["se"], "hi": a["se"]}[stat])
         if ctx.workout is not None:

@@ -178,15 +178,18 @@ def test_drift_counts_the_40_minutes_after_the_warmup():
     assert r["drift"] == pytest.approx(plain, abs=1e-12) and r["drift"] > 0.02     # 141.75 → 145.25 bpm
 
 
-def test_drift_refuses_a_hot_run_and_says_which_temperature():
+def test_drift_keeps_a_hot_run_with_its_band_and_source():
+    # heat bands: > 25 °C is no longer a refusal
     t, hr, v = _warmup_run(60)
-    r = R.drift_of(t, hr, v, temp_c=27.4, temp_src="watch")
-    assert not r["ok"] and not r["pw_ok"] and "手錶溫度 27 °C" in r["reason"] and "25 °C" in r["reason"]
-    r = R.drift_of(t, hr, v, temp_c=26.0, temp_src="route_weather")
-    assert not r["ok"] and "路線天氣" in r["reason"] and r["temp_src"] == "route_weather"
+    p = np.full(len(t), 200.0)
+    r = R.drift_of(t, hr, v, p, cp=300.0, temp_c=27.4, temp_src="watch")
+    assert r["ok"] and r["pw_ok"] and r["temp_band"] == "warm" and r["heat"] and not r["reason"]
+    r = R.drift_of(t, hr, v, temp_c=29.0, temp_src="route_weather")
+    assert r["ok"] and r["temp_band"] == "hot" and r["temp_src"] == "route_weather"
     r = R.drift_of(t, hr, v, temp_c=24.0, temp_src="watch")
-    assert r["ok"] and r["temp_c"] == 24.0 and r["temp_src"] == "watch"
-    assert R.basis_drift(R.heat_gate(r, 30.0, "watch"), "power")[0] is None
+    assert r["ok"] and r["temp_c"] == 24.0 and r["temp_band"] == "cool" and not r["heat"]
+    assert R.basis_drift(R.heat_band(r, 30.0, "watch"), "pace")[0] == r["drift"]
+    assert R.band_chip(R.heat_band(r, 30.0, "watch")) == "🌡 > 28 °C"
 
 
 def _hot_run(day, temp):
@@ -199,17 +202,27 @@ def test_measure_uses_the_archive_first_then_the_watch():
     today = dt.date(2026, 9, 30)
     ds = FakeDataset([_hot_run(today, 28.0)], today, settings=SETTINGS)
     w = ds.workouts[0]
-    ds.activity_temps = {}                                          # no archive: the watch's 28 °C
+    ds.activity_temps = {}                                          # no archive: the watch's 28 °C …
     m = R.measure(ds, w)
-    assert m["watch_temp_c"] == pytest.approx(28.0)
-    assert not m["drift"]["ok"] and m["drift"]["temp_src"] == "watch" and "手錶溫度 28 °C" in m["drift"]["reason"]
+    assert m["watch_temp_c"] == pytest.approx(28.0)                 # (raw, cached)
+    # … minus the wrist bias (3.7 °C): 24.3 °C in the air, the cool band, lower confidence
+    assert m["drift"]["ok"] and m["drift"]["temp_src"] == "watch"
+    assert m["drift"]["temp_c"] == pytest.approx(28.0 - R.WATCH_BIAS_C) and m["drift"]["temp_band"] == "cool"
     ds.activity_temps = {w.entry.file: 22.4}                         # the archive's air temperature wins
     m = R.measure(ds, w)
     assert m["drift"]["ok"] and m["drift"]["temp_c"] == 22.4 and m["drift"]["temp_src"] == "route_weather"
-    rows = {s["name"]: s["data"]["value"] for s in R.review(ds, w, "aerobic")["series"]}
-    assert rows["溫度"] == "路線天氣（Open-Meteo 檔案） 22 °C"
-    ds.activity_temps = {w.entry.file: 26.0}
-    assert "路線天氣" in R.measure(ds, w)["drift"]["reason"]
+    res = R.review(ds, w, "aerobic")
+    rows = {s["name"]: s["data"]["value"] for s in res["series"]}
+    assert rows["溫度"] == "路線天氣（Open-Meteo 檔案） 22 °C · 🌡 < 25 °C"
+    assert res["chip"]["text"] == "🌡 < 25 °C" and not res["chip"]["heat"] and "推估" in res["chip"]["tip"]
+    ds.activity_temps = {w.entry.file: 29.0}                         # a hot run: kept, chipped, noted
+    m = R.measure(ds, w)
+    assert m["drift"]["ok"] and m["drift"]["temp_band"] == "hot" and m["drift"]["heat"]
+    res = R.review(ds, w, "aerobic")
+    rows = {s["name"]: s["data"]["value"] for s in res["series"]}
+    assert res["chip"]["text"] == "🌡 > 28 °C" and res["chip"]["heat"]
+    assert "Pa:HR 飄移" in rows and R.HEAT_NOTE in rows["溫度"]
+    assert any(R.HEAT_NOTE in s["data"]["value"] for s in res["series"] if s["name"] in ("判讀", ""))
 
 
 def test_activity_temp_reads_the_route_weather_archive(tmp_path, monkeypatch):
@@ -226,9 +239,31 @@ def test_activity_temp_reads_the_route_weather_archive(tmp_path, monkeypatch):
     w0 = next(w for w in ds.workouts if w.entry.file == "fake/0.wko4")
     w1 = next(w for w in ds.workouts if w.entry.file == "fake/1.wko4")
     assert R.activity_temp(ds, w0) == (26.3, "route_weather")
-    assert R.activity_temp(ds, w1, {"watch_temp_c": 21.0}) == (21.0, "watch")
+    # the watch: minus the wrist bias
+    assert R.activity_temp(ds, w1, {"watch_temp_c": 21.0}) == (pytest.approx(21.0 - R.WATCH_BIAS_C), "watch")
     assert R.activity_temp(ds, w1) == (None, None)
-    assert not R.measure(ds, w0)["drift"]["ok"]
+    d = R.measure(ds, w0)["drift"]
+    assert d["ok"] and d["temp_band"] == "warm"                      # 26.3 °C: kept, in its band
+    R._WX_CACHE.clear()
+
+
+def test_activity_temp_falls_back_to_the_only_archive_row_of_that_date(tmp_path, monkeypatch):
+    # the archive is keyed by the WKO5 file; a COROS dataset's files are named otherwise
+    import json
+    from backend.engine import route_weather as RW
+    from backend.engine import routes as RT
+    monkeypatch.setattr(RT, "HOME", tmp_path)
+    R._WX_CACHE.clear()
+    (tmp_path / RW.ACTIVITY_WX_FILE).write_text(json.dumps(
+        {"version": RW.ACTIVITY_WX_VERSION, "activities": {
+            "2026/Y_2026_09_30_20_30.wko4": {"date": "2026-09-30", "temp_c": 27.0},
+            "2026/Y_2026_09_29_06_00.wko4": {"date": "2026-09-29", "temp_c": 24.0},
+            "2026/Y_2026_09_29_18_00.wko4": {"date": "2026-09-29", "temp_c": 29.0}}}), "utf-8")
+    ds = FakeDataset([_run(dt.date(2026, 9, 30)), _run(dt.date(2026, 9, 29))], dt.date(2026, 9, 30),
+                     settings=SETTINGS)
+    by_day = {R._wdate(w).isoformat(): w for w in ds.workouts}
+    assert R.activity_temp(ds, by_day["2026-09-30"]) == (27.0, "route_weather")
+    assert R.activity_temp(ds, by_day["2026-09-29"]) == (None, None)        # two rows that day: ambiguous
     R._WX_CACHE.clear()
 
 

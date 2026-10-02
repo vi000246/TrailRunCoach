@@ -277,7 +277,7 @@
         },
         {
           "title": "心率飄移 Pa:HR（暖身後 ≥ 40 分鐘的路跑，30–40 分為參考）",
-          "description": "後半段每單位速度多用多少心跳。< 5% = 在有氧閾值以下（Uphill Athlete）。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾、> 25 °C 的跑步不採用（不畫點）。淺色點 = 參考（暖身後 30–40 分，未達 UA 測試標準）：其他條件都通過、只是不到 40 分；UA 不建議用短於 40 分的測試，30 分是推估的門檻（未找到來源；心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001），只當參考，不解鎖間歇、不寫進門檻。單次跑步的飄移誤差約 ±4–6 個百分點（UA 的 3.5／5% 帶只差 1.5），所以深色線是最近 6 次（8 週內、兩級都算）的加權平均，虛線是 ± 標準誤；判讀看平均，不看單一個點（drift-algorithm.md §1.3、§5.4；權重 1/SE² 是推估）。回程市區段當緩和排除、錶沒按停的結尾靜止裁掉；跑走、VI > 1.04、前後半功率差 > 5% 的不採用。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點；要看 WKO5 的數字請看 WKO5 匯入的心飄移圖。越野跑都有坡，判讀卡不算，所以這張圖只有路跑。",
+          "description": "後半段每單位速度多用多少心跳。< 5% = 在有氧閾值以下（Uphill Athlete）。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾的跑步不採用（不畫點）。淺色點 = 參考（暖身後 30–40 分，未達 UA 測試標準）：其他條件都通過、只是不到 40 分；UA 不建議用短於 40 分的測試，30 分是推估的門檻（未找到來源；心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001），只當參考，不解鎖間歇、不寫進門檻。單次跑步的飄移誤差約 ±4–6 個百分點（UA 的 3.5／5% 帶只差 1.5），所以深色線是最近 6 次（8 週內、兩級都算）的加權平均，灰點是同一溫度區平均的 ± 標準誤；判讀看平均，不看單一個點（drift-algorithm.md §1.3、§5.4；權重 1/SE² 是推估）。溫度分區：熱天不再不採用，改成分 🌡 < 25 °C、25–28 °C、> 28 °C 與溫度不明四區，平均只和同一區的跑步算，每區一條線（25 °C 是徐國峰的條件；28 °C 是推估的分界，Beiter 2025 的熱組 28.7 °C）；熱會讓飄移偏高，熱區的數字只和熱區比。溫度先用 Open-Meteo 路線天氣，沒有時用手錶溫度扣掉手腕偏差 3.7 °C（較不準）。回程市區段當緩和排除、錶沒按停的結尾靜止裁掉；跑走、VI > 1.04、前後半功率差 > 5% 的不採用。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點；要看 WKO5 的數字請看 WKO5 匯入的心飄移圖。越野跑都有坡，判讀卡不算，所以這張圖只有路跑。",
           "basis": {"default": "pace", "choices": ["pace", "power"]},
           "axes": [{"id": "PERCENT"}],
           "series": [
@@ -285,12 +285,18 @@
             {"name": "路跑 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\"))"},
             {"name": "參考 Pa:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9cc0ec", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"pace\", \"ref\"))"},
             {"name": "參考 Pw:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9cc0ec", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\", \"ref\"))"},
-            {"name": "6 次平均 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#0b3d91", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\"))"},
-            {"name": "6 次平均 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#0b3d91", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\"))"},
-            {"name": "Pa:HR 平均 + 標準誤", "basis": "pace", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#6f8fc9", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"hi\"))"},
-            {"name": "Pa:HR 平均 − 標準誤", "basis": "pace", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#6f8fc9", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"lo\"))"},
-            {"name": "Pw:HR 平均 + 標準誤", "basis": "power", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#6f8fc9", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"hi\"))"},
-            {"name": "Pw:HR 平均 − 標準誤", "basis": "power", "type": "line", "line_style": "dot", "y_axis": "PERCENT", "color": "#6f8fc9", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"lo\"))"},
+            {"name": "6 次平均 Pa:HR 🌡 < 25 °C", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#0b3d91", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"cool\"))"},
+            {"name": "6 次平均 Pa:HR 🌡 25–28 °C", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#d97706", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"warm\"))"},
+            {"name": "6 次平均 Pa:HR 🌡 > 28 °C", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#be123c", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"hot\"))"},
+            {"name": "6 次平均 Pa:HR 🌡 溫度不明", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#57534e", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"none\"))"},
+            {"name": "6 次平均 Pw:HR 🌡 < 25 °C", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#0b3d91", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"cool\"))"},
+            {"name": "6 次平均 Pw:HR 🌡 25–28 °C", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#d97706", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"warm\"))"},
+            {"name": "6 次平均 Pw:HR 🌡 > 28 °C", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#be123c", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"hot\"))"},
+            {"name": "6 次平均 Pw:HR 🌡 溫度不明", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#57534e", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"none\"))"},
+            {"name": "Pa:HR 平均 + 標準誤", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9aa6b8", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"hi\"))"},
+            {"name": "Pa:HR 平均 − 標準誤", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9aa6b8", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"lo\"))"},
+            {"name": "Pw:HR 平均 + 標準誤", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9aa6b8", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"hi\"))"},
+            {"name": "Pw:HR 平均 − 標準誤", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#9aa6b8", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"lo\"))"},
             {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#8a8984", "line_style": "dash", "expression": "(,0.05)"},
             {"name": "10% 注意", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "line_style": "dash", "expression": "(,0.10)"}
           ]
@@ -312,6 +318,11 @@
             {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) >= 600, sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), delta(_elevation))) / sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) * 3600)"},
             {"name": "登山健行", "type": "line", "y_axis": "METERSPERHOUR", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) >= 600, sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), delta(_elevation))) / sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) * 3600)"}
           ]
+        },
+        {
+          "title": "穩定爬坡 VAM:HR（同一路線，參考）",
+          "kind": "climbvam",
+          "description": "爬坡的有氧效率：每下心跳換到多少垂直爬升（m/h ÷ bpm），往上 = 同樣心率爬得更快。用走的、用跑的都算，越野跑和登山健行（百岳）都算，不需要功率。只當參考，不當門檻、不解鎖任何課表。\n\n想法來自 Uphill Athlete 的基準爬坡：同一段坡用同樣心率爬，時間變快就是進步（教練經驗）。把 VAM 除以心率、變成一個數字是推估，沒有找到驗證過的研究。\n\n怎麼挑段：坡度 ≥ +8%、連續 ≥ 8 分鐘、一直在移動（水平速度 > 0.3 m/s，陡坡慢走也算），中間停 ≤ 30 秒不算斷、停更久就斷開。這三個門檻是用你自己的資料挑的（推估）：+8%、8 分鐘時有 5 條重複路線可比，10 分鐘剩 4 條，15 分鐘就沒有了。每段的前 2 分鐘不算，因為心率要約 1 分鐘才跟上（Hunt：時間常數 τ ≈ 60 秒；取 2 分鐘是推估）。VAM = 這段的淨爬升 ÷ 時間。走或跑看步頻：≥ 130 spm 的時間過半算「跑」（實心點），否則算「走」（空心點）；走和跑的效率不一樣，比較時看同一種。\n\n為什麼只比同一路線：坡度、路面、海拔不同，VAM 就不同，點放在一起會混到路線差異，所以一次只看一條路線（下拉選單，預設是符合條件的段最多次的路線；反方向另成一條）。路線用路線頁自動找出的重複路線。藍點 = 每一段，橘線 = 這條路線近 8 週的滾動中位數。沒有可比的段時，改畫每次活動裡最長的一段爬坡有多長。\n\n熱：天熱時同樣速度心率較高，VAM:HR 會變低。切到「熱調整」時，心率用你自己回測出的係數換算到 Hadley 120（每 1 Hadley 單位 0.224 bpm；這個係數是用跑步回測的，用在單次活動、登山都是推估），沒有天氣資料的點不畫。長時間爬坡心率會慢慢飄高（心血管飄移，Coyle & González-Alonso 2001），所以同一條路線上的第幾段也會影響數字，hover 看得到開始的分鐘。hover 也看得到溫度、Hadley、走／跑和心率落在哪個區（< AeT／AeT–LTHR／≥ LTHR；登山用最近一次跑步的門檻）。"
         },
         {
           "title": "下坡腳程（每小時下降）",

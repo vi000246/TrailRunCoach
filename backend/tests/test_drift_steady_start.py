@@ -166,13 +166,15 @@ def test_a_genuinely_unsteady_run_after_a_city_start_is_still_refused():
     assert R.basis_drift(r, "pace", ref=True)[0] is None
 
 
-def test_a_hot_run_after_a_city_start_is_still_refused():
+def test_a_hot_run_after_a_city_start_is_kept_with_its_band():
+    # heat bands: no refusal above 25 °C any more — the same result, tagged
     t, hr, v, p = _city_then(70)
     cool = R.drift_of(t, hr, v, p, cp=300.0)
     assert cool["ok"] and cool["start_shift"]["stops"] == 3
     r = R.drift_of(t, hr, v, p, cp=300.0, temp_c=28.0, temp_src="watch")
-    assert r["hot"] and r["tier"] is None and not r["ok"] and not r["pw_ok"] and "28 °C" in r["reason"]
-    assert r["warmup_s"] == cool["warmup_s"]              # the record survives the heat refusal
+    assert r["ok"] and r["pw_ok"] and r["tier"] == "test" and r["drift"] == cool["drift"]
+    assert r["temp_band"] == "warm" and r["heat"]
+    assert r["warmup_s"] == cool["warmup_s"]
 
 
 # ---------------------------------------------------------------------------
