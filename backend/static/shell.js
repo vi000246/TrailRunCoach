@@ -5,8 +5,8 @@
  * Put it as the first element inside <body>; it inserts the nav synchronously
  * (no flash) and styles it from the page's own tokens (--panel, --text, --muted,
  * --line, --accent), so dark mode follows each page.
- *   >= 1100 px : top bar, icon + name + one-line purpose
- *   700–1100   : top bar, icon + name (purpose in the tooltip)
+ *   >= 1600 px : top bar, icon + name + one-line purpose
+ *   700–1600   : top bar, icon + name (purpose in the tooltip)
  *   < 700 px   : bottom tab bar, icon + short name
  */
 (() => {
@@ -61,6 +61,8 @@
     height: 3px; border-radius: 3px 3px 0 0; background: var(--an-acc); }
   .appnav a.an-item:focus-visible, .appnav .an-brand:focus-visible { outline: 2px solid var(--an-acc); outline-offset: -2px; }
   .appnav .an-sep { flex: 1; }
+  /* nine pages: the one-line purposes fit only on a wide screen (else the bar overflowed at 1360 px) */
+  @media (max-width: 1599px) { .appnav .an-purpose { display: none; } }
   @media (max-width: 1100px) {
     .appnav a.an-item { grid-template-columns: 20px auto; grid-template-rows: auto; padding: 0 11px; }
     .appnav a.an-item svg { grid-row: 1; }
