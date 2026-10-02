@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>賽事計畫（分享）</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --watch: #b45309; --bad: #c62828; --bar: #b9b8b1; --s3: #1baf7a;
+  --c-sd: #3f6fb5; --c-d: #86a9dc; --c-f: #b9b8b1; --c-u: #e8a15a; --c-su: #c9542c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --watch: #fbbf24; --bad: #f87171; --bar: #5a5954; --s3: #199e70;
+    --c-sd: #5b8ad0; --c-d: #37557f; --c-f: #5a5954; --c-u: #a8692c; --c-su: #d06a3f;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --watch: #fbbf24; --bad: #f87171; --bar: #5a5954; --s3: #199e70;
+  --c-sd: #5b8ad0; --c-d: #37557f; --c-f: #5a5954; --c-u: #a8692c; --c-su: #d06a3f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px; }
+header h1 { font-size: 18px; margin: 0; }
+.meta { color: var(--muted); font-size: 12.5px; }
+main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+h2 { font-size: 15px; margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+h2 .meta { font-weight: 400; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .v .u { font-size: 13px; font-weight: 500; color: var(--muted); }
+.tile .s { font-size: 11.5px; color: var(--muted); }
+.tile.main { border-color: var(--accent); }
+.profile { width: 100%; height: 300px; }
+.tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.tcard { border: 1px solid var(--line); border-left: 4px solid var(--c-f); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+.tcard .th { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.tc { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 3px; }
+.tc span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; font-size: 12.5px; }
+.tc span.main { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.fa { font-size: 12px; color: var(--muted); }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.act { white-space: normal; min-width: 220px; }
+tr.k-aid td { background: var(--soft); }
+.warn { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--watch); }
+.badge { display: inline-block; font-size: 11.5px; border: 1px solid var(--watch); color: var(--watch); border-radius: 10px; padding: 0 8px; }
+.err { color: var(--bad); padding: 30px 0; text-align: center; }
+footer { text-align: center; }
+@media (max-width: 700px) { .tiles { grid-template-columns: 1fr 1fr; } .tile .v { font-size: 18px; } main { padding: 10px 10px 30px; } }
+</style>
+</head>
+<body>
+<header><h1 id="title">賽事計畫</h1><div class="meta" id="sub">唯讀分享</div></header>
+<main id="main"><section><div class="meta">讀取中…</div></section></main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const ok = (v) => v != null && isFinite(v);
+const n0 = (v) => ok(v) ? Math.round(v).toLocaleString() : "–";
+const f1 = (v) => ok(v) ? Number(v).toFixed(1) : "–";
+const pct = (v) => ok(v) ? Math.round(v * 100) + "%" : "–";
+function hms(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
+function dur(s) { if (!ok(s)) return "–"; s = Math.round(s); return s < 3600 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : hms(s); }
+function pace(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} /km`; }
+const rng = (v, fmt = n0, unit = "") => !v ? "–" : (fmt(v[0]) === fmt(v[1]) ? fmt(v[0]) : `${fmt(v[0])}–${fmt(v[1])}`) + (unit ? ` <span class="u">${unit}</span>` : "");
+const tile = (k, v, s, main) => `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
+const CLS = { steep_down: "--c-sd", down: "--c-d", flat: "--c-f", up: "--c-u", steep_up: "--c-su" };
+const STOP = { water: ["水站", "💧"], aid: ["補給站", "🍌"], big: ["大補給站", "🍲"], medical: ["醫護站", "⛑️"], self: ["自備補給點", "🎒"] };
+const TYPE = { road: "路跑", trail: "越野", baiyue: "百岳" };
+
+async function init() {
+  let S;
+  try {
+    const r = await fetch(location.pathname.replace(/\/+$/, "") + "/data", { cache: "no-store" });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || `${r.status}`); }
+    S = await r.json();
+  } catch (e) { $("main").innerHTML = `<section><div class="err">${esc(e.message)}</div></section>`; return; }
+  document.title = `${S.title}（分享）`;
+  $("title").textContent = S.title;
+  const I = S.inputs || {}, s = S.summary || {}, hike = S.type === "baiyue";
+  $("sub").textContent = [TYPE[S.type], I.date, I.start_time && `出發 ${I.start_time}`, `${f1(s.km)} km ↑${n0(s.gain_m)} m`,
+    `建立於 ${S.created.slice(0, 10)}`, S.expires && `到期 ${S.expires.slice(0, 10)}`, "唯讀"].filter(Boolean).join(" · ");
+  let h = `<section><h2>預估結果${s.badge ? ` <span class="badge">${esc(s.badge)}</span>` : ""}</h2><div class="tiles">`;
+  if (hike) {
+    h += tile("移動時間", dur(s.capacity_time_s ?? s.time_s), `${(S.days || []).length || s.days || 1} 天`, true);
+    if (ok(s.clock_s)) h += tile("時鐘時間", dur(s.clock_s), "含休息");
+    if (ok(s.hr_cap)) h += tile("心率上限", n0(s.hr_cap) + " bpm", "AeT");
+  } else {
+    h += tile("預估完賽", hms(s.time_s), s.finish_eta ? `抵達 ${esc(s.finish_eta)}` : "", true);
+    h += tile("平均功率", ok(s.power) ? n0(s.power) + " W" : "–", `${pct(s.pct_cp)} CP${ok(s.w_per_kg) ? ` · ${s.w_per_kg.toFixed(2)} W/kg` : ""}`);
+    h += tile("平均配速", pace(s.pace_s_per_km), "");
+  }
+  if (S.effort?.label) h += tile("努力度", esc(S.effort.label), ok(S.effort.f) ? pct(S.effort.f) : ok(S.effort.r) ? pct(S.effort.r) : "");
+  if (ok(I.temp_c)) h += tile("比賽日", `${f1(I.temp_c)} °C`, ok(I.rh_pct) ? `濕度 ${n0(I.rh_pct)} %` : "");
+  if (ok(S.weight)) h += tile("體重", `${f1(S.weight)} kg`, "分享者選擇公開");
+  h += `</div></section>`;
+  if (S.profile || (S.segments || []).length) h += `<section><h2>剖面與分段</h2><div class="profile" id="profile"></div><div id="targets"></div></section>`;
+  h += fuelHtml(S);
+  if (!S.seg_targets) h += splitsHtml(S);
+  $("main").innerHTML = h + `<footer class="meta">這是分享者在建立當下的計算結果，不會重新計算。</footer>`;
+  if ($("profile")) drawProfile(S);
+  if (S.seg_targets && $("targets")) $("targets").innerHTML = targetsHtml(S);
+}
+
+function fuelHtml(S) {
+  const F = S.fuel; if (!F || !F.kcal_band) return "";
+  const hike = F.category === "hike", c = F.cho || {}, w = F.water || {}, na = F.sodium || {}, ld = F.loading || {};
+  let h = `<section><h2>🍽 補給 <span class="meta">${esc(F.label || "")} · 建議值</span></h2><div class="tiles">`;
+  h += tile(`🔥 ${hike ? "行動熱量" : "消耗熱量"}`, rng(F.kcal_band, n0, "kcal"), `±${Math.round((F.band_rel || 0) * 100)}%`, true);
+  h += tile("🍌 碳水", rng(c.per_h, n0, "g/h"), `共 ${rng(c.total, n0, "g")}`);
+  h += tile("💧 水", hike ? rng((w.total_ml || []).map((x) => x / 1000), (x) => x.toFixed(1), "L") : w.thirst ? "口渴再喝" : rng(w.per_h, n0, "ml/h"),
+    "別喝到體重增加");
+  h += tile("🧂 鈉", na.per_h && na.per_h[1] > 0 ? rng(na.per_h, n0, "mg/h") : "不必另外補", na.total_mg && na.total_mg[1] > 0 ? `共 ${rng(na.total_mg, n0, "mg")}` : "");
+  if (!hike && ld.label) h += tile("🍚 賽前", ld.g_day ? rng(ld.g_day, n0, "g") : esc(ld.label.replace(/^前一天\s*/, "")), ld.g_day ? esc(ld.label) : "前一天");
+  if (hike && ok(F.food_kg_mean)) h += tile("🎒 糧食", `${F.food_kg_mean.toFixed(2)} <span class="u">kg/天</span>`, "推估");
+  h += `</div>`;
+  const ev = F.schedule || [];
+  if (ev.length) {
+    const icon = (e) => e.kind === "start" ? "🏁" : e.kind === "aid" ? (STOP[e.stop_type] || STOP.aid)[1] : hike ? "🍙" : "🍬";
+    h += `<h2 style="margin-top:12px">補給時間表 <span class="badge">推估</span></h2><div class="tablewrap"><table><thead><tr>${hike ? "<th>天</th>" : ""}<th>時刻</th><th class="n">移動</th><th class="n">km</th><th></th><th>動作</th></tr></thead><tbody>` +
+      ev.map((e) => `<tr class="k-${e.kind}">${hike ? `<td>${e.day}</td>` : ""}<td>${esc(e.eta || "–")}</td><td class="n">${dur(e.t_s)}</td><td class="n">${f1(e.km)}</td><td>${icon(e)}</td><td class="act">${esc(e.action)}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  }
+  if ((F.warnings || []).length) h += `<ul class="warn">${F.warnings.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  return h + `</section>`;
+}
+
+function targetsHtml(S) {
+  const hike = S.type === "baiyue";
+  return `<h2 style="margin-top:10px">分段目標</h2><div class="tcards">` + S.seg_targets.map((t) => {
+    const sg = (S.segments || []).find((x) => x.i === t.i && (x.day || 1) === (t.day || 1)) || {};
+    return `<div class="tcard" style="border-left-color:${css(CLS[sg.cls] || "--c-f")}" title="${esc(t.src)}">
+      <div class="th"><b>${t.mark} ${esc(t.label)}</b><span class="meta">${hike && t.day ? `D${t.day} · ` : ""}${f1(t.start_km)}–${f1(t.end_km)} km · ↑${n0(t.gain_m)} ↓${n0(t.loss_m)}</span></div>
+      <div class="tc">${t.chips.map((c) => `<span class="${c.role === "main" ? "main" : ""}">${c.icon} ${esc(c.text)}</span>`).join("") || "<span>—</span>"}</div>
+      <div class="meta">⏱ ${dur(t.t)} · 累計 ${dur(t.cum_s)}${t.eta ? ` · ETA ${esc(t.eta)}` : ""}${(t.ref || []).length ? " · " + esc(t.ref.join(" · ")) : ""}</div>
+      ${t.fuel_action ? `<div class="fa">🍬 ${esc(t.fuel_action)}</div>` : ""}</div>`;
+  }).join("") + `</div>`;
+}
+
+function splitsHtml(S) {
+  const segs = S.segments || []; if (!segs.length) return "";
+  return `<section><h2>分段</h2><div class="tablewrap"><table><thead><tr><th>#</th><th class="n">km</th><th class="n">目標功率</th><th class="n">配速</th><th class="n">分段</th><th class="n">累計</th><th class="n">ETA</th><th>補給</th></tr></thead><tbody>` +
+    segs.map((x) => `<tr><td>${x.i}</td><td class="n">${f1(x.start_km)}–${f1(x.end_km)}</td><td class="n">${ok(x.power) ? n0(x.power) + " W" : "–"}</td><td class="n">${pace(x.pace_s_per_km)}</td>
+      <td class="n">${dur(x.t)}</td><td class="n">${dur(x.cum_s)}</td><td class="n">${esc(x.eta || "")}</td><td class="act">${esc(x.fuel_action || "")}</td></tr>`).join("") + `</tbody></table></div></section>`;
+}
+
+function drawProfile(S) {
+  const pr = S.profile, segs = S.segments || [], km = S.summary.km;
+  const ax = () => ({ axisLabel: { color: css("--muted"), fontSize: 11 }, axisLine: { lineStyle: { color: css("--line") } }, splitLine: { lineStyle: { color: css("--line") } } });
+  const minW = km * 0.025;
+  const areas = segs.map((s) => [{ xAxis: s.start_km, itemStyle: { color: css(CLS[s.cls] || "--c-f"), opacity: 0.18 },
+    ...(s.target && s.end_km - s.start_km >= minW ? { name: s.target.mark, label: { show: true, position: "insideTop", color: css("--text"), fontWeight: 600 } } : {}) }, { xAxis: s.end_km }]);
+  const series = [];
+  const zAt = (k) => { if (!pr) return 0; const i = pr.km.findIndex((x) => x >= k); return i <= 0 ? pr.z[Math.max(0, i)] : pr.z[i - 1] + (pr.z[i] - pr.z[i - 1]) * (k - pr.km[i - 1]) / ((pr.km[i] - pr.km[i - 1]) || 1); };
+  if (pr) series.push({ type: "line", data: pr.km.map((x, i) => [x, pr.z[i]]), symbol: "none", lineStyle: { color: css("--muted"), width: 1.2 },
+    areaStyle: { color: css("--bar"), opacity: 0.35 }, markArea: { silent: true, data: areas } });
+  const st = (S.inputs?.stops || []).filter((x) => x.km > 0 && x.km < km);
+  if (pr && st.length) series.push({ type: "scatter", data: st.map((x) => [x.km, zAt(x.km)]), symbol: "pin", symbolSize: 24, itemStyle: { color: css("--s3") },
+    label: { show: true, formatter: (p) => (STOP[st[p.dataIndex].type] || STOP.aid)[1], fontSize: 11 } });
+  if (!pr) series.push({ type: "line", data: segs.flatMap((s) => [[s.start_km, s.power], [s.end_km, s.power]]), symbol: "none", lineStyle: { color: css("--accent") } });
+  const c = echarts.init($("profile"));
+  c.setOption({ animation: false, grid: { left: 46, right: 16, top: 20, bottom: 28 },
+    tooltip: { trigger: "axis", confine: true, formatter: (ps) => { const k = ps[0].value[0]; const s = segs.find((x) => k >= x.start_km && k <= x.end_km);
+      return s ? `<b>${s.target ? s.target.mark + " " : ""}${esc(s.cls_label || "")}</b> ${f1(s.start_km)}–${f1(s.end_km)} km<br>${esc(s.target ? s.target.text : (ok(s.power) ? n0(s.power) + " W" : ""))}<br>⏱ ${dur(s.t)}${s.eta ? " · " + esc(s.eta) : ""}` : ""; } },
+    xAxis: { type: "value", min: 0, max: km, name: "km", ...ax() }, yAxis: { type: "value", scale: true, name: pr ? "m" : "W", ...ax() }, series });
+  new ResizeObserver(() => c.resize()).observe($("profile"));
+}
+init();
+</script>
+</body>
+</html>
