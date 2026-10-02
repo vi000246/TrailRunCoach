@@ -934,7 +934,7 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
     from backend.engine import drift_agg as DA
     val = ae.get("validity") or {}
     try:
-        recent = [p for p in DA.aet_points(ds, today, BC.NO_DATA_DAYS)]
+        recent = DA.aet_points(ds, today, BC.NO_DATA_DAYS, beta={"beta": 0.0})   # presence only: no β fit
         xu_recent = [r for r in BC.xu_runs(ds, today, BC.NO_DATA_DAYS)]
     except Exception:                       # noqa: BLE001
         recent, xu_recent = [], []
