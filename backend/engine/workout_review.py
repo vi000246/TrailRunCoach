@@ -174,7 +174,7 @@ SECTIONS = ("summary", "aerobic", "intervals", "climbs", "durability", "form")
 EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test",
                   # 間歇判讀 (engine/interval_eval.py)
                   "interval_verdict", "interval_reps", "interval_power", "interval_battery", "interval_tiz",
-                  "interval_hr",
+                  "interval_hr", "wprime_battery",
                   # 跑姿依坡度／隨疲勞 (form_bins)
                   "form_grades", "form_work", "form_cadence")
 SUGGESTED = {"easy": 1, "long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
@@ -2951,21 +2951,37 @@ def _cp(ds, w, m, c, base):
 
 
 # ---------------------------------------------------------------------------
-# 間歇判讀 (engine/interval_eval.py; interval-prescription.md Part B) — six cards,
-# hidden on activities that aren't interval / quality sessions
+# 間歇判讀 (engine/interval_eval.py; interval-prescription.md Part B) — the 間歇
+# dashboard is shown for every run (interval_eval.card): a plan / detected interval
+# session or a CP / AeT test fills every card; otherwise the verdict card says why
+# (不是間歇課 + 「當作間歇判讀」, or no power) and the battery still shows W′; the
+# per-rep cards (reps, power, TIZ, HR) only drop out when there are no reps to show.
 # ---------------------------------------------------------------------------
 
-GOOD, BAD, SERIES1, SERIES2, MUTED = "#0ca30c", "#d03b3b", "#2a78d6", "#eb6834", "#898781"
+GOOD, BAD, WARN, SERIES1, SERIES2, MUTED = "#0ca30c", "#d03b3b", "#c98a00", "#2a78d6", "#eb6834", "#898781"
 
 
 def _ie(ds, w, base):
+    """(evaluation, None) or (None, the card to return instead). Only the
+    verdict card shows the not-an-interval / no-power text; the per-rep cards
+    drop out then, so the dashboard reads as one short card."""
     from backend.engine import interval_eval as IE
-    e = IE.cached(ds, w)
-    if not e:
-        return None, {**base, "hide": True, "empty": "不是間歇課"}
+    e = IE.card_cached(ds, w)
     if not e.get("ok"):
-        return None, {**base, "empty": e.get("why") or "無法判讀"}
+        return None, {**base, "hide": True}
     return e, None
+
+
+def _offer_action(w) -> dict:
+    """「當作間歇判讀」: adds the activity tag interval_eval.FLAG_TAG (PATCH
+    /api/v1/wko5/activities, the 活動編輯 page's key-based edit), then the
+    viewer reloads the dashboard (`reload`)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.interval_eval import FLAG_TAG
+    return {"kind": "flag_interval", "label": "當作間歇判讀", "method": "PATCH", "url": "/api/v1/wko5/activities",
+            "body": {"items": [{"key": AT.key_of(w.entry.start), "file": getattr(w.entry, "file", None)}],
+                     "add_tags": [FLAG_TAG]},
+            "done": f"已標記「{FLAG_TAG}」，重新判讀中…（到活動編輯頁移除這個標籤可以取消）", "reload": True}
 
 
 def _thin(xs: list, ys: list, n: int = 1800) -> list:
@@ -2975,10 +2991,31 @@ def _thin(xs: list, ys: list, n: int = 1800) -> list:
 
 
 def _iv_verdict(ds, w, m, c, base):
-    e, bad = _ie(ds, w, base)
-    if bad:
-        return bad
-    sub = f"{e['label']}" + ("" if e["planned"] else "（沒有對應的課表：用偵測到的趟）")
+    from backend.engine import interval_eval as IE
+    e = IE.card_cached(ds, w)
+    if not e.get("ok"):
+        if e.get("state") != "offer":
+            return {**base, "empty": e.get("why") or "無法判讀"}
+        n = e.get("n_bouts") or 0
+        rows = [_row("間歇", e["why"])]
+        if e.get("flagged"):
+            return {**base, "series": rows}
+        rows.append(_row("偵測", f"偵測到 {n} 趟用力段，可以當作間歇判讀" if n else "沒有偵測到用力段，當作間歇也沒有趟可判讀",
+                         "用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段"))
+        out = {**base, "badge": {"text": "這次不是間歇課", "level": "", "sub": e.get("type_label") or ""}, "series": rows}
+        if n:
+            out["action"] = _offer_action(w)
+        return out
+    if e.get("kind") == "test":
+        rows = [_row("判定", e["verdict_label"], "測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）"),
+                _row("流程", e["label"])]
+        for i, r in enumerate(e["reasons"]):
+            rows.append(_row("各段" if i == 0 else "", r))
+        rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
+                         f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證"))
+        return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": e["label"]}, "series": rows}
+    sub = f"{e['label']}" + ("" if e["planned"] else
+                             "（你標了「當作間歇」：用偵測到的趟）" if e.get("flagged") else "（沒有對應的課表：用偵測到的趟）")
     rows = [_row("判定", e["verdict_label"], "對照「這次選的課表」本身的計畫；同等與否在選課時已決定"),
             _row("課表", sub)]
     for i, r in enumerate(e["reasons"]):
@@ -2999,6 +3036,8 @@ def _iv_reps(ds, w, m, c, base):
     wu = U.meta("WATTS")
     xu = {"id": "REP", "label": "趟", "kind": "number", "dec": [[0, 0]]}
     cp = e["cp"]
+    if e.get("kind") == "test":
+        return _iv_reps_test(e, base, wu, xu)
     ok = [[r["k"], round(r["power"])] for r in e["reps"] if r["in_band"]]
     no = [[r["k"], round(r["power"])] for r in e["reps"] if not r["in_band"]]
     lab = lambda rs, t: [f"{t} {round(r['power'])} W" for r in rs]
@@ -3016,6 +3055,34 @@ def _iv_reps(ds, w, m, c, base):
     return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
 
 
+def _iv_reps_test(e, base, wu, xu):
+    """A test's bouts: bar = the bout's mean (green = even, amber = not), the
+    marker = all-out by the CP model (CP test only, 推估). No target band."""
+    cp = e["cp"]
+    ev = [r for r in e["reps"] if r["even"]]
+    un = [r for r in e["reps"] if not r["even"]]
+    lab = lambda rs, t: [f"{t} {r['name']} {round(r['power'])} W" for r in rs]
+    s = [{"name": "✓ 配速平均", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": GOOD,
+          "bar_width": 28, "labels": lab(ev, "✓"), "data": {"kind": "points", "x": "value",
+                                                           "points": [[r["k"], round(r["power"])] for r in ev]}},
+         {"name": "◐ 不平均", "type": "bar", "expression": "", "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": WARN,
+          "bar_width": 28, "labels": lab(un, "◐"), "data": {"kind": "points", "x": "value",
+                                                           "points": [[r["k"], round(r["power"])] for r in un]}},
+         {"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
+          "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}}]
+    exp = [[r["k"], round(r["expected"])] for r in e["reps"] if r.get("expected")]
+    if exp:
+        s.append({"name": "預期全力（CP + W′/t，推估）", "type": "line", "line_style": "none", "expression": "",
+                  "y_axis": "WATTS", "unit": wu, "x_unit": xu, "color": SERIES1,
+                  "labels": [f"預期 {p[1]} W" for p in exp], "data": {"kind": "points", "x": "value", "points": exp}})
+    desc = (f"{e['label']}：每段一根柱子（綠＝前後半配速平均，黃＝不平均）。"
+            + ("點＝這段長度的預期全力功率，用測試前的 CP 和 W′ 依 CP 模型 P = CP + W′/t 算"
+               f"（Monod & Scherrer 1965；{e['wprime_src']}）。" if exp else "")
+            + "平均＝後半和前半差 ±" + ("5" if e.get("intent") == "max" else "3")
+            + "% 內、最後 1 分 ≤ 該段 × 1.08（推估）。測試不用目標帶判「達標」。")
+    return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
+
+
 def _iv_power(ds, w, m, c, base):
     """A simplified 「Run VO2max & FRC Chart – 5 Min PDC & Skiba」: power with the reps,
     CP and the target band only; the 5-min PDC and W′ in the hover text."""
@@ -3028,29 +3095,44 @@ def _iv_power(ds, w, m, c, base):
     p = np.asarray(ser["power"], float)
     p30 = np.convolve(np.nan_to_num(p), np.ones(30) / 30, "same") if len(p) else p
     cp = e["cp"]
+    test = e.get("kind") == "test"
     s = [{"name": "功率（30 秒）", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
-          "line_width": "thin", "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], list(p30))}},
-         {"name": "目標帶", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
-          "data": {"kind": "band", "range": [round(e["lo"] * cp), round(e["hi"] * cp)]}},
-         {"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
-          "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}}]
+          "line_width": "thin", "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], list(p30))}}]
+    if not test:
+        s.append({"name": "目標帶", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": SERIES1,
+                  "data": {"kind": "band", "range": [round(e["lo"] * cp), round(e["hi"] * cp)]}})
+    s.append({"name": "CP", "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu, "color": MUTED,
+              "line_style": "dash", "data": {"kind": "hline", "y": round(cp)}})
     for r in e["reps"]:
-        s.append({"name": "✓ 達標的趟（開始）" if r["in_band"] else "✕ 沒到的趟（開始）", "type": "line",
-                  "expression": "", "y_axis": "WATTS", "unit": wu,
-                  "color": GOOD if r["in_band"] else BAD, "line_style": "dot",
-                  "data": {"kind": "vline", "x": r["start_s"]}})
+        if test:
+            nm, col = ("✓ 平均的段（開始）", GOOD) if r["even"] else ("◐ 不平均的段（開始）", WARN)
+        else:
+            nm, col = ("✓ 達標的趟（開始）", GOOD) if r["in_band"] else ("✕ 沒到的趟（開始）", BAD)
+        s.append({"name": nm, "type": "line", "expression": "", "y_axis": "WATTS", "unit": wu,
+                  "color": col, "line_style": "dot", "data": {"kind": "vline", "x": r["start_s"]}})
     pdc = e.get("pdc5")
-    desc = (f"CP {cp:.0f} W；目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP。"
+    desc = (f"CP {cp:.0f} W" + ("；測試沒有目標帶。" if test else f"；目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP。")
             + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，WKO5 的 5 Min PDC 參考）。" if pdc else "")
-            + "虛線 = 每趟開始（綠＝達標、紅＝沒到）。W′ 剩多少見「功率電池」。")
+            + ("虛線 = 每段開始（綠＝配速平均、黃＝不平均）。" if test else "虛線 = 每趟開始（綠＝達標、紅＝沒到）。")
+            + "W′ 剩多少見「功率電池」。")
     return {**base, "axes": [{"id": "WATTS", "unit": wu, "min": 0}], "series": s, "description": desc}
 
 
-def _iv_battery(ds, w, m, c, base):
-    """「dFRC Run」as a battery: the W′ left over time (WKO5 dFRC), Skiba for comparison."""
-    e, bad = _ie(ds, w, base)
-    if bad:
-        return bad
+def _battery_of(ds, w):
+    """The card's battery numbers: the evaluation's (rep-aware τ), else the
+    not-an-interval card's (every run with power). None without power / CP."""
+    from backend.engine import interval_eval as IE
+    e = IE.card_cached(ds, w)
+    return e if e.get("series") and e["series"].get("t") and e.get("dfrc_min_pct") is not None else None
+
+
+def _iv_battery(ds, w, m, c, base, compact: bool = False):
+    """「dFRC Run」as a battery: the W′ left over time (WKO5 dFRC), Skiba for
+    comparison — every run with power (long and trail runs too). `compact`
+    (本次重點): dFRC only, with a one-line subtitle."""
+    e = _battery_of(ds, w)
+    if e is None:
+        return {**base, "hide": True}
     from backend.engine.wko5expr import units as U
     pct = U.meta("PERCENT")
     ser = e["series"]
@@ -3063,16 +3145,29 @@ def _iv_battery(ds, w, m, c, base):
          {"name": "最低", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "labels": [f"最低 {lo_v * 100:.0f}%"], "data": {"kind": "points", "x": "seconds",
                                                           "points": [[round(lo_t, 1), round(lo_v, 4)]]}}]
-    desc = (f"電池 = 還剩多少 W′（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP 就耗電，休息時回充。"
-            f"dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），Skiba 用跑步的 τ（Vassallo 2020）；兩者都只是推估，"
-            f"跑步沒驗證。{e['wprime_src']}")
-    return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc}
+    desc = (f"電池 = 還剩多少 W′（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP（{e['cp']:.0f} W）就耗電，"
+            f"休息或低於 CP 時回充。dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），Skiba 用跑步的 τ（Vassallo 2020）；"
+            f"兩者都只是推估，跑步沒驗證。{e['wprime_src']}")
+    sub = (f"整趟高於 CP 的功 {e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′，"
+           f"含回充後再用），電池最低 {lo_v * 100:.0f}%（{_hms(lo_t)}）")
+    if compact:
+        s = [x for x in s if not x["name"].startswith("Skiba")]
+        desc = "W′ 電池：dFRC（WKO5）剩多少，100% = 滿。Skiba 對照和逐趟數字在「間歇」分頁。" + desc
+    return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc,
+            "subtitle": sub}
+
+
+def _wprime_battery(ds, w, m, c, base):
+    """本次重點's small W′ card (the same numbers as 間歇 → 功率電池)."""
+    return _iv_battery(ds, w, m, c, base, compact=True)
 
 
 def _iv_tiz(ds, w, m, c, base):
     e, bad = _ie(ds, w, base)
     if bad:
         return bad
+    if e.get("kind") == "test":
+        return {**base, "hide": True}           # a test has no target zone
     from backend.engine.wko5expr import units as U
     du = U.meta("HHMMSS")
     xu = {"id": "BAR", "label": "", "kind": "number", "dec": [[0, 0]]}
@@ -3094,6 +3189,8 @@ def _iv_hr(ds, w, m, c, base):
     e, bad = _ie(ds, w, base)
     if bad:
         return bad
+    if e.get("kind") == "test":
+        return {**base, "hide": True}           # tests aren't compared with interval sessions
     from backend.engine.wko5expr import units as U
     bu = U.meta("BPM")
     ps = e.get("peers") or []
@@ -3118,6 +3215,7 @@ def _iv_hr(ds, w, m, c, base):
 _SECTIONS = {"summary": _summary, "aerobic": _aerobic, "intervals": _intervals, "climbs": _climbs,
              "interval_verdict": _iv_verdict, "interval_reps": _iv_reps, "interval_power": _iv_power,
              "interval_battery": _iv_battery, "interval_tiz": _iv_tiz, "interval_hr": _iv_hr,
+             "wprime_battery": _wprime_battery,
              "durability": _durability, "form": _form, "grades": _grades, "pacing": _pacing,
              "durability_curve": _durability_curve, "cp_test": _cp,
              "form_grades": _form_grades, "form_work": _form_work, "form_cadence": _form_cadence}
