@@ -63,7 +63,7 @@ WARM_STD_S = 15 * 60            # the standard test's
 MAIN_MAX_S = 60 * 60            # the analysis window: up to 60′ after the warm-up (UA 40–60)
 MAIN_MIN_S = 40 * 60            # the planned minimum = UA's
 UA_MIN_S = 40 * 60              # UA: "We don't recommend relying on tests less than 40 minutes long"
-UA_SLACK_S = 30                 # 自組: a few lost samples (GPS / Stryd dropouts) don't fail a 40′ test
+UA_SLACK_S = 30                 # 推估: a few lost samples (GPS / Stryd dropouts) don't fail a 40′ test
 BAND_LOW, BAND_HIGH = 0.035, 0.05
 FAST_FINISH = 0.05              # 自訂
 HEAT_C = 25.0                   # 徐國峰's condition: the session text's advice (HEAT_TEXT), not a refusal
@@ -383,7 +383,7 @@ def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
 def warm_for(title: str, duration_s: float) -> float:
     """The warm-up to cut: from the test's title (「AeT 飄移測試 60 分」 → the
     standard 15′, 「… 40 分」 → the short 10′), else 15′ when the run is long
-    enough for 40′ after it, else 10′ (自組)."""
+    enough for 40′ after it, else 10′ (推估)."""
     p = protocol_of_title(title)
     if p:
         return PROTOCOLS[p]["warm"] * 60.0
@@ -479,14 +479,17 @@ def due(today: dt.date, kind: Optional[str], base_start: Optional[str], reason,
         last_test: Optional[str]) -> bool:
     """Suggest the AeT test this week? Base phase, a reason
     (quality_gate.aet_test_reason: no data for ~6 weeks, the aggregate's SE
-    too large, a shift, the estimate moved — B3 and the Z5 lifecycle) and no
-    test in the last RECENT_DAYS (推估 spacing). No fixed cadence any more.
+    too large, a shift, the estimate moved — B3 and the Z5 lifecycle) that
+    isn't waiting for a stable weekly volume, and no test in the last
+    RECENT_DAYS (推估 spacing). No fixed cadence any more.
     `reason` may be the reason dict or any truthy value; a date string (the
     old signature) is not a reason."""
     if (kind or "base") != "base":
         return False
     if not reason or isinstance(reason, str):
         return False
+    if isinstance(reason, dict) and reason.get("wait"):
+        return False                # the weekly volume isn't stable yet (base_check.volume_stable, 推估)
     if last_test and (today - dt.date.fromisoformat(last_test)).days < RECENT_DAYS:
         return False
     return True
@@ -608,7 +611,7 @@ def pick_day(avail: list, long_day: Optional[dt.date], hard_days=(), days=TEST_D
       3. else any preferred day left;
       4. else (weekend_ok) the same three steps on the weekend days;
       5. none: `day` None — not placed this week (`note`).
-    自組 (no source gives a placement rule; the reasons are UA's: test
+    推估 (no source gives a placement rule; the reasons are UA's: test
     rested, flat, ≥ 40 min — docs/research/aerobic-base-readiness.md §6.4)."""
     def best(pool):
         cands = sorted((d for d in avail if d.weekday() in pool), key=lambda d: (DAY_ORDER.index(d.weekday()), d))

@@ -11,7 +11,7 @@ classify
 drift_of
     Pa:HR decoupling of a steady run, first 10 minutes (the warm-up)
     excluded — later after a city start: 60 s after the last stop in the
-    first 20 min when that costs no tier (steady_start, 自組). Refuses runs where the number means nothing: hilly (≥ 20 m
+    first 20 min when that costs no tier (steady_start, 推估). Refuses runs where the number means nothing: hilly (≥ 20 m
     climbed per km, or a trail run), stopped (> 5 % of the time standing),
     too short (< 40 min of moving time *after* the warm-up — Uphill
     Athlete's 40–60 min is the test after the warm-up), unsteady (30-s
@@ -92,7 +92,7 @@ QUALITY_CATEGORIES = ("road", "trail", "hike")
 DRIFT_MIN_S = 2400            # ≥ 40 min of moving time *after* the warm-up (UA: "We don't recommend
                               # relying on tests less than 40 minutes long" — the test after a 10–15′ warm-up)
                               # = the 嚴格 / test tier: `ok`, the only tier gates and thresholds read
-DRIFT_REF_MIN_S = 1800        # 自組 — the 參考 / reference tier: ≥ 30 min after the warm-up (`ref_ok`,
+DRIFT_REF_MIN_S = 1800        # 推估 — the 參考 / reference tier: ≥ 30 min after the warm-up (`ref_ok`,
                               # `tier` "ref"). No source gives 30 min: Coyle & González-Alonso 2001
                               # (Exerc Sport Sci Rev 29:88, doi 10.1097/00003677-200104000-00009) show
                               # cardiovascular drift starting after ~10–20 min of exercise, so 30 min
@@ -101,12 +101,12 @@ DRIFT_REF_MIN_S = 1800        # 自組 — the 參考 / reference tier: ≥ 30 m
                               # power coverage) applies to both tiers. Display only, never a gate.
 REF_LABEL = "參考（暖身後 30–40 分，未達 UA 測試標準）"
 REF_TIP = ("暖身後只有 30–40 分鐘：Uphill Athlete 不建議用短於 40 分的測試判定 AeT，所以這個數字只當參考，"
-           "不拿來解鎖間歇、不算 AeT 測試、不寫進門檻。30 分是自組的門檻（未找到來源）：心血管飄移約在運動"
+           "不拿來解鎖間歇、不算 AeT 測試、不寫進門檻。30 分是推估的門檻（未找到來源）：心血管飄移約在運動"
            "10–20 分鐘後開始（Coyle & González-Alonso 2001），暖身後 30 分已看得到一部分。")
 START_TIP = ("出門先過市區路口、到河濱才開始穩定跑時，前 20 分鐘內的停等不算穩定跑：飄移從最後一次停等後 1 分鐘、"
-             "而且至少第 10 分鐘起算。20 分鐘和 1 分鐘都是自組（未找到來源；UA／Friel 只說要排除暖身）。"
+             "而且至少第 10 分鐘起算。20 分鐘和 1 分鐘都是推估（未找到來源；UA／Friel 只說要排除暖身）。"
              "坡道、快步不排除：上坡後心率不一定回得來，排除會把真的影響藏起來。")
-DRIFT_FINISH_SHARE = 0.10    # 自組 (doc §6.2 / §7): the last 10 % of the measured time …
+DRIFT_FINISH_SHARE = 0.10    # 推估 (doc §6.2 / §7): the last 10 % of the measured time …
 DRIFT_FAST_FINISH = 0.05      # … > 5 % above the rest (power or pace) = a fast finish, refused
 DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C): the cool band's top
 DRIFT_HOT_C = 28.0            # 推估: the warm / hot split. Beiter 2025 (Physiol Rep, doi 10.14814/phy2.70305): 28.7 vs
@@ -127,17 +127,17 @@ HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只�
 # watch temperature → air: the wrist warms the sensor (zone_events.WATCH_BIAS_C: the athlete's 72 paired
 # route efforts, watch − Open-Meteo median +3.7 °C, SD 2.7; no literature source — 推估)
 from backend.engine.zone_events import WATCH_BIAS_C  # noqa: E402
-DRIFT_POWER_COVER = 0.95      # 自組: Pw:HR only when power covers ≥ 95 % of the Pa:HR window (same samples)
-DRIFT_EARLY_S = 1200          # 自組 (adaptive start): stops that begin in the first 20 min are the city section
+DRIFT_POWER_COVER = 0.95      # 推估: Pw:HR only when power covers ≥ 95 % of the Pa:HR window (same samples)
+DRIFT_EARLY_S = 1200          # 推估 (adaptive start): stops that begin in the first 20 min are the city section
                               # before a steady path (crossings), not the steady run; no source gives 20 min
-DRIFT_SETTLE_S = 60           # 自組: the window starts 60 s after the last of those stops ends (re-acceleration);
+DRIFT_SETTLE_S = 60           # 推估: the window starts 60 s after the last of those stops ends (re-acceleration);
                               # no sourced settle time. UA / Friel only say "exclude the warm-up".
                               # Never later than needed: start = max(WARMUP_S, that); and never at the cost of a
                               # tier — when the later start leaves less moving time than a tier needs that the
                               # fixed 10-min start reaches, the fixed start is kept (the stops then count
                               # toward the 5 % stop rule, as before)
 # ---- drift v2 (docs/research/drift-algorithm.md, "DRIFT"; every number below is 推估 — no source — unless it says
-# otherwise; the research doc calls these 自組)
+# otherwise; the research doc calls these 推估)
 DRIFT_IDLE_S = 120            # 推估 (DRIFT §7.4): trailing non-moving time ≥ 2 min (the watch not stopped) is cut,
                               # and not counted toward the 5 % stop rule (precedent: aet_test.analyze's trim)
 DRIFT_TAIL_S = 720            # 推估, calibrated on the user's runs (DRIFT §7.1, 8 weeks 15/15): the cool-down = the
@@ -421,7 +421,7 @@ def _tier_rank(measured_s: float) -> int:
 
 
 def steady_start(t, hr, speed, end: Optional[float] = None) -> tuple[float, Optional[dict]]:
-    """drift_of's adaptive start (自組): (start s after the first sample,
+    """drift_of's adaptive start (推估): (start s after the first sample,
     record or None). A stop = a sample at ≤ 1.6 km/h (WKO5's moving
     threshold; a recording gap is not a stop). The window starts at
     max(WARMUP_S, end of the last stop that begins in the first
@@ -477,9 +477,9 @@ def _start_text(dr: dict) -> Optional[str]:
         return None
     if r.get("fallback"):
         return (f"前 20 分鐘內有路口停等（最後一次在 {_hms(r['last_stop_s'])}），但從那之後起算會不夠"
-                f" {DRIFT_REF_MIN_S // 60}／{DRIFT_MIN_S // 60} 分鐘，所以仍從第 10 分鐘起算，停等計入 5% 停頓（自組）")
+                f" {DRIFT_REF_MIN_S // 60}／{DRIFT_MIN_S // 60} 分鐘，所以仍從第 10 分鐘起算，停等計入 5% 停頓（推估）")
     return (f"前段路口停等 {r['stops']} 次（共 {_hms(r['stopped_s'])}）：從最後一次停等後 1 分鐘、"
-            f"第 {_hms(_f(dr.get('warmup_s')))} 起算，多排除 {_hms(r['shifted_s'])}（自組）")
+            f"第 {_hms(_f(dr.get('warmup_s')))} 起算，多排除 {_hms(r['shifted_s'])}（推估）")
 
 
 def tail_text(dr: dict) -> Optional[str]:
@@ -791,12 +791,12 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
       * 嚴格 / test — `ok` (and `pw_ok`): ≥ DRIFT_MIN_S (40 min) after the
         warm-up. Gates, AeT-test classification and thresholds read only this.
       * 參考 / reference — `ref_ok` (and `pw_ref_ok`): every other check passed
-        and ≥ DRIFT_REF_MIN_S (30 min, 自組) but < 40 min. `drift` / `hr1` …
+        and ≥ DRIFT_REF_MIN_S (30 min, 推估) but < 40 min. `drift` / `hr1` …
         are filled, `ok` stays False and `reason` is the strict refusal.
     `tier` = "test" / "ref" / None. Display callers opt in with
     basis_drift(…, ref=True).
 
-    The warm-up is adaptive (steady_start, 自組): after a city section with
+    The warm-up is adaptive (steady_start, 推估): after a city section with
     crossings the window starts 60 s after the last stop that begins in the
     first 20 min, if that is past 10 min and costs no tier. `warmup_s` = the
     start used, `start_shift` = what it left out (None: the fixed 10 min).
@@ -1134,7 +1134,7 @@ def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
     if res["p12"] < 0.98 * cp_now:
         return False
     # a 3′ that was not all-out (single-bout fallback) still makes the session
-    # a test when it is a separate bout at ≥ 98 % CP (自組; the 2026-09-30 test:
+    # a test when it is a separate bout at ≥ 98 % CP (推估; the 2026-09-30 test:
     # 3′ 218 W below the 12′ 222 W, 16 min apart)
     return res["p3"] >= 1.15 * cp_now or (res.get("method") == "1pt_prior" and res["p3"] >= 0.98 * cp_now)
 
@@ -1756,6 +1756,18 @@ def _archive_temps() -> dict:
 
 
 _BY_DATE = "__by_date__"
+_BY_START_MEMO: dict = {}
+
+
+def _by_start(arch: dict):
+    """A ByStartDict over the archive's file keys (memoised per archive dict)."""
+    from backend.engine.activity_key import ByStartDict
+    hit = _BY_START_MEMO.get(id(arch))
+    if hit is None or hit[0] is not arch:
+        hit = (arch, ByStartDict({x: y for x, y in arch.items() if x != _BY_DATE}))
+        _BY_START_MEMO.clear()
+        _BY_START_MEMO[id(arch)] = hit
+    return hit[1]
 
 
 def watch_air(t_watch: Optional[float]) -> Optional[float]:
@@ -1776,6 +1788,10 @@ def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Opt
         arch = _archive_temps()
     f = getattr(getattr(w, "entry", None), "file", None)
     v = _f(arch.get(f)) if f is not None else None
+    if v is None:
+        # the same activity under another source's file (engine/activity_key.py: by start)
+        k = _by_start(arch).key_for(f, getattr(getattr(w, "entry", None), "start", None)) if f is not None else None
+        v = _f(arch.get(k)) if k is not None and k != f else None
     if v is None and isinstance(arch.get(_BY_DATE), dict):
         try:
             v = _f(arch[_BY_DATE].get(_wdate(w).isoformat()))
@@ -1827,7 +1843,7 @@ def _plan_test(ds, day: dt.date) -> dict:
 
 
 SAME_DAY_BOUT = 1.05          # an unfinished test that day counts with a ≥ 3′ bout ≥ 1.05 × CP
-QUICK_PATTERN = 1.03          # 自組: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
+QUICK_PATTERN = 1.03          # 推估: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
 CP_HINT = "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」"
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
@@ -1907,7 +1923,7 @@ def _race_test(ds, w, m: dict, title: str) -> bool:
 
 
 def _looks_like_quick(m: dict) -> bool:
-    """自組: a 20′ window ≥ 1.03 × CP whose HR also reached LTHR (a tempo run
+    """推估: a 20′ window ≥ 1.03 × CP whose HR also reached LTHR (a tempo run
     against a stale, low CP would otherwise look like a test)."""
     q = (m.get("cp_bouts") or {}).get("quick")
     cp, lthr = m.get("cp"), m.get("lthr")

@@ -8,7 +8,7 @@ descents; fatigue turns flats into walking), so the athlete's effort is read
 from HR (activity_tags.effort_hr) and the time from the effort-km pace that
 HR level buys on their own trail runs.
 
-Model (all 自組, 推估 until the back-test validates it):
+Model (all 推估 until the back-test validates it):
 
 1. Per past trail run (outdoor, ≥ 45 min moving, with HR): effort distance
    E = km + gain / 153 (algorithms.effort SIMPLE_FORMULAS "fitted_run", the
@@ -20,7 +20,7 @@ Model (all 自組, 推估 until the back-test validates it):
    time axis with output = effort-km speed (Δd + max(Δz, 0)/153 per second)
    and HR — the rolling output/HR ratio as % of the first window [coach
    practice: Uphill Athlete / Maunder et al. 2021 "durability"]. Its decline
-   per hour after T0 = 1 h (the user's "beyond ~1–2 h"; 1 h 自組) is the run's
+   per hour after T0 = 1 h (the user's "beyond ~1–2 h"; 1 h 推估) is the run's
    δ; the personal δ is the median over runs, clamped to 0…0.15 /h. Speed
    at a given HR then is v(t) = v₀·(1 − δ·(t − T0)⁺), whose mean over a run
    of length T is D̄(T) = 1 − δ·(T − T0)²/(2T) for T > T0.
@@ -35,7 +35,7 @@ Model (all 自組, 推估 until the back-test validates it):
    1287, DOI 10.1080/02640414.2017.1374707: 65 km / 11.8 h at 77 % HRmax,
    86 % of the time below VT1), Kerhervé 2015 (PLoS ONE 10:e0145482: HR
    falls with race progress over 106 km). Shape: x*(T) = x₀ − s·ln(T / 1 h)
-   (log-linear, 自組). Prior = the least-squares line through three anchors
+   (log-linear, 推估). Prior = the least-squares line through three anchors
    (XSTAR["anchors"]): 1.00 @ 0.5 h (a 5K's last quarter ≥ LTHR, the
    maximal.py road rule), 0.90 @ 3 h (Friel Z3 lower bound, coach), 0.85 @
    12 h (Fornasiero's 77 % HRmax ÷ ~0.90 HRmax per LTHR; the conversion is
@@ -47,7 +47,7 @@ Model (all 自組, 推估 until the back-test validates it):
    line stays near the prior, and the slope (which needs races of very
    different lengths) moves least.
    Prediction: T solves T = E / (v₀(f·x*(T))·D̄(T)). The planner's effort
-   target f scales it (自組).
+   target f scales it (推估).
 6. Durability δ (2026-10-02, §0.6 / §A3): each run's δ is measured on its
    drift-v2-cleaned window (athlete._trail_durability: adaptive start,
    return-leg cool-down, trailing idle, re-acceleration after stops and
@@ -91,10 +91,10 @@ import numpy as np
 TRAILHR = {
     "divisor": 153.0,          # SIMPLE_FORMULAS["fitted_run"]
     "min_moving_s": 45 * 60.0,  # athlete.TRAIL_MIN_MOVING_S
-    "dur_min_s": 2 * 3600.0,   # 自組: durability only from runs ≥ 2 h moving
-    "t0_h": 1.0,               # 自組: the decline starts after 1 h
-    "delta_max": 0.15,         # 自組 clamp (/h)
-    "min_runs": 6,             # 自組
+    "dur_min_s": 2 * 3600.0,   # 推估: durability only from runs ≥ 2 h moving
+    "t0_h": 1.0,               # 推估: the decline starts after 1 h
+    "delta_max": 0.15,         # 推估 clamp (/h)
+    "min_runs": 6,             # 推估
     "window_days": 365,        # as RE_WINDOW_DAYS
     "race_min_s": 90 * 60.0,   # maximal.MAXIMAL["trail_min_s"]
     "x_default": 0.90,         # Friel Z3 lower bound (activity_tags.AUTO_EFFORT max_hr_frac)
@@ -159,7 +159,7 @@ def heat_shift(hadley: Optional[float], lthr: Optional[float]) -> float:
     """The HR-level shift of heat, in LTHR units: β·(Hadley − 120)/LTHR with
     the athlete's own β = 0.224 bpm per Hadley unit (heat back-test, 271
     route efforts). 0 without a Hadley or an LTHR, or with the switch off.
-    Using it to move the HR model's x is 自組 (推估)."""
+    Using it to move the HR model's x is 推估 (推估)."""
     if not TRAILHR["heat_beta"] or hadley is None or not lthr or not math.isfinite(hadley):
         return 0.0
     from backend.engine import heat as HT

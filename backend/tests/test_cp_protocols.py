@@ -243,7 +243,7 @@ def test_standard_falls_back_to_one_bout_with_the_prior():
     assert r["method"] == "1pt_prior" and r["quality"] == "參考" and r["wprime"] is None
     assert r["cp"] == approx(250 - 13100 / 720, abs=0.3)
     assert r["cp_range"] == [approx(250 - 17100 / 720, abs=0.3), approx(250 - 9100 / 720, abs=0.3)]
-    assert any("自組門檻" in x and "低 24 bpm" in x for x in r["reasons"])
+    assert any("推估門檻" in x and "低 24 bpm" in x for x in r["reasons"])
     assert any("Ruiz-Alias 2025" in x for x in r["reasons"])
     women = CPP.result(_bouts(standard_parts(p12=250.0, p3=245.0)), "standard", LTHR, sex="female")
     assert women["cp"] == approx(250 - 6400 / 720, abs=0.3)
@@ -254,7 +254,7 @@ def test_quick_is_095_p20_and_its_checks():
     assert r["method"] == "tt20" and r["cp"] == approx(0.95 * 240) and r["quality"] == "可信"
     assert r["wprime"] is None
     kick = CPP.result(_bouts(quick_parts(p20=240.0, last_min=280.0)), "quick", LTHR)   # held back, then kicked
-    assert kick["quality"] == "參考" and any("自組門檻" in x and "最後 1 分" in x for x in kick["reasons"])
+    assert kick["quality"] == "參考" and any("推估門檻" in x and "最後 1 分" in x for x in kick["reasons"])
     soft = CPP.result(_bouts(quick_parts(p20=240.0, hr=150)), "quick", LTHR)          # HR far below LTHR
     assert soft["quality"] == "不採用" and CPP.apply_payload(soft, "2026-09-30") is None
 
@@ -289,7 +289,7 @@ def test_real_2026_09_30_test_falls_back_to_one_bout():
     assert res["p3"] < res["p12"]
     text = " ".join(res["reasons"])
     import re
-    assert re.search(r"比 12 分段 171 低 2\d bpm：不是全力（自組門檻）", text) and "< 25 分" in text
+    assert re.search(r"比 12 分段 171 低 2\d bpm：不是全力（推估門檻）", text) and "< 25 分" in text
     assert "不高於 12 分" in text and not res["checks"][0]["own"]            # the model check is not ours
     pay = CPP.apply_payload(res, "2026-09-30", 7)
     assert pay["cp"] == 204 and pay["wprime"] is None and pay["cp_method"] == "1pt_prior" and "參考" in pay["label"]

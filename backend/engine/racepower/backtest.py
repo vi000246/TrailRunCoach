@@ -88,8 +88,8 @@ HIKE_WINDOW_DAYS = 3 * 365
 HIKE_MIN_MOVING_S = 3600.0
 SEG_MIN_M = 200.0
 SEG_MIN_S = 60.0
-WALK_HEAVY = 0.5               # 自組: ≥ half the moving time walked (< 130 spm) = walking-heavy outing
-CLEAR_DIFF = 0.03              # 自組: "clearly differs" = class medians ≥ 3 points apart
+WALK_HEAVY = 0.5               # 推估: ≥ half the moving time walked (< 130 spm) = walking-heavy outing
+CLEAR_DIFF = 0.03              # 推估: "clearly differs" = class medians ≥ 3 points apart
 STORE = WX.HOME / "racepower_backtest.json"
 CATEGORY_ZH = {"road": "路跑", "trail": "越野", "hike": "登山（自己走）"}
 CLASSES = ("easy", "steady", "race")
@@ -401,7 +401,7 @@ def _cp_of(d: dict) -> dict:
 
 
 HR_VARIANTS = (("tt30", "TTE 1800 s（Friel 30 分計時）"), ("tte", "當時 PD 模型 TTE"))
-FEW_MAXIMAL = 3                 # 自組: < 3 capacity samples in the 365 days before → HR capacity as a second lower bound
+FEW_MAXIMAL = 3                 # 推估: < 3 capacity samples in the 365 days before → HR capacity as a second lower bound
 COMBINED_VARIANT = "tte"
 
 
@@ -1079,7 +1079,7 @@ CAP_MIN_SEG_WINDOWS = 3        # a scored segment is ≥ 300 m (after the first 
 CAP_MIN = {"trail": {"segs": 30, "groups": 10}, "hike": {"segs": 30, "groups": 5}}
 CAP_BIAS_MAX = 0.05
 HIGH_Z = 2500.0
-SANITY_BAND = (0.60, 1.00)     # capacity moving ÷ actual group moving time (自組, §7.1 D)
+SANITY_BAND = (0.60, 1.00)     # capacity moving ÷ actual group moving time (推估, §7.1 D)
 SANITY_SHARE = 0.80
 
 

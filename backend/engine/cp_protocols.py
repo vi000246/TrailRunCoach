@@ -24,7 +24,7 @@ result(bouts, protocol, …)
     {protocol, method, cp, wprime, cp_range, quality, checks, reasons}.
     quality: 可信 / 參考 / 不採用.
 
-Quality checks marked 自組 are our own thresholds — no study validated an HR
+Quality checks marked 推估 are our own thresholds — no study validated an HR
 or pacing rule for "not all-out" (§3.4); they are to be calibrated on the
 athlete's own tests.
 """
@@ -75,10 +75,10 @@ RACE_MIN_S, RACE_MAX_S = 15 * 60, 70 * 60
 # 外插 — to calibrate on the athlete's own tests of both kinds.
 CP_2PT_OVER_30MIN = 1.05
 
-# quality checks (自組 unless noted)
-HR_GAP_BPM = 8.0                   # 自組: 3′ peak HR ≥ 12′ peak HR − 8 bpm
-HR_BELOW_LTHR_BPM = 5.0            # 自組: a ≥ 12′ all-out bout peaks above LTHR − 5 bpm
-LAST_MIN_RATIO = 1.08              # 自組: last-minute power ≤ 1.08 × the bout average
+# quality checks (推估 unless noted)
+HR_GAP_BPM = 8.0                   # 推估: 3′ peak HR ≥ 12′ peak HR − 8 bpm
+HR_BELOW_LTHR_BPM = 5.0            # 推估: a ≥ 12′ all-out bout peaks above LTHR − 5 bpm
+LAST_MIN_RATIO = 1.08              # 推估: last-minute power ≤ 1.08 × the bout average
 RECOVERY_MIN_S = 25 * 60           # §3.2: 30 min between bouts; < 25 min flagged
 TT20_CROSS_TOL = 0.03              # 0.95·P20 vs P20 − W′prior/1200 within 3 %
 GAP_S = 600                        # the 3′ window starts ≥ 10 min from the 12′ bout
@@ -235,7 +235,7 @@ def measure_bouts(t, power, hr=None) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def _check(cid: str, ok: bool, text: str, own: bool = True) -> dict:
-    return {"id": cid, "ok": bool(ok), "text": text + ("（自組門檻）" if own and not ok else ""), "own": own}
+    return {"id": cid, "ok": bool(ok), "text": text + ("（推估門檻）" if own and not ok else ""), "own": own}
 
 
 def _pacing(b: dict, name: str) -> Optional[dict]:

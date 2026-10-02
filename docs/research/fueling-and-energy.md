@@ -310,7 +310,7 @@ REE：Mifflin-St Jeor 1990（Am J Clin Nutr 51:241–247，doi:10.1093/ajcn/51.2
 
 ### 5.2 對照 app 的「每天 −0.7 kg 糧食」
 
-`capacity.PACK_DAILY_DROP = 0.7`，程式註解寫「自組，使用者保留」。
+`capacity.PACK_DAILY_DROP = 0.7`，程式註解寫「推估，使用者保留」。
 
 - 0.7 kg × 4.4 kcal/g（筆記的 125 kcal/oz）≈ **3080 kcal/天**，大約是上面 3600 kcal 的 85 %。
 - 如果食物的熱量密度只有 3.6 kcal/g（乾燥飯加零食的混合，這個數字 [推估]，沒有核對產品標示），0.7 kg 只有 2500 kcal，約 70 %。

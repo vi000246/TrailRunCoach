@@ -6,7 +6,7 @@ back-test and the per-intensity calibrations (docs/research/racepower-v2.md
 Why: running economy and the cost of grade differ by intensity, and a race
 model must not be validated on Zone-2 training runs. Every number below is
 one of the app's existing, cited zone definitions; the combination rule
-(`classify`) is our own composite (自組) and says so.
+(`classify`) is our own composite (推估) and says so.
 
 INTENSITY (the one constant):
     Three zones after Seiler & Kjerland 2006 (Scand J Med Sci Sports 16:49–56;
@@ -24,18 +24,18 @@ INTENSITY (the one constant):
                             (zones.PALLADINO_3ZONE)
       drift_easy     0.05   Pw:HR decoupling < 5 % = aerobic (Uphill Athlete
                             AeT drift test; status.DRIFT_GOOD)
-      majority       0.50   自組: a zone "holds" the activity when it holds at
+      majority       0.50   推估: a zone "holds" the activity when it holds at
                             least half of the moving time with HR
       run_cadence    65     strides/min (130 spm): below it the athlete is
                             walking (workout_review.RUN_CADENCE)
       race_min_f     0.90   power check on an HR-"race" activity: P̄ ÷ P_sus(T)
                             with F1 (Riegel, k −0.07 ≈ Stryd's table, TTE
                             3000 s the workbook default) must reach the effort
-                            bar's 吃力 cut (90 %, 自組). Used only to DEMOTE:
+                            bar's 吃力 cut (90 %, 推估). Used only to DEMOTE:
                             with CP a lower bound P_sus is understated, so a
                             run below 90 % even then was surely not maximal.
 
-classify (自組): race = a season-plan race that day, or ≥ majority of the
+classify (推估): race = a season-plan race that day, or ≥ majority of the
 moving time at ≥ 0.95·LTHR while the power reaches race_min_f of the
 sustainable power for that duration (HR high but power below it = a
 conflict → steady; with CP a lower bound that test is conservative — it
@@ -74,7 +74,7 @@ SOURCES = {
     "power": "Palladino 三區：低 < 80 % CP、高 ≥ 95 % CP",
     "drift": "Uphill Athlete：Pw:HR 飄移 < 5 % = 有氧",
     "gait": "步頻 < 130 spm = 走路（workout_review）",
-    "rule": "組合規則為自組（多數時間所在的區）",
+    "rule": "組合規則為推估（多數時間所在的區）",
 }
 CLASSES = ("easy", "steady", "race")
 CLASS_ZH = {"easy": "輕鬆", "steady": "穩定", "race": "比賽強度"}

@@ -57,6 +57,16 @@ def _no_real_activity_tags(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_registered_dataset():
+    """engine/activity_key.py's registry of the last built Dataset is per
+    test: a dataset built by one test never re-indexes another's plan rows."""
+    from backend.engine import activity_key
+    activity_key.clear_registry()
+    yield
+    activity_key.clear_registry()
+
+
+@pytest.fixture(autouse=True)
 def _no_real_tp_client(monkeypatch, tmp_path_factory):
     """Tests never read the real ~/.wko5coach/tp_client.json or TP_* env."""
     from backend.sync import tp_client

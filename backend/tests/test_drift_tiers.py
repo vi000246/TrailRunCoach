@@ -1,5 +1,5 @@
 """Two tiers of drift_of (workout_review): 嚴格 / test (≥ 40 min after the
-10-min warm-up, UA) and 參考 / reference (≥ 30 min, 自組). Gates and
+10-min warm-up, UA) and 參考 / reference (≥ 30 min, 推估). Gates and
 thresholds read only the strict tier; display shows the reference tier,
 labelled. Synthetic data only — never the user's plan or DB."""
 import datetime as dt
@@ -127,7 +127,7 @@ def test_the_drift_indicator_shows_the_reference_tier_but_never_warns_on_it():
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     d = next(i for i in st.indicators if i.id == "drift")
     assert d.extra["ref"] == 3 and d.extra["test"] == 0 and d.extra["ref_label"] == R.REF_LABEL
-    assert "（參考）" in d.text and R.REF_LABEL in d.why and "自組" in d.extra["ref_tip"]
+    assert "（參考）" in d.text and R.REF_LABEL in d.why and "推估" in d.extra["ref_tip"]
     assert d.level != "bad" and not d.action                               # gate levels read strict only
 
 

@@ -69,13 +69,28 @@ def wko5_available(wko5_dir: Optional[Path] = None) -> bool:
         return False
 
 
+CHOSEN_KEY = "charts.data_source.chosen"
+LEGACY_DEFAULT = "coros"     # what the pre-同步資料 setup stored (the old UI had no merged source)
+
+
+def effective_source(stored, chosen, default: str = DEFAULT_SOURCE) -> str:
+    """The chart source in effect (read-time migration, nothing is written):
+    a stored "coros" the user never picked in the new 進階設定 / source chip
+    (`chosen` unset) is the old setup's value -> "synced"; an unknown /
+    missing value -> `default`."""
+    if stored == LEGACY_DEFAULT and not chosen and default == DEFAULT_SOURCE:
+        return DEFAULT_SOURCE
+    return stored if stored in SOURCES else default
+
+
 def current_source(user_id: int = 1, wko5_dir: Optional[Path] = None) -> str:
-    """charts.data_source; "wko5" (stored, or the no-DB default) only while a
-    WKO5 athlete file exists — otherwise "synced" (generalize-athlete S6)."""
+    """effective_source of charts.data_source; "wko5" (stored, or the no-DB
+    default) only while a WKO5 athlete file exists — otherwise "synced"
+    (generalize-athlete S6)."""
     db = _db_path()
     default = DEFAULT_SOURCE if db is not None and db.exists() else "wko5"
-    v = read_setting("charts.data_source", default, user_id)
-    v = v if v in SOURCES else default
+    v = effective_source(read_setting("charts.data_source", None, user_id),
+                         read_setting(CHOSEN_KEY, False, user_id) is True, default)
     if v == "wko5" and not wko5_available(wko5_dir):
         return DEFAULT_SOURCE
     return v

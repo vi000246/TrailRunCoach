@@ -47,7 +47,7 @@ MAX_COROS_STEPS = 50
 STRYD_TABLE = ((10.0, 100.0), (21.1, 94.6), (42.2, 89.9))
 HINT_30S = "看 30 秒平均功率"
 STEEP_POWER_GRADE = 0.08       # Stryd ≈ metabolic power validated to 8 % (van Rassel 2026)
-HR_FIRST_SHARE = 0.30          # 自組: above this share of steep distance, HR targets come first
+HR_FIRST_SHARE = 0.30          # 推估: above this share of steep distance, HR targets come first
 
 
 def _pace(v: float) -> Optional[float]:
@@ -151,7 +151,7 @@ def coros_steps(segments: list[dict], band: float = 0.03) -> list:
 # The heat penalty itself is Hadley's (env.heat_penalty_pct, ported from the
 # SuperPower workbook's `v4 Calcs`, docs/research/superpower-calculator.md
 # §1.1). Feeding it the forecast at each segment's predicted clock time is our
-# own composition (自組; racepower-v2.md §8 proposes it for long events) —
+# own composition (推估; racepower-v2.md §8 proposes it for long events) —
 # segment outputs carry 推估. The clock depends on the segment times and the
 # times on Mᵢ, so the planner iterates to a fixed point (max |Δ cumulative
 # time| < HEAT_TOL_S). Forecast temperatures are used as given at the
@@ -235,7 +235,7 @@ def heat_acclimation(opts: dict) -> Optional[dict]:
       heat_acclimatisation = {"mode": auto | none | partial | acclimatised | custom, "s"}
       heat_status = {"s_race": {"center", "low", "high"}, "s_from", "source"} (the API
                     projects it from the athlete's exposure history; auto uses it)
-    None (no choice) = v1 behaviour. Every S is 推估 (the S model is 自組).
+    None (no choice) = v1 behaviour. Every S is 推估 (the S model is 推估).
 
     a (2026-10-02, unsourced-rules.md §A8; racepower/heatacc.py): 0 — S is
     shown but does not discount the heat penalty — unless heat_status
@@ -263,7 +263,7 @@ def heat_acclimation(opts: dict) -> Optional[dict]:
         src = "自訂"
     else:
         s = s_lo = s_hi = HT.PRESET_S.get(mode, 0.0)
-        src = {"none": "未適應", "partial": "部分（S 0.5，自組）", "acclimatised": "已適應（S 0.9，自組）"}.get(mode, mode)
+        src = {"none": "未適應", "partial": "部分（S 0.5，推估）", "acclimatised": "已適應（S 0.9，推估）"}.get(mode, mode)
     s_from = st.get("s_from")
     a, a_why = HA.acclimation_a(st.get("hrc_test"), HT.SCENARIOS["center"]["a"])
     supported = a > 0
@@ -521,7 +521,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         return {"res": res, "alpha_used": alpha_used, "runs": runs, "t_whole": t_whole, "p_whole": p_whole,
                 "t_c": t_c, "p_c": p_c, "mbar": mbar}
 
-    # ---- per-segment, time-of-day heat (自組, 推估) ----------------------------
+    # ---- per-segment, time-of-day heat (推估) ----------------------------
     stops = opts.get("stops") or []
     heat_rows, start_dt, heat_reason = _heat_context(opts)
     st = solve_all(factors())
@@ -863,7 +863,7 @@ AMS_NOTE = "高山症會讓速度與行程失準，出現症狀以下撤為先"
 def _cap_band_factor(cap) -> float:
     """「能力上限」(≥ 0.95·LTHR, ≤ 3 h): β ≈ 0 means the HR band does not
     predict the speed (§2.2 finding 1), so the ceiling is the athlete's own
-    faster quarter: exp(p75 − mean) of the steep-window residuals (自組)."""
+    faster quarter: exp(p75 − mean) of the steep-window residuals (推估)."""
     spread = cap.basis.get("resid_p75_minus_mean")
     return math.exp(max(0.0, spread)) if spread is not None else 1.0
 
@@ -971,7 +971,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     he = DF.hike_effort(lam, cuts)
     he["badge"] = "推估"
     # uncertainty (§3.8): each component time-weighted over the segments, the
-    # components added in quadrature (independence is 自組)
+    # components added in quadrature (independence is 推估)
     if rows:
         tt = sum(r["t"] for r in rows)
         comp = {k: sum(r["t"] * r["sigma"][k] for r in rows) / tt for k in ("pack", "alt", "time", "day")}
@@ -1055,7 +1055,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                 f"{bs.get('trail_activities', 0)} 次越野 + {bs.get('hike_trips', 0)} 趟登山）")
     warnings.append(base_txt + ("，回測通過" if v2_primary else "，待回測（推估）"))
     if band_id == "cap":
-        warnings.append(f"能力上限：你在陡坡窗較快的四分之一（× {band_f:.2f}，自組），只適合 ≤ {CAP.CAP_BAND_MAX_H:g} h")
+        warnings.append(f"能力上限：你在陡坡窗較快的四分之一（× {band_f:.2f}，推估），只適合 ≤ {CAP.CAP_BAND_MAX_H:g} h")
         if T / 3600.0 / max(1, n_days) > CAP.CAP_BAND_MAX_H:
             warnings.append(f"每天超過 {CAP.CAP_BAND_MAX_H:g} h：能力上限撐不住，建議用 AeT")
     if not (cap.beta or {}).get("reliable"):
@@ -1067,7 +1067,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         warnings.append(f"熱：每段溫度由 {to['temp_c']:.1f} °C（{z0:.0f} m）以 0.0065 K/m 遞減率推算；"
                         f"熱適應 S {hacc['s']:.0%}（{hacc['source']}，推估）")
     if pack_src.startswith("預設"):
-        warnings.append(f"背負{pack_src}，之後每天 −{CAP.PACK_DAILY_DROP:g} kg（糧食，自組）")
+        warnings.append(f"背負{pack_src}，之後每天 −{CAP.PACK_DAILY_DROP:g} kg（糧食，推估）")
     main = "group" if (kind == "group" and grp) else "capacity"
     summary = {"time_s": T, "capacity_time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1),
                "group_time_s": ({"p25": grp["p25_s"], "p50": grp["p50_s"], "p75": grp["p75_s"], "n": grp["n"],

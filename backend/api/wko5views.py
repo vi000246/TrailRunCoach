@@ -75,6 +75,11 @@ def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "") -> Datase
         raise
     st.finish()
     _LIVE.add(ds)
+    try:                            # stored plan rows find their activities by start (activity_key.py)
+        from backend.engine import activity_key as AK
+        AK.register_dataset(ds)
+    except Exception:               # noqa: BLE001
+        pass
     return ds
 
 
@@ -337,6 +342,13 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
 
     def compute():
         res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None, params=params)
+        if ch.get("race_refs") == "course_constant" and not needs_workout:
+            # 目標賽事參考線 (panels/race_refs.py): the plan and the dataset are in the cache key
+            import math
+            from backend.engine.panels import race_refs as RR
+            from backend.engine.planning import Plan
+            from backend.files.wko5_athlete import day_to_date
+            res = RR.apply(res, getattr(ds, "plan", None) or Plan(), day_to_date(int(math.floor(ds.today))))
         if winfo:
             rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
             res = {**res, **winfo, "recent_bests": rb}
@@ -705,7 +717,7 @@ async def patch_activity(i: int, body: dict):
 def _set_pack(w, kg) -> None:
     from backend.engine.racepower import athlete as A
     try:
-        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg))
+        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg), start=w.entry.start)
     except (TypeError, ValueError) as e:
         raise HTTPException(400, str(e) or "背負要在 0–40 kg")
     try:                                     # the race-power walking model reads the packs too

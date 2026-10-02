@@ -306,7 +306,7 @@ def test_viewer_drops_the_card_and_links_the_edit_page():
     shell = (STATIC / "shell.js").read_text(encoding="utf-8")
     assert 'id: "activity"' in shell and "/api/v1/wko5/activities/page" in shell
     page = (STATIC / "activity.html").read_text(encoding="utf-8")
-    assert 'data-page="activity"' in page and "自組" not in page
+    assert 'data-page="activity"' in page and "\u81ea\u7d44" not in page
     from backend.api import wko5views as V
     assert Path(V.activities_page().path).name == "activity.html"
 

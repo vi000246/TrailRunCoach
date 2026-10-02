@@ -859,7 +859,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         elif s.id == "test_aet":
             # the 50-min test: a ≥ 48-min road run (2′ slack) titled AeT — the COROS
             # workout's name; untitled only from 55 min (workout_review.TEST_AET_MIN_S),
-            # so the athlete's ordinary 41–52′ road runs are not taken for the test (自組)
+            # so the athlete's ordinary 41–52′ road runs are not taken for the test (推估)
             from backend.engine import workout_review as WR
             if AT.is_xu(asdict(s)):
                 # 徐國峰's test = any ≥ 88-min flat road run that week (the LSD itself; 2′ slack)
@@ -1081,7 +1081,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
         "long_weekday": WEEKDAYS[long_wd],
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
-                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": tt.get("aet_source")},
+                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": tt.get("aet_source"), "aet_pm": tt.get("aet_pm")},
         "notes": notes,
         # the quality gate (engine/quality_gate.py), so projection.project_weeks can
         # re-evaluate it for each projected week instead of copying this week's answer

@@ -10,7 +10,7 @@ Per bout the power is the mean-max over the bout's own duration from the
 Non-maximal bout (a bout that was not all-out):
   * the workbook's "falling" rule (cp.validity): the shorter bout must have
     the higher power — a 3′ at or below the 12′ power was not maximal;
-  * 自組: its peak HR is ≥ HR_GAP_BPM below the other bout's peak. Evidence:
+  * 推估: its peak HR is ≥ HR_GAP_BPM below the other bout's peak. Evidence:
     the 2026-09-30 test, 3′ 217 W peak 146 bpm vs 12′ 221 W peak 171 bpm.
 With both bouts maximal: the 2-parameter model through the two points
 (work = CP·t + W′, Jones & Vanhatalo 2017). With one maximal bout: the
@@ -31,8 +31,8 @@ from backend.engine.racepower import cp as CP
 
 SHORT_S = (150.0, 210.0)       # 3′ ± 30 s
 LONG_S = (660.0, 780.0)        # 12′ ± 60 s
-BOUT_MIN_RATIO = 1.3           # 自組: a bout is ≥ 1.3 × the median power of the other laps
-HR_GAP_BPM = 10.0              # 自組, see the module docstring
+BOUT_MIN_RATIO = 1.3           # 推估: a bout is ≥ 1.3 × the median power of the other laps
+HR_GAP_BPM = 10.0              # 推估, see the module docstring
 FRESH_DAYS = 90                # as PLAN_CP_MAX_AGE_DAYS
 CACHE_NAME = "racepower_cptests.json"
 _KEY_VERSION = 2
@@ -123,12 +123,65 @@ def estimate(test: dict, weight: float, sex: str = "male", wind: bool = False) -
 # ---------------------------------------------------------------------------
 
 def _file_date(p: Path) -> Optional[dt.date]:
+    """The date in a synced file name: COROS …_YYYY-MM-DD_….fit, TP tp_YYYY_MM_DD_….fit."""
     import re
-    m = re.search(r"(\d{4}-\d{2}-\d{2})", p.name)
+    m = re.search(r"(\d{4})-(\d{2})-(\d{2})", p.name) or re.match(r"tp_(\d{4})_(\d{2})_(\d{2})_", p.name)
     try:
-        return dt.date.fromisoformat(m.group(1)) if m else None
+        return dt.date(*(int(x) for x in m.groups())) if m else None
     except ValueError:
         return None
+
+
+_SKIP_MEMO: dict = {}
+
+
+def secondary_duplicates(home: Path) -> set[str]:
+    """Paths (relative to home/fit) of the synced files another source's file
+    of the same activity stands in for — the 主要資料來源 rule of the merged
+    Dataset (backend/sync/primary.py merge: the primary's file when both have
+    the activity, one file per activity), so the race-power curves and the CP
+    test scan read the same files as the charts. Starts come from the FIT
+    dataset cache's index (fitcache.FitStore, filled by any COROS / TP / 同步資料
+    build); a file it does not know yet is never skipped. Memoised on the
+    index files and the primary setting."""
+    from backend.engine.wko5expr import fitcache
+    from backend.engine.wko5expr.datasource import primary_info
+    from backend.sync import primary as P
+    root = Path(home) / "fit"
+    folders = [f for f in ("coros", "tp") if (root / f).exists()]
+    if len(folders) < 2:
+        return set()
+    setting, status = primary_info()
+    stamp = []
+    for f in folders:
+        ip = fitcache.index_path_of(root / f)
+        try:
+            stamp.append((f, ip.stat().st_mtime_ns))
+        except OSError:
+            stamp.append((f, None))
+    key = (str(root), tuple(stamp), setting, tuple(sorted(status.items())))
+    if _SKIP_MEMO.get("k") == key:
+        return _SKIP_MEMO["v"]
+    stores = {f: fitcache.FitStore(root / f) for f in folders}
+    items = []
+    for f, s in stores.items():
+        for rel, e in s.files.items():
+            m = (e or {}).get("meta") or {}
+            if m.get("error") or not m.get("start") or not m.get("n"):
+                continue
+            try:
+                t = dt.datetime.fromisoformat(m["start"])
+            except ValueError:
+                continue
+            items.append((t, P.to_db(f), (f"{f}/{rel}", m)))
+    by_src: dict = {}
+    for t, s, _ in items:
+        by_src.setdefault(s, []).append(t)
+    chosen = P.resolve(setting, {s: P.stats_from_starts(v, status.get(s)) for s, v in by_src.items()})
+    _, dropped = P.merge(items, chosen, quality=lambda x: (x[1].get("n") or 0, x[1].get("duration") or 0))
+    out = {x[0] for _, _, x in dropped}
+    _SKIP_MEMO.update(k=key, v=out)
+    return out
 
 
 def _read(p: Path) -> Optional[dict]:
@@ -175,8 +228,18 @@ def mean_max_curve(p: np.ndarray, grid=None) -> Optional[list]:
     return [xs, ys]
 
 
-def _files(home: Path, since: dt.date, until: dt.date) -> list[dict]:
-    """Every running FIT file in home/fit/** dated since…until, cached per file."""
+def _primary_files(home: Path, since: dt.date, until: dt.date) -> list[dict]:
+    """_files without the other source's copies of the primary's activities."""
+    try:
+        skip = secondary_duplicates(home)
+    except Exception:                       # noqa: BLE001 — no merge info: every file
+        skip = set()
+    return _files(home, since, until, skip)
+
+
+def _files(home: Path, since: dt.date, until: dt.date, skip: Optional[set] = None) -> list[dict]:
+    """Every running FIT file in home/fit/** dated since…until, cached per file;
+    `skip` = paths (relative to home/fit, "/"-separated) left out unread."""
     cache_p = home / CACHE_NAME
     try:
         cache = json.loads(cache_p.read_text("utf-8"))
@@ -190,8 +253,10 @@ def _files(home: Path, since: dt.date, until: dt.date) -> list[dict]:
         d = _file_date(p)
         if d is None or not (since <= d <= until):
             continue
-        st = p.stat()
         key = str(p.relative_to(root))
+        if skip and key.replace("\\", "/") in skip:
+            continue
+        st = p.stat()
         stamp = [st.st_size, int(st.st_mtime)]
         hit = cache["files"].get(key)
         if not hit or hit[0] != stamp:
@@ -343,7 +408,7 @@ def scan(home: Path, since: dt.date, until: dt.date, accept_watch: bool = True) 
     """Every 3′/12′ test in the FIT folder dated since…until (one per date).
     `accept_watch` False: a test recorded with watch-estimated power is no test."""
     out, seen = [], set()
-    files = [f for f in _files(home, since, until) if f.get("test")]
+    files = [f for f in _primary_files(home, since, until) if f.get("test")]
     for f in _usable(home, files, accept_watch):
         if f.get("test") and f["date"] not in seen:
             seen.add(f["date"])
@@ -356,9 +421,10 @@ def curves(home: Path, since: dt.date, until: dt.date, accept_watch: bool = True
     """Mean-max curves of the synced running FIT files (COROS / TP), so a
     session WKO5 has not imported yet (today's test) still enters the
     envelope. Duplicates of WKO5 activities are harmless: the envelope is a
-    maximum. Only file names with a YYYY-MM-DD date are read (`_file_date`):
-    the COROS files, not TP's tp_YYYY_MM_DD_… names. `accept_watch` False:
+    maximum. COROS and TP files follow the 主要資料來源 like the charts
+    (secondary_duplicates: the primary's file of an activity, the other
+    source's only for activities the primary lacks). `accept_watch` False:
     watch-estimated power is left out."""
-    files = [f for f in _files(home, since, until) if f.get("curve")]
+    files = [f for f in _primary_files(home, since, until) if f.get("curve")]
     return [{"date": f["date"], "file": f["file"], "path": f["path"], "xs": f["curve"][0], "ys": f["curve"][1]}
             for f in _usable(home, files, accept_watch)]
