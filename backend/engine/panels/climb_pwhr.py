@@ -18,6 +18,7 @@ Hadley 120 with the athlete's own β (engine/heat.hr_heat_adjust, 推估).
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Optional
 
 from backend.engine import climb_pwhr as CP
@@ -77,10 +78,16 @@ def sources() -> dict:
             "weather": {f: v for f, v in acts.items() if v}}
 
 
-def route_map(route_index: dict, names: dict) -> tuple[dict, dict]:
-    """({file: route key}, {route key: name}); routes with ≥ 2 runs; reversed
-    runs get "<id>~rev", mixed-direction runs no key."""
-    of, name = {}, {}
+START_TOL_S = 180               # 推估: the same activity in another source starts within 3 min
+
+
+def route_map(route_index: dict, names: dict) -> tuple[dict, dict, list]:
+    """({file: route key}, {route key: name}, [(start, route key)]); routes
+    with ≥ 2 runs; reversed runs get "<id>~rev", mixed-direction runs no key.
+    The index is built on the WKO5 .wko4 files while the charts may read the
+    COROS / TP FITs, so an activity is also matched by its start time (the
+    efforts' "start")."""
+    of, name, starts = {}, {}, []
     for r in route_index.get("routes") or []:
         members = r.get("members") or []
         if len(members) < 2:
@@ -94,7 +101,50 @@ def route_map(route_index: dict, names: dict) -> tuple[dict, dict]:
             key = r["id"] if d == "same" else f"{r['id']}~rev"
             of[f] = key
             name[key] = base if d == "same" else f"{base}（反向）"
-    return of, name
+        for e in r.get("efforts") or []:
+            k = of.get(e.get("file"))
+            if k and e.get("start"):
+                try:
+                    starts.append((dt.datetime.fromisoformat(str(e["start"])).replace(tzinfo=None), k))
+                except ValueError:
+                    pass
+    starts.sort()
+    return of, name, starts
+
+
+def _nearest(w, starts: list):
+    if not starts:
+        return None
+    s = w.entry.start.replace(tzinfo=None)
+    best = min(starts, key=lambda x: abs((x[0] - s).total_seconds()))
+    return best[1] if abs((best[0] - s).total_seconds()) <= START_TOL_S else None
+
+
+def route_of(w, of: dict, starts: list) -> Optional[str]:
+    return of.get(w.entry.file) or _nearest(w, starts)
+
+
+_WKO4_START = re.compile(r"_(\d{4})_(\d\d)_(\d\d)_(\d\d)_(\d\d)\.wko4$")
+
+
+def weather_starts(weather: dict) -> list:
+    """[(start, file)] of the activity-weather entries, the start read from
+    WKO5's file name (<athlete>_YYYY_MM_DD_HH_MM.wko4), for activities of
+    another source."""
+    out = []
+    for f in weather:
+        m = _WKO4_START.search(f)
+        if m:
+            out.append((dt.datetime(*map(int, m.groups())), f))
+    return sorted(out)
+
+
+def weather_of(w, weather: dict, wstarts: list) -> dict:
+    v = weather.get(w.entry.file)
+    if v is None:
+        f = _nearest(w, wstarts)
+        v = weather.get(f) if f else None
+    return v or {}
 
 
 def _zone(hr: float, aet: Optional[float], lthr: Optional[float]) -> Optional[str]:
@@ -115,7 +165,8 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
         route_index = src["route_index"] if route_index is None else route_index
         weather = src["weather"] if weather is None else weather
         names = src["names"] if names is None else names
-    of, rname = route_map(route_index, names)
+    of, rname, starts = route_map(route_index, names)
+    wstarts = weather_starts(weather)
     counts = {"trail_runs": 0, "stryd": 0, "watch_power": 0, "no_power": 0, "with_segments": 0,
               "segments": 0, "on_route": 0, "not_on_route": 0, "rejected": {}}
     by_route: dict[str, list] = {}
@@ -139,12 +190,12 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
             if segs:
                 counts["with_segments"] += 1
                 counts["segments"] += len(segs)
-        key = of.get(w.entry.file)
+        key = route_of(w, of, starts) if segs else None
         if in_range:
             counts["on_route" if key else "not_on_route"] += len(segs)
         if not key or not segs:
             continue
-        wx = weather.get(w.entry.file) or {}
+        wx = weather_of(w, weather, wstarts)
         had = wx.get("hadley")
         aet = getattr(ds, "aethr", lambda _w: None)(w)
         lthr = ds.sport_setting("thr", w)
