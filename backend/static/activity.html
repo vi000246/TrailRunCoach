@@ -150,7 +150,9 @@ const SPORT_ZH = { "running": "路跑", "trail running": "越野跑", "indoor ru
   "hiking": "健行", "mountaineering": "登山", "walking": "走路", "cycling": "騎車", "strength training": "肌力" };
 const sportZh = (a) => SPORT_ZH[a.sport_type] || a.sport_type || a.sport || "";
 const PREF = "activityedit.filters";
-const S = { acts: [], auto: null, types: {}, efforts: {}, sel: null, checked: new Set(), detail: null, pain: null };
+// usePower: settings 「使用功率」 (charts.power.enabled); off = the 功率來源 field is hidden
+// pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 row / filter / bulk button)
+const S = { acts: [], auto: null, types: {}, efforts: {}, sel: null, checked: new Set(), detail: null, usePower: true, pain: null };
 const PAIN_ZH = { 0: "沒痛", 1: "痠", 2: "痛", 3: "中斷" };
 const areaZh = (k) => (S.pain?.areas || []).find((x) => x.key === k)?.label || (k === "unknown" ? "" : k || "");
 
@@ -368,8 +370,8 @@ function renderEditor() {
       <div class="ctl" style="display:block"><textarea data-note rows="3" aria-label="備註">${esc(a.note || "")}</textarea></div></div>
     <div class="fld"><span class="lab">地形${qt("路跑或越野。自動 = 依距離與爬升判定；選路跑／越野會蓋過規則，選回「自動」就恢復。WKO5 來源的地形是 WKO5 的活動類型，要在 WKO5 改。")}</span><div class="ctl">${terrainCtl}</div></div>
     <div class="fld"><span class="lab">排除${qt("排除的活動留在清單（標「已排除」），但不算進 PMC、功率曲線、比賽功率和圖表。規則會自動排除疑似交通工具或不可能的功率；你可以手動排除，或把規則排除的標成正常。")}</span><div class="ctl">${exCtl}</div></div>
-    <div class="fld"><span class="lab">功率來源${qt("唯讀。Stryd 功率一律採用；手錶推估功率要在「設定」打開才採用，沒採用時功率模型和功率 TSS 不用它，心率與配速照常使用。")}</span><div class="ctl">${a.index == null ? "—" : !d ? "讀取中…"
-      : p && p.source && p.source !== "none" ? esc(p.label || p.source) + (p.used || /未採用/.test(p.label || "") ? "" : "（未採用）") : "沒有功率"}</div></div>
+    ${!S.usePower ? "" : `<div class="fld"><span class="lab">功率來源${qt("唯讀。Stryd 功率一律採用；手錶推估功率要在「設定」打開才採用，沒採用時功率模型和功率 TSS 不用它，心率與配速照常使用。")}</span><div class="ctl">${a.index == null ? "—" : !d ? "讀取中…"
+      : p && p.source && p.source !== "none" ? esc(p.label || p.source) + (p.used || /未採用/.test(p.label || "") ? "" : "（未採用）") : "沒有功率"}</div></div>`}
     ${d?.capacity ? `<div class="fld"><span class="lab">能力樣本</span><div class="ctl">${d.capacity.ok ? "是" : "否"}</div><div class="why">${esc(d.capacity.reason || "")}</div></div>` : ""}
     <div class="msg" id="msg"></div>`;
   wireEditor(a);
@@ -499,6 +501,7 @@ $("b-nopain").addEventListener("click", async () => {
 // ---- start ----------------------------------------------------------------
 (async () => {
   const want = new URLSearchParams(location.search).get("key");
+  S.usePower = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
   S.pain = await PainPicker.meta();        // null in the demo mode: no pain row, filter or bulk button
   document.querySelectorAll("[data-pain-only]").forEach((el) => { el.hidden = !S.pain; });
   try { await loadList(); } catch (e) { $("list").innerHTML = `<div class="empty">讀取失敗：${esc(e.message)}</div>`; return; }

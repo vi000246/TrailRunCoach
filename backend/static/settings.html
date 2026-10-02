@@ -70,6 +70,7 @@ progress { width: 220px; height: 10px; }
 .ok-text { color: var(--ok); } .err-text { color: var(--err); }
 button[aria-busy="true"] { cursor: progress; opacity: .75; }
 button.danger { color: var(--err); border-color: var(--err); }
+button.q { width: 18px; height: 18px; padding: 0; border-radius: 50%; font-size: 11px; line-height: 16px; color: var(--muted); cursor: help; }
 button.danger.primary { background: var(--err); color: #fff; }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); max-width: 440px; }
 dialog::backdrop { background: rgba(0,0,0,.35); }
@@ -105,6 +106,15 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
           <li>不套用資料校正與你的測試值</li>
         </ul>
       </button>
+    </div>
+  </section>
+
+  <section id="power">
+    <h2>功率</h2>
+    <div class="row" style="margin-top:4px">
+      <label><input type="checkbox" id="u-power"> 使用功率</label>
+      <button type="button" class="q" aria-label="說明" title="只用心率訓練（沒有 Stryd 或不看功率）就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、W′ 電池、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
+      <span class="meta" id="u-power-note"></span>
     </div>
   </section>
 
@@ -406,6 +416,8 @@ async function loadSyncSettings() {
   $("s-primary").value = SS.primary_source || "";
   $("s-chart").value = SS.chart_data_source || "wko5";
   $("m-base").value = SS.map_basemap || "rudy";
+  $("u-power").checked = SS.use_power !== false;
+  $("u-power-note").textContent = SS.use_power === false ? "已關閉：只顯示心率／配速的圖" : "";
   document.querySelectorAll('input[name="m-ovl"]').forEach((c) => c.checked = (SS.map_overlays || []).includes(c.value));
   f("tp", "secretsrc").textContent = SRC_LABEL[SS.tp_client_credentials_source] || SS.tp_client_credentials_source;
   f("tp", "secretfile").textContent = SS.tp_client_file_exists ? "存在（內容不顯示）" : "不存在";
@@ -465,6 +477,13 @@ $("m-save").onclick = async () => {
 async function putSetting(body) {
   await j(`${SYNC}/settings`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 }
+// ? on touch (no hover): show the explanation under the switch
+document.querySelector("#power button.q").onclick = (e) => { $("u-power-note").textContent = e.currentTarget.title; };
+$("u-power").onchange = async (e) => {
+  try { await putSetting({ use_power: e.target.checked });
+    toast(e.target.checked ? "已開啟功率：重新整理其他頁面就會顯示功率的圖" : "已關閉功率：其他頁面重新整理後只顯示心率／配速"); loadSyncSettings(); }
+  catch (err) { toast("失敗：" + err.message.slice(0, 80)); e.target.checked = !e.target.checked; }
+};
 f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast("已更新"));
 f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast("已更新"));
 f("tp", "usewko5").onchange = (e) => putSetting({ tp_use_wko5_client: e.target.checked }).then(() => toast("已更新"));
