@@ -103,9 +103,10 @@ def test_viewer_draws_cards_and_hides_the_text_rows():
 
 def test_overview_is_a_dashboard():
     html = (STATIC / "overview.html").read_text(encoding="utf-8")
-    for needle in ('id="kpis"', "function renderKpis(", "function stype(", 'class="week"', "data-suggest-hook",
-                   "suggestions:changed", "/api/v1/static/dashicons.js"):
+    for needle in ('id="kpis"', "function renderKpis(", "function stype(", 'class="week"', "suggestions:changed", "/api/v1/static/dashicons.js"):
         assert needle in html, needle
+    # due tests live in the shared floating box (suggestions.js), not inline on the overview
+    assert 'id="tsug"' not in html
     # every session type the week can show has a label (identity = icon + word)
     for t in ("easy", "z3", "z5", "long", "b2b", "loaded", "test", "rest"):
         assert f"{t}:" in html.split("const TYPES = {", 1)[1].split("};", 1)[0], t
