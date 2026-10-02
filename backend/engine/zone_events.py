@@ -146,7 +146,7 @@ CONDITIONS = {
     "aet": "< 25 °C、平地；固定功率 40–60 分（Uphill Athlete）或固定 E 配速 90 分（徐國峰），不要調速",
     "cp": "< 25 °C；照課表偏好的 CP 測試方式，全力段要真的全力",
 }
-SRC = "docs/research/zones-and-thresholds.md §2.5 事件觸發、§3.3"
+SRC = "門檻在事件後重測：CP 變化、停跑、季節轉換（Friel；推估）"
 
 
 def _iso(d) -> str:
@@ -689,7 +689,7 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
                 f"停跑 ≥ 4 週，同功率心率會升高（停訓 2–4 週次大心率約 +11 bpm）；區間先照用，"
                 f"{brk.get('end') or brk['return']} 恢復期結束後再測", today, brk.get("end") or brk["return"],
                 {"break_days": brk["days"], "return": brk["return"], "block_end": brk.get("end")},
-                SRC + "；docs/research/detraining.md（Coyle 1986、Houmard 1992）；engine/reentry.py"))
+                SRC + "；停訓：Coyle 1986、Houmard 1992"))
     # heat-adjusted HR-at-power shift
     if points is None:
         try:
@@ -742,7 +742,7 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
                 f"{cs['start']} 起連續 {SPELL_DAYS} 個路跑日{basis} < {COOL_C:.0f} °C、Hadley < {HOT_HADLEY:.0f}"
                 f"（之前 {SUMMER_DAYS} 天有 {cs['summer_days']} 天 Hadley ≥ {HOT_HADLEY:.0f}）：夏天測的門檻受熱影響，"
                 f"清晨涼的時候重測比較準",
-                cs["start"], None, cs, SRC + "；徐國峰：等天氣轉涼再做（xu-guofeng-reply.md）；Hadley 150（route_weather）"))
+                cs["start"], None, cs, SRC + "；徐國峰（教練）：等天氣轉涼再做；Hadley 150"))
     # the AeT is only a lower bound (drift_agg.aet_validity): one AeT test every 8 weeks, low priority
     val = aet_validity
     if val is None and real:
@@ -762,7 +762,7 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
                 f"{DA.bound_label(x)}。每 {BOUND_REMIND_DAYS // 7} 週建議一次（推估），不擋課表、可以關掉；"
                 f"多跑 {x - 20:.0f}–{x - 10:.0f} bpm 的輕鬆跑，回歸就能自己找出 AeT",
                 due, None, {"bound": val.get("bound"), "value": x},
-                SRC + "；下限規則與 8 週提醒為推估（drift_agg.aet_validity）")
+                SRC + "；下限規則與 8 週提醒為推估")
             out.append({**sg, "priority": "low"})
     return {"suggestions": out, "events": applied_events(plan, today), "checks": checks}
 

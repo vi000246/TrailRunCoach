@@ -564,7 +564,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 QUALITY_ORDER = (1, 2, 3, 0, 4, 5, 6)          # Tue, Wed, Thu, Mon, Fri, Sat, Sun
-SRC_GAP = "台灣教練：5 區一週最多兩次、兩次之間至少隔兩天；強度課與長跑隔 ≥ 48 小時"
+SRC_GAP = "徐國峰（教練）：5 區一週最多兩次、兩次之間至少隔兩天；強度課與長跑隔 ≥ 48 小時"
 LONG_MIN_TYPICAL = 90                            # 推估: an LSD rarely fits under 90 min
 
 
@@ -621,10 +621,10 @@ def day_conflicts(p: Prefs, auto_long_wd: int = 5) -> list[dict]:
     for kind in ("aet_test",):
         for wd in p.pref_of(kind)[:1]:
             if p.aet_test_days == "weekday" and wd >= 5:
-                add("aet_weekday", kind, wd, "AeT 測試只排平日（課表偏好 AeT 測試日）", "課表偏好；aet_test.pick_day",
+                add("aet_weekday", kind, wd, "AeT 測試只排平日（課表偏好 AeT 測試日）", "課表偏好",
                     f"AeT 測試偏好週{WD_ZH[wd]}，但「AeT 測試日」設成只排平日", "改排平日（或把 AeT 測試日改成「任何一天」）")
             if _gap(wd, lw) < 2 or (q and _gap(wd, q[0]) < 1):
-                add("aet_gap", kind, wd, "測試前後不排長跑／強度課", "aet_test.pick_day（測試前一天輕鬆）",
+                add("aet_gap", kind, wd, "測試前後不排長跑／強度課", "測試前一天輕鬆（推估）",
                     f"AeT 測試偏好週{WD_ZH[wd]}，離長跑（週{WD_ZH[lw]}）或間歇太近：測出來的飄移會失真", "建議日期會避開，偏好日排在後面")
     return out
 
@@ -706,7 +706,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             avail.remove(r["day"])
             continue
         elif s["kind"] in ("quality", "test"):
-            # ≥ 2 days between hard days: 台灣教練— Zone 5 at most twice a week, ≥ 2 days apart
+            # ≥ 2 days between hard days: 徐國峰（教練）— Zone 5 at most twice a week, ≥ 2 days apart
             hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
             hard_days += list(hard_done or [])   # done hard days this week (workout_review.HARD_TYPES)
             ok = lambda d:(long_day is None or abs((d - long_day).days) >= 2) and \

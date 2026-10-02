@@ -27,7 +27,7 @@ LONG_RACE_H = 3.0               # longer: HR cap at AeT (「長距離壓在 AeT 
 CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 KIND_LABEL = {"run_climb": "可跑的爬坡", "steep_climb": "陡坡（走）", "descent": "下坡", "flat": "平路／可跑"}
 SRC = {"run_climb": "3–8 % 坡：Stryd 功率 ≈ 固定代謝負荷（van Rassel 2026）；心率只當上限",
-       "steep_climb": "> 8 %：功率低估，改看心率上限與 VAM（vo2max-gate-and-trail-metric.md §2.3；Uphill Athlete）",
+       "steep_climb": "> 8 %：功率低估，改看心率上限與 VAM（Uphill Athlete）",
        "descent": "下坡：功率和心率都低估離心負荷（Kipp 2023；Gravina-Cognetti），看技術與安全",
        "flat": "平路與可跑段：功率（沒有 CP 時看心率）",
        "hike": "百岳揹重：心率 ≤ AeT（Uphill Athlete）＋ VAM；配速受地形與背負影響，不當目標"}
