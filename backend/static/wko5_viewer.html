@@ -3363,7 +3363,7 @@ function drawRepProfile(card, res) {
   const sw = (st) => `<span><b class="sym" style="color:${col(st)}">${IV_ST[st].icon}</b>${IV_ST[st].word}</span>`;
   leg.innerHTML = test
     ? `${sw("even")}${sw("uneven")}${reps.some((r) => r.expected) ? `<span><b class="sym" style="color:var(--iv-wp)">◇</b>預期全力（推估）</span>` : ""}<span><i class="dash" style="border-color:var(--iv-ink2)"></i>CP ${Math.round(P.cp)} W</span>`
-    : `<span><i class="band"></i>目標帶</span>${sw("in")}${sw("high")}${sw("low")}`;
+    : `<span><i class="band"></i>目標帶（淡邊 = ±2% 容許）</span>${sw("in")}${sw("high")}${sw("low")}`;
   const el = document.createElement("div");
   el.className = "plot iv-reps";
   el.setAttribute("role", "img");
@@ -3410,6 +3410,13 @@ function drawRepProfile(card, res) {
           const kids = [{ type: "rect", shape: { x: xc - bw / 2, y: api.coord([0, yn.max])[1], width: bw, height: api.coord([0, yn.min])[1] - api.coord([0, yn.max])[1] },
             style: { fill: "rgba(0,0,0,0.001)" } }];
           if (P.band) {
+            // the ±2 % tolerance (floor = lo × 0.98, ceil = hi × 1.02) as a fainter rim, so a green dot
+            // just outside the core band still reads as inside what counts
+            if (P.floor != null) {
+              const t0 = api.coord([0, P.floor])[1], t1 = api.coord([0, P.ceil ?? bandHi])[1];
+              kids.push({ type: "rect", silent: true, shape: { x: xc - w / 2, y: t1, width: w, height: Math.max(2, t0 - t1), r: 4 },
+                style: { fill: css("--iv-band"), opacity: 0.45 } });
+            }
             const y0 = api.coord([0, P.band[0]])[1], y1 = api.coord([0, bandHi])[1];
             kids.push({ type: "rect", silent: true, shape: { x: xc - w / 2, y: y1, width: w, height: Math.max(2, y0 - y1), r: 4 },
               style: { fill: css("--iv-band") } });
