@@ -62,7 +62,7 @@ import numpy as np
 STEP_HOLD, STEP_BLOCK = 0.10, 0.20           # quality_gate.STEP_HOLD / STEP_BLOCK, status.VOLUME_STEP_WATCH
 RAMP_SUB, RAMP_BLOCK = 5.0, 8.0              # quality_gate.RAMP_SUB / RAMP_BLOCK, status.RAMP
 LOW_SHARE_MIN, LOW_SHARE_WATCH = 0.75, 0.65  # status.LOW_SHARE_GOOD / WATCH
-MONOTONY_HIGH = 2.0                          # panels/fatigue.MONOTONY_HIGH
+MONOTONY_HIGH = 2.0                          # Foster 1998 (the app no longer shows monotony)
 ACWR_BANDS = (0.8, 1.3, 1.5)                 # chart_metrics.LOAD_RATIO_BANDS
 CTL_TAU, ATL_TAU = 42.0, 7.0
 FC = 1 - math.exp(-1 / CTL_TAU)              # engine/algorithms/metrics.compute_run_pmc
