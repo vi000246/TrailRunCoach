@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from backend.engine import interval_library as IL
+from backend.i18n import N_, _
 from backend.engine.zones import FRIEL_HR, FRIEL_PACE, PALLADINO_POWER_ZONES
 
 V = 1
@@ -77,6 +78,28 @@ HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "
 
 WARM_NAME = {"city": "市區輕鬆跑到河濱", "river": "河濱輕鬆→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
+
+
+NO_TPACE = N_("沒有閾值配速：這段推到手錶不會有配速目標")
+
+
+def no_tpace_text() -> str:
+    return _(NO_TPACE)
+
+
+def needs_tpace(items) -> bool:
+    """A step whose pace target is % / zone of threshold pace (Daniels / Canova / Billat
+    templates); absolute s/km steps don't need one. `items`: a steps doc or its item list."""
+    items = items.get("items") if isinstance(items, dict) else items
+    for it in items or []:
+        if it.get("kind") == "repeat":
+            if needs_tpace(it.get("items")):
+                return True
+            continue
+        tg = it.get("target") or {}
+        if tg.get("type") == "pace" and tg.get("mode", "pct") in ("pct", "zone"):
+            return True
+    return False
 
 
 class StepsError(ValueError):
@@ -588,10 +611,11 @@ class Resolved:
     warn: str = ""
     err: str = ""
     intensity: Optional[tuple] = None    # what COROS gets: ("power" | "hr" | "pace", lo, hi)
+    need: str = ""                       # "tpace": a % / zone pace target with no threshold pace
 
     def as_dict(self) -> dict:
         return {"type": self.type, "lo": self.lo, "hi": self.hi, "frac": self.frac, "text": self.text,
-                "sub": self.sub, "auto": self.auto, "warn": self.warn, "err": self.err,
+                "sub": self.sub, "auto": self.auto, "warn": self.warn, "err": self.err, "need": self.need,
                 "level": level(self.frac), "label": TYPE_LABEL.get(self.type, self.type)}
 
 
@@ -671,7 +695,9 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             lo, hi = _zone_of("pace", tg.get("zone"))
         if mode != "abs":
             if not c.tpace:
-                return Resolved("none", text="不設目標", auto=False, err="選了配速卻沒有閾值配速")
+                # a warning, not an error: the session can be saved and pushed, that step just
+                # has no pace target on the watch (absolute s/km steps never need it)
+                return Resolved("none", text=_("不設目標"), auto=False, warn=no_tpace_text(), need="tpace")
             lo, hi = lo * c.tpace, hi * c.tpace
         a, b = min(lo, hi), max(lo, hi)
         f = 1.0 / ((a + b) / 2 / c.tpace) if c.tpace else 0.8
@@ -1156,6 +1182,8 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
         {"key": "ramp", "hit": False, "text": "沒有漸進（ramp）步驟：漸進只寫在步驟名稱"},
     ]
     lost = []
+    if any(r.need == "tpace" for _st, r in res):
+        lost.append(no_tpace_text())
     if unrolled:
         lost.append("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段")
     if dist:
@@ -1277,7 +1305,11 @@ def templates(prefs=None) -> dict:
     g("trail", "有出處的課表", [r for t, r in lib if t.cat == "trail"])
     g("trail", "附加", [hills])
     from backend.engine.workout_templates import CATS
-    return {"cats": CATS, "groups": groups}
+    for gr in groups:
+        for r in gr["rows"]:
+            # the editor badges these when there is no threshold pace (their pace is × it)
+            r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
+    return {"cats": CATS, "groups": groups, "no_tpace_text": no_tpace_text()}
 
 
 def zones_table(c: Ctx) -> dict:

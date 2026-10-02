@@ -354,6 +354,20 @@ async def settings(db) -> dict:
     repo = SettingsRepository(db)
     out = {k.split(".")[-1]: await repo.get(k) for k in AUTO_KEYS}
     out["state"] = await repo.get("plan.auto.state") or {}
+    # 推課表到手錶 only when the push provider (sync/workout_targets, plan.push.provider)
+    # is connected (generalize-athlete S4): push and notify None = auto -> on /
+    # "watch" when connected, off / "overview" without. Today only COROS can be
+    # connected; the other providers are stubs.
+    from backend.sync import runner
+    from backend.sync import workout_targets as WT
+    prov = await WT.active(db, current_athlete_id())
+    connected = prov.enabled and prov.id == "coros" and await runner.logged_in(db, "coros", current_athlete_id())
+    out["coros_logged_in"] = connected            # the auto-plan panel's flag (name kept)
+    out["push_provider"] = prov.id
+    if out["push"] is None:
+        out["push"] = connected
+    if out["notify"] is None:
+        out["notify"] = "watch" if connected else "overview"
     return out
 
 

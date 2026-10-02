@@ -1,4 +1,6 @@
 {
   "找不到備份檔": "Backup file not found",
-  "檔案是空的": "The file is empty"
+  "檔案是空的": "The file is empty",
+  "沒有閾值配速：這段推到手錶不會有配速目標": "No threshold pace: this step reaches the watch without a pace target",
+  "不設目標": "No target"
 }

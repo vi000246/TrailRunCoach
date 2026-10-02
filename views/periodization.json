@@ -62,28 +62,18 @@
         {
           "id": "long-easy-drift",
           "title": "長時間輕鬆跑的心率飄移",
-          "description": "Uphill Athlete 的有氧閾值測試：暖身後 40–60 分鐘穩定跑，飄移 < 5% 代表在有氧閾值以下。長期壓在 5% 以下代表有氧基礎穩固；> 10% 代表有氧基礎不足或跑太快。用單次活動判讀卡的算法：前 10 分鐘暖身不算、暖身後要有 ≥ 40 分鐘的移動時間，只看路跑；有坡、停頓 > 5%、功率起伏大、> 90% CP、快速結尾的跑步不採用（不畫點）。淺色點 = 參考（暖身後 30–40 分，未達 UA 測試標準）：其他條件都通過、只是不到 40 分；30 分是推估的門檻（未找到來源；心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001），只當參考，不解鎖間歇、不算 AeT 測試、不寫進門檻。總覽「心率飄移」指標是同一個算法，另外只算平均心率 ≤ AeT+3 的輕鬆跑（總覽用配速）。單次跑步誤差約 ±4–6 個百分點，所以深色線是最近 6 次（8 週內）的加權平均、淺色點是同一溫度區平均的 ± 標準誤，判讀看平均（drift-algorithm.md §1.3、§5.4；權重 1/SE² 推估）；溫度分區：熱天不再不採用，改成分 🌡 < 25 °C、25–28 °C、> 28 °C 與溫度不明四區，平均只和同一區的跑步算，每區一條線（25 °C 是徐國峰的條件；28 °C 是推估的分界，Beiter 2025 的熱組 28.7 °C；溫度先用 Open-Meteo 路線天氣，沒有時用手錶溫度扣掉手腕偏差 3.7 °C）；回程市區段當緩和排除、結尾靜止裁掉，跑走、VI > 1.04、前後半功率差 > 5% 的不採用。和 WKO5 存的 Pa:HR（全程、含暖身和停頓）不同，同一次可以差 1–9 個百分點。",
+          "description": "每根長條＝一次長時間的平路路跑：後段心率比前段多飄了幾 %。綠＝穩定（< 5%）、橘＝有點飄（5–10%）、紅＝飄很多（> 10%）。\n怎麼用：基礎期要看到綠色越來越多、長條越來越矮；紅色多代表輕鬆跑跑太快，或太熱、沒補給。\n一次會有誤差，看最近幾根的走向，不要只看一根；熱天本來就會偏高，滑過長條看當天溫度。\n5% 是 Uphill Athlete 有氧閾值測試的標準，10% 是徐國峰 90 分鐘測試的標準。只算暖身後還有 30 分鐘以上、沒有爬坡和停頓的穩定路跑，和總覽「心率飄移」同一個算法。",
+          "drift_bars": true,
           "basis": {"default": "pace", "choices": ["pace", "power"]},
           "axes": [{"id": "PERCENT"}],
           "series": [
-            {"name": "飄移 Pa:HR", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"pace\"))"},
-            {"name": "飄移 Pw:HR", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\"))"},
-            {"name": "參考 Pa:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#f2a7a7", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"pace\", \"ref\"))"},
-            {"name": "參考 Pw:HR（暖身後 30–40 分，未達 UA 測試標準）", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#f2a7a7", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift(\"power\", \"ref\"))"},
-            {"name": "6 次平均 Pa:HR 🌡 < 25 °C", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#7f1d1d", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"cool\"))"},
-            {"name": "6 次平均 Pa:HR 🌡 25–28 °C", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#d97706", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"warm\"))"},
-            {"name": "6 次平均 Pa:HR 🌡 > 28 °C", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#6d28d9", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"hot\"))"},
-            {"name": "6 次平均 Pa:HR 🌡 溫度不明", "basis": "pace", "type": "line", "y_axis": "PERCENT", "color": "#57534e", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"mean\", \"none\"))"},
-            {"name": "6 次平均 Pw:HR 🌡 < 25 °C", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#7f1d1d", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"cool\"))"},
-            {"name": "6 次平均 Pw:HR 🌡 25–28 °C", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#d97706", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"warm\"))"},
-            {"name": "6 次平均 Pw:HR 🌡 > 28 °C", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#6d28d9", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"hot\"))"},
-            {"name": "6 次平均 Pw:HR 🌡 溫度不明", "basis": "power", "type": "line", "y_axis": "PERCENT", "color": "#57534e", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"mean\", \"none\"))"},
-            {"name": "Pa:HR 平均 + 標準誤", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#c9a5a5", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"hi\"))"},
-            {"name": "Pa:HR 平均 − 標準誤", "basis": "pace", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#c9a5a5", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"pace\", \"lo\"))"},
-            {"name": "Pw:HR 平均 + 標準誤", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#c9a5a5", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"hi\"))"},
-            {"name": "Pw:HR 平均 − 標準誤", "basis": "power", "type": "line", "line_style": "none", "y_axis": "PERCENT", "color": "#c9a5a5", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), drift_avg(\"power\", \"lo\"))"},
-            {"name": "5% 門檻", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash", "expression": "(,0.05)"},
-            {"name": "10% 注意", "type": "line", "y_axis": "PERCENT", "color": "#dc2626", "line_style": "dash", "expression": "(,0.10)"}
+            {"name": "穩定（< 5%）", "basis": "pace", "type": "bar", "y_axis": "PERCENT", "color": "#16a34a", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and drift(\"pace\", \"all\") < 0.05, drift(\"pace\", \"all\"))"},
+            {"name": "有點飄（5–10%）", "basis": "pace", "type": "bar", "y_axis": "PERCENT", "color": "#f59e0b", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and drift(\"pace\", \"all\") >= 0.05 and drift(\"pace\", \"all\") < 0.10, drift(\"pace\", \"all\"))"},
+            {"name": "飄很多（> 10%）", "basis": "pace", "type": "bar", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and drift(\"pace\", \"all\") >= 0.10, drift(\"pace\", \"all\"))"},
+            {"name": "穩定（< 5%）", "basis": "power", "type": "bar", "y_axis": "PERCENT", "color": "#16a34a", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and drift(\"power\", \"all\") < 0.05, drift(\"power\", \"all\"))"},
+            {"name": "有點飄（5–10%）", "basis": "power", "type": "bar", "y_axis": "PERCENT", "color": "#f59e0b", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and drift(\"power\", \"all\") >= 0.05 and drift(\"power\", \"all\") < 0.10, drift(\"power\", \"all\"))"},
+            {"name": "飄很多（> 10%）", "basis": "power", "type": "bar", "y_axis": "PERCENT", "color": "#dc2626", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and drift(\"power\", \"all\") >= 0.10, drift(\"power\", \"all\"))"},
+            {"name": "5%", "type": "line", "y_axis": "PERCENT", "color": "#94a3b8", "line_style": "dash", "expression": "(,0.05)"}
           ]
         },
         {
@@ -134,7 +124,7 @@
             {"name": "越野跑", "type": "line", "y_axis": "NONE", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
             {"name": "登山健行", "type": "line", "y_axis": "NONE", "color": "#1baf7a", "expression": "if((hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 1, 1.8 * movingduration / 3600 + 0.3 * distance + 10 * climbing / 1000 + 0.6 * descending / 1000)"},
             {"name": "20 一般", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,20)"},
-            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#e34948", "line_style": "dash", "expression": "(,40)"}
+            {"name": "40 要過夜", "type": "line", "y_axis": "NONE", "color": "#8a8984", "line_style": "dash", "expression": "(,40)"}
           ]
         },
         {
