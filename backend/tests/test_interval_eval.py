@@ -129,6 +129,11 @@ def test_the_interval_tab_shows_on_a_cp_test_with_its_protocol_as_the_plan():
     assert WR.review(ds, w, "interval_tiz").get("hide") and WR.review(ds, w, "interval_hr").get("hide")
     even = _ds([_cp_test_run(TODAY - dt.timedelta(days=1), fade=False)])
     assert IE.card(even, even.workouts[0])["verdict"] == "even"
+    # the reference uses the CP before the test day (a CP applied from this very test is circular)
+    two = _ds([_run(TODAY - dt.timedelta(days=5), power=150.0), _cp_test_run(TODAY - dt.timedelta(days=1))])
+    two.cp = lambda x: 230.0 if x.idx == 0 else 250.0
+    e2 = IE.card(two, two.workouts[1])
+    assert e2["cp_ref"] == 230.0 and e2["reps"][0]["expected"] == pytest.approx(230 + 13100 / 180)
 
 
 def test_an_unplanned_run_offers_the_interval_reading_and_remembers_it(tmp_path, monkeypatch):

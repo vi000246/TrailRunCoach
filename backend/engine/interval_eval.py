@@ -332,6 +332,23 @@ def _test_bouts(ds, w, m: dict, c: dict, n_grid: int):
     return None
 
 
+def cp_before(ds, w) -> Optional[float]:
+    """The CP in effect before the test day (the latest earlier activity's): a test
+    applied the same day (the 9/30 CP 204 W came from that test's own 12′ bout)
+    would make the all-out reference circular."""
+    if not hasattr(ds, "cp"):
+        return None
+    d0 = math.floor(w.day)
+    prev = [x for x in ds.workouts if math.floor(x.day) < d0]
+    if not prev:
+        return None
+    try:
+        v = ds.cp(max(prev, key=lambda x: x.day))
+        return float(v) if v else None
+    except Exception:                       # noqa: BLE001
+        return None
+
+
 def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]:
     """A CP / AeT test judged against its protocol: the protocol's bouts are the
     planned reps; the verdict is the pacing (each bout even?), not a target band.
@@ -349,6 +366,7 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
     bouts, label, n_plan, intent, extra = got
     tol = EVEN_TOL if intent == "max" else EVEN_TOL_AET
     wp = bat["wprime_j"]
+    cp_ref = (cp_before(ds, w) or cp) if intent == "max" else cp
     reps, reasons = [], []
     for k, b in enumerate(bouts):
         a, e = int(round(b["start_s"])), int(round(b["start_s"] + b["duration_s"]))
@@ -361,7 +379,7 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
         split = (p2 / p1 - 1.0) if p1 > 0 else 0.0
         last = (float(seg[-60:].mean()) / mean - 1.0) if len(seg) >= 120 and mean > 0 else None
         word = _pacing_word(split, last, tol)
-        exp = (cp + wp / len(seg)) if intent == "max" else None
+        exp = (cp_ref + wp / len(seg)) if intent == "max" else None
         dmin, used = _seg_w(bat, a, e)
         name = f"{len(seg) / 60:.0f} 分段"
         reps.append({"k": k + 1, "start_s": float(a), "duration_s": float(len(seg)), "power": mean,
@@ -370,8 +388,8 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
                      "pct_expected": (mean / exp) if exp else None, "name": name,
                      "hr_end": _hr_last_half(s["t"], s["hr"], a, e), "hr_peak": b.get("hr_peak"),
                      "dfrc_min_pct": dmin, "wprime_used_j": used, "source": "test"})
-        ref = (f"；預期全力 ≈ {exp:.0f} W（CP + W′/{len(seg):.0f} 秒，推估），做到 {mean / exp * 100:.0f}%"
-               if exp else "")
+        ref = (f"；預期全力 ≈ {exp:.0f} W（測試前 CP {cp_ref:.0f} + W′/{len(seg):.0f} 秒，推估），"
+               f"做到 {mean / exp * 100:.0f}%" if exp else "")
         reasons.append(f"{name} {mean:.0f} W（{mean / cp * 100:.0f}% CP{ref}）：前半 {p1:.0f} → 後半 {p2:.0f} W"
                        f"（{split * 100:+.0f}%）" + (f"，最後 1 分 {last * 100:+.0f}%" if last is not None else "")
                        + f"——{word}")
@@ -385,6 +403,7 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
     reasons.append(f"平均＝後半和前半差 ±{tol * 100:.0f}% 內、最後 1 分 ≤ 該段 × 1.08（推估）")
     reasons += extra
     return {"ok": True, "kind": "test", "test": c["type"], "intent": intent, "label": label, "planned": True,
+            "cp_ref": cp_ref,
             "variant_key": None, "rung_key": None, "equiv": None, "cp": cp, "lo": None, "hi": None, "floor": None,
             "n_plan": n_plan, "works": [r["duration_s"] for r in reps], "reps": reps, "rep_source": "test",
             "outcome": None, "outcome_why": None, "hit": n_even, "hit_rate": n_even / len(reps), "fade": None,
