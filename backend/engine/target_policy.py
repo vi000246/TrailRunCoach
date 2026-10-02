@@ -10,7 +10,9 @@ the push: always HR).
 Order: the session's own override (target_basis on the stored session, a user
 edit) → 課表偏好 plan.prefs.target_basis (hr / power) → `auto`, by session
 type (docs/research/vo2max-gate-and-trail-metric.md §2, zones-and-thresholds.md):
-  easy, recovery, long, trail long days, hikes      心率 ≤ AeT (Uphill Athlete: the base
+  road easy / long                                   功率 (% CP) with HR ≤ AeT as a cap (athlete's
+                                                     call 2026-10-02; HR still guards heat / fatigue)
+  trail easy, recovery, trail long days, hikes       心率 ≤ AeT (Uphill Athlete: the base
                                                      is built below AeT; long days: HR —
                                                      drift and the late-day cap protect)
   Zone 3 / Zone 5 intervals, hill repeats 3–8 %     功率 (Stryd ≈ fixed metabolic load on
@@ -34,13 +36,15 @@ BASES = ("auto", "hr", "power")
 LABEL = {"auto": "自動（依課表類型）", "hr": "心率", "power": "功率", "pace": "配速", "none": "不設目標"}
 SRC = {
     "hr_base": "Uphill Athlete（AeT 以下累積有氧基礎）；長天後段心率飄移（Coyle & González-Alonso 2001）",
-    "power_iv": "Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）",
+    "power_easy": "路跑輕鬆／長跑看功率（Palladino Z1–Z2 % CP），心率 ≤ AeT 當上限：天熱、疲勞時心率先到就放慢",
+    "power_iv":"Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）",
     "climb": "長爬坡：> 8% 功率低估、心率在 20 分以上才準（vo2max-gate-and-trail-metric.md §2）",
     "down": "下坡：Stryd 功率低估離心負荷（Kipp 2023），看下降量與技術",
     "cp": "CP 測試：全力段不設上下限，事後用功率算 CP",
     "aet": "AeT 測試：依方式（徐國峰 90／Friel 看心率；UA／Evoke 固定功率）",
 }
-TIP = ("課表的目標用心率還是功率。\n自動：輕鬆跑、長跑、山路長天、恢復跑用心率（≤ AeT）；3 區／5 區間歇和 3–8% 坡的爬坡重複用功率，"
+TIP = ("課表的目標用心率還是功率。\n自動：路跑的輕鬆跑、長跑用功率，心率 ≤ AeT 當上限（天熱、疲勞時心率先到就放慢）；"
+       "越野輕鬆跑、山路長天、恢復跑用心率（≤ AeT）；3 區／5 區間歇和 3–8% 坡的爬坡重複用功率，"
        "心率只當上限提醒；長爬坡只給建議、不設目標；下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。\n"
        "心率：全部用心率區間（Friel % LTHR，輕鬆跑上限 AeT）。\n功率：全部用功率區間（Palladino % CP）；"
        "測試和下坡照它們自己的規則。\n每次課表也可以在編輯時改「目標用：自動／心率／功率」，只影響這次課表。")
@@ -79,11 +83,14 @@ def session_type(s: dict) -> str:
     if kind == "long":
         return "trail_long" if s.get("terrain") in ("trail", "hike") or "山路" in title else "long"
     if kind in ("easy", "heat_passive"):
-        return "easy"
+        return "trail_easy" if s.get("terrain") in ("trail", "hike") or "山路" in title or "越野" in title else "easy"
     return "other"
 
 
-AUTO = {"easy": ("hr", "hr_base"), "long": ("hr", "hr_base"), "trail_long": ("hr", "hr_base"),
+# road easy / long: power first with an HR cap (the athlete's call, 2026-10-02: power has no lag and
+# needs only CP; the HR cap still guards heat and fatigue). Trail stays HR (Stryd only validated 3–8 %).
+AUTO = {"easy": ("power", "power_easy"), "long": ("power", "power_easy"), "trail_easy": ("hr", "hr_base"),
+        "trail_long": ("hr", "hr_base"),
         "hike": ("hr", "hr_base"), "interval": ("power", "power_iv"), "hill": ("power", "power_iv"),
         "climb": ("none", "climb"), "downhill": ("none", "down"), "cp_test": ("power", "cp"),
         "aet_test": (None, "aet"), "other": ("hr", "hr_base")}
@@ -100,7 +107,7 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     if base is None:
         base = _aet_basis(s)
     basis = base
-    why = f"自動：{ {'easy': '輕鬆跑', 'long': '長跑', 'trail_long': '山路長天', 'hike': '健行', 'interval': '間歇', 'hill': '爬坡重複', 'climb': '長爬坡', 'downhill': '下坡練習', 'cp_test': 'CP 測試', 'aet_test': 'AeT 測試', 'other': '其他'}[t] }看{LABEL[base]}"
+    why = f"自動：{ {'easy': '輕鬆跑', 'trail_easy': '越野輕鬆跑', 'long': '長跑', 'trail_long': '山路長天', 'hike': '健行', 'interval': '間歇', 'hill': '爬坡重複', 'climb': '長爬坡', 'downhill': '下坡練習', 'cp_test': 'CP 測試', 'aet_test': 'AeT 測試', 'other': '其他'}[t] }看{LABEL[base]}"
     if chosen in ("hr", "power") and t not in ("cp_test", "aet_test", "downhill", "climb"):
         basis = chosen
         why = ("這次課表你選了" if own in ("hr", "power") else "課表偏好：") + LABEL[chosen]
@@ -111,7 +118,7 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
         basis, fb = "none", "沒有 AeT／LTHR：不設目標"
     return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why + (f"（{fb}）" if fb else ""),
-            "source": SRC[key], "hr_cap": basis == "power" and t in ("interval", "hill"), "fallback": fb}
+            "source": SRC[key], "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb}
 
 
 def target_text(target: str, basis: str) -> str:

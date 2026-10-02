@@ -12,8 +12,9 @@ TH = {"cp": 250.0, "lthr": 165.0, "aet": 145.0}
 
 
 @pytest.mark.parametrize("s, basis, typ", [
-    ({"kind": "easy", "title": "輕鬆跑"}, "hr", "easy"),
-    ({"kind": "long", "title": "長時間輕鬆"}, "hr", "long"),
+    ({"kind": "easy", "title": "輕鬆跑"}, "power", "easy"),
+    ({"kind": "easy", "title": "輕鬆跑", "terrain": "trail"}, "hr", "trail_easy"),
+    ({"kind": "long", "title": "長時間輕鬆"}, "power", "long"),
     ({"kind": "long", "title": "長時間輕鬆（山路）"}, "hr", "trail_long"),
     ({"kind": "long", "title": "長跑", "terrain": "trail"}, "hr", "trail_long"),
     ({"kind": "hike", "title": "登山健行"}, "hr", "hike"),
@@ -30,7 +31,7 @@ TH = {"cp": 250.0, "lthr": 165.0, "aet": 145.0}
 def test_the_auto_policy_table(s, basis, typ):
     p = TP.target_policy(s)
     assert (p["basis"], p["type"]) == (basis, typ) and p["source"]
-    assert p["hr_cap"] == (basis == "power" and typ in ("interval", "hill"))
+    assert p["hr_cap"] == (basis == "power" and typ in ("interval", "hill", "easy", "long"))
 
 
 def test_the_pref_and_the_sessions_own_choice():
@@ -45,7 +46,8 @@ def test_the_pref_and_the_sessions_own_choice():
     assert own["basis"] == "power" and own["why"].startswith("這次課表你選了")
     # a basis the thresholds can't fill falls back, with the reason
     assert TP.target_policy(iv, None, {"lthr": 165.0})["basis"] == "hr"
-    assert TP.target_policy({"kind": "easy"}, None, {"cp": 250.0})["fallback"]
+    assert TP.target_policy({"kind": "easy"}, None, {"lthr": 165.0})["fallback"]   # power without CP → HR
+    assert TP.target_policy({"kind": "easy", "terrain": "trail"}, None, {"cp": 250.0})["fallback"]
     assert zones.WORKOUT_TARGETS[3][0] == "trail" and zones.WORKOUT_TARGETS[3][6] == "心率"
 
 
