@@ -79,7 +79,7 @@ def test_templates_and_new_session_with_steps(monkeypatch):
         assert r.status_code == 200, r.text
         s = r.json()
         assert s["steps"] and s["origin"] == "custom" and s["minutes"] == 45      # warm-up 12 + 3×8′ with 2×2′ rests + cool-down 5
-        assert s["target"].startswith("心率")              # an easy-kind session: 自動 = HR
+        assert s["target"].startswith("功率")              # a road easy-kind session: 自動 = power (HR cap note)
         d = e.c.post(f"{API}/steps/derive", json={"kind": "easy", "minutes": 40, "title": "輕鬆跑"}).json()
         assert d["derived"] and d["steps"]["items"][0]["kind"] == "work"
         none = e.c.post(f"{API}/steps/derive", json={"kind": "strength", "minutes": 30}).json()
