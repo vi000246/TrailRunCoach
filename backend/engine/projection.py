@@ -26,6 +26,7 @@ from typing import Optional
 
 from backend.engine import aet_test as AT
 from backend.engine import b2b as B2B
+from backend.engine import loaded_carry as LC
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
 from backend.engine.zones import WORKOUT_TARGETS
@@ -331,7 +332,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     long_wd = O.WEEKDAYS.index(cur.get("long_weekday") or "六")
     cur_s = cur.get("sessions") or []
     long_s = next((s for s in cur_s if s.get("id", s.get("gen_key")) == "long" or s["kind"] == "long"), None)
-    longest = float(long_s["minutes"]) if long_s else 60.0
+    longest = float(long_s.get("pack_from") or long_s["minutes"]) if long_s else 60.0
     mountain = bool(long_s and "山路" in long_s["title"])
     rates = cur.get("tss_per_category") if PR is not None else None
     gate = _gate_inputs(cur)
@@ -366,6 +367,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         (sum(hist[-5:-1]) / 4.0) if len(hist) >= 5 else (hist[-1] if hist else None), longest)
     cb = cur.get("b2b") or {}
     b2b_state = B2B.next_state(cb, monday, cur_s)          # 連續兩天長天 (engine/b2b.py)
+    lc_cur = cur.get("loaded_carry") or {}                  # 負重訓練 (engine/loaded_carry.py)
+    lc_state = LC.next_state(lc_cur)
     prev_mode = cur.get("mode")
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
@@ -445,6 +448,16 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if b2b_info.get("post"):
             notes.append(B2B.post_note(b2b_info))
         b2b_state, prev_mode = B2B.next_state(b2b_info, week, ss), mode
+        lc_info = None
+        if lc_cur.get("active"):
+            # 負重訓練 (engine/loaded_carry.py): the stage, the loaded long day / machine session, ME, taper
+            try:
+                lc_info = LC.projected_context(kind, mode, week, lc_cur, lc_state, phases)
+                LC.apply(ss, lc_info, aet=th.get("aet"), prefs=prefs, th=th, b2b=b2b_info, notes=notes,
+                         rates=cur.get("tss_per_category"))
+                lc_state = LC.next_state(lc_info, lc_state)
+            except Exception:              # noqa: BLE001 — never breaks the projection
+                lc_info = None
         heat_w = None
         if events is not None:
             try:
@@ -477,14 +490,17 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
-                       or b2b_info.get("post") or b2b_info.get("due") else {}),
+                       or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
+                    **({"loaded_carry": LC.public(lc_info)} if lc_info and lc_info.get("active") else {}),
                     **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None)
         if long_n:
             # a B2B day 1 shortened to fit the pair (engine/b2b.py) doesn't lower the long-run base
-            longest = max(longest, float(long_n["minutes"])) if b2b_info.get("due") else float(long_n["minutes"])
+            # … nor does a loaded long day shortened at a new pack weight (engine/loaded_carry.py)
+            longest = max(longest, float(long_n["minutes"])) if b2b_info.get("due") else \
+                float(long_n.get("pack_from") or long_n["minutes"])
         if PR is not None or lost:
             # what the preferences / 不排課日期 actually let through (a hard cap or
             # too few days can leave less)

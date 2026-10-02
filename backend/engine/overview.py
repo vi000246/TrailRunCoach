@@ -345,6 +345,10 @@ class Session:
     variant_adj: Optional[dict] = None
     progress: Optional[bool] = None     # not stored: this week's pick moves the projected ladder
     prefer_days: Optional[list] = None  # not stored: weekdays the cap rule moved it to (plan_prefs.place)
+    # 負重訓練 (engine/loaded_carry.py): the planned pack (kg; also in the title 「· 背 X kg」), and the
+    # long day's minutes before the first-at-a-new-weight cut (the long-run base is not lowered)
+    pack_kg: Optional[float] = None
+    pack_from: Optional[int] = None
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -952,6 +956,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         kept = B2B.place(dd, monday, first, set(bmap), allowed_fn, notes, PR.cap_weekday if PR is not None else None)
         sessions = [Session(**d) for d in kept]
         B2B.placed(b2b, kept)
+    # ---- 負重訓練 (engine/loaded_carry.py): the long day's pack, the weekday machine session,
+    # ME instead of strength1, the taper's short carry — on the placed sessions
+    from backend.engine import loaded_carry as LC
+    lc = LC.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate)
+    if lc.get("active"):
+        try:
+            pack_of = LC.meta_pack_of()
+            dd = [asdict(s) for s in sessions]
+            LC.apply(dd, lc, aet=aet, prefs=prefs, th={"aet": aet, "lthr": tt.get("lthr"), "cp": tt.get("cp")},
+                     b2b=b2b, notes=notes, week_packs={w.idx: pack_of(w) for w in week_ws}, rates=tph)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+        except Exception as e:              # noqa: BLE001 — the plan must still build
+            lc = {**lc, "error": type(e).__name__}
 
     # ---- 熱適應課 (engine/heat_plan.py): only before a hot A/B race ---------
     heat_info = {"active": False}
@@ -1049,4 +1066,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "reentry": rp,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card
         "b2b": B2B.public(b2b),
+        # 負重訓練 (engine/loaded_carry.py): this week's stage / loaded sessions, for projection and the card
+        "loaded_carry": LC.public(lc),
     }
