@@ -71,6 +71,23 @@ def hr_cap(plan: dict, aet: Optional[float], lthr: Optional[float]) -> tuple[Opt
     return aet, "AeT" if aet else ""
 
 
+def fuel_summary(plan: dict, seg: dict) -> str:
+    """The fuelling in one segment, short: the fuel points counted (「吃 3 次
+    （每次約 25 g 碳水）」), station / start rows as they are."""
+    ev = [e for e in ((plan.get("fuel") or {}).get("schedule") or [])
+          if e.get("seg") == seg.get("i") and (e.get("day") or 1) == (seg.get("day") or 1)]
+    if not ev:
+        return seg.get("fuel_action") or ""
+    parts = [e["action"] for e in ev if e["kind"] == "start"]
+    eats = [e for e in ev if e["kind"] == "fuel"]
+    if eats:
+        dose = eats[0].get("cho_g")
+        txt = "行動糧" if plan.get("type") == "baiyue" else "吃"
+        parts.append(f"{txt} {len(eats)} 次" + (f"（每次約 {dose:.0f} g 碳水）" if dose else ""))
+    parts += [e["action"] for e in ev if e["kind"] == "aid"]
+    return "；".join(parts)
+
+
 def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None) -> Optional[list[dict]]:
     """Adds `target` {n, mark, kind, basis, chips, text, badge, src} to every
     segment of a trail / 百岳 plan and returns the list; None for road."""
@@ -133,5 +150,5 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
         s["target"] = t
         out.append({**t, "i": s.get("i"), "day": s.get("day"), "start_km": s.get("start_km"), "end_km": s.get("end_km"),
                     "gain_m": s.get("gain_m"), "loss_m": s.get("loss_m"), "grade": s.get("grade"), "t": s.get("t"),
-                    "cum_s": s.get("cum_s"), "eta": s.get("eta"), "fuel_action": s.get("fuel_action") or ""})
+                    "cum_s": s.get("cum_s"), "eta": s.get("eta"), "fuel_action": fuel_summary(plan, s)})
     return out

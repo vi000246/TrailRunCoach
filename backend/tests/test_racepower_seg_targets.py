@@ -52,6 +52,17 @@ def test_baiyue_targets_are_hr_and_vam_never_pace():
     assert all(not x["ref"] and "配速" not in x["text"] for x in t)
 
 
+def test_fuel_summary_counts_points_and_keeps_stations():
+    s = seg(0.05, i=2)
+    plan = {"type": "trail", "fuel": {"schedule": [
+        {"seg": 2, "kind": "fuel", "cho_g": 25.0, "action": "約 25 g 碳水"},
+        {"seg": 2, "kind": "fuel", "cho_g": 25.0, "action": "約 25 g 碳水"},
+        {"seg": 2, "kind": "aid", "action": "補給站「CP1」：補水、吃"},
+        {"seg": 3, "kind": "fuel", "cho_g": 25.0, "action": "x"}]}}
+    assert ST.fuel_summary(plan, s) == "吃 2 次（每次約 25 g 碳水）；補給站「CP1」：補水、吃"
+    assert ST.fuel_summary(plan, seg(0.0, i=9, fuel_action="")) == ""
+
+
 def test_api_trail_plan_and_csv_carry_the_targets(client):  # noqa: F811
     tr = synthetic_track({"len": 16000, "z": lambda x: 300 + (x * 0.1 if x < 8000 else (16000 - x) * 0.1)})
     cid = client.post("/api/v1/racepower/course",
