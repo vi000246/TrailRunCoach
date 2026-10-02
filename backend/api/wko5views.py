@@ -249,6 +249,7 @@ def list_views():
          "error": v.get("error"),
          "dashboards": [
             {"index": i, "id": d.get("id"), "title": d["title"], "description": d.get("description"),
+             **({"descriptions": d["descriptions"]} if d.get("descriptions") else {}),
              "charts": [{"index": j, "id": c.get("id"), "title": c.get("title"), "kind": _panel_kind(c),
                          "series": len(c.get("series", [])),
                          # 「使用功率」 off (charts.power.enabled): the viewer hides power-only charts

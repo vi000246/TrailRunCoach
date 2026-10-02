@@ -332,6 +332,23 @@ SRC_DANIELS = "Daniels《Daniels' Running Formula》"
 # long run and its bounds are 推估 (no published single rule).
 MP_SHARE, MP_MIN, MP_MAX = 0.40, 20, 75
 MP_TSS_PER_HOUR = 70.0                 # 推估: MP sits around 80–85 % of threshold
+MP_GOAL_MIN_KM = 30.0                  # the A race's goal pace is the MP target only for a marathon-like race
+
+
+def mp_goal_pace(events, today: dt.date) -> Optional[float]:
+    """The next A 路跑賽's goal pace (s/km = 預估移動時間 ÷ distance) when it is ≥ MP_GOAL_MIN_KM;
+    None = no goal (the MP segment then follows the threshold pace)."""
+    ahead = sorted((e for e in events or () if getattr(e, "priority", "A") == "A" and e.kind == "road"
+                    and e.start >= today), key=lambda e: e.start)
+    e = ahead[0] if ahead else None
+    if e is None or not e.est_hours or not e.distance_km or e.distance_km < MP_GOAL_MIN_KM:
+        return None
+    return e.est_hours * 3600.0 / e.distance_km
+
+
+def _mmss(sec: float) -> str:
+    s = int(round(sec))
+    return f"{s // 60}:{s % 60:02d}"
 
 RAMP_GOAL = {"base": 3.0, "specific": 4.0}            # CTL points per week
 WEEKDAYS = "一二三四五六日"
@@ -528,9 +545,12 @@ def mp_minutes(long_min: float) -> int:
     return int(round(max(MP_MIN, min(MP_MAX, MP_SHARE * long_min)) / 5.0) * 5)
 
 
-def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rate: float) -> dict:
+def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rate: float,
+                      goal_pace: Optional[float] = None) -> dict:
     """The long run for 主要訓練項目 = 路跑: flat, easy; in the 專項期 with a marathon-pace segment
-    near the end (Pfitzinger / Daniels). Session kwargs (id long)."""
+    near the end (Pfitzinger / Daniels). `goal_pace` (s/km, mp_goal_pace): the race's goal pace, written
+    as 「目標配速 m:ss/km」 (the step builders read it); None = threshold pace × 1.04–1.08.
+    Session kwargs (id long)."""
     aet_txt = f" {aet:.0f} bpm" if aet else ""
     m = int(round(long_min / 5) * 5)
     if kind == "specific" and m >= 60:
@@ -538,7 +558,8 @@ def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rat
         easy = m - mp
         return dict(id="long", kind="long", title=f"長跑＋馬拉松配速 {mp} 分", minutes=m, terrain="road",
                     detail=f"平路；前 {easy - 10} 分輕鬆（心率 ≤ AeT{aet_txt}），接著 {mp} 分馬拉松配速"
-                           f"（約閾值配速 × 1.06，推估），最後 10 分輕鬆收操",
+                           + (f"（目標配速 {_mmss(goal_pace)}/km）" if goal_pace else "（約閾值配速 × 1.06，推估）")
+                           + "，最後 10 分輕鬆收操",
                     source=f"{SRC_PFITZ}（馬拉松配速長跑）；{SRC_DANIELS}（M 配速）",
                     tss=easy / 60.0 * road_rate + mp / 60.0 * max(road_rate, MP_TSS_PER_HOUR))
     return dict(id="long", kind="long", title="長時間輕鬆（路跑）", minutes=m, terrain="road",
@@ -593,6 +614,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         except Exception:                   # noqa: BLE001 — the plan must still build
             sport = "trail"
     road = sport == "road"
+    mp_goal = mp_goal_pace(getattr(getattr(status, "plan", None), "events", None) or (), today) if road else None
 
     # ---- history ---------------------------------------------------------
     hist = [(monday - dt.timedelta(weeks=i), *_week_hours(ds, monday - dt.timedelta(weeks=i)))
@@ -818,7 +840,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # a due CP / AeT test is SUGGESTED, never put into the plan (the user, 2026-10-01): the
         # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
         if road:
-            add(**road_long_session(long_min, kind, aet, tph["road"]), target=tgt.get("long", ""))
+            add(**road_long_session(long_min, kind, aet, tph["road"], mp_goal), target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
@@ -1158,6 +1180,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "phase": kind, "mode": mode, "mode_label": mode_label,
         # 主要訓練項目 (engine/primary_sport.py): trail | road — projection.project_weeks follows it
         "primary_sport": sport,
+        "mp_goal_pace_s": mp_goal,          # the A marathon's goal pace (s/km) for the MP segment; None = threshold
         "target": {"hours": hours, "tss": tss_target, "tss_per_hour": r_all},
         "done": {"hours": done_h, "tss": done_tss, "sessions": len(week_ws),
                  "activities": [activity_row(w, ds) for w in sorted(week_ws, key=lambda w: w.day)]},

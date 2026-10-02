@@ -206,8 +206,12 @@
 - 路跑：不排陡坡健走（模擬背包，`steep_hill`）、不建議 B2B（超馬／山岳工具，Koop、UA）、長跑不加「山路」、
   間歇不選上坡版（`interval_library` 的 `mountain=False`）。
 - 長跑：平路輕鬆；**專項期加一段馬拉松配速**：長跑的 40 %、20–75 分（推估），在中後段，最後 10 分輕鬆
-  （Pfitzinger MP 長跑、Daniels M）。COROS 上是 3 段：輕鬆／MP 心率帶 88–95 % LTHR（Pfitzinger 79–88 % HRmax
-  ÷ 0.9，推估；COROS 配速目標未驗證所以用心率）／輕鬆。
+  （Pfitzinger MP 長跑、Daniels M）。COROS 上是 3 段：輕鬆／MP／輕鬆。MP 段是**配速目標**（intensityType 3）：
+  A 賽是 ≥ 30 km 的路跑賽且有預估移動時間 → 目標配速 ± 1.5 %；否則閾值配速 × 1.04–1.08；沒有閾值配速才退回
+  心率帶 88–95 % LTHR（Pfitzinger 79–88 % HRmax ÷ 0.9，推估），並顯示「沒有閾值配速」警告。
+- 專項期（`specific_phase`，info `sport`）：路跑不用コース定數，長天跟賽事**距離**走（每週比例 ROAD_FRAC、
+  ≤ 35 km、≤ 3 小時、長跑配速 ≈ 比賽配速 × 1.15，都是推估）；不排 GPX 的長爬坡反覆／下坡課；賽事模擬保留，
+  改成平路長跑（比賽裝備、早餐、補給、配速），不跑全程。專項期頁的說明依模式換（views `descriptions`）。
 - 專項期間歇：5×4′ 爬坡 → 平路閾值節奏 2×15′（Pfitzinger LT、Daniels T）；基礎期坡衝刺 → 平路加速跑 6×20″。
 - 插入範本推薦：路跑不推越野範本；專項期 +Pfitzinger LT／MP 長跑、Daniels T、Canova 專項；長跑日偏 Pfitzinger
   長跑。新增範本「Pfitzinger 馬拉松配速長跑（16 km MP）」。

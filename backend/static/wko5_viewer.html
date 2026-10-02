@@ -904,9 +904,11 @@ async function load() {
   const q = (S.mode === "workout" ? `workout=${S.workout}`
     : `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}`)
     + "&" + tpParam();
-  if (d.description) {
+  // 主要訓練項目: a dashboard may have its own text per mode (views/*.json "descriptions")
+  const ddesc = (d.descriptions || {})[S.sport] || d.description;
+  if (ddesc) {
     // the dashboard's description: behind a ? (hover / tap), not a caption paragraph
-    grid.insertAdjacentHTML("beforeend", `<p class="ddesc-q">這一頁看什麼<button type="button" class="qtip" aria-label="這一頁看什麼" data-tip="${esc(d.description)}">?</button></p>`);
+    grid.insertAdjacentHTML("beforeend", `<p class="ddesc-q">這一頁看什麼<button type="button" class="qtip" aria-label="這一頁看什麼" data-tip="${esc(ddesc)}">?</button></p>`);
   }
   // render sequentially-ish (4 at a time) so heavy charts don't block the rest
   const focus = S.focusChart; S.focusChart = null;

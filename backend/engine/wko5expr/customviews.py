@@ -211,10 +211,17 @@ def parse_view(data: dict, source_path: Optional[Path] = None) -> dict:
     for d in data.get("dashboards", []):
         if "title" not in d:
             raise CustomViewError(f"{where}: dashboard needs a title")
+        ds = d.get("descriptions")
+        if ds is not None:
+            # 主要訓練項目 (engine/primary_sport.py): {"road": "…"} = this mode's text instead of `description`
+            from backend.engine.primary_sport import SPORTS
+            if not isinstance(ds, dict) or any(k not in SPORTS or not isinstance(v, str) for k, v in ds.items()):
+                raise CustomViewError(f"{where}/{d['title']}: descriptions must be {{sport: text}} for {list(SPORTS)}")
         dashboards.append({
             "id": d.get("id"),
             "title": d["title"],
             "description": d.get("description"),
+            **({"descriptions": dict(ds)} if ds else {}),
             "class": "CustomDashboard",
             "charts": [_chart(c, f"{where}/{d['title']}") for c in d.get("charts", [])],
         })
