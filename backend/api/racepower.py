@@ -816,7 +816,32 @@ def _fuel(body: PlanIn, out: dict) -> dict:
     if th and th.get("x") and lthr:
         hr = th["x"] * lthr                 # the race HR the trail model predicts
     return FU.plan_fuel(out, weight=out["used"]["weight"]["value"], stops=[x.model_dump() for x in body.stops],
-                        start_time=body.start_time, hr_bpm=hr, body=inp.get("body"))
+                        start_time=body.start_time, hr_bpm=hr, body=_body(inp))
+
+
+def _body(inp: dict) -> Optional[dict]:
+    """inputs()["body"] (settings profile → the dataset's athlete); a COROS /
+    TP dataset has no WKO5 athlete, so missing fields come from the WKO5
+    athlete file itself when there is one. No "body" key (old cache, tests)
+    = nothing to fill: fuel uses its labelled defaults."""
+    b = inp.get("body")
+    if b is None or all(b.get(k) is not None for k in ("height_cm", "sex", "age")):
+        return b
+    b = dict(b)
+    try:
+        from backend.engine.racepower import athlete as A
+        from backend.files.wko5_athlete import read_athlete
+        from backend.settings.paths import athlete_dir
+        f = next(athlete_dir().glob("*.wko5athlete"), None)
+        if f is not None:
+            plan = type("P", (), {"profile": {}})()
+            w = A.body_profile(type("D", (), {"plan": plan, "athlete": read_athlete(f)})(), dt.date.today())
+            for k in ("height_cm", "sex", "age"):
+                if b.get(k) is None and w.get(k) is not None:
+                    b[k], b[k + "_src"] = w[k], w[k + "_src"]
+    except (OSError, ValueError, StopIteration):
+        pass
+    return b
 
 
 @router.post("/plan")

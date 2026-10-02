@@ -471,9 +471,15 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
     for x, e, h in zip(segs, en, hot):
         h_t = float(x.get("t") or 0.0) / 3600.0
         cum += e["kcal"]
+        sw = sweat_prior(x.get("temp_c"), e["kcal"] / h_t if h_t else None)
         wb = None if thirst else water_band(w_cls, x.get("temp_c"), h)
+        if wb:
+            # never more than the sweat rate: no weight gain (NATA 2017, Hew-Butler 2015)
+            cap = sw * 1000.0
+            wb = [min(wb[0], cap), min(wb[1], cap)]
         nb = sodium_band("half" if thirst else w_cls, x.get("temp_c"), h, sum(wb) / 2 if wb else None)
         cb = [cho["lo"], cho["hi"]] if cho["base"] is None else cho["base"]
+        x["_wb"], x["_sweat"] = wb, sw
         x.update(kcal=e["kcal"], kcal_method=e["method"], cum_kcal=cum,
                  cho_g=sum(cb) / 2 * h_t, water_ml=(sum(wb) / 2 * h_t) if wb else None,
                  na_mg=sum(nb) / 2 * h_t, hot=h, fuel_action="")
@@ -531,8 +537,8 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
             for x in segs:
                 st0, st1 = x["cum_s"] - x["t"], x["cum_s"]
                 ov = max(0.0, min(st1, b["t_s"]) - max(st0, a["t_s"]))
-                if ov > 0 and x.get("water_ml") is not None and x["t"]:
-                    wb = water_band(w_cls, x.get("temp_c"), x.get("hot"))
+                if ov > 0 and x.get("_wb") and x["t"]:
+                    wb = x["_wb"]
                     lo += wb[0] * ov / 3600.0
                     hi += wb[1] * ov / 3600.0
             legs.append({"from_km": a["km"], "to_km": b["km"], "t_s": b["t_s"] - a["t_s"],
@@ -571,7 +577,9 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
             if x["i"] == e["seg"]:
                 x["fuel_action"] = "；".join(filter(None, [x.get("fuel_action"), e["action"]]))
     # dehydration check: sweat prior vs the planned water (推估 sweat rate, §4.2)
-    sweat_l = sum(sweat_prior(x.get("temp_c")) * float(x.get("t") or 0) / 3600.0 for x in segs)
+    sweat_l = sum(x.pop("_sweat") * float(x.get("t") or 0) / 3600.0 for x in segs)
+    for x in segs:
+        x.pop("_wb", None)
     drunk_l = (tot_w[0] + tot_w[1]) / 2000.0
     dehyd = (sweat_l - drunk_l) / weight if weight else None
     if dehyd is not None and dehyd > 0.02 and not thirst:
@@ -603,10 +611,19 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
                     "keytel": "Keytel 2005（不含 VO2max 的式子，係數引自 Hsieh 2025）"}}
 
 
-def sweat_prior(temp_c: Optional[float]) -> float:
+SWEAT_REF_KCAL_H = 700.0        # a race-pace run; sweat scales with heat production (推估)
+SWEAT_SCALE = (0.4, 1.3)
+
+
+def sweat_prior(temp_c: Optional[float], kcal_per_h: Optional[float] = None) -> float:
     """L/h without a personal record: 1.0 cool (筆記:37) … 1.75 at 30 °C
-    (Baker 2017 0.5–2.0 L/h; 筆記:36 夏天可到 3) — 推估."""
-    return 1.0 + 0.75 * heat_pos(20.0 if temp_c is None else temp_c)
+    (Baker 2017 0.5–2.0 L/h; 筆記:36 夏天可到 3) at race-pace running,
+    scaled by the segment's metabolic rate ÷ 700 kcal/h (0.4–1.3) — the
+    heat to shed follows the energy burnt (推估)."""
+    base = 1.0 + 0.75 * heat_pos(20.0 if temp_c is None else temp_c)
+    if kcal_per_h:
+        base *= min(SWEAT_SCALE[1], max(SWEAT_SCALE[0], kcal_per_h / SWEAT_REF_KCAL_H))
+    return base
 
 
 def _hike_fuel(plan: dict, segs: list, weight: float, cls: str, body: dict, body_src: dict,

@@ -117,6 +117,23 @@ def test_water_and_sodium_move_with_heat_inside_the_source_range():
     assert FU.loading(65.0, 20.0, "hike")["kind"] == "normal"
 
 
+def test_sweat_prior_scales_with_intensity_and_caps_the_water():
+    assert FU.sweat_prior(8.0) == approx(1.0) and FU.sweat_prior(30.0) == approx(1.75)
+    assert FU.sweat_prior(30.0, 700.0) == approx(1.75)
+    assert FU.sweat_prior(30.0, 200.0) == approx(1.75 * 0.4)        # a slow walk: floor 0.4
+    # a slow, long effort (≈ 250 kcal/h, hot): water never above the sweat rate, dehydration sane
+    segs, cum = [], 0.0
+    for i in range(10):
+        cum += 3600.0
+        segs.append({"i": i + 1, "t": 3600.0, "cum_s": cum, "grade": 0.0, "power": 60.0, "dist_m": 4000.0,
+                     "start_km": 4.0 * i, "end_km": 4.0 * (i + 1), "temp_c": 30.0, "heat_pct": 5.0})
+    plan = {"type": "trail", "segments": segs, "summary": {"time_s": cum, "km": 40.0}}
+    f = FU.plan_fuel(plan, weight=66.0)
+    sweat = FU.sweat_prior(30.0, segs[0]["kcal"]) * 1000.0
+    assert f["water"]["per_h"][1] <= round(sweat) and f["water"]["dehydration"] < 0.02
+    assert all("_wb" not in s and "_sweat" not in s for s in segs)
+
+
 def test_schedule_skips_steep_descents_and_moves_onto_climbs():
     segs, cum = [], 0.0
     spec = [(1500, 0.0, None), (600, -0.20, None), (1200, 0.0, None), (900, 0.20, "走跑皆可"), (3000, 0.0, None)]
