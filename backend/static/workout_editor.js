@@ -21,6 +21,8 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wz1: #184f95; --wz2: #256abf; --wz3: #3987e5; --wz4: #6da7ec; --wz5: #9ec5f4; } }
 :root[data-theme="dark"] { --wz1: #184f95; --wz2: #256abf; --wz3: #3987e5; --wz4: #6da7ec; --wz5: #9ec5f4; }
 dialog.sd.we-wide { width: min(880px, 96vw); }
+.we-tpb { color: var(--watch); font-size: 11.5px; white-space: nowrap; }
+.we-tpl { font-size: 11.5px; margin-left: 4px; }
 .we { border: 1px solid var(--line); border-radius: 9px; padding: 0; min-width: 0; }
 .we > summary { cursor: pointer; padding: 7px 10px; font-size: 13px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; list-style: none; }
 .we > summary::-webkit-details-marker { display: none; }
@@ -134,6 +136,14 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const TYPE = { auto: "自動", power: "功率", hr: "心率", pace: "配速", none: "無" };
   const opt = (v, l, cur, extra = "") => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}${extra}>${esc(l)}</option>`;
   const q = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
+  // i18n (static/i18n/i18n.js t(key, fallback)); the zh-TW text is the fallback
+  const tr = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t(k, fb, p) : fb);
+  const noTpaceText = () => tr("workout.no_tpace", "沒有閾值配速：這段推到手錶不會有配速目標");
+  // where threshold pace is estimated (GET /steps/context tpace_link: the Friel pace-zone chart)
+  const tpaceLink = (ctx) => {
+    const u = (ctx || {}).tpace_link;
+    return u ? ` <a class="we-tpl" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(tr("workout.no_tpace_link", "看閾值配速怎麼估"))}</a>` : "";
+  };
   const OPEN_W = 90;
   const TIP = {
     basis: "每一段自己決定用功率、心率還是配速：點那一段的目標就能改（標「指定」）。標「自動」的段依課表類型（路跑輕鬆／長跑看功率、心率 ≤ AeT 當上限；越野看心率；間歇看功率）。數字依目前的 CP、LTHR、AeT、閾值配速帶入。",
@@ -407,7 +417,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     issues() {
       const v = this.view || {}, list = v.issues || [];
       const ic = { err: "✕", warn: "!", info: "i" };
-      this.$("we-issues").innerHTML = list.map((i) => `<li class="${i.level}"${i.id ? ` data-id="${esc(i.id)}"` : ""}><span class="ic">${ic[i.level] || "i"}</span><span>${esc(i.text)}</span></li>`).join("") +
+      const nt = noTpaceText(), T = this.tpls || {};
+      const isNt = (x) => x === nt || x === T.no_tpace_text;
+      this.$("we-issues").innerHTML = list.map((i) => `<li class="${i.level}"${i.id ? ` data-id="${esc(i.id)}"` : ""}><span class="ic">${ic[i.level] || "i"}</span><span>${esc(i.text)}${isNt(i.text) ? tpaceLink(this.ctx) : ""}</span></li>`).join("") +
         (list.length ? `<li class="info"><span class="ic"></span><span class="faint">檢查規則 ${q(TIP.rules)}</span></li>` : "");
     }
     watch() {
@@ -416,7 +428,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const line = (l) => `<li>${esc(l.kind)} · ${esc(l.dur)} · ${esc(l.target)}${l.name ? ` <span class="nm">「${esc(l.name)}」</span>` : ""}</li>`;
       const body = w.lines.map((l) => l.group ? `<li>${esc(l.group)} × ${l.sets}<ol>${l.steps.map(line).join("")}</ol></li>` : line(l)).join("");
       this.$("we-wbody").innerHTML = `<ol>${body}</ol><ul class="we-lim">${w.limits.map((x) => `<li class="${x.hit ? "hit" : ""}">${esc(x.text)}</li>`).join("")}` +
-        w.lost.map((x) => `<li class="hit">${esc(x)}</li>`).join("") + `</ul>`;
+        w.lost.map((x) => `<li class="hit">${esc(x)}${x === noTpaceText() || x === (this.tpls || {}).no_tpace_text ? tpaceLink(this.ctx) : ""}</li>`).join("") + `</ul>`;
     }
     chart() {
       const svg = this.$("we-svg"), v = this.view;
@@ -667,7 +679,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const recKeys = new Set(recs.map((x) => x.key));
       const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub));
       const tab = (k, id, l, on, tip) => `<button type="button" data-${k}="${esc(id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${tip ? ` title="${esc(tip)}"` : ""}>${esc(l)}</button>`;
-      const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}</span><span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
+      // pace × threshold pace (Daniels / Canova / Billat …) with no threshold pace: badge it
+      const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
+      const tpBadge = (r) => r.needs_tpace && noTp
+        ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge", "沒有閾值配速"))}</span>` : "";
+      const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span><span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
       const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
       const rec = recs.length ? `<div class="g rec">推薦 ${q((this.recs || {}).tip || "")}</div>` +
         recs.map((x, n) => btn(rowAt(where[x.key]), where[x.key], `${n + 1}. ${x.reason}`)).join("") : "";
