@@ -49,11 +49,14 @@ svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
 .seg button .sub { font-weight: 400; font-size: 11.5px; }
 .seg button.on { background: var(--panel); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 /* 趨勢／單次活動: the page's main switch, dark orange so it stands out (owner's call) */
-.seg.mode { border-color: #b4530f; background: #b4530f; }
-.seg.mode button { color: rgba(255,255,255,.78); font-weight: 600; }
-.seg.mode button:hover { color: #fff; }
-.seg.mode button.on { background: #7f3a09; color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-.seg.mode button .sub { color: inherit; opacity: .85; }
+/* same text colours as the top menu (shell.js .appnav): names in --text, the current one in
+   the accent with a light tint — the accent here is dark orange */
+.seg.mode { --mode-acc: #b4530f; border: 1.5px solid var(--mode-acc); }
+.seg.mode button { color: var(--text); font-weight: 600; }
+.seg.mode button .sub { color: var(--muted); font-weight: 400; }
+.seg.mode button:hover { color: var(--mode-acc); }
+.seg.mode button.on { color: var(--mode-acc); background: color-mix(in srgb, var(--mode-acc) 14%, var(--panel)); box-shadow: none; }
+.seg.mode button.on .sub { color: var(--mode-acc); }
 .crumb { display: flex; align-items: baseline; gap: 6px; min-width: 0; color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; }
 .crumb b { color: var(--text); font-size: 15px; overflow: hidden; text-overflow: ellipsis; }
 .crumb .sep { opacity: .45; }
