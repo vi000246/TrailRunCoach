@@ -142,7 +142,8 @@ def extract_segments(t, dist_m, elev, power, hr, cadence, speed_kmh=None, *,
     distance when missing) — all sample-aligned, None = no channel.
 
     Returns {"segments": [...], "rejected": [{"reason", "start_s", "duration_s"}],
-    "reason": why there is nothing at all (or None)}. A segment:
+    "reason": why there is nothing at all (or None), "longest_s": the longest
+    qualifying climb, kept or not}. A segment:
     start_s / end_s (elapsed, the whole climb), measured_s (after the HR lag),
     avg_power, avg_hr, pwhr (W/bpm), grade, gain_m, dist_m, vi, cv30, cadence_spm."""
     t = np.asarray([np.nan if v is None else v for v in t], dtype=float)
@@ -182,6 +183,7 @@ def extract_segments(t, dist_m, elev, power, hr, cadence, speed_kmh=None, *,
             joined[-1][1] = b
         else:
             joined.append([a, b])
+    out["longest_s"] = float(max((b - a for a, b in joined), default=0))
     lag = int(round(hr_lag_s))
     for a, b in joined:
         dur = float(b - a)

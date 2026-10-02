@@ -23,7 +23,7 @@ from typing import Optional
 
 from backend.engine import climb_pwhr as CP
 
-SERIES_KEY = "climb_pwhr_v1"
+SERIES_KEY = "climb_pwhr_v2"     # v2: longest_s
 WINDOW_DAYS = 56                 # 8-week rolling median
 SOURCES_OVERRIDE: Optional[dict] = None   # tests: {"route_index", "weather", "names"}
 
@@ -170,6 +170,7 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
     counts = {"trail_runs": 0, "stryd": 0, "watch_power": 0, "no_power": 0, "with_segments": 0,
               "segments": 0, "on_route": 0, "not_on_route": 0, "rejected": {}}
     by_route: dict[str, list] = {}
+    runs_longest: list[dict] = []
     for w in ds.workouts:
         if not is_trail_run(w):
             continue
@@ -185,6 +186,10 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
         r = _cached(ds, w)
         segs = r.get("segments") or []
         if in_range:
+            # how close each run came: its longest +3…+8 % running climb (the empty-state chart)
+            runs_longest.append({"date": w.entry.start.date().isoformat(), "workout": w.idx,
+                                 "longest_s": r.get("longest_s"), "segments": len(segs),
+                                 "reason": r.get("reason")})
             for x in r.get("rejected") or []:
                 counts["rejected"][x["reason"]] = counts["rejected"].get(x["reason"], 0) + 1
             if segs:
@@ -226,14 +231,18 @@ def compute(ds, b: float, e: float, params: dict, route_index: Optional[dict] = 
     route = next((r for r in routes if r["id"] == want), routes[0] if routes else None)
     out = {"kind": "climbpwhr", "routes": routes, "route": route, "counts": counts,
            "window_days": WINDOW_DAYS, "beta": HT.HR_BETA, "beta_ref": HT.HR_BETA_REF,
-           "beta_src": HT.HR_BETA_SRC, "heat_basis": "beta", "points": [], "median": [], "median_adj": []}
+           "beta_src": HT.HR_BETA_SRC, "heat_basis": "beta", "points": [], "median": [], "median_adj": [],
+           "runs_longest": runs_longest, "min_seg_s": CP.MIN_SEG_S}
     if route is None:
+        top = max((x["longest_s"] or 0 for x in runs_longest), default=0)
         if counts["trail_runs"] == 0:
             out["empty"] = "這段期間沒有越野跑"
         elif counts["stryd"] == 0:
             out["empty"] = "這段期間的越野跑都沒有 Stryd 功率"
         elif counts["segments"] == 0:
-            out["empty"] = "這段期間沒有符合條件的穩定爬坡段（+3～+8%、連續 ≥ 10 分、用跑的、功率穩定）"
+            out["empty"] = (f"這段期間 {counts['stryd']} 次有 Stryd 的越野跑，都沒有符合條件的穩定爬坡段"
+                            f"（+3～+8%、用跑的、連續 ≥ 10 分）：最長的一段只有 {top / 60:.1f} 分鐘。"
+                            "下圖是每次越野跑裡最長的一段，虛線 = 10 分鐘門檻。")
         else:
             out["empty"] = "有符合條件的爬坡段，但都不在重複路線上（同一路線跑過 2 次以上才能比較）"
         return out

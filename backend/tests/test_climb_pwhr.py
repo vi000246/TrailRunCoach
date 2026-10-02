@@ -70,6 +70,7 @@ def test_walking_cadence_is_hiking_not_a_segment():
 def test_short_climb_is_listed_as_rejected_short():
     r = _ex([FLAT, (420, 0.05, 8.0, 250, 150, 85), DOWN])
     assert r["segments"] == [] and [x["reason"] for x in r["rejected"]] == ["short"]
+    assert 380 <= r["longest_s"] <= 460
 
 
 def test_unsteady_power_fails_the_vi_rule():
