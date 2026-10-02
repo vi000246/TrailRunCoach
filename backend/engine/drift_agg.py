@@ -25,10 +25,35 @@ aet_points / aet_validity
 Heat bands (workout_review.temp_band: < 25 / 25–28 / > 28 °C, 推估 cut-offs):
 runs are aggregated only with runs of the same band — heat inflates the drift
 (Lafrenz 2008; Beiter 2025), so a mean across bands mixes the season into
-the number. rolling() = each run with the earlier runs of its own band;
-aet_points keeps the cool band (and runs without a temperature, as before
-the bands): the AeT regression compares across runs, and a heat covariate
-(unsourced-rules.md §B6) is not built yet.
+the number. rolling() = each run with the earlier runs of its own band.
+
+AeT heat covariate (unsourced-rules.md §B6; feat/aet-heat-covariate):
+aet_points keeps the cool band, runs without a temperature (as before the
+bands) and the warm band (25–28 °C). A warm run's first-half HR is moved to
+the cool band's top, 25 °C: hr1' = hr1 − β·(T − 25), before the between-run
+regression; the drift itself is not adjusted (β is a between-run HR level,
+not the within-run rise — workout-review.spec.md, heat bands). Cool runs are
+left as they are: the AeT test is run < 25 °C and the gate compares the
+estimate with the tested AeT (quality_gate.aet_test_reason "moved"), so the
+reference is the test's condition, not heat.HR_BETA_REF (Hadley 120 would
+move every estimate ~7 bpm below a cool-day test). Hot runs (> 28 °C) stay
+out: there the drift itself is inflated (Lafrenz 2008), not only the level.
+β (bpm per °C of air) = heat_beta(): the literature default shrunk toward
+the athlete's own fit —
+  default  1.0 bpm/°C: Jenkins, Campbell, Lee, Mündel & Cotter 2023 (Exp
+           Physiol 108:207–220, doi 10.1113/EP090969): 14 trained cyclists,
+           45 min at 70 % VO2peak at 18 / 27 / 36 °C, same vapour pressure —
+           「higher heart rate (1 bpm/°C)」; humidity had no reliable effect
+           on %HRmax. Cycling in a chamber, used for running: 推估.
+  personal OLS hr1 = a + b·x1 + β·T over the athlete's road runs with a
+           drift tier and a temperature in the last BETA_DAYS (x1 = first-
+           half power, else speed — the basis most runs have), needs
+           ≥ BETA_MIN_N runs and a temperature SD ≥ BETA_MIN_SD_C.
+  used     w·β_personal + (1 − w)·β_default, w = n / (n + BETA_K), clipped to
+           BETA_BOUNDS. Summer is also the base season, so β_personal is
+           confounded with fitness (zone_events.beta_check) — the shrinkage
+           and the bounds limit that. Numbers 推估 except the default's.
+No temperature at all → no adjustment (the band is "none", kept as before).
 """
 from __future__ import annotations
 
@@ -84,7 +109,96 @@ def text(a: Optional[dict]) -> str:
     return f"{a['mean'] * 100:.1f}% ± {a['se'] * 100:.1f} pp（{a['n']} 次平均）"
 
 
-AET_BANDS = ("cool", "none")   # the bands the AeT aggregate reads (see the module doc)
+AET_BANDS = ("cool", "warm", "none")   # the bands the AeT aggregate reads (warm: heat-adjusted, module doc)
+HEAT_REF_C = 25.0              # = workout_review.DRIFT_HEAT_C: the cool band's top, the AeT test's condition
+BETA_DEFAULT = 1.0             # bpm per °C: Jenkins 2023 (module doc); for running 推估
+BETA_DEFAULT_SRC = "Jenkins 2023（Exp Physiol，doi 10.1113/EP090969）：氣溫每 +1 °C 心率 +1 bpm（騎車，推估套用到跑步）"
+BETA_MIN_N = 10                # 推估: runs needed before the athlete's own fit counts at all
+BETA_MIN_SD_C = 2.0            # 推估: the runs' temperatures must spread this much (else β is not identified)
+BETA_K = 20                    # 推估: shrinkage w = n / (n + 20) — 20 runs = half personal
+BETA_BOUNDS = (0.0, 2.0)       # 推估: heat never lowers HR; at most twice the default
+BETA_DAYS = 365                # 推估: a whole year of seasons for the fit
+
+
+def fit_heat_beta(rows: list[dict]) -> dict:
+    """The athlete's own β from `rows` [{"hr", "x", "temp_c"}] (one per run):
+    OLS hr = a + b·x + β·T (x dropped when it doesn't vary). {"personal",
+    "se", "n", "sd_c"}; personal None below BETA_MIN_N runs or a temperature
+    SD < BETA_MIN_SD_C."""
+    pts = [(float(r["hr"]), r.get("x"), float(r["temp_c"])) for r in rows
+           if r.get("hr") is not None and r.get("temp_c") is not None]
+    n = len(pts)
+    t = np.array([p[2] for p in pts]) if pts else np.array([])
+    sd = float(t.std()) if n else 0.0
+    out = {"personal": None, "se": None, "n": n, "sd_c": round(sd, 2)}
+    if n < BETA_MIN_N or sd < BETA_MIN_SD_C:
+        return out
+    y = np.array([p[0] for p in pts])
+    xs = [p[1] for p in pts]
+    cols = [np.ones(n), t]
+    if all(x is not None for x in xs) and float(np.std(np.array(xs, float))) > 1e-9:
+        cols.insert(1, np.array(xs, float))
+    X = np.column_stack(cols)
+    try:
+        inv = np.linalg.inv(X.T @ X)
+    except np.linalg.LinAlgError:
+        return out
+    c = inv @ X.T @ y
+    r = y - X @ c
+    dof = max(1, n - X.shape[1])
+    se = math.sqrt(max(0.0, float(r @ r) / dof * inv[-1, -1]))
+    return {**out, "personal": float(c[-1]), "se": se}
+
+
+def shrink_beta(fit: dict) -> dict:
+    """{"beta", "w", "personal", "se", "n", "default", "src"}: the personal β
+    shrunk toward BETA_DEFAULT with w = n / (n + BETA_K), clipped."""
+    p, n = fit.get("personal"), int(fit.get("n") or 0)
+    w = n / (n + BETA_K) if p is not None else 0.0
+    b = BETA_DEFAULT if p is None else w * p + (1.0 - w) * BETA_DEFAULT
+    b = min(max(b, BETA_BOUNDS[0]), BETA_BOUNDS[1])
+    src = "default" if p is None else "personal"
+    return {"beta": b, "w": w, "personal": p, "se": fit.get("se"), "n": n, "sd_c": fit.get("sd_c"),
+            "default": BETA_DEFAULT, "src": src}
+
+
+def heat_beta(ds, today: dt.date, days: int = BETA_DAYS) -> dict:
+    """shrink_beta(fit_heat_beta(…)) on the road runs of the last `days`
+    with a drift tier and a temperature (any band). Never raises: the
+    default on any failure."""
+    from backend.engine import workout_review as WR
+    from backend.engine.overview import category
+    from backend.engine.wko5expr.dataset import date_to_day
+    try:
+        tday = math.floor(date_to_day(today))
+        power, pace = [], []
+        for w in ds.workouts:
+            if not (tday - days < math.floor(w.day) <= tday) or w.sport != "run" or "runningtrail" in w.tags:
+                continue
+            dur = WR._f(w.metrics.get("duration"))
+            if dur is None or dur < WR.WARMUP_S + WR.DRIFT_REF_MIN_S or category(w) != "road":
+                continue
+            dr = (WR.measure(ds, w) or {}).get("drift") or {}
+            tc = WR._f(dr.get("temp_c"))
+            if tc is None or WR.drift_tier(dr) is None:
+                continue
+            if dr.get("pw_hr1") is not None and WR._f(dr.get("p1")) is not None:
+                power.append({"hr": dr["pw_hr1"], "x": WR._f(dr["p1"]), "temp_c": tc})
+            if dr.get("hr1") is not None and WR._f(dr.get("v1")) is not None:
+                pace.append({"hr": dr["hr1"], "x": WR._f(dr["v1"]), "temp_c": tc})
+        WR._flush(ds)
+        rows, basis = (power, "power") if len(power) >= len(pace) else (pace, "pace")
+        return {**shrink_beta(fit_heat_beta(rows)), "basis": basis}
+    except Exception:           # noqa: BLE001 — the gate must not break on one bad file
+        return {**shrink_beta({}), "basis": None}
+
+
+def beta_text(b: dict) -> str:
+    """「β 0.85 bpm／°C（本人 24 次 × 0.55 ＋ 文獻 1.0）」."""
+    if b.get("src") == "personal":
+        return (f"β {b['beta']:.2f} bpm／°C（本人 {b['n']} 次跑步擬合 {b['personal']:.2f}，"
+                f"權重 {b['w']:.0%}，其餘用文獻 {BETA_DEFAULT:.1f}）")
+    return f"β {b['beta']:.2f} bpm／°C（文獻預設；本人有溫度的跑步 {b.get('n') or 0} 次，不夠自己擬合）"
 
 
 def band_of(dr: dict) -> str:
@@ -146,11 +260,14 @@ def rolling(ds, basis: str = "pace", n: int = AGG_N, days: int = AGG_DAYS) -> di
     return out
 
 
-def aet_points(ds, today: dt.date, days: int = AET_DAYS) -> list[dict]:
+def aet_points(ds, today: dt.date, days: int = AET_DAYS, bands: tuple = AET_BANDS,
+               beta: Optional[dict] = None) -> list[dict]:
     """(first-half HR, drift, SE) of the road runs in `days` up to `today`
-    whose drift_of passed (test or reference tier) in the cool band or
-    without a temperature (AET_BANDS), oldest first: Pw:HR when the run has
-    it (the AeT test's basis), else Pa:HR."""
+    whose drift_of passed (test or reference tier) in `bands` (AET_BANDS:
+    cool, warm, no temperature), oldest first: Pw:HR when the run has it
+    (the AeT test's basis), else Pa:HR. A warm run's "hr1" is heat-adjusted
+    to HEAT_REF_C with `beta` (heat_beta() when None and there is a warm
+    run): "hr1_raw", "heat_bpm" (the amount taken off), "temp_c", "band"."""
     from backend.engine import workout_review as WR
     from backend.engine.overview import category
     from backend.engine.wko5expr.dataset import date_to_day
@@ -164,7 +281,8 @@ def aet_points(ds, today: dt.date, days: int = AET_DAYS) -> list[dict]:
             continue
         m = WR.measure(ds, w)
         dr = (m or {}).get("drift") or {}
-        if WR.drift_tier(dr) is None or band_of(dr) not in AET_BANDS:
+        band = band_of(dr)
+        if WR.drift_tier(dr) is None or band not in bands:
             continue
         if dr.get("pw_drift") is not None and (dr.get("pw_ok") or dr.get("pw_ref_ok")):
             hr1, d, se, basis = dr.get("pw_hr1"), dr["pw_drift"], dr.get("pw_drift_se"), "power"
@@ -172,10 +290,33 @@ def aet_points(ds, today: dt.date, days: int = AET_DAYS) -> list[dict]:
             hr1, d, se, basis = dr.get("hr1"), dr.get("drift"), dr.get("drift_se"), "pace"
         if hr1 is None or d is None:
             continue
-        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "hr1": hr1, "drift": d, "se": se,
-                    "basis": basis, "tier": WR.drift_tier(dr)})
+        out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "hr1": hr1, "hr1_raw": hr1, "drift": d,
+                    "se": se, "basis": basis, "tier": WR.drift_tier(dr), "band": band,
+                    "temp_c": WR._f(dr.get("temp_c")), "heat_bpm": 0.0})
     WR._flush(ds)
+    if any(p["band"] == "warm" for p in out):
+        heat_adjust(out, (beta if beta is not None else heat_beta(ds, today))["beta"])
     return out
+
+
+def heat_adjust(pts: list[dict], b: float) -> list[dict]:
+    """In place: each warm point's hr1 = hr1_raw − b·(T − HEAT_REF_C)."""
+    for p in pts:
+        if p.get("band") == "warm" and p.get("temp_c") is not None:
+            p["heat_bpm"] = b * max(0.0, float(p["temp_c"]) - HEAT_REF_C)
+            p["hr1"] = float(p["hr1_raw"]) - p["heat_bpm"]
+    return pts
+
+
+def heat_note(pts: list[dict], beta: Optional[dict]) -> str:
+    """「含 3 次 25–28 °C 的跑步：心率先扣掉熱的影響（…，推估）」, or "" without a warm run."""
+    warm = [p for p in pts if p.get("band") == "warm"]
+    if not warm or not beta:
+        return ""
+    lo, hi = min(p["heat_bpm"] for p in warm), max(p["heat_bpm"] for p in warm)
+    amt = f"{lo:.1f}" if abs(hi - lo) < 0.05 else f"{lo:.1f}–{hi:.1f}"
+    return (f"含 {len(warm)} 次 25–28 °C 的跑步：前半心率先扣掉熱的影響 {amt} bpm（移到 25 °C，{beta_text(beta)}；"
+            f"推估），飄移本身不校正；> 28 °C 的不用")
 
 
 def aet_validity(ds, today: dt.date, lthr: Optional[float] = None) -> dict:
@@ -186,9 +327,42 @@ def aet_validity(ds, today: dt.date, lthr: Optional[float] = None) -> dict:
     from dataclasses import asdict
     from backend.engine.algorithms import threshold_estimate as TE
     try:
-        pts = aet_points(ds, today)
+        beta = None
+        pts = aet_points(ds, today, beta={"beta": 0.0})
+        if any(p["band"] == "warm" for p in pts):
+            beta = heat_beta(ds, today)
+            heat_adjust(pts, beta["beta"])
         agg = TE.aet_aggregate([(p["hr1"], p["drift"], p["se"]) for p in pts], lthr=lthr)
     except Exception as e:      # noqa: BLE001 — the gate must not break on one bad file
         return {"valid": False, "value": None, "se": None, "n": 0, "shift_bpm": None, "slope_per_10bpm": None,
-                "reason": f"AeT 聚合估計算不出來（{type(e).__name__}）：需要測試", "points": 0}
-    return {**asdict(agg), "points": len(pts)}
+                "reason": f"AeT 聚合估計算不出來（{type(e).__name__}）：需要測試", "points": 0, "heat": None}
+    out = {**asdict(agg), "points": len(pts), "lower_bound": False, "bound": None,
+           "heat": None if beta is None else {**beta, "warm": sum(1 for p in pts if p["band"] == "warm"),
+                                              "ref_c": HEAT_REF_C, "default_src": BETA_DEFAULT_SRC}}
+    if not agg.valid and agg.code in TE.AET_BOUND_NO_CROSSING:
+        # no crossing: the temporary lower bound (threshold_estimate.aet_lower_bound, 推估)
+        lb = TE.aet_lower_bound([(p["hr1"], p["drift"], p["se"], p.get("tier")) for p in pts], lthr=lthr)
+        out["bound"] = lb
+        if lb["ok"]:
+            x = lb["value"]
+            out.update(valid=True, value=x, se=None, shift_bpm=None, lower_bound=True, code="bound",
+                       reason=f"{bound_label(x)}：{lb['reason']}。{BOUND_TIP.format(x=x, lo=x - 20, hi=x - 10)}")
+        elif lb.get("broken"):
+            out["reason"] = f"{out['reason']}（AeT 下限也不成立：{lb['reason']}）"
+    note = heat_note(pts, beta)
+    if note:
+        out["reason"] = f"{out['reason']}（{note}）"
+    return out
+
+
+def bound_label(x: float) -> str:
+    """「AeT ≥ 152 bpm（下限，推估）」."""
+    return f"AeT ≥ {x:.0f} bpm（下限，推估）"
+
+
+BOUND_TIP = ("暫時規則（推估）：輕鬆跑的心率都在 {x:.0f} bpm 附近、飄移都 < 5%，回歸找不到飄移到 5% 的心率，"
+             "所以只能說 AeT 至少 {x:.0f}。用 {x:.0f} 當 AeT 是保守的（真正的 AeT ≥ {x:.0f}）；區間仍照課表的 AeT。"
+             "只算參考級以上、SE ≤ 5 pp 的跑步，每次 SE 加倍（GC 驗證：單次 SE 低估 2–3 倍）；"
+             "之後只要 ≤ {x:.0f} bpm 有一次飄移明顯 ≥ 5%，下限就取消、改建議測試。"
+             "多跑幾次 {lo:.0f}–{hi:.0f} bpm 的真正輕鬆跑，回歸就能找出實際的 AeT；"
+             "在那之前每 8 週建議做一次 AeT 測試（可以關掉）")

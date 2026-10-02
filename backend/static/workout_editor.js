@@ -45,14 +45,26 @@ dialog.sd.we-wide { width: min(880px, 96vw); }
 .we-issues .err { color: var(--bad); } .we-issues .warn { color: var(--watch); } .we-issues .info { color: var(--muted); }
 .we-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .we-tools .sp { flex: 1; }
-.we-menu { position: relative; }
-.we-pop { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: min(380px, 86vw); max-height: 52vh; overflow: auto; background: var(--panel);
+.we-menu { position: relative; display: inline-flex; align-items: center; }
+.we .btn.we-tplbtn { font-weight: 700; }
+.we-sumtpl { margin-left: auto; font-size: 12px; padding: 2px 9px; border-radius: 12px; border: 1px solid var(--accent); color: var(--accent); background: none; cursor: pointer; }
+.we-sumtpl:hover, .we-sumtpl:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.we-pop { position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: min(440px, 92vw); max-height: 60vh; overflow: auto; background: var(--panel);
   border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 6px; }
+.we-pop .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 4px 6px; }
+.we-pop .tabs button { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 12px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; }
+.we-pop .tabs button.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
+.we-pop .tabs.sub button { font-size: 12px; padding: 1px 9px; }
 .we-pop .g { font-size: 11.5px; color: var(--faint); padding: 6px 8px 2px; }
-.we-pop button.t { display: block; width: 100%; text-align: left; border: 0; background: none; color: var(--text); font-size: 13px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.we-pop button.t { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 10px; align-items: center; width: 100%; text-align: left; border: 0; background: none; color: var(--text);
+  font-size: 13px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.we-pop button.t svg { grid-row: span 2; width: 96px; height: 26px; display: block; }
+.we-pop button.t .src { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .we-pop button.t:hover, .we-pop button.t:focus-visible { background: var(--soft); }
-.we-pop .mode { display: flex; gap: 10px; padding: 4px 8px 6px; font-size: 12.5px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.we-pop .mode { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 8px 6px; font-size: 12.5px; border-top: 1px solid var(--line); margin-top: 4px; }
 .we-pop .mode label { display: inline-flex !important; gap: 4px; align-items: center; color: var(--text) !important; font-size: 12.5px !important; }
+.we-pop .empty { color: var(--muted); font-size: 12.5px; padding: 8px; }
+.we-lap { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .we-list { display: grid; gap: 5px; }
 .we-row { display: grid; grid-template-columns: 18px 84px 150px minmax(0, 1fr) minmax(0, .8fr) auto; gap: 6px; align-items: center; padding: 5px 6px;
   border: 1px solid var(--line); border-left: 4px solid var(--zc, var(--bar)); border-radius: 8px; background: var(--panel); min-width: 0; }
@@ -94,7 +106,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
 .we-lim li::before { content: "· "; }
 .we-lim li.hit::before { content: "! "; font-weight: 700; }
 .we-empty { color: var(--muted); font-size: 12.5px; }
-.we-ro .we-acts, .we-ro .we-tools, .we-ro .grip { display: none; }
+.we-ro .we-acts, .we-ro .we-tools, .we-ro .grip, .we-ro .we-sumtpl { display: none; }
 @media (max-width: 699px) {
   .we-chart svg { height: 96px; }
   .we-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "g k a" "g d d" "g t t" "g n n"; row-gap: 4px; }
@@ -106,6 +118,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   .we-row > .nt { grid-area: n; }
   .we-rep-in { padding-left: 4px; }
   .we-tools .sp { display: none; }
+  .we-pop { width: calc(100vw - 64px); left: -4px; }
+  .we-pop button.t { grid-template-columns: 72px minmax(0, 1fr); }
+  .we-pop button.t svg { width: 72px; }
 }`;
 
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -123,7 +138,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     rules: "即時檢查：5 區每趟至少 2 分鐘（徐國峰）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
     lastRest: "最後一趟做完不休息、直接接下一段。COROS 的間歇群組做不到，推送時會攤平成一段一段（每段一個 lap）。",
     watch: "COROS 手錶的限制：跑步的功率只收絕對瓦數（沒有 % CP）；每段只能設一個目標；沒有漸進（ramp）步驟。下面是實際會送出的步驟。",
-    tpl: "插入間歇庫的課表（依階段分組）、CP 測試或快步跑。插入後就是一般步驟，可以再改。改過的結構會用它自己的趟數和強度判斷算不算進階。",
+    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再依主課目標的中點分：三區 88–101% CP、四區 101–106%、五區 ≥ 106%（Palladino 功率區 3／4／5，也是區段圖的顏色）。每段同時有功率（% CP）和心率（% LTHR）目標，跟著「目標用」切換。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。",
+    total: "總時間由下面的步驟加總：要改時間就改步驟（點這格會打開結構）。",
     pacePct: "配速的 % 是閾值配速的倍數：數字大＝慢（例：114–129% 是 Friel 2 區）。",
   };
 
@@ -155,22 +171,22 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.dirty = false; this.cleared = false; this.stored = false; this.ro = false;
       this.sel = null; this.openT = null; this.auto = {};
       this.seq = 0; this.timer = null; this.key = "";
-      this.tpls = null; this.tplFull = false;
-      root.innerHTML = `<details class="we" id="we-box"><summary><b>結構</b><span class="we-sumtxt" id="we-sum">載入中…</span></summary>
+      this.tpls = null; this.tplFull = true; this.tplCat = null; this.tplSub = null;
+      root.innerHTML = `<details class="we" id="we-box"><summary><b>結構</b><span class="we-sumtxt" id="we-sum">載入中…</span><button type="button" class="we-sumtpl" id="we-sumtpl">範本</button></summary>
         <div class="we-body">
-          <div class="we-chart" id="we-chart"><svg id="we-svg" role="img" aria-label="區段圖：強度隨時間"></svg><div class="we-tip" id="we-tip" hidden></div></div>
-          <div class="we-legend" id="we-legend"></div>
-          <div class="we-stats" id="we-stats" aria-live="polite"></div>
-          <ul class="we-issues" id="we-issues" aria-live="polite"></ul>
           <div class="we-tools" id="we-tools">
+            <span class="we-menu" id="we-tpl"><button class="btn primary we-tplbtn" type="button" data-a="tpl" id="we-tplbtn" aria-haspopup="true" aria-expanded="false">＋ 插入範本 ▾</button>${q(TIP.tpl)}
+              <div class="we-pop" id="we-pop" hidden></div></span>
             <button class="btn" type="button" data-a="add-step">＋ 步驟</button>
             <button class="btn" type="button" data-a="add-rep">＋ 重複</button>
-            <span class="we-menu" id="we-tpl"><button class="btn" type="button" data-a="tpl" aria-haspopup="true" aria-expanded="false">插入範本 ▾</button>${q(TIP.tpl)}
-              <div class="we-pop" id="we-pop" hidden></div></span>
             <span class="sp"></span>
             <button class="btn" type="button" data-a="reset" id="we-reset" hidden>還原成系統排的</button>
             ${q(TIP.basis)}
           </div>
+          <div class="we-chart" id="we-chart"><svg id="we-svg" role="img" aria-label="區段圖：強度隨時間"></svg><div class="we-tip" id="we-tip" hidden></div></div>
+          <div class="we-legend" id="we-legend"></div>
+          <div class="we-stats" id="we-stats" aria-live="polite"></div>
+          <ul class="we-issues" id="we-issues" aria-live="polite"></ul>
           <div class="we-list" id="we-list" data-cont="root"></div>
           <details class="we-watch" id="we-watch"><summary>推到手錶會長這樣 ${q(TIP.watch)}</summary><div id="we-wbody"></div></details>
         </div></details>`;
@@ -308,7 +324,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         return;
       }
       const t = (v && v.totals) || {};
-      this.$("we-sum").textContent = `${v ? v.structure : ""}${t.sec != null ? ` · ${mmss(t.sec)}${t.open ? "＋按圈" : ""}` : ""}` +
+      this.$("we-sum").textContent = `${v ? v.structure : ""}${t.sec != null ? ` · ${t.est ? "約 " : ""}${mmss(t.sec)}${t.open ? "＋按圈" : ""}` : ""}` +
         (this.dirty ? " · 尚未儲存" : this.stored ? " · 你改過的結構" : "");
       this.$("we-list").innerHTML = d.items.map((it) => this.itemHtml(it, 0)).join("");
       this.legend();
@@ -326,7 +342,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const r = ((this.view || {}).resolved || {})[st.id] || null, dis = this.ro ? " disabled" : "";
       const dt = st.dur.type;
       const durIn = dt === "time" ? `<input class="dur" data-f="sec" value="${mmss(st.dur.value)}" inputmode="numeric" aria-label="時間（分:秒）"${dis}>`
-        : dt === "distance" ? `<input class="num" type="number" step="0.1" min="0.05" data-f="km" value="${st.dur.value / 1000}" aria-label="距離 km"${dis}><span class="faint">km</span>` : "";
+        : dt === "distance" ? `<input class="num" type="number" step="0.1" min="0.05" data-f="km" value="${st.dur.value / 1000}" aria-label="距離 km"${dis}><span class="faint">km</span>`
+        : st.dur.est ? `<span class="we-lap" title="按圈結束；總時間用課表寫的最短時間估">≈ ${mmss(st.dur.est)}</span>` : "";
       const ov = st.target && st.target.type !== "auto";
       const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "改過" : "自動"}</span><b>${r.type === "none" ? "不設目標" : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
         (r.err ? `<span class="e">✕ ${esc(r.err)}</span>` : r.warn ? `<span class="w">⚠ ${esc(r.warn)}</span>` : "") : `<span class="s">…</span>`;
@@ -379,8 +396,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const v = this.view || {}, t = v.totals || {}, c = this.ctx || {};
       const cap = c.cap ? `${Math.round(c.cap)} 分（${c.cap_mode === "hard" ? "硬上限" : "軟上限"}）` : "不限";
       this.$("we-stats").innerHTML = t.sec == null ? "" :
-        `<span>總時間 <b>${mmss(t.sec)}</b>${t.open ? "＋按圈" : ""}${t.est ? "（含距離換算，推估）" : ""}</span>` +
-        `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>5 區 <b>${mmss(t.z5_s)}</b></span>` : "") +
+        `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋按圈" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
+        `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>≥ 102% CP <b>${mmss(t.z5_s)}</b></span>` : "") +
         `<span>TSS 估 <b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
     }
     issues() {
@@ -409,7 +426,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const pat = el("pattern", { id: "we-hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
       el("rect", { width: 6, height: 6, fill: "var(--bar)" }, pat);
       el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--panel)", "stroke-width": 2 }, pat);
-      const total = v.order.reduce((a, o) => a + (o.open ? OPEN_W : o.sec), 0) || 1;
+      const total = v.order.reduce((a, o) => a + (o.open && !o.sec ? OPEN_W : o.sec), 0) || 1;
       const sx = (W - 2) / total, maxF = 1.3;
       const yCP = base - (1 / maxF) * (base - top);
       el("line", { x1: 0, x2: W, y1: yCP, y2: yCP, stroke: "var(--faint)", "stroke-dasharray": "3 3", "stroke-width": 1 });
@@ -420,7 +437,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const ticks = [];
       const step = total > 5400 ? 1800 : total > 2400 ? 600 : 300;
       for (const o of v.order) {
-        const w = (o.open ? OPEN_W : o.sec) * sx;
+        const w = (o.open && !o.sec ? OPEN_W : o.sec) * sx;
         const f = Math.min(maxF, o.frac == null ? (o.kind === "rest" ? 0.5 : 0.6) : o.frac);
         const h = Math.max(6, (f / maxF) * (base - top));
         const fill = o.open ? "url(#we-hatch)" : o.frac == null || !o.level ? "var(--bar)" : `var(--wz${o.level})`;
@@ -430,7 +447,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         rr.addEventListener("mouseleave", () => (this.$("we-tip").hidden = true));
         rr.addEventListener("click", () => this.select(o.id));
         for (const rp of o.rep) { const sp = spans.get(rp.id) || { a: x, b: x + w, n: rp.n, d: o.rep.indexOf(rp) }; sp.b = x + w; spans.set(rp.id, sp); }
-        if (!o.open) { const before = tAcc; tAcc += o.sec; for (let m = Math.ceil(before / step) * step || step; m <= tAcc; m += step) if (m > before) ticks.push(x + (m - before) * sx); }
+        if (!o.open || o.sec) { const before = tAcc; tAcc += o.sec; for (let m = Math.ceil(before / step) * step || step; m <= tAcc; m += step) if (m > before) ticks.push(x + (m - before) * sx); }
         x += w;
       }
       ticks.forEach((px, i) => { if (px < W - 18) el("text", { x: px, y: H - 3, "text-anchor": "middle", "font-size": 10.5, fill: "var(--faint)" }).textContent = `${(i + 1) * step / 60}′`; });
@@ -475,7 +492,16 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.$("we-issues").addEventListener("click", (e) => { const li = e.target.closest("li[data-id]"); if (li) this.select(li.dataset.id); });
       this.$("we-tools").addEventListener("click", (e) => this.onTool(e));
       this.$("we-pop").addEventListener("click", (e) => this.onTpl(e));
-      document.addEventListener("click", (e) => { if (!e.target.closest("#we-tpl")) this.$("we-pop").hidden = true; });
+      // (a tab click re-renders the popup: its target is detached by the time this runs)
+      document.addEventListener("click", (e) => { if (e.target.isConnected && !e.target.closest("#we-tpl, #we-sumtpl")) this.$("we-pop").hidden = true; });
+      this.$("we-sumtpl").addEventListener("click", (e) => {
+        e.preventDefault();                      // a button in <summary>: open the box, not toggle it
+        if (this.ro) return;
+        this.$("we-box").open = true;
+        const b = this.$("we-tplbtn");
+        this.$("we-pop").hidden = true;
+        this.menu(b).then(() => b.scrollIntoView({ block: "nearest" }));
+      });
       let drag = null;
       L.addEventListener("dragstart", (e) => {
         if (this.ro || e.target.closest("input,select,button:not(.grip)")) return;
@@ -596,27 +622,80 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       else if (a === "add-rep") { this.doc.items.splice(this.insertAt(), 0, this.newRep()); this.touch(); }
       else if (a === "reset") { this.cleared = true; this.dirty = false; this.stored = false; this.$("we-reset").hidden = true; this.derive({ rederive: true }).then(() => { this.cleared = true; this.render(); this.o.onView && this.o.onView(this.view, this); }); }
     }
+    // 插入範本: category tabs (default: this session's kind), 強度課 split 三區／四區／五區,
+    // one row per template with a mini chart of its structure and its source
+    catOf(kind) { return { easy: "easy", long: "easy", quality: "quality", test: "test", hike: "trail" }[kind] || "easy"; }
     async menu(btn) {
       const pop = this.$("we-pop");
       if (!pop.hidden) { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); return; }
       if (!this.tpls) {
         const r = await req("GET", `${this.o.api}/steps/templates`);
-        this.tpls = r.ok ? r.body.groups : [];
+        this.tpls = r.ok ? r.body : { cats: [], groups: [] };
       }
-      pop.innerHTML = `<div class="mode" role="radiogroup" aria-label="插入方式"><label><input type="radio" name="we-tm" value="main"${this.tplFull ? "" : " checked"}>只換主課</label><label><input type="radio" name="we-tm" value="full"${this.tplFull ? " checked" : ""}>連暖身、緩和整份換</label></div>` +
-        this.tpls.map((g, gi) => `<div class="g">${esc(g.group)}</div>` + g.rows.map((r, i) =>
-          `<button type="button" class="t" data-t="${gi}.${i}">${esc(r.label)}${r.src_kind === "推估" ? " <span class=\"faint\">（推估）</span>" : ""}</button>`).join("")).join("");
+      const k = this.sess().kind;
+      if (!this.tplCat || this.tplKind !== k) { this.tplCat = this.catOf(k); this.tplSub = null; this.tplKind = k; }
+      this.menuHtml();
       pop.hidden = false; btn.setAttribute("aria-expanded", "true");
+    }
+    menuHtml() {
+      const T = this.tpls, cat = this.tplCat, cats = T.cats || [];
+      const subs = (cats.find((c) => c.id === cat) || {}).subs || [];
+      if (subs.length && !subs.some((s) => s.id === this.tplSub)) this.tplSub = subs[0].id;
+      const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub));
+      const tab = (k, id, l, on, tip) => `<button type="button" data-${k}="${esc(id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${tip ? ` title="${esc(tip)}"` : ""}>${esc(l)}</button>`;
+      this.$("we-pop").innerHTML = `<div class="tabs" role="group" aria-label="類型">${cats.map((c) => tab("cat", c.id, c.label, c.id === cat)).join("")}</div>` +
+        (subs.length ? `<div class="tabs sub" role="group" aria-label="強度">${subs.map((s) => tab("sub", s.id, s.label, s.id === this.tplSub, s.tip)).join("")}</div>` : "") +
+        (gs.length ? gs.map(({ g, gi }) => (gs.length > 1 || g.title ? `<div class="g">${esc(g.title || g.group)}</div>` : "") + g.rows.map((r, i) =>
+          `<button type="button" class="t" data-t="${gi}.${i}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}</span><span class="src">${esc(r.src || "")}</span></button>`).join("")).join("")
+          : `<p class="empty">這一類還沒有範本</p>`) +
+        `<div class="mode" role="radiogroup" aria-label="插入方式"><label><input type="radio" name="we-tm" value="full"${this.tplFull ? " checked" : ""}>整份換（含暖身、緩和）</label><label><input type="radio" name="we-tm" value="main"${this.tplFull ? "" : " checked"}>只換主課</label></div>`;
+    }
+    // a template's structure as a 96×26 sparkline: width = time, height + colour = intensity
+    mini(items) {
+      const rows = [];
+      const walk = (xs) => xs.forEach((x) => {
+        if (x.kind === "repeat") {
+          for (let i = 0; i < x.times; i++) {
+            let kids = x.items;
+            if (i === x.times - 1 && x.last_rest === false) { kids = kids.slice(); while (kids.length && kids[kids.length - 1].kind === "rest") kids.pop(); }
+            walk(kids);
+          }
+        } else rows.push(x);
+      });
+      walk(items || []);
+      const f = (x) => {
+        const t = x.target || {};
+        if (t.type === "auto" && t.intent === "band") return (t.lo + t.hi) / 2;
+        if (t.type === "auto" && t.intent === "easy") return t.plo != null ? (t.plo + t.phi) / 2 : 0.75;
+        if (t.type === "power" && t.mode === "pct") return (t.lo + t.hi) / 2;
+        return null;
+      };
+      const sec = (x) => x.dur.type === "time" ? x.dur.value : x.dur.type === "distance" ? x.dur.value * 0.36 : (x.dur.est || 60);
+      const tot = rows.reduce((a, x) => a + sec(x), 0) || 1, W = 96, H = 26;
+      let xx = 0;
+      const lv = (v) => v == null ? 0 : v < .75 ? 1 : v < .88 ? 2 : v < 1.01 ? 3 : v < 1.06 ? 4 : 5;
+      const bars = rows.map((x) => {
+        const v = f(x), w = sec(x) / tot * W, h = Math.max(3, Math.min(1.3, v == null ? (x.kind === "rest" ? .45 : .55) : v) / 1.3 * H);
+        const fill = v == null ? "var(--bar)" : `var(--wz${lv(v)})`;
+        const r = `<rect x="${xx.toFixed(1)}" y="${(H - h).toFixed(1)}" width="${Math.max(0.6, w - 0.6).toFixed(1)}" height="${h.toFixed(1)}" fill="${fill}"/>`;
+        xx += w;
+        return r;
+      }).join("");
+      return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true" preserveAspectRatio="none">${bars}</svg>`;
     }
     onTpl(e) {
       const m = e.target.closest('input[name="we-tm"]');
       if (m) { this.tplFull = m.value === "full"; return; }
+      const c = e.target.closest("button[data-cat]");
+      if (c) { this.tplCat = c.dataset.cat; this.tplSub = null; this.menuHtml(); return; }
+      const sb = e.target.closest("button[data-sub]");
+      if (sb) { this.tplSub = sb.dataset.sub; this.menuHtml(); return; }
       const b = e.target.closest("button[data-t]"); if (!b) return;
-      const [g, i] = b.dataset.t.split(".").map(Number), row = this.tpls[g].rows[i];
+      const [g, i] = b.dataset.t.split(".").map(Number), row = this.tpls.groups[g].rows[i];
       const fresh = (xs) => xs.map(clone);
       if (!this.doc) this.doc = { origin: "user", items: [] };
       const items = this.doc.items;
-      if (this.tplFull && row.full) this.doc.items = fresh(row.full);
+      if ((this.tplFull || !items.length) && row.full) this.doc.items = fresh(row.full);
       else {
         // replace the main set: everything between the leading warm-up (warm steps, strides) and the cool-down
         let a = 0;
@@ -628,7 +707,22 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       }
       this.$("we-pop").hidden = true;
       this.touch();
+      this.o.onTemplate && this.o.onTemplate(row, this.tplFull);
     }
+    // the session's total from outside (同負荷換算 changed the time): the longest top-level
+    // timed step takes the difference
+    setTotal(min) {
+      if (!this.doc || this.ro) return false;
+      const cur = ((this.view || {}).totals || {}).sec, want = Math.round(min * 60);
+      if (cur == null || Math.abs(want - cur) < 30) return false;
+      const ts = this.doc.items.filter((x) => x.kind !== "repeat" && x.dur.type === "time");
+      if (!ts.length) return false;
+      const st = ts.reduce((a, x) => (x.dur.value > a.dur.value ? x : a));
+      st.dur = { type: "time", value: Math.max(60, st.dur.value + want - cur) };
+      this.touch();
+      return true;
+    }
+    openBox() { this.$("we-box").open = true; const t = this.root.querySelector(".we-row input.dur"); if (t && !this.ro) t.focus(); }
   }
 
   window.WorkoutEditor = { mount: (root, opts) => new Editor(root, opts), request: req };

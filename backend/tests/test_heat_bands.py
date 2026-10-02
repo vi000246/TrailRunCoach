@@ -110,12 +110,13 @@ def test_the_overview_drift_indicator_compares_within_one_band():
     assert d.level != "bad" and R.HEAT_NOTE in d.verdict and not d.action   # a high drift in heat never warns
 
 
-def test_the_aet_aggregate_reads_the_cool_band_only():
+def test_the_aet_aggregate_leaves_the_hot_band_out():
     ws = [_run(TODAY - dt.timedelta(days=d), minutes=52) for d in (6, 4, 2)]
     ds = _ds(ws)
-    order = _temps(ds, [22.0, 27.0, None])
+    order = _temps(ds, [22.0, 31.0, None])
     pts = DA.aet_points(ds, TODAY)
     assert [p["idx"] for p in pts] == [order[0].idx, order[2].idx]           # cool + no temperature
+    # warm runs: heat-adjusted (feat/aet-heat-covariate, test_aet_heat_covariate.py)
 
 
 # ---------------------------------------------------------------------------

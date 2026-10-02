@@ -34,8 +34,8 @@ def test_module_does_not_import_garminconnect():
 
 
 def test_easy_run_is_one_hr_step():
-    w = GP.garmin_workout(sess("easy", "輕鬆跑", 45), TH)
-    assert w["workoutName"] == "TRC 輕鬆跑 10/1"
+    w = GP.garmin_workout(sess("easy", "越野輕鬆跑", 45), TH)
+    assert w["workoutName"] == "TRC 越野輕鬆跑 10/1"
     assert w["sportType"]["sportTypeId"] == 1 and w["estimatedDurationInSecs"] == 45 * 60
     (s,) = steps_of(w)
     assert s["type"] == "ExecutableStepDTO" and s["stepOrder"] == 1
