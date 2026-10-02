@@ -2,8 +2,7 @@
 
 程式：`backend/engine/workout_templates.py`（`TEMPLATES`）、`backend/engine/workout_steps.py` 的 `templates()`
 （把這份清單、間歇庫 `interval_library` 的階梯課表和 app 自己的 CP 測試分到四類）。
-測試：`backend/tests/test_workout_templates.py`（每一份都有暖身、出處、網址，每個有目標的步驟在
-「目標用：功率」和「目標用：心率」下都解得出來）。
+測試：`backend/tests/test_workout_templates.py`。它檢查每一份範本都有暖身、出處和網址，而且每一步都用自己的目標，不管整堂的目標依據設成什麼都一樣。
 
 ## 1. 分類
 
@@ -14,33 +13,32 @@
 | 測試 | 測試 |
 | 越野跑（舊的「健行／登山」，kind 仍是 `hike`） | 越野跑 |
 
-**三區／四區／五區**依主課 work 步驟的功率帶中點（時間加權）分：三區 88–101% CP、四區 101–106%、
-五區 ≥ 106%。這是 Palladino 的跑步功率區 3（3A＋3B）、4（Supra-threshold）、5 以上
-（`backend/engine/zones.py` 的 `PALLADINO_POWER_ZONES`），也就是編輯器區段圖的第 3／4／5 個顏色。
-所以分類是用數字算出來的，不是看範本的名字。舉例：Canova 10×1000 m 的中點約 100% CP，所以分到三區；
-Palladino 自己叫「VO2max」的 4×2:40（101–106%）分到四區。
+**三區／四區／五區**用的是 Palladino 的跑步功率區（使用者規則：Palladino 的區間是跑步用的，Coggan／Friel 的功率區是自行車用的）：
 
-另一種分法是 Stryd 的五區（Easy 65–80、Moderate 80–90、Threshold 90–100、Interval 100–115、
-Repetition > 115% CP）。這種分法會把 3–8 分鐘的 VO2 間歇和 30/30 這類短間歇放在同一區，而且跟區段圖的顏色對不起來，
-所以沒有用。
+- 三區 = 88–101% CP，Palladino 3A＋3B
+- 四區 = 101–106% CP，Palladino 4（Supra-threshold）
+- 五區 = ≥ 106% CP，Palladino 5 以上
 
-## 2. 目標：功率和心率都要有
+這三段也是編輯器區段圖的第 3／4／5 個顏色。每一份範本放在哪一區，是依它主課的強度在 `Template.sub` 裡指定的。
+來源不是用功率寫的課（心率、配速），先換算成約當的 % CP 再分區，所以這部分是推估。
 
-每個有強度的步驟都同時寫 % CP 和 % LTHR（`band(lo, hi, hrp)`），輕鬆段寫成 `easy(plo, phi)`
-（功率 plo–phi × CP；心率 ≤ AeT，照 app 原本的輕鬆規則）。全力測試段、衝刺和走路恢復段不設目標。
+## 2. 目標：每一步都用來源自己的依據
 
-來源只給一種目標時，另一種是**推估**，換算規則如下（每份範本的 `conv` 欄位會寫清楚是哪一邊換算的）：
+課表對話框沒有整堂的「目標用：自動／心率／功率」了，每一步在結構裡自己決定用什麼目標。範本的每一步都照來源原本寫的依據：
 
-- **% HRmax → % LTHR**：除以 0.9（假設 LTHR ≈ 90% HRmax，訓練有素跑者的常見值，沒有出處，算推估）。
-- **Palladino 功率區 → Friel 心率區**（`HRP`）：
-  - < 80% CP → 70–85% LTHR
-  - 80–88% → 85–90%
-  - 88–95% → 90–95%
-  - 95–101% → 95–100%
-  - 101–106% → 100–103%（Friel 5a）
-  - ≥ 106% → 103–106%（Friel 5b）
-- **只有 RPE 或配速的來源**（Koop、登山王、Canova）：功率和心率都是推估。
-- **短趟（≤ 1 分鐘）心率追不上**：心率目標只是讓切換有值，應該照功率或感覺跑。
+| 依據 | 範本 | 寫法 |
+|---|---|---|
+| 功率（% CP） | Palladino、Stryd 測試、Rønnestad（原研究是自行車功率，跑步的 % CP 是推估） | `pw(lo, hi)` |
+| 心率 | Friel（% LTHR，原生）；Uphill Athlete（≤ AeT，原生）；Pfitzinger、Seiler、Daniels E、徐國峰 E（% HRmax ÷ 0.9 → % LTHR，推估）；Koop、登山王（RPE → % LTHR，推估）；越野跑的課 | `hr(lo, hi)`、`AET` |
+| 配速（× 閾值配速） | Daniels T／I／R、Canova、Billat、Pfitzinger 5K 配速、徐國峰 E 配速飄移 | `pace(lo, hi)` |
+
+- 用心率或配速的課，暖身和緩和是 ≤ AeT。
+- 全力測試段、衝刺和走路恢復段不設目標。
+- 換算的部分都寫在 `conv` 欄位，也標成推估：
+  - 閾值配速是 app 的 T 配速（`thresholds.estimate_tpace`）。
+  - 馬拉松配速 ≈ T × 1.06，5K ≈ T × 0.93–0.96，I ≈ T × 0.92–0.95，R ≈ T × 0.85–0.89，vVO2max ≈ T × 0.86–0.90，E ≈ T × 1.18–1.29（Friel 2 區配速）。
+- 推到 COROS 時，配速段不設目標：COROS 的配速單位還沒驗證，配速會寫在步驟名稱裡，預覽也會標出來。
+- 系統排的課（derive 出來、標「自動」的段）還是照 `target_policy` 決定：路跑輕鬆跑和長跑用功率、心率 ≤ AeT 當上限；越野看心率；間歇看功率。
 
 Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–99、Z5a 100–102、Z5b 103–106、Z5c > 106
 （[TrainingPeaks](https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones/)）。
@@ -113,7 +111,7 @@ Uphill Athlete 要求用胸帶測，但使用者只有手腕光學心率，所�
 | ua_hill_sprints | 陡坡衝刺 8×10″／3′ 走 | Uphill Athlete《Training for the Uphill Athlete》2019 |
 | koop_uphill | 上坡 TempoRun 3×12′ | Koop（間歇盡量在上坡做） |
 | long_climb | 長爬坡有氧 90′（≤ AeT） | Uphill Athlete Zone 2；結構是推估 |
-| ua_me | 負重爬坡肌耐力 45′（10–30% 體重） | Uphill Athlete〈Muscular Endurance Training〉2016 |
+| steep_5／10／15 | 陡坡健走 30′，不背包（坡度約 13／13.5／14.5%、3.5 km/h，心率 ≤ AeT），模擬背 5／10／15% 體重 | Pandolf 1977 同代謝率坡度（[DOI](https://doi.org/10.1152/jappl.1977.43.4.577)）；UA trekking 用跑步機坡度替代背包；`loaded-carry-training.md` §1.1、§3.2。坡度是換算的（推估）；取代原本的負重爬坡（負重課已從排課拿掉） |
 | downhill_ecc | 下坡離心預適應 25′（−10～−15%） | Assumpção et al. 2020 Sci Rep（[PMC7606541](https://pmc.ncbi.nlm.nih.gov/articles/PMC7606541/)）；Bontemps et al. 2020 Sports Med（[PMC7674385](https://pmc.ncbi.nlm.nih.gov/articles/PMC7674385/)）；Koop〈[downhill](https://trainright.com/downhill-running-training-go-faster-hurt-less/)〉 |
 
 ## 4. Stryd 課表庫能不能直接用

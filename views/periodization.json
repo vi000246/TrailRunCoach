@@ -17,15 +17,15 @@
         },
         {
           "title": "疲勞與狀況（應該往恢復走）",
-          "description": "ATL 往下、TSB 爬回正值 = 恢復中。如果 TSB 還是很負（紅、綠），代表還沒休息夠。TSB 長條的顏色和「我的訓練 → 負荷 PMC」同一套（TSB ÷ CTL）：紅 過度疲勞、綠 在練、淺紫 維持、紫 新鮮、黃 過度新鮮。",
+          "description": "ATL 往下、TSB 爬回正值 = 恢復中。如果 TSB 還是很負（紅、綠），代表還沒休息夠。TSB 長條的顏色和「我的訓練 → 負荷 PMC」同一套（TSB ÷ CTL）：紅 過度疲勞、綠 有效訓練、淺紫 持平、紫 比賽狀態、黃 休息過久。",
           "axes": [{"id": "TSSPERDAY"}],
           "series": [
             {"name": "疲勞 ATL", "type": "line", "y_axis": "TSSPERDAY", "color": "#eb6834", "expression": "tl(tss, atlconstant)"},
             {"name": "TSB 過度疲勞", "type": "bar", "y_axis": "TSSPERDAY", "color": "#e34948", "expression": "if(tsb / shift(ctl, 1) < -0.3, tsb)"},
-            {"name": "TSB 在練", "type": "bar", "y_axis": "TSSPERDAY", "color": "#1baf7a", "expression": "if(tsb / shift(ctl, 1) >= -0.3 and tsb / shift(ctl, 1) < -0.1, tsb)"},
-            {"name": "TSB 維持", "type": "bar", "y_axis": "TSSPERDAY", "color": "#a9a1e6", "expression": "if(tsb / shift(ctl, 1) >= -0.1 and tsb / shift(ctl, 1) < 0.05, tsb)"},
-            {"name": "TSB 新鮮", "type": "bar", "y_axis": "TSSPERDAY", "color": "#6a5cc9", "expression": "if(tsb / shift(ctl, 1) >= 0.05 and tsb / shift(ctl, 1) < 0.25, tsb)"},
-            {"name": "TSB 過度新鮮", "type": "bar", "y_axis": "TSSPERDAY", "color": "#eda100", "expression": "if(tsb / shift(ctl, 1) >= 0.25, tsb)"},
+            {"name": "TSB 有效訓練", "type": "bar", "y_axis": "TSSPERDAY", "color": "#1baf7a", "expression": "if(tsb / shift(ctl, 1) >= -0.3 and tsb / shift(ctl, 1) < -0.1, tsb)"},
+            {"name": "TSB 持平", "type": "bar", "y_axis": "TSSPERDAY", "color": "#a9a1e6", "expression": "if(tsb / shift(ctl, 1) >= -0.1 and tsb / shift(ctl, 1) < 0.05, tsb)"},
+            {"name": "TSB 比賽狀態", "type": "bar", "y_axis": "TSSPERDAY", "color": "#6a5cc9", "expression": "if(tsb / shift(ctl, 1) >= 0.05 and tsb / shift(ctl, 1) < 0.25, tsb)"},
+            {"name": "TSB 休息過久", "type": "bar", "y_axis": "TSSPERDAY", "color": "#eda100", "expression": "if(tsb / shift(ctl, 1) >= 0.25, tsb)"},
             {"name": "0", "type": "line", "y_axis": "TSSPERDAY", "color": "#52514e", "expression": "(,0)"}
           ]
         },
@@ -194,15 +194,15 @@
         },
         {
           "title": "新鮮度 Form%（TSB ÷ CTL）",
-          "description": "比賽前應該爬進紫色的「新鮮」區（+5～+25%），不要掉到黃色的「過度新鮮」（休太久、體能在掉）。線的顏色 = 那天落在哪一區，最右邊標出最新的值。和「我的訓練 → 負荷 PMC → 狀況 Form%」同一張圖、同一套區間。沒有任何登山越野賽事公開過經驗證的「最佳 TSB 區間」，只當方向參考。",
+          "description": "比賽前應該爬進紫色的「比賽狀態」區（+5～+25%），不要掉到黃色的「休息過久」（體能在掉）。線的顏色 = 那天落在哪一區，最右邊標出最新的值。和「我的訓練 → 負荷 PMC → 狀況 Form%」同一張圖、同一套區間。沒有任何登山越野賽事公開過經驗證的「最佳 TSB 區間」，只當方向參考。",
           "zoned": {"line": "Form%"},
           "axes": [{"id": "PERCENT", "min": -0.6, "max": 0.4}],
           "series": [
             {"name": "過度疲勞 < −30%", "type": "line", "y_axis": "PERCENT", "color": "#e34948", "expression": "{-0.6:-0.3}"},
-            {"name": "在練 −30～−10%", "type": "line", "y_axis": "PERCENT", "color": "#1baf7a", "expression": "{-0.3:-0.1}"},
-            {"name": "維持 −10～+5%", "type": "line", "y_axis": "PERCENT", "color": "#a9a1e6", "expression": "{-0.1:0.05}"},
-            {"name": "新鮮 +5～+25%", "type": "line", "y_axis": "PERCENT", "color": "#6a5cc9", "expression": "{0.05:0.25}"},
-            {"name": "過度新鮮 > +25%", "type": "line", "y_axis": "PERCENT", "color": "#eda100", "expression": "{0.25:0.4}"},
+            {"name": "有效訓練 −30～−10%", "type": "line", "y_axis": "PERCENT", "color": "#1baf7a", "expression": "{-0.3:-0.1}"},
+            {"name": "持平 −10～+5%", "type": "line", "y_axis": "PERCENT", "color": "#a9a1e6", "expression": "{-0.1:0.05}"},
+            {"name": "比賽狀態 +5～+25%", "type": "line", "y_axis": "PERCENT", "color": "#6a5cc9", "expression": "{0.05:0.25}"},
+            {"name": "休息過久 > +25%", "type": "line", "y_axis": "PERCENT", "color": "#eda100", "expression": "{0.25:0.4}"},
             {"name": "0", "type": "line", "y_axis": "PERCENT", "color": "#52514e", "expression": "(,0)"},
             {"name": "Form%", "type": "line", "y_axis": "PERCENT", "color": "#1d232b", "line_width": "thick", "expression": "tsb / shift(ctl, 1)"}
           ]

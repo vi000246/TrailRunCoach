@@ -146,35 +146,6 @@ def b2b_card():
     return B2B.card(ds, today, st.plan.events, st.phase, cur, weeks, aet_of)
 
 
-@router.get("/loaded-carry")
-def loaded_carry_card():
-    """The 「負重訓練」 card (engine/loaded_carry.card): the trip and its pack,
-    this week's stage and loaded sessions, the planned ones (this week + the
-    projection), every loaded session done with ΔHR@VAM / 負重效率, the
-    per-stage trend, and the recent activities with their recorded pack."""
-    from backend.engine import loaded_carry as LC
-    ds = _dataset()
-    today = O.day_to_date(ds.today)
-    st = _status(ds, today)
-    cur, weeks = None, []
-    try:
-        from backend.api.plan_sessions import _compute_inputs
-        inp = _compute_inputs()
-        cur, weeks = inp.get("cur"), inp.get("weeks") or []
-    except Exception:                          # noqa: BLE001 — the card still shows what was done
-        pass
-    aet_now = ((cur or {}).get("thresholds") or {}).get("aet")
-
-    def aet_of(day: dt.date):
-        try:
-            from backend.engine.racepower.athlete import thresholds_as_of
-            return thresholds_as_of(ds, day).get("aet") or aet_now
-        except Exception:                      # noqa: BLE001
-            return aet_now
-    weight = st.plan.weight_on(today) if st.plan is not None else None
-    return LC.card(ds, today, st.plan.events, st.phase, cur, weeks, aet_of, weight)
-
-
 def _z5_chart_href() -> str:
     """The viewer deep link of the first z5gate panel in the custom views (the 基礎期 chart)."""
     from urllib.parse import urlencode

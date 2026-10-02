@@ -1462,6 +1462,17 @@ def set_hike_meta(file: str, pack_kg: Optional[float], path=None) -> dict:
     return trips
 
 
+def activity_pack(w, meta: Optional[dict] = None) -> dict:
+    """{pack_kg (recorded), recorded, default_kg, range, file, note} of one dataset
+    workout — the activity card's 「這次背多少」 (the 百岳 prediction uses it)."""
+    if meta is None:
+        meta = hike_meta()
+    rec = (meta.get(getattr(w.entry, "file", None)) or {}).get("pack_kg")
+    return {"pack_kg": None if rec is None else float(rec), "recorded": rec is not None,
+            "default_kg": None if rec is None else float(rec), "range": [0, 40], "file": w.entry.file,
+            "note": "這次背多少（kg）：寫進 racepower_hike_meta.json，百岳預測會用；空白 = 沒記錄"}
+
+
 def walk_capacity_inputs(ds, today: dt.date, exclude: Optional[set] = None, runs: Optional[list] = None,
                          hikes: Optional[list] = None) -> dict:
     """Every window the capacity model (racepower/capacity.py) is fitted on,
