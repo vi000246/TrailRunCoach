@@ -58,6 +58,16 @@ def athlete_sex(ds) -> Optional[str]:
     return s if s in WPRIME_PRIOR else None
 
 
+def sex_or_default(ds) -> tuple[str, str]:
+    """(sex, where it came from) for the models that need one: 設定頁 / WKO5,
+    else the men's value labelled 「預設（男，推估）」 (未填性別)."""
+    prof = getattr(getattr(ds, "plan", None), "profile", None) or {}
+    s = athlete_sex(ds)
+    if s is None:
+        return "male", "預設（男，推估）"
+    return s, "設定頁" if prof.get("sex") == s else "WKO5"
+
+
 def wprime_prior(sex: Optional[str]) -> tuple[float, float, str]:
     """(W′ J, SD J, label) of the single-bout prior for this sex. Without a
     sex on file the men's value is used (the long-standing default) and the

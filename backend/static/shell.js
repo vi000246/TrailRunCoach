@@ -194,4 +194,10 @@
   sg.src = "/api/v1/static/suggestions.js";
   sg.defer = true;
   document.head.appendChild(sg);
+
+  // first run: the 一般設定 精靈 (weight / sex / height / birth year / power source), once
+  const sw = document.createElement("script");
+  sw.src = "/api/v1/static/setup_wizard.js";
+  sw.defer = true;
+  document.head.appendChild(sw);
 })();

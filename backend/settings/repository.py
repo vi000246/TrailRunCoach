@@ -28,6 +28,8 @@ SOURCES = ("coros", "trainingpeaks", "local")
 DEFAULTS: dict[str, Any] = {
     # IANA zone for local workout dates; None = WKO5COACH_TZ env, then the system zone
     "athlete.timezone": None,
+    # the first-run 精靈 (一般設定) was saved or dismissed (engine/athlete_profile.py)
+    "athlete.setup.done": False,
     # 主要資料來源 (backend/sync/primary.py): which source an activity is read
     # from when COROS and TP both have it — the DB de-dup, the merged chart
     # Dataset ("synced") and the sync order. "auto" = the source with the most
@@ -68,7 +70,9 @@ DEFAULTS: dict[str, Any] = {
     # 使用功率: False = the athlete trains by HR only — the viewer, overview and activity
     # pages hide power-only charts, cards and fields (wko5expr/power_use.py); the models
     # themselves are unchanged
-    "charts.power.enabled": True,
+    # None = auto (engine/athlete_profile.use_power): on for Stryd, watch power only when
+    # power.accept_watch_power is on, off without a power meter
+    "charts.power.enabled": None,
     # leave bad activity files (a run recorded in a car / on a bike, impossible
     # power; backend/engine/bad_activity.py) out of every model; the per-activity
     # overrides (keep / exclude) apply either way
@@ -126,10 +130,10 @@ DEFAULTS: dict[str, Any] = {
     # 自動調整課表 (engine/plan_auto.py): after a sync that imported an activity,
     # reconcile + adapt (engine/adapt.py) + push the next N days to COROS
     "plan.auto.enabled": True,
-    "plan.auto.push": True,                   # push the window to COROS automatically
+    "plan.auto.push": None,                   # push the window to COROS automatically; None = auto: on when COROS is logged in
     "plan.auto.push_days": 7,                 # 1-14 days from today
     "plan.auto.confirm_big": True,            # hold big changes for the user's approval
-    "plan.auto.notify": "watch",              # watch (a 課表待確認 workout on COROS) | overview (banner only)
+    "plan.auto.notify": None,                 # watch (a 課表待確認 workout on COROS) | overview (banner only); None = auto (watch with COROS)
     # internal: {stamp, phase, rejected: [fingerprint]} of the last automatic run
     "plan.auto.state": None,
     # 傷病紀錄 (engine/injuries.py; docs/plans/injury-tracking.plan.md §4): 「跟受傷前很像」
@@ -263,23 +267,25 @@ def validate(key: str, value: Any) -> None:
         raise ValueError(f"map overlays must be a list of distinct {MAP_OVERLAYS}")
     if key == "sync.trainingpeaks.use_wko5_client" and value not in (None, True, False):
         raise ValueError(f"{key} must be true/false/null")
-    if key in ("charts.fit_settings_from_wko5", "power.accept_watch_power", "activities.exclude_bad",
+    if key in ("charts.fit_settings_from_wko5", "power.accept_watch_power", "activities.exclude_bad", "athlete.setup.done",
                "sync.secondary.auto", "charts.data_source.chosen") \
             and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
-    if key.endswith(".enabled") and not isinstance(value, bool):
+    if key.endswith(".enabled") and not isinstance(value, bool) and not (key == "charts.power.enabled" and value is None):
         raise ValueError(f"{key} must be true/false")
     if key.startswith("plan.prefs."):
         _validate_pref(key, value)
     if key == "plan.blackouts":
         from backend.engine.blackouts import validate as validate_blackouts
         validate_blackouts(value)
-    if key in ("plan.auto.push", "plan.auto.confirm_big") and not isinstance(value, bool):
+    if key == "plan.auto.confirm_big" and not isinstance(value, bool):
+        raise ValueError(f"{key} must be true/false")
+    if key == "plan.auto.push" and value is not None and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
     if key == "plan.auto.push_days" and (isinstance(value, bool) or not isinstance(value, int)
                                          or not 1 <= value <= 14):
         raise ValueError("plan.auto.push_days must be an integer 1-14")
-    if key == "plan.auto.notify" and value not in AUTO_NOTIFY:
+    if key == "plan.auto.notify" and value is not None and value not in AUTO_NOTIFY:
         raise ValueError(f"plan.auto.notify must be one of {AUTO_NOTIFY}")
     if key == "plan.b2b.accepted" and not (isinstance(value, list) and all(
             isinstance(e, dict) and isinstance(e.get("week"), str) and isinstance(e.get("days"), list)
