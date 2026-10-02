@@ -55,6 +55,10 @@ DEFAULTS: dict[str, Any] = {
     # checks) also read watch-estimated (wrist) power; False = Stryd only
     # (backend/engine/power_source.py). HR / pace paths always use every run.
     "power.accept_watch_power": False,
+    # 使用功率: False = the athlete trains by HR only — the viewer, overview and activity
+    # pages hide power-only charts, cards and fields (wko5expr/power_use.py); the models
+    # themselves are unchanged
+    "charts.power.enabled": True,
     # leave bad activity files (a run recorded in a car / on a bike, impossible
     # power; backend/engine/bad_activity.py) out of every model; the per-activity
     # overrides (keep / exclude) apply either way

@@ -331,6 +331,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 </main>
 <script>
 const API = "/api/v1/overview";
+let USE_POWER = true;                       // settings 「使用功率」 (charts.power.enabled), read at start
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -531,6 +532,7 @@ document.addEventListener("click", async (ev) => {
 
 // 測試 indicator: 「套用這次的 CP」 (status.i_testing extra.cp_test.apply -> POST /api/v1/plan/thresholds/apply-cp)
 function applyCpBtn(i) {
+  if (!USE_POWER) return "";
   const ct = i.id === "testing" && i.extra && i.extra.cp_test;
   if (!ct || !ct.apply) return "";
   return `<div class="act"><button type="button" class="btn" data-apply-cp="${esc(ct.idx)}">${esc(ct.apply.label)}</button>
@@ -790,7 +792,7 @@ async function loadWeek() {
       <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
       <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
       <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">下週一 TSB <b>${sgn(L.tsb_next)}</b></span></div>
-      <div>門檻：CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ${gl("AeT")} ${n0(w.thresholds.aet)} bpm（${esc(w.thresholds.aet_source)}）</div>
+      <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${gl("AeT")} ${n0(w.thresholds.aet)} bpm（${esc(w.thresholds.aet_source)}）</div>
       <div id="later"></div></div></details>`;
   renderKpis();
   // Not shown (sources live in backend/engine/overview.py SRC_*; w.rules still carries them):
@@ -973,6 +975,8 @@ addEventListener("suggestions:changed", () => { loadWeek().then(() => loadPlan()
 $("wk-ic").innerHTML = I("time");
 (async () => {
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
+  // 使用功率 (設定): off = no CP / power fields or buttons on this page
+  USE_POWER = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
   await loadStatus().catch(fail("kpis"));
   loadZ5().catch(fail("z5"));
   loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load

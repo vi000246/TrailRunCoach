@@ -17,7 +17,7 @@ from backend.db.models import PlanSession
 from backend.engine import reconcile as R
 
 KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test": "測試",
-         "hike": "健行／登山", "strength": "肌力", "heat_passive": "被動熱適應",
+         "hike": "越野跑", "strength": "肌力", "heat_passive": "被動熱適應",
          # 課表待確認 (engine/plan_auto.py): a reminder pushed to the watch, not a
          # training session — never done / missed, no TSS, no compliance
          "notice": "課表待確認"}
@@ -26,7 +26,7 @@ EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "d
             "target_basis", "steps")
 TERRAINS = ("road", "trail", "hike")
 DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
-                  "hike": "健行", "strength": "肌力（下肢單腳＋核心）"}
+                  "hike": "越野跑", "strength": "肌力（下肢單腳＋核心）"}
 
 
 def _test_default(data: dict) -> None:

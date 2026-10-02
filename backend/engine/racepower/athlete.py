@@ -1576,7 +1576,7 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
             "classes": cmap}
 
 
-TRAILHR_DUR_KEY = "racepower_trailhr_dur_v2"   # v2 (2026-10-02): δ on the drift-v2-cleaned window
+TRAILHR_DUR_KEY = "racepower_trailhr_dur_v3"   # v3 (2026-10-02): terrain-matched within-run δ ± SE
 
 
 def durability_clean_mask(t, kmh, hr, es_rel=None) -> tuple[np.ndarray, dict]:
@@ -1646,9 +1646,11 @@ def _trail_durability(ds, w) -> Optional[dict]:
     keep, cuts = durability_clean_mask(a["t"], a["kmh"], a["hr"], es_all)
     es_clean = np.where(keep[m], es, np.nan)
     r = durability(tm, es_clean, a["hr"][m])
-    raw = durability(tm, es, a["hr"][m])
-    return {"delta": TH.durability_delta((r or {}).get("points")), "moving_s": float(tm[-1]),
-            "end_pct": (r or {}).get("end_pct"), "delta_uncleaned": TH.durability_delta((raw or {}).get("points")),
+    # trailhr step 7: terrain-matched δ on the cleaned windows (the ratio above only for comparison)
+    wd = TH.within_run_delta(TH.terrain_windows(a["t"], a["d"], a["z"], a["hr"], mv, keep))
+    return {"delta": (wd or {}).get("delta"), "se": (wd or {}).get("se"), "windows": (wd or {}).get("n"),
+            "bins": (wd or {}).get("bins"), "moving_s": float(tm[-1]), "end_pct": (r or {}).get("end_pct"),
+            "delta_uncleaned": TH.durability_delta((r or {}).get("points")),
             "clean": cuts, "kept_share": float(keep[m].mean()) if len(m) else None}
 
 
@@ -1800,13 +1802,15 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
         if p["T_h"] * 3600.0 >= TH.TRAILHR["dur_min_s"]:
             w = ds.workouts[p["idx"]]
             r = ds.cached_series(TRAILHR_DUR_KEY, w, lambda w=w: _trail_durability(ds, w))
-            if r and r.get("delta") is not None:
-                p["delta"] = r["delta"]
+            if r and r.get("delta") is not None and r.get("se"):
+                p["delta"], p["delta_se"] = r["delta"], r["se"]
                 p["delta_uncleaned"] = r.get("delta_uncleaned")
                 p["fuel"] = _fuel_tags(tags, w)
-                drows.append({"delta": r["delta"], "fuel": p["fuel"]})
+                drows.append({"delta": r["delta"], "se": r["se"], "fuel": p["fuel"], "date": p["date"],
+                              "windows": r.get("windows")})
     ds.flush_series()
     dinfo = TH.delta_by_fuel(drows)
+    dinfo["runs"] = drows
     dinfo["gate"] = TH.choose_delta(pts, dinfo)
     m = TH.fit(pts, dinfo["gate"]["delta"])
     m["delta_raw"] = dinfo["all"]["raw_median"]

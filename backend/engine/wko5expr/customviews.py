@@ -80,9 +80,11 @@ def _chart(raw: dict, where: str) -> dict:
     # z5gate: the Zone 5 opening process over the season (quality_gate.z5_history)
     # activity: a single-activity chart computed in panels/activity_charts.py ({"chart": "hrpower"})
     # periodzones: time in zone over a period (panels/period_zones.py, {"view": "total" | "weekly"})
-    if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity", "periodzones"):
+    # climbvam: steady-climb VAM:HR per route, trail runs + hikes (panels/climb_vam.py)
+    if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity", "periodzones",
+                    "climbvam"):
         raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets', 'review', "
-                              "'z5gate', 'activity' or 'periodzones'")
+                              "'z5gate', 'activity', 'periodzones' or 'climbvam'")
     out = {
         "title": raw["title"],
         "description": raw.get("description"),
@@ -137,6 +139,14 @@ def _chart(raw: dict, where: str) -> dict:
         out["basis"] = {"default": bs["default"], "choices": list(choices)}
         if bs.get("power_note"):
             out["basis"]["power_note"] = str(bs["power_note"])
+    if raw.get("zoned") is not None:
+        # banded chart (負荷比, Form%): {"line": "<series name>"} — the viewer colours that line by the
+        # band ({lo:hi} series) it is in, draws the band edges and labels the latest value with its band
+        z = raw["zoned"]
+        names = {s["name"] for s in out["series"]}
+        if not isinstance(z, dict) or z.get("line") not in names:
+            raise CustomViewError(f"{where}/{raw['title']}: zoned needs a line that is one of the series")
+        out["zoned"] = {"line": z["line"]}
     for s in [s for v in out.get("variants", []) for s in v["series"]] or out["series"]:
         if s["basis"] is not None and s["basis"] not in out.get("basis", {}).get("choices", ()):
             raise CustomViewError(f"{where}/{raw['title']}/{s['name']}: series basis needs a chart basis that lists it")
