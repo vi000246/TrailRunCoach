@@ -104,6 +104,9 @@ input.small { width: 90px; }
 .tcard .tc span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .tcard .tc span.main { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .tcard .fa { font-size: 12px; color: var(--muted); margin-top: 3px; }
+dialog#share-dlg { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(620px, 94vw); }
+dialog#share-dlg::backdrop { background: rgba(0,0,0,.35); }
+#share-list td { white-space: normal; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .chip { border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chip b { color: var(--text); font-weight: 600; }
@@ -334,7 +337,21 @@ td select.terr { width: 80px; padding: 2px 5px; }
       <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
       <button class="btn" id="coros">匯出到 COROS</button><span class="meta" id="coros-meta"></span>
-      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span></div>
+      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span>
+      <button class="btn" id="share">🔗 分享</button></div>
+    <dialog id="share-dlg">
+      <h2>🔗 分享計算結果 <span class="meta">唯讀，不會重新計算</span>
+        <span class="help" tabindex="0">?<span class="tip">把目前的結果（剖面、分段、分段目標、補給）凍結成一份快照，產生一個無法猜到的連結。拿到連結的人只看得到這份快照，看不到你的活動、設定或其他資料。不勾「包含體重」時，體重和會透露體重的數字（W/kg、超補的公克數）都不會出現；身高、年齡、性別一律不會出現。外面的人要經過你的 Cloudflare tunnel，tunnel 的密碼保護要放行 /share/ 開頭的路徑。</span></span></h2>
+      <div class="form" style="grid-template-columns:1fr 1fr">
+        <label style="grid-column:1/-1">標題<input id="share-title" maxlength="80" placeholder="例 台北馬 半馬 計畫"></label>
+        <label>有效期限<select id="share-exp"><option value="">不過期</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
+        <label class="f" style="align-self:end"><span><input type="checkbox" id="share-weight"> 包含體重</span></label>
+      </div>
+      <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="share-go">建立連結</button><span class="meta" id="share-msg"></span></div>
+      <div class="toolbar hidden" id="share-out"><input id="share-link" readonly style="flex:1;min-width:240px"><button class="btn" id="share-copy">複製</button></div>
+      <h3>已分享</h3><div class="tablewrap"><table><tbody id="share-list"></tbody></table></div>
+      <div class="toolbar" style="justify-content:flex-end;margin-top:8px"><button class="btn" id="share-close">關閉</button></div>
+    </dialog>
     <div class="profile" id="profile"></div>
     <div id="segtargets"></div>
     <div class="segtable tablewrap" id="segtable"></div>
@@ -1301,6 +1318,48 @@ async function csvExport() {
     $("csv-meta").innerHTML = `<span class="ok">已下載 ✓</span> ${esc(fname)}`;
   } catch (e) { $("csv-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
+
+// ---------------- read-only share links ----------------
+const shareUrl = (u) => location.origin + u;
+async function loadShares() {
+  try {
+    const { shares } = await j(`${API}/shares`);
+    $("share-list").innerHTML = shares.length ? shares.map((s) => `<tr><td><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>
+        <div class="meta">${esc(s.created.slice(0, 16).replace("T", " "))}${s.date ? ` · 比賽 ${esc(s.date)}` : ""}${s.expires ? ` · ${s.expired ? "已過期" : "到期 " + esc(s.expires.slice(0, 10))}` : " · 不過期"}${s.weight ? " · 含體重" : ""}</div></td>
+        <td class="n"><button class="btn" data-copy="${esc(s.url)}">複製</button> <button class="btn" data-del="${esc(s.id)}">刪除分享</button></td></tr>`).join("")
+      : `<tr><td class="meta">還沒有分享</td></tr>`;
+  } catch (e) { $("share-list").innerHTML = `<tr><td class="err">${esc(e.message)}</td></tr>`; }
+}
+async function copyText(t, el) {
+  try { await navigator.clipboard.writeText(t); } catch { const i = document.createElement("textarea"); i.value = t; document.body.appendChild(i); i.select(); document.execCommand("copy"); i.remove(); }
+  if (el) { const was = el.textContent; el.textContent = "已複製 ✓"; setTimeout(() => el.textContent = was, 1500); }
+}
+$("share").onclick = () => {
+  const ev = (INP?.events || []).find((e) => e.id === $("event").value);
+  if (!$("share-title").value) $("share-title").value = ev ? ev.name : (PLAN?.course_name || "");
+  $("share-out").classList.add("hidden"); $("share-msg").textContent = "";
+  $("share-dlg").showModal(); loadShares();
+};
+$("share-close").onclick = () => $("share-dlg").close();
+$("share-go").onclick = async () => {
+  $("share-msg").textContent = "建立中…"; $("share-go").disabled = true;
+  try {
+    const r = await post(`${API}/share`, { ...planBody(), share_title: $("share-title").value || null,
+      include_weight: $("share-weight").checked, expires_days: $("share-exp").value ? Number($("share-exp").value) : null });
+    $("share-link").value = shareUrl(r.url); $("share-out").classList.remove("hidden");
+    $("share-msg").innerHTML = `<span class="ok">已建立 ✓</span>${r.expires ? " 到期 " + esc(r.expires.slice(0, 10)) : ""}`;
+    loadShares();
+  } catch (e) { $("share-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  $("share-go").disabled = false;
+};
+$("share-copy").onclick = (e) => copyText($("share-link").value, e.target);
+$("share-list").addEventListener("click", async (e) => {
+  if (e.target.dataset.copy) return copyText(shareUrl(e.target.dataset.copy), e.target);
+  const id = e.target.dataset.del; if (!id) return;
+  if (!confirm("刪除這個分享？拿到連結的人就看不到了。")) return;
+  try { await j(`${API}/shares/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch (err) { alert(err.message); }
+  loadShares();
+});
 
 // ---------------- analyses (v1 sections) ----------------
 function renderCP() {

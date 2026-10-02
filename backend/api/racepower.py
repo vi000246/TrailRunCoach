@@ -931,6 +931,86 @@ def export_csv(body: ExportIn):
                              "X-Filename": q})
 
 
+# ---------------------------------------------------------------------------
+# read-only share links (engine/racepower/share.py)
+#
+#   POST   /api/v1/racepower/share          same body as /plan + title / include_weight /
+#                                            expires_days → freeze the result, return the link
+#   GET    /api/v1/racepower/shares         the athlete's shares
+#   DELETE /api/v1/racepower/shares/{id}    remove one
+#   GET    /share/{id}        (public)      the read-only page
+#   GET    /share/{id}/data   (public)      the frozen snapshot
+#
+# Only /share/ is meant to be reachable without the site password (the
+# Cloudflare tunnel's Basic-auth proxy exempts that prefix); it serves
+# nothing but stored snapshots.
+# ---------------------------------------------------------------------------
+
+class ShareIn(PlanIn):
+    share_title: Optional[str] = Field(None, max_length=80)
+    include_weight: bool = False
+    expires_days: Optional[int] = None
+
+
+@router.post("/share")
+def create_share(body: ShareIn):
+    from backend.engine.racepower import share as SH
+    p = _py(make_plan(body))
+    req = {"date": body.date, "start_time": body.start_time, "stops": [x.model_dump() for x in body.stops]}
+    title = body.share_title or p.get("course_name") or \
+        f"{ {'road': '路跑', 'trail': '越野', 'baiyue': '百岳'}.get(body.type, '')} {p['summary']['km']:.1f} km"
+    try:
+        snap = SH.snapshot(p, title=title, include_weight=body.include_weight, expires_days=body.expires_days,
+                           request=req)
+        sid = SH.save(snap)
+    except SH.ShareError as e:
+        raise HTTPException(400, str(e))
+    return {"id": sid, "url": f"/share/{sid}", "title": snap["title"], "created": snap["created"],
+            "expires": snap["expires"]}
+
+
+@router.get("/shares")
+def list_shares():
+    from backend.engine.racepower import share as SH
+    return {"shares": [{**r, "url": f"/share/{r['id']}"} for r in SH.listing()]}
+
+
+@router.delete("/shares/{sid}")
+def delete_share(sid: str):
+    from backend.engine.racepower import share as SH
+    try:
+        if not SH.delete(sid):
+            raise HTTPException(404, "找不到這個分享")
+    except SH.ShareError as e:
+        raise HTTPException(400, str(e))
+    return {"deleted": sid}
+
+
+share_router = APIRouter(prefix="/share", tags=["share"], include_in_schema=False)
+SHARE_HEADERS = {"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer"}
+
+
+@share_router.get("/{sid}")
+def share_page(sid: str):
+    return FileResponse(STATIC / "share.html", headers=SHARE_HEADERS)
+
+
+@share_router.get("/{sid}/data")
+def share_data(sid: str):
+    from fastapi.responses import JSONResponse
+
+    from backend.engine.racepower import share as SH
+    try:
+        snap = SH.load(sid)
+    except SH.ShareError:
+        snap = None
+    if snap is None:
+        raise HTTPException(404, "這個分享不存在或已刪除")
+    if SH.expired(snap):
+        raise HTTPException(410, "這個分享已過期")
+    return JSONResponse(snap, headers=SHARE_HEADERS)
+
+
 @router.post("/export/coros")
 async def export_coros(body: ExportIn, db=Depends(_db)):
     from starlette.concurrency import run_in_threadpool
