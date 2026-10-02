@@ -336,7 +336,7 @@ table.z5ev td { white-space: normal; }
 <body class="aside-closed" data-mode="season">
 <script src="/api/v1/static/shell.js" data-page="charts"></script>
 <script src="/api/v1/static/segments_card.js" defer></script>
-<script src="/api/v1/static/climb_pwhr.js" defer></script>
+<script src="/api/v1/static/climb_vam.js" defer></script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
   <symbol id="i-sport" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="m6 21 3.5-6 3 2.5V22M9.5 15 11 9l3.5 2 3 .5M11 9 7 10.5 5.5 14"/></symbol>
@@ -835,7 +835,7 @@ async function load() {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
       if (c.kind === "z5gate" || (c.kind === "periodzones" && c.view === "weekly")) card.classList.add("wide");
-      if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones", "climbpwhr"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
+      if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones", "climbvam"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
       if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
       await renderCard(card, v, di, c, q, token);
     }
@@ -928,7 +928,7 @@ async function renderCard(card, v, di, c, q, token) {
       + (win && c.kind === "athlete" ? `&window=${win}` : "")
       + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : "")
       + (c.kind === "periodzones" ? pzQuery(c) : "") + variantQuery(pkey)
-      + (c.kind === "climbpwhr" && window.cpwQuery ? cpwQuery(c) : ""));   // climb_pwhr.js
+      + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : ""));   // climb_vam.js
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -1023,7 +1023,7 @@ function drawInto(box, res) {
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "z5gate") drawZ5Gate(box, res);
   else if (res.kind === "periodzones") drawPeriodZones(box, res);   // panels/period_zones.py
-  else if (res.kind === "climbpwhr" && window.drawClimbPwhr) drawClimbPwhr(box, res);   // climb_pwhr.js
+  else if (res.kind === "climbvam" && window.drawClimbVam) drawClimbVam(box, res);   // climb_vam.js
   else if (res.kind === "map") drawMap(box, res);
   else if (String(res.kind || "").startsWith("act_")) drawActivity(box, res);   // panels/activity_charts.py
   else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)
