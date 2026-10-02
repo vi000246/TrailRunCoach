@@ -41,6 +41,17 @@ def test_the_preferred_days_are_used_first():
     assert _day(ss, "long") == 5 and _day(ss, "quality") == 0 and _day(ss, "easy1") == 3
 
 
+def test_a_done_hard_day_keeps_the_interval_48h_away():
+    # a 高強度長跑 / unplanned Z5 run on Monday (overview passes it as hard_done): no interval on Tue
+    p = PP.Prefs(long_day="sat")
+    ss = _ss()
+    PP.place(ss, WEEK[1:], 5, p, notes=[], hard_done=[MON])
+    assert _day(ss, "quality") not in (0, 1)
+    ss2 = _ss()
+    PP.place(ss2, WEEK[1:], 5, p, notes=[])
+    assert _day(ss2, "quality") == 1            # without it: Tuesday (QUALITY_ORDER)
+
+
 def test_second_choice_then_the_default_rules():
     # Monday is not a training day here: the second choice (Wednesday)
     days = (False, True, True, True, True, True, True)

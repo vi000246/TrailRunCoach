@@ -109,10 +109,23 @@ def ep_km(w: Workout) -> float:
     return (_n(w.metrics.get("distance")) or 0.0) + (_n(w.metrics.get("climbing")) or 0.0) / 100.0
 
 
-def activity_row(w: Workout) -> dict:
+def session_of(ds: Dataset, w: Workout) -> dict:
+    """The session classifier for one activity (workout_review.classify): {type,
+    type_label, stimulus, icon}; {} when it can't be measured."""
+    from backend.engine import workout_review as WR
+    try:
+        c = WR.classify(ds, w)
+    except Exception:                       # noqa: BLE001 — a row never breaks the overview
+        return {}
+    return {k: c.get(k) for k in ("type", "type_label", "stimulus", "icon", "moderate")}
+
+
+def activity_row(w: Workout, ds: Optional[Dataset] = None) -> dict:
+    """One activity for the week / calendar views; with `ds` also its session class
+    (`session`: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 … and the dashicon)."""
     m = w.metrics
     cat = category(w)
-    return {
+    row = {
         "index": w.idx, "start": w.entry.start.isoformat(), "date": wdate(w).isoformat(),
         "category": cat, "category_label": CATEGORIES[cat][0], "sport_type": w.sport_type,
         "moving_s": moving_s(w), "duration_s": _n(m.get("duration")),
@@ -120,6 +133,9 @@ def activity_row(w: Workout) -> dict:
         "descending_m": _n(m.get("descending")), "tss": _n(m.get("tss")),
         "if": _n(m.get("if")), "np": _n(m.get("np")), "ep_km": ep_km(w),
     }
+    if ds is not None and cat in ("road", "trail", "hike"):
+        row["session"] = session_of(ds, w)
+    return row
 
 
 # ---------------------------------------------------------------------------
@@ -856,13 +872,17 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                     hard_z3 = _hard_seconds(ds, [w for w in week_ws if category(w) in ENDURANCE],
                                             int(date_to_day(monday)), int(date_to_day(sunday)), (Z3_EXPR,))
                 w = take(lambda w, h=hard_z3: h.get(w.idx, 0) >= need)
+            elif s.kind == "quality" and (QG.is_z5_variant(s.variant_key) or str(s.rung_key or "").startswith("z5")):
+                # the Zone 5 slot: only a run classified Z5 (equivalent T@VO2max ≥ 4 min; owner
+                # 2026-10-02) — a threshold climb with 10′ ≥ LTHR no longer ticks it
+                w = take(lambda w: session_of(ds, w).get("stimulus") == "z5")
             else:
                 w = take(lambda w: hard.get(w.idx, 0) >= need)
         elif s.kind == "easy":
             w = take(lambda w: category(w) in ENDURANCE)
         if w is not None:
             s.done = True
-            s.done_by = activity_row(w)
+            s.done_by = activity_row(w, ds)
             s.day = wdate(w).isoformat()
 
     # ---- place the rest on the remaining days ----------------------------
@@ -880,11 +900,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         plan_days.setdefault(s.day, []).append(s.id)
 
     long_done = next((dt.date.fromisoformat(s.day) for s in sessions if s.kind == "long" and s.done and s.day), None)
+    # hard days already done this week (Z5 / Z3 / 高強度長跑 / CP test, planned or not): the
+    # remaining interval keeps 48 h from them (徐國峰: ≥ 2 days apart; owner 2026-10-02)
+    from backend.engine import workout_review as _WR
+    hard_done = sorted({wdate(w) for w in week_ws if category(w) in ("road", "trail", "hike")
+                        and session_of(ds, w).get("type") in _WR.HARD_TYPES})
     if PR is not None:
         long_wd = PP.long_weekday(PR, long_wd)
         ds_ = [{**asdict(s), "long_day": getattr(s, "_long_day", False)} for s in todo]
         notes.extend(PP.blocked_pref_notes(PR, monday, bmap))          # a preferred weekday on a 不排課日期
-        left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done)
+        left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done, hard_done=hard_done)
         for s, d in zip(todo, ds_):
             if d["day"]:
                 put(s, dt.date.fromisoformat(d["day"]))
@@ -927,7 +952,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         elif s.kind in ("quality", "test"):
             long_day = next((dt.date.fromisoformat(x.day) for x in sessions
                              if (x.kind == "long" or AT.is_xu(asdict(x))) and x.day), None)
-            cands = [d for d in avail if long_day is None or abs((d - long_day).days) >= 2]
+            cands = [d for d in avail if (long_day is None or abs((d - long_day).days) >= 2)
+                     and all(abs((d - h).days) >= 2 for h in hard_done)]
             if not cands and lost and any(abs((d - long_day).days) <= 1 for d in avail):
                 continue          # 不排課日期 left no room: drop it rather than stack two hard days
             pick = (cands or avail)[0]
@@ -1042,7 +1068,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "phase": kind, "mode": mode, "mode_label": mode_label,
         "target": {"hours": hours, "tss": tss_target, "tss_per_hour": r_all},
         "done": {"hours": done_h, "tss": done_tss, "sessions": len(week_ws),
-                 "activities": [activity_row(w) for w in sorted(week_ws, key=lambda w: w.day)]},
+                 "activities": [activity_row(w, ds) for w in sorted(week_ws, key=lambda w: w.day)]},
         "remaining": {"hours": max(0.0, hours - done_h), "tss": max(0.0, tss_target - done_tss)},
         "why": why,
         "rules": [SRC_RAMP, SRC_TEN, SRC_31] if kind in ("base", "specific") else [SRC_BOSQUET if kind == "taper" else SRC_UA],

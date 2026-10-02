@@ -82,7 +82,9 @@ from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 # v16: `cad_windows` (steady 30-s ILR / cadence / speed / grade windows, the 步頻與衝擊 card)
 # v17: heat bands — the drift is no longer refused above 25 °C (`temp_band` / `heat` applied on read);
 # bumped so no result computed under the refusal-era code is reused
-CACHE_KEY = "workout_review_v17"
+# v18: `stim` (engine/session_stimulus.py: VO2 bouts, T@VO2max, Zone 3 time, the HR path) — the
+# session classifier of docs/research/vo2max-session-detection.md
+CACHE_KEY = "workout_review_v18"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -184,7 +186,7 @@ BASE_WEEKS = (8, 12)
 BANDS = (("閾值下", 0.88, 0.95), ("閾值", 0.95, 1.01), ("超閾值", 1.01, 1.06),
          ("VO2max", 1.06, 1.16), ("無氧", 1.16, 9.0))
 
-TYPE_LABEL = {"easy": "輕鬆跑", "long": "長時間", "quality": "品質課（間歇）",
+TYPE_LABEL = {"easy": "輕鬆跑", "long": "長時間", "quality": "間歇", "hard_long": "高強度長跑",
               "test_cp": "CP 測試", "test_aet": "AeT 飄移測試", "strength": "肌力",
               "bike": "騎車", "walk": "走路", "other": "其他"}
 TERRAIN_LABEL = {"road": "路跑", "trail": "越野", "hike": "登山健行"}
@@ -199,7 +201,25 @@ EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test",
                   "interval_hr", "wprime_battery",
                   # 跑姿依坡度／隨疲勞 (form_bins)
                   "form_grades", "form_work", "form_cadence")
-SUGGESTED = {"easy": 1, "long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
+SUGGESTED = {"easy": 1, "long": 1, "hard_long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
+# the session classifier's labels (docs/research/vo2max-session-detection.md §3.5; owner 2026-10-02)
+STIM_LABEL = {"z5": "Z5 間歇", "z3": "Z3 閾值"}
+HARD_LONG_HIKE = "高強度長天"
+MODERATE_LABEL = "中強度跑"           # informational: avg HR > AeT+3 without a Zone 3 / Zone 5 stimulus
+HARD_TYPES = ("quality", "hard_long", "test_cp")   # hard days (48 h apart; plan_prefs.place)
+
+
+def type_icon(typ: str, stimulus: Optional[str] = None, moderate: bool = False) -> str:
+    """The dashicons.js name for a session class (always shown next to its label)."""
+    if typ == "quality":
+        return "z5" if stimulus == "z5" else "z3"
+    if typ.startswith("test"):
+        return "test"
+    if typ in ("long", "hard_long"):
+        return "long"
+    if typ == "strength":
+        return "strength"
+    return "intensity" if moderate else "easy"
 
 
 # ---------------------------------------------------------------------------
@@ -1392,42 +1412,45 @@ def compare(x: Optional[float], b: dict) -> Optional[str]:
     return "within"
 
 
-def session_type(category: str, moving_s: float, hard_s: float, title: str = "",
-                 plan_test: Optional[dict] = None, cp_detected: bool = False,
-                 aet_steady: bool = False, long_target_s: Optional[float] = None,
-                 hard_power_s: Optional[float] = None, n_efforts: Optional[int] = None,
-                 easy_hr: bool = False, plan_aet: bool = False) -> str:
-    """The plan's order: category → the plan's AeT-test session (`plan_aet`,
-    done_by) → test_cp → test_aet (title, a plan AeT row that day, a ≥ 55-min
-    steady run) → quality → long → easy.
+def session_class(category: str, moving_s: float, title: str = "",
+                  plan_test: Optional[dict] = None, cp_detected: bool = False,
+                  aet_steady: bool = False, long_target_s: Optional[float] = None,
+                  plan_aet: bool = False, stimulus: Optional[str] = None) -> tuple[str, Optional[str]]:
+    """(type, stimulus). The plan's order: category → the plan's AeT-test session
+    (`plan_aet`, done_by) → test_cp → test_aet (title, a plan AeT row that day, a
+    ≥ 55-min steady run) → the stimulus → long → easy.
 
-    quality = ≥ HARD_SESSION_S at/above threshold (overview.HARD_EXPRS). With a
-    power stream, time above LTHR alone isn't enough: an easy run whose HR
-    drifted over LTHR has no work bouts, so it also needs one detected effort
-    (or the time at ≥ 95 % CP). `hard_s` = max(HR, power) seconds."""
+    `stimulus` = session_stimulus.verdict(...)["stimulus"] (docs/research/
+    vo2max-session-detection.md §3.5):
+      "z5"  equivalent T@VO2max ≥ 4 min (road / trail only)  → quality (Z5 間歇), long runs too
+      "z3"  Zone 3 ≥ 10 min: ≥ 75 min → hard_long (高強度長跑 / 長天: not an interval session,
+            a hard day), else quality (Z3 閾值)
+    The old rule (≥ 10 min HR ≥ LTHR or power ≥ 95 % CP) counted threshold climbs and
+    drifting runs as intervals: 100 of 188 runs in the owner's last 12 months."""
     if category in ("strength", "bike", "walk", "other"):
-        return category
+        return category, None
     plan_test = plan_test or {}
     if plan_aet:
-        return "test_aet"                  # the plan says this activity was its AeT test
+        return "test_aet", None            # the plan says this activity was its AeT test
     if AET_TITLE.search(title or "") and not cp_detected:
-        return "test_aet"                  # 「AeT 飄移測試」 (engine/aet_test.py), not a CP test
+        return "test_aet", None            # 「AeT 飄移測試」 (engine/aet_test.py), not a CP test
     if plan_test.get("cp") is not None or re.search(r"\bCP\b|測試", title or "") or cp_detected:
-        return "test_cp"
+        return "test_cp", None
     if plan_test.get("aethr") is not None or (aet_steady and moving_s >= TEST_AET_MIN_S):
-        return "test_aet"
-    need = _hard_session_s()
-    # hikes count too (the athlete's call, 2026-09-30): a sustained climb above
-    # threshold is a quality stimulus for 百岳. A session whose average HR stayed
-    # ≤ AeT+3 was easy even if short rises spiked HR or power.
-    runs = category in QUALITY_CATEGORIES and not easy_hr
-    if runs and hard_power_s is not None and hard_power_s >= need:
-        return "quality"
-    if runs and hard_s >= need and (n_efforts is None or n_efforts >= 1):
-        return "quality"
+        return "test_aet", None
+    if category in QUALITY_CATEGORIES:
+        if stimulus == "z5" and category != "hike":
+            return "quality", "z5"
+        if stimulus == "z3":
+            return ("hard_long" if moving_s >= LONG_MIN_S else "quality"), "z3"
     if moving_s >= LONG_MIN_S or (long_target_s and moving_s >= 0.8 * long_target_s):
-        return "long"
-    return "easy"
+        return "long", None
+    return "easy", None
+
+
+def session_type(category: str, moving_s: float, title: str = "", **kw) -> str:
+    """session_class's type only."""
+    return session_class(category, moving_s, title, **kw)[0]
 
 
 def streak_of(drifts: Sequence[Optional[float]], good: float = DRIFT_GOOD) -> int:
@@ -1459,9 +1482,6 @@ def next_quality(last: Optional[dict]) -> tuple[int, int]:
     return 3, 8
 
 
-def _hard_session_s() -> float:
-    from backend.engine.overview import HARD_SESSION_S
-    return HARD_SESSION_S
 
 
 # ---------------------------------------------------------------------------
@@ -1643,6 +1663,12 @@ def _measure(ds, w) -> Optional[dict]:
     out["climbs"] = climbs
     rg = _rgrade(ds, w, s)
     out["grade_bins"] = _grade_rows(ds, w, s, rg)
+    # the session classifier's per-run part (engine/session_stimulus.py): cadence is stored per
+    # leg (rpm) like form_drift's ×2 below
+    from backend.engine import session_stimulus as SS
+    out["stim"] = SS.measure(t, s["hr"], s["power"], s["speed"],
+                             None if s["cadence"] is None else np.asarray(s["cadence"], dtype=float) * 2.0,
+                             rg, cp, lthr, cat) if cat in QUALITY_CATEGORIES else None
     hp = [c["hr_per_100m"] for c in climbs if c.get("hr_per_100m")]
     out["hr_per_100m"] = statistics.median(hp) if hp else None
     stryd = s["ilr"] is not None or s["lss"] is not None
@@ -1868,6 +1894,55 @@ def _looks_like_quick(m: dict) -> bool:
     return not lthr or q.get("hr_peak") is None or q["hr_peak"] >= lthr
 
 
+def hr_peak(ds, w) -> tuple[Optional[float], str]:
+    """(HRpeak, source) on the activity date for the HR path: the plan's 最大心率
+    (thresholds `mhr`) when set, else the 3rd-highest per-run 60-s HR peak of the
+    road / trail runs in the 365 days before (session_stimulus.hr_peak; the top
+    ones are optical errors — 216 / 211 bpm in the owner's data)."""
+    from backend.engine import session_stimulus as SS
+    day = _wdate(w)
+    plan = getattr(ds, "plan", None)
+    try:
+        v = _f(plan.threshold_on("mhr", day)) if plan is not None else None
+    except Exception:                       # noqa: BLE001
+        v = None
+    if v:
+        return v, "plan"
+    memo = getattr(ds, "memo", None)
+    key = ("wr_hr_peaks", len(getattr(ds, "workouts", []) or []))
+    peaks = memo.get(key) if isinstance(memo, dict) else None
+    if peaks is None:
+        from backend.engine.overview import category
+        peaks = []
+        for p in getattr(ds, "workouts", []) or []:
+            if category(p) not in ("road", "trail"):
+                continue
+            pm = measure(ds, p) or {}
+            pk = (pm.get("stim") or {}).get("hr_peak60")
+            if pk:
+                peaks.append((math.floor(p.day), float(pk)))
+        if isinstance(memo, dict):
+            memo[key] = peaks
+    d = math.floor(w.day)
+    return SS.hr_peak([pk for dd, pk in peaks if d - SS.HRPEAK_DAYS <= dd < d]), "observed"
+
+
+def _stimulus(ds, w, m: dict, cat: str) -> dict:
+    """session_stimulus.verdict for this run; HRpeak is looked up only when the HR
+    path could change the answer (it reads every run's measure once per dataset)."""
+    from backend.engine import session_stimulus as SS
+    st = m.get("stim")
+    easy_hr = bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN)
+    hp, src = None, None
+    if st and cat in ("road", "trail") and (st.get("t_vo2_power_s") or 0) < SS.Z5_MIN_S \
+            and any((st.get("hr_path") or {}).get("secs") or []):
+        hp, src = hr_peak(ds, w)
+    v = SS.verdict(st, cat, hp, easy_hr)
+    return {**v, "hrpeak_source": src, "easy_hr": easy_hr,
+            "bouts": (st or {}).get("vo2_bouts") or [], "top_pct_cp": (st or {}).get("top_pct_cp"),
+            "power_valid_share": (st or {}).get("power_valid_share")}
+
+
 def classify(ds, w, m: Optional[dict] = None) -> dict:
     """Session type, terrain and phase on the activity date. The AeT test is
     recognised from the plan first (scheduled_aet_test: a done AeT-test
@@ -1907,12 +1982,9 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     # mFTP — now it is only a hint (`cp_hint`), and picks the protocol of a marked test
     cp_detected = bool(sched) or race
     plan_test = _plan_test(ds, day)
-    typ = session_type(cat, m.get("moving_s") or 0.0, m.get("hard_s") or 0.0, title,
-                       plan_test, cp_detected, aet_steady,
-                       hard_power_s=m.get("hard_power_s"),
-                       n_efforts=len(m.get("efforts") or []) if m.get("hard_power_s") is not None else None,
-                       easy_hr=bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN),
-                       plan_aet=aet_sched is not None)
+    stim = _stimulus(ds, w, m, cat) if cat in QUALITY_CATEGORIES else None
+    typ, stimulus = session_class(cat, m.get("moving_s") or 0.0, title, plan_test, cp_detected, aet_steady,
+                                  plan_aet=aet_sched is not None, stimulus=(stim or {}).get("stimulus"))
     protocol = match = None
     user_test = False
     if runs and typ not in ("test_cp", "test_aet"):
@@ -1945,9 +2017,20 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
                                                             "standard" if (m.get("cp_bouts") or {}).get("standard")
                                                             else "quick")
             match = match or ("title" if CPP.protocol_of({"title": title}) else "pattern")
+    if typ in ("test_cp", "test_aet"):
+        stimulus = None
     terrain = cat if cat in TERRAIN_LABEL else None
-    label = "輕鬆健行" if typ == "easy" and cat == "hike" else TYPE_LABEL.get(typ, typ)
-    return {"type": typ, "type_label": label, "terrain": terrain,
+    moderate = typ == "easy" and bool(stim) and not stim.get("easy_hr") and bool(m.get("aet") and m.get("avg_hr"))
+    if typ == "quality":
+        label = STIM_LABEL.get(stimulus or "", TYPE_LABEL["quality"])
+    elif typ == "hard_long":
+        label = HARD_LONG_HIKE if cat == "hike" else TYPE_LABEL["hard_long"]
+    elif moderate:
+        label = MODERATE_LABEL if cat != "hike" else "中強度健行"
+    else:
+        label = "輕鬆健行" if typ == "easy" and cat == "hike" else TYPE_LABEL.get(typ, typ)
+    return {"type": typ, "type_label": label, "terrain": terrain, "stimulus": stimulus,
+            "moderate": moderate, "stim": stim, "icon": type_icon(typ, stimulus, moderate),
             "terrain_label": TERRAIN_LABEL.get(terrain, ""), "category": cat,
             "phase": phase, "phase_label": PHASE_LABEL.get(phase, "未設定周期"),
             "date": day.isoformat(), "protocol": protocol, "test_match": match,
@@ -2049,7 +2132,7 @@ def last_quality(ds, today: dt.date, days: int = 28) -> Optional[dict]:
         if (_f(w.metrics.get("duration")) or 0) < 1200:
             continue
         m = measure(ds, w)
-        if not m or (m.get("hard_s") or 0) < _hard_session_s():
+        if not m:
             continue
         c = classify(ds, w, m)
         if c["type"] != "quality":
@@ -2186,6 +2269,49 @@ def interval_lines(m: dict) -> list[str]:
     if len(lines) < 3 and b and b[0] in ("閾值下", "閾值") and aet and lthr and hr and aet <= hr < lthr:
         lines.append(f"功率有到、心率 {hr:.0f} 在 AeT–LTHR 之間：屬於閾值下")
     return lines[:3]
+
+
+def stimulus_lines(c: dict) -> list[str]:
+    """Why this run got its class (session_stimulus.verdict), in plain words."""
+    st = c.get("stim") or {}
+    if not st:
+        return []
+    from backend.engine import session_stimulus as SS
+    eq, tp, th = st.get("t_vo2_eq_s") or 0.0, st.get("t_vo2_power_s") or 0.0, st.get("t_vo2_hr_s") or 0.0
+    out = [f"等效 T@VO2max {eq / 60:.1f} 分（≥ {SS.Z5_MIN_S // 60} 分算 5 區，目標 ≥ {SS.Z5_GOAL_S // 60} 分）"]
+    parts = []
+    if tp:
+        parts.append(f"功率 {tp / 60:.1f} 分")
+    if th:
+        parts.append(f"心率 {th / 60:.1f} 分 ÷ {SS.HR_FACTOR}")
+    if parts:
+        out[0] += "：" + " + ".join(parts)
+    bouts = st.get("bouts") or []
+    if bouts:
+        out.append("VO2 段：" + "、".join(f"{b['duration_s'] / 60:.1f} 分 @ {b['pct_cp'] * 100:.0f}% CP" for b in bouts[:6]))
+    elif st.get("top_pct_cp") and c.get("category") != "hike":
+        out.append(f"沒有 VO2 段：最高的 30 秒功率 {st['top_pct_cp'] * 100:.0f}% CP（要 ≥ 106% 撐 2 分，或 ≥ 103% 撐 5 分）")
+    out.append(f"Zone 3 {(st.get('z3_s') or 0) / 60:.0f} 分（≥ {SS.Z3_NEED_S // 60} 分算閾值刺激）")
+    if th or st.get("hrpeak_source"):
+        src = "計畫的最大心率" if st.get("hrpeak_source") == "plan" else "365 天內第 3 高的 60 秒心率"
+        out.append(f"心率門檻 {_num(st.get('hr_thr'))} bpm = 93% × {_num(st.get('hrpeak'))}（{src}；手腕心率只當替代）")
+    if c.get("type") == "hard_long":
+        out.append("長天裡有閾值強度：不算間歇次數，算硬課（和下一堂強度課隔 48 小時）")
+    if c.get("category") == "hike":
+        out.append("健行／百岳不自動判 5 區（心率受海拔、負重影響）；要算就標「當作間歇判讀」")
+    if st.get("easy_hr") and c.get("stimulus") == "z5":
+        out.append("平均心率 ≤ AeT+3，但功率證據 ≥ 4 分：照功率算")
+    return out
+
+
+def stimulus_tip(c: dict) -> Optional[str]:
+    """The type card's ? text: the reasons plus the sources (103 % is 推估)."""
+    lines = stimulus_lines(c)
+    if not lines:
+        return None
+    from backend.engine import session_stimulus as SS
+    return "\n".join(lines + ["", "來源：", SS.SRC["t_vo2"], SS.SRC["bouts"], SS.SRC["lag"], SS.SRC["hr"],
+                              SS.SRC["z3"], SS.SRC["trail"], SS.SRC["hrpeak"]])
 
 
 def cp_headline(ev: dict) -> str:
@@ -2408,11 +2534,25 @@ def _durability_card(ds, w) -> Optional[dict]:
                      f"≥ 95% 撐得住；90–95% 開始累（95% 推估）；< 90% 補給或配速要調整。詳細在「配速與耐久」。")
 
 
+def _stimulus_card(c: dict) -> dict:
+    """「VO2max 刺激」 for a Z5 session (equivalent T@VO2max vs the 10-min goal), 「閾值刺激」
+    (Zone 3 minutes) for a Z3 session or a hard long run."""
+    from backend.engine import session_stimulus as SS
+    st = c.get("stim") or {}
+    tip = stimulus_tip(c)
+    if c.get("stimulus") == "z5":
+        eq = st.get("t_vo2_eq_s") or 0.0
+        return _card("status", id="vo2", icon="z5", label="VO2max 刺激", value=f"{eq / 60:.1f}", unit="分",
+                     sub="達到目標（≥ 10 分）" if eq >= SS.Z5_GOAL_S else f"有刺激，目標 ≥ {SS.Z5_GOAL_S // 60} 分",
+                     level="good" if eq >= SS.Z5_GOAL_S else "info", tip=tip)
+    return _card("status", id="z3", icon="z3", label="閾值刺激", value=f"{(st.get('z3_s') or 0) / 60:.0f}", unit="分",
+                 sub="沒有到 VO2max" if c.get("category") != "hike" else "健行不判 5 區", level="info", tip=tip)
+
+
 def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]) -> list[dict]:
     typ = c["type"]
-    cards = [_card("tag", id="type", icon=("z5" if typ == "quality" else "test" if typ.startswith("test") else
-                                          "long" if typ == "long" else "strength" if typ == "strength" else "easy"),
-                   text=c["type_label"])]
+    cards = [_card("tag", id="type", icon=c.get("icon") or type_icon(typ), text=c["type_label"],
+                   tip=stimulus_tip(c))]
     if c.get("terrain_label"):
         cards.append(_card("tag", id="terrain", icon="climb" if c["terrain"] in ("trail", "hike") else "distance",
                            text=c["terrain_label"]))
@@ -2447,7 +2587,9 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
                                level="warn" if high else "good",
                                tip=f"心率超過 AeT+3（{_num((m.get('aet') or 0) + AET_MARGIN)} bpm）的時間佔 {sh * 100:.0f}%；"
                                    f"輕鬆跑、長跑 ≤ 10% 才算壓在有氧區。"))
-    elif typ == "quality":
+    if typ in ("quality", "hard_long") and c.get("stim"):
+        cards.append(_stimulus_card(c))         # Z5 / Z3: the T@VO2max and Zone 3 numbers behind the label
+    if typ == "quality":
         iv = m.get("intervals") or {}
         n, inb = iv.get("n") or 0, iv.get("in_band")
         lvl = "na" if not n else "info" if inb is None or not iv.get("band") else "good" if inb == n else "warn"
@@ -2569,7 +2711,9 @@ def _summary(ds, w, m, c, base):
     elif typ in ("easy", "long"):
         lines = aerobic_lines(typ, m)
     elif typ == "quality":
-        lines = interval_lines(m)
+        lines = stimulus_lines(c)[:1] + interval_lines(m)
+    elif typ == "hard_long":
+        lines = stimulus_lines(c)
     else:
         ev = cp_eval(ds, w, m, c)
         lines = cp_lines(ev, m.get("avg_power") is not None)
