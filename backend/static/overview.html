@@ -877,7 +877,8 @@ $("wk-ic").innerHTML = I("time");
   USE_POWER = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
   await loadStatus().catch(fail("kpis"));
   loadZ5().catch(fail("z5"));
-  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
+  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
+  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
 })();
 </script>
 </body>
