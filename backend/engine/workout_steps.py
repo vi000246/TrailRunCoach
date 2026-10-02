@@ -1257,12 +1257,13 @@ def templates(prefs=None) -> dict:
                 ok, _why = IL.equivalent(v)
                 ladder.append({"key": v.key, "label": f"{IL.RUNG_NAME[rung]} {IL.title(v)} · {IL.rest_text(v)}" + ("（標準）" if v.canonical else ""),
                                "title": f"{IL.CLASS_LABEL[v.cls]} {IL.structure(v)}", "src": f"間歇庫 {IL.RUNG_NAME[rung]}（interval-prescription.md）",
-                               "items": main_set(v), "equiv": ok, "src_kind": v.src_kind, "full": from_variant(v, "std")["items"]})
+                               "items": main_set(v), "equiv": ok, "src_kind": v.src_kind, "full": from_variant(v, "std")["items"],
+                               "variant": True, "rung": v.rung})
         for v in IL.NON_EQUIV:
             if WT.sub_of(v.mid) == sub:
                 ladder.append({"key": v.key, "label": f"{IL.title(v)}（每趟 < 2 分，不算進階）", "title": IL.title(v),
                                "src": "間歇庫（非同等）", "items": main_set(v), "equiv": False, "src_kind": v.src_kind,
-                               "full": from_variant(v, "std")["items"]})
+                               "full": from_variant(v, "std")["items"], "variant": True, "rung": v.rung})
         g("quality", "間歇庫（進階階梯）", ladder, sub)
     g("test", "有出處的課表", [r for t, r in lib if t.cat == "test"])
     other = []
