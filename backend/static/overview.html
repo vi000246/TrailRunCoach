@@ -220,8 +220,7 @@ ol.z5steps > li > div { min-width: 0; }
     <section>
       <h2>還缺什麼 <span class="meta">依周期排優先順序</span></h2>
       <div id="actions"><div class="loading">…</div></div>
-      <!-- due CP / AeT tests: suggested, the athlete picks the day (never auto-scheduled) -->
-      <div id="tsug" hidden></div>
+      <!-- due CP / AeT tests, B2B weekends, zone retests: the shared floating box (static/suggestions.js) -->
     </section>
     <!-- Zone 5 opening process (quality_gate.z5_card): next to the week plan, whose interval
          session is Zone 3 or Zone 5 because of it; the season history is the 基礎期 chart -->
@@ -490,6 +489,7 @@ async function loadB2B() {
   $("b2b-sub").textContent = E ? `${E.name} ${md(E.start)}（${E.days > 1 ? E.days + " 天" : "單日"}）` : "";
   const W = c.this_week, out = [];
   if (W && W.due) out.push(`<div class="z5note"><span class="lvl good">本週</span> B2B 第 ${W.index} 次（${W.days} 天：${(W.minutes || []).join(" ＋ ")} 分）· ${esc((W.why || []).join("；"))}${src(c.rules.when)}</div>`);
+  else if (W && W.suggest) out.push(`<div class="meta">本週建議 B2B（${(W.minutes || []).join(" ＋ ")} 分）：還沒排，在右下角的建議框挑兩天再排入${src(c.rules.when)}</div>`);
   else if (W && W.post) out.push(`<div class="z5note"><span class="lvl info">本週</span> B2B 後的輕鬆日到 ${md(W.post.until)}：不排間歇、不改恢復週${src(c.rules.post)}</div>`);
   else if (W && W.blocked && W.blocked.length && E && E.qualifies) out.push(`<div class="meta">本週不排：${esc(W.blocked[0])}${src(c.rules.when)}</div>`);
   const ahead = c.planned.filter((p) => !p.this_week);
@@ -830,32 +830,13 @@ document.addEventListener("click", (e) => {
 })();
 
 const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：${esc(e.message)}</p>`; };
-// due CP / AeT tests (api/plan_sessions test-suggestions): pick a suitable day, then 排入
-async function loadSug() {
-  const r = await sj("GET", `${PAPI}/test-suggestions`);
-  const box = $("tsug"), sg = r.suggestions || [];
-  box.hidden = !sg.length;
-  const wdz = (iso) => "日一二三四五六"[new Date(iso + "T00:00:00").getDay()];
-  box.innerHTML = sg.map((x) => `<div class="loadbox" style="margin-top:8px"><b>🧪 ${esc(x.label)}</b><br>${x.days.length
-    ? `<select aria-label="測試日期">${x.days.map((d) => `<option value="${esc(d.day)}">${md(d.day)}（週${wdz(d.day)}）${d.note ? " · " + esc(d.note) : ""}</option>`).join("")}</select>
-       <button type="button" data-sug="${esc(x.kind)}">排入</button>` : `<span class="meta">兩週內沒有適合的日子</span>`}
-    <span class="meta">${esc(x.title)} · ${x.minutes} 分</span></div>`).join("");
-}
-$("tsug").addEventListener("click", async (e) => {
-  const b = e.target.closest("button[data-sug]");
-  if (!b) return;
-  b.disabled = true;
-  try {
-    const day = b.parentElement.querySelector("select").value;
-    const s = await sj("POST", `${PAPI}/test-suggestions/schedule`, { kind: b.dataset.sug, day });
-    b.parentElement.innerHTML = `✓ 已排入「${esc(s.title)}」到 ${md(day)}（<a href="/api/v1/overview/plan/schedule/page">到課表看</a>）`;
-  } catch (err) { b.disabled = false; b.insertAdjacentHTML("afterend", ` <span class="err">${esc(err.message)}</span>`); }
-});
+// due CP / AeT tests, B2B weekends, zone retests: the shared floating box (static/suggestions.js, via
+// shell.js); after 排入 the week view reloads
+addEventListener("suggestions:changed", () => { loadWeek().then(() => loadPlan()).catch(() => {}); });
 (async () => {
   if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
   await loadStatus().catch(fail("hero"));
   loadZ5().catch(fail("z5"));
-  loadSug().catch(() => {});
   loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
   loadLC().catch(() => {});                   // 負重訓練: likewise
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);

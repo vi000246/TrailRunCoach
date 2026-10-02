@@ -99,18 +99,22 @@ def test_matches_the_single_activity_card_and_counts_moving_time_only():
     assert PZ.compute(ds2, B, E, _q(zkind="hr"))["total_s"] == len(hr) - 300
 
 
-def test_sport_filter_road_by_default_trail_and_hike_on_request():
+def test_sport_filter_road_and_trail_by_default_hike_on_request():
     d = dt.date(2026, 9, 10)
     ds = DatedDS([_act(d, [130] * 100),
                   _act(d, [130] * 200, tags=("runningtrail",), sport_type="trail running"),
                   _act(d, [130] * 400, sport="walk", tags=("hiking",), sport_type="hiking"),
                   _act(d, [130] * 800, sport="walk", tags=(), sport_type="walking")])
-    assert PZ.compute(ds, B, E, _q())["total_s"] == 100
-    assert PZ.compute(ds, B, E, _q(zsports="road,trail"))["total_s"] == 300
+    res = PZ.compute(ds, B, E, _q())
+    assert res["total_s"] == 300 and res["sports"] == ["road", "trail"]   # 路跑 + 越野跑 by default, no hike
+    assert PZ.compute(ds, B, E, _q(zsports="road"))["total_s"] == 100
+    assert PZ.compute(ds, B, E, _q(zsports="trail"))["total_s"] == 200
     res = PZ.compute(ds, B, E, _q(zsports="road,trail,hike"))
     assert res["total_s"] == 700 and res["n_used"] == 3            # the hike uses the run LTHR; walking never counts
     assert res["sports"] == ["road", "trail", "hike"]
-    assert PZ.compute(ds, B, E, _q(zsports="bogus"))["sports"] == ["road"]
+    assert PZ.compute(ds, B, E, _q(zsports="bogus"))["sports"] == ["road", "trail"]
+    assert PZ.parse_sports(None) == PZ.DEFAULT_SPORTS == ("road", "trail")
+    assert "hike" not in PZ.DEFAULT_SPORTS
 
 
 def test_power_models_skip_watch_power_and_default_to_palladino():

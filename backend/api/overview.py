@@ -98,10 +98,12 @@ def pmc(begin: Optional[str] = None, end: Optional[str] = None):
 def weekplan():
     ds = _dataset()
     today = O.day_to_date(ds.today)
+    from backend.engine import b2b as B2B
     from backend.engine import blackouts as BL
     from backend.engine import plan_prefs as PP
-    # same 課表偏好 and 不排課日期 as the 課表 page
-    return O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load())
+    # same 課表偏好, 不排課日期 and accepted B2B weekends as the 課表 page
+    return O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load(),
+                       b2b_accepted=B2B.load_accepted())
 
 
 @router.get("/z5")

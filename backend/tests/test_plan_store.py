@@ -436,6 +436,98 @@ def test_api_tests_are_suggested_and_put_in_by_the_user(monkeypatch):
         assert [t["protocol"] for t in cal_t["aet"]] == list(AT.PROTOCOLS)
 
 
+def _b2b_sg(week="2026-09-28"):
+    return {"id": f"b2b:{week}", "type": "b2b", "week": week, "title": "建議這週做一次 B2B", "reason": "上週是恢復週",
+            "minutes": [150, 100], "long_day": "2026-10-04", "event": "嘉明湖", "event_days": 3,
+            "event_kind": "baiyue", "weeks_out": 9, "help": "（推估）", "src": ""}
+
+
+def test_api_suggestion_box_b2b_accept_cancel_and_dismiss(monkeypatch):
+    """The floating box (engine/suggestions.py): a B2B is only suggested; 排入 stores the two
+    days as the user's sessions + the accepted entry; deleting a day cancels it (declined for
+    the week); 不要 / ✕ persist server-side; zone updates are information."""
+    from backend.engine import plan_prefs as PP
+    monkeypatch.setattr(PP, "load", lambda user_id=1: PP.Prefs())       # never the real settings
+    with Env(monkeypatch) as e:
+        e.inp["cur"]["b2b_suggestion"] = _b2b_sg()
+        e.inp["zone"] = {"suggestions": [], "events": [
+            {"id": "test_applied", "kind": "zone_update", "field": "cp", "date": "2026-09-25", "value": 250.0,
+             "text": "CP 250 W（測試 2026-09-25）：從 2026-09-25 起區間已重算"}]}
+        e.c.get(f"{API}/sessions")
+        r = e.c.get(f"{API}/suggestions").json()
+        by = {s["id"]: s for s in r["suggestions"]}
+        b = by["b2b:2026-09-28"]
+        assert b["pick"] == "pair" and b["options"] and all(o["day"] >= "2026-09-30" for o in b["options"])
+        assert b["options"][0]["day"] == "2026-10-03" and b["options"][0]["end"] == "2026-10-04"   # weekend first
+        assert by["zone_update:cp:2026-09-25"]["pick"] is None
+        assert e.c.post(f"{API}/suggestions/accept", json={"id": b["id"], "day": "2026-09-01"}).status_code == 400
+        out = e.c.post(f"{API}/suggestions/accept", json={"id": b["id"], "day": "2026-10-03"}).json()
+        d1, d2 = out["sessions"]
+        assert (d1["day"], d2["day"]) == ("2026-10-03", "2026-10-04") and d1["origin"] == d2["origin"] == "custom"
+        assert d1["kind"] == d2["kind"] == "long" and d1["title"].startswith("B2B 第 1 天") and d2["minutes"] == 100
+        assert out["accepted"]["uids"] == [d1["uid"], d2["uid"]]
+        from backend.engine import b2b as B2B
+        from backend.settings.repository import SettingsRepository
+        acc = run(SettingsRepository(e.db).get(B2B.ACCEPTED_KEY))
+        assert acc[0]["days"] == ["2026-10-03", "2026-10-04"] and acc[0]["minutes"] == [150, 100]
+        ids = {s["id"] for s in e.c.get(f"{API}/suggestions").json()["suggestions"]}
+        assert "b2b:2026-09-28" not in ids                                       # accepted: gone
+        # the auto-replan keeps them (user sessions)
+        e.c.post(f"{API}/reconcile")
+        live = {s["uid"] for s in e.c.get(f"{API}/sessions").json()["sessions"]}
+        assert {d1["uid"], d2["uid"]} <= live
+        # deleting day 2 cancels the B2B: day 1 goes too, declined for this week
+        assert e.c.delete(f"{API}/sessions/{d2['uid']}").json()["b2b_cancelled"]
+        live = {s["uid"] for s in e.c.get(f"{API}/sessions").json()["sessions"]}
+        assert not {d1["uid"], d2["uid"]} & live
+        assert run(SettingsRepository(e.db).get(B2B.ACCEPTED_KEY)) == []
+        dis = run(SettingsRepository(e.db).get("plan.suggestions.dismissed"))
+        assert dis["b2b:2026-09-28"]["action"] == "declined"
+        assert "b2b:2026-09-28" not in {s["id"] for s in e.c.get(f"{API}/suggestions").json()["suggestions"]}
+        # ✕ on the zone update: persisted, not shown again
+        assert e.c.post(f"{API}/suggestions/dismiss", json={"id": "zone_update:cp:2026-09-25"}).status_code == 200
+        assert e.c.get(f"{API}/suggestions").json()["suggestions"] == []
+        assert e.c.post(f"{API}/suggestions/dismiss", json={"id": "x", "action": "nope"}).status_code == 400
+        # the update no longer computed: its dismissal is pruned (a new one would show again)
+        e.inp["zone"] = {"suggestions": [], "events": []}
+        e.c.get(f"{API}/suggestions")
+        dis = run(SettingsRepository(e.db).get("plan.suggestions.dismissed"))
+        assert "zone_update:cp:2026-09-25" not in dis and "b2b:2026-09-28" in dis     # this week's B2B stays
+
+
+def test_api_suggestion_box_tests_and_zone_retests(monkeypatch):
+    from backend.engine import aet_test as AT
+    from backend.engine import plan_prefs as PP
+    monkeypatch.setattr(PP, "load", lambda user_id=1: PP.Prefs(aet_test_protocol="ua40"))
+    with Env(monkeypatch) as e:
+        a = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 50, "ua40")
+        e.inp["cur"]["test_suggestions"] = [{"kind": "cp", "protocol": "quick", "title": "CP 測試", "minutes": 40,
+                                             "reason": "門檻過期", "replaces_long": False,
+                                             "session": {"kind": "test", "title": "CP 測試 3 分＋12 分",
+                                                         "minutes": 40, "protocol": "quick"}}]
+        e.inp["zone"] = {"events": [], "suggestions": [
+            {"id": "cool_season", "kind": "test_suggestion", "tests": ["tt30", "aet"], "title": "天氣轉涼了",
+             "text": "清晨 < 25 °C", "earliest": None, "detected": "2026-09-27", "conditions": ["x：y"],
+             "caveat": "手腕心率", "estimate": True, "source": "s", "evidence": {}}]}
+        e.c.get(f"{API}/sessions")
+        by = {s["id"]: s for s in e.c.get(f"{API}/suggestions").json()["suggestions"]}
+        t = by["test:cp:2026-09-28"]
+        assert t["pick"] == "day" and t["options"]
+        z = by["zone:cool_season"]
+        assert z["pick"] == "test_day" and [x["key"] for x in z["tests"]] == ["aet"]      # tt30: described only
+        assert "30 分鐘獨跑測試" in z["help"] and "推估" in z["help"]
+        assert z["tests"][0]["session"]["kind"] == "test" and "40" in z["tests"][0]["label"]   # 課表偏好 UA 40
+        day = z["tests"][0]["options"][0]["day"]
+        assert e.c.post(f"{API}/suggestions/accept", json={"id": "zone:cool_season", "day": day}).status_code == 400
+        s = e.c.post(f"{API}/suggestions/accept", json={"id": "zone:cool_season", "day": day, "test": "aet"}).json()
+        assert s["sessions"][0]["kind"] == "test" and AT.is_aet_session(s["sessions"][0])
+        # 不要 on the CP test: hidden for this week, also from the 課表 page's own list
+        e.c.post(f"{API}/suggestions/dismiss", json={"id": "test:cp:2026-09-28", "action": "declined"})
+        assert e.c.get(f"{API}/suggestions").json()["suggestions"] == []
+        assert e.c.get(f"{API}/test-suggestions").json()["suggestions"] == []
+        assert a["minutes"] > 0
+
+
 def test_push_scopes_and_idempotency(monkeypatch):
     with Env(monkeypatch) as e:
         pv = e.c.get(f"{API}/push-coros/preview?scope=day&day=2026-10-01").json()

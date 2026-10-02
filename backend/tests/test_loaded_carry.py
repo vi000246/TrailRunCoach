@@ -322,7 +322,7 @@ def test_me_replaces_strength_with_johnstons_progression():
 # the generator end to end (the synthetic athlete of test_b2b, a synthetic 3-day 嘉明湖)
 # ---------------------------------------------------------------------------
 
-def _week(event_start="2026-12-06", days=3, today=None, aethr=None, prefs=None, kind="baiyue"):
+def _week(event_start="2026-12-06", days=3, today=None, aethr=None, prefs=None, kind="baiyue", accepted=None):
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine.planning import Threshold
@@ -336,11 +336,18 @@ def _week(event_start="2026-12-06", days=3, today=None, aethr=None, prefs=None, 
         plan.thresholds.append(Threshold("2026-08-02", aethr=aethr, aethr_method="manual"))
     ds.plan = plan
     st = Status(ds, plan, today, prefs=PP.Prefs()).compute()
-    return ds, plan, st, O.week_plan(ds, st, today, prefs=prefs)
+    return ds, plan, st, O.week_plan(ds, st, today, prefs=prefs, b2b_accepted=accepted)
 
 
-def test_week_plan_puts_the_stage_1_pack_on_the_b2b_weekend():
+def test_week_plan_puts_the_stage_1_pack_on_the_accepted_b2b_weekend_only():
+    # a B2B only suggested (not accepted): no day 2 — the long day carries the pack on its own
     _, _, _, wp = _week()
+    assert wp["b2b_suggestion"] and not (wp["b2b"] or {}).get("due")
+    by = {s["id"]: s for s in wp["sessions"]}
+    assert "long2" not in by and by["long"]["pack_kg"] == 3.1
+    # accepted on Sat + Sun: both days carry it, no machine session that week
+    acc = [{"week": "2026-09-28", "days": ["2026-10-03", "2026-10-04"], "minutes": [180, 120]}]
+    _, _, _, wp = _week(accepted=acc)
     lc = wp["loaded_carry"]
     assert lc["step"] == 1 and lc["weeks_out"] == 10 and lc["stage_kg"] == 3.1          # 5 % of 62 kg
     by = {s["id"]: s for s in wp["sessions"]}
