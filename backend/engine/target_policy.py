@@ -100,7 +100,7 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     if base is None:
         base = _aet_basis(s)
     basis = base
-    why = f"自動：{ {'easy': '輕鬆跑', 'long': '長跑', 'trail_long': '山路長天', 'hike': '健行', 'interval': '間歇', 'hill': '爬坡重複', 'climb': '長爬坡', 'downhill': '下坡練習', 'cp_test': 'CP 測試', 'aet_test': 'AeT 測試', 'other': '其他'}[t] }看{LABEL[base]}"
+    why = f"自動：{ {'easy': '輕鬆跑', 'long': '長跑', 'trail_long': '山路長天', 'hike': '越野跑', 'interval': '間歇', 'hill': '爬坡重複', 'climb': '長爬坡', 'downhill': '下坡練習', 'cp_test': 'CP 測試', 'aet_test': 'AeT 測試', 'other': '其他'}[t] }看{LABEL[base]}"
     if chosen in ("hr", "power") and t not in ("cp_test", "aet_test", "downhill", "climb"):
         basis = chosen
         why = ("這次課表你選了" if own in ("hr", "power") else "課表偏好：") + LABEL[chosen]
