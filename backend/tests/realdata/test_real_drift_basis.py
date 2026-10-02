@@ -215,8 +215,9 @@ def test_season_charts_plot_the_cards_drift_for_each_basis(real):
     """The season drift charts plot the card's number (drift()), not WKO5's
     stored pahr / pwhr: equal on the fair run, nothing drawn on refused ones."""
     ds, ws, fair = real
-    charts = (("我的訓練", SEASON_TITLE, "路跑 Pa:HR", "路跑 Pw:HR"),
-              ("周期化訓練", "長時間輕鬆跑的心率飄移", "飄移 Pa:HR", "飄移 Pw:HR"))
+    # (周期化訓練「長時間輕鬆跑的心率飄移」 is verdict bars over both tiers since 2026-10-02:
+    # test_periodization_drift_bars_are_the_cards_drift below)
+    charts = (("我的訓練", SEASON_TITLE, "路跑 Pa:HR", "路跑 Pw:HR"),)
     for w in [fair] + sorted(ws, key=lambda x: x.day)[:2]:
         dr = R.measure(ds, w)["drift"]
         want_pa, want_pw = R.basis_drift(dr, "pace")[0], R.basis_drift(dr, "power")[0]
@@ -246,3 +247,23 @@ def test_season_charts_plot_the_cards_drift_for_each_basis(real):
             assert (y == pytest.approx(R.basis_drift(dr, "pace", ref=True)[0], abs=1e-9)) if is_ref else y is None
             y, _ = _chart_point(ds, w, view, title, "power", ref_pw)
             assert (y == pytest.approx(R.basis_drift(dr, "power", ref=True)[0], abs=1e-9)) if is_ref else y is None
+
+
+@pytest.mark.golden
+@needs_data
+def test_periodization_drift_bars_are_the_cards_drift(real):
+    """周期化訓練 ②: each run's drift (either tier) is in exactly the verdict bar its value
+    falls in (< 5 / 5–10 / ≥ 10 %), nothing drawn on refused runs."""
+    ds, ws, fair = real
+    names = ("穩定（< 5%）", "有點飄（5–10%）", "飄很多（> 10%）")
+    for w in [fair] + ws:
+        dr = R.measure(ds, w)["drift"]
+        for basis in ("pace", "power"):
+            want = R.basis_drift(dr, basis, ref=True)[0]
+            got = {n: _chart_point(ds, w, "周期化訓練", "長時間輕鬆跑的心率飄移", basis, n)[0] for n in names}
+            drawn = {n: y for n, y in got.items() if y is not None}
+            if want is None:
+                assert not drawn
+                continue
+            k = names[0] if want < R.DRIFT_GOOD else names[1] if want < R.DRIFT_WATCH else names[2]
+            assert list(drawn) == [k] and drawn[k] == pytest.approx(want, abs=1e-9)

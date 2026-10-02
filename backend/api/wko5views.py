@@ -358,6 +358,10 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
             from backend.engine.planning import Plan
             from backend.files.wko5_athlete import day_to_date
             res = RR.apply(res, getattr(ds, "plan", None) or Plan(), day_to_date(int(math.floor(ds.today))))
+        if ch.get("drift_bars") and not needs_workout:
+            # 心率飄移 bars (panels/drift_bars.py): each bar's date / duration / temperature on hover
+            from backend.engine.panels import drift_bars as DB
+            res = DB.apply(res, ds)
         if winfo:
             rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
             res = {**res, **winfo, "recent_bests": rb}

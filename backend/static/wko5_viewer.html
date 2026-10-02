@@ -2511,12 +2511,15 @@ function drawPlot(card, res, series) {
     const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
       : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
-    // 目標線 (res.race_ref, panels/race_refs.py): each point as a share of the single-day target
-    // (a single-day race's constant, a multi-day trip's per-day average)
+    // 目標線 (res.race_ref, panels/race_refs.py): each point as a share of the nearest race's
+    // single-day target (a single-day race's constant, a multi-day trip's per-day average)
     const tgt = res.race_ref?.target, goal = +(tgt?.goal ?? tgt?.cc);
     const share = (p) => !(goal > 0 && Number.isFinite(+yOf(p))) || srcOf[p.seriesIndex]?.role === "race_ref" ? ""
-      : `<br><span style="opacity:.8">＝ 單日目標的 ${Math.round(+yOf(p) / goal * 100)}%</span>`;
-    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>${share(p)}`);
+      : `<br><span style="opacity:.8">＝ ${esc(tgt.name || "")} 單日目標的 ${Math.round(+yOf(p) / goal * 100)}%</span>`;
+    // s.tips (panels/drift_bars.py): one hover line per point (date, duration, temperature…)
+    const ptip = (p) => { const t = srcOf[p.seriesIndex]?.tips?.[p.dataIndex];
+      return t ? `<br><span style="opacity:.8">${esc(t).replace(/\n/g, "<br>")}</span>` : ""; };
+    const rows = ps.slice(0, 16).map((p) => `${p.marker}${esc(p.seriesName)} <b style="float:right;margin-left:12px">${esc(fmtU(yOf(p), srcOf[p.seriesIndex]?.unit || unitByName[p.seriesName]))}</b>${share(p)}${ptip(p)}`);
     if (ps.length > 16) rows.push(`<span style="opacity:.7">… 另 ${ps.length - 16} 條</span>`);
     // stacked series (依類別堆疊): add the stack's total — only the series shown in the
     // legend are in `ps`, so hiding a category takes it out of the total too

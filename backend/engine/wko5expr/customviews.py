@@ -149,11 +149,16 @@ def _chart(raw: dict, where: str) -> dict:
             raise CustomViewError(f"{where}/{raw['title']}: zoned needs a line that is one of the series")
         out["zoned"] = {"line": z["line"]}
     if raw.get("race_refs") is not None:
-        # target-race reference lines (panels/race_refs.py): "course_constant" = each upcoming
-        # A / B race's コース定数 + 50 % of the A race, and 「＝ 目標賽事的 X%」 on hover
+        # target-race reference lines (panels/race_refs.py): "course_constant" = the next two
+        # races' single-day コース定数, the A race's 80–100 % band, 「＝ <race> 單日目標的 X%」 on hover
         if raw["race_refs"] not in ("course_constant",) or kind != "athlete":
             raise CustomViewError(f"{where}/{raw['title']}: race_refs must be 'course_constant' on an athlete chart")
         out["race_refs"] = raw["race_refs"]
+    if raw.get("drift_bars") is not None:
+        # verdict-coloured drift bars (panels/drift_bars.py): each bar's hover line + the latest label
+        if raw["drift_bars"] is not True or kind != "athlete":
+            raise CustomViewError(f"{where}/{raw['title']}: drift_bars must be true on an athlete chart")
+        out["drift_bars"] = True
     for s in [s for v in out.get("variants", []) for s in v["series"]] or out["series"]:
         if s["basis"] is not None and s["basis"] not in out.get("basis", {}).get("choices", ()):
             raise CustomViewError(f"{where}/{raw['title']}/{s['name']}: series basis needs a chart basis that lists it")
