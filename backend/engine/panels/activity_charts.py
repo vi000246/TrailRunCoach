@@ -334,7 +334,8 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
     est = bool(model.get("estimate"))
     aet, lthr, cp = ctx["thr"]
     if b == "ilevels":
-        lv = ctx.setdefault("ilevels", ilevels_for(ds, w))
+        # a caller may pass the levels in ctx (period_zones memoises them per file)
+        lv = ctx["ilevels"] if "ilevels" in ctx else ctx.setdefault("ilevels", ilevels_for(ds, w))
         if lv is None:
             return {"reason": "算不出 iLevels：前 90 天的功率不夠擬合 PD 模型（WKO5 的有效性門檻）"}
         ftp = lv[4][3] / 1.05 if lv[4][3] else None

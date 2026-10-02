@@ -239,7 +239,9 @@ def list_views():
          "dashboards": [
             {"index": i, "title": d["title"], "description": d.get("description"),
              "charts": [{"index": j, "title": c.get("title"), "kind": _panel_kind(c),
-                         "series": len(c.get("series", []))} for j, c in enumerate(d["charts"])]}
+                         "series": len(c.get("series", [])),
+                         **({"view": c.get("view")} if c.get("kind") == "periodzones" else {})}
+                        for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
         for name, v in _views().items()
     ]
@@ -283,7 +285,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
-    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate"):
+    if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     pinfo = winfo = binfo = None
     if v.get("source") == "custom" and BS.basis_spec(ch):
@@ -312,7 +314,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     key = chart_key(ch, req, data_fingerprint(ds))
 
     def compute():
-        res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None)
+        res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None, params=params)
         if winfo:
             rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
             res = {**res, **winfo, "recent_bests": rb}
@@ -393,7 +395,13 @@ def z5gate_panel(ch: dict, ds: Dataset, b: float, e: float, prefs=None) -> dict:
             "range_note": f"重播 {begin.isoformat()} 起（最多 1 年）" if begin > day_to_date(int(math.floor(b))) else None}
 
 
-def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w) -> dict:
+def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
+            params: Optional[dict] = None) -> dict:
+    if ch.get("kind") == "periodzones":
+        # time in zone over a period: zkind / zmodel / zsports / zperiod (/ zbegin, zend) / zgroup
+        # come from the query (all part of the render-cache key); the RHE sport filter is not used
+        from backend.engine.panels.period_zones import render as render_period_zones
+        return render_period_zones(ds, ch, b, e, params or {})
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
         return {**review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace"),
@@ -428,9 +436,11 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w)
 def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Optional[str] = None,
              parity: Optional[bool] = None):
     """RHE activity list for the selected range / sports (newest first)."""
+    from backend.engine import activity_tags as AT
     ds = _dataset(parity)
     b, e = _range(ds, begin, end)
     sp = _sports(sports)
+    tag_rows = AT.load()
     out = []
     for w in reversed(ds.workouts):
         if not (b <= w.day < e + 1) or (sp is not None and w.sport not in sp):
@@ -438,6 +448,9 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
         m = w.metrics
         out.append({
             "index": w.idx, "start": w.entry.start.isoformat(), "sport": w.sport,
+            # the 活動編輯 page's title (activity_tags.name), else null
+            "name": AT.name_of(AT.find(tag_rows, w.entry.start, w.entry.file)) if tag_rows else None,
+            "key": AT.key_of(w.entry.start),
             "sport_type": w.sport_type, "file": w.entry.file, "tags": w.tags,
             "duration": m.get("duration"), "distance": m.get("distance"),
             "climbing": m.get("climbing"), "tss": m.get("tss"), "if": m.get("if"),
@@ -544,7 +557,10 @@ def _activity_json(ds, w) -> dict:
     t = A.auto_tags(ds, w)
     src = A.power_source(ds, w)
     kept = next((x for x in getattr(ds, "exclusion_kept", []) if x["file"] == w.entry.file), None)
+    title = getattr(w.entry, "title", "") or ""
     return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
+            "title_original": title or A.label(w), "title_from": "activity" if title else "label",
+            "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
             "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
             # bad activity files (engine/bad_activity.py): an excluded file is not
             # in ds.workouts; `flagged` = the rule's reason when the user kept it
@@ -552,7 +568,17 @@ def _activity_json(ds, w) -> dict:
                                 "enabled": bool(getattr(ds, "exclude_bad", False))},
             "power": {"source": src, "used": A.power_ok(ds, w) if src != PS.NONE else False,
                       "label": PS.label(src, bool(getattr(ds, "accept_watch_power", True))),
-                      "setting": PS.SETTING_KEY}}
+                      "setting": PS.SETTING_KEY},
+            # the pack carried (engine/loaded_carry.activity_pack; racepower_hike_meta.json)
+            "pack": _pack_json(w)}
+
+
+def _pack_json(w) -> Optional[dict]:
+    try:
+        from backend.engine import loaded_carry as LC
+        return LC.activity_pack(w)
+    except Exception:                       # noqa: BLE001 — never breaks the activity card
+        return None
 
 
 @router.get("/workouts/{i}/activity")
@@ -579,15 +605,195 @@ async def patch_activity(i: int, body: dict):
     if not 0 <= i < len(ds.workouts):
         raise HTTPException(404, "workout not found")
     w = ds.workouts[i]
-    upd = ActivityUpdate(**{k: v for k, v in body.items() if k in ("activity_type", "effort", "note", "exclusion")})
-    from backend.engine.wko5expr import datasource as DSRC
-    cur = AT.user_of(w)                     # an existing tag (maybe set from another source ±3 min)
-    key = (cur or {}).get("start_local") or AT.key_of(w.entry.start)
-    async with AsyncSessionLocal() as db:
-        await save_activity_tag(db, upd, start_local=key, source=DSRC.current_source(),
-                                file=w.entry.file, distance_km=w.metrics.get("distance"),
-                                label=f"{w.entry.start:%Y-%m-%d} {w.sport_type}")
+    from backend.api.workouts import TAG_FIELDS
+    if "pack_kg" in body:
+        # the pack carried (loaded-carry-training.md §5.1): racepower_hike_meta.json, null = cleared
+        await run_in_threadpool(_set_pack, w, body.get("pack_kg"))
+    tag_keys = {k: v for k, v in body.items() if k in TAG_FIELDS}
+    if tag_keys or "pack_kg" not in body:
+        upd = ActivityUpdate(**tag_keys)
+        from backend.engine.wko5expr import datasource as DSRC
+        cur = AT.user_of(w)                     # an existing tag (maybe set from another source ±3 min)
+        key = (cur or {}).get("start_local") or AT.key_of(w.entry.start)
+        async with AsyncSessionLocal() as db:
+            await save_activity_tag(db, upd, start_local=key, source=DSRC.current_source(),
+                                    file=w.entry.file, distance_km=w.metrics.get("distance"),
+                                    label=f"{w.entry.start:%Y-%m-%d} {w.sport_type}")
     return await run_in_threadpool(_activity_json, ds, w)
+
+
+def _set_pack(w, kg) -> None:
+    from backend.engine.racepower import athlete as A
+    try:
+        A.set_hike_meta(w.entry.file, None if kg in (None, "") else float(kg))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, str(e) or "背負要在 0–40 kg")
+    try:                                     # the race-power walking model reads the packs too
+        from backend.api import racepower as RP
+        with RP._lock:
+            RP._cache.pop("grade", None)
+    except Exception:                       # noqa: BLE001
+        pass
+
+
+# ---------------------------------------------------------------------------
+# 活動編輯 page (static/activity.html): every activity with its stored user
+# values, the auto values in a second (slower) call, key-based and bulk edits
+# ---------------------------------------------------------------------------
+
+def _terrain(ds, file: Optional[str], trail: bool) -> dict:
+    """Road / trail of one activity and whether it can be changed here: a
+    COROS / TP FIT has a workout_files row (PATCH /api/v1/workouts/{id}/
+    classification, the existing override); the WKO5 source has none — its
+    terrain is the WKO5 workout type."""
+    from backend.engine.wko5expr import fitdataset as FD
+    rows = getattr(ds, "_classes", None) or {}
+    d = getattr(ds, "dir", None)
+    r = None
+    if rows and d is not None and file:
+        r = rows.get(FD._norm(Path(d) / file))
+        if r is None:
+            cand = rows.get("_by_name", {}).get(Path(str(file)).name) or []
+            r = cand[0] if len(cand) == 1 else None
+    if r is None:
+        return {"value": "trail" if trail else "road", "editable": False, "overridden": False,
+                "workout_file_id": None, "why": "WKO5 來源：地形依 WKO5 的活動類型" if not rows else "找不到這個檔案的資料庫紀錄"}
+    eff = FD.classification_for(Path(d) / file, rows)
+    return {"value": eff or ("trail" if trail else "road"), "editable": True,
+            "overridden": bool(r["classification_overridden"]), "workout_file_id": r["id"],
+            "stored": r["trail_classification"], "why": None}
+
+
+@router.get("/activities")
+def activities_list():
+    """Every activity of the current data source (newest first) with the
+    stored user values (activity_tags: type / effort marks, name, tags,
+    note, exclusion), the terrain and the power source. Excluded bad files
+    are included (index null). The auto values: GET /activities/auto."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.racepower import athlete as A
+    ds = _dataset()
+    tags = AT.load()
+    out = []
+
+    def user_part(u):
+        return {"name": AT.name_of(u), "tags": AT.tags_of(u), "note": (u or {}).get("note"),
+                "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
+                "user_exclusion": AT.user_exclusion(u)}
+
+    for w in ds.workouts:
+        u = AT.find(tags, w.entry.start, w.entry.file)
+        m = w.metrics
+        title = getattr(w.entry, "title", "") or ""
+        out.append({"index": w.idx, "key": AT.key_of(w.entry.start), "start": w.entry.start.isoformat(),
+                    "file": w.entry.file, "sport": w.sport, "sport_type": w.sport_type,
+                    "title_original": title or A.label(w), "label": A.label(w),
+                    "duration": m.get("duration"), "distance": m.get("distance"), "climbing": m.get("climbing"),
+                    "tss": m.get("tss"), "trail": A.is_trail(w),
+                    "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
+                    "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
+                    "excluded": None, **user_part(u)})
+    for x in getattr(ds, "excluded", []):
+        start = dt.datetime.fromisoformat(x["start"])
+        u = AT.find(tags, start, x["file"])
+        km = x.get("distance")
+        lab = f"{start:%Y-%m-%d} {A.SPORT_ZH.get(x['sport_type'], x['sport_type'])}" + (f" {km:.1f} km" if km else "")
+        out.append({"index": None, "key": x.get("key") or AT.key_of(start), "start": x["start"], "file": x["file"],
+                    "sport": x["sport"], "sport_type": x["sport_type"], "title_original": lab, "label": lab,
+                    "duration": x.get("duration"), "distance": km, "climbing": None, "tss": None,
+                    "trail": x["sport_type"] == "trail running",
+                    "terrain": _terrain(ds, x["file"], x["sport_type"] == "trail running"),
+                    "power_label": None, "excluded": _exclusion_json(x), **user_part(u)})
+    out.sort(key=lambda a: a["start"], reverse=True)
+    return {"source": getattr(ds, "source", None) or "wko5", "types": AT.TYPES, "efforts": AT.EFFORTS,
+            "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
+
+
+@router.get("/activities/auto")
+async def activities_auto():
+    """The AUTO activity type / effort (with reasons) of every activity, by
+    key (racepower.athlete.auto_tags_all; memoised per Dataset). Slow on the
+    first call (HR effort reads every activity), so the page asks after the
+    list."""
+    from starlette.concurrency import run_in_threadpool
+    from backend.engine import activity_tags as AT
+    from backend.engine.racepower import athlete as A
+
+    def work():
+        ds = _dataset()
+        auto = A.auto_tags_all(ds)
+        return {AT.key_of(w.entry.start): auto.get(w.idx) for w in ds.workouts}
+    return await run_in_threadpool(work)
+
+
+class BulkItem(BaseModel):
+    key: str
+    file: Optional[str] = None
+
+
+class BulkBody(BaseModel):
+    """Edits applied to every item: a field present = set it (null = back to
+    auto), absent = unchanged. `add_tags` / `remove_tags` change the tag list
+    of each activity; `tags` replaces it; `name` is for single edits."""
+    items: list[BulkItem]
+    activity_type: Optional[str] = None
+    effort: Optional[str] = None
+    note: Optional[str] = None
+    exclusion: Optional[str] = None
+    name: Optional[str] = None
+    tags: Optional[list[str]] = None
+    add_tags: Optional[list[str]] = None
+    remove_tags: Optional[list[str]] = None
+
+
+BULK_MAX = 500
+
+
+@router.patch("/activities")
+async def patch_activities(body: BulkBody):
+    """Key-based edit of one or more activities (the 活動編輯 page; an
+    excluded file has no dataset index, so it is edited by key). Each item is
+    stored under its existing tag key (another source ±3 min) or its own."""
+    from backend.api.workouts import ActivityUpdate, save_activity_tag
+    from backend.db.database import AsyncSessionLocal
+    from backend.engine import activity_tags as AT
+    if not body.items:
+        raise HTTPException(400, "NO_ITEMS")
+    if len(body.items) > BULK_MAX:
+        raise HTTPException(400, "TOO_MANY_ITEMS")
+    sent = body.model_fields_set
+    base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags") if k in sent}
+    for k in ("add_tags", "remove_tags"):
+        v = getattr(body, k)
+        if v is not None and AT.validate(tags=v):
+            raise HTTPException(400, "INVALID_TAGS")
+    rows = AT.load()
+    src = DSRC.current_source()
+    saved = []
+    async with AsyncSessionLocal() as db:
+        for it in body.items:
+            try:
+                start = dt.datetime.fromisoformat(it.key)
+            except ValueError:
+                raise HTTPException(400, "INVALID_KEY")
+            cur = AT.find(rows, start, it.file)
+            key = (cur or {}).get("start_local") or AT.key_of(start)
+            patch = dict(base)
+            if body.add_tags or body.remove_tags:
+                have = patch.get("tags", AT.tags_of(cur))
+                drop = {t.strip().lower() for t in body.remove_tags or []}
+                patch["tags"] = [t for t in AT.clean_tags(list(have) + list(body.add_tags or []))
+                                 if t.lower() not in drop]
+            if not patch:
+                continue
+            await save_activity_tag(db, ActivityUpdate(**patch), start_local=key, source=src, file=it.file)
+            saved.append(key)
+    return {"saved": saved, "n": len(saved)}
+
+
+@router.get("/activities/page", include_in_schema=False)
+def activities_page():
+    return FileResponse(Path(__file__).resolve().parents[1] / "static" / "activity.html")
 
 
 @router.get("/sports")

@@ -128,6 +128,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <label>距離 km<input type="number" name="distance_km" step="0.1" min="0"></label>
       <label>爬升 m<input type="number" name="climbing_m" step="10" min="0"></label>
       <label>預估移動時間 h<input type="number" name="est_hours" step="0.5" min="0"></label>
+      <label title="百岳／多日行程第 1 天的背包重量；空白 = 9 kg。負重訓練的進度（5 % → 10 % 體重 → 行程背包）以它為上限">行程背包 kg<input type="number" name="pack_kg" step="0.5" min="0" max="40" placeholder="9"></label>
       <label>備註<input name="note"></label>
       <button class="primary" type="submit" id="evsubmit">新增</button>
       <button type="button" id="evcancel" hidden>取消編輯</button>
@@ -372,7 +373,7 @@ $("#evform").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = new FormData(ev.target), body = {};
   for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
-  for (const k of ["days", "distance_km", "climbing_m", "est_hours"]) if (body[k] != null) body[k] = Number(body[k]);
+  for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg"]) if (body[k] != null) body[k] = Number(body[k]);
   body.days = body.days || 1; body.note = body.note || "";
   await call("PUT", "/events", body);
   ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true;
@@ -383,7 +384,7 @@ $("#events").addEventListener("click", async (ev) => {
   const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
   if (ed) {
     const e = S.events.find((x) => x.id === ed), f = $("#evform");
-    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "note"]) f[k].value = e[k] ?? "";
+    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "note"]) f[k].value = e[k] ?? "";
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   if (del && confirm("刪除這場賽事？")) { await call("DELETE", "/events/" + del); toast("已刪除"); load(); }

@@ -315,6 +315,9 @@ async def _import_one_file(
 
     wf.elevation_gain_m = elevation_gain(raw)
     _apply_classification(wf)
+    # the watch's post-workout RPE / feel, when the FIT has it (activity_tags: it outranks the HR effort rule)
+    from backend.engine.activity_tags import recorded_from_session
+    wf.rpe, wf.feel = recorded_from_session(raw.session)
 
     is_running = (raw.sport == "running")
     workout_date = local_day or date.today()

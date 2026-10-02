@@ -326,7 +326,9 @@ def test_week_plan_with_prefs_on_the_athletes_data():
     capped = O.week_plan(ds, st, today, prefs=PP.Prefs(cap_weekday=50, cap_mode="hard"))
     # a hot A/B race in the plan adds heat sessions; a hard cap turns them into run + bath (heat_plan.py)
     kinds = lambda wp: sorted({s["id"].rstrip("0123456789") for s in wp["sessions"]
-                               if s["kind"] != "heat_passive"} - {"easy"})
+                               if s["kind"] != "heat_passive"} - {"easy", "carry"})
+    # (carry = an easy run turned into the loaded-carry machine session, engine/loaded_carry.py:
+    # whether one fits depends on where the cap puts the easy runs)
     assert kinds(capped) == kinds(base)                   # nothing but easy runs is lost
     for s in capped["sessions"]:
         if s["kind"] != "test" and not s["done"]:

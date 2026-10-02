@@ -293,7 +293,6 @@ table.z5ev td { white-space: normal; }
 <body class="aside-closed" data-mode="season">
 <script src="/api/v1/static/shell.js" data-page="charts"></script>
 <script src="/api/v1/static/segments_card.js" defer></script>
-<script src="/api/v1/static/activity_tags_card.js" defer></script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
   <symbol id="i-sport" viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2"/><path d="m6 21 3.5-6 3 2.5V22M9.5 15 11 9l3.5 2 3 .5M11 9 7 10.5 5.5 14"/></symbol>
@@ -323,6 +322,7 @@ table.z5ev td { white-space: normal; }
     <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
     <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
     <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
+    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動編輯」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
   </div>
 </div>
 <div class="wrap">
@@ -705,8 +705,11 @@ function filterSummary() {
 function renderActChip() {
   const a = S.workout == null ? null : (S.acts || []).find((x) => x.index === S.workout);   // excluded rows: index null
   // the picked activity may fall outside the current date filter; keep its last known label
-  if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.sport_type || a.sport} · ${hms(a.duration)}`;
+  if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.name || a.sport_type || a.sport} · ${hms(a.duration)}`;
   $("act-txt").textContent = S.workout == null ? "還沒選" : S.workoutLabel || `#${S.workout}`;
+  if (a?.key) S.workoutKey = [S.workout, a.key];      // the 活動編輯 link: the shown activity's start minute
+  const wk = S.workoutKey && S.workoutKey[0] === S.workout ? S.workoutKey[1] : null;
+  $("edit-act").href = `/api/v1/wko5/activities/page${wk ? "?key=" + encodeURIComponent(wk) : ""}`;
 }
 
 async function loadActs() {
@@ -787,8 +790,8 @@ async function load() {
     while (queue.length) {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
-      if (c.kind === "z5gate") card.classList.add("wide");
-      if (!["athlete", "workout", "zones", "targets", "map", "z5gate"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
+      if (c.kind === "z5gate" || (c.kind === "periodzones" && c.view === "weekly")) card.classList.add("wide");
+      if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
       if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
       await renderCard(card, v, di, c, q, token);
     }
@@ -854,7 +857,8 @@ async function renderCard(card, v, di, c, q, token) {
     const res = await j(`${API}/views/${encodeURIComponent(v.name)}/dashboards/${di}/charts/${c.index}?${q}`
       + (period && c.kind === "athlete" ? `&period=${period}` : "")
       + (win && c.kind === "athlete" ? `&window=${win}` : "")
-      + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : ""));
+      + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : "")
+      + (c.kind === "periodzones" ? pzQuery(c) : ""));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -947,10 +951,13 @@ function drawInto(box, res) {
   if (res.kind === "zones") drawZones(box, res);
   else if (res.kind === "targets") drawTargets(box, res);
   else if (res.kind === "z5gate") drawZ5Gate(box, res);
+  else if (res.kind === "periodzones") drawPeriodZones(box, res);   // panels/period_zones.py
   else if (res.kind === "map") drawMap(box, res);
   else if (String(res.kind || "").startsWith("act_")) drawActivity(box, res);   // panels/activity_charts.py
   else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)
   else if (res.grade_profile) drawGradeProfile(box, res);     // 坡度分組: one row per grade bin
+  else if (res.form_profile) drawFormProfile(box, res);       // 跑姿依坡度／隨疲勞 (form_grades / form_work)
+  else if (res.cadence_profile) drawCadenceProfile(box, res); // 步頻與衝擊 (form_cadence)
   else draw(box, res);
 }
 
@@ -1157,6 +1164,313 @@ function drawZones(card, res) {
     <p class="desc" style="margin-top:6px">${esc(Z.source)}</p>`);
 }
 const ZCOL = (i, n) => `hsl(${140 - 140 * i / Math.max(1, n - 1)} 65% 45%)`;   // green → red
+
+// ---- 區間時數 (views kind "periodzones" → panels/period_zones.py). Self-contained: its styles (pzStyle),
+// the shared controls (心率／功率, zone model, sports, period, week／month — remembered in PZ.KEY and applied to
+// every periodzones card at once, so both charts always show the same model and colours), drawPeriodZones
+// (view "total": one bar per zone, x = zone, y = hours, labelled h:mm + share; the 3-zone summary against
+// the phase's target with a verdict) and pzWeekly (view "weekly": hours per zone stacked per week / month,
+// and below it on the same category axis the low-intensity share against the target — two panels, one y-scale each).
+// Zones are ordinal: one blue ramp, light → dark (dark mode: dim → bright), from OKLCH so 3–9 steps pass the
+// dataviz ordinal checks in both modes; every zone is also labelled (axis, legend, table), never colour alone.
+const PZ = { KEY: "wko5viewer.pzone",
+  status: { good: "#0ca30c", watch: "#fab219", warning: "#ec835a", serious: "#d03b3b", none: "#898781" } };
+function pzPrefs() { try { return JSON.parse(localStorage.getItem(PZ.KEY) || "{}"); } catch { return {}; } }
+function pzSave(patch) { try { localStorage.setItem(PZ.KEY, JSON.stringify({ ...pzPrefs(), ...patch })); } catch {} }
+function pzQuery(c) {
+  const p = pzPrefs(), kind = p.kind === "power" ? "power" : "hr", q = new URLSearchParams({ zkind: kind });
+  const m = (p.model || {})[kind];
+  if (m) q.set("zmodel", m);
+  if (p.sports?.length) q.set("zsports", p.sports.join(","));
+  if (c.view === "weekly") { if (p.group) q.set("zgroup", p.group); }
+  else if (p.period) {
+    q.set("zperiod", p.period);
+    if (p.period === "custom" && p.zbegin && p.zend) { q.set("zbegin", p.zbegin); q.set("zend", p.zend); }
+  }
+  return "&" + q.toString();
+}
+async function pzRefresh() {
+  const cards = [...document.querySelectorAll("#grid .card")].filter((k) => k._ctx?.c.kind === "periodzones");
+  await Promise.all(cards.map((card) => {
+    card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+    const { v, di, c, q } = card._ctx;
+    return renderCard(card, v, di, c, q, loadToken);
+  }));
+  if (ZOOM.card?._ctx?.c.kind === "periodzones") fillZoom();
+}
+function pzDark() {
+  const t = document.documentElement.dataset.theme;
+  return t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+}
+function pzHex(L, C, h) {             // OKLCH → sRGB hex
+  const a = C * Math.cos(h * Math.PI / 180), b = C * Math.sin(h * Math.PI / 180);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3,
+    s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  const enc = (x) => { x = Math.max(0, Math.min(1, x)); x = x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;
+    return Math.round(x * 255).toString(16).padStart(2, "0"); };
+  return "#" + enc(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s) + enc(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
+    + enc(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+}
+function pzRamp(n) {
+  // light: L .76 (≥ 2:1 on the surface) → .17; dark: L .43 (≥ 2:1 on the dark surface) → .98. Hue 255 (the palette blue).
+  const [L0, L1] = pzDark() ? [0.43, 0.98] : [0.76, 0.17];
+  return Array.from({ length: n }, (_, i) => {
+    const L = n === 1 ? (L0 + L1) / 2 : L0 + (L1 - L0) * i / (n - 1);
+    const C = 0.15 * Math.max(0.25, 1 - Math.abs((L - 0.55) / 0.45) ** 2);
+    return { hex: pzHex(L, C, 255), ink: L < 0.62 ? "#ffffff" : "#0b0b0b" };
+  });
+}
+function pzStyle() {
+  if (document.getElementById("pz-style")) return;
+  const st = document.createElement("style");
+  st.id = "pz-style";
+  st.textContent = `.pzbar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 2px 0 6px; font-size: 12px; }
+.pzbar .seg { font-size: 11.5px; padding: 1px; flex-wrap: wrap; max-width: 100%; }
+.pzbar .seg button { padding: 1px 9px; font-weight: 500; }
+.pzbar select { font-size: 12px; max-width: 220px; }
+.pzbar .sp button { border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 12px; padding: 1px 9px;
+  font: inherit; font-size: 11.5px; cursor: pointer; }
+.pzbar .sp button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.pzbar .sp button[aria-pressed="true"]::before { content: "✓ "; }
+.pzbar input[type="date"] { font-size: 11.5px; padding: 1px 4px; }
+.pzhead { font-size: 11.5px; color: var(--muted); margin: 0 0 6px; }
+.pzhead b { color: var(--text); font-weight: 600; }
+.pzsum { margin: 0 0 8px; }
+.pzsum .h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; }
+.pzsum .h b { color: var(--text); font-weight: 600; }
+.pzv { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-left: 4px solid; border-radius: 6px;
+  padding: 1px 8px; color: var(--text); font-size: 12px; font-weight: 600; }
+.pztrack { position: relative; display: flex; height: 22px; border-radius: 4px; overflow: visible; background: var(--code); margin-bottom: 18px; }
+.pztrack > i { display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 11px; white-space: nowrap;
+  overflow: hidden; border-right: 2px solid var(--panel); min-width: 0; }
+.pztrack > i:first-child { border-radius: 4px 0 0 4px; } .pztrack > i:last-of-type { border-right: 0; border-radius: 0 4px 4px 0; }
+.pztrack > em { position: absolute; top: -3px; bottom: -3px; border-left: 2px dashed var(--text); font-style: normal; }
+.pztrack > em span { position: absolute; top: 100%; left: 0; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; padding-top: 2px; }
+.pztrack > em.tgt { border-left-style: solid; }
+.pzleg { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
+.pzleg span { white-space: nowrap; }
+.pzleg i { display: inline-block; width: 12px; height: 10px; margin-right: 4px; vertical-align: -1px; border-radius: 2px; }
+.pzleg i.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text); }
+.pzleg i.tri { width: 0; height: 0; border-radius: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--muted); }
+.pzleg i.band { background: color-mix(in srgb, var(--muted) 22%, transparent); }
+.pzleg i.ln { height: 0; border-top: 2px dashed var(--muted); border-radius: 0; vertical-align: 3px; }
+.pzmeta { font-size: 11.5px; color: var(--muted); margin: 4px 0 0; }
+.plot.pzt { height: 280px; } .plot.pzw { height: 400px; }
+details.pzdet { margin-top: 6px; } details.pzdet > summary { font-size: 12px; cursor: pointer; }
+details.pzdet table { margin-top: 4px; }`;
+  document.head.appendChild(st);
+}
+function pzStep(max) {                      // y-axis step in seconds: 10 min … 10 h
+  const steps = [600, 900, 1800, 3600, 7200, 10800, 18000, 36000, 72000];
+  return steps.find((s) => max / s <= 5) || 144000;
+}
+const pzTick = (v) => v === 0 ? "0" : v < 3600 ? `${Math.round(v / 60)} 分` : v % 3600 ? fmtDur(v, "hm") : `${v / 3600} h`;
+const pzPct = (x) => x == null ? "—" : `${Math.round(x * 100)}%`;
+function pzBar(card, res) {
+  // the shared controls; a change saves the preference and re-renders every periodzones card
+  const p = pzPrefs(), kind = res.zone_kind, weekly = res.view === "weekly";
+  const bar = document.createElement("div");
+  bar.className = "pzbar";
+  const seg = (k, items, cur, label) => `<div class="seg" role="group" aria-label="${label}" data-k="${k}">${items.map(([id, t]) =>
+    `<button type="button" data-v="${esc(id)}" class="${id === cur ? "on" : ""}" aria-pressed="${id === cur}">${esc(t)}</button>`).join("")}</div>`;
+  const ms = res.models[kind];
+  bar.innerHTML = seg("kind", [["hr", "心率"], ["power", "功率"]], kind, "心率或功率區間")
+    + `<label>模型 <select aria-label="區間模型">${ms.map((m) => `<option value="${esc(m.id)}"${m.id === res.model.id ? " selected" : ""}>${esc(m.title)}${m.estimate ? "（推估）" : ""}</option>`).join("")}</select></label>`
+    + `<span class="sp" role="group" aria-label="運動">${res.sport_choices.map((s) => `<button type="button" data-s="${s.id}" aria-pressed="${res.sports.includes(s.id)}">${esc(s.label)}</button>`).join(" ")}</span>`
+    + (weekly ? seg("group", [["auto", "自動"], ["week", "週"], ["month", "月"]], res.group_choice, "每週或每月")
+      : seg("period", res.period_choices.map((c) => [c.id, c.label]), p.period || "range", "期間")
+        + (res.period.key === "custom" || p.period === "custom" ? `<span class="pzcustom"><input type="date" aria-label="開始" value="${esc(p.zbegin || res.period.begin)}"> – <input type="date" aria-label="結束" value="${esc(p.zend || res.period.end)}"> <button type="button" class="chip">套用</button></span>` : ""));
+  card.appendChild(bar);
+  bar.querySelectorAll(".seg").forEach((s) => s.onclick = (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b || b.classList.contains("on")) return;
+    pzSave({ [s.dataset.k]: b.dataset.v });
+    if (s.dataset.k === "period" && b.dataset.v === "custom" && !(p.zbegin && p.zend))
+      pzSave({ zbegin: res.period.begin, zend: res.period.end });
+    pzRefresh();
+  });
+  bar.querySelector("select").onchange = (e) => { pzSave({ model: { ...(p.model || {}), [kind]: e.target.value } }); pzRefresh(); };
+  bar.querySelectorAll(".sp button").forEach((b) => b.onclick = () => {
+    const on = new Set(res.sports);
+    if (on.has(b.dataset.s)) { if (on.size === 1) return; on.delete(b.dataset.s); } else on.add(b.dataset.s);
+    pzSave({ sports: res.sport_choices.map((s) => s.id).filter((s) => on.has(s)) });
+    pzRefresh();
+  });
+  const cu = bar.querySelector(".pzcustom");
+  if (cu) cu.querySelector("button").onclick = () => {
+    const [a, b] = [...cu.querySelectorAll("input")].map((x) => x.value);
+    if (!a || !b) return;
+    pzSave({ period: "custom", zbegin: a, zend: b });
+    pzRefresh();
+  };
+}
+function pzThresholdText(res) {
+  const t = res.thresholds || [];
+  if (!t.length) return "";
+  if (t.length === 1) return `門檻：${t[0].text}`;
+  const vals = [...new Set(t.map((r) => r.value))];
+  if (vals.length === 1) return `門檻：${vals[0]}（${t.length} 個來源，見下方）`;
+  return `門檻依每次活動當天：${vals.length <= 3 ? vals.join("、") : `${t[0].value} → ${t[t.length - 1].value}`}（${t.length} 組，見下方）`;
+}
+function pzSkipText(res) {
+  const s = res.skipped || [];
+  return s.length ? "沒算進來：" + s.map((x) => `${x.reason} ${x.n} 次`).join("、") : "";
+}
+function pzDetailsThresholds(res) {
+  const t = res.thresholds || [];
+  if (t.length < 2) return "";
+  return `<details class="pzdet"><summary>用到的門檻（${t.length} 組）</summary><table class="zt"><thead><tr><th>門檻</th><th class="num">活動</th><th>期間</th></tr></thead><tbody>
+    ${t.map((r) => `<tr><td>${esc(r.text)}</td><td class="num">${r.n}</td><td class="meta">${esc(r.first)} – ${esc(r.last)}</td></tr>`).join("")}</tbody></table></details>`;
+}
+function pzVerdict(v) {
+  if (!v) return "";
+  return `<span class="pzv" style="border-left-color:${PZ.status[v.level] || PZ.status.none}" role="status"><span aria-hidden="true">${esc(v.icon)}</span>${esc(v.text)}</span>`;
+}
+function drawPeriodZones(card, res) {
+  pzStyle();
+  card.querySelector(".loading")?.remove();
+  if (res.description) {
+    if (res._zoom) card.insertAdjacentHTML("beforeend", `<p class="desc">${esc(res.description)}</p>`);
+    else {
+      const h2 = card.querySelector("h2"), zb = h2?.querySelector(".zbtn");
+      const q = `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(res.description)}">?</button>`;
+      if (zb) zb.insertAdjacentHTML("beforebegin", q); else h2?.insertAdjacentHTML("beforeend", q);
+    }
+  }
+  pzBar(card, res);
+  if (res.view === "weekly") return pzWeekly(card, res);
+  const per = res.period, ph = per.phase;
+  card.insertAdjacentHTML("beforeend", `<p class="pzhead"><b>${esc(per.label)}</b> ${esc(per.begin)} – ${esc(per.end)}（${per.days} 天）
+    · ${ph ? `階段：${esc(ph.label)}` : "沒有賽事周期"} · ${res.n_used}／${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
+    ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}${per.note ? ` · ${esc(per.note)}` : ""}</p>`);
+  if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
+  // 3-zone summary against the phase target (the verdict's basis)
+  const S_ = res.summary, tg = res.target, c3 = pzRamp(3);
+  if (S_?.total_s) {
+    const tip = [`3 區摘要（${S_.title}）`, ...S_.rows.map((r) => `${r.name}（${r.pct}）${fmtDur(r.seconds, "hm")} · ${pzPct(r.share)}`),
+      `低強度至少 ${pzPct(tg.low_floor)}${tg.low_target ? `；${ph?.label || ""}目標 ≥ ${pzPct(tg.low_target)}` : ""}`, ...tg.sources].join("\n");
+    card.insertAdjacentHTML("beforeend", `<div class="pzsum">
+      <div class="h"><b>3 區摘要</b><button type="button" class="qtip" aria-label="目標的來源" data-tip="${esc(tip)}">?</button>
+        <span>${S_.rows.map((r) => esc(r.pct)).join("／")}</span>${pzVerdict(res.verdict)}</div>
+      <div class="pztrack" role="img" aria-label="${esc(S_.rows.map((r) => `${r.name} ${pzPct(r.share)}`).join("，"))}">
+        ${S_.rows.map((r, i) => `<i style="width:${((r.share || 0) * 100).toFixed(2)}%;background:${c3[i].hex};color:${c3[i].ink}">${(r.share || 0) >= 0.08 ? `${esc(r.name.slice(0, 1))} ${pzPct(r.share)}` : ""}</i>`).join("")}
+        <em style="left:${tg.low_floor * 100}%"><span>${pzPct(tg.low_floor)}</span></em>
+        ${tg.low_target ? `<em class="tgt" style="left:${tg.low_target * 100}%"><span>目標 ${pzPct(tg.low_target)}</span></em>` : ""}
+      </div></div>`);
+  }
+  const rows = res.rows, col = pzRamp(rows.length), max = Math.max(1, ...rows.map((r) => r.seconds));
+  const el = document.createElement("div");
+  el.className = "plot pzt";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `${res.model.title}：各區間的移動時間；表格在下方`);
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+  const step = pzStep(max);
+  const paint = () => {
+    const w = el.clientWidth || 480, bw = Math.max(24, (w - 60) / rows.length - 6);
+    const maxCh = Math.max(3, Math.floor(bw / 6.4));       // ~6.4 px per Latin character at 10 px
+    const short = (s) => s.length > maxCh ? s.slice(0, maxCh - 1) + "…" : s;
+    chart.setOption({
+      animation: false,
+      grid: { left: 46, right: 10, top: 34, bottom: rows.length > 7 ? 30 : 44 },
+      tooltip: { trigger: "item", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: ink },
+        formatter: (q) => { const r = rows[q.dataIndex];
+          return `<div style="font-size:11.5px;line-height:1.5"><b>${esc(r.id)} ${esc(r.name)}</b><br>${esc([r.pct, r.range].filter(Boolean).join(" · "))}<br>${fmtDur(r.seconds, "hm")}（${pzPct(r.share)}）</div>`; } },
+      xAxis: { type: "category", data: rows.map((r) => r.id), axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
+        axisLabel: { interval: 0, color: ink, fontSize: 11,
+          formatter: (id, i) => rows.length > 7 ? `{z|${id}}` : `{z|${id}}\n{n|${short(rows[i].name)}}`,
+          rich: { z: { color: ink, fontSize: 11, fontWeight: 600 }, n: { color: muted, fontSize: 10 } } } },
+      yAxis: { type: "value", min: 0, interval: step, max: (v) => Math.ceil(v.max * 1.18 / step) * step || step,
+        axisLabel: { color: muted, fontSize: 10.5, formatter: pzTick }, splitLine: { lineStyle: { color: line, opacity: 0.7 } } },
+      series: [{ type: "bar", barMaxWidth: 46, barCategoryGap: "18%",
+        data: rows.map((r, i) => ({ value: r.seconds, itemStyle: { color: col[i].hex, borderRadius: [4, 4, 0, 0] } })),
+        label: { show: true, position: "top", color: ink, fontSize: 10.5, lineHeight: 13,
+          formatter: (q) => { const r = rows[q.dataIndex]; return r.seconds ? `${fmtDur(r.seconds, "hm")}\n${pzPct(r.share)}` : ""; } } }],
+    });
+  };
+  paint();
+  new ResizeObserver(() => { chart.resize(); paint(); }).observe(el);
+  const meta = [pzThresholdText(res), pzSkipText(res)].filter(Boolean).map(esc).join(" · ");
+  card.insertAdjacentHTML("beforeend", `${meta ? `<p class="pzmeta">${meta}</p>` : ""}${pzDetailsThresholds(res)}
+    <details class="pzdet"><summary>表格（${esc(res.model.title)}）</summary><table class="zt"><thead><tr><th>區</th><th>名稱</th><th>門檻 %</th><th>範圍</th><th class="num">時間</th><th class="num">佔比</th></tr></thead><tbody>
+    ${rows.map((r) => `<tr><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="meta">${esc(r.pct || "—")}</td><td class="meta">${esc(r.range || "依活動")}</td><td class="num">${fmtDur(r.seconds, "hm")}</td><td class="num">${pzPct(r.share)}</td></tr>`).join("")}
+    </tbody></table></details>`);
+}
+function pzWeekly(card, res) {
+  const G = res.groups, Z = res.zones, col = pzRamp(Z.length), month = res.group_by === "month";
+  const lab = (g) => { const [y, m, d] = g.start.split("-").map(Number); return month ? `${y}/${m}` : `${m}/${d}`; };
+  card.insertAdjacentHTML("beforeend", `<p class="pzhead">${esc(res.range.begin)} – ${esc(res.range.end)} · 每${month ? "月" : "週"}一根 · ${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
+    ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}</p>`);
+  if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
+  const tip = ["下方小圖：低強度（3 區摘要第 1 區）佔比", `所有階段 ≥ ${pzPct(res.low_floor)}；基礎期 ≥ 90%`, ...res.target_sources].join("\n");
+  card.insertAdjacentHTML("beforeend", `<div class="pzleg" aria-label="圖例">${Z.map((z, i) => `<span><i style="background:${col[i].hex}"></i>${esc(z.id)} ${esc(z.name)}</span>`).join("")}</div>
+    <div class="pzleg" aria-label="下方小圖圖例"><span><i class="dot"></i>低強度佔比達標</span><span><i class="tri"></i>沒達標</span>
+      <span><i class="band"></i>目標帶（75% 到該階段目標）</span><span><i class="ln"></i>75% 護欄</span>
+      <button type="button" class="qtip" aria-label="目標的來源" data-tip="${esc(tip)}">?</button></div>`);
+  const el = document.createElement("div");
+  el.className = "plot pzw";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", `每${month ? "月" : "週"}各區間的時數（堆疊）與低強度佔比；表格在下方`);
+  card.appendChild(el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
+  const cats = G.map(lab), max = Math.max(1, ...G.map((g) => g.total_s)), step = pzStep(max);
+  const lows = G.map((g) => g.low_share).filter((x) => x != null);
+  const yMin = Math.min(0.5, Math.floor((lows.length ? Math.min(...lows) : 0.5) * 10) / 10);
+  const bandColor = pzDark() ? "rgba(195,194,183,0.16)" : "rgba(137,135,129,0.18)";
+  const zoneSeries = Z.map((z, i) => ({ name: `${z.id} ${z.name}`, type: "bar", stack: "t", xAxisIndex: 0, yAxisIndex: 0, barMaxWidth: 34,
+    data: G.map((g) => g.seconds[i] || 0), itemStyle: { color: col[i].hex, borderColor: panel, borderWidth: 1 },
+    emphasis: { focus: "series" } }));
+  chart.setOption({
+    animation: false,
+    grid: [{ left: 58, right: 12, top: 22, height: "58%" }, { left: 58, right: 12, top: "74%", bottom: 24 }],
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: panel, borderColor: line, textStyle: { color: ink },
+      formatter: (pp) => {
+        const i = [].concat(pp)[0]?.dataIndex; const g = G[i]; if (!g) return "";
+        const zr = Z.map((z, k) => g.seconds[k] ? `<span style="color:${col[k].hex}">■</span> ${esc(z.id)} ${esc(z.name)} <b>${fmtDur(g.seconds[k], "hm")}</b>` : "").filter(Boolean);
+        return `<div style="font-size:11.5px;line-height:1.5"><b>${esc(g.start)} – ${esc(g.end)}</b>${g.phase ? ` · ${esc(g.phase.label)}` : ""}<br>
+          合計 ${fmtDur(g.total_s, "hm")}（${g.n} 次）<br>${zr.join("<br>")}<br>低強度 ${pzPct(g.low_share)}${g.low_target ? `（目標 ≥ ${pzPct(g.low_target)}）` : ""}<br>${esc(g.verdict.icon)} ${esc(g.verdict.text)}</div>`;
+      } },
+    xAxis: [{ type: "category", data: cats, gridIndex: 0, axisTick: { show: false }, axisLabel: { show: false }, axisLine: { lineStyle: { color: line } } },
+      { type: "category", data: cats, gridIndex: 1, axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
+        axisLabel: { color: muted, fontSize: 10.5, hideOverlap: true } }],
+    yAxis: [{ type: "value", gridIndex: 0, min: 0, interval: step, max: (v) => Math.ceil(v.max * 1.12 / step) * step || step,
+        axisLabel: { color: muted, fontSize: 10.5, formatter: pzTick }, splitLine: { lineStyle: { color: line, opacity: 0.7 } } },
+      { type: "value", gridIndex: 1, min: yMin, max: 1, interval: (1 - yMin) / 2, name: "低強度", nameLocation: "middle", nameGap: 42,
+        nameTextStyle: { color: muted, fontSize: 10.5 },
+        axisLabel: { color: muted, fontSize: 10, formatter: (v) => `${Math.round(v * 100)}%` }, splitLine: { lineStyle: { color: line, opacity: 0.5 } } }],
+    series: [...zoneSeries,
+      { name: "合計", type: "bar", stack: "t", xAxisIndex: 0, yAxisIndex: 0, silent: true, data: G.map(() => 0), itemStyle: { color: "transparent" },
+        label: { show: G.length <= 16, position: "top", color: ink, fontSize: 10, formatter: (q) => G[q.dataIndex].total_s ? fmtDur(G[q.dataIndex].total_s, "hm") : "" },
+        tooltip: { show: false } },
+      { name: "目標帶", type: "custom", xAxisIndex: 1, yAxisIndex: 1, silent: true, z: 1, data: G.map((g, i) => [i, g.low_target || 0]),
+        renderItem: (params, api) => {
+          const g = G[params.dataIndex]; if (!g.low_target) return null;
+          const x = api.coord([params.dataIndex, 0])[0], w = api.size([1, 0])[0];
+          const y0 = api.coord([0, res.low_floor])[1], y1 = api.coord([0, g.low_target])[1];
+          return { type: "rect", shape: { x: x - w / 2, y: y1, width: w, height: y0 - y1 }, style: { fill: bandColor } };
+        } },
+      { name: "低強度佔比", type: "scatter", xAxisIndex: 1, yAxisIndex: 1, z: 3, symbolSize: 9,
+        data: G.map((g) => {
+          if (g.low_share == null || g.verdict.level === "none") return { value: null };
+          const ok = g.verdict.level === "good";
+          return { value: g.low_share, symbol: ok ? "circle" : "triangle",
+            itemStyle: ok ? { color: ink, borderColor: panel, borderWidth: 1.5 } : { color: panel, borderColor: ink, borderWidth: 1.5 } };
+        }),
+        markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: "dashed", width: 1 }, label: { show: false },
+          data: [{ yAxis: res.low_floor }] } }],
+  });
+  new ResizeObserver(() => chart.resize()).observe(el);
+  const meta = [pzThresholdText(res), pzSkipText(res)].filter(Boolean).map(esc).join(" · ");
+  card.insertAdjacentHTML("beforeend", `${meta ? `<p class="pzmeta">${meta}</p>` : ""}${pzDetailsThresholds(res)}
+    <details class="pzdet"><summary>表格（每${month ? "月" : "週"}）</summary><div style="overflow-x:auto"><table class="zt"><thead><tr><th>${month ? "月" : "週"}</th>${Z.map((z) => `<th class="num">${esc(z.id)}</th>`).join("")}<th class="num">合計</th><th class="num">低強度</th><th>判定</th></tr></thead><tbody>
+    ${G.map((g, i) => `<tr><td>${esc(cats[i])}${g.phase ? ` <span class="meta">${esc(g.phase.label)}</span>` : ""}</td>${g.seconds.map((s) => `<td class="num">${s ? fmtDur(s, "hm") : "—"}</td>`).join("")}<td class="num">${fmtDur(g.total_s, "hm")}</td><td class="num">${pzPct(g.low_share)}</td><td>${esc(g.verdict.icon)} ${esc(g.verdict.text)}</td></tr>`).join("")}
+    </tbody></table></div></details>`);
+}
 
 function drawTargets(card, res) {
   card.querySelector(".loading")?.remove();
@@ -2135,17 +2449,21 @@ function drawActHrTrend(card, res) {
 }
 
 // ---- 爬坡與地形 (workout_review climbs / grades). Self-contained: its own styles (cpStyle), toggles and
-// helpers (cp*). drawClimbProfile: the elevation profile against km with the detected climbs (①②…) and
-// descents (↓, hatched) as bands, and an aligned metric panel below on the same km axis (never a second
-// y-scale on the profile); then one row per climb against the athlete's usual. drawGradeProfile: one row
+// helpers (cp*). drawClimbProfile: ONE plot against km — the elevation as a light background area on the
+// right axis (m) and the selected metric as a thick line on the left axis (the user asked for the overlay,
+// 2026-10-02: a dual scale, so both axes and the legend name their series and units), with the detected
+// climbs (①②…) and descents (↓, hatched) as bands; then one row per climb against the athlete's usual.
+// Explanations go behind the card's 「?」, not into captions. drawGradeProfile: one row
 // per grade bin — time in it, and the metric against the usual for that bin. Tables sit in 「詳細數字」.
 const CP_KEYS = { climb: "wko5viewer.climbmetric", grade: "wko5viewer.grademetric" };
 function cpStyle() {
   if (document.getElementById("cp-style")) return;
-  const dark = "--cp-elev: #9a9890; --cp-up: #d95926; --cp-down: #199e70; --cp-line: #3987e5; --cp-base: #3b424c; --cp-ink2: #c3c2b7; --cp-bar: #5b616b;";
+  // --cp-metric: the climb overlay's metric line — saturated blue, far in hue and lightness from the
+  // neutral elevation area (validate_palette: ΔE 28 light / 22 dark against --cp-elev, contrast ≥ 3:1)
+  const dark = "--cp-elev: #9a9890; --cp-up: #d95926; --cp-down: #199e70; --cp-line: #3987e5; --cp-metric: #4a95ee; --cp-base: #3b424c; --cp-ink2: #c3c2b7; --cp-bar: #5b616b;";
   const st = document.createElement("style");
   st.id = "cp-style";
-  st.textContent = `:root { --cp-elev: #77756f; --cp-up: #eb6834; --cp-down: #1baf7a; --cp-line: #2a78d6; --cp-base: #d5d8dd; --cp-ink2: #52514e; --cp-bar: #a9adb4; }
+  st.textContent = `:root { --cp-elev: #77756f; --cp-up: #eb6834; --cp-down: #1baf7a; --cp-line: #2a78d6; --cp-metric: #1f5fbf; --cp-base: #d5d8dd; --cp-ink2: #52514e; --cp-bar: #a9adb4; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${dark} } }
 :root[data-theme="dark"] { ${dark} }
 .cpbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 2px 0 4px; }
@@ -2279,15 +2597,15 @@ function drawClimbProfile(card, res) {
   if (!P || !cpHas(P.alt)) return;
   const pctLine = cpHas(P.power) && cp ? P.power.map((v) => v == null ? null : v / cp * 100) : null;
   const M = {
-    vam: { label: "VAM", ys: P.vam, seg: (c) => c.vam, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), zero: true,
-      cap: "VAM 每小時爬升 m/h（60 秒滾動，推估）" },
-    power: { label: "功率", ys: P.power, seg: (c) => c.avg_power, segF: (v) => `${cpN(v)} W`, axisF: (v) => `${cpN(v)}`,
+    vam: { label: "VAM", unit: "m/h", ys: P.vam, seg: (c) => c.vam, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), zero: true,
+      cap: "VAM = 每小時爬升 m/h（60 秒滾動，推估）" },
+    power: { label: "功率", unit: "W", ys: P.power, seg: (c) => c.avg_power, segF: (v) => `${cpN(v)} W`, axisF: (v) => `${cpN(v)}`,
       cap: "功率 W（60 秒平均）" },
-    pct: { label: "%CP", ys: pctLine, seg: (c) => c.pct_cp == null ? null : c.pct_cp * 100, segF: (v) => `${cpN(v)}%`,
+    pct: { label: "%CP", unit: "%", ys: pctLine, seg: (c) => c.pct_cp == null ? null : c.pct_cp * 100, segF: (v) => `${cpN(v)}%`,
       axisF: (v) => `${cpN(v)}%`, cap: `功率佔 CP 的比例（CP ${cpN(cp)} W，60 秒平均）` },
-    hr: { label: "心率", ys: P.hr, seg: (c) => c.avg_hr, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), cap: "心率 bpm（60 秒平均）" },
-    pace: { label: "配速／GAP", ys: P.gap, ys2: P.pace, pace: true, seg: (c) => c.gap_s_per_km, segF: (v) => `GAP ${cpPace(v)}`,
-      axisF: cpPaceTick, cap: "GAP（坡度換算平地配速）與實際配速 /km，上 = 快" },
+    hr: { label: "心率", unit: "bpm", ys: P.hr, seg: (c) => c.avg_hr, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), cap: "心率 bpm（60 秒平均）" },
+    pace: { label: "配速／GAP", name: "GAP", unit: "/km", ys: P.gap, ys2: P.pace, pace: true, seg: (c) => c.gap_s_per_km, segF: (v) => `GAP ${cpPace(v)}`,
+      axisF: cpPaceTick, cap: "GAP（坡度換算平地配速）與實際配速 /km；左軸上下顛倒，越上面越快" },
   };
   const CMP = {
     vam: { key: "vam", f: (v) => `${cpN(v)} m/h`, axisF: (v) => cpN(v), scale: 1, name: "VAM（m/h）", hint: "越右爬得越快" },
@@ -2307,23 +2625,53 @@ function drawClimbProfile(card, res) {
   const leg = document.createElement("div");
   leg.className = "cpleg";
   leg.setAttribute("aria-label", "圖例");
+  // the overlay: elevation = light area on the RIGHT axis (m), the metric = thick line on the LEFT axis;
+  // the legend and both axis names say which is which (a dual scale the user asked for, made explicit)
+  const mName = (m) => m.name || m.label;
   const legend = () => {
     const m = M[metric];
-    leg.innerHTML = `<span><i style="background:${cpRgba(css("--cp-elev"), .28)}"></i>海拔</span>`
-      + (climbs.length ? `<span><i style="background:${cpRgba(css("--cp-up"), .22)};border-bottom:2px solid var(--cp-up)"></i>①② 爬坡段（≥ 80 m、≥ 3%）</span>` : "")
-      + ((D.descents || []).length ? `<span><i class="hatch"></i>↓ 下坡段（≥ 80 m）</span>` : "")
-      + `<span><i class="ln" style="border-color:var(--cp-line)"></i>${esc(m.pace ? "GAP" : m.label)}</span>`
-      + (m.ys2 ? `<span><i class="ln" style="border-color:var(--cp-elev)"></i>實際配速</span>` : "")
+    leg.innerHTML = `<span><i class="ln" style="border-top-width:3px;border-color:var(--cp-metric)"></i>${esc(mName(m))}（左軸，${esc(m.unit)}）</span>`
+      + `<span><i style="background:${cpRgba(css("--cp-elev"), .3)};border-top:1px solid var(--cp-elev)"></i>海拔（右軸，m）</span>`
+      + (m.ys2 ? `<span><i class="ln" style="border-top-style:dashed;border-color:var(--cp-ink2)"></i>實際配速（左軸）</span>` : "")
+      + (climbs.length ? `<span><i style="background:${cpRgba(css("--cp-up"), .22)};border-bottom:2px solid var(--cp-up)"></i>①② 爬坡段</span>` : "")
+      + ((D.descents || []).length ? `<span><i class="hatch"></i>↓ 下坡段</span>` : "")
       + (climbs.length ? `<span><i class="ln" style="border-color:var(--text)"></i>每段平均</span>` : "");
   };
-  bar.appendChild(cpSeg(avail, metric, "下方面板的指標", (k) => { metric = k; cpSave(CP_KEYS.climb, k); legend(); paint(); }));
+  // explanations live behind the card's 「?」 (no inline captions): the card description + this chart's notes
+  const qBtn = () => {
+    const h2 = card.querySelector("h2");
+    if (!h2) return null;
+    let q = h2.querySelector(".qtip");
+    if (!q) {
+      q = document.createElement("button");
+      q.type = "button"; q.className = "qtip"; q.textContent = "?"; q.setAttribute("aria-label", "說明"); q.dataset.base = "";
+      const zb = h2.querySelector(".zbtn");
+      if (zb) zb.before(q); else h2.appendChild(q);
+    }
+    if (q.dataset.base == null) q.dataset.base = q.dataset.tip || "";
+    return q;
+  };
+  const tipText = () => {
+    // the card description (views/workout.json) explains the layout; this adds the current metric's notes
+    const m = M[metric], cm = CMP[metric];
+    const t = [`目前的曲線（左軸）：${m.cap}。`];
+    if (climbs.length) t.push(`每段和平常比（${cm.name}）：${cm.hint}；點 = 這段，灰條 = 平常的中間 50%，直線 = 中位數。`);
+    return t.join("\n");
+  };
+  const setTip = () => {
+    const q = qBtn();
+    if (!q) return;
+    q.dataset.tip = [q.dataset.base, tipText()].filter(Boolean).join("\n\n");
+  };
+  bar.appendChild(cpSeg(avail, metric, "曲線的指標（左軸）", (k) => { metric = k; cpSave(CP_KEYS.climb, k); legend(); setTip(); paint(); }));
   bar.appendChild(leg);
   legend();
+  setTip();
   wrap.appendChild(bar);
   const el = document.createElement("div");
   el.className = "plot cprof";
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `高度圖：${climbs.length} 段爬坡、${(D.descents || []).length} 段下坡；數字在「詳細數字」表格`);
+  el.setAttribute("aria-label", `高度圖與指標曲線（左軸指標、右軸海拔）：${climbs.length} 段爬坡、${(D.descents || []).length} 段下坡；數字在「詳細數字」表格`);
   wrap.appendChild(el);
   const cmpCap = document.createElement("p");
   cmpCap.className = "cpcap";
@@ -2390,29 +2738,29 @@ function drawClimbProfile(card, res) {
   }
   const chart = echarts.init(el);
   charts.push(chart);
-  const hatchTop = cpHatch(css("--cp-down"), 0.45), hatchLow = cpHatch(css("--cp-down"), 0.25);
+  const hatchTop = cpHatch(css("--cp-down"), 0.3);    // light: the metric line must stay on top visually
 
   function paint() {
     const m = M[metric];
     const H = el.clientHeight || 390;
-    const top0 = bands.length ? 44 : 12, gap = 34, bottom = 28;
-    const h1 = Math.round((H - top0 - gap - bottom) * 0.38), h0 = H - top0 - gap - bottom - h1, top1 = top0 + h0 + gap;
+    const top0 = bands.length ? 44 : 12, bottom = 28, h0 = H - top0 - bottom;
     const ys = m.ys || [];
-    const yN1 = cpNice(...cpRange([...ys, ...(m.ys2 || [])], !!m.zero), 3, !!m.pace), y1min = yN1.min, y1max = yN1.max;
+    const yN1 = cpNice(...cpRange([...ys, ...(m.ys2 || [])], !!m.zero), 4, !!m.pace), y1min = yN1.min, y1max = yN1.max;
     const ink = css("--text"), muted = css("--muted"), line = css("--line"), up = css("--cp-up"), down = css("--cp-down");
-    const elev = css("--cp-elev"), blue = css("--cp-line");
+    const elev = css("--cp-elev"), metricC = css("--cp-metric"), ink2 = css("--cp-ink2");
     const lbl = { color: muted, fontSize: 10.5 };
+    // low = the metric layer (left axis): only the per-climb average rules; else the elevation layer
+    // (right axis): the band rects, the climb / descent stroke on the profile and the ①② labels
     const bandItem = (low) => (params, api) => {
       const b = bands[params.dataIndex];
       if (!low && (params.dataIndex === 0 || !b.lay)) layout(api);
-      const yA = low ? y1min : y0min, yB = low ? y1max : y0max;
-      const a = api.coord([b.x0, yA]), z = api.coord([b.x1, yB]);
+      const a = api.coord([b.x0, y0min]), z = api.coord([b.x1, y0max]);
       const yTop = Math.min(a[1], z[1]), hgt = Math.abs(a[1] - z[1]);
-      const kids = [{ type: "rect", silent: true, shape: { x: a[0], y: yTop, width: Math.max(1, z[0] - a[0]), height: hgt },
-        style: { fill: b.up ? cpRgba(up, low ? 0.08 : 0.16) : low ? hatchLow : hatchTop } }];
+      const kids = low ? [] : [{ type: "rect", silent: true, shape: { x: a[0], y: yTop, width: Math.max(1, z[0] - a[0]), height: hgt },
+        style: { fill: b.up ? cpRgba(up, 0.13) : hatchTop } }];
       if (!low) {
         if (b.pts.length > 1) kids.push({ type: "polyline", silent: true, shape: { points: b.pts.map((p) => api.coord(p)) },
-          style: { stroke: b.up ? up : down, lineWidth: 2.5, fill: null, lineJoin: "round", lineCap: "round" } });
+          style: { stroke: b.up ? up : down, lineWidth: 1.5, fill: null, lineJoin: "round", lineCap: "round" } });
         const L = b.lay || { full: false, x: (a[0] + z[0]) / 2, row: 0 };
         const gy = api.coord([x0, y0max])[1];
         if (L.full) {
@@ -2475,34 +2823,37 @@ function drawClimbProfile(card, res) {
           const b = bandAt(+x);
           return cpTipBox(tipRow(idxAt(+x)) + (b ? `<hr style="border:0;border-top:1px solid ${line};margin:5px 0">${tipBand(b)}` : ""));
         } },
-      grid: [{ left: 56, right: 18, top: top0, height: h0 }, { left: 56, right: 18, top: top1, height: h1 }],
-      xAxis: [
-        { type: "value", gridIndex: 0, min: x0, max: x1, axisLabel: { show: false }, axisTick: { show: false },
-          axisLine: { lineStyle: { color: line } }, splitLine: { lineStyle: { color: line } } },
-        { type: "value", gridIndex: 1, min: x0, max: x1, axisLine: { lineStyle: { color: line } }, splitLine: { lineStyle: { color: line } },
-          axisLabel: { ...lbl, showMinLabel: x0 === 0, showMaxLabel: false, formatter: (v) => `${cpN(v, v % 1 ? 1 : 0)} km` } },
-      ],
+      // one plot: the metric on the LEFT axis (yAxis 0), the elevation on the RIGHT axis (yAxis 1). The
+      // grid lines follow the left axis only; each axis is named with its unit next to its own swatch
+      grid: { left: 62, right: 60, top: top0, height: h0 },
+      xAxis: { type: "value", min: x0, max: x1, axisLine: { lineStyle: { color: line } }, splitLine: { show: false },
+        axisLabel: { ...lbl, showMinLabel: x0 === 0, showMaxLabel: false, formatter: (v) => `${cpN(v, v % 1 ? 1 : 0)} km` } },
       yAxis: [
-        { type: "value", gridIndex: 0, min: y0min, max: y0max, interval: yN0.interval, axisLabel: { ...lbl, formatter: (v) => `${v} m` },
-          splitLine: { lineStyle: { color: line } } },
-        { type: "value", gridIndex: 1, min: y1min, max: y1max, inverse: !!m.pace, interval: yN1.interval,
-          axisLabel: { ...lbl, formatter: (v) => m.axisF(v) }, splitLine: { lineStyle: { color: line } } },
+        { type: "value", position: "left", min: y1min, max: y1max, inverse: !!m.pace, interval: yN1.interval,
+          name: `{sw|━} ${mName(m)}（${m.unit}）`, nameLocation: "middle", nameGap: 44, nameRotate: 90,
+          nameTextStyle: { color: ink, fontSize: 11, fontWeight: 600, rich: { sw: { color: metricC, fontSize: 13, fontWeight: 700 } } },
+          axisLine: { show: true, lineStyle: { color: line } }, axisTick: { show: true, lineStyle: { color: line } },
+          axisLabel: { ...lbl, color: ink, formatter: (v) => m.axisF(v) }, splitLine: { lineStyle: { color: line } } },
+        { type: "value", position: "right", min: y0min, max: y0max, interval: yN0.interval,
+          name: `{sw|▇} 海拔（m）`, nameLocation: "middle", nameGap: 44, nameRotate: -90,
+          nameTextStyle: { color: muted, fontSize: 11, fontWeight: 600, rich: { sw: { color: cpRgba(elev, 0.45), fontSize: 11 } } },
+          axisLine: { show: true, lineStyle: { color: line } }, axisTick: { show: true, lineStyle: { color: line } },
+          axisLabel: { ...lbl, formatter: (v) => `${v}` }, splitLine: { show: false } },
       ],
-      graphic: [{ type: "text", left: 56, top: top1 - 19, silent: true,
-        style: { text: m.cap, fill: muted, font: F2, width: Math.max(80, (el.clientWidth || 600) - 74), overflow: "truncate" } }],
+      graphic: [],
       series: [
-        { id: "alt", name: "海拔", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(A), showSymbol: false, z: 2,
-          lineStyle: { color: elev, width: 1.5 }, itemStyle: { color: elev }, areaStyle: { color: cpRgba(elev, 0.13) } },
-        { id: "bands", type: "custom", xAxisIndex: 0, yAxisIndex: 0, clip: false, z: 3, silent: true,
+        { id: "alt", name: "海拔", type: "line", yAxisIndex: 1, data: pts(A), showSymbol: false, z: 1, silent: true,
+          lineStyle: { color: cpRgba(elev, 0.6), width: 1 }, itemStyle: { color: elev }, areaStyle: { color: cpRgba(elev, 0.16) } },
+        { id: "bands", type: "custom", yAxisIndex: 1, clip: false, z: 2, silent: true,
           data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(false) },
-        { id: "bandsLow", type: "custom", xAxisIndex: 1, yAxisIndex: 1, z: 1, silent: true,
+        { id: "bandsLow", type: "custom", yAxisIndex: 0, z: 4, silent: true,
           data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(true) },
-        { id: "m2", name: "實際配速", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: m.ys2 ? pts(m.ys2) : [], showSymbol: false,
-          connectNulls: false, lineStyle: { color: elev, width: 1 }, itemStyle: { color: elev }, z: 2 },
-        { id: "m", name: m.label, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(ys), showSymbol: false, connectNulls: false,
-          lineStyle: { color: blue, width: 1.5 }, itemStyle: { color: blue }, z: 3 },
+        { id: "m2", name: "實際配速", type: "line", yAxisIndex: 0, data: m.ys2 ? pts(m.ys2) : [], showSymbol: false,
+          connectNulls: false, lineStyle: { color: ink2, width: 1, type: "dashed", opacity: 0.8 }, itemStyle: { color: ink2 }, z: 3 },
+        { id: "m", name: mName(m), type: "line", yAxisIndex: 0, data: pts(ys), showSymbol: false, connectNulls: false,
+          lineStyle: { color: metricC, width: 2.75, cap: "round", join: "round" }, itemStyle: { color: metricC }, z: 5 },
       ],
-    }, { replaceMerge: ["series", "graphic"] });
+    }, { replaceMerge: ["series", "graphic", "xAxis", "yAxis", "grid"] });
     paintCmp();
   }
 
@@ -2518,9 +2869,8 @@ function drawClimbProfile(card, res) {
     }
     cmpEl.style.display = "";
     const nb = rows.filter((c) => c.base?.[cm.key]?.ok).length;
-    cmpCap.innerHTML = `<b>每段 ${esc(cm.name)} 和你平常比</b>（${esc(cm.hint)}）：點 = 這段；灰條 = 平常的中間 50%，直線 = 中位數。`
-      + `平常 = 同類活動近 8 週（不足 5 段放寬到 12、26 週）坡度相差 ±${Math.round(D.grade_match * 100)} pp 內的爬坡（推估）`
-      + (nb < rows.length ? `；${rows.length - nb} 段樣本不足，不比較` : "");
+    // a short heading only; how to read it is behind the card's 「?」 (tipText)
+    cmpCap.innerHTML = `<b>每段 ${esc(cm.name)} 和平常比</b>` + (nb < rows.length ? `（${rows.length - nb} 段樣本不足，不比較）` : "");
     const narrow = (cmpEl.clientWidth || card.clientWidth || 800) < 520;
     const h = rows.length * 30 + 34;
     cmpEl.style.height = cmpEl.style.minHeight = `${h}px`;
@@ -2616,10 +2966,8 @@ function drawGradeProfile(card, res) {
   function paint() {
     const g = G[metric];
     const val = (b) => b.metrics?.[g.key];
-    const nb = bins.filter((b) => b.base?.[g.key]?.ok).length;
-    cap.innerHTML = `<b>每個坡度的${esc(g.label)}和你平常比</b>（${esc(g.hint)}；上 = 上坡、下 = 下坡）。`
-      + `平常 = 同類活動近 8 週（不足 5 次放寬到 12、26 週）在該坡度待 ≥ ${Math.round(D.min_s)} 秒的那幾次（推估）`
-      + (nb < bins.length ? `；${bins.length - nb} 個坡度樣本不足，只畫這次` : "");
+    // the explanation lives behind the card's 「?」 (views/workout.json description); only a short axis hint here
+    cap.innerHTML = `<b>${esc(g.label)}</b>（${esc(g.unit)}）· ${esc(g.hint)}`;
     const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
     const h = bins.length * 28 + 34;
     el.style.height = el.style.minHeight = `${h}px`;
@@ -2686,6 +3034,291 @@ function drawGradeProfile(card, res) {
               itemStyle: short ? { color: panel, borderColor: css("--cp-line"), borderWidth: 1.5 }
                 : { color: css("--cp-line"), borderColor: panel, borderWidth: 2 } };
           }) },
+      ],
+    }, { replaceMerge: ["series"] });
+  }
+  paint();
+  new ResizeObserver(() => paint()).observe(el);
+}
+
+// ---- 跑姿與膝蓋負荷 (workout_review form_grades / form_work; res.form_profile). Self-contained; reuses the
+// cp* helpers above. mode "grade": one row per grade bin, like 坡度分組 (time share + this run's dot against the
+// usual's middle 50 % and median). mode "work": the metric across the ten 10 % slices of the work done, this run
+// as a line over the usual as a band (q1–q3) with the median dashed — a line reads change over the run (fatigue)
+// better than ten rows of dots. A band toggle keeps one grade band only. Explanations sit behind the card's 「?」.
+const FP_KEYS = { grade: "wko5viewer.formgrademetric", work: "wko5viewer.formworkmetric", band: "wko5viewer.formworkband" };
+const FP_METRICS = {
+  ilr: { label: "ILR", unit: "BW/s", d: 1 },
+  impact_g: { label: "衝擊 G", unit: "G", d: 2 },
+  impact_km: { label: "每公里衝擊量", unit: "G·步/km，推估", d: 0 },
+  lss: { label: "LSS", unit: "kN/m", d: 1 },
+  kleg: { label: "kleg", unit: "kN/m", d: 1 },
+  gct: { label: "觸地時間", unit: "ms", d: 0 },
+  cadence: { label: "步頻", unit: "spm", d: 0 },
+  vo: { label: "垂直振幅", unit: "cm", d: 1 },
+};
+const FP_IMPACT = new Set(["ilr", "impact_g", "impact_km"]);      // these show the same bin's cadence beside them
+// "158↓": the bin's cadence, ↑ / ↓ when above / below the usual's middle 50 %
+function fpCad(r) {
+  const v = r.m?.cadence, b = r.base?.cadence;
+  if (v == null) return "–";
+  return `${Math.round(v)}${b?.ok ? (v > b.q3 ? "↑" : v < b.q1 ? "↓" : "") : ""}`;
+}
+function drawFormProfile(card, res) {
+  cpStyle();
+  const D = res.form_profile, work = D.mode === "work";
+  const rowsOf = (band) => work ? (D.bands?.[band] || []) : (D.bins || []).filter((b) => b.time_s > 0);
+  const keys = (D.keys || []).filter((k) => FP_METRICS[k]);
+  const wrap = cpFrame(card, res, work ? "詳細數字（每 10% 作功）" : `詳細數字（${rowsOf().length} 個坡度區間）`);
+  if (!keys.length) return;
+  const avail = keys.map((k) => [k, FP_METRICS[k].label]);
+  const mkey = work ? FP_KEYS.work : FP_KEYS.grade;
+  let metric = keys.includes(cpPref(mkey, keys[0])) ? cpPref(mkey, keys[0]) : keys[0];
+  const bands = work ? Object.keys(D.bands || {}) : [];
+  let band = bands.includes(cpPref(FP_KEYS.band, "all")) ? cpPref(FP_KEYS.band, "all") : (bands[0] || "all");
+  const bar = document.createElement("div");
+  bar.className = "cpbar";
+  bar.appendChild(cpSeg(avail, metric, "跑姿指標", (k) => { metric = k; cpSave(mkey, k); paint(); }));
+  if (bands.length > 1)
+    bar.appendChild(cpSeg(bands.map((b) => [b, D.band_labels?.[b] || b]), band, "只看一種坡度", (b) => { band = b; cpSave(FP_KEYS.band, b); paint(); }));
+  const leg = document.createElement("div");
+  leg.className = "cpleg";
+  const min = Math.round(D.min_s);
+  leg.innerHTML = work
+    ? `<span><i class="ln" style="border-color:var(--cp-line)"></i>這次</span>`
+      + `<span><i class="hol"></i>這次（不到 ${min} 秒）</span>`
+      + `<span><i style="background:var(--cp-base)"></i>平常的中間 50%</span>`
+      + `<span><i class="ln" style="border-top-style:dashed;border-color:var(--cp-ink2)"></i>平常中位數（推估）</span>`
+    : `<span><i style="background:var(--cp-bar)"></i>跑步時間佔比</span>`
+      + `<span><i class="dot" style="background:var(--cp-line)"></i>這次</span>`
+      + `<span><i class="hol"></i>這次（不到 ${min} 秒）</span>`
+      + `<span><i class="iqr"></i>平常的中間 50% 與中位數（推估）</span>`;
+  const cadLeg = document.createElement("span");
+  cadLeg.textContent = work ? "橫軸下方數字 = 該段步頻 spm（↑↓ = 高／低於平常）" : "右欄數字 = 該坡度步頻 spm（↑↓ = 高／低於平常）";
+  leg.appendChild(cadLeg);
+  bar.appendChild(leg);
+  const cap = document.createElement("p");
+  cap.className = "cpcap";
+  const el = document.createElement("div");
+  el.className = "plot cpform";
+  el.style.flex = "none";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", work ? "跑姿隨作功進度的變化，數字在「詳細數字」表格" : "跑姿依坡度，數字在「詳細數字」表格");
+  wrap.append(bar, cap, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  const ink = () => css("--text"), muted = () => css("--muted"), line = () => css("--line"), panel = () => css("--panel");
+  function usualTip(v, bb, g) {
+    const f = (x) => cpN(x, g.d);
+    return bb?.ok ? `<br>平常 中位 ${f(bb.median)}（中間 50%：${f(bb.q1)}～${f(bb.q3)}；${bb.n} 次／${bb.weeks} 週，推估）<br>${cpOutside(v, bb, false) || "在平常範圍內"}`
+      : `<br>平常：只有 ${bb?.n || 0} 次 ≥ ${min} 秒（< 5），不比較`;
+  }
+  function paintGrade(g) {
+    const bins = rowsOf(), val = (b) => b.m?.[metric];
+    cap.innerHTML = `<b>${esc(g.label)}</b>（${esc(g.unit)}）· 越右越高`;
+    const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
+    const h = bins.length * 28 + 34;
+    el.style.height = el.style.minHeight = `${h}px`;
+    const left = 78, w0 = narrow ? 64 : Math.max(90, Math.min(190, W * 0.2)), gap = narrow ? 14 : 26;
+    const vals = bins.flatMap((b) => { const v = val(b), bb = b.base?.[metric]; return [v, ...(bb?.ok ? [bb.q1, bb.q3] : [])]; })
+      .filter((v) => v != null && isFinite(v));
+    let lo = vals.length ? Math.min(...vals) : 0, hi = vals.length ? Math.max(...vals) : 1;
+    const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
+    const xn = cpNice(lo - pad, hi + pad, narrow ? 3 : 5);
+    lo = xn.min; hi = xn.max;
+    const maxShare = Math.max(...bins.map((b) => b.time_pct || 0), 1);
+    const cats = bins.map((b) => b.label);
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => {
+        const b = bins[p.dataIndex];
+        if (!b) return "";
+        const v = val(b);
+        return cpTipBox(`<b>坡度 ${esc(b.label)}</b><br>跑步時間 <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）`
+          + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${b.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
+          + usualTip(v, b.base?.[metric], g) + cadTip(b));
+      } },
+      grid: [{ left, width: w0, top: 4, bottom: 26 },
+        { left: left + w0 + gap, right: (narrow ? 14 : 118) + (showCad ? 48 : 0), top: 4, bottom: 26 }],
+      xAxis: [
+        { type: "value", gridIndex: 0, min: 0, max: maxShare * (narrow ? 1.6 : 1.45), axisLabel: { show: false }, axisTick: { show: false },
+          axisLine: { show: false }, splitLine: { show: false } },
+        { type: "value", gridIndex: 1, min: lo, max: hi, interval: xn.interval, axisLine: { show: false },
+          axisLabel: { color: muted(), fontSize: 10.5, formatter: (v) => cpN(v, xn.interval >= 1 ? 0 : g.d) }, splitLine: { lineStyle: { color: line() } } },
+      ],
+      yAxis: [
+        { type: "category", gridIndex: 0, data: cats, axisTick: { show: false }, axisLine: { lineStyle: { color: line() } },
+          axisLabel: { color: ink(), fontSize: 11 } },
+        { type: "category", gridIndex: 1, data: cats, axisTick: { show: false }, axisLine: { show: false }, axisLabel: { show: false } },
+      ],
+      series: [
+        { id: "time", type: "bar", xAxisIndex: 0, yAxisIndex: 0, barWidth: 12, z: 2, data: bins.map((b) => b.time_pct || 0),
+          itemStyle: { color: css("--cp-bar"), borderRadius: [0, 4, 4, 0] },
+          label: { show: true, position: "right", color: muted(), fontSize: 10.5, formatter: (p) => `${Math.round(p.value)}%` } },
+        { id: "base", type: "custom", xAxisIndex: 1, yAxisIndex: 1, data: bins.map((b, i) => [lo, i]), encode: { x: 0, y: 1 }, z: 1,
+          renderItem: (params, api) => {
+            const b = bins[params.dataIndex], bb = b.base?.[metric], yc = api.coord([lo, params.dataIndex])[1];
+            const gx0 = api.coord([lo, 0])[0], gx1 = api.coord([hi, 0])[0];
+            const kids = [{ type: "rect", shape: { x: Math.min(gx0, gx1), y: yc - 13, width: Math.abs(gx1 - gx0), height: 26 },
+              style: { fill: "rgba(0,0,0,0.001)" } }];
+            if (bb?.ok) {
+              const a = api.coord([bb.q1, 0])[0], z = api.coord([bb.q3, 0])[0], md = api.coord([bb.median, 0])[0];
+              kids.push({ type: "rect", silent: true, shape: { x: Math.min(a, z), y: yc - 5, width: Math.max(2, Math.abs(z - a)), height: 10, r: 4 },
+                style: { fill: css("--cp-base") } },
+                { type: "line", silent: true, shape: { x1: md, y1: yc - 8, x2: md, y2: yc + 8 }, style: { stroke: css("--cp-ink2"), lineWidth: 2 } });
+            }
+            const xr = Math.max(gx0, gx1);
+            // the same bin's cadence, a quiet column right of the plot (impact metrics only)
+            if (showCad) kids.push({ type: "text", silent: true, style: { text: fpCad(b), x: xr + 10, y: yc, fill: muted(),
+              font: "10.5px system-ui, sans-serif", verticalAlign: "middle" } });
+            const t = narrow || b.time_s < D.min_s ? null : cpOutside(val(b), bb, false);
+            if (t) kids.push({ type: "text", silent: true, style: { text: t, x: xr + (showCad ? 58 : 12), y: yc, fill: ink(),
+              font: "11px system-ui, sans-serif", verticalAlign: "middle" } });
+            return { type: "group", children: kids };
+          } },
+        { id: "me", type: "scatter", xAxisIndex: 1, yAxisIndex: 1, silent: true, z: 3, symbolSize: 11,
+          data: bins.map((b, i) => {
+            const v = val(b), short = b.time_s < D.min_s;
+            return v == null ? { value: [null, i] } : { value: [v, i],
+              itemStyle: short ? { color: panel(), borderColor: css("--cp-line"), borderWidth: 1.5 }
+                : { color: css("--cp-line"), borderColor: panel(), borderWidth: 2 } };
+          }) },
+      ],
+    }, { replaceMerge: ["series", "xAxis", "yAxis", "grid"] });
+  }
+  function paintWork(g) {
+    const rows = rowsOf(band), val = (r) => r.m?.[metric], B = (r) => r.base?.[metric];
+    const xname = D.split === "work" ? "累積作功" : "累積移動時間";
+    cap.innerHTML = `<b>${esc(g.label)}</b>（${esc(g.unit)}）· 越上越高；橫軸 = ${xname}`;
+    const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
+    el.style.height = el.style.minHeight = `${narrow ? 230 : 260}px`;
+    const vals = rows.flatMap((r) => { const v = val(r), bb = B(r); return [v, ...(bb?.ok ? [bb.q1, bb.q3] : [])]; })
+      .filter((v) => v != null && isFinite(v));
+    let lo = vals.length ? Math.min(...vals) : 0, hi = vals.length ? Math.max(...vals) : 1;
+    const pad = (hi - lo || Math.abs(hi) || 1) * 0.15;
+    const yn = cpNice(lo - pad, hi + pad, 4);
+    const cats = rows.map((r) => r.label);
+    const ok = (r) => B(r)?.ok;
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "axis", axisPointer: { type: "line", lineStyle: { color: muted() } }, formatter: (ps) => {
+        const r = rows[ps?.[0]?.dataIndex];
+        if (!r) return "";
+        const v = val(r);
+        return cpTipBox(`<b>${esc(xname)} ${esc(r.label)}</b>${band !== "all" ? `（${esc(D.band_labels?.[band] || band)}）` : ""}`
+          + `<br>跑步時間 <b>${cpDur(r.time_s)}</b>`
+          + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${r.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
+          + usualTip(v, B(r), g) + cadTip(r));
+      } },
+      grid: [{ left: 52, right: narrow ? 22 : 30, top: 12, bottom: showCad ? 48 : 34 }],
+      xAxis: [{ type: "category", data: cats, boundaryGap: false, axisTick: { show: false },
+        axisLine: { lineStyle: { color: line() } },
+        // with an impact metric: the slice's cadence on a second, quieter line under each label
+        axisLabel: { color: muted(), fontSize: 10.5, interval: narrow ? 1 : 0, lineHeight: 15,
+          formatter: (c, i) => showCad && rows[i] ? `${c}\n{c|${fpCad(rows[i])}}` : c,
+          rich: { c: { color: muted(), fontSize: 10, fontWeight: 600 } } } }],
+      yAxis: [{ type: "value", min: yn.min, max: yn.max, interval: yn.interval, axisLine: { show: false },
+        axisLabel: { color: muted(), fontSize: 10.5, formatter: (v) => cpN(v, yn.interval >= 1 ? 0 : g.d) }, splitLine: { lineStyle: { color: line() } } }],
+      series: [
+        { id: "q1", type: "line", stack: "iqr", silent: true, symbol: "none", lineStyle: { opacity: 0 },
+          data: rows.map((r) => ok(r) ? B(r).q1 : null) },
+        { id: "iqr", type: "line", stack: "iqr", silent: true, symbol: "none", lineStyle: { opacity: 0 },
+          areaStyle: { color: css("--cp-base"), opacity: 1 }, data: rows.map((r) => ok(r) ? B(r).q3 - B(r).q1 : null) },
+        { id: "med", type: "line", silent: true, symbol: "none", z: 4,
+          lineStyle: { color: css("--cp-ink2"), width: 1.5, type: [5, 4], opacity: 1 }, data: rows.map((r) => ok(r) ? B(r).median : null) },
+        { id: "me", type: "line", z: 5, symbol: "circle", symbolSize: 8, connectNulls: false,
+          lineStyle: { color: css("--cp-line"), width: 2 },
+          data: rows.map((r) => {
+            const v = val(r), short = r.time_s < D.min_s;
+            return { value: v == null ? null : v,
+              itemStyle: short ? { color: panel(), borderColor: css("--cp-line"), borderWidth: 1.5 }
+                : { color: css("--cp-line"), borderColor: panel(), borderWidth: 2 } };
+          }) },
+      ],
+    }, { replaceMerge: ["series", "xAxis", "yAxis", "grid"] });
+  }
+  let showCad = false;
+  const cadTip = (r) => showCad && r.m?.cadence != null
+    ? `<br>步頻 <b>${cpN(r.m.cadence)}</b> spm${r.base?.cadence?.ok ? `（平常 ${cpN(r.base.cadence.median)}）` : ""}` : "";
+  function paint() {
+    const g = FP_METRICS[metric];
+    showCad = FP_IMPACT.has(metric) && keys.includes("cadence");
+    cadLeg.style.display = showCad ? "" : "none";
+    if (work) paintWork(g); else paintGrade(g);
+  }
+  paint();
+  new ResizeObserver(() => paint()).observe(el);
+}
+
+// ---- 步頻與衝擊 (workout_review form_cadence; res.cadence_profile): this run's steady 30-s windows, ILR
+// adjusted to the run's median speed and grade with the athlete's own within-run coefficients, against
+// cadence; the personal trend line (solid over the cadences seen, dashed out to +10 %) and the +5–10 %
+// range (Heiderscheit 2011) as a band. One y-scale. Explanations behind the card's 「?」.
+function drawCadenceProfile(card, res) {
+  cpStyle();
+  const D = res.cadence_profile, F = D.fit, pts = D.points || [];
+  const wrap = cpFrame(card, res, "");
+  if (D.weak || !pts.length) return;           // weak / no personal trend: the rows say so, no chart
+  const bar = document.createElement("div");
+  bar.className = "cpbar";
+  const leg = document.createElement("div");
+  leg.className = "cpleg";
+  leg.innerHTML = `<span><i class="dot" style="background:var(--cp-line);opacity:.6"></i>這次每 30 秒（換算到同速度、同坡度）</span>`
+    + `<span><i class="ln" style="border-color:var(--cp-ink2)"></i>你的趨勢（推估）</span>`
+    + `<span><i style="background:var(--cp-base)"></i>建議 +5–10%（Heiderscheit 2011）</span>`;
+  bar.appendChild(leg);
+  const cap = document.createElement("p");
+  cap.className = "cpcap";
+  cap.innerHTML = `<b>ILR</b>（BW/s，同速度 ${cpN(D.speed_ref, 1)} km/h）· 橫軸 = 步頻 spm`;
+  const el = document.createElement("div");
+  el.className = "plot cpcad";
+  el.style.flex = "none";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", "步頻與衝擊：這次每 30 秒的 ILR 對步頻，和你自己的趨勢線");
+  wrap.append(bar, cap, el);
+  const chart = echarts.init(el);
+  charts.push(chart);
+  function paint() {
+    const W = el.clientWidth || card.clientWidth || 800, narrow = W < 520;
+    el.style.height = el.style.minHeight = `${narrow ? 240 : 280}px`;
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const cmin = Math.min(...xs), cmax = Math.max(...xs);
+    const [cx, cy] = D.center, line = (x) => cy + F.b_cad * (x - cx);
+    const xEnd = Math.max(cmax, D.suggest[1]);
+    const xn = cpNice(Math.min(cmin, D.median_cad) - 2, xEnd + 2, narrow ? 4 : 6);
+    const yv = [...ys, line(xEnd), line(cmin)];
+    const yl = pctl(yv, 0.01), yh = pctl(yv, 0.99), pad = (yh - yl || 1) * 0.12;
+    const yn = cpNice(yl - pad, yh + pad, 4);
+    const muted = css("--muted"), lineC = css("--line"), ink2 = css("--cp-ink2");
+    chart.resize();
+    chart.setOption({
+      animation: false,
+      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => {
+        if (p.seriesId !== "me") return "";
+        const q = pts[p.dataIndex];
+        return cpTipBox(`步頻 <b>${cpN(q[0])}</b> spm<br>ILR <b>${cpN(q[2], 1)}</b> BW/s（${cpN(q[3], 1)} km/h、坡度 ${cpN(q[4], 1)}%）`
+          + `<br>換算到 ${cpN(D.speed_ref, 1)} km/h、坡度 ${cpN(D.grade_ref, 1)}%：<b>${cpN(q[1], 1)}</b>（推估）`);
+      } },
+      grid: [{ left: 48, right: narrow ? 14 : 24, top: 14, bottom: 30 }],
+      xAxis: [{ type: "value", min: xn.min, max: xn.max, interval: xn.interval, axisLine: { lineStyle: { color: lineC } },
+        axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => cpN(v) }, splitLine: { show: false } }],
+      yAxis: [{ type: "value", min: yn.min, max: yn.max, interval: yn.interval, axisLine: { show: false },
+        axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => cpN(v, yn.interval >= 1 ? 0 : 1) }, splitLine: { lineStyle: { color: lineC } } }],
+      series: [
+        { id: "sug", type: "line", silent: true, data: [], markArea: { silent: true, itemStyle: { color: css("--cp-base"), opacity: 0.7 },
+            label: { show: true, position: "insideTop", color: muted, fontSize: 10.5, formatter: "+5–10%" },
+            data: [[{ xAxis: D.suggest[0] }, { xAxis: D.suggest[1] }]] },
+          markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: [2, 3], width: 1 },
+            label: { color: muted, fontSize: 10, formatter: `這次中位 ${cpN(D.median_cad)}`, position: "insideEndTop" },
+            data: [{ xAxis: D.median_cad }] } },
+        { id: "me", type: "scatter", z: 3, symbolSize: 7, data: pts.map((p) => [p[0], p[1]]),
+          itemStyle: { color: css("--cp-line"), opacity: 0.6, borderColor: css("--panel"), borderWidth: 1 } },
+        { id: "trend", type: "line", silent: true, z: 4, symbol: "none", lineStyle: { color: ink2, width: 2 },
+          data: [[cmin, line(cmin)], [cmax, line(cmax)]] },
+        { id: "extra", type: "line", silent: true, z: 4, symbol: "none", lineStyle: { color: ink2, width: 2, type: [5, 4] },
+          data: cmax < xEnd ? [[cmax, line(cmax)], [xEnd, line(xEnd)]] : [] },
       ],
     }, { replaceMerge: ["series"] });
   }
