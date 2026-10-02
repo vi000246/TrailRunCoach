@@ -309,3 +309,11 @@ def test_viewer_drops_the_card_and_links_the_edit_page():
     assert 'data-page="activity"' in page and "自組" not in page
     from backend.api import wko5views as V
     assert Path(V.activities_page().path).name == "activity.html"
+
+
+def test_climb_profile_is_one_overlaid_plot():
+    html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
+    body = html[html.index("function drawClimbProfile"):html.index("function drawGradeProfile")]
+    assert 'position: "left"' in body and 'position: "right"' in body and "海拔（m）" in body
+    assert "--cp-metric" in html and "gridIndex: 1" not in body          # one grid, no stacked panel
+    assert "graphic: []" in body                                           # no inline caption on the plot
