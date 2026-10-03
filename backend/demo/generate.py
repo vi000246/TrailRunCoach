@@ -5,6 +5,7 @@
   root/fit/coros/<year>/demo_<nnnn>.fit   one FIT per activity (as the COROS sync stores them)
   root/plan.json                          events, phases, dated thresholds, weights, profile
   root/demo_courses/<file>.gpx            3 fictional race courses (路跑半馬 / 越野 50K / 百岳 3 日)
+                                          + the real 貓空越野 17K (backend/demo/data, copied as is)
 
 Deterministic: every random number comes from numpy PCG64 seeded with
 (seed, ...) and every date is counted back from `anchor`; the FIT bytes do
@@ -29,7 +30,11 @@ from backend.demo.signals import Segment, simulate_hike, simulate_run
 
 VERSION = 1
 COURSES = {"路跑半馬": "half_marathon.gpx", "越野 50K": "trail_50k.gpx", "百岳 3 日": "baiyue_3day.gpx"}
-COURSE_EVENTS = {"路跑半馬": "demo-half", "越野 50K": "demo-50k", "百岳 3 日": "demo-baiyue"}
+COURSE_EVENTS = {"路跑半馬": "demo-half", "越野 50K": "demo-50k", "百岳 3 日": "demo-baiyue",
+                 "貓空越野 17K": S.MAOKONG_ID}
+# real courses kept in the repo (backend/demo/data), copied as they are (not synthesised)
+DATA_DIR = Path(__file__).resolve().parent / "data"
+DATA_COURSES = {"貓空越野 17K": "maokong_17k.gpx"}
 
 
 def _rng(seed: int, *key: int) -> np.random.Generator:
@@ -181,6 +186,19 @@ def write_courses(root: Path, seed: int, small: bool = False) -> dict:
         p = d / COURSES[name]
         p.write_bytes(C.gpx(c, f"示範賽道：{name}").encode("utf-8"))
         out[name] = p.relative_to(root).as_posix()
+    out.update(copy_data_courses(root))
+    return out
+
+
+def copy_data_courses(root: Path) -> dict:
+    """The real courses of DATA_COURSES copied into root/demo_courses; {name: relpath}."""
+    import shutil
+    out = {}
+    d = root / "demo_courses"
+    d.mkdir(parents=True, exist_ok=True)
+    for name, f in DATA_COURSES.items():
+        shutil.copyfile(DATA_DIR / f, d / f)
+        out[name] = (d / f).relative_to(root).as_posix()
     return out
 
 
