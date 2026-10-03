@@ -770,6 +770,51 @@ def update_steps(root: Path, out: Path, log=lambda m: print(m, flush=True)) -> d
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def update_pages(root: Path, out: Path, log=lambda m: print(m, flush=True)) -> dict:
+    """Re-render only the pages and copy the static assets into an existing export (--update-pages):
+    for a change in backend/static (HTML/JS/CSS) that needs no new data. Takes about a minute."""
+    out = out.resolve()
+    if not (out / MARKER).exists() or not (out / "data").is_dir():
+        raise SystemExit(f"{out} is not a static demo export")
+    root = root.resolve()
+    tmp = Path(tempfile.mkdtemp(prefix="trc-static-pages-"))
+    home = tmp / "demo"
+    shutil.copytree(root, home, ignore=shutil.ignore_patterns("sandboxes"))
+    (home / "sandboxes").mkdir(exist_ok=True)
+    try:
+        from backend.demo import sandbox as SB
+        written: list[str] = []
+        with DemoApp(home) as app:
+            snap = json.loads((out / "export.json").read_text("utf-8")).get("snapshot")
+            cfg = {"snapshot": snap, "today": snap, "pages": {**PAGES, **PAGE_ALIASES}, "compute": COMPUTE_POSTS.pattern,
+                   "locks": STATIC_LOCKS}
+            session = static_session(SB.current_base_name())
+            scrub = scrubber([str(REPO), str(tmp), str(home), str(root), str(Path.home())])
+            for path, file in PAGES.items():
+                status, _h, body = app.get(path)
+                if status != 200:
+                    log(f"  ! page {path}: HTTP {status}")
+                    continue
+                (out / file).write_text(scrub(transform_page(body.decode("utf-8"), cfg, session)), "utf-8")
+                written.append(file)
+        # the page assets (everything except the raw page templates and the files the other
+        # update modes own: the shim, the Pyodide bundle)
+        keep = {"trc_static.js", "trc_racepower_worker.js", "py"}
+        for src in STATIC_SRC.rglob("*"):
+            rel = src.relative_to(STATIC_SRC)
+            if src.is_dir() or src.suffix == ".html" or "__pycache__" in rel.parts or rel.parts[0] in keep:
+                continue
+            dst = out / "static" / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if not dst.exists() or dst.read_bytes() != src.read_bytes():
+                shutil.copyfile(src, dst)
+                written.append(f"static/{rel.as_posix()}")
+        shutil.copyfile(SHIM_SRC, out / "static" / "trc_static.js")
+        return {"updated": written, "leaks": check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])[:20]}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # --------------------------------------------------------------------------- race calculator (Pyodide)
 # Any input the crawl did not precompute is computed in the browser: static_shim.js starts
 # static/trc_racepower_worker.js, which runs engine/racepower/calc.py with Pyodide on
@@ -1252,7 +1297,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--update-racepower", action="store_true",
                     help="only refresh the race calculator (Pyodide bundle, data/racepower_ctx.json, its precomputed "
                          "answers, the shim) in an existing --out")
+    ap.add_argument("--update-pages", action="store_true",
+                    help="only re-render the pages and copy the static assets into an existing --out "
+                         "(a change in backend/static that needs no new data; about a minute)")
     a = ap.parse_args(argv)
+    if a.update_pages:
+        info = update_pages(a.root, a.out)
+        print(json.dumps(info, ensure_ascii=False, indent=1))
+        return 2 if info.get("leaks") else 0
     if a.update:
         info = update(a.root, (a.reuse or a.out), a.out, browser=not a.no_browser, verbose=a.verbose)
         print(json.dumps(info, ensure_ascii=False, indent=1))
