@@ -51,12 +51,16 @@ section { background: var(--panel); border: 1px solid var(--line); border-radius
 .tl .seg { position: absolute; top: 14px; height: 22px; border-radius: 3px; opacity: .85;
   font-size: 11px; color: #fff; overflow: hidden; white-space: nowrap; padding: 2px 4px; }
 .tl .ev { position: absolute; top: 0; width: 2px; height: 50px; background: var(--text); }
-.tl .ev span { position: absolute; top: -16px; left: 4px; font-size: 11.5px; white-space: nowrap; }
+.tl { container-type: inline-size; }
+.tl .ev span { position: absolute; top: -16px; left: 4px; font-size: 11.5px; white-space: nowrap;
+  max-width: calc(100cqw * var(--room, 1) - 6px); overflow: hidden; text-overflow: ellipsis; }
+.tl .ev.r span { left: auto; right: 4px; }
 .tl .ev.B { opacity: .6; } .tl .ev.C { opacity: .35; }
 .tl .today { position: absolute; top: 8px; width: 0; height: 36px; border-left: 2px dashed var(--accent); }
-.tl .today span { position: absolute; top: 36px; left: -12px; font-size: 11px; color: var(--accent); }
+.tl .today span { position: absolute; top: 49px; left: -12px; font-size: 11px; color: var(--accent); white-space: nowrap; }
 .tl .mini { position: absolute; top: 38px; height: 4px; background: var(--muted); opacity: .6; }
-.tl .month { position: absolute; top: 40px; font-size: 10.5px; color: var(--muted); }
+.tl .month { position: absolute; top: 40px; font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.tl .month.r { transform: translateX(-100%); }
 .legend span { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; font-size: 12px; }
 .legend i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
 /* tables and forms */
@@ -262,6 +266,23 @@ function renderNow() {
   $("#now").innerHTML = cards.join("");
 }
 
+// race labels that would overlap (close dates, or a narrow phone) go up one row each instead of printing over each other
+function stackTlLabels() {
+  const tl = $("#tl"), spans = [...tl.querySelectorAll(".ev span")];
+  spans.forEach((s) => { s.style.top = ""; });
+  const boxes = spans.map((s) => ({ s, r: s.getBoundingClientRect() })).sort((a, b) => a.r.left - b.r.left);
+  const rowsEnd = [];
+  for (const { s, r } of boxes) {
+    let row = rowsEnd.findIndex((end) => r.left >= end + 6);
+    if (row < 0) { row = rowsEnd.length; rowsEnd.push(0); }
+    rowsEnd[row] = r.right;
+    if (row) s.style.top = `${-16 - 15 * row}px`;
+  }
+  tl.style.marginTop = `${18 + 15 * Math.max(0, rowsEnd.length - 1)}px`;
+}
+let tlResize = 0;
+addEventListener("resize", () => { cancelAnimationFrame(tlResize); tlResize = requestAnimationFrame(() => { if ($("#tl").children.length) stackTlLabels(); }); });
+
 function renderTimeline() {
   const b = S.begin, e = S.end, span = ddiff(b, e) + 1;
   const pos = (d) => Math.max(0, Math.min(100, ddiff(b, d) / span * 100));
@@ -278,12 +299,17 @@ function renderTimeline() {
   const d0 = day(b);
   for (let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m <= day(e); m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
     const iso = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}-01`;
-    h += `<div class="month" style="left:${pos(iso)}%">${m.getMonth() === 0 ? m.getFullYear() + "/" : ""}${m.getMonth() + 1}月</div>`;
+    h += `<div class="month${pos(iso) > 94 ? " r" : ""}" style="left:${pos(iso)}%">${m.getMonth() === 0 ? m.getFullYear() + "/" : ""}${m.getMonth() + 1}月</div>`;
   }
-  for (const ev of S.events) if (ev.date >= b && ev.date <= e)
-    h += `<div class="ev ${ev.priority}" style="left:${pos(ev.date)}%"><span>${esc(ev.priority)} ${esc(ev.name)}</span></div>`;
+  for (const ev of S.events) if (ev.date >= b && ev.date <= e) {
+    // labels in the right half hang to the left of the marker, and --room caps them at the space left on
+    // that side, so a long name ends in "…" instead of pushing the page sideways on a phone
+    const x = pos(ev.date), r = x > 55, lab = `${ev.priority} ${ev.name}`;
+    h += `<div class="ev ${ev.priority}${r ? " r" : ""}" style="left:${x}%;--room:${((r ? x : 100 - x) / 100).toFixed(3)}"><span title="${esc(lab)}">${esc(lab)}</span></div>`;
+  }
   h += `<div class="today" style="left:${pos(S.today)}%"><span>今天</span></div>`;
   $("#tl").innerHTML = h;
+  stackTlLabels();
   $("#legend").innerHTML = ["recovery", "base", "specific", "taper", "event"].map((k) =>
     `<span><i style="background:${PCOL(k)}"></i>${S.phase_labels[k]}</span>`).join("") +
     `<span><i style="background:var(--muted);height:4px"></i>B 賽事小減量 / 恢復</span>`;
