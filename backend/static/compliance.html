@@ -6,9 +6,9 @@
 <title data-i18n="compliance.page_title">課表達成率</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <style>
-/* 課表達成率 (engine/compliance.dashboard, GET /api/v1/overview/plan/compliance): a tab of
-   課表. KPI tiles, charts (planned vs actual per week, weekly completion, per kind),
-   then a compact session list. Tokens as overview.html (light / dark / data-theme). */
+/* 課表統計 (engine/compliance.dashboard, GET /api/v1/overview/plan/compliance): a tab of
+   課表. Period filter (incl. each phase of the plan), KPI tiles, charts (負荷比 ATL ÷ CTL,
+   planned vs actual per week, weekly completion, per kind), then a compact session list. Tokens as overview.html (light / dark / data-theme). */
 :root {
   color-scheme: light;
   --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
@@ -48,10 +48,30 @@ section, .panel { background: var(--panel); border: 1px solid var(--line); borde
 h2 { font-size: 14.5px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 h2 .meta { font-weight: 400; }
 
-.ptabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
-.ptabs a { padding: 6px 14px; font-size: 13.5px; font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.ptabs a:hover { color: var(--text); }
-.ptabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+/* page switch 日曆 | 課表統計: the chart viewer's 趨勢 / 單次活動 mode cards (as schedule.html) */
+.modesw { display: inline-flex; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px;
+  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; text-decoration: none; text-align: left;
+  padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
+.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
+.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
+.modesw .mcard:active { transform: translateY(1px); }
+.modesw .mcard[aria-current="page"] { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff; box-shadow: 0 3px 8px rgba(143,63,10,.35); }
+.modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
+.modesw .mcard[aria-current="page"] small { opacity: .85; }
+.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+/* the plan's phases in the period filter: a colour dot per phase kind */
+#phases[hidden] { display: none; }
+#phases { flex-wrap: wrap; max-width: 100%; row-gap: 4px; }
+#phases button { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+@media (max-width: 699px) { #phases button { border-radius: 7px !important; margin-left: 0; margin-right: 4px; } }
+#phases button i { width: 8px; height: 8px; border-radius: 2px; background: var(--ph, var(--accent)); flex: none; }
+#phases button[aria-pressed="true"] i { box-shadow: 0 0 0 1.5px var(--bg); }
+.plot.ratio { height: 210px; }
 
 .top { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .top h1 { font-size: 19px; margin: 0 4px 0 0; }
@@ -161,16 +181,22 @@ h2 .meta { font-weight: 400; }
 <body>
 <script src="/api/v1/static/shell.js" data-page="schedule"></script>
 <main>
-  <nav class="ptabs" data-i18n-attr="aria-label:compliance.tabs.label" aria-label="課表檢視">
-    <a href="/api/v1/overview/plan/schedule/page" data-i18n="compliance.tabs.calendar">日曆</a>
-    <a href="/api/v1/overview/plan/compliance/page" aria-current="page" data-i18n="compliance.tabs.compliance">課表達成率</a>
+  <nav class="modesw" data-i18n-attr="aria-label:compliance.tabs.label" aria-label="課表檢視">
+    <a class="mcard" href="/api/v1/overview/plan/schedule/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span><b data-i18n="compliance.tabs.calendar">日曆</b><small data-i18n="compliance.tabs.calendar_sub">每天排了什麼課</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/compliance/page" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
+      <span><b data-i18n="compliance.tabs.compliance">課表統計</b><small data-i18n="compliance.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
   </nav>
 
   <div class="top">
-    <h1 data-i18n="compliance.title">課表達成率</h1>
+    <h1 data-i18n="compliance.title">課表統計</h1>
     <div class="seg" id="period" role="group" data-i18n-attr="aria-label:compliance.period.label" aria-label="期間">
       <button type="button" data-p="4w" data-i18n="compliance.period.4w">4 週</button><button type="button" data-p="12w" data-i18n="compliance.period.12w">12 週</button><button type="button" data-p="phase" data-i18n="compliance.period.phase">本周期</button><button type="button" data-p="custom" data-i18n="compliance.period.custom">自訂</button>
     </div>
+    <!-- each phase of the plan (賽事周期): picking one shows its weeks -->
+    <div class="seg" id="phases" role="group" data-i18n-attr="aria-label:compliance.period.phases" aria-label="賽事周期" hidden></div>
     <span class="custom" id="custom" hidden>
       <input type="date" id="c-a" data-i18n-attr="aria-label:compliance.period.from" aria-label="開始">
       <span>–</span>
@@ -193,6 +219,11 @@ h2 .meta { font-weight: 400; }
       <div class="legend" id="st-legend" style="margin-top:10px"></div>
     </section>
   </div>
+
+  <section aria-labelledby="ra-h">
+    <h2 id="ra-h"><span data-i18n="compliance.ratio.title">負荷比 ATL ÷ CTL</span><span id="ra-q"></span></h2>
+    <div class="plot ratio" id="ra-plot" role="img"></div>
+  </section>
 
   <div class="charts">
     <section aria-labelledby="wk-h">
@@ -249,16 +280,36 @@ function chart(id) {
   return charts[id];
 }
 
+// a phase of the plan picked in the filter: "ph:<start>" -> the whole phase (its future weeks show the plan)
+const MAX_DAYS = 371;
+const planPhase = (p) => (String(p).startsWith("ph:") ? ((S.data && S.data.plan_phases) || []).find((x) => "ph:" + x.start === p) : null);
 function range(today, phase) {
   const ws = mondayOf(today);
   if (S.period === "12w") return [addDays(ws, -77), today];
   if (S.period === "phase" && phase) return [phase.start, today < phase.end ? today : phase.end];
+  const pp = planPhase(S.period);
+  if (pp) { const cap = addDays(pp.start, MAX_DAYS); return [pp.start, pp.end < cap ? pp.end : cap]; }
   if (S.period === "custom" && S.a && S.b && S.a <= S.b) return [S.a, S.b];
   return [addDays(ws, -21), today];
 }
 
+const markPeriod = () => document.querySelectorAll("#period button, #phases button")
+  .forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === S.period)));
+function renderPhases() {
+  const ps = (S.data && S.data.plan_phases) || [];
+  $("phases").hidden = !ps.length;
+  // a label used twice (基礎期 before and after the race) also shows its start
+  const name = (p) => T("phase_kind." + p.kind, p.label || p.kind);
+  const seen = ps.reduce((m, p) => ({ ...m, [p.kind]: (m[p.kind] || 0) + 1 }), {});
+  $("phases").innerHTML = ps.map((p) => `<button type="button" class="ph-${esc(p.kind)}" data-p="ph:${esc(p.start)}"
+    title="${esc(T("period.phase_tip", { label: name(p), start: md(p.start), end: md(p.end) }))}"><i aria-hidden="true"></i>${esc(name(p))}${seen[p.kind] > 1 ? ` <span class="faint num">${esc(md(p.start))}</span>` : ""}</button>`).join("");
+  markPeriod();
+}
+
 async function load() {
-  document.querySelectorAll("#period button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === S.period)));
+  // a stored phase that is no longer in the plan falls back to 4 weeks
+  if (S.data && String(S.period).startsWith("ph:") && !planPhase(S.period)) S.period = "4w";
+  markPeriod();
   $("custom").hidden = S.period !== "custom";
   const today = S.today || isoOf(new Date());
   const [a, b] = range(today, S.data && S.data.current_phase);
@@ -269,11 +320,14 @@ async function load() {
     if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : r.statusText);
     const first = !S.data;
     S.data = j; S.today = j.today;
+    renderPhases();
     // the server's today and the phase decide the range: reload once when it differs
+    if (first && String(S.period).startsWith("ph:") && !planPhase(S.period)) S.period = "4w";
     const [a2, b2] = range(j.today, j.current_phase);
     if (first && (a2 !== a || b2 !== b)) return load();
     if (!$("c-a").value) { $("c-a").value = a; $("c-b").value = b; }
     render();
+    loadRatio(a, b);
   } catch (e) {
     $("kpis").innerHTML = `<div class="kpi"><div class="err">${esc(T("load_failed", { error: e.message }))}</div></div>`;
   }
@@ -356,6 +410,71 @@ function renderWeeks(ws) {
   $("wk-legend").innerHTML = `<span><i class="ol"></i>${esc(T("weeks.planned"))}</span><span><i style="background:${css("--s1")}"></i>${esc(T("weeks.actual"))}${unit}</span>`;
 }
 
+// 負荷比 ATL ÷ CTL over the same range (GET /api/v1/overview/pmc), drawn like views/training.json's
+// 負荷比 chart (the viewer's "zoned" style): shaded bands with their names in the right margin, the line
+// coloured by the band it is in, the latest value labelled with its band
+const RATIO_BANDS = [{ k: "low", lo: 0, hi: 0.8, c: "#8a8984" }, { k: "ok", lo: 0.8, hi: 1.3, c: "#1baf7a" },
+  { k: "high", lo: 1.3, hi: 1.5, c: "#eda100" }, { k: "spike", lo: 1.5, hi: 2.5, c: "#e34948" }];
+const RATIO = { rows: null, seq: 0 };
+async function loadRatio(a, b) {
+  const seq = ++RATIO.seq;
+  const end = b < S.today ? b : S.today;
+  if (a > end) { RATIO.rows = []; return renderRatio(); }
+  try {
+    const r = await fetch(`/api/v1/overview/pmc?begin=${a}&end=${end}`);
+    if (!r.ok) throw new Error(r.statusText);
+    const j = await r.json();
+    if (seq !== RATIO.seq) return;
+    RATIO.rows = j.series.map((x) => [x.date, x.ctl > 0 && x.atl != null ? Math.round(x.atl / x.ctl * 100) / 100 : null]);
+  } catch (_) { if (seq === RATIO.seq) RATIO.rows = []; }
+  renderRatio();
+}
+function hexMix(a, b, t) {
+  const h = (s) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(s || "").trim()); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+  const A = h(a), B = h(b);
+  return A && B ? "#" + A.map((x, i) => Math.round(x + (B[i] - x) * t).toString(16).padStart(2, "0")).join("") : a;
+}
+function renderRatio() {
+  $("ra-q").innerHTML = q(T("ratio.tip"));
+  $("ra-plot").setAttribute("aria-label", T("ratio.aria"));
+  const rows = (RATIO.rows || []).filter((p) => p[1] != null);
+  const ch = chart("ra-plot");
+  if (!rows.length) {
+    ch.setOption({ title: { text: T("ratio.empty"), left: "center", top: "middle", textStyle: { color: css("--muted"), fontSize: 13, fontWeight: 400 } },
+      xAxis: { show: false }, yAxis: { show: false }, series: [] }, true);
+    return;
+  }
+  const text = css("--text"), muted = css("--muted"), panel = css("--panel");
+  const dark = document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  const name = (b) => T("ratio.band." + b.k);
+  const zoneOf = (y) => RATIO_BANDS.find((b, k) => (k === 0 || y >= b.lo) && (k === RATIO_BANDS.length - 1 || y < b.hi));
+  const lineColor = (b) => hexMix(b.c, text, 0.2);
+  const last = rows[rows.length - 1], lb = zoneOf(last[1]);
+  const top = 2.5;      // as views/training.json: a multi-day trip / the first weeks of data go off the top (hover)
+  const markArea = { silent: true, label: { show: true, position: "right", color: muted, fontSize: 10.5, distance: 4 },
+    data: RATIO_BANDS.map((b, k) => [{ yAxis: b.lo, name: name(b), itemStyle: { color: b.c, opacity: dark ? 0.22 : 0.15 } },
+      { yAxis: k === RATIO_BANDS.length - 1 ? top : b.hi }]) };
+  const markLine = { silent: true, symbol: "none", label: { show: false },
+    data: RATIO_BANDS.slice(1).map((b) => ({ yAxis: b.lo, lineStyle: { color: b.c, type: "solid", width: 1, opacity: 0.8 } })) };
+  ch.setOption({ ...axisBase(), grid: { left: 40, right: 50, top: 14, bottom: 26 },
+    tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
+      const p = [].concat(ps).find((x) => x.seriesName === "ratio"); if (!p) return "";
+      const y = p.value[1], b = zoneOf(y);
+      return `<b>${esc(mdw(p.value[0]))}</b><br>ATL ÷ CTL ${F ? F.num(y, 2) : y.toFixed(2)}<br>${esc(T("ratio.zone"))} ${esc(name(b))}`;
+    } },
+    xAxis: { type: "time", axisTick: { show: false }, axisLine: { lineStyle: { color: css("--line") } }, splitLine: { show: false },
+      axisLabel: { color: muted, fontSize: 11, hideOverlap: true, formatter: (v) => md(isoOf(new Date(v))) } },
+    yAxis: yAxis({ min: 0, max: top, interval: 0.5, splitLine: { show: false } }),
+    visualMap: [{ type: "piecewise", show: false, seriesIndex: 0, dimension: 1,
+      pieces: RATIO_BANDS.map((b, k) => ({ ...(k ? { gte: b.lo } : {}), ...(k < RATIO_BANDS.length - 1 ? { lt: b.hi } : {}), color: lineColor(b) })) }],
+    series: [{ name: "ratio", type: "line", data: rows, showSymbol: false, z: 5, markArea, markLine,
+      lineStyle: { width: 2.5, shadowColor: panel, shadowBlur: 5 },
+      markPoint: { silent: true, symbol: "circle", symbolSize: 9, data: [{ coord: last, value: last[1],
+        itemStyle: { color: lineColor(lb), borderColor: panel, borderWidth: 2 },
+        label: { show: true, position: "left", distance: 8, color: text, fontSize: 11, fontWeight: 600, backgroundColor: panel,
+          borderColor: lb.c, borderWidth: 1, borderRadius: 4, padding: [2, 5], formatter: () => `${F ? F.num(last[1], 2) : last[1].toFixed(2)} ${name(lb)}` } }] } }] }, true);
+}
+
 function renderTrend(ws, st) {
   const rows = ws.filter((w) => w.due);
   $("tr-q").innerHTML = q(T("trend.tip", { pct: Math.round(st.threshold * 100) }));
@@ -417,6 +536,10 @@ $("period").addEventListener("click", (e) => {
   if (S.period === "custom") { $("custom").hidden = false; document.querySelectorAll("#period button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); $("c-a").focus(); return; }
   load();
 });
+$("phases").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-p]"); if (!b) return;
+  S.period = b.dataset.p; store.set("period", S.period); load();
+});
 $("c-go").onclick = () => {
   const a = $("c-a").value, b = $("c-b").value;
   if (!a || !b || a > b) { $("range").textContent = T("period.bad"); return; }
@@ -425,7 +548,7 @@ $("c-go").onclick = () => {
 $("metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; S.metric = b.dataset.m; store.set("metric", S.metric); renderWeeks(S.data.weeks); });
 $("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; S.filter = b.dataset.f; S.limit = 40; renderList(); });
 $("more").addEventListener("click", (e) => { if (e.target.id === "more-btn") { S.limit += 80; renderList(); } });
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.data) render(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.data) render(); if (RATIO.rows) renderRatio(); });
 
 // ? help: hover shows a popup, click / tap pins it; Esc or a click elsewhere closes it
 const QT = { el: null, pinned: null };

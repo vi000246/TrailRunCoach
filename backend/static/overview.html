@@ -96,11 +96,9 @@ h2 .di { font-size: 16px; color: var(--muted); }
 .track { height: 7px; background: color-mix(in srgb, var(--line) 80%, transparent); border-radius: 4px; overflow: hidden; position: relative; }
 .track i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 4px; }
 @media (max-width: 420px) { .kpi { padding: 10px 11px 9px; } .kpi .v { font-size: 26px; } .kpi svg.spark { width: 40%; } }
-.strip { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel);
-  border-radius: 14px; padding: 3px 10px; color: var(--muted); white-space: nowrap; }
-.chip b { color: var(--text); }
-.counts { display: inline-flex; gap: 10px; }
+/* PMC (last 90 days): CTL / ATL lines, TSB bars coloured like views/training.json's PMC */
+.plot.pmc { height: 230px; }
+@media (max-width: 699px) { .plot.pmc { height: 200px; } }
 
 /* ---- this week: 7 day cards ---- */
 .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
@@ -242,7 +240,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 <header>
   <h1>總覽</h1>
   <nav class="jump" id="jump" aria-label="本頁段落">
-    <a href="#s-status">狀況</a><a href="#s-week">本週</a><a href="#s-todo">待辦</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a>
+    <a href="#s-status">狀況</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a><a href="#s-week">本週</a><a href="#s-todo">待辦</a>
   </nav>
   <span class="spacer" style="flex:1"></span>
   <span class="meta" id="asof"></span>
@@ -255,8 +253,35 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   <!-- KPI row: CTL, TSB, this week's volume, countdown to the next A race -->
   <div data-sec id="s-status" style="display:grid;gap:10px">
     <div class="kpis" id="kpis"><div class="kpi"><div class="loading">計算訓練狀況中…</div></div></div>
-    <div class="strip" id="strip"></div>
+    <!-- PMC, last 90 days (GET /overview/pmc): CTL / ATL lines, TSB bars in views/training.json's PMC colours -->
+    <section aria-labelledby="pmc-h">
+      <h2 id="pmc-h"><span data-i18n="overview.pmc.title">體能・疲勞・狀況</span> <span class="meta" data-i18n="overview.pmc.sub">近 90 天</span><span id="pmc-q"></span></h2>
+      <div class="legend" id="pmc-legend" style="margin:0 0 2px"></div>
+      <div class="plot pmc" id="pmc" role="img"></div>
+    </section>
   </div>
+
+  <section data-sec id="s-log">
+    <h2>做了什麼 <span class="meta" id="per-sub"></span></h2>
+    <div class="toolbar">
+      <div class="seg" id="unit"><button data-u="week">週</button><button data-u="month">月</button><button data-u="year">年</button></div>
+      <button class="btn" id="prev" aria-label="上一期">◀</button>
+      <b id="per-label" class="num"></b>
+      <button class="btn" id="next" aria-label="下一期">▶</button>
+      <button class="btn" id="now">回到現在</button>
+      <button type="button" class="q" aria-label="說明" data-tip="點長條切換期間；上圖是移動時間（依類別堆疊），下圖是爬升。">?</button>
+    </div>
+    <div class="legend" id="cat-legend" style="margin:0 0 4px"></div>
+    <div class="plot" id="trend"></div>
+    <div class="meta" style="margin:4px 0 0">爬升（m）</div>
+    <div class="plot small" id="trend-climb"></div>
+    <div id="period"><div class="loading">…</div></div>
+  </section>
+
+  <section data-sec id="s-ind">
+    <h2>指標 <span class="meta" id="ind-sub"></span></h2>
+    <div class="ind" id="ind"><div class="loading">…</div></div>
+  </section>
 
   <section data-sec id="s-week" aria-labelledby="wk-h">
     <h2 id="wk-h"><span id="wk-ic"></span>本週 <span class="meta num" id="wk-sub"></span><span id="wk-cp"></span>
@@ -283,28 +308,6 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
       <div id="b2b"><div class="loading">…</div></div>
     </section>
   </div>
-
-  <section data-sec id="s-log">
-    <h2>做了什麼 <span class="meta" id="per-sub"></span></h2>
-    <div class="toolbar">
-      <div class="seg" id="unit"><button data-u="week">週</button><button data-u="month">月</button><button data-u="year">年</button></div>
-      <button class="btn" id="prev" aria-label="上一期">◀</button>
-      <b id="per-label" class="num"></b>
-      <button class="btn" id="next" aria-label="下一期">▶</button>
-      <button class="btn" id="now">回到現在</button>
-      <button type="button" class="q" aria-label="說明" data-tip="點長條切換期間；上圖是移動時間（依類別堆疊），下圖是爬升。">?</button>
-    </div>
-    <div class="legend" id="cat-legend" style="margin:0 0 4px"></div>
-    <div class="plot" id="trend"></div>
-    <div class="meta" style="margin:4px 0 0">爬升（m）</div>
-    <div class="plot small" id="trend-climb"></div>
-    <div id="period"><div class="loading">…</div></div>
-  </section>
-
-  <section data-sec id="s-ind">
-    <h2>指標 <span class="meta" id="ind-sub"></span></h2>
-    <div class="ind" id="ind"><div class="loading">…</div></div>
-  </section>
 </main>
 <script>
 const API = "/api/v1/overview";
@@ -431,13 +434,10 @@ function kpiWord(i) {
   return v || LEVEL[i.level];
 }
 
-// ---------------- status: strip, to-do, indicators ----------------
+// ---------------- status: to-do, indicators ----------------
 async function loadStatus() {
   const s = STATUS = await j(`${API}/status`);
   $("asof").textContent = `資料到 ${s.today}`;
-  const p = s.phase, c = s.counts;
-  $("strip").innerHTML = `<span class="chip">${I("flag")}<b>${esc(p ? p.label : "未設定周期")}</b>${p ? `<span class="faint num">${md(p.start)}–${md(p.end)}</span>` : ""}${p ? q("這個周期的目標：" + p.goal) : ""}</span>
-    <span class="chip counts" title="${esc(s.headline)}"><span class="st bad">${I("bad")}${c.bad}</span><span class="st watch">${I("watch")}${c.watch}</span><span class="st good">${I("good")}${c.good}</span>${q(s.headline)}</span>`;
   renderKpis();
   // to-do: icon + short title; the detail opens on click
   const lvl = (a) => (ind((a.because || [])[0]) || {}).level || "info";
@@ -824,7 +824,7 @@ document.querySelectorAll("#unit button").forEach((b) => b.onclick = () => { PS.
 $("prev").onclick = () => shift(-1);
 $("next").onclick = () => shift(1);
 $("now").onclick = () => { PS.anchor = null; loadPeriod(); };
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { loadPeriod(); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { loadPeriod(); renderPmc(); });
 // ? / glossary / session tips: hover shows a popup, click / tap pins it; Esc or a click elsewhere closes it
 const QT = { el: null, pinned: null };
 function qShow(t) {
@@ -868,6 +868,48 @@ addEventListener("scroll", () => { if (QT.pinned) qShow(QT.pinned); else qHide()
   mark();
 })();
 
+// ---------------- PMC, last 90 days ----------------
+// CTL / ATL lines and TSB bars; a bar's colour = the same Form% band (TSB ÷ yesterday's CTL) as
+// views/training.json's PMC, so a day has one colour on both pages. No zoom, no extras.
+const tO = (k, p) => (window.I18N ? I18N.t("overview." + k, p) : k);
+const TSB_BANDS = [[-0.3, "#e34948"], [-0.1, "#1baf7a"], [0.05, "#a9a1e6"], [0.25, "#6a5cc9"], [Infinity, "#eda100"]];
+let PMC = null;
+async function loadPmc() {
+  const end = STATUS?.today || new Date().toISOString().slice(0, 10);
+  const d = new Date(end + "T00:00:00"); d.setDate(d.getDate() - 90);    // one day before the 90: yesterday's CTL
+  const begin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  PMC = (await j(`${API}/pmc?begin=${begin}&end=${end}`)).series;
+  renderPmc();
+}
+function renderPmc() {
+  if (!PMC) return;
+  const rows = PMC.slice(1).map((r, i) => ({ ...r, prev: PMC[i].ctl }));
+  const ctlC = css("--s1"), atlC = css("--s2");
+  const color = (r) => {
+    const f = r.prev > 0 && r.tsb != null ? r.tsb / r.prev : 0;
+    return TSB_BANDS.find(([hi]) => f < hi)[1];
+  };
+  $("pmc-q").innerHTML = q(tO("pmc.tip"));
+  $("pmc").setAttribute("aria-label", tO("pmc.aria"));
+  $("pmc-legend").innerHTML = `<span><i style="background:${ctlC};height:3px"></i>${esc(tO("pmc.ctl"))}</span>`
+    + `<span><i style="background:${atlC};height:3px"></i>${esc(tO("pmc.atl"))}</span>`
+    + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`;
+  const one = (v) => v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1);
+  chart("pmc").setOption({ animation: false, textStyle: { fontFamily: "system-ui, sans-serif" },
+    grid: { left: 36, right: 10, top: 10, bottom: 24 },
+    tooltip: { trigger: "axis", backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 },
+      formatter: (ps) => { const r = rows[ps[0].dataIndex];
+        return `<b>${esc(I18N.fmt.date(r.date, "mdw"))}</b><br>${esc(tO("pmc.ctl"))} ${one(r.ctl)}<br>${esc(tO("pmc.atl"))} ${one(r.atl)}<br>${esc(tO("pmc.tsb"))} ${r.tsb == null ? "–" : sgn(r.tsb, one)}`; } },
+    xAxis: { type: "category", data: rows.map((r) => md(r.date)), ...axisStyle(), splitLine: { show: false },
+      axisLabel: { color: css("--muted"), fontSize: 11, hideOverlap: true } },
+    yAxis: { type: "value", ...axisStyle(), splitLine: { lineStyle: { color: css("--line"), type: [3, 3] } } },
+    series: [
+      { name: "TSB", type: "bar", barCategoryGap: "20%", data: rows.map((r) => ({ value: r.tsb == null ? null : Math.round(r.tsb * 10) / 10, itemStyle: { color: color(r) } })) },
+      { name: "CTL", type: "line", data: rows.map((r) => r.ctl), showSymbol: false, z: 3, lineStyle: { width: 2.5, color: ctlC }, itemStyle: { color: ctlC } },
+      { name: "ATL", type: "line", data: rows.map((r) => r.atl), showSymbol: false, z: 3, lineStyle: { width: 1.6, color: atlC }, itemStyle: { color: atlC } },
+    ] }, true);
+}
+
 const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：${esc(e.message)}</p>`; };
 // the shared floating suggestion box (static/suggestions.js) fires this after 排入: reload the week
 addEventListener("suggestions:changed", () => { loadWeek().then(() => loadPlan()).catch(() => {}); });
@@ -877,6 +919,7 @@ $("wk-ic").innerHTML = I("time");
   // 使用功率 (設定): off = no CP / power fields or buttons on this page
   USE_POWER = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
   await loadStatus().catch(fail("kpis"));
+  loadPmc().catch(fail("pmc"));
   loadZ5().catch(fail("z5"));
   loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
