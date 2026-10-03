@@ -7,13 +7,13 @@ Where the numbers come from (resolution order, per date):
 
   max HR   1. the user's own value: plan thresholds `mhr` dated on or before the
               day (設定 → 心率, or the 賽事周期 page's table)        「你的設定 YYYY-MM-DD」
-           2. the higher of thresholds.estimate_mhr (runs of the 365 days up to
-              the day, 「推估」) and the COROS account (zoneData.maxHr, stored at
-              login / sync, 「來自手錶」). The estimate is a floor — training runs
-              rarely reach HRmax — so a higher watch value wins (2026-10-03: the
-              user's last 365 days peak at 191, the watch says 202, and the
-              201–208 peaks are 1–2.6 years old); the estimate wins when it is
-              higher (a new maximum the watch hasn't picked up) or alone.
+           2. the watch account (COROS zoneData.maxHr, stored at login / sync,
+              「來自手錶」; a future Garmin source goes here too) — owner
+              2026-10-03: 「就用手錶的資料」
+           3. thresholds.estimate_mhr (runs of the 365 days up to the day,
+              「推估」), only without a watch value — training runs rarely reach
+              HRmax, so it is a floor (the user's last 365 days peak at 191,
+              the watch says 202)
   rest HR  1. plan thresholds `rhr` dated on or before the day            「你的設定 YYYY-MM-DD」
            2. the COROS account (zoneData.rhr)                            「來自手錶」
            3. none → the HRR model says 「沒有靜息心率，到設定填」
@@ -26,8 +26,8 @@ lthrZone 80/90/95/102/106/(255), rhrZone 59/74/84/88/95/100,
 maxHrZone 50/60/70/80/90/100. Each array lists the UPPER edge of zones 1–6
 (the user's HRR zone 2 = 141–163 = rhrZone[0]..[1], verified against the app),
 so zone 1 is everything below the first ratio and zone 6 runs to the last.
-Reading maxHrZone the same way (zone 1 < 50 % HRmax) is 推估 — consistent with
-the other two arrays, not confirmed in the COROS app.
+maxHrZone reads the same way: zone 1 < 50 % HRmax (confirmed in the COROS app
+by the owner, 2026-10-03).
 
 The COROS edges are rounded to whole bpm as COROS shows them (53 + 0.59 × 149 =
 140.9 → 141), so with the same max / rest HR the app and the watch agree.
@@ -182,12 +182,11 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
     acc = account() if acc is None and use_account else acc
     watch = float(acc["max_hr"]) if acc and acc.get("max_hr") else None
     ev = float(est["value"]) if est and est.get("value") else None
-    if ev is not None and (watch is None or ev > watch):
-        return {"value": ev, "kind": "estimate", "source": "推估（近 365 天跑步）", "estimate": est}
     if watch is not None:
-        # the estimate is a floor (training runs rarely reach HRmax): a higher watch value wins
-        note = f"；近 365 天跑步最高 {ev:.0f}（推估，是下限）" if ev is not None else ""
+        note = f"；近 365 天跑步最高 {ev:.0f}（推估）" if ev is not None else ""
         return {"value": watch, "kind": "coros", "source": "來自手錶（COROS 帳號）" + note, "estimate": est}
+    if ev is not None:
+        return {"value": ev, "kind": "estimate", "source": "推估（近 365 天跑步）", "estimate": est}
     return {"value": None, "kind": None, "source": None, "estimate": est,
             "reason": NO_MAX if not est else f"{NO_MAX}（{est.get('reason')}）"}
 
