@@ -217,7 +217,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.ro = !!ro; this.uid = uid || null;
       this.root.classList.toggle("we-ro", this.ro);
       this.root.closest("dialog")?.classList.add("we-wide");
-      this.$("we-box").open = ["quality", "test", "long"].includes(kind);
+      this.$("we-box").open = true;     // 結構 is expanded by default
       await this.derive({});
     }
     async derive(extra) {

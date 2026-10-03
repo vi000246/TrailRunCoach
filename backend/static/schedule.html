@@ -466,7 +466,8 @@ dialog.sd .gopt label:has(input:checked) { background: var(--accent); border-col
 /* ---- same-load conversion (session dialog) ---- */
 .eq { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 9px; padding: 6px 11px 10px; margin: 0;
   display: grid; gap: 8px; background: color-mix(in srgb, var(--accent) 4%, var(--panel)); min-width: 0; }
-.eq > legend { font-size: 12.5px; font-weight: 700; padding: 0 5px; }
+.eq .eq-fold > summary { font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 2px 0; }
+.eq .eq-fold[open] > summary { margin-bottom: 6px; }
 .tseg { display: flex; }
 .tseg label { flex: 1; display: flex !important; justify-content: center; align-items: center; border: 1px solid var(--line); margin-left: -1px;
   padding: 5px 8px; cursor: pointer; font-size: 13px !important; color: var(--text) !important; position: relative; background: var(--panel); }
@@ -615,7 +616,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </div>
     <div class="hint" id="sd-tss" aria-live="polite"></div>
     <fieldset class="eq" id="sd-eq" hidden>
-      <legend>地形與同負荷換算</legend>
+      <details class="eq-fold" id="sd-eq-fold"><summary>地形與同負荷換算</summary>
       <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形">
         <label><input type="radio" name="terrain" value="road">路跑</label><label><input type="radio" name="terrain" value="trail">越野跑</label>
       </div>
@@ -635,6 +636,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="eq-sum" id="eq-sum" aria-live="polite"></div>
       <div class="warn" id="eq-warn" role="status"></div>
       <div class="hint" id="eq-note"></div>
+      </details>
     </fieldset>
     <label>標題<input name="title" required maxlength="200" autocomplete="off"></label>
     <label>目標<input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; AeT"></label>
