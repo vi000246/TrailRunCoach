@@ -535,12 +535,12 @@ class Dataset:
             self._ba_dirty = False
 
     def _is_hr_sourced(self, w: Workout) -> bool:
-        m = w.metrics
-        if m["tssduration"] and m["np"] is not None and not m.get("power_tss_blocked"):
-            return False                                   # power TSS
-        if w.sport == "run" and m["ngp"] and m["tss"] is not None and m["tss"] != m["hrtss"]:
-            return False                                   # rTSS
-        return True
+        """TSS not from power / pace: what _metrics actually used
+        (`tss_source`). Not "has NP": a run with NP but no FTP in effect
+        falls back to hrTSS too, and then gets the moving-time hrTSS and the
+        elevation bonus like any hrTSS day. A TP-synced TSS counts as
+        hr-sourced, as before."""
+        return w.metrics.get("tss_source") not in ("power", "rtss")
 
     def _apply_elevation_bonus(self) -> None:
         """Uphill Athlete's vertical bonus — heart rate cannot see the muscular
@@ -620,28 +620,46 @@ class Dataset:
         prefix = SPORT_SETTING_PREFIX.get(w.sport, "other")
         return self.setting(prefix + kind, w.day)
 
+    def tss_ftp(self, w: Workout) -> tuple[Optional[float], Optional[str]]:
+        """(FTP power TSS / IF divide by, where it comes from — a UI label).
+        WKO5: the FTP stored with the workout (index 3010 = the dated FTP
+        setting at workout time, typed in by hand; WKO5 never puts its PD
+        model's mFTP there), else the sport's dated FTP setting.
+        FitFolderDataset overrides it for runs (plan test / DB / Stryd mFTP)."""
+        if w.entry.ftp:
+            return w.entry.ftp, "WKO5 設定（活動當時的 FTP）"
+        name = SPORT_SETTING_PREFIX.get(w.sport, "other") + "ftp"
+        v = self.setting(name, w.day)
+        return (v, self.setting_label(name)) if v else (None, None)
+
     # ---- workout metrics --------------------------------------------------
     def _metrics(self, w: Workout) -> dict[str, Optional[float]]:
         """Workout metrics per WKO5 5.0.587 (docs/wko5-internals/formulas.md):
-        tss / if are computed on the fly, never stored."""
+        tss / if are computed on the fly, never stored. `tss_source` = the
+        branch that made `tss` (power / rtss / trainingpeaks / hrtss, None
+        without one); `ftp_used` / `ftp_source` = the FTP of a power TSS."""
         m = w.entry.metrics
-        ftp = w.entry.ftp or self.sport_setting("ftp", w)   # index 3010 = FTP at workout time
         np_ = m.get(F_NP)
         tssdur = m.get(F_TSSDURATION)
         ngp = m.get(F_NGP)
-        tss = iff = None
+        tss = iff = src = None
         # watch-estimated power gives no power TSS unless power.accept_watch_power
         # (backend/engine/power_source.py); the run falls back to rTSS / hrTSS
         blocked = w.entry.file in getattr(self, "_power_blocked", ())
-        if tssdur and tssdur > 0 and np_ is not None and ftp and not blocked:
+        ftp = ftp_src = None
+        if tssdur and tssdur > 0 and np_ is not None and not blocked:
+            ftp, ftp_src = self.tss_ftp(w)
+        if ftp:
             iff = np_ / ftp
             tss = np_ * np_ * tssdur / (ftp * ftp * 36.0)       # = hours * IF^2 * 100
+            src = "power"
         elif w.sport == "run" and ngp and m.get(F_PACE_TSSDURATION):
             tpace = self.sport_setting("tpace", w)                # threshold pace, min/km
             if tpace:
                 iff = tpace / ngp
                 d = m[F_PACE_TSSDURATION]
                 tss = (d / 60.0) ** 1.025 * iff * iff / 60.0 * 100.0   # rTSS
+                src = "rtss"
         # swim (cubic speed formula) not implemented yet
         if tss is None:
             # WKO5 prefers a TSS synced from TrainingPeaks over its own hrTSS
@@ -649,6 +667,7 @@ class Dataset:
             # on disk — so "use it when present" is the closest file-only rule).
             tp = self._tp_tss.get(w.entry.file)
             tss = tp if tp is not None else m.get(F_HRTSS)
+            src = "trainingpeaks" if tp is not None else "hrtss" if tss is not None else None
             iff = m.get(F_HRIF) if iff is None else iff
         dur = m.get(F_DURATION)
         return {
@@ -674,6 +693,9 @@ class Dataset:
             "tss": tss,
             "plannedtss": None,
             "power_tss_blocked": blocked,
+            "tss_source": src,
+            "ftp_used": ftp if src == "power" else None,
+            "ftp_source": ftp_src if src == "power" else None,
         }
 
     # ---- disk-cached derived data -----------------------------------------

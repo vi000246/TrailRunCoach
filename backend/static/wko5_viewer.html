@@ -806,6 +806,15 @@ function filterSummary() {
 // an activity's start (already the athlete's local time, naive ISO) -> 26/10/02 07:15
 const actWhen = (s) => String(s || "").slice(2, 16).replaceAll("-", "/").replace("T", " ");
 // the planned session it was matched to (engine/plan_match.py; /workouts "plan"), or ""
+// hover of the TSS source icon: how TSS was computed, and the FTP of a power TSS
+const TSS_SRC = { power: "功率 TSS", rtss: "配速 rTSS", hrtss: "心率 hrTSS", trainingpeaks: "TrainingPeaks 的 TSS" };
+const tssSrcTitle = (a) => {
+  if (!a.tss_source) return "TSS 來源";
+  let t = `TSS 來源：${TSS_SRC[a.tss_source] || a.tss_source}`;
+  if (a.ftp_used != null) t += `\nFTP ${Math.round(a.ftp_used)} W（${a.ftp_source || "未標來源"}）`;
+  if (a.ftp_source && !a.ftp_source.startsWith("WKO5")) t += "\nWKO5 用手動輸入的 FTP 算 TSS（不會用 PD 模型的 mFTP 更新），所以 TSS 可能跟 WKO5 不同";
+  return t;
+};
 const planTag = (p) => !p ? "" : `<span class="ptag pk-${esc(p.kind)}" title="${esc(`課表：${p.title || p.label}`)}">${window.DI ? DI(p.icon) : ""}${esc(p.label)}</span>`;
 function renderActChip() {
   const a = S.workout == null ? null : (S.acts || []).find((x) => x.index === S.workout);   // excluded rows: index null
@@ -891,7 +900,7 @@ async function loadActs() {
         style="font-size:11.5px;padding:1px 6px;margin-left:4px">${a.excluded.auto ? "這筆是正常的，不要排除" : "取消手動排除"}</button></div></div>`
     : `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
     <div class="t"><span class="tl"><b>${esc(actWhen(a.start))}</b>${planTag(a.plan)}</span><span>${esc(a.sport_type || a.sport)}</span></div>
-    <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="TSS 來源">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
+    <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="${esc(tssSrcTitle(a))}">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
   $("acts").querySelectorAll("button[data-exkey]").forEach((b) => b.onclick = async (ev) => {
     ev.stopPropagation(); b.disabled = true;
     try {

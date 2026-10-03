@@ -1,6 +1,6 @@
 # 跑步 FTP 自動帶入 TSS（COROS／TP 來源）
 
-Status: todo（還沒開工）
+Status: 第一部分（跑步 FTP → TSS）done（branch fix/run-ftp-tss，2026-10-03）；第二部分（心率）另一個分支在做
 Type: bugfix
 建立：2026-10-03
 
@@ -48,6 +48,10 @@ COROS 來源的 9/17 跑步（NP 156 W、45 分）TSS = 51，WKO5 = 29。
 做法：在 `FitFolderDataset` override `sport_setting("ftp", w)`，跑步就走上面的順序；或在 `_metrics` 改成用 `self.cp(w)`。
 選一個就好，**算 TSS 的 FTP 和圖表用的 CP 要是同一個值**。
 
+- [x] 做法：新增 `Dataset.tss_ftp(w)`（WKO5 規則：活動存的 FTP → 設定），`FitFolderDataset.tss_ftp` 對跑步改用
+  `cp_info`（= `cp(w)`，同一個值）。`_metrics` 回傳 `ftp_used`／`ftp_source`。
+  `_estimate_cp` 跑完後也重算 metrics（原本只有估到 LTHR 才重算）。`estimate_thresholds=False` 時沒有 PD 擬合，只用計畫／DB。
+
 ### 2. 手錶功率一律不用
 
 - 算 FTP（PD 擬合）只用 `power_source == STRYD` 而且 `power_ok` 的跑步。`_estimate_cp` 已經這樣做，要加測試鎖住。
@@ -55,20 +59,34 @@ COROS 來源的 9/17 跑步（NP 156 W、45 分）TSS = 51，WKO5 = 29。
 - 拿掉 `_estimate_settings` 裡「不填 runftp」的理由（那時 `cp_as_of` 會混手錶功率），改用 Stryd-only 的 `_cp_fit_on`。
   `cp_as_of` 不要拿來算 TSS。
 
+- [x] 測試鎖住（`test_run_ftp_tss.py`）；`_estimate_settings` 的 docstring 改了（runftp 設定仍不從 `cp_as_of` 填，TSS 走 `tss_ftp`）。
+
 ### 3. 修 `_is_hr_sourced`
 
 改成判斷 TSS 實際是怎麼算出來的：在 `_metrics` 回傳 `tss_source`（power／rtss／hrtss／tp），
 `_is_hr_sourced` 和 `api/wko5views.py:588` 都改讀這個欄位。
+
+- [x] 值用 `trainingpeaks`（不是 `tp`），跟前端 `wko5_viewer.html` 原本的圖示對應一致。TP 的 TSS 照舊算「心率來源」
+  （維持原行為）。順帶修掉：原本移動時間 hrTSS 取代後 `tss != hrtss`，會被誤判成 rTSS 而拿不到爬升加成。
 
 ### 4. WKO5 比對（parity）
 
 - `config.parity=True` 或 `charts.fit_settings_from_wko5=true` 時：FTP 用 WKO5 設定（現有行為），不用推估值。
 - 對照表（sourcecompare）每筆活動要顯示：FTP 用了哪個值、來源是什麼、TSS 算法。
 
+- [x] parity／WKO5 選用設定走 `Dataset.tss_ftp`（原行為）。對照表每列多 `tss_basis`（兩邊的 tss_source／ftp_used／ftp_source），
+  `compare.html` TSS 格滑過顯示，TSS 欄標題 ? 說明 WKO5 用手動 FTP。活動列表（`/workouts`）多 `ftp_used`／`ftp_source`，
+  TSS 來源圖示滑過顯示。
+
 ### 5. 快取失效
 
 FTP 改變會讓所有 TSS 跟著變 → `_dataset_cfg` 的 key 和 PMC 序列快取要包含 FTP 來源的簽章。
 計畫改 CP 時，`plan_changed(thresholds=True)` 已經會清快取，要確認 cp 也有觸發。
+
+- [x] 確認過，不用改 key：TSS 不存磁碟（每次 build 由 `_metrics` 算）；PMC（`overview.pmc`、`ctl`／`atl`）每次從 `w.metrics` 算；
+  `cached_series` 的簽章 `_settings_sig` 已含 `cp(w)`（= 跑步 TSS 的 FTP）；`fitcache` 的 derived（hr／mhr／bad／avg）跟 FTP 無關。
+  FTP 三個來源各自會換 Dataset：計畫 CP（`PUT /plan/thresholds`、`apply-cp`、`apply` 都 `_notify(True)` → `plan_changed(True)`）、
+  DB `run_ftp_w`（`source_stamp` 含 `db_stamp`）、PD 擬合（FIT 檔變 → `source_stamp`）。
 
 ## 測試（不能依賴 WKO5 資料夾，用合成 FIT／fixture）
 
@@ -78,6 +96,8 @@ FTP 改變會讓所有 TSS 跟著變 → `_dataset_cfg` 的 key 和 PMC 序列�
 - 退回 hrTSS 的跑步 → 有套到移動時間 hrTSS 和爬升加成（`_is_hr_sourced` 修正）。
 - parity 模式 → FTP 用 WKO5 設定的值，TSS 等於 WKO5 的公式（NP² × dur ÷ (FTP² × 36)）。
 - 只跑相關的測試檔，全套留到最後。
+- [x] 以上都在 `backend/tests/test_run_ftp_tss.py`（另加：DB run_ftp_w 優先於推估、`estimate_thresholds=False` 只用計畫／DB、
+  WKO5 選用設定維持 WKO5 的 FTP）。
 
 ## 手動驗收
 
