@@ -28,6 +28,18 @@
     { id: "injuries", href: "/api/v1/wko5/injuries/page", feature: "injuries", icon: I('<rect x="2.8" y="8.2" width="18.4" height="7.6" rx="3.8" transform="rotate(-45 12 12)"/><path d="M10.6 10.6h.01M13.4 13.4h.01M10.6 13.4h.01M13.4 10.6h.01"/>') },
     { id: "settings", href: "/api/v1/wko5/settings", icon: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M4.2 7.5l2 1.2M17.8 15.3l2 1.2M4.2 16.5l2-1.2M17.8 8.7l2-1.2"/><circle cx="12" cy="12" r="6.6"/>') },
   ];
+  // who this page is for (GET /api/v1/session, inlined by the server as TRC_SESSION):
+  // the demo instance hides the owner-only pages and locks what it can't do
+  const SESSION = window.TRC_SESSION || { mode: "owner", caps: null, user: null };
+  const DEMO = SESSION.mode === "demo";
+  const CAPS = new Set(SESSION.caps || []);
+  const can = (cap) => !SESSION.caps || CAPS.has(cap);
+  if (DEMO) {
+    for (const id of ["settings", "injuries"]) {
+      const i = PAGES.findIndex((p) => p.id === id);
+      if (i >= 0) PAGES.splice(i, 1);
+    }
+  }
   // less-used pages sit under 「更多」 (owner, 2026-10-02: the bar was too crowded)
   // 成就 is the 成就 tab of 活動列表 (2026-10-02); /api/v1/achievements/page redirects there
   const MORE = new Set(["activity", "routes", "injuries", "settings"]);
@@ -150,7 +162,161 @@
   const mount = () => document.body.prepend(nav);
   if (document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
   if (cur && !document.title.includes("·")) document.title = `${cur.name.split("／")[0]} · ${T("brand")}`;
-  window.AppShell = { pages: PAGES, current: cur };
+  window.AppShell = { pages: PAGES, current: cur, session: SESSION, can };
+
+  // ---- writes: CSRF header + the demo's refusals ------------------------
+  // every same-origin write carries X-TRC-CSRF = the trc_csrf cookie (double submit,
+  // backend/tenancy_mw.py); the token comes from GET /api/v1/session
+  const nativeFetch = window.fetch.bind(window);
+  let csrfP = null;
+  const csrf = () => csrfP || (csrfP = nativeFetch("/api/v1/session", { cache: "no-store", credentials: "same-origin" })
+    .then((r) => r.json()).then((j) => { if (j && j.demo) Object.assign(SESSION, { demo: j.demo, caps: j.caps }); return j.csrf || ""; })
+    .catch(() => ""));
+  const toast = (msg) => {
+    let el = document.getElementById("an-toast");
+    if (!el) {
+      el = document.createElement("div"); el.id = "an-toast"; el.className = "an-toast"; el.setAttribute("role", "status");
+      document.body.appendChild(el);
+    }
+    el.textContent = msg; el.hidden = false;
+    clearTimeout(el._t); el._t = setTimeout(() => { el.hidden = true; }, 3500);
+  };
+  window.fetch = async (input, init) => {
+    const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+    let url;
+    try { url = new URL(typeof input === "string" ? input : input.url, location.href); } catch (_) { url = null; }
+    if (method === "GET" || method === "HEAD" || !url || url.origin !== location.origin) return nativeFetch(input, init);
+    const tok = await csrf();
+    const headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined));
+    if (tok) headers.set("X-TRC-CSRF", tok);
+    const r = await nativeFetch(input, { ...(init || {}), headers, credentials: "same-origin" });
+    if (DEMO && (r.status === 403 || r.status === 429 || r.status === 413)) {
+      r.clone().json().then((j) => {
+        const d = j && (j.detail || j);
+        toast((d && d.message) || T("demo.disabled"));
+        if (j && j.code === "CSRF") csrfP = null;
+      }).catch(() => {});
+    }
+    if (DEMO && r.ok && !SESSION.demo?.sandbox) {      // the first write made the visitor's sandbox
+      csrfP = null; csrf().then(() => renderBanner());
+    }
+    return r;
+  };
+  if (!window.TRC_SESSION || DEMO) csrf();     // the cookie (and, without the inline copy, the session)
+
+  // ---- the demo banner + locked buttons ----------------------------------
+  let renderBanner = () => {};
+  if (DEMO) {
+    st.textContent += `
+    .an-demo { position: sticky; top: var(--shell-top, 0px); z-index: 38; display: flex; flex-wrap: wrap; gap: 6px 12px;
+      align-items: center; padding: 7px 14px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+      background: color-mix(in srgb, #f59e0b 16%, var(--panel, #fff)); color: var(--text, #111);
+      border-bottom: 1px solid color-mix(in srgb, #f59e0b 45%, var(--line, #e1e5ea)); }
+    .an-demo b.an-d-tag { padding: 1px 8px; border-radius: 999px; background: #b45309; color: #fff; font-size: 12px; letter-spacing: .04em; }
+    .an-demo .an-d-try a { color: var(--accent, #2563eb); font-weight: 600; text-decoration: none; margin: 0 2px; }
+    .an-demo .an-d-try a:hover { text-decoration: underline; }
+    .an-demo .an-d-sp { flex: 1; }
+    .an-demo button, .an-demo .an-d-cta { font: inherit; font-size: 12.5px; padding: 3px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--line, #d4d8de); background: var(--panel, #fff); color: var(--text, #111); text-decoration: none; }
+    .an-demo button:hover, .an-demo .an-d-cta:hover { border-color: var(--accent, #2563eb); color: var(--accent, #2563eb); }
+    .an-demo .an-d-left { color: var(--muted, #667); font-size: 12px; }
+    @media (max-width: 699px) { .an-demo { top: 0; font-size: 12.5px; padding: 6px 10px; } .an-demo .an-d-sp { display: none; } }
+    [data-cap][data-cap-locked] { opacity: .5; cursor: not-allowed !important; }
+    .an-toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 80; max-width: min(92vw, 460px);
+      padding: 9px 14px; border-radius: 9px; background: #1f2937; color: #fff; font: 13px/1.4 system-ui, sans-serif;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .an-toast[hidden] { display: none; }
+    `;
+    const banner = document.createElement("div");
+    banner.className = "an-demo"; banner.setAttribute("role", "note");
+    const left = () => {
+      const exp = SESSION.demo && SESSION.demo.expires_at ? Date.parse(SESSION.demo.expires_at) : null;
+      if (!exp) return T("demo.left_none");
+      const h = Math.max(0, (exp - Date.now()) / 3600e3);
+      return h >= 1 ? T("demo.left_h", { h: Math.floor(h) }) : T("demo.left_m", { m: Math.max(1, Math.round(h * 60)) });
+    };
+    renderBanner = () => {
+      const href = (id) => (PAGES.find((p) => p.id === id) || {}).href || "#";
+      banner.innerHTML = `<b class="an-d-tag">${T("demo.tag")}</b>
+        <span>${T("demo.text")}</span>
+        <span class="an-d-try">${T("demo.try")}<a href="${href("schedule")}">${T("demo.try_schedule")}</a>·<a href="${href("racepower")}">${T("demo.try_race")}</a>·<a href="${href("plan")}">${T("demo.try_plan")}</a></span>
+        <span class="an-d-sp"></span>
+        <span class="an-d-left" title="${T("demo.left_title")}">${left()}</span>
+        <button type="button" class="an-d-reset" title="${T("demo.reset_title")}">${T("demo.reset")}</button>
+        ${SESSION.demo && SESSION.demo.cta_url ? `<a class="an-d-cta" href="${SESSION.demo.cta_url}" target="_blank" rel="noopener">${T("demo.cta")}</a>` : ""}`;
+      banner.querySelector(".an-d-reset").addEventListener("click", async () => {
+        if (!confirm(T("demo.reset_confirm"))) return;
+        await window.fetch("/api/v1/demo/reset", { method: "POST" });
+        try { sessionStorage.clear(); } catch (_) {}
+        location.reload();
+      });
+    };
+    renderBanner();
+    const mountBanner = () => nav.after(banner);
+    if (document.body) mountBanner(); else document.addEventListener("DOMContentLoaded", mountBanner);
+    setInterval(() => { const el = banner.querySelector(".an-d-left"); if (el) el.textContent = left(); }, 60e3);
+
+    // buttons / inputs marked data-cap="sync" (… push, share, thresholds.write …) are
+    // locked when the session lacks the cap: disabled, with the reason on hover
+    // the pages' owner-only controls, by selector (so each page needn't know about the demo)
+    const CAP_SELECTORS = [
+      ["push", "#push-main, #push-caret, [data-unpush], #sd-push, #coros, #cx-go"],
+      ["share", "#share, #share-go"],
+      ["backtest", "#bt-run"],
+      ["weather.key", "#cwasave, #cwakey"],
+      ["thresholds.write", "#addthr, #savethr, [data-apply-cp], [data-apply-at], [data-apply-thr]"],
+      ["dataset.write", "#rebuild, [data-rename-route], #ex-save, #act-save, [data-exclude]"],
+      ["upload.fit", "input[type=file][accept*='.fit' i]:not([accept*='.gpx' i])"],
+      ["ai", "[data-ai]"],
+    ];
+    const lock = (root) => {
+      if (!root.querySelectorAll) return;
+      for (const [cap, sel] of CAP_SELECTORS) {
+        if (can(cap)) continue;
+        for (const el of root.querySelectorAll(sel)) if (!el.dataset.cap) el.dataset.cap = cap;
+        if (root.matches && root.matches(sel) && !root.dataset.cap) root.dataset.cap = cap;
+      }
+      for (const el of (root.querySelectorAll ? root.querySelectorAll("[data-cap]") : [])) {
+        const need = el.dataset.cap.split(/\s+/).filter(Boolean);
+        if (need.every(can) || el.dataset.capLocked) continue;
+        el.dataset.capLocked = "1";
+        el.title = T("demo.locked");
+        if ("disabled" in el) el.disabled = true;
+        el.setAttribute("aria-disabled", "true");
+        el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(T("demo.locked")); }, true);
+      }
+    };
+    // no WKO5 comparison content in the demo (owner): the help texts' WKO5 references go
+    const scrub = (s) => s.replace(/（\s*WKO5\s*）/g, "").replace(/WKO5\s*(的定義|定義)?\s*[：:]\s*/g, "")
+      .replace(/(比照|對照|從)\s*WKO5\s*的?/g, "").replace(/WKO5\s*的?\s*/g, "");
+    const clean = (root) => {
+      if (!root) return;
+      if (root.nodeType === 3) { if (root.nodeValue.includes("WKO5")) root.nodeValue = scrub(root.nodeValue); return; }
+      if (root.nodeType !== 1) return;
+      if (root.title && root.title.includes("WKO5")) root.title = scrub(root.title);
+      if (!root.textContent.includes("WKO5") && !(root.innerHTML || "").includes("WKO5")) return;
+      const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+      for (let n = w.currentNode; n; n = w.nextNode()) {
+        if (n.nodeType === 3) { if (n.nodeValue.includes("WKO5")) n.nodeValue = scrub(n.nodeValue); }
+        else for (const a of ["title", "aria-label", "placeholder", "data-tip"]) {
+          const v = n.getAttribute(a);
+          if (v && v.includes("WKO5")) n.setAttribute(a, scrub(v));
+        }
+      }
+    };
+    const startLock = () => {
+      lock(document); clean(document.body);
+      if (document.title.includes("WKO5")) document.title = scrub(document.title);
+      new MutationObserver((ms) => {
+        for (const m of ms) {
+          if (m.type === "attributes") { clean(m.target); continue; }
+          if (m.type === "characterData") { clean(m.target); continue; }
+          for (const n of m.addedNodes) { if (n.nodeType === 1) lock(n.parentNode || n); clean(n); }
+        }
+      }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["title"] });
+    };
+    if (document.body) startLock(); else document.addEventListener("DOMContentLoaded", startLock);
+  }
 
   // ---- dataset build progress -------------------------------------------
   // While the chart Dataset of the data source builds (first start, new FIT
@@ -217,6 +383,8 @@
   }
   setTimeout(poll, 250);
   window.AppShell.datasetStatus = poll;
+
+  if (DEMO) return;          // the demo has no sync, no settings, no first-run wizard
 
   // auto-sync on site open (COROS / TP, per the settings page; throttled inside autosync.js)
   const as = document.createElement("script");
