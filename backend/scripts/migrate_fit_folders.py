@@ -30,7 +30,7 @@ from backend.sync import storage
 
 LEGACY_DIRS = {
     "coros": lambda: [Path.home() / ".wko5coach" / "fits"],
-    "tp": lambda: sorted(p for p in storage.FIT_ROOT.glob("athlete_*") if p.is_dir()),
+    "tp": lambda: sorted(p for p in storage.fit_root().glob("athlete_*") if p.is_dir()),
 }
 
 
@@ -94,10 +94,10 @@ async def migrate(db: AsyncSession, apply: bool = False, legacy_dirs: Optional[d
     out["athlete_dirs_updated"] = 0
     for a in (await db.execute(select(Athlete))).scalars():
         if a.data_dir and (str(Path(a.data_dir).resolve()) in legacy_tp
-                           or (Path(a.data_dir).parent == storage.FIT_ROOT and Path(a.data_dir).name.startswith("athlete_"))):
+                           or (Path(a.data_dir).parent == storage.fit_root() and Path(a.data_dir).name.startswith("athlete_"))):
             out["athlete_dirs_updated"] += 1
             if apply:
-                a.data_dir = str(storage.FIT_ROOT)
+                a.data_dir = str(storage.fit_root())
     if apply:
         await db.commit()
     else:

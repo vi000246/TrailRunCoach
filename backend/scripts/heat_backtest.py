@@ -99,7 +99,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     from backend.engine import heat as HT
     from backend.engine import routes as R
-    root = R.HOME
+    root = R.home()
     idx, aw = load(root)
     rows = efforts(idx, a.min_min)
     acts = [dict(v, file=f) for f, v in (aw.get("activities") or {}).items() if v]

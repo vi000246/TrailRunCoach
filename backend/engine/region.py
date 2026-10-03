@@ -37,7 +37,7 @@ def home_cell(root: Optional[Path] = None) -> Optional[tuple[float, float]]:
     """(lat, lon) of the weather cell with the most cached days; None without a cache."""
     if root is None:
         from backend.engine import routes as R
-        root = R.HOME
+        root = R.home()
     try:
         files = list((Path(root) / "weather").glob("*.json"))
     except OSError:

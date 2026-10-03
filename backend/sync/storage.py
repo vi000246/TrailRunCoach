@@ -16,13 +16,21 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-FIT_ROOT = Path.home() / ".wko5coach" / "fit"
+FIT_ROOT = None      # fixed folder (tests); None = the tenant's shared fit/
 SOURCES = {"coros": "coros", "tp": "trainingpeaks"}          # folder / API name -> DB source
 DB_TO_FOLDER = {v: k for k, v in SOURCES.items()}
 
 
 class PathNotConfined(ValueError):
     pass
+
+
+def fit_root() -> Path:
+    """<tenant shared>/fit (backend/tenancy.py): the owner's ~/.wko5coach/fit."""
+    if FIT_ROOT is not None:
+        return Path(FIT_ROOT)
+    from backend import tenancy
+    return tenancy.shared_path("fit")
 
 
 def check_source(source: str) -> str:
@@ -32,7 +40,7 @@ def check_source(source: str) -> str:
 
 
 def source_dir(source: str) -> Path:
-    return FIT_ROOT / check_source(source)
+    return fit_root() / check_source(source)
 
 
 def year_dir(source: str, year) -> Path:

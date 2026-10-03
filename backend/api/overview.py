@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
 from backend.engine import overview as O
-from backend.engine.planning import PLAN_PATH
+from backend.engine.planning import plan_path
 from backend.engine.status import Status
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
@@ -22,7 +22,8 @@ STATIC = Path(__file__).resolve().parents[1] / "static"
 router = APIRouter(prefix="/api/v1/overview", tags=["overview"])
 
 _lock = threading.Lock()
-_status_cache: dict = {}
+_status_cache: dict = {}          # (tenant id, ...) -> Status, insertion order = LRU
+_STATUS_MAX = 64
 
 
 def _dataset():
@@ -33,7 +34,7 @@ def _dataset():
 
 def _plan_stamp() -> float:
     try:
-        return PLAN_PATH.stat().st_mtime
+        return plan_path().stat().st_mtime
     except OSError:
         return 0.0
 
@@ -47,14 +48,22 @@ def _status(ds, today: dt.date) -> Status:
     prefs = PP.load()
     tests = tuple((s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol"))
                   for s in test_sessions())
-    key = (id(ds), today, _plan_stamp(), prefs.stamp(), tests)
+    from backend import tenancy
+    key = (tenancy.current().id, id(ds), today, _plan_stamp(), prefs.stamp(), tests)
     with _lock:
         hit = _status_cache.get(key)
+        if hit is not None:
+            _status_cache[key] = _status_cache.pop(key)      # most recent last
     if hit is None:
         hit = Status(ds, today=today, prefs=prefs).compute()
         with _lock:
-            _status_cache.clear()
+            # LRU per tenant (demo sandboxes, later users); the owner alone keeps one entry warm
+            mine = [k for k in _status_cache if k[0] == key[0]]
+            for k in mine:
+                _status_cache.pop(k, None)
             _status_cache[key] = hit
+            while len(_status_cache) > _STATUS_MAX:
+                _status_cache.pop(next(iter(_status_cache)))
     return hit
 
 

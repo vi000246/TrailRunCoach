@@ -33,7 +33,7 @@ MAX_UPLOAD = 8 << 30
 # paths are looked up at call time so tests can point them at tmp_path
 def _db_path() -> Path:
     from backend.db import database
-    return Path(database.DB_PATH)
+    return database.db_path()
 
 
 def _local_dir() -> Path:
@@ -43,7 +43,7 @@ def _local_dir() -> Path:
 
 def _fit_root() -> Path:
     from backend.sync import storage
-    return Path(storage.FIT_ROOT)
+    return storage.fit_root()
 
 
 def _now() -> datetime:
@@ -228,7 +228,7 @@ async def after_restore() -> None:
     """Drop pooled connections (they'd keep the old pages cached), upgrade an
     older schema, clear in-memory caches that read the DB."""
     from backend.db import database
-    await database.engine.dispose()
+    await database.dispose()
     await database.init_db()
     try:
         from backend.engine import activity_tags

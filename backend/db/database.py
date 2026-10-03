@@ -1,14 +1,83 @@
+"""The app DB: one SQLite file per tenant (backend/tenancy.py, auth-and-demo
+plan §2.2) — the owner's ~/.wko5coach/wko5coach.db as before, a demo
+sandbox's own copy, later each user's. Engines are pooled per file (LRU).
+
+    db_path()             the current tenant's DB file
+    AsyncSessionLocal()   a session on it (call it like the old sessionmaker)
+    get_engine()          its engine
+"""
+import threading
+from collections import OrderedDict
 from pathlib import Path
+from typing import Optional
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from backend.db.models import Base
+from backend import tenancy
 
-DB_PATH = Path.home() / ".wko5coach" / "wko5coach.db"
-DB_PATH.parent.mkdir(exist_ok=True)
-DATABASE_URL = f"sqlite+aiosqlite:///{DB_PATH}"
+# a fixed DB file (scripts / tests); None = the current tenant's (tenancy.db_path)
+DB_PATH: Optional[Path] = None
 
-engine = create_async_engine(DATABASE_URL, echo=False)
-AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+_POOL_MAX = 32
+_POOL: "OrderedDict[str, tuple]" = OrderedDict()      # path -> (engine, sessionmaker)
+_POOL_LOCK = threading.Lock()
+
+
+def db_path() -> Path:
+    return Path(DB_PATH) if DB_PATH is not None else tenancy.db_path()
+
+
+def url_for(path: Path) -> str:
+    return f"sqlite+aiosqlite:///{path}"
+
+
+def _entry(path: Optional[Path] = None) -> tuple:
+    p = Path(path) if path is not None else db_path()
+    key = str(p)
+    with _POOL_LOCK:
+        hit = _POOL.get(key)
+        if hit is not None:
+            _POOL.move_to_end(key)
+            return hit
+        p.parent.mkdir(parents=True, exist_ok=True)
+        eng = create_async_engine(url_for(p), echo=False)
+        hit = _POOL[key] = (eng, async_sessionmaker(eng, expire_on_commit=False))
+        while len(_POOL) > _POOL_MAX:
+            _k, (old, _m) = _POOL.popitem(last=False)
+            try:                                   # sync dispose: drops the pooled connections
+                old.sync_engine.dispose()
+            except Exception:                      # noqa: BLE001
+                pass
+    return hit
+
+
+def get_engine(path: Optional[Path] = None):
+    return _entry(path)[0]
+
+
+def AsyncSessionLocal(path: Optional[Path] = None) -> AsyncSession:     # noqa: N802 — the old sessionmaker's name
+    """A session on the current tenant's DB (or `path`)."""
+    return _entry(path)[1]()
+
+
+async def dispose(path: Optional[Path] = None) -> None:
+    """Close the pooled connections of a DB file (backup restore, a sandbox
+    deleted) and forget its engine."""
+    key = str(Path(path) if path is not None else db_path())
+    with _POOL_LOCK:
+        hit = _POOL.pop(key, None)
+    if hit is not None:
+        await hit[0].dispose()
+
+
+def __getattr__(name):
+    """Back-compat for readers of the old module constants."""
+    if name == "DATABASE_URL":
+        return url_for(db_path())
+    if name == "engine":
+        return get_engine()
+    raise AttributeError(name)
 
 
 async def get_db():
@@ -69,7 +138,7 @@ async def _migrate_schema():
         ("activity_tags", "injury_id", "INTEGER"),
         ("coros_plan_push", "provider", "TEXT DEFAULT 'coros'"),   # sync/workout_targets
     ]
-    async with engine.begin() as conn:
+    async with get_engine().begin() as conn:
         for table, col, col_type in new_cols:
             result = await conn.execute(text(f"PRAGMA table_info({table})"))
             existing = {row[1] for row in result.fetchall()}
@@ -88,6 +157,6 @@ async def _migrate_schema():
 
 
 async def init_db():
-    async with engine.begin() as conn:
+    async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _migrate_schema()

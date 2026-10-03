@@ -43,7 +43,21 @@ def find_athlete_dir(roots: list[Path]) -> Path | None:
     return None
 
 
+def no_wko5_dir() -> Path:
+    """A folder that never holds a WKO5 athlete: what every tenant but the
+    owner gets (the demo instance, later signed-in users; tenancy.py)."""
+    from backend import tenancy
+    return tenancy.home_root() / "_no_wko5"
+
+
 def athlete_dir() -> Path:
+    from backend import tenancy
+    if tenancy.demo_mode():
+        # the demo instance never looks for (or at) a WKO5 folder, env or not
+        if any(os.getenv(n) for n in ENV_VARS):
+            import logging
+            logging.getLogger(__name__).warning("demo mode: %s ignored", "/".join(ENV_VARS))
+        return no_wko5_dir()
     for name in ENV_VARS:
         v = os.getenv(name)
         if v:

@@ -27,8 +27,18 @@ from backend.engine.algorithms.routes import cells, cluster_routes
 from backend.engine.algorithms.wko5_time import MOVING_SPEED_KMH
 
 ALGO_VERSION = 2          # 2: moving mask excludes recording gaps; VAM on moving time
-CACHE_PATH = Path.home() / ".wko5coach" / "achievements_cache.json"
-ANNOTATIONS_PATH = Path.home() / ".wko5coach" / "annotations.json"
+CACHE_PATH = None          # fixed files (tests); None = the tenant's
+ANNOTATIONS_PATH = None
+
+
+def cache_path() -> Path:
+    from backend import tenancy
+    return Path(CACHE_PATH) if CACHE_PATH is not None else tenancy.shared_path("achievements_cache.json")
+
+
+def annotations_path() -> Path:
+    from backend import tenancy
+    return Path(ANNOTATIONS_PATH) if ANNOTATIONS_PATH is not None else tenancy.base_path("annotations.json")
 PEAKS_PATH = Path(__file__).resolve().parents[1] / "data" / "baiyue.json"
 
 # Mountain class by summit altitude — the grading Taiwanese hikers use.
@@ -317,15 +327,15 @@ def _assign_routes(records: list[Achievement]) -> None:
 
 def _load_cache() -> dict:
     try:
-        return json.loads(CACHE_PATH.read_text("utf-8"))
+        return json.loads(cache_path().read_text("utf-8"))
     except (OSError, ValueError):
         return {}
 
 
 def _save_cache(cache: dict) -> None:
     try:
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        CACHE_PATH.write_text(json.dumps(cache), "utf-8")
+        cache_path().parent.mkdir(parents=True, exist_ok=True)
+        cache_path().write_text(json.dumps(cache), "utf-8")
     except OSError:
         pass
 
@@ -336,7 +346,7 @@ def _save_cache(cache: dict) -> None:
 
 class Annotations:
     def __init__(self, path: Optional[Path] = None):
-        self.path = path or ANNOTATIONS_PATH
+        self.path = path or annotations_path()
         try:
             self.data = json.loads(self.path.read_text("utf-8"))
         except (OSError, ValueError):

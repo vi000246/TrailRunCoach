@@ -30,12 +30,12 @@ from dataclasses import asdict
 from backend.engine.wko5expr.chartfixes import FIXES_PATH, apply_fixes, load_fixes
 from backend.engine.wko5expr.viewids import ensure_ids
 from backend.engine.wko5expr import viewi18n as VI
-from backend.engine.wko5expr.config import CONFIG_PATH, MOUNTAIN_PRESET, EngineConfig
+from backend.engine.wko5expr.config import config_path, MOUNTAIN_PRESET, EngineConfig
 from backend.engine.wko5expr.corrections import (
     CorrectionStore, detect_spikes, proposals_to_corrections,
 )
 from backend.engine.wko5expr.customviews import (
-    REPO_VIEWS, USER_VIEWS, load_custom_views, view_dirs,
+    REPO_VIEWS, user_views, load_custom_views, view_dirs,
 )
 from backend.engine.wko5expr.dataset import Dataset, date_to_day
 from backend.engine.wko5expr import datasource as DSRC
@@ -49,6 +49,7 @@ from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
 from backend.files.wko5chart_reader import read_view
 from backend.settings.paths import athlete_dir
+from backend import tenancy
 
 ROOT = Path(__file__).resolve().parents[2]
 ATHLETE_DIR = athlete_dir()     # WKO5_ATHLETE_DIR, else found under ~/WKO5 (settings/paths.py)
@@ -61,7 +62,7 @@ _LIVE: "weakref.WeakSet[Dataset]" = weakref.WeakSet()
 
 
 @lru_cache(maxsize=4)
-def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "") -> Dataset:
+def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "", shared: str = "") -> Dataset:
     """The Dataset for charts.data_source: the WKO5 athlete folder, or the
     COROS / TP FIT folder (FitFolderDataset: thresholds from the plan, the
     app DB's athlete_settings and as-of estimates; WKO5 only when opted in).
@@ -93,23 +94,23 @@ def plan_changed(thresholds: bool) -> None:
     and zones everywhere, so the datasets are rebuilt."""
     if thresholds:
         _dataset_cfg.cache_clear()
-        return
-    from backend.engine.planning import Plan
-    for ds in list(_LIVE):
-        if not ds.config.parity:
-            ds.plan = Plan.load()   # per-workout memo doesn't depend on events
+    # events / phases: Dataset.plan reads the tenant's plan.json per request
+    # (memoised on its stamp), so nothing to push into the shared Datasets
 
 
 _FLIGHT: dict = {}                       # build key -> lock (single flight)
 _FLIGHT_LOCK = threading.Lock()
 
 
-def _dataset_key(parity: Optional[bool] = None, source: Optional[str] = None) -> tuple[str, str, str]:
+def _dataset_key(parity: Optional[bool] = None, source: Optional[str] = None) -> tuple[str, str, str, str]:
+    """(engine config, source, files stamp, the tenant's shared root): every
+    demo sandbox maps to its base, so they all share one Dataset (§2.4)."""
     cfg = EngineConfig.load()
     if parity is not None and parity != cfg.parity:
         cfg = cfg.replace(parity=parity)
     src = source if source in DSRC.SOURCES else DSRC.current_source()
-    return json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, ATHLETE_DIR)
+    return (json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, ATHLETE_DIR),
+            str(tenancy.current().shared))
 
 
 def _dataset(parity: Optional[bool] = None, source: Optional[str] = None) -> Dataset:
@@ -122,6 +123,13 @@ def _dataset(parity: Optional[bool] = None, source: Optional[str] = None) -> Dat
     Single flight: concurrent callers of the same key (the viewer asks for a
     dozen charts at once) wait for ONE build instead of each building its
     own; the build's progress is in buildstate (GET /dataset/status)."""
+    # built from the base's data (DB settings, thresholds): a sandbox that
+    # triggers the build never puts its own copy into the shared Dataset
+    with tenancy.use(tenancy.base_of()):
+        return _dataset_in_tenant(parity, source)
+
+
+def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset:
     key = _dataset_key(parity, source)
     with _FLIGHT_LOCK:
         lk = _FLIGHT.get(key)
@@ -174,7 +182,9 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
                 asyncio.run(fit_once())
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__)
-    t = threading.Thread(target=run, name=f"dataset-warmup-{reason}", daemon=True)
+    import contextvars              # a Thread does not carry the tenant (contextvars) by itself
+    ctx = contextvars.copy_context()
+    t = threading.Thread(target=ctx.run, args=(run,), name=f"dataset-warmup-{reason}", daemon=True)
     _WARM["thread"] = t
     t.start()
     return t
@@ -289,7 +299,7 @@ def list_views():
 def custom_view_dirs():
     """Where to put your own view JSON files."""
     return {"dirs": [str(p) for p in view_dirs()],
-            "repo": str(REPO_VIEWS), "user": str(USER_VIEWS)}
+            "repo": str(REPO_VIEWS), "user": str(user_views())}
 
 
 def _sports(sports: Optional[str]) -> Optional[set[str]]:
@@ -1029,7 +1039,7 @@ def primary_sport():
 @router.get("/config")
 def get_config():
     cfg = EngineConfig.load()
-    return {"config": cfg.to_dict(), "path": str(CONFIG_PATH),
+    return {"config": cfg.to_dict(), "path": str(config_path()),
             "mountain_preset": MOUNTAIN_PRESET.to_dict()}
 
 
