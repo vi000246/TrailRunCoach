@@ -25,8 +25,8 @@ FIT_SOURCES = ("coros", "tp")
 
 def _db_path() -> Optional[Path]:
     try:
-        from backend.db.database import DB_PATH
-        return Path(DB_PATH)
+        from backend.db.database import db_path
+        return db_path()
     except Exception:
         return None
 

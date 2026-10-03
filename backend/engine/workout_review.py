@@ -1771,7 +1771,8 @@ def _archive_temps() -> dict:
     routes build). {} when it isn't there. Cached on the file's mtime."""
     try:
         from backend.engine import route_weather as RW
-        from backend.engine.routes import HOME
+        from backend.engine.routes import home as routes_home
+        HOME = routes_home()
         p = HOME / RW.ACTIVITY_WX_FILE
         mt = p.stat().st_mtime_ns
     except Exception:

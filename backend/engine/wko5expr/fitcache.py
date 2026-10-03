@@ -67,7 +67,10 @@ PARSE_V, POWER_V, BAD_V, FIELDS_V, HR_V, AVG_V = 1, 1, 1, 1, 1, 1
 
 def root() -> Path:
     v = os.getenv(ENV_ROOT)
-    return Path(v) if v else Path.home() / ".wko5coach" / "cache" / "fit"
+    if v:
+        return Path(v)
+    from backend import tenancy
+    return tenancy.shared_path("cache", "fit")
 
 
 # ---------------------------------------------------------------------------

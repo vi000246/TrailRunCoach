@@ -74,8 +74,8 @@ def main(argv=None) -> None:
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     if a.db is None:
-        from backend.db.database import DB_PATH
-        db = Path(DB_PATH)
+        from backend.db.database import db_path
+        db = db_path()
     else:
         db = Path(a.db)
     con = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True) if a.dry_run else sqlite3.connect(db)

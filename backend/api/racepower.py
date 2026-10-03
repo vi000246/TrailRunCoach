@@ -35,7 +35,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.engine.algorithms.effort import SIMPLE_FORMULAS
-from backend.engine.planning import PLAN_PATH
+from backend.engine.planning import plan_path
 from backend.engine.racepower import env as ENV
 from backend.engine.racepower import predict as PR
 from backend.engine.racepower import re as RE
@@ -59,7 +59,7 @@ def _dataset():
 
 def _plan_stamp() -> float:
     try:
-        return PLAN_PATH.stat().st_mtime
+        return plan_path().stat().st_mtime
     except OSError:
         return 0.0
 

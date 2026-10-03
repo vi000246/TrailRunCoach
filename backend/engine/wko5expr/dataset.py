@@ -39,9 +39,15 @@ SPORT_SETTING_PREFIX = {"run": "run", "bike": "bike", "road bike": "bike",
 
 
 F_TP_TSS = 4038          # .wko4 info: TSS synced from TrainingPeaks
-_CACHE_DIR = Path.home() / ".wko5coach"
-_TP_CACHE = _CACHE_DIR / "tp_tss.json"
-_MOVING_CACHE = _CACHE_DIR / "moving_hrtss.json"
+_CACHE_DIR = None      # fixed folder (tests); None = the tenant's shared root
+
+
+def _cache_dir() -> Path:
+    """Dataset caches: <tenant shared>/ (the owner's ~/.wko5coach)."""
+    if _CACHE_DIR is not None:
+        return Path(_CACHE_DIR)
+    from backend import tenancy
+    return tenancy.shared_path()
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +98,7 @@ def _load_tp_tss(athlete_dir: Path) -> dict[str, float]:
     stamp = {k: [p.stat().st_size, int(p.stat().st_mtime)] for k, p in files.items()}
     cache = {}
     try:
-        cache = json.loads(_TP_CACHE.read_text("utf-8"))
+        cache = json.loads((_cache_dir() / "tp_tss.json").read_text("utf-8"))
     except (OSError, ValueError):
         pass
     out, entries, dirty = {}, cache.get("files", {}), False
@@ -112,8 +118,8 @@ def _load_tp_tss(athlete_dir: Path) -> dict[str, float]:
             out[key] = hit[2]
     if dirty:
         try:
-            _TP_CACHE.parent.mkdir(parents=True, exist_ok=True)
-            _TP_CACHE.write_text(json.dumps({"files": entries}), "utf-8")
+            _cache_dir().mkdir(parents=True, exist_ok=True)
+            (_cache_dir() / "tp_tss.json").write_text(json.dumps({"files": entries}), "utf-8")
         except OSError:
             pass
     return out
@@ -127,7 +133,7 @@ def _load_moving_hrtss(ds) -> dict[str, float]:
 
     cache = {}
     try:
-        cache = json.loads(_MOVING_CACHE.read_text("utf-8"))
+        cache = json.loads((_cache_dir() / "moving_hrtss.json").read_text("utf-8"))
     except (OSError, ValueError):
         pass
     entries = cache.get("files", {})
@@ -156,8 +162,8 @@ def _load_moving_hrtss(ds) -> dict[str, float]:
             out[w.entry.file] = hit[3]
     if dirty:
         try:
-            _MOVING_CACHE.parent.mkdir(parents=True, exist_ok=True)
-            _MOVING_CACHE.write_text(json.dumps({"files": entries}), "utf-8")
+            _cache_dir().mkdir(parents=True, exist_ok=True)
+            (_cache_dir() / "moving_hrtss.json").write_text(json.dumps({"files": entries}), "utf-8")
         except OSError:
             pass
     return out
@@ -219,7 +225,47 @@ class Workout:
     metrics: dict[str, Optional[float]] = field(default_factory=dict)
 
 
+_PLAN_MEMO: dict = {}             # (tenant id, plan path) -> (stamp, Plan)
+_PLAN_MEMO_LOCK = threading.Lock()
+
+
+def tenant_plan():
+    """The current tenant's season plan (events, phases, thresholds), memoised
+    on the plan.json file's stamp. A Dataset is shared by every tenant that
+    reads the same data (a demo base and its sandboxes), so its `plan` is
+    looked up per request instead of being stored in it (auth-and-demo §2.4)."""
+    from backend import tenancy
+    from backend.engine.planning import Plan, plan_path
+    p = plan_path()
+    try:
+        st = p.stat()
+        stamp = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        stamp = None
+    key = (tenancy.current().id, str(p))
+    with _PLAN_MEMO_LOCK:
+        hit = _PLAN_MEMO.get(key)
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    plan = Plan.load(p)
+    with _PLAN_MEMO_LOCK:
+        if len(_PLAN_MEMO) > 256:
+            _PLAN_MEMO.clear()
+        _PLAN_MEMO[key] = (stamp, plan)
+    return plan
+
+
 class Dataset:
+    @property
+    def plan(self):
+        """An explicitly set plan (parity mode: empty; tests), else the current tenant's."""
+        fixed = getattr(self, "_plan_fixed", None)
+        return fixed if fixed is not None else tenant_plan()
+
+    @plan.setter
+    def plan(self, value):
+        self._plan_fixed = value
+
     def __init__(self, athlete_dir: str | Path, today: Optional[dt.date] = None,
                  config: Optional[EngineConfig] = None,
                  corrections: Optional["CorrectionStore"] = None,
@@ -235,7 +281,7 @@ class Dataset:
         # Season plan (events, dated HR tests). Its thresholds replace WKO5's
         # settings outside parity mode.
         from backend.engine.planning import Plan
-        self.plan = Plan() if self.config.parity else Plan.load()
+        self._plan_fixed = Plan() if self.config.parity else None     # None: the tenant's plan (plan property)
         path = next(self.dir.glob("*.wko5athlete"), None)
         if path is None:
             # no WKO5 folder (a COROS / TP-only runner): datasource.current_source
@@ -302,7 +348,7 @@ class Dataset:
         p = self.dir / w.entry.file
         if not p.exists():
             return self._compute_power_source(w)
-        path = _CACHE_DIR / "power_source_v1.json"
+        path = _cache_dir() / "power_source_v1.json"
         store = self.__dict__.setdefault("_ps_store", None)
         if store is None:
             store = self._ps_store = _cache_read(path)
@@ -316,7 +362,7 @@ class Dataset:
 
     def _flush_power_sources(self) -> None:
         if getattr(self, "_ps_dirty", False):
-            _cache_write(_CACHE_DIR / "power_source_v1.json", self._ps_store)
+            _cache_write(_cache_dir() / "power_source_v1.json", self._ps_store)
             self._ps_dirty = False
 
     def power_ok(self, w: Workout) -> bool:
@@ -406,7 +452,7 @@ class Dataset:
             return None
         store = self.__dict__.get("_ba_store")
         if store is None:
-            store = self._ba_store = _cache_read(_CACHE_DIR / "bad_activity_v1.json")
+            store = self._ba_store = _cache_read(_cache_dir() / "bad_activity_v1.json")
         stamp = _file_stamp(p) + [self._corr_sig(w.entry.file, "power")]
         hit = store.get(w.entry.file)
         if not hit or hit[:3] != stamp:
@@ -431,7 +477,7 @@ class Dataset:
                 keep.append(w)
         self.workouts = keep
         if getattr(self, "_ba_dirty", False):
-            _cache_write(_CACHE_DIR / "bad_activity_v1.json", self._ba_store)
+            _cache_write(_cache_dir() / "bad_activity_v1.json", self._ba_store)
             self._ba_dirty = False
 
     def _is_hr_sourced(self, w: Workout) -> bool:
@@ -603,7 +649,7 @@ class Dataset:
         with self._series_lock:
             store = self._series.get(key)
             if store is None:
-                store = self._series[key] = _cache_read(_CACHE_DIR / f"series_{_safe(key)}.json")
+                store = self._series[key] = _cache_read(_cache_dir() / f"series_{_safe(key)}.json")
         p = self.dir / w.entry.file
         if not p.exists():
             return None
@@ -629,7 +675,7 @@ class Dataset:
             todo = {key: dict(self._series[key]) for key in self._series_dirty}
             self._series_dirty.clear()
         for key, entries in todo.items():      # write outside the lock, from snapshots
-            _cache_write(_CACHE_DIR / f"series_{_safe(key)}.json", entries)
+            _cache_write(_cache_dir() / f"series_{_safe(key)}.json", entries)
 
     def _cached_per_workout(self, cache_name: str, channel: str, compute):
         """{relative file -> value} for every workout, memoised on disk.
@@ -638,7 +684,7 @@ class Dataset:
         JSON-round-trippable. Only workouts whose file changed (or whose
         corrections changed) are recomputed.
         """
-        path = _CACHE_DIR / f"{cache_name}.json"
+        path = _cache_dir() / f"{cache_name}.json"
         entries = _cache_read(path)
         out, dirty = {}, False
         for w in self.workouts:

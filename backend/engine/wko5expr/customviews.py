@@ -45,7 +45,14 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 REPO_VIEWS = Path(__file__).resolve().parents[3] / "views"
-USER_VIEWS = Path.home() / ".wko5coach" / "views"
+USER_VIEWS = None      # fixed folder (tests); None = the tenant's views/
+
+
+def user_views() -> Path:
+    if USER_VIEWS is not None:
+        return Path(USER_VIEWS)
+    from backend import tenancy
+    return tenancy.base_path("views")
 # JSON files in the views folders that are not views (see chartfixes.py)
 NON_VIEW_FILES = {"wko5_fixes.json"}
 
@@ -231,7 +238,7 @@ def parse_view(data: dict, source_path: Optional[Path] = None) -> dict:
 
 
 def view_dirs() -> list[Path]:
-    return [p for p in (REPO_VIEWS, USER_VIEWS) if p.is_dir()]
+    return [p for p in (REPO_VIEWS, user_views()) if p.is_dir()]
 
 
 def load_custom_views(dirs: Optional[Iterable[Path]] = None) -> dict[str, dict]:

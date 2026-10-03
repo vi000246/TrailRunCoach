@@ -25,7 +25,15 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
-PLAN_PATH = Path.home() / ".wko5coach" / "plan.json"
+PLAN_PATH: Optional[Path] = None      # fixed file (tests); None = the tenant's plan.json
+
+
+def plan_path() -> Path:
+    """The current tenant's plan.json (backend/tenancy.py)."""
+    if PLAN_PATH is not None:
+        return Path(PLAN_PATH)
+    from backend import tenancy
+    return tenancy.private_path("plan.json")
 
 TAPER_DAYS = 14
 SPECIFIC_WEEKS = 8
@@ -218,7 +226,8 @@ class Plan:
 
     # ---- persistence ------------------------------------------------------
     @classmethod
-    def load(cls, path: Path = PLAN_PATH) -> "Plan":
+    def load(cls, path: Optional[Path] = None) -> "Plan":
+        path = path or plan_path()
         try:
             raw = json.loads(path.read_text("utf-8"))
         except (OSError, ValueError):
@@ -232,7 +241,8 @@ class Plan:
             profile=dict(raw.get("profile", {})),
         )
 
-    def save(self, path: Path = PLAN_PATH) -> None:
+    def save(self, path: Optional[Path] = None) -> None:
+        path = path or plan_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "events": [asdict(e) for e in sorted(self.events, key=lambda e: e.date)],

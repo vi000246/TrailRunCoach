@@ -33,7 +33,15 @@ from typing import Any, Callable, Optional
 
 # Bump when the rendered JSON changes shape or meaning without a code mtime change.
 CACHE_VERSION = 1
-CACHE_DIR = Path.home() / ".wko5coach" / "cache" / "render"
+CACHE_DIR = None      # fixed folder (tests); None = <tenant shared>/cache/render
+
+
+def cache_dir() -> Path:
+    if CACHE_DIR is not None:
+        return Path(CACHE_DIR)
+    from backend import tenancy
+    return tenancy.shared_path('cache', 'render')
+
 MAX_DISK_BYTES = 300 * 1024 * 1024
 MAX_MEMORY_ENTRIES = 400
 MAX_CONCURRENT = 2
@@ -81,8 +89,8 @@ def code_signature() -> str:
 def data_fingerprint(ds) -> str:
     """What the data looks like: athlete file (sync rewrites it), plan /
     thresholds, corrections, engine config, workout list, today."""
-    from backend.engine.planning import PLAN_PATH
-    from backend.engine.wko5expr.corrections import CORRECTIONS_PATH
+    from backend.engine.planning import plan_path
+    from backend.engine.wko5expr.corrections import corrections_path
     athlete = [_stamp(p) for p in sorted(Path(ds.dir).glob("*.wko5athlete"))]
     cfg = ds.config.to_dict() if hasattr(ds.config, "to_dict") else repr(ds.config)
     wl = ds.memo.get(("render_cache", "workouts"))
@@ -115,11 +123,11 @@ def data_fingerprint(ds) -> str:
     # heat rule read it (workout_review.activity_temp), and a routes build fills it
     try:
         from backend.engine import route_weather as RW
-        from backend.engine.routes import HOME
-        wx = _stamp(HOME / RW.ACTIVITY_WX_FILE)
+        from backend.engine.routes import home as routes_home
+        wx = _stamp(routes_home() / RW.ACTIVITY_WX_FILE)
     except Exception:                          # noqa: BLE001 — no routes module: no archive
         wx = None
-    parts = [athlete, _stamp(PLAN_PATH), _stamp(CORRECTIONS_PATH), cfg, wl, ds.today, src, tests, wx]
+    parts = [athlete, _stamp(plan_path()), _stamp(corrections_path()), cfg, wl, ds.today, src, tests, wx]
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -132,9 +140,14 @@ def chart_key(chart: dict, request: dict, fingerprint: str) -> str:
 
 
 class RenderCache:
-    def __init__(self, root: Path = CACHE_DIR, max_bytes: int = MAX_DISK_BYTES,
+    @property
+    def root(self) -> Path:
+        """A fixed folder, else the tenant's shared cache/render (backend/tenancy.py)."""
+        return self._root if self._root is not None else cache_dir()
+
+    def __init__(self, root: Optional[Path] = None, max_bytes: int = MAX_DISK_BYTES,
                  max_memory: int = MAX_MEMORY_ENTRIES, max_concurrent: int = MAX_CONCURRENT):
-        self.root = Path(root)
+        self._root = Path(root) if root is not None else None
         self.max_bytes = max_bytes
         self.max_memory = max_memory
         self._mem: "OrderedDict[str, Any]" = OrderedDict()
