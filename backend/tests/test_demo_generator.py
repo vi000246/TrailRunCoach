@@ -46,9 +46,11 @@ def test_manifest_and_showcase(small):
     assert 1 <= (ANCHOR - last).days <= 2
     for a in m["activities"]:
         assert a["start_utc"].endswith("Z") and a["file"].startswith("fit/coros/")
+    from backend.demo.generate import DATA_COURSES
     for name, rel in m["courses"].items():
         txt = (root / rel).read_text("utf-8")
-        assert "<trkpt" in txt and "虛構" in txt
+        # generated courses say they are made up; DATA_COURSES are real public courses (貓空 17K)
+        assert "<trkpt" in txt and (name in DATA_COURSES or "虛構" in txt)
 
 
 def test_plan_json(small):
