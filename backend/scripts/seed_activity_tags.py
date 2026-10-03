@@ -1,11 +1,12 @@
 """
 One-off, idempotent seed of activity tags (activity_tags table,
 engine/activity_tags.py) from a JSON file of corrections you write yourself,
-e.g. runs a back-test wrongly took as maximal, or your races:
+e.g. runs a back-test wrongly took as maximal, or your races. The app ships
+no rows; a (fictional) example file:
 
-    [{"date": "2025-10-18", "km": 5.0, "trail": false,
+    [{"date": "2025-08-09", "km": 5.0, "trail": false,
       "activity_type": "training", "effort": "moderate", "why": "weekday run"},
-     {"date": "2025-07-26", "file": "Athlete_2025_07_26_07_30.wko4",
+     {"date": "2025-06-14", "file": "Example_2025_06_14_07_30.wko4",
       "activity_type": "race", "why": "trail race (effort left auto)"}]
 
 A row with `file` (a WKO5 file name) is found by that name, or on a COROS /
@@ -20,13 +21,17 @@ first write), keyed by the local start minute, so a tag applies to the same
 activity in every source. Dry run by default: it prints what it would
 change; --apply writes.
 
-    python -m backend.scripts.seed_activity_tags --seed my_tags.json [--source coros|tp|wko5] [--db PATH] [--apply]
+    python -m backend.scripts.seed_activity_tags [--seed my_tags.json] [--source coros|tp|wko5] [--db PATH] [--apply]
+
+The seed file is --seed, else $WKO5COACH_TAG_SEED, else
+~/.wko5coach/activity_tag_seed.json (DEFAULT_SEED).
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -34,18 +39,27 @@ from typing import Optional
 
 from backend.engine import activity_tags as AT
 
-# the shape of a seed file (see the module docstring); the tests use it, nothing reads it by default
+SEED_ENV = "WKO5COACH_TAG_SEED"
+DEFAULT_SEED = Path.home() / ".wko5coach" / "activity_tag_seed.json"
+
+# the shape of a seed file (fictional rows, see the module docstring); the tests use it,
+# nothing reads it by default
 EXAMPLE_SEED = [
-    {"date": "2025-10-18", "km": 5.0, "trail": False, "activity_type": "training", "effort": "moderate",
+    {"date": "2025-08-09", "km": 5.0, "trail": False, "activity_type": "training", "effort": "moderate",
      "why": "平日練跑，不是全力"},
-    {"date": "2025-11-02", "km": 14.4, "trail": True, "activity_type": "hike", "effort": "moderate",
+    {"date": "2025-04-12", "km": 14.4, "trail": True, "activity_type": "hike", "effort": "moderate",
      "why": "一般爬山"},
-    {"date": "2026-07-27", "km": 11.7, "trail": True, "activity_type": "hike", "effort": "hard_with_rests",
+    {"date": "2025-05-17", "km": 11.7, "trail": True, "activity_type": "hike", "effort": "hard_with_rests",
      "why": "有拼但休息很久"},
 ] + [{"date": d, "file": f, "activity_type": "race", "why": "越野賽（努力度保留自動）"} for d, f in (
-    ("2025-07-26", "Athlete_2025_07_26_07_30.wko4"),
-    ("2024-09-21", "Athlete_2024_09_21_05_55.wko4"),
+    ("2025-06-14", "Example_2025_06_14_07_30.wko4"),
+    ("2024-05-11", "Example_2024_05_11_05_55.wko4"),
 )]
+
+
+def seed_path(arg: Optional[str] = None) -> Path:
+    """The seed file: the --seed argument, else $WKO5COACH_TAG_SEED, else DEFAULT_SEED."""
+    return Path(arg or os.environ.get(SEED_ENV) or DEFAULT_SEED)
 
 
 def load_seed(path) -> list[dict]:
@@ -156,7 +170,8 @@ def _fmt(item: dict) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--seed", required=True, help="JSON file of the tags to set (see the module docstring)")
+    ap.add_argument("--seed", help=f"JSON file of the tags to set (see the module docstring; "
+                                   f"default: ${SEED_ENV}, else {DEFAULT_SEED})")
     ap.add_argument("--source", choices=("wko5", "coros", "tp"),
                     help="dataset to match against (default: the charts.data_source setting)")
     ap.add_argument("--db", help="the DB to write (default: the app DB ~/.wko5coach/wko5coach.db)")
@@ -166,12 +181,16 @@ def main(argv=None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
+    seed = seed_path(a.seed)
+    if not seed.is_file():
+        print(f"no seed file: {seed} (pass --seed or set ${SEED_ENV})", file=sys.stderr)
+        return 2
     from backend.api.wko5views import _dataset
     from backend.engine.wko5expr.datasource import current_source
     a.source = a.source or current_source()
     db = a.db or str(AT._db_path())
     ds = _dataset(source=a.source)
-    items = plan(ds.workouts, AT.load(db), a.source, load_seed(a.seed))
+    items = plan(ds.workouts, AT.load(db), a.source, load_seed(seed))
     print(f"source {a.source}, DB {db}")
     for it in items:
         print(_fmt(it))

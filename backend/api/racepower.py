@@ -825,7 +825,7 @@ def _trail_hr() -> Optional[dict]:
     try:
         m = A.trail_hr_model(_dataset())
         if not m.get("n"):
-            # the chosen source has no trail history (e.g. COROS synced since 2025-10):
+            # the chosen source has no trail history (e.g. a watch account synced only recently):
             # the WKO5 athlete folder has it
             from backend.api.wko5views import _dataset as wds
             m = A.trail_hr_model(wds(source="wko5"))

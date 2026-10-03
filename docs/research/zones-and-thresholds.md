@@ -6,14 +6,14 @@
 
 ## 0. 先回答三個問題
 
-1. **「輕鬆跑心率是用最大心率算的吧？」——不是。** app 的輕鬆跑上限是 **AeT**。你沒有測過 AeT，所以用 **0.89 × LTHR**（Friel Z2 上緣）。LTHR 160 → 上限 **142 bpm**。最大心率完全沒有參與區間計算（§1.3）。
+1. **「輕鬆跑心率是用最大心率算的吧？」——不是。** app 的輕鬆跑上限是 **AeT**。範例跑者沒有測過 AeT，所以用 **0.89 × LTHR**（Friel Z2 上緣）。LTHR 160 → 上限 **142 bpm**。最大心率完全沒有參與區間計算（§1.3）。
 2. **「閾值心率變高，輕鬆跑配速就能變高？」——只對一半。**
    - 把 LTHR 從 160 改成 165，上限會從 142 變成 147。同一天同樣的體能，147 的配速當然比 142 快。但這只是**換了尺**，不是你變強。
    - 換尺只有在原本的尺量錯（LTHR 被低估）時才是對的。這次的資料顯示 160 **很可能偏低**（§1.6）。
    - 真正的進步，是**同一個心率跑得更快**。LTHR 這個心率本身通常變化不大（§2.4）。
 3. **「CP 測試可以推 LTHR 嗎？」——可以當參考，不能當測量。**
    - 族群平均來說，CP 時的心率和 MLSS 時的心率幾乎一樣（差 0.6 bpm）。但個人的 95% 一致性界限是 **−16 到 +17 bpm**（Micheli 2025）。
-   - 你 9/30 的 12′ 段是 109% CP，又在 27.6 °C 的悶熱夜裡跑，後半段的心率（163）只能當 LTHR 的**上界**。
+   - 範例跑者那次 3′/12′ CP 測試的 12′ 段是 109% CP，又在悶熱的夜裡跑，後半段的心率只能當 LTHR 的**上界**。
    - 要得到可信的 LTHR，還是要在涼爽天、戴胸帶，跑一次 30 分鐘獨跑 TT（§2.2、§3）。
 
 ---
@@ -39,20 +39,20 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 **COROS 帳號那一列（LTHR 182／FTP 200）被忽略**（`fitdataset.py:676-682`、`:698-701`，原因字串 `IGNORED_WHY` 在 `:90-91`）：
 
 - 這一列是 `coros_client.login` 寫進去的 COROS zoneData，沒記錄是哪個運動。
-- DB 目前有兩列：2026-09-30 和 2026-10-01，都是 `ftp_w 200, weight 66.3, lthr 182`。
-- 182 比 9/30 那次全力 12′ 測試的峰值 171 還高，所以不採用。這個判斷是對的：182 / 185（觀測 HRmax）= 98%，不可能是跑步的 LTHR。
+- DB 目前有兩列，都是 `ftp_w 200, weight 70, lthr 182`。
+- 182 比那次全力 12′ 測試的峰值還高，所以不採用。這個判斷是對的：182 / 185（觀測 HRmax）= 98%，不可能是跑步的 LTHR。
 
 ### 1.2 今天（2026-10-01）實際生效的值
 
-計畫只有一列：`2026-09-30 lthr 160, cp 220, aethr null, mhr null`。這一列的 note 寫著「LTHR 自動估算（7 次跑步…）；CP 220 W：9/30 測試的 12 分段 238.2 W − W′ 先驗 13.1 kJ ÷ 720」。
+計畫只有一列（CP 測試那天）：`lthr 160, cp 220, aethr null, mhr null`。這一列的 note 寫著「LTHR 自動估算（7 次跑步…）；CP 220 W：CP 測試的 12 分段平均功率 − W′ 先驗 13.1 kJ ÷ 720」。
 
 | 值 | 今天的數字 | 來源（app 顯示） | 實際是什麼 |
 |---|---|---|---|
-| LTHR | **160 bpm** | 「你的測試 2026-09-30」（`zones.threshold_info`，`backend/engine/zones.py:155-159`；`training_targets` 的 `lthr_src`，`zones.py:277-278`） | **不是測試**。是 `apply-estimate` 套用的自動估算（`backend/api/plan.py:286-312`），標籤誤導，見 §3.4 改動 1 |
+| LTHR | **160 bpm** | 「你的測試（測試日）」（`zones.threshold_info`，`backend/engine/zones.py:155-159`；`training_targets` 的 `lthr_src`，`zones.py:277-278`） | **不是測試**。是 `apply-estimate` 套用的自動估算（`backend/api/plan.py:286-312`），標籤誤導，見 §3.4 改動 1 |
 | AeT | **142.4 ≈ 142 bpm** | 「0.89 × LTHR（Friel Z2 上限）」（`zones.py:281-287`；`racepower/athlete.py:445-449`） | 沒有實測。自動估算 `estimate_aet` 和 B3 聚合 `aet_aggregate` 都**算不出來**，見下 |
-| CP | **220 W** | 「你的測試 2026-09-30」 | 3′/12′ 測試，3′ 段沒有全力，兩點法無效。用 W′ 先驗 13.1 kJ 單點推：238.2 − 13100/720 = 220.0 W |
+| CP | **220 W** | 「你的測試（測試日）」 | 3′/12′ 測試，3′ 段沒有全力，兩點法無效。用 W′ 先驗 13.1 kJ 單點推：12′ 段平均功率 − 13100/720 = 220 W |
 | 閾值配速 | **6.01 min/km（6:01 /km）** | 「推估：CP 220 W × 近 90 天 41 次 Stryd 路跑的速度／功率比（中位數 12.6 mm/s/W）」（`backend/engine/thresholds.py:194-224`） | 推估（`thresholds.py:112-133`） |
-| 體重 | 66.3 kg | athlete_settings | — |
+| 體重 | 70 kg | athlete_settings | — |
 | 最大心率 | **不在任何區間計算裡**。計畫 mhr 是空的，FIT 資料集沒有 runmhr | — | 觀測值見 §1.5 |
 
 **AeT 自動估算的實際輸出**（`thresholds.estimate`，180 天窗）：
@@ -102,12 +102,12 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 | 項目 | 數字 | 怎麼算的 |
 |---|---|---|
-| LTHR | 160（計畫，2026-09-30）。as-of 推估歷史：2026-02-15 156、03-17 163、04-16 166、05-16 159、06-15 162、07-15 159、08-14 160、09-13 161 | `ds.athlete.settings["runthr"]` |
-| 套用 160 時用的 CP | **cp_as_of = 189 W**（9/13、9/29），不是 220。≥ 95% 的門檻是 180 W | `racepower.athlete.cp_as_of`（`racepower/athlete.py:382-399`）。9/29 的 estimate：7 次、IQR 158–161 |
+| LTHR | 160（計畫，CP 測試那天）。as-of 推估歷史（近 8 格，每 30 天一格）：156–166 之間 | `ds.athlete.settings["runthr"]` |
+| 套用 160 時用的 CP | **cp_as_of = 189 W**（夏天的 Stryd PD 擬合，約現行 CP 的 86%），不是 220。≥ 95% 的門檻是 180 W | `racepower.athlete.cp_as_of`（`racepower/athlete.py:382-399`）。套用前的 estimate：7 次、IQR 158–161 |
 | AeT | 142（0.89 × 160）。自動與聚合估計都失敗（§1.2） | — |
-| 觀測最大心率 | **185 bpm**：365 天內每次「撐 ≥ 120 秒」的峰值，取前 5 的中位數，同 `maximal.hrmax_observed` | 前幾名：2025-07-26 越野 199、2024-11-05 越野 191、2025-03-22 越野 190、2025-09-27 路跑 189、2025-07-02 路跑 187、2026-03-25 越野 187、2026-04-11 越野 187 |
-| 原始峰值（多半是光學雜訊） | 2026-03-25 **223**、2025-09-27 **220**、2025-08-09 208 | 單一取樣最大值。撐 120 秒後只剩 187／189／182 |
-| CP 測試 9/30（20:30，27.6 °C、RH 85%、Hadley 158） | 3′ 段（8.7–11.8′）233 W、心率均 145、峰值 154（沒有全力）。**12′ 段（28.4–40.3′）239 W（109% CP）、心率均 160、後半 168、最後 2′ 169、峰值 176** | 30 秒功率 > 205 W 且 ≥ 90 秒的段落 |
+| 觀測最大心率 | **185 bpm**：365 天內每次「撐 ≥ 120 秒」的峰值，取前 5 的中位數，同 `maximal.hrmax_observed` | 前幾名大多是越野（187–199），其次是路跑（187–189） |
+| 原始峰值（多半是光學雜訊） | **223**、**220**、208 | 單一取樣最大值。撐 120 秒後只剩 187／189／182 |
+| CP 測試（夜間、悶熱，Hadley > 150） | 3′ 段約 106% CP、心率均 145、峰值 154（沒有全力）。**12′ 段 109% CP、心率均 160、後半 168、最後 2′ 169、峰值 176** | 30 秒功率 > 93% CP 且 ≥ 90 秒的段落 |
 | 閾值配速 | 6:29 /km（推估，CP 法） | `thresholds.estimate_tpace` |
 | 近期穩定跑的「HR at CP」 | 180 天內只有 1 次 ≥ 10 分鐘在 97–103% × 220 W，心率 164。近 120 天的路跑沒有一次 | `threshold_estimate.run_threshold`（`threshold_estimate.py:70-86`） |
 
@@ -118,15 +118,15 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 | 天氣 | 段數 | 功率範圍 | 心率 = a + b·P | 外插到 220 W |
 |---|---|---|---|---|
-| 涼（Hadley < 120，2025-11…2026-03） | 19 | 161–188 W | 120.5 + 0.177·P，殘差 SD 4.8 | **157 bpm**（推估：外插超出資料 16 W，斜率可能被日間雜訊壓平） |
-| 中（120–150） | 50 | 150–192 W | 134.0 + 0.117·P | 158 |
-| 熱（> 150） | 81 | 128–191 W | 斜率 ≈ 0（−0.055） | 熱天時，心率決定功率，而不是功率決定心率 |
+| 涼（Hadley < 120，冬季） | 19 | 73–85% CP | 120.5 + 0.177·P，殘差 SD 4.8 | **157 bpm**（推估：外插超出資料約 7% CP，斜率可能被日間雜訊壓平） |
+| 中（120–150） | 50 | 68–87% CP | 134.0 + 0.117·P | 158 |
+| 熱（> 150） | 81 | 58–87% CP | 斜率 ≈ 0（−0.055） | 熱天時，心率決定功率，而不是功率決定心率 |
 
 - 逐月看，穩定段的心率中位數**一整年都在 151–156**，變的是功率：
-  - 2026-01 中位數 179 W、Hadley 113。
-  - 2026-07 中位數 167 W、Hadley 161。
+  - 1 月中位數約 81% CP、Hadley 113。
+  - 7 月中位數約 76% CP、Hadley 161。
   - 每 100 W 的心率從 83（2 月）升到 99（6 月）。
-  - → 你平常是**照心率在跑**。熱天同樣 154 bpm 只推得出 76% CP，冬天推得出 88% CP。
+  - → 範例跑者平常是**照心率在跑**。熱天同樣 154 bpm 只推得出 76% CP，冬天推得出 88% CP。
 
 ### 1.6 為什麼 LTHR 160 很可能偏低
 
@@ -136,7 +136,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 4. 交叉證據都指向 > 160（都是推估）：
    - 涼天外插 HR@220 W ≈ 162。
    - 唯一一次 ≥ 10 分鐘在 CP 的心率 159。
-   - 2025-12-21 半馬（19.1 °C）最好的 60 分鐘均 156、40 分鐘均 158，而且是在 2 小時多的比賽裡撐住的。
+   - 一場涼天的半程路跑賽：最好的 60 分鐘均 156、40 分鐘均 158，而且是在整場比賽裡撐住的。
    - 12′ @ 109% CP 後半 163（熱天，而且高於 CP，所以是上界）。
 5. 範圍推估：**真實 LTHR 落在約 157–163**。這只是推估，不能直接套用，要測（§3.3）。
 6. 熱天會讓同功率的心率變高（§2.3）。所以「熱天 83% CP 時 160」和「涼天 100% CP 時約 165」可以同時成立。
@@ -161,7 +161,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 |---|---|---|---|
 | **%HRmax** | Iannetta 2020（*MSSE* 52:466–473，DOI 10.1249/MSS.0000000000002147，n = 100，摘要）：LT 落在 **60–90% HRmax**、MLSS 落在 **75–97% HRmax**。固定百分比 "conform poorly to exercise intensity domains"。<br>Kanniainen 2025（*Physiol Rep* 13:e70241，DOI 10.14814/phy2.70241，n = 58 跑步機，PMC 全文）：用**實測** HRmax × 70% 當 T1，比 LT1 平均低 **21 bpm**；× 85% 當 T2，比 LT2 低 **11 bpm**。用公式 HRmax 分別低 25／17 bpm | 系統性偏低，個人差異大。上面的範圍等於 ±15% HRmax | 入門、多數手錶的預設；Helgerud 4×4 用 90–95% HRmax（`docs/research/interval-prescription.md`） |
 | HRmax 本身 | Ausland, Kelemen & Seiler 2026（*Front Sports Act Living*，DOI 10.3389/fspor.2026.1806303，n = 4,375，摘要）：Tanaka 公式低估 4.8 bpm，一致性界限 **−18.5～+9.1 bpm** | 公式 ±約 14 bpm；實測要有真的全力 | — |
-| **%HRR（Karvonen）** | Mann, Lamberts & Lambert 2013（*Sports Med* 43:613–625，DOI 10.1007/s40279-013-0045-x，摘要）："a similar effect has been shown when relating exercise intensity to VO2R or HRR"。也就是說，同一個 %HRR 的乳酸反應個人差異一樣大。建議改用 AerT／AnT 這類閾值錨點 | 跟 %HRmax 差不多 | 徐國峰／RQ：閾值 84–88% HRR（`300 Sport/60 🏃 有氧訓練/不同的心率區間模型比較.md:10-13`），教練 |
+| **%HRR（Karvonen）** | Mann, Lamberts & Lambert 2013（*Sports Med* 43:613–625，DOI 10.1007/s40279-013-0045-x，摘要）："a similar effect has been shown when relating exercise intensity to VO2R or HRR"。也就是說，同一個 %HRR 的乳酸反應個人差異一樣大。建議改用 AerT／AnT 這類閾值錨點 | 跟 %HRmax 差不多 | 徐國峰／RQ：閾值 84–88% HRR（`不同的心率區間模型比較.md:10-13`），教練 |
 | **%LTHR（Friel）** | Friel 原文（TrainingPeaks "Quick Guide to Setting Zones"，教練）：30 分鐘獨跑 TT，"look to see what your average heart rate was for the last 20 minutes. That number is an approximation of your LTHR"。跑步 Z1 < 85%、Z2 85–89%、Z3 90–94%、Z4 95–99%、5a 100–102%、5b 103–106%、5c > 106%。<br>30 分 TT 後 20 分心率對實驗室 LT／MLSS 的**驗證研究沒有找到**（Europe PMC 檢索，**未驗證**） | 錨點本身準度未驗證。百分比切出來的 Z2 上緣（89%）只是慣例，不等於 LT1（`aerobic-base-readiness.md:254`） | Friel、TrainingPeaks、WKO5、Stryd／COROS 的 LTHR 模式 |
 | **通氣／乳酸閾值（Seiler 三區）** | Seiler & Kjerland 2006（*Scand J Med Sci Sports* 16:49–56，見 `aerobic-base-readiness.md:214`）：區間邊界直接用 VT1／VT2（或 LT1／LT2）當下的心率 | 實驗室測量本身就是標準。誤差來自「測完之後會變」與「場地和實驗室不同」 | Seiler、Uphill Athlete（AeT／AnT）、挪威派 |
 | HRV DFA-α1 | Kanniainen 2025：DDFAT1 對 LT1 平均差 −2 bpm，一致性界限 **+23～−27 bpm**；DDFAT2 +5 bpm，界限較窄 | 平均沒偏，個人散 | 需要 RR 間期（胸帶） |
@@ -201,7 +201,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
   - 熱天的閾值功率也會被高估：1 小時 TT 的預測，熱天（38 °C）比涼天（13 °C）多高估約 13 W（37.7 vs 24.1 W，Lorenzo 2011，*J Appl Physiol* 111:221–227，DOI 10.1152/japplphysiol.00334.2011）。
   - **熱天時「LTHR 這個心率」本身會不會變：未驗證**（沒找到直接研究）。
 - 心血管飄移：10–20 分鐘後每搏量下降、心率上升（Coyle & González-Alonso 2001，引自 `aerobic-base-readiness.md:512`）。
-- 範例跑者的資料：同樣約 159 bpm，冬天 193 W、夏天 167 W（§1.5）。**季節造成的差異（約 26 W ≈ 12% CP）比任何轉換公式的誤差都大。**
+- 範例跑者的資料：同樣約 159 bpm，冬天約 88% CP、夏天約 76% CP（§1.5）。**季節造成的差異（約 12% CP）比任何轉換公式的誤差都大。**
 
 **「用功率推心率區間」成不成立**
 
@@ -228,17 +228,17 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 | 原因 | 證據 | 這位選手 | 能不能修、怎麼修 |
 |---|---|---|---|
-| **熱（台灣）** | Lafrenz 2008、Wingo 2020、Beiter 2025（見 §2.2）。台灣教練：< 25 °C（熱天心率偏高、飄移失真） | 9/30 CP 測試 Hadley 158。LTHR 160 的 7 次跑全在夏天。穩定段每 100 W 的心率 6 月 99、2 月 83 | **能修**：只在 < 25 °C／Hadley < 120 的日子測。10 月以後的清晨，或冷氣房跑步機加電扇（`aerobic-base-readiness.md:579`） |
+| **熱（台灣）** | Lafrenz 2008、Wingo 2020、Beiter 2025（見 §2.2）。台灣教練：< 25 °C（熱天心率偏高、飄移失真） | 那次 CP 測試 Hadley 158。LTHR 160 的 7 次跑全在夏天。穩定段每 100 W 的心率 6 月 99、2 月 83 | **能修**：只在 < 25 °C／Hadley < 120 的日子測。10 月以後的清晨，或冷氣房跑步機加電扇（`aerobic-base-readiness.md:579`） |
 | **心血管飄移** | Coyle & González-Alonso 2001 | 30 分 TT 後 20 分本來就含飄移，Friel 的定義已經把它算進去 | 照 Friel 的流程做就好；不要用 40 分鐘以上的一般跑代替 |
-| **錶的心率感測器** | Gillinov 2017（*MSSE* 49:1697–1703，DOI 10.1249/MSS.0000000000001284，摘要）：胸帶 Polar H7 對 ECG 的 rc = 0.996，腕式 0.67–0.92，Garmin FR235 0.81。Gielen 2026（*JMIR Form Res*，DOI 10.2196/85186）：10 款光學裝置的 MAE 4.5–14 bpm。徐國峰：「因為手腕的血流量會有延遲，所以腕式心率比胸式心率沒那麼即時」（`300 Sport/60 🏃 有氧訓練/跑者都該懂的跑步數據，讀書心得.md:41`） | 原始峰值 223、220、208 bpm，撐 120 秒後只剩 187／189／182 → 有尖峰雜訊。FIT 的 device_info 只記錄 COROS APEX 2 Pro，**無法從檔案判斷那幾次有沒有戴胸帶（未驗證）**，要問使用者 | **能修**：測試一律戴胸帶（Polar H10／COROS HRM）；app 標記沒有胸帶的測試 |
-| **很少全力跑** | Friel：「the more times you do this test the more accurate your LTHR is likely to become」 | 路跑 20 分鐘最高心率前幾名幾乎都在夏天，而且功率只有 145–185 W | 一年 2–3 次 30 分 TT 或 10K 比賽（頻率是推估） |
+| **錶的心率感測器** | Gillinov 2017（*MSSE* 49:1697–1703，DOI 10.1249/MSS.0000000000001284，摘要）：胸帶 Polar H7 對 ECG 的 rc = 0.996，腕式 0.67–0.92，Garmin FR235 0.81。Gielen 2026（*JMIR Form Res*，DOI 10.2196/85186）：10 款光學裝置的 MAE 4.5–14 bpm。徐國峰：「因為手腕的血流量會有延遲，所以腕式心率比胸式心率沒那麼即時」（`跑者都該懂的跑步數據，讀書心得.md:41`） | 原始峰值 223、220、208 bpm，撐 120 秒後只剩 187／189／182 → 有尖峰雜訊。FIT 的 device_info 只記錄手錶型號，**無法從檔案判斷那幾次有沒有戴胸帶（未驗證）**，要問使用者 | **能修**：測試一律戴胸帶（Polar H10／COROS HRM）；app 標記沒有胸帶的測試 |
+| **很少全力跑** | Friel：「the more times you do this test the more accurate your LTHR is likely to become」 | 路跑 20 分鐘最高心率前幾名幾乎都在夏天，而且功率只有 66–84% CP | 一年 2–3 次 30 分 TT 或 10K 比賽（頻率是推估） |
 | **閾值是推估的，不是測的** | §1.6 | LTHR 160 = 熱天 83% CP 的心率；AeT 142 = 0.89 × 這個推估值，推估疊推估 | **能修**：LTHR 用 30 分 TT 測；AeT 用徐國峰 90 分鐘或 UA 飄移測試測 |
 | AeT 飄移回歸失敗 | 單次飄移誤差 ±4–6 pp（`drift_agg.py:5-8`） | 10–16 點的心率範圍 133–162，飄移沒有跟著心率上升，大多是熱天 40–47 分鐘的短跑 | 一次正式的 AeT 測試，比一百次被動資料有用 |
 | 實驗室 | Iannetta 2020、Seiler 2006 | — | 最準。一次乳酸／氣體分析的跑步機測試同時拿到 LT1、LT2、HRmax（可選） |
 
 ### 2.4 「閾值心率變高 → 輕鬆跑配速變快」這個想法
 
-- **錨點是尺，不是體能。** 輕鬆跑的上限 = AeT（或 0.89 × LTHR）。把 LTHR 調高，上限就跟著調高，你在同一天就能跑快一點。但同樣的跑法生理上變硬了。
+- **錨點是尺，不是體能。** 輕鬆跑的上限 = AeT（或 0.89 × LTHR）。把 LTHR 調高，上限就跟著調高，同一天就能跑快一點。但同樣的跑法生理上變硬了。
   - 如果原本 LTHR 是低估的（這位選手很可能是），調高是**修正錯誤**。
   - 如果原本是對的，調高就讓「輕鬆跑」超過 AeT，等於把 1 區跑成 2–3 區。後果是灰色地帶的疲勞，有氧基礎反而練不起來（Seiler 的極化理由，見 `aerobic-base-readiness.md:212-223`）。
 - **進步的樣子是同一個心率跑得更快。**
@@ -246,7 +246,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
   - 徐國峰（RQ 文）：「最佳的進步結果是 T-pace 提升了，但 LTHR 不變」（`不同的心率區間模型比較.md:24`）。他採用儲備心率法，正是因為「不變的標準」比較好衡量進步（`:11-16`）。
   - Friel 的 EF（同心率的速度或功率）"will rise over the course of a few weeks"（`aerobic-base-readiness.md:258`）。
   - 有氧體能變好時，閾值的速度／功率會往上移。**閾值心率通常只有小幅變動**：這是教練共識，系統性證據**未驗證**。
-- **範例跑者的情況**：今年冬天同樣約 160 bpm 跑出 193 W，夏天只有 167 W。到了 11–12 月，同一個心率配速自然會變快，那是天氣，不是 LTHR 變了。要看真的進步，比較的是「涼天、同心率的功率或配速」的逐年趨勢，app 已有 EF／HRC（`heat.hr_cost`）。
+- **範例跑者的情況**：冬天同樣約 160 bpm 跑出約 88% CP，夏天只有約 76% CP。到了 11–12 月，同一個心率配速自然會變快，那是天氣，不是 LTHR 變了。要看真的進步，比較的是「涼天、同心率的功率或配速」的逐年趨勢，app 已有 EF／HRC（`heat.hr_cost`）。
 
 ### 2.5 什麼時候該更新區間
 
@@ -268,18 +268,18 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 2. 新的 AeT 測試套用後：輕鬆跑上限馬上換。
 3. **熱校正後**的 HR-at-power 持續偏移（`engine/zone_events.py` `hr_shift`，2026-10-02 改版）→ 提示「該測 LTHR／AeT」，不自動改。
    - 原本只用 < 25 °C 的路跑。但台灣一年大半時間 ≥ 25 °C，最近 60 天常常湊不到 6 次，偵測器多數月份根本不會動；手錶溫度又會被體溫墊高。
-   - 改成**每一次穩定路跑都用**，把熱的影響算掉：每次跑步的穩定段心率中位數，用本人 β = 0.224 ± 0.036 bpm／Hadley（HEAT 回測，`heat.HR_BETA`）換算到 Hadley 120：HR′ = HR − β·(Hadley − 120)。
-   - 溫度來源依序：Open-Meteo 路線歷史天氣（跑步當時、當地，含露點 → Hadley）→ 手錶溫度扣掉手腕偏差（本人 72 段路線 effort：手錶比空氣高 3.7 ± 2.7 °C；RH 用同季節的歷史值；標「較不準」）→ 同季節的歷史 Hadley 中位數（最不準）→ 都沒有就不用。
+   - 改成**每一次穩定路跑都用**，把熱的影響算掉：每次跑步的穩定段心率中位數，用範例跑者的 β = 0.224 ± 0.036 bpm／Hadley（HEAT 回測，`heat.HR_BETA`）換算到 Hadley 120：HR′ = HR − β·(Hadley − 120)。
+   - 溫度來源依序：Open-Meteo 路線歷史天氣（跑步當時、當地，含露點 → Hadley）→ 手錶溫度扣掉手腕偏差（範例跑者 72 段路線 effort：手錶比空氣高 3.7 ± 2.7 °C；RH 用同季節的歷史值；標「較不準」）→ 同季節的歷史 Hadley 中位數（最不準）→ 都沒有就不用。
    - 基準線：最近幾次之前 365 天的 HR′ = a + b·P（≥ 8 次）；最近 = 90 天內最後 6–8 次、落在基準線功率範圍內。偏移 = 殘差中位數。
    - 門檻 = max(5 bpm, 2·SE)，SE 合併基準線在該功率的誤差、最近幾次的散布（加上溫度不準的那幾次的 β·σ_H）、β 的誤差 × 兩段時間的平均 Hadley 差；且 ≥ 5/6 次同方向。5 bpm／6 次沿用 B3 的 shift 規則，2·SE、8 次／90 天是推估。
    - **去年同季對照**：最近這幾次的日期往前 365 ± 30 天，有 ≥ 4 次就算它們對同一條基準線的殘差；扣掉這個季節殘差後仍要超過門檻才觸發。理由：回測的 β 在初夏（0.149）和夏末（0.260）不一樣，單一 β 可能留下幾 bpm 的季節性；去年同季直接量出這個量，偏移若只是季節，就不是體能變化（推估）。
    - 訊息會寫「已依熱指數校正（β 0.22 ± 0.04 bpm/Hadley …；天氣：…；校正信心 高／中／低）」，保留手腕心率的提醒。
-   - 本人資料（2026-10-02，唯讀）：穩定路跑點 62 → 135（全部有 Open-Meteo 天氣）；最近一段 60 天內涼天 8 次 → 90 天內 34 次（取最後 8 次）；基準線 56 → 100 次。偏移 −1.9 ± 2.6 bpm，門檻 5.3 bpm，5/8 同方向 → 不觸發；去年同季 −1.7 bpm（17 次），扣掉後 −0.1。舊規則是 +2.8 bpm（6 次、4/6 同方向）。
+   - 範例跑者資料（唯讀）：穩定路跑點 62 → 135（全部有 Open-Meteo 天氣）；最近一段 60 天內涼天 8 次 → 90 天內 34 次（取最後 8 次）；基準線 56 → 100 次。偏移 −1.9 ± 2.6 bpm，門檻 5.3 bpm，5/8 同方向 → 不觸發；去年同季 −1.7 bpm（17 次），扣掉後 −0.1。舊規則是 +2.8 bpm（6 次、4/6 同方向）。
    - 交叉檢查：在這 100 次基準線上聯合擬合 β 得 0.115 ± 0.045（全部 135 次 0.078 ± 0.046），比回測的 0.224 小。一年內熱和體能一起變（夏天也是練量期），這個 β 有混淆，所以偵測器仍用回測（同路線比較）的 β；聯合擬合值只放在 evidence（`heat.beta_check`）。β 的誤差已經算進 SE，去年同季對照也會擋掉 β 不準造成的季節性偏移。
 4. 停跑 ≥ 4 週（已有 `reentry`）：恢復期後重測 AeT、CP。
-5. **季節轉涼**（台灣約 9–10 月）：夏天之後，連續 3 個路跑日的**清晨**（05–07 時，Open-Meteo 歷史天氣，家附近那一格的最低點；`heat_data.morning_weather`）< 25 °C 且 Hadley < 150 → 建議一次 30 分 TT＋一次 AeT 測試。
+5. **季節轉涼**（台灣約 9–10 月）：夏天之後，連續 3 個路跑日的**清晨**（05–07 時，Open-Meteo 歷史天氣，常跑地點那一格的最低點；`heat_data.morning_weather`）< 25 °C 且 Hadley < 150 → 建議一次 30 分 TT＋一次 AeT 測試。
    - 用清晨而不是跑步當時：測試會排在清晨；傍晚下過雨的 24 °C 不代表換季。快取沒有那天清晨時，退回跑步當時的路線天氣（比清晨熱，只會延後、不會提早）。手錶溫度不用在這裡。
-   - 原本寫「Hadley < 120 的清晨」：本人資料裡這要到 11 月中～12 月（2025-11-19、2024-12-09）才出現，太晚。25 °C 是台灣教練「等天氣轉涼再做」的線，Hadley 150 是 Hadley 的熱帶（`route_weather.HOT_HADLEY`）；夏天 = 前 60 天 ≥ 10 個路跑日清晨 Hadley ≥ 150 且過半。3 天／60 天是推估。
+   - 原本寫「Hadley < 120 的清晨」：範例跑者資料裡這要到 11 月中～12 月才出現，太晚。25 °C 是台灣教練「等天氣轉涼再做」的線，Hadley 150 是 Hadley 的熱帶（`route_weather.HOT_HADLEY`）；夏天 = 前 60 天 ≥ 10 個路跑日清晨 Hadley ≥ 150 且過半。3 天／60 天是推估。
 
 - app 現有的 B3／aggregate 邏輯（`quality_gate.aet_test_reason`）已經是事件觸發。只需要把 LTHR 也接上同一套（§3.4 改動 4）。
 
@@ -293,7 +293,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 |---|---|---|
 | 輕鬆跑／長跑上限 | **實測 AeT**（徐國峰 90 分鐘或 UA 40–60 分鐘飄移測試，< 25 °C） | Seiler／UA 用的是 LT1／AeT 本身。0.89 × LTHR 是兩層推估 |
 | 中、高強度心率 | **實測 LTHR**（30 分獨跑 TT 的後 20 分平均，涼天、胸帶） | Friel 定義；同一次 TT 也驗證 CP |
-| 功率（主） | **CP 220 W**（9/30 測試，W′ 用先驗）→ Palladino % CP | 爬坡、間歇、熱天都看功率（`zones.py:229-247`）。下一次在涼天重測，最好用兩點法量到 W′ |
+| 功率（主） | **CP 220 W**（3′/12′ 測試，W′ 用先驗）→ Palladino % CP | 爬坡、間歇、熱天都看功率（`zones.py:229-247`）。下一次在涼天重測，最好用兩點法量到 W′ |
 | 最大心率 | **不拿來分區**。只當資料清理用（尖峰）和 4×4 的參考（90–95% HRmax，Helgerud） | %HRmax 個人誤差大（Iannetta 2020） |
 
 ### 3.2 每一套區間怎麼算
@@ -340,7 +340,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 1. **LTHR 的來源標籤**（最重要）：
    - 現在 `apply-estimate` 寫進去的 LTHR，在 `zones.threshold_info`（`zones.py:155-159`）、`zones.training_targets`（`zones.py:277-278`）、`racepower.athlete.thresholds_as_of`（「測試 …」）都顯示成「你的測試」。
    - 改法：`planning.Threshold` 加 `lthr_method`／`aethr_method`（比照 `cp_method`）。值可以是 `estimate`、`friel30`、`race`、`lab`、`manual`。
-   - `api/plan.apply_estimate` 寫 `estimate`。顯示時改成「自動估算（已套用 2026-09-30）」。
+   - `api/plan.apply_estimate` 寫 `estimate`。顯示時改成「自動估算（已套用 YYYY-MM-DD）」。
 2. **LTHR 估算的門檻不該只看 as-of CP**（`threshold_estimate.run_threshold`／`RunThreshold.qualifies`，`threshold_estimate.py:45-46`；`thresholds.estimate`）：
    - (a) 只收 Hadley < 150（或 < 25 °C）的跑步。天氣從 `heat_data.exposures` 讀；FIT 資料集要用開始時間對應 WKO5 的天氣檔名，現在只對到 440／803 筆。
    - (b) 30 分鐘窗還要 ≥ 該跑者 90 天最佳 30 分鐘功率的 97%（推估）。
@@ -384,7 +384,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
   - `zones.threshold_info(...)`
   - `thresholds.estimate_tpace(ds, today)`
 - 觀測 HRmax：每次活動心率排序後的第 120 名（= 撐 120 秒的值），365 天內取前 5 的中位數。
-- CP 測試段：30 秒功率 > 190 W 且連續 ≥ 90 秒。
+- CP 測試段：30 秒功率 > 86% CP 且連續 ≥ 90 秒。
 - 穩定段：`heat_data.steady_segments`（HRC_DAYS 暫改 800）。activity_weather 用開始時間（±2 分鐘）對應到 COROS 檔。
 - DB 只用 `sqlite3.connect("file:...wko5coach.db?mode=ro", uri=True)` 讀 `athlete_settings`。
 
@@ -404,5 +404,5 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 - Nixon RJ et al. (2021). Steady-state VO2 above MLSS: evidence that critical speed better represents maximal metabolic steady state in well-trained runners. *Eur J Appl Physiol* 121:3133–3144. DOI 10.1007/s00421-021-04780-8（摘要）
 - Nuuttila OP et al. (2025). *Eur J Appl Physiol* 125:697–705. DOI 10.1007/s00421-024-05631-y（摘要；不是心率錨點的研究）
 - 教練：Friel, "Joe Friel's Quick Guide to Setting Zones"，TrainingPeaks（本次核對原文）。
-- 徐國峰：使用者 notes `<notes>\300 Sport\60 🏃 有氧訓練\跑者都該懂的跑步數據，讀書心得.md`、`不同的心率區間模型比較.md`。
+- 徐國峰：筆記 `跑者都該懂的跑步數據，讀書心得.md`、`不同的心率區間模型比較.md`。
 - 沿用既有文件、本次沒有重讀的：Seiler & Kjerland 2006、Coyle & González-Alonso 2001、Lafrenz 2008、Wingo 2020、Beiter 2025、Hunt 2015／2019、Coyle 1986、Houmard 1992（出處見文中引用的 `docs/research/*.md` 行號）。

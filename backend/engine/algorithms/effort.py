@@ -11,7 +11,7 @@ which is exactly "how far on the flat would have cost the same energy".
 
 `SIMPLE_FORMULAS` keeps the published summary-level formulas for comparison
 and for activities with no elevation stream. Measured against integrated
-Minetti over 430 of this athlete's activities (2026-09-29):
+Minetti over 430 of one runner's activities (2026-09-29):
 
     Scarf   km + gain/126     4.0% mean error   (+2.6% bias)  <- best
     ITRA    km + gain/100     6.9%              (+6.9%)
@@ -36,7 +36,7 @@ SIMPLE_FORMULAS: dict[str, tuple[float, Optional[float]]] = {
     "scarf": (126.0, None),          # Scarf's equivalence — best fit to our data
     "itra": (100.0, None),           # ITRA km-effort, used by 健行筆記
     "swiss_lk": (100.0, 150.0),      # Swiss Leistungskilometer
-    "fitted_run": (153.0, None),     # the author's fit; in use: divisor_of() -> engine/terrain_calib (per athlete)
+    "fitted_run": (153.0, None),     # one runner's fit; in use: divisor_of() -> engine/terrain_calib (per athlete)
     "fitted_hike": (111.0, None),    # ... and hikes
 }
 

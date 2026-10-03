@@ -47,7 +47,7 @@
     {"zh": ["間歇"], "en": "intervals", "accept": ["interval"], "check": true},
     {"zh": ["飄移"], "en": "(HR) drift", "accept": ["drift"], "check": true},
     {"zh": ["徐國峰"], "en": "Kuo-Feng Hsu", "accept": ["Hsu"], "check": true,
-     "note": "spelling to be confirmed by the owner; what he says himself counts as a source"},
+     "note": "spelling to be confirmed by the maintainer; what 徐國峰 says himself counts as a source"},
     {"zh": ["台灣教練"], "en": "a Taiwanese coach", "accept": ["coach"], "check": false,
      "note": "an unnamed coach's rule (no public source to cite)"},
     {"zh": ["傷病紀錄"], "en": "Injury log", "accept": ["injury log"], "check": true},

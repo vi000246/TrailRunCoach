@@ -82,8 +82,8 @@ def _old(root, name, **kw):
 
 
 def test_migration_renames_old_files_and_rows_and_is_idempotent(tmp_path, _fit_root_in_tmp):
-    run_p = _old(_fit_root_in_tmp, "480707326343414059_2026-09-30_cycling.fit")
-    trail_p = _old(_fit_root_in_tmp, "480470392861917592_2026-09-20_other.fit", sub_sport=3)
+    run_p = _old(_fit_root_in_tmp, "480000000000000003_2026-09-30_cycling.fit")
+    trail_p = _old(_fit_root_in_tmp, "480000000000000002_2026-09-20_other.fit", sub_sport=3)
     ok_p = _old(_fit_root_in_tmp, "480000000000000001_2026-09-01_run.fit")
     stray = _old(_fit_root_in_tmp, "notes.fit")                          # not a sync name
     outside = tmp_path / "elsewhere" / "1_2026-09-01_cycling.fit"      # not in fit/coros
@@ -92,8 +92,8 @@ def test_migration_renames_old_files_and_rows_and_is_idempotent(tmp_path, _fit_r
 
     async def go():
         s = await make_session(tmp_path)
-        for p, lid, sp in ((run_p, "480707326343414059", "running"),
-                           (trail_p, "480470392861917592", "cycling"),    # a wrong row gets fixed
+        for p, lid, sp in ((run_p, "480000000000000003", "running"),
+                           (trail_p, "480000000000000002", "cycling"),    # a wrong row gets fixed
                            (outside, "1", "running")):
             s.add(WorkoutFile(athlete_id=1, file_path=str(p), file_format="fit", sport=sp,
                               source="coros", coros_activity_id=lid, workout_date=date(2026, 9, 30)))
@@ -106,11 +106,11 @@ def test_migration_renames_old_files_and_rows_and_is_idempotent(tmp_path, _fit_r
         assert out["already"] == 1 and out["skipped"] == 1
         names = sorted(p.name for p in (_fit_root_in_tmp / "coros" / "2026").iterdir())
         assert names == ["480000000000000001_2026-09-01_run.fit",
-                         "480470392861917592_2026-09-20_trail_run.fit",
-                         "480707326343414059_2026-09-30_run.fit", "notes.fit"]
+                         "480000000000000002_2026-09-20_trail_run.fit",
+                         "480000000000000003_2026-09-30_run.fit", "notes.fit"]
         rows = {r.coros_activity_id: r for r in (await s.execute(select(WorkoutFile))).scalars()}
-        assert rows["480707326343414059"].file_path.endswith("480707326343414059_2026-09-30_run.fit")
-        assert rows["480470392861917592"].sport == "running"
+        assert rows["480000000000000003"].file_path.endswith("480000000000000003_2026-09-30_run.fit")
+        assert rows["480000000000000002"].sport == "running"
         assert rows["1"].file_path == str(outside) and outside.exists()      # outside fit/coros: untouched
         again = await MIG.migrate(s, apply=True)
         assert again["renamed"] == 0 and again["rows_updated"] == 0 and again["sport_fixed"] == 0

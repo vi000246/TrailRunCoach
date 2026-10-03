@@ -34,7 +34,7 @@ saw (state["cp"]) — api/plan.py starts one after every threshold edit
 detail) are recomputed (rescale_sessions; regenerated sessions get the new
 text anyway), the pushed ones go out of date by fingerprint and are re-pushed
 through push_window — also those already on the watch beyond the window —
-and one change-log row says 「CP 204 → 210 W：未來 N 堂課的功率目標已更新並重新
+and one change-log row says 「CP 220 → 226 W：未來 N 堂課的功率目標已更新並重新
 推送」. With plan.auto.push off the stored plan and the log are updated, the
 row says 「…，待推送」 and nothing is sent; each item says 已重新推送 / 待推送 /
 只在 app. plan.auto.enabled off: nothing (the next enabled run catches up).
@@ -569,7 +569,7 @@ def _f(v) -> Optional[float]:
 
 async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out: dict, trigger: str,
                   th: dict, today: str) -> dict:
-    """The change-log row of a CP change: 「CP 204 → 210 W：未來 N 堂課的功率目標已更新
+    """The change-log row of a CP change: 「CP 220 → 226 W：未來 N 堂課的功率目標已更新
     並重新推送」, or 「…，待推送」 when plan.auto.push is off (or the run is held / the
     push failed). Per session: 已重新推送 / 待推送 (on the watch with old watts) /
     只在 app (not on the watch yet: it is sent when it enters the push window)."""

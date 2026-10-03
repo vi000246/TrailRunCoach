@@ -5,7 +5,7 @@
   - `docs/prd/ai-coach-training-analysis.prd.md` — initial（chat/dashboard/trail analysis）
   - `docs/prd/wko5-trail-multipage-sync-coach.prd.md` — Milestone 4（知識驅動處方）
 - **Source Linear Issue**: N/A
-- **Owner**: solo / self
+- **Owner**: maintainer
 - **Status**: DRAFT — needs architectural review（M4 delta 進行中）
 - **Generated**: 2026-05-16
 - **Last Updated**: 2026-06-13
@@ -36,7 +36,7 @@
 ### Actors
 | Actor | Type | Interaction |
 |---|---|---|
-| 運動員（自己） | Human | 瀏覽 Dashboard、開啟 AI Chat、查看訓練詳情 |
+| 運動員（使用者） | Human | 瀏覽 Dashboard、開啟 AI Chat、查看訓練詳情 |
 | Claude API | External Service | 接收 messages + system prompt，回傳 SSE token 串流 |
 | OpenAI API | External Service | 同上，另一 provider 選項 |
 | Coros FIT 檔案 | File System | Trail endpoint 讀取 FIT 計算 GAP/VAM |

@@ -34,13 +34,13 @@ MODEL — the athlete's own history, not a fixed formula
     A terrain mode with fewer than MIN_SAMPLES easy samples falls back to
     effort distance EP = km + gain/100 (the ITRA "km-effort" / 健行筆記
     convention, algorithms/effort.py SIMPLE_FORMULAS["itra"]; measured there
-    against integrated Minetti over 430 of this athlete's activities: 6.9 %
+    against integrated Minetti over 430 of one runner's activities: 6.9 %
     mean error, +6.9 % bias), at the athlete's median EP speed on that
     terrain (or on trail + hike, or v_flat).
 
     With enough samples both forms are fitted to the athlete and the one
     with the lower leave-one-out error on that terrain is used (`fit(method=
-    "auto")`). On this athlete's 26 weeks (2026-09-30: 9 easy trail runs)
+    "auto")`). On one runner's 26 weeks (9 easy trail runs)
     EP at the athlete's own EP speed won — 5.6 % vs 11.4 % MAPE — so the
     Naismith / Langmuir terms are kept for the comparison and for athletes
     whose data favours them.

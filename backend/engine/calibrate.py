@@ -1,7 +1,7 @@
 """
 Per-athlete calibration (generalize-athlete plan §0.1, batch B1).
 
-Every 「A 類」 number that used to be tuned on the author's own data becomes an
+Every 「A 類」 number that used to be tuned on one runner's data becomes an
 `Item`: a literature / 推估 default plus a fit on the athlete's own data,
 shrunk toward the default with w = n / (n + k), as engine/drift_agg.py does
 for the AeT heat β. Below `min_n` points nothing is written and the default
@@ -25,7 +25,7 @@ and its hover help (static/calib_chip.js renders it).
 
 Adding an item: `register(Item(...))` in the module that owns the number,
 plus a self-consistency test (backend/tests/calib_fixtures.py): on a
-synthetic fixture that mimics the author's data, the fitted value must land
+synthetic fixture that mimics that runner's data, the fitted value must land
 within ±1 SE of today's constant.
 """
 from __future__ import annotations
