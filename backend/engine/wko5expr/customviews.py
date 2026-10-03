@@ -148,6 +148,12 @@ def _chart(raw: dict, where: str) -> dict:
         if not isinstance(z, dict) or z.get("line") not in names:
             raise CustomViewError(f"{where}/{raw['title']}: zoned needs a line that is one of the series")
         out["zoned"] = {"line": z["line"]}
+        # optional reference line on it: {"y": 1, "label": "1 = 跟平常一樣"} (thin, dashed)
+        ref = z.get("ref")
+        if ref is not None:
+            if not isinstance(ref, dict) or not isinstance(ref.get("y"), (int, float)):
+                raise CustomViewError(f"{where}/{raw['title']}: zoned.ref needs a number y")
+            out["zoned"]["ref"] = {"y": float(ref["y"]), "label": str(ref.get("label") or "")}
     if raw.get("race_refs") is not None:
         # target-race reference lines (panels/race_refs.py): "course_constant" = the next two
         # races' single-day コース定数, the A race's 80–100 % band, 「＝ <race> 單日目標的 X%」 on hover
