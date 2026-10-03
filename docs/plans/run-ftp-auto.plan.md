@@ -125,6 +125,7 @@ COROS 三種模型，各 6 區（Recovery／Aerobic Endurance／Aerobic Power／
 - 儲備心率：59／74／84／88／95 % HRR（從使用者的數字驗證過）
 - 最大心率：**百分比還沒查到官方數字**。先從 COROS 帳號 API 的 `zoneData` 讀（登入回應裡有，現在只讀 lthr／ftp）；
   讀不到的話，就請使用者從 COROS app 抄 6 個區間的 bpm。不能用猜的。
+  → 已讀到：`maxHrZone` 50／60／70／80／90／100%（見下方「第二部分進度」）。
 
 ### 改法
 
@@ -146,6 +147,47 @@ COROS 三種模型，各 6 區（Recovery／Aerobic Endurance／Aerobic Power／
 
 合成心率資料：尖刺要被濾掉、最大心率的估算、HRR 的區間邊界（202／53 → Z2 141–163）、
 COROS LTHR 表、設定覆寫的優先順序、沒有靜息心率時顯示原因。
+
+### 第二部分進度（2026-10-03，branch feat/hr-zones-settings）
+
+使用者同日改範圍：**課表心率區間（設定）和圖表的心率區間是兩件事**。
+
+- [x] COROS 帳號 `zoneData`（GET /account/query 唯讀查一次）有 `maxHr` 202、`rhr` 53、`lthr` 182，
+  以及三種模型各 6 個上緣：`lthrZone` 80／90／95／102／106、`rhrZone` 59／74／84／88／95（＝RQ）、
+  `maxHrZone` **50／60／70／80／90**（官方沒公開，這是帳號裡的值；照另外兩組的讀法，Z1 < 50%，推估）。
+  登入回應與每次同步後（`coros_client.store_hr_profile` / `refresh_hr_profile`）存到
+  user_settings `athlete.coros_profile`，標「來自手錶」；COROS 的 ratio 優先於預設表，bpm 四捨五入，
+  同樣的最大／靜息心率時跟手錶一致。
+- [x] `thresholds.estimate_mhr`：近 365 天每次跑步「持續 ≥ 5 秒」的最高心率；丟掉 < 30、> 220、
+  一秒跳 > 15 bpm 的尖刺（直到回到跳之前 +15 以內）；最高那次比第二高多 > 5 bpm 就當誤差。
+  ≥ 3 次跑步才有值，標推估。使用者資料：**191**（182 次；3/25 的 218 是鎖到步頻的假值，被丟掉；
+  201–208 的峰值都在 1–2.6 年前）。
+- [x] 來源順序（`engine/hr_profile.py`，所有圖表和課表共用）：
+  - 最大心率：你的設定（計畫門檻 `mhr`，有日期）> **推估和手錶取高的**（推估是下限，訓練很少跑到最大心率；
+    所以使用者目前是手錶的 202，來源文字註明近 365 天最高 191）。
+    ⚠ 跟原本「設定 > 推估 > 手錶」不同：照原順序會用 191，HRR 區間比手錶低一截。
+  - 靜息心率：你的設定（計畫門檻新欄位 `rhr`）> 手錶 > 沒有（「沒有靜息心率，到設定填」）。
+- [x] 設定頁「心率」：最大／靜息心率顯示目前值和來源；進階設定可手動覆寫（存成今天的計畫門檻列，
+  改回自動 = 清掉 mhr／rhr）。API：`GET/PUT /api/v1/plan/hr-profile`。
+- [x] A. **課表心率區間**（`plan.hr_zone_model`：lthr 預設／hrr／hrmax）只管課表的心率目標：
+  `zones.training_targets`、總覽的輕鬆跑上限、`coros_workouts` / `workout_steps` 的 easy_hr 和間歇心率。
+  對應：恢復 Z1、輕鬆／長跑／越野 Z2、Z3sub→Z3、Z3near（閾值）→Z4、Z4（supra）與 Z5（VO2）→Z5。
+  量到的 AeT（測試）一定當輕鬆跑上限；推估的 AeT、0.89 × LTHR 不再壓過模型。缺資料時改用乳酸閾值區間並顯示原因。
+  推到 COROS 仍是 hrType 3 + 絕對 bpm（其他 hrType 代碼沒驗證，不猜）。編輯器裡使用者自己選的 Friel 區間不動。
+  預設（乳酸閾）下使用者的目標變化（LTHR 155）：恢復 ≤132 → ≤124、輕鬆／長跑 ≤138 → 124–140（下緣 0.75 → 0.80 LTHR）、
+  爬坡 140–155 → 140–158、爬坡重複 147–160 → 147–158、閾值 147–155 → 147–158、supra 155–160 → 158–164、VO2 160–164 → 158–164。
+  非乳酸閾模型時總覽加一則說明「課表文字裡的『AeT』指這個上限」（76 處文字沒有改名）。
+- [x] B. **圖表**：預設仍是 Friel（跟 WKO5 一致），各自記住；新增 COROS 乳酸閾／儲備心率（id 沿用 `rqhrr`）／最大心率
+  到單次活動、區間時數、WKO5 區間表（`zones.SYSTEMS` 加 coroslthr／coroshrr／coroshrmax，心率區間表卡片可以切換）。
+  %HRmax 的限制（Iannetta 2020）寫在模型的來源文字裡。
+- [x] AeT 自動估失敗時，「0.89 × LTHR」的來源文字附「參考：飄移 < 5% 的跑步最高心率 162 bpm」
+  （`racepower/athlete.thresholds_as_of`、`zones.training_targets`）；輕鬆跑上限不跟著改。
+- [x] 測試：`backend/tests/test_hr_profile.py`（合成資料）。
+
+待使用者決定：
+- 最大心率要不要看更長的時間（例如 3 年）？近 365 天沒有最大努力，推估只有 191。
+- `maxHrZone` 的 Z1 是 < 50% 還是 50–60%（要在 COROS app 對一下）。
+- 課表文字的「AeT」在儲備心率／最大心率模型下要不要改名（例如「輕鬆跑上限」）。
 
 ## WKO5 的缺失（已確認，使用者 2026-10-03 定案）
 

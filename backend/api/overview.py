@@ -49,7 +49,8 @@ def _status(ds, today: dt.date) -> Status:
     tests = tuple((s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol"))
                   for s in test_sessions())
     from backend import tenancy
-    key = (tenancy.current().id, id(ds), today, _plan_stamp(), prefs.stamp(), tests)
+    from backend.engine import hr_profile as HRP          # 課表心率區間 (the week plan's HR targets)
+    key = (tenancy.current().id, id(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp())
     with _lock:
         hit = _status_cache.get(key)
         if hit is not None:

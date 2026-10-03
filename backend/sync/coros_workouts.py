@@ -119,16 +119,24 @@ class Thresholds:
     lthr: Optional[float] = None
     aet: Optional[float] = None
     tpace: Optional[float] = None      # threshold pace, s/km (pace targets in % / zones)
+    # 課表心率區間 (engine/hr_profile.plan_hr_zones, via the plan's thresholds "hr_model"):
+    # easy = its Z2 band (a measured AeT caps it), interval classes = its zones
+    hrz: Optional[dict] = None
 
     @classmethod
     def of(cls, t: Optional[dict]) -> "Thresholds":
         t = t or {}
         f = lambda k: float(t[k]) if t.get(k) else None
-        return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"))
+        hrz = t.get("hr_model") if isinstance(t.get("hr_model"), dict) else None
+        return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"), hrz=hrz)
 
 
 def easy_hr(th: Thresholds) -> Optional[tuple]:
-    """Easy / long / hike: heart rate capped at AeT."""
+    """Easy / long / hike: heart rate capped at AeT — with a 課表心率區間, its Z2
+    band (the cap a measured AeT, else Z2's top; hr_profile.plan_hr_zones)."""
+    if th.hrz and th.hrz.get("easy"):
+        lo, hi = th.hrz["easy"]
+        return ("hr", round(lo), round(hi))
     hi = th.aet or (0.89 * th.lthr if th.lthr else None)
     if not hi:
         return None
@@ -165,6 +173,10 @@ def _work_hr(s: dict, th: Thresholds, cls: Optional[str]) -> Optional[tuple]:
     hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", s.get("target", ""))
     if hm:
         return ("hr", int(hm.group(1)), int(hm.group(2)))
+    from backend.engine.hr_profile import work_band
+    wb = work_band(th.hrz, cls or "Z3near")          # 課表心率區間: the class's COROS zone
+    if wb:
+        return ("hr", *wb)
     a, b = HR_WORK.get(cls or "", (0.95, 1.00))
     if not th.lthr:
         return None
@@ -392,7 +404,7 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
             st = WS.normalize(s["steps"])
         except WS.StepsError as e:
             raise Unsupported(f"課表結構有誤：{e}")
-        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s))
+        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz)
         return WS.steps_to_coros(st, c)
     if kind == "notice":
         # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is

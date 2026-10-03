@@ -456,7 +456,8 @@ def thresholds_as_of(ds, day: dt.date) -> dict:
     test dated on or before `day`, else the estimate from the runs before
     `day` (thresholds.estimate, each run measured against cp_as_of its own
     date — no later CP, no WKO5 snapshot), else WKO5's dated setting; AeT
-    falls back to 0.89 × LTHR (Friel Z2 top). CP only from a dated plan test
+    falls back to 0.89 × LTHR (Friel Z2 top; then `aet_below`, the highest HR of
+    the runs with drift < 5 %, is added to the source text as a reference). CP only from a dated plan test
     (else None: the HR decides the class)."""
     from backend.engine.racepower import intensity as I
     out = {"day": day.isoformat()}
@@ -486,6 +487,12 @@ def thresholds_as_of(ds, day: dt.date) -> dict:
     else:
         out.update(aet=None if not out["lthr"] else I.INTENSITY["aet_frac_lthr"] * out["lthr"],
                    aet_source="0.89 × LTHR（Friel Z2 上限）")
+        below = (est.get("aethr") or {}).get("below")
+        if below:
+            # the estimate failed; the highest HR of the runs with drift < 5 % is shown as a hint
+            # (text only — the easy cap stays 0.89 × LTHR)
+            out.update(aet_below=float(below),
+                       aet_source=out["aet_source"] + f"；參考：飄移 < 5% 的跑步最高心率 {below:.0f} bpm")
     c = _plan_last(ds, "cp", day)
     out.update(cp=float(c[1]) if c else None, cp_source=f"測試 {c[0]}" if c else None)
     return out

@@ -61,8 +61,10 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     # saving 課表偏好 or 不排課日期, or accepting / cancelling a B2B, regenerates
     # 主要訓練項目 (engine/primary_sport.py): switching it regenerates too
     from backend.engine import primary_sport as PSP
+    # 課表心率區間 and the COROS account's max / rest HR (engine/hr_profile.py) change the HR targets
+    from backend.engine import hr_profile as HRP
     key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
-           PSP.stored())
+           PSP.stored(), HRP.stamp())
     with _lock:
         hit = _cache.get(key)
     if hit is not None:

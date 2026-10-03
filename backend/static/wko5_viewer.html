@@ -1085,6 +1085,7 @@ async function renderCard(card, v, di, c, q, token) {
       + (win && c.kind === "athlete" ? `&window=${win}` : "")
       + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : "")
       + (c.kind === "periodzones" ? pzQuery(c) : "") + variantQuery(pkey)
+      + (c.kind === "zones" && zsPrefs()[pkey] ? `&zsys=${encodeURIComponent(zsPrefs()[pkey])}` : "")
       + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : ""));   // climb_vam.js
     if (token !== loadToken) return;
     card._res = res;
@@ -1463,9 +1464,22 @@ function drawZones(card, res) {
     : (r.to == null ? `${f(r.from)}+` : `${f(r.from) || 0}–${f(r.to)}`);
   const pct = (r) => `${r.lo == null ? "" : Math.round(r.lo * 100)}${r.hi == null ? "+" : (r.lo == null ? "<" : "–") + Math.round(r.hi * 100)}%`;
   const maxShare = Math.max(0.0001, ...Z.rows.map((r) => r.share || 0));
-  const basis = { lthr: "LTHR", cp: "CP", tpace: "閾值配速" }[Z.basis];
+  const basis = { lthr: "LTHR", cp: "CP", tpace: "閾值配速", hrr: "HRR", hrmax: "最大心率" }[Z.basis];
   // the description and the source sit behind the title's ?; one short threshold line stays
   addTip(card, [res.description, Z.source ? "來源：" + Z.source : ""].filter(Boolean).join("\n\n"));
+  if (Z.choices && card._ctx) {
+    // HR tables: the zone model is picked here and remembered per card (zones.HR_SYSTEMS; not the 課表 setting)
+    const { v, di, c, q } = card._ctx, pkey = `${v.name}|${di}|${c.index}`;
+    const bar = document.createElement("div");
+    bar.className = "row";
+    bar.innerHTML = `<label class="meta">區間模型 <select aria-label="區間模型">${Z.choices.map((o) => `<option value="${esc(o.id)}"${o.id === Z.system ? " selected" : ""}>${esc(o.title)}</option>`).join("")}</select></label>${Z.estimate ? ` <span class="badge">推估</span>` : ""}`;
+    bar.querySelector("select").onchange = (e) => {
+      zsSave(pkey, e.target.value);
+      card.insertAdjacentHTML("beforeend", `<div class="loading">計算中…</div>`);
+      renderCard(card, v, di, c, q, loadToken);
+    };
+    card.appendChild(bar);
+  }
   card.insertAdjacentHTML("beforeend", `<p class="meta" style="margin:0 0 6px">
     ${basis} ${Z.threshold == null ? "未設定" : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · W′ ${(Z.wprime / 1000).toFixed(1)} kJ（${esc(Z.wprime_source || "")}）` : ""} · 最近 ${Z.days} 天 ${Z.runs} 次跑步</p>
     ${Z.no_data_reason ? `<p class="badge" style="margin:0 0 6px">沒有資料：${esc(Z.no_data_reason)}</p>` : ""}
@@ -1476,6 +1490,9 @@ function drawZones(card, res) {
       <td><div class="zbar"><i style="width:${((r.share || 0) / maxShare * 100).toFixed(1)}%;background:${ZCOL(i, Z.rows.length)}"></i>
         <span>${r.share == null ? "" : Math.round(r.share * 100) + "% · " + hms(r.seconds)}</span></div></td></tr>`).join("")}</tbody></table>`);
 }
+const ZS_KEY = "wko5viewer.zsys";        // the HR zone table chosen per card (kind "zones")
+function zsPrefs() { try { return JSON.parse(localStorage.getItem(ZS_KEY) || "{}"); } catch { return {}; } }
+function zsSave(pkey, id) { try { localStorage.setItem(ZS_KEY, JSON.stringify({ ...zsPrefs(), [pkey]: id })); } catch {} }
 const ZCOL = (i, n) => `hsl(${140 - 140 * i / Math.max(1, n - 1)} 65% 45%)`;   // green → red
 
 // ---- 區間時數 (views kind "periodzones" → panels/period_zones.py). Self-contained: its styles (pzStyle),

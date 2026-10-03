@@ -129,7 +129,8 @@ def test_power_models_skip_watch_power_and_default_to_palladino():
     assert [m["id"] for m in res["models"]["power"]] == ["palladino", "palladino3"]   # Palladino everywhere, no iLevels
     # a remembered 「ilevels」 choice falls back to the default
     assert PZ.compute(ds, B, E, _q(zkind="power", zmodel="ilevels"))["model"]["id"] == "palladino"
-    assert [m["id"] for m in res["models"]["hr"]] == ["frielhr", "classichr", "seiler3"]   # no %HRmax
+    assert [m["id"] for m in res["models"]["hr"]] == ["frielhr", "classichr", "seiler3", "coroslthr", "rqhrr",
+                                                      "coroshrmax"]       # + the COROS models (2026-10-03)
 
 
 def test_quick_pick_periods():
