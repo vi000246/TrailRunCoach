@@ -1,0 +1,21 @@
+{
+  "z5flow.aria": "Zone 5 unlock path",
+  "z5flow.here": "You are here",
+  "z5flow.next": "Next",
+  "z5flow.also": "Can do alongside ({stage})",
+  "z5flow.help": "Details",
+  "z5flow.ok": "Done",
+  "z5flow.todo": "Not yet",
+  "z5flow.unknown": "Not done yet",
+  "z5flow.unlocks": "Unlocks:",
+  "z5flow.unlocked": "Unlocked:",
+  "z5flow.tag.done": "Done",
+  "z5flow.tag.current": "Now",
+  "z5flow.tag.parallel": "In parallel",
+  "z5flow.tag.locked": "Locked",
+  "workout.no_tpace": "No threshold pace: this step reaches the watch without a pace target",
+  "workout.no_tpace_badge": "No threshold pace",
+  "workout.no_tpace_link": "How threshold pace is estimated",
+  "autoplan.log_title": "Automatic adjustment log",
+  "autoplan.log_count": "({n})"
+}

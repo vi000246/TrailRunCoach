@@ -1,0 +1,988 @@
+<!doctype html>
+<html lang="zh-TW">
+<head><script>window.TRC_STATIC_CFG = {"snapshot": "2026-10-03", "today": "2026-10-03", "pages": {"/demo": "index.html", "/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html", "/api/v1/overview/plan/compliance/page": "compliance.html", "/api/v1/wko5/viewer": "charts.html", "/api/v1/plan/page": "plan.html", "/api/v1/wko5/activities/page": "activities.html", "/api/v1/routes/page": "routes.html", "/api/v1/racepower/page": "racepower.html", "/": "index.html", "/api/v1/achievements/page": "activities.html#achievements"}, "compute": "^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$", "locks": "#gpxpick, #evsubmit, #addphase, #savephases, #tomanual, #toauto, [data-del-event], [data-edit-event], #rec-btn, #pf-save, #pf-reset, #bo-save, #bo-del, #sd-swap, #vd button[data-vk], #gpxfile, #gpx-attach, #stop-import, input[type=file][accept*='.gpx' i]"};</script><script src="static/trc_static.js"></script><script>window.TRC_SESSION = {"mode": "demo", "static": true, "caps": ["plan.write"], "user": null, "demo": {"sandbox": false, "base": "2026-10-03-20261002", "expires_at": null, "reset": false, "cta_url": null, "static": true}};</script><script>window.__I18N__ = {"locale": "zh-TW", "debug": false, "catalog": {"common.z5flow.aria": "5 區開放流程", "common.z5flow.here": "你現在在這裡", "common.z5flow.next": "下一步", "common.z5flow.also": "同時可以做（{stage}）", "common.z5flow.help": "說明", "common.z5flow.ok": "已達成", "common.z5flow.todo": "還沒達成", "common.z5flow.unknown": "還沒做", "common.z5flow.unlocks": "完成後：", "common.z5flow.unlocked": "已解鎖：", "common.z5flow.tag.done": "已完成", "common.z5flow.tag.current": "現在", "common.z5flow.tag.parallel": "可同時做", "common.z5flow.tag.locked": "未解鎖", "common.workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標", "common.workout.no_tpace_badge": "沒有閾值配速", "common.workout.no_tpace_link": "看閾值配速怎麼估", "common.autoplan.log_title": "自動調整紀錄", "common.autoplan.log_count": "{n} 筆", "shell.brand": "訓練教練", "shell.brand.title": "回首頁", "shell.nav.label": "主選單", "shell.nav.item_title": "{name}：{purpose}", "shell.page.home.name": "總覽", "shell.page.home.short": "總覽", "shell.page.home.purpose": "狀況・待辦・本週課表", "shell.page.schedule.name": "課表", "shell.page.schedule.short": "課表", "shell.page.schedule.purpose": "日曆排課・同步 COROS", "shell.page.charts.name": "圖表分析", "shell.page.charts.short": "圖表", "shell.page.charts.purpose": "趨勢與單次活動圖表", "shell.page.activity.name": "活動列表", "shell.page.activity.short": "活動", "shell.page.activity.purpose": "搜尋・篩選・編輯・成就", "shell.page.injuries.name": "傷病紀錄", "shell.page.injuries.short": "傷病", "shell.page.injuries.purpose": "疼痛・受傷前的訓練", "shell.page.routes.name": "路線", "shell.page.routes.short": "路線", "shell.page.routes.purpose": "重複路段與路線的進步", "shell.page.plan.name": "賽事周期", "shell.page.plan.short": "周期", "shell.page.plan.purpose": "目標賽事・周期・門檻", "shell.page.racepower.name": "賽事計算機", "shell.page.racepower.short": "計算機", "shell.page.racepower.purpose": "完賽時間・分段配速／功率／心率・補給", "shell.page.settings.name": "設定", "shell.page.settings.short": "設定", "shell.page.settings.purpose": "計算模式・體重・資料校正", "shell.build.preparing": "正在準備資料…", "shell.build.elapsed": "已 {s} 秒", "shell.build.failed": "資料處理失敗：{error}", "shell.lang.title": "切換語言（Language）", "shell.lang.zh-TW": "中文", "shell.lang.en": "EN", "shell.nav.more": "更多", "shell.nav.more_title": "活動列表、路線、傷病紀錄、設定", "shell.demo.tag": "示範資料", "shell.demo.text": "這是虛構的跑者，你的修改只存在這個瀏覽器。", "shell.demo.try": "試試：", "shell.demo.try_schedule": "排課表", "shell.demo.try_race": "賽事計算機", "shell.demo.try_plan": "週期", "shell.demo.left_none": "還沒有修改", "shell.demo.left_h": "{h} 小時後清除", "shell.demo.left_m": "{m} 分鐘後清除", "shell.demo.left_title": "你的修改從第一次修改起保留 24 小時，之後自動回到原始示範資料", "shell.demo.reset": "重設示範", "shell.demo.reset_title": "清掉你的修改，回到原始示範資料", "shell.demo.reset_confirm": "清掉你在示範裡的所有修改？", "shell.demo.cta": "想用自己的資料？", "shell.demo.locked": "示範模式不提供這個功能", "shell.demo.disabled": "示範模式不提供這個功能", "shell.demo.static_text": "唯讀示範：虛構跑者的一年訓練。課表可以試著改，修改只存在這個瀏覽器。", "shell.demo.static_edits": "已修改課表", "shell.demo.static_none": "還沒有修改", "shell.demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改", "shell.demo.static_locked": "唯讀示範：這個操作在示範版不能用", "activity.title": "活動列表", "activity.help.page": "所有活動：上方搜尋、篩選，點欄位標題排序。\n「編輯」改單筆活動的名稱、類型、努力度、疼痛、背負、標籤、地形或排除；圖表圖示在「圖表分析」打開這筆。\n「成就」分頁：越野跑和登山健行的紀錄、已登百岳，以及複製給登山團的清單。\n只改 app 裡的資料，原始 FIT 檔不會被改。", "activity.help.editor": "自動判定的值標「自動」，滑過可看判定理由；你改過的標「手動」，選回「自動」或清空就回到自動。改了就存。\n只改 app 裡的資料，原始 FIT 檔不會被改。", "activity.help.name": "留空或按「還原原名」就用原本的名稱（來源檔的標題，沒有標題時是日期＋運動＋距離）。", "activity.help.effort": "優先順序：你的標記 ＞ 手錶記錄的 RPE（運動後自評，FIT 檔的 workout_rpe；目前只有 Garmin 手錶寫入）＞ 心率規則。\nRPE 換算（推估）：1–4 輕鬆、5–8 一般、9–10 全力（長休息 > 10% 時為有拼但有休息）。\n心率規則看移動時的心率佔 LTHR、AeT 以上的比例與長休息。", "activity.help.pain": "這次有沒有痛。「痠」是練完正常的痠，不算受傷；「痛」是會影響跑姿、配速，或跑完還在痛；「中斷」是痛到停下來。\n選「痛」或「中斷」會自動開一筆傷病紀錄，細節到「傷病紀錄」頁補。\n沒填和「沒痛」不一樣：分析只把「沒痛」當確定沒事。\n這不是診斷，持續痛請看醫師或物理治療師。", "activity.help.pack": "這次背多少（kg），百岳預測會用；空白 = 沒記錄。", "activity.help.tags": "自由輸入，可以多個（每個最多 30 字、最多 20 個）；輸入後按 Enter。上方的搜尋也會找標籤。", "activity.help.terrain": "路跑或越野。自動 = 依距離與爬升判定；選路跑／越野會蓋過規則，選回「自動」就恢復。WKO5 來源的地形是 WKO5 的活動類型，要在 WKO5 改。", "activity.help.exclude": "排除只是一個標記：活動留在列表（標「已排除」），檔案不會刪除，但不算進 PMC、功率曲線、比賽功率和圖表。規則會自動排除疑似交通工具或不可能的功率；你可以手動排除，或把規則排除的標成正常。", "activity.help.power": "唯讀。Stryd 功率一律採用；手錶推估功率要在「設定」打開才採用，沒採用時功率模型和功率 TSS 不用它，心率與配速照常使用。", "activity.f.q": "搜尋名稱、標籤、備註、日期…", "activity.f.q_label": "搜尋", "activity.f.from": "開始日期", "activity.f.to": "結束日期", "activity.f.type": "運動類型", "activity.f.type_all": "所有類型", "activity.f.src": "資料來源", "activity.f.src_all": "所有來源", "activity.f.pain": "只看有疼痛", "activity.f.reset": "清除篩選", "activity.loading": "讀取中…", "activity.empty": "沒有符合的活動", "activity.count": "{n} / {total} 筆", "activity.page": "{p} / {n} 頁", "activity.prev": "上一頁", "activity.next": "下一頁", "activity.sport.running": "路跑", "activity.sport.trail running": "越野", "activity.sport.indoor running": "跑步機", "activity.sport.treadmill running": "跑步機", "activity.sport.hiking": "健行", "activity.sport.mountaineering": "登山", "activity.sport.walking": "走路", "activity.sport.cycling": "騎車", "activity.sport.swimming": "游泳", "activity.sport.strength": "肌力", "activity.sport.strength training": "肌力", "activity.sport.generic": "其他", "activity.col.date": "日期", "activity.col.name": "名稱", "activity.col.type": "類型", "activity.col.dur": "時間", "activity.col.dist": "距離 km", "activity.col.climb": "爬升 m", "activity.col.hr": "均心率", "activity.col.pw": "均功率 W", "activity.col.tss": "TSS", "activity.col.rpe": "RPE", "activity.col.src": "來源", "activity.col.pain": "疼痛", "activity.col.actions": "操作", "activity.pain.0": "沒痛", "activity.pain.1": "痠", "activity.pain.2": "痛", "activity.pain.3": "中斷", "activity.src_tip": "資料來自 {src}", "activity.src_fill": "（主要資料來源沒有這筆，才用這個來源補上）", "activity.source.synced": "同步資料", "activity.source.primary": "（主要：{src}）", "activity.source.line": "資料來源：{src} · {n} 筆", "activity.excluded": "已排除", "activity.edit": "編輯", "activity.edit_label": "編輯「{name}」", "activity.open_chart": "在圖表分析開啟", "activity.close": "關閉", "activity.manual": "手動", "activity.manual_tip": "你設定的值", "activity.auto": "自動", "activity.auto_tip": "依規則自動判定", "activity.auto_opt": "自動（{v}）", "activity.auto_was": "自動判定：{v}（{why}）", "activity.auto_progress": "自動分類計算中：{done}／{total} 筆", "activity.auto_failed": "自動分類暫時算不出來，稍後重新整理", "activity.computing": "計算中…", "activity.recorded": "手錶記錄：{v}", "activity.feel": "感覺「{v}」", "activity.f_name": "名稱", "activity.f_activity_type": "活動類型", "activity.f_effort": "努力度", "activity.f_pack": "背負", "activity.f_tags": "標籤", "activity.f_note": "備註", "activity.f_terrain": "地形", "activity.f_exclude": "排除", "activity.f_power": "功率來源", "activity.name_reset": "還原原名", "activity.name_orig": "原名：{v}", "activity.name_orig_tip": "原本的名稱", "activity.tag_add": "加標籤", "activity.tag_add_ph": "加標籤，Enter", "activity.tag_rm": "移除標籤 {v}", "activity.tag_long": "標籤最多 30 字", "activity.pack_range": "背負要在 0–40 kg", "activity.terrain.road": "路跑", "activity.terrain.trail": "越野", "activity.terrain.rule": "規則判定", "activity.terrain.locked": "不能在這裡改", "activity.ex.keep": "這筆是正常的，不要排除", "activity.ex.unmanual": "取消手動排除", "activity.ex.kept": "你標成正常（不要排除）", "activity.ex.flagged": "；規則判定：{v}", "activity.ex.back_auto": "恢復自動判定", "activity.ex.none": "沒有排除", "activity.ex.exclude": "手動排除", "activity.ex.confirm": "排除這筆活動？它會留在列表（標「已排除」），檔案不會刪除，但不再算進 PMC、功率曲線、比賽功率和圖表。之後可以在這裡取消。", "activity.power_unused": "（未採用）", "activity.power_none": "沒有功率", "activity.saving": "儲存中…", "activity.saved": "已儲存", "activity.save_failed": "儲存失敗：{err}", "activity.load_failed": "讀取失敗：{err}", "activity.rebuilding": "已儲存，重新整理資料中…", "activity.tab.label": "檢視", "activity.tab.acts": "活動", "activity.tab.ach": "成就", "activity.f.ach": "有成就", "activity.help.f_ach": "只看越野跑和登山健行（「成就」分頁的紀錄）。名稱旁的標記：▲ 登頂的百岳；中級山、百岳是依最高點分級。", "activity.ach.help": "每一次越野跑、登山健行一筆，依最高點分級：百岳 ≥ 3000 m、中級山 1500–3000 m、郊山 < 1500 m。\n名稱直接點擊就能改；×N 是同一路線走過的次數，點它幫路線取名。\n上河比 = 移動時間 ÷ 上河地圖標準時間（填分鐘）。✕ 隱藏 = 不列入給登山團的清單。\n上方的搜尋和日期也套用在這裡。編輯只存在 app 裡，原始紀錄不會被改。", "activity.ach.kind": "類型", "activity.ach.kind_all": "越野＋登山", "activity.ach.kind.trail": "越野跑", "activity.ach.kind.hike": "登山健行", "activity.ach.cls.baiyue": "百岳", "activity.ach.cls.mid": "中級山", "activity.ach.cls.low": "郊山", "activity.ach.cls_intl.baiyue": "3000 m 以上", "activity.ach.cls_intl.mid": "1500–3000 m", "activity.ach.cls_intl.low": "1500 m 以下", "activity.ach.sep": "、", "activity.ach.badge_tip": "最高點 {m} m", "activity.ach.show_hidden": "含隱藏", "activity.ach.copy": "複製給登山團", "activity.ach.recopy": "再複製一次", "activity.ach.copied": "已複製到剪貼簿；可以在這裡調整後再複製", "activity.ach.copy_manual": "無法自動複製，請選取下面的文字複製", "activity.ach.top": "代表紀錄筆數", "activity.ach.top_n": "Top {n}", "activity.ach.top_all": "全部", "activity.ach.col.date": "日期", "activity.ach.col.name": "名稱", "activity.ach.col.cls": "等級", "activity.ach.col.dist": "距離 km", "activity.ach.col.climb": "爬升 m", "activity.ach.col.mv": "移動時間", "activity.ach.col.top": "最高點 m", "activity.ach.col.vam": "爬坡 m/h", "activity.ach.col.sh": "上河比", "activity.ach.help_vam": "最大一段爬坡的爬升速度（只計移動時間）。", "activity.ach.help_sh": "移動時間 ÷ 上河地圖標準時間。1.0 = 剛好上河時間；越小越快。", "activity.ach.kpi.peaks": "已登百岳", "activity.ach.kpi.peaks_u": "座", "activity.ach.kpi.count": "次數", "activity.ach.kpi.climb": "總爬升", "activity.ach.kpi.dist": "總距離", "activity.ach.kpi.top": "最高到達", "activity.ach.kpi.big": "單次最大爬升", "activity.ach.peaks_sum": "已登百岳 {n} 座（依海拔）", "activity.ach.peak_tip": "第一次：{d}", "activity.ach.peak_tip_n": "第一次：{d}，共 {n} 次", "activity.ach.computing": "整理成就中…（第一次要讀每一筆越野、登山紀錄，之後很快）", "activity.ach.none": "還沒有越野跑或登山健行紀錄", "activity.ach.rep_tip": "同一路線走過 {n} 次；點這裡幫路線取名", "activity.ach.days": "{n} 天", "activity.ach.day": "第 {n} 天 {d}", "activity.ach.days_toggle": "每天的分段", "activity.ach.rename": "點擊修改名稱", "activity.ach.vam_tip": "{gain} m 爬升 · 坡度 {grade}%", "activity.ach.sh_ph": "分鐘", "activity.ach.sh_label": "上河標準時間（分鐘）", "activity.ach.hide": "隱藏（不列入給登山團的清單）", "activity.ach.unhide": "取消隱藏", "activity.ach.route_prompt": "幫這條路線取名（之後每次走這條路線都會套用；留空 = 取消）："}};</script><script src="static/i18n/i18n.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="activity.title">活動列表</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --soft: #e8efff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  --baiyue: #b45309; --mid: #0f766e; --low: #64748b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+    --baiyue: #f59e0b; --mid: #2dd4bf; --low: #94a3b8;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --soft: #1c2a40; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+  --baiyue: #f59e0b; --mid: #2dd4bf; --low: #94a3b8;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; }
+button { padding: 3px 10px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--err); border-color: var(--err); }
+button:disabled { opacity: .45; cursor: default; }
+input, select { padding: 4px 7px; }
+textarea { padding: 5px 7px; width: 100%; resize: vertical; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.meta { color: var(--muted); font-size: 12.5px; }
+
+main { max-width: 1400px; margin: 0 auto; padding: 12px 16px 24px; }
+.head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+h1 { font-size: 17px; margin: 0; }
+h2 { font-size: 15px; margin: 0; }
+
+/* filters: one wrapping row */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.filters .q { flex: 1 1 220px; min-width: 0; }
+.filters .range { display: inline-flex; gap: 4px; align-items: center; color: var(--muted); }
+.filters .range input { width: 9.6em; }
+.filters label.ck { display: inline-flex; gap: 5px; align-items: center; font-size: 13px; white-space: nowrap; }
+.filters .reset { margin-left: auto; color: var(--muted); }
+@media (max-width: 699px) { .filters .range { flex: 1 1 100%; } .filters .range input { flex: 1; width: auto; min-width: 0; }
+  .filters select { flex: 1 1 30%; min-width: 0; } .filters .reset { margin-left: 0; } }
+
+/* table */
+.tablewrap { margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; background: var(--panel); position: sticky; top: 0; }
+th button.sort { border: 0; background: none; padding: 0; color: inherit; font: inherit; display: inline-flex; gap: 3px; align-items: center; }
+th button.sort::after { content: "↕"; opacity: .35; font-size: 11px; }
+th[aria-sort="ascending"] button.sort, th[aria-sort="descending"] button.sort { color: var(--accent); }
+th[aria-sort="ascending"] button.sort::after { content: "↑"; opacity: 1; }
+th[aria-sort="descending"] button.sort::after { content: "↓"; opacity: 1; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.num button.sort { flex-direction: row-reverse; }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+tbody tr.on td { background: var(--soft); }
+td.c-date small { color: var(--muted); margin-left: 4px; }
+td.c-name { white-space: normal; min-width: 12em; max-width: 26em; }
+td.c-name .nm { overflow-wrap: anywhere; }
+tr.excl td.c-name .nm { text-decoration: line-through; color: var(--muted); }
+td.c-name .sub { display: none; color: var(--muted); font-size: 12px; }
+td.c-act { text-align: right; }
+td.c-act .acts { display: inline-flex; gap: 4px; align-items: center; }
+.edit { padding: 2px 10px; font-weight: 600; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.edit:hover { background: var(--soft); }
+.iconlink { display: inline-grid; place-items: center; width: 28px; height: 26px; border-radius: 6px; color: var(--muted);
+  border: 1px solid transparent; }
+.iconlink:hover { color: var(--accent); border-color: var(--line); }
+.iconlink svg { width: 17px; height: 17px; }
+.iconlink.off { visibility: hidden; }
+.badge { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line);
+  color: var(--muted); white-space: nowrap; line-height: 1.6; }
+.badge.fill { border-style: dashed; }
+.badge.pn { color: #fff; background: var(--err); border-color: var(--err); }
+.badge.so { color: var(--warn); border-color: var(--warn); }
+.badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+.badge.ex { color: var(--err); border-color: var(--err); }
+.badge.man { background: var(--accent); border-color: var(--accent); color: #fff; }
+.empty { color: var(--muted); padding: 28px 6px; text-align: center; }
+.loading { color: var(--muted); padding: 14px 8px; }
+/* phone: date, name (with a one-line summary), distance, actions */
+@media (max-width: 699px) {
+  main { padding: 10px 10px 20px; }
+  .c-climb, .c-hr, .c-pw, .c-tss, .c-rpe, .c-src, .c-pain, .c-type, .c-dur { display: none; }
+  td.c-name { min-width: 0; max-width: none; }
+  td.c-name .sub { display: block; }
+  th, td { padding: 6px 6px; }
+  td.c-date small { display: block; margin: 0; }
+  td.c-date .yr { display: block; color: var(--muted); font-size: 11px; }
+}
+.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 8px 2px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.pager .cnt { margin-right: auto; }
+
+/* single-activity editor */
+dialog#ed { border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(680px, calc(100vw - 24px));
+  max-height: calc(100vh - 40px); background: var(--panel); color: var(--text); box-shadow: 0 16px 48px rgba(0,0,0,.28); }
+dialog#ed::backdrop { background: rgba(10,14,20,.45); }
+@media (max-width: 699px) { dialog#ed { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; border: 0; } }
+.edhead { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 10px 14px; display: flex; gap: 8px; align-items: flex-start; }
+.edhead .ttl { flex: 1; min-width: 0; }
+.edhead h2 { overflow-wrap: anywhere; }
+.edhead .x { border: 0; background: none; font-size: 20px; line-height: 1; padding: 2px 6px; color: var(--muted); }
+.edbody { padding: 4px 14px 14px; }
+.fld { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 4px 10px; align-items: start; padding: 8px 0; border-top: 1px solid var(--line); }
+.fld:first-child { border-top: 0; }
+.fld > .lab { color: var(--muted); font-size: 13px; padding-top: 4px; }
+.fld .ctl { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.fld .ctl input[type=text] { flex: 1 1 220px; min-width: 0; }
+.fld .why { grid-column: 2; font-size: 12px; color: var(--muted); }
+@media (max-width: 480px) { .fld { grid-template-columns: 1fr; } .fld .why { grid-column: 1; } }
+.chip { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; padding: 0 8px; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel)); white-space: nowrap; }
+.chip button { border: 0; background: none; padding: 0 0 0 2px; line-height: 1; color: var(--muted); }
+.msg { font-size: 12px; color: var(--muted); min-height: 1.3em; padding-top: 6px; }
+.msg.err { color: var(--err); }
+.msg.ok { color: var(--ok); }
+.qtip { display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; margin: 0 0 0 5px;
+  border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif;
+  cursor: help; vertical-align: 1px; }
+.qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
+.edlinks { display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; padding-top: 8px; }
+.edlinks a { color: var(--accent); }
+
+/* tabs: 活動 | 成就 (the old 成就 page, merged 2026-10-02) */
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+.tabs button { border: 0; border-radius: 0; padding: 4px 14px; color: var(--muted); background: none; }
+.tabs button + button { border-left: 1px solid var(--line); }
+.tabs button[aria-selected="true"] { background: var(--soft); color: var(--accent); font-weight: 600; }
+body.tab-ach [data-acts-only], body.tab-acts [data-ach-only] { display: none !important; }
+.badge.cls-baiyue, .cls.cls-baiyue { color: var(--baiyue); border-color: color-mix(in srgb, var(--baiyue) 55%, var(--line)); }
+.badge.cls-mid, .cls.cls-mid { color: var(--mid); border-color: color-mix(in srgb, var(--mid) 55%, var(--line)); }
+.cls.cls-low { color: var(--low); }
+.cls { display: inline-block; font-size: 11.5px; padding: 0 7px; border-radius: 9px; border: 1px solid var(--line); line-height: 1.6; }
+.badge.pk { color: var(--baiyue); border-color: color-mix(in srgb, var(--baiyue) 55%, var(--line)); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin-top: 10px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.kpi .k { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .v { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.kpi .v small { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+details.peaks { margin-top: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+details.peaks summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+details.peaks .pk { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0 2px; }
+details.peaks .pk span { font-size: 12.5px; padding: 0 8px; border-radius: 10px; color: var(--baiyue);
+  background: color-mix(in srgb, var(--baiyue) 13%, transparent); white-space: nowrap; }
+.achbar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-top: 8px; }
+.achbar .cnt { margin-left: auto; color: var(--muted); font-size: 13px; }
+.cchip { padding: 1px 10px; border-radius: 12px; font-size: 12.5px; color: var(--muted); }
+.cchip[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); color: var(--accent); }
+#a-tbody .nm[contenteditable] { cursor: text; border-bottom: 1px dashed transparent; }
+#a-tbody .nm[contenteditable]:hover { border-bottom-color: var(--muted); }
+#a-tbody .pkl { display: block; color: var(--baiyue); font-size: 12px; white-space: normal; }
+#a-tbody .kd { display: block; color: var(--muted); font-size: 12px; }
+#a-tbody .rep { border: 0; background: none; padding: 0 2px; font-size: 11px; color: var(--accent); }
+#a-tbody .tg { border: 0; background: none; padding: 0 4px 0 0; color: var(--muted); width: 1.3em; }
+#a-tbody tr.hid td { opacity: .45; }
+#a-tbody tr.day td { background: var(--bg); color: var(--muted); font-size: 12px; }
+#a-tbody input.sh { width: 4.6em; padding: 1px 4px; text-align: right; }
+#a-tbody .x { border: 0; background: none; padding: 0 4px; color: var(--muted); }
+#a-tbody .clsm { display: none; }
+@media (max-width: 699px) {
+  .c-mv, .c-vam, .c-sh, .c-top, .c-cls { display: none; }
+  #a-tbody .clsm { display: inline-block; margin-left: 4px; }
+  .achbar .cnt { margin-left: 0; flex: 1 1 100%; }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .kpi { padding: 5px 8px; }
+  .kpi .v { font-size: 16px; }
+}
+dialog#exp { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text);
+  width: min(680px, calc(100vw - 24px)); }
+dialog#exp::backdrop { background: rgba(10,14,20,.45); }
+dialog#exp textarea { height: 300px; font: 12.5px/1.5 ui-monospace, Consolas, monospace; background: var(--bg); }
+dialog#exp .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+dialog#exp .row .sp { flex: 1; }
+</style>
+</head>
+<body class="tab-acts">
+<script src="static/shell.js" data-page="activity"></script>
+<main>
+  <div class="head">
+    <h1><span data-i18n="activity.title">活動列表</span><button type="button" class="qtip" aria-label="?"
+      data-i18n-attr="data-tip:activity.help.page" data-tip="所有活動：上方搜尋、篩選，點欄位標題排序。
+「編輯」改單筆活動的名稱、類型、努力度、疼痛、背負、標籤、地形或排除；圖表圖示在「圖表分析」打開這筆。
+「成就」分頁：越野跑和登山健行的紀錄、已登百岳，以及複製給登山團的清單。
+只改 app 裡的資料，原始 FIT 檔不會被改。">?</button></h1>
+    <div class="tabs" role="tablist" data-i18n-attr="aria-label:activity.tab.label" aria-label="檢視">
+      <button type="button" role="tab" id="tab-acts" data-tab="acts" aria-selected="true" aria-controls="acts-view" data-i18n="activity.tab.acts">活動</button>
+      <button type="button" role="tab" id="tab-ach" data-tab="ach" aria-selected="false" aria-controls="ach" data-i18n="activity.tab.ach">成就</button>
+    </div>
+    <span class="meta" id="hdr"></span>
+    <span class="meta" id="autost" role="status" aria-live="polite" hidden></span>
+  </div>
+  <div class="filters" role="search">
+    <input type="search" id="f-q" class="q" data-i18n-attr="placeholder:activity.f.q;aria-label:activity.f.q_label" placeholder="搜尋名稱、標籤、備註、日期…" aria-label="搜尋">
+    <span class="range"><input type="date" id="f-from" data-i18n-attr="aria-label:activity.f.from" aria-label="開始日期">–<input type="date" id="f-to" data-i18n-attr="aria-label:activity.f.to" aria-label="結束日期"></span>
+    <select id="f-type" data-acts-only data-i18n-attr="aria-label:activity.f.type" aria-label="運動類型"></select>
+    <select id="f-src" data-acts-only data-i18n-attr="aria-label:activity.f.src" aria-label="資料來源"></select>
+    <label class="ck" data-pain-only data-acts-only hidden><input type="checkbox" id="f-pain"><span data-i18n="activity.f.pain">只看有疼痛</span></label>
+    <label class="ck" data-acts-only><input type="checkbox" id="f-ach"><span data-i18n="activity.f.ach">有成就</span></label><button type="button" class="qtip" aria-label="?"
+      data-acts-only data-i18n-attr="data-tip:activity.help.f_ach" data-tip="只看越野跑和登山健行（「成就」分頁的紀錄）。名稱旁的標記：▲ 登頂的百岳；中級山、百岳是依最高點分級。" style="margin-left:-4px">?</button>
+    <button type="button" class="reset" id="f-reset" data-i18n="activity.f.reset">清除篩選</button>
+  </div>
+  <div id="acts-view" role="tabpanel" aria-labelledby="tab-acts" data-acts-only>
+    <div class="tablewrap">
+      <table id="tbl">
+        <thead><tr id="thead"></tr></thead>
+        <tbody id="tbody"><tr><td class="loading" colspan="13" data-i18n="activity.loading">讀取中…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager" id="pager"></div>
+  </div>
+  <section id="ach" role="tabpanel" aria-labelledby="tab-ach" data-ach-only>
+    <div class="kpis" id="a-kpis"></div>
+    <details class="peaks" id="a-peaks" open hidden><summary></summary><div class="pk"></div></details>
+    <div class="achbar">
+      <select id="a-kind" data-i18n-attr="aria-label:activity.ach.kind" aria-label="類型"></select>
+      <span id="a-cls"></span>
+      <label class="ck"><input type="checkbox" id="a-hidden"><span data-i18n="activity.ach.show_hidden">含隱藏</span></label>
+      <button type="button" class="primary" id="a-copy" data-i18n="activity.ach.copy">複製給登山團</button>
+      <button type="button" class="qtip" aria-label="?" data-i18n-attr="data-tip:activity.ach.help" data-tip="每一次越野跑、登山健行一筆，依最高點分級：百岳 ≥ 3000 m、中級山 1500–3000 m、郊山 &lt; 1500 m。
+名稱直接點擊就能改；×N 是同一路線走過的次數，點它幫路線取名。
+上河比 = 移動時間 ÷ 上河地圖標準時間（填分鐘）。✕ 隱藏 = 不列入給登山團的清單。
+上方的搜尋和日期也套用在這裡。編輯只存在 app 裡，原始紀錄不會被改。">?</button>
+      <span class="cnt" id="a-cnt"></span>
+    </div>
+    <div class="tablewrap">
+      <table id="a-tbl">
+        <thead><tr id="a-thead"></tr></thead>
+        <tbody id="a-tbody"><tr><td class="loading" colspan="11" data-i18n="activity.loading">讀取中…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<dialog id="exp" aria-labelledby="exp-title">
+  <div class="row"><b id="exp-title" data-i18n="activity.ach.copy">複製給登山團</b><span class="sp"></span>
+    <select id="exp-limit" data-i18n-attr="aria-label:activity.ach.top" aria-label="代表紀錄筆數"></select></div>
+  <div class="meta" id="exp-msg"></div>
+  <textarea id="exp-text" data-i18n-attr="aria-label:activity.ach.copy" aria-label="複製給登山團"></textarea>
+  <div class="row"><span class="sp"></span><button type="button" id="exp-recopy" data-i18n="activity.ach.recopy">再複製一次</button>
+    <button type="button" id="exp-close" data-i18n="activity.close">關閉</button></div>
+</dialog>
+<dialog id="ed" aria-labelledby="ed-title"></dialog>
+<datalist id="tag-list"></datalist>
+<script src="static/painpicker.js"></script>
+<script>
+const API = "/api/v1/wko5";
+const T = (k, p) => (window.I18N ? I18N.t("activity." + k, p) : k);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const hms = (s) => { if (s == null) return "—"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}` : `${m}:${String(s % 60).padStart(2, "0")}`; };
+const num = (v, d = 0) => (v == null || Number.isNaN(+v) ? "—" : (+v).toFixed(d));
+const SPORTS = ["running", "trail running", "indoor running", "treadmill running", "hiking", "mountaineering", "walking", "cycling", "swimming", "strength", "strength training", "generic"];
+const sportName = (a) => { const k = a.sport_type || a.sport || ""; return SPORTS.includes(k) ? T("sport." + k) : k; };
+const SRC_SHORT = { coros: "COROS", tp: "TP", wko5: "WKO5" };
+const PREF = "activitylist.filters", PER = 50;
+// usePower: settings 「使用功率」 (off = no 平均功率 column, no 功率來源 row)
+// pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 column / filter / row)
+// ach: the 成就 records (GET /api/v1/achievements, loaded once; null until then) — the 成就 tab and
+// the per-activity badges / 「有成就」 filter all read this one copy
+const S = { acts: [], stats: {}, auto: null, types: {}, efforts: {}, usePower: true, pain: null,
+  sort: { k: "date", dir: -1 }, page: 0, sel: null, detail: null, merge: null, originLabels: {},
+  tab: "acts", ach: null, achErr: null, achMin: new Map(), actMin: new Map(),
+  asort: { k: "date", dir: -1 }, aopen: new Set(), acls: new Set(["baiyue", "mid", "low"]) };
+let TW = true;                 // 地區 (engine/region.py): 百岳 (peaks, the 百岳 count) only in Taiwan
+const ACH = "/api/v1/achievements";
+const CLS_IDS = ["baiyue", "mid", "low"];
+// an activity <-> its 成就 record: the same local start minute, else the nearest within ±3 min
+// (activity_key.MATCH_TOL_MIN — the record may come from another data source's file)
+const minOf = (k) => { const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/.exec(k || "");
+  return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) / 60000 : null; };
+function nearest(map, key) {
+  const m = minOf(key);
+  if (m == null) return null;
+  for (const d of [0, -1, 1, -2, 2, -3, 3]) { const x = map.get(m + d); if (x) return x; }
+  return null;
+}
+const achOf = (a) => nearest(S.achMin, a.key);
+const actOfAch = (r) => nearest(S.actMin, r.key);
+const clsName = (id) => T((TW ? "ach.cls." : "ach.cls_intl.") + id);
+const peaksOf = (r) => (TW && r ? r.peaks || [] : []);
+const hm = (s) => { if (!s) return "—"; s = Math.round(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}`; };
+const big = (v) => (v == null ? "—" : Math.round(v).toLocaleString());
+
+async function j(url, opt) {
+  const r = await fetch(url, opt);
+  let body = null;
+  try { body = await r.json(); } catch {}
+  if (!r.ok) throw new Error((body && (body.detail || body.error)) || `HTTP ${r.status}`);
+  return body;
+}
+const send = (url, method, data) => j(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+const title = (a) => a.name || a.title_original || a.label;
+const autoOf = (a) => (S.auto ? S.auto[a.key] || null : null);
+const actOf = (k) => S.acts.find((a) => a.key === k);
+const viewerHref = (a) => a.index == null ? null
+  : `/api/v1/wko5/viewer?${new URLSearchParams({ workout: a.index, label: `${a.start.slice(0, 10)} ${title(a)}` })}`;
+
+// ---- columns ----------------------------------------------------------------
+const COLS = [
+  { k: "date", cls: "c-date", get: (a) => a.start },
+  { k: "name", cls: "c-name", get: (a) => title(a).toLowerCase(), asc: true },
+  { k: "type", cls: "c-type", get: (a) => sportName(a), asc: true },
+  { k: "dur", cls: "c-dur num", get: (a) => a.duration },
+  { k: "dist", cls: "c-dist num", get: (a) => a.distance },
+  { k: "climb", cls: "c-climb num", get: (a) => a.climbing },
+  { k: "hr", cls: "c-hr num", get: (a) => S.stats[a.key]?.avg_hr },
+  { k: "pw", cls: "c-pw num", get: (a) => S.stats[a.key]?.avg_power, power: true },
+  { k: "tss", cls: "c-tss num", get: (a) => a.tss },
+  { k: "rpe", cls: "c-rpe num", get: (a) => a.rpe },
+  { k: "src", cls: "c-src", get: (a) => a.origin || "", asc: true },
+  { k: "pain", cls: "c-pain", get: (a) => a.pain, pain: true },
+];
+const cols = () => COLS.filter((c) => (!c.power || S.usePower) && (!c.pain || S.pain));
+
+function renderHead() {
+  $("thead").innerHTML = cols().map((c) => {
+    const s = S.sort.k === c.k ? (S.sort.dir > 0 ? "ascending" : "descending") : "none";
+    return `<th class="${c.cls}" aria-sort="${s}" scope="col"><button type="button" class="sort" data-sort="${c.k}">${esc(T("col." + c.k))}</button></th>`;
+  }).join("") + `<th class="c-act" scope="col"><span class="sr" hidden>${esc(T("col.actions"))}</span></th>`;
+}
+$("thead").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-sort]");
+  if (!b) return;
+  const c = COLS.find((x) => x.k === b.dataset.sort);
+  S.sort = S.sort.k === c.k ? { k: c.k, dir: -S.sort.dir } : { k: c.k, dir: c.asc ? 1 : -1 };
+  S.page = 0; savePrefs(); render();
+});
+
+// ---- filters ----------------------------------------------------------------
+const FIDS = ["f-q", "f-from", "f-to", "f-type", "f-src"];
+function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF) || "{}"); } catch { return {}; } }
+function savePrefs() {
+  const p = { sort: S.sort, pain: $("f-pain").checked, ach: $("f-ach").checked,
+    asort: S.asort, akind: $("a-kind").value, acls: [...S.acls], ahid: $("a-hidden").checked };
+  for (const k of FIDS) p[k] = $(k).value;
+  try { localStorage.setItem(PREF, JSON.stringify(p)); } catch {}
+}
+function restorePrefs() {
+  const p = loadPrefs();
+  for (const k of FIDS) if (p[k] && $(k)) { $(k).value = p[k]; if ($(k).value !== p[k]) $(k).value = ""; }
+  $("f-pain").checked = !!p.pain;
+  $("f-ach").checked = !!p.ach;
+  if (p.sort && COLS.some((c) => c.k === p.sort.k)) S.sort = { k: p.sort.k, dir: p.sort.dir > 0 ? 1 : -1 };
+  if (p.asort && ACOLS.some((c) => c.k === p.asort.k && c.get)) S.asort = { k: p.asort.k, dir: p.asort.dir > 0 ? 1 : -1 };
+  if (p.akind) { $("a-kind").value = p.akind; if ($("a-kind").value !== p.akind) $("a-kind").value = ""; }
+  if (Array.isArray(p.acls)) S.acls = new Set(p.acls.filter((c) => CLS_IDS.includes(c)));
+  $("a-hidden").checked = !!p.ahid;
+}
+function fillFilterOptions() {
+  const sports = [...new Set(S.acts.map((a) => a.sport_type || a.sport).filter(Boolean))]
+    .sort((x, y) => (SPORTS.indexOf(x) + 1 || 99) - (SPORTS.indexOf(y) + 1 || 99));
+  const keep = (id, html) => { const v = $(id).value; $(id).innerHTML = html; $(id).value = v; if ($(id).value !== v) $(id).value = ""; };
+  keep("f-type", `<option value="">${esc(T("f.type_all"))}</option>` +
+    sports.map((s) => `<option value="${esc(s)}">${esc(sportName({ sport_type: s }))}</option>`).join(""));
+  const srcs = [...new Set(S.acts.map((a) => a.origin).filter(Boolean))];
+  keep("f-src", `<option value="">${esc(T("f.src_all"))}</option>` +
+    srcs.map((s) => `<option value="${esc(s)}">${esc(SRC_SHORT[s] || s)}</option>`).join(""));
+  $("f-src").hidden = srcs.length < 2;
+  const tags = [...new Set(S.acts.flatMap((a) => a.tags || []))].sort();
+  $("tag-list").innerHTML = tags.map((t) => `<option value="${esc(t)}">`).join("");
+}
+function filtered() {
+  const from = $("f-from").value, to = $("f-to").value, ty = $("f-type").value, src = $("f-src").value,
+    pain = S.pain && $("f-pain").checked, q = $("f-q").value.trim().toLowerCase(), achOnly = $("f-ach").checked;
+  return S.acts.filter((a) => {
+    const d = a.start.slice(0, 10);
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    if (ty && (a.sport_type || a.sport) !== ty) return false;
+    if (src && a.origin !== src) return false;
+    if (pain && !(a.pain >= 1)) return false;
+    const r = (achOnly || q) ? achOf(a) : null;
+    if (achOnly && !(r && !r.hidden)) return false;
+    if (q) {
+      const hay = [title(a), a.title_original, a.note, ...(a.tags || []), d, sportName(a),
+        r ? r.name : "", ...peaksOf(r).map((p) => p.name)].join(" ").toLowerCase();
+      if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
+    }
+    return true;
+  });
+}
+function sorted(rows) {
+  const c = COLS.find((x) => x.k === S.sort.k) || COLS[0], dir = S.sort.dir;
+  return rows.map((a) => [a, c.get(a)]).sort(([a, x], [b, y]) => {
+    const nx = x == null || x === "", ny = y == null || y === "";
+    if (nx || ny) return nx === ny ? (a.start < b.start ? 1 : -1) : nx ? 1 : -1;     // blanks last, either way
+    return (x < y ? -1 : x > y ? 1 : 0) * dir || (a.start < b.start ? 1 : -1);
+  }).map(([a]) => a);
+}
+const refresh = () => { render(); renderAch(); };
+for (const id of ["f-from", "f-to", "f-type", "f-src", "f-pain", "f-ach"]) $(id).addEventListener("change", () => { S.page = 0; savePrefs(); refresh(); });
+let qTimer = null;
+$("f-q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { S.page = 0; savePrefs(); refresh(); }, 120); });
+$("f-reset").addEventListener("click", () => {
+  for (const k of FIDS) $(k).value = "";
+  $("f-pain").checked = false; $("f-ach").checked = false; S.page = 0; savePrefs(); refresh();
+});
+
+// ---- table ------------------------------------------------------------------
+const CHART_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="m7.5 14.5 3.5-4 3 2.5 5-6"/></svg>`;
+function srcBadge(a) {
+  if (!a.origin) return "";
+  const fill = S.merge && S.merge.primary && ({ coros: "coros", trainingpeaks: "tp" })[S.merge.primary] !== a.origin && a.origin !== "wko5";
+  const tip = T("src_tip", { src: S.originLabels[a.origin] || a.origin }) + (fill ? T("src_fill") : "");
+  return `<span class="badge${fill ? " fill" : ""}" title="${esc(tip)}">${esc(SRC_SHORT[a.origin] || a.origin)}</span>`;
+}
+function painBadge(a) {
+  if (!S.pain || a.pain == null) return "";
+  const area = a.pain_area ? (S.pain.areas || []).find((x) => x.key === a.pain_area)?.label || "" : "";
+  const cls = a.pain >= 2 ? "pn" : a.pain === 1 ? "so" : "ok";
+  return `<span class="badge ${cls}" title="${esc(T("col.pain"))}">${esc(T("pain." + a.pain))}${area ? "・" + esc(area) : ""}</span>`;
+}
+function cell(c, a) {
+  const st = S.stats[a.key] || {};
+  switch (c.k) {
+    case "date": return `<span class="yr">${esc(a.start.slice(0, 5))}</span>${esc(a.start.slice(5, 10))}<small>${esc(a.start.slice(11, 16))}</small>`;
+    case "name": {
+      const sub = [sportName(a), hms(a.duration), a.climbing != null ? `↑${Math.round(a.climbing)} m` : ""].filter(Boolean).join(" · ");
+      return `<span class="nm">${esc(title(a))}</span>${a.excluded ? ` <span class="badge ex">${esc(T("excluded"))}</span>` : ""}${achBadge(a)}` +
+        `<span class="sub">${esc(sub)} ${painBadge(a)}</span>`;
+    }
+    case "type": return esc(sportName(a));
+    case "dur": return hms(a.duration);
+    case "dist": return num(a.distance, 1);
+    case "climb": return a.climbing != null ? Math.round(a.climbing) : "—";
+    case "hr": return S.statsReady ? num(st.avg_hr) : "…";
+    case "pw": return S.statsReady ? num(st.avg_power) : "…";
+    case "tss": return num(a.tss);
+    case "rpe": return a.rpe != null ? `${+a.rpe}` : "—";
+    case "src": return srcBadge(a);
+    case "pain": return painBadge(a);
+  }
+  return "";
+}
+function render() {
+  renderHead();
+  const rows = sorted(filtered()), n = rows.length, pages = Math.max(1, Math.ceil(n / PER));
+  S.page = Math.min(S.page, pages - 1);
+  const cs = cols();
+  if (!n) {
+    $("tbody").innerHTML = `<tr><td class="empty" colspan="${cs.length + 1}">${esc(T("empty"))}</td></tr>`;
+  } else {
+    $("tbody").innerHTML = rows.slice(S.page * PER, S.page * PER + PER).map((a) => {
+      const href = viewerHref(a);
+      return `<tr data-k="${esc(a.key)}" class="${a.excluded ? "excl" : ""} ${a.key === S.sel ? "on" : ""}">` +
+        cs.map((c) => `<td class="${c.cls}">${cell(c, a)}</td>`).join("") +
+        `<td class="c-act"><span class="acts"><button type="button" class="edit" data-edit="${esc(a.key)}" aria-label="${esc(T("edit_label", { name: title(a) }))}">${esc(T("edit"))}</button>` +
+        `<a class="iconlink${href ? "" : " off"}" ${href ? `href="${esc(href)}"` : 'aria-hidden="true" tabindex="-1"'} title="${esc(T("open_chart"))}" aria-label="${esc(T("open_chart"))}">${CHART_ICON}</a></span></td></tr>`;
+    }).join("");
+  }
+  $("pager").innerHTML = `<span class="cnt">${esc(T("count", { n, total: S.acts.length }))}</span>` + (pages > 1
+    ? `<button type="button" data-pg="-1" ${S.page ? "" : "disabled"} aria-label="${esc(T("prev"))}">‹</button>` +
+      `<span>${esc(T("page", { p: S.page + 1, n: pages }))}</span>` +
+      `<button type="button" data-pg="1" ${S.page < pages - 1 ? "" : "disabled"} aria-label="${esc(T("next"))}">›</button>` : "");
+}
+$("pager").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-pg]");
+  if (!b) return;
+  S.page += +b.dataset.pg; render();
+  $("tbl").scrollIntoView({ block: "start" });
+});
+$("tbody").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-edit]");
+  if (b) openEditor(b.dataset.edit);
+});
+
+async function loadList() {
+  const r = await j(`${API}/activities`);
+  S.acts = r.activities; S.types = r.types; S.efforts = r.efforts;
+  S.merge = r.merge || null; S.originLabels = r.origin_labels || {};
+  S.actMin = new Map();
+  for (const a of S.acts) { const m = minOf(a.key); if (m != null && (!S.actMin.has(m) || a.index != null)) S.actMin.set(m, a); }
+  const src = { synced: T("source.synced"), wko5: "WKO5", coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source;
+  const prim = S.merge && S.merge.primary ? T("source.primary", { src: ({ coros: "COROS", trainingpeaks: "TrainingPeaks" })[S.merge.primary] || S.merge.primary }) : "";
+  $("hdr").textContent = T("source.line", { src: src + prim, n: S.acts.length });
+  fillFilterOptions();
+  render();
+}
+async function loadStats() {
+  try { S.stats = await j(`${API}/activities/stats`); } catch { S.stats = {}; }
+  S.statsReady = true; render();
+}
+// the auto type / effort is computed in the background on the server (minutes on a
+// first open): the reply carries what is known so far and the progress; poll until ready
+async function loadAuto() {
+  const gen = S.autoGen = (S.autoGen || 0) + 1;
+  let r = null;
+  try { r = await j(`${API}/activities/auto`); } catch { r = { state: "error", auto: {} }; }
+  if (gen !== S.autoGen) return;                          // a newer request took over (rebuild)
+  S.auto = r.auto || {}; S.autoState = r.state;
+  const st = $("autost");
+  if (r.state === "computing") {
+    st.hidden = false;
+    st.textContent = T("auto_progress", { done: r.n_done || 0, total: r.n_total || 0 });
+    setTimeout(() => { if (gen === S.autoGen) loadAuto(); }, 1500);
+  } else {
+    st.hidden = r.state !== "error";
+    st.textContent = r.state === "error" ? T("auto_failed") : "";
+  }
+  if (S.sel && $("ed").open) renderEditor();
+}
+
+// ---- 「?」 help: hover shows it, a tap / click pins it (touch has no hover) -----------
+const qt = (tip) => `<button type="button" class="qtip" aria-label="?" data-tip="${esc(tip)}">?</button>`;
+const QTIP = { el: null, pinned: null };
+function qtipShow(btn) {
+  qtipHide();
+  const d = document.createElement("div");
+  d.className = "qtip-pop"; d.textContent = btn.dataset.tip;
+  (btn.closest("dialog[open]") || document.body).appendChild(d);
+  const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  QTIP.el = d;
+}
+function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
+document.addEventListener("mouseover", (e) => { const b = e.target.closest?.(".qtip"); if (b && !QTIP.pinned) qtipShow(b); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".qtip");
+  if (b && QTIP.pinned !== b) { QTIP.pinned = b; qtipShow(b); e.stopPropagation(); e.preventDefault(); return; }
+  QTIP.pinned = null; qtipHide();
+}, true);
+addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(QTIP.pinned); }, { passive: true, capture: true });
+
+// ---- the single-activity editor (a dialog) ---------------------------------------
+const badge = (manual, why) => manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
+  : `<span class="badge" title="${esc(why || T("auto_tip"))}">${esc(T("auto"))}</span>`;
+function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
+
+async function openEditor(key) {
+  if (!actOf(key)) return;
+  S.sel = key; S.detail = null;
+  document.querySelectorAll("#tbody tr").forEach((r) => r.classList.toggle("on", r.dataset.k === key));
+  try { history.replaceState(null, "", `${location.pathname}?key=${encodeURIComponent(key)}${location.hash}`); } catch {}
+  renderEditor();
+  if (!$("ed").open) $("ed").showModal();
+  const a = actOf(key);
+  if (a && a.index != null) {
+    try {
+      const d = await j(`${API}/workouts/${a.index}/activity`);
+      if (S.sel === key) { S.detail = d; renderEditor(); }
+    } catch (e) { if (S.sel === key) setMsg(T("load_failed", { err: e.message }), "err"); }
+  }
+}
+$("ed").addEventListener("close", () => {
+  S.sel = null; qtipHide(); QTIP.pinned = null;
+  document.querySelectorAll("#tbody tr.on").forEach((r) => r.classList.remove("on"));
+  try { history.replaceState(null, "", location.pathname + location.hash); } catch {}
+});
+$("ed").addEventListener("click", (e) => {
+  if (e.target === $("ed") || e.target.closest("[data-close]")) $("ed").close();   // the backdrop or ×
+});
+
+function renderEditor() {
+  const a = actOf(S.sel);
+  if (!a) return;
+  const d = S.detail, au = autoOf(a);
+  const tAuto = d ? d.activity_type_auto : au?.activity_type, tWhy = d ? d.activity_type_reason : au?.activity_type_reason;
+  const eAuto = d ? d.effort_auto : au?.effort, eWhy = d ? d.effort_reason : au?.effort_reason;
+  const pending = !d && !au && S.autoState !== "ready" && S.autoState !== "error";
+  const sel = (f, opts, cur, autoV) => `<select data-f="${f}" aria-label="${esc(T("f_" + f))}">` +
+    `<option value="" ${cur ? "" : "selected"}>${esc(T("auto_opt", { v: autoV ? opts[autoV] : pending ? T("computing") : "—" }))}</option>` +
+    Object.entries(opts).map(([k, v]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(v)}</option>`).join("") + `</select>`;
+  const rc = d?.recorded || (a.rpe != null || a.feel != null ? { rpe: a.rpe, feel: a.feel } : null);
+  const recTxt = rc && (rc.rpe != null || rc.feel != null)
+    ? T("recorded", { v: [rc.rpe != null ? `RPE ${rc.rpe}` : "", rc.feel_label ? T("feel", { v: rc.feel_label }) : ""].filter(Boolean).join("、") }) : "";
+  const tr = a.terrain || {};
+  const terrainCtl = tr.editable
+    ? `<select data-terrain="1" aria-label="${esc(T("f_terrain"))}"><option value="auto" ${tr.overridden ? "" : "selected"}>${esc(T("auto_opt", { v: tr.overridden ? T("terrain.rule") : T("terrain." + (tr.value === "trail" ? "trail" : "road")) }))}</option>
+        <option value="road" ${tr.overridden && tr.value === "road" ? "selected" : ""}>${esc(T("terrain.road"))}</option>
+        <option value="trail" ${tr.overridden && tr.value === "trail" ? "selected" : ""}>${esc(T("terrain.trail"))}</option></select>${badge(tr.overridden)}`
+    : `<span>${esc(T("terrain." + (tr.value === "trail" ? "trail" : "road")))}</span><span class="meta">（${esc(tr.why || T("terrain.locked"))}）</span>`;
+  const x = a.excluded, ov = a.user_exclusion, flagged = d?.exclusion_state?.flagged;
+  const exBtn = (v, t, cls = "") => `<button type="button" data-ex="${v}" class="${cls}">${esc(t)}</button>`;
+  const exCtl = x
+    ? `<span class="badge ex">${esc(T("excluded"))}</span><span>${esc(x.reason || x.label || "")}</span>` +
+      (x.auto ? exBtn("keep", T("ex.keep")) : exBtn("auto", T("ex.unmanual")))
+    : ov === "keep"
+      ? `<span>${esc(T("ex.kept"))}${flagged ? esc(T("ex.flagged", { v: flagged })) : ""}</span>${exBtn("auto", T("ex.back_auto"))}`
+      : `<span>${esc(T("ex.none"))}</span>${exBtn("exclude", T("ex.exclude"), "danger")}`;
+  const p = d?.power, pk = d?.pack;
+  const href = viewerHref(a);
+  $("ed").innerHTML = `
+    <div class="edhead"><div class="ttl"><h2 id="ed-title">${esc(title(a))} ${srcBadge(a)}</h2>
+      <div class="meta">${esc(a.start.slice(0, 16).replace("T", " "))} · ${esc(sportName(a))} · ${hms(a.duration)} · ${a.distance != null ? num(a.distance, 2) + " km" : "—"}${a.climbing != null ? ` · ↑${Math.round(a.climbing)} m` : ""}${qt(T("help.editor"))}</div></div>
+      <button type="button" class="x" data-close autofocus aria-label="${esc(T("close"))}">×</button></div>
+    <div class="edbody">
+    <div class="fld"><span class="lab">${esc(T("f_name"))}${qt(T("help.name"))}</span>
+      <div class="ctl"><input type="text" data-name maxlength="200" value="${esc(a.name || "")}" placeholder="${esc(a.title_original || a.label)}" aria-label="${esc(T("f_name"))}">
+        ${a.name ? `<button type="button" data-name-clear>${esc(T("name_reset"))}</button>` : ""}${badge(!!a.name, T("name_orig_tip"))}</div>
+      ${a.name ? `<div class="why">${esc(T("name_orig", { v: a.title_original || a.label }))}</div>` : ""}</div>
+    <div class="fld"><span class="lab">${esc(T("f_activity_type"))}</span>
+      <div class="ctl">${sel("activity_type", S.types, a.user_type, tAuto)}${badge(!!a.user_type, tWhy)}</div>
+      <div class="why">${a.user_type ? esc(T("auto_was", { v: S.types[tAuto] || "—", why: tWhy || "" })) : esc(tWhy || (pending ? T("computing") : ""))}</div></div>
+    <div class="fld"><span class="lab">${esc(T("f_effort"))}${qt(T("help.effort"))}</span>
+      <div class="ctl">${sel("effort", S.efforts, a.user_effort, eAuto)}${badge(!!a.user_effort, eWhy)}</div>
+      <div class="why">${a.user_effort ? esc(T("auto_was", { v: S.efforts[eAuto] || "—", why: eWhy || "" })) : esc(eWhy || (pending ? T("computing") : ""))}${recTxt ? `<br>${esc(recTxt)}` : ""}</div></div>
+    ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"))}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
+    ${a.index != null ? `<div class="fld"><span class="lab">${esc(T("f_pack"))}${qt(T("help.pack"))}</span>
+      <div class="ctl">${!d ? esc(T("loading")) : `<input type="number" data-pack min="0" max="40" step="0.5" inputmode="decimal" style="width:6em" value="${pk?.pack_kg ?? ""}" placeholder="—" aria-label="${esc(T("f_pack"))}"> kg`}</div></div>` : ""}
+    <div class="fld"><span class="lab">${esc(T("f_tags"))}${qt(T("help.tags"))}</span>
+      <div class="ctl">${(a.tags || []).map((t) => `<span class="chip">${esc(t)}<button type="button" data-tag-rm="${esc(t)}" aria-label="${esc(T("tag_rm", { v: t }))}">×</button></span>`).join("")}
+        <input type="text" data-tag-in list="tag-list" placeholder="${esc(T("tag_add_ph"))}" style="width:10em;flex:0 1 10em" aria-label="${esc(T("tag_add"))}"></div></div>
+    <div class="fld"><span class="lab">${esc(T("f_note"))}</span>
+      <div class="ctl" style="display:block"><textarea data-note rows="3" aria-label="${esc(T("f_note"))}">${esc(a.note || "")}</textarea></div></div>
+    <div class="fld"><span class="lab">${esc(T("f_terrain"))}${qt(T("help.terrain"))}</span><div class="ctl">${terrainCtl}</div></div>
+    <div class="fld"><span class="lab">${esc(T("f_exclude"))}${qt(T("help.exclude"))}</span><div class="ctl">${exCtl}</div></div>
+    ${!S.usePower ? "" : `<div class="fld"><span class="lab">${esc(T("f_power"))}${qt(T("help.power"))}</span><div class="ctl">${a.index == null ? "—" : !d ? esc(T("loading"))
+      : p && p.source && p.source !== "none" ? esc(p.label || p.source) + (p.used || /未採用|not used/i.test(p.label || "") ? "" : esc(T("power_unused"))) : esc(T("power_none"))}</div></div>`}
+    ${href ? `<div class="edlinks"><a href="${esc(href)}">${esc(T("open_chart"))} →</a></div>` : ""}
+    <div class="msg" id="msg" role="status"></div></div>`;
+  if ($("ed").open && !$("ed").contains(document.activeElement)) $("ed").querySelector("[data-close]").focus();   // keep focus in the dialog
+  wireEditor(a);
+}
+
+function painState(a) {
+  const ps = S.detail && S.detail.workout === a.index ? S.detail.pain_state : null;
+  return { pain: a.pain ?? null, pain_area: a.pain_area ?? null, injury: ps?.injury || null, reentry: ps?.reentry || null };
+}
+function patchLocal(a, r) {
+  // r: the single-activity JSON (PATCH /workouts/{i}/activity)
+  if ("activity_type_overridden" in r) a.user_type = r.activity_type_overridden ? r.activity_type : null;
+  if ("effort_overridden" in r) a.user_effort = r.effort_overridden ? r.effort : null;
+  for (const k of ["note", "name", "tags"]) if (k in r) a[k] = r[k];
+  if (r.pain_state) { a.pain = r.pain_state.pain; a.pain_area = r.pain_state.pain_area; a.injury_id = r.pain_state.injury?.id ?? null; }
+}
+// every edit is a mark in the app's own data (activity_tags, keyed by start time; the pack in
+// racepower_hike_meta.json) — the FIT / TP / WKO5 files are never written
+async function saveFields(a, patch) {
+  setMsg(T("saving"));
+  try {
+    if (a.index != null) {
+      const r = await send(`${API}/workouts/${a.index}/activity`, "PATCH", patch);
+      patchLocal(a, r);
+      if (S.sel === a.key) S.detail = r;
+    } else {
+      // an excluded file has no dataset index: edited by key
+      await send(`${API}/activities`, "PATCH", { items: [{ key: a.key, file: a.file }], ...patch });
+      if ("activity_type" in patch) a.user_type = patch.activity_type;
+      if ("effort" in patch) a.user_effort = patch.effort;
+      for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
+      if ("pain" in patch) { a.pain = patch.pain; if (!(patch.pain >= 1)) a.pain_area = null; }
+      if ("pain_area" in patch) a.pain_area = patch.pain_area;
+    }
+    if ("tags" in patch) fillFilterOptions();
+    render(); renderEditor(); setMsg(T("saved"), "ok");
+  } catch (e) { setMsg(T("save_failed", { err: e.message }), "err"); }
+}
+// exclusion / terrain rebuild the dataset: indices shift, so reload and reopen by key
+async function rebuildAndReopen(key) {
+  setMsg(T("rebuilding"));
+  await loadList();
+  S.auto = null; loadAuto(); loadStats();
+  await openEditor(key);
+  setMsg(T("saved"), "ok");
+}
+function wireEditor(a) {
+  const ed = $("ed");
+  const pc = ed.querySelector("#pain-ctl");
+  if (pc) PainPicker.wire(pc, painState(a), S.pain, async (patch) => {
+    await saveFields(a, patch);
+    if (patch.pain_area && !S.pain.areas.some((x) => x.key === patch.pain_area || x.label === patch.pain_area)) {
+      S.pain = (await PainPicker.meta(true)) || S.pain; render(); renderEditor();   // a new body area joins the picker
+    }
+  });
+  ed.querySelectorAll("select[data-f]").forEach((el) => el.addEventListener("change", () => saveFields(a, { [el.dataset.f]: el.value || null })));
+  const nm = ed.querySelector("input[data-name]");
+  nm.addEventListener("change", () => saveFields(a, { name: nm.value.trim() || null }));
+  ed.querySelector("button[data-name-clear]")?.addEventListener("click", () => saveFields(a, { name: null }));
+  const note = ed.querySelector("textarea[data-note]");
+  note.addEventListener("change", () => saveFields(a, { note: note.value }));
+  const pack = ed.querySelector("input[data-pack]");
+  pack?.addEventListener("change", () => {
+    const v = pack.value.trim();
+    if (v !== "" && !(+v >= 0 && +v <= 40)) { setMsg(T("pack_range"), "err"); return; }
+    saveFields(a, { pack_kg: v === "" ? null : +v });
+  });
+  const tin = ed.querySelector("input[data-tag-in]");
+  const addTag = () => {
+    const v = tin.value.trim();
+    if (!v) return;
+    if (v.length > 30) { setMsg(T("tag_long"), "err"); return; }
+    if ((a.tags || []).some((t) => t.toLowerCase() === v.toLowerCase())) { tin.value = ""; return; }
+    saveFields(a, { tags: [...(a.tags || []), v] });
+  };
+  tin.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); addTag(); } });
+  ed.querySelectorAll("button[data-tag-rm]").forEach((b) => b.addEventListener("click", () =>
+    saveFields(a, { tags: (a.tags || []).filter((t) => t !== b.dataset.tagRm) })));
+  ed.querySelector("select[data-terrain]")?.addEventListener("change", async (ev) => {
+    setMsg(T("saving"));
+    try {
+      await send(`/api/v1/workouts/${a.terrain.workout_file_id}/classification`, "PATCH", { trail_classification: ev.target.value });
+      await rebuildAndReopen(a.key);
+    } catch (e) { setMsg(T("save_failed", { err: e.message }), "err"); }
+  });
+  ed.querySelectorAll("button[data-ex]").forEach((b) => b.addEventListener("click", async () => {
+    const v = b.dataset.ex === "auto" ? null : b.dataset.ex;
+    if (v === "exclude" && !confirm(T("ex.confirm"))) return;
+    setMsg(T("saving"));
+    try {
+      await send(`${API}/exclusions`, "PUT", { key: a.key, file: a.file, exclusion: v });
+      await rebuildAndReopen(a.key);
+    } catch (e) { setMsg(T("save_failed", { err: e.message }), "err"); }
+  }));
+}
+
+// ---- 成就 tab (the old 成就 page): trail runs and mountain days -------------------------
+function achBadge(a) {
+  const r = achOf(a);
+  if (!r || r.hidden) return "";
+  const pk = peaksOf(r);
+  if (pk.length) return ` <span class="badge pk" title="${esc(pk.map((p) => `${p.name} ${p.elevation_m} m`).join(T("ach.sep")))}">▲ ${esc(pk[0].name)}${pk.length > 1 ? ` +${pk.length - 1}` : ""}</span>`;
+  return r.class_id === "low" ? "" : ` <span class="badge cls-${esc(r.class_id)}" title="${esc(T("ach.badge_tip", { m: big(r.top_m) }))}">${esc(clsName(r.class_id))}</span>`;
+}
+// k: the column; get: its sort value (no get = not sortable); srv: the export's sort key
+const ACOLS = [
+  { k: "date", cl: "c-date", get: (r) => r.start, srv: "date" },
+  { k: "name", cl: "c-name" },
+  { k: "cls", cl: "c-cls" },
+  { k: "dist", cl: "c-dist num", get: (r) => r.distance_km, srv: "distance" },
+  { k: "climb", cl: "c-aclimb num", get: (r) => r.climbing_m, srv: "climbing" },
+  { k: "mv", cl: "c-mv num", get: (r) => r.moving_s, srv: "moving" },
+  { k: "top", cl: "c-top num", get: (r) => r.top_m, srv: "top" },
+  { k: "vam", cl: "c-vam num", get: (r) => r.best_climb?.vam_m_per_h, srv: "vam", tip: "help_vam" },
+  { k: "sh", cl: "c-sh num", get: (r) => r.shang_he_ratio, asc: true, tip: "help_sh" },
+];
+function achFiltered() {
+  if (!S.ach) return [];
+  const from = $("f-from").value, to = $("f-to").value, kind = $("a-kind").value, hid = $("a-hidden").checked,
+    q = $("f-q").value.trim().toLowerCase();
+  return S.ach.filter((r) => {
+    const d = r.start.slice(0, 10);
+    if ((from && d < from) || (to && d > to)) return false;
+    if (kind && r.kind_id !== kind) return false;
+    if (!S.acls.has(r.class_id)) return false;
+    if (r.hidden && !hid) return false;
+    if (q) {
+      const hay = [r.name, r.auto_name, r.route_name, r.note, d, ...peaksOf(r).map((p) => p.name)].join(" ").toLowerCase();
+      if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
+    }
+    return true;
+  });
+}
+function achSorted(rows) {
+  const c = ACOLS.find((x) => x.k === S.asort.k && x.get) || ACOLS[0], dir = S.asort.dir;
+  return rows.map((r) => [r, c.get(r)]).sort(([a, x], [b, y]) => {
+    const nx = x == null || x === "", ny = y == null || y === "";
+    if (nx || ny) return nx === ny ? (a.start < b.start ? 1 : -1) : nx ? 1 : -1;
+    return (x < y ? -1 : x > y ? 1 : 0) * dir || (a.start < b.start ? 1 : -1);
+  }).map(([r]) => r);
+}
+function renderAchBar() {
+  const v = $("a-kind").value;
+  $("a-kind").innerHTML = `<option value="">${esc(T("ach.kind_all"))}</option>` +
+    ["trail", "hike"].map((k) => `<option value="${k}">${esc(T("ach.kind." + k))}</option>`).join("");
+  $("a-kind").value = v;
+  $("a-cls").innerHTML = CLS_IDS.map((id) => `<button type="button" class="cchip" data-cls="${id}" aria-pressed="${S.acls.has(id)}">${esc(clsName(id))}</button>`).join(" ");
+}
+function renderKpis(rows) {
+  const peaks = new Map(), by = { baiyue: 0, mid: 0, low: 0 };
+  for (const r of rows) {
+    by[r.class_id] = (by[r.class_id] || 0) + 1;
+    for (const p of peaksOf(r)) {
+      const x = peaks.get(p.name) || { name: p.name, el: p.elevation_m, first: r.start.slice(0, 10), times: 0 };
+      x.times += 1; if (r.start.slice(0, 10) < x.first) x.first = r.start.slice(0, 10);
+      peaks.set(p.name, x);
+    }
+  }
+  const sum = (f) => rows.reduce((s, r) => s + (r[f] || 0), 0), mx = (f) => rows.reduce((m, r) => Math.max(m, r[f] || 0), 0);
+  const tile = (k, v, u, sub) => `<div class="kpi"><div class="k" title="${esc(sub || k)}">${esc(k)}</div><div class="v">${v}${u ? `<small>${esc(u)}</small>` : ""}</div></div>`;
+  $("a-kpis").innerHTML = [
+    TW ? tile(T("ach.kpi.peaks"), peaks.size, T("ach.kpi.peaks_u")) : "",
+    tile(T("ach.kpi.count"), rows.length, "", CLS_IDS.map((id) => `${clsName(id)} ${by[id]}`).join(" · ")),
+    tile(T("ach.kpi.climb"), big(sum("climbing_m")), "m"),
+    tile(T("ach.kpi.dist"), big(sum("distance_km")), "km"),
+    tile(T("ach.kpi.top"), mx("top_m") ? big(mx("top_m")) : "—", "m"),
+    tile(T("ach.kpi.big"), mx("climbing_m") ? big(mx("climbing_m")) : "—", "m"),
+  ].join("");
+  const pk = [...peaks.values()].sort((a, b) => (b.el || 0) - (a.el || 0));
+  $("a-peaks").hidden = !(TW && pk.length);
+  $("a-peaks").querySelector("summary").textContent = T("ach.peaks_sum", { n: pk.length });
+  $("a-peaks").querySelector(".pk").innerHTML = pk.map((p) =>
+    `<span title="${esc(T(p.times > 1 ? "ach.peak_tip_n" : "ach.peak_tip", { d: p.first, n: p.times }))}">${esc(p.name)} ${p.el ?? ""}${p.times > 1 ? ` ×${p.times}` : ""}</span>`).join("");
+}
+function renderAch() {
+  if (S.tab !== "ach") return;
+  $("a-thead").innerHTML = ACOLS.map((c) => {
+    const lab = esc(T("ach.col." + c.k));
+    if (!c.get) return `<th class="${c.cl}" scope="col">${lab}</th>`;
+    const s = S.asort.k === c.k ? (S.asort.dir > 0 ? "ascending" : "descending") : "none";
+    return `<th class="${c.cl}" aria-sort="${s}" scope="col"><button type="button" class="sort" data-asort="${c.k}">${lab}</button>${c.tip ? qt(T("ach." + c.tip)) : ""}</th>`;
+  }).join("") + `<th class="c-act" scope="col"></th>`;
+  const span = ACOLS.length + 1;
+  if (!S.ach) {
+    $("a-kpis").innerHTML = ""; $("a-peaks").hidden = true; $("a-cnt").textContent = "";
+    $("a-tbody").innerHTML = `<tr><td class="${S.achErr ? "empty" : "loading"}" colspan="${span}">${esc(S.achErr ? T("load_failed", { err: S.achErr }) : T("ach.computing"))}</td></tr>`;
+    return;
+  }
+  const rows = achSorted(achFiltered());
+  renderKpis(rows);
+  $("a-cnt").textContent = T("count", { n: rows.length, total: S.ach.length });
+  if (!rows.length) { $("a-tbody").innerHTML = `<tr><td class="empty" colspan="${span}">${esc(T(S.ach.length ? "empty" : "ach.none"))}</td></tr>`; return; }
+  $("a-tbody").innerHTML = rows.map((r) => {
+    const open = S.aopen.has(r.id), act = actOfAch(r), href = act ? viewerHref(act) : null, pk = peaksOf(r), bc = r.best_climb || {};
+    const rep = r.route_count > 1 ? ` <button type="button" class="rep" data-route="${esc(r.route_key)}" title="${esc(T("ach.rep_tip", { n: r.route_count }))}">×${r.route_count}</button>` : "";
+    const kd = [T("ach.kind." + r.kind_id), r.days.length ? T("ach.days", { n: r.days.length }) : "", hm(r.moving_s),
+      r.top_m ? `▲${big(r.top_m)} m` : ""].filter((x) => x && x !== "—").join(" · ");
+    const days = open ? r.days.map((d, i) => `<tr class="day"><td class="c-date">${esc(T("ach.day", { n: i + 1, d: d.date.slice(5) }))}</td><td class="c-name"></td><td class="c-cls"></td>` +
+      `<td class="c-dist num">${num(d.distance_km, 1)}</td><td class="c-aclimb num">${big(d.climbing_m)}</td><td class="c-mv num">${hm(d.moving_s)}</td>` +
+      `<td class="c-top num">${d.top_m ? big(d.top_m) : "—"}</td><td class="c-vam"></td><td class="c-sh"></td><td></td></tr>`).join("") : "";
+    const hideT = T(r.hidden ? "ach.unhide" : "ach.hide");
+    return `<tr data-id="${esc(r.id)}" class="${r.hidden ? "hid" : ""}">` +
+      `<td class="c-date">${r.days.length ? `<button type="button" class="tg" data-tg aria-expanded="${open}" aria-label="${esc(T("ach.days_toggle"))}">${open ? "▾" : "▸"}</button>` : ""}` +
+        `<span class="yr">${esc(r.start.slice(0, 5))}</span>${esc(r.start.slice(5, 10))}</td>` +
+      `<td class="c-name"><span class="nm" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="${esc(T("ach.rename"))}" title="${esc(T("ach.rename"))}">${esc(r.name)}</span>${rep}<span class="cls clsm cls-${esc(r.class_id)}">${esc(clsName(r.class_id))}</span>` +
+        `${pk.length ? `<span class="pkl">▲ ${esc(pk.map((p) => p.name).join(T("ach.sep")))}</span>` : ""}<span class="kd">${esc(kd)}</span></td>` +
+      `<td class="c-cls"><span class="cls cls-${esc(r.class_id)}">${esc(clsName(r.class_id))}</span></td>` +
+      `<td class="c-dist num">${num(r.distance_km, 1)}</td><td class="c-aclimb num">${big(r.climbing_m)}</td>` +
+      `<td class="c-mv num">${hm(r.moving_s)}</td><td class="c-top num">${r.top_m ? big(r.top_m) : "—"}</td>` +
+      `<td class="c-vam num" title="${bc.gain_m ? esc(T("ach.vam_tip", { gain: bc.gain_m, grade: Math.round(bc.grade * 100) })) : ""}">${bc.vam_m_per_h ? big(bc.vam_m_per_h) : "—"}</td>` +
+      `<td class="c-sh num"><input type="number" class="sh" min="0" step="10" inputmode="numeric" value="${r.shang_he_min ?? ""}" placeholder="${esc(T("ach.sh_ph"))}" aria-label="${esc(T("ach.sh_label"))}" title="${esc(T("ach.sh_label"))}">${r.shang_he_ratio ? ` <b>${r.shang_he_ratio.toFixed(2)}</b>` : ""}</td>` +
+      `<td class="c-act"><span class="acts"><a class="iconlink${href ? "" : " off"}" ${href ? `href="${esc(href)}"` : 'aria-hidden="true" tabindex="-1"'} title="${esc(T("open_chart"))}" aria-label="${esc(T("open_chart"))}">${CHART_ICON}</a>` +
+        `<button type="button" class="x" data-hide title="${esc(hideT)}" aria-label="${esc(hideT)}">${r.hidden ? "↺" : "✕"}</button></span></td></tr>${days}`;
+  }).join("");
+}
+const achById = (id) => (S.ach || []).find((r) => r.id === id);
+const annotate = (id, body) => send(`${ACH}/records/${encodeURIComponent(id)}`, "PUT", body);
+async function loadAch(p) {
+  try { S.ach = (await (p || j(`${ACH}?include_hidden=true`))).rows || []; S.achErr = null; }
+  catch (e) { S.ach = null; S.achErr = e.message; }
+  S.achMin = new Map();
+  for (const r of S.ach || []) { const m = minOf(r.key); if (m != null && !S.achMin.has(m)) S.achMin.set(m, r); }
+  refresh();
+}
+$("a-thead").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-asort]");
+  if (!b) return;
+  const c = ACOLS.find((x) => x.k === b.dataset.asort);
+  S.asort = S.asort.k === c.k ? { k: c.k, dir: -S.asort.dir } : { k: c.k, dir: c.asc ? 1 : -1 };
+  savePrefs(); renderAch();
+});
+$("a-cls").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-cls]");
+  if (!b) return;
+  S.acls.has(b.dataset.cls) ? S.acls.delete(b.dataset.cls) : S.acls.add(b.dataset.cls);
+  savePrefs(); renderAchBar(); renderAch();
+});
+for (const id of ["a-kind", "a-hidden"]) $(id).addEventListener("change", () => { savePrefs(); renderAch(); });
+$("a-tbody").addEventListener("click", async (e) => {
+  const tr = e.target.closest("tr[data-id]"), r = tr && achById(tr.dataset.id);
+  if (!r) return;
+  if (e.target.closest("[data-tg]")) { S.aopen.has(r.id) ? S.aopen.delete(r.id) : S.aopen.add(r.id); renderAch(); }
+  if (e.target.closest("[data-hide]")) {
+    try { await annotate(r.id, { hidden: !r.hidden }); r.hidden = !r.hidden; refresh(); } catch (err) { alert(T("save_failed", { err: err.message })); }
+  }
+  const rep = e.target.closest("button[data-route]");
+  if (rep) {
+    const name = prompt(T("ach.route_prompt"), r.route_name || "");
+    if (name == null) return;
+    try { await send(`${ACH}/routes/${encodeURIComponent(rep.dataset.route)}`, "PUT", { name }); await loadAch(); }
+    catch (err) { alert(T("save_failed", { err: err.message })); }
+  }
+});
+$("a-tbody").addEventListener("keydown", (e) => {
+  if (e.target.classList.contains("nm") && e.key === "Enter" && !e.isComposing) { e.preventDefault(); e.target.blur(); }
+});
+$("a-tbody").addEventListener("focusout", async (e) => {
+  const tr = e.target.closest("tr[data-id]"), r = tr && achById(tr.dataset.id);
+  if (!r || !e.target.classList.contains("nm")) return;
+  const v = e.target.textContent.trim();
+  if (v === r.name) return;
+  try {
+    await annotate(r.id, { name: v });       // "" = back to the route / automatic name
+    r.name = v || r.route_name || r.auto_name;
+    if (!v) e.target.textContent = r.name;
+  } catch (err) { e.target.textContent = r.name; alert(T("save_failed", { err: err.message })); }
+});
+$("a-tbody").addEventListener("change", async (e) => {
+  const tr = e.target.closest("tr[data-id]"), r = tr && achById(tr.dataset.id);
+  if (!r || !e.target.classList.contains("sh")) return;
+  const v = e.target.value.trim() === "" ? null : +e.target.value;
+  if (v != null && !(v > 0)) return;
+  try {
+    await annotate(r.id, { shang_he_min: v });
+    r.shang_he_min = v;
+    r.shang_he_ratio = v && r.moving_s ? Math.round(r.moving_s / 60 / v * 100) / 100 : null;
+    renderAch();
+  } catch (err) { alert(T("save_failed", { err: err.message })); }
+});
+// 複製給登山團: the server's plain text (GET /achievements/export) of what the tab shows
+function exportParams() {
+  const p = new URLSearchParams();
+  if (S.acls.size < CLS_IDS.length) p.set("mclass", [...S.acls].join(","));
+  const kind = $("a-kind").value, q = $("f-q").value.trim(), from = $("f-from").value, to = $("f-to").value;
+  if (kind) p.set("kind", kind);
+  if (q) p.set("q", q);
+  if (from) p.set("date_from", from);
+  if (to) p.set("date_to", to);
+  p.set("sort", (ACOLS.find((c) => c.k === S.asort.k) || {}).srv || "climbing");
+  p.set("limit", $("exp-limit").value || "10");
+  return p;
+}
+async function loadExport() {
+  $("exp-msg").textContent = T("loading");
+  try {
+    const r = await fetch(`${ACH}/export?${exportParams()}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    $("exp-text").value = await r.text();
+    try { await navigator.clipboard.writeText($("exp-text").value); $("exp-msg").textContent = T("ach.copied"); }
+    catch { $("exp-msg").textContent = T("ach.copy_manual"); }
+  } catch (e) { $("exp-msg").textContent = T("load_failed", { err: e.message }); }
+}
+$("exp-limit").innerHTML = [10, 20, 50, 1000].map((n) => `<option value="${n}">${esc(n === 1000 ? T("ach.top_all") : T("ach.top_n", { n }))}</option>`).join("");
+$("a-copy").addEventListener("click", () => { if (!$("exp").open) $("exp").showModal(); loadExport(); });
+$("exp-limit").addEventListener("change", loadExport);
+$("exp-recopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("exp-text").value); $("exp-msg").textContent = T("ach.copied"); } catch { $("exp-text").select(); }
+});
+$("exp-close").addEventListener("click", () => $("exp").close());
+$("exp").addEventListener("click", (e) => { if (e.target === $("exp")) $("exp").close(); });
+
+// ---- tabs: 活動 | 成就 (#achievements; the old /api/v1/achievements/page redirects there) ----
+function setTab(t) {
+  S.tab = t === "ach" ? "ach" : "acts";
+  document.body.classList.toggle("tab-ach", S.tab === "ach");
+  document.body.classList.toggle("tab-acts", S.tab !== "ach");
+  document.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
+  const h = S.tab === "ach" ? "#achievements" : "";
+  if (location.hash !== h) { try { history.replaceState(null, "", location.pathname + location.search + h); } catch {} }
+  renderAch();
+}
+document.querySelector(".tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); });
+document.querySelector(".tabs").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  setTab(S.tab === "ach" ? "acts" : "ach"); document.querySelector(`[data-tab="${S.tab}"]`).focus();
+});
+addEventListener("hashchange", () => setTab(location.hash === "#achievements" ? "ach" : "acts"));
+
+// ---- start ------------------------------------------------------------------
+(async () => {
+  const want = new URLSearchParams(location.search).get("key");
+  const achP = j(`${ACH}?include_hidden=true`);     // started now, read once (the tab, badges and filter share it)
+  achP.catch(() => {});
+  setTab(location.hash === "#achievements" ? "ach" : "acts");
+  restorePrefs();
+  const [usePower, pain, region] = await Promise.all([
+    j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true),
+    PainPicker.meta(),                       // null in the demo mode: no pain column, filter or row
+    j("/api/v1/region").then((x) => x.region !== "intl").catch(() => true),
+  ]);
+  S.usePower = usePower; S.pain = pain; TW = region;
+  document.querySelectorAll("[data-pain-only]").forEach((el) => { el.hidden = !S.pain; });
+  renderAchBar(); renderAch();
+  try { await loadList(); } catch (e) {
+    $("tbody").innerHTML = `<tr><td class="empty" colspan="13">${esc(T("load_failed", { err: e.message }))}</td></tr>`; return;
+  }
+  restorePrefs(); render();
+  loadAch(achP);
+  if (want && actOf(want)) {
+    // a link from 圖表分析 (編輯活動): show its page of the table, then open it
+    if (!filtered().some((a) => a.key === want)) { for (const k of FIDS) $(k).value = ""; $("f-pain").checked = false; }
+    const i = sorted(filtered()).findIndex((a) => a.key === want);
+    S.page = Math.max(0, Math.floor(i / PER)); render();
+    openEditor(want);
+  }
+  loadStats(); loadAuto();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="zh-TW">
+<head><script>window.TRC_STATIC_CFG = {"snapshot": "2026-10-03", "today": "2026-10-03", "pages": {"/demo": "index.html", "/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html", "/api/v1/overview/plan/compliance/page": "compliance.html", "/api/v1/wko5/viewer": "charts.html", "/api/v1/plan/page": "plan.html", "/api/v1/wko5/activities/page": "activities.html", "/api/v1/routes/page": "routes.html", "/api/v1/racepower/page": "racepower.html", "/": "index.html", "/api/v1/achievements/page": "activities.html#achievements"}, "compute": "^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$", "locks": "#gpxpick, #evsubmit, #addphase, #savephases, #tomanual, #toauto, [data-del-event], [data-edit-event], #rec-btn, #pf-save, #pf-reset, #bo-save, #bo-del, #sd-swap, #vd button[data-vk], #gpxfile, #gpx-attach, #stop-import, input[type=file][accept*='.gpx' i]"};</script><script src="static/trc_static.js"></script><script>window.TRC_SESSION = {"mode": "demo", "static": true, "caps": ["plan.write"], "user": null, "demo": {"sandbox": false, "base": "2026-10-03-20261002", "expires_at": null, "reset": false, "cta_url": null, "static": true}};</script><script>window.__I18N__ = {"locale": "zh-TW", "debug": false, "catalog": {"common.z5flow.aria": "5 區開放流程", "common.z5flow.here": "你現在在這裡", "common.z5flow.next": "下一步", "common.z5flow.also": "同時可以做（{stage}）", "common.z5flow.help": "說明", "common.z5flow.ok": "已達成", "common.z5flow.todo": "還沒達成", "common.z5flow.unknown": "還沒做", "common.z5flow.unlocks": "完成後：", "common.z5flow.unlocked": "已解鎖：", "common.z5flow.tag.done": "已完成", "common.z5flow.tag.current": "現在", "common.z5flow.tag.parallel": "可同時做", "common.z5flow.tag.locked": "未解鎖", "common.workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標", "common.workout.no_tpace_badge": "沒有閾值配速", "common.workout.no_tpace_link": "看閾值配速怎麼估", "common.autoplan.log_title": "自動調整紀錄", "common.autoplan.log_count": "{n} 筆", "shell.brand": "訓練教練", "shell.brand.title": "回首頁", "shell.nav.label": "主選單", "shell.nav.item_title": "{name}：{purpose}", "shell.page.home.name": "總覽", "shell.page.home.short": "總覽", "shell.page.home.purpose": "狀況・待辦・本週課表", "shell.page.schedule.name": "課表", "shell.page.schedule.short": "課表", "shell.page.schedule.purpose": "日曆排課・同步 COROS", "shell.page.charts.name": "圖表分析", "shell.page.charts.short": "圖表", "shell.page.charts.purpose": "趨勢與單次活動圖表", "shell.page.activity.name": "活動列表", "shell.page.activity.short": "活動", "shell.page.activity.purpose": "搜尋・篩選・編輯・成就", "shell.page.injuries.name": "傷病紀錄", "shell.page.injuries.short": "傷病", "shell.page.injuries.purpose": "疼痛・受傷前的訓練", "shell.page.routes.name": "路線", "shell.page.routes.short": "路線", "shell.page.routes.purpose": "重複路段與路線的進步", "shell.page.plan.name": "賽事周期", "shell.page.plan.short": "周期", "shell.page.plan.purpose": "目標賽事・周期・門檻", "shell.page.racepower.name": "賽事計算機", "shell.page.racepower.short": "計算機", "shell.page.racepower.purpose": "完賽時間・分段配速／功率／心率・補給", "shell.page.settings.name": "設定", "shell.page.settings.short": "設定", "shell.page.settings.purpose": "計算模式・體重・資料校正", "shell.build.preparing": "正在準備資料…", "shell.build.elapsed": "已 {s} 秒", "shell.build.failed": "資料處理失敗：{error}", "shell.lang.title": "切換語言（Language）", "shell.lang.zh-TW": "中文", "shell.lang.en": "EN", "shell.nav.more": "更多", "shell.nav.more_title": "活動列表、路線、傷病紀錄、設定", "shell.demo.tag": "示範資料", "shell.demo.text": "這是虛構的跑者，你的修改只存在這個瀏覽器。", "shell.demo.try": "試試：", "shell.demo.try_schedule": "排課表", "shell.demo.try_race": "賽事計算機", "shell.demo.try_plan": "週期", "shell.demo.left_none": "還沒有修改", "shell.demo.left_h": "{h} 小時後清除", "shell.demo.left_m": "{m} 分鐘後清除", "shell.demo.left_title": "你的修改從第一次修改起保留 24 小時，之後自動回到原始示範資料", "shell.demo.reset": "重設示範", "shell.demo.reset_title": "清掉你的修改，回到原始示範資料", "shell.demo.reset_confirm": "清掉你在示範裡的所有修改？", "shell.demo.cta": "想用自己的資料？", "shell.demo.locked": "示範模式不提供這個功能", "shell.demo.disabled": "示範模式不提供這個功能", "shell.demo.static_text": "唯讀示範：虛構跑者的一年訓練。課表可以試著改，修改只存在這個瀏覽器。", "shell.demo.static_edits": "已修改課表", "shell.demo.static_none": "還沒有修改", "shell.demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改", "shell.demo.static_locked": "唯讀示範：這個操作在示範版不能用"}};</script><script src="static/i18n/i18n.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>路線</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="static/basemaps.js"></script>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
+  --accent: #2563eb; --soft: #e8efff; --a: #2563eb; --b: #d9480f; --up: #b45309; --down: #0f766e; --flat: #64748b;
+  --ok: #15803d; --warn: #b45309;
+  /* temperature: diverging blue <-> gray <-> red (dataviz reference ramps) */
+  --cold: #256abf; --mild: #9a9994; --hot: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+    --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --up: #f59e0b; --down: #2dd4bf; --flat: #94a3b8;
+    --ok: #4ade80; --warn: #fbbf24; --cold: #5598e7; --mild: #8a8984; --hot: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
+  --accent: #60a5fa; --soft: #1c2a40; --a: #60a5fa; --b: #fb923c; --up: #f59e0b; --down: #2dd4bf; --flat: #94a3b8;
+  --ok: #4ade80; --warn: #fbbf24; --cold: #5598e7; --mild: #8a8984; --hot: #e66767;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px;
+  display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+h1 { font-size: 17px; margin: 0; }
+.meta { color: var(--muted); font-size: 12px; }
+button, select, input { font: inherit; color: var(--text); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.prog { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.prog[hidden] { display: none; }
+.prog .bar { width: 120px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.prog .bar i { display: block; height: 100%; background: var(--accent); }
+.wrap { display: grid; grid-template-columns: minmax(340px, 440px) 1fr; gap: 14px; padding: 14px 16px;
+  max-width: 1500px; margin: 0 auto; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 3px 9px; font-size: 13px; background: transparent; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--soft); color: var(--accent); font-weight: 600; }
+.list { max-height: calc(100vh - var(--shell-top, 53px) - 150px); overflow-y: auto; }
+.row { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; padding: 9px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row:hover { background: var(--soft); }
+.row.on { background: var(--soft); box-shadow: inset 3px 0 0 var(--accent); }
+.row.d1 { padding-left: 30px; }
+.row.d2 { padding-left: 46px; }
+.row .nm { grid-column: 2; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.row .sub { grid-column: 2; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.row .sp { grid-row: 1 / span 2; grid-column: 3; align-self: center; }
+/* the path's shape: north up, true aspect (server-side projection, route_match.thumbnail) */
+.row .th { grid-row: 1 / span 2; grid-column: 1; align-self: center; display: block;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel)); border: 1px solid var(--line); border-radius: 5px; }
+.row .th path { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.row .th .s { fill: var(--ok); }
+.rel { font-size: 12px; color: var(--muted); }
+.rel a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.rel a:hover { text-decoration: underline; }
+.dirtag { font-size: 11px; padding: 0 5px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); margin-left: 4px; }
+.kb { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; margin-right: 5px; vertical-align: 1px; font-weight: 500; }
+.kb.up { background: color-mix(in srgb, var(--up) 16%, transparent); color: var(--up); }
+.kb.down { background: color-mix(in srgb, var(--down) 16%, transparent); color: var(--down); }
+.kb.flat { background: color-mix(in srgb, var(--flat) 16%, transparent); color: var(--flat); }
+.kb.route { background: var(--soft); color: var(--accent); }
+.empty { padding: 30px 16px; text-align: center; color: var(--muted); }
+.detail { display: grid; gap: 14px; min-width: 0; }
+.dh { padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; }
+.dh h2 { font-size: 18px; margin: 0; cursor: text; border-bottom: 1px dashed transparent; }
+.dh h2:hover { border-bottom-color: var(--muted); }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); }
+.stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+.back { display: none; }
+#map { height: 340px; border-radius: 8px; }
+.card { padding: 10px 12px; }
+.card h3 { font-size: 14px; margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.card h3 .meta { font-weight: 400; }
+.chart { height: 260px; width: 100%; }
+.chart.tall { height: 360px; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+tr.best td { color: var(--ok); }
+td.pick { text-align: center; }
+td.pick label { display: inline-flex; gap: 2px; margin: 0 2px; font-size: 11px; color: var(--muted); cursor: pointer; }
+td.pick input { margin: 0; accent-color: var(--accent); }
+.a-dot, .b-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; vertical-align: 0; margin-right: 4px; }
+.a-dot { background: var(--a); } .b-dot { background: var(--b); }
+a.act { color: var(--accent); text-decoration: none; }
+a.act:hover { text-decoration: underline; }
+.hint { font-size: 12px; color: var(--muted); }
+.cmpbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
+.cmpbar b { font-variant-numeric: tabular-nums; }
+.note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.hotdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--hot); margin-right: 4px; vertical-align: 0; }
+td.sec { color: var(--muted); }
+.tog { font-size: 12px; padding: 2px 8px; }
+.tog.on { background: var(--soft); color: var(--accent); border-color: var(--accent); }
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: 1fr; padding: 10px; }
+  .list { max-height: none; }
+  body.has-detail .listpanel { display: none; }
+  body:not(.has-detail) .detail { display: none; }
+  .back { display: inline-block; }
+  #map { height: 260px; }
+  .chart { height: 220px; }
+  .chart.tall { height: 300px; }
+}
+</style>
+</head>
+<body>
+<script src="static/shell.js" data-page="routes"></script>
+<header>
+  <h1>路線進步</h1>
+  <span class="meta" id="builtinfo"></span>
+  <span class="prog" id="prog" hidden><span id="progtxt"></span><span class="bar"><i id="progbar" style="width:0"></i></span></span>
+  <span style="flex:1"></span>
+  <button id="rebuild" title="讀取新活動，找新的重複路段（已有的名稱與編號保留）">更新</button>
+</header>
+<div class="wrap">
+  <section class="panel listpanel">
+    <div class="filters">
+      <div class="seg" id="f-kind"><button data-v="" class="on">全部</button><button data-v="segment">路段</button><button data-v="route">路線</button></div>
+      <div class="seg" id="f-dir"><button data-v="" class="on">全部</button><button data-v="up">上坡</button><button data-v="down">下坡</button><button data-v="flat">平路</button></div>
+      <select id="f-sport" aria-label="運動"><option value="">所有運動</option></select>
+    </div>
+    <div class="meta" id="count" style="padding:6px 12px 0"></div>
+    <div class="list" id="list"><div class="empty">載入中…</div></div>
+  </section>
+  <section class="detail" id="detail">
+    <div class="panel empty" id="pick">從左邊選一個路段或路線</div>
+  </section>
+</div>
+<script>
+const API = "/api/v1/routes";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const S = { kind: "", dir: "", sport: "", colorTemp: true, rows: [], cur: null, detail: null, a: null, b: null, charts: [], map: null, polled: false };
+
+function hms(s) {
+  if (s == null) return "—";
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
+}
+function dhms(s) { return s == null ? "—" : s === 0 ? "最佳" : `+${hms(s)}`; }
+function pace(v) { if (v == null || !isFinite(v)) return "—"; const m = Math.floor(v), s = Math.round((v - m) * 60); return `${m}:${String(s === 60 ? 59 : s).padStart(2, "0")}`; }
+function km(m) { return m == null ? "—" : (m / 1000).toFixed(m < 10000 ? 2 : 1) + " km"; }
+function num(v, d = 0) { return v == null ? "—" : (+v).toFixed(d); }
+function day(iso) { return iso ? iso.slice(0, 10) : "—"; }
+function dirLabel(r) { return r.kind === "route" ? "路線" : r.direction === "up" ? "上坡" : r.direction === "down" ? "下坡" : "平路"; }
+function badge(r) { const c = r.kind === "route" ? "route" : r.direction; return `<span class="kb ${c}">${dirLabel(r)}</span>`; }
+function gainTxt(r) { if (r.kind === "route") return r.gain_m ? `↑${Math.round(r.gain_m)} m` : ""; return r.gain_m >= 0 ? `↑${Math.round(r.gain_m)} m` : `↓${Math.round(-r.gain_m)} m`; }
+async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(`${r.status} ${await r.text()}`); return r.json(); }
+
+// ---- sparkline: last efforts' times, lower is better (drawn inverted so up = faster)
+function spark(pts) {
+  const v = pts.map((p) => p[1]).filter((x) => x != null);
+  if (v.length < 2) return "";
+  const w = 84, h = 26, lo = Math.min(...v), hi = Math.max(...v), span = hi - lo || 1;
+  const xs = v.map((_, i) => (i / (v.length - 1)) * (w - 4) + 2);
+  const ys = v.map((x) => 2 + ((x - lo) / span) * (h - 4));    // faster = higher
+  const d = xs.map((x, i) => `${i ? "L" : "M"}${x.toFixed(1)},${ys[i].toFixed(1)}`).join("");
+  const best = v.indexOf(lo);
+  return `<svg class="sp" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-label="最近 ${v.length} 次時間，越高越快">
+    <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+    <circle cx="${xs[best]}" cy="${ys[best]}" r="2.4" fill="var(--ok)"/>
+    <circle cx="${xs[xs.length - 1]}" cy="${ys[ys.length - 1]}" r="2.4" fill="var(--accent)"/></svg>`;
+}
+
+// ---- the path's shape, drawn from the server's projected path (north up, true aspect)
+function thumb(t) {
+  if (!t) return `<svg class="th" width="64" height="40" aria-hidden="true"></svg>`;
+  return `<svg class="th" width="${t.w}" height="${t.h}" viewBox="0 0 ${t.w} ${t.h}" role="img" aria-label="路線形狀（北方朝上）">
+    <path d="${t.d}"/><circle class="s" cx="${t.start[0]}" cy="${t.start[1]}" r="2.2"/></svg>`;
+}
+
+// ---- status / list
+function showStatus(st, built) {
+  $("builtinfo").textContent = built ? `更新於 ${built.replace("T", " ").slice(0, 16)}` : "";
+  const busy = st && st.state === "building";
+  $("prog").hidden = !busy;
+  $("rebuild").disabled = busy;
+  if (busy) {
+    $("progtxt").textContent = `${st.phase || "處理中"} ${st.total ? `${st.done}/${st.total}` : ""}`;
+    $("progbar").style.width = st.total ? `${(100 * st.done / st.total).toFixed(1)}%` : "5%";
+  }
+  if (st && st.state === "error") $("builtinfo").textContent = `更新失敗：${st.error}`;
+  if (busy && !S.polled) {
+    S.polled = true;
+    setTimeout(async () => { S.polled = false; await loadList(true); }, 2500);
+  }
+}
+
+async function loadList(keepDetail) {
+  const q = new URLSearchParams();
+  if (S.kind) q.set("kind", S.kind);
+  if (S.dir) q.set("direction", S.dir);
+  if (S.sport) q.set("sport", S.sport);
+  let res;
+  try { res = await j(`${API}?${q}`); } catch (e) { $("list").innerHTML = `<div class="empty">讀取失敗：${esc(e.message)}</div>`; return; }
+  const wasBusy = S.busy;
+  S.busy = res.status?.state === "building";
+  showStatus(res.status, res.built_at);
+  const sel = $("f-sport");
+  if (sel.options.length <= 1 && res.sports?.length) sel.insertAdjacentHTML("beforeend", res.sports.map((s) => `<option>${esc(s)}</option>`).join(""));
+  S.rows = res.rows;
+  const c = res.counts || {};
+  $("count").textContent = res.built_at ? `${res.total} 筆 · 爬坡 ${c.climb || 0}、下坡 ${c.descent || 0}、路段 ${c.stretch || 0}、路線 ${c.route || 0}` +
+    (c.sub_route ? `（另 ${c.sub_route} 條是其他路線的一段）` : "") : "";
+  if (!res.rows.length) {
+    $("list").innerHTML = `<div class="empty">${res.built_at ? "沒有符合的路段" : "第一次整理 GPS 紀錄中，找到的路段會陸續出現"}</div>`;
+  } else {
+    const nameOf = Object.fromEntries(res.rows.map((r) => [r.id, r.name]));
+    $("list").innerHTML = res.rows.map((r) => `<div class="row ${r.id === S.cur ? "on" : ""} ${r.depth ? `d${Math.min(2, r.depth)}` : ""}" data-id="${r.id}">
+      ${thumb(r.thumb)}
+      <div class="nm">${r.depth ? "⊂ " : ""}${badge(r)}${esc(r.name)}</div>
+      ${spark(r.spark)}
+      <div class="sub">${km(r.length_m)} ${gainTxt(r)} · ${r.n_efforts} 次${r.n_reversed ? `（反向 ${r.n_reversed}）` : ""} · 最佳 ${hms(r.best_s)} · 最近 ${hms(r.last_s)}（${day(r.last_date)}）${r.parent && !r.depth && nameOf[r.parent] ? ` · ⊂ ${esc(nameOf[r.parent])}` : ""}${r.n_partials ? ` · 另 ${r.n_partials} 次只跑一段` : ""}</div>
+    </div>`).join("");
+    $("list").querySelectorAll(".row").forEach((el) => el.onclick = () => openDetail(el.dataset.id, true));
+  }
+  if (wasBusy && !S.busy && S.cur && keepDetail) openDetail(S.cur, false);
+}
+
+function bindSeg(id, key) {
+  $(id).querySelectorAll("button").forEach((b) => b.onclick = () => {
+    $(id).querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    S[key] = b.dataset.v;
+    savePrefs(); loadList();
+  });
+}
+function savePrefs() { try { localStorage.setItem("routes.page", JSON.stringify({ kind: S.kind, dir: S.dir, sport: S.sport, colorTemp: S.colorTemp })); } catch {} }
+function loadPrefs() {
+  try { Object.assign(S, JSON.parse(localStorage.getItem("routes.page") || "{}")); } catch {}
+  for (const [id, key] of [["f-kind", "kind"], ["f-dir", "dir"]])
+    $(id).querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === (S[key] || "")));
+}
+
+// ---- detail
+function disposeCharts() { S.charts.splice(0).forEach((c) => c.dispose()); if (S.map) { S.map.remove(); S.map = null; } }
+
+async function openDetail(id, push) {
+  S.cur = id;
+  document.querySelectorAll(".row").forEach((x) => x.classList.toggle("on", x.dataset.id === id));
+  if (push) history.pushState({ id }, "", `#${id}`);
+  document.body.classList.add("has-detail");
+  let d;
+  try { d = await j(`${API}/${id}`); } catch (e) { $("detail").innerHTML = `<div class="panel empty">找不到這個路段（可能已在更新後合併）</div>`; return; }
+  S.detail = d;
+  if (d.id !== id) {          // an old id, merged into this one
+    S.cur = d.id;
+    history.replaceState({ id: d.id }, "", `#${d.id}`);
+    document.querySelectorAll(".row").forEach((x) => x.classList.toggle("on", x.dataset.id === d.id));
+  }
+  S.showAll = false;
+  document.querySelector(`.row[data-id="${d.id}"]`)?.scrollIntoView({ block: "nearest" });
+  // default comparison: the best effort vs the latest one, both the main direction
+  const main = d.efforts.filter((e) => (e.dir || "same") === "same");
+  const timed = main.filter((e) => e[d.time_key] != null);
+  const byTime = [...timed].sort((x, y) => x[d.time_key] - y[d.time_key]);
+  S.a = byTime[0]?.id || null;
+  S.b = (main[main.length - 1]?.id !== S.a ? main[main.length - 1]?.id : byTime[1]?.id) || null;
+  renderDetail();
+}
+
+function renderDetail() {
+  disposeCharts();
+  const d = S.detail, tk = d.time_key, up = d.direction === "up", down = d.direction === "down";
+  const best = d.efforts.find((e) => e.rank === 1 && (e.dir || "same") === "same");
+  const last = d.efforts[d.efforts.length - 1];
+  const hasPw = d.efforts.some((e) => e.avg_power != null);
+  const hasWx = d.efforts.some((e) => e.wx);
+  const timeName = tk === "elapsed_s" ? "經過時間" : "移動時間";
+  const w = d.weather;
+  const wxNote = w && w.attribution ? `氣溫、濕度、露點：${esc(w.attribution)}，每次在當時、當地（這段的平均位置與平均海拔，由 Open-Meteo 換算到該海拔）的逐時歷史資料；熱 = Hadley 氣溫 °F + 露點 °F，> 150 標紅點（Hadley 表配速約慢 4.5% 以上）。` +
+    `本次更新查了 ${w.needed ?? 0} 個「日 × 格點」：呼叫 ${w.calls ?? 0} 次、快取 ${w.cache_hits ?? 0}` + (w.failed ? `、失敗 ${w.failed}` : "") + (w.skipped ? `、略過 ${w.skipped}（離線？下次更新再補）` : "") + "。" : "";
+  $("detail").innerHTML = `
+  <div class="panel dh">
+    <button class="back" id="back">← 清單</button>
+    <h2 id="dname" title="點一下改名">${esc(d.name)}</h2>
+    <div class="stats">${badge(d)}<span><b>${km(d.length_m)}</b></span><span><b>${gainTxt(d)}</b></span>
+      <span><b>${d.n_efforts}</b> 次 · ${d.n_activities} 個活動</span>
+      <span>最佳 <b>${hms(best?.[tk])}</b>（${day(best?.start)}）</span><span>最近 <b>${hms(last?.[tk])}</b>（${day(last?.start)}）</span>
+      ${d.renamed ? `<span class="meta">自動名稱：${esc(d.auto_name)}</span>` : ""}</div>
+    ${relations(d)}
+  </div>
+  <div class="panel card"><div id="map"></div>
+    <div class="note">藍線：這個${d.kind === "route" ? "路線（過半數的那幾次都有跑到的共同部分）" : d.derived ? "路段（相連的幾段合併後的共同部分）" : "路段（第一次經過的軌跡）"}，<span style="color:var(--ok)">●</span> 起點、<span style="color:var(--err,#b91c1c)">●</span> 終點。比較圖上移動游標，地圖上的點跟著走。</div></div>
+  <div class="panel card"><h3>趨勢 <span class="seg" id="tmode"><button data-v="time" class="on">${timeName}</button>${up ? '<button data-v="vam">VAM</button>' : ""}${d.kind === "route" ? "" : '<button data-v="pace">配速</button>'}</span>
+    ${hasWx ? `<button class="tog ${S.colorTemp ? "on" : ""}" id="ctemp" title="點的顏色 = 當時氣溫（Open-Meteo 歷史資料）；外圈 = 熱（Hadley > 150）">依氣溫上色</button>` : ""}
+    <span class="meta">${up ? "下圖：同樣爬升速度下的心率（HR ÷ VAM，越低越省力）" : "下圖：平均心率"}</span></h3>
+    <div class="chart tall" id="trend"></div></div>
+  <div class="panel card" id="cmpcard"><h3>兩次比較 <span class="seg" id="cmode"><button data-v="pace" class="on">配速</button><button data-v="hr">心率</button>${hasPw ? '<button data-v="power">功率</button>' : ""}<button data-v="elev">海拔</button></span>
+    <span class="meta">在下表勾 A / B，或點趨勢圖上的點換 B</span></h3>
+    <div class="cmpbar" id="cmpbar"></div>
+    <div class="chart" id="cmp"></div><div class="chart" id="gap" style="height:170px"></div></div>
+  <div class="panel card"><h3>每次成績 <span class="meta">勾 A / B 兩次來比較；排名依${timeName}</span></h3>
+    <div class="tablewrap"><table id="etab"></table></div>
+    <div id="more"></div>
+    <div class="note">${up ? "VAM = 淨爬升 ÷ 移動時間；" : down ? "下降率 = 淨下降 ÷ 移動時間；" : ""}⚠ = 移動時間不到經過時間一半，VAM 可能偏高；心率、功率為移動中的時間加權平均；最高心率 = 這段原始取樣的最大值；30 s 功率 = 完全落在這段內的 30 秒平均最大值；hrTSS 占比 = 這段的 hrTSS ÷ 整個活動的 hrTSS（WKO5 hrTSS 算法）；錶溫為手錶感測器（受體溫、日照影響，僅供參考）。</div>
+    ${wxNote ? `<div class="note">${wxNote}</div>` : ""}</div>`;
+  $("back").onclick = () => { document.body.classList.remove("has-detail"); history.pushState({}, "", location.pathname); };
+  $("dname").onclick = rename;
+  document.querySelectorAll(".rel a[data-go]").forEach((a) => a.onclick = () => openDetail(a.dataset.go, true));
+  document.querySelectorAll(".rel a[data-w]").forEach((a) => a.onclick = () => openWorkout(+a.dataset.w));
+  drawMap();
+  S.tmode = "time";
+  drawTrend(S.tmode);
+  $("tmode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    $("tmode").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); S.tmode = b.dataset.v; drawTrend(S.tmode); });
+  if ($("ctemp")) $("ctemp").onclick = () => {
+    S.colorTemp = !S.colorTemp; savePrefs();
+    $("ctemp").classList.toggle("on", S.colorTemp); drawTrend(S.tmode); };
+  drawTable();
+  S.cmode = "pace";
+  $("cmode").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    $("cmode").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); S.cmode = b.dataset.v; drawCompare(); });
+  loadCompare();
+}
+
+// parent route, sub-routes, runs that covered only a part, merged pieces
+function relations(d) {
+  const link = (r) => `<a data-go="${esc(r.id)}">${esc(r.name)}</a>（${km(r.length_m)}，${r.n_efforts} 次）`;
+  const out = [];
+  if (d.parent) out.push(`這條是 ${link(d.parent)} 的一段`);
+  if (d.sub_routes?.length) out.push(`包含的較短路線：${d.sub_routes.map(link).join("、")}`);
+  if (d.partials?.length) out.push(`另有 ${d.partials.length} 次只跑了其中一段：` + d.partials.map((p) =>
+    p.workout != null ? `<a data-w="${p.workout}">${day(p.start)}</a>` : day(p.start)).join("、"));
+  if (d.n_reversed) out.push(`${d.n_reversed} 次反方向（排名與比較各自分開）`);
+  if (d.derived && d.merged_from?.length) out.push(`由 ${d.merged_from.length} 段相連的路段合併`);
+  return out.length ? `<div class="rel" style="flex-basis:100%">${out.join(" · ")}</div>` : "";
+}
+
+async function rename() {
+  const d = S.detail;
+  const name = prompt("路段名稱（留空 = 用自動名稱）", d.renamed ? d.name : "");
+  if (name === null) return;
+  const r = await j(`${API}/${d.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+  d.name = r.name; d.renamed = r.renamed;
+  $("dname").textContent = r.name;
+  loadList();
+}
+
+async function drawMap() {
+  const d = S.detail;
+  const map = S.map = L.map("map", { zoomControl: true });
+  MapLayers.attach(map, await MapLayers.defaults(), "routes.map");
+  const ll = d.lat.map((a, i) => [a, d.lon[i]]);
+  L.polyline(ll, { color: "#fff", weight: 8, opacity: .7, interactive: false }).addTo(map);
+  L.polyline(ll, { color: css("--accent") || "#2563eb", weight: 5, interactive: false }).addTo(map);
+  L.circleMarker(ll[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1 }).addTo(map).bindTooltip("起點");
+  L.circleMarker(ll[ll.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#dc2626", fillOpacity: 1 }).addTo(map).bindTooltip("終點");
+  S.hoverA = L.circleMarker(ll[0], { radius: 7, color: "#fff", weight: 2, fillColor: css("--a"), fillOpacity: 1 });
+  S.hoverB = L.circleMarker(ll[0], { radius: 5, color: "#fff", weight: 2, fillColor: css("--b"), fillOpacity: 1 });
+  map.fitBounds(L.latLngBounds(ll), { padding: [18, 18] });
+}
+
+function baseChart(el) {
+  const c = echarts.init(el);
+  S.charts.push(c);
+  return c;
+}
+function axisStyle() {
+  return { axisLine: { lineStyle: { color: css("--line") } }, axisLabel: { color: css("--muted") },
+    splitLine: { lineStyle: { color: css("--line") } }, nameTextStyle: { color: css("--muted") } };
+}
+
+function drawTrend(mode) {
+  const d = S.detail, up = d.direction === "up";
+  const el = $("trend");
+  echarts.getInstanceByDom(el)?.dispose();
+  const c = baseChart(el);
+  const byTemp = S.colorTemp && d.efforts.some((e) => e.wx);
+  const pts = d.efforts.map((e) => {
+    const y = mode === "vam" ? e.vam : mode === "pace" ? e.pace_min_km : e[d.time_key];
+    const p = { value: [e.start.slice(0, 10), y, e.wx ? e.wx.temp_c : null], e };
+    if (byTemp) {
+      // no weather: hollow gray; hot (Hadley > 150): a ring in ink around the fill
+      p.itemStyle = !e.wx ? { color: css("--panel"), borderColor: css("--mild"), borderWidth: 1.5 }
+        : e.wx.hot ? { borderColor: css("--text"), borderWidth: 2 } : { borderColor: css("--panel"), borderWidth: 1 };
+      if (e.wx?.hot) p.symbolSize = 11;
+    }
+    return p;
+  }).filter((p) => p.value[1] != null);
+  // diverging around 18 °C (comfortable running): blue colder, red warmer, symmetric arms
+  const temps = pts.map((p) => p.value[2]).filter((v) => v != null);
+  const arm = temps.length ? Math.max(6, ...temps.map((v) => Math.abs(v - 18))) : 10;
+  const visualMap = byTemp ? [{ type: "continuous", seriesIndex: 0, dimension: 2, min: Math.floor(18 - arm), max: Math.ceil(18 + arm),
+    inRange: { color: [css("--cold"), css("--mild"), css("--hot")] }, outOfRange: { color: css("--mild") },
+    orient: "horizontal", right: 16, top: 0, itemWidth: 10, itemHeight: 120, calculable: false, precision: 0,
+    text: ["°C", ""], textStyle: { color: css("--muted"), fontSize: 11 } }] : undefined;
+  const eff = d.efforts.map((e) => ({ value: [e.start.slice(0, 10), up ? e.hr_vam : e.avg_hr], e })).filter((p) => p.value[1] != null);
+  const fmtY = mode === "vam" ? (v) => Math.round(v) : mode === "pace" ? pace : hms;
+  const ax = axisStyle();
+  c.setOption({
+    animation: false, textStyle: { color: css("--text") },
+    grid: [{ left: 58, right: 16, top: byTemp ? 30 : 16, height: byTemp ? "42%" : "46%" }, { left: 58, right: 16, top: "66%", bottom: 28 }],
+    visualMap,
+    tooltip: { trigger: "item", formatter: (p) => {
+      const e = p.data.e;
+      return `${e.start.slice(0, 16).replace("T", " ")} ${esc(e.sport_type || "")}<br>${d.time_key === "elapsed_s" ? "經過" : "移動"} ${hms(e[d.time_key])}（第 ${e.rank ?? "—"}）` +
+        (e.vam != null ? `<br>VAM ${Math.round(e.vam)} m/h` : "") + (e.avg_hr != null ? `<br>心率 ${num(e.avg_hr)} bpm` : "") +
+        (e.max_hr != null ? `（最高 ${num(e.max_hr)}）` : "") +
+        (e.hr_vam != null ? ` · HR÷VAM ${num(e.hr_vam, 0)}` : "") +
+        (e.wx ? `<br>氣溫 ${num(e.wx.temp_c, 1)}° · 露點 ${num(e.wx.dew_c, 1)}° · 濕度 ${num(e.wx.rh_pct)}% · 熱 ${num(e.wx.hadley)}${e.wx.hot ? `（熱，配速約慢 ${num(e.wx.heat_pct, 1)}%）` : ""}` : "") +
+        (e.phase ? `<br>${esc(e.phase)}` : ""); } },
+    xAxis: [{ type: "time", gridIndex: 0, ...ax, axisLabel: { show: false }, splitLine: { show: false } },
+      { type: "time", gridIndex: 1, ...ax, splitLine: { show: false } }],
+    yAxis: [{ type: "value", gridIndex: 0, scale: true, inverse: mode !== "vam", ...ax, nameLocation: mode !== "vam" ? "start" : "end",
+      name: mode === "vam" ? "VAM m/h" : mode === "pace" ? "min/km" : "時間", axisLabel: { color: css("--muted"), formatter: fmtY } },
+      { type: "value", gridIndex: 1, scale: true, ...ax, name: up ? "HR÷VAM" : "bpm" }],
+    series: [
+      { type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts, symbolSize: byTemp ? 9 : 7, symbol: byTemp ? "circle" : "emptyCircle",
+        lineStyle: { width: 1, opacity: .45, color: byTemp ? css("--mild") : css("--accent") },
+        itemStyle: { color: css("--accent") },
+        markPoint: pts.length ? { symbol: "circle", symbolSize: 11, itemStyle: { color: css("--ok") }, label: { show: false },
+          data: [{ coord: (mode === "vam" ? pts.reduce((a, b) => (b.value[1] > a.value[1] ? b : a)) : pts.reduce((a, b) => (b.value[1] < a.value[1] ? b : a))).value }] } : undefined },
+      { type: "line", xAxisIndex: 1, yAxisIndex: 1, data: eff, symbolSize: 6, lineStyle: { width: 1, opacity: .45 }, itemStyle: { color: css("--b") } },
+    ],
+  });
+  c.on("click", (p) => { if (p.data?.e) pickEffort(p.data.e.id); });
+}
+
+function lowMov(e) {
+  // the moving mask (speed > 1 mph) drops slow, steep climbing: moving-time VAM overstates it
+  return e.moving_share != null && e.moving_share < 0.5
+    ? ` <span title="移動時間只占經過時間的 ${Math.round(e.moving_share * 100)}%（速度低於 1.6 km/h 不算移動），VAM 可能偏高" style="color:var(--warn);cursor:help">⚠</span>` : "";
+}
+
+function pickEffort(id) {
+  if (id === S.a || id === S.b) return;
+  S.b = id; drawTable(); loadCompare();
+}
+
+function drawTable() {
+  const d = S.detail, up = d.direction === "up", down = d.direction === "down", tk = d.time_key;
+  const f2i = (e) => e.workout;
+  const hasPw = d.efforts.some((e) => e.avg_power != null);
+  const hasT = d.efforts.some((e) => e.temp_c != null);
+  const hasWx = d.efforts.some((e) => e.wx);
+  const hasMax = d.efforts.some((e) => e.max_hr != null);
+  const hasP30 = d.efforts.some((e) => e.max_p30 != null);
+  const heat = (w) => !w ? "—" : `${w.hot ? `<i class="hotdot" aria-label="熱"></i>` : ""}${num(w.hadley)}`;
+  const all = [...d.efforts].reverse();
+  // newest 20, plus A / B and the best when older; "顯示全部" lists every one
+  const rows = S.showAll ? all : all.filter((e, i) => i < 20 || e.id === S.a || e.id === S.b || e.rank === 1);
+  $("more").innerHTML = all.length > rows.length || S.showAll && all.length > 20
+    ? `<button id="moreb" style="margin-top:8px">${S.showAll ? "只看最近 20 次" : `顯示全部 ${all.length} 次`}</button>` : "";
+  if ($("moreb")) $("moreb").onclick = () => { S.showAll = !S.showAll; drawTable(); };
+  $("etab").innerHTML = `<thead><tr><th class="l">日期</th><th>比較</th><th>名次</th><th>${tk === "elapsed_s" ? "經過" : "移動"}</th><th>與最佳差</th>
+    ${tk === "elapsed_s" ? "<th>移動</th>" : ""}<th>配速</th>${up ? "<th>VAM</th>" : down ? "<th>下降率</th>" : ""}<th>心率</th>
+    ${hasMax ? "<th title='這段原始取樣的最高心率'>最高心率</th>" : ""}
+    ${up ? "<th title='HR ÷ VAM × 1000'>HR÷VAM</th><th title='心跳次數 / 每爬 100 m'>心跳/100m</th>" : ""}
+    ${hasPw ? `<th>功率</th>${hasP30 ? "<th title='完全落在這段內的 30 秒平均功率最大值'>30 s 最大</th>" : ""}${up ? "<th title='W ÷ VAM × 1000'>W÷VAM</th>" : ""}` : ""}<th title="這段占整個活動 hrTSS 的比例">hrTSS 占比</th>
+    ${hasWx ? "<th title='Open-Meteo 歷史資料，當時當地，依海拔修正'>氣溫</th><th>露點</th><th>濕度</th><th title='Hadley：氣溫 °F + 露點 °F；> 150 標紅點（配速約慢 4.5% 以上）'>熱</th>" : ""}
+    ${hasT ? "<th title='手錶溫度感測器（受體溫、日照影響）'>錶溫</th>" : ""}<th class="l">周期</th><th class="l">運動</th></tr></thead><tbody>` +
+    rows.map((e) => `<tr class="${e.rank === 1 ? "best" : ""}">
+      <td class="l">${f2i(e) != null ? `<a class="act" href="#" data-w="${f2i(e)}" title="在圖表分析打開這個活動">${e.start.slice(0, 10)}</a>` : e.start.slice(0, 10)}${e.dir && e.dir !== "same" ? `<span class="dirtag" title="${e.dir === "reversed" ? "反方向跑這條路線：名次只和同方向的比" : "部分正向、部分反向"}">${e.dir === "reversed" ? "反向" : "混合"}</span>` : ""}</td>
+      <td class="pick"><label><input type="radio" name="pa" value="${e.id}" ${e.id === S.a ? "checked" : ""}>A</label><label><input type="radio" name="pb" value="${e.id}" ${e.id === S.b ? "checked" : ""}>B</label></td>
+      <td>${e.rank ?? "—"}</td><td>${hms(e[tk])}</td><td>${dhms(e.delta_best_s)}</td>
+      ${tk === "elapsed_s" ? `<td>${hms(e.moving_s)}</td>` : ""}<td>${pace(e.pace_min_km)}</td>
+      ${up ? `<td>${num(e.vam)}${lowMov(e)}</td>` : down ? `<td>${num(e.descent_rate)}${lowMov(e)}</td>` : ""}<td>${num(e.avg_hr)}</td>
+      ${hasMax ? `<td>${num(e.max_hr)}</td>` : ""}
+      ${up ? `<td>${num(e.hr_vam)}</td><td>${num(e.hr_per_100m)}</td>` : ""}
+      ${hasPw ? `<td>${num(e.avg_power)}</td>${hasP30 ? `<td>${num(e.max_p30)}</td>` : ""}${up ? `<td>${num(e.power_vam)}</td>` : ""}` : ""}
+      <td>${e.hrtss_share != null ? (e.hrtss_share * 100).toFixed(0) + "%" : "—"}</td>
+      ${hasWx ? `<td>${e.wx ? num(e.wx.temp_c, 1) + "°" : "—"}</td><td>${e.wx ? num(e.wx.dew_c, 1) + "°" : "—"}</td><td>${e.wx ? num(e.wx.rh_pct) + "%" : "—"}</td>
+        <td title="${e.wx ? `Hadley ${num(e.wx.hadley)}；配速約慢 ${num(e.wx.heat_pct, 1)}%` : "沒有天氣資料"}">${heat(e.wx)}</td>` : ""}
+      ${hasT ? `<td class="sec">${e.temp_c != null ? num(e.temp_c, 1) + "°" : "—"}</td>` : ""}
+      <td class="l">${esc(e.phase || "—")}</td><td class="l">${esc(e.sport_type || e.sport || "")}${e.frechet_m != null && e.frechet_m > 60 ? ` <span class="meta" title="和參考軌跡的最大偏差（離散 Fréchet 距離）">偏 ${Math.round(e.frechet_m)} m</span>` : ""}</td></tr>`).join("") + "</tbody>";
+  $("etab").querySelectorAll("input[name=pa]").forEach((i) => i.onchange = () => { S.a = i.value; loadCompare(); });
+  $("etab").querySelectorAll("input[name=pb]").forEach((i) => i.onchange = () => { S.b = i.value; loadCompare(); });
+  $("etab").querySelectorAll("a.act").forEach((a) => a.onclick = (ev) => { ev.preventDefault(); openWorkout(+a.dataset.w); });
+}
+
+function openWorkout(idx) {
+  // the viewer restores its last state from localStorage; point it at this activity
+  try {
+    const st = JSON.parse(localStorage.getItem("wko5viewer") || "{}");
+    localStorage.setItem("wko5viewer", JSON.stringify({ ...st, mode: "workout", workout: idx, workoutLabel: null }));
+  } catch {}
+  location.href = window.TRC_STATIC ? TRC_STATIC.href("/api/v1/wko5/viewer") : "/api/v1/wko5/viewer";   // the static demo's file
+}
+
+async function loadCompare() {
+  const d = S.detail;
+  if (!S.a || !S.b || S.a === S.b) { $("cmpbar").innerHTML = `<span class="hint">選兩次不同的成績來比較</span>`; return; }
+  const token = S.cmpToken = Math.random();
+  let c;
+  try { c = await j(`${API}/${d.id}/compare?a=${S.a}&b=${S.b}`); }
+  catch (e) {
+    if (token !== S.cmpToken) return;
+    S.cmp = null;
+    for (const id of ["cmp", "gap"]) echarts.getInstanceByDom($(id))?.dispose();
+    const msg = (() => { try { return JSON.parse(e.message.replace(/^\d+ /, "")).detail; } catch { return e.message; } })();
+    $("cmpbar").innerHTML = `<span class="hint">${esc(msg)}</span>`;
+    return;
+  }
+  if (token !== S.cmpToken) return;
+  S.cmp = c;
+  const ea = c.a.effort, eb = c.b.effort, tk = d.time_key;
+  const fin = c.gap_s.filter((g) => g != null);
+  const endGap = fin.length ? fin[fin.length - 1] : null;
+  const wxs = (e) => e.wx ? ` <span class="meta">${num(e.wx.temp_c, 1)}°／露點 ${num(e.wx.dew_c, 1)}°${e.wx.hot ? " 熱" : ""}</span>` : "";
+  $("cmpbar").innerHTML = `<span><i class="a-dot"></i>A ${ea.start.slice(0, 10)} <b>${hms(ea[tk])}</b>${wxs(ea)}</span>
+    <span><i class="b-dot"></i>B ${eb.start.slice(0, 10)} <b>${hms(eb[tk])}</b>${wxs(eb)}</span>
+    <span>終點差 <b>${endGap == null ? "—" : (endGap > 0 ? "B 慢 " : "B 快 ") + hms(Math.abs(endGap))}</b></span>`;
+  drawCompare();
+}
+
+function drawCompare() {
+  const c = S.cmp, d = S.detail;
+  if (!c) return;
+  for (const id of ["cmp", "gap"]) echarts.getInstanceByDom($(id))?.dispose();
+  S.charts = S.charts.filter((x) => !x.isDisposed());
+  const m = S.cmode, key = { pace: "pace_min_km", hr: "hr", power: "power", elev: "elev" }[m];
+  const x = c.x_m.map((v) => v / 1000);
+  const ser = (side, color) => ({ type: "line", name: side.toUpperCase(), showSymbol: false, connectNulls: false,
+    data: x.map((xv, i) => [xv, c[side][key][i]]), lineStyle: { width: 1.6, color }, itemStyle: { color } });
+  const ax = axisStyle();
+  const unit = { pace: "min/km", hr: "bpm", power: "W", elev: "m" }[m];
+  const fmt = m === "pace" ? pace : (v) => Math.round(v);
+  const ch = baseChart($("cmp"));
+  ch.setOption({
+    animation: false, legend: { top: 0, textStyle: { color: css("--muted") } },
+    grid: { left: 52, right: 16, top: 28, bottom: 26 },
+    tooltip: { trigger: "axis", valueFormatter: (v) => (v == null ? "—" : fmt(v)) },
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    xAxis: { type: "value", min: 0, max: x[x.length - 1], ...ax, axisLabel: { color: css("--muted"), formatter: (v) => v.toFixed(1) }, name: "km" },
+    yAxis: { type: "value", scale: true, inverse: m === "pace", name: unit, ...ax, axisLabel: { color: css("--muted"), formatter: fmt } },
+    series: [ser("a", css("--a")), ser("b", css("--b"))],
+  });
+  const g = baseChart($("gap"));
+  g.setOption({
+    animation: false, grid: { left: 52, right: 16, top: 22, bottom: 26 },
+    title: { text: "B 相對 A 的時間差（秒，正 = B 落後）", textStyle: { fontSize: 12, fontWeight: 400, color: css("--muted") }, left: 50, top: 0 },
+    tooltip: { trigger: "axis", valueFormatter: (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Math.round(v)} s`) },
+    xAxis: { type: "value", min: 0, max: x[x.length - 1], ...ax, axisLabel: { color: css("--muted"), formatter: (v) => v.toFixed(1) } },
+    yAxis: { type: "value", ...ax },
+    series: [{ type: "line", showSymbol: false, data: x.map((xv, i) => [xv, c.gap_s[i]]), lineStyle: { color: css("--b"), width: 1.6 },
+      areaStyle: { color: css("--b"), opacity: .12 }, markLine: { symbol: "none", silent: true, lineStyle: { color: css("--muted") }, data: [{ yAxis: 0 }] } }],
+  });
+  echarts.connect([ch, g]);
+  const hover = (p) => {
+    const xv = p?.axesInfo?.[0]?.value ?? p?.value;
+    if (xv == null || !S.map) return;
+    let k = 0, best = Infinity;
+    for (let i = 0; i < x.length; i++) { const dd = Math.abs(x[i] - xv); if (dd < best) { best = dd; k = i; } }
+    const pos = [c.lat[k], c.lon[k]];
+    S.hoverA.setLatLng(pos).addTo(S.map);
+    // where B is when A is here: B's position at A's elapsed time
+    const ta = c.a.t_s[k];
+    let kb = k;
+    if (ta != null) { let bb = Infinity; c.b.t_s.forEach((t, i) => { if (t != null && Math.abs(t - ta) < bb) { bb = Math.abs(t - ta); kb = i; } }); }
+    S.hoverB.setLatLng([c.lat[kb], c.lon[kb]]).addTo(S.map);
+    S.hoverA.bindTooltip(`A ${x[k].toFixed(2)} km · B 在 ${x[kb].toFixed(2)} km`, { direction: "top", offset: [0, -6] }).openTooltip();
+  };
+  ch.on("updateAxisPointer", hover);
+  g.on("updateAxisPointer", hover);
+  const clear = () => { S.hoverA?.remove(); S.hoverB?.remove(); };
+  $("cmp").onmouseleave = clear; $("gap").onmouseleave = clear;
+}
+
+// ---- init
+bindSeg("f-kind", "kind");
+bindSeg("f-dir", "dir");
+$("f-sport").onchange = (e) => { S.sport = e.target.value; savePrefs(); loadList(); };
+$("rebuild").onclick = async () => { await j(`${API}/rebuild`, { method: "POST" }); loadList(); };
+window.addEventListener("popstate", () => {
+  const id = location.hash.slice(1);
+  if (id) openDetail(id, false); else document.body.classList.remove("has-detail");
+});
+window.addEventListener("resize", () => S.charts.forEach((c) => c.resize()));
+loadPrefs();
+loadList().then(() => {
+  if (S.sport) $("f-sport").value = S.sport;
+  const id = location.hash.slice(1);
+  if (id) openDetail(id, false);
+  else if (window.matchMedia("(min-width: 901px)").matches && S.rows[0]) openDetail(S.rows[0].id, false);
+});
+</script>
+</body>
+</html>

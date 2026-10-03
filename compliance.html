@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="zh-TW">
+<head><script>window.TRC_STATIC_CFG = {"snapshot": "2026-10-03", "today": "2026-10-03", "pages": {"/demo": "index.html", "/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html", "/api/v1/overview/plan/compliance/page": "compliance.html", "/api/v1/wko5/viewer": "charts.html", "/api/v1/plan/page": "plan.html", "/api/v1/wko5/activities/page": "activities.html", "/api/v1/routes/page": "routes.html", "/api/v1/racepower/page": "racepower.html", "/": "index.html", "/api/v1/achievements/page": "activities.html#achievements"}, "compute": "^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$", "locks": "#gpxpick, #evsubmit, #addphase, #savephases, #tomanual, #toauto, [data-del-event], [data-edit-event], #rec-btn, #pf-save, #pf-reset, #bo-save, #bo-del, #sd-swap, #vd button[data-vk], #gpxfile, #gpx-attach, #stop-import, input[type=file][accept*='.gpx' i]"};</script><script src="static/trc_static.js"></script><script>window.TRC_SESSION = {"mode": "demo", "static": true, "caps": ["plan.write"], "user": null, "demo": {"sandbox": false, "base": "2026-10-03-20261002", "expires_at": null, "reset": false, "cta_url": null, "static": true}};</script><script>window.__I18N__ = {"locale": "zh-TW", "debug": false, "catalog": {"common.z5flow.aria": "5 區開放流程", "common.z5flow.here": "你現在在這裡", "common.z5flow.next": "下一步", "common.z5flow.also": "同時可以做（{stage}）", "common.z5flow.help": "說明", "common.z5flow.ok": "已達成", "common.z5flow.todo": "還沒達成", "common.z5flow.unknown": "還沒做", "common.z5flow.unlocks": "完成後：", "common.z5flow.unlocked": "已解鎖：", "common.z5flow.tag.done": "已完成", "common.z5flow.tag.current": "現在", "common.z5flow.tag.parallel": "可同時做", "common.z5flow.tag.locked": "未解鎖", "common.workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標", "common.workout.no_tpace_badge": "沒有閾值配速", "common.workout.no_tpace_link": "看閾值配速怎麼估", "common.autoplan.log_title": "自動調整紀錄", "common.autoplan.log_count": "{n} 筆", "shell.brand": "訓練教練", "shell.brand.title": "回首頁", "shell.nav.label": "主選單", "shell.nav.item_title": "{name}：{purpose}", "shell.page.home.name": "總覽", "shell.page.home.short": "總覽", "shell.page.home.purpose": "狀況・待辦・本週課表", "shell.page.schedule.name": "課表", "shell.page.schedule.short": "課表", "shell.page.schedule.purpose": "日曆排課・同步 COROS", "shell.page.charts.name": "圖表分析", "shell.page.charts.short": "圖表", "shell.page.charts.purpose": "趨勢與單次活動圖表", "shell.page.activity.name": "活動列表", "shell.page.activity.short": "活動", "shell.page.activity.purpose": "搜尋・篩選・編輯・成就", "shell.page.injuries.name": "傷病紀錄", "shell.page.injuries.short": "傷病", "shell.page.injuries.purpose": "疼痛・受傷前的訓練", "shell.page.routes.name": "路線", "shell.page.routes.short": "路線", "shell.page.routes.purpose": "重複路段與路線的進步", "shell.page.plan.name": "賽事周期", "shell.page.plan.short": "周期", "shell.page.plan.purpose": "目標賽事・周期・門檻", "shell.page.racepower.name": "賽事計算機", "shell.page.racepower.short": "計算機", "shell.page.racepower.purpose": "完賽時間・分段配速／功率／心率・補給", "shell.page.settings.name": "設定", "shell.page.settings.short": "設定", "shell.page.settings.purpose": "計算模式・體重・資料校正", "shell.build.preparing": "正在準備資料…", "shell.build.elapsed": "已 {s} 秒", "shell.build.failed": "資料處理失敗：{error}", "shell.lang.title": "切換語言（Language）", "shell.lang.zh-TW": "中文", "shell.lang.en": "EN", "shell.nav.more": "更多", "shell.nav.more_title": "活動列表、路線、傷病紀錄、設定", "shell.demo.tag": "示範資料", "shell.demo.text": "這是虛構的跑者，你的修改只存在這個瀏覽器。", "shell.demo.try": "試試：", "shell.demo.try_schedule": "排課表", "shell.demo.try_race": "賽事計算機", "shell.demo.try_plan": "週期", "shell.demo.left_none": "還沒有修改", "shell.demo.left_h": "{h} 小時後清除", "shell.demo.left_m": "{m} 分鐘後清除", "shell.demo.left_title": "你的修改從第一次修改起保留 24 小時，之後自動回到原始示範資料", "shell.demo.reset": "重設示範", "shell.demo.reset_title": "清掉你的修改，回到原始示範資料", "shell.demo.reset_confirm": "清掉你在示範裡的所有修改？", "shell.demo.cta": "想用自己的資料？", "shell.demo.locked": "示範模式不提供這個功能", "shell.demo.disabled": "示範模式不提供這個功能", "shell.demo.static_text": "唯讀示範：虛構跑者的一年訓練。課表可以試著改，修改只存在這個瀏覽器。", "shell.demo.static_edits": "已修改課表", "shell.demo.static_none": "還沒有修改", "shell.demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改", "shell.demo.static_locked": "唯讀示範：這個操作在示範版不能用", "compliance.page_title": "課表統計 · 訓練教練", "compliance.title": "課表統計", "compliance.tabs.label": "課表檢視", "compliance.tabs.calendar": "日曆", "compliance.tabs.compliance": "課表統計", "compliance.loading": "載入中…", "compliance.load_failed": "載入失敗：{error}", "compliance.help": "說明", "compliance.empty": "這段期間沒有到期的課", "compliance.empty_short": "沒有到期的課", "compliance.period.label": "期間", "compliance.period.4w": "4 週", "compliance.period.12w": "12 週", "compliance.period.phase": "本周期", "compliance.period.custom": "自訂", "compliance.period.from": "開始", "compliance.period.to": "結束", "compliance.period.apply": "套用", "compliance.period.bad": "日期不對：開始要早於結束", "compliance.status.done": "完成", "compliance.status.partial": "部分", "compliance.status.off_plan": "沒照課表", "compliance.status.missed": "沒做", "compliance.status.open": "待同步", "compliance.kind.easy": "輕鬆跑", "compliance.kind.long": "LSD", "compliance.kind.quality": "強度課", "compliance.kind.test": "測試", "compliance.kind.hike": "越野跑", "compliance.kind.strength": "肌力", "compliance.kind.heat_passive": "被動熱適應", "compliance.kind.notice": "課表待確認", "compliance.kpi.rate": "完成率", "compliance.kpi.rate_tip": "到期的課裡，有做的比例（完成＋部分＋沒照課表都算有做）。\n到期＝日期在今天以前，或今天已經做完。\n「待同步」＝日期已過、但同步的資料還沒涵蓋那天，先不算。\n刪掉的過期課不算。", "compliance.kpi.rate_sub": "完成 {done} / {due} 堂", "compliance.kpi.open": "{n} 堂待同步", "compliance.kpi.ok": "達標率", "compliance.kpi.ok_tip": "照計畫完成（✓）的比例：時間和 TSS 都在計畫的 ±20% 內，而且類型和強度對。\n±20% 是 TrainingPeaks 的完成度顏色門檻（綠色）；20–50% 算「部分」。\n「沒照課表」＝排強度跑成輕鬆（或反過來）、或做了別的運動。", "compliance.kpi.ok_sub": "✓ {n} · 部分 {partial} · 沒照課表 {off}", "compliance.kpi.tss": "TSS 完成度", "compliance.kpi.tss_tip": "到期的課：實際 TSS ÷ 計畫 TSS（intervals.icu 的 Compliance 算法）。\n沒做的課算 0。條上的黑線是 100%。", "compliance.kpi.tss_sub": "實際 {a} / 計畫 {p}", "compliance.kpi.hours": "時數", "compliance.kpi.hours_tip": "到期的課：實際移動時間 vs 計畫時間（肌力不算，跟週量一樣）。", "compliance.kpi.hours_sub": "計畫的 {pct}%", "compliance.kpi.streak": "連續達標", "compliance.kpi.streak_tip": "最近連續幾週，每週到期的課完成 ≥ {pct}%（門檻推估）。\n本週還沒結束：達到門檻才算進去，沒達到不算中斷。", "compliance.kpi.streak_sub": "這段期間最長 {best} 週", "compliance.kpi.weeks_unit": "週", "compliance.phase.title": "目前周期", "compliance.phase.tip": "賽事周期（賽事周期頁）裡目前這一期：過了幾天、整期的課完成多少、還剩幾堂。\n整期 TSS＝整期所有的課（含還沒到的）的計畫 TSS；實際＝到期的課做到的 TSS。", "compliance.phase.days": "第 {done} / {total} 天", "compliance.phase.time_aria": "周期已過 {pct}%", "compliance.phase.rate": "這期完成率", "compliance.phase.left": "還剩", "compliance.phase.left_sub": "堂課（含今天）", "compliance.phase.tss": "TSS", "compliance.phase.tss_sub": "已完成 / 整期計畫", "compliance.weeks.title": "每週計畫 vs 實際", "compliance.weeks.hours": "時數", "compliance.weeks.metric": "指標", "compliance.weeks.planned": "計畫", "compliance.weeks.actual": "實際", "compliance.weeks.aria": "每週計畫（虛線外框）與實際（實心）的長條圖", "compliance.weeks.tip": "每週計畫 vs 實際的量。\n怎麼看：虛線外框 = 計畫（存起來的課表，含完成、沒做、還沒到的）；實心 = 實際做到的（所有活動，含沒排課的）。\n看什麼：實心長期填不滿外框 = 課表排太多；遠超過 = 排太少或加練太多。\n方法：同課表頁每週右邊的統計。", "compliance.trend.title": "每週完成率", "compliance.trend.sub": "虛線 {pct}%", "compliance.trend.rate": "完成率", "compliance.trend.current": "本週還沒結束", "compliance.trend.aria": "每週完成率的折線圖", "compliance.trend.tip": "每週到期的課裡有做的比例。\n怎麼看：綠點 = 達到 {pct}%，橘點 = 沒達到。\n看什麼：連續綠點 = 課表排得做得到；橘點多 = 排太多或太難。\n方法：{pct}% 是連續達標的門檻（推估）。", "compliance.kinds.title": "依課表類型", "compliance.kinds.aria": "{kind}：完成 {done} / {due} 堂", "compliance.kinds.tip": "每種課的完成狀況。\n怎麼看：綠 = 完成、橘 = 部分、斜線 = 沒照課表、紅 = 沒做；右邊是完成率和堂數。\n看什麼：哪種課最常沒做或做走樣。\n方法：完成 = 時間和 TSS 都在計畫 ±20% 內（TrainingPeaks 的完成度顏色）。", "compliance.list.title": "每堂課", "compliance.list.sub": "共 {n} 堂（新的在上面）", "compliance.list.tip": "百分比＝完成度：實際 TSS ÷ 計畫 TSS，沒有 TSS 時用時間。\n點一下打開課表頁的那堂課（看計畫 vs 實際、改配對）。", "compliance.list.all": "全部", "compliance.list.more": "再顯示（還有 {n} 堂）", "compliance.list.dur_pct": "時間 {pct}%", "compliance.list.tss_pct": "TSS {pct}%", "compliance.tabs.calendar_sub": "每天排了什麼課", "compliance.tabs.compliance_sub": "計畫 vs 實際、負荷", "compliance.period.phases": "賽事周期", "compliance.period.phase_tip": "{label}：{start} – {end}", "compliance.ratio.title": "負荷比 ATL ÷ CTL", "compliance.ratio.tip": "負荷比 ATL ÷ CTL：近 7 天的疲勞除以 42 天的體能。\n怎麼看：線的顏色 = 那天的區間：灰 < 0.8 偏少、綠 0.8–1.3 正常、黃 1.3–1.5 偏多、紅 > 1.5 暴增；最右邊是最新值。\n看什麼：1 = 跟平常一樣；恢復週、減量期灰色正常，多日百岳衝高也正常。\n方法：區間借自 Runalyze（引 Gabbett 2016）；只看方向，不是受傷預測。", "compliance.ratio.aria": "每天的 ATL ÷ CTL 折線，背景分成偏少、正常、偏多、暴增四區", "compliance.ratio.empty": "這段期間還沒有資料", "compliance.ratio.zone": "區間", "compliance.ratio.band.low": "偏少", "compliance.ratio.band.ok": "正常", "compliance.ratio.band.high": "偏多", "compliance.ratio.band.spike": "暴增", "compliance.phase_kind.transition": "轉換期", "compliance.phase_kind.base": "基礎期", "compliance.phase_kind.specific": "專項期", "compliance.phase_kind.taper": "減量期", "compliance.phase_kind.event": "賽事", "compliance.phase_kind.recovery": "恢復期", "compliance.unit.label": "單位", "compliance.unit.day": "天", "compliance.unit.week": "週", "compliance.unit.month": "月", "compliance.weeks.title_day": "每日計畫 vs 實際", "compliance.weeks.title_month": "每月計畫 vs 實際", "compliance.weeks.aria_day": "每天計畫（虛線外框）與實際（實心）的長條圖", "compliance.weeks.aria_month": "每月計畫（虛線外框）與實際（實心）的長條圖", "compliance.weeks.tip_day": "每天計畫 vs 實際的量。\n怎麼看：虛線外框 = 計畫（存起來的課表，含完成、沒做、還沒到的）；實心 = 實際做到的（所有活動，含沒排課的）。\n看什麼：實心長期填不滿外框 = 課表排太多；遠超過 = 排太少或加練太多。\n方法：範圍跟著上面選的期間或周期。", "compliance.weeks.tip_month": "每月計畫 vs 實際的量。\n怎麼看：虛線外框 = 計畫（存起來的課表，含完成、沒做、還沒到的）；實心 = 實際做到的（所有活動，含沒排課的）。\n看什麼：實心長期填不滿外框 = 課表排太多；遠超過 = 排太少或加練太多。\n方法：範圍跟著上面選的期間或周期，頭尾的月份只算範圍內的天。", "compliance.trend.title_day": "每日完成率", "compliance.trend.title_month": "每月完成率", "compliance.trend.aria_day": "每日完成率的折線圖", "compliance.trend.aria_month": "每月完成率的折線圖", "compliance.trend.tip_day": "每天到期的課裡有做的比例（沒排課的日子不畫）。\n怎麼看：綠點 = 達到 {pct}%，橘點 = 沒達到。\n看什麼：連續綠點 = 課表排得做得到；橘點多 = 排太多或太難。\n方法：{pct}% 是連續達標的門檻（推估）。", "compliance.trend.tip_month": "每月到期的課裡有做的比例。\n怎麼看：綠點 = 達到 {pct}%，橘點 = 沒達到。\n看什麼：連續綠點 = 課表排得做得到；橘點多 = 排太多或太難。\n方法：{pct}% 是連續達標的門檻（推估）。", "compliance.trend.current_day": "今天還沒結束", "compliance.trend.current_month": "這個月還沒結束", "compliance.ratio.hover": "{v} · {band}（{range}）", "compliance.ratio.ref": "1 = 跟平常一樣"}};</script><script src="static/i18n/i18n.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="compliance.page_title">課表統計 · 訓練教練</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+/* 課表統計 (engine/compliance.dashboard, GET /api/v1/overview/plan/compliance): a tab of
+   課表. Period filter (incl. each phase of the plan), KPI tiles, charts (負荷比 ATL ÷ CTL,
+   planned vs actual per week, weekly completion, per kind), then a compact session list. Tokens as overview.html (light / dark / data-theme). */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --good: #1a7f37; --watch: #b45309; --bad: #c62828;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s7: #4a3aa7; --bar: #b9b8b1;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --good: #4ade80; --watch: #fbbf24; --bad: #f87171;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s7: #9085e9; --bar: #5a5954;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --good: #4ade80; --watch: #fbbf24; --bad: #f87171;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s7: #9085e9; --bar: #5a5954;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+button, input { font: inherit; color: inherit; }
+main { max-width: 1280px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 12px; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+.num { font-variant-numeric: tabular-nums; }
+.err { color: var(--bad); }
+.loading { color: var(--muted); padding: 18px 0; text-align: center; }
+section, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; box-shadow: var(--shadow); }
+h2 { font-size: 14.5px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+h2 .meta { font-weight: 400; }
+
+/* page switch 日曆 | 課表統計: the chart viewer's 趨勢 / 單次活動 mode cards (as schedule.html) */
+.modesw { display: inline-flex; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px;
+  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; text-decoration: none; text-align: left;
+  padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
+.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
+.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
+.modesw .mcard:active { transform: translateY(1px); }
+.modesw .mcard[aria-current="page"] { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff; box-shadow: 0 3px 8px rgba(143,63,10,.35); }
+.modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
+.modesw .mcard[aria-current="page"] small { opacity: .85; }
+.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+/* the plan's phases in the period filter: a colour dot per phase kind */
+#phases[hidden] { display: none; }
+#phases { flex-wrap: wrap; max-width: 100%; row-gap: 4px; }
+#phases button { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+@media (max-width: 699px) { #phases button { border-radius: 7px !important; margin-left: 0; margin-right: 4px; } }
+#phases button i { width: 8px; height: 8px; border-radius: 2px; background: var(--ph, var(--accent)); flex: none; }
+#phases button[aria-pressed="true"] i { box-shadow: 0 0 0 1.5px var(--bg); }
+.plot.ratio { height: 210px; }
+
+.top { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.top h1 { font-size: 19px; margin: 0 4px 0 0; }
+.seg { display: inline-flex; }
+.seg button { border: 1px solid var(--line); background: var(--panel); padding: 4px 12px; cursor: pointer; margin-left: -1px; font-size: 13px; }
+.seg button:first-child { border-radius: 7px 0 0 7px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 7px 7px 0; }
+.seg button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); }
+.seg button:focus-visible, .btn:focus-visible, .q:focus-visible, .fchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.custom { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.custom[hidden] { display: none; }
+.custom input { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 3px 6px; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px; padding: 4px 11px; cursor: pointer; font-size: 13px; }
+#range { margin-left: auto; }
+
+/* ? help: hover shows, click / tap pins */
+.q { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; padding: 0; flex: none; }
+.q:hover { border-color: var(--accent); color: var(--accent); }
+.qpop { position: fixed; z-index: 100; max-width: min(340px, calc(100vw - 24px)); white-space: pre-line; background: var(--panel);
+  color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; line-height: 1.55;
+  box-shadow: 0 8px 24px rgba(0,0,0,.2); pointer-events: none; }
+
+/* KPI tiles */
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 699px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 11px 13px 10px; box-shadow: var(--shadow);
+  display: grid; grid-template-rows: auto 1fr auto; gap: 2px; min-width: 0; }
+.kpi .k { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.kpi .k .q { margin-left: auto; }
+.kpi .v { font-size: 30px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi .v small { font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.kpi .sub { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 420px) { .kpi .v { font-size: 25px; } .kpi { padding: 9px 10px; } }
+.split { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; margin-top: 6px; background: var(--line); }
+.split i { display: block; height: 100%; }
+.track { height: 8px; background: color-mix(in srgb, var(--line) 85%, transparent); border-radius: 4px; overflow: hidden; position: relative; margin-top: 6px; }
+.track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
+.track b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); border-radius: 1px; }
+
+/* phase */
+.phase { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); gap: 10px 18px; align-items: center; }
+@media (max-width: 860px) { .phase { grid-template-columns: 1fr 1fr; } }
+.phase .pl { font-size: 15px; font-weight: 700; }
+.ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); } .ph-event { --ph: var(--bad); }
+.ph-recovery { --ph: var(--s3); } .ph-transition { --ph: var(--s7); }
+.phase .dotp { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--ph, var(--accent)); margin-right: 6px; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+/* charts */
+.charts { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 960px) { .charts { grid-template-columns: 1fr; } }
+.plot { width: 100%; height: 250px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.legend i.ol { border: 1.5px solid var(--muted); background: transparent; }
+.kinds { display: grid; gap: 9px; }
+.kr { display: grid; grid-template-columns: 82px minmax(0, 1fr) 92px; gap: 10px; align-items: center; font-size: 13px; }
+.kr .kl { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kr .kl i { width: 9px; height: 9px; border-radius: 2px; background: var(--k); flex: none; }
+.kr .n { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.kr .n b { color: var(--text); }
+.k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); } .k-test { --k: var(--s7); }
+.k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive, .k-notice { --k: var(--bar); }
+.kbar { display: flex; height: 12px; border-radius: 4px; overflow: hidden; gap: 2px; background: color-mix(in srgb, var(--line) 80%, transparent); }
+.kbar i { display: block; height: 100%; }
+
+/* status: icon + word + colour, never colour alone */
+.st { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 650; white-space: nowrap; }
+.st-done { color: var(--good); } .st-partial { color: var(--watch); } .st-off_plan { color: var(--watch); } .st-missed { color: var(--bad); } .st-open { color: var(--muted); }
+.bg-done { background: var(--good); } .bg-partial { background: color-mix(in srgb, var(--watch) 70%, var(--panel)); }
+.bg-off_plan { background: repeating-linear-gradient(45deg, var(--watch) 0 3px, color-mix(in srgb, var(--watch) 45%, var(--panel)) 3px 6px); }
+.bg-missed { background: var(--bad); }
+
+/* list */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.fchip { border: 1px solid var(--line); background: var(--panel); border-radius: 14px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; color: var(--muted); }
+.fchip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--soft); font-weight: 600; }
+.list { display: grid; }
+.row { display: grid; grid-template-columns: 74px 10px minmax(0, 1fr) 104px 64px 118px; gap: 4px 10px; align-items: center;
+  padding: 6px 4px; border-top: 1px solid var(--line); font-size: 13px; text-decoration: none; color: inherit; }
+.row:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.row:first-child { border-top: 0; }
+.row .d { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row .kd { width: 9px; height: 9px; border-radius: 2px; background: var(--k); }
+.row .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .t .meta { margin-left: 6px; }
+.row .p { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.row .x { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.more { margin-top: 8px; }
+@media (max-width: 699px) {
+  main { padding: 10px 10px 84px; gap: 10px; }
+  section, .panel { padding: 12px; }
+  .top h1 { display: none; }
+  #range { margin-left: 0; flex-basis: 100%; }
+  .row { grid-template-columns: 46px 8px minmax(0, 1fr) auto auto; }
+  .row .x { grid-column: 3 / -1; text-align: left; }
+  .row .st .lb { display: none; }
+  .kr { grid-template-columns: 78px minmax(0, 1fr) 70px; gap: 8px; }
+  .plot { height: 220px; }
+}
+</style>
+</head>
+<body>
+<script src="static/shell.js" data-page="schedule"></script>
+<main>
+  <nav class="modesw" data-i18n-attr="aria-label:compliance.tabs.label" aria-label="課表檢視">
+    <a class="mcard" href="schedule.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span><b data-i18n="compliance.tabs.calendar">日曆</b><small data-i18n="compliance.tabs.calendar_sub">每天排了什麼課</small></span></a>
+    <a class="mcard" href="compliance.html" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
+      <span><b data-i18n="compliance.tabs.compliance">課表統計</b><small data-i18n="compliance.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
+  </nav>
+
+  <div class="top">
+    <h1 data-i18n="compliance.title">課表統計</h1>
+    <div class="seg" id="period" role="group" data-i18n-attr="aria-label:compliance.period.label" aria-label="期間">
+      <button type="button" data-p="4w" data-i18n="compliance.period.4w">4 週</button><button type="button" data-p="12w" data-i18n="compliance.period.12w">12 週</button><button type="button" data-p="phase" data-i18n="compliance.period.phase">本周期</button><button type="button" data-p="custom" data-i18n="compliance.period.custom">自訂</button>
+    </div>
+    <!-- each phase of the plan (賽事周期): picking one shows its weeks -->
+    <div class="seg" id="phases" role="group" data-i18n-attr="aria-label:compliance.period.phases" aria-label="賽事周期" hidden></div>
+    <span class="custom" id="custom" hidden>
+      <input type="date" id="c-a" data-i18n-attr="aria-label:compliance.period.from" aria-label="開始">
+      <span>–</span>
+      <input type="date" id="c-b" data-i18n-attr="aria-label:compliance.period.to" aria-label="結束">
+      <button class="btn" type="button" id="c-go" data-i18n="compliance.period.apply">套用</button>
+    </span>
+    <span class="meta num" id="range"></span>
+  </div>
+
+  <div class="kpis" id="kpis"><div class="kpi"><div class="loading" data-i18n="compliance.loading">載入中…</div></div></div>
+
+  <div class="charts">
+    <section id="phase-card" aria-labelledby="ph-h" hidden>
+    <h2 id="ph-h"><span data-i18n="compliance.phase.title">目前周期</span> <span class="meta" id="ph-sub"></span><span id="ph-q"></span></h2>
+    <div class="phase" id="phase"></div>
+  </section>
+    <section aria-labelledby="kd-h">
+      <h2 id="kd-h"><span data-i18n="compliance.kinds.title">依課表類型</span><span id="kd-q"></span></h2>
+      <div class="kinds" id="kinds"></div>
+      <div class="legend" id="st-legend" style="margin-top:10px"></div>
+    </section>
+  </div>
+
+  <section aria-labelledby="ra-h">
+    <h2 id="ra-h"><span data-i18n="compliance.ratio.title">負荷比 ATL ÷ CTL</span><span id="ra-q"></span></h2>
+    <div class="plot ratio" id="ra-plot" role="img"></div>
+  </section>
+
+  <div class="charts">
+    <section aria-labelledby="wk-h">
+      <h2 id="wk-h"><span id="wk-t" data-i18n="compliance.weeks.title">每週計畫 vs 實際</span>
+        <!-- 天 / 週 / 月 buckets: one setting for both charts (the range is the filter above) -->
+        <span class="seg unitsw" role="group" data-i18n-attr="aria-label:compliance.unit.label" aria-label="單位" style="margin-left:auto">
+          <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
+        </span>
+        <span class="seg" id="metric" role="group" data-i18n-attr="aria-label:compliance.weeks.metric" aria-label="指標">
+          <button type="button" data-m="tss" aria-pressed="true">TSS</button><button type="button" data-m="hours" data-i18n="compliance.weeks.hours">時數</button>
+        </span><span id="wk-q"></span></h2>
+      <div class="plot" id="wk-plot" role="img"></div>
+      <div class="legend" id="wk-legend"></div>
+    </section>
+    <section aria-labelledby="tr-h">
+      <h2 id="tr-h"><span id="tr-t" data-i18n="compliance.trend.title">每週完成率</span> <span class="meta" id="tr-sub"></span>
+        <span class="seg unitsw" role="group" data-i18n-attr="aria-label:compliance.unit.label" aria-label="單位" style="margin-left:auto">
+          <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
+        </span><span id="tr-q"></span></h2>
+      <div class="plot" id="tr-plot" role="img"></div>
+    </section>
+  </div>
+
+  <section aria-labelledby="ls-h">
+      <h2 id="ls-h"><span data-i18n="compliance.list.title">每堂課</span> <span class="meta" id="ls-sub"></span><span id="ls-q"></span></h2>
+      <div class="filters" id="filters"></div>
+      <div class="list" id="list"></div>
+      <div class="more" id="more"></div>
+    </section>
+</main>
+<script>
+const T = (k, p) => (window.I18N ? I18N.t("compliance." + k, p) : k);
+const F = window.I18N ? I18N.fmt : null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const API = "/api/v1/overview/plan/compliance";
+const SCHED = "/api/v1/overview/plan/schedule/page";
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dOf = (iso) => new Date(iso + "T00:00:00");
+const addDays = (iso, n) => { const d = dOf(iso); d.setDate(d.getDate() + n); return isoOf(d); };
+const mondayOf = (iso) => addDays(iso, -((dOf(iso).getDay() + 6) % 7));
+const md = (iso) => (F ? F.date(iso, "md") : iso.slice(5));
+const mdw = (iso) => (F ? F.date(iso, "mdw") : iso.slice(5));
+const n0 = (x) => (x == null ? "–" : F ? F.num(x, 0) : Math.round(x));
+const h1 = (x) => (x == null ? "–" : F ? F.num(x, 1) : (+x).toFixed(1));
+const pc = (r) => (r == null ? "–" : Math.round(r * 100));
+const hm = (s) => (s == null ? "" : F ? F.dur(s, "hm") : `${Math.round(s / 60)}′`);
+const store = { get(k, d) { try { const v = localStorage.getItem("compliance." + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
+  set(k, v) { try { localStorage.setItem("compliance." + k, JSON.stringify(v)); } catch (_) { /* blocked */ } } };
+const STATUS = ["done", "partial", "off_plan", "missed", "open"];
+const ICON = { done: "✓", partial: "◐", off_plan: "≠", missed: "✗", open: "…" };
+const sw = (s) => `<span class="st st-${s}"><span aria-hidden="true">${ICON[s]}</span><span class="lb">${esc(T("status." + s))}</span></span>`;
+const q = (tip, label) => `<button type="button" class="q" data-tip="${esc(tip)}" aria-label="${esc(label || T("help"))}">?</button>`;
+
+const S = { period: store.get("period", "4w"), a: store.get("a", null), b: store.get("b", null), metric: store.get("metric", "tss"),
+  unit: ["day", "week", "month"].includes(store.get("unit", "week")) ? store.get("unit", "week") : "week",
+  filter: "all", limit: 40, data: null, today: null };
+const charts = {};
+function chart(id) {
+  if (!charts[id]) { charts[id] = echarts.init($(id)); new ResizeObserver(() => charts[id].resize()).observe($(id)); }
+  return charts[id];
+}
+
+// a phase of the plan picked in the filter: "ph:<start>" -> the whole phase (its future weeks show the plan)
+const MAX_DAYS = 371;
+const planPhase = (p) => (String(p).startsWith("ph:") ? ((S.data && S.data.plan_phases) || []).find((x) => "ph:" + x.start === p) : null);
+function range(today, phase) {
+  const ws = mondayOf(today);
+  if (S.period === "12w") return [addDays(ws, -77), today];
+  if (S.period === "phase" && phase) return [phase.start, today < phase.end ? today : phase.end];
+  const pp = planPhase(S.period);
+  if (pp) { const cap = addDays(pp.start, MAX_DAYS); return [pp.start, pp.end < cap ? pp.end : cap]; }
+  if (S.period === "custom" && S.a && S.b && S.a <= S.b) return [S.a, S.b];
+  return [addDays(ws, -21), today];
+}
+
+const markPeriod = () => document.querySelectorAll("#period button, #phases button")
+  .forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === S.period)));
+function renderPhases() {
+  const ps = (S.data && S.data.plan_phases) || [];
+  $("phases").hidden = !ps.length;
+  // a label used twice (基礎期 before and after the race) also shows its start
+  const name = (p) => T("phase_kind." + p.kind, p.label || p.kind);
+  const seen = ps.reduce((m, p) => ({ ...m, [p.kind]: (m[p.kind] || 0) + 1 }), {});
+  $("phases").innerHTML = ps.map((p) => `<button type="button" class="ph-${esc(p.kind)}" data-p="ph:${esc(p.start)}"
+    title="${esc(T("period.phase_tip", { label: name(p), start: md(p.start), end: md(p.end) }))}"><i aria-hidden="true"></i>${esc(name(p))}${seen[p.kind] > 1 ? ` <span class="faint num">${esc(md(p.start))}</span>` : ""}</button>`).join("");
+  markPeriod();
+}
+
+async function load() {
+  // a stored phase that is no longer in the plan falls back to 4 weeks
+  if (S.data && String(S.period).startsWith("ph:") && !planPhase(S.period)) S.period = "4w";
+  markPeriod();
+  $("custom").hidden = S.period !== "custom";
+  const today = S.today || isoOf(new Date());
+  const [a, b] = range(today, S.data && S.data.current_phase);
+  $("range").textContent = `${mdw(a)} – ${mdw(b)}`;
+  try {
+    const r = await fetch(`${API}?start=${a}&end=${b}`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : r.statusText);
+    const first = !S.data;
+    S.data = j; S.today = j.today;
+    renderPhases();
+    // the server's today and the phase decide the range: reload once when it differs
+    if (first && String(S.period).startsWith("ph:") && !planPhase(S.period)) S.period = "4w";
+    const [a2, b2] = range(j.today, j.current_phase);
+    if (first && (a2 !== a || b2 !== b)) return load();
+    if (!$("c-a").value) { $("c-a").value = a; $("c-b").value = b; }
+    render();
+    loadRatio(a, b);
+  } catch (e) {
+    $("kpis").innerHTML = `<div class="kpi"><div class="err">${esc(T("load_failed", { error: e.message }))}</div></div>`;
+  }
+}
+
+function kpi(k, tip, v, sub, extra = "") {
+  return `<div class="kpi"><div class="k"><span>${esc(k)}</span>${q(tip, k)}</div><div class="v">${v}</div>${extra}<div class="sub">${sub}</div></div>`;
+}
+function render() {
+  const d = S.data, t = d.totals;
+  const split = STATUS.filter((s) => s !== "open" && t[s]).map((s) => `<i class="bg-${s}" style="flex:${t[s]}" title="${esc(T("status." + s))} ${t[s]}"></i>`).join("");
+  const st = d.streak;
+  $("kpis").innerHTML = [
+    kpi(T("kpi.rate"), T("kpi.rate_tip"), t.due ? `${pc(t.rate)}<small>%</small>` : "–",
+      t.due ? esc(T("kpi.rate_sub", { done: t.completed, due: t.due })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
+      t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${T("status." + s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
+    kpi(T("kpi.ok"), T("kpi.ok_tip"), t.due ? `${pc(t.ok_rate)}<small>%</small>` : "–",
+      esc(T("kpi.ok_sub", { n: t.done, partial: t.partial, off: t.off_plan }))),
+    kpi(T("kpi.tss"), T("kpi.tss_tip"), t.tss_pct != null ? `${t.tss_pct}<small>%</small>` : "–",
+      esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) })),
+      `<div class="track" role="img" aria-label="${esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) }))}"><i style="width:${Math.min(100, (t.tss_pct || 0) / 1.5)}%"></i><b style="left:${100 / 1.5}%"></b></div>`),
+    kpi(T("kpi.hours"), T("kpi.hours_tip"), `${h1(t.actual_hours)}<small>/ ${h1(t.planned_hours)} h</small>`,
+      esc(t.planned_hours ? T("kpi.hours_sub", { pct: Math.round(t.actual_hours / t.planned_hours * 100) }) : T("empty_short"))),
+    kpi(T("kpi.streak"), T("kpi.streak_tip", { pct: Math.round(st.threshold * 100) }), `${st.weeks}<small>${esc(T("kpi.weeks_unit"))}</small>`,
+      esc(T("kpi.streak_sub", { best: st.best }))),
+  ].join("");
+  renderPhase(d.phase);
+  renderWeeks(buckets());
+  renderTrend(buckets(), st);
+  renderKinds(d.by_kind);
+  renderList();
+}
+
+function renderPhase(p) {
+  $("phase-card").hidden = !p;
+  if (!p) return;
+  $("ph-sub").textContent = `${md(p.start)} – ${md(p.end)}`;
+  $("ph-q").innerHTML = q(T("phase.tip"));
+  $("phase").innerHTML = `<div class="ph-${esc(p.kind)}"><div class="pl"><span class="dotp"></span>${esc(p.label || "")}</div>
+      <div class="meta">${esc(T("phase.days", { done: p.days_done, total: p.days_total }))}</div>
+      <div class="track" role="img" aria-label="${esc(T("phase.time_aria", { pct: p.time_pct }))}"><i style="width:${p.time_pct || 0}%;background:var(--ph)"></i></div></div>
+    <div class="stat"><div class="k">${esc(T("phase.rate"))}</div><div class="v">${p.due ? pc(p.rate) + "<small>%</small>" : "–"}</div><div class="meta">${esc(T("kpi.rate_sub", { done: p.completed, due: p.due }))}</div></div>
+    <div class="stat"><div class="k">${esc(T("phase.left"))}</div><div class="v">${p.sessions_left}<small>/ ${p.sessions_total}</small></div><div class="meta">${esc(T("phase.left_sub"))}</div></div>
+    <div class="stat"><div class="k">${esc(T("phase.tss"))}</div><div class="v">${n0(p.actual_tss)}<small>/ ${n0(p.planned_tss)}</small></div><div class="meta">${esc(T("phase.tss_sub"))}</div></div>`;
+}
+
+function axisBase() {
+  return { textStyle: { fontFamily: "system-ui, sans-serif" }, animation: false,
+    grid: { left: 40, right: 12, top: 14, bottom: 26 },
+    tooltip: { trigger: "axis", backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 },
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(127,127,127,.08)" } } } };
+}
+const xAxis = (labels) => ({ type: "category", data: labels, axisTick: { show: false }, axisLine: { lineStyle: { color: css("--line") } },
+  axisLabel: { color: css("--muted"), fontSize: 11, hideOverlap: true } });
+const yAxis = (extra = {}) => ({ type: "value", splitLine: { lineStyle: { color: css("--line"), type: [3, 3] } },
+  axisLabel: { color: css("--muted"), fontSize: 11 }, ...extra });
+
+// 天 / 週 / 月 buckets of the two charts: the server's weeks and days; months are the days summed
+const sfx = () => (S.unit === "week" ? "" : "_" + S.unit);       // i18n key suffix (week = the original key)
+function buckets() {
+  const d = S.data;
+  if (S.unit === "week") return d.weeks;
+  const days = d.days || [];
+  if (S.unit === "day") return days;
+  const by = new Map();
+  for (const x of days) {
+    const k = x.start.slice(0, 7);
+    const m = by.get(k) || { start: x.start, end: x.end, planned_tss: 0, done_tss: 0, planned_hours: 0, done_hours: 0, due: 0, completed: 0 };
+    m.end = x.end;
+    for (const f of ["planned_tss", "done_tss", "planned_hours", "done_hours", "due", "completed"]) m[f] += x[f] || 0;
+    by.set(k, m);
+  }
+  return [...by.values()].map((m) => ({ ...m, rate: m.due ? m.completed / m.due : null, current: m.start <= S.today && S.today <= m.end }));
+}
+const bLabel = (w) => (S.unit === "month" ? (F ? F.date(w.start, "ymd").slice(0, 7).replace("-", "/") : w.start.slice(0, 7)) : md(w.start));
+const bHead = (w) => (S.unit === "day" ? mdw(w.start) : `${md(w.start)} – ${md(w.end)}`);
+function renderUnit() {
+  document.querySelectorAll(".unitsw button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.u === S.unit)));
+  $("wk-t").textContent = T("weeks.title" + sfx());
+  $("tr-t").textContent = T("trend.title" + sfx());
+}
+
+function renderWeeks(ws) {
+  const m = S.metric;
+  renderUnit();
+  document.querySelectorAll("#metric button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.m === m)));
+  $("wk-q").innerHTML = q(T("weeks.tip" + sfx()));
+  const P = ws.map((w) => (m === "tss" ? w.planned_tss : w.planned_hours));
+  const A = ws.map((w) => (w.start > S.today ? null : m === "tss" ? w.done_tss : w.done_hours));
+  const unit = m === "tss" ? "" : " h";
+  const lab = ws.map(bLabel);
+  $("wk-plot").setAttribute("aria-label", T("weeks.aria" + sfx()));
+  chart("wk-plot").setOption({ ...axisBase(), xAxis: xAxis(lab), yAxis: yAxis(),
+    tooltip: { ...axisBase().tooltip, formatter: (ps) => {
+      const w = ws[ps[0].dataIndex];
+      const f = (x) => (x == null ? "–" : m === "tss" ? n0(x) : h1(x) + " h");
+      return `<b>${esc(bHead(w))}</b>${w.phase_label ? ` · ${esc(w.phase_label)}` : ""}<br>${esc(T("weeks.planned"))} ${f(P[ps[0].dataIndex])}<br>${esc(T("weeks.actual"))} ${f(A[ps[0].dataIndex])}` +
+        (w.due ? `<br>${esc(T("kpi.rate_sub", { done: w.completed, due: w.due }))}` : "");
+    } },
+    series: [
+      { name: T("weeks.planned"), type: "bar", data: P, barMaxWidth: 26, barGap: "-100%", z: 1,
+        itemStyle: { color: "transparent", borderColor: css("--muted"), borderWidth: 1.5, borderType: "dashed", borderRadius: [4, 4, 0, 0] } },
+      { name: T("weeks.actual"), type: "bar", data: A, barMaxWidth: 26, z: 2,
+        itemStyle: { color: css("--s1"), borderRadius: [4, 4, 0, 0] } },
+    ] }, true);
+  $("wk-legend").innerHTML = `<span><i class="ol"></i>${esc(T("weeks.planned"))}</span><span><i style="background:${css("--s1")}"></i>${esc(T("weeks.actual"))}${unit}</span>`;
+}
+
+// 負荷比 ATL ÷ CTL over the same range (GET /api/v1/overview/pmc), drawn like views/training.json's
+// 負荷比 chart (the viewer's "zoned" style): shaded bands with their names in the right margin, the line
+// coloured by the band it is in, the latest value labelled with its band
+const RATIO_BANDS = [{ k: "low", lo: 0, hi: 0.8, c: "#8a8984", r: "< 0.8" }, { k: "ok", lo: 0.8, hi: 1.3, c: "#1baf7a", r: "0.8–1.3" },
+  { k: "high", lo: 1.3, hi: 1.5, c: "#eda100", r: "1.3–1.5" }, { k: "spike", lo: 1.5, hi: 2.5, c: "#e34948", r: "> 1.5" }];
+const RATIO = { rows: null, seq: 0 };
+async function loadRatio(a, b) {
+  const seq = ++RATIO.seq;
+  const end = b < S.today ? b : S.today;
+  if (a > end) { RATIO.rows = []; return renderRatio(); }
+  try {
+    const r = await fetch(`/api/v1/overview/pmc?begin=${a}&end=${end}`);
+    if (!r.ok) throw new Error(r.statusText);
+    const j = await r.json();
+    if (seq !== RATIO.seq) return;
+    RATIO.rows = j.series.map((x) => [x.date, x.ctl > 0 && x.atl != null ? Math.round(x.atl / x.ctl * 100) / 100 : null]);
+  } catch (_) { if (seq === RATIO.seq) RATIO.rows = []; }
+  renderRatio();
+}
+function hexMix(a, b, t) {
+  const h = (s) => { const m = /^#?([0-9a-f]{6})$/i.exec(String(s || "").trim()); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+  const A = h(a), B = h(b);
+  return A && B ? "#" + A.map((x, i) => Math.round(x + (B[i] - x) * t).toString(16).padStart(2, "0")).join("") : a;
+}
+function renderRatio() {
+  $("ra-q").innerHTML = q(T("ratio.tip"));
+  $("ra-plot").setAttribute("aria-label", T("ratio.aria"));
+  const rows = (RATIO.rows || []).filter((p) => p[1] != null);
+  const ch = chart("ra-plot");
+  if (!rows.length) {
+    ch.setOption({ title: { text: T("ratio.empty"), left: "center", top: "middle", textStyle: { color: css("--muted"), fontSize: 13, fontWeight: 400 } },
+      xAxis: { show: false }, yAxis: { show: false }, series: [] }, true);
+    return;
+  }
+  const text = css("--text"), muted = css("--muted"), panel = css("--panel");
+  const dark = document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  const name = (b) => T("ratio.band." + b.k);
+  const zoneOf = (y) => RATIO_BANDS.find((b, k) => (k === 0 || y >= b.lo) && (k === RATIO_BANDS.length - 1 || y < b.hi));
+  const lineColor = (b) => hexMix(b.c, text, 0.2);
+  const last = rows[rows.length - 1], lb = zoneOf(last[1]);
+  const top = 2.5;      // as views/training.json: a multi-day trip / the first weeks of data go off the top (hover)
+  const markArea = { silent: true, label: { show: true, position: "right", color: muted, fontSize: 10.5, distance: 4 },
+    data: RATIO_BANDS.map((b, k) => [{ yAxis: b.lo, name: name(b), itemStyle: { color: b.c, opacity: dark ? 0.22 : 0.15 } },
+      { yAxis: k === RATIO_BANDS.length - 1 ? top : b.hi }]) };
+  const markLine = { silent: true, symbol: "none", label: { show: false },
+    data: [...RATIO_BANDS.slice(1).map((b) => ({ yAxis: b.lo, lineStyle: { color: b.c, type: "solid", width: 1, opacity: 0.8 } })),
+      // 1 = as usual: thin dashed, labelled at the start (as views/training.json's zoned.ref)
+      { yAxis: 1, lineStyle: { color: muted, type: [4, 4], width: 1 },
+        label: { show: true, position: "insideStartTop", color: muted, fontSize: 10.5, formatter: () => T("ratio.ref") } }] };
+  ch.setOption({ ...axisBase(), grid: { left: 40, right: 50, top: 14, bottom: 26 },
+    tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
+      const p = [].concat(ps).find((x) => x.seriesName === "ratio"); if (!p) return "";
+      const y = p.value[1], b = zoneOf(y);
+      // the value and its band in one line: 「1.12 · 正常（0.8–1.3）」
+      return `<b>${esc(mdw(p.value[0]))}</b><br>${p.marker}<b>${esc(T("ratio.hover", { v: F ? F.num(y, 2) : y.toFixed(2), band: name(b), range: b.r }))}</b>`;
+    } },
+    xAxis: { type: "time", axisTick: { show: false }, axisLine: { lineStyle: { color: css("--line") } }, splitLine: { show: false },
+      axisLabel: { color: muted, fontSize: 11, hideOverlap: true, formatter: (v) => md(isoOf(new Date(v))) } },
+    yAxis: yAxis({ min: 0, max: top, interval: 0.5, splitLine: { show: false } }),
+    visualMap: [{ type: "piecewise", show: false, seriesIndex: 0, dimension: 1,
+      pieces: RATIO_BANDS.map((b, k) => ({ ...(k ? { gte: b.lo } : {}), ...(k < RATIO_BANDS.length - 1 ? { lt: b.hi } : {}), color: lineColor(b) })) }],
+    series: [{ name: "ratio", type: "line", data: rows, showSymbol: false, z: 5, markArea, markLine,
+      lineStyle: { width: 2.5, shadowColor: panel, shadowBlur: 5 },
+      markPoint: { silent: true, symbol: "circle", symbolSize: 9, data: [{ coord: last, value: last[1],
+        itemStyle: { color: lineColor(lb), borderColor: panel, borderWidth: 2 },
+        label: { show: true, position: "left", distance: 8, color: text, fontSize: 11, fontWeight: 600, backgroundColor: panel,
+          borderColor: lb.c, borderWidth: 1, borderRadius: 4, padding: [2, 5], formatter: () => `${F ? F.num(last[1], 2) : last[1].toFixed(2)} ${name(lb)}` } }] } }] }, true);
+}
+
+function renderTrend(ws, st) {
+  const rows = ws.filter((w) => w.due);
+  $("tr-q").innerHTML = q(T("trend.tip" + sfx(), { pct: Math.round(st.threshold * 100) }));
+  $("tr-sub").textContent = rows.length ? T("trend.sub", { pct: Math.round(st.threshold * 100) }) : "";
+  $("tr-plot").setAttribute("aria-label", T("trend.aria" + sfx()));
+  const th = Math.round(st.threshold * 100);
+  chart("tr-plot").setOption({ ...axisBase(), grid: { left: 40, right: 38, top: 14, bottom: 26 },
+    tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
+      const w = rows[ps[0].dataIndex];
+      return `<b>${esc(bHead(w))}</b><br>${esc(T("trend.rate"))} ${pc(w.rate)}%<br>${esc(T("kpi.rate_sub", { done: w.completed, due: w.due }))}` +
+        (w.current ? `<br>${esc(T("trend.current" + sfx()))}` : "");
+    } },
+    xAxis: xAxis(rows.map(bLabel)), yAxis: yAxis({ min: 0, max: 100, axisLabel: { color: css("--muted"), fontSize: 11, formatter: "{value}%" } }),
+    series: [{ type: "line", data: rows.map((w) => ({ value: Math.round((w.rate || 0) * 100),
+        itemStyle: { color: (w.rate || 0) >= st.threshold ? css("--good") : css("--watch"), borderColor: css("--panel"), borderWidth: 2 } })),
+      symbol: "circle", symbolSize: 9, lineStyle: { width: 2, color: css("--s1") },
+      markLine: { silent: true, symbol: "none", label: { color: css("--muted"), fontSize: 11, formatter: `${th}%` },
+        lineStyle: { color: css("--faint"), type: [4, 4] }, data: [{ yAxis: th }] } }] }, true);
+}
+
+function renderKinds(ks) {
+  $("kd-q").innerHTML = q(T("kinds.tip"));
+  if (!ks.length) { $("kinds").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("st-legend").innerHTML = ""; return; }
+  $("kinds").innerHTML = ks.map((k) => {
+    const segs = ["done", "partial", "off_plan", "missed"].filter((s) => k[s]).map((s) =>
+      `<i class="bg-${s}" style="flex:${k[s]}" title="${esc(T("status." + s))} ${k[s]}"></i>`).join("");
+    return `<div class="kr k-${esc(k.kind)}"><span class="kl"><i></i>${esc(T("kind." + k.kind))}</span>
+      <div class="kbar" role="img" aria-label="${esc(T("kinds.aria", { kind: T("kind." + k.kind), done: k.completed, due: k.due }))}">${segs}</div>
+      <span class="n"><b>${k.due ? pc(k.rate) + "%" : "–"}</b> · ${k.completed}/${k.due}</span></div>`;
+  }).join("");
+  $("st-legend").innerHTML = ["done", "partial", "off_plan", "missed"].map((s) => `<span><i class="bg-${s}"></i>${sw(s)}</span>`).join("");
+}
+
+function renderList() {
+  const d = S.data;
+  const counts = Object.fromEntries(STATUS.map((s) => [s, d.sessions.filter((r) => r.status === s).length]));
+  $("ls-q").innerHTML = q(T("list.tip"));
+  $("ls-sub").textContent = T("list.sub", { n: d.sessions.length });
+  $("filters").innerHTML = [["all", T("list.all"), d.sessions.length], ...STATUS.filter((s) => counts[s]).map((s) => [s, T("status." + s), counts[s]])]
+    .map(([k, l, n]) => `<button type="button" class="fchip" data-f="${k}" aria-pressed="${S.filter === k}">${esc(l)} ${n}</button>`).join("");
+  const rows = d.sessions.filter((r) => S.filter === "all" || r.status === S.filter);
+  if (!rows.length) { $("list").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("more").innerHTML = ""; return; }
+  $("list").innerHTML = rows.slice(0, S.limit).map((r) => {
+    const act = r.actual_tss != null || r.actual_s ? `${r.actual_s ? hm(r.actual_s) : ""}${r.actual_tss != null ? ` · TSS ${n0(r.planned_tss)}→${n0(r.actual_tss)}` : ""}`
+      : `${r.minutes ? r.minutes + "′" : ""} · TSS ${n0(r.planned_tss)}`;
+    const tip = [r.title, r.off_text, r.duration_pct != null ? T("list.dur_pct", { pct: r.duration_pct }) : "", r.tss_pct != null ? T("list.tss_pct", { pct: r.tss_pct }) : ""].filter(Boolean).join("\n");
+    return `<a class="row k-${esc(r.kind)}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
+      <span class="d">${esc(md(r.day))}</span><span class="kd" aria-hidden="true"></span>
+      <span class="t">${esc(r.title)}<span class="meta">${esc(T("kind." + r.kind))}</span></span>
+      ${sw(r.status)}<span class="p">${r.pct != null ? r.pct + "%" : "–"}</span><span class="x">${esc(act)}</span></a>`;
+  }).join("");
+  $("more").innerHTML = rows.length > S.limit ? `<button class="btn" type="button" id="more-btn">${esc(T("list.more", { n: rows.length - S.limit }))}</button>` : "";
+}
+
+// ---- wiring ----
+$("period").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-p]"); if (!b) return;
+  S.period = b.dataset.p; store.set("period", S.period);
+  if (S.period === "custom") { $("custom").hidden = false; document.querySelectorAll("#period button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); $("c-a").focus(); return; }
+  load();
+});
+$("phases").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-p]"); if (!b) return;
+  S.period = b.dataset.p; store.set("period", S.period); load();
+});
+$("c-go").onclick = () => {
+  const a = $("c-a").value, b = $("c-b").value;
+  if (!a || !b || a > b) { $("range").textContent = T("period.bad"); return; }
+  S.a = a; S.b = b; store.set("a", a); store.set("b", b); load();
+};
+document.querySelectorAll(".unitsw").forEach((g) => g.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-u]"); if (!b || !S.data) return;
+  S.unit = b.dataset.u; store.set("unit", S.unit);
+  renderWeeks(buckets()); renderTrend(buckets(), S.data.streak);
+}));
+$("metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; S.metric = b.dataset.m; store.set("metric", S.metric); renderWeeks(buckets()); });
+$("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; S.filter = b.dataset.f; S.limit = 40; renderList(); });
+$("more").addEventListener("click", (e) => { if (e.target.id === "more-btn") { S.limit += 80; renderList(); } });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.data) render(); if (RATIO.rows) renderRatio(); });
+
+// ? help: hover shows a popup, click / tap pins it; Esc or a click elsewhere closes it
+const QT = { el: null, pinned: null };
+function qShow(t) {
+  qHide();
+  const d = document.createElement("div");
+  d.className = "qpop"; d.setAttribute("role", "tooltip"); d.textContent = t.dataset.tip;
+  document.body.appendChild(d);
+  const r = t.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  QT.el = d;
+}
+function qHide() { QT.el?.remove(); QT.el = null; }
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".q"); if (t && !QT.pinned) qShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".q") && !QT.pinned) qHide(); });
+document.addEventListener("focusin", (e) => { const t = e.target.closest?.(".q"); if (t && !QT.pinned) qShow(t); });
+document.addEventListener("focusout", () => { if (!QT.pinned) qHide(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".q");
+  if (t && QT.pinned !== t) { QT.pinned = t; qShow(t); return; }
+  QT.pinned = null; qHide();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { QT.pinned = null; qHide(); } });
+addEventListener("scroll", () => { if (QT.pinned) qShow(QT.pinned); else qHide(); }, { passive: true, capture: true });
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+ "snapshot": "2026-10-03",
+ "base": "2026-10-03-20261002",
+ "pages": 9,
+ "gets": 2764,
+ "precomputed": 11,
+ "data_bytes": 28166318,
+ "exported_at": "2026-10-03T08:40:11+00:00",
+ "racepower": {
+  "version": "0e85566be95d",
+  "updated_at": "2026-10-03T10:39:35+00:00"
+ }
+}

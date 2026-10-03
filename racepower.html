@@ -1,0 +1,2066 @@
+<!doctype html>
+<html lang="zh-TW">
+<head><script>window.TRC_STATIC_CFG = {"snapshot": "2026-10-03", "today": "2026-10-03", "pages": {"/demo": "index.html", "/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html", "/api/v1/overview/plan/compliance/page": "compliance.html", "/api/v1/wko5/viewer": "charts.html", "/api/v1/plan/page": "plan.html", "/api/v1/wko5/activities/page": "activities.html", "/api/v1/routes/page": "routes.html", "/api/v1/racepower/page": "racepower.html", "/": "index.html", "/api/v1/achievements/page": "activities.html#achievements"}, "compute": "^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$", "locks": "#gpxpick, #evsubmit, #addphase, #savephases, #tomanual, #toauto, [data-del-event], [data-edit-event], #rec-btn, #pf-save, #pf-reset, #bo-save, #bo-del, #sd-swap, #vd button[data-vk], #gpxfile, #gpx-attach, #stop-import, input[type=file][accept*='.gpx' i]"};</script><script src="static/trc_static.js"></script><script>window.TRC_SESSION = {"mode": "demo", "static": true, "caps": ["plan.write"], "user": null, "demo": {"sandbox": false, "base": "2026-10-03-20261002", "expires_at": null, "reset": false, "cta_url": null, "static": true}};</script><script>window.__I18N__ = {"locale": "zh-TW", "debug": false, "catalog": {"common.z5flow.aria": "5 區開放流程", "common.z5flow.here": "你現在在這裡", "common.z5flow.next": "下一步", "common.z5flow.also": "同時可以做（{stage}）", "common.z5flow.help": "說明", "common.z5flow.ok": "已達成", "common.z5flow.todo": "還沒達成", "common.z5flow.unknown": "還沒做", "common.z5flow.unlocks": "完成後：", "common.z5flow.unlocked": "已解鎖：", "common.z5flow.tag.done": "已完成", "common.z5flow.tag.current": "現在", "common.z5flow.tag.parallel": "可同時做", "common.z5flow.tag.locked": "未解鎖", "common.workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標", "common.workout.no_tpace_badge": "沒有閾值配速", "common.workout.no_tpace_link": "看閾值配速怎麼估", "common.autoplan.log_title": "自動調整紀錄", "common.autoplan.log_count": "{n} 筆", "shell.brand": "訓練教練", "shell.brand.title": "回首頁", "shell.nav.label": "主選單", "shell.nav.item_title": "{name}：{purpose}", "shell.page.home.name": "總覽", "shell.page.home.short": "總覽", "shell.page.home.purpose": "狀況・待辦・本週課表", "shell.page.schedule.name": "課表", "shell.page.schedule.short": "課表", "shell.page.schedule.purpose": "日曆排課・同步 COROS", "shell.page.charts.name": "圖表分析", "shell.page.charts.short": "圖表", "shell.page.charts.purpose": "趨勢與單次活動圖表", "shell.page.activity.name": "活動列表", "shell.page.activity.short": "活動", "shell.page.activity.purpose": "搜尋・篩選・編輯・成就", "shell.page.injuries.name": "傷病紀錄", "shell.page.injuries.short": "傷病", "shell.page.injuries.purpose": "疼痛・受傷前的訓練", "shell.page.routes.name": "路線", "shell.page.routes.short": "路線", "shell.page.routes.purpose": "重複路段與路線的進步", "shell.page.plan.name": "賽事周期", "shell.page.plan.short": "周期", "shell.page.plan.purpose": "目標賽事・周期・門檻", "shell.page.racepower.name": "賽事計算機", "shell.page.racepower.short": "計算機", "shell.page.racepower.purpose": "完賽時間・分段配速／功率／心率・補給", "shell.page.settings.name": "設定", "shell.page.settings.short": "設定", "shell.page.settings.purpose": "計算模式・體重・資料校正", "shell.build.preparing": "正在準備資料…", "shell.build.elapsed": "已 {s} 秒", "shell.build.failed": "資料處理失敗：{error}", "shell.lang.title": "切換語言（Language）", "shell.lang.zh-TW": "中文", "shell.lang.en": "EN", "shell.nav.more": "更多", "shell.nav.more_title": "活動列表、路線、傷病紀錄、設定", "shell.demo.tag": "示範資料", "shell.demo.text": "這是虛構的跑者，你的修改只存在這個瀏覽器。", "shell.demo.try": "試試：", "shell.demo.try_schedule": "排課表", "shell.demo.try_race": "賽事計算機", "shell.demo.try_plan": "週期", "shell.demo.left_none": "還沒有修改", "shell.demo.left_h": "{h} 小時後清除", "shell.demo.left_m": "{m} 分鐘後清除", "shell.demo.left_title": "你的修改從第一次修改起保留 24 小時，之後自動回到原始示範資料", "shell.demo.reset": "重設示範", "shell.demo.reset_title": "清掉你的修改，回到原始示範資料", "shell.demo.reset_confirm": "清掉你在示範裡的所有修改？", "shell.demo.cta": "想用自己的資料？", "shell.demo.locked": "示範模式不提供這個功能", "shell.demo.disabled": "示範模式不提供這個功能", "shell.demo.static_text": "唯讀示範：虛構跑者的一年訓練。課表可以試著改，修改只存在這個瀏覽器。", "shell.demo.static_edits": "已修改課表", "shell.demo.static_none": "還沒有修改", "shell.demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改", "shell.demo.static_locked": "唯讀示範：這個操作在示範版不能用", "racepower.title": "賽事計算機", "racepower.results": "預估結果", "racepower.trip.label": "行程", "racepower.trip.group": "跟團", "racepower.trip.solo": "自己走", "racepower.trip.hint": "必選：兩種的休息和步調差很多", "racepower.trip.tip": "跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是你的能力時間（在 AeT 的步行能力：越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗）。", "racepower.calc": "計算", "racepower.calc.tip": "紅色 * 是必填。填齊之後每次修改都會自動重算；按「計算」可以馬上重算。選了賽季計畫的賽事時，輸入和結果會存在這場賽事，下次選它就直接帶回來。", "racepower.req.gpx": "GPX 路線", "racepower.req.dist": "距離", "racepower.req.trip": "行程（跟團／自己走）", "racepower.req.time": "目標時間", "racepower.req.pace": "目標配速", "racepower.req.power": "目標功率", "racepower.req.missing": "還缺：{list}", "racepower.saved": "已存到這場賽事 {at}", "racepower.restored": "已帶回這場賽事上次的輸入 {at}", "racepower.chart.title": "分段目標", "racepower.chart.tip": "沿著距離看每段的目標配速、功率或心率。\n怎麼看：橫軸 = 距離（km），縱軸一次看一種；淺色底 = 海拔剖面；滑過圖或點表格看每段細節。\n看什麼：平路和可跑的坡（3–8 %）看功率；陡坡（> 8 %）或要走的段看心率上限；越野下坡求控制、安全，在功率／心率圖上是空的；> 3 小時的比賽心率上限壓在 AeT。\n方法：每段的目標由坡度模型依坡度算。", "racepower.m.pace": "配速", "racepower.m.power": "功率", "racepower.m.hr": "心率", "racepower.seg.all": "全部欄位（鎖定功率、地形、熱）", "racepower.segs": "段", "racepower.est": "分段目標是推估", "racepower.elev": "海拔", "racepower.stops": "補給站", "racepower.walk": "走", "racepower.split": "分段", "racepower.cum": "累計", "racepower.grade": "坡度", "racepower.fuel": "補給", "racepower.total": "合計", "racepower.hrcap": "心率上限", "racepower.safe": "下坡：不看功率也不看心率，控制、安全", "racepower.safe_short": "控制、安全", "racepower.legend.target": "目標{m}", "racepower.legend.walk": "走路段", "racepower.legend.gap_power": "圖上空白 = 這段功率只當參考（陡坡、下坡；表格寫灰色）", "racepower.legend.gap_hr": "圖上空白 = 越野下坡心率只當參考（表格寫灰色）", "racepower.env.title": "環境", "racepower.env.sub": "自動帶入，不用填", "racepower.env.tip": "From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（中央氣象署 → Open-Meteo），太遠的日期用過去 5 年同期的氣候平均。兩邊的差換成環境係數 M。要自己改按 ✎。", "racepower.env.from": "From 訓練", "racepower.env.to": "To 比賽日", "racepower.env.edit": "自己改 From / To", "racepower.env.adv": "進階：自己改 From / To（藍框 = 你改過的值，清空回到自動）", "racepower.env.refetch": "重新取得比賽日天氣", "racepower.env.manual": "手動", "racepower.env.from_om": "歷史天氣", "racepower.env.from_own": "你的中位數", "racepower.env.gpx_alt": "（海拔逐段取自 GPX）", "racepower.env.to_wait": "選日期與地點後自動取得", "racepower.env.need_date": "選比賽日期後自動取得", "racepower.env.need_loc": "輸入地點（山名、座標）或用 GPX 路線後自動取得", "racepower.env.fetching": "查詢中…", "racepower.env.fetched_at": "上次取得 {at}", "racepower.env.none": "沒有自動資料，可按 ✎ 自己填", "racepower.coros.btn": "⌚ 匯出到 COROS", "racepower.coros.title": "匯出到手錶", "racepower.coros.tip": "越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「按圈結束」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %、陡坡和走路段看心率上限、越野下坡不設目標。同一場賽事再匯出會更新同一個課表，不會多一份。", "racepower.coros.end": "每段結束", "racepower.coros.lap": "按圈", "racepower.coros.dist": "距離", "racepower.coros.go": "確認匯出", "racepower.coros.on_day": "排在比賽日 {day}", "racepower.coros.library": "沒有日期或日期已過：只放進課表庫", "racepower.coros.n_steps": "{n} 步", "racepower.coros.again": "之前匯出過（{at}）：再匯出會更新同一個課表", "racepower.coros.step": "步驟（名稱）", "racepower.coros.end_col": "結束", "racepower.coros.target": "目標", "racepower.coros.preparing": "準備中…", "racepower.coros.sending": "送出中…", "racepower.coros.same": "手錶上已經是這個版本", "racepower.coros.done_day": "已排到比賽日", "racepower.coros.done_lib": "已加入課表庫", "racepower.close": "關閉", "racepower.goal.time": "目標時間", "racepower.goal.pace": "目標配速", "racepower.goal.power": "目標功率", "racepower.goal.model": "模型預測", "racepower.goal.basis_hr": "依設定：心率", "racepower.goal.basis_power": "依設定：功率", "racepower.goal.tip": "目標可以用配速（平均配速或完賽時間）或功率（平均功率 W 或 %CP）輸入，兩種都能選。每公里／分段的目標由坡度模型從你的目標分配。沒有設目標就用模型自己的預測。", "racepower.goal.vs": "目標完賽 {goal}，模型預測 {model}（{pace}）", "racepower.goal.vs_tip": "模型預測 = 同樣路線和天氣下「模型預測」（努力度 100 %）的時間。快超過 3 % 提醒、超過 8 % 警告；門檻是推估。", "racepower.goal.near": "和模型差 {pct}%", "racepower.goal.fast": "比模型預測快 {pct}%，可能撐不住", "racepower.goal.too_fast": "比模型預測快 {pct}%，很可能撐不住", "racepower.goal.slow": "比模型預測慢 {pct}%：很保守"}};</script><script src="static/i18n/i18n.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="racepower.title">賽事計算機</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+  --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
+  --e1: #7cc6a4; --e2: #2f9e6e; --e3: #e0a21b; --e4: #e0662b; --e5: #c62828;
+  --c-sd: #3f6fb5; --c-d: #86a9dc; --c-f: #b9b8b1; --c-u: #e8a15a; --c-su: #c9542c; --needbg: #fdeeee;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+    --e1: #3f8f6c; --e2: #23805a; --e3: #b8860b; --e4: #c2521f; --e5: #d64545;
+    --c-sd: #5b8ad0; --c-d: #37557f; --c-f: #5a5954; --c-u: #a8692c; --c-su: #d06a3f; --needbg: #3a2020;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+  --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+  --e1: #3f8f6c; --e2: #23805a; --e3: #b8860b; --e4: #c2521f; --e5: #d64545;
+  --c-sd: #5b8ad0; --c-d: #37557f; --c-f: #5a5954; --c-u: #a8692c; --c-su: #d06a3f; --needbg: #3a2020;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px;
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+header h1 { font-size: 17px; margin: 0 8px 0 0; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+.ref { color: var(--faint); cursor: help; }
+main { max-width: 1240px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+h2 { font-size: 15px; margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+h2 .meta { font-weight: 400; }
+h3 { font-size: 13.5px; margin: 14px 0 6px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.seg { display: inline-flex; flex-wrap: wrap; }
+.seg button, .btn { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  padding: 3px 10px; cursor: pointer; min-height: 30px; }
+.seg button { margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.seg.big button { font-size: 14px; padding: 6px 14px; }
+.btn { border-radius: 6px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0; }
+.row > .lbl { font-size: 12.5px; color: var(--muted); min-width: 44px; }
+.form { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 12px; }
+.form label, label.f { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+input, select { font: inherit; font-size: 13.5px; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 7px; min-width: 0; width: 100%; }
+input[type=checkbox] { width: auto; }
+input[type=range] { padding: 0; }
+input.ovr, select.ovr { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+input.small { width: 90px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.tile .k { font-size: 12px; color: var(--muted); }
+.tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .s { font-size: 11.5px; color: var(--muted); }
+.tile.main { border-color: var(--accent); }
+.tile .ic { font-size: 15px; margin-right: 4px; }
+.tile .v .u { font-size: 13px; font-weight: 500; color: var(--muted); }
+.tile.warnt { border-color: var(--watch); }
+.tile.warnt .v { color: var(--watch); }
+.stoptbl { width: auto; min-width: 320px; margin-top: 2px; }
+.stoptbl td { padding: 3px 6px; }
+.stoptbl input, .stoptbl select { width: auto; padding: 2px 6px; }
+.stoptbl input.km { width: 76px; text-align: right; }
+.stoptbl input.min { width: 60px; text-align: right; }
+.stoptbl input.nm { width: 150px; }
+.stoptbl input.bad { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; }
+.stoptbl .x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 6px; }
+.stoptbl .x:hover { color: var(--bad); }
+.sched td.act { white-space: normal; min-width: 220px; }
+.sched tr.k-aid td { background: var(--soft); }
+.tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.tcard { border: 1px solid var(--line); border-left: 4px solid var(--c-f); border-radius: 8px; padding: 7px 10px; font-size: 13px; cursor: pointer; }
+.tcard.hl { border-color: var(--accent); }
+.tcard .th { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.tcard .th b { font-size: 14px; }
+.tcard .tc { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 3px; }
+.tcard .tc span { border: 1px solid var(--line); border-radius: 12px; padding: 0 8px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.tcard .tc span.main { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.tcard .fa { font-size: 12px; color: var(--muted); margin-top: 3px; }
+dialog#share-dlg { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(620px, 94vw); }
+dialog#share-dlg::backdrop { background: rgba(0,0,0,.35); }
+#share-list td { white-space: normal; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.chip { border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip b { color: var(--text); font-weight: 600; }
+.num { font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+td.wrap { white-space: normal; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+tr.center td { background: var(--soft); font-weight: 600; }
+tr.hl td { background: var(--soft); }
+.inputs td:first-child { color: var(--muted); }
+.inputs input, .inputs select { width: 110px; }
+.inputs select.src { width: 210px; }
+.badge { display: inline-block; font-size: 11.5px; border: 1px solid var(--line); border-radius: 10px; padding: 0 8px; color: var(--muted); font-weight: 400; }
+.badge.good { color: var(--good); border-color: var(--good); } .badge.watch { color: var(--watch); border-color: var(--watch); }
+.badge.bad { color: var(--bad); border-color: var(--bad); }
+.warn { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--watch); }
+.warn li { margin: 2px 0; }
+.ok { color: var(--good); } .no { color: var(--bad); } .wn { color: var(--watch); }
+.plot { width: 100%; height: 300px; }
+.profile { width: 100%; height: 320px; }
+.envgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 700px) { .envgrid { grid-template-columns: 1fr; } }
+.envbox { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
+.envbox .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.envbox label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+.kv { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); }
+.kv b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.loading { color: var(--muted); padding: 24px 0; text-align: center; }
+.err { color: var(--bad); }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin: 6px 0; }
+.hidden { display: none !important; }
+.note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.daytbl input { width: 70px; }
+.help { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
+  font-size: 11px; color: var(--muted); cursor: help; position: relative; }
+.help:hover .tip, .help:focus .tip { display: block; }
+.tip { display: none; position: absolute; top: 20px; left: -8px; z-index: 5; width: min(320px, 80vw); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--text); line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(0,0,0,.15); white-space: normal; font-weight: 400; }
+/* effort bar */
+.ebar { position: relative; height: 30px; border-radius: 6px; display: flex; overflow: hidden; cursor: ew-resize; touch-action: none;
+  user-select: none; touch-action: none; margin: 6px 0 2px; }
+.busy { padding: 4px 0; color: var(--accent, #1565c0); }
+.ebar > div.z { height: 100%; display: grid; place-items: center; font-size: 12px; color: #fff; font-weight: 600; }
+.ebar .band { position: absolute; top: 0; bottom: 0; background: rgba(255,255,255,.35); pointer-events: none; }
+.ebar .needle { position: absolute; top: -4px; bottom: -4px; width: 4px; margin-left: -2px; background: var(--text); border-radius: 2px;
+  pointer-events: none; box-shadow: 0 0 0 2px var(--panel); }
+.escale { position: relative; height: 16px; font-size: 11px; color: var(--muted); }
+.escale span { position: absolute; transform: translateX(-50%); }
+.zbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 8px; position: relative; }
+.zbar div { height: 100%; }
+.zbar .needle { position: absolute; top: -3px; bottom: -3px; width: 3px; background: var(--text); margin-left: -1px; }
+.eline { font-size: 13.5px; margin: 4px 0; }
+/* segments */
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.card .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .big { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.card.hl { border-color: var(--accent); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+td input.lock { width: 72px; padding: 2px 5px; }
+td select.terr { width: 80px; padding: 2px 5px; }
+.drop { border: 1px dashed var(--line); border-radius: 8px; padding: 10px; text-align: center; color: var(--muted); font-size: 13px; }
+.drop.over { border-color: var(--accent); background: var(--soft); }
+.tabs { display: inline-flex; margin-left: auto; }
+#sticky { position: sticky; top: 0; z-index: 4; }
+/* required inputs: a red * and a highlighted field until filled */
+.req { color: var(--bad); font-weight: 700; margin-left: 2px; }
+input.need, .drop.need { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad) inset; background: var(--needbg); }
+.seg.need button { border-color: var(--bad); }
+.trip { border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 8px 10px; margin: 8px 0;
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+.trip.need { border-color: var(--bad); border-left-color: var(--bad); background: var(--needbg); }
+.trip .lbl { font-weight: 650; font-size: 14px; color: var(--text); }
+.calcbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.btn.big { font-size: 15px; padding: 6px 22px; min-height: 36px; font-weight: 600; }
+#calc-msg.miss { color: var(--bad); }
+.flash { animation: flash 1.2s ease-out 1; }
+@keyframes flash { 0% { box-shadow: 0 0 0 4px var(--bad); } 100% { box-shadow: 0 0 0 0 transparent; } }
+/* environment: computed chips, ✎ opens the override inputs */
+.envchips { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.echip { border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; display: grid; gap: 1px; min-width: 0; flex: 1 1 220px; }
+.echip .k { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.echip b { font-size: 14.5px; font-variant-numeric: tabular-nums; }
+.echip .s { font-size: 11.5px; color: var(--faint); }
+.btn.icon { padding: 3px 9px; }
+/* the main chart's segment table */
+.cmp { max-height: 440px; overflow: auto; }
+.cmp table th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+.cmp td.cur, .cmp th.cur { font-weight: 650; color: var(--accent); }
+.cmp td.walk { color: var(--watch); }
+.cmp tr { cursor: pointer; }
+.cmp td.fuel { white-space: normal; min-width: 160px; font-size: 12px; color: var(--muted); }
+.chead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 4px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
+dialog.dlg { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(680px, 94vw); }
+dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
+.saved { font-size: 12px; color: var(--good); }
+@media (max-width: 700px) {
+  main { padding: 10px 10px 40px; gap: 10px; }
+  section { padding: 12px; }
+  .cmp .opt:not(.cur) { display: none; }
+  .profile { height: 220px; }
+  .tiles { grid-template-columns: 1fr 1fr; }
+  .tile .v { font-size: 19px; }
+  .seg button, .btn { min-height: 40px; }
+  .seg.big button { padding: 6px 10px; }
+  .ebar > div.z .full { display: none; }
+  #sticky { background: var(--bg); padding-bottom: 4px; }
+  .tabs { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<script src="static/shell.js" data-page="racepower"></script>
+<header>
+  <h1 data-i18n="racepower.title">賽事計算機</h1>
+  <span class="meta" id="asof"></span>
+  <div class="seg tabs" id="tabs"><button data-tab="calc" class="on">計算</button><button data-tab="acc">準確度</button></div>
+</header>
+<main>
+  <section id="target-sec" class="tab-calc">
+    <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
+    <div class="toolbar">
+      <label class="meta">目標賽事 <select id="event" style="width:auto;max-width:320px"></select></label>
+      <div class="seg" id="type"><button data-t="road">路跑</button><button data-t="trail">越野</button><button data-t="baiyue" data-intl-text="多日登山">百岳</button></div>
+      <span class="meta">快速：</span>
+      <button class="btn" data-preset="10k">10K</button><button class="btn" data-preset="half">半馬</button>
+      <button class="btn" data-preset="full">全馬</button><button class="btn" data-preset="trail30">越野 30K</button>
+      <button class="btn" data-preset="yushan" data-tw-only>玉山 2 日</button>
+      <span class="saved" id="saved-line"></span>
+    </div>
+    <div class="trip bf" id="trip-box"><span class="lbl"><span data-i18n="racepower.trip.label">行程</span><b class="req">*</b></span>
+      <div class="seg big" id="tripkind"><button data-k="group" data-i18n="racepower.trip.group">跟團</button><button data-k="solo" data-i18n="racepower.trip.solo">自己走</button></div>
+      <span class="meta" id="trip-hint" data-i18n="racepower.trip.hint">必選：兩種的休息和步調差很多</span>
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.trip.tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是你的能力時間（在 AeT 的步行能力：越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗）。</span></span>
+    </div>
+    <div id="sticky">
+      <div class="seg big" id="mode"><button data-m="time">⏱ <span class="bf" data-i18n="racepower.goal.time">目標時間</span><span class="rf" data-i18n="racepower.goal.pace">目標配速</span></button><button data-m="power">⚡ <span class="rf" data-i18n="racepower.goal.power">目標功率</span><span class="bf">目標速度</span></button><button data-m="auto">✨ <span class="bf">通通幫我算</span><span class="rf" data-i18n="racepower.goal.model">模型預測</span></button></div>
+      <span class="meta rf" id="goal-basis"></span>
+      <span class="help rf" tabindex="0">?<span class="tip" data-i18n="racepower.goal.tip">目標可以用配速（平均配速或完賽時間）或功率（平均功率 W 或 %CP）輸入，兩種都能選。每公里／分段的目標由坡度模型從你的目標分配。沒有設目標就用模型自己的預測。</span></span>
+    </div>
+    <div class="row" id="mode-time">
+      <div class="seg" id="tunit"><button data-u="time">時間</button><button data-u="pace">配速</button></div>
+      <label class="f" id="tt-time" style="width:150px"><span class="bf-l">目標<span class="bf">移動</span>時間 (h:mm:ss)<b class="req">*</b></span><input id="target" placeholder="例 1:55:00"></label>
+      <label class="f" id="tt-pace" style="width:150px"><span>平均配速 (m:ss /km)<b class="req">*</b></span><input id="tpace" placeholder="例 5:20"></label>
+    </div>
+    <div class="row" id="mode-power">
+      <span class="rf"><span class="seg" id="punit"><button data-u="w">W</button><button data-u="pct">%CP</button></span></span>
+      <label class="f rf" style="width:120px"><span><span id="plabel">平均功率 W</span><b class="req">*</b></span><input id="tpower" type="number" step="1"></label>
+      <label class="rf meta"><input type="checkbox" id="ptrain"> 以訓練條件功率輸入（會再乘上環境係數 M）</label>
+      <label class="f bf" style="width:170px">速度倍率（100% = 你平常的速度）<input id="tspeed" type="number" step="1" value="100"></label>
+    </div>
+    <div class="row" id="mode-auto">
+      <span class="lbl">努力目標</span>
+      <div class="seg rf" id="effort"><button data-e="1">極限 100%</button><button data-e="0.95">吃力 95%</button><button data-e="0.85">穩定 85%</button></div>
+      <span class="meta bf">以你平常的登山速度（100%）推估</span>
+      <span class="meta rf" id="effort-custom"></span>
+    </div>
+
+    <div class="row"><span class="lbl">路線</span>
+      <div class="seg" id="csrc"><button data-c="manual">手動</button><button data-c="gpx">GPX</button></div>
+      <span class="meta" id="course-line"></span>
+    </div>
+    <div id="course-manual" class="form">
+      <label><span>距離 (km)<b class="req">*</b></span><input id="dist" type="number" step="0.1" min="0.1"></label>
+      <label>爬升 (m)<input id="gain" type="number" step="10" min="0"></label>
+      <label>下降 (m)<input id="loss" type="number" step="10" min="0" placeholder="同爬升"></label>
+      <label class="bf">天數<input id="days" type="number" step="1" min="1" value="1"></label>
+    </div>
+    <div id="course-gpx" class="hidden">
+      <div class="drop" id="drop"><b class="req">*</b> 把 .gpx / .fit 拖到這裡，或 <label class="btn" style="display:inline-block">選擇檔案<input id="gpxfile" type="file" accept=".gpx,.fit,application/gpx+xml" hidden></label></div>
+      <div class="form" style="margin-top:8px">
+        <label>官方爬升 (m，選填)<input id="ogain" type="number" step="10" min="0" placeholder="用來校正 GPS 海拔"></label>
+      </div>
+      <ul class="warn" id="course-warn"></ul>
+    </div>
+    <div class="row"><span class="lbl">分段</span>
+      <div class="seg" id="split"><button data-s="grade">依坡段</button><button data-s="km">每公里</button><button data-s="none">不分段</button></div>
+      <details id="adv"><summary>進階</summary>
+        <div class="form" style="margin:4px 0 6px">
+          <label>平滑 σ (m)<input id="sigma" type="number" step="5" min="25" max="150" placeholder="50"></label>
+          <label>容差 ε (m)<input id="eps" type="number" step="1" min="2" placeholder="10"></label>
+          <label>最短段 (m)<input id="minlen" type="number" step="50" min="50" placeholder="自動"></label>
+          <label>平路門檻 (%)<input id="flatpct" type="number" step="0.5" min="0.5" placeholder="2"></label>
+        </div></details>
+    </div>
+    <div class="row rf"><span class="lbl">策略</span>
+      <div class="seg" id="strategy"><button data-k="even">均速</button><button data-k="negative">前慢後快</button><button data-k="positive">前快後慢</button></div>
+      <label class="meta" id="amt-box">幅度 <input id="amount" type="range" min="0" max="5" step="0.5" style="width:120px;vertical-align:middle"> <b id="amount-v"></b></label>
+      <span class="help" tabindex="0">?<span class="tip">均速：全程同樣的平均功率（越野是同樣的「努力」，坡上功率照下面的坡道彈性變化）。前慢後快 / 前快後慢：功率從起點到終點線性變化，整場平均不變。過去的研究多半發現前後差距小的配速最快。</span></span>
+    </div>
+    <div class="row rf" id="hills-row"><span class="lbl">坡道彈性</span>
+      <label class="meta">上坡 +<input id="hup" type="number" step="1" min="0" max="12" style="width:56px"> %</label>
+      <label class="meta">下坡 −<input id="hdown" type="number" step="1" min="0" max="30" style="width:56px"> %</label>
+      <span class="help" tabindex="0">?<span class="tip">上坡時功率可以比平均高一點、下坡讓它自然掉下來，平均功率不變。上坡 +5% 以內沒有額外的生理成本；上限 12%。持續超過 CP 太久的坡段會自動縮小。</span></span>
+    </div>
+    <div class="row"><span class="lbl">海拔</span>
+      <div class="seg" id="accl"><button data-a="acclimatised">已適應</button><button data-a="partial">部分適應</button><button data-a="unacclimatised">未適應</button></div>
+      <span class="badge watch hidden" id="accl-badge">推估</span>
+      <span class="help" tabindex="0">?<span class="tip">未適應：剛上山，每升高 1000 m 有氧能力約少 6.3%（300 m 起算）。已適應：較樂觀的海拔曲線。部分適應（例如前一晚住山屋）取兩者中間，沒有研究可依，所以標推估。</span></span>
+    </div>
+    <div class="row rf"><span class="lbl">熱</span>
+      <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
+      <span class="badge watch">推估</span>
+      <span class="help" tabindex="0">?<span class="tip">取得比賽日天氣後，如果有逐時預報（中央氣象署三天預報或 Open-Meteo），每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時預報（日期太遠、離線）或沒填起跑時間時，全程用同一個溫度。</span></span>
+      <span class="meta" id="heat-line"></span>
+    </div>
+    <div class="row"><span class="lbl">熱適應</span>
+      <div class="seg" id="heat-accl"><button data-h="auto">自動</button><button data-h="none">未適應</button><button data-h="partial">部分</button><button data-h="acclimatised">已適應</button><button data-h="custom">自訂 %</button></div>
+      <input id="heat-s" type="number" min="0" max="100" step="5" style="width:64px" class="hidden" placeholder="S %">
+      <span class="badge watch">推估</span>
+      <span class="help" tabindex="0">?<span class="tip">熱適應指數 S（0–100 %）：近期每天在 Hadley ≥ 150（例如 28 °C / 75 %）的移動分鐘，每天 ≥ 60 分算滿劑量，連續 5 天約 70 %（Pandolf 1998），停止後每天掉約 2.5 %（Daanen 2018）。比賽的熱懲罰乘上 (1 − 0.75 × S)（Racinais 2015 兩週拿回約 77 %；0.75 是推估）。自動 = 從你的紀錄推算到比賽日。部分 = 50 %、已適應 = 90 % 是推估的固定值。你自己的心率資料目前不支持「夏末熱懲罰比較小」，所以一律標推估。</span></span>
+      <span class="meta" id="heat-accl-line"></span>
+    </div>
+    <div class="row bf"><span class="lbl">心率帶</span>
+      <div class="seg" id="hrband"><button data-b="aet">AeT（多日建議）</button><button data-b="cap">能力上限（≤ 3 h）</button></div>
+      <label class="meta">天數 <input id="tripdays" type="number" min="1" max="10" step="1" value="3" style="width:52px"></label>
+      <label class="meta">每天背負 kg <input id="packdays" placeholder="例 9, 8.3, 7.6" style="width:120px"></label>
+      <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
+      <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
+    </div>
+    <div class="form" style="margin-top:6px">
+      <label>日期<input id="date" type="date"></label>
+      <label>起跑 / 起登時間<input id="start" type="time"></label>
+      <label class="bf">背負 (kg)<input id="pack" type="number" step="0.5" min="0" placeholder="預設"></label>
+      <label class="tf">effort km 公式<select id="formula">
+        <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
+        <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
+        <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
+      <label data-tw-only>地點（山名，天氣用）<input id="peak" list="peaklist" placeholder="例：玉山"></label>
+      <label>或 緯度, 經度<input id="latlon" placeholder="23.47, 120.957" data-intl-placeholder="46.55, 7.98"></label>
+    </div>
+    <datalist id="peaklist"></datalist>
+    <div class="stops-box" id="stops-box">
+      <div class="row"><span class="lbl">補給站</span>
+        <button class="btn" id="stop-add" type="button">＋ 新增補給站</button>
+        <button class="btn hidden" id="stop-import" type="button">從路線匯入</button>
+        <span class="meta" id="stop-msg"></span>
+        <span class="help" tabindex="0">?<span class="tip">每一列一個補給站，依 km 自動排序。類型決定補給計畫：水站只補水；補給站有食物和水，附近的那一次碳水改在站上吃；大補給站再加電解質和熱食；醫護站不補給（水要從上一站帶夠）；自備補給點是自己的補給袋。停留分鐘留白時用預設（水站 0.5、補給站 2、大補給站 5、自備 2 分鐘，推估），會加進 ETA。GPX 的航點名稱像補給站（補給、水站、CP1、Aid…）時可以「從路線匯入」。</span></span>
+      </div>
+      <div class="tablewrap"><table class="stoptbl"><thead><tr><th class="n">km</th><th>類型</th><th>名稱（選填）</th><th class="n">停留 分</th><th></th></tr></thead>
+        <tbody id="stoprows"></tbody></table></div>
+      <input id="stops" type="hidden">
+    </div>
+    <details class="bf" id="dayplan-box"><summary>逐日行程（手動路線；空白 = 平均分配）</summary>
+      <div class="tablewrap"><table class="daytbl"><thead><tr><th>天</th><th>km</th><th>爬升 m</th><th>下降 m</th></tr></thead><tbody id="dayplan"></tbody></table></div>
+    </details>
+    <div class="calcbar"><button class="btn primary big" id="calc" type="button" data-i18n="racepower.calc">計算</button>
+      <span class="meta" id="calc-msg"></span>
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.calc.tip">紅色 * 是必填。填齊之後每次修改都會自動重算；按「計算」可以馬上重算。選了賽季計畫的賽事時，輸入和結果會存在這場賽事，下次選它就直接帶回來。</span></span>
+    </div>
+  </section>
+
+  <section id="results" class="tab-calc"><h2>預估結果</h2><div class="loading">讀取你的活動資料中（第一次約需一分鐘）…</div></section>
+
+  <section id="fuel-sec" class="tab-calc hidden"><div id="fuel"></div></section>
+
+  <section id="profile-sec" class="tab-calc hidden">
+    <h2><span data-i18n="racepower.chart.title">分段目標</span> <span class="meta" id="profile-sub"></span>
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.chart.tip">沿著距離看每段的目標配速、功率或心率。
+怎麼看：橫軸 = 距離（km），縱軸一次看一種；淺色底 = 海拔剖面；滑過圖或點表格看每段細節。
+看什麼：平路和可跑的坡（3–8 %）看功率；陡坡（&gt; 8 %）或要走的段看心率上限；越野下坡求控制、安全，在功率／心率圖上是空的；&gt; 3 小時的比賽心率上限壓在 AeT。
+方法：每段的目標由坡度模型依坡度算。</span></span></h2>
+    <div class="chead"><div class="seg" id="measure"><button data-m="pace" data-i18n="racepower.m.pace">配速</button><button data-m="power" class="rf" data-i18n="racepower.m.power">功率</button><button data-m="hr" data-i18n="racepower.m.hr">心率</button></div>
+      <div class="legend" id="chart-legend"></div></div>
+    <div class="profile" id="profile"></div>
+    <div class="cmp tablewrap" id="segcmp"></div>
+    <details id="seg-all"><summary data-i18n="racepower.seg.all">全部欄位（鎖定功率、地形、熱）</summary><div class="tablewrap" id="segtable"></div></details>
+    <div class="toolbar" id="daysplit-bar" style="margin-top:8px"><label class="meta bf"><input type="checkbox" id="splitmode"> 在剖面上點選分日點</label>
+      <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
+      <button class="btn rf" id="unlock">解除全部鎖定</button>
+      <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">⌚ 匯出到 COROS</button>
+      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span>
+      <button class="btn" id="share">🔗 分享</button></div>
+    <dialog id="coros-dlg" class="dlg">
+      <h2><span data-i18n="racepower.coros.title">匯出到手錶</span> <span class="meta" id="cx-prov"></span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「按圈結束」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %、陡坡和走路段看心率上限、越野下坡不設目標。同一場賽事再匯出會更新同一個課表，不會多一份。</span></span></h2>
+      <div class="toolbar"><span class="meta" data-i18n="racepower.coros.end">每段結束</span>
+        <div class="seg" id="cx-mode"><button data-x="lap" data-i18n="racepower.coros.lap">按圈</button><button data-x="distance" data-i18n="racepower.coros.dist">距離</button></div>
+        <span class="meta" id="cx-where"></span></div>
+      <div id="cx-body" class="meta"></div>
+      <div class="toolbar" style="justify-content:flex-end;margin-top:10px"><span class="meta" id="cx-msg"></span>
+        <button class="btn primary" id="cx-go" data-i18n="racepower.coros.go">確認匯出</button><button class="btn" id="cx-close" autofocus data-i18n="racepower.close">關閉</button></div>
+    </dialog>
+    <dialog id="share-dlg">
+      <h2>🔗 分享計算結果 <span class="meta">唯讀，不會重新計算</span>
+        <span class="help" tabindex="0">?<span class="tip">把目前的結果（剖面、分段、分段目標、補給）凍結成一份快照，產生一個無法猜到的連結。拿到連結的人只看得到這份快照，看不到你的活動、設定或其他資料。不勾「包含體重」時，體重和會透露體重的數字（W/kg、超補的公克數）都不會出現；身高、年齡、性別一律不會出現。外面的人要經過你的 Cloudflare tunnel，tunnel 的密碼保護要放行 /share/ 開頭的路徑。</span></span></h2>
+      <div class="form" style="grid-template-columns:1fr 1fr">
+        <label style="grid-column:1/-1">標題<input id="share-title" maxlength="80" placeholder="例 春季半馬 計畫"></label>
+        <label>有效期限<select id="share-exp"><option value="">不過期</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
+        <label class="f" style="align-self:end"><span><input type="checkbox" id="share-weight"> 包含體重</span></label>
+      </div>
+      <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="share-go">建立連結</button><span class="meta" id="share-msg"></span></div>
+      <div class="toolbar hidden" id="share-out"><input id="share-link" readonly style="flex:1;min-width:240px"><button class="btn" id="share-copy">複製</button></div>
+      <h3>已分享</h3><div class="tablewrap"><table><tbody id="share-list"></tbody></table></div>
+      <div class="toolbar" style="justify-content:flex-end;margin-top:8px"><button class="btn" id="share-close">關閉</button></div>
+    </dialog>
+  </section>
+
+  <div class="two tab-calc">
+    <section>
+      <h2>你的數據 <span class="meta">藍框 = 你改過的值；清空即回到自動值</span></h2>
+      <div class="tablewrap"><table class="inputs"><tbody id="inputs"></tbody></table></div>
+      <div id="inputs-note" class="note"></div>
+    </section>
+    <section>
+      <h2><span data-i18n="racepower.env.title">環境</span> <span class="meta" data-i18n="racepower.env.sub">自動帶入，不用填</span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.env.tip">From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（中央氣象署 → Open-Meteo），太遠的日期用過去 5 年同期的氣候平均。兩邊的差換成環境係數 M。要自己改按 ✎。</span></span></h2>
+      <div class="envchips">
+        <div class="echip"><span class="k"><span data-i18n="racepower.env.from">From 訓練</span> <span class="badge" id="from-badge"></span></span><b id="from-v">–</b><span class="s" id="from-s"></span></div>
+        <div class="echip"><span class="k"><span data-i18n="racepower.env.to">To 比賽日</span> <span class="badge" id="to-badge">未取得</span></span><b id="to-v">–</b><span class="s" id="wx-meta"></span></div>
+        <button class="btn icon" id="env-edit" type="button" title="自己改 From / To" data-i18n-attr="title:racepower.env.edit">✎</button>
+      </div>
+      <div class="kv" id="env-kv" style="margin-top:8px"></div>
+      <details id="env-adv"><summary data-i18n="racepower.env.adv">進階：自己改 From / To（藍框 = 你改過的值，清空回到自動）</summary>
+      <div class="envgrid">
+        <div class="envbox"><b>From 訓練</b>
+          <div class="row3">
+            <label>海拔 m<input id="f-alt" type="number" step="10"></label>
+            <label>溫度 °C<input id="f-t" type="number" step="0.5"></label>
+            <label>濕度 %<input id="f-rh" type="number" step="1" min="1" max="100"></label>
+          </div><div class="kv" id="f-kv"></div></div>
+        <div class="envbox"><b>To 比賽日</b>
+          <div class="row3">
+            <label>海拔 m<input id="t-alt" type="number" step="10"></label>
+            <label>溫度 °C<input id="t-t" type="number" step="0.5"></label>
+            <label>濕度 %<input id="t-rh" type="number" step="1" min="1" max="100"></label>
+          </div><div class="kv" id="t-kv"></div>
+          <div class="toolbar" style="margin:0"><button class="btn" id="wx" data-i18n="racepower.env.refetch">重新取得比賽日天氣</button></div>
+        </div>
+      </div>
+      <div id="wx-tried" class="note"></div>
+      <details data-tw-only><summary>中央氣象署授權碼（登山預報，選填）</summary>
+        <div class="toolbar" style="margin-top:6px"><input id="cwakey" placeholder="CWA-XXXXXXXX-…" style="max-width:260px" autocomplete="off">
+          <button class="btn" id="cwasave">儲存</button><span class="meta" id="cwastatus"></span></div>
+        <div class="note">到 opendata.cwa.gov.tw 免費註冊 → 會員 → API 授權碼。只存在本機 ~/.wko5coach/weather.json。沒有授權碼會改用 Open-Meteo。</div>
+      </details>
+      </details>
+      <div class="note" id="attrib"></div>
+    </section>
+  </div>
+
+  <section id="gm-sec" class="tab-calc"><h2>坡度 RE 曲線 <span class="meta">你的 Stryd 功率在不同坡度換成多少速度</span></h2>
+    <details><summary>展開</summary><div class="two"><div><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div></details>
+  </section>
+
+  <section id="cp-sec" class="tab-calc"><details><summary><b>CP 分析</b> <span class="meta" id="cp-sub"></span></summary>
+    <div class="two"><div><div class="plot" id="cp-chart"></div></div><div id="cp-detail"></div></div></details>
+  </section>
+
+  <section id="rg-sec" class="tab-calc"><details><summary><b>Riegel 分析</b> <span class="meta">ln 功率 對 ln 時間；斜率 = k</span>
+    <span class="help" tabindex="0" onclick="event.preventDefault(); event.stopPropagation()">?<span class="tip" style="white-space:pre-line">Riegel 是什麼：撐得越久，能出的功率越低。這裡把你近一年的最佳功率（每種時間長度各取最高）畫成線，擬合出一條直線（ln 功率 對 ln 時間），斜率就是 k。
+怎麼讀：k 越負（例如 −0.10），功率隨時間掉得越快，長距離比賽就得用比短時間低很多的功率；k 越接近 0，耐力越好。
+圖：藍線是你的最佳功率包絡線，橘線是個人擬合，虛線是用 CP、TTE 查表得到的 k，圓點是這次預估。個人線和查表線差很多，通常是長時間的全力紀錄不夠。
+可不可信：看 R²（越接近 1 越貼）、點數，和是否標「可用」。全力的長時間努力少於 3 次時不擬合，會顯示「資料不足」。
+怎麼用：平常不用動。個人擬合不可靠時，可在進階設定把 Riegel k 改成「查表」。</span></span></summary>
+    <div class="two"><div><div class="plot" id="rg-chart"></div></div><div id="rg-detail"></div></div></details>
+  </section>
+
+  <section id="re-sec" class="tab-calc"><details><summary><b>跑步效率 RE 與活動指標</b> <span class="meta">RE = 速度 m/s ÷ 功率 W/kg</span></summary><div id="re-detail"></div></details></section>
+
+  <section id="hike-sec" class="tab-calc"><details><summary><b>登山日 EP/h</b> <span class="meta">EP = km + 爬升/100（健行筆記 / ITRA）</span></summary><div id="hike-detail"></div></details></section>
+
+  <section id="zone-sec" class="tab-calc"><details><summary><b>P³ 功率區間</b> <span class="meta">Palladino，依所選 CP</span></summary><div id="zones"></div></details></section>
+
+  <section id="acc-sec" class="tab-acc hidden">
+    <h2>準確度 <span class="meta">拿你過去的比賽與長距離活動回測：每一場都只用「那天以前、而且不含那一場」的資料來推估，再和實際比</span></h2>
+    <div class="toolbar"><button class="btn primary" id="bt-run">重新回測</button><span class="meta" id="bt-meta"></span></div>
+    <div id="bt-body" class="loading">讀取中…</div>
+  </section>
+</main>
+<script>
+const API = "/api/v1/racepower";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// an error answer → its message: the API's {"detail": "..."} text, else `status body`
+async function errText(r) {
+  const t = await r.text();
+  try { const d = JSON.parse(t).detail; const m = typeof d === "string" ? d : d && typeof d.message === "string" ? d.message : ""; if (m) return m; } catch {}
+  return `${r.status} ${t.slice(0, 300)}`;
+}
+async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) { const e = new Error(await errText(r)); e.status = r.status; throw e; } return r.json(); }
+const post = (url, body) => j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const ls = { get(k, d) { try { const v = localStorage.getItem("racepower." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("racepower." + k, JSON.stringify(v)); } catch {} } };
+
+// ---- formatting: W integer, W/kg 2 dp, h:mm:ss, m:ss /km, % integer, k 3 dp ----
+const ok = (v) => v != null && isFinite(v);
+const W = (v) => ok(v) ? Math.round(v) + " W" : "–";
+const wkg = (v) => ok(v) ? v.toFixed(2) + " W/kg" : "–";
+const pct = (v) => ok(v) ? Math.round(v * 100) + "%" : "–";
+const pct1 = (v) => ok(v) ? (v * 100).toFixed(1) + "%" : "–";
+const spct = (v) => ok(v) ? (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v * 100).toFixed(1) + "%" : "–";
+const k3 = (v) => ok(v) ? v.toFixed(3) : "–";
+const r3 = (v) => ok(v) ? v.toFixed(3) : "–";
+const f1 = (v) => ok(v) ? v.toFixed(1) : "–";
+const n0 = (v) => ok(v) ? Math.round(v).toLocaleString() : "–";
+function hms(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
+function dur(s) { if (!ok(s)) return "–"; s = Math.round(s); return s < 3600 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` : hms(s); }
+function pace(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} /km`; }
+const hrs = (h) => { if (!ok(h)) return "–"; const m = Math.round(h * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+const hm = (s) => ok(s) ? hrs(s / 3600) : "–";
+function parseHms(t) { if (!t || !t.trim()) return null; const p = t.trim().split(":").map(Number); if (p.some(isNaN)) return null;
+  while (p.length < 3) p.unshift(0); return p[0] * 3600 + p[1] * 60 + p[2]; }
+function parseMs(t) { if (!t || !t.trim()) return null; const p = t.trim().split(":").map(Number); if (p.some(isNaN)) return null; return p.length === 1 ? p[0] * 60 : p[0] * 60 + p[1]; }
+const num = (id) => { const v = $(id).value; return v === "" ? null : Number(v); };
+const badge = (b, cls = "watch") => b ? ` <span class="badge ${cls}">${esc(b)}</span>` : "";
+const help = (t) => ` <span class="help" tabindex="0">?<span class="tip">${t}</span></span>`;
+
+const charts = {};
+function chart(id) { if (!charts[id]) { charts[id] = echarts.init($(id)); new ResizeObserver(() => charts[id].resize()).observe($(id)); } return charts[id]; }
+const axisStyle = () => ({ axisLabel: { color: css("--muted"), fontSize: 11 }, axisLine: { lineStyle: { color: css("--line") } },
+  splitLine: { lineStyle: { color: css("--line") } }, axisTick: { show: false }, nameTextStyle: { color: css("--muted") } });
+
+let INP = null, PEAKS = [], LAST = null, PLAN = null, WX = null, GM = null;
+const ovr = {};          // user overrides of "your numbers": {cp, w_prime, tte, k, re, weight, eph, cp_source, k_source}
+let type = ls.get("type", "road");
+// 主要訓練項目 (設定; engine/primary_sport.py): road = 越野／百岳 buttons and presets hidden (a
+// season-plan 越野賽 / 百岳 picked from the event list still shows its own type)
+let SPORT = "trail";
+function applySport() {
+  const road = SPORT === "road";
+  document.querySelectorAll("#type button").forEach((b) => b.classList.toggle("hidden", road && b.dataset.t !== "road" && b.dataset.t !== type));
+  document.querySelectorAll('[data-preset="trail30"], [data-preset="yushan"]').forEach((b) => b.classList.toggle("hidden", road));
+}
+const S = Object.assign({ mode: "auto", tunit: "time", punit: "w", effort: 1, csrc: "manual", split: "grade", strategy: "even",
+  amount: null, measure: "pace", accl: null, hup: 5, hdown: 10, heatAccl: { mode: "auto", s: null }, trip: null, hrband: "aet" },   // trip: 跟團／自己走 has no default (must pick)
+  ls.get("ui", {}));
+const T = (k, p) => (window.I18N ? I18N.t("racepower." + k, p) : k);
+let HEAT = null;                          // /heat-status for the race date
+let HIKEMETA = null;                      // /hike-meta rows
+let COURSE = ls.get("course", null);      // {course_id, name, km, gain_m} — the file itself is not stored
+let LOCKS = {};                           // seg index -> power
+let SPLITS = [];                          // day split km (百岳)
+let TERRAIN = {};                         // seg index -> terrain key
+let SEL = new Set(), HOVER = null;        // selected segments (click; shift+click adds / removes) and the hovered one
+// click: select only this segment (again: clear); shift+click: add / remove it
+function pickSeg(i, shift) {
+  if (shift) { if (SEL.has(i)) SEL.delete(i); else SEL.add(i); }
+  else SEL = SEL.size === 1 && SEL.has(i) ? new Set() : new Set([i]);
+  renderProfile(); renderSegCompact(); renderSegments();
+}
+// hovering a row: show that segment on the elevation chart (the chart only; the tables stay as they are)
+function hoverSeg(i) { if (HOVER === i) return; HOVER = i; renderProfile(); }
+const saveUI = () => ls.set("ui", S);
+const CLS_COLOR = { steep_down: "--c-sd", down: "--c-d", flat: "--c-f", up: "--c-u", steep_up: "--c-su" };
+const EFF_COLORS = ["--e1", "--e2", "--e3", "--e4", "--e5"];
+const TERRAIN_OPTS = [["normal", "一般"], ["gravel", "碎石"], ["bamboo", "箭竹"], ["offpath", "無路"]];
+
+// ---------------- target form ----------------
+const PRESETS = {
+  "10k": { type: "road", dist: 10, gain: 0, days: 1 }, half: { type: "road", dist: 21.0975, gain: 0, days: 1 },
+  full: { type: "road", dist: 42.195, gain: 0, days: 1 }, trail30: { type: "trail", dist: 30, gain: 1800, days: 1 },
+  yushan: { type: "baiyue", dist: 21, gain: 1800, days: 2, peak: "玉山", inDays: 7 },
+};
+function segOn(id, attr, val) { document.querySelectorAll(`#${id} button`).forEach((b) => b.classList.toggle("on", String(b.dataset[attr]) === String(val))); }
+function setType(t) {
+  type = t; ls.set("type", t);
+  segOn("type", "t", t); applySport();
+  const hike = t === "baiyue";
+  document.querySelectorAll(".bf").forEach((e) => e.classList.toggle("hidden", !hike));
+  document.querySelectorAll(".rf").forEach((e) => e.classList.toggle("hidden", hike));
+  document.querySelectorAll(".tf").forEach((e) => e.classList.toggle("hidden", t !== "trail"));
+  ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
+  $("hike-sec").classList.toggle("hidden", !hike);
+  if (!S.accl) segOn("accl", "a", hike ? "unacclimatised" : "acclimatised");
+  // user decision 2026-09-30: a 百岳 trip defaults to 3 days
+  if (hike && !S.daysInit) { if ((Number($("days").value) || 1) === 1) $("days").value = 3; $("tripdays").value = $("tripdays").value || 3; S.daysInit = true; saveUI(); }
+  renderDayPlan(); syncForm();
+}
+function accl() { return S.accl || (type === "baiyue" ? "unacclimatised" : "acclimatised"); }
+// the goal follows the training basis (/goal-basis): hr → a target pace, power → a target power;
+// 百岳 keeps its three modes. A saved goal of the other kind falls back to the model (it is kept in S).
+let BASIS = null;
+// (both kinds are always offered: the owner picks pace or power; the training basis no longer hides one)
+function goalOk(m) { return true; }
+function mode() { return goalOk(S.mode) ? S.mode : "auto"; }
+function syncForm() {
+  const md = mode();
+  document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("hidden", !goalOk(b.dataset.m)));
+  $("goal-basis").textContent = "";
+  segOn("mode", "m", md); segOn("tunit", "u", S.tunit); segOn("punit", "u", S.punit); segOn("effort", "e", S.effort);
+  segOn("csrc", "c", S.csrc); segOn("split", "s", S.split); segOn("strategy", "k", S.strategy); segOn("measure", "m", measure());
+  segOn("accl", "a", accl());
+  segOn("heat-accl", "h", S.heatAccl?.mode || "auto"); segOn("tripkind", "k", S.trip); segOn("hrband", "b", S.hrband);
+  $("heat-s").classList.toggle("hidden", S.heatAccl?.mode !== "custom");
+  if (S.heatAccl?.s != null && $("heat-s").value === "") $("heat-s").value = Math.round(S.heatAccl.s * 100);
+  heatAcclLabel();
+  $("mode-time").classList.toggle("hidden", md !== "time");
+  $("mode-power").classList.toggle("hidden", md !== "power");
+  $("mode-auto").classList.toggle("hidden", md !== "auto");
+  $("tt-time").classList.toggle("hidden", S.tunit !== "time" && type !== "baiyue");
+  $("tt-pace").classList.toggle("hidden", S.tunit !== "pace" || type === "baiyue");
+  $("tunit").classList.toggle("hidden", type === "baiyue");
+  $("plabel").textContent = S.punit === "pct" ? "平均功率 %CP" : "平均功率 W";
+  $("course-manual").classList.toggle("hidden", S.csrc !== "manual");
+  $("course-gpx").classList.toggle("hidden", S.csrc !== "gpx");
+  $("hills-row").classList.toggle("hidden", type === "baiyue" || S.csrc !== "gpx");
+  $("accl-badge").classList.toggle("hidden", accl() !== "partial");
+  const amt = S.amount ?? (S.strategy === "positive" && type === "trail" ? 3 : 2);
+  $("amount").value = amt; $("amount-v").textContent = S.strategy === "even" ? "" : amt + "%";
+  $("amt-box").classList.toggle("hidden", S.strategy === "even");
+  $("hup").value = S.hup; $("hdown").value = S.hdown;
+  const fixed = [1, 0.95, 0.85].includes(Number(S.effort));
+  $("effort-custom").textContent = fixed ? "" : `自訂 ${Math.round(S.effort * 100)}%（拖動努力度條設定）`;
+  courseLine(); markRequired();
+}
+// the chart's one measure: 百岳 has no power target
+function measure() { return S.measure === "power" && type === "baiyue" ? "pace" : (S.measure || "pace"); }
+
+// ---------------- required inputs ----------------
+// [element id to highlight, label] of every required input that is still empty
+function missing() {
+  const out = [];
+  if (S.csrc === "gpx" && !COURSE) out.push(["drop", T("req.gpx")]);
+  if (S.csrc === "manual" && !(num("dist") > 0)) out.push(["dist", T("req.dist")]);
+  if (type === "baiyue" && !S.trip) out.push(["trip-box", T("req.trip")]);
+  if (mode() === "time") {
+    const paceMode = type !== "baiyue" && S.tunit === "pace";
+    if (paceMode ? !parseMs($("tpace").value) : !parseHms($("target").value)) out.push([paceMode ? "tpace" : "target", paceMode ? T("req.pace") : T("req.time")]);
+  }
+  if (mode() === "power" && type !== "baiyue" && !(num("tpower") > 0)) out.push(["tpower", T("req.power")]);
+  return out;
+}
+function markRequired() {
+  const miss = missing(), ids = new Set(miss.map((m) => m[0]));
+  for (const id of ["drop", "dist", "target", "tpace", "tpower"]) $(id).classList.toggle("need", ids.has(id));
+  $("trip-box").classList.toggle("need", ids.has("trip-box"));
+  $("tripkind").classList.toggle("need", ids.has("trip-box"));
+  const m = $("calc-msg");
+  m.classList.toggle("miss", !!miss.length);
+  m.textContent = miss.length ? T("req.missing", { list: miss.map((x) => x[1]).join("、") }) : "";
+  return miss;
+}
+function missingHtml(miss) {
+  return `<h2>${esc(T("results"))}</h2><div class="err">${esc(T("req.missing", { list: miss.map((x) => x[1]).join("、") }))}</div>`;
+}
+$("calc").onclick = () => {
+  const miss = markRequired();
+  if (miss.length) {
+    const el = $(miss[0][0]); el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+    const inp = el.tagName === "INPUT" ? el : null; if (inp) inp.focus({ preventScroll: true });
+    $("results").innerHTML = missingHtml(miss);
+    return;
+  }
+  clearTimeout(timer); saveForm(); saveUI(); run();
+};
+function heatAcclLabel() {
+  const b = document.querySelector('#heat-accl button[data-h="auto"]');
+  const s = HEAT?.s_race?.center ?? HEAT?.s;
+  if (b) b.textContent = ok(s) ? `自動（${Math.round(s * 100)} %）` : "自動";
+  let t = "";
+  if (HEAT) {
+    t = `今天 S ${Math.round(HEAT.s * 100)} %（${esc(HEAT.level?.label || "")}）· ${esc(HEAT.source || "")}`;
+    if (HEAT.s_race) t += ` · 比賽日 ${Math.round(HEAT.s_race.low * 100)}–${Math.round(HEAT.s_race.high * 100)} %`;
+    if (HEAT.warning) t += ` · ${esc(HEAT.warning)}`;
+  }
+  $("heat-accl-line").innerHTML = t;
+}
+async function loadHeat() {
+  try { HEAT = await j(`${API}/heat-status?${new URLSearchParams({ date: $("date").value || "" })}`); } catch { HEAT = null; }
+  heatAcclLabel();
+}
+function heatAcclBody() {
+  const m = S.heatAccl?.mode || "auto";
+  return m === "custom" ? { mode: m, s: Math.max(0, Math.min(100, num("heat-s") ?? 0)) / 100 } : { mode: m };
+}
+function courseLine() {
+  const evId = $("event").value, ev = (INP?.events || []).find((e) => e.id === evId);
+  if (S.csrc === "gpx" && COURSE) {
+    $("course-line").innerHTML = esc(`${COURSE.name || "GPX"} · ${f1(COURSE.km)} km ↑${n0(COURSE.gain_m)} m · ${COURSE.segments ?? "?"} 段`) +
+      (COURSE.event_id ? ` <span class="badge good" title="存在賽季計畫的這場賽事，下次選這場賽事會自動載入；在賽季計畫頁可以換檔或刪除">已存在賽事</span>`
+        : ev ? ` <button class="btn" id="gpx-attach" title="把這個 GPX 存到賽季計畫的「${esc(ev.name)}」，之後不用再上傳">存到「${esc(ev.name)}」</button>` : "");
+    const b = $("gpx-attach"); if (b) b.onclick = () => attachGpx(evId);
+  }
+  else if (S.csrc === "gpx") $("course-line").textContent = "尚未上傳";
+  else $("course-line").textContent = "";
+}
+// ---------------- the plan event's stored GPX (engine/event_gpx.py) ----------------
+let LAST_FILE = null;                      // the last uploaded file, so it can be attached to the event
+async function loadEventGpx(eid, keep = false) {          // keep: the restored locks / terrain / splits stay
+  try {
+    const c = await post(`${API}/course/event/${encodeURIComponent(eid)}`, { split: S.split, ...Object.fromEntries(courseOpts(false)) });
+    COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null };
+    ls.set("course", COURSE); if (!keep) { LOCKS = {}; TERRAIN = {}; SPLITS = c.day_splits_km || []; }
+    $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    STOP_SUGG = c.stop_suggestions || [];
+    S.csrc = "gpx"; saveUI(); syncForm(); renderStops();
+    return true;
+  } catch (e) {
+    if (COURSE?.event_id) { COURSE = null; ls.set("course", null); }
+    return false;                          // 404: the event has no GPX — the manual numbers stay
+  }
+}
+async function attachGpx(eid) {
+  if (!LAST_FILE) { alert("請重新選一次 GPX 檔案"); return; }
+  const fd = new FormData(); fd.append("file", LAST_FILE);
+  try {
+    const r = await fetch(`/api/v1/plan/events/${encodeURIComponent(eid)}/gpx`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.text()).slice(0, 300));
+    if (await loadEventGpx(eid)) schedule();
+  } catch (e) { $("course-line").insertAdjacentHTML("beforeend", ` <span class="err">${esc(e.message)}</span>`); }
+}
+let splitTimer = null;
+function saveEventSplits() {
+  // the day ends clicked on the profile belong to the event's stored GPX: kept for next time
+  // and for the コース定数 reference line's per-day breakdown
+  if (!COURSE?.event_id || type !== "baiyue") return;
+  const eid = COURSE.event_id, body = { day_splits_km: SPLITS };
+  clearTimeout(splitTimer);
+  splitTimer = setTimeout(() => fetch(`/api/v1/plan/events/${encodeURIComponent(eid)}/gpx/splits`,
+    { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => {}), 800);
+}
+function applyPreset(p) {
+  S.csrc = "manual"; setType(p.type); $("dist").value = p.dist; $("gain").value = p.gain; $("loss").value = ""; $("days").value = p.days;
+  $("target").value = ""; $("pack").value = "";
+  if (p.peak) { $("peak").value = p.peak; }
+  if (p.inDays) { const d = new Date(); d.setDate(d.getDate() + p.inDays); $("date").value = d.toISOString().slice(0, 10); }
+  saveForm(); syncForm(); schedule();
+  if (p.peak) getWeather();
+}
+function renderDayPlan() {
+  const n = Math.max(1, Number($("days").value) || 1), tb = $("dayplan"), old = readDayPlan(true);
+  tb.innerHTML = Array.from({ length: n }, (_, i) => `<tr><td>第 ${i + 1} 天</td>` +
+    ["km", "gain_m", "loss_m"].map((k) => `<td><input data-d="${i}" data-k="${k}" type="number" step="${k === "km" ? 0.1 : 10}" value="${old[i]?.[k] ?? ""}"></td>`).join("") + "</tr>").join("");
+  tb.querySelectorAll("input").forEach((e) => e.addEventListener("input", schedule));
+}
+function readDayPlan(raw) {
+  const rows = [];
+  $("dayplan").querySelectorAll("input").forEach((e) => { const i = +e.dataset.d; rows[i] = rows[i] || {}; if (e.value !== "") rows[i][e.dataset.k] = Number(e.value); });
+  if (raw) return rows;
+  const full = rows.length && rows.every((r) => r && r.km != null);
+  return full ? rows.map((r) => ({ km: r.km, gain_m: r.gain_m || 0, loss_m: r.loss_m ?? null })) : null;
+}
+const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct",
+  "tripdays", "packdays", "heatz", "heat-s"];
+function formValues() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.hourlyheat = $("hourlyheat").checked; return o; }
+function setForm(o) { FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("hourlyheat").checked = o.hourlyheat !== false; }
+function saveForm() { ls.set("form", formValues()); }
+function loadForm() { const o = ls.get("form", null); if (!o) return false; setForm(o); return true; }
+// hourly rows go with the plan only when the race-day temperature / humidity are the fetched ones
+const tempOverridden = () => ["t-t", "t-rh"].some((id) => $(id).classList.contains("ovr"));
+
+function getLoc() {
+  const peak = PEAKS.find((p) => p.name === $("peak").value.trim());
+  const ll = $("latlon").value.split(/[,\s]+/).map(Number).filter((x) => !isNaN(x));
+  if (ll.length >= 2) return { lat: ll[0], lon: ll[1], elevation: ll[2] ?? peak?.elevation_m ?? null, name: peak?.name };
+  if (peak) return { lat: peak.lat, lon: peak.lon, elevation: peak.elevation_m, name: peak.name, peak };
+  // a GPX course: where it starts
+  if (S.csrc === "gpx" && COURSE?.start) return { lat: COURSE.start.lat, lon: COURSE.start.lon, elevation: COURSE.start.z, gpx: true };
+  return null;
+}
+
+// ---------------- GPX ----------------
+async function uploadGpx(file) {
+  if (!file) return;
+  $("course-line").textContent = "解析中…";
+  const fd = new FormData(); fd.append("file", file);
+  courseOpts(true).forEach(([k, v]) => fd.append(k, v));
+  try {
+    const r = await fetch(`${API}/course`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.text()).slice(0, 300));
+    const c = await r.json();
+    LAST_FILE = file;
+    COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null };
+    ls.set("course", COURSE); LOCKS = {}; SPLITS = (c.wpts || []).filter((w) => w.camp).map((w) => +w.km.toFixed(2)); TERRAIN = {};
+    $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    STOP_SUGG = c.stop_suggestions || [];
+    S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); schedule(); autoWeather();
+  } catch (e) { $("course-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+function courseOpts(asForm) {
+  const o = [["sigma_m", num("sigma")], ["eps_m", num("eps")], ["min_len_m", num("minlen")], ["flat_pct", num("flatpct")], ["official_gain_m", num("ogain")]]
+    .filter(([, v]) => v != null);
+  if (asForm) o.push(["split", S.split]);
+  return o;
+}
+// ---------------- aid stations (one row each; stored as JSON in the hidden #stops) ----------------
+const STOP_TYPES = [["water", "水站", "💧"], ["aid", "補給站（食物＋水）", "🍌"], ["big", "大補給站（含電解質、熱食）", "🍲"],
+  ["medical", "醫護站", "⛑️"], ["self", "自備補給點", "🎒"]];
+const STOP_MIN = { water: 0.5, aid: 2, big: 5, medical: 0, self: 2 };   // default stop minutes (推估)
+const stopIcon = (t) => (STOP_TYPES.find((x) => x[0] === t) || STOP_TYPES[1])[2];
+const stopName = (t) => (STOP_TYPES.find((x) => x[0] === t) || STOP_TYPES[1])[1];
+let STOPS = [];
+let STOP_SUGG = [];                        // GPX waypoints that look like aid stations
+function parseStops(v) {
+  v = (v || "").trim(); if (!v) return [];
+  try {
+    const a = JSON.parse(v);
+    if (Array.isArray(a)) return a.map((r) => ({ km: ok(Number(r.km)) && r.km !== "" && r.km != null ? Number(r.km) : null,
+      type: STOP_MIN[r.type] != null ? r.type : "aid", name: String(r.name || "").slice(0, 40),
+      minutes: r.minutes === "" || r.minutes == null ? null : Number(r.minutes) }));
+  } catch {}
+  // the old 「km:分, km:分」 text
+  return v.split(/[,，]/).map((s) => s.trim()).filter(Boolean).map((s) => s.split(/[:：]/).map(Number))
+    .filter((p) => p.length >= 1 && p.every((x) => !isNaN(x))).map(([km, minutes]) => ({ km, type: "aid", name: "", minutes: minutes ?? null }));
+}
+function courseKm() { return S.csrc === "gpx" && COURSE ? COURSE.km : num("dist"); }
+function sortStops() { STOPS.sort((a, b) => (a.km ?? 1e9) - (b.km ?? 1e9)); }
+function saveStops() { $("stops").value = JSON.stringify(STOPS); saveForm(); }
+function stopIssue(r, i) {
+  const km = courseKm();
+  if (r.km == null) return "填 km";
+  if (r.km <= 0 || (ok(km) && r.km >= km)) return `km 要在 0–${ok(km) ? f1(km) : "?"} 之間`;
+  if (STOPS.some((o, j) => j !== i && o.km != null && Math.abs(o.km - r.km) < 0.05)) return "重複的 km";
+  return null;
+}
+function renderStops() {
+  const issues = STOPS.map(stopIssue);
+  $("stoprows").innerHTML = STOPS.map((r, i) => `<tr><td class="n"><input class="km ${issues[i] ? "bad" : ""}" data-si="${i}" data-f="km" type="number" step="0.1" min="0" value="${r.km ?? ""}" title="${esc(issues[i] || "")}"></td>
+      <td><select data-si="${i}" data-f="type">${STOP_TYPES.map(([k, n, ic]) => `<option value="${k}" ${r.type === k ? "selected" : ""}>${ic} ${n}</option>`).join("")}</select></td>
+      <td><input class="nm" data-si="${i}" data-f="name" maxlength="40" value="${esc(r.name || "")}" placeholder="例 CP1"></td>
+      <td class="n"><input class="min" data-si="${i}" data-f="minutes" type="number" step="0.5" min="0" value="${r.minutes ?? ""}" placeholder="${STOP_MIN[r.type]}"></td>
+      <td><button class="x" data-rm="${i}" type="button" title="移除">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="5" class="meta">沒有補給站</td></tr>`;
+  const bad = issues.filter(Boolean);
+  $("stop-msg").innerHTML = bad.length ? `<span class="wn">⚠ ${bad.length} 列要修正：${esc([...new Set(bad)].join("、"))}（不會算進去）</span>` : "";
+  const fresh = STOP_SUGG.filter((s) => !STOPS.some((r) => r.km != null && Math.abs(r.km - s.km) < 0.1));
+  $("stop-import").classList.toggle("hidden", !(S.csrc === "gpx" && fresh.length));
+  $("stop-import").textContent = `從路線匯入（${fresh.length}）`;
+}
+function stopsOf() {
+  return STOPS.filter((r, i) => !stopIssue(r, i)).map((r) => ({ km: r.km, type: r.type, name: r.name || null,
+    minutes: r.minutes ?? STOP_MIN[r.type] ?? 0 }));
+}
+$("stoprows").addEventListener("change", (e) => {
+  const i = e.target.dataset.si; if (i == null) return;
+  const f = e.target.dataset.f, v = e.target.value;
+  STOPS[i][f] = f === "km" || f === "minutes" ? (v === "" ? null : Number(v)) : v;
+  sortStops(); saveStops(); renderStops(); schedule();
+});
+$("stoprows").addEventListener("click", (e) => { const i = e.target.dataset.rm; if (i == null) return; STOPS.splice(+i, 1); saveStops(); renderStops(); schedule(); });
+$("stop-add").onclick = () => {
+  const km = courseKm(), last = STOPS.filter((r) => r.km != null).at(-1);
+  const next = last ? Math.min(+(last.km + 5).toFixed(1), ok(km) ? +(km - 0.5).toFixed(1) : last.km + 5) : (ok(km) ? +Math.min(5, km / 2).toFixed(1) : 5);
+  STOPS.push({ km: next, type: "aid", name: "", minutes: null }); sortStops(); saveStops(); renderStops(); schedule();
+  const el = $("stoprows").querySelector(`input[data-f="km"][value="${next}"]`); if (el) el.focus();
+};
+$("stop-import").onclick = () => {
+  const fresh = STOP_SUGG.filter((s) => !STOPS.some((r) => r.km != null && Math.abs(r.km - s.km) < 0.1));
+  STOPS.push(...fresh.map((s) => ({ km: s.km, type: s.type, name: s.name || "", minutes: null })));
+  sortStops(); saveStops(); renderStops(); schedule();
+};
+
+// ---------------- your numbers ----------------
+function inputRow(label, key, value, fmt, source, extra = "", step = "any") {
+  const cls = ovr[key] != null ? "ovr" : "";
+  return `<tr><td>${label}</td><td><input data-o="${key}" class="${cls}" type="number" step="${step}" value="${ovr[key] ?? (ok(value) ? fmt(value) : "")}"></td>
+    <td class="wrap meta">${esc(source)}${extra}</td></tr>`;
+}
+function renderInputs() {
+  if (!INP) return;
+  const u = LAST?.used || {};
+  const rows = [];
+  rows.push(inputRow("體重 kg", "weight", u.weight?.value ?? INP.weight.value, (v) => v.toFixed(1), u.weight?.source ?? INP.weight.source));
+  if (type === "baiyue") {
+    rows.push(inputRow("EP/h（你的登山速度）", "eph", u.eph?.value, (v) => v.toFixed(2), u.eph?.source || "", ` <a href="#hike-sec">看紀錄</a>`));
+    rows.push(`<tr><td>背負</td><td class="num">${f1(u.pack_kg?.value)} kg</td><td class="meta wrap">${esc(u.pack_kg?.source || "")}；過去 ${f1(u.hist_pack_kg?.value)} kg（${esc(u.hist_pack_kg?.source || "")}）</td></tr>`);
+    rows.push(`<tr><td>心率上限</td><td class="num">${n0(u.aet?.value)} bpm</td><td class="meta wrap">AeT：${esc(u.aet?.source || "")}</td></tr>`);
+  } else {
+    // CP: 自動 (the engine picks the source and shows the value it used) or 手動 (typed in)
+    const manual = ovr.cp != null;
+    rows.push(`<tr><td>CP</td><td colspan="2"><div class="seg" id="cpmode" style="display:inline-flex">
+        <button type="button" data-cpm="auto" class="${manual ? "" : "on"}">自動</button><button type="button" data-cpm="manual" class="${manual ? "on" : ""}">手動</button></div>
+      ${manual ? ` <input data-o="cp" class="ovr" type="number" step="1" style="width:90px" value="${ovr.cp}"> W`
+        : ` <b class="num">${W(u.cp?.value)}</b> <span class="meta">${wkg((u.cp?.value) / (u.weight?.value || 1))} · ${esc(u.cp?.source || "")}</span>`}
+      <a href="#cp-sec" class="meta">看依據</a></td></tr>`);
+    // everything below is derived automatically; shown only under 進階設定
+    rows.push(`<tr><td colspan="3"><details id="adv" ${ls.get("advOpen", false) ? "open" : ""}><summary class="meta">進階設定（W′、TTE、Riegel k、RE、先前賽事）：平常不用動，都自動算</summary>
+      <table class="inputs"><tbody>`);
+    rows.push(inputRow("W′ J", "w_prime", u.w_prime?.value, (v) => Math.round(v), u.w_prime?.source || "", "", 100));
+    rows.push(inputRow("TTE 秒", "tte", u.tte?.value, (v) => Math.round(v), (u.tte?.source || "") + (ok(u.tte?.value) ? `（${dur(u.tte.value)}）` : ""), "", 10));
+    const pk = INP.riegel, tk = LAST?.tasks?.table;
+    const kcur = ovr.k_source || u.k?.kind;
+    rows.push(`<tr><td>k 來源</td><td colspan="2"><select class="src ${ovr.k_source ? "ovr" : ""}" data-o="k_source">
+      <option value="">自動</option>
+      <option value="personal" ${kcur === "personal" ? "selected" : ""}>個人擬合 ${k3(pk?.k)}${pk && !pk.valid ? "（不可靠）" : ""}</option>
+      <option value="table" ${kcur === "table" ? "selected" : ""}>查表 ${k3(tk?.k)}</option>
+      <option value="manual" ${kcur === "manual" && ovr.k_source ? "selected" : ""}>手動</option></select></td></tr>`);
+    rows.push(inputRow("Riegel k", "k", u.k?.value, (v) => v.toFixed(3), u.k?.source || "", ` <a href="#rg-sec">看依據</a>`, 0.005));
+    rows.push(inputRow("RE", "re", u.re?.value, (v) => v.toFixed(3), u.re?.source || "", ` <a href="#re-sec">看依據</a>`, 0.005));
+    const pr = LAST?.tasks?.prior;
+    const opts = [`<option value="">自動（${esc(INP.auto_prior?.label || "無")}）</option>`].concat(INP.priors.map((p, i) =>
+      `<option value="${i}" ${String(i) === ls.get("prior", "") ? "selected" : ""}>${esc(p.label)} ${dur(p.time_s)} ${W(p.avg_power)}</option>`));
+    rows.push(`<tr><td>先前賽事</td><td colspan="2"><select class="src" id="prior" style="width:100%">${opts.join("")}</select>
+      <div class="meta">用於查表 k 與任務 7/9/10${pr ? `：${esc(pr.label || "")} ${dur(pr.time_s)} @ ${W(pr.power)}` : ""}</div></td></tr>`);
+    rows.push(`</tbody></table></details></td></tr>`);
+  }
+  $("inputs").innerHTML = rows.join("");
+  const adv = $("adv"); if (adv) adv.addEventListener("toggle", () => ls.set("advOpen", adv.open));
+  document.querySelectorAll("#cpmode button").forEach((b) => b.onclick = () => {
+    if (b.dataset.cpm === "auto") delete ovr.cp;
+    else if (ovr.cp == null) ovr.cp = Math.round(u.cp?.value || INP.cp.sources[0]?.cp || 200);
+    delete ovr.cp_source;
+    renderInputs(); schedule();
+  });
+  $("inputs").querySelectorAll("[data-o]").forEach((e) => e.addEventListener("change", () => {
+    const k = e.dataset.o; const v = e.value;
+    if (v === "") delete ovr[k]; else ovr[k] = e.tagName === "SELECT" ? v : Number(v);
+    if (k === "cp_source") delete ovr.cp;
+    if (k === "k_source" && v !== "manual") delete ovr.k;
+    if (k === "k") ovr.k_source = "manual";
+    schedule();
+  }));
+  const pe = $("prior"); if (pe) pe.addEventListener("change", () => { ls.set("prior", pe.value); schedule(); });
+  $("inputs-note").innerHTML = `性別 ${esc(INP.profile.sex === "female" ? "女" : "男")}（${esc(INP.profile.sex_source)}）· 功率計 ${esc(INP.profile.power_meter)}，${esc(INP.profile.wind_source)} · 近 365 天 ${INP.counts.runs_365} 次跑步，${INP.counts.runs_with_power} 次有功率` +
+    (INP.power_source && !INP.power_source.accept_watch_power && INP.power_source.counts && INP.power_source.counts.watch
+      ? `（另 ${INP.power_source.counts.watch} 次${esc(INP.power_source.unused_label)}）` : "");
+}
+
+// ---------------- environment ----------------
+function envBody() {
+  const f = { altitude_m: num("f-alt"), temp_c: num("f-t"), rh_pct: num("f-rh") };
+  const t = { altitude_m: num("t-alt"), temp_c: num("t-t"), rh_pct: num("t-rh") };
+  return { f, t };
+}
+// From = the training conditions the server derived (athlete.py: 90-day runs' median altitude +
+// the weather at those runs / the athlete's own median, heat_calib B4); To = the race-day forecast /
+// climatology (fetched automatically). Shown as read-only chips; ✎ opens the override inputs.
+const envTxt = (alt, t, rh) => [ok(alt) ? `${n0(alt)} m` : null, ok(t) ? `${f1(t)} °C` : null, ok(rh) ? `${Math.round(rh)} %` : null]
+  .filter(Boolean).join(" · ") || "–";
+const isOvr = (ids) => ids.some((id) => $(id).classList.contains("ovr"));
+function renderEnvChips() {
+  const e = LAST?.env, tc = INP?.training_conditions;
+  const fr = e?.from || tc;
+  if (fr) $("from-v").textContent = envTxt(fr.altitude_m, fr.temp_c, fr.rh_pct);
+  const fOvr = isOvr(["f-alt", "f-t", "f-rh"]);
+  if (tc) {
+    const b = $("from-badge");
+    b.textContent = fOvr ? T("env.manual") : tc.provider === "open_meteo_archive" ? T("env.from_om") : T("env.from_own");
+    b.className = "badge " + (fOvr ? "watch" : "good"); b.title = tc.label || "";
+    $("from-s").textContent = tc.label || "";
+  }
+  const to = e?.to, v = WX?.values, tOvr = isOvr(["t-alt", "t-t", "t-rh"]);
+  if (to && (v || tOvr)) $("to-v").textContent = envTxt(to.altitude_m, to.temp_c, to.rh_pct) + (PLAN?.course_source === "gpx" && !$("t-alt").classList.contains("ovr") ? " " + T("env.gpx_alt") : "");
+  else if (v) $("to-v").textContent = envTxt(PLAN?.course_source === "gpx" ? null : v.altitude_m, v.temp_c, v.rh_pct);
+  else if (!WX) $("to-v").textContent = T("env.to_wait");
+  if (tOvr) { $("to-badge").className = "badge watch"; $("to-badge").textContent = T("env.manual"); }
+}
+function renderEnv() {
+  const e = LAST?.env; if (!e) { renderEnvChips(); return; }
+  const kv = (s) => `<span>氣壓 <b>${f1(s.torr)} torr</b></span><span>海拔係數 <b>${s.altitude_factor.toFixed(3)}</b></span>
+    <span>露點 <b>${f1(s.dew_c)} °C</b></span><span>熱負荷 <b>${s.heat_applies ? s.heat_penalty_pct.toFixed(1) + "%" : "無"}</b></span>`;
+  $("f-kv").innerHTML = kv(e.from); $("t-kv").innerHTML = kv(e.to);
+  const set = (id, v, d) => { if ($(id).value === "" || $(id).dataset.auto === "1") { $(id).value = ok(v) ? v.toFixed(d) : ""; $(id).dataset.auto = "1"; } };
+  set("f-alt", e.from.altitude_m, 0); set("f-t", e.from.temp_c, 1); set("f-rh", e.from.rh_pct, 0);
+  $("t-alt").placeholder = f1(e.to.altitude_m); $("t-t").placeholder = f1(e.to.temp_c); $("t-rh").placeholder = f1(e.to.rh_pct);
+  const M = PLAN?.summary?.M ?? e.M;
+  $("env-kv").innerHTML = `<span>環境係數 M <b class="${M < 0.97 ? "wn" : ""}">${M.toFixed(3)}</b>（功率 × M${PLAN?.course_source === "gpx" ? "，GPX 逐段海拔的平均" : ""}）</span>
+    <span>海拔影響 <b>${spct(e.altitude_pct)}</b></span><span>熱影響 <b>${spct(e.heat_pct)}</b></span>`;
+  renderEnvChips();
+}
+// fetch the race-day weather whenever the date and a location are known (once per date + place)
+let WX_KEY = null;
+function wxKey() {
+  const loc = getLoc(), date = $("date").value, sel = $("event").value;
+  if (!date || !(loc || sel)) return null;
+  return [date, Math.max(1, Number($("days").value) || 1), loc ? `${(+loc.lat).toFixed(3)},${(+loc.lon).toFixed(3)}` : "ev:" + sel].join("|");
+}
+function autoWeather() {
+  const k = wxKey();
+  if (!k) { if (!WX) $("wx-meta").textContent = $("date").value ? T("env.need_loc") : T("env.need_date"); return; }
+  if (k === WX_KEY && WX) return;
+  getWeather();
+}
+async function getWeather() {
+  const loc = getLoc(), date = $("date").value;
+  if (!date) { $("wx-meta").textContent = T("env.need_date"); return; }
+  const sel = $("event").value;
+  const q = new URLSearchParams({ date, days: Math.max(1, Number($("days").value) || 1) });
+  if (loc) { q.set("lat", loc.lat); q.set("lon", loc.lon); if (loc.elevation != null) q.set("elevation", loc.elevation); if (loc.name) q.set("peak", loc.name); }
+  else if (sel) q.set("event_id", sel);
+  else { $("wx-meta").textContent = T("env.need_loc"); return; }
+  const key = wxKey();
+  $("wx-meta").textContent = T("env.fetching");
+  try {
+    const w = WX = await j(`${API}/weather?${q}`);
+    WX_KEY = key;
+    const v = w.values;
+    const cls = { cwa_hourly: "good", cwa_weekly: "good", open_meteo: "good", climatology: "watch", manual: "bad" }[w.provider];
+    $("to-badge").className = "badge " + (cls || ""); $("to-badge").textContent = w.label;
+    if (v) {
+      // fetched values fill the To inputs unless the athlete typed their own
+      if (!$("t-t").classList.contains("ovr")) $("t-t").value = v.temp_c.toFixed(1);
+      if (!$("t-rh").classList.contains("ovr")) $("t-rh").value = Math.round(v.rh_pct);
+      // a GPX course: each segment's altitude comes from the profile — no single race altitude
+      if (!$("t-alt").classList.contains("ovr")) $("t-alt").value = S.csrc === "gpx" && COURSE ? "" : v.altitude_m != null ? Math.round(v.altitude_m) : "";
+    } else if (loc?.elevation != null && !loc.gpx && !$("t-alt").classList.contains("ovr")) { $("t-alt").value = Math.round(loc.elevation); }
+    const d = w.detail || {};
+    $("wx-meta").textContent = v ? `白天 06–18 平均${w.fetched_at ? "，取得於 " + w.fetched_at.slice(5, 16).replace("T", " ") : ""}` +
+      (d.cwa_location ? `，CWA 地點 ${d.cwa_location}${d.match === "nearest" ? `（最近 ${d.distance_km.toFixed(1)} km）` : ""}` : "") +
+      (d.years ? `，${d.years} 年平均，已依海拔修正溫度` : "") +
+      (w.hourly?.length ? `；逐時 ${w.hourly.length} 筆，可逐段修正熱` : "；沒有逐時資料，熱用這個平均值") : T("env.none");
+    $("wx-tried").innerHTML = "嘗試：" + w.tried.map((t) => `<span class="${t.ok ? "ok" : "faint"}">${esc(t.provider)} ${t.ok ? "✓" : "✕ " + esc(t.reason || "")}</span>`).join(" → ");
+    $("attrib").textContent = (d.attribution || "");
+    renderEnvChips();
+    schedule();
+  } catch (e) { $("wx-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+// ---------------- plan ----------------
+let timer = null;
+function schedule() { clearTimeout(timer); timer = setTimeout(run, 250); saveForm(); saveUI(); }
+function planBody(extra = {}) {
+  const { f, t } = envBody();
+  const body = { type, mode: mode(), date: $("date").value || null, pack_kg: num("pack"), effort_formula: $("formula").value,
+    env_from: f, env_to: t, start_time: $("start").value || null, stops: stopsOf(),
+    strategy: { kind: S.strategy, amount: S.strategy === "even" ? 0 : Number($("amount").value) / 100 },
+    hills: { up: (num("hup") ?? 5) / 100, down: (num("hdown") ?? 10) / 100 }, acclimatisation: accl(),
+    effort_target: Number(S.effort), wbal: null,
+    locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power })), day_splits_km: SPLITS,
+    terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
+    hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null,
+    heat_acclimatisation: heatAcclBody(), ...extra };
+  if (type === "baiyue") {
+    body.trip_kind = S.trip; body.hr_band = S.hrband;
+    body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
+    if (num("heatz") != null) body.heat_ref_alt_m = num("heatz");
+  }
+  if (body.mode === "time") {
+    if (type !== "baiyue" && S.tunit === "pace") body.target_pace_s_per_km = parseMs($("tpace").value);
+    else body.target_time_s = parseHms($("target").value);
+  }
+  if (body.mode === "power") {
+    if (type === "baiyue") body.speed_factor = (num("tspeed") || 100) / 100;
+    else if (S.punit === "pct") body.target_pct_cp = (num("tpower") || 0) / 100;
+    else body.target_power = num("tpower");
+    body.power_is_training = $("ptrain").checked;
+  }
+  if (S.csrc === "gpx" && COURSE) {
+    body.course = { course_id: COURSE.course_id, event_id: COURSE.event_id || null, split: S.split, ...Object.fromEntries(courseOpts(false)) };
+    if (type === "baiyue") body.days = Math.max(1, num("tripdays") || 1);
+  } else {
+    body.distance_km = num("dist"); body.gain_m = num("gain") || 0; body.loss_m = num("loss");
+    body.days = Math.max(1, num("days") || 1); body.day_plan = type === "baiyue" ? readDayPlan() : null;
+    body.course = { manual: { km: num("dist"), gain: num("gain") || 0, loss: num("loss"), split: S.split === "km" ? "km" : "none" } };
+  }
+  for (const k of ["cp", "w_prime", "tte", "k", "re", "weight", "eph"]) if (ovr[k] != null) body[k] = ovr[k];
+  if (ovr.cp_source) body.cp_source = ovr.cp_source;
+  if (ovr.k_source) body.k_source = ovr.k_source;
+  const pi = ls.get("prior", "");
+  if (pi !== "" && INP.priors[+pi]) { const p = INP.priors[+pi]; body.prior = { distance_km: p.km, time_s: p.time_s, power: p.avg_power, label: p.label }; }
+  return body;
+}
+function renderAll() {
+  renderResults(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
+  renderStops();
+  if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
+}
+let RUN_SEQ = 0;
+async function run() {
+  if (!INP) return;
+  const miss = markRequired();
+  if (miss.length) { $("results").innerHTML = missingHtml(miss); return; }
+  const seq = ++RUN_SEQ;
+  try {
+    const p = await post(`${API}/plan`, planBody());
+    if (seq !== RUN_SEQ) return;                 // a newer run started meanwhile
+    PLAN = p; LAST = PLAN.v1;
+    STOP_SUGG = PLAN.stop_suggestions || [];
+    renderAll();
+    saveEvent();
+  } catch (e) {
+    if (e.status === 410) { COURSE = null; ls.set("course", null); syncForm(); $("results").innerHTML = `<h2>預估結果</h2><div class="err">GPX 路線已過期（伺服器重啟過），請重新上傳。</div>`; return; }
+    $("results").innerHTML = `<h2>預估結果</h2><div class="err">${esc(e.message)}</div>`;
+    $("fuel-sec").classList.add("hidden");
+  }
+}
+
+function renderHeatLine() {
+  const h = PLAN?.summary?.heat;
+  if (!h || PLAN.type === "baiyue") { $("heat-line").textContent = ""; return; }
+  let t = "";
+  if (h.mode === "hourly") t = `已套用：${PLAN.segments.filter((s) => s.heat_src === "hourly").length} 段用逐時預報，${h.passes} 次迭代${h.converged ? "收斂" : "未收斂"}`;
+  else if ($("hourlyheat").checked && tempOverridden()) t = "比賽日溫度 / 濕度是你輸入的值：全程用這個溫度";
+  else if (h.reason) t = `全程單一溫度（${h.reason}）`;
+  $("heat-line").textContent = t;
+}
+function tile(k, v, s, main) { return `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`; }
+function warnList(ws) { return ws && ws.length ? `<ul class="warn">${ws.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""; }
+
+// effort bar: 60–110 % mapped across the width
+const EMIN = 0.6, EMAX = 1.1;
+const ex = (f) => Math.max(0, Math.min(100, (f - EMIN) / (EMAX - EMIN) * 100));
+function effortBar(e, hike) {
+  let cuts, lo = EMIN, hi = EMAX, val, band = null, lab = ["輕鬆", "穩定", "吃力", "極限", "超出"];
+  if (hike) { cuts = [0.6].concat(e.cuts); lo = 0.6; hi = Math.max(1.5, e.cuts[3] * 1.15); val = e.r; }
+  else { cuts = e.cuts.map((c) => Math.max(EMIN, c.from)); val = e.f; band = e.band; }
+  const X = (f) => Math.max(0, Math.min(100, (f - lo) / (hi - lo) * 100));
+  const edges = cuts.concat([hi]);
+  let h = `<div class="ebar" id="ebar" data-lo="${lo}" data-hi="${hi}">`;
+  for (let i = 0; i < 5; i++) {
+    const w = X(edges[i + 1]) - X(edges[i]);
+    h += `<div class="z" style="width:${w}%;background:${css(EFF_COLORS[i])}"><span class="full">${w > 6 ? lab[i] : ""}</span></div>`;
+  }
+  if (band) h += `<div class="band" style="left:${X(band[0])}%;width:${Math.max(0.5, X(band[1]) - X(band[0]))}%"></div>`;
+  h += `<div class="needle" style="left:${X(val)}%"></div></div><div class="escale">`;
+  const ticks = hike ? [edges[1], 1, edges[3], edges[4]] : [0.6, 0.8, 0.9, 0.97, 1.0, 1.1];
+  h += ticks.map((t) => `<span style="left:${X(t)}%">${Math.round(t * 100)}</span>`).join("") + "</div>";
+  return h;
+}
+function zoneBar(p, cp) {
+  const z = PLAN.zones || []; if (!z.length || !cp) return "";
+  const lo = 0.5, hi = 1.3, X = (f) => Math.max(0, Math.min(100, (f - lo) / (hi - lo) * 100));
+  const cols = ["--s3", "--s1", "--s7", "--s4", "--s2", "--s5", "--hi", "--bad", "--bad"];
+  let h = `<div class="zbar" title="Palladino 區間">`;
+  z.forEach((r, i) => { const a = Math.max(lo, r.lo), b = Math.min(hi, r.hi ?? hi); if (b > a) h += `<div style="width:${X(b) - X(a)}%;background:${css(cols[i % cols.length])}" title="${esc(r.id)} ${esc(r.name)}"></div>`; });
+  return h + `<div class="needle" style="left:${X(p / cp)}%"></div></div><div class="meta">絕對強度：平均 ${pct(p / cp)} CP，落在 Palladino ${esc(zoneOf(p, cp))} 區</div>`;
+}
+
+// the goal against the model's own prediction (100 %): one line, a warning when it is clearly faster
+function goalLine(g) {
+  const f = g.faster, cls = g.level === "too_fast" ? "err" : g.level === "fast" ? "wn" : "";
+  const msg = ok(f) && g.level !== "ok" ? T("goal." + g.level, { pct: Math.round(Math.abs(f) * 100) }) : ok(f) ? T("goal.near", { pct: (f >= 0 ? "+" : "−") + Math.round(Math.abs(f) * 100) }) : "";
+  return `<div class="note" id="goal-line">🎯 ${esc(T("goal.vs", { goal: hms(g.goal_time_s), model: hms(g.model_time_s), pace: pace(g.model_pace_s_per_km) }))}
+    ${msg ? ` · <b class="${cls}">${esc(msg)}</b>` : ""}${badge(g.badge)}${help(T("goal.vs_tip"))}</div>`;
+}
+function renderResults() {
+  const P = PLAN, s = P.summary, e = P.effort;
+  if (P.type === "baiyue") return renderBaiyue();
+  const trail = P.type === "trail", cp = P.used.cp.value, wt = P.used.weight.value;
+  const MODE = { time: T("goal.pace"), power: T("goal.power"), auto: T("goal.model") }[s.mode];
+  let h = `<h2>預估結果 <span class="meta">${trail ? "越野" : "路跑"} · ${MODE}${s.total_method === "trail_hr" ? " · 整場用你的越野心率配速模型（推估），功率只當參考" : s.total_method === "v1" ? " · 整場用已驗證的方法（Riegel + 你的 RE），分段是推估" : " · 分段加總"}</span></h2>`;
+  h += `<div class="tiles">`;
+  h += tile(s.time_total_s ? `預估移動時間${help("越野心率配速模型預估的是「移動時間」（速度 > 1 km/h 的時間），回測驗證的就是這個數字。補給站、排隊、零碎停頓另外預估，列在「含停留總時間」。")}` : "預估完賽",
+    hms(s.time_s), `${f1(s.km)} km${s.stops_s ? ` · 含補給 ${Math.round(s.stops_s / 60)} 分 → ${s.finish_eta || ""}` : s.finish_eta ? " · 抵達 " + s.finish_eta : ""}`, true);
+  if (s.time_total_s && s.nonmoving) {
+    const nm = s.nonmoving, rg = s.time_total_range_s;
+    h += tile(`含停留總時間${badge("推估")}${help(`總時間 = 移動時間 + 非移動時間。非移動時間用你之前 ${nm.n_runs} 場比賽／全力越野跑的停留：≥ 60 秒算補給站／排隊，其餘算零碎停頓。${esc(nm.why)}。範圍是你過去每移動小時停留的 25–75 百分位。補給站停留沒有文獻數字，所以是推估；在補給站編輯器填「分鐘」會改用你填的。`)}`,
+      hms(s.time_total_s), `停留約 ${Math.round(nm.total_s / 60)} 分${rg ? `（${hms(rg[0])}–${hms(rg[1])}）` : ""}`);
+  }
+  h += tile("平均功率", W(s.power), `${pct(s.pct_cp)} CP · ${wkg(s.w_per_kg)}`, true);
+  h += tile("平均配速", pace(s.pace_s_per_km), trail ? "實際距離" : "");
+  h += tile("努力度", `<span style="color:${css(EFF_COLORS[["easy", "steady", "hard", "max", "over"].indexOf(e.key)])}">${esc(e.label)}</span>`, `${pct(e.f)} 可持續功率`);
+  h += tile("環境係數 M", s.M.toFixed(3), P.course_source === "gpx" ? "逐段海拔的平均" : "功率 × M");
+  h += `</div>`;
+  const ha = s.heat_accl;
+  if (ha) {
+    const bd = ha.band;
+    h += `<div class="note">熱影響（對訓練條件）：未適應 ${spct(-bd.raw_penalty_pct / 100)} → 適應後 <b>${spct(-bd.center.penalty_pct / 100)}</b>
+      （範圍 ${spct(-bd.high.penalty_pct / 100)} ~ ${spct(-bd.low.penalty_pct / 100)}；完賽 ${hms(ha.time_s.high)}–${hms(ha.time_s.low)}）
+      · S ${Math.round(ha.s * 100)} %（${esc(ha.source)}）、訓練期 S ${Math.round((ha.s_from || 0) * 100)} %、a ${ha.a} <span class="badge watch">推估</span>${help(`a 是熱適應能抵掉多少熱懲罰。文獻的族群平均是 ${ha.a_literature ?? 0.75}（Racinais 2015），但你自己的心率資料看不到熱適應（夏末的熱係數比初夏大），所以預設 a = 0：S 照算、照顯示，但不折抵熱懲罰。只有近 84 天熱天穩定段的心率成本（HRC）隨時間顯著下降（單尾 p < 0.1，推估檢定）才用文獻的 a。目前：${esc(ha.a_reason || "")}`)}</div>`;
+  }
+  // effort bar
+  const mult = e.multiple, tl = e.t_lim_s;
+  h += `<h3>努力度${badge(e.badge)}${help("把這個平均功率和「你能撐這麼久的功率」比。淡色帶是 CP ±3% 與 Riegel k ±0.01 的不確定範圍。拖動指針可以改努力目標（會切到「通通幫我算」）。")}</h3>`;
+  h += effortBar(e, false);
+  h += `<div class="eline">${e.f <= 1.0000001 && ok(mult) ? `這個強度你大約可以撐 <b>${mult.toFixed(1)} ×</b> 目標時間（約 ${hm(mult * s.time_s)}）` :
+    `這個平均功率大約只撐得了 <b>${hm(tl)}</b>，比預計時間短`}</div>`;
+  h += zoneBar(s.power, cp);
+  // compare
+  const cmp = P.compare?.auto, g = P.goal;
+  if (g) h += goalLine(g);
+  else if (cmp && s.mode !== "auto") h += `<div class="note">對照「通通幫我算」（100%）：${hms(cmp.time_s)} @ ${W(cmp.power)}</div>`;
+  if (P.target) h += `<div class="tiles">${tile("要把這個目標變成你的 100%", W(P.target.cp_required), `CP ${spct(P.target.pct_change)}（目前 ${W(cp)}）`, true)}</div>`;
+  h += warnList(P.warnings.concat(P.course_warnings || []));
+  // other calcs (v1)
+  h += `<details><summary>其他試算與交叉檢查</summary>${otherCalcs()}</details>`;
+  $("results").innerHTML = h;
+  wireEffortBar();
+}
+function durText(m) {
+  // the terrain-matched durability measurement (trailhr step 7), for the ? tip
+  const how = "每次 ≥ 2 小時的越野跑：只用清過的視窗（去暖身、回程、停等後 60 秒、慢段），只比前後半都有跑到的坡度（坡度樣條當地形模型），心率延遲 60 秒，量「同坡度、同心率下每小時慢多少」；再把各次合併（隨機效應），往 Clark 2019 的 5%/h 先驗收縮，留一誤差沒變好就用先驗。";
+  if (!m || m.raw == null) return how + "目前沒有可量的長跑，用先驗 5%/h。";
+  const ci = m.ci95 ? `（95% 信賴區間 ${(m.ci95[0] * 100).toFixed(1)}–${(m.ci95[1] * 100).toFixed(1)}%/h）` : "";
+  const use = m.choice === "prior" ? "留一誤差沒有比先驗好，所以用先驗 5%/h" : `收縮後 ${((m.shrunk || 0) * 100).toFixed(1)}%/h`;
+  return how + `量到 ${(m.raw * 100).toFixed(1)}%/h${ci}，${m.n} 次；${use}。`;
+}
+function otherCalcs() {
+  const P = PLAN, v1 = P.v1, r = v1.result, cc = P.crosscheck || {};
+  const items = [];
+  items.push(`<li>v1 整場預估（effort 距離 × RE，不分段）：${hms(cc.v1?.time_s)} @ ${W(cc.v1?.power)}</li>`);
+  if (cc.power_envelope) items.push(`<li>功率能力（CP / Riegel，越野只供對照）：${hms(cc.power_envelope.time_s)} @ ${W(cc.power_envelope.power)}</li>`);
+  const th = P.summary?.trail_hr;
+  if (th) items.push(`<li>越野心率配速模型（推估）：全力心率 ${((th.x_star ?? th.x) * 100).toFixed(0)}% LTHR${th.heat_beta && th.heat_shift > 0 ? `（熱 −${(th.heat_shift * 100).toFixed(1)}%）` : ""}、effort ${th.eff_km.toFixed(1)} km → ${hms(th.time_s)}（不含耐久衰減 ${hms(th.time_no_durability_s)}）${help(`全力心率會隨比賽時長下降：x*(T) = x₀ − s·ln(T)。形狀先驗來自文獻（Fornasiero 2018：65 km 全力賽平均 77% HRmax；Kerhervé 2015：106 km 心率隨進度下降），錨點 0.5 小時 1.00、3 小時 0.90、12 小時 0.85 × LTHR；${th.xstar ? `你之前 ${th.xstar.n} 次比賽／全力跑（用當天的 LTHR）擬合成 ${th.xstar.x0?.toFixed(3)} − ${th.xstar.s?.toFixed(3)}·ln(T)` : "沒有你的比賽資料，只用先驗"}，樣本少時往先驗收縮。耐久衰減每小時 ${((th.delta || 0) * 100).toFixed(1)}%：${durText(th.delta_measured)}熱：用你的 β 0.224 bpm／Hadley 把心率水準移到比賽日的熱度，不再另外套 Hadley 時間懲罰。`)}</li>`);
+  if (cc.stryd_table) items.push(`<li>Stryd 比賽功率表（由你的 10K 功率 ${W(cc.stryd_table.p10k)} 換算）：${W(cc.stryd_table.power)} → ${hms(cc.stryd_table.time_s)}</li>`);
+  if (cc.cvi) items.push(`<li>CVI 法（平路 RE ${r3(cc.cvi.road_re)} ${cc.cvi.adjust >= 0 ? "+" : "−"}${Math.abs(cc.cvi.adjust).toFixed(2)}）：${hms(cc.cvi.time_s)} @ ${W(cc.cvi.power)}</li>`);
+  const T = v1.tasks || {};
+  if (T.prior) {
+    items.push(`<li>先前賽事 ${esc(T.prior.label || "")}：${f1(T.prior.distance_km)} km ${dur(T.prior.time_s)} @ ${W(T.prior.power)}；推 CP ${W(T.task7_cp)}</li>`);
+    if (T.task10) items.push(`<li>先前賽事 → 此距離的功率：${W(T.task10.power)}（時間 × ${T.task10.time_ratio.toFixed(3)}）</li>`);
+  }
+  if (r.task17) items.push(`<li>CP + W′ 模型（≤ 10 km）：${hms(r.task17.time_s)} @ ${W(r.task17.power)}</li>`);
+  if (ok(P.summary.damage)) items.push(`<li>逐段耗損指數 ${P.summary.damage.toFixed(2)}（只是診斷數字）</li>`);
+  let h = `<ul class="meta" style="padding-left:18px;margin:0">${items.join("")}</ul>`;
+  h += `<h3>功率 ↔ 時間</h3><div class="tablewrap"><table><thead><tr><th>時間</th><th class="n">vs 預估</th><th class="n">配速</th><th class="n">需要功率</th><th class="n">% CP</th><th class="n">可持續功率</th><th class="n">需要 CP</th><th>可行</th></tr></thead><tbody>` +
+    r.scenarios.map((s) => `<tr class="${s.factor === 1 ? "center" : ""}"><td class="num">${hms(s.time_s)}</td><td class="n">${s.factor === 1 ? "v1 預估" : spct(s.factor - 1)}</td>
+      <td class="n">${pace(s.pace_s_per_km)}</td><td class="n">${W(s.power_needed)}</td><td class="n">${pct(s.pct_cp_needed)}</td>
+      <td class="n">${W(s.power_sustainable)}</td><td class="n">${W(s.cp_required)}</td><td class="${s.feasible ? "ok" : "no"}">${s.feasible ? "✓" : "✕"}</td></tr>`).join("") + `</tbody></table></div>`;
+  return h;
+}
+function wireEffortBar() {
+  const bar = $("ebar"); if (!bar || PLAN.type === "baiyue") return;
+  let drag = false;
+  const at = (ev) => { const r = bar.getBoundingClientRect(); const x = (ev.clientX - r.left) / r.width; return EMIN + Math.max(0, Math.min(1, x)) * (EMAX - EMIN); };
+  // while dragging only the needle moves; releasing it recomputes at once (no debounce) and
+  // says so, so a slow GPX plan doesn't look like nothing happened
+  const move = (ev) => { if (!drag) return; const f = Math.round(at(ev) * 100) / 100; bar.querySelector(".needle").style.left = ex(f) + "%";
+    S.mode = "auto"; S.effort = Math.max(0.6, Math.min(1.05, f));
+    const lab = bar.querySelector(".needle-val"); if (lab) lab.textContent = Math.round(S.effort * 100) + "%"; };
+  bar.addEventListener("pointerdown", (ev) => { drag = true; bar.setPointerCapture(ev.pointerId); move(ev); });
+  bar.addEventListener("pointermove", move);
+  const done = () => {
+    if (!drag) return; drag = false;
+    syncForm(); saveForm(); clearTimeout(timer);
+    $("results").insertAdjacentHTML("afterbegin", `<div class="meta busy">以努力度 ${Math.round(S.effort * 100)}% 重新計算中…</div>`);
+    run();
+  };
+  bar.addEventListener("pointerup", done);
+  bar.addEventListener("pointercancel", done);
+}
+
+function renderBaiyue() {
+  if (PLAN.capacity) return renderBaiyueCapacity();
+  const P = PLAN, s = P.summary, e = P.effort;
+  let h =`<h2>預估結果 <span class="meta">百岳步行模型 · ${{ time: "目標時間", power: "目標速度", auto: "你平常的速度" }[s.mode]}${s.total_method === "v1" ? " · 整趟用 EP/h 模型，分段是推估" : ""}</span></h2><div class="tiles">`;
+  h += tile("總移動時間", hm(s.time_s), `${P.days.length} 天，不含休息`, true);
+  h += tile("時鐘時間", hm(s.clock_s), `移動 ÷ ${s.moving_ratio.toFixed(2)}${s.clock_s > s.time_s / s.moving_ratio + 1 ? " + 補給" : ""}`);
+  h += tile("速度倍率", pct(s.speed_factor), "100% = 你平常的速度", true);
+  h += tile("EP/h", s.ep_per_h.toFixed(2), `你的 ${s.eph_personal.toFixed(2)}`);
+  h += tile("熱量", n0(s.kcal) + " kcal", "Yamamoto");
+  h += tile("飲水", `${(s.water_ml[0] / 1000).toFixed(1)}–${(s.water_ml[1] / 1000).toFixed(1)} L`, "0.7–0.8 ml / kcal");
+  h += tile("心率上限", ok(s.hr_cap) ? n0(s.hr_cap) + " bpm" : "–", "AeT，爬坡時壓住");
+  h += `</div><h3>難度${badge(e.badge)}${help("需要的速度 ÷ 你平常的速度。切點用你自己過去登山日 EP/h 的分佈（25%、中位數、75%、90%）。")}</h3>`;
+  h += effortBar(e, true);
+  h += `<div class="eline">需要你平常速度的 <b>${pct(e.r)}</b> → ${esc(e.label)}</div>`;
+  h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">移動</th><th class="n">時鐘</th><th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
+    P.days.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td><td class="n">${n0(d.loss_m)} m</td>
+      <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${n0(d.kcal)}</td>
+      <td class="n">${(d.water_ml[0] / 1000).toFixed(1)}–${(d.water_ml[1] / 1000).toFixed(1)} L</td></tr>`).join("") + `</tbody></table></div>`;
+  const c = P.crosscheck || {};
+  h += warnList(P.warnings.concat(P.course_warnings || []));
+  h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
+    <li>v1 EP/h 模型：${hm(c.v1?.time_s)}</li><li>Naismith（5 km/h + 每 600 m 爬升 1 h）：${hm(c.naismith_s)}</li>
+    ${c.langmuir_s ? `<li>Naismith + Langmuir 下坡修正：${hm(c.langmuir_s)}</li>` : ""}<li>健行筆記 EP：${f1(c.ep)}</li></ul></details>`;
+  $("results").innerHTML = h;
+}
+
+const SIGMA_ZH = { model: "模型（回測）", pack: "背負", alt: "海拔", time: "日內", day: "多日" };
+function renderBaiyueCapacity() {
+  const P = PLAN, s = P.summary, e = P.effort, c = P.capacity, b = s.band, g = s.group_time_s;
+  const grpMain = s.main === "group";
+  let h = `<h2>預估結果 <span class="meta">百岳 · ${s.trip_kind === "group" ? "跟團" : "自己走"} · ${s.hr_band === "cap" ? "能力上限" : "AeT"}${s.badge ? ' · <span class="badge watch">推估</span>' : ""}</span></h2><div class="tiles">`;
+  const capTile = tile(`能力時間（你的能力，${s.hr_band === "cap" ? "上限" : "AeT"}）${badge(s.badge)}`, hm(s.capacity_time_s),
+    `p10–p90 ${hm(b.p10_s)}–${hm(b.p90_s)} · 時鐘 ${hm(s.clock_s)}`, !grpMain);
+  const grpTile = g ? tile("跟團時間（過去跟團日，不是能力）", hm(g.p50), `p25–p75 ${hm(g.p25)}–${hm(g.p75)} · ${g.n} 天 · EP/h ${g.eph[1].toFixed(2)}`, grpMain)
+    : tile("跟團時間", "–", "需要 ≥ 3 天跟團紀錄");
+  h += grpMain ? grpTile + capTile : capTile + grpTile;
+  h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? "（預設）" : ""}`);
+  h += tile("熱量", n0(s.kcal) + " kcal", "Yamamoto");
+  h += tile("飲水", `${(s.water_ml[0] / 1000).toFixed(1)}–${(s.water_ml[1] / 1000).toFixed(1)} L`, "0.7–0.8 ml / kcal");
+  h += tile("心率上限", ok(s.hr_cap) ? n0(s.hr_cap) + " bpm" : "–", "AeT，爬坡時壓住");
+  h += `</div>`;
+  // uncertainty decomposition
+  const sh = b.shares || {};
+  h += `<h3>不確定帶 ±${pct1(Math.exp(1.2816 * b.sigma) - 1)}（p10–p90）${help("對數尺度相加（假設彼此獨立，推估）。模型 = 回測的留一誤差；背負只在超出你資料的背負範圍時加 8 %（Looney 2022、Weyand 2021）；海拔 = 海拔斜率的不確定 × 路線平均高度差；日內 = 0.05 × 小時 ÷ 1.5（Nuuttila 2025 量級）；多日 = 每多一天 3 %（沒有來源）。")}</h3>`;
+  h += `<div class="zbar" title="σ 各分量占比">${Object.entries(sh).filter(([, v]) => v > 0.001).map(([k, v], i) =>
+    `<div style="width:${(v * 100).toFixed(1)}%;background:${css(["--s1", "--s2", "--s4", "--s5", "--s7"][i % 5])}" title="${SIGMA_ZH[k] || k} ${pct(v)}"></div>`).join("")}</div>`;
+  h += `<div class="meta">${Object.entries(sh).filter(([, v]) => v > 0.001).map(([k, v]) => `${SIGMA_ZH[k] || k} ${pct(v)}（σ ${f2(b.components[k])}）`).join(" · ")}</div>`;
+  // data source card + altitude
+  const bs = c.basis || {}, al = c.alpha || {}, dg = { current: c.alt_current };
+  h += `<div class="two"><div class="note"><b>資料來源</b><br>越野跑走路窗 ${bs.trail_windows} 窗 / ${bs.trail_activities} 次活動（${bs.trail_segments} 段）<br>
+    百岳心率窗 ${bs.hike_windows} 窗 / ${bs.hike_trips} 趟（${bs.hike_segments} 段）<br>
+    先驗：平路跑步在 AeT 的速度 ${f2(c.v_run)} m/s（${esc(c.v_run_info?.source || "")}，${c.v_run_info?.n ?? 0} 窗）→ Ė ${f1(c.e_aet_w_per_kg)} W/kg<br>
+    個人水準 δ̄ ${spct(Math.exp(c.level ?? 0) - 1)} · 下坡上限 ${f2(c.c_cap)} × Tobler · 模型誤差 σ ${f2(c.sigma_loo)}（${esc(c.sigma_loo_src || "")}）<br>
+    ${esc(bs.pack_default_rule || "")}（已填 ${bs.packs_recorded ?? 0} 趟）</div>
+    <div class="note"><b>海拔</b>（每 1000 m，300 m 起）<br>收縮後 <b>${f1(al.post)} %</b>（個人權重 ${pct(al.w)}，先驗 Wehrlin −6.3 %，寬度 τ ${f2(al.tau)}）<br>
+    個人：${ok(dg.current) ? `跨趟 ${f1(dg.current)} %（這裡混了趟次差異）` : ""} · 趟內（趟次固定效果）${ok(al.personal) ? f1(al.personal) + " % ± " + f1(al.se) : "無法估"}<br>
+    Coffman 2020 固定心率負重：−3.8 %（換算）</div></div>`;
+  h += `<h3>難度${badge(e.badge)}</h3>` + effortBar(e, true) + `<div class="eline">需要能力速度的 <b>${pct(e.r)}</b> → ${esc(e.label)}</div>`;
+  h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">背負</th><th class="n">能力移動</th><th class="n">時鐘</th><th class="n">跟團移動</th><th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
+    P.days.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td><td class="n">${n0(d.loss_m)} m</td><td class="n">${f1(d.pack_kg)} kg</td>
+      <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${d.group_h ? hrs(d.group_h) : "–"}</td><td class="n">${n0(d.kcal)}</td>
+      <td class="n">${(d.water_ml[0] / 1000).toFixed(1)}–${(d.water_ml[1] / 1000).toFixed(1)} L</td></tr>`).join("") + `</tbody></table></div>`;
+  const cc = P.crosscheck || {};
+  h += warnList(P.warnings.concat(P.course_warnings || []));
+  h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
+    <li>v1 EP/h 模型：${hm(cc.v1?.time_s)}</li><li>Tobler（通用步行函數）：${hm(cc.tobler_s)}</li><li>Naismith：${hm(cc.naismith_s)}</li>
+    ${cc.langmuir_s ? `<li>Naismith + Langmuir：${hm(cc.langmuir_s)}</li>` : ""}${cc.solo_eph_s ? `<li>自己走的 EP/h：${hm(cc.solo_eph_s)}</li>` : ""}<li>健行筆記 EP：${f1(cc.ep)}</li></ul></details>`;
+  $("results").innerHTML = h;
+}
+function f2(x) { return ok(x) ? Number(x).toFixed(2) : "–"; }
+
+// ---------------- 補給 (engine/racepower/fuel.py) ----------------
+const rng = (v, fmt = n0, unit = "") => !v ? "–" : (fmt(v[0]) === fmt(v[1]) ? fmt(v[0]) : `${fmt(v[0])}–${fmt(v[1])}`) + (unit ? ` <span class="u">${unit}</span>` : "");
+const L1 = (ml) => ok(ml) ? (ml / 1000).toFixed(1) : "–";
+const FUEL_METHOD = { power: "功率法", minetti: "Minetti × Fletcher", minetti_walk: "Minetti 走路", keytel: "心率 Keytel", pandolf: "Pandolf", yamamoto: "Yamamoto" };
+function ftile(icon, k, v, s, tip, src, cls = "") {
+  return `<div class="tile ${cls}" title="${esc(src || "")}"><div class="k"><span class="ic">${icon}</span>${k}${tip ? help(tip) : ""}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
+}
+function renderFuel() {
+  const F = PLAN?.fuel, sec = $("fuel-sec");
+  if (!F || !F.kcal_band) { sec.classList.add("hidden"); return; }
+  sec.classList.toggle("hidden", ls.get("tab", "calc") !== "calc");
+  const hike = F.category === "hike", c = F.cho, w = F.water, na = F.sodium, ld = F.loading;
+  const meth = Object.keys(F.methods || {}).map((k) => FUEL_METHOD[k] || k).join("、");
+  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。滑過每個數字看來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2><div class="tiles">`;
+  const kTip = hike
+    ? "行動熱量 = Pandolf 公式（體重、當天背負、每段速度和坡度）逐段加總；下坡 Pandolf 不適用，改用 Minetti 走路曲線推估。範圍包含 Yamamoto（app 原本的百岳熱量）：Pandolf 對重背負常低估。"
+    : "功率法：每段 Stryd 功率 × 時間 ÷ (22.1 % × 4.184)，坡度 > 4 % 用 21.6 %。坡度 > 8 %、走路段和下坡改用 1.07 kcal/kg/km × Minetti 坡度比例。Stryd 自己的「kJ ≈ kcal」會少算約 8 %：跑步不能直接把 kJ 當 kcal。範圍 ±10–15 %：個人差異、疲勞、陡坡低估加起來。";
+  h += ftile("🔥", hike ? "行動熱量" : "消耗熱量", rng(F.kcal_band, n0, "kcal"),
+    `${esc(meth)} · ±${Math.round(F.band_rel * 100)}%${ok(F.kcal_per_h) ? ` · ${n0(F.kcal_per_h)} kcal/h` : ""}`, kTip,
+    hike ? `${F.src.pandolf}；${F.src.yamamoto}；${F.src.band}` : `${F.src.power}；${F.src.minetti}；誤差：${F.src.band}`, "main");
+  const cTip = hike ? "低強度、多日：取超馬建議的下限，每 45–60 分鐘吃一次行動糧，每次 30–50 g。重點是每天的總熱量。"
+    : F.category === "short" ? "不到 75 分鐘：漱口或少量碳水就有效。"
+    : F.category === "half" ? "2–2.5 小時以內：每小時 30–60 g。"
+    : F.category === "ultra" ? "超過 6 小時：先從 30–50 g/h 開始，吃得下再往 60–90 g/h 加。用葡萄糖＋果糖。"
+    : "2–6 小時：每小時 60–90 g，用葡萄糖＋果糖（例如 2:1 的膠）才吸收得到。沒有腸胃訓練紀錄，所以不超過 90 g/h；從 60 開始在長跑練。";
+  h += ftile("🍌", "碳水", rng(c.per_h, n0, "g/h"), `共 ${rng(c.total, n0, "g")}${c.mix ? " · 葡萄糖＋果糖" : ""}`, cTip, c.src);
+  if (hike) {
+    h += ftile("💧", "水", rng(w.total_ml.map((x) => x / 1000), (x) => x.toFixed(1), "L"), `全程 · 0.7–0.8 ml / kcal`,
+      "照 Yamamoto 的量喝（行動熱量的 70–80 % 毫升），不要刻意灌水；每天看尿色和體重。", `${w.src}；${w.caution}`);
+  } else if (w.thirst) {
+    h += ftile("💧", "水", "口渴再喝", "涼天、時間短 · 別喝到體重增加", "時間短、天氣涼的比賽，口渴時喝就夠；喝太多反而有低血鈉風險。", `${w.src}；${w.caution}`);
+  } else {
+    h += ftile("💧", "水", rng(w.per_h, n0, "ml/h"), `共 ${rng(w.total_ml.map((x) => x / 1000), (x) => x.toFixed(1), "L")} · 別喝到體重增加`,
+      "依各段氣溫在 400–800 ml/h 裡移動：涼的段靠下限、熱的段（最熱的四分之一或 ≥ 25 °C）靠上限。上限是自己的流汗率，比賽中體重不能增加。汗量不從熱量反推（1 L 汗 ≈ 580 kcal 是散掉的熱，不是消耗）。",
+      `${w.src}；${w.caution}`);
+  }
+  h += ftile("🧂", "鈉", na.per_h && na.per_h[1] > 0 ? rng(na.per_h, n0, "mg/h") : "不必另外補",
+    na.total_mg && na.total_mg[1] > 0 ? `共 ${rng(na.total_mg, n0, "mg")}` : "", hike ? "電解錠每小時約 200–300 mg，晚餐的湯和醬料也算。" :
+    "每小時 300–600 mg，熱的段往上限。補鈉可以減緩血鈉下降，但擋不住喝太多造成的低血鈉。", na.src);
+  if (hike) {
+    const tots = (F.daily || []).map((d) => d.total);
+    const lo = Math.min(...tots.map((t) => t[0])), hi = Math.max(...tots.map((t) => t[1]));
+    h += ftile("🏕️", "每日合計", tots.length ? rng([lo, hi], n0, "kcal") : "–", "行動 ＋ 休息（基礎代謝 × 1.3）",
+      `休息時間 = 24 h − 移動時間，用 Mifflin-St Jeor 基礎代謝 × 營地活動係數 1.3（推估）。身高 ${n0(F.body.height_cm)} cm（${esc(F.body_src.height_cm)}）、${n0(F.body.age)} 歲（${esc(F.body_src.age)}）、${F.body.sex === "female" ? "女" : "男"}（${esc(F.body_src.sex)}）。`,
+      F.src.ree);
+    const fk = F.food_kg_mean, diff = ok(fk) ? fk - F.food_check.default_kg : 0;
+    h += ftile("🎒", "糧食", ok(fk) ? `${fk.toFixed(2)} kg/天` : "–", `背負預設 −${F.food_check.default_kg} kg/天${badge("推估")}`,
+      "每天糧食 = 每日合計（取 Pandolf / Yamamoto 較高者）× 補回 85 % ÷ 4.4 kcal/g。4.4 kcal/g 是 thru-hiker 每盎司 125 kcal 的原則；每天有約 500 kcal 赤字，3–5 天可以接受。跟團時晚餐通常由嚮導負責，自己背的會少一些。",
+      "§5.2：0.7 kg × 4.4 kcal/g ≈ 3080 kcal（125 kcal/oz）", Math.abs(diff) > 0.15 ? "warnt" : "");
+  } else {
+    if (ld.g_day) h += ftile("🍚", "賽前超補", rng(ld.g_day, n0, "g"), esc(ld.label),
+      `早餐：賽前 1–4 h 吃 ${rng(ld.breakfast_g, n0, "g")}（1–4 g/kg）。${ld.drink}。咖啡因（選用）${rng(ld.caffeine_mg, n0, "mg")}，賽前 30–90 分鐘。`,
+      `${ld.src}；${ld.breakfast_src}；${ld.caffeine_src}；${ld.drink_src}`);
+    if (!w.thirst && ok(w.dehydration)) h += ftile("⚖️", "預估脫水", pct1(Math.max(0, w.dehydration)), `流汗約 ${f1(w.sweat_l)} L${badge("推估")}`,
+      "流汗率沒有個人紀錄：比賽配速時涼天約 1.0 L/h、30 °C 約 1.75 L/h，再依該段每小時消耗 ÷ 700 kcal 調整（走得慢流得少，推估），減去照建議喝的水；建議水量也不超過這個流汗率。超過體重 2 % 表現會下降；但不要為了補滿而喝到體重增加。",
+      "ACSM 2007（Sawka）：脫水不超過體重 2 %；Baker 2017 流汗率 0.5–2.0 L/h", w.dehydration > 0.02 ? "warnt" : "");
+  }
+  h += `</div>`;
+  if (!hike && ok(F.intake_kcal)) h += `<div class="chips"><span class="chip">攝取約 <b>${n0(F.intake_kcal)}</b> kcal</span><span class="chip">缺口約 <b>${n0(F.deficit_kcal)}</b> kcal（身體肝醣補上）</span>` +
+    (w.legs && w.legs.length > 1 ? w.legs.map((lg) => `<span class="chip">💧 ${f1(lg.from_km)}→${f1(lg.to_km)} km 帶 <b>${rng(lg.carry_ml, n0, "ml")}</b></span>`).join("") : "") + `</div>`;
+  if (hike && F.daily?.length) {
+    h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">移動</th><th class="n">行動 kcal（Pandolf / Yamamoto）</th><th class="n">休息 kcal</th><th class="n">合計 kcal</th><th class="n">糧食</th><th class="n">碳水</th><th class="n">水</th><th class="n">鈉</th></tr></thead><tbody>` +
+      F.daily.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${hrs(d.moving_h)}</td><td class="n">${n0(d.kcal_pandolf)} / ${n0(d.kcal_yamamoto)}</td><td class="n">${n0(d.rest_kcal)}</td>
+        <td class="n">${rng(d.total)}</td><td class="n">${d.food_kg.toFixed(2)} kg</td><td class="n">${rng(d.cho_g, n0, "g")}</td><td class="n">${rng(d.water_ml.map((x) => x / 1000), (x) => x.toFixed(1), "L")}</td><td class="n">${rng(d.na_mg, n0, "mg")}</td></tr>`).join("") + `</tbody></table></div>`;
+  }
+  // the schedule on the predicted splits
+  const ev = F.schedule || [];
+  if (ev.length) {
+    const icon = (e) => e.kind === "start" ? "🏁" : e.kind === "aid" ? stopIcon(e.stop_type) : hike ? "🍙" : "🍬";
+    h += `<h3>補給時間表${badge("推估")}${help(hike ? "每天從出發算起，每 45–60 分鐘一次行動糧，盡量放在爬坡（走路時比較好吃）。" :
+      "每 20–30 分鐘一次（前半段可以吃固體，後半段改能量膠或飲料）；附近有補給站時改在站上吃；盡量放在走路或陡上坡，不放在陡下坡。補給站之間要帶的水 = 每小時水量 × 時間 × 1.2（多帶 20 %）。")}</h3>`;
+    h += `<div class="tablewrap"><table class="sched"><thead><tr>${hike ? "<th>天</th>" : ""}<th>時刻</th><th class="n">移動</th><th class="n">km</th><th></th><th>動作</th></tr></thead><tbody>` +
+      ev.map((e) => `<tr class="k-${e.kind}">${hike ? `<td>${e.day}</td>` : ""}<td class="num">${esc(e.eta || "–")}</td><td class="n">${dur(e.t_s)}</td><td class="n">${f1(e.km)}</td><td>${icon(e)}</td><td class="act">${esc(e.action)}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  }
+  h += warnList(F.warnings);
+  const cc = F.crosscheck || {};
+  if (!hike && cc.fletcher) h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
+    <li>Fletcher 2009（1.05–1.11 kcal/kg/km × 坡度調整 ${f1(cc.fletcher.adj_km)} km）：${rng(cc.fletcher.range, n0, "kcal")}</li>
+    <li>Stryd「kJ = kcal」：${n0(cc.stryd_kj)}（跑步會少算約 8 %）</li>
+    ${ok(cc.keytel) ? `<li>心率 Keytel 2005（${n0(cc.hr_bpm)} bpm）：${n0(cc.keytel)} kcal</li>` : ""}</ul></details>`;
+  $("fuel").innerHTML = h;
+}
+
+async function loadHikeMeta() {
+  try { HIKEMETA = await j(`${API}/hike-meta`); } catch { HIKEMETA = null; }
+  if (INP) renderHike();
+}
+
+// ---------------- profile + segments ----------------
+function segColor(cls) { return css(CLS_COLOR[cls] || "--c-f"); }
+// The main chart: x = km 0…N, y = one measure (pace / power / heart rate, toggle), the elevation
+// profile as a light background area. Each segment's target comes from the plan (chart_rows =
+// seg_targets.chart_rows): grade-adjusted pace everywhere; power only where Stryd is a valid target
+// (road; trail flat / runnable 3–8 %); the HR cap (AeT on long races) except on trail descents.
+const MEASURE = {
+  pace: { val: (r) => ok(r.pace_s_per_km) ? r.pace_s_per_km : null, axis: (v) => mmss(v), unit: "/km", inverse: true },
+  power: { val: (r) => ok(r.power) ? r.power : null, axis: (v) => Math.round(v), unit: "W", inverse: false },
+  hr: { val: (r) => ok(r.hr_cap) ? r.hr_cap : null, axis: (v) => Math.round(v), unit: "bpm", inverse: false },
+};
+function mmss(s) { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+const rowsOf = (P) => P.chart_rows || [];
+function rowAt(km) { return rowsOf(PLAN).find((r) => km >= r.start_km && km <= r.end_km); }
+// a measure that is not a valid target on a segment (trail: power on steep climbs / descents, HR on
+// descents) is written as a grey 「參考」 (seg_targets.chart_rows power_ref / hr_ref), never left blank
+const REF_TIP = { power: "參考：這段功率不準（> 8% 陡坡功率會低估、下坡測不到離心負荷），看心率、VAM 或控制安全",
+  hr: "參考：下坡心率不代表負荷，這段看控制和安全" };
+function refCell(m, txt) { return `<span class="ref" title="${esc(REF_TIP[m])}">${txt} 參考</span>`; }
+function fmtRow(r, m, plain = false) {
+  if (m === "pace") return ok(r.pace_s_per_km) ? pace(r.pace_s_per_km) : "–";
+  if (m === "power") {
+    if (r.power) return `${Math.round(r.power_band[0])}–${Math.round(r.power_band[1])} W`;
+    if (r.power_ref) return plain ? `約 ${Math.round(r.power_ref)} W（參考）` : refCell("power", `約 ${Math.round(r.power_ref)} W`);
+    return "–";
+  }
+  if (r.hr_cap) return `≤ ${Math.round(r.hr_cap)}`;
+  if (r.hr_ref) return plain ? `≤ ${Math.round(r.hr_ref)}（參考）` : refCell("hr", `≤ ${Math.round(r.hr_ref)}`);
+  return "–";
+}
+function rowTip(r) {
+  const hike = PLAN.type === "baiyue";
+  const lines = [`<b>${r.mark} ${esc(r.label)}</b>${r.walk ? ` <span class="badge watch">${esc(T("walk"))}</span>` : ""}`,
+    `${f1(r.start_km)}–${f1(r.end_km)} km · ${f1((r.grade || 0) * 100)}% · ↑${n0(r.gain_m)} ↓${n0(r.loss_m)} m`,
+    `${T("m.pace")} ${fmtRow(r, "pace")}${hike ? "" : ` · ${T("m.power")} ${fmtRow(r, "power", true)}`} · ${T("m.hr")} ${fmtRow(r, "hr", true)}`,
+    `${T("split")} ${dur(r.t)} · ${T("cum")} ${dur(r.cum_s)}${r.eta ? " · ETA " + esc(r.eta) : ""}${ok(r.temp_c) ? ` · ${f1(r.temp_c)} °C` : ""}`];
+  if (r.basis === "safe") lines.push(esc(T("safe")));
+  if (r.fuel) lines.push("🍬 " + esc(r.fuel));
+  return lines.join("<br>");
+}
+function renderProfile() {
+  const P = PLAN, pr = P.profile, R = rowsOf(P);
+  $("profile-sec").classList.toggle("hidden", !R.length);
+  if (!R.length) return;
+  const hike = P.type === "baiyue", m = measure(), M = MEASURE[m];
+  segOn("measure", "m", m);
+  document.querySelector('#measure button[data-m="power"]').classList.toggle("hidden", hike);
+  $("profile-sub").textContent = `${R.length} ${T("segs")}${P.summary.badge ? " · " + T("est") : ""}`;
+  $("splits-line").textContent = SPLITS.length ? "分日點：" + SPLITS.map((x) => x.toFixed(1) + " km").join("、") : "";
+  // the target as steps; a measure that is not a target on a segment leaves a gap there
+  const step = [];
+  for (const r of R) {
+    const v = M.val(r);
+    if (v == null) { step.push([r.start_km, null]); continue; }
+    step.push([r.start_km, v], [r.end_km, v]);
+  }
+  const vals = R.map(M.val).filter(ok);
+  const narrow = window.innerWidth < 700;
+  const km = P.summary.km || R[R.length - 1].end_km;
+  const walkAreas = R.filter((r) => r.walk).map((r) => [{ xAxis: r.start_km, itemStyle: { color: css("--watch"), opacity: 0.10 } }, { xAxis: r.end_km }]);
+  for (const r of R.filter((x) => SEL.has(x.i)))
+    walkAreas.push([{ xAxis: r.start_km, itemStyle: { color: css("--accent"), opacity: 0.16 } }, { xAxis: r.end_km }]);
+  const hv = R.find((r) => r.i === HOVER && !SEL.has(r.i));
+  if (hv) walkAreas.push([{ xAxis: hv.start_km, itemStyle: { color: css("--accent"), opacity: 0.28 } }, { xAxis: hv.end_km }]);
+  const series = [];
+  if (pr) {
+    series.push({ name: T("elev"), type: "line", yAxisIndex: 1, data: pr.km.map((x, i) => [x, pr.z[i]]), symbol: "none", silent: true, z: 1,
+      lineStyle: { color: css("--bar"), width: 1 }, areaStyle: { color: css("--bar"), opacity: 0.28 },
+      markLine: SPLITS.length ? { symbol: "none", silent: true, lineStyle: { color: css("--accent"), type: "dashed" }, label: { formatter: "分日", color: css("--accent") }, data: SPLITS.map((x) => ({ xAxis: x })) } : undefined });
+    const st = stopsOf();
+    if (st.length) {
+      const zAt = (k) => { const i = pr.km.findIndex((x) => x >= k); return i <= 0 ? pr.z[Math.max(0, i)] : pr.z[i - 1] + (pr.z[i] - pr.z[i - 1]) * (k - pr.km[i - 1]) / ((pr.km[i] - pr.km[i - 1]) || 1); };
+      series.push({ name: T("stops"), type: "scatter", yAxisIndex: 1, data: st.map((s) => ({ value: [s.km, zAt(s.km)], name: `${stopIcon(s.type)} ${stopName(s.type)}${s.name ? " " + s.name : ""} · ${f1(s.km)} km` })),
+        symbol: "pin", symbolSize: 24, itemStyle: { color: css("--s3") }, z: 5,
+        label: { show: true, formatter: (p) => stopIcon(st[p.dataIndex].type), fontSize: 10, offset: [0, -3] },
+        tooltip: { trigger: "item", formatter: (p) => esc(p.name) } });
+    }
+  }
+  series.push({ name: T("m." + m), type: "line", yAxisIndex: 0, data: step, symbol: "none", connectNulls: false, z: 3,
+    lineStyle: { color: css("--accent"), width: 2.4 }, markArea: { silent: true, data: walkAreas } });
+  // at least ± 30 s/km, ± 10 % W, ± 15 bpm around the targets: a flat cap is not drawn as a big swing
+  const span = vals.length ? Math.max(...vals) - Math.min(...vals) : 0, mid = vals.length ? Math.max(...vals) : 0;
+  const pad = Math.max(span * 0.15, m === "pace" ? 30 : m === "power" ? mid * 0.10 : 15);
+  const yMain = { type: "value", name: M.unit, scale: true, inverse: M.inverse, ...axisStyle(),
+    min: vals.length ? Math.floor(Math.min(...vals) - pad) : null, max: vals.length ? Math.ceil(Math.max(...vals) + pad) : null,
+    axisLabel: { color: css("--muted"), fontSize: 11, formatter: M.axis } };
+  const yElev = { type: "value", show: false, scale: true, min: pr ? Math.min(...pr.z) - (Math.max(...pr.z) - Math.min(...pr.z) || 50) * 0.1 : null };
+  const tick = km <= 12 ? 1 : km <= 30 ? 2 : km <= 60 ? 5 : 10;
+  chart("profile").setOption({
+    animation: false, grid: { left: 52, right: 14, top: 32, bottom: narrow ? 30 : 52 },
+    tooltip: { trigger: "axis", confine: true, axisPointer: { type: "line" },
+      formatter: (ps) => { const k = ps[0]?.axisValue ?? ps[0]?.value?.[0]; const r = rowAt(+k); return r ? rowTip(r) : `${f1(+k)} km`; } },
+    xAxis: { type: "value", name: "km", min: 0, max: Math.ceil(km * 10) / 10, interval: tick, ...axisStyle(),
+      axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v), showMaxLabel: false } },
+    yAxis: [yMain, yElev],
+    dataZoom: narrow ? [{ type: "inside" }] : [{ type: "inside" }, { type: "slider", height: 14, bottom: 6 }],
+    series,
+  }, true);
+  $("chart-legend").innerHTML = `<span><i style="background:${css("--accent")}"></i>${esc(T("legend.target", { m: T("m." + m) }))}</span>` +
+    (pr ? `<span><i style="background:${css("--bar")};opacity:.6"></i>${esc(T("elev"))}</span>` : "") +
+    (R.some((r) => r.walk) ? `<span><i style="background:${css("--watch")};opacity:.35"></i>${esc(T("legend.walk"))}</span>` : "") +
+    (m !== "pace" && R.some((r) => M.val(r) == null) ? `<span>${esc(T(m === "power" ? "legend.gap_power" : "legend.gap_hr"))}</span>` : "");
+  const c = chart("profile");
+  c.getZr().off("click");
+  c.getZr().on("click", (ev) => {
+    if (!c.containPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY])) return;
+    const p = c.convertFromPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY]); if (!p) return;
+    const k = p[0]; if (!(k >= 0 && k <= km)) return;
+    if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +k.toFixed(2)].sort((a, b) => a - b); saveEventSplits(); schedule(); return; }
+    const r = rowAt(k); if (r) { pickSeg(r.i, !!ev.event?.shiftKey); const row = document.querySelector(`#segcmp [data-row="${r.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
+  });
+}
+// the compact table under the chart: each segment's target pace / power / HR, split and fuelling
+function renderSegCompact() {
+  const R = rowsOf(PLAN);
+  if (!R.length) { $("segcmp").innerHTML = ""; return; }
+  const hike = PLAN.type === "baiyue", m = measure();
+  const th = (k, lab) => `<th class="n opt ${m === k ? "cur" : ""}">${esc(lab)}</th>`;
+  const td = (k, r) => `<td class="n opt ${m === k ? "cur" : ""}">${fmtRow(r, k)}</td>`;
+  let h = `<table><thead><tr><th>#</th><th class="n">km</th><th class="n">${esc(T("grade"))}</th>${th("pace", T("m.pace"))}${hike ? "" : th("power", T("m.power"))}${th("hr", T("m.hr"))}` +
+    `<th class="n">${esc(T("split"))}</th><th class="n">${esc(T("cum"))}</th><th>${esc(T("fuel"))}</th></tr></thead><tbody>`;
+  for (const r of R) {
+    h += `<tr data-row="${r.i}" class="${SEL.has(r.i) ? "hl" : ""}" title="${esc(r.label)}${r.hr_cap_src ? " · " + esc(T("hrcap")) + "：" + esc(r.hr_cap_src) : ""}">
+      <td>${r.mark}${hike && r.day ? ` <span class="faint">D${r.day}</span>` : ""}</td><td class="n">${f1(r.start_km)}–${f1(r.end_km)}</td>
+      <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
+      <td class="n">${dur(r.t)}</td><td class="n">${dur(r.cum_s)}${r.eta ? ` <span class="faint">${esc(r.eta)}</span>` : ""}</td>
+      <td class="fuel">${r.basis === "safe" ? `🛡️ ${esc(T("safe_short"))}${r.fuel ? "；" : ""}` : ""}${esc(r.fuel || "")}</td></tr>`;
+  }
+  const s = PLAN.summary;
+  h += `<tr class="center"><td colspan="2">${esc(T("total"))}</td><td></td><td class="n opt ${m === "pace" ? "cur" : ""}">${pace(s.pace_s_per_km || (s.time_s / s.km))}</td>` +
+    `${hike ? "" : `<td class="n opt ${m === "power" ? "cur" : ""}">${W(s.power)}</td>`}<td class="opt ${m === "hr" ? "cur" : ""}"></td><td class="n">${hms(s.time_s)}</td><td></td><td></td></tr></tbody></table>`;
+  $("segcmp").innerHTML = h;
+  $("segcmp").querySelectorAll("tr[data-row]").forEach((e) => {
+    e.addEventListener("click", (ev) => pickSeg(+e.dataset.row, ev.shiftKey));
+    e.addEventListener("mouseenter", () => hoverSeg(+e.dataset.row));
+  });
+  $("segcmp").onmouseleave = () => hoverSeg(null);
+}
+function segAt(km) { return PLAN.segments.find((s) => km >= s.start_km && km <= s.end_km); }
+function segNote(s) { return (s.notes || []).concat(s.walk && !(s.notes || []).includes(s.walk) ? [s.walk] : []).join("、"); }
+function heatText(s) {
+  return `${f1(s.temp_c)} °C · 露點 ${f1(s.dew_c)} °C · 熱 ${s.heat_pct > 0 ? "−" + s.heat_pct.toFixed(1) + "%" : "0"}${s.heat_src === "hourly" ? `（${esc(s.heat_clock || "")} 逐時，推估）` : "（單一溫度）"}`;
+}
+function renderSegments() {
+  const P = PLAN, hike = P.type === "baiyue", trail = P.type === "trail";
+  if (!P.segments.length) { $("segtable").innerHTML = ""; return; }
+  let h = `<table><thead><tr><th>#</th>${hike ? "<th>天</th>" : ""}<th>類別</th><th class="n">km</th><th class="n">距離</th><th class="n">↑ / ↓</th><th class="n">坡度</th>`;
+  const capx = hike && !!P.capacity;
+  h += hike ? `<th>地形</th><th class="n">速度</th><th class="n">垂直</th>${capx ? `<th class="n" title="遞減率推算的氣溫 / 熱懲罰（適應後）">溫度</th><th class="n" title="海拔係數 A">A</th><th class="n" title="日內衰減 f_time">f時</th><th class="n" title="該段 σ（對數）">σ</th><th>資料</th>` : ""}` :
+    `<th class="n">目標功率</th><th class="n">% CP</th><th>區</th><th class="n">配速</th><th class="n">${trail ? "GAP / 垂直" : ""}</th>`;
+  const hourly = P.summary.heat?.mode === "hourly";
+  h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
+  for (const s of P.segments) {
+    h += `<tr data-seg="${s.i}" class="${SEL.has(s.i) ? "hl" : ""}"><td>${s.i}</td>${hike ? `<td>${s.day || 1}</td>` : ""}<td><span class="dot" style="background:${segColor(s.cls)}"></span>${esc(s.cls_label)}</td>
+      <td class="n">${f1(s.start_km)}–${f1(s.end_km)}</td><td class="n">${s.dist_m >= 1000 ? f1(s.dist_m / 1000) + " km" : n0(s.dist_m) + " m"}</td>
+      <td class="n">${n0(s.gain_m)} / ${n0(s.loss_m)}</td><td class="n">${f1(s.grade * 100)}%</td>`;
+    if (hike) {
+      h += `<td><select class="terr" data-terr="${s.i}">${TERRAIN_OPTS.map(([k, n]) => `<option value="${k}" ${s.terrain === k ? "selected" : ""}>${n}</option>`).join("")}</select></td>
+        <td class="n">${f1(s.speed_kmh)} km/h</td><td class="n">${s.vert_m_per_h ? n0(s.vert_m_per_h) + " m/h" : ""}</td>` +
+        (capx ? `<td class="n">${f1(s.temp_c)}°${s.heat_eff_pct > 0.05 ? ` <span class="wn">−${s.heat_eff_pct.toFixed(1)}%</span>` : ""}</td><td class="n">${f2(s.A)}</td>
+        <td class="n">${f2(s.f_time)}</td><td class="n">${f2(s.sigma)}</td><td class="wrap">${(s.extrapolated || []).length ? '<span class="wn">外插：' + esc(s.extrapolated.join("、")) + "</span>" : '<span class="faint">資料內</span>'}</td>` : "");
+    } else {
+      h += `<td class="n"><input class="lock ${s.locked ? "ovr" : ""}" data-lock="${s.i}" type="number" step="1" value="${Math.round(s.power)}" title="改這一段的功率會鎖定它，其他段重新分配"></td>
+        <td class="n">${pct(s.pct_cp)}</td><td>${esc(s.zone)}</td><td class="n">${pace(s.pace_s_per_km)}</td>
+        <td class="n">${s.vert_m_per_h ? "↑" + n0(s.vert_m_per_h) + " m/h" : trail ? pace(s.gap_pace_s_per_km) : ""}</td>`;
+    }
+    h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>
+      <td class="n" title="${esc(heatText(s).replace(/<[^>]+>/g, ""))}">${f1(s.temp_c)}°${s.heat_pct > 0 ? ` <span class="wn">−${s.heat_pct.toFixed(1)}%</span>` : ""}${ok(s.heat_eff_pct) && s.heat_pct > 0 ? ` <span class="faint" title="適應後 H_eff">→ −${s.heat_eff_pct.toFixed(1)}%</span>` : ""}</td>`}
+      <td class="wrap">${esc(segNote(s))}${s.badge ? ' <span class="badge watch">推估</span>' : ""}</td></tr>`;
+  }
+  const tot = P.summary;
+  h += `<tr class="center"><td colspan="${hike ? 7 : 6}">合計</td>${hike ? `<td></td><td class="n">${f1(tot.km / (tot.time_s / 3600))} km/h</td><td></td>${capx ? "<td></td><td></td><td></td><td></td><td></td>" : ""}` :
+    `<td class="n">${W(tot.power)}</td><td class="n">${pct(tot.pct_cp)}</td><td></td><td class="n">${pace(tot.pace_s_per_km)}</td><td></td>`}
+    <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${hike ? "" : "<td></td><td></td>"}<td></td></tr></tbody></table>`;
+  h += `<div class="note">${hike ? "速度已含背負、海拔、地形與多日修正。" : `目標功率請${esc(PLAN.hint || "看 30 秒平均功率")}，不要看瞬間值（上坡起點讀數常會衝高）。在功率欄改數字會鎖定該段，其他段重新分配、平均不變。`}</div>`;
+  $("segtable").innerHTML = h;
+  document.querySelectorAll("[data-lock]").forEach((e) => e.addEventListener("change", () => {
+    const v = Number(e.value); if (v > 0) LOCKS[e.dataset.lock] = v; else delete LOCKS[e.dataset.lock]; schedule(); }));
+  document.querySelectorAll("[data-terr]").forEach((e) => e.addEventListener("change", () => { TERRAIN[e.dataset.terr] = e.value; schedule(); }));
+  document.querySelectorAll("#segtable tr[data-seg]").forEach((e) => {
+    e.addEventListener("click", (ev) => { if (["INPUT", "SELECT"].includes(ev.target.tagName)) return; pickSeg(+e.dataset.seg, ev.shiftKey); });
+    e.addEventListener("mouseenter", () => hoverSeg(+e.dataset.seg));
+  });
+  if ($("segtable")) $("segtable").onmouseleave = () => hoverSeg(null);
+}
+// ---------------- export to the watch (the workout provider, default COROS) ----------------
+// trail / 百岳 default to lap-button steps (watch GPS distance drifts on trails), road to distance steps
+let CX_MODE = null;
+const cxMode = () => CX_MODE || (type === "road" ? "distance" : "lap");
+function cxBody(push) { return { ...planBody(), push, name: null, event_id: $("event").value || null, step_mode: cxMode() }; }
+function renderCx(r) {
+  segOn("cx-mode", "x", r.mode);
+  $("cx-prov").textContent = r.provider_label || "";
+  $("cx-where").textContent = r.scheduled ? T("coros.on_day", { day: r.day }) : T("coros.library");
+  const legs = r.legs || [], lines = r.lines || [];
+  let h = `<div class="note">${esc(r.name)} · ${T("coros.n_steps", { n: lines.length })}${r.previous?.coros_program_id ? " · " + esc(T("coros.again", { at: (r.previous.pushed_at || "").slice(0, 16).replace("T", " ") })) : ""}</div>`;
+  h += `<div class="tablewrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>#</th><th>${esc(T("coros.step"))}</th><th>${esc(T("coros.end_col"))}</th><th>${esc(T("coros.target"))}</th></tr></thead><tbody>` +
+    lines.map((ln, i) => `<tr><td>${i + 1}</td><td class="wrap">${esc(ln.name || legs[i]?.name || "")}</td><td class="num">${esc(ln.dur)}</td><td class="num">${esc(ln.target)}</td></tr>`).join("") +
+    `</tbody></table></div>`;
+  if ((r.notes || []).length) h += warnList(r.notes);
+  $("cx-body").innerHTML = h;
+}
+async function corosPreview() {
+  $("cx-msg").textContent = T("coros.preparing"); $("cx-go").disabled = true;
+  try { const r = await post(`${API}/export/coros`, cxBody(false)); renderCx(r); $("cx-msg").textContent = ""; $("cx-go").disabled = false; }
+  catch (e) { $("cx-body").innerHTML = `<div class="err">${esc(e.message)}</div>`; $("cx-msg").textContent = ""; }
+}
+async function corosPush() {
+  $("cx-msg").textContent = T("coros.sending"); $("cx-go").disabled = true;
+  try {
+    const r = await post(`${API}/export/coros`, cxBody(true)); renderCx(r);
+    const p = r.pushed || {};
+    $("cx-msg").innerHTML = p.status === "failed" ? `<span class="err">${esc(p.error || "")}</span>` :
+      `<span class="ok">${esc(p.changed === false ? T("coros.same") : p.scheduled ? T("coros.done_day") : T("coros.done_lib"))} ✓</span>`;
+  } catch (e) { $("cx-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  $("cx-go").disabled = false;
+}
+$("coros").onclick = () => { $("cx-body").innerHTML = ""; $("coros-dlg").showModal(); corosPreview(); };
+$("cx-close").onclick = () => $("coros-dlg").close();
+$("cx-go").onclick = corosPush;
+document.querySelectorAll("#cx-mode button").forEach((b) => b.onclick = () => { CX_MODE = b.dataset.x; corosPreview(); });
+
+async function csvExport() {
+  $("csv-meta").textContent = "產生中…";
+  try {
+    const ev = (INP?.events || []).find((e) => e.id === $("event").value);
+    const r = await fetch(`${API}/export/csv`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...planBody(), name: ev ? ev.name : null }) });
+    if (!r.ok) throw new Error(await errText(r));
+    const fname = decodeURIComponent(r.headers.get("X-Filename") || "racepower.csv");
+    const url = URL.createObjectURL(await r.blob());
+    const a = document.createElement("a"); a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    $("csv-meta").innerHTML = `<span class="ok">已下載 ✓</span> ${esc(fname)}`;
+  } catch (e) { $("csv-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+// ---------------- read-only share links ----------------
+const shareUrl = (u) => location.origin + u;
+async function loadShares() {
+  try {
+    const { shares } = await j(`${API}/shares`);
+    $("share-list").innerHTML = shares.length ? shares.map((s) => `<tr><td><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>
+        <div class="meta">${esc(s.created.slice(0, 16).replace("T", " "))}${s.date ? ` · 比賽 ${esc(s.date)}` : ""}${s.expires ? ` · ${s.expired ? "已過期" : "到期 " + esc(s.expires.slice(0, 10))}` : " · 不過期"}${s.weight ? " · 含體重" : ""}</div></td>
+        <td class="n"><button class="btn" data-copy="${esc(s.url)}">複製</button> <button class="btn" data-del="${esc(s.id)}">刪除分享</button></td></tr>`).join("")
+      : `<tr><td class="meta">還沒有分享</td></tr>`;
+  } catch (e) { $("share-list").innerHTML = `<tr><td class="err">${esc(e.message)}</td></tr>`; }
+}
+async function copyText(t, el) {
+  try { await navigator.clipboard.writeText(t); } catch { const i = document.createElement("textarea"); i.value = t; document.body.appendChild(i); i.select(); document.execCommand("copy"); i.remove(); }
+  if (el) { const was = el.textContent; el.textContent = "已複製 ✓"; setTimeout(() => el.textContent = was, 1500); }
+}
+$("share").onclick = () => {
+  const ev = (INP?.events || []).find((e) => e.id === $("event").value);
+  if (!$("share-title").value) $("share-title").value = ev ? ev.name : (PLAN?.course_name || "");
+  $("share-out").classList.add("hidden"); $("share-msg").textContent = "";
+  $("share-dlg").showModal(); loadShares();
+};
+$("share-close").onclick = () => $("share-dlg").close();
+$("share-go").onclick = async () => {
+  $("share-msg").textContent = "建立中…"; $("share-go").disabled = true;
+  try {
+    const r = await post(`${API}/share`, { ...planBody(), share_title: $("share-title").value || null,
+      include_weight: $("share-weight").checked, expires_days: $("share-exp").value ? Number($("share-exp").value) : null });
+    $("share-link").value = shareUrl(r.url); $("share-out").classList.remove("hidden");
+    $("share-msg").innerHTML = `<span class="ok">已建立 ✓</span>${r.expires ? " 到期 " + esc(r.expires.slice(0, 10)) : ""}`;
+    loadShares();
+  } catch (e) { $("share-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  $("share-go").disabled = false;
+};
+$("share-copy").onclick = (e) => copyText($("share-link").value, e.target);
+$("share-list").addEventListener("click", async (e) => {
+  if (e.target.dataset.copy) return copyText(shareUrl(e.target.dataset.copy), e.target);
+  const id = e.target.dataset.del; if (!id) return;
+  if (!confirm("刪除這個分享？拿到連結的人就看不到了。")) return;
+  try { await j(`${API}/shares/${encodeURIComponent(id)}`, { method: "DELETE" }); } catch (err) { alert(err.message); }
+  loadShares();
+});
+
+// ---------------- analyses (v1 sections) ----------------
+function renderCP() {
+  const a = INP.cp.activities;
+  if (!a) { $("cp-detail").innerHTML = `<div class="meta">近 ${INP.counts.runs_90} 次跑步裡沒有足夠的 3–20 分鐘紀錄可擬合 CP。</div>`; return; }
+  $("cp-sub").textContent = `近 ${a.window_days} 天跑步的最佳功率包絡線，功 = CP × 時間 + W′`;
+  const pts = a.points.map((p) => [p.t / 60, p.p * p.t / 1000]);
+  const x0 = 0, x1 = Math.max(...a.points.map((p) => p.t)) / 60 * 1.1;
+  const line = [[x0, a.w_prime / 1000], [x1, (a.cp * x1 * 60 + a.w_prime) / 1000]];
+  chart("cp-chart").setOption({
+    animation: false, grid: { left: 52, right: 14, top: 26, bottom: 38 },
+    tooltip: { trigger: "item", formatter: (p) => p.seriesIndex === 0 ? `${dur(a.points[p.dataIndex].t)} · ${W(a.points[p.dataIndex].p)}<br>${esc(a.points[p.dataIndex].label)}` : "" },
+    xAxis: { type: "value", name: "時間（分）", nameLocation: "middle", nameGap: 24, min: 0, ...axisStyle() },
+    yAxis: { type: "value", name: "功（kJ）", ...axisStyle() },
+    series: [{ type: "scatter", data: pts, symbolSize: 9, itemStyle: { color: css("--s1") } },
+      { type: "line", data: line, symbol: "none", lineStyle: { color: css("--s2"), width: 2 } }],
+  }, true);
+  const rt = a.rating;
+  const sources = INP.cp.sources.map((s) => `<tr><td>${esc(s.label)}</td><td class="n">${W(s.cp)}</td><td class="n">${wkg(s.cp / INP.weight.value)}</td><td class="meta">${s.w_prime ? "W′ " + (s.w_prime / 1000).toFixed(1) + " kJ" : s.frc ? "FRC " + (s.frc / 1000).toFixed(1) + " kJ, TTE " + dur(s.tte) : ""}</td></tr>`).join("");
+  $("cp-detail").innerHTML = `<div class="kv"><span>CP <b>${W(a.cp)}</b>（${wkg(a.cp / INP.weight.value)}）</span><span>W′ <b>${(a.w_prime / 1000).toFixed(1)} kJ</b>（${n0(rt.j_per_kg)} J/kg）</span>
+    <span>R² <b>${a.r2.toFixed(4)}</b></span><span>RWC 評等 <b class="${rt.rating === "Medium" ? "ok" : "wn"}">${esc(rt.rating_zh)}（${esc(rt.rating)}）</b></span></div>
+    <div class="note">評等依 ${rt.sex === "female" ? "女性" : "男性"}、${rt.wind ? "Stryd 含風阻（Wind）" : "不含風阻"} 的 J/kg 表（kJ 表：${esc(rt.rating_kj)}）。${esc(rt.note || "")}</div>
+    <div class="tablewrap"><table><thead><tr><th>時間</th><th class="n">最佳功率</th><th>來自</th></tr></thead><tbody>${a.points.map((p) =>
+      `<tr><td class="num">${dur(p.t)}</td><td class="n">${W(p.p)}</td><td>${esc(p.label)}</td></tr>`).join("")}</tbody></table></div>
+    <h3>有效性檢查</h3><ul style="padding-left:18px;margin:0;font-size:12.5px">${a.checks.map((c) => `<li class="${c.ok ? "ok" : c.level === "warn" ? "wn" : "no"}">${c.ok ? "✓" : c.level === "warn" ? "!" : "✕"} ${esc(c.text)}</li>`).join("")}</ul>
+    ${INP.cp.dropped_365.length ? `<div class="note">排除功率異常的活動：${INP.cp.dropped_365.map((d) => esc(d.label)).join("、")}（NP ≥ 1.5 × CP 或 5 分鐘 > 2 × CP）</div>` : ""}
+    ${INP.power_source && (INP.power_source.unused || []).length ? `<div class="note">${esc(INP.power_source.unused_label)}，不進 CP／功率模型：${INP.power_source.unused.map((d) => esc(d.label)).join("、")}（設定 ${esc(INP.power_source.setting)}）</div>` : ""}
+    <h3>CP 來源比較</h3><div class="tablewrap"><table><tbody>${sources}</tbody></table></div>
+    ${INP.cp.lower_bound_message ? `<div class="err">${esc(INP.cp.lower_bound_message)}</div>` : ""}
+    ${INP.cp.lower_bound ? `<div class="note">下限：你在 ${dur(INP.cp.lower_bound.t_s)} 撐過 ${W(INP.cp.lower_bound.p)}（${esc(INP.cp.lower_bound.who?.label || "")}），
+      依 k ${k3(INP.cp.lower_bound.k)}、TTE ${dur(INP.cp.lower_bound.tte)} 換算 CP 至少 ${W(INP.cp.lower_bound.cp_min)}。模型不會預測比你已經撐過的還低的功率。</div>` : ""}
+    ${(INP.cp.tests || []).map((t) => `<div class="note">偵測到 CP 測試 ${esc(t.date)}：${esc(t.estimate.label)} → CP ${W(t.estimate.cp)}（${t.estimate.cp_range ? W(t.estimate.cp_range[0]) + "–" + W(t.estimate.cp_range[1]) : ""}）。
+      ${t.bouts.filter((b) => !b.maximal).map((b) => esc(`${b.nominal_s / 60}′ 不是全力：${b.why}`)).join("；")}。這只是建議，要到「賽季計畫」自己套用。</div>`).join("")}
+    <div class="note">預設：PD 模型（WKO5 的模型，用近 90 天 mean-max 含同步的 FIT 重算）的 mFTP / TTE 當長時間的錨點，20 分鐘以內用 CP 測試的 CP + W′；低於下限時提高到下限。</div>`;
+}
+function renderRiegel() {
+  const r = INP.riegel, env = INP.envelope;
+  // no usable fit (k / range are null: too few maximal efforts): say so. Looping from a null t_min
+  // never advances (null * 1.2 = 0) and froze the page.
+  if (!r || !(r.t_min > 0) || !(r.t_max > r.t_min) || r.k == null || r.r2 == null) {
+    $("rg-detail").innerHTML = `<div class="meta">資料不足以擬合。</div>${r && (r.invalid_reasons || []).length ? warnList(r.invalid_reasons) : ""}`;
+    $("rg-chart").innerHTML = ""; return;
+  }
+  const fit = [];
+  for (let x = r.t_min; x <= r.t_max * 1.0001; x *= 1.2) fit.push([x / 60, Math.exp(r.a) * Math.pow(x, r.k)]);
+  const tk = LAST?.tasks?.table;
+  const series = [
+    { name: "包絡線", type: "line", data: env.map((e) => [e.t / 60, e.p]), symbol: "none", lineStyle: { color: css("--s1"), width: 1.5 } },
+    { name: "擬合區間", type: "line", data: env.filter((e) => e.t >= r.t_min && e.t <= r.t_max).map((e) => [e.t / 60, e.p]), symbol: "circle", symbolSize: 4, lineStyle: { width: 0 }, itemStyle: { color: css("--s3") } },
+    { name: `個人 k ${k3(r.k)}`, type: "line", data: fit, symbol: "none", lineStyle: { color: css("--s2"), width: 2 } },
+  ];
+  if (tk?.k != null && LAST?.used?.cp) {
+    const cp = LAST.used.cp.value, tte = LAST.used.tte.value, tl = [];
+    for (let x = tte > 0 ? tte : Infinity; x <= Math.max(r.t_max, LAST.result?.time_s || 0) * 1.2; x *= 1.2) tl.push([x / 60, cp * Math.pow(x / tte, tk.k)]);
+    series.push({ name: `查表 k ${k3(tk.k)}（由 CP、TTE）`, type: "line", data: tl, symbol: "none", lineStyle: { color: css("--s4"), width: 2, type: "dashed" } });
+  }
+  if (PLAN?.summary?.time_s && PLAN.type !== "baiyue") series.push({ name: "預估", type: "scatter", data: [[PLAN.summary.time_s / 60, PLAN.summary.power_train]], symbolSize: 11, itemStyle: { color: css("--hi") } });
+  chart("rg-chart").setOption({
+    animation: false, grid: { left: 52, right: 14, top: 40, bottom: 38 },
+    legend: { top: 0, textStyle: { color: css("--muted"), fontSize: 11 } },
+    tooltip: { trigger: "axis", valueFormatter: (v) => ok(v) ? Math.round(v) + " W" : "" },
+    xAxis: { type: "log", name: "時間（分，對數）", nameLocation: "middle", nameGap: 24, min: 1, ...axisStyle(),
+      axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => v >= 60 ? (+(v / 60).toFixed(1)) + " h" : (+v.toFixed(1)) + " 分" } },
+    yAxis: { type: "log", name: "W（對數）", min: (v) => Math.max(10, Math.floor(v.min * 0.9)), ...axisStyle() },
+    series,
+  }, true);
+  $("rg-detail").innerHTML = `<div class="kv"><span>個人 k <b>${k3(r.k)}</b></span><span>R² <b>${r.r2.toFixed(3)}</b></span><span>點數 <b>${r.n}</b></span>
+    <span>區間 <b>${dur(r.t_min)} – ${dur(r.t_max)}</b></span><span>活動 <b>${r.n_activities}</b> 次</span>
+    <span>${r.valid ? '<b class="ok">可用</b>' : '<b class="wn">不可靠</b>'}</span></div>
+    ${r.invalid_reasons.length ? warnList(r.invalid_reasons) : ""}
+    <div class="note">近 ${r.window_days} 天跑步的最佳功率包絡線，從 max(TTE, 20 分) 起擬合 ln P = a + k·ln t。
+    包絡線在 ${r.cut_s ? dur(r.cut_s) : "—"} 掉到起點的 80% 以下就停止（之後是暫停很多或很輕鬆的長時間活動，不是最大努力；
+    不截斷時 k = ${k3(r.uncut?.k)}，R² ${r.uncut ? r.uncut.r2.toFixed(2) : "–"}，到 ${dur(r.uncut?.t_max)}）。</div>
+    <div class="note">查表 k 只到全馬；超過全馬取最慢值 −0.12。3 小時以上的比賽，訓練裡很少有真正最大的紀錄，個人 k 往往偏負；兩者都列出來，用「k 來源」切換。</div>
+    <details><summary>構成擬合區間的活動</summary><ul class="meta">${r.activities.map((a) => `<li>${esc(a.label)}</li>`).join("")}</ul></details>`;
+}
+function renderRE() {
+  const re = INP.re, fx = $("formula").value;
+  const row = (r, trail) => `<tr><td>${esc(r.label)}</td><td class="n">${f1(r.km)}</td><td class="n">${n0(r.climb_m)}</td><td class="n">${n0(r.cvi)}</td>
+    <td class="n">${dur(r.moving_s)}</td><td class="n">${W(r.avg_power)}</td><td class="n">${r3(r.re)}</td>${trail ? `<td class="n">${r3(r.re_trail[fx])}</td>` : ""}
+    <td class="n">${r.lss_kg != null ? r.lss_kg.toFixed(3) : "–"}</td><td class="n">${r.air_pct != null ? r.air_pct.toFixed(1) + "%" : "–"}</td><td class="n">${r.form_pct != null ? Math.round(r.form_pct) + "%" : "–"}</td></tr>`;
+  const head = (trail) => `<thead><tr><th>活動</th><th class="n">km</th><th class="n">爬升</th><th class="n">CVI</th><th class="n">移動</th><th class="n">功率</th><th class="n">RE</th>${trail ? '<th class="n">越野 RE</th>' : ""}<th class="n">LSS/kg</th><th class="n">風阻 Pa</th><th class="n">Form</th></tr></thead>`;
+  const s = (x) => x ? `<b>${r3(x.median)}</b>（IQR ${r3(x.q1)}–${r3(x.q3)}，${x.n} 次）` : "–";
+  $("re-detail").innerHTML = `<div class="kv"><span>平路 RE（CVI &lt; 51 的路跑各自調到平路）${s(re.road)}</span><span>越野 RE（effort km）${s(re.trail[fx])}</span>
+    <span>訓練 CVI 中位 <b>${n0(re.train_cvi?.median)}</b>（近 90 天）</span></div>
+    <div class="note">越野 RE = (effort 距離 m ÷ 移動秒) ÷ (功率 ÷ 體重)，近 ${re.window_days} 天有功率、爬升 ≥ 150 m、移動 ≥ 45 分的越野跑。移動 = 功率 &gt; 0 且速度 &gt; 1 km/h。</div>
+    <details><summary>越野跑（${re.trail_runs.length}）</summary><div class="tablewrap"><table>${head(true)}<tbody>${re.trail_runs.slice().reverse().map((r) => row(r, true)).join("")}</tbody></table></div></details>
+    <details><summary>平路跑（${re.road_runs.length}）</summary><div class="tablewrap"><table>${head(false)}<tbody>${re.road_runs.slice().reverse().map((r) => row(r, false)).join("")}</tbody></table></div></details>`;
+}
+function renderHike() {
+  const h = INP.hiking;
+  if (!h.days.length) { $("hike-detail").innerHTML = `<div class="meta">沒有登山紀錄。${esc(h.error || "")}</div>`; return; }
+  if (HIKEMETA) return renderHikeMeta();
+  const e = h.eph;
+  $("hike-detail").innerHTML = `<div class="note"><b>${esc(h.note || "百岳多為跟團，速度不代表個人能力，不列入目標時間推算")}</b>。
+    只有標記為「自己走」的登山日會算 EP/h（目前 ${h.solo_n || 0} 天，跟團 ${h.group_n || 0} 天）；沒有時 百岳 ETA 用 Tobler 步行函數（推估）。</div>
+    <div class="kv">${e ? `<span>自己走的 EP/h 中位 <b>${e.median.toFixed(2)}</b>（IQR ${e.q1.toFixed(2)}–${e.q3.toFixed(2)}，${e.n} 天）</span>` : `<span>EP/h <b>推估（Tobler）</b></span>`}
+    <span class="faint">爬升 ≥ 600 m 的日子權重 3 倍；多日行程逐日計算；移動 ≥ 1 h 才算</span></div>
+    <div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">EP</th><th class="n">移動</th><th class="n">EP/h</th><th class="n">最高點</th><th>計入</th></tr></thead><tbody>${h.days.slice().reverse().map((d) =>
+      `<tr><td>${esc(d.date)}</td><td>${esc(d.name)}${d.day ? `（第 ${d.day}/${d.days} 天）` : ""}</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td>
+      <td class="n">${f1(d.ep)}</td><td class="n">${hrs(d.moving_h)}</td><td class="n">${d.ep_per_h.toFixed(2)}</td><td class="n">${d.top_m ? n0(d.top_m) + " m" : "–"}</td><td>${d.solo ? "自己走" : '<span class="faint">跟團，不計</span>'}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function renderHikeMeta() {
+  const H = HIKEMETA, v = H.validation || {};
+  const rows = H.days.slice().reverse();
+  let t = `<div class="note">跟團的速度不代表你的能力：百岳時間改用<b>你的步行能力模型</b>（越野跑走路窗 + 百岳心率 ≥ AeT 的爬升窗）。
+    「看起來是自己走」是自動判斷的<b>建議</b>（推估規則：自己走的段 ≥ 60 %、被限制的段 ≤ 15 %），要你按「確認」才會寫進自己走的清單。
+    ${esc(v.rule || "")}：目前手動標記 自己走 ${v.n_solo ?? 0} 天、跟團 ${v.n_group ?? 0} 天${v.agreement != null ? `，符合率 ${pct(v.agreement)}` : ""}，${v.validated ? "已可自動套用" : "還只是建議"}。
+    背負填了才準；沒填用預設（體重 × 13 %，沒有體重時 9 kg；推估）。</div>`;
+  t += `<div class="tablewrap"><table><thead><tr><th>日期</th><th>行程</th><th class="n">km</th><th class="n">爬升</th><th class="n">移動</th><th class="n">EP/h</th><th>背負 kg</th><th>建議</th><th>目前</th></tr></thead><tbody>` +
+    rows.map((d) => { const sg = d.suggest || {};
+      const sug = sg.suggest ? `${sg.suggest === "solo" ? "看起來是自己走" : "看起來是跟團"}（${pct(sg.own_share)}）` : '<span class="faint">–</span>';
+      return `<tr><td>${esc(d.date)}</td><td>${esc(d.name)}${d.day ? `（第 ${d.day}/${d.days} 天）` : ""}</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td>
+      <td class="n">${hrs(d.moving_h)}</td><td class="n">${f2(d.ep_per_h)}</td>
+      <td><input class="packin" data-file="${esc(d.file)}" type="number" step="0.5" min="0" max="40" style="width:64px" value="${d.pack_kg ?? ""}" placeholder="${f1(d.pack_default)}"></td>
+      <td class="wrap" title="${esc(sg.reason || "")}">${sug}</td>
+      <td>${d.solo ? '自己走 <button class="btn" data-unsolo="' + esc(d.file) + '">改跟團</button>' : '<span class="faint">跟團</span> <button class="btn" data-solo="' + esc(d.file) + '">確認自己走</button>'}</td></tr>`; }).join("") +
+    `</tbody></table></div>`;
+  $("hike-detail").innerHTML = t;
+  const soloSet = async (file, on) => {
+    const cur = new Set((await j(`${API}/solo-hikes`)).files); on ? cur.add(file) : cur.delete(file);
+    await post(`${API}/solo-hikes`, { files: [...cur] }); INP = await j(`${API}/inputs?refresh=true`); await loadHikeMeta(); schedule(); };
+  $("hike-detail").querySelectorAll("[data-solo]").forEach((b) => b.onclick = () => soloSet(b.dataset.solo, true));
+  $("hike-detail").querySelectorAll("[data-unsolo]").forEach((b) => b.onclick = () => soloSet(b.dataset.unsolo, false));
+  $("hike-detail").querySelectorAll(".packin").forEach((e) => e.addEventListener("change", async () => {
+    await post(`${API}/hike-meta`, { file: e.dataset.file, pack_kg: e.value === "" ? null : Number(e.value) }); schedule(); }));
+}
+function renderZones() {
+  const z = PLAN?.zones || LAST?.zones; if (!z || !z.length || !PLAN || PLAN.type === "baiyue") { $("zones").innerHTML = ""; return; }
+  $("zones").innerHTML = `<div class="tablewrap"><table><thead><tr><th>區</th><th>名稱</th><th class="n">% CP</th><th class="n">功率</th></tr></thead><tbody>${z.map((r) =>
+    `<tr><td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="n">${Math.round(r.lo * 100)}–${r.hi ? Math.round(r.hi * 100) + "%" : "+"}</td>
+    <td class="n">${r.watts ? r.watts[0] + (r.watts[1] ? "–" + r.watts[1] : "+") + " W" : "–"}</td></tr>`).join("")}</tbody></table></div>
+    <div class="note">CP ${W(PLAN.used.cp.value)}；目標平均功率 ${W(PLAN.summary.power)} 落在區間 ${esc(zoneOf(PLAN.summary.power, PLAN.used.cp.value))}。</div>`;
+}
+function zoneOf(p, cp) { const zs = PLAN?.zones || LAST?.zones || []; const x = p / cp; const z = zs.find((r) => x >= r.lo && (r.hi == null || x < r.hi)); return z ? z.id : "1A 以下"; }
+async function renderGM() {
+  try { GM = GM || await j(`${API}/grade-model`); } catch (e) { $("gm-detail").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const g = GM.grade_re, bins = g.bins.filter((b) => Math.abs(b.grade) <= 0.35);
+  chart("gm-chart").setOption({
+    animation: false, grid: { left: 48, right: 14, top: 44, bottom: 38 }, legend: { top: 0, textStyle: { color: css("--muted"), fontSize: 11 } },
+    tooltip: { trigger: "axis", valueFormatter: (v) => ok(v) ? v.toFixed(3) : "" },
+    xAxis: { type: "value", name: "坡度 %", nameLocation: "middle", nameGap: 24, ...axisStyle() },
+    yAxis: { type: "value", name: "RE", scale: true, ...axisStyle() },
+    series: [
+      { name: "你的中位數", type: "scatter", data: bins.filter((b) => b.median_re).map((b) => [b.grade * 100, b.median_re, b.n]), symbolSize: (d) => Math.max(4, Math.min(16, Math.sqrt(d[2]))), itemStyle: { color: css("--s1") } },
+      { name: "採用（向先驗收縮）", type: "line", data: bins.map((b) => [b.grade * 100, b.re]), symbol: "none", lineStyle: { color: css("--s2"), width: 2 } },
+      { name: "先驗（坡度能耗）", type: "line", data: bins.map((b) => [b.grade * 100, b.prior_re]), symbol: "none", lineStyle: { color: css("--muted"), type: "dashed" } },
+    ],
+  }, true);
+  $("gm-detail").innerHTML = `<div class="kv"><span>平路 RE <b>${r3(g.re_flat)}</b></span><span>100 m 窗 <b>${n0(g.n_samples)}</b></span><span>活動 <b>${g.n_activities}</b></span></div>
+    <div class="note">每一點是你在那個坡度（每 2% 一格）的 100 m 窗「速度 ÷ (功率/體重)」中位數，點越大樣本越多。樣本少的坡度會往「由平路 RE 與坡度能耗推出來」的虛線靠。這條曲線已經包含 Stryd 在陡坡的讀數特性與你上坡快走的習慣。</div>`;
+}
+
+// ---------------- 準確度 ----------------
+async function renderBacktest() {
+  let r;
+  try { r = await j(`${API}/backtest`); } catch (e) { $("bt-body").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const st = r.state;
+  $("bt-meta").textContent = st.running ? `回測中… ${st.progress ? `${st.progress.i + 1}/${st.progress.n} ${st.progress.label || ""}` : ""}` :
+    st.error ? `上次失敗：${st.error}` : r.result ? `上次回測 ${r.result.computed_at.slice(0, 16).replace("T", " ")}（${r.result.seconds} 秒）` : "";
+  if (st.running) setTimeout(renderBacktest, 3000);
+  const R = r.result;
+  $("bt-body").classList.remove("loading");
+  if (!R) { $("bt-body").innerHTML = `<div class="meta">還沒有回測結果，按「重新回測」。</div>`; return; }
+  if (R.version !== 2) { $("bt-body").innerHTML = `<div class="meta">回測格式已更新，按「重新回測」。</div>`; return; }
+  const CZ = { easy: "輕鬆", steady: "穩定", race: "比賽強度" };
+  const st4 = (s) => `<td class="n">${s.n}</td><td class="n">${pct1(s.median_abs)}</td><td class="n">${spct(s.bias)}</td><td class="n faint">${spct(s.p10)}…${spct(s.p90)}</td>`;
+  const hd4 = `<th class="n">n</th><th class="n">|誤差| 中位</th><th class="n">偏差（中位）</th><th class="n">10–90 %</th>`;
+  const C = R.capacity, T = R.terrain;
+  let h = `<div class="note"><b>百岳多為跟團，速度不代表個人能力，不列入目標時間推算。</b>只有你標記為「自己走」的登山才算（目前 ${R.hike_basis?.solo_hikes ?? 0} 次）。
+    每一場都只用那天以前、不含這一場的資料；強度用每次活動當天的 LTHR / AeT 判定：輕鬆（多數時間 &lt; AeT，Seiler 三區）、穩定（AeT–LTHR）、比賽強度（多數時間 ≥ 0.95 × LTHR，Friel Z4；功率也要夠）。
+    這一年：${Object.entries(R.intensity_counts).map(([k, v]) => `${CZ[k]} ${v}`).join("、")} 次。</div>`;
+  // 1. capacity
+  h += `<h3>比賽預測回測（能力模型）</h3>`;
+  if (C.message) h += `<div class="err">${esc(C.message)}</div>`;
+  h += `<div class="tablewrap"><table><thead><tr><th>類別</th>${hd4}<th class="n">功率誤差</th><th class="n">努力度中位</th><th>結果</th></tr></thead><tbody>`;
+  for (const cat of ["road", "trail"]) {
+    const c = C.categories[cat];
+    h += `<tr><td>${esc(c.label)}</td>${st4(c.time)}<td class="n">${spct(c.power.bias)}</td><td class="n">${pct(c.f_median)}</td>
+      <td class="wrap ${c.passed ? "ok" : "no"}">${c.passed ? "✓ 通過" : "✕ " + esc(c.reasons.join("；"))}</td></tr>`;
+  }
+  h += `</tbody></table></div><div class="note">用那天以前的 CP / W′ / TTE / k 算這個時長可持續的功率，再在那次自己的路線上推整場時間（模式 C），和實際比。
+    只有接近全力的努力能檢驗能力：心率判定的比賽強度、賽季計畫比賽、正式 CP 測試的全力段（${C.tests.n} 段，功率誤差 ${spct(C.tests.power.bias)}）。
+    努力度條切點：${C.effort.passed ? '<span class="ok">✓ 通過</span>' : '<span class="no">✕ ' + esc(C.effort.reasons.join("；")) + "</span>"}（≥ ${R.min_n} 次、中位數 97–103 %）。</div>`;
+  const LB = C.lower_bound;
+  h += `<div class="note">下限檢查：${LB.n} 次跑步中 ${LB.violations} 次的功率高於模型當時算的可持續功率${LB.violations ? "：" + LB.worst.slice(0, 3).map((x) => `${esc(x.label)} ${hm(x.t_s)} ${W(x.p_train)}（模型 ${W(x.p_sus)}）`).join("、") : ""}。</div>`;
+  // 2. terrain
+  h += `<h3>地形模型回測（給實際功率，看各坡度的速度）</h3><div class="tablewrap"><table><thead><tr><th>類別</th>${hd4}<th class="n">舊方法 |誤差|</th><th class="n">下坡偏差</th></tr></thead><tbody>`;
+  for (const cat of ["road", "trail"]) {
+    const c = T.categories[cat];
+    h += `<tr><td>${esc(c.label)}</td>${st4(c.time)}<td class="n">${pct1(c.time_v1.median_abs)}</td><td class="n">${spct(c.downhill.bias)}</td></tr>`;
+    for (const g of Object.values(c.groups || {})) h += `<tr><td class="faint">　${esc(g.label)}</td>${st4(g)}<td></td><td></td></tr>`;
+  }
+  h += `</tbody></table></div>`;
+  h += `<div class="tablewrap"><table><thead><tr><th>強度</th><th class="n">活動</th>${hd4}<th class="n">分段 |誤差|</th><th class="n">分強度擬合後</th></tr></thead><tbody>`;
+  for (const k of ["easy", "steady", "race"]) {
+    const c = T.classes[k];
+    h += `<tr><td>${CZ[k]}</td><td class="n">${c.activities}</td>${st4(c.time)}<td class="n">${pct1(c.segments.median_abs)}</td><td class="n">${pct1(c.segments_class_model.median_abs)}</td></tr>`;
+  }
+  h += `</tbody></table></div><h3>分段速度誤差：強度 × 坡度</h3><div class="tablewrap"><table><thead><tr><th>強度</th>${R.grade_bins.map((b) => `<th class="n">${esc(b)}</th>`).join("")}</tr></thead><tbody>`;
+  for (const k of ["easy", "steady", "race", "all"]) {
+    h += `<tr><td>${k === "all" ? "全部" : CZ[k]}</td>${R.grade_bins.map((b) => { const x = T.grid[k][b]; return `<td class="n">${x.n ? `${spct(x.bias)} <span class="faint">(${x.n})</span>` : "–"}</td>`; }).join("")}</tr>`;
+  }
+  const cd = T.class_differs;
+  h += `</tbody></table></div><div class="note">正值 = 預估比實際快。這一段只檢驗「功率 → 速度」（坡度 RE、走跑分開、下坡上限、越野技術係數），不是預測準確度。
+    強度之間的分段誤差差 ${pct1(cd.spread)}${cd.clear ? "（明顯）" : ""}；分強度擬合比合併擬合好的強度：${Object.entries(cd.class_model_better).filter(([, v]) => v).map(([k]) => CZ[k]).join("、") || "無"}。
+    走跑分開前後的時間 |誤差|：${pct1(T.models.no_gait.median_abs)} → ${pct1(T.models.gait.median_abs)}。</div>`;
+  // hike HR windows
+  const HH = R.hike_hr;
+  if (HH && HH.uses) {
+    const u = HH.uses;
+    h += `<h3>百岳的心率陡坡窗</h3><div class="note">跟團的總時間不用，但心率 ≥ AeT、速度 &gt; 1.5 km/h、連續 ≥ 300 m、坡度 ≥ 10 % 的爬升是你自己的努力：${HH.n} 個 100 m 窗（${HH.days} 天）。</div>
+      <ul class="meta"><li>VAM × 心率帶：n ${u.vam.n}（${esc(u.vam.evidence)}）</li>
+      <li>個人海拔係數：${u.altitude.enough ? `${spct(u.altitude.pct_per_km / 100)} / 1000 m（Wehrlin ${u.altitude.wehrlin_pct_per_km} %）` : "資料不足"}，n ${u.altitude.n}（${esc(u.altitude.evidence)}）</li>
+      <li>多日疲勞（同 VAM 的心率，第 n 天 − 第 1 天）：${(u.fatigue.days || []).map((d) => `第 ${d.day} 天 ${d.hr_shift_bpm >= 0 ? "+" : ""}${d.hr_shift_bpm.toFixed(1)} bpm（${d.trips} 趟）`).join("、") || "資料不足"}（${esc(u.fatigue.evidence)}）</li>
+      <li>步行模型的陡坡分箱：n ${u.walking.n}（${esc(u.walking.evidence)}）</li></ul>`;
+  }
+  h += `<details><summary>每一場（${R.rows.length}）</summary><div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>強度</th><th>活動</th><th class="n">實際移動</th><th class="n">地形誤差</th><th class="n">能力（模式 C）誤差</th><th class="n">努力度</th></tr></thead><tbody>` +
+    R.rows.map((x) => x.error ? `<tr><td>${esc(x.date)}</td><td>${esc(x.category)}</td><td></td><td>${esc(x.label)}</td><td colspan="4" class="meta">${esc(x.error)}</td></tr>` :
+      `<tr><td>${esc(x.date)}</td><td>${esc({ road: "路跑", trail: "越野", hike: "登山", test: "CP 測試" }[x.category])}${x.priority_a ? " A" : ""}${x.walk_heavy ? " 走" : ""}</td>
+      <td title="${esc(x.intensity_reason || "")}">${esc(CZ[x.intensity] || "–")}</td><td>${esc(x.label)}</td><td class="n">${hm(x.t_act)}</td>
+      <td class="n">${spct(x.err_v2)}</td><td class="n">${spct(x.err_c)}</td><td class="n">${x.f ? pct(x.f) : ""}</td></tr>`).join("") + `</tbody></table></div></details>`;
+  h += warnList(R.notes);
+  $("bt-body").innerHTML = h;
+}
+$("bt-run").onclick = async () => { try { await post(`${API}/backtest/run`, {}); } catch (e) { $("bt-meta").textContent = e.message; } renderBacktest(); };
+
+// ---------------- events: saved inputs + result per event (engine/race_calc_store.py) ----------------
+const ENV_IDS = ["f-alt", "f-t", "f-rh", "t-alt", "t-t", "t-rh"];
+function snapshot() {
+  const env = {};
+  ENV_IDS.forEach((id) => { if ($(id).classList.contains("ovr")) env[id] = $(id).value; });
+  return { v: 1, type, S: { ...S }, form: formValues(), ovr: { ...ovr }, prior: ls.get("prior", ""), stops: STOPS,
+    locks: LOCKS, terrain: TERRAIN, splits: SPLITS, course: COURSE, env, wx: WX, wx_key: WX_KEY };
+}
+function restore(x) {
+  if (!x || typeof x !== "object") return;
+  Object.keys(S).forEach((k) => delete S[k]);
+  Object.assign(S, { mode: "auto", tunit: "time", punit: "w", effort: 1, csrc: "manual", split: "grade", strategy: "even", amount: null,
+    measure: "pace", accl: null, hup: 5, hdown: 10, heatAccl: { mode: "auto", s: null }, trip: null, hrband: "aet" }, x.S || {});
+  setForm(x.form || {});
+  Object.keys(ovr).forEach((k) => delete ovr[k]); Object.assign(ovr, x.ovr || {});
+  ls.set("prior", x.prior ?? "");
+  STOPS = Array.isArray(x.stops) ? x.stops : parseStops($("stops").value); sortStops();
+  LOCKS = x.locks || {}; TERRAIN = x.terrain || {}; SPLITS = x.splits || [];
+  COURSE = x.course || null; ls.set("course", COURSE);
+  ENV_IDS.forEach((id) => { const v = (x.env || {})[id]; $(id).value = v ?? ""; $(id).classList.toggle("ovr", v != null && v !== ""); $(id).dataset.auto = v != null ? "0" : "1"; });
+  WX = x.wx || null; WX_KEY = x.wx_key || null;
+  // a forecast saved more than 6 h ago is fetched again (autoWeather)
+  if (!WX?.fetched_at || !(Date.now() - Date.parse(WX.fetched_at) < 6 * 3600e3)) WX_KEY = null;
+  if (WX?.values) {
+    $("to-badge").className = "badge good"; $("to-badge").textContent = WX.label || "";
+    if (!$("t-t").classList.contains("ovr")) $("t-t").value = WX.values.temp_c?.toFixed(1) ?? "";
+    if (!$("t-rh").classList.contains("ovr")) $("t-rh").value = WX.values.rh_pct != null ? Math.round(WX.values.rh_pct) : "";
+    if (!$("t-alt").classList.contains("ovr")) $("t-alt").value = S.csrc === "gpx" || WX.values.altitude_m == null ? "" : Math.round(WX.values.altitude_m);
+    $("wx-meta").textContent = WX.fetched_at ? T("env.fetched_at", { at: WX.fetched_at.slice(5, 16).replace("T", " ") }) : "";
+  } else { $("wx-meta").textContent = ""; }
+  saveForm(); saveUI();
+  setType(x.type || type); renderDayPlan(); renderStops(); syncForm();
+}
+let saveTimer = null;
+function saveEvent() {
+  const eid = $("event").value;
+  if (!eid || !PLAN) return;
+  clearTimeout(saveTimer);
+  const inputs = snapshot(), result = PLAN;
+  saveTimer = setTimeout(async () => {
+    try {
+      const r = await j(`${API}/saved/${encodeURIComponent(eid)}`, { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs, result }) });
+      if ($("event").value === eid) $("saved-line").textContent = "✓ " + T("saved", { at: (r.saved_at || "").slice(5, 16) });
+    } catch (e) { $("saved-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  }, 800);
+}
+const KIND = { race: "trail", road: "road", baiyue: "baiyue", other: "trail" };
+function applyEventDefaults(e) {
+  setType(KIND[e.kind] || "trail");
+  if (e.distance_km) $("dist").value = e.distance_km; if (e.climbing_m != null) $("gain").value = e.climbing_m;
+  $("days").value = e.days || 1; $("date").value = e.date; $("loss").value = "";
+  if (e.est_hours && type === "baiyue") $("target").value = hms(e.est_hours * 3600);
+  if (e.peak) { $("peak").value = e.peak.name; $("latlon").value = ""; }
+  if ((e.days || 1) > 1) $("tripdays").value = e.days;
+  renderDayPlan(); saveForm();
+}
+// choosing an event (or reopening the page with it): its saved inputs and last result come back;
+// a first visit takes the event's distance / date / place and its stored GPX
+async function chooseEvent(eid) {
+  ls.set("event", eid || "");
+  $("saved-line").textContent = "";
+  const e = (INP.events || []).find((x) => x.id === eid);
+  if (!e) { await run(); return; }
+  let saved = null;
+  try { saved = (await j(`${API}/saved/${encodeURIComponent(eid)}`)).saved; } catch { saved = null; }
+  if (saved?.inputs) {
+    restore(saved.inputs);
+    $("saved-line").textContent = "✓ " + T("restored", { at: (saved.saved_at || "").slice(5, 16) });
+    if (saved.result?.summary && saved.result?.v1) {
+      PLAN = saved.result; LAST = PLAN.v1;
+      try { renderAll(); } catch (err) { console.warn(err); }
+    }
+    // the event's GPX may have been replaced on the plan page: reload it, keeping the restored edits
+    if (S.csrc === "gpx" && COURSE?.event_id) await loadEventGpx(eid, true);
+    loadHeat(); autoWeather(); schedule();
+    return;
+  }
+  applyEventDefaults(e);
+  if (!(await loadEventGpx(e.id)) && S.csrc === "gpx") {
+    // no GPX stored with this event: its distance / climb (just filled in) are the course
+    COURSE = null; ls.set("course", null); S.csrc = "manual"; saveUI(); syncForm();
+  }
+  courseLine(); loadHeat(); autoWeather(); schedule();
+}
+function renderEvents() {
+  const ev = INP.events;
+  $("event").innerHTML = `<option value="">手動輸入${ev.length ? "（或從下面選賽季計畫的賽事）" : "（賽季計畫沒有未來的賽事）"}</option>` +
+    ev.map((e) => `<option value="${esc(e.id)}">${esc(e.date)} ${esc(e.name)}（${e.priority}）</option>`).join("");
+  $("event").onchange = () => chooseEvent($("event").value);
+}
+async function keyStatus() {
+  try { const s = await j(`${API}/weather/key`); $("cwastatus").textContent = s.configured ? `已設定 ${s.masked}（${s.source}）` : "未設定"; } catch {}
+}
+$("cwasave").onclick = async () => {
+  try { const s = await post(`${API}/weather/key`, { key: $("cwakey").value }); $("cwakey").value = "";
+    $("cwastatus").textContent = s.configured ? `已設定 ${s.masked}` : "已清除"; } catch (e) { $("cwastatus").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+};
+
+// ---------------- wiring ----------------
+function bindSeg(id, attr, key, cast = (x) => x, after) {
+  document.querySelectorAll(`#${id} button`).forEach((b) => b.onclick = () => { S[key] = cast(b.dataset[attr]); if (after) after(); syncForm(); schedule(); });
+}
+document.querySelectorAll("#type button").forEach((b) => b.onclick = () => { setType(b.dataset.t); schedule(); });
+document.querySelectorAll("[data-preset]").forEach((b) => b.onclick = () => applyPreset(PRESETS[b.dataset.preset]));
+bindSeg("mode", "m", "mode"); bindSeg("tunit", "u", "tunit"); bindSeg("punit", "u", "punit"); bindSeg("effort", "e", "effort", Number);
+bindSeg("csrc", "c", "csrc", (x) => x, () => { LOCKS = {}; }); bindSeg("split", "s", "split", (x) => x, () => { LOCKS = {}; });
+bindSeg("strategy", "k", "strategy", (x) => x, () => { S.amount = null; });
+document.querySelectorAll("#measure button").forEach((b) => b.onclick = () => { S.measure = b.dataset.m; saveUI(); if (PLAN) { renderProfile(); renderSegCompact(); } });
+bindSeg("accl", "a", "accl");
+bindSeg("tripkind", "k", "trip"); bindSeg("hrband", "b", "hrband");
+document.querySelectorAll("#heat-accl button").forEach((b) => b.onclick = () => {
+  S.heatAccl = { mode: b.dataset.h, s: b.dataset.h === "custom" ? (num("heat-s") ?? 50) / 100 : null };
+  if (b.dataset.h === "custom" && $("heat-s").value === "") $("heat-s").value = 50;
+  syncForm(); schedule(); });
+$("heat-s").addEventListener("input", () => { S.heatAccl = { mode: "custom", s: (num("heat-s") ?? 0) / 100 }; schedule(); });
+["tripdays", "packdays", "heatz"].forEach((id) => $(id).addEventListener("input", schedule));
+$("date").addEventListener("change", () => { loadHeat(); autoWeather(); });
+$("latlon").addEventListener("change", () => autoWeather());
+$("amount").addEventListener("input", () => { S.amount = Number($("amount").value); syncForm(); schedule(); });
+["hup", "hdown"].forEach((id) => $(id).addEventListener("input", () => { S[id] = num(id) ?? S[id]; schedule(); }));
+["dist", "gain", "loss", "date", "target", "tpace", "tpower", "tspeed", "pack", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"].forEach((id) => $(id).addEventListener("input", schedule));
+$("ptrain").addEventListener("change", schedule); $("hourlyheat").addEventListener("change", schedule);
+$("days").addEventListener("input", () => { renderDayPlan(); schedule(); });
+$("formula").addEventListener("change", () => { schedule(); if (INP) renderRE(); });
+$("peak").addEventListener("change", () => { const l = getLoc(); if (l?.elevation != null && !l.gpx && !$("t-alt").classList.contains("ovr")) { $("t-alt").value = Math.round(l.elevation); } schedule(); autoWeather(); });
+["f-alt", "f-t", "f-rh", "t-alt", "t-t", "t-rh"].forEach((id) => $(id).addEventListener("input", () => { $(id).dataset.auto = "0"; $(id).classList.toggle("ovr", $(id).value !== ""); renderEnvChips(); schedule(); }));
+$("wx").onclick = () => { ["t-t", "t-rh"].forEach((id) => $(id).classList.remove("ovr")); getWeather(); };
+$("env-edit").onclick = () => { const d = $("env-adv"); d.open = !d.open; if (d.open) d.scrollIntoView({ block: "nearest" }); };
+$("gpxfile").addEventListener("change", (e) => uploadGpx(e.target.files[0]));
+const drop = $("drop");
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); uploadGpx(e.dataTransfer.files[0]); });
+$("clearsplits").onclick = () => { SPLITS = []; saveEventSplits(); schedule(); };
+$("unlock").onclick = () => { LOCKS = {}; schedule(); };
+$("csv").onclick = csvExport;
+$("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
+// charts inside a closed <details> have no size: draw them when opened
+$("cp-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open && INP) renderCP(); });
+$("rg-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open && INP) renderRiegel(); });
+document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
+  const t = b.dataset.tab; segOn("tabs", "tab", t); ls.set("tab", t);
+  document.querySelectorAll(".tab-calc").forEach((e) => e.classList.toggle("hidden", t !== "calc" || (e.id === "profile-sec" && !PLAN?.segments?.length) || (e.id === "fuel-sec" && !PLAN?.fuel?.kcal_band) || (e.dataset.hide === "1")));
+  document.querySelectorAll(".tab-acc").forEach((e) => e.classList.toggle("hidden", t !== "acc"));
+  if (t === "acc") renderBacktest(); else setType(type);
+});
+
+(async function init() {
+  if (!loadForm()) { $("dist").value = 21.0975; $("gain").value = 0; }
+  const [ps, gb] = await Promise.all([j("/api/v1/wko5/primary-sport").catch(() => null), j(`${API}/goal-basis`).catch(() => null)]);
+  BASIS = gb;
+  SPORT = ps?.sport || "trail";
+  if (SPORT === "road" && type !== "road") { type = "road"; $("gain").value = 0; }
+  STOPS = parseStops($("stops").value); sortStops(); renderStops();
+  setType(type); syncForm();
+  keyStatus();
+  if (ls.get("tab", "calc") === "acc") document.querySelector('#tabs button[data-tab="acc"]').click();
+  j(`${API}/peaks`).then((r) => { PEAKS = r.peaks; $("peaklist").innerHTML = PEAKS.map((p) => `<option value="${esc(p.name)}">${p.elevation_m} m${p.baiyue ? " 百岳" : " 小百岳"}</option>`).join(""); }).catch(() => {});
+  try { INP = await j(`${API}/inputs`); }
+  catch (e) { $("results").innerHTML = `<h2>預估結果</h2><div class="err">讀取資料失敗：${esc(e.message)}</div>`; return; }
+  $("asof").textContent = `資料到 ${INP.today}`;
+  $("attrib").textContent = INP.training_conditions.attribution || "";
+  renderEvents(); renderHike(); renderRE(); renderEnvChips();
+  loadHikeMeta();
+  const ev0 = new URLSearchParams(location.search).get("event") || ls.get("event", "");   // ?event=<id>: a link to one event's plan
+  if (ev0 && (INP.events || []).some((e) => e.id === ev0)) { $("event").value = ev0; await chooseEvent(ev0); }
+  else { loadHeat(); autoWeather(); await run(); }
+})();
+</script>
+</body>
+</html>

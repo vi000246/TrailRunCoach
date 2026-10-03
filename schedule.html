@@ -1,0 +1,2658 @@
+<!doctype html>
+<html lang="zh-TW">
+<head><script>window.TRC_STATIC_CFG = {"snapshot": "2026-10-03", "today": "2026-10-03", "pages": {"/demo": "index.html", "/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html", "/api/v1/overview/plan/compliance/page": "compliance.html", "/api/v1/wko5/viewer": "charts.html", "/api/v1/plan/page": "plan.html", "/api/v1/wko5/activities/page": "activities.html", "/api/v1/routes/page": "routes.html", "/api/v1/racepower/page": "racepower.html", "/": "index.html", "/api/v1/achievements/page": "activities.html#achievements"}, "compute": "^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$", "locks": "#gpxpick, #evsubmit, #addphase, #savephases, #tomanual, #toauto, [data-del-event], [data-edit-event], #rec-btn, #pf-save, #pf-reset, #bo-save, #bo-del, #sd-swap, #vd button[data-vk], #gpxfile, #gpx-attach, #stop-import, input[type=file][accept*='.gpx' i]"};</script><script src="static/trc_static.js"></script><script>window.TRC_SESSION = {"mode": "demo", "static": true, "caps": ["plan.write"], "user": null, "demo": {"sandbox": false, "base": "2026-10-03-20261002", "expires_at": null, "reset": false, "cta_url": null, "static": true}};</script><script>window.__I18N__ = {"locale": "zh-TW", "debug": false, "catalog": {"common.z5flow.aria": "5 區開放流程", "common.z5flow.here": "你現在在這裡", "common.z5flow.next": "下一步", "common.z5flow.also": "同時可以做（{stage}）", "common.z5flow.help": "說明", "common.z5flow.ok": "已達成", "common.z5flow.todo": "還沒達成", "common.z5flow.unknown": "還沒做", "common.z5flow.unlocks": "完成後：", "common.z5flow.unlocked": "已解鎖：", "common.z5flow.tag.done": "已完成", "common.z5flow.tag.current": "現在", "common.z5flow.tag.parallel": "可同時做", "common.z5flow.tag.locked": "未解鎖", "common.workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標", "common.workout.no_tpace_badge": "沒有閾值配速", "common.workout.no_tpace_link": "看閾值配速怎麼估", "common.autoplan.log_title": "自動調整紀錄", "common.autoplan.log_count": "{n} 筆", "shell.brand": "訓練教練", "shell.brand.title": "回首頁", "shell.nav.label": "主選單", "shell.nav.item_title": "{name}：{purpose}", "shell.page.home.name": "總覽", "shell.page.home.short": "總覽", "shell.page.home.purpose": "狀況・待辦・本週課表", "shell.page.schedule.name": "課表", "shell.page.schedule.short": "課表", "shell.page.schedule.purpose": "日曆排課・同步 COROS", "shell.page.charts.name": "圖表分析", "shell.page.charts.short": "圖表", "shell.page.charts.purpose": "趨勢與單次活動圖表", "shell.page.activity.name": "活動列表", "shell.page.activity.short": "活動", "shell.page.activity.purpose": "搜尋・篩選・編輯・成就", "shell.page.injuries.name": "傷病紀錄", "shell.page.injuries.short": "傷病", "shell.page.injuries.purpose": "疼痛・受傷前的訓練", "shell.page.routes.name": "路線", "shell.page.routes.short": "路線", "shell.page.routes.purpose": "重複路段與路線的進步", "shell.page.plan.name": "賽事周期", "shell.page.plan.short": "周期", "shell.page.plan.purpose": "目標賽事・周期・門檻", "shell.page.racepower.name": "賽事計算機", "shell.page.racepower.short": "計算機", "shell.page.racepower.purpose": "完賽時間・分段配速／功率／心率・補給", "shell.page.settings.name": "設定", "shell.page.settings.short": "設定", "shell.page.settings.purpose": "計算模式・體重・資料校正", "shell.build.preparing": "正在準備資料…", "shell.build.elapsed": "已 {s} 秒", "shell.build.failed": "資料處理失敗：{error}", "shell.lang.title": "切換語言（Language）", "shell.lang.zh-TW": "中文", "shell.lang.en": "EN", "shell.nav.more": "更多", "shell.nav.more_title": "活動列表、路線、傷病紀錄、設定", "shell.demo.tag": "示範資料", "shell.demo.text": "這是虛構的跑者，你的修改只存在這個瀏覽器。", "shell.demo.try": "試試：", "shell.demo.try_schedule": "排課表", "shell.demo.try_race": "賽事計算機", "shell.demo.try_plan": "週期", "shell.demo.left_none": "還沒有修改", "shell.demo.left_h": "{h} 小時後清除", "shell.demo.left_m": "{m} 分鐘後清除", "shell.demo.left_title": "你的修改從第一次修改起保留 24 小時，之後自動回到原始示範資料", "shell.demo.reset": "重設示範", "shell.demo.reset_title": "清掉你的修改，回到原始示範資料", "shell.demo.reset_confirm": "清掉你在示範裡的所有修改？", "shell.demo.cta": "想用自己的資料？", "shell.demo.locked": "示範模式不提供這個功能", "shell.demo.disabled": "示範模式不提供這個功能", "shell.demo.static_text": "唯讀示範：虛構跑者的一年訓練。課表可以試著改，修改只存在這個瀏覽器。", "shell.demo.static_edits": "已修改課表", "shell.demo.static_none": "還沒有修改", "shell.demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改", "shell.demo.static_locked": "唯讀示範：這個操作在示範版不能用", "schedule.tabs.label": "課表檢視", "schedule.tabs.calendar": "日曆", "schedule.tabs.compliance": "課表統計", "schedule.ctx.edit": "編輯", "schedule.ctx.move": "移到…", "schedule.ctx.open": "查看", "schedule.ctx.del": "刪除", "schedule.ctx.del_expired": "刪除（過期未完成）", "schedule.ctx.day_title": "{day}（週{wd}）", "schedule.ctx.add": "新增課表", "schedule.ctx.rest": "設為休息日", "schedule.ctx.rest_sub": "不自動排課", "schedule.ctx.unrest": "取消休息日", "schedule.ctx.tests": "排入測試 ▸", "schedule.ctx.tests_sub": "{n} 個建議", "schedule.ctx.tests_no_day": "這天都不適合，點看原因", "schedule.tests.title": "排入測試", "schedule.tests.close": "關閉", "schedule.tests.loading": "讀取建議的測試…", "schedule.tests.none": "現在沒有建議的測試", "schedule.tests.pick": "選一個測試範本", "schedule.tests.rec": "推薦", "schedule.tests.go": "排入這天", "schedule.tests.not_this_day": "這天不能排：{why}", "schedule.tests.done": "已排入 {day}「{title}」", "schedule.del.title": "刪除這堂課", "schedule.del.body": "刪除 {day}「{title}」？自動排的課刪掉後，重排時不會再補回來。", "schedule.del.body_expired": "{day}「{title}」已經過期而且沒做。刪除後不會再出現在課表和達成率裡，自動調整也不會把它加回來；如果它還在手錶的行事曆上，會一起移除。", "schedule.del.ok": "刪除", "schedule.del.done": "已刪除「{title}」（{day}）", "schedule.del.what": "刪除", "schedule.del.confirm_expired": "確定刪除（也會從手錶移除）", "schedule.del.coros_ok": "，已從 {provider} 移除 {n} 堂", "schedule.del.coros_partial": "，已從 {provider} 移除 {n} 堂；{left} 堂 {provider} 上已標成完成，保留", "schedule.del.coros_later": "；{provider} 現在連不上（可能要重新登入），下次推送時會從手錶移除", "schedule.del_all.menu": "刪除所有過期未完成", "schedule.del_all.count": "{n} 堂", "schedule.del_all.none": "沒有", "schedule.del_all.title": "刪除所有過期未完成的課", "schedule.del_all.body": "過去日子裡沒做的課共 {n} 堂（未完成，或日期已過還沒配到活動）。刪除後不會再出現在課表和達成率裡，自動調整也不會把它們加回來；還在手錶行事曆上的會一起移除。已完成的課不受影響。", "schedule.del_all.ok": "刪除 {n} 堂", "schedule.del_all.working": "刪除過期未完成的課…", "schedule.del_all.done": "已刪除 {n} 堂過期未完成的課", "schedule.rest.working": "設定休息日、重排這週…", "schedule.rest.undo_working": "取消休息日、重排這週…", "schedule.rest.done": "{day}（週{wd}）設為休息日", "schedule.rest.undone": "已取消 {day}（週{wd}）的休息日", "schedule.rest.changes": "：課表 {n} 項變動", "schedule.rest.what": "設定休息日", "schedule.rest.undo_what": "取消休息日", "schedule.rest.chip": "休息日", "schedule.rest.chip_aria": "{day} 休息日，取消", "schedule.rest.chip_title": "休息日：這天不自動排課，這週的量排到其他天\n點一下或右鍵（長按）取消", "schedule.rest.day_tip": "{day}（週{wd}）　休息日\n右鍵（手機長按）可以取消", "schedule.rest.undo_title": "取消休息日", "schedule.rest.undo_body": "{day}（週{wd}）恢復照常排課？之後還沒做、你沒改過的課會依目前狀況重排。", "schedule.rest.legend": "休息日", "schedule.rest.legend_tip": "在空白的日子按右鍵（手機長按）→「設為休息日」：這天不自動排課。和「不排課日期」不同，這週的訓練量不會減少，而是排到同一週的其他天（長跑優先、強度課不相鄰，照原本的排課規則）。同一個選單可以取消。", "schedule.pd.label": "固定星期", "schedule.pd.auto": "自動（排課程式自己挑）", "schedule.pd.tip_aria": "固定星期的說明", "schedule.pd.tip": "想讓某種課固定在某幾天就加一列。沒加的課照預設規則排（長跑排你最常長跑的那天）。一天只能給一種課；可以選兩天的課，先點的是第一選擇。和預設規則衝突時會在那一列提醒。", "schedule.pd.add": "＋ 新增", "schedule.pd.kind.long": "LSD", "schedule.pd.kind.quality": "間歇", "schedule.pd.kind.aet_test": "AeT 測試", "schedule.pd.kind.cp_test": "CP 測試", "schedule.pd.kind.strides": "坡道衝刺／加速跑", "schedule.pd.kind_aria": "課的類型", "schedule.pd.taken": "已給 {kind}", "schedule.pd.del": "刪除「{kind}」這一列", "schedule.pd.pick": "點一天", "schedule.pd.pick2": "點一或兩天（先點的是第一選擇）", "schedule.pd.why": "為什麼", "schedule.pd.keep": "照我的偏好", "schedule.pd.rule": "規則：{rule}（{source}）", "schedule.pd.action": "不改的話：{action}", "schedule.pd.dropped": "{day}原本也給了{kind}；一天只能一種課，已從這裡拿掉", "schedule.pd.c.gap48": "{day}：離長跑太近", "schedule.pd.c.after_long": "{day}：長跑隔天", "schedule.pd.c.not_allowed": "{day}不是可練日", "schedule.pd.c.cap_long": "平日上限放不下長跑", "schedule.pd.c.z5_twice": "{day}：兩堂間歇太近", "schedule.pd.c.aet_weekday": "{day}：AeT 測試設成只排平日", "schedule.pd.c.aet_gap": "{day}：離長跑／間歇太近", "schedule.pf.btn": " 課表偏好", "schedule.pf.btn_title": "課表偏好：可練日、時間上限、課表內容、自動調整", "schedule.pf.title": "⚙ 課表偏好", "schedule.pf.title_tip": "只改自動產生、還沒做、你沒改過的課；存檔後先預覽變動再套用。", "schedule.pf.about": "說明", "schedule.pf.about_x": "{x} 的說明", "schedule.pf.close": "關閉", "schedule.pf.g.time": "每週時間", "schedule.pf.g.days": "偏好的星期", "schedule.pf.g.content": "課表內容／目標", "schedule.pf.g.auto": "自動調整", "schedule.pf.g.adv": "進階", "schedule.pf.days": "可練日", "schedule.pf.runs": "每週跑步", "schedule.pf.auto": "自動", "schedule.pf.custom": "自訂上限", "schedule.pf.u_times": "次", "schedule.pf.u_h": "小時", "schedule.pf.u_min": "分", "schedule.pf.u_days": "天", "schedule.pf.u_wk": "週", "schedule.pf.wh": "每週時數", "schedule.pf.wh_tip": "自動：照 CTL 爬升規則加量。\n自訂：每週最多幾小時。", "schedule.pf.cap_w": "平日單次上限", "schedule.pf.cap_l": "長跑日上限", "schedule.pf.no_cap": "不限", "schedule.pf.same_wd": "同平日", "schedule.pf.same_n": "同 {n}", "schedule.pf.cap_mode": "超過上限時", "schedule.pf.cap_mode_tip": "盡量不超過：放不下的量先加在長跑日。\n絕對不超過：放不下的量這週就少練，會提醒你。", "schedule.pf.soft": "盡量不超過", "schedule.pf.hard": "絕對不超過", "schedule.pf.quality": "每週品質課", "schedule.pf.quality_tip": "自動：最多 1 堂。基礎期什麼時候開始排，看「進階」的間歇門檻。", "schedule.pf.auto_q": "自動（最多 1）", "schedule.pf.strength": "每週肌力", "schedule.pf.sdays": "肌力排在", "schedule.pf.sdays_tip": "都不選＝跟輕鬆跑同一天。", "schedule.pf.basis": "目標依據", "schedule.pf.basis_tip": "課表的目標用心率還是功率。\n自動：路跑的輕鬆跑、長跑用功率，心率 ≤ AeT 當上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ AeT）；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。\n心率：全部用心率區間（Friel % LTHR，輕鬆跑上限 AeT）。\n功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。\n只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。", "schedule.pf.hr": "心率", "schedule.pf.power": "功率", "schedule.pf.t_easy": "輕鬆跑地形", "schedule.pf.t_long": "長跑地形", "schedule.pf.t_quality": "間歇地形", "schedule.pf.any": "都可", "schedule.pf.road": "路跑", "schedule.pf.trail": "越野跑", "schedule.pf.trail_hr": "越野（只看心率）", "schedule.pf.auto_race": "自動（依目標賽事）", "schedule.pf.flat": "平路間歇", "schedule.pf.hill": "爬坡間歇", "schedule.pf.auto_tip": "同步後依實際完成狀況調整之後的課。減量（疲勞保護、沒跑的課不補、輕鬆跑偏強後縮短）直接套用並推送；你改過的課、自己加的課、不排課日期都不會動。這一區跟著「儲存」一起存；「立即重算」會先存這一區再跑。", "schedule.pf.ap_run": "立即重算", "schedule.pf.ap_enabled": "同步後自動調整", "schedule.pf.ap_push": "自動推送到手錶", "schedule.pf.ap_days": "推送範圍", "schedule.pf.ap_big": "大變動先等我確認", "schedule.pf.ap_big_tip": "大變動先等你同意，手錶維持原本的課（門檻推估）：", "schedule.pf.ap_notify": "待確認通知", "schedule.pf.ap_watch": "手錶", "schedule.pf.ap_overview": "只在總覽頁", "schedule.pf.ap_login": "登入 COROS 後可以自動推到手錶", "schedule.pf.ap_save_err": "自動調整設定沒存成功：{msg}", "schedule.pf.ap_run_err": "重算失敗：{msg}", "schedule.pf.gate": "間歇門檻", "schedule.pf.gate.auto": "自動", "schedule.pf.gate.ua_gap": "UA 差距", "schedule.pf.gate.friel_drift": "Friel 飄移", "schedule.pf.gate.xu_drift": "90′ 長跑", "schedule.pf.gate.plateau": "有氧停滯", "schedule.pf.gate.weeks": "週數", "schedule.pf.gate.none": "不設門檻", "schedule.pf.gate_loading": "你現在的資料：讀取中…", "schedule.pf.gate_na": "你現在的資料：算不出來", "schedule.pf.gate_ok": "你現在的資料：✓ 可以用——{why}", "schedule.pf.gate_no": "你現在的資料：✗ 還不能用——{why}", "schedule.pf.gate_weeks": "週數法：基礎期滿", "schedule.pf.warmup": "間歇暖身：市區段", "schedule.pf.warmup_tip": "暖身裡一定要跑的輕鬆跑（例如從家裡跑到間歇地點），間歇課表不會砍這段。", "schedule.pf.cooldown": "間歇緩和", "schedule.pf.cooldown_tip": "跑回家的話設 10。", "schedule.pf.cp": "CP 測試方式", "schedule.pf.cpp.quick": "快速 20′", "schedule.pf.cpp.standard": "標準 12′＋3′", "schedule.pf.cpp.race": "用比賽", "schedule.pf.cpp_tip.quick": "20 分全力。約 37 分；CP ≈ 0.95 × 20 分功率，誤差約 ±3%，不測 W′。", "schedule.pf.cpp_tip.standard": "12 分＋休 30 分＋3 分。約 70 分；兩點 CP＋W′，最準，休息不能縮短。", "schedule.pf.cpp_tip.race": "5–10 K 比賽或計時跑。不另外排；Riegel 換算（外插），不測 W′。", "schedule.pf.aet": "AeT 測試方式", "schedule.pf.aet_tip": "「測試方式」決定排什麼、怎麼判讀；「間歇門檻」決定什麼時候開 5 區。90′ 長跑測試排在週末長跑日（台灣教練），其他方式照「AeT 排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。", "schedule.pf.aetp.auto": "自動", "schedule.pf.aetp.xu90": "90′ 長跑", "schedule.pf.aetp.ua60": "UA 60′", "schedule.pf.aetp.ua40": "UA 40′", "schedule.pf.aetp.evoke60": "Evoke 60′", "schedule.pf.aetp.friel": "Friel 1 h", "schedule.pf.aet_days": "AeT 排在", "schedule.pf.aet_days_tip": "平日：週一到週五。\n同間歇：週二優先，週末也可以。", "schedule.pf.weekday": "平日", "schedule.pf.like_q": "同間歇", "schedule.pf.b2b": "建議 B2B 長天", "schedule.pf.b2b_tip": "連續兩天長天。只在專項期、多日或 ≥ 6 小時的 A 賽事前、恢復週後的第一個加量週建議；不會自動排進課表，要在建議框挑連續兩天按「排入」。排入後那兩天是你自己的課，自動調整不會動它們；刪掉其中一天就整組取消。", "schedule.pf.heat": "熱適應課", "schedule.pf.est": "推估", "schedule.pf.heat_tip": "開：只在 30 天內有熱天 A / B 賽時自動排。比賽前 21–8 天誘導（5–10 天）、前 7–3 天每 4 天維持一次；熱適應跑需要 ≥ 60 分鐘（Racinais 2015），不受單次上限；上限設「絕對不超過」時改成跑 40 分＋熱水浴（Zurawlew 2016）。熱水浴 / 桑拿不推到 COROS，做完請在課表打勾。", "schedule.pf.heat_m": "熱適應方式", "schedule.pf.heat_m_tip": "熱天輕鬆跑：60 分、心率 ≤ AeT。\n多穿衣服跑：涼爽天用。\n熱水浴：跑後 40 °C ≤ 40 分。\n桑拿：跑後約 30 分。\n輪流：跑步與熱水浴交替。", "schedule.pf.hm.run": "熱天輕鬆跑 60 分", "schedule.pf.hm.overdress": "多穿衣服跑", "schedule.pf.hm.bath": "跑後熱水浴", "schedule.pf.hm.sauna": "跑後桑拿", "schedule.pf.hm.mixed": "跑步與熱水浴輪流", "schedule.pf.heat_now": "目前熱適應 S {s} %（{level}）", "schedule.pf.reset": "恢復預設", "schedule.pf.cancel": "取消", "schedule.pf.save": "儲存並預覽重排", "schedule.pf.load_what": "讀取課表偏好", "schedule.pf.saved_conflicts": "已儲存。上面有偏好和預設規則衝突：勾「照我的偏好」再按一次儲存，或直接再按儲存讓課表照規則移動。", "schedule.pf.rc_title": "依新的課表偏好重排", "schedule.pf.rc_intro": "偏好已儲存。下面是之後還沒做、你沒改過的自動課會怎麼變；你改過或自己加的課不會動。", "schedule.pf.rc_cancel": "偏好已儲存，課表還沒重排——之後按「依實際進度重排」就會套用", "schedule.pf.e.no_day": "至少要有一天可以練", "schedule.pf.e.runs_days": "每週跑步次數 {runs} 比可練日（{n} 天）多", "schedule.pf.e.quality_runs": "品質課次數要比每週跑步次數少", "schedule.pf.e.cap_w": "平日單次上限要在 20–300 分", "schedule.pf.e.cap_l": "長跑日上限要在 20–600 分", "schedule.pf.e.cap_lw": "長跑日上限不能比平日上限短", "schedule.pf.e.wh": "每週時數上限要在 1–40 小時", "schedule.pf.e.gate_weeks": "週數法的週數要在 2–16 週", "schedule.pf.e.push_days": "推送範圍要在 1–14 天", "schedule.tabs.calendar_sub": "每天排了什麼課", "schedule.tabs.compliance_sub": "計畫 vs 實際、負荷"}};</script><script src="static/i18n/i18n.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>課表</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+  --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
+  --cell: #ffffff; --out: #f7f7f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+    --cell: #1a1a19; --out: #151514;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+  --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+  --cell: #1a1a19; --out: #151514;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+.num { font-variant-numeric: tabular-nums; }
+.err { color: var(--bad); }
+.ok { color: var(--good); }
+main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+
+/* kind + phase palettes */
+.k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); }
+.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); }
+.heat-tag { display: inline-block; margin-right: 3px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px;
+  background: color-mix(in srgb, var(--hi) 25%, transparent); color: var(--hi); font-weight: 700; }
+.ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); }
+.ph-event { --ph: var(--hi); } .ph-recovery { --ph: var(--s3); } .ph-transition { --ph: var(--s7); } .ph-none { --ph: var(--line); }
+
+/* ---- buttons ---- */
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px;
+  padding: 5px 12px; cursor: pointer; font-size: 13px; line-height: 1.3; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn:hover { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.btn:focus-visible, .chip:focus-visible, .dnum:focus-visible, .add:focus-visible, .menu button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn.danger { color: var(--bad); }
+.btn.danger.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.icon { padding: 5px 9px; }
+.btn small { font-weight: 400; opacity: .85; font-size: 11.5px; }
+.seg { display: inline-flex; }
+.seg button { border: 1px solid var(--line); background: var(--panel); padding: 4px 12px; cursor: pointer; margin-left: -1px; font-size: 13px; }
+.seg button:first-child { border-radius: 7px 0 0 7px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 7px 7px 0; }
+.seg button[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); }
+
+/* ---- header: title + calendar navigation ---- */
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.calnav h1 { font-size: 19px; margin: 0 6px 0 0; font-weight: 700; letter-spacing: .01em; }
+.calnav .navbtns { display: inline-flex; gap: 4px; }
+.spacer { flex: 1; }
+
+/* ---- sync toolbar ---- */
+.sync { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; display: grid; gap: 6px; }
+.sync .bar { gap: 8px; }
+.split { display: inline-flex; position: relative; }
+.split > .btn:first-child { border-radius: 7px 0 0 7px; }
+.split > .caret { border-radius: 0 7px 7px 0; border-left: 1px solid color-mix(in srgb, #fff 35%, var(--accent)); padding: 5px 8px; }
+.menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; min-width: 230px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 9px; box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 5px; display: grid; }
+.menu.right { left: auto; right: 0; }
+.menu[hidden] { display: none; }
+.menu button { border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 6px; cursor: pointer;
+  display: flex; justify-content: space-between; gap: 16px; font-size: 13px; }
+.menu button:hover:not([disabled]), .menu button:focus-visible { background: var(--soft); }
+.menu button[disabled] { color: var(--faint); cursor: default; }
+.menu button .meta { font-size: 12px; }
+.menu .menu-h { font-size: 11.5px; color: var(--faint); padding: 6px 10px 2px; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; width: 100%; }
+.more { position: relative; }
+.status { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12.5px; color: var(--muted); }
+.status b { color: var(--text); font-weight: 600; }
+.status .warn b { color: var(--watch); } .status .bad b { color: var(--bad); }
+#sync-msg { font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+#sync-msg:empty { display: none; }
+#sync-msg ul { margin: 2px 0 0; padding-left: 18px; width: 100%; }
+.spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: sp .8s linear infinite; display: inline-block; }
+@keyframes sp { to { transform: rotate(360deg); } }
+.login { color: var(--watch); border-color: color-mix(in srgb, var(--watch) 45%, var(--line)); }
+
+/* ---- calendar (month + week) ---- */
+.calwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; position: relative; }
+.calwrap.loading::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--panel) 45%, transparent); }
+.cal { --sumw: 150px; display: grid; }
+.cal-head, .wk { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) var(--sumw); }
+.cal-head div { font-size: 12px; color: var(--muted); padding: 7px 8px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.cal-head div.we { color: var(--faint); }
+.cal-head div:last-child { border-left: 1px solid var(--line); }
+.wk { border-bottom: 1px solid var(--line); position: relative; }
+.wk:last-child { border-bottom: 0; }
+.wk::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--ph); z-index: 1; }
+.wk.prov .cell { background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--line) 45%, transparent) 9px 10px); }
+.cell { background: var(--cell); min-height: 118px; padding: 4px 5px 6px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px;
+  position: relative; min-width: 0; cursor: default; }
+.cell:first-child { border-left: 0; padding-left: 9px; }
+.cell.can { cursor: copy; }
+.cell.out { background: var(--out); }
+/* past days: quietly different — a faint wash, muted date, no add cursor (only what was done shows) */
+.cell.past, .ag-day.past { background: color-mix(in srgb, var(--out) 70%, var(--cell)); cursor: default; }
+.cell.past .dnum, .ag-day.past .d { color: var(--faint); }
+.cell.past .chip:not(.st-done) { opacity: .75; }
+.cell.out .dnum { color: var(--faint); }
+.cell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.cell.drop { background: color-mix(in srgb, var(--accent) 12%, var(--cell)); outline: 2px dashed var(--accent); outline-offset: -3px; }
+/* 不排課日期: a faint diagonal hatch (45°, so it reads apart from the 135° provisional hatch) + a label chip, no ＋ */
+.wk .cell.bo, .ag-day.bo { background-color: color-mix(in srgb, var(--out) 55%, var(--cell));
+  background-image: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--faint) 22%, transparent) 6px 7px); }
+.wk.prov .cell.bo { background-image: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--faint) 22%, transparent) 6px 7px),
+  repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--line) 45%, transparent) 9px 10px); }
+.cell.bo .dnum, .ag-day.bo .d { color: var(--faint); }
+.bo-chip { margin-left: auto; min-width: 0; max-width: 100%; border: 1px solid color-mix(in srgb, var(--faint) 45%, transparent); background: var(--panel);
+  color: var(--muted); border-radius: 9px; padding: 0 7px; font-size: 10.5px; line-height: 17px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bo-chip:hover { color: var(--text); border-color: var(--faint); }
+.bo-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ag-day .bo-chip { margin: 0 0 3px; align-self: flex-start; font-size: 12px; line-height: 20px; }
+.cell.rng, .ag-day.rng { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent);
+  background-color: color-mix(in srgb, var(--accent) 9%, var(--cell)); }
+/* no text selection only while a day range is being dragged */
+.cal.ranging { user-select: none; -webkit-user-select: none; }
+.legend .bo-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--line);
+  background: repeating-linear-gradient(45deg, var(--cell) 0 3px, color-mix(in srgb, var(--faint) 45%, var(--cell)) 3px 4px); }
+/* 休息日 (kind rest): a plain soft-green wash with a dotted outline, no hatch — the day off you chose */
+.wk .cell.bo.rest-d, .ag-day.bo.rest-d { background-image: none; background-color: color-mix(in srgb, var(--s3) 9%, var(--cell));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s3) 35%, transparent); }
+.wk .cell.bo.rest-d.sel, .ag-day.bo.rest-d.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.bo-chip.rest { color: color-mix(in srgb, var(--s3) 75%, var(--text)); border-color: color-mix(in srgb, var(--s3) 45%, transparent); font-weight: 600; }
+.legend .rest-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px;
+  background: color-mix(in srgb, var(--s3) 20%, var(--cell)); border: 1px solid color-mix(in srgb, var(--s3) 45%, transparent); }
+/* right-click / long-press menu */
+.menu.ctx { position: fixed; top: 0; left: 0; z-index: 60; min-width: 200px; }
+.menu.ctx button.danger { color: var(--bad); }
+.menu.ctx button.muted { color: var(--muted); }
+/* 排入測試 picker */
+#tp { width: min(520px, 96vw); }
+#tp > .dh { padding: 14px 16px 0; }
+.tp-body { display: grid; gap: 10px; padding: 10px 16px 16px; max-height: calc(100vh - 120px); overflow: auto; }
+.tp-opt { border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; display: grid; gap: 6px; }
+.tp-opt.off { background: color-mix(in srgb, var(--out) 60%, var(--panel)); }
+.tp-opt.off .tp-l b { color: var(--muted); }
+.tp-tpls { display: grid; gap: 2px; }
+.tp-t { display: flex; gap: 8px; align-items: flex-start; padding: 4px 6px; border-radius: 7px; cursor: pointer; font-size: 13px; }
+.tp-t:has(input:checked) { background: var(--soft); }
+dialog.sd label.tp-t { display: flex; flex-direction: row; color: var(--text); font-size: 13px; }
+dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
+.tp-tt { font-weight: 600; }
+.tp-src { display: block; font-size: 11.5px; }
+.tp-act { display: flex; gap: 8px; align-items: center; }
+.tp-why { font-size: 12.5px; }
+/* page switch 日曆 | 課表統計: the chart viewer's 趨勢 / 單次活動 mode cards (wko5_viewer.html .modesw),
+   same look in compliance.html: icon + title + one line, the current one filled dark orange */
+.modesw { display: inline-flex; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px;
+  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; text-decoration: none; text-align: left;
+  padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
+.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
+.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
+.modesw .mcard:active { transform: translateY(1px); }
+.modesw .mcard[aria-current="page"] { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff; box-shadow: 0 3px 8px rgba(143,63,10,.35); }
+.modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
+.modesw .mcard[aria-current="page"] small { opacity: .85; }
+.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+.chg .dec { display: inline-flex; flex-wrap: wrap; gap: 2px 10px; margin-left: 4px; }
+.chg .dec label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); }
+.chg .dec input { width: auto; margin: 0; }
+.cell-top { display: flex; align-items: center; gap: 4px; min-height: 22px; }
+.dnum { border: 0; background: none; padding: 0 5px; min-width: 24px; height: 22px; border-radius: 11px; font-size: 12.5px; font-weight: 600;
+  color: var(--text); cursor: pointer; font-variant-numeric: tabular-nums; }
+.dnum:hover { background: var(--soft); }
+.cell.today .dnum { background: var(--accent); color: #fff; }
+.cell .phl { font-size: 10.5px; color: var(--ph); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.add { margin-left: auto; border: 1px solid transparent; background: none; width: 22px; height: 22px; border-radius: 6px; color: var(--faint);
+  cursor: pointer; font-size: 15px; line-height: 1; opacity: 0; }
+.cell:hover .add, .add:focus-visible, .ag-day .add { opacity: 1; }
+.add:hover { color: var(--accent); border-color: var(--line); background: var(--panel); }
+@media (hover: none) { .add { opacity: 1; } }
+.chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+
+.chip { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 4px; align-items: center; text-align: left;
+  width: 100%; border: 0; border-left: 3px solid var(--k); border-radius: 5px; padding: 2px 5px 3px 6px; cursor: pointer;
+  background: color-mix(in srgb, var(--k) 13%, var(--cell)); color: var(--text); font-size: 11.5px; line-height: 1.3; min-width: 0; }
+.chip:hover { background: color-mix(in srgb, var(--k) 22%, var(--cell)); }
+.chip .c-t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .c-r { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; }
+.chip .c-m { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .c-x { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip[draggable="true"] { cursor: grab; }
+.chip.dragging { opacity: .4; }
+.chip.st-done { background: color-mix(in srgb, var(--k) 24%, var(--cell)); }
+.chip.st-done .c-t::before { content: "✓ "; color: var(--cpc, var(--k)); font-weight: 800; }
+/* compliance: green ±20 %, yellow 20–50 %, red > 50 % or wrong type (engine/compliance.py) */
+.cp-green { --cpc: var(--good); } .cp-yellow { --cpc: var(--watch); } .cp-red { --cpc: var(--bad); }
+.chip.st-done[class*="cp-"] { background: color-mix(in srgb, var(--cpc) 15%, var(--cell)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cpc) 45%, transparent); }
+.chip.st-done[class*="cp-"]:hover { background: color-mix(in srgb, var(--cpc) 24%, var(--cell)); }
+.cpw { font-weight: 700; color: var(--cpc, var(--text)); }
+.chip.st-missed { background: none; border-left-color: color-mix(in srgb, var(--k) 40%, var(--line)); color: var(--faint); }
+.chip.st-missed .c-t { text-decoration: line-through; font-weight: 500; }
+.chip.st-missed .c-r::before { content: "未完成"; color: var(--bad); text-decoration: none; font-size: 10px; }
+.chip.prov { background: color-mix(in srgb, var(--k) 6%, var(--cell)); border-left-style: dashed; }
+.chip.prov .c-t { font-weight: 500; }
+.chip.act { --k: var(--bar); cursor: default; background: none; border: 1px solid var(--line); border-left: 3px solid var(--k); }
+.chip.act .c-t { font-weight: 500; }
+.chip.act .c-t::before { content: "● "; color: var(--k); }
+
+/* COROS sync state icon on a chip */
+.sy { display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; flex: none; }
+.sy svg { width: 13px; height: 13px; }
+.sy-ok { color: var(--good); } .sy-warn { color: var(--watch); } .sy-bad { color: var(--bad); } .sy-none { color: var(--faint); }
+
+/* week summary column */
+.sum { border-left: 1px solid var(--line); padding: 6px 9px; display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; background: color-mix(in srgb, var(--ph) 5%, var(--panel)); min-width: 0; }
+.php { align-self: flex-start; font-size: 11px; font-weight: 700; color: var(--ph); border: 1px solid color-mix(in srgb, var(--ph) 45%, transparent);
+  background: color-mix(in srgb, var(--ph) 10%, transparent); border-radius: 9px; padding: 0 7px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.sum .r { display: flex; justify-content: space-between; gap: 4px; color: var(--muted); }
+.sum .r b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.trk { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.trk i { display: block; height: 100%; background: var(--ph); border-radius: 3px; }
+.sum .tag { font-size: 10.5px; color: var(--faint); }
+
+/* week view: same grid, one tall row with more detail */
+.cal.week .cell { min-height: 420px; }
+.cal.week .chip { padding: 5px 6px 6px 8px; font-size: 12.5px; }
+.cal.week .chip .c-t { white-space: normal; }
+.cal.week .chip .c-x { white-space: normal; font-size: 11.5px; }
+.cal.week .chip .c-m, .ag-day .chip .c-m { font-size: 11.5px; }
+.cal.week .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 11px; margin-top: 2px; white-space: normal; }
+
+/* agenda (phones) */
+.agenda { display: grid; }
+.ag-sum { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ph) 6%, var(--panel)); font-size: 12.5px; border-left: 4px solid var(--ph); }
+.ag-sum b { font-variant-numeric: tabular-nums; }
+.ag-day { display: grid; grid-template-columns: 52px minmax(0, 1fr) 36px; gap: 8px; padding: 9px 10px 9px 12px; border-bottom: 1px solid var(--line); align-items: start; }
+.ag-day:last-child { border-bottom: 0; }
+.ag-day .d { font-size: 12px; color: var(--muted); line-height: 1.25; }
+.ag-day .d b { display: block; font-size: 17px; color: var(--text); font-variant-numeric: tabular-nums; }
+.ag-day.today .d b { color: var(--accent); }
+.ag-day.sel { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.ag-day.drop { background: color-mix(in srgb, var(--accent) 12%, var(--panel)); }
+.ag-day .chip { font-size: 13px; padding: 5px 8px 6px; }
+.ag-day .chip .c-x { font-size: 12px; white-space: normal; }
+.ag-day .rest { color: var(--faint); font-size: 12.5px; padding-top: 4px; }
+.ag-day .add { opacity: 1; width: 32px; height: 32px; border-color: var(--line); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
+.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--k); margin-right: 5px; vertical-align: -1px; }
+.legend .sy { vertical-align: -2px; margin-right: 3px; }
+
+/* glossary hover (AeT / CP) */
+.term { position: relative; border-bottom: 1px dotted currentColor; cursor: help; }
+.term:hover::after, .term.open::after, .term:focus::after { content: attr(data-tip); position: absolute; top: 1.5em; left: 0; z-index: 50; width: max-content;
+  max-width: min(320px, 80vw); white-space: pre-line; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 10px; font-size: 12px; font-weight: 400; line-height: 1.5; box-shadow: 0 6px 18px rgba(0,0,0,.18); text-decoration: none; }
+
+/* ---- dialogs ---- */
+dialog.sd { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--text); padding: 0; width: min(460px, 94vw);
+  box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+dialog.sd::backdrop { background: rgba(0,0,0,.35); }
+dialog.sd form { padding: 14px 16px 14px; display: grid; gap: 9px; }
+dialog.sd .dh { display: flex; align-items: flex-start; gap: 8px; }
+dialog.sd h3 { margin: 0; font-size: 16px; }
+dialog.sd .dh .meta { display: block; font-size: 12px; }
+dialog.sd .x { margin-left: auto; border: 0; background: none; font-size: 18px; line-height: 1; color: var(--faint); cursor: pointer; padding: 2px 4px; border-radius: 5px; }
+dialog.sd .x:hover { color: var(--text); }
+dialog.sd label { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
+dialog.sd input, dialog.sd select, dialog.sd textarea { font-size: 14px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; width: 100%; }
+dialog.sd input:focus, dialog.sd textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 0; }
+dialog.sd input:disabled, dialog.sd textarea:disabled { opacity: .75; }
+dialog.sd .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+dialog.sd .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; align-items: center; }
+dialog.sd .err { font-size: 12.5px; }
+dialog.sd .err:empty { display: none; }
+.kinds { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.kinds legend { font-size: 12.5px; color: var(--muted); padding: 0; margin-bottom: 3px; }
+.kinds label { display: inline-flex !important; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 14px; padding: 3px 10px 3px 8px;
+  cursor: pointer; font-size: 13px !important; color: var(--text) !important; }
+.kinds label::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--k); }
+.kinds input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+.kinds label:has(input:checked) { border-color: var(--k); background: color-mix(in srgb, var(--k) 15%, transparent); font-weight: 600; }
+.kinds label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kinds label:has(input:disabled) { cursor: default; }
+.kinds label[hidden] { display: none !important; }
+dialog.sd input.locked { background: var(--soft); color: var(--muted); cursor: pointer; }
+.hint { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.hint button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12px; }
+.done-box { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
+/* planned vs actual (engine/plan_match.py) */
+.vs-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vs { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
+.vs dt { color: var(--muted); font-size: 12px; } .vs dd { margin: 0; overflow-wrap: anywhere; }
+.vs dd.off { color: var(--watch); font-weight: 600; }
+.offp { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: var(--watch);
+  border: 1px solid color-mix(in srgb, var(--watch) 45%, transparent); border-radius: 999px; padding: 0 7px; }
+.chip .offp-i { color: var(--watch); font-weight: 800; font-size: 11px; }
+.vs-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.vs-act select { max-width: 100%; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+button.chip.act { cursor: pointer; }
+button.chip.act:hover { background: color-mix(in srgb, var(--k) 10%, var(--cell)); }
+/* interval library: editor templates + the 換一個 drawer (engine/interval_library.py) */
+.var-box { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.var-box select { width: 100%; }
+.var-cur { font-size: 12.5px; color: var(--muted); }
+/* 固定星期: one row per session type (type, weekday chips, 🗑), its conflict hints under it */
+.pd-head .btn.sm { padding: 3px 10px; font-size: 12.5px; margin-left: auto; }
+.pd-list { display: grid; gap: 6px; }
+.pd-list:empty { display: none; }
+.pd-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 0; }
+dialog.sd .pd-row select { width: auto; max-width: 100%; padding: 4px 8px; font-size: 13px; }
+.pd-chips { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.pdc { position: relative; width: 32px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel);
+  color: var(--muted); font-size: 13px; cursor: pointer; padding: 0; }
+.pdc[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.pdc[aria-disabled="true"] { opacity: .35; cursor: not-allowed; text-decoration: line-through; }
+.pdc:focus-visible, .pd-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pdc sup { position: absolute; top: 1px; right: 3px; font-size: 9px; font-weight: 600; line-height: 1; }
+.pd-del { margin-left: auto; border: 0; background: none; cursor: pointer; font-size: 15px; padding: 2px 6px; border-radius: 6px; color: var(--muted); }
+.pd-del:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.pd-w { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12.5px; color: var(--watch, #b45309); }
+.pd-w label.chk { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.pd-hint { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.pd-chips { order: 1; } .pd-del { order: 2; } .pd-w, .pd-hint { order: 4; }
+@media (max-width: 520px) { .pdc { width: 30px; } dialog.sd .pd-row select { flex: 1 1 0; min-width: 0; } .pd-chips { order: 3; flex-basis: 100%; } }
+.pf-dw { display: grid; gap: 6px; }
+.pf-dw .w { border: 1px solid var(--watch, #b45309); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; }
+.pf-dw .w .m { color: var(--muted); }
+.steps-prev { margin: 0; padding: 0; list-style: none; font-size: 12.5px; font-variant-numeric: tabular-nums; display: grid; gap: 2px; }
+.var-cur b { color: var(--text); }
+.vd-g { margin: 12px 0 4px; font-size: 13px; }
+.vd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.vd-list li { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: start; }
+.vd-list li.cur { border-color: var(--accent); }
+.vd-list li.off { opacity: .55; }
+.vd-list .t { font-weight: 600; font-size: 13.5px; }
+.vd-list .m { grid-column: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.vd-list .c { grid-column: 1 / -1; font-size: 12px; }
+.vd-list .c.neq { color: var(--warn, #b45309); }
+.vd-list button { grid-column: 2; grid-row: 1 / span 2; }
+.chg { margin: 0; padding-left: 18px; font-size: 13px; max-height: 50vh; overflow: auto; display: grid; gap: 3px; }
+.chg .add-c { color: var(--good); } .chg .rm-c { color: var(--bad); } .chg .ch-c { color: var(--watch); }
+.cf-body { font-size: 13.5px; display: grid; gap: 6px; }
+.cf-body .big { font-size: 15px; }
+
+.pnotes { margin: 0; padding: 7px 12px 7px 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; display: grid; gap: 2px; }
+.pnotes li.watch { color: var(--watch); }
+.pnotes .wk-l { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.pnotes button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
+.tsug { display: grid; gap: 6px; }
+.tsug-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: space-between; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; font-size: 13px; }
+.tsug-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* ---- 自動調整 (autoplan.js) ---- */
+.adapt-note { color: #b36b00; }
+.chip.k-notice { border-style: dashed; opacity: .85; }
+/* ---- 課表偏好 dialog ---- */
+dialog.sd.wide { width: min(580px, 96vw); }
+dialog.sd form { max-height: calc(100vh - 40px); overflow: auto; }
+dialog.sd .eq select { width: auto; max-width: 100%; padding: 4px 8px; }
+dialog.sd input[type="checkbox"], dialog.sd input[type="radio"] { width: auto; }
+/* sections: a short heading, then one setting per line (label · ? · control on the right) */
+#pf { width: min(540px, 96vw); }
+#pf form { gap: 4px; }
+.pf-ttl { display: flex; align-items: center; gap: 2px; }
+.pf-g { display: grid; padding: 8px 0 6px; border-top: 1px solid var(--line); min-width: 0; }
+.pf-g h4 { display: flex; align-items: center; gap: 4px; margin: 0 0 2px; font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--faint); min-height: 26px; }
+.pf-g h4 .btn.sm { margin-left: auto; padding: 2px 10px; font-size: 12px; letter-spacing: 0; text-transform: none; }
+.pf-g h4 .meta { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.pf-g h4 .qtip { text-transform: none; letter-spacing: 0; }
+.pf-r { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 38px; padding: 3px 0; font-size: 13.5px; min-width: 0; }
+dialog.sd .pf-l { display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; color: var(--text); }
+.pf-c { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+dialog.sd .pf-c select { width: auto; max-width: 100%; padding: 5px 8px; font-size: 13.5px; }
+.pf-r .u { color: var(--muted); font-size: 12.5px; }
+.stp-w .u { align-self: center; padding-right: 2px; white-space: nowrap; }
+.stp-w input:placeholder-shown + .u { display: none; }
+.pf-wide { display: grid; gap: 6px; }
+.pf-wide .gopts { margin-left: 0; }
+.pf-st:empty { display: none; }
+.pf-st { font-size: 12px; padding-bottom: 4px; }
+/* number stepper: − [n] + (the − below min clears a nullable one to its placeholder: 不限 / 同平日) */
+.stp { display: inline-flex; align-items: center; gap: 6px; }
+.stp-w { display: inline-flex; align-items: stretch; width: 136px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--bg); }
+dialog.sd .stp-w input[type="number"] { flex: 1 1 0; min-width: 0; width: auto; border: 0; border-radius: 0; padding: 4px 2px; text-align: center; background: none;
+  -moz-appearance: textfield; font-variant-numeric: tabular-nums; }
+.stp-w input::-webkit-outer-spin-button, .stp-w input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stp-w button { width: 30px; border: 0; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 0; }
+.stp-w button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--text); }
+.stp-w button:disabled { opacity: .35; cursor: default; background: none; }
+.stp-w:focus-within { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+dialog.sd .stp-w input:focus { outline: 0; }
+.stp-w:has(input:disabled) { opacity: .5; }
+/* switch */
+dialog.sd input.sw { appearance: none; -webkit-appearance: none; width: 38px; height: 22px; padding: 0; margin-left: auto; border-radius: 999px;
+  border: 0; background: color-mix(in srgb, var(--faint) 55%, var(--line)); position: relative; cursor: pointer; flex: none; transition: background .15s; }
+dialog.sd input.sw::before { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+dialog.sd input.sw:checked { background: var(--accent); }
+dialog.sd input.sw:checked::before { transform: translateX(16px); }
+dialog.sd input.sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 進階: collapsed */
+.pf-adv > summary { list-style: none; cursor: pointer; }
+.pf-adv > summary::-webkit-details-marker { display: none; }
+.pf-adv > summary h4::after { content: "▸"; margin-left: 4px; font-size: 11px; }
+.pf-adv[open] > summary h4::after { content: "▾"; }
+#pf .tseg label { padding: 4px 10px; font-size: 13px !important; flex: none; }
+#pf .tseg label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff !important; }
+#pf .daychk label { width: 32px; height: 30px; }
+dialog.sd label.rb { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-size: 13px; cursor: pointer; }
+.daychk { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+dialog.sd .daychk label { display: inline-grid; place-items: center; width: 34px; height: 30px; border: 1px solid var(--line); border-radius: 7px;
+  cursor: pointer; font-size: 13px; color: var(--muted); position: relative; }
+.daychk input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+dialog.sd .daychk label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.daychk label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* 間歇門檻 options: a chip per mode, the explanation behind its ? (engine/quality_gate.py) */
+.gopts { display: inline-flex; flex-wrap: wrap; gap: 5px 4px; min-width: 0; }
+.gopt { display: inline-flex; align-items: center; }
+dialog.sd .gopt label { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 14px; padding: 3px 9px;
+  cursor: pointer; font-size: 12.5px; color: var(--text); position: relative; }
+.gopt input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+dialog.sd .gopt label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.gopt label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gopt.off label { color: var(--muted); border-style: dashed; }
+/* ? hover (tap on touch): a fixed popup so the dialog's scroll box never clips it (ported from the viewer) */
+.qtip { display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0; margin: 0 2px 0 3px; border-radius: 50%;
+  border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; flex: none; }
+.qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
+
+/* ---- same-load conversion (session dialog) ---- */
+.eq { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 9px; padding: 6px 11px 10px; margin: 0;
+  display: grid; gap: 8px; background: color-mix(in srgb, var(--accent) 4%, var(--panel)); min-width: 0; }
+.eq .eq-fold > summary { font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 2px 0; }
+.eq .eq-fold[open] > summary { margin-bottom: 6px; }
+.tseg { display: flex; }
+.tseg label { flex: 1; display: flex !important; justify-content: center; align-items: center; border: 1px solid var(--line); margin-left: -1px;
+  padding: 5px 8px; cursor: pointer; font-size: 13px !important; color: var(--text) !important; position: relative; background: var(--panel); }
+.tseg label:first-child { border-radius: 7px 0 0 7px; margin-left: 0; }
+.tseg label:last-child { border-radius: 0 7px 7px 0; }
+.tseg input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
+.tseg label:has(input:checked) { background: var(--text); color: var(--bg) !important; border-color: var(--text); font-weight: 600; }
+.tseg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 1; }
+dialog.sd input[type="range"] { padding: 0; border: 0; background: none; accent-color: var(--accent); height: 22px; }
+dialog.sd .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+dialog.sd label.chk { display: flex; align-items: center; gap: 6px; color: var(--text); font-size: 13px; align-self: end; padding-bottom: 7px; cursor: pointer; }
+.eq-sum { font-size: 13.5px; font-weight: 600; }
+.eq-sum .d { font-weight: 700; }
+.eq-sum .up { color: var(--watch); } .eq-sum .down { color: var(--accent); } .eq-sum .same { color: var(--good); }
+.badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 7px; border: 1px solid currentColor; vertical-align: 1px; }
+.badge.est { color: var(--watch); } .badge.fit { color: var(--good); }
+dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.warn { color: var(--watch); font-size: 12.5px; }
+.warn:empty { display: none; }
+
+/* ---- phones: agenda list, stacked toolbar ---- */
+@media (max-width: 699px) {
+  main { padding: 10px 10px 24px; gap: 8px; }
+  .calnav h1 { font-size: 17px; }
+  #view-seg { display: none; }
+  .sync { padding: 8px 10px; }
+  #phase-now { display: none; }
+  .calnav .navbtns { margin-left: auto; }
+  .split, #login-link { flex: 1 1 auto; min-width: 0; }
+  .split > .btn:first-child { flex: 1; justify-content: center; min-width: 0; overflow: hidden; }
+  #login-link { justify-content: center; white-space: normal; }
+  .status { flex-basis: 100%; }
+  .calwrap, .sync { max-width: 100%; }
+  #rec-btn .lbl-long, #pf-btn .lbl-long { display: none; }
+  dialog.sd form { max-height: 92vh; }
+  dialog.sd .row3 { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .menu { min-width: min(260px, 88vw); }
+  .legend { font-size: 11.5px; }
+  dialog.sd { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 14px 14px 0 0; max-height: 92vh; }
+}
+@media (min-width: 700px) { #rec-btn .lbl-short { display: none; } }
+@media (max-width: 1000px) and (min-width: 700px) { .cal { --sumw: 112px; } .cell { min-height: 104px; } .chip .c-x { display: none; } }
+</style>
+</head>
+<body>
+<script src="static/shell.js" data-page="schedule"></script>
+<main>
+  <nav class="modesw" data-i18n-attr="aria-label:schedule.tabs.label" aria-label="課表檢視">
+    <a class="mcard" href="schedule.html" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span><b data-i18n="schedule.tabs.calendar">日曆</b><small data-i18n="schedule.tabs.calendar_sub">每天排了什麼課</small></span></a>
+    <a class="mcard" href="compliance.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
+      <span><b data-i18n="schedule.tabs.compliance">課表統計</b><small data-i18n="schedule.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
+  </nav>
+  <div class="bar calnav">
+    <h1 id="cal-label">課表</h1>
+    <span class="navbtns">
+      <button class="btn icon" id="prev" type="button" aria-label="上個月">‹</button>
+      <button class="btn" id="go-today" type="button">今天</button>
+      <button class="btn icon" id="next" type="button" aria-label="下個月">›</button>
+    </span>
+    <span class="spacer"></span>
+    <span class="meta" id="phase-now"></span>
+    <div class="seg" id="view-seg" role="group" aria-label="檢視">
+      <button type="button" data-view="month" aria-pressed="true">月</button><button type="button" data-view="week" aria-pressed="false">週</button>
+    </div>
+  </div>
+
+  <section class="sync" aria-label="同步到 COROS">
+    <div class="bar main">
+      <div class="split" id="push-split">
+        <button class="btn primary" id="push-main" type="button">同步到 COROS <small id="push-main-sub"></small></button>
+        <button class="btn primary caret" id="push-caret" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="push-menu" aria-label="選擇同步範圍">▾</button>
+        <div class="menu" id="push-menu" role="menu" aria-label="同步範圍" hidden>
+          <button type="button" role="menuitem" data-scope="day">這一天 <span class="meta" id="pm-day">先點選日曆上的一天</span></button>
+          <button type="button" role="menuitem" data-scope="week">這一週 <span class="meta" id="pm-week"></span></button>
+          <button type="button" role="menuitem" data-scope="phase">整個周期 <span class="meta" id="pm-phase"></span></button>
+        </div>
+      </div>
+      <a class="btn login" id="login-link" href="/api/v1/wko5/settings" hidden>COROS 未登入 · 到設定頁登入 →</a>
+      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成未完成，之後的課重排（你改過的保留）">
+        <span class="lbl-long">依實際進度重排</span><span class="lbl-short">重排</span></button>
+      <button class="btn" id="pf-btn" type="button" title="課表偏好：可練日、時間上限、課表內容、自動調整" data-i18n-attr="title:schedule.pf.btn_title" aria-haspopup="dialog">⚙<span class="lbl-long" data-i18n="schedule.pf.btn"> 課表偏好</span></button>
+      <div class="more">
+        <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
+        <div class="menu right" id="more-menu" role="menu" aria-label="更多" hidden>
+          <button type="button" role="menuitem" data-act="blackout">🏖 設定不排課日期 <span class="meta">連假、出遊</span></button>
+          <button type="button" role="menuitem" data-act="del-expired"><span data-i18n="schedule.del_all.menu">刪除所有過期未完成</span> <span class="meta" id="dx-n"></span></button>
+          <hr>
+          <div class="menu-h">從 COROS 移除（只動這裡推送過的）</div>
+          <button type="button" role="menuitem" data-unpush="day">這一天 <span class="meta" id="um-day"></span></button>
+          <button type="button" role="menuitem" data-unpush="week">這一週 <span class="meta" id="um-week"></span></button>
+          <button type="button" role="menuitem" data-unpush="phase">整個周期 <span class="meta" id="um-phase"></span></button>
+          <hr>
+          <button type="button" role="menuitem" data-act="refresh">重新整理</button>
+        </div>
+      </div>
+      <span class="status" id="sync-status" aria-live="polite"></span>
+    </div>
+    <div id="sync-msg" role="status" aria-live="polite"></div>
+  </section>
+
+  <div id="autoplan" data-limit="5" data-log="collapsible" style="margin-bottom:8px"></div>
+  <script src="static/autoplan.js" defer></script>
+  <script src="static/session_banner.js" defer></script>
+  <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
+  <div class="tsug" id="tsug" aria-label="建議的測試" hidden></div>
+  <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
+  <div class="legend" id="legend"></div>
+</main>
+
+<dialog class="sd" id="ad" aria-labelledby="ad-h">
+  <div class="dh"><div><h3 id="ad-h">沒排課的活動</h3><span class="meta" id="ad-sub"></span></div>
+    <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+  <div class="done-box" id="ad-body"></div>
+</dialog>
+
+<dialog class="sd" id="sd" aria-labelledby="sd-h">
+  <form id="sd-form" novalidate>
+    <div class="dh"><div><h3 id="sd-h">新增課表</h3><span class="meta" id="sd-sub"></span></div>
+      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="done-box" id="sd-done" hidden></div>
+    <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
+    <div class="var-box" id="sd-tb">
+      <!-- the structured editor (static/workout_editor.js, engine/workout_steps.py): chart, steps, per-step targets
+           (each step picks power / HR / pace; 自動 steps follow target_policy by session type), watch preview -->
+      <div id="sd-we"></div>
+    </div>
+    <div class="var-box" id="sd-test" hidden>
+      <div class="row2">
+        <label>哪一種測試<select id="sd-tkind"><option value="">先選…</option><option value="cp">CP 測試</option><option value="aet">AeT 測試</option></select></label>
+        <label>方式<select id="sd-tproto" disabled><option value="">先選測試</option></select></label>
+      </div>
+      <div class="hint" id="sd-tinfo"></div>
+    </div>
+    <div class="var-box" id="sd-var" hidden>
+      <!-- the old 間歇範本 dropdown is gone: 結構 › 插入範本 lists the same ladder sessions, its
+           推薦 block puts the one the planner would pick first (engine/template_recs.py) -->
+      <div class="var-cur" id="sd-var-cur"></div>
+      <button class="btn" type="button" id="sd-swap" hidden>換一個（同等課表）</button>
+    </div>
+    <div class="row2">
+      <label>日期<input type="date" name="day" required></label>
+      <label><span><span id="sd-min-lbl">分鐘</span><button type="button" class="qtip" id="sd-min-q" aria-label="說明" data-tip="" hidden>?</button></span><input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
+    </div>
+    <div class="hint" id="sd-tss" aria-live="polite"></div>
+    <fieldset class="eq" id="sd-eq" hidden>
+      <details class="eq-fold" id="sd-eq-fold"><summary>地形與同負荷換算</summary>
+      <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形">
+        <label><input type="radio" name="terrain" value="road">路跑</label><label><input type="radio" name="terrain" value="trail">越野跑</label>
+      </div>
+      <label>爬升比例 <span><b id="eq-d-v" class="num">0</b> m/km</span>
+        <input type="range" id="eq-d" min="0" max="150" step="5" value="0" aria-describedby="eq-sum"></label>
+      <div class="hint eq-grade" id="eq-grade" aria-live="polite"></div>
+      <div class="hint" id="eq-goal-row"><button type="button" id="eq-goal"></button></div>
+      <div class="row3">
+        <label>距離 km<input type="number" id="eq-km" min="0" max="500" step="0.1" inputmode="decimal"></label>
+        <label>爬升 m<input type="number" id="eq-gain" min="0" max="20000" step="10" inputmode="numeric"></label>
+        <label>TSS<input type="number" id="eq-tss" min="0" max="2000" step="1" inputmode="numeric"></label>
+      </div>
+      <div class="row2">
+        <label>改其他欄位時固定<select id="eq-lock"><option value="time">鎖時間</option><option value="tss">鎖 TSS</option><option value="dist">鎖距離</option></select></label>
+        <label class="chk"><input type="checkbox" id="eq-free">完全自由調整</label>
+      </div>
+      <div class="eq-sum" id="eq-sum" aria-live="polite"></div>
+      <div class="warn" id="eq-warn" role="status"></div>
+      <div class="hint" id="eq-note"></div>
+      </details>
+    </fieldset>
+    <label>標題<input name="title" required maxlength="200" autocomplete="off"></label>
+    <label>目標<input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; AeT"></label>
+    <div class="hint" id="sd-tgt"></div>
+    <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
+    <div class="hint" id="sd-gl"></div>
+    <p class="meta faint" style="margin:0" id="sd-q" hidden></p>
+    <div class="err" id="sd-err" role="alert"></div>
+    <div class="btns">
+      <button class="btn danger" type="button" id="sd-del">刪除</button>
+      <button class="btn" type="button" id="sd-push">推送這天到 COROS</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close id="sd-cancel">取消</button>
+      <button class="btn primary" type="submit" id="sd-save">儲存</button>
+    </div>
+  </form>
+</dialog>
+<script src="static/workout_editor.js"></script>
+
+<!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
+<dialog class="sd wide" id="vd" aria-labelledby="vd-h">
+  <div class="dh"><div><h3 id="vd-h">換一個課表 <button type="button" class="qtip" id="vd-tip" aria-label="說明" data-tip="">?</button></h3><span class="meta" id="vd-sub"></span></div>
+    <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+  <p class="meta" id="vd-rec"></p>
+  <h4 class="vd-g">同等（不影響進階）</h4>
+  <ul class="vd-list" id="vd-eq"></ul>
+  <h4 class="vd-g">不同等（會影響進階）</h4>
+  <ul class="vd-list" id="vd-ot"></ul>
+  <div class="err" id="vd-err" role="alert"></div>
+</dialog>
+
+<dialog class="sd wide" id="pf" aria-labelledby="pf-h">
+  <form id="pf-form" novalidate>
+    <div class="dh"><div class="pf-ttl"><h3 id="pf-h" data-i18n="schedule.pf.title">⚙ 課表偏好</h3>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.title_tip" aria-label="說明"
+          data-tip="只改自動產生、還沒做、你沒改過的課；存檔後先預覽變動再套用。">?</button></div>
+      <button class="x" type="button" data-close data-i18n-attr="aria-label:schedule.pf.close" aria-label="關閉">✕</button></div>
+
+    <section class="pf-g" aria-labelledby="pf-g1"><h4 id="pf-g1" data-i18n="schedule.pf.g.time">每週時間</h4>
+      <div class="pf-r"><span class="pf-l" id="pf-days-l" data-i18n="schedule.pf.days">可練日</span>
+        <span class="pf-c daychk" id="pf-days" role="group" aria-labelledby="pf-days-l"></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-runs" data-i18n="schedule.pf.runs">每週跑步</label>
+        <span class="pf-c"><select id="pf-runs" name="runs"><option value="" data-i18n="schedule.pf.auto">自動</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-whm" data-i18n="schedule.pf.wh">每週時數</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.wh_tip" aria-label="說明" data-tip="自動：照 CTL 爬升規則加量。
+自訂：每週最多幾小時。">?</button>
+        <span class="pf-c"><select id="pf-whm" name="wh_mode"><option value="auto" data-i18n="schedule.pf.auto">自動</option><option value="custom" data-i18n="schedule.pf.custom">自訂上限</option></select>
+          <span class="stp" id="pf-wh-stp"><input type="number" name="weekly_hours" min="1" max="40" step="0.5" data-start="6" inputmode="decimal" data-i18n-attr="aria-label:schedule.pf.wh" aria-label="每週時數"><span class="u" data-i18n="schedule.pf.u_h">小時</span></span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-capw" data-i18n="schedule.pf.cap_w">平日單次上限</label>
+        <span class="pf-c stp"><input id="pf-capw" type="number" name="cap_weekday" min="20" max="300" step="5" data-start="60" data-null placeholder="不限" data-i18n-attr="placeholder:schedule.pf.no_cap" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-capl" data-i18n="schedule.pf.cap_l">長跑日上限</label>
+        <span class="pf-c stp"><input id="pf-capl" type="number" name="cap_long" min="20" max="600" step="5" data-start="120" data-null placeholder="同平日" data-i18n-attr="placeholder:schedule.pf.same_wd" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-capm-l" data-i18n="schedule.pf.cap_mode">超過上限時</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.cap_mode_tip" aria-label="說明"
+          data-tip="盡量不超過：放不下的量先加在長跑日。
+絕對不超過：放不下的量這週就少練，會提醒你。">?</button>
+        <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-capm-l"><label><input type="radio" name="cap_mode" value="soft"><span data-i18n="schedule.pf.soft">盡量不超過</span></label><label><input type="radio" name="cap_mode" value="hard"><span data-i18n="schedule.pf.hard">絕對不超過</span></label></span></div>
+    </section>
+
+    <section class="pf-g" aria-labelledby="pf-g2"><h4 id="pf-g2" class="pd-head"><span data-i18n="schedule.pf.g.days">偏好的星期</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pd.tip_aria;data-tip:schedule.pd.tip" aria-label="固定星期的說明"
+          data-tip="想讓某種課固定在某幾天就加一列。沒加的課照預設規則排（長跑排你最常長跑的那天）。一天只能給一種課；可以選兩天的課，先點的是第一選擇。和預設規則衝突時會在那一列提醒。">?</button>
+        <span class="meta" id="pf-pd-auto" data-i18n="schedule.pd.auto">自動（排課程式自己挑）</span>
+        <button type="button" class="btn sm" id="pf-pd-add" data-i18n="schedule.pd.add">＋ 新增</button></h4>
+      <div class="pd-list" id="pf-pdays" aria-live="polite"></div>
+      <div class="pf-dw" id="pf-dw" aria-live="polite"></div>
+    </section>
+
+    <section class="pf-g" aria-labelledby="pf-g3"><h4 id="pf-g3" data-i18n="schedule.pf.g.content">課表內容／目標</h4>
+      <div class="pf-r"><label class="pf-l" for="pf-q" data-i18n="schedule.pf.quality">每週品質課</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.quality_tip" aria-label="說明" data-tip="自動：最多 1 堂。基礎期什麼時候開始排，看「進階」的間歇門檻。">?</button>
+        <span class="pf-c"><select id="pf-q" name="quality"><option value="" data-i18n="schedule.pf.auto_q">自動（最多 1）</option><option>0</option><option>1</option><option>2</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-st" data-i18n="schedule.pf.strength">每週肌力</label>
+        <span class="pf-c"><select id="pf-st" name="strength"><option value="" data-i18n="schedule.pf.auto">自動</option><option>0</option><option>1</option><option>2</option><option>3</option></select></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-sdays-l" data-i18n="schedule.pf.sdays">肌力排在</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.sdays_tip" aria-label="說明" data-tip="都不選＝跟輕鬆跑同一天。">?</button>
+        <span class="pf-c daychk" id="pf-sdays" role="group" aria-labelledby="pf-sdays-l"></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-tb-l" data-i18n="schedule.pf.basis">目標依據</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.basis_tip" aria-label="說明" data-tip="課表的目標用心率還是功率。
+自動：路跑的輕鬆跑、長跑用功率，心率 ≤ AeT 當上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ AeT）；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
+心率：全部用心率區間（Friel % LTHR，輕鬆跑上限 AeT）。
+功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
+只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
+        <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-te" data-i18n="schedule.pf.t_easy">輕鬆跑地形</label>
+        <span class="pf-c"><select id="pf-te" name="terrain_easy"><option value="any" data-i18n="schedule.pf.any">都可</option><option value="road" data-i18n="schedule.pf.road">路跑</option><option value="trail" data-i18n="schedule.pf.trail_hr">越野（只看心率）</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-tl" data-i18n="schedule.pf.t_long">長跑地形</label>
+        <span class="pf-c"><select id="pf-tl" name="terrain_long"><option value="auto" data-i18n="schedule.pf.auto_race">自動（依目標賽事）</option><option value="road" data-i18n="schedule.pf.road">路跑</option><option value="trail" data-i18n="schedule.pf.trail">越野跑</option></select></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-tq" data-i18n="schedule.pf.t_quality">間歇地形</label>
+        <span class="pf-c"><select id="pf-tq" name="terrain_quality"><option value="any" data-i18n="schedule.pf.any">都可</option><option value="flat" data-i18n="schedule.pf.flat">平路間歇</option><option value="hill" data-i18n="schedule.pf.hill">爬坡間歇</option></select></span></div>
+    </section>
+
+    <section class="pf-g" aria-labelledby="pf-g4"><h4 id="pf-g4"><span data-i18n="schedule.pf.g.auto">自動調整</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.auto_tip" aria-label="說明"
+          data-tip="同步後依實際完成狀況調整之後的課。減量（疲勞保護、沒跑的課不補、輕鬆跑偏強後縮短）直接套用並推送；你改過的課、自己加的課、不排課日期都不會動。這一區跟著「儲存」一起存；「立即重算」會先存這一區再跑。">?</button>
+        <button type="button" class="btn sm" id="ap-run" data-i18n="schedule.pf.ap_run">立即重算</button></h4>
+      <div class="pf-r"><label class="pf-l" for="ap-en" data-i18n="schedule.pf.ap_enabled">同步後自動調整</label>
+        <input type="checkbox" class="sw pf-c" id="ap-en" name="ap_enabled" role="switch"></div>
+      <div class="pf-r ap-co"><label class="pf-l" for="ap-pu" data-i18n="schedule.pf.ap_push">自動推送到手錶</label>
+        <input type="checkbox" class="sw pf-c" id="ap-pu" name="ap_push" role="switch"></div>
+      <div class="pf-r ap-co"><label class="pf-l" for="ap-pd" data-i18n="schedule.pf.ap_days">推送範圍</label>
+        <span class="pf-c stp"><input id="ap-pd" type="number" name="ap_push_days" min="1" max="14" step="1" data-start="7" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_days">天</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="ap-cb" data-i18n="schedule.pf.ap_big">大變動先等我確認</label>
+        <button type="button" class="qtip" id="ap-big-q" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.ap_big_tip" aria-label="說明"
+          data-tip="大變動先等你同意，手錶維持原本的課（門檻推估）：">?</button>
+        <input type="checkbox" class="sw pf-c" id="ap-cb" name="ap_confirm_big" role="switch"></div>
+      <div class="pf-r ap-co"><label class="pf-l" for="ap-nt" data-i18n="schedule.pf.ap_notify">待確認通知</label>
+        <span class="pf-c"><select id="ap-nt" name="ap_notify"><option value="watch" data-i18n="schedule.pf.ap_watch">手錶</option><option value="overview" data-i18n="schedule.pf.ap_overview">只在總覽頁</option></select></span></div>
+      <div class="pf-r ap-nc meta" data-i18n="schedule.pf.ap_login">登入 COROS 後可以自動推到手錶</div>
+      <div class="err" id="ap-err" role="alert"></div>
+    </section>
+
+    <details class="pf-g pf-adv" id="pf-adv"><summary><h4 data-i18n="schedule.pf.g.adv">進階</h4></summary>
+      <div class="pf-r pf-wide"><span class="pf-l" id="pf-gate-l" data-i18n="schedule.pf.gate">間歇門檻</span>
+        <span class="gopts" id="pf-gate" role="radiogroup" aria-labelledby="pf-gate-l"></span></div>
+      <div class="pf-r" id="pf-gw-row"><label class="pf-l" for="pf-gw" data-i18n="schedule.pf.gate_weeks">週數法：基礎期滿</label>
+        <span class="pf-c stp"><input id="pf-gw" type="number" name="quality_gate_weeks" min="2" max="16" step="1" data-start="8" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_wk">週</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-wu" data-i18n="schedule.pf.warmup">間歇暖身：市區段</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.warmup_tip" aria-label="說明" data-tip="暖身裡一定要跑的輕鬆跑（例如從家裡跑到間歇地點），間歇課表不會砍這段。">?</button>
+        <span class="pf-c stp"><input id="pf-wu" type="number" name="warmup_commute_min" min="0" max="30" step="1" data-start="10" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r"><label class="pf-l" for="pf-cd" data-i18n="schedule.pf.cooldown">間歇緩和</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.cooldown_tip" aria-label="說明" data-tip="跑回家的話設 10。">?</button>
+        <span class="pf-c stp"><input id="pf-cd" type="number" name="cooldown_min" min="0" max="20" step="1" data-start="5" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>
+      <div class="pf-r pf-wide" id="pf-cpt"><span class="pf-l" id="pf-cpt-l" data-i18n="schedule.pf.cp">CP 測試方式</span>
+        <span class="gopts" id="pf-cptp" role="radiogroup" aria-labelledby="pf-cpt-l"></span></div>
+      <div class="pf-r pf-wide" id="pf-aet"><span class="pf-l" id="pf-aetp-l"><span data-i18n="schedule.pf.aet">AeT 測試方式</span>
+          <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.aet_tip" aria-label="說明" data-tip="「測試方式」決定排什麼、怎麼判讀；「間歇門檻」決定什麼時候開 5 區。90′ 長跑測試排在週末長跑日（台灣教練），其他方式照「AeT 排在」。只在需要時才排：聚合估計不準、有偏移、約 6 週沒有可判讀的跑步，或停跑 ≥ 4 週後（推估）。氣溫 25 °C 以下時開始。">?</button></span>
+        <span class="gopts" id="pf-aetp" role="radiogroup" aria-labelledby="pf-aetp-l"></span></div>
+      <div class="pf-r"><span class="pf-l" id="pf-aetd-l" data-i18n="schedule.pf.aet_days">AeT 排在</span>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.aet_days_tip" aria-label="說明" data-tip="平日：週一到週五。
+同間歇：週二優先，週末也可以。">?</button>
+        <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-aetd-l"><label><input type="radio" name="aet_test_days" value="weekday"><span data-i18n="schedule.pf.weekday">平日</span></label><label><input type="radio" name="aet_test_days" value="any"><span data-i18n="schedule.pf.like_q">同間歇</span></label></span></div>
+      <div class="pf-r" id="pf-b2b"><label class="pf-l" for="pf-b2bx" data-i18n="schedule.pf.b2b">建議 B2B 長天</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.b2b_tip" aria-label="說明" data-tip="連續兩天長天。只在專項期、多日或 ≥ 6 小時的 A 賽事前、恢復週後的第一個加量週建議；不會自動排進課表，要在建議框挑連續兩天按「排入」。排入後那兩天是你自己的課，自動調整不會動它們；刪掉其中一天就整組取消。">?</button>
+        <input type="checkbox" class="sw pf-c" id="pf-b2bx" name="b2b" role="switch"></div>
+      <div class="pf-r" id="pf-heat"><label class="pf-l" for="pf-heatx"><span data-i18n="schedule.pf.heat">熱適應課</span> <span class="badge watch" data-i18n="schedule.pf.est">推估</span></label>
+        <button type="button" class="qtip" id="pf-heat-q" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_tip" aria-label="說明" data-tip="開：只在 30 天內有熱天 A / B 賽時自動排。比賽前 21–8 天誘導（5–10 天）、前 7–3 天每 4 天維持一次；熱適應跑需要 ≥ 60 分鐘（Racinais 2015），不受單次上限；上限設「絕對不超過」時改成跑 40 分＋熱水浴（Zurawlew 2016）。熱水浴 / 桑拿不推到 COROS，做完請在課表打勾。">?</button>
+        <input type="checkbox" class="sw pf-c" id="pf-heatx" name="heat" role="switch"></div>
+      <div class="pf-r"><label class="pf-l" for="pf-hm" data-i18n="schedule.pf.heat_m">熱適應方式</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_m_tip" aria-label="說明" data-tip="熱天輕鬆跑：60 分、心率 ≤ AeT。
+多穿衣服跑：涼爽天用。
+熱水浴：跑後 40 °C ≤ 40 分。
+桑拿：跑後約 30 分。
+輪流：跑步與熱水浴交替。">?</button>
+        <span class="pf-c"><select id="pf-hm" name="heat_method">
+          <option value="run" data-i18n="schedule.pf.hm.run">熱天輕鬆跑 60 分</option><option value="overdress" data-i18n="schedule.pf.hm.overdress">多穿衣服跑</option>
+          <option value="bath" data-i18n="schedule.pf.hm.bath">跑後熱水浴</option><option value="sauna" data-i18n="schedule.pf.hm.sauna">跑後桑拿</option><option value="mixed" data-i18n="schedule.pf.hm.mixed">跑步與熱水浴輪流</option></select></span></div>
+      <div class="meta pf-st" id="pf-heat-s"></div>
+    </details>
+
+    <div class="err" id="pf-err" role="alert"></div>
+    <div class="btns">
+      <button class="btn" type="button" id="pf-reset" data-i18n="schedule.pf.reset">恢復預設</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close data-i18n="schedule.pf.cancel">取消</button>
+      <button class="btn primary" type="submit" id="pf-save" data-i18n="schedule.pf.save">儲存並預覽重排</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sd" id="bo" aria-labelledby="bo-h">
+  <form id="bo-form" novalidate>
+    <div class="dh"><div><h3 id="bo-h">🏖 設定不排課日期</h3><span class="meta">這幾天不排任何課，本週目標時數跟著減少；套用前會先預覽哪些課會移動或取消</span></div>
+      <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <div class="row2">
+      <label>開始<input type="date" name="start" required></label>
+      <label>結束<input type="date" name="end" required></label>
+    </div>
+    <label>說明（選填）<input name="label" maxlength="30" autocomplete="off" placeholder="例：連假出遊"></label>
+    <div class="hint" id="bo-sum" aria-live="polite"></div>
+    <p class="meta faint" style="margin:0">小技巧：在日曆上拖曳選取幾天，或點一天再按住 Shift 點另一天，也能直接設定</p>
+    <div class="err" id="bo-err" role="alert"></div>
+    <div class="btns">
+      <button class="btn danger" type="button" id="bo-del">移除這段</button>
+      <span class="spacer"></span>
+      <button class="btn" type="button" data-close>取消</button>
+      <button class="btn primary" type="submit" id="bo-save">預覽變動</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="sd" id="cf" aria-labelledby="cf-h">
+  <form method="dialog">
+    <div class="dh"><h3 id="cf-h"></h3><button class="x" value="cancel" aria-label="關閉">✕</button></div>
+    <div class="cf-body" id="cf-body"></div>
+    <div class="btns"><span class="spacer"></span><button class="btn" value="cancel" id="cf-no">取消</button><button class="btn primary" value="ok" id="cf-ok">確定</button></div>
+  </form>
+</dialog>
+
+<script>
+const PAPI = "/api/v1/overview/plan";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// glossary: AeT / CP terms get a hover (tap on touch) explanation — same text as the overview page
+const GLOSS = {
+  "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
+    "怎麼測（心率飄移測試）：\n" +
+    "1. 平路環線或跑步機 2–3%（不要山路），< 25 °C，先暖身 15 分鐘\n" +
+    "2. 從你猜的 AeT 心率起跑，固定功率跑 60 分鐘（至少 45 分），中途不停、不加速；補給和咖啡因照平常\n" +
+    "3. 比較前半與後半的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
+    "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
+  "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
+    "怎麼測（課表偏好選一種）：\n" +
+    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分；CP ≈ 0.95 × 20 分平均功率\n" +
+    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分；" +
+    "CP = (12 分功率×720 − 3 分功率×180) ÷ 540，W′ = (3 分功率 − CP) × 180\n" +
+    "• 用比賽：5–10 K 比賽或計時跑，以 30 分為錨點換算\n" +
+    "測完在活動判讀卡按「套用這次的 CP」；每 4–6 週測一次，賽前 10 天內不要測",
+};
+const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
+const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
+const hasGl = (s) => { GLOSS_RE.lastIndex = 0; const r = GLOSS_RE.test(String(s || "")); GLOSS_RE.lastIndex = 0; return r; };
+const ls = { get(k, d) { try { const v = localStorage.getItem("schedule." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("schedule." + k, JSON.stringify(v)); } catch {} } };
+
+// ---- dates ----
+const WD = I18N.fmt.weekdays("narrow");     // i18n.js: 一…日 / M…S, Monday first
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dOf = (iso) => new Date(iso + "T00:00:00");
+const addDays = (iso, n) => { const d = dOf(iso); d.setDate(d.getDate() + n); return isoOf(d); };
+const mondayOf = (iso) => addDays(iso, -((dOf(iso).getDay() + 6) % 7));
+const md = (iso) => { const d = dOf(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const wd = (iso) => WD[(dOf(iso).getDay() + 6) % 7];
+const rangeTxt = (a, b) => a === b ? `${md(a)}（週${wd(a)}）` : `${md(a)}–${md(b)}`;
+const hm = (s) => { if (s == null) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+const h1 = (h) => (h || 0) >= 10 ? (h || 0).toFixed(0) : (h || 0).toFixed(1);
+const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
+const localTime = (s) => { if (!s) return null; const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s + "Z");
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+
+async function sj(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  const b = await r.json().catch(() => ({}));
+  if (r.status === 401) { const e = new Error("COROS 未登入或登入過期"); e.auth = true; throw e; }
+  if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
+  return b;
+}
+
+// the dialog's 類型: hiking is not a workout type — the kind key "hike" is 越野跑 (trail
+// running, the editor's trail templates); 被動熱適應 is no longer offered (an existing one
+// still opens with its own radio)
+const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
+const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
+  notice: "課表待確認" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
+// 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
+const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
+const SYNC = { pushed: ["ok", "已推送到 COROS"], updated: ["ok", "已推送到 COROS"], outdated: ["warn", "需更新：課表改過，再同步一次會更新 COROS"],
+  failed: ["bad", "推送失敗"], not_pushed: ["none", "未推送"] };
+const SY_SVG = {
+  ok: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="m4.8 8.2 2.2 2.2 4.2-4.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M11 6.2A3.3 3.3 0 0 0 5 7M5 9.8A3.3 3.3 0 0 0 11 9" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M11.4 4.2v2.3H9.1M4.6 11.8V9.5h2.3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  bad: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 4.3v4.6" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/><circle cx="8" cy="11.6" r="1.1" fill="#fff"/></svg>',
+  none: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.4 2"/></svg>',
+};
+const syIcon = (st, extra = "") => { const [cls, label] = SYNC[st] || []; if (!cls) return "";
+  return `<span class="sy sy-${cls}" role="img" aria-label="${esc(label)}" title="${esc(label + (extra ? "\n" + extra : ""))}">${SY_SVG[cls]}</span>`; };
+
+const S = { view: ls.get("view", "month"), anchor: null, sel: null, data: null, narrow: matchMedia("(max-width: 699px)").matches, busy: false };
+let D = null;                                      // last /calendar payload
+
+// ---------------- range + load ----------------
+function range() {
+  if (S.narrow || S.view === "week") { const a = mondayOf(S.anchor); return [a, addDays(a, 6)]; }
+  const d = dOf(S.anchor), first = isoOf(new Date(d.getFullYear(), d.getMonth(), 1)), last = isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  return [mondayOf(first), addDays(mondayOf(last), 6)];
+}
+async function load() {
+  const [a, b] = range();
+  $("calwrap").classList.add("loading");
+  try {
+    D = await sj("GET", `${PAPI}/calendar?start=${a}&end=${b}`);
+    if (!S.anchor) S.anchor = D.today;
+    render();
+    sugCount();                                    // 排入測試 ▸ in the context menu
+  } catch (e) {
+    $("cal").innerHTML = `<p class="err" style="padding:20px">載入失敗：${esc(e.message)}</p>`;
+  } finally { $("calwrap").classList.remove("loading"); }
+}
+
+// ---------------- rendering ----------------
+const findS = (uid) => D.sessions.find((s) => s.uid === uid);
+const editable = (s) => s.state === "active" && s.day >= D.today;
+function chipHtml(s, big) {
+  const live = editable(s);
+  const c = s.coros || {};
+  const done = s.state === "done" && s.done_by;
+  const est = s.tss_est ?? s.tss;
+  // "45′ · TSS 35" (planned) — "TSS 35 → 41" once done (planned → actual)
+  const tss = `TSS ${n0(est)}${done && s.done_by.tss != null ? ` → ${n0(s.done_by.tss)}` : ""}`;
+  const dist = s.distance_km ? `${(+s.distance_km).toFixed(1)} km${s.climb_m ? ` ↑${Math.round(s.climb_m)} m` : ""}` : "";
+  const meta = [s.minutes ? s.minutes + "′" : "", dist, tss].filter(Boolean).join(" · ");
+  // done: what was actually run that day (the planned title stays the chip's title), with its
+  // session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …)
+  const sl = done && s.done_by.session && s.done_by.session.type_label ? ` · ${s.done_by.session.type_label}` : "";
+  const line = done ? `實際 ${esc((s.done_by.category_label || "完成") + sl)} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}` : esc(s.target || "");
+  const off = done && s.vs && s.vs.off_plan;
+  const cp = s.compliance;
+  const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : "");
+  const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
+  const lbl = `${KINDS[s.kind] || ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + (SYNC[c.status] || [])[1] : ""}`;
+  return `<button type="button" class="chip k-${esc(s.kind)} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
+      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
+    <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : ""}${icon}</span>
+    <span class="c-m">${meta}</span>
+    ${line ? `<span class="c-x">${line}</span>` : ""}${big && off ? `<span class="c-x offp-i">≠ ${esc(s.vs.text.replace("沒照課表：", "沒照課表 · "))}</span>` : ""}${big && s.detail && s.state !== "done" ? `<span class="c-d">${esc(s.detail)}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
+}
+const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s4", bike: "--s7", strength: "--s5", walk: "--s6", other: "--bar" };
+// an activity no session holds: 沒排課的活動 (click: summary, open it, pair it with a session)
+function actHtml(a) {
+  // + the session class (workout_review.classify): Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …
+  const lab = a.session && a.session.type_label ? `${a.category_label} · ${a.session.type_label}` : a.category_label;
+  return `<button type="button" class="chip act" data-act="${a.index}" style="--k:var(${CAT_VAR[a.category] || "--bar"})" aria-label="${esc(`沒排課的活動：${lab} ${hm(a.moving_s)}`)}" title="${esc(`沒排課的活動：${lab} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}\n點一下看摘要或配對到課表`)}">
+    <span class="c-t">${esc(lab)}</span><span class="c-r">${hm(a.moving_s)}</span>
+    ${a.tss != null ? `<span class="c-x">TSS ${n0(a.tss)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}</span>` : ""}</button>`;
+}
+function byDay() {
+  const ss = {}, acts = {};
+  for (const s of D.sessions) (ss[s.day] ||= []).push(s);
+  const used = new Set(D.sessions.filter((s) => s.state === "done" && s.done_by).map((s) => s.done_by.index));
+  for (const a of D.activities) if (!used.has(a.index)) (acts[a.date] ||= []).push(a);
+  const order = (s) => (s.state === "missed" ? 1 : 0) * 10 + (s.kind === "strength" ? 1 : 0);
+  for (const k in ss) ss[k].sort((x, y) => order(x) - order(y));
+  return { ss, acts };
+}
+const estOf = (s) => s.tss_est ?? s.tss ?? 0;
+// plan compliance (engine/compliance.py decides the level; thresholds live there)
+function compTip(cp) {
+  if (!cp) return "";
+  if (cp.level === "missed") return "未完成";
+  const parts = [cp.tss_pct != null ? `TSS ${cp.tss_pct}%` : "", cp.duration_pct != null ? `時間 ${cp.duration_pct}%` : ""].filter(Boolean).join(" · ");
+  return `完成度 ${cp.pct != null ? cp.pct + "%" : "–"}（${cp.label}${parts ? "；" + parts : ""}）`;
+}
+function dayTip(d, ss) {
+  const list = (ss || []).filter((s) => ["active", "done", "missed"].includes(s.state));
+  const t = list.reduce((a, s) => a + estOf(s), 0);
+  const done = list.filter((s) => s.state === "done" && s.done_by && s.done_by.tss != null).reduce((a, s) => a + s.done_by.tss, 0);
+  const b = boOf(d);
+  if (b && b.kind === "rest") return tt("rest.day_tip", { day: md(d), wd: wd(d) });
+  if (b) return `${md(d)}（週${wd(d)}）　不排課${b.label ? `（${b.label}）` : ""}\n點標籤修改或移除`;
+  return `${md(d)}（週${wd(d)}）` + (list.length ? `　計畫 TSS ${n0(t)}${done ? ` · 完成 ${n0(done)}` : ""}` : "　沒有排課") + (d >= D.today ? "\n點空白處新增；拖曳或 Shift＋點選可設定不排課日期" : "");
+}
+// 不排課日期 (engine/blackouts.py): one-off ranges, from the calendar payload
+const BOS = () => (D && D.blackouts) || [];
+const boOf = (iso) => BOS().find((b) => b.start <= iso && iso <= b.end);
+const boChip = (b) => b.kind === "rest" ? `<button type="button" class="bo-chip rest" data-rest="${esc(b.start)}" aria-label="${esc(tt("rest.chip_aria", { day: md(b.start) }))}"
+  title="${esc(tt("rest.chip_title"))}">${esc(tt("rest.chip"))}</button>` : `<button type="button" class="bo-chip" data-bo="${esc(b.id)}" aria-label="不排課 ${esc(rangeTxt(b.start, b.end))}${b.label ? "：" + esc(b.label) : ""}，修改或移除"
+  title="${esc(`不排課 ${rangeTxt(b.start, b.end)}${b.label ? "（" + b.label + "）" : ""}\n點一下修改或移除`)}">🏖 ${esc(b.label || "不排課")}</button>`;
+const phaseOf = (iso) => (D.phases || []).find((p) => p.start <= iso && iso <= p.end);
+const weekRow = (ws) => (D.week_rows || []).find((w) => w.start === ws) || {};
+function sumHtml(w) {
+  const future = w.start > D.today, cur = w.start <= D.today && D.today <= w.end;
+  const ph = w.phase_label || w.mode_label;
+  if (!future && !w.planned_hours && !w.planned_tss)          // before the stored plan existed
+    return `${ph ? `<span class="php">${esc(ph)}</span>` : ""}<div class="r"><span>完成</span><b>${h1(w.done_hours)} h</b></div>
+      <div class="r"><span>TSS</span><b>${n0(w.done_tss)}</b></div><span class="tag">沒有排課</span>`;
+  const pct = (a, b) => b > 0 ? Math.min(100, a / b * 100) : 0;
+  return `${ph ? `<span class="php" title="${esc(w.mode_label && w.mode_label !== ph ? `${ph} · ${w.mode_label}` : ph)}">${esc(ph)}</span>` : ""}
+    <div class="r"><span>時間</span><span>${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span></div>
+    ${future ? "" : `<div class="trk" role="img" aria-label="完成 ${h1(w.done_hours)} / 計畫 ${h1(w.planned_hours)} 小時"><i style="width:${pct(w.done_hours, w.planned_hours).toFixed(0)}%"></i></div>`}
+    <div class="r"><span>TSS</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
+    ${future ? "" : `<div class="trk" role="img" aria-label="TSS 完成 ${n0(w.done_tss)} / 計畫 ${n0(w.planned_tss)}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}
+    ${compW(w)}
+    ${w.provisional ? `<span class="tag">暫定（重排時會依進度調整）</span>` : cur ? `<span class="tag">本週</span>` : ""}`;
+}
+const compW = (w) => w.compliance ? `<div class="r cp-${esc(w.compliance.level)}" title="到${w.end < D.today ? "週日" : "昨天（今天完成的也算）"}為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）"><span>完成度</span><span class="cpw">${w.compliance.pct} %</span></div>` : "";
+function render() {
+  const [a, b] = range();
+  const { ss, acts } = byDay();
+  const month = dOf(S.anchor).getMonth();
+  const week = S.narrow || S.view === "week";
+  $("cal-label").textContent = week ? `${dOf(a).getFullYear()} · ${md(a)}–${md(b)}` : `${dOf(S.anchor).getFullYear()} 年 ${month + 1} 月`;
+  $("prev").setAttribute("aria-label", week ? "上一週" : "上個月");
+  $("next").setAttribute("aria-label", week ? "下一週" : "下個月");
+  document.querySelectorAll("#view-seg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.view === S.view)));
+  const pn = phaseOf(D.today);
+  $("phase-now").innerHTML = pn ? `目前 <b class="ph-${esc(pn.kind)}" style="color:var(--ph)">${esc(pn.label)}</b> ${md(pn.start)}–${md(pn.end)}` : "";
+  if (S.narrow) $("cal").innerHTML = agendaHtml(a, ss, acts);
+  else {
+    const rows = [];
+    let prevPh = null;
+    for (let ws = a; ws <= b; ws = addDays(ws, 7)) {
+      const w = weekRow(ws);
+      const cells = [];
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(ws, i), p = phaseOf(d);
+        const phl = p && p.kind !== prevPh && (i === 0 || p.start === d) ? `<span class="phl ph-${esc(p.kind)}">${esc(p.label)}</span>` : "";
+        if (p) prevPh = p.kind;
+        const bo = boOf(d);
+        const can = d >= D.today && !bo;
+        const out = !week && dOf(d).getMonth() !== month;
+        const items = (ss[d] || []).map((s) => chipHtml(s, week)).join("") + (acts[d] || []).map(actHtml).join("");
+        cells.push(`<div class="cell ${out ? "out" : ""} ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" role="gridcell" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
+          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}
+          ${bo && (d === bo.start || i === 0) ? boChip(bo) : ""}
+          ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
+          <div class="chips">${items}</div></div>`);
+      }
+      const ph = phaseOf(addDays(ws, 3)) || {};
+      rows.push(`<div class="wk ph-${esc(w.phase || ph.kind || "none")} ${w.provisional ? "prov" : ""}" role="row" data-week="${ws}">${cells.join("")}<div class="sum" role="gridcell" aria-label="週統計">${sumHtml(w)}</div></div>`);
+    }
+    $("cal").innerHTML = `<div class="cal ${week ? "week" : ""}" role="grid" aria-label="${esc($("cal-label").textContent)} 課表">
+      <div class="cal-head" role="row">${[...WD].map((x, i) => `<div role="columnheader" class="${i > 4 ? "we" : ""}">週${x}${week ? ` ${md(addDays(a, i))}` : ""}</div>`).join("")}<div role="columnheader">週統計</div></div>
+      ${rows.join("")}</div>`;
+  }
+  renderToolbar();
+  renderNotes();
+  renderSug();
+}
+function renderNotes() {
+  const ns = (D.plan_notes || []).filter((n, i, all) => all.findIndex((x) => x.week_start === n.week_start && x.text === n.text) === i);
+  $("pnotes").hidden = !ns.length;
+  $("pnotes").innerHTML = ns.map((n) => `<li class="${esc(n.level)}"><span class="wk-l">${md(n.week_start)} 那週</span>${n.src === "blackout" ? "🏖 " : ""}${esc(n.text)}</li>`).join("") +
+    (ns.some((n) => n.src === "prefs") ? `<li style="list-style:none;margin-left:-16px"><button type="button" data-open-prefs>調整課表偏好 →</button></li>` : "");
+}
+$("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
+// due CP / AeT tests: suggested with a day picker, never put into the plan by the generator
+// superseded by the floating suggestion box (suggestions.js); kept hidden to avoid showing them twice
+function renderSug() {
+  const sg = [];
+  const box = $("tsug");
+  box.hidden = !sg.length;
+  box.innerHTML = sg.map((x) => `<div class="tsug-row" data-kind="${esc(x.kind)}"><span>🧪 ${esc(x.label)}</span>
+    <span class="tsug-act">${x.days.length ? `<select aria-label="測試日期">${x.days.map((d) =>
+      `<option value="${esc(d.day)}">${md(d.day)}（週${wd(d.day)}）${d.note ? ` · ${esc(d.note)}` : ""}</option>`).join("")}</select>
+      <button class="btn primary" type="button" data-sug="${esc(x.kind)}">排入</button>` : `<span class="meta">兩週內沒有適合的日子（離長跑、強度課太近）</span>`}
+      <span class="meta">${esc(x.title)} · ${x.minutes} 分</span></span></div>`).join("");
+}
+$("tsug").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-sug]");
+  if (!b) return;
+  const day = b.parentElement.querySelector("select").value;
+  b.disabled = true;
+  try {
+    const r = await sj("POST", `${PAPI}/test-suggestions/schedule`, { kind: b.dataset.sug, day });
+    S.sel = day; await load();
+    msg(`已排入「${esc(r.title)}」到 ${md(day)}`, "ok");
+  } catch (err) { msg(esc(err.message), "err"); b.disabled = false; }
+});
+function agendaHtml(a, ss, acts) {
+  const w = weekRow(a), ph = phaseOf(addDays(a, 3));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(a, i), bo = boOf(d), can = d >= D.today && !bo;
+    const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
+    days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
+      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}</div>
+      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}</div>
+      ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
+  }
+  const future = a > D.today;
+  return `<div class="agenda"><div class="ag-sum ph-${esc(w.phase || (ph && ph.kind) || "none")}">
+      ${w.phase_label || w.mode_label ? `<span class="php">${esc(w.phase_label || w.mode_label)}</span>` : ""}
+      <span>時間 ${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span>
+      <span>TSS ${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span>
+      ${w.compliance ? `<span class="cp-${esc(w.compliance.level)}">完成度 <span class="cpw">${w.compliance.pct} %</span></span>` : ""}
+      ${w.provisional ? `<span class="faint">暫定</span>` : ""}</div>${days.join("")}</div>`;
+}
+function renderLegend() {
+  $("legend").innerHTML = KIND_ORDER.map((k) => `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
+    `<span class="faint">｜</span><span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ 完成：<b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><b class="offp-i">≠</b> 沒照課表 <button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP)}">?</button></span><span>● 沒排課的活動 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></span><span><s class="faint">未完成</s></span><span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span><i class="rest-sw"></i>${esc(tt("rest.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("rest.legend"))}" data-tip="${esc(tt("rest.legend_tip"))}">?</button></span><span class="faint">｜</span>` +
+    ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${({ pushed: "已推送", outdated: "需更新", failed: "失敗", not_pushed: "未推送" })[k]}</span>`).join("");
+}
+
+// ---------------- toolbar ----------------
+function scopeRange(scope, day) {
+  const t = D.today;
+  if (scope === "day") return [day, day];
+  if (scope === "week") { const m = mondayOf(day || t); const e = addDays(m, 6); return [m > t ? m : t, e]; }
+  return [t, D.phase_push_end];
+}
+const weekDay = () => { const [a, b] = range(); if (S.sel) return S.sel; return D.today >= a && D.today <= b ? D.today : (S.narrow || S.view === "week" ? a : D.today); };
+function renderToolbar() {
+  const C = D.coros || {};
+  $("push-split").hidden = !C.authenticated;
+  const DEMO = (window.TRC_SESSION || {}).mode === "demo";      // no watch, no settings page in the demo
+  $("login-link").hidden = !!C.authenticated || DEMO;
+  const wkd = weekDay(), [wa, wb] = scopeRange("week", wkd);
+  const weekPast = wb < D.today;
+  $("push-main-sub").textContent = weekPast ? "" : `這一週 ${rangeTxt(wa, wb)}`;
+  $("push-main").disabled = weekPast || S.busy;
+  $("push-caret").disabled = S.busy;
+  const dayOk = S.sel && S.sel >= D.today;
+  const bd = $("push-menu").querySelector('[data-scope="day"]');
+  bd.disabled = !dayOk; $("pm-day").textContent = S.sel ? (dayOk ? rangeTxt(S.sel, S.sel) : "過去的日子不能推送") : "先點選日曆上的一天";
+  $("push-menu").querySelector('[data-scope="week"]').disabled = weekPast;
+  $("pm-week").textContent = weekPast ? "這週已經過去" : rangeTxt(wa, wb);
+  $("pm-phase").textContent = `${md(D.today)}–${md(D.phase_push_end)}${D.phase && D.phase_push_end < D.phase.end ? `（最多 ${D.max_weeks} 週）` : ""}`;
+  $("um-day").textContent = S.sel ? rangeTxt(S.sel, S.sel) : "先點選一天";
+  $("more-menu").querySelector('[data-unpush="day"]').disabled = !S.sel || !C.authenticated;
+  $("more-menu").querySelector('[data-unpush="week"]').disabled = weekPast || !C.authenticated;
+  $("more-menu").querySelector('[data-unpush="phase"]').disabled = !C.authenticated;
+  $("um-week").textContent = weekPast ? "" : rangeTxt(wa, wb);
+  $("um-phase").textContent = `到 ${md(D.phase_push_end)}`;
+  $("rec-btn").disabled = S.busy;
+  const nx = D.expired_open || 0;
+  $("more-menu").querySelector('[data-act="del-expired"]').disabled = !nx || S.busy;
+  $("dx-n").textContent = nx ? tt("del_all.count", { n: nx }) : tt("del_all.none");
+  const parts = [];
+  if (C.authenticated) {
+    parts.push(`<span>上次推送 <b>${esc(localTime(C.last_pushed_at) || "還沒推送過")}</b></span>`);
+    if (C.outdated) parts.push(`<span class="warn" title="課表改過、COROS 上還是舊的">需更新 <b>${C.outdated}</b> 堂</span>`);
+    if (C.failed) parts.push(`<span class="bad">失敗 <b>${C.failed}</b> 堂</span>`);
+    if (C.pushed) parts.push(`<span>已推送 <b>${C.pushed}</b> 堂</span>`);
+  } else parts.push(DEMO ? `<span>示範模式不推送到手錶</span>` : `<span>登入 COROS 後才能把課表送到手錶</span>`);
+  $("sync-status").innerHTML = parts.join("");
+}
+function msg(html, cls = "") { $("sync-msg").innerHTML = html ? `<span class="${cls}">${html}</span>` : ""; }
+function errMsg(what, e) {
+  if (e.auth) { msg(`${esc(what)}失敗：COROS 未登入或登入過期 · <a href="/api/v1/wko5/settings">到設定頁重新登入 →</a>`, "err"); if (D) { D.coros.authenticated = false; renderToolbar(); } }
+  else msg(`${esc(what)}失敗：${esc(e.message)}`, "err");
+}
+
+// ---- menus (split + overflow): click, Esc, arrow keys ----
+function menu(btnId, menuId) {
+  const btn = $(btnId), m = $(menuId);
+  const items = () => [...m.querySelectorAll("button:not([disabled])")];
+  const close = (focus) => { m.hidden = true; btn.setAttribute("aria-expanded", "false"); if (focus) btn.focus(); };
+  const open = () => { closeMenus(); m.hidden = false; btn.setAttribute("aria-expanded", "true"); items()[0]?.focus(); };
+  btn.addEventListener("click", (e) => { e.stopPropagation(); m.hidden ? open() : close(); });
+  btn.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); open(); } });
+  m.addEventListener("keydown", (e) => {
+    const it = items(), i = it.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); close(true); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); it[(i + 1) % it.length]?.focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); it[(i - 1 + it.length) % it.length]?.focus(); }
+    else if (e.key === "Tab") close();
+  });
+  m.addEventListener("click", (e) => { if (e.target.closest("button:not([disabled])")) close(); });
+  menus.push(close);
+}
+const menus = [];
+const closeMenus = () => menus.forEach((c) => c());
+document.addEventListener("click", (e) => { if (!e.target.closest(".menu")) closeMenus(); });
+
+// ---- confirm dialog (returns a promise) ----
+function ask(title, html, ok = "確定", { cancel = "取消", danger = false } = {}) {
+  const dlg = $("cf");
+  $("cf-h").textContent = title; $("cf-body").innerHTML = html;
+  $("cf-ok").textContent = ok; $("cf-ok").hidden = !ok; $("cf-no").textContent = cancel;
+  $("cf-ok").classList.toggle("danger", danger); $("cf-ok").classList.toggle("primary", !danger);
+  dlg.returnValue = "";
+  dlg.showModal();
+  (ok ? $("cf-ok") : $("cf-no")).focus();
+  return new Promise((res) => dlg.addEventListener("close", () => res(dlg.returnValue === "ok"), { once: true }));
+}
+
+// ---- reconcile ----
+const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["✕ 未完成", "rm-c"], done: ["✓ 完成", "add-c"],
+  conflict: ["⚠ 在不排課日期內", "ch-c"] };
+// `decide`: edited sessions on a 不排課日期 get a move / delete / keep choice (read by decisions())
+function changesHtml(byDay, decide = false) {
+  const days = Object.keys(byDay || {});
+  if (!days.length) return `<p class="meta" style="margin:0">課表已經是最新的，沒有要變動的。</p>`;
+  const bf = (c) => c.before && Object.keys(c.before).length ? `（原本 ${Object.entries(c.before).map(([k, v]) => k === "day" ? md(v) : k === "minutes" ? v + " 分" : k === "terrain" ? (TER[v] || "未指定地形") : esc(v)).join("、")}）` : "";
+  const dec = (c) => {
+    if (c.action !== "conflict") return "";
+    if (!decide) return ` <span class="faint">（你改過的課：到「依實際進度重排」選擇移動或刪除；在那之前不會推送到 COROS）</span>`;
+    const to = c.conflict && c.conflict.move_to, nm = `dec-${esc(c.uid)}`;
+    return `<span class="dec" role="radiogroup" aria-label="${esc(c.title)} 怎麼處理">` +
+      (to ? `<label><input type="radio" name="${nm}" data-dec="${esc(c.uid)}" value="move" checked>移到週${wd(to)} ${md(to)}</label>` : "") +
+      `<label><input type="radio" name="${nm}" data-dec="${esc(c.uid)}" value="delete">刪除</label>` +
+      `<label><input type="radio" name="${nm}" data-dec="${esc(c.uid)}" value="keep" ${to ? "" : "checked"}>先留著</label></span>`;
+  };
+  return `<ul class="chg">${days.map((d) => `<li><b>${d === "—" ? "—" : `週${wd(d)} ${md(d)}`}</b>：${byDay[d].map((c) =>
+    `<span class="${(ACT[c.action] || ACT.changed)[1]}">${(ACT[c.action] || ACT.changed)[0]}</span> ${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}${dec(c)}`).join("；")}</li>`).join("")}</ul>`;
+}
+// the user's choices in the open preview: {uid: move | delete} ("keep" = no decision)
+const decisions = () => Object.fromEntries([...$("cf-body").querySelectorAll("input[data-dec]:checked")]
+  .filter((x) => x.value !== "keep").map((x) => [x.dataset.dec, x.value]));
+async function reconcile(opts = {}) {
+  if (S.busy) return;
+  msg(`<span class="spin"></span> 依實際進度計算中…`);
+  let p;
+  try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
+  msg("");
+  const n = (p.changes || []).length;
+  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day, true)}`,
+    n ? `套用 ${n} 項變動` : "", { cancel: n ? "取消" : "關閉" });
+  if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : "偏好已儲存；課表不需要變動", n ? "" : "ok"); return; }
+  const dec = decisions();
+  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> 套用中…`);
+  try { await sj("POST", `${PAPI}/reconcile`, { decisions: dec }); msg(`已重排：${n} 項變動`, "ok"); await load(); }
+  catch (e) { errMsg("重排", e); }
+  finally { S.busy = false; renderToolbar(); }
+}
+
+// ---- push / unpush ----
+const scopeQs = (scope, day) => `scope=${scope}${day ? `&day=${encodeURIComponent(day)}` : ""}`;
+const SCOPE_NAME = { day: "這一天", week: "這一週", phase: "整個周期" };
+async function push(scope, day) {
+  if (S.busy || !D) return;
+  day = scope === "phase" ? null : (day || (scope === "day" ? S.sel : weekDay()));
+  S.busy = true; renderToolbar();
+  msg(`<span class="spin"></span> 準備推送（${SCOPE_NAME[scope]}）…`);
+  try {
+    const p = await sj("GET", `${PAPI}/push-coros/preview?${scopeQs(scope, day)}`);
+    msg("");
+    const recN = (p.changes || []).filter((c) => c.action !== "done").length;
+    const rng = rangeTxt(p.start, p.end);
+    if (!p.count && !p.missed_to_remove && !p.blackout_to_remove && !recN) { msg(`${esc(rng)} 沒有可以推送的課`); return; }
+    const html = `<p class="big" style="margin:0">把 <b>${esc(rng)}</b> 的 <b>${p.count}</b> 堂課推送到 COROS 行事曆？</p>
+      <p class="meta" style="margin:0">新送出或更新 <b>${p.to_send}</b> 堂，${p.unchanged} 堂已經是最新的不會重送；會同步到手錶。</p>
+      ${p.skipped.length ? `<p class="meta" style="margin:0">${p.skipped.length} 堂（肌力等）不推送。</p>` : ""}
+      ${p.missed_to_remove ? `<p class="meta" style="margin:0">${p.missed_to_remove} 堂錯過的課會從 COROS 移除。</p>` : ""}
+      ${p.blackout_to_remove ? `<p class="meta" style="margin:0">🏖 ${p.blackout_to_remove} 堂在不排課日期內的課會從 COROS 移除（課表裡保留，等你決定移動或刪除）。</p>` : ""}
+      ${(p.pace_notes || []).length ? `<p class="meta" style="margin:0;color:var(--watch)">⚠ ${esc(p.pace_notes[0].text)}：${p.pace_notes.map((n) => esc(`${md(n.day)} ${n.title || ""}`)).join("、")}${p.tpace_link ? ` <a href="${esc(p.tpace_link)}" target="_blank" rel="noopener">${esc((window.I18N ? I18N.t("workout.no_tpace_link", "看閾值配速怎麼估") : "看閾值配速怎麼估"))}</a>` : ""}</p>` : ""}
+      ${scope === "phase" ? `<p class="meta" style="margin:0">最遠排到 ${md(p.end)}（最多 ${p.max_weeks} 週）。</p>` : ""}
+      ${recN ? `<div><b style="font-size:13px">推送前會先依實際進度重排（${recN} 項）</b>${changesHtml(p.by_day)}</div>` : ""}`;
+    if (!(await ask(`同步到 COROS · ${SCOPE_NAME[scope]}`, html, `推送 ${p.count} 堂`))) return;
+    msg(`<span class="spin"></span> 推送 ${esc(rng)} 的 ${p.to_send} 堂課到 COROS…`);
+    const res = await sj("POST", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
+    const k = (st) => res.sessions.filter((r) => r.status === st);
+    const nNew = k("pushed").filter((r) => r.changed).length, fails = k("failed");
+    const rm = (res.removed || []).filter((r) => r.status === "removed").length;
+    await load();
+    msg(`${fails.length ? "" : "✓ "}推送完成（${esc(rng)}）：新推送 ${nNew} · 更新 ${k("updated").length}${rm ? ` · 移除 ${rm}` : ""}${fails.length ? ` · <b class="err">失敗 ${fails.length}</b>` : ""}` +
+      (fails.length ? `<ul>${fails.map((f) => `<li class="err">${md(f.day)} ${esc(f.title)}：${esc(f.error || "")}</li>`).join("")}</ul>` : ""), fails.length ? "" : "ok");
+  } catch (e) { errMsg("推送", e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+async function unpush(scope) {
+  if (S.busy || !D) return;
+  const day = scope === "phase" ? null : scope === "day" ? S.sel : weekDay();
+  const [a, b] = scope === "day" ? [day, day] : scopeRange(scope, day);
+  S.busy = true; renderToolbar();
+  try {
+    const all = (await sj("GET", `${PAPI}/sessions?start=${a}&end=${b}`)).sessions;
+    const n = all.filter((s) => s.coros && (s.coros.coros_program_id || s.coros.coros_id_in_plan)).length;
+    if (!n) { msg(`${esc(rangeTxt(a, b))} 沒有推送過的課`); return; }
+    if (!(await ask("從 COROS 移除", `<p style="margin:0">把 <b>${esc(rangeTxt(a, b))}</b> 推送過的 <b>${n}</b> 堂課從 COROS 行事曆和課表庫移除？</p>
+      <p class="meta" style="margin:0">只會動這裡推送過的；已經在手錶上完成的不會刪。課表本身不變，之後可以再推送。</p>`, `移除 ${n} 堂`, { danger: true }))) return;
+    msg(`<span class="spin"></span> 從 COROS 移除 ${n} 堂…`);
+    const r = await sj("DELETE", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
+    await load();
+    msg(`已從 COROS 移除 ${r.removed.filter((x) => x.status === "removed").length} 堂（${esc(rangeTxt(r.start, r.end))}）`, "ok");
+  } catch (e) { errMsg("移除", e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+
+// ---------------- session dialog ----------------
+let dlg = { uid: null, targetTouched: false };
+$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive"].map((k) =>
+  `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
+const F = $("sd-form");
+const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).value || "easy";
+// estimated TSS: an existing session keeps its own rate (the generator's) while the
+// kind is unchanged; otherwise minutes × the kind's TSS per hour (tss_rates, same
+// per-category medians / fixed hard-session rates week_plan() uses)
+const rateOf = (k) => (D.tss_rates || {})[k] || D.tss_per_hour || 50;
+function estDialog() {
+  const k = kindVal(), m = +F.minutes.value || 0, o = dlg.orig;
+  // terrain / same-load panel: same intensity (≤ AeT) → the original session's TSS per hour
+  if (eqOn()) return { tss: $("eq-tss").value !== "" ? +$("eq-tss").value : m / 60 * EQS.rate, rate: EQS.rate };
+  if (o && o.kind === k && o.minutes > 0 && (o.tss || 0) > 0) return { tss: o.tss * m / o.minutes, rate: o.tss / o.minutes * 60 };
+  return { tss: m / 60 * rateOf(k), rate: rateOf(k) };
+}
+function tssHint() {
+  const o = dlg.orig;
+  if (dlg.ro) {
+    const act = o && o.state === "done" && o.done_by && o.done_by.tss != null ? ` → 實際 <b>${n0(o.done_by.tss)}</b>` : "";
+    $("sd-tss").innerHTML = o ? `計畫 TSS <b>${n0(estOf(o))}</b>${act}` : "";
+    return;
+  }
+  const e = estDialog();
+  $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} TSS/小時 × ${+F.minutes.value || 0} 分${eqOn() ? "（同強度 ≤ AeT：沿用原本每小時的 TSS）" : ""}</span>`;
+}
+
+// ---------------- terrain + same-load conversion (engine/equivalence.py) ----------------
+// two terrains: 路跑 / 越野跑 (an old 登山 session opens as 越野跑)
+const TER = { road: "路跑", trail: "越野跑", hike: "越野跑" };
+const EQ_KINDS = new Set(["easy", "long", "hike"]);
+const AUTO_TITLE = { easy: { road: "輕鬆跑", trail: "輕鬆越野跑" }, long: { road: "LSD（路跑）", trail: "LSD（山路越野）" },
+  hike: { trail: "越野跑" } };
+const AUTO_TITLE_RE = /^(輕鬆跑|輕鬆跑（路跑）|輕鬆越野跑|(長時間輕鬆|LSD)(（[^）]*）)?|登山健行(（長時間）)?|健行|越野跑)$/;
+let EQ = null, eqReq = null;
+const loadEq = () => eqReq ||= sj("GET", `${PAPI}/equivalence`).then((b) => (EQ = b)).catch(() => { eqReq = null; return null; });
+const EQS = { rate: 50, tss0: 0, tssFix: 0, d: 0, needFill: false };
+const terVal = () => (F.querySelector('input[name="terrain"]:checked') || {}).value || "road";
+const eqOn = () => !$("sd-eq").hidden;
+const terOf = (s) => { if (!s) return "road"; const t = s.terrain || (s.kind === "hike" || /越野|山路/.test(s.title || "") ? "trail" : "road"); return t === "hike" ? "trail" : t; };
+const defaultD = () => Math.round(D.goal_climb_per_km || 80);
+const aetText = () => { const a = (D.thresholds || {}).aet; return a ? `心率 ≤ AeT ${Math.round(a)} bpm` : "心率 ≤ AeT"; };
+function capFor(kind) {
+  const p = D.prefs || {};
+  return kind === "long" || kind === "hike" ? (p.cap_long ?? p.cap_weekday) : kind === "easy" ? p.cap_weekday : null;
+}
+// Langmuir descent + the model: the same formulas as equivalence.descent_hours / predict_hours
+function eqDesc(km, gain, loss) {
+  const M = EQ.model;
+  if (km <= 0 || loss <= 0) return 0;
+  const deg = Math.atan((gain + loss) / (km * 1000)) * 180 / Math.PI;
+  if (deg < M.gentle_deg) return 0;
+  return (deg <= M.steep_deg ? -1 : 1) * loss * M.langmuir_h_per_m;
+}
+function eqH(mode, km, gain) {
+  const M = EQ.model, mm = M.modes[mode];
+  if (mode === "road" || !mm) return (km + gain / M.ep_m_per_km) / M.v_flat_kmh;
+  if (mm.method === "ep") return (km + gain / M.ep_m_per_km) / mm.ep_kmh;
+  return km / mm.v_flat_kmh + gain / mm.vam_mh + eqDesc(km, gain, gain);
+}
+function bisect(f, lo, hi) {                       // f increasing: the x in [lo, hi] where f(x) ≈ 0
+  if (f(lo) >= 0) return lo;
+  if (f(hi) <= 0) return hi;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (f(m) > 0) hi = m; else lo = m; }
+  return (lo + hi) / 2;
+}
+const eqF = () => ({ min: +F.minutes.value || 0, km: +$("eq-km").value || 0, gain: +$("eq-gain").value || 0, tss: +$("eq-tss").value || 0 });
+function eqSet({ min, km, gain, d, tss }) {
+  if (min != null) {
+    F.minutes.value = Math.max(0, Math.round(min));
+    if (dlg.minLock) WE.setTotal(+F.minutes.value);       // the time lives in the structure
+  }
+  if (km != null) $("eq-km").value = km > 0 ? km.toFixed(1) : "0";
+  if (gain != null) $("eq-gain").value = Math.max(0, Math.round(gain));
+  if (d != null) { $("eq-d").value = Math.max(0, Math.min(150, Math.round(d / 5) * 5)); $("eq-d-v").textContent = Math.round(d); }
+  if (tss != null) $("eq-tss").value = Math.max(0, Math.round(tss));
+}
+// grade readout: average = climb ÷ distance; trail (out-and-back / loop) ≈ half the distance
+// uphill, so the climbing sections ≈ 2 × average (推估). 陡坡健走 has its own target grade.
+const GRADE_TIP = "平均坡度＝爬升 ÷ 距離。越野多半是去回或繞圈，大約一半距離在上坡，所以爬坡段的坡度約是平均的 2 倍（推估；實際看路線）。" +
+  "陡坡健走有目標坡度：填距離會帶出預期爬升（距離 × 坡度），填爬升會帶出距離。";
+const gradeOf = (km, gain, trail) => km > 0 && gain > 0 ? { avg: gain / (km * 10), climb: trail ? gain / (km * 5) : null } : null;
+// the 陡坡健走 target grade (engine/steep_hill.py title 「陡坡健走 13.5%（…）」), else null
+const steepGrade = () => { const m = (F.title.value || "").match(/陡坡健走\s*([\d.]+)\s*%/); return m ? +m[1] : null; };
+function gradeRender() {
+  const f = eqF(), sg = steepGrade(), g = gradeOf(f.km, f.gain, terVal() !== "road" && !sg);   // a steep walk is all uphill
+  $("eq-grade").innerHTML = !g ? (sg ? `目標坡度 <b class="num">${sg}%</b>：填距離會帶出爬升 ${qb(GRADE_TIP)}` : "") :
+    g.avg > 100 ? `坡度 ${g.avg.toFixed(0)}%：距離或爬升可能填錯 ${qb(GRADE_TIP)}` :
+    `平均坡度 <b class="num">${g.avg.toFixed(1)}%</b>` + (g.climb != null ? ` · 爬坡段約 <b class="num">${g.climb.toFixed(0)}%</b>（推估）` : "") +
+    (sg ? ` · 目標 ${sg}%` : "") + ` ${qb(GRADE_TIP)}`;
+}
+const qb = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
+// `changed`: the field the user just edited; the lock decides what stays fixed
+function eqRecalc(changed, exactD) {
+  if (!eqOn()) return;
+  if (!EQ) return eqRender();
+  const mode = terVal(), free = $("eq-free").checked, lock = $("eq-lock").value, r = EQS.rate || 1;
+  let { min, km, gain, tss } = eqF();
+  const sg = steepGrade();
+  if (sg && (changed === "km" || changed === "gain")) {
+    // 陡坡健走: the grade is given — distance ↔ climb, the time stays the structure's
+    if (changed === "km") gain = km * sg * 10; else km = gain / (sg * 10);
+    EQS.d = sg * 10;
+    eqSet({ km: changed === "km" ? null : km, gain: changed === "gain" ? null : gain, d: EQS.d });
+    eqRender();
+    return;
+  }
+  let d = changed === "d" ? (exactD ?? +$("eq-d").value) : EQS.d;
+  if (changed === "km" || changed === "gain") d = km > 0 ? gain / km : 0;
+  // the locked field is the anchor: editing it re-anchors, editing anything else keeps it
+  if (changed === "tss" && !free) min = tss / r * 60;
+  if (lock === "tss" && (changed === "tss" || changed === "minutes")) EQS.tssFix = min / 60 * r;
+  if (free) {                                            // nothing fixed: only TSS follows the time
+    if (changed === "d") gain = km * d;
+    if (changed === "tss") min = tss / r * 60;
+  } else if (lock === "dist") {                          // km fixed
+    if (changed === "minutes" || changed === "tss") { d = bisect((x) => eqH(mode, km, km * x) - min / 60, 0, 300); gain = km * d; }
+    else { if (changed !== "gain") gain = km * d; min = eqH(mode, km, gain) * 60; }
+  } else {                                               // time (or TSS → time) fixed
+    if (lock === "tss" && changed !== "minutes" && changed !== "tss") min = EQS.tssFix / r * 60;
+    const T = min / 60;
+    if (changed === "km") { d = bisect((x) => eqH(mode, km, km * x) - T, 0, 300); gain = km * d; }
+    else if (changed === "gain") { km = bisect((x) => eqH(mode, x, gain) - T, 0.05, 300); d = km > 0 ? gain / km : 0; }
+    else { km = T / eqH(mode, 1, d); gain = km * d; }
+  }
+  if (changed !== "tss") tss = min / 60 * r;
+  EQS.d = d;
+  eqSet({ min: changed === "minutes" ? null : min, km: changed === "km" ? null : km, gain: changed === "gain" ? null : gain,
+    d, tss: changed === "tss" ? null : tss });
+  eqRender();
+  tssHint();
+}
+// how km / climb turn into time (the ? next to 分鐘; plain text for the tooltip)
+function eqTip(mode) {
+  if (!EQ) return "";
+  const M = EQ.model;
+  if (mode === "road") return `距離 ↔ 時間：你的平路速度 ${M.v_flat_kmh.toFixed(1)} km/h（${M.v_flat_source}）；有坡時用努力距離 km + 爬升/100。`;
+  const bt = (EQ.backtest || {})[mode] || {}, mm = M.modes[mode] || {}, est = (EQ.estimate || {})[mode];
+  const how = mm.method === "ep" ? `努力距離 EP = km + 爬升/100，用你的越野 EP 速度 ${(mm.ep_kmh || 0).toFixed(1)} km/h`
+    : `平地 ${(mm.v_flat_kmh || 0).toFixed(1)} km/h＋上坡 ${Math.round(mm.vam_mh || 0)} m/h＋下坡修正（Naismith／Langmuir）`;
+  const err = bt.n ? `回測 ${bt.n} 次：平均差 ${bt.mae_min} 分（${bt.mape_pct} %）` : "紀錄還不夠回測";
+  return `距離 ↔ 時間：${how}；${err}${est ? "（推估）" : ""}。`;
+}
+function eqRender() {
+  if (!eqOn()) return;
+  const free = $("eq-free").checked, lock = $("eq-lock").value, ro = !!dlg.ro;
+  $("eq-lock").disabled = ro || free;
+  // nothing is disabled: the locked field is the anchor (editing it re-anchors)
+  F.minutes.disabled = $("eq-km").disabled = $("eq-tss").disabled = $("eq-gain").disabled = $("eq-d").disabled = ro;
+  if (dlg.minLock) $("sd-min-q").dataset.tip = $("sd-min-q").dataset.tip.replace(/\n距離 ↔ 時間：.*$/s, "") + "\n" + eqTip(terVal());
+  const anchor = free ? null : { time: F.minutes, tss: $("eq-tss"), dist: $("eq-km") }[lock];
+  [F.minutes, $("eq-tss"), $("eq-km")].forEach((x) => x.classList.toggle("anchor", x === anchor));
+  const g = D.goal_climb_per_km;
+  $("eq-goal-row").hidden = !g || terVal() === "road" || ro;
+  if (g) $("eq-goal").textContent = `套用目標賽事的爬升比例 ${Math.round(g)} m/km`;
+  if (!EQ) { $("eq-sum").textContent = "載入你的速度模型中…"; $("eq-warn").textContent = ""; $("eq-note").textContent = ""; return; }
+  gradeRender();
+  const mode = terVal(), f = eqF();
+  const pct = EQS.tss0 > 0 ? (f.tss / EQS.tss0 - 1) * 100 : 0;
+  const diff = Math.abs(pct) < 1 ? `<span class="same">和原本一樣</span>` : `<span class="${pct > 0 ? "up" : "down"}">比原本${pct > 0 ? "多" : "少"} ${Math.abs(Math.round(pct))} %</span>`;
+  $("eq-sum").innerHTML = `${TER[mode]} <span class="d num">${f.km.toFixed(1)} km</span>${f.gain ? `、爬升 <span class="d num">${Math.round(f.gain)} m</span>` : ""}、約 <span class="d num">${f.min} 分</span> · 預估 TSS <b class="num">${n0(f.tss)}</b>（${diff}）`;
+  const warns = [];
+  const cap = capFor(kindVal());
+  if (cap && f.min > cap) warns.push(`⚠ 超過你設定的單次上限 ${cap} 分（課表偏好）`);
+  const pred = f.km > 0 ? eqH(mode, f.km, f.gain) * 60 : 0;
+  if (f.km > 0 && Math.abs(pred - f.min) > Math.max(3, 0.05 * f.min)) warns.push(`依你的紀錄，${f.km.toFixed(1)} km／爬升 ${Math.round(f.gain)} m 約要 ${Math.round(pred)} 分`);
+  const mm = EQ.model.modes[mode];
+  if (mode !== "road" && mm && mm.density_range && (EQS.d < mm.density_range[0] - 10 || EQS.d > mm.density_range[1] + 10))
+    warns.push(`爬升比例 ${Math.round(EQS.d)} m/km 在你的${TER[mode]}紀錄（${mm.density_range[0]}–${mm.density_range[1]} m/km）之外，誤差可能較大`);
+  $("eq-warn").innerHTML = warns.map(esc).join("<br>");
+  $("eq-note").innerHTML = "";
+  if (mode === "trail" && WE.doc && !dlg.ro) WE.refreshSoon();     // distance steps: EP with this climb
+}
+function eqInit(s) {
+  const k = s ? s.kind : kindVal();
+  $("sd-eq").hidden = !EQ_KINDS.has(k) || !!dlg.ro;
+  const ter = terOf(s || { kind: k });
+  F.querySelector(`input[name="terrain"][value="${ter}"]`).checked = true;
+  const min = +F.minutes.value || 0;
+  EQS.rate = s && s.minutes > 0 && estOf(s) > 0 ? estOf(s) / s.minutes * 60 : rateOf(k);
+  EQS.tss0 = min / 60 * EQS.rate;
+  EQS.tssFix = EQS.tss0;
+  $("eq-free").checked = false;
+  $("eq-lock").value = "time";
+  $("eq-tss").value = Math.round(EQS.tss0);
+  if (s && s.distance_km) {
+    EQS.d = (s.climb_m || 0) / s.distance_km;
+    eqSet({ km: +s.distance_km, gain: s.climb_m || 0, d: EQS.d });
+    EQS.needFill = false;
+  } else {
+    EQS.d = ter === "road" ? 0 : defaultD();
+    eqSet({ d: EQS.d });
+    $("eq-km").value = ""; $("eq-gain").value = "";
+    EQS.needFill = true;                                // estimate km / climb once the model is loaded
+  }
+  eqRender();
+  if (eqOn()) eqFillLater();
+}
+function eqFillLater() {
+  loadEq().then(() => { if (!$("sd").open || !eqOn()) return; if (EQS.needFill && EQ) { EQS.needFill = false; eqRecalc("terrain"); } else eqRender(); });
+}
+function autoText() {
+  const t = terVal(), k = kindVal();
+  if (!dlg.titleTouched && AUTO_TITLE_RE.test(F.title.value.trim()) && (AUTO_TITLE[k] || {})[t]) F.title.value = AUTO_TITLE[k][t];
+  const hr = aetText();
+  if (t !== "road" && (!F.target.value || /功率/.test(F.target.value))) F.target.value = hr;
+  if (t === "road" && F.target.value === hr) F.target.value = (D.targets || {})[k] || "";
+}
+function onTerrain() {
+  const t = terVal(), k = kindVal();
+  if (t === "road" && k === "hike") {                 // 越野跑 is trail: 路跑 goes back to a road kind
+    const back = dlg.orig && dlg.orig.kind !== "hike" && EQ_KINDS.has(dlg.orig.kind) ? dlg.orig.kind : "long";
+    F.querySelector(`input[name="kind"][value="${back}"]`).checked = true;
+  }
+  if (t === "road") EQS.d = 0; else if (EQS.d === 0) EQS.d = defaultD();
+  eqSet({ d: EQS.d });
+  autoText();
+  eqFillLater();
+  eqRecalc("terrain", EQS.d);
+  tgtHint();
+}
+function onKind() {
+  const k = kindVal(), show = EQ_KINDS.has(k) && !dlg.ro, was = eqOn();
+  $("sd-eq").hidden = !show;
+  if (!show) { F.minutes.disabled = !!dlg.ro; return; }
+  if (!(dlg.orig && EQ_KINDS.has(dlg.orig.kind))) EQS.rate = rateOf(k);    // a different intensity class
+  if (!was) { EQS.tss0 = (+F.minutes.value || 0) / 60 * EQS.rate; EQS.tssFix = EQS.tss0; }
+  if (k === "hike") F.querySelector('input[name="terrain"][value="trail"]').checked = true;
+  autoText();
+  eqFillLater();
+  eqRecalc("terrain", EQS.d);
+}
+$("eq-d").addEventListener("input", () => { $("eq-d-v").textContent = $("eq-d").value; eqRecalc("d"); });
+$("eq-km").addEventListener("input", () => eqRecalc("km"));
+$("eq-gain").addEventListener("input", () => eqRecalc("gain"));
+$("eq-tss").addEventListener("input", () => { EQS.tssFix = +$("eq-tss").value || 0; eqRecalc("tss"); });
+$("eq-lock").addEventListener("change", () => { EQS.tssFix = +$("eq-tss").value || EQS.tssFix; eqRender(); });
+$("eq-free").addEventListener("change", () => { EQS.tssFix = +$("eq-tss").value || EQS.tssFix; eqRender(); });
+$("eq-goal").addEventListener("click", () => { const g = D.goal_climb_per_km; if (g) eqRecalc("d", g); });
+function tgtHint() {
+  tssHint();
+  // trail / hike: heart rate only (pace and power are unreliable off-road)
+  const t = eqOn() && terVal() !== "road" ? aetText() : (D.targets || {})[kindVal()] || "";
+  dlg.sugg = t;
+  $("sd-tgt").innerHTML = t && F.target.value !== t && !F.target.disabled ? `依門檻建議：${gl(t)} <button type="button" id="sd-tgt-use">套用</button>` : "";
+  const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
+  $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
+  $("sd-test").hidden = kindVal() !== "test" || !!dlg.ro;
+  varLoad();
+  stepsPreview();
+}
+
+// The structured editor (static/workout_editor.js): every step shows what it resolves to — its own
+// basis (power / HR / pace), or 自動 = engine/target_policy.py by session type; one step is changed
+// by clicking its target. Nothing is stored until 儲存.
+function weSession() {
+  return { kind: kindVal(), title: F.title.value, minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+    day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
+    // trail: the climb per km for the effort distance of distance steps (the panel's, else the goal race's)
+    climb_per_km: eqOn() && terVal() === "trail" ? EQS.d : kindVal() === "hike" ? (D.goal_climb_per_km ?? null) : null,
+    protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
+    ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
+      variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
+      variant_adj: dlg.orig.variant_adj, rung_key: dlg.orig.rung_key } : {}) };
+}
+// 分鐘 follows the structure whenever there is one (locked, computed from the steps; click it
+// to open the structure). Distance / lap-button steps make it an estimate (約, ? = how).
+function minLock(v) {
+  const lock = !!(v && v.totals && WE.doc) && !dlg.ro;
+  dlg.minLock = lock;
+  F.minutes.readOnly = lock;
+  F.minutes.classList.toggle("locked", lock);
+  const est = lock && v.totals.est;
+  $("sd-min-lbl").textContent = est ? "約（分鐘）" : "分鐘";
+  const tip = !lock ? "" : (est ? `總時間是估的：步驟裡有距離或按圈段。${v.totals.est_note || ""}` : "") +
+    (est ? "\n" : "") + "時間由下面的結構加總；要改時間就改步驟（點這格會打開結構）。" + (eqOn() ? "\n" + eqTip(terVal()) : "");
+  $("sd-min-q").hidden = !lock;
+  $("sd-min-q").dataset.tip = tip;
+  if (!lock) return;
+  const m = Math.max(1, Math.round(v.totals.sec / 60));
+  if (+F.minutes.value !== m) { F.minutes.value = m; if (eqOn()) eqRecalc("minutes"); tssHint(); }
+}
+const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onView: (v, we) => {
+  const mine = we.dirty || we.stored;
+  minLock(v);
+  // a structure of your own: the target text and the TSS estimate come from it
+  if (v && v.totals && we.dirty && v.summary) F.target.value = v.summary;
+  if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+}, onTemplate: (row) => {
+  // an interval-ladder session (what the old 間歇範本 dropdown set): saved with its variant_key, so
+  // it keeps its rung and counts for progression; a library template is a structure of your own
+  if (kindVal() === "quality") dlg.variant = row.variant ? { key: row.key } : null;
+  // a template names the session while the title is still the default one
+  const defs = Object.values(D.default_titles || {});
+  if (!dlg.titleTouched && (!F.title.value || defs.includes(F.title.value) || AUTO_TITLE_RE.test(F.title.value.trim()) || dlg.tplTitle === F.title.value))
+    F.title.value = dlg.tplTitle = row.title || row.label;
+  if (eqOn() && steepGrade() && +$("eq-km").value > 0) eqRecalc("km");   // 陡坡健走: the climb from the distance
+  else if (eqOn()) gradeRender();
+} });
+F.minutes.addEventListener("click", () => { if (dlg.minLock) WE.openBox(); });
+function stepsPreview() {
+  const k = kindVal();
+  if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
+  $("sd-tb").hidden = false;
+  WE.refresh();
+}
+
+// ---- 測試: which test first (CP / AeT), then its protocol; the steps are filled in ----
+$("sd-tkind").addEventListener("change", () => {
+  const k = $("sd-tkind").value, T = (D.test_templates || {})[k] || [], sel = $("sd-tproto");
+  sel.disabled = !k;
+  sel.innerHTML = k ? `<option value="">選方式…</option>` + T.map((t) => `<option value="${esc(t.protocol)}"${t.none ? " disabled" : ""}>${esc(t.label)}${t.minutes ? ` · ${t.minutes} 分` : ""}</option>`).join("")
+    : `<option value="">先選測試</option>`;
+  $("sd-tinfo").textContent = k === "cp" ? "CP 測試量 CP（功率）；比賽代替測試時不排課" : k === "aet" ? "AeT 測試量有氧閾值心率（依方式看心率或配速）" : "";
+});
+$("sd-tproto").addEventListener("change", () => {
+  const k = $("sd-tkind").value, t = ((D.test_templates || {})[k] || []).find((x) => x.protocol === $("sd-tproto").value);
+  if (!t) return;
+  dlg.test = { protocol: k === "aet" ? (t.protocol_stored || "aet") : t.protocol };
+  F.title.value = t.title; F.minutes.value = t.minutes; F.target.value = t.target || ""; F.detail.value = t.detail || "";
+  dlg.targetTouched = true;
+  $("sd-tinfo").textContent = t.tip || t.source || "";
+  tgtHint();
+});
+
+// ---- interval library: the editor's templates and 換一個 (engine/interval_library.py) ----
+const SRC_KIND = { peer: "同儕審查", coach: "教練來源", "推估": "推估" };
+const OUTC = { met: "達標", border: "邊界", unadapted: "未適應", too_high: "未適應（目標太高）" };
+async function varLoad() {
+  // a stored interval session: what it is now and 換一個 (new sessions pick in 結構 › 插入範本)
+  const box = $("sd-var");
+  const has = (r) => !!(r && (r.session || r.drawer));
+  if (kindVal() !== "quality" || dlg.ro || !dlg.uid) { box.hidden = true; return; }
+  const key = `${F.day.value}|${dlg.uid}`;
+  if (dlg.varFor === key) { box.hidden = !has(dlg.vars); return; }
+  dlg.varFor = key;
+  box.hidden = true;
+  try {
+    const q = new URLSearchParams({ day: F.day.value, uid: dlg.uid });
+    const r = await sj("GET", `${PAPI}/variants?${q}`);
+    dlg.vars = r;
+    const s = r.session;
+    $("sd-var-cur").innerHTML = s ? `目前：<b>${esc(s.title)}</b>${s.swap_reason ? ` · ${esc(s.swap_reason)}` : ""}${s.equiv === false ? " · <b>不算進階</b>" : ""}` : "";
+    $("sd-swap").hidden = !r.drawer;
+    box.hidden = !has(r) || kindVal() !== "quality";
+  } catch (e) { box.hidden = false; $("sd-var-cur").textContent = `讀取失敗：${e.message}`; }
+}
+function vdRow(v, cur) {
+  const meta = [v.structure, v.power, v.rest, `目標區 ${v.tiz_min} 分`, v.terrain === "hill" ? `⛰ 上坡 ${v.grade}` : "平路",
+    v.last ? `上次 ${md(v.last.date)}${v.last.outcome ? ` ${OUTC[v.last.outcome] || v.last.outcome}` : ""}` : "沒做過"].filter(Boolean);
+  return `<li class="${v.key === cur && !v.reps ? "cur" : ""}${v.fits ? "" : " off"}"><span class="t">${esc(v.title)}${v.key === cur && !v.reps ? "（目前）" : ""}</span>
+    <button class="btn" type="button" data-vk="${esc(v.key)}" data-vr="${v.reps || ""}"${v.fits ? "" : " disabled"}>換成這個</button>
+    <span class="m">${esc(meta.join(" · "))}<br>${esc(v.split)}${v.fits ? "" : ` · ${esc(v.why_not)}`}</span>
+    <span class="c${v.equiv ? "" : " neq"}">${esc(v.consequence)}；來源（${esc(SRC_KIND[v.source_kind] || v.source_kind)}）：${esc(v.source)}</span></li>`;
+}
+function openVd() {
+  const d = dlg.vars && dlg.vars.drawer;
+  if (!d) return;
+  $("vd-sub").textContent = `${d.rung_name} · ${md(F.day.value)}（週${wd(F.day.value)}）${dlg.vars.cap ? ` · 今天上限 ${dlg.vars.cap} 分` : " · 今天不限時間"}`;
+  $("vd-rec").textContent = d.recommended_reason ? `自動會選：${d.recommended_reason}` : "";
+  $("vd-eq").innerHTML = d.equivalent.map((v) => vdRow(v, d.current_key)).join("");
+  $("vd-ot").innerHTML = d.other.map((v) => vdRow(v, d.current_key)).join("");
+  $("vd-tip").dataset.tip = `同等＝同一類強度、目標區時間差 ±15% 內、5 區每趟 ≥ 2 分、工休比在範圍內、每趟 W′ 相近（30/15 不算同等）。` +
+    `換同等的課不影響進階；換不同等的會記下來，這次不算進階。換過的課算你的修改：自動重排不會蓋掉。${d.terrain_note}`;
+  $("vd-err").textContent = "";
+  $("vd").showModal();
+}
+$("sd-swap").addEventListener("click", openVd);
+$("vd").addEventListener("click", async (e) => {
+  if (e.target.closest("[data-close]") || e.target === $("vd")) return $("vd").close();
+  const b = e.target.closest("button[data-vk]");
+  if (!b) return;
+  b.disabled = true;
+  try {
+    const body = { variant_key: b.dataset.vk };
+    if (b.dataset.vr) body.variant_reps = +b.dataset.vr;
+    const r = await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}`, body);
+    $("vd").close(); $("sd").close();
+    S.sel = r.day || S.sel;
+    await load();
+    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}`, "ok");
+  } catch (err) { $("vd-err").textContent = err.message; b.disabled = false; }
+});
+// ---------------- planned vs actual (engine/plan_match.py) ----------------
+const MATCH_TIP = "配對：同一天、同類運動（路跑／越野）先配；一天兩筆以上時，配時間和強度最接近的課。長跑、強度課、測試在同一週別天做完也算。" +
+  "一筆活動只算一堂課；沒排課那天的跑步維持獨立一筆，不會把之後的課拉過來。可以手動改配或取消，取消後這筆活動不再自動配對。" +
+  "（COROS 的活動檔沒有記錄是照哪個課表跑的，所以由日期和運動類型配對。）";
+const OFF_TIP = "沒照課表：排強度課，但閾值以上（功率 ≥ 95% CP 或心率 ≥ LTHR）的時間不到這堂課的門檻（預設 10 分，短間歇為計畫的 60%）；" +
+  "或排輕鬆跑卻有 ≥ 10 分在閾值以上；或換了別的運動。完成度顏色至少為黃色（推估）。";
+const INT_LB = { hard: "強度", easy: "輕鬆" };
+const VIEWER = (a) => `/api/v1/wko5/viewer?${new URLSearchParams({ workout: a.index, label: `${md(a.date)} ${a.category_label || ""} ${hm(a.moving_s)}` })}`;
+const actOf = (i) => (D.activities || []).find((a) => a.index === i);
+const actTxt = (a) => `${md(a.date)} ${a.category_label || ""} ${hm(a.moving_s)}${a.distance_km ? ` · ${(+a.distance_km).toFixed(1)} km` : ""}${a.tss != null ? ` · TSS ${n0(a.tss)}` : ""}`;
+function linkSelect(s, ph) {
+  const opts = (s.link_options || []).map(actOf).filter(Boolean);
+  if (!opts.length) return "";
+  return `<select data-link="${esc(s.uid)}" aria-label="${esc(ph)}"><option value="">${esc(ph)}</option>` +
+    opts.map((a) => `<option value="${a.index}">${esc(actTxt(a))}</option>`).join("") + `</select>`;
+}
+const linkSel = (s, ph) => { const h = linkSelect(s, ph); return h ? `<div class="vs-act">${h}</div>` : ""; };
+function vsHtml(s) {
+  const a = s.done_by || {}, vs = s.vs || {}, cp = s.compliance;
+  const plan = [KINDS[s.kind] || "", s.minutes ? `${s.minutes}′` : "", `TSS ${n0(s.tss_est ?? s.tss)}`, vs.planned ? INT_LB[vs.planned] : ""].filter(Boolean).join(" · ");
+  const real = [a.category_label || "", hm(a.moving_s), a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "", a.climbing_m ? `↑${Math.round(a.climbing_m)} m` : "",
+    a.tss != null ? `TSS ${n0(a.tss)}` : "", vs.actual ? INT_LB[vs.actual] : ""].filter(Boolean).join(" · ");
+  const hard = vs.hard_min != null ? `閾值以上 ${vs.hard_min} 分${vs.need_min ? `（強度課門檻 ${vs.need_min} 分）` : ""}` : "";
+  return `<div class="vs-h"><b class="ok">✓ 已完成</b><span class="meta">${esc(vs.match_label || "")}</span>` +
+    `<button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button>` +
+    (vs.off_plan ? `<span class="offp" title="${esc(vs.text)}">≠ 沒照課表</span><button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP)}">?</button>` : "") + `</div>` +
+    `<dl class="vs"><dt>計畫</dt><dd>${esc(plan)}</dd><dt>實際</dt><dd class="${vs.off_plan ? "off" : ""}">${esc(real)}</dd>` +
+    (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.text.replace("沒照課表：", ""))}</dd>` : "") +
+    (hard ? `<dt></dt><dd class="meta">${esc(hard)}</dd>` : "") + `</dl>` +
+    (cp ? `<span class="cp-${esc(cp.level)}"><span class="cpw">${esc(compTip(cp))}</span></span>` : "") +
+    `<div class="vs-act">${a.index != null ? `<a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` : ""}` +
+    `<button type="button" class="btn" data-unlink="${esc(s.uid)}" title="這筆活動不算這堂課；之後也不會再自動配對">取消配對</button>` +
+    linkSelect(s, "改配到…") + `</div>`;
+}
+async function doLink(uid, index) {
+  try {
+    await sj("POST", `${PAPI}/sessions/${encodeURIComponent(uid)}/link`, { index: +index });
+    $("sd").close(); $("ad").close();
+    await load();
+    msg("已配對", "ok");
+  } catch (err) { msg(esc(err.message), "err"); }
+}
+async function doUnlink(uid) {
+  try {
+    await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(uid)}/link`);
+    $("sd").close();
+    await load();
+    msg("已取消配對；這筆活動改列為沒排課的活動", "ok");
+  } catch (err) { msg(esc(err.message), "err"); }
+}
+$("sd-done").addEventListener("click", (e) => { const b = e.target.closest("[data-unlink]"); if (b) doUnlink(b.dataset.unlink); });
+$("sd-done").addEventListener("change", (e) => { const sel = e.target.closest("select[data-link]"); if (sel && sel.value) doLink(sel.dataset.link, sel.value); });
+// 沒排課的活動: summary, open it, pair it with a session of that week
+function openAct(index) {
+  const a = actOf(index);
+  if (!a) return;
+  closeMenus();
+  $("ad").dataset.index = index;
+  $("ad-sub").textContent = `${md(a.date)}（週${wd(a.date)}）${a.start ? " " + a.start.slice(11, 16) : ""}`;
+  const ss = D.sessions.filter((s) => (s.link_options || []).includes(index));
+  const rows = [["類別", `${a.category_label || ""}${a.sport_type ? `（${a.sport_type}）` : ""}`], ["移動時間", hm(a.moving_s)],
+    ["距離", a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "–"], ["爬升", a.climbing_m ? `${Math.round(a.climbing_m)} m` : "–"],
+    ["TSS", n0(a.tss)], ...(a.hard_s != null ? [["閾值以上", `${(a.hard_s / 60).toFixed(1)} 分`]] : [])];
+  $("ad-body").innerHTML = `<p class="meta" style="margin:0 0 6px">這天沒有對應的課表，算計畫外的訓練 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></p>` +
+    `<dl class="vs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` +
+    `<div class="vs-act"><a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` +
+    (ss.length ? `<select id="ad-link" aria-label="配對到課表"><option value="">配對到課表…</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? "（改配這筆）" : s.state === "missed" ? "（未完成）" : ""}`)}</option>`).join("")}</select>` : "") +
+    `</div>`;
+  $("ad").showModal();
+}
+$("ad").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("ad")) $("ad").close(); });
+$("ad").addEventListener("change", (e) => { if (e.target.id === "ad-link" && e.target.value) {
+  const a = $("ad").dataset.index; doLink(e.target.value, a); } });
+
+function openDlg(s, day) {
+  closeMenus();
+  const ro = s && !editable(s);
+  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null, test: null };
+  $("sd-tkind").value = s && s.kind === "test" ? (s.protocol === "aet" || /AeT|飄移/.test(s.title || "") ? "aet" : "cp") : "";
+  $("sd-tkind").dispatchEvent(new Event("change"));
+  $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
+  const d = s ? s.day : day;
+  $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
+  const db = $("sd-done");
+  const pastOpen = s && s.state === "active" && s.day <= D.today && (s.link_options || []).length;
+  db.hidden = !(s && (s.state === "done" || s.state === "missed" || pastOpen));
+  if (s && s.state === "done") db.innerHTML = vsHtml(s) +
+    (s.note ? `<br><span class="adapt-note" title="自動調整：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬推估）">⚠ ${esc(s.note)}</span>` : "");
+  else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}${linkSel(s, "配對活動…")}`;
+  else if (pastOpen) db.innerHTML = `<span class="meta">還沒配到活動</span>${linkSel(s, "配對活動…")}`;
+  F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
+  F.day.value = d;
+  (F.querySelector(`input[name="kind"][value="${s ? s.kind : "easy"}"]`) || {}).checked = true;
+  F.querySelector('#sd-kinds label.k-heat_passive').hidden = !(s && s.kind === "heat_passive");
+  F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
+  F.minutes.value = s ? s.minutes : 45;
+  F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";
+  F.detail.value = s ? s.detail || "" : "";
+  F.querySelectorAll("input, textarea").forEach((x) => { x.disabled = !!ro; });
+  $("sd-err").textContent = "";
+  $("sd-save").hidden = !!ro;
+  $("sd-cancel").textContent = ro ? "關閉" : "取消";
+  // a past session that wasn't done can be deleted too (it never comes back; off the watch)
+  const del = $("sd-del"); del.hidden = !s || (ro && !expOpen(s)); del.classList.remove("armed"); del.textContent = "刪除";
+  $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
+  dlg.titleTouched = false;
+  F.minutes.readOnly = false;
+  eqInit(s);
+  tgtHint();
+  WE.open({ uid: s ? s.uid : null, ro, kind: s ? s.kind : "easy" });
+  $("sd").showModal();
+  (ro ? $("sd-cancel") : F.title).focus();
+}
+F.addEventListener("change", (e) => {
+  if (e.target.name === "terrain") return onTerrain();
+  if (e.target.name === "kind") onKind();
+  if (e.target.name !== "kind" || dlg.uid) return tgtHint();
+  const k = kindVal();
+  const defs = D.default_titles || {};
+  if (!F.title.value || Object.values(defs).includes(F.title.value)) F.title.value = defs[k] || KINDS[k];
+  if (!dlg.targetTouched) F.target.value = (D.targets || {})[k] || "";
+  if (k === "strength" && +F.minutes.value === 45) F.minutes.value = 35;
+  if (eqOn()) autoText();
+  tgtHint();
+});
+F.target.addEventListener("input", () => { dlg.targetTouched = true; tgtHint(); });
+F.title.addEventListener("input", () => { dlg.titleTouched = true; tgtHint(); if (eqOn()) gradeRender(); });
+F.minutes.addEventListener("input", () => { if (eqOn()) eqRecalc("minutes"); tssHint(); });
+F.detail.addEventListener("input", tgtHint);
+$("sd").addEventListener("click", (e) => {
+  if (e.target.closest("[data-close]")) $("sd").close();
+  else if (e.target.id === "sd-tgt-use") { F.target.value = dlg.sugg || D.targets[kindVal()]; dlg.targetTouched = true; tgtHint(); }
+  else if (e.target === $("sd")) $("sd").close();                  // backdrop click
+});
+F.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (dlg.ro) return;
+  if (!F.title.value.trim()) { $("sd-err").textContent = "標題不能空白"; F.title.focus(); return; }
+  if (!F.day.value || F.day.value < D.today) { $("sd-err").textContent = "不能排到過去的日子"; F.day.focus(); return; }
+  const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
+    tss: Math.round(estDialog().tss * 10) / 10 };
+  if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
+  if (dlg.test && body.kind === "test") body.protocol = dlg.test.protocol;          // 測試 → which protocol
+  // no session-level 目標用: each step picks its own basis in the structure (a stored
+  // target_basis from before stays as it was)
+  if (eqOn()) {
+    const f = eqF();
+    Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });
+  }
+  // the structure: saved only when you changed it (a user edit — 自動重排不會再改它)
+  const wp = WE.payload();
+  if (wp) Object.assign(body, wp);
+  $("sd-save").disabled = true;
+  try {
+    const url = dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, method = dlg.uid ? "PATCH" : "POST";
+    if (wp && wp.steps) {
+      let r = await WorkoutEditor.request(method, url, body);
+      if (r.status === 422) {
+        const errs = ((r.body.detail || {}).errors || []);
+        if (!(await ask("結構有錯誤", `<ul style="margin:0;padding-left:18px">${errs.map((x) => `<li class="err">${esc(x)}</li>`).join("")}</ul>
+          <p class="meta" style="margin:0">仍要照這樣儲存？</p>`, "仍要儲存", { danger: true }))) return;
+        r = await WorkoutEditor.request(method, url, { ...body, steps_force: true });
+      }
+      if (!r.ok) throw new Error(typeof r.body.detail === "string" ? r.body.detail : JSON.stringify(r.body.detail || r.body).slice(0, 200));
+    } else await sj(method, url, body);
+    $("sd").close();
+    S.sel = body.day;
+    await load();
+    msg(dlg.uid ? `已更新「${esc(body.title)}」` : `已新增「${esc(body.title)}」到 ${md(body.day)}`, "ok");
+  } catch (err) { $("sd-err").textContent = err.message; }
+  finally { $("sd-save").disabled = false; }
+});
+$("sd-del").addEventListener("click", async () => {
+  const b = $("sd-del"), s = findS(dlg.uid);
+  if (!s) return;
+  if (!b.classList.contains("armed")) {
+    b.classList.add("armed");
+    const pushed = s.coros && ["pushed", "updated", "outdated"].includes(s.coros.status);
+    b.textContent = expOpen(s) ? tt("del.confirm_expired") : pushed ? "確定刪除（下次同步時也會從 COROS 移除）" : "確定刪除？";
+    return;
+  }
+  try {
+    const r = await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`);
+    $("sd").close(); await load(); msg(`已刪除「${esc(s.title)}」（${md(s.day)}）${esc(coroNote(r.coros))}`, "ok");
+  } catch (err) { $("sd-err").textContent = err.message; }
+});
+$("sd-push").addEventListener("click", () => { const s = findS(dlg.uid); if (!s) return; $("sd").close(); S.sel = s.day; render(); push("day", s.day); });
+
+// ---------------- 課表偏好 (engine/plan_prefs.py) ----------------
+const PFF = $("pf-form");
+let PF_DEF = null;
+const dayBoxes = (id, name) => { const z = I18N.fmt.weekdays("narrow"), w = I18N.fmt.weekdays("short");
+  $(id).innerHTML = [...z].map((x, i) =>
+    `<label title="${esc(w[i])}"><input type="checkbox" name="${name}" value="${i}" aria-label="${esc(w[i])}">${esc(x)}</label>`).join(""); };
+dayBoxes("pf-days", "pf-day");
+dayBoxes("pf-sdays", "pf-sday");
+// ---- number steppers: − [n] + around each input of a .stp; a data-null input (placeholder
+// 不限 / 同平日) goes back to empty when − passes its min, + from empty starts at data-start
+PFF.querySelectorAll(".stp input[type=number]").forEach((inp) => {
+  const w = document.createElement("span");
+  w.className = "stp-w";
+  inp.replaceWith(w);
+  const b = (d) => `<button type="button" data-stp="${d}" tabindex="-1" aria-hidden="true">${d < 0 ? "−" : "+"}</button>`;
+  const u = w.nextElementSibling?.classList.contains("u") ? w.nextElementSibling : null;   // the unit sits in the box
+  w.insertAdjacentHTML("beforeend", b(-1));
+  w.appendChild(inp);
+  if (u) w.appendChild(u);
+  w.insertAdjacentHTML("beforeend", b(1));
+});
+PFF.addEventListener("click", (e) => {
+  const bt = e.target.closest("[data-stp]");
+  if (!bt) return;
+  const inp = bt.parentElement.querySelector("input"), d = +bt.dataset.stp;
+  if (inp.disabled) return;
+  const st = +inp.step || 1, lo = +inp.min, hi = +inp.max, nul = inp.hasAttribute("data-null");
+  let v = inp.value === "" ? null : +inp.value;
+  if (v == null) { if (d < 0) return; v = +inp.dataset.start || lo; }
+  else {
+    v = Math.round((v + d * st) / st) * st;
+    if (v < lo) v = nul ? null : lo;
+    if (v > hi) v = hi;
+  }
+  inp.value = v == null ? "" : String(+v.toFixed(2));
+  inp.dispatchEvent(new Event("input", { bubbles: true }));
+});
+// ---- 間歇門檻 (engine/quality_gate.py): chips; each ? says what the method is, how it is
+// computed, what to do, and whether it runs on your data now (GET /prefs/gate)
+const GATE_MODES = ["auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none"];
+let PF_GATE = {}, PF_AVAIL = null, PF_AETP = {};
+// ---- AeT 測試方式 (engine/aet_test.py PROTOCOLS): chips; each ? = duration, terrain, held, judging, source
+const AET_PROTOCOLS = ["auto", "xu90", "ua60", "ua40", "evoke60", "friel"];
+// ---- CP 測試方式 (engine/cp_protocols.py): chips, the details behind ?
+const CP_PROTOCOLS = ["quick", "standard", "race"];
+const chipsHtml = (name, keys, sel, lab, tip, off) => keys.map((k) =>
+  `<span class="gopt${off && off(k) ? " off" : ""}"><label><input type="radio" name="${name}" value="${k}"${k === sel ? " checked" : ""}>${esc(lab(k))}</label>` +
+  `<button type="button" class="qtip" aria-label="${esc(tt("pf.about_x", { x: lab(k) }))}" data-tip="${esc(tip(k))}">?</button></span>`).join("");
+function aetpRender(sel) {
+  $("pf-aetp").innerHTML = chipsHtml("aet_test_protocol", AET_PROTOCOLS, sel, (k) => tt("pf.aetp." + k), (k) => (PF_AETP[k] || {}).tip || "");
+}
+function cptRender(sel) {
+  $("pf-cptp").innerHTML = chipsHtml("cp_test_protocol", CP_PROTOCOLS, sel, (k) => tt("pf.cpp." + k), (k) => tt("pf.cpp_tip." + k));
+}
+function gateTip(m) {
+  const base = (PF_GATE[m] || {}).tip || "";
+  const a = PF_AVAIL && PF_AVAIL[m];
+  const now = !PF_AVAIL ? tt("pf.gate_loading") : !a ? tt("pf.gate_na") :
+    tt(a.usable ? "pf.gate_ok" : "pf.gate_no", { why: a.why });
+  return `${base}\n\n${now}`;
+}
+function gateRender(sel) {
+  $("pf-gate").innerHTML = chipsHtml("quality_gate", GATE_MODES, sel, (m) => tt("pf.gate." + m), gateTip,
+    (m) => PF_AVAIL && PF_AVAIL[m] && !PF_AVAIL[m].usable);
+}
+async function gateAvail() {
+  try { PF_AVAIL = (await sj("GET", `${PAPI}/prefs/gate`)).options || {}; } catch { PF_AVAIL = {}; }
+  gateRender(radioVal("quality_gate") || "auto");
+}
+const QTIP = { el: null, pinned: null };
+function qtipShow(btn) {
+  qtipHide();
+  const d = document.createElement("div");
+  d.className = "qtip-pop";
+  d.textContent = btn.dataset.tip;
+  // inside a modal <dialog> the popup must live in the dialog (top layer), not on <body>
+  (btn.closest("dialog[open]") || document.body).appendChild(d);
+  const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  QTIP.el = d;
+}
+function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QTIP.pinned) qtipShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".qtip");
+  if (t && QTIP.pinned !== t) { QTIP.pinned = t; qtipShow(t); return; }
+  QTIP.pinned = null; qtipHide();
+}, true);
+addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(QTIP.pinned); }, { passive: true, capture: true });
+const numOrNull = (v) => v === "" || v == null ? null : +v;
+const radioVal = (name) => (PFF.querySelector(`input[name="${name}"]:checked`) || {}).value;
+function pfFill(p) {
+  PFF.querySelectorAll('input[name="pf-day"]').forEach((b) => { b.checked = !!(p.days || [])[+b.value]; });
+  PFF.querySelectorAll('input[name="pf-sday"]').forEach((b) => { b.checked = (p.strength_days || []).includes(+b.value); });
+  PFF.elements.cap_weekday.value = p.cap_weekday ?? "";
+  PFF.elements.cap_long.value = p.cap_long ?? "";
+  (PFF.querySelector(`input[name="cap_mode"][value="${p.cap_mode || "soft"}"]`) || {}).checked = true;
+  PFF.elements.runs.value = p.runs ?? "";
+  PFF.elements.quality.value = p.quality ?? "";
+  PFF.elements.strength.value = p.strength ?? "";
+  PFF.elements.wh_mode.value = p.weekly_hours == null ? "auto" : "custom";
+  PFF.elements.weekly_hours.value = p.weekly_hours ?? "";
+  PFF.elements.terrain_easy.value = p.terrain_easy;
+  PFF.elements.terrain_long.value = p.terrain_long;
+  PFF.elements.terrain_quality.value = p.terrain_quality;
+  (PFF.querySelector(`input[name="target_basis"][value="${p.target_basis || "auto"}"]`) || {}).checked = true;
+  pdaysRender(p);
+  PFF.elements.warmup_commute_min.value = p.warmup_commute_min ?? 10;
+  PFF.elements.cooldown_min.value = p.cooldown_min ?? 5;
+  cptRender(p.cp_test_protocol || "quick");
+  (PFF.querySelector(`input[name="aet_test_days"][value="${p.aet_test_days || "weekday"}"]`) || {}).checked = true;
+  aetpRender(p.aet_test_protocol || "auto");
+  gateRender(p.quality_gate || "auto");
+  PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
+  PFF.elements.heat.checked = (p.heat || "auto") !== "off";
+  PFF.elements.heat_method.value = p.heat_method || "run";
+  PFF.elements.b2b.checked = p.b2b !== false;
+  pfHeatLine();
+  pfSync();
+}
+async function pfHeatLine() {                 // current S and race-day S (racepower /heat-status)
+  try {
+    const h = await sj("GET", `/api/v1/racepower/heat-status`);
+    $("pf-heat-s").textContent = tt("pf.heat_now", { s: Math.round(h.s * 100), level: h.level?.label || "" }) +
+      (h.warning ? ` · ${h.warning}` : "");
+  } catch { $("pf-heat-s").textContent = ""; }
+}
+function pfRead() {
+  const E = PFF.elements;
+  return { days: [...PFF.querySelectorAll('input[name="pf-day"]')].map((b) => b.checked), long_day: pdLong(),
+    cap_weekday: numOrNull(E.cap_weekday.value), cap_long: numOrNull(E.cap_long.value), cap_mode: radioVal("cap_mode") || "soft",
+    runs: numOrNull(E.runs.value), quality: numOrNull(E.quality.value), strength: numOrNull(E.strength.value),
+    strength_days: [...PFF.querySelectorAll('input[name="pf-sday"]:checked')].map((b) => +b.value),
+    weekly_hours: E.wh_mode.value === "custom" ? numOrNull(E.weekly_hours.value) : null,
+    terrain_easy: E.terrain_easy.value, terrain_long: E.terrain_long.value, terrain_quality: E.terrain_quality.value,
+    // 目標依據 replaces 間歇目標 (engine/target_policy.py); interval_target stays "power" so it can't override it
+    interval_target: "power", target_basis: radioVal("target_basis") || "auto",
+    warmup_commute_min: numOrNull(E.warmup_commute_min.value) ?? 10, cooldown_min: numOrNull(E.cooldown_min.value) ?? 5,
+    pref_days: pdaysRead(), pref_keep: [...PD_KEEP].filter((k) => PD_CONF.some((c) => c.code === k)),
+    cp_test_protocol: radioVal("cp_test_protocol") || "quick",
+    aet_test_days: radioVal("aet_test_days") || "weekday",
+    aet_test_protocol: radioVal("aet_test_protocol") || "auto",
+    quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
+    heat: E.heat.checked ? "auto" : "off", heat_method: E.heat_method.value || "run",
+    b2b: E.b2b.checked };
+}
+function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
+  const n = p.days.filter(Boolean).length;
+  if (!n) return tt("pf.e.no_day");
+  if (p.runs && p.runs > n) return tt("pf.e.runs_days", { runs: p.runs, n });
+  if (p.runs && p.quality != null && p.quality >= p.runs) return tt("pf.e.quality_runs");
+  if (p.cap_weekday != null && !(p.cap_weekday >= 20 && p.cap_weekday <= 300)) return tt("pf.e.cap_w");
+  if (p.cap_long != null && !(p.cap_long >= 20 && p.cap_long <= 600)) return tt("pf.e.cap_l");
+  if (p.cap_weekday != null && p.cap_long != null && p.cap_long < p.cap_weekday) return tt("pf.e.cap_lw");
+  if (PFF.elements.wh_mode.value === "custom" && !(p.weekly_hours >= 1 && p.weekly_hours <= 40)) return tt("pf.e.wh");
+  if (!(Number.isInteger(p.quality_gate_weeks) && p.quality_gate_weeks >= 2 && p.quality_gate_weeks <= 16)) return tt("pf.e.gate_weeks");
+  const a = apRead();
+  if (a.push_days != null && !(Number.isInteger(a.push_days) && a.push_days >= 1 && a.push_days <= 14)) return tt("pf.e.push_days");
+  return "";
+}
+function pfSync() {
+  const E = PFF.elements;
+  const custom = E.wh_mode.value === "custom";
+  E.weekly_hours.disabled = !custom;
+  $("pf-wh-stp").hidden = !custom;
+  if (custom && !E.weekly_hours.value) E.weekly_hours.value = E.weekly_hours.dataset.start;
+  E.cap_long.placeholder = E.cap_weekday.value ? tt("pf.same_n", { n: E.cap_weekday.value }) : tt("pf.same_wd");
+  $("pf-gw-row").hidden = radioVal("quality_gate") !== "weeks";
+  E.heat_method.disabled = !E.heat.checked;
+  apSync();
+  $("pf-err").textContent = pfError(pfRead());
+  pdCheckSoon();
+}
+PFF.addEventListener("input", pfSync);
+PFF.addEventListener("change", pfSync);
+// ---- 自動調整 (engine/plan_auto.py, PUT /overview/plan/auto/settings): the plan.auto.* keys.
+// Saved with the dialog (only the keys you changed); push / push_days / notify only when the
+// push provider is connected (otherwise they stay as stored).
+const AAPI = "/api/v1/overview/plan/auto";
+let AP = null;                                        // the settings as loaded
+function apFill(s, th) {
+  AP = s || null;
+  const E = PFF.elements, sec = $("pf-g4").parentElement;
+  sec.hidden = !AP;
+  if (!AP) return;
+  E.ap_enabled.checked = !!AP.enabled;
+  E.ap_push.checked = !!AP.push;
+  E.ap_push_days.value = AP.push_days ?? 7;
+  E.ap_confirm_big.checked = !!AP.confirm_big;
+  E.ap_notify.value = AP.notify || "overview";
+  const tx = th && th.texts ? Object.values(th.texts) : [];
+  if (tx.length) $("ap-big-q").dataset.tip = `${tt("pf.ap_big_tip")}\n\n${tx.map((x) => "• " + x).join("\n")}`;
+  $("ap-err").textContent = "";
+  apSync();
+}
+function apSync() {
+  if (!AP) return;
+  const co = !!AP.coros_logged_in, E = PFF.elements;
+  PFF.querySelectorAll(".ap-co").forEach((r) => { r.hidden = !co; });
+  PFF.querySelectorAll(".ap-nc").forEach((r) => { r.hidden = co; });
+  E.ap_push_days.disabled = !E.ap_push.checked;
+}
+function apRead() {
+  if (!AP) return {};
+  const E = PFF.elements, out = { enabled: E.ap_enabled.checked, confirm_big: E.ap_confirm_big.checked };
+  if (AP.coros_logged_in) Object.assign(out, { push: E.ap_push.checked, push_days: numOrNull(E.ap_push_days.value), notify: E.ap_notify.value });
+  return out;
+}
+function apChanges() {                               // only the keys you changed: nothing stored gets rewritten
+  const a = apRead(), out = {};
+  for (const [k, v] of Object.entries(a)) if (AP && AP[k] !== v) out[k] = v;
+  return out;
+}
+async function apSave() {
+  const ch = apChanges();
+  if (!Object.keys(ch).length) return true;
+  try { AP = { ...AP, ...(await sj("PUT", `${AAPI}/settings`, ch)).settings }; return true; }
+  catch (x) { $("ap-err").textContent = tt("pf.ap_save_err", { msg: x.message }); return false; }
+}
+$("ap-run").onclick = async () => {
+  if (pfError(pfRead())) return;
+  const bt = $("ap-run");
+  bt.disabled = true;
+  try {
+    if (!(await apSave())) return;
+    await sj("POST", `${AAPI}/run`);
+    $("ap-err").textContent = "";
+    window.autoPlanRefresh?.();
+    load();
+  } catch (x) { $("ap-err").textContent = tt("pf.ap_run_err", { msg: x.message }); }
+  finally { bt.disabled = false; }
+};
+// ---- 固定星期: a row per session type (engine/plan_prefs.py day_owners / overlaps /
+// day_conflicts / place). long -> long_day (one day); the others -> pref_days (≤ 2 days,
+// the first clicked = first choice). One type per row, one type per weekday; no rows = 自動.
+const PD_KINDS = ["long", "quality", "aet_test", "cp_test", "strides"];
+const PD_MAX = (k) => (k === "long" ? 1 : 2);
+const WDZ = I18N.fmt.weekdays("narrow"), WDS = I18N.fmt.weekdays("short");   // 四 / T · 週四 / Thu
+const pdLabel = (k) => tt("pd.kind." + k);
+let PD = [], PD_CONF = [], PD_DROP = [], PD_KEEP = new Set(), PD_T = 0, PD_SEQ = 0;
+let PF_WARNED = null;
+function pdaysRender(p) {                        // stored prefs -> rows (no data loss: every stored day becomes a chip)
+  const pd = p.pref_days || {};
+  PD = [];
+  const lw = WD_KEYS.indexOf(p.long_day);
+  if (lw >= 0) PD.push({ kind: "long", days: [lw] });
+  for (const k of PD_KINDS.slice(1)) if ((pd[k] || []).length) PD.push({ kind: k, days: pd[k].slice(0, PD_MAX(k)) });
+  PD_CONF = p._conflicts || [];
+  PD_DROP = p._dropped || [];
+  PD_KEEP = new Set(p.pref_keep || []);
+  pdDraw();
+}
+const WD_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+function pdaysRead() {
+  const out = {};
+  for (const r of PD) if (r.kind !== "long" && r.days.length) out[r.kind] = r.days.slice(0, PD_MAX(r.kind));
+  return out;
+}
+const pdLong = () => { const r = PD.find((x) => x.kind === "long" && x.days.length); return r ? WD_KEYS[r.days[0]] : "auto"; };
+const pdOwner = (wd, self) => PD.find((r) => r !== self && r.days.includes(wd));
+const PD_SHORT = new Set(["gap48", "after_long", "not_allowed", "cap_long", "z5_twice", "aet_weekday", "aet_gap"]);
+function pdWarn(c) {                            // short + plain; rule, source and what happens behind ?
+  const code = c.code.split(":")[0], day = WDS[c.wd] ?? "";
+  const short = PD_SHORT.has(code) ?tt("pd.c." + code, { day }) : c.text;
+  const tip = `${c.text}\n${tt("pd.rule", { rule: c.rule, source: c.source })}\n${tt("pd.action", { action: c.action })}`;
+  return `<div class="pd-w">⚠ ${esc(short)}<button type="button" class="qtip" aria-label="${esc(tt("pd.why"))}" data-tip="${esc(tip)}">?</button>
+    <label class="chk"><input type="checkbox" data-keep="${esc(c.code)}"${PD_KEEP.has(c.code) ? " checked" : ""}>${esc(tt("pd.keep"))}</label></div>`;
+}
+function pdDraw(focus) {
+  const used = new Set(PD.map((r) => r.kind));
+  $("pf-pd-auto").hidden = PD.length > 0;
+  $("pf-pd-add").disabled = used.size >= PD_KINDS.length;
+  $("pf-pdays").innerHTML = PD.map((r, i) => {
+    const opts = PD_KINDS.map((k) => `<option value="${k}"${k === r.kind ? " selected" : ""}${k !== r.kind && used.has(k) ? " disabled" : ""}>${esc(pdLabel(k))}</option>`).join("");
+    const chips = [...WDZ].map((z, wd) => {
+      const own = pdOwner(wd, r), on = r.days.includes(wd), n = r.days.length > 1 && on ? `<sup>${r.days.indexOf(wd) + 1}</sup>` : "";
+      const title = own ? tt("pd.taken", { kind: pdLabel(own.kind) }) : WDS[wd];
+      return `<button type="button" class="pdc" data-r="${i}" data-wd="${wd}" aria-pressed="${on}"${own ? ' aria-disabled="true"' : ""} title="${esc(title)}" aria-label="${esc(title)}">${z}${n}</button>`;
+    }).join("");
+    const warn = PD_CONF.filter((c) => c.kind === r.kind && (r.kind === "long" || r.days.includes(c.wd))).map(pdWarn).join("");
+    const drop = PD_DROP.filter((d) => d.kind === r.kind).map((d) => `<div class="pd-w">⚠ ${esc(tt("pd.dropped", { day: WDS[d.wd], kind: pdLabel(d.owner) }))}</div>`).join("");
+    const hint = r.days.length ? "" : `<div class="pd-hint">${esc(tt(PD_MAX(r.kind) > 1 ? "pd.pick2" : "pd.pick"))}</div>`;
+    return `<div class="pd-row" data-r="${i}"><select data-pdk="${i}" aria-label="${esc(tt("pd.kind_aria"))}">${opts}</select>
+      <span class="pd-chips" role="group" aria-label="${esc(pdLabel(r.kind))}">${chips}</span>
+      <button type="button" class="pd-del" data-del="${i}" aria-label="${esc(tt("pd.del", { kind: pdLabel(r.kind) }))}" title="${esc(tt("pd.del", { kind: pdLabel(r.kind) }))}">🗑</button>${hint}${drop}${warn}</div>`;
+  }).join("");
+  // a long-run conflict with no 長跑 row (長跑日 自動): show it under the list
+  $("pf-dw").innerHTML = PD_CONF.filter((c) => !PD.some((r) => r.kind === c.kind)).map(pdWarn).join("");
+  if (focus) PFF.querySelector(focus)?.focus();
+}
+function pdChanged(focus) {
+  PD_DROP = [];                                  // the athlete is redoing the rows: the load-time flags are done
+  pdDraw(focus);
+  pfSync();
+}
+$("pf-pd-add").onclick = () => {
+  const used = new Set(PD.map((r) => r.kind)), k = PD_KINDS.find((x) => !used.has(x));
+  if (!k) return;
+  PD.push({ kind: k, days: [] });
+  pdChanged(`select[data-pdk="${PD.length - 1}"]`);
+};
+$("pf-pdays").addEventListener("click", (e) => {
+  const c = e.target.closest(".pdc"), d = e.target.closest(".pd-del");
+  if (c) {
+    if (c.getAttribute("aria-disabled") === "true") return;
+    const r = PD[+c.dataset.r], wd = +c.dataset.wd;
+    if (r.days.includes(wd)) r.days = r.days.filter((x) => x !== wd);
+    else {                                         // full: the new day replaces the last choice
+      const m = PD_MAX(r.kind);
+      r.days = r.days.length >= m ? [...r.days.slice(0, m - 1), wd] : [...r.days, wd];
+    }
+    pdChanged(`.pdc[data-r="${c.dataset.r}"][data-wd="${wd}"]`);
+  } else if (d) {
+    PD.splice(+d.dataset.del, 1);
+    pdChanged(PD.length ? `.pd-del[data-del="${Math.min(+d.dataset.del, PD.length - 1)}"]` : "#pf-pd-add");
+  }
+});
+$("pf-pdays").addEventListener("change", (e) => {
+  const s = e.target.closest("select[data-pdk]"), k = e.target.closest("input[data-keep]");
+  if (s) {
+    e.stopPropagation();
+    const r = PD[+s.dataset.pdk];
+    r.kind = s.value;
+    r.days = r.days.slice(0, PD_MAX(r.kind));
+    pdChanged(`select[data-pdk="${s.dataset.pdk}"]`);
+  } else if (k) {
+    k.checked ? PD_KEEP.add(k.dataset.keep) : PD_KEEP.delete(k.dataset.keep);
+  }
+});
+$("pf-dw").addEventListener("change", (e) => {
+  const k = e.target.closest("input[data-keep]");
+  if (k) k.checked ? PD_KEEP.add(k.dataset.keep) : PD_KEEP.delete(k.dataset.keep);
+});
+function pdCheckSoon() {                        // live conflict hints for the unsaved set (POST /prefs/conflicts)
+  clearTimeout(PD_T);
+  PD_T = setTimeout(async () => {
+    const seq = ++PD_SEQ, p = pfRead();
+    if (pfError(p)) return;
+    try {
+      const r = await sj("POST", `${PAPI}/prefs/conflicts`, p);
+      if (seq !== PD_SEQ || !$("pf").open) return;
+      const sig = (cs) => cs.map((c) => c.code).join(",");
+      if (sig(r.day_conflicts || []) === sig(PD_CONF)) return;
+      PD_CONF = r.day_conflicts || [];
+      const f = document.activeElement, sel = f && f.closest?.("#pf-pdays") ? (f.dataset.wd != null
+        ? `.pdc[data-r="${f.dataset.r}"][data-wd="${f.dataset.wd}"]` : f.dataset.pdk != null ? `select[data-pdk="${f.dataset.pdk}"]`
+        : f.dataset.del != null ? `.pd-del[data-del="${f.dataset.del}"]` : null) : null;
+      pdDraw(sel);
+    } catch { /* the save validates again */ }
+  }, 250);
+}
+async function openPrefs() {
+  closeMenus();
+  PF_WARNED = null;
+  $("pf-err").textContent = "";
+  let b;
+  let a = null;
+  try {
+    [b, a] = await Promise.all([sj("GET", `${PAPI}/prefs`), sj("GET", `${AAPI}?limit=1`).catch(() => null)]);
+  } catch (e) { return errMsg(tt("pf.load_what"), e); }
+  PF_DEF = b.defaults;
+  PF_GATE = b.gate_options || {};
+  PF_AETP = b.aet_options || {};
+  apFill(a && a.settings, a && a.thresholds);
+  pfFill({ ...b.prefs, _conflicts: b.day_conflicts || [], _dropped: b.pref_dropped || [] });
+  $("pf").showModal();
+  if (PF_AVAIL == null) gateAvail();          // needs the dataset: filled in when it arrives
+  PFF.querySelector('input[name="pf-day"]').focus();
+}
+$("pf").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("pf")) $("pf").close(); });
+$("pf-reset").onclick = () => { if (PF_DEF) pfFill(PF_DEF); };
+PFF.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const p = pfRead(), err = pfError(p);
+  if (err) { $("pf-err").textContent = err; return; }
+  $("pf-save").disabled = true;
+  let saved;
+  try {
+    if (!(await apSave())) return;                  // 自動調整: only the keys you changed
+    saved = await sj("PUT", `${PAPI}/prefs`, p);
+  }
+  catch (x) { $("pf-err").textContent = x.message; return; }
+  finally { $("pf-save").disabled = false; }
+  // 偏好的星期 vs the default rules: show them once, with 照我的偏好, before replanning
+  const open = (saved.day_conflicts || []).filter((c) => !c.keep);
+  const sig = open.map((c) => c.code).join(",");
+  if (open.length && PF_WARNED !== sig) {
+    PF_WARNED = sig;
+    PD_CONF = saved.day_conflicts; PD_DROP = []; pdDraw();
+    $("pf-err").textContent = tt("pf.saved_conflicts");
+    return;
+  }
+  PF_WARNED = null;
+  $("pf").close();
+  PF_AVAIL = null;                                   // the gate's state depends on the mode
+  if (D) D.prefs = p;
+  window.autoPlanRefresh?.();
+  await reconcile({ title: tt("pf.rc_title"), intro: tt("pf.rc_intro"), cancelMsg: tt("pf.rc_cancel") });
+});
+$("pf-btn").onclick = openPrefs;
+
+// ---------------- 不排課日期 (engine/blackouts.py) ----------------
+const BOF = $("bo-form");
+let boEdit = null;                                   // the range being edited (null = new)
+const spanDays = (a, b) => Math.round((dOf(b) - dOf(a)) / 864e5) + 1;
+function openBo(b, start, end) {
+  closeMenus();
+  if (!D) return;
+  boEdit = b || null;
+  $("bo-h").textContent = b ? "🏖 修改不排課日期" : "🏖 設定不排課日期";
+  const a = b ? b.start : start || S.sel || D.today;
+  BOF.start.value = a;
+  BOF.end.value = b ? b.end : end || a;
+  BOF.label.value = b ? b.label || "" : "";
+  $("bo-del").hidden = !b;
+  $("bo-err").textContent = "";
+  boSync();
+  $("bo").showModal();
+  (b ? BOF.label : end ? BOF.label : BOF.start).focus();
+}
+function boError() {
+  const a = BOF.start.value, b = BOF.end.value;
+  if (!a || !b) return "要選開始和結束日期";
+  if (b < a) return "結束日不能早於開始日";
+  if (spanDays(a, b) > 62) return "一段最多 62 天";
+  const hit = BOS().find((x) => x !== boEdit && !(b < x.start || a > x.end));
+  if (hit) return `和另一段不排課日期重疊（${rangeTxt(hit.start, hit.end)}${hit.label ? " " + hit.label : ""}）`;
+  return "";
+}
+function boSync() {
+  const a = BOF.start.value, b = BOF.end.value;
+  if (a && b && b >= a) {
+    const n = (D.sessions || []).filter((s) => s.state === "active" && s.day >= a && s.day <= b && s.day >= D.today).length;
+    $("bo-sum").innerHTML = `${esc(rangeTxt(a, b))}，共 <b>${spanDays(a, b)}</b> 天` +
+      (n ? `；目前有 <b>${n}</b> 堂課在這幾天，會移到同一週的其他天或取消` : "；這幾天目前沒有排課") +
+      (b < D.today ? `<br><span class="faint">過去的日子：只做紀錄，不改課表</span>` : "");
+  } else $("bo-sum").textContent = "";
+  $("bo-err").textContent = boError();
+}
+BOF.addEventListener("input", () => { if (BOF.end.value && BOF.start.value > BOF.end.value && document.activeElement === BOF.start) BOF.end.value = BOF.start.value; boSync(); });
+$("bo").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("bo")) $("bo").close(); });
+// preview first (nothing saved), then save + reconcile with the choices made in the preview
+async function applyBlackouts(list, title, done, removing = false) {
+  if (S.busy) return;
+  msg(`<span class="spin"></span> 計算不排課後的課表…`);
+  let p;
+  try { p = await sj("POST", `${PAPI}/blackouts/preview`, { blackouts: list }); } catch (e) { return errMsg(title, e); }
+  msg("");
+  const n = (p.changes || []).length;
+  const intro = removing ? "移除後這幾天恢復照常排課；之後還沒做、你沒改過的課依目前狀況重排，你改過或自己加的課不會動。"
+    : "這些日子不排課；之後還沒做、你沒改過的課會移到同一週的其他天，排不下的取消（長跑優先），本週目標時數跟著減少。你改過或自己加的課由你決定。";
+  const ok = await ask(title, `<p class="meta" style="margin:0">${intro}</p>${changesHtml(p.by_day, true)}`,
+    n ? `套用（${n} 項變動）` : "儲存", { cancel: "取消" });
+  if (!ok) { msg("不排課日期沒有變更"); return; }
+  const dec = decisions();
+  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> 套用中…`);
+  try {
+    const r = await sj("PUT", `${PAPI}/blackouts`, { blackouts: list, decisions: dec });
+    await load();
+    msg(`${done}${(r.changes || []).length ? `：${r.changes.length} 項變動` : ""}`, "ok");
+  } catch (e) { errMsg(title, e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+BOF.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const err = boError();
+  if (err) { $("bo-err").textContent = err; return; }
+  const r = { id: boEdit ? boEdit.id : null, start: BOF.start.value, end: BOF.end.value, label: BOF.label.value.trim() };
+  const list = BOS().filter((x) => x !== boEdit).concat([r]);
+  $("bo").close();
+  const t = rangeTxt(r.start, r.end) + (r.label ? `（${r.label}）` : "");
+  applyBlackouts(list, boEdit ? "修改不排課日期" : "設定不排課日期", `已設定 ${t} 不排課`);
+});
+$("bo-del").addEventListener("click", () => {
+  if (!boEdit) return;
+  const b = boEdit, list = BOS().filter((x) => x !== b);
+  $("bo").close();
+  applyBlackouts(list, "移除不排課日期", `已移除 ${rangeTxt(b.start, b.end)} 的不排課`, true);
+});
+
+// ---------------- calendar interaction ----------------
+function select(d) { S.sel = S.sel === d ? S.sel : d; render(); }
+$("cal").addEventListener("click", (e) => {
+  if (e.target.closest(".term")) return;
+  if (performance.now() < RG.quietUntil) return;             // the click that ends a range drag
+  const rc = e.target.closest("[data-rest]");
+  if (rc) {
+    const d = rc.dataset.rest;
+    if (d >= D.today) ask(tt("rest.undo_title"), `<p style="margin:0">${esc(tt("rest.undo_body", { day: md(d), wd: wd(d) }))}</p>`, tt("ctx.unrest"))
+      .then((ok) => { if (ok) setRest(d, false); });
+    return;
+  }
+  const boc = e.target.closest("[data-bo]");
+  if (boc) { const b = BOS().find((x) => x.id === boc.dataset.bo); if (b) openBo(b); return; }
+  const day = e.target.closest("[data-day]");
+  if (e.shiftKey && day && !e.target.closest(".chip")) {    // shift-click: a range from the selected day
+    const d = day.dataset.day;
+    if (S.sel && S.sel !== d) { const [a, b] = S.sel < d ? [S.sel, d] : [d, S.sel]; return openBo(null, a, b); }
+    return select(d);
+  }
+  const ac = e.target.closest(".chip[data-act]");
+  if (ac) return openAct(+ac.dataset.act);
+  const add = e.target.closest("[data-add]"), sel = e.target.closest("[data-sel]"), chip = e.target.closest(".chip[data-uid]");
+  if (add) { S.sel = add.dataset.add; render(); return openDlg(null, add.dataset.add); }
+  if (chip) { const s = findS(chip.dataset.uid); if (s) { S.sel = s.day; render(); openDlg(findS(chip.dataset.uid)); } return; }
+  if (sel) return select(sel.dataset.sel);
+  const cell = e.target.closest("[data-day]");
+  if (!cell || e.target.closest(".chip")) return;
+  const d = cell.dataset.day;
+  S.sel = d; render();
+  if (d >= D.today && !boOf(d)) openDlg(null, d);
+});
+// drag across days (mouse / pen): select a range for 不排課日期
+const RG = { a: null, b: null, x: 0, y: 0, on: false, quietUntil: 0 };
+function paintRange(a, b) {
+  const [lo, hi] = a < b ? [a, b] : [b, a];
+  $("cal").querySelectorAll("[data-day]").forEach((el) => el.classList.toggle("rng", el.dataset.day >= lo && el.dataset.day <= hi));
+}
+$("cal").addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || e.pointerType === "touch" || e.shiftKey) return;
+  const c = e.target.closest("[data-day]");
+  if (!c || e.target.closest(".chip, .add, .bo-chip, .term") || CTX.el) return;
+  Object.assign(RG, { a: c.dataset.day, b: c.dataset.day, x: e.clientX, y: e.clientY, on: false });
+});
+document.addEventListener("pointermove", (e) => {
+  if (!RG.a) return;
+  if (!RG.on && Math.hypot(e.clientX - RG.x, e.clientY - RG.y) < 8) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("#cal [data-day]");
+  if (!RG.on) { $("cal").classList.add("ranging"); window.getSelection()?.removeAllRanges(); }
+  RG.on = true;
+  if (el) RG.b = el.dataset.day;
+  paintRange(RG.a, RG.b);
+});
+document.addEventListener("pointerup", () => {
+  if (!RG.a) return;
+  const { a, b, on } = RG;
+  RG.a = null;
+  $("cal").classList.remove("ranging");
+  if (!on) return;
+  RG.quietUntil = performance.now() + 350;
+  $("cal").querySelectorAll(".rng").forEach((el) => el.classList.remove("rng"));
+  if (a === b) return;
+  openBo(null, a < b ? a : b, a < b ? b : a);
+});
+// arrow keys move between days (on the date buttons)
+$("cal").addEventListener("keydown", (e) => {
+  const b = e.target.closest(".dnum"); if (!b) return;
+  const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: S.narrow ? -1 : -7, ArrowDown: S.narrow ? 1 : 7 }[e.key];
+  if (!step) return;
+  e.preventDefault();
+  const d = addDays(b.dataset.sel, step);
+  const t = $("cal").querySelector(`.dnum[data-sel="${d}"]`);
+  if (t) t.focus();
+  else { S.anchor = d; load().then(() => $("cal").querySelector(`.dnum[data-sel="${d}"]`)?.focus()); }
+});
+// drag a chip onto another day
+$("cal").addEventListener("dragstart", (e) => {
+  const el = e.target.closest(".chip[draggable]"); if (!el) return;
+  e.dataTransfer.setData("text/plain", el.dataset.uid); e.dataTransfer.effectAllowed = "move"; el.classList.add("dragging");
+});
+$("cal").addEventListener("dragend", (e) => { e.target.closest?.(".chip")?.classList.remove("dragging"); document.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop")); });
+$("cal").addEventListener("dragover", (e) => {
+  const d = e.target.closest("[data-day]"); if (!d || d.dataset.day < D.today || boOf(d.dataset.day)) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".drop").forEach((x) => x !== d && x.classList.remove("drop")); d.classList.add("drop");
+});
+$("cal").addEventListener("dragleave", (e) => { const d = e.target.closest("[data-day]"); if (d && !d.contains(e.relatedTarget)) d.classList.remove("drop"); });
+$("cal").addEventListener("drop", async (e) => {
+  const d = e.target.closest("[data-day]"); if (!d) return;
+  e.preventDefault(); d.classList.remove("drop");
+  const uid = e.dataTransfer.getData("text/plain"), s = findS(uid), day = d.dataset.day;
+  if (!s || s.day === day || day < D.today || boOf(day)) return;
+  try { await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }); S.sel = day; await load(); msg(`「${esc(s.title)}」移到 ${md(day)}（週${wd(day)}）`, "ok"); }
+  catch (err) { errMsg("移動", err); }
+});
+
+// ---------------- context menu (right-click / long-press) ----------------
+// on a session: 編輯 / 移到… / 刪除; on an empty day: 新增 / 設為休息日; on a 休息日: 取消休息日.
+// 休息日 = a one-day 不排課日期 of kind rest (api POST /rest-days): the planner skips the day
+// and puts the week's volume on its other days.
+const tt = (k, p) => (window.I18N ? I18N.t("schedule." + k, p) : k);
+const expOpen = (s) => !!s && s.kind !== "notice" && s.day < D.today && (s.state === "missed" || s.state === "active");
+const CTX = { el: null, at: 0, lp: null, quietUntil: 0 };
+function ctxClose() { CTX.el?.remove(); CTX.el = null; }
+function ctxItems(target) {
+  const chip = target.closest(".chip[data-uid]"), cell = target.closest("[data-day]");
+  if (chip) {
+    const s = findS(chip.dataset.uid);
+    if (!s) return null;
+    const out = [];
+    if (editable(s)) out.push({ act: "edit", uid: s.uid, label: tt("ctx.edit") }, { act: "move", uid: s.uid, label: tt("ctx.move") });
+    else out.push({ act: "open", uid: s.uid, label: tt("ctx.open") });
+    if (editable(s) || expOpen(s)) out.push({ act: "del", uid: s.uid, label: expOpen(s) ? tt("ctx.del_expired") : tt("ctx.del"), danger: true });
+    return { title: `${md(s.day)} ${s.title}`, items: out };
+  }
+  if (!cell || target.closest(".chip[data-act]")) return null;
+  const d = cell.dataset.day, bo = boOf(d);
+  if (bo && bo.kind === "rest") return { title: tt("ctx.day_title", { day: md(d), wd: wd(d) }), items: d >= D.today
+    ? [{ act: "unrest", day: d, label: tt("ctx.unrest") }] : [] };
+  if (bo || d < D.today) return null;
+  const busy = (D.sessions || []).some((s) => s.day === d && ["active", "done"].includes(s.state));
+  const items = [{ act: "add", day: d, label: tt("ctx.add") }];
+  // a test can go next to an easy run (the suggestion's own day rules decide), so also on a busy day
+  if (CTX.tests) items.push({ act: "tests", day: d, label: tt("ctx.tests"),
+    sub: sugFits(d) ? tt("ctx.tests_sub", { n: CTX.tests }) : tt("ctx.tests_no_day"), muted: !sugFits(d) });
+  if (!busy) items.push({ act: "rest", day: d, label: tt("ctx.rest"), sub: tt("ctx.rest_sub") });
+  return { title: tt("ctx.day_title", { day: md(d), wd: wd(d) }), items };
+}
+function ctxOpen(target, x, y) {
+  if (!D || S.busy) return false;
+  const m = ctxItems(target);
+  if (!m || !m.items.length) return false;
+  ctxClose(); closeMenus();
+  const el = document.createElement("div");
+  el.className = "menu ctx"; el.setAttribute("role", "menu"); el.setAttribute("aria-label", m.title);
+  el.innerHTML = `<div class="menu-h">${esc(m.title)}</div>` + m.items.map((it) =>
+    `<button type="button" role="menuitem" data-ctx="${it.act}" ${it.uid ? `data-uid="${esc(it.uid)}"` : ""} ${it.day ? `data-day="${it.day}"` : ""}${it.danger ? ' class="danger"' : it.muted ? ' class="muted"' : ""}>${esc(it.label)}${it.sub ? ` <span class="meta">${esc(it.sub)}</span>` : ""}</button>`).join("");
+  document.body.appendChild(el);
+  const r = el.getBoundingClientRect();
+  el.style.left = `${Math.max(6, Math.min(x, innerWidth - r.width - 6))}px`;
+  el.style.top = `${Math.max(6, Math.min(y, innerHeight - r.height - 6))}px`;
+  CTX.el = el; CTX.at = performance.now();
+  el.querySelector("button")?.focus();
+  el.addEventListener("keydown", (e) => {
+    const bs = [...el.querySelectorAll("button")], i = bs.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); ctxClose(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); bs[(i + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length]?.focus(); }
+  });
+  el.addEventListener("click", (e) => { const b = e.target.closest("button[data-ctx]"); if (b) { ctxClose(); ctxRun(b.dataset); } });
+  return true;
+}
+async function ctxRun({ ctx, uid, day }) {
+  const s = uid ? findS(uid) : null;
+  if (ctx === "edit" || ctx === "open") { if (s) { S.sel = s.day; render(); openDlg(s); } }
+  else if (ctx === "move") { if (s) { S.sel = s.day; render(); openDlg(s); F.day.focus(); F.day.showPicker?.(); } }
+  else if (ctx === "del") { if (s) delSession(s); }
+  else if (ctx === "add") { S.sel = day; render(); openDlg(null, day); }
+  else if (ctx === "tests") openTests(day);
+  else if (ctx === "rest") setRest(day, true);
+  else if (ctx === "unrest") setRest(day, false);
+}
+function coroNote(c) {
+  if (!c || c.status === "none") return "";
+  if (c.status === "ok") return tt("del.coros_ok", { n: c.removed, provider: c.provider_label || "COROS" });
+  if (c.status === "partial") return tt("del.coros_partial", { n: c.removed, left: c.pending, provider: c.provider_label || "COROS" });
+  return tt("del.coros_later", { provider: c.provider_label || "COROS" });
+}
+async function delSession(s) {
+  const exp = expOpen(s);
+  const ok = await ask(tt("del.title"), `<p style="margin:0">${esc(tt(exp ? "del.body_expired" : "del.body", { title: s.title, day: md(s.day) }))}</p>`,
+    tt("del.ok"), { danger: true });
+  if (!ok) return;
+  try {
+    const r = await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`);
+    await load();
+    msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + coroNote(r.coros)), r.coros && ["auth", "failed"].includes(r.coros.status) ? "warn" : "ok");
+  } catch (e) { errMsg(tt("del.what"), e); }
+}
+async function delExpired() {
+  const n = (D && D.expired_open) || 0;
+  if (!n) return;
+  const ok = await ask(tt("del_all.title"), `<p style="margin:0">${esc(tt("del_all.body", { n }))}</p>`, tt("del_all.ok", { n }), { danger: true });
+  if (!ok) return;
+  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> ${esc(tt("del_all.working"))}`);
+  try {
+    const r = await sj("POST", `${PAPI}/sessions/expired/delete`, {});
+    await load();
+    msg(esc(tt("del_all.done", { n: r.deleted }) + coroNote(r.coros)), r.coros && ["auth", "failed"].includes(r.coros.status) ? "warn" : "ok");
+  } catch (e) { errMsg(tt("del_all.title"), e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+async function setRest(day, on) {
+  if (S.busy) return;
+  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> ${esc(tt(on ? "rest.working" : "rest.undo_working"))}`);
+  try {
+    const r = on ? await sj("POST", `${PAPI}/rest-days`, { day }) : await sj("DELETE", `${PAPI}/rest-days/${day}`);
+    S.sel = day; await load();
+    const n = (r.changes || []).filter((c) => c.action !== "done").length;
+    msg(esc(tt(on ? "rest.done" : "rest.undone", { day: md(day), wd: wd(day) }) + (n ? tt("rest.changes", { n }) : "")), "ok");
+  } catch (e) { errMsg(tt(on ? "rest.what" : "rest.undo_what"), e); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+// 排入測試 ▸: the floating box's test suggestions (CP / AeT / zone retest) for this day, each
+// with its templates (推薦 first); a day the suggestion's rules don't allow is greyed with why
+async function sugCount() {
+  try {
+    const r = await fetch(`${PAPI}/suggestions`, { cache: "no-store" });
+    CTX.sug = r.ok ? ((await r.json()).suggestions || []).filter((x) => x.type === "test" || x.type === "zone_test") : [];
+  } catch (_) { CTX.sug = []; }
+  CTX.tests = CTX.sug.length;
+}
+const sugFits = (day) => (CTX.sug || []).some((x) => [...(x.options || []), ...(x.tests || []).flatMap((t) => t.options || [])]
+  .some((o) => o.day === day));
+addEventListener("suggestions:changed", () => sugCount());
+function tpDialog() {
+  let d = $("tp");
+  if (d) return d;
+  d = document.createElement("dialog");
+  d.className = "sd"; d.id = "tp"; d.setAttribute("aria-labelledby", "tp-h");
+  d.innerHTML = `<div class="dh"><div><h3 id="tp-h"></h3><span class="meta" id="tp-sub"></span></div>
+    <button class="x" type="button" data-close aria-label="${esc(tt("tests.close"))}">✕</button></div><div class="tp-body" id="tp-body"></div>`;
+  document.body.appendChild(d);
+  d.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-close]") || e.target === d) return d.close();
+    const b = e.target.closest("button[data-tp-go]"); if (!b) return;
+    const box = b.closest(".tp-opt"), tpl = box.querySelector("input[type=radio]:checked");
+    if (!tpl) return;
+    b.disabled = true;
+    try {
+      const r = await sj("POST", `${PAPI}/suggestions/accept`, { id: box.dataset.id, day: d.dataset.day,
+        test: box.dataset.test || undefined, template: tpl.value });
+      d.close(); S.sel = d.dataset.day; await load();
+      window.AppSuggestions?.refresh?.();
+      const s = (r.sessions || [])[0];
+      msg(esc(tt("tests.done", { day: md(d.dataset.day), title: s ? s.title : "" })), "ok");
+    } catch (err) { b.disabled = false; box.querySelector(".tp-err").textContent = err.message; }
+  });
+  return d;
+}
+async function openTests(day) {
+  const d = tpDialog();
+  d.dataset.day = day;
+  $("tp-h").textContent = tt("tests.title");
+  $("tp-sub").textContent = `${md(day)}（週${wd(day)}）`;
+  $("tp-body").innerHTML = `<p class="meta"><span class="spin"></span> ${esc(tt("tests.loading"))}</p>`;
+  d.showModal();
+  let r;
+  try { r = await sj("GET", `${PAPI}/test-options?day=${day}`); } catch (e) { $("tp-body").innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  if (!r.options.length) { $("tp-body").innerHTML = `<p class="meta">${esc(tt("tests.none"))}</p>`; return; }
+  $("tp-body").innerHTML = r.options.map((o, i) => `<div class="tp-opt ${o.ok ? "" : "off"}" data-id="${esc(o.id)}" data-test="${esc(o.test || "")}">
+      <div class="tp-l"><b>${esc(o.label)}</b>${o.note ? ` <span class="meta">${esc(o.note)}</span>` : ""}</div>
+      ${o.ok ? `<div class="tp-tpls" role="radiogroup" aria-label="${esc(tt("tests.pick"))}">${o.templates.map((t, j) => `<label class="tp-t">
+          <input type="radio" name="tp-${i}" value="${esc(t.key)}"${j === 0 ? " checked" : ""}>
+          <span><span class="tp-tt">${esc(t.title)}</span> <span class="meta">${t.minutes} ′</span>${t.recommended ? ` <span class="badge fit">${esc(tt("tests.rec"))}</span>` : ""}
+          <span class="meta tp-src">${esc(t.reason || t.src)}</span></span></label>`).join("")}</div>
+        <div class="tp-act"><button class="btn primary" type="button" data-tp-go>${esc(tt("tests.go"))}</button><span class="tp-err err"></span></div>`
+      : `<div class="meta tp-why">${esc(tt("tests.not_this_day", { why: o.reason }))}</div>`}</div>`).join("");
+}
+$("cal").addEventListener("contextmenu", (e) => {
+  if (performance.now() - CTX.at < 700) { e.preventDefault(); return; }     // the long-press already opened it
+  if (ctxOpen(e.target, e.clientX, e.clientY)) e.preventDefault();
+});
+// long-press on touch (iOS has no contextmenu event): 550 ms without moving
+$("cal").addEventListener("pointerdown", (e) => {
+  if (e.pointerType !== "touch") return;
+  clearTimeout(CTX.lp);
+  const t = e.target, x = e.clientX, y = e.clientY;
+  CTX.lp = setTimeout(() => { if (ctxOpen(t, x, y)) { CTX.quietUntil = performance.now() + 600; navigator.vibrate?.(10); } }, 550);
+  CTX.lx = x; CTX.ly = y;
+});
+$("cal").addEventListener("pointermove", (e) => { if (CTX.lp && Math.hypot(e.clientX - CTX.lx, e.clientY - CTX.ly) > 10) { clearTimeout(CTX.lp); CTX.lp = null; } });
+["pointerup", "pointercancel"].forEach((ev) => $("cal").addEventListener(ev, () => { clearTimeout(CTX.lp); CTX.lp = null; }));
+// the tap that ends a long-press must not also open the dialog
+$("cal").addEventListener("click", (e) => { if (performance.now() < CTX.quietUntil) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+document.addEventListener("pointerdown", (e) => { if (CTX.el && !CTX.el.contains(e.target)) ctxClose(); });
+addEventListener("scroll", () => ctxClose(), { passive: true, capture: true });
+addEventListener("resize", () => ctxClose());
+
+// ---------------- wiring ----------------
+window.onAutoPlanChange = () => load();      // autoplan.js: approve / reject / 復原 changed the plan
+function shift(dir) {
+  if (S.narrow || S.view === "week") S.anchor = addDays(mondayOf(S.anchor), 7 * dir);
+  else { const d = dOf(S.anchor); S.anchor = isoOf(new Date(d.getFullYear(), d.getMonth() + dir, 1)); }
+  load();
+}
+$("prev").onclick = () => shift(-1);
+$("next").onclick = () => shift(1);
+$("go-today").onclick = () => { S.anchor = D ? D.today : null; S.sel = D ? D.today : null; load(); };
+document.querySelectorAll("#view-seg button").forEach((b) => b.onclick = () => {
+  S.view = b.dataset.view; ls.set("view", S.view);
+  if (S.view === "week" && S.sel) S.anchor = S.sel;
+  load();
+});
+menu("push-caret", "push-menu");
+menu("more-btn", "more-menu");
+$("push-main").onclick = () => push("week");
+$("push-menu").addEventListener("click", (e) => { const b = e.target.closest("[data-scope]:not([disabled])"); if (b) push(b.dataset.scope); });
+$("more-menu").addEventListener("click", (e) => {
+  const b = e.target.closest("button:not([disabled])"); if (!b) return;
+  if (b.dataset.unpush) unpush(b.dataset.unpush);
+  else if (b.dataset.act === "refresh") { msg(""); load(); }
+  else if (b.dataset.act === "blackout") openBo(null);
+  else if (b.dataset.act === "del-expired") delExpired();
+});
+$("rec-btn").onclick = reconcile;
+matchMedia("(max-width: 699px)").addEventListener("change", (e) => { S.narrow = e.matches; if (D) load(); });
+// tap-to-pin glossary on touch
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".term");
+  document.querySelectorAll(".term.open").forEach((x) => x !== t && x.classList.remove("open"));
+  if (t) t.classList.toggle("open");
+});
+renderLegend();
+(async () => {
+  const q = new URLSearchParams(location.search).get("day");
+  S.anchor = q && /^\d{4}-\d\d-\d\d$/.test(q) ? q : isoOf(new Date());
+  await load();
+  if (D && !q && S.anchor !== D.today) { S.anchor = D.today; await load(); }
+  // deep link from 總覽: ?uid= opens that session (planned vs actual), ?act= an activity outside the plan
+  const qp = new URLSearchParams(location.search), qu = qp.get("uid"), qa = qp.get("act");
+  if (D && qu && findS(qu)) { S.sel = findS(qu).day; render(); openDlg(findS(qu)); }
+  else if (D && qa && /^\d+$/.test(qa)) openAct(+qa);
+})();
+</script>
+</body>
+</html>

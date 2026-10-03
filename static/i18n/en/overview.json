@@ -1,0 +1,9 @@
+{
+  "pmc.title": "Fitness · fatigue · form",
+  "pmc.sub": "last 90 days",
+  "pmc.ctl": "CTL fitness",
+  "pmc.atl": "ATL fatigue",
+  "pmc.tsb": "TSB form",
+  "pmc.aria": "CTL and ATL lines with TSB bars over the last 90 days",
+  "pmc.tip": "Fitness, fatigue and form over the last 90 days.\nHow to read: blue CTL = fitness (42-day average load), orange ATL = fatigue (7 days); bars TSB = yesterday's CTL − ATL, coloured by TSB ÷ CTL: red < −30% High Risk, green −30 to −10% Optimal, light purple −10 to +5% grey zone, purple +5 to +25% Fresh, yellow > +25% Transition.\nLook for: blue rising = getting fitter; orange above blue = training more than usual lately; negative TSB is not bad.\nMethod: the TrainingPeaks PMC; bands from Friel, rules of thumb, a direction only."
+}

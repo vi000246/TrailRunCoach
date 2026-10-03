@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="zh-TW">
+<head><script>window.TRC_STATIC_CFG = {"snapshot": "2026-10-03", "today": "2026-10-03", "pages": {"/demo": "index.html", "/api/v1/overview/page": "overview.html", "/api/v1/overview/plan/schedule/page": "schedule.html", "/api/v1/overview/plan/compliance/page": "compliance.html", "/api/v1/wko5/viewer": "charts.html", "/api/v1/plan/page": "plan.html", "/api/v1/wko5/activities/page": "activities.html", "/api/v1/routes/page": "routes.html", "/api/v1/racepower/page": "racepower.html", "/": "index.html", "/api/v1/achievements/page": "activities.html#achievements"}, "compute": "^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$", "locks": "#gpxpick, #evsubmit, #addphase, #savephases, #tomanual, #toauto, [data-del-event], [data-edit-event], #rec-btn, #pf-save, #pf-reset, #bo-save, #bo-del, #sd-swap, #vd button[data-vk], #gpxfile, #gpx-attach, #stop-import, input[type=file][accept*='.gpx' i]"};</script><script src="static/trc_static.js"></script><script>window.TRC_SESSION = {"mode": "demo", "static": true, "caps": ["plan.write"], "user": null, "demo": {"sandbox": false, "base": "2026-10-03-20261002", "expires_at": null, "reset": false, "cta_url": null, "static": true}};</script><script>window.__I18N__ = {"locale": "zh-TW", "debug": false, "catalog": {"common.z5flow.aria": "5 區開放流程", "common.z5flow.here": "你現在在這裡", "common.z5flow.next": "下一步", "common.z5flow.also": "同時可以做（{stage}）", "common.z5flow.help": "說明", "common.z5flow.ok": "已達成", "common.z5flow.todo": "還沒達成", "common.z5flow.unknown": "還沒做", "common.z5flow.unlocks": "完成後：", "common.z5flow.unlocked": "已解鎖：", "common.z5flow.tag.done": "已完成", "common.z5flow.tag.current": "現在", "common.z5flow.tag.parallel": "可同時做", "common.z5flow.tag.locked": "未解鎖", "common.workout.no_tpace": "沒有閾值配速：這段推到手錶不會有配速目標", "common.workout.no_tpace_badge": "沒有閾值配速", "common.workout.no_tpace_link": "看閾值配速怎麼估", "common.autoplan.log_title": "自動調整紀錄", "common.autoplan.log_count": "{n} 筆", "shell.brand": "訓練教練", "shell.brand.title": "回首頁", "shell.nav.label": "主選單", "shell.nav.item_title": "{name}：{purpose}", "shell.page.home.name": "總覽", "shell.page.home.short": "總覽", "shell.page.home.purpose": "狀況・待辦・本週課表", "shell.page.schedule.name": "課表", "shell.page.schedule.short": "課表", "shell.page.schedule.purpose": "日曆排課・同步 COROS", "shell.page.charts.name": "圖表分析", "shell.page.charts.short": "圖表", "shell.page.charts.purpose": "趨勢與單次活動圖表", "shell.page.activity.name": "活動列表", "shell.page.activity.short": "活動", "shell.page.activity.purpose": "搜尋・篩選・編輯・成就", "shell.page.injuries.name": "傷病紀錄", "shell.page.injuries.short": "傷病", "shell.page.injuries.purpose": "疼痛・受傷前的訓練", "shell.page.routes.name": "路線", "shell.page.routes.short": "路線", "shell.page.routes.purpose": "重複路段與路線的進步", "shell.page.plan.name": "賽事周期", "shell.page.plan.short": "周期", "shell.page.plan.purpose": "目標賽事・周期・門檻", "shell.page.racepower.name": "賽事計算機", "shell.page.racepower.short": "計算機", "shell.page.racepower.purpose": "完賽時間・分段配速／功率／心率・補給", "shell.page.settings.name": "設定", "shell.page.settings.short": "設定", "shell.page.settings.purpose": "計算模式・體重・資料校正", "shell.build.preparing": "正在準備資料…", "shell.build.elapsed": "已 {s} 秒", "shell.build.failed": "資料處理失敗：{error}", "shell.lang.title": "切換語言（Language）", "shell.lang.zh-TW": "中文", "shell.lang.en": "EN", "shell.nav.more": "更多", "shell.nav.more_title": "活動列表、路線、傷病紀錄、設定", "shell.demo.tag": "示範資料", "shell.demo.text": "這是虛構的跑者，你的修改只存在這個瀏覽器。", "shell.demo.try": "試試：", "shell.demo.try_schedule": "排課表", "shell.demo.try_race": "賽事計算機", "shell.demo.try_plan": "週期", "shell.demo.left_none": "還沒有修改", "shell.demo.left_h": "{h} 小時後清除", "shell.demo.left_m": "{m} 分鐘後清除", "shell.demo.left_title": "你的修改從第一次修改起保留 24 小時，之後自動回到原始示範資料", "shell.demo.reset": "重設示範", "shell.demo.reset_title": "清掉你的修改，回到原始示範資料", "shell.demo.reset_confirm": "清掉你在示範裡的所有修改？", "shell.demo.cta": "想用自己的資料？", "shell.demo.locked": "示範模式不提供這個功能", "shell.demo.disabled": "示範模式不提供這個功能", "shell.demo.static_text": "唯讀示範：虛構跑者的一年訓練。課表可以試著改，修改只存在這個瀏覽器。", "shell.demo.static_edits": "已修改課表", "shell.demo.static_none": "還沒有修改", "shell.demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改", "shell.demo.static_locked": "唯讀示範：這個操作在示範版不能用", "overview.pmc.title": "體能・疲勞・狀況", "overview.pmc.sub": "近 90 天", "overview.pmc.ctl": "CTL 體能", "overview.pmc.atl": "ATL 疲勞", "overview.pmc.tsb": "TSB 狀況", "overview.pmc.aria": "近 90 天的 CTL、ATL 折線與 TSB 長條", "overview.pmc.tip": "近 90 天的體能、疲勞、狀況。\n怎麼看：藍線 CTL = 體能（42 天平均負荷）、橘線 ATL = 疲勞（7 天）；長條 TSB = 昨天的 CTL − ATL，顏色看 TSB ÷ CTL：紅 < −30% 過度疲勞、綠 −30～−10% 有效訓練、淺紫 −10～+5% 持平、紫 +5～+25% 比賽狀態、黃 > +25% 休息過久。\n看什麼：藍線往上 = 體能在長；橘線高過藍線 = 最近練得比平常多；TSB 負的不代表不好。\n方法：TrainingPeaks 的 PMC；區間 Friel，經驗法則，只當方向。"}};</script><script src="static/i18n/i18n.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>訓練總覽</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<script src="static/dashicons.js"></script>
+<script src="static/z5flow.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
+  --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+    --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
+  --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+.di { width: 1em; height: 1em; flex: none; vertical-align: -.14em; }
+header { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line); padding: 7px 16px;
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; position: sticky; top: var(--shell-top, 0); z-index: 10; }
+header h1 { font-size: 16px; margin: 0 4px 0 0; }
+.jump { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.jump a { color: var(--muted); text-decoration: none; font-size: 13px; padding: 3px 11px; border-radius: 14px; white-space: nowrap; }
+.jump a:hover { background: var(--soft); color: var(--text); }
+.jump a.on { background: var(--text); color: var(--bg); }
+[data-sec] { scroll-margin-top: calc(var(--shell-top, 0px) + 56px); }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+.num { font-variant-numeric: tabular-nums; }
+main { max-width: 1280px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
+section, .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; box-shadow: var(--shadow); }
+h2 { font-size: 14.5px; margin: 0 0 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+h2 .meta { font-weight: 400; }
+h2 .di { font-size: 16px; color: var(--muted); }
+.to-sched { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: none; white-space: nowrap; }
+.to-sched:hover { text-decoration: underline; }
+@media (max-width: 699px) { header { padding: 7px 10px; } header h1 { display: none; } #asof { display: none; }
+  main { padding: 10px 10px 84px; gap: 10px; } section, .panel { padding: 12px; } }
+
+/* ? help: hover shows, click / tap pins (touch has no hover); one fixed popup on <body> */
+.q { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; padding: 0; flex: none; vertical-align: 1px; }
+.q:hover, .q:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+.qpop { position: fixed; z-index: 100; max-width: min(340px, calc(100vw - 24px)); white-space: pre-line; background: var(--panel);
+  color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; font-size: 12.5px; line-height: 1.55;
+  box-shadow: 0 8px 24px rgba(0,0,0,.2); pointer-events: none; }
+.term { border-bottom: 1px dotted currentColor; cursor: help; }
+
+/* status words: colour + icon + text, never colour alone */
+.st { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.st.good { color: var(--good); } .st.watch { color: var(--watch); } .st.bad { color: var(--bad); } .st.info, .st.na { color: var(--muted); }
+
+/* ---- KPI row ---- */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 980px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .kpis { gap: 8px; } }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 10px; box-shadow: var(--shadow);
+  display: grid; grid-template-rows: auto 1fr auto; gap: 2px; min-width: 0; position: relative; }
+.kpi .k { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.kpi .k .q { margin-left: auto; }
+.kpi .row { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; min-width: 0; }
+.kpi .v { font-size: 32px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi .v small { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 2px; }
+.kpi .sub { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; min-width: 0; }
+.kpi .sub > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.kpi svg.spark { width: 46%; max-width: 140px; height: 34px; flex: none; overflow: visible; }
+.kpi .ring { width: 46px; height: 46px; flex: none; }
+.kpi .bars { display: grid; gap: 4px; flex: 1; max-width: 150px; }
+.kpi .bars .b { display: grid; grid-template-columns: 30px 1fr; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); }
+.track { height: 7px; background: color-mix(in srgb, var(--line) 80%, transparent); border-radius: 4px; overflow: hidden; position: relative; }
+.track i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 4px; }
+@media (max-width: 420px) { .kpi { padding: 10px 11px 9px; } .kpi .v { font-size: 26px; } .kpi svg.spark { width: 40%; } }
+/* PMC (last 90 days): CTL / ATL lines, TSB bars coloured like views/training.json's PMC */
+.plot.pmc { height: 230px; }
+@media (max-width: 699px) { .plot.pmc { height: 200px; } }
+
+/* ---- this week: 7 day cards ---- */
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.dc { border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 9px; min-height: 128px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  background: color-mix(in srgb, var(--bg) 40%, var(--panel)); }
+.dc .dh { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; font-size: 12px; color: var(--muted); }
+.dc .dh b { font-size: 13px; color: var(--text); }
+.dc.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.dc.today .dh b { color: var(--accent); }
+.dc .now { font-size: 10.5px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 8px; padding: 0 6px; }
+.dc.past:not(.today) { opacity: .92; }
+.sx { --c: var(--faint); display: grid; grid-template-columns: 26px 1fr; gap: 1px 7px; align-items: center; text-align: left; width: 100%;
+  border: 0; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 9%, transparent); border-radius: 6px;
+  padding: 5px 6px 5px 5px; font: inherit; color: var(--text); cursor: default; min-width: 0; }
+.sx .ic { grid-row: 1 / span 2; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--c); color: #fff; font-size: 15px; position: relative; }
+.sx .tl { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sx .mn { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sx .ok { position: absolute; right: -5px; bottom: -5px; width: 15px; height: 15px; border-radius: 50%; background: var(--good); color: #fff;
+  display: grid; place-items: center; font-size: 10px; border: 2px solid var(--panel); }
+.sx.cp-yellow .ok { background: var(--watch); } .sx.cp-red .ok { background: var(--bad); }
+.sx.missed { opacity: .55; } .sx.missed .tl { text-decoration: line-through; }
+.sx.extra { --c: var(--bar); }
+.sx .offp { color: var(--watch); font-weight: 800; }
+.sx[data-go] { cursor: pointer; }
+.ty-easy { --c: var(--s3); } .ty-long, .ty-hike { --c: var(--s1); } .ty-z3 { --c: var(--s4); } .ty-z5 { --c: var(--s2); }
+.ty-test { --c: var(--s5); } .ty-b2b { --c: var(--s7); } .ty-loaded { --c: var(--s6); } .ty-strength, .ty-heat, .ty-notice { --c: var(--faint); }
+.ty-race { --c: var(--text); }
+.rest { margin-top: auto; margin-bottom: auto; display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--faint); font-size: 12px; }
+.badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.mini { font-size: 10.5px; border: 1px solid currentColor; border-radius: 8px; padding: 0 5px; color: var(--muted); white-space: nowrap; }
+.mini.pushed, .mini.updated { color: var(--good); } .mini.outdated { color: var(--watch); } .mini.failed { color: var(--bad); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+@media (max-width: 899px) {
+  .week { grid-template-columns: 1fr; gap: 6px; }
+  .dc { min-height: 0; display: grid; grid-template-columns: 52px 1fr; gap: 6px; padding: 6px 8px; align-items: center; }
+  .dc .dh { flex-direction: column; align-items: flex-start; gap: 0; }
+  .dc .sxs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 5px; }
+  .rest { justify-content: flex-start; }
+}
+.sxs { display: grid; gap: 5px; }
+
+/* expanders */
+details.more { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 6px; }
+details.more > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 4px; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "▸"; font-size: 10px; }
+details.more[open] > summary::before { content: "▾"; }
+details.more .body { font-size: 12.5px; color: var(--muted); display: grid; gap: 6px; margin-top: 6px; }
+details.more ul { margin: 0; padding-left: 18px; }
+
+/* ---- status cards row ---- */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.cards:has(#b2bcard[hidden]) #todocard { grid-column: 1 / -1; }
+.alerts { display: grid; gap: 6px; }
+details.al { border: 1px solid var(--line); border-radius: 9px; padding: 0; border-left: 4px solid var(--lc, var(--line)); }
+details.al.good { --lc: var(--good); } details.al.watch { --lc: var(--watch); } details.al.bad { --lc: var(--bad); } details.al.info, details.al.na { --lc: var(--line); }
+details.al > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr) 12px; gap: 7px; align-items: center;
+  padding: 7px 10px; font-size: 13px; }
+details.al > summary::-webkit-details-marker { display: none; }
+details.al > summary .di { font-size: 17px; color: var(--lc); }
+details.al > summary b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* phone: a long alert title wraps instead of running past the card (its full text is also in the body) */
+@media (max-width: 699px) { details.al > summary b { white-space: normal; overflow-wrap: anywhere; } }
+details.al > summary .s { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+details.al > summary::after { content: "▸"; font-size: 10px; color: var(--faint); }
+details.al[open] > summary::after { content: "▾"; }
+details.al .body { padding: 0 10px 9px 35px; font-size: 12.5px; color: var(--muted); }
+.btn { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 3px 10px; cursor: pointer; border-radius: 6px; }
+.btn:hover { border-color: var(--accent); }
+.err { color: var(--bad); }
+.loading { color: var(--muted); padding: 18px 0; text-align: center; }
+
+/* 5 區 tracker */
+.z5st { display: inline-flex; align-items: center; gap: 5px; font-weight: 650; font-size: 13px; border-radius: 14px; padding: 1px 10px 1px 8px; border: 1px solid currentColor; }
+.z5st.confirmed, .z5st.open { color: var(--good); } .z5st.paused { color: var(--watch); } .z5st.reentry { color: var(--bad); } .z5st.unconfirmed { color: var(--muted); }
+.pmb { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; padding: 0 2px 0 6px; border-radius: 10px;
+  border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.pmb .q { width: 14px; height: 14px; font-size: 9.5px; border: 0; }
+
+/* compact stat blocks (B2B / 負重) */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.stat { border: 1px solid var(--line); border-radius: 9px; padding: 6px 9px; min-width: 0; }
+.stat .k { font-size: 11.5px; color: var(--muted); display: flex; gap: 4px; align-items: center; white-space: nowrap; overflow: hidden; }
+.stat .v { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .v small { font-size: 12px; color: var(--muted); font-weight: 600; }
+.now-l { display: flex; gap: 6px; align-items: center; font-size: 13px; margin: 0 0 8px; min-width: 0; }
+.now-l .di { color: var(--accent); font-size: 16px; }
+.now-l span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rows { display: grid; gap: 4px; margin-top: 8px; }
+details.rw { border-top: 1px solid var(--line); }
+details.rw > summary { list-style: none; cursor: pointer; display: flex; gap: 8px; align-items: center; padding: 5px 0; font-size: 12.5px; flex-wrap: wrap; }
+details.rw > summary::-webkit-details-marker { display: none; }
+details.rw .body { font-size: 12px; color: var(--muted); padding: 0 0 6px; }
+.grid2 { display: grid; grid-template-columns: auto auto auto; gap: 1px 10px; font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+/* ---- 紀錄 ---- */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.seg { display: inline-flex; }
+.seg button { font: inherit; font-size: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 3px 10px; cursor: pointer; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.plot { width: 100%; height: 280px; }
+.plot.small { height: 120px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 10px 0; }
+.tile { border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; min-width: 0; }
+.tile .k { font-size: 12px; color: var(--muted); display: flex; gap: 5px; align-items: center; }
+.tile .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile .s { font-size: 11.5px; color: var(--muted); }
+.up { color: var(--good); } .down { color: var(--bad); }
+.split { display: flex; height: 16px; border-radius: 5px; overflow: hidden; gap: 2px; margin: 6px 0 4px; background: var(--panel); }
+.split i { display: block; height: 100%; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin: 8px 0; }
+.keys div { font-size: 13px; }
+
+/* ---- 指標 ---- */
+.ind { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.ic { border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px 8px; border-top: 3px solid var(--lc, var(--line)); display: grid; gap: 2px; min-width: 0; align-content: start; }
+.ic.good { --lc: var(--good); } .ic.watch { --lc: var(--watch); } .ic.bad { --lc: var(--bad); }
+.ic .v.vl-good { color: var(--good); } .ic .v.vl-warn { color: var(--watch); } .ic .v.vl-bad { color: var(--bad); }
+.ic .top { display: flex; justify-content: space-between; gap: 6px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.ic .top > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ic .vr { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }
+.ic .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ic svg.spark { width: 45%; height: 26px; flex: none; }
+.ic .vd { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ic details.more { margin-top: 4px; padding-top: 4px; }
+.heatbars { display: flex; align-items: flex-end; gap: 1px; height: 20px; margin: 4px 0; }
+.heatbars i { flex: 1; min-width: 1px; background: var(--hi, #e34948); opacity: .6; border-radius: 1px 1px 0 0; }
+.act { margin-top: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<script src="static/shell.js" data-page="home"></script>
+<header>
+  <h1>總覽</h1>
+  <nav class="jump" id="jump" aria-label="本頁段落">
+    <a href="#s-status">狀況</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a><a href="#s-week">本週</a><a href="#s-todo">待辦</a>
+  </nav>
+  <span class="spacer" style="flex:1"></span>
+  <span class="meta" id="asof"></span>
+</header>
+<main>
+  <!-- the pending 課表待確認 proposal only; the change log lives on 課表 (data-log="none") -->
+  <div id="autoplan" data-limit="3" data-log="none"></div>
+  <script src="static/autoplan.js" defer></script>
+  <script src="static/session_banner.js" defer></script>
+
+  <!-- KPI row: CTL, TSB, this week's volume, countdown to the next A race -->
+  <div data-sec id="s-status" style="display:grid;gap:10px">
+    <div class="kpis" id="kpis"><div class="kpi"><div class="loading">計算訓練狀況中…</div></div></div>
+    <!-- PMC, last 90 days (GET /overview/pmc): CTL / ATL lines, TSB bars in views/training.json's PMC colours -->
+    <section aria-labelledby="pmc-h">
+      <h2 id="pmc-h"><span data-i18n="overview.pmc.title">體能・疲勞・狀況</span> <span class="meta" data-i18n="overview.pmc.sub">近 90 天</span><span id="pmc-q"></span></h2>
+      <div class="legend" id="pmc-legend" style="margin:0 0 2px"></div>
+      <div class="plot pmc" id="pmc" role="img"></div>
+    </section>
+  </div>
+
+  <section data-sec id="s-log">
+    <h2>做了什麼 <span class="meta" id="per-sub"></span></h2>
+    <div class="toolbar">
+      <div class="seg" id="unit"><button data-u="week">週</button><button data-u="month">月</button><button data-u="year">年</button></div>
+      <button class="btn" id="prev" aria-label="上一期">◀</button>
+      <b id="per-label" class="num"></b>
+      <button class="btn" id="next" aria-label="下一期">▶</button>
+      <button class="btn" id="now">回到現在</button>
+      <button type="button" class="q" aria-label="說明" data-tip="每一期做了多少：上圖移動時間（依類別堆疊），下圖爬升（m）。&#10;怎麼看：點長條切到那一期，下方數字跟著換；◀ ▶ 換期、週／月／年換單位。&#10;看什麼：跟「平常」（詳細數字裡的典型一期）比，這期多還是少。&#10;方法：只算移動時間；類別同「我的訓練 → 訓練量」。">?</button>
+    </div>
+    <div class="legend" id="cat-legend" style="margin:0 0 4px"></div>
+    <div class="plot" id="trend"></div>
+    <div class="meta" style="margin:4px 0 0">爬升（m）</div>
+    <div class="plot small" id="trend-climb"></div>
+    <div id="period"><div class="loading">…</div></div>
+  </section>
+
+  <section data-sec id="s-ind">
+    <h2>指標 <span class="meta" id="ind-sub"></span></h2>
+    <div class="ind" id="ind"><div class="loading">…</div></div>
+  </section>
+
+  <section data-sec id="s-week" aria-labelledby="wk-h">
+    <h2 id="wk-h"><span id="wk-ic"></span>本週 <span class="meta num" id="wk-sub"></span><span id="wk-cp"></span>
+      <a class="to-sched" href="schedule.html">課表編輯 →</a></h2>
+    <div class="week" id="wk-days"><div class="loading">排本週課表中…</div></div>
+    <div class="legend" id="wk-legend"></div>
+    <div id="week"></div>
+  </section>
+
+  <div class="cards" data-sec id="s-todo">
+    <!-- Zone 5 opening process (quality_gate.z5_card); the season history is the 基礎期 chart -->
+    <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
+      <h2 id="z5-h">5 區（最大攝氧量間歇）開放流程 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="charts.html">歷程 →</a></h2>
+      <div id="z5"><div class="loading">…</div></div>
+    </section>
+    <!-- 待辦與警示 at the bottom, left of B2B (full width while B2B is hidden) -->
+    <section id="todocard" aria-labelledby="todo-h">
+      <h2 id="todo-h">待辦與警示 <span class="meta" id="todo-sub"></span></h2>
+      <div class="alerts" id="actions"><div class="loading">…</div></div>
+      <!-- due CP / AeT tests, B2B weekends, zone retests: the shared floating box (static/suggestions.js) -->
+    </section>
+    <!-- 連續兩天長天 (engine/b2b.py card): only before a multi-day / ≥ 6 h A event, or once B2B weekends exist -->
+    <section id="b2bcard" aria-labelledby="b2b-h" hidden>
+      <h2 id="b2b-h">B2B 連續長天 <span class="meta" id="b2b-sub"></span><span id="b2b-q"></span></h2>
+      <div id="b2b"><div class="loading">…</div></div>
+    </section>
+  </div>
+</main>
+<script>
+const API = "/api/v1/overview";
+let USE_POWER = true;                       // settings 「使用功率」 (charts.power.enabled), read at start
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const I = (n, c) => window.DI ? DI(n, c) : "";
+// ? help button: the text lives in data-tip (plain text, newlines kept)
+const q = (s, label = "說明") => s ? `<button type="button" class="q" aria-label="${esc(label)}" data-tip="${esc(s)}">?</button>` : "";
+// glossary: terms in engine text get a hover (tap on touch) explanation
+const GLOSS = {
+  "AeT": "AeT 有氧閾值（≈ LT1、第一換氣閾值）：還能只用鼻子呼吸、能講完整句子的最高強度。基礎期的輕鬆課都壓在它以下。\n\n" +
+    "怎麼測（心率飄移測試）：\n" +
+    "1. 平日排 50 分：冷氣房跑步機 2–3%＋電扇（首選），或清晨平路環線（不要山路）；記下溫度，熱的時候結果會偏高；先暖身 10 分鐘到開始流汗\n" +
+    "2. 從你猜的 AeT 心率起跑，固定功率跑 40 分鐘（Uphill Athlete：只有 40 分就做 40 分，不建議更短），中途不停、不加速；主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）\n" +
+    "3. 比較前 20 分與後 20 分的「功率÷心率」：飄移 < 3.5% → AeT 還可以再高；3.5–5% → 前半心率就是 AeT；> 5% → 設太高\n" +
+    "4. 判讀卡和總覽「測試」會出現「套用這次的 AeT」（沒測時用 0.89 × LTHR 估）",
+  "CP 測試": "CP 臨界功率：可以長時間維持的最高功率（跑步約 30–60 分鐘的比賽強度）。\n\n" +
+    "怎麼測（課表偏好選一種）：\n" +
+    "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分；CP ≈ 0.95 × 20 分平均功率\n" +
+    "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分；" +
+    "CP = (12 分功率×720 − 3 分功率×180) ÷ 540，W′ = (3 分功率 − CP) × 180\n" +
+    "• 用比賽：5–10 K 比賽或計時跑，以 30 分為錨點換算\n" +
+    "測完在活動判讀卡按「套用這次的 CP」；每 4–6 週測一次，賽前 10 天內不要測",
+  "間歇門檻": "間歇門檻：基礎期什麼時候可以排間歇（課表偏好可以選方法，每個選項的 ? 有說明）。\n\n" +
+    "自動（預設）：有實測 AeT（16 週內）而且 LTHR 不是預設值 → Uphill Athlete 差距法（LTHR ÷ AeT − 1 ≤ 10%），" +
+    "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5、週增量 ≤ 10%、" +
+    "3:1 恢復週改 fartlek、TSB。劑量 5×1 分 → 6×1 → 4×3 上坡 → 5×3 → 4×4，之後閾值下 3×8／4×8 交替。\n\n" +
+    "選了某個方法但缺資料時不會永久鎖住，改照護欄排（自訂）。",
+};
+const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
+const gl = (s) => esc(s).replace(GLOSS_RE, (m) => `<span class="term" tabindex="0" data-tip="${esc(GLOSS[m])}">${m}</span>`);
+async function j(url) { const r = await fetch(url); if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`); return r.json(); }
+const ls = { get(k, d) { try { const v = localStorage.getItem("overview." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("overview." + k, JSON.stringify(v)); } catch {} } };
+
+// ---- formatting (units: h:mm, km 1 dec, m 0 dec, TSS 0 dec) ----
+const hm = (s) => { if (s == null) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+const hrs = (h) => h == null ? "–" : (h >= 10 ? h.toFixed(0) : h.toFixed(1)) + " h";
+const hrN = (h) => h == null ? "–" : (h >= 10 ? h.toFixed(0) : h.toFixed(1));
+const km = (v) => v == null ? "–" : (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(1)) + " km";
+const m0 = (v) => v == null ? "–" : Math.round(v).toLocaleString() + " m";
+const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
+const sgn = (v, f = n0) => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "±") + f(Math.abs(v));
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
+const WD = I18N.fmt.weekdays("narrow");     // i18n.js: 一…日 / M…S, Monday first
+const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const wd = (iso) => WD[(new Date(iso + "T00:00:00").getDay() + 6) % 7];
+const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s3", bike: "--s4", strength: "--s5", walk: "--s6", other: "--s7" };
+const catColor = (k) => css(CAT_VAR[k] || "--s7");
+const LEVEL = { good: "良好", watch: "注意", bad: "要處理", info: "參考", na: "資料不足" };
+const stw = (lvl, word) => `<span class="st ${esc(lvl)}">${I(lvl)}${esc(word ?? LEVEL[lvl] ?? "")}</span>`;
+
+const charts = {};
+function chart(id) { if (!charts[id]) { charts[id] = echarts.init($(id)); new ResizeObserver(() => charts[id].resize()).observe($(id)); } return charts[id]; }
+const axisStyle = () => ({ axisLabel: { color: css("--muted"), fontSize: 11 }, axisLine: { lineStyle: { color: css("--line") } },
+  splitLine: { lineStyle: { color: css("--line") } }, axisTick: { show: false } });
+
+let STATUS = null, PLAN = null, SP = null;
+
+// sparkline: thin line, last point marked; hover shows the last value (native title)
+function spark(pts, level, last) {
+  const P = (pts || []).filter((p) => p[1] != null);
+  if (P.length < 3) return "";
+  const xs = P.map((p) => new Date(p[0]).getTime()), ys = P.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const X = (x) => x1 === x0 ? 0 : (x - x0) / (x1 - x0) * 196 + 2, Y = (y) => y1 === y0 ? 17 : 31 - (y - y0) / (y1 - y0) * 28;
+  const col = level === "bad" ? "var(--bad)" : level === "watch" ? "var(--watch)" : level === "good" ? "var(--good)" : "var(--accent)";
+  const lx = X(xs[xs.length - 1]), ly = Y(ys[ys.length - 1]);
+  const zero = y0 < 0 && y1 > 0 ? `<line x1="0" x2="200" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--line)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : "";
+  return `<svg class="spark" viewBox="0 0 200 34" preserveAspectRatio="none" role="img" aria-label="近 90 天走勢">
+    <title>近 90 天：${esc(P[0][0])} ${Math.round(ys[0])} → ${esc(P[P.length - 1][0])} ${Math.round(ys[ys.length - 1])}</title>${zero}
+    <polyline fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"
+      points="${P.map((p, i) => `${X(xs[i]).toFixed(1)},${Y(ys[i]).toFixed(1)}`).join(" ")}"/>
+    <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="3.2" fill="${col}" stroke="var(--panel)" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+}
+// progress ring (done ÷ target)
+function ring(f, col = "var(--accent)") {
+  const r = 19, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, f || 0));
+  return `<svg class="ring" viewBox="0 0 46 46" role="img" aria-label="完成 ${Math.round((f || 0) * 100)}%">
+    <circle cx="23" cy="23" r="${r}" fill="none" stroke="var(--line)" stroke-width="5"/>
+    <circle cx="23" cy="23" r="${r}" fill="none" stroke="${col}" stroke-width="5" stroke-linecap="round"
+      stroke-dasharray="${(c * v).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 23 23)"/>
+    <text x="23" y="27" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--text)">${Math.round((f || 0) * 100)}%</text></svg>`;
+}
+const bar = (label, done, tgt, fmt) => `<div class="b"><span>${label}</span>
+  <div class="track" role="img" aria-label="${label} ${fmt(done)} / ${fmt(tgt)}" title="${label} ${fmt(done)} / ${fmt(tgt)}"><i style="width:${Math.min(100, tgt > 0 ? done / tgt * 100 : 0).toFixed(1)}%"></i></div></div>`;
+
+// ---------------- KPI tiles ----------------
+const ind = (id) => (STATUS?.indicators || []).find((x) => x.id === id);
+const tipOf = (i) => i ? [i.verdict, i.why, i.action ? "→ " + i.action : "", i.source ? "來源：" + i.source : ""].filter(Boolean).join("\n") : "";
+function renderKpis() {
+  if (!STATUS) return;
+  const F = ind("fitness"), T = ind("form"), ph = ind("phase"), g = STATUS.goals;
+  const out = [];
+  const ramp = F?.extra?.ramp_week;
+  out.push(`<div class="kpi"><div class="k">${I("fitness")}體能 CTL${q(tipOf(F))}</div>
+    <div class="row"><div class="v">${esc(F?.text ?? "–")}</div>${spark(F?.spark, F?.level)}</div>
+    <div class="sub"><span class="num">${ramp == null ? "" : `本週 ${sgn(ramp, (v) => v.toFixed(1))}/週`}</span>${F ? stw(F.level, kpiWord(F)) : ""}</div></div>`);
+  out.push(`<div class="kpi"><div class="k">${I("form")}狀況 TSB${q(tipOf(T))}</div>
+    <div class="row"><div class="v">${esc(T?.text ?? "–")}</div>${spark(T?.spark, T?.level)}</div>
+    <div class="sub"><span class="num">${T?.why ? esc(T.why.replace(/^TSB [^（]*/, "").replace(/[（）]/g, "")) : ""}</span>${T ? stw(T.level, kpiWord(T)) : ""}</div></div>`);
+  // this week: from the stored plan once loaded (the user's edits), else the generated targets
+  const S = SP?.summary, D = PLAN?.done;
+  const th = S?.hours ?? PLAN?.target?.hours, tt = S?.tss ?? PLAN?.target?.tss;
+  if (PLAN) {
+    const f = th > 0 ? D.hours / th : 0;
+    const wtip = [...(PLAN.why || []), "時數不含肌力；TSS 以你近 6 週每小時 " + n0(PLAN.target.tss_per_hour) + " TSS 換算"].join("\n");
+    out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量${q(wtip)}</div>
+      <div class="row"><div class="v">${hrN(D.hours)}<small>/ ${hrs(th)}</small></div>${ring(f, f >= 1 ? "var(--good)" : "var(--accent)")}</div>
+      <div class="sub"><span class="num">TSS ${n0(D.tss)} / ${n0(tt)}</span>${stw(f >= 1 ? "good" : "info", f >= 1 ? "達成" : f >= 0.5 ? "過半" : "進行中")}</div></div>`);
+  } else out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量</div><div class="loading">…</div></div>`);
+  const name = ph?.extra?.next_a;
+  out.push(`<div class="kpi"><div class="k">${I("flag")}下一場 A 賽${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
+    ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>天</small></div></div>
+      <div class="sub"><span>${esc(name || "")}</span>${STATUS.phase ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>`
+      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="plan.html">新增目標賽事 →</a></div>`}</div>`);
+  $("kpis").innerHTML = out.join("");
+}
+// one word for a KPI tile: the verdict before its first punctuation when short, else the level word
+function kpiWord(i) {
+  const v = String(i.verdict || "").split(/[，、：（()）；]/).map((x) => x.trim()).find((x) => x && !/\d/.test(x) && x.length <= 6);
+  return v || LEVEL[i.level];
+}
+
+// ---------------- status: to-do, indicators ----------------
+async function loadStatus() {
+  const s = STATUS = await j(`${API}/status`);
+  $("asof").textContent = `資料到 ${s.today}`;
+  renderKpis();
+  // to-do: icon + short title; the detail opens on click
+  const lvl = (a) => (ind((a.because || [])[0]) || {}).level || "info";
+  $("todo-sub").textContent = s.actions.length ? `${s.actions.length} 項` : "";
+  $("actions").innerHTML = s.actions.length ? s.actions.map((a) => {
+    const [t, ...rest] = String(a.title).split("：");
+    const l = lvl(a);
+    return `<details class="al ${l}"><summary>${I(l)}<b>${gl(t)}</b><span class="s">${gl(rest.join("："))}</span></summary>
+      <div class="body">${gl(a.detail)}${a.source ? ` ${q("來源：" + a.source)}` : ""}</div></details>`;
+  }).join("") : `<p class="meta">${I("good")} 沒有需要處理的項目</p>`;
+  const order = { bad: 0, watch: 1, good: 2, info: 3, na: 4 };
+  const inds = [...s.indicators].sort((a, b) => order[a.level] - order[b.level]);
+  $("ind-sub").textContent = `${inds.length} 項 · 全部運動一起算`;
+  $("ind").innerHTML = inds.map((i) => {
+    const more = [i.why ? `<div>${gl(i.why)}</div>` : "", driftTier(i), i.action ? `<div class="act">→ ${gl(i.action)}</div>` : "", heatExtra(i),
+      i.source ? `<div class="faint">來源：${esc(i.source)}</div>` : ""].filter(Boolean).join("");
+    return `<div class="ic ${i.level}">
+      <div class="top"><span>${gl(i.title)}${i.extra && i.extra.tip ? q(i.extra.tip) : ""}</span>${stw(i.level)}</div>
+      <div class="vr"><div class="v${i.extra && i.extra.verdict_level ? " vl-" + esc(i.extra.verdict_level) : ""}">${esc(i.text)}</div>${spark(i.spark, i.level)}</div>
+      ${i.verdict ? `<div class="vd" title="${esc(i.verdict)}">${gl(i.verdict)}</div>` : ""}
+      ${applyCpBtn(i)}${aetApply(i)}
+      ${more ? `<details class="more"><summary>詳細</summary><div class="body">${more}</div></details>` : ""}</div>`;
+  }).join("");
+}
+
+// 熱適應 card (status.i_heat, engine/heat.py): daily heat dose bars under the S line,
+// race-day S, and the HRC observation (does the HR cost of heat fall as S rises?)
+function heatExtra(i) {
+  if (i.id !== "heat" || !i.extra) return "";
+  const x = i.extra, doses = x.doses || [];
+  const bars = doses.length ? `<div class="heatbars" title="每天的熱劑量（近 60 天，1 = ≥ 60 分鐘 Hadley ≥ 150）">${doses.slice(-60).map(([d, v]) =>
+    `<i style="height:${Math.max(2, v * 18)}px" title="${esc(d)} ${Math.round(v * 100)}%"></i>`).join("")}</div>` : "";
+  const r = x.s_race ? `<div>${esc(x.s_race.event)}（${esc(x.s_race.date)}）比賽日預估 S ${Math.round(x.s_race.center * 100)} %（${Math.round(x.s_race.low * 100)}–${Math.round(x.s_race.high * 100)} %）</div>` : "";
+  const h = x.hrc && x.hrc.recent != null ? `<div>熱天心率成本 HRC：近 4 週 ${x.hrc.recent.toFixed(1)}、前 4 週 ${x.hrc.before != null ? x.hrc.before.toFixed(1) : "–"} bpm / 10 Hadley${x.hrc.disagrees ? " · <b>觀測不支持模型</b>" : ""}</div>` : "";
+  return `${bars}${r}${h}<div><span class="st watch">推估</span> a = ${x.a}（${(x.a_range || []).join("–")}）</div>`;
+}
+
+// 心率飄移 card (status.i_drift): runs on the 參考 tier are counted for display — say so in plain
+// words (no tier names), why on hover
+const tD = (k, s, p) => (window.I18N ? I18N.t(k, s, p) : s.replace(/\{(\w+)\}/g, (m, a) => (p && p[a] != null ? p[a] : m)));
+function driftTier(i) {
+  const x = i.id === "drift" && i.extra;
+  if (!x || !x.ref) return "";
+  return `<div><span class="st watch">${esc(tD("overview.drift.ref_badge", "只當參考"))}</span> ${esc(tD("overview.drift.ref_runs", "{n} 次暖身後不到 40 分鐘", { n: x.ref }))} ${q(x.ref_tip)}</div>`;
+}
+
+// 測試 card: 「套用這次的 AeT」 when the latest AeT drift test is in UA's 3.5–5 % band
+// (status.i_testing extra.aet_test.apply, engine/aet_test.py) -> POST apply-estimate on the test day
+function aetApply(i) {
+  const at = i.id === "testing" && i.extra && i.extra.aet_test;
+  if (!at || !at.apply) return "";
+  return `<div class="act"><button type="button" class="btn" data-aet-apply>套用這次的 AeT（${esc(at.apply.aethr)} bpm）</button>
+    <span class="meta" data-apply-msg>${esc(at.date)} ${at.drift != null ? esc(tD("overview.drift.value", "心率飄移 {v}%", { v: (at.drift * 100).toFixed(1) })) : ""}</span>${q(at.basis === "Pw:HR"
+      ? tD("overview.drift.basis_power", "用功率算的心率飄移（功率÷心率，Pw:HR）") : tD("overview.drift.basis_pace", "用配速算的心率飄移（速度÷心率，Pa:HR）"))}</div>`;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-aet-apply]");
+  if (!b || !STATUS) return;
+  const at = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).aet_test;
+  if (!at || !at.apply) return;
+  const a = at.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
+  if (!confirm(`把 ${a.date} 的 AeT 設成 ${a.aethr} bpm？區間和間歇門檻會重新計算`)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch("/api/v1/plan/thresholds/apply-estimate", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(a) });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+    b.remove();
+    msg.textContent = `已套用：${a.date} AeT ${a.aethr} bpm`;
+  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+});
+
+// 測試 indicator: 「套用這次的 CP」 (status.i_testing extra.cp_test.apply -> POST /api/v1/plan/thresholds/apply-cp)
+function applyCpBtn(i) {
+  if (!USE_POWER) return "";
+  const ct = i.id === "testing" && i.extra && i.extra.cp_test;
+  if (!ct || !ct.apply) return "";
+  return `<div class="act"><button type="button" class="btn" data-apply-cp="${esc(ct.idx)}">${esc(ct.apply.label)}</button>
+    <span class="meta" data-apply-msg>${esc(ct.date)}</span>${q(`${ct.method_label || ""} · 品質 ${ct.quality || ""}`)}</div>`;
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-apply-cp]");
+  if (!b || !STATUS) return;
+  const ct = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).cp_test;
+  if (!ct || !ct.apply) return;
+  const a = ct.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
+  if (!confirm(`把 ${a.date} 的 CP 設成 ${a.cp} W（${ct.method_label}，品質 ${ct.quality}）？區間和 TSS 會重新計算`)) return;
+  b.disabled = true;
+  try {
+    const r = await fetch("/api/v1/plan/thresholds/apply-cp", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: a.date, cp: a.cp, wprime: a.wprime, cp_method: a.cp_method, activity_index: a.activity_index, note: a.note }) });
+    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+    b.remove();
+    msg.textContent = `已套用：${a.date} CP ${a.cp} W`;
+  } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
+});
+
+// ---------------- 5 區 opening (GET /z5 = quality_gate.z5_card) ----------------
+// the stage flow (static/z5flow.js): 「你現在在這裡，下一步：…」 + one checklist card per stage
+const Z5_ICON = { confirmed: "good", open: "good", paused: "watch", reentry: "bad", unconfirmed: "na" };
+async function loadZ5() {
+  const c = await j(`${API}/z5`);
+  if (c.history_href) $("z5-hist").href = c.history_href;
+  const sub = c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}`
+    : c.state === "paused" || c.state === "reentry" ? (c.reason || "") : (c.reason || "還沒確認有氧基礎");
+  $("z5-st").innerHTML = `<span class="z5st ${esc(c.state)}" title="${esc(sub)}">${I(Z5_ICON[c.state] || "na")}${esc(c.label)}</span>`;
+  // the quest-style stage flow (static/z5flow.js, shared with the 基礎期 panel)
+  Z5Flow.bind();
+  $("z5").innerHTML = Z5Flow.html(c.flow, { q: "q" });
+}
+
+// ---------------- B2B (GET /b2b = engine/b2b.card): numbers + icons, the rest on click ----------------
+const pctS = (v) => v == null ? "–" : (v >= 0 ? "+" : "−") + Math.abs(Math.round(v * 100)) + "%";
+async function loadB2B() {
+  const c = await j(`${API}/b2b`);
+  if (!c.active) return;
+  $("b2bcard").hidden = false;
+  const E = c.event, W = c.this_week || {}, T = c.trend || {};
+  $("b2b-sub").textContent = E ? `${E.name} ${md(E.start)}` : "";
+  $("b2b-q").innerHTML = q(`B2B = 連續兩天、每天 ≥ 90 分的長天。\n判讀：第 2 天和第 1 天比，同 VAM 的心率差、同心率的 VAM 差。\n推估：判讀門檻 ±3 bpm、±5%、趨勢 ±2 個百分點都沒有來源。\n\n何時排：${c.rules.when}\n\n怎麼排：${c.rules.days}\n\n判讀：${c.rules.eval}`);
+  let now;
+  if (W.due) now = [I("b2b"), `本週第 ${W.index} 次 · ${(W.minutes || []).join("＋")} 分`, (W.why || []).join("；")];
+  else if (W.suggest) now = [I("b2b"), `本週建議 B2B（${(W.minutes || []).join("＋")} 分）`, "還沒排：在建議框挑兩天再排入"];
+  else if (W.post) now = [I("rest"), `B2B 後輕鬆日到 ${md(W.post.until)}`, c.rules.post];
+  else if ((W.blocked || []).length && E && E.qualifies) now = [I("na"), "本週不排", W.blocked[0]];
+  const ahead = c.planned.filter((p) => !p.this_week);
+  const out = [];
+  if (now) out.push(`<p class="now-l">${now[0]}<span>${esc(now[1])}</span>${q(now[2])}</p>`);
+  out.push(`<div class="stats">
+    <div class="stat"><div class="k">${I("check")}做過</div><div class="v">${c.done.length}<small> 次</small></div></div>
+    <div class="stat"><div class="k">${I("b2b")}下次</div><div class="v">${ahead.length ? esc(ahead[0].sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")) : "–"}</div></div>
+    <div class="stat"><div class="k">${I("durability")}耐久性好</div><div class="v">${T.durable_share != null ? Math.round(T.durable_share * 100) + "<small>%</small>" : "–"}</div></div>
+    <div class="stat"><div class="k">${I("flag")}賽事</div><div class="v">${E ? (E.days > 1 ? E.days + "<small> 天</small>" : "單日") : "–"}</div></div></div>`);
+  const rows = c.done.map((d, i) => {
+    const r = d.eval || {}, n = r.n || {}, d1 = r.day1 || {}, d2 = r.day2 || {};
+    const share = (x) => x.over_aet_share == null ? "–" : Math.round(x.over_aet_share * 100) + "%";
+    const lv = { good: "good", watch: "watch", bad: "bad" }[r.level] || "na";
+    return `<details class="rw"><summary><b>#${i + 1}</b><span class="num">${md(d.start)}–${md(d.end)}</span>
+        <span class="meta num">${d.minutes.join("＋")} 分</span>${stw(lv, r.label || "–")}</summary>
+      <div class="body">${esc(r.text || "")}
+      <div class="grid2"><span>同 VAM 的心率</span><span class="num">${r.hr_shift_bpm == null ? "–" : sgn(r.hr_shift_bpm, (v) => v.toFixed(1)) + " bpm"}</span><span>±${(r.thresholds || {}).hr_bpm ?? 3} bpm 內＝差不多</span>
+        <span>同心率的 VAM</span><span class="num">${r.vam_ratio == null ? "–" : pctS(r.vam_ratio - 1)}</span><span>±${Math.round(((r.thresholds || {}).vam ?? 0.05) * 100)}% 內＝差不多</span>
+        <span>心率 > AeT+3</span><span class="num">${share(d1)} → ${share(d2)}</span><span>≤ 10%＝達標</span>
+        <span>爬坡段（第 1／2 天）</span><span class="num">${n.day1 ?? 0} ／ ${n.day2 ?? 0}</span><span>每段 100 m、坡度 ≥ 10%</span></div></div></details>`;
+  }).join("");
+  if (rows) out.push(`<div class="rows">${rows}</div>`);
+  if (c.done.length) out.push(`<p class="meta" style="margin:6px 0 0">${I("fitness")} ${esc(T.text || "")}${T.judged ? ` · ${T.judged} 次有判讀` : ""}</p>`);
+  if (ahead.length > 1) out.push(`<p class="meta" style="margin:4px 0 0">之後：${ahead.slice(1).map((p) => p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")).join("、")} <span class="faint">暫定</span></p>`);
+  $("b2b").innerHTML = out.join("");
+}
+
+// ---------------- this week ----------------
+// session type -> icon + colour + label (identity is icon + word, never colour alone)
+const TYPES = {
+  easy: "輕鬆", z3: "3 區間歇", z5: "5 區間歇", long: "LSD", hike: "健行", b2b: "B2B", loaded: "負重", test: "測試",
+  strength: "肌力", race: "比賽", heat: "熱適應", notice: "提醒", rest: "休息" };
+function stype(s) {
+  const k = s.kind, t = s.title || "";
+  if (k === "test") return "test";
+  if (k === "quality") return /^z5/i.test(s.rung_key || "") || /VO2max|5 區|Z5/i.test(t) ? "z5" : "z3";
+  if (k === "race") return "race";
+  if (k === "strength") return /ME|肌耐力/.test(t) ? "loaded" : "strength";
+  if (/^B2B/.test(t) || /^long[23]$/.test(s.gen_key || "")) return "b2b";
+  if (/背\s*[\d.]+\s*kg|背包/.test(t) || /^(carry|me)$/.test(s.gen_key || "")) return "loaded";
+  if (k === "long" || k === "mountain") return "long";
+  if (k === "hike") return "hike";
+  if (k === "heat_passive" || (s.heat && k !== "easy")) return "heat";
+  if (k === "notice") return "notice";
+  return "easy";
+}
+// an activity's session class -> the .ty-* colour (the icon comes from the server)
+function actTy(se) {
+  if (se.type === "quality") return se.stimulus === "z5" ? "z5" : "z3";
+  if (se.type === "hard_long" || se.type === "long") return "long";
+  if ((se.type || "").startsWith("test")) return "test";
+  return "easy";
+}
+const CB = { pushed: "COROS ✓", updated: "COROS ✓", outdated: "COROS 需更新", failed: "COROS 失敗" };
+function sessHtml(s, today) {
+  const ty = stype(s), done = s.state === "done", missed = s.state === "missed";
+  const live = s.state === "active" && s.day >= today;
+  const est = s.tss_est ?? s.tss, cp = done ? s.compliance : null;
+  const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分" : ""}${est ? ` · ${n0(est)}` : ""}`;
+  const tip = [s.title, `${TYPES[ty]}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
+    done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · TSS 計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
+    cp ? `完成度：${cp.label}${cp.pct != null ? ` ${cp.pct}%` : ""}（實際 ÷ 計畫${cp.tss_pct != null ? `：TSS ${cp.tss_pct}%` : ""}${cp.duration_pct != null ? ` · 時間 ${cp.duration_pct}%` : ""}；綠 ±20%、黃 20–50%、紅 > 50% 或類型不符）` : "",
+    done && s.vs?.off_plan ? `≠ ${s.vs.text}` : "", done ? "點一下看計畫 vs 實際、開啟活動" : "",
+    missed ? "未完成" : "", s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "",
+    live && s.coros?.status ? `COROS：${CB[s.coros.status] || s.coros.status}${s.coros.status === "failed" ? " " + (s.coros.error || "") : s.coros.status === "outdated" ? " " + (s.coros.reason || "課表改過，到課表頁再同步一次") : ""}` : ""].filter(Boolean).join("\n");
+  const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
+  return `<button type="button" class="sx ty-${ty} ${missed ? "missed" : ""} ${cp ? "cp-" + esc(cp.level) : ""}" data-tip="${esc(tip)}"${go} aria-label="${esc(tip.split("\n").slice(0, 3).join("，"))}">
+    <span class="ic">${I(ty)}${done ? `<span class="ok" aria-hidden="true">✓</span>` : ""}</span>
+    <span class="tl">${esc(s.title)}</span><span class="mn num">${done && s.vs?.off_plan ? `<b class="offp" aria-label="沒照課表">≠</b> ` : ""}${info}${cp && cp.level !== "green" && cp.pct != null ? ` · ${cp.pct}%` : ""}</span></button>`;
+}
+const SCHED = "/api/v1/overview/plan/schedule/page";
+// a done session / an activity outside the plan: open it on the 課表 page (planned vs actual, the activity link)
+document.addEventListener("click", (e) => { const g = e.target.closest?.(".sx[data-go]"); if (g) { e.stopImmediatePropagation(); location.href = window.TRC_STATIC ? TRC_STATIC.href(g.dataset.go) : g.dataset.go; } }, true);
+function dayHtml(iso, ss, extra, today) {
+  const past = iso < today, isT = iso === today;
+  // 課表外 activities carry their session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …);
+  // a click opens it on the 課表 page (summary, match it to the plan)
+  const items = ss.map((s) => sessHtml(s, today)).concat(extra.map((a) => {
+    const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
+    return `<button type="button" class="sx extra ${se.icon ? "ty-" + esc(actTy(se)) : ""}" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · TSS ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
+      <span class="ic">${I(se.icon || "check")}<span class="ok" aria-hidden="true">✓</span></span><span class="tl">${esc(lab)}</span><span class="mn num">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></button>`;
+  }));
+  return `<div class="dc ${isT ? "today" : ""} ${past ? "past" : ""}"><div class="dh"><b>週${wd(iso)}</b><span class="num">${md(iso)}</span>${isT ? `<span class="now">今天</span>` : ""}</div>
+    <div class="sxs">${items.join("") || `<span class="rest">${I(past ? "na" : "rest")}${past ? "沒有活動" : "休息"}</span>`}</div></div>`;
+}
+function renderPlan() {
+  if (!SP || !PLAN) return;
+  const today = SP.today, ws = PLAN.week.start;
+  const by = {};
+  for (const s of SP.sessions) if (s.day) (by[s.day] ||= []).push(s);
+  const used = new Set(SP.sessions.filter((s) => s.done_by).map((s) => s.done_by.index));
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const iso = addDays(ws, i);
+    days.push(dayHtml(iso, by[iso] || [], PLAN.done.activities.filter((a) => a.date === iso && !used.has(a.index)), today));
+  }
+  $("wk-days").innerHTML = days.join("");
+  const seen = [...new Set(SP.sessions.filter((s) => s.day).map(stype))];
+  $("wk-legend").innerHTML = seen.map((t) => `<span><i class="ty-${t}" style="background:var(--c)"></i>${TYPES[t]}</span>`).join("") +
+    `<span>${I("good")} 完成</span>`;
+  const wc = (SP.week_rows || [])[0]?.compliance;
+  $("wk-cp").innerHTML = wc ? `<span class="st ${{ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info"}" title="到今天為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）">${I({ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info")}完成度 ${wc.pct}%</span>` : "";
+  paintPlanLoad();
+}
+// targets / projection from the stored plan, so the user's edits show in the KPI tile and the details
+function paintPlanLoad() {
+  const S = SP && SP.summary;
+  renderKpis();
+  if (!S || !PLAN) return;
+  if ($("wk-prog")) $("wk-prog").innerHTML = progHtml(PLAN.done, S.hours, S.tss);
+  if ($("wk-ctl")) $("wk-ctl").innerHTML = ctlHtml(PLAN.load.ctl_week_start, S.ctl_end);
+  if ($("wk-tsb")) $("wk-tsb").innerHTML = `下週一 TSB <b>${sgn(S.tsb_next)}</b>`;
+  PLAN.projection = S.projection;
+  const weeks = SP.weeks || [];
+  if ($("later")) $("later").innerHTML = weeks.length ? `之後已排到 ${md(SP.horizon_end)}（${weeks.length} 週）· <a href="schedule.html">日曆、修改、同步到 COROS →</a>` : "";
+}
+const progHtml = (D, hours, tss) => `${bar("時間", D.hours, hours, hrs)}${bar("TSS", D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · TSS ${n0(D.tss)} / ${n0(tss)}</span>`;
+const ctlHtml = (c0, c1) => `CTL <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
+async function loadWeek() {
+  const w = PLAN = await j(`${API}/weekplan`);
+  $("wk-sub").textContent = `${md(w.week.start)}–${md(w.week.end)} · ${w.mode_label}`;
+  const T = w.target, D = w.done, L = w.load;
+  const notes = (w.notes || []).map((n) => `<details class="al ${esc(n.level)}"><summary>${I(n.level)}<b>${gl(String(n.text).split("：")[0])}</b><span class="s">${gl(String(n.text).split("：").slice(1).join("："))}</span></summary>
+    <div class="body">${gl(n.text)}</div></details>`).join("");
+  $("week").innerHTML = `${notes ? `<div class="alerts" style="margin-top:10px">${notes}</div>` : ""}
+    <details class="more"><summary>詳細</summary><div class="body">
+      <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
+      <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
+      <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">下週一 TSB <b>${sgn(L.tsb_next)}</b></span></div>
+      <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${gl("AeT")} ${n0(w.thresholds.aet)} bpm${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, "AeT 誤差")}</span>` : ""}（${esc(w.thresholds.aet_source)}）</div>
+      <div id="later"></div></div></details>`;
+  renderKpis();
+  // Not shown (sources live in backend/engine/overview.py SRC_*; w.rules still carries them):
+  // week targets follow the Palladino CTL ramp (+1–3/week sustainable, 3–5 elite), Uphill Athlete's
+  // ≤ 10 % weekly volume step and a 3:1 build/recovery cycle; the long day goes on the weekday the
+  // athlete most often did long sessions in the last 12 weeks (w.long_weekday), else the last day.
+}
+
+// PMC: shown in 圖表分析 → 負荷 PMC, not on this page.
+
+// ---------------- periods ----------------
+const PS = { unit: ls.get("unit", "week"), anchor: null, data: null };
+const N = { week: 16, month: 12, year: 6 };
+async function loadPeriod() {
+  document.querySelectorAll("#unit button").forEach((b) => b.classList.toggle("on", b.dataset.u === PS.unit));
+  const qs = `unit=${PS.unit}&n=${N[PS.unit]}${PS.anchor ? "&anchor=" + PS.anchor : ""}`;
+  $("period").innerHTML = `<div class="loading">計算中…</div>`;
+  const R = PS.data = await j(`${API}/summary?${qs}`);
+  const B = R.buckets, C = R.current;
+  $("per-label").textContent = C.label;
+  const cats = Object.keys(R.categories).filter((k) => B.some((b) => b.by_category[k]));
+  $("cat-legend").innerHTML = cats.map((k) => `<span><i style="background:${catColor(k)}"></i>${esc(R.categories[k].label)}</span>`).join("");
+  const sel = B.findIndex((b) => b.start === C.start);
+  const cur = sel < 0 ? B.length - 1 : sel;
+  const hourSeries = cats.map((k) => ({
+    name: R.categories[k].label, type: "bar", stack: "h", barMaxWidth: 26,
+    data: B.map((b, i) => ({ value: (b.by_category[k]?.moving_s || 0) / 3600, itemStyle: { opacity: i === cur ? 1 : 0.5 } })),
+    itemStyle: { color: catColor(k), borderColor: css("--panel"), borderWidth: 1 },
+  }));
+  const tip = { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 } };
+  chart("trend").setOption({
+    animation: false, grid: { left: 40, right: 10, top: 10, bottom: 22 },
+    tooltip: { ...tip, formatter: (ps) => { const b = B[ps[0].dataIndex];
+      return `<b>${b.label}</b>　${hrs(b.moving_s / 3600)} · ${b.sessions} 次<br>` +
+        ps.filter((p) => p.value > 0).map((p) => `${p.marker}${p.seriesName} ${hrs(p.value)}`).join("<br>"); } },
+    xAxis: { type: "category", data: B.map((b) => b.label), ...axisStyle(), splitLine: { show: false } },
+    yAxis: { type: "value", ...axisStyle(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => v + " h" } },
+    series: hourSeries,
+  }, true);
+  chart("trend-climb").setOption({
+    animation: false, grid: { left: 40, right: 10, top: 6, bottom: 20 },
+    tooltip: { ...tip, formatter: (ps) => `<b>${B[ps[0].dataIndex].label}</b><br>爬升 ${m0(ps[0].value)}` },
+    xAxis: { type: "category", data: B.map((b) => b.label), ...axisStyle(), splitLine: { show: false } },
+    yAxis: { type: "value", min: 0, splitNumber: 2, ...axisStyle(), axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v) } },
+    series: [{ type: "bar", barMaxWidth: 26, data: B.map((b, i) => ({ value: b.climbing_m, itemStyle: { opacity: i === cur ? 1 : 0.5 } })),
+      itemStyle: { color: css("--s3"), borderRadius: [3, 3, 0, 0] } }],
+  }, true);
+  for (const id of ["trend", "trend-climb"]) {
+    chart(id).off("click");
+    chart(id).on("click", (e) => { PS.anchor = B[e.dataIndex].start; loadPeriod(); });
+  }
+  renderPeriod(R);
+}
+function delta(cur, ref, fmt) {
+  if (ref == null) return "";
+  const d = cur - ref;
+  if (Math.abs(d) < 1e-9) return `<span class="faint">持平</span>`;
+  return `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${sgn(d, fmt).slice(1)}</span>`;
+}
+function renderPeriod(R) {
+  const C = R.current, P = C.vs_prev, T = C.typical, unitWord = { week: "週", month: "月", year: "年" }[R.unit];
+  $("per-sub").textContent = `${C.start} ～ ${C.end}${C.elapsed_share != null ? `（進行中 ${pct(C.elapsed_share)}）` : ""}`;
+  const tile = (icon, k, v, key, fmt) => `<div class="tile" title="${esc(T ? `平常 ${fmt(T[key])}` : "")}"><div class="k">${I(icon)}${k}</div><div class="v">${v}</div>
+    <div class="s">${P ? `比上${unitWord} ${delta(C[key], C[key] - P[key], fmt)}` : ""}</div></div>`;
+  const I_ = C.intensity;
+  const cats = Object.entries(C.by_category).sort((a, b) => b[1].moving_s - a[1].moving_s);
+  const k = (r, label, val) => r ? `<div><span class="meta">${label}</span><br><b>${esc(r.date)}</b> ${esc(r.category_label)} · ${val}</div>` : "";
+  $("period").innerHTML = `
+    <div class="tiles">
+      ${tile("time", "移動時間", hrs(C.moving_s / 3600), "moving_s", (v) => hrs(v / 3600))}
+      ${tile("list", "次數", C.sessions, "sessions", (v) => Math.round(v * 10) / 10 + " 次")}
+      ${tile("distance", "距離", km(C.distance_km), "distance_km", km)}
+      ${tile("gain", "爬升", m0(C.climbing_m), "climbing_m", m0)}
+      ${tile("tss", "TSS", n0(C.tss), "tss", n0)}
+      <div class="tile"><div class="k">${I("climb")}努力距離 EP ${q("km + 爬升/100（跑步、登山）")}</div><div class="v">${km(C.ep_km)}</div></div>
+      <div class="tile"><div class="k">${I("check")}有練的天數</div><div class="v">${C.days}</div><div class="s">下降 ${m0(C.descending_m)}</div></div>
+    </div>
+    ${I_.total > 0 ? `<div><b style="font-size:13px">強度分配</b> <span class="meta">目標 低 ≥ 75–80%</span>
+      ${q("這期耐力活動的移動時間，依心率分三段。\n怎麼看：低 < AeT、中 AeT–LTHR、高 ≥ LTHR，條的長度 = 佔比。\n看什麼：低強度 ≥ 75–80%。\n方法：Seiler 2006。")}
+      <div class="split" role="img" aria-label="低 ${pct(I_.low / I_.total)}，中 ${pct(I_.mid / I_.total)}，高 ${pct(I_.high / I_.total)}">
+        <i style="width:${I_.low / I_.total * 100}%;background:var(--lo)"></i><i style="width:${I_.mid / I_.total * 100}%;background:var(--mid)"></i><i style="width:${I_.high / I_.total * 100}%;background:var(--hi)"></i></div>
+      <div class="legend" style="margin:0"><span><i style="background:var(--lo)"></i>低 ${pct(I_.low / I_.total)} · ${hm(I_.low)}</span>
+        <span><i style="background:var(--mid)"></i>中 ${pct(I_.mid / I_.total)} · ${hm(I_.mid)}</span>
+        <span><i style="background:var(--hi)"></i>高 ${pct(I_.high / I_.total)} · ${hm(I_.high)}</span></div></div>` : ""}
+    <details class="more"><summary>詳細數字</summary><div class="body" style="color:var(--text)">
+    ${T ? `<div class="meta">平常（典型的一${unitWord}）：${hrs(T.moving_s / 3600)} · ${km(T.distance_km)} · ${m0(T.climbing_m)} · TSS ${n0(T.tss)}</div>` : ""}
+    <div class="keys">
+      ${k(C.longest, "最長一次", hm(C.longest?.moving_s))}
+      ${k(C.biggest_climb, "爬最多", m0(C.biggest_climb?.climbing_m))}
+      ${k(C.hardest, "負荷最大", "TSS " + n0(C.hardest?.tss))}
+    </div>
+    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">次數</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">TSS</th></tr></thead>
+      <tbody>${cats.map(([key, v]) => `<tr><td><span class="dot" style="background:${catColor(key)}"></span>${esc(R.categories[key].label)}</td>
+        <td class="n">${v.sessions}</td><td class="n">${hm(v.moving_s)}</td><td class="n">${km(v.distance_km)}</td><td class="n">${m0(v.climbing_m)}</td><td class="n">${n0(v.tss)}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="meta">這段期間沒有活動。</p>`}
+    ${C.activities.length ? `<div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>類型</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">TSS</th></tr></thead>
+      <tbody>${C.activities.map((a) => `<tr><td>${esc(a.start.slice(0, 16).replace("T", " "))}</td><td><span class="dot" style="background:${catColor(a.category)}"></span>${esc(a.category_label)}</td>
+        <td class="meta">${esc(a.sport_type)}</td><td class="n">${hm(a.moving_s)}</td><td class="n">${a.distance_km ? km(a.distance_km) : "–"}</td>
+        <td class="n">${a.climbing_m ? m0(a.climbing_m) : "–"}</td><td class="n">${n0(a.tss)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    </div></details>`;
+}
+function shift(dir) {
+  const cur = new Date((PS.data?.current.start || STATUS.today) + "T00:00:00");
+  if (PS.unit === "week") cur.setDate(cur.getDate() + 7 * dir);
+  else if (PS.unit === "month") cur.setMonth(cur.getMonth() + dir);
+  else cur.setFullYear(cur.getFullYear() + dir);
+  PS.anchor = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`;
+  loadPeriod();
+}
+
+// ---------------- stored, editable plan (edit / push live on the 課表 page) ----------------
+const PAPI = `${API}/plan`;
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return isoOf(d); };
+async function sj(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  const b = await r.json().catch(() => ({}));
+  if (r.status === 401) throw new Error("COROS 未登入或登入過期，請到設定頁重新登入");
+  if (!r.ok) throw new Error(typeof b.detail === "string" ? b.detail : `${r.status} ${JSON.stringify(b.detail || b).slice(0, 200)}`);
+  return b;
+}
+async function loadPlan() {
+  // the 課表 calendar endpoint for this week: sessions + TSS estimates + compliance
+  SP = await sj("GET", `${PAPI}/calendar?start=${PLAN.week.start}&end=${PLAN.week.end}`);
+  renderPlan();
+}
+
+// ---------------- wiring ----------------
+document.querySelectorAll("#unit button").forEach((b) => b.onclick = () => { PS.unit = b.dataset.u; PS.anchor = null; ls.set("unit", PS.unit); loadPeriod(); });
+$("prev").onclick = () => shift(-1);
+$("next").onclick = () => shift(1);
+$("now").onclick = () => { PS.anchor = null; loadPeriod(); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { loadPeriod(); renderPmc(); });
+// ? / glossary / session tips: hover shows a popup, click / tap pins it; Esc or a click elsewhere closes it
+const QT = { el: null, pinned: null };
+function qShow(t) {
+  qHide();
+  const d = document.createElement("div");
+  d.className = "qpop"; d.setAttribute("role", "tooltip");
+  d.textContent = t.dataset.tip;
+  document.body.appendChild(d);
+  const r = t.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  QT.el = d;
+}
+function qHide() { QT.el?.remove(); QT.el = null; }
+const TIPSEL = ".q, .term, [data-tip]";
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(TIPSEL); if (t && !QT.pinned && t.dataset.tip) qShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(TIPSEL) && !QT.pinned) qHide(); });
+document.addEventListener("focusin", (e) => { const t = e.target.closest?.(TIPSEL); if (t && t.dataset.tip && !QT.pinned) qShow(t); });
+document.addEventListener("focusout", () => { if (!QT.pinned) qHide(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(TIPSEL);
+  if (t && t.dataset.tip && !e.target.closest("summary") && QT.pinned !== t) { QT.pinned = t; qShow(t); e.preventDefault(); return; }
+  if (t && QT.pinned === t) { QT.pinned = null; qHide(); return; }
+  QT.pinned = null; qHide();
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { QT.pinned = null; qHide(); } });
+addEventListener("scroll", () => { if (QT.pinned) qShow(QT.pinned); else qHide(); }, { passive: true, capture: true });
+// in-page nav: highlight the section being read
+(() => {
+  const links = [...document.querySelectorAll("#jump a")];
+  const secs = links.map((a) => document.querySelector(a.getAttribute("href")));
+  const mark = () => {
+    const top = (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--shell-top")) || 0) + 70;
+    let k = 0;
+    secs.forEach((s, i) => { if (s && s.getBoundingClientRect().top <= top) k = i; });
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) k = secs.length - 1;
+    links.forEach((a, i) => a.classList.toggle("on", i === k));
+  };
+  addEventListener("scroll", mark, { passive: true });
+  addEventListener("resize", mark);
+  mark();
+})();
+
+// ---------------- PMC, last 90 days ----------------
+// CTL / ATL lines and TSB bars; a bar's colour = the same Form% band (TSB ÷ yesterday's CTL) as
+// views/training.json's PMC, so a day has one colour on both pages. No zoom, no extras.
+const tO = (k, p) => (window.I18N ? I18N.t("overview." + k, p) : k);
+const TSB_BANDS = [[-0.3, "#e34948"], [-0.1, "#1baf7a"], [0.05, "#a9a1e6"], [0.25, "#6a5cc9"], [Infinity, "#eda100"]];
+let PMC = null;
+async function loadPmc() {
+  const end = STATUS?.today || new Date().toISOString().slice(0, 10);
+  const d = new Date(end + "T00:00:00"); d.setDate(d.getDate() - 90);    // one day before the 90: yesterday's CTL
+  const begin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  PMC = (await j(`${API}/pmc?begin=${begin}&end=${end}`)).series;
+  renderPmc();
+}
+function renderPmc() {
+  if (!PMC) return;
+  const rows = PMC.slice(1).map((r, i) => ({ ...r, prev: PMC[i].ctl }));
+  const ctlC = css("--s1"), atlC = css("--s2");
+  const color = (r) => {
+    const f = r.prev > 0 && r.tsb != null ? r.tsb / r.prev : 0;
+    return TSB_BANDS.find(([hi]) => f < hi)[1];
+  };
+  $("pmc-q").innerHTML = q(tO("pmc.tip"));
+  $("pmc").setAttribute("aria-label", tO("pmc.aria"));
+  $("pmc-legend").innerHTML = `<span><i style="background:${ctlC};height:3px"></i>${esc(tO("pmc.ctl"))}</span>`
+    + `<span><i style="background:${atlC};height:3px"></i>${esc(tO("pmc.atl"))}</span>`
+    + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`;
+  const one = (v) => v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1);
+  chart("pmc").setOption({ animation: false, textStyle: { fontFamily: "system-ui, sans-serif" },
+    grid: { left: 36, right: 10, top: 10, bottom: 24 },
+    tooltip: { trigger: "axis", backgroundColor: css("--panel"), borderColor: css("--line"), textStyle: { color: css("--text"), fontSize: 12 },
+      formatter: (ps) => { const r = rows[ps[0].dataIndex];
+        return `<b>${esc(I18N.fmt.date(r.date, "mdw"))}</b><br>${esc(tO("pmc.ctl"))} ${one(r.ctl)}<br>${esc(tO("pmc.atl"))} ${one(r.atl)}<br>${esc(tO("pmc.tsb"))} ${r.tsb == null ? "–" : sgn(r.tsb, one)}`; } },
+    xAxis: { type: "category", data: rows.map((r) => md(r.date)), ...axisStyle(), splitLine: { show: false },
+      axisLabel: { color: css("--muted"), fontSize: 11, hideOverlap: true } },
+    yAxis: { type: "value", ...axisStyle(), splitLine: { lineStyle: { color: css("--line"), type: [3, 3] } } },
+    series: [
+      { name: "TSB", type: "bar", barCategoryGap: "20%", data: rows.map((r) => ({ value: r.tsb == null ? null : Math.round(r.tsb * 10) / 10, itemStyle: { color: color(r) } })) },
+      { name: "CTL", type: "line", data: rows.map((r) => r.ctl), showSymbol: false, z: 3, lineStyle: { width: 2.5, color: ctlC }, itemStyle: { color: ctlC } },
+      { name: "ATL", type: "line", data: rows.map((r) => r.atl), showSymbol: false, z: 3, lineStyle: { width: 1.6, color: atlC }, itemStyle: { color: atlC } },
+    ] }, true);
+}
+
+const fail = (id) => (e) => { $(id).innerHTML = `<p class="err">載入失敗：${esc(e.message)}</p>`; };
+// the shared floating suggestion box (static/suggestions.js) fires this after 排入: reload the week
+addEventListener("suggestions:changed", () => { loadWeek().then(() => loadPlan()).catch(() => {}); });
+$("wk-ic").innerHTML = I("time");
+(async () => {
+  if (typeof echarts === "undefined") document.body.insertAdjacentHTML("afterbegin", `<p class="err" style="padding:8px 16px">ECharts 載入失敗，圖表無法顯示</p>`);
+  // 使用功率 (設定): off = no CP / power fields or buttons on this page
+  USE_POWER = await j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true);
+  await loadStatus().catch(fail("kpis"));
+  loadPmc().catch(fail("pmc"));
+  loadZ5().catch(fail("z5"));
+  loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
+  await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
+})();
+</script>
+</body>
+</html>
