@@ -383,7 +383,10 @@ unchanged files and unchanged code reads no FIT file at all.
   (`dataset.batched_flush`, at most every 20 s): each estimate() rewrote the
   MB-sized series files.
 - **Measured** (2026-10-03, a fresh user: user data + FIT folders only, 803
-  COROS activities, 4 workers): see the perf/activities-auto commit message.
+  COROS activities, 4 workers): first build 1680 s → 377 s; GET
+  /activities/auto blocked 147 s → answers in 0.03 s (computing n/N, the
+  background job done in 83 s), a restart 0.1 s from disk; the data dir
+  copied elsewhere: build 0.7 s (no re-parse), with all mtimes reset 0.8–15 s.
 - **Warm-up**: the app's lifespan and a sync that downloaded files start a
   background build of the active source (and the overview status);
   `WKO5COACH_NO_WARMUP=1` disables. The AnyIO thread limit is 200
