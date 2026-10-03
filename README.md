@@ -3,7 +3,8 @@
 **給越野跑、百岳、路跑的訓練教練。** 讀你的手錶資料，告訴你現在的訓練狀況、幫你排課表並推送到 COROS 手錶、
 判讀每一趟間歇和心率飄移，還能用賽道 GPX 預估比賽配速、功率和補給。自己架、資料留在自己的電腦。
 
-> **線上示範**：〈示範連結：部署後填入〉— 一位虛構跑者的一年資料，不用登入就能試排課表、賽事計算機和週期規劃。
+> **線上示範**：<https://vi000246.github.io/TrailRunCoach/> — 一位虛構跑者的一年資料，不用登入就能看訓練總覽、圖表、
+> 賽事計算機和週期規劃，課表可以試著改（修改只存在你的瀏覽器）。唯讀的靜態網站，沒有伺服器。
 
 ![訓練總覽](docs/screenshots/overview.webp)
 
@@ -42,7 +43,7 @@
 ## 隱私
 
 資料（活動、心率、門檻、帳號 token）只存在你自己的電腦：`~/.wko5coach/`（SQLite、快取、加密金鑰）。
-token 和記住的密碼以 Fernet 加密。沒有雲端、沒有追蹤。線上示範只有虛構資料，訪客的修改 24 小時後刪除。
+token 和記住的密碼以 Fernet 加密。沒有雲端、沒有追蹤。線上示範只有虛構資料，訪客的修改只存在自己的瀏覽器。
 
 ## 在自己的電腦上跑
 
@@ -72,8 +73,23 @@ WKO5COACH_MODE=demo WKO5COACH_HOME=~/trc-demo WKO5COACH_COOKIE_SECURE=0 \
 ```
 
 示範模式有自己的資料夾（拒絕使用 `~/.wko5coach`），同步、上傳、AI、分享都關閉；每位訪客第一次修改時
-才建立自己的沙盒，24 小時後清除。部署到 Hugging Face Spaces：見 [`deploy/hf/`](deploy/hf/README.md)
-（`python deploy/hf/make_space.py <space-repo>`）。
+才建立自己的沙盒，24 小時後清除。
+
+**公開示範預設是靜態網站**（免費放在 GitHub Pages，不需要伺服器）：
+
+```bash
+pip install -r requirements-dev.txt && python -m playwright install chromium
+python -m backend.demo.export_static --root ~/trc-demo        # → dist/static-demo/
+```
+
+匯出時在程式內跑示範模式、用無頭瀏覽器點過每一頁，把每個 API 回應存成 JSON；頁面裡的小 shim 把請求對到
+這些檔案。課表的修改存在訪客的瀏覽器（localStorage），其他寫入一律顯示「唯讀示範」。發佈步驟見
+[`deploy/static/`](deploy/static/README.md)。
+
+**伺服器版示範（Docker）** 仍然保留：同一個示範模式（`WKO5COACH_MODE=demo`，每位訪客一個沙盒，可以改週期規劃、
+上傳 GPX）打包成 Docker image（[`deploy/hf/Dockerfile`](deploy/hf/Dockerfile)），可以放在任何能跑 Docker 的雲端主機；
+Hugging Face Docker Space（現在要付費）是其中一種，見 [`deploy/hf/`](deploy/hf/README.md)
+（`python deploy/hf/make_space.py <space-repo>`）。兩條路互不影響：靜態網站是免費的預設，Docker 是要雲端部署時用。
 
 ## 測試
 
@@ -93,9 +109,13 @@ and road runners. It reads your watch data (COROS, TrainingPeaks or plain FIT fi
 an overview dashboard (PMC, load ratio, status), an automatic weekly schedule you can push to a
 COROS watch, interval and heart-rate-drift analysis per activity, a race calculator (GPX + weather +
 fitness → pacing, power, finish time, fuelling), season periodisation, schedule statistics and an
-injury log. Your data stays on your machine. A public demo with a synthetic athlete runs on
-Hugging Face Spaces (`WKO5COACH_MODE=demo`, see `deploy/hf/`). The UI is Traditional Chinese first,
-with an English catalog.
+injury log. Your data stays on your machine. The public demo (a synthetic athlete) is a static,
+read-only export hosted on GitHub Pages: <https://vi000246.github.io/TrailRunCoach/>
+(`python -m backend.demo.export_static`, see `deploy/static/`); schedule edits are kept in the
+visitor's browser. The server-side demo (`WKO5COACH_MODE=demo`, per-visitor sandboxes) stays
+available as a Docker image (`deploy/hf/Dockerfile`) for any Docker host, e.g. a (paid) Hugging Face
+Docker Space (`deploy/hf/`). The UI is Traditional Chinese first, with an
+English catalog.
 
 > Not affiliated with COROS, TrainingPeaks or Stryd.
 

@@ -53,5 +53,10 @@
   "demo.reset_confirm": "清掉你在示範裡的所有修改？",
   "demo.cta": "想用自己的資料？",
   "demo.locked": "示範模式不提供這個功能",
-  "demo.disabled": "示範模式不提供這個功能"
+  "demo.disabled": "示範模式不提供這個功能",
+  "demo.static_text": "唯讀示範：虛構跑者的一年訓練。課表可以試著改，修改只存在這個瀏覽器。",
+  "demo.static_edits": "已修改課表",
+  "demo.static_none": "還沒有修改",
+  "demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改",
+  "demo.static_locked": "唯讀示範：這個操作在示範版不能用"
 }
