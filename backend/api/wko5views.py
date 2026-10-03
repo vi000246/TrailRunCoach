@@ -392,6 +392,10 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         tests = [[s["uid"], s["state"], (s.get("done_by") or {}).get("index"), s.get("protocol")]
                  for s in test_sessions()]
         params = {**params, "_prefs": PP.load().stamp(), "_tests": json.dumps(tests, default=str)}
+    if ch.get("kind") in ("zones", "targets", "activity", "periodzones"):
+        # HR zones / targets read the COROS account and the 課表心率區間 setting (engine/hr_profile.py)
+        from backend.engine import hr_profile as HP
+        params = {**params, "_hr": HP.stamp()}
     if ch.get("race_refs") == "course_constant":
         # the events' stored GPX (engine/event_gpx.py) changes the reference lines, not plan.json
         from backend.engine import event_gpx as EG
@@ -541,11 +545,18 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         end_day = int(math.floor(e))
         base = {"title": ch.get("title"), "description": ch.get("description"), "kind": ch["kind"]}
         if ch["kind"] == "zones":
-            return {**base, "zones": zone_table(ds, ch["system"], end_day, ch.get("days", 30))}
+            # an HR table can be switched in the card (?zsys=, remembered by the viewer)
+            from backend.engine.zones import HR_SYSTEMS, SYSTEMS
+            system = ch["system"]
+            want = (params or {}).get("zsys")
+            if want in HR_SYSTEMS and SYSTEMS[system]["unit"] == "bpm":
+                system = want
+            return {**base, "zones": zone_table(ds, system, end_day, ch.get("days", 30))}
         from backend.engine.thresholds import estimate
         est = estimate(ds, today_local()) if not ds.config.parity else {}
         return {**base, "targets": training_targets(
-            ds, end_day, (est.get("lthr") or {}).get("value"), (est.get("aethr") or {}).get("value"))}
+            ds, end_day, (est.get("lthr") or {}).get("value"), (est.get("aethr") or {}).get("value"),
+            (est.get("aethr") or {}).get("below"))}
     if ch.get("kind") != "athlete":
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     return render_chart(ch, ds, b, e, sports=_sports(sports))

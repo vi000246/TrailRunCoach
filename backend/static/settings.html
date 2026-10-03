@@ -157,6 +157,23 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     </details>
   </section>
 
+  <section id="hr">
+    <h2>心率 <button type="button" class="q" aria-label="說明" title="最大心率：自動從近 365 天的跑步估（持續 5 秒以上的最高心率，濾掉光學心率的尖刺），沒有資料才用手錶（COROS 帳號）的值；你填的值優先。靜息心率：用手錶（COROS 帳號）的值，或你填的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
+    <dl class="kv" id="hr-kv"><dt>最大心率</dt><dd class="meta">載入中…</dd></dl>
+    <div class="row">
+      <label>課表心率區間 <select id="hr-model"></select></label>
+      <button type="button" class="q" aria-label="說明" id="hr-model-q" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。量過的 AeT（AeT 測試）一定當輕鬆跑上限。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
+      <span class="meta" id="hr-model-note" role="status"></span>
+    </div>
+    <details style="margin-top:6px"><summary class="meta">進階設定</summary>
+      <div class="row"><label>最大心率 <input type="number" id="hr-max" min="120" max="240" step="1" style="width:72px"> bpm</label>
+        <button id="hr-max-save">儲存</button><button id="hr-max-auto" hidden>改回自動</button></div>
+      <div class="row"><label>靜息心率 <input type="number" id="hr-rest" min="25" max="120" step="1" style="width:72px"> bpm</label>
+        <button id="hr-rest-save">儲存</button><button id="hr-rest-auto" hidden>改回自動</button></div>
+      <p class="meta" id="hr-est"></p>
+    </details>
+  </section>
+
   <section id="sync">
     <h2>資料同步</h2>
     <p class="meta">帳號密碼只在登入時送出一次、不會保存；保存的只有加密過的登入憑證（token / cookie）。<span id="keystat"></span></p>
@@ -493,6 +510,48 @@ $("saveprof").onclick = async () => {
     toast("已儲存，圖表會用新的體重重算"); loadProfile();
   } catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 };
+
+// ---- 心率 (api/plan.py hr-profile, engine/hr_profile.py) ---------------------
+const HRP = "/api/v1/plan/hr-profile";
+function renderHr(r) {
+  const v = (x) => x && x.value != null ? `${Math.round(x.value)} bpm` : "未設定";
+  const src = (x) => x && x.source ? `<span class="meta">（${esc(x.source)}）</span>` : x && x.reason ? `<span class="meta">${esc(x.reason)}</span>` : "";
+  $("hr-kv").innerHTML = `<dt>最大心率</dt><dd>${v(r.max_hr)} ${src(r.max_hr)}</dd>
+    <dt>靜息心率</dt><dd>${v(r.rest_hr)} ${src(r.rest_hr)}</dd>`;
+  $("hr-model").innerHTML = r.models.map((m) => `<option value="${esc(m.id)}"${m.id === r.model ? " selected" : ""}>${esc(m.label)}</option>`).join("");
+  const cur = r.models.find((m) => m.id === r.model);
+  $("hr-model-q").title = $("hr-model-q").title.split("\n\n")[0] + (cur ? "\n\n" + cur.source : "");
+  const z = r.plan_zones;
+  $("hr-model-note").textContent = !z ? "" : z.fallback ? z.fallback
+    : `輕鬆跑 ${z.easy[0]}–${z.easy[1]} bpm（${z.easy_source}）`;
+  const man = (x) => x && x.kind === "manual";
+  $("hr-max").value = man(r.max_hr) ? Math.round(r.max_hr.value) : "";
+  $("hr-max").placeholder = r.estimate && r.estimate.value ? r.estimate.value : (r.account && r.account.max_hr) || "";
+  $("hr-rest").value = man(r.rest_hr) ? Math.round(r.rest_hr.value) : "";
+  $("hr-rest").placeholder = (r.account && r.account.rest_hr) || "";
+  $("hr-max-auto").hidden = !man(r.max_hr); $("hr-rest-auto").hidden = !man(r.rest_hr);
+  const e = r.estimate || {};
+  $("hr-est").textContent = [
+    e.value ? `自動估算：${e.value} bpm（${e.reason}）` : e.reason ? `自動估算：${e.reason}` : "",
+    e.peaks && e.peaks.length ? `各次跑步最高：${e.peaks.map((p) => `${p[0]} ${p[1]}`).join("、")}` : "",
+    r.account ? `手錶（COROS 帳號）：最大 ${r.account.max_hr ?? "–"}、靜息 ${r.account.rest_hr ?? "–"} bpm` : "手錶：還沒讀到（登入 COROS 或同步一次）",
+  ].filter(Boolean).join("　");
+}
+async function loadHr() {
+  try { renderHr(await j(HRP)); }
+  catch (e) { $("hr-kv").innerHTML = `<dt>心率</dt><dd class="meta">讀取失敗：${esc(e.message.slice(0, 100))}</dd>`; }
+}
+async function putHr(body, msg) {
+  try {
+    renderHr(await j(HRP, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    toast(msg);
+  } catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+}
+$("hr-model").onchange = (e) => putHr({ model: e.target.value }, "已儲存，課表心率目標會重算");
+$("hr-max-save").onclick = () => { const x = Number($("hr-max").value); if (x) putHr({ max_hr: x }, "已儲存最大心率"); };
+$("hr-rest-save").onclick = () => { const x = Number($("hr-rest").value); if (x) putHr({ rest_hr: x }, "已儲存靜息心率"); };
+$("hr-max-auto").onclick = () => putHr({ clear_max: true }, "最大心率改回自動");
+$("hr-rest-auto").onclick = () => putHr({ clear_rest: true }, "靜息心率改回自動");
 
 // ---- 資料同步 -------------------------------------------------------------
 const SYNC = "/api/v1/sync";
@@ -969,7 +1028,7 @@ $("calib-run").onclick = async (e) => {
   b.disabled = false;
 };
 
-loadMode(); loadApplied(); loadProfile(); loadExclusions(); loadBackup(); loadCalib();
+loadMode(); loadApplied(); loadProfile(); loadHr(); loadExclusions(); loadBackup(); loadCalib();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>

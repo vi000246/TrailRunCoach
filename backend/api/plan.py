@@ -271,6 +271,7 @@ class ThresholdIn(BaseModel):
     lthr: Optional[float] = None
     aethr: Optional[float] = None
     mhr: Optional[float] = None
+    rhr: Optional[float] = None          # resting HR (設定 → 心率, engine/hr_profile.py)
     cp: Optional[float] = None
     note: str = ""
     wprime: Optional[float] = None       # carried through so an edit keeps what apply-cp wrote
@@ -291,7 +292,7 @@ def put_thresholds(body: list[ThresholdIn]):
         if t.lthr_method not in (None, *P.LTHR_METHODS) or t.aethr_method not in (None, *P.AETHR_METHODS):
             raise HTTPException(400, "unknown lthr_method / aethr_method")
     plan.thresholds = [P.Threshold(**t.model_dump()) for t in body
-                       if any(v is not None for v in (t.lthr, t.aethr, t.mhr, t.cp))]
+                       if any(v is not None for v in (t.lthr, t.aethr, t.mhr, t.rhr, t.cp))]
     plan.save()
     _notify(True)
     return {"thresholds": [t.__dict__ for t in plan.thresholds]}
@@ -465,6 +466,96 @@ def put_profile(body: ProfileIn):
     plan.save()
     _notify(True)     # weight feeds W/kg everywhere
     return get_profile()
+
+
+# ---------------------------------------------------------------------------
+# 設定 → 心率 (engine/hr_profile.py): max / resting HR (auto + manual override,
+# stored as dated plan thresholds mhr / rhr) and the 課表心率區間 model
+#   GET /api/v1/plan/hr-profile
+#   PUT /api/v1/plan/hr-profile   {max_hr?, rest_hr?, clear_max?, clear_rest?, model?}
+# ---------------------------------------------------------------------------
+
+HR_NOTE = "設定頁手動輸入"
+
+
+def hr_profile_view(ds, today: dt.date) -> dict:
+    from backend.engine import hr_profile as HP
+    acc = HP.account()
+    mx = HP.max_hr(ds, today, acc)
+    rs = HP.rest_hr(ds, today, acc)
+    est = mx.get("estimate")
+    if est is None:
+        from backend.engine.thresholds import estimate_mhr
+        try:
+            est = estimate_mhr(ds, today)
+        except Exception:                   # noqa: BLE001
+            est = None
+    model = HP.plan_model()
+    tt = None
+    try:
+        from backend.engine.zones import training_targets
+        tt = training_targets(ds, int(ds.today))
+    except Exception:                       # noqa: BLE001 — no runs yet
+        tt = None
+    return {"max_hr": {k: v for k, v in mx.items() if k != "estimate"}, "rest_hr": rs,
+            "estimate": est, "account": acc, "model": model,
+            "models": [{"id": k, "label": HP.MODEL_LABEL[k], "source": HP.SOURCE[k]} for k in HP.PLAN_MODELS],
+            "plan_zones": (tt or {}).get("hr_model")}
+
+
+class HrProfileIn(BaseModel):
+    max_hr: Optional[float] = None
+    rest_hr: Optional[float] = None
+    clear_max: bool = False
+    clear_rest: bool = False
+    model: Optional[str] = None
+
+
+@router.get("/hr-profile")
+def get_hr_profile():
+    return hr_profile_view(_estimate_dataset(), today_local())
+
+
+@router.put("/hr-profile")
+async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
+    """A manual max / resting HR is a plan threshold row dated today (so it applies from
+    today on and charts before it keep what was in effect); clear_* removes every manual
+    value of that field (back to auto)."""
+    from fastapi.concurrency import run_in_threadpool
+    from backend.engine import hr_profile as HP
+    if body.max_hr is not None and not 120 <= body.max_hr <= 240:
+        raise HTTPException(400, f"最大心率 {body.max_hr:g} 不合理（120–240）")
+    if body.rest_hr is not None and not 25 <= body.rest_hr <= 120:
+        raise HTTPException(400, f"靜息心率 {body.rest_hr:g} 不合理（25–120）")
+    if body.model is not None and body.model not in HP.PLAN_MODELS:
+        raise HTTPException(400, f"model must be one of {HP.PLAN_MODELS}")
+    today = today_local().isoformat()
+    changed = False
+    plan = P.Plan.load()
+    for field_, val, clear in (("mhr", body.max_hr, body.clear_max), ("rhr", body.rest_hr, body.clear_rest)):
+        if clear:
+            for t in plan.thresholds:
+                if getattr(t, field_) is not None:
+                    setattr(t, field_, None)
+                    changed = True
+        if val is not None:
+            row = next((t for t in plan.thresholds if t.date[:10] == today), None)
+            if row is None:
+                row = P.Threshold(date=today, note=HR_NOTE)
+                plan.thresholds.append(row)
+            setattr(row, field_, round(float(val)))
+            changed = True
+    if changed:
+        plan.thresholds = [t for t in plan.thresholds
+                           if any(getattr(t, f) is not None for f in P.Threshold.THRESHOLD_FIELDS)]
+        plan.save()
+    if body.model is not None:
+        from backend.settings.repository import SettingsRepository
+        await SettingsRepository(db, current_athlete_id()).set(HP.MODEL_KEY, body.model)
+        await db.commit()
+    if changed or body.model is not None:
+        _notify(True)          # zones / targets / the pushed workouts follow
+    return await run_in_threadpool(lambda: hr_profile_view(_estimate_dataset(), today_local()))
 
 
 def _estimate_dataset():

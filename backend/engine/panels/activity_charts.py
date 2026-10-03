@@ -14,10 +14,12 @@ hrpower
     is the reference implementation; the viewer mirrors it.
 hrzones / powerzones
     Time in zones of this activity under a zone model the viewer picks (and
-    remembers; defaults Friel % LTHR and Palladino % CP, no %HRmax model).
-    The tables are zones.py's (Friel, WKO5 Classic HR, Seiler 3, RQ HRR;
-    Palladino 10 / 3 zones of % CP). WKO5 iLevels were dropped (owner
-    2026-10-02): power zones are Palladino, HR zones Friel.
+    remembers; defaults Friel % LTHR and Palladino % CP — the chart default is
+    not the 課表心率區間 setting). The tables are zones.py's (Friel, WKO5
+    Classic HR, Seiler 3) and the watch's three COROS models
+    (engine/hr_profile.py: % LTHR, % HRR = RQ, % HRmax — re-added 2026-10-03
+    at the user's request, its limitation in the 來源 text); Palladino 10 / 3
+    zones of % CP. WKO5 iLevels were dropped (owner 2026-10-02).
 hrtrend
     WKO5 「Heart Rate Variation and Trend」 (WKO5 workout view → Zone &
     Variation): heart rate, its least-
@@ -36,6 +38,7 @@ from typing import Optional
 
 import numpy as np
 
+from backend.engine import hr_profile as HP
 from backend.engine import zones as Z
 
 MAX_DT = 30.0            # a source interval > 30 s is a gap (workout_review.MAX_DT)
@@ -257,12 +260,17 @@ HR_MODELS = [
      "source": "WKO5 Classic HR 區間（% LTHR）"},
     {"id": "seiler3", "title": "Seiler 3 區（AeT／LTHR）", "basis": "aet_lthr",
      "source": "Seiler 三區模型：1 區 < 第一閾值、2 區 兩閾值之間、3 區 > 第二閾值；這裡第一閾值用 AeT、第二用 LTHR"},
-    # no %HRmax model (zones.py: Iannetta 2020); a remembered 「hrmax5」 choice is no
-    # longer in the list, so the viewer falls back to the default (Friel)
-    {"id": "rqhrr", "title": "徐國峰 RQ 儲備心率（% HRR）", "basis": "hrr", "zones": lambda: Z.RQ_HRR_ZONES,
-     "estimate": True,
-     "source": "RQ 跑力（徐國峰）儲備心率法；T 區 84–88% HRR 出自 runningquotient.com/article/single/52，"
-               "其他區界沒有逐一對過 RQ 原文（推估）"},
+    # the watch's own three models (engine/hr_profile.py, user request 2026-10-03). The
+    # 2026-10-01 decision dropped %HRmax zones (zones.py: Iannetta 2020); the user re-added
+    # them 2026-10-03 as a choice — the limitation is in the model's 來源 text. A remembered
+    # 「hrmax5」 choice is not in the list and falls back to the default (Friel).
+    {"id": "coroslthr", "title": "COROS 乳酸閾 6 區（% LTHR）", "basis": "coros", "coros": "lthr",
+     "source": HP.SOURCE["lthr"]},
+    # id kept from the RQ model (a remembered choice still works): COROS's HRR table is RQ's
+    {"id": "rqhrr", "title": "COROS 儲備心率 6 區（% HRR，同 RQ）", "basis": "coros", "coros": "hrr",
+     "source": HP.SOURCE["hrr"] + "；T 區 84–88% HRR 也見 runningquotient.com/article/single/52"},
+    {"id": "coroshrmax", "title": "COROS 最大心率 6 區（% HRmax）", "basis": "coros", "coros": "hrmax",
+     "source": HP.SOURCE["hrmax"]},
 ]
 POWER_MODELS = [
     {"id": "palladino", "title": "Palladino 10 區（% CP）", "basis": "cp", "zones": lambda: Z.PALLADINO_POWER_ZONES,
@@ -302,8 +310,8 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
         return {"rows": [("1", "低強度（< AeT）", 0.0, aet), ("2", "中強度（AeT–LTHR）", aet, lthr),
                          ("3", "高強度（≥ LTHR）", lthr, None)],
                 "basis_text": f"AeT {aet:.0f}、LTHR {lthr:.0f} bpm", "estimate": est}
-    if b == "hrr":
-        return {"reason": "沒有靜息心率資料，算不出儲備心率（HRR = 最大心率 − 靜息心率）"}
+    if b == "coros":
+        return _coros_bounds(ds, w, model["coros"], lthr, ctx)
     T = {"lthr": lthr, "cp": cp}[b]
     if not T:
         return {"reason": f"沒有 {'LTHR' if b == 'lthr' else 'CP'}，區間算不出來"}
@@ -315,6 +323,28 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
     # counts below 50 % as 1A), so every second has a zone
     rows[0] = (rows[0][0], rows[0][1], 0.0, rows[0][3])
     return {"rows": rows, "basis_text": text, "estimate": est}
+
+
+def _coros_bounds(ds, w, kind: str, lthr: Optional[float], ctx: dict) -> dict:
+    """A COROS model (hr_profile.zone_rows) at the activity's date: LTHR in effect, or
+    max / resting HR (hr_profile.max_hr / rest_hr: your setting > estimate > the watch)."""
+    from backend.files.wko5_athlete import day_to_date
+    if "acc" not in ctx:
+        ctx["acc"] = HP.account()
+    acc = ctx["acc"]
+    day = day_to_date(math.floor(w.day))
+    mx = HP.max_hr(ds, day, acc) if kind in ("hrr", "hrmax") else {}
+    rs = HP.rest_hr(ds, day, acc) if kind == "hrr" else {}
+    z = HP.zone_rows(kind, lthr, mx.get("value"), rs.get("value"), acc)
+    if "reason" in z:
+        return {"reason": z["reason"]}
+    srcs = [s for s in ((f"最大心率：{mx['source']}" if mx.get("source") else ""),
+                        (f"靜息心率：{rs['source']}" if rs.get("source") else "")) if s]
+    if kind == "lthr":
+        src = _threshold_text(ds, w, "lthr")
+        srcs = [src] if src else []
+    text = z["basis_text"] + (f"（{'；'.join(srcs)}）" if srcs else "")
+    return {"rows": z["rows"], "basis_text": text, "estimate": mx.get("kind") == "estimate"}
 
 
 def time_in(values: Optional[np.ndarray], rows: list[tuple]) -> tuple[list[float], float]:

@@ -260,3 +260,119 @@ def estimate_tpace(ds: Dataset, today: dt.date) -> dict:
                               "（Friel 30 分鐘測試的後 20 分鐘）"}
     return {"value": None, "n": len(per), "days": WINDOWS[-1],
             "reason": f"近 {WINDOWS[-1]} 天只有 {len(per)} 次路跑有 20 分鐘心率在 LTHR ±3%（需要 ≥ {TPACE_MIN_RUNS} 次）"}
+
+
+# ---------------------------------------------------------------------------
+# maximum heart rate (推估) — the highest HR the athlete's own runs held
+#
+# Wrist optical HR only (no chest strap): its errors are short spikes (a jump
+# of 20–40 bpm within a second, often to 215–225) and cadence lock-on. Per
+# run, on a 1-s grid (gaps > 5 s are not bridged):
+#   * samples < 30 or > 220 bpm are dropped (MHR_ABS_MAX; 220 is above any
+#     plausible maximum of this athlete's data, 202–209);
+#   * a rise of more than 15 bpm within one second (MHR_JUMP) starts a spike:
+#     every sample from it until HR is back within 15 bpm of the level before
+#     the jump is dropped (a real effort climbs a few bpm per second at most);
+#   * the run's peak = the highest HR held for ≥ 5 s (the max of the rolling
+#     5-s minimum over valid samples), so a 1–4 s spike can't count.
+# Result: the highest per-run peak of the runs (road, trail, treadmill) in the
+# 365 days up to the date; when that one run stands > 5 bpm above the next
+# (MHR_OUTLIER), it is taken as an artefact and the second-highest is used.
+# ≥ 3 runs with HR are needed. Every number here is 推估 (no source); the
+# value is a floor — a runner rarely reaches true HRmax outside a test.
+# ---------------------------------------------------------------------------
+
+MHR_KEY = "mhr_peak5_v1"
+MHR_DAYS = 365
+MHR_ABS_MIN, MHR_ABS_MAX = 30.0, 220.0
+MHR_JUMP = 15.0               # bpm within 1 s
+MHR_HOLD_S = 5
+MHR_GAP_S = 5.0
+MHR_OUTLIER = 5.0
+MHR_MIN_RUNS = 3
+
+
+def peak_sustained_hr(t, hr) -> Optional[float]:
+    """The highest HR held ≥ MHR_HOLD_S seconds after dropping optical spikes
+    (see above); None without enough valid samples."""
+    import numpy as np
+    if t is None or hr is None:
+        return None
+    t = np.asarray([np.nan if v is None else v for v in t], float)
+    h = np.asarray([np.nan if v is None else v for v in hr], float)
+    n = min(len(t), len(h))
+    t, h = t[:n], h[:n]
+    ok = np.isfinite(t) & np.isfinite(h) & (h > 0)
+    if ok.sum() < MHR_HOLD_S:
+        return None
+    tt, hh = t[ok], h[ok]
+    order = np.argsort(tt, kind="stable")
+    tt, hh = tt[order], hh[order]
+    g = np.arange(np.floor(tt[0]), np.floor(tt[-1]) + 1.0)
+    y = np.interp(g, tt, hh)
+    j = np.clip(np.searchsorted(tt, g), 1, len(tt) - 1)
+    gap = (tt[j] - tt[j - 1]) > MHR_GAP_S
+    y[gap & (g > tt[j - 1]) & (g < tt[j])] = np.nan
+    y[(y < MHR_ABS_MIN) | (y > MHR_ABS_MAX)] = np.nan
+    # spikes: a > 15 bpm rise within a second, dropped until back near the level before it
+    i = 1
+    while i < len(y):
+        if np.isfinite(y[i]) and np.isfinite(y[i - 1]) and y[i] - y[i - 1] > MHR_JUMP:
+            base = y[i - 1]
+            k = i
+            while k < len(y) and (not np.isfinite(y[k]) or y[k] > base + MHR_JUMP):
+                y[k] = np.nan
+                k += 1
+            i = k + 1
+            continue
+        i += 1
+    if len(y) < MHR_HOLD_S:
+        return None
+    win = np.lib.stride_tricks.sliding_window_view(y, MHR_HOLD_S)
+    full = np.isfinite(win).all(axis=1)
+    if not full.any():
+        return None
+    return float(np.min(win[full], axis=1).max())
+
+
+def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
+    """Maximum HR (bpm, 推估) as of `today` from the runs of the 365 days up
+    to it: {"value", "n", "days", "peaks": [[date, bpm]] (top 5), "dropped",
+    "reason"}; value None with the reason when fewer than 3 runs have HR."""
+    tday = int(math.floor(date_to_day(today)))
+    memo = getattr(ds, "memo", None)
+    mk = ("estimate_mhr", tday, len(getattr(ds, "workouts", []) or []))
+    if isinstance(memo, dict) and mk in memo:
+        return memo[mk]
+    runs = [w for w in ds.workouts if w.sport == "run" and tday - MHR_DAYS < math.floor(w.day) <= tday]
+    cached = getattr(ds, "cached_series", None)
+    peaks = []
+    for w in runs:
+        def compute(w=w):
+            return peak_sustained_hr(ds.channel(w.idx, "elapsedtime"), ds.channel(w.idx, "heartrate"))
+        v = cached(MHR_KEY, w, compute) if cached is not None else None
+        if v is None and cached is None:
+            v = compute()
+        if v:
+            peaks.append((math.floor(w.day), float(v)))
+    if cached is not None and hasattr(ds, "flush_series"):
+        ds.flush_series()
+    from backend.engine.wko5expr.dataset import day_to_date
+    top = sorted(peaks, key=lambda p: -p[1])
+    out = {"value": None, "n": len(peaks), "days": MHR_DAYS, "dropped": None,
+           "peaks": [[day_to_date(d).isoformat(), round(v)] for d, v in top[:5]]}
+    if len(peaks) < MHR_MIN_RUNS:
+        out["reason"] = f"近 {MHR_DAYS} 天只有 {len(peaks)} 次跑步有心率（需要 ≥ {MHR_MIN_RUNS} 次）"
+    else:
+        pick = top[0][1]
+        if top[0][1] - top[1][1] > MHR_OUTLIER:
+            out["dropped"] = [day_to_date(top[0][0]).isoformat(), round(top[0][1])]
+            pick = top[1][1]
+        out["value"] = round(pick)
+        out["reason"] = (f"推估：近 {MHR_DAYS} 天 {len(peaks)} 次跑步中，持續 ≥ {MHR_HOLD_S} 秒的最高心率"
+                         "（濾掉光學心率尖刺：一秒跳 > 15 bpm、超過 220）"
+                         + (f"；{out['dropped'][0]} 那次 {out['dropped'][1]} 比其他高太多，當成誤差不採用"
+                            if out["dropped"] else ""))
+    if isinstance(memo, dict):
+        memo[mk] = out
+    return out

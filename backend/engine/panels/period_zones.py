@@ -6,8 +6,11 @@ Time in zone over a period (圖表分析 → 強度; views kind "periodzones").
     (view "weekly").
 
 Reuse, not a copy:
-  * the zone models are activity_charts.MODELS (zones.py's tables), minus the ones the user rejected (%HRmax) or the app can't
-    compute (RQ %HRR: no resting HR). Default HR Friel, power Palladino.
+  * the zone models are activity_charts.MODELS (zones.py's tables and the
+    COROS % LTHR / % HRR / % HRmax models of engine/hr_profile.py; HRR / HRmax
+    at the max / resting HR in effect on each activity's day, or the reason
+    they can't be used). Default HR Friel, power Palladino — the chart's own
+    choice, not the 課表心率區間 setting.
   * an activity's zone boundaries are activity_charts._bounds on that
     activity: the thresholds in effect on ITS day (workout_review._thresholds
     -> Dataset.sport_setting / cp / aethr, i.e. the plan's dated tests, the
@@ -44,7 +47,9 @@ from backend.engine.panels import activity_charts as A
 
 HIST_KEY = "period_zone_hist_v1"
 
-HR_IDS = ("frielhr", "classichr", "seiler3")
+# + the watch's COROS models (engine/hr_profile.py, user request 2026-10-03): % LTHR,
+# % HRR (id rqhrr: the RQ table) and % HRmax; HRR / HRmax need max / resting HR
+HR_IDS = ("frielhr", "classichr", "seiler3", "coroslthr", "rqhrr", "coroshrmax")
 POWER_IDS = ("palladino", "palladino3")         # Palladino everywhere, no WKO5 iLevels (owner 2026-10-02)
 MODEL_IDS = {"hr": HR_IDS, "power": POWER_IDS}
 DEFAULT_MODEL = {"hr": "frielhr", "power": "palladino"}
@@ -202,6 +207,13 @@ def model(kind: str, mid: Optional[str]) -> dict:
 
 def _pct_text(m: dict) -> list[Optional[str]]:
     """「85–90% LTHR」 per zone of a fraction-based model; None otherwise."""
+    if m["basis"] == "coros":
+        from backend.engine import hr_profile as HP
+        rs = HP.ratios(m["coros"], HP.account())
+        b = {"lthr": "LTHR", "hrr": "HRR", "hrmax": "HRmax"}[m["coros"]]
+        p = lambda x: f"{x * 100:.0f}"
+        return ([f"< {p(rs[0])}% {b}"] + [f"{p(a)}–{p(c)}% {b}" for a, c in zip(rs, rs[1:])]
+                + [f"≥ {p(rs[-1])}% {b}"])
     if "zones" not in m or m["basis"] not in ("lthr", "cp"):
         if m["id"] == "seiler3":
             return ["< AeT", "AeT–LTHR", "≥ LTHR"]
@@ -307,7 +319,9 @@ def _activities(ds, begin: dt.date, end: dt.date, sports: tuple[str, ...]):
 def _per_activity(ds, ws, kind: str, m: dict, sm: dict) -> list[dict]:
     """Zone seconds of each activity under model m and the summary model sm,
     each at the thresholds in effect on the activity's own day."""
+    from backend.engine import hr_profile as HP
     from backend.engine.workout_review import _thresholds
+    acc = HP.account() if "coros" in (m.get("basis"), sm.get("basis")) else None
     out = []
     for w in ws:
         item = {"w": w, "day": day_to_date(w.day), "skip": None}
@@ -321,7 +335,7 @@ def _per_activity(ds, ws, kind: str, m: dict, sm: dict) -> list[dict]:
             out.append(item)
             continue
         wt = _as_run(w)
-        ctx = {"thr": _thresholds(ds, wt)}
+        ctx = {"thr": _thresholds(ds, wt), "acc": acc}
         for name, mm in (("main", m), ("sum", sm)):
             if name == "sum" and mm is m:
                 item["sum"] = item.get("main")
@@ -386,6 +400,9 @@ def _zone_rows(items: list[dict], m: dict, kind: str) -> tuple[list[dict], float
         zs = used[0]["main"]["rows"]
     elif "zones" in m:
         zs = m["zones"]()
+    elif m["basis"] == "coros":
+        from backend.engine import hr_profile as HP
+        zs = [(i, n, None, None) for i, n in zip(HP.ZONE_IDS, HP.ZONE_NAMES)]
     else:                                   # seiler3: the names _bounds gives its rows
         zs = [("1", "低強度（< AeT）", None, None), ("2", "中強度（AeT–LTHR）", None, None),
               ("3", "高強度（≥ LTHR）", None, None)]

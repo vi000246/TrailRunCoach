@@ -128,7 +128,8 @@ class Threshold:
     date: str
     lthr: Optional[float] = None    # lactate-threshold HR (WKO5 `thr`)
     aethr: Optional[float] = None   # aerobic-threshold HR (Uphill Athlete AeT test)
-    mhr: Optional[float] = None
+    mhr: Optional[float] = None     # maximum HR (設定 → 心率; engine/hr_profile.py)
+    rhr: Optional[float] = None     # resting HR (設定 → 心率; engine/hr_profile.py)
     cp: Optional[float] = None      # running critical power, W (a CP test, engine/cp_protocols.py)
     note: str = ""
     # how `cp` was measured (cp_protocols.METHOD_LABEL): 2pt / 1pt_prior / tt20 /
@@ -142,10 +143,10 @@ class Threshold:
     lthr_method: Optional[str] = None
     aethr_method: Optional[str] = None
 
-    THRESHOLD_FIELDS = ("lthr", "aethr", "mhr", "cp")
+    THRESHOLD_FIELDS = ("lthr", "aethr", "mhr", "rhr", "cp")
 
 
-_THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "cp", "note", "wprime", "cp_method",
+_THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "rhr", "cp", "note", "wprime", "cp_method",
                    "lthr_method", "aethr_method")
 
 # estimate = thresholds.estimate applied with 「套用估計」; friel30 = Friel's
