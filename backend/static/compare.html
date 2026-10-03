@@ -31,6 +31,8 @@ th, td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: rig
 th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
 th { color: var(--muted); font-weight: 600; font-size: 12px; }
 td.flag { background: var(--flag); color: var(--warn); font-weight: 600; }
+.qm { display: inline-block; width: 15px; height: 15px; line-height: 14px; text-align: center; border-radius: 50%;
+  border: 1px solid var(--muted); font-size: 10.5px; cursor: help; }
 .sum { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; }
 </style>
 </head>
@@ -49,7 +51,7 @@ td.flag { background: var(--flag); color: var(--warn); font-weight: 600; }
     <p class="meta">同一筆活動以開始時間 ±2 分鐘配對。儲存格標色＝差異超過容差（時長 / 距離 2%、爬升 10%、NP 3%、TSS 5%）。每格顯示 A / B。</p>
   </section>
   <section><div class="sum" id="sum"></div></section>
-  <section class="wrap"><table><thead><tr><th>開始</th><th>運動</th><th>時長</th><th>距離 km</th><th>爬升 m</th><th>NP W</th><th>TSS</th></tr></thead>
+  <section class="wrap"><table><thead><tr><th>開始</th><th>運動</th><th>時長</th><th>距離 km</th><th>爬升 m</th><th>NP W</th><th>TSS <span class="qm" title="滑到 TSS 格看兩邊怎麼算（功率／配速／心率、用的 FTP 和來源）。&#10;跑步功率 TSS 跟 WKO5 不同是預期的：WKO5 用手動輸入的 FTP，不會用 PD 模型的 mFTP 更新；COROS／TP 來源用你的 CP 測試，沒有測試時用 Stryd 功率 PD 模型的 mFTP（推估）。">?</span></th></tr></thead>
     <tbody id="rows"><tr><td colspan="7" class="meta">選好兩個來源後按「比對」。</td></tr></tbody></table></section>
 </main>
 <script>
@@ -57,6 +59,13 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const F = ["duration", "distance", "climbing", "np", "tss"];
 const NAME = { duration: "時長", distance: "距離", climbing: "爬升", np: "NP", tss: "TSS" };
+// hover of a TSS cell: how each side computed it (Dataset._metrics tss_source / ftp_used / ftp_source)
+const TSS_SRC = { power: "功率 TSS", rtss: "配速 rTSS", hrtss: "心率 hrTSS", trainingpeaks: "TrainingPeaks 的 TSS" };
+function basis(x) {
+  if (!x || !x.tss_source) return "–";
+  const s = TSS_SRC[x.tss_source] || x.tss_source;
+  return x.ftp_used != null ? `${s}，FTP ${Math.round(x.ftp_used)} W（${x.ftp_source || "未標來源"}）` : s;
+}
 function fmt(f, v) {
   if (v == null) return "–";
   if (f === "duration") { const s = Math.round(v); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
@@ -75,7 +84,8 @@ $("go").onclick = async () => {
       + F.map((f) => `<span>${NAME[f]} 平均差 <b>${d.mean_rel[f] == null ? "–" : (d.mean_rel[f] * 100).toFixed(1) + "%"}</b></span>`).join("");
     $("rows").innerHTML = d.rows.map((row) => `<tr><td>${esc(row.start.replace("T", " "))}</td><td>${esc(row.sport)}</td>`
       + F.map((f) => { const c = row.metrics[f];
-        return `<td class="${row.flags.includes(f) ? "flag" : ""}">${fmt(f, c.a)} / ${fmt(f, c.b)}</td>`; }).join("") + "</tr>").join("")
+        const tip = f === "tss" && row.tss_basis ? ` title="${esc(`A：${basis(row.tss_basis.a)}\nB：${basis(row.tss_basis.b)}`)}"` : "";
+        return `<td class="${row.flags.includes(f) ? "flag" : ""}"${tip}>${fmt(f, c.a)} / ${fmt(f, c.b)}</td>`; }).join("") + "</tr>").join("")
       || `<tr><td colspan="7" class="meta">沒有配對到的活動。</td></tr>`;
     $("msg").textContent = "";
   } catch (e) { $("msg").textContent = "失敗：" + e.message.slice(0, 120); }
