@@ -399,7 +399,7 @@
 
 - [ ] **SuperPower Calculator / Palladino**：racepower 的公式移植自 SuperPower Calculator 試算表，包括環境乘數、Riegel、CP / RWC、RE、賽事預測。zones 的 Palladino 功率區間表也出自他。
   - app 內的「關於 / 方法」頁與 racepower 頁尾要清楚標示出處與原作者。
-  - **建議使用者在社團發文前先私訊 Palladino 取得同意**：說明是免費工具、公式來源已標示，並詢問他是否同意用他的名字與區間名稱。
+  - **建議使用者在社團發文前先聯絡 Palladino 取得同意**：說明是免費工具、公式來源已標示，並詢問他是否同意用他的名字與區間名稱。
 - [ ] WKO5 的公式重建（TIS、stamina、PD model、formulas.md）：是逆向工程的成果。公開時要評估 WKO5 / TrainingPeaks 的條款；說明文件避免附上二進位位址、解碼步驟等可直接用來繞過授權的細節。
 - [ ] 第三方研究引用（Minetti 2002、Foster 1998、Uphill Athlete 等）：沿用目前 docs 的引用格式，放進「方法」頁。
 

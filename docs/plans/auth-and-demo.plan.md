@@ -370,7 +370,7 @@ def db_path() -> Path            # root / "wko5coach.db"
 
 | 測試檔 | 驗證內容 |
 |---|---|
-| `test_demo_generator.py` | 1. **決定性**：同樣的 seed 和 anchor 跑兩次，`demo_manifest` 的 sha256 完全相同；換 seed 就不同。<br>2. **合理性**（用 `--weeks 8` 加完整一年的統計摘要，不寫檔）：每週時數的分布、恢復週、≥90% 的跑步有 Stryd 欄位、心率在 90–195 之間、百岳行程單日爬升 ≥ 1000 m、事件和階段的日期順序正確。<br>3. `fit_to_channels` 讀得懂每一個產生的檔案；`FitFolderDataset` 建得起來，PMC 不為空。<br>4. 輸出裡不含任何擁有者的字串（`Athlete`、`user`、真實路徑） |
+| `test_demo_generator.py` | 1. **決定性**：同樣的 seed 和 anchor 跑兩次，`demo_manifest` 的 sha256 完全相同；換 seed 就不同。<br>2. **合理性**（用 `--weeks 8` 加完整一年的統計摘要，不寫檔）：每週時數的分布、恢復週、≥90% 的跑步有 Stryd 欄位、心率在 90–195 之間、百岳行程單日爬升 ≥ 1000 m、事件和階段的日期順序正確。<br>3. `fit_to_channels` 讀得懂每一個產生的檔案；`FitFolderDataset` 建得起來，PMC 不為空。<br>4. 輸出裡不含任何擁有者的字串（擁有者的名字、帳號、真實路徑） |
 | `test_tenancy.py` | 1. 預設是 owner tenant，`WKO5COACH_HOME` 生效。<br>2. 在 `use()` 裡，§1.1 的每個路徑函式都換到新根目錄（參數化列出所有模組）。<br>3. warm-up 的 thread 也拿得到 tenant。<br>4. 示範模式的啟動檢查：根目錄等於或位在 `~/.wko5coach` 底下時拒絕啟動；`athlete_dir()` 是 `None` |
 | `test_demo_sandbox.py` | 1. 沒有 cookie 的 GET 不會建目錄。<br>2. 第一次寫入會發 cookie、建目錄。<br>3. **A 和 B 兩個 client 互相看不到對方的事件和課表**。<br>4. 寫完之後 base 目錄的 hash 沒變。<br>5. 重設。<br>6. 用假時鐘測 24 小時到期和 janitor。<br>7. base 切換後沙盒會重設。<br>8. 總量上限與淘汰 |
 | `test_demo_routes.py` | 1. **列舉 `app.routes`**：示範模式下，每一個非 GET 路由要嘛在白名單裡，要嘛回 403。新增路由卻沒分類就會失敗。<br>2. 不掛載的 router 回 404。<br>3. 缺少或不符的 CSRF header 回 403。<br>4. 門檻、push-coros、share 回 403 |
