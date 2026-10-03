@@ -567,7 +567,7 @@ class TrainingHub:
     async def from_db(cls, db: AsyncSession, athlete_id: int = 1) -> "TrainingHub":
         try:
             token, base, user_id = await _get_token_and_base(db, athlete_id)
-        except ValueError as e:
+        except ValueError as e:                  # session_check already marked an expired login
             raise CorosAuthError(str(e)) from None
         hub = cls(token, base, user_id)
         hub._db, hub._athlete_id = db, athlete_id
@@ -581,15 +581,22 @@ class TrainingHub:
         try:
             return await self._call_once(method, path, params=params, body=body)
         except CorosAuthError:
+            from backend.sync import session_check
             if self._db is None or self._relogged:
+                session_check.mark_expired("coros", self._athlete_id)
                 raise
             from backend.sync.coros_client import relogin
             if not await relogin(self._db, self._athlete_id, since=t0):
+                session_check.mark_expired("coros", self._athlete_id)
                 raise
             self._relogged = True
             self.token, self.base, self.user_id = await _get_token_and_base(self._db, self._athlete_id,
                                                                             auto_relogin=False)
-            return await self._call_once(method, path, params=params, body=body)
+            try:
+                return await self._call_once(method, path, params=params, body=body)
+            except CorosAuthError:
+                session_check.mark_expired("coros", self._athlete_id)
+                raise
 
     async def _call_once(self, method: str, path: str, *, params=None, body=None):
         try:

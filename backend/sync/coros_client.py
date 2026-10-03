@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile, AthleteSettings
 from backend.files.file_service import _import_one_file, record_corrupt
-from backend.sync import http, storage
+from backend.sync import http, session_check, storage
 from backend.sync.coros_sport import COROS_SPORT_TYPES, fit_session_sport, sport_token
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, seal, unseal
@@ -95,6 +95,31 @@ async def _probe(base: str, token: str, user_id: str, timeout: float = 10) -> tu
     if body.get("result") == "0000":
         return True, ""
     return False, f"result={body.get('result')} {body.get('message') or ''}".strip()
+
+
+async def probe_token(base: str, token: str, user_id: str, timeout: float = 10) -> str:
+    """The login check (sync/session_check.py): one size=1 activity query.
+    "ok" | "invalid" (COROS refused the token) | "unknown" (network / other)."""
+    today = datetime.now(timezone.utc).date()
+    params = {"size": 1, "pageNumber": 1,
+              "startDay": (today - timedelta(days=7)).strftime("%Y%m%d"),
+              "endDay": today.strftime("%Y%m%d")}
+    try:
+        async with http.client(timeout=timeout) as client:
+            resp = await client.get(f"{base}/activity/query", headers=_headers(token, user_id), params=params)
+    except Exception:                            # noqa: BLE001 — unknown, never raises
+        return "unknown"
+    if resp.status_code in (401, 403):
+        return "invalid"
+    if resp.status_code != 200:
+        return "unknown"
+    try:
+        body = resp.json()
+    except ValueError:
+        return "unknown"
+    if body.get("result") == "0000":
+        return "ok"
+    return "invalid" if token_invalid(body) else "unknown"
 
 
 async def _detect_data_base(token: str, user_id: str, login_base: Optional[str] = None,
@@ -230,6 +255,7 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
         log.info("Coros profile: FTP=%s LTHR=%s weight=%s", ftp, lthr, weight)
 
     await db.commit()
+    session_check.mark_ok("coros", athlete_id)
 
     log.info("Coros login OK region=%s data_base=%s user_id=%s", region, data_base, user_id)
     return {
@@ -337,12 +363,14 @@ async def _get_token_and_base(db: AsyncSession, athlete_id: int = 1,
         if auto_relogin and state.coros_password_sealed and await relogin(db, athlete_id, since=time.monotonic()):
             await db.refresh(state)
             return await _get_token_and_base(db, athlete_id, auto_relogin=False)
+        session_check.mark_expired("coros", athlete_id)
         raise ValueError("COROS_AUTH_REQUIRED: token expired, please login again")
     base = state.coros_base_url or COROS_BASES["us"]
     user_id = state.coros_user_id or ""
     try:
         token = unseal(state.coros_access_token)
     except SecretError as e:
+        session_check.mark_expired("coros", athlete_id)
         raise ValueError(f"COROS_AUTH_REQUIRED: {e}")
     return token, base, user_id
 
@@ -454,6 +482,7 @@ async def sync_workouts(
                 token, base, user_id = await _get_token_and_base(db, athlete_id, auto_relogin=False)
                 yield {"status": "relogin", "detail": "COROS token renewed (remembered password)"}
                 continue
+            session_check.mark_expired("coros", athlete_id)
             yield {"status": "error", "error": "COROS_AUTH_REQUIRED", "detail": str(e),
                    "hint": "請到設定頁重新登入 COROS"}
             return
