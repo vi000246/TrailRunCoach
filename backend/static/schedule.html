@@ -639,7 +639,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       </details>
     </fieldset>
     <label>標題<input name="title" required maxlength="200" autocomplete="off"></label>
-    <label>目標<input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; AeT"></label>
+    <label>目標<input name="target" maxlength="200" autocomplete="off" placeholder="例：心率 &lt; 輕鬆跑上限"></label>
     <div class="hint" id="sd-tgt"></div>
     <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
     <div class="hint" id="sd-gl"></div>
@@ -714,8 +714,8 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         <span class="pf-c daychk" id="pf-sdays" role="group" aria-labelledby="pf-sdays-l"></span></div>
       <div class="pf-r"><span class="pf-l" id="pf-tb-l" data-i18n="schedule.pf.basis">目標依據</span>
         <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.basis_tip" aria-label="說明" data-tip="課表的目標用心率還是功率。
-自動：路跑的輕鬆跑、長跑用功率，心率 ≤ AeT 當上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ AeT）；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
-心率：全部用心率區間（Friel % LTHR，輕鬆跑上限 AeT）。
+自動：路跑的輕鬆跑、長跑用功率，心率以輕鬆跑上限為上限；越野輕鬆跑、山路長天、恢復跑用心率（≤ 輕鬆跑上限）；間歇和 3–8% 坡的爬坡重複用功率，心率只當上限提醒；長爬坡、下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。
+心率：全部用心率區間（設定的課表心率區間；輕鬆跑上限＝Z2 上緣，有實測 AeT 時用實測值）。
 功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
 只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
         <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
@@ -773,7 +773,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         <button type="button" class="qtip" id="pf-heat-q" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_tip" aria-label="說明" data-tip="開：只在 30 天內有熱天 A / B 賽時自動排。比賽前 21–8 天誘導（5–10 天）、前 7–3 天每 4 天維持一次；熱適應跑需要 ≥ 60 分鐘（Racinais 2015），不受單次上限；上限設「絕對不超過」時改成跑 40 分＋熱水浴（Zurawlew 2016）。熱水浴 / 桑拿不推到 COROS，做完請在課表打勾。">?</button>
         <input type="checkbox" class="sw pf-c" id="pf-heatx" name="heat" role="switch"></div>
       <div class="pf-r"><label class="pf-l" for="pf-hm" data-i18n="schedule.pf.heat_m">熱適應方式</label>
-        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_m_tip" aria-label="說明" data-tip="熱天輕鬆跑：60 分、心率 ≤ AeT。&#10;多穿衣服跑：涼爽天用。&#10;熱水浴：跑後 40 °C ≤ 40 分。&#10;桑拿：跑後約 30 分。&#10;輪流：跑步與熱水浴交替。">?</button>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_m_tip" aria-label="說明" data-tip="熱天輕鬆跑：60 分、心率 ≤ 輕鬆跑上限。&#10;多穿衣服跑：涼爽天用。&#10;熱水浴：跑後 40 °C ≤ 40 分。&#10;桑拿：跑後約 30 分。&#10;輪流：跑步與熱水浴交替。">?</button>
         <span class="pf-c"><select id="pf-hm" name="heat_method">
           <option value="run" data-i18n="schedule.pf.hm.run">熱天輕鬆跑 60 分</option><option value="overdress" data-i18n="schedule.pf.hm.overdress">多穿衣服跑</option>
           <option value="bath" data-i18n="schedule.pf.hm.bath">跑後熱水浴</option><option value="sauna" data-i18n="schedule.pf.hm.sauna">跑後桑拿</option><option value="mixed" data-i18n="schedule.pf.hm.mixed">跑步與熱水浴輪流</option></select></span></div>
@@ -1311,7 +1311,8 @@ const terVal = () => (F.querySelector('input[name="terrain"]:checked') || {}).va
 const eqOn = () => !$("sd-eq").hidden;
 const terOf = (s) => { if (!s) return "road"; const t = s.terrain || (s.kind === "hike" || /越野|山路/.test(s.title || "") ? "trail" : "road"); return t === "hike" ? "trail" : t; };
 const defaultD = () => Math.round(D.goal_climb_per_km || 80);
-const aetText = () => { const a = (D.thresholds || {}).aet; return a ? `心率 ≤ AeT ${Math.round(a)} bpm` : "心率 ≤ AeT"; };
+// the easy-run cap (hr_profile.easy_cap_label: 「輕鬆跑上限 N bpm」, 「（實測 AeT）」 only when measured)
+const aetText = () => { const t = D.thresholds || {}, a = t.aet; return t.easy_cap_label ? `心率 ≤ ${t.easy_cap_label}` : a ? `心率 ≤ 輕鬆跑上限 ${Math.round(a)} bpm` : "心率 ≤ 輕鬆跑上限"; };
 function capFor(kind) {
   const p = D.prefs || {};
   return kind === "long" || kind === "hike" ? (p.cap_long ?? p.cap_weekday) : kind === "easy" ? p.cap_weekday : null;

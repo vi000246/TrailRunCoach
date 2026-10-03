@@ -207,7 +207,7 @@ def test_trail_easy_is_hr_only_and_uses_the_trail_rate():
     ss = week(PP.Prefs(terrain_easy="trail"))
     e = [s for s in ss if s["kind"] == "easy"]
     assert e and all(s["terrain"] == "trail" and "越野" in s["title"] for s in e)
-    assert all(s["target"] == "心率 ≤ AeT 150 bpm" and "功率" not in s["target"] for s in e)
+    assert all(s["target"] == "心率 ≤ 輕鬆跑上限 150 bpm" and "功率" not in s["target"] for s in e)
     assert all(s["tss"] == pytest.approx(s["minutes"] / 60 * RATES["trail"]) for s in e)
 
 

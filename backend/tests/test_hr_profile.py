@@ -179,6 +179,19 @@ def test_plan_zones_lthr_default_and_measured_aet_caps():
     assert m["easy"] == [128, 148] and "AeT" in m["easy_source"]
 
 
+def test_easy_cap_label_says_aet_only_when_measured():
+    z = HP.plan_hr_zones(160.0, 0.89 * 160, False, None, None)
+    m = HP.plan_hr_zones(160.0, 148.0, True, None, None)
+    assert HP.easy_cap_label(z) == "輕鬆跑上限 144 bpm"                     # the Z2 top, no 「AeT」
+    assert HP.easy_cap_label(m) == "輕鬆跑上限 148 bpm（實測 AeT）"
+    # a plan's thresholds dict (week_plan): the cap value + hr_model
+    assert HP.easy_cap_label({"aet": 148.0, "hr_model": m}) == "輕鬆跑上限 148 bpm（實測 AeT）"
+    assert HP.easy_cap_measured({"aet": 150.0, "aet_measured": True}) is True    # no 課表心率區間 (parity)
+    assert HP.easy_cap_label(None) == "輕鬆跑上限" and HP.easy_cap_hr(142.0) == "心率 ≤ 輕鬆跑上限 142 bpm"
+    assert HP.below(HP.easy_cap_label(None, 142.0)) == "輕鬆跑上限 142 bpm 以下"
+    assert HP.below(HP.easy_cap_label(None)) == "輕鬆跑上限以下"
+
+
 def test_plan_zones_hrr_and_its_fallback():
     z = HP.plan_hr_zones(160.0, None, False, 202, 53, "hrr")
     assert z["model"] == "hrr" and z["easy"] == [141, 163]

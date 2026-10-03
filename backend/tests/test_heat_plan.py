@@ -59,7 +59,7 @@ def test_induction_block_tags_the_long_run_and_easy_runs():
     easy = [s for s in ss if s["kind"] == "easy"]
     assert all(s["heat"] and s["minutes"] == 60 and s["title"] == "熱適應輕鬆跑" for s in easy)
     assert easy[0]["tss"] == approx(40.0 * 60 / 45)
-    assert "AeT 142" in easy[0]["target"]
+    assert "輕鬆跑上限 142 bpm" in easy[0]["target"]
     assert [s for s in ss if s["id"] == "long"][0]["title"].endswith("（熱適應）")
     assert info["s_race_after"] > info["s_race_before"]
     assert any("熱天" in n["text"] for n in notes)

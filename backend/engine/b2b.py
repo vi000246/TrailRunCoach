@@ -77,6 +77,7 @@ import datetime as dt
 from statistics import median
 from typing import Callable, Iterable, Optional
 
+from backend.engine import hr_profile as HP
 from backend.i18n import fmt
 
 FOLLOWERS = ("long2",)         # always 2 days (the 3-day version was dropped, 2026-10-02)
@@ -453,7 +454,7 @@ def suggestion(info: Optional[dict], monday: dt.date, long_day: Optional[str] = 
             "weeks_out": info.get("weeks_out"), "index": info.get("index"),
             "help": (f"專項期、恢復週後的第一個加量週，下一場 A 賽事（{ev.get('name') or 'A 賽事'}）"
                      f"{'是多日' if int(ev.get('days') or 1) > 1 else '≥ 6 小時'}。第 1 天是這週的長天，第 2 天約 2/3"
-                     f"（CTS 30:20），兩天都心率 ≤ AeT；第 2 天從輕鬆跑的時間扣，這週總量不變（Koop）。"
+                     f"（CTS 30:20），兩天都心率 ≤ {HP.EASY_CAP}；第 2 天從輕鬆跑的時間扣，這週總量不變（Koop）。"
                      f"排入後之後 {POST_EASY_DAYS} 天只排輕鬆跑（UA），TSB 下降不改成恢復週（推估）。"
                      f"你選的兩天會變成你自己的課，自動調整不會動它們。"),
             "src": f"{SRC_WHEN}；{SRC_DAYS}"}
@@ -554,19 +555,19 @@ def _rate(s: dict) -> float:
 
 
 def decorate(ss: list[dict], info: dict, aet: Optional[float], long_cap: Optional[int] = None,
-             weight: Optional[float] = None) -> None:
+             weight: Optional[float] = None, aet_measured: bool = False) -> None:
     """Titles, details (Chinese, with sources) and HR-only targets of the B2B
     days, after the 課表偏好 shaping (which may rename / re-kind the long run or
     cap it): day 2 follows day 1's kind and terrain, ≤ the long-day cap and
-    ≤ 2/3 of day 1 (or the single-day clamp)."""
+    ≤ 2/3 of day 1 (or the single-day clamp). `aet` = the easy-run cap
+    (hr_profile.easy_cap_hr; `aet_measured`: a measured AeT)."""
     long_s = next((s for s in ss if s.get("id") == "long"), None)
     fol = [s for s in ss if s.get("id") in FOLLOWERS]
     if long_s is None or not fol:
         return
     n = 1 + len(fol)
     ev = info.get("event") or {}
-    aet_t = f" {aet:.0f} bpm" if aet else ""
-    hr_t = f"心率 ≤ AeT{aet_t}" if aet else "心率 ≤ AeT"
+    hr_t = HP.easy_cap_hr(aet, aet_measured)
     rate = _rate(long_s)
     single = int(ev.get("days") or 1) <= 1
     for s in fol:
