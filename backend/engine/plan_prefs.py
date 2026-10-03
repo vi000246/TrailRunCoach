@@ -203,7 +203,7 @@ class Prefs:
 def from_settings(values: dict, lenient: bool = True) -> Prefs:
     """Prefs from {user_settings key: value}; missing / None -> the default.
     `lenient` (stored values): a 間歇門檻 that is no longer a mode — e.g. the
-    dropped "xu_signals" (三訊號) — reads as "auto"."""
+    dropped "xu_signals" (an old unlock path) — reads as "auto"."""
     kw = {}
     for k, f in KEY_FIELDS.items():
         v = values.get(k)
@@ -564,7 +564,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 QUALITY_ORDER = (1, 2, 3, 0, 4, 5, 6)          # Tue, Wed, Thu, Mon, Fri, Sat, Sun
-SRC_GAP = "徐國峰（教練）：5 區一週最多兩次、兩次之間至少隔兩天；強度課與長跑隔 ≥ 48 小時"
+SRC_GAP = "台灣教練：5 區一週最多 2 次、間隔至少 2 天；強度課與長跑隔 ≥ 48 小時"
 LONG_MIN_TYPICAL = 90                            # 推估: an LSD rarely fits under 90 min
 
 
@@ -604,15 +604,15 @@ def day_conflicts(p: Prefs, auto_long_wd: int = 5) -> list[dict]:
         alt_t = f"週{WD_ZH[alt]}" if alt is not None else "別天"
         if (wd - lw) % 7 == 1:
             add("after_long", "quality", wd, "長跑隔天不排強度課", SRC_GAP,
-                f"間歇排在長跑（週{WD_ZH[lw]}）的隔天：長跑後腿還沒恢復（建議 ≥ 2 天，徐國峰）：要改到{alt_t}嗎？",
+                f"間歇排在長跑（週{WD_ZH[lw]}）的隔天：長跑後腿還沒恢復（建議 ≥ 2 天，台灣教練）：要改到{alt_t}嗎？",
                 f"改到{alt_t}" if alt is not None else "改到離長跑最遠的一天")
         elif g < 2:
             add("gap48", "quality", wd, "強度課與長跑隔 ≥ 48 小時", SRC_GAP,
-                f"間歇和 LSD 只隔 {g} 天（建議 ≥ 2 天，徐國峰）：要改到{alt_t}嗎？",
+                f"間歇和 LSD 只隔 {g} 天（建議 ≥ 2 天，台灣教練）：要改到{alt_t}嗎？",
                 f"改到{alt_t}" if alt is not None else "改到離長跑最遠的一天")
     if len(q) >= 2 and _gap(q[0], q[1]) < 2:
         add("z5_twice", "quality", q[1], "5 區每週最多 2 次、間隔 ≥ 2 天", SRC_GAP,
-            f"兩個間歇偏好日週{WD_ZH[q[0]]}、週{WD_ZH[q[1]]}只隔 {_gap(q[0], q[1])} 天（徐國峰：至少隔兩天）",
+            f"兩個間歇偏好日週{WD_ZH[q[0]]}、週{WD_ZH[q[1]]}只隔 {_gap(q[0], q[1])} 天（台灣教練：至少隔 2 天）",
             "第二堂改到隔 ≥ 2 天的日子")
     if lw < 5 and p.cap_long is None and p.cap_weekday is not None and p.cap_weekday < LONG_MIN_TYPICAL:
         add("cap_long", "long", lw, "平日時間上限", "課表偏好（單次時間上限）",
@@ -706,7 +706,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             avail.remove(r["day"])
             continue
         elif s["kind"] in ("quality", "test"):
-            # ≥ 2 days between hard days: 徐國峰（教練）— Zone 5 at most twice a week, ≥ 2 days apart
+            # ≥ 2 days between hard days: 台灣教練 — Zone 5 at most twice a week, ≥ 2 days apart
             hard_days = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
             hard_days += list(hard_done or [])   # done hard days this week (workout_review.HARD_TYPES)
             ok = lambda d:(long_day is None or abs((d - long_day).days) >= 2) and \
@@ -731,7 +731,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
                         break
                     if notes is not None:
                         why = next((c["text"] for c in conf if c["kind"] == "quality" and c["wd"] == wd),
-                                   f"週{WD_ZH[wd]}離長跑或另一堂強度課不到 2 天（徐國峰）")
+                                   f"週{WD_ZH[wd]}離長跑或另一堂強度課不到 2 天（台灣教練）")
                         notes.append({"level": "watch", "src": "prefs", "text": f"{why} → 這週改排別天（要照偏好排，到課表偏好選「照我的偏好」）"})
             pick = pick or next((d for d in cands if ok(d)), None) or next(
                 (d for d in cands if long_day is None or abs((d - long_day).days) >= 1), cands[0])

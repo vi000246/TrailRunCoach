@@ -104,7 +104,7 @@ def test_projection_ramp_31_and_cap():
     assert modes[-1] == "taper"
     taper = weeks[-1]
     assert any(s["title"] == "短強度 4×3 分" for s in taper["sessions"])
-    # 專項期 without a confirmed aerobic base: the Zone 3 ladder, not the 5×4′ hill set (徐國峰)
+    # 專項期 without a confirmed aerobic base: the Zone 3 ladder, not the 5×4′ hill set (台灣教練)
     assert weeks[6]["phase"] == "specific" and (weeks[6]["mode"] == "recovery_week" or any(
         s["kind"] == "quality" and s["title"].startswith("閾值") for s in weeks[6]["sessions"]))
 
@@ -723,7 +723,7 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     from backend.engine import interval_library as IL
     dose = [s[1] for s in QG.LADDER] + [IL.title(v) for v in IL.ALL.values()]
     assert base and all(q[d] and q[d][0] in dose for d in base)
-    # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
+    # 台灣教練: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
     # standard session (no cap: the full-length one, engine/interval_library.fit)
     assert [q[d][0] for d in base][:2] == [IL.title(IL.canonical("z3a")), IL.title(IL.canonical("z3b"))]
     assert all(q[d][0].startswith("閾值") for d in base), {d: q[d] for d in base}

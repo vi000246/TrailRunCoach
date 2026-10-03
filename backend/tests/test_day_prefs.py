@@ -64,7 +64,7 @@ def test_second_choice_then_the_default_rules():
 
 @pytest.mark.parametrize("prefs, code, words", [
     (PP.Prefs(long_day="thu", pref_days=(("quality", (4,)),)), "after_long", "長跑（週四）的隔天"),
-    (PP.Prefs(long_day="thu", pref_days=(("quality", (2,)),)), "gap48", "間歇和 LSD 只隔 1 天（建議 ≥ 2 天，徐國峰）：要改到週二嗎？"),
+    (PP.Prefs(long_day="thu", pref_days=(("quality", (2,)),)), "gap48", "間歇和 LSD 只隔 1 天（建議 ≥ 2 天，台灣教練）：要改到週二嗎？"),
     (PP.Prefs(long_day="sun", pref_days=(("quality", (0,)),)), "after_long", "隔天"),
     (PP.Prefs(long_day="sat", quality=2, pref_days=(("quality", (1, 2)),)), "z5_twice", "只隔 1 天"),
     (PP.Prefs(long_day="thu", cap_weekday=45), "cap_long", "平日上限只有 45 分，LSD 放不下"),

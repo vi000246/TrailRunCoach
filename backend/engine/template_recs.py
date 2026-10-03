@@ -13,7 +13,7 @@ Inputs (all of them already decided elsewhere):
   * terrain (road / trail) and the session's own type (輕鬆 / 長跑 / 強度 / 測試 / 越野)
 
 The weights are 推估 (no published ranking); the phase rules follow the general →
-specific progression (Koop; Uphill Athlete) and 徐國峰's Zone 3 before Zone 5. EXPLAIN
+specific progression (Koop; Uphill Athlete) and 台灣教練's Zone 3 before Zone 5. EXPLAIN
 is the ? text.
 """
 from __future__ import annotations
@@ -50,7 +50,7 @@ FAMILY = {"lib:steep_5": "steep", "lib:steep_10": "steep", "lib:steep_15": "stee
           "lib:ua_hill_sprints": "hills", "hill_sprints": "hills", "cp_quick": "cp", "cp_standard": "cp"}
 
 EXPLAIN = ("推薦依這堂課排序（權重是推估）：① 強度課的第一名一定是間歇階梯的下一步（自動排課會選的那份，依你目前這一階和這天的時間上限）；"
-           "同一階的同等課表接在後面，換它們不影響進階。② 5 區還沒開放時不推薦 5 區課表（徐國峰：先練 3 區）。"
+           "同一階的同等課表接在後面，換它們不影響進階。② 5 區還沒開放時不推薦 5 區課表（台灣教練：先練 3 區）。"
            "③ 階段：基礎期偏 3 區和有氧、專項期偏賽道的爬升和下坡、減量期偏短的課（Koop；Uphill Athlete 由一般到專項）。"
            "④ 時間：超過這天上限的往後排，接近這堂原本分鐘數的往前。⑤ 地形：越野日偏上坡版，路跑日不推需要找坡的課。"
            "⑥ 類型：長跑日偏 90 分以上的課。⑦ 主要訓練項目是路跑時：不推越野範本，專項期偏馬拉松專項課"
@@ -147,7 +147,7 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
     # ③ phase
     if cat == "quality":
         if phase == "base" and sub == "z3":
-            sc.add(15, "基礎期先練 3 區（徐國峰）")
+            sc.add(15, "基礎期先練 3 區（台灣教練）")
         elif phase in ("build", "specific") and sub == "z4":
             sc.add(10, f"{PHASE_LABEL[phase]}：超閾值")
         elif phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:

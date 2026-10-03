@@ -9,7 +9,7 @@ period lasts as long as the break):
   1–5 days    back to 100 %, no make-up (Daniels cat. 1; Friel ≤ 3 days)
   6–13 days   first half 50 %, second half 75 % of the previous volume; no
               Zone 3 / Zone 5 inside it; then 1 Zone 3 session before Zone 5
-              (徐國峰: Zone 3 first; 1 session 推估)
+              (台灣教練: Zone 3 first; 1 session 推估)
   14–28 days  as above; Zone 3 / Zone 5 targets × FVDOT (0.973–0.931); the
               last long run of the block is a drift check (UA: re-read after
               a layoff); 2 Zone 3 sessions before Zone 5 (推估)
@@ -49,7 +49,7 @@ TARGETS_AFTER_DAYS = 14               # 推估: Zone 3 targets × FVDOT also for
 CAT4_STEPS = (0.33, 0.50, 0.70, 0.85, 1.00)
 CAT4_Z3_WEEKS = 12                    # 推估: Zone 3 from week 13 (Daniels' T at step 5)
 SRC = ("Daniels 表 9.2（停練後回來的調整）；VDOT O2 FVDOT 表（2018）；"
-       "Mujika & Padilla 2000；Uphill Athlete（中斷後用飄移測試重新讀）；徐國峰（先 3 區後 5 區）")
+       "Mujika & Padilla 2000；Uphill Athlete（中斷後用飄移測試重新讀）；台灣教練（先 3 區後 5 區）")
 
 FVDOT1 = ((5, 1.000), (6, 0.997), (7, 0.994), (10, 0.985), (14, 0.973), (21, 0.952), (28, 0.931), (35, 0.910),
           (42, 0.889), (49, 0.868), (56, 0.847), (63, 0.826), (70, 0.805), (72, 0.800))

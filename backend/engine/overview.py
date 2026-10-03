@@ -859,7 +859,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 add(**f)
         if allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
                 and (gate.get("z5") or {}).get("state") != "open":
-            # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (徐國峰: Zone 3
+            # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (台灣教練: Zone 3
             # first, Zone 5 only on a confirmed base) — the Zone 3 ladder, uphill versions allowed
             dz = QG.week_decision({**gate, "z5": {**(gate.get("z5") or {}), "open": False}}, "base", "base", monday)
             if dz["allow"] and dz["spec"] is not None:
@@ -1004,7 +1004,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
 
     long_done = next((dt.date.fromisoformat(s.day) for s in sessions if s.kind == "long" and s.done and s.day), None)
     # hard days already done this week (Z5 / Z3 / 高強度長跑 / CP test, planned or not): the
-    # remaining interval keeps 48 h from them (徐國峰: ≥ 2 days apart; owner 2026-10-02)
+    # remaining interval keeps 48 h from them (台灣教練: ≥ 2 days apart)
     from backend.engine import workout_review as _WR
     hard_done = sorted({wdate(w) for w in week_ws if category(w) in ("road", "trail", "hike")
                         and session_of(ds, w).get("type") in _WR.HARD_TYPES})

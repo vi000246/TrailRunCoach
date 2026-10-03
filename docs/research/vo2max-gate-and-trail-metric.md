@@ -2,7 +2,7 @@
 
 - 日期：2026-10-01
 - 分支：`docs/vo2-trail-metric`（只寫文件，不改程式）
-- 相關文件：`xu-guofeng-reply.md`、`aerobic-base-readiness.md`、`drift-algorithm.md`、`racepower-v2.md`、
+- 相關文件：`aerobic-base-readiness.md`、`drift-algorithm.md`、`racepower-v2.md`、
   `interval-prescription.md`、`coaching-dashboards-mountain.md`、`uphill-athlete-mountain-metrics.md`、
   `backend/engine/quality_gate.py`、`backend/engine/base_check.py`、`backend/engine/zones.py`
 - 標記：**同儕審查**、**教練經驗**、**廠商**、**推估**（沒有來源的數字或做法）、**未驗證**（查不到原文或沒能核對）。
@@ -76,7 +76,7 @@
 
 - Cusick 講的是週期**什麼時候換階段**：FTP 練到快頂天花板而且停滯了，就換去練 VO2max，目的是再把 FTP 拉上去。
 - 他沒有講「什麼時候身體**準備好、可以安全地**練 VO2max」。
-- 徐國峰的門檻問的是後面這個問題：有氧基礎能不能承受 5 區間歇（`xu-guofeng-reply.md:14–16`）。
+- 有氧基礎門檻問的是後面這個問題：有氧基礎能不能承受 5 區間歇（台灣教練）。
 - 兩個問題不一樣。
 
 Palladino 的筆記也沒有這條規則。他練 VO2max 的條件是：
@@ -197,14 +197,14 @@ mFTP % VO2max  = (avg(metric(lookup(weight,now)))*0.007 + 0.0108*ftp(meanmax(run
 
 現在的 Z5 流程（`quality_gate.py`、`base_check.z5_status`）：
 
-- 有氧基礎用徐國峰 90 分鐘法、三訊號、UA 差距法、Friel 飄移法其中一條確認。
+- 有氧基礎用徐國峰 90 分鐘法、UA 差距法、Friel 飄移法其中一條確認。
 - 先完成 3 區階梯，才開 5 區。
 
 **建議：不加成解鎖條件，也不加成第四條路徑。**
 
 | 理由 | 說明 |
 |---|---|
-| 問的是不同的事 | Cusick 的比例回答「FTP 還有沒有成長空間」；Z5 門檻回答「有氧基礎扛不扛得住 5 區」（徐國峰）。比例高不代表扛得住 |
+| 問的是不同的事 | Cusick 的比例回答「FTP 還有沒有成長空間」；Z5 門檻回答「有氧基礎扛不扛得住 5 區」（台灣教練）。比例高不代表扛得住 |
 | 跑步上沒有鑑別力 | §1.4–§1.5：你幾乎永遠 > 80 %；低於 80 % 時是 FRC 造成的 |
 | 定義不唯一 | WKO5 模型、5 分 MMP、ramp MAP 算出的數字差 10 個百分點以上（§1.2） |
 | 證據等級 | 自行車教練經驗；Cusick 本人說只當參考，不當目標（`The Art of Coaching with Data.md:781`） |
@@ -286,7 +286,7 @@ mFTP % VO2max  = (avg(metric(lookup(weight,now)))*0.007 + 0.0108*ftp(meanmax(run
 
 **徐國峰／Daniels（你的筆記）：**
 
-- 徐國峰的有氧基礎用的是「**心率** 1 區」（`xu-guofeng-reply.md:26`）。
+- 徐國峰的 90 分鐘測試用的是心率 1 區的 E 配速（部落格 2016-12）。
 - Daniels：T 強度「偏好在平坦的路面上進行……在上下起伏的路面上也可以使用心率錶來監控訓練強度」，
   但要鎖配速的課表心率錶做不到
   （`300 Sport/70 ⏳ 周期化訓練/越野跑周期化訓練(晏慶、K天王、丹尼爾).md:109–111`）。
@@ -322,7 +322,7 @@ mFTP % VO2max  = (avg(metric(lookup(weight,now)))*0.007 + 0.0108*ftp(meanmax(run
 4. **下坡用劑量控制**（下降公尺、陡下坡時間），強度看 RPE 和技術。心率和功率都會低估下坡的負擔。
 5. **RPE 當每次都有的第三個指標**：
    - Koop 把 RPE 排第一，UA 的 ME 也用感覺判斷。
-   - 跑後輸入一個 RPE 就夠用。`xu-guofeng-reply.md` §4 已經有加跑後自評欄位的提議。
+   - 跑後輸入一個 RPE 就夠用。
 
 ### 2.4 各課表的處方與評估
 
@@ -437,4 +437,4 @@ AeT、LTHR、CP 都用 app 現行的值。表裡沒有標來源的百分比都�
 - Uphill Athlete：https://uphillathlete.com/trail-running/training-for-trail-running/ ；https://uphillathlete.com/strength-training/muscular-endurance-for-mountain-athletes/
 - Stryd：https://help.stryd.com/en/articles/6879554-trail-and-ultra-racing-with-power
 - Koop：見 `coaching-dashboards-mountain.md` §1.2
-- 徐國峰：`xu-guofeng-reply.md`；Daniels／晏慶：`越野跑周期化訓練(晏慶、K天王、丹尼爾).md`
+- 徐國峰：部落格 2016-12 http://rocky549.blogspot.com/2016/12/rq.html；Daniels／晏慶：`越野跑周期化訓練(晏慶、K天王、丹尼爾).md`

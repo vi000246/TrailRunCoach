@@ -44,7 +44,7 @@
 | T2 | `engine/zone_events.py:124-126` `WATCH_BIAS_C/SD/PAIR_MIN`；文字：`engine/workout_review.py:123,126` | 手錶溫度 − 氣溫 +3.7 ± 2.7 °C | 是（72 對） | **A**（已經有一半） | 已經是「≥ 10 對就用本人的」。只要改兩件事：預設改標「推估（單一使用者）」；`workout_review.py:123` 的說明改成顯示實際用的值 |
 | T3 | `engine/zone_events.py:126` `RH_DEFAULT` | 濕度 83 % | 是（608 筆活動中位數） | **A** | 用本人有天氣快取的活動算 RH 中位數。**≥ 20 筆**；不足時用 60 %（推估，溫帶中位） |
 | T4 | `engine/heat.py:29-32`、`engine/route_weather.py:46-49` `PARTIAL_HADLEY` | 130（理由是「台北夏天傍晚」） | 是 | **C** | 150 是 Hadley 表（教練），保留。130 只在熱適應累積用，收進進階 |
-| T5 | `engine/workout_review.py:109-113`、`zone_events.py:105` 溫度分區 | < 25 / 25–28 / > 28 °C | 否（徐國峰、Beiter 2025） | D | 分區是生理門檻，跟台灣無關（註解提到台灣只是為什麼要分區） |
+| T5 | `engine/workout_review.py:109-113`、`zone_events.py:105` 溫度分區 | < 25 / 25–28 / > 28 °C | 否（台灣教練、Beiter 2025） | D | 分區是生理門檻，跟台灣無關（註解提到台灣只是為什麼要分區） |
 | T6 | `racepower/heatacc.py:21` `A_DEFAULT` | 0 | 是 | D | 已經是「本人 HRC 趨勢顯著才給分」（`MIN_ROWS` 8），對別人一樣成立 |
 | T7 | `engine/drift_agg.py:113-201` AeT 熱 β | 文獻 ＋ 收縮 | — | D | 範本 |
 | T8 | `engine/heat_data.py:35-76` 住家氣候、賽季熱不熱 | 自動 | — | D | 住家 = 快取最多天的天氣格點，誰都適用 |

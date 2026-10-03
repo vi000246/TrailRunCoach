@@ -251,7 +251,7 @@ def test_bad_values_are_rejected(key, value):
 
 
 def test_dropped_quality_gate_mode_falls_back_to_auto(monkeypatch):
-    # 三訊號 ("xu_signals") is no longer a 間歇門檻: a stored value reads as auto…
+    # the old "xu_signals" path is no longer a 間歇門檻: a stored value reads as auto…
     assert PP.from_settings({"plan.prefs.quality_gate": "xu_signals"}).quality_gate == "auto"
     assert PP.from_settings({"plan.prefs.quality_gate": "ua_gap"}).quality_gate == "ua_gap"
     from backend.engine.wko5expr import datasource as DSRC

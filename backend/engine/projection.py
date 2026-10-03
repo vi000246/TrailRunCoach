@@ -438,7 +438,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         z5g = gate.get("z5") or {}
         if base_q is None and kind == "specific" and dec["allow"] and not z5g.get("open") and z5g.get("state") != "open" \
                 and mode not in ("recovery_week", "reentry"):
-            # 專項期 without a confirmed base: the Zone 3 ladder instead of the 5×4′ hill set (徐國峰)
+            # 專項期 without a confirmed base: the Zone 3 ladder instead of the 5×4′ hill set (台灣教練)
             dz = QG.week_decision({**gate, "z5": {**z5g, "open": False}}, "base", "base", week, step, first=False)
             if dz["allow"] and dz["spec"] is not None:
                 q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
