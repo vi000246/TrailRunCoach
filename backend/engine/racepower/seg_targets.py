@@ -116,9 +116,13 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
         if not pace and s.get("speed_kmh"):
             pace = 3600.0 / s["speed_kmh"]
         p = s.get("power") if (not hike and cp and s.get("power")) else None
+        # where a measure is not a valid target it is still shown, as a reference only (power_ref /
+        # hr_ref: the table writes them grey 「參考」; the watch export never uses them)
+        p_ref = None
         if kind == "trail" and k not in ("flat", "run_climb"):
-            p = None
+            p_ref, p = p, None
         hr = cap if cap and not (k == "descent" and kind != "road") else None
+        hr_ref = cap if cap and hr is None else None
         walk = _walked(s, k) and kind != "road"
         basis = tg.get("basis") if tg.get("basis") not in (None, "none") else None
         if kind == "road":
@@ -131,6 +135,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
             "gain_m": s.get("gain_m"), "loss_m": s.get("loss_m"), "grade": s.get("grade"),
             "kind": k, "label": tg.get("label") or KIND_LABEL[k], "basis": basis or "pace",
             "pace_s_per_km": pace, "power": p, "power_band": [p * (1 - POWER_BAND), p * (1 + POWER_BAND)] if p else None,
+            "power_ref": p_ref, "hr_ref": hr_ref,
             "hr_cap": hr, "hr_cap_src": cap_src if hr else None, "walk": walk,
             "t": s.get("t"), "cum_s": s.get("cum_s"), "eta": s.get("eta"),
             "temp_c": s.get("temp_c"), "fuel": fuel_summary(plan, s), "badge": tg.get("badge") or s.get("badge"),
