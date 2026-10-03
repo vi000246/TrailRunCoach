@@ -585,12 +585,11 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
             # 「手錶推估功率（未採用）」 unless power.accept_watch_power
             "power_source": ds.power_source(w) if hasattr(ds, "power_source") else None,
             "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
-            "tss_source": ("power" if m.get("np") is not None and m.get("tssduration")
-                           and not m.get("power_tss_blocked")
-                           else "rtss" if w.sport == "run" and m.get("ngp") and m.get("tss") is not None
-                           and m.get("tss") != m.get("hrtss")
-                           else "trainingpeaks" if w.entry.file in ds._tp_tss
-                           else "hrtss" if m.get("tss") is not None else None),
+            # the branch Dataset._metrics took: power / rtss / trainingpeaks / hrtss
+            "tss_source": m.get("tss_source"),
+            # power TSS: the FTP it divided by and where it came from (Dataset.tss_ftp),
+            # e.g. 「你的測試 2026-09-30」 / 「推估：Stryd PD 模型 mFTP（…）」 / WKO5 設定
+            "ftp_used": m.get("ftp_used"), "ftp_source": m.get("ftp_source"),
         })
     # bad activity files (engine/bad_activity.py) are in no model, but stay in
     # the list, marked 「已排除：…」, without an index (nothing reads them)
@@ -602,6 +601,7 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
                     "file": x["file"], "tags": [], "duration": x.get("duration"), "distance": x.get("distance"),
                     "climbing": None, "tss": None, "if": None, "hrtss": None, "np": None,
                     "power_source": None, "power_label": None, "tss_source": None,
+                    "ftp_used": None, "ftp_source": None,
                     "excluded": _exclusion_json(x)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return out
