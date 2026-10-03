@@ -1,5 +1,5 @@
 {
- "source": "peak-list v2/app/src/lib/peaks-data.ts (flags: 1 = 百岳, 2 = 小百岳); rank = order by elevation",
+ "source": "peak list rows [name, ele_m, lng, lat, flags] (flags: 1 = 百岳, 2 = 小百岳); rank = order by elevation",
  "count": {
   "baiyue": 100,
   "xiaobaiyue": 103
