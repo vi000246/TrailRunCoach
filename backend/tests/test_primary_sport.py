@@ -302,7 +302,7 @@ def test_mp_long_run_steps_editor_and_coros():
     assert WS.derive(g)["items"][1]["target"] == {"type": "pace", "mode": "abs", "lo": 296, "hi": 304}
     assert CW.session_steps(g, CW.Thresholds(lthr=165.0))[1].intensity == ("pace", 296, 304)
     base = O.road_long_session(100, "base", 145.0, 50.0)
-    assert base["title"] == "長時間輕鬆（路跑）" and WS.mp_minutes(base) is None
+    assert base["title"] == "LSD（路跑）" and WS.mp_minutes(base) is None
     # 課表偏好 長跑地形 = 路跑 keeps the MP segment
     c = PP.Ctx(kind="specific", mode="specific", allow_quality=True, rates={"road": 50.0}, aet=145.0)
     t = dict(s)

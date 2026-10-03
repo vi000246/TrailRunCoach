@@ -7,7 +7,7 @@ rate (% LTHR, or ≤ AeT); Daniels' T / I / R, Canova, Billat → pace (× thres
 Where the source's own number isn't one the app has (% HRmax, VO2max pace, RPE) it is
 converted and the template's `conv` says so (推估).
 
-Categories follow the session's 類型: easy (輕鬆跑 / 長時間), quality (強度課, split
+Categories follow the session's 類型: easy (輕鬆跑 / LSD), quality (強度課, split
 三區 88–101 % CP / 四區 101–106 % / 五區 ≥ 106 % — Palladino's running power zones
 3 / 4 / 5, the editor chart's colours; set per template from its main set), test,
 trail (越野跑).

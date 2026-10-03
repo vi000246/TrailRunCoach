@@ -15,7 +15,7 @@ TODAY = dt.date(2026, 10, 5)                       # a Monday
 
 def week(extra=()):
     days = [TODAY + dt.timedelta(days=i) for i in range(7)]
-    ss = [{"id": "long", "kind": "long", "title": "長時間輕鬆", "minutes": 90, "day": days[5].isoformat(), "tss": 80.0,
+    ss = [{"id": "long", "kind": "long", "title": "LSD", "minutes": 90, "day": days[5].isoformat(), "tss": 80.0,
            "done": False, "detail": "", "source": ""},
           {"id": "easy1", "kind": "easy", "title": "輕鬆跑", "minutes": 45, "day": days[1].isoformat(), "tss": 40.0,
            "done": False, "detail": "", "source": ""},
