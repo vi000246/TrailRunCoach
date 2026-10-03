@@ -210,6 +210,20 @@ def test_fixes_apply_series_axis_and_scale(tmp_path):
     assert [f["note"] for f in unmatched(VIEWS, fixes)] == ["stale"]
 
 
+def test_fix_without_view_applies_to_every_imported_view(tmp_path):
+    import copy
+    views = {"A": VIEWS["V"], "B": {**copy.deepcopy(VIEWS["V"]), "view": "B"}}
+    fixes = load_fixes(_write(tmp_path, {"fixes": [
+        {"chart": "C", "axis": "NONE", "set": {"min": None}, "note": "all"},
+        {"view": "B", "chart": "C", "series_index": 1, "scale": 2, "note": "only B"},
+        {"chart_id": "gone", "axis": "NONE", "note": "stale"},
+    ]}))
+    out = apply_fixes(views, fixes)
+    assert out["A"]["dashboards"][0]["charts"][0]["fixes"] == ["all"]
+    assert out["B"]["dashboards"][0]["charts"][0]["fixes"] == ["all", "only B"]
+    assert [f["note"] for f in unmatched(views, fixes)] == ["stale"]
+
+
 def test_fixes_file_validation(tmp_path):
     assert load_fixes(tmp_path / "missing.json") == []
     with pytest.raises(FixError):
@@ -231,13 +245,16 @@ def test_repo_fixes_file_is_valid_and_matches_wko5_charts():
     from pathlib import Path
     from backend.engine.wko5expr.chartfixes import FIXES_PATH
     from backend.files.wko5chart_reader import read_view
+    import os
     fixes = load_fixes()
-    root = Path(__file__).resolve().parents[2]
     from backend.engine.wko5expr.viewids import ensure_ids
-    # as wko5views._wko5_views_raw reads them: with the title-derived chart ids the fixes match on
-    views = {p.stem: ensure_ids(read_view(p)) for p in root.glob("*/*.wko5chart")}
     assert all(f.get("chart_id") for f in fixes)
+    assert not any(f.get("view") for f in fixes)     # keyed by chart id, not by a view file name
+    # your own exported views (opt-in): WKO5_VIEWS_DIR; WKO5 views are never shipped in the repo
+    root = os.getenv("WKO5_VIEWS_DIR")
+    # as wko5views._wko5_views_raw reads them: with the title-derived chart ids the fixes match on
+    views = {p.stem: ensure_ids(read_view(p)) for p in Path(root).rglob("*.wko5chart")} if root else {}
     if not views:
-        pytest.skip("no .wko5chart files")
+        pytest.skip("set WKO5_VIEWS_DIR to your exported .wko5chart views")
     assert FIXES_PATH.name == "wko5_fixes.json"
     assert unmatched(views, fixes) == []

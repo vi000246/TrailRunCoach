@@ -51,7 +51,7 @@ class Push:
 def base_inputs(new=0, easy_minutes=45, quality=True, days_to_race=None):
     ss = [g("easy2", "easy", "輕鬆跑", 40, "2026-09-29", done=True, done_by=ACT_929),
           g("easy1", "easy", "輕鬆跑", easy_minutes, "2026-10-02"),
-          g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")]
+          g("long", "long", "LSD（山路）", 120, "2026-10-04")]
     if quality:
         ss.insert(1, g("quality", "quality", "閾值 3×10 分", 60, "2026-10-01", detail="休 2–3 分鐘；暖身 15 分、緩和 10 分"))
     inp = inputs(cur=cur_plan(sessions=ss), weeks=[next_week()], horizon="2026-10-11")

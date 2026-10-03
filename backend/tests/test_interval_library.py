@@ -31,7 +31,7 @@ def test_the_corrected_ladder_canonicals():
     assert all(IL.total_min(v, "std") <= 45 for v in c.values())
     assert [IL.total_min(c[r], "full") for r in ("z3a", "z3b", "z5d")] == [46, 53, 55]
     assert "Seiler 2013" not in " ".join(v.src for vs in IL.LIBRARY.values() for v in vs)
-    # 徐國峰: Zone 5 reps ≥ 2 min in every equivalent variant
+    # 台灣教練: Zone 5 reps ≥ 2 min in every equivalent variant
     assert all(min(v.works) >= 120 for r in ("z5a", "z5b", "z5c", "z5d") for v in IL.LIBRARY[r])
 
 

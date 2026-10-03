@@ -302,7 +302,7 @@ Ikari 2026 預印本：以**速度**為分母的 decoupling 光靠路線幾何�
 | 6 | 後半功率比前半差 > 5% | UA／Evoke／Palladino（教練） | 推估數字 | **沒有** |
 | 7 | 最後 10% > 5% | ABR §6.2 | 推估 | 有 |
 | 8 | 平均功率 > 90% CP | Palladino 輕鬆 ≤ 80% CP（教練，ABR） | 推估 | 有 |
-| 9 | 溫度 > 25 °C → 只在同溫度區內比較（< 25／25–28／> 28 °C，不拒絕） | 徐國峰 < 25 °C；Lafrenz 2008；Beiter 2025（同儕審查，brief §4） | 已驗證＋28 °C 推估 | 有（2026-10-02，`workout_review.temp_band`；`workout-review.spec.md` §Heat bands） |
+| 9 | 溫度 > 25 °C → 只在同溫度區內比較（< 25／25–28／> 28 °C，不拒絕） | 台灣教練 < 25 °C；Lafrenz 2008；Beiter 2025（同儕審查，brief §4） | 已驗證＋28 °C 推估 | 有（2026-10-02，`workout_review.temp_band`；`workout-review.spec.md` §Heat bands） |
 | 10 | 心率／功率缺口讓有效樣本 < 95% | `DRIFT_POWER_COVER`（推估） | 推估 | 有 |
 | 11 | 正式測試：第 10 分鐘心率已比起始高 10 下還在升 | Evoke 提早放棄（教練，ABR §6.2） | 已驗證 | aet_test 沒有，可加提示 |
 

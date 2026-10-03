@@ -362,7 +362,7 @@ class PdMemo:
         from backend.engine.racepower import athlete as A
         from backend.engine.racepower import cptest as T
         from backend.engine.racepower import weather as WX
-        from backend.engine.wko5expr.fitcache import stamp_of
+        from backend.engine.wko5expr.fitcache import stamp_of, stamp_s
         ds = self.ds
         code = hashlib.sha1()
         for m in (A, T, wko5_pdmodel, wko5_meanmax, PS):
@@ -393,7 +393,8 @@ class PdMemo:
                     s = p.stat()
                 except OSError:
                     continue
-                files.append((d, str(p.relative_to(root)), s.st_size, int(s.st_mtime)))
+                # stamp_s: a copied folder's new mtimes (same bytes) keep the refits
+                files.append((d, str(p.relative_to(root)), *stamp_s(p, s)))
         files.sort()
         # cptest.curves reads only the 資料來源's folder (cptest.unused_folder)
         glob = (code.hexdigest(), A.CP_WINDOW_DAYS, bool(ds.accept_watch_power), BA.read_setting(True),
@@ -888,7 +889,9 @@ class FitFolderDataset(Dataset):
             return bool(hit["ret"])
         before = {k: list(v) for k, v in self.athlete.settings.items()}
         labels = dict(self._setting_labels)
-        ret = self._estimate_settings()
+        from backend.engine.wko5expr.dataset import batched_flush
+        with batched_flush(self):            # one estimate() per grid day each flushed every series file
+            ret = self._estimate_settings()
         self.pd_memo.flush()
         changed = {k: [(d.isoformat(), val) for d, val in v] for k, v in self.athlete.settings.items()
                    if before.get(k) != list(v)}
@@ -1038,7 +1041,9 @@ class FitFolderDataset(Dataset):
     def flush_series(self) -> None:
         import json
         import os
-        from backend.engine.wko5expr.dataset import _safe
+        from backend.engine.wko5expr.dataset import _safe, flush_held
+        if flush_held(self):
+            return
         memo = getattr(self, "pd_memo", None)
         if memo is not None:
             memo.flush()

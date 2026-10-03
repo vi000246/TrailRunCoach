@@ -44,7 +44,7 @@
 | T2 | `engine/zone_events.py:124-126` `WATCH_BIAS_C/SD/PAIR_MIN`；文字：`engine/workout_review.py:123,126` | 手錶溫度 − 氣溫 +3.7 ± 2.7 °C | 是（72 對） | **A**（已經有一半） | 已經是「≥ 10 對就用本人的」。只要改兩件事：預設改標「推估（單一使用者）」；`workout_review.py:123` 的說明改成顯示實際用的值 |
 | T3 | `engine/zone_events.py:126` `RH_DEFAULT` | 濕度 83 % | 是（608 筆活動中位數） | **A** | 用本人有天氣快取的活動算 RH 中位數。**≥ 20 筆**；不足時用 60 %（推估，溫帶中位） |
 | T4 | `engine/heat.py:29-32`、`engine/route_weather.py:46-49` `PARTIAL_HADLEY` | 130（理由是「台北夏天傍晚」） | 是 | **C** | 150 是 Hadley 表（教練），保留。130 只在熱適應累積用，收進進階 |
-| T5 | `engine/workout_review.py:109-113`、`zone_events.py:105` 溫度分區 | < 25 / 25–28 / > 28 °C | 否（徐國峰、Beiter 2025） | D | 分區是生理門檻，跟台灣無關（註解提到台灣只是為什麼要分區） |
+| T5 | `engine/workout_review.py:109-113`、`zone_events.py:105` 溫度分區 | < 25 / 25–28 / > 28 °C | 否（台灣教練、Beiter 2025） | D | 分區是生理門檻，跟台灣無關（註解提到台灣只是為什麼要分區） |
 | T6 | `racepower/heatacc.py:21` `A_DEFAULT` | 0 | 是 | D | 已經是「本人 HRC 趨勢顯著才給分」（`MIN_ROWS` 8），對別人一樣成立 |
 | T7 | `engine/drift_agg.py:113-201` AeT 熱 β | 文獻 ＋ 收縮 | — | D | 範本 |
 | T8 | `engine/heat_data.py:35-76` 住家氣候、賽季熱不熱 | 自動 | — | D | 住家 = 快取最多天的天氣格點，誰都適用 |
@@ -73,7 +73,7 @@
 |---|---|---|---|---|---|
 | P1 | `racepower/fuel.py:80` `BODY_DEFAULTS`（175 cm／40 歲／男，警告文字 :677）；性別預設男：`racepower/athlete.py:991`、`racepower/backtest.py:883`、`racepower/cptest.py:91,103`、`racepower/cp.py:82`、`engine/cp_protocols.py:254`；**沒讀性別、直接用男性 W′ 13100**：`engine/workout_review.py:1050`、`engine/interval_eval.py:63`、`engine/cp_protocols.py:43` | 男 | 是 | **B** | 性別、身高、**出生年**（新增）放一般設定；`planning.py:196-212` 的 profile 已經有 sex、height。三個沒讀性別的地方要改成讀 profile。沒填時才用預設，並保留警告 |
 | P2 | `engine/bad_activity.py:76` 70 kg；`static/settings.html:388` 新增體重預設 65 | 體重 | 否 | **B** | 體重是一般設定（已有 dated weights）；第一次開啟時必填。COROS 登入時寫進來的體重（`sync/coros_client.py:206-229`）當預填 |
-| P3 | `racepower/capacity.py:45-49` 背包 9 kg、`TRIP_DAYS_DEFAULT 3`、`TRIP_KIND_DEFAULT "group"`；`engine/planning.py:77`；`static/plan.html:131`；`api/plan.py:125`；`static/racepower.html:493`；`engine/steep_hill.py:46` `DEFAULT_PCT 0.13`（9／68 kg） | 9 kg、跟團、3 天 | 是（使用者決定） | **B** | 這些本來就是每場活動的欄位（`pack_kg`、天數、跟團／自走）。預設改成「體重 × 13 %」（UA trekking 例子，推估），不再寫 9 kg；跟團／自走沒有預設、要選 |
+| P3 | `racepower/capacity.py:45-49` 背包 9 kg、`TRIP_DAYS_DEFAULT 3`、`TRIP_KIND_DEFAULT "group"`；`engine/planning.py:77`；`static/plan.html:131`；`api/plan.py:125`；`static/racepower.html:493`；`engine/steep_hill.py:46` `DEFAULT_PCT 0.13`（約 9／70 kg） | 9 kg、跟團、3 天 | 是（使用者決定） | **B** | 這些本來就是每場活動的欄位（`pack_kg`、天數、跟團／自走）。預設改成「體重 × 13 %」（UA trekking 例子，推估），不再寫 9 kg；跟團／自走沒有預設、要選 |
 | P4 | `racepower/capacity.py:41,47`、`racepower/fuel.py:44,79` | 越野背心 2 kg、每天少 0.7 kg | 部分 | **C** | 進階 |
 | P5 | `racepower/athlete.py:37` `FALLBACK_TRAINING` | 海拔 100 m、25 °C、75 % | 是（住家條件） | **A** | 用本人活動的海拔中位數和住家格點的氣候（`heat_data` 已經有）。**≥ 10 筆有天氣的活動**；不足時用 `racepower/env.py:19-21` 的參考條件（200 m／12 °C／70 %） |
 | P6 | `racepower/env.py:19-21` | 200 m／12 °C／70 % | 否 | D | 參考條件 |

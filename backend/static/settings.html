@@ -497,8 +497,8 @@ $("saveprof").onclick = async () => {
 // ---- 資料同步 -------------------------------------------------------------
 const SYNC = "/api/v1/sync";
 const SRC_NAME = { coros: "COROS", tp: "TrainingPeaks" };
-const SRC_LABEL = { env: "環境變數", file: "~/.wko5coach/tp_client.json", sealed: "repo 內加密檔（tp_client.enc）",
-  wko5_exe: "本機 WKO5.exe", none: "未設定（只能用網站登入）" };
+const SRC_LABEL = { env: "環境變數", file: "~/.wko5coach/tp_client.json",
+  none: "未設定（只能用網站登入）" };
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("zh-TW", { hour12: false }) : "–";
 const box = (src) => $(`src-${src}`);
 const f = (src, name) => box(src).querySelector(`[data-f="${name}"]`);
@@ -547,14 +547,26 @@ async function loadSources() {
     const s = SOURCES[src], st = s.stats, r = s.last_result;
     const auth = src === "coros" ? co : tp;
     const pill = f(src, "login");
-    pill.className = "pill " + (auth.authenticated ? "ok" : "warn");
+    // the server validates the stored token (sync/session_check.py): 登入已過期 = log in again
+    const expired = !!auth.expired;
+    pill.className = "pill " + (auth.authenticated ? "ok" : expired ? "err" : "warn");
     pill.textContent = auth.authenticated
       ? (src === "coros" ? `已登入 ${auth.email || ""}` : `已登入（${({ web: "網站", oauth: "OAuth", token: "token" })[auth.method] || ""}）`)
-      : "未登入";
+      : expired ? "登入已過期" : "未登入";
     f(src, "loginform").hidden = !!auth.authenticated;
     box(src).querySelectorAll('[data-act="login"]').forEach((b) => b.hidden = !!auth.authenticated);
-    box(src).querySelector('[data-act="logout"]').hidden = !auth.authenticated;
+    box(src).querySelector('[data-act="logout"]').hidden = !auth.authenticated && !expired;
     f(src, "remember").checked = !!auth.password_saved;
+    if (expired) {
+      if (src === "coros" && auth.email && !f(src, "user").value) f(src, "user").value = auth.email;
+      if (!auth.password_saved) {
+        // suggest 記住密碼 so the next expiry renews itself
+        f(src, "remember").checked = true;
+        authMsg(src, "登入已過期，請重新登入。建議勾選「記住密碼」，之後過期會自動重新登入。", "err-text");
+      } else {
+        authMsg(src, "登入已過期，用記住的密碼自動重新登入也失敗了（密碼可能已變更），請重新登入。", "err-text");
+      }
+    }
     f(src, "busy").hidden = !s.busy;
     const res = r ? `${({ ok: "成功", partial: "部分失敗", failed: "失敗", aborted: "中斷" })[r.status] || r.status}：`
       + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}` : "–";

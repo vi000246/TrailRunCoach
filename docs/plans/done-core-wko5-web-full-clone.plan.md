@@ -373,7 +373,7 @@ def test_feature():
           await conn.run_sync(Base.metadata.create_all)
   ```
 
-  Then from project root: `cd /Users/<user>/Projects/WKO5reverse && /opt/homebrew/bin/python3.12 -m alembic init backend/db/migrations`
+  Then from project root: `cd <repo> && /opt/homebrew/bin/python3.12 -m alembic init backend/db/migrations`
 
   Edit `alembic.ini`: `sqlalchemy.url = sqlite:///%(here)s/../../../.wko5coach/wko5coach.db`
 
@@ -739,7 +739,7 @@ def test_feature():
 
   Create `backend/__init__.py` (empty) and `backend/api/__init__.py` (empty).
 
-- **VALIDATE**: `cd /Users/<user>/Projects/WKO5reverse && /opt/homebrew/bin/python3.12 -c "from backend.main import app; print('app ok')"`
+- **VALIDATE**: `cd <repo> && /opt/homebrew/bin/python3.12 -c "from backend.main import app; print('app ok')"`
 
 ---
 
@@ -1337,7 +1337,7 @@ def test_feature():
 - **IMPLEMENT**:
 
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse
+  cd <repo>
   # Install Node via brew if needed
   brew install node
   # Create frontend with Vite
@@ -1697,7 +1697,7 @@ def test_feature():
 - **IMPLEMENT**:
 
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse
+  cd <repo>
 
   # 1. Install new deps
   /opt/homebrew/bin/python3.12 -m pip install fastapi uvicorn sqlalchemy aiosqlite alembic httpx python-multipart sse-starlette pydantic pydantic-settings --break-system-packages
@@ -1792,7 +1792,7 @@ def test_feature():
 
 ### Backend
 ```bash
-cd /Users/<user>/Projects/WKO5reverse
+cd <repo>
 
 # Unit tests (existing + new)
 /opt/homebrew/bin/python3.12 -m pytest src/tests/ -v
@@ -1814,7 +1814,7 @@ EXPECT: workouts total > 0; pmc series non-empty
 
 ### Frontend
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend
+cd <repo>/frontend
 npm run build
 ```
 EXPECT: Zero TypeScript errors, build succeeds

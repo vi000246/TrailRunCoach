@@ -9,7 +9,7 @@
         {
           "id": "pmc-all",
           "title": "PMC：體能 CTL・疲勞 ATL・狀況 TSB（全部運動）",
-          "description": "CTL = 42 天平均負荷，ATL = 7 天，TSB = 昨天的 CTL − ATL。TSB 是負的不代表不好：練得多本來就會是負的。TSB 長條的顏色跟下面「狀況 Form%」同一套區間（TSB ÷ 昨天的 CTL），同一天一定同一色：紅 = 過度疲勞、綠 = 有效訓練（疲勞累積、體能在長）、淺紫 = 維持、紫 = 比賽狀態、黃 = 休息過久。區間是經驗法則（Friel；intervals.icu 換成 % CTL），沒有任何登山越野賽公開過經驗證的最佳 TSB，只當方向參考。",
+          "description": "體能 CTL、疲勞 ATL、狀況 TSB（全部運動）。\n怎麼看：藍線 CTL = 42 天平均負荷、橘線 ATL = 7 天；長條 TSB = 昨天的 CTL − ATL，顏色看 TSB ÷ CTL：紅 過度疲勞、綠 有效訓練、淺紫 持平、紫 比賽狀態、黃 休息過久（同下方 Form%）。\n看什麼：藍線長期往上 = 體能在長；TSB 負的不代表不好，練得多本來就負。\n方法：TrainingPeaks 的 PMC（Banister 模型）；顏色區間 Friel、intervals.icu（% CTL），經驗法則，只當方向。",
           "axes": [{"id": "TSSPERDAY"}],
           "series": [
             {"name": "CTL 體能", "type": "line", "y_axis": "TSSPERDAY", "color": "#2a78d6", "line_width": "thick", "expression": "ctl"},
@@ -25,7 +25,7 @@
         {
           "id": "daily-tss",
           "title": "每日 TSS（跟體能比）",
-          "description": "長條 = 每天的 TSS，顏色是跟前一天的 CTL（你目前每天平均吃得下的負荷）比：灰 = 低於 CTL（這天體能會小降，恢復日正常）；綠 = CTL 到 CTL+30（推進體能的有效負荷）；黃 = CTL+30 到 +60（大負荷日）；紅 = 超過 CTL+60（很重，後面要安排恢復）。依據 Couzens：加量期每天大約 CTL+30。藍線 = CTL（體能），橘線 = ATL（近 7 天的疲勞）：橘線高過藍線代表這陣子練得比平常多。y 軸最高 150：多日百岳那幾天（幾百 TSS）的紅色長條會頂到最上面，實際數字看 hover。",
+          "description": "每天的 TSS，跟前一天的 CTL 比。\n怎麼看：長條灰 = 低於 CTL（恢復日）、綠 = CTL 到 CTL+30（推進體能）、黃 = +30 到 +60（大負荷日）、紅 = 超過 +60（很重，之後要恢復）；藍線 CTL、橘線 ATL。y 軸最高 150，更高的看 hover。\n看什麼：加量期大多是綠；橘線高過藍線 = 最近練得比平常多。\n方法：Couzens：加量期每天約 CTL+30。",
           "variants": [
             {
               "key": "tss",
@@ -43,7 +43,7 @@
             {
               "key": "pct",
               "label": "% CTL",
-              "description": "長條 = 每天的 TSS ÷ 前一天的 CTL（全部運動加在一起），100% = 剛好等於你目前每天平均吃得下的負荷（虛線）。類似 WKO5 的 Daily % of CTL，但 WKO5 那張只算跑步。顏色跟 TSS 圖完全一樣，同一天一定同一色：區間是每天用當天的 CTL 把 CTL+30、CTL+60 換算成百分比。灰 = 低於 100%（這天體能會小降，恢復日正常）；綠 = 100% 到 (CTL+30) ÷ CTL（推進體能的有效負荷）；黃 = 到 (CTL+60) ÷ CTL（大負荷日）；紅 = 超過（很重，後面要安排恢復）。所以綠色的上緣會跟著體能移動：CTL 40 時是 175%，CTL 60 時是 150%，CTL 100 時是 130%；體能越高，同樣 +30 TSS 佔的比例越小。依據 Couzens：加量期每天大約 CTL+30。y 軸自動縮放，不裁掉資料：CTL 低的時期或多日百岳會衝很高，實際數字看 hover。",
+              "description": "每天的 TSS ÷ 前一天的 CTL（全部運動），類似 WKO5 的 Daily % of CTL（WKO5 那張只算跑步）。\n怎麼看：虛線 100% = 剛好等於平常每天的負荷；顏色同 TSS 圖：灰 < 100%、綠 到 (CTL+30) ÷ CTL、黃 到 (CTL+60) ÷ CTL、紅 更高。綠的上緣跟著體能移動：CTL 40 時 175%、60 時 150%、100 時 130%。\n看什麼：同 TSS 圖；CTL 低的時期或多日百岳會衝很高，數字看 hover。\n方法：Couzens：加量期每天約 CTL+30。",
               "axes": [{"id": "PERCENT", "min": 0}],
               "series": [
                 {"name": "低於 CTL（< 100%）", "type": "stackedbar", "y_axis": "PERCENT", "color": "#8a8984", "expression": "if(shift(tl(tss, ctlconstant), 1) > 0 and sum(tss, trunc(date)) > 0 and sum(tss, trunc(date)) < shift(tl(tss, ctlconstant), 1), sum(tss, trunc(date)) / shift(tl(tss, ctlconstant), 1))"},
@@ -58,7 +58,7 @@
         {
           "id": "tss-total",
           "title": "TSS 合計",
-          "description": "每一期的 TSS 總和，切換日／週／月／季／年看總負荷的變化。",
+          "description": "每一期的 TSS 總和。\n怎麼看：每根長條 = 一期，可切換日／週／月／季／年。\n看什麼：總負荷的起伏；恢復週、減量期應該明顯較低。\n方法：TSS 加總（TrainingPeaks）。",
           "axes": [{"id": "TSS", "min": 0}],
           "period": "week",
           "series": [
@@ -68,7 +68,7 @@
         {
           "id": "ramp-rate",
           "title": "Ramp rate（CTL 每週變化）",
-          "description": "每天的 CTL 減掉 7 天前的 CTL，也就是體能一週長了多少（TrainingPeaks / intervals.icu 的算法）。長條顏色 = 風險：綠 < 5 安全、黃 5–7 只能撐一兩週、紅 ≥ 7 受傷與生病風險（TrainingPeaks 對 CTL ≤ 45 的建議；Friel：5–8 撐幾週就要恢復週）；灰 = 下降，恢復週本來就會這樣。藍線 = 近 4 週平均每週增加：這才是長期能不能維持的速度，Couzens 建議長期 3–5。",
+          "description": "體能一週長了多少：每天的 CTL − 7 天前的 CTL。\n怎麼看：長條綠 < 5 安全、黃 5–7 只能撐一兩週、紅 ≥ 7 受傷與生病風險、灰 = 下降（恢復週正常）；藍線 = 近 4 週平均。\n看什麼：藍線才是長期能維持的速度，長期 3–5（Couzens）。\n方法：TrainingPeaks、intervals.icu 的算法；區間 TrainingPeaks（CTL ≤ 45）、Friel（5–8 撐幾週就要恢復週）。",
           "axes": [{"id": "TSSPERDAYPERWEEK"}],
           "series": [
             {"name": "下降（恢復）", "type": "stackedbar", "y_axis": "TSSPERDAYPERWEEK", "color": "#8a8984", "expression": "if(tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7) < 0, tl(tss, ctlconstant) - shift(tl(tss, ctlconstant), 7))"},
@@ -81,7 +81,7 @@
         {
           "id": "form-pct",
           "title": "狀況 Form%（TSB ÷ CTL）",
-          "description": "TSB 除以昨天的 CTL，換成體能的百分比，CTL 低的時候也能用同一組區間。負的不是不好：−30～−10% 是「有效訓練」，代表正在累積疲勞、體能在長，大部分訓練日應該在這裡。紅 < −30% 過度疲勞（要安排恢復）、綠 −30～−10% 有效訓練、淺紫 −10～+5% 持平（不增不減）、紫 +5～+25% 比賽狀態（比賽前想要的）、黃 > +25% 休息過久（體能在掉）。線的顏色 = 那天落在哪一區，最右邊標出最新的值。顏色和上面 PMC 的 TSB 長條同一套。區間是經驗法則（Friel；intervals.icu 換成 % CTL），登山越野賽沒有公開過最佳值，只當方向看。多日百岳後會掉到圖外，數字看 hover。",
+          "description": "狀況 Form% = TSB ÷ 昨天的 CTL，CTL 低時也能用同一組區間。\n怎麼看：線的顏色 = 那天的區間：紅 < −30% 過度疲勞、綠 −30～−10% 有效訓練、淺紫 −10～+5% 持平、紫 +5～+25% 比賽狀態、黃 > +25% 休息過久；最右邊是最新值。顏色和 PMC 的 TSB 長條同一套。\n看什麼：大部分訓練日在綠色；負的不是不好。多日百岳後會掉出圖外，數字看 hover。\n方法：Friel 的 TSB 區間換成 % CTL（intervals.icu）；經驗法則，只當方向。",
           "zoned": {"line": "Form%"},
           "axes": [{"id": "PERCENT", "min": -0.6, "max": 0.4}],
           "series": [
@@ -97,8 +97,8 @@
         {
           "id": "load-ratio",
           "title": "負荷比 ATL ÷ CTL（7:42）",
-          "description": "近 7 天的疲勞除以 42 天的體能：1 = 跟平常一樣，大於 1 = 最近練得比平常多。灰 < 0.8 偏少（恢復週、減量期正常）、綠 0.8–1.3 正常、黃 1.3–1.5 偏多、紅 > 1.5 暴增（突然加很多）。線的顏色 = 那天落在哪一區，最右邊標出最新的值和區間。區間借自 Runalyze（引 Gabbett 2016）。只看方向，不是受傷預測：這類比值能不能預測受傷，研究結論是不行。多日百岳那幾天會衝很高，屬正常。",
-          "zoned": {"line": "ATL ÷ CTL"},
+          "description": "負荷比 ATL ÷ CTL：近 7 天的疲勞除以 42 天的體能。\n怎麼看：線的顏色 = 那天的區間：灰 < 0.8 偏少、綠 0.8–1.3 正常、黃 1.3–1.5 偏多、紅 > 1.5 暴增；最右邊是最新值。\n看什麼：1 = 跟平常一樣；恢復週、減量期灰色正常，多日百岳衝高也正常。\n方法：區間借自 Runalyze（引 Gabbett 2016）；只看方向，研究不支持拿它預測受傷。",
+          "zoned": {"line": "ATL ÷ CTL", "ref": {"y": 1, "label": "1 = 跟平常一樣"}},
           "axes": [{"id": "NONE", "min": 0, "max": 2.5}],
           "series": [
             {"name": "偏少 < 0.8", "type": "line", "y_axis": "NONE", "color": "#8a8984", "expression": "{0:0.8}"},
@@ -118,7 +118,7 @@
         {
           "id": "weekly-moving-time",
           "title": "每週移動時間（依類別堆疊）",
-          "description": "Koop、Jornet、Uphill Athlete 都用時數當主要訓練量。顏色只是看每週重心放在哪裡，高度是全部加總。",
+          "description": "每週移動時間，依類別堆疊。\n怎麼看：藍 路跑、橘 越野跑、綠 登山健行、黃 騎車、粉 肌力；高度 = 全部加總。\n看什麼：總時數的趨勢，和每週重心放在哪。\n方法：Koop、Jornet、Uphill Athlete 都用時數當主要訓練量。",
           "axes": [{"id": "HHMMSS", "min": 0}],
           "period": "week",
           "series": [
@@ -132,13 +132,13 @@
         {
           "id": "weekly-volume", "order": {"road": -1},
           "title": "每週訓練量（跑量／爬升／EP）",
-          "description": "同一張圖切換三種看法。只跑越野的週，跑量會變低、爬升變高，切到 EP 才看得出總量其實沒少。點圖例可以只看某一類。",
+          "description": "每週訓練量，可切換跑量、爬升／下降、EP。\n怎麼看：長條依類別堆疊，點圖例可以只看某一類。\n看什麼：只跑越野的週跑量變低、爬升變高，切到 EP 才看得出總量有沒有少。",
           "period": "week",
           "variants": [
             {
               "key": "km",
               "label": "跑量",
-              "description": "距離（km），依類別堆疊。",
+              "description": "每週跑步距離（km）。\n怎麼看：長條依類別堆疊，點圖例可以只看某一類。\n看什麼：只跑越野的週跑量會變低，切到 EP 看總量。",
               "axes": [{"id": "KM", "min": 0}],
               "series": [
                 {"name": "路跑", "type": "stackedbar", "y_axis": "KM", "color": "#2a78d6", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), distance), startofweek(date))"},
@@ -149,7 +149,7 @@
             {
               "key": "climb",
               "label": "爬升／下降",
-              "description": "兩個長條並排：爬升是垂直訓練量，下降是離心負荷（越野跑肌肉損傷的主因，心率看不出來）。總量本身沒有劑量反應，要對照比賽看「每公里爬升」。",
+              "description": "每週爬升與下降（m）。\n怎麼看：兩根長條並排：爬升 = 垂直訓練量，下降 = 離心負荷。\n看什麼：下降突然變多 = 腿部肌肉負荷變大（心率看不出來）；爬升要對照比賽看「每公里爬升」。\n方法：總爬升量本身沒有劑量反應（Koop）。",
               "axes": [{"id": "METERS", "min": 0}],
               "series": [
                 {"name": "爬升", "type": "bar", "y_axis": "METERS", "color": "#1baf7a", "expression": "sum(climbing, startofweek(date))"},
@@ -159,7 +159,7 @@
             {
               "key": "ep",
               "label": "EP",
-              "description": "努力距離 EP = 距離 km + 爬升 m ÷ 100（健行筆記／ITRA 的算法），把爬升換算成等值的平路距離，路跑、越野、登山可以放在一起比。",
+              "description": "每週努力距離 EP。\n怎麼看：長條依類別堆疊。\n看什麼：路跑、越野、登山放在一起比總量。\n方法：EP = 距離 km + 爬升 m ÷ 100（健行筆記、ITRA 的算法）。",
               "axes": [{"id": "KM", "min": 0}],
               "series": [
                 {"name": "路跑", "type": "stackedbar", "y_axis": "KM", "color": "#2a78d6", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), distance + climbing/100), startofweek(date))"},
@@ -172,7 +172,7 @@
         {
           "id": "long-run-km", "sports": ["road"],
           "title": "每次長跑距離（≥ 90 分的路跑）",
-          "description": "每次 ≥ 90 分鐘的路跑的距離：長跑是馬拉松最重要的課（Pfitzinger：專項期最長約 32–35 km）。長條應該一段一段往上爬，減量期再下來。",
+          "description": "每次 ≥ 90 分鐘路跑的距離。\n怎麼看：藍長條 = 每次長跑。\n看什麼：長條一段一段往上爬，減量期再下來。\n方法：Pfitzinger《Advanced Marathoning》：長跑是馬拉松最重要的課，專項期最長約 32–35 km。",
           "axes": [{"id": "KM", "min": 0}],
           "series": [
             {"name": "長跑距離", "type": "bar", "y_axis": "KM", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and movingduration >= 5400, distance)"}
@@ -181,7 +181,7 @@
         {
           "id": "weekly-downhill-load", "sports": ["trail"],
           "title": "每週下坡衝擊負荷（參考・自訂指標）",
-          "description": "參考（自訂指標），沒有公開的標準公式。把下坡路段的距離加權：坡越陡、速度越快，每公里算越多。1 = 在平路用 3 m/s（約 5:33/km）跑 1 公里的衝擊；最陡、最快時一公里約算 2.4。只算坡度陡於 −3% 的路段，平路和上坡不算。用來看下山的膝蓋、股四頭肌負荷有沒有突然變多，心率看不出這個。點圖例可以只看某一類。",
+          "description": "每週下坡衝擊負荷（參考）。\n怎麼看：依類別堆疊；1 = 平路用 3 m/s（約 5:33/km）跑 1 公里的衝擊，最陡、最快時一公里約 2.4。\n看什麼：下山的膝蓋、股四頭肌負荷有沒有突然變多（心率看不出來）。\n方法：推估，沒有公開的標準公式：只算陡於 −3% 的路段，坡越陡、速度越快權重越高。",
           "axes": [{"id": "CUSTOM等效 km", "min": 0}],
           "period": "week",
           "series": [
@@ -193,7 +193,7 @@
         {
           "id": "strength-calendar",
           "title": "肌力訓練日曆",
-          "description": "有練肌力的日子會上色。基礎期目標每週 2 次。",
+          "description": "有練肌力的日子。\n看什麼：基礎期每週 2 次。\n方法：Uphill Athlete。",
           "axes": [{"id": "CUSTOM次", "min": 0}],
           "series": [
             {"name": "肌力", "type": "calendar", "y_axis": "CUSTOM次", "color": "#e87ba4", "expression": "count(if(sport=\"strength\", duration), trunc(date))"}
@@ -202,7 +202,7 @@
         {
           "id": "route-difficulty", "sports": ["trail"],
           "title": "每次路線難度（コース定数）",
-          "description": "每次越野、登山的コース定数：約 10 輕鬆、20 一般、30 單日很吃力、40 以上通常要過夜。用實際移動時間代入，走得比標準路線時間快時會偏低。拿來對照目標行程：要走的百岳算出來是多少，訓練裡有沒有做到相近的日子。",
+          "description": "每次越野、登山的コース定数（路線難度）。\n怎麼看：橘點 = 越野跑、綠點 = 登山健行；灰線 20 = 一般、40 = 通常要過夜（約 10 輕鬆、30 單日很吃力）。\n看什麼：目標行程算出來是多少，訓練裡有沒有做到相近的日子。\n方法：コース定数（山本正嘉）代入實際移動時間，走得比標準路線時間快時會偏低。",
           "race_refs": "course_constant",
           "axes": [{"id": "NONE", "min": 0}],
           "series": [
@@ -224,12 +224,12 @@
           "title": "這段時間在各區間的時數",
           "kind": "periodzones",
           "view": "total",
-          "description": "每根長條 = 選的這段時間裡，在這個區間的移動時間合計（h:mm）與佔比。期間預設跟著上方的日期範圍，也可以選本週、上週、近 4 週、本期（賽事周期目前的階段）或自訂。區間模型可選，會記住：心率 Friel（% LTHR，預設）、WKO5 Classic、Seiler 3 區（AeT／LTHR）；功率 Palladino（% CP，預設）、Palladino 3 區。每次活動用『那一天』有效的門檻切區間（賽事周期的測試、設定或當時的估算值），所以早幾週用的是當時的 CP／LTHR；圖下方寫出用到哪些門檻。只算移動時間（有速度時 > 1.6 km/h，和 WKO5 一樣）。預設只算路跑，可以加越野跑、登山健行（登山用跑步的門檻）。手錶推估的功率不算進功率區間，被排除的壞檔案也不算。上方的三段條是 3 區摘要（心率：< AeT／AeT–LTHR／≥ LTHR；功率：< 80%／80–95%／≥ 95% CP），拿來跟這個階段的目標比：所有階段低強度至少 75%（app 的強度護欄；Seiler 2006 約 75–80% 的課是低強度，依時間算菁英約 91%，Seiler & Tønnessen 2009）；基礎期 ≥ 90%（Uphill Athlete：90% 以上在 1–2 區）；減量期高強度要保留（Bosquet 2007）。高強度 < 1% 算『沒有』是推估。"
+          "description": "選定期間在各區間的移動時間（h:mm）與佔比。\n怎麼看：每根長條一個區間，區間越高顏色越深（心率紅色系、功率橘色系）；上方三段條 = 3 區摘要（心率 < AeT／AeT–LTHR／≥ LTHR；功率 < 80%／80–95%／≥ 95% CP）。期間、區間模型、運動可以換，選擇會記住。\n看什麼：低強度至少 75%，基礎期 ≥ 90%；減量期高強度要保留。\n方法：每次活動用當天有效的門檻切區間（圖下方列出）；只算移動時間（> 1.6 km/h，同 WKO5），手錶推估的功率不算。Seiler 2006、Seiler & Tønnessen 2009、Uphill Athlete、Bosquet 2007；高強度 < 1% 算「沒有」是推估。"
         },
         {
           "id": "mp-weekly", "sports": ["road"],
           "title": "每週馬拉松配速時間",
-          "description": "每週路跑中落在馬拉松配速（閾值配速 × 1.04–1.08，推估：馬拉松配速 ≈ 閾值配速 × 1.06）的時間。專項期應該逐步增加（Pfitzinger 的馬拉松配速長跑、Canova 的專項課）；基礎期接近 0 是正常的。需要閾值配速（設定或推估）。",
+          "description": "每週跑在馬拉松配速的時間。\n怎麼看：橘長條 = 每週時間。\n看什麼：專項期逐步增加；基礎期接近 0 是正常的。\n方法：馬拉松配速 = 閾值配速 × 1.04–1.08（推估：中心 × 1.06），需要閾值配速（設定或推估）；Pfitzinger 的馬拉松配速長跑、Canova 的專項課。",
           "axes": [{"id": "HHMMSS", "min": 0}],
           "period": "week",
           "series": [
@@ -241,7 +241,7 @@
           "title": "每週各區間時數（區間分布的變化）",
           "kind": "periodzones",
           "view": "weekly",
-          "description": "每根長條 = 一週（範圍超過 26 週時改成一個月）的移動時間，依區間堆疊，顏色和上一張圖一樣（區間越高顏色越深）。區間模型、運動、門檻的算法都跟上一張圖共用。下方的小圖是每週低強度（3 區摘要的第 1 區）佔比：灰帶 = 75% 護欄到那一週階段的目標（基礎期 90%），實心圓 = 達標、空心三角 = 沒達標；不到 1 小時的週不判斷。"
+          "description": "每週（範圍超過 26 週時改成每月）各區間的移動時間。\n怎麼看：依區間堆疊，顏色同上一張圖；下方小圖 = 每週低強度佔比：灰帶 = 75% 到這階段的目標（基礎期 90%），實心圓 = 達標、空心三角 = 沒達標。\n看什麼：區間分布有沒有照階段變化；不到 1 小時的週不判斷。\n方法：區間模型、運動、門檻跟上一張圖共用。"
         }
       ]
     },
@@ -253,7 +253,7 @@
         {
           "id": "run-power-recent-bests",
           "title": "跑步功率曲線",
-          "description": "黃線 = 所選範圍每個時長的最佳平均功率（MMP）；紅色粗線 = WKO5 的 PD 模型曲線（用 MMP 擬合出來的功率－時間模型，看得出哪些時長還沒全力跑過：黃線低於紅線的地方）。橘色區塊 = 最近 N 天跑出比以前更高的時長，也就是最近進步的地方。「以前」至少往回比 90 天（所選範圍更長就用整個範圍）：功率曲線要有夠長的資料才準，Stryd 自動 CP 和 WKO5 的功率模型都看近 90 天；只拿幾週比，很多時長都會變成「新高」，那不是真的進步。可切換 7／14／28 天；同 WKO5 PDC 的 New Bests 算法。",
+          "description": "跑步功率曲線：每個時長的最佳平均功率（MMP）。\n怎麼看：黃線 = 所選範圍的 MMP；紅粗線 = PD 模型曲線；橘色區塊 = 最近 N 天（7／14／28 可切換）創新高的時長。\n看什麼：橘色 = 最近進步的地方；黃線低於紅線 = 那個時長還沒全力跑過。\n方法：WKO5 的 PD 模型與 PDC New Bests；「以前」至少往回比 90 天（Stryd 自動 CP、WKO5 都看近 90 天），比太短會到處都是假新高。",
           "window": {"default": 7, "choices": [7, 14, 28]},
           "axes": [{"id": "WATTS", "min": 0}],
           "series": [
@@ -266,7 +266,7 @@
         {
           "id": "ef-easy-road",
           "title": "有氧效率 EF（輕鬆路跑）",
-          "description": "每下心跳換到的速度（m/min per bpm）。往上走 = 有氧引擎變強。只取 ≥ 30 分鐘、平均心率 ≤ AeT + 3 的路跑才能公平比較（和總覽「有氧效率」指標同一個條件）。",
+          "description": "有氧效率 EF：每下心跳換到的速度（m/min per bpm）。\n怎麼看：每個點 = 一次輕鬆路跑，往上 = 有氧引擎變強。\n看什麼：看幾週的趨勢，不看單次。\n方法：只取 ≥ 30 分鐘、平均心率 ≤ AeT + 3 的路跑（同總覽「有氧效率」）；EF 的概念來自 Friel（TrainingPeaks）。",
           "axes": [{"id": "CUSTOMm/min/bpm", "min": 0}],
           "series": [
             {"name": "EF", "type": "line", "y_axis": "CUSTOMm/min/bpm", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and duration >= 1800 and avg(heartrate) <= aethr + 3, avg(speed)/avg(heartrate)*1000/60)"}
@@ -275,7 +275,7 @@
         {
           "id": "hr-drift-pahr",
           "title": "輕鬆路跑的心率飄移",
-          "description": "每根長條＝一次長時間的平路路跑：後段心率比前段多飄了幾 %。綠＝穩定（< 5%）、橘＝有點飄（5–10%）、紅＝飄很多（> 10%）。\n怎麼用：基礎期要看到綠色越來越多、長條越來越矮；紅色多代表輕鬆跑跑太快，或太熱、沒補給。\n一次會有誤差，看最近幾根的走向，不要只看一根；熱天本來就會偏高，滑過長條看當天溫度。\n5% 是 Uphill Athlete 有氧閾值測試的標準，10% 是徐國峰 90 分鐘測試的標準。只算暖身後還有 30 分鐘以上、沒有爬坡和停頓的穩定路跑，和總覽「心率飄移」同一個算法。",
+          "description": "長時間平路輕鬆跑的心率飄移：後段心率比前段多飄了幾 %。\n怎麼看：每根長條 = 一次跑步；綠 < 5% 穩定、橘 5–10% 有點飄、紅 > 10% 飄很多；虛線 = 5%。滑過長條看當天溫度。\n看什麼：基礎期綠色越來越多、長條越來越矮；紅色多 = 輕鬆跑太快，或太熱、沒補給。看最近幾根的走向，不看單根。\n方法：暖身後還有 ≥ 30 分鐘、沒有爬坡和停頓的穩定路跑，同總覽「心率飄移」。5% 是 Uphill Athlete 有氧閾值測試的標準，10% 是 90 分鐘測試的標準（台灣教練）。",
           "drift_bars": true,
           "basis": {"default": "pace", "choices": ["pace", "power"]},
           "axes": [{"id": "PERCENT"}],
@@ -292,7 +292,7 @@
         {
           "id": "long-run-pace", "sports": ["road"],
           "title": "長跑配速（≥ 90 分的路跑）",
-          "description": "每次 ≥ 90 分鐘的路跑的平均移動配速。同樣是輕鬆長跑，配速慢慢變快（心率不變）= 有氧進步；專項期加了馬拉松配速段，配速會再快一點。看趨勢，不比單次（天氣、路線會影響）。",
+          "description": "每次 ≥ 90 分鐘路跑的平均移動配速。\n怎麼看：藍點 = 每次長跑，越快越好。\n看什麼：心率不變、配速慢慢變快 = 有氧進步；專項期加了馬拉松配速段會再快一點。看趨勢，不比單次（天氣、路線會影響）。\n方法：移動配速（停頓不算）。",
           "axes": [{"id": "PACEKM"}],
           "series": [
             {"name": "長跑配速", "type": "line", "y_axis": "PACEKM", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\") and movingduration >= 5400, movingduration/distance)"}
@@ -301,7 +301,7 @@
         {
           "id": "uphill-vam", "sports": ["trail"],
           "title": "上坡腳程（每小時爬升，心率 < LTHR）",
-          "description": "只算坡度 ≥ 5% 而且在移動的時間，每小時爬了多少公尺，拿來推算百岳每段要走多久（上坡時間 ≈ 爬升 ÷ 腳程）。心率 ≥ LTHR 的時間不算，避免比賽或衝刺拉高數字；沒有心率的活動全部算。上坡時間少於 10 分鐘的活動不畫。參考：傳統的登山估算用每小時 600 m。",
+          "description": "上坡腳程：每小時爬升幾公尺（VAM）。\n怎麼看：橘點 = 越野跑、綠點 = 登山健行；往上 = 爬坡變快。\n看什麼：拿來推百岳每段時間：上坡時間 ≈ 爬升 ÷ 腳程；傳統登山估算約每小時 600 m。\n方法：只算坡度 ≥ 5%、在移動、心率 < LTHR 的時間（避免比賽、衝刺拉高；沒心率的全算）；上坡不到 10 分鐘的活動不畫。",
           "axes": [{"id": "METERSPERHOUR", "min": 0}],
           "series": [
             {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) >= 600, sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), delta(_elevation))) / sum(if(rgrade >= 0.05 and speed > 0.5 and (heartrate < lthr or !isvalid(heartrate)), deltatime)) * 3600)"},
@@ -312,12 +312,12 @@
           "id": "steady-climb-vam-hr", "sports": ["trail"],
           "title": "穩定爬坡 VAM:HR（同一路線，參考）",
           "kind": "climbvam",
-          "description": "爬坡的有氧效率：每下心跳換到多少垂直爬升（m/h ÷ bpm），往上 = 同樣心率爬得更快。用走的、用跑的都算，越野跑和登山健行（百岳）都算，不需要功率。只當參考，不當門檻、不解鎖任何課表。\n\n想法來自 Uphill Athlete 的基準爬坡：同一段坡用同樣心率爬，時間變快就是進步（教練經驗）。把 VAM 除以心率、變成一個數字是推估，沒有找到驗證過的研究。\n\n怎麼挑段：坡度 ≥ +8%、連續 ≥ 8 分鐘、一直在移動（水平速度 > 0.3 m/s，陡坡慢走也算），中間停 ≤ 30 秒不算斷、停更久就斷開。這三個門檻是用你自己的資料挑的（推估）：+8%、8 分鐘時有 5 條重複路線可比，10 分鐘剩 4 條，15 分鐘就沒有了。每段的前 2 分鐘不算，因為心率要約 1 分鐘才跟上（Hunt：時間常數 τ ≈ 60 秒；取 2 分鐘是推估）。VAM = 這段的淨爬升 ÷ 時間。走或跑看步頻：≥ 130 spm 的時間過半算「跑」（實心點），否則算「走」（空心點）；走和跑的效率不一樣，比較時看同一種。\n\n為什麼只比同一路線：坡度、路面、海拔不同，VAM 就不同，點放在一起會混到路線差異，所以一次只看一條路線（下拉選單，預設是符合條件的段最多次的路線；反方向另成一條）。路線用路線頁自動找出的重複路線。藍點 = 每一段，橘線 = 這條路線近 8 週的滾動中位數。沒有可比的段時，改畫每次活動裡最長的一段爬坡有多長。\n\n熱：天熱時同樣速度心率較高，VAM:HR 會變低。切到「熱調整」時，心率用你自己回測出的係數換算到 Hadley 120（每 1 Hadley 單位 0.224 bpm；這個係數是用跑步回測的，用在單次活動、登山都是推估），沒有天氣資料的點不畫。長時間爬坡心率會慢慢飄高（心血管飄移，Coyle & González-Alonso 2001），所以同一條路線上的第幾段也會影響數字，hover 看得到開始的分鐘。hover 也看得到溫度、Hadley、走／跑和心率落在哪個區（< AeT／AeT–LTHR／≥ LTHR；登山用最近一次跑步的門檻）。"
+          "description": "穩定爬坡的有氧效率 VAM:HR：每下心跳換到多少垂直爬升（m/h ÷ bpm），只比同一路線（參考）。\n怎麼看：藍點 = 每段爬坡（實心 = 跑、空心 = 走），橘線 = 這條路線近 8 週的滾動中位數；下拉選路線（反方向另成一條）。可切「熱調整」。沒有可比的段時改畫每次最長的爬坡。\n看什麼：同路線、同走或跑，點往上 = 同樣心率爬得更快。只當參考，不解鎖課表；hover 看溫度和第幾分鐘開始（長爬坡心率會慢慢飄高，Coyle & González-Alonso 2001）。\n方法：基準爬坡的想法來自 Uphill Athlete；VAM ÷ 心率是推估。挑段：坡度 ≥ +8%、連續 ≥ 8 分鐘、停 ≤ 30 秒不算斷（用自己的資料挑，推估），每段前 2 分鐘不算（Hunt：心率 τ ≈ 60 秒）；跑 = 步頻 ≥ 130 spm 過半。熱調整換算到 Hadley 120（每單位 0.224 bpm，自己回測的係數，推估）。"
         },
         {
           "id": "downhill-rate", "sports": ["trail"],
           "title": "下坡腳程（每小時下降）",
-          "description": "只算坡度陡於 −5% 而且在移動的時間，每小時下降多少公尺。下坡通常卡在腿和技術，不是心肺，所以不用心率過濾。拿來推算下山時間（下坡時間 ≈ 下降 ÷ 腳程）；變快代表下坡技術或腿力進步。下坡時間少於 10 分鐘的活動不畫。",
+          "description": "下坡腳程：每小時下降幾公尺。\n怎麼看：橘點 = 越野跑、綠點 = 登山健行；往上 = 下坡變快。\n看什麼：推下山時間（下降 ÷ 腳程）；變快 = 下坡技術或腿力進步。\n方法：坡度陡於 −5%、在移動的時間；下坡卡在腿和技術、不是心肺，所以不用心率過濾；下坡不到 10 分鐘的活動不畫。",
           "axes": [{"id": "METERSPERHOUR", "min": 0}],
           "series": [
             {"name": "越野跑", "type": "line", "y_axis": "METERSPERHOUR", "color": "#eb6834", "expression": "if(hastag(\"runningtrail\") and sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) >= 600, -sum(if(rgrade <= -0.05 and speed > 0.5, delta(_elevation))) / sum(if(rgrade <= -0.05 and speed > 0.5, deltatime)) * 3600)"},
@@ -327,7 +327,7 @@
         {
           "id": "climb-density", "sports": ["trail"],
           "title": "爬升密度（每公里爬升）",
-          "description": "Koop：拿每公里爬升對照目標賽事，而不是追週總量。",
+          "description": "每次越野、登山的爬升密度（每公里爬升）。\n怎麼看：綠點 = 每次活動，紅線 = 目標賽事。\n看什麼：專項期的長課接近紅線，不追週總量。\n方法：Koop。",
           "axes": [{"id": "CUSTOMm/km", "min": 0}],
           "series": [
             {"name": "越野 + 登山", "type": "line", "y_axis": "CUSTOMm/km", "color": "#1baf7a", "expression": "if((hastag(\"runningtrail\") or hastag(\"hiking\") or hastag(\"mountaineering\")) and distance > 3, climbing/distance)"},
@@ -337,7 +337,7 @@
         {
           "id": "moving-time-per-activity",
           "title": "每次移動時間（跑步、越野、登山）",
-          "description": "最長單次應該逐步接近目標賽事的時間（Koop）。",
+          "description": "每次的移動時間（路跑、越野、登山）。\n怎麼看：藍 路跑、橘 越野跑、綠 登山健行。\n看什麼：最長一次逐步接近目標賽事的時間。\n方法：Koop。",
           "axes": [{"id": "HHMMSS", "min": 0}],
           "series": [
             {"name": "路跑", "type": "line", "y_axis": "HHMMSS", "color": "#2a78d6", "expression": "if(sport=\"run\" and !hastag(\"runningtrail\"), movingduration)"},
@@ -348,7 +348,7 @@
         {
           "id": "durability-drift",
           "title": "耐久度：長時間後段心率飄移",
-          "description": "每個點＝一次超過 90 分鐘的越野跑：後半段的心率比前半段多飄了幾 %。越低越好，代表越能撐住後段（耐久度）；超過 15% 是後段掉很多。登山會混到休息時間、數字亂跳，所以不算；超過 30% 當成壞資料不畫。和總覽「耐久度」同一個條件。\n方法：用 WKO5 存的 Pa:HR（全程前半對後半、含暖身和停頓），不是單次活動判讀卡的算法——判讀卡會把有坡的跑步（越野都是）判為不採用。",
+          "description": "耐久度：超過 90 分鐘的越野跑，後半段心率比前半段多飄幾 %。\n怎麼看：每個點 = 一次越野跑；灰虛線 = 5%，紅線 = 15%（後段掉很多）。\n看什麼：越低越好 = 越撐得住後段。同總覽「耐久度」。\n方法：WKO5 存的 Pa:HR（全程前半對後半，含暖身和停頓），不是判讀卡的算法（判讀卡不採用有坡的跑步）；登山混到休息時間所以不算，> 30% 當壞資料不畫。",
           "basis": {"default": "pace", "choices": ["pace", "power"],
                     "power_note": "越野用功率算的心率飄移只當參考：Stryd 功率只驗證到約 8% 坡度，陡坡上的功率不一定準。"},
           "axes": [{"id": "PERCENT"}],

@@ -11,8 +11,8 @@ File shape::
 
     {
       "fixes": [
-        {"view": "WKO5 Workout View",
-         "chart_id": "palladino-run-summary-report",   # viewids.py; "chart": "<title>" also works
+        {"chart_id": "palladino-run-summary-report",   # viewids.py; "chart": "<title>" also works
+         "view": "My Workout View",         # optional: only this imported view (default: every one)
          "chart": "Palladino Run Summary Report",      # with an id: only a reminder for the reader
          "dashboard_id": "workout",         # optional, when titles repeat (or "dashboard": "<title>")
          "series": "Distance (mi)",         # optional: series name ...
@@ -21,10 +21,13 @@ File shape::
          "scale": 2,                        # optional: multiply the values
          "drop": true,                      # optional: remove the series
          "note": "english() 英制距離改公制"},
-        {"view": "...", "chart": "...", "axis": "NONE",
+        {"chart": "...", "axis": "NONE",
          "set": {"min": null, "max": null}, "note": "..."}
       ]
     }
+
+Fixes are keyed by chart id (and dashboard id), not by the view's file name,
+so they follow the charts whatever the user named the exported view.
 
 Every applied entry adds its `note` to the chart's `fixes` list; the viewer
 shows those as a "已修正單位" badge.
@@ -59,8 +62,8 @@ def load_fixes(path: Optional[Path] = None) -> list[dict]:
     if not isinstance(fixes, list):
         raise FixError(f"{p}: expected an object with a 'fixes' list")
     for i, f in enumerate(fixes):
-        if not isinstance(f, dict) or not f.get("view") or not (f.get("chart_id") or f.get("chart")):
-            raise FixError(f"{p}: fix #{i} needs 'view' and 'chart_id' (or 'chart')")
+        if not isinstance(f, dict) or not (f.get("chart_id") or f.get("chart")):
+            raise FixError(f"{p}: fix #{i} needs 'chart_id' (or 'chart')")
         if "axis" in f and ("series" in f or "series_index" in f):
             raise FixError(f"{p}: fix #{i} targets both an axis and a series")
         bad = set(f.get("set") or {}) - (AXIS_KEYS if "axis" in f else SERIES_KEYS)
@@ -116,31 +119,41 @@ def apply_fixes(views: dict[str, dict], fixes: Iterable[dict]) -> dict[str, dict
     (reported by `unmatched()`), so a renamed WKO5 chart can't break a view."""
     out = copy.deepcopy(views)
     for f in fixes:
-        v = out.get(f["view"])
-        if v is None:
-            continue
-        for d in v.get("dashboards", []):
-            if not _hit(d, f, "dashboard"):
-                continue
-            for c in d.get("charts", []):
-                if not _hit(c, f, "chart", required=True):
-                    continue
-                if _apply_one(c, f):
-                    note = f.get("note") or "已修正單位"
-                    notes = c.setdefault("fixes", [])
-                    if note not in notes:
-                        notes.append(note)
+        for v in _targets(out, f):
+            _apply_to_view(v, f)
     return out
+
+
+def _targets(views: dict[str, dict], f: dict) -> list[dict]:
+    """The views a fix applies to: the one named by `view`, else every view."""
+    if f.get("view"):
+        v = views.get(f["view"])
+        return [v] if v is not None else []
+    return list(views.values())
+
+
+def _apply_to_view(v: dict, f: dict) -> None:
+    for d in v.get("dashboards", []):
+        if not _hit(d, f, "dashboard"):
+            continue
+        for c in d.get("charts", []):
+            if not _hit(c, f, "chart", required=True):
+                continue
+            if _apply_one(c, f):
+                note = f.get("note") or "已修正單位"
+                notes = c.setdefault("fixes", [])
+                if note not in notes:
+                    notes.append(note)
 
 
 def unmatched(views: dict[str, dict], fixes: Iterable[dict]) -> list[dict]:
     """Fixes that don't hit anything in `views` (stale entries)."""
     miss = []
+    note_of = lambda f: f.get("note") or "已修正單位"           # noqa: E731
     for f in fixes:
-        probe = apply_fixes({f["view"]: views[f["view"]]} if f["view"] in views else {}, [f])
-        v = probe.get(f["view"])
-        hit = v is not None and any((f.get("note") or "已修正單位") in (c.get("fixes") or [])
-                                    for d in v["dashboards"] for c in d["charts"])
+        probe = apply_fixes({k: v for k, v in views.items() if not f.get("view") or k == f["view"]}, [f])
+        hit = any(note_of(f) in (c.get("fixes") or [])
+                  for v in probe.values() for d in v.get("dashboards", []) for c in d.get("charts", []))
         if not hit:
             miss.append(f)
     return miss

@@ -404,21 +404,21 @@ function CollapsibleSection({ title, children }) { /* ▼/▶ toggle */ }
 
 ### Static Analysis
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse/frontend"
+cd "<repo>reverse/frontend"
 npx tsc --noEmit
 ```
 EXPECT: 零型別錯誤
 
 ### Build
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse/frontend"
+cd "<repo>reverse/frontend"
 npm run build
 ```
 EXPECT: build 成功
 
 ### Browser Validation
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
+cd "<repo>reverse"
 # 依專案啟動方式（start.sh / docker-compose）啟前後端後手測上方 checklist
 ```
 EXPECT: Manual/Visual Checklist 全綠

@@ -161,7 +161,11 @@ async def logged_in(db: AsyncSession, source: str, athlete_id: int = 1) -> bool:
     st = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
     if st is None:
         return False
-    return bool(st.coros_access_token if source == "coros" else st.tp_access_token)
+    if not (st.coros_access_token if source == "coros" else st.tp_access_token):
+        return False
+    # a login known to be expired (sync/session_check.py; cache only, no network)
+    from backend.sync import session_check
+    return not session_check.is_expired(source, athlete_id)
 
 
 async def last_sync_at(db: AsyncSession, source: str, athlete_id: int = 1) -> Optional[datetime]:

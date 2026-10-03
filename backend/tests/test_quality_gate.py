@@ -87,7 +87,7 @@ def test_auto_without_aet_is_no_method_and_the_guardrails():
     assert g["resolved"] == "none" and g["state"] == "none" and not g["fallback"]
     t = QG.indicator(g)
     assert t["level"] == "info" and "沒有 AeT 實測：照 80/20 原則每週 1 次間歇" in t["verdict"]
-    # 徐國峰: Zone 3 first — the ladder's first rung is threshold 3×6 (§A5.3), not 5×1′
+    # 台灣教練: Zone 3 first — the ladder's first rung is threshold 3×6 (§A5.3), not 5×1′
     assert "第 1 步：閾值 3×6 分" in t["verdict"]
     assert QG.guardrail_mode(g)
     assert QG.week_decision(g, "base", "base")["spec"] is QG.Z3[0]
@@ -117,7 +117,7 @@ def test_auto_with_measured_aet_uses_ua_gap_then_friel(valid_aet):
     t = QG.indicator(shut)
     assert t["level"] == "watch" and t["verdict"].startswith("AeT 140 / LTHR 165：差距 18%（> 10%，有氧不足）")
     assert "3 區照排" in t["action"]
-    # a locked method only keeps Zone 5 closed: Zone 3 still goes on (徐國峰)
+    # a locked method only keeps Zone 5 closed: Zone 3 still goes on (台灣教練)
     d = QG.week_decision(shut, "base", "base")
     assert d["allow"] and d["spec"] is QG.Z3[0] and not shut["z5"]["open"]
     # Friel is the second way in: one steady run at AeT (140 ± band), ≥ 70 min, flat drift
@@ -243,7 +243,7 @@ def test_guardrails_block_the_week_and_say_so():
 
 
 def test_dose_ladder_zone3_first_then_zone5_only_when_open():
-    # 徐國峰: Zone 3 first; Zone 5 reps ≥ 2 min, only while Zone 5 is open
+    # 台灣教練: Zone 3 first; Zone 5 reps ≥ 2 min, only while Zone 5 is open
     # the corrected ladder (interval-prescription.md §A5.3), then V3 / V4 / T+ maintenance
     open_titles = [QG.dose_spec(i, True)[1] for i in range(10)]
     assert open_titles == ["閾值 3×6 分", "閾值 3×8 分", "閾值 2×12 分", "VO2max 5×2 分", "VO2max 4×3 分",
@@ -761,7 +761,7 @@ def test_aet_test_session_steps_and_payload_without_coros():
     assert s["kind"] == "test" and s["id"] == "test_aet" and s["minutes"] == 80
     assert "冷氣房跑步機 2–3%＋電扇（首選），或平路環線" in s["detail"]
     assert "暖身 15 分到開始流汗" in s["detail"] and "測試 60 分固定功率不要調" in s["detail"] and "中途不停" in s["detail"]
-    # the heat condition as a temperature (徐國峰; user decision), not 「太陽出來前」
+    # the heat condition as a temperature (台灣教練; user decision), not 「太陽出來前」
     assert "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真" in s["detail"] and "太陽" not in s["detail"]
     assert "主課第 10 分鐘心率已經比起始高 10 下還在升" in s["detail"] and "evokeendurance.com" in s["source"]
     assert "If you only have 40 minutes" in s["source"]

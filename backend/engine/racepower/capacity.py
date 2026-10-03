@@ -46,7 +46,7 @@ PACK_DEFAULT_MULTI = 9.0
 PACK_DEFAULT_SINGLE = 9.0
 # generalize-athlete P3: the default follows the body weight — 13 % (Uphill Athlete's
 # trekking example, 推估), rounded to 0.5 kg; 9 kg only when the weight is unknown.
-# The author's 68 kg gives 8.84 -> 9.0, i.e. the same default as before.
+# e.g. 68 kg gives 8.84 -> 9.0, i.e. the same default as before.
 PACK_PCT = 0.13
 
 

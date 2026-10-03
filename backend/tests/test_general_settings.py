@@ -164,7 +164,7 @@ def test_sex_or_default():
 def test_pack_default_follows_body_weight():
     from backend.engine.racepower import capacity as CAP
     from backend.engine import steep_hill as SH
-    assert CAP.pack_default(68.0) == 9.0                 # the author's weight: the old 9 kg default
+    assert CAP.pack_default(68.0) == 9.0                 # 68 kg: the old 9 kg default
     assert CAP.pack_default(52.0) == 7.0                 # 6.76 -> 7.0
     assert CAP.pack_default(None, 3) == CAP.PACK_DEFAULT_MULTI
     assert "13 %" in CAP.pack_default_text(60.0) and "9 kg" in CAP.pack_default_text(None)

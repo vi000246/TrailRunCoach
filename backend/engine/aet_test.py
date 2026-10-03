@@ -68,7 +68,7 @@ UA_MIN_S = 40 * 60              # UA: "We don't recommend relying on tests less 
 UA_SLACK_S = 30                 # 推估: a few lost samples (GPS / Stryd dropouts) don't fail a 40′ test
 BAND_LOW, BAND_HIGH = 0.035, 0.05
 FAST_FINISH = 0.05              # 自訂
-HEAT_C = 25.0                   # 徐國峰's condition: the session text's advice (HEAT_TEXT), not a refusal
+HEAT_C = 25.0                   # 台灣教練's condition: the session text's advice (HEAT_TEXT), not a refusal
 MAX_STOPPED = 0.05
 MAX_CV = 0.15                   # the old unsourced 30-s CV rule: information only now (drift v2 uses VI)
 START_BELOW = 5.0               # 自訂: 0.89 × LTHR − 5 as the starting HR without an estimate
@@ -76,19 +76,19 @@ POWER_OF_CP = 0.75              # 自訂: starting power when nothing better is 
 RECENT_DAYS = 28                # 推估: a test in the last 4 weeks → don't suggest another (minimum spacing)
 # B3 (unsourced-rules.md): no fixed expiry / cadence any more (16 weeks, 4–6 weeks, every 5 base
 # weeks: no source). The test is due only for a reason (quality_gate.aet_test_reason).
-HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；徐國峰（教練）、Lafrenz 2008）"
+HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；台灣教練、Lafrenz 2008）"
 
 SRC_UA_TEST = "Uphill Athlete 心率飄移測試（https://uphillathlete.com/aerobic-training/heart-rate-drift/，教練）"
 
 # ---- the protocols (課表偏好 plan.prefs.aet_test_protocol) -------------------------
 # judge: ua = halves, UA's 3.5 / 5 % bands (finds the AeT HR); evoke = halves, > 5 % = above
 # AeT; friel = halves < 5 % / 5–10 / > 10 (aerobic endurance at AeT); xu = HR at minute 10 vs
-# minute 90, < 10 % = the base is sufficient (徐國峰's own comparison, not halves).
+# minute 90, < 10 % = the base is sufficient (徐國峰's published comparison, not halves).
 PROTOCOLS = {
     "xu90": {"label": "徐國峰 90 分鐘平路 1 區", "warm": 10, "main": 80, "cool": 0, "judge": "xu",
-             "title": "AeT 飄移測試 徐國峰 90 分", "terrain": "平坦路段（就是週末那一次 LSD）",
+             "title": "AeT 飄移測試 徐國峰 90 分", "terrain": "平坦路段（排在週末長跑日）",
              "hold": "配速固定在 E 配速，心率自然變", "rule": "第 10 分鐘心率 A、第 90 分鐘心率 B：(B − A) ÷ A < 10% 有氧基礎夠（5% 內國家級）",
-             "source": "徐國峰（教練）；徐國峰《跑者都該懂的跑步數據》"},
+             "source": "徐國峰部落格（2016-12，有氧基礎檢測）；徐國峰《跑者都該懂的跑步數據》"},
     "ua60": {"label": "Uphill Athlete 60 分", "warm": 15, "main": 60, "cool": 5, "judge": "ua",
              "title": "AeT 飄移測試 60 分", "terrain": "跑步機 2–3% 或平路環線（不要山路）",
              "hold": "固定功率（UA 原文固定配速；有 Stryd 用功率較穩）", "rule": "前半對後半：< 3.5% 低於 AeT、3.5–5% 前半心率就是 AeT、> 5% 起始太高",
@@ -288,8 +288,8 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
 
 def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = None, trail: bool = False,
                temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
-    """徐國峰's 90-minute test (notes L62–L67): flat, every stop ≤ 30 s (his
-    ≤ 25 °C: a temperature band on the result, _tag_heat); HR at minute 10
+    """徐國峰's 90-minute test (blog 2016-12): flat, every stop ≤ 30 s (the
+    ≤ 25 °C line, 台灣教練: a temperature band on the result, _tag_heat); HR at minute 10
     (A) vs minute 90 (B), each the ±1-min mean;
     drift = (B − A) ÷ A; < 10 % = the base is sufficient. Not halves."""
     from backend.engine import base_check as BC
@@ -303,7 +303,7 @@ def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = N
     if r is None:
         tt = np.asarray(t, dtype=float)
         dur = float(np.nanmax(tt) - np.nanmin(tt)) if np.isfinite(tt).any() else 0.0
-        out["reason"] = f"只跑了 {dur / 60:.0f} 分鐘：要連續跑到第 91 分鐘（徐國峰：時間太短看不出後段心率會不會飄）"
+        out["reason"] = f"只跑了 {dur / 60:.0f} 分鐘：要連續跑到第 91 分鐘（測試長度 90 分鐘：徐國峰部落格）"
         return out
     stop = BC.longest_stop(t, speed)
     if stop > BC.XU_STOP_S:
@@ -362,9 +362,9 @@ def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
     if judge == "xu":
         head = f"徐國峰 90 分鐘：第 10 分 {h1:.0f} → 第 90 分 {r['hr2']:.0f} bpm，飄移 {d * 100:.1f}%"
         if r["band"] == "base_ok":
-            return [f"{head} < 10%：有氧基礎夠（5% 內國家級），可以加 5 區（徐國峰）",
+            return [f"{head} < 10%：有氧基礎夠（5% 內國家級），可以加 5 區",
                     _("這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由平常多次輕鬆跑的飄移推估")]
-        return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑（徐國峰）", "5 區先不排；3 區照排"]
+        return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑", "5 區先不排；3 區照排"]
     if judge == "friel":
         head = _("心率飄移 {d:.1f}%（Friel 1 小時）", d=d * 100)
         return [{"base_ok": f"{head} < 5%：有氧耐力夠", "base_mid": f"{head}（5–10%）：有氧耐力還在進步",
@@ -516,9 +516,9 @@ def is_short(s: dict) -> bool:
 def protocol_tip(key: str) -> str:
     """The 課表偏好 hover: duration, terrain, what is held, how it is judged, source."""
     if key == "auto":
-        return (f"自動：標準版＝{PROTOCOLS[STANDARD]['label']}（放在週末長跑日，就是那次 LSD）；"
+        return (f"自動：標準版＝{PROTOCOLS[STANDARD]['label']}（放在週末長跑日，取代那次長跑）；"
                 f"長跑日上限 < 90 分放不下時改用備案 {PROTOCOLS[BACKUP]['label']}（平日）。"
-                "選標準版的理由：你的教練徐國峰說檢測沒辦法縮短太多、時間太短看不出後段心率會不會飄；"
+                "選標準版的理由：90 分鐘是徐國峰公開的測試長度（部落格 2016-12），測得太短看不出後段心率飄移；"
                 "UA 接受 40 分、Evoke 60 分、Friel 1–2 小時；沒有任何長度有同儕審查的驗證。")
     p = PROTOCOLS[key]
     total = p["warm"] + p["main"] + p["cool"]
@@ -544,7 +544,7 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
         aet = th.get("aet") if isinstance(th, dict) else None
         tgt.append("配速固定在 E 配速，不要調")
         tgt.append(f"心率 1 區（≤ AeT {aet:.0f}）" if aet else "心率 1 區（≤ AeT）")
-        why = ("自動：標準版徐國峰 90 分鐘（就是週末那次 LSD）：" if protocol == "auto" else "徐國峰 90 分鐘：")
+        why = ("自動：標準版徐國峰 90 分鐘（取代週末那次長跑）：" if protocol == "auto" else "徐國峰 90 分鐘：")
         body = (f"暖身 {warm} 分，接著測試 {main} 分：平坦路段、配速盡量不變，記下第 10 分鐘和第 90 分鐘的心率；"
                 "補給每次停不超過 30 秒；(第 90 分 − 第 10 分) ÷ 第 10 分 < 10% 有氧基礎夠。")
         place = "平坦路段（河濱）、不要山路；"

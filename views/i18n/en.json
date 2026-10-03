@@ -111,15 +111,15 @@
       },
       "long-run-km": {
         "title": "Long-run distance (road runs ≥ 90 min)",
-        "description": "Distance of every road run of 90 minutes or more: the long run is the key marathon session (Pfitzinger: the longest runs of the specific phase are about 32–35 km). The bars should step up, then come down in the taper."
+        "description": "Distance of every road run of 90 minutes or more.\nHow to read: blue bar = one long run.\nLook for: bars stepping up, then coming down in the taper.\nMethod: Pfitzinger, Advanced Marathoning: the long run is the key marathon session; the longest runs of the specific phase are about 32–35 km."
       },
       "long-run-pace": {
         "title": "Long-run pace (road runs ≥ 90 min)",
-        "description": "Average moving pace of every road run of 90 minutes or more. The same easy long run getting faster at the same heart rate = aerobic progress. Read the trend, not single runs."
+        "description": "Average moving pace of every road run of 90 minutes or more.\nHow to read: one dot per long run; faster is better.\nLook for: the same easy long run getting faster at the same heart rate = aerobic progress; marathon-pace segments make it a bit faster in the specific phase. Read the trend, not single runs (weather, route).\nMethod: moving pace (stops excluded)."
       },
       "mp-weekly": {
         "title": "Weekly marathon-pace time",
-        "description": "Time per week on road runs at marathon pace (threshold pace × 1.04–1.08, estimate: marathon pace ≈ threshold pace × 1.06). It should grow through the specific phase; near zero in the base phase is normal. Needs a threshold pace (set or estimated)."
+        "description": "Time per week at marathon pace.\nHow to read: orange bar = one week.\nLook for: growing through the specific phase; near zero in the base phase is normal.\nMethod: marathon pace = threshold pace × 1.04–1.08 (estimate: centre × 1.06); needs a threshold pace (set or estimated). Pfitzinger's marathon-pace long runs, Canova's specific sessions."
       }
     }
   },
@@ -230,15 +230,15 @@
       },
       "long-run-km-specific": {
         "title": "Long-run distance (road runs ≥ 90 min)",
-        "description": "Distance of every road run of 90 minutes or more: the long run is the key marathon session (Pfitzinger: the longest runs of the specific phase are about 32–35 km). The bars should step up, then come down in the taper. Red dashed line = the next target race's distance."
+        "description": "Distance of every road run of 90 minutes or more.\nHow to read: blue bar = one long run, red dashed line = the next target race's distance.\nLook for: bars stepping up, then coming down in the taper.\nMethod: Pfitzinger, Advanced Marathoning: the long run is the key marathon session; the longest runs of the specific phase are about 32–35 km."
       },
       "long-run-pace-specific": {
         "title": "Long-run pace (road runs ≥ 90 min)",
-        "description": "Average moving pace of every road run of 90 minutes or more. The same easy long run getting faster at the same heart rate = aerobic progress. Read the trend, not single runs."
+        "description": "Average moving pace of every road run of 90 minutes or more.\nHow to read: one dot per long run; faster is better.\nLook for: the same easy long run getting faster at the same heart rate = aerobic progress; marathon-pace segments make it a bit faster in the specific phase. Read the trend, not single runs (weather, route).\nMethod: moving pace (stops excluded)."
       },
       "mp-weekly-specific": {
         "title": "Weekly marathon-pace time",
-        "description": "Time per week on road runs at marathon pace (threshold pace × 1.04–1.08, estimate: marathon pace ≈ threshold pace × 1.06). It should grow through the specific phase; near zero in the base phase is normal. Needs a threshold pace (set or estimated)."
+        "description": "Time per week at marathon pace.\nHow to read: orange bar = one week.\nLook for: growing through the specific phase; near zero in the base phase is normal.\nMethod: marathon pace = threshold pace × 1.04–1.08 (estimate: centre × 1.06); needs a threshold pace (set or estimated). Pfitzinger's marathon-pace long runs, Canova's specific sessions."
       }
     }
   },

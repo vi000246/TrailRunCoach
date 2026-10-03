@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.sync.tp_client import get_auth_url, exchange_code, login_password, fetch_tp_settings
-from backend.sync import coros_client
+from backend.sync import coros_client, session_check
 from backend.settings.secrets import SecretKeyMissing
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
@@ -64,8 +64,14 @@ async def tp_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
     state = state_result.scalar_one_or_none()
     athlete_result = await db.execute(select(Athlete).where(Athlete.id == athlete_id))
     athlete = athlete_result.scalar_one_or_none()
+    if state and state.tp_access_token:
+        # validated like COROS (refresh / remembered-password login first)
+        session = _session_fields(await session_check.check(db, "tp", athlete_id))
+        await db.refresh(state)
+    else:
+        session = {"authenticated": False, "expired": False, "status": "logged_out"}
     return {
-        "authenticated": bool(state and state.tp_access_token),
+        **session,
         "tp_athlete_id": athlete.tp_athlete_id if athlete else None,
         # how the stored session was obtained (no values)
         "method": (None if not (state and state.tp_access_token)
@@ -88,6 +94,7 @@ async def tp_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
         state.tp_username = None
         state.tp_password_sealed = None          # 記住密碼: logging out deletes it
         await db.commit()
+    session_check.forget("tp", athlete_id)
     return {"logged_out": True}
 
 
@@ -118,24 +125,32 @@ async def coros_login(body: CorosLoginRequest, db: AsyncSession = Depends(get_db
         raise HTTPException(502, f"COROS_LOGIN_ERROR: {detail}")
 
 
+def _session_fields(verdict: str) -> dict:
+    """status: logged_in | expired (登入已過期) | logged_out. check: the
+    login check's answer (sync/session_check.py); "unknown" = COROS / TP not
+    reachable, the login is still shown as 已登入."""
+    expired = verdict == session_check.EXPIRED
+    return {"authenticated": not expired, "expired": expired,
+            "status": "expired" if expired else "logged_in", "check": verdict}
+
+
 @router.get("/coros/status")
 async def coros_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The stored token is validated (one cheap COROS call, cached
+    session_check.CHECK_TTL_S); an expired one is renewed with a remembered
+    password, else status = expired. Never returns the token / password."""
     from sqlalchemy import select
     from backend.db.models import SyncState
-    from datetime import datetime, timezone
     state_result = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
     state = state_result.scalar_one_or_none()
     saved = bool(state and state.coros_password_sealed)          # never the value
     if not state or not state.coros_access_token:
-        return {"authenticated": False, "email": None, "password_saved": saved}
-    # SQLite returns naive datetimes; treat a naive expiry as UTC so the
-    # comparison against an aware "now" doesn't raise TypeError.
-    expiry = state.coros_token_expires
-    if expiry is not None and expiry.tzinfo is None:
-        expiry = expiry.replace(tzinfo=timezone.utc)
-    expired = expiry is not None and datetime.now(timezone.utc) >= expiry
+        return {"authenticated": False, "expired": False, "status": "logged_out", "email": None,
+                "password_saved": saved}
+    verdict = await session_check.check(db, "coros", athlete_id)
+    await db.refresh(state)                     # an automatic re-login may have renewed it
     return {
-        "authenticated": not expired,
+        **_session_fields(verdict),
         "email": state.coros_email,
         "token_expires": state.coros_token_expires.isoformat() if state.coros_token_expires else None,
         "last_sync": state.coros_last_sync_at.isoformat() if state.coros_last_sync_at else None,
@@ -143,6 +158,26 @@ async def coros_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_
         # an expired token is renewed on the next sync / push when a password is remembered
         "auto_relogin": saved,
     }
+
+
+@router.get("/session-alerts")
+async def session_alerts(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The overview / schedule banner: the logins in use (資料來源, 課表推送)
+    that have expired. Uses the same cached check as the status endpoints."""
+    from backend.settings.repository import SettingsRepository
+    from backend.sync import primary as P
+    use = P.FOLDER[await P.current(db, athlete_id)]
+    push = await SettingsRepository(db, athlete_id).get("plan.push.provider")
+    names = {"coros": "COROS", "tp": "TrainingPeaks"}
+    out = []
+    for src in session_check.SOURCES:
+        needs = (["同步"] if src == use else []) + (["推送"] if src == "coros" and push == "coros" else [])
+        if not needs:
+            continue
+        if await session_check.check(db, src, athlete_id) == session_check.EXPIRED:
+            out.append({"source": src, "name": names[src],
+                        "message": f"{names[src]} 登入已過期，重新登入後才能{'／'.join(needs)}"})
+    return {"expired": out, "settings_url": "/api/v1/wko5/settings#sync"}
 
 
 @router.post("/coros/logout")
@@ -157,6 +192,7 @@ async def coros_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
         state.coros_email = None
         state.coros_password_sealed = None       # 記住密碼: logging out deletes it
         await db.commit()
+    session_check.forget("coros", athlete_id)
     return {"logged_out": True}
 
 

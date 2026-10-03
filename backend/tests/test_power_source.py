@@ -182,6 +182,39 @@ def test_cptest_curves_and_scan_skip_watch_files(tmp_path):
     assert (tmp_path / T.POWER_CACHE_NAME).exists()
 
 
+def test_cptest_cold_folder_prefetch_matches_the_file_by_file_read(tmp_path, monkeypatch):
+    """A cold folder is read in one pass (cptest._prefetch: the pool, inline
+    here) that also fills the bad-file and power-source caches; the curves,
+    the scan and both caches are what the file-by-file reads give."""
+    import json
+    from backend.engine.racepower import cptest as T
+    monkeypatch.setenv("WKO5COACH_FIT_WORKERS", "0")
+
+    def folder(home):
+        root = home / "fit" / "coros" / "2026"
+        root.mkdir(parents=True)
+        (root / "1_2026-09-01_run.fit").write_bytes(build_run(T0, seconds=900, power=210, stryd=True))
+        (root / "2_2026-09-02_run.fit").write_bytes(build_run(T0 + dt.timedelta(days=1), seconds=900, power=500))
+        (root / "3_2026-09-03_run.fit").write_bytes(build_run(T0 + dt.timedelta(days=2), seconds=600, power=230))
+        (root / "4_2026-09-04_run.fit").write_bytes(b"not a fit")
+        return home
+    lo, hi = dt.date(2026, 8, 1), dt.date(2026, 9, 30)
+    out = {}
+    for name, min_reads in (("inline", 10_000), ("prefetch", 1)):
+        home = folder(tmp_path / name)
+        monkeypatch.setattr(T, "POOL_MIN_READS", min_reads)
+        c = T.curves(home, lo, hi, accept_watch=False)
+        s = T.scan(home, lo, hi)
+        # the stamps differ (two folders written at different times): compare what follows them
+        out[name] = (c, s, {k: v[2:] for k, v in json.loads((home / T.BAD_CACHE_NAME).read_text("utf-8")).items()},
+                     {k: v[2:] for k, v in json.loads((home / T.POWER_CACHE_NAME).read_text("utf-8")).items()})
+    a, b = out["inline"], out["prefetch"]
+    assert a[0] == b[0] and a[1] == b[1]
+    assert a[2] == {k: v for k, v in b[2].items() if k in a[2]}       # the prefetch also fills the others
+    assert a[3] == {k: v for k, v in b[3].items() if k in a[3]}
+    assert len(b[2]) == 4 and len(b[3]) == 4
+
+
 def test_settings_key_is_known_and_validated():
     from backend.settings import repository as R
     assert R.DEFAULTS[PS.SETTING_KEY] is False

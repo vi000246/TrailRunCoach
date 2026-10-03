@@ -290,7 +290,7 @@ function issues() {
     if (seen.has(st.id)) continue; seen.add(st.id);
     const r = resolve(st);
     if (st.kind === "work" && r.type === "power" && r.frac >= 1.02 && st.dur.type === "time" && st.dur.value < 120)
-      out.push(["err", `5 區每趟至少 2 分鐘（徐國峰）：這段只有 ${mmss(st.dur.value)}`, st.id]);
+      out.push(["err", `5 區每趟至少 2 分鐘（台灣教練）：這段只有 ${mmss(st.dur.value)}`, st.id]);
     if (r.type === "power" && r.lo > r.hi) out.push(["err", "功率下限比上限高", st.id]);
     if (r.warn) out.push(["warn", r.warn, st.id]);
   }

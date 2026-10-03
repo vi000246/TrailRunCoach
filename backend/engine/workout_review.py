@@ -111,18 +111,18 @@ START_TIP = ("出門先過市區路口、到河濱才開始穩定跑時，前 20
              "坡道、快步不排除：上坡後心率不一定回得來，排除會把真的影響藏起來。")
 DRIFT_FINISH_SHARE = 0.10    # 推估 (doc §6.2 / §7): the last 10 % of the measured time …
 DRIFT_FAST_FINISH = 0.05      # … > 5 % above the rest (power or pace) = a fast finish, refused
-DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C): the cool band's top
+DRIFT_HEAT_C = 25.0           # 台灣教練 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C): the cool band's top
 DRIFT_HOT_C = 28.0            # 推估: the warm / hot split. Beiter 2025 (Physiol Rep, doi 10.14814/phy2.70305): 28.7 vs
                               # 19.2 °C, HR +16 bpm — the hot condition sits just above 28; no source gives a cut-off
 # Temperature bands (heat-bands, 2026-10-02 — replaces the > 25 °C refusal: in Taiwan most of the year is
 # above it). A drift is kept in every band and compared only with runs of its own band (the overview
 # indicator, the season charts' 6-run mean, the AeT aggregate takes the cool band only). Air temperature,
-# not Hadley: the drift sources (徐國峰, Lafrenz, Beiter) give °C, and the watch path has no humidity of its
+# not Hadley: the drift sources (台灣教練, Lafrenz, Beiter) give °C, and the watch path has no humidity of its
 # own (Hadley there would rest on the season's RH). ≤ 25 cool (the old rule let 25.0 through), ≤ 28 warm.
 TEMP_BANDS = ("cool", "warm", "hot")
 TEMP_BAND_LABEL = {"cool": "< 25 °C", "warm": "25–28 °C", "hot": "> 28 °C", "none": "溫度不明"}
 HEAT_NOTE = "熱環境，結果可能偏高"
-HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是徐國峰的條件"
+HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是台灣教練的條件"
             "（Lafrenz 2008：35 °C 心率升 11%、22 °C 升 2%）；28 °C 是推估的分界（Beiter 2025：28.7 對 19.2 °C，"
             "最高心率 +16 bpm）。熱會讓飄移偏高：熱天通過門檻仍算數（保守），沒通過可能是熱造成的。"
             "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差（本人有 10 對以上用本人的，"
@@ -190,7 +190,7 @@ BASE_WEEKS = (8, 12)
 BANDS = (("閾值下", 0.88, 0.95), ("閾值", 0.95, 1.01), ("超閾值", 1.01, 1.06),
          ("VO2max", 1.06, 1.16), ("無氧", 1.16, 9.0))
 
-TYPE_LABEL = {"easy": "輕鬆跑", "long": "長時間", "quality": "間歇", "hard_long": "高強度長跑",
+TYPE_LABEL = {"easy": "輕鬆跑", "long": "LSD", "quality": "間歇", "hard_long": "高強度長跑",
               "test_cp": "CP 測試", "test_aet": "AeT 飄移測試", "strength": "肌力",
               "bike": "騎車", "walk": "走路", "other": "其他"}
 TERRAIN_LABEL = {"road": "路跑", "trail": "越野", "hike": "登山健行"}
@@ -396,7 +396,7 @@ def temp_band(temp_c: Optional[float]) -> str:
 
 
 def is_heat(band: Optional[str]) -> bool:
-    """Above 徐國峰's 25 °C: the result may be heat-inflated."""
+    """Above the 25 °C line (台灣教練): the result may be heat-inflated."""
     return band in ("warm", "hot")
 
 
@@ -1817,8 +1817,8 @@ def watch_air(t_watch: Optional[float]) -> Optional[float]:
 def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Optional[str]]:
     """(temperature °C, source) for drift_of's temperature band: the
     route_weather archive's air temperature when it has this activity — by
-    file, else the only archive row of that date (the air is what 徐國峰's
-    < 25 °C means) — else the watch's mean over the drift window minus the
+    file, else the only archive row of that date (the air is what the
+    < 25 °C line means) — else the watch's mean over the drift window minus the
     wrist bias (watch_air, lower confidence); (None, None) without either.
     A dataset may carry its own {file: temp_c} (`activity_temps`, tests)."""
     arch = getattr(ds, "activity_temps", None)
@@ -2784,7 +2784,7 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     tc = dr.get("temp_c")
     if tc is not None:
         chip(id="heat", icon="temp", text=f"{tc:.0f} °C", level="good" if tc <= DRIFT_HEAT_C else "warn",
-             tip=_("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（徐國峰 < 25 °C；Lafrenz 2008）",
+             tip=_("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（台灣教練 < 25 °C；Lafrenz 2008）",
                    src=TEMP_SRC_LABEL.get(dr.get("temp_src"), "溫度"), tc=tc, hot=DRIFT_HEAT_C))
     elif m.get("category") in ("road", "trail"):
         chip(id="heat", icon="temp", text="沒有溫度", level="na",
@@ -3624,14 +3624,38 @@ def _iv_verdict(ds, w, m, c, base):
         if n:
             out["action"] = _offer_action(w)
         return out
+    # the viewer draws `chip_rows` (one compact row per segment / reading: label + number chips + a verdict
+    # chip, the long sentence behind the row's ?); `series` keeps the full sentences for the AI / API
+    wtip = e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證（推估）"
+    wrow = _chip_row("W′", [f"用掉 {e['wprime_used_j'] / 1000:.1f} kJ", f"{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′",
+                            f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%"],
+                     tip=f"整趟高於 CP 的功（含回充後再用）÷ W′ {e['wprime_j'] / 1000:.1f} kJ；dFRC 最低 = 電池最低剩多少。{wtip}")
     if e.get("kind") == "test":
         rows = [_row("判定", e["verdict_label"], "測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）"),
                 _row("流程", e["label"])]
         for i, r in enumerate(e["reasons"]):
             rows.append(_row("各段" if i == 0 else "", r))
         rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
-                         f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證"))
-        return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": e["label"]}, "series": rows}
+                         f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+        chips = []
+        for r in e["reps"]:
+            exp = r.get("expected")
+            nums = [f"{r['power']:.0f} W", f"{r['pct_cp'] * 100:.0f}% CP"] + ([f"做到 {r['power'] / exp * 100:.0f}%"] if exp else [])
+            word = r.get("pacing") or ""
+            tip = (f"前半 {r['p1']:.0f} → 後半 {r['p2']:.0f} W（{r['split'] * 100:+.0f}%）" if r.get("p1") else "")
+            if r.get("last_ratio") is not None:
+                tip += f"；最後 1 分比整段 {r['last_ratio'] * 100:+.0f}%"
+            tip += f"——{word}。"
+            if exp:
+                tip += (f"\n預期全力 ≈ {exp:.0f} W = 測試前 CP {e['cp_ref']:.0f} + W′ {e['wprime_j'] / 1000:.1f} kJ ÷ "
+                        f"{r['duration_s']:.0f} 秒（CP 模型，Monod & Scherrer 1965，推估）。")
+            chips.append(_chip_row(r["name"], nums, ("平均" if r["even"] else word.split("（")[0]),
+                                   "good" if r["even"] else "warn", tip))
+        for x in e.get("notes") or []:
+            chips.append(_chip_row(x["label"], [x["text"]], tip=x["tip"]))
+        chips.append(wrow)
+        return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": e["label"]}, "series": rows,
+                "chip_rows": chips}
     sub = f"{e['label']}" + ("" if e["planned"] else
                              "（你標了「當作間歇」：用偵測到的趟）" if e.get("flagged") else "（沒有對應的課表：用偵測到的趟）")
     rows = [_row("判定", e["verdict_label"], "對照「這次選的課表」本身的計畫；同等與否在選課時已決定"),
@@ -3639,11 +3663,36 @@ def _iv_verdict(ds, w, m, c, base):
     for i, r in enumerate(e["reasons"]):
         rows.append(_row("理由" if i == 0 else "", r))
     rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
-                     f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證"))
+                     f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
     src = {"lap": "COROS 推送的分段（lap）", "power": "功率型態（0.95 × 目標下限）", "short": "短趟偵測（≥ 95% CP）",
            "z3": "3 區偵測（≥ 0.95 × 88% CP）"}.get(e["rep_source"], "—")
     rows.append(_row("找趟", src))
-    return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": sub}, "series": rows}
+    n, hit = e["n_plan"], e["hit"]
+    chips = [_chip_row("每趟", [f"{hit}/{n} 趟在目標帶"], "全部達標" if hit >= n else f"差 {n - hit} 趟",
+                       "good" if hit >= n else "warn",
+                       f"在目標帶 = 平均 ≥ {e['floor']:.0f} W（目標下限 {e['lo'] * 100:.0f}% CP × 0.98）。每趟的長條在「每趟功率」。")]
+    if e.get("tiz_ratio") is not None:
+        ok = e["tiz_ratio"] >= 0.85
+        chips.append(_chip_row("目標區時間", [f"{e['tiz_s'] / 60:.1f} / {e['tiz_plan_s'] / 60:.0f} 分", f"{e['tiz_ratio'] * 100:.0f}%"],
+                               "夠" if ok else "不足", "good" if ok else "warn",
+                               "目標區時間 ÷ 這份課表計畫的時間；≥ 85% 算達到（推估）。"))
+    if e.get("outcome_why"):
+        lv = {"met": "good", "border": "warn"}.get(e.get("outcome"), "bad")
+        from backend.engine import quality_gate as QG
+        chips.append(_chip_row("逐趟判定", [], QG.OUTCOME_LABEL.get(e.get("outcome"), e.get("outcome")), lv, e["outcome_why"]))
+    if e.get("fade") is not None:
+        chips.append(_chip_row("掉速", [f"{e['fade'] * 100:+.0f}%", f"Sdec {e['sdec']:.1f}%"],
+                               tip="掉速 = 最後一趟比第一趟；Sdec = 衰退分數（Glaister 2008），只顯示、不判讀。"))
+    chips.append(wrow)
+    chips.append(_chip_row("找趟", [src.split("（")[0]], tip=f"{src}。課表：{sub}"))
+    return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": sub}, "series": rows,
+            "chip_rows": chips}
+
+
+def _chip_row(label: str, chips: list, verdict: Optional[str] = None, level: str = "", tip: Optional[str] = None) -> dict:
+    """One compact row of the 間歇判讀 card (viewer: drawChipRows)."""
+    return {"label": label, "chips": chips, "verdict": {"text": verdict, "level": level} if verdict else None,
+            "tip": tip or None}
 
 
 REP_HI_TOL = 2.0 - 0.98    # 推估: a rep is above the band past hi × 1.02 (the floor's 0.98, mirrored)

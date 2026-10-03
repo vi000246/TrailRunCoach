@@ -864,7 +864,7 @@ export interface CorosStatus {
 ### Backend
 ```bash
 # Syntax check
-cd /Users/<user>/Projects/WKO5reverse
+cd <repo>
 python3 -m py_compile backend/sync/coros_client.py backend/api/auth.py backend/api/sync.py backend/files/file_service.py backend/db/models.py backend/db/database.py
 echo "SYNTAX OK"
 
@@ -880,7 +880,7 @@ curl -s "http://localhost:8000/api/v1/pmc" | python3 -m json.tool | head -20
 
 ### Frontend
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend
+cd <repo>/frontend
 npm run build   # should succeed with no TS errors
 ```
 

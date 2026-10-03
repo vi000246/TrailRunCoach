@@ -371,21 +371,21 @@ async def _session():
 
 ### Backend
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
+cd "<repo>reverse"
 /opt/homebrew/bin/pytest backend/tests/ -q
 ```
 EXPECT: 全 pass（含新 test_sync_inventory）
 
 ### Frontend
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse/frontend"
+cd "<repo>reverse/frontend"
 npx tsc -b && npm run build
 ```
 EXPECT: 型別零錯誤、build 成功
 
 ### Integration (smoke)
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
+cd "<repo>reverse"
 /opt/homebrew/bin/python3.12 -m uvicorn backend.main:app --port 8021 &
 sleep 3
 curl -s "http://localhost:8021/api/v1/sync/inventory?athlete_id=1" | head -c 300

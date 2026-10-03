@@ -4,6 +4,7 @@ import datetime as dt
 import math
 import numpy as np
 import pytest
+from pathlib import Path
 from backend.engine import workout_review as R
 from backend.engine.wko5expr import basis as BS
 from backend.engine.wko5expr.customviews import REPO_VIEWS, load_custom_views
@@ -14,14 +15,19 @@ from backend.tests.test_drift_basis import SEASON_TITLE, _card_text
 needs_data = pytest.mark.skipif(not ATHLETE_DIR.exists(), reason="no WKO5 athlete folder")
 
 
+def _stamp(file: str) -> str:
+    """'2026/<athlete>_2026_09_15_20_40.wko4' -> '2026_09_15_20_40'."""
+    return Path(file).stem[-16:]
+
+
 # flat ≥ 40-min road runs with Stryd power; drift_of took them until v8, which
 # counts the 40 min after the warm-up (they have 33–35 min): now refused
-RUNS = {"2026/Athlete_2026_09_15_20_40.wko4", "2026/Athlete_2026_08_28_20_35.wko4",
-        "2026/Athlete_2026_08_27_20_33.wko4"}
+# matched by the local start the WKO5 file name ends with (<athlete>_YYYY_MM_DD_HH_MM.wko4)
+RUNS = {"2026_09_15_20_40", "2026_08_28_20_35", "2026_08_27_20_33"}
 
 
 # the one road run in the data with ≥ 40 min after the warm-up that drift_of accepts (41.1 min)
-FAIR = "2025/Athlete_2025_06_30_20_42.wko4"
+FAIR = "2025_06_30_20_42"
 
 
 # stored (whole run) vs the warm-up-excluded definition (10 min excluded), percentage points:
@@ -131,8 +137,8 @@ def real():
     from backend.engine.wko5expr.dataset import Dataset
     ds = Dataset(ATHLETE_DIR, today=dt.date(2026, 9, 29))
     ds.activity_temps = {}               # no route_weather archive; these files have no watch temperature
-    ws = [w for w in ds.workouts if w.entry.file in RUNS]
-    fair = [w for w in ds.workouts if w.entry.file == FAIR]
+    ws = [w for w in ds.workouts if _stamp(w.entry.file) in RUNS]
+    fair = [w for w in ds.workouts if _stamp(w.entry.file) == FAIR]
     assert len(ws) == 3 and len(fair) == 1
     return ds, ws, fair[0]
 

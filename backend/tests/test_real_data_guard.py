@@ -18,12 +18,12 @@ def clean():
 
 def test_home_is_a_temp_folder_and_module_paths_follow_it():
     assert G.FAKE_HOME is not None and Path.home() == G.FAKE_HOME != G.REAL_HOME
-    from backend.db.database import DB_PATH
-    from backend.engine.planning import PLAN_PATH
-    from backend.engine.wko5expr.config import CONFIG_PATH
-    from backend.engine.wko5expr.render_cache import CACHE_DIR
+    from backend.db.database import db_path
+    from backend.engine.planning import plan_path
+    from backend.engine.wko5expr.config import config_path
+    from backend.engine.wko5expr.render_cache import cache_dir
     from backend.settings.paths import athlete_dir
-    for p in (DB_PATH, PLAN_PATH, CONFIG_PATH, CACHE_DIR, athlete_dir()):
+    for p in (db_path(), plan_path(), config_path(), cache_dir(), athlete_dir()):
         assert G.FAKE_HOME in Path(p).parents, p
     assert "WKO5_ATHLETE_DIR" not in os.environ
 

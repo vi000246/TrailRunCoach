@@ -19,8 +19,8 @@ import pytest
 
 from backend.tests.realdata._paths import ATHLETE_DIR
 
-ROOT = Path(__file__).resolve().parents[3]
-SEASON = ROOT / "WKO5 Season View" / "WKO5 Season View.wko5chart"
+# your exported season view (opt-in): WKO5_SEASON_VIEW=<path to .wko5chart>; never in the repo
+SEASON = Path(os.environ.get("WKO5_SEASON_VIEW") or "__no_season_view__")
 TODAY = dt.date(2026, 9, 29)
 
 needs_data = pytest.mark.skipif(not ATHLETE_DIR.exists(), reason="no WKO5 athlete folder")

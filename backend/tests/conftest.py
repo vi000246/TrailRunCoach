@@ -26,7 +26,32 @@ def _no_real_data_folders():
         pytest.fail("real data folder touched:\n  " + "\n  ".join(got[:10]), pytrace=False)
 
 
-FAKE_TP_CLIENT = ("fake-client-id", "fake-client-secret-for-tests")
+@pytest.fixture(autouse=True)
+def _no_live_sync_calls():
+    """Never a live COROS / TP call: every sync request (backend/sync/http.py)
+    goes to a transport that refuses, unless the test installs its own
+    MockTransport. The login check's cache (sync/session_check.py) is per test."""
+    import httpx
+    from backend.sync import http, session_check
+
+    def refuse(request):
+        raise httpx.ConnectError(f"no live network in tests: {request.url.host}", request=request)
+    session_check.forget()
+    with http.use_transport(httpx.MockTransport(refuse)):
+        yield
+    session_check.forget()
+
+
+@pytest.fixture(autouse=True)
+def _no_user_wko5_views(monkeypatch):
+    """Imported WKO5 views come only from a folder the user configures
+    (WKO5_VIEWS_DIR / charts.wko5_views_dir); a test that wants one writes a
+    synthetic .wko5chart (wko5chart_builder.py) and sets the env itself."""
+    if not _guard.REALDATA:
+        monkeypatch.delenv("WKO5_VIEWS_DIR", raising=False)
+
+
+FAKE_TP_CLIENT =("fake-client-id", "fake-client-secret-for-tests")
 
 
 @pytest.fixture(autouse=True)
@@ -87,8 +112,6 @@ def _no_real_tp_client(monkeypatch, tmp_path_factory):
     monkeypatch.delenv("TP_CLIENT_SECRET", raising=False)
     d = tmp_path_factory.mktemp("tpc")
     monkeypatch.setattr(tp_client, "TP_CLIENT_FILE", d / "missing_tp_client.json")
-    monkeypatch.setattr(tp_client, "SEALED_CLIENT_FILE", d / "missing_tp_client.enc")
-    monkeypatch.setenv(tp_client.WKO5_EXE_ENV, str(d / "missing_WKO5.exe"))
 
 
 @pytest.fixture(autouse=True)
