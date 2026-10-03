@@ -19,14 +19,13 @@ v2 (docs/research/racepower-v2.md §10.2):
 """
 from __future__ import annotations
 
-import dataclasses
 import datetime as dt
 import hashlib
 import threading
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 from backend.engine.localtime import today_local
 from backend.i18n.pages import render_page
@@ -34,19 +33,17 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from backend.engine.algorithms.effort import SIMPLE_FORMULAS
 from backend.engine.planning import plan_path
-from backend.engine.racepower import env as ENV
-from backend.engine.racepower import predict as PR
-from backend.engine.racepower import re as RE
-from backend.engine.racepower import riegel as R
+from backend.engine.racepower import calc as CALC
 from backend.engine.racepower import weather as WX
-from backend.engine.zones import zones_json
+# the request bodies live with the computations (engine/racepower/calc.py); kept importable from here
+from backend.engine.racepower.calc import (  # noqa: F401
+    CourseRef, DayIn, EnvIn, EventCourseIn, ExportIn, HourIn, LockIn, PlanIn, PredictIn, PriorIn, StopIn)
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
 router = APIRouter(prefix="/api/v1/racepower", tags=["racepower"])
 
-DEFAULT_K = -0.07
+DEFAULT_K = CALC.DEFAULT_K
 INPUTS_TTL_S = 600.0
 _lock = threading.Lock()
 _cache: dict = {}
@@ -166,236 +163,73 @@ def save_key(body: KeyIn):
 
 
 # ---------------------------------------------------------------------------
-# prediction
+# prediction (engine/racepower/calc.py on the live athlete context)
 # ---------------------------------------------------------------------------
 
-class EnvIn(BaseModel):
-    altitude_m: Optional[float] = None
-    temp_c: Optional[float] = None
-    rh_pct: Optional[float] = None
+class LiveContext:
+    """calc.Context on this process's athlete: the Dataset, the season plan and the local
+    files, memoised as before (inputs(), _grade_models(), ...). The static demo runs the
+    same computations on an exported copy (backend/demo/static_racepower.py)."""
+
+    def inputs(self) -> dict:
+        return inputs()
+
+    def grade_models(self) -> dict:
+        return _grade_models()
+
+    def flags(self):
+        from backend.engine.racepower import backtest as BT
+        return BT.flags()
+
+    def heat_status(self, date: Optional[str]) -> dict:
+        return heat_status_for(date)
+
+    def hrc_test(self) -> Optional[dict]:
+        return _hrc_test()
+
+    def trail_hr(self) -> Optional[dict]:
+        return _trail_hr()
+
+    def body(self) -> Optional[dict]:
+        return _body(inputs())
+
+    def event(self, eid: str):
+        return _event(eid)
+
+    def event_track(self, eid: str):
+        return _event_track(eid)
+
+    def event_splits(self, row: dict, days: int) -> list[float]:
+        from backend.engine import event_gpx as EG
+        return EG.splits_for(row, days)
+
+    def event_meta(self, row: dict) -> Optional[dict]:
+        from backend.engine import event_gpx as EG
+        return EG.meta(row)
+
+    def course_track(self, course_id: str):
+        with _courses_lock:
+            return _courses.get(course_id)
 
 
-class DayIn(BaseModel):
-    km: float
-    gain_m: float = 0.0
-    loss_m: Optional[float] = None
+LIVE = LiveContext()
 
 
-class PriorIn(BaseModel):
-    distance_km: float
-    time_s: float
-    power: float
-    label: Optional[str] = None
-
-
-class PredictIn(BaseModel):
-    type: Literal["road", "trail", "baiyue"] = "road"
-    distance_km: float = Field(gt=0)
-    gain_m: float = 0.0
-    loss_m: Optional[float] = None
-    days: int = 1
-    date: Optional[str] = None
-    target_time_s: Optional[float] = None
-    pack_kg: Optional[float] = None
-    hist_pack_kg: float = 5.0
-    day_plan: Optional[list[DayIn]] = None
-    cp_source: Optional[str] = None
-    cp: Optional[float] = None
-    w_prime: Optional[float] = None
-    tte: Optional[float] = None
-    k: Optional[float] = None
-    k_source: Optional[Literal["personal", "table", "manual"]] = None
-    re: Optional[float] = None
-    weight: Optional[float] = None
-    eph: Optional[float] = None
-    effort_formula: str = "fitted_run"
-    env_from: Optional[EnvIn] = None
-    env_to: Optional[EnvIn] = None
-    prior: Optional[PriorIn] = None
-
-
-def _src(value, source, **extra):
-    return {"value": value, "source": source, **extra}
+def _calc(fn, *args):
+    """A calc.py computation; its CalcError → the same HTTP status and detail."""
+    try:
+        return fn(*args)
+    except CALC.CalcError as e:
+        raise HTTPException(e.status, e.detail)
 
 
 @router.post("/predict")
 def predict(body: PredictIn):
-    d = inputs()
-    used, warnings = {}, []
-    weight = body.weight or d["weight"]["value"]
-    used["weight"] = _src(weight, "手動" if body.weight else d["weight"]["source"])
-
-    # environment
-    tc = d["training_conditions"]
-    frm = {k: (getattr(body.env_from, k) if body.env_from and getattr(body.env_from, k) is not None
-               else tc.get(k)) for k in ("altitude_m", "temp_c", "rh_pct")}
-    to = body.env_to.model_dump() if body.env_to else {}
-    env = ENV.multiplier(frm, to)
-    m = env["M"]
-
-    if body.type == "baiyue":
-        return _predict_baiyue(body, d, weight, env, used, warnings)
-
-    # CP
-    srcs = {s["id"]: s for s in d["cp"]["sources"]}
-    sid = body.cp_source if body.cp_source in srcs else d["cp"]["default"]
-    if body.cp:
-        cp, cp_src = body.cp, "手動"
-    elif sid:
-        cp, cp_src = srcs[sid]["cp"], srcs[sid]["label"]
-    else:
-        raise HTTPException(400, "沒有 CP：請手動輸入")
-    used["cp"] = _src(cp, cp_src, id="manual" if body.cp else sid)
-    acts = d["cp"]["activities"] or {}
-    s_ = {} if body.cp else (srcs.get(sid) or {})
-    w_src = "手動" if body.w_prime else (s_.get("short_label") if s_.get("w_prime") and s_.get("short_label") else
-                                        "來源自帶" if s_.get("w_prime") else "活動擬合")
-    w_prime = body.w_prime or s_.get("w_prime") or acts.get("w_prime")
-    used["w_prime"] = _src(w_prime, w_src)
-    tte = body.tte or s_.get("tte") or d["tte"]["value"]
-    used["tte"] = _src(tte, "手動" if body.tte else ("PD 模型重算的 TTE" if s_.get("fit") or s_.get("base") == "pdmodel"
-                                                    else "來源自帶" if s_.get("tte") else d["tte"]["source"]))
-    # the short-range (F2) CP of a two-anchor source (PD model mFTP + test CP)
-    used["cp2"] = _src(s_.get("cp2"), s_.get("short_label"))
-    if d["cp"].get("lower_bound_message") and not body.cp:
-        warnings.append(d["cp"]["lower_bound_message"])
-
-    # effort distance & RE
-    trail = body.type == "trail"
-    fx = body.effort_formula if body.effort_formula in SIMPLE_FORMULAS else "fitted_run"
-    from backend.engine.algorithms.effort import divisor_of
-    divisor = divisor_of(fx) if trail else None
-    d_eff_km = RE.effort_km(body.distance_km, body.gain_m, divisor) if trail else body.distance_km
-    race_cvi = RE.cvi(body.gain_m, body.distance_km)
-    if body.re:
-        re_v, re_src = body.re, "手動"
-    elif trail:
-        s = d["re"]["trail"].get(fx)
-        if not s:
-            raise HTTPException(400, "沒有越野 RE：請手動輸入")
-        re_v, re_src = s["median"], f"你的越野跑 RE 中位數（{s['n']} 次，effort km = km + 爬升/{divisor:g}）"
-    else:
-        s = d["re"]["road"]
-        if not s:
-            raise HTTPException(400, "沒有路跑 RE：請手動輸入")
-        base_cvi = (d["re"]["road_cvi"] or {}).get("median") or 0.0
-        adj = RE.cvi_adjust(base_cvi, race_cvi or 0.0)
-        re_v = s["median"] + adj
-        re_src = f"你的平路 RE 中位數（{s['n']} 次）" + (f"，CVI 調整 {adj:+.2f}" if adj else "")
-    used["re"] = _src(re_v, re_src)
-
-    # Riegel k
-    target_m = d_eff_km * 1000.0
-    prior = body.prior.model_dump() if body.prior else None
-    if prior is None and d.get("auto_prior"):
-        a = d["auto_prior"]
-        prior = {"distance_km": a["km"], "time_s": a["time_s"], "power": a["avg_power"],
-                 "label": f"{a['label']}（自動：一年內心率判定為比賽強度的標準距離跑步）"}
-    elif prior is None:
-        warnings.append("沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）")
-    tk = R.table_k(target_m, prior["distance_km"] * 1000.0, prior["time_s"]) if prior else None
-    pr = d.get("riegel") or {}
-    ksrc = body.k_source or ("manual" if body.k is not None else None)
-    if ksrc == "manual" and body.k is not None:
-        k, k_label = body.k, "手動"
-    elif ksrc == "personal" and pr.get("k") is not None:
-        k, k_label = pr["k"], "個人擬合"
-    elif ksrc == "table" and tk and tk.get("k") is not None:
-        k, k_label = tk["k"], "查表"
-    elif ksrc is None and pr.get("valid"):
-        k, k_label, ksrc = pr["k"], "個人擬合", "personal"
-    elif tk and tk.get("k") is not None:
-        k, k_label, ksrc = tk["k"], "查表", "table"
-        if body.k_source is None and pr.get("k") is not None and not pr.get("valid"):
-            warnings.append("個人 Riegel k 不可靠（" + "；".join(pr.get("invalid_reasons") or []) + "），改用查表 k")
-    else:
-        k, k_label, ksrc = DEFAULT_K, "預設 −0.07", "manual"
-    used["k"] = _src(k, k_label, kind=ksrc)
-    if not body.cp:
-        # never predict below a power the athlete already held: the bound for THIS k
-        from backend.engine.racepower.athlete import enforce_lower_bound
-        cp_eff, lb_k = enforce_lower_bound(d, cp, w_prime, tte, k, (used.get("cp2") or {}).get("value"))
-        if cp_eff > cp:
-            warnings.append(f"k {k:+.2f} 下，CP {cp:.0f} W 撐不住你 {lb_k['t_s'] / 60:.0f} 分鐘 {lb_k['p']:.0f} W 的紀錄："
-                            f"提高到 {cp_eff:.0f} W")
-            cp = cp_eff
-            used["cp"] = _src(cp, f"{used['cp']['source']}；依 k {k:+.2f} 提高到下限", id=used["cp"].get("id"))
-    if tk and tk.get("warning"):
-        warnings.append("查表 k：" + tk["warning"])
-
-    res = PR.predict_run(distance_km=body.distance_km, cp=cp, tte=tte, k=k, re=re_v, weight=weight, m=m,
-                         gain_m=body.gain_m, effort_divisor=divisor, target_time_s=body.target_time_s,
-                         w_prime=w_prime, longest_effort_s=pr.get("longest_s"),
-                         road_re=(d["re"]["road"] or {}).get("median"),
-                         # the CVI that road RE was measured at (its own flat runs),
-                         # not the all-run training CVI — §1.3 adjusts from there
-                         train_cvi=(d["re"]["road_cvi"] or {}).get("median"))
-    if trail:
-        res["ep_itra_per_h"] = RE.effort_km(body.distance_km, body.gain_m, 100.0) / (res["time_s"] / 3600.0)
-        res["effort_km_itra"] = RE.effort_km(body.distance_km, body.gain_m, 100.0)
-        warnings.append("爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來")
-    if race_cvi is not None and not trail and race_cvi >= 25:
-        warnings.append(f"路線 CVI {race_cvi:.0f}（丘陵），已用 CVI 調整 RE；起伏很大的路線請改用「越野」")
-
-    tasks = {}
-    if prior:
-        tasks = {"prior": prior,
-                 "task7_cp": R.cp_from_prior(prior["power"], prior["time_s"], tte, k),
-                 "task9_power": R.power_from_prior_time(prior["power"], prior["time_s"], res["time_s"], k) * m,
-                 "task10": {k_: (v * m if k_ in ("power", "power_workbook") else v)
-                            for k_, v in R.power_from_prior_distance(prior["power"], prior["distance_km"],
-                                                                     d_eff_km, k).items()},
-                 "table": tk}
-    return {"type": body.type, "used": used, "env": env, "result": res, "tasks": tasks,
-            "zones": zones_json(cp), "warnings": res.pop("warnings") + warnings}
+    return _calc(CALC.predict, LIVE, body)
 
 
 def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: dict, warnings: list):
-    from backend.engine.racepower import hike as HK
-    h = d["hiking"]
-    if body.eph:
-        eph, src = body.eph, "手動"
-    elif h.get("eph"):
-        eph = h["eph"]["median"]
-        src = f"你自己走的登山日 EP/h 中位數（{h['eph']['n']} 天，爬升 ≥ 600 m 的日子權重 3 倍）"
-    else:
-        cap = None
-        try:
-            cap = _grade_models().get("walk_capacity")
-        except Exception:                   # noqa: BLE001
-            cap = None
-        if cap is not None:
-            from backend.engine.racepower import capacity as CAP
-            # at the v1 reference pack: predict_baiyue then applies its own
-            # pack factor (W + hist)/(W + pack) and the altitude M
-            eph = CAP.course_eph(cap, body.distance_km, body.gain_m, body.loss_m, body.hist_pack_kg)
-            src = ("推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；" +
-                   (h.get("note") or "百岳多為跟團") + "）")
-            warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；用你的步行能力模型（待回測）")
-        else:
-            eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
-            src = "推估：Tobler 步行函數在這條路線的 EP/h（" + (h.get("note") or "百岳多為跟團") + "）"
-            warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；沒有跑步資料可建能力模型，用 Tobler 步行函數")
-    used["eph"] = _src(eph, src)
-    days = max(1, body.days or 1)
-    from backend.engine.racepower import capacity as _cap
-    default_pack = _cap.pack_default(weight, days)
-    pack = body.pack_kg if body.pack_kg is not None else default_pack
-    used["pack_kg"] = _src(pack, "手動" if body.pack_kg is not None else f"預設背負 {_cap.pack_default_text(weight)}")
-    used["hist_pack_kg"] = _src(body.hist_pack_kg, "假設：過去登山日多為輕裝（約 5 kg）")
-    plan = PR.split_days(days, body.distance_km, body.gain_m, body.loss_m,
-                         [x.model_dump() for x in body.day_plan] if body.day_plan else None)
-    aet = d["aet"].get("aet")
-    used["aet"] = _src(aet, d["aet"].get("source"))
-    big = h.get("biggest")
-    res = PR.predict_baiyue(day_plan=plan, eph=eph, weight=weight, m=env["M"], pack_kg=pack,
-                            hist_pack_kg=body.hist_pack_kg, aet=aet,
-                            target_moving_h=(body.target_time_s / 3600.0) if body.target_time_s else None,
-                            biggest_day=big)
-    if not body.day_plan and days > 1:
-        warnings.append("沒有每日行程：距離與爬升平均分配到每一天；實際行程請逐日輸入")
-    return {"type": "baiyue", "used": used, "env": env, "result": res, "tasks": {},
-            "biggest_day": big, "zones": [], "warnings": res.pop("warnings") + warnings}
+    return _calc(CALC.predict_baiyue, LIVE, body, d, weight, env, used, warnings)
 
 
 @router.get("/page", include_in_schema=False)
@@ -413,39 +247,12 @@ _courses: "OrderedDict[str, object]" = OrderedDict()
 _courses_lock = threading.Lock()
 
 
-def _py(o):
-    """numpy scalars → Python, recursively (FastAPI cannot encode np.bool_)."""
-    import math
-
-    import numpy as np
-    if isinstance(o, dict):
-        return {k: _py(v) for k, v in o.items()}
-    if isinstance(o, (list, tuple)):
-        return [_py(v) for v in o]
-    if isinstance(o, np.generic):
-        o = o.item()
-    if isinstance(o, float) and not math.isfinite(o):
-        return None
-    return o
-
-
-def _course_opts(c: dict) -> dict:
-    out = {}
-    for k in ("sigma_m", "eps_m", "min_len_m", "flat_pct", "official_gain_m"):
-        v = c.get(k)
-        if v is not None and v != "":
-            out[k] = float(v)
-    if c.get("split") in ("grade", "km", "none"):
-        out["split"] = c["split"]
-    return out
+_py = CALC.py
+_course_opts = CALC.course_opts
 
 
 def _build(track, opts: dict) -> dict:
-    from backend.engine.racepower import course as CO
-    try:
-        return CO.build_course(track, **opts)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    return _calc(CALC.build, track, opts)
 
 
 @router.post("/course")
@@ -495,31 +302,11 @@ def _event_track(eid: str):
     return row["sha1"], track, row
 
 
-class EventCourseIn(BaseModel):
-    split: Optional[Literal["grade", "km", "none"]] = None
-    sigma_m: Optional[float] = None
-    eps_m: Optional[float] = None
-    min_len_m: Optional[float] = None
-    flat_pct: Optional[float] = None
-    official_gain_m: Optional[float] = None
-
-
 @router.post("/course/event/{eid}")
 def event_course(eid: str, body: Optional[EventCourseIn] = None):
     """The course of the GPX stored with a plan event — the race calculator's upload
     response, without uploading again; + `event_id` and the stored day splits."""
-    from backend.engine import event_gpx as EG
-    from backend.engine.racepower import fuel as FU
-    e = _event(eid)
-    got = _event_track(eid)
-    if got is None:
-        raise HTTPException(404, "這場賽事沒有 GPX")
-    cid, track, row = got
-    c = _build(track, _course_opts((body or EventCourseIn()).model_dump()))
-    sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
-    splits = EG.splits_for(row, e.days or 1) if (e.days or 1) > 1 else []
-    return _py({"course_id": cid, "event_id": eid, "name": track.name or row.get("filename"), **c,
-                "stop_suggestions": sug, "day_splits_km": splits, "gpx": EG.meta(row)})
+    return _calc(CALC.event_course, LIVE, eid, body)
 
 
 def _grade_models() -> dict:
@@ -575,12 +362,7 @@ def grade_model():
 def heat_status_for(date: Optional[str]) -> dict:
     """engine/heat_data.status for today, projected to `date` (the race day)."""
     from backend.engine import heat_data as HD
-    rd = None
-    if date:
-        try:
-            rd = dt.date.fromisoformat(str(date)[:10])
-        except ValueError:
-            rd = None
+    rd = CALC.race_day(date)
     try:
         passive = HD.completed_passive_dates()
     except Exception:                       # noqa: BLE001
@@ -697,119 +479,12 @@ def post_solo_hikes(body: SoloHikesIn):
     return {"files": sorted(s), "note": A.GROUP_HIKE_NOTE}
 
 
-class CourseRef(BaseModel):
-    course_id: Optional[str] = None
-    event_id: Optional[str] = None          # the course is a plan event's stored GPX: reloaded after a restart
-    split: Optional[Literal["grade", "km", "none"]] = None
-    sigma_m: Optional[float] = None
-    eps_m: Optional[float] = None
-    min_len_m: Optional[float] = None
-    flat_pct: Optional[float] = None
-    official_gain_m: Optional[float] = None
-    manual: Optional[dict] = None           # {km, gain, loss, split}
-
-
-class LockIn(BaseModel):
-    seg: int
-    power: float
-
-
-class StopIn(BaseModel):
-    km: float
-    minutes: float = 0.0
-    # aid-station editor (fuel.STOP_TYPES); the old 「km:分」 text has neither
-    type: Optional[Literal["water", "aid", "big", "medical", "self"]] = None
-    name: Optional[str] = Field(None, max_length=40)
-
-
-class HourIn(BaseModel):
-    t: str                                  # local clock 'YYYY-MM-DDTHH:MM' (UTC+8), as /weather returns it
-    temp_c: float
-    rh_pct: Optional[float] = None
-    dew_c: Optional[float] = None
-
-
-class PlanIn(PredictIn):
-    distance_km: Optional[float] = None
-    mode: Literal["time", "power", "auto"] = "auto"
-    target_pace_s_per_km: Optional[float] = None
-    target_power: Optional[float] = None
-    target_pct_cp: Optional[float] = None
-    power_is_training: bool = False
-    effort_target: float = 1.0
-    speed_factor: Optional[float] = None
-    course: Optional[CourseRef] = None
-    strategy: Optional[dict] = None         # {kind: even|negative|positive, amount}
-    hills: Optional[dict] = None            # {up, down}
-    acclimatisation: Optional[Literal["acclimatised", "partial", "unacclimatised"]] = None
-    locks: list[LockIn] = []
-    start_time: Optional[str] = None
-    stops: list[StopIn] = []
-    day_splits_km: list[float] = []
-    terrain: dict = {}
-    # "skiba" (cycling τ) is still accepted from old saved pages and mapped to "wko5" in the planner
-    wbal: Optional[Literal["wko5", "skiba", "skiba_run"]] = None
-    # per-segment heat: the /weather hourly rows of the event (CWA 3-day or
-    # Open-Meteo); none, or no date / start time → the single To value
-    hourly: Optional[list[HourIn]] = None
-    hourly_heat: bool = True
-    # heat acclimation (heat-acclimation.md §5.5): {"mode": auto|none|partial|acclimatised|custom, "s"}
-    heat_acclimatisation: Optional[dict] = None
-    # 百岳 capacity (baiyue-from-running.md §6.1)
-    trip_kind: Optional[Literal["group", "solo"]] = None
-    hr_band: Optional[Literal["aet", "cap"]] = None
-    pack_kg_by_day: list[float] = []
-    heat_ref_alt_m: Optional[float] = None  # the elevation the race-day temperature refers to
-
-
 def _resolve_course(body: PlanIn) -> dict:
-    from backend.engine.racepower import course as CO
-    c = body.course
-    if c and (c.course_id or c.event_id):
-        with _courses_lock:
-            track = _courses.get(c.course_id) if c.course_id else None
-        if track is None and c.event_id:
-            got = _event_track(c.event_id)
-            track = got[1] if got else None
-        if track is None:
-            raise HTTPException(410, "路線已過期（伺服器重啟過），請重新上傳 GPX")
-        return {**_build(track, _course_opts(c.model_dump())), "name": track.name}
-    man = (c.manual if c and c.manual else None) or {}
-    km = float(man.get("km") or body.distance_km or 0)
-    if km <= 0:
-        raise HTTPException(400, "需要距離或 GPX 路線")
-    gain = float(man.get("gain") if man.get("gain") is not None else body.gain_m or 0)
-    loss = man.get("loss") if man.get("loss") is not None else body.loss_m
-    split = man.get("split") or (c.split if c and c.split else "none")
-    alt = body.env_to.altitude_m if body.env_to else None
-    return CO.manual_course(km, gain, loss, "km" if split == "km" else "none", alt)
+    return _calc(CALC.resolve_course, LIVE, body)
 
 
 def _v1_for(body: PlanIn, course: dict) -> dict:
-    """The v1 /predict response for the same inputs (baseline + cross-check).
-    With a GPX course and no race-day altitude, the altitude is the course's
-    (百岳: the top, as v1 uses the peak; runs: the distance-weighted mean)."""
-    t = course["totals"]
-    data = {k: v for k, v in body.model_dump().items() if k in PredictIn.model_fields}
-    data.update(distance_km=t["km"], gain_m=t["gain_m"], loss_m=t.get("loss_m"))
-    gpx = course.get("source") == "gpx"
-    to = dict(data.get("env_to") or {})
-    if gpx and to.get("altitude_m") is None:
-        segs = course["segments"]
-        to["altitude_m"] = t["z_max"] if body.type == "baiyue" else \
-            sum(s["z_mean"] * s["dist_m"] for s in segs) / sum(s["dist_m"] for s in segs)
-        data["env_to"] = to
-    if body.type == "baiyue" and gpx:
-        from backend.engine.racepower import course as CO
-        pieces = CO.cut_at(course["segments"], body.day_splits_km)
-        days = sorted({p["day"] for p in pieces})
-        data["days"] = len(days)
-        data["day_plan"] = [{"km": sum(p["dist_m"] for p in pieces if p["day"] == n) / 1000.0,
-                             "gain_m": sum(p["gain_m"] for p in pieces if p["day"] == n),
-                             "loss_m": sum(p["loss_m"] for p in pieces if p["day"] == n)} for n in days]
-    if body.mode != "time":
-        data["target_time_s"] = None
-    return predict(PredictIn(**data))
+    return _calc(CALC.v1_for, LIVE, body, course)
 
 
 def _trail_hr() -> Optional[dict]:
@@ -839,87 +514,7 @@ def _trail_hr() -> Optional[dict]:
 
 
 def make_plan(body: PlanIn) -> dict:
-    from backend.engine.racepower import backtest as BT
-    from backend.engine.racepower import planner as PL
-    course = _resolve_course(body)
-    if body.type == "baiyue" and course.get("source") == "gpx" and not body.day_splits_km and (body.days or 1) > 1:
-        # a multi-day trip without split points: cut the course into equal-km days
-        km = course["totals"]["km"]
-        body = body.model_copy(update={"day_splits_km": [km * i / body.days for i in range(1, body.days)]})
-    v1 = _v1_for(body, course)
-    validated, effort_ok = BT.flags()
-    gm = _grade_models()
-    opts = body.model_dump()
-    opts["locks"] = [x.model_dump() for x in body.locks]
-    opts["stops"] = [x.model_dump() for x in body.stops]
-    opts["hourly"] = [x.model_dump() for x in body.hourly or []]
-    if body.heat_acclimatisation:
-        opts["heat_status"] = {**heat_status_for(body.date), "hrc_test": _hrc_test()}
-    if body.type == "baiyue" and body.heat_ref_alt_m is None and (body.env_to is None or body.env_to.temp_c is None):
-        # no race-day temperature: env.resolve copied the training one, which
-        # belongs to the training altitude — lapse from there, not from the peak
-        opts["heat_ref_alt_m"] = v1["env"]["from"]["altitude_m"]
-    try:
-        if body.type == "baiyue":
-            opts["moving_rows"] = gm.get("moving_rows") or []
-            opts["moving_rows_group"] = gm.get("moving_rows_group") or []
-            out = PL.plan_hike(v1=v1, course=course, hike_speed=gm["hike_speed"], inp=inputs(), opts=opts,
-                               validated=validated, capacity=gm.get("walk_capacity"))
-        else:
-            gre = gm["grade_re"]
-            if body.type == "road":
-                # RE(0) is the CVI-adjusted road RE v1 uses
-                gre = gre.with_flat(v1["used"]["re"]["value"]) if hasattr(gre, "with_flat") else \
-                    dataclasses.replace(gre, re_flat=v1["used"]["re"]["value"])
-            inp = inputs()
-            cpd = inp.get("cp") or {}
-            capacity = {"spread": cpd.get("spread"), "lower_bound": cpd.get("lower_bound"),
-                        "message": cpd.get("lower_bound_message"),
-                        "lthr": (inp.get("aet") or {}).get("lthr"), "aet": (inp.get("aet") or {}).get("aet")}
-            th = _trail_hr() if body.type == "trail" else None
-
-            def run(o: dict, v: dict) -> dict:
-                return PL.plan_run(v1=v, course=course, grade_re=gre, opts=o, validated=validated,
-                                   effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
-                                   capacity=capacity, trail_hr=th)
-            out = run(opts, v1)
-            if body.mode in ("time", "power"):
-                # the goal against the model's own prediction (auto, 100 %), same course and conditions
-                from backend.engine.racepower import goal as GOAL
-                ref = body.model_copy(update={"mode": "auto", "effort_target": 1.0})
-                model = run({**opts, "mode": "auto", "effort_target": 1.0}, _v1_for(ref, course))
-                out["goal"] = GOAL.check(out["summary"]["time_s"], model["summary"]["time_s"], body.mode)
-                out["goal"].update(model_power=model["summary"]["power"],
-                                   model_pace_s_per_km=model["summary"]["pace_s_per_km"])
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
-               course_id=body.course.course_id if body.course else None, course_name=course.get("name"))
-    out["fuel"] = _fuel(body, out)
-    from backend.engine.racepower import seg_targets as ST
-    aet_d = inputs().get("aet") or {}
-    out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
-    # the main chart / table: pace, power and HR target per segment, null where not valid
-    out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
-    if course.get("source") == "gpx":
-        from backend.engine.racepower import fuel as FU
-        out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
-    return out
-
-
-def _fuel(body: PlanIn, out: dict) -> dict:
-    """The 補給 card (engine/racepower/fuel.py) on the predicted segments;
-    adds kcal / carbohydrate / water / sodium / fuel_action to each one."""
-    from backend.engine.racepower import fuel as FU
-    inp = inputs()
-    hr = None
-    th = (out.get("summary") or {}).get("trail_hr")
-    lthr = (inp.get("aet") or {}).get("lthr")
-    if th and th.get("x") and lthr:
-        # the race HR the trail model predicts (x_star = the measured level, before the heat shift)
-        hr = (th.get("x_star") or th["x"]) * lthr
-    return FU.plan_fuel(out, weight=out["used"]["weight"]["value"], stops=[x.model_dump() for x in body.stops],
-                        start_time=body.start_time, hr_bpm=hr, body=_body(inp))
+    return _calc(CALC.make_plan, LIVE, body)
 
 
 def _body(inp: dict) -> Optional[dict]:
@@ -985,15 +580,6 @@ def backtest_run():
     return {"started": BT.start_background(_dataset), "state": BT.state()}
 
 
-class ExportIn(PlanIn):
-    push: bool = False
-    name: Optional[str] = None
-    event_id: Optional[str] = None          # the plan event: one workout per event (re-export updates it)
-    # lap = open steps ended with the lap button (trail / 百岳 default: watch GPS drifts on trails);
-    # distance = distance steps (road default)
-    step_mode: Optional[Literal["lap", "distance"]] = None
-
-
 def _thresholds(p: dict) -> dict:
     a = inputs().get("aet") or {}
     return {"cp": (p["used"].get("cp") or {}).get("value"), "lthr": a.get("lthr"),
@@ -1041,14 +627,7 @@ def export_csv(body: ExportIn):
 
     from fastapi.responses import Response
 
-    from backend.engine.racepower import csvplan as CSV
-    p = _py(make_plan(body))
-    fname = CSV.filename(p, body.name, body.date)
-    label = body.name or p.get("course_name") or f"{CSV.TYPE_LABEL.get(p['type'], '')} {p['summary']['km']:.1f} km"
-    text = CSV.plan_csv(p, name=label, date=body.date, start_time=body.start_time,
-                        stops=[x.model_dump() for x in body.stops],
-                        acclimatisation=body.acclimatisation or ("unacclimatised" if body.type == "baiyue"
-                                                                 else "acclimatised"))
+    text, fname = _calc(CALC.export_csv, LIVE, body)
     q = quote(fname)
     return Response(content=text.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f"attachment; filename=\"racepower.csv\"; filename*=UTF-8''{q}",
