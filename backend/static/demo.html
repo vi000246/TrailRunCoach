@@ -52,6 +52,8 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn:hover { border-color: var(--accent); }
 .note { color: var(--muted); font-size: 13px; }
+.ex a { color: var(--accent); font-weight: 600; text-decoration: none; }
+.ex a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -87,6 +89,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
   <div class="enter">
     <a class="btn primary" href="/api/v1/overview/page">進入示範（訓練總覽）</a>
     <a class="btn" href="/api/v1/wko5/activities/page">看單次活動分析</a>
+    <span class="note ex" id="examples" hidden></span>
     <span class="note" data-static-text="唯讀示範：課表的修改只存在這個瀏覽器；同步、推送、上傳、分享和週期規劃的修改在這裡不能用。">同步手錶、推送課表、分享連結在示範裡是關閉的。</span>
   </div>
   <script>
@@ -95,6 +98,23 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
     document.querySelectorAll("[data-static-text]").forEach((el) => { el.textContent = el.dataset.staticText; });
     document.querySelectorAll("[data-static-title]").forEach((el) => { el.title = el.dataset.staticTitle; });
   }
+  // the runs done as the 課表 planned them (backend/demo/linked.py): straight to their analysis
+  (async () => {
+    try {
+      const r = await fetch("/api/v1/wko5/workouts", { credentials: "same-origin" });
+      if (!r.ok) return;
+      const j = await r.json(), rows = Array.isArray(j) ? j : (j.workouts || []);
+      const iv = rows.find((a) => a.plan && a.plan.kind === "quality");
+      const tr = rows.find((a) => a.plan && /山路|越野/.test(`${a.plan.title || ""}${a.sport_type || ""}`));
+      const viewer = window.TRC_STATIC ? "charts.html" : "/api/v1/wko5/viewer";
+      const link = (a, dash, text) => `<a href="${viewer}?view=${encodeURIComponent("單次活動判讀")}&dash=${dash}&workout=${a.index}">${text}</a>`;
+      const out = [iv && link(iv, 2, "看間歇分析範例"), tr && link(tr, 0, "看越野課表範例")].filter(Boolean);
+      if (!out.length) return;
+      const el = document.getElementById("examples");
+      el.innerHTML = out.join(" · ");
+      el.hidden = false;
+    } catch {}
+  })();
   </script>
 </main>
 </body>
