@@ -2,11 +2,11 @@
 
 - 日期：2026-10-01
 - 問題：長假或中斷後要不要「重新練」？Z5（和 Z3）的暫停門檻（目前是佔位值：連續 ≥ 14 天沒跑、Z1 週量 < 確認時的 70 % 持續 2 週、長跑飄移變差）該怎麼定？中斷後的課表長什麼樣子？
-- 對象：休閒越野跑者兼百岳登山者，Stryd + COROS，平日 40–50 分、週末越野。
+- 對象：範例跑者（休閒越野跑者兼百岳登山者，用跑步功率計；假設平日 40–50 分、週末越野）。
 - 標記：
   - **[同儕審查]**：期刊論文，數字取自摘要（Europe PMC）；沒讀全文的都是摘要層級。
   - **[教練]**：書、教練文章、研討會；不是同儕審查。
-  - **[你的筆記]**：筆記，以 `路徑:行號` 引用。
+  - **[筆記]**：讀書與研討會筆記，以 `路徑:行號` 引用。
   - **推估**：我們自己的數字或推論，沒有外部來源。
   - **未驗證**：查不到原文、只有二手轉述。
 - 相關文件：`aerobic-base-readiness.md`（有氧基礎確認）、`interval-adaptation.md`、`docs/spec/plan-auto.spec.md`。
@@ -26,7 +26,7 @@
    - 一週只跑一次 35 分高強度、4 週：VO2max 不變，但 75 % VO2max 的力竭時間 −21 %（Madsen 1993）。
    - **所以「量掉了」傷的是長耐力和飄移，也就是 Z5 門檻想保護的那個有氧基礎，不是 VO2max。**
 4. **回來的速度：** 至少不比第一次慢。一位多年訓練的鐵人停 12 週、再練 12 週，VO2max 回到原點，但跑步經濟性沒回來（Lepers 2024，n = 1）。肌肉的「耐力記憶」在轉錄層級找不到證據（Lindholm 2016，停 9 個月）。教練經驗是「成熟度」會留 12–18 個月（WKO5 研討會，§4.6）。
-5. **最好用的復跑表是 Daniels 表 9.2（你的筆記裡有）：恢復期長度＝停訓長度。** ≤ 5 天照常；6–28 天前半 50 %、後半 75 %；4–8 週分三段 33／50／75 %；> 8 週每 3 週一階 33→50→70→85→100 %。配 VDOT 折減表（14 天 ×0.973、28 天 ×0.931；中斷期間有交叉訓練則 ×0.986、×0.965）。
+5. **最好用的復跑表是 Daniels 表 9.2（筆記裡有）：恢復期長度＝停訓長度。** ≤ 5 天照常；6–28 天前半 50 %、後半 75 %；4–8 週分三段 33／50／75 %；> 8 週每 3 週一階 33→50→70→85→100 %。配 VDOT 折減表（14 天 ×0.973、28 天 ×0.931；中斷期間有交叉訓練則 ×0.986、×0.965）。
 6. **給 app 的建議（§6）：**
    - 「連續 14 天沒跑」改成**「連續 ≥ 6 天沒跑 → 進入恢復期」**（Daniels 第 2 類的起點）。Z5 在恢復期內一律暫停，恢復期長度＝中斷天數。
    - 「Z1 週量 < 70 % 持續 2 週」改成**「Z1 週量 < 2/3 持續 3 週（不算恢復週／減量週）」**，依據是 Hickson 1982：量砍 1/3 仍守得住長耐力，砍 2/3 守不住。
@@ -63,7 +63,7 @@
 - Mujika & Padilla 2000（Part II，> 4 週）：「VO2max of athletes declines markedly but remains above control values during long term detraining, whereas recently acquired VO2max gains are completely lost.」
 - 肌肉層級：微血管、動靜脈氧差、氧化酵素在運動員身上下降，「are completely reversed in recently trained individuals」。
 - Part I（< 4 週）：這些變化在剛練起來的人身上比較溫和。
-- **對這位選手的意義（推估）：** 他練了幾年，有一定的「地板」。但最近幾個月才建的有氧基礎（也就是 Z5 門檻剛確認的那一段），停 > 4 週要當作沒了。
+- **對範例跑者的意義（推估）：** 他練了幾年，有一定的「地板」。但最近幾個月才建的有氧基礎（也就是 Z5 門檻剛確認的那一段），停 > 4 週要當作沒了。
 
 ### 1.4 更新的綜論
 
@@ -100,10 +100,10 @@
 | Joo 2018, PLoS One 13:e0196212 | 半職業足球員停 2 週，Yo-Yo IR2 顯著下降；再練 2 週回到與沒停組無差 | [同儕審查] 足球，非長跑 |
 | Lindholm et al. 2016, PLoS Genet 12:e1006294 | 單腿訓練 3 個月，停 9 個月後，練過的腿和沒練過的腿轉錄體無差；「no coherent evidence of an endurance training induced transcriptional skeletal muscle memory」 | [同儕審查] 分子層級；不代表表現層級沒有記憶 |
 | Coyle 1984 | 多年訓練者停 84 天，微血管與酵素仍高於久坐者 | 「地板」是回得快的合理解釋（推論） |
-| WKO5 研討會（Elements of WKO5 Training Load） | 「成熟度來自於你的訓練歷史，不會那麼快消失」；「關鍵不是你目前的 CTL 降到多低，而是你是否真正痊癒、準備好重新開始訓練」 | [教練]，你的筆記 `65 ⚡ 功率訓練/研討會整理/研討會 Elements of WKO5 Training Load.md:439-449` |
-| WKO5 研討會（基礎期） | 「通常你的『訓練成熟度』會維持 12 到 18 個月」；停更久則「回退到『1~3 年前的訓練水準』」，不會讓他完全重頭開始 | [教練]，`70 ⏳ 周期化訓練/wko5研討會 基礎期.md:154-162` |
+| WKO5 研討會（Elements of WKO5 Training Load） | 「成熟度來自於你的訓練歷史，不會那麼快消失」；「關鍵不是你目前的 CTL 降到多低，而是你是否真正痊癒、準備好重新開始訓練」 | [教練]，筆記 `研討會整理/研討會 Elements of WKO5 Training Load.md:439-449` |
+| WKO5 研討會（基礎期） | 「通常你的『訓練成熟度』會維持 12 到 18 個月」；停更久則「回退到『1~3 年前的訓練水準』」，不會讓他完全重頭開始 | [教練]，`wko5研討會 基礎期.md:154-162` |
 | WKO5 研討會（Training Load） | 年紀大的人「休息不能太長，一旦恢復期拉太長，重新建立 fitness 的代價就會變得太大」 | [教練]，`…/研討會 Elements of WKO5 Training Load.md:305-306` |
-| WKO5 研討會（強化期） | 「也因為剛恢復訓練，運動表現通常會先下降」：重新加量的疲勞會先壓低表現 | [教練]，`70 ⏳ 周期化訓練/wko5研討會 強化期.md:227-228` |
+| WKO5 研討會（強化期） | 「也因為剛恢復訓練，運動表現通常會先下降」：重新加量的疲勞會先壓低表現 | [教練]，`wko5研討會 強化期.md:227-228` |
 
 **「再練比第一次快」的證據：** 表現層級只有個案與教練經驗支持（Lepers 2024、WKO5）。分子層級反而否定（Lindholm 2016）。合理的說法是：**多年累積的結構（微血管、部分酵素、心臟、肌腱骨骼適應）留下來了，所以回得快；最近幾個月才加上去的那一層沒有特權。** 這是推論，沒有直接比較「首次 vs 再次」速度的耐力研究（未驗證：Europe PMC 只查到上述 retraining 研究）。
 
@@ -113,7 +113,7 @@
 
 ### 4.1 Daniels 表 9.2：停練一段時間之後的訓練量調整 [教練]
 
-來源：你的筆記 `60 🏃 有氧訓練/丹尼爾的跑步方程式筆記 還有課表.md:123-124`（「停練後回來訓練的規劃」，附圖 `assets/丹尼爾的跑步方程式筆記-20250315213400605.jpg`，中文版表 9.2）。下表照圖轉錄：
+來源：筆記 `丹尼爾的跑步方程式筆記 還有課表.md:123-124`（「停練後回來訓練的規劃」，附圖 `assets/丹尼爾的跑步方程式筆記-20250315213400605.jpg`，中文版表 9.2）。下表照圖轉錄：
 
 | 類別 | 休息期長度 | 重回訓練後的調整原則 | 前跑力值 % |
 |---|---|---|---|
@@ -133,7 +133,7 @@
 
 ### 4.2 Daniels VDOT 折減（表 9.1）[教練]
 
-表 9.1 不在你的筆記裡。下表取自 VDOT O2 官方部落格「VDOT Adjustments For Time Off From Running」（2018-02）。FVDOT-1：中斷期間沒有交叉訓練；FVDOT-2：有交叉訓練。
+表 9.1 不在筆記裡。下表取自 VDOT O2 官方部落格「VDOT Adjustments For Time Off From Running」（2018-02）。FVDOT-1：中斷期間沒有交叉訓練；FVDOT-2：有交叉訓練。
 
 | 中斷 | FVDOT-1 | FVDOT-2 |
 |---|---|---|
@@ -187,12 +187,12 @@ joefrieltraining.com/missed-workouts/：
 - 「Zone 2 Heart Rate Training」：每 6–10 週重測一次；這條針對進步，不是針對中斷。
 - 沒找到 UA 對復跑起始量、加量速度的具體數字（未驗證）。
 
-### 4.7 Palladino、WKO5 [教練／你的筆記]
+### 4.7 Palladino、WKO5 [教練／筆記]
 
-- Palladino 基礎期：「初階選手或長期休息者：3‑6 週，最多 2‑3 個月；有經驗或具備基礎選手：1‑3 週即可」；CTL 每週 +1–3 TSS/day（約 2–5 %），「避免用過時的『10% 升量法則』」。`70 ⏳ 周期化訓練/palladino基礎期訓練.md:48-54`
-- WKO5（Training and Coaching part 1）：基準測試「也適用於運動員因傷休息或長時間沒有訓練的情況，例如長達兩個月的訓練中斷後重新開始」。`65 ⚡ 功率訓練/研討會整理/研討會 Training and Coaching with WKO5 part 1.md:169-170`
+- Palladino 基礎期：「初階選手或長期休息者：3‑6 週，最多 2‑3 個月；有經驗或具備基礎選手：1‑3 週即可」；CTL 每週 +1–3 TSS/day（約 2–5 %），「避免用過時的『10% 升量法則』」。`palladino基礎期訓練.md:48-54`
+- WKO5（Training and Coaching part 1）：基準測試「也適用於運動員因傷休息或長時間沒有訓練的情況，例如長達兩個月的訓練中斷後重新開始」。`研討會整理/研討會 Training and Coaching with WKO5 part 1.md:169-170`
   → **中斷 ≈ 2 個月要重做 CP／功率曲線基準。**
-- WKO5（巔峰期）：無氧功率「是退化最慢的一個項目。你甚至可以在休息四週後，輕鬆地輸出一個不錯的 45 秒功率」。`70 ⏳ 周期化訓練/wko研討會 巔峰期.md:533-537`
+- WKO5（巔峰期）：無氧功率「是退化最慢的一個項目。你甚至可以在休息四週後，輕鬆地輸出一個不錯的 45 秒功率」。`wko研討會 巔峰期.md:533-537`
   → 中斷後短段功率看起來沒掉，**不代表有氧基礎沒掉**。不能拿短段 MMP 判斷能不能開 Z5。
 - WKO5（巔峰期）：傷後回來的選手「有很大的心肺與有氧系統能力，但就是缺少高輸出能力」。`…/wko研討會 巔峰期.md:443-459`（只有強度受限、量沒停的情形）。
 
@@ -397,7 +397,7 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 
 ### 教練來源
 
-- Daniels J.《丹尼爾斯博士跑步方程式》中文版，表 9.2（你的筆記附圖，`300 Sport/60 🏃 有氧訓練/丹尼爾的跑步方程式筆記 還有課表.md:123-124`）。
+- Daniels J.《丹尼爾斯博士跑步方程式》中文版，表 9.2（筆記附圖，`丹尼爾的跑步方程式筆記 還有課表.md:123-124`）。
 - VDOT O2. VDOT Adjustments For Time Off From Running (2018-02). https://news.vdoto2.com/2018/02/vdot-adjustments-time-off/
 - Friel J. Missed Workouts (2010-05-11). https://joefrieltraining.com/missed-workouts/
 - Friel J. Covid and Return-to-Training Comments (2021-12-21). https://joefrieltraining.com/covid-and-return-to-training-comments/
@@ -406,5 +406,5 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 - Uphill Athlete. Aerobic Self-Assessment for Mountain Athletes. https://uphillathlete.com/aerobic-training/aerobic-anaerobic-threshold-self-assessment/
 - Uphill Athlete. Zone 2 Heart Rate Training. https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/
 - 台灣教練：先 Z3 後 Z5、每週 Z1 時間。
-- WKO5 研討會筆記：`300 Sport/65 ⚡ 功率訓練/研討會整理/研討會 Elements of WKO5 Training Load.md:305-306, 439-449`；`…/研討會 Training and Coaching with WKO5 part 1.md:169-170`；`300 Sport/70 ⏳ 周期化訓練/wko5研討會 基礎期.md:154-162`；`…/wko5研討會 強化期.md:227-228`；`…/wko研討會 巔峰期.md:443-459, 533-537`。
-- Palladino 基礎期筆記：`300 Sport/70 ⏳ 周期化訓練/palladino基礎期訓練.md:48-54`。
+- WKO5 研討會筆記：`研討會 Elements of WKO5 Training Load.md:305-306, 439-449`；`…/研討會 Training and Coaching with WKO5 part 1.md:169-170`；`wko5研討會 基礎期.md:154-162`；`…/wko5研討會 強化期.md:227-228`；`…/wko研討會 巔峰期.md:443-459, 533-537`。
+- Palladino 基礎期筆記：`palladino基礎期訓練.md:48-54`。

@@ -84,7 +84,7 @@ def test_future_row_is_not_in_effect_yet():
 def test_race_category_within_ten_percent():
     assert MX.race_category(5.4) == "5k" and MX.race_category(4.55) == "5k"     # 5000 × 0.91
     assert MX.race_category(5.6) is None                                       # +12 %
-    assert MX.race_category(20.544) == "half"                                  # −2.6 %
+    assert MX.race_category(20.8) == "half"                                  # −2.6 %
     assert MX.race_category(38.5) == "marathon" and MX.race_category(12.0) is None
 
 
@@ -138,26 +138,26 @@ def test_trail_race_like_rules():
     assert "split" not in {c["id"] for c in MX.trail_maximal(s, lthr, aet)["checks"]}
     # a race word in the title: only km / time apply
     low = {**s, "hr_avg": 120.0, "above_aet": 0.2}
-    assert MX.trail_maximal(low, lthr, aet, title="東眼山越野賽")["ok"]
+    assert MX.trail_maximal(low, lthr, aet, title="山徑越野賽")["ok"]
     assert not MX.trail_maximal(low, lthr, aet, title="Trail Running")["ok"]
 
 
 def test_match_events_by_date_kind_distance():
-    ev = [SimpleNamespace(id="a", name="台北馬 2025 半馬", date="2025-12-21", kind="road", priority="A",
+    ev = [SimpleNamespace(id="a", name="城市半程馬拉松", date="2025-12-07", kind="road", priority="A",
                           distance_km=21.0975),
-          SimpleNamespace(id="b", name="越野", date="2025-11-02", kind="race", priority="B", distance_km=None),
-          SimpleNamespace(id="c", name="百岳", date="2025-11-02", kind="baiyue", priority="A", distance_km=10.0)]
-    runs = [{"idx": 1, "date": "2025-12-21", "km": 2.0, "trail": False},       # warm-up jog
-            {"idx": 2, "date": "2025-12-21", "km": 20.544, "trail": False},
-            {"idx": 3, "date": "2025-12-21", "km": 21.0, "trail": True},        # wrong kind
-            {"idx": 4, "date": "2025-11-02", "km": 14.4, "trail": True},
-            {"idx": 5, "date": "2025-11-02", "km": 4.0, "trail": True}]
+          SimpleNamespace(id="b", name="越野", date="2025-10-05", kind="race", priority="B", distance_km=None),
+          SimpleNamespace(id="c", name="百岳", date="2025-10-05", kind="baiyue", priority="A", distance_km=10.0)]
+    runs = [{"idx": 1, "date": "2025-12-07", "km": 2.0, "trail": False},       # warm-up jog
+            {"idx": 2, "date": "2025-12-07", "km": 20.8, "trail": False},
+            {"idx": 3, "date": "2025-12-07", "km": 21.0, "trail": True},        # wrong kind
+            {"idx": 4, "date": "2025-10-05", "km": 14.4, "trail": True},
+            {"idx": 5, "date": "2025-10-05", "km": 4.0, "trail": True}]
     m = MX.match_events(ev, runs)
     assert set(m) == {2, 4}
-    assert m[2]["priority"] == "A" and m[2]["km_err"] == pytest.approx(1.0 - 20.544 / 21.0975)   # |error|
+    assert m[2]["priority"] == "A" and m[2]["km_err"] == pytest.approx(1.0 - 20.8 / 21.0975)   # |error|
     assert m[2]["km_ok"] and m[4]["km_err"] is None                           # no distance: longest run
     # a run far from the event distance is not the race
-    assert MX.match_events(ev[:1], [{"idx": 9, "date": "2025-12-21", "km": 5.0, "trail": False}]) == {}
+    assert MX.match_events(ev[:1], [{"idx": 9, "date": "2025-12-07", "km": 5.0, "trail": False}]) == {}
 
 
 # ---------------------------------------------------------------------------

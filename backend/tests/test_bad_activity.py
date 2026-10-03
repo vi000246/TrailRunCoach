@@ -32,7 +32,7 @@ def test_world_record_speeds_at_the_record_durations():
 # ---- the rules ------------------------------------------------------------
 
 def test_car_file_is_flagged_by_average_speed():
-    # the TP 2025-12-14 shape: 17 min at ~43 km/h
+    # a car ride saved as a run: 17 min at ~43 km/h
     t, d = _track([43.0] * 1037)
     f = B.features(t, d)
     v = B.judge(f, "run")

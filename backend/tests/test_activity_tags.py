@@ -78,21 +78,21 @@ def test_merge_user_wins_and_none_means_auto():
 
 def test_store_upsert_find_and_clear(tmp_path):
     db = tmp_path / "t.db"
-    AT.upsert(db, start_local="2026-07-27T09:36", file="2026/Athlete_2026_07_27_09_36.wko4", source="wko5",
+    AT.upsert(db, start_local="2025-05-17T09:36", file="2025/Example_2025_05_17_09_36.wko4", source="wko5",
               activity_type="hike", effort="hard_with_rests")
-    AT.upsert(db, start_local="2026-07-27T09:36", note="中級山")        # same key: idempotent update
+    AT.upsert(db, start_local="2025-05-17T09:36", note="中級山")        # same key: idempotent update
     rows = AT.load(db)
     assert len(rows) == 1 and rows[0]["effort_overridden"] and rows[0]["note"] == "中級山"
-    st = dt.datetime(2026, 7, 27, 9, 36, 40)
-    assert AT.find(rows, st, "2026/Athlete_2026_07_27_09_36.wko4")["activity_type"] == "hike"
+    st = dt.datetime(2025, 5, 17, 9, 36, 40)
+    assert AT.find(rows, st, "2025/Example_2025_05_17_09_36.wko4")["activity_type"] == "hike"
     assert AT.find(rows, st, "other.fit") is not None                    # by start minute
     assert AT.find(rows, st + dt.timedelta(minutes=2), "x.fit") is not None   # ±3 min (another source)
     assert AT.find(rows, st + dt.timedelta(minutes=9), "x.fit") is None
-    AT.upsert(db, start_local="2026-07-27T09:36", effort=None)           # back to auto
+    AT.upsert(db, start_local="2025-05-17T09:36", effort=None)           # back to auto
     r = AT.load(db)[0]
     assert not r["effort_overridden"] and r["effort"] is None and r["activity_type"] == "hike"
     with pytest.raises(ValueError):
-        AT.upsert(db, start_local="2026-07-27T09:36", effort="all_out")
+        AT.upsert(db, start_local="2025-05-17T09:36", effort="all_out")
 
 
 def test_default_db_is_blocked_in_tests():
@@ -176,7 +176,7 @@ def _fake_capacity_ds(monkeypatch, st, ms):
     from backend.engine.racepower import athlete as A
     w = SimpleNamespace(idx=0, sport="run", sport_type="trail running", tags=["runningtrail"], day=100.0,
                         metrics={"distance": 14.4, "climbing": 1400.0},
-                        entry=SimpleNamespace(start=dt.datetime(2025, 11, 2, 10, 32), file="2025/x.wko4",
+                        entry=SimpleNamespace(start=dt.datetime(2025, 4, 12, 10, 32), file="2025/x.wko4",
                                               title="Trail Running"))
     ds = SimpleNamespace(workouts=[w], plan=SimpleNamespace(events=[], thresholds=[]), flush_series=lambda: None)
     monkeypatch.setattr(A, "plan_race_runs", lambda ds: {})
@@ -203,7 +203,7 @@ def test_capacity_sample_needs_max_effort_and_user_mark_wins(monkeypatch):
     ds, w = _fake_capacity_ds(monkeypatch, st, {"elapsed_s": 14500.0, "rest_share": 0.02})
     assert A.capacity_samples(ds, [w], tags=[])[0]["ok"]
     # the user's 一般 always excludes it, even though the auto rule says 全力
-    tag = {"start_local": "2025-11-02T10:32", "file": "2025/x.wko4", "activity_type": "hike",
+    tag = {"start_local": "2025-04-12T10:32", "file": "2025/x.wko4", "activity_type": "hike",
            "activity_type_overridden": True, "effort": "moderate", "effort_overridden": True}
     c = A.capacity_samples(ds, [w], tags=[tag])[0]
     assert not c["ok"] and c["kind"] == "user" and c["tags"]["activity_type"] == "hike"
@@ -226,15 +226,15 @@ def _wk(idx, start, km, trail, file):
 
 def test_seed_matches_by_date_distance_and_file_and_is_idempotent(tmp_path):
     from backend.scripts import seed_activity_tags as SD
-    ws = [_wk(0, dt.datetime(2025, 10, 18, 20, 54), 5.02, False, "2025/Athlete_2025_10_18_20_54.wko4"),
-          _wk(1, dt.datetime(2025, 11, 2, 10, 29), 0.1, True, "2025/a.wko4"),
-          _wk(2, dt.datetime(2025, 11, 2, 10, 32), 14.4, True, "2025/b.wko4"),
-          _wk(3, dt.datetime(2024, 9, 21, 5, 55), 13.8, True, "2024/Athlete_2024_09_21_05_55.wko4")]
+    ws = [_wk(0, dt.datetime(2025, 8, 9, 20, 54), 5.02, False, "2025/Example_2025_08_09_20_54.wko4"),
+          _wk(1, dt.datetime(2025, 4, 12, 10, 29), 0.1, True, "2025/a.wko4"),
+          _wk(2, dt.datetime(2025, 4, 12, 10, 32), 14.4, True, "2025/b.wko4"),
+          _wk(3, dt.datetime(2024, 5, 11, 5, 55), 13.8, True, "2024/Example_2024_05_11_05_55.wko4")]
     db = tmp_path / "seed.db"
     items = SD.plan(ws, AT.load(db), seed=SD.EXAMPLE_SEED)
     by = {it["spec"]["date"]: it for it in items if it["found"]}
-    assert by["2025-11-02"]["file"] == "2025/b.wko4"                  # the 14.4 km run, not the 0.1 km stub
-    assert by["2024-09-21"]["how"] == "file" and by["2024-09-21"]["want"] == {"activity_type": "race"}
+    assert by["2025-04-12"]["file"] == "2025/b.wko4"                  # the 14.4 km run, not the 0.1 km stub
+    assert by["2024-05-11"]["how"] == "file" and by["2024-05-11"]["want"] == {"activity_type": "race"}
     assert sum(1 for it in items if not it["found"]) == len(SD.EXAMPLE_SEED) - 3
     assert SD.apply(db, items) == 3
     rows = AT.load(db)
@@ -243,6 +243,16 @@ def test_seed_matches_by_date_distance_and_file_and_is_idempotent(tmp_path):
     again = SD.plan(ws, rows, seed=SD.EXAMPLE_SEED)
     assert all(not it.get("change") for it in again if it["found"])      # idempotent
     assert SD.apply(db, again) == 0
+
+
+def test_seed_path_argument_then_env_then_default(tmp_path, monkeypatch):
+    from backend.scripts import seed_activity_tags as SD
+    monkeypatch.delenv(SD.SEED_ENV, raising=False)
+    assert SD.seed_path() == SD.DEFAULT_SEED
+    monkeypatch.setenv(SD.SEED_ENV, str(tmp_path / "env.json"))
+    assert SD.seed_path() == tmp_path / "env.json"
+    assert SD.seed_path(str(tmp_path / "arg.json")) == tmp_path / "arg.json"
+    assert SD.main(["--seed", str(tmp_path / "missing.json")]) == 2   # no file: nothing read or written
 
 
 # ---- trail HR pace model -----------------------------------------------------------

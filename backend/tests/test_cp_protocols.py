@@ -2,7 +2,7 @@
 CP-test protocols (engine/cp_protocols.py; docs/research/cp-test-protocols.md §5):
 the 課表偏好 preference, the session per protocol, detection (the plan's
 done_by first, then the power pattern), the per-protocol analysis with its
-quality checks (incl. the athlete's real 2026-09-30 test), the same-method
+quality checks (incl. a synthetic 1-s 3′/12′ test), the same-method
 comparison, 「套用這次的 CP」, and the timing rules. Temp plans only — the
 user's plan thresholds are never written.
 """
@@ -267,32 +267,39 @@ def test_race_is_riegel_anchored_at_30_min():
     assert (1200 / 1800) ** 0.07 == approx(0.972, abs=1e-3)               # the doc's 20-min check
 
 
-CP_TEST_FIXTURE = Path(__file__).parent / "fixtures" / "cp_test_2026-09-30.json.gz"
+CP_TEST_FIXTURE = Path(__file__).parent / "fixtures" / "cp_test_synthetic.json.gz"
 
 
 def _frozen_cp_test():
-    """The 2026-09-30 COROS test frozen to its 1-s power and HR (no GPS, no ids,
-    ~4 KB): the FIT's time / power / heart-rate channels as parse_fit gives them."""
+    """The synthetic 範例跑者 3′/12′ test (fixtures/make_cp_test_fixture.py): 1-s
+    power and HR, the channels parse_fit gives for a FIT."""
     d = json.load(gzip.open(CP_TEST_FIXTURE, "rt", encoding="utf-8"))
     arr = lambda k: np.array([np.nan if v is None else v for v in d[k]], float)
     return np.arange(d["n"], dtype=float), arr("power_w"), arr("heart_rate_bpm")
 
 
-def test_real_2026_09_30_test_falls_back_to_one_bout():
-    """The athlete's test: 3′ 218 W < 12′ 222 W, 3′ HR peak 149 (146 in the lap,
-    +15 s of HR lag) vs 171, 16.5 min of recovery → single bout, CP ≈ 204 W,
-    參考. (The 12′ bout's last minute is 220 W on the 1-s records: no kick.)"""
+def test_cp_test_fixture_is_reproducible():
+    from backend.tests.fixtures import make_cp_test_fixture as MK
+    assert MK.encode(MK.build()) == CP_TEST_FIXTURE.read_bytes()
+
+
+def test_3_12_test_with_a_soft_3min_falls_back_to_one_bout():
+    """Synthetic test: 3′ 234 W < 12′ 238 W, 3′ HR peak 152 (incl. 15 s of HR
+    lag) vs 177, 16 min of recovery → single bout, CP = 238 − 13 100 / 720 ≈ 220 W
+    (214–225), 參考. Even pacing (the 12′ bout's last minute ≈ its mean: no kick)."""
     b = CPP.measure_bouts(*_frozen_cp_test())
     res = CPP.result(b, "standard", lthr=None)
     assert res["method"] == "1pt_prior" and res["quality"] == "參考"
-    assert 203.0 <= res["cp"] <= 204.5
+    assert 219.0 <= res["cp"] <= 220.5
+    assert res["cp_range"] == [approx(214.2, abs=0.3), approx(225.4, abs=0.3)]
     assert res["p3"] < res["p12"]
     text = " ".join(res["reasons"])
     import re
-    assert re.search(r"比 12 分段 171 低 2\d bpm：不是全力（推估門檻）", text) and "< 25 分" in text
+    assert re.search(r"比 12 分段 177 低 2\d bpm：不是全力（推估門檻）", text) and "< 25 分" in text
     assert "不高於 12 分" in text and not res["checks"][0]["own"]            # the model check is not ours
+    assert not any("最後 1 分" in x for x in res["reasons"])                 # no kick
     pay = CPP.apply_payload(res, "2026-09-30", 7)
-    assert pay["cp"] == 204 and pay["wprime"] is None and pay["cp_method"] == "1pt_prior" and "參考" in pay["label"]
+    assert pay["cp"] == 220 and pay["wprime"] is None and pay["cp_method"] == "1pt_prior" and "參考" in pay["label"]
 
 
 # ---------------------------------------------------------------------------

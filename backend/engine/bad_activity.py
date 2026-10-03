@@ -2,8 +2,8 @@
 Bad activity files — a "run" that was not a run (2026-10-01).
 
 Typical case: the watch was left recording on a bike or in a car, so a run
-has an impossible speed (TP 2025-12-14 `tp_2025_12_14_3477204875.fit`: 12.28
-km in 17.3 min ≈ 43 km/h, average power 899 W, HR 66 bpm). Such a file breaks
+has an impossible speed (e.g. a TP file of 12.28 km in 17.3 min ≈ 43 km/h,
+average power 899 W, HR 66 bpm). Such a file breaks
 every model that reads it (the PD fit, mean-max, power TSS, PMC), so it is
 EXCLUDED: it stays in the DB and the activity list, marked
 「已排除：疑似交通工具／騎車（均速 43 km/h）」, and the Dataset leaves it out of
@@ -59,10 +59,10 @@ OVERRIDES = (KEEP, EXCLUDE)
 # any runner; a fast downhill is not 15 % faster than a flat world record
 # for a minute.
 WR_POINTS = ((43.03, 400.0), (206.00, 1500.0), (1571.00, 10000.0), (7235.0, 42195.0))
-# 推估: room for GPS distance error and steep downhills. Read-only scan of this
-# athlete's 1889 foot activities (2026-10-01): the fastest genuine run reaches
-# 0.65 of the limit (2024-06-14 treadmill); two real vehicle segments sat at
-# 1.12 (2024-03-18 run: 7 min at 25–38 km/h; 2021-07-17 hike: 5 min at 31
+# 推估: room for GPS distance error and steep downhills. Read-only scan of one
+# runner's ~1900 foot activities (2026-10-01): the fastest genuine run reaches
+# 0.65 of the limit (a treadmill run); two real vehicle segments sat at
+# 1.12 (a run with 7 min at 25–38 km/h; a hike with 5 min at 31
 # km/h), which a 1.25 margin missed.
 MARGIN = 1.15
 WINDOWS_S = (60, 300, 1200)

@@ -62,8 +62,8 @@ the activity view still show it).
 
 ## Bad activity files (`backend/engine/bad_activity.py`, 2026-10-01)
 
-A "run" that was not a run — the watch left recording on a bike or in a car (TP 2025-12-14
-`tp_2025_12_14_3477204875.fit`: 12.28 km in 17.3 min ≈ 43 km/h, 899 W average, HR 66) — is
+A "run" that was not a run — the watch left recording on a bike or in a car (e.g. a file of
+~12 km in ~17 min ≈ 43 km/h, ~900 W average, resting-level HR) — is
 **excluded**: it stays in the DB and the activity list, marked
 「已排除：疑似交通工具／騎車（均速 43 km/h）」, and leaves `ds.workouts`, so no model reads it
 (PMC / TSS, mean-max / PD / CP, race-power samples and back-tests, drift / AeT, plan matching,
@@ -104,13 +104,12 @@ overrides hash, so a change rebuilds the cached datasets. The legacy DB-row APIs
 (`/api/v1/pmc`, `/api/v1/analytics/*`, the unbuilt React `frontend/`) are not covered.
 
 Review scan: `python -m backend.scripts.scan_bad_activities` (read-only; flagged files and the
-closest calls). 2026-10-01 on this athlete (WKO5 682, COROS 515, TP 692 foot activities; ratio =
-speed ÷ limit at 1.25): flagged files — 2025-12-14 run 12.28 km avg 45.5 km/h, 917 W (WKO5 + TP;
-not in COROS); 2021-05-16 "hiking" 57.0 km avg 26.6 km/h (car; WKO5); 2021-04-10 hiking 10.9 km,
-minutes at 28–50 km/h at the end (WKO5); with 1.15 also 2024-03-18 run 6.67 km, 7 min at 25–38
-km/h (all three sources) and 2021-07-17 hiking 4.83 km, 5 min at 31 km/h (WKO5) — all checked
-minute by minute as vehicle segments. The fastest genuine activity: ratio 0.60 (2024-06-14
-treadmill 4 km at 17.9 km/h); 2024-08-25 28.4 km run 0.56. No race or long run is flagged.
+closest calls). On one runner's history (~680 WKO5, ~515 COROS, ~690 TP foot activities; ratio =
+speed ÷ limit): at 1.25 three files are flagged (a whole-file car / bike run, a "hiking" file that
+was a car trip, a hike ending with minutes at 28–50 km/h); with 1.15 also two short vehicle
+segments inside a run and a hike — all checked minute by minute as vehicle segments. The fastest
+genuine activity: ratio 0.60 (a short treadmill run); a long run 0.56. No race or long run is
+flagged.
 
 ## API
 
@@ -153,9 +152,9 @@ and the files the user marked normal (「恢復自動判定」).
 ## Seed
 
 `python -m backend.scripts.seed_activity_tags [--source coros|tp|wko5] [--db PATH] [--apply]` —
-one-off, idempotent: 2025-10-18 road 5 km → 練跑 / 一般, 2025-11-02 trail 14.4 km → 爬山 / 一般,
-2026-07-27 trail 11.7 km → 爬山 / 有拼但有休息 (date + distance ±10 %), and the 7 diary trail
-races (date + WKO5 file) → 比賽 with effort left auto. `--source` defaults to `charts.data_source`.
+one-off, idempotent: a few hand-labelled activities (e.g. a road run → 練跑 / 一般, a trail
+outing → 爬山 / 有拼但有休息; matched by date + distance ±10 %), and the diary trail races
+(date + WKO5 file) → 比賽 with effort left auto. `--source` defaults to `charts.data_source`.
 On a COROS / TP source a race row matches the activity starting within ±3 min of the start its
 WKO5 file name encodes (`start_of_file`, `backend/scripts/seed_activity_tags.py:56`); the trail
 rows need the FIT dataset's trail classification (wko5-coros-sync.spec.md). Writes the app DB

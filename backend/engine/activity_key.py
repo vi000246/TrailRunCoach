@@ -11,7 +11,7 @@ is resolved by the activity's LOCAL START TIME:
   1. the same file (exactly, or the same path without the merged source's
      "coros/" / "tp/" folder prefix);
   2. else the stored start (a record's "start", or the start in a WKO5 file
-     name, `Athlete_2021_03_03_22_32.wko4` = local 22:32) within
+     name, `Athlete_2025_01_05_22_32.wko4` = local 22:32) within
      MATCH_TOL_MIN minutes of the activity's start — the nearest one.
 
 COROS and TP starts of one activity differ by seconds (sync/dedup.py groups

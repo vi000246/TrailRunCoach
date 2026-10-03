@@ -174,7 +174,7 @@
    - 連 **Garmin**（勾 Upload planned workouts，並按 Import All Garmin Data 補一年以上的歷史）。
 2. 用 `backend/scripts/intervals_probe.py` 實測（§5）：
    - 原始檔下載對 COROS 與 Garmin 來源的活動是否都拿得到 `.fit`；
-   - 推一個測試課表，看會不會出現在兩支手錶上；
+   - 推一個測試課表，看會不會出現在 Garmin／COROS 手錶上；
    - % LTHR 換算後的心率範圍對不對。
 3. 實測通過再做 hub 模式（§4.3）。之後：
    - COROS 非官方 Training Hub API 降為備案；

@@ -11,7 +11,7 @@ traversal is an **effort** with time, VAM, heart rate, power and hrTSS share,
 so progress on the same hill or loop can be read effort by effort and any two
 efforts compared along the segment.
 
-User request: 「同一條路線的進步追蹤能自動產出嗎，例如判斷我歷史有幾段重疊的路線，就把重疊的地方撈出來做出差異比對」
+User request: 「同一條路線的進步追蹤能自動產出嗎，例如判斷歷史上有幾段重疊的路線，就把重疊的地方撈出來做出差異比對」
 
 ## Architecture
 
@@ -236,7 +236,7 @@ matches `climbs._measure` on the same sample range (tested).
 | `avg_hr`, `avg_power` | time-weighted over moving samples |
 | `hr_per_100m` | Σhr·dt ÷ 60 ÷ gain × 100 (climbs.py) |
 | `hr_vam`, `power_vam` | avg HR (W) ÷ VAM × 1000, up segments only |
-| `hrtss`, `hrtss_share` | WKO5 hrTSS (`wko5_hr.hr_tss`, verified 1030/1030 against WKO5) on the slice ÷ the same over the whole activity. LTHR is `Dataset.sport_setting("thr")` of the engine config in use — outside parity mode that is the plan's own test value (e.g. 155 vs WKO5's 160), so the totals differ from WKO5's stored hrTSS while the share uses one LTHR on both sides |
+| `hrtss`, `hrtss_share` | WKO5 hrTSS (`wko5_hr.hr_tss`, verified 1030/1030 against WKO5) on the slice ÷ the same over the whole activity. LTHR is `Dataset.sport_setting("thr")` of the engine config in use — outside parity mode that is the plan's own test value (which can differ from WKO5's), so the totals differ from WKO5's stored hrTSS while the share uses one LTHR on both sides |
 | `max_hr` | max HR over raw samples idx[i0]+1 .. idx[i1], all samples with HR (moving or not) = max of the kept points' `mhr` over i0+1 .. i1 — exact, not a sampled max |
 | `max_p30` | max 30 s power over windows lying wholly in the effort: for each end sample e the window starts after s = the latest sample with t ≤ t_e − 30 s, and counts when s ≥ idx[i0] and power covers ≥ 80 % of it; mean = Σp·dt ÷ Σdt over samples with power. = max(`p30h`[i0], `mp30`[p30k[i0]+1 .. i1]) |
 | `raw_i0`, `raw_i1` | the effort's first / last raw sample index (for independent checks) |
@@ -279,9 +279,9 @@ without changing them.
   for the new points, a rebuild none.
 - **Why the effort's own point, not the cell centre**: the first version asked
   for the cell centre and corrected T by −6.5 °C/km to the effort's elevation.
-  On 小油坑 → 七星山主峰 (997 m) that gave 24.3 °C where the archive at the
-  climb itself (downscaled to 970 m) says 21.7 °C — the cell centre's model
-  cell is the warm basin. Asking for each point in the same call costs no
+  On a climb to a ~1,000 m summit that gave a value ~2.6 °C warmer than the
+  archive at the climb itself (downscaled to its height) — the cell centre's
+  model cell was a warm basin. Asking for each point in the same call costs no
   extra calls.
 - **Values**: T and RH = the mean of the hourly rows within ±30 min of the
   window (`activities_conditions`); dew point = Magnus of that T and RH
@@ -403,8 +403,8 @@ Thumbnails: an L (1 km east, 1 km north) at 24 °N has equal legs on screen
 box filled by one scale; a 3 × 1 km loop stays 3 : 1 and every point lies
 within 0.5 px of the simplified line.
 
-Real-data verification (2026-09-30): per-effort metrics of 小油坑 → 七星山主峰
-(13 efforts) recomputed from raw samples by an independent plain-loop script
+Real-data verification (2026-09-30): per-effort metrics of one repeated mountain
+climb (13 efforts) recomputed from raw samples by an independent plain-loop script
 agreed on all fields for 13/13; the same plain-loop whole-activity hrTSS at
 WKO5's LTHR equals WKO5's stored hrTSS on 13/13; a route compare (122-effort
 loop) ends with gap = the elapsed difference; 14 segments / routes drawn with every matched
@@ -417,13 +417,13 @@ separate `WKO5COACH_ROUTES_DIR`): the first build asked for 512 (day, cell)
 groups (1,141 effort points) in 512 archive calls (0 failed, ~6 min with the
 track parse) and gave weather to 1,654 / 1,654 efforts; a full rebuild after
 that made 0 calls (512 / 512 from the cache). For
-小油坑 → 七星山主峰 (13 efforts) `backend/scripts/verify_route_weather_hr.py`
+the same climb (13 efforts) `backend/scripts/verify_route_weather_hr.py`
 recomputed max HR from the raw `.wko4` samples: 13/13 equal; max 30 s power by
 brute force: 12/12 equal (the first run had 11/12 — a double rounding of the
-stored peaks, fixed); the 2026-08-22 effort's weather by a direct single-point
-archive query: T 21.7 °C, RH 91 %, dew 20.1 °C, Hadley 139, equal to the API;
+stored peaks, fixed); one effort's weather by a direct single-point archive
+query: T, RH, dew point and Hadley sum equal to the API;
 querying the unrounded raw-sample mean point instead gives the same T (Δ 0.00 °C).
-Monthly mean effort temperature runs 15.6 °C (Jan) to 27.9 °C (Jul / Aug); the
+Monthly mean effort temperature spans ~12 °C between winter and summer; the
 watch sensor reads 1.8 °C above the archive on average (409 efforts with both).
 46 % of efforts are hot (Hadley > 150). Across the version bump 186 / 187 ids
 and the one rename survived.

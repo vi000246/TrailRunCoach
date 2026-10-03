@@ -14,7 +14,7 @@ Detectors (numbers 推估 unless a source is named):
                 in Taiwan days < 25 °C are a minority of the year, and a
                 filter on them left the detector without runs most months.
                 Each run's median steady HR is moved to Hadley 120 with the
-                athlete's own β (engine/heat_calib.hr_beta; the author's fit 0.224 ± 0.036 bpm per Hadley unit,
+                athlete's own β (engine/heat_calib.hr_beta; one runner's fit 0.224 ± 0.036 bpm per Hadley unit,
                 the heat back-test): HR' = HR − β·(Hadley − 120). Reference
                 line HR' = a + b·P over the steady runs of the 365 days before
                 the recent ones (≥ 8 runs); recent = the last 6–8 steady runs
@@ -48,7 +48,7 @@ Detectors (numbers 推估 unless a source is named):
                 without a cached dawn use the run's own archive weather (a
                 later hour is warmer — it can only delay the spell). The watch
                 temperature is never used here (the wrist warms it: +3.7 °C
-                median vs the archive on the athlete's 72 paired route
+                median vs the archive on one runner's 72 paired route
                 efforts). 25 °C is 台灣教練's line; Hadley 150 is Hadley's hot
                 band (route_weather.HOT_HADLEY); 3 days / 60 days / the summer
                 test are 推估.
@@ -125,7 +125,7 @@ POWER_RANGE_W = 10.0          # 推估: compare only within the reference runs' 
 # of its own uses those instead. No literature source (heat-acclimation.md §2.4).
 WATCH_BIAS_C, WATCH_BIAS_SD_C, WATCH_PAIR_MIN = 3.7, 2.7, 10
 # RH when a season has too few archive days: the athlete's own median (engine/heat_calib
-# humidity_default, ≥ 20 activities; the author's 608 gave 83 %), else 60 % (推估); ±10 % 推估
+# humidity_default, ≥ 20 activities; one runner's 608 gave 83 %), else 60 % (推估); ±10 % 推估
 RH_DEFAULT, RH_SD = 60.0, 10.0
 CLIMATE_WIN_D, CLIMATE_MIN = 15, 5   # 推估 (heat_data.HOT_MONTH_WINDOW_D)
 BREAK_DAYS = 28               # ≥ 4 weeks (detraining.md; reentry 29–56 / long blocks)

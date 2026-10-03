@@ -23,7 +23,7 @@ Program codes: sportType 1 run, 2 bike, 4 strength. exerciseType 0 group,
 1 warm-up, 2 training, 3 cool-down, 4 rest. targetType 1 open (lap button),
 2 time (s), 5 distance (cm). intensityType 0 none, 2 heart rate, 3 pace
 (seconds per km in intensityValue = the faster bound / intensityValueExtend = the slower,
-intensityDisplayUnit 1 — verified on the owner's watch 2026-10-02: 270 / 285 showed
+intensityDisplayUnit 1 — verified on a COROS watch 2026-10-02: 270 / 285 showed
 4'30"–4'45"/km; 270000 showed 4500'00"), 6 power (W). HR: isIntensityPercent false = absolute bpm in
 intensityValue/intensityValueExtend; hrType 3 = the LTHR zone scheme
 (intensityPercent = % of LTHR × 1000).

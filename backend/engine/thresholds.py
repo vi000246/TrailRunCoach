@@ -131,8 +131,8 @@ def estimate(ds: Dataset, today: Optional[dt.date] = None, cp_of=None) -> dict:
 #    Ordinary runs are not time trials, so this takes, per road run, the
 #    fastest 20-minute stretch after a 10-minute warm-up whose mean HR is
 #    within ±3 % of the LTHR in effect that day. In summer heat this reads
-#    far too slow (cardiac drift: on this athlete's 2026-07…09 runs HR sat at
-#    LTHR at ~8:00 /km, while the 2025-12 half marathon averaged 6:54 /km),
+#    far too slow (cardiac drift: on one runner's summer runs HR sat at
+#    LTHR at a pace ~15 % slower than the same runner's winter half marathon),
 #    which is why the CP route comes first.
 # Both are 推估; the ±3 % band, the warm-up, the minimum of 3 runs and the
 # 90 → 180-day windows have no source. Trail and treadmill runs are left out

@@ -11,7 +11,7 @@ Non-maximal bout (a bout that was not all-out):
   * the workbook's "falling" rule (cp.validity): the shorter bout must have
     the higher power — a 3′ at or below the 12′ power was not maximal;
   * 推估: its peak HR is ≥ HR_GAP_BPM below the other bout's peak. Evidence:
-    the 2026-09-30 test, 3′ 217 W peak 146 bpm vs 12′ 221 W peak 171 bpm.
+    one runner's test, a 3′ just below the 12′ power with a peak HR ~25 bpm lower.
 With both bouts maximal: the 2-parameter model through the two points
 (work = CP·t + W′, Jones & Vanhatalo 2017). With one maximal bout: the
 single-bout estimate CP = P − W′/t with a W′ prior = Ruiz-Alias et al. 2025's

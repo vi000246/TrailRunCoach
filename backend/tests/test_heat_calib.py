@@ -26,7 +26,7 @@ def _fresh(monkeypatch, tmp_path):
 
 
 def _index(root, n_routes=8, per_route=12, beta=0.224, seed=3, power=True):
-    """Route efforts like the author's: HR = route base + 0.18·P + β·(Hadley − 120) + noise."""
+    """Route efforts like the reference runner's: HR = route base + 0.18·P + β·(Hadley − 120) + noise."""
     rng = np.random.default_rng(seed)
     routes = []
     for r in range(n_routes):
@@ -52,9 +52,9 @@ def test_default_beta_without_route_data():
 
 
 def test_beta_fit_and_shrinkage_for_the_author(tmp_path):
-    """Self-consistency (calib_fixtures): efforts following the author's 0.224
+    """Self-consistency (calib_fixtures): efforts following the reference 0.224
     fit back within ±1 SE (0.036) of it after shrinkage toward 0.3."""
-    _index(tmp_path, n_routes=12, per_route=22)                     # 264 efforts, like the author's 271
+    _index(tmp_path, n_routes=12, per_route=22)                     # 264 efforts, like the reference runner's 271
     item = CAL._registry()["hadley_hr_beta"]
     e = assert_self_consistent(item, None, 0.224, se=0.036)
     assert e["n"] >= 250 and abs(e["personal"] - 0.224) < 0.02 and 0.224 < e["value"] < 0.3
