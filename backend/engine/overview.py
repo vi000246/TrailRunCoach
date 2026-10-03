@@ -744,7 +744,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         except Exception:
             est = {}
     tt = training_targets(ds, tday, (est.get("lthr") or {}).get("value"),
-                          (est.get("aethr") or {}).get("value"))
+                          (est.get("aethr") or {}).get("value"), (est.get("aethr") or {}).get("below"))
     if rp and rp["return"] <= sunday.isoformat() and monday.isoformat() < (
             dt.date.fromisoformat(rp["end"]) + dt.timedelta(days=RE.TARGETS_AFTER_DAYS)).isoformat() \
             and rp.get("fvdot", 1.0) < 1.0:
@@ -758,7 +758,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                       "text": f"恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {rp['days']} 天的 FVDOT"
                               f"{'，有交叉訓練' if rp.get('cross') else ''}）"})
     tgt = _targets(tt)
-    aet = tt.get("aet")
+    # the easy-run cap of every session: 課表心率區間 (設定; engine/hr_profile.py) — a measured AeT,
+    # else the chosen COROS model's Z2 top; an estimated AeT no longer caps (owner 2026-10-03).
+    # The session texts keep calling it 「AeT」; a note says what it is when the model isn't LTHR.
+    hrz = tt.get("hr_model")
+    aet = (tt.get("easy_cap") or {}).get("value") or tt.get("aet")
+    aet_src = (tt.get("easy_cap") or {}).get("source") or tt.get("aet_source")
+    if hrz and (hrz.get("fallback") or (hrz["model"] != "lthr" and not hrz.get("aet_measured"))):
+        notes.append({"level": "info", "src": "hr_zones",
+                      "text": (hrz["fallback"] + "。" if hrz.get("fallback") else "")
+                      + f"課表心率用{hrz['label']}：輕鬆跑上限 {aet:.0f} bpm（{aet_src}）；課表文字裡的「AeT」指這個上限"})
     try:
         from backend.engine import base_check as BC
         et = BC.easy_targets(ds, today, aet) if not ds.config.parity else None
@@ -1196,7 +1205,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
         "long_weekday": WEEKDAYS[long_wd],
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
-                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": tt.get("aet_source"), "aet_pm": tt.get("aet_pm")},
+                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src, "aet_pm": tt.get("aet_pm"),
+                       # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it
+                       "hr_model": hrz},
         "notes": notes,
         # the quality gate (engine/quality_gate.py), so projection.project_weeks can
         # re-evaluate it for each projected week instead of copying this week's answer

@@ -128,6 +128,9 @@ class Ctx:
     ep_kmh: Optional[float] = None          # km/h of effort distance on trail (equivalence trail EP)
     terrain: str = "road"                   # road | trail
     climb_per_km: float = 0.0               # m/km of the session (trail: EP = km + climb/100)
+    # 課表心率區間 (engine/hr_profile.plan_hr_zones; the plan thresholds' "hr_model"): the
+    # automatic easy / interval HR targets; an explicit zone picked in the editor stays Friel
+    hrz: Optional[dict] = None
 
     @classmethod
     def of(cls, th: Optional[dict], basis: Optional[str] = None, hr_cap: bool = False,
@@ -145,7 +148,8 @@ class Ctx:
         return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"),
                    basis=basis if basis in ("hr", "power", "none") else "hr", hr_cap=hr_cap,
                    v_easy=f("v_easy", sp), v_easy_src=str(sp.get("v_easy_src") or ""), ep_kmh=f("ep_kmh", sp),
-                   terrain=ter, climb_per_km=max(0.0, f("climb_per_km", sp) or 0.0) if ter == "trail" else 0.0)
+                   terrain=ter, climb_per_km=max(0.0, f("climb_per_km", sp) or 0.0) if ter == "trail" else 0.0,
+                   hrz=th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None)
 
 
 def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
@@ -160,7 +164,10 @@ def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
 
 
 def easy_hr(c: Ctx) -> Optional[tuple]:
-    """HR ≤ AeT (coros_workouts.easy_hr)."""
+    """HR ≤ AeT (coros_workouts.easy_hr; with a 課表心率區間 its Z2 band)."""
+    if c.hrz and c.hrz.get("easy"):
+        lo, hi = c.hrz["easy"]
+        return ("hr", round(lo), round(hi))
     hi = c.aet or (0.89 * c.lthr if c.lthr else None)
     if not hi:
         return None
@@ -179,6 +186,10 @@ def _work_hr(c: Ctx, tg: dict) -> Optional[tuple]:
         return ("hr", int(tg["hr"][0]), int(tg["hr"][1]))
     if tg.get("hrp") and c.lthr:                 # a template's own % LTHR (workout_templates)
         return ("hr", round(tg["hrp"][0] * c.lthr), round(tg["hrp"][1] * c.lthr))
+    from backend.engine.hr_profile import work_band
+    wb = work_band(c.hrz, tg.get("cls") or "Z3near")      # 課表心率區間: the class's COROS zone
+    if wb:
+        return ("hr", *wb)
     a, b = HR_WORK.get(tg.get("cls") or "", (0.95, 1.00))
     if not c.lthr:
         return None
@@ -1209,7 +1220,7 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     "n", "limits": [{key, text, hit}], "lost": [text]} — limits always listed
     (absolute watts, one target per step, no ramps), `hit` when this session meets one."""
     CW = _cw()
-    program = CW.build_program(name, steps_to_coros(steps, c), CW.Thresholds(cp=c.cp, lthr=c.lthr, aet=c.aet), overview)
+    program = CW.build_program(name, steps_to_coros(steps, c), CW.Thresholds(cp=c.cp, lthr=c.lthr, aet=c.aet, hrz=c.hrz), overview)
     groups = {}
     lines = []
     for ex in program["exercises"]:

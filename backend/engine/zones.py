@@ -86,9 +86,25 @@ FRIEL_PACE = [
     ("5c", "Zone 5c", None, 0.90),
 ]
 
+def _coros_table(kind: str) -> list[tuple]:
+    """The COROS model's default edges as (id, name, lo, hi) fractions (hr_profile)."""
+    from backend.engine import hr_profile as HP
+    r = HP.DEFAULT_RATIOS[kind]
+    lo, hi = (0.0,) + r, r + (None,)
+    return [(HP.ZONE_IDS[i], HP.ZONE_NAMES[i], lo[i], hi[i]) for i in range(6)]
+
+
 SYSTEMS = {
     "classichr": {"title": "Classic 心率區間（跑步）", "unit": "bpm", "basis": "lthr", "zones": CLASSIC_HR},
     "frielhr": {"title": "Friel 心率區間（跑步）", "unit": "bpm", "basis": "lthr", "zones": FRIEL_HR},
+    # the watch's COROS models (engine/hr_profile.py, 2026-10-03); hrr / hrmax rows are
+    # computed in bpm from the max / resting HR in effect (zone_table)
+    "coroslthr": {"title": "COROS 乳酸閾心率區間（跑步）", "unit": "bpm", "basis": "lthr", "coros": "lthr",
+                  "zones": _coros_table("lthr")},
+    "coroshrr": {"title": "COROS 儲備心率區間（跑步）", "unit": "bpm", "basis": "hrr", "coros": "hrr",
+                 "zones": _coros_table("hrr")},
+    "coroshrmax": {"title": "COROS 最大心率區間（跑步）", "unit": "bpm", "basis": "hrmax", "coros": "hrmax",
+                   "zones": _coros_table("hrmax")},
     "frielpace": {"title": "Friel 配速區間（跑步）", "unit": "min/km", "basis": "tpace", "zones": FRIEL_PACE},
     "palladino": {"title": "Palladino 功率區間（跑步）", "unit": "W", "basis": "cp", "zones": PALLADINO_POWER_ZONES},
 }
@@ -115,9 +131,13 @@ STRYD_ZONES = [
 # anywhere from 60 to 90 % HRmax and MLSS at 75–97 % (Iannetta et al. 2020,
 # MSSE 52:466; docs/research/zones-and-thresholds.md §2.1, §3.1). HR zones
 # are Friel % LTHR, power zones Palladino % CP; HRmax is only a data check.
+# → The user re-added %HRmax zones 2026-10-03 as a CHOICE (COROS's max-HR model,
+# engine/hr_profile.py): the chart default stays Friel and the limitation above is
+# in that model's 來源 / ? text.
 # 徐國峰 RQ 跑力 heart-rate-reserve zones (% HRR): T = 84–88 % HRR
-# (runningquotient.com/article/single/52); the other edges are RQ's zone table
-# as the athlete's notes have it — not checked edge by edge against RQ (推估).
+# (runningquotient.com/article/single/52). Verified 2026-10-03: the same edges are
+# COROS's HRR model (the account's rhrZone 59/74/84/88/95; the user's COROS app shows
+# Z2 141–163 at max 202 / rest 53), so this IS the COROS HRR table.
 RQ_HRR_ZONES = [
     ("R", "恢復", 0.0, 0.59),
     ("E", "輕鬆 E", 0.59, 0.74),
@@ -239,6 +259,8 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
     runs = [w for w in ds.workouts if w.sport == "run" and end_day - days < math.floor(w.day) <= end_day]
     ref = runs[-1] if runs else next((w for w in reversed(ds.workouts) if w.sport == "run"), None)
     ref = _on_day(ref, end_day)
+    if spec["basis"] in ("hrr", "hrmax"):
+        return _zone_table_bpm(ds, system, spec, end_day, days, runs)
     basis = {"lthr": lambda w: ds.sport_setting("thr", w), "cp": ds.cp,
              "tpace": lambda w: ds.sport_setting("tpace", w)}[spec["basis"]]
     T = basis(ref) if ref else None
@@ -275,7 +297,68 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
             "threshold_source": info.get("source"), "threshold_date": info.get("date"),
             "wprime": info.get("wprime"), "wprime_source": info.get("wprime_source"),
             "no_data_reason": None if total else _no_data_reason(spec["basis"], T, len(runs), days),
-            "source": SOURCE if system == "palladino" else "WKO5 level tables"}
+            "source": SOURCE if system == "palladino" else _coros_source(spec) or "WKO5 level tables",
+            "choices": hr_choices() if spec["unit"] == "bpm" else None}
+
+
+HR_SYSTEMS = ("frielhr", "classichr", "coroslthr", "coroshrr", "coroshrmax")
+
+
+def hr_choices() -> list[dict]:
+    """The HR zone tables a 「心率區間」 card can switch between (the viewer remembers the choice)."""
+    return [{"id": k, "title": SYSTEMS[k]["title"]} for k in HR_SYSTEMS]
+
+
+def _coros_source(spec: dict) -> Optional[str]:
+    if not spec.get("coros"):
+        return None
+    from backend.engine import hr_profile as HP
+    return HP.SOURCE[spec["coros"]]
+
+
+def _zone_table_bpm(ds, system: str, spec: dict, end_day: int, days: int, runs: list) -> dict:
+    """zone_table for the COROS % HRR / % HRmax models: edges in bpm from the max /
+    resting HR in effect on end_day (engine/hr_profile.py), or the reason there are none."""
+    from backend.engine import hr_profile as HP
+    from backend.engine.wko5expr.evaluator import Evaluator, WS
+    from backend.files.wko5_athlete import day_to_date
+    kind = spec["coros"]
+    acc = HP.account()
+    day = day_to_date(end_day)
+    mx = HP.max_hr(ds, day, acc)
+    rs = HP.rest_hr(ds, day, acc) if kind == "hrr" else {}
+    z = HP.zone_rows(kind, None, mx.get("value"), rs.get("value"), acc)
+    rat = HP.ratios(kind, acc)
+    fr_lo, fr_hi = (0.0,) + tuple(rat), tuple(rat) + (None,)
+    srcs = "；".join(s for s in ((f"最大心率：{mx['source']}" if mx.get("source") else ""),
+                                (f"靜息心率：{rs['source']}" if rs.get("source") else "")) if s)
+    T = None
+    if "rows" in z:
+        T = mx["value"] - rs["value"] if kind == "hrr" else mx["value"]
+    ev = Evaluator(ds, end_day - days + 1, end_day, sports={"run"})
+    rows, total = [], 0.0
+    for i, (zid, name, lo, hi) in enumerate(z.get("rows") or _blank_rows(kind)):
+        secs = 0.0
+        if "rows" in z:
+            r = ev.evaluate(f"athleterange({end_day - days + 1}, {end_day}, "
+                            f"{_in_zone_expr('hr', lo or None, hi, '1')})")
+            secs = sum(float(v) for v in r.values() if v == v) if isinstance(r, WS) else 0.0
+        total += secs
+        rows.append({"id": zid, "name": name, "lo": fr_lo[i], "hi": fr_hi[i], "seconds": secs,
+                     "from": None if "rows" not in z else lo, "to": None if "rows" not in z else hi})
+    for r in rows:
+        r["share"] = r["seconds"] / total if total else None
+    reason = z.get("reason") if "reason" in z else (None if total else _no_data_reason("lthr", T, len(runs), days))
+    return {"system": system, "title": spec["title"], "unit": spec["unit"], "basis": spec["basis"],
+            "threshold": T, "threshold_is_default": False, "days": days, "runs": len(runs), "total_seconds": total,
+            "rows": rows, "threshold_source": (z.get("basis_text", "") + (f"；{srcs}" if srcs else "")) or None,
+            "threshold_date": None, "wprime": None, "wprime_source": None,
+            "estimate": mx.get("kind") == "estimate", "no_data_reason": reason,
+            "source": _coros_source(spec), "choices": hr_choices()}
+
+
+def _blank_rows(kind: str) -> list[tuple]:
+    return [(i, n, None, None) for i, n, _lo, _hi in _coros_table(kind)]
 
 
 # What to run by, per workout type. Power from Palladino's table; HR caps from
@@ -356,10 +439,14 @@ def aet_uncertainty(kind: Optional[str], se: Optional[float] = None) -> Optional
     return {"pm": AET_PM_BORROWED, "tip": f"推估的誤差約 ±{AET_PM_BORROWED} bpm。{head}{_PM_SRC}。做一次 AeT 測試最準。"}
 
 
-def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
+def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=None) -> dict:
     """Suggested HR / power ranges per workout type. Uses the thresholds in
     effect; when LTHR is still WKO5's untouched default and an estimate
-    exists, uses the estimate and says so."""
+    exists, uses the estimate and says so. HR ranges follow the 課表心率區間
+    setting (engine/hr_profile.plan_hr_zones: recovery Z1, easy / long / trail
+    Z2 — capped by a MEASURED AeT, climb Z3–Z4, hill / threshold Z4, supra /
+    VO2 Z5). `aet_below`: thresholds.estimate's 「highest HR of the runs with
+    drift < 5 %」, shown as a reference when AeT falls back to 0.89 × LTHR."""
     import datetime as dt
     import math
     runs = [w for w in ds.workouts if w.sport == "run" and math.floor(w.day) <= end_day]
@@ -386,24 +473,45 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
         aet, aet_src = float(aet_est), "自動估算（尚未套用）"
     else:
         aet, aet_src = (None if lthr is None else 0.89 * lthr), "0.89 × LTHR（Friel Z2 上限，推估）"
+        if aet_below:
+            # the AeT estimate failed: the highest HR of the runs that drifted < 5 % is a hint
+            # that the easy cap may sit higher than 0.89 × LTHR (text only, the cap is unchanged)
+            aet_src += f"；參考：飄移 < 5% 的跑步最高心率 {aet_below:.0f} bpm"
+    # 課表心率區間 (engine/hr_profile.py, 設定): the workout HR targets in the chosen COROS model;
+    # the WKO5 cross-check mode keeps the old Friel fractions
+    hrz = None
+    if lthr is not None and not getattr(getattr(ds, "config", None), "parity", False):
+        from backend.engine import hr_profile as HP
+        try:
+            hrz = HP.plan_hr_zones_for(ds, day_to_date(ref.day), lthr, aet, aet_measured)
+        except Exception:                   # noqa: BLE001 — a dataset without a plan (tests)
+            hrz = None
     rows = []
     for tid, name, plo, phi, hlo, hhi, primary, example, src in WORKOUT_TARGETS:
         def hr(x):
             if x is None or lthr is None:
                 return None
             return aet if x == "aet" else x * lthr
+        h = [hr(hlo), hr(hhi)]
+        if hrz and tid in hrz["targets"]:
+            h = list(hrz["easy"]) if tid in ("z2", "long", "trail") else list(hrz["targets"][tid])
+            if tid in ("z2", "long", "trail"):
+                h[0] = None                         # the easy rows are a cap (≤), as before
         rows.append({"id": tid, "name": name, "primary": primary, "example": example, "source": src,
                      "power": [None if plo is None or not cp else plo * cp, None if phi is None or not cp else phi * cp],
-                     "power_pct": [plo, phi], "hr": [hr(hlo), hr(hhi)]})
+                     "power_pct": [plo, phi], "hr": h})
     ci = threshold_info(ds, "cp", ref, end_day)
     return {"cp": cp, "cp_source": ci.get("source") or ("WKO5 mFTP" if ds.settings_from == "wko5"
                                                         else ds.setting_label("runftp")),
             "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
             "lthr": lthr, "lthr_source": lthr_src, "lthr_measured": lthr_measured,
-            "aet": aet, "aet_source": aet_src, "aet_measured": aet_measured,
+            "aet": aet, "aet_source": aet_src, "aet_measured": aet_measured, "aet_below": aet_below,
             "aet_pm": None if aet is None else aet_uncertainty(
                 "measured" if aet_measured else "estimate" if (ar is not None or aet_est) else "friel"),
-            "hr_zones": "Friel % LTHR", "power_zones": "Palladino % CP", "rows": rows}
+            # the easy-run HR cap of the 課表: a measured AeT, else the model's Z2 top
+            "easy_cap": None if hrz is None else {"value": float(hrz["easy"][1]), "source": hrz["easy_source"]},
+            "hr_model": hrz,
+            "hr_zones": hrz["label"] if hrz else "Friel % LTHR", "power_zones": "Palladino % CP", "rows": rows}
 
 
 def zones_json(cp: float | None) -> list[dict]:

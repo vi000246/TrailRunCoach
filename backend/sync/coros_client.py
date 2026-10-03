@@ -253,6 +253,10 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
         if weight:
             settings.weight_kg = float(weight)
         log.info("Coros profile: FTP=%s LTHR=%s weight=%s", ftp, lthr, weight)
+    try:
+        await store_hr_profile(db, athlete_id, result)      # max / resting HR, zone tables (hr_profile.py)
+    except Exception as e:                  # noqa: BLE001 — never fails the login
+        log.info("Coros HR profile not stored: %s", e)
 
     await db.commit()
     session_check.mark_ok("coros", athlete_id)
@@ -268,6 +272,43 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
         "lthr": lthr,
         "token_expires": expires_at.isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# The account's heart-rate settings (engine/hr_profile.py): max HR, resting HR and
+# the three COROS zone tables (zoneData.lthrZone / rhrZone / maxHrZone). Read from
+# the login response and refreshed on every sync with GET /account/query (one
+# read-only call; checked 2026-10-03: it returns the same zoneData). Stored in
+# user_settings 「athlete.coros_profile」, labelled 「來自手錶」 where used.
+# ---------------------------------------------------------------------------
+
+async def store_hr_profile(db: AsyncSession, athlete_id: int, data: Optional[dict]) -> Optional[dict]:
+    """Parse and store the HR part of a COROS account response; no commit. None
+    (nothing stored) when the response has no HR settings."""
+    from backend.engine import hr_profile as HP
+    from backend.settings.repository import SettingsRepository
+    prof = HP.parse_account(data)
+    if prof is None:
+        return None
+    prof["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    repo = SettingsRepository(db, athlete_id)
+    old = await repo.get(HP.ACCOUNT_KEY) or {}
+    if {k: v for k, v in old.items() if k != "at"} != {k: v for k, v in prof.items() if k != "at"}:
+        await repo.set(HP.ACCOUNT_KEY, prof)
+        log.info("Coros HR profile: max=%s rest=%s", prof.get("max_hr"), prof.get("rest_hr"))
+    return prof
+
+
+async def refresh_hr_profile(db: AsyncSession, athlete_id: int, token: str, base: str, user_id: str) -> None:
+    """Best effort: a failure never fails the sync."""
+    try:
+        async with http.client(timeout=15) as client:
+            resp = await client.get(f"{base}/account/query", headers=_headers(token, user_id))
+        body = resp.json() if resp.status_code == 200 else {}
+        if body.get("result") == "0000" and await store_hr_profile(db, athlete_id, body.get("data")):
+            await db.commit()
+    except Exception as e:                  # noqa: BLE001
+        log.info("Coros HR profile not refreshed: %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +619,7 @@ async def sync_workouts(
     if state and not errors:
         state.coros_last_sync_at = sync_started
         await db.commit()
+    await refresh_hr_profile(db, athlete_id, token, base, user_id)
 
     yield {"status": "complete", "total_downloaded": total_downloaded,
            "total_checked": total_checked, "errors": errors}
