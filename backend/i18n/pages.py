@@ -147,4 +147,15 @@ _LOCK = threading.Lock()
 
 def render_page(name: str, loc: Optional[str] = None, headers: Optional[dict] = None) -> PageResponse:
     """A page route's response: `return render_page("overview")`."""
-    return PageResponse(render(name, loc), STATIC / f"{name}.html", headers=headers)
+    out = render(name, loc)
+    # who the page is for (mode, caps, demo sandbox): per request, so outside the cache;
+    # the shell reads it synchronously (banner, hidden pages, locked buttons)
+    try:
+        from backend.api.session import session_info
+        sess = json.dumps(session_info(), ensure_ascii=False).replace("</", "<\\/")
+        m = _HEAD.search(out)
+        tag = f"<script>window.TRC_SESSION = {sess};</script>"
+        out = out[:m.end()] + tag + out[m.end():] if m else tag + out
+    except Exception:              # noqa: BLE001 — the shell falls back to GET /api/v1/session
+        pass
+    return PageResponse(out, STATIC / f"{name}.html", headers=headers)
