@@ -545,7 +545,15 @@ let COURSE = ls.get("course", null);      // {course_id, name, km, gain_m} — t
 let LOCKS = {};                           // seg index -> power
 let SPLITS = [];                          // day split km (百岳)
 let TERRAIN = {};                         // seg index -> terrain key
-let HL = null;                            // highlighted segment
+let SEL = new Set(), HOVER = null;        // selected segments (click; shift+click adds / removes) and the hovered one
+// click: select only this segment (again: clear); shift+click: add / remove it
+function pickSeg(i, shift) {
+  if (shift) { if (SEL.has(i)) SEL.delete(i); else SEL.add(i); }
+  else SEL = SEL.size === 1 && SEL.has(i) ? new Set() : new Set([i]);
+  renderProfile(); renderSegCompact(); renderSegments();
+}
+// hovering a row: show that segment on the elevation chart (the chart only; the tables stay as they are)
+function hoverSeg(i) { if (HOVER === i) return; HOVER = i; renderProfile(); }
 const saveUI = () => ls.set("ui", S);
 const CLS_COLOR = { steep_down: "--c-sd", down: "--c-d", flat: "--c-f", up: "--c-u", steep_up: "--c-su" };
 const EFF_COLORS = ["--e1", "--e2", "--e3", "--e4", "--e5"];
@@ -1436,8 +1444,10 @@ function renderProfile() {
   const narrow = window.innerWidth < 700;
   const km = P.summary.km || R[R.length - 1].end_km;
   const walkAreas = R.filter((r) => r.walk).map((r) => [{ xAxis: r.start_km, itemStyle: { color: css("--watch"), opacity: 0.10 } }, { xAxis: r.end_km }]);
-  const hl = R.find((r) => r.i === HL);
-  if (hl) walkAreas.push([{ xAxis: hl.start_km, itemStyle: { color: css("--accent"), opacity: 0.14 } }, { xAxis: hl.end_km }]);
+  for (const r of R.filter((x) => SEL.has(x.i)))
+    walkAreas.push([{ xAxis: r.start_km, itemStyle: { color: css("--accent"), opacity: 0.16 } }, { xAxis: r.end_km }]);
+  const hv = R.find((r) => r.i === HOVER && !SEL.has(r.i));
+  if (hv) walkAreas.push([{ xAxis: hv.start_km, itemStyle: { color: css("--accent"), opacity: 0.28 } }, { xAxis: hv.end_km }]);
   const series = [];
   if (pr) {
     series.push({ name: T("elev"), type: "line", yAxisIndex: 1, data: pr.km.map((x, i) => [x, pr.z[i]]), symbol: "none", silent: true, z: 1,
@@ -1483,7 +1493,7 @@ function renderProfile() {
     const p = c.convertFromPixel({ gridIndex: 0 }, [ev.offsetX, ev.offsetY]); if (!p) return;
     const k = p[0]; if (!(k >= 0 && k <= km)) return;
     if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +k.toFixed(2)].sort((a, b) => a - b); saveEventSplits(); schedule(); return; }
-    const r = rowAt(k); if (r) { HL = r.i; renderProfile(); renderSegCompact(); renderSegments(); const row = document.querySelector(`#segcmp [data-row="${r.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
+    const r = rowAt(k); if (r) { pickSeg(r.i, !!ev.event?.shiftKey); const row = document.querySelector(`#segcmp [data-row="${r.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
   });
 }
 // the compact table under the chart: each segment's target pace / power / HR, split and fuelling
@@ -1496,7 +1506,7 @@ function renderSegCompact() {
   let h = `<table><thead><tr><th>#</th><th class="n">km</th><th class="n">${esc(T("grade"))}</th>${th("pace", T("m.pace"))}${hike ? "" : th("power", T("m.power"))}${th("hr", T("m.hr"))}` +
     `<th class="n">${esc(T("split"))}</th><th class="n">${esc(T("cum"))}</th><th>${esc(T("fuel"))}</th></tr></thead><tbody>`;
   for (const r of R) {
-    h += `<tr data-row="${r.i}" class="${HL === r.i ? "hl" : ""}" title="${esc(r.label)}${r.hr_cap_src ? " · " + esc(T("hrcap")) + "：" + esc(r.hr_cap_src) : ""}">
+    h += `<tr data-row="${r.i}" class="${SEL.has(r.i) ? "hl" : ""}" title="${esc(r.label)}${r.hr_cap_src ? " · " + esc(T("hrcap")) + "：" + esc(r.hr_cap_src) : ""}">
       <td>${r.mark}${hike && r.day ? ` <span class="faint">D${r.day}</span>` : ""}</td><td class="n">${f1(r.start_km)}–${f1(r.end_km)}</td>
       <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
       <td class="n">${dur(r.t)}</td><td class="n">${dur(r.cum_s)}${r.eta ? ` <span class="faint">${esc(r.eta)}</span>` : ""}</td>
@@ -1506,7 +1516,11 @@ function renderSegCompact() {
   h += `<tr class="center"><td colspan="2">${esc(T("total"))}</td><td></td><td class="n opt ${m === "pace" ? "cur" : ""}">${pace(s.pace_s_per_km || (s.time_s / s.km))}</td>` +
     `${hike ? "" : `<td class="n opt ${m === "power" ? "cur" : ""}">${W(s.power)}</td>`}<td class="opt ${m === "hr" ? "cur" : ""}"></td><td class="n">${hms(s.time_s)}</td><td></td><td></td></tr></tbody></table>`;
   $("segcmp").innerHTML = h;
-  $("segcmp").querySelectorAll("tr[data-row]").forEach((e) => e.addEventListener("click", () => { HL = +e.dataset.row; renderProfile(); renderSegCompact(); renderSegments(); }));
+  $("segcmp").querySelectorAll("tr[data-row]").forEach((e) => {
+    e.addEventListener("click", (ev) => pickSeg(+e.dataset.row, ev.shiftKey));
+    e.addEventListener("mouseenter", () => hoverSeg(+e.dataset.row));
+  });
+  $("segcmp").onmouseleave = () => hoverSeg(null);
 }
 function segAt(km) { return PLAN.segments.find((s) => km >= s.start_km && km <= s.end_km); }
 function segNote(s) { return (s.notes || []).concat(s.walk && !(s.notes || []).includes(s.walk) ? [s.walk] : []).join("、"); }
@@ -1523,7 +1537,7 @@ function renderSegments() {
   const hourly = P.summary.heat?.mode === "hourly";
   h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
   for (const s of P.segments) {
-    h += `<tr data-seg="${s.i}" class="${HL === s.i ? "hl" : ""}"><td>${s.i}</td>${hike ? `<td>${s.day || 1}</td>` : ""}<td><span class="dot" style="background:${segColor(s.cls)}"></span>${esc(s.cls_label)}</td>
+    h += `<tr data-seg="${s.i}" class="${SEL.has(s.i) ? "hl" : ""}"><td>${s.i}</td>${hike ? `<td>${s.day || 1}</td>` : ""}<td><span class="dot" style="background:${segColor(s.cls)}"></span>${esc(s.cls_label)}</td>
       <td class="n">${f1(s.start_km)}–${f1(s.end_km)}</td><td class="n">${s.dist_m >= 1000 ? f1(s.dist_m / 1000) + " km" : n0(s.dist_m) + " m"}</td>
       <td class="n">${n0(s.gain_m)} / ${n0(s.loss_m)}</td><td class="n">${f1(s.grade * 100)}%</td>`;
     if (hike) {
@@ -1549,7 +1563,11 @@ function renderSegments() {
   document.querySelectorAll("[data-lock]").forEach((e) => e.addEventListener("change", () => {
     const v = Number(e.value); if (v > 0) LOCKS[e.dataset.lock] = v; else delete LOCKS[e.dataset.lock]; schedule(); }));
   document.querySelectorAll("[data-terr]").forEach((e) => e.addEventListener("change", () => { TERRAIN[e.dataset.terr] = e.value; schedule(); }));
-  document.querySelectorAll("#segtable tr[data-seg]").forEach((e) => e.addEventListener("click", (ev) => { if (["INPUT", "SELECT"].includes(ev.target.tagName)) return; HL = +e.dataset.seg; renderProfile(); renderSegCompact(); renderSegments(); }));
+  document.querySelectorAll("#segtable tr[data-seg]").forEach((e) => {
+    e.addEventListener("click", (ev) => { if (["INPUT", "SELECT"].includes(ev.target.tagName)) return; pickSeg(+e.dataset.seg, ev.shiftKey); });
+    e.addEventListener("mouseenter", () => hoverSeg(+e.dataset.seg));
+  });
+  if ($("segtable")) $("segtable").onmouseleave = () => hoverSeg(null);
 }
 // ---------------- export to the watch (the workout provider, default COROS) ----------------
 // trail / 百岳 default to lap-button steps (watch GPS distance drifts on trails), road to distance steps
