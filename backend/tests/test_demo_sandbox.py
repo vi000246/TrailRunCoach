@@ -225,7 +225,7 @@ def test_every_write_route_is_classified(demo):
 @pytest.mark.parametrize("path", ["/api/v1/sync/auto", "/api/v1/auth/tp/callback", "/api/v1/ai/chat",
                                   "/api/v1/athletes", "/api/v1/scan", "/api/v1/backup/list",
                                   "/api/v1/wko5/injuries/meta", "/api/v1/static/compare.html",
-                                  "/api/v1/static/settings.html", "/share/abc"])
+                                  "/api/v1/static/settings.html", "/api/v1/wko5/settings", "/share/abc"])
 def test_owner_only_routes_are_not_mounted(demo, path):
     c, _r, _b = demo
     assert c.get(path).status_code == 404
@@ -307,7 +307,7 @@ def test_client_ip_trusts_only_the_proxy(monkeypatch):
     monkeypatch.setenv("WKO5COACH_TRUSTED_PROXIES", "127.0.0.1/32,10.0.0.0/8")
     hdr = [(b"cf-connecting-ip", b"203.0.113.7")]
     assert RL.client_ip({"client": ("127.0.0.1", 1), "headers": hdr}) == "203.0.113.7"
-    assert RL.client_ip({"client": ("10.1.2.3", 1), "headers": [(b"x-forwarded-for", b"198.51.100.2, 10.0.0.1")]}) == "198.51.100.2"
+    assert RL.client_ip({"client": ("10.1.2.3", 1), "headers": [(b"x-forwarded-for", b"6.6.6.6, 198.51.100.2, 10.0.0.1")]}) == "198.51.100.2"
     assert RL.client_ip({"client": ("198.51.100.9", 1), "headers": hdr}) == "198.51.100.9"     # untrusted peer: header ignored
 
 

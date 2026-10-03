@@ -71,24 +71,32 @@ def _header(scope, name: bytes) -> Optional[str]:
 
 
 def client_ip(scope) -> str:
-    """The visitor's IP: CF-Connecting-IP (else the first X-Forwarded-For)
-    only when the direct peer is a trusted proxy (cloudflared, the Docker
+    """The visitor's IP: CF-Connecting-IP (else the address our proxy appended
+    to X-Forwarded-For) only when the direct peer is a trusted proxy (cloudflared, the Docker
     bridge, the hosting platform's proxy); otherwise the peer itself."""
     peer = (scope.get("client") or ("", 0))[0] or ""
     try:
         addr = ipaddress.ip_address(peer)
     except ValueError:
         return peer or "unknown"
-    if any(addr in n for n in trusted_networks()):
+    nets = trusted_networks()
+    if any(addr in n for n in nets):
         fwd = _header(scope, b"cf-connecting-ip")
-        if not fwd:
-            xff = _header(scope, b"x-forwarded-for")
-            fwd = xff.split(",")[0].strip() if xff else None
         if fwd:
             try:
                 return str(ipaddress.ip_address(fwd))
             except ValueError:
                 pass
+        # X-Forwarded-For: the entries a client sent come first; the rightmost
+        # address that is not one of our proxies is the one our proxy saw
+        xff = _header(scope, b"x-forwarded-for")
+        for part in reversed([x.strip() for x in (xff or "").split(",") if x.strip()]):
+            try:
+                a = ipaddress.ip_address(part)
+            except ValueError:
+                break
+            if not any(a in n for n in nets):
+                return str(a)
     return str(addr)
 
 
