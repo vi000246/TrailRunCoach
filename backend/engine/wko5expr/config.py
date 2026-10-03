@@ -19,7 +19,14 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 from typing import Any, Optional
 
-CONFIG_PATH = Path.home() / ".wko5coach" / "engine.json"
+CONFIG_PATH = None      # fixed file (tests); None = the tenant's engine.json
+
+
+def config_path() -> Path:
+    if CONFIG_PATH is not None:
+        return Path(CONFIG_PATH)
+    from backend import tenancy
+    return tenancy.base_path("engine.json")
 FEET_PER_METRE = 1 / 0.3048
 
 
@@ -103,7 +110,7 @@ class EngineConfig:
 
     @classmethod
     def load(cls, path: Optional[Path] = None) -> "EngineConfig":
-        p = path or CONFIG_PATH
+        p = path or config_path()
         try:
             data = json.loads(p.read_text("utf-8"))
         except (OSError, ValueError):
@@ -119,7 +126,7 @@ class EngineConfig:
         return cls.from_dict(data)
 
     def save(self, path: Optional[Path] = None) -> None:
-        p = path or CONFIG_PATH
+        p = path or config_path()
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(self.to_dict(), indent=2), "utf-8")
 

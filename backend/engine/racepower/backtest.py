@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from pathlib import Path
 import math
 import threading
 import time
@@ -90,7 +91,11 @@ SEG_MIN_M = 200.0
 SEG_MIN_S = 60.0
 WALK_HEAVY = 0.5               # 推估: ≥ half the moving time walked (< 130 spm) = walking-heavy outing
 CLEAR_DIFF = 0.03              # 推估: "clearly differs" = class medians ≥ 3 points apart
-STORE = WX.HOME / "racepower_backtest.json"
+STORE = None      # fixed file (tests); None = <tenant shared>/racepower_backtest.json
+
+
+def _store() -> Path:
+    return Path(STORE) if STORE is not None else WX.home() / "racepower_backtest.json"
 CATEGORY_ZH = {"road": "路跑", "trail": "越野", "hike": "登山（自己走）"}
 CLASSES = ("easy", "steady", "race")
 CLASS_ZH = {"easy": "輕鬆", "steady": "穩定", "race": "比賽強度"}
@@ -1264,14 +1269,14 @@ def store_capacity(res: dict, path=None) -> dict:
 # ---------------------------------------------------------------------------
 
 def save(result: dict, path=None) -> None:
-    p = path or STORE
+    p = path or _store()
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(result, ensure_ascii=False, default=float), "utf-8")
 
 
 def load(path=None) -> Optional[dict]:
     try:
-        return json.loads((path or STORE).read_text("utf-8"))
+        return json.loads((path or _store()).read_text("utf-8"))
     except (OSError, ValueError):
         return None
 

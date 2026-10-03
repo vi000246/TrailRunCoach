@@ -37,5 +37,21 @@
   "lang.zh-TW": "中文",
   "lang.en": "EN",
   "nav.more": "更多",
-  "nav.more_title": "活動列表、路線、傷病紀錄、設定"
+  "nav.more_title": "活動列表、路線、傷病紀錄、設定",
+  "demo.tag": "示範資料",
+  "demo.text": "這是虛構的跑者，你的修改只存在這個瀏覽器。",
+  "demo.try": "試試：",
+  "demo.try_schedule": "排課表",
+  "demo.try_race": "賽事計算機",
+  "demo.try_plan": "週期",
+  "demo.left_none": "還沒有修改",
+  "demo.left_h": "{h} 小時後清除",
+  "demo.left_m": "{m} 分鐘後清除",
+  "demo.left_title": "你的修改從第一次修改起保留 24 小時，之後自動回到原始示範資料",
+  "demo.reset": "重設示範",
+  "demo.reset_title": "清掉你的修改，回到原始示範資料",
+  "demo.reset_confirm": "清掉你在示範裡的所有修改？",
+  "demo.cta": "想用自己的資料？",
+  "demo.locked": "示範模式不提供這個功能",
+  "demo.disabled": "示範模式不提供這個功能"
 }

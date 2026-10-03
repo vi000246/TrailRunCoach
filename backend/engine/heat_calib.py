@@ -63,7 +63,7 @@ HOME_DEFAULTS = {"home_alt_m": 200.0, "home_temp_c": 12.0, "home_rh_pct": 70.0} 
 
 def _routes_home() -> Path:
     from backend.engine import routes as R
-    return Path(R.HOME)
+    return R.home()
 
 
 # ---------------------------------------------------------------------------

@@ -1064,7 +1064,7 @@ async def _ensure_athlete(db: AsyncSession, athlete_id: int, tp_athlete_id: int)
     (sync needs it: it stores tp_athlete_id and the FIT download folder)."""
     athlete = (await db.execute(select(Athlete).where(Athlete.id == athlete_id))).scalar_one_or_none()
     if athlete is None:
-        folder = storage.FIT_ROOT          # synced FITs live in per-source folders below it
+        folder = storage.fit_root()          # synced FITs live in per-source folders below it
         folder.mkdir(parents=True, exist_ok=True)
         athlete = Athlete(id=athlete_id, name=f"athlete_{athlete_id}", data_dir=str(folder))
         db.add(athlete)

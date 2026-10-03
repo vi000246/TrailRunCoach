@@ -67,7 +67,10 @@ PARSE_V, POWER_V, BAD_V, FIELDS_V, HR_V, AVG_V = 1, 1, 1, 1, 1, 1
 
 def root() -> Path:
     v = os.getenv(ENV_ROOT)
-    return Path(v) if v else Path.home() / ".wko5coach" / "cache" / "fit"
+    if v:
+        return Path(v)
+    from backend import tenancy
+    return tenancy.shared_path("cache", "fit")
 
 
 # ---------------------------------------------------------------------------
@@ -242,8 +245,10 @@ def _abs_key(s: str) -> str:
 
 
 def app_home() -> Path:
-    """~/.wko5coach: the FIT folders and their cache move together with it."""
-    return Path.home() / ".wko5coach"
+    """The tenant's shared root (~/.wko5coach for the owner, a demo base):
+    the FIT folders and their cache move together with it."""
+    from backend import tenancy
+    return tenancy.shared_path()
 
 
 def ident_of(fit_dir: Path) -> str:

@@ -110,8 +110,8 @@ def _default_db() -> Optional[Path]:
     if os.environ.get(TAGS_DB_ENV):
         return Path(os.environ[TAGS_DB_ENV])
     try:
-        from backend.db.database import DB_PATH
-        return Path(DB_PATH)
+        from backend.db.database import db_path
+        return db_path()
     except Exception:                       # noqa: BLE001
         return None
 

@@ -28,8 +28,19 @@ from typing import Callable, Optional
 
 from backend.engine.racepower.env import dew_point, rh_from_dew_point
 
-HOME = Path.home() / ".wko5coach"
-KEY_PATH = HOME / "weather.json"
+HOME = None      # fixed folder (tests); None = the tenant's shared root
+KEY_PATH = None  # fixed file (tests); None = home()/weather.json (owner only: the demo has no weather.key cap)
+
+
+def home() -> Path:
+    if HOME is not None:
+        return Path(HOME)
+    from backend import tenancy
+    return tenancy.shared_path()
+
+
+def key_path() -> Path:
+    return Path(KEY_PATH) if KEY_PATH is not None else home() / "weather.json"
 PEAKS_PATH = Path(__file__).resolve().parents[2] / "data" / "baiyue.json"
 
 CWA_URL = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi/{id}"
@@ -53,7 +64,8 @@ PROVIDER_LABEL = {"cwa_hourly": "中央氣象署 登山三天預報", "cwa_weekl
 # API key
 # ---------------------------------------------------------------------------
 
-def load_key(path: Path = KEY_PATH) -> Optional[str]:
+def load_key(path: Optional[Path] = None) -> Optional[str]:
+    path = path or key_path()
     env = os.getenv("CWA_API_KEY")
     if env:
         return env.strip()
@@ -63,7 +75,8 @@ def load_key(path: Path = KEY_PATH) -> Optional[str]:
         return None
 
 
-def save_key(key: str, path: Path = KEY_PATH) -> None:
+def save_key(key: str, path: Optional[Path] = None) -> None:
+    path = path or key_path()
     try:
         data = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError):
@@ -83,7 +96,8 @@ def mask_key(key: Optional[str]) -> Optional[str]:
     return key[:8] + "…" if len(key) > 8 else key[:2] + "…"
 
 
-def key_status(path: Path = KEY_PATH) -> dict:
+def key_status(path: Optional[Path] = None) -> dict:
+    path = path or key_path()
     k = load_key(path)
     return {"configured": bool(k), "masked": mask_key(k),
             "source": "env CWA_API_KEY" if os.getenv("CWA_API_KEY") else ("weather.json" if k else None)}
@@ -407,12 +421,13 @@ def _http_get(url: str, params: dict, timeout: float) -> dict:
     return r.json()
 
 
-def fetch_cwa(dataset: str, key: Optional[str], *, cache_dir: Path = HOME,
+def fetch_cwa(dataset: str, key: Optional[str], *, cache_dir: Optional[Path] = None,
               max_age_h: float = CWA_MAX_AGE_H, now: Optional[dt.datetime] = None,
               get: Callable = _http_get) -> dict:
     """Compact CWA doc for one dataset, from the disk cache when < max_age_h
     old, else downloaded (the whole file) and re-compacted."""
     now = now or dt.datetime.now(TZ)
+    cache_dir = cache_dir or home()
     path = cache_dir / f"cwa_{dataset}.json"
     cached = None
     try:
@@ -445,9 +460,10 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     lon: Optional[float] = None, elevation_m: Optional[float] = None,
                     name: Optional[str] = None, today: Optional[dt.date] = None,
                     key: Optional[str] = None, get: Callable = _http_get,
-                    cache_dir: Path = HOME, use_cwa: bool = True) -> dict:
+                    cache_dir: Optional[Path] = None, use_cwa: bool = True) -> dict:
     """Run the provider chain. Returns {provider, label, values|None, tried,
     location, fetched_at}."""
+    cache_dir = cache_dir or home()
     from backend.engine.localtime import today_local
     today = today or today_local()
     lead = (date - today).days

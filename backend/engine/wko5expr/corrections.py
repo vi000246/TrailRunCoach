@@ -24,7 +24,14 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
-CORRECTIONS_PATH = Path.home() / ".wko5coach" / "corrections.json"
+CORRECTIONS_PATH = None      # fixed file (tests); None = the tenant's corrections.json
+
+
+def corrections_path() -> Path:
+    if CORRECTIONS_PATH is not None:
+        return Path(CORRECTIONS_PATH)
+    from backend import tenancy
+    return tenancy.base_path("corrections.json")
 
 
 @dataclass
@@ -44,7 +51,7 @@ class Correction:
 
 class CorrectionStore:
     def __init__(self, path: Optional[Path] = None):
-        self.path = path or CORRECTIONS_PATH
+        self.path = path or corrections_path()
         self.items: list[Correction] = []
         self.load()
 

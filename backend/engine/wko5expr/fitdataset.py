@@ -382,7 +382,7 @@ class PdMemo:
             rows.append((w.entry.file, st, A.power_ok(ds, w), A.power_source(ds, w),
                          ds._corr_sig(w.entry.file, "power"), w.metrics.get("np")))
         files = []
-        root = Path(WX.HOME) / "fit"
+        root = WX.home() / "fit"
         skip = T.unused_folder()
         if root.exists():
             for p in root.rglob("*.fit"):
@@ -398,7 +398,7 @@ class PdMemo:
         files.sort()
         # cptest.curves reads only the 資料來源's folder (cptest.unused_folder)
         glob = (code.hexdigest(), A.CP_WINDOW_DAYS, bool(ds.accept_watch_power), BA.read_setting(True),
-                BA.overrides_stamp(), str(WX.HOME), skip)
+                BA.overrides_stamp(), str(WX.home()), skip)
         self._prep = (days, rows, files, glob)
 
     def sig(self, day: dt.date) -> str:
@@ -495,7 +495,7 @@ class FitFolderDataset(Dataset):
         self._init_power_policy(accept_watch_power)
         self.corrections = None if self.config.parity else (corrections or CorrectionStore())
         self._init_exclusion_policy(exclude_bad)
-        self.plan = Plan() if self.config.parity else Plan.load()
+        self._plan_fixed = Plan() if self.config.parity else None     # None: the tenant's plan (Dataset.plan)
         self.athlete = default_athlete()
         # where the thresholds / weight come from (module docstring): the plan's
         # dated rows (Dataset.setting) -> athlete_settings in the app DB -> as-of

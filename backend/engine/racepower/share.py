@@ -26,7 +26,12 @@ from typing import Optional
 
 from backend.engine.racepower import weather as WX
 
-SHARES_DIR = WX.HOME / "racepower_shares"
+SHARES_DIR = None      # fixed folder (tests); None = the tenant's (private) racepower_shares/
+
+
+def _shares_dir() -> Path:
+    from backend import tenancy
+    return Path(SHARES_DIR) if SHARES_DIR is not None else tenancy.private_path("racepower_shares")
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
 EXPIRY_DAYS = (None, 7, 30, 90)
 MAX_SHARES = 200
@@ -115,11 +120,11 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
 def _path(sid: str, root: Optional[Path] = None) -> Path:
     if not ID_RE.match(sid or ""):
         raise ShareError("分享連結格式不對")
-    return (root or SHARES_DIR) / f"{sid}.json"
+    return (root or _shares_dir()) / f"{sid}.json"
 
 
 def save(snap: dict, root: Optional[Path] = None) -> str:
-    root = root or SHARES_DIR
+    root = root or _shares_dir()
     root.mkdir(parents=True, exist_ok=True)
     if len(list(root.glob("*.json"))) >= MAX_SHARES:
         raise ShareError(f"分享最多 {MAX_SHARES} 個：先刪掉舊的")
@@ -149,7 +154,7 @@ def delete(sid: str, root: Optional[Path] = None) -> bool:
 
 
 def listing(root: Optional[Path] = None, now: Optional[dt.datetime] = None) -> list[dict]:
-    root = root or SHARES_DIR
+    root = root or _shares_dir()
     out = []
     for p in root.glob("*.json") if root.exists() else []:
         try:
