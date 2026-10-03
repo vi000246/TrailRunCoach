@@ -73,6 +73,9 @@ def test_the_cards_render_and_hide_on_easy_runs():
     w = ds.workouts[0]
     v = WR.review(ds, w, "interval_verdict")
     assert v["badge"]["text"] == "達到訓練目標" and v["badge"]["level"] == "good"
+    rows = {r["label"]: r for r in v["chip_rows"]}
+    assert rows["每趟"]["verdict"] == {"text": "全部達標", "level": "good"} and "0.98" in rows["每趟"]["tip"]
+    assert rows["目標區時間"]["verdict"]["level"] == "good" and all(len(c) <= 24 for r in v["chip_rows"] for c in r["chips"])
     reps = WR.review(ds, w, "interval_reps")
     rp = reps["rep_profile"]
     assert rp["mode"] == "plan" and rp["band"][0] < rp["band"][1] and len(rp["reps"]) == rp["n_plan"]
@@ -128,6 +131,14 @@ def test_the_interval_tab_shows_on_a_cp_test_with_its_protocol_as_the_plan():
     v = WR.review(ds, w, "interval_verdict")
     assert v["badge"]["text"].startswith("測試配速分配") and not v.get("hide")
     assert all("達標" not in x["data"]["value"] for x in v["series"][2:] if x["data"]["kind"] == "value")
+    # the compact rows: label · short chips · verdict chip; the formula and halves only behind the ?
+    b3, b12 = v["chip_rows"][:2]
+    assert b3["label"] == "3 分段" and b3["chips"][0] == "330 W" and b3["chips"][2].startswith("做到 ")
+    assert b3["verdict"] == {"text": "平均", "level": "good"} and "預期全力" in b3["tip"] and "推估" in b3["tip"]
+    assert b12["verdict"] == {"text": "前快後掉", "level": "warn"} and "前半 295 → 後半 265 W" in b12["tip"]
+    assert v["chip_rows"][-1]["label"] == "W′"
+    assert all(len(c) <= 24 for r in v["chip_rows"] for c in r["chips"])
+    assert not any("平均＝" in c for r in v["chip_rows"] for c in r["chips"])     # the rule sits in the card's ?
     reps = WR.review(ds, w, "interval_reps")
     rp = reps["rep_profile"]
     assert rp["mode"] == "test" and rp["band"] is None and [r["status"] for r in rp["reps"]] == ["even", "uneven"]

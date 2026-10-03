@@ -70,6 +70,8 @@ VERDICT = {"met": ("達到訓練目標", "good"), "partial": ("部分達到", "w
 FLAG_TAG = "當作間歇"            # the activity tag the 「當作間歇判讀」 button adds
 EVEN_TOL = 0.05                  # 推估: a CP-test bout's 2nd-half power within ±5 % of the 1st = even
 EVEN_TOL_AET = 0.03              # 推估: the AeT test's block is fixed power
+# the 間歇判讀 card's short CP-method word (cp_protocols.METHOD_LABEL in full behind the ?)
+METHOD_SHORT = {"2pt": "兩點", "1pt_prior": "單段推估", "tt20": "20 分 × 0.95", "race": "比賽換算"}
 
 
 def _grid(t, x):
@@ -332,8 +334,11 @@ def _test_bouts(ds, w, m: dict, c: dict, n_grid: int):
         bouts = sorted(ev["bouts"], key=lambda b: b["start_s"])
         # in the order run (the athlete's 9/30 test was 3′ first)
         label = "CP 測試 " + " + ".join(f"{b['duration_s'] / 60:.0f} 分" for b in bouts) + "（全力）"
+        short = METHOD_SHORT.get(ev.get("method"), ev["method_label"])
         return bouts, label, len(CPP.TABLE[p]["bouts"]) or len(bouts), "max", \
-            [f"這次 CP {ev['cp']:.0f} W（{ev['method_label']}，品質 {ev['quality']}）：結果看「本次重點」的 CP 測試卡"]
+            [{"label": "CP", "text": f"這次 CP {ev['cp']:.0f} W（{short}）",
+              "tip": f"方法：{ev['method_label']}；品質 {ev['quality']}。結果和套用按鈕在「本次重點」的 CP 測試卡。",
+              "long": f"這次 CP {ev['cp']:.0f} W（{ev['method_label']}，品質 {ev['quality']}）：結果看「本次重點」的 CP 測試卡"}]
     if c["type"] == "test_aet":
         from backend.engine import aet_test as AET
         r = AET.analyze_workout(ds, w, m)
@@ -346,7 +351,8 @@ def _test_bouts(ds, w, m: dict, c: dict, n_grid: int):
         if e - a < 600:
             return None
         return [{"start_s": float(a), "duration_s": float(e - a), "hr_peak": None}], AET.PROTOCOLS[proto]["title"], 1, \
-            "steady", AET.lines(r, m.get("aet"))[:1]
+            "steady", [{"label": "AeT", "text": ln.split("：")[0] if len(ln) > 28 else ln, "tip": ln, "long": ln}
+                       for ln in AET.lines(r, m.get("aet"))[:1]]
     return None
 
 
@@ -402,7 +408,7 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
         name = f"{len(seg) / 60:.0f} 分段"
         reps.append({"k": k + 1, "start_s": float(a), "duration_s": float(len(seg)), "power": mean,
                      "pct_cp": mean / cp, "in_band": word == "平均", "even": word == "平均", "split": split,
-                     "last_ratio": last, "pacing": word, "expected": exp,
+                     "last_ratio": last, "pacing": word, "expected": exp, "p1": p1, "p2": p2,
                      "pct_expected": (mean / exp) if exp else None, "name": name,
                      "hr_end": _hr_last_half(s["t"], s["hr"], a, e), "hr_peak": b.get("hr_peak"),
                      "dfrc_min_pct": dmin, "wprime_used_j": used, "source": "test"})
@@ -419,7 +425,7 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
     if ver == "uneven" and len(reps) == 1:
         lab = "測試配速分配：不平均"
     reasons.append(f"平均＝後半和前半差 ±{tol * 100:.0f}% 內、最後 1 分 ≤ 該段 × 1.08（推估）")
-    reasons += extra
+    reasons += [x["long"] for x in extra]
     return {"ok": True, "kind": "test", "test": c["type"], "intent": intent, "label": label, "planned": True,
             "cp_ref": cp_ref,
             "variant_key": None, "rung_key": None, "equiv": None, "cp": cp, "lo": None, "hi": None, "floor": None,
@@ -427,6 +433,7 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
             "outcome": None, "outcome_why": None, "hit": n_even, "hit_rate": n_even / len(reps), "fade": None,
             "sdec": None, "tiz_s": None, "tiz_plan_s": None, "tiz_ratio": None, "z5": False,
             "verdict": ver, "verdict_label": lab, "level": VERDICT[ver][1], "reasons": reasons, "flagged": False,
+            "notes": extra, "tol": tol,
             **_public(bat), "pdc5": best_5min(ds, w), "peers": []}
 
 
