@@ -105,9 +105,9 @@ def test_the_overview_drift_indicator_compares_within_one_band():
     assert d.extra["fair"] == 3 and d.extra["bands"]["cool"]["n"] == 3 and d.extra["bands"]["hot"]["n"] == 3
     assert d.extra["agg"]["mean"] == pytest.approx(d.extra["bands"]["hot"]["agg"]["mean"])
     assert d.extra["agg"]["mean"] > d.extra["bands"]["cool"]["agg"]["mean"]
-    assert "🌡 > 28 °C" in d.text and R.HEAT_NOTE in d.why and "< 25 °C 3 次" in d.why
+    assert d.text.startswith("飄很多") and R.HEAT_NOTE in d.why and "< 25 °C 3 次" in d.why
     assert d.extra["agg"]["mean"] > 0.10 and d.extra["test"] == 3
-    assert d.level != "bad" and R.HEAT_NOTE in d.verdict and not d.action   # a high drift in heat never warns
+    assert d.level != "bad" and "天熱" in d.verdict and not d.action   # a high drift in heat never warns
 
 
 def test_the_aet_aggregate_leaves_the_hot_band_out():

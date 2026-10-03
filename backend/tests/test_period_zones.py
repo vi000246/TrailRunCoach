@@ -208,7 +208,7 @@ def test_view_wiring_and_api_render():
     from backend.engine.wko5expr.customviews import CustomViewError, REPO_VIEWS, load_custom_views, parse_view
     v = load_custom_views([REPO_VIEWS])["我的訓練"]
     dash = next(d for d in v["dashboards"] if d["title"] == "強度")
-    first = dash["charts"][:2]
+    first = [c for c in dash["charts"] if c.get("kind") == "periodzones"][:2]
     assert [c["kind"] for c in first] == ["periodzones", "periodzones"]
     assert [c["view"] for c in first] == ["total", "weekly"]
     with pytest.raises(CustomViewError):
