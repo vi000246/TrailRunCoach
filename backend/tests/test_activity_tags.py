@@ -231,16 +231,16 @@ def test_seed_matches_by_date_distance_and_file_and_is_idempotent(tmp_path):
           _wk(2, dt.datetime(2025, 11, 2, 10, 32), 14.4, True, "2025/b.wko4"),
           _wk(3, dt.datetime(2024, 9, 21, 5, 55), 13.8, True, "2024/Athlete_2024_09_21_05_55.wko4")]
     db = tmp_path / "seed.db"
-    items = SD.plan(ws, AT.load(db))
+    items = SD.plan(ws, AT.load(db), seed=SD.EXAMPLE_SEED)
     by = {it["spec"]["date"]: it for it in items if it["found"]}
     assert by["2025-11-02"]["file"] == "2025/b.wko4"                  # the 14.4 km run, not the 0.1 km stub
     assert by["2024-09-21"]["how"] == "file" and by["2024-09-21"]["want"] == {"activity_type": "race"}
-    assert sum(1 for it in items if not it["found"]) == len(SD.SEED) - 3
+    assert sum(1 for it in items if not it["found"]) == len(SD.EXAMPLE_SEED) - 3
     assert SD.apply(db, items) == 3
     rows = AT.load(db)
     r = AT.find(rows, ws[3].entry.start, ws[3].entry.file)
     assert r["activity_type"] == "race" and not r["effort_overridden"]   # effort stays auto
-    again = SD.plan(ws, rows)
+    again = SD.plan(ws, rows, seed=SD.EXAMPLE_SEED)
     assert all(not it.get("change") for it in again if it["found"])      # idempotent
     assert SD.apply(db, again) == 0
 

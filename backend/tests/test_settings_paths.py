@@ -1,7 +1,11 @@
 """backend/settings/paths.py: where the WKO5 athlete folder is."""
+import re
 from pathlib import Path
 
 from backend.settings import paths
+
+# a hard-coded user home (C:\Users\<name>, /Users/<name>, /home/<name>) in a default
+HOME_PATH = re.compile(r"[A-Za-z]:[\\/]+Users[\\/]+\w|/Users/\w|/home/\w")
 
 
 def _athlete(d: Path) -> Path:
@@ -38,5 +42,5 @@ def test_fallback_is_not_machine_specific(monkeypatch, tmp_path):
     src = Path(paths.__file__).read_text(encoding="utf-8")
     for f in ("api/wko5views.py", "api/achievements.py", "api/plan.py"):
         text = (Path(paths.__file__).resolve().parents[1] / f).read_text(encoding="utf-8")
-        assert "user" not in text and "athlete_dir()" in text
-    assert "user" not in src
+        assert not HOME_PATH.search(text) and "athlete_dir()" in text
+    assert not HOME_PATH.search(src)
