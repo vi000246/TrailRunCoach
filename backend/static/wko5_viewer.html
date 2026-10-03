@@ -2791,15 +2791,19 @@ function cpHatch(color, alpha) {      // the descents' 135° lines (identity by 
 // a value against the athlete's usual: "平常 690（+8%）" / "快 5%" for paces (lower = faster)
 function cpRel(v, b, f, pace) {
   if (!b?.ok || v == null) return "";
+  if (!(b.median > 0) || !isFinite(v / b.median)) return `（平常 ${f(b.median)}）`;   // no % against 0 / negative
   const d = v / b.median - 1;
   return `（平常 ${f(b.median)}，${pace ? (d <= 0 ? "快 " : "慢 ") + Math.abs(d * 100).toFixed(0) + "%" : cpSigned(d)}）`;
 }
 // above / below the usual's middle 50 %: the only rows that get a direct label
 function cpOutside(v, b, pace) {
   if (!b?.ok || v == null) return null;
-  const d = v / b.median - 1;
-  if (pace) return v < b.q1 ? `▲ 快 ${Math.abs(d * 100).toFixed(0)}%` : v > b.q3 ? `▼ 慢 ${Math.abs(d * 100).toFixed(0)}%` : null;
-  return v > b.q3 ? `▲ 高於平常 ${cpSigned(d)}` : v < b.q1 ? `▼ 低於平常 ${cpSigned(d)}` : null;
+  // a % only makes sense against a positive median: flat-grade VAM has a median of 0 (→ ±Infinity %)
+  // and descent VAM is negative (the sign would flip) — then just say above / below
+  const pctOk = b.median > 0 && isFinite(v / b.median);
+  const d = pctOk ? v / b.median - 1 : null;
+  if (pace) return v < b.q1 ? `▲ 快${pctOk ? ` ${Math.abs(d * 100).toFixed(0)}%` : ""}` : v > b.q3 ? `▼ 慢${pctOk ? ` ${Math.abs(d * 100).toFixed(0)}%` : ""}` : null;
+  return v > b.q3 ? `▲ 高於平常${pctOk ? ` ${cpSigned(d)}` : ""}` : v < b.q1 ? `▼ 低於平常${pctOk ? ` ${cpSigned(d)}` : ""}` : null;
 }
 function cpTipBox(html) { return `<div style="font-size:11.5px;line-height:1.55;max-width:340px;white-space:normal">${html}</div>`; }
 function cpTipOpts() {
