@@ -181,12 +181,13 @@ def _rate(s: dict) -> float:
     return float(s.get("tss") or 0.0) / m if m else 0.0
 
 
-def session_text(info: dict, minutes: int, aet: Optional[float]) -> tuple[str, str]:
-    """(title, detail) of the session."""
+def session_text(info: dict, minutes: int, aet: Optional[float], aet_measured: bool = False) -> tuple[str, str]:
+    """(title, detail) of the session. `aet` = the easy-run cap (hr_profile.easy_cap_hr)."""
+    from backend.engine.hr_profile import easy_cap_hr
     sim, pct = info["sim"], info["pct"]
     kg = info.get("kg")
     what = f"{kg:g} kg（體重的 {pct * 100:.0f}%）" if kg else f"體重的 {pct * 100:.0f}%"
-    hr = f"心率 ≤ AeT {aet:.0f} bpm" if aet else "心率 ≤ AeT"
+    hr = easy_cap_hr(aet, aet_measured)
     main = max(10, minutes - 15)
     speed = f"{sim['kmh']:g} km/h" + ("（坡度到上限，改加速度）" if sim["grade"] >= TREADMILL_MAX and sim["kmh"] > BASE_KMH else "")
     title = f"陡坡健走 {sim['grade']:g}%（模擬負重 {kg:g} kg）" if kg else f"陡坡健走 {sim['grade']:g}%（模擬負重）"
@@ -198,7 +199,8 @@ def session_text(info: dict, minutes: int, aet: Optional[float]) -> tuple[str, s
 
 
 def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, prefs=None, th=None,
-          b2b: Optional[dict] = None, notes: Optional[list] = None, rates: Optional[dict] = None, **_) -> list[dict]:
+          b2b: Optional[dict] = None, notes: Optional[list] = None, rates: Optional[dict] = None,
+          aet_measured: bool = False, **_) -> list[dict]:
     """Turn one weekday easy run into the session (in place); sets info["planned"]."""
     if not info or not info.get("active"):
         return ss
@@ -246,8 +248,9 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
             if delta <= 0:
                 break
     rate = (rates or {}).get("trail") or (rates or {}).get("road") or 50.0
-    title, detail = session_text(info, m, aet)
+    title, detail = session_text(info, m, aet, aet_measured)
+    from backend.engine.hr_profile import easy_cap_hr
     s.update(id="steep", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail, source=SRC,
-             tss=round(rate * m / 60.0, 1), target=f"心率 ≤ AeT {aet:.0f} bpm" if aet else "心率 ≤ AeT")
+             tss=round(rate * m / 60.0, 1), target=easy_cap_hr(aet, aet_measured))
     info["planned"].append({"day": s["day"], "minutes": m, "grade": info["sim"]["grade"], "kmh": info["sim"]["kmh"]})
     return ss

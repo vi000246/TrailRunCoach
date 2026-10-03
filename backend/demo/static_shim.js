@@ -515,7 +515,7 @@
         return R("power", { lo, hi, frac: f, text: `${fx(lo)}–${fx(hi)} W`, sub, auto, warn, intensity: it });
       }
       const f = c.lthr ? hrToP((lo + hi) / 2 / c.lthr, D) : 0.7;
-      const sub = c.aet && Math.abs(hi - c.aet) < 1 ? "≤ AeT" : c.lthr ? `${fx(lo / c.lthr * 100)}–${fx(hi / c.lthr * 100)}% LTHR` : "";
+      const sub = c.aet && Math.abs(hi - c.aet) < 1 ? "≤ 輕鬆跑上限" : c.lthr ? `${fx(lo / c.lthr * 100)}–${fx(hi / c.lthr * 100)}% LTHR` : "";
       return R("hr", { lo, hi, frac: f, text: `${fx(lo)}–${fx(hi)} bpm`, sub, auto, warn, intensity: it });
     }
     function resolve(st, c, D) {
@@ -831,7 +831,7 @@
       const name = (st, r, grouped) => {
         if (st.note) return st.note;
         const tg = st.target || {};
-        if (st.kind === "work" && tg.type === "auto" && tg.intent === "easy" && tg.plo != null) return r.type === "hr" ? "心率 ≤ AeT" : r.type === "power" ? "功率區間" : "照感覺";
+        if (st.kind === "work" && tg.type === "auto" && tg.intent === "easy" && tg.plo != null) return r.type === "hr" ? "心率 ≤ 輕鬆跑上限" : r.type === "power" ? "功率區間" : "照感覺";
         if (st.kind === "work" && !grouped) { em.n++; return `第 ${em.n} 趟 ${fmtDur(st.dur)}`; }
         return "";
       };
@@ -911,7 +911,7 @@
     }
     function zonesTable(c, D) {
       const rows = (ty) => D.ws.zones[ty].map(([z, lo, hi]) => {
-        if (ty === "hr" && z === "aet") { const e = easyHr(c); return { id: "aet", label: "≤ AeT", text: e ? `${e[1]}–${e[2]} bpm` : "" }; }
+        if (ty === "hr" && z === "aet") { const e = easyHr(c); return { id: "aet", label: "≤ 輕鬆跑上限", text: e ? `${e[1]}–${e[2]} bpm` : "" }; }
         const base = { power: c.cp, hr: c.lthr, pace: c.tpace }[ty];
         const text = !base ? "" : ty === "pace" ? `${mmss(lo * base)}–${mmss(hi * base)} /km` : `${fx(lo * base)}–${fx(hi * base)} ${ty === "power" ? "W" : "bpm"}`;
         return { id: z, label: `Z${z}`, lo, hi, text };
@@ -970,7 +970,7 @@
           if (base >= 600) {
             const flatRun = title.includes("加速跑");
             const [w, r, rn] = flatRun ? [`${sp} 秒加速跑（平路）`, "慢跑回來", `加速跑 ${k}×${sp} 秒`] : [`${sp} 秒上坡衝刺`, "走下來", `衝刺 ${k}×${sp} 秒`];
-            const a = step("work", base, easy(0.75, 0.8), "心率 ≤ AeT");
+            const a = step("work", base, easy(0.75, 0.8), "心率 ≤ 輕鬆跑上限");
             const kids = [step("work", sp, OPEN, w), step("rest", 60, OPEN, r)];
             return doc([a, { id: ids(), kind: "repeat", times: k, last_rest: true, note: rn, items: kids }]);   // rep() takes its id after its kids
           }

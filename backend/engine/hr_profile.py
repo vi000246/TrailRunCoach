@@ -301,6 +301,51 @@ def plan_hr_zones_for(ds, day: dt.date, lthr: Optional[float], aet: Optional[flo
                          (m or {}).get("source"), (r or {}).get("source"))
 
 
+# ---------------------------------------------------------------------------
+# what the texts call the easy-run cap (owner 2026-10-03: not 「AeT」 — with a COROS
+# model it is the Z2 top; 「AeT」 only for a MEASURED one)
+# ---------------------------------------------------------------------------
+
+EASY_CAP = "輕鬆跑上限"
+EASY_CAP_MEASURED = "（實測 AeT）"
+EASY_CAP_TIP = "輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值"
+
+
+def easy_cap_measured(src) -> bool:
+    """Whether the easy cap is a measured AeT. `src`: plan_hr_zones' dict, or a plan's
+    thresholds dict ({"hr_model", "aet_measured"}; week_plan / projection), or None."""
+    if not isinstance(src, dict):
+        return False
+    if "easy" in src and "model" in src:
+        return bool(src.get("aet_measured"))
+    hrz = src.get("hr_model")
+    if isinstance(hrz, dict):
+        return bool(hrz.get("aet_measured"))
+    return bool(src.get("aet_measured"))
+
+
+def easy_cap_label(src=None, bpm: Optional[float] = None, measured: Optional[bool] = None) -> str:
+    """「輕鬆跑上限 148 bpm」 / 「輕鬆跑上限 150 bpm（實測 AeT）」 / 「輕鬆跑上限」 — the one
+    name of the easy-run HR cap in the 課表 texts. `src` as easy_cap_measured; `bpm`
+    defaults to plan_hr_zones' easy top."""
+    if measured is None:
+        measured = easy_cap_measured(src)
+    if bpm is None and isinstance(src, dict):
+        e = src.get("easy") if "easy" in src else ((src.get("hr_model") or {}).get("easy") or [None, src.get("aet")])
+        bpm = e[1] if isinstance(e, (list, tuple)) and len(e) == 2 else None
+    return EASY_CAP + (f" {float(bpm):.0f} bpm" if bpm else "") + (EASY_CAP_MEASURED if measured else "")
+
+
+def below(label: str) -> str:
+    """「輕鬆跑上限 148 bpm 以下」 / 「輕鬆跑上限以下」 (a space only after 「bpm」)."""
+    return label + (" 以下" if label.endswith("bpm") else "以下")
+
+
+def easy_cap_hr(bpm: Optional[float] = None, measured: bool = False) -> str:
+    """The HR target text of an easy / long / hike session: 「心率 ≤ 輕鬆跑上限 148 bpm」."""
+    return "心率 ≤ " + easy_cap_label(None, bpm, measured)
+
+
 def work_band(hrz: Optional[dict], cls: Optional[str]) -> Optional[tuple]:
     """(lo, hi) bpm of an interval class (CLASS_ZONES) under the 課表 zones, or None."""
     if not hrz or not cls or cls not in (hrz.get("work") or {}):

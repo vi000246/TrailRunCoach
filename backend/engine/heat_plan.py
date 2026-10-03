@@ -28,6 +28,7 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine import heat as HT
+from backend.engine import hr_profile as HP
 
 METHODS = ("run", "overdress", "bath", "sauna", "mixed")
 WINDOW_D = 30
@@ -68,12 +69,11 @@ def hot_race(events, today: dt.date, acts: list) -> Optional[dict]:
 
 
 def _heat_run(s: dict, method: str, aet: Optional[float], cap: Optional[int], cap_mode: str,
-              notes: list, i: int) -> list[dict]:
+              notes: list, i: int, aet_measured: bool = False) -> list[dict]:
     """Turn one placed easy / long session into a heat session; returns the
-    extra heat_passive session(s)."""
+    extra heat_passive session(s). `aet` = the easy-run cap (hr_profile)."""
     m = method if method != "mixed" else ("run" if i % 2 == 0 else "bath")
     extra = []
-    aet_t = f" {aet:.0f} bpm" if aet else ""
     s["heat"] = True
     if s["kind"] == "easy":
         if m in ("bath", "sauna") or (cap_mode == "hard" and cap is not None and cap < HEAT_RUN_MIN):
@@ -90,7 +90,7 @@ def _heat_run(s: dict, method: str, aet: Optional[float], cap: Optional[int], ca
                 s["tss"] = float(s.get("tss") or 0.0) * new / s["minutes"]
             s["minutes"] = new
             s["title"] = "熱適應輕鬆跑" + ("（多穿衣服）" if m == "overdress" else "")
-        s["target"] = f"心率 ≤ AeT{aet_t}"
+        s["target"] = HP.easy_cap_hr(aet, aet_measured)
         s["detail"] = (("涼爽天（Hadley < 120）多穿長袖或防風外套；" if m == "overdress" else
                         "一天最熱的時段；" if m == "run" else "在涼爽環境跑，跑完立刻") +
                        "照心率不照配速，配速會自然變慢。" + SAFETY)
@@ -115,7 +115,7 @@ def passive(s: dict, kind: str) -> dict:
 
 def apply(sessions: list[dict], *, events, today: dt.date, prefs=None, aet: Optional[float] = None,
           mode: str = "", kind: str = "", notes: Optional[list] = None, acts: Optional[list] = None,
-          s_now: Optional[float] = None) -> dict:
+          s_now: Optional[float] = None, aet_measured: bool = False) -> dict:
     """Mutates `sessions` (dicts with day / kind / minutes …, already placed)
     and appends heat_passive sessions. Returns the heat info for the page."""
     notes = notes if notes is not None else []
@@ -161,7 +161,7 @@ def apply(sessions: list[dict], *, events, today: dt.date, prefs=None, aet: Opti
         return {**info, "reason": "這週沒有落在熱適應區塊（賽前 21–8 天誘導、7–3 天維持）的課"}
     extra = []
     for i, s in enumerate(picked):
-        extra += _heat_run(s, method, aet, cap, cap_mode, notes, i)
+        extra += _heat_run(s, method, aet, cap, cap_mode, notes, i, aet_measured)
     sessions.extend(extra)
     days = sorted({s["day"] for s in picked})
     induct = [x for x in days if lo_i <= _d(x) <= hi_i]

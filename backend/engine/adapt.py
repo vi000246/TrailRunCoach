@@ -58,6 +58,7 @@ import copy
 import datetime as dt
 from typing import Optional
 
+from backend.engine.hr_profile import easy_cap_label
 from backend.i18n import fmt
 
 HARD = ("quality", "test")
@@ -243,7 +244,7 @@ def _downgrade(g: dict, th: dict) -> str:
         return s["title"]
     rate = 50.0 / 60.0
     m = min(int(g.get("minutes") or 45), 45)
-    g.update(kind="easy", title="輕鬆跑", minutes=m, target="", detail="心率不超過 AeT（原本的強度課改成輕鬆跑）",
+    g.update(kind="easy", title="輕鬆跑", minutes=m, target="", detail=f"心率不超過{easy_cap_label(th or {})}（原本的強度課改成輕鬆跑）",
              tss=round(m * rate, 1), protocol=None, **NO_VARIANT)
     return "輕鬆跑"
 
