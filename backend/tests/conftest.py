@@ -26,7 +26,23 @@ def _no_real_data_folders():
         pytest.fail("real data folder touched:\n  " + "\n  ".join(got[:10]), pytrace=False)
 
 
-FAKE_TP_CLIENT = ("fake-client-id", "fake-client-secret-for-tests")
+@pytest.fixture(autouse=True)
+def _no_live_sync_calls():
+    """Never a live COROS / TP call: every sync request (backend/sync/http.py)
+    goes to a transport that refuses, unless the test installs its own
+    MockTransport. The login check's cache (sync/session_check.py) is per test."""
+    import httpx
+    from backend.sync import http, session_check
+
+    def refuse(request):
+        raise httpx.ConnectError(f"no live network in tests: {request.url.host}", request=request)
+    session_check.forget()
+    with http.use_transport(httpx.MockTransport(refuse)):
+        yield
+    session_check.forget()
+
+
+FAKE_TP_CLIENT =("fake-client-id", "fake-client-secret-for-tests")
 
 
 @pytest.fixture(autouse=True)

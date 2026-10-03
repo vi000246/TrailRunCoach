@@ -145,7 +145,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         elif road:
             add(**O.road_long_session(long_min, kind, aet, tph, goal_pace), target=tgt.get("long", ""))
         else:
-            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain else ""),
+            add(id="long", kind="long", title="LSD" + ("（山路）" if mountain else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
                 detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
                 + f"；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",

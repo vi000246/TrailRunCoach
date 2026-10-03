@@ -563,7 +563,7 @@ def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rat
                            + "，最後 10 分輕鬆收操",
                     source=f"{SRC_PFITZ}（馬拉松配速長跑）；{SRC_DANIELS}（M 配速）",
                     tss=easy / 60.0 * road_rate + mp / 60.0 * max(road_rate, MP_TSS_PER_HOUR))
-    return dict(id="long", kind="long", title="長時間輕鬆（路跑）", minutes=m, terrain="road",
+    return dict(id="long", kind="long", title="LSD（路跑）", minutes=m, terrain="road",
                 detail=f"平路或緩坡；全程心率壓在 AeT{aet_txt} 以下",
                 source=SRC_PFITZ if kind == "specific" else SRC_UA, tss=long_min / 60.0 * road_rate)
 
@@ -843,7 +843,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if road:
             add(**road_long_session(long_min, kind, aet, tph["road"], mp_goal), target=tgt.get("long", ""))
         else:
-            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
+            add(id="long", kind="long", title="LSD" + ("（山路）" if mountain_goal else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
                 detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
                 source=SRC_KOOP if kind == "specific" else SRC_UA,

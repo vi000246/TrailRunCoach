@@ -84,7 +84,7 @@ def test_the_short_test_fits_a_50_minute_cap_untrimmed():
     prefs = PP.Prefs(cap_weekday=50, cap_long=150, long_day="sat")
     test = AT.session(TH, 140.0, 190.0, prefs.cap_weekday)
     ss = PP.shape([{**test, "day": None, "done": False, "done_by": None},
-                   {"id": "long", "kind": "long", "title": "長時間輕鬆", "minutes": 120, "target": "", "detail": "",
+                   {"id": "long", "kind": "long", "title": "LSD", "minutes": 120, "target": "", "detail": "",
                     "source": "", "tss": 100.0, "day": None, "done": False, "done_by": None}], 300, prefs, ctx)
     t = next(s for s in ss if s["id"] == "test_aet")
     assert t["minutes"] == 50 and t["detail"] == test["detail"]

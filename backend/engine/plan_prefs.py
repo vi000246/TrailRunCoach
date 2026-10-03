@@ -96,7 +96,7 @@ WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
 PREF_KINDS = ("quality", "aet_test", "cp_test", "strides")
-PREF_LABEL = {"long": "長跑", "quality": "間歇", "aet_test": "AeT 測試", "cp_test": "CP 測試", "strides": "坡道衝刺／加速跑"}
+PREF_LABEL = {"long": "LSD", "quality": "間歇", "aet_test": "AeT 測試", "cp_test": "CP 測試", "strides": "坡道衝刺／加速跑"}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
 
@@ -393,10 +393,10 @@ def _terrain_long(s: dict, p: Prefs, c: Ctx) -> None:
     aet_txt = f" {c.aet:.0f} bpm" if c.aet else ""
     s["terrain"] = t
     if t == "road":
-        s["title"] = "長時間輕鬆（路跑）"
+        s["title"] = "LSD（路跑）"
         s["detail"] = f"平路或緩坡；全程心率壓在 AeT{aet_txt} 以下"
     else:
-        s["title"] = "長時間輕鬆（山路越野）"
+        s["title"] = "LSD（山路越野）"
         s["target"] = easy_hr_text(c.aet)
         s["detail"] = f"山路越野，陡坡用走的；只看心率（≤ AeT{aet_txt}），山路的配速和功率不準"
 

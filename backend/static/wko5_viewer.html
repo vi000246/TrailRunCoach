@@ -156,6 +156,18 @@ aside .hint { font-size: 11.5px; color: var(--muted); margin: -2px 0 6px; }
 .act.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .act .t { display: flex; justify-content: space-between; gap: 8px; }
 .act .s { color: var(--muted); font-size: 11px; }
+.act .t b { font-variant-numeric: tabular-nums; }
+.act .t .tl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* the matched planned session's 類型 (課表 kind palette, schedule.html .k-*; dashicons.js icon) */
+.ptag { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border-radius: 4px; flex: none;
+  font-size: 10.5px; line-height: 16px; font-weight: 600; white-space: nowrap;
+  color: color-mix(in srgb, var(--pk, var(--muted)) 72%, var(--text)); background: color-mix(in srgb, var(--pk, var(--muted)) 15%, transparent); }
+.ptag svg { width: 11px; height: 11px; }
+.pk-easy { --pk: #1baf7a; } .pk-long { --pk: #2a78d6; } .pk-quality { --pk: #eb6834; } .pk-test { --pk: #4a3aa7; }
+.pk-strength { --pk: #e87ba4; } .pk-hike { --pk: #eda100; } .pk-heat_passive { --pk: #e34948; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pk-test { --pk: #9085e9; } }
+:root[data-theme="dark"] .pk-test { --pk: #9085e9; }
+.chip .ptag { margin-left: 2px; }
 .empty .iconbtn { margin-top: 10px; }
 .scrim { display: none; }
 @media (max-width: 1100px) { .crumb .c1, .crumb .c1 + .sep { display: none; } }
@@ -385,7 +397,7 @@ table.z5ev td { white-space: normal; }
     <button class="chip s-only" id="chip-sports" aria-controls="aside"><svg class="i"><use href="#i-sport"/></svg><span class="v" id="sports-txt"></span><span class="caret">▾</span></button>
     <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
     <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
-    <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
+    <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span id="act-tag" style="display:contents"></span><span class="caret">▾</span></button>
     <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動列表」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
     <span class="w-only pain-wrap" id="pain-wrap" hidden><button class="chip" id="pain-chip" aria-haspopup="dialog" aria-expanded="false" title="這次有沒有痛（傷病紀錄）">疼痛？</button>
       <div class="pain-pop" id="pain-pop" role="dialog" aria-label="疼痛" hidden></div></span>
@@ -514,7 +526,7 @@ async function j(url, retry = 1) {
   return r.json();
 }
 function save() { try { localStorage.setItem("wko5viewer", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
-  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel })); } catch {} }
+  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null })); } catch {} }
 function restore() { try { return JSON.parse(localStorage.getItem("wko5viewer") || "{}"); } catch { return {}; } }
 
 function viewKind(v) {
@@ -573,7 +585,7 @@ async function init() {
   $("end").value = r.end || iso(today);
   $("begin").value = r.begin || iso(new Date(today - 365 * 864e5));
   $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!r.sports || r.sports.includes(s.sport) ? "checked" : ""}>${esc(s.sport)} <span class="meta">${s.count}</span></label>`).join("");
-  S.dash = { ...S.dash, ...(r.dash || {}) }; S.view = r.view || {}; S.workout = r.workout ?? null; S.workoutLabel = r.workoutLabel || null;
+  S.dash = { ...S.dash, ...(r.dash || {}) }; S.view = r.view || {}; S.workout = r.workout ?? null; S.workoutLabel = r.workoutLabel || null; S.workoutPlan = r.workoutPlan || null;
   // deep link from other pages: ?view=<name>&dash=<index or title>
   const qp = new URLSearchParams(location.search), qv = S.views.find((x) => x.name === qp.get("view") && !x.error);
   if (qv) {
@@ -589,7 +601,7 @@ async function init() {
   // deep link from the 課表 page: ?workout=<activity index>&label=<shown name> opens that activity
   const qw = qp.get("workout");
   if (/^\d+$/.test(qw ?? "")) {
-    S.workout = +qw; S.workoutLabel = qp.get("label") || null; r.mode = "workout";
+    S.workout = +qw; S.workoutLabel = qp.get("label") || null; S.workoutPlan = null; r.mode = "workout";
     history.replaceState(null, "", location.pathname);
   }
   $("m-season").onclick = () => setMode("season");
@@ -790,11 +802,17 @@ function filterSummary() {
     isToday && ((+x.dataset.d && +x.dataset.d === days) || (x.dataset.d === "ytd" && b === `${e.slice(0, 4)}-01-01`))));
 }
 
+// an activity's start (already the athlete's local time, naive ISO) -> 26/10/02 07:15
+const actWhen = (s) => String(s || "").slice(2, 16).replaceAll("-", "/").replace("T", " ");
+// the planned session it was matched to (engine/plan_match.py; /workouts "plan"), or ""
+const planTag = (p) => !p ? "" : `<span class="ptag pk-${esc(p.kind)}" title="${esc(`課表：${p.title || p.label}`)}">${window.DI ? DI(p.icon) : ""}${esc(p.label)}</span>`;
 function renderActChip() {
   const a = S.workout == null ? null : (S.acts || []).find((x) => x.index === S.workout);   // excluded rows: index null
   // the picked activity may fall outside the current date filter; keep its last known label
-  if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.name || a.sport_type || a.sport} · ${hms(a.duration)}`;
+  if (a) { S.workoutLabel = `${actWhen(a.start)} · ${a.name || a.sport_type || a.sport} · ${hms(a.duration)}`; S.workoutPlan = a.plan || null; }
+  else if (S.workout == null) S.workoutPlan = null;
   $("act-txt").textContent = S.workout == null ? "還沒選" : S.workoutLabel || `#${S.workout}`;
+  $("act-tag").innerHTML = S.workout == null ? "" : planTag(S.workoutPlan);
   if (a?.key) S.workoutKey = [S.workout, a.key];      // the 活動編輯 link: the shown activity's start minute
   const wk = S.workoutKey && S.workoutKey[0] === S.workout ? S.workoutKey[1] : null;
   $("edit-act").href = `/api/v1/wko5/activities/page${wk ? "?key=" + encodeURIComponent(wk) : ""}`;
@@ -865,13 +883,13 @@ async function loadActs() {
   renderActChip();
   // an excluded bad file (engine/bad_activity.py) has no index: shown, not openable
   $("acts").innerHTML = acts.map((a) => a.excluded ? `<div class="act excl" style="opacity:.6;cursor:default">
-    <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="t"><b>${esc(actWhen(a.start))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"}</div>
     <div class="s" style="color:var(--err, #b91c1c)">${esc(a.excluded.label)}
       <button class="iconbtn" data-exkey="${esc(a.excluded.key)}" data-exfile="${esc(a.file)}" data-exact="${a.excluded.auto ? "keep" : "auto"}"
         style="font-size:11.5px;padding:1px 6px;margin-left:4px">${a.excluded.auto ? "這筆是正常的，不要排除" : "取消手動排除"}</button></div></div>`
     : `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
-    <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="t"><span class="tl"><b>${esc(actWhen(a.start))}</b>${planTag(a.plan)}</span><span>${esc(a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="TSS 來源">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
   $("acts").querySelectorAll("button[data-exkey]").forEach((b) => b.onclick = async (ev) => {
     ev.stopPropagation(); b.disabled = true;
@@ -2198,9 +2216,20 @@ function zonedSetup(out, srcOf, zoned) {
         backgroundColor: panel, borderColor: b ? b.color : muted, borderWidth: 1, borderRadius: 4, padding: [2, 5],
         formatter: () => `${fmtU(last[1], u, { label: false })} ${b ? b.name.split(" ")[0] : ""}` } }] };
   }
+  // a reference line on the data line (zoned.ref, e.g. 負荷比's「1 = 跟平常一樣」): thin, dashed, labelled at the start
+  if (zoned.ref && Number.isFinite(+zoned.ref.y)) {
+    L.markLine = { silent: true, symbol: "none", lineStyle: { color: muted, type: [4, 4], width: 1 },
+      label: { show: !!zoned.ref.label, position: "insideStartTop", color: muted, fontSize: 10.5, formatter: () => zoned.ref.label || "" },
+      data: [{ yAxis: +zoned.ref.y }] };
+  }
   const pieces = bands.map((b, k) => ({ ...(k > 0 ? { gte: b.lo } : {}), ...(k < bands.length - 1 ? { lt: b.hi } : {}),
     color: lineColor(b) }));
-  return { visualMap: [{ type: "piecewise", show: false, seriesIndex: li, dimension: 1, pieces }], zoneOf };
+  return { visualMap: [{ type: "piecewise", show: false, seriesIndex: li, dimension: 1, pieces }], zoneOf, unit: srcOf[li].unit };
+}
+// 「1.12 · 正常（0.8–1.3）」: a band's name is「short range」 (views: 「正常 0.8–1.3」)
+function zonedHover(y, b, unit) {
+  const [short, ...rest] = String(b.name || "").split(" ");
+  return `${fmtU(y, unit, { label: false })} · ${short}${rest.length ? `（${rest.join(" ")}）` : ""}`;
 }
 
 function drawPlot(card, res, series) {
@@ -2439,12 +2468,14 @@ function drawPlot(card, res, series) {
   const zoom = !!res._zoom;
   const Z = res.zoned ? zonedSetup(out, srcOf, res.zoned) : null;
   if (Z) {
-    // the zoned line's hover row also names its band
+    // hovering the line: the value and its band in one line,「1.12 · 正常（0.8–1.3）」
     const f0 = tooltip.formatter;
     tooltip.formatter = (ps) => {
-      const h = f0(ps), p = [].concat(ps).find((q) => q.seriesName === res.zoned.line);
+      const p = [].concat(ps).find((q) => q.seriesName === res.zoned.line);
       const y = p && (Array.isArray(p.value) ? p.value[1] : p.value), b = y != null ? Z.zoneOf(y) : null;
-      return b && h ? h.replace(/<\/div>$/, `<br><span style="opacity:.8">區間：${esc(b.name)}</span></div>`) : h;
+      if (!b) return f0(ps);
+      const head = String(p.value[0]).slice(0, 10);
+      return `<div style="font-size:11.5px">${esc(head)}<br>${p.marker}<b>${esc(zonedHover(y, b, Z.unit))}</b></div>`;
     };
   }
   const legendRows = zoom ? Math.ceil(out.length / Math.max(1, Math.floor((el.clientWidth || 900) / 170))) : 1;
@@ -2800,15 +2831,19 @@ function cpHatch(color, alpha) {      // the descents' 135° lines (identity by 
 // a value against the athlete's usual: "平常 690（+8%）" / "快 5%" for paces (lower = faster)
 function cpRel(v, b, f, pace) {
   if (!b?.ok || v == null) return "";
+  if (!(b.median > 0) || !isFinite(v / b.median)) return `（平常 ${f(b.median)}）`;   // no % against 0 / negative
   const d = v / b.median - 1;
   return `（平常 ${f(b.median)}，${pace ? (d <= 0 ? "快 " : "慢 ") + Math.abs(d * 100).toFixed(0) + "%" : cpSigned(d)}）`;
 }
 // above / below the usual's middle 50 %: the only rows that get a direct label
 function cpOutside(v, b, pace) {
   if (!b?.ok || v == null) return null;
-  const d = v / b.median - 1;
-  if (pace) return v < b.q1 ? `▲ 快 ${Math.abs(d * 100).toFixed(0)}%` : v > b.q3 ? `▼ 慢 ${Math.abs(d * 100).toFixed(0)}%` : null;
-  return v > b.q3 ? `▲ 高於平常 ${cpSigned(d)}` : v < b.q1 ? `▼ 低於平常 ${cpSigned(d)}` : null;
+  // a % only makes sense against a positive median: flat-grade VAM has a median of 0 (→ ±Infinity %)
+  // and descent VAM is negative (the sign would flip) — then just say above / below
+  const pctOk = b.median > 0 && isFinite(v / b.median);
+  const d = pctOk ? v / b.median - 1 : null;
+  if (pace) return v < b.q1 ? `▲ 快${pctOk ? ` ${Math.abs(d * 100).toFixed(0)}%` : ""}` : v > b.q3 ? `▼ 慢${pctOk ? ` ${Math.abs(d * 100).toFixed(0)}%` : ""}` : null;
+  return v > b.q3 ? `▲ 高於平常${pctOk ? ` ${cpSigned(d)}` : ""}` : v < b.q1 ? `▼ 低於平常${pctOk ? ` ${cpSigned(d)}` : ""}` : null;
 }
 function cpTipBox(html) { return `<div style="font-size:11.5px;line-height:1.55;max-width:340px;white-space:normal">${html}</div>`; }
 function cpTipOpts() {

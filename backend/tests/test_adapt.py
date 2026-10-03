@@ -13,7 +13,7 @@ TH = {"cp": 300.0, "lthr": 170.0, "aet": 150.0}
 
 
 def g(id, kind, day, minutes=45, tss=None, done=False, done_by=None, title=None):
-    return {"id": id, "kind": kind, "title": title or {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分",
+    return {"id": id, "kind": kind, "title": title or {"easy": "輕鬆跑", "long": "LSD", "quality": "閾值 3×10 分",
                                                        "strength": "肌力"}.get(kind, kind),
             "minutes": minutes, "target": "", "detail": "", "source": "",
             "tss": tss if tss is not None else minutes * 0.8, "day": day, "done": done, "done_by": done_by}
