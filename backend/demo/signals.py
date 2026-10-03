@@ -118,7 +118,7 @@ def _course_at(course: Course, d: np.ndarray):
 def _measure(rng, *, course: Course, d: np.ndarray, v: np.ndarray, p_true: np.ndarray,
              frac: np.ndarray, walking: np.ndarray, stryd: bool, has_power: bool, drift: float,
              doy: int, hour: float, artifacts: bool, alt_hr: bool, laps: list, temp_warm: float = 0.0,
-             fatigue_hr: float = 0.0, lock_ok: bool = True) -> Signals:
+             fatigue_hr: float = 0.0, lock_ok: bool = True, power_sd: float = 0.04) -> Signals:
     n = len(d)
     ele, lat, lon = _course_at(course, d)
     # ---- heart rate (wrist optical) ----
@@ -170,7 +170,7 @@ def _measure(rng, *, course: Course, d: np.ndarray, v: np.ndarray, p_true: np.nd
     power = form = airp = lss = None
     if has_power:
         if stryd:
-            power = p_true * (1.0 + _ar1_fast(rng, n, 0.04, 0.7))
+            power = p_true * (1.0 + _ar1_fast(rng, n, power_sd, 0.7))
             form = power * 0.27 + rng.normal(0, 1.5, n)
             airp = power * 0.015 + 1.0 + rng.normal(0, 0.4, n)
             lss = 10.0 + _ar1_fast(rng, n, 0.4, 0.95)
@@ -228,7 +228,10 @@ def _laps(segs: list[Segment], d: np.ndarray, p: np.ndarray) -> list:
 def simulate_run(rng, course: Course, segs: list[Segment], *, cp: float, stryd: bool,
                  doy: int, hour: float, drift: float = 0.06, push: float = 0.0,
                  down_cap: float = 3.2, has_power: bool = True, mass: float = A.WEIGHT_KG,
-                 temp_warm: float = 0.0, lock_ok: bool = True) -> Signals:
+                 temp_warm: float = 0.0, lock_ok: bool = True, pace_sd: float = 0.025,
+                 power_sd: float = 0.04) -> Signals:
+    """`pace_sd`: how far the runner wanders off the target power (AR(1)); `power_sd`:
+    the Stryd's own noise. A run to the watch's step targets wanders less."""
     durs = [s.dur_s for s in segs]
     n = int(sum(durs))
     target = np.empty(n)
@@ -240,7 +243,7 @@ def simulate_run(rng, course: Course, segs: list[Segment], *, cp: float, stryd: 
     # start gently, smooth the steps between segments (a few seconds)
     target[:60] *= np.linspace(0.75, 1.0, min(60, n))[: min(60, n)]
     target = _moving(target, 5)
-    tn = (target * (1.0 + _ar1_fast(rng, n, 0.025, 0.95))).tolist()
+    tn = (target * (1.0 + _ar1_fast(rng, n, pace_sd, 0.95))).tolist()
     g = course.grade()
     rat = run_ratio(g)
     gl, rl = g.tolist(), rat.tolist()
@@ -279,7 +282,7 @@ def simulate_run(rng, course: Course, segs: list[Segment], *, cp: float, stryd: 
     laps = _laps(segs, dist, p_true)
     return _measure(rng, course=course, d=dist, v=spd, p_true=p_true, frac=frac, walking=walking,
                     stryd=stryd, has_power=has_power, drift=drift, doy=doy, hour=hour, artifacts=True,
-                    alt_hr=False, laps=laps, temp_warm=temp_warm, lock_ok=lock_ok)
+                    alt_hr=False, laps=laps, temp_warm=temp_warm, lock_ok=lock_ok, power_sd=power_sd)
 
 
 def simulate_hike(rng, course: Course, *, cp: float, stryd: bool, doy: int, hour: float,

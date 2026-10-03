@@ -119,6 +119,11 @@ def data_fingerprint(ds) -> str:
     from backend.engine.plan_store import test_sessions
     tests = sorted((s["uid"], s["state"], s.get("day") or "", (s.get("done_by") or {}).get("index") or -1,
                     s.get("protocol") or "") for s in test_sessions())
+    # …and the done interval sessions: the 間歇判讀 charts judge a run against the session it
+    # was matched to (interval_eval._planned), a match a sync makes after the charts were drawn
+    from backend.engine.plan_store import done_plan
+    tests += sorted((i, r.get("uid") or "", r.get("title") or "", r.get("variant_key") or "",
+                     json.dumps(r.get("steps"), sort_keys=True, default=str)) for i, r in done_plan().items())
     # route_weather's per-activity air temperature: drift() / the review card's
     # heat rule read it (workout_review.activity_temp), and a routes build fills it
     try:

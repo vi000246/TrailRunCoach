@@ -2037,12 +2037,28 @@ def hr_peak(ds, w) -> tuple[Optional[float], str]:
     return SS.hr_peak([pk for dd, pk in peaks if d - SS.HRPEAK_DAYS <= dd < d]), "observed"
 
 
+def _planned_quality(ds, w) -> bool:
+    """A done 課表 interval session (kind quality) was matched to this activity."""
+    try:
+        from backend.engine.interval_eval import _planned
+        return (_planned(ds, w) or {}).get("kind") == "quality"
+    except Exception:                       # noqa: BLE001 — no plan: not planned
+        return False
+
+
 def _stimulus(ds, w, m: dict, cat: str) -> dict:
     """session_stimulus.verdict for this run; HRpeak is looked up only when the HR
     path could change the answer (it reads every run's measure once per dataset)."""
     from backend.engine import session_stimulus as SS
     st = m.get("stim")
     easy_hr = bool(m.get("aet") and m.get("avg_hr") and m["avg_hr"] <= m["aet"] + AET_MARGIN)
+    if easy_hr and _planned_quality(ds, w):
+        # the 課表's interval session was done by this run: the plan says intervals, so a
+        # low whole-run average (long warm-up, cool-down and rests) doesn't make it easy —
+        # the Zone 3 / Zone 5 time still decides (the same reason as vo2max-session-detection
+        # §3.2's power exception). Before, the planner's own 「爬坡間歇 5×4 分」 run as planned
+        # read 「輕鬆跑」 and the 課表 said 「沒照課表：排強度課，實際跑輕鬆」.
+        easy_hr = False
     hp, src = None, None
     if st and cat in ("road", "trail") and (st.get("t_vo2_power_s") or 0) < SS.Z5_MIN_S \
             and any((st.get("hr_path") or {}).get("secs") or []):
@@ -2668,6 +2684,56 @@ def _stimulus_card(c: dict) -> dict:
                  sub="沒有到 VO2max" if c.get("category") != "hike" else "健行不判 5 區", level="info", tip=tip)
 
 
+PLAN_LEVEL = {"green": "good", "yellow": "warn", "red": "bad"}
+
+
+def _plan_card(ds, w) -> Optional[dict]:
+    """「課表」: the stored session this run was matched to (engine/plan_match.py), planned
+    vs actual as on the 課表 page (compliance.session_compliance: time / TSS, the
+    「沒照課表」 check), plus the planned climb and the session's target in the tip."""
+    try:
+        from backend.engine import compliance as CO
+        from backend.engine import plan_match as PM
+        from backend.engine import plan_store as PS
+        s = PS.done_session(w.idx)
+    except Exception:                       # noqa: BLE001 — no plan: no card
+        return None
+    if not s or s.get("kind") in ("notice", "heat_passive"):
+        return None
+    try:
+        # the stored row completed with today's fields (its session class may have changed
+        # since the match), as the 課表 page does (api/plan_sessions._fresh_done_by)
+        from backend.engine.overview import activity_row
+        d, cur = s.get("done_by") or {}, activity_row(w, ds)
+        if cur.get("start") == d.get("start"):
+            s = {**s, "done_by": {**d, **cur, "match": d.get("match")}}
+    except Exception:                       # noqa: BLE001 — the stored row then
+        pass
+    a = s.get("done_by") or {}
+    comp = CO.session_compliance(s) or {}
+    vs = PM.compare(s) or {}
+    if vs.get("off_plan"):
+        comp = CO.with_plan_check(comp, vs)
+    tip = [f"課表：{s.get('title')}（{s.get('day')}，{vs.get('match_label') or PM.MATCH_LABEL.get('day')}）"]
+    mov = _f(a.get("moving_s"))
+    if s.get("minutes") and mov is not None:
+        tip.append(f"時間：{_hms(mov)} ／ 計畫 {int(s['minutes'])} 分（{comp.get('duration_pct')}%）")
+    if s.get("tss") and a.get("tss") is not None:
+        tip.append(f"TSS：{_f(a['tss']):.0f} ／ 計畫 {_f(s['tss']):.0f}（{comp.get('tss_pct')}%）")
+    if s.get("climb_m"):
+        tip.append(f"爬升：{_num(w.metrics.get('climbing'))} m ／ 計畫 {_num(s['climb_m'])} m")
+    if s.get("target"):
+        tip.append(f"目標：{s['target']}")
+    if vs.get("text"):
+        tip.append(vs["text"])
+    tip.append("顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）")
+    pct = comp.get("pct")
+    return _card("status", id="plan", icon=PS.session_tag(s).get("icon"), label="課表",
+                 value=f"{pct}" if pct is not None else "–", unit="%" if pct is not None else None,
+                 sub=comp.get("label") or s.get("title"), level=PLAN_LEVEL.get(comp.get("level"), "info"),
+                 tip="\n".join(tip))
+
+
 def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]) -> list[dict]:
     typ = c["type"]
     cards = [_card("tag", id="type", icon=c.get("icon") or type_icon(typ), text=c["type_label"],
@@ -2678,6 +2744,9 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
     if c.get("phase_label"):
         cards.append(_card("tag", id="phase", icon="flag", text=c["phase_label"]))
     cards += _stat_cards(w, m)
+    pc = _plan_card(ds, w)
+    if pc:
+        cards.append(pc)
     zc = _zones_card(m)
     if zc:
         cards.append(zc)

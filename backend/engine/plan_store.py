@@ -605,6 +605,8 @@ _VARIANT_CACHE: dict = {}
 # the interval-library columns (engine/interval_library.py; interval-prescription.md §C5.4)
 VARIANT_COLS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
                 "variant_adj", "steps")
+# the text a structure is derived from, and what a done session is compared with (done_session)
+TEXT_COLS = ("minutes", "target", "detail", "source", "tss", "terrain", "distance_km", "climb_m")
 
 
 def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
@@ -632,7 +634,9 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
         try:
             cols = {r[1] for r in con.execute("PRAGMA table_info(plan_sessions)")}
             if cols:
-                extra = [c for c in VARIANT_COLS if c in cols]
+                # + the text a structure is derived from (workout_steps.derive: interval_eval
+                # judges a planned session with no library variant by its structure)
+                extra = [c for c in VARIANT_COLS + TEXT_COLS if c in cols]
                 sel = ", ".join(["uid", "day", "state", "kind", "title", "done_by"] + extra)
                 marks = ",".join("?" * len(kinds))
                 for row in con.execute(f"SELECT {sel} FROM plan_sessions WHERE kind IN ({marks})", kinds):
@@ -726,6 +730,16 @@ def done_by_index(db_path=None) -> dict:
             continue
         out[d["index"]] = {**session_tag(r), "title": display_title(r.get("title")), "day": r.get("day")}
     return out
+
+
+def done_session(index, db_path=None) -> Optional[dict]:
+    """The stored session done by activity `index` (with its done_by row: moving_s, tss,
+    category …), or None — the single-activity 課表 card (workout_review)."""
+    for r in _plan_rows(db_path, LOAD_KINDS, _DONE_CACHE):
+        d = r.get("done_by")
+        if r.get("state") == "done" and isinstance(d, dict) and d.get("index") == index:
+            return {**r, "title": display_title(r.get("title"))}
+    return None
 
 
 def test_sessions(db_path=None) -> list[dict]:
