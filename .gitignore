@@ -31,3 +31,5 @@ workouts/
 
 # Local agent / editor state
 .claude/
+
+backend/scripts/history_rewrite.md
