@@ -470,7 +470,7 @@ step(w):
 - Jason Koop（CTS）— Ultrarunners: How to Train for Mountains When You Live in a Flat Area（2025-03-07）：https://trainright.com/train-for-mountainous-ultramarathon-live-in-flat-area/
 - 只有搜尋摘要、沒有讀原文（**未驗證**）：Koop／CTS〈Should Runners Train with Weighted Vests?〉https://trainright.com/should-runners-train-with-weighted-vests/；台灣百岳訓練文章（搜尋摘要提到「背 10 kg、每週 7–8 小時」「最後達到實際重量的 75 %」，出處沒有核對，這份文件沒有採用）。
 
-### 你的筆記（notes `300 Sport`）
+### 你的筆記（筆記）
 
 - `50 🏋️ 肌力訓練/100 爬山-越野跑專項/跑步登山運動傷害 (無痛登山肌力訓練心得.md:11–12, 20–22, 50–53, 65–67, 72`（單邊、快速離心；下坡膝痛與疲勞、補給；肌耐力課表 2×20；肌力 → 肌耐力）
 - `50 🏋️ 肌力訓練/100 爬山-越野跑專項/有規律在越野跑與負重爬山的族群，膝主導該練什麼？.md:1, 5, 11, 15`（負重爬山族群改練等長；30 秒）

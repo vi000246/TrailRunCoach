@@ -1,6 +1,6 @@
 # SuperPower Calculator → 賽事功率頁（race-power page）
 
-Date: 2026-09-30. Source workbook: `C:\Users\<user>\Downloads\TOOL_ SuperPower Calculator - 副本.xlsx`
+Date: 2026-09-30. Source workbook: `~\Downloads\TOOL_ SuperPower Calculator - 副本.xlsx`
 (Google Sheets export, Revision 4.2, Palladino/Stryd community tool). The workbook is a **blank
 template**: apart from the default environment chain and the lookup tables it has no cached
 values to test against. Raw extraction (cell dump incl. array formulas, named ranges and data

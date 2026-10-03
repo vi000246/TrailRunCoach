@@ -4,7 +4,7 @@
 >
 > 對象：`backend/engine/workout_review.py` 的 `drift_of`（v2）、`backend/engine/drift_agg.py`；規則來源見 `drift-algorithm.md`（下稱 DRIFT）、可移植性分類見 `unsourced-rules.md` §0.5。
 >
-> 腳本：`backend/scripts/validation/gc_fetch.py`（抽樣下載）、`backend/scripts/validation/gc_drift.py`（`run` / `stats` / `diag`）。資料放在 repo 外 `C:\Users\<user>\Datasets\goldencheetah\`，**沒有進 repo**。
+> 腳本：`backend/scripts/validation/gc_fetch.py`（抽樣下載）、`backend/scripts/validation/gc_drift.py`（`run` / `stats` / `diag`）。資料放在 repo 外 `~\Datasets\goldencheetah\`，**沒有進 repo**。
 >
 > 標記：沒有外部來源、由本次資料推出來的結論標 **推估**。
 
@@ -347,7 +347,7 @@ python -m backend.scripts.validation.gc_drift stats
 python -m backend.scripts.validation.gc_drift diag
 ```
 
-輸出在 `C:\Users\<user>\Datasets\goldencheetah\`：`manifest.json`、`scan.jsonl`、`download_log.jsonl`、`zips/`、`results/{runs,trunc,grade}.jsonl`、`results/stats.json`、`results/diag.json`。`run` 在單一行程裡跑完 33,937 個 CSV。`scan` 用 4 條執行緒做網路 I/O。
+輸出在 `~\Datasets\goldencheetah\`：`manifest.json`、`scan.jsonl`、`download_log.jsonl`、`zips/`、`results/{runs,trunc,grade}.jsonl`、`results/stats.json`、`results/diag.json`。`run` 在單一行程裡跑完 33,937 個 CSV。`scan` 用 4 條執行緒做網路 I/O。
 
 ## 10. 來源
 

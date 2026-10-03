@@ -522,7 +522,7 @@ def vo2_stimulus(samples, cp, lthr, aet, hrpeak, category):
 
 **教練經驗**
 - 台灣教練：5 區每趟 ≥ 2 分、一週最多 2 次、間隔 2 天。
-- 徐國峰引 Daniels 的 E／M／T／I 強度表：你的筆記 `C:\Users\<user>\Projects\notes\notes\300 Sport\60 🏃 有氧訓練\各心率區間的目的.md:1–52`
+- 徐國峰引 Daniels 的 E／M／T／I 強度表：你的筆記 `<notes>\300 Sport\60 🏃 有氧訓練\各心率區間的目的.md:1–52`
 - 「power@VO2max 是功率-時間組合」與強度-時間表：同資料夾 `如何進入VO2max.md:1–76`（作者沒有標，**未驗證**）
 - Palladino MAP 103–109 % CP：`vo2max-gate-and-trail-metric.md` §1.1
 - Uphill Athlete Zone 3：`vo2max-gate-and-trail-metric.md` §2.1
