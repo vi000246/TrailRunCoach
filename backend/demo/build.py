@@ -4,6 +4,8 @@ Build the demo athlete's data (auth-and-demo plan §3.2):
     python -m backend.demo.build --root <demo-root> [--seed 20261002] [--anchor 2026-10-03] [--weeks 52] [--small]
     python -m backend.demo.build --root <demo-root> --add-linked      # an existing base: add only the
                                                                       # planned interval / trail runs (linked.py)
+    python -m backend.demo.build --root <demo-root> --regen-trail     # an existing base: re-write only the
+                                                                      # trail runs' FITs (generate.trail_run)
 
 Writes <demo-root>/base/<anchor>-<seed>/ (a full tenant folder, the layout of
 ~/.wko5coach) and then switches <demo-root>/base/current to it atomically.
@@ -102,18 +104,22 @@ def build(root: Path, seed: int = DEFAULT_SEED, anchor: dt.date | None = None, w
 def relocate_paths(base: Path) -> int:
     """The DB's workout_files.file_path rows are absolute; the build imports in the
     staging folder and then renames it (and a demo root may be copied elsewhere), so
-    point every row whose file is gone at the same file under `base` (the part from
-    its fit/ folder on). Without this a later import (--add-linked) took every FIT
-    for a new one. Returns the rows changed."""
+    point every row whose file is not under `base` at the same file under `base` (the
+    part from its fit/ folder on) when that is there. Without this a later import
+    (--add-linked) took every FIT for a new one, and a copied root kept reading (and
+    --regen-trail kept re-importing) the original's files. Returns the rows changed."""
     import sqlite3
     db = base / "wko5coach.db"
     if not db.is_file():
         return 0
+    home = os.path.normcase(os.path.abspath(str(base)))
     con = sqlite3.connect(str(db))
     try:
         n = 0
         for rid, fp in con.execute("SELECT id, file_path FROM workout_files").fetchall():
-            if not fp or Path(fp).exists():
+            if not fp:
+                continue
+            if os.path.normcase(os.path.abspath(str(fp))).startswith(home + os.sep):
                 continue
             norm = str(fp).replace("\\", "/")
             k = norm.rfind("/fit/")
@@ -297,14 +303,150 @@ def add_linked(root: Path, warm: bool = True) -> Path:
     return base
 
 
+def regen_trail(root: Path, warm: bool = True) -> Path:
+    """Re-write the trail runs' FITs (generated trail / trail_long and the linked trail
+    session) of the current base of an existing demo root with the current generator,
+    in place, and re-import only those: what a full build would write for them now,
+    without the full build. Activity ids, dates and count stay as they are."""
+    root = Path(root).resolve()
+    _refuse_owner(root)
+    name = (root / "base" / "current").read_text("utf-8").strip()
+    base = root / "base" / name
+    if not (base / "demo_manifest.json").is_file():
+        raise RuntimeError(f"{base} is not a demo base (no demo_manifest.json)")
+    t0 = time.time()
+    print(f"  relocated {relocate_paths(base)} workout_files paths", flush=True)
+    cmd = [sys.executable, "-m", "backend.demo.build", "--stage-regen-trail", str(base)] + \
+          ([] if warm else ["--no-warm"])
+    r = subprocess.run(cmd, env=child_env(base), cwd=str(Path(__file__).resolve().parents[2]))
+    if r.returncode != 0:
+        raise RuntimeError(f"re-writing the trail runs failed (exit {r.returncode})")
+    print(f"demo base {name}: trail runs re-written in {time.time() - t0:.0f} s", flush=True)
+    return base
+
+
+def reimport(c, base: Path, rels: list[str]) -> dict:
+    """Re-import FITs whose bytes changed (`rels`, relative to `base`): their
+    workout_files rows (and metrics, MMP) are dropped and scan_and_import reads them
+    again, the code a sync runs. `c`: the TestClient (owner mode) on `base`."""
+    want = {(base / r).resolve() for r in rels}
+
+    async def run():
+        from sqlalchemy import delete, select, update
+        from backend.db import database
+        from backend.db.models import MmpCache, WorkoutFile, WorkoutMetric
+        from backend.files.file_service import scan_and_import
+        async with database.AsyncSessionLocal() as db:
+            rows = (await db.execute(select(WorkoutFile.id, WorkoutFile.file_path))).all()
+            ids = [i for i, fp in rows if fp and Path(fp).resolve() in want]
+            if ids:
+                await db.execute(update(WorkoutFile).where(WorkoutFile.duplicate_of.in_(ids)).values(duplicate_of=None))
+                await db.execute(delete(WorkoutMetric).where(WorkoutMetric.workout_id.in_(ids)))
+                await db.execute(delete(MmpCache).where(MmpCache.workout_id.in_(ids)))
+                await db.execute(delete(WorkoutFile).where(WorkoutFile.id.in_(ids)))
+                await db.commit()
+            return {"dropped": len(ids), **(await scan_and_import(db, 1, str(base / "fit")))}
+    return c.portal.call(run)
+
+
+def _stage_regen_trail(base: Path, warm: bool) -> None:
+    """--regen-trail, in the child process (owner mode on the base)."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy import update
+    from backend.demo import generate as G, linked, season as S
+    from backend.main import build_app
+    mp = base / "demo_manifest.json"
+    manifest = json.loads(mp.read_text("utf-8"))
+    seed, anchor = int(manifest.get("seed") or DEFAULT_SEED), dt.date.fromisoformat(manifest["anchor"])
+    small = bool(manifest.get("small"))
+    t0 = time.time()
+    season = S.schedule(seed, anchor, int(manifest.get("weeks") or 52))
+    acts = manifest["activities"]
+    rels = []
+    for i, p in enumerate(season.activities, start=1):
+        if p.kind not in G.TRAIL_KINDS:
+            continue
+        a = acts[i - 1]
+        if a.get("kind") != p.kind or a.get("date") != p.date.isoformat():
+            raise RuntimeError(f"activity {i}: the manifest has {a.get('kind')} {a.get('date')}, the season "
+                               f"{p.kind} {p.date} (another seed / generator version?)")
+        raw, info = G.build_activity(seed, i, p, season, small, {})
+        (base / a["file"]).write_bytes(raw)
+        info["file"] = a["file"]
+        acts[i - 1] = info
+        manifest["files"][a["file"]] = G._sha(raw)
+        rels.append(a["file"])
+    print(f"  re-wrote {len(rels)} generated trail runs in {time.time() - t0:.0f} s", flush=True)
+    with TestClient(build_app(demo=False), raise_server_exceptions=False) as c:
+        rows = linked._rows(c)
+        before = {Path(str(x.get("file", ""))).name: x.get("index") for x in rows if "index" in x}
+        lk = linked.rewrite_trail(c, base, manifest, seed, small)
+        if lk:
+            rels.append(lk)
+            print(f"  re-wrote the linked trail run {lk}", flush=True)
+        print(f"  re-imported {reimport(c, base, rels)}", flush=True)
+        rows = linked._rows(c)
+        by_file = {Path(str(x.get("file", ""))).name: x for x in rows if "index" in x}
+        moved = [n for n, i in before.items() if (by_file.get(n) or {}).get("index") != i]
+        if moved:
+            print(f"  ! {len(moved)} activities changed index (e.g. {moved[:3]})", flush=True)
+        # the 課表 sessions these runs did: open them again, the next page view pairs them anew
+        # (plan_match), so their done_by holds the new distance / climb / TSS
+        idx = {by_file[Path(r).name]["index"] for r in rels if Path(r).name in by_file}
+
+        async def reopen():
+            from backend.db import database
+            from backend.db.models import PlanSession
+            from sqlalchemy import select
+            async with database.AsyncSessionLocal() as db:
+                out = []
+                for s in (await db.execute(select(PlanSession).where(PlanSession.state == "done"))).scalars():
+                    try:
+                        d = json.loads(s.done_by) if isinstance(s.done_by, str) else (s.done_by or {})
+                    except ValueError:
+                        d = {}
+                    if d.get("index") in idx:
+                        out.append((s.uid, s.week_start, d.get("index")))
+                if out:
+                    await db.execute(update(PlanSession).where(PlanSession.uid.in_([u for u, _, _ in out]))
+                                     .values(state="active", done_by=None))
+                    await db.commit()
+                return out
+        reopened = c.portal.call(reopen)
+        for wk in sorted({w for _, w, _ in reopened}):
+            c.get(linked.SESSIONS, params={"scope": "week", "day": str(wk)})
+        ss = {}
+        for wk in sorted({w for _, w, _ in reopened}):
+            for s in c.get(linked.SESSIONS, params={"scope": "week", "day": str(wk)}).json().get("sessions") or []:
+                ss[s["uid"]] = s
+        for uid, _, i in reopened:
+            s = ss.get(uid) or {}
+            got = (s.get("done_by") or {}).get("index")
+            print(f"  session {s.get('title')} {s.get('day')}: #{i} -> "
+                  f"{'#' + str(got) if got is not None else '(not matched)'} ({(s.get('done_by') or {}).get('match')})",
+                  flush=True)
+            for a in acts:
+                if (a.get("linked") or {}).get("uid") == uid and s.get("done_by"):
+                    a["linked"] = {"uid": uid, "title": s.get("title"), "match": s["done_by"].get("match")}
+        if warm:
+            show = [v for k, v in (manifest.get("showcase") or {}).items()
+                    if isinstance(v, str) and v in rels]
+            warm_base(c, anchor, show, charts_for=len(show))
+    mp.write_text(json.dumps(manifest, ensure_ascii=False, indent=1), "utf-8")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--root", help="the demo root (WKO5COACH_HOME of the demo process)")
     ap.add_argument("--stage", help=argparse.SUPPRESS)
     ap.add_argument("--stage-linked", help=argparse.SUPPRESS)
+    ap.add_argument("--stage-regen-trail", help=argparse.SUPPRESS)
     ap.add_argument("--add-linked", action="store_true",
                     help="add only the planned-and-done interval / trail sessions to the current base of --root "
                          "(an existing build), in place")
+    ap.add_argument("--regen-trail", action="store_true",
+                    help="re-write only the trail runs' FITs of the current base of --root with the current "
+                         "generator and re-import them, in place")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--anchor", help="the last day of the data (default: today)")
     ap.add_argument("--weeks", type=int, default=52)
@@ -320,10 +462,16 @@ def main(argv=None) -> int:
         linked.stage(Path(a.stage_linked), dt.date.fromisoformat(a.anchor) if a.anchor else None, None,
                      warm=not a.no_warm)
         return 0
+    if a.stage_regen_trail:
+        _stage_regen_trail(Path(a.stage_regen_trail), warm=not a.no_warm)
+        return 0
     if not a.root:
         ap.error("--root is required")
     if a.add_linked:
         add_linked(Path(a.root), warm=not a.no_warm)
+        return 0
+    if a.regen_trail:
+        regen_trail(Path(a.root), warm=not a.no_warm)
         return 0
     build(Path(a.root), a.seed, anchor, a.weeks, a.small, warm=not a.no_warm)
     return 0
