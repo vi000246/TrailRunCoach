@@ -84,7 +84,7 @@
   "goal.model": "Model prediction",
   "goal.basis_hr": "From settings: heart rate",
   "goal.basis_power": "From settings: power",
-  "goal.tip": "The goal follows your training basis: target basis heart rate in the plan preferences, or 「use power」 off → the goal is a pace (average pace or finish time); power → an average power (W or % CP). The per-km / segment targets are spread from your goal by the grade model. No goal = the model's own prediction.",
+  "goal.tip": "Enter the goal as a pace (average pace or finish time) or as a power (average power in W or % CP): both are offered. The per-km / segment targets are spread from your goal by the grade model. No goal = the model's own prediction.",
   "goal.vs": "Goal finish {goal}, model predicts {model} ({pace})",
   "goal.vs_tip": "Model = the 「model prediction」 time (100 % effort) on the same course and weather. Faster by more than 3 % is flagged, by more than 8 % warned; the thresholds are an estimate.",
   "goal.near": "{pct}% off the model",

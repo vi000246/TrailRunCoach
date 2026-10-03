@@ -570,12 +570,13 @@ function accl() { return S.accl || (type === "baiyue" ? "unacclimatised" : "accl
 // the goal follows the training basis (/goal-basis): hr → a target pace, power → a target power;
 // 百岳 keeps its three modes. A saved goal of the other kind falls back to the model (it is kept in S).
 let BASIS = null;
-function goalOk(m) { return type === "baiyue" || !BASIS || m === "auto" || m === (BASIS.basis === "hr" ? "time" : "power"); }
+// (both kinds are always offered: the owner picks pace or power; the training basis no longer hides one)
+function goalOk(m) { return true; }
 function mode() { return goalOk(S.mode) ? S.mode : "auto"; }
 function syncForm() {
   const md = mode();
   document.querySelectorAll("#mode button").forEach((b) => b.classList.toggle("hidden", !goalOk(b.dataset.m)));
-  $("goal-basis").textContent = BASIS && type !== "baiyue" ? T(BASIS.basis === "hr" ? "goal.basis_hr" : "goal.basis_power") : "";
+  $("goal-basis").textContent = "";
   segOn("mode", "m", md); segOn("tunit", "u", S.tunit); segOn("punit", "u", S.punit); segOn("effort", "e", S.effort);
   segOn("csrc", "c", S.csrc); segOn("split", "s", S.split); segOn("strategy", "k", S.strategy); segOn("measure", "m", measure());
   segOn("accl", "a", accl());
@@ -2013,7 +2014,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   $("attrib").textContent = INP.training_conditions.attribution || "";
   renderEvents(); renderHike(); renderRE(); renderEnvChips();
   loadHikeMeta();
-  const ev0 = ls.get("event", "");
+  const ev0 = new URLSearchParams(location.search).get("event") || ls.get("event", "");   // ?event=<id>: a link to one event's plan
   if (ev0 && (INP.events || []).some((e) => e.id === ev0)) { $("event").value = ev0; await chooseEvent(ev0); }
   else { loadHeat(); autoWeather(); await run(); }
 })();
