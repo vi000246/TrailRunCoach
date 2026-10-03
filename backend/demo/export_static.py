@@ -17,7 +17,9 @@ How it works:
   2. every GET the pages make is saved as data/<fnv64(key)>.json, where key =
      the decoded path + "?" + the query sorted by name (data_key()); the
      view-only computations that are POSTs with the page's default inputs
-     (race calculator ...) are saved as data/p<fnv64(method path body)>.json;
+     (race calculator ...) are saved as data/p<fnv64(method path body)>.json; the
+     structure editor's /steps/check and /steps/derive are computed in the browser
+     (static_shim.js Steps) from data/steps_ctx.json (static_steps.py);
   3. the pages are written flat at the root (index.html = the demo landing),
      with static/trc_static.js injected first: it maps /api/v1/... requests to
      those files, freezes the clock at the export day, keeps the schedule's
@@ -72,6 +74,8 @@ PAGE_ALIASES: dict[str, str] = {
 COMPUTE_POSTS = re.compile(
     r"^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate"
     r"|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$")
+# ... of which the structure editor's: answered in the browser (static_shim.js Steps), not recorded
+STEPS_POSTS = re.compile(r"^/api/v1/overview/plan/steps/(check|derive)$")
 
 # the schedule edits the shim keeps in the browser (static_shim.js OVERLAY_RULES);
 # the crawl answers them with 403 like any other write (it never changes the data)
@@ -232,6 +236,7 @@ class Recorder:
         self.gets: dict[str, dict] = {}          # data_key -> {url, status, ctype, body}
         self.posts: dict[str, dict] = {}         # post_file -> {method, url, body_in, status, body}
         self.writes: list[tuple[str, str]] = []  # refused writes seen during the crawl
+        self.files: dict[str, bytes] = {}         # data/<name> written as is (steps_ctx.json)
         self.log: list[str] = []
 
     def add_get(self, url: str, status: int, ctype: str, body: bytes) -> None:
@@ -240,6 +245,8 @@ class Recorder:
             self.gets[k] = {"url": url, "status": status, "ctype": ctype, "body": body}
 
     def add_post(self, method: str, url: str, body_in: str, status: int, body: bytes) -> None:
+        if status == 429:                         # the demo's rate limits: not an answer to keep
+            return
         self.posts[post_file(method, url, body_in)] = {"method": method, "url": url, "body_in": body_in,
                                                         "status": status, "body": body}
 
@@ -294,7 +301,7 @@ class Crawler:
         if COMPUTE_POSTS.match(path):
             status, headers, body = self.app.request(method, url, body=body_in.encode("utf-8"),
                                                      headers=dict(request.headers))
-            if "json" in headers.get("content-type", ""):
+            if "json" in headers.get("content-type", "") and not STEPS_POSTS.match(path):
                 self.rec.add_post(method, url, body_in, status, body)
             if self.verbose:
                 print(f"  {method} {status} {len(body):>8} {path} (precomputed)")
@@ -661,6 +668,103 @@ def pass_schedule(app: DemoApp, rec: Recorder, today: dt.date, log) -> None:
     log(f"  schedule: {len(rs)} calendar ranges")
 
 
+STEPS_FILE = "steps_ctx.json"            # static_shim.js STEPS_FILE
+
+
+def _saved_json(rec: Recorder, prefix: str) -> list:
+    out = []
+    for k, v in rec.gets.items():
+        if (k == prefix or k.startswith(prefix + "?")) and v["status"] == 200:
+            try:
+                out.append(json.loads(v["body"]))
+            except ValueError:
+                pass
+    return out
+
+
+RECS_DAYS = 28                           # 插入範本's 推薦 precomputed for new sessions this many days ahead
+RECS_KINDS = ("easy", "long", "quality", "test", "hike", "mountain")
+
+
+def pass_steps(app: DemoApp, rec: Recorder, today: dt.date, log) -> None:
+    """data/steps_ctx.json: what static_shim.js needs to answer the structure editor
+    itself — POST /steps/check and /steps/derive (backend/demo/static_steps.py) and
+    插入範本's 推薦 (GET /steps/templates/recs, whose query changes with every edit of the
+    minutes): each stored session's, and per kind / day / terrain for new sessions."""
+    from backend.demo import static_steps as SS
+    cals = _saved_json(rec, "/api/v1/overview/plan/calendar") + _saved_json(rec, "/api/v1/overview/plan/sessions")
+    seen, sessions = set(), []
+    for c in cals:
+        for s in c.get("sessions") or []:
+            if isinstance(s, dict) and s.get("uid") not in seen:
+                seen.add(s.get("uid"))
+                sessions.append(s)
+    sug = (_saved_json(rec, "/api/v1/overview/plan/test-suggestions") or [None])[0]
+    cal = next((c for c in cals if c.get("test_templates")), {})
+    data = app.client.portal.call(SS.collect, sessions + SS.dialog_tests(cal, sug))
+    recs: dict = {}
+
+    def get_recs(kind, day, ter, minutes=None, uid=None, terrain=None):
+        k = SS.recs_key(kind, day, ter, minutes)
+        if k in recs:
+            return
+        q = [("kind", kind), ("day", day)] + ([("uid", uid)] if uid else []) + \
+            ([("minutes", str(minutes))] if minutes else []) + ([("terrain", terrain)] if terrain else [])
+        r = _get_json(app, rec, f"/api/v1/overview/plan/steps/templates/recs?{_qs(q)}", record=False)
+        if r is not None:
+            recs[k] = r
+    for s in sessions:
+        if s.get("state") == "active" and (s.get("day") or "") >= today.isoformat() and s.get("kind") in RECS_KINDS:
+            get_recs(s["kind"], s["day"], SS.recs_terrain(s["kind"], s.get("terrain")), s.get("minutes"), s.get("uid"), s.get("terrain"))
+    for i in range(RECS_DAYS):
+        day = (today + dt.timedelta(days=i)).isoformat()
+        for kind in RECS_KINDS:
+            for ter in (("trail",) if kind == "hike" else ("road", "trail")):
+                get_recs(kind, day, ter, terrain=ter)
+    # most days answer the same: each distinct answer once ({"keys": {key: i}, "pool": [answer]})
+    pool, at = [], {}
+    for k, v in recs.items():
+        j = json.dumps(v, ensure_ascii=False, sort_keys=True)
+        if j not in at:
+            at[j] = len(pool)
+            pool.append(v)
+        recs[k] = at[j]
+    data["recs"] = {"keys": recs, "pool": pool}
+    rec.files[STEPS_FILE] = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    log(f"  steps: {len(sessions)} sessions, {len(data['derive'])} derived structures, {len(recs)} 推薦 blocks")
+
+
+def update_steps(root: Path, out: Path, log=lambda m: print(m, flush=True)) -> dict:
+    """Refresh only the structure editor's part of an existing export (--update-steps):
+    data/steps_ctx.json and static/trc_static.js, from a copy of the demo root."""
+    out = out.resolve()
+    if not (out / MARKER).exists() or not (out / "data").is_dir():
+        raise SystemExit(f"{out} is not a static demo export")
+    root = root.resolve()
+    tmp = Path(tempfile.mkdtemp(prefix="trc-static-steps-"))
+    home = tmp / "demo"
+    shutil.copytree(root, home, ignore=shutil.ignore_patterns("sandboxes"))
+    (home / "sandboxes").mkdir(exist_ok=True)
+    try:
+        rec = Recorder()
+        with DemoApp(home) as app:
+            cal = _get_json(app, rec, "/api/v1/overview/plan/calendar?start=2000-01-03&end=2000-01-09", record=False) or {}
+            today = dt.date.fromisoformat(cal.get("today") or dt.date.today().isoformat())
+            snap = json.loads((out / "export.json").read_text("utf-8")).get("snapshot") if (out / "export.json").exists() else None
+            if snap and snap != today.isoformat():
+                log(f"  ! the export's day is {snap}, the demo's today {today}: re-export instead")
+            pass_schedule(app, rec, today, log)
+            pass_steps(app, rec, today, log)
+        scrub = scrubber([str(REPO), str(tmp), str(home), str(root), str(Path.home())])
+        for name, raw in rec.files.items():
+            (out / "data" / name).write_bytes(scrub(raw.decode("utf-8")).encode("utf-8"))
+        shutil.copyfile(SHIM_SRC, out / "static" / "trc_static.js")
+        return {"updated": sorted(rec.files) + ["static/trc_static.js"], "today": today.isoformat(),
+                "leaks": check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])[:20]}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def pass_routes(app: DemoApp, rec: Recorder, log) -> None:
     ids: list[str] = []
     for k in list(rec.gets):
@@ -783,6 +887,10 @@ def write_site(app: DemoApp, rec: Recorder, out: Path, snapshot: dt.date, base_n
         data = scrub(minify_json(body).decode("utf-8")).encode("utf-8")
         (out / "data" / name).write_bytes(data)
         n_bytes += len(data)
+    for name, raw in rec.files.items():
+        data = scrub(raw.decode("utf-8")).encode("utf-8")
+        (out / "data" / name).write_bytes(data)
+        n_bytes += len(data)
     info = {"snapshot": snapshot.isoformat(), "base": base_name, "pages": pages, "gets": len(rec.gets),
             "precomputed": len(rec.posts), "data_bytes": n_bytes,
             "exported_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
@@ -833,6 +941,7 @@ def export(root: Path, out: Path, activities: int = 40, browser: bool = True, ke
             if browser:
                 crawl_pages(app, rec, snapshot, verbose, log)
             pass_schedule(app, rec, snapshot, log)
+            pass_steps(app, rec, snapshot, log)
             pass_routes(app, rec, log)
             chosen = pick_activities(acts, activities)
             pass_viewer(app, rec, snapshot, chosen, log)
@@ -892,7 +1001,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--no-browser", action="store_true", help="skip the headless-browser pass")
     ap.add_argument("--keep-copy", action="store_true", help="keep the temporary copy of the demo data")
     ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument("--update-steps", action="store_true",
+                    help="only refresh the structure editor's data (data/steps_ctx.json) and the shim in an existing --out")
     a = ap.parse_args(argv)
+    if a.update_steps:
+        info = update_steps(a.root, a.out)
+        print(json.dumps(info, ensure_ascii=False, indent=1))
+        return 2 if info.get("leaks") else 0
     info = export(a.root, a.out.resolve(), activities=a.activities, browser=not a.no_browser,
                   keep_copy=a.keep_copy, verbose=a.verbose)
     size = sum(p.stat().st_size for p in a.out.rglob("*") if p.is_file())
