@@ -310,6 +310,8 @@ def compute(ctx, method: str, path: str, body) -> dict:
 
     from backend.engine.racepower import calc as CALC
     sub = path[len(ROUTE_PREFIX):] if path.startswith(ROUTE_PREFIX) else None
+    if method == "GET" and sub == "heat-status":         # GET /heat-status?date=: body = {"date"}
+        return {"status": 200, "body": CALC.py(ctx.heat_status((body or {}).get("date")))}
     if method != "POST" or sub is None:
         return {"status": 404, "body": {"detail": "Not Found"}}
     try:
@@ -400,6 +402,63 @@ def sample_requests(ctx_doc: dict) -> list[tuple[str, str, dict]]:
         out.append((f"plan {e['id']}", "plan", b))
         out.append((f"plan {e['id']} goal", "plan", {**b, "mode": "time", "target_time_s": 6 * 3600}))
     return out
+
+
+def trace(ctx_path) -> dict:
+    """_trace_main in a fresh interpreter (the export's process has FastAPI etc. loaded)."""
+    import subprocess
+    from pathlib import Path
+    repo = Path(__file__).resolve().parents[2]
+    r = subprocess.run([sys.executable, "-m", "backend.demo.static_racepower", "--trace", str(ctx_path)],
+                       cwd=repo, capture_output=True, text=True, encoding="utf-8", timeout=900)
+    if r.returncode != 0:
+        raise RuntimeError("racepower trace failed: " + r.stderr[-2000:])
+    out = json.loads(r.stdout.strip().splitlines()[-1])
+    if out["failures"]:
+        raise RuntimeError("racepower trace: samples failed: " + json.dumps(out["failures"], ensure_ascii=False)[:3000])
+    bad = set(out["third_party"]) - set(ALLOWED_THIRD_PARTY)
+    if bad:
+        raise RuntimeError(f"racepower trace: the bundle would need {sorted(bad)} (not in Pyodide's packages)")
+    return out
+
+
+def bundle(modules) -> bytes:
+    """The zip the worker unpacks: the traced backend modules, every engine/racepower
+    module (lazy imports the samples did not reach), their packages' __init__.py and this
+    file. Sorted, fixed timestamps: the same sources give the same bytes."""
+    import io
+    import zipfile
+    from pathlib import Path
+    repo = Path(__file__).resolve().parents[2]
+    files = set()
+    for m in set(modules) | {"backend.demo.static_racepower"}:
+        parts = m.split(".")
+        p = repo.joinpath(*parts)
+        f = p / "__init__.py" if p.is_dir() else p.with_suffix(".py")
+        if f.is_file():
+            files.add(f)
+        for i in range(1, len(parts)):
+            init = repo.joinpath(*parts[:i], "__init__.py")
+            if init.is_file():
+                files.add(init)
+    files |= set((repo / "backend" / "engine" / "racepower").glob("*.py"))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for f in sorted(files):
+            info = zipfile.ZipInfo(f.relative_to(repo).as_posix(), date_time=(2020, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(info, f.read_bytes())
+    return buf.getvalue()
+
+
+def worker_js(version: str) -> str:
+    """static_racepower_worker.js with this module's constants filled in."""
+    from pathlib import Path
+    t = (Path(__file__).resolve().parent / "static_racepower_worker.js").read_text("utf-8")
+    for k, v in (("__PYODIDE_URL__", PYODIDE_URL), ("__PACKAGES__", json.dumps(list(PYODIDE_PACKAGES))),
+                 ("__BUNDLE__", BUNDLE), ("__CTX_FILE__", CTX_FILE), ("__VERSION__", version)):
+        t = t.replace(k, v)
+    return t
 
 
 def _trace_main(ctx_path: str) -> int:
