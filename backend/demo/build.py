@@ -2,6 +2,8 @@
 Build the demo athlete's data (auth-and-demo plan §3.2):
 
     python -m backend.demo.build --root <demo-root> [--seed 20261002] [--anchor 2026-10-03] [--weeks 52] [--small]
+    python -m backend.demo.build --root <demo-root> --add-linked      # an existing base: add only the
+                                                                      # planned interval / trail runs (linked.py)
 
 Writes <demo-root>/base/<anchor>-<seed>/ (a full tenant folder, the layout of
 ~/.wko5coach) and then switches <demo-root>/base/current to it atomically.
@@ -80,6 +82,7 @@ def build(root: Path, seed: int = DEFAULT_SEED, anchor: dt.date | None = None, w
     if final.exists():
         shutil.rmtree(final)
     os.replace(tmp, final)
+    relocate_paths(final)
     if switch:
         from backend import tenancy
         from backend.demo import sandbox as SB
@@ -94,6 +97,36 @@ def build(root: Path, seed: int = DEFAULT_SEED, anchor: dt.date | None = None, w
                 os.environ[tenancy.ENV_HOME] = old
     print(f"demo base {name}: {time.time() - t0:.0f} s", flush=True)
     return final
+
+
+def relocate_paths(base: Path) -> int:
+    """The DB's workout_files.file_path rows are absolute; the build imports in the
+    staging folder and then renames it (and a demo root may be copied elsewhere), so
+    point every row whose file is gone at the same file under `base` (the part from
+    its fit/ folder on). Without this a later import (--add-linked) took every FIT
+    for a new one. Returns the rows changed."""
+    import sqlite3
+    db = base / "wko5coach.db"
+    if not db.is_file():
+        return 0
+    con = sqlite3.connect(str(db))
+    try:
+        n = 0
+        for rid, fp in con.execute("SELECT id, file_path FROM workout_files").fetchall():
+            if not fp or Path(fp).exists():
+                continue
+            norm = str(fp).replace("\\", "/")
+            k = norm.rfind("/fit/")
+            if k < 0:
+                continue
+            new = base / norm[k + 1:]
+            if new.is_file():
+                con.execute("UPDATE workout_files SET file_path = ? WHERE id = ?", (str(new), rid))
+                n += 1
+        con.commit()
+        return n
+    finally:
+        con.close()
 
 
 def rebuild_in_place() -> Path:
@@ -190,49 +223,88 @@ def _stage(base: Path, seed: int, anchor: dt.date, weeks: int, small: bool, warm
             if a["kind"].startswith("race"):
                 body["activity_type"] = "race"
             ok(c.patch(f"/api/v1/wko5/workouts/{i}/activity", json=body), "name")
+        # an interval run and a trail run done as the 課表 planned them, matched to their
+        # sessions as after a COROS sync (backend/demo/linked.py)
+        from backend.demo import linked
+        linked.add(c, base, manifest, anchor, seed, small=small)
         if warm:
-            t1 = time.time()
-            for url in ("/api/v1/wko5/dataset/status", "/api/v1/overview/status", "/api/v1/overview/summary",
-                        "/api/v1/overview/pmc", "/api/v1/overview/plan/sessions?scope=week",
-                        f"/api/v1/overview/plan/calendar?start={anchor - dt.timedelta(days=35)}&end={anchor + dt.timedelta(days=28)}",
-                        f"/api/v1/overview/plan/compliance?start={anchor - dt.timedelta(days=84)}&end={anchor}",
-                        "/api/v1/wko5/workouts", "/api/v1/plan", "/api/v1/racepower/inputs",
-                        "/api/v1/racepower/goal-basis", "/api/v1/racepower/heat-status",
-                        "/api/v1/routes", "/api/v1/wko5/views"):
-                t2 = time.time()
-                ok(c.get(url), url)
-                print(f"    {url.split('?')[0]}: {time.time() - t2:.1f} s", flush=True)
-            # the next weeks' sessions (the schedule generates a week on its first visit)
-            for w in range(1, 4):
-                day = (anchor + dt.timedelta(weeks=w)).isoformat()
-                ok(c.get(f"/api/v1/overview/plan/sessions?scope=week&day={day}"), f"week +{w}")
-            # every chart of the views, for the showcase activities (render cache)
-            acts = c.get("/api/v1/wko5/workouts").json()
-            rows = acts if isinstance(acts, list) else acts.get("workouts") or []
-            show = {v for v in (manifest.get("showcase") or {}).values() if isinstance(v, str)}
-            idxs = [r["index"] for r in rows if any(str(r.get("file", "")).replace("\\", "/").endswith(s.split("/")[-1])
-                                                     for s in show)][:8]
-            views = c.get("/api/v1/wko5/views").json()
-            n = 0
-            for v in views if isinstance(views, list) else []:
-                if v.get("error"):
-                    continue
-                for d in v.get("dashboards", []):
-                    for ch in d.get("charts", []):
-                        url = f"/api/v1/wko5/views/{v['name']}/dashboards/{d['index']}/charts/{ch['index']}"
-                        for i in (idxs[:1] or [None]):
-                            c.get(url, params={"workout": i} if i is not None else None)
-                            n += 1
-            for i in idxs:
-                c.get(f"/api/v1/wko5/workouts/{i}/review")
-            print(f"  warmed {n} charts in {time.time() - t1:.0f} s", flush=True)
+            show = [v for v in (manifest.get("showcase") or {}).values() if isinstance(v, str)]
+            warm_base(c, anchor, show)
     (base / "demo_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1), "utf-8")
+
+
+def warm_base(c, anchor: dt.date, show: list[str], max_acts: int = 8, charts_for: int = 1) -> None:
+    """Open the pages' data routes (overview, schedule, charts, race calculator) so the
+    caches are on disk; every chart of the views for the first `charts_for` of the
+    `show` activities (FIT paths), the review of up to `max_acts` of them."""
+    def ok(r, what):
+        if r.status_code >= 400:
+            print(f"  ! {what}: {r.status_code} {r.text[:200]}", flush=True)
+        return r
+    t1 = time.time()
+    for url in ("/api/v1/wko5/dataset/status", "/api/v1/overview/status", "/api/v1/overview/summary",
+                "/api/v1/overview/pmc", "/api/v1/overview/plan/sessions?scope=week",
+                f"/api/v1/overview/plan/calendar?start={anchor - dt.timedelta(days=35)}&end={anchor + dt.timedelta(days=28)}",
+                f"/api/v1/overview/plan/compliance?start={anchor - dt.timedelta(days=84)}&end={anchor}",
+                "/api/v1/wko5/workouts", "/api/v1/plan", "/api/v1/racepower/inputs",
+                "/api/v1/racepower/goal-basis", "/api/v1/racepower/heat-status",
+                "/api/v1/routes", "/api/v1/wko5/views"):
+        t2 = time.time()
+        ok(c.get(url), url)
+        print(f"    {url.split('?')[0]}: {time.time() - t2:.1f} s", flush=True)
+    # the next weeks' sessions (the schedule generates a week on its first visit)
+    for w in range(1, 4):
+        day = (anchor + dt.timedelta(weeks=w)).isoformat()
+        ok(c.get(f"/api/v1/overview/plan/sessions?scope=week&day={day}"), f"week +{w}")
+    # every chart of the views, for the showcase activities (render cache)
+    acts = c.get("/api/v1/wko5/workouts").json()
+    rows = acts if isinstance(acts, list) else acts.get("workouts") or []
+    names = {s.split("/")[-1] for s in show}
+    idxs = [r["index"] for r in rows if str(r.get("file", "")).replace("\\", "/").split("/")[-1] in names][:max_acts]
+    views = c.get("/api/v1/wko5/views").json()
+    n = 0
+    for v in views if isinstance(views, list) else []:
+        if v.get("error"):
+            continue
+        for d in v.get("dashboards", []):
+            for ch in d.get("charts", []):
+                url = f"/api/v1/wko5/views/{v['name']}/dashboards/{d['index']}/charts/{ch['index']}"
+                for i in (idxs[:charts_for] or [None]):
+                    c.get(url, params={"workout": i} if i is not None else None)
+                    n += 1
+    for i in idxs:
+        c.get(f"/api/v1/wko5/workouts/{i}/review")
+    print(f"  warmed {n} charts in {time.time() - t1:.0f} s", flush=True)
+
+
+def add_linked(root: Path, warm: bool = True) -> Path:
+    """Add the two linked sessions' activities (backend/demo/linked.py) to the current
+    base of an existing demo root, in place: only the new FITs are imported and only
+    what they change is recomputed (the FIT / dataset caches are per file)."""
+    root = Path(root).resolve()
+    _refuse_owner(root)
+    name = (root / "base" / "current").read_text("utf-8").strip()
+    base = root / "base" / name
+    if not (base / "demo_manifest.json").is_file():
+        raise RuntimeError(f"{base} is not a demo base (no demo_manifest.json)")
+    t0 = time.time()
+    print(f"  relocated {relocate_paths(base)} workout_files paths", flush=True)
+    cmd = [sys.executable, "-m", "backend.demo.build", "--stage-linked", str(base)] + ([] if warm else ["--no-warm"])
+    r = subprocess.run(cmd, env=child_env(base), cwd=str(Path(__file__).resolve().parents[2]))
+    if r.returncode != 0:
+        raise RuntimeError(f"adding the linked sessions failed (exit {r.returncode})")
+    print(f"demo base {name}: linked sessions added in {time.time() - t0:.0f} s", flush=True)
+    return base
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--root", help="the demo root (WKO5COACH_HOME of the demo process)")
     ap.add_argument("--stage", help=argparse.SUPPRESS)
+    ap.add_argument("--stage-linked", help=argparse.SUPPRESS)
+    ap.add_argument("--add-linked", action="store_true",
+                    help="add only the planned-and-done interval / trail sessions to the current base of --root "
+                         "(an existing build), in place")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--anchor", help="the last day of the data (default: today)")
     ap.add_argument("--weeks", type=int, default=52)
@@ -243,8 +315,16 @@ def main(argv=None) -> int:
     if a.stage:
         _stage(Path(a.stage), a.seed, anchor, a.weeks, a.small, not a.no_warm)
         return 0
+    if a.stage_linked:
+        from backend.demo import linked
+        linked.stage(Path(a.stage_linked), dt.date.fromisoformat(a.anchor) if a.anchor else None, None,
+                     warm=not a.no_warm)
+        return 0
     if not a.root:
         ap.error("--root is required")
+    if a.add_linked:
+        add_linked(Path(a.root), warm=not a.no_warm)
+        return 0
     build(Path(a.root), a.seed, anchor, a.weeks, a.small, warm=not a.no_warm)
     return 0
 

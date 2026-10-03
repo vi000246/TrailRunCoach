@@ -3,6 +3,8 @@ Static, read-only demo: export the demo instance as a folder of files any
 static host serves (GitHub Pages, a Hugging Face static Space ...):
 
     python -m backend.demo.export_static --root <demo-root> [--out dist/static-demo]
+    python -m backend.demo.export_static --root <demo-root> --update --reuse <old export> --out <new>
+        (the root only gained activities since the old export: re-crawl what they change)
 
 <demo-root> is a folder built by `python -m backend.demo.build --root ...`. It
 is copied to a temporary folder first (the app writes caches next to its
@@ -849,10 +851,13 @@ def prepare_out(out: Path) -> None:
 
 
 def write_site(app: DemoApp, rec: Recorder, out: Path, snapshot: dt.date, base_name: Optional[str],
-               scrub: Callable[[str], str], log) -> dict:
-    prepare_out(out)
+               scrub: Callable[[str], str], log, fresh: bool = True) -> dict:
+    """`fresh` False (--update): write over an existing export, keeping its other data files."""
+    if fresh:
+        prepare_out(out)
     # assets (not the raw page templates: the pages are rendered below)
-    shutil.copytree(STATIC_SRC, out / "static", ignore=shutil.ignore_patterns("*.html", "__pycache__"))
+    shutil.copytree(STATIC_SRC, out / "static", ignore=shutil.ignore_patterns("*.html", "__pycache__"),
+                    dirs_exist_ok=not fresh)
     shutil.copyfile(SHIM_SRC, out / "static" / "trc_static.js")
     (out / ".nojekyll").write_text("", "utf-8")
     cfg = {"snapshot": snapshot.isoformat(), "today": snapshot.isoformat(),
@@ -913,6 +918,91 @@ def check_output(out: Path, forbidden: Iterable[str]) -> list[str]:
             if f.lower() in t.lower():
                 bad.append(f"{p.relative_to(out)}: {f!r}")
     return bad
+
+
+# --------------------------------------------------------------------------- incremental
+ACTIVITIES_KEY = "/api/v1/wko5/activities"
+
+
+def _old_activities(reuse: Path) -> dict:
+    """{index: start} of the activities in an existing export (its activity list)."""
+    p = reuse / "data" / data_file(ACTIVITIES_KEY)
+    try:
+        acts = json.loads(p.read_text("utf-8")).get("activities") or []
+    except (OSError, ValueError, AttributeError):
+        raise SystemExit(f"{reuse} has no activity list ({p.name}): do a full export")
+    return {a["index"]: a.get("start") for a in acts if a.get("index") is not None}
+
+
+def update(root: Path, reuse: Path, out: Path, browser: bool = True, verbose: bool = False,
+           log=lambda m: print(m, flush=True)) -> dict:
+    """--update --reuse <old export>: an export for a demo root that only gained new
+    activities after the old export was made (backend/demo/build.py --add-linked). The
+    old export is copied to `out`, then only what the new activities change is
+    crawled again and written over it: the new activities' details and single-activity
+    charts, every page's browser pass (lists, overview, schedule, the precomputed POSTs
+    and the page HTML), the calendar ranges, the structure editor's data, the routes and
+    the season charts (all their ranges end today). Every older activity's own files are
+    reused, which needs the older activities to keep their indexes (refused otherwise)."""
+    root, reuse, out = root.resolve(), reuse.resolve(), out.resolve()
+    if not (reuse / MARKER).exists():
+        raise SystemExit(f"{reuse} is not a static demo export")
+    if out != reuse:
+        if out.exists() and any(out.iterdir()) and not (out / MARKER).exists():
+            raise SystemExit(f"refusing to overwrite {out}: not empty and not a static demo export")
+        shutil.rmtree(out, ignore_errors=True)
+        shutil.copytree(reuse, out)
+    old = _old_activities(out)
+    snap_old = json.loads((out / "export.json").read_text("utf-8")).get("snapshot")
+    tmp = Path(tempfile.mkdtemp(prefix="trc-static-update-"))
+    home = tmp / "demo"
+    shutil.copytree(root, home, ignore=shutil.ignore_patterns("sandboxes"))
+    (home / "sandboxes").mkdir(exist_ok=True)
+    t0 = time.time()
+    try:
+        rec = Recorder()
+        with DemoApp(home) as app:
+            from backend.demo import sandbox as SB
+            base_name = SB.current_base_name()
+            cal = _get_json(app, rec, "/api/v1/overview/plan/calendar?start=2000-01-03&end=2000-01-09", record=False) or {}
+            snapshot = dt.date.fromisoformat(cal.get("today") or dt.date.today().isoformat())
+            if snap_old and snap_old != snapshot.isoformat():
+                raise SystemExit(f"the old export is of {snap_old}, the demo's today is {snapshot}: do a full export")
+            acts = (_get_json(app, rec, ACTIVITIES_KEY) or {}).get("activities") or []
+            now = {a["index"]: a.get("start") for a in acts if a.get("index") is not None}
+            moved = [i for i, s in old.items() if now.get(i) != s]
+            if moved:
+                raise SystemExit(f"{len(moved)} older activities changed index (e.g. {moved[:5]}): do a full export")
+            new = sorted(i for i in now if i not in old)
+            log(f"demo base {base_name}, today {snapshot}: {len(new)} new activities {new}")
+            for i in new:
+                _get_json(app, rec, f"/api/v1/wko5/workouts/{i}/activity")
+                _get_json(app, rec, f"/api/v1/wko5/workouts/{i}/segments")
+            t1 = time.time()
+            if browser:
+                crawl_pages(app, rec, snapshot, verbose, log)
+            log(f"  browser pass: {time.time() - t1:.0f} s")
+            t1 = time.time()
+            pass_schedule(app, rec, snapshot, log)
+            pass_steps(app, rec, snapshot, log)
+            pass_routes(app, rec, log)
+            log(f"  schedule / steps / routes: {time.time() - t1:.0f} s")
+            t1 = time.time()
+            pass_viewer(app, rec, snapshot, new, log)
+            log(f"  viewer: {time.time() - t1:.0f} s")
+            scrub = scrubber([str(REPO), str(tmp), str(home), str(root), str(Path.home())])
+            info = write_site(app, rec, out, snapshot, base_name, scrub, log, fresh=False)
+        info.update(seconds=round(time.time() - t0), new_activities=new, reused_from=str(reuse),
+                    data_files=sum(1 for _ in (out / "data").iterdir()))
+        (out / "export.json").write_text(json.dumps({k: info[k] for k in ("snapshot", "base", "pages", "gets",
+                                                                         "precomputed", "data_bytes", "exported_at")}
+                                                    | {"updated": True, "data_files": info["data_files"]},
+                                                    ensure_ascii=False, indent=1), "utf-8")
+        info["refused_writes"] = sorted({f"{m} {p}" for m, p in rec.writes})
+        info["leaks"] = check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])[:20]
+        return info
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 # --------------------------------------------------------------------------- main
@@ -1006,7 +1096,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--update-steps", action="store_true",
                     help="only refresh the structure editor's data (data/steps_ctx.json) and the shim in an existing --out")
+    ap.add_argument("--update", action="store_true",
+                    help="incremental: copy the export --reuse to --out and re-crawl only what the demo root's "
+                         "new activities change (build.py --add-linked); older activities' files are reused")
+    ap.add_argument("--reuse", type=Path, help="the existing export --update starts from (default: --out)")
     a = ap.parse_args(argv)
+    if a.update:
+        info = update(a.root, (a.reuse or a.out), a.out, browser=not a.no_browser, verbose=a.verbose)
+        print(json.dumps(info, ensure_ascii=False, indent=1))
+        return 2 if info.get("leaks") else 0
     if a.update_steps:
         info = update_steps(a.root, a.out)
         print(json.dumps(info, ensure_ascii=False, indent=1))
