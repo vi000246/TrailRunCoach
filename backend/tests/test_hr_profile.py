@@ -1,7 +1,7 @@
 """Max / resting HR and the COROS HR zone models (engine/hr_profile.py,
 thresholds.estimate_mhr): optical-spike filtering, the max-HR estimate, the
 COROS tables (HRR 202 / 53 → Z2 141–163, LTHR %), where each value comes from
-(your setting > estimate > the watch), the 課表 targets and the charts' new
+(your setting > the watch > estimate), the 課表 targets and the charts' new
 models. Synthetic data only — no WKO5 folder, no real DB, no COROS call."""
 from __future__ import annotations
 
@@ -134,20 +134,21 @@ def test_missing_rest_or_max_hr_says_where_to_fill_it():
 # where max / resting HR come from
 # ---------------------------------------------------------------------------
 
-def test_resolution_order_setting_then_estimate_then_watch():
+def test_resolution_order_setting_then_watch_then_estimate():
     acc = HP.parse_account(ACCOUNT_DATA)
     runs = [_hr_run(dt.date(2026, 8, 31) - dt.timedelta(days=i * 10), p) for i, p in enumerate((198.0, 204.0, 205.0))]
     ds = _ds(runs, Plan(thresholds=[Threshold("2026-09-20", mhr=200), Threshold("2026-10-05", mhr=210)]))
     m = HP.max_hr(ds, TODAY, acc)
     assert (m["value"], m["kind"], m["source"]) == (200, "manual", "你的設定 2026-09-20")   # the later row isn't due yet
-    m = HP.max_hr(ds, dt.date(2026, 9, 15), acc)                  # before your setting: the estimate
-    assert m["kind"] == "estimate" and m["value"] == 205 and "推估" in m["source"]
-    m = HP.max_hr(_ds([]), TODAY, acc)                              # no runs: the watch
-    assert (m["value"], m["kind"]) == (202, "coros") and "來自手錶" in m["source"]
-    # the estimate is a floor: a higher watch value wins, and says what the runs showed
+    # before your setting: the watch, even when the runs went higher (owner: use the watch's data)
+    m = HP.max_hr(ds, dt.date(2026, 9, 15), acc)
+    assert (m["value"], m["kind"]) == (202, "coros") and "來自手錶" in m["source"] and "205" in m["source"]
     low = [_hr_run(dt.date(2026, 8, 31) - dt.timedelta(days=i * 10), p) for i, p in enumerate((186.0, 189.0, 191.0))]
     m = HP.max_hr(_ds(low), TODAY, acc)
     assert (m["value"], m["kind"]) == (202, "coros") and "191" in m["source"]
+    # no watch value: the estimate
+    m = HP.max_hr(ds, dt.date(2026, 9, 15), None, use_account=False)
+    assert m["kind"] == "estimate" and m["value"] == 205 and "推估" in m["source"]
     m = HP.max_hr(_ds([]), TODAY, None, use_account=False)
     assert m["value"] is None and HP.NO_MAX in m["reason"]
     # resting HR: your setting > the watch > nothing
