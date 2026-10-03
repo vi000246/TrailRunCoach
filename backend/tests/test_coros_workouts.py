@@ -136,7 +136,7 @@ def plan(sessions, start="2026-09-28", today="2026-09-30", th=TH):
 
 def week1():
     return plan([
-        sess("long", "long", "長時間輕鬆（山路）", 120, "2026-10-03", detail="全程心率壓在 AeT 150 bpm 以下"),
+        sess("long", "long", "LSD（山路）", 120, "2026-10-03", detail="全程心率壓在 AeT 150 bpm 以下"),
         sess("quality", "quality", "閾值 3×10 分", 60, "2026-10-01", detail="休 2–3 分鐘；暖身 15 分、緩和 10 分",
              source="Palladino 功率區間（3B）"),
         sess("strength1", "strength", "肌力（下肢單腳＋核心）", 35, "2026-10-02"),
@@ -177,11 +177,11 @@ def test_trail_easy_run_is_hr_capped_at_aet():
 
 
 def test_long_and_hike_time_based_hr():
-    spec = CW.session_workout(sess("long", "long", "長時間輕鬆", 150, "2026-10-03"), TH)
+    spec = CW.session_workout(sess("long", "long", "LSD", 150, "2026-10-03"), TH)
     (e,) = _flat(spec.payload)
     assert e["targetValue"] == 150 * 60 and e["intensityType"] == CW.INT_POWER      # road long: power first
     for kind in ("hike", "mountain"):
-        spec = CW.session_workout(sess(kind, kind, "長時間輕鬆", 150, "2026-10-03"), TH)
+        spec = CW.session_workout(sess(kind, kind, "LSD", 150, "2026-10-03"), TH)
         (e,) = _flat(spec.payload)
         assert e["targetValue"] == 150 * 60 and e["intensityType"] == CW.INT_HR
         assert e["intensityValueExtend"] == 150

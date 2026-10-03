@@ -869,7 +869,7 @@ async function sj(method, url, body) {
 // running, the editor's trail templates); 被動熱適應 is no longer offered (an existing one
 // still opens with its own radio)
 const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
-const KINDS = { easy: "輕鬆跑", long: "長時間", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
+const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
   notice: "課表待確認" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
 // 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
 const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
@@ -1297,9 +1297,9 @@ function tssHint() {
 // two terrains: 路跑 / 越野跑 (an old 登山 session opens as 越野跑)
 const TER = { road: "路跑", trail: "越野跑", hike: "越野跑" };
 const EQ_KINDS = new Set(["easy", "long", "hike"]);
-const AUTO_TITLE = { easy: { road: "輕鬆跑", trail: "輕鬆越野跑" }, long: { road: "長時間輕鬆（路跑）", trail: "長時間輕鬆（山路越野）" },
+const AUTO_TITLE = { easy: { road: "輕鬆跑", trail: "輕鬆越野跑" }, long: { road: "LSD（路跑）", trail: "LSD（山路越野）" },
   hike: { trail: "越野跑" } };
-const AUTO_TITLE_RE = /^(輕鬆跑|輕鬆跑（路跑）|輕鬆越野跑|長時間輕鬆(（[^）]*）)?|登山健行(（長時間）)?|健行|越野跑)$/;
+const AUTO_TITLE_RE = /^(輕鬆跑|輕鬆跑（路跑）|輕鬆越野跑|(長時間輕鬆|LSD)(（[^）]*）)?|登山健行(（長時間）)?|健行|越野跑)$/;
 let EQ = null, eqReq = null;
 const loadEq = () => eqReq ||= sj("GET", `${PAPI}/equivalence`).then((b) => (EQ = b)).catch(() => { eqReq = null; return null; });
 const EQS = { rate: 50, tss0: 0, tssFix: 0, d: 0, needFill: false };

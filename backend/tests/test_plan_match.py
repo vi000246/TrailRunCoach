@@ -100,7 +100,7 @@ def test_unplanned_run_stays_separate_and_does_not_pull_a_later_easy():
 def test_long_done_a_day_early_follows_the_generator():
     a = act(6, "2026-10-03", 120)
     out = [sess("l", "2026-10-04", "long", 120, gen_key="long")]
-    gen_done = {(WS, "long"): g("long", "long", "長時間輕鬆", 120, "2026-10-03", done=True, done_by=a)}
+    gen_done = {(WS, "long"): g("long", "long", "LSD", 120, "2026-10-03", done=True, done_by=a)}
     PM.assign(out, [a], "2026-10-03", gen_done)
     assert out[0]["state"] == "done" and out[0]["day"] == "2026-10-03" and out[0]["done_by"]["match"] == "plan"
 
@@ -171,7 +171,7 @@ def _week(e, sessions, monkeypatch):
 
 def test_api_sessions_marks_a_synced_run_done_and_link_unlink(monkeypatch):
     with Env(monkeypatch) as e:
-        _week(e, [g("easy1", "easy", "輕鬆跑", 45, "2026-10-01"), g("long", "long", "長時間輕鬆", 120, "2026-10-04")],
+        _week(e, [g("easy1", "easy", "輕鬆跑", 45, "2026-10-01"), g("long", "long", "LSD", 120, "2026-10-04")],
               monkeypatch)
         ss = e.c.get(f"{API}/sessions").json()["sessions"]
         easy = next(s for s in ss if s.get("gen_key") == "easy1" and s["day"] == "2026-10-01")

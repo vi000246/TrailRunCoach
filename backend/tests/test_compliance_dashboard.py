@@ -37,7 +37,7 @@ def _two_days_on(e, monkeypatch):
         g("quality", "quality", "閾值 3×10 分", 60, "2026-10-03"),
         g("strength1", "strength", "肌力", 35, "2026-10-02"),
         g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
-        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+        g("long", "long", "LSD（山路）", 120, "2026-10-04")])
     e.inp = inputs(today="2026-10-02", cur=cur, weeks=e.inp["weeks"], horizon="2026-10-18")
     assert e.c.post(f"{API}/reconcile").status_code == 200
 

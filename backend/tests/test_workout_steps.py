@@ -33,7 +33,7 @@ def _sessions():
          "target": "功率 220–235 W · 心率 150–160 bpm"},
         {"kind": "quality", "title": "閾值 4×8 分", "minutes": 60, "detail": "休 2 分", "target": "心率 150–160 bpm"},
         {"kind": "quality", "title": "爬坡 6×3 分", "minutes": 55, "detail": "95–101% CP 休 2 分", "target": ""},
-        {"kind": "long", "title": "長時間輕鬆", "minutes": 120},
+        {"kind": "long", "title": "LSD", "minutes": 120},
         {"kind": "mountain", "title": "山路", "minutes": 180},
         {"kind": "hike", "title": "健行", "minutes": 240},
         {"kind": "easy", "title": "輕鬆跑", "minutes": 45},
