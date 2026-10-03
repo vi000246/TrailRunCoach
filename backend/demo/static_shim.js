@@ -5,6 +5,8 @@
  *     (data/<fnv64(key)>.json; key = decoded path + "?" + query sorted by name);
  *   - answers the view-only computations (race calculator ...) the export
  *     precomputed for the pages' default inputs (data/p<fnv64(method key body)>.json);
+ *   - computes the schedule's structure editor itself (POST /steps/check, /steps/derive:
+ *     `Steps`, a port of engine/workout_steps.py on data/steps_ctx.json);
  *   - keeps the schedule's edits in this browser (localStorage overlay): move,
  *     edit, add, delete a session, rest days, schedule a suggested test; the
  *     calendar reads return the saved data with the overlay applied;
@@ -29,6 +31,7 @@
   const PAGE_MSG = "示範版沒有這個頁面";
   const OV_KEY = "trc.static.overlay.v1";
   const PAPI = "/api/v1/overview/plan";
+  const STEPS_FILE = "steps_ctx.json";
 
   // ---------------------------------------------------------------- keys
   const MASK = (1n << 64n) - 1n, PRIME = 0x100000001b3n, OFFSET = 0xcbf29ce484222325n;
@@ -242,6 +245,774 @@
     return null;
   }
 
+  // ---------------------------------------------------------------- steps (pure)
+  // The structure editor's POST /steps/check and /steps/derive (api/plan_sessions.py) for the
+  // static site: a port of engine/workout_steps.py view() / derive() and
+  // engine/target_policy.py, on data/steps_ctx.json (backend/demo/static_steps.py: the athlete
+  // context, the engine's tables, derive() of the stored sessions / test templates).
+  // backend/tests/test_static_steps.py compares it with the real endpoints.
+  const Steps = (() => {
+    class StepsError extends Error {
+      constructor(errors) { super(errors.join("；")); this.errors = errors; }
+    }
+    // Python round(x, nd) (half to even on the exact binary value) and f"{x:.nf}"
+    function pyRound(x, nd = 0) {
+      if (x == null || !isFinite(x)) return x;
+      const s = Math.abs(x).toFixed(nd + 30), [ip, fp = ""] = s.split(".");
+      const rest = fp.slice(nd), d = rest.charCodeAt(0) - 48, tail = /[1-9]/.test(rest.slice(1));
+      let n = BigInt(ip + fp.slice(0, nd));
+      if (d > 5 || (d === 5 && (tail || n % 2n === 1n))) n += 1n;
+      let t = n.toString().padStart(nd + 1, "0");
+      if (nd) t = t.slice(0, -nd) + "." + t.slice(-nd);
+      const v = Number(t);
+      return x < 0 ? -v : v;
+    }
+    const fx = (x, nd = 0) => pyRound(x, nd).toFixed(nd);
+    const fmtG = (x) => (x === 0 ? "0" : String(Number(x.toPrecision(6))));
+    const mmss = (sec) => { const s = pyRound(sec); return `${Math.floor(s / 60)}:${String(((s % 60) + 60) % 60).padStart(2, "0")}`; };
+    const fmtS = (sec) => { const s = pyRound(sec); if (s < 60) return `${s} 秒`; const m = Math.floor(s / 60), r = s % 60; return r ? `${m}:${String(r).padStart(2, "0")}` : `${m} 分`; };
+    const isDict = (x) => x != null && typeof x === "object" && !Array.isArray(x);
+    const repr = (v) => (v == null ? "None" : typeof v === "string" ? `'${v}'` : v === true ? "True" : v === false ? "False" : String(v));
+    const cut = (s, n) => Array.from(s).slice(0, n).join("");
+    function toFloat(x) {                         // Python float(); undefined = TypeError / ValueError
+      if (typeof x === "number") return x;
+      if (typeof x === "boolean") return +x;
+      if (typeof x === "string") {
+        const t = x.trim();
+        if (/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return Number(t);
+        if (/^[+-]?(inf|infinity)$/i.test(t)) return t[0] === "-" ? -Infinity : Infinity;
+        if (/^[+-]?nan$/i.test(t)) return NaN;
+      }
+      return undefined;
+    }
+    function toInt(x) {                           // Python int(); undefined = error
+      if (typeof x === "number") return isFinite(x) ? Math.trunc(x) : undefined;
+      if (typeof x === "boolean") return +x;
+      if (typeof x === "string" && /^\s*[+-]?\d+\s*$/.test(x)) return parseInt(x, 10);
+      return undefined;
+    }
+
+    // ---- normalize (the stored shape)
+    function normalize(d, K) {
+      const W = K.ws;
+      if (typeof d === "string") { try { d = JSON.parse(d); } catch (_) { throw new StepsError(["結構不是 JSON"]); } }
+      if (!isDict(d) || !Array.isArray(d.items)) throw new StepsError(["結構要有 items"]);
+      const errs = [], seen = new Set();
+      let n = 0, cnt = 0;
+      const nextId = () => `n${++n}`;
+      const f = (x, name, lo, hi) => {
+        const v = toFloat(x);
+        if (v === undefined) { errs.push(`${name} 要是數字`); return null; }
+        if (v !== v || (lo != null && v < lo) || (hi != null && v > hi)) { errs.push(`${name} 超出範圍`); return null; }
+        return v;
+      };
+      const OPEN = () => ({ type: "auto", intent: "open" });
+      const zoneIds = (ty) => new Set(W.zones[ty].map((r) => r[0]));
+      const target = (t) => {
+        if (!isDict(t)) return OPEN();
+        const ty = t.type === undefined ? "auto" : t.type;
+        if (!["auto", "power", "hr", "pace", "none"].includes(ty)) { errs.push(`目標類型不對：${repr(ty)}`); return OPEN(); }
+        if (ty === "none") return { type: "none" };
+        if (ty === "auto") {
+          const it = t.intent === undefined ? "open" : t.intent;
+          if (!["easy", "band", "open"].includes(it)) { errs.push(`自動目標的類型不對：${repr(it)}`); return OPEN(); }
+          const out = { type: "auto", intent: it };
+          if (it === "easy" && t.plo != null) { out.plo = f(t.plo, "功率下限", 0.3, 2.5); out.phi = f(t.phi, "功率上限", 0.3, 2.5); }
+          if (it === "band") {
+            out.lo = f(t.lo, "強度下限", 0.3, 2.5); out.hi = f(t.hi, "強度上限", 0.3, 2.5);
+            out.cls = String(t.cls || "");
+            if (Array.isArray(t.hr) && t.hr.length === 2) out.hr = [Math.trunc(f(t.hr[0], "心率", 40, 230) || 0), Math.trunc(f(t.hr[1], "心率", 40, 230) || 0)];
+            if (Array.isArray(t.hrp) && t.hrp.length === 2) out.hrp = [f(t.hrp[0], "心率 %", 0.5, 1.2), f(t.hrp[1], "心率 %", 0.5, 1.2)];
+          }
+          return out;
+        }
+        const mode = t.mode === undefined ? "pct" : t.mode;
+        if (!["pct", "zone", "abs"].includes(mode)) { errs.push(`目標填法不對：${repr(mode)}`); return OPEN(); }
+        const out = { type: ty, mode };
+        if (mode === "zone") {
+          const z = String(t.zone || "");
+          if (!zoneIds(ty).has(z)) errs.push(`沒有這個區間：${repr(z)}`);
+          out.zone = z;
+          return out;
+        }
+        const rng = { "power|pct": [0.2, 3.0], "hr|pct": [0.3, 1.3], "pace|pct": [0.5, 2.5], "power|abs": [20, 1500], "hr|abs": [40, 230], "pace|abs": [120, 1200] }[`${ty}|${mode}`];
+        out.lo = f(t.lo, "目標下限", ...rng); out.hi = f(t.hi, "目標上限", ...rng);
+        if (ty === "pace" && mode === "pct" && Array.isArray(t.hrp) && t.hrp.length === 2) out.hrp = [f(t.hrp[0], "心率 %", 0.5, 1.2), f(t.hrp[1], "心率 %", 0.5, 1.2)];
+        return out;
+      };
+      const item = (x, depth) => {
+        if (!isDict(x)) { errs.push("步驟格式不對"); return null; }
+        cnt++;
+        let iid = cut(String(x.id || ""), 16);
+        if (!iid || seen.has(iid)) { iid = nextId(); while (seen.has(iid)) iid = nextId(); }
+        seen.add(iid);
+        const note = cut(String(x.note || "").trim(), W.max_note);
+        const k = x.kind;
+        if (k === "repeat") {
+          if (depth >= W.max_depth) { errs.push("重複最多兩層"); return null; }
+          let times = toInt(x.times);
+          if (times === undefined) times = 0;
+          if (!(times >= 1 && times <= W.max_times)) { errs.push(`重複次數要在 1–${W.max_times}`); times = Math.max(1, Math.min(W.max_times, times || 1)); }
+          const kids = (Array.isArray(x.items) ? x.items : []).map((c) => item(c, depth + 1)).filter(Boolean);
+          if (!kids.length) errs.push("重複區塊裡沒有步驟");
+          return { id: iid, kind: "repeat", times, last_rest: x.last_rest !== false, note, items: kids };
+        }
+        if (!["warm", "work", "rest", "cool", "other"].includes(k)) { errs.push(`步驟類型不對：${repr(k)}`); return null; }
+        let dur = x.dur || {};
+        const dt = isDict(dur) ? dur.type : undefined;
+        if (!["time", "distance", "open"].includes(dt)) { errs.push("時長類型要是 時間／距離／按圈"); dur = { type: "open" }; }
+        else if (dt === "time") { const v = f(dur.value, "時間", 5, 6 * 3600); dur = v ? { type: "time", value: pyRound(v) } : { type: "open" }; }
+        else if (dt === "distance") { const v = f(dur.value, "距離", 50, 100000); dur = v ? { type: "distance", value: pyRound(v) } : { type: "open" }; }
+        else { const v = dur.est ? f(dur.est, "按圈的預估時間", 5, 6 * 3600) : null; dur = v ? { type: "open", est: pyRound(v) } : { type: "open" }; }
+        return { id: iid, kind: k, dur, target: target(x.target), note };
+      };
+      const items = d.items.map((x) => item(x, 0)).filter(Boolean);
+      if (!items.length) errs.push("至少要有一個步驟");
+      if (cnt > W.max_items) errs.push(`步驟太多（> ${W.max_items}）`);
+      if (errs.length) throw new StepsError([...new Set(errs)]);
+      let origin = String(d.origin || "user");
+      if (!(origin === "derived" || origin === "user" || origin.startsWith("template:"))) origin = "user";
+      return { v: 1, origin: cut(origin, 40), items };
+    }
+
+    // ---- the context (Ctx.of, target_policy, day_cap)
+    function ctxOf(th, basis, hrCap, sp) {
+      th = th || {}; sp = sp || {};
+      const f = (d, k) => { const v = d[k]; if (!v) return null; const n = toFloat(v); return n === undefined ? null : n; };
+      const ter = ["trail", "hike"].includes(sp.terrain) ? "trail" : "road";
+      return { cp: f(th, "cp"), lthr: f(th, "lthr"), aet: f(th, "aet"), tpace: f(th, "tpace"),
+        basis: ["hr", "power", "none"].includes(basis) ? basis : "hr", hr_cap: !!hrCap,
+        v_easy: f(sp, "v_easy"), v_easy_src: String(sp.v_easy_src || ""), ep_kmh: f(sp, "ep_kmh"),
+        terrain: ter, climb_per_km: ter === "trail" ? Math.max(0, f(sp, "climb_per_km") || 0) : 0 };
+    }
+    function aetProtocol(title, K) {
+      const m = String(title || "").match(new RegExp(K.aet.title_re));
+      if (!m) return null;
+      return { "徐國峰": "xu90", Evoke: "evoke60", Friel: "friel" }[m[1]] || (+m[2] >= 60 ? "ua60" : "ua40");
+    }
+    const isAet = (s, K) => s.protocol === K.aet.protocol || s.kind === K.aet.protocol || s.id === "test_aet" ||
+      s.gen_key === "test_aet" || String(s.title || "").includes("AeT");
+    function sessionType(s, K) {
+      const kind = s.kind, title = String(s.title || "");
+      if (kind === "test") return isAet(s, K) ? "aet_test" : "cp_test";
+      if (title.includes("下坡") && ["easy", "long", "quality"].includes(kind)) return "downhill";
+      if (title.includes("長爬坡")) return "climb";
+      if (kind === "mountain") return "trail_long";
+      if (kind === "quality") return title.includes("爬坡") || title.includes("上坡") || s.terrain === "trail" ? "hill" : "interval";
+      if (kind === "hike") return "hike";
+      if (kind === "long") return ["trail", "hike"].includes(s.terrain) || title.includes("山路") ? "trail_long" : "long";
+      if (kind === "easy" || kind === "heat_passive") return ["trail", "hike"].includes(s.terrain) || title.includes("山路") || title.includes("越野") ? "trail_easy" : "easy";
+      return "other";
+    }
+    const TYPE_NAME = { easy: "輕鬆跑", trail_easy: "越野輕鬆跑", long: "長跑", trail_long: "山路長天", hike: "越野跑", interval: "間歇", hill: "爬坡重複",
+      climb: "長爬坡", downhill: "下坡練習", cp_test: "CP 測試", aet_test: "AeT 測試", other: "其他" };
+    function targetPolicy(s, D, th) {
+      const K = D, L = K.tp.label;
+      const t = sessionType(s, K), own = s.target_basis;
+      const chosen = ["hr", "power"].includes(own) ? own : D.prefs.basis;
+      let [base, key] = K.tp.auto[t];
+      if (base == null) { const p = aetProtocol(s.title, K); base = ["xu90", "friel"].includes(p) ? "hr" : "power"; }
+      let basis = base, why = `自動：${TYPE_NAME[t]}看${L[base]}`;
+      if (["hr", "power"].includes(chosen) && !["cp_test", "aet_test", "downhill", "climb"].includes(t)) {
+        basis = chosen;
+        why = (["hr", "power"].includes(own) ? "這次課表你選了" : "課表偏好：") + L[chosen];
+      }
+      let fb = "";
+      th = th || {};
+      const thOn = Object.keys(th).length > 0;
+      if (basis === "power" && !["hr", "power"].includes(chosen) && !D.auto_power_ok) { basis = "hr"; fb = "功率來源不是 Stryd：用心率"; }
+      if (basis === "power" && thOn && !th.cp) { basis = "hr"; fb = "沒有 CP：改用心率"; }
+      if (basis === "hr" && thOn && !(th.aet || th.lthr)) { basis = "none"; fb = "沒有 AeT／LTHR：不設目標"; }
+      return { basis, chosen: ["hr", "power"].includes(own) ? own : chosen, type: t, why: why + (fb ? `（${fb}）` : ""),
+        source: K.tp.src[key], hr_cap: basis === "power" && ["interval", "hill", "easy", "long"].includes(t), fallback: fb };
+    }
+    function dayCap(prefs, day) {
+      if (!prefs || !prefs.active || !day) return null;
+      const wd = (new Date(String(day).slice(0, 10) + "T00:00:00Z").getUTCDay() + 6) % 7;
+      const c = wd >= 5 ? prefs.long_cap : prefs.cap_weekday;
+      return c != null ? +c : null;
+    }
+    const STEP_FIELDS = ["kind", "title", "minutes", "target", "detail", "source", "terrain", "protocol", "day", "variant_key", "variant_reps",
+      "variant_blocks", "variant_adj", "rung_key", "heat", "target_basis", "climb_per_km", "distance_km", "climb_m"];
+    function sessionOf(body, stored) {
+      const s = { ...(stored || {}) };
+      for (const k of STEP_FIELDS) if (body[k] !== undefined && body[k] !== null) s[k] = body[k];
+      if ("target_basis" in body && [undefined, null, "", "auto"].includes(body.target_basis)) s.target_basis = null;
+      s.minutes = toInt(s.minutes || 0) ?? Math.trunc(+s.minutes || 0);
+      return s;
+    }
+    function climbPerKm(s) {
+      if (s.climb_per_km != null) { const v = toFloat(s.climb_per_km); if (v !== undefined) return v; }
+      if (s.distance_km && s.climb_m != null) { const a = toFloat(s.climb_m), b = toFloat(s.distance_km); if (a !== undefined && b) return a / b; }
+      return null;
+    }
+    function env(s, D) {
+      const th = { ...D.th };
+      const pol = targetPolicy(s, D, th);
+      const sp = { ...D.speeds, terrain: s.kind === "hike" || ["trail", "hike"].includes(s.terrain) ? "trail" : "road", climb_per_km: climbPerKm(s) };
+      const c = ctxOf(th, pol.basis, !!pol.hr_cap, sp);
+      let rung = null;
+      if (s.kind === "quality") rung = s.rung_key || D.il.variant_rung[s.variant_key] || null;
+      const cap = s.kind !== "test" ? dayCap(D.prefs, s.day) : null;
+      return { ctx: c, th, policy: pol, cap, cap_mode: D.prefs.cap_mode || "soft", rung: rung && D.il.canonical[rung] ? rung : null };
+    }
+    function context(e, D) {
+      const th = e.th, pol = e.policy, W = D.ws;
+      const thresholds = {};
+      for (const k of ["cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source"]) thresholds[k] = th[k] ?? null;
+      return { thresholds, tpace_link: D.tpace_link ?? null, zones: zonesTable(e.ctx, D), policy: pol,
+        basis_label: `目標用：${D.tp.label[pol.basis]}（${pol.why}）`, cap: e.cap, cap_mode: e.cap_mode, rung: e.rung,
+        kinds: W.kind_label, types: W.type_label, rules: W.rules };
+    }
+
+    // ---- resolving one step's target
+    const OPENT = { type: "auto", intent: "open" };
+    function easyHr(c) {
+      const hi = c.aet || (c.lthr ? 0.89 * c.lthr : null);
+      if (!hi) return null;
+      let lo = c.lthr ? 0.75 * c.lthr : hi - 25;
+      lo = Math.min(lo, hi - 10);
+      return ["hr", pyRound(lo), pyRound(hi)];
+    }
+    const power = (c, lo, hi) => (c.cp ? ["power", pyRound(lo * c.cp), pyRound(hi * c.cp)] : null);
+    function workHr(c, tg, D) {
+      if (tg.hr && tg.hr.length) return ["hr", Math.trunc(tg.hr[0]), Math.trunc(tg.hr[1])];
+      if (tg.hrp && tg.hrp.length && c.lthr) return ["hr", pyRound(tg.hrp[0] * c.lthr), pyRound(tg.hrp[1] * c.lthr)];
+      const [a, b] = D.ws.hr_work[tg.cls || ""] || [0.95, 1.0];
+      if (!c.lthr) return null;
+      const lo = a === "aet" ? c.aet : a * c.lthr;
+      return ["hr", pyRound(lo || 0.89 * c.lthr), pyRound(b * c.lthr)];
+    }
+    function pzone(f, D) {
+      for (const [z, lo, hi] of D.ws.zones.power) if (lo <= f && f < hi) return `Z${z}`;
+      return f >= 1.5 ? "Z7" : "Z1A";
+    }
+    const level = (f) => (f == null ? 0 : f < 0.75 ? 1 : f < 0.88 ? 2 : f < 1.01 ? 3 : f < 1.06 ? 4 : 5);
+    function hrToP(f, D) {
+      const P = D.ws.hr_p;
+      if (f <= P[0][0]) return P[0][1];
+      for (let i = 0; i + 1 < P.length; i++) {
+        const [a0, b0] = P[i], [a1, b1] = P[i + 1];
+        if (f <= a1) return b0 + (f - a0) / (a1 - a0) * (b1 - b0);
+      }
+      return P[P.length - 1][1];
+    }
+    const zoneOf = (ty, zid, D) => { const r = D.ws.zones[ty].find((x) => x[0] === zid); return r ? [r[1], r[2]] : [null, null]; };
+    const R = (type, o = {}) => ({ type, lo: null, hi: null, frac: null, text: "", sub: "", auto: true, warn: "", err: "", intensity: null, need: "", ...o });
+    function fromInt(it, c, D, auto = true, warn = "") {
+      if (!it) return R("none", { text: "不設目標", auto, warn });
+      const [typ, lo, hi] = it;
+      if (typ === "power") {
+        const f = c.cp ? (lo + hi) / 2 / c.cp : null;
+        const sub = c.cp ? `${fx(lo / c.cp * 100)}–${fx(hi / c.cp * 100)}% CP · ${pzone(f, D)}` : "";
+        return R("power", { lo, hi, frac: f, text: `${fx(lo)}–${fx(hi)} W`, sub, auto, warn, intensity: it });
+      }
+      const f = c.lthr ? hrToP((lo + hi) / 2 / c.lthr, D) : 0.7;
+      const sub = c.aet && Math.abs(hi - c.aet) < 1 ? "≤ AeT" : c.lthr ? `${fx(lo / c.lthr * 100)}–${fx(hi / c.lthr * 100)}% LTHR` : "";
+      return R("hr", { lo, hi, frac: f, text: `${fx(lo)}–${fx(hi)} bpm`, sub, auto, warn, intensity: it });
+    }
+    function resolve(st, c, D) {
+      const tg = st.target || OPENT, ty = tg.type || "auto";
+      if (ty === "none") return R("none", { text: "不設目標", auto: false });
+      if (ty === "auto") {
+        const it = tg.intent || "open";
+        if (it === "open") return R("none", { text: "不設目標" });
+        if (it === "easy") {
+          if (tg.plo != null && c.basis === "power") {
+            const p = power(c, tg.plo, tg.phi);
+            if (p) return fromInt(p, c, D);
+            return fromInt(easyHr(c), c, D, true, "沒有 CP：改用心率");
+          }
+          if (tg.plo != null && c.basis === "none") return R("none", { text: "不設目標" });
+          const e = easyHr(c);
+          return fromInt(e, c, D, true, e ? "" : "沒有 AeT／LTHR：不設目標");
+        }
+        if (c.basis === "none") return R("none", { text: "不設目標" });
+        if (c.basis === "hr") {
+          const h = workHr(c, tg, D);
+          if (h) return fromInt(h, c, D);
+          const p = power(c, tg.lo, tg.hi);
+          return fromInt(p, c, D, true, p ? "沒有 LTHR：改用功率" : "沒有 LTHR／CP：不設目標");
+        }
+        const p = power(c, tg.lo, tg.hi);
+        if (p) return fromInt(p, c, D);
+        const h = workHr(c, tg, D);
+        return fromInt(h, c, D, true, h ? "沒有 CP：改用心率" : "沒有 CP／LTHR：不設目標");
+      }
+      const mode = tg.mode || "pct";
+      let lo = tg.lo, hi = tg.hi, r;
+      if (ty === "power") {
+        if (mode === "zone") [lo, hi] = zoneOf("power", tg.zone, D);
+        if (mode !== "abs") {
+          if (!c.cp) return R("none", { text: "不設目標", auto: false, err: "選了功率卻沒有 CP" });
+          lo *= c.cp; hi *= c.cp;
+        }
+        r = fromInt(["power", pyRound(lo), pyRound(hi)], c, D, false);
+      } else if (ty === "hr") {
+        if (mode === "zone" && tg.zone === "aet") {
+          const e = easyHr(c);
+          if (!e) return R("none", { text: "不設目標", auto: false, err: "選了心率卻沒有 AeT／LTHR" });
+          r = fromInt(e, c, D, false);
+        } else {
+          if (mode === "zone") [lo, hi] = zoneOf("hr", tg.zone, D);
+          if (mode !== "abs") {
+            if (!c.lthr) return R("none", { text: "不設目標", auto: false, err: "選了心率卻沒有 LTHR" });
+            lo *= c.lthr; hi *= c.lthr;
+          }
+          r = fromInt(["hr", pyRound(lo), pyRound(hi)], c, D, false);
+        }
+      } else {
+        if (mode === "zone") [lo, hi] = zoneOf("pace", tg.zone, D);
+        if (mode !== "abs") {
+          if (!c.tpace) {
+            if (tg.hrp && tg.hrp.length && c.lthr) {
+              const x = fromInt(["hr", pyRound(tg.hrp[0] * c.lthr), pyRound(tg.hrp[1] * c.lthr)], c, D, false, D.ws.no_tpace);
+              x.need = "tpace";
+              return x;
+            }
+            return R("none", { text: "不設目標", auto: false, warn: D.ws.no_tpace, need: "tpace" });
+          }
+          lo *= c.tpace; hi *= c.tpace;
+        }
+        const a = Math.min(lo, hi), b = Math.max(lo, hi);
+        const f = c.tpace ? 1 / ((a + b) / 2 / c.tpace) : 0.8;
+        const sub = c.tpace ? `${fx(a / c.tpace * 100)}–${fx(b / c.tpace * 100)}% 閾值配速（推估）` : "";
+        r = R("pace", { lo: a, hi: b, frac: f, text: `${mmss(a)}–${mmss(b)} /km`, sub, auto: false, intensity: ["pace", pyRound(a), pyRound(b)] });
+      }
+      if (r.lo != null && r.hi != null && r.lo > r.hi && r.type !== "pace") r.err = "下限比上限高";
+      if (r.type === "power" && c.cp && (r.lo < 0.4 * c.cp || r.hi > 2.0 * c.cp)) r.err = r.err || "功率不在 40–200% CP（推估的合理範圍）";
+      if (r.type === "hr" && c.lthr && r.hi > 1.1 * c.lthr) r.err = r.err || "心率超過 110% LTHR（推估的合理範圍）";
+      return r;
+    }
+    const asDict = (r, D) => ({ type: r.type, lo: r.lo, hi: r.hi, frac: r.frac, text: r.text, sub: r.sub, auto: r.auto, warn: r.warn,
+      err: r.err, need: r.need, level: level(r.frac), label: D.ws.type_label[r.type] ?? r.type });
+
+    // ---- flatten, totals
+    function iterRep(it) {
+      const passes = [];
+      for (let i = 0; i < it.times; i++) {
+        const kids = it.items.slice();
+        if (i === it.times - 1 && it.last_rest === false) while (kids.length && kids[kids.length - 1].kind === "rest") kids.pop();
+        passes.push(kids);
+      }
+      return passes;
+    }
+    function flat(items, ctx) {
+      let out = [];
+      for (const it of items) {
+        if (it.kind === "repeat") iterRep(it).forEach((kids, i) => { out = out.concat(flat(kids, (ctx || []).concat([[it.id, i, it.times]]))); });
+        else out.push({ st: it, rep: ctx || [] });
+      }
+      return out;
+    }
+    function speedKmh(f, c, D) {
+      const W = D.ws, vE = c.v_easy, vT = c.tpace ? 3600 / c.tpace : null;
+      if (f == null) f = W.easy_f;
+      f = Math.max(0.45, Math.min(1.4, f));
+      let v, how;
+      if (vE && vT && vT > vE) { v = vE + (f - W.easy_f) / (1 - W.easy_f) * (vT - vE); how = "easy+tpace"; }
+      else if (vE) { v = vE * f / W.easy_f; how = "easy"; }
+      else if (vT) { v = vT * f; how = "tpace"; }
+      else return [3600 / W.dist_pace_default, "default"];
+      return [Math.max(v, 0.55 * (vE || vT)), how];
+    }
+    function secs(st, r, c, D) {
+      const d = st.dur, W = D.ws;
+      if (d.type === "time") return [d.value, false];
+      if (d.type === "distance") {
+        const km = d.value / 1000;
+        if (r.type === "pace" && r.lo) return [km * (r.lo + r.hi) / 2, true];
+        if (r.frac == null && st.kind === "rest") return [km / W.walk_kmh * 3600, true];
+        const f = r.frac != null ? r.frac : (W.none_if[st.kind] ?? W.easy_f);
+        const [v] = speedKmh(f, c, D);
+        if (c.terrain === "trail") {
+          const ep = km * (1 + c.climb_per_km / 100);
+          if (c.ep_kmh && c.v_easy) return [ep / (c.ep_kmh * v / c.v_easy) * 3600, true];
+          return [ep / v * 3600, true];
+        }
+        return [km / v * 3600, true];
+      }
+      if (d.est) return [d.est, true];
+      return [0, false];
+    }
+    function estimateNote(steps, c, D) {
+      const rows = flat(steps.items).map((x) => x.st);
+      const dist = rows.some((s) => s.dur.type === "distance"), lap = rows.some((s) => s.dur.type === "open" && s.dur.est);
+      const parts = [];
+      if (dist) {
+        const [, how] = speedKmh(D.ws.easy_f, c, D);
+        const src = how === "easy+tpace" ? (c.v_easy && c.tpace ? `你的輕鬆路跑速度 ${fx(c.v_easy, 1)} km/h（${c.v_easy_src || "近期紀錄"}）和閾值配速 ${mmss(c.tpace || 0)}/km 之間，依每段的目標強度內插` : "")
+          : how === "easy" ? `你的輕鬆路跑速度 ${fx(c.v_easy || 0, 1)} km/h 依目標強度等比例放大`
+          : how === "tpace" ? `你的閾值配速 ${mmss(c.tpace || 0)}/km 依目標強度換算` : "沒有你的速度資料，先用 6:00/km";
+        parts.push("距離段：" + src);
+        if (c.terrain === "trail") parts.push(`越野：努力距離 EP = km × (1 + 爬升 ${fx(c.climb_per_km)} m/km ÷ 100)` +
+          (c.ep_kmh ? `，用你的越野 EP 速度 ${fx(c.ep_kmh, 1)} km/h` : "，你的越野紀錄不夠，先用路跑速度"));
+      }
+      if (lap) parts.push("按圈段：用課表原本寫的最短時間");
+      return parts.length ? parts.join("；") + "（推估）" : "";
+    }
+    function totals(steps, c, D) {
+      let sec = 0, tss = 0, hard = 0, z5 = 0, nOpen = 0, est = false;
+      for (const row of flat(steps.items)) {
+        const st = row.st, r = resolve(st, c, D), [s, e] = secs(st, r, c, D);
+        est = est || e;
+        if (st.dur.type === "open" && !s) { nOpen++; continue; }
+        sec += s;
+        const f = r.frac != null ? r.frac : (D.ws.none_if[st.kind] ?? 0.7);
+        tss += s * f * f * 100 / 3600;
+        if (f >= 0.88) hard += s;
+        if (r.frac != null && r.frac >= D.ws.z5_frac && st.kind === "work") z5 += s;
+      }
+      return { sec: pyRound(sec), open: nOpen, est, tss: pyRound(tss, 1), hard_s: pyRound(hard), z5_s: pyRound(z5),
+        est_note: est ? estimateNote(steps, c, D) : "" };
+    }
+
+    // ---- issues
+    const bandMid = (tg) => (tg.lo + tg.hi) / 2;
+    function isZ5(st, r, D) {
+      const tg = st.target || {};
+      if (tg.type === "auto" && tg.intent === "band") return bandMid(tg) >= D.ws.z5_frac;
+      return r.type === "power" && r.frac != null && r.frac >= D.ws.z5_frac;
+    }
+    function isZ3(st, r, D) {
+      const tg = st.target || {}, CR = D.il.class_range;
+      let m;
+      if (tg.type === "auto" && tg.intent === "band") m = bandMid(tg);
+      else if (r.type === "power" && r.frac != null) m = r.frac;
+      else return false;
+      return CR.Z3sub[0] <= m && m < CR.Z3near[1];
+    }
+    function hasRestAfter(rows, st) {
+      const i = rows.findIndex((x) => x.st === st);
+      return i >= 0 && i + 1 < rows.length && rows[i + 1].st.kind === "rest";
+    }
+    function issues(steps, c, D, cap, capMode, rung) {
+      const out = [], seen = new Set(), W = D.ws;
+      const add = (lv, text, id = null) => { const k = JSON.stringify([lv, text, id]); if (!seen.has(k)) { seen.add(k); out.push({ level: lv, text, id }); } };
+      const rows = flat(steps.items);
+      for (const row of rows) {
+        const st = row.st, r = resolve(st, c, D);
+        if (r.err) add("err", r.err, st.id);
+        if (r.warn) add("warn", r.warn, st.id);
+        if (st.kind === "work" && st.dur.type === "time" && isZ5(st, r, D) && st.dur.value < W.rules.z5_min_rep_s)
+          add("err", `5 區每趟至少 2 分鐘（台灣教練）：這段只有 ${mmss(st.dur.value)}`, st.id);
+        if (st.kind === "work" && st.dur.type === "time" && isZ3(st, r, D) && st.dur.value < W.rules.z3_min_rep_s && hasRestAfter(rows, st))
+          add("warn", `3 區每趟至少 3 分鐘（Haugen 2022 的下緣）：這段只有 ${mmss(st.dur.value)}`, st.id);
+      }
+      const z5w = rows.map((x) => x.st).filter((st) => st.kind === "work" && st.dur.type === "time" && isZ5(st, resolve(st, c, D), D));
+      if (z5w.length) {
+        const short = Math.min(...z5w.map((x) => x.dur.value));
+        rows.forEach((row, i) => {
+          const st = row.st;
+          if (st.kind !== "rest" || st.dur.type !== "time" || i === 0) return;
+          const prev = rows[i - 1].st;
+          if (z5w.includes(prev) && st.dur.value > Math.min(short, W.rules.z5_max_rest_s) && !(i + 1 < rows.length && rows[i + 1].st.kind === "rest"))
+            if (i + 1 < rows.length && z5w.includes(rows[i + 1].st))
+              add("warn", `5 區休息 ${mmss(st.dur.value)} 比一趟長或超過 3 分鐘（Buchheit 工休比）`, st.id);
+        });
+      }
+      const t = totals(steps, c, D);
+      if (cap) {
+        const mins = t.sec / 60;
+        if (mins > cap + 0.5) {
+          const hard = capMode === "hard";
+          add(hard ? "err" : "warn", `總時間 ${fx(mins)} 分超過這天上限 ${fx(cap)} 分（課表偏好：${hard ? "硬上限" : "軟上限，只提醒"}）`);
+        }
+      }
+      if (t.open) add("info", `${t.open} 段「按圈結束」不算進總時間`);
+      for (const it of steps.items) if (it.kind === "repeat" && it.items.some((x) => x.kind === "repeat")) add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it.id);
+      const n = corosCount(steps, c, D);
+      if (n > W.coros_max_steps) add("warn", `推到手錶是 ${n} 段，超過 ${W.coros_max_steps} 段：COROS 的上限未驗證`);
+      if (rung) { const eq = equivalence(steps, rung, c, D); if (eq) add("info", eq.text); }
+      return out;
+    }
+
+    // ---- progression: the structure as a library variant (interval_library.equivalent)
+    const works = (v) => (v.pattern ? v.pattern.map((x) => Math.trunc(x)) : Array(v.reps * v.sets).fill(Math.trunc(v.work_s)));
+    const classOf = (v, D) => { const m = (v.lo + v.hi) / 2; for (const [k, [a, b]] of Object.entries(D.il.class_range)) if (a <= m && m < b) return k; return null; };
+    const sum = (xs) => xs.reduce((a, x) => a + x, 0);
+    function structure(v) {
+      const ws = works(v);
+      if (v.sets > 1) return `${v.sets} 組 × ${v.reps}×${fmtS(v.work_s)}／${fmtS(v.rest_s)}`;
+      if (ws.length === 1 && !v.rest_s) return `連續 ${fmtS(v.work_s)}`;
+      if (v.pattern) {
+        const mins = (s) => { const x = s / 60; return Math.abs(x - pyRound(x)) < 0.01 ? fx(x) : fx(x, 1); };
+        return v.pattern.map(mins).join("-") + " 分" + (v.pattern.length >= 5 ? "金字塔" : "");
+      }
+      return `${ws.length}×${fmtS(v.work_s)}`;
+    }
+    function equivalent(v, ref, D) {
+      const why = [], IL = D.il, W = D.ws, wv = works(v), wr = works(ref);
+      if (!v.listed_equiv) why.push("列為非同等（30/15：每趟 < 2 分，證據方向不一致）");
+      if (classOf(v, D) !== classOf(ref, D) || v.cls !== ref.cls) why.push(`強度類別不同（${v.cls} vs ${ref.cls}）`);
+      const t = sum(wv), tr = sum(wr);
+      if (tr && Math.abs(t / tr - 1) > IL.tiz_tol + 1e-9) why.push(`目標區時間 ${fx(t / 60)} 分，和 ${fx(tr / 60)} 分差 > 15%`);
+      const wp = (x, ws) => sum(ws.map((w) => Math.max(0, (x.lo + x.hi) / 2 - 1) * w)) / Math.max(1, ws.length);
+      if (v.cls === "Z5") {
+        if (Math.min(...wv) < W.rules.z5_min_rep_s) why.push("5 區每趟 < 2 分（台灣教練）");
+        if (v.rest_s > Math.min(...wv) || v.rest_s > W.rules.z5_max_rest_s) why.push("組休比每趟長或 > 3 分");
+        const a = wp(v, wv), b = wp(ref, wr);
+        if (b && !(IL.wprime_ratio[0] <= a / b && a / b <= IL.wprime_ratio[1])) why.push(`每趟 W′ 是標準課表的 ${fx(a / b, 2)} 倍（範圍 0.7–1.5）`);
+      } else if (!(wv.length === 1 && !v.rest_s)) {
+        if (Math.min(...wv) < W.rules.z3_min_rep_s) why.push("3 區每趟 < 3 分");
+        const ratio = v.rest_s ? (sum(wv) / wv.length) / v.rest_s : null;
+        if (ratio == null || !(IL.z3_ratio[0] - 1e-9 <= ratio && ratio <= IL.z3_ratio[1] + 1e-9)) why.push("工休比不在 3:1–6:1");
+      }
+      return [!why.length, why];
+    }
+    function workBand(st, c, D) {
+      const tg = st.target || {}, ty = tg.type;
+      if (ty === "auto" && tg.intent === "band") return [tg.lo, tg.hi, false];
+      if (ty === "power") {
+        if (tg.mode === "pct") return [tg.lo, tg.hi, false];
+        if (tg.mode === "zone") { const [lo, hi] = zoneOf("power", tg.zone, D); return lo != null ? [lo, hi, false] : null; }
+        if (c && c.cp) return [tg.lo / c.cp, tg.hi / c.cp, false];
+        return null;
+      }
+      if (ty === "hr") {
+        let m;
+        if (tg.mode === "pct") m = (tg.lo + tg.hi) / 2;
+        else if (tg.mode === "zone" && tg.zone !== "aet") { const [lo, hi] = zoneOf("hr", tg.zone, D); m = (lo + hi) / 2; }
+        else if (tg.mode === "abs" && c && c.lthr) m = (tg.lo + tg.hi) / 2 / c.lthr;
+        else return null;
+        const cls = m >= 1.03 ? "Z5" : m >= 1.0 ? "Z4" : m >= 0.95 ? "Z3near" : m >= 0.88 ? "Z3sub" : null;
+        if (cls == null) return null;
+        return [...D.ws.hr_class_band[cls], true];
+      }
+      return null;
+    }
+    function variantFromSteps(steps, rung, c, D) {
+      const rows = flat(steps.items || []), ws = [], rests = [], bands = [];
+      let est = false, lastWork = null;
+      rows.forEach((row, i) => {
+        const st = row.st;
+        if (st.kind === "work") {
+          const b = workBand(st, c, D);
+          if (b == null || st.dur.type !== "time") return;
+          ws.push(st.dur.value); bands.push(b.slice(0, 2)); est = est || b[2]; lastWork = i;
+        } else if (st.kind === "rest" && lastWork != null && st.dur.type === "time") {
+          const nxt = rows.slice(i + 1).map((r) => r.st).find((x) => x.kind === "work" || x.kind === "cool");
+          if (nxt && nxt.kind === "work") rests.push(st.dur.value);
+        }
+      });
+      if (!ws.length) return null;
+      const lo = sum(bands.map((b) => b[0])) / bands.length, hi = sum(bands.map((b) => b[1])) / bands.length;
+      const cls = classOf({ lo, hi }, D);
+      if (cls == null) return null;
+      const same = new Set(ws).size === 1;
+      return { key: "user", rung: rung || "", cls, reps: ws.length, work_s: ws[0], rest_s: Math.trunc(rests.length ? Math.max(...rests) : 0),
+        rest_mode: rests.length ? "walk" : "none", lo: pyRound(lo, 3), hi: pyRound(hi, 3), terrain: "flat", canonical: false,
+        src_kind: est ? "推估" : "peer", pattern: same ? null : ws, sets: 1, set_rest_s: 0, listed_equiv: true };
+    }
+    function equivalence(steps, rung, c, D) {
+      const canon = rung && D.il.canonical[rung];
+      if (!canon) return null;
+      const name = D.il.rung_name[rung] || rung;
+      const v = variantFromSteps(steps, rung, c, D);
+      if (v == null) return { ok: false, why: ["找不到有強度的主課段"], text: `${name}：找不到有功率／心率目標的主課段，這堂不算進階` };
+      const [ok, why] = equivalent(v, canon, D);
+      const est = v.src_kind === "推估" ? "（心率結構換算強度，推估）" : "";
+      return { ok, why, text: `和 ${name} 標準課表 ${structure(canon)} ` + (ok ? "等效：這堂算進階" : "不等效：這堂不算進階（" + why.join("；") + "）") + est };
+    }
+
+    // ---- the watch (sync/coros_workouts.build_program as lines)
+    const EX = { warm: 1, work: 2, other: 2, rest: 4, cool: 3 };
+    const EX_LABEL = { 1: "暖身", 2: "訓練", 3: "緩和", 4: "休息" };
+    const fmtDur = (d) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`) : "按圈結束");
+    function stepsToCoros(steps, c, D) {
+      const em = { n: 0 }, out = [];
+      const name = (st, r, grouped) => {
+        if (st.note) return st.note;
+        const tg = st.target || {};
+        if (st.kind === "work" && tg.type === "auto" && tg.intent === "easy" && tg.plo != null) return r.type === "hr" ? "心率 ≤ AeT" : r.type === "power" ? "功率區間" : "照感覺";
+        if (st.kind === "work" && !grouped) { em.n++; return `第 ${em.n} 趟 ${fmtDur(st.dur)}`; }
+        return "";
+      };
+      const one = (st, grouped) => {
+        const r = resolve(st, c, D), d = st.dur;
+        return { kind: EX[st.kind], seconds: Math.trunc(d.type === "time" ? d.value : 0), intensity: r.intensity, name: name(st, r, grouped),
+          meters: Math.trunc(d.type === "distance" ? d.value : 0) };
+      };
+      const plain = (xs) => xs.every((x) => x.kind !== "repeat");
+      const emit = (items) => {
+        for (const it of items) {
+          if (it.kind !== "repeat") out.push(one(it, false));
+          else if (plain(it.items) && it.last_rest !== false) out.push({ sets: it.times, steps: it.items.map((x) => one(x, true)), name: it.note || "間歇" });
+          else iterRep(it).forEach(emit);
+        }
+      };
+      emit(steps.items);
+      return out;
+    }
+    const corosCount = (steps, c, D) => sum(stepsToCoros(steps, c, D).map((x) => 1 + (x.steps ? x.steps.length : 0)));
+    function exLine(st, D) {
+      const dur = st.meters ? `${fmtG(st.meters * 100 / 100000)} km` : st.seconds ? fmtS(st.seconds) : "按圈結束";
+      let tgt = "不設目標";
+      if (st.intensity) {
+        const [typ, lo, hi] = st.intensity;
+        if (typ === "hr") tgt = `心率 ${Math.trunc(lo)}–${Math.trunc(hi)} bpm`;
+        else if (typ === "power") tgt = `功率 ${Math.trunc(lo)}–${Math.trunc(hi)} W`;
+        else if (typ === "pace") { const [a, b] = [pyRound(lo), pyRound(hi)].sort((x, y) => x - y); tgt = `配速 ${mmss(a)}–${mmss(b)} /km`; }
+      }
+      return { kind: EX_LABEL[st.kind] || "訓練", dur, target: tgt, name: st.name || D.ws.step_name[st.kind] || "" };
+    }
+    function watchPreview(steps, c, D) {
+      const lines = [];
+      let n = 0, total = 0;
+      for (const x of stepsToCoros(steps, c, D)) {
+        n++;
+        if (x.steps) {
+          lines.push({ group: x.name, sets: x.sets, steps: x.steps.map((s) => exLine(s, D)) });
+          n += x.steps.length;
+          total += sum(x.steps.map((s) => s.seconds)) * x.sets;
+        } else { lines.push(exLine(x, D)); total += x.seconds; }
+      }
+      const res = flat(steps.items).map((row) => [row.st, resolve(row.st, c, D)]);
+      const hasPower = res.some(([, r]) => r.type === "power");
+      const unrolled = steps.items.some((it) => it.kind === "repeat" && (it.last_rest === false || !it.items.every((x) => x.kind !== "repeat")));
+      const dist = res.some(([st]) => st.dur.type === "distance");
+      const limits = [
+        { key: "watts", hit: hasPower, text: "只收絕對瓦數：跑步沒有 % CP，送的是換算後的 W；CP 更新後這堂會標成「已過期」，要重推" },
+        { key: "one", hit: !!(c.hr_cap && hasPower), text: "每段只有一個目標：功率段的心率上限只寫在文字，手錶不會提醒" },
+        { key: "ramp", hit: false, text: "沒有漸進（ramp）步驟：漸進只寫在步驟名稱" },
+      ];
+      const lost = [];
+      if (res.some(([, r]) => r.need === "tpace")) lost.push(D.ws.no_tpace);
+      if (unrolled) lost.push("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段");
+      if (dist) lost.push("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）");
+      if (n > D.ws.coros_max_steps) lost.push(`${n} 段超過 ${D.ws.coros_max_steps} 段：COROS 的上限未驗證`);
+      return { lines, n, limits, lost, seconds: total };
+    }
+
+    // ---- text
+    function stepsText(steps, c, D) {
+      const parts = [], rows = flat(steps.items);
+      let work = rows.filter((r) => r.st.kind === "work").map((r) => r.st);
+      if (!work.length) work = rows.slice(0, 1).map((r) => r.st);
+      for (const st of work) {
+        const r = resolve(st, c, D);
+        if (r.type === "none") continue;
+        const t = `${D.ws.type_label[r.type]} ${r.text}` + (r.sub ? `（${r.sub.split(" · ")[0]}）` : "");
+        if (!parts.includes(t)) parts.push(t);
+      }
+      return cut(parts.slice(0, 3).join(" · "), 200);
+    }
+    function structureText(steps, D) {
+      const one = (x) => (x.kind === "repeat" ? `${x.times}×(` + x.items.map(one).join("＋") + ")"
+        : ["work", "rest", "other"].includes(x.kind) ? fmtDur(x.dur) : `${D.ws.kind_label[x.kind]} ${fmtDur(x.dur)}`);
+      return cut(steps.items.map(one).join(" · "), 300);
+    }
+    function zonesTable(c, D) {
+      const rows = (ty) => D.ws.zones[ty].map(([z, lo, hi]) => {
+        if (ty === "hr" && z === "aet") { const e = easyHr(c); return { id: "aet", label: "≤ AeT", text: e ? `${e[1]}–${e[2]} bpm` : "" }; }
+        const base = { power: c.cp, hr: c.lthr, pace: c.tpace }[ty];
+        const text = !base ? "" : ty === "pace" ? `${mmss(lo * base)}–${mmss(hi * base)} /km` : `${fx(lo * base)}–${fx(hi * base)} ${ty === "power" ? "W" : "bpm"}`;
+        return { id: z, label: `Z${z}`, lo, hi, text };
+      });
+      return { power: rows("power"), hr: rows("hr"), pace: rows("pace") };
+    }
+    function view(steps, c, D, cap, capMode, rung) {
+      const byId = {}, order = [];
+      for (const row of flat(steps.items)) {
+        const st = row.st, r = resolve(st, c, D), [s, e] = secs(st, r, c, D);
+        if (!(st.id in byId)) byId[st.id] = asDict(r, D);
+        order.push({ id: st.id, kind: st.kind, sec: pyRound(s), est: e, open: st.dur.type === "open", frac: r.frac, level: level(r.frac),
+          type: r.type, rep: row.rep.map(([a, i, n]) => ({ id: a, i, n })) });
+      }
+      const eq = rung ? equivalence(steps, rung, c, D) : null;
+      return { resolved: byId, order, totals: totals(steps, c, D), issues: issues(steps, c, D, cap, capMode, rung), watch: watchPreview(steps, c, D),
+        summary: stepsText(steps, c, D), structure: structureText(steps, D), equiv: eq ? { ok: eq.ok, why: eq.why, text: eq.text } : null };
+    }
+
+    // ---- derive (engine/workout_steps.derive): stored / exported (data.derive) / the easy and long kinds here
+    const SIG_FIELDS = ["kind", "title", "minutes", "target", "detail", "source", "protocol", "variant_key", "variant_reps", "variant_blocks", "variant_adj", "heat", "gen_key"];
+    const sortKeys = (x) => (Array.isArray(x) ? x.map(sortKeys) : isDict(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sortKeys(x[k])])) : x);
+    const sigVal = (k, v) => (v == null || v === false ? "" : v === true ? "1" : k === "minutes" ? String(toInt(v || 0) ?? 0)
+      : typeof v === "object" ? JSON.stringify(sortKeys(v)) : String(v));
+    const deriveSig = (s) => SIG_FIELDS.map((k) => sigVal(k, s[k])).join("\u001f");
+    function deriveHere(s, D) {
+      let n = 0;
+      const ids = () => `s${++n}`;
+      const EASY = { type: "auto", intent: "easy" }, OPEN = { type: "auto", intent: "open" };
+      const easy = (plo, phi) => (plo != null ? { ...EASY, plo, phi } : { ...EASY });
+      const step = (kind, dur, target, note = "") => ({ id: ids(), kind, dur: typeof dur === "number" ? (dur ? { type: "time", value: Math.trunc(dur) } : { type: "open" }) : dur,
+        target: target ? { ...target } : { ...OPEN }, note });
+      const doc = (items) => ({ v: 1, origin: "derived", items });
+      const kind = s.kind, sec = (toInt(s.minutes || 0) || 0) * 60, title = String(s.title || "");
+      if (["race", "rest", "strength", "heat_passive"].includes(kind)) return null;
+      if (kind === "notice") return doc([step("warm", 60, OPEN, "課表待確認：到總覽頁同意／拒絕")]);
+      if (kind === "quality" || kind === "test") return undefined;          // only from data.derive
+      if (sec <= 0) return null;
+      const M = D.ws.mp;
+      const mpm = kind === "long" ? (title.match(/馬拉松配速\s*(\d+)\s*分/) || [])[1] : null;
+      if (mpm && sec - +mpm * 60 - M.tail_s >= 600) {
+        const g = String(s.detail || "").match(/目標配速\s*(\d+):(\d{2})\s*\/km/);
+        const gp = g ? +g[1] * 60 + +g[2] : null;
+        const mt = gp ? { type: "pace", mode: "abs", lo: pyRound(gp * (1 - M.goal_band)), hi: pyRound(gp * (1 + M.goal_band)) }
+          : { type: "pace", mode: "pct", lo: M.pace[0], hi: M.pace[1], hrp: M.hr.slice() };
+        const a = step("work", sec - +mpm * 60 - M.tail_s, easy(0.8, 0.88), "輕鬆");
+        return doc([a, step("work", +mpm * 60, mt, "馬拉松配速"), step("cool", M.tail_s, easy(0.75, 0.8), "輕鬆收操")]);
+      }
+      if (["long", "mountain", "hike"].includes(kind)) { const [lo, hi] = kind === "long" ? [0.8, 0.88] : [0.75, 0.88]; return doc([step("work", sec, easy(lo, hi))]); }
+      if (kind === "easy" && (s.heat || title.includes("熱適應")) && sec >= 1200)
+        return doc([step("warm", 600, EASY, "熱適應：慢慢進入"), step("work", sec - 900, EASY, "熱適應：照心率、配速放慢"), step("cool", 300, OPEN, "走路降溫")]);
+      if (kind === "easy") {
+        const m = title.match(/(\d+)\s*[×xX]\s*(\d+)\s*秒/);
+        if (m) {
+          const k = +m[1], sp = +m[2], base = sec - k * (sp + 60);
+          if (base >= 600) {
+            const flatRun = title.includes("加速跑");
+            const [w, r, rn] = flatRun ? [`${sp} 秒加速跑（平路）`, "慢跑回來", `加速跑 ${k}×${sp} 秒`] : [`${sp} 秒上坡衝刺`, "走下來", `衝刺 ${k}×${sp} 秒`];
+            const a = step("work", base, easy(0.75, 0.8), "心率 ≤ AeT");
+            const kids = [step("work", sp, OPEN, w), step("rest", 60, OPEN, r)];
+            return doc([a, { id: ids(), kind: "repeat", times: k, last_rest: true, note: rn, items: kids }]);   // rep() takes its id after its kids
+          }
+        }
+        return doc([step("work", sec, easy(0.75, 0.8))]);
+      }
+      return null;
+    }
+    const NO_STEPS = "這種課不推到手錶，或標題看不出結構（用「＋ 步驟」自己排）";
+    const STATIC_NO_STEPS = "示範版排不出這堂課的結構：用「插入範本」或「＋ 步驟」自己排";
+
+    // POST /steps/derive and /steps/check: (body, the stored session or null, data) -> response body
+    function derive(body, stored, D) {
+      body = body || {};
+      const s = sessionOf(body, stored), e = env(s, D), ctx = context(e, D);
+      if (stored && stored.steps && !body.rederive) return { steps: stored.steps, derived: false, context: ctx };
+      const k = deriveSig(s);
+      let d = Object.prototype.hasOwnProperty.call(D.derive || {}, k) ? D.derive[k] : deriveHere(s, D);
+      const unknown = d === undefined;
+      if (unknown) d = null;
+      return { steps: d, derived: true, context: ctx, reason: d ? "" : unknown ? STATIC_NO_STEPS : NO_STEPS };
+    }
+    function check(body, stored, D) {
+      body = body || {};
+      const s = sessionOf(body, stored), st = normalize(body.steps, D), e = env(s, D);
+      return { ...view(st, e.ctx, D, e.cap, e.cap_mode, e.rung), basis_label: context(e, D).basis_label, policy: e.policy };
+    }
+    // GET /steps/templates/recs from data.recs (export_static.pass_steps): this length, else the day's
+    // 推薦 for no particular length, else the nearest exported day of the same weekday (the day's cap)
+    const recsTerrain = (kind, t) => (kind === "hike" || ["trail", "hike"].includes(t) ? "trail" : "road");
+    const recsKey = (kind, day, ter, m) => `${kind}|${day}|${ter}|${m && isFinite(+m) && +m ? Math.trunc(+m) : ""}`;
+    function recsFor(D, kind, day, terrain, minutes) {
+      const R = (D.recs || {}).keys || {}, pool = (D.recs || {}).pool || [], ter = recsTerrain(kind, terrain);
+      const at = (i) => (i == null ? null : pool[i] || null);
+      const hit = at(R[recsKey(kind, day, ter, minutes)] ?? R[recsKey(kind, day, ter)]);
+      if (hit || !day) return hit;
+      const t = Date.parse(day + "T00:00:00Z"), wd = new Date(t).getUTCDay();
+      let best = null, bd = Infinity;
+      for (const k of Object.keys(R)) {
+        const [kk, dd, tt, mm] = k.split("|");
+        if (kk !== kind || tt !== ter || mm) continue;
+        const u = Date.parse(dd + "T00:00:00Z");
+        if (new Date(u).getUTCDay() === wd && Math.abs(u - t) < bd) { bd = Math.abs(u - t); best = at(R[k]); }
+      }
+      return best;
+    }
+    return { StepsError, pyRound, normalize, derive, check, deriveSig, targetPolicy, view, ctxOf, recsFor, recsKey };
+  })();
+
   // ---------------------------------------------------------------- the browser part
   function install(win) {
     const CFG = win.TRC_STATIC_CFG || {};
@@ -293,6 +1064,8 @@
       if (!r.ok) return null;
       try { return await r.json(); } catch (_) { return null; }
     }
+    let stepsP = null;                  // data/steps_ctx.json (backend/demo/static_steps.py), loaded once
+    const stepsData = () => (stepsP ||= loadData(STEPS_FILE).then((d) => (d && d.v === 1 ? d : null)));
     const unwrap = (j) => (j && typeof j === "object" && !Array.isArray(j) && "__trc_status" in j
       ? { status: j.__trc_status, body: j.body } : { status: 200, body: j });
 
@@ -332,6 +1105,12 @@
       if (method === "GET" || method === "HEAD") {
         if (path === "/api/v1/session") return json(200, { ...(win.TRC_SESSION || {}), csrf: "static" });
         if (path === "/api/v1/wko5/dataset/status") return json(200, { state: "ready", message: null });
+        if (path === PAPI + "/steps/templates/recs") {       // 插入範本's 推薦: its query follows every edit
+          const D = await stepsData(), p = url.searchParams;
+          const st = p.get("uid") ? findSession(p.get("uid")) : null;
+          const r = D && Steps.recsFor(D, p.get("kind") || "easy", p.get("day") || (st && st.day) || "", p.get("terrain") || (st && st.terrain), p.get("minutes"));
+          if (r) return json(200, r);
+        }
         const got = await getApi(url);
         // plain text: the pages show `${status} ${body text}` -> 「404 示範版沒有這筆資料」
         if (!got) return new win.Response(MISS_MSG, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
@@ -364,6 +1143,22 @@
           if (e instanceof OverlayError) return json(e.status, errBody(e.status === 403 ? "STATIC_READONLY" : "STATIC_INVALID", e.message));
           throw e;
         }
+      }
+      // the structure editor: computed here (Steps; the session as shown, overlay edits included)
+      if (method === "POST" && (path === PAPI + "/steps/check" || path === PAPI + "/steps/derive")) {
+        let parsed = null;
+        try { parsed = typeof body === "string" && body ? JSON.parse(body) : null; } catch (_) {}
+        const D = await stepsData();
+        if (D && parsed) {
+          const stored = parsed.uid ? findSession(parsed.uid) : null;
+          try {
+            return json(200, path.endsWith("/check") ? Steps.check(parsed, stored, D) : Steps.derive(parsed, stored, D));
+          } catch (e) {
+            if (e instanceof Steps.StepsError) return json(400, { detail: { errors: e.errors } });
+            if (win.console) win.console.warn("trc static steps:", e);
+          }
+        }
+        return json(403, errBody("STATIC_PRECOMPUTED_ONLY", CALC_MSG));
       }
       if (COMPUTE.test(path)) {
         if (typeof body === "string") {
@@ -463,6 +1258,6 @@
   return {
     fnv64, dataKey, dataFile, postFile, emptyOverlay, applyCalendar, applySessionList, weekDeltas, mondayOf,
     opPatch, opDelete, opAdd, opRestAdd, opRestDel, opScheduleTest, overlayRule, OverlayError, install,
-    RO_MSG, MISS_MSG, CALC_MSG,
+    Steps, STEPS_FILE, RO_MSG, MISS_MSG, CALC_MSG,
   };
 });
