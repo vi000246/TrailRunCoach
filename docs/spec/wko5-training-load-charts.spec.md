@@ -378,14 +378,14 @@ Feature visible immediately after deploy; no feature flag needed. If intensity m
 
 ### runFTP vs. Cycling FTP Confusion
 
-**Problem**: The original implementation used `ftp_w` (cycling FTP from Coros profile, 200W) for all running workout metric calculations. WKO5 uses a separate `runFTP` for running workouts:
+**Problem**: The original implementation used `ftp_w` (cycling FTP from the Coros profile) for all running workout metric calculations. WKO5 uses a separate `runFTP` for running workouts:
 ```
 runFTP = athleterange(date-89, date, ftp(meanmax(runpower)))
 ```
 This is the FTP derived from the running power MMP curve over a rolling 90-day window — a different value from cycling FTP.
 
 **Impact**:
-- TSS was inflated by ~16% (using 200W instead of ~186W runFTP)
+- TSS was inflated by ~16% (the cycling FTP was ~7.5% above the running CP fit)
 - `high_intensity_95pct_s` and `high_intensity_103pct_s` thresholds were wrong, suppressing intensity metrics
 - CTL/ATL/ACWR all derived from inflated TSS values
 
@@ -396,12 +396,12 @@ This is the FTP derived from the running power MMP curve over a rolling 90-day w
 4. Fixed `_import_one_file()` — running FIT workouts now use `get_run_ftp()` instead of `settings.ftp_w`.
 5. Added `POST /api/v1/athletes/{id}/recalculate-running-metrics` — recalculates TSS, NP, IF, variability_index, high_intensity_95pct_s, high_intensity_103pct_s for all existing running FIT workouts using the correct runFTP.
 
-**Data gap (wko4 files)**: 363 historical running workouts (2023–2025/11) exist only as `.wko4` files (WKO5's proprietary binary format). The `wko4_reader.py` can read metadata (sport, date from filename) but cannot decode exercise channel data (power, HR, distance). These workouts contribute 0 TSS to the PMC. The Coros API only provides data from when the user started using Coros (Dec 2025 onward). This data gap is a known limitation until wko4 binary decoding is implemented.
+**Data gap (wko4 files)**: 363 historical running workouts exist only as `.wko4` files (WKO5's proprietary binary format). The `wko4_reader.py` can read metadata (sport, date from filename) but cannot decode exercise channel data (power, HR, distance). These workouts contribute 0 TSS to the PMC. The Coros API only provides data from when the athlete started using Coros. This data gap is a known limitation until wko4 binary decoding is implemented.
 
-**runFTP result** (as of 2026-05-16, from 90-day running MMP):
-- CP model fit: 186W (using 3–30 min MMP durations)
-- Previous (wrong): 200W cycling FTP
-- TSS correction factor: ×(200/186)² ≈ 1.16
+**runFTP result** (from 90-day running MMP):
+- CP model fit on 3–30 min MMP durations (the runFTP estimate)
+- Previous (wrong): cycling FTP ≈ 1.075 × that fit
+- TSS correction factor: ×1.075² ≈ 1.16
 
 ---
 
@@ -409,36 +409,36 @@ This is the FTP derived from the running power MMP curve over a rolling 90-day w
 
 ### Power Spikes in Coros FIT Files
 
-During investigation of a runFTP discrepancy (WKO5 shows 250W vs our 186W), two suspicious workouts were identified:
+During investigation of a runFTP discrepancy (WKO5 shows a runFTP ≈ 1.34 × our CP fit), two suspicious workouts were identified:
 
-**April 19, 2026** — Coros FIT file (`476897474257125477_2026-04-19_other.fit`) is **corrupted**: `FitParseError: Invalid field size 1 for type 'uint32'`. The file was downloaded but failed to parse, so it was never imported and has no effect on any calculation. A stub DB record (`file_format="corrupt"`) was added to prevent re-download on future syncs.
+**Workout A** — a Coros FIT file is **corrupted**: `FitParseError: Invalid field size 1 for type 'uint32'`. The file was downloaded but failed to parse, so it was never imported and has no effect on any calculation. A stub DB record (`file_format="corrupt"`) was added to prevent re-download on future syncs.
 
-**April 26, 2026** — Contains 4 power spike samples: 1 isolated at 425W (t=1636s, surrounded by zeros and normal values) and 3 consecutive at 432W (t=1654–1656s, then drops back to 79W). These are GPS/accelerometer sensor artifacts. The 3-30 min MMP for this workout is unaffected (peak 1-min MMP = 206W, normal endurance values). These spikes do not change the runFTP calculation.
+**Workout B** — contains 4 power spike samples: 1 isolated sample at ~2 × CP (surrounded by zeros and normal values) and 3 consecutive samples at a similar level, then a drop back to an easy value. These are GPS/accelerometer sensor artifacts. The 3-30 min MMP for this workout is unaffected (normal endurance values). These spikes do not change the runFTP calculation.
 
 **Coros sync improvement**: `coros_client.py` updated to create a stub `WorkoutFile(file_format="corrupt")` when `_import_one_file` returns `None` for an unparseable FIT file. Previously the failure was silent and the file would be re-downloaded on every sync.
 
-### Why WKO5 Shows runFTP=250W
+### Why WKO5 Shows a Higher runFTP
 
-WKO5 displays `runFTP=250W`; our CP model consistently gives **186W** regardless of duration range:
-- 3–30 min (180–1800s): CP = 186.0W
-- 2–30 min (120–1800s): CP = 186.3W  
-- 1–30 min (60–1800s): CP = 186.8W
+WKO5 displays a `runFTP` ≈ 1.34 × ours; our CP model gives the same value (within 0.5%) regardless of duration range:
+- 3–30 min (180–1800s)
+- 2–30 min (120–1800s)
+- 1–30 min (60–1800s)
 
-The 250W is NOT caused by power spikes in Coros FIT files. The most likely cause: **WKO5 can decode the April 19 `.wko4` binary** (that file contains running power channel data from within the 90-day window that WKO5's proprietary decoder can read, but our `wko4_reader.py` cannot). If April 19 was a hard interval session, its MMP data would shift WKO5's CP estimate toward 250W. User confirmed 186W is correct; WKO5's 250W is wrong.
+The higher value is NOT caused by power spikes in Coros FIT files. The most likely cause: **WKO5 can decode workout A's `.wko4` binary** (that file contains running power channel data from within the 90-day window that WKO5's proprietary decoder can read, but our `wko4_reader.py` cannot). If it was a hard interval session, its MMP data would shift WKO5's CP estimate upward. The user confirmed our CP fit is correct; WKO5's value is wrong.
 
-The coincidence: the 75-second MMP in the 90-day window is 250.4W (from March 12 interval session). WKO5's `ftp()` function may use a different reference duration or fitting range internally.
+The coincidence: the 75-second MMP in the 90-day window (from an interval session) equals WKO5's runFTP. WKO5's `ftp()` function may use a different reference duration or fitting range internally.
 
 ### Historical Data Expansion (2026-05-16)
 
-Coros sync was previously limited to Dec 2025–May 2026 (59 FIT workouts). After a full re-sync (back to Nov 2020), **667 Coros workouts** were imported, including **321 running workouts** from Nov 2020 onward. Following `recalculate-running-metrics`, **243 running workouts** now have TSS computed. The May 2026 running PMC (CTL≈20.6, ATL≈9.3) remains unchanged because most historical workouts (2020–2025) fall outside the ATL tau window.
+Coros sync was previously limited to the last few months (59 FIT workouts). After a full re-sync (several years back), **667 Coros workouts** were imported, including **321 running workouts**. Following `recalculate-running-metrics`, **243 running workouts** now have TSS computed. The current running PMC remains unchanged because most historical workouts fall outside the ATL tau window.
 
 ### ATL Discrepancy with WKO5
 
-WKO5 screenshot shows CTL=20, ATL=20, TSB=9; our website shows CTL≈20.6, ATL≈9.3 for May 16.  
-- CTL and TSB match closely (20 vs 20.6; 9 vs ~10).  
-- ATL is 2× off (20 vs 9.3).  
+On the same day, a WKO5 screenshot and our website show:
+- CTL and TSB match closely (within ~1).
+- ATL is 2× off (WKO5 higher).
 
-Leading hypothesis: WKO5's ATL includes TSS from historical wko4 running workouts (which it can read) that fall within the 7-day ATL window, e.g., the April 19 wko4 workout (we get TSS=0 from it because we can't read its power data, but WKO5 can). Alternatively, the WKO5 screenshot cursor was hovering over a past chart date with higher ATL. No code fix available without wko4 binary decoding.
+Leading hypothesis: WKO5's ATL includes TSS from historical wko4 running workouts (which it can read) that fall within the 7-day ATL window, e.g., workout A (we get TSS=0 from it because we can't read its power data, but WKO5 can). Alternatively, the WKO5 screenshot cursor was hovering over a past chart date with higher ATL. No code fix available without wko4 binary decoding.
 
 ---
 
@@ -452,5 +452,5 @@ Leading hypothesis: WKO5's ATL includes TSS from historical wko4 running workout
 ## Open Questions (Still Pending)
 
 - [ ] Is `total_ascent` reliable in all Coros FIT files? Outdoor GPS runs: yes. Indoor workouts: falls back to altitude channel diff (`np.diff(altitude)`).
-- [ ] Historical wko4 data (2023–2025): running workouts with no metrics. Requires reverse-engineering the wko4 binary channel format to extract power/HR/distance series. This is also why WKO5's ATL doesn't match ours — WKO5 can read the wko4 power data.
-- [ ] Power spike filtering: Coros running power (estimated from accelerometer/GPS) occasionally produces brief spikes (e.g., April 26 had 4 samples at 400–432W). These don't affect the CP model but pollute the 1–3s MMP. Consider adding a cap (e.g., 5×runFTP) before MMP computation.
+- [ ] Historical wko4 data: running workouts with no metrics. Requires reverse-engineering the wko4 binary channel format to extract power/HR/distance series. This is also why WKO5's ATL doesn't match ours — WKO5 can read the wko4 power data.
+- [ ] Power spike filtering: Coros running power (estimated from accelerometer/GPS) occasionally produces brief spikes (e.g., one run had 4 samples at ~2 × CP). These don't affect the CP model but pollute the 1–3s MMP. Consider adding a cap (e.g., 5×runFTP) before MMP computation.

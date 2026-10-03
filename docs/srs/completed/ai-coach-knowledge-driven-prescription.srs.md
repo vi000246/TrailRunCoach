@@ -34,7 +34,7 @@ linear_issue: null
 
 ### Changed Business Logic
 
-- **新增** `backend/engine/ai/knowledge.py`：curated 訓練知識常數（Palladino 區間定義與訓練目的、CP 測試協定、間歇模板、越野/爬升概念、使用者 profile 事實如 CP≈192W/TTE 30min/Trail PI），組成知識區塊。
+- **新增** `backend/engine/ai/knowledge.py`：curated 訓練知識常數（Palladino 區間定義與訓練目的、CP 測試協定、間歇模板、越野/爬升概念、使用者 profile 事實如 CP/TTE/Trail PI），組成知識區塊。
 - **新增** zone 計算（功率以 rFTP × Palladino %、心率以 LTHR × %，沿用 `workouts.py` 既有 `POWER_ZONES_DEF`/`HR_ZONES_DEF` 帶權），輸出每區的 W/bpm 範圍。
 - **改** `build_context`：加入 zone 邊界與越野負荷摘要（hrTSS/trail summary）。
 - **改** `SYSTEM_PROMPT`：注入知識區塊 + 指示輸出「狀態判讀 → 建議 zone → 間歇處方（時間×瓦數/組數）」。
@@ -70,9 +70,9 @@ linear_issue: null
 ## Acceptance Criteria
 
 ### AC-1: zone 計算端點
-- **Given**: 使用者設定 run_ftp_w=192、lthr=182
+- **Given**: 使用者設定 run_ftp_w=220、lthr=160（範例跑者）
 - **When**: 呼叫 `GET /api/v1/ai/zones?athlete_id=1`
-- **Then**: 回 7 個功率區與 5 個心率區，每區有 name 與 low/high 的 W/bpm 邊界（如 zone4 threshold ≈ 0.90–1.05×192W）
+- **Then**: 回 7 個功率區與 5 個心率區，每區有 name 與 low/high 的 W/bpm 邊界（如 zone4 threshold ≈ 0.90–1.05×220W）
 - **Test**: `backend/tests/test_ai_zones.py::test_zones_from_settings`
 
 ### AC-2: 知識注入 system prompt
@@ -96,5 +96,5 @@ linear_issue: null
 ## Open Questions
 
 - [ ] Palladino 區間 % 是否完全沿用 `workouts.py` 既有 7 區（Coggan-style），或筆記有自訂個人化邊界？初版沿用既有 def，筆記若有特例再覆寫。
-- [ ] 使用者 profile 事實（CP 192W 等）放知識模組常數，未來變動需手動更新——是否改讀 settings？CP 與 rFTP 關係待確認。
+- [ ] 使用者 profile 事實（CP 等）放知識模組常數，未來變動需手動更新——是否改讀 settings？CP 與 rFTP 關係待確認。
 - [ ] 間歇處方的 RWC（無氧儲備）個人化參數是否要納入計算，還是交給 LLM 依知識文字判斷？初版交 LLM。

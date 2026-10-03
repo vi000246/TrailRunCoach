@@ -1,4 +1,4 @@
-"""A brand-new runner without the author's setup (generalize-athlete plan B0):
+"""A brand-new runner without the original single-user setup (generalize-athlete plan B0):
 COROS only, no Stryd, outside Taiwan, no WKO5 folder, nothing entered on the
 settings page. Every page and every parameterless data route must answer
 without a server error.

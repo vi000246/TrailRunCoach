@@ -5,7 +5,7 @@
   - `docs/prd/wko5-training-ai.prd.md` — Milestone 4（initial: Coros 非官方 API）
   - `docs/prd/wko5-trail-multipage-sync-coach.prd.md` — Milestone 3（統一同步頁 + 已載入資料盤點 + TP 接 UI）
 - **Source Linear Issue**: N/A — standalone
-- **Owner**: vi000246
+- **Owner**: maintainer
 - **Status**: IMPLEMENTED（M3 delta 進行中）
 - **Generated**: 2026-05-15
 - **Last updated**: 2026-10-01
@@ -21,10 +21,10 @@
 | 2026-09-30 | code-sync | N/A | 掃描改走 `fit/<source>/` 並標 source + provider id、`FitFolderDataset` 時區取 `athlete.timezone`、`charts.map.basemap` / `charts.map.overlays` 設定鍵、COROS 課表推送改指向 overview.spec.md；路徑改寫成使用者資料夾相對形式 |
 | 2026-10-01 | feat/auto-replan | N/A | 同步結束時，若這次下載 ≥ 1 筆活動（狀態 ok／partial），`runner.stream` 會呼叫 `plan_auto.after_sync`，在背景 task 裡用自己的 DB session 自動調整課表並推送（`docs/spec/plan-auto.spec.md`）。失敗不影響同步結果 |
 | 2026-10-01 | bugfix | N/A | `FitFolderDataset` 前置修正：越野分類讀 app DB（含覆寫、跨來源重複）、sub_sport 後備；門檻／體重改成計畫 → `athlete_settings` → as-of 估算，WKO5 athlete 檔改為選用（`charts.fit_settings_from_wko5`）；`source_stamp` 含 DB 簽章 |
-| 2026-10-01 | bugfix | user request (COROS vs TP back-test) | 每筆活動的功率來源（`stryd` / `watch` / `none`，`backend/engine/power_source.py`）；手錶推估功率預設不進功率模型、不算功率 TSS（設定 `power.accept_watch_power`，預設 false）；記錄 COROS 與 TP 檔案集合的差異（TP 獨有的 2025-12-14 垃圾功率檔、TP 缺 2025-03/04 的 Stryd 跑步） |
+| 2026-10-01 | bugfix | user request (COROS vs TP back-test) | 每筆活動的功率來源（`stryd` / `watch` / `none`，`backend/engine/power_source.py`）；手錶推估功率預設不進功率模型、不算功率 TSS（設定 `power.accept_watch_power`，預設 false）；記錄 COROS 與 TP 檔案集合的差異（TP 獨有的一筆垃圾功率檔、TP 缺一段時期的 Stryd 跑步） |
 | 2026-10-01 | feature | user request (bad activity files) | 壞掉的活動檔（忘了停錶騎車／開車、功率不可能）整筆排除：`FitFolderDataset`／`Dataset` 不放進 `ds.workouts`、`cptest.bad_files`；覆寫 `activity_tags.exclusion`，設定 `activities.exclude_bad`（預設 true），併入 `source_stamp`（見 workouts.spec.md） |
-| 2026-10-02 | feat/primary-source-2 | user request (主要資料來源 follow-ups) | 以開始時間認活動（`backend/engine/activity_key.py`：同檔、去掉 `coros/`／`tp/` 前綴的同檔，否則 ±3 分內最近的開始時間；WKO5 檔名帶開始時間）：背負重量、獨攀標記、山名註記（新紀錄附 `start`，舊的就地沿用，不改鍵）、活動標籤／當作間歇／RPE、活動天氣與路線索引對應、課表完成紀錄的 `done_by.index`（依 `start` 改指目前資料來源的 index，`plan_store.load`／`_plan_rows`／`plan_match.assign`／月曆）。圖表來源讀取時遷移：存的是舊的 `coros` 且沒在新 UI 選過（`charts.data_source.chosen`）→ 視為 `synced`，不寫 DB。`cptest.curves`／`scan` 跟主要來源（`secondary_duplicates`，同 merge 規則；TP 檔名也讀）。實測（DB 與快取複本）：三筆課表完成紀錄 index 801/800/802 → 合併資料的 1064/1063/1065 同一活動；10/10 標籤、2/2 山名找得到；cptest 跳過 807 個 TP 重複檔 |
-| 2026-10-02 | feat/primary-source | user request (主要資料來源) | `sync.primary_source` 改為 自動（預設）／COROS／TrainingPeaks（`backend/sync/primary.py`；自動＝最新活動日最新者，同日看上次同步是否完整、近 90 天筆數，再 COROS）。新圖表來源 `synced`（`charts.data_source` 預設）：兩個 FIT 資料夾合併，同一活動（開始時間 ±2 分，同 dedup）只用主要來源的檔，另一來源只補主要來源沒有的活動；同來源重複檔留樣本數多的；不逐值互補（「算不出來就不要補了」）。`MultiFitStore` 沿用各資料夾既有快取。自動同步（開網站／每日）只同步主要來源，另一個要開 `sync.secondary.auto`（進階）；主要來源停用或登出時改同步另一個。自動模式同步下載後重建 dedup。活動編輯頁顯示來源 badge（`origin`）。實測（唯讀，快取複本）：主要 COROS → 1068 筆（COROS 799、TP 補 269，多為 2022–2023）；主要 TP → 1068 筆 |
+| 2026-10-02 | feat/primary-source-2 | user request (主要資料來源 follow-ups) | 以開始時間認活動（`backend/engine/activity_key.py`：同檔、去掉 `coros/`／`tp/` 前綴的同檔，否則 ±3 分內最近的開始時間；WKO5 檔名帶開始時間）：背負重量、獨攀標記、山名註記（新紀錄附 `start`，舊的就地沿用，不改鍵）、活動標籤／當作間歇／RPE、活動天氣與路線索引對應、課表完成紀錄的 `done_by.index`（依 `start` 改指目前資料來源的 index，`plan_store.load`／`_plan_rows`／`plan_match.assign`／月曆）。圖表來源讀取時遷移：存的是舊的 `coros` 且沒在新 UI 選過（`charts.data_source.chosen`）→ 視為 `synced`，不寫 DB。`cptest.curves`／`scan` 跟主要來源（`secondary_duplicates`，同 merge 規則；TP 檔名也讀）。實測（DB 與快取複本）：三筆課表完成紀錄的 index 都改指到合併資料裡的同一活動；10/10 標籤、2/2 山名找得到；cptest 跳過 807 個 TP 重複檔 |
+| 2026-10-02 | feat/primary-source | user request (主要資料來源) | `sync.primary_source` 改為 自動（預設）／COROS／TrainingPeaks（`backend/sync/primary.py`；自動＝最新活動日最新者，同日看上次同步是否完整、近 90 天筆數，再 COROS）。新圖表來源 `synced`（`charts.data_source` 預設）：兩個 FIT 資料夾合併，同一活動（開始時間 ±2 分，同 dedup）只用主要來源的檔，另一來源只補主要來源沒有的活動；同來源重複檔留樣本數多的；不逐值互補（「算不出來就不要補了」）。`MultiFitStore` 沿用各資料夾既有快取。自動同步（開網站／每日）只同步主要來源，另一個要開 `sync.secondary.auto`（進階）；主要來源停用或登出時改同步另一個。自動模式同步下載後重建 dedup。活動編輯頁顯示來源 badge（`origin`）。實測（唯讀，快取複本）：主要 COROS → 1068 筆（COROS 799、TP 補 269，多為較早年份）；主要 TP → 1068 筆 |
 | 2026-10-01 | perf/dataset-load | user request (login / token) | 登入一次：某 region 發了 token 後不再登入其他 region；同時兩個登入回 409 `COROS_LOGIN_BUSY`（COROS 只認最後一次登入）。資料 server 偵測順序：上次偵測到的 → US → 登入 server → 其餘；全部探測失敗（2026-10-01：dataset 建置卡住 event loop，探測全部逾時）時沿用上次的，否則 US。「記住密碼」（預設關）：密碼以 `secrets.seal` 存 `sync_state.coros_password_sealed`／`tp_password_sealed`，token 過期或 result 1019 時自動登入一次、重試一次，取消勾選或登出即刪除（`docs/secrets-and-keys.md`）。同步時 FIT 解析改在 thread，同步下載到新檔後背景重建圖表 Dataset |
 | 2026-10-01 | bugfix | user request (charts on COROS) | 圖表分析在 COROS 來源：FIT `vam` 與登山標籤、Stryd-only PD 擬合的圖表 CP（計畫測試之前）、閾值配速推估（CP × 速度／功率比）、區間表來源與日期、越野／爬坡課表看功率、訓練量週增幅改 4 週平均（見「圖表分析在 COROS 來源」） |
 | 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
@@ -75,16 +75,16 @@ User-Agent: Mozilla/5.0 ...Chrome/145.0.0.0 Safari/537.36
   "apiCode": "...",
   "message": "OK",
   "data": {
-    "userId":      "467711295934709760",
+    "userId":      "<user_id>",
     "accessToken": "<token>",           // 在 data.accessToken，不是 result.accessToken
     "zoneData": {
-      "ftp":  200,    // 單位 W，從 Coros profile 自動帶入
-      "lthr": 182,    // 心率閾值
-      "rhr":  53
+      "ftp":  230,    // 單位 W，從 Coros profile 自動帶入
+      "lthr": 178,    // 心率閾值
+      "rhr":  50
     },
-    "weight": 70.5,
-    "maxHr":  202,
-    "criticalPower": 186
+    "weight": 70,
+    "maxHr":  190,
+    "criticalPower": 220
   }
 }
 ```
@@ -130,8 +130,8 @@ Headers: accessToken + yfheader + User-Agent
   "data": {
     "dataList": [               // 欄位在 data.dataList，不是 result.dataList
       {
-        "labelId":   "477483755548737936",   // unique activity ID
-        "name":      "台北市 跑步",
+        "labelId":   "<label_id>",           // unique activity ID
+        "name":      "<城市> 跑步",
         "sportType": 100,        // 100=cycling, 102=trail run, 105=hiking, 200=run, 402=strength, 9904=custom
         "date":      20260514,   // YYYYMMDD 8位整數，不是 Unix timestamp
         "startTime": 1747282306, // Unix timestamp（不用於日期解析）
@@ -329,9 +329,9 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 ### `athlete_settings` 表（已有，從 Coros 登入自動填入）
 
 登入成功後自動 upsert：
-- `ftp_w` ← `data.zoneData.ftp`（200W 實測）
-- `lthr` ← `data.zoneData.lthr`（182 實測）
-- `weight_kg` ← `data.weight`（70.5kg 實測）
+- `ftp_w` ← `data.zoneData.ftp`
+- `lthr` ← `data.zoneData.lthr`
+- `weight_kg` ← `data.weight`
 - `effective_date` ← 今日
 
 ---
@@ -382,8 +382,8 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 **FIT 資料集的前置（2026-10-01，`docs/research/unsourced-rules.md` §0.10 第 0 步）**：app 的資料要從 TP／COROS 來，WKO5 只當對照。
 
 - **越野／路跑**：`sport_of`（`backend/engine/wko5expr/fitdataset.py:89`）先看 app DB 的 `workout_files.trail_classification`（唯讀開啟，`load_classifications`，`backend/engine/wko5expr/fitdataset.py:129`），FIT 的 session sub_sport 只當後備（COROS 的 FIT 沒有 trail sub_sport，原本整批越野都被當路跑，回測越野 n = 0；sub_sport 先前也根本沒被讀進來，`fit_to_channels` 現在帶出 `sub_sport`）。跨來源重複（`duplicate_of`）視為同一筆活動：群組裡任一列的使用者覆寫優先（自己這列 → 主紀錄 → 其他重複列），否則用自己這列的自動值，再退到主紀錄（`classification_for`，`backend/engine/wko5expr/fitdataset.py:180`）。每個來源的資料集仍保留自己的檔案（不因為是重複列就丟掉，否則該來源會少活動）。越野跑同時加上 WKO5 的 `runningtrail` 標籤，因為 thresholds／品質門檻／status／成就只看標籤。
-- **門檻與體重**，依序：賽季計畫的 dated 列（`Dataset.setting` / `cp`）→ app DB 的 `athlete_settings`（體重、`run_ftp_w`、閾值配速；`_load_db_settings`，`backend/engine/wko5expr/fitdataset.py:417`）→ 從這些 FIT 估算的 as-of LTHR（`_estimate_settings`，`backend/engine/wko5expr/fitdataset.py:445`：每 30 天一個格點，推估；格點日只用當天以前的跑步，`thresholds.estimate`，每次跑步對照它自己日期的 `racepower.athlete.cp_as_of`，估出的值只套用到格點日以後；只在有 app DB 時自動估算）→ 未設定。跑步 FTP（功率 TSS）**不**用估算值補（圖表的 CP 另有 Stryd-only 擬合，見「圖表分析在 COROS 來源」）：`cp_as_of` 的 PD 重擬在第一筆計畫 CP 之前沒有合理性參考，這位跑者的 COROS 資料在 2024-06～12 得到 362–384 W（計畫 CP 220 W），會讓那段時間的功率 TSS 少 4 倍；沒有計畫／DB 值的跑步改用 hrTSS（估算的 LTHR）或維持未設定。實測（2026-10-01，同步進行中的 COROS 803 筆）：LTHR 估算只有 2024-03～05（145）與 2025-10 之後（149–157）有值，中間約 17 個月沒有 LTHR，那段 COROS 跑步在 app 路徑上沒有 TSS。WKO5 athlete 檔只有在設定 `charts.fit_settings_from_wko5 = true`（預設 false，`backend/settings/repository.py:53`）時才讀（`dataset_for_source`，`backend/engine/wko5expr/fitdataset.py:537`）。各處的來源標籤改走 `Dataset.setting_label`，FIT 資料集不再顯示「WKO5 設定」。
-- **`athlete_settings.lthr` / `ftp_w` 不當跑步門檻**：唯一的自動寫入者是 `coros_client.login`（COROS 帳號 `zoneData.lthr` / `.ftp` 與體重，日期 = 登入當天 UTC），沒有記錄是哪個運動；TP 的 `fetch_tp_settings` 只回傳 JSON、不寫 DB。2026-09-30 那列（FTP 200、LTHR 182、66.3 kg）是 COROS 登入寫的，不是 TP；LTHR 182 高於同一天 12′ 全力測試的峰值心率 171，不可能是現在的跑步 LTHR。這兩欄留在 `settings_ignored` 供顯示，體重照用。
+- **門檻與體重**，依序：賽季計畫的 dated 列（`Dataset.setting` / `cp`）→ app DB 的 `athlete_settings`（體重、`run_ftp_w`、閾值配速；`_load_db_settings`，`backend/engine/wko5expr/fitdataset.py:417`）→ 從這些 FIT 估算的 as-of LTHR（`_estimate_settings`，`backend/engine/wko5expr/fitdataset.py:445`：每 30 天一個格點，推估；格點日只用當天以前的跑步，`thresholds.estimate`，每次跑步對照它自己日期的 `racepower.athlete.cp_as_of`，估出的值只套用到格點日以後；只在有 app DB 時自動估算）→ 未設定。跑步 FTP（功率 TSS）**不**用估算值補（圖表的 CP 另有 Stryd-only 擬合，見「圖表分析在 COROS 來源」）：`cp_as_of` 的 PD 重擬在第一筆計畫 CP 之前沒有合理性參考，在一位跑者的 COROS 資料上，手錶功率時期的擬合值比計畫 CP 高約 70%，會讓那段時間的功率 TSS 少到約三分之一；沒有計畫／DB 值的跑步改用 hrTSS（估算的 LTHR）或維持未設定。實測（2026-10-01，一位跑者同步進行中的 COROS 803 筆）：LTHR 估算只有前後兩段時期有值，中間約 17 個月沒有 LTHR，那段 COROS 跑步在 app 路徑上沒有 TSS。WKO5 athlete 檔只有在設定 `charts.fit_settings_from_wko5 = true`（預設 false，`backend/settings/repository.py:53`）時才讀（`dataset_for_source`，`backend/engine/wko5expr/fitdataset.py:537`）。各處的來源標籤改走 `Dataset.setting_label`，FIT 資料集不再顯示「WKO5 設定」。
+- **`athlete_settings.lthr` / `ftp_w` 不當跑步門檻**：唯一的自動寫入者是 `coros_client.login`（COROS 帳號 `zoneData.lthr` / `.ftp` 與體重，日期 = 登入當天 UTC），沒有記錄是哪個運動；TP 的 `fetch_tp_settings` 只回傳 JSON、不寫 DB。實測時 DB 裡那列是 COROS 登入寫的，不是 TP；它的 LTHR 高於同一天 12′ 全力測試的峰值心率，不可能是現在的跑步 LTHR。這兩欄留在 `settings_ignored` 供顯示，體重照用。
 - **快取**：`source_stamp` 多帶 `db_stamp()`（`backend/engine/wko5expr/datasource.py:65`），分類覆寫、去重或 `athlete_settings` 變了，即使 FIT 檔沒變也會重建 Dataset。`FitFolderDataset.cached_series` 改成記憶體快取，key 含當時的門檻（`backend/engine/wko5expr/fitdataset.py:513`）。
 - 測試：`backend/tests/test_fit_dataset_prereqs.py`（合成 FIT ＋ tmp SQLite，不碰 WKO5 資料夾與真實 DB）。
 
@@ -407,11 +407,11 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 // Response 200
 {
   "authenticated": true,
-  "coros_user_id": "467711295934709760",
+  "coros_user_id": "<user_id>",
   "email": "user@example.com",
   "region": "eu",
-  "ftp_w": 200,
-  "lthr": 182,
+  "ftp_w": 230,
+  "lthr": 178,
   "token_expires": "2026-05-16T02:15:00Z"
 }
 
@@ -435,10 +435,10 @@ event: sync_progress
 data: {"status": "started", "since": "20260514", "until": "20260515"}
 
 event: sync_progress
-data: {"status": "checking", "activity_id": "477483755548737936", "date": "2026-05-14"}
+data: {"status": "checking", "activity_id": "<label_id>", "date": "2026-05-14"}
 
 event: sync_progress
-data: {"status": "downloaded", "activity_id": "477483755548737936", "file": "..._cycling.fit", "sport": "cycling"}
+data: {"status": "downloaded", "activity_id": "<label_id>", "file": "..._cycling.fit", "sport": "cycling"}
 
 event: sync_progress
 data: {"status": "skipped", "activity_id": "...", "reason": "already_imported"}
@@ -453,7 +453,7 @@ data: {"status": "complete", "total_downloaded": 2, "total_checked": 2}
 **POST /api/v1/pmc/recompute**
 ```json
 // Response
-{ "updated": 59, "ftp_w": 200.0 }
+{ "updated": 59, "ftp_w": 230.0 }
 ```
 
 ---
@@ -493,13 +493,13 @@ TSS = (duration × NP × IF) / (runFTP × 3600) × 100
 ### 功率來源（2026-10-01，`backend/engine/power_source.py`）
 
 同一個 FIT `power` 欄位裝了兩種功率，WKO5／TrainingPeaks 都分不出來（它們讀的是同一份
-COROS 上傳的 FIT；2025-12-21 與 2026-09-30 兩邊的檔案功率完全相同）：
+COROS 上傳的 FIT；抽查的兩筆，兩邊的檔案功率完全相同）：
 
-| 來源 | 判定 | 這位運動員的歷史 |
-|---|---|---|
-| `stryd` | 紀錄裡有 Stryd 開發者欄位（Form Power、Air Power、Leg Spring Stiffness，經 COROS 轉寫，`developer_data_id` 是 COROS 的），或 `device_info` 有 Stryd（manufacturer 95） | 2025-03-19 起 |
-| `watch` | 有功率但沒有上述欄位／裝置：手錶從手腕推估 | 2023-04 – 2024-09（抽查的三筆 2024-05 檔是 Garmin 錶錄的），之後零星幾次沒配對 Stryd |
-| `none` | 沒有 > 0 的功率 | 2023-02/03、2024-08 – 2025-03 多數 |
+| 來源 | 判定 |
+|---|---|
+| `stryd` | 紀錄裡有 Stryd 開發者欄位（Form Power、Air Power、Leg Spring Stiffness，經 COROS 轉寫，`developer_data_id` 是 COROS 的），或 `device_info` 有 Stryd（manufacturer 95） |
+| `watch` | 有功率但沒有上述欄位／裝置：手錶從手腕推估（配了 Stryd 的跑者也會有零星幾次沒配對） |
+| `none` | 沒有 > 0 的功率 |
 
 把有 Form Power 等欄位的跑步當成 Stryd、沒有的當成手錶推估，是推估（手錶本身不算 form power）。
 
@@ -523,28 +523,28 @@ COROS 上傳的 FIT；2025-12-21 與 2026-09-30 兩邊的檔案功率完全相�
 files」：均速或持續 60 秒／5 分／20 分的速度超過同時間世界紀錄均速 × 1.15（推估），或平均功率
 > 10 W/kg（推估）。使用者覆寫存在 `activity_tags.exclusion`（`keep` / `exclude`），設定
 `activities.exclude_bad`（預設 true）；兩者都併入 `source_stamp`。parity 模式不排除。
-TP 的 2025-12-14 垃圾檔（下節）就是這條規則抓的：不再只靠「沒有 Stryd 欄位」擋下（已知限制 7）。
+TP 的那筆垃圾檔（下節）就是這條規則抓的：不再只靠「沒有 Stryd 欄位」擋下（已知限制 7）。
 
 ### 圖表分析在 COROS 來源（2026-10-01，fix/charts-coros-source）
 
 切到 `charts.data_source = coros` 後，「周期化訓練」幾張圖空白或數字不對，原因與修正（實測 802 筆，唯讀）：
 - **VAM 圖空白**：FIT 資料集沒算 4224 `vam`（全部 NaN），登山／健行也沒有 `hiking` / `mountaineering`
   標籤（圖用 `hastag()` 選）。`workout_fields` 補 `vam = round(climbing / duration · 3600)`（WKO5 定義，
-  含停留時間，所以多日百岳的 VAM 很低：2026-08-14 三天行程 45 m/h），`TYPE_TAGS` 依運動類型加標籤。
+  含停留時間，所以多日百岳的 VAM 很低：例如三天行程約 45 m/h），`TYPE_TAGS` 依運動類型加標籤。
   近一年：越野 20 點、登山 4 點（之前 0／0）。
-- **Palladino 區間沒資料**：計畫 CP 220 W 是 2026-09-30，之前的跑步沒有 CP（WKO5 設定不再讀、
-  `run_ftp_w` 空），近 30 天 18 次跑步只算到 9/30 那次（2509 s）。`FitFolderDataset.cp`：計畫測試 →
+- **Palladino 區間沒資料**：計畫 CP 從第一次 CP 測試那天才有，之前的跑步沒有 CP（WKO5 設定不再讀、
+  `run_ftp_w` 空），近 30 天 18 次跑步只算到測試那一次。`FitFolderDataset.cp`：計畫測試 →
   `run_ftp_w` → **只用 Stryd 跑步**的 PD 模型（`racepower.athlete.pd_model`，90 天窗、每 30 天一格、
   窗內 ≥ 5 次 Stryd 跑步，推估；手錶功率永遠不進來，壞檔已在 `ds.workouts`／`cptest.curves` 外）→ 未設定。
-  擬合值 2025-04 起 177.9–202.9 W（2026-08-14 為 168.9 W），2025-03-22 只有 1 次跑步的 135.6 W 被門檻擋下。
+  擬合值大致落在計畫 CP 的 0.77–0.92 倍；窗內只有 1 次跑步的格點（擬合值明顯偏低）被門檻擋下。
   功率 TSS 不用這個值。區間表的秒數改用表上印的門檻（當天的 CP）計算，表頭寫出來源與日期、W′
   （有測才有；PD 擬合時顯示 FRC ≈ W′，推估）。近 30 天：39 999 s，1C+Z2 佔 52%。
 - **Friel 配速區間沒資料**：計畫沒有閾值配速欄位，`athlete_settings.threshold_pace_s_per_km` 是空的（TP
-  沒寫進 DB；COROS 登入那列的 LTHR 182／FTP 200 本來就不用）。`thresholds.estimate_tpace`（推估）：
+  沒寫進 DB；COROS 登入那列的 LTHR／FTP 本來就不用）。`thresholds.estimate_tpace`（推估）：
   先用 CP × 近 90 天 Stryd 路跑的速度／功率比（中位數）＝ CP 對應的平路配速；沒有 Stryd 時才用「心率在
-  LTHR ±3% 的最快 20 分鐘」中位數（Friel 30 分鐘測試）。後者在夏天讀出 8:03 /km（心率飄移：同一段時間
-  心率在 LTHR 時配速約 8:00），對不上 2025-12 半馬的 6:54 /km，所以排第二。實測：6:01 /km（CP 220 W、
-  40 次、12.6 mm/s/W）；近 30 天 Z1+Z2 81%。估算值只給區間表，不當 rTSS 的閾值配速。
+  LTHR ±3% 的最快 20 分鐘」中位數（Friel 30 分鐘測試）。後者在夏天讀得太慢（心率飄移：夏天心率在
+  LTHR 時配速明顯變慢），比一場半程路跑賽的實際配速還慢約 17%，所以排第二。實測：例如 CP 220 W、
+  速度／功率比 12.6 mm/s/W（40 次）→ 6:01 /km；近 30 天 Z1+Z2 81%。估算值只給區間表，不當 rTSS 的閾值配速。
 - **課表建議強度**：新增「山路長天／越野輕鬆」（功率 0.75–0.88 CP、心率 ≤ AeT）與「爬坡重複」（功率
   0.95–1.06 CP）兩列，看功率、心率第二；「長跑」改成路跑。依據與限制寫在 `zones.TERRAIN_NOTE`：心率延遲
   τ ≈ 60 s（Hunt 2015／2019）、Stryd 在 0–8% 坡 ≈ 固定代謝負荷（van Rassel 2026）、Stryd 自己說陡峭技術
@@ -552,19 +552,18 @@ TP 的 2025-12-14 垃圾檔（下節）就是這條規則抓的：不再只靠�
   總覽的「長時間輕鬆（山路）」仍用 `long` 那列（心率）——還沒改。
 - **訓練量週增幅太大**：公式（本週 ÷ 上週 − 1，所有運動的移動時間）沒算錯，也沒有重複或壞檔灌水
   （COROS 資料夾近一年沒有來源內重複、排除 1 筆；TP 的重複是另一個來源）。數字大是因為單週比單週：
-  2026-08-10 那週有三天百岳（DB 經過時間 49.1 h），讓那週 +131%、下週 −86%；7/27 +32%、8/24 +92%。
+  某週有三天百岳（經過時間約 49 h），讓那週 +131%、下週 −86%；其他週也有 +30%～+90% 的單週跳動。
   UA 說的是「平均」每週 > 10% 持續約 8 週，所以改成「近 4 週平均」的週變化（沒有活動的週算 0）：
   近 20 週落在 −45%～+44%，最大 +44% 仍是百岳那週、−45% 是它離開 4 週窗的那週。
 
 ### COROS 與 TP 資料集差異（2026-10-01 實測，唯讀）
 
-TP 1086 筆（含 2020 起、796 筆標 `duplicate_of`），COROS 808 筆。功率回測差異的來源：
-- **TP 獨有的 2025-12-14 05:42 UTC「跑步」**（`tp_workout_id` 3477204875）：17 分鐘 12.3 km（約
-  43 km/h）、平均功率 899 W／最大 1462 W，COROS APEX 2 Pro 錄的，沒有 Stryd 欄位；COROS 資料夾
-  沒有這筆（推定：在 COROS 端刪除過，TP 留著）。它在 2025-12-21 半馬前 90 天窗內，讓 PD 模型
-  擬合失敗，詳見 racepower.spec.md「COROS vs TP」。
-- TP 缺 COROS 有的 2025-03-19 – 04-16 十筆 Stryd 跑步（TP 第一筆 Stryd 檔是 2025-04-19）；
-  另有 2025-08-12、08-13、11-02（0.1 km）三筆 TP 獨有的短跑。其餘配對到的跑步 mean-max 完全相同。
+TP 1086 筆（796 筆標 `duplicate_of`），COROS 808 筆。功率回測差異的來源：
+- **TP 獨有的一筆「跑步」**：約 17 分鐘 12 km（約 43 km/h）、平均功率約 900 W，手錶錄的，沒有
+  Stryd 欄位；COROS 資料夾沒有這筆（推定：在 COROS 端刪除過，TP 留著）。它落在一場半程路跑賽
+  前的 90 天窗內，讓 PD 模型擬合失敗，詳見 racepower.spec.md「COROS vs TP」。
+- TP 缺 COROS 有的十筆早期 Stryd 跑步（TP 的 Stryd 檔晚約一個月才開始）；另有三筆 TP 獨有的
+  短跑。其餘配對到的跑步 mean-max 完全相同。
 - `cptest.curves` / `scan` 只讀檔名有 `YYYY-MM-DD` 的 FIT（`_file_date`），也就是 COROS 檔；TP 的
   `tp_YYYY_MM_DD_…` 檔名不會進去，所以 TP 回測的 PD 擬合其實也混進了 COROS 的檔案。
 - 同來源內的重複（coros→coros 9 筆、tp→tp 7 筆）`FitFolderDataset` 不去掉；mean-max 取最大值，
@@ -593,19 +592,19 @@ TP 1086 筆（含 2020 起、796 筆標 `duplicate_of`），COROS 808 筆。功�
 | Region server 變動 | Low | High | 每次 sync 重新偵測 base URL | 已實作 `_detect_data_base()` |
 | `yfheader` 要求改版 | Low | Medium | 動態讀取 userId，易調整 | 已實作 |
 | Token TTL 縮短 | Low | Medium | 長時間 sync 時 token 可能 mid-sync 失效 | 發生時記 error，提示重新登入 |
-| 運動類型無 FIT | Low | Low | `detail/download` 返回 error，已 graceful skip | 已測試 table tennis (9904)、strength (402) 均 skip |
+| 運動類型無 FIT | Low | Low | `detail/download` 返回 error，已 graceful skip | 已測試 custom (9904)、strength (402) 均 skip |
 
 ---
 
 ## 已知限制
 
 1. **Token mid-sync 失效**：長時間 sync（>200 筆）偶見 "Access token is invalid"，原因未知（可能 Coros server-side invalidation）。重新登入後繼續 sync 可恢復。
-2. **無功率資料活動的 TSS**：hiking、table tennis 等活動無 power 也無 HR zones，TSS=0，不計入 PMC。
-3. **PMC 起始點（歷史資料缺口）**：完整 Coros 歷史資料（2020-11 起）現已匯入（667 筆 Coros 活動，321 筆跑步）。但 WKO5 本機 `.wko4` 二進位格式的跑步活動（2023–2025/11）仍無法解析 power/HR channel，貢獻 0 TSS。這導致 ATL 與 WKO5 顯示值有差異——WKO5 能讀取 wko4 跑步功率，我們不能。
+2. **無功率資料活動的 TSS**：hiking、球類等活動無 power 也無 HR zones，TSS=0，不計入 PMC。
+3. **PMC 起始點（歷史資料缺口）**：完整 Coros 歷史資料現已匯入（667 筆 Coros 活動，321 筆跑步）。但 WKO5 本機 `.wko4` 二進位格式的跑步活動仍無法解析 power/HR channel，貢獻 0 TSS。這導致 ATL 與 WKO5 顯示值有差異——WKO5 能讀取 wko4 跑步功率，我們不能。
 4. **檔名 sport 標籤不準確**：`SPORT_NAMES` 映射（e.g., `200="run"`）只影響 FIT 檔名，不影響 DB 中的 `sport` 欄位。`sport` 由 `fit_reader.py` 解析 FIT session 內的實際運動類型後正規化（`"running"`）。
-5. **損壞的 FIT 檔案**：部分 Coros FIT 檔案無效（e.g., `476897474257125477_2026-04-19_other.fit`，FitParseError: Invalid field size）。已修正：`coros_client.py` 現在對無法解析的 FIT 建立 `file_format="corrupt"` 的 stub DB 記錄，避免每次 sync 重複下載。
-6. **Coros 功率尖峰**：跑步功率由 Coros 手錶從加速度計/GPS 估算，偶有短暫尖峰（e.g., 2026-04-26 有 4 個樣本達 400–432W）。對 3-30 分鐘 MMP 的 CP 模型計算（runFTP）無影響，但會污染 1–3 秒 MMP 顯示值。2025-03-19 起的跑步功率多半來自 Stryd（見「功率來源」）。
-7. ~~垃圾功率檔只靠來源規則擋下~~（2026-10-01 已處理）：TP 的 2025-12-14 899 W 檔現在被「壞掉的活動檔」規則整筆排除（均速 43 km/h），打開 `power.accept_watch_power` 也不會再進 PD 擬合；除非使用者把它標成「這筆是正常的」。
+5. **損壞的 FIT 檔案**：部分 Coros FIT 檔案無效（e.g., 某個 `<labelId>_<date>_other.fit`，FitParseError: Invalid field size）。已修正：`coros_client.py` 現在對無法解析的 FIT 建立 `file_format="corrupt"` 的 stub DB 記錄，避免每次 sync 重複下載。
+6. **Coros 功率尖峰**：跑步功率由 Coros 手錶從加速度計/GPS 估算，偶有短暫尖峰（e.g., 某次有 4 個樣本約達 2 × CP）。對 3-30 分鐘 MMP 的 CP 模型計算（runFTP）無影響，但會污染 1–3 秒 MMP 顯示值。配了 Stryd 之後的跑步功率多半來自 Stryd（見「功率來源」）。
+7. ~~垃圾功率檔只靠來源規則擋下~~（2026-10-01 已處理）：TP 的那筆約 900 W 的檔現在被「壞掉的活動檔」規則整筆排除（均速 43 km/h），打開 `power.accept_watch_power` 也不會再進 PD 擬合；除非使用者把它標成「這筆是正常的」。
 8. **圖表引擎**（WKO5 clone 的 `meanmax(power)`、`ftp(meanmax(power))` 等）照 WKO5 讀全部功率，不套用來源規則。
 
 ---

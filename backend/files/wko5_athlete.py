@@ -67,7 +67,7 @@ F_TITLE, F_DESCRIPTION, F_NOTES, F_CODE = 3213, 3206, 3207, 3210
 
 @dataclass
 class WorkoutEntry:
-    file: str                   # relative path, e.g. "2023/Athlete_2023_04_06_21_57.wko4"
+    file: str                   # relative path, e.g. "2025/Athlete_2025_01_05_21_57.wko4"
     sport: Optional[str]        # 3213 = WKO5's title; the workout type unless renamed ("Trail Running")
     sport_group: Optional[str]  # "Run", "Walk", "Strength", ...
     start: Optional[dt.datetime]

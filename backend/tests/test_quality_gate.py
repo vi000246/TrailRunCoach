@@ -725,7 +725,7 @@ def test_aet_test_fallbacks_title_plan_row_then_steady_run():
     c = R.classify(ds, ds.workouts[0])
     assert c["type"] == "test_aet" and c["test_match"] == "threshold"
     # an untitled, unplanned 50′ run is not taken for a test: the steady fallback stays ≥ 55′
-    # (the athlete's ordinary 41–52′ road runs must not offer 「套用這次的 AeT」)
+    # (ordinary ~45′ road runs must not offer 「套用這次的 AeT」)
     ds = _ds([_aet_workout(day, title="")])
     assert R.classify(ds, ds.workouts[0])["type"] != "test_aet"
     ds = _ds([_aet_workout(day, title="", main=60)])                     # 70′ flat steady run, fair drift

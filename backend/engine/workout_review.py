@@ -128,7 +128,7 @@ HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只�
             "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差（本人有 10 對以上用本人的，"
             "否則用單一使用者的 3.7 °C，推估；較不準）。"
             "不做「熱校正後的飄移」：熱 β（bpm／Hadley）是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度。")
-# watch temperature → air: the wrist warms the sensor (zone_events.WATCH_BIAS_C: the athlete's 72 paired
+# watch temperature → air: the wrist warms the sensor (zone_events.WATCH_BIAS_C: one runner's 72 paired
 # route efforts, watch − Open-Meteo median +3.7 °C, SD 2.7; no literature source — 推估)
 from backend.engine.zone_events import WATCH_BIAS_C  # noqa: E402
 DRIFT_POWER_COVER = 0.95      # 推估: Pw:HR only when power covers ≥ 95 % of the Pa:HR window (same samples)
@@ -1115,7 +1115,7 @@ def cp_test(t, power) -> Optional[dict]:
 
     The two windows must not overlap: the best 720 s first, then the best
     180 s at least CP_TEST_GAP_S away from it (a 3′ window inside the 12′
-    bout gives a meaningless "CP 219 W, W′ 2.1 kJ"). When the 3′ bout is not
+    bout gives a meaningless CP with a W′ of ~2 kJ). When the 3′ bout is not
     above the 12′ power (not all-out) the two-point fit is invalid and CP
     comes from the 12′ bout alone, CP = P12 − W′/720 with the W′ prior above
     (range ± 1 SD), method "1pt_prior"."""
@@ -1171,8 +1171,8 @@ def looks_like_cp_test(res: Optional[dict], cp_now: Optional[float]) -> bool:
     if res["p12"] < 0.98 * cp_now:
         return False
     # a 3′ that was not all-out (single-bout fallback) still makes the session
-    # a test when it is a separate bout at ≥ 98 % CP (推估; the 2026-09-30 test:
-    # 3′ 218 W below the 12′ 222 W, 16 min apart)
+    # a test when it is a separate bout at ≥ 98 % CP (推估; e.g. a test whose
+    # 3′ came out ~2 % below the 12′, 16 min apart)
     return res["p3"] >= 1.15 * cp_now or (res.get("method") == "1pt_prior" and res["p3"] >= 0.98 * cp_now)
 
 
@@ -1480,7 +1480,7 @@ def session_class(category: str, moving_s: float, title: str = "",
       "z3"  Zone 3 ≥ 10 min: ≥ 75 min → hard_long (高強度長跑 / 長天: not an interval session,
             a hard day), else quality (Z3 閾值)
     The old rule (≥ 10 min HR ≥ LTHR or power ≥ 95 % CP) counted threshold climbs and
-    drifting runs as intervals: 100 of 188 runs in the owner's last 12 months."""
+    drifting runs as intervals: 100 of 188 runs in one runner's 12 months."""
     if category in ("strength", "bike", "walk", "other"):
         return category, None
     plan_test = plan_test or {}
@@ -2007,7 +2007,7 @@ def hr_peak(ds, w) -> tuple[Optional[float], str]:
     """(HRpeak, source) on the activity date for the HR path: the plan's 最大心率
     (thresholds `mhr`) when set, else the 3rd-highest per-run 60-s HR peak of the
     road / trail runs in the 365 days before (session_stimulus.hr_peak; the top
-    ones are optical errors — 216 / 211 bpm in the owner's data)."""
+    ones are often optical errors, e.g. > 210 bpm)."""
     from backend.engine import session_stimulus as SS
     day = _wdate(w)
     plan = getattr(ds, "plan", None)

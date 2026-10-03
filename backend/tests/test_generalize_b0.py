@@ -1,5 +1,5 @@
 """generalize-athlete plan B0: what broke or misbehaved for a runner without
-the author's setup — the parity default without WKO5, the empty athlete row,
+the original single-user setup — the parity default without WKO5, the empty athlete row,
 the hard-coded athlete id, the W′ prior by sex, and the AI coach's system
 prompt built from the athlete's own data. Synthetic data only."""
 from __future__ import annotations
@@ -38,7 +38,7 @@ def test_parity_default_follows_the_wko5_folder(tmp_path, monkeypatch):
     cfg.write_text(json.dumps({"use_tp_tss": False}), "utf-8")
     assert EngineConfig.load(cfg).parity is False and EngineConfig.load(cfg).use_tp_tss is False
     monkeypatch.setenv("WKO5_ATHLETE_DIR", str(_wko5_folder(tmp_path)))
-    assert EngineConfig.load(cfg).parity is True                    # the author's setup: unchanged
+    assert EngineConfig.load(cfg).parity is True                    # the original setup: unchanged
     cfg.write_text(json.dumps({"parity": False}), "utf-8")
     assert EngineConfig.load(cfg).parity is False                   # an explicit choice wins
 

@@ -21,7 +21,7 @@
 
 ## Key Hypothesis
 
-We believe 安裝 Tailwind + shadcn/ui + WKO5 風格設計 token，will 讓前端從無樣式狀態變為視覺上專業的訓練分析工具，for 個人運動員（使用者本人）。
+We believe 安裝 Tailwind + shadcn/ui + WKO5 風格設計 token，will 讓前端從無樣式狀態變為視覺上專業的訓練分析工具，for 自我訓練的個人運動員。
 We'll know we're right when 開啟瀏覽器後，看到和 WKO5 dashboard 類似的深色、資料密集、多圖表佈局，所有 4 個 tab 均有實際內容。
 
 ## What We're NOT Building
@@ -54,7 +54,7 @@ We'll know we're right when 開啟瀏覽器後，看到和 WKO5 dashboard 類似
 ## Users & Context
 
 **Primary User**
-- **Who**: 個人運動員（使用者本人），Coros APEX 2 Pro 用戶，技術能力強，熟悉 WKO5 桌面版
+- **Who**: 個人運動員，用 Coros 手錶記錄，技術能力強，熟悉 WKO5 桌面版
 - **Current behavior**: 依賴 WKO5 桌面版查看訓練分析，偶爾查看 Coros app 基礎統計
 - **Trigger**: 完成訓練後想在 Web UI 中快速看到相同品質的分析資訊
 - **Success state**: 開啟 `localhost:8000`，看到和 WKO5 相同風格的深色介面，可以查看 PMC 趨勢、點開單次活動看功率曲線、設定 FTP

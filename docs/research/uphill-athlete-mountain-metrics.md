@@ -272,7 +272,7 @@ Other evidence:
 | Convention | Formula | Descent? | Source |
 |---|---|---|---|
 | **ITRA km-effort** | `km + D+(m)/100` | No | https://www.finishers.com/en/articles/itra-points-everything-you-need-to-know-about-how-it-works-and-how-to-earn-them ("100 mD+ = 1 km-effort") |
-| **Taiwan EP / EPH** (the user's charts) | `EP = km + D+/100`, `EPH = EP / hours` | No. The article names this as a blind spot ("不計算下坡", "does not count descent") | 健行筆記 (hiking.biji.co), 2025-08-21: https://hiking.biji.co/index.php?act=info&id=24918&q=news. Described as taken over from trail-running circles, i.e. the ITRA convention |
+| **Taiwan EP / EPH** (the app's existing charts) | `EP = km + D+/100`, `EPH = EP / hours` | No. The article names this as a blind spot ("不計算下坡", "does not count descent") | 健行筆記 (hiking.biji.co), 2025-08-21: https://hiking.biji.co/index.php?act=info&id=24918&q=news. Described as taken over from trail-running circles, i.e. the ITRA convention |
 | Swiss **Leistungskilometer** | `km + D+/100 + (steep descent D−)/150`, where steep means more than 20% | Yes, steep sections only | https://de.wikipedia.org/wiki/Leistungskilometer (cites BASPO). Planning rate: 10–15 min per Leistungskilometer |
 | Scarf's equivalence (Naismith) | `x + 7.92 y`, i.e. about 126 m of climb = 1 km | No | https://en.wikipedia.org/wiki/Naismith%27s_rule |
 | Yamamoto **course constant** (Japan) | `1.8·h + 0.3·km + 10.0·D+(km) + 0.6·D−(km)`. Energy: `kcal ≈ CC × (bodyweight + pack kg)`. Water loss: the same number in mL | Yes | https://www.yamakei-online.com/yama-ya/detail.php?id=363. Bands: ~10 easy, ~20 average, ~30 strong day-hiker, 40+ needs an overnight. Derived from portable metabolic measurements (https://business.ntt-west.co.jp/bizclip/articles/bcl00020-045.html) |
@@ -292,7 +292,7 @@ below). They are not normative.
 - Add **VAM per climb segment**. `trail.compute_vam` already exists.
 - Add a **vertical mean-max curve**: the best gain in 5/10/20/30/60/120 min, which is the vertical analogue of a power-duration curve.
 - Add **VAM at AeT**: VAM on segments with grade ≥ 15% and HR in the top of Z2. This operationalises UA's fixed-HR benchmark climb.
-- Keep **EP/EPH** exactly as the user's charts define them (ITRA convention) for continuity. Add two siblings:
+- Keep **EP/EPH** exactly as the app's existing charts define them (ITRA convention) for continuity. Add two siblings:
   - `EP_desc`, the Leistungskilometer-style variant with steep descent/150.
   - `EFD_minetti`, an energy-based equivalent flat distance (§4).
 - Compute Yamamoto's course constant as an independent energy/water estimate. It is the only published mountain formula here that includes time, distance, gain *and* loss, and it is derived from metabolic measurements.
@@ -389,11 +389,11 @@ Minetti is the best-grounded **uphill** replacement for ACSM up to ±45%.
   - At least 20 TSS/h at any HR.
   - 30 TSS/h at ≥ 27% of LTHR.
   - 40 TSS/h at ≥ 55% of LTHR.
-  - Sleeping HR of about 50 bpm with LTHR about 165 is ≥ 27% of LTHR, so it earns **30 TSS/h**. This matches the UA forum's remark that TrainingPeaks "can score up to 30 hrTSS/hr even when doing nothing."
-- The 51 h outing (7 h moving): 906 hrTSS on all recorded time, 298 on moving time. Most of the gap is camp and sleep time accruing 20–30 TSS/h.
-- **The TrainingPeaks figure of 32 is not explained by any documented behaviour we found.**
+  - Sleeping HR of about 50 bpm with LTHR about 160 is ≥ 27% of LTHR, so it earns **30 TSS/h**. This matches the UA forum's remark that TrainingPeaks "can score up to 30 hrTSS/hr even when doing nothing."
+- A multi-day outing with two nights out (moving time about one seventh of recorded time): hrTSS on all recorded time came out about 3× the moving-time value. Most of the gap is camp and sleep time accruing 20–30 TSS/h.
+- **The TrainingPeaks figure for the same file, about a tenth of the moving-time value, is not explained by any documented behaviour we found.**
   - Hypotheses to check in our TrainingPeaks sync data: the TSS type or source field (e.g. rTSS on trail, which TrainingPeaks' own help page "Low rTSS and Trail Running" admits runs low — https://help.trainingpeaks.com/hc/en-us/articles/205229730-Low-rTSS-and-Trail-Running, 403 to our fetcher), a truncated or partial upload, or a manually entered or planned value.
-  - Do not treat 32 as ground truth.
+  - Do not treat that figure as ground truth.
 
 ### 5(b) Moving-time conventions
 
@@ -433,7 +433,7 @@ Minetti is the best-grounded **uphill** replacement for ACSM up to ±45%.
 1. Compute hrTSS on **moving samples only**. `wko5_hr.hr_tss(moving=...)` already supports this.
 2. Also score samples below the Z1 floor (AeT −20%) at **0 TSS/h**, not 20–30. This removes camp time that the moving mask misses, such as slow shuffling around camp.
 3. Add UA's vertical term (half-sum gain/loss, §1) and load term.
-4. **Split multi-day activities by calendar day** before feeding the PMC. A 51 h file must land on 3 days, or ATL/TSB spike on one day and ignore the others. Neither UA nor TrainingPeaks addresses this explicitly. It is our recommendation.
+4. **Split multi-day activities by calendar day** before feeding the PMC. A file spanning three calendar days must land on 3 days, or ATL/TSB spike on one day and ignore the others. Neither UA nor TrainingPeaks addresses this explicitly. It is our recommendation.
 5. No duration cap. There is no source for one, and Johnston argues against reducing long days.
 
 **Secondary lines, shown alongside for comparison:**
@@ -454,14 +454,14 @@ per-workout pack weight, and an optional per-workout "pitched climbing" flag.
 
 | # | Metric | Formula | Inputs | Validation |
 |---|---|---|---|---|
-| 1 | **hrTSS_moving** (+ sub-Z1 zeroing) | WKO5 Friel levels, summed only where `moving` is true and HR ≥ AeT·0.8. Samples below that floor score 0 | elapsedtime, HR, speed (moving mask), LTHR, AeT | On ordinary workouts without stops, equals WKO5 hrTSS (golden tests). On the 51 h trip, falls from 906 toward ≤ 298 and stays ≥ 40 TSS/h × moving hours ± 30% (UA rate) |
+| 1 | **hrTSS_moving** (+ sub-Z1 zeroing) | WKO5 Friel levels, summed only where `moving` is true and HR ≥ AeT·0.8. Samples below that floor score 0 | elapsedtime, HR, speed (moving mask), LTHR, AeT | On ordinary workouts without stops, equals WKO5 hrTSS (golden tests). On a multi-day file, falls toward (or below) the moving-time hrTSS and stays ≥ 40 TSS/h × moving hours ± 30% (UA rate) |
 | 2 | **Vertical & load adjustment → mountain_tss** | `vert = 10 × ((gain+loss)/2)/304.8`; `load = 10 × (L/BW/0.10) × gain/304.8` if L/BW > 0.10; `mountain_tss = hrTSS_moving + vert + load` | smoothed `_elevation` with 3–5 m hysteresis, weight, pack weight | Hand-computed fixtures. Cross-check against https://pdragun.github.io/uphill-peaks-tss/. Treadmill case = half. Keep the divisor configurable (×2 literal reading) |
-| 3 | **Per-day split of multi-day activities** | Split all channels at local midnight and compute each metric per day | elapsedtime, activity start time and time zone | Sum of daily parts = whole-activity value for additive metrics. PMC for the 51 h trip shows 3 days |
+| 3 | **Per-day split of multi-day activities** | Split all channels at local midnight and compute each metric per day | elapsedtime, activity start time and time zone | Sum of daily parts = whole-activity value for additive metrics. PMC for a three-calendar-day trip shows 3 days |
 | 4 | **Minetti GAP / metabolic power channel** | `i = dh/dx` (clamp ±0.45), `v_eq = v·Cr(i)/Cr(0)`, `P_met = Cr(i)·v`. Hybrid downhill floor (§4c) | speed/distance, smoothed `_elevation`, weight (for W) | Flat: v_eq = v. Reproduce the paper's table (Cr(0.45) ≈ 19.4). Grade-residual test: HR vs v_eq residual flatter than ACSM across grade bins |
 | 5 | **Vertical metrics** | VAM per climb (existing `compute_vam`). Vertical mean-max `max Δh over window w`, w ∈ {5,10,20,30,60,120} min. VAM@AeT on segments with grade ≥ 15% and HR in [AeT−10%, AeT] | elapsedtime, smoothed `_elevation`, HR, AeT | Known VK or race results. Stable week-to-week for steady athletes. Monotone non-increasing mean-max curve |
 | 6 | **AeT/AnT spread (ADS)** | `AnT/AeT − 1`. Flag when over 0.10. Also report `1 − AeT/AnT` | AeT, AnT settings (dated) | UA example: 128/150 gives 17.2% |
 | 7 | **Drift test detector (Pa:HR)** | Qualifying steady segment of 40–60 min or more after a ≥ 10 min warm-up. `drift = (v/HR)_1 / (v/HR)_2 − 1`, with v = v_eq (or VAM when grade ≥ 15%). Bands < 3.5 / 3.5–5 / > 5% | HR, speed, smoothed `_elevation` | UA example: 151/144 gives 4.9%. Treadmill fixed-pace workouts give the same result as TrainingPeaks Pa:HR. Fix or bypass the sign issue in `trail.compute_hr_drift` first |
-| 8 | **EP / EPH and siblings** | `EP = km + D+/100`, `EPH = EP/h_moving`. `EP_desc = EP + D−(steep > 20%)/150`. `EFD = Σ ds·Cr(i)/Cr(0)` | distance, smoothed `_elevation`, moving time | EP and EPH match the user's existing charts exactly. EFD ≈ EP on running-grade routes, larger on steep hikes |
+| 8 | **EP / EPH and siblings** | `EP = km + D+/100`, `EPH = EP/h_moving`. `EP_desc = EP + D−(steep > 20%)/150`. `EFD = Σ ds·Cr(i)/Cr(0)` | distance, smoothed `_elevation`, moving time | EP and EPH match the app's existing charts exactly. EFD ≈ EP on running-grade routes, larger on steep hikes |
 | 9 | **Yamamoto course constant & energy** | `CC = 1.8·h + 0.3·km + 10·D+km + 0.6·D−km`. `kcal = CC × (BW + pack)` | moving hours, distance, gain, loss, weight, pack | Worked examples from https://www.yamakei-online.com/yama-ya/detail.php?id=363. Same order of magnitude as Minetti energy |
 | 10 | **Lucia TRIMP (TSS-normalised)** | `TRIMP_L = Σ minutes × w`, w = 1 (AeT·0.8 ≤ HR < AeT), 2 (AeT ≤ HR < AnT), 3 (HR ≥ AnT), and 0 below AeT·0.8. The zero band is our addition, so sleep is not charged. `lucia_tss = TRIMP_L / 180 × 100`, so 1 h at AnT = 100 | HR, AeT, AnT | 1 h at AnT = 100. Check Z2 hours against UA's ~60 hrTSS/h rule of thumb. Compare against mountain_tss over 6 months (correlation, outliers) |
 | 11 | **Volume ramp flag** | 4-week rolling mean weekly hours. Flag if average weekly growth > 10% for ≥ 8 weeks | daily moving hours | Synthetic ramps |
@@ -469,7 +469,7 @@ per-workout pack weight, and an optional per-workout "pitched climbing" flag.
 
 Sequencing rationale:
 
-- Items 1–3 fix the load numbers that are visibly wrong today (the 51 h trip), and they feed CTL/ATL/TSB.
+- Items 1–3 fix the load numbers that are visibly wrong today (multi-day trips), and they feed CTL/ATL/TSB.
 - Item 4 underpins items 5, 7 and 8.
 - Items 5–7 are the UA-specific fitness diagnostics WKO5 lacks.
 - Items 8–12 are cheap additions and comparison lines.

@@ -10,7 +10,7 @@ T1 — hadley_hr_beta: HR per Hadley unit at a given effort.
     Default β₀ = 0.3 bpm／Hadley (推估): Jenkins 2023's 1 bpm per °C, put in
     Hadley units with temperature and dew point rising together (≈ 0.29;
     with the dew point fixed it would be 0.56). Owner decision 2026-10-02.
-    The author's 271 efforts fit 0.224 ± 0.036; shrunk (w = 271/331) that is
+    One runner's 271 efforts fit 0.224 ± 0.036; shrunk (w = 271/331) that is
     ≈ 0.238 — inside ±1 SE of the old constant.
 
 T3 — humidity_default: the RH (%) to assume when a run has a temperature

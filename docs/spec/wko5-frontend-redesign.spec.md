@@ -2,7 +2,7 @@
 
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-frontend-redesign.prd.md`
-- **Owner**: vi000246
+- **Owner**: maintainer
 - **Status**: DRAFT
 - **Generated**: 2026-05-15
 - **Last Updated**: 2026-06-13
@@ -51,7 +51,7 @@
 
 | Actor | Type | Interaction |
 |---|---|---|
-| Athlete（使用者本人） | Human | 查看圖表、設定 FTP、觸發 Coros sync |
+| Athlete（使用者） | Human | 查看圖表、設定 FTP、觸發 Coros sync |
 | Backend FastAPI | Service | 提供訓練資料、PMC、時序 API |
 
 ---

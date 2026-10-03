@@ -5,7 +5,7 @@ P8 — trail_max_min_km / trail_max_min_min: the shortest trail race that can
      count as a full effort (racepower/maximal.trail_maximal). Fit: p10 of
      the distance / moving time of the athlete's own trail runs marked 全力
      (activity tags, effort "max"). ≥ 3 races; defaults 10 km / 90 min
-     (the author's rule — his races are all longer; 推估 for anyone else).
+     (a user rule — trail races are all longer than that; 推估 for anyone else).
 P9 — effort_rest_max: the long-rest share above which a hard day is 「有拼
      但有休息」, not 全力 (activity_tags.AUTO_EFFORT["rest_max"]). Fit:
      p90 × 1.5 of the rest share of those full-effort activities (trail runs

@@ -33,7 +33,7 @@ so the extrapolation distance (LTHR − the highest run HR) is reported — the
 farther it is, the less it is worth. Needs ≥ 8 runs spanning ≥ 15 bpm, a
 positive slope and R² ≥ 0.5 (推估): when the runs are all at about the same
 power, HR differences come from heat / drift / fatigue and the line says
-nothing about capacity (this athlete, 2026-10-01: slope 0.18 W/bpm, R² 0.01).
+nothing about capacity (one runner's data: slope 0.18 W/bpm, R² 0.01).
 The combined rule in the back-test uses only a valid fit.
 """
 from __future__ import annotations

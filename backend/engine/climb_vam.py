@@ -24,7 +24,7 @@ same HR, faster = fitter (coaching-dashboards-mountain.md §1.1, 教練經驗).
      — "跑" when ≥ half, else "走"; None without a cadence channel.
 
 GRADE_MIN / MIN_SEG_S / JOIN_GAP_S were picked from the athlete's own data
-(推估; read-only count 2026-10-02, 73 trail runs and hikes since 2025-03):
+(推估; read-only count 2026-10-02 on one runner, 73 trail runs and hikes):
 +8 % / 8 min / 30 s gave 93 climbs on 54 activities and 5 repeated routes;
 10 min dropped to 54 climbs and 4 routes, 15 min to none on a repeated
 route; 10-s joins split most climbs (30 at 8 min). +3 % or +5 % add a few

@@ -170,7 +170,7 @@ def _on_day(w, end_day: int):
     effect that day: a plan test dated after the last run but on or before
     `end_day` applies (since Plan.threshold_on stopped applying tests
     backwards, 2026-10-01, the last run's own date would miss a test done
-    on a day WKO5 has no run for — the 2026-09-30 CP test)."""
+    on a day WKO5 has no run for, e.g. a CP test entered in the plan)."""
     import dataclasses
     if w is None or not dataclasses.is_dataclass(w):
         return w
@@ -255,8 +255,8 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
         # no threshold-pace setting: the estimate (thresholds.estimate_tpace)
         T = info["value"]
     # the time in each zone is counted against the threshold the rows show
-    # (T, in effect on end_day), not each run's own dated value: with a CP
-    # test on 2026-09-30, runs before it had no CP and the table read 0 s
+    # (T, in effect on end_day), not each run's own dated value: with a
+    # recent CP test, runs before it had no CP and the table read 0 s
     # (FIT source), or a different CP than the boundaries printed in the row
     op = None if T is None else f"{float(T):.4f}"
     ev = Evaluator(ds, end_day - days + 1, end_day, sports={"run"})
@@ -370,7 +370,7 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None) -> dict:
     from backend.engine.planning import threshold_row
     from backend.files.wko5_athlete import day_to_date
     # where each value comes from, said as it is: a test, or an applied estimate
-    # (zones-and-thresholds.md §3.4 change 1 — LTHR 155 was an applied estimate shown as 「你的測試」)
+    # (zones-and-thresholds.md §3.4 change 1 — an LTHR that was an applied estimate shown as 「你的測試」)
     lr = threshold_row(ds.plan, "lthr", day_to_date(ref.day)) if ref is not None else None
     planned = lr is not None
     lthr_src = lr["label"] if planned else ds.setting_label("runthr", "WKO5 設定")

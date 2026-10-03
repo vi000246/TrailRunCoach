@@ -16,7 +16,7 @@ A runner's history can mix two kinds of running power under the same FIT
 WKO5 / TrainingPeaks do not tell them apart: both read the same FIT `power`.
 The power-based models (race-power envelope / mean-max, CP / PD fits, power
 TSS, power effort checks) use only Stryd power by default, because wrist
-power reads on another scale than the pod (2025-12-21: the same course and
+power reads on another scale than the pod (seen on the same course and
 effort); the setting `power.accept_watch_power` (default False) lets watch
 power back in. HR- and pace-based paths always use every run.
 

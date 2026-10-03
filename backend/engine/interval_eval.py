@@ -332,7 +332,7 @@ def _test_bouts(ds, w, m: dict, c: dict, n_grid: int):
             return None
         p = ev["protocol"]
         bouts = sorted(ev["bouts"], key=lambda b: b["start_s"])
-        # in the order run (the athlete's 9/30 test was 3′ first)
+        # in the order run (a test may do the 3′ first)
         label = "CP 測試 " + " + ".join(f"{b['duration_s'] / 60:.0f} 分" for b in bouts) + "（全力）"
         short = METHOD_SHORT.get(ev.get("method"), ev["method_label"])
         return bouts, label, len(CPP.TABLE[p]["bouts"]) or len(bouts), "max", \
@@ -358,7 +358,7 @@ def _test_bouts(ds, w, m: dict, c: dict, n_grid: int):
 
 def cp_before(ds, w) -> Optional[float]:
     """The CP in effect before the test day (the latest earlier activity's): a test
-    applied the same day (the 9/30 CP 204 W came from that test's own 12′ bout)
+    applied the same day (its CP comes from that test's own 12′ bout)
     would make the all-out reference circular."""
     if not hasattr(ds, "cp"):
         return None

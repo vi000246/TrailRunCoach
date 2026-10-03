@@ -23,12 +23,12 @@ for rapid chart navigation.
 
 | Source | Count | Has TSS? | Reason |
 |---|---|---|---|
-| Coros FIT (Dec 2025–present) | 59 running | Yes (power-based) | FIT has power channel; FTP set |
-| WKO4 binary (2020–2025) | 363 running | No | `parse_wko4_metadata()` reads only `start_time` + `sport` |
+| Coros FIT (recent months) | 59 running | Yes (power-based) | FIT has power channel; FTP set |
+| WKO4 binary (earlier years) | 363 running | No | `parse_wko4_metadata()` reads only `start_time` + `sport` |
 | **Total running** | **422** | **14% have TSS** | — |
 
-**Effect**: `compute_run_pmc()` starts EWMA from 0 at 2025-12-09; max CTL reached = 26.
-WKO5 Season View shows CTL built since 2020; typical steady-state ≈ 40–70 for consistent runner.
+**Effect**: `compute_run_pmc()` starts EWMA from 0 at the first Coros activity; max CTL reached = 26.
+WKO5 Season View shows CTL built over several years; typical steady-state ≈ 40–70 for consistent runner.
 
 ### Why WKO5 values differ
 
@@ -121,7 +121,7 @@ User sets initial_ctl_run=55 in Config
   → GET /run-load fetches initial_ctl_run=55
   → compute_run_pmc(run_series, initial_ctl=55, initial_atl=35)
      → EWMA starts from CTL=55 at day 0 instead of 0
-  → Chart shows CTL converging correctly from Dec 2025 onward
+  → Chart shows CTL converging correctly from the first synced activity onward
 ```
 
 ### Data Flow — TSS backfill
@@ -188,7 +188,7 @@ Existing `tss` key stays as the canonical TSS. `rtss_pace` is stored separately 
 
 ### WKO4 minimal extractor (extension to `wko4_reader.py`)
 - WKO4 binary contains human-readable field names (`_ragpace`, `elapseddistance`, timestamp strings)
-- Strategy: scan for `2025-01-03T20:32:49` style timestamp → extract duration from file metadata
+- Strategy: scan for `2025-01-01T07:00:00` style timestamp → extract duration from file metadata
 - Extract `total_distance_m` from `elapseddistance` field encoding (needs one-time binary format study per field)
 - **Risk**: WKO4 binary uses variable-length encoding — field extraction may be partial (see Risks section)
 
@@ -230,8 +230,8 @@ Response — 200 OK:
 // PUT /api/v1/athletes/1/settings
 // Request — new fields (all optional):
 {
-  "ftp_w": 200,
-  "lthr": 182,
+  "ftp_w": 220,
+  "lthr": 160,
   "threshold_pace_s_per_km": 300,   // 5:00/km threshold pace
   "initial_ctl_run": 55.0,          // seed from WKO5
   "initial_atl_run": 35.0           // seed from WKO5

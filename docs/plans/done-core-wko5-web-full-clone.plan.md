@@ -572,7 +572,7 @@ def test_feature():
       return Wko4Metadata(start_time, sport, path)
   ```
 
-- **VALIDATE**: `/opt/homebrew/bin/python3.12 -c "from backend.files.wko4_reader import parse_wko4_metadata; r = parse_wko4_metadata('$HOME/WKO5/Athlete/2022/Athlete_2022_10_03_22_14.wko4'); print(r)"`
+- **VALIDATE**: `/opt/homebrew/bin/python3.12 -c "from backend.files.wko4_reader import parse_wko4_metadata; r = parse_wko4_metadata('$HOME/WKO5/Athlete/<year>/Athlete_<YYYY>_<MM>_<DD>_<HH>_<MM>.wko4'); print(r)"`
 
 ---
 
@@ -1776,7 +1776,7 @@ def test_feature():
 | NP port | constant power=200W 3600s | NP=200W | No |
 | PMC compute_pmc | TSS=[100,50,0,0,80] | CTL increases, ATL faster | Yes: zero TSS days |
 | ftp_from_mmp | MMP[3600]=240 | 240W | Yes: missing 3600s key |
-| wko4_metadata | Athlete_2022_10_03_22_14.wko4 | date=2022-10-03 sport=walking | No |
+| wko4_metadata | a sample `Athlete_<YYYY>_<MM>_<DD>_<HH>_<MM>.wko4` | date parsed from the filename, sport from the header | No |
 
 ### Edge Cases Checklist
 - [ ] FIT file with no power channel → warning, not error; imports as metadata-only

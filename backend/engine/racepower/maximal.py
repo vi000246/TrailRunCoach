@@ -2,8 +2,8 @@
 Which activities may test the race-power CAPACITY model (CP / W′ / TTE / k):
 only efforts that were maximal for their duration. Fixed 2026-10-01 after the
 back-test showed that the HR "race-like" class (intensity.classify: ≥ half the
-time ≥ 0.95 × LTHR) catches ~38-min 5 km training runs at 7:30 /km — slower
-than the athlete's own half marathon — which are not maximal and made the
+time ≥ 0.95 × LTHR) catches 5 km training runs slower than the athlete's own
+half-marathon pace — which are not maximal and made the
 model look 16.5 % too fast.
 
 A capacity sample is one of (in this order):
@@ -35,8 +35,8 @@ A capacity sample is one of (in this order):
      definition (a power held for 60 min was also available for 30 min), so
      a maximal 38-min effort below a power already held for an hour was not
      maximal. Needed because heat alone drives HR to "maximal" values on
-     this athlete's summer 5 km runs (150–158 W at 30-s peak HR 181–183, vs
-     184 W held for 141 min in the 2025-12-21 half). It reads raw past
+     summer 5 km runs (e.g. ~15 % below the power the same runner held for
+     over 2 h in a half marathon, at a near-HRmax 30-s peak). It reads raw past
      activities, not the fitted model; the 1.5 × is 推估;
 4. a race-like TRAIL effort (`trail_maximal`; user correction 2026-10-01:
    trail races are > 10 km, never standard distances, and always slow in the
@@ -107,8 +107,8 @@ def peak_hr(hist, lo: int = 40, hold_s: float = MAXIMAL["peak_hold_s"]) -> Optio
 
 def hrmax_observed(peaks, top_n: int = MAXIMAL["hrmax_top_n"]) -> Optional[float]:
     """Median of the top-n per-run peaks (each held ≥ hrmax_hold_s): robust to
-    a strap spike (30-s peaks: 2026-03-25 216 bpm, 2025-09-27 212, 2025-07-26
-    201; held 120 s the top of 2024–26 is 199 / 191 / 189 / 188 / 188)."""
+    a strap spike (in one runner's data the top 30-s peaks were 15–30 bpm
+    above the rest; held 120 s the top five sat within ~10 bpm)."""
     v = sorted((float(p) for p in peaks if p), reverse=True)[:top_n]
     return float(median(v)) if v else None
 

@@ -58,7 +58,7 @@
 
 ## Deviations from Plan
 
-- **計畫外補 hrTSS 回填腳本**：整合測試發現越野 PMC 對歷史資料是空的（hr_tss 只在新匯入時寫）。因 `lthr=182` 已設且歷史活動有 `avg_hr_bpm`，補了 `backfill_hr_load.py` 以 avg-HR 近似回填（正是 plan Task 8 GOTCHA 預期的 fallback），使越野 PMC 立即有 311 點資料。TDD 完成，2 測試。
+- **計畫外補 hrTSS 回填腳本**：整合測試發現越野 PMC 對歷史資料是空的（hr_tss 只在新匯入時寫）。因 `lthr` 已設且歷史活動有 `avg_hr_bpm`，補了 `backfill_hr_load.py` 以 avg-HR 近似回填（正是 plan Task 8 GOTCHA 預期的 fallback），使越野 PMC 立即有 311 點資料。TDD 完成，2 測試。
 - **執行了資料回填（修改真實 DB）**：跑了 `backfill_classification`（1686 筆分類）與 `backfill_hr_load`（247 筆 hrTSS）使三頁面有真實資料。兩者皆 idempotent、additive、可重跑。
 - **前端無測試框架**：以 `tsc -b` + `vite build` + 後端整合 smoke test 為 gate（balanced rigor 允許）。
 - **axios sports[] 序列化**：預設 `sports[]=` 與 FastAPI 不符，改 `paramsSerializer: { indexes: null }` 產生 `sports=a&sports=b`。

@@ -112,7 +112,7 @@
 
 | 使用者 | 會先壞的地方 |
 |---|---|
-| 5 人 | Render：沒有 persistent disk，SQLite 和 FIT 會消失，Postgres 30 天到期，每次打開都要等喚醒 1 分鐘。Oracle：容量夠，但同步都從同一個 IP 打 COROS / TP，已開始有被限流、封鎖的風險；每人的 FIT 大約 1–3 GB/年（本使用者 1000+ 活動約 2–3 GB）。 |
+| 5 人 | Render：沒有 persistent disk，SQLite 和 FIT 會消失，Postgres 30 天到期，每次打開都要等喚醒 1 分鐘。Oracle：容量夠，但同步都從同一個 IP 打 COROS / TP，已開始有被限流、封鎖的風險；每人的 FIT 大約 1–3 GB/年（一位約 1000 筆活動的使用者約 2–3 GB）。 |
 | 20 人 | Oracle 12 GB RAM 還夠，但 WKO5 風格的 Dataset 常駐記憶體約每人數百 MB，要改成按需載入、LRU 淘汰。每日排程同一時間打出 20 個同步，需要排隊。儲存 20–60 GB 仍在 200 GB 內。 |
 | 100 人 | 記憶體和 CPU 都不夠（每次重算 PMC、MMP 都很重）；非官方 API 從單一 IP 大量存取幾乎一定被擋；儲存可能超過 200 GB；需要監控、備份、帳號客服、資料外洩責任，已經不是「零成本」。 |
 
@@ -205,7 +205,7 @@
   - Windows Credential Manager 或 macOS Keychain，透過 `keyring` 套件。
   - 鍵名如 `wko5coach/secret-key`。
 - `secrets.py` 的讀取順序改為：環境變數 `WKO5COACH_SECRET_KEY` → keyring → `~/.wko5coach/secret.key`（舊版相容，之後移除）。
-- dotfiles（chezmoi）只是這位使用者自己的開發設定，不是產品的一部分；分享版完全不提。
+- 開發者自己的 dotfiles 只是開發設定，不是產品的一部分；分享版完全不提。
 - 金鑰遺失時只影響登入 token，重新登入即可，因為活動檔不加密。UI 要照這個說明。
 
 ---
@@ -652,7 +652,7 @@ COROS OAuth 可以當 (b) 的帳號身分嗎？
    - token 加密保存、定期清掉已取走的 FIT。
 5. **自架 server 的營運**：
    - 可用性：server 掛了，付費功能就停。
-   - 備份、監控、TLS。使用者已有 NAS 和 Cloudflare Tunnel，可沿用 homelab 的做法。
+   - 備份、監控、TLS。可以用 NAS 加 Cloudflare Tunnel 這類自架做法。
    - 客服。
 
 ### 10.4 分階段（接在 §9.5 之後）
