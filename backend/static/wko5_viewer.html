@@ -210,6 +210,16 @@ table.zt th.num { text-align: right; }
 .verdict-pill { margin: 4px 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--code); font-size: 13px; }
 .verdict-pill b { font-weight: 650; }
 .verdict-pill.good b { color: var(--ok); } .verdict-pill.warn b { color: var(--warn); } .verdict-pill.bad b { color: var(--err); }
+/* 間歇判讀: one compact row per segment / reading — label, number chips, a verdict chip; details behind ? (chip_rows) */
+.chiprows { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 4px; }
+.chiprow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 5px 8px; border: 1px solid var(--line);
+  border-radius: 8px; min-width: 0; }
+.chiprow > b { font-size: 12.5px; font-weight: 650; margin-right: 2px; }
+.chiprow .ch { font-size: 12px; padding: 1px 8px; border-radius: 10px; background: var(--code); color: var(--text);
+  font-variant-numeric: tabular-nums; max-width: 100%; overflow-wrap: anywhere; }
+.chiprow .vch { font-size: 12px; font-weight: 600; padding: 0 8px; border-radius: 10px; border: 1px solid currentColor; }
+.chiprow .vch.good { color: var(--ok); } .chiprow .vch.warn { color: var(--warn); } .chiprow .vch.bad { color: var(--err); }
+.chiprow .qtip { margin-left: auto; }
 .card h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .qtip { position: relative; display: inline-grid; place-items: center; width: 17px; height: 17px; padding: 0; margin: 0 2px 0 6px;
   border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif;
@@ -1313,7 +1323,8 @@ function draw(card, res) {
   // has nothing to plot them against, so they are listed here too
   // review cards (本次重點 / 飄移判讀): small visual cards replace the text rows (res.series keeps them for the AI)
   if (res.cards?.length && !res.empty) drawReviewCards(card, res);
-  const values = res.empty || res.cards?.length ? [] : S_.filter((s) => s.type !== "gauge" && (s.data.kind === "value"
+  if (res.chip_rows?.length && !res.empty) drawChipRows(card, res.chip_rows);
+  const values = res.empty || res.cards?.length || res.chip_rows?.length ? [] : S_.filter((s) => s.type !== "gauge" && (s.data.kind === "value"
     || (!hasPoints && s.data.kind === "hline" && s.data.y != null)));
   if (values.length) {
     if (values.length > 8) card.classList.add("wide");
@@ -1327,6 +1338,17 @@ function draw(card, res) {
   // it is for debugging and AI use. The same data is in the chart JSON from
   // GET /api/v1/wko5/views/{view}/dashboards/{d}/charts/{c} (series[].expression / data / unit,
   // unsupported, fixes).
+}
+
+// 間歇判讀 (workout_review _iv_verdict chip_rows): label · number chips · verdict chip (icon + word, never colour
+// alone); the long sentence behind the row's ?. Chips wrap, so a phone never scrolls sideways.
+function drawChipRows(card, rows) {
+  const icon = { good: "✓", warn: "⚠", bad: "✕" };
+  card.insertAdjacentHTML("beforeend", `<div class="chiprows">${rows.map((r) => `<div class="chiprow"><b>${esc(r.label)}</b>`
+    + r.chips.map((c) => `<span class="ch">${esc(c)}</span>`).join("")
+    + (r.verdict ? `<span class="vch ${esc(r.verdict.level || "")}">${icon[r.verdict.level] && r.verdict.text !== "✓" ? icon[r.verdict.level] + " " : ""}${esc(r.verdict.text)}</span>` : "")
+    + (r.tip ? `<button type="button" class="qtip" aria-label="${esc(r.label)} 的細節" data-tip="${esc(r.tip)}">?</button>` : "")
+    + `</div>`).join("")}</div>`);
 }
 
 // ---- review cards (workout_review `cards`, see its "dashboard cards" block): stat / status / zones / chip / tag.
@@ -3304,7 +3326,7 @@ function drawGradeProfile(card, res) {
 }
 
 // ---- 間歇 tab (workout_review interval_reps / interval_power). Self-contained; reuses ACT / cp* helpers.
-// 每趟功率 vs 目標 (res.rep_profile): bars per rep + one green target band (see drawRepProfile).
+// 每趟功率 vs 目標 (res.rep_profile): a line of the reps' power over one framed green target band (drawRepProfile).
 // 功率、W′ 與心率 (res.iv_trace): top panel = power as a soft area (W, left) + dFRC as a solid blue line
 //   (%, right, 0–100 — the owner's choice of one extra scale), bottom thin panel = heart rate; one time
 //   axis, one linked crosshair. Status / series colours validated with dataviz validate_palette.
@@ -3326,7 +3348,8 @@ function ivStyle() {
 .iv-leg i.dash { border-top-style: dashed; border-top-width: 1px; }
 .iv-leg i.area { height: 10px; border: 0; border-top: 1px solid; border-radius: 2px 2px 0 0; }
 .iv-leg i.band { height: 10px; border: 0; border-radius: 3px; background: var(--iv-band); }
-.iv-leg i.bar { width: 10px; height: 10px; border: 0; border-radius: 2px; }
+.iv-leg i.dot { width: 10px; height: 10px; border: 0; border-radius: 50%; }
+.iv-leg i.frame { width: 16px; height: 10px; border: 1.5px solid var(--iv-in); border-radius: 2px; background: var(--iv-target); }
 .iv-head .iv-rule { font-size: 12px; color: var(--muted); }
 .plot.iv-reps { height: 280px; }
 .plot.iv-trace { height: 380px; }
@@ -3334,16 +3357,17 @@ function ivStyle() {
   document.head.appendChild(st);
 }
 const IV_ST = {
-  in: { word: "達標（在綠色帶裡）", short: "達標", c: "--iv-in" },
-  high: { word: "偏高（超過綠色帶）", short: "偏高", c: "--iv-hi" },
-  low: { word: "偏低（不到綠色帶）", short: "偏低", c: "--iv-lo" },
+  in: { word: "達標（在綠框裡）", short: "達標", c: "--iv-in" },
+  low: { word: "偏低（在綠框下面）", short: "偏低", c: "--iv-lo" },
+  high: { word: "偏高（在綠框上面）", short: "偏高", c: "--iv-hi" },
   even: { word: "配速平均", short: "配速平均", c: "--iv-in" },
   uneven: { word: "配速不平均", short: "不平均", c: "--iv-lo" },
 };
-// 每趟功率 vs 目標 (owner 2026-10-02, 2nd pass): x = 第幾趟, y = 平均功率 (W) from 0; each rep one bar
-// from the axis to its mean, coloured by the verdict, the W printed on top; the target as ONE green band
-// across the reps (step-wise when a rep carries its own band), labelled 「目標 lo–hi W」 at its right end.
-// The rule sits in one line above the chart. CP / AeT tests: no band — bars green / amber by pacing, CP dashed.
+// 每趟功率 vs 目標 (owner 2026-10-03, 3rd pass — bars hid the band): x = 第幾趟, y = 平均功率 (W); the target
+// as ONE framed band (translucent green fill + solid green outline) across the reps, step-wise when a rep has
+// its own band, drawn above the grid and under the line, labelled 「目標 lo–hi W」 at its right end; the reps'
+// mean power as one line with markers coloured by the verdict and the W printed beside each. The rule sits
+// in one line above. CP / AeT tests: no band — markers green / amber by pacing, CP dashed.
 function drawRepProfile(card, res) {
   ivStyle();
   const P = res.rep_profile, test = P.mode === "test";
@@ -3352,7 +3376,7 @@ function drawRepProfile(card, res) {
   card.querySelector(".loading")?.remove();
   const col = (st) => css(IV_ST[st].c);
   const reps = P.reps || [];
-  // planned reps that weren't done: an empty column with 「沒做」 (the count says how many)
+  // planned reps that weren't done: a gap in the line with 「沒做」 (the count says how many)
   const cols = [...reps];
   for (let k = reps.length + 1; !test && k <= P.n_plan; k++) cols.push({ k, label: String(k), missing: true });
   const bandOf = (r) => r?.band || P.band;                     // [lo, hi | null] W
@@ -3360,25 +3384,24 @@ function drawRepProfile(card, res) {
   const head = document.createElement("p");
   head.className = "iv-head";
   head.innerHTML = `<b>${esc(res.subtitle || "")}</b><br><span class="iv-rule">${test
-    ? "綠色長條 = 前後半配速平均，黃色 = 不平均；虛線 = CP"
-    : "長條頂端落在綠色帶裡 = 達標"}</span>`;
+    ? "綠點 = 前後半配速平均，黃點 = 不平均；虛線 = CP" : "點落在綠框裡 = 達標（框外的淡綠 = ±2% 容許，也算）"}</span>`;
   const leg = document.createElement("div");
   leg.className = "iv-leg";
   leg.setAttribute("aria-label", "圖例");
-  const sw = (st) => `<span><i class="bar" style="background:${col(st)}"></i>${IV_ST[st].word}</span>`;
+  const sw = (st) => `<span><i class="dot" style="background:${col(st)}"></i>${IV_ST[st].word}</span>`;
   leg.innerHTML = test ? `${sw("even")}${sw("uneven")}<span><i class="dash" style="border-color:var(--iv-ink2)"></i>CP ${Math.round(P.cp)} W</span>`
-    : `<span><i class="band" style="background:var(--iv-target)"></i>目標 ${fmtBand(P.band)} W（淡邊 = ±2% 容許）</span>${sw("in")}${sw("low")}${sw("high")}`;
+    : `<span><i class="frame"></i>目標 ${fmtBand(P.band)} W</span>${sw("in")}${sw("low")}${sw("high")}`;
   const el = document.createElement("div");
   el.className = "plot iv-reps";
   el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `每趟平均功率的長條和目標帶：${res.subtitle || ""}`);
+  el.setAttribute("aria-label", `每趟平均功率的折線和目標框：${res.subtitle || ""}`);
   card.append(head, leg, el);
   const chart = echarts.init(el);
   charts.push(chart);
-  const tops = [...reps.map((r) => r.power), ...cols.flatMap((r) => bandOf(r) || []).filter((v) => v != null), P.cp];
-  const ymax = Math.max(...tops) * 1.1, ystep = ymax > 400 ? 100 : 50;
-  const yn = { max: Math.ceil(ymax / ystep) * ystep, interval: ystep };
-  const ink = css("--text"), muted = css("--muted"), line = css("--line");
+  const vals = [...reps.map((r) => r.power), ...cols.flatMap((r) => bandOf(r) || []).filter((v) => v != null), ...(test ? [P.cp] : [])];
+  const lo0 = Math.min(...vals), hi0 = Math.max(...vals), pad = Math.max((hi0 - lo0) * 0.2, 10);
+  const yn = cpNice(Math.max(0, lo0 - pad), hi0 + pad, 4);
+  const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
   const tip = (r) => {
     if (!r || r.missing) return r ? cpTipBox(`<b>第 ${r.k} 趟</b><br>沒做（計畫 ${P.n_plan} 趟）`) : "";
     const b = bandOf(r);
@@ -3392,51 +3415,62 @@ function drawRepProfile(card, res) {
       + (r.hr_end != null ? `<br>後半心率 ${Math.round(r.hr_end)} bpm` : ""));
   };
   function paint() {
-    const W = el.clientWidth || card.clientWidth || 600, colW = (W - 140) / Math.max(1, cols.length);
-    const tight = colW < 40;                    // phones with many reps: the number turned inside the bar's top
-    const target = css("--iv-target"), dark = pzDark();
+    const W = el.clientWidth || card.clientWidth || 600, colW = (W - 136) / Math.max(1, cols.length);
+    const tight = colW < 40;                    // many reps on a phone: the bare number, alternating above / below
+    const green = col("in"), fill = css("--iv-target");
+    const pw = (i) => cols[i] && !cols[i].missing ? cols[i].power : null;
+    const labelPos = (i) => {
+      const nb = [pw(i - 1), pw(i + 1)].filter((v) => v != null);
+      return !nb.length || pw(i) >= nb.reduce((a, b) => a + b, 0) / nb.length ? "top" : "bottom";
+    };
     chart.resize();
     chart.setOption({
       animation: false,
-      grid: { left: 52, right: test ? 16 : 78, top: 22, bottom: 40 },
+      grid: { left: 58, right: test ? 16 : 78, top: 26, bottom: 40 },
       tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => tip(cols[p.dataIndex]) },
-      xAxis: { type: "category", data: cols.map((r) => r.label), axisTick: { show: false }, axisLine: { lineStyle: { color: line } },
+      xAxis: { type: "category", data: cols.map((r) => r.label), boundaryGap: true, axisTick: { show: false },
+        axisLine: { lineStyle: { color: line } }, splitLine: { show: false },
         name: test ? "段" : "第幾趟", nameLocation: "middle", nameGap: 24, nameTextStyle: { color: muted, fontSize: 11 },
         axisLabel: { color: ink, fontSize: 11, interval: 0, hideOverlap: true } },
-      yAxis: { type: "value", min: 0, max: yn.max, interval: yn.interval, splitLine: { lineStyle: { color: line, opacity: 0.6 } },
+      yAxis: { type: "value", min: yn.min, max: yn.max, interval: yn.interval, splitLine: { lineStyle: { color: line, opacity: 0.6 } },
         name: "平均功率（W）", nameLocation: "middle", nameGap: 42, nameTextStyle: { color: muted, fontSize: 11 },
         axisLabel: { color: muted, fontSize: 10 } },
       series: [
-        { type: "bar", z: 2, barMaxWidth: 38, barCategoryGap: "30%",
-          data: cols.map((r) => r.missing ? { value: 0, label: { show: true, position: "insideBottom", formatter: "沒做", color: muted, fontSize: 10.5 } }
-            : { value: Math.round(r.power), itemStyle: { color: col(r.status), borderRadius: [4, 4, 0, 0] },
-                // the number inside a bar (tight): dark ink on amber (and on the lighter dark-mode green), white otherwise
-                ...(tight ? { label: { color: r.status === "low" || r.status === "uneven" || (dark && r.status !== "high") ? "#1a1a19" : "#fff" } } : {}) }),
-          label: tight ? { show: true, position: "insideTop", rotate: 90, align: "right", verticalAlign: "middle", distance: 6,
-              color: "#fff", fontSize: 10.5, fontWeight: 600, formatter: (p) => cols[p.dataIndex]?.missing ? "" : `${p.value} W` }
-            : { show: true, position: "top", distance: 3, color: ink, fontSize: 11, fontWeight: 600,
-              formatter: (p) => cols[p.dataIndex]?.missing ? "" : `${p.value} W` } },
-        // the target: one band across the reps, drawn over the bars (translucent) so each bar's top reads
-        // against it; a step where a rep's own band differs; the label once, right of the last column
-        ...(!test && P.band ? [{ type: "custom", z: 3, silent: true, data: cols.map((r, i) => [i, 0]), encode: { x: 0, y: 1 },
+        // the target: ONE framed band across all columns (a step where a rep's own band differs), above the grid
+        ...(!test && P.band ? [{ type: "custom", z: 3, silent: true, data: [[0, 0]], encode: { x: 0, y: 1 },
           renderItem: (params, api) => {
-            const i = params.dataIndex, b = bandOf(cols[i]);
-            if (!b) return null;
-            const xc = api.coord([i, 0])[0], bw = api.size([1, 0])[0];
-            const y0 = api.coord([0, b[0]])[1], y1 = api.coord([0, b[1] ?? yn.max])[1];
-            const kids = [];
-            // the ±2 % that still counts (floor = lo × 0.98, ceil = hi × 1.02) as a fainter rim of the same band
-            if (P.floor != null && !cols[i].band) {
-              const t0 = api.coord([0, P.floor])[1], t1 = api.coord([0, P.ceil ?? b[1] ?? yn.max])[1];
-              kids.push({ type: "rect", shape: { x: xc - bw / 2, y: t1, width: bw, height: Math.max(3, t0 - t1) }, style: { fill: target, opacity: 0.5 } });
+            const bw = api.size([1, 0])[0], top = [], bot = [];
+            cols.forEach((r, i) => {
+              const b = bandOf(r), xc = api.coord([i, 0])[0];
+              const y1 = api.coord([0, Math.min(b[1] ?? yn.max, yn.max)])[1], y0 = api.coord([0, Math.max(b[0], yn.min)])[1];
+              top.push([xc - bw / 2, y1], [xc + bw / 2, y1]); bot.push([xc - bw / 2, y0], [xc + bw / 2, y0]);
+            });
+            const pts = [...top, ...bot.reverse()];
+            const last = bandOf(cols[cols.length - 1]), xr = top[top.length - 1][0];
+            const ym = (api.coord([0, Math.min(last[1] ?? yn.max, yn.max)])[1] + api.coord([0, Math.max(last[0], yn.min)])[1]) / 2;
+            // the ±2 % that still counts (floor = lo × 0.98, ceil = hi × 1.02): a faint strip outside the frame
+            const tol = [];
+            if (P.floor != null && cols.every((r) => !r.band)) {
+              const x0 = top[0][0], x1 = xr, yA = api.coord([0, Math.min(P.ceil ?? yn.max, yn.max)])[1], yB = api.coord([0, Math.max(P.floor, yn.min)])[1];
+              tol.push({ type: "rect", shape: { x: x0, y: yA, width: x1 - x0, height: yB - yA }, style: { fill, opacity: 0.45 } });
             }
-            kids.push({ type: "rect", shape: { x: xc - bw / 2, y: y1, width: bw, height: Math.max(3, y0 - y1) }, style: { fill: target } });
-            if (i === cols.length - 1) kids.push({ type: "text", style: { text: `目標\n${fmtBand(b)} W`, x: xc + bw / 2 + 6, y: (y0 + y1) / 2,
-              fill: col("in"), font: "600 11px system-ui, sans-serif", verticalAlign: "middle", lineHeight: 14 } });
+            const kids = [...tol, { type: "polygon", shape: { points: pts }, style: { fill, stroke: green, lineWidth: 1.5 } },
+              { type: "text", style: { text: `目標\n${fmtBand(last)} W`, x: xr + 6, y: ym, fill: green,
+                font: "600 11px system-ui, sans-serif", verticalAlign: "middle", lineHeight: 14 } }];
+            cols.forEach((r, i) => { if (r.missing) kids.push({ type: "text", style: { text: "沒做", x: api.coord([i, 0])[0],
+              y: api.coord([0, yn.min])[1] - 8, fill: muted, font: "11px system-ui, sans-serif", align: "center" } }); });
             return { type: "group", children: kids };
           } }] : []),
         ...(test ? [{ type: "line", data: [], silent: true, markLine: { silent: true, symbol: "none", label: { show: false },
           lineStyle: { color: css("--iv-ink2"), type: "dashed", width: 1 }, data: [{ yAxis: P.cp }] } }] : []),
+        // the reps' mean power: one line, a marker per rep coloured by its verdict, the W beside it
+        { type: "line", z: 5, connectNulls: false, symbol: "circle", symbolSize: 11,
+          lineStyle: { color: css("--iv-ink2"), width: 1.5 }, itemStyle: { borderColor: panel, borderWidth: 2 },
+          data: cols.map((r, i) => r.missing ? null : { value: Math.round(r.power),
+            itemStyle: { color: col(r.status), borderColor: panel, borderWidth: 2 },
+            // above a local peak, below a valley: the label sits away from the line on either side
+            label: { show: true, position: labelPos(i), distance: 6, color: ink,
+              fontSize: tight ? 9.5 : 11, fontWeight: 600, formatter: tight ? "{c}" : "{c} W" } }) },
       ],
     }, { replaceMerge: ["series"] });
   }
