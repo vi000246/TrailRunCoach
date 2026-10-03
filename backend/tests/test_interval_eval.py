@@ -39,6 +39,30 @@ def _planned(ds, key, reps=None):
     return ds
 
 
+def test_a_text_only_planned_session_is_judged_by_its_structure():
+    """The planner's 專項期 「爬坡間歇 5×4 分」 has no library variant and no ladder title: its
+    structure (workout_steps.derive: 5 × 4′ at 101–106 % CP) is the plan. Run as planned with a
+    long warm-up, rests and cool-down (low average HR) it is still an interval session."""
+    p = [175.0] * 900
+    for _ in range(5):
+        p += [260.0] * 240 + [120.0] * 240
+    p += [150.0] * 600
+    t = np.arange(len(p), dtype=float)
+    ch = {"elapsedtime": list(t), "heartrate": [140.0] * len(t), "speed": [10.0] * len(t), "power": p,
+          "elapseddistance": list(t * 10 / 3600)}
+    w = FakeWorkout(start=dt.datetime.combine(TODAY - dt.timedelta(days=2), dt.time(18)), sport="run",
+                    tags=["running"], sport_type="running", channels=ch,
+                    metrics={"duration": float(len(t)), "movingduration": float(len(t)),
+                             "distance": len(t) / 360.0, "climbing": 5.0})
+    ds = _ds([w])
+    ds.plan_rows = {ds.workouts[0].idx: {"kind": "quality", "title": "爬坡間歇 5×4 分", "minutes": 60, "state": "done",
+                                         "detail": "上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分"}}
+    e = IE.evaluate(ds, ds.workouts[0], with_peers=False)
+    assert e["ok"] and e["planned"] and e["label"] == "爬坡間歇 5×4 分"
+    assert e["n_plan"] == 5 and e["hit"] == 5 and e["lo"] == pytest.approx(1.01) and e["verdict"] == "met"
+    assert WR.classify(ds, ds.workouts[0])["type"] == "quality"
+
+
 def test_a_full_session_meets_its_goal():
     ds = _planned(_ds([_v1a_run(TODAY - dt.timedelta(days=3))]), "v1a")
     e = IE.evaluate(ds, ds.workouts[0])

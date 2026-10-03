@@ -51,6 +51,7 @@ The 間歇 dashboard is shown for every run (`card`, the user 2026-10-02):
 """
 from __future__ import annotations
 
+import json
 import math
 from typing import Optional
 
@@ -150,6 +151,18 @@ def _spec(ds, w, row: dict, m: dict):
     spec = QG.spec_by_title(row.get("title")) if row else None
     if spec is not None:
         return None, spec, spec[1]
+    if row and row.get("kind") == "quality":
+        # a planned interval session without a library variant or a ladder title (the
+        # 專項期 「爬坡間歇 5×4 分」, the taper's 「短強度 4×3 分」, an edited structure): its
+        # structure — the one pushed to the watch (workout_steps.derive) — is the plan
+        from backend.engine import workout_steps as WS
+        try:
+            st = row.get("steps") or WS.derive(row)
+            v = WS.variant_from_steps(st, row.get("rung_key")) if st else None
+        except Exception:                   # noqa: BLE001 — an unreadable structure: not judged as planned
+            v = None
+        if v is not None:
+            return v, QG.variant_tuple(v), row.get("title") or IL.title(v)
     return None, None, None
 
 
@@ -494,7 +507,11 @@ def card(ds, w) -> dict:
 def card_cached(ds, w) -> dict:
     """card() memoised per dataset / activity / the 「當作間歇」 mark."""
     memo = getattr(ds, "memo", None)
-    key = ("interval_card", w.idx, flagged(w))
+    # the planned session it was matched to is an input: a sync's match comes after the
+    # dataset was built (plan_match on the next 課表 view)
+    row = _planned(ds, w)
+    key = ("interval_card", w.idx, flagged(w), row.get("uid"), row.get("title"), row.get("variant_key"),
+           json.dumps(row.get("steps"), sort_keys=True, default=str) if row.get("steps") else None)
     if isinstance(memo, dict) and key in memo:
         return memo[key]
     r = card(ds, w)
