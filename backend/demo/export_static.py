@@ -191,6 +191,9 @@ class DemoApp:
         # the crawl is one client making thousands of requests: lift the per-IP limits
         TM.REQ_BUCKET = RL.Buckets(rate=10 ** 9, per=60)
         TM.HEAVY_IP = RL.Buckets(rate=10 ** 9, per=60)
+        TM.CREATE_HOUR = RL.Buckets(rate=10 ** 9, per=3600)     # computations that make a sandbox
+        TM.CREATE_DAY = RL.Buckets(rate=10 ** 9, per=86400)     # (racepower/course/event…) would hit 3/h
+        TM.WRITE_MIN = RL.Buckets(rate=10 ** 9, per=60)
         TM.HEAVY_GATE = RL.Gate(n=8, wait_s=600.0)
         self.app = build_app(demo=True)
         self.client = TestClient(self.app, base_url=HOST, follow_redirects=False)
