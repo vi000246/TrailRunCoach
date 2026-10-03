@@ -95,7 +95,7 @@ has no humidity of its own.
 
 | Rule | Source / status |
 |---|---|
-| 25 °C (`DRIFT_HEAT_C`) | 徐國峰 < 25 °C (coach); Lafrenz 2008 (35 °C HR +11 % vs 22 °C +2 %, DOI 10.1249/MSS.0b013e3181666ed7) |
+| 25 °C (`DRIFT_HEAT_C`) | 台灣教練 < 25 °C; Lafrenz 2008 (35 °C HR +11 % vs 22 °C +2 %, DOI 10.1249/MSS.0b013e3181666ed7) |
 | 28 °C (`DRIFT_HOT_C`) | **推估**: Beiter 2025 (Physiol Rep, DOI 10.14814/phy2.70305) 28.7 vs 19.2 °C, HR +16 bpm — the hot condition sits just above 28; no source gives a cut-off |
 | Temperature source | `activity_temp`: Open-Meteo archive by file, else the only archive row of that date (a COROS / TP dataset's files are not the WKO5 names the archive is keyed by — `zone_events.weather_of`'s rule), else the watch minus the wrist bias `WATCH_BIAS_C` 3.7 °C (`watch_air`; the athlete's 72 paired route efforts, 推估, lower confidence) |
 | Compare within a band | `status.i_drift` (the band of the latest fair run when it has ≥ 2, else the band with most; `drift_agg.pick_band`), `drift_agg.rolling` / `drift_avg()` (the season charts: one 6-run mean per band), the aerobic card's 同類課表基準. `aet_points` (the AeT aggregate) regresses across runs, so it reads the cool band, `none` and — heat-adjusted — the warm band (next row); the hot band stays out |
@@ -115,7 +115,7 @@ has no humidity of its own.
 | Multi-run aggregate (`backend/engine/drift_agg.py`) | `aggregate`: the last 6 drifts (both tiers), inverse-variance weighted (w = 1/SE², SE floor 0.5 pp, default 5 pp without one), SE = max(√(1/Σw), weighted SD/√n). `rolling` for the season charts (8 weeks, **same temperature band only**, `band` on each). `aet_points` / `aet_validity`: drift points (first-half HR, Pw:HR else Pa:HR, SE) of road runs in 180 days, cool / warm (heat-adjusted HR) / no temperature (`AET_BANDS`) → `threshold_estimate.aet_aggregate` (weighted regression, crossing 5 %, delta-method SE scaled by the reduced χ²); valid = SE ≤ 3 bpm and the last 6 points' mean horizontal offset ≤ 5 bpm (`unsourced-rules.md` §B3) | 6 runs: Ikari 2026 (SportRxiv preprint) and `AET_MIN_RUNS`; weights, floors, SE rule: 推估 | `backend/engine/drift_agg.py`, `backend/engine/algorithms/threshold_estimate.py` |
 | `fast_finish` | Time-weighted mean of the last 10 % of the mask's time vs the rest − 1 | > `DRIFT_FAST_FINISH` 0.05 refuses (推估) | `backend/engine/workout_review.py:264` |
 | `heat_band` (alias `heat_gate`) | Tags a drift result with `temp_c` / `temp_src` / `temp_band` / `heat`; never refuses (2026-10-02). Idempotent | Bands: see Heat bands | `backend/engine/workout_review.py` |
-| `activity_temp` | (°C, source): the route_weather archive's air temperature for the file (`activity_weather.json`, moving-weighted, `backend/engine/route_weather.py:300`), else the only archive row of that date — the air is what 徐國峰's rule means, a wrist sensor is warmed by the body (`docs/research/aerobic-base-readiness.md:515`) — else the watch's `watch_temp_c` minus 3.7 °C (`watch_air`); a dataset may carry `activity_temps` (tests; `conftest` points `routes.HOME` at a temp folder so the date fallback never reads the real archive) | Archive read cached on the file's mtime | `backend/engine/workout_review.py` |
+| `activity_temp` | (°C, source): the route_weather archive's air temperature for the file (`activity_weather.json`, moving-weighted, `backend/engine/route_weather.py:300`), else the only archive row of that date — the air is what the 25 °C rule (台灣教練) means, a wrist sensor is warmed by the body (`docs/research/aerobic-base-readiness.md:515`) — else the watch's `watch_temp_c` minus 3.7 °C (`watch_air`); a dataset may carry `activity_temps` (tests; `conftest` points `routes.HOME` at a temp folder so the date fallback never reads the real archive) | Archive read cached on the file's mtime | `backend/engine/workout_review.py` |
 | `basis_drift` | (drift, reason) of a `drift_of` result for pace or power; strict by default, `ref=True` also returns a reference-tier value | Gates and thresholds (`quality_gate.friel_check` / `xu_check`, `classify`'s steady AeT test, the AeT-test bands) read strict; display (`_aerobic`, `aerobic_lines` except on `test_aet`, `drift_series(ref=True)` → `i_drift`, `drift(basis, "ref")`) opts in, labelled 「參考（暖身後 30–40 分，未達 UA 測試標準）」 (`REF_LABEL`, hover `REF_TIP`) | `backend/engine/workout_review.py:390` |
 | `detect_efforts` | Work bouts in the 1-s power stream | 30-s power ≥ max(0.85 CP, 1.12 × session median) (1.15 × median with no CP), ≥ 60 s, gaps < 30 s bridged; HR drop 60 s after the HR peak, skipped only when the next bout that is itself an effort (≥ 60 s) starts within those 60 s (`backend/engine/workout_review.py:336`) | `backend/engine/workout_review.py:294` |
 | `interval_summary` | Set band (median %CP), reps in band (±1 %), fade last vs first, median HR drop | Bands 閾值下 0.88–0.95, 閾值 0.95–1.01, 超閾值 1.01–1.06, VO2max 1.06–1.16, 無氧 ≥ 1.16 ×CP | `backend/engine/workout_review.py:346`, `backend/engine/workout_review.py:88` |
@@ -360,8 +360,8 @@ decision 2026-09-30); the session side is in `overview.spec.md`.
 - `apply_payload` (`backend/engine/cp_protocols.py:377`): `{date = test day, cp, wprime
   (2pt only), cp_method, activity_index, note, label}`; None for 不採用. 參考 labels
   the button「套用這次的 CP {cp} W（參考）」 and applies the point estimate.
-- The athlete's 2026-09-30 test (3′ 218 W < 12′ 222 W, 3′ HR peak ~147–149 vs 171,
-  16 min apart) → `1pt_prior`, CP ≈ 204 W (198–209), 參考
+- The athlete's 2026-09-30 test (3′ 235 W < 12′ 239 W, 3′ HR peak ~152–154 vs 176,
+  16 min apart) → `1pt_prior`, CP ≈ 220 W (214–225), 參考
   (`backend/tests/test_cp_protocols.py:264`).
 
 ## View (`views/workout.json`)

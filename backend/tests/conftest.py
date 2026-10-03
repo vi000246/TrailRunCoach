@@ -42,6 +42,15 @@ def _no_live_sync_calls():
     session_check.forget()
 
 
+@pytest.fixture(autouse=True)
+def _no_user_wko5_views(monkeypatch):
+    """Imported WKO5 views come only from a folder the user configures
+    (WKO5_VIEWS_DIR / charts.wko5_views_dir); a test that wants one writes a
+    synthetic .wko5chart (wko5chart_builder.py) and sets the env itself."""
+    if not _guard.REALDATA:
+        monkeypatch.delenv("WKO5_VIEWS_DIR", raising=False)
+
+
 FAKE_TP_CLIENT =("fake-client-id", "fake-client-secret-for-tests")
 
 
@@ -103,8 +112,6 @@ def _no_real_tp_client(monkeypatch, tmp_path_factory):
     monkeypatch.delenv("TP_CLIENT_SECRET", raising=False)
     d = tmp_path_factory.mktemp("tpc")
     monkeypatch.setattr(tp_client, "TP_CLIENT_FILE", d / "missing_tp_client.json")
-    monkeypatch.setattr(tp_client, "SEALED_CLIENT_FILE", d / "missing_tp_client.enc")
-    monkeypatch.setenv(tp_client.WKO5_EXE_ENV, str(d / "missing_WKO5.exe"))
 
 
 @pytest.fixture(autouse=True)

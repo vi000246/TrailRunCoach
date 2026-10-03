@@ -226,10 +226,10 @@
 
 | 檔案 | 內容 |
 |---|---|
-| `backend/api/wko5views.py:42` | `C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete` |
+| `backend/api/wko5views.py:42` | `~\Projects\TrailRunCoach\WKO5\Athlete` |
 | `backend/api/plan.py:22` | 同上 |
 | `backend/api/achievements.py:24` | 同上 |
-| `backend/scripts/build_baiyue.py:21` | `C:\Users\<user>\Projects\peak-list\v2\app\src\lib\peaks-data.ts` |
+| `backend/scripts/build_baiyue.py:21` | `~\Projects\另一個專案\v2\app\src\lib\peaks-data.ts` |
 | `backend/engine/wko5expr/chartfixes.py:14`、`views/wko5_fixes.json` | 視圖名稱 "WKO5 Workout View"（`wko5_fixes.json` 裡 51 處） |
 | `backend/engine/algorithms/validator.py:4`、`backend/files/wko5chart_reader.py:174-175`、`backend/files/wko5_athlete.py:70` | 註解中的個人檔名 |
 | 測試：`test_wko5_*.py`、`test_wko4_*.py`、`test_fit_to_channels.py`、`test_wko5chart_reader.py`、`test_wko5expr_parser.py` | golden 測試用的個人資料夾路徑（沒有資料時會自動 skip） |
@@ -386,9 +386,9 @@
 | `docs/wko5-views/season-view.json`、`workout-view.json` | 上面兩個視圖的 JSON 匯出，含個人自訂的圖表與中文註記 | 移除，或改寫成中性範例 |
 | `views/wko5_fixes.json` | 針對 "Athlete's …" 視圖的修正（51 處提到名字） | 移除，或改用中性視圖名 |
 | `views/periodization.json`、`views/training.json` | 自訂視圖，內容泛用，但有個人化的目標值（例如賽事爬升密度） | 保留，但檢查數值是否個人化，改成預設 |
-| `backend/data/baiyue.json` | 百岳清單，來自 peak-list 的 twmap 資料 | 確認資料來源授權（twmap / 地圖資料）；註明出處 |
-| `backend/api/wko5views.py:42`、`backend/api/plan.py:22`、`backend/api/achievements.py:24` | 寫死的 `C:\Users\<user>\…\WKO5\Athlete` | 移除預設值，改 `app_data_dir()` 或設定 |
-| `backend/scripts/build_baiyue.py:21` | 寫死的 `C:\Users\<user>\Projects\peak-list\…` | 改成參數 |
+| `backend/data/baiyue.json` | 百岳清單，來自 另一個專案 的 twmap 資料 | 確認資料來源授權（twmap / 地圖資料）；註明出處 |
+| `backend/api/wko5views.py:42`、`backend/api/plan.py:22`、`backend/api/achievements.py:24` | 寫死的 `~\…\WKO5\Athlete` | 移除預設值，改 `app_data_dir()` 或設定 |
+| `backend/scripts/build_baiyue.py:21` | 寫死的 `~\Projects\另一個專案\…` | 改成參數 |
 | `backend/engine/wko5expr/chartfixes.py:14`、`validator.py:4`、`wko5chart_reader.py:174-175`、`wko5_athlete.py:70` | 註解與範例中的個人檔名 | 改寫成中性範例 |
 | 測試（`test_wko5_*`、`test_wko4_*`、`test_fit_to_channels`、`test_wko5chart_reader`、`test_wko5expr_parser`） | 個人資料夾路徑（golden） | 改讀環境變數，沒設定就 skip |
 | `docs/research/superpower-calculator.md` | 試算表研究筆記 | 見 7.3 |
@@ -399,7 +399,7 @@
 
 - [ ] **SuperPower Calculator / Palladino**：racepower 的公式移植自 SuperPower Calculator 試算表，包括環境乘數、Riegel、CP / RWC、RE、賽事預測。zones 的 Palladino 功率區間表也出自他。
   - app 內的「關於 / 方法」頁與 racepower 頁尾要清楚標示出處與原作者。
-  - **建議使用者在社團發文前先私訊 Palladino 取得同意**：說明是免費工具、公式來源已標示，並詢問他是否同意用他的名字與區間名稱。
+  - **建議使用者在社團發文前先聯絡 Palladino 取得同意**：說明是免費工具、公式來源已標示，並詢問他是否同意用他的名字與區間名稱。
 - [ ] WKO5 的公式重建（TIS、stamina、PD model、formulas.md）：是逆向工程的成果。公開時要評估 WKO5 / TrainingPeaks 的條款；說明文件避免附上二進位位址、解碼步驟等可直接用來繞過授權的細節。
 - [ ] 第三方研究引用（Minetti 2002、Foster 1998、Uphill Athlete 等）：沿用目前 docs 的引用格式，放進「方法」頁。
 

@@ -301,7 +301,7 @@ async def test_migrate_schema_adds_new_columns():
         db_mod.engine = orig
 ```
 
-Run: `cd /Users/<user>/Projects/WKO5reverse && python -m pytest backend/tests/test_migration.py -v` — expect FAIL (columns don't exist yet)
+Run: `cd <repo> && python -m pytest backend/tests/test_migration.py -v` — expect FAIL (columns don't exist yet)
 
 **IMPLEMENT:**
 ```python
@@ -972,7 +972,7 @@ If values are None (format mismatch), inspect the actual bytes and adjust `_read
 
 **TEST FIRST** (TypeScript compiler):
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit 2>&1 | head -20
+cd <repo>/frontend && npx tsc --noEmit 2>&1 | head -20
 ```
 After adding the types, this should still pass (no new errors).
 
@@ -1202,7 +1202,7 @@ export function DateRangePicker({ value, onChange }: Props) {
 
 **VALIDATE:**
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit && npm run build
+cd <repo>/frontend && npx tsc --noEmit && npm run build
 ```
 Then open browser and verify both preset rows appear and active highlighting works.
 
@@ -1423,7 +1423,7 @@ Simplest: move the entire form to wrap a `space-y-4` div containing both Card `C
 
 **VALIDATE:**
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit && npm run build
+cd <repo>/frontend && npx tsc --noEmit && npm run build
 ```
 Then open browser `/config`, verify new section appears, test threshold pace display (5:00/km formatting).
 
@@ -1460,25 +1460,25 @@ Then open browser `/config`, verify new section appears, test threshold pace dis
 
 ### Static Analysis
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit
+cd <repo>/frontend && npx tsc --noEmit
 ```
 EXPECT: Zero type errors
 
 ### Python Tests
 ```bash
-cd /Users/<user>/Projects/WKO5reverse && python -m pytest backend/tests/ -v
+cd <repo> && python -m pytest backend/tests/ -v
 ```
 EXPECT: All tests pass (12 unit + 2 migration + 2 wko4 = 16 total)
 
 ### Build
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npm run build
+cd <repo>/frontend && npm run build
 ```
 EXPECT: Build succeeds, dist/ updated
 
 ### Deploy
 ```bash
-cd /Users/<user>/Projects/WKO5reverse && ./deploy.sh
+cd <repo> && ./deploy.sh
 ```
 EXPECT: Docker Compose rebuilds and starts
 

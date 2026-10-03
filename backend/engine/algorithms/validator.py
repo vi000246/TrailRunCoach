@@ -1,7 +1,7 @@
 """Validate core metric formulas against WKO5 reverse-engineered constants.
 
 Authoritative constants come from docs/spec/wko5-training-load-charts.spec.md
-(extracted verbatim from `WKO5 Season View.wko5chart`):
+(extracted verbatim from a WKO5 Season View export (`.wko5chart`)):
   - CTL = tl(tss, ctlconstant)  EWMA tau = 42 days
   - ATL = tl(tss, atlconstant)  EWMA tau = 7 days
   - TSB = CTL - ATL (shifted 1 day)

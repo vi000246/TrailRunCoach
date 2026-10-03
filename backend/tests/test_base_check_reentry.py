@@ -1,6 +1,5 @@
-"""徐國峰's base checks (engine/base_check.py), the Zone 5 lifecycle and the
-re-entry block after a break (engine/reentry.py; docs/research/detraining.md,
-xu-guofeng-reply.md). Synthetic data only — never the WKO5 folder, the app DB,
+"""The aerobic-base checks (engine/base_check.py), the Zone 5 lifecycle and the
+re-entry block after a break (engine/reentry.py; docs/research/detraining.md). Synthetic data only — never the WKO5 folder, the app DB,
 the user's plan or COROS."""
 import datetime as dt
 from datetime import date
@@ -165,7 +164,7 @@ def test_projection_schedules_the_block_after_a_planned_blackout_not_step_cap():
 
 
 # ---------------------------------------------------------------------------
-# 徐國峰's 90-min test and the three signals
+# 徐國峰's 90-min test
 # ---------------------------------------------------------------------------
 
 def _xu_workout(day, rise=0.06, minutes=95, tags=("running",), climb=10.0):
@@ -199,7 +198,7 @@ def test_rq_points_are_daniels_intensity_points_and_the_tss_conversion():
 
 
 def test_three_signals_are_gone_three_tests_remain():
-    # 2026-10-01: Zone 5 opens on ONE of three tests; 三訊號 is no longer a path
+    # 2026-10-01: Zone 5 opens on ONE of three tests; the old xu_signals path is gone
     assert not hasattr(BC, "three_signals") and not hasattr(BC, "signal2")
     assert BC._paths_for("auto") == ("xu90", "aet_ua_gap", "aet_friel_drift")
     assert BC._paths_for("xu_signals") == ()
@@ -293,7 +292,7 @@ def test_after_14_to_28_days_two_z3_and_the_drift_check(xu_confirmed, monkeypatc
     z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-22"])
     assert z["state"] == "paused" and "2 堂" in z["reason"]
     assert z["pause"] == {"kind": "reentry_z3", "done": 1, "need": 2}
-    # the post-break long-run drift check (a re-entry rule, kept when 三訊號 went)
+    # the post-break long-run drift check (a re-entry rule, kept when xu_signals went)
     monkeypatch.setattr(BC, "long_check", lambda ds, today, days=28: {"state": "fail", "why": "後段心率 +8%"})
     z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-22", "2026-09-26"])
     assert z["state"] == "paused" and "飄移檢查" in z["reason"] and z["pause"]["kind"] == "drift_check"

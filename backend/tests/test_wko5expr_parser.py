@@ -7,9 +7,9 @@ import pytest
 
 from backend.engine.wko5expr import parser as P
 
-ROOT = Path(__file__).resolve().parents[2]
-VIEWS = [ROOT / "WKO5 Season View" / "WKO5 Season View.wko5chart",
-         ROOT / "WKO5 Workout View" / "WKO5 Workout View.wko5chart"]
+# your own exported views (opt-in): WKO5_VIEWS_DIR, never the repo
+_VDIR = os.getenv("WKO5_VIEWS_DIR")
+VIEWS = sorted(Path(_VDIR).rglob("*.wko5chart")) if _VDIR else []
 
 
 def test_precedence_and_right_assoc_power():
@@ -60,11 +60,10 @@ def test_blank_expression_is_empty():
     assert isinstance(P.parse(None), P.Empty)
 
 
-@pytest.mark.skipif(not all(v.exists() for v in VIEWS), reason="user view exports not present")
-def test_every_expression_in_the_users_views_parses():
+def _parse_all(paths):
     from backend.files.wko5chart_reader import read_view
     total, failed = 0, []
-    for p in VIEWS:
+    for p in paths:
         for d in read_view(p)["dashboards"]:
             for c in d["charts"]:
                 for s in c.get("series", []):
@@ -73,6 +72,19 @@ def test_every_expression_in_the_users_views_parses():
                         P.parse(s["expression"])
                     except P.ParseError:
                         failed.append((d["title"], c["title"], s["name"]))
+    return total, failed
+
+
+def test_every_expression_in_a_synthetic_view_parses(tmp_path):
+    from backend.tests import wko5chart_builder as WB
+    total, failed = _parse_all([WB.season_view(tmp_path / "s.wko5chart"),
+                                WB.workout_view(tmp_path / "w.wko5chart")])
+    assert total == 5 and failed == []
+
+
+@pytest.mark.skipif(not VIEWS, reason="set WKO5_VIEWS_DIR to your exported views")
+def test_every_expression_in_the_users_views_parses():
+    total, failed = _parse_all(VIEWS)
     # known gap: one VO2max interval-marking series uses the `in` operator
-    assert total > 800
+    assert total > 0
     assert len(failed) <= 1, failed

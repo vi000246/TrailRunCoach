@@ -6,9 +6,7 @@ import pytest
 
 from backend.files.wko5chart_reader import decode, read_view, WKO5ChartFormatError
 
-ROOT = Path(__file__).resolve().parents[2]
-SEASON = ROOT / "WKO5 Season View" / "WKO5 Season View.wko5chart"
-WORKOUT = ROOT / "WKO5 Workout View" / "WKO5 Workout View.wko5chart"
+from backend.tests import wko5chart_builder as WB
 
 
 def _tag(fid, wire):
@@ -48,24 +46,25 @@ def test_wire5_blob_is_kept_raw_and_unpackable():
     assert unpack_varints(rec.get(925)) == [2000, 4000, 2000]
 
 
-@pytest.mark.skipif(not SEASON.exists(), reason="user export not present")
-def test_season_view_inventory():
-    view = read_view(SEASON)
-    assert view["view"] == "WKO5 Season View"
-    assert len(view["dashboards"]) == 10
+def test_season_view_inventory(tmp_path):
+    """A synthetic export (wko5chart_builder.py): view / dashboard / chart titles,
+    series expressions, axes; WKO5's XML-escaped text is unescaped."""
+    view = read_view(WB.season_view(tmp_path / "s.wko5chart", "Exports/WKO5 Season View"))
+    assert view["view"] == "WKO5 Season View"            # the folder part of the title is dropped
+    assert [d["title"] for d in view["dashboards"]] == ["Load", "PDC"]
     charts = [c for d in view["dashboards"] for c in d["charts"]]
-    assert len(charts) == 72
-    acr = charts[0]
-    assert acr["title"] == "ATL CTL Ratio 訓練負荷比 (only run)"
-    assert acr["series"][0]["expression"] == \
-        'tl(if(sport="run",tss),atlconstant)/tl(if(sport="run",tss),ctlconstant)'
-    titles = {c["title"] for c in charts}
-    assert "Daily % of CTL (run TSS/CTL)" in titles  # entity-unescaped
+    assert [c["kind"] for c in charts] == ["athlete", "athlete"]
+    assert charts[0]["title"] == "Daily % of CTL (run TSS/CTL)"   # entity-unescaped
+    assert charts[0]["axes"] == [{"id": "PERCENT", "min": 0.0, "max": None}]
+    pd = charts[1]
+    assert [s["name"] for s in pd["series"]] == ["MMP Curve", "New Bests"]
+    assert pd["series"][0]["expression"] == "meanmax(runpower)"
+    assert pd["series"][1]["type"] == "area" and pd["series"][1]["y_axis"] == "WATTS"
 
 
-@pytest.mark.skipif(not WORKOUT.exists(), reason="user export not present")
-def test_workout_view_inventory():
-    view = read_view(WORKOUT)
+def test_workout_view_inventory(tmp_path):
+    view = read_view(WB.workout_view(tmp_path / "w.wko5chart"))
     charts = [c for d in view["dashboards"] for c in d["charts"]]
-    assert len([c for c in charts if c["kind"] == "workout"]) == 52
-    assert any(c.get("class") == "PKMapPanelConfig" for c in charts)
+    assert [c["kind"] for c in charts] == ["workout", "other"]
+    assert charts[1]["class"] == "PKMapPanelConfig"
+    assert [s["expression"] for s in charts[0]["series"]] == ["power", "heartrate"]

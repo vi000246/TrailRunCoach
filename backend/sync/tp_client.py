@@ -1,7 +1,7 @@
 """
 TrainingPeaks sync client.
 
-Login (see docs/deploy/tp-oauth-client.md):
+Login:
   1. OAuth password grant as WKO5 sends it, only when client credentials are
      configured at runtime (TP_CLIENT_ID / TP_CLIENT_SECRET or
      ~/.wko5coach/tp_client.json) and not disabled by the
@@ -66,19 +66,15 @@ TP_HEADERS = {
 # OAuth client credentials are NOT in the code. They are loaded at runtime
 # from TP_CLIENT_ID / TP_CLIENT_SECRET, else ~/.wko5coach/tp_client.json
 # ({"client_id", "client_secret"}). Without them the OAuth path is skipped and
-# the website login is used. See docs/deploy/tp-oauth-client.md (ToS risk).
+# the website login is used. Using another app's OAuth client may break
+# TrainingPeaks' terms; bring your own registered client. See .env.example.
 TP_CLIENT_FILE = Path.home() / ".wko5coach" / "tp_client.json"
 
 # Space-separated, i.e. '+' once form-urlencoded (as WKO5 sends it).
 TP_SCOPE = "fitness baseactivity users metrics software groundcontrol"
 
 
-# Fernet-sealed {"client_id", "client_secret"} committed to the (private) repo;
-# decrypts only where the secrets.py key lives. See
-# docs/wko5-internals/trainingpeaks-auth.md — remove before going public.
-SEALED_CLIENT_FILE = Path(__file__).resolve().parents[1] / "settings" / "tp_client.enc"
-WKO5_EXE_ENV = "WKO5_EXE"
-CREDS_SOURCES = ("env", "file", "sealed", "wko5_exe", "none")
+CREDS_SOURCES = ("env", "file", "none")
 
 
 def _creds_pair(d) -> Optional[tuple[str, str]]:
@@ -87,40 +83,9 @@ def _creds_pair(d) -> Optional[tuple[str, str]]:
     return None
 
 
-def _creds_from_sealed() -> Optional[tuple[str, str]]:
-    from backend.settings.secrets import SecretError, unseal, PREFIX
-    try:
-        blob = SEALED_CLIENT_FILE.read_text("ascii").strip()
-    except OSError:
-        return None
-    try:
-        plain = unseal(blob if blob.startswith(PREFIX) else PREFIX + blob)
-        return _creds_pair(json.loads(plain))
-    except (SecretError, ValueError):
-        log.warning("TP client credentials: source=sealed not usable with this key; skipping")
-        return None
-
-
-def _creds_from_wko5_exe() -> Optional[tuple[str, str]]:
-    """Derive from a local WKO5.exe (backend/scripts/decode_tp_client_secret.py).
-    Skipped silently when the script, pefile or the exe is absent."""
-    try:
-        from backend.scripts import decode_tp_client_secret as D
-    except Exception:
-        return None
-    exe = os.getenv(WKO5_EXE_ENV) or getattr(D, "DEFAULT_EXE", None)
-    if not exe or not Path(exe).exists():
-        return None
-    try:
-        return D.CLIENT_ID, D.derive_secret(exe)
-    except Exception:
-        log.warning("TP client credentials: source=wko5_exe could not be derived; skipping")
-        return None
-
-
 def lookup_client_creds() -> tuple[Optional[tuple[str, str]], str]:
-    """(creds, source label). Order: env → ~/.wko5coach/tp_client.json →
-    sealed repo blob → local WKO5.exe. Values are never logged."""
+    """(creds, source label). Order: env → ~/.wko5coach/tp_client.json.
+    Nothing is shipped in the repo. Values are never logged."""
     cid, sec = os.getenv("TP_CLIENT_ID"), os.getenv("TP_CLIENT_SECRET")
     if cid and sec:
         return (cid, sec), "env"
@@ -130,12 +95,6 @@ def lookup_client_creds() -> tuple[Optional[tuple[str, str]], str]:
         creds = None
     if creds:
         return creds, "file"
-    creds = _creds_from_sealed()
-    if creds:
-        return creds, "sealed"
-    creds = _creds_from_wko5_exe()
-    if creds:
-        return creds, "wko5_exe"
     return None, "none"
 
 

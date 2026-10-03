@@ -71,7 +71,7 @@ PACE_ZONES = [(z, lo if lo is not None else 0.85, hi if hi is not None else 1.45
               for z, _n, lo, hi in FRIEL_PACE]         # × threshold pace; bigger = slower
 ZONES = {"power": POWER_ZONES, "hr": HR_ZONES, "pace": PACE_ZONES}
 
-# Z5 / Z3 rules (interval_library §C2): 徐國峰 ≥ 2 min; Buchheit rest; Haugen ≥ 3 min
+# Z5 / Z3 rules (interval_library §C2): 台灣教練 ≥ 2 min; Buchheit rest; Haugen ≥ 3 min
 Z5_MIN_REP_S, Z3_MIN_REP_S, Z5_MAX_REST_S = IL.Z5_MIN_REP_S, IL.Z3_MIN_REP_S, IL.Z5_MAX_REST_S
 Z5_FRAC = IL.CLASS_RANGE["Z5"][0]
 HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}    # = coros_workouts.HR_WORK
@@ -943,7 +943,7 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
         if r.warn:
             add("warn", r.warn, st["id"])
         if st["kind"] == "work" and st["dur"]["type"] == "time" and _is_z5(st, r) and st["dur"]["value"] < Z5_MIN_REP_S:
-            add("err", f"5 區每趟至少 2 分鐘（徐國峰）：這段只有 {mmss(st['dur']['value'])}", st["id"])
+            add("err", f"5 區每趟至少 2 分鐘（台灣教練）：這段只有 {mmss(st['dur']['value'])}", st["id"])
         if st["kind"] == "work" and st["dur"]["type"] == "time" and _is_z3(st, r) and \
                 st["dur"]["value"] < Z3_MIN_REP_S and _has_rest_after(rows, st):
             add("warn", f"3 區每趟至少 3 分鐘（Haugen 2022 的下緣）：這段只有 {mmss(st['dur']['value'])}", st["id"])

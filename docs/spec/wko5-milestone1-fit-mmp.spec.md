@@ -264,7 +264,7 @@ TSS = (duration_s × NP × IF) / (FTP × 3600) × 100
 **`athlete.json`**
 ```json
 {
-  "name": "maintainer",
+  "name": "Example Runner",
   "ftp_w": 250,
   "weight_kg": 70,
   "updated": "2026-05-14"

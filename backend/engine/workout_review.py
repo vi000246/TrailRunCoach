@@ -111,18 +111,18 @@ START_TIP = ("出門先過市區路口、到河濱才開始穩定跑時，前 20
              "坡道、快步不排除：上坡後心率不一定回得來，排除會把真的影響藏起來。")
 DRIFT_FINISH_SHARE = 0.10    # 推估 (doc §6.2 / §7): the last 10 % of the measured time …
 DRIFT_FAST_FINISH = 0.05      # … > 5 % above the rest (power or pace) = a fast finish, refused
-DRIFT_HEAT_C = 25.0           # 徐國峰 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C): the cool band's top
+DRIFT_HEAT_C = 25.0           # 台灣教練 < 25 °C (Lafrenz 2008: HR +11 % at 35 °C vs +2 % at 22 °C): the cool band's top
 DRIFT_HOT_C = 28.0            # 推估: the warm / hot split. Beiter 2025 (Physiol Rep, doi 10.14814/phy2.70305): 28.7 vs
                               # 19.2 °C, HR +16 bpm — the hot condition sits just above 28; no source gives a cut-off
 # Temperature bands (heat-bands, 2026-10-02 — replaces the > 25 °C refusal: in Taiwan most of the year is
 # above it). A drift is kept in every band and compared only with runs of its own band (the overview
 # indicator, the season charts' 6-run mean, the AeT aggregate takes the cool band only). Air temperature,
-# not Hadley: the drift sources (徐國峰, Lafrenz, Beiter) give °C, and the watch path has no humidity of its
+# not Hadley: the drift sources (台灣教練, Lafrenz, Beiter) give °C, and the watch path has no humidity of its
 # own (Hadley there would rest on the season's RH). ≤ 25 cool (the old rule let 25.0 through), ≤ 28 warm.
 TEMP_BANDS = ("cool", "warm", "hot")
 TEMP_BAND_LABEL = {"cool": "< 25 °C", "warm": "25–28 °C", "hot": "> 28 °C", "none": "溫度不明"}
 HEAT_NOTE = "熱環境，結果可能偏高"
-HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是徐國峰的條件"
+HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是台灣教練的條件"
             "（Lafrenz 2008：35 °C 心率升 11%、22 °C 升 2%）；28 °C 是推估的分界（Beiter 2025：28.7 對 19.2 °C，"
             "最高心率 +16 bpm）。熱會讓飄移偏高：熱天通過門檻仍算數（保守），沒通過可能是熱造成的。"
             "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差（本人有 10 對以上用本人的，"
@@ -396,7 +396,7 @@ def temp_band(temp_c: Optional[float]) -> str:
 
 
 def is_heat(band: Optional[str]) -> bool:
-    """Above 徐國峰's 25 °C: the result may be heat-inflated."""
+    """Above the 25 °C line (台灣教練): the result may be heat-inflated."""
     return band in ("warm", "hot")
 
 
@@ -1816,8 +1816,8 @@ def watch_air(t_watch: Optional[float]) -> Optional[float]:
 def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Optional[str]]:
     """(temperature °C, source) for drift_of's temperature band: the
     route_weather archive's air temperature when it has this activity — by
-    file, else the only archive row of that date (the air is what 徐國峰's
-    < 25 °C means) — else the watch's mean over the drift window minus the
+    file, else the only archive row of that date (the air is what the
+    < 25 °C line means) — else the watch's mean over the drift window minus the
     wrist bias (watch_air, lower confidence); (None, None) without either.
     A dataset may carry its own {file: temp_c} (`activity_temps`, tests)."""
     arch = getattr(ds, "activity_temps", None)
@@ -2783,7 +2783,7 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     tc = dr.get("temp_c")
     if tc is not None:
         chip(id="heat", icon="temp", text=f"{tc:.0f} °C", level="good" if tc <= DRIFT_HEAT_C else "warn",
-             tip=_("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（徐國峰 < 25 °C；Lafrenz 2008）",
+             tip=_("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（台灣教練 < 25 °C；Lafrenz 2008）",
                    src=TEMP_SRC_LABEL.get(dr.get("temp_src"), "溫度"), tc=tc, hot=DRIFT_HEAT_C))
     elif m.get("category") in ("road", "trail"):
         chip(id="heat", icon="temp", text="沒有溫度", level="na",

@@ -382,7 +382,7 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 **FIT 資料集的前置（2026-10-01，`docs/research/unsourced-rules.md` §0.10 第 0 步）**：app 的資料要從 TP／COROS 來，WKO5 只當對照。
 
 - **越野／路跑**：`sport_of`（`backend/engine/wko5expr/fitdataset.py:89`）先看 app DB 的 `workout_files.trail_classification`（唯讀開啟，`load_classifications`，`backend/engine/wko5expr/fitdataset.py:129`），FIT 的 session sub_sport 只當後備（COROS 的 FIT 沒有 trail sub_sport，原本整批越野都被當路跑，回測越野 n = 0；sub_sport 先前也根本沒被讀進來，`fit_to_channels` 現在帶出 `sub_sport`）。跨來源重複（`duplicate_of`）視為同一筆活動：群組裡任一列的使用者覆寫優先（自己這列 → 主紀錄 → 其他重複列），否則用自己這列的自動值，再退到主紀錄（`classification_for`，`backend/engine/wko5expr/fitdataset.py:180`）。每個來源的資料集仍保留自己的檔案（不因為是重複列就丟掉，否則該來源會少活動）。越野跑同時加上 WKO5 的 `runningtrail` 標籤，因為 thresholds／品質門檻／status／成就只看標籤。
-- **門檻與體重**，依序：賽季計畫的 dated 列（`Dataset.setting` / `cp`）→ app DB 的 `athlete_settings`（體重、`run_ftp_w`、閾值配速；`_load_db_settings`，`backend/engine/wko5expr/fitdataset.py:417`）→ 從這些 FIT 估算的 as-of LTHR（`_estimate_settings`，`backend/engine/wko5expr/fitdataset.py:445`：每 30 天一個格點，推估；格點日只用當天以前的跑步，`thresholds.estimate`，每次跑步對照它自己日期的 `racepower.athlete.cp_as_of`，估出的值只套用到格點日以後；只在有 app DB 時自動估算）→ 未設定。跑步 FTP（功率 TSS）**不**用估算值補（圖表的 CP 另有 Stryd-only 擬合，見「圖表分析在 COROS 來源」）：`cp_as_of` 的 PD 重擬在第一筆計畫 CP 之前沒有合理性參考，這位跑者的 COROS 資料在 2024-06～12 得到 362–384 W（計畫 CP 204 W），會讓那段時間的功率 TSS 少 4 倍；沒有計畫／DB 值的跑步改用 hrTSS（估算的 LTHR）或維持未設定。實測（2026-10-01，同步進行中的 COROS 803 筆）：LTHR 估算只有 2024-03～05（145）與 2025-10 之後（149–157）有值，中間約 17 個月沒有 LTHR，那段 COROS 跑步在 app 路徑上沒有 TSS。WKO5 athlete 檔只有在設定 `charts.fit_settings_from_wko5 = true`（預設 false，`backend/settings/repository.py:53`）時才讀（`dataset_for_source`，`backend/engine/wko5expr/fitdataset.py:537`）。各處的來源標籤改走 `Dataset.setting_label`，FIT 資料集不再顯示「WKO5 設定」。
+- **門檻與體重**，依序：賽季計畫的 dated 列（`Dataset.setting` / `cp`）→ app DB 的 `athlete_settings`（體重、`run_ftp_w`、閾值配速；`_load_db_settings`，`backend/engine/wko5expr/fitdataset.py:417`）→ 從這些 FIT 估算的 as-of LTHR（`_estimate_settings`，`backend/engine/wko5expr/fitdataset.py:445`：每 30 天一個格點，推估；格點日只用當天以前的跑步，`thresholds.estimate`，每次跑步對照它自己日期的 `racepower.athlete.cp_as_of`，估出的值只套用到格點日以後；只在有 app DB 時自動估算）→ 未設定。跑步 FTP（功率 TSS）**不**用估算值補（圖表的 CP 另有 Stryd-only 擬合，見「圖表分析在 COROS 來源」）：`cp_as_of` 的 PD 重擬在第一筆計畫 CP 之前沒有合理性參考，這位跑者的 COROS 資料在 2024-06～12 得到 362–384 W（計畫 CP 220 W），會讓那段時間的功率 TSS 少 4 倍；沒有計畫／DB 值的跑步改用 hrTSS（估算的 LTHR）或維持未設定。實測（2026-10-01，同步進行中的 COROS 803 筆）：LTHR 估算只有 2024-03～05（145）與 2025-10 之後（149–157）有值，中間約 17 個月沒有 LTHR，那段 COROS 跑步在 app 路徑上沒有 TSS。WKO5 athlete 檔只有在設定 `charts.fit_settings_from_wko5 = true`（預設 false，`backend/settings/repository.py:53`）時才讀（`dataset_for_source`，`backend/engine/wko5expr/fitdataset.py:537`）。各處的來源標籤改走 `Dataset.setting_label`，FIT 資料集不再顯示「WKO5 設定」。
 - **`athlete_settings.lthr` / `ftp_w` 不當跑步門檻**：唯一的自動寫入者是 `coros_client.login`（COROS 帳號 `zoneData.lthr` / `.ftp` 與體重，日期 = 登入當天 UTC），沒有記錄是哪個運動；TP 的 `fetch_tp_settings` 只回傳 JSON、不寫 DB。2026-09-30 那列（FTP 200、LTHR 182、66.3 kg）是 COROS 登入寫的，不是 TP；LTHR 182 高於同一天 12′ 全力測試的峰值心率 171，不可能是現在的跑步 LTHR。這兩欄留在 `settings_ignored` 供顯示，體重照用。
 - **快取**：`source_stamp` 多帶 `db_stamp()`（`backend/engine/wko5expr/datasource.py:65`），分類覆寫、去重或 `athlete_settings` 變了，即使 FIT 檔沒變也會重建 Dataset。`FitFolderDataset.cached_series` 改成記憶體快取，key 含當時的門檻（`backend/engine/wko5expr/fitdataset.py:513`）。
 - 測試：`backend/tests/test_fit_dataset_prereqs.py`（合成 FIT ＋ tmp SQLite，不碰 WKO5 資料夾與真實 DB）。
@@ -532,7 +532,7 @@ TP 的 2025-12-14 垃圾檔（下節）就是這條規則抓的：不再只靠�
   標籤（圖用 `hastag()` 選）。`workout_fields` 補 `vam = round(climbing / duration · 3600)`（WKO5 定義，
   含停留時間，所以多日百岳的 VAM 很低：2026-08-14 三天行程 45 m/h），`TYPE_TAGS` 依運動類型加標籤。
   近一年：越野 20 點、登山 4 點（之前 0／0）。
-- **Palladino 區間沒資料**：計畫 CP 204 W 是 2026-09-30，之前的跑步沒有 CP（WKO5 設定不再讀、
+- **Palladino 區間沒資料**：計畫 CP 220 W 是 2026-09-30，之前的跑步沒有 CP（WKO5 設定不再讀、
   `run_ftp_w` 空），近 30 天 18 次跑步只算到 9/30 那次（2509 s）。`FitFolderDataset.cp`：計畫測試 →
   `run_ftp_w` → **只用 Stryd 跑步**的 PD 模型（`racepower.athlete.pd_model`，90 天窗、每 30 天一格、
   窗內 ≥ 5 次 Stryd 跑步，推估；手錶功率永遠不進來，壞檔已在 `ds.workouts`／`cptest.curves` 外）→ 未設定。
@@ -543,7 +543,7 @@ TP 的 2025-12-14 垃圾檔（下節）就是這條規則抓的：不再只靠�
   沒寫進 DB；COROS 登入那列的 LTHR 182／FTP 200 本來就不用）。`thresholds.estimate_tpace`（推估）：
   先用 CP × 近 90 天 Stryd 路跑的速度／功率比（中位數）＝ CP 對應的平路配速；沒有 Stryd 時才用「心率在
   LTHR ±3% 的最快 20 分鐘」中位數（Friel 30 分鐘測試）。後者在夏天讀出 8:03 /km（心率飄移：同一段時間
-  心率在 LTHR 時配速約 8:00），對不上 2025-12 半馬的 6:54 /km，所以排第二。實測：6:29 /km（CP 204 W、
+  心率在 LTHR 時配速約 8:00），對不上 2025-12 半馬的 6:54 /km，所以排第二。實測：6:01 /km（CP 220 W、
   40 次、12.6 mm/s/W）；近 30 天 Z1+Z2 81%。估算值只給區間表，不當 rTSS 的閾值配速。
 - **課表建議強度**：新增「山路長天／越野輕鬆」（功率 0.75–0.88 CP、心率 ≤ AeT）與「爬坡重複」（功率
   0.95–1.06 CP）兩列，看功率、心率第二；「長跑」改成路跑。依據與限制寫在 `zones.TERRAIN_NOTE`：心率延遲

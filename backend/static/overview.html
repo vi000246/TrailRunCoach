@@ -270,7 +270,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
       <b id="per-label" class="num"></b>
       <button class="btn" id="next" aria-label="下一期">▶</button>
       <button class="btn" id="now">回到現在</button>
-      <button type="button" class="q" aria-label="說明" data-tip="點長條切換期間；上圖是移動時間（依類別堆疊），下圖是爬升。">?</button>
+      <button type="button" class="q" aria-label="說明" data-tip="每一期做了多少：上圖移動時間（依類別堆疊），下圖爬升（m）。&#10;怎麼看：點長條切到那一期，下方數字跟著換；◀ ▶ 換期、週／月／年換單位。&#10;看什麼：跟「平常」（詳細數字裡的典型一期）比，這期多還是少。&#10;方法：只算移動時間；類別同「我的訓練 → 訓練量」。">?</button>
     </div>
     <div class="legend" id="cat-legend" style="margin:0 0 4px"></div>
     <div class="plot" id="trend"></div>
@@ -771,7 +771,7 @@ function renderPeriod(R) {
       <div class="tile"><div class="k">${I("check")}有練的天數</div><div class="v">${C.days}</div><div class="s">下降 ${m0(C.descending_m)}</div></div>
     </div>
     ${I_.total > 0 ? `<div><b style="font-size:13px">強度分配</b> <span class="meta">目標 低 ≥ 75–80%</span>
-      ${q("耐力活動的移動時間，依心率：低 < AeT、中 AeT–LTHR、高 ≥ LTHR（目標：低 ≥ 75–80%，Seiler）")}
+      ${q("這期耐力活動的移動時間，依心率分三段。\n怎麼看：低 < AeT、中 AeT–LTHR、高 ≥ LTHR，條的長度 = 佔比。\n看什麼：低強度 ≥ 75–80%。\n方法：Seiler 2006。")}
       <div class="split" role="img" aria-label="低 ${pct(I_.low / I_.total)}，中 ${pct(I_.mid / I_.total)}，高 ${pct(I_.high / I_.total)}">
         <i style="width:${I_.low / I_.total * 100}%;background:var(--lo)"></i><i style="width:${I_.mid / I_.total * 100}%;background:var(--mid)"></i><i style="width:${I_.high / I_.total * 100}%;background:var(--hi)"></i></div>
       <div class="legend" style="margin:0"><span><i style="background:var(--lo)"></i>低 ${pct(I_.low / I_.total)} · ${hm(I_.low)}</span>

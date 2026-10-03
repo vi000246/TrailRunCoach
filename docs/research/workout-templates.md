@@ -49,7 +49,7 @@ Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–
 
 | key | 名稱 | 出處 |
 |---|---|---|
-| pal_ez | Palladino EZ 輕鬆跑＋3×10″ 加速（24′ ≤ 80% CP、3×10″/1:50、5′） | Steve Palladino，Stryd 訓練計畫（Stryd app 內建課表；使用者 notes 筆記「palladino課表整理/Easy」）· [Stryd Help](https://help.stryd.com/en/articles/7065214-stryd-training-plans-by-steve-palladino) |
+| pal_ez | Palladino EZ 輕鬆跑＋3×10″ 加速（24′ ≤ 80% CP、3×10″/1:50、5′） | Steve Palladino，Stryd 訓練計畫（Stryd app 內建課表；使用者 筆記「palladino課表整理/Easy」）· [Stryd Help](https://help.stryd.com/en/articles/7065214-stryd-training-plans-by-steve-palladino) |
 | pfitz_recovery | 恢復跑 30′（< 76% HRmax） | Pfitzinger & Douglas《Advanced Marathoning》3rd ed. 2019；[webinar](https://www.slideshare.net/slideshow/marathon-training-webinar/11191347) |
 | pfitz_ga | 有氧耐力跑（70–81% HRmax） | 同上 |
 | pfitz_long | 長跑（74–84% HRmax） | 同上 |
@@ -83,7 +83,7 @@ Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–
 間歇庫原本的階梯課表（T1–T3、T+、V1–V4、30/15）也列在同一區，標「間歇庫（進階階梯）」，
 用來判斷這堂算不算進階。
 
-5 區每趟 < 2 分鐘的課（30-30、30/15）在編輯器裡會出現「5 區每趟至少 2 分鐘（徐國峰）」的錯誤，
+5 區每趟 < 2 分鐘的課（30-30、30/15）在編輯器裡會出現「5 區每趟至少 2 分鐘（台灣教練）」的錯誤，
 儲存時要確認才能存。這是 app 原本就有的規則，沒有改。
 
 ### 測試
@@ -125,7 +125,7 @@ Uphill Athlete 要求用胸帶測，但使用者只有手腕光學心率，所�
 - 第三方 client（例：`ethanopp/fitly` 的 `strydAPI.py`）是用使用者自己的帳號密碼打私有端點，違反「不用帳密」的原則，也有違反服務條款的風險。
 - [ToS](https://club.stryd.com/tos) 是沒填完的範本，只寫了內容版權歸公司。所以這邊不複製 Stryd 的課表文字，只重寫結構並附出處。
 
-本文件用到的 Stryd／Palladino 課表，都來自使用者自己的 notes 筆記（Stryd app 的截圖和抄錄），
+本文件用到的 Stryd／Palladino 課表，都來自使用者自己的 筆記（Stryd app 的截圖和抄錄），
 以及 Stryd 公開的 help 頁面。
 
 ## 5. 總時間怎麼估（`workout_steps.speed_kmh`、`_secs`）

@@ -904,32 +904,32 @@ No automated tests for this plan (Mode A, balanced rigor). Manual browser verifi
 
 ### TypeScript
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit
+cd <repo>/frontend && npx tsc --noEmit
 ```
 EXPECT: Zero errors
 
 ### Lint
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npm run lint
+cd <repo>/frontend && npm run lint
 ```
 EXPECT: No errors or warnings
 
 ### Build
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npm run build
+cd <repo>/frontend && npm run build
 ```
 EXPECT: Vite build succeeds, no TS errors
 
 ### Backend (manual check)
 ```bash
-cd /Users/<user>/Projects/WKO5reverse && python -m uvicorn backend.main:app --reload --port 8000
+cd <repo> && python -m uvicorn backend.main:app --reload --port 8000
 ```
 Then: `curl http://localhost:8000/api/v1/athletes/1/settings`
 EXPECT: `{"detail":"NO_SETTINGS"}` (404) if no settings exist, or full settings JSON if they do.
 
 ### Dev Server (browser validation)
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npm run dev
+cd <repo>/frontend && npm run dev
 ```
 Open http://localhost:5173
 

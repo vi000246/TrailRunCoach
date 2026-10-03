@@ -18,7 +18,7 @@
   "saved": "Saved with this event {at}",
   "restored": "Restored this event's last inputs {at}",
   "chart.title": "Segment targets",
-  "chart.tip": "Distance (km) across, one measure up: pace, power or heart rate. The light area is the elevation profile. Each segment's target comes from the models by grade: flats and runnable climbs (3–8 %) by power; steep (> 8 %) or walked climbs by an HR cap; trail descents by neither (control and safety), so they are blank on the power / HR chart. On long races (> 3 h) the HR cap is AeT. Hover the chart or click the table for a segment's details.",
+  "chart.tip": "Each segment's target pace, power or heart rate along the course.\nHow to read: distance (km) across, one measure up; the light area is the elevation profile; hover the chart or click the table for a segment's details.\nLook for: flats and runnable climbs (3–8 %) by power; steep (> 8 %) or walked climbs by an HR cap; trail descents by neither (control and safety), so they are blank on the power / HR chart; on races > 3 h the HR cap is AeT.\nMethod: the grade models set each segment's target.",
   "m.pace": "Pace",
   "m.power": "Power",
   "m.hr": "Heart rate",

@@ -13,7 +13,7 @@ linear_issue: null
 
 ## Feature Summary
 
-把 AI 教練從通用越野教練升級為「知識驅動處方」：注入使用者 notes 筆記的 curated 訓練知識（Palladino 個人化功率區間、CP 測試、間歇模板、越野 PI/爬升概念），在 context 中加入由設定計算的功率/心率 zone 邊界與越野負荷，並把系統提示改為輸出「目前訓練狀態判讀 + 該練 zone 幾 + 間歇處方（時間/瓦數）」。
+把 AI 教練從通用越野教練升級為「知識驅動處方」：注入使用者 筆記的 curated 訓練知識（Palladino 個人化功率區間、CP 測試、間歇模板、越野 PI/爬升概念），在 context 中加入由設定計算的功率/心率 zone 邊界與越野負荷，並把系統提示改為輸出「目前訓練狀態判讀 + 該練 zone 幾 + 間歇處方（時間/瓦數）」。
 
 ## Delta from Current Module State
 
@@ -41,7 +41,7 @@ linear_issue: null
 
 ### Explicitly Out of Scope
 
-- RAG / 向量檢索整個 notes（本次採 curated 知識；筆記更新需手動同步知識模組）。
+- RAG / 向量檢索整個 notes vault（本次採 curated 知識；筆記更新需手動同步知識模組）。
 - 對話歷史持久化（既有 spec 已排除）。
 - 自動排課 / 寫入行事曆。
 - 重新設計 chat UI（只加 quick-prompt 按鈕）。

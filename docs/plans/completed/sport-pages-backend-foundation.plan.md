@@ -534,14 +534,14 @@ async def _inner():
 
 ### Static Analysis
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
+cd "<repo>reverse"
 python -m pyflakes backend/ 2>/dev/null || true
 ```
 EXPECT: 無新增未定義名稱
 
 ### Unit Tests
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
+cd "<repo>reverse"
 python -m pytest backend/tests/ -q
 ```
 EXPECT: 全數 pass（含既有 test_run_pmc / test_migration 無回歸）
