@@ -59,7 +59,8 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
 <main>
   <section class="hero">
     <span class="who">示範跑者 · <b>虛構資料</b>
-      <button type="button" class="q" aria-label="說明" title="這位跑者和他的一年訓練、心率、功率、GPS 軌跡都是程式產生的，跟任何真人無關。你的修改只存在你的瀏覽器，24 小時後自動清除。">?</button></span>
+      <button type="button" class="q" aria-label="說明" title="這位跑者和他的一年訓練、心率、功率、GPS 軌跡都是程式產生的，跟任何真人無關。你的修改只存在你的瀏覽器，24 小時後自動清除。"
+        data-static-title="這位跑者和他的一年訓練、心率、功率、GPS 軌跡都是程式產生的，跟任何真人無關。這是唯讀的靜態示範：課表可以試著改，修改只存在你的瀏覽器。">?</button></span>
     <h1>越野跑、百岳、路跑的訓練教練</h1>
     <p>從你的手錶資料看訓練狀況、自動排課表、預估比賽配速和功率。這裡用一位虛構的跑者給你試。</p>
   </section>
@@ -67,27 +68,34 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
     <a class="card" href="/api/v1/overview/plan/schedule/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>
       <h2>排課表</h2>
-      <ul><li>拖曳課程、改強度</li><li>調課表偏好（哪天長跑、休息日）</li><li>看每趟的步驟和目標功率</li></ul>
+      <ul><li>拖曳課程、改強度</li><li data-static-text="新增、刪除課，設休息日">調課表偏好（哪天長跑、休息日）</li><li>看每趟的步驟和目標功率</li></ul>
       <span class="go">打開課表 →</span>
     </a>
     <a class="card" href="/api/v1/racepower/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15h.01M8.5 18h.01M12 18h3.5"/></svg>
       <h2>賽事計算機</h2>
-      <ul><li>內建路跑半馬、越野 50K、百岳 3 日</li><li>也可以上傳自己的 GPX</li><li>分段配速、功率、補給</li></ul>
+      <ul><li>內建路跑半馬、越野 50K、百岳 3 日</li><li data-static-text="快速選項的結果已經算好">也可以上傳自己的 GPX</li><li>分段配速、功率、補給</li></ul>
       <span class="go">試算一場比賽 →</span>
     </a>
     <a class="card" href="/api/v1/plan/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3"/></svg>
       <h2>週期規劃</h2>
-      <ul><li>新增賽事（A／B／C）</li><li>基礎期、強化期、專項期、減量期</li><li>課表跟著週期重排</li></ul>
+      <ul><li data-static-text="賽事（A／B／C）怎麼排">新增賽事（A／B／C）</li><li>基礎期、強化期、專項期、減量期</li><li>課表跟著週期重排</li></ul>
       <span class="go">規劃賽季 →</span>
     </a>
   </div>
   <div class="enter">
     <a class="btn primary" href="/api/v1/overview/page">進入示範（訓練總覽）</a>
     <a class="btn" href="/api/v1/wko5/activities/page">看單次活動分析</a>
-    <span class="note">同步手錶、推送課表、分享連結在示範裡是關閉的。</span>
+    <span class="note" data-static-text="唯讀示範：課表的修改只存在這個瀏覽器；同步、推送、上傳、分享和週期規劃的修改在這裡不能用。">同步手錶、推送課表、分享連結在示範裡是關閉的。</span>
   </div>
+  <script>
+  // the static read-only demo (backend/demo/export_static.py): its own wording
+  if (window.TRC_STATIC) {
+    document.querySelectorAll("[data-static-text]").forEach((el) => { el.textContent = el.dataset.staticText; });
+    document.querySelectorAll("[data-static-title]").forEach((el) => { el.title = el.dataset.staticTitle; });
+  }
+  </script>
 </main>
 </body>
 </html>

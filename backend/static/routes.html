@@ -495,7 +495,7 @@ function openWorkout(idx) {
     const st = JSON.parse(localStorage.getItem("wko5viewer") || "{}");
     localStorage.setItem("wko5viewer", JSON.stringify({ ...st, mode: "workout", workout: idx, workoutLabel: null }));
   } catch {}
-  location.href = "/api/v1/wko5/viewer";
+  location.href = window.TRC_STATIC ? TRC_STATIC.href("/api/v1/wko5/viewer") : "/api/v1/wko5/viewer";   // the static demo's file
 }
 
 async function loadCompare() {
