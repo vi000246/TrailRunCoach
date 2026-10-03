@@ -139,10 +139,9 @@ def build_fit(seed: int, k: int, kind: str, session: dict, day: dt.date, hour: f
         climb = float(session.get("climb_m") or 1200.0)
         p = S.Planned(date=day, kind="trail_long", minutes=minutes, sport="trail", name=session.get("title") or "",
                       hour=hour, stryd=True, params={"climb": climb})
-        course = G._run_course(rng, p, minutes, small)
         # held under the AeT cap: little drift (the athlete eases off as it creeps up)
-        sig = simulate_run(rng, course, segs, cp=cp, stryd=True, doy=day.timetuple().tm_yday, hour=hour,
-                           drift=0.01, push=0.05, down_cap=3.2, has_power=True, lock_ok=False)
+        _, sig = G.trail_run(rng, p, segs, small, cp=cp, stryd=True, doy=day.timetuple().tm_yday, hour=hour,
+                             drift=0.01, push=0.05, down_cap=3.2, has_power=True, lock_ok=False)
         sub = FW.SUB_TRAIL
     start = G._local_start(p)
     raw = FW.encode_activity(start=start, lat=sig.lat, lon=sig.lon, alt=sig.alt, dist=sig.dist,
@@ -247,6 +246,35 @@ def add(c, base: Path, manifest: dict, anchor: dt.date, seed: int, small: bool =
         manifest.setdefault("files", {})[a["file"]] = G._sha((base / a["file"]).read_bytes())
     manifest["n_activities"] = len(manifest["activities"])
     return new
+
+
+def rewrite_trail(c, base: Path, manifest: dict, seed: int, small: bool = False, log=print) -> Optional[str]:
+    """Re-write the linked trail run's FIT in place (build_fit with the current
+    generator) from its stored 課表 session; updates its manifest entry. Returns the
+    FIT path (relative to `base`) or None (no linked trail run in this base). The
+    caller re-imports it (build.reimport)."""
+    i, a = next(((i, a) for i, a in enumerate(manifest.get("activities") or []) if a.get("kind") == "trail_plan"),
+                (None, None))
+    if a is None:
+        return None
+    uid = (a.get("linked") or {}).get("uid")
+    day = dt.date.fromisoformat(a["date"])
+    ss = c.get(SESSIONS, params={"scope": "week", "day": day.isoformat()}).json().get("sessions") or []
+    s = next((x for x in ss if uid and x.get("uid") == uid), None) or \
+        next((x for x in ss if x.get("title") == (a.get("session") or {}).get("title")
+              and x.get("day") == (a.get("session") or {}).get("day")), None)
+    if s is None:
+        log(f"  ! linked trail run: its session ({uid}) is not in the 課表 any more")
+        return None
+    k = KINDS.index("trail_plan") + 1
+    raw, info = build_fit(seed, k, "trail_plan", s, day, TRAIL_HOUR, _cp_on(base, day), small)
+    (base / a["file"]).write_bytes(raw)
+    for key in ("file", "linked"):
+        if key in a:
+            info[key] = a[key]
+    manifest["activities"][i] = info
+    manifest.setdefault("files", {})[a["file"]] = G._sha(raw)
+    return a["file"]
 
 
 def stage(base: Path, anchor: Optional[dt.date], seed: Optional[int], warm: bool = True) -> None:

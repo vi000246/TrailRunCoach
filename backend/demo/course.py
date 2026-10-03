@@ -53,10 +53,14 @@ class Course:
 
 def wave_profile(rng, length_m: float, gain_m: float, loss_m: float, start_ele: float,
                  up=(0.03, 0.08), down=(0.03, 0.08), n_up: int = 4, n_down: int = 4,
-                 first_up: bool = True, rough: float = 1.5) -> np.ndarray:
+                 first_up: bool = True, rough: float = 1.5, alternate: bool = False,
+                 lead_m: float = 0.0) -> np.ndarray:
     """Elevation on the 5 m grid: `gain_m` of climbing in n_up chunks and
     `loss_m` of descent in n_down chunks, each at a random grade from its
-    range, the rest flat; total horizontal length = length_m."""
+    range, the rest flat; total horizontal length = length_m. `alternate`:
+    climb, descend, climb, descend … (a rolling trail: no part of the course is
+    one long descent), each descent about the size of the climb before it.
+    `lead_m`: that much flat at each end (≤ 20 % of the length)."""
     n = max(2, int(round(length_m / STEP)) + 1)
 
     def chunks(total, k, grades):
@@ -67,14 +71,31 @@ def wave_profile(rng, length_m: float, gain_m: float, loss_m: float, start_ele: 
 
     ups = [(h, g) for h, g in chunks(gain_m, n_up, up)]
     downs = [(-h, g) for h, g in chunks(loss_m, n_down, down)]
+    lead = min(max(0.0, lead_m), length_m * 0.2)
+    room = length_m - 2 * lead
     horiz = sum(abs(h) / g for h, g in ups + downs)
     scale = 1.0
-    if horiz > length_m * 0.97:               # steeper than asked to fit the length
-        scale = horiz / (length_m * 0.97)
+    if horiz > room * 0.97:                   # steeper than asked to fit the length
+        scale = horiz / (room * 0.97)
     segs = [(h, g * scale) for h, g in ups + downs]
-    flat_total = max(0.0, length_m - sum(abs(h) / g for h, g in segs))
+    flat_total = max(0.0, room - sum(abs(h) / g for h, g in segs))
     order = list(rng.permutation(len(segs)))
-    if first_up and ups:                       # climbs first (a trailhead below)
+    if alternate:
+        ups_i = [i for i in order if segs[i][0] > 0]
+        dn_i = [i for i in order if segs[i][0] < 0]
+        # each descent about as big as the climb before it (by rank): the course rolls
+        # around a level instead of wandering into one long climb or descent
+        if len(ups_i) == len(dn_i):
+            by_h = sorted(dn_i, key=lambda i: -segs[i][0])
+            rank = {u: r for r, u in enumerate(sorted(ups_i, key=lambda i: segs[i][0]))}
+            dn_i = [by_h[rank[u]] for u in ups_i]
+        order = []
+        while ups_i or dn_i:
+            if ups_i:
+                order.append(ups_i.pop(0))
+            if dn_i:
+                order.append(dn_i.pop(0))
+    elif first_up and ups:                     # climbs first (a trailhead below)
         order.sort(key=lambda i: (segs[i][0] < 0, rng.random()))
         # interleave: mostly up first, a few downs in between
         ups_i = [i for i in order if segs[i][0] > 0]
@@ -87,6 +108,9 @@ def wave_profile(rng, length_m: float, gain_m: float, loss_m: float, start_ele: 
                 order.append(dn_i.pop(0))
     nf = len(order) + 1
     flats = rng.dirichlet(np.full(nf, 1.5)) * flat_total if flat_total > 0 else np.zeros(nf)
+    if lead > 0:                               # the approach / run-out at the trailhead
+        flats[0] += lead
+        flats[-1] += lead
     pieces_x, pieces_dz = [], []
     for k, i in enumerate(order):
         pieces_x.append(flats[k]); pieces_dz.append(0.0)
@@ -147,9 +171,12 @@ def _loop_xy(rng, length_m: float, n: int) -> tuple[np.ndarray, np.ndarray]:
 
 def make(rng, kind: str, area, length_m: float, gain_m: float, loss_m: float = None,
          start_ele: float = None, up=(0.03, 0.08), down=(0.03, 0.08), n_seg: int = 4,
-         trail: bool = False, offset_m: float = 0.0, rough: float = 1.5) -> Course:
+         trail: bool = False, offset_m: float = 0.0, rough: float = 1.5, alternate: bool = False,
+         lead_m: float = 0.0) -> Course:
     """A course of `kind` in `area` (athlete.AREAS value: lat, lon, base ele).
-    out_back: `gain_m` is the climb to the turnaround; the way back mirrors it."""
+    out_back: `gain_m` is the climb to the turnaround; the way back mirrors it.
+    `alternate`, `lead_m` (loop): the climbs and descents take turns, with a flat
+    approach / run-out at the trailhead (wave_profile)."""
     center = (area[0], area[1])
     base = area[2] if start_ele is None else start_ele
     if kind == "out_back":
@@ -163,7 +190,8 @@ def make(rng, kind: str, area, length_m: float, gain_m: float, loss_m: float = N
     elif kind == "loop":
         g = gain_m
         ele = wave_profile(rng, length_m, g, g if loss_m is None else loss_m, base, up, down,
-                           n_seg, n_seg, first_up=False, rough=rough)
+                           n_seg, n_seg, first_up=False, rough=rough, alternate=alternate,
+                           lead_m=lead_m)
         ele[-1] = ele[0]
         x, y = _loop_xy(rng, length_m, len(ele))
     else:
