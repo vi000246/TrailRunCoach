@@ -62,7 +62,7 @@
   "pd.tip_aria": "固定星期的說明",
   "pd.tip": "想讓某種課固定在某幾天就加一列。沒加的課照預設規則排（長跑排你最常長跑的那天）。一天只能給一種課；可以選兩天的課，先點的是第一選擇。和預設規則衝突時會在那一列提醒。",
   "pd.add": "＋ 新增",
-  "pd.kind.long": "長跑",
+  "pd.kind.long": "LSD",
   "pd.kind.quality": "間歇",
   "pd.kind.aet_test": "AeT 測試",
   "pd.kind.cp_test": "CP 測試",

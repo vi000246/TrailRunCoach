@@ -190,7 +190,7 @@ BASE_WEEKS = (8, 12)
 BANDS = (("閾值下", 0.88, 0.95), ("閾值", 0.95, 1.01), ("超閾值", 1.01, 1.06),
          ("VO2max", 1.06, 1.16), ("無氧", 1.16, 9.0))
 
-TYPE_LABEL = {"easy": "輕鬆跑", "long": "長時間", "quality": "間歇", "hard_long": "高強度長跑",
+TYPE_LABEL = {"easy": "輕鬆跑", "long": "LSD", "quality": "間歇", "hard_long": "高強度長跑",
               "test_cp": "CP 測試", "test_aet": "AeT 飄移測試", "strength": "肌力",
               "bike": "騎車", "walk": "走路", "other": "其他"}
 TERRAIN_LABEL = {"road": "路跑", "trail": "越野", "hike": "登山健行"}

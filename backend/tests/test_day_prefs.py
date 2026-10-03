@@ -11,7 +11,7 @@ WEEK = [MON + dt.timedelta(days=i) for i in range(7)]
 
 
 def _ss(*extra):
-    base = [{"id": "long", "kind": "long", "title": "長時間輕鬆", "minutes": 120, "day": None},
+    base = [{"id": "long", "kind": "long", "title": "LSD", "minutes": 120, "day": None},
             {"id": "quality", "kind": "quality", "title": "閾值 3×8 分", "minutes": 45, "day": None},
             {"id": "easy1", "kind": "easy", "title": "輕鬆跑＋坡道衝刺 8×10 秒", "minutes": 45, "day": None},
             {"id": "easy2", "kind": "easy", "title": "輕鬆跑", "minutes": 45, "day": None}]
@@ -99,7 +99,7 @@ def test_one_session_type_per_weekday():
     assert PP.overlaps(p) == [{"kind": "quality", "wd": 5, "owner": "long"},
                               {"kind": "strides", "wd": 1, "owner": "quality"},
                               {"kind": "strides", "wd": 3, "owner": "cp_test"}]
-    with pytest.raises(ValueError, match="週六已給長跑"):
+    with pytest.raises(ValueError, match="週六已給LSD"):
         PP.check(p)
     # stored before the rule: the first type keeps the day, the later ones lose it (and are named)
     fixed, dropped = PP.drop_overlaps(p)
@@ -125,7 +125,7 @@ def test_api_prefs_migrate_overlaps_and_check_unsaved(monkeypatch):
         assert got["prefs"]["long_day"] == "sun" and got["prefs"]["pref_days"] == {"quality": [2]}
         assert {(d["kind"], d["wd"], d["owner"]) for d in got["pref_dropped"]} == {("quality", 6, "long"), ("strides", 2, "quality")}
         bad = e.c.put(f"{API}/prefs", json={"long_day": "sun", "pref_days": {"quality": [6]}})
-        assert bad.status_code == 400 and "週日已給長跑" in bad.text
+        assert bad.status_code == 400 and "週日已給LSD" in bad.text
         r = e.c.post(f"{API}/prefs/conflicts", json={"long_day": "thu", "pref_days": {"quality": [4]}}).json()
         assert [c["code"] for c in r["day_conflicts"]] == ["after_long"] and r["overlaps"] == []
         assert e.c.get(f"{API}/prefs").json()["prefs"]["long_day"] == "sun"      # nothing stored
