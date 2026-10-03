@@ -18,6 +18,8 @@ from backend import tenancy
 
 # a fixed DB file (scripts / tests); None = the current tenant's (tenancy.db_path)
 DB_PATH: Optional[Path] = None
+# a fixed engine (tests); None = the pooled engine of db_path()
+engine = None
 
 _POOL_MAX = 32
 _POOL: "OrderedDict[str, tuple]" = OrderedDict()      # path -> (engine, sessionmaker)
@@ -53,6 +55,8 @@ def _entry(path: Optional[Path] = None) -> tuple:
 
 
 def get_engine(path: Optional[Path] = None):
+    if path is None and engine is not None:
+        return engine
     return _entry(path)[0]
 
 
@@ -75,8 +79,6 @@ def __getattr__(name):
     """Back-compat for readers of the old module constants."""
     if name == "DATABASE_URL":
         return url_for(db_path())
-    if name == "engine":
-        return get_engine()
     raise AttributeError(name)
 
 
