@@ -1664,7 +1664,12 @@ function renderCP() {
 }
 function renderRiegel() {
   const r = INP.riegel, env = INP.envelope;
-  if (!r) { $("rg-detail").innerHTML = `<div class="meta">資料不足以擬合。</div>`; return; }
+  // no usable fit (k / range are null: too few maximal efforts): say so. Looping from a null t_min
+  // never advances (null * 1.2 = 0) and froze the page.
+  if (!r || !(r.t_min > 0) || !(r.t_max > r.t_min) || r.k == null || r.r2 == null) {
+    $("rg-detail").innerHTML = `<div class="meta">資料不足以擬合。</div>${r && (r.invalid_reasons || []).length ? warnList(r.invalid_reasons) : ""}`;
+    $("rg-chart").innerHTML = ""; return;
+  }
   const fit = [];
   for (let x = r.t_min; x <= r.t_max * 1.0001; x *= 1.2) fit.push([x / 60, Math.exp(r.a) * Math.pow(x, r.k)]);
   const tk = LAST?.tasks?.table;
@@ -1675,7 +1680,7 @@ function renderRiegel() {
   ];
   if (tk?.k != null && LAST?.used?.cp) {
     const cp = LAST.used.cp.value, tte = LAST.used.tte.value, tl = [];
-    for (let x = tte; x <= Math.max(r.t_max, LAST.result?.time_s || 0) * 1.2; x *= 1.2) tl.push([x / 60, cp * Math.pow(x / tte, tk.k)]);
+    for (let x = tte > 0 ? tte : Infinity; x <= Math.max(r.t_max, LAST.result?.time_s || 0) * 1.2; x *= 1.2) tl.push([x / 60, cp * Math.pow(x / tte, tk.k)]);
     series.push({ name: `查表 k ${k3(tk.k)}（由 CP、TTE）`, type: "line", data: tl, symbol: "none", lineStyle: { color: css("--s4"), width: 2, type: "dashed" } });
   }
   if (PLAN?.summary?.time_s && PLAN.type !== "baiyue") series.push({ name: "預估", type: "scatter", data: [[PLAN.summary.time_s / 60, PLAN.summary.power_train]], symbolSize: 11, itemStyle: { color: css("--hi") } });
