@@ -226,7 +226,8 @@ class Job:
                 continue
             k = AT.key_of(w.entry.start)
             (self.fresh if same else self.stale)[k] = e["auto"]
-        if same and len(self.fresh) == len(ds.workouts):
+        # by key: two activities starting in the same minute share one
+        if same and len(self.fresh) == len({AT.key_of(w.entry.start) for w in ds.workouts}):
             self.state, self.n_done, self.finished = "ready", self.n_total, time.monotonic()
         self.thread: Optional[threading.Thread] = None
 
