@@ -788,6 +788,10 @@ def pass_racepower(app: DemoApp, rec: Recorder, log) -> dict:
         shutil.rmtree(tmp, ignore_errors=True)
     zipped = SR.bundle(tr["modules"])
     rec.files[SR.CTX_FILE] = raw
+    prefix = API + "racepower/"
+    saved = [data_file(v["url"]) for v in rec.gets.values() if urlsplit(v["url"]).path.startswith(prefix)] + \
+        [name for name, v in rec.posts.items() if urlsplit(v["url"]).path.startswith(prefix) and v["status"] == 200]
+    rec.files[SR.SAVED_FILE] = json.dumps({"v": 1, "files": sorted(set(saved))}).encode("utf-8")
     version = hashlib.sha1(zipped + raw).hexdigest()[:12]
     log(f"  racepower: context {len(raw) // 1024} KB, bundle {len(zipped) // 1024} KB "
         f"({len(tr['modules'])} modules traced), {time.time() - t0:.0f} s")

@@ -36,6 +36,9 @@ from types import SimpleNamespace
 from typing import Optional
 
 CTX_FILE = "racepower_ctx.json"                 # under data/
+# under data/: the names of the race calculator's saved answers (GET /racepower/... and the
+# precomputed POSTs), so static_shim.js asks the engine without fetching a missing file first
+SAVED_FILE = "racepower_saved.json"
 BUNDLE = "py/trc_racepower.zip"                 # under static/
 WORKER = "trc_racepower_worker.js"              # under static/
 PYODIDE_VERSION = "314.0.7"

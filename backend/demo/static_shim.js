@@ -35,6 +35,7 @@
   // (static/trc_racepower_worker.js: engine/racepower/calc.py with Pyodide; backend/demo/static_racepower.py)
   const RACEPOWER_POSTS = /^\/api\/v1\/racepower\/(predict|plan|course\/event\/[^/]+|export\/csv)$/;
   const RACEPOWER_WORKER = "trc_racepower_worker.js";
+  const RACEPOWER_SAVED = "racepower_saved.json";             // static_racepower.SAVED_FILE
   const OV_KEY = "trc.static.overlay.v1";
   const PAPI = "/api/v1/overview/plan";
   const STEPS_FILE = "steps_ctx.json";
@@ -1093,7 +1094,7 @@
       function start() {
         if (readyP) return readyP;
         readyP = new Promise((resolve, reject) => {
-          try { worker = new win.Worker(STATIC + RACEPOWER_WORKER); } catch (e) { reject(e); return; }
+          try { worker = new win.Worker(STATIC + RACEPOWER_WORKER, { type: "module" }); } catch (e) { reject(e); return; }
           worker.onmessage = (ev) => {
             const m = ev.data || {};
             if (m.type === "progress") pill(`載入計算引擎… ${m.text}`);
@@ -1145,8 +1146,19 @@
         location: { name: p.get("peak"), lat: num("lat"), lon: num("lon"), elevation_m: num("elevation") }, peak: null };
     };
 
+    // data/racepower_saved.json: which race-calculator answers the export saved (none listed: ask
+    // the engine without a 404 first); an export without it: try the file as before
+    let rpSavedP = null;
+    const rpSaved = () => (rpSavedP ||= loadData(RACEPOWER_SAVED).then((d) => (d && Array.isArray(d.files) ? new Set(d.files) : null)));
+    const rpMissing = async (path, file) => {          // only where a miss has an answer (engine / offline)
+      if (!RACEPOWER_POSTS.test(path) && !/^\/api\/v1\/racepower\/(weather|heat-status)$/.test(path)) return false;
+      const s = await rpSaved();
+      return !!s && !s.has(file);
+    };
+
     async function getApi(url) {
       const key = dataKey(url.pathname, url.search);
+      if (await rpMissing(url.pathname, fnv64(key) + ".json")) { misses.push(key); return null; }
       const j = await loadData(fnv64(key) + ".json");
       if (j === null) { misses.push(key); return null; }
       return unwrap(j);
@@ -1240,8 +1252,9 @@
         return json(403, errBody("STATIC_PRECOMPUTED_ONLY", CALC_MSG));
       }
       if (method === "POST" && RACEPOWER_POSTS.test(path) && (typeof body === "string" || body == null)) {
-        if (typeof body === "string") {          // the export's answer to the page's default inputs: instant
-          const j = await loadData(postFile(method, path, url.search, body));
+        const pf = typeof body === "string" ? postFile(method, path, url.search, body) : null;
+        if (pf && !(await rpMissing(path, pf))) {     // the export's answer to the page's default inputs: instant
+          const j = await loadData(pf);
           if (j !== null) { const u = unwrap(j); if (u.status === 200) return json(200, u.body); }
         }
         return engineResponse(await Engine.call(method, path, body == null ? null : body));
