@@ -6,6 +6,8 @@ Build the demo athlete's data (auth-and-demo plan §3.2):
                                                                       # planned interval / trail runs (linked.py)
     python -m backend.demo.build --root <demo-root> --regen-trail     # an existing base: re-write only the
                                                                       # trail runs' FITs (generate.trail_run)
+    python -m backend.demo.build --root <demo-root> --add-maokong     # an existing base: add only the
+                                                                      # 貓空越野 17K B race + its GPX
 
 Writes <demo-root>/base/<anchor>-<seed>/ (a full tenant folder, the layout of
 ~/.wko5coach) and then switches <demo-root>/base/current to it atomically.
@@ -325,6 +327,93 @@ def regen_trail(root: Path, warm: bool = True) -> Path:
     return base
 
 
+def add_maokong(root: Path, warm: bool = True) -> Path:
+    """Add the 貓空越野 17K B race (season.maokong_event) and its real GPX course
+    (backend/demo/data) to the current base of an existing demo root, in place, as a
+    full build would have them: the event through the plan API, the course through the
+    event-GPX upload. Idempotent; no activity is added or changed."""
+    root = Path(root).resolve()
+    _refuse_owner(root)
+    name = (root / "base" / "current").read_text("utf-8").strip()
+    base = root / "base" / name
+    if not (base / "demo_manifest.json").is_file():
+        raise RuntimeError(f"{base} is not a demo base (no demo_manifest.json)")
+    t0 = time.time()
+    print(f"  relocated {relocate_paths(base)} workout_files paths", flush=True)
+    cmd = [sys.executable, "-m", "backend.demo.build", "--stage-maokong", str(base)] + ([] if warm else ["--no-warm"])
+    r = subprocess.run(cmd, env=child_env(base), cwd=str(Path(__file__).resolve().parents[2]))
+    if r.returncode != 0:
+        raise RuntimeError(f"adding the 貓空 17K failed (exit {r.returncode})")
+    print(f"demo base {name}: 貓空越野 17K added in {time.time() - t0:.0f} s", flush=True)
+    return base
+
+
+def _stage_maokong(base: Path, warm: bool) -> None:
+    """--add-maokong, in the child process (owner mode on the base)."""
+    import hashlib
+    from dataclasses import asdict
+    from fastapi.testclient import TestClient
+    from backend.demo import generate as G, season as S
+    from backend.main import build_app
+    mp = base / "demo_manifest.json"
+    manifest = json.loads(mp.read_text("utf-8"))
+    anchor = dt.date.fromisoformat(manifest["anchor"])
+    ev = next(e for e in S.make_events(anchor) if e.id == S.MAOKONG_ID)
+    courses = G.copy_data_courses(base)
+    for course, rel in courses.items():
+        manifest.setdefault("courses", {})[course] = rel
+        manifest.setdefault("course_events", {})[course] = G.COURSE_EVENTS[course]
+        manifest.setdefault("files", {})[rel] = G._sha((base / rel).read_bytes())
+
+    def ok(r, what):
+        if r.status_code >= 400:
+            raise RuntimeError(f"{what}: {r.status_code} {r.text[:300]}")
+        return r
+    with TestClient(build_app(demo=False), raise_server_exceptions=False) as c:
+        weeks = [(anchor + dt.timedelta(weeks=w)).isoformat() for w in range(0, 5)]
+
+        def sessions():
+            out = {}
+            for day in weeks:
+                for s in ok(c.get("/api/v1/overview/plan/sessions", params={"scope": "week", "day": day}),
+                            "sessions").json().get("sessions") or []:
+                    out[s["uid"]] = (s.get("day"), s.get("kind"), s.get("title"), s.get("minutes"), s.get("state"))
+            return out
+        before = sessions()
+        plan = ok(c.get("/api/v1/plan"), "plan").json()
+        have = next((e for e in plan.get("events") or [] if e.get("id") == ev.id), None)
+        want = asdict(ev)
+        if have is None or any(have.get(k) != v for k, v in want.items()):
+            ok(c.put("/api/v1/plan/events", json=want), "event")
+            print(f"  event {ev.id} {ev.date} {'updated' if have else 'added'}", flush=True)
+        else:
+            print(f"  event {ev.id} {ev.date}: already in the plan", flush=True)
+        for course, rel in courses.items():
+            eid = G.COURSE_EVENTS[course]
+            p = base / rel
+            data = p.read_bytes()
+            got = (have or {}).get("gpx") or {}
+            if got.get("sha1") == hashlib.sha1(data).hexdigest():
+                print(f"  gpx {eid}: already uploaded", flush=True)
+                continue
+            r = ok(c.post(f"/api/v1/plan/events/{eid}/gpx", files={"file": (p.name, data, "application/gpx+xml")}),
+                   f"gpx {course}").json()
+            g = r.get("gpx") or {}
+            print(f"  gpx {eid}: {g.get('km', 0):.1f} km ↑{g.get('gain_m', 0):.0f} m", flush=True)
+        # the 課表's stored weeks: the plan sessions the app keeps or re-plans with the event in
+        after = sessions()
+        changed = sorted({u for u in set(before) | set(after) if before.get(u) != after.get(u)},
+                         key=lambda u: (after.get(u) or before.get(u))[0] or "")
+        print(f"  課表 weeks {weeks[0]}..{weeks[-1]}: {len(changed)} sessions changed", flush=True)
+        for u in changed:
+            print(f"    {before.get(u)} -> {after.get(u)}", flush=True)
+        if warm:
+            warm_base(c, anchor, [])
+            r = c.post(f"/api/v1/racepower/course/event/{ev.id}", json={})
+            print(f"    /racepower/course/event/{ev.id}: {r.status_code}", flush=True)
+    mp.write_text(json.dumps(manifest, ensure_ascii=False, indent=1), "utf-8")
+
+
 def reimport(c, base: Path, rels: list[str]) -> dict:
     """Re-import FITs whose bytes changed (`rels`, relative to `base`): their
     workout_files rows (and metrics, MMP) are dropped and scan_and_import reads them
@@ -447,6 +536,9 @@ def main(argv=None) -> int:
     ap.add_argument("--regen-trail", action="store_true",
                     help="re-write only the trail runs' FITs of the current base of --root with the current "
                          "generator and re-import them, in place")
+    ap.add_argument("--stage-maokong", help=argparse.SUPPRESS)
+    ap.add_argument("--add-maokong", action="store_true",
+                    help="add only the 貓空越野 17K B race and its GPX course to the current base of --root, in place")
     ap.add_argument("--seed", type=int, default=DEFAULT_SEED)
     ap.add_argument("--anchor", help="the last day of the data (default: today)")
     ap.add_argument("--weeks", type=int, default=52)
@@ -465,8 +557,14 @@ def main(argv=None) -> int:
     if a.stage_regen_trail:
         _stage_regen_trail(Path(a.stage_regen_trail), warm=not a.no_warm)
         return 0
+    if a.stage_maokong:
+        _stage_maokong(Path(a.stage_maokong), warm=not a.no_warm)
+        return 0
     if not a.root:
         ap.error("--root is required")
+    if a.add_maokong:
+        add_maokong(Path(a.root), warm=not a.no_warm)
+        return 0
     if a.add_linked:
         add_linked(Path(a.root), warm=not a.no_warm)
         return 0

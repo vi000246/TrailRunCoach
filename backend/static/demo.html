@@ -108,12 +108,15 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
       const tr = rows.find((a) => a.plan && /山路|越野/.test(`${a.plan.title || ""}${a.sport_type || ""}`));
       const viewer = window.TRC_STATIC ? "charts.html" : "/api/v1/wko5/viewer";
       const link = (a, dash, text) => `<a href="${viewer}?view=${encodeURIComponent("單次活動判讀")}&dash=${dash}&workout=${a.index}">${text}</a>`;
-      // the 50K race with its GPX course in the race calculator (the event picked, the plan computed)
+      // a trail race with its GPX course in the race calculator (the event picked, the plan computed):
+      // the 貓空 17K (a real course), else the 50K (an older demo base without it)
       let rc = null;
       try {
         const ri = await fetch("/api/v1/racepower/inputs", { credentials: "same-origin" });
-        if (ri.ok && ((await ri.json()).events || []).some((e) => e.id === "demo-50k")) {
-          rc = `<a href="${window.TRC_STATIC ? "racepower.html" : "/api/v1/racepower/page"}?event=demo-50k">看越野賽事（GPX）計算範例</a>`;
+        const ids = ri.ok ? ((await ri.json()).events || []).map((e) => e.id) : [];
+        const ev = ["demo-maokong", "demo-50k"].find((id) => ids.includes(id));
+        if (ev) {
+          rc = `<a href="${window.TRC_STATIC ? "racepower.html" : "/api/v1/racepower/page"}?event=${ev}">看越野賽事（GPX）計算範例</a>`;
         }
       } catch {}
       const out = [iv && link(iv, 2, "看間歇分析範例"), tr && link(tr, 0, "看越野課表範例"), rc].filter(Boolean);
