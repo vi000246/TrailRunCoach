@@ -113,6 +113,12 @@ def test_overview_is_a_dashboard():
         assert needle in html, needle
     # due tests live in the shared floating box (suggestions.js), not inline on the overview
     assert 'id="tsug"' not in html
+    # order: KPI tiles, PMC, 做了什麼, 指標, 本週, 待辦 (no strip under the tiles); the nav follows it
+    assert 'id="strip"' not in html
+    pos = [html.index(n) for n in ('id="kpis"', 'id="pmc"', 'id="s-log"', 'id="s-ind"', 'id="s-week"', 'id="s-todo"')]
+    assert pos == sorted(pos), pos
+    nav = html.split('id="jump"', 1)[1].split("</nav>", 1)[0]
+    assert [a.split('"', 1)[0] for a in nav.split('href="#')[1:]] == ["s-status", "s-log", "s-ind", "s-week", "s-todo"]
     # every session type the week can show has a label (identity = icon + word)
     for t in ("easy", "z3", "z5", "long", "b2b", "loaded", "test", "rest"):
         assert f"{t}:" in html.split("const TYPES = {", 1)[1].split("};", 1)[0], t

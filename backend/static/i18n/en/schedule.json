@@ -1,7 +1,7 @@
 {
   "tabs.label": "Plan views",
   "tabs.calendar": "Calendar",
-  "tabs.compliance": "Plan compliance",
+  "tabs.compliance": "Plan stats",
   "ctx.edit": "Edit",
   "ctx.move": "Move to…",
   "ctx.open": "View",
@@ -214,5 +214,7 @@
   "pf.e.cap_lw": "The long-run day cap can't be shorter than the weekday cap",
   "pf.e.wh": "The weekly hours cap must be 1–40 h",
   "pf.e.gate_weeks": "The weeks rule must be 2–16 weeks",
-  "pf.e.push_days": "The push range must be 1–14 days"
+  "pf.e.push_days": "The push range must be 1–14 days",
+  "tabs.calendar_sub": "What's on each day",
+  "tabs.compliance_sub": "Planned vs actual, load"
 }

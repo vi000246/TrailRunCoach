@@ -299,6 +299,8 @@ def test_api_compliance_and_page(monkeypatch):
         assert st["2026-10-01"] == "missed" and st["2026-09-29"] in ("done", "partial", "off_plan")
         assert b["totals"]["due"] >= 2 and b["phase"]["label"] == "基礎期"
         assert [w["start"] for w in b["weeks"]] == ["2026-09-21", "2026-09-28"]
+        # 課表統計's period filter: the plan's phases (falls back to the range's phases)
+        assert [p["label"] for p in b["plan_phases"]] == ["基礎期"]
         # a deleted expired session leaves the dashboard
         uid = next(x["uid"] for x in b["sessions"] if x["status"] == "missed")
         e.c.delete(f"{API}/sessions/{uid}")
@@ -308,3 +310,21 @@ def test_api_compliance_and_page(monkeypatch):
         assert e.c.get(f"{API}/compliance?start=2025-01-01&end=2026-10-04").status_code == 400
         p = e.c.get(f"{API}/compliance/page")
         assert p.status_code == 200 and "compliance" in p.text
+        # the 日曆 | 課表統計 switch is the viewer's mode cards; the 負荷比 chart sits above the weeks
+        assert 'class="modesw"' in p.text and "ra-plot" in p.text and 'id="phases"' in p.text
+
+
+def test_api_compliance_plan_phases(monkeypatch):
+    from backend.api import plan_sessions
+    every = [{"kind": "base", "label": "基礎期", "start": "2026-09-01", "end": "2026-10-10"},
+             {"kind": "specific", "label": "專項期", "start": "2026-10-11", "end": "2026-12-05"}]
+    monkeypatch.setattr(plan_sessions, "_range_extras", lambda a, b: {
+        "activities": [], "plan_phases": every,
+        "phases": [p for p in every if p["end"] >= a and p["start"] <= b]})
+    with Env(monkeypatch) as e:
+        b = e.c.get(f"{API}/compliance?start=2026-09-21&end=2026-10-04").json()
+        assert [p["kind"] for p in b["phases"]] == ["base"]
+        assert [p["kind"] for p in b["plan_phases"]] == ["base", "specific"]
+        # a future phase's range: the planned weeks show (no actuals yet)
+        f = e.c.get(f"{API}/compliance?start=2026-10-11&end=2026-12-05").json()
+        assert [w["start"] for w in f["weeks"]][:2] == ["2026-10-05", "2026-10-12"]
