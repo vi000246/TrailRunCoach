@@ -99,6 +99,11 @@ def test_zoned_needs_one_of_its_series():
                                           {"name": "ATL ÷ CTL", "expression": "atl / ctl"}]}
     v = parse_view({"name": "x", "dashboards": [{"title": "d", "charts": [{**base, "zoned": {"line": "ATL ÷ CTL"}}]}]})
     assert v["dashboards"][0]["charts"][0]["zoned"] == {"line": "ATL ÷ CTL"}
+    # an optional reference line (負荷比's 1 = as usual)
+    r = parse_view({"name": "x", "dashboards": [{"title": "d", "charts": [{**base, "zoned": {"line": "ATL ÷ CTL", "ref": {"y": 1, "label": "1 = 跟平常一樣"}}}]}]})
+    assert r["dashboards"][0]["charts"][0]["zoned"]["ref"] == {"y": 1.0, "label": "1 = 跟平常一樣"}
+    with pytest.raises(CustomViewError):
+        parse_view({"name": "x", "dashboards": [{"title": "d", "charts": [{**base, "zoned": {"line": "ATL ÷ CTL", "ref": {"y": "a"}}}]}]})
     with pytest.raises(CustomViewError):
         parse_view({"name": "x", "dashboards": [{"title": "d", "charts": [{**base, "zoned": {"line": "nope"}}]}]})
 
