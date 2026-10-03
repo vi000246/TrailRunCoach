@@ -365,6 +365,25 @@ unchanged files and unchanged code reads no FIT file at all.
   with six page requests waiting: typically 3–6 ms, worst 240 ms. The
   datasets are identical to the old build's (all 802 workouts' metrics,
   power sources, exclusions, estimated settings).
+- **Relocatable** (2026-10-03): the cache folder is found by the FIT
+  folder's place inside the app home (`fitcache.resolve_home`: the new key,
+  else the old absolute-path key, else a folder whose `home.json` / index
+  names the same `app:fit/<source>`), so a copied or moved `~/.wko5coach`
+  reads no FIT again. Each entry keeps the file's sha1: a file whose mtime
+  changed but whose bytes did not keeps its parse, and `stamp_of` /
+  `stamp_s` answer the cached stamp so the per-file memos (series, estimate,
+  PD refits, the race-power file caches) stay valid too.
+- **Race-power file caches** (`racepower/cptest.py`): the folder listing is
+  reused while no folder changed; a cold folder is read once in the process
+  pool (`_prefetch`, also filling the bad-file / power-source caches), and
+  files the FIT dataset cache already parsed take their power source and
+  bad-file features from it. Before, a new user's first build re-parsed
+  every FIT file 2–3 times single-threaded, one 90-day window at a time.
+- **Series writes** inside the as-of estimates are batched
+  (`dataset.batched_flush`, at most every 20 s): each estimate() rewrote the
+  MB-sized series files.
+- **Measured** (2026-10-03, a fresh user: user data + FIT folders only, 803
+  COROS activities, 4 workers): see the perf/activities-auto commit message.
 - **Warm-up**: the app's lifespan and a sync that downloaded files start a
   background build of the active source (and the overview status);
   `WKO5COACH_NO_WARMUP=1` disables. The AnyIO thread limit is 200

@@ -115,6 +115,19 @@ def test_a_restart_answers_from_the_disk_cache(tmp_path, no_plan, monkeypatch):
     assert s["state"] == "ready" and calls == [] and s["auto"] == first["auto"]
 
 
+def test_a_restart_is_ready_with_two_activities_in_the_same_minute(tmp_path, no_plan, monkeypatch):
+    d = tmp_path / "fit" / "coros" / "2025"
+    d.mkdir(parents=True)
+    (d / "x.fit").write_bytes(build_run(T0 + dt.timedelta(seconds=20), seconds=900, speed_m_s=3.0))
+    ds = _fit_ds(tmp_path, n=2)                         # 0.fit and x.fit start in the same minute
+    assert len({AT.key_of(w.entry.start) for w in ds.workouts}) < len(ds.workouts)
+    AA.wait(ds)
+    calls = []
+    real = AA._chunk_values
+    monkeypatch.setattr(AA, "_chunk_values", lambda *a: calls.append(1) or real(*a))
+    assert AA.status(_fit_ds(tmp_path, n=2))["state"] == "ready" and calls == []
+
+
 def test_a_change_recomputes_and_serves_the_old_values_meanwhile(tmp_path, no_plan, monkeypatch):
     ds = _fit_ds(tmp_path, n=3)
     old = AA.wait(ds)["auto"]

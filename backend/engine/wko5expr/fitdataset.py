@@ -362,7 +362,7 @@ class PdMemo:
         from backend.engine.racepower import athlete as A
         from backend.engine.racepower import cptest as T
         from backend.engine.racepower import weather as WX
-        from backend.engine.wko5expr.fitcache import stamp_of
+        from backend.engine.wko5expr.fitcache import stamp_of, stamp_s
         ds = self.ds
         code = hashlib.sha1()
         for m in (A, T, wko5_pdmodel, wko5_meanmax, PS):
@@ -393,7 +393,8 @@ class PdMemo:
                     s = p.stat()
                 except OSError:
                     continue
-                files.append((d, str(p.relative_to(root)), s.st_size, int(s.st_mtime)))
+                # stamp_s: a copied folder's new mtimes (same bytes) keep the refits
+                files.append((d, str(p.relative_to(root)), *stamp_s(p, s)))
         files.sort()
         # cptest.curves reads only the 資料來源's folder (cptest.unused_folder)
         glob = (code.hexdigest(), A.CP_WINDOW_DAYS, bool(ds.accept_watch_power), BA.read_setting(True),
