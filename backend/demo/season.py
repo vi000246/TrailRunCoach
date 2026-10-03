@@ -159,20 +159,96 @@ def make_weights(anchor: dt.date, start: dt.date) -> list:
             Weight(date=(anchor - dt.timedelta(days=30)).isoformat(), kg=A.WEIGHT_KG)]
 
 
-def _phase_on(phases: list, events: dict, d: dt.date) -> tuple[str, Optional[str]]:
+def _phase_on(phases: list, events: dict, d: dt.date):
+    """(phase kind, its event's kind, the Phase) on day d."""
     for p in phases:
         if p.start <= d.isoformat() <= p.end:
             ev = events.get(p.event_id)
-            return p.kind, (ev.kind if ev is not None else None)
-    return "base", None
+            return p.kind, (ev.kind if ev is not None else None), p
+    return "base", None, None
+
+
+# the minutes a session kind may stretch to when a week's hours are shared out
+FLEX = {"easy": (35, 75), "recovery": (25, 45), "long": (75, 160), "lsd": (110, 170),
+        "trail": (60, 165), "trail_long": (120, 260)}
+
+
+def week_hours(phase: str, wk_in: int, wk_left: int, base_idx: int) -> tuple[float, bool]:
+    """(target hours, recovery week?) of a week: base blocks ramp ~5 → 7.5 h
+    over 3 weeks then ease to ~60 % (each block and each later base phase a
+    little higher); 專項期 8–10 h; 減量期 −40 % then −60 %; a dip after a race."""
+    if phase == "base":
+        meso, pos = wk_in // 4, wk_in % 4
+        if base_idx >= 2:
+            # the long base before the 50K: from a low start after the 百岳 trip
+            # to ~9.5 h, so CTL climbs ~50 → 70+ into the 專項期
+            ramp, lift = (4.5, 5.5, 6.5), 1.5 * meso
+        else:
+            ramp, lift = (5.0, 6.25, 7.5), 0.5 * meso + 0.2 * base_idx
+        peak = min(9.5, ramp[2] + lift)
+        if pos == 3:
+            return round(0.6 * peak, 2), True
+        return min(9.5, ramp[pos] + lift), False
+    if phase == "specific":
+        if wk_left <= 2:                       # the last specific weeks: the biggest
+            return 10.0, False
+        pos = wk_in % 4
+        if pos == 3:
+            return 6.0, True
+        return (8.0, 9.0, 9.5)[pos], False
+    if phase == "taper":
+        return (6.0 if wk_in == 0 else 4.0), False
+    if phase == "event":
+        return 4.0, False
+    if phase == "recovery":
+        return (3.0 if wk_in == 0 else 4.5), False
+    return 5.0, False
+
+
+def _share(kinds: list, hours: float) -> list:
+    """Minutes per session so the week sums to `hours`: structured sessions
+    keep their length, the FLEX kinds stretch within their bounds."""
+    mins = [None] * len(kinds)
+    fixed = 0.0
+    for i, k in enumerate(kinds):
+        if k not in FLEX:
+            lo, hi = MINUTES[k]
+            mins[i] = (lo + hi) / 2.0
+            fixed += mins[i]
+    flex = [i for i, k in enumerate(kinds) if k in FLEX]
+    left = hours * 60.0 - fixed
+    free = list(flex)
+    for _ in range(4):
+        if not free:
+            break
+        w = sum(sum(FLEX[kinds[i]]) / 2.0 for i in free)
+        s = max(0.0, left) / w if w else 0.0
+        clamped = []
+        for i in free:
+            lo, hi = FLEX[kinds[i]]
+            v = s * sum(FLEX[kinds[i]]) / 2.0
+            if v < lo or v > hi:
+                mins[i] = min(hi, max(lo, v))
+                clamped.append(i)
+            else:
+                mins[i] = v
+        if not clamped:
+            break
+        left -= sum(mins[i] for i in clamped)
+        free = [i for i in free if i not in clamped]
+    return mins
 
 
 def _showcase(anchor: dt.date) -> list:
-    """(days before anchor, kind, showcase?) for the last three weeks."""
-    return [(21, "recovery", False), (20, "cp_test", True), (18, "easy", True), (17, "easy", False),
-            (15, "baiyue", True), (14, "baiyue", True), (13, "baiyue", True), (11, "recovery", False),
-            (10, "aet_test", True), (8, "interval", True), (7, "easy", False), (6, "trail_long", True),
-            (5, "easy", False), (3, "easy", False), (2, "lsd", True), (1, "recovery", False)]
+    """(days before anchor, kind, showcase?, minutes or None) for the last
+    three weeks; the last one is the 50K block's biggest normal week (~11 h,
+    back-to-back trail days)."""
+    return [(21, "recovery", False, 40), (20, "cp_test", True, None), (19, "easy", False, 60),
+            (18, "easy", True, 65), (17, "trail", False, 110), (15, "baiyue", True, None),
+            (14, "baiyue", True, None), (13, "baiyue", True, None), (11, "recovery", False, 40),
+            (10, "aet_test", True, None), (9, "easy", False, 60), (8, "interval", True, None),
+            (7, "easy", False, 70), (6, "trail_long", True, 230), (5, "trail", False, 120),
+            (3, "easy", False, 60), (2, "lsd", True, 150), (1, "recovery", False, 40)]
 
 
 def _templates(phase: str, ev_kind: Optional[str], week_no: int) -> dict:
@@ -182,6 +258,7 @@ def _templates(phase: str, ev_kind: Optional[str], week_no: int) -> dict:
     if phase in ("recovery", "event"):
         return {2: "recovery", 4: "easy", 6: "easy"}
     if phase == "specific" and ev_kind == "race":
+        # back-to-back long days (Sat trail_long + Sun trail) late in the block: schedule()
         return {1: "interval", 2: "easy", 3: "hill", 4: "opt", 5: "trail_long", 6: "easy"}
     if phase == "specific" and ev_kind == "baiyue":
         return {1: "tempo", 2: "easy", 3: "easy", 4: "opt", 5: "hike", 6: "trail"}
@@ -204,9 +281,9 @@ def schedule(seed: int, anchor: dt.date, weeks: int = 52) -> Season:
     acts: list[Planned] = []
     weeks_meta = []
 
-    def add(d: dt.date, kind: str, *, showcase=False, day=0, trip=None, factor=1.0, hour=None):
+    def add(d: dt.date, kind: str, *, showcase=False, day=0, trip=None, minutes=None, hour=None):
         lo, hi = MINUTES[kind]
-        mins = float(rng.uniform(lo, hi)) * factor
+        mins = float(rng.uniform(lo, hi)) if minutes is None else float(minutes) * float(rng.uniform(0.94, 1.06))
         sport = SPORT.get(kind, "run")
         weekend = d.weekday() >= 5
         if hour is None:
@@ -219,8 +296,14 @@ def schedule(seed: int, anchor: dt.date, weeks: int = 52) -> Season:
             name = f"百岳 第 {day + 1} 天"
         elif showcase and kind == "trail_long":
             name = "越野長爬坡"
+        params = {}
+        if kind in ("trail", "trail_long"):
+            # climbing that goes with the time on trail: ~600 m/h on the long runs
+            # (3–4 h → 1500–2500 m), less on the shorter ones
+            rate = 600.0 if kind == "trail_long" else 380.0
+            params["climb"] = round(min(2500.0, mins / 60.0 * rate * float(rng.uniform(0.9, 1.1))), 0)
         acts.append(Planned(date=d, kind=kind, minutes=round(mins, 1), sport=sport, name=name, hour=hour,
-                            showcase=showcase, stryd=stryd, day=day, trip=trip))
+                            showcase=showcase, stryd=stryd, day=day, trip=trip, params=params))
 
     # trips and the race inside the history: (date, kind, day, trip)
     fixed: dict[dt.date, tuple] = {}
@@ -234,20 +317,34 @@ def schedule(seed: int, anchor: dt.date, weeks: int = 52) -> Season:
             fixed[e.start] = ("race_half", 0, e.id)
     monday = _wd(start, 0)
     week_no = 0
+    base_seen: list = []                 # the base phases met so far (later ones run a little higher)
     while monday < show0:
         wtype = "normal"
         days = [monday + dt.timedelta(days=i) for i in range(7)]
-        ph, evk = _phase_on(phases, ev_by_id, days[3])
+        ph, evk, phase = _phase_on(phases, ev_by_id, days[3])
+        if phase is not None:
+            p0, p1 = dt.date.fromisoformat(phase.start), dt.date.fromisoformat(phase.end)
+            wk_in, wk_left = max(0, (days[3] - p0).days // 7), max(0, (p1 - days[3]).days // 7)
+        else:
+            wk_in, wk_left = week_no, 99
+        if ph == "base" and phase is not None and phase.start not in base_seen:
+            base_seen.append(phase.start)
+        hours, recovery_week = week_hours(ph, wk_in, wk_left, max(0, len(base_seen) - 1))
         tmpl = dict(_templates(ph, evk, week_no))
-        recovery_week = ph in ("base", "specific") and week_no % 4 == 3
+        if ph == "base" and len(base_seen) >= 3 and wk_in % 4 == 2:
+            tmpl[5] = "trail_long"           # the base before the 50K: long climbs on trails
+        if ph == "specific" and evk == "race" and wk_left <= 2:
+            tmpl[6] = "trail"                # back-to-back long days
         if recovery_week:
             wtype = "recovery"
             tmpl = {1: "easy", 3: "easy", 5: "long", 6: "easy"}
         if ph in ("taper", "recovery", "event"):
             wtype = ph
         # the optional 6th session; a missed one now and then (never below 4)
-        if tmpl.pop(4, None) == "opt" and rng.random() < 0.6:
-            tmpl[4] = "recovery"
+        if tmpl.get(4) == "opt":
+            del tmpl[4]
+            if rng.random() < 0.6:
+                tmpl[4] = "recovery"
         if len(tmpl) >= 5 and rng.random() < 0.12:
             tmpl.pop(int(rng.choice([2, 3])), None)
         if any(d in fixed for d in days):
@@ -257,33 +354,41 @@ def schedule(seed: int, anchor: dt.date, weeks: int = 52) -> Season:
         if any(d < start or d >= show0 for d in days):
             wtype = "partial"
         n = 0
+        todo = []
         for i, d in enumerate(days):
             if d < start or d >= show0 or d in gap:
                 continue
             if d in fixed:
-                kind, k, trip = fixed[d]
-                add(d, kind, day=k, trip=trip, hour=5.0 if kind == "baiyue" else 6.5)
-                n += 1
+                todo.append((d, None))
                 continue
             # the days around a trip / race are rest
             if any((d + dt.timedelta(days=j)) in fixed for j in (-1, 1)):
                 continue
-            kind = tmpl.get(i)
+            if tmpl.get(i) is not None:
+                todo.append((d, tmpl[i]))
+        # share the week's hours out (the first partial week / a sick week gets
+        # its share; the week cut by the showcase window keeps its full load)
+        live = sum(1 for d in days if start <= d and d not in gap)
+        mins = _share([k for _d, k in todo if k], hours * live / 7.0)
+        it = iter(mins)
+        for d, kind in todo:
             if kind is None:
-                continue
-            add(d, kind, factor=0.75 if recovery_week else 1.0)
+                kind, k, trip = fixed[d]
+                add(d, kind, day=k, trip=trip, hour=5.0 if kind == "baiyue" else 6.5)
+            else:
+                add(d, kind, minutes=next(it))
             n += 1
-        weeks_meta.append({"monday": monday, "type": wtype, "n": n, "phase": ph})
+        weeks_meta.append({"monday": monday, "type": wtype, "n": n, "phase": ph, "target_h": hours})
         monday += dt.timedelta(days=7)
         week_no += 1
-    for back, kind, show in _showcase(anchor):
+    for back, kind, show, mins in _showcase(anchor):
         d = anchor - dt.timedelta(days=back)
         if d < start:
             continue
         if kind == "baiyue":
             add(d, kind, showcase=show, day=15 - back, trip="demo-trip", hour=5.0)
         else:
-            add(d, kind, showcase=show)
+            add(d, kind, showcase=show, minutes=mins)
     # showcase: exactly one per kind (the 3 trip days count as one 百岳多日)
     acts.sort(key=lambda p: (p.date, p.hour))
     cp_on = {p.date: cp_true(p.date, anchor) for p in acts}
