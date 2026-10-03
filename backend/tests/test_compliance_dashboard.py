@@ -328,3 +328,19 @@ def test_api_compliance_plan_phases(monkeypatch):
         # a future phase's range: the planned weeks show (no actuals yet)
         f = e.c.get(f"{API}/compliance?start=2026-10-11&end=2026-12-05").json()
         assert [w["start"] for w in f["weeks"]][:2] == ["2026-10-05", "2026-10-12"]
+        # 天 buckets: one row per day of the range, same planned / done numbers as the weeks
+        days = b["days"]
+        assert [x["start"] for x in days][0] == "2026-09-21" and len(days) == 14
+        assert all(x["start"] == x["end"] for x in days)
+        assert len(f["days"]) == 56
+
+
+def test_dashboard_day_buckets_count_their_sessions():
+    ss = [_s("a", "2026-09-22", "easy", "done", comp=_comp("green", 98), done_by=_done(3500, 49)),
+          _s("c", "2026-09-22", "long", "missed", minutes=120, tss=100)]
+    days = [{"start": d, "end": d, "planned_tss": 150 if d == "2026-09-22" else 0, "done_tss": 49 if d == "2026-09-22" else 0,
+             "planned_hours": 3, "done_hours": 1} for d in ("2026-09-21", "2026-09-22")]
+    d = C.dashboard(ss, [], "2026-09-30", "2026-09-21", "2026-09-22", day_rows=days)
+    d0, d1 = d["days"]
+    assert (d0["due"], d0["rate"]) == (0, None)
+    assert (d1["due"], d1["completed"], d1["rate"], d1["planned_tss"]) == (2, 1, 0.5, 150)

@@ -2176,9 +2176,20 @@ function zonedSetup(out, srcOf, zoned) {
         backgroundColor: panel, borderColor: b ? b.color : muted, borderWidth: 1, borderRadius: 4, padding: [2, 5],
         formatter: () => `${fmtU(last[1], u, { label: false })} ${b ? b.name.split(" ")[0] : ""}` } }] };
   }
+  // a reference line on the data line (zoned.ref, e.g. 負荷比's「1 = 跟平常一樣」): thin, dashed, labelled at the start
+  if (zoned.ref && Number.isFinite(+zoned.ref.y)) {
+    L.markLine = { silent: true, symbol: "none", lineStyle: { color: muted, type: [4, 4], width: 1 },
+      label: { show: !!zoned.ref.label, position: "insideStartTop", color: muted, fontSize: 10.5, formatter: () => zoned.ref.label || "" },
+      data: [{ yAxis: +zoned.ref.y }] };
+  }
   const pieces = bands.map((b, k) => ({ ...(k > 0 ? { gte: b.lo } : {}), ...(k < bands.length - 1 ? { lt: b.hi } : {}),
     color: lineColor(b) }));
-  return { visualMap: [{ type: "piecewise", show: false, seriesIndex: li, dimension: 1, pieces }], zoneOf };
+  return { visualMap: [{ type: "piecewise", show: false, seriesIndex: li, dimension: 1, pieces }], zoneOf, unit: srcOf[li].unit };
+}
+// 「1.12 · 正常（0.8–1.3）」: a band's name is「short range」 (views: 「正常 0.8–1.3」)
+function zonedHover(y, b, unit) {
+  const [short, ...rest] = String(b.name || "").split(" ");
+  return `${fmtU(y, unit, { label: false })} · ${short}${rest.length ? `（${rest.join(" ")}）` : ""}`;
 }
 
 function drawPlot(card, res, series) {
@@ -2417,12 +2428,14 @@ function drawPlot(card, res, series) {
   const zoom = !!res._zoom;
   const Z = res.zoned ? zonedSetup(out, srcOf, res.zoned) : null;
   if (Z) {
-    // the zoned line's hover row also names its band
+    // hovering the line: the value and its band in one line,「1.12 · 正常（0.8–1.3）」
     const f0 = tooltip.formatter;
     tooltip.formatter = (ps) => {
-      const h = f0(ps), p = [].concat(ps).find((q) => q.seriesName === res.zoned.line);
+      const p = [].concat(ps).find((q) => q.seriesName === res.zoned.line);
       const y = p && (Array.isArray(p.value) ? p.value[1] : p.value), b = y != null ? Z.zoneOf(y) : null;
-      return b && h ? h.replace(/<\/div>$/, `<br><span style="opacity:.8">區間：${esc(b.name)}</span></div>`) : h;
+      if (!b) return f0(ps);
+      const head = String(p.value[0]).slice(0, 10);
+      return `<div style="font-size:11.5px">${esc(head)}<br>${p.marker}<b>${esc(zonedHover(y, b, Z.unit))}</b></div>`;
     };
   }
   const legendRows = zoom ? Math.ceil(out.length / Math.max(1, Math.floor((el.clientWidth || 900) / 170))) : 1;
