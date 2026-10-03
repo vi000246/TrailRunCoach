@@ -52,11 +52,11 @@ def client(monkeypatch, _fit_root_in_tmp, tmp_path):
         raise OSError("network disabled in tests")
     monkeypatch.setattr(socket.socket, "connect", _no_net)
 
-    from backend.db.database import DB_PATH
+    from backend.db.database import db_path
     from backend.engine.wko5expr import datasource
     from backend.api import plan as plan_api, wko5views
     # the app's own DB (under the fake home) is the settings store, as for a real user
-    monkeypatch.setattr(datasource, "_db_path", lambda: DB_PATH)
+    monkeypatch.setattr(datasource, "_db_path", lambda: db_path())
     # no WKO5 folder anywhere
     missing = tmp_path / "WKO5"
     monkeypatch.setattr(plan_api, "ATHLETE_DIR", missing)

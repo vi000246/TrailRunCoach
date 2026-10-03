@@ -26,7 +26,8 @@ from cryptography.fernet import Fernet, InvalidToken
 log = logging.getLogger(__name__)
 
 PREFIX = "enc:v1:"
-KEY_FILE = Path.home() / ".wko5coach" / "secret.key"
+from backend import tenancy as _tenancy
+KEY_FILE = _tenancy.home_root() / "secret.key"   # the server key: $WKO5COACH_HOME, never a sandbox folder
 
 
 class SecretError(RuntimeError):
@@ -47,8 +48,8 @@ SEALED_DB_COLUMNS = (("sync_state", "tp_access_token"), ("sync_state", "tp_refre
 
 def _db_path() -> Optional[Path]:
     try:
-        from backend.db.database import DB_PATH
-        return DB_PATH
+        from backend.db.database import db_path
+        return db_path()
     except Exception:
         return None
 

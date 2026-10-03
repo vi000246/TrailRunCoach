@@ -27,8 +27,14 @@ import sqlite3
 from pathlib import Path
 from typing import Optional, Sequence
 
-HOME = Path.home() / ".wko5coach"
-ROOT = HOME / "event_gpx"
+ROOT = None      # fixed folder (tests); None = the tenant's event_gpx/
+
+
+def _root() -> Path:
+    if ROOT is not None:
+        return Path(ROOT)
+    from backend import tenancy
+    return tenancy.private_path("event_gpx")
 TABLE = "event_gpx"
 COLS = ("event_id", "filename", "sha1", "bytes_raw", "bytes_gz", "km", "gain_m", "loss_m", "z_min", "z_max",
         "day_splits_json", "camp_km_json", "uploaded_at")
@@ -45,8 +51,8 @@ class EventGpxError(ValueError):
 def _default_db() -> Optional[Path]:
     """The app DB. Tests patch this (conftest)."""
     try:
-        from backend.db.database import DB_PATH
-        return Path(DB_PATH)
+        from backend.db.database import db_path
+        return db_path()
     except Exception:                       # noqa: BLE001
         return None
 
@@ -62,7 +68,7 @@ def _check_id(eid: str) -> str:
 
 
 def file_path(eid: str, root: Optional[Path] = None) -> Path:
-    return Path(root or ROOT) / f"{_check_id(eid)}.gz"
+    return Path(root or _root()) / f"{_check_id(eid)}.gz"
 
 
 def _row(r: sqlite3.Row) -> dict:

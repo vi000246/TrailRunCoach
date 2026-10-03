@@ -889,7 +889,7 @@ def test_apply_writes_the_test_day_to_a_temp_plan(tmp_path, monkeypatch):
     monkeypatch.setattr(PL.Plan, "load", classmethod(lambda cls, p=None: real_load(cls, path)))
     monkeypatch.setattr(PL.Plan, "save", lambda self, p=None: real_save(self, path))
     monkeypatch.setattr(API, "_notify", lambda thresholds: None)
-    before = PL.PLAN_PATH.stat().st_mtime if PL.PLAN_PATH.exists() else None
+    before = PL.plan_path().stat().st_mtime if PL.plan_path().exists() else None
     out = API.apply_estimate(API.ApplyEstimate(aethr=146.4, date="2026-09-20",
                                                note="AeT 飄移測試 2026-09-20：Pw:HR 4.2%"))
     assert out["threshold"]["date"] == "2026-09-20" and out["threshold"]["aethr"] == 146
@@ -906,4 +906,4 @@ def test_apply_writes_the_test_day_to_a_temp_plan(tmp_path, monkeypatch):
     assert g["resolved"] == "ua_gap+friel_drift" and g["gap"] == pytest.approx(165 / 146 - 1)
     with pytest.raises(Exception):
         API.apply_estimate(API.ApplyEstimate(aethr=146, date="2999-01-01"))
-    assert (PL.PLAN_PATH.stat().st_mtime if PL.PLAN_PATH.exists() else None) == before     # the real plan untouched
+    assert (PL.plan_path().stat().st_mtime if PL.plan_path().exists() else None) == before     # the real plan untouched

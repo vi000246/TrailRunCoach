@@ -36,8 +36,8 @@ class RaceCalcError(ValueError):
 def _default_db() -> Optional[Path]:
     """The app DB. Tests patch this (conftest)."""
     try:
-        from backend.db.database import DB_PATH
-        return Path(DB_PATH)
+        from backend.db.database import db_path
+        return db_path()
     except Exception:                       # noqa: BLE001
         return None
 

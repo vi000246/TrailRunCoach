@@ -12,6 +12,8 @@
   "use strict";
 
   async function mount() {
+    // the demo has one fixed source and no WKO5 cross-check: no chip
+    if ((window.TRC_SESSION || {}).mode === "demo") return;
     let host = document.getElementById("source-chip");
     if (!host) {
       host = document.createElement("span");

@@ -557,8 +557,8 @@ async function init0() {
   S.athlete = ath;
   const snap = ath.wko5_pmc_snapshot || {};
   const info = $("athinfo");
-  info.textContent = `${ath.name} · ${ath.workouts} 筆活動`;
-  info.title = `WKO5 快照 CTL ${fmtNum(snap.ctl)} ATL ${fmtNum(snap.atl)} TSB ${fmtNum(snap.tsb)}`;
+  info.textContent = `${ath.name ? `${ath.name} · ` : ""}${ath.workouts} 筆活動`;
+  info.title = snap.ctl != null ? `WKO5 快照 CTL ${fmtNum(snap.ctl)} ATL ${fmtNum(snap.atl)} TSB ${fmtNum(snap.tsb)}` : "";
 }
 
 async function init() {
@@ -577,6 +577,7 @@ async function init() {
   pill.title = (S.parity ? "WKO5 對照模式：完全比照 WKO5 的公式，不套用資料校正與你的測試值"
     : "我的算式：移動時間 hrTSS、爬升加成、套用資料校正與你的測試值") + "（點這裡到設定切換）";
   pill.className = "pill " + (S.parity ? "parity" : "mine");
+  if ((window.TRC_SESSION || {}).mode === "demo") pill.style.display = "none";   // the demo has no formula switch (settings)
   const broken = S.views.filter((v) => v.error);
   if (broken.length) console.warn("view files with errors:", broken.map((v) => `${v.path}: ${v.error}`));
   await init0();

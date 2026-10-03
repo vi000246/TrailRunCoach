@@ -21,7 +21,7 @@ HOT_MONTH_WINDOW_D = 15
 
 def _root() -> Path:
     from backend.engine import routes as R
-    return R.HOME
+    return R.home()
 
 
 def exposures(root: Optional[Path] = None) -> tuple[list[dict], dict]:

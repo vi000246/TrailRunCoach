@@ -61,7 +61,17 @@ INDEX_VERSION = 4         # tier B (index.json): 3 = ALGO_VERSION 3's index;
                           #    canonical common part, partials / sub-routes, stretches merged
 # WKO5COACH_ROUTES_DIR: another store root (a second server on the same
 # machine must not share the live index — two versions would rebuild it in turn)
-HOME = Path(os.getenv("WKO5COACH_ROUTES_DIR") or (Path.home() / ".wko5coach" / "routes"))
+HOME = None      # fixed folder (tests); None = $WKO5COACH_ROUTES_DIR, else <tenant shared>/routes
+
+
+def home() -> Path:
+    if HOME is not None:
+        return Path(HOME)
+    v = os.getenv("WKO5COACH_ROUTES_DIR")
+    if v:
+        return Path(v)
+    from backend import tenancy
+    return tenancy.shared_path("routes")
 P30_S = 30.0                     # max-power window
 P30_MIN_COVER = 0.8              # share of the window with power samples
 PEAKS_PATH = Path(__file__).resolve().parents[1] / "data" / "baiyue.json"
@@ -533,12 +543,17 @@ class RouteStore:
     """Paths are injectable so tests never touch ~/.wko5coach."""
 
     def __init__(self, root: Optional[Path] = None):
-        self.root = Path(root) if root else HOME
-        self.tracks_dir = self.root / "tracks"
-        self.index_path = self.root / "index.json"
-        self.names_path = self.root / "names.json"
-        self.manifest_path = self.root / "manifest.json"
-        self.weather_dir = self.root / "weather"
+        self._root = Path(root) if root else None     # None: the tenant's routes folder, per call
+
+    @property
+    def root(self) -> Path:
+        return self._root if self._root is not None else home()
+
+    tracks_dir = property(lambda self: self.root / "tracks")
+    index_path = property(lambda self: self.root / "index.json")
+    names_path = property(lambda self: self.root / "names.json")
+    manifest_path = property(lambda self: self.root / "manifest.json")
+    weather_dir = property(lambda self: self.root / "weather")
 
     # tier A
     def _track_path(self, file: str) -> Path:

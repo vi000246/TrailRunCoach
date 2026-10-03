@@ -37,5 +37,21 @@
   "lang.zh-TW": "中文",
   "lang.en": "EN",
   "nav.more": "More",
-  "nav.more_title": "Activities, routes, injury log, settings"
+  "nav.more_title": "Activities, routes, injury log, settings",
+  "demo.tag": "Demo data",
+  "demo.text": "A fictional runner; your changes stay in this browser only.",
+  "demo.try": "Try: ",
+  "demo.try_schedule": "Schedule",
+  "demo.try_race": "Race calculator",
+  "demo.try_plan": "Season",
+  "demo.left_none": "No changes yet",
+  "demo.left_h": "Cleared in {h} h",
+  "demo.left_m": "Cleared in {m} min",
+  "demo.left_title": "Your changes are kept for 24 hours from the first one, then the demo resets",
+  "demo.reset": "Reset demo",
+  "demo.reset_title": "Drop your changes and go back to the original demo data",
+  "demo.reset_confirm": "Drop all your changes in the demo?",
+  "demo.cta": "Use your own data?",
+  "demo.locked": "Not available in the demo",
+  "demo.disabled": "Not available in the demo"
 }

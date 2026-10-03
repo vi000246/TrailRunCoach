@@ -171,7 +171,7 @@ def cache_path(ds) -> Path:
         return Path(store.home) / "activity_auto.json"
     from backend.engine.wko5expr import dataset as D
     key = hashlib.sha1(os.path.normcase(str(getattr(ds, "dir", ""))).encode()).hexdigest()[:10]
-    return D._CACHE_DIR / f"activity_auto_{key}.json"
+    return D._cache_dir() / f"activity_auto_{key}.json"
 
 
 def load_cache(ds) -> dict:

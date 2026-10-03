@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+from pathlib import Path
 import math
 import re
 from statistics import median
@@ -36,7 +37,11 @@ HIKE_MIN_MOVING_S = 3600.0
 HIKE_HEAVY_GAIN_M, HIKE_HEAVY_WEIGHT = 600.0, 3.0
 FALLBACK_TRAINING = {"altitude_m": 100.0, "temp_c": 25.0, "rh_pct": 75.0}
 METRICS_KEY = "racepower_v1"
-TRAINING_ENV_CACHE = WX.HOME / "racepower_training_env.json"
+TRAINING_ENV_CACHE = None      # fixed file (tests); None = <tenant shared>/racepower_training_env.json
+
+
+def _training_env_cache() -> Path:
+    return Path(TRAINING_ENV_CACHE) if TRAINING_ENV_CACHE is not None else WX.home() / "racepower_training_env.json"
 
 SPORT_ZH = {"running": "路跑", "trail running": "越野跑", "indoor running": "跑步機",
             "hiking": "健行", "mountaineering": "登山"}
@@ -226,7 +231,12 @@ def _plan_cp(ds, today: dt.date) -> Optional[dict]:
     return {"cp": float(t.cp), "date": t.date[:10], "age_days": age, "fresh": age <= PLAN_CP_MAX_AGE_DAYS}
 
 
-SOLO_HIKES = WX.HOME / "racepower_solo_hikes.json"
+SOLO_HIKES = None      # fixed file (tests); None = the tenant's (private) racepower_solo_hikes.json
+
+
+def _solo_hikes_path() -> Path:
+    from backend import tenancy
+    return Path(SOLO_HIKES) if SOLO_HIKES is not None else tenancy.private_path("racepower_solo_hikes.json")
 GROUP_HIKE_NOTE = "百岳多為跟團，速度不代表個人能力，不列入目標時間推算"
 HIKE_SPORTS = ("hiking", "mountaineering")
 HIKE_TAGS = {"hiking", "mountaineering"}
@@ -244,7 +254,7 @@ def solo_hikes(path=None) -> set[str]:
     solo` also matches the same trip under another source's file name."""
     from backend.engine.activity_key import ByStartSet
     try:
-        d = json.loads((path or SOLO_HIKES).read_text("utf-8"))
+        d = json.loads((path or _solo_hikes_path()).read_text("utf-8"))
         return ByStartSet(d.get("files") or [], d.get("starts") or {})
     except (OSError, ValueError):
         return ByStartSet()
@@ -252,7 +262,7 @@ def solo_hikes(path=None) -> set[str]:
 
 def set_solo_hikes(files, path=None) -> set[str]:
     from backend.engine import activity_key as AK
-    p = path or SOLO_HIKES
+    p = path or _solo_hikes_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     s = sorted({str(f) for f in files if f})
     old = solo_hikes(p)
@@ -321,7 +331,7 @@ def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) 
         return base
     stamp = f"{today.isoformat()}|{len(ms)}|{base['lat']:.3f},{base['lon']:.3f}"
     try:
-        c = json.loads(TRAINING_ENV_CACHE.read_text("utf-8"))
+        c = json.loads(_training_env_cache().read_text("utf-8"))
         if c.get("stamp") == stamp:
             return {**base, **c["values"]}
     except (OSError, ValueError, KeyError):
@@ -345,8 +355,8 @@ def _training_conditions(ds, runs, metrics, today: dt.date, fetch: bool = True) 
             "fetched_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"),
             "attribution": WX.ATTRIBUTION}
     try:
-        TRAINING_ENV_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        TRAINING_ENV_CACHE.write_text(json.dumps({"stamp": stamp, "values": vals}, ensure_ascii=False), "utf-8")
+        _training_env_cache().parent.mkdir(parents=True, exist_ok=True)
+        _training_env_cache().write_text(json.dumps({"stamp": stamp, "values": vals}, ensure_ascii=False), "utf-8")
     except OSError:
         pass
     return {**base, **vals}
@@ -907,7 +917,7 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
         best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
     extra = []
     try:
-        extra = T.curves(WX.HOME, today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today, accept_watch=accept)
+        extra = T.curves(WX.home(), today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today, accept_watch=accept)
     except Exception:                       # noqa: BLE001
         extra = []
     for c in extra:
@@ -940,7 +950,7 @@ def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
     each with its estimate (cptest.estimate). Suggestions only."""
     from backend.engine.racepower import cptest as T
     try:
-        found = T.scan(WX.HOME, today - dt.timedelta(days=RIEGEL_WINDOW_DAYS), today,
+        found = T.scan(WX.home(), today - dt.timedelta(days=RIEGEL_WINDOW_DAYS), today,
                        accept_watch=getattr(ds, "accept_watch_power", True))
     except Exception:                       # noqa: BLE001
         return []
@@ -1472,7 +1482,12 @@ def hike_hr_windows(ds, hikes, exclude: Optional[set] = None) -> tuple[list[dict
     return wins, th_of
 
 
-HIKE_META = WX.HOME / "racepower_hike_meta.json"
+HIKE_META = None      # fixed file (tests); None = the tenant's (private) racepower_hike_meta.json
+
+
+def _hike_meta_path() -> Path:
+    from backend import tenancy
+    return Path(HIKE_META) if HIKE_META is not None else tenancy.private_path("racepower_hike_meta.json")
 
 
 def hike_meta(path=None) -> dict:
@@ -1482,7 +1497,7 @@ def hike_meta(path=None) -> dict:
     stored under another source's file name, by start time."""
     from backend.engine.activity_key import ByStartDict
     try:
-        d = json.loads((path or HIKE_META).read_text("utf-8"))
+        d = json.loads((path or _hike_meta_path()).read_text("utf-8"))
         return ByStartDict({str(k): v for k, v in (d.get("trips") or {}).items() if isinstance(v, dict)})
     except (OSError, ValueError):
         return ByStartDict()
@@ -1494,7 +1509,7 @@ def set_hike_meta(file: str, pack_kg: Optional[float], path=None, start=None) ->
     local start (`start`, else the registered dataset's) so any source finds
     them."""
     from backend.engine import activity_key as AK
-    p = path or HIKE_META
+    p = path or _hike_meta_path()
     trips = hike_meta(p)
     key = trips.key_for(str(file), start)
     if pack_kg is None:
