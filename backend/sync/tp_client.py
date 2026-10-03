@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile
-from backend.sync import http, storage
+from backend.sync import http, session_check, storage
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, SecretKeyMissing, seal, unseal
 
@@ -422,6 +422,7 @@ async def login_password(
         await _ensure_athlete(db, athlete_id, tp_athlete_id)
 
     await db.commit()
+    session_check.mark_ok("tp", athlete_id)
 
     return {
         "authenticated": True,
@@ -627,12 +628,28 @@ async def _get_valid_token(db: AsyncSession, athlete_id: int) -> Optional[str]:
         if not ok and state.tp_password_sealed:
             ok = await _relogin(db, athlete_id, state)
         if not ok:
+            session_check.mark_expired("tp", athlete_id)
             return None
     try:
         return unseal(state.tp_access_token)
     except SecretError as e:
         log.warning("TP token unreadable: %s", e)
+        session_check.mark_expired("tp", athlete_id)
         return None
+
+
+async def probe_token(access_token: str) -> str:
+    """The login check (sync/session_check.py): GET users/v3/user.
+    "ok" | "invalid" (401 / 403) | "unknown" (network / other)."""
+    headers = {**TP_HEADERS, "Authorization": f"Bearer {access_token}"}
+    try:
+        async with http.client(base_url=TP_API_BASE, headers=headers, timeout=10) as client:
+            resp = await client.get("users/v3/user")
+    except Exception:                         # noqa: BLE001 — unknown, never raises
+        return "unknown"
+    if resp.status_code in (401, 403):
+        return "invalid"
+    return "ok" if resp.status_code == 200 else "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -755,6 +772,10 @@ async def sync_workouts(
             pages = _iter_date_range(client, athlete.tp_athlete_id, list_from, date.today().isoformat())
         async for page_items, info in pages:
             if "error" in info:
+                if info.get("status") in (401, 403):
+                    # TP refused the token: the login is gone (sync/session_check.py)
+                    session_check.mark_expired("tp", athlete_id)
+                    info = {**info, "error": "TP_AUTH_REQUIRED", "hint": "請到設定頁重新登入 TrainingPeaks"}
                 yield info
                 return
             if info:
@@ -1075,6 +1096,7 @@ async def exchange_code(code: str, db: AsyncSession, athlete_id: int) -> dict:
     if tp_athlete_id:
         await _ensure_athlete(db, athlete_id, tp_athlete_id)
     await db.commit()
+    session_check.mark_ok("tp", athlete_id)
     return token
 
 
