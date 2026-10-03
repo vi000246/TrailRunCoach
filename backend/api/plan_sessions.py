@@ -841,7 +841,7 @@ def _b2b_fallback(inp: dict, sg: dict, days: list[str]) -> list[dict]:
     """The two days from the suggestion alone (the generator didn't plan the week)."""
     from backend.engine import b2b as B2B
     rate = float(((inp.get("cur") or {}).get("tss_per_category") or {}).get("trail") or 55.0) / 60.0
-    long_s = {"id": "long", "kind": "long", "title": "長時間輕鬆（山路）", "minutes": sg["minutes"][0],
+    long_s = {"id": "long", "kind": "long", "title": "LSD（山路）", "minutes": sg["minutes"][0],
               "tss": round(rate * sg["minutes"][0], 1), "detail": "", "target": "", "source": "", "terrain": None}
     ss = [long_s] + B2B.followers(long_s, {"minutes": sg["minutes"]})
     B2B.decorate(ss, {"event": {"name": sg.get("event"), "days": sg.get("event_days") or 2,

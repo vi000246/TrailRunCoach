@@ -156,6 +156,18 @@ aside .hint { font-size: 11.5px; color: var(--muted); margin: -2px 0 6px; }
 .act.on { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .act .t { display: flex; justify-content: space-between; gap: 8px; }
 .act .s { color: var(--muted); font-size: 11px; }
+.act .t b { font-variant-numeric: tabular-nums; }
+.act .t .tl { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* the matched planned session's 類型 (課表 kind palette, schedule.html .k-*; dashicons.js icon) */
+.ptag { display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border-radius: 4px; flex: none;
+  font-size: 10.5px; line-height: 16px; font-weight: 600; white-space: nowrap;
+  color: color-mix(in srgb, var(--pk, var(--muted)) 72%, var(--text)); background: color-mix(in srgb, var(--pk, var(--muted)) 15%, transparent); }
+.ptag svg { width: 11px; height: 11px; }
+.pk-easy { --pk: #1baf7a; } .pk-long { --pk: #2a78d6; } .pk-quality { --pk: #eb6834; } .pk-test { --pk: #4a3aa7; }
+.pk-strength { --pk: #e87ba4; } .pk-hike { --pk: #eda100; } .pk-heat_passive { --pk: #e34948; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pk-test { --pk: #9085e9; } }
+:root[data-theme="dark"] .pk-test { --pk: #9085e9; }
+.chip .ptag { margin-left: 2px; }
 .empty .iconbtn { margin-top: 10px; }
 .scrim { display: none; }
 @media (max-width: 1100px) { .crumb .c1, .crumb .c1 + .sep { display: none; } }
@@ -375,7 +387,7 @@ table.z5ev td { white-space: normal; }
     <button class="chip s-only" id="chip-sports" aria-controls="aside"><svg class="i"><use href="#i-sport"/></svg><span class="v" id="sports-txt"></span><span class="caret">▾</span></button>
     <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
     <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
-    <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span class="caret">▾</span></button>
+    <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span id="act-tag" style="display:contents"></span><span class="caret">▾</span></button>
     <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動列表」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
     <span class="w-only pain-wrap" id="pain-wrap" hidden><button class="chip" id="pain-chip" aria-haspopup="dialog" aria-expanded="false" title="這次有沒有痛（傷病紀錄）">疼痛？</button>
       <div class="pain-pop" id="pain-pop" role="dialog" aria-label="疼痛" hidden></div></span>
@@ -504,7 +516,7 @@ async function j(url, retry = 1) {
   return r.json();
 }
 function save() { try { localStorage.setItem("wko5viewer", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
-  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel })); } catch {} }
+  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null })); } catch {} }
 function restore() { try { return JSON.parse(localStorage.getItem("wko5viewer") || "{}"); } catch { return {}; } }
 
 function viewKind(v) {
@@ -563,7 +575,7 @@ async function init() {
   $("end").value = r.end || iso(today);
   $("begin").value = r.begin || iso(new Date(today - 365 * 864e5));
   $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!r.sports || r.sports.includes(s.sport) ? "checked" : ""}>${esc(s.sport)} <span class="meta">${s.count}</span></label>`).join("");
-  S.dash = { ...S.dash, ...(r.dash || {}) }; S.view = r.view || {}; S.workout = r.workout ?? null; S.workoutLabel = r.workoutLabel || null;
+  S.dash = { ...S.dash, ...(r.dash || {}) }; S.view = r.view || {}; S.workout = r.workout ?? null; S.workoutLabel = r.workoutLabel || null; S.workoutPlan = r.workoutPlan || null;
   // deep link from other pages: ?view=<name>&dash=<index or title>
   const qp = new URLSearchParams(location.search), qv = S.views.find((x) => x.name === qp.get("view") && !x.error);
   if (qv) {
@@ -579,7 +591,7 @@ async function init() {
   // deep link from the 課表 page: ?workout=<activity index>&label=<shown name> opens that activity
   const qw = qp.get("workout");
   if (/^\d+$/.test(qw ?? "")) {
-    S.workout = +qw; S.workoutLabel = qp.get("label") || null; r.mode = "workout";
+    S.workout = +qw; S.workoutLabel = qp.get("label") || null; S.workoutPlan = null; r.mode = "workout";
     history.replaceState(null, "", location.pathname);
   }
   $("m-season").onclick = () => setMode("season");
@@ -780,11 +792,17 @@ function filterSummary() {
     isToday && ((+x.dataset.d && +x.dataset.d === days) || (x.dataset.d === "ytd" && b === `${e.slice(0, 4)}-01-01`))));
 }
 
+// an activity's start (already the athlete's local time, naive ISO) -> 26/10/02 07:15
+const actWhen = (s) => String(s || "").slice(2, 16).replaceAll("-", "/").replace("T", " ");
+// the planned session it was matched to (engine/plan_match.py; /workouts "plan"), or ""
+const planTag = (p) => !p ? "" : `<span class="ptag pk-${esc(p.kind)}" title="${esc(`課表：${p.title || p.label}`)}">${window.DI ? DI(p.icon) : ""}${esc(p.label)}</span>`;
 function renderActChip() {
   const a = S.workout == null ? null : (S.acts || []).find((x) => x.index === S.workout);   // excluded rows: index null
   // the picked activity may fall outside the current date filter; keep its last known label
-  if (a) S.workoutLabel = `${a.start.slice(0, 16).replace("T", " ")} · ${a.name || a.sport_type || a.sport} · ${hms(a.duration)}`;
+  if (a) { S.workoutLabel = `${actWhen(a.start)} · ${a.name || a.sport_type || a.sport} · ${hms(a.duration)}`; S.workoutPlan = a.plan || null; }
+  else if (S.workout == null) S.workoutPlan = null;
   $("act-txt").textContent = S.workout == null ? "還沒選" : S.workoutLabel || `#${S.workout}`;
+  $("act-tag").innerHTML = S.workout == null ? "" : planTag(S.workoutPlan);
   if (a?.key) S.workoutKey = [S.workout, a.key];      // the 活動編輯 link: the shown activity's start minute
   const wk = S.workoutKey && S.workoutKey[0] === S.workout ? S.workoutKey[1] : null;
   $("edit-act").href = `/api/v1/wko5/activities/page${wk ? "?key=" + encodeURIComponent(wk) : ""}`;
@@ -855,13 +873,13 @@ async function loadActs() {
   renderActChip();
   // an excluded bad file (engine/bad_activity.py) has no index: shown, not openable
   $("acts").innerHTML = acts.map((a) => a.excluded ? `<div class="act excl" style="opacity:.6;cursor:default">
-    <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="t"><b>${esc(actWhen(a.start))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"}</div>
     <div class="s" style="color:var(--err, #b91c1c)">${esc(a.excluded.label)}
       <button class="iconbtn" data-exkey="${esc(a.excluded.key)}" data-exfile="${esc(a.file)}" data-exact="${a.excluded.auto ? "keep" : "auto"}"
         style="font-size:11.5px;padding:1px 6px;margin-left:4px">${a.excluded.auto ? "這筆是正常的，不要排除" : "取消手動排除"}</button></div></div>`
     : `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
-    <div class="t"><b>${esc(a.start.slice(0, 16).replace("T", " "))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="t"><span class="tl"><b>${esc(actWhen(a.start))}</b>${planTag(a.plan)}</span><span>${esc(a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="TSS 來源">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
   $("acts").querySelectorAll("button[data-exkey]").forEach((b) => b.onclick = async (ev) => {
     ev.stopPropagation(); b.disabled = true;

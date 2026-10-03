@@ -517,6 +517,12 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
     b, e = _range(ds, begin, end)
     sp = _sports(sports)
     tag_rows = AT.load()
+    # the planned session each activity was matched to (engine/plan_match.py): one cached query
+    try:
+        from backend.engine.plan_store import done_by_index
+        plan = done_by_index() if not ds.config.parity else {}
+    except Exception:                       # noqa: BLE001 — the list never breaks on the plan
+        plan = {}
     out = []
     for w in reversed(ds.workouts):
         if not (b <= w.day < e + 1) or (sp is not None and w.sport not in sp):
@@ -531,6 +537,7 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
             "duration": m.get("duration"), "distance": m.get("distance"),
             "climbing": m.get("climbing"), "tss": m.get("tss"), "if": m.get("if"),
             "hrtss": m.get("hrtss"), "np": m.get("np"),
+            "plan": plan.get(w.idx),        # {kind, label, icon, title, day} or None
             # stryd / watch / none (engine/power_source.py); watch power is
             # 「手錶推估功率（未採用）」 unless power.accept_watch_power
             "power_source": ds.power_source(w) if hasattr(ds, "power_source") else None,

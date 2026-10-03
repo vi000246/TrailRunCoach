@@ -152,7 +152,7 @@ def test_unedited_auto_follows_the_regenerated_week_and_says_why():
     new, ch = R.reconcile(stored, PS.gen_weeks({**base, "cur": cur}), base["activities"], base["today"],
                           base["horizon_end"], blocked=blocked)
     assert not [s for s in new if s["state"] == "active" and s["day"] in blocked]
-    c = next(c for c in ch if c["title"] == "長時間輕鬆（山路）")
+    c = next(c for c in ch if c["title"] == "LSD（山路）")
     assert c["action"] == "changed" and c["before"]["day"] == "2026-10-04"
     assert c["reason"] == "在不排課日期內（連假出遊），移到 10/2"
 
@@ -326,7 +326,7 @@ def test_api_preview_saves_nothing_and_put_applies_decisions(monkeypatch):
         ch = pv.json()["changes"]
         conf = next(c for c in ch if c["uid"] == q["uid"])
         assert conf["action"] == "conflict" and conf["conflict"]["label"] == "連假出遊"
-        long_c = next(c for c in ch if c["title"] == "長時間輕鬆（山路）" and c.get("before"))
+        long_c = next(c for c in ch if c["title"] == "LSD（山路）" and c.get("before"))
         assert long_c["before"]["day"] == "2026-10-04" and "在不排課日期內" in long_c["reason"]
         assert e.c.get(f"{API}/blackouts").json()["blackouts"] == []          # nothing saved
         assert any(s["day"] == "2026-10-04" for s in e.c.get(f"{API}/sessions").json()["sessions"])

@@ -141,7 +141,7 @@ def test_day_minutes_two_thirds_pair_cap_and_single_day_clamp():
 
 
 def _wk(long_day="2026-10-03", easy=("2026-09-29", "2026-10-01", "2026-10-04"), quality="2026-09-30"):
-    ss = [{"id": "long", "kind": "long", "title": "長時間輕鬆（山路）", "minutes": 180, "tss": 180.0,
+    ss = [{"id": "long", "kind": "long", "title": "LSD（山路）", "minutes": 180, "tss": 180.0,
            "day": long_day, "done": False, "target": "功率 200 W", "detail": "", "source": ""},
           {"id": "long2", "kind": "long", "title": "B2B 第 2 天", "minutes": 120, "tss": 120.0, "day": None,
            "done": False, "target": "", "detail": "", "source": ""}]

@@ -94,7 +94,7 @@ def test_progression_reaches_the_band_twice_in_weeks_6_to_3():
 def test_decorate_says_the_target_and_the_route(store):
     r = _race(store)
     info = SP.week_context(kind="specific", mode="specific", monday=MON, race=r)
-    ss = [{"id": "long", "kind": "long", "minutes": 170, "title": "長時間輕鬆（山路）", "source": "Koop",
+    ss = [{"id": "long", "kind": "long", "minutes": 170, "title": "LSD（山路）", "source": "Koop",
            "detail": "挑每公里爬升 ≥ 47 m 的路線；全程心率壓在 AeT 以下，爬坡可以走"}]
     SP.decorate(ss, info)
     s = ss[0]
