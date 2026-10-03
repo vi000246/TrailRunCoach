@@ -635,7 +635,7 @@ function sessHtml(s, today) {
 }
 const SCHED = "/api/v1/overview/plan/schedule/page";
 // a done session / an activity outside the plan: open it on the 課表 page (planned vs actual, the activity link)
-document.addEventListener("click", (e) => { const g = e.target.closest?.(".sx[data-go]"); if (g) { e.stopImmediatePropagation(); location.href = g.dataset.go; } }, true);
+document.addEventListener("click", (e) => { const g = e.target.closest?.(".sx[data-go]"); if (g) { e.stopImmediatePropagation(); location.href = window.TRC_STATIC ? TRC_STATIC.href(g.dataset.go) : g.dataset.go; } }, true);
 function dayHtml(iso, ss, extra, today) {
   const past = iso < today, isT = iso === today;
   // 課表外 activities carry their session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …);

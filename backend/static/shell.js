@@ -32,6 +32,9 @@
   // the demo instance hides the owner-only pages and locks what it can't do
   const SESSION = window.TRC_SESSION || { mode: "owner", caps: null, user: null };
   const DEMO = SESSION.mode === "demo";
+  // the static read-only demo (backend/demo/export_static.py): no server; static_shim.js answers
+  // the requests, keeps the schedule's edits in this browser and refuses the other writes
+  const STATIC = DEMO && !!window.TRC_STATIC;
   const CAPS = new Set(SESSION.caps || []);
   const can = (cap) => !SESSION.caps || CAPS.has(cap);
   if (DEMO) {
@@ -143,6 +146,7 @@
       <div class="an-menu" role="menu">${PAGES.filter((p) => p.more).map(item).join("")}</div></details>` +
     `<button type="button" class="an-lang" lang="${other}" data-lang="${other}" title="${T("lang.title")}">${T("lang." + other)}</button>`;
   nav.querySelector(".an-lang").addEventListener("click", (e) => L.setLocale(e.currentTarget.dataset.lang));
+  if (STATIC) nav.querySelector(".an-lang").remove();      // the static demo is exported in one language
   // close 更多 on an outside click / Esc
   const more = nav.querySelector(".an-more");
   document.addEventListener("click", (e) => { if (more.open && !more.contains(e.target)) more.open = false; });
@@ -192,6 +196,7 @@
     const r = await nativeFetch(input, { ...(init || {}), headers, credentials: "same-origin" });
     if (DEMO && (r.status === 403 || r.status === 429 || r.status === 413)) {
       r.clone().json().then((j) => {
+        if (j && j.code === "STATIC_SILENT") return;     // the static demo: a background save, refused quietly
         const d = j && (j.detail || j);
         toast((d && d.message) || T("demo.disabled"));
         if (j && j.code === "CSRF") csrfP = null;
@@ -237,6 +242,21 @@
     };
     renderBanner = () => {
       const href = (id) => (PAGES.find((p) => p.id === id) || {}).href || "#";
+      if (STATIC) {
+        const edited = window.TRC_STATIC.hasEdits();
+        banner.innerHTML = `<b class="an-d-tag">${T("demo.tag")}</b>
+          <span>${T("demo.static_text")}</span>
+          <span class="an-d-try">${T("demo.try")}<a href="${href("schedule")}">${T("demo.try_schedule")}</a>·<a href="${href("racepower")}">${T("demo.try_race")}</a>·<a href="${href("plan")}">${T("demo.try_plan")}</a></span>
+          <span class="an-d-sp"></span>
+          <span class="an-d-left">${edited ? T("demo.static_edits") : T("demo.static_none")}</span>
+          <button type="button" class="an-d-reset" title="${T("demo.static_reset_title")}"${edited ? "" : " disabled"}>${T("demo.reset")}</button>`;
+        banner.querySelector(".an-d-reset").addEventListener("click", () => {
+          if (!confirm(T("demo.reset_confirm"))) return;
+          window.TRC_STATIC.reset();
+          location.reload();
+        });
+        return;
+      }
       banner.innerHTML = `<b class="an-d-tag">${T("demo.tag")}</b>
         <span>${T("demo.text")}</span>
         <span class="an-d-try">${T("demo.try")}<a href="${href("schedule")}">${T("demo.try_schedule")}</a>·<a href="${href("racepower")}">${T("demo.try_race")}</a>·<a href="${href("plan")}">${T("demo.try_plan")}</a></span>
@@ -254,7 +274,8 @@
     renderBanner();
     const mountBanner = () => nav.after(banner);
     if (document.body) mountBanner(); else document.addEventListener("DOMContentLoaded", mountBanner);
-    setInterval(() => { const el = banner.querySelector(".an-d-left"); if (el) el.textContent = left(); }, 60e3);
+    if (STATIC) window.addEventListener("trc-static-overlay", () => renderBanner());
+    else setInterval(() => { const el = banner.querySelector(".an-d-left"); if (el) el.textContent = left(); }, 60e3);
 
     // buttons / inputs marked data-cap="sync" (… push, share, thresholds.write …) are
     // locked when the session lacks the cap: disabled, with the reason on hover
@@ -269,10 +290,14 @@
       ["upload.fit", "input[type=file][accept*='.fit' i]:not([accept*='.gpx' i])"],
       ["ai", "[data-ai]"],
     ];
+    // the static demo: writes the live demo allows but a page without a server can't do
+    // (static_shim.js keeps only the schedule's session edits / rest days in the browser)
+    if (STATIC) CAP_SELECTORS.push(["static.write", window.TRC_STATIC.cfg.locks || ""]);
+    const LOCKED = STATIC ? T("demo.static_locked") : T("demo.locked");
     const lock = (root) => {
       if (!root.querySelectorAll) return;
       for (const [cap, sel] of CAP_SELECTORS) {
-        if (can(cap)) continue;
+        if (can(cap) || !sel) continue;
         for (const el of root.querySelectorAll(sel)) if (!el.dataset.cap) el.dataset.cap = cap;
         if (root.matches && root.matches(sel) && !root.dataset.cap) root.dataset.cap = cap;
       }
@@ -280,10 +305,10 @@
         const need = el.dataset.cap.split(/\s+/).filter(Boolean);
         if (need.every(can) || el.dataset.capLocked) continue;
         el.dataset.capLocked = "1";
-        el.title = T("demo.locked");
+        el.title = LOCKED;
         if ("disabled" in el) el.disabled = true;
         el.setAttribute("aria-disabled", "true");
-        el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(T("demo.locked")); }, true);
+        el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(LOCKED); }, true);
       }
     };
     // no WKO5 comparison content in the demo (owner): the help texts' WKO5 references go

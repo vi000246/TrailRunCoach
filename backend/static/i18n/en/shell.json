@@ -53,5 +53,10 @@
   "demo.reset_confirm": "Drop all your changes in the demo?",
   "demo.cta": "Use your own data?",
   "demo.locked": "Not available in the demo",
-  "demo.disabled": "Not available in the demo"
+  "demo.disabled": "Not available in the demo",
+  "demo.static_text": "Read-only demo: a year of training of a fictional runner. Try editing the schedule; changes stay in this browser only.",
+  "demo.static_edits": "Schedule edited",
+  "demo.static_none": "No changes yet",
+  "demo.static_reset_title": "Drop the schedule changes saved in this browser",
+  "demo.static_locked": "Read-only demo: not available here"
 }
