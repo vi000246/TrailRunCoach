@@ -19,8 +19,8 @@ hrzones / powerzones
     Palladino 10 / 3 zones of % CP). WKO5 iLevels were dropped (owner
     2026-10-02): power zones are Palladino, HR zones Friel.
 hrtrend
-    WKO5 「Heart Rate Variation and Trend」 (WKO5 Workout View → Zone &
-    Variation, docs/wko5-views/workout-view.json): heart rate, its least-
+    WKO5 「Heart Rate Variation and Trend」 (WKO5 workout view → Zone &
+    Variation): heart rate, its least-
     squares trend `slr(heartrate)`, avg ± 1 sample SD (`stddev`, n − 1), and
     from the companion 「Heart Rate Format」 chart the variability class
     (SD / avg < .33 steady, < .66 mixed, else variable) and the trend class

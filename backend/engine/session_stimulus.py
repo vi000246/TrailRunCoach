@@ -8,7 +8,7 @@ Sports Med 43:313, §1 / §3) — estimated without gas analysis:
   power path (where Stryd is trusted: road; trail at −3…8 % grade, van Rassel 2026;
   never on hikes — walking power is not comparable, Uphill Athlete)
     a VO2 bout = 30-s power ≥ 1.03 × CP (gaps < 5 s bridged) whose mean is
-      ≥ 1.06 CP for ≥ 2 min   (your note 如何進入VO2max.md: 106–120 % 2–5 min; 徐國峰 ≥ 2 min)
+      ≥ 1.06 CP for ≥ 2 min   (your note 如何進入VO2max.md: 106–120 % 2–5 min; 台灣教練 ≥ 2 min)
       1.03–1.06 CP for ≥ 5 min (same note 100–105 % 5–8 min; Palladino MAP from 103 %;
                                 the 3 % margin over CP is 推估)
     each bout counts minus the VO2 on-kinetics (Buchheit §3.1.1.2: τ 20–35 s, VO2max within
@@ -71,7 +71,7 @@ SRC = {
     "t_vo2": "Buchheit & Laursen 2013（Sports Med 43:313）：每堂 ≥ 90% VO2max「at least several minutes」，目標約 10 分",
     "z5_min": "推估：等效 T@VO2max ≥ 4 分（「幾分鐘」；5×2 分做完是 4.5 分）",
     "bouts": "VO2 段：Palladino 5 區（≥ 106% CP）撐 ≥ 2 分，或 4 區上段（103–106%）撐 ≥ 5 分。"
-             "教練常見做法：106–120% CP 2–5 分、100–105% 5–8 分（未標出處，推估）；徐國峰：每趟 ≥ 2 分；"
+             "教練常見做法：106–120% CP 2–5 分、100–105% 5–8 分（未標出處，推估）；台灣教練：每趟 ≥ 2 分；"
              "103% 比 CP 高 3% 是推估的緩衝（CP 本身有誤差），也是 Palladino MAP 間歇的下限",
     "lag": "Buchheit §3.1.1.2：攝氧量 1:20–2:20 才到最大；每段扣 60／90／180 秒是推估",
     "hr": "手腕心率只當替代：≥ 93% 最高心率（推估；Swain 1994 換算 90% VO2max ≈ 95% HRmax、Daniels T 上緣 92%），"

@@ -241,7 +241,7 @@ def test_season_drift_charts_use_the_card_definition():
         assert len(refs) == 1 and refs[0]["expression"] == "(,0.05)" and refs[0]["line_style"] == "dash"
         for word in ("標準誤", "SE", "回歸", "信賴", "Pa:HR", "次平均"):
             assert word not in c["description"] and word not in c["title"], word
-        assert "怎麼用" in c["description"] and "Uphill Athlete" in c["description"]
+        assert "看什麼" in c["description"] and "Uphill Athlete" in c["description"]
     for key in (("我的訓練", "耐久度：長時間後段心率飄移"), ("周期化訓練", "耐久度：長時間後段心率飄移")):
         c = charts[key]
         # WKO5's stored value: named only in the description's last 方法 line; plain series names

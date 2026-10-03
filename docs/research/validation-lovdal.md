@@ -29,7 +29,7 @@
 
 - **來源**：Lövdal SS, den Hartigh RJR, Azzopardi G. "Injury Prediction in Competitive Runners With Machine Learning." *Int J Sports Physiol Perform* 2021。doi:10.1123/ijspp.2020-0518。資料集 doi:10.34894/UWU9PV（DataverseNL，第 2 版，2024-06-05）。
 - **授權**：CC0 1.0（DataverseNL API 的 `license` 欄位：`CC0-1.0`）。CC0 不要求署名，但學術規範要求引用，本文照引。
-- **下載**：2026-10-02 用 DataverseNL API（`/api/access/datafile/{id}`）下載四個檔案到 `C:\Users\<user>\Datasets\lovdal\`（repo 外，**沒有 commit**）：`day_approach_maskedID_timeseries.csv`（13.5 MB）、`week_approach_maskedID_timeseries.csv`（15.2 MB）、`README.txt`、`main.ipynb`。
+- **下載**：2026-10-02 用 DataverseNL API（`/api/access/datafile/{id}`）下載四個檔案到 `~\Datasets\lovdal\`（repo 外，**沒有 commit**）：`day_approach_maskedID_timeseries.csv`（13.5 MB）、`week_approach_maskedID_timeseries.csv`（15.2 MB）、`README.txt`、`main.ipynb`。
 - **規模**：74 位跑者；週檔 42,798 列、575 次受傷；日檔 42,766 列、583 次受傷。兩檔共有的 42,680 個 (athlete, date) 受傷標記完全一致；週檔的 W0 總 km 和日檔 7 天加總 100% 相同。
 - **受傷定義**：依論文（例如「影響訓練的健康問題」），細節 **未驗證**（論文需付費，沒有下載）。
 
@@ -249,7 +249,7 @@ ramp 的替代算法夠好；ACWR 和 4 週平均的替代算法只能當方向�
 ## 7. 重跑
 
 ```
-python -m backend.scripts.validation.lovdal_guardrails --data C:\Users\<user>\Datasets\lovdal --json out.json
+python -m backend.scripts.validation.lovdal_guardrails --data ~\Datasets\lovdal --json out.json
 ```
 
 單一行程、只用 numpy。資料不在 repo 裡；要先從 doi:10.34894/UWU9PV 下載。

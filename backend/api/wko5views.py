@@ -6,7 +6,9 @@ WKO5 itself.
 Env:
     WKO5_ATHLETE_DIR  folder containing <Name>.wko5athlete and year/*.wko4
                       (unset: backend/settings/paths.py looks under ~/WKO5)
-    WKO5_VIEWS_DIR    folder searched (recursively) for *.wko5chart
+    WKO5_VIEWS_DIR    folder searched (recursively) for your own exported
+                      *.wko5chart views (else the charts.wko5_views_dir
+                      setting; unset: no imported WKO5 views)
 """
 from __future__ import annotations
 
@@ -52,7 +54,22 @@ from backend.settings.paths import athlete_dir
 
 ROOT = Path(__file__).resolve().parents[2]
 ATHLETE_DIR = athlete_dir()     # WKO5_ATHLETE_DIR, else found under ~/WKO5 (settings/paths.py)
-VIEWS_DIR = Path(os.getenv("WKO5_VIEWS_DIR", str(ROOT)))
+VIEWS_SETTING = "charts.wko5_views_dir"
+
+
+def views_dir() -> Optional[Path]:
+    """The folder with the user's own exported WKO5 views (*.wko5chart):
+    WKO5_VIEWS_DIR, else the charts.wko5_views_dir setting, else None (no
+    imported WKO5 views; the bundled views/*.json still work). Never the repo:
+    WKO5 chart packs are the user's own files, not shipped with the app."""
+    v = os.getenv("WKO5_VIEWS_DIR")
+    if not v:
+        try:
+            from backend.engine.wko5expr.datasource import read_setting
+            v = read_setting(VIEWS_SETTING, None)
+        except Exception:               # noqa: BLE001 — no app DB: no imported views
+            v = None
+    return Path(v).expanduser() if v else None
 
 router = APIRouter(prefix="/api/v1/wko5", tags=["wko5-views"])
 
@@ -197,11 +214,20 @@ async def dataset_status():
     return {**cur, "sources": buildstate.all_states()}
 
 
-@lru_cache(maxsize=1)
 def _wko5_views_raw() -> dict[str, dict]:
-    """Views imported from WKO5 `.wko5chart` binaries, exactly as WKO5 has them."""
+    """Views imported from WKO5 `.wko5chart` binaries, exactly as WKO5 has them
+    (from views_dir(); none when no folder is configured)."""
+    d = views_dir()
+    return _wko5_views_in(str(d)) if d is not None else {}
+
+
+@lru_cache(maxsize=2)
+def _wko5_views_in(folder: str) -> dict[str, dict]:
     out = {}
-    for p in sorted(VIEWS_DIR.rglob("*.wko5chart")):
+    root = Path(folder)
+    if not root.is_dir():
+        return out
+    for p in sorted(root.rglob("*.wko5chart")):
         if ".venv" in p.parts or "node_modules" in p.parts:
             continue
         v = ensure_ids(read_view(p))     # chart ids from the titles: wko5_fixes.json matches on them
@@ -211,7 +237,7 @@ def _wko5_views_raw() -> dict[str, dict]:
 
 
 @lru_cache(maxsize=4)
-def _wko5_views_fixed(fixes_mtime: float) -> dict[str, dict]:
+def _wko5_views_fixed(fixes_mtime: float, folder: Optional[str] = None) -> dict[str, dict]:
     """WKO5 views with views/wko5_fixes.json applied (keyed on the file's
     mtime, so editing the fixes and reloading picks them up)."""
     try:
@@ -231,7 +257,8 @@ def _wko5_views(parity: bool = True) -> dict[str, dict]:
         mtime = FIXES_PATH.stat().st_mtime
     except OSError:
         return _wko5_views_raw()
-    return _wko5_views_fixed(mtime)
+    d = views_dir()
+    return _wko5_views_fixed(mtime, str(d) if d else None)
 
 
 def _views(parity: Optional[bool] = None) -> dict[str, dict]:
@@ -293,7 +320,9 @@ def list_views():
 def custom_view_dirs():
     """Where to put your own view JSON files."""
     return {"dirs": [str(p) for p in view_dirs()],
-            "repo": str(REPO_VIEWS), "user": str(USER_VIEWS)}
+            "repo": str(REPO_VIEWS), "user": str(USER_VIEWS),
+            # your exported WKO5 views (*.wko5chart): WKO5_VIEWS_DIR / charts.wko5_views_dir
+            "wko5": str(views_dir()) if views_dir() else None}
 
 
 def _sports(sports: Optional[str]) -> Optional[set[str]]:

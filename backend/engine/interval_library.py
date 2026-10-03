@@ -14,10 +14,10 @@ cool-down — so the first exposure can be compared with the literature; the
 shorter equivalents are only the fallback for a tight cap (the user,
 2026-10-01). Rotation picks among equivalent variants of standard length.
 
-Equivalence (§C2, all must hold; the numbers are 推估 except 徐國峰's):
+Equivalence (§C2, all must hold; the numbers are 推估 except 台灣教練's):
   1. same class (Z3sub / Z3near / Z5 — by the band's middle)
   2. time in zone (TIZ, Σ work) within ±15 % of the rung's canonical
-  3. rep length: Z5 ≥ 2 min (徐國峰); Z3 ≥ 3 min (Haugen 2022's lower end) or one continuous block
+  3. rep length: Z5 ≥ 2 min (台灣教練); Z3 ≥ 3 min (Haugen 2022's lower end) or one continuous block
   4. work:rest: Z5 rest ≤ the shortest rep and ≤ 3 min (Buchheit: work:rest > 1; Palladino 1:1–2:1);
      Z3 work ÷ rest 3–6 (Palladino 3:1–4:1, Haugen 1–2′ rests) or continuous
   5. Z5 only: W′ per rep (mean) 0.7–1.5 × the canonical's (W′ = (P − CP)·t, CP-relative)
@@ -108,7 +108,7 @@ LIBRARY: dict[str, tuple[Variant, ...]] = {
     # ---- Zone 3 (Z3sub 90–95 % CP) -------------------------------------------
     "z3a": (
         _v("t1a", "z3a", "Z3sub", 3, 360, 90, "jog", 0.90, 0.95, canonical=True,
-           src=f"{HAUGEN}；{PALLADINO_NT}；徐國峰（教練）：先練 3 區"),
+           src=f"{HAUGEN}；{PALLADINO_NT}；台灣教練：先練 3 區"),
         _v("t1b", "z3a", "Z3sub", 6, 180, 60, "jog", 0.92, 0.97, src=f"{HAUGEN}；短趟強度略高：推估"),
         _v("t1c", "z3a", "Z3sub", 3, 360, 120, "jog_down", 0.90, 0.95, "hill", grade="4–6%",
            src="Haugen 2022（坡 5–10%）；Koop／CTS 上坡"),
@@ -143,7 +143,7 @@ LIBRARY: dict[str, tuple[Variant, ...]] = {
     # ---- Zone 5 --------------------------------------------------------------------
     "z5a": (
         _v("v1a", "z5a", "Z5", 5, 120, 120, "walk", 1.06, 1.12, canonical=True,
-           src="徐國峰（教練）：5 區每趟 ≥ 2 分；Buchheit & Laursen 2013：休 < 2–3 分用被動恢復、約 10 分 T@VO2max"),
+           src="台灣教練：5 區每趟 ≥ 2 分；Buchheit & Laursen 2013：休 < 2–3 分用被動恢復、約 10 分 T@VO2max"),
         _v("v1b", "z5a", "Z5", 4, 150, 120, "walk", 1.05, 1.10, src="Palladino MAP 每趟 2.5–3 分",
            src_kind="coach"),
         _v("v1c", "z5a", "Z5", 5, 120, 120, "jog_down", 1.06, 1.12, "hill", grade="6–10%",
@@ -180,7 +180,7 @@ LIBRARY: dict[str, tuple[Variant, ...]] = {
 # 非同等 (§C4): selectable by hand, counts as a Zone 5 session, never progress
 NON_EQUIV = (
     _v("x3015", "x", "Z5", 13, 30, 15, "jog", 1.10, 1.20, sets=2, set_rest_s=180, listed_equiv=False,
-       src="Rønnestad 2015／2020 30/15（騎車）；每趟 < 2 分不符合徐國峰"),
+       src="Rønnestad 2015／2020 30/15（騎車）；每趟 < 2 分不符合 5 區每趟 ≥ 2 分（台灣教練）"),
 )
 RUNG_NAME = {"z3a": "T1", "z3b": "T2", "z3c": "T3", "tp": "T+", "z5a": "V1", "z5b": "V2", "z5c": "V3", "z5d": "V4"}
 RUNG_ORDER = ("z3a", "z3b", "z3c", "z5a", "z5b", "z5c", "z5d")
@@ -297,7 +297,7 @@ def equivalent(v: Variant, ref: Optional[Variant] = None) -> tuple[bool, list[st
         why.append(f"目標區時間 {t / 60:.0f} 分，和 {tr / 60:.0f} 分差 > 15%")
     if is_z5(v):
         if min(v.works) < Z5_MIN_REP_S:
-            why.append("5 區每趟 < 2 分（徐國峰）")
+            why.append("5 區每趟 < 2 分（台灣教練）")
         if v.rest_s > min(v.works) or v.rest_s > Z5_MAX_REST_S:
             why.append("組休比每趟長或 > 3 分")
         wr, wref = wprime_per_rep(v), wprime_per_rep(ref)

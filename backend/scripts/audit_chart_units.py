@@ -66,6 +66,23 @@ LEFT_AS_IS = [
 ]
 
 
+
+def _fix_hits(x: dict, f: dict) -> bool:
+    """Does fix `x` (wko5_fixes.json; `view` optional = every imported view)
+    target the chart of finding `f`?"""
+    return (not x.get("view") or x["view"] == f["view"]) and x.get("chart") == f["chart"]
+
+
+class _Touched:
+    """(view, chart title) pairs the fixes touch; a fix without `view` touches every view."""
+
+    def __init__(self, fixes):
+        self.fixes = fixes
+
+    def __contains__(self, key) -> bool:
+        view, chart = key
+        return any(_fix_hits(x, {"view": view, "chart": chart}) for x in self.fixes)
+
 def left_reason(f: dict):
     for check, chart_re, series_re, why in LEFT_AS_IS:
         if f["check"] == check and re.search(chart_re, f["chart"] or "") and re.search(series_re, f["series"] or ""):
@@ -296,7 +313,7 @@ def fix_status(f: dict, fixes: list[dict], fixed_left: set) -> str:
     if why and not why.startswith("fixed"):
         return "left as is — " + why
     for x in fixes:
-        if x["view"] != f["view"] or x["chart"] != f["chart"]:
+        if not _fix_hits(x, f):
             continue
         if x.get("dashboard") and x["dashboard"] != f.get("dashboard"):
             continue
@@ -304,9 +321,9 @@ def fix_status(f: dict, fixes: list[dict], fixed_left: set) -> str:
             return "fixed: " + x.get("note", "")
         if x.get("series") == f["series"]:
             return "fixed: " + x.get("note", "")
-    touched = any(x["view"] == f["view"] and x["chart"] == f["chart"] for x in fixes)
+    touched = any(_fix_hits(x, f) for x in fixes)
     if touched and k not in fixed_left and f["check"] not in ("imperial", "pace-base", "error"):
-        notes = sorted({x.get("note", "") for x in fixes if x["view"] == f["view"] and x["chart"] == f["chart"]})
+        notes = sorted({x.get("note", "") for x in fixes if _fix_hits(x, f)})
         return "fixed: " + "；".join(notes[:2])
     if f["check"] == "imperial":
         return "fixed automatically: english() → metric(), imperial id → metric id (non-parity)"
@@ -422,7 +439,7 @@ def main(argv=None):
     rows, findings, n_charts = audit(raw, ds, begin, end, workouts, a.limit, a.view, log)
     findings = dedupe(findings)
     fixed_views = apply_fixes(raw, fixes)
-    touched = {(f["view"], f["chart"]) for f in fixes}
+    touched = _Touched(list(fixes))
     # re-audit only the charts the fixes touch, merge with untouched findings
     sub = {}
     for vname, v in fixed_views.items():

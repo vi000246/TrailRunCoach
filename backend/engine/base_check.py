@@ -1,26 +1,26 @@
 """
-有氧基礎確認與 Zone 5 的生命週期 — 徐國峰's aerobic-base checks
-(docs/research/xu-guofeng-reply.md, aerobic-base-readiness.md §1.1, §4).
+有氧基礎確認與 Zone 5 的生命週期 — the aerobic-base checks
+(aerobic-base-readiness.md §1.1, §4).
 
-Sources: 徐國峰（教練）and the user's notes on 徐國峰's book
-(跑者都該懂的跑步數據 L58–L77). Our proxies / interpretations are 推估.
+Sources: 徐國峰's public 90-minute test (blog 2016-12,
+http://rocky549.blogspot.com/2016/12/rq.html; 《跑者都該懂的跑步數據》); the
+Zone 3-first rule, the Zone 5 limits and the 25 °C line are 台灣教練. Our
+proxies / interpretations are 推估.
 
 xu_run(ds, w)
     徐國峰's 90-min test on one run: ≥ 90 min, flat, every stop ≤ 30 s, HR
     in Z1, drift = (HR@90′ − HR@10′) / HR@10′ < 10 % (his own definition —
     minute 10 vs minute 90, ±1 min means; NOT drift_of's half-vs-half
-    Pa:HR). The test "就是你週末那一次 LSD": any qualifying run counts,
-    scheduled or not. His ≤ 25 °C is advice in the session text, not a
+    Pa:HR). The test can be the weekend long run: any qualifying run counts,
+    scheduled or not. The ≤ 25 °C condition (台灣教練) is advice in the session text, not a
     refusal (heat bands): the run carries its temperature band; a pass in
     heat counts (heat only inflates the drift — conservative), a fail in
     heat is marked 「熱環境，結果可能偏高」.
 z5_status(ds, today, …)
-    Zone 5 opens only once the base is confirmed (徐國峰: Zone 3 first, then
+    Zone 5 opens only once the base is confirmed (台灣教練: Zone 3 first, then
     Zone 5) by ONE of three tests, done and passed (2026-10-01 使用者決定):
     the 90-min test, a measured AeT with LTHR ÷ AeT − 1 ≤ 10 % (UA gap), or
-    ≥ 60 min near a measured AeT with drift < 5 % (Friel). 徐國峰's 三訊號
-    path was dropped (aerobic-base-readiness.md): if you run ≥ 75 min anyway,
-    just run the 90-min test. Once confirmed it stays open with no expiry
+    ≥ 60 min near a measured AeT with drift < 5 % (Friel). Once confirmed it stays open with no expiry
     while (docs/research/detraining.md §6.1) weekly Z1 time is not < 2/3 of
     the level at confirmation for 3 weeks in a row (Hickson 1982; 3 weeks
     推估; recovery / taper weeks don't count). A break ≥ 6 days without
@@ -50,20 +50,20 @@ from typing import Optional
 
 import numpy as np
 
-# ---- 徐國峰 (notes L58–L67; 私訊 2026-10-01) -----------------------------------
+# ---- the 90-minute test (徐國峰 blog 2016-12; the 25 °C line: 台灣教練) ----------
 XU_MIN_S = 90 * 60
 XU_A_S, XU_B_S = 600.0, 5400.0       # HR at minute 10 (A) and minute 90 (B)
 XU_GOOD = 0.10                       # < 10 % = 有氧基礎夠（5 % 內國家級）
 XU_STOP_S = 30.0                     # 補給每次停不超過 30 秒
 XU_HEAT_C = 25.0                     # 當天氣溫 25 °C 以下（課表文字的建議；不再拒絕，heat bands）
 XU_FLAT_M_PER_KM = 20.0              # 「全程平坦」 = drift_of's flat rule (推估 mapping)
-SRC_XU = "徐國峰（教練）；徐國峰《跑者都該懂的跑步數據》"
-SRC_Z3_FIRST = "徐國峰（教練）：入門轉進階先練 3 區，3 區跑順、恢復跟得上再加 5 區"
-SRC_Z5_LIMIT = "徐國峰（教練）：5 區每趟最短 2 分鐘；一週最多兩次、兩次之間至少隔兩天"
+SRC_XU = "徐國峰部落格（2016-12，有氧基礎檢測）；徐國峰《跑者都該懂的跑步數據》"
+SRC_Z3_FIRST = "台灣教練：入門轉進階先練 3 區，3 區穩定、恢復正常後再加 5 區"
+SRC_Z5_LIMIT = "台灣教練：5 區每趟至少 2 分鐘；一週最多 2 次、間隔至少 2 天"
 
 # ---- weekly Z1 volume (the chart's reference band; the pause rule's measure) -----
 RQ_E_PER_MIN = 0.2                   # Daniels E intensity points / min (RQ 訓練指數; 徐國峰 blog, verified)
-XU_WEEK_POINTS = 30.0                # 徐國峰：210 分鐘左右（訓練指數約 30～42 點）— the lower end
+XU_WEEK_POINTS = 30.0                # 台灣教練：一週約 150–210 分鐘 1 區（訓練指數 30–42 點）— the lower end
 XU_WEEK_POINTS_HI = 42.0
 IF_E = 0.70                          # 推估 (未驗證): an E run's intensity factor for the TSS conversion
 
@@ -521,7 +521,7 @@ def z5_status(ds, today: dt.date, mode: str = "auto", method_state: Optional[str
     n = sum(1 for d in (quality_dates or []) if d >= qf)
     need = int(brk.get("z3_before_z5") or 1)
     if n < need:
-        why = f"恢復期後先完成 {need} 堂 3 區（已 {n} 堂；徐國峰：先 3 區後 5 區，堂數推估）"
+        why = f"恢復期後先完成 {need} 堂 3 區（已 {n} 堂；台灣教練：先 3 區後 5 區，堂數推估）"
         return {**st, "state": "paused", "label": STATE_LABEL["paused"], "open": False, "reason": why,
                 "pause": {"kind": "reentry_z3", "done": n, "need": need},
                 "text": f"Zone 5：暫停（{why}）"}

@@ -145,7 +145,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
   class also carries `capacity`: whether the run is a capacity sample (see Back-tests).
 - **Thresholds on past dates**: `planning.Plan.threshold_on` (`backend/engine/planning.py:205`)
   returns None before a row's date (fixed 2026-10-01). Before, the earliest row applied
-  backwards, so the 2026-09-30 row (CP 204, LTHR 155) leaked into every earlier date.
+  backwards, so the 2026-09-30 row (CP 220, LTHR 160) leaked into every earlier date.
   `Dataset.setting` / `cp` / `aethr` then fall back to WKO5's dated settings (runthr 160, the
   current mFTP snapshot 175.6 W, 0.89 × LTHR). Today's values are unchanged.
 - **Training conditions**: median elevation of the 90-day power runs + Open-Meteo archive
@@ -659,7 +659,7 @@ fatigue. With an invalid fit the combined rule never applies, so the combined co
 power envelope. On the two cases that matter, HR is worse: the half marathon is −17 % against
 −7.6 %, and the 12′ bout −18 % against −3.5 %. HR stays 推估 and is not used for predictions.
 
-Training intensity (road runs, 90 days): against the CP 204 W, the median is 76 %, 90th
+Training intensity (road runs, 90 days): against the CP 220 W, the median is 76 %, 90th
 percentile 81 %. 86 % of the moving time is < 80 % CP, 14 % is at 80–95 %, none ≥ 95 %. That
 supports the user's suspicion: there are few hard efforts, and the envelope cannot show the
 capacity the 12′ test did. Against the invalid HR P_LTHR it reads 95 %, which is meaningless.
@@ -668,7 +668,7 @@ Lower bound: still 1 of 175 runs. The 2025-12-21 half (141 min at 184 W) is abov
 P_sus of 170 W (CP 189, raised to its bound). Nothing is validated. The terrain back-test is
 unchanged within 0.1 point (路跑 139 runs 3.7 %, 越野 36 runs 10.3 %, downhill bias +13.2 %).
 
-**Before (2026-09-30)**, after the plan CP 204 W test row was applied: 177 cases. Runs by class:
+**Before (2026-09-30)**, after the plan CP 220 W test row was applied: 177 cases. Runs by class:
 easy 20, steady 142, race-like 14. Plus one CP-test bout. Hikes: 0 solo.
 
 比賽預測回測（能力）:
@@ -721,7 +721,7 @@ Findings:
 Capacity before / after on the same data:
 - 21.1 km road: before (activities CP 174, WKO5 TTE, k −0.10, flat RE 0.908) 3:00:00 at 146 W.
   After: PD mFTP 191.5 raised to the bound (204.8 at k −0.07, 214.3 at the table k −0.10), TTE
-  1884, plan CP 204 + W′ 13.1 kJ, RE 0.871. That gives 2:29:48 at 183 W (k −0.10) or 2:29:36 at
+  1884, plan CP 220 + W′ 13.1 kJ, RE 0.871. That gives 2:29:48 at 183 W (k −0.10) or 2:29:36 at
   184 W (k −0.07).
 - The 2025-12-21 run (2.36 h, 184.2 W moving): f 1.23 → 1.00.
 - The bound includes each run's moving-time average (altitude-normalised) beside the elapsed
@@ -897,7 +897,7 @@ the version-2 store.
     on trail needs a walking-aware demand, not the road power curve;
   - the HR-based capacity is not identifiable on this athlete's data (R² 0.01). It needs runs
     at clearly different powers, e.g. a progressive run or a submaximal step test;
-  - an LTHR of 152–156 looks low next to the 12′ test (HR 155 → 171), so many daily runs read
+  - an LTHR of 152–156 looks low next to the 12′ test (HR 160 → 176), so many daily runs read
     HR-high and are demoted only by the power check;
   - `Dataset.cp` before the first plan CP row is WKO5's current mFTP snapshot (WKO5 has no
     dated mFTP). The back-test does not use it (it uses `cp_as_of`), but `workout_review`'s
