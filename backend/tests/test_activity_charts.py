@@ -140,22 +140,31 @@ def test_friel_zones_count_seconds_at_the_lthr_boundaries():
     # Seiler 3 zones on AeT (0.89 × LTHR without a plan) / LTHR
     s3 = _model(res, "seiler3")
     assert s3["available"] and [r["seconds"] for r in s3["rows"]] == [1200.0, 1200.0, 600.0]
-    # RQ needs a resting HR the app doesn't have
+    # COROS / RQ HRR needs max and resting HR: one run gives no max-HR estimate, no setting, no watch
     rq = _model(res, "rqhrr")
-    assert not rq["available"] and "靜息心率" in rq["reason"]
+    assert not rq["available"] and rq["reason"] == "沒有最大心率，到設定填"
     assert res["default"] == "frielhr" and res["empty"] is None
 
 
-def test_no_hrmax_model_even_with_an_hrmax_setting():
-    # %HRmax zones were dropped (zones-and-thresholds.md §2.1: LT at 60–90 % HRmax, Iannetta 2020);
-    # a remembered 「hrmax5」 is not in the list, so the viewer falls back to res["default"]
+def test_coros_models_are_choices_and_friel_stays_the_default():
+    # %HRmax zones were dropped 2026-10-01 (Iannetta 2020) and re-added 2026-10-03 as the COROS
+    # model, a choice only; a remembered 「hrmax5」 is not in the list (viewer falls back to default)
     hr = np.repeat([110.0, 125.0, 160.0, 185.0], 300)
     t = np.arange(len(hr), dtype=float)
     ds = _ds(_run(t, hr), runmhr=190.0)
     res = A.zone_times(ds, ds.workouts[0], "hr")
-    assert [m["id"] for m in res["models"]] == ["frielhr", "classichr", "seiler3", "rqhrr"]
+    assert [m["id"] for m in res["models"]] == ["frielhr", "classichr", "seiler3", "coroslthr", "rqhrr",
+                                                "coroshrmax"]
     assert res["default"] == "frielhr"
     assert not hasattr(A.Z, "HRMAX5_ZONES")
+    # one run: no max-HR estimate (≥ 3 runs), no account, no setting → the reason says where to fill it
+    mx = _model(res, "coroshrmax")
+    assert not mx["available"] and "最大心率" in mx["reason"] and "設定" in mx["reason"]
+    assert "Iannetta" in mx["source"]
+    cl = _model(res, "coroslthr")          # LTHR 160: < 128 / 128–144 / 144–152 / 152–163 / 163–170 / ≥ 170
+    assert cl["available"] and [(r["from"], r["to"]) for r in cl["rows"]] == [
+        (0, 128), (128, 144), (144, 152), (152, 163), (163, 170), (170, None)]
+    assert [r["seconds"] for r in cl["rows"]] == [600.0, 0.0, 0.0, 300.0, 0.0, 300.0]
 
 
 def test_power_zone_models_are_palladino_only():

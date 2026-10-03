@@ -83,6 +83,13 @@ DEFAULTS: dict[str, Any] = {
     # power; backend/engine/bad_activity.py) out of every model; the per-activity
     # overrides (keep / exclude) apply either way
     "activities.exclude_bad": True,
+    # 心率 (engine/hr_profile.py): the COROS account's HR settings, written by the COROS
+    # login / sync — {max_hr, rest_hr, lthr, ratios: {lthr, hrr, hrmax}, hr_zone_type, at};
+    # None = never read. Max / rest HR the user enters are dated plan thresholds (mhr / rhr).
+    "athlete.coros_profile": None,
+    # 課表心率區間 (engine/hr_profile.py): lthr (COROS % LTHR, default) | hrr | hrmax — the
+    # 課表's HR targets only; the HR-zone charts keep their own selector
+    "plan.hr_zone_model": "lthr",
     # workout route map (viewer 單次活動): default basemap id and overlay ids;
     # the map can switch them temporarily (remembered per browser)
     "charts.map.basemap": None,               # None = by 地區 (engine/region.py): tw 魯地圖, intl OSM
@@ -324,6 +331,10 @@ def validate(key: str, value: Any) -> None:
         if not (isinstance(value, list) and len(value) <= INJ.CUSTOM_MAX
                 and all(INJ.clean_custom(v) == v for v in value) and len(set(value)) == len(value)):
             raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
+    if key == "athlete.coros_profile" and value is not None and not isinstance(value, dict):
+        raise ValueError("athlete.coros_profile must be an object or null")
+    if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
+        raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.auto.state must be an object or null")
     if key == "backup.dir" and value is not None and not (
