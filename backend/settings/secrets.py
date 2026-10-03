@@ -26,7 +26,8 @@ from cryptography.fernet import Fernet, InvalidToken
 log = logging.getLogger(__name__)
 
 PREFIX = "enc:v1:"
-KEY_FILE = Path.home() / ".wko5coach" / "secret.key"   # server key (owner home), never a tenant folder
+from backend import tenancy as _tenancy
+KEY_FILE = _tenancy.home_root() / "secret.key"   # the server key: $WKO5COACH_HOME, never a sandbox folder
 
 
 class SecretError(RuntimeError):
@@ -40,7 +41,7 @@ class SecretKeyMissing(SecretError):
 
 KEY_DOC = "docs/secrets-and-keys.md"
 # where sealed values can live (paths / DB are patched in tests)
-SEALED_FILES: list[Path] = [Path(__file__).resolve().parent / "tp_client.enc"]
+SEALED_FILES: list[Path] = []
 SEALED_DB_COLUMNS = (("sync_state", "tp_access_token"), ("sync_state", "tp_refresh_token"),
                      ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"))
 
@@ -97,7 +98,7 @@ def _fernet() -> Fernet:
         elif ciphertext_exists():
             raise SecretKeyMissing(
                 f"SECRET_KEY_MISSING: encrypted data exists but no key was found at {KEY_FILE} "
-                f"and WKO5COACH_SECRET_KEY is not set. Deploy the key (chezmoi apply) or set "
+                f"and WKO5COACH_SECRET_KEY is not set. Restore the key file or set "
                 f"WKO5COACH_SECRET_KEY — see {KEY_DOC}. A new key will not be generated.")
         else:
             key = Fernet.generate_key().decode()

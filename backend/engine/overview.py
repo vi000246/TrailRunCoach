@@ -563,7 +563,7 @@ def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rat
                            + "，最後 10 分輕鬆收操",
                     source=f"{SRC_PFITZ}（馬拉松配速長跑）；{SRC_DANIELS}（M 配速）",
                     tss=easy / 60.0 * road_rate + mp / 60.0 * max(road_rate, MP_TSS_PER_HOUR))
-    return dict(id="long", kind="long", title="長時間輕鬆（路跑）", minutes=m, terrain="road",
+    return dict(id="long", kind="long", title="LSD（路跑）", minutes=m, terrain="road",
                 detail=f"平路或緩坡；全程心率壓在 AeT{aet_txt} 以下",
                 source=SRC_PFITZ if kind == "specific" else SRC_UA, tss=long_min / 60.0 * road_rate)
 
@@ -843,7 +843,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if road:
             add(**road_long_session(long_min, kind, aet, tph["road"], mp_goal), target=tgt.get("long", ""))
         else:
-            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain_goal else ""),
+            add(id="long", kind="long", title="LSD" + ("（山路）" if mountain_goal else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
                 detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
                 source=SRC_KOOP if kind == "specific" else SRC_UA,
@@ -859,7 +859,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 add(**f)
         if allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
                 and (gate.get("z5") or {}).get("state") != "open":
-            # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (徐國峰: Zone 3
+            # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (台灣教練: Zone 3
             # first, Zone 5 only on a confirmed base) — the Zone 3 ladder, uphill versions allowed
             dz = QG.week_decision({**gate, "z5": {**(gate.get("z5") or {}), "open": False}}, "base", "base", monday)
             if dz["allow"] and dz["spec"] is not None:
@@ -1004,7 +1004,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
 
     long_done = next((dt.date.fromisoformat(s.day) for s in sessions if s.kind == "long" and s.done and s.day), None)
     # hard days already done this week (Z5 / Z3 / 高強度長跑 / CP test, planned or not): the
-    # remaining interval keeps 48 h from them (徐國峰: ≥ 2 days apart; owner 2026-10-02)
+    # remaining interval keeps 48 h from them (台灣教練: ≥ 2 days apart)
     from backend.engine import workout_review as _WR
     hard_done = sorted({wdate(w) for w in week_ws if category(w) in ("road", "trail", "hike")
                         and session_of(ds, w).get("type") in _WR.HARD_TYPES})

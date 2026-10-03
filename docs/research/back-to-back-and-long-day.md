@@ -65,7 +65,7 @@
 | **Friel**（部落格〈The Aerobic Base Ride〉，2009-11-30／12-01） | 「a long, steady workout with heart rate mostly in zone 2」；舉一位選手當「excellent example」，他是「close to 60% in zone 1, 35% in zone 2 and 5% in zone 3」 | 沒有門檻；搜尋摘要寫「at least half the time in z2」，原文找不到這句（**未驗證**） | 教練經驗 |
 | **Koop**（CTS〈Should You Run or Hike That Hill?〉） | 「if you are running on any normal climb (4 to 15 percent grade) around 18- to 19-min/mile or slower, it's in your best interest to drop to a power-hike」 | 沒有時間比例；只講什麼時候改走 | 教練經驗 |
 | **Daniels**（你的筆記） | L 長跑用 E 配速；長度 ≤ 週跑量 25 % 或 150 分鐘（`300 Sport/60 🏃 有氧訓練/丹尼爾的跑步方程式筆記 還有課表.md:10–12`）；「跑步動作開始變形或不受控制，可以直接刪減跑量」（`300 Sport/70 ⏳ 周期化訓練/越野跑周期化訓練(晏慶、K天王、丹尼爾).md:80–81`） | 沒有；用配速和長度管 | 教練經驗 |
-| **徐國峰**（你的筆記） | 「你可以『舒服地』連續跑 90 分鐘的『心率』1 區……近期的長跑數據裡，後段心率沒有明顯往上飄，配速也沒有掉」（`300 Sport/60 🏃 有氧訓練/要怎麼判斷有氧基礎足夠才能練間歇.md:22–24`）；「E 配速 90 分鐘的心率飄移 %……在 10 % 以下」（`300 Sport/70 ⏳ 周期化訓練/400 爆發力、敏捷性、專項耐力周期.md:5`） | 沒有時間比例；判準是**飄移 < 10 %** | 徐國峰 |
+| **徐國峰** | 90 分鐘 1 區有氧基礎檢測（部落格 2016-12，http://rocky549.blogspot.com/2016/12/rq.html）；「E 配速 90 分鐘的心率飄移 %……在 10 % 以下」（`300 Sport/70 ⏳ 周期化訓練/400 爆發力、敏捷性、專項耐力周期.md:5`） | 沒有時間比例；判準是**飄移 < 10 %** | 徐國峰 |
 | **Gordo Byrn**（Substack，2023-12-07） | 「be willing to PowerWalk to keep stay the HR cap」 | 沒有。**注意**：搜尋摘要把這句歸給 UA，其實是 Byrn 寫的；摘要裡「走路還進 3 區就縮短，算成 Tempo 課」那句，原文沒有核對到（**未驗證**） | 教練經驗 |
 
 另外查了 Europe PMC，關鍵字是 session goal、time-in-zone，以及長跑在 LT1／VT1 以下的時間。**沒有找到**用「一堂長跑在 VT1 以下的時間比例」來判斷達標的研究。
@@ -363,9 +363,9 @@ b2b_due =
 - Gordo Byrn — Aerobic Efficiency Workouts（2023-12-07）：https://feelthebyrn.substack.com/p/aerobic-efficiency-workouts
 - David & Megan Roche — Back-to-Back Long Runs and Workouts（Trail Runner，付費牆，**未驗證**）：https://run.outsideonline.com/training/workouts/back-back-long-runs-workouts-next-level-training-done-right/
 
-### 你的筆記（notes `300 Sport`）
+### 你的筆記（筆記）
 
-- `60 🏃 有氧訓練/要怎麼判斷有氧基礎足夠才能練間歇.md:22–24`（徐國峰：90 分鐘 1 區、後段不飄）
+- 徐國峰部落格 2016-12 http://rocky549.blogspot.com/2016/12/rq.html（90 分鐘 1 區有氧基礎檢測）
 - `70 ⏳ 周期化訓練/400 爆發力、敏捷性、專項耐力周期.md:5`（徐國峰：E 配速 90 分鐘飄移 < 10 %）
 - `60 🏃 有氧訓練/丹尼爾的跑步方程式筆記 還有課表.md:10–12`（Daniels：L ≤ 25 % 或 150 分鐘）
 - `70 ⏳ 周期化訓練/越野跑周期化訓練(晏慶、K天王、丹尼爾).md:17–18, 21, 40–43, 80–81`（江晏慶：基礎後期 B2B、恢復 1.5 週、巔峰期抓七成；Daniels：動作變形就刪減）

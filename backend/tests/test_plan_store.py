@@ -43,7 +43,7 @@ def cur_plan(today="2026-09-30", sessions=None, mode="base", hours=5.0):
             g("quality", "quality", "閾值 3×10 分", 60, "2026-10-01", detail="休 2–3 分鐘；暖身 15 分、緩和 10 分"),
             g("strength1", "strength", "肌力（下肢單腳＋核心）", 35, "2026-10-02"),
             g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
-            g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04"),
+            g("long", "long", "LSD（山路）", 120, "2026-10-04"),
         ]
     return {"week": {"start": "2026-09-28", "end": "2026-10-04", "today": today, "days_left": 5},
             "phase": "base", "mode": mode, "target": {"hours": hours, "tss": hours * 50, "tss_per_hour": 50.0},
@@ -67,7 +67,7 @@ def next_week(sessions=None, provisional=False):
             "sessions": sessions if sessions is not None else [
                 g("quality", "quality", "閾值 3×10 分", 60, "2026-10-06"),
                 g("easy1", "easy", "輕鬆跑", 50, "2026-10-07"),
-                g("long", "long", "長時間輕鬆（山路）", 130, "2026-10-11")]}
+                g("long", "long", "LSD（山路）", 130, "2026-10-11")]}
 
 
 def active(ss):
@@ -104,7 +104,7 @@ def test_projection_ramp_31_and_cap():
     assert modes[-1] == "taper"
     taper = weeks[-1]
     assert any(s["title"] == "短強度 4×3 分" for s in taper["sessions"])
-    # 專項期 without a confirmed aerobic base: the Zone 3 ladder, not the 5×4′ hill set (徐國峰)
+    # 專項期 without a confirmed aerobic base: the Zone 3 ladder, not the 5×4′ hill set (台灣教練)
     assert weeks[6]["phase"] == "specific" and (weeks[6]["mode"] == "recovery_week" or any(
         s["kind"] == "quality" and s["title"].startswith("閾值") for s in weeks[6]["sessions"]))
 
@@ -161,13 +161,13 @@ def test_unedited_auto_is_regenerated_edited_is_kept():
                                detail="休 2–3 分鐘；暖身 15 分、緩和 10 分"),
                              g("strength1", "strength", "肌力（下肢單腳＋核心）", 35, "2026-10-02"),
                              g("easy1", "easy", "輕鬆跑", 55, "2026-10-03"),
-                             g("long", "long", "長時間輕鬆（山路）", 100, "2026-10-04")])
+                             g("long", "long", "LSD（山路）", 100, "2026-10-04")])
     new2, ch = rec(new, inputs(cur=cur))
     b = active(new2)
     assert b[("2026-09-28", "easy1")]["minutes"] == 30 and b[("2026-09-28", "easy1")]["day"] == "2026-10-02"
     assert b[("2026-09-28", "long")]["minutes"] == 100
     changed = [c for c in ch if c["action"] == "changed"]
-    assert [c["title"] for c in changed] == ["長時間輕鬆（山路）"] and changed[0]["before"] == {"minutes": 120}
+    assert [c["title"] for c in changed] == ["LSD（山路）"] and changed[0]["before"] == {"minutes": 120}
     assert b[("2026-09-28", "long")]["uid"] == a[("2026-09-28", "long")]["uid"]   # same session, updated
 
 
@@ -189,7 +189,7 @@ def test_missed_and_recalculated():
         g("quality", "quality", "閾值 3×10 分", 60, "2026-10-03"),
         g("strength1", "strength", "肌力", 35, "2026-10-02"),
         g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
-        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+        g("long", "long", "LSD（山路）", 120, "2026-10-04")])
     new2, ch = rec(new, inputs(today="2026-10-02", cur=cur))
     missed = [s for s in new2 if s["state"] == "missed"]
     assert [s["gen_key"] for s in missed] == ["quality"] and missed[0]["day"] == "2026-10-01"
@@ -205,7 +205,7 @@ def _two_days_later_quality_moved():
         g("quality", "quality", "閾值 3×10 分", 60, "2026-10-03"),
         g("strength1", "strength", "肌力", 35, "2026-10-02"),
         g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
-        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+        g("long", "long", "LSD（山路）", 120, "2026-10-04")])
 
 
 def test_late_sync_turns_missed_into_done():
@@ -219,7 +219,7 @@ def test_late_sync_turns_missed_into_done():
         g("quality", "quality", "閾值 3×10 分", 60, "2026-10-01", done=True, done_by=act),
         g("strength1", "strength", "肌力", 35, "2026-10-02"),
         g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
-        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+        g("long", "long", "LSD（山路）", 120, "2026-10-04")])
     new3, ch = rec(new2, inputs(today="2026-10-02", cur=cur, acts=[ACT_929, act]))
     q = [s for s in new3 if s.get("gen_key") == "quality" and s["state"] in ("active", "done", "missed")]
     assert [(s["state"], s["day"]) for s in q] == [("done", "2026-10-01")]     # no leftover re-placed row
@@ -341,7 +341,7 @@ class Env:
         self.db = run(make_db())
         self.fake = FakeHub()
         self.inp = inputs(weeks=[next_week(), {**next_week(provisional=True), "start": "2026-10-12", "sessions": [
-            g("long", "long", "長時間輕鬆（山路）", 140, "2026-10-18")]}], horizon="2026-10-18")
+            g("long", "long", "LSD（山路）", 140, "2026-10-18")]}], horizon="2026-10-18")
         monkeypatch.setattr(plan_sessions, "_compute_inputs", lambda: self.inp)
 
         async def fake_db():
@@ -586,7 +586,7 @@ def test_missed_session_is_removed_from_coros(monkeypatch):
             g("quality", "quality", "閾值 3×10 分", 60, "2026-10-03", detail="休 2–3 分鐘；暖身 15 分、緩和 10 分"),
             g("strength1", "strength", "肌力", 35, "2026-10-02"),
             g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
-            g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+            g("long", "long", "LSD（山路）", 120, "2026-10-04")])
         e.inp = inputs(today="2026-10-02", cur=cur, weeks=e.inp["weeks"], horizon="2026-10-18")
         pv = e.c.get(f"{API}/push-coros/preview?scope=week").json()
         assert pv["missed_to_remove"] == 1
@@ -694,7 +694,7 @@ def _test_week(gate):
         g("test", "test", "CP 測試 3 分 + 12 分", 60, "2026-10-01"),
         g("strength1", "strength", "肌力（下肢單腳＋核心）", 35, "2026-10-02"),
         g("easy1", "easy", "輕鬆跑", 45, "2026-10-02"),
-        g("long", "long", "長時間輕鬆（山路）", 120, "2026-10-04")])
+        g("long", "long", "LSD（山路）", 120, "2026-10-04")])
     cur["quality_gate"] = gate
     return cur
 
@@ -723,7 +723,7 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     from backend.engine import interval_library as IL
     dose = [s[1] for s in QG.LADDER] + [IL.title(v) for v in IL.ALL.values()]
     assert base and all(q[d] and q[d][0] in dose for d in base)
-    # 徐國峰: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
+    # 台灣教練: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
     # standard session (no cap: the full-length one, engine/interval_library.fit)
     assert [q[d][0] for d in base][:2] == [IL.title(IL.canonical("z3a")), IL.title(IL.canonical("z3b"))]
     assert all(q[d][0].startswith("閾值") for d in base), {d: q[d] for d in base}

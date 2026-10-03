@@ -49,7 +49,7 @@ Detectors (numbers 推估 unless a source is named):
                 later hour is warmer — it can only delay the spell). The watch
                 temperature is never used here (the wrist warms it: +3.7 °C
                 median vs the archive on the athlete's 72 paired route
-                efforts). 25 °C is 徐國峰's line; Hadley 150 is Hadley's hot
+                efforts). 25 °C is 台灣教練's line; Hadley 150 is Hadley's hot
                 band (route_weather.HOT_HADLEY); 3 days / 60 days / the summer
                 test are 推估.
 
@@ -102,7 +102,7 @@ from typing import Optional
 
 from backend.engine import heat as HT
 
-COOL_C = 25.0                 # 徐國峰（xu-guofeng-reply.md:22）：臺灣半年白天 ≥ 25 °C，熱天心率偏高
+COOL_C = 25.0                 # 台灣教練：熱天心率偏高、飄移失真
 HOT_HADLEY = HT.HOT_HADLEY    # Hadley's 151–160 band (route_weather.HOT_HADLEY)
 SHIFT_BPM = 5.0               # B3 shift rule (unsourced-rules.md; §2.5 item 3) — 推估
 SE_K = 2.0                    # 推估: the shift must also exceed 2 SE of itself
@@ -742,7 +742,7 @@ def suggestions(ds, plan, today: dt.date, acts: Optional[list] = None, brk: Opti
                 f"{cs['start']} 起連續 {SPELL_DAYS} 個路跑日{basis} < {COOL_C:.0f} °C、Hadley < {HOT_HADLEY:.0f}"
                 f"（之前 {SUMMER_DAYS} 天有 {cs['summer_days']} 天 Hadley ≥ {HOT_HADLEY:.0f}）：夏天測的門檻受熱影響，"
                 f"清晨涼的時候重測比較準",
-                cs["start"], None, cs, SRC + "；徐國峰（教練）：等天氣轉涼再做；Hadley 150"))
+                cs["start"], None, cs, SRC + "；台灣教練：等天氣轉涼再做；Hadley 150"))
     # the AeT is only a lower bound (drift_agg.aet_validity): one AeT test every 8 weeks, low priority
     val = aet_validity
     if val is None and real:

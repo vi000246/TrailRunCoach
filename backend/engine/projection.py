@@ -145,7 +145,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         elif road:
             add(**O.road_long_session(long_min, kind, aet, tph, goal_pace), target=tgt.get("long", ""))
         else:
-            add(id="long", kind="long", title="長時間輕鬆" + ("（山路）" if mountain else ""),
+            add(id="long", kind="long", title="LSD" + ("（山路）" if mountain else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
                 detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
                 + f"；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
@@ -438,7 +438,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         z5g = gate.get("z5") or {}
         if base_q is None and kind == "specific" and dec["allow"] and not z5g.get("open") and z5g.get("state") != "open" \
                 and mode not in ("recovery_week", "reentry"):
-            # 專項期 without a confirmed base: the Zone 3 ladder instead of the 5×4′ hill set (徐國峰)
+            # 專項期 without a confirmed base: the Zone 3 ladder instead of the 5×4′ hill set (台灣教練)
             dz = QG.week_decision({**gate, "z5": {**z5g, "open": False}}, "base", "base", week, step, first=False)
             if dz["allow"] and dz["spec"] is not None:
                 q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))

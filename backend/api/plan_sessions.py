@@ -841,7 +841,7 @@ def _b2b_fallback(inp: dict, sg: dict, days: list[str]) -> list[dict]:
     """The two days from the suggestion alone (the generator didn't plan the week)."""
     from backend.engine import b2b as B2B
     rate = float(((inp.get("cur") or {}).get("tss_per_category") or {}).get("trail") or 55.0) / 60.0
-    long_s = {"id": "long", "kind": "long", "title": "長時間輕鬆（山路）", "minutes": sg["minutes"][0],
+    long_s = {"id": "long", "kind": "long", "title": "LSD（山路）", "minutes": sg["minutes"][0],
               "tss": round(rate * sg["minutes"][0], 1), "detail": "", "target": "", "source": "", "terrain": None}
     ss = [long_s] + B2B.followers(long_s, {"minutes": sg["minutes"]})
     B2B.decorate(ss, {"event": {"name": sg.get("event"), "days": sg.get("event_days") or 2,
@@ -1871,6 +1871,25 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
     return out
 
 
+def _day_rows(start: str, end: str, sessions: list[dict], acts: list[dict], rates: dict) -> list[dict]:
+    """Per day in [start, end]: planned (same sessions and strength rule as _week_rows,
+    future ones included) vs done (the activities) — 課表統計's 天 / 月 buckets."""
+    out = []
+    d, last = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
+    while d <= last:
+        a = d.isoformat()
+        ss = [s for s in sessions if s.get("day") == a and s["state"] in ("active", "done", "missed")
+              and s["kind"] not in PS.NOT_LOAD]
+        aa = [x for x in acts if (x.get("date") or "")[:10] == a]
+        out.append({"start": a, "end": a,
+                    "planned_hours": sum(s["minutes"] or 0 for s in ss if s["kind"] != "strength") / 60.0,
+                    "planned_tss": sum(est_tss(s, rates) for s in ss),
+                    "done_hours": sum(float(x.get("moving_s") or 0) for x in aa) / 3600.0,
+                    "done_tss": sum(float(x.get("tss") or 0) for x in aa)})
+        d += dt.timedelta(days=1)
+    return out
+
+
 async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
     from sqlalchemy import select
     from backend.db.models import SyncState
@@ -2036,7 +2055,8 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     acts = [x for x in extras["activities"] if start <= (x.get("date") or "") <= end]
     phases = [p for p in extras["phases"] if p["end"] >= start and p["start"] <= end]
     weeks = _week_rows(start, end, ss, acts, phases, inp["weeks"], rates, today)
-    out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss)
+    days = _day_rows(start, end, ss, acts, rates)
+    out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss, day_rows=days)
     return {**out, "phases": phases, "current_phase": ph, "kinds": PS.KINDS,
             "plan_phases": extras.get("plan_phases", extras["phases"]),
             "plan_start": min((s["day"] for s in every if s.get("day")), default=None)}

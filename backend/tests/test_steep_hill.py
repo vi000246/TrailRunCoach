@@ -44,7 +44,7 @@ def test_when_it_is_planned():
 
 def _week():
     d = lambda i: (MON + dt.timedelta(days=i)).isoformat()
-    return [{"id": "long", "kind": "long", "day": d(5), "minutes": 150, "tss": 120.0, "title": "長時間輕鬆"},
+    return [{"id": "long", "kind": "long", "day": d(5), "minutes": 150, "tss": 120.0, "title": "LSD"},
             {"id": "quality", "kind": "quality", "day": d(1), "minutes": 55, "tss": 60.0, "title": "閾值"},
             {"id": "easy1", "kind": "easy", "day": d(2), "minutes": 40, "tss": 30.0, "title": "輕鬆跑"},
             {"id": "easy2", "kind": "easy", "day": d(3), "minutes": 45, "tss": 33.0, "title": "輕鬆跑"},

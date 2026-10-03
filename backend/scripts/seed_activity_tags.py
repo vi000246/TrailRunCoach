@@ -1,51 +1,64 @@
 """
-One-off, idempotent seed of the user's activity tags (activity_tags table,
-engine/activity_tags.py) — the corrections the user gave on 2026-10-01:
+One-off, idempotent seed of activity tags (activity_tags table,
+engine/activity_tags.py) from a JSON file of corrections you write yourself,
+e.g. runs a back-test wrongly took as maximal, or your races:
 
-* three runs the race-power back-test wrongly took as maximal:
-    2025-10-18 road 5 km     → 練跑 / 一般            (a weekday training run)
-    2025-11-02 trail 14.4 km → 爬山 / 一般            (an ordinary mountain trip)
-    2026-07-27 trail 11.7 km → 爬山 / 有拼但有休息    (hard, near-max, long rests)
-* the trail races from their diary → 比賽, effort left AUTO (they often race
-  by feel, so the effort comes from the HR rule, not from "race").
+    [{"date": "2025-10-18", "km": 5.0, "trail": false,
+      "activity_type": "training", "effort": "moderate", "why": "weekday run"},
+     {"date": "2025-07-26", "file": "Athlete_2025_07_26_07_30.wko4",
+      "activity_type": "race", "why": "trail race (effort left auto)"}]
 
-Activities are found in the dataset (default: the charts.data_source
-setting, e.g. coros) by date + distance, or for the races by the WKO5 file
-name — on a COROS / TP source by the start time that name encodes (±3 min,
-activity_tags.MATCH_TOL_MIN). Tags go to the app DB's activity_tags table
-(the same DB activity_tags.load() and the back-test read; the table is
-created on the first write), keyed by the local start minute, so a tag
-applies to the same activity in every source. Dry run by default: it prints
-what it would change; --apply writes.
+A row with `file` (a WKO5 file name) is found by that name, or on a COROS /
+TP source by the start time the name encodes (<anything>_YYYY_MM_DD_HH_MM.wko4,
+±3 min, activity_tags.MATCH_TOL_MIN); a row with `km` by date + distance
+(±10 %) and terrain. Leave `effort` out to keep it AUTO (the HR rule).
 
-    python -m backend.scripts.seed_activity_tags [--source coros|tp|wko5] [--db PATH] [--apply]
+Activities are looked up in the dataset (default: the charts.data_source
+setting). Tags go to the app DB's activity_tags table (the same DB
+activity_tags.load() and the back-test read; the table is created on the
+first write), keyed by the local start minute, so a tag applies to the same
+activity in every source. Dry run by default: it prints what it would
+change; --apply writes.
+
+    python -m backend.scripts.seed_activity_tags --seed my_tags.json [--source coros|tp|wko5] [--db PATH] [--apply]
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import sys
+from pathlib import Path
 from typing import Optional
 
 from backend.engine import activity_tags as AT
 
-SEED = [
+# the shape of a seed file (see the module docstring); the tests use it, nothing reads it by default
+EXAMPLE_SEED = [
     {"date": "2025-10-18", "km": 5.0, "trail": False, "activity_type": "training", "effort": "moderate",
      "why": "平日練跑，不是全力"},
     {"date": "2025-11-02", "km": 14.4, "trail": True, "activity_type": "hike", "effort": "moderate",
      "why": "一般爬山"},
     {"date": "2026-07-27", "km": 11.7, "trail": True, "activity_type": "hike", "effort": "hard_with_rests",
-     "why": "中級山，有拼但休息很久"},
-] + [{"date": d, "file": f, "activity_type": "race", "why": "日記中的越野賽（努力度保留自動）"} for d, f in (
-    ("2026-04-11", "Athlete_2026_04_11_07_24.wko4"),
-    ("2025-09-06", "Athlete_2025_09_06_07_58.wko4"),
+     "why": "有拼但休息很久"},
+] + [{"date": d, "file": f, "activity_type": "race", "why": "越野賽（努力度保留自動）"} for d, f in (
     ("2025-07-26", "Athlete_2025_07_26_07_30.wko4"),
     ("2024-09-21", "Athlete_2024_09_21_05_55.wko4"),
-    ("2024-06-02", "Athlete_2024_06_02_07_46.wko4"),
-    ("2024-04-13", "Athlete_2024_04_13_08_46.wko4"),
-    ("2024-01-06", "Athlete_2024_01_06_08_45.wko4"),
 )]
+
+
+def load_seed(path) -> list[dict]:
+    """A seed file: a JSON list of rows, each with `date`, `activity_type` and
+    either `file` or `km` (see the module docstring)."""
+    rows = json.loads(Path(path).read_text("utf-8"))
+    if not isinstance(rows, list) or not all(
+            isinstance(r, dict) and r.get("date") and r.get("activity_type") and (r.get("file") or r.get("km"))
+            for r in rows):
+        raise ValueError(f"{path}: expected a list of {{date, activity_type, file | km}} rows")
+    return rows
+
+
 KM_TOL = 0.10        # 推估: the watch distance within ±10 % of the stated one
 
 
@@ -54,7 +67,7 @@ def _trail(w) -> bool:
 
 
 def start_of_file(name: str) -> Optional[dt.datetime]:
-    """The local start a WKO5 file name encodes: Athlete_YYYY_MM_DD_HH_MM.wko4."""
+    """The local start a WKO5 file name encodes: <athlete>_YYYY_MM_DD_HH_MM.wko4."""
     m = re.search(r"(\d{4})_(\d{2})_(\d{2})_(\d{2})_(\d{2})\.wko4$", name or "")
     if not m:
         return None
@@ -92,11 +105,11 @@ def match(spec: dict, workouts) -> tuple[Optional[object], str]:
     return w, "date+distance"
 
 
-def plan(workouts, rows: list[dict], source: str = "wko5") -> list[dict]:
+def plan(workouts, rows: list[dict], source: str = "wko5", seed: Optional[list[dict]] = None) -> list[dict]:
     """What the seed would do: per row the matched workout, the current
     stored tag and the change (empty when already applied: idempotent)."""
     out = []
-    for spec in SEED:
+    for spec in seed if seed is not None else []:
         w, how = match(spec, workouts)
         item = {"spec": spec, "found": w is not None, "how": how}
         if w is None:
@@ -143,6 +156,7 @@ def _fmt(item: dict) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--seed", required=True, help="JSON file of the tags to set (see the module docstring)")
     ap.add_argument("--source", choices=("wko5", "coros", "tp"),
                     help="dataset to match against (default: the charts.data_source setting)")
     ap.add_argument("--db", help="the DB to write (default: the app DB ~/.wko5coach/wko5coach.db)")
@@ -157,7 +171,7 @@ def main(argv=None) -> int:
     a.source = a.source or current_source()
     db = a.db or str(AT._db_path())
     ds = _dataset(source=a.source)
-    items = plan(ds.workouts, AT.load(db), a.source)
+    items = plan(ds.workouts, AT.load(db), a.source, load_seed(a.seed))
     print(f"source {a.source}, DB {db}")
     for it in items:
         print(_fmt(it))

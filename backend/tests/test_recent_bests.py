@@ -197,8 +197,14 @@ def test_window_rewrite_only_touches_the_leading_literal():
 
 
 def test_season_view_chart_through_the_coros_source(monkeypatch, tmp_path, _fit_root_in_tmp):
-    """The real Season View chart, with charts.data_source = coros patched in
-    process (as test_chart_source_wiring.py does); the saved setting is untouched."""
+    """A Season View chart read from an imported .wko5chart (a synthetic one,
+    wko5chart_builder.py, in WKO5_VIEWS_DIR), with charts.data_source = coros
+    patched in process (as test_chart_source_wiring.py does); the saved setting
+    is untouched."""
+    from backend.tests import wko5chart_builder as WB
+    WB.season_view(tmp_path / "views" / "WKO5 Season View.wko5chart")
+    monkeypatch.setenv("WKO5_VIEWS_DIR", str(tmp_path / "views"))
+    WV._wko5_views_in.cache_clear()
     root = _fit_root_in_tmp / "coros"
     _write(root, 10, HISTORY, "1_2026-09-10_run.fit")
     _write(root, 28, RECENT, "2_2026-09-28_run.fit")
@@ -211,7 +217,8 @@ def test_season_view_chart_through_the_coros_source(monkeypatch, tmp_path, _fit_
     try:
         ds = WV._dataset()
         assert ds.source == "coros" and len(ds.workouts) == 2
-        ch = WV._view("WKO5 Season View", True)["dashboards"][4]["charts"][0]
+        v = WV._view("WKO5 Season View", True)
+        ch = next(c for d in v["dashboards"] for c in d["charts"] if c["title"].startswith("PD Curve"))
         s = next(x for x in ch["series"] if x["name"] == "New Bests")
         assert "athleterange(today-6, today" in s["expression"]
         out = render_chart(ch, ds, B, E)
@@ -219,3 +226,4 @@ def test_season_view_chart_through_the_coros_source(monkeypatch, tmp_path, _fit_
         assert sum(p[1] is not None for p in nb) > 20
     finally:
         WV._dataset_cfg.cache_clear()
+        WV._wko5_views_in.cache_clear()
