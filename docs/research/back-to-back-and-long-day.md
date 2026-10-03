@@ -363,7 +363,7 @@ b2b_due =
 - Gordo Byrn — Aerobic Efficiency Workouts（2023-12-07）：https://feelthebyrn.substack.com/p/aerobic-efficiency-workouts
 - David & Megan Roche — Back-to-Back Long Runs and Workouts（Trail Runner，付費牆，**未驗證**）：https://run.outsideonline.com/training/workouts/back-back-long-runs-workouts-next-level-training-done-right/
 
-### 你的筆記（notes `300 Sport`）
+### 你的筆記（筆記）
 
 - 徐國峰部落格 2016-12 http://rocky549.blogspot.com/2016/12/rq.html（90 分鐘 1 區有氧基礎檢測）
 - `70 ⏳ 周期化訓練/400 爆發力、敏捷性、專項耐力周期.md:5`（徐國峰：E 配速 90 分鐘飄移 < 10 %）

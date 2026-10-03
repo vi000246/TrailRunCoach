@@ -94,7 +94,7 @@ Scope 由使用者決定：
 |---|---|
 | 跑步（路跑 / 跑道） | 摘要列（距離、時間、配速、NP / 平均功率、平均 HR、rTSS / TSS、IF）；TIS 有氧 / 無氧 + 主要效益；區間時間（HR / 功率 / 配速）；圈 / 間歇表（自動偵測努力段）；本次最佳努力 vs PD 曲線（1 / 5 / 20 / 60 分功率與配速佔 90 天最佳的 %）；EF 與解耦 vs 最近輕鬆跑基準；步頻 / 步幅 |
 | 越野跑 | 摘要（含爬升 / 下降、GAP / EFD）；TIS + Energy System Impact；區間時間（HR / 功率 / GAP）；坡度分箱表；爬坡清單（每段的坡度、長度、VAM、功率、HR，並對照自己的 VAM-坡度擬合）；下坡表現與下坡負荷（坡度 < -10% 的時間）；耐力曲線（GAP/HR 或 功率/HR 對累積 kJ / 時間，逐小時衰退）；各坡度的跑 / 走比例 |
-| 百岳 / 登山 | 摘要（移動 vs 總時間、爬升 / 下降、最高海拔、3000 m 以上時間）；垂直速度（上 / 下 m/h）vs 個人基準，以及 vs 標準時間（GPX metadata 有魯地圖 / 上河標準時間就用，沒有就用 Naismith / Tobler 推估），算出「配速 / 標準」比；HR 區間時間與整天的 HR 飄移；耐力（每小時垂直速度衰退）；休息 / 停留分析；能量消耗估算；到達的山頭（比對百岳 / 中級山清單，沿用 peak-list 的 twmap snapshot 做法）。沒有功率時不顯示 TIS，改用 HR 負荷並清楚標示 |
+| 百岳 / 登山 | 摘要（移動 vs 總時間、爬升 / 下降、最高海拔、3000 m 以上時間）；垂直速度（上 / 下 m/h）vs 個人基準，以及 vs 標準時間（GPX metadata 有魯地圖 / 上河標準時間就用，沒有就用 Naismith / Tobler 推估），算出「配速 / 標準」比；HR 區間時間與整天的 HR 飄移；耐力（每小時垂直速度衰退）；休息 / 停留分析；能量消耗估算；到達的山頭（比對百岳 / 中級山清單，沿用 另一個專案 的 twmap snapshot 做法）。沒有功率時不顯示 TIS，改用 HR 負荷並清楚標示 |
 
 三種版面共用同一批 panel 元件。
 
@@ -144,7 +144,7 @@ Scope 由使用者決定：
 
 ## 公開 repo 注意事項（只列出，不改歷史）
 
-- `api/wko5views.py`、`api/plan.py`、`api/achievements.py`、`scripts/build_baiyue.py` 寫死了 `C:\Users\<user>\Projects\TrailRunCoach\WKO5\Athlete`。
+- `api/wko5views.py`、`api/plan.py`、`api/achievements.py`、`scripts/build_baiyue.py` 寫死了 `~\Projects\TrailRunCoach\WKO5\Athlete`。
 - repo 追蹤了個人的 `WKO5 Season View/*.wko5chart`、`WKO5 Workout View/*.wko5chart`。
 - `chartfixes.py` 裡有 "Athlete"。
 - token 以明文存在 SQLite（會由上面的使用者設定模型改為加密）。

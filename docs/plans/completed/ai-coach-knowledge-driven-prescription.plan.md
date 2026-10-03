@@ -74,7 +74,7 @@ chat 上方 quick-prompt：[今天該練什麼] [我的間歇怎麼排] [現在�
 | P2 | `backend/engine/ai/client.py` | all | ai_client.stream 簽章 |
 
 ## External Documentation
-No external research needed — Palladino 區間知識由使用者 notes 筆記提供（已研究）；技術沿用既有 FastAPI/React 模式。
+No external research needed — Palladino 區間知識由使用者 筆記提供（已研究）；技術沿用既有 FastAPI/React 模式。
 
 ---
 
@@ -249,7 +249,7 @@ def test_x(): assert ...
           assert term in kb
   ```
   Run: `/opt/homebrew/bin/pytest backend/tests/test_ai_knowledge.py -q` — expect FAIL
-- **IMPLEMENT**: `knowledge.py`（內容萃取自使用者 notes 筆記，curated 常數）
+- **IMPLEMENT**: `knowledge.py`（內容萃取自使用者 筆記，curated 常數）
   ```python
   """Curated training knowledge from the athlete's notes power-training notes.
   Static (no RAG) — update here when the notes' framework changes."""
@@ -387,21 +387,21 @@ def test_x(): assert ...
 
 ### Backend
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
+cd "<repo>reverse"
 /opt/homebrew/bin/pytest backend/tests/ -q
 ```
 EXPECT: 全 pass（含新 3 個 ai 測試）
 
 ### Frontend
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse/frontend"
+cd "<repo>reverse/frontend"
 npx tsc -b && npm run build
 ```
 EXPECT: 型別零錯誤、build 成功
 
 ### Integration (smoke)
 ```bash
-cd "/Users/<user>/Projects/Archive Project/WKO5reverse"
+cd "<repo>reverse"
 /opt/homebrew/bin/python3.12 -m uvicorn backend.main:app --port 8022 &
 sleep 3
 curl -s "http://localhost:8022/api/v1/ai/zones?athlete_id=1" | head -c 400

@@ -430,7 +430,7 @@ AeT、LTHR、CP 都用 app 現行的值。表裡沒有標來源的百分比都�
 
 **教練經驗／廠商**
 
-- Tim Cusick，WKO5 webinars（你的 notes 筆記，§1.1 列出的行號）
+- Tim Cusick，WKO5 webinars（你的 筆記，§1.1 列出的行號）
 - WKO5 圖表設定：`~/WKO5/Views/Athlete/WKO5 Basic Run View.wko5chart`、`WKO5 Season View.wko5chart`（「Compare VO2max to mFTP as % - Run」）
 - Steve Palladino：`300 Sport/65 ⚡ 功率訓練/功率區間說明與訓練目的 --star.md:133–139`
 - intervals.icu 論壇：https://forum.intervals.icu/t/percentage-of-ftp-to-vo2max/13343（二手，**未驗證**）

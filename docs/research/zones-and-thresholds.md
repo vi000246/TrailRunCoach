@@ -404,5 +404,5 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 - Nixon RJ et al. (2021). Steady-state VO2 above MLSS: evidence that critical speed better represents maximal metabolic steady state in well-trained runners. *Eur J Appl Physiol* 121:3133–3144. DOI 10.1007/s00421-021-04780-8（摘要）
 - Nuuttila OP et al. (2025). *Eur J Appl Physiol* 125:697–705. DOI 10.1007/s00421-024-05631-y（摘要；不是心率錨點的研究）
 - 教練：Friel, "Joe Friel's Quick Guide to Setting Zones"，TrainingPeaks（本次核對原文）。
-- 徐國峰：使用者 notes `C:\Users\<user>\Projects\notes\notes\300 Sport\60 🏃 有氧訓練\跑者都該懂的跑步數據，讀書心得.md`、`不同的心率區間模型比較.md`。
+- 徐國峰：使用者 notes `<notes>\300 Sport\60 🏃 有氧訓練\跑者都該懂的跑步數據，讀書心得.md`、`不同的心率區間模型比較.md`。
 - 沿用既有文件、本次沒有重讀的：Seiler & Kjerland 2006、Coyle & González-Alonso 2001、Lafrenz 2008、Wingo 2020、Beiter 2025、Hunt 2015／2019、Coyle 1986、Houmard 1992（出處見文中引用的 `docs/research/*.md` 行號）。

@@ -542,7 +542,7 @@ export function MyChart({ data }: Props) {
 - **GOTCHA**: `compute_grade` 中 distance diff 用 `prepend=` 讓輸出與輸入等長；`np.errstate(divide='ignore')` 避免 0-division warning
 - **VALIDATE**: 在專案根目錄執行：
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse
+  cd <repo>
   python -c "
   import numpy as np, sys
   sys.path.insert(0, '.')
@@ -1895,7 +1895,7 @@ export function MyChart({ data }: Props) {
 
 ### Backend 啟動
 ```bash
-cd /Users/<user>/Projects/WKO5reverse
+cd <repo>
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn backend.main:app --reload --port 8000
@@ -1925,21 +1925,21 @@ curl -s http://localhost:8000/api/v1/workouts/1/trail | python3 -m json.tool
 
 ### Algorithm Unit Test
 ```bash
-cd /Users/<user>/Projects/WKO5reverse
+cd <repo>
 python -m pytest src/tests/ backend/tests/ -v 2>&1 | tail -20
 ```
 EXPECT: All tests pass（新的 trail.py 算法不在現有測試中，手動驗證即可）
 
 ### Frontend Build
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend
+cd <repo>/frontend
 npm run build
 ```
 EXPECT: 無 TypeScript 或 Vite 錯誤
 
 ### Type Check
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend
+cd <repo>/frontend
 npx tsc --noEmit
 ```
 EXPECT: Zero errors

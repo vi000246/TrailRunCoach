@@ -12,7 +12,7 @@ linear_issue: null
 - 使用者原話：「不確定圖表公式有沒有用準確」「越野跑跟跑步不太一樣，它有爬升」「我一直無法找到正確下載資料的方式」「AI 教練我還沒有使用過它的功能」「WKO5 的圖表太難懂，希望呈現結果平易近人，不需要吃力閱讀圖表」。
 - 程式碼現況（探索確認）：目前所有運動只正規化成 4 類（running/cycling/swimming/walking），**無 trail/road 區分**；無 per-sport 獨立頁面；COROS 同步已實作並驗證 1088+ 筆，但**無同步管理 UI 頁面**；AI 教練 chat 與 context 組裝可運作，但 Trail Analysis / Ask Coach 未完成、無知識庫 RAG。
 - 逆向素材確認：WKO5 chart 以 `if(sport="run", ...)` 條件式做運動篩選，bike FTP 與 running FTP（mFTP/rFTP）按 sport 切換——本專案缺此分流即構成可驗證的落差。
-- 使用者 notes 筆記已有完整個人化資料：CP 192W、TTE 30min、Trail PI 341、爬升配速 30min/km @ HR160、Palladino 個人化功率區間、PDC 分析、間歇模板——足以支撐越野跑圖表與 AI 教練處方。
+- 使用者 筆記已有完整個人化資料：CP 192W、TTE 30min、Trail PI 341、爬升配速 30min/km @ HR160、Palladino 個人化功率區間、PDC 分析、間歇模板——足以支撐越野跑圖表與 AI 教練處方。
 
 ## Proposed Solution
 
@@ -53,7 +53,7 @@ We'll know we're right when 使用者把它當成主要訓練決策工具（取�
 
 - [ ] 方案 3（解析逆向 WKO5/TrainingPeaks 下載格式）能否穩定解出 FIT 內容？解不出來的判定標準與退回方案 1 的時機？
 - [ ] 越野跑負荷該用哪個為主：NGP/rTSS（TP 自承技術地形低估）還是 hrTSS？是否兩者並陳？
-- [ ] AI 教練的知識來源如何接入 notes 筆記（RAG / 預先萃取 / 手動整理成知識檔）？筆記會持續更新，更新如何反映？
+- [ ] AI 教練的知識來源如何接入 筆記（RAG / 預先萃取 / 手動整理成知識檔）？筆記會持續更新，更新如何反映？
 - [ ] 越野跑「爬升 TSS / 垂直負荷」是否要自訂公式？是否有 WKO5 逆向素材可對照，或屬於本專案原創指標（無法對 WKO5 驗證）？
 - [ ] 圖表白話解讀由規則產生還是由 AI 即時生成？
 
@@ -139,7 +139,7 @@ M1 先交付使用者最痛的兩件：**越野跑頁面 + 圖表公式/篩選�
 - **Out of scope for this milestone**: 上傳/寫回 TP。
 
 **Milestone 4: AI 教練處方強化**
-- **User can now**: 問 AI 教練即得到「目前訓練狀態判讀 + 該練 zone 幾 + 間歇時間/瓦數處方」，依據其 notes 筆記知識。
+- **User can now**: 問 AI 教練即得到「目前訓練狀態判讀 + 該練 zone 幾 + 間歇時間/瓦數處方」，依據其 筆記知識。
 - **Success signal**: 使用者實測一輪並認為處方可採用。
 - **Out of scope for this milestone**: 自動排課、行事曆整合。
 

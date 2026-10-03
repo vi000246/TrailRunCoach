@@ -284,7 +284,7 @@ def test_name():
       # After ~2 tau it's close to 60
       assert last == pytest.approx(60.0, abs=5.0)
   ```
-  Run: `cd /Users/<user>/Projects/WKO5reverse && python -m pytest backend/tests/test_run_pmc.py -v`
+  Run: `cd <repo> && python -m pytest backend/tests/test_run_pmc.py -v`
   Expected: **FAIL** (ImportError — functions don't exist yet)
 
 - **IMPLEMENT**:
@@ -368,7 +368,7 @@ def test_name():
       return result
   ```
 
-- **VALIDATE**: `cd /Users/<user>/Projects/WKO5reverse && python -m pytest backend/tests/test_run_pmc.py -v`
+- **VALIDATE**: `cd <repo> && python -m pytest backend/tests/test_run_pmc.py -v`
   Expected: **PASS** (6 tests green)
 
 - **COMMIT**: `feat: add compute_run_pmc and compute_intensity_load_series algorithms`
@@ -398,7 +398,7 @@ def test_name():
   #     print('OK: elevation_gain_m present')
   # "
   ```
-  Run: `cd /Users/<user>/Projects/WKO5reverse && python -c "import asyncio; from backend.db.database import init_db; asyncio.run(init_db()); print('no error')"`
+  Run: `cd <repo> && python -c "import asyncio; from backend.db.database import init_db; asyncio.run(init_db()); print('no error')"`
   Before change: column absent in PRAGMA output.
 
 - **IMPLEMENT**:
@@ -415,7 +415,7 @@ def test_name():
 
 - **VALIDATE**:
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse
+  cd <repo>
   python -c "
   import asyncio
   from backend.db.database import init_db
@@ -488,7 +488,7 @@ def test_name():
 
 - **VALIDATE**:
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse && python -m pytest backend/tests/test_run_pmc.py -v
+  cd <repo> && python -m pytest backend/tests/test_run_pmc.py -v
   ```
   Expected: all 7 tests pass
 
@@ -705,7 +705,7 @@ def test_name():
 
 - **VALIDATE**:
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse && python -c "
+  cd <repo> && python -c "
   from backend.api.analytics import router
   routes = [r.path for r in router.routes]
   assert '/api/v1/analytics/run-load' in routes
@@ -727,7 +727,7 @@ def test_name():
 
 - **TEST FIRST** (TypeScript type-check):
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit 2>&1 | head -20
+  cd <repo>/frontend && npx tsc --noEmit 2>&1 | head -20
   ```
   Before changes: should pass (baseline).
 
@@ -810,7 +810,7 @@ def test_name():
 
 - **VALIDATE**:
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit
+  cd <repo>/frontend && npx tsc --noEmit
   ```
   Expected: Zero type errors
 
@@ -825,7 +825,7 @@ def test_name():
 
 - **TEST FIRST** (TypeScript compile):
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit
+  cd <repo>/frontend && npx tsc --noEmit
   ```
   Before: zero errors (baseline).
 
@@ -881,7 +881,7 @@ def test_name():
   }
   ```
 
-- **VALIDATE**: `cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit`
+- **VALIDATE**: `cd <repo>/frontend && npx tsc --noEmit`
 
 - **COMMIT**: `feat: add RunLoadChart with CTL/ATL/TSB/ACWR and risk bands`
 
@@ -957,7 +957,7 @@ def test_name():
   }
   ```
 
-- **VALIDATE**: `cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit`
+- **VALIDATE**: `cd <repo>/frontend && npx tsc --noEmit`
 
 - **COMMIT**: `feat: add DailyPctCtlChart with green/yellow/red WKO5 color bands`
 
@@ -1017,7 +1017,7 @@ def test_name():
   }
   ```
 
-- **VALIDATE**: `cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit`
+- **VALIDATE**: `cd <repo>/frontend && npx tsc --noEmit`
 
 - **COMMIT**: `feat: add RampRateChart with 0 and +7 reference lines`
 
@@ -1082,7 +1082,7 @@ def test_name():
   }
   ```
 
-- **VALIDATE**: `cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit`
+- **VALIDATE**: `cd <repo>/frontend && npx tsc --noEmit`
 
 - **COMMIT**: `feat: add IntensityLoadChart with 4-series chronic/acute lines`
 
@@ -1168,7 +1168,7 @@ def test_name():
   }
   ```
 
-- **VALIDATE**: `cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit`
+- **VALIDATE**: `cd <repo>/frontend && npx tsc --noEmit`
 
 - **COMMIT**: `feat: add RunVolumeLog with weekly bar chart and monthly table`
 
@@ -1240,11 +1240,11 @@ def test_name():
 
 - **VALIDATE**:
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit
+  cd <repo>/frontend && npx tsc --noEmit
   ```
   Then start dev server and verify visually:
   ```bash
-  cd /Users/<user>/Projects/WKO5reverse && bash start.sh &
+  cd <repo> && bash start.sh &
   # Open http://localhost:5173 → Season tab → expand "Run Training Load"
   ```
   Expected: 5 chart panels visible; all show loading then empty state (no data yet — needs real workouts).
@@ -1281,25 +1281,25 @@ def test_name():
 
 ### Static Analysis
 ```bash
-cd /Users/<user>/Projects/WKO5reverse/frontend && npx tsc --noEmit
+cd <repo>/frontend && npx tsc --noEmit
 ```
 EXPECT: Zero type errors
 
 ### Unit Tests
 ```bash
-cd /Users/<user>/Projects/WKO5reverse && python -m pytest backend/tests/test_run_pmc.py -v
+cd <repo> && python -m pytest backend/tests/test_run_pmc.py -v
 ```
 EXPECT: 8 tests pass
 
 ### Full Backend Tests
 ```bash
-cd /Users/<user>/Projects/WKO5reverse && python -m pytest src/tests/ backend/tests/ -v
+cd <repo> && python -m pytest src/tests/ backend/tests/ -v
 ```
 EXPECT: No regressions in existing tests
 
 ### DB Migration Validation
 ```bash
-cd /Users/<user>/Projects/WKO5reverse && python -c "
+cd <repo> && python -c "
 import asyncio
 from backend.db.database import init_db
 asyncio.run(init_db())
@@ -1318,7 +1318,7 @@ EXPECT: `elevation_gain_m` in columns list
 
 ### Browser Validation
 ```bash
-cd /Users/<user>/Projects/WKO5reverse && bash start.sh
+cd <repo> && bash start.sh
 # open http://localhost:5173 → Season tab → Run Training Load section
 ```
 EXPECT: 5 chart panels expand; empty state messages visible if no run workouts present
