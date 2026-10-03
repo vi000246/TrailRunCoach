@@ -95,12 +95,12 @@ def test_decorate_says_the_target_and_the_route(store):
     r = _race(store)
     info = SP.week_context(kind="specific", mode="specific", monday=MON, race=r)
     ss = [{"id": "long", "kind": "long", "minutes": 170, "title": "LSD（山路）", "source": "Koop",
-           "detail": "挑每公里爬升 ≥ 47 m 的路線；全程心率壓在 AeT 以下，爬坡可以走"}]
+           "detail": "挑每公里爬升 ≥ 47 m 的路線；全程心率壓在輕鬆跑上限以下，爬坡可以走"}]
     SP.decorate(ss, info)
     s = ss[0]
     pct = round(170 / 300 * 100)
     assert s["detail"].startswith(f"這次目標定數約 {0.01 * pct * r['goal']:.0f}（單日目標的 {pct}%）")
-    assert "挑每公里爬升" not in s["detail"] and "全程心率壓在 AeT 以下" in s["detail"]
+    assert "挑每公里爬升" not in s["detail"] and "全程心率壓在輕鬆跑上限以下" in s["detail"]
     assert "+15%" in s["detail"]                                               # 85 % wanted, capped
     assert s["distance_km"] == pytest.approx(r["km"] * 170 / 300, abs=0.2)
     assert s["climb_m"] == pytest.approx(r["climb_m"] * 170 / 300, abs=2) and "江晏慶" in s["source"]
@@ -125,7 +125,7 @@ def test_apply_climb_turns_one_easy_run_into_the_race_climb(store):
     SP.apply_climb(ss, info, aet=150.0)
     c = [s for s in ss if s["id"] == "climb"]
     assert len(c) == 1 and c[0]["day"] == (MON + dt.timedelta(days=3)).isoformat()   # ≥ 2 days from Tue / Sat
-    assert "16% 坡" in c[0]["title"] and "下坡用跑的" in c[0]["detail"] and "AeT 150" in c[0]["target"]
+    assert "16% 坡" in c[0]["title"] and "下坡用跑的" in c[0]["detail"] and "輕鬆跑上限 150 bpm" in c[0]["target"]
     assert sum(s["minutes"] for s in ss if s["kind"] == "easy") == pytest.approx(before, abs=25)
     # a tight weekday cap: fewer repeats, or none
     from backend.engine import plan_prefs as PP

@@ -14,7 +14,7 @@ trail (越野跑).
 
 Targets
   pw(lo, hi)     power × CP          hr(lo, hi)   heart rate × LTHR
-  AET            heart rate ≤ AeT    pace(lo, hi) × threshold pace (bigger = slower)
+  AET            HR ≤ the easy cap   pace(lo, hi) × threshold pace (bigger = slower)
   OPEN           no target (all-out test bouts, strides, walk recoveries)
 Lap-button steps carry `est` (the protocol's minimum, s) so the total can be estimated.
 """
@@ -144,7 +144,7 @@ _S10, _S10B = _steep(0.10)
 _S15, _S15B = _steep(0.15)
 STEEP_SRC = "Pandolf 1977（同代謝率的坡度）；UA trekking（跑步機坡度替代背包）"
 STEEP_URL = "https://doi.org/10.1152/jappl.1977.43.4.577"
-STEEP_CONV = "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ AeT"
+STEEP_CONV = "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ 輕鬆跑上限"
 
 TEMPLATES: list[Template] = [
     # ---------------- 輕鬆跑 ----------------
@@ -341,7 +341,7 @@ TEMPLATES: list[Template] = [
         b.cool(10)], conv="來源只有 RPE：心率推估"),
     Template("long_climb", "trail", "長爬坡有氧 90′", UA + " Zone 2（AeT −10%～AeT）",
              "https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/", lambda b: [
-        b.warm(15), b.t("work", 90 * 60, AET, "持續爬升，跑走混合，心率 ≤ AeT"),
+        b.warm(15), b.t("work", 90 * 60, AET, "持續爬升，跑走混合，心率 ≤ 輕鬆跑上限"),
         b.t("cool", 15 * 60, OPEN, "輕鬆下山")], src_kind="推估"),
     Template("steep_5", "trail", f"陡坡健走 {_S5['grade']:g}%（模擬背 5% 體重）", STEEP_SRC, STEEP_URL, _S5B,
              conv=STEEP_CONV, note="不背包；百岳前的專項期，第 1 階段"),

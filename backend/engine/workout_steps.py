@@ -44,6 +44,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from backend.engine import interval_library as IL
+from backend.engine.hr_profile import EASY_CAP
 from backend.i18n import N_, _
 from backend.engine.zones import FRIEL_HR, FRIEL_PACE, PALLADINO_POWER_ZONES
 
@@ -164,7 +165,7 @@ def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
 
 
 def easy_hr(c: Ctx) -> Optional[tuple]:
-    """HR ≤ AeT (coros_workouts.easy_hr; with a 課表心率區間 its Z2 band)."""
+    """HR ≤ the easy-run cap (coros_workouts.easy_hr; with a 課表心率區間 its Z2 band)."""
     if c.hrz and c.hrz.get("easy"):
         lo, hi = c.hrz["easy"]
         return ("hr", round(lo), round(hi))
@@ -223,6 +224,7 @@ def rep(ids, times: int, items: list, last_rest: bool = True, note: str = "") ->
 
 
 EASY = {"type": "auto", "intent": "easy"}
+CAP_NAME = "心率 ≤ " + EASY_CAP              # an easy step capped by HR (hr_profile: not 「AeT」)
 OPEN = {"type": "auto", "intent": "open"}
 
 
@@ -456,7 +458,7 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
             base = secs - n * (sprint + 60)
             if base >= 10 * 60:
                 w_name, r_name, rep_name = strides_names(s.get("title") or "", sprint, n)
-                return doc([step(ids, "work", base, _easy(0.75, 0.80), "心率 ≤ AeT"),
+                return doc([step(ids, "work", base, _easy(0.75, 0.80), CAP_NAME),
                             rep(ids, n, [step(ids, "work", sprint, OPEN, w_name),
                                          step(ids, "rest", 60, OPEN, r_name)], True, rep_name)])
         return doc([step(ids, "work", secs, _easy(0.75, 0.80))])
@@ -686,7 +688,7 @@ def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") ->
         sub = f"{lo / c.cp * 100:.0f}–{hi / c.cp * 100:.0f}% CP · {pzone(f)}" if c.cp else ""
         return Resolved("power", lo, hi, f, f"{lo:.0f}–{hi:.0f} W", sub, auto, warn, intensity=it)
     f = hr_to_p((lo + hi) / 2 / c.lthr) if c.lthr else 0.7
-    sub = ("≤ AeT" if c.aet and abs(hi - c.aet) < 1 else
+    sub = ("≤ " + EASY_CAP if c.aet and abs(hi - c.aet) < 1 else
            f"{lo / c.lthr * 100:.0f}–{hi / c.lthr * 100:.0f}% LTHR" if c.lthr else "")
     return Resolved("hr", lo, hi, f, f"{lo:.0f}–{hi:.0f} bpm", sub, auto, warn, intensity=it)
 
@@ -1116,7 +1118,7 @@ def _name(st: dict, r: Resolved, em: _Emit, grouped: bool) -> str:
         return st["note"]
     tg = st.get("target") or {}
     if st["kind"] == "work" and tg.get("type") == "auto" and tg.get("intent") == "easy" and tg.get("plo") is not None:
-        return "心率 ≤ AeT" if r.type == "hr" else "功率區間" if r.type == "power" else "照感覺"
+        return CAP_NAME if r.type == "hr" else "功率區間" if r.type == "power" else "照感覺"
     if st["kind"] == "work" and not grouped:
         em.n_work += 1
         return f"第 {em.n_work} 趟 {fmt_dur(st['dur'])}"
@@ -1383,7 +1385,7 @@ def zones_table(c: Ctx) -> dict:
         for z, lo, hi in ZONES[ty]:
             if ty == "hr" and z == "aet":
                 e = easy_hr(c)
-                out.append({"id": "aet", "label": "≤ AeT", "text": f"{e[1]}–{e[2]} bpm" if e else ""})
+                out.append({"id": "aet", "label": "≤ " + EASY_CAP, "text": f"{e[1]}–{e[2]} bpm" if e else ""})
                 continue
             base = {"power": c.cp, "hr": c.lthr, "pace": c.tpace}[ty]
             if ty == "pace":

@@ -51,6 +51,8 @@ import re
 from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Optional
 
+from backend.engine.hr_profile import below
+
 KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.days": "days",
     "plan.prefs.long_day": "long_day",
@@ -323,8 +325,10 @@ def _hr_part(target: str) -> str:
     return " · ".join(hr) if hr else (target or "")
 
 
-def easy_hr_text(aet: Optional[float]) -> str:
-    return f"心率 ≤ AeT {aet:.0f} bpm" if aet else "心率 ≤ AeT"
+def easy_hr_text(aet: Optional[float], measured: bool = False) -> str:
+    """「心率 ≤ 輕鬆跑上限 N bpm」 (hr_profile.easy_cap_hr; `aet` = the easy cap)."""
+    from backend.engine.hr_profile import easy_cap_hr
+    return easy_cap_hr(aet, measured)
 
 
 def trim_quality(s: dict, cap: int) -> bool:
@@ -377,10 +381,16 @@ class Ctx:
     mode: str                         # week mode (… / recovery_week)
     allow_quality: bool               # the caller's quality gate (drift streak in base)
     rates: dict                       # TSS per hour: road / trail / hike / strength
-    aet: Optional[float] = None
-    slots: int = 7                    # allowed days for main sessions
+    aet: Optional[float] = None       # the easy-run HR cap (課表心率區間 Z2 top, or a measured AeT)
+    slots: int = 7                   # allowed days for main sessions
     notes: list = field(default_factory=list)
     quality_cap: Optional[int] = None  # 間歇門檻 guardrail mode: base phase ≤ 1 (engine/quality_gate.py)
+    aet_measured: bool = False        # the cap is a measured AeT (「（實測 AeT）」 in the texts)
+
+    def cap(self) -> str:
+        """「輕鬆跑上限 N bpm」 (hr_profile.easy_cap_label)."""
+        from backend.engine.hr_profile import easy_cap_label
+        return easy_cap_label(None, self.aet, self.aet_measured)
 
     def rate(self, cat: str) -> float:
         return float(self.rates.get(cat) or self.rates.get("road") or 50.0)
@@ -390,33 +400,32 @@ def _terrain_long(s: dict, p: Prefs, c: Ctx) -> None:
     t = "trail" if p.terrain_long == "hike" else p.terrain_long      # the old 登山 = 越野跑
     if t == "auto" or (t == "road" and "馬拉松配速" in (s.get("title") or "")):
         return                  # (a 路跑 專項期 long run with its marathon-pace segment is road already)
-    aet_txt = f" {c.aet:.0f} bpm" if c.aet else ""
     s["terrain"] = t
     if t == "road":
         s["title"] = "LSD（路跑）"
-        s["detail"] = f"平路或緩坡；全程心率壓在 AeT{aet_txt} 以下"
+        s["detail"] = f"平路或緩坡；全程心率壓在{below(c.cap())}"
     else:
         s["title"] = "LSD（山路越野）"
-        s["target"] = easy_hr_text(c.aet)
-        s["detail"] = f"山路越野，陡坡用走的；只看心率（≤ AeT{aet_txt}），山路的配速和功率不準"
+        s["target"] = easy_hr_text(c.aet, c.aet_measured)
+        s["detail"] = f"山路越野，陡坡用走的；只看心率（≤ {c.cap()}），山路的配速和功率不準"
 
 
 def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) -> dict:
     base = dict(template) if template else {
-        "kind": "easy", "title": "輕鬆跑", "target": "", "detail": "心率不超過 AeT", "source": "Uphill Athlete",
+        "kind": "easy", "title": "輕鬆跑", "target": "", "detail": f"心率不超過{c.cap()}", "source": "Uphill Athlete",
         "day": None, "done": False, "done_by": None}
     strides = i == 0 and any(w in (template or {}).get("title", "") for w in ("衝刺", "加速跑"))
     s = {**base, "id": f"easy{i + 1}", "kind": "easy", "minutes": _r5(minutes), "day": None,
          "done": False, "done_by": None}
     if not strides:
         s["title"] = "輕鬆跑"
-        s["detail"] = "心率不超過 AeT"
+        s["detail"] = f"心率不超過{c.cap()}"
     t = p.terrain_easy
     if t == "trail":
         s["terrain"] = "trail"
         s["title"] = "輕鬆越野跑" + ("＋坡道衝刺 8×10 秒" if strides else "")
-        s["target"] = easy_hr_text(c.aet)
-        s["detail"] = "山路或步道；只看心率 ≤ AeT，配速和功率在山路不準" + \
+        s["target"] = easy_hr_text(c.aet, c.aet_measured)
+        s["detail"] = f"山路或步道；只看心率 ≤ {c.cap()}，配速和功率在山路不準" + \
             ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else "")
         cat = "trail"
     else:

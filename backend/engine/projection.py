@@ -30,6 +30,7 @@ from backend.engine import specific_phase as SP
 from backend.engine import steep_hill as SH
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
+from backend.engine.hr_profile import below, easy_cap_label, easy_cap_measured
 from backend.engine.zones import WORKOUT_TARGETS
 
 MAX_WEEKS = 8                 # never schedule further ahead than this
@@ -107,8 +108,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   notes: Optional[list] = None, blocked=frozenset(), quality_cap: Optional[int] = None,
                   aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
                   b2b: Optional[dict] = None, long_min: Optional[float] = None,
-                  sport: str = "trail", goal_pace: Optional[float] = None) -> list[dict]:
+                  sport: str = "trail", goal_pace: Optional[float] = None,
+                  aet_measured: bool = False) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
+    `aet` = the easy-run cap (hr_profile; `aet_measured`: a measured AeT).
     `long_min`: the 專項期 long day (engine/specific_phase.long_minutes); None = the base rule.
     `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
     week's B2B is decided here and written back as b2b["info"].
@@ -124,6 +127,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     road = sport == "road"
     total = hours * 60.0
     ss: list[dict] = []
+    cap_txt = easy_cap_label(None, aet, aet_measured)
 
     def add(**kw):
         ss.append({"target": "", "detail": "", "source": "", "tss": 0.0, "day": None,
@@ -143,12 +147,12 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         if xu_test and kind == "base":
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
         elif road:
-            add(**O.road_long_session(long_min, kind, aet, tph, goal_pace), target=tgt.get("long", ""))
+            add(**O.road_long_session(long_min, kind, aet, tph, goal_pace, aet_measured), target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
                 detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
-                + f"；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
+                + f"；全程心率壓在{below(cap_txt)}，爬坡可以走",
                 source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
             if info is not None and info.get("due"):
                 ss.extend(B2B.followers(ss[-1], info))     # out of the easy minutes (Koop)
@@ -184,33 +188,34 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         st_t, st_d, _st_s = O.ROAD_STRIDES if road else O.HILL_STRIDES
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
-            detail="心率不超過 AeT" + (st_d if strides else ""),
+            detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
             source=O.SRC_UA, tss=m / 60.0 * tph)
     if prefs is not None and prefs.active:
         from backend.engine import plan_prefs as PP
         r = {"road": tph, "trail": tph, "hike": tph, "strength": strength_tss / 35 * 60, **(rates or {})}
         days = [d for d in (monday + dt.timedelta(days=i) for i in range(7)) if d.isoformat() not in blocked]
         n_lost = sum(1 for i in range(7) if prefs.days[i] and (monday + dt.timedelta(days=i)).isoformat() in blocked)
-        ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=r, aet=aet,
+        ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=r, aet=aet, aet_measured=aet_measured,
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
                      quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
         ctx.notes.extend(PP.blocked_pref_notes(prefs, monday, blocked))
         PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs, notes=ctx.notes)
-        return _b2b_finish(ss, info, b2b, monday, aet, blocked, prefs, ctx.notes)
+        return _b2b_finish(ss, info, b2b, monday, aet, blocked, prefs, ctx.notes, aet_measured)
     # the raw 課表偏好 value: aet_test_days isn't part of `active`, so `prefs` may be None here
     aet_days = AT.TEST_DAYS.get(aet_test_days or getattr(prefs, "aet_test_days", None) or "weekday")
     _place(ss, monday, long_wd, blocked, aet_days, notes)
-    return _b2b_finish(ss, info, b2b, monday, aet, blocked, None, notes)
+    return _b2b_finish(ss, info, b2b, monday, aet, blocked, None, notes, aet_measured)
 
 
 def _b2b_finish(ss: list[dict], info: Optional[dict], b2b: Optional[dict], monday: dt.date, aet, blocked,
-                prefs, notes) -> list[dict]:
+                prefs, notes, aet_measured: bool = False) -> list[dict]:
     """engine/b2b.py after the shaping and the placement: texts / caps, then
     the B2B days on consecutive days (課表偏好: allowed days, the caps)."""
     if not info or not info.get("due"):
         return ss
-    B2B.decorate(ss, info, aet, prefs.long_cap if prefs is not None else None, (b2b or {}).get("weight"))
+    B2B.decorate(ss, info, aet, prefs.long_cap if prefs is not None else None, (b2b or {}).get("weight"),
+                 aet_measured)
     kept = B2B.place(ss, monday, monday, set(blocked or ()), prefs.allowed if prefs is not None else None, notes,
                      prefs.cap_weekday if prefs is not None else None, fixed=info.get("pair"))
     B2B.placed(info, kept)
@@ -343,6 +348,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     until = min(until, cap)
     tph = float(cur["target"].get("tss_per_hour") or 50.0)
     th = cur.get("thresholds") or {}
+    th_meas = easy_cap_measured(th)          # the easy cap is a measured AeT (「（實測 AeT）」)
     tgt = target_texts(th)
     long_wd = O.WEEKDAYS.index(cur.get("long_weekday") or "六")
     cur_s = cur.get("sessions") or []
@@ -466,12 +472,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
                            aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
-                           long_min=sp_long, sport=sport, goal_pace=cur.get("mp_goal_pace_s"))
+                           long_min=sp_long, sport=sport, goal_pace=cur.get("mp_goal_pace_s"),
+                           aet_measured=th_meas)
         if sp_info and sp_info.get("active"):
             try:
                 SP.decorate(ss, sp_info)
                 SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=(b2b or {}).get("info"), notes=notes,
-                               rates=cur.get("tss_per_category"))
+                               rates=cur.get("tss_per_category"), aet_measured=th_meas)
             except Exception:              # noqa: BLE001 — never breaks the projection
                 pass
         b2b_info = (b2b or {}).get("info") or {}
@@ -486,7 +493,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             try:
                 lc_info = SH.projected_context(kind, mode, week, lc_cur)
                 SH.apply(ss, lc_info, aet=th.get("aet"), prefs=prefs, b2b=b2b_info, notes=notes,
-                         rates=cur.get("tss_per_category"))
+                         rates=cur.get("tss_per_category"), aet_measured=th_meas)
             except Exception:              # noqa: BLE001 — never breaks the projection
                 lc_info = None
         heat_w = None
@@ -496,7 +503,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 from backend.engine import heat_plan as HP
                 acts_w = list(heat_acts or []) + [{"date": d, "hot_min": 60.0} for d in planned_heat]
                 heat_w = HP.apply(ss, events=events, today=week, prefs=prefs, aet=th.get("aet"), mode=mode, kind=kind,
-                                  notes=notes, acts=acts_w, s_now=HT.current(acts_w, week - dt.timedelta(days=1))["s"])
+                                  notes=notes, acts=acts_w, s_now=HT.current(acts_w, week - dt.timedelta(days=1))["s"],
+                                  aet_measured=th_meas)
                 for d in heat_w.get("days") or []:
                     planned_heat[d] = 1.0
             except Exception:              # noqa: BLE001 — never breaks the projection

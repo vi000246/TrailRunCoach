@@ -122,17 +122,27 @@ class Thresholds:
     # 課表心率區間 (engine/hr_profile.plan_hr_zones, via the plan's thresholds "hr_model"):
     # easy = its Z2 band (a measured AeT caps it), interval classes = its zones
     hrz: Optional[dict] = None
+    aet_measured: bool = False         # the easy cap is a measured AeT (week_plan thresholds)
 
     @classmethod
     def of(cls, t: Optional[dict]) -> "Thresholds":
         t = t or {}
         f = lambda k: float(t[k]) if t.get(k) else None
         hrz = t.get("hr_model") if isinstance(t.get("hr_model"), dict) else None
-        return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"), hrz=hrz)
+        from backend.engine.hr_profile import easy_cap_measured
+        return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"), hrz=hrz,
+                   aet_measured=easy_cap_measured(t))
+
+
+def cap_name(th: Thresholds) -> str:
+    """The step name of an easy step capped by HR: 「心率 ≤ 輕鬆跑上限」 (+「（實測 AeT）」 when
+    measured; the bpm is the step's target) — hr_profile.easy_cap_label."""
+    from backend.engine.hr_profile import easy_cap_label
+    return "心率 ≤ " + easy_cap_label(None, None, th.aet_measured or bool((th.hrz or {}).get("aet_measured")))
 
 
 def easy_hr(th: Thresholds) -> Optional[tuple]:
-    """Easy / long / hike: heart rate capped at AeT — with a 課表心率區間, its Z2
+    """Easy / long / hike: heart rate capped at the easy-run cap — with a 課表心率區間, its Z2
     band (the cap a measured AeT, else Z2's top; hr_profile.plan_hr_zones)."""
     if th.hrz and th.hrz.get("easy"):
         lo, hi = th.hrz["easy"]
@@ -434,7 +444,7 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
                 Step(EX_COOLDOWN, WS.MP_TAIL_S, easy_target(s, th), "輕鬆收操")]
     if kind in ("long", "mountain", "hike"):
         it = easy_target(s, th, (0.80, 0.88) if kind == "long" else (0.75, 0.88))
-        return [Step(EX_TRAIN, secs, it, "心率 ≤ AeT" if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
+        return [Step(EX_TRAIN, secs, it, cap_name(th) if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
     if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
         # heat-acclimation.md §5.4: warm-up 10 / main / cool-down 5 (walk), HR ≤ AeT
         return [Step(EX_WARMUP, 10 * 60, easy_hr(th), "熱適應：慢慢進入"),
@@ -448,11 +458,11 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
             base = secs - n * (sprint + recover)
             if base >= 10 * 60:
                 w_name, r_name, rep_name = WS.strides_names(s.get("title") or "", sprint, n)
-                return [Step(EX_TRAIN, base, easy_target(s, th), "心率 ≤ AeT"),
+                return [Step(EX_TRAIN, base, easy_target(s, th), cap_name(th)),
                         Repeat(n, [Step(EX_TRAIN, sprint, None, w_name),
                                    Step(EX_REST, recover, None, r_name)], rep_name)]
         it = easy_target(s, th)
-        return [Step(EX_TRAIN, secs, it, "心率 ≤ AeT" if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
+        return [Step(EX_TRAIN, secs, it, cap_name(th) if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
     raise Unsupported(f"不支援的課表類型 {kind}")
 
 
