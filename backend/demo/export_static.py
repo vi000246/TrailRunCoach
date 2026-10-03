@@ -770,6 +770,153 @@ def update_steps(root: Path, out: Path, log=lambda m: print(m, flush=True)) -> d
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------- race calculator (Pyodide)
+# Any input the crawl did not precompute is computed in the browser: static_shim.js starts
+# static/trc_racepower_worker.js, which runs engine/racepower/calc.py with Pyodide on
+# data/racepower_ctx.json (backend/demo/static_racepower.py).
+def pass_racepower(app: DemoApp, rec: Recorder, log) -> dict:
+    """data/racepower_ctx.json (the athlete context, in rec.files) and the Python bundle
+    (returned: {"bundle": zip bytes, "version", "modules"}) for write_racepower()."""
+    import hashlib
+    from backend.api import racepower as RP
+    from backend.demo import static_racepower as SR
+    t0 = time.time()
+    raw = SR.export_json(RP.LIVE)
+    tmp = Path(tempfile.mkdtemp(prefix="trc-static-rp-"))
+    try:
+        (tmp / SR.CTX_FILE).write_bytes(raw)
+        tr = SR.trace(tmp / SR.CTX_FILE)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    zipped = SR.bundle(tr["modules"])
+    rec.files[SR.CTX_FILE] = raw
+    prefix = API + "racepower/"
+    saved = [data_file(v["url"]) for v in rec.gets.values() if urlsplit(v["url"]).path.startswith(prefix)] + \
+        [name for name, v in rec.posts.items() if urlsplit(v["url"]).path.startswith(prefix) and v["status"] == 200]
+    rec.files[SR.SAVED_FILE] = json.dumps({"v": 1, "files": sorted(set(saved))}).encode("utf-8")
+    version = hashlib.sha1(zipped + raw).hexdigest()[:12]
+    log(f"  racepower: context {len(raw) // 1024} KB, bundle {len(zipped) // 1024} KB "
+        f"({len(tr['modules'])} modules traced), {time.time() - t0:.0f} s")
+    return {"bundle": zipped, "version": version, "modules": tr["modules"]}
+
+
+def write_racepower(out: Path, rp: dict) -> list[str]:
+    """static/py/trc_racepower.zip and static/trc_racepower_worker.js (the context is a data/ file)."""
+    from backend.demo import static_racepower as SR
+    z = out / "static" / SR.BUNDLE
+    z.parent.mkdir(parents=True, exist_ok=True)
+    z.write_bytes(rp["bundle"])
+    (out / "static" / SR.WORKER).write_text(SR.worker_js(rp["version"]), "utf-8")
+    return ["static/" + SR.BUNDLE, "static/" + SR.WORKER]
+
+
+def _crawl_racepower(app: DemoApp, rec: Recorder, snapshot: dt.date, log) -> None:
+    """crawl_pages() for the race calculator page only (its precomputed default answers)."""
+    from playwright.sync_api import sync_playwright
+    cr = Crawler(app, rec)
+    clock = (f"window.TRC_STATIC_CFG = {json.dumps({'snapshot': snapshot.isoformat(), 'clockOnly': True})};\n"
+             + SHIM_SRC.read_text("utf-8"))
+    path = "/api/v1/racepower/page"
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        try:
+            ctx = b.new_context(viewport={"width": 1400, "height": 900}, locale="zh-TW", timezone_id="Asia/Taipei")
+            ctx.add_init_script(clock)
+            ctx.route("**/*", cr.handle)
+            page = ctx.new_page()
+            page.goto(HOST + path, wait_until="domcontentloaded", timeout=120000)
+            cr.settle(page, quiet_s=1.5)
+            task_racepower(cr, page)
+            page.close()
+            ctx.close()
+        finally:
+            b.close()
+    log(f"  page {path}: {len(rec.gets)} GETs, {len(rec.posts)} precomputed")
+
+
+def _saved_body(status: int, body: bytes) -> bytes:
+    """A recorded answer as write_site saves it (non-200: wrapped with its status)."""
+    if status == 200:
+        return body
+    try:
+        inner = json.loads(body)
+    except ValueError:
+        inner = None
+    return json.dumps({"__trc_status": status, "body": inner}, ensure_ascii=False).encode("utf-8")
+
+
+def update_racepower(root: Path, out: Path, browser: bool = True, log=lambda m: print(m, flush=True)) -> dict:
+    """Refresh only the race calculator in an existing export (--update-racepower): the Pyodide
+    bundle + worker, data/racepower_ctx.json, the shim, and its precomputed answers — the
+    race calculator page is crawled again; precomputed answers saved as 429 (the demo's rate
+    limits, before the export lifted them) are removed."""
+    out = out.resolve()
+    if not (out / MARKER).exists() or not (out / "data").is_dir():
+        raise SystemExit(f"{out} is not a static demo export")
+    root = root.resolve()
+    tmp = Path(tempfile.mkdtemp(prefix="trc-static-rp-"))
+    home = tmp / "demo"
+    shutil.copytree(root, home, ignore=shutil.ignore_patterns("sandboxes"))
+    (home / "sandboxes").mkdir(exist_ok=True)
+    try:
+        rec = Recorder()
+        with DemoApp(home) as app:
+            cal = _get_json(app, rec, "/api/v1/overview/plan/calendar?start=2000-01-03&end=2000-01-09", record=False) or {}
+            today = dt.date.fromisoformat(cal.get("today") or dt.date.today().isoformat())
+            snap = json.loads((out / "export.json").read_text("utf-8")).get("snapshot") if (out / "export.json").exists() else None
+            if snap and snap != today.isoformat():
+                log(f"  ! the export's day is {snap}, the demo's today {today}: re-export instead")
+            if browser:
+                _crawl_racepower(app, rec, today, log)
+            rp = pass_racepower(app, rec, log)
+            # the page itself (its error display, the locks): rendered like write_site does
+            from backend.demo import sandbox as SB
+            day = snap or today.isoformat()
+            cfg = {"snapshot": day, "today": day, "pages": {**PAGES, **PAGE_ALIASES}, "compute": COMPUTE_POSTS.pattern,
+                   "locks": STATIC_LOCKS}
+            status, _h, page_body = app.get("/api/v1/racepower/page")
+            page_html = transform_page(page_body.decode("utf-8"), cfg, static_session(SB.current_base_name())) \
+                if status == 200 else None
+        scrub = scrubber([str(REPO), str(tmp), str(home), str(root), str(Path.home())])
+        removed = 0
+        for p in (out / "data").glob("p*.json"):
+            try:
+                j = json.loads(p.read_text("utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(j, dict) and j.get("__trc_status") == 429:
+                p.unlink()
+                removed += 1
+        written = []
+        for v in rec.gets.values():
+            name = data_file(v["url"])
+            (out / "data" / name).write_bytes(scrub(minify_json(_saved_body(v["status"], v["body"])).decode("utf-8")).encode("utf-8"))
+            written.append(name)
+        for name, v in rec.posts.items():
+            (out / "data" / name).write_bytes(scrub(minify_json(_saved_body(v["status"], v["body"])).decode("utf-8")).encode("utf-8"))
+            written.append(name)
+        for name, raw in rec.files.items():
+            (out / "data" / name).write_bytes(scrub(raw.decode("utf-8")).encode("utf-8"))
+            written.append(name)
+        files = write_racepower(out, rp)
+        shutil.copyfile(SHIM_SRC, out / "static" / "trc_static.js")
+        if page_html is not None:
+            (out / PAGES["/api/v1/racepower/page"]).write_text(scrub(page_html), "utf-8")
+            files.append(PAGES["/api/v1/racepower/page"])
+        try:
+            info = json.loads((out / "export.json").read_text("utf-8"))
+            info["racepower"] = {"version": rp["version"], "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+            (out / "export.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), "utf-8")
+        except (OSError, ValueError):
+            pass
+        return {"today": today.isoformat(), "version": rp["version"], "removed_429": removed,
+                "precomputed": len(rec.posts), "gets": len(rec.gets),
+                "updated": files + ["static/trc_static.js", "data/" + "racepower_ctx.json"],
+                "leaks": check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])[:20]}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def pass_routes(app: DemoApp, rec: Recorder, log) -> None:
     ids: list[str] = []
     for k in list(rec.gets):
@@ -1035,11 +1182,13 @@ def export(root: Path, out: Path, activities: int = 40, browser: bool = True, ke
                 crawl_pages(app, rec, snapshot, verbose, log)
             pass_schedule(app, rec, snapshot, log)
             pass_steps(app, rec, snapshot, log)
+            rp = pass_racepower(app, rec, log)
             pass_routes(app, rec, log)
             chosen = pick_activities(acts, activities)
             pass_viewer(app, rec, snapshot, chosen, log)
             scrub = scrubber([str(REPO), str(tmp), str(home), str(root), str(Path.home())])
             info = write_site(app, rec, out, snapshot, base_name, scrub, log)
+            write_racepower(out, rp)
         info["seconds"] = round(time.time() - t0)
         info["refused_writes"] = sorted({f"{m} {p}" for m, p in rec.writes})
         bad = check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])
@@ -1100,9 +1249,16 @@ def main(argv: Optional[list[str]] = None) -> int:
                     help="incremental: copy the export --reuse to --out and re-crawl only what the demo root's "
                          "new activities change (build.py --add-linked); older activities' files are reused")
     ap.add_argument("--reuse", type=Path, help="the existing export --update starts from (default: --out)")
+    ap.add_argument("--update-racepower", action="store_true",
+                    help="only refresh the race calculator (Pyodide bundle, data/racepower_ctx.json, its precomputed "
+                         "answers, the shim) in an existing --out")
     a = ap.parse_args(argv)
     if a.update:
         info = update(a.root, (a.reuse or a.out), a.out, browser=not a.no_browser, verbose=a.verbose)
+        print(json.dumps(info, ensure_ascii=False, indent=1))
+        return 2 if info.get("leaks") else 0
+    if a.update_racepower:
+        info = update_racepower(a.root, a.out, browser=not a.no_browser)
         print(json.dumps(info, ensure_ascii=False, indent=1))
         return 2 if info.get("leaks") else 0
     if a.update_steps:

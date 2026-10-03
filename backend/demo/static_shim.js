@@ -29,6 +29,13 @@
   const MISS_MSG = "示範版沒有這筆資料";
   const CALC_MSG = "示範版只預先算好預設輸入的結果；這組輸入要在完整版才能計算";
   const PAGE_MSG = "示範版沒有這個頁面";
+  const ENGINE_FAIL_MSG = "示範版的計算引擎載入失敗（要連得到 cdn.jsdelivr.net）：請確認網路後重新整理";
+  const ENGINE_ERR_MSG = "示範版算不出這組輸入，請換一組數字再試";
+  // the race calculator's computations: the precomputed answer, else the engine in the browser
+  // (static/trc_racepower_worker.js: engine/racepower/calc.py with Pyodide; backend/demo/static_racepower.py)
+  const RACEPOWER_POSTS = /^\/api\/v1\/racepower\/(predict|plan|course\/event\/[^/]+|export\/csv)$/;
+  const RACEPOWER_WORKER = "trc_racepower_worker.js";
+  const RACEPOWER_SAVED = "racepower_saved.json";             // static_racepower.SAVED_FILE
   const OV_KEY = "trc.static.overlay.v1";
   const PAPI = "/api/v1/overview/plan";
   const STEPS_FILE = "steps_ctx.json";
@@ -1069,8 +1076,89 @@
     const unwrap = (j) => (j && typeof j === "object" && !Array.isArray(j) && "__trc_status" in j
       ? { status: j.__trc_status, body: j.body } : { status: 200, body: j });
 
+    // -- the race calculator's engine (a Web Worker with Pyodide), started on the first
+    //    computation the export did not precompute; a small pill shows its progress
+    const Engine = (() => {
+      let worker = null, readyP = null, seq = 0, loadMs = null;
+      const waiting = new Map();
+      const pill = (text) => {
+        let el = doc.getElementById("trc-engine");
+        if (!text) { if (el) el.hidden = true; return; }
+        if (!el) {
+          el = doc.createElement("div"); el.id = "trc-engine"; el.setAttribute("role", "status");
+          el.style.cssText = "position:fixed;right:14px;bottom:14px;z-index:80;padding:7px 12px;border-radius:999px;background:#1f2937;color:#fff;font:12.5px/1.3 system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.22);opacity:.92";
+          doc.body.appendChild(el);
+        }
+        el.textContent = text; el.hidden = false;
+      };
+      function start() {
+        if (readyP) return readyP;
+        readyP = new Promise((resolve, reject) => {
+          try { worker = new win.Worker(STATIC + RACEPOWER_WORKER, { type: "module" }); } catch (e) { reject(e); return; }
+          worker.onmessage = (ev) => {
+            const m = ev.data || {};
+            if (m.type === "progress") pill(`載入計算引擎… ${m.text}`);
+            else if (m.type === "ready") { loadMs = m.ms; resolve(m.ms); }
+            else if (m.type === "fail") reject(new Error(m.error));
+            else if (m.type === "result") { const w = waiting.get(m.id); if (w) { waiting.delete(m.id); w(m.out); } }
+          };
+          worker.onerror = (e) => reject(new Error((e && e.message) || "worker error"));
+          worker.postMessage({ type: "init", base: STATIC, data: DATA });
+        });
+        pill("載入計算引擎…（第一次要下載約 10 MB）");
+        readyP.then(() => pill(null), () => pill(null));
+        return readyP;
+      }
+      // -> {status, body} | {status, csv, filename}
+      async function call(method, path, body) {
+        try { await start(); }
+        catch (e) {
+          if (win.console) win.console.warn("trc static engine:", e);
+          readyP = null; if (worker) { try { worker.terminate(); } catch (_) {} worker = null; }   // retry next time
+          return { status: 503, body: { detail: ENGINE_FAIL_MSG } };
+        }
+        const id = ++seq;
+        const slow = setTimeout(() => pill("計算中…"), 400);
+        const out = await new Promise((res) => { waiting.set(id, res); worker.postMessage({ type: "call", id, method, path, body }); });
+        clearTimeout(slow); pill(null);
+        let r;
+        try { r = JSON.parse(out); } catch (_) { r = { status: 500, body: { detail: ENGINE_ERR_MSG } }; }
+        if (r.error && win.console) win.console.warn("trc static engine:", r.error, r.trace || "");
+        if (r.status === 503) r.body = { detail: ENGINE_FAIL_MSG };
+        return r;
+      }
+      return { call, start, get loadMs() { return loadMs; } };
+    })();
+    const engineResponse = (r) => {
+      if (r.csv != null) {
+        return new win.Response("﻿" + r.csv, { status: 200, headers: { "Content-Type": "text/csv; charset=utf-8",
+          "X-Filename": encodeURIComponent(r.filename || "racepower.csv") } });
+      }
+      return json(r.status, r.body);
+    };
+    // GET /racepower/weather the export did not save: what the server answers without network
+    const offlineWeather = (url) => {
+      const p = url.searchParams, date = p.get("date") || "";
+      const lead = date ? Math.round((Date.parse(date.slice(0, 10) + "T00:00:00Z") - Date.parse((CFG.today || CFG.snapshot) + "T00:00:00Z")) / 864e5) : null;
+      const num = (k) => (p.get(k) == null || p.get(k) === "" ? null : Number(p.get(k)));
+      return { provider: "manual", label: "手動 / 預設", values: null, hourly: null, fetched_at: null, lead_days: lead,
+        tried: [{ provider: "weather", ok: false, reason: "示範版不連網查天氣：比賽日溫度、濕度請自己填" }],
+        location: { name: p.get("peak"), lat: num("lat"), lon: num("lon"), elevation_m: num("elevation") }, peak: null };
+    };
+
+    // data/racepower_saved.json: which race-calculator answers the export saved (none listed: ask
+    // the engine without a 404 first); an export without it: try the file as before
+    let rpSavedP = null;
+    const rpSaved = () => (rpSavedP ||= loadData(RACEPOWER_SAVED).then((d) => (d && Array.isArray(d.files) ? new Set(d.files) : null)));
+    const rpMissing = async (path, file) => {          // only where a miss has an answer (engine / offline)
+      if (!RACEPOWER_POSTS.test(path) && !/^\/api\/v1\/racepower\/(weather|heat-status)$/.test(path)) return false;
+      const s = await rpSaved();
+      return !!s && !s.has(file);
+    };
+
     async function getApi(url) {
       const key = dataKey(url.pathname, url.search);
+      if (await rpMissing(url.pathname, fnv64(key) + ".json")) { misses.push(key); return null; }
       const j = await loadData(fnv64(key) + ".json");
       if (j === null) { misses.push(key); return null; }
       return unwrap(j);
@@ -1112,6 +1200,9 @@
           if (r) return json(200, r);
         }
         const got = await getApi(url);
+        if (!got && path === "/api/v1/racepower/weather") return json(200, offlineWeather(url));
+        if (!got && path === "/api/v1/racepower/heat-status")
+          return engineResponse(await Engine.call("GET", path, JSON.stringify({ date: url.searchParams.get("date") || null })));
         // plain text: the pages show `${status} ${body text}` -> 「404 示範版沒有這筆資料」
         if (!got) return new win.Response(MISS_MSG, { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
         if (got.status === 200 && (path === PAPI + "/calendar" || path === PAPI + "/sessions")) {
@@ -1159,6 +1250,14 @@
           }
         }
         return json(403, errBody("STATIC_PRECOMPUTED_ONLY", CALC_MSG));
+      }
+      if (method === "POST" && RACEPOWER_POSTS.test(path) && (typeof body === "string" || body == null)) {
+        const pf = typeof body === "string" ? postFile(method, path, url.search, body) : null;
+        if (pf && !(await rpMissing(path, pf))) {     // the export's answer to the page's default inputs: instant
+          const j = await loadData(pf);
+          if (j !== null) { const u = unwrap(j); if (u.status === 200) return json(200, u.body); }
+        }
+        return engineResponse(await Engine.call(method, path, body == null ? null : body));
       }
       if (COMPUTE.test(path)) {
         if (typeof body === "string") {
