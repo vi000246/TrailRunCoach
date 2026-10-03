@@ -482,17 +482,14 @@ def due(today: dt.date, kind: Optional[str], base_start: Optional[str], reason,
         last_test: Optional[str]) -> bool:
     """Suggest the AeT test this week? Base phase, a reason
     (quality_gate.aet_test_reason: no data for ~6 weeks, the aggregate's SE
-    too large, a shift, the estimate moved — B3 and the Z5 lifecycle) that
-    isn't waiting for a stable weekly volume, and no test in the last
-    RECENT_DAYS (推估 spacing). No fixed cadence any more.
+    too large, a shift, the estimate moved — B3 and the Z5 lifecycle), and no
+    test in the last RECENT_DAYS (推估 spacing). No fixed cadence any more.
     `reason` may be the reason dict or any truthy value; a date string (the
     old signature) is not a reason."""
     if (kind or "base") != "base":
         return False
     if not reason or isinstance(reason, str):
         return False
-    if isinstance(reason, dict) and reason.get("wait"):
-        return False                # the weekly volume isn't stable yet (base_check.volume_stable, 推估)
     if last_test and (today - dt.date.fromisoformat(last_test)).days < RECENT_DAYS:
         return False
     return True
