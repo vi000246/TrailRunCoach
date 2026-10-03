@@ -27,7 +27,7 @@ from typing import Iterable, Optional, Sequence
 # heat minute — route_weather.HOT_HADLEY (Hadley's 151–160 band, ≥ ~4.5 %
 # slower), shared so the overview and the routes page flag the same days.
 HOT_HADLEY = 150.0
-# 130–150 counts linearly 0 → 1 (Taipei summer evenings; Brown 2022 shows
+# 130–150 counts linearly 0 → 1 (humid subtropical summer evenings; Brown 2022 shows
 # everyday outdoor activity acclimatises seasonally) [推估]
 PARTIAL_HADLEY = 130.0
 # ≥ 60 min/day of heat exposure (Racinais et al. 2015 consensus, BJSM
@@ -65,9 +65,9 @@ EVIDENCE = "Pandolf 1998；Racinais 2015 共識；Daanen 2018；Racinais 2015 MS
 # route FE + power + moving min + time of day + β·(Hadley − 120), OLS) gave
 # β = 0.224 ± 0.036 bpm per Hadley unit (docs/spec/racepower.spec.md,
 # 2026-10-01; docs/research/unsourced-rules.md §A5). Linear and centred on
-# Hadley 120, as it was fitted. The fit is the athlete's own [本人資料]; using
+# Hadley 120, as it was fitted. The fit is one runner's own data [本人資料]; using
 # it to move one run's HR to Hadley 120 is [推估].
-HR_BETA = 0.224              # the author's fit; in use: heat_calib.hr_beta() (per athlete)
+HR_BETA = 0.224              # one runner's fit; in use: heat_calib.hr_beta() (per athlete)
 HR_BETA_SE = 0.036
 HR_BETA_REF = 120.0
 HR_BETA_SRC = "單一跑者回測 β 0.224 ± 0.036 bpm／Hadley（271 段路線，推估）"

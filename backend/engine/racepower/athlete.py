@@ -400,9 +400,9 @@ def _pd_mftp(ds, day: dt.date) -> Optional[float]:
         try:
             # this CP only locates the Friel window of the LTHR estimate
             # (thresholds.estimate, an HR threshold): the power the models use
-            # when the window has any (a junk watch file, e.g. TP's 2025-12-14
-            # 899 W "run", must not break the fit), else every power — before
-            # the Stryd (2025-03) the history has watch power only, measured
+            # when the window has any (a junk watch file, e.g. a TP car ride
+            # read as an 899 W "run", must not break the fit), else every power — before
+            # a Stryd the history may have watch power only, measured
             # against a CP from the same watch power (推估)
             pw = [w for w in runs if power_ok(ds, w) and power_source(ds, w) != "none"]
             pdm = pd_model(ds, day, pw, None) if pw else pd_model(ds, day, runs, None, any_power=True)
@@ -1111,7 +1111,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     env_pts = [(x, y, i) for x, y, i in zip(env365["xs"], env365["ys"], env365["who"])]
     # each run's moving-time average too: the back-test, the effort f and the
     # predictions all work on moving time, and a paused run's elapsed mean-max
-    # understates what the athlete held (2025-12-21: 178.8 vs 184.2 W)
+    # understates what the athlete held (e.g. ~3 % lower on a long road race)
     bad = {d_["idx"] for d_ in dropped365}
     for w in runs_365:
         m_ = metrics.get(w.idx)

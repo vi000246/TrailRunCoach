@@ -4,7 +4,7 @@ Sustained-climb detection.
 Mountain fitness is climbing fitness, and the climbs you do on local hills are
 the same capability a 百岳 trip draws on. Treating each sustained climb as its
 own data point — rather than each activity — roughly doubles the evidence for
-this athlete (≈60-80 climbs a year from ≈40 trail runs), which is what makes a
+a typical trail runner (e.g. ≈60-80 climbs a year from ≈40 trail runs), which is what makes a
 climbing-ability trend meaningful when trail and 百岳 days are sparse.
 
 A climb starts at a low point and runs to the highest point reached before the

@@ -4,7 +4,7 @@
 
 ## 方法
 
-- **API 掃描**：`GET /views`，每張圖打 `/views/{view}/dashboards/{d}/charts/{c}`。趨勢圖用 `begin=2025-10-01&end=2026-09-30`；單次活動圖各跑 #1097（有功率的路跑）、#1094（越野跑）、#1073（登山健行）。每條 series 記錄 data.kind、點數、錯誤訊息，以及是否全部 NaN／0／常數。共 270 次圖表請求（單次活動圖每筆活動算一次）。
+- **API 掃描**：`GET /views`，每張圖打 `/views/{view}/dashboards/{d}/charts/{c}`。趨勢圖用最近一年的 `begin`／`end`；單次活動圖各跑三筆：一筆有功率的路跑、一筆越野跑、一筆登山健行。每條 series 記錄 data.kind、點數、錯誤訊息，以及是否全部 NaN／0／常數。共 270 次圖表請求（單次活動圖每筆活動算一次）。
 - **瀏覽器掃描**（Playwright）：用 `?view=&dash=` 開每個 dashboard，讀每張卡片的 ECharts option，找出沒畫任何 series、只有座標軸、空表格、錯誤文字、console error 的卡片，並截圖。首頁與賽事功率頁另外切換週／月／年、上一期、路跑／越野／百岳。
 - 「單次活動」的卡片數以 3 筆活動 × 圖表計。
 
@@ -24,12 +24,12 @@
 
 ### 1. 評估器（evaluator gap）
 
-- **核准的資料校正對 mean-max／PD 圖沒效果** — `backend/engine/wko5expr/evaluator.py: Evaluator._cached_curve`。`meanmax(power)` 先讀 WKO5 Cache5 的曲線，而那是原始樣本的曲線，已核准的功率尖峰校正又被帶回來。現在只要該檔有核准的校正，就改用校正後的樣本重算。實測：在拋棄式校正檔核准三筆尖峰提案後，2025-10-01–2026-09-30 的 PD 模型從「擬合失敗」變成 mFTP 185 W、TTE 1:01:48、valid。
+- **核准的資料校正對 mean-max／PD 圖沒效果** — `backend/engine/wko5expr/evaluator.py: Evaluator._cached_curve`。`meanmax(power)` 先讀 WKO5 Cache5 的曲線，而那是原始樣本的曲線，已核准的功率尖峰校正又被帶回來。現在只要該檔有核准的校正，就改用校正後的樣本重算。實測：在拋棄式校正檔核准三筆尖峰提案後，一年範圍的 PD 模型從「擬合失敗」變成 valid（mFTP、TTE 落在正常範圍）。
 
 ### 2. Render／JSON 形狀
 
 - **EPH by EP**（及所有 `(每筆活動的值, 每筆活動的值)` 散佈圖） — `render.py: _pair_series_json`。兩邊都是逐筆活動（WS）或逐日（Daily）序列的 pair，原本被壓成一個 null 點。現在每筆活動一點。
-- **`(x,)` 是垂直線** — `render.py: _scalar_pair_json`，新增 `vline`。`(avg(power),)`（HR vs Power 圖的平均功率線）、`(0,)`（LSS 飄移率 by 坡度的 0% 線）、`(153,)`／TTE 線原本回傳空值或 null 點。單次活動圖裡兩個單值的 `(x, y)` 也改成一個點（原本是空的 value）。
+- **`(x,)` 是垂直線** — `render.py: _scalar_pair_json`，新增 `vline`。`(avg(power),)`（HR vs Power 圖的平均功率線）、`(0,)`（LSS 飄移率 by 坡度的 0% 線）、`(常數,)`／TTE 線原本回傳空值或 null 點。單次活動圖裡兩個單值的 `(x, y)` 也改成一個點（原本是空的 value）。
 - **單次活動的 x-y 散佈圖被標成時間軸** — `render.py: workout_result_to_json / _is_time`。`(ewma(power,30), heartrate)`、`(rgrade, LSS)` 原本 `x: "seconds"`，檢視器因此把它們從功率／坡度 x 軸的圖中濾掉（HR vs Power by % of work／by grade、LSS 飄移率 by 坡度的散佈點都沒畫）。現在只有 x 真的是 elapsedtime 才算時間軸。
 - **地圖面板** — `backend/api/wko5views.py: _panel_kind / chart`、`render.py: render_map`。WKO5 的 `PKMapPanelConfig` 原本是「地圖／其他面板尚未支援」。現在回傳 GPS 軌跡（最多 2000 點），檢視器畫成依海拔上色的軌跡（沒有底圖）。
 
@@ -47,15 +47,15 @@
 
 | 卡片 | 原因 | 顯示 |
 |---|---|---|
-| #1073 登山健行：Power chart、Power Summary、Avg Power、np、Power Variation and Trend、Energy System Impact、PWHR、Aerobic／Anaerobic TIS（9 張） | 手錶沒有記錄功率 | 這筆活動沒有功率資料（裝置沒有記錄）。 |
-| #1073：Cadence、Cadence Summary、Cadence Variation and Trend、步頻 vs 垂直比（4 張） | 沒有步頻 | 這筆活動沒有步頻資料（裝置沒有記錄）。 |
-| This Week Climbing／Run Distance／Run Duration／Run TSS（4 張） | 本週（9/28 起）還沒有活動；最後一筆是 9/24 | 本週還沒有活動，這段期間沒有資料。 |
+| 登山健行那筆：Power chart、Power Summary、Avg Power、np、Power Variation and Trend、Energy System Impact、PWHR、Aerobic／Anaerobic TIS（9 張） | 手錶沒有記錄功率 | 這筆活動沒有功率資料（裝置沒有記錄）。 |
+| 登山健行那筆：Cadence、Cadence Summary、Cadence Variation and Trend、步頻 vs 垂直比（4 張） | 沒有步頻 | 這筆活動沒有步頻資料（裝置沒有記錄）。 |
+| This Week Climbing／Run Distance／Run Duration／Run TSS（4 張） | 掃描當週還沒有活動 | 本週還沒有活動，這段期間沒有資料。 |
 | 本周目標runTSS、本周EP v.s 目標EP | 同上（目標值有畫，本週值是 —） | gauge 下方顯示「本週還沒有活動」 |
 | Stamina、Run Interval Targeting FRC、Aerobic and Anaerobic Contribution to Power Run（3 張） | **PD 模型擬合失敗**，原因是功率資料壞掉，見下 | 說明＋到「設定 › 資料校正」核准的指引（核准後已正常畫出） |
 
 只有部分 PD series 空白、其他線有畫的圖（例如用一整年範圍的 PD Curve with Metrics、Best Times for Informal Testing、PD Curve Profile、VLamax），卡片上方會顯示同一段 `notice`。Donny's Optimized Interval Targeting 只看最近 90 天，不含尖峰，所以本來就畫得出 PD 曲線，不會顯示 notice。
 
-**PD 模型為什麼擬合失敗**：2025-12-14 的路跑（#929）有 520 個 >905 W 的樣本，10 分鐘平均 908 W；2025-10-26 越野跑（#895）有 1594 W 的尖峰（另外還有 2024-06-29 #600）。所以一年的 run-power 包絡線 5 分鐘 1173 W、20 分鐘 193 W，Gauss-Newton 在 FTP 撞到下限後矩陣奇異。`/corrections/proposals` 已經列出這三筆。依照資料校正的設計（「只列建議，按下套用才生效」），我沒有替使用者核准；使用者之後自己核准了三筆（`/corrections` 的 applied 清單），加上修正 1，PD 模型可以擬合（在拋棄式校正檔上驗證的結果：mFTP 185 W，valid）。MMP Peaks Report 在核准前顯示的 1449 W／1319 W 也是同樣的尖峰。
+**PD 模型為什麼擬合失敗**：一筆路跑有數百個約 4 倍 CP 的錯誤樣本，連 10 分鐘平均都在這個水準；一筆越野跑有約 7 倍 CP 的尖峰（另外還有一筆更早的活動）。所以一年的 run-power 包絡線 5 分鐘高達約 5 倍 CP、20 分鐘卻接近 CP，Gauss-Newton 在 FTP 撞到下限後矩陣奇異。`/corrections/proposals` 已經列出這三筆。依照資料校正的設計（「只列建議，按下套用才生效」），我沒有替使用者核准；使用者之後自己核准了三筆（`/corrections` 的 applied 清單），加上修正 1，PD 模型可以擬合（在拋棄式校正檔上驗證的結果：valid）。MMP Peaks Report 在核准前顯示的異常高峰值也是同樣的尖峰。
 
 ## 資料確實不存在、只有部分 series 空白的（沒有動）
 
@@ -66,7 +66,7 @@
 - `if(TSB >= 25, …)`、`if(tisaerobic > 6, …)`：TSB 沒有超過 25、有氧 TIS 最高 6。
 - `goalclimbperkm`、`goalhours`（我的訓練、周期化訓練）：賽季計畫沒有設 A 賽事。
 - 溫度、Garmin `@vertical_oscillation`：裝置沒有記錄（Stryd 的垂直振幅有）。
-- 路跑 #1097 的 `rgrade >= 0.3`：路跑沒有 30% 以上的坡。
+- 那筆路跑的 `rgrade >= 0.3`：路跑沒有 30% 以上的坡。
 - VO2max 間歇標記（v3／v4）全 0：這些活動沒有符合條件的 VO2max 間歇。
 
 ## 仍然存在、屬於圖表設計的小問題
@@ -75,7 +75,7 @@
 
 ## 首頁、賽事功率頁
 
-首頁（PMC、每日 TSS、做了什麼 週／月／年／上一期、爬升、指標）和賽事功率頁（CP、Riegel；路跑／越野／百岳）的每個 ECharts 都有畫出資料，沒有錯誤文字，也沒有 console error。賽事功率頁本來就排除了 2025-12-14 的異常活動。
+首頁（PMC、每日 TSS、做了什麼 週／月／年／上一期、爬升、指標）和賽事功率頁（CP、Riegel；路跑／越野／百岳）的每個 ECharts 都有畫出資料，沒有錯誤文字，也沒有 console error。賽事功率頁本來就排除了那筆功率異常的路跑。
 
 ## 後續：render cache（圖表分析頁太慢、重新整理會 Failed to fetch）
 
@@ -93,7 +93,7 @@
 |---|---:|---:|
 | 冷啟動第一次載入 Season View | 228.6 s | 204–713 s（cache miss，一樣慢）¹ |
 | 同一行程再載入 Season View | 12.0 s | 0.6 s |
-| 同一行程再載入 Workout #1097（53 張） | 3.1 s | 0.8 s |
+| 同一行程再載入單次活動 Workout View（53 張） | 3.1 s | 0.8 s |
 | 重啟後載入 Season View | 228.6 s（全部重算） | 15.2 s（第一個請求要建 Dataset，約 11 s） |
 | 重啟後單張 PMC with Insights | 50.0 s | 1.4 s |
 | 載入期間 `/config` 最慢回應 | 0.9 s | 1.3–1.9 s（冷載入時） |

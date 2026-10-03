@@ -18,8 +18,8 @@ from backend.tests.fit_builder import build_run
 
 TODAY = dt.date(2026, 10, 1)
 UTC = timezone.utc
-# the user's real row (plan.json, 2026-09-30): an applied estimate, no lthr_method
-REAL_NOTE = "LTHR 自動估算（7 次跑步的最佳 30 分鐘後 20 分鐘平均心率）；CP 204 W：9/30 測試的 12 分段"
+# a legacy plan.json row: an applied estimate, no lthr_method
+LEGACY_NOTE = "LTHR 自動估算（7 次跑步的最佳 30 分鐘後 20 分鐘平均心率）；CP 204 W：CP 測試的 12 分段"
 
 
 def _ds(tmp_path, plan):
@@ -34,7 +34,7 @@ def _ds(tmp_path, plan):
 
 
 def test_legacy_rows_read_their_note():
-    t = Threshold("2026-09-30", lthr=155, cp=204, note=REAL_NOTE)
+    t = Threshold("2026-09-30", lthr=155, cp=204, note=LEGACY_NOTE)
     assert P.threshold_method(t, "lthr") == "estimate"
     assert P.threshold_method(t, "aethr") is None                     # no AeT on the row
     a = Threshold("2026-09-20", aethr=146, note="AeT 飄移測試 2026-09-20：Pw:HR 4.1%")
@@ -44,7 +44,7 @@ def test_legacy_rows_read_their_note():
 
 
 def test_threshold_row_labels_an_applied_estimate():
-    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, note=REAL_NOTE)])
+    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, note=LEGACY_NOTE)])
     r = P.threshold_row(plan, "lthr", TODAY)
     assert r["value"] == 155 and r["method"] == "estimate" and not r["measured"]
     assert r["label"] == "自動估算（已套用 2026-09-30）"
@@ -63,7 +63,7 @@ def test_methods_survive_save_and_load(tmp_path):
 
 def test_zone_sources_say_estimate_not_your_test(tmp_path):
     from backend.engine.zones import threshold_info, training_targets, zone_table
-    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, note=REAL_NOTE)])
+    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, note=LEGACY_NOTE)])
     ds = _ds(tmp_path, plan)
     end = int(date_to_day(TODAY))
     z = zone_table(ds, "frielhr", end)
@@ -81,7 +81,7 @@ def test_zone_sources_say_estimate_not_your_test(tmp_path):
 
 def test_a_measured_aet_is_the_easy_cap(tmp_path):
     from backend.engine.zones import training_targets
-    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, aethr=142, aethr_method="test", note=REAL_NOTE)])
+    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, aethr=142, aethr_method="test", note=LEGACY_NOTE)])
     ds = _ds(tmp_path, plan)
     tt = training_targets(ds, int(date_to_day(TODAY)))
     assert tt["aet"] == 142 and tt["aet_measured"] is True and tt["aet_source"] == "AeT 測試 2026-09-30"
@@ -94,7 +94,7 @@ def test_a_new_test_re_zones_from_its_day(tmp_path, monkeypatch):
     # API's _notify(True) rebuilds the datasets (wko5views.plan_changed)
     from backend.api import wko5views as WV
     from backend.engine.zones import training_targets, zone_table
-    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, note=REAL_NOTE)])
+    plan = Plan(thresholds=[Threshold("2026-09-30", lthr=155, cp=204, note=LEGACY_NOTE)])
     ds = _ds(tmp_path, plan)
     end = int(date_to_day(TODAY))
     assert zone_table(ds, "palladino", end)["threshold"] == 204

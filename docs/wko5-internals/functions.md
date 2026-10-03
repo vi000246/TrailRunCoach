@@ -628,7 +628,7 @@ dated values is per day.
 | `a in b` | 1 where a's value occurs in b's values, else 0 | PROVISIONAL (not in the Reference) |
 | `begintime`, `endtime` | selected range of a workout in elapsed s (0 and the last elapsedtime; the workoutrange window inside workoutrange) | DOC; the Cache5 entry `workoutrange(begintime,if(sport="run",endtime,0),…rngp…)` matches (see `rngp`). Summary-level resolver 0x4f9402 / 0x4f9442 reads them from a range object ([edi+0x270] vcall +0x20) — not decoded further |
 | `title` | athlete index 3213 (the workout type, "Trail Running", unless renamed; e.g. "Mountaineering"); "" → falls back to the sport type | DISASSEMBLY: summary resolver 0x4f93e6 reads `title` at +0x144 (0x4f95da), which the index serializer 0x4fb517 writes as 3213 (0x4fb520). In a .wko4 the title is info 4020; the workout getter 0x553760 falls back to 4006, then 4005 (sport group) |
-| `description` / `desc` | athlete index 3206 (gunzipped if it starts 1f 8b); .wko4 info 4003 | DISASSEMBLY: +0x15c via 0x4f4990 → 0x4d7400 (gunzip); written by 0x4fb55b through 0x4f8c70 (gzip when shorter). Data: workout 2025-06-21 has 3206 = 4003 = "雪主單攻" with title "Mountaineering", which is what the Season View chart `if(has(title,"Mountaineering") and climbing >1500, description)` labels |
+| `description` / `desc` | athlete index 3206 (gunzipped if it starts 1f 8b); .wko4 info 4003 | DISASSEMBLY: +0x15c via 0x4f4990 → 0x4d7400 (gunzip); written by 0x4fb55b through 0x4f8c70 (gzip when shorter). Data: one workout has 3206 = 4003 = a short trip description with title "Mountaineering", which is what the Season View chart `if(has(title,"Mountaineering") and climbing >1500, description)` labels |
 | `notes` | athlete index 3207 (gunzipped); in a .wko4 a list 4700 {4701 …} that the workout-level resolver joins as `X + "\n" + text + "\n"` per note (0x7201a1…0x72028f) | DISASSEMBLY (+0x174 via 0x4f49c0); empty for every workout in the data set, so not checked against data |
 | `code` | athlete index 3210 | DISASSEMBLY (+0x1a4, 0x4f95c2); no chart uses it |
 | `sftp` | the `bikeftp` setting, for every sport | DISASSEMBLY: settings resolver 0x71dba0 rewrites `sftp` to lower("Bike") + "ftp" (0x71dbe9…0x71dc20) |
@@ -671,7 +671,7 @@ scale. Pace stays min/km (see `rngp`).
   drifts). |dElev| = dRun would be x/0, which is na (the evaluator's x/0 rule, PROVISIONAL).
 - **One guard the string does not have** (PROVISIONAL): a horizontal run below 1 cm is na.
   Distance is stored in 1 cm steps, so a smaller run can only be the float residue of
-  dRun = |dElev|. On workout 1094, 0.5 m against 0.500000000000167 m gave g = 1.2·10⁶ and
+  dRun = |dElev|. On one trail-run workout, 0.5 m against 0.500000000000167 m gave g = 1.2·10⁶ and
   would have made the trail run's average grade 37 000 %.
 - rgrade = `filter(g, gaussian(3,17), 2)`: a centred 17-sample Gaussian (σ = 3 samples, ±8),
   renormalised over the valid samples, so single na samples are bridged by their neighbours.
@@ -709,13 +709,13 @@ _elevation 58, power 55, cadence 55, @vertical_ratio 55, stancetime 55, vertical
 | 10b | `filter`, `isef`, `gaussian` | **Fixed**: WKO5's loop and kernels (§5), in-order sums | DISASSEMBLY 0x6dcf10 / 0x6e7590 / 0x6e20a0 | OK; not VERIFIED (no cached result). VO2max marking charts still limited by #19 |
 | 11 | `_rolling_time_avg` | Still present | Replaced by `_rapower` (NP) | Dead code |
 | 12 | `shift` | Lag (lists too) | Lag, plus the one pre-range value at position k−1 | First day of a TSB series |
-| 13 | `rgrade` | **Fixed**: WKO5's channel string (§7b "rgrade, step by step"), plus a PROVISIONAL na for horizontal runs < 1 cm (float residue); `_elevation` recomputed from `elevation` when a file lacks it | Channel string (0x724cfd): `filter(Δ_elevation / sqrt((Δelapseddistance·1000)² − Δ_elevation²), gaussian(3,17), 2)`, per-sample rise over horizontal run, Gaussian-smoothed | Grade-coloured charts. Trail run 1094: average 2.9 % → 1.8 %, median 0.9 % → 0.4 %, 99th percentile 66 % → 52 %; road run 1097 unchanged on average (0.02–0.04 %), wider tails (±20–30 %). Not VERIFIED |
+| 13 | `rgrade` | **Fixed**: WKO5's channel string (§7b "rgrade, step by step"), plus a PROVISIONAL na for horizontal runs < 1 cm (float residue); `_elevation` recomputed from `elevation` when a file lacks it | Channel string (0x724cfd): `filter(Δ_elevation / sqrt((Δelapseddistance·1000)² − Δ_elevation²), gaussian(3,17), 2)`, per-sample rise over horizontal run, Gaussian-smoothed | Grade-coloured charts. A trail run: average 2.9 % → 1.8 %, median 0.9 % → 0.4 %, 99th percentile 66 % → 52 %; a road run unchanged on average (0.02–0.04 %), wider tails (±20–30 %). Not VERIFIED |
 | 14 | athlete-level sets | **Changed**: reductions (`max(tss)`, `greatest`, `stddev`…), `meanmax(x)` envelopes and per-workout sample aggregates cover the chart (RHE) range unless an `athleterange` is given; only `tl()` integrates the whole history | WKO5 works on the selected range | "(Range)" charts and range PD curves now use the range; before they used all history |
 | 15 | `max/min(a, b)` | Groupby for two dated / listed sets or a period name, elementwise otherwise (PROVISIONAL split) | Reference: groupby; disassembly: elementwise max/2 | Sample-vs-sample `max(x, y)` stays elementwise |
 | 16 | `dfrc(power, frc, ftp)` | **Implemented** (§5): kJ balance, bi-exponential recovery 0.3/τ25 + 0.7/τ300 | DISASSEMBLY 0x6d7ae0 | "dFRC Run" series; not VERIFIED (no cached result) |
 | 17 | `fmax`, `kleg`, `ecpower`, text fields | **Fixed**: WKO5's channel strings (§7b), parsed verbatim now that stancetime / height evaluate in ms / cm (#20), `sftp` = bikeftp, title/description/notes/code = index 3213/3206/3207/3210 | DISASSEMBLY 0x7242ac, 0x71dba0, 0x4f93e6 / 0x4fb517 | "Impact Gs", "ElevCP"/"Elev CF" rows of the Palladino / Hilly Run reports; the Mountaineering description labels |
 | 18 | `ctspower`, `rstpower` levels | **Fixed**: empty tables, `levelcount` = 0 | Builder 0x64d1e0 clears the table; level count 0 (§4) | none of the user's charts |
-| 20 | display units | **Fixed**: stancetime evaluates in ms, verticaloscillation in cm, the height setting in cm, in every expression (§7b); MILLISECONDS / CM axes lost their ×1000 / ×100 display scale. Pace stays min/km | Expressions see display units (stancetime ms, height cm, pace per the athlete's unit preference) | The user's formulas now read as written. Road run 1097: Palladino "Flight Phase" 0.999 → −1.5 % (GCT 448 ms average against a 420 ms step: the average includes walking samples with GCT up to 700 ms), "Pwr-GCT" none → 0.392 W/ms. Trail run 1094 Hilly Run Summary: "Coggan Osc Pwr %" 0.4 % → 42 %, "LSS/kg/GCT" 169 → 0.169 |
+| 20 | display units | **Fixed**: stancetime evaluates in ms, verticaloscillation in cm, the height setting in cm, in every expression (§7b); MILLISECONDS / CM axes lost their ×1000 / ×100 display scale. Pace stays min/km | Expressions see display units (stancetime ms, height cm, pace per the athlete's unit preference) | The user's formulas now read as written. A road run: Palladino "Flight Phase" 0.999 → −1.5 % (GCT 448 ms average against a 420 ms step: the average includes walking samples with GCT up to 700 ms), "Pwr-GCT" none → 0.392 W/ms. A trail run's Hilly Run Summary: "Coggan Osc Pwr %" 0.4 % → 42 %, "LSS/kg/GCT" 169 → 0.169 |
 | 20b | x/0 on sample series | **Fixed**: na, as for single values (before: ±inf, which made `avg(power/stancetime)` inf whenever a sample had GCT 0) | Not decoded | PROVISIONAL |
 | 21 | groupby with na keys | na keys are dropped | Cache5 shows one extra group with an na x per workout (`avg(@HR, if(@Pace<=20, @Pace))`) | One extra (na) bin in RHE pace/HR scatter charts |
 | 19 | XY-set model | Only curves, lists, pairs and per-workout / daily sets carry x; sample sets keep their x implicitly (elapsedtime) and are never re-ordered or shortened | Every WKO5 set is (x, y) pairs | The VO2max interval-marking charts (`{@ZeroBeginning, filter(...), @ZeroEnd}`, `lookup` over transition sets) evaluate but will not match WKO5 |
@@ -736,15 +736,15 @@ _elevation 58, power 55, cadence 55, @vertical_ratio 55, stancetime 55, vertical
 5. ~~The rounding mode of `round`~~ — halves away from zero, x·m/m (§7).
 6. ~~`dfrc(power, frc, ftp)`~~ — decoded (§5); VERIFY the same way as item 3, using the
    "dFRC Run" chart's dFRC value at one time point.
-   ~~`fmax`~~ — a derived Run channel, decoded (§7b). VERIFY: open workout 1097 (2026-09-24
-   road run) in WKO5 with the Palladino Run Summary Report and read "Impact Gs" (evaluator
-   1.557; 1.539 for 1094). Also read "Flight Phase" (evaluator −1.5 %), "GCT" (448 ms) and
-   "Pwr-GCT" (0.392) there to confirm the ms convention (§8 #20), and the "Avg Grade" of 1094's
-   Hilly Run Summary (evaluator 1.83 %) to check rgrade (§8 #13).
+   ~~`fmax`~~ — a derived Run channel, decoded (§7b). VERIFY: open the road run of §8 #20 in
+   WKO5 with the Palladino Run Summary Report and read "Impact Gs" (evaluator 1.557; 1.539 for
+   the trail run). Also read "Flight Phase" (evaluator −1.5 %), "GCT" (448 ms) and
+   "Pwr-GCT" (0.392) there to confirm the ms convention (§8 #20), and the "Avg Grade" of the
+   trail run's Hilly Run Summary (evaluator 1.83 %) to check rgrade (§8 #13).
 7. ~~`ecpower`~~ — WKO5's expression string, decoded (§7b). VERIFY: read "ElevCP" /
-   "Elev CF" of the same report (evaluator: 1097 150.16 W / 0.023 %, 1094 128.73 W /
-   0.60 %); a high-altitude workout (e.g. the 2025-06-21 Mountaineering day, but it has no
-   power) would test f(h) better.
+   "Elev CF" of the same report and compare with the evaluator (Elev CF: 0.023 % on the road
+   run, 0.60 % on the trail run); a high-altitude workout (e.g. a Mountaineering day, but the
+   one in the data has no power) would test f(h) better.
 8. ~~Which index field is `description` / `notes`~~ — decoded (§7b): 3206 / 3207, title 3213.
    Only `description` is backed by data (one workout). To check `notes`: add a note to any
    workout in WKO5, save, and re-read index field 3207 (and .wko4 record 4700).

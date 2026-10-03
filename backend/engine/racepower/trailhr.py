@@ -57,7 +57,7 @@ Model (all 推估 until the back-test validates it):
    R59: CP −9 … −11 % after 2 h of heavy exercise; per hour 推估) and k = 3
    (推估). The shrunk δ is kept only when it lowers the leave-one-out
    given-HR error of the runs against the prior alone (§0.4: "加了參數 LOO
-   誤差要降才留"; choose_delta) — on this athlete's trail runs the per-run δ
+   誤差要降才留"; choose_delta) — on one runner's trail runs the per-run δ
    reads 0.2–0.4 /h (terrain order, not fatigue) and the prior wins.
    Fuelling covariate: when the user's free-form tags mark runs as
    fuelled / unfuelled and both groups have ≥ 2 runs, the fuelled group's δ

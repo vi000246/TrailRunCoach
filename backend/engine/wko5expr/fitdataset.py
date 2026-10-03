@@ -72,9 +72,9 @@ F_DESCENDING, F_WORK, F_VAM = 4225, 4218, 4224
 # a full-history load to ~one estimate per month; the thresholds.estimate
 # windows (90 / 180 days) are much longer, so a finer grid changes little.
 ESTIMATE_STEP_DAYS = 30
-# 推估: fewest Stryd runs in the 90-day window for a chart CP fit. On this
-# athlete's data the first Stryd window (2025-03-22, one run) fitted 135.6 W
-# against 178–203 W from the next window (11 runs) on; a single run's
+# 推估: fewest Stryd runs in the 90-day window for a chart CP fit. On one
+# runner's data the first Stryd window (one run) fitted ~30 % below the
+# next window (11 runs) on; a single run's
 # mean-max rarely holds a maximal effort at every duration.
 CP_FIT_MIN_RUNS = 5
 # Athlete.setting_on applies the earliest value backwards (WKO5's rule); a
@@ -725,9 +725,9 @@ class FitFolderDataset(Dataset):
         Used: weight_kg -> weight, run_ftp_w -> runftp, threshold_pace_s_per_km
         -> runtpace. NOT used: `lthr` and `ftp_w` — the only automatic writer
         is coros_client.login, which stores COROS's account zoneData.lthr /
-        .ftp without saying which sport they are for (the 2026-09-30 row:
-        LTHR 182, above the 171 bpm peak of that day's maximal 12′ test, so
-        not this athlete's running LTHR); they stay in settings_ignored."""
+        .ftp without saying which sport they are for (one such row had an
+        LTHR ~10 bpm above the peak HR of that day's maximal 12′ test, so
+        not the athlete's running LTHR); they stay in settings_ignored."""
         rows = read_athlete_settings() if rows is None else rows
         s = self.athlete.settings
         for r in sorted(rows, key=lambda r: str(r.get("effective_date"))):
@@ -752,8 +752,8 @@ class FitFolderDataset(Dataset):
         """generalize-athlete P7: without any hard run to estimate from, the
         watch account's LTHR (COROS zoneData, kept in settings_ignored) is the
         prior — applied from its date, labelled 「來自手錶」. With estimates
-        the runner's own data wins (the watch value can be far off: the
-        author's 182 vs a 171 bpm test peak) and the watch value stays ignored."""
+        the runner's own data wins (the watch value can be far off: ~10 bpm
+        above a test's peak HR) and the watch value stays ignored."""
         rows = [r for r in self.settings_ignored if r.get("field") == "lthr" and r.get("value")]
         if not rows:
             return []
@@ -779,8 +779,8 @@ class FitFolderDataset(Dataset):
         plan first). True when anything was set.
 
         Run FTP (power TSS) is NOT filled from an estimate: cp_as_of's PD
-        refit falls back to watch power and gave 362–384 W for 2024-06…12 on
-        this athlete's COROS data (plan CP 204 W), which would cut every
+        refit falls back to watch power and gave ~1.8× the plan CP for the
+        months before a Stryd on one runner's COROS data, which would cut every
         power TSS there ~4×. Without a plan / DB value those runs fall back to
         hrTSS (with the estimated LTHR) or stay unset.
 

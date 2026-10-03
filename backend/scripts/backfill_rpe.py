@@ -5,9 +5,9 @@ engine/activity_tags.recorded_from_session) is stored at import since
 2026-10-02; this fills the rows imported before. Only FIT rows with neither
 value are read; a file without the fields stays NULL. Idempotent.
 
-On this athlete's data (read-only scan, 2026-10-02): the COROS APEX 2 Pro
-FITs carry no RPE / feel; the Garmin fenix 7 FITs in the COROS folder
-(2023-12 … 2025-03) do, 32 with a value.
+On one runner's data (read-only scan, 2026-10-02): COROS APEX 2 Pro
+FITs carry no RPE / feel; Garmin fenix 7 FITs in a COROS folder do, a few
+with a value.
 
 Usage:
     python -m backend.scripts.backfill_rpe --dry-run      # read-only: what would change

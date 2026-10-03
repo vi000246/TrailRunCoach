@@ -45,7 +45,7 @@ def test_default_is_itra_until_fitted():
 def test_author_like_runs_fit_back_to_153():
     """Self-consistency (calib_fixtures): runs built on 153 m per effort km."""
     item = CAL._registry()["climb_divisor_run"]
-    e = assert_self_consistent(item, _ds(n_flat=280, n_climb=150), 153.0, se=15.0, today=TODAY)   # 430 runs like the author
+    e = assert_self_consistent(item, _ds(n_flat=280, n_climb=150), 153.0, se=15.0, today=TODAY)   # 430 runs like the reference fit
     assert e["n"] == 150 and abs(e["personal"] - 153.0) < 10
 
 

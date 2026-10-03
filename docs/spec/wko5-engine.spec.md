@@ -84,7 +84,7 @@ samples and compared against what WKO5 itself stored.
 | NGP, rTSS duration | `wko5_pace.py` | 4230, 4249 | 582/582 within 2.2e-6, 578/582 |
 | Channel min / max / avg | `backend/files/wko4_file.py:194` `range_stats` | range stats | 100% of fresh ranges |
 | FIT → channels | `backend/files/fit_to_channels.py:269` | channels | 1038/1061 files sample-for-sample |
-| PMC (CTL/ATL/TSB) | `evaluator.py` `_tl` | athlete snapshot | 17.62 / 10.41 / 5.91, matches WKO5 |
+| PMC (CTL/ATL/TSB) | `evaluator.py` `_tl` | athlete snapshot | matches WKO5's stored CTL / ATL / TSB |
 | Power-duration model | `wko5_pdmodel.py` | — | **disassembly only, unverified** |
 
 Two traps the verification surfaced, both reproduced deliberately:
@@ -94,8 +94,8 @@ Two traps the verification surfaced, both reproduced deliberately:
 - WKO5's "almost equal" is effectively *exactly* equal; float residue in a
   running window sum counts as non-zero (`wko5_pace.py` `_is_zero`).
 
-The remaining FIT mismatches (23 files) are GPSMAP 66i clock quirks, data-less
-indoor/table-tennis runs, and swims.
+The remaining FIT mismatches (23 files) are a handheld GPS unit's clock quirks,
+data-less indoor activities, and swims.
 
 ## TSS policy
 
@@ -118,7 +118,7 @@ ignored (`evaluator.py` `_tl`).
 | Setting | Parity | Own formulas (`MOUNTAIN_PRESET`) | Why |
 |---|---|---|---|
 | Use TP's TSS | forced on | off | Independence from TrainingPeaks; a direct COROS import has no TP TSS |
-| hrTSS on moving time only | off | on | WKO5 charges every recorded second; a 51 h trip with 7 h moving scored 906 |
+| hrTSS on moving time only | off | on | WKO5 charges every recorded second; a two-day trip with only ~7 h moving can score ~900 |
 | hrTSS zone-1 floor | off | 0.70 × LTHR | WKO5's lowest band earns 20–30 TSS/h even while asleep |
 | Elevation bonus | off | 10 TSS / 1000 ft | Uphill Athlete: heart rate cannot see the muscular cost of climbing |
 | Data corrections | ignored | applied | Keeps WKO5 comparisons honest |
@@ -135,8 +135,8 @@ the individual knobs are a fixed, researched preset.
    athlete's per-workout peaks (defaults 1.6 × p90). WKO5's own spike chart
    compares the maximum against the top-5 average, which breaks when several
    files are corrupted — the baseline is pulled up by the very samples being
-   hunted. On this athlete it finds exactly the three outliers (1875, 1594,
-   1462 W) above a smooth tail ending at 896 W.
+   hunted. On one runner's data it finds exactly the three outliers
+   (1.6–2.1 × the highest genuine peak) above a smooth tail.
 2. **Propose** (`GET /corrections/proposals`): returns the evidence — samples,
    peak, and the workout's peak after correction.
 3. **Approve** (`POST /corrections/approve`): only the proposals sent are stored.
@@ -149,7 +149,7 @@ the individual knobs are a fixed, researched preset.
 ## Expression engine
 
 `backend/engine/wko5expr/parser.py` parses 828 of the 829 expressions in the
-athlete's two views (the exception uses the `in` operator). Value kinds in
+two imported views (the exception uses the `in` operator). Value kinds in
 `evaluator.py`: per-workout series (`WS`), daily series (`Daily`), sample
 arrays, curves (`Curve`), pairs, ranges and lists.
 
@@ -480,7 +480,7 @@ WKO5's ACSM grade factor `(0.19v + 0.9vg)/0.19` under-counts steep running
 against Minetti by 22% at +20% grade, 31% at +30%, and goes negative below
 about −21%.
 
-Against integrated Minetti on 430 of this athlete's activities, Scarf's
+Against integrated Minetti on 430 activities of one runner, Scarf's
 `km + gain/126` is the best summary formula (4.0% mean error); ITRA's
 `gain/100` over-counts by ~7%; the Swiss descent term makes it worse (22%).
 Least-squares fit: running `gain/153`, hiking `gain/111`. This says which
@@ -512,14 +512,13 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 The WKO5 athlete folder is `WKO5_ATHLETE_DIR` (or `WKO5COACH_ATHLETE_DIR`), else the first
 folder holding a `*.wko5athlete` under the home directory's `WKO5` (`default_roots`,
 `athlete_dir`, `backend/settings/paths.py:46`); the chart, achievements and plan APIs share it.
-The library moved there on 2026-10-01, when `Projects/TrailRunCoach` became the repo.
 
 ## Testing
 
 | Kind | Run | What it proves |
 |---|---|---|
 | Synthetic | `pytest backend/tests` | Each rule in isolation, on hand-built data and small frozen fixtures (`backend/tests/fixtures/`) |
-| Golden | `WKO5COACH_REALDATA=1 pytest backend/tests/realdata` (~5 min) | Parity with the athlete's real WKO5 data |
+| Golden | `WKO5COACH_REALDATA=1 pytest backend/tests/realdata` (~5 min) | Parity with a real WKO5 athlete folder |
 
 The default run never reads `~/WKO5` or `~/.wko5coach`: `backend/tests/_guard.py`
 points home at a temp folder and fails any test that opens, lists or writes a
@@ -553,7 +552,7 @@ mode (`backend/tests/test_drift_basis.py:340`).
 |------|-----------|
 | Parity mode | Reproduce WKO5 exactly; the correctness proof |
 | Own formulas | This project's mountain-sport adjustments to WKO5 |
-| Golden test | A test that compares against the athlete's real WKO5 data |
+| Golden test | A test that compares against a real WKO5 athlete folder |
 | Channel | A per-sample data stream in a `.wko4` (heartrate, `_elevation`, `@form_power`...) |
 | Range | A span of a workout with WKO5-computed stats ("Entire Workout", "Peak 0:05:00 Speed", laps) |
 | TSS source | Which branch produced a workout's TSS: power, rTSS, TrainingPeaks, hrTSS |

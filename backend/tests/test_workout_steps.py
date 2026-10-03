@@ -134,7 +134,7 @@ def test_resolve_overrides():
 
 
 def test_pace_targets_push_as_intensity_type_3_seconds_per_km():
-    # verified on the owner's watch 2026-10-02: value 270 / extend 285, displayUnit 1 → 4'30"–4'45"/km
+    # verified on a COROS watch 2026-10-02: value 270 / extend 285, displayUnit 1 → 4'30"–4'45"/km
     c = WS.Ctx.of({**FULL, "tpace": 280}, "hr")
     st = _one({"type": "pace", "mode": "abs", "lo": 285, "hi": 270})
     prog = CW.build_program("TRC p", WS.steps_to_coros(WS.normalize(st), c), CW.Thresholds.of(FULL))

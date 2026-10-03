@@ -7,7 +7,7 @@ G3 — climb_divisor_run: metres of ascent that cost one flat km on the
      the runs of the last year, moving_h · v − gain · u = km for one speed v
      and u = 1 / divisor (flat runs anchor v, climbing runs give u). At least
      MIN_CLIMB_RUNS runs with ≥ 20 m/km; shrunk toward ITRA's 100 with
-     k = 10 (推估). The author's 430 runs gave 153.
+     k = 10 (推估). One runner's 430 runs gave 153.
 """
 from __future__ import annotations
 

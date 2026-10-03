@@ -37,7 +37,7 @@
 |---|---|
 | GET /api/v1/ai/models | done — 200 OK, returns Claude + OpenAI model lists |
 | GET /api/v1/ai/status/1 | done — 200 OK, `{"configured": false}` |
-| GET /api/v1/analytics/dashboard-summary | done — 200 OK, weekly_tss=51 |
+| GET /api/v1/analytics/dashboard-summary | done — 200 OK, returns weekly_tss |
 | frontend/dist/index.html exists | done |
 | Season page Smart Dashboard | manual — pending server restart |
 | /ai shows AI chat UI | manual — pending server restart |

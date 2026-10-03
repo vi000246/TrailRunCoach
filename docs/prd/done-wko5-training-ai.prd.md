@@ -57,7 +57,7 @@ We'll know we're right when 訓練結束後 1 小時內，資料自動出現在�
 ## Users & Context
 
 **Primary User**
-- **Who**: 個人運動員（使用者本人），使用 Coros APEX 2 Pro 手錶記錄訓練，具備技術能力
+- **Who**: 個人運動員，使用 Coros 手錶記錄訓練，具備技術能力
 - **Current behavior**: 用 WKO5 桌面版手動查看，或用 Coros app 看基礎統計
 - **Trigger**: 完成訓練後想了解訓練品質，或定期回顧訓練趨勢
 - **Success state**: 開啟 web UI 看到 PMC 圖表 + 問 AI「本週訓練量如何」，得到基於真實功率數據的具體回答
@@ -146,7 +146,7 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統手動觸發 sync
 
 **Milestone 4: Coros 同步 + PMC Web UI** ✅
 - **User can now**: 登入 Coros、按 Sync、FIT 自動下載，PMC 圖表即時更新
-- **Verified**: 1088 筆活動成功匯入；PMC 有 157 個資料點（2025-12 ~ 2026-05）
+- **Verified**: 1088 筆活動成功匯入；PMC 有 157 個資料點
 - **Out of scope**: iLevels
 
 **Milestone 4.5: FTP/LTHR 設定頁面**
@@ -206,14 +206,14 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統手動觸發 sync
 
 **TrainingPeaks API（已逆向，保留可選）**
 - Password grant 不含 `client_id`（僅 refresh token 帶 `client_id=WKO5`）
-- FIT 下載需 premium/coach 帳號（目前帳號不符）
+- FIT 下載需 premium/coach 帳號
 - 保留為 Milestone 7 可選功能
 
 **技術基礎現況（2026-05-15）**
 - FIT 解析：`fitparse` 已整合，解析 1088+ 筆
 - MMP 計算：算法已驗證
 - TSS：(NP/FTP)²×dur/3600×100，59 筆有功率資料的活動已計算
-- PMC：157 個資料點（2025-12-09 ~ 2026-05-14），CTL/ATL/TSB 正常
+- PMC：157 個資料點，CTL/ATL/TSB 正常
 - FastAPI + SQLite：已部署於 Docker（localhost:8000）
 
 ---

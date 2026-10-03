@@ -3,7 +3,7 @@
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`
 - **Source Linear Issue**: N/A — standalone
-- **Owner**: 個人（vi000246）
+- **Owner**: maintainer
 - **Status**: DRAFT
 - **Generated**: 2026-05-14
 - **Scope**: Milestone 1 only — FIT parsing + MMP curve + JSON storage; no AI, no FTP/iLevels

@@ -14,7 +14,7 @@ from backend.engine.planning import Plan, Threshold
 
 @pytest.fixture(autouse=True)
 def _author_beta(monkeypatch):
-    """These synthetic runs follow the author's fitted heat β 0.224 ± 0.036 bpm/Hadley
+    """These synthetic runs follow the reference fitted heat β 0.224 ± 0.036 bpm/Hadley
     (engine/heat_calib.hr_beta; a new athlete starts from the 0.3 default)."""
     from backend.engine import heat_calib as HC
     monkeypatch.setattr(HC, "hr_beta", lambda: {"beta": 0.224, "se": 0.036, "n": 271, "source": "fitted",

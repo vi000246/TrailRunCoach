@@ -3,7 +3,7 @@
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md` (partial context)
 - **Source Linear Issue**: N/A — standalone
-- **Owner**: vi000246
+- **Owner**: maintainer
 - **Status**: DRAFT
 - **Generated**: 2026-05-14
 - **Updated**: 2026-05-15 — 改為 Coros-first，獨立 fits 資料夾，移除 WKO5 目錄依賴

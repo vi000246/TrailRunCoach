@@ -17,7 +17,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # file never contains it literally: the history rewrite (backend/scripts/history_rewrite.md)
 # replaces those words everywhere, and its post-check greps the whole tree for them.
 DENY = re.compile(r"Yi[c]h|Obsi[d]ian|私[訊]|私[信]|私[下]|私[人]|回[信]|本人回[覆]|本人的回[覆]|親自回[覆]|來[信]"
-                  r"|xu-guofeng-[r]eply|docs/research|\.md\b|擁有者|\bowner\b|Main[R]epo|may[o]hr", re.I)
+                  r"|xu-guofeng-[r]eply|docs/research|\.md\b|擁有者|\bowner\b|Main[R]epo|may[o]hr"
+                  r"|\b[A]thlete_\d{4}_\d\d_\d\d|\bthe athlete's\b", re.I)   # a real activity file stamp; the owner as "the athlete"
 
 
 def _strings(obj, path=""):
@@ -94,7 +95,8 @@ def test_denylist_matches_the_known_leaks():
     for s in ("WKO5「Yi" "ch's Workout」→ 間歇", "徐國峰（私" "訊，2026-10-01）", "見 docs/research/x.md",
               "Obsi" "dian vault", "擁有者決定", "the owner", "Main" "Repo/notes",
               "徐國峰（私" "信）", "徐國峰私" "下說", "徐國峰本人回" "覆", "徐國峰回" "信", "私" "人訊息",
-              "徐國峰來" "信", "見 xu-guofeng-" "reply", "someone@may" "ohr.com"):
+              "徐國峰來" "信", "見 xu-guofeng-" "reply", "someone@may" "ohr.com",
+              "A" "thlete_2025_07_26_07_30.wko4", "the athlete's half marathon"):
         assert DENY.search(s), s
     for s in ("徐國峰（教練）", "Monod & Scherrer 1965", "健行筆記 EP", "WKO5 的 dFRC 模型",
               "90 分鐘測試（台灣教練）", "徐國峰《跑者都該懂的跑步科學》"):

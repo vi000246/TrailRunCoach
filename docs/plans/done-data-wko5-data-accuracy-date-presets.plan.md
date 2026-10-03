@@ -4,7 +4,7 @@
 
 ## Summary
 
-Seeds the Run PMC EWMA from a user-supplied WKO5 CTL value, fills historical TSS gaps via pace-based rTSS for GPS-only runs, exposes a backfill endpoint, and adds calendar-aligned date presets to `DateRangePicker`. Together these bring the Run Training Load chart from max CTL ≈ 26 (Dec 2025 only) toward the correct steady-state range of 40–70 that WKO5 Season View shows.
+Seeds the Run PMC EWMA from a user-supplied WKO5 CTL value, fills historical TSS gaps via pace-based rTSS for GPS-only runs, exposes a backfill endpoint, and adds calendar-aligned date presets to `DateRangePicker`. Together these bring the Run Training Load chart from max CTL ≈ 26 (only a few months of synced data) toward the correct steady-state range of 40–70 that WKO5 Season View shows.
 
 ## User Story
 
@@ -12,7 +12,7 @@ As an athlete, I want to seed the Run PMC from my WKO5 CTL value and backfill hi
 
 ## Problem → Solution
 
-`compute_run_pmc()` starts from CTL=0 with only 157 days of data → CTL maxes at 26. WKO5 has 5+ years of data and shows CTL ≈ 40–70. Fix: add `initial_ctl` / `initial_atl` seed params, add pace-based rTSS for the 363 GPS-only WKO4 runs, expose a backfill endpoint, and let the user choose date windows with calendar presets.
+`compute_run_pmc()` starts from CTL=0 with only a few months of data → CTL maxes at 26. WKO5 has years of history and shows CTL ≈ 40–70. Fix: add `initial_ctl` / `initial_atl` seed params, add pace-based rTSS for the GPS-only WKO4 runs, expose a backfill endpoint, and let the user choose date windows with calendar presets.
 
 ## Metadata
 
@@ -38,13 +38,13 @@ As an athlete, I want to seed the Run PMC from my WKO5 CTL value and backfill hi
 
 ```
 DateRangePicker:
-  [1M] [3M] [6M] [1Y] [All]  [2025-12-09] — [2026-05-15]
+  [1M] [3M] [6M] [1Y] [All]  [YYYY-MM-DD] — [YYYY-MM-DD]
 
 Config:
-  FTP (W): [200]   LTHR (bpm): [182]   Weight: [70.5]
+  FTP (W): [220]   LTHR (bpm): [160]   Weight: [70]
   [Save & Recompute PMC]
 
-Run PMC chart: CTL starts at 0, peaks at 26 (since Dec 2025 only)
+Run PMC chart: CTL starts at 0, peaks at 26 (only a few months of data)
 ```
 
 ### After
@@ -53,10 +53,10 @@ Run PMC chart: CTL starts at 0, peaks at 26 (since Dec 2025 only)
 DateRangePicker:
   Rolling:  [30d] [90d] [6M] [1Y] [All]
   Calendar: [本月] [上月] [近3月] [近6月] [今年YTD] [去年]
-            [2025-12-09] — [2026-05-15]
+            [YYYY-MM-DD] — [YYYY-MM-DD]
 
 Config:
-  FTP (W): [200]   LTHR (bpm): [182]   Weight: [70.5]
+  FTP (W): [220]   LTHR (bpm): [160]   Weight: [70]
   [Save & Recompute PMC]
 
   ─── Run Training Load Settings ──────────────────────
@@ -611,8 +611,8 @@ Expected response shape:
 {
   "recomputed_power_tss": 0,
   "computed_rtss_pace": 0,
-  "skipped_no_data": 363,
-  "skipped_already_has_tss": 59
+  "skipped_no_data": 300,
+  "skipped_already_has_tss": 50
 }
 ```
 After setting `threshold_pace_s_per_km=300` in settings, expect `computed_rtss_pace` > 0.
@@ -757,7 +757,7 @@ curl -s -X PUT http://localhost:8000/api/v1/athletes/1/settings \
   -d '{"initial_ctl_run": 55.0, "initial_atl_run": 35.0}'
 
 # Then check run-load response:
-curl -s 'http://localhost:8000/api/v1/analytics/run-load?date_from=2025-12-09&date_to=2025-12-15' | python3 -m json.tool
+curl -s 'http://localhost:8000/api/v1/analytics/run-load?date_from=2026-01-05&date_to=2026-01-11' | python3 -m json.tool
 ```
 Expected: `seeded: true`, `initial_ctl_used: 55.0`, and `series[0].ctl > 0`.
 
@@ -831,7 +831,7 @@ async def run_load(
 - Modify: `backend/db/database.py` (scan re-import trigger — see IMPLEMENT)
 
 **Context from binary analysis (confirmed):**
-- `elapsedtime` channel exists at byte 52138 in a sample WKO4 file (2022_10_03)
+- `elapsedtime` channel exists at byte 52138 in a sample WKO4 file
 - `elapseddistance` channel exists at byte 88470
 - Both use `\xb4\x06` marker after the field name
 - After `\xb4\x06`, the next 2 bytes are a LE uint16 sample count
@@ -850,7 +850,7 @@ import pytest
 from pathlib import Path
 from backend.files.wko4_reader import extract_wko4_metrics
 
-SAMPLE_FILE = Path.home() / "WKO5/Athlete/2022/Athlete_2022_10_03_22_14.wko4"
+SAMPLE_FILE = Path.home() / "WKO5/Athlete/<year>/Athlete_<YYYY_MM_DD_HH_MM>.wko4"  # any local sample
 
 @pytest.mark.skipif(not SAMPLE_FILE.exists(), reason="WKO4 sample file not available")
 def test_extract_wko4_metrics_returns_reasonable_values():

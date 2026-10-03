@@ -57,7 +57,7 @@ curl -s -X POST http://localhost:8000/api/v1/athletes/bootstrap | python3 -m jso
 curl -s -X POST http://localhost:8000/api/v1/scan | python3 -m json.tool
 ```
 
-預期：`{"new": 1012, "skipped": 0, "errors": 0, "total": 1012}`（數字依實際檔案數）
+預期：`{"new": N, "skipped": 0, "errors": 0, "total": N}`（N 依實際檔案數）
 
 ### Step 4 — 驗證 API
 
@@ -65,7 +65,7 @@ curl -s -X POST http://localhost:8000/api/v1/scan | python3 -m json.tool
 curl -s "http://localhost:8000/api/v1/workouts?per_page=3" | python3 -m json.tool
 ```
 
-預期：`{"total": 1012, ...}` 或類似
+預期：`{"total": N, ...}` 或類似
 
 ### Step 5 — TrainingPeaks 登入（可選）
 
@@ -106,7 +106,7 @@ data: {"status": "complete", "total_downloaded": N, "total_checked": M}
 ```bash
 curl -s -X PUT http://localhost:8000/api/v1/athletes/1/settings \
   -H 'Content-Type: application/json' \
-  -d '{"ftp_w": 250, "effective_date": "2026-05-15"}' \
+  -d '{"ftp_w": 220, "effective_date": "2026-05-15"}' \
   | python3 -m json.tool
 ```
 

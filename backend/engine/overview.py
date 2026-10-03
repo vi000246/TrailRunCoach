@@ -959,7 +959,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         elif s.id == "test_aet":
             # the 50-min test: a ≥ 48-min road run (2′ slack) titled AeT — the COROS
             # workout's name; untitled only from 55 min (workout_review.TEST_AET_MIN_S),
-            # so the athlete's ordinary 41–52′ road runs are not taken for the test (推估)
+            # so ordinary ~45′ road runs are not taken for the test (推估)
             from backend.engine import workout_review as WR
             if AT.is_xu(asdict(s)):
                 # 徐國峰's test = any ≥ 88-min flat road run that week (the LSD itself; 2′ slack)

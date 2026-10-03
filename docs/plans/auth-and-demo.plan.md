@@ -187,7 +187,7 @@ def db_path() -> Path            # root / "wko5coach.db"
 - **建議跑在 Docker 容器 `trailcoach-demo`**：
   - 只掛 `<demo-root>`，不掛 `~/.wko5coach` 和 `~/WKO5`。這樣從檔案系統層就讀不到擁有者的資料。
   - 用非 root 使用者執行，程式碼目錄唯讀。
-  - **`--cpus 1 --memory 1.5g`**：這台 Windows 開發機同時開好幾個 Claude session，示範流量不能把整台機器拖慢（見全域 CLAUDE.md）。
+  - **`--cpus 1 --memory 1.5g`**：示範流量不能把整台主機拖慢。
   - 也可以放到 NAS 上。
 - **示範 process 的啟動檢查**：任一項不符合就拒絕啟動。
   1. `WKO5COACH_HOME` 必須有設定，而且 resolve 後不能是 `~/.wko5coach`，也不能在它底下。
@@ -209,15 +209,15 @@ def db_path() -> Path            # root / "wko5coach.db"
     <sha256(cookie)[:32]>/   # 每位訪客：wko5coach.db  plan.json  meta.json
 ```
 
-### 3.2 合成示範跑者（產生器）
+### 3.2 合成範例跑者（產生器）
 
 新套件 `backend/demo/`：
 
 | 檔案 | 內容 |
 |---|---|
 | `fitwrite.py` | 正式版的 FIT writer，從 `tests/fit_builder.py` 搬上來並擴充：position lat/long、altitude、cadence、lap、session totals、sport／sub_sport（跑步、越野、健行／登山）、Stryd developer fields、device_info。`tests/fit_builder.py` 改成 import 它，現有測試不變 |
-| `athlete.py` | 虛構跑者的固定設定：「示範跑者」，36 歲，62 kg，CP 255 W（Stryd），LTHR 168，AeT 150，HRmax 188，跑步效率 RE 約 1.0。**全部是虛構的，和擁有者的數值無關**，不從真實資料推出 |
-| `season.py` | 一年的週期與課表：<br>・一年 3 個目標：路跑半馬（約第 18 週）、越野 50K（約第 40 週）、**百岳 3 日**（約第 30 週，單日爬升 1200–1600 m，海拔 2800–3900 m）。另有兩次 2 日的百岳暖身行程<br>・每週 4–6 次：輕鬆跑、長跑、閾值或間歇、坡道反覆、越野長跑、健行<br>・每 4 週一週恢復；有一段 10 天的感冒空窗，和幾次漏練，看起來比較真實<br>・用 `engine/planning.py` 的格式寫出事件、階段，和 3 筆有日期的門檻（CP 隨訓練從 240 W 升到 260 W） |
+| `athlete.py` | 虛構跑者的固定設定：「範例跑者」，40 歲，175 cm，70 kg，CP 220 W（Stryd），LTHR 160，AeT 142，HRmax 185，跑步效率 RE 約 1.0。**全部是虛構的，和擁有者的數值無關**，不從真實資料推出 |
+| `season.py` | 一年的週期與課表：<br>・一年 3 個目標：路跑半馬（約第 18 週）、越野 50K（約第 40 週）、**百岳 3 日**（約第 30 週，單日爬升 1200–1600 m，海拔 2800–3900 m）。另有兩次 2 日的百岳暖身行程<br>・每週 4–6 次：輕鬆跑、長跑、閾值或間歇、坡道反覆、越野長跑、健行<br>・每 4 週一週恢復；有一段 10 天的感冒空窗，和幾次漏練，看起來比較真實<br>・用 `engine/planning.py` 的格式寫出事件、階段，和 3 筆有日期的門檻（CP 隨訓練從 210 W 升到 225 W） |
 | `course.py` | 產生路線：路跑是起伏小的環線；越野是 8–25% 的爬坡加技術下坡；百岳是長爬坡加高海拔。GPS 軌跡放在一個固定的虛構區域，**不使用任何真實活動的軌跡** |
 | `signals.py` | 產生逐秒資料：<br>・速度：目標配速加 AR(1) 雜訊，爬坡依 Minetti 成本降速（`engine/algorithms/minetti.py`）<br>・功率：依同一個成本模型換算成 Stryd 風格的功率，加入 3–5% 雜訊<br>・心率：**手腕光學心率**（沒有胸帶），也就是強度的一階延遲（τ 30–60 s）、心率飄移、高溫時加成，再加上光學誤差：起跑後 2–4 分鐘偏低、偶爾鎖到步頻（170–180 bpm 突波）、短暫掉訊號<br>・步頻；海拔加氣壓計雜訊<br>・約 10% 的跑步只有手錶功率，沒有 Stryd，用來展示 `power.accept_watch_power` 的差別 |
 | `build.py` | CLI：`python -m backend.demo.build --root <demo-root> --seed 20261002 --anchor 2026-09-28 [--weeks 52]` |
@@ -347,7 +347,7 @@ def db_path() -> Path            # root / "wko5coach.db"
 
 - 第二條 tunnel，直接連 `:8001`，前面**沒有** proxy。
   - **試用期**：可以先用 quick tunnel（`cloudflared tunnel --url http://localhost:8001`）。但每次啟動網址都會變，貼出去的連結會失效。
-  - **正式**：要穩定的連結，就要在擁有者的網域上開 **named tunnel**，例如 `demo.<網域>`。homelab 已經有網域和 Cloudflare Tunnel，可以沿用。
+  - **正式**：要穩定的連結，就要在擁有者的網域上開 **named tunnel**，例如 `demo.<網域>`。已經有網域和 Cloudflare Tunnel 的話可以沿用。
 - 示範 process 的環境變數：
 
       WKO5COACH_MODE=demo
@@ -543,7 +543,7 @@ def db_path() -> Path            # root / "wko5coach.db"
 
 前提沿用 §2.2：**每個 tenant 一個目錄、一個 SQLite**。本節回答「搬到雲端主機時，這個目錄要放哪裡」：示範先放 Hugging Face Spaces，之後登入版放 Oracle Cloud 免費 VM，前面接 Cloudflare（Tunnel、R2）。**現在不做**；示範模式（§3）不需要本節的任何東西，理由見 §10.6。
 
-### 10.1 實測：一位使用者有多大（2026-10-02，擁有者的 `~/.wko5coach`，唯讀量測）
+### 10.1 實測：一位使用者有多大（2026-10-02，一位實際使用者的資料目錄，唯讀量測）
 
 | 項目 | 內容 | 大小 |
 |---|---|---|
@@ -624,7 +624,7 @@ class FitStore(Protocol):
 | gzip -6 | 3.26 MB | **35.4%（2.82 倍）**，每檔 6.4 ms |
 | gzip -9 | 3.26 MB | 35.4%，沒有比 -6 好 |
 
-- 換算擁有者的 1,895 個檔案：245.6 MB → 約 **87 MB**；一般單一來源的使用者約 120 MB → 約 43 MB。
+- 換算 §10.1 那位使用者的 1,895 個檔案：245.6 MB → 約 **87 MB**；一般單一來源的使用者約 120 MB → 約 43 MB。
 - 解壓成本相對於 fitdecode 解析（純 Python，幾百個檔要幾分鐘，`fitcache.py` 開頭的說明）可以忽略。
 - 用 gzip 而不是 zstd：標準函式庫就有，`fit_to_channels` 已經在用，TP 下載本來就是 gzip。
 

@@ -166,16 +166,16 @@ def test_x(): assert ...
   from backend.engine.ai.zones import compute_zones
 
   def test_zones_from_settings():
-      z = compute_zones(run_ftp_w=192, lthr=182)
+      z = compute_zones(run_ftp_w=220, lthr=160)
       power = {p["zone"]: p for p in z["power"]}
       hr = {h["zone"]: h for h in z["hr"]}
       assert len(z["power"]) == 7 and len(z["hr"]) == 5
-      # zone4 threshold power: 0.90–1.05 × 192 = 172.8–201.6
-      assert abs(power[4]["low_w"] - 172.8) < 0.5
-      assert abs(power[4]["high_w"] - 201.6) < 0.5
+      # zone4 threshold power: 0.90–1.05 × 220 = 198.0–231.0
+      assert abs(power[4]["low_w"] - 198.0) < 0.5
+      assert abs(power[4]["high_w"] - 231.0) < 0.5
       assert power[4]["name"] == "Threshold"
-      # zone4 HR threshold: 0.95–1.00 × 182
-      assert abs(hr[4]["low_bpm"] - 172.9) < 0.5
+      # zone4 HR threshold: 0.95–1.00 × 160
+      assert abs(hr[4]["low_bpm"] - 152.0) < 0.5
 
   def test_zones_missing_inputs():
       z = compute_zones(run_ftp_w=None, lthr=None)
@@ -261,7 +261,7 @@ def test_x(): assert ...
     閾值用 8–20 分鐘 @ Z4。處方應給「時間 × 目標瓦數（或 zone）× 組數 × 恢復」。
   - 越野/爬升：技術地形以心率（hrTSS）為主負荷，rTSS（配速）低估；爬升用 VAM（垂直速度 m/hr）評估；
     GAP（坡度調整配速）比對平路強度。
-  - 使用者特性：偏無氧型（RWC 充足），間歇可略高於典型 Palladino 上緣；越野 PI 屬中階。
+  - 跑者特性（範例跑者）：偏無氧型（RWC 充足），間歇可略高於典型 Palladino 上緣；越野 PI 屬中階。
   - 訓練狀態判讀：TSB>5 新鮮（可高強度/比賽）、-10~5 最佳、-25~-10 疲勞（注意恢復）、<-25 過度（減量）。
   """
 
@@ -293,7 +293,7 @@ def test_x(): assert ...
           S = async_sessionmaker(engine, expire_on_commit=False); s = S()
           s.add(Athlete(id=1, name="a", data_dir="/tmp")); await s.flush()
           s.add(AthleteSettings(athlete_id=1, effective_date=date(2025,1,1),
-                                run_ftp_w=192, lthr=182))
+                                run_ftp_w=220, lthr=160))
           await s.commit()
           from backend.engine.ai.context import build_context, SYSTEM_PROMPT
           ctx = await build_context(s, 1)
@@ -371,7 +371,7 @@ def test_x(): assert ...
 ### Unit Tests
 | Test | Input | Expected | Edge? |
 |---|---|---|---|
-| compute_zones | ftp 192, lthr 182 | 7 power + 5 hr 區，邊界正確 | N |
+| compute_zones | ftp 220, lthr 160 | 7 power + 5 hr 區，邊界正確 | N |
 | compute_zones | None/None | 空 | Y |
 | build_knowledge | — | 含關鍵概念 | N |
 | build_context | settings | 含 zone 區塊 | N |
@@ -435,4 +435,4 @@ EXPECT: 回功率/心率 zone 邊界 JSON
 | 處方品質依賴 LLM | M | M | 提供具體 zone 數值 + 知識降低幻覺 |
 
 ## Notes
-zone % 沿用 `workouts.py` 既有 Coggan-style 定義；筆記若有 Palladino 個人化特例可後續覆寫（SRS Open Question）。使用者 profile 事實（CP≈192W 等）放 knowledge.py 常數，未來可改讀 settings。
+zone % 沿用 `workouts.py` 既有 Coggan-style 定義；筆記若有 Palladino 個人化特例可後續覆寫（SRS Open Question）。跑者 profile 事實（範例跑者 CP≈220W 等）放 knowledge.py 常數，未來可改讀 settings。
