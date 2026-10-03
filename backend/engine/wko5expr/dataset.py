@@ -77,6 +77,60 @@ def _file_stamp(p: Path) -> list:
     return [st.st_size, int(st.st_mtime)]
 
 
+FLUSH_EVERY_S = 20.0
+_HOLD_LOCK = threading.Lock()
+
+
+def flush_held(ds) -> bool:
+    """True while batched_flush holds this Dataset's series writes and the
+    last write is younger than FLUSH_EVERY_S. A pass over every activity
+    (estimate(), capacity_samples, ... each end with flush_series) used to
+    rewrite the multi-MB series files once per activity, and json.dumps
+    holds the GIL — the web server stalled with it."""
+    import time
+    if not getattr(ds, "_flush_hold", 0):
+        return False
+    now = time.monotonic()
+    if now - getattr(ds, "_flush_last", 0.0) < FLUSH_EVERY_S:
+        return True
+    ds._flush_last = now                     # this call writes; the next ones wait again
+    return False
+
+
+class batched_flush:
+    """`with batched_flush(ds):` — flush_series writes at most every
+    FLUSH_EVERY_S inside (a killed process keeps what was written), and once
+    at the end."""
+
+    def __init__(self, ds):
+        self.ds = ds
+
+    def __enter__(self):
+        import time
+        with _HOLD_LOCK:
+            n = getattr(self.ds, "_flush_hold", 0)
+            try:
+                if not n:
+                    self.ds._flush_last = time.monotonic()
+                self.ds._flush_hold = n + 1
+            except AttributeError:               # a test double without attributes
+                pass
+        return self.ds
+
+    def __exit__(self, *exc):
+        with _HOLD_LOCK:
+            n = getattr(self.ds, "_flush_hold", 0)
+            try:
+                self.ds._flush_hold = max(0, n - 1)
+            except AttributeError:
+                return False
+            last = self.ds._flush_hold == 0
+        f = getattr(self.ds, "flush_series", None)
+        if last and f is not None:
+            f()
+        return False
+
+
 def _safe(key: str) -> str:
     """Filesystem-safe, collision-free name for a cache keyed by an expression."""
     import hashlib
@@ -625,6 +679,8 @@ class Dataset:
         return ",".join("" if v is None else f"{v:g}" for v in vals)
 
     def flush_series(self) -> None:
+        if flush_held(self):
+            return
         with self._series_lock:
             todo = {key: dict(self._series[key]) for key in self._series_dirty}
             self._series_dirty.clear()

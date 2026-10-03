@@ -144,16 +144,19 @@ def parse_file(path: str, npz_path: str) -> dict:
     from backend.engine.wko5expr.fitdataset import workout_fields
     from backend.files.fit_to_channels import fit_to_channels
     v = versions()
+    sha = None
     try:
-        fc = fit_to_channels(Path(path).read_bytes())
+        raw = Path(path).read_bytes()
+        sha = hashlib.sha1(raw).hexdigest()
+        fc = fit_to_channels(raw)
     except Exception as e:                       # noqa: BLE001 — recorded, the build skips it
-        return {"meta": {"error": type(e).__name__}, "parse": v["parse"]}
+        return {"meta": {"error": type(e).__name__}, "parse": v["parse"], "sha": sha}
     start = fc.start_time
     meta = {"start": start.isoformat() if start is not None else None, "sport": fc.sport,
             "sub_sport": fc.sub_sport, "stryd_device": bool(fc.stryd_device), "one_second": bool(fc.one_second),
             "n": len(fc.elapsedtime), "duration": float(fc.elapsedtime[-1]) if fc.elapsedtime else None,
             "channels": sorted(fc.channels)}
-    out = {"meta": meta, "parse": v["parse"]}
+    out = {"meta": meta, "parse": v["parse"], "sha": sha}
     if start is None or not fc.elapsedtime:
         return out                                # the build skips it (no start / no samples)
     t = np.asarray(fc.elapsedtime, dtype=float)
@@ -191,15 +194,154 @@ def _lock_for(key: str) -> threading.RLock:
         return lk
 
 
+# (normcase path, size, mtime_ns) -> the stamp the caches were written with:
+# a file whose mtime changed but whose content did not (a copied / restored /
+# unzipped data folder) keeps its cached parse and every per-file memo keyed
+# on stamp_of (FitStore._valid registers the alias after a content check)
+_ALIASES: dict[tuple, list] = {}
+_ALIASES_LOCK = threading.Lock()
+
+
 def stamp_of(p: Path) -> list:
     st = p.stat()
-    return [st.st_size, st.st_mtime_ns]
+    raw = [st.st_size, st.st_mtime_ns]
+    if _ALIASES:
+        with _ALIASES_LOCK:
+            a = _ALIASES.get((os.path.normcase(str(p)), st.st_size, st.st_mtime_ns))
+        if a is not None:
+            return list(a)
+    return raw
+
+
+def stamp_s(p: Path, st=None) -> list:
+    """[size, whole-second mtime] (the race-power file caches' stamp) with
+    the content alias of stamp_of: a copied folder's new mtimes keep them."""
+    st = st or p.stat()
+    if _ALIASES:
+        with _ALIASES_LOCK:
+            a = _ALIASES.get((os.path.normcase(str(p)), st.st_size, st.st_mtime_ns))
+        if a is not None:
+            return [a[0], int(a[1] / 1e9)]          # as int(st_mtime) of the stat it stands for
+    return [st.st_size, int(st.st_mtime)]
+
+
+def _alias(p: Path, now: list, cached: list) -> None:
+    with _ALIASES_LOCK:
+        _ALIASES[(os.path.normcase(str(p)), now[0], now[1])] = list(cached)
+
+
+def content_hash(p: Path) -> Optional[str]:
+    try:
+        return hashlib.sha1(Path(p).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def _abs_key(s: str) -> str:
+    return hashlib.sha1(s.encode()).hexdigest()[:12]
+
+
+def app_home() -> Path:
+    """~/.wko5coach: the FIT folders and their cache move together with it."""
+    return Path.home() / ".wko5coach"
+
+
+def ident_of(fit_dir: Path) -> str:
+    """A location-independent name of a FIT folder: its path inside the app
+    home ("app:fit/coros") when it lives there, else its absolute path."""
+    p = Path(os.path.abspath(str(fit_dir)))
+    try:
+        return "app:" + _case(p.relative_to(Path(os.path.abspath(str(app_home())))).as_posix())
+    except ValueError:
+        return "abs:" + os.path.normcase(str(p))
+
+
+def _case(s: str) -> str:
+    return s.lower() if os.name == "nt" else s
+
+
+def _ident_of_dir_string(d: str) -> Optional[str]:
+    """ident_of for a folder path recorded by an older cache (index.json
+    "dir"), wherever that app home was: the parts after the last
+    ".wko5coach"."""
+    parts = [x for x in str(d).replace("\\", "/").split("/") if x]
+    low = [x.lower() for x in parts]
+    if ".wko5coach" not in low:
+        return None
+    i = len(low) - 1 - low[::-1].index(".wko5coach")
+    return "app:" + _case("/".join(parts[i + 1:]))
+
+
+HOME_MARK = "home.json"
+
+
+def _read_ident(h: Path) -> Optional[str]:
+    try:
+        return json.loads((h / HOME_MARK).read_text("utf-8")).get("ident")
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:                                   # an older cache: no marker, the index's folder
+        with open(h / "index.json", "r", encoding="utf-8") as f:
+            head = f.read(4096)            # {"dir": "...", "files": ...}: dir comes first
+        i = head.find('"dir"')
+        if i < 0:
+            return None
+        d = json.loads("{" + head[i:head.index(",", head.index(":", i))] + "}")["dir"]
+        return _ident_of_dir_string(d)
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+_HOMES: dict[tuple, Path] = {}
+
+
+def resolve_home(base: Path, legacy: str, ident: str) -> Path:
+    """The cache folder for `ident` under `base`: the location-independent
+    key's folder, else the folder of the old absolute-path key (existing
+    caches keep working), else a folder another location left behind with the
+    same ident (a copied / moved ~/.wko5coach: no re-parse), else a new one
+    under the location-independent key."""
+    ck = (str(base), legacy, ident)
+    hit = _HOMES.get(ck)
+    if hit is not None and hit.exists():
+        return hit
+    new = base / _abs_key(ident)
+    out = None
+    if new.exists():
+        out = new
+    elif (base / legacy).exists():
+        out = base / legacy
+    elif "app:" in ident and base.is_dir():
+        try:
+            subs = sorted(p for p in base.iterdir() if p.is_dir())
+        except OSError:
+            subs = []
+        for h in subs:
+            if _read_ident(h) == ident:
+                out = h
+                break
+    out = out or new
+    if out.exists():
+        write_mark(out, ident)
+    _HOMES[ck] = out
+    return out
+
+
+def write_mark(home: Path, ident: str) -> None:
+    """home.json: which folder this cache belongs to (found again after a move)."""
+    try:
+        if not (home / HOME_MARK).exists():
+            home.mkdir(parents=True, exist_ok=True)
+            (home / HOME_MARK).write_text(json.dumps({"ident": ident}), "utf-8")
+    except OSError:
+        pass
 
 
 def home_of(fit_dir: Path, base: Optional[Path] = None) -> Path:
-    """The cache folder of one FIT folder."""
-    key = hashlib.sha1(os.path.normcase(os.path.abspath(str(Path(fit_dir)))).encode()).hexdigest()[:12]
-    return (base or root()) / key
+    """The cache folder of one FIT folder (resolve_home: survives the app
+    home being copied or moved)."""
+    legacy = _abs_key(os.path.normcase(os.path.abspath(str(Path(fit_dir)))))
+    return resolve_home(Path(base or root()), legacy, ident_of(fit_dir))
 
 
 def index_path_of(fit_dir: Path, base: Optional[Path] = None) -> Path:
@@ -219,8 +361,11 @@ class FitStore:
         self.dirty = False
         try:
             raw = json.loads(self.index_path.read_text("utf-8"))
-            if raw.get("dir") == str(self.dir):
+            d = raw.get("dir")
+            # the same folder, or the same app-home folder at another location (a moved copy)
+            if d == str(self.dir) or (raw.get("ident") or _ident_of_dir_string(d or "")) == ident_of(self.dir):
                 self.files = raw.get("files", {})
+                self.dirty = d != str(self.dir)
         except (OSError, ValueError):
             pass
 
@@ -233,12 +378,45 @@ class FitStore:
 
     def _valid(self, rel: str, stamp: list) -> Optional[dict]:
         e = self.files.get(rel)
-        if not e or e.get("stamp") != stamp or e.get("parse") != self.v["parse"]:
+        if not e or e.get("parse") != self.v["parse"]:
+            return None
+        if e.get("stamp") != stamp and not self._same_content(rel, e, stamp):
             return None
         m = e["meta"]
         if not m.get("error") and m.get("start") and m.get("n") and not self.npz(rel).exists():
             return None
         return e
+
+    def _same_content(self, rel: str, e: dict, stamp: list) -> bool:
+        """Only the mtime changed (a copied / restored folder): the same
+        bytes as when parsed (sha1 recorded at parse) keep the entry, and
+        stamp_of then answers the cached stamp for this file so the per-file
+        memos keyed on it stay valid too."""
+        old = e.get("stamp")
+        if not e.get("sha") or not old or old[0] != stamp[0]:
+            return False
+        p = self.dir / rel
+        if e.get("seen") != stamp:              # checked once per new mtime, then remembered
+            if content_hash(p) != e["sha"]:
+                return False
+            e["seen"] = list(stamp)
+            self.dirty = True
+        _alias(p, stamp, old)
+        return True
+
+    def _backfill_sha(self, paths: list[Path]) -> None:
+        """Entries parsed before the content hash existed get one (read once)."""
+        for p in paths:
+            rel = self.rel(p)
+            with self.lock:
+                e = self.files.get(rel)
+                need = e is not None and not e.get("sha")
+            if need:
+                h = content_hash(p)
+                if h:
+                    with self.lock:
+                        e["sha"] = h
+                        self.dirty = True
 
     def stale(self, paths: list[Path]) -> list[Path]:
         with self.lock:
@@ -250,6 +428,8 @@ class FitStore:
         todo = self.stale(paths)
         if progress is not None:
             progress.phase("parse", total=len(todo))
+        todo_set = set(todo)
+        self._backfill_sha([p for p in paths if p not in todo_set])
         if not todo:
             self.save()
             return 0
@@ -312,10 +492,11 @@ class FitStore:
         with self.lock:
             if not self.dirty:
                 return
-            data = json.dumps({"dir": str(self.dir), "files": self.files})
+            data = json.dumps({"dir": str(self.dir), "ident": ident_of(self.dir), "files": self.files})
             self.dirty = False
         try:
             self.home.mkdir(parents=True, exist_ok=True)
+            write_mark(self.home, ident_of(self.dir))
             tmp = self.index_path.with_name(f"index.{os.getpid()}.{threading.get_ident()}.tmp")
             tmp.write_text(data, "utf-8")
             os.replace(tmp, self.index_path)
