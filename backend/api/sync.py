@@ -282,7 +282,7 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["push_providers"] = WT.available()
     creds, source = lookup_client_creds()
     out["tp_client_credentials_configured"] = creds is not None      # never the values
-    out["tp_client_credentials_source"] = source                     # env|file|sealed|wko5_exe|none
+    out["tp_client_credentials_source"] = source                     # env|file|none
     from backend.sync.tp_client import TP_CLIENT_FILE
     out["tp_client_file_exists"] = TP_CLIENT_FILE.exists()           # existence only, never read here
     from backend.settings.secrets import KEY_DOC, key_status

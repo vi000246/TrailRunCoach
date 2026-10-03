@@ -35,7 +35,6 @@ WKO5COACH_REALDATA=1 pytest backend/tests/realdata
 | test_real_fit_to_channels.py | test_fit_to_channels.py | FIT → channels parity with WKO5's imports |
 | test_real_plan_prefs.py | test_plan_prefs.py | week_plan with prefs |
 | test_real_racepower_backtest2.py | test_racepower_backtest2.py | classification on real activities |
-| test_real_tp_client_sealed.py | test_tp_client_sealed.py | leak guard: reads the real `~/.wko5coach/tp_client.json` |
 | test_real_wko4_extractor.py | test_wko4_extractor.py | one real .wko4 |
 | test_real_wko4_file.py | test_wko4_file.py (whole file) | .wko4 channel stats vs WKO5's |
 | test_real_wko5_{elevation,hr,meanmax,pace,power,time,perf}.py | test_wko5_*.py | each metric vs WKO5's stored value |

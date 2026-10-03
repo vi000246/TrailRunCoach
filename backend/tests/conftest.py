@@ -87,8 +87,6 @@ def _no_real_tp_client(monkeypatch, tmp_path_factory):
     monkeypatch.delenv("TP_CLIENT_SECRET", raising=False)
     d = tmp_path_factory.mktemp("tpc")
     monkeypatch.setattr(tp_client, "TP_CLIENT_FILE", d / "missing_tp_client.json")
-    monkeypatch.setattr(tp_client, "SEALED_CLIENT_FILE", d / "missing_tp_client.enc")
-    monkeypatch.setenv(tp_client.WKO5_EXE_ENV, str(d / "missing_WKO5.exe"))
 
 
 @pytest.fixture(autouse=True)

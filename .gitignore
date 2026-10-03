@@ -28,3 +28,6 @@ workouts/
 # Secrets
 .env
 *.key
+
+# Local agent / editor state
+.claude/

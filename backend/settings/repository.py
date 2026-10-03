@@ -43,8 +43,8 @@ DEFAULTS: dict[str, Any] = {
     "sync.primary_source": None,
     "sync.coros.enabled": True,
     "sync.trainingpeaks.enabled": True,
-    # log in with WKO5's OAuth client credentials (ToS risk, see
-    # docs/deploy/tp-oauth-client.md). None = auto: on only when the
+    # log in with OAuth client credentials from TP_CLIENT_ID/SECRET or
+    # ~/.wko5coach/tp_client.json (see .env.example). None = auto: on only when the
     # credentials are configured on this machine; False = website login only.
     "sync.trainingpeaks.use_wko5_client": None,
     # outcome of the last run: {at, trigger, status, downloaded, checked, errors, error}
@@ -66,6 +66,9 @@ DEFAULTS: dict[str, Any] = {
     # COROS / TP source: read thresholds / weight from the WKO5 athlete file
     # (opt-in cross-check; default = plan → athlete_settings → estimates, fitdataset.py)
     "charts.fit_settings_from_wko5": False,
+    # folder searched (recursively) for your own exported WKO5 views (*.wko5chart);
+    # None = no imported WKO5 views (env WKO5_VIEWS_DIR wins; api/wko5views.views_dir)
+    "charts.wko5_views_dir": None,
     # power-based models (race-power envelope / CP / PD, power TSS, power effort
     # checks) also read watch-estimated (wrist) power; False = Stryd only
     # (backend/engine/power_source.py). HR / pace paths always use every run.
@@ -273,6 +276,8 @@ def validate(key: str, value: Any) -> None:
         raise ValueError("auto-sync threshold must be 1-168 hours")
     if key == "charts.data_source" and value not in ("source", "wko5"):
         raise ValueError("chart data source must be source or wko5")
+    if key == "charts.wko5_views_dir" and value is not None and not (isinstance(value, str) and value.strip()):
+        raise ValueError("charts.wko5_views_dir must be a folder path or null")
     if key == "charts.map.basemap" and value is not None and value not in MAP_BASEMAPS:
         raise ValueError(f"map basemap must be one of {MAP_BASEMAPS}")
     if key == "charts.map.overlays" and not (
