@@ -26,7 +26,8 @@ the WKO5 athlete folder.
 * vam (4224) = climbing / duration · 3600, as WKO5.
 * CP for the charts (`cp`, cp_info): plan test -> athlete_settings
   run_ftp_w -> a Stryd-only PD fit as of the run's date (_estimate_cp,
-  never watch power) -> unset; power TSS does not use the fit.
+  never watch power) -> unset. A run's power TSS divides by the same value
+  (tss_ftp; parity mode / the WKO5 opt-in keep WKO5's FTP setting).
 * thresholds / weight, in order: the season plan's dated rows (Dataset.setting
   / cp) -> athlete_settings in the app DB (weight, run_ftp_w, threshold pace;
   not lthr / ftp_w, see _load_db_settings) -> as-of LTHR / CP estimates from
@@ -594,7 +595,8 @@ class FitFolderDataset(Dataset):
         self.pd_memo = PdMemo(self)               # racepower.athlete._pd_mftp on disk
         if self.settings_from == "app" and estimate_thresholds and self.workouts:
             prog.phase("estimate")
-            if self._estimate_settings_memo():
+            # an estimated LTHR, or a Stryd PD fit (the run FTP of power TSS: tss_ftp)
+            if self._estimate_settings_memo() or self._cp_est:
                 for w in self.workouts:          # hrTSS / rTSS / power TSS with the estimated thresholds
                     self._refresh_hr_fields(w)
                     w.metrics = self._metrics(w)
@@ -778,15 +780,16 @@ class FitFolderDataset(Dataset):
         day to the next. A plan test still wins (Dataset.setting looks at the
         plan first). True when anything was set.
 
-        Run FTP (power TSS) is NOT filled from an estimate: cp_as_of's PD
-        refit falls back to watch power and gave ~1.8× the plan CP for the
-        months before a Stryd on one runner's COROS data, which would cut every
-        power TSS there ~4×. Without a plan / DB value those runs fall back to
-        hrTSS (with the estimated LTHR) or stay unset.
+        The runftp setting is NOT filled from cp_as_of: its PD refit falls
+        back to watch power and gave ~1.8× the plan CP for the months before
+        a Stryd on one runner's COROS data, which would cut every power TSS
+        there ~4×.
 
-        CP for the charts (Dataset.cp: Palladino zones, `cp` in expressions)
-        is filled before the first plan CP by a Stryd-only PD fit on the same
-        grid (_estimate_cp); it does not change any TSS."""
+        CP (Dataset.cp: Palladino zones, `cp` in expressions) is filled before
+        the first plan CP by a Stryd-only PD fit on the same grid
+        (_estimate_cp), and a run's power TSS uses that CP as its FTP
+        (tss_ftp): the runs before the first fit / without Stryd power fall
+        back to rTSS / hrTSS (with the estimated LTHR)."""
         from backend.engine.racepower import athlete as A
         from backend.engine.thresholds import estimate
         runs = [w for w in self.workouts if w.sport == "run"]
@@ -960,7 +963,8 @@ class FitFolderDataset(Dataset):
 
     def cp(self, w: Workout) -> Optional[float]:
         """Dataset.cp (the plan's dated CP test, else athlete_settings
-        run_ftp_w), else the Stryd-only PD fit in effect on the run's date."""
+        run_ftp_w), else the Stryd-only PD fit in effect on the run's date.
+        Also the FTP of a run's power TSS (tss_ftp)."""
         v = super().cp(w)
         if v is not None or w.sport != "run":
             return v
@@ -974,20 +978,38 @@ class FitFolderDataset(Dataset):
                       key=lambda t: t.date)
         if rows:
             t = rows[-1]
-            return {"cp": float(t.cp), "source": f"你的測試 {t.date[:10]}", "date": t.date[:10],
+            return {"cp": float(t.cp), "source": f"你的測試 {t.date[:10]}", "date": t.date[:10], "kind": "test",
                     "wprime": t.wprime, "wprime_source": "測試（兩點法）" if t.wprime else None}
         v = super().cp(w)
         if v is not None:
-            return {"cp": v, "source": self.setting_label("runftp"), "date": None, "wprime": None,
-                    "wprime_source": None}
+            return {"cp": v, "source": self.setting_label("runftp"), "date": None, "kind": "setting",
+                    "wprime": None, "wprime_source": None}
         fit = self._cp_fit_on(day)
         if fit:
-            return {"cp": fit["cp"], "date": fit["date"].isoformat(),
+            return {"cp": fit["cp"], "date": fit["date"].isoformat(), "kind": "estimate",
                     "source": f"推估：Stryd 功率 PD 模型 {fit['date'].isoformat()}（近 90 天 {fit['runs']} 次 Stryd 跑步，"
                               f"排除手錶功率）",
                     "wprime": fit["frc_j"], "wprime_source": "推估：PD 模型 FRC（≈ W′）"}
-        return {"cp": None, "source": "未設定（測試日以前沒有 Stryd 功率可擬合）", "date": None,
+        return {"cp": None, "source": "未設定（測試日以前沒有 Stryd 功率可擬合）", "date": None, "kind": None,
                 "wprime": None, "wprime_source": None}
+
+    def tss_ftp(self, w: Workout) -> tuple[Optional[float], Optional[str]]:
+        """A run's power-TSS FTP on a COROS / TP source = the CP in effect
+        (`cp` / cp_info, the same value the charts use): the plan's CP test on
+        or before the date -> athlete_settings run_ftp_w -> the Stryd-only PD
+        mFTP as of the date (_estimate_cp; watch power never fitted) -> none
+        (rTSS / hrTSS). On purpose not WKO5's rule: WKO5 divides by the FTP
+        typed into its settings and never by its own mFTP
+        (docs/plans/run-ftp-auto.plan.md). Parity mode and the WKO5 opt-in
+        (charts.fit_settings_from_wko5) keep WKO5's rule (Dataset.tss_ftp)."""
+        if w.sport != "run" or self.config.parity or self.settings_from != "app":
+            return super().tss_ftp(w)
+        info = self.cp_info(w)
+        if not info["cp"]:
+            return None, None
+        if info["kind"] == "estimate":
+            return info["cp"], f"推估：Stryd PD 模型 mFTP（{info['date']}）"
+        return info["cp"], info["source"]
 
     def _refresh_hr_fields(self, w: Workout) -> None:
         """Recompute the LTHR-dependent hrTSS / hrIF after the estimates."""

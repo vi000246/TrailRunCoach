@@ -17,6 +17,8 @@ from backend.engine.wko5expr.fitdataset import dataset_for_source
 from backend.scripts.compare_sources import TOLERANCE, Act, pair
 
 FIELDS = ("duration", "distance", "climbing", "np", "tss")
+# how each side computed its TSS (Dataset._metrics): shown, not compared
+BASIS = ("tss_source", "ftp_used", "ftp_source")
 TOL = {"duration": TOLERANCE["duration_s"], "distance": TOLERANCE["distance_km"],
        "climbing": TOLERANCE["gain_m"], "np": TOLERANCE["np"], "tss": TOLERANCE["tss"]}
 
@@ -33,7 +35,7 @@ def _acts(ds, source: str, since: Optional[dt.date]) -> list[Act]:
         s = w.entry.start
         if s is None or (since and s.date() < since):
             continue
-        a = Act(source, str(w.idx), s, w.sport_type, {f: w.metrics.get(f) for f in FIELDS})
+        a = Act(source, str(w.idx), s, w.sport_type, {f: w.metrics.get(f) for f in FIELDS + BASIS})
         out.append(a)
     return out
 
@@ -64,7 +66,9 @@ def compare(a: str, b: str, wko5_dir: Path, since: Optional[dt.date] = None,
                     flags.append(f)
             cells[f] = {"a": va, "b": vb, "rel": rel}
         rows.append({"start": x.start_utc.isoformat(timespec="minutes"), "sport": x.sport,
-                     "dt_s": d, "metrics": cells, "flags": flags})
+                     "dt_s": d, "metrics": cells, "flags": flags,
+                     "tss_basis": {"a": {k: x.values.get(k) for k in BASIS},
+                                   "b": {k: y.values.get(k) for k in BASIS}}})
     return {"a": a, "b": b, "since": since.isoformat() if since else None,
             "matched": len(rows), "only_a": len(only_a), "only_b": len(only_b),
             "only_a_starts": [x.start_utc.isoformat(timespec="minutes") for x in only_a[:50]],
