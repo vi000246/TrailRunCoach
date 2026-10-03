@@ -146,7 +146,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   };
   const OPEN_W = 90;
   const TIP = {
-    basis: "每一段自己決定用功率、心率還是配速：點那一段的目標就能改（標「指定」）。標「自動」的段依課表類型（路跑輕鬆／長跑看功率、心率 ≤ AeT 當上限；越野看心率；間歇看功率）。數字依目前的 CP、LTHR、AeT、閾值配速帶入。",
+    basis: "每一段自己決定用功率、心率還是配速：點那一段的目標就能改（標「指定」）。標「自動」的段依課表類型（路跑輕鬆／長跑看功率、心率以輕鬆跑上限為上限；越野看心率；間歇看功率）。數字依目前的 CP、LTHR、輕鬆跑上限、閾值配速帶入。",
     chart: "橫軸是時間（按圈結束的段畫成固定寬度、斜線），高度和顏色都是強度（約當 % CP）。心率段換算成功率高度是推估，只影響這張圖。點一段可以選到下面那一步。",
     tss: "TSS 估＝Σ 秒 × IF² × 100 ÷ 3600，IF＝目標中點 ÷ CP；心率段用 Friel 心率區對到 Palladino 功率區，沒有目標的段依類型給固定值。都是推估，跑步 rTSS 和這個公式的差距未驗證。",
     rules: "即時檢查：5 區每趟至少 2 分鐘（台灣教練）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
@@ -299,7 +299,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         return { type, mode: "zone", zone: st.kind === "work" ? "3A" : "1C" };
       }
       if (type === "hr") {
-        if (r.type === "hr" && /AeT/.test(r.sub || "")) return { type, mode: "zone", zone: "aet" };
+        if (r.type === "hr" && /輕鬆跑上限|AeT/.test(r.sub || "")) return { type, mode: "zone", zone: "aet" };
         if (r.type === "hr" && th.lthr) return { type, mode: "pct", lo: rd(r.lo / th.lthr), hi: rd(r.hi / th.lthr) };
         return { type, mode: "zone", zone: st.kind === "work" ? "4" : "aet" };
       }

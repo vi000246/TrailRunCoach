@@ -842,13 +842,15 @@ def _b2b_generated(inp: dict, week: str) -> list[dict]:
 def _b2b_fallback(inp: dict, sg: dict, days: list[str]) -> list[dict]:
     """The two days from the suggestion alone (the generator didn't plan the week)."""
     from backend.engine import b2b as B2B
+    from backend.engine.hr_profile import easy_cap_measured
     rate = float(((inp.get("cur") or {}).get("tss_per_category") or {}).get("trail") or 55.0) / 60.0
     long_s = {"id": "long", "kind": "long", "title": "LSD（山路）", "minutes": sg["minutes"][0],
               "tss": round(rate * sg["minutes"][0], 1), "detail": "", "target": "", "source": "", "terrain": None}
     ss = [long_s] + B2B.followers(long_s, {"minutes": sg["minutes"]})
     B2B.decorate(ss, {"event": {"name": sg.get("event"), "days": sg.get("event_days") or 2,
                                 "kind": sg.get("event_kind")}, "weeks_out": sg.get("weeks_out")},
-                 (inp.get("thresholds") or {}).get("aet"))
+                 (inp.get("thresholds") or {}).get("aet"),
+                 aet_measured=easy_cap_measured(inp.get("thresholds")))
     for s, d in zip(ss, days):
         s["day"] = d
     return ss

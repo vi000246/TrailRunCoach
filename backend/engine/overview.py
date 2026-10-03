@@ -23,6 +23,7 @@ from typing import Optional
 
 import numpy as np
 
+from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
 from backend.engine.wko5expr.evaluator import WS, Evaluator
 
@@ -547,24 +548,24 @@ def mp_minutes(long_min: float) -> int:
 
 
 def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rate: float,
-                      goal_pace: Optional[float] = None) -> dict:
+                      goal_pace: Optional[float] = None, aet_measured: bool = False) -> dict:
     """The long run for 主要訓練項目 = 路跑: flat, easy; in the 專項期 with a marathon-pace segment
     near the end (Pfitzinger / Daniels). `goal_pace` (s/km, mp_goal_pace): the race's goal pace, written
     as 「目標配速 m:ss/km」 (the step builders read it); None = threshold pace × 1.04–1.08.
-    Session kwargs (id long)."""
-    aet_txt = f" {aet:.0f} bpm" if aet else ""
+    `aet` = the easy-run cap (hr_profile; `aet_measured`: a measured AeT). Session kwargs (id long)."""
+    cap = easy_cap_label(None, aet, aet_measured)
     m = int(round(long_min / 5) * 5)
     if kind == "specific" and m >= 60:
         mp = min(mp_minutes(m), m - 25)
         easy = m - mp
         return dict(id="long", kind="long", title=f"長跑＋馬拉松配速 {mp} 分", minutes=m, terrain="road",
-                    detail=f"平路；前 {easy - 10} 分輕鬆（心率 ≤ AeT{aet_txt}），接著 {mp} 分馬拉松配速"
+                    detail=f"平路；前 {easy - 10} 分輕鬆（心率 ≤ {cap}），接著 {mp} 分馬拉松配速"
                            + (f"（目標配速 {_mmss(goal_pace)}/km）" if goal_pace else "（約閾值配速 × 1.06，推估）")
                            + "，最後 10 分輕鬆收操",
                     source=f"{SRC_PFITZ}（馬拉松配速長跑）；{SRC_DANIELS}（M 配速）",
                     tss=easy / 60.0 * road_rate + mp / 60.0 * max(road_rate, MP_TSS_PER_HOUR))
     return dict(id="long", kind="long", title="LSD（路跑）", minutes=m, terrain="road",
-                detail=f"平路或緩坡；全程心率壓在 AeT{aet_txt} 以下",
+                detail=f"平路或緩坡；全程心率壓在{below(cap)}",
                 source=SRC_PFITZ if kind == "specific" else SRC_UA, tss=long_min / 60.0 * road_rate)
 
 
@@ -760,14 +761,17 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     tgt = _targets(tt)
     # the easy-run cap of every session: 課表心率區間 (設定; engine/hr_profile.py) — a measured AeT,
     # else the chosen COROS model's Z2 top; an estimated AeT no longer caps (owner 2026-10-03).
-    # The session texts keep calling it 「AeT」; a note says what it is when the model isn't LTHR.
+    # The session texts call it 「輕鬆跑上限」 (hr_profile.easy_cap_label; 「（實測 AeT）」 only when
+    # measured); a note says what it is when the model isn't LTHR.
     hrz = tt.get("hr_model")
     aet = (tt.get("easy_cap") or {}).get("value") or tt.get("aet")
     aet_src = (tt.get("easy_cap") or {}).get("source") or tt.get("aet_source")
+    aet_meas = bool(hrz.get("aet_measured")) if hrz else bool(tt.get("aet_measured"))
+    cap_txt = easy_cap_label(None, aet, aet_meas)
     if hrz and (hrz.get("fallback") or (hrz["model"] != "lthr" and not hrz.get("aet_measured"))):
         notes.append({"level": "info", "src": "hr_zones",
                       "text": (hrz["fallback"] + "。" if hrz.get("fallback") else "")
-                      + f"課表心率用{hrz['label']}：輕鬆跑上限 {aet:.0f} bpm（{aet_src}）；課表文字裡的「AeT」指這個上限"})
+                      + f"課表心率用{hrz['label']}：輕鬆跑上限 {aet:.0f} bpm（{aet_src}）"})
     try:
         from backend.engine import base_check as BC
         et = BC.easy_targets(ds, today, aet) if not ds.config.parity else None
@@ -850,11 +854,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # a due CP / AeT test is SUGGESTED, never put into the plan (the user, 2026-10-01): the
         # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
         if road:
-            add(**road_long_session(long_min, kind, aet, tph["road"], mp_goal), target=tgt.get("long", ""))
+            add(**road_long_session(long_min, kind, aet, tph["road"], mp_goal, aet_meas), target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain_goal else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
-                detail=f"{terrain}；全程心率壓在 AeT{f' {aet:.0f} bpm' if aet else ''} 以下，爬坡可以走",
+                detail=f"{terrain}；全程心率壓在{below(cap_txt)}，爬坡可以走",
                 source=SRC_KOOP if kind == "specific" else SRC_UA,
                 tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
         if b2b.get("candidate") and not in_reentry:
@@ -914,11 +918,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         st_t, st_d, st_s = ROAD_STRIDES if road else HILL_STRIDES
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
-            detail="心率不超過 AeT" + (st_d if strides else ""),
+            detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
             source=SRC_UA + (st_s if strides else ""), tss=m / 60.0 * tph["road"])
     if PR is not None:
         # 課表偏好: counts, caps, terrain, interval target (engine/plan_prefs.py)
-        ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet,
+        ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet, aet_measured=aet_meas,
                      slots=max(1, sum(bool(x) for x in PR.days) - len(lost)), notes=notes,
                      quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None)
         shaped = PP.shape([asdict(s) for s in sessions], minutes_total, PR, ctx)
@@ -931,7 +935,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # B2B texts / caps after the 課表偏好 shaping (it may rename, re-kind or cap the long run)
         flags = {s.id: getattr(s, "_long_day", False) for s in sessions}
         dd = [asdict(s) for s in sessions]
-        B2B.decorate(dd, b2b, aet, PR.long_cap if PR is not None else None, b2b.get("weight"))
+        B2B.decorate(dd, b2b, aet, PR.long_cap if PR is not None else None, b2b.get("weight"), aet_meas)
         sessions = [Session(**d) for d in dd]
         for s in sessions:
             s._long_day = flags.get(s.id, False)
@@ -1107,12 +1111,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 長爬坡反覆 (engine/specific_phase.py): the race GPX's longest climb, one easy run
         try:
             dd = [asdict(s) for s in sessions]
-            SP.apply_climb(dd, sp, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph)
+            SP.apply_climb(dd, sp, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph, aet_measured=aet_meas)
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             sp = {**sp, "error": type(e).__name__}
     race_sim = SP.sim_suggestion(sp, monday, max([longest28] + [s.minutes for s in sessions if s.id == "long"]),
-                                 aet, tph["trail"])
+                                 aet, tph["trail"], aet_meas)
     from backend.engine import steep_hill as SH
     # (主要訓練項目 = 路跑: no steep walk — it simulates a mountain pack)
     lc = {"active": False, "why": "主要訓練項目：路跑"} if road else \
@@ -1120,7 +1124,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if lc.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
-            SH.apply(dd, lc, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph)
+            SH.apply(dd, lc, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph, aet_measured=aet_meas)
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             lc = {**lc, "error": type(e).__name__}
@@ -1131,7 +1135,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         from backend.engine import heat_plan as HP
         sd = [asdict(s) for s in sessions]
         heat_info = HP.apply(sd, events=status.plan.events, today=today, prefs=prefs, aet=aet, mode=mode,
-                             kind=kind, notes=notes)
+                             kind=kind, notes=notes, aet_measured=aet_meas)
         if heat_info.get("active"):
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in sd]
     except Exception as e:                  # noqa: BLE001 — heat sessions never break the plan
@@ -1205,7 +1209,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
         "long_weekday": WEEKDAYS[long_wd],
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
-                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src, "aet_pm": tt.get("aet_pm"),
+                       # aet = the easy-run cap (not always an AeT: the 課表心率區間 Z2 top unless measured);
+                       # its ± badge only when the cap IS the AeT estimate (no 課表心率區間)
+                       "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src,
+                       "aet_pm": tt.get("aet_pm") if hrz is None else None,
+                       "aet_measured": aet_meas, "easy_cap_label": cap_txt, "easy_cap_tip": EASY_CAP_TIP,
                        # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it
                        "hr_model": hrz},
         "notes": notes,

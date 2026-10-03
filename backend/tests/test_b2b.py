@@ -192,7 +192,7 @@ def test_decorate_texts_targets_caps_and_sources():
     B2B.decorate(ss, info, 142.0, long_cap=None, weight=62.0)
     l1, l2 = ss[0], ss[1]
     assert l1["title"].startswith("B2B 第 1 天｜") and l2["title"].startswith("B2B 第 2 天｜")
-    assert l1["target"] == l2["target"] == "心率 ≤ AeT 142 bpm"           # HR only (trail)
+    assert l1["target"] == l2["target"] == "心率 ≤ 輕鬆跑上限 142 bpm"           # HR only (trail)
     assert "30–60 g" in l1["detail"] and "Burke 2011" in l1["detail"]
     assert "背" not in l1["detail"] and "kg" not in l1["detail"]             # no pack (engine/steep_hill.py)
     assert "2/3" in l2["detail"] and "下坡" in l2["detail"]
@@ -351,7 +351,7 @@ def test_week_plan_accepted_b2b_on_the_users_days_volume_unchanged():
     assert (by["long"]["day"], by["long2"]["day"]) == ("2026-10-03", "2026-10-04")       # the user's Sat + Sun
     assert by["long"]["minutes"] == 180 and by["long2"]["minutes"] == 120
     assert by["long"]["title"].startswith("B2B 第 1 天") and "30–60 g" in by["long"]["detail"]
-    assert "（共 2 天）" in by["long"]["detail"] and by["long"]["target"].startswith("心率 ≤ AeT")
+    assert "（共 2 天）" in by["long"]["detail"] and by["long"]["target"].startswith("心率 ≤ 輕鬆跑上限")
     assert wp["b2b"]["weeks_out"] == 10 and "kg" not in by["long"]["detail"]            # no pack in training
     # Koop: the week's total is the same as without B2B (day 2 came out of the easy runs)
     main = sum(s["minutes"] for s in wp["sessions"] if s["kind"] not in ("strength",))

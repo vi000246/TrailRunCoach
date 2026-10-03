@@ -380,11 +380,14 @@ def climb_minutes(sh: dict, n: Optional[int] = None) -> int:
     return _r5(15 + n * sh["rep"] * (1 + DOWN_SHARE) + 10)
 
 
-def climb_text(race: dict, sh: dict, n: int, aet: Optional[float]) -> tuple[str, str, str]:
+def climb_text(race: dict, sh: dict, n: int, aet: Optional[float],
+               aet_measured: bool = False) -> tuple[str, str, str]:
+    """`aet` = the easy-run cap (hr_profile.easy_cap_label)."""
+    from backend.engine.hr_profile import easy_cap_label
     f = race.get("features") or {}
     g = sh["grade"]
     dn = f.get("steep_descent") or f.get("descent") or {}
-    hr = f"心率約 AeT {aet:.0f} bpm" if aet else "心率約 AeT"
+    hr = "心率約" + easy_cap_label(None, aet, aet_measured)
     when = f"、你的速度約 {sh['climb_min']:.0f} 分" if sh.get("climb_min") else ""
     title = f"長爬坡反覆 {n}×{sh['rep']} 分（{g:.0f}% 坡）"
     down = (f"下坡用跑的：找接近 {dn['grade']:.0f}% 的坡（賽道最陡的長下坡 ↓{dn['dz']:.0f} m；整場下降 {f.get('loss_m', 0):.0f} m）"
@@ -395,7 +398,8 @@ def climb_text(race: dict, sh: dict, n: int, aet: Optional[float]) -> tuple[str,
 
 
 def apply_climb(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, prefs=None,
-                b2b: Optional[dict] = None, notes: Optional[list] = None, rates: Optional[dict] = None) -> list[dict]:
+                b2b: Optional[dict] = None, notes: Optional[list] = None, rates: Optional[dict] = None,
+                aet_measured: bool = False) -> list[dict]:
     """Turn one easy run into 長爬坡反覆 (in place; the week's easy minutes unchanged):
     never within a day of the long day / quality, the easy days after a B2B, or the last
     7 days before the race; a weekday only when it fits the weekday cap."""
@@ -442,7 +446,7 @@ def apply_climb(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = 
         delta -= int(x["minutes"]) - new
         x["minutes"], x["tss"] = new, round(r * new, 1)
     rate = (rates or {}).get("trail") or (rates or {}).get("road") or 55.0
-    title, detail, hr = climb_text(race, sh, n, aet)
+    title, detail, hr = climb_text(race, sh, n, aet, aet_measured)
     s.update(id="climb", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail, source=SRC_CLIMB,
              tss=round(rate * 1.1 * m / 60.0, 1), target=hr,
              climb_m=round(n * sh["rep"] / sh["climb_min"] * sh["climb_dz"]) if sh.get("climb_min") else None)
@@ -479,9 +483,10 @@ def fuel_text(race: dict) -> str:
 
 
 def sim_sessions(race: dict, minutes: list[int], aet: Optional[float], rate: float,
-                 sport: str = "trail") -> list[dict]:
-    """The simulation day(s) as the user's sessions."""
-    hr = f"心率 ≤ AeT {aet:.0f} bpm" if aet else "心率 ≤ AeT"
+                 sport: str = "trail", aet_measured: bool = False) -> list[dict]:
+    """The simulation day(s) as the user's sessions. `aet` = the easy-run cap (hr_profile)."""
+    from backend.engine.hr_profile import easy_cap_hr
+    hr = easy_cap_hr(aet, aet_measured)
     if sport == "road":
         # 路跑: a long run in race kit, fuelling and pacing, on the flat
         out = []
@@ -540,7 +545,7 @@ def sim_day_options(sg: dict, first: dt.date, blocked=frozenset(), allowed: Opti
 
 
 def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: Optional[float] = None,
-                   rate: float = 55.0) -> Optional[dict]:
+                   rate: float = 55.0, aet_measured: bool = False) -> Optional[dict]:
     """The race simulation, suggested from the week before its window (this week or the
     next) until the window ends: {id, type race_sim, weeks, minutes, sessions, pick…}.
     `longest`: the longest of the last 4 weeks / this week's long day (the +15 % cap)."""
@@ -566,7 +571,7 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
                 "help": ("Koop、Pfitzinger：賽前把比賽日的裝備、早餐、補給和配速演練一次，問題在比賽前就發現；"
                          f"路跑不跑全程，長度是專項期最長的那一次，一樣守「每次最多 +15%」。補給：{fuel_text(race)}。"
                          "選一天按「排入」才會進課表；不排也不影響其他課。時間點與長度為推估。"),
-                "src": SRC_SIM, "sessions": sim_sessions(race, [d1], aet, rate, "road")}
+                "src": SRC_SIM, "sessions": sim_sessions(race, [d1], aet, rate, "road", aet_measured)}
     multi = int(race.get("days") or 1) > 1
     from backend.engine.b2b import DAY2_RATIO, MIN_DAY2
     mins = [d1] + ([max(MIN_DAY2, _r5(DAY2_RATIO * d1))] if multi else [])
@@ -580,4 +585,4 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
                      f"這天換掉那週的長天；長度一樣守「每次最多 +15%」。補給：{fuel_text(race)}。"
                      + ("多日行程做連續兩天，第 2 天約第 1 天的 2/3（CTS 30:20）。" if multi else "")
                      + "選一天按「排入」才會進課表；不排也不影響其他課。時間點與目標比例為推估。"),
-            "src": SRC_SIM, "sessions": sim_sessions(race, mins, aet, rate)}
+            "src": SRC_SIM, "sessions": sim_sessions(race, mins, aet, rate, aet_measured=aet_measured)}
