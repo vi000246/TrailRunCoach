@@ -77,13 +77,12 @@ def _run_course(rng, p: S.Planned, minutes: float, small: bool):
     """A course long enough for the run (wrapping courses repeat)."""
     k = 0.25 if small else 1.0
     if p.kind in ("trail", "trail_long"):
+        climb = float(p.params.get("climb") or rng.uniform(350, 650))
         if p.kind == "trail_long":
-            climb = float(rng.uniform(1300, 1500)) if p.showcase else float(rng.uniform(900, 1600))
             length = climb / 0.15 * 2 * 1.15
             up, down = (0.08, 0.25), (0.06, 0.20)
         else:
-            climb = float(rng.uniform(350, 650))
-            length = float(rng.uniform(9000, 13000))
+            length = max(9000.0, climb / 0.09 * 2)
             up, down = (0.06, 0.18), (0.05, 0.15)
         return C.make(rng, "out_back", A.AREAS["trail"], length * k, climb * k, climb * 0.15 * k,
                       up=up, down=down, n_seg=6, trail=True, offset_m=float(rng.uniform(0, 1500)), rough=2.0)
