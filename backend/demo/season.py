@@ -5,7 +5,8 @@ generator, so a seed + anchor always gives the same season.
 
 Targets: 半程馬拉松 (~30 weeks ago), 百岳 3 日 (~16 weeks ago, with two 2-day
 warm-up trips), 越野 50K (A race, ~4 weeks after the anchor, so the plan is
-live: the anchor falls in its 專項期). 4–6 sessions a week, every 4th week
+live: the anchor falls in its 專項期) with a B race (貓空越野 17K, a real course) three
+weeks before it. 4–6 sessions a week, every 4th week
 easier, a 10-day 感冒 gap, a few missed sessions. The last three weeks hold
 the showcase activities (one each): 間歇課, 越野長爬坡, 輕鬆跑, LSD, CP 測試,
 AeT 測試, 百岳多日.
@@ -92,7 +93,22 @@ def make_events(anchor: dt.date) -> list:
               days=3, distance_km=36, climbing_m=3700, est_hours=23, pack_kg=9, note="虛構行程"),
         Event(id="demo-50k", name="示範山徑越野 50K", date=race.isoformat(), kind="race", priority="A",
               distance_km=50, climbing_m=2800, est_hours=7.5, note="虛構賽事"),
+        maokong_event(race),
     ]
+
+
+# 貓空越野 17K: a real course (backend/demo/data/maokong_17k.gpx, the public Xtrail Maokong 17K
+# route), the race calculator's example (demo.html). A B race three weeks before the 50K, inside
+# its 專項期: make_phases builds on the A events only, so the phases (and the history) stay as
+# they were. km / climb as the app reads the GPX (racepower.course: 16.6 km, ↑893 m ↓653 m); est_hours ≈ the
+# calculator's 穩定 finish for the demo athlete (1:57).
+MAOKONG_ID = "demo-maokong"
+
+
+def maokong_event(race: dt.date):
+    from backend.engine.planning import Event
+    return Event(id=MAOKONG_ID, name="貓空越野 17K", date=(race - dt.timedelta(days=21)).isoformat(), kind="race",
+                 priority="B", distance_km=16.6, climbing_m=890, est_hours=2.0, note="示範賽事")
 
 
 def make_phases(events: list, start: dt.date) -> list:

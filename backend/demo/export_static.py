@@ -5,6 +5,8 @@ static host serves (GitHub Pages, a Hugging Face static Space ...):
     python -m backend.demo.export_static --root <demo-root> [--out dist/static-demo]
     python -m backend.demo.export_static --root <demo-root> --update --reuse <old export> --out <new>
         (the root only gained activities since the old export: re-crawl what they change)
+    python -m backend.demo.export_static --root <demo-root> --out <export> --update-plan
+        (a season-plan event was added / changed: re-crawl only what the plan feeds; a few minutes)
 
 <demo-root> is a folder built by `python -m backend.demo.build --root ...`. It
 is copied to a temporary folder first (the app writes caches next to its
@@ -630,7 +632,10 @@ def update_periodzones(root: Path, out: Path, log=lambda m: print(m, flush=True)
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def pass_viewer(app: DemoApp, rec: Recorder, snapshot: dt.date, activities: list[int], log) -> None:
+def pass_viewer(app: DemoApp, rec: Recorder, snapshot: dt.date, activities: list[int], log,
+                only: Optional[Callable[[dict], bool]] = None) -> None:
+    """`only` (--update-plan): the season charts whose default-range answer it accepts, and no
+    single-activity chart."""
     views = _get_json(app, rec, "/api/v1/wko5/views") or []
     sports = [s["sport"] for s in (_get_json(app, rec, "/api/v1/wko5/sports") or []) if s.get("sport")]
     ath = _get_json(app, rec, "/api/v1/wko5/athlete?parity=false") or {}
@@ -660,6 +665,10 @@ def pass_viewer(app: DemoApp, rec: Recorder, snapshot: dt.date, activities: list
                     kind = c.get("kind")
                     extra = [("zkind", "hr")] if kind == "periodzones" else []
                     base_url = f"/api/v1/wko5/views/{vn}/dashboards/{d['index']}/charts/{c['index']}"
+                    if only is not None:
+                        p0 = [("begin", ranges[0][0]), ("end", ranges[0][1]), ("sports", ""), ("parity", "false")]
+                        if not only(_get_json(app, rec, f"{base_url}?{_qs(p0 + extra)}") or {}):
+                            continue
                     for ri, (b, e) in enumerate(ranges):
                         for sp in (sport_sets if ri == 0 else [""]):
                             params = [("begin", b), ("end", e), ("sports", sp), ("parity", "false")] + extra
@@ -669,7 +678,7 @@ def pass_viewer(app: DemoApp, rec: Recorder, snapshot: dt.date, activities: list
                                     _get_json(app, rec, f"{base_url}?{_qs(params + [t])}")
                     if kind == "periodzones":
                         pass_periodzones(app, rec, base_url, c.get("view") or "total", ranges)
-        else:
+        elif only is None:
             for i in activities:
                 for d in v.get("dashboards") or []:
                     for c in d.get("charts") or []:
@@ -897,6 +906,81 @@ def update_pages(root: Path, out: Path, log=lambda m: print(m, flush=True)) -> d
                 written.append(f"static/{rel.as_posix()}")
         shutil.copyfile(SHIM_SRC, out / "static" / "trc_static.js")
         return {"updated": written, "leaks": check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])[:20]}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# the pages whose data a season-plan event edit changes (the race calculator: --update-racepower)
+PLAN_PAGES = ("/demo", "/api/v1/overview/page", "/api/v1/overview/plan/schedule/page",
+              "/api/v1/overview/plan/compliance/page", "/api/v1/plan/page")
+
+
+def _same_answer(a: bytes, b: bytes) -> bool:
+    """Two saved answers that differ only in their timings (a chart's per-series "ms")."""
+    def strip(x):
+        if isinstance(x, dict):
+            return {k: strip(v) for k, v in x.items() if k != "ms"}
+        if isinstance(x, list):
+            return [strip(v) for v in x]
+        return x
+    try:
+        return strip(json.loads(a)) == strip(json.loads(b))
+    except ValueError:
+        return False
+
+
+def update_plan(root: Path, out: Path, browser: bool = True, log=lambda m: print(m, flush=True)) -> dict:
+    """Refresh what a season-plan edit (an event added / changed, e.g. build.py --add-maokong)
+    changes in an existing export (--update-plan): the browser pass of PLAN_PAGES, the calendar
+    ranges and the structure editor's data, and every range / toggle of the season charts that
+    draw the races (the 目標賽事參考線, panels/race_refs.py). Only the data files whose answer
+    differs from the export's (or that it lacks) are written. Pages: --update-pages; the race
+    calculator: --update-racepower."""
+    out = out.resolve()
+    if not (out / MARKER).exists() or not (out / "data").is_dir():
+        raise SystemExit(f"{out} is not a static demo export")
+    root = root.resolve()
+    tmp = Path(tempfile.mkdtemp(prefix="trc-static-plan-"))
+    home = tmp / "demo"
+    shutil.copytree(root, home, ignore=shutil.ignore_patterns("sandboxes"))
+    (home / "sandboxes").mkdir(exist_ok=True)
+    t0 = time.time()
+    try:
+        rec = Recorder()
+        with DemoApp(home) as app:
+            cal = _get_json(app, rec, "/api/v1/overview/plan/calendar?start=2000-01-03&end=2000-01-09", record=False) or {}
+            today = dt.date.fromisoformat(cal.get("today") or dt.date.today().isoformat())
+            snap = json.loads((out / "export.json").read_text("utf-8")).get("snapshot")
+            if snap and snap != today.isoformat():
+                raise SystemExit(f"the export is of {snap}, the demo's today is {today}: do a full export")
+            if browser:
+                crawl_pages(app, rec, today, False, log, paths=PLAN_PAGES)
+            pass_schedule(app, rec, today, log)
+            pass_steps(app, rec, today, log)
+            pass_viewer(app, rec, today, [], log, only=lambda r: isinstance(r, dict) and "race_ref" in r)
+        scrub = scrubber([str(REPO), str(tmp), str(home), str(root), str(Path.home())])
+        items = [(data_file(v["url"]), v["status"], v["body"]) for v in rec.gets.values()] + \
+                [(name, v["status"], v["body"]) for name, v in rec.posts.items()]
+        changed, added = [], []
+        for name, status, body in items:
+            data = scrub(minify_json(_saved_body(status, body)).decode("utf-8")).encode("utf-8")
+            p = out / "data" / name
+            old = p.read_bytes() if p.exists() else None
+            if old == data or (old is not None and _same_answer(old, data)):
+                continue
+            p.write_bytes(data)
+            (changed if old is not None else added).append(name)
+        for name, raw in rec.files.items():
+            data = scrub(raw.decode("utf-8")).encode("utf-8")
+            p = out / "data" / name
+            if not p.exists() or p.read_bytes() != data:
+                p.write_bytes(data)
+                changed.append(name)
+        urls = {data_file(v["url"]): v["url"] for v in rec.gets.values()}
+        urls.update({name: f"{v['method']} {v['url']}" for name, v in rec.posts.items()})
+        return {"today": today.isoformat(), "seconds": round(time.time() - t0), "checked": len(items),
+                "changed": {n: urls.get(n, n) for n in changed}, "added": {n: urls.get(n, n) for n in added},
+                "leaks": check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])[:20]}
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -1330,7 +1414,8 @@ def export(root: Path, out: Path, activities: int = 40, browser: bool = True, ke
             shutil.rmtree(tmp, ignore_errors=True)
 
 
-def crawl_pages(app: DemoApp, rec: Recorder, snapshot: dt.date, verbose: bool, log) -> None:
+def crawl_pages(app: DemoApp, rec: Recorder, snapshot: dt.date, verbose: bool, log,
+                paths: Optional[Iterable[str]] = None) -> None:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -1346,7 +1431,7 @@ def crawl_pages(app: DemoApp, rec: Recorder, snapshot: dt.date, verbose: bool, l
                 ctx = b.new_context(viewport=vp, locale="zh-TW", timezone_id="Asia/Taipei")
                 ctx.add_init_script(clock)
                 ctx.route("**/*", cr.handle)
-                for path in PAGES:
+                for path in (list(paths) if paths is not None else PAGES):
                     n0 = len(rec.gets) + len(rec.posts)
                     page = ctx.new_page()
                     try:
@@ -1389,9 +1474,16 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--update-periodzones", action="store_true",
                     help="only crawl the 區間時數 charts' toggles (心率／功率, models, periods, sports, 週／月) "
                          "into an existing --out")
+    ap.add_argument("--update-plan", action="store_true",
+                    help="only refresh what a season-plan event edit changes (plan / overview / 課表 pages' data, "
+                         "the season charts with race lines) in an existing --out; writes changed files only")
     a = ap.parse_args(argv)
     if a.update_periodzones:
         info = update_periodzones(a.root, a.out)
+        print(json.dumps(info, ensure_ascii=False, indent=1))
+        return 2 if info.get("leaks") else 0
+    if a.update_plan:
+        info = update_plan(a.root, a.out, browser=not a.no_browser)
         print(json.dumps(info, ensure_ascii=False, indent=1))
         return 2 if info.get("leaks") else 0
     if a.update_pages:
