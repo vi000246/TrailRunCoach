@@ -107,19 +107,19 @@ def test_effort_band_from_the_data_spread_and_the_inconsistency_flag():
 # ---- CP tests ---------------------------------------------------------------------
 
 def _laps(p3, hr3, p12, hr12):
-    return [{"t": 536.0, "p": 134.0, "hr_max": 146}, {"t": 180.0, "p": p3, "hr_max": hr3},
-            {"t": 989.0, "p": 118.0, "hr_max": 149}, {"t": 720.0, "p": p12, "hr_max": hr12},
-            {"t": 479.0, "p": 131.0, "hr_max": 160}]
+    return [{"t": 540.0, "p": 168.0, "hr_max": 138}, {"t": 180.0, "p": p3, "hr_max": hr3},
+            {"t": 960.0, "p": 115.0, "hr_max": 150}, {"t": 720.0, "p": p12, "hr_max": hr12},
+            {"t": 511.0, "p": 105.0, "hr_max": 165}]
 
 
 def test_cptest_detects_a_non_maximal_3min_and_falls_back_to_one_bout():
-    t = T.detect(_laps(217.0, 146, 221.0, 171))                 # the 2026-09-30 laps
+    t = T.detect(_laps(234.0, 152, 238.0, 177))       # the synthetic 範例跑者 test (fixtures/make_cp_test_fixture.py)
     s, l = t["bouts"]
     assert not s["maximal"] and l["maximal"] and "低 25 bpm" in s["why"]
-    e = T.estimate(t, 68.0, "male")
+    e = T.estimate(t, 70.0, "male")
     assert e["method"] == "single_bout" and e["w_prime"] == 13100.0            # Ruiz-Alias 2025 men
-    assert e["cp"] == approx(221.0 - 13100.0 / 720.0)
-    assert e["cp_range"] == [approx(221.0 - 17100.0 / 720.0), approx(221.0 - 9100.0 / 720.0)]
+    assert e["cp"] == approx(238.0 - 13100.0 / 720.0)
+    assert e["cp_range"] == [approx(238.0 - 17100.0 / 720.0), approx(238.0 - 9100.0 / 720.0)]
 
 
 def test_cptest_two_point_when_both_bouts_are_maximal():

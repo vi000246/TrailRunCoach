@@ -13,7 +13,7 @@
 | 測試 | 測試 |
 | 越野跑（舊的「健行／登山」，kind 仍是 `hike`） | 越野跑 |
 
-**三區／四區／五區**用的是 Palladino 的跑步功率區（使用者規則：Palladino 的區間是跑步用的，Coggan／Friel 的功率區是自行車用的）：
+**三區／四區／五區**用的是 Palladino 的跑步功率區（專案規則：Palladino 的區間是跑步用的，Coggan／Friel 的功率區是自行車用的）：
 
 - 三區 = 88–101% CP，Palladino 3A＋3B
 - 四區 = 101–106% CP，Palladino 4（Supra-threshold）
@@ -49,7 +49,7 @@ Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–
 
 | key | 名稱 | 出處 |
 |---|---|---|
-| pal_ez | Palladino EZ 輕鬆跑＋3×10″ 加速（24′ ≤ 80% CP、3×10″/1:50、5′） | Steve Palladino，Stryd 訓練計畫（Stryd app 內建課表；使用者 筆記「palladino課表整理/Easy」）· [Stryd Help](https://help.stryd.com/en/articles/7065214-stryd-training-plans-by-steve-palladino) |
+| pal_ez | Palladino EZ 輕鬆跑＋3×10″ 加速（24′ ≤ 80% CP、3×10″/1:50、5′） | Steve Palladino，Stryd 訓練計畫（Stryd app 內建課表 Easy）· [Stryd Help](https://help.stryd.com/en/articles/7065214-stryd-training-plans-by-steve-palladino) |
 | pfitz_recovery | 恢復跑 30′（< 76% HRmax） | Pfitzinger & Douglas《Advanced Marathoning》3rd ed. 2019；[webinar](https://www.slideshare.net/slideshow/marathon-training-webinar/11191347) |
 | pfitz_ga | 有氧耐力跑（70–81% HRmax） | 同上 |
 | pfitz_long | 長跑（74–84% HRmax） | 同上 |
@@ -62,7 +62,7 @@ Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–
 
 | key | 名稱 | 分區 | 出處 |
 |---|---|---|---|
-| pal_hm_tempo | 半馬功率節奏 2×11′ @ 91–96% CP（3′） | 三區 | Palladino／Stryd（筆記「95% ftp Power Tempo」的 Day 3 截圖） |
+| pal_hm_tempo | 半馬功率節奏 2×11′ @ 91–96% CP（3′） | 三區 | Palladino／Stryd（「95% ftp Power Tempo」Day 3） |
 | pal_near | 近閾值 3×7′ @ 96–102%（3′） | 三區 | Palladino／Stryd（Day 15 Near-Threshold） |
 | daniels_cruise | T 巡航 5×6′／1′ | 三區 | Daniels |
 | pfitz_lt | 乳酸閾值節奏 25′ | 三區 | Pfitzinger |
@@ -90,8 +90,8 @@ Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–
 
 | key | 名稱 | 出處 |
 |---|---|---|
-| stryd_cp_3_12 | Stryd 內建 CP 測試 3′＋12′（暖身 20′；按圈開始、≥ 30′ 恢復、按圈結束） | Stryd 內建課表庫（Palladino），使用者 notes「Critical Power測試」〈出自Stryd內建的lib〉 |
-| pal_test3 / pal_test10 / pal_test20 | Palladino 3／10／20 分鐘全力 | Palladino／Stryd（筆記「palladino課表整理」3、10、20 分鐘測試） |
+| stryd_cp_3_12 | Stryd 內建 CP 測試 3′＋12′（暖身 20′；按圈開始、≥ 30′ 恢復、按圈結束） | Stryd 內建課表庫（Palladino）「Critical Power測試」 |
+| pal_test3 / pal_test10 / pal_test20 | Palladino 3／10／20 分鐘全力 | Palladino／Stryd（3、10、20 分鐘測試） |
 | stryd_9_3 | 9′＋3′ CP 測試 | Stryd 9/3 protocol；JSSM 2023 驗證（[PMC10499150](https://pmc.ncbi.nlm.nih.gov/articles/PMC10499150/)） |
 | friel_lthr30 | 30′ 獨自全力，LTHR＝後 20′ 平均心率 | Joe Friel，TrainingPeaks〈Quick Guide to Setting Zones〉 |
 | ua_aet_drift | AeT 心率飄移 60′（3.5–5% 就是 AeT） | Steve House，Uphill Athlete〈[Heart Rate Drift](https://uphillathlete.com/aerobic-training/heart-rate-drift/)〉 |
@@ -100,7 +100,7 @@ Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–
 「按圈結束」的步驟帶 `est`（這份課表寫的最短時間，例：恢復 ≥ 30′），只用來估總時間。
 全力段不設目標：Stryd 原本也把這段留空，讓你自己填「模型功率 −1%～+5%」。
 
-Uphill Athlete 要求用胸帶測，但使用者只有手腕光學心率，所以範本的備註寫「只看趨勢」。
+Uphill Athlete 要求用胸帶測，但 app 假設多數人只有手腕光學心率，所以範本的備註寫「只看趨勢」。
 
 ### 越野跑
 
@@ -116,7 +116,7 @@ Uphill Athlete 要求用胸帶測，但使用者只有手腕光學心率，所�
 
 ## 4. Stryd 課表庫能不能直接用
 
-**結論：不能，也沒有接。** 範本只照公開或使用者筆記裡的結構重寫，並寫上出處。
+**結論：不能，也沒有接。** 範本只照公開資料或 Stryd app 裡看得到的結構重寫，並寫上出處。
 
 - Stryd Library 有 300 多份功率課表，Palladino 的訓練計畫也在裡面
   （[help](https://help.stryd.com/en/articles/8928220-the-stryd-library)、[2025 更新](https://blog.stryd.com/2025/07/29/explore-the-newly-updated-stryd-workout-library-more-variety-more-workouts-more-power-in-every-run/)）。
@@ -125,7 +125,7 @@ Uphill Athlete 要求用胸帶測，但使用者只有手腕光學心率，所�
 - 第三方 client（例：`ethanopp/fitly` 的 `strydAPI.py`）是用使用者自己的帳號密碼打私有端點，違反「不用帳密」的原則，也有違反服務條款的風險。
 - [ToS](https://club.stryd.com/tos) 是沒填完的範本，只寫了內容版權歸公司。所以這邊不複製 Stryd 的課表文字，只重寫結構並附出處。
 
-本文件用到的 Stryd／Palladino 課表，都來自使用者自己的 筆記（Stryd app 的截圖和抄錄），
+本文件用到的 Stryd／Palladino 課表，都來自 Stryd app 內的課表（截圖和抄錄），
 以及 Stryd 公開的 help 頁面。
 
 ## 5. 總時間怎麼估（`workout_steps.speed_kmh`、`_secs`）
