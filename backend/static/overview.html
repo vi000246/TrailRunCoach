@@ -152,6 +152,7 @@ details.more ul { margin: 0; padding-left: 18px; }
 
 /* ---- status cards row ---- */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+.cards:has(#b2bcard[hidden]) #todocard { grid-column: 1 / -1; }
 .alerts { display: grid; gap: 6px; }
 details.al { border: 1px solid var(--line); border-radius: 9px; padding: 0; border-left: 4px solid var(--lc, var(--line)); }
 details.al.good { --lc: var(--good); } details.al.watch { --lc: var(--watch); } details.al.bad { --lc: var(--bad); } details.al.info, details.al.na { --lc: var(--line); }
@@ -295,15 +296,16 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
 
   <div class="cards" data-sec id="s-todo">
-    <section aria-labelledby="todo-h">
+    <!-- Zone 5 opening process (quality_gate.z5_card); the season history is the 基礎期 chart -->
+    <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
+      <h2 id="z5-h">5 區（最大攝氧量間歇）開放流程 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">歷程 →</a></h2>
+      <div id="z5"><div class="loading">…</div></div>
+    </section>
+    <!-- 待辦與警示 at the bottom, left of B2B (full width while B2B is hidden) -->
+    <section id="todocard" aria-labelledby="todo-h">
       <h2 id="todo-h">待辦與警示 <span class="meta" id="todo-sub"></span></h2>
       <div class="alerts" id="actions"><div class="loading">…</div></div>
       <!-- due CP / AeT tests, B2B weekends, zone retests: the shared floating box (static/suggestions.js) -->
-    </section>
-    <!-- Zone 5 opening process (quality_gate.z5_card); the season history is the 基礎期 chart -->
-    <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
-      <h2 id="z5-h">5 區間歇 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">歷程 →</a></h2>
-      <div id="z5"><div class="loading">…</div></div>
     </section>
     <!-- 連續兩天長天 (engine/b2b.py card): only before a multi-day / ≥ 6 h A event, or once B2B weekends exist -->
     <section id="b2bcard" aria-labelledby="b2b-h" hidden>
