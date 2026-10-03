@@ -546,6 +546,90 @@ def viewer_ranges(snapshot: dt.date, first: Optional[str]) -> list[tuple[str, st
     return uniq
 
 
+PZ_SPORT_SETS = ("", "road", "trail", "hike", "road,trail,hike")          # 強度's sport chips, in the chips' order
+
+
+def pass_periodzones(app: DemoApp, rec: Recorder, base_url: str, view: str, ranges: list[tuple[str, str]]) -> int:
+    """One 區間時數 chart (kind periodzones): what its own controls send (wko5_viewer.html pzQuery) —
+    心率／功率, each zone model, each period (本週／上週／近 4 週／本期), the sport chips, 週／月 and the
+    date presets — one control at a time plus 心率／功率 × the others, since every combination is
+    too many to crawl. 自訂 (free dates) is not crawled."""
+    b0, e0 = ranges[0]
+    common = [("begin", b0), ("end", e0), ("sports", ""), ("parity", "false")]
+    n0 = len(rec.gets)
+
+    def get(extra: list[tuple[str, str]], rng: tuple[str, str] = (b0, e0)):
+        params = [("begin", rng[0]), ("end", rng[1])] + common[2:] + extra
+        return _get_json(app, rec, f"{base_url}?{_qs(params)}")
+
+    first = get([("zkind", "hr")]) or {}
+    models = first.get("models") or {}
+    for kind in ("hr", "power"):
+        k = [("zkind", kind)]
+        res = get(k) or {}
+        ids = [m["id"] for m in (models.get(kind) or [])]
+        for mid in ids:
+            get(k + [("zmodel", mid)])
+        for ss in PZ_SPORT_SETS[1:]:
+            get(k + [("zsports", ss)])
+        if view == "weekly":
+            for g in ("auto", "week", "month"):
+                get(k + [("zgroup", g)])
+            for rng in ranges[1:]:
+                get(k, rng)
+                get(k + [("zgroup", "week")], rng)
+        else:
+            periods = [p["id"] for p in (res.get("period_choices") or []) if p["id"] != "custom"]
+            for per in periods:
+                get(k + [("zperiod", per)])
+                for ss in PZ_SPORT_SETS[1:]:
+                    get(k + [("zperiod", per), ("zsports", ss)])
+            for rng in ranges[1:]:
+                get(k + [("zperiod", "range")], rng)
+    return len(rec.gets) - n0
+
+
+def update_periodzones(root: Path, out: Path, log=lambda m: print(m, flush=True)) -> dict:
+    """Crawl only the 區間時數 charts' toggles into an existing export (--update-periodzones)."""
+    out = out.resolve()
+    if not (out / MARKER).exists() or not (out / "data").is_dir():
+        raise SystemExit(f"{out} is not a static demo export")
+    root = root.resolve()
+    tmp = Path(tempfile.mkdtemp(prefix="trc-static-pz-"))
+    home = tmp / "demo"
+    shutil.copytree(root, home, ignore=shutil.ignore_patterns("sandboxes"))
+    (home / "sandboxes").mkdir(exist_ok=True)
+    try:
+        rec = Recorder()
+        from urllib.parse import quote
+        with DemoApp(home) as app:
+            cal = _get_json(app, rec, "/api/v1/overview/plan/calendar?start=2000-01-03&end=2000-01-09", record=False) or {}
+            today = dt.date.fromisoformat(cal.get("today") or dt.date.today().isoformat())
+            snap = json.loads((out / "export.json").read_text("utf-8")).get("snapshot") if (out / "export.json").exists() else None
+            if snap and snap != today.isoformat():
+                log(f"  ! the export's day is {snap}, the demo's today {today}: re-export instead")
+            ath = _get_json(app, rec, "/api/v1/wko5/athlete?parity=false", record=False) or {}
+            ranges = viewer_ranges(today, ath.get("first"))
+            for v in _get_json(app, rec, "/api/v1/wko5/views", record=False) or []:
+                if v.get("error"):
+                    continue
+                for d in v.get("dashboards") or []:
+                    for c in d.get("charts") or []:
+                        if c.get("kind") == "periodzones":
+                            url = f"/api/v1/wko5/views/{quote(v['name'], safe='')}/dashboards/{d['index']}/charts/{c['index']}"
+                            n = pass_periodzones(app, rec, url, c.get("view") or "total", ranges)
+                            log(f"  {v['name']} / {d.get('title')} / {c.get('title')}: {n} responses")
+        scrub = scrubber([str(REPO), str(tmp), str(home), str(root), str(Path.home())])
+        for v in rec.gets.values():
+            if v["status"] != 200:
+                continue
+            name = data_file(v["url"])
+            (out / "data" / name).write_bytes(scrub(minify_json(v["body"]).decode("utf-8")).encode("utf-8"))
+        return {"written": len(rec.gets), "leaks": check_output(out, [str(REPO), str(Path.home()), Path.home().name, str(root)])[:20]}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def pass_viewer(app: DemoApp, rec: Recorder, snapshot: dt.date, activities: list[int], log) -> None:
     views = _get_json(app, rec, "/api/v1/wko5/views") or []
     sports = [s["sport"] for s in (_get_json(app, rec, "/api/v1/wko5/sports") or []) if s.get("sport")]
@@ -583,6 +667,8 @@ def pass_viewer(app: DemoApp, rec: Recorder, snapshot: dt.date, activities: list
                             if ri == 0 and sp == "":
                                 for t in chart_toggles(res, kind):
                                     _get_json(app, rec, f"{base_url}?{_qs(params + [t])}")
+                    if kind == "periodzones":
+                        pass_periodzones(app, rec, base_url, c.get("view") or "total", ranges)
         else:
             for i in activities:
                 for d in v.get("dashboards") or []:
@@ -1300,7 +1386,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--update-pages", action="store_true",
                     help="only re-render the pages and copy the static assets into an existing --out "
                          "(a change in backend/static that needs no new data; about a minute)")
+    ap.add_argument("--update-periodzones", action="store_true",
+                    help="only crawl the 區間時數 charts' toggles (心率／功率, models, periods, sports, 週／月) "
+                         "into an existing --out")
     a = ap.parse_args(argv)
+    if a.update_periodzones:
+        info = update_periodzones(a.root, a.out)
+        print(json.dumps(info, ensure_ascii=False, indent=1))
+        return 2 if info.get("leaks") else 0
     if a.update_pages:
         info = update_pages(a.root, a.out)
         print(json.dumps(info, ensure_ascii=False, indent=1))
