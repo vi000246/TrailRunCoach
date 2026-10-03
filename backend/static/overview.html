@@ -159,7 +159,9 @@ details.al > summary { list-style: none; cursor: pointer; display: grid; grid-te
   padding: 7px 10px; font-size: 13px; }
 details.al > summary::-webkit-details-marker { display: none; }
 details.al > summary .di { font-size: 17px; color: var(--lc); }
-details.al > summary b { white-space: nowrap; }
+details.al > summary b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* phone: a long alert title wraps instead of running past the card (its full text is also in the body) */
+@media (max-width: 699px) { details.al > summary b { white-space: normal; overflow-wrap: anywhere; } }
 details.al > summary .s { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 details.al > summary::after { content: "▸"; font-size: 10px; color: var(--faint); }
 details.al[open] > summary::after { content: "▾"; }
