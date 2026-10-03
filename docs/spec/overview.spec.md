@@ -207,7 +207,7 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
   first row, `Dataset.setting` / `cp` / `aethr` fall back to WKO5's dated settings (runthr, the
   current mFTP snapshot, 0.89 × LTHR). Today's thresholds come from the last run moved to today
   (`zones._on_day`, `backend/engine/zones.py:113`; also `status._aet_now` and the LTHR estimate's
-  CP), so a test dated after WKO5's last run still applies. Today's CP 204 / LTHR 155 / AeT 138,
+  CP), so a test dated after WKO5's last run still applies. Today's CP 220 / LTHR 160 / AeT 142,
   the targets and the zone bounds are unchanged. Indicators that judge each past run with its
   own-date AeT do move (2026-10-01, WKO5 source): 強度分配 mid share 26 % → 35 % (still bad);
   效率 good 「進步」 → info 「持平」; drift-eligible easy runs 1 → 6 (still too few).
@@ -437,7 +437,7 @@ be predicted from distance and climb, per terrain, for this athlete.
 
 **Validation** (`backtest`, `backend/engine/equivalence.py:301`): leave-one-out on the athlete's
 own easy trail and hike activities — refit without the activity (including the method choice),
-predict its moving time, compare. Result on 2026-09-30 (AeT 138 bpm, 26 weeks):
+predict its moving time, compare. Result on 2026-09-30 (AeT 142 bpm, 26 weeks):
 
 | Terrain | n | Method chosen | MAE | MAPE | Bias | Naismith / Langmuir alone | EP alone |
 |---|---|---|---|---|---|---|---|
@@ -895,7 +895,7 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feature | N/A | 間歇門檻 (quality_gate.py, `plan.prefs.quality_gate` / `_weeks`; design docs/research/aerobic-base-readiness.md): 7 modes, guardrails, the 6-week dose table, recovery-week fartlek, forced-mode fallback (自訂), i_gate / informational i_drift, per-week projection; AeT drift test (aet_test.py: due cadence, session, COROS steps, UA bands, 「套用這次的 AeT」 on the review card and 測試 card, apply-estimate `date`); prefs chips with fixed-position `?` hover; the 「連續 3 次」 rule and UA misattributions removed |
 | 2026-10-01 | feature | N/A | CP 測試方式 (`plan.prefs.cp_test_protocol`, quick default / standard / race; cp_protocols.py): per-protocol test session with `protocol` (column + migration, reconcile field), race = a 還缺什麼 note instead of a session, protocol-specific cap note and COROS steps (all-out bouts open), same-method comparison in i_testing, 測試 card apply button |
 | 2026-10-01 | feature | docs/research/heat-acclimation.md | 熱適應: `i_heat` (S, doses, HRC, race-day S), 熱適應課 in week_plan / project_weeks (heat_plan.py: induction / maintenance, ≥ 60 min cap exemption `NOTE_HEAT`, hard cap → 40 min + bath, methods), `heat_passive` (side kind, TSS 0, never pushed, ticked = a dose), `plan.prefs.heat` / `heat_method` (not shaping), COROS heat-run steps, Event.heat, 課表 page 熱 tag + prefs block, 總覽 heat card |
-| 2026-10-01 | bugfix | N/A | Thresholds never apply backwards: `Plan.threshold_on` returns None before a row's date (the 2026-09-30 CP 204 / LTHR 155 row had leaked into every earlier date); past days use WKO5's dated settings; today's values unchanged |
+| 2026-10-01 | bugfix | N/A | Thresholds never apply backwards: `Plan.threshold_on` returns None before a row's date (the 2026-09-30 CP 220 / LTHR 160 row had leaked into every earlier date); past days use WKO5's dated settings; today's values unchanged |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |
 | 2026-10-01 | feat/auto-replan | N/A | Adaptive plan: `adapt.py` (missed easy / quality / long, easy run too hard, fatigue guard) applied before reconcile on every path. The interval progression state machine (`interval_outcome` / `dose_step`) replaces the 5 % fade rule. Actual TSS for done sessions. Kind `notice`. Automatic run after sync with hold / approve / reject / 復原 and the `plan_change_log` table. Details in plan-auto.spec.md |
 | 2026-10-01 | feat/drift-v2-planning | docs/research/drift-algorithm.md, unsourced-rules.md, detraining.md | `i_drift` = 6-run mean ± SE; season drift charts add 「6 次平均」 ± SE (`drift_avg()`); guardrail sources (ramp 5/8 Friel, volume step Nielsen/Damsted, TSB Friel/TP); AeT valid by the aggregate (B3) and the test by reason; ladder Z3 → Z5 with the Zone 5 lifecycle (base_check); AeT test protocols (`plan.prefs.aet_test_protocol`, 徐國峰 90′ standard on the weekend, UA 40′ backup); re-entry block after breaks ≥ 6 days replaces `blackouts.step_cap`; easy targets from the recent EF (推估) |

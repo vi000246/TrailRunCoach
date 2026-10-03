@@ -360,8 +360,8 @@ decision 2026-09-30); the session side is in `overview.spec.md`.
 - `apply_payload` (`backend/engine/cp_protocols.py:377`): `{date = test day, cp, wprime
   (2pt only), cp_method, activity_index, note, label}`; None for 不採用. 參考 labels
   the button「套用這次的 CP {cp} W（參考）」 and applies the point estimate.
-- The athlete's 2026-09-30 test (3′ 218 W < 12′ 222 W, 3′ HR peak ~147–149 vs 171,
-  16 min apart) → `1pt_prior`, CP ≈ 204 W (198–209), 參考
+- The athlete's 2026-09-30 test (3′ 235 W < 12′ 239 W, 3′ HR peak ~152–154 vs 176,
+  16 min apart) → `1pt_prior`, CP ≈ 220 W (214–225), 參考
   (`backend/tests/test_cp_protocols.py:264`).
 
 ## View (`views/workout.json`)
