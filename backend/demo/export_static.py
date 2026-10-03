@@ -548,7 +548,8 @@ def viewer_ranges(snapshot: dt.date, first: Optional[str]) -> list[tuple[str, st
     return uniq
 
 
-PZ_SPORT_SETS = ("", "road", "trail", "hike", "road,trail,hike")          # 強度's sport chips, in the chips' order
+# 強度's sport chips: every non-empty set of the three, in the chips' order (pzQuery sends them joined)
+PZ_SPORT_SETS = ("", "road", "trail", "hike", "road,trail", "road,hike", "trail,hike", "road,trail,hike")
 
 
 def pass_periodzones(app: DemoApp, rec: Recorder, base_url: str, view: str, ranges: list[tuple[str, str]]) -> int:
@@ -577,6 +578,8 @@ def pass_periodzones(app: DemoApp, rec: Recorder, base_url: str, view: str, rang
         if view == "weekly":
             for g in ("auto", "week", "month"):
                 get(k + [("zgroup", g)])
+                for ss in PZ_SPORT_SETS[1:]:
+                    get(k + [("zgroup", g), ("zsports", ss)])
             for rng in ranges[1:]:
                 get(k, rng)
                 get(k + [("zgroup", "week")], rng)
