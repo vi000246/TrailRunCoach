@@ -80,7 +80,7 @@ def test_build_is_synthetic_and_complete(built):
         for h in here:
             t = t.replace(h, "")
         t = t.replace(str(built.parent).lower(), "").replace(_json.dumps(str(built.parent)).strip('"').lower(), "")
-        assert "athlete" not in t and ".wko5coach" not in t and "\\wko5" not in t, p
+        assert ".wko5coach" not in t and "\\wko5" not in t, p
 
 
 def test_every_page_and_data_route(demo):

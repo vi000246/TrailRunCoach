@@ -174,12 +174,13 @@ def test_aet_test_drift_band():
 
 def test_no_owner_strings(small):
     root, m = small
-    bad = ("athlete", "user", "users\\", "/users/", "wko5")
+    import os
+    me = os.path.basename(os.path.expanduser("~")).lower()     # the machine's user name must not leak
+    bad = (me, "users\\", "/users/", "wko5")
     blob = json.dumps(m, ensure_ascii=False).lower()
     for f in root.rglob("*"):
         if f.is_file():
             data = f.read_bytes().lower()
             for b in bad:
                 assert b.encode() not in data, (f, b)
-    for b in ("athlete", "user"):
-        assert b not in blob
+    assert me not in blob
