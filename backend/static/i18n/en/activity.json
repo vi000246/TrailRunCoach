@@ -71,6 +71,8 @@
   "auto_tip": "Set by the rules",
   "auto_opt": "Auto ({v})",
   "auto_was": "Auto: {v} ({why})",
+  "auto_progress": "Auto type / effort: {done} / {total}",
+  "auto_failed": "Auto type / effort could not be computed; reload later",
   "computing": "computing…",
   "recorded": "Watch recorded: {v}",
   "feel": "feel \"{v}\"",

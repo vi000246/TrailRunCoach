@@ -172,6 +172,10 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
                     finally:
                         await eng.dispose()
                 asyncio.run(fit_once())
+            # the 活動列表's auto type / effort: started now (its own thread),
+            # read from disk when nothing changed
+            from backend.api import activity_auto as AA
+            AA.job_for(ds)
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__)
     t = threading.Thread(target=run, name=f"dataset-warmup-{reason}", daemon=True)
@@ -867,18 +871,17 @@ def activities_list():
 
 @router.get("/activities/auto")
 async def activities_auto():
-    """The AUTO activity type / effort (with reasons) of every activity, by
-    key (racepower.athlete.auto_tags_all; memoised per Dataset). Slow on the
-    first call (HR effort reads every activity), so the page asks after the
-    list."""
+    """The AUTO activity type / effort (with reasons) of every activity:
+    {state computing | ready | error, n_done, n_total, stale, auto: {key:
+    values}}. Never waits for the computation (minutes on a cold cache):
+    it runs once per Dataset in the background (api/activity_auto.py, kept
+    on disk per file), and the page polls while state is computing — `auto`
+    holds what is known so far."""
     from starlette.concurrency import run_in_threadpool
-    from backend.engine import activity_tags as AT
-    from backend.engine.racepower import athlete as A
+    from backend.api import activity_auto as AA
 
     def work():
-        ds = _dataset()
-        auto = A.auto_tags_all(ds)
-        return {AT.key_of(w.entry.start): auto.get(w.idx) for w in ds.workouts}
+        return AA.status(_dataset())
     return await run_in_threadpool(work)
 
 
