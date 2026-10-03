@@ -206,6 +206,17 @@ def py(o):
     return o
 
 
+def race_day(date: Optional[str]):
+    """The race day of a body's `date` ('YYYY-MM-DD…'), None when missing or not a date."""
+    import datetime as dt
+    if not date:
+        return None
+    try:
+        return dt.date.fromisoformat(str(date)[:10])
+    except ValueError:
+        return None
+
+
 def course_opts(c: dict) -> dict:
     out = {}
     for k in ("sigma_m", "eps_m", "min_len_m", "flat_pct", "official_gain_m"):

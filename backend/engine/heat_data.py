@@ -133,15 +133,23 @@ def status(today: Optional[dt.date] = None, race_day: Optional[dt.date] = None,
            "doses": {d.isoformat(): round(v, 3) for d, v in cur["doses"].items() if d >= today - dt.timedelta(days=120)},
            "n_activities": len(acts), "data": meta, "evidence": HT.EVIDENCE, "badge": "推估",
            "a": HT.A_RECOVER, "a_range": list(HT.A_RANGE)}
+    return project_status(out, race_day, planned)
+
+
+def project_status(base: dict, race_day: Optional[dt.date] = None, planned: Optional[dict] = None) -> dict:
+    """A status() (any race day, or none) for `race_day`: the race-day projection and
+    the source line. status() ends here; the static demo exports status(race_day=None)
+    and projects it in the browser to the date the race calculator asks for."""
+    out = {k: v for k, v in base.items() if k not in ("s_race", "source", "warning")}
     if race_day:
-        pj = HT.project(cur["s"], today, race_day, planned)
+        pj = HT.project(base["s"], dt.date.fromisoformat(base["today"]), race_day, planned)
         out["s_race"] = {"center": pj["center"], "low": pj["low"], "high": pj["high"], "date": race_day.isoformat()}
-        out["source"] = (f"近 14 天 {cur['days_14']} 天熱暴露" +
-                         (f"，最後一次 {cur['since_last_d']} 天前" if cur["since_last_d"] is not None else "") +
+        out["source"] = (f"近 14 天 {base['days_14']} 天熱暴露" +
+                         (f"，最後一次 {base['since_last_d']} 天前" if base["since_last_d"] is not None else "") +
                          f"，推算到比賽日 {race_day.month}/{race_day.day}")
     else:
-        out["source"] = f"近 14 天 {cur['days_14']} 天熱暴露"
-    if meta.get("missing"):
+        out["source"] = f"近 14 天 {base['days_14']} 天熱暴露"
+    if (base.get("data") or {}).get("missing"):
         out["warning"] = "還沒有每筆活動的歷史天氣（路線頁重建一次、含天氣）：S 當作 0"
     return out
 
