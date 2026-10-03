@@ -75,6 +75,17 @@ async def dispose(path: Optional[Path] = None) -> None:
         await hit[0].dispose()
 
 
+def forget(path: Path) -> None:
+    """Synchronous dispose (a demo sandbox deleted by the janitor thread)."""
+    with _POOL_LOCK:
+        hit = _POOL.pop(str(Path(path)), None)
+    if hit is not None:
+        try:
+            hit[0].sync_engine.dispose()
+        except Exception:                          # noqa: BLE001
+            pass
+
+
 def __getattr__(name):
     """Back-compat for readers of the old module constants."""
     if name == "DATABASE_URL":
