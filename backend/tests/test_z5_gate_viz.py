@@ -45,14 +45,6 @@ def _no_plan_db(monkeypatch):
     monkeypatch.setattr(plan_store, "done_titles", lambda: {})
 
 
-@pytest.fixture(autouse=True)
-def _steady_volume(monkeypatch):
-    # the stable-volume precondition has its own tests (test_volume_precondition.py); the
-    # every-other-day fixtures here alternate 3 / 4 runs a week, so pass it
-    real = BC.volume_stable
-    monkeypatch.setattr(BC, "volume_stable", lambda ds, day: {**real(ds, day), "ok": True})
-
-
 # ---------------------------------------------------------------------------
 # the replay agrees with the planner
 # ---------------------------------------------------------------------------

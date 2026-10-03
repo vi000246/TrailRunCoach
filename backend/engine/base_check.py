@@ -87,16 +87,8 @@ LOOKBACK_DAYS = 182                  # how far back a confirmation is looked for
 NO_DATA_DAYS = 42                    # no interpretable data for ~6 weeks → schedule the AeT test
                                      # (UA's 4–6-week retest, coach; the original wording 未驗證)
 
-# ---- the stable-volume precondition (Uphill Athlete-style; every number 推估) -------
-# A test (the 90-min test, an AeT test) only says something about the aerobic base when
-# the weeks before it were ordinary training: weekly running time steady for ~3 weeks.
-# docs/research has no source for the numbers → 推估. Recovery / taper / event weeks are
-# skipped (a planned 3:1 down week is not "unstable"), looking back at most VOL_LOOK weeks.
-VOL_WEEKS = 3                        # 推估
-VOL_TOL = 0.15                       # 推估: every week within ±15 % of the weeks' mean
-VOL_LOOK = 6                         # 推估: how far back the counted weeks are looked for
-SRC_VOL = ("推估：Uphill Athlete 式的前提（測試前的訓練量要穩定），沒有找到原文；"
-           "3 週、±15% 是推估。恢復週、減量週不算")
+# No stable-weekly-volume precondition before a test (owner 2026-10-03): the rule
+# (3 weeks within ±15 %) had no source, so tests are suggested and counted without it.
 
 STATE_LABEL = {"unconfirmed": "未確認", "confirmed": "已確認", "paused": "暫停", "open": "不設門檻",
                "reentry": "恢復期"}
@@ -293,37 +285,6 @@ def weekly(ds, today: dt.date, weeks: int) -> list[dict]:
     WR._flush(ds)
     cur = monday(today)
     return [{"monday": k.isoformat(), **v, "complete": k < cur} for k, v in sorted(rows.items())]
-
-
-def volume_stable(ds, day: dt.date) -> dict:
-    """The stable-volume precondition for a test on `day`: the last VOL_WEEKS
-    counted weeks before `day`'s week (recovery / taper / event weeks skipped,
-    at most VOL_LOOK weeks back) each have running time within ±VOL_TOL of
-    their mean. {"ok": True / False / None, "weeks": [{"monday", "min"}],
-    "mean_min", "worst", "label", "value", "need", "src"}. ok None = nothing
-    to judge (no running in those weeks — the break / re-entry rules cover
-    that), which doesn't block. Never raises."""
-    def calc() -> dict:
-        out = {"ok": None, "weeks": [], "mean_min": None, "worst": None,
-               "label": f"前提：週量穩定 {VOL_WEEKS} 週（每週在平均 ±{VOL_TOL * 100:.0f}% 內）",
-               "value": "—（沒有跑步資料）", "need": f"±{VOL_TOL * 100:.0f}%（推估）", "src": SRC_VOL}
-        try:
-            rows = weekly(ds, monday(day) - dt.timedelta(days=1), VOL_LOOK)
-            kept = [r for r in reversed(rows) if not _skip_week(ds, dt.date.fromisoformat(r["monday"]), None)]
-            kept = list(reversed(kept[:VOL_WEEKS]))
-        except Exception:                   # noqa: BLE001 — no verdict, never a block
-            return out
-        mins = [r["run_s"] / 60.0 for r in kept]
-        out["weeks"] = [{"monday": r["monday"], "min": round(m, 1)} for r, m in zip(kept, mins)]
-        mean = float(np.mean(mins)) if mins else 0.0
-        if len(mins) < VOL_WEEKS or mean <= 0:
-            return out
-        worst = max(abs(m / mean - 1.0) for m in mins)
-        ok = worst <= VOL_TOL
-        out.update(ok=ok, mean_min=round(mean, 1), worst=round(worst, 3),
-                   value=" / ".join(f"{m:.0f}" for m in mins) + f" 分（最大差 {worst * 100:.0f}%）")
-        return out
-    return _memo(("vol", id(ds), day.isoformat()), calc)
 
 
 # ---------------------------------------------------------------------------
@@ -565,23 +526,10 @@ def z5_status_base(ds, today: dt.date, mode: str = "auto", method_state: Optiona
     if after:
         # a break ≥ 4 weeks: confirmations from before it no longer count (Mujika & Padilla 2000)
         events = [e for e in events if e[0] >= after]
-    base = {"xu_last": xs[-1] if xs else None, "maintenance": None, "pause": None, "vol_skipped": []}
-    # the stable-volume precondition (推估): a test only counts when the weeks before it were
-    # steady; checked from the latest event back until one counts (the latest counting one wins)
-    kept: list[tuple[str, str, str]] = []
-    for e in sorted(events, key=lambda e: e[0], reverse=True):
-        if e[1] == "method" or volume_stable(ds, dt.date.fromisoformat(e[0]))["ok"] is not False:
-            kept.append(e)
-            break
-        base["vol_skipped"].append({"date": e[0], "path": e[1]})
-    had_tests = bool(events)
-    events = kept
+    base = {"xu_last": xs[-1] if xs else None, "maintenance": None, "pause": None}
     if not events:
         why = ("三種確認測試都還沒做到" if len(paths) > 1 else "這個測試還沒做到" if paths
                else "還沒解鎖" if mode in ("plateau", "weeks") else "這個間歇門檻不開 5 區")
-        if had_tests:
-            why = (f"做過的測試前 {VOL_WEEKS} 週週量不穩定（±{VOL_TOL * 100:.0f}%，推估），不算確認；"
-                   f"週量穩定 {VOL_WEEKS} 週後再測一次")
         return {**base, "state": "unconfirmed", "label": STATE_LABEL["unconfirmed"], "open": False, "since": None,
                 "path": None, "path_label": "", "reason": why,
                 "text": f"Zone 5：未確認（{why}）"}
