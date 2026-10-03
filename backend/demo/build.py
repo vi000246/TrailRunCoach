@@ -180,8 +180,16 @@ def _stage(base: Path, seed: int, anchor: dt.date, weeks: int, small: bool, warm
         by_file = {Path(str(r.get("file", ""))).name: r["index"] for r in rows if "index" in r}
         for a in manifest["activities"]:
             i = by_file.get(Path(a["file"]).name)
-            if i is not None and a.get("name"):
-                ok(c.patch(f"/api/v1/wko5/workouts/{i}/activity", json={"name": a["name"]}), "name")
+            if i is None or not a.get("name"):
+                continue
+            body = {"name": a["name"]}
+            if a["kind"] in ("interval", "interval_short", "hill", "tempo"):
+                # a FIT carries no plan: the 間歇 analysis is asked for as a user would (「當作間歇判讀」)
+                from backend.engine.interval_eval import FLAG_TAG
+                body["tags"] = [FLAG_TAG]
+            if a["kind"].startswith("race"):
+                body["activity_type"] = "race"
+            ok(c.patch(f"/api/v1/wko5/workouts/{i}/activity", json=body), "name")
         if warm:
             t1 = time.time()
             for url in ("/api/v1/wko5/dataset/status", "/api/v1/overview/status", "/api/v1/overview/summary",

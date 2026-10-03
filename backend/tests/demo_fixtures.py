@@ -31,6 +31,9 @@ def make_base(root: Path, name: str = "b1") -> Path:
 
 
 def demo_env(monkeypatch, root: Path) -> None:
+    # backend.main builds its module-level `app` from WKO5COACH_MODE on first import: import it
+    # in owner mode first, so later tests' `from backend.main import app` is not a demo app
+    import backend.main  # noqa: F401
     monkeypatch.setenv("WKO5COACH_MODE", "demo")
     monkeypatch.setenv("WKO5COACH_HOME", str(root))
     monkeypatch.setenv("WKO5COACH_COOKIE_SECURE", "0")
