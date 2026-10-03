@@ -1786,10 +1786,16 @@ def _range_extras(start: str, end: str) -> dict:
     acts = activity_rows(ds, a, b + dt.timedelta(days=1))
     st = _status(ds, today)
     lo, hi = min(a, today) - dt.timedelta(days=400), max(b, today) + dt.timedelta(days=400)
-    phases = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end}
-              for p in planning.phases(st.plan, lo, hi) if p.end >= start and p.start <= end]
+    every = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end} for p in planning.phases(st.plan, lo, hi)]
+    phases = [p for p in every if p["end"] >= start and p["start"] <= end]
+    # the plan's phases from a year back on: 課表統計's period filter offers each one (an auto
+    # phase's start depends on the window, so a long one is cut at a year back: a stable id)
+    since = (today - dt.timedelta(days=MAX_COMPLIANCE_DAYS)).isoformat()
+    plan_phases = sorted(({**p, "start": max(p["start"], since)} for p in every if p["end"] >= since),
+                         key=lambda p: p["start"])
     goal_d = ((st.goals.get("targets") or {}).get("climb_per_km") or {}).get("value")
-    return {"activities": acts, "phases": phases, "tph": O._tss_per_hour(ds, today), "goal_climb_per_km": goal_d}
+    return {"activities": acts, "phases": phases, "plan_phases": plan_phases,
+            "tph": O._tss_per_hour(ds, today), "goal_climb_per_km": goal_d}
 
 
 # TSS per hour of a planned session by kind: week_plan() / projection use the
@@ -2032,6 +2038,7 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     weeks = _week_rows(start, end, ss, acts, phases, inp["weeks"], rates, today)
     out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss)
     return {**out, "phases": phases, "current_phase": ph, "kinds": PS.KINDS,
+            "plan_phases": extras.get("plan_phases", extras["phases"]),
             "plan_start": min((s["day"] for s in every if s.get("day")), default=None)}
 
 

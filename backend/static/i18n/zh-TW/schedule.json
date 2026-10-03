@@ -1,7 +1,7 @@
 {
   "tabs.label": "課表檢視",
   "tabs.calendar": "日曆",
-  "tabs.compliance": "課表達成率",
+  "tabs.compliance": "課表統計",
   "ctx.edit": "編輯",
   "ctx.move": "移到…",
   "ctx.open": "查看",
@@ -214,5 +214,7 @@
   "pf.e.cap_lw": "長跑日上限不能比平日上限短",
   "pf.e.wh": "每週時數上限要在 1–40 小時",
   "pf.e.gate_weeks": "週數法的週數要在 2–16 週",
-  "pf.e.push_days": "推送範圍要在 1–14 天"
+  "pf.e.push_days": "推送範圍要在 1–14 天",
+  "tabs.calendar_sub": "每天排了什麼課",
+  "tabs.compliance_sub": "計畫 vs 實際、負荷"
 }

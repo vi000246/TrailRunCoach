@@ -175,11 +175,23 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .tp-src { display: block; font-size: 11.5px; }
 .tp-act { display: flex; gap: 8px; align-items: center; }
 .tp-why { font-size: 12.5px; }
-/* page tabs: 日曆 | 達成率 (the dashboard is a tab of 課表) */
-.ptabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: -2px; }
-.ptabs a { padding: 6px 14px; font-size: 13.5px; font-weight: 600; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.ptabs a:hover { color: var(--text); }
-.ptabs a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+/* page switch 日曆 | 課表統計: the chart viewer's 趨勢 / 單次活動 mode cards (wko5_viewer.html .modesw),
+   same look in compliance.html: icon + title + one line, the current one filled dark orange */
+.modesw { display: inline-flex; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px;
+  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; text-decoration: none; text-align: left;
+  padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
+.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
+.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
+.modesw .mcard:active { transform: translateY(1px); }
+.modesw .mcard[aria-current="page"] { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff; box-shadow: 0 3px 8px rgba(143,63,10,.35); }
+.modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
+.modesw .mcard[aria-current="page"] small { opacity: .85; }
+.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
 .chg .dec { display: inline-flex; flex-wrap: wrap; gap: 2px 10px; margin-left: 4px; }
 .chg .dec label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); }
 .chg .dec input { width: auto; margin: 0; }
@@ -502,9 +514,13 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 <body>
 <script src="/api/v1/static/shell.js" data-page="schedule"></script>
 <main>
-  <nav class="ptabs" data-i18n-attr="aria-label:schedule.tabs.label" aria-label="課表檢視">
-    <a href="/api/v1/overview/plan/schedule/page" aria-current="page" data-i18n="schedule.tabs.calendar">日曆</a>
-    <a href="/api/v1/overview/plan/compliance/page" data-i18n="schedule.tabs.compliance">課表達成率</a>
+  <nav class="modesw" data-i18n-attr="aria-label:schedule.tabs.label" aria-label="課表檢視">
+    <a class="mcard" href="/api/v1/overview/plan/schedule/page" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span><b data-i18n="schedule.tabs.calendar">日曆</b><small data-i18n="schedule.tabs.calendar_sub">每天排了什麼課</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/compliance/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
+      <span><b data-i18n="schedule.tabs.compliance">課表統計</b><small data-i18n="schedule.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
   </nav>
   <div class="bar calnav">
     <h1 id="cal-label">課表</h1>
