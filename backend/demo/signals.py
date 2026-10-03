@@ -42,6 +42,18 @@ def run_ratio(grade: np.ndarray) -> np.ndarray:
     return np.maximum(r, 0.62)
 
 
+DESC_K = 1.6          # trail descents: power x (1 + DESC_K * grade), floored at DESC_MIN
+DESC_MIN = 0.5
+DESC_CAP_A, DESC_CAP_K = 1.4, 2.0   # the technical speed cap: down_cap x (A + K * grade)
+TRAIL_DRIFT_MAX = 8.0  # bpm: a trail run's cardiac drift levels off towards this
+
+
+def descent_frac(grade: float) -> float:
+    """The share of the flat target power a trail runner holds downhill (Stryd power):
+    ~0.9 on a runnable −6 %, ~0.7 at −20 %, ~0.5 on the steepest pitches."""
+    return max(DESC_MIN, 1.0 + DESC_K * min(0.0, grade))
+
+
 def walk_ratio(grade: np.ndarray) -> np.ndarray:
     g = np.clip(grade, -0.45, 0.45)
     return np.maximum(_poly(WALK_COEFFS, g) / WALK_COEFFS[-1], 0.55)
@@ -118,7 +130,10 @@ def _course_at(course: Course, d: np.ndarray):
 def _measure(rng, *, course: Course, d: np.ndarray, v: np.ndarray, p_true: np.ndarray,
              frac: np.ndarray, walking: np.ndarray, stryd: bool, has_power: bool, drift: float,
              doy: int, hour: float, artifacts: bool, alt_hr: bool, laps: list, temp_warm: float = 0.0,
-             fatigue_hr: float = 0.0, lock_ok: bool = True, power_sd: float = 0.04) -> Signals:
+             fatigue_hr: float = 0.0, lock_ok: bool = True, power_sd: float = 0.04,
+             drift_max: Optional[float] = None) -> Signals:
+    """`drift_max` (bpm): the cardiac drift levels off towards it (a long easy run,
+    fed and drinking) instead of climbing linearly all the way."""
     n = len(d)
     ele, lat, lon = _course_at(course, d)
     # ---- heart rate (wrist optical) ----
@@ -127,7 +142,10 @@ def _measure(rng, *, course: Course, d: np.ndarray, v: np.ndarray, p_true: np.nd
     heat = 1.0 + max(0.0, float(np.mean(air)) - 18.0) / 12.0
     t = np.arange(n)
     ss = A.hr_steady_vec(fs)
-    ss = ss + drift * heat * np.maximum(0.0, t - 900) / 60.0 * np.clip(fs, 0.3, 1.2) + fatigue_hr
+    dr = drift * heat * np.maximum(0.0, t - 900) / 60.0
+    if drift_max:
+        dr = drift_max * (1.0 - np.exp(-dr / drift_max))
+    ss = ss + dr * np.clip(fs, 0.3, 1.2) + fatigue_hr
     if alt_hr:
         ss = ss + np.maximum(0.0, ele - 1500.0) * 0.008
     ss = np.clip(ss, 88.0 + (np.maximum(0.0, ele - 1500.0) * 0.006 if alt_hr else 0.0), A.HRMAX - 1.0)
@@ -264,11 +282,19 @@ def simulate_run(rng, course: Course, segs: list[Segment], *, cp: float, stryd: 
             k = ng - 1
         gr, r = gl[k], rl[k]
         p = tn[i]
-        if push:
-            p *= 1.0 + push * max(-1.0, min(1.0, gr / 0.15))
-        vt = p / (mass * A.ECOR * r)
-        if trail and gr < -0.06:
-            vt = min(vt, down_cap * (1.0 + gr * 1.5))       # technical descent
+        if trail:
+            if gr > 0.0:
+                p *= 1.0 + push * min(1.0, gr / 0.15)
+            elif gr < 0.0:
+                p *= descent_frac(gr)
+            vt = p / (mass * A.ECOR * r)
+            if gr < -0.06:
+                # technical footing: a speed cap that only bites on the steep pitches
+                vt = min(vt, down_cap * (DESC_CAP_A + gr * DESC_CAP_K))
+        else:
+            if push:
+                p *= 1.0 + push * max(-1.0, min(1.0, gr / 0.15))
+            vt = p / (mass * A.ECOR * r)
         if gr > 0.19:
             vt = min(vt, 1.45)                              # power-hiking
             walking[i] = True
@@ -282,7 +308,8 @@ def simulate_run(rng, course: Course, segs: list[Segment], *, cp: float, stryd: 
     laps = _laps(segs, dist, p_true)
     return _measure(rng, course=course, d=dist, v=spd, p_true=p_true, frac=frac, walking=walking,
                     stryd=stryd, has_power=has_power, drift=drift, doy=doy, hour=hour, artifacts=True,
-                    alt_hr=False, laps=laps, temp_warm=temp_warm, lock_ok=lock_ok, power_sd=power_sd)
+                    alt_hr=False, laps=laps, temp_warm=temp_warm, lock_ok=lock_ok, power_sd=power_sd,
+                    drift_max=TRAIL_DRIFT_MAX if trail else None)
 
 
 def simulate_hike(rng, course: Course, *, cp: float, stryd: bool, doy: int, hour: float,
