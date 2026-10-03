@@ -73,19 +73,51 @@ def _shrink(segs: list[Segment], k: float) -> list[Segment]:
     return [Segment(max(30, int(s.dur_s * k)), s.frac, s.lap, s.fade, s.label) for s in segs]
 
 
-def _run_course(rng, p: S.Planned, minutes: float, small: bool):
-    """A course long enough for the run (wrapping courses repeat)."""
+TRAIL_KINDS = ("trail", "trail_long")
+TRAIL_DRIFT = 0.5           # × the drawn cardiac drift: a long easy trail run creeps up slowly
+TRAIL_PITCH_M = 40.0        # m of one climb / descent of the rolling trail loop
+TRAIL_LEAD_M = 3000.0       # m of runnable approach (and run-out) at the trailhead
+
+
+def _trail_course(rng, p: S.Planned, length: float, climb: float) -> C.Course:
+    """A rolling trail loop of `length` m with `climb` m up (and down): climbs and
+    descents of ~TRAIL_PITCH_M take turns (no stretch of the run is one long descent),
+    after a runnable approach of TRAIL_LEAD_M (the way back out at the end)."""
+    if p.kind == "trail_long":
+        up, down = (0.08, 0.25), (0.06, 0.20)
+    else:
+        up, down = (0.06, 0.18), (0.05, 0.15)
+    n_seg = int(min(60, max(4, round(climb / TRAIL_PITCH_M))))
+    return C.make(rng, "loop", A.AREAS["trail"], length, climb, climb, up=up, down=down, n_seg=n_seg,
+                  trail=True, offset_m=float(rng.uniform(0, 1500)), rough=2.0, alternate=True,
+                  lead_m=TRAIL_LEAD_M)
+
+
+def trail_run(rng, p: S.Planned, segs: list[Segment], small: bool, **sim):
+    """(course, Signals) of a trail run (generated trail / trail_long and the linked
+    trail session): the loop is sized so the run goes round it once and ends back at
+    the trailhead — the whole planned climb, and the last part of the run is the same
+    rolling terrain as the rest (not the bottom of one long descent). Deterministic:
+    the course and the run each get a seed drawn from `rng`, and the loop length is
+    found by a few re-runs (the distance the run covers on a loop of that length)."""
     k = 0.25 if small else 1.0
-    if p.kind in ("trail", "trail_long"):
-        climb = float(p.params.get("climb") or rng.uniform(350, 650))
-        if p.kind == "trail_long":
-            length = climb / 0.15 * 2 * 1.15
-            up, down = (0.08, 0.25), (0.06, 0.20)
-        else:
-            length = max(9000.0, climb / 0.09 * 2)
-            up, down = (0.06, 0.18), (0.05, 0.15)
-        return C.make(rng, "out_back", A.AREAS["trail"], length * k, climb * k, climb * 0.15 * k,
-                      up=up, down=down, n_seg=6, trail=True, offset_m=float(rng.uniform(0, 1500)), rough=2.0)
+    climb = float(p.params.get("climb") or rng.uniform(350, 650)) * k
+    cseed, sseed = (int(x) for x in rng.integers(0, 2 ** 62, 2))
+    length = max(2000.0, sum(s.dur_s for s in segs) * 2.4)
+    course = sig = None
+    for _ in range(6):
+        course = _trail_course(np.random.Generator(np.random.PCG64(cseed)), p, length, climb)
+        sig = simulate_run(np.random.Generator(np.random.PCG64(sseed)), course, segs, **sim)
+        ran = float(sig.dist[-1] + sig.speed[-1]) if sig.n else length
+        if abs(ran - length) <= 0.01 * length:
+            break
+        length = max(2000.0, ran)
+    return course, sig
+
+
+def _run_course(rng, p: S.Planned, minutes: float, small: bool):
+    """A course long enough for the run (wrapping courses repeat). Trail runs: trail_run."""
+    k = 0.25 if small else 1.0
     if p.kind == "hill":
         return C.make(rng, "out_back", A.AREAS["hill"], 6000 * k, 160 * k, 40 * k, up=(0.05, 0.10),
                       down=(0.04, 0.08), n_seg=4, offset_m=float(rng.uniform(0, 800)))
@@ -183,11 +215,16 @@ def build_activity(seed: int, idx: int, p: S.Planned, season: S.Season, small: b
         segs = _segments(p.kind, p.minutes)
         if small:
             segs = _shrink(segs, 0.25)
-        c = _run_course(rng, p, p.minutes, small)
-        drift = 0.17 if p.kind == "aet_test" else float(rng.uniform(0.04, 0.12))
-        sig = simulate_run(rng, c, segs, cp=cp, stryd=p.stryd, doy=doy, hour=p.hour, drift=drift,
-                           push=0.12 if c.trail else 0.0, down_cap=float(rng.uniform(2.8, 3.6)),
-                           has_power=True, lock_ok=p.kind not in ("cp_test", "aet_test", "interval"))
+        if p.kind in TRAIL_KINDS:
+            drift = float(rng.uniform(0.04, 0.12)) * TRAIL_DRIFT
+            c, sig = trail_run(rng, p, segs, small, cp=cp, stryd=p.stryd, doy=doy, hour=p.hour, drift=drift,
+                               push=0.12, down_cap=float(rng.uniform(2.8, 3.6)), has_power=True, lock_ok=True)
+        else:
+            c = _run_course(rng, p, p.minutes, small)
+            drift = 0.17 if p.kind == "aet_test" else float(rng.uniform(0.04, 0.12))
+            sig = simulate_run(rng, c, segs, cp=cp, stryd=p.stryd, doy=doy, hour=p.hour, drift=drift,
+                               push=0.12 if c.trail else 0.0, down_cap=float(rng.uniform(2.8, 3.6)),
+                               has_power=True, lock_ok=p.kind not in ("cp_test", "aet_test", "interval"))
         sport, sub = FW.SPORT_RUNNING, (FW.SUB_TRAIL if c.trail else FW.SUB_GENERIC)
     raw = FW.encode_activity(start=start, lat=sig.lat, lon=sig.lon, alt=sig.alt, dist=sig.dist,
                              speed=sig.speed, hr=sig.hr, cadence=sig.cadence, power=sig.power, temp=sig.temp,
