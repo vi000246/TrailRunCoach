@@ -3623,14 +3623,38 @@ def _iv_verdict(ds, w, m, c, base):
         if n:
             out["action"] = _offer_action(w)
         return out
+    # the viewer draws `chip_rows` (one compact row per segment / reading: label + number chips + a verdict
+    # chip, the long sentence behind the row's ?); `series` keeps the full sentences for the AI / API
+    wtip = e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證（推估）"
+    wrow = _chip_row("W′", [f"用掉 {e['wprime_used_j'] / 1000:.1f} kJ", f"{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′",
+                            f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%"],
+                     tip=f"整趟高於 CP 的功（含回充後再用）÷ W′ {e['wprime_j'] / 1000:.1f} kJ；dFRC 最低 = 電池最低剩多少。{wtip}")
     if e.get("kind") == "test":
         rows = [_row("判定", e["verdict_label"], "測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）"),
                 _row("流程", e["label"])]
         for i, r in enumerate(e["reasons"]):
             rows.append(_row("各段" if i == 0 else "", r))
         rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
-                         f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證"))
-        return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": e["label"]}, "series": rows}
+                         f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+        chips = []
+        for r in e["reps"]:
+            exp = r.get("expected")
+            nums = [f"{r['power']:.0f} W", f"{r['pct_cp'] * 100:.0f}% CP"] + ([f"做到 {r['power'] / exp * 100:.0f}%"] if exp else [])
+            word = r.get("pacing") or ""
+            tip = (f"前半 {r['p1']:.0f} → 後半 {r['p2']:.0f} W（{r['split'] * 100:+.0f}%）" if r.get("p1") else "")
+            if r.get("last_ratio") is not None:
+                tip += f"；最後 1 分比整段 {r['last_ratio'] * 100:+.0f}%"
+            tip += f"——{word}。"
+            if exp:
+                tip += (f"\n預期全力 ≈ {exp:.0f} W = 測試前 CP {e['cp_ref']:.0f} + W′ {e['wprime_j'] / 1000:.1f} kJ ÷ "
+                        f"{r['duration_s']:.0f} 秒（CP 模型，Monod & Scherrer 1965，推估）。")
+            chips.append(_chip_row(r["name"], nums, ("平均" if r["even"] else word.split("（")[0]),
+                                   "good" if r["even"] else "warn", tip))
+        for x in e.get("notes") or []:
+            chips.append(_chip_row(x["label"], [x["text"]], tip=x["tip"]))
+        chips.append(wrow)
+        return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": e["label"]}, "series": rows,
+                "chip_rows": chips}
     sub = f"{e['label']}" + ("" if e["planned"] else
                              "（你標了「當作間歇」：用偵測到的趟）" if e.get("flagged") else "（沒有對應的課表：用偵測到的趟）")
     rows = [_row("判定", e["verdict_label"], "對照「這次選的課表」本身的計畫；同等與否在選課時已決定"),
@@ -3638,11 +3662,36 @@ def _iv_verdict(ds, w, m, c, base):
     for i, r in enumerate(e["reasons"]):
         rows.append(_row("理由" if i == 0 else "", r))
     rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
-                     f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證"))
+                     f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
     src = {"lap": "COROS 推送的分段（lap）", "power": "功率型態（0.95 × 目標下限）", "short": "短趟偵測（≥ 95% CP）",
            "z3": "3 區偵測（≥ 0.95 × 88% CP）"}.get(e["rep_source"], "—")
     rows.append(_row("找趟", src))
-    return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": sub}, "series": rows}
+    n, hit = e["n_plan"], e["hit"]
+    chips = [_chip_row("每趟", [f"{hit}/{n} 趟在目標帶"], "全部達標" if hit >= n else f"差 {n - hit} 趟",
+                       "good" if hit >= n else "warn",
+                       f"在目標帶 = 平均 ≥ {e['floor']:.0f} W（目標下限 {e['lo'] * 100:.0f}% CP × 0.98）。每趟的長條在「每趟功率」。")]
+    if e.get("tiz_ratio") is not None:
+        ok = e["tiz_ratio"] >= 0.85
+        chips.append(_chip_row("目標區時間", [f"{e['tiz_s'] / 60:.1f} / {e['tiz_plan_s'] / 60:.0f} 分", f"{e['tiz_ratio'] * 100:.0f}%"],
+                               "夠" if ok else "不足", "good" if ok else "warn",
+                               "目標區時間 ÷ 這份課表計畫的時間；≥ 85% 算達到（推估）。"))
+    if e.get("outcome_why"):
+        lv = {"met": "good", "border": "warn"}.get(e.get("outcome"), "bad")
+        from backend.engine import quality_gate as QG
+        chips.append(_chip_row("逐趟判定", [], QG.OUTCOME_LABEL.get(e.get("outcome"), e.get("outcome")), lv, e["outcome_why"]))
+    if e.get("fade") is not None:
+        chips.append(_chip_row("掉速", [f"{e['fade'] * 100:+.0f}%", f"Sdec {e['sdec']:.1f}%"],
+                               tip="掉速 = 最後一趟比第一趟；Sdec = 衰退分數（Glaister 2008），只顯示、不判讀。"))
+    chips.append(wrow)
+    chips.append(_chip_row("找趟", [src.split("（")[0]], tip=f"{src}。課表：{sub}"))
+    return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": sub}, "series": rows,
+            "chip_rows": chips}
+
+
+def _chip_row(label: str, chips: list, verdict: Optional[str] = None, level: str = "", tip: Optional[str] = None) -> dict:
+    """One compact row of the 間歇判讀 card (viewer: drawChipRows)."""
+    return {"label": label, "chips": chips, "verdict": {"text": verdict, "level": level} if verdict else None,
+            "tip": tip or None}
 
 
 REP_HI_TOL = 2.0 - 0.98    # 推估: a rep is above the band past hi × 1.02 (the floor's 0.98, mirrored)
