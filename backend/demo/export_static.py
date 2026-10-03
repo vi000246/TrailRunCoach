@@ -197,6 +197,13 @@ class DemoApp:
         return self
 
     def __exit__(self, *exc):
+        # close the pooled SQLite connections (else Windows keeps the temporary copy locked)
+        try:
+            from backend.db import database as DB
+            for key in list(DB._POOL):
+                self.client.portal.call(DB.dispose, Path(key))
+        except Exception:                  # noqa: BLE001 — cleanup only
+            pass
         self.client.__exit__(*exc)
 
     def request(self, method: str, url: str, body: Optional[bytes] = None,
