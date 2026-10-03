@@ -479,7 +479,13 @@ const API = "/api/v1/racepower";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) { const e = new Error(`${r.status} ${(await r.text()).slice(0, 300)}`); e.status = r.status; throw e; } return r.json(); }
+// an error answer → its message: the API's {"detail": "..."} text, else `status body`
+async function errText(r) {
+  const t = await r.text();
+  try { const d = JSON.parse(t).detail; const m = typeof d === "string" ? d : d && typeof d.message === "string" ? d.message : ""; if (m) return m; } catch {}
+  return `${r.status} ${t.slice(0, 300)}`;
+}
+async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) { const e = new Error(await errText(r)); e.status = r.status; throw e; } return r.json(); }
 const post = (url, body) => j(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 const ls = { get(k, d) { try { const v = localStorage.getItem("racepower." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem("racepower." + k, JSON.stringify(v)); } catch {} } };
@@ -1570,7 +1576,7 @@ async function csvExport() {
     const ev = (INP?.events || []).find((e) => e.id === $("event").value);
     const r = await fetch(`${API}/export/csv`, { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...planBody(), name: ev ? ev.name : null }) });
-    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 300)}`);
+    if (!r.ok) throw new Error(await errText(r));
     const fname = decodeURIComponent(r.headers.get("X-Filename") || "racepower.csv");
     const url = URL.createObjectURL(await r.blob());
     const a = document.createElement("a"); a.href = url; a.download = fname;
