@@ -39,6 +39,19 @@ def demo_env(monkeypatch, root: Path) -> None:
     from backend.engine.wko5expr import datasource
     from backend.db.database import db_path
     monkeypatch.setattr(datasource, "_db_path", lambda: db_path())
+    # the conftest's fixed tmp folders off: everything follows the demo tenant (all inside `root`)
+    from backend.sync import storage
+    from backend.engine import routes, event_gpx, race_calc_store, activity_tags
+    from backend.engine.racepower import athlete
+    from backend.engine.wko5expr import fitcache
+    monkeypatch.setattr(storage, "FIT_ROOT", None)
+    monkeypatch.setattr(routes, "HOME", None)
+    monkeypatch.setattr(event_gpx, "ROOT", None)
+    monkeypatch.setattr(athlete, "HIKE_META", None)
+    monkeypatch.delenv(fitcache.ENV_ROOT, raising=False)
+    monkeypatch.setattr(event_gpx, "_default_db", lambda: db_path())
+    monkeypatch.setattr(race_calc_store, "_default_db", lambda: db_path())
+    monkeypatch.setattr(activity_tags, "_default_db", lambda: db_path())
     from backend import tenancy_mw as MW
     for b in (MW.REQ_BUCKET, MW.CREATE_HOUR, MW.CREATE_DAY, MW.WRITE_MIN, MW.HEAVY_IP):
         b.reset()

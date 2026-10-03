@@ -1048,7 +1048,7 @@ def athlete_summary(parity: Optional[bool] = None):
     ds = _dataset(parity)
     a = ds.athlete
     return {
-        "name": f"{a.first_name} {a.last_name}",
+        "name": " ".join(x for x in (a.first_name, a.last_name) if x),     # "" without a WKO5 athlete file
         "workouts": len(ds.workouts),
         "first": ds.workouts[0].entry.start.isoformat() if ds.workouts else None,
         "last": ds.workouts[-1].entry.start.isoformat() if ds.workouts else None,
@@ -1194,4 +1194,6 @@ def viewer():
 
 @router.get("/settings", include_in_schema=False)
 def settings_page():
+    if tenancy.demo_mode():          # the demo's settings are fixed (they shape the shared data)
+        raise HTTPException(404, "page not found")
     return render_page("settings")

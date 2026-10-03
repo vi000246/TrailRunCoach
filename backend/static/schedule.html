@@ -1102,7 +1102,8 @@ const weekDay = () => { const [a, b] = range(); if (S.sel) return S.sel; return 
 function renderToolbar() {
   const C = D.coros || {};
   $("push-split").hidden = !C.authenticated;
-  $("login-link").hidden = !!C.authenticated;
+  const DEMO = (window.TRC_SESSION || {}).mode === "demo";      // no watch, no settings page in the demo
+  $("login-link").hidden = !!C.authenticated || DEMO;
   const wkd = weekDay(), [wa, wb] = scopeRange("week", wkd);
   const weekPast = wb < D.today;
   $("push-main-sub").textContent = weekPast ? "" : `這一週 ${rangeTxt(wa, wb)}`;
@@ -1130,7 +1131,7 @@ function renderToolbar() {
     if (C.outdated) parts.push(`<span class="warn" title="課表改過、COROS 上還是舊的">需更新 <b>${C.outdated}</b> 堂</span>`);
     if (C.failed) parts.push(`<span class="bad">失敗 <b>${C.failed}</b> 堂</span>`);
     if (C.pushed) parts.push(`<span>已推送 <b>${C.pushed}</b> 堂</span>`);
-  } else parts.push(`<span>登入 COROS 後才能把課表送到手錶</span>`);
+  } else parts.push(DEMO ? `<span>示範模式不推送到手錶</span>` : `<span>登入 COROS 後才能把課表送到手錶</span>`);
   $("sync-status").innerHTML = parts.join("");
 }
 function msg(html, cls = "") { $("sync-msg").innerHTML = html ? `<span class="${cls}">${html}</span>` : ""; }

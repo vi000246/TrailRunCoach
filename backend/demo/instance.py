@@ -78,7 +78,8 @@ def base_anchor() -> dt.date | None:
 def rebuild_due(today: dt.date | None = None) -> bool:
     a = base_anchor()
     today = today or dt.date.today()
-    return a is None or (today - a).days >= REBUILD_DAYS
+    # a new calendar week (the schedule generates weeks lazily), or a week old
+    return a is None or a.isocalendar()[:2] != today.isocalendar()[:2] or (today - a).days >= REBUILD_DAYS
 
 
 async def loop() -> None:

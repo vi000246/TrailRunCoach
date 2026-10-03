@@ -293,7 +293,8 @@
       if (!root) return;
       if (root.nodeType === 3) { if (root.nodeValue.includes("WKO5")) root.nodeValue = scrub(root.nodeValue); return; }
       if (root.nodeType !== 1) return;
-      if (root.title && root.title.includes("WKO5")) root.title = scrub(root.title);
+      const tt = root.getAttribute && root.getAttribute("title");
+      if (tt && tt.includes("WKO5")) root.setAttribute("title", scrub(tt));
       if (!root.textContent.includes("WKO5") && !(root.innerHTML || "").includes("WKO5")) return;
       const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
       for (let n = w.currentNode; n; n = w.nextNode()) {
