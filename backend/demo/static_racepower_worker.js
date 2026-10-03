@@ -12,7 +12,9 @@
  * Messages out: {type: "progress", text} · {type: "ready", ms} · {type: "fail", error}
  *               {type: "result", id, out}             out = handle()'s JSON text
  */
-"use strict";
+// a module worker: Pyodide ≥ 314 refuses classic workers
+import { loadPyodide } from "__PYODIDE_URL__pyodide.mjs";
+
 const PYODIDE_URL = "__PYODIDE_URL__";
 const PACKAGES = __PACKAGES__;
 const BUNDLE = "__BUNDLE__";
@@ -34,8 +36,7 @@ async function fetchOk(url, how) {
 async function boot(m) {
   const t0 = Date.now();
   progress("下載 Python 執行環境…");
-  self.importScripts(PYODIDE_URL + "pyodide.js");
-  const py = await self.loadPyodide({ indexURL: PYODIDE_URL });
+  const py = await loadPyodide({ indexURL: PYODIDE_URL });
   progress("下載 numpy／pydantic…");
   const [zip, ctx] = await Promise.all([
     fetchOk(m.base + BUNDLE + "?v=" + VERSION, "bin"),
