@@ -228,7 +228,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 | 原因 | 證據 | 這位選手 | 能不能修、怎麼修 |
 |---|---|---|---|
-| **熱（台灣）** | Lafrenz 2008、Wingo 2020、Beiter 2025（見 §2.2）。台灣教練："臺灣一年有超過半年白天都在 25 度以上…天氣熱的時候心率本來就會偏高，測出來的飄移會失真"（`docs/research/xu-guofeng-reply.md:22`） | 9/30 CP 測試 Hadley 158。LTHR 155 的 7 次跑全在夏天。穩定段每 100 W 的心率 6 月 99、2 月 83 | **能修**：只在 < 25 °C／Hadley < 120 的日子測。10 月以後的清晨，或冷氣房跑步機加電扇（`aerobic-base-readiness.md:579`） |
+| **熱（台灣）** | Lafrenz 2008、Wingo 2020、Beiter 2025（見 §2.2）。台灣教練：< 25 °C（熱天心率偏高、飄移失真） | 9/30 CP 測試 Hadley 158。LTHR 155 的 7 次跑全在夏天。穩定段每 100 W 的心率 6 月 99、2 月 83 | **能修**：只在 < 25 °C／Hadley < 120 的日子測。10 月以後的清晨，或冷氣房跑步機加電扇（`aerobic-base-readiness.md:579`） |
 | **心血管飄移** | Coyle & González-Alonso 2001 | 30 分 TT 後 20 分本來就含飄移，Friel 的定義已經把它算進去 | 照 Friel 的流程做就好；不要用 40 分鐘以上的一般跑代替 |
 | **錶的心率感測器** | Gillinov 2017（*MSSE* 49:1697–1703，DOI 10.1249/MSS.0000000000001284，摘要）：胸帶 Polar H7 對 ECG 的 rc = 0.996，腕式 0.67–0.92，Garmin FR235 0.81。Gielen 2026（*JMIR Form Res*，DOI 10.2196/85186）：10 款光學裝置的 MAE 4.5–14 bpm。徐國峰：「因為手腕的血流量會有延遲，所以腕式心率比胸式心率沒那麼即時」（`300 Sport/60 🏃 有氧訓練/跑者都該懂的跑步數據，讀書心得.md:41`） | 原始峰值 223、220、208 bpm，撐 120 秒後只剩 187／189／182 → 有尖峰雜訊。FIT 的 device_info 只記錄 COROS APEX 2 Pro，**無法從檔案判斷那幾次有沒有戴胸帶（未驗證）**，要問使用者 | **能修**：測試一律戴胸帶（Polar H10／COROS HRM）；app 標記沒有胸帶的測試 |
 | **很少全力跑** | Friel：「the more times you do this test the more accurate your LTHR is likely to become」 | 路跑 20 分鐘最高心率前幾名幾乎都在夏天，而且功率只有 145–185 W | 一年 2–3 次 30 分 TT 或 10K 比賽（頻率是推估） |
@@ -279,7 +279,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 4. 停跑 ≥ 4 週（已有 `reentry`）：恢復期後重測 AeT、CP。
 5. **季節轉涼**（台灣約 9–10 月）：夏天之後，連續 3 個路跑日的**清晨**（05–07 時，Open-Meteo 歷史天氣，家附近那一格的最低點；`heat_data.morning_weather`）< 25 °C 且 Hadley < 150 → 建議一次 30 分 TT＋一次 AeT 測試。
    - 用清晨而不是跑步當時：測試會排在清晨；傍晚下過雨的 24 °C 不代表換季。快取沒有那天清晨時，退回跑步當時的路線天氣（比清晨熱，只會延後、不會提早）。手錶溫度不用在這裡。
-   - 原本寫「Hadley < 120 的清晨」：本人資料裡這要到 11 月中～12 月（2025-11-19、2024-12-09）才出現，太晚。25 °C 是徐國峰「等天氣轉涼再做」的線，Hadley 150 是 Hadley 的熱帶（`route_weather.HOT_HADLEY`）；夏天 = 前 60 天 ≥ 10 個路跑日清晨 Hadley ≥ 150 且過半。3 天／60 天是推估。
+   - 原本寫「Hadley < 120 的清晨」：本人資料裡這要到 11 月中～12 月（2025-11-19、2024-12-09）才出現，太晚。25 °C 是台灣教練「等天氣轉涼再做」的線，Hadley 150 是 Hadley 的熱帶（`route_weather.HOT_HADLEY`）；夏天 = 前 60 天 ≥ 10 個路跑日清晨 Hadley ≥ 150 且過半。3 天／60 天是推估。
 
 - app 現有的 B3／aggregate 邏輯（`quality_gate.aet_test_reason`）已經是事件觸發。只需要把 LTHR 也接上同一套（§3.4 改動 4）。
 
@@ -404,5 +404,5 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 - Nixon RJ et al. (2021). Steady-state VO2 above MLSS: evidence that critical speed better represents maximal metabolic steady state in well-trained runners. *Eur J Appl Physiol* 121:3133–3144. DOI 10.1007/s00421-021-04780-8（摘要）
 - Nuuttila OP et al. (2025). *Eur J Appl Physiol* 125:697–705. DOI 10.1007/s00421-024-05631-y（摘要；不是心率錨點的研究）
 - 教練：Friel, "Joe Friel's Quick Guide to Setting Zones"，TrainingPeaks（本次核對原文）。
-- 徐國峰：使用者 notes `C:\Users\<user>\Projects\notes\notes\300 Sport\60 🏃 有氧訓練\跑者都該懂的跑步數據，讀書心得.md`、`不同的心率區間模型比較.md`；私訊見 `docs/research/xu-guofeng-reply.md`。
+- 徐國峰：使用者 notes `C:\Users\<user>\Projects\notes\notes\300 Sport\60 🏃 有氧訓練\跑者都該懂的跑步數據，讀書心得.md`、`不同的心率區間模型比較.md`。
 - 沿用既有文件、本次沒有重讀的：Seiler & Kjerland 2006、Coyle & González-Alonso 2001、Lafrenz 2008、Wingo 2020、Beiter 2025、Hunt 2015／2019、Coyle 1986、Houmard 1992（出處見文中引用的 `docs/research/*.md` 行號）。

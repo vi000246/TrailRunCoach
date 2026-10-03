@@ -3,7 +3,7 @@
 - 日期：2026-10-02
 - 分支：本 worktree（只寫文件，不改程式）
 - 相關文件：`interval-prescription.md`、`vo2max-gate-and-trail-metric.md`、`zones-and-thresholds.md`、
-  `xu-guofeng-reply.md`、`interval-adaptation.md`、`drift-algorithm.md`；
+  `interval-adaptation.md`、`drift-algorithm.md`；
   程式：`backend/engine/workout_review.py`（`session_type`、`_measure`）、`backend/engine/overview.py`（`HARD_EXPRS`、`HARD_SESSION_S`、`Z3_EXPR`）、
   `backend/engine/quality_gate.py`（Z3／Z5 階梯、`dose_history`）、`backend/engine/interval_eval.py`、`backend/engine/interval_reps.py`
 - 標記：**同儕審查**、**教練經驗**、**廠商**、**推估**（沒有直接來源的數字，或我們從來源換算出來的數字）、**未驗證**（查不到原文或沒能核對）。
@@ -87,7 +87,7 @@
 | Seiler & Sjursen 2004，*SJMSS* 14:318–325 | 同儕審查 | 1 分的趟峰值 VO2 只到 82 %；2–6 分的趟到 92 % |
 | Billat et al. 2000，*EJAP* 81:188–196 | 同儕審查 | 30-30 在 VO2max 7′51″；vΔ50 的**持續跑**只有 2′42″ |
 | Fleckenstein et al. 2025，*Front Sports Act Living* 6:1507957（全文） | 同儕審查 | 高度訓練的中距離跑者，**胸帶**心率：4×3 分 @ 95 % vVO2max：> 90 % VO2max 328 ± 147 秒、> 90 % HRmax 545 ± 131 秒。24×30 秒：201 ± 268 秒 vs 820 ± 249 秒。作者：「utilization of HRmax does not automatically translate to utilization of VO2max」 |
-| 台灣教練 | 教練經驗 | 5 區間歇「每趟的時間（最短兩分鐘）也要夠長才能練到最大攝氧量」 |
+| 台灣教練 | 教練經驗 | 5 區間歇每趟至少 2 分鐘 |
 
 **解讀：**
 - 「有刺激」的下限是「幾分鐘」，好的一堂是約 10 分。
@@ -120,7 +120,7 @@
 - **換算到你**：90 % pVO2max ≈ 105–110 % CP，95 % ≈ 111–116 % CP（`interval-prescription.md` §A1.4，Billat 換算，**推估**）。
 
 **轉成規則（§3.3）：**
-- 一段 **≥ 106 % CP、≥ 2 分** → 算「VO2 段」（筆記的第一列；徐國峰的 2 分；106 % 是 app Z5 帶的下限）。
+- 一段 **≥ 106 % CP、≥ 2 分** → 算「VO2 段」（筆記的第一列；台灣教練的 2 分；106 % 是 app Z5 帶的下限）。
 - 一段 **103–106 % CP、≥ 5 分** → 也算（筆記的第二列；103 % 是 Palladino MAP 下限）。
 - **< 103 % CP 不管多久都不算 VO2**，歸 Z3（筆記第三列；Buchheit 的 92 % vVO2max 持續跑到不了）。
   103 % 而不是 100 %：CP 本身有誤差（Stryd 的 CP ≠ 實驗室 CS，`interval-prescription.md` §A1.4），留 3 % 的緩衝，**推估**。
@@ -186,7 +186,7 @@
 
 ### 2.7 Z3 和 Z5 怎麼分
 
-- **徐國峰**：3 區先、跑順再加 5 區；5 區每趟 ≥ 2 分、一週最多兩次、間隔兩天（私訊 2026-10-01）。
+- **台灣教練**：3 區先、穩定後再加 5 區；5 區每趟 ≥ 2 分、一週最多 2 次、間隔 2 天。
 - **app 的 Z3** = 90–95 % CP（`quality_gate.Z3`：3×6、3×8、2×12；Haugen 2022、Palladino、Daniels），
   找趟的下限是 88 % CP（`interval_reps.Z3_FLOOR`）。
 - **Uphill Athlete 的 Zone 3** = AeT–LTHR，總量 30–60 分，坡度像比賽（`vo2max-gate-and-trail-metric.md` §2.1）。
@@ -320,7 +320,7 @@
 | T@VO2max 的定義 | ≥ 90 % VO2max | Buchheit & Laursen 2013 §1、§3（同儕審查） |
 | 一堂「有刺激」 | 等效 ≥ 4 分 | **推估**：Buchheit「at least several minutes」；讓照課表做完的 z5a（4.5 分）算得到 |
 | 一堂「達到目標」（顯示用） | ≥ 10 分 | Buchheit §3.1.1.6 |
-| VO2 段（高） | ≥ 1.06 CP、≥ 2 分 | 你的筆記 `如何進入VO2max.md:73`（106–120 %，2–5 分；**未驗證**作者）；徐國峰 ≥ 2 分；app Z5 帶下限 |
+| VO2 段（高） | ≥ 1.06 CP、≥ 2 分 | 你的筆記 `如何進入VO2max.md:73`（106–120 %，2–5 分；**未驗證**作者）；台灣教練 ≥ 2 分；app Z5 帶下限 |
 | VO2 段（低） | 1.03–1.06 CP、≥ 5 分 | 同筆記 :74（100–105 %，5–8 分）；Palladino MAP 下限 103 %；3 % 緩衝是**推估** |
 | 扣爬升時間 | 60 秒（第一段 90）／180 秒 | Buchheit §3.1.1.2（τ 20–35 秒、1:20–2:20 到達）；數字**推估** |
 | 心率 VO2 門檻 | ≥ 0.93 HRpeak | **推估**：Swain 1994 換算 95 %、Daniels T 上緣 92 %，再考慮手腕低估 |
@@ -378,7 +378,7 @@ def vo2_stimulus(samples, cp, lthr, aet, hrpeak, category):
 | `TYPE_LABEL` | 「品質課（間歇）」 | `quality/z5`「Z5 間歇」、`quality/z3`「Z3 閾值」、`hard_long`「高強度長跑」／（健行）「高強度長天」 |
 | 週表：計畫的 **Z5** 間歇算做完 | `HARD_EXPRS`（≥ LTHR 或 ≥ 95 % CP）≥ `hard_need` | 要 `stimulus == "z5"`，而且等效 T@VO2max ≥ 計畫變體的 60 %（沿用 `hard_need` 的 60 %）。計畫變體的 T@VO2max 用 §3.3 對它的標準課表算 |
 | 週表：計畫的 **Z3** 間歇算做完 | `Z3_EXPR`（≥ 85 % CP） | `stimulus` 是 z3 或 z5 都可以，Z3 時間 ≥ 60 % 計畫（Z5 的那堂強度更高，也滿足 Z3 那一格；**推估**） |
-| `hard_long` | — | 不填間歇那一格；在 `plan_prefs.place`／`b2b` 的「硬課間隔 48 小時」裡算硬課（徐國峰：5 區之間隔兩天；硬課 48 小時是現行規則） |
+| `hard_long` | — | 不填間歇那一格；在 `plan_prefs.place`／`b2b` 的「硬課間隔 48 小時」裡算硬課（台灣教練：5 區之間隔 2 天；硬課 48 小時是現行規則） |
 | `dose_history` | `c["type"] == "quality"` 就收 | 沒計畫的：只收 `stimulus == "z5"` 或 Z3 趟數 ≥ 2（現行）。`hard_long` 不收。**停訓回來的堂數**（`quality_dates`）同樣只收這兩種 |
 | Z5 每週最多兩次、間隔兩天（徐國峰） | 只在計畫端 | 用 `stimulus == "z5"` 數，沒計畫的 Z5（比賽、團練）也要算進去 |
 | 強度分配卡（Seiler 三區）、TSS | 不受影響 | 不變 |
@@ -468,7 +468,7 @@ def vo2_stimulus(samples, cp, lthr, aet, hrpeak, category):
 1. **沒有一個門檻是用你的攝氧量驗證過的。** 全部建立在 CP 和 HRpeak 準不準上。CP 偏低 → Z5 判太多（§5.3 就是例子）；HRpeak 偏低 → 心率路線判太多。
    過去的課要用**當天生效的 CP** 判（不然夏天的課全部會變 Z3），但這表示 CP 估錯時歷史標籤也跟著錯。
 2. 心率路線的 ÷ 1.6 來自胸帶、跑步機、中距離選手的研究。手腕光學、越野、熱天的係數**未驗證**。
-3. 間歇組休中的 T@VO2max 沒有算（保守）。30-30 這類短間歇幾乎都會被判成「不是 Z5」；這和徐國峰「每趟 ≥ 2 分」一致，但和 Billat 的 30-30（7′51″ 在 VO2max）不一致。
+3. 間歇組休中的 T@VO2max 沒有算（保守）。30-30 這類短間歇幾乎都會被判成「不是 Z5」；這和台灣教練「每趟 ≥ 2 分」一致，但和 Billat 的 30-30（7′51″ 在 VO2max）不一致。
 4. > 8 % 坡只有心率。Buchheit 自己說 > 10 % 坡的心肺反應「more research is required」。
 5. 百岳完全不判 Z5 是保守的選擇，不是生理結論。
 
@@ -521,7 +521,7 @@ def vo2_stimulus(samples, cp, lthr, aet, hrpeak, category):
 - Hunt 2015／2019、Wang & Hunt 2021：見 `drift-algorithm.md`；Coyle & González-Alonso 2001：見 `aerobic-base-readiness.md`；Ausland 2026：見 `zones-and-thresholds.md`
 
 **教練經驗**
-- 台灣教練：`xu-guofeng-reply.md`
+- 台灣教練：5 區每趟 ≥ 2 分、一週最多 2 次、間隔 2 天。
 - 徐國峰引 Daniels 的 E／M／T／I 強度表：你的筆記 `C:\Users\<user>\Projects\notes\notes\300 Sport\60 🏃 有氧訓練\各心率區間的目的.md:1–52`
 - 「power@VO2max 是功率-時間組合」與強度-時間表：同資料夾 `如何進入VO2max.md:1–76`（作者沒有標，**未驗證**）
 - Palladino MAP 103–109 % CP：`vo2max-gate-and-trail-metric.md` §1.1

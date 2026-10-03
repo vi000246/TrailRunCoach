@@ -57,7 +57,7 @@ import numpy as np
 
 from backend.i18n import _
 
-# "xu_signals" (三訊號) was dropped 2026-10-01: stored prefs that still say it fall back to
+# "xu_signals" (an old unlock path) was dropped 2026-10-01: stored prefs that still say it fall back to
 # auto (plan_prefs.from_settings; evaluate() maps any unknown mode to auto too)
 MODES = ("auto", "ua_gap", "friel_drift", "xu_drift", "plateau", "weeks", "none")
 WEEKS_RANGE = (2, 16)
@@ -83,7 +83,7 @@ FRIEL_MIN_S = 70 * 60          # ≥ 60 min after drift_of's 10-min warm-up
 FRIEL_GOOD = 0.05
 XU_MIN_S = 90 * 60
 XU_GOOD = 0.10
-XU_HEAT_C = 25.0               # 徐國峰's condition: advice in the session text, not a refusal (heat bands)
+XU_HEAT_C = 25.0               # 台灣教練's condition: advice in the session text, not a refusal (heat bands)
 PLATEAU_WEEKS = 8              # 自訂
 EF_PLATEAU = 0.02              # status.EF_TREND
 LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD (Seiler, by time)
@@ -94,11 +94,11 @@ ZONE3_SESSIONS = 3             # 自訂: ua_gap unlock → this many Zone 3 sess
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
 FADE = 0.05                    # workout_review.FADE
 
-# ---- the dose ladder: Zone 3 first, then Zone 5 (徐國峰, 私訊 2026-10-01) -----------
-# 「第一個加進來的質量課表我會先選強度 3 區…等 3 區跑順了、恢復也跟得上，再把 5 區間歇排進來」;
-# Zone 5 reps ≥ 2 min, ≤ 2 sessions a week, ≥ 2 days apart (徐國峰). Zone 5 also needs the
+# ---- the dose ladder: Zone 3 first, then Zone 5 (台灣教練) ----------------------------
+# the first quality session is Zone 3; Zone 5 once Zone 3 is steady and recovery keeps up;
+# Zone 5 reps ≥ 2 min, ≤ 2 sessions a week, ≥ 2 days apart (台灣教練). Zone 5 also needs the
 # aerobic base confirmed (engine/base_check.z5_status). The old ladder started with 5×1′ @ 98–101 % CP —
-# in his terms too short to train VO2max yet a Zone 5 load (xu-guofeng-reply.md §3).
+# too short to train VO2max yet a Zone 5 load.
 # key, title, reps, work min, rest min, %CP lo, hi, uphill, source — each rung's standard
 # session (the canonical variant of engine/interval_library.py; interval-prescription.md §A5.3,
 # corrected 2026-10-01): Zone 3 3×6 → 3×8 → 2×12 at 90–95 % CP (Haugen 2022 / Palladino / Daniels —
@@ -117,7 +117,7 @@ Z3 = tuple(_rung_row(r) for r in ("z3a", "z3b", "z3c"))
 Z5 = tuple(_rung_row(r) for r in ("z5a", "z5b", "z5c", "z5d"))
 TP = _rung_row("tp")             # T+ near-threshold: maintenance once the Z5 rungs are done (§A5.3)
 LADDER = Z3 + Z5
-Z3_MET_FOR_Z5 = len(Z3)        # 推估: 3 sessions 達標 at Zone 3 (the Z3 rungs) = 「3 區跑順了」
+Z3_MET_FOR_Z5 = len(Z3)        # 推估: 3 sessions 達標 at Zone 3 (the Z3 rungs) = Zone 3 is steady
 # legacy titles of the old ladders: not counted as steps any more (neutral in planned_spec).
 # The old z3a 「閾值 3×8 分」 is the new second rung's title: a title-only row reads as z3b now.
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
@@ -133,7 +133,7 @@ ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：�
 def dose_spec(step: int, z5_open: bool = True) -> tuple:
     """The ladder rung for `step` (達標 count): Z3 rungs first; from step 3
     Z5 rungs only while Zone 5 is open — else the top Z3 rungs alternating
-    (Zone 3 continues; 徐國峰). After the Z5 rungs: maintenance rotating V3, V4
+    (Zone 3 continues; 台灣教練). After the Z5 rungs: maintenance rotating V3, V4
     and T+ (near-threshold) — T+ every 3rd week (interval-prescription.md §C5.2-4, 推估)."""
     step = max(0, int(step))
     if step < len(Z3):
@@ -305,7 +305,7 @@ def xu_check(ds, today: dt.date) -> dict:
     workout_review.heat_band; a pass in heat unlocks, a fail in heat is
     marked possibly heat-inflated — heat_suffix)."""
     # the method stays strict-tier (drift_of's fairness, as before); the Zone 5 path uses
-    # base_check.xu_run with 徐國峰's own conditions (stops ≤ 30 s, Zone 1, ≤ 25 °C)
+    # base_check.xu_run with the test's conditions (stops ≤ 30 s, Zone 1, ≤ 25 °C)
     from backend.engine import workout_review as WR
     last = None
     for w in sorted(_runs(ds, today), key=lambda x: x.day):
@@ -1015,14 +1015,14 @@ def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], va
 # ---------------------------------------------------------------------------
 
 SRC_Z5 = {
-    "week": "徐國峰（教練）：一週約 210 分鐘 1 區（RQ 訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）"
+    "week": "台灣教練：一週約 150–210 分鐘 1 區（訓練指數 30–42 點＝Daniels 強度點數，徐國峰部落格）"
             "——圖上的參考帶，不是解鎖條件",
-    "xu90": "徐國峰（教練）：平路、≤ 25 °C、停 ≤ 30 秒、心率 1 區，飄移 < 10%",
+    "xu90": "徐國峰部落格（2016-12）：平路、停 ≤ 30 秒、心率 1 區，飄移 < 10%；≤ 25 °C：台灣教練",
     "ua": SRC_UA,
     "friel": SRC_FRIEL,
-    "z3": "徐國峰（教練）：先 3 區、跑順了再加 5 區；「3 堂達標」是推估",
+    "z3": "台灣教練：先 3 區、穩定後再加 5 區；「3 堂達標」是推估",
     "keep": "Hickson 1982：1 區時間保有 2/3 就維持耐力；連 3 週是推估",
-    "reentry": "Daniels 表 9.2（恢復期＝停訓天數，期間只有 E 日）；先 3 區：徐國峰；堂數推估；"
+    "reentry": "Daniels 表 9.2（恢復期＝停訓天數，期間只有 E 日）；先 3 區：台灣教練；堂數推估；"
                "≥ 4 週要重新確認：Mujika & Padilla 2000",
 }
 
@@ -1334,7 +1334,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         s2.append(item(_("恢復期後的 3 區"), False, f"{pause.get('done', 0)}/{pause.get('need', 1)}",
                        _("再 {n} 堂 3 區", n=left)))
     done2 = bool(z3["ok"]) and pk != "reentry_z3"
-    tip2 = _("3 區只要護欄通過就照排；跑順 {n} 堂才進 5 區", n=z3["need"]) + "\n" + _("來源：") + z3["src"]
+    tip2 = _("3 區只要護欄通過就照排；達標 {n} 堂才進 5 區", n=z3["need"]) + "\n" + _("來源：") + z3["src"]
 
     # 3 有氧基礎確認: the stable-volume precondition, then one of the tests
     s3, any3, note3 = [], [], ""
@@ -1381,7 +1381,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         {"key": "base", "title": _("有氧基礎"), "sub": _("輕鬆跑打底"), "items": s1, "done": done1,
          "unlocks": _("可以開始排 3 區"), "tip": tip1, "note": ""},
         {"key": "z3", "title": _("3 區階梯"), "sub": _("{d}/{n} 堂達標", d=z3["done"], n=z3["need"]), "items": s2,
-         "done": done2, "unlocks": _("3 區跑順了：5 區的條件之一"), "tip": tip2, "note": ""},
+         "done": done2, "unlocks": _("3 區達標：5 區的條件之一"), "tip": tip2, "note": ""},
         {"key": "confirm", "title": _("有氧基礎確認"), "sub": _("測試三選一") if len(tests) > 1 else "",
          "items": s3, "any": [] if B.get("ok") else any3,
          "any_label": _("三選一，做了且達標") if len(any3) > 1 else "", "done": done3,
@@ -1484,7 +1484,7 @@ def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
 
 
 def z1_target_min() -> tuple[float, float]:
-    """徐國峰's weekly Zone 1 band in minutes: RQ 30–42 points ÷ 0.2 = 150–210."""
+    """The weekly Zone 1 band in minutes (台灣教練): RQ 30–42 points ÷ 0.2 = 150–210."""
     from backend.engine.base_check import RQ_E_PER_MIN, XU_WEEK_POINTS, XU_WEEK_POINTS_HI
     return XU_WEEK_POINTS / RQ_E_PER_MIN, XU_WEEK_POINTS_HI / RQ_E_PER_MIN
 
@@ -1554,7 +1554,7 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
     if kind != "base":
         ok = levels.get("intensity") != "bad" and levels.get("drift") != "bad"
         return {"allow": ok, "spec": None, "advance": False, "note": ""}
-    # two gates (徐國峰, 私訊 2026-10-01): Zone 3 whenever the guardrails pass; Zone 5 only
+    # two gates (台灣教練): Zone 3 whenever the guardrails pass; Zone 5 only
     # while the aerobic base is confirmed (gate["z5"], engine/base_check.z5_status). A locked
     # method no longer stops Zone 3 — it only keeps Zone 5 closed.
     z5 = gate.get("z5") or {}
@@ -1713,7 +1713,7 @@ def indicator(gate: dict) -> dict:
     why_parts.append(f"8 週內 {d.get('done', 0)} 次間歇")
     z5 = gate.get("z5") or {}
     if z5.get("text"):
-        why_parts.append(z5["text"] + "（3 區先、5 區後：徐國峰）")
+        why_parts.append(z5["text"] + "（3 區先、5 區後：台灣教練）")
     tr = gate.get("aet_test_reason")
     if tr:
         why_parts.append(f"建議測試：{tr['text']}")
@@ -1730,7 +1730,7 @@ def indicator(gate: dict) -> dict:
     state = gate.get("state")
     src = {"ua_gap": SRC_UA, "friel_drift": SRC_FRIEL, "xu_drift": SRC_XU}.get(gate.get("via") or gate["mode"], SRC_SEILER)
     if state == "locked":
-        # the method keeps Zone 5 closed; Zone 3 still goes on when the guardrails pass (徐國峰)
+        # the method keeps Zone 5 closed; Zone 3 still goes on when the guardrails pass (台灣教練)
         v = gate["verdict"] + (f"；本週 3 區{step_txt}" if dec["allow"] and dec["spec"] is not None else "")
         if g.get("block"):
             v += "；" + g["verdict"]
@@ -1764,8 +1764,8 @@ def indicator(gate: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 OPTION_INFO = {
-    "auto": {"source": "徐國峰（教練）、Uphill Athlete、Friel、Seiler",
-             "rule": "3 區（閾值）只要護欄通過就排；5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：徐國峰）要先確認有氧基礎："
+    "auto": {"source": "台灣教練、徐國峰部落格、Uphill Athlete、Friel、Seiler",
+             "rule": "3 區（閾值）只要護欄通過就排；5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）要先確認有氧基礎："
                      "三種測試做了其中一種而且達標——① 徐國峰 90 分鐘測試（平路 1 區，第 90 分 vs 第 10 分心率飄移 < 10%）、"
                      "② 實測 AeT 的 UA 差距法（LTHR ÷ AeT − 1 ≤ 10%）、③ 實測 AeT 的 Friel 飄移（AeT 附近 ≥ 60 分鐘，前後半 < 5%）。"
                      "確認後沒有到期日，每週檢查：1 區時間連 3 週 < 確認時的 2/3 就暫停，到下次確認為止（Hickson 1982；3 週推估）；"
@@ -1781,7 +1781,7 @@ OPTION_INFO = {
                             "前後半心率飄移 < 5%。一次就夠。",
                     "todo": "需要實測 AeT，並排一次 60–90 分鐘平路跑，心率壓在 AeT 附近、不停、不加速。"},
     "xu_drift": {"source": "徐國峰《跑者都該懂的跑步數據》",
-                 "rule": "平地、< 25 °C、E 配速 90 分鐘：(第 90 分心率 − 第 10 分心率) ÷ 第 10 分心率 < 10% 就可以練間歇（< 5% 是國家級）。",
+                 "rule": "平地、E 配速 90 分鐘（< 25 °C：台灣教練）：(第 90 分心率 − 第 10 分心率) ÷ 第 10 分心率 < 10% 就可以練間歇（< 5% 是國家級）。",
                  "todo": "排一次 90 分鐘平路 E 配速跑，選 < 25 °C 的日子，補給停不超過 30 秒。"},
     "plateau": {"source": "徐國峰（錶上 VO2max 不再提升）；Cusick（指標先到平台期）",
                 "rule": "基礎期 ≥ 8 週，而且有氧效率 EF 近 6 週和之前比 < +2%（持平）。用 EF 代替錶上 VO2max、8 週和 2% 都是推估。"
@@ -1793,7 +1793,7 @@ OPTION_INFO = {
     "none": {"source": "Seiler 2010、Seiler & Tønnessen 2009、Koop／CTS",
              "rule": "不設門檻：整個週期都有少量高強度。基礎期每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5（≥ 5 只排閾值下）、"
                      "週增量 ≤ 20%（10–20% 維持）、3:1 恢復週改 4×1 分 fartlek、TSB、離長跑 ≥ 2 天。"
-                     "劑量 3 區 3×6 → 3×8 → 2×12（90–95% CP），5 區 5×2 → 4×3 → 5×3 → 4×4（徐國峰：3 區先）；"
+                     "劑量 3 區 3×6 → 3×8 → 2×12（90–95% CP），5 區 5×2 → 4×3 → 5×3 → 4×4（台灣教練：3 區先）；"
                      "時間足夠排標準版，平日上限放不下時換同等較短版。",
              "todo": "不用測試。"},
 }

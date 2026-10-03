@@ -365,7 +365,7 @@ def test_streak_of(drifts, n):
     ("base", {"intensity": "watch", "drift": "watch"}, None, True),
     ("base", {"intensity": "bad", "drift": "good"}, None, False),
     (None, {"intensity": "good", "drift": "good"}, False, True),        # no phase = base
-    # a locked method keeps Zone 5 closed only; Zone 3 still goes on (徐國峰, two gates)
+    # a locked method keeps Zone 5 closed only; Zone 3 still goes on (台灣教練, two gates)
     ("base", {"intensity": "good", "drift": "good"}, {"state": "locked", "verdict": "x"}, True),
     ("base", {"intensity": "good", "drift": "good"}, {"state": "unlocked", "dose": {"step": 0}}, True),
     ("specific", {"intensity": "good", "drift": "good"}, False, True),

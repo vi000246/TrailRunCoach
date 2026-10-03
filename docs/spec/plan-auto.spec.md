@@ -64,7 +64,7 @@ Only the current week is adjusted. Sessions that are done, edited, custom or del
 | rule | trigger | action | source |
 |---|---|---|---|
 | A missed easy | stored easy session `missed` | its make-up (same gen_key, re-placed by week_plan) is dropped | Seiler「easy days easy」; not making it up is 推估 |
-| B missed quality / test | stored quality / test `missed` | stays on the generator's day if it is ≥ 2 days from the long run and every other hard day (done or planned). Else it moves to a free day that keeps that gap. Else it is cancelled. Next week repeats the dose step (the step only counts sessions done) | ≥ 2 days between hard days: 台灣教練 |
+| B missed quality / test | stored quality / test `missed` | stays on the generator's day if it is ≥ 2 days from the long run and every other hard day (done or planned). Else it moves to a free day that keeps that gap. Else it is cancelled. Next week repeats the dose step (the step only counts sessions done) | ≥ 2 days between hard days: 台灣教練（5 區一週最多 2 次、間隔至少 2 天） |
 | C missed long | stored long `missed` | same week, on a free day not next to a quality / test day, else cancelled; never carried into next week | 2-day rule; no carry-over is 推估 |
 | D easy run too hard | done easy run with avg HR > AeT + 3 bpm **and** > 10 % of the time above AeT + 3 (both, `unsourced-rules.md` §B5), **or** avg power > 80 % CP, **or** TSS > planned + 20 % | (1) the done session counts its actual TSS (`plan_store.session_tss`); (2) a hard session < 2 days later moves later in the week if the gap allows, else it steps down one ladder step, else it becomes an easy run; (3) the remaining easy runs lose the excess TSS, each ≥ 20 min, else the last easy run is dropped (long and quality are never trimmed); (4) the note 「輕鬆跑偏強（…）：已調整之後的課表」 goes on that day | AeT + 3 / 10 %: `workout_review.AET_MARGIN` / `OVER_AET_SHARE`; 80 % CP: zones z2 (Palladino 1C); +20 %: TrainingPeaks compliance green band. HR needs both because this athlete's summer easy runs sit high on HR alone (heat); the combination, 20 min and the downgrade order are 推估 |
 | E fatigue guard | TSB < −30 (only when week_plan has not already made it a recovery week), CTL ramp ≥ `status.RAMP["short"]` (8/week; not in a re-entry block), or two red-compliance sessions in a row | TSB / ramp: the quality is removed. Two reds: the quality is downgraded to the recovery fartlek. Easy minutes × 0.8 (≥ 20 min) in all three cases | CTL ramp 5 warn / 8 block: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits most, 10 the ceiling); TSB −20 / −30: Friel / TrainingPeaks (coach); the 2-red trigger and the 20 % cut are 推估 |
@@ -96,23 +96,23 @@ RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_r
 
 ### The ladder: Zone 3 first, then Zone 5 (台灣教練)
 
-「第一個加進來的質量課表我會先選強度 3 區…等 3 區跑順了、恢復也跟得上，再把 5 區間歇排進來」.
-The old first rungs (5×1′ @ 98–101 % CP) were, in his terms, too short to train VO2max yet a
+The first quality session is Zone 3; Zone 5 once Zone 3 is steady and recovery keeps up.
+The old first rungs (5×1′ @ 98–101 % CP) were too short to train VO2max yet a
 Zone 5 load; they are gone (`LEGACY_TITLES` are neutral in the history).
 
 | step | session | target | source |
 |---|---|---|---|
-| 0 | 閾值 3×8 分, rest 2 | 88–95 % CP | 徐國峰 Z3 first; Palladino 3A |
+| 0 | 閾值 3×8 分, rest 2 | 88–95 % CP | 台灣教練 Z3 first; Palladino 3A |
 | 1 | 閾值 4×8 分 | 88–95 % CP | Seiler 2013 4×8 |
 | 2 | 閾值 3×10 分, rest 3 | 95–101 % CP | Palladino 3B |
-| 3 | VO2max 5×2 分 | 106–112 % CP (推估: Palladino Z5's lower part) | 徐國峰: reps ≥ 2 min |
+| 3 | VO2max 5×2 分 | 106–112 % CP (推估: Palladino Z5's lower part) | 台灣教練: reps ≥ 2 min |
 | 4–6 | 4×3, 5×3, 4×4 分 | 105–110 / 103–107 % CP | Koop; Helgerud 2007 |
 | after | 4×4 and 3×10 alternating | | |
 
 Zone 5 rungs (step ≥ 3 = three Zone 3 sessions 達標 — the count is 推估) are scheduled only while
 Zone 5 is open (below); otherwise the top Zone 3 rungs alternate and the Zone 5 step waits
 (those Zone 3 sessions are neutral). At most 2 Zone 5 sessions a week, ≥ 2 days apart
-(徐國峰; base phase plans one, `plan.prefs.quality_per_week = 2` places the second ≥ 2 days
+(台灣教練; base phase plans one, `plan.prefs.quality_per_week = 2` places the second ≥ 2 days
 away). A ramp-week session (`SUB`, 「閾值 3×8 分（只排閾值）」) and the recovery fartlek are
 neutral.
 
@@ -124,13 +124,13 @@ neutral.
   使用者決定): 徐國峰's 90-min test (`xu90`: minute 10 vs minute 90, < 10 %); a measured AeT with
   LTHR ÷ AeT − 1 ≤ 10 % (`aet_ua_gap`); ≥ 60 min near a measured AeT, first vs second half
   drift < 5 % (`aet_friel_drift`). Forced modes use their own test (`xu_drift`, `ua_gap`,
-  `friel_drift`; `plateau` / `weeks` by their own unlock; `none` = no gate). 三訊號 and its
+  `friel_drift`; `plateau` / `weeks` by their own unlock; `none` = no gate). The old `xu_signals` path and its
   mode `xu_signals` were removed (aerobic-base-readiness.md); a stored `xu_signals` reads as
   `auto` (`plan_prefs.from_settings`), new writes are rejected.
-- **徐國峰's 90-min test** (`xu_run`): ≥ 90 min, flat (not trail, < 20 m/km), ≤ 25 °C, every
+- **徐國峰's 90-min test** (`xu_run`): ≥ 90 min, flat (not trail, < 20 m/km), ≤ 25 °C (台灣教練), every
   stop ≤ 30 s, HR in Zone 1 (the app's easy rule: avg ≤ AeT + 3, ≤ 10 % above — mapping his
   E zone to "below AeT" is 推估), (HR@90′ − HR@10′) / HR@10′ < 10 % — his own comparison, not
-  drift_of's halves (notes L58–L67). Any qualifying run counts: "就是你週末那一次 LSD".
+  drift_of's halves (blog 2016-12). Any qualifying run counts (it can be the weekend long run).
 - **Maintenance** (weekly, no expiry): Zone 1 time < 2/3 of the level at confirmation (mean of
   the 4 weeks up to it) for 3 complete weeks in a row → pause Zone 5 until the next
   confirmation (Hickson 1982; 3 weeks 推估; recovery / taper / event / transition weeks and weeks
@@ -169,14 +169,14 @@ neutral.
 | key | length | terrain | held | judged | source |
 |---|---|---|---|---|---|
 | `auto` | the standard `xu90`; `ua40` when the long-day cap < 90 min | | | | justification: `aerobic-base-readiness.md` §6.3 |
-| `xu90` | 10 + 80 = 90 min, on the weekend long day in place of the long run | flat | E pace | HR@10′ vs HR@90′ < 10 % (base check, no AeT number) | 台灣教練 |
+| `xu90` | 10 + 80 = 90 min, on the weekend long day in place of the long run | flat | E pace | HR@10′ vs HR@90′ < 10 % (base check, no AeT number) | 徐國峰部落格 2016-12（有氧基礎檢測） |
 | `ua60` | 15 + 60 + 5 | treadmill 2–3 % / flat loop | power | halves, < 3.5 / 3.5–5 / > 5 % | Uphill Athlete |
 | `ua40` | 10 + 40 | same | power | same | Uphill Athlete ("If you only have 40 minutes") |
 | `evoke60` | 10 + 60 + 5 | treadmill 2 % / flat loop, no out-and-back | speed (power) | halves, > 5 % = above AeT | Evoke |
 | `friel` | 10 + 60 + 5 | steady flat | at AeT HR | halves < 5 / 5–10 / > 10 % | Friel (TrainingPeaks) |
 
 The protocol drives the session text (「氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真）」,
-徐國峰 + Lafrenz 2008), the COROS steps (xu90 / friel: an HR-capped main block; UA / Evoke:
+台灣教練 + Lafrenz 2008), the COROS steps (xu90 / friel: an HR-capped main block; UA / Evoke:
 a power range), the placement (xu90 on the weekend; the others by `aet_test_days`) and the
 analysis (`analyze_workout`: warm-up cut, window and judging rule by the title's protocol).
 The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Every protocol is ≥ 40
@@ -193,7 +193,7 @@ break (推估) × the block's % per day (break days 0).
 | break | block | Zone 3 / 5 | targets |
 |---|---|---|---|
 | 1–5 d | none, back to 100 %, no make-up | as before | × 1 |
-| 6–13 d | first half 50 %, second half 75 %; long ≤ 90 min (推估) | none inside; Z5 after 1 Z3 session (推估 count; 徐國峰 Z3 first) | × FVDOT |
+| 6–13 d | first half 50 %, second half 75 %; long ≤ 90 min (推估) | none inside; Z5 after 1 Z3 session (推估 count; 台灣教練 Z3 first) | × FVDOT |
 | 14–28 d | as above | Z5 after 2 Z3 sessions and the block's last long run passing the drift check (UA) | × FVDOT 0.973–0.931 |
 | 29–56 d | 33 / 50 / 75 % thirds | Z5 only after a confirmation dated after the break (Mujika & Padilla 2000); AeT stale → test | × FVDOT |
 | > 56 d | 15 weeks, 33 → 50 → 70 → 85 → 100 % | Z3 from week 13 (推估 mapping), base restart; CP and AeT retests | × FVDOT ≤ 0.847 |

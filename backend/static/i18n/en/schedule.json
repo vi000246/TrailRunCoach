@@ -174,7 +174,7 @@
   "pf.cpp_tip.standard": "12 min + 30 min rest + 3 min. About 70 min; two-point CP + W′, the most accurate; the rest can't be shortened.",
   "pf.cpp_tip.race": "A 5–10 K race or time trial. Not scheduled separately; Riegel conversion (extrapolated), no W′.",
   "pf.aet": "AeT test",
-  "pf.aet_tip": "The protocol decides what is scheduled and how it is read; the interval gate decides when zone 5 opens. The 90′ long-run test goes on the weekend long-run day (it is that LSD; a Taiwanese coach); the others follow \"AeT on\". Scheduled only when needed: the pooled estimate is unreliable or drifting, no readable run for about 6 weeks, or after a ≥ 4-week break (estimate). Starts when it is 25 °C or cooler.",
+  "pf.aet_tip": "The protocol decides what is scheduled and how it is read; the interval gate decides when zone 5 opens. The 90′ long-run test goes on the weekend long-run day (a Taiwanese coach); the others follow \"AeT on\". Scheduled only when needed: the pooled estimate is unreliable or drifting, no readable run for about 6 weeks, or after a ≥ 4-week break (estimate). Starts when it is 25 °C or cooler.",
   "pf.aetp.auto": "Auto",
   "pf.aetp.xu90": "90′ long run",
   "pf.aetp.ua60": "UA 60′",
