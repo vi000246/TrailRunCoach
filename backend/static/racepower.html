@@ -458,7 +458,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="two"><div><div class="plot" id="cp-chart"></div></div><div id="cp-detail"></div></div></details>
   </section>
 
-  <section id="rg-sec" class="tab-calc"><details><summary><b>Riegel 分析</b> <span class="meta">ln 功率 對 ln 時間；斜率 = k</span></summary>
+  <section id="rg-sec" class="tab-calc"><details><summary><b>Riegel 分析</b> <span class="meta">ln 功率 對 ln 時間；斜率 = k</span>
+    <span class="help" tabindex="0" onclick="event.preventDefault(); event.stopPropagation()">?<span class="tip" style="white-space:pre-line">Riegel 是什麼：撐得越久，能出的功率越低。這裡把你近一年的最佳功率（每種時間長度各取最高）畫成線，擬合出一條直線（ln 功率 對 ln 時間），斜率就是 k。
+怎麼讀：k 越負（例如 −0.10），功率隨時間掉得越快，長距離比賽就得用比短時間低很多的功率；k 越接近 0，耐力越好。
+圖：藍線是你的最佳功率包絡線，橘線是個人擬合，虛線是用 CP、TTE 查表得到的 k，圓點是這次預估。個人線和查表線差很多，通常是長時間的全力紀錄不夠。
+可不可信：看 R²（越接近 1 越貼）、點數，和是否標「可用」。全力的長時間努力少於 3 次時不擬合，會顯示「資料不足」。
+怎麼用：平常不用動。個人擬合不可靠時，可在進階設定把 Riegel k 改成「查表」。</span></span></summary>
     <div class="two"><div><div class="plot" id="rg-chart"></div></div><div id="rg-detail"></div></div></details>
   </section>
 
