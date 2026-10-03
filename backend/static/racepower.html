@@ -46,6 +46,7 @@ header { background: var(--panel); border-bottom: 1px solid var(--line); padding
 header h1 { font-size: 17px; margin: 0 8px 0 0; }
 .meta { color: var(--muted); font-size: 12.5px; }
 .faint { color: var(--faint); }
+.ref { color: var(--faint); cursor: help; }
 main { max-width: 1240px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
 h2 { font-size: 15px; margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
@@ -1389,16 +1390,27 @@ const MEASURE = {
 function mmss(s) { s = Math.round(s); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 const rowsOf = (P) => P.chart_rows || [];
 function rowAt(km) { return rowsOf(PLAN).find((r) => km >= r.start_km && km <= r.end_km); }
-function fmtRow(r, m) {
+// a measure that is not a valid target on a segment (trail: power on steep climbs / descents, HR on
+// descents) is written as a grey 「參考」 (seg_targets.chart_rows power_ref / hr_ref), never left blank
+const REF_TIP = { power: "參考：這段功率不準（> 8% 陡坡功率會低估、下坡測不到離心負荷），看心率、VAM 或控制安全",
+  hr: "參考：下坡心率不代表負荷，這段看控制和安全" };
+function refCell(m, txt) { return `<span class="ref" title="${esc(REF_TIP[m])}">${txt} 參考</span>`; }
+function fmtRow(r, m, plain = false) {
   if (m === "pace") return ok(r.pace_s_per_km) ? pace(r.pace_s_per_km) : "–";
-  if (m === "power") return r.power ? `${Math.round(r.power_band[0])}–${Math.round(r.power_band[1])} W` : "–";
-  return r.hr_cap ? `≤ ${Math.round(r.hr_cap)}` : "–";
+  if (m === "power") {
+    if (r.power) return `${Math.round(r.power_band[0])}–${Math.round(r.power_band[1])} W`;
+    if (r.power_ref) return plain ? `約 ${Math.round(r.power_ref)} W（參考）` : refCell("power", `約 ${Math.round(r.power_ref)} W`);
+    return "–";
+  }
+  if (r.hr_cap) return `≤ ${Math.round(r.hr_cap)}`;
+  if (r.hr_ref) return plain ? `≤ ${Math.round(r.hr_ref)}（參考）` : refCell("hr", `≤ ${Math.round(r.hr_ref)}`);
+  return "–";
 }
 function rowTip(r) {
   const hike = PLAN.type === "baiyue";
   const lines = [`<b>${r.mark} ${esc(r.label)}</b>${r.walk ? ` <span class="badge watch">${esc(T("walk"))}</span>` : ""}`,
     `${f1(r.start_km)}–${f1(r.end_km)} km · ${f1((r.grade || 0) * 100)}% · ↑${n0(r.gain_m)} ↓${n0(r.loss_m)} m`,
-    `${T("m.pace")} ${fmtRow(r, "pace")}${hike ? "" : ` · ${T("m.power")} ${fmtRow(r, "power")}`} · ${T("m.hr")} ${fmtRow(r, "hr")}`,
+    `${T("m.pace")} ${fmtRow(r, "pace")}${hike ? "" : ` · ${T("m.power")} ${fmtRow(r, "power", true)}`} · ${T("m.hr")} ${fmtRow(r, "hr", true)}`,
     `${T("split")} ${dur(r.t)} · ${T("cum")} ${dur(r.cum_s)}${r.eta ? " · ETA " + esc(r.eta) : ""}${ok(r.temp_c) ? ` · ${f1(r.temp_c)} °C` : ""}`];
   if (r.basis === "safe") lines.push(esc(T("safe")));
   if (r.fuel) lines.push("🍬 " + esc(r.fuel));
