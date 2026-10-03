@@ -227,15 +227,22 @@ h2 .meta { font-weight: 400; }
 
   <div class="charts">
     <section aria-labelledby="wk-h">
-      <h2 id="wk-h"><span data-i18n="compliance.weeks.title">每週計畫 vs 實際</span>
-        <span class="seg" id="metric" role="group" data-i18n-attr="aria-label:compliance.weeks.metric" aria-label="指標" style="margin-left:auto">
+      <h2 id="wk-h"><span id="wk-t" data-i18n="compliance.weeks.title">每週計畫 vs 實際</span>
+        <!-- 天 / 週 / 月 buckets: one setting for both charts (the range is the filter above) -->
+        <span class="seg unitsw" role="group" data-i18n-attr="aria-label:compliance.unit.label" aria-label="單位" style="margin-left:auto">
+          <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
+        </span>
+        <span class="seg" id="metric" role="group" data-i18n-attr="aria-label:compliance.weeks.metric" aria-label="指標">
           <button type="button" data-m="tss" aria-pressed="true">TSS</button><button type="button" data-m="hours" data-i18n="compliance.weeks.hours">時數</button>
         </span><span id="wk-q"></span></h2>
       <div class="plot" id="wk-plot" role="img"></div>
       <div class="legend" id="wk-legend"></div>
     </section>
     <section aria-labelledby="tr-h">
-      <h2 id="tr-h"><span data-i18n="compliance.trend.title">每週完成率</span> <span class="meta" id="tr-sub"></span><span id="tr-q"></span></h2>
+      <h2 id="tr-h"><span id="tr-t" data-i18n="compliance.trend.title">每週完成率</span> <span class="meta" id="tr-sub"></span>
+        <span class="seg unitsw" role="group" data-i18n-attr="aria-label:compliance.unit.label" aria-label="單位" style="margin-left:auto">
+          <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
+        </span><span id="tr-q"></span></h2>
       <div class="plot" id="tr-plot" role="img"></div>
     </section>
   </div>
@@ -273,6 +280,7 @@ const sw = (s) => `<span class="st st-${s}"><span aria-hidden="true">${ICON[s]}<
 const q = (tip, label) => `<button type="button" class="q" data-tip="${esc(tip)}" aria-label="${esc(label || T("help"))}">?</button>`;
 
 const S = { period: store.get("period", "4w"), a: store.get("a", null), b: store.get("b", null), metric: store.get("metric", "tss"),
+  unit: ["day", "week", "month"].includes(store.get("unit", "week")) ? store.get("unit", "week") : "week",
   filter: "all", limit: 40, data: null, today: null };
 const charts = {};
 function chart(id) {
@@ -355,8 +363,8 @@ function render() {
       esc(T("kpi.streak_sub", { best: st.best }))),
   ].join("");
   renderPhase(d.phase);
-  renderWeeks(d.weeks);
-  renderTrend(d.weeks, st);
+  renderWeeks(buckets());
+  renderTrend(buckets(), st);
   renderKinds(d.by_kind);
   renderList();
 }
@@ -385,20 +393,46 @@ const xAxis = (labels) => ({ type: "category", data: labels, axisTick: { show: f
 const yAxis = (extra = {}) => ({ type: "value", splitLine: { lineStyle: { color: css("--line"), type: [3, 3] } },
   axisLabel: { color: css("--muted"), fontSize: 11 }, ...extra });
 
+// 天 / 週 / 月 buckets of the two charts: the server's weeks and days; months are the days summed
+const sfx = () => (S.unit === "week" ? "" : "_" + S.unit);       // i18n key suffix (week = the original key)
+function buckets() {
+  const d = S.data;
+  if (S.unit === "week") return d.weeks;
+  const days = d.days || [];
+  if (S.unit === "day") return days;
+  const by = new Map();
+  for (const x of days) {
+    const k = x.start.slice(0, 7);
+    const m = by.get(k) || { start: x.start, end: x.end, planned_tss: 0, done_tss: 0, planned_hours: 0, done_hours: 0, due: 0, completed: 0 };
+    m.end = x.end;
+    for (const f of ["planned_tss", "done_tss", "planned_hours", "done_hours", "due", "completed"]) m[f] += x[f] || 0;
+    by.set(k, m);
+  }
+  return [...by.values()].map((m) => ({ ...m, rate: m.due ? m.completed / m.due : null, current: m.start <= S.today && S.today <= m.end }));
+}
+const bLabel = (w) => (S.unit === "month" ? (F ? F.date(w.start, "ymd").slice(0, 7).replace("-", "/") : w.start.slice(0, 7)) : md(w.start));
+const bHead = (w) => (S.unit === "day" ? mdw(w.start) : `${md(w.start)} – ${md(w.end)}`);
+function renderUnit() {
+  document.querySelectorAll(".unitsw button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.u === S.unit)));
+  $("wk-t").textContent = T("weeks.title" + sfx());
+  $("tr-t").textContent = T("trend.title" + sfx());
+}
+
 function renderWeeks(ws) {
   const m = S.metric;
+  renderUnit();
   document.querySelectorAll("#metric button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.m === m)));
-  $("wk-q").innerHTML = q(T("weeks.tip"));
+  $("wk-q").innerHTML = q(T("weeks.tip" + sfx()));
   const P = ws.map((w) => (m === "tss" ? w.planned_tss : w.planned_hours));
   const A = ws.map((w) => (w.start > S.today ? null : m === "tss" ? w.done_tss : w.done_hours));
   const unit = m === "tss" ? "" : " h";
-  const lab = ws.map((w) => md(w.start));
-  $("wk-plot").setAttribute("aria-label", T("weeks.aria"));
+  const lab = ws.map(bLabel);
+  $("wk-plot").setAttribute("aria-label", T("weeks.aria" + sfx()));
   chart("wk-plot").setOption({ ...axisBase(), xAxis: xAxis(lab), yAxis: yAxis(),
     tooltip: { ...axisBase().tooltip, formatter: (ps) => {
       const w = ws[ps[0].dataIndex];
       const f = (x) => (x == null ? "–" : m === "tss" ? n0(x) : h1(x) + " h");
-      return `<b>${esc(md(w.start))} – ${esc(md(w.end))}</b>${w.phase_label ? ` · ${esc(w.phase_label)}` : ""}<br>${esc(T("weeks.planned"))} ${f(P[ps[0].dataIndex])}<br>${esc(T("weeks.actual"))} ${f(A[ps[0].dataIndex])}` +
+      return `<b>${esc(bHead(w))}</b>${w.phase_label ? ` · ${esc(w.phase_label)}` : ""}<br>${esc(T("weeks.planned"))} ${f(P[ps[0].dataIndex])}<br>${esc(T("weeks.actual"))} ${f(A[ps[0].dataIndex])}` +
         (w.due ? `<br>${esc(T("kpi.rate_sub", { done: w.completed, due: w.due }))}` : "");
     } },
     series: [
@@ -413,8 +447,8 @@ function renderWeeks(ws) {
 // 負荷比 ATL ÷ CTL over the same range (GET /api/v1/overview/pmc), drawn like views/training.json's
 // 負荷比 chart (the viewer's "zoned" style): shaded bands with their names in the right margin, the line
 // coloured by the band it is in, the latest value labelled with its band
-const RATIO_BANDS = [{ k: "low", lo: 0, hi: 0.8, c: "#8a8984" }, { k: "ok", lo: 0.8, hi: 1.3, c: "#1baf7a" },
-  { k: "high", lo: 1.3, hi: 1.5, c: "#eda100" }, { k: "spike", lo: 1.5, hi: 2.5, c: "#e34948" }];
+const RATIO_BANDS = [{ k: "low", lo: 0, hi: 0.8, c: "#8a8984", r: "< 0.8" }, { k: "ok", lo: 0.8, hi: 1.3, c: "#1baf7a", r: "0.8–1.3" },
+  { k: "high", lo: 1.3, hi: 1.5, c: "#eda100", r: "1.3–1.5" }, { k: "spike", lo: 1.5, hi: 2.5, c: "#e34948", r: "> 1.5" }];
 const RATIO = { rows: null, seq: 0 };
 async function loadRatio(a, b) {
   const seq = ++RATIO.seq;
@@ -455,12 +489,16 @@ function renderRatio() {
     data: RATIO_BANDS.map((b, k) => [{ yAxis: b.lo, name: name(b), itemStyle: { color: b.c, opacity: dark ? 0.22 : 0.15 } },
       { yAxis: k === RATIO_BANDS.length - 1 ? top : b.hi }]) };
   const markLine = { silent: true, symbol: "none", label: { show: false },
-    data: RATIO_BANDS.slice(1).map((b) => ({ yAxis: b.lo, lineStyle: { color: b.c, type: "solid", width: 1, opacity: 0.8 } })) };
+    data: [...RATIO_BANDS.slice(1).map((b) => ({ yAxis: b.lo, lineStyle: { color: b.c, type: "solid", width: 1, opacity: 0.8 } })),
+      // 1 = as usual: thin dashed, labelled at the start (as views/training.json's zoned.ref)
+      { yAxis: 1, lineStyle: { color: muted, type: [4, 4], width: 1 },
+        label: { show: true, position: "insideStartTop", color: muted, fontSize: 10.5, formatter: () => T("ratio.ref") } }] };
   ch.setOption({ ...axisBase(), grid: { left: 40, right: 50, top: 14, bottom: 26 },
     tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
       const p = [].concat(ps).find((x) => x.seriesName === "ratio"); if (!p) return "";
       const y = p.value[1], b = zoneOf(y);
-      return `<b>${esc(mdw(p.value[0]))}</b><br>ATL ÷ CTL ${F ? F.num(y, 2) : y.toFixed(2)}<br>${esc(T("ratio.zone"))} ${esc(name(b))}`;
+      // the value and its band in one line: 「1.12 · 正常（0.8–1.3）」
+      return `<b>${esc(mdw(p.value[0]))}</b><br>${p.marker}<b>${esc(T("ratio.hover", { v: F ? F.num(y, 2) : y.toFixed(2), band: name(b), range: b.r }))}</b>`;
     } },
     xAxis: { type: "time", axisTick: { show: false }, axisLine: { lineStyle: { color: css("--line") } }, splitLine: { show: false },
       axisLabel: { color: muted, fontSize: 11, hideOverlap: true, formatter: (v) => md(isoOf(new Date(v))) } },
@@ -477,17 +515,17 @@ function renderRatio() {
 
 function renderTrend(ws, st) {
   const rows = ws.filter((w) => w.due);
-  $("tr-q").innerHTML = q(T("trend.tip", { pct: Math.round(st.threshold * 100) }));
+  $("tr-q").innerHTML = q(T("trend.tip" + sfx(), { pct: Math.round(st.threshold * 100) }));
   $("tr-sub").textContent = rows.length ? T("trend.sub", { pct: Math.round(st.threshold * 100) }) : "";
-  $("tr-plot").setAttribute("aria-label", T("trend.aria"));
+  $("tr-plot").setAttribute("aria-label", T("trend.aria" + sfx()));
   const th = Math.round(st.threshold * 100);
   chart("tr-plot").setOption({ ...axisBase(), grid: { left: 40, right: 38, top: 14, bottom: 26 },
     tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
       const w = rows[ps[0].dataIndex];
-      return `<b>${esc(md(w.start))} – ${esc(md(w.end))}</b><br>${esc(T("trend.rate"))} ${pc(w.rate)}%<br>${esc(T("kpi.rate_sub", { done: w.completed, due: w.due }))}` +
-        (w.current ? `<br>${esc(T("trend.current"))}` : "");
+      return `<b>${esc(bHead(w))}</b><br>${esc(T("trend.rate"))} ${pc(w.rate)}%<br>${esc(T("kpi.rate_sub", { done: w.completed, due: w.due }))}` +
+        (w.current ? `<br>${esc(T("trend.current" + sfx()))}` : "");
     } },
-    xAxis: xAxis(rows.map((w) => md(w.start))), yAxis: yAxis({ min: 0, max: 100, axisLabel: { color: css("--muted"), fontSize: 11, formatter: "{value}%" } }),
+    xAxis: xAxis(rows.map(bLabel)), yAxis: yAxis({ min: 0, max: 100, axisLabel: { color: css("--muted"), fontSize: 11, formatter: "{value}%" } }),
     series: [{ type: "line", data: rows.map((w) => ({ value: Math.round((w.rate || 0) * 100),
         itemStyle: { color: (w.rate || 0) >= st.threshold ? css("--good") : css("--watch"), borderColor: css("--panel"), borderWidth: 2 } })),
       symbol: "circle", symbolSize: 9, lineStyle: { width: 2, color: css("--s1") },
@@ -545,7 +583,12 @@ $("c-go").onclick = () => {
   if (!a || !b || a > b) { $("range").textContent = T("period.bad"); return; }
   S.a = a; S.b = b; store.set("a", a); store.set("b", b); load();
 };
-$("metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; S.metric = b.dataset.m; store.set("metric", S.metric); renderWeeks(S.data.weeks); });
+document.querySelectorAll(".unitsw").forEach((g) => g.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-u]"); if (!b || !S.data) return;
+  S.unit = b.dataset.u; store.set("unit", S.unit);
+  renderWeeks(buckets()); renderTrend(buckets(), S.data.streak);
+}));
+$("metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; S.metric = b.dataset.m; store.set("metric", S.metric); renderWeeks(buckets()); });
 $("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; S.filter = b.dataset.f; S.limit = 40; renderList(); });
 $("more").addEventListener("click", (e) => { if (e.target.id === "more-btn") { S.limit += 80; renderList(); } });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.data) render(); if (RATIO.rows) renderRatio(); });

@@ -62,7 +62,7 @@
   "pd.tip_aria": "About fixed weekdays",
   "pd.tip": "Add a row to keep a session type on certain days. Types without a row follow the default rules (the long run goes on the day you usually run long). A day can belong to one type only; a type can have two days, the first one clicked is the first choice. A row says so when it breaks a default rule.",
   "pd.add": "+ Add",
-  "pd.kind.long": "Long run",
+  "pd.kind.long": "LSD (long slow distance)",
   "pd.kind.quality": "Intervals",
   "pd.kind.aet_test": "AeT test",
   "pd.kind.cp_test": "CP test",

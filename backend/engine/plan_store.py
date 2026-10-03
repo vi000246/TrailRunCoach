@@ -17,7 +17,7 @@ from backend.db.models import PlanSession
 from backend.engine import reconcile as R
 from backend.i18n import _
 
-KINDS = {"easy": "輕鬆跑", "long": "長時間", "quality": "強度課", "test": "測試",
+KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "測試",
          "hike": "越野跑", "strength": "肌力", "heat_passive": "被動熱適應",
          # 課表待確認 (engine/plan_auto.py): a reminder pushed to the watch, not a
          # training session — never done / missed, no TSS, no compliance
@@ -26,8 +26,16 @@ NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
             "target_basis", "steps")
 TERRAINS = ("road", "trail", "hike")
-DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "長時間輕鬆", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
+DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "LSD", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
                   "hike": "越野跑", "strength": "肌力（下肢單腳＋核心）"}
+# 長時間 -> LSD (2026-10-03): the planner's old auto titles, mapped at read time so stored
+# rows show the new label; any other title (a user's own wording) is left as written
+LEGACY_TITLES = {"長時間輕鬆": "LSD", "長時間輕鬆（山路）": "LSD（山路）",
+                 "長時間輕鬆（路跑）": "LSD（路跑）", "長時間輕鬆（山路越野）": "LSD（山路越野）"}
+
+
+def display_title(title):
+    return LEGACY_TITLES.get(title, title) if title else title
 
 
 def _test_default(data: dict) -> None:
@@ -63,7 +71,7 @@ def to_dict(r: PlanSession) -> dict:
         except ValueError:
             adj = None
     return {"uid": r.uid, "week_start": r.week_start, "gen_key": r.gen_key, "day": r.day, "kind": r.kind,
-            "title": r.title, "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
+            "title": display_title(r.title), "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
             "source": r.source or "", "tss": r.tss or 0.0, "origin": r.origin, "edited": bool(r.edited),
             "provisional": bool(r.provisional), "state": r.state, "done_by": done_by, "note": r.note,
             "terrain": r.terrain, "distance_km": r.distance_km, "climb_m": r.climb_m,
@@ -687,6 +695,37 @@ def variant_rows(db_path=None) -> list[dict]:
     rows = [r for r in _plan_rows(db_path, ("quality",), _VARIANT_CACHE)
             if r.get("variant_key") and r.get("state") in ("done", "active", "missed")]
     return sorted(rows, key=lambda r: r.get("day") or "")
+
+
+_DONE_CACHE: dict = {}
+LOAD_KINDS = tuple(k for k in KINDS if k not in NOT_LOAD)
+
+
+def session_tag(s: dict) -> dict:
+    """The small 課表類型 tag of a session for an activity list: {kind, label, icon}
+    (label = the schedule's type word; icon = a dashicons.js name, as on 總覽)."""
+    k, t = s.get("kind") or "", s.get("title") or ""
+    label, icon = KINDS.get(k, k), {"easy": "easy", "long": "long", "test": "test", "hike": "hike",
+                                     "strength": "strength", "heat_passive": "heat"}.get(k, "easy")
+    if k == "quality":
+        z5 = str(s.get("rung_key") or "").lower().startswith("z5") or any(x in t for x in ("VO2max", "5 區", "Z5"))
+        icon = "z5" if z5 else "z3"
+    elif t.startswith("陡坡健走"):          # engine/steep_hill.py (kind easy)
+        label, icon = "陡坡健走", "climb"
+    return {"kind": k, "label": label, "icon": icon}
+
+
+def done_by_index(db_path=None) -> dict:
+    """{activity index: session tag + title} for every stored done session — one
+    read-only query for a whole activity list (cached on the DB file's mtime;
+    indexes rebased to the current source, activity_key.py)."""
+    out = {}
+    for r in _plan_rows(db_path, LOAD_KINDS, _DONE_CACHE):
+        d = r.get("done_by")
+        if r.get("state") != "done" or not isinstance(d, dict) or d.get("index") is None:
+            continue
+        out[d["index"]] = {**session_tag(r), "title": display_title(r.get("title")), "day": r.get("day")}
+    return out
 
 
 def test_sessions(db_path=None) -> list[dict]:

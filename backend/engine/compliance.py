@@ -189,22 +189,25 @@ def _streak(weeks: list[dict], today: str) -> dict:
 
 
 def dashboard(sessions: list[dict], week_rows: list[dict], today: str, start: str, end: str,
-              phase: Optional[dict] = None, phase_sessions: Optional[list[dict]] = None) -> dict:
+              phase: Optional[dict] = None, phase_sessions: Optional[list[dict]] = None,
+              day_rows: Optional[list[dict]] = None) -> dict:
     """`sessions`: calendar-shaped stored sessions in [start, end] (deleted /
     superseded already left out); `week_rows`: api/plan_sessions._week_rows of the
-    range (planned vs done hours / TSS per week); `phase_sessions`: the same shape
-    over the current phase (its progress)."""
+    range (planned vs done hours / TSS per week); `day_rows`: the same per day
+    (api/plan_sessions._day_rows; the page sums them into months); `phase_sessions`:
+    the same shape over the current phase (its progress)."""
     rows = [r for r in (session_row(s, today) for s in sessions if start <= (s.get("day") or "") <= end) if r]
     rows.sort(key=lambda r: (r["day"], r["uid"]), reverse=True)
-    weeks = []
-    for w in week_rows:
-        wr = [r for r in rows if w["start"] <= r["day"] <= w["end"]]
-        c = _count(wr)
-        weeks.append({"start": w["start"], "end": w["end"], "phase": w.get("phase"), "phase_label": w.get("phase_label"),
-                      "planned_tss": round(_f(w.get("planned_tss")), 1), "done_tss": round(_f(w.get("done_tss")), 1),
-                      "planned_hours": round(_f(w.get("planned_hours")), 2), "done_hours": round(_f(w.get("done_hours")), 2),
-                      "compliance": w.get("compliance"), "due": c["due"], "completed": c["completed"],
-                      "ok": c["done"], "rate": c["rate"], "current": w["start"] <= today <= w["end"]})
+
+    def bucket(w: dict) -> dict:
+        c = _count([r for r in rows if w["start"] <= r["day"] <= w["end"]])
+        return {"start": w["start"], "end": w["end"], "phase": w.get("phase"), "phase_label": w.get("phase_label"),
+                "planned_tss": round(_f(w.get("planned_tss")), 1), "done_tss": round(_f(w.get("done_tss")), 1),
+                "planned_hours": round(_f(w.get("planned_hours")), 2), "done_hours": round(_f(w.get("done_hours")), 2),
+                "compliance": w.get("compliance"), "due": c["due"], "completed": c["completed"],
+                "ok": c["done"], "rate": c["rate"], "current": w["start"] <= today <= w["end"]}
+    weeks = [bucket(w) for w in week_rows]
+    days = [bucket(w) for w in (day_rows or [])]
     kinds = []
     for k in KIND_ORDER + tuple(sorted({r["kind"] for r in rows} - set(KIND_ORDER))):
         kr = [r for r in rows if r["kind"] == k]
@@ -213,7 +216,7 @@ def dashboard(sessions: list[dict], week_rows: list[dict], today: str, start: st
             kinds.append({"kind": k, **{x: c[x] for x in ("due", "completed", "done", "partial", "off_plan", "missed",
                                                           "rate", "tss_pct", "planned_tss", "actual_tss")}})
     out = {"start": start, "end": end, "today": today, "totals": _count(rows), "sessions": rows,
-           "weeks": weeks, "streak": _streak(weeks, today), "by_kind": kinds, "phase": None,
+           "weeks": weeks, "days": days, "streak": _streak(weeks, today), "by_kind": kinds, "phase": None,
            "levels": COMPLIANCE}
     if phase:
         a, b = phase["start"], phase["end"]

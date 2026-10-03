@@ -14,8 +14,8 @@ TH = {"cp": 250.0, "lthr": 165.0, "aet": 145.0}
 @pytest.mark.parametrize("s, basis, typ", [
     ({"kind": "easy", "title": "輕鬆跑"}, "power", "easy"),
     ({"kind": "easy", "title": "輕鬆跑", "terrain": "trail"}, "hr", "trail_easy"),
-    ({"kind": "long", "title": "長時間輕鬆"}, "power", "long"),
-    ({"kind": "long", "title": "長時間輕鬆（山路）"}, "hr", "trail_long"),
+    ({"kind": "long", "title": "LSD"}, "power", "long"),
+    ({"kind": "long", "title": "LSD（山路）"}, "hr", "trail_long"),
     ({"kind": "long", "title": "長跑", "terrain": "trail"}, "hr", "trail_long"),
     ({"kind": "hike", "title": "登山健行"}, "hr", "hike"),
     ({"kind": "mountain", "title": "山路長天"}, "hr", "trail_long"),
