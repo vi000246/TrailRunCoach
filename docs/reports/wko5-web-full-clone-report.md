@@ -110,6 +110,6 @@ Full-stack WKO5 clone implemented: FastAPI backend with SQLAlchemy 2.0 async ORM
 ## Next Steps
 
 - [ ] Register TP OAuth app at developer.trainingpeaks.com; set `TP_CLIENT_ID` + `TP_CLIENT_SECRET` in `backend/sync/tp_client.py`
-- [ ] Set FTP: `curl -X PUT http://localhost:8000/api/v1/athletes/1/settings -H 'Content-Type: application/json' -d '{"ftp_w": 250}'`
+- [ ] Set FTP: `curl -X PUT http://localhost:8000/api/v1/athletes/1/settings -H 'Content-Type: application/json' -d '{"ftp_w": 220}'`
 - [ ] Run `./start.sh` to launch both servers
 - [ ] After TP sync, PMC chart will populate with CTL/ATL/TSB

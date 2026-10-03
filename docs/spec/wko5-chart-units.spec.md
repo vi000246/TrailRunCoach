@@ -7,7 +7,7 @@
 ## Overview
 
 Every chart shows its values in the right unit with sensible decimals, in metric, and the
-design mistakes found in the athlete's imported WKO5 charts are corrected — without editing
+design mistakes found in the imported WKO5 charts are corrected — without editing
 the `.wko5chart` files. It is a display layer on top of `wko5-engine`: a unit registry, a
 render-time pass that attaches unit metadata and converts imperial / pace values, and a JSON
 file of chart fixes. Parity mode (side-by-side checking against WKO5) keeps WKO5's own ids,

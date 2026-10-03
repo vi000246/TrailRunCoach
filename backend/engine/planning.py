@@ -174,7 +174,7 @@ def threshold_row(plan: "Plan", name: str, day: dt.date) -> Optional[dict]:
     """The plan row whose `name` (lthr / aethr) is in effect on `day`:
     {"value", "date", "method", "measured", "label"}; None without one.
     measured = obtained by a test / race / lab / by hand, not an applied
-    estimate. label: 「自動估算（已套用 2026-09-30）」, 「30 分鐘測試 2026-…」 …"""
+    estimate. label: 「自動估算（已套用 2026-01-15）」, 「30 分鐘測試 2026-…」 …"""
     rows = sorted((t for t in plan.thresholds if getattr(t, name, None) is not None and _d(t.date) <= day),
                   key=lambda t: t.date)
     if not rows:
@@ -275,8 +275,8 @@ class Plan:
     def threshold_on(self, name: str, day: dt.date) -> Optional[float]:
         """Latest non-blank `name` (lthr / aethr / mhr / cp) dated on or before `day`,
         else None. A test never applies to the days before it was done (fixed
-        2026-10-01: the earliest row used to apply backwards, so the 2026-09-30
-        CP 204 / LTHR 155 row leaked into every earlier date). Callers then fall
+        2026-10-01: the earliest row used to apply backwards, so a recent test's
+        CP / LTHR row leaked into every earlier date). Callers then fall
         back to what existed on `day`: WKO5's dated setting history
         (Dataset.setting / cp / aethr) or an estimate as of that date
         (racepower.athlete.thresholds_as_of)."""

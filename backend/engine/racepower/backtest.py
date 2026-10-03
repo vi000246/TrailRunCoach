@@ -874,7 +874,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
                 # watch-estimated power counts as no power (power_source.py)
                 if c["category"] != "trail":
                     continue
-                # trail without power (e.g. the 2024-09-21 race): only the HR pace model
+                # trail without power (e.g. a race before a power pod): only the HR pace model
                 c = {**c, "no_power": True, "cap_sample": False,
                      "power_unused": not no_pw}
             arrays[(c["idx"], None)] = arr

@@ -9,8 +9,8 @@
 The home page (總覽). It answers four questions without splitting by sport: *how am I
 doing* (the training-status indicators), *what's missing* (their prioritised
 actions), *what did I do* (totals by week / month / year) and *what should I do
-this week* (a day-by-day plan with a load projection). The athlete's trail, 百岳
-and bike days are too few to read on their own, so every total, the PMC and the
+this week* (a day-by-day plan with a load projection). Trail, 百岳 and bike days are
+usually too few to read on their own, so every total, the PMC and the
 plan use all sports together; categories exist only to colour stacked bars.
 
 The plan is **stored and editable**: the generator writes sessions into a table once, the
@@ -23,7 +23,7 @@ which nothing is planned), and the session dialog can convert a session to anoth
 the **same load** from the athlete's own speed history.
 
 Volume is **moving time**, never recorded time — a multi-day 百岳 file records
-the nights too (one 51 h trip held about 7 h of walking).
+the nights too (a two-day trip can hold only a few hours of walking).
 
 ## Architecture
 
@@ -211,10 +211,11 @@ moving hours / TSS, today's CTL / ATL / TSB, and the 課表偏好 `prefs`
   the targets and the zone bounds are unchanged. Indicators that judge each past run with its
   own-date AeT do move (2026-10-01, WKO5 source): 強度分配 mid share 26 % → 35 % (still bad);
   效率 good 「進步」 → info 「持平」; drift-eligible easy runs 1 → 6 (still too few).
-  Past days change back to their pre-2026-09-30 values: hrTSS of past runs uses LTHR 160
-  instead of 155 (365-day TSS −0.7 %, CTL today 20.40 → 20.28 in the evaluator).
-  `workout_review` again labels 36 past hard 5 km runs (2025-10 … 2026-07) `test_cp` by power
-  pattern against mFTP 175.6 W. None of them falls in the 28 / 42-day windows the overview reads.
+  Past days change back to their values before the first threshold row: hrTSS of past runs
+  uses WKO5's dated LTHR instead of the row's (365-day TSS −0.7 %, CTL today −0.6 % in the
+  evaluator). `workout_review` again labels about three dozen past hard 5 km runs `test_cp` by
+  power pattern against the WKO5 mFTP snapshot (≈ 80 % of CP). None of them falls in the
+  28 / 42-day windows the overview reads.
 - With active preferences the template is then shaped by `plan_prefs.shape()`
   (`backend/engine/overview.py:619`; see 課表偏好 below).
 
@@ -271,8 +272,8 @@ defaults reproduce today's plan exactly.
 | 地形偏好 | `plan.prefs.terrain_easy` / `_long` / `_quality` | easy `road`/`trail`/`any`; long `road`/`trail`/`hike`/`auto`; quality `flat`/`hill`/`any` |
 | 間歇目標 | `plan.prefs.interval_target` | `power` / `hr` (`power`) |
 | 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:72`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:496`, `backend/static/schedule.html:1281`, `backend/static/schedule.html:1299`) |
-| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`, the athlete's choice). **Not part of `active`**: it only changes the test session (`backend/engine/plan_prefs.py:103`). Panel: three radio options with a time / accuracy line (`backend/static/schedule.html:492`) |
-| AeT 飄移測試 | `plan.prefs.aet_test_days` | `weekday` / `any` (`weekday`: the athlete trail-runs on weekends). **Not part of `active`** (`NOT_SHAPING`): every placement path reads it (`aet_test.test_days` / `pick_day`): weekday = Mon–Fri in Tue-first order, ≥ 2 days from the long run and other hard days where possible, never the day after the long run unless nothing else; the 80′ standard test may fall back to a weekend day that isn't the long run's, the 50′ short one never; `any` = the interval rule. The test's **length** follows `cap_weekday` (`aet_test.variant_for`): no cap or ≥ 80 → 15′ + 60′ + 5′; < 80 → UA's minimum 10′ + 40′ (never shorter, exempt below 50). Panel: `#pf-aet` radios |
+| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`). **Not part of `active`**: it only changes the test session (`backend/engine/plan_prefs.py:103`). Panel: three radio options with a time / accuracy line (`backend/static/schedule.html:492`) |
+| AeT 飄移測試 | `plan.prefs.aet_test_days` | `weekday` / `any` (`weekday`: weekends are often trail days). **Not part of `active`** (`NOT_SHAPING`): every placement path reads it (`aet_test.test_days` / `pick_day`): weekday = Mon–Fri in Tue-first order, ≥ 2 days from the long run and other hard days where possible, never the day after the long run unless nothing else; the 80′ standard test may fall back to a weekend day that isn't the long run's, the 50′ short one never; `any` = the interval rule. The test's **length** follows `cap_weekday` (`aet_test.variant_for`): no cap or ≥ 80 → 15′ + 60′ + 5′; < 80 → UA's minimum 10′ + 40′ (never shorter, exempt below 50). Panel: `#pf-aet` radios |
 | 熱適應 | `plan.prefs.heat`, `plan.prefs.heat_method` | `auto` / `off` (`auto`); `run` / `overdress` / `bath` / `sauna` / `mixed` (`run`). **Not part of `active`** (`NOT_SHAPING`): they only add heat sessions before a hot A/B race (`engine/heat_plan.py`). Panel: radio + select with the current S and the rules (`#pf-heat`) |
 
 **熱適應課** (`engine/heat_plan.py`, heat-acclimation.md §5.4, 推估 from §3.4; applied after
@@ -427,7 +428,7 @@ be predicted from distance and climb, per terrain, for this athlete.
   fitted together (`backend/engine/equivalence.py:215`).
 - Fewer than 5 samples on a terrain → effort distance EP = km + gain/100 (ITRA / 健行筆記,
   `algorithms/effort.py` SIMPLE_FORMULAS["itra"], measured there at 6.9 % vs integrated
-  Minetti on this athlete) at the athlete's median EP speed on that terrain.
+  Minetti on one runner's data) at the athlete's median EP speed on that terrain.
 - With ≥ 5 samples both forms are fitted and the one with the lower **inner** leave-one-out
   error is used (`method="auto"`).
 - `design()` solves km (and climb = km × m/km) for a time at a climb density
@@ -437,16 +438,16 @@ be predicted from distance and climb, per terrain, for this athlete.
 
 **Validation** (`backtest`, `backend/engine/equivalence.py:301`): leave-one-out on the athlete's
 own easy trail and hike activities — refit without the activity (including the method choice),
-predict its moving time, compare. Result on 2026-09-30 (AeT 142 bpm, 26 weeks):
+predict its moving time, compare. Result on one runner's data (2026-09-30, 26 weeks):
 
-| Terrain | n | Method chosen | MAE | MAPE | Bias | Naismith / Langmuir alone | EP alone |
-|---|---|---|---|---|---|---|---|
-| 越野 trail | 9 | EP at 8.0 km-effort/h | 3.8 min | 5.6 % | −1.0 % | 7.4 min, 11.3 % | 3.8 min, 5.6 % |
-| 登山 hike | 3 | EP at 6.3 km-effort/h (< 5 samples) | 82.5 min | 21.5 % | +1.7 % | — | 82.5 min, 21.5 % |
+| Terrain | n | Method chosen | MAPE | Bias | Naismith / Langmuir alone | EP alone |
+|---|---|---|---|---|---|---|
+| 越野 trail | 9 | EP | 5.6 % | −1.0 % | 11.3 % | 5.6 % |
+| 登山 hike | 3 | EP (< 5 samples) | 21.5 % | +1.7 % | — | 21.5 % |
 
-Flat easy road speed 6.6 km/h (7 runs). Trail samples span 55–111 m/km; the page warns outside
+Flat easy road speed from 7 runs. Trail samples span 55–111 m/km; the page warns outside
 that range. A terrain whose MAPE is above 15 % (`ESTIMATE_MAPE`) or that cannot be backtested is
-labelled **推估** — today hike is 推估, trail is 依你的紀錄.
+labelled **推估** — on that data hike is 推估, trail is 依你的紀錄.
 
 **Dialog** (`backend/static/schedule.html:419`): terrain 路跑 / 越野 / 登山 (登山 ⇄ kind hike), a
 爬升比例 slider 0–150 m/km, a 套用目標賽事 button (the goal's climb per km), distance / climb /
@@ -895,7 +896,7 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feature | N/A | 間歇門檻 (quality_gate.py, `plan.prefs.quality_gate` / `_weeks`; design docs/research/aerobic-base-readiness.md): 7 modes, guardrails, the 6-week dose table, recovery-week fartlek, forced-mode fallback (自訂), i_gate / informational i_drift, per-week projection; AeT drift test (aet_test.py: due cadence, session, COROS steps, UA bands, 「套用這次的 AeT」 on the review card and 測試 card, apply-estimate `date`); prefs chips with fixed-position `?` hover; the 「連續 3 次」 rule and UA misattributions removed |
 | 2026-10-01 | feature | N/A | CP 測試方式 (`plan.prefs.cp_test_protocol`, quick default / standard / race; cp_protocols.py): per-protocol test session with `protocol` (column + migration, reconcile field), race = a 還缺什麼 note instead of a session, protocol-specific cap note and COROS steps (all-out bouts open), same-method comparison in i_testing, 測試 card apply button |
 | 2026-10-01 | feature | docs/research/heat-acclimation.md | 熱適應: `i_heat` (S, doses, HRC, race-day S), 熱適應課 in week_plan / project_weeks (heat_plan.py: induction / maintenance, ≥ 60 min cap exemption `NOTE_HEAT`, hard cap → 40 min + bath, methods), `heat_passive` (side kind, TSS 0, never pushed, ticked = a dose), `plan.prefs.heat` / `heat_method` (not shaping), COROS heat-run steps, Event.heat, 課表 page 熱 tag + prefs block, 總覽 heat card |
-| 2026-10-01 | bugfix | N/A | Thresholds never apply backwards: `Plan.threshold_on` returns None before a row's date (the 2026-09-30 CP 220 / LTHR 160 row had leaked into every earlier date); past days use WKO5's dated settings; today's values unchanged |
+| 2026-10-01 | bugfix | N/A | Thresholds never apply backwards: `Plan.threshold_on` returns None before a row's date (the first CP 220 / LTHR 160 row had leaked into every earlier date); past days use WKO5's dated settings; today's values unchanged |
 | 2026-09-30 | feature | N/A | 不排課日期 (blackouts.py, `plan.blackouts`, /plan/blackouts + preview): never placed on a blocked day, hours × kept share with a week note, ≤ 10 % step from what was actually done after it, reconcile rule 6 with move / delete decisions for edited sessions, pushed copies on blocked days removed from COROS; 課表 page hatch + label chip, drag / Shift-click / ⋯ menu, preview before applying; shifted anchors refreshed |
 | 2026-10-01 | feat/auto-replan | N/A | Adaptive plan: `adapt.py` (missed easy / quality / long, easy run too hard, fatigue guard) applied before reconcile on every path. The interval progression state machine (`interval_outcome` / `dose_step`) replaces the 5 % fade rule. Actual TSS for done sessions. Kind `notice`. Automatic run after sync with hold / approve / reject / 復原 and the `plan_change_log` table. Details in plan-auto.spec.md |
 | 2026-10-01 | feat/drift-v2-planning | docs/research/drift-algorithm.md, unsourced-rules.md, detraining.md | `i_drift` = 6-run mean ± SE; season drift charts add 「6 次平均」 ± SE (`drift_avg()`); guardrail sources (ramp 5/8 Friel, volume step Nielsen/Damsted, TSB Friel/TP); AeT valid by the aggregate (B3) and the test by reason; ladder Z3 → Z5 with the Zone 5 lifecycle (base_check); AeT test protocols (`plan.prefs.aet_test_protocol`, 徐國峰 90′ standard on the weekend, UA 40′ backup); re-entry block after breaks ≥ 6 days replaces `blackouts.step_cap`; easy targets from the recent EF (推估) |

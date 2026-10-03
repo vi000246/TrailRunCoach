@@ -25,7 +25,7 @@ Rules (thresholds: source or 推估):
   D. easy run done too hard: the session stays done. Detected by
      overhard() (unsourced-rules.md §B5): the heart-rate condition needs BOTH
      avg HR > AeT + 3 bpm (workout_review.AET_MARGIN) AND time above AeT+3
-     > 10 % (workout_review.OVER_AET_SHARE) — this athlete's summer easy runs
+     > 10 % (workout_review.OVER_AET_SHARE) — summer easy runs
      sit high on HR alone (heat), so one HR rule fired too often; or avg power
      > 80 % CP (zones z2 upper bound, Palladino 1C); or TSS > planned + 20 %
      (TrainingPeaks compliance green band, engine/compliance.py). Power / TSS

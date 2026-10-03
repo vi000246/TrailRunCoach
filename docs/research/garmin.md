@@ -86,7 +86,7 @@
 
 - **#444（open，2026-09-28，Windows 11 + Python 3.12）**：登入與 MFA 成功、也拿到 token，但所有資料 API 都回 403。原因是登入用 curl_cffi，資料呼叫卻用一般 `requests`，被 Cloudflare 拒絕。作者回覆「looks environment-specific — are you on a VPN, datacenter or corporate network?」，不打算改預設，因為 curl_cffi 不支援 `files=` 上傳。
   - 回報者的繞法：`verify_login=False`，再把 `api.client._api_session` 換成 `curl_cffi.requests.Session(impersonate="chrome")`。
-  - 本專案 probe 的 `--cffi-api` 參數就是這個繞法（預設關閉）。使用者在公司網路測試時特別可能遇到。
+  - 本專案 probe 的 `--cffi-api` 參數就是這個繞法（預設關閉）。在公司網路測試時特別可能遇到。
 - **429（登入被限流）**：
   - #337（2026-03）、#350（2026-04）都有回報；#350 最後發現是裝到很舊的 `curl_cffi`。
   - Garmin 論壇 thread 435087（約 2026-05）：「The block appears to be at the account level, not IP」，且「My account works fine on the web and mobile app」，有人 72 小時以上仍被擋。
@@ -303,7 +303,7 @@ probe 腳本：`backend/scripts/garmin_probe.py`。它是獨立腳本，沒有�
    - 需要 Python ≥ 3.12；目前 venv 是 3.12.10。
    - 會一併裝 `curl_cffi>=0.15.0`、`requests>=2.33.0`、`ua-generator>=1.0`。不需要 `[workout]` extra（probe 直接組 JSON，不用 pydantic 模型）。
    - 確認 `curl_cffi` 版本 ≥ 0.15.0：`.venv\Scripts\python.exe -m pip show curl_cffi`。#350 的 429 就是裝到舊版造成的。
-3. 確認 `~/.wko5coach/secret.key` 存在（`chezmoi apply` 部署的那把）。probe 用它加密 token 快取。
+3. 確認 `~/.wko5coach/secret.key` 存在（app 的加密金鑰）。probe 用它加密 token 快取。
 
 ### 6.2 指令（都在 repo 根目錄執行）
 

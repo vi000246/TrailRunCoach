@@ -105,7 +105,7 @@
   standard = 暖身 15 → 12 分全力 → 休 30 → 3 分全力 → 緩和 10。
 - AeT 測試：`aet_test.PROTOCOLS`（`backend/engine/aet_test.py:81-102`）xu90 / ua60 / ua40 / evoke60 / friel 的 warm/main/cool 分鐘。
 - 間歇庫（`feat/interval-library`：`backend/engine/interval_library.py`）：`Variant`（reps、work_s、rest_s、
-  rest_mode、lo/hi ×CP、pattern 金字塔、sets/set_rest_s 30/15）、`blocks()` 暖身分段（市區 10 分、drill、strides）、
+  rest_mode、lo/hi ×CP、pattern 金字塔、sets/set_rest_s 30/15）、`blocks()` 暖身分段（暖身跑 10 分、drill、strides）、
   `steps(v, level)` 回傳**攤平的** `[{kind: warm|work|rest|cool, s, lo, hi, text}]`。
 
 ---
@@ -146,7 +146,7 @@ Stryd 結構課同步到 COROS 之後用的是哪種 COROS 目標欄位：**未�
   "items": [
     {"id": "a1", "kind": "warm", "dur": {"type": "time", "value": 600},
      "target": {"type": "inherit"},  // 跟整堂預設
-     "note": "市區輕鬆跑到河濱"},
+     "note": "輕鬆跑到間歇地點"},
     {"id": "a2", "kind": "repeat", "times": 5, "items": [
       {"id": "a3", "kind": "work", "dur": {"type": "time", "value": 120},
        "target": {"type": "power", "mode": "pct", "lo": 1.06, "hi": 1.12}},
@@ -199,7 +199,7 @@ Stryd 結構課同步到 COROS 之後用的是哪種 COROS 目標欄位：**未�
 
 #### 3.2.1 每段的下拉
 
-`[功率 ▾] [區間 3B ▾ | % 門檻 | 自訂數字]  248–262 W（95–101% CP）`
+`[功率 ▾] [區間 3B ▾ | % 門檻 | 自訂數字]  209–222 W（95–101% CP）`
 
 - 類型：功率 / 心率 / 配速 / 無 / 跟整堂預設。
 - 填法：
@@ -265,7 +265,7 @@ def target_policy(session: dict, prefs, step_kind: str) -> str:
   深色模式 `#184f95` → `#9ec5f4`；兩組都用 `validate_palette.js --ordinal` 驗過，全部 PASS）。
   休息 / 無目標 = 中性灰（`--bar`）。高度和顏色重複編碼，所以不靠顏色也看得出強度。
 - 重複區塊上方畫括號標「×5」；狀態色（`--bad` 等）只留給驗證警告。
-- hover / 點：tooltip 顯示「第 3 趟 · 2:00 · 功率 296–313 W（106–112% CP，Z5）」；點區塊選中下方對應步驟，反之亦然。
+- hover / 點：tooltip 顯示「第 3 趟 · 2:00 · 功率 233–246 W（106–112% CP，Z5）」；點區塊選中下方對應步驟，反之亦然。
 - 圖下方一行：總時間、Z3 以上時間、TSS 估計、單日上限。
 
 **(b) 步驟清單**
@@ -338,7 +338,7 @@ COROS 表示不了的東西（UI 要先講）：
 **推送預覽「推到手錶會長這樣」**
 
 - `GET /api/v1/overview/plan/sessions/{uid}/coros-preview`：呼叫 `session_workout()`（不打 COROS），
-  把 payload 轉成清單：`1 暖身 10:00 心率 118–150`、`2 間歇 ×5：2:00 功率 296–313 W / 2:00 無目標`……
+  把 payload 轉成清單：`1 暖身 10:00 心率 120–142`、`2 間歇 ×5：2:00 功率 233–246 W / 2:00 無目標`……
   再附 `lost`：哪些東西在轉換時被丟掉或攤平（ramp、次要上限、巢狀）。
 - 對話框裡「推送這天到 COROS」旁邊加「預覽手錶」；推送週的確認視窗（`schedule.html:928` `push()`）每堂課也可展開看。
 

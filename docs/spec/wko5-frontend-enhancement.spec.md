@@ -177,7 +177,7 @@ Power zones from FTP (Coggan 7-zone collapsed to 5):
   "effective_date": "2026-05-15",
   "ftp_w": 200.0,
   "lthr": 160,
-  "weight_kg": 68.0,
+  "weight_kg": 70.0,
   "power_zones": [
     { "zone": 1, "label": "Recovery", "min_w": 0, "max_w": 109 },
     { "zone": 2, "label": "Endurance", "min_w": 110, "max_w": 149 },

@@ -38,14 +38,14 @@
 |---|---|
 | `GET /api/v1/sports/facets` | ✅ 回真實運動別（running 688…） |
 | `GET /api/v1/sync/inventory` | ✅ total 1686（coros 674 / local 1012） |
-| `GET /api/v1/ai/zones`（新 M4 端點） | ✅ rFTP 200W、7 功率區 + 5 心率區 → 證明新 image 已上線 |
+| `GET /api/v1/ai/zones`（新 M4 端點） | ✅ 依設定的 rFTP 回 7 功率區 + 5 心率區 → 證明新 image 已上線 |
 | `GET /api/v1/analytics/trail-load`（新 M1 端點） | ✅ 越野 PMC 311 點 |
 | 前端 index | ✅ 載入正常（serve 新 build） |
 | 容器狀態 | ✅ wko5coach Recreated + Started |
 
 ## Notes
 - 新 image (`wko5reverse-wko5coach:latest`) 取代了原本已跑 11 天的舊容器（4 週前 image）。
-- 順手修正部署指南內舊路徑 `…/Projects/WKO5reverse` → `…/Projects/Archive Project/WKO5reverse`。
+- 順手修正部署指南內過時的 repo 路徑。
 - Source Linear Issue：本次為 whole-app 部署，非單一 plan；部署後人工驗證由 SP-386~392 追蹤，未綁定單一 issue 狀態。
 - Rollback（若需要）：`git checkout <prev-sha>` 後 `./deploy.sh`；DB volume 不受 image 影響。
 - 待人工驗證（需帳密/key/瀏覽器）：TP 同步（SP-388）、AI 處方品質（SP-389）、各頁面視覺（SP-386/387/390）。

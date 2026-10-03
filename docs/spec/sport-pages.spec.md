@@ -57,7 +57,7 @@ N/A — 本模組為讀取/視圖導向，不對外發事件。
 ### Actors
 | Actor | Type | Interaction |
 |---|---|---|
-| 運動員（自己） | Human | 在三頁面間切換、調整總體頁篩選、檢視越野跑圖表、手動改分類 |
+| 運動員（使用者） | Human | 在三頁面間切換、調整總體頁篩選、檢視越野跑圖表、手動改分類 |
 | FIT 檔案（`~/.wko5coach/fits/`） | File System | 解析時計算 trail 分類與越野指標來源 |
 | WKO5 逆向素材 | Reference | 提供權威公式常數供離線驗證對照 |
 
@@ -134,7 +134,7 @@ ALTER TABLE workout_files ADD COLUMN classification_overridden BOOLEAN DEFAULT 0
 ```
 
 ### Migration Strategy
-- **Forward**: 新增兩欄（預設 unknown / false）；對既有 ~1100 筆跑一次回填分類腳本。
+- **Forward**: 新增兩欄（預設 unknown / false）；對既有活動跑一次回填分類腳本。
 - **Backward**: 欄位可空，移除不影響既有 sport 篩選。
 - **Backfill**: 依既有 `elevation_gain_m` 與（可得時）坡度統計回填 `trail_classification`。
 - **Coexistence**: 未回填者為 `unknown`，越野跑頁以 `trail` 為準，過渡期不顯示 unknown。
@@ -262,4 +262,4 @@ ALTER TABLE workout_files ADD COLUMN classification_overridden BOOLEAN DEFAULT 0
 
 - [ ] climb_load 若採自訂公式，標記為原創、排除 AC-7 驗證集？
 - [ ] hrTSS 所需 LTHR/HR zones 對歷史活動覆蓋率？缺值 fallback 策略？
-- [ ] 總體頁跨運動（肌力、桌球）無功率/配速者負荷如何估算？（可能延後）
+- [ ] 總體頁跨運動（肌力、球類）無功率/配速者負荷如何估算？（可能延後）

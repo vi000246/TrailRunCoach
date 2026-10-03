@@ -5,8 +5,8 @@ The old COROS code map had 100 = "cycling", so every run was saved as
 `<labelId>_<date>_cycling.fit` (and trail runs / strength as `_other`). The
 sport word now comes from the FIT session (sync/coros_sport.py):
 
-    480707326343414059_2026-09-30_cycling.fit -> 480707326343414059_2026-09-30_run.fit
-    480470392861917592_2026-09-20_other.fit   -> 480470392861917592_2026-09-20_trail_run.fit
+    400000000000000001_2026-01-10_cycling.fit -> 400000000000000001_2026-01-10_run.fit
+    400000000000000002_2026-01-11_other.fit   -> 400000000000000002_2026-01-11_trail_run.fit
 
     python -m backend.scripts.migrate_coros_sport_names            # dry run (default)
     python -m backend.scripts.migrate_coros_sport_names --apply

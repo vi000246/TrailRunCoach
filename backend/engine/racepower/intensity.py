@@ -1,7 +1,7 @@
 """
 Intensity class of one activity — easy / steady / race — for the race-power
 back-test and the per-intensity calibrations (docs/research/racepower-v2.md
-§3B, user feedback 2026-09-30: 「回測要搭配心率吧，如果我是 zone2 區間，感覺會不準」).
+§3B, user feedback 2026-09-30: 回測要搭配心率，Zone 2 的課拿來驗證會不準).
 
 Why: running economy and the cost of grade differ by intensity, and a race
 model must not be validated on Zone-2 training runs. Every number below is

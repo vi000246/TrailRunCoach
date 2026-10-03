@@ -127,9 +127,9 @@ days before the first input day → 0
 Defaults: `ctlconstant` = 42, `atlconstant` = 7 (athlete profile fields 3022 / 3021).
 `tsb` = shift(ctl - atl, 1) per the Expression Reference.
 
-**Caution:** the athlete PMC snapshot (record 3403: ctl 17.616, atl 10.406) was written mid-sync
-and does not match any day of the full dataset. With the rules above on the full data,
-CTL(2026-09-29) = 25.82 and ATL = 10.52. Verify against WKO5's on-screen numbers instead.
+**Caution:** the athlete PMC snapshot (record 3403: ctl, atl) was written mid-sync
+and does not match any day of the full dataset: with the rules above on the full data, CTL on the
+snapshot day comes out ~8 higher (ATL about the same). Verify against WKO5's on-screen numbers instead.
 
 ---
 
@@ -347,6 +347,6 @@ rgrade  (all)       0x724cfd   filter(dElev / sqrt((dDist*1000)^2 - dElev^2), ga
 
 ### 6.11 Handoff note for the functions agent (meanmax)
 Observed vs Cache5 `meanmax(power)`: windows are built from whole consecutive samples (a sample
-that holds 6 s only counts toward durations >= 6 s; smart-recording file 2023_09_03_16_35: 1 s best
-147 W while a 6 s-held 153 W first appears at x=6), and averages divide by valid time. Details are
+that holds 6 s only counts toward durations >= 6 s; in a smart-recording file the 1 s best is lower
+than a 6 s-held sample's value, which first appears at x=6), and averages divide by valid time. Details are
 owned by `functions.md`.

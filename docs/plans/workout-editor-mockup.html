@@ -131,7 +131,7 @@ select { max-width: 100%; }
 <div class="wrap">
   <div class="card">
     <div class="head">
-      <div><h1 id="title">VO2max 5×2 分</h1><span class="meta">週三 10/7 · 強度課 · 平路　<span class="faint">（mockup：門檻是假的 CP 280 W · LTHR 168 · AeT 148 · 閾值配速 4:40/km）</span></span></div>
+      <div><h1 id="title">VO2max 5×2 分</h1><span class="meta">週三 10/7 · 強度課 · 平路　<span class="faint">（mockup：門檻是假的 CP 220 W · LTHR 160 · AeT 142 · 閾值配速 5:30/km）</span></span></div>
       <span class="sp"></span>
       <label class="inl">整堂預設目標
         <select id="deflt">
@@ -177,7 +177,7 @@ select { max-width: 100%; }
 // #light / #dark in the URL forces the theme (for screenshots)
 if (/^#(light|dark)$/.test(location.hash)) document.documentElement.dataset.theme = location.hash.slice(1);
 // ---------------- thresholds (made up) ----------------
-const TH = { cp: 280, lthr: 168, aet: 148, tpace: 280 /* s/km */ };
+const TH = { cp: 220, lthr: 160, aet: 142, tpace: 330 /* s/km */ };
 const KIND = { warm: "暖身", work: "主課", rest: "休息", cool: "緩和", other: "其他" };
 const TYPE = { inherit: "跟整堂", power: "功率", hr: "心率", pace: "配速", none: "無" };
 const PZ = [ // Palladino ×CP
@@ -195,7 +195,7 @@ const rep = (times, items) => ({ id: nid(), kind: "repeat", times, items });
 let S = {
   default_target: "auto",
   items: [
-    step("warm", 600, { type: "hr", mode: "zone", zone: "aet" }, "市區輕鬆跑到河濱"),
+    step("warm", 600, { type: "hr", mode: "zone", zone: "aet" }, "輕鬆跑到間歇地點"),
     step("warm", 120, { type: "none" }, "drill 2 分"),
     step("warm", 180, { type: "none" }, "快步跑 3×20 秒"),
     rep(5, [

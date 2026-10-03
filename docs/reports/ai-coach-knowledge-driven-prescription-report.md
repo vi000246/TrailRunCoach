@@ -29,7 +29,7 @@
 | Lint | ✅ Pass | （AiChat 既有 `catch {}` no-empty 為前置，非本次新增） |
 | Unit Tests | ✅ Pass | 63 passed（+3 ai 測試：zones/knowledge/context） |
 | Build (vite) | ✅ Pass | |
-| Integration | ✅ Pass | `/ai/zones` 回真實 zone：rFTP 200W → Threshold 180–210W、LTHR 182 |
+| Integration | ✅ Pass | `/ai/zones` 回真實 zone：rFTP 220W → Threshold 198–231W、LTHR 160（範例跑者） |
 
 ## Files Changed
 
@@ -62,7 +62,7 @@
 
 | AC | Description | Test / Evidence | Status |
 |----|-------------|------|--------|
-| AC-1 | zone 計算端點 | `test_ai_zones.py` + smoke（200W → 180–210W） | ✅ Pass |
+| AC-1 | zone 計算端點 | `test_ai_zones.py` + smoke（220W → 198–231W） | ✅ Pass |
 | AC-2 | 知識注入 system prompt | `test_ai_knowledge.py` + `test_ai_context.py` | ✅ Pass |
 | AC-3 | context 含 zone + 越野負荷 | `test_ai_context.py`（zone 已驗；越野負荷摘要初版以 zone 為主） | 🟢 zone 已驗；越野負荷為選配 |
 | AC-4 | 前端 quick-prompt | AiChat 3 顆按鈕 + build 綠 | ✅ Pass（視覺） |

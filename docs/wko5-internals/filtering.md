@@ -10,7 +10,7 @@ Status tags:
 
 ## TL;DR
 
-The mismatch between our PMC and WKO5's (TSB off by up to ~9, CTL 25.8 vs 17.6) was **not
+The mismatch between our PMC and WKO5's (TSB off by up to ~9, CTL off by ~8) was **not
 caused by an RHE sport filter**. WKO5 **uses the TSS that came from TrainingPeaks
 (`tssActual`) for a workout when that is available, instead of its own hrTSS**. With the rule below
 and **all sports included**, we reproduce WKO5's athlete-bar snapshot to 8.4e-3 and the
@@ -24,7 +24,7 @@ tss(workout) =
     hrTSS      index field 4235                          otherwise
 ```
 
-The dominant case is **2026-08-14 Mountaineering (49 h)**. Our old rule gave it hrTSS **1014**,
+The dominant case is **one multi-day Mountaineering workout (~2 days long)**. Our old rule gave it hrTSS **~1000**,
 while TrainingPeaks' TSS is **65** (`.wko4` info fields 4038 and 4057). That single day
 contributed ~8 CTL.
 
@@ -51,7 +51,7 @@ else: return tss_compute(range=workout+0x270, sport=workout+0x18c,
 info record (4001) and of the athlete index (3202) was checked. So from files alone the best available
 approximation is "use the TP TSS (4038) when present, after power and rTSS". The small residual
 (8.4e-3 on the snapshot) is consistent with a few workouts whose `tssSource != 0`.
-Example: 2026-09-06 strength, where WKO5 used hrTSS 8.53 rather than TP's 9.0.
+Example: one strength workout, where WKO5 used its hrTSS rather than TP's (slightly different) TSS.
 
 `.wko4` info fields involved: `4038` / `4057` = TP TSS (identical except for 23 workouts that
 have no device data), `4039` / `4056` = TP total time, `4040` / `4055` = TP distance.
@@ -86,7 +86,7 @@ DISASSEMBLY-ONLY. The power and rTSS parts are numerically consistent with the s
 ## 4. Athlete-bar PMC snapshot
 
 - Stored twice: athlete file **3403** (`atl`, `ctl`, `phenotype`, `ramp`, `tsb`) and `WKO4.wko5home`
-  **2100 → 2101 → 2145** (plus `frc`, `mftp` 175.5557, `vo2maxkg` 41.766, each with a unit string).
+  **2100 → 2101 → 2145** (plus `frc`, `mftp`, `vo2maxkg`, each with a unit string).
 - Computed in the loop @0x5658ca over a name table (@0x8e5318). For each name it calls
   `athlete->[+0x94](name)`, which returns the built-in variable (`ctl := tl(tss, ctlconstant)` etc.), then `->[+0x10]`
   evaluates it in the **plain athlete context** (no RHE sport filter) and stores the result via @0x573600.
@@ -94,10 +94,10 @@ DISASSEMBLY-ONLY. The power and rTSS parts are numerically consistent with the s
   `athlete+0x178…0x190`.
 - Snapshot time: home `2147` = day 45927 + 13,622,000 ms → **2026-09-29 11:47:02 local**.
   Every `.wko4` was already on disk (last written 10:53:20), so the snapshot is **not** mid-sync.
-- The evaluation day is **2026-09-29** (VERIFIED): `ctl_y = ctl·42/41 = 18.046`,
-  `atl_y = atl·7/6 = 12.141`, and `ctl_y − atl_y = 5.905`, which equals the stored `tsb`.
+- The evaluation day is **2026-09-29** (VERIFIED): with `ctl_y = ctl·42/41` and
+  `atl_y = atl·7/6`, `ctl_y − atl_y` equals the stored `tsb`.
 - Home `2108 = 1096` workouts vs 1098 in the index. The two extras have index flag `4023 = 2`
-  (runs on 2026-08-31 and 2026-09-24). Excluding them does **not** improve the fit, so 4023's meaning is unknown.
+  (both runs). Excluding them does **not** improve the fit, so 4023's meaning is unknown.
 
 ## 5. Results
 

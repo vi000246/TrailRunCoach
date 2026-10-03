@@ -30,7 +30,7 @@
 | Lint | ✅ Pass | 新檔 eslint 乾淨 |
 | Unit Tests | ✅ Pass | 57 passed（+2 新 test_sync_inventory） |
 | Build (vite) | ✅ Pass | |
-| Integration | ✅ Pass | `/sync/inventory` 回真實資料：1686 筆、coros 674/local 1012、2020-11→2026-05、COROS last-sync 2026-05-15、TP 從未 |
+| Integration | ✅ Pass | `/sync/inventory` 回真實資料：約 1700 筆（coros + local 兩個來源）、日期範圍、COROS last-sync 時間、TP 從未 |
 
 ## Files Changed
 

@@ -48,9 +48,9 @@ CorosPage：只有 COROS 帳號 + 同步 log
 ```
 nav: … 同步
 SyncPage (/sync)：
-  ┌ 已載入資料盤點 ── 總 1686 筆 · coros 674 / local 1012 · 2020-11 → 2026-05 ┐
-  │   依運動：跑步 688 · 健走 174 · 單車 18 …                                  │
-  │   最後同步：COROS 2026-05-15 · TP 從未                                     │
+  ┌ 已載入資料盤點 ── 總 N 筆 · coros N / local N · YYYY-MM → YYYY-MM ┐
+  │   依運動：跑步 N · 健走 N · 單車 N …                                        │
+  │   最後同步：COROS YYYY-MM-DD · TP 從未                                     │
   ├ COROS 同步（帳號 + Start Sync + log）── 既有                              │
   └ TrainingPeaks 同步（帳號 + Start Sync + log）── 新接                      │
 /coros → 重導 /sync

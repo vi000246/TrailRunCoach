@@ -5,8 +5,8 @@
 ## 範圍
 
 - 引擎設定：parity = False（使用者目前的模式）
-- 賽季圖表：2025-09-30 – 2026-09-30（最近 365 天），全部運動
-- 單次活動圖表：#1097 2026-09-24 running, #1094 2026-09-20 trail running, #1073 2026-08-14 mountaineering
+- 賽季圖表：最近 365 天，全部運動
+- 單次活動圖表：三筆活動（一筆 running、一筆 trail running、一筆 mountaineering）
 - 檢查 160 張圖、886 條 series（workout 圖在每筆活動各算一次），1581 次 series 渲染，耗時 216 秒
 
 ## 摘要

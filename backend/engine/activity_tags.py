@@ -79,9 +79,9 @@ AUTO_EFFORT = {
     "max_hr_frac": 0.90,        # Friel HR Z3 lower bound (zones.FRIEL_HR), as maximal.MAXIMAL["trail_avg_frac"]
     "above_aet": 2.0 / 3.0,     # 推估 (Seiler three-zone AeT boundary; the 2/3 share is ours)
     "rest_min_s": 300.0,        # 推估: a LONG rest = a stop of ≥ 5 min (shorter: aid stations, gates, GPS dropouts)
-    "rest_max": 0.10,           # 推估: long rests ≤ 10 % of the elapsed time = a continuous effort. This
-                                # athlete's 7 diary trail races: 0.00–0.05; hard mountain days with real
-                                # breaks (2026-07-27, 2025-11-02, 2024-07-27/-08-18): 0.12–0.17
+    "rest_max": 0.10,           # 推估: long rests ≤ 10 % of the elapsed time = a continuous effort. One
+                                # runner's 7 diary trail races: 0.00–0.05; hard mountain days with real
+                                # breaks (4 of them): 0.12–0.17
     "easy_low_share": 0.50,     # intensity.INTENSITY["majority"] (推估)
     "easy_tol_bpm": 3.0,        # intensity.INTENSITY["easy_tol_bpm"] (workout_review.AET_MARGIN)
 }
@@ -360,11 +360,10 @@ def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclu
 # the watch's own post-workout rating (FIT session workout_rpe / workout_feel)
 # ---------------------------------------------------------------------------
 #
-# Read-only scan of this athlete's 809 COROS-folder FITs (2026-10-02): the
-# COROS APEX 2 Pro files (359) carry NO RPE / feel field (no session field
-# 192 / 193, no developer field); the Garmin fenix 7 files the COROS account
-# imported (259, 2023-12 … 2025-03) carry both, 32 with a value (RPE 1–4,
-# feel 25–100). So the RPE is used wherever a FIT has it, whatever the
+# Read-only scan of one runner's ~800 COROS-folder FITs (2026-10-02): the
+# COROS APEX 2 Pro files carry NO RPE / feel field (no session field
+# 192 / 193, no developer field); Garmin fenix 7 files imported into a COROS
+# account carry both, a few with a value (RPE 1–4, feel 25–100). So the RPE is used wherever a FIT has it, whatever the
 # watch. Stored per workout_files row at import (file_service) and by
 # scripts/backfill_rpe.py; read here by start time.
 

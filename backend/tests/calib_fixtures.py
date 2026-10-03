@@ -3,7 +3,7 @@
 
 Every item gets one test like test_calibrate.test_aet_heat_beta_self_consistent:
 
-  1. build synthetic data that mimics the author's distribution (n, spread,
+  1. build synthetic data that mimics a reference runner's distribution (n, spread,
      noise) — never the WKO5 folder;
   2. feed it to the item's fit (monkeypatch the item's row collector, or a
      FakeDataset from wko5_fakes.py when the fit reads workouts);

@@ -27,18 +27,18 @@ def _run(coro):
 
 def test_name_and_tags_upsert_clear_and_validate(tmp_path):
     db = tmp_path / "t.db"
-    AT.upsert(db, start_local="2026-07-27T09:36", name="  五寮尖  ", tags=["百岳", " 雨天 ", "百岳", "", "雨天"])
+    AT.upsert(db, start_local="2025-05-17T09:36", name="  郊山步道  ", tags=["百岳", " 雨天 ", "百岳", "", "雨天"])
     r = AT.load(db)[0]
-    assert r["name"] == "五寮尖" and r["tags"] == ["百岳", "雨天"]
-    AT.upsert(db, start_local="2026-07-27T09:36", note="x")               # untouched fields stay
+    assert r["name"] == "郊山步道" and r["tags"] == ["百岳", "雨天"]
+    AT.upsert(db, start_local="2025-05-17T09:36", note="x")               # untouched fields stay
     assert AT.load(db)[0]["tags"] == ["百岳", "雨天"]
-    AT.upsert(db, start_local="2026-07-27T09:36", name="", tags=[])         # cleared → original title, no tags
+    AT.upsert(db, start_local="2025-05-17T09:36", name="", tags=[])         # cleared → original title, no tags
     r = AT.load(db)[0]
     assert r["name"] is None and r["tags"] == [] and r["note"] == "x"
     with pytest.raises(ValueError):
-        AT.upsert(db, start_local="2026-07-27T09:36", tags=["x" * 31])
+        AT.upsert(db, start_local="2025-05-17T09:36", tags=["x" * 31])
     with pytest.raises(ValueError):
-        AT.upsert(db, start_local="2026-07-27T09:36", tags=[f"t{i}" for i in range(21)])
+        AT.upsert(db, start_local="2025-05-17T09:36", tags=[f"t{i}" for i in range(21)])
     assert AT.validate(name="n" * 201) == "INVALID_NAME"
     m = AT.merge({"activity_type": "training", "effort": "easy"},
                  {"name": "晨跑", "tags_json": '["a", "b"]', "start_local": "k"})
@@ -186,11 +186,11 @@ def test_capacity_sample_uses_the_recorded_rpe_but_the_user_mark_wins(monkeypatc
     st = {"moving_s": 13900.0, "hr_avg": 152.0, "hist": _hist(152, 13900.0), "hist_lo": 40, "hr_s": 13900.0}
     ds, w = _fake_capacity_ds(monkeypatch, st, {"elapsed_s": 14500.0, "rest_share": 0.02})
     assert A.capacity_samples(ds, [w], tags=[], recorded=[])[0]["ok"]           # HR rule: 全力
-    rec = [{"start_local": "2025-11-02T10:32", "file": "x.wko4", "rpe": 3.0, "feel": 50}]
+    rec = [{"start_local": "2025-04-12T10:32", "file": "x.wko4", "rpe": 3.0, "feel": 50}]
     c = A.capacity_samples(ds, [w], tags=[], recorded=rec)[0]
     assert not c["ok"] and c["effort"]["effort"] == "easy" and c["effort"]["basis"] == "rpe"
     assert c["tags"]["effort_auto"] == "easy"
-    tag = {"start_local": "2025-11-02T10:32", "file": "2025/x.wko4", "effort": "max", "effort_overridden": True}
+    tag = {"start_local": "2025-04-12T10:32", "file": "2025/x.wko4", "effort": "max", "effort_overridden": True}
     assert A.capacity_samples(ds, [w], tags=[tag], recorded=rec)[0]["ok"]       # the user's 全力 wins
 
 

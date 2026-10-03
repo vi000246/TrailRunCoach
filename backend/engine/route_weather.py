@@ -11,8 +11,8 @@ Hadley penalty. Nothing in racepower/ is changed.
 Place: each effort's own point — its mean position (0.01°) and mean
 elevation (10 m), passed as `elevation` so Open-Meteo downscales T and dew
 point to the effort's height. (Querying a shared cell centre and correcting
-by −6.5 °C/km instead was 2.6 °C too warm on 七星山: the cell centre's model
-cell is the basin.)
+by −6.5 °C/km instead was 2.6 °C too warm on a ~1100 m peak above a basin:
+the cell centre's model cell is the basin.)
 
 Batching: efforts are grouped by (local date, 0.25° cell). Each group is ONE
 archive call for that single day carrying all of its points (Open-Meteo takes

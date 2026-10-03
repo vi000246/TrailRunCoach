@@ -7,8 +7,8 @@ file covers UA's TSS fudge factors, the AeT drift test, the ADS 10% rule, VAM, g
 Minetti 2002, EP/EPH and load for long days. This file does not repeat those. It points to
 the relevant UA-notes section instead.
 
-The athlete runs on roads and trails, hikes 百岳 (often multi-day, with a pack) and cycles
-some of the time. They asked three things:
+The target user (the example runner) runs on roads and trails, hikes 百岳 (often multi-day,
+with a pack) and cycles some of the time. The questions this file answers:
 
 - Which charts should I look at?
 - Which ones measure my ability and my progress?

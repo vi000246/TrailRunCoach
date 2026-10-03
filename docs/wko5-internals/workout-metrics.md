@@ -1,6 +1,6 @@
 # WKO5 per-workout metric algorithms
 
-WKO5 5.0.587 (Windows). These are reverse-engineered from `WKO5.exe` and verified against the "Entire Workout" range fields that WKO5 stores in the athlete index (`<Name>.wko5athlete` → 3201/3202/4202). The sample data is 1098 workouts from the user's account, downloaded 2026-09-29. Thresholds on this PC are defaults: runthr/bikethr 160, runtpace 4.66, run/bike FTP 250.
+WKO5 5.0.587 (Windows). These are reverse-engineered from `WKO5.exe` and verified against the "Entire Workout" range fields that WKO5 stores in the athlete index (`<Name>.wko5athlete` → 3201/3202/4202). The sample data is 1098 workouts from one real athlete account. Thresholds on this PC are defaults: runthr/bikethr 160, runtpace 4.66, run/bike FTP 250.
 
 The reference implementations live outside the repo, in the session scratchpad `re\` folder: `metrics_hr.py`, `metrics_pace.py`, `metrics_elev.py`, `metrics_time.py` and `metrics_summary.py`. Port them into the repo with tests.
 
@@ -139,7 +139,7 @@ Source: `calculateTimeAndDistanceMetrics` @0x654370.
 | 4250 | (unnamed) | mean `_ragpace` (m/min)·60/1000 / avg(speed, **first half**). WKO5 reuses the first-half speed; this is reproduced as-is. | 534/548 |
 | 4251 | (unnamed, pace EF) | `round(mean _ragpace / avg(heartrate), 2)` | 561/561 |
 
-The pwhr/pahr misses are one workout (2026_09_10_20_29) whose stored value is exactly 1.0. The 4250 misses are the same files that carry the NGP float noise.
+The pwhr/pahr misses are one workout whose stored value is exactly 1.0. The 4250 misses are the same files that carry the NGP float noise.
 
 ## Remaining unknowns
 
