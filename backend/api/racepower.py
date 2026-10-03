@@ -362,12 +362,7 @@ def grade_model():
 def heat_status_for(date: Optional[str]) -> dict:
     """engine/heat_data.status for today, projected to `date` (the race day)."""
     from backend.engine import heat_data as HD
-    rd = None
-    if date:
-        try:
-            rd = dt.date.fromisoformat(str(date)[:10])
-        except ValueError:
-            rd = None
+    rd = CALC.race_day(date)
     try:
         passive = HD.completed_passive_dates()
     except Exception:                       # noqa: BLE001
