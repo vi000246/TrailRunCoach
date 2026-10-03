@@ -240,7 +240,7 @@ def test_seed_matches_coros_races_by_wko5_start(tmp_path, app_db, monkeypatch):
     app_db(_db(tmp_path, [(1, str(a), "coros", "trail", 0, None), (2, str(b), "coros", "road", 0, None)]))
     ds = FitFolderDataset(root, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=False)
     assert SD.start_of_file("Athlete_2025_07_26_07_30.wko4") == datetime(2025, 7, 26, 7, 30)
-    items = SD.plan(ds.workouts, [], "coros")
+    items = SD.plan(ds.workouts, [], "coros", SD.EXAMPLE_SEED)
     by = {it["spec"]["date"]: it for it in items if it["found"]}
     race = by["2025-07-26"]
     assert race["how"] == "start" and race["file"] == "2025/1_2025-07-26_run.fit"

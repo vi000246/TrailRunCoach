@@ -171,8 +171,8 @@ def dump(rec: Record, depth: int = 0, max_str: int = 100) -> str:
 # ---------------------------------------------------------------------------
 # Semantic extraction
 # ---------------------------------------------------------------------------
-# Field ids mapped by inspecting `dump()` output of WKO5 Season View /
-# WKO5 Workout View against what WKO5 shows in the chart editor.
+# Field ids mapped by inspecting `dump()` output of exported Season / Workout
+# views against what WKO5 shows in the chart editor.
 F_CLASS = 401
 F_BODY = 402          # config body (graph settings, or dashboard wrapper)
 F_CHILDREN = 432      # list of child configs (dashboards / graphs)

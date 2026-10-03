@@ -26,7 +26,16 @@ def _no_real_data_folders():
         pytest.fail("real data folder touched:\n  " + "\n  ".join(got[:10]), pytrace=False)
 
 
-FAKE_TP_CLIENT = ("fake-client-id", "fake-client-secret-for-tests")
+@pytest.fixture(autouse=True)
+def _no_user_wko5_views(monkeypatch):
+    """Imported WKO5 views come only from a folder the user configures
+    (WKO5_VIEWS_DIR / charts.wko5_views_dir); a test that wants one writes a
+    synthetic .wko5chart (wko5chart_builder.py) and sets the env itself."""
+    if not _guard.REALDATA:
+        monkeypatch.delenv("WKO5_VIEWS_DIR", raising=False)
+
+
+FAKE_TP_CLIENT =("fake-client-id", "fake-client-secret-for-tests")
 
 
 @pytest.fixture(autouse=True)
