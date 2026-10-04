@@ -342,6 +342,38 @@ class RaceCalc(Base):
     saved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class WorkoutTemplateUser(Base):
+    """The user's own 課表範本 (engine/user_templates.py, 範本 page; SP-36): a step structure
+    (engine/workout_steps.py, relative targets resolved when applied), several categories
+    (built-in ids easy / quality / test / trail, custom ones c<id>), the 目標用 it was made
+    for, and an optional training-route GPX (the file: <HOME>/template_gpx/<id>.gz; its
+    elevation profile cached here). New table: created by init_db's create_all."""
+    __tablename__ = "workout_templates_user"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    cats_json: Mapped[str] = mapped_column(Text, default="[]")
+    target_basis: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)   # hr / power; None = 自動
+    steps_json: Mapped[str] = mapped_column(Text)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    copied_from: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)   # the built-in row key
+    gpx_filename: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    gpx_sha1: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    gpx_km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gpx_gain_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gpx_loss_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gpx_profile_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # {"km": [...], "z": [...]}
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WorkoutTemplateCat(Base):
+    """A category the user added to the 範本 page (SP-36), id c<id> in a template's cats."""
+    __tablename__ = "workout_template_cats"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    label: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class UserSetting(Base):
     """Per-user key/value settings (backend/settings/repository.py)."""
     __tablename__ = "user_settings"

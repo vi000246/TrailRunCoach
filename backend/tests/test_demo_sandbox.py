@@ -143,6 +143,23 @@ def test_first_write_makes_a_sandbox_and_isolates_visitors(demo):
     assert s["demo"]["sandbox"] is True and s["demo"]["expires_at"]
 
 
+def test_templates_are_the_visitors_own(demo):
+    """範本 (SP-36): a visitor's templates and categories live in their sandbox like their sessions."""
+    c, root, base = demo
+    before = F.tree_hash(base)
+    api = "/api/v1/overview/plan/steps/templates"
+    tok = F.csrf(c)
+    cat = c.post(f"{api}/cats", json={"label": "上坡"}, headers={"X-TRC-CSRF": tok})
+    assert cat.status_code == 200, cat.text
+    body = {"name": "自由上坡", "cats": ["trail", cat.json()["id"]], "steps": {"items": [
+        {"kind": "work", "dur": {"type": "open"}, "target": {"type": "none"}}]}}
+    r = c.post(f"{api}/user", json=body, headers={"X-TRC-CSRF": tok})
+    assert r.status_code == 200, r.text
+    assert [t["name"] for t in c.get(f"{api}/user").json()["templates"]] == ["自由上坡"]
+    assert _client(c).get(f"{api}/user").json()["templates"] == []
+    assert F.tree_hash(base) == before
+
+
 def test_reset(demo):
     c, root, base = demo
     assert _add_event(c).status_code == 200

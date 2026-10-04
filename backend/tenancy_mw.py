@@ -45,6 +45,11 @@ WRITE_ALLOW: list[tuple[frozenset, re.Pattern]] = [(frozenset(m.split()), re.com
     ("POST", _P + r"/(test-suggestions/schedule|suggestions/dismiss|suggestions/accept|steps-preview|steps/derive"
              r"|steps/check|reconcile|prefs/conflicts|blackouts/preview|equivalence/design|rest-days)"),
     ("DELETE", _P + r"/rest-days/[^/]+"),
+    # 範本 (SP-36): the visitor's own templates, categories and route GPX, in the sandbox
+    ("POST", _P + r"/steps/templates/(user|user/copy|cats)"),
+    ("PATCH DELETE", _P + r"/steps/templates/(user|cats)/[^/]+"),
+    ("POST DELETE", _P + r"/steps/templates/user/[^/]+/gpx"),
+    ("POST", _P + r"/sessions/[^/]+/save-as-template"),
     ("PUT", _P + r"/(prefs|blackouts)"),
     ("PUT", r"/api/v1/plan/(events|phases)"),
     ("DELETE", r"/api/v1/plan/events/[^/]+"),
