@@ -408,6 +408,30 @@ def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None,
     return None
 
 
+def transition_days(plan: Plan, begin: dt.date, end: dt.date,
+                    transition_weeks: Optional[int] = None) -> set[dt.date]:
+    """The days in [begin, end] inside a 轉換期 (auto or manual). SP-73 (owner 2026-10-05): a
+    transition is a planned easy / cross-training block, so its days without a run are not a
+    running break for the re-entry block (reentry.find_all) or the Zone 3 gate's gap / re-lock
+    (quality_gate.z3_consistency). Empty on any plan error."""
+    out: set[dt.date] = set()
+    try:
+        ps = phases(plan, begin - dt.timedelta(days=400), end, transition_weeks)
+    except Exception:                       # noqa: BLE001 — the callers must still work
+        return out
+    for p in ps:
+        if p.kind != "transition":
+            continue
+        a, b = _d(p.start), _d(p.end)
+        if a is None or b is None:
+            continue
+        d = max(a, begin)
+        while d <= min(b, end):
+            out.add(d)
+            d += dt.timedelta(days=1)
+    return out
+
+
 def pre_race_mondays(phases_: list, day: dt.date, n: int = 4) -> list[dt.date]:
     """The Mondays of the `n` complete weeks before the taper of the A race whose 轉換期 /
     恢復期 contains `day` (the last `event` phase that ended before `day`; its `taper` phase

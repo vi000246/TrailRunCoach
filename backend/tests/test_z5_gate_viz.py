@@ -501,3 +501,41 @@ def test_a_variant_action_saves_with_its_rung():
     assert v is not None and v.rung == "z5a" and IL.track_of(v.rung) == "z5"
     assert QG.row_track({"variant_key": a["key"]}) == "z5"
     assert QG.row_track({"variant_key": QG._rung_action("a1")["key"]}) == "z3"
+
+
+def test_zone3_consistency_skips_transition_days():
+    # SP-73 (owner 2026-10-05): a 轉換期 of only cross-training is no running gap — no 7-day
+    # stretch, no 21-day re-lock, and its weeks neither count nor break the run of weeks
+    mon = TODAY - dt.timedelta(days=TODAY.weekday())
+    wk = lambda i, ks=(0, 2, 4): [mon - dt.timedelta(weeks=i) + dt.timedelta(days=k) for k in ks]
+    span = lambda a, b: {mon - dt.timedelta(weeks=a) + dt.timedelta(days=k) for k in range(7 * (a - b + 1))}
+    before = sorted(d for i in range(5, 9) for d in wk(i))           # weeks 8–5 ok, 4–2 nothing, week 1 ok
+    runs = before + wk(1)
+    c = QG.z3_consistency(runs, TODAY)
+    assert not c["open"] and c["break"]["days"] >= QG.Z3_RELOCK_DAYS                # re-locked without it
+    c = QG.z3_consistency(runs, TODAY, skip=span(4, 2))
+    assert c["open"] and c["break"] is None and c["weeks"] == 5                      # the transition is see-through
+    assert [r.get("transition", False) for r in c["rows"]] == [True, True, True, False]
+    assert all(r["ok"] for r in c["rows"])
+    # 2 weeks before + a 3-week transition + 2 weeks after = 4 weeks across it
+    runs = sorted(d for i in (7, 6) for d in wk(i)) + sorted(d for i in (2, 1) for d in wk(i))
+    assert not QG.z3_consistency(runs, TODAY)["open"]
+    c = QG.z3_consistency(runs, TODAY, skip=span(5, 3))
+    assert c["open"] and c["since"] == mon.isoformat() and c["weeks"] == 4
+    # a transition week with 3 runs counts as usual
+    runs = sorted(d for i in (5, 4, 3, 1) for d in wk(i))
+    c = QG.z3_consistency(runs, TODAY, skip=span(3, 2))
+    assert c["open"] and c["weeks"] == 4
+    assert not QG.z3_consistency(runs, TODAY)["open"]                                # week 2 breaks it
+
+
+def test_zone3_gate_reads_the_plans_transition():
+    from backend.engine.planning import Phase
+    mon = TODAY - dt.timedelta(days=TODAY.weekday())
+    ds = _ds([])
+    ds.plan.phases = [Phase("transition", (mon - dt.timedelta(weeks=4)).isoformat(),
+                            (mon - dt.timedelta(weeks=1, days=1)).isoformat(), auto=False)]
+    days = [mon - dt.timedelta(weeks=8)]
+    s = QG._transition_skip(ds, days, TODAY)
+    assert len(s) == 21 and min(s) == mon - dt.timedelta(weeks=4)
+    assert QG._transition_skip(_ds([]), days, TODAY) == set()
