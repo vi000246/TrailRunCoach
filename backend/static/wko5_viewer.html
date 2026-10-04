@@ -1738,10 +1738,10 @@ function pzWeekly(card, res) {
   card.insertAdjacentHTML("beforeend", `<p class="pzhead">${esc(res.range.begin)} – ${esc(res.range.end)} · 每${month ? "月" : "週"}一根 · ${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
     ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}</p>`);
   if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
-  const tip = ["下方小圖：低強度（3 區摘要第 1 區）佔比", `所有階段 ≥ ${pzPct(res.low_floor)}；基礎期 ≥ 90%`, ...res.target_sources].join("\n");
+  const tip = ["下方小圖：低強度（3 區摘要第 1 區）佔比", `底線：所有階段 ≥ ${pzPct(res.low_floor)}；目標：基礎期 ≥ 90%（提醒，不是 3 區的解鎖條件）`, ...res.target_sources].join("\n");
   card.insertAdjacentHTML("beforeend", `<div class="pzleg" aria-label="圖例">${Z.map((z, i) => `<span><i style="background:${col[i].hex}"></i>${esc(z.id)} ${esc(z.name)}</span>`).join("")}</div>
     <div class="pzleg" aria-label="下方小圖圖例"><span><i class="dot"></i>低強度佔比達標</span><span><i class="tri"></i>沒達標</span>
-      <span><i class="band"></i>目標帶（75% 到該階段目標）</span><span><i class="ln"></i>75% 護欄</span>
+      <span><i class="band"></i>目標帶（75% 到該階段目標）</span><span><i class="ln"></i>75% 底線</span>
       <button type="button" class="qtip" aria-label="目標的來源" data-tip="${esc(tip)}">?</button></div>`);
   const el = document.createElement("div");
   el.className = "plot pzw";

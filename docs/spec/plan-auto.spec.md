@@ -138,37 +138,83 @@ RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_r
 (`steps_spec`: its own reps / band, counted only when equivalent to the rung), else the stored
 variant, else the planned title. An unplanned interval run is neutral.
 
-### The ladder: Zone 3 first, then Zone 5 (台灣教練)
+### The ladder: two tracks, Zone 3 and Zone 5 (SP-31, 2026-10-04)
 
-The first quality session is Zone 3; Zone 5 once Zone 3 is steady and recovery keeps up.
-The old first rungs (5×1′ @ 98–101 % CP) were too short to train VO2max yet a
-Zone 5 load; they are gone (`LEGACY_TITLES` are neutral in the history). Each rung is the
-canonical variant of `backend/engine/interval_library.py` (corrected ladder, interval-prescription.md
-§A5.3); rests < 2–3 min are walks (Buchheit & Laursen 2013).
+Zone 3 (有氧間歇／節奏, reps 12–30 min) and Zone 5 (VO2max) are two independent tracks, each
+with its own ladder, dose step and 達標 count (`dose_tracks`: `gate["dose"]["z3"]` /
+`["z5"]`; the top-level `step` / `adjust` / `note` keep the Zone 3 track's values for older
+readers). A history row's track is `row_track` (stored rung / variant / edited structure /
+title; a run without a plan row by its stimulus). Zone 3 keeps being scheduled after Zone 5
+opens (coach-schools-zones-periodization.md R2: no school's norm is two sessions of one
+intensity). Each rung is the canonical variant of `backend/engine/interval_library.py`; rests
+< 2–3 min are walks (Buchheit & Laursen 2013).
 
-| step | rung | standard session | target | source |
-|---|---|---|---|---|
-| 0 | T1 `z3a` | 3×6 分, rest 1.5 jog | 90–95 % CP | Haugen 2022; Palladino near-threshold; 台灣教練 Z3 first |
-| 1 | T2 `z3b` | 3×8 分, rest 2 jog | 90–95 % CP | Haugen 2022; Daniels T |
-| 2 | T3 `z3c` | 2×12 分, rest 2 jog | 90–95 % CP | WKO 研討會; CTS tempo (coach) |
-| 3 | V1 `z5a` | 5×2 分, rest 2 walk | 106–112 % CP | 台灣教練: reps ≥ 2 min; Buchheit & Laursen 2013 |
-| 4 | V2 `z5b` | 4×3 分, rest 3 jog | 105–110 % CP | Koop / CTS; Palladino MAP |
-| 5 | V3 `z5c` | 5×3 分, rest 2.5 walk | 105–110 % CP | Palladino; Wen 2019 |
-| 6 | V4 `z5d` | 4×4 分, rest 3 jog | 104–108 % CP | Helgerud 2007 |
-| after | V3, V4, T+ rotating (T+ `tp` 3×7 分 at 97–100 % CP every 3rd, 推估) | | | Palladino near-threshold |
+| track | step | rung | standard session | target | source |
+|---|---|---|---|---|---|
+| Zone 3 | 0 | A1 `a1` | 2×15 分, rest 3 jog | 88–95 % CP | Uphill Athlete Zone 3 (15–60 min, 4:1–5:1) |
+| Zone 3 | 1 | A2 `a2` | 3×12 分, rest 3 jog | 88–95 % CP | UA Zone 3; Pfitzinger LT 20 → 35–45 min |
+| Zone 3 | 2 | A3 `a3` | 2×20 分, rest 4 jog | 88–95 % CP | Friel Base 2 2×20 Zone 3 |
+| Zone 3 | 3 | A4 `a4` | 連續 30 分 | 88–92 % CP | Koop SteadyStateRun; Pfitzinger LT |
+| Zone 3 | after | A3, A4, T+ (`tp` 3×7 分 at 97–100 % CP) rotating (推估) | | | Palladino near-threshold |
+| Zone 5 | 0 | V1 `z5a` | 5×2 分, rest 2 walk | 106–112 % CP | 台灣教練: reps ≥ 2 min; Buchheit & Laursen 2013 |
+| Zone 5 | 1 | V2 `z5b` | 4×3 分, rest 3 jog | 105–110 % CP | Koop / CTS; Palladino MAP |
+| Zone 5 | 2 | V3 `z5c` | 5×3 分, rest 2.5 walk | 105–110 % CP | Palladino; Wen 2019 |
+| Zone 5 | 3 | V4 `z5d` | 4×4 分, rest 3 jog | 104–108 % CP | Helgerud 2007 |
+| Zone 5 | after | V3, V4 rotating (推估) | | | |
 
-Seiler 2013's 4×8′ is no longer a Zone 3 rung (it ran at ~90 % HRpeak: severe, not Zone 3).
-Zone 5 rungs (step ≥ 3 = three Zone 3 sessions 達標 — the count is 推估) are scheduled only while
-Zone 5 is open (below); otherwise T2 / T3 alternate (`dose_spec`) and the Zone 5 step waits
-(those Zone 3 sessions are neutral). At most 2 Zone 5 sessions a week, ≥ 2 days apart
-(台灣教練; base phase plans one, `plan.prefs.quality_per_week = 2` places the second ≥ 2 days
-away). A ramp-week session (`SUB`, 「閾值 3×6 分（只排閾值）」) and the recovery fartlek are
-neutral.
+- **巡航版 T1–T3** (`z3a` 3×6′ / `z3b` 3×8′ / `z3c` 2×12′, 90–95 % CP): the old Zone 3 rungs, kept
+  as the Zone 3 track's weekday-cap / low-volume fallback (`interval_library.PREV_RUNG`: A1 → T3)
+  and for stored sessions. A stored row of an old rung still resolves: it is judged against its
+  own variant and its 達標 counts in `met` (Zone 5's 「3 區達標」), but it doesn't move the A rung.
+- **Zone 3 volume** (`z3_budget_min`): the session's time in zone ≤ 10 % of the week's planned
+  hours (Daniels: T ≤ 10 % of the weekly volume), 5 % for the track's first session (UA: Zone 3
+  starts at ~5 %). Over it, `cruise_for` picks the 巡航版 of the same position (A1 → T1, A2 → T2,
+  A3 / A4 → T3, stepping down to fit; T1 the floor); it is stored under the A rung (equiv) and
+  counts, with a 「本週 x h：3 區上限 …→ 巡航版」 note.
+- **Week total** (`QUALITY_SHARE_MAX = 0.20`, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in
+  zone ≤ 20 % of the planned running time. `overview.quality_sessions` builds Zone 5 first and
+  gives Zone 3 what is left (a smaller 巡航版); a session still over is cut to fewer reps as a
+  縮量版 (`_shorten`, floor `MIN_REPS`, no progress) or, when it can't be cut, kept with a note —
+  never dropped silently. 課表偏好's repeat of a lone track (`plan_prefs.shape`) is skipped when
+  the two would pass it.
+- **How many a week**: 課表偏好 `quality_per_week = 2` → one Zone 3 + one Zone 5 when both are
+  open (`week_decision(n=2)`; the base phase's guardrail mode still caps it at 1); only one track
+  open → that one, repeated by `plan_prefs.shape` as before. One a week with both open → by the
+  A race (`track_ratio`, 推估): the next A race a road race ≤ 10 km → 3 區 : 5 區 = 1:1, else
+  (half marathon or longer, trail / 百岳, no A race) 2:1 — Zone 3 the first weeks of each cycle,
+  deterministic by the week's Monday.
+- **專項期 / 減量期** run the same pick (`overview.quality_sessions`): 專項期 road Zone 3 =
+  `ROAD_SPECIFIC_Q` 2×15′ flat, trail Zone 5 = the 5×4′ hill set (`TRAIL_SPECIFIC_Z5`), the other two
+  the ladder (trail Zone 3 uphill versions allowed); 減量期 Zone 3 = 節奏 2×8′ (`TAPER_Z3`,
+  88–95 % CP; Bosquet 2007, Daniels Phase IV), Zone 5 or no track open = the 4×3′ short intensity.
+- At most 2 Zone 5 sessions a week, ≥ 2 days apart (台灣教練). A ramp-week session (`SUB`,
+  「閾值 3×6 分（只排閾值）」, only when Zone 3 is open) and the recovery fartlek are neutral.
+- `dose_spec(step, z5_open)` stays as the legacy single-ladder reading; the plan reads
+  `z3_spec` / `z5_spec`. `ladder_pick` / `rung_now` pick the rung of the session's own track.
 
 ### Two gates and the Zone 5 lifecycle (`backend/engine/base_check.py`)
 
-- **Zone 3** whenever the guardrails pass. A locked method (e.g. the UA gap > 10 %) keeps
-  Zone 5 closed but no longer stops Zone 3.
+- **Zone 3** (`z3_gate`, SP-31; the owner's rule 2026-10-04) opens on any one of: (a)
+  consistency — 4 complete weeks of actual training (imported history counts, whatever the
+  phase label) with ≥ 3 runs every week and no ≥ 7-day stretch without running
+  (`Z3_WEEKS_NEED`, `Z3_RUNS_PER_WEEK`, `Z3_MAX_GAP_DAYS`, all 推估; `z3_consistency`); (b) the
+  90-min drift test < 10 %; (c) a measured UA gap ≤ 10 %. Also open: mode `none`, the chosen
+  method unlocked, an aerobic-base confirmation of the Zone 5 process, the re-entry rule asking
+  for Zone 3, a Zone 3 session 達標 in the 8-week history. Once met it stays open; a break of
+  ≥ 21 days without running (`Z3_RELOCK_DAYS`, 推估; Coyle 1984 VO2max −7 % at 21 days,
+  detraining.md §1) re-locks it — only what comes after the break counts. Breaks of 6–20 days
+  get the re-entry block only. No low-intensity-share condition. Until it opens the base phase
+  has no interval (easy running + strides); a projected week opens once the streak would reach 4
+  weeks. Zone 5 also needs 3 Zone 3 sessions 達標 (`Z3_MET_FOR_Z5`, 推估; SP-39 decides) or its
+  track already under way.
+- **Guardrails per track** (`guard` → `guard_blocks`): CTL ramp ≥ 8, a > 20 % volume step and the
+  injury pause block both tracks; the low-intensity share < 75 % blocks Zone 5 only — for Zone 3
+  it is a warning note 「輕鬆跑心率偏高：…（底線 75%、基礎期目標 ≥ 90%）」 (the AeT is often
+  estimated, climbs inflate HR). 75 % is the floor, the base phase's ≥ 90 % a target. 專項期:
+  intensity bad keeps Zone 5 out, drift bad stops both.
+- **Why no Zone 3 this week**: `week_decision` returns `z3_note` (the gate, a guardrail, the
+  1-a-week turn, the recovery week); `week_plan` shows it as a note (`src: z3`), the share
+  warning as `src: intensity`, the volume / total caps as `src: z3` / `quality_share`.
 - **Zone 5** opens only when ONE of three tests has been done and passed (auto; 2026-10-01
   使用者決定): 徐國峰's 90-min test (`xu90`: minute 10 vs minute 90, < 10 %); a measured AeT with
   LTHR ÷ AeT − 1 ≤ 10 % (`aet_ua_gap`); ≥ 60 min near a measured AeT, first vs second half
@@ -198,7 +244,8 @@ neutral.
   results dated after it count); `steps` = ① base ② 3 區達標 n/3 ③ 5 區開放, each done / active /
   todo / paused / wait; `next` = the one 「還缺：…」 line (or 恢復期還剩 n 天 / 都做到了), computed
   once. `flow` (`quality_gate.z5_flow`, presentation only) = the same flags as five quest
-  stages 有氧基礎 → 3 區階梯 → 有氧基礎確認 → 5 區解鎖 → 5 區階梯 (status done / current /
+  stages 有氧基礎 (the Zone 3 gate: its three tests until one passes) → 3 區階梯 (A1–A4) →
+  有氧基礎確認 → 5 區解鎖 → 5 區階梯 (status done / current /
   parallel / locked, checklist items with a short `todo`) + `here` (「你現在在這裡，下一步」);
   the 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
 - **Re-confirmation**: passive first — any qualifying run re-confirms. The AeT test is
@@ -381,7 +428,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 
 ## Interval library, swaps and tests (2026-10-01, interval-prescription.md)
 
-- Every base-phase ladder step (and the 專項期 Zone 3 ladder while Zone 5 is unconfirmed) is a
+- Every ladder step of either track (base phase, and the 專項期's ladder sessions) is a
   library variant (`engine/interval_library.py`) fitted to the day's cap by `fit()`: the
   standard full-length session when time allows, then the std / min warm-up, an equivalent
   shorter variant, fewer reps (縮量版 doesn't progress), another day, the rung before. The
@@ -406,3 +453,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
+| 2026-10-04 | feature | SP-31 | Two interval tracks: Zone 3 A1–A4 (2×15 → 3×12 → 2×20 → 1×30, 88–95 % CP) and Zone 5 V1–V4, own steps / 達標 counts; T1–T3 kept as 巡航版 and legacy; Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap, sticky, ≥ 21-day break re-locks / 90-min test / UA gap); low-intensity share blocks Zone 5 only; Zone 3 ≤ 10 % of the week, Zone 3 + Zone 5 ≤ 20 %; 2 a week = one of each, 1 a week 1:1 / 2:1 by the A race; 專項期 / 減量期 two-track sessions; z3_note / warn notes; flow stage 1 = the Zone 3 gate |
