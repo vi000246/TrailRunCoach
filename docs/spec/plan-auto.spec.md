@@ -100,7 +100,11 @@ Other entry points:
 leaving the 轉換期 — and changing its length while in it — is a phase change, so it is held for
 approval like any other (Big changes below). Adapt and reconcile treat the 轉換期 as a rest
 phase (`reconcile.REST_MODES`, adapt's rest week); the re-entry block applies only in base /
-specific.
+specific. Days inside a 轉換期 (auto or manual, `planning.transition_days`) are **not a running
+break** (owner 2026-10-05): a transition of only cross-training / strength starts no re-entry
+block when base resumes — `reentry.find_all` counts a break's days outside the transition only
+(still ≥ 6 → a block of that length, its text 「停跑 N 天（不含轉換期 M 天）」) — and doesn't break
+the Zone 3 gate's streak or re-lock it (below).
 
 The toggles are in 課表 › ⚙ 課表偏好 › 自動調整 (`backend/static/schedule.html`, saved through
 `PUT /settings`); `autoplan.js` no longer draws them.
@@ -242,7 +246,12 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   for Zone 3, a Zone 3 session 達標 in the 8-week history. Once met it stays open; a break of
   ≥ 21 days without running (`Z3_RELOCK_DAYS`, 推估; Coyle 1984 VO2max −7 % at 21 days,
   detraining.md §1) re-locks it — only what comes after the break counts. Breaks of 6–20 days
-  get the re-entry block only. No low-intensity-share condition. Until it opens the base phase
+  get the re-entry block only. 轉換期 days (`z3_consistency(skip=)`, `planning.transition_days`;
+  SP-73, owner 2026-10-05) are no running gap: they count neither toward the 7-day stretch nor
+  the 21-day re-lock (a 3–4-week transition alone never re-locks — chosen: the transition is a
+  planned easy block, the fitness loss Coyle measured is for full inactivity), and a week touching
+  the transition that fails on its own is see-through (neither counts nor breaks the 4 weeks; one
+  with ≥ 3 runs counts as usual). No low-intensity-share condition. Until it opens the base phase
   has no interval (easy running + strides); a projected week opens once the streak would reach 4
   weeks. Zone 3 and Zone 5 are **independent gates** (SP-39): the Zone 5 gate is below.
 - **Guardrails per track** (`guard` → `guard_blocks`): CTL ramp at the block line, a > 20 % running-time step and the
@@ -557,3 +566,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | feature | SP-39 follow-up | Zone 5's UA path counts a measured LTHR only when tested in the last 12 weeks (`LTHR_FRESH_DAYS` 84, 推估); WKO5-sourced LTHRs carry their setting date; an older one re-locks that path until a retest |
 | 2026-10-04 | feature | SP-39 follow-up | A 徐國峰 90-min test saved through `POST /sessions` (the 「安排課表」 deep link, or the dialog's 測試 › 徐國峰 / the `lib:xu_e_drift` row) replaces that day's long run — the 排入測試 code path (`_replace_long`) |
 | 2026-10-04 | change | SP-63 follow-up | The short-break exemption from the running-volume step counts unplanned days only: days of the user's 不排課日期 / 休息日 don't make a short break (a partly planned gap needs ≥ 3 unplanned days); the note says 非計畫停跑 N 天 (owner 2026-10-05) |
+| 2026-10-04 | change | SP-73 follow-up | 轉換期 days are not a running break: no re-entry block from a cross-training-only transition (`reentry.find_all` counts days outside it), and the Zone 3 gate's 7-day gap / 21-day re-lock skip them, its weeks see-through (`planning.transition_days`; owner 2026-10-05) |

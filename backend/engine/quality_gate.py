@@ -1169,19 +1169,32 @@ def run_days(ds, today: dt.date, days: int = Z3_HISTORY_DAYS) -> list[dt.date]:
                    if w.sport == "run" and tday - days < math.floor(w.day) <= tday})
 
 
-def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED) -> dict:
+def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=()) -> dict:
     """The Zone 3 gate's consistency path on the run dates (SP-31): a window of `need` complete
     weeks, each with ≥ Z3_RUNS_PER_WEEK runs and no Z3_MAX_GAP_DAYS-day stretch without running,
     after the last break of ≥ Z3_RELOCK_DAYS days (which re-locks; a break still going on too).
     Once such a window exists the path stays open (sticky — a 6–20-day break only gets the
-    re-entry block). {"open", "since", "weeks" (the trailing complete weeks that pass, for
-    the progress line), "rows" (the last `need` weeks: monday, runs, ok), "break"}."""
+    re-entry block). `skip`: 轉換期 days (planning.transition_days; SP-73, owner 2026-10-05) —
+    they are no running gap: not counted in the 7-day stretch nor the 21-day re-lock, and a week
+    touching the transition that fails on its own is left out of the run of weeks (neither counts
+    nor breaks it; a transition week with ≥ 3 runs counts as usual). {"open", "since", "weeks"
+    (the trailing complete weeks that pass, for the progress line), "rows" (the last `need` weeks:
+    monday, runs, ok[, transition]), "break"}."""
+    skip = set(skip or ())
+    one = dt.timedelta(days=1)
+
+    def gap(a: dt.date, b: dt.date) -> int:
+        """Days without a run between `a` and `b`, 轉換期 days left out."""
+        n = (b - a).days - 1
+        if not skip or n <= 0:
+            return n
+        return n - sum(1 for k in range(1, n + 1) if a + k * one in skip)
     mon = today - dt.timedelta(days=today.weekday())
     brk = None
     prev = None
-    for d in list(days) + [today + dt.timedelta(days=1)]:
-        if prev is not None and (d - prev).days - 1 >= Z3_RELOCK_DAYS:
-            brk = {"last_run": prev.isoformat(), "days": (d - prev).days - 1,
+    for d in list(days) + [today + one]:
+        if prev is not None and gap(prev, d) >= Z3_RELOCK_DAYS:
+            brk = {"last_run": prev.isoformat(), "days": gap(prev, d),
                    "return": d.isoformat() if d <= today else None}
         prev = d
     if not days:
@@ -1199,18 +1212,24 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED) -> dic
 
     def gap_ok(w0: dt.date, w1: dt.date) -> bool:
         ds_ = [d for d in days if w0 <= d < w1]
-        return all((b - a).days - 1 < Z3_MAX_GAP_DAYS for a, b in zip(ds_, ds_[1:]))
+        return all(gap(a, b) < Z3_MAX_GAP_DAYS for a, b in zip(ds_, ds_[1:]))
+
+    def in_transition(w: dt.date) -> bool:
+        return any(w + k * one in skip for k in range(7))
+    # a transition week that fails on its own is transparent (SP-73)
+    clear = {w for w in weeks if in_transition(w) and not (runs[w] >= Z3_RUNS_PER_WEEK
+                                                          and gap_ok(w, w + dt.timedelta(weeks=1)))}
+    seq = [w for w in weeks if w not in clear]
     since = None
     if not (brk and brk["return"] is None):
-        for i in range(len(weeks) - need + 1):
-            win = weeks[i:i + need]
+        for i in range(len(seq) - need + 1):
+            win = seq[i:i + need]
             if all(runs[w] >= Z3_RUNS_PER_WEEK for w in win) and gap_ok(win[0], win[-1] + dt.timedelta(weeks=1)):
                 since = (win[-1] + dt.timedelta(weeks=1)).isoformat()
                 break
     trail = 0
-    for k in range(len(weeks), 0, -1):
-        win = weeks[k - 1:]
-        if runs[weeks[k - 1]] >= Z3_RUNS_PER_WEEK and gap_ok(win[0], mon):
+    for k in range(len(seq), 0, -1):
+        if runs[seq[k - 1]] >= Z3_RUNS_PER_WEEK and gap_ok(seq[k - 1], mon):
             trail += 1
         else:
             break
@@ -1218,8 +1237,20 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED) -> dic
     for k in range(need, 0, -1):
         w = mon - dt.timedelta(weeks=k)
         n = sum(1 for d in days if w <= d < w + dt.timedelta(weeks=1))
-        rows.append({"monday": w.isoformat(), "runs": n, "ok": n >= Z3_RUNS_PER_WEEK and w >= first_mon})
+        row = {"monday": w.isoformat(), "runs": n, "ok": (n >= Z3_RUNS_PER_WEEK or w in clear) and w >= first_mon}
+        if w in clear:
+            row["transition"] = True
+        rows.append(row)
     return {"open": since is not None, "since": since, "weeks": trail, "rows": rows, "break": brk}
+
+
+def _transition_skip(ds, days: list, today: dt.date) -> set:
+    """The 轉換期 days over the run history (planning.transition_days; SP-73); empty without a plan."""
+    plan_ = getattr(ds, "plan", None)
+    if plan_ is None or not days:
+        return set()
+    from backend.engine.planning import transition_days
+    return transition_days(plan_, days[0], today)
 
 
 def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict, z5: dict,
@@ -1239,7 +1270,8 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break"}."""
     need = Z3_WEEKS_NEED
     try:
-        cons = z3_consistency(run_days(ds, today), today, need)
+        rd = run_days(ds, today)
+        cons = z3_consistency(rd, today, need, _transition_skip(ds, rd, today))
     except Exception:                       # noqa: BLE001 — the gate must still evaluate
         cons = {"open": False, "since": None, "weeks": 0, "rows": [], "break": None}
     brk = cons.get("break")
