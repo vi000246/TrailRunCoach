@@ -18,6 +18,7 @@ import statistics
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
+from backend.engine import load_guard as LG
 from backend.engine.planning import KINDS, PHASES, Plan, goals, phase_on
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day
 from backend.engine.wko5expr.evaluator import WS, Evaluator
@@ -32,8 +33,8 @@ SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）TSB 區間：−10～−30 
 # weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
 # Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10–20 % hold = 推估, conservative.
 # The 「10 % 法則」 itself has no evidence (unsourced-rules.md §B2)
-SRC_VOLUME = ("週增量 > 20%：Nielsen 2014、Damsted 2019（同儕審查：增 20–30% 以上受傷風險升高）；"
-              "10–20% 先維持：推估（保守）")
+SRC_VOLUME = ("週增量 > 20%：Nielsen 2014、Damsted 2019（同儕審查：增 20–30% 以上受傷風險升高；量的是跑步）；"
+              "10–20% 先維持：推估（保守）；只算跑步時間、基準是前一週和前 4 週平均取大（SP-63）")
 SRC_UA = "Uphill Athlete"
 SRC_SEILER = "Seiler 2006 強度分配；Palladino 金字塔 70–90% 輕鬆"
 SRC_BOSQUET = "Bosquet 2007 減量統合分析"
@@ -41,16 +42,15 @@ SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
 SRC_CHIANG = "江晏慶（越野跑周期化訓練）"
 SRC_NOTES = "教練常見做法（推估）"
 
-# CTL/week. warn 5 / block 8: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits
-# most athletes, 10 is the ceiling; unsourced-rules.md §B2). "sustain" 3 = Palladino's 1–3 long-term (display)
-RAMP = {"sustain": 3.0, "elite": 5.0, "short": 8.0}
-SRC_RAMP_FRIEL = "Friel：CTL ramp 每週 5–8 適合多數人、10 是上限（教練）；Palladino：每週 +1–3 可長期維持"
+# CTL ramp: the relative watch / block lines of engine/load_guard.py (SP-63; Friel 5–8, 10 the ceiling,
+# https://joefrieltraining.com/the-ctl-ramp-rate/ — as a share of CTL, 推估). Palladino's +1–3 long-term (display)
+SRC_RAMP_FRIEL = ("Friel：CTL ramp 每週 5–8 適合多數人、10 是上限（教練），換算成 CTL 的 10%／15%（推估）；"
+                  "Palladino：每週 +1–3 可長期維持")
 TSB_A = (10.0, 20.0)                                        # A race, taper end (Palladino)
 TSB_PRODUCTIVE = (-30.0, -10.0)                             # Friel: productive training
 TSB_OVERREACH = -30.0
 TSB_STALE = 25.0
 LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # Seiler / Palladino
-VOLUME_STEP_WATCH = 0.10                                    # 推估 hold band 10–20 %; > 20 % block (SRC_VOLUME)
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
 DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # Friel (<5%), 徐國峰 (90' E <10%)
 SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）"
@@ -177,10 +177,11 @@ class Status:
             return {}
         return {k: float(v) for k, v in r.items() if _n(v) is not None}
 
-    def weekly_hours(self, weeks: int) -> list[tuple[dt.date, float]]:
+    def weekly_hours(self, weeks: int, sports=None) -> list[tuple[dt.date, float]]:
         """[(monday, moving hours)] for the last `weeks` weeks incl. the current
-        one. Moving time, not recorded time: a multi-day 百岳 file records the
-        nights too (one 51 h trip had about 7 h of walking)."""
+        one (`sports`: sport groups, None = all). Moving time, not recorded time:
+        a multi-day 百岳 file records the nights too (one 51 h trip had about 7 h
+        of walking)."""
         monday = self.today - dt.timedelta(days=self.today.weekday())
         out = []
         for i in range(weeks - 1, -1, -1):
@@ -188,7 +189,7 @@ class Status:
             e = s + dt.timedelta(days=6)
             lo, hi = date_to_day(s), date_to_day(e)
             h = sum((self.m(w, "movingduration") or self.m(w, "duration") or 0) for w in self.ds.workouts
-                    if lo <= math.floor(w.day) <= hi) / 3600
+                    if lo <= math.floor(w.day) <= hi and (sports is None or w.sport in sports)) / 3600
             out.append((s, h))
         return out
 
@@ -286,29 +287,42 @@ class Status:
                                 "days_to_next_a": g["days_to_next_a"]})
 
     def i_fitness(self) -> Indicator:
+        """CTL and its 7-day ramp. The ramp is the guardrail one (engine/load_guard.py):
+        CTL seeded with the first 4 weeks' mean daily TSS, not checked in the first
+        STARTUP_DAYS, judged against the relative watch / block lines. The CTL shown is
+        the PMC's (unseeded); the two differ only in the first months of data."""
         ctl = self.ev.evaluate("ctl")
         now = _n(ctl.at(self.tday))
-        wk = _n(ctl.at(self.tday - 7))
         mo = _n(ctl.at(self.tday - 28))
-        ramp = None if now is None or wk is None else now - wk
+        g = (LG.guard_ramp(ctl.values, ctl.start, self.tday, self.ds.athlete.ctlconstant)
+             if hasattr(ctl, "values") else {"ramp": None, "ctl_prev": None, "startup": False, "day_n": None})
+        ramp, base, startup = g["ramp"], g["ctl_prev"], g["startup"]
         spark = [[self._iso(d), _n(ctl.at(d))] for d in range(self.tday - 90, self.tday + 1, 3)]
         if now is None:
             return Indicator("fitness", "體能 CTL", NA, "–", "沒有訓練資料")
         txt = f"{now:.0f}"
         why = f"CTL {now:.0f}，本週 {ramp:+.1f}/週，4 週 {now - mo:+.0f}" if mo is not None and ramp is not None else f"CTL {now:.0f}"
+        if ramp is not None and not startup:
+            why += f"；注意線 +{LG.watch_line(base):.1f}、擋線 +{LG.block_line(base):.1f}（7 天前 CTL {base:.0f}）"
         level, verdict, action = INFO, "", ""
         k = self.kind
-        if ramp is not None:
+        lv = None if startup else LG.ramp_level(ramp, base)
+        if startup:
+            d = g.get("day_n")
+            verdict = (f"起算期（有 TSS 的第 {d + 1} 天）：前 {LG.STARTUP_DAYS} 天 CTL 還在建立，不看 ramp"
+                       if d is not None else "還沒有 TSS：不看 ramp")
+        elif ramp is not None:
             if k in ("taper", "event", "recovery"):
                 level, verdict = GOOD, "減量／恢復期，體能小幅下降是正常的"
                 if ramp > 1:
                     level, verdict, action = WATCH, "減量期 CTL 還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
             else:
-                if ramp >= RAMP["short"]:
-                    level, verdict, action = (BAD, f"每週 +{ramp:.1f}，≥ {RAMP['short']:.0f} 超過 Friel 建議的 5–8",
+                if lv == LG.BLOCK:
+                    level, verdict, action = (BAD, f"{LG.ramp_text(ramp, base, lv)}：超過擋線（Friel：10 以上最多撐一週）",
                                               "本週維持或減量，不要再加")
-                elif ramp >= RAMP["elite"]:
-                    level, verdict, action = WATCH, f"每週 +{ramp:.1f}（5–8：Friel 的上段），只能撐一兩週", "下週安排恢復週"
+                elif lv == LG.WATCH:
+                    level, verdict, action = (WATCH, f"{LG.ramp_text(ramp, base, lv)}：到注意線，只能撐一兩週",
+                                              "下週安排恢復週")
                 elif ramp >= 1:
                     level, verdict = GOOD, f"每週 +{ramp:.1f}，可長期維持的增幅（1–3；菁英 3–5）"
                 elif ramp > -1:
@@ -317,7 +331,10 @@ class Status:
                 else:
                     level, verdict, action = WATCH, f"每週 {ramp:+.1f}，體能在下降", "補回訓練量，或確認是否在恢復"
         return Indicator("fitness", "體能 CTL", level, txt, verdict, why, action, SRC_RAMP_FRIEL, now, spark,
-                         {"ramp_week": ramp, "delta_28d": None if mo is None else now - mo})
+                         {"ramp_week": None if startup else ramp, "ramp_base": base, "ramp_level": lv,
+                          "ramp_startup": startup,
+                          "ramp_lines": None if startup else [LG.watch_line(base), LG.block_line(base)],
+                          "delta_28d": None if mo is None else now - mo})
 
     def i_form(self) -> Indicator:
         tsb = self.ev.evaluate("tsb")
@@ -356,15 +373,22 @@ class Status:
         return Indicator("form", "狀況 TSB", lvl, txt, v, why, act, SRC_TP_TSB, now, spark)
 
     def i_volume(self) -> Indicator:
+        """Weekly moving hours (all sports: the headline, taper / recovery bands) and the
+        volume step on RUNNING time only (engine/load_guard.py, SP-63): last week against
+        max(the week before, the 4 weeks before's mean)."""
         wk = self.weekly_hours(12)
         spark = [[d.isoformat(), round(h, 2)] for d, h in wk]
         this, last = wk[-1][1], wk[-2][1]
         prev4 = [h for _, h in wk[-5:-1]]
         avg4 = _mean(prev4) or 0
-        step = None if wk[-3][1] <= 0 else (last - wk[-3][1]) / wk[-3][1]
+        run = [h for _, h in self.weekly_hours(12, LG.STEP_SPORTS)]
+        run_last = run[-2]
+        step, run_base = LG.volume_step(run_last, run[-6:-2])
         base6 = _mean([h for _, h in wk[-8:-2]]) or 0
         txt = f"{last:.1f} h"
         why = f"上週 {last:.1f} h，本週到目前 {this:.1f} h，前 4 週平均 {avg4:.1f} h"
+        if run_base is not None:
+            why += f"；跑步上週 {run_last:.1f} h，基準 {run_base:.1f} h（前一週、前 4 週平均取大）"
         k = self.kind
         if k in ("taper",):
             lo, hi = base6 * TAPER_BAND[0], base6 * TAPER_BAND[1]
@@ -378,17 +402,18 @@ class Status:
         elif k in ("recovery", "transition"):
             lvl, v, act = (GOOD, "量降下來了", "") if last <= base6 * 0.7 else (WATCH, "恢復期量還太多", "本週再降")
         else:
-            if step is not None and step > VOLUME_STEP_WATCH * 2:
-                lvl, v, act = (BAD, f"上週比前一週多 {step * 100:+.0f}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）",
+            if step is not None and step > LG.STEP_BLOCK:
+                lvl, v, act = (BAD, f"上週跑步時間比基準多 {step * 100:+.0f}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）",
                                "本週維持上週的量，不要再加")
-            elif step is not None and step > VOLUME_STEP_WATCH:
-                lvl, v, act = WATCH, f"上週比前一週多 {step * 100:+.0f}%（10–20%：先維持，推估）", "本週維持，下週再加"
+            elif step is not None and step > LG.STEP_HOLD:
+                lvl, v, act = WATCH, f"上週跑步時間比基準多 {step * 100:+.0f}%（10–20%：先維持，推估）", "本週維持，下週再加"
             elif last < avg4 * 0.6 and avg4 > 1:
                 lvl, v, act = WATCH, f"上週只有前 4 週平均的 {last / avg4 * 100:.0f}%", "如果不是刻意恢復，本週補回來"
             else:
-                lvl, v, act = GOOD, "量穩定" if step is None or abs(step) < 0.1 else f"週增幅 {step * 100:+.0f}%，在範圍內", ""
+                lvl, v, act = GOOD, "量穩定" if step is None or abs(step) < 0.1 else f"跑步週增幅 {step * 100:+.0f}%，在範圍內", ""
         return Indicator("volume", "每週時數", lvl, txt, v, why, act, SRC_VOLUME if k not in ("taper",) else SRC_BOSQUET,
-                         last, spark, {"this_week": this, "last_week": last, "avg4": avg4, "step": step})
+                         last, spark, {"this_week": this, "last_week": last, "avg4": avg4, "step": step,
+                                       "run_last_week": run_last, "run_base": run_base})
 
     def i_intensity(self) -> Indicator:
         low = self.ws("athleterange(today-27, today, sum(if(heartrate < aethr, deltatime)))")

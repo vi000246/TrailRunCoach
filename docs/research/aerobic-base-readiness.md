@@ -391,8 +391,8 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 護欄 | 規則 | 現有程式 | 依據 |
 |---|---|---|---|
 | 強度分配 | 4 週心率 < AeT（估計值）的**時間**佔比 ≥ 75%（`LOW_SHARE_GOOD`）才排 VO2 類；65–75% 只排閾值下 3×8 或不排；< 65% 不排 | `i_intensity` | Seiler：課表數約 80%、時間約 91% 低強度。用時間算，75% 已經偏寬，所以不再放寬。有功率時也要看 < 80% CP 的佔比 ≥ 75%（Palladino 早期 ≤ 80% CP） |
-| CTL ramp | 每週 ≥ `RAMP["elite"]`（5）→ 這週只排閾值；≥ `RAMP["short"]`（**8**）→ 不排 | `i_fitness` | **Friel**（教練，https://joefrieltraining.com/the-ctl-ramp-rate/ ：5–8 適合多數人、10 是上限；`unsourced-rules.md` §B2，2026-10-01 從 7 改 8）；Palladino 的每週 +1–3 當「可長期維持」顯示 |
-| 週增量 | 上週增幅 > 20%（`i_volume` 的 BAD）→ 不排；10–20% → 維持上週的劑量，不往上加 | `i_volume`、`VOLUME_STEP_WATCH` | > 20%：**Nielsen et al. 2014**（JOSPT 44:739，DOI 10.2519/jospt.2014.5164）、**Damsted et al. 2019**（JOSPT 49:230，DOI 10.2519/jospt.2019.8541），同儕審查；10–20% 維持：推估（保守）。「10% 法則」本身沒有證據 |
+| CTL ramp | 每週 ≥ max(3, CTL 的 10%) → 這週只排閾值；≥ min(10, max(5, CTL 的 15%)) → 不排（SP-63 起，`load_guard.py`；之前是 5／**8**） | `i_fitness` | **Friel**（教練，https://joefrieltraining.com/the-ctl-ramp-rate/ ：5–8 適合多數人、10 是上限；`unsourced-rules.md` §B2，2026-10-01 從 7 改 8）；Palladino 的每週 +1–3 當「可長期維持」顯示 |
+| 週增量 | 上週增幅 > 20%（`i_volume` 的 BAD）→ 不排；10–20% → 維持上週的劑量，不往上加（SP-63 起只算跑步時間、對 max(上上週, 前 4 週平均)） | `i_volume`、`load_guard.STEP_HOLD／STEP_BLOCK` | > 20%：**Nielsen et al. 2014**（JOSPT 44:739，DOI 10.2519/jospt.2014.5164）、**Damsted et al. 2019**（JOSPT 49:230，DOI 10.2519/jospt.2019.8541），同儕審查；10–20% 維持：推估（保守）。「10% 法則」本身沒有證據 |
 | 3:1 恢復週 | `mode == "recovery_week"` → 不排正式間歇，改成 4×1 分 @ 98–101% CP fartlek | `week_plan` 的 `build3` | Palladino 恢復週保留 1–2 次 98–101% fartlek（palladino基礎期 L86）；3:1 是 Friel / UA 的常見做法（`SRC_31`） |
 | TSB | TSB < −30 → 恢復週（現有）；−30 到 −20 → 劑量不往上加 | `week_plan` | Friel／TrainingPeaks（Simmons 2020，教練）TSB 區間 |
 | 2 天 | 間歇離長跑和其他硬課 ≥ 2 天；5 區一週最多 2 次 | `plan_prefs.place()`（已經有） | **台灣教練**：5 區一週最多 2 次、間隔至少 2 天 |

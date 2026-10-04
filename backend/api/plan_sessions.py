@@ -171,10 +171,11 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
             WR._flush(ds)
         except Exception:                   # noqa: BLE001 — a review failure never breaks the plan
             pass
-    ramp = next(((i.extra or {}).get("ramp_week") for i in st.indicators if i.id == "fitness"), None)
+    fx = next(((i.extra or {}) for i in st.indicators if i.id == "fitness"), {})
+    ramp, ramp_base = fx.get("ramp_week"), fx.get("ramp_base")
     load = cur.get("load") or {}
     done_today = any(a.get("date") == today.isoformat() for a in (cur.get("done") or {}).get("activities") or [])
-    return {"enabled": enabled, "reviews": reviews, "ramp": ramp, "tsb": load.get("tsb_today"),
+    return {"enabled": enabled, "reviews": reviews, "ramp": ramp, "ramp_base": ramp_base, "tsb": load.get("tsb_today"),
             "hard_days": sorted(hard_days),
             "first_free": (today + dt.timedelta(days=1 if done_today else 0)).isoformat()}
 

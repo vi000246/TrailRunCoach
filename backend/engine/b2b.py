@@ -42,7 +42,7 @@ When (doc §2.4):
     number of weekends (≈ 2 in an 8-week block) is 推估;
   * prerequisites: base built (longest of the 28 days before ≥ day 1 × 0.87,
     the app's +15 % step reversed), not a re-entry / recovery week, TSB ≥ −20,
-    CTL ramp < 8 and the gate's guardrails pass (combination 推估).
+    CTL ramp under load_guard's block line and the gate's guardrails pass (combination 推估).
 
 Structure (doc §2.5):
   * day 1 = the week's long day (longer, more climbing); day 2 ≈ 2/3 of day 1
@@ -58,7 +58,7 @@ The exception (doc §2.5, user-approved): an accepted B2B pushes TSB below −30
 the B2B week and the week after keep their volume, the 4 days after the B2B are
 easy only (no quality / test; UA「three or four light days」, 4 推估), and the
 3:1 cycle continues. Not when something beyond the expected drop shows up:
-a CTL ramp ≥ 8 (status.RAMP["short"]) or — in adapt — two red-compliance
+a CTL ramp at load_guard's block line (SP-63; was 8 = the old block) or — in adapt — two red-compliance
 sessions in a row.
 
 Evaluation without RPE (doc §2.6): day 2 vs day 1 on the climbs (grade ≥ 10 %,
@@ -78,6 +78,7 @@ from statistics import median
 from typing import Callable, Iterable, Optional
 
 from backend.engine import hr_profile as HP
+from backend.engine import load_guard as LG
 from backend.i18n import fmt
 
 FOLLOWERS = ("long2",)         # always 2 days (the 3-day version was dropped, 2026-10-02)
@@ -90,7 +91,6 @@ SPACING_DAYS = 14              # 推估: never two B2B weekends < 2 weeks apart
 RECOVERY_SHARE = 0.85          # 推估: last week ≤ 85 % of the 3 before = the 3:1 recovery week (0.65)
 LONGEST_FRAC = 0.87            # base built: longest 28 d ≥ day 1 × 0.87 (1 / 1.15, the app's +15 % step)
 TSB_MIN = -20.0                # week_plan's 維持量 line
-RAMP_MAX = 8.0                 # status.RAMP["short"] (Friel 5–8)
 # ---- structure ----------------------------------------------------------------
 DAY2_RATIO = 0.67              # CTS 30:20 (Jones-Wilkins); 0.6–0.7 推估
 SINGLE_DAY2 = (90, 150)        # single-day ≥ 6 h event: day 2 1.5–2.5 h easy (推估, doc §2.5)
@@ -262,7 +262,8 @@ def last_was_recovery(hours: list[float]) -> bool:
 
 def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict], last_recovery: bool,
                  state: dict, tsb: Optional[float] = None, ramp: Optional[float] = None,
-                 guard_ok: bool = True, post_from: Optional[dict] = None) -> dict:
+                 guard_ok: bool = True, post_from: Optional[dict] = None,
+                 ramp_base: Optional[float] = None) -> dict:
     """Everything about B2B for one week except the base-built check (needs
     the long-run minutes: finalize()). `event`: event_json(); `state`:
     history(); `tsb`: TSB at the start of the week (Monday's, so the answer
@@ -304,8 +305,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     if tsb is not None and tsb < TSB_MIN:
         info["blocked"].append(f"週初 TSB {tsb:+.0f} < {TSB_MIN:.0f}：先恢復")
         return info
-    if ramp is not None and ramp >= RAMP_MAX:
-        info["blocked"].append(f"CTL 每週 +{ramp:.1f}（≥ {RAMP_MAX:.0f}）")
+    if LG.ramp_level(ramp, ramp_base) == LG.BLOCK:
+        info["blocked"].append(LG.ramp_text(ramp, ramp_base, LG.BLOCK))
         return info
     if not guard_ok:
         info["blocked"].append("間歇門檻的護欄沒過（低強度比例或飄移）")
@@ -376,12 +377,14 @@ def plan_context(ds, status, today: dt.date, monday: dt.date, hist_hours: list[f
         lo = monday - dt.timedelta(days=28)
         longest = max((m for d, m, _ in rows if d >= lo), default=0.0)
         tsb = O._n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun))
-        ramp = ((getattr(by.get("fitness"), "extra", None) or {}).get("ramp_week")) if by else None
+        fx = (getattr(by.get("fitness"), "extra", None) or {}) if by else {}
+        ramp, ramp_base = fx.get("ramp_week"), fx.get("ramp_base")
         guard = ((getattr(by.get("gate"), "extra", None) or {}).get("guard") or {}) if by else {}
         info = week_context(kind=status.kind or "base", mode=mode, monday=monday, event=ev,
                             last_recovery=last_was_recovery(hist_hours), state=state, tsb=tsb, ramp=ramp,
-                            guard_ok=not guard.get("block"), post_from=accepted_post(accepted, monday))
-        info.update(longest_before=longest, ramp=ramp, tsb_week_start=tsb,
+                            guard_ok=not guard.get("block"), post_from=accepted_post(accepted, monday),
+                            ramp_base=ramp_base)
+        info.update(longest_before=longest, ramp=ramp, ramp_base=ramp_base, tsb_week_start=tsb,
                     weight=status.plan.weight_on(today) if getattr(status, "plan", None) else None)
         return apply_accepted(info, accepted_for(accepted, monday))
     except Exception as e:                  # noqa: BLE001 — the plan must still build
@@ -494,12 +497,13 @@ def pair_options(monday: dt.date, first: dt.date, minutes: list, blocked=frozens
 # the TSB exception
 # ---------------------------------------------------------------------------
 
-def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float] = None) -> Optional[str]:
+def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float] = None,
+               ramp_base: Optional[float] = None) -> Optional[str]:
     """Why a low TSB this week is the planned B2B's expected drop (or None).
-    A CTL ramp ≥ 8 is beyond the expected drop: no exception."""
+    A CTL ramp at load_guard's block line is beyond the expected drop: no exception."""
     if not info or tsb is None or tsb >= TSB_MIN:
         return None
-    if ramp is not None and ramp >= RAMP_MAX:
+    if LG.ramp_level(ramp, ramp_base) == LG.BLOCK:
         return None
     if info.get("due"):
         return f"TSB {tsb:+.0f}：本週有你排入的 B2B，TSB 下降是預期的，不改成恢復週、量不砍（推估）"
