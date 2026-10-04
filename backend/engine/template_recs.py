@@ -202,9 +202,16 @@ def _rung_sub(rung: Optional[str]) -> Optional[str]:
     return sub_of(c.mid) if c is not None else None
 
 
-def ladder_pick(rung: Optional[str], cap: Optional[float], history=(), prefs=None) -> tuple[Optional[str], str]:
+def ladder_pick(rung: Optional[str], cap: Optional[float], history=(), prefs=None, gate: Optional[dict] = None,
+                track: Optional[str] = None) -> tuple[Optional[str], str]:
     """(variant key, one-line reason) of the old 間歇範本 ★ 推薦: interval_library.fit for
-    the athlete's current rung and the day's cap (what the generator schedules)."""
+    the athlete's current rung and the day's cap (what the generator schedules). Two tracks
+    (SP-31): with `gate`, the rung is the one `track` stands at (the session's own class —
+    a Zone 3 session gets the Zone 3 ladder's next step, a Zone 5 one the Zone 5's;
+    quality_gate.rung_now), `rung` is then ignored."""
+    if gate is not None:
+        from backend.engine import quality_gate as QG
+        rung = QG.rung_now(gate, track)
     if rung not in IL.LIBRARY:
         return None, ""
     f = IL.fit(rung, cap, history, prefs)

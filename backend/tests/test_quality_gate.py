@@ -14,6 +14,7 @@ from backend.engine import aet_test as AT
 from backend.engine import overview as O
 from backend.engine import plan_prefs as PP
 from backend.engine import projection as P
+from backend.engine import interval_library as IL_
 from backend.engine import quality_gate as QG
 from backend.engine.planning import Plan, Threshold
 from backend.engine.status import Status
@@ -52,10 +53,22 @@ def _plan(aethr=None, lthr=None, day="2026-09-01", note=""):
     return p
 
 
-def _gate(mode="auto", plan=None, workouts=(), by=None, phase=BASE, weeks=8, settings=None):
+def _weeks_ok(n, need=QG.Z3_WEEKS_NEED):
+    """Run dates for QG.run_days: 4 runs in each of the last `n` complete weeks, none before —
+    the Zone 3 gate's consistency path (SP-31) is met from n ≥ 4."""
+    mon = TODAY - dt.timedelta(days=TODAY.weekday())
+    return sorted(mon - dt.timedelta(weeks=i) + dt.timedelta(days=k) for i in range(1, n + 1) for k in (0, 2, 4, 6))
+
+
+def _gate(mode="auto", plan=None, workouts=(), by=None, phase=BASE, weeks=8, settings=None, z3_weeks=QG.Z3_WEEKS_NEED):
+    """evaluate() on synthetic data; `z3_weeks`: complete weeks in a row of ≥ 3 runs (the Zone 3
+    gate's consistency path, SP-31) — default: open."""
+    from unittest import mock
     plan = plan or Plan()
     ds = _ds(list(workouts), plan, settings)
-    return QG.evaluate(ds, plan, TODAY, PP.Prefs(quality_gate=mode, quality_gate_weeks=weeks), by or GOOD_BY, phase)
+    with mock.patch.object(QG, "run_days", lambda ds, today, days=QG.Z3_HISTORY_DAYS: _weeks_ok(z3_weeks)):
+        return QG.evaluate(ds, plan, TODAY, PP.Prefs(quality_gate=mode, quality_gate_weeks=weeks), by or GOOD_BY,
+                           phase)
 
 
 # ---------------------------------------------------------------------------
@@ -87,8 +100,8 @@ def test_auto_without_aet_is_no_method_and_the_guardrails():
     assert g["resolved"] == "none" and g["state"] == "none" and not g["fallback"]
     t = QG.indicator(g)
     assert t["level"] == "info" and "沒有 AeT 實測：照 80/20 原則每週 1 次間歇" in t["verdict"]
-    # 台灣教練: Zone 3 first — the ladder's first rung is threshold 3×6 (§A5.3), not 5×1′
-    assert "第 1 步：閾值 3×6 分" in t["verdict"]
+    # 台灣教練: Zone 3 first — the Zone 3 track's first rung is 2×15′ (SP-31), not 5×1′
+    assert "3 區第 1 步：閾值 2×15 分" in t["verdict"]
     assert QG.guardrail_mode(g)
     assert QG.week_decision(g, "base", "base")["spec"] is QG.Z3[0]
     assert g["z5"]["state"] == "unconfirmed" and not g["z5"]["open"]
@@ -196,7 +209,10 @@ def test_none_mode_and_other_phases():
     spec = _gate(phase=types.SimpleNamespace(kind="specific", start="2026-11-01", end="2026-11-30"))
     assert QG.indicator(spec)["level"] == "info"
     assert QG.week_decision({**spec, "levels": {"intensity": "good", "drift": "good"}}, "specific", "specific")["allow"]
-    assert not QG.week_decision({**spec, "levels": {"intensity": "bad"}}, "specific", "specific")["allow"]
+    # 專項期: intensity bad keeps Zone 5 out but Zone 3 goes on with a warning (SP-31); drift bad stops both
+    d = QG.week_decision({**spec, "levels": {"intensity": "bad"}}, "specific", "specific")
+    assert d["allow"] and d["track"] == "z3" and "輕鬆跑心率偏高" in d["warn"]
+    assert not QG.week_decision({**spec, "levels": {"drift": "bad"}}, "specific", "specific")["allow"]
 
 
 def test_options_say_what_the_data_allows():
@@ -215,7 +231,7 @@ def test_options_say_what_the_data_allows():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("kw, flag, words", [
-    (dict(low_share=0.68), "block", "低強度只有 68%（< 75%）"),
+    (dict(low_share=0.68), "block", "低強度只有 68%（< 75%，底線）"),
     (dict(low_share=0.9, power_low_share=0.7), "block", "功率 < 80% CP 只有 70%"),
     (dict(ramp=5.6), "sub", "CTL 每週 +5.6（≥ 5，Friel）：本週只排閾值下"),
     (dict(ramp=7.2), "sub", "≥ 5，Friel"),                 # B2: 7 is no longer a block
@@ -234,47 +250,102 @@ def test_guardrails_block_the_week_and_say_so():
     by = {**GOOD_BY, "intensity": _ind("watch", extra={"low_share": 0.68})}
     g = _gate(by=by)
     t = QG.indicator(g)
-    assert t["level"] == "watch" and t["verdict"] == "本週不排間歇：低強度只有 68%（< 75%）"
+    assert t["level"] == "watch" and t["verdict"] == "低強度只有 68%（< 75%，底線）：本週 5 區先不排，3 區照排"
     assert t["action"] == "輕鬆跑壓在 AeT 以下，下週再看" or "bpm 以下" in t["action"]
-    assert not QG.week_decision(g, "base", "base")["allow"]
+    # SP-31 (owner 2026-10-04): the low-intensity share no longer blocks Zone 3 — a warning only;
+    # Zone 5 keeps the guardrail (SP-39 will revisit)
+    d = QG.week_decision(g, "base", "base")
+    assert d["allow"] and d["track"] == "z3" and d["warn"].startswith("輕鬆跑心率偏高：低強度只有 68%")
+    both = {**g, "z5": {"open": True}, "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 0, "done": 0}}}
+    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2)["items"]] == ["z3"]
+    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2, first=False)["items"]] == ["z3"]
+    # the other guardrails still block Zone 3 too
+    vol = _gate(by={**by, "volume": _ind(extra={"step": 0.3, "last_week": 5.0})})
+    d = QG.week_decision(vol, "base", "base")
+    assert not d["allow"] and "上週量增 +30%" in d["z3_note"]
     ramp = _gate(by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": 5.6})})
     assert QG.week_decision(ramp, "base", "base")["spec"] is QG.SUB
     assert QG.indicator(ramp)["action"] == "先穩住量"
 
 
-def test_dose_ladder_zone3_first_then_zone5_only_when_open():
-    # 台灣教練: Zone 3 first; Zone 5 reps ≥ 2 min, only while Zone 5 is open
-    # the corrected ladder (interval-prescription.md §A5.3), then V3 / V4 / T+ maintenance
-    open_titles = [QG.dose_spec(i, True)[1] for i in range(10)]
-    assert open_titles == ["閾值 3×6 分", "閾值 3×8 分", "閾值 2×12 分", "VO2max 5×2 分", "VO2max 4×3 分",
-                           "VO2max 5×3 分", "VO2max 4×4 分", "VO2max 5×3 分", "VO2max 4×4 分", "近閾值 3×7 分"]
+def test_two_tracks_each_with_its_own_ladder():
+    # SP-31: the Zone 3 track (有氧間歇, reps 15–30 min) and the Zone 5 track, each with its own step
+    z3 = [QG.z3_spec(i)[1] for i in range(8)]
+    assert z3 == ["閾值 2×15 分", "閾值 3×12 分", "閾值 2×20 分", "閾值 連續 30 分",
+                  "閾值 2×20 分", "閾值 連續 30 分", "近閾值 3×7 分", "閾值 2×20 分"]        # then A3 / A4 / T+
+    assert all(min(IL_.canonical(s[0]).works) >= 12 * 60 for s in QG.Z3)        # long reps (old: 6–12′)
+    assert [(s[5], s[6]) for s in QG.Z3] == [(0.88, 0.95)] * 3 + [(0.88, 0.92)]
+    assert [(s[5], s[6]) for s in QG.CRUISE] == [(0.90, 0.95)] * 3                # 巡航版 T1–T3 kept
+    z5 = [QG.z5_spec(i)[1] for i in range(7)]
+    assert z5 == ["VO2max 5×2 分", "VO2max 4×3 分", "VO2max 5×3 分", "VO2max 4×4 分",
+                  "VO2max 5×3 分", "VO2max 4×4 分", "VO2max 5×3 分"]
     assert all(s[3] >= 2 for s in QG.Z5)                                  # reps ≥ 2 min
-    assert [(s[5], s[6]) for s in QG.Z3] == [(0.90, 0.95)] * 3
     assert [s[4] for s in QG.Z5] == [2, 3, 2.5, 3] and (QG.Z5[3][5], QG.Z5[3][6]) == (1.04, 1.08)
-    shut = [QG.dose_spec(i, False)[1] for i in range(3, 7)]
-    assert all(t.startswith("閾值") for t in shut)                        # Zone 3 continues
-    assert QG.dose_step([]) == {"done": 0, "faded": False, "step": 0}
+    # the legacy single-ladder reading still resolves
+    assert QG.dose_spec(0)[0] == "a1" and QG.dose_spec(4, True)[0] == "z5b" and QG.dose_spec(4, False)[0] == "a3"
+    assert QG.dose_step([]) == {"track": "z3", "done": 0, "faded": False, "step": 0, "met": 0}
     # B4: a session that can't be judged (no bouts / CP) repeats the step — no progress
     three = [{"faded": False}] * 3
     d = QG.dose_step(three)
     assert d["step"] == 0 and d["outcome"] == "unknown"
-    g = {"state": "none", "guard": {"hold": True}, "dose": {"done": 2, "step": 2}}
-    assert QG.week_decision(g, "base", "base")["spec"][1] == "閾值 3×8 分"    # held: repeat the last step
-    rec = QG.week_decision({"state": "none", "guard": {}, "dose": {"step": 4}}, "base", "recovery_week")
-    assert rec["spec"] is QG.RECOVERY and not rec["advance"]
-    # step 3 (3 Zone 3 達標): Zone 5 only with z5 open; else Zone 3, and the step waits
-    g3 = {"state": "none", "guard": {}, "dose": {"done": 3, "step": 3}, "z5": {"open": False, "text": "Zone 5：未確認"}}
+    gate = {"state": "none", "guard": {}, "z3": {"open": True},
+            "dose": {"z3": {"step": 1, "met": 1, "done": 1}, "z5": {"step": 0, "done": 0}}}
+    held = {**gate, "guard": {"hold": True}}
+    assert QG.week_decision(held, "base", "base")["spec"][1] == "閾值 2×15 分"   # held: repeat the last step
+    assert not QG.week_decision(held, "base", "base")["advance"]
+    rec = QG.week_decision(gate, "base", "recovery_week")
+    assert rec["spec"] is QG.RECOVERY and not rec["advance"] and "恢復週" in rec["z3_note"]
+    # 3 Zone 3 達標 and Zone 5 not open: Zone 3 keeps stepping, the note says why no Zone 5
+    g3 = {**gate, "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 0, "done": 0}},
+          "z5": {"open": False, "text": "Zone 5：未確認"}}
     d = QG.week_decision(g3, "base", "base")
-    assert d["spec"][1].startswith("閾值") and not d["advance"] and "未確認" in d["note"]
-    d = QG.week_decision({**g3, "z5": {"open": True}}, "base", "base")
-    assert d["spec"] is QG.Z5[0] and d["advance"]
+    assert d["spec"] is QG.Z3[3] and d["advance"] and d["track"] == "z3" and "未確認" in d["note"]
+    # Zone 5 open but Zone 3 not steady yet (2 of 3): still Zone 3 only
+    g2 = {**g3, "dose": {"z3": {"step": 2, "met": 2, "done": 2}, "z5": {}}, "z5": {"open": True}}
+    assert [it["track"] for it in QG.week_decision(g2, "base", "base", n=2)["items"]] == ["z3"]
+
+
+def test_zone3_continues_after_zone5_opens_and_the_week_split():
+    gate = {"state": "none", "guard": {}, "z3": {"open": True}, "z5": {"open": True},
+            "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 1, "done": 1}},
+            "ratio": {"z3": 2, "z5": 1, "why": "A 賽越野"}}
+    # 2 a week: one Zone 3 + one Zone 5 (each its own rung), not a copy
+    d = QG.week_decision(gate, "base", "base", n=2)
+    assert [(it["track"], it["spec"][0]) for it in d["items"]] == [("z3", "a4"), ("z5", "z5b")]
+    assert d["z3_note"] == "" and all(it["advance"] for it in d["items"])
+    # 1 a week: 2:1 for a trail / long race, deterministic by the week (3 consecutive weeks)
+    mon = date(2026, 9, 28)
+    picks = [QG.week_decision(gate, "base", "base", mon + dt.timedelta(weeks=i))["track"] for i in range(6)]
+    assert sorted(picks[:3]) == ["z3", "z3", "z5"] and picks[:3] == picks[3:]
+    z5wk = next(mon + dt.timedelta(weeks=i) for i in range(3) if picks[i] == "z5")
+    d = QG.week_decision(gate, "base", "base", z5wk)
+    assert d["spec"][0] == "z5b" and "本週輪到 5 區" in d["z3_note"] and "2:1" in d["z3_note"]
+    # 1:1 for a ≤ 10 km road race
+    g11 = {**gate, "ratio": {"z3": 1, "z5": 1, "why": "A 賽 10 km 路跑"}}
+    picks = [QG.week_decision(g11, "base", "base", mon + dt.timedelta(weeks=i))["track"] for i in range(4)]
+    assert sorted(picks) == ["z3", "z3", "z5", "z5"] and picks[0] != picks[1]
+    # the projection's steps carry each track on
+    d = QG.week_decision(gate, "base", "base", step={"z3": 5, "z5": 3, "met": 5}, first=False, n=2)
+    assert [it["spec"][0] for it in d["items"]] == ["a4", "z5d"]
+    # the guardrails apply to both tracks
+    blocked = {**gate, "guard": {"block": True, "rule": "volume", "verdict": "上週量增 +30%"}}
+    d = QG.week_decision(blocked, "base", "base", n=2)
+    assert not d["allow"] and d["items"] == [] and d["z3_note"] == "本週沒排 3 區：上週量增 +30%"
+
+
+def test_track_ratio_by_the_a_race():
+    from backend.engine.planning import Event
+    ev = lambda kind, km: Event(id="x", name="x", date="2026-12-01", kind=kind, priority="A", distance_km=km)
+    assert (QG.track_ratio([ev("road", 10)], TODAY)["z3"], QG.track_ratio([ev("road", 21.1)], TODAY)["z3"]) == (1, 2)
+    assert QG.track_ratio([ev("race", 8)], TODAY)["z3"] == 2                  # trail: 2:1 whatever the distance
+    assert QG.track_ratio([], TODAY) == {"z3": 2, "z5": 1, "why": "沒有 A 賽"}
 
 
 def test_dose_sessions_parse_for_coros_and_the_cap():
     th = {"cp": 250.0, "lthr": 165.0, "aet": 142.0}
     # the legacy text builder (recovery fartlek, Zone 3 HR, adapt's old rows) on a ladder row:
     # no rest after the last rep (§A5.2-3)
-    s = QG.session(QG.Z3[1], th, "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，")
+    s = QG.session(QG.CRUISE[1], th, "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，")
     assert s["title"] == "閾值 3×8 分" and s["minutes"] == 15 + 3 * 8 + 2 * 2 + 10
     assert s["detail"].startswith("沒有 AeT 實測：照 80/20 原則每週 1 次間歇，") and "休 2 分" in s["detail"]
     steps = CW.session_steps(s, CW.Thresholds.of(th))
@@ -327,10 +398,13 @@ def test_count_reps_finds_one_minute_reps_and_the_history_counts_them():
     ds = _ds([r, _reps_run(TODAY - dt.timedelta(days=12), fade=0.08, on=260.0), _run(TODAY - dt.timedelta(days=2))])
     h = QG.dose_history(ds, TODAY)
     assert len(h) == 2 and h[0]["faded"] and not h[1]["faded"] and h[1]["reps"] == 5
-    # judged against the Zone 3 rungs (3×8 @ 88–95 % CP, then 4×8): both sessions' first reps
-    # are above 0.98 × 88 % CP → 達標 twice → step 2
-    d = QG.dose_step(h)
-    assert d["step"] == 2 and [x["outcome"] for x in h] == ["met", "met"] and d["outcome"] == "met"
+    # two tracks (SP-31): ≥ 4 short reps without a plan row are a Zone 5 session — judged against
+    # V1 5×2′ @ 106–112 % CP: 1-minute reps at ~104 % don't reach it; the Zone 3 track has none
+    assert [x["track"] for x in h] == ["z5", "z5"]
+    assert QG.dose_step(h)["done"] == 0
+    d = QG.dose_step(h, track="z5")
+    assert d["step"] == 0 and d["done"] == 2 and d["outcome"] in ("too_high", "unadapted")
+    assert d["note"].startswith("上次 5 區間歇")
 
 
 def _z3_run(day, reps=3, work_min=8, rest_min=2, on=230.0, title=""):
@@ -390,11 +464,12 @@ def test_unplanned_hard_runs_are_not_ladder_steps_once_the_plan_is_in_use(monkey
     from backend.engine import plan_store as PS
     ds = _ds([_z3_run(TODAY - dt.timedelta(days=4)), _z3_run(TODAY - dt.timedelta(days=2))])
     monkeypatch.setattr(PS, "plan_in_use", lambda db_path=None: True)
-    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {1: {"title": QG.Z3[0][1], "state": "done"}})
+    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {1: {"title": QG.CRUISE[1][1], "state": "done"}})
     h = QG.dose_history(ds, TODAY)
     assert [x.get("unplanned", False) for x in h] == [True, False]
     d = QG.dose_step(h)
-    assert h[0]["outcome"] == "neutral" and h[1]["outcome"] == "met" and d["step"] == 1 and d["done"] == 1
+    # the planned 3×8′ (T2, an old Zone 3 rung) counts as a Zone 3 達標 without moving the A rung
+    assert h[0]["outcome"] == "neutral" and h[1]["outcome"] == "met" and d["met"] == 1 and d["done"] == 1
 
 
 def test_planned_zone3_reps_come_from_the_coros_laps(monkeypatch):
@@ -405,7 +480,7 @@ def test_planned_zone3_reps_come_from_the_coros_laps(monkeypatch):
     day = TODAY - dt.timedelta(days=4)
     w = _z3_run(day)
     ds = _ds([w])
-    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {0: {"title": QG.Z3[1][1], "state": "done"}})
+    monkeypatch.setattr(PS, "done_plan", lambda db_path=None: {0: {"title": QG.CRUISE[1][1], "state": "done"}})
     laps = [{"start_s": 0.0, "duration_s": 720.0, "power": 175.0}]
     t = 720.0
     for k in range(3):
@@ -460,18 +535,42 @@ def test_bug_a_a_shortened_session_still_moves_the_ladder():
     # The stored variant key (and its rung) is what is judged now.
     cp = 250.0
     good = _b(*[240] * 6)
-    first = {"bouts": good, "cp": cp, "title": "閾值 3×8 分", "variant_key": "t1a", "rung_key": "z3a", "equiv": True}
-    trimmed = {"bouts": good, "cp": cp, "title": "閾值 3×8 分", "variant_key": "t2c", "rung_key": "z3b",
+    first = {"bouts": good, "cp": cp, "title": "閾值 2×15 分", "variant_key": "a1a", "rung_key": "a1", "equiv": True}
+    trimmed = {"bouts": good, "cp": cp, "title": "閾值 連續 32 分", "variant_key": "a2c", "rung_key": "a2",
                "equiv": True}                              # an equivalent shorter variant of the second rung
     d = QG.dose_step([first, trimmed])
-    assert trimmed["outcome"] == "met" and d["step"] == 2
+    assert trimmed["outcome"] == "met" and d["step"] == 2 and d["met"] == 2
     # a 縮量版 (TIZ < 85 %, equiv False) is judged for display only: the rung doesn't move …
-    reduced = {"bouts": good, "cp": cp, "variant_key": "t2a", "variant_reps": 2, "rung_key": "z3b", "equiv": False}
+    reduced = {"bouts": good, "cp": cp, "variant_key": "a2a", "variant_reps": 2, "rung_key": "a2", "equiv": False}
     d = QG.dose_step([first, reduced])
     assert reduced["outcome"] == "met" and reduced.get("counted") is False and d["step"] == 1
     # … and the old title-only rows still work the old way (backward compatible)
     old = {"bouts": good, "cp": cp, "title": QG.Z3[0][1]}
     assert QG.dose_step([old])["step"] == 1
+
+
+def test_legacy_zone3_rungs_still_resolve_and_count_for_zone5():
+    # SP-31: stored sessions of the old Zone 3 rungs (rung_key z3a / z3b / z3c, now the 巡航版 T1–T3)
+    # are judged against their own variant: their 達標 count for Zone 5's 「3 區達標」, but they don't
+    # move the new Zone 3 track (A1–A4) — and the Zone 5 rows of the old single ladder still step Zone 5
+    cp = 250.0
+    good = _b(*[240] * 6)
+    rows = [{"bouts": good, "cp": cp, "variant_key": k, "rung_key": r, "equiv": True}
+            for k, r in (("t1a", "z3a"), ("t2c", "z3b"), ("t3a", "z3c"))]
+    rows.append({"bouts": _b(*[275] * 5), "cp": cp, "variant_key": "v1a", "rung_key": "z5a", "equiv": True})
+    assert [QG.row_track(h) for h in rows] == ["z3", "z3", "z3", "z5"]
+    d = QG.dose_tracks(rows)
+    assert d["z3"]["step"] == 0 and d["z3"]["met"] == 3 and [h["outcome"] for h in rows[:3]] == ["met"] * 3
+    assert all(h["counted"] is False for h in rows[:3])
+    assert d["z5"]["step"] == 1 and rows[3]["outcome"] == "met"
+    assert d["step"] == 0 and d["done"] == 4                       # the legacy top-level keys = the Zone 3 track
+    # title-only rows of the old rungs resolve too (T2 「閾值 3×8 分」)
+    assert QG.spec_by_title("閾值 3×8 分")[0] == "z3b" and QG.row_track({"title": "閾值 3×8 分"}) == "z3"
+    # Zone 5 is reachable with the old history: 3 達標 → Zone 5 open → the week takes Zone 5 on its turn
+    gate = {"state": "none", "guard": {}, "z3": {"open": True}, "z5": {"open": True}, "dose": d}
+    assert [it["track"] for it in QG.week_decision(gate, "base", "base", n=2)["items"]] == ["z3", "z5"]
+    # adapt / editors: the cruise rungs keep their library rows and names
+    assert IL_.RUNG_NAME["z3b"] == "T2" and IL_.canonical("z3c").key == "t3a" and IL_.track_of("z3a") == "z3"
 
 
 def test_interval_outcome_state_machine_rows():
@@ -513,15 +612,16 @@ def test_dose_step_replays_outcomes():
     # a ramp-week SUB (3×8′) when the ladder stands further on: neutral
     sub = {"bouts": _b(190, 190, 190), "cp": cp, "title": QG.SUB[1]}
     assert QG.dose_step([good, sub])["step"] == 1 and sub["outcome"] == "neutral"
-    # Zone 3 maintenance while Zone 5 is paused (step ≥ 3): neutral, the Z5 step waits
-    assert QG.planned_spec(QG.Z3[2][1], 4) == (QG.Z3[2], True)
-    assert QG.planned_spec(QG.Z5[1][1], 4) == (QG.Z5[1], False)
+    # a 巡航版 (old Zone 3 rung) off the track's rung: neutral position, each track its own step
+    assert QG.planned_spec(QG.CRUISE[2][1], 4) == (QG.CRUISE[2], True)
+    assert QG.planned_spec(QG.Z3[2][1], 4) == (QG.Z3[2], False)              # A3 = the first maintenance rung
+    assert QG.planned_spec(QG.Z5[1][1], 1, "z5") == (QG.Z5[1], False)
     # the old ladder's titles don't count any more
     assert QG.planned_spec("短間歇 5×1 分", 0)[1] is True
     d = QG.dose_step([{"bouts": _b(150, 250, 250, 250, 250), "cp": cp}])
     assert d["step"] == 0 and d["adjust"] == {"power": QG.TARGET_DOWN}
     spec = QG.adjusted_spec(QG.Z3[0], {"power": 0.95})
-    assert spec[5] == round(0.90 * 0.95, 3) and spec[1] == QG.Z3[0][1]
+    assert spec[5] == round(0.88 * 0.95, 3) and spec[1] == QG.Z3[0][1]
     g = {"state": "none", "guard": {}, "dose": {"done": 2, "step": 1, "adjust": {"rest_add": 1}}}
     dec = QG.week_decision(g, "base", "base")
     sp = dec["spec"]
@@ -574,19 +674,25 @@ def test_projection_advances_the_dose_and_evaluates_weeks_per_week():
     cur["history"] = [{"start": "x", "hours": 5.0, "tss": 250} for _ in range(8)]    # flat: no 3:1 yet
     cur["quality_gate"] = {"state": "locked", "mode": "weeks", "resolved": "weeks", "verdict": "基礎期第 7 週 / 8 週",
                            "base_start": "2026-08-17", "weeks_need": 8, "levels": {"intensity": "good"},
-                           "guard": {}, "dose": {"step": 3, "done": 3, "faded": False}, "aet": {"date": "2026-09-01"},
-                           "z5": {"open": False}}
+                           "guard": {}, "dose": {"step": 3, "done": 3, "faded": False,
+                                                 "z3": {"step": 1, "met": 3, "done": 3}, "z5": {"step": 0, "done": 0}},
+                           "aet": {"date": "2026-09-01"}, "z5": {"open": False}, "z3": {"open": True},
+                           "ratio": {"z3": 2, "z5": 1, "why": "沒有 A 賽"}}
     phases = [{"kind": "base", "start": "2026-08-17", "end": "2026-12-31"}]
     weeks = P.project_weeks(cur, phases, date(2026, 11, 22))
     first_q = {w["start"]: [s["title"] for s in w["sessions"] if s["kind"] == "quality"] for w in weeks}
-    # Zone 3 keeps going while the weeks method keeps Zone 5 closed (base week 8, 10/5);
-    # from week 9 (10/12) Zone 5 opens and the ladder moves on to 5×2′, 4×3′
-    pre = [v[0] for k, v in sorted(first_q.items()) if v and k < "2026-10-12"
-           and next(w for w in weeks if w["start"] == k)["mode"] != "recovery_week"]
-    assert all(x.startswith("閾值") for x in pre)
-    built = [v[0] for k, v in sorted(first_q.items()) if v and k >= "2026-10-12"
-             and next(w for w in weeks if w["start"] == k)["mode"] != "recovery_week"]
-    assert built[:2] == ["VO2max 5×2 分", "VO2max 4×3 分"]
+    # from week 9 (10/12) the weeks method opens Zone 5: its own ladder 5×2′ → 4×3′, and Zone 3
+    # stays in the plan (1 a week: 3 區 : 5 區 = 2:1 — SP-31), one rung per Zone 3 week. A rung
+    # over 10 % of the week (Daniels) is its 巡航版: A2 3×12′ = 36′ > 30′ of 5.1 h → T2 3×8′;
+    # A3 2×20′ = 40′ > 37′ → T3 2×12′; A4 1×30′ fits
+    q = [(k, v[0]) for k, v in sorted(first_q.items()) if v
+         and next(w for w in weeks if w["start"] == k)["mode"] != "recovery_week"]
+    assert all(k >= "2026-10-12" for k, _ in q)
+    z5 = [x for _, x in q if x.startswith("VO2max")]
+    z3 = [x for _, x in q if not x.startswith("VO2max")]
+    assert z5[:2] == ["VO2max 5×2 分", "VO2max 4×3 分"]
+    assert z3[:3] == ["閾值 3×8 分", "閾值 2×12 分", "閾值 連續 30 分"]          # Zone 3 doesn't disappear
+    assert [x for _, x in q][:3] in (["閾值 3×8 分", "VO2max 5×2 分", "閾值 2×12 分"],)
 
 
 # ---------------------------------------------------------------------------
@@ -907,3 +1013,21 @@ def test_apply_writes_the_test_day_to_a_temp_plan(tmp_path, monkeypatch):
     with pytest.raises(Exception):
         API.apply_estimate(API.ApplyEstimate(aethr=146, date="2999-01-01"))
     assert (PL.plan_path().stat().st_mtime if PL.plan_path().exists() else None) == before     # the real plan untouched
+
+
+def test_ladder_pick_and_the_change_log_follow_the_tracks():
+    # SP-31: 推薦第一名 = the next step of the session's own track; the change log notes the Zone 3 gate
+    from backend.engine import plan_auto as PA
+    from backend.engine import template_recs as TR
+    gate = {"state": "none", "guard": {}, "z3": {"open": True}, "z5": {"open": True},
+            "dose": {"z3": {"step": 2, "met": 3, "done": 3}, "z5": {"step": 1, "done": 1}}}
+    assert QG.rung_now(gate, "z3") == "a3" and QG.rung_now(gate, "z5") == "z5b" and QG.rung_now({}, "z3") is None
+    k3, why3 = TR.ladder_pick(None, None, gate=gate, track="z3")
+    k5, why5 = TR.ladder_pick(None, None, gate=gate, track="z5")
+    assert k3 == "a3a" and "A3" in why3 and k5 == "v2a" and "V2" in why5
+    state = {}
+    closed = {"cur": {"quality_gate": {"z3": {"open": False, "path": None, "text": "Zone 3：未解鎖（…）"}}}}
+    assert PA.state_changes(closed, state) == []                         # the first closed record: nothing new
+    opened = {"cur": {"quality_gate": {"z3": {"open": True, "path": "weeks", "text": "Zone 3：已解鎖（連續 4 週規律訓練）"}}}}
+    assert PA.state_changes(opened, state) == ["Zone 3：已解鎖（連續 4 週規律訓練）"]
+    assert PA.state_changes(opened, state) == []

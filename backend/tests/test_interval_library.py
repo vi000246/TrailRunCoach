@@ -21,9 +21,17 @@ def test_each_rows_total_time(key, total):
 
 def test_the_corrected_ladder_canonicals():
     c = {r: IL.canonical(r) for r in IL.RUNG_ORDER}
-    assert [IL.structure(c[r]) for r in IL.RUNG_ORDER] == ["3×6 分", "3×8 分", "2×12 分", "5×2 分", "4×3 分",
+    assert [IL.structure(c[r]) for r in IL.RUNG_ORDER] == ["2×15 分", "3×12 分", "2×20 分", "連續 30 分",
+                                                           "3×6 分", "3×8 分", "2×12 分", "5×2 分", "4×3 分",
                                                            "5×3 分", "4×4 分"]
     assert all((v.lo, v.hi) == (0.90, 0.95) for r, v in c.items() if r.startswith("z3"))
+    # SP-31 the Zone 3 track: 88–95 % CP (continuous 88–92), reps ≥ 12 min, rests ≤ 4 min
+    assert all(v.cls == "Z3sub" and v.lo == 0.88 and min(v.works) >= 720 and v.rest_s <= 240
+               for r, v in c.items() if r in IL.Z3_TRACK)
+    assert [IL.tiz_s(c[r]) // 60 for r in IL.Z3_TRACK] == [30, 36, 40, 30]
+    assert IL.PREV_RUNG["a1"] == "z3c" and IL.PREV_RUNG["a2"] == "a1" and IL.PREV_RUNG["z5a"] == "z3c"
+    assert [IL.track_of(r) for r in ("a1", "z3b", "tp", "z5c", "x", None)] == ["z3", "z3", "z3", "z5", "z5", None]
+    c = {r: IL.canonical(r) for r in IL.CRUISE_RUNGS + IL.Z5_TRACK}
     assert (c["z5a"].lo, c["z5a"].hi, c["z5a"].rest_s, c["z5a"].rest_mode) == (1.06, 1.12, 120, "walk")
     assert (c["z5b"].rest_s, c["z5c"].rest_s, c["z5c"].rest_mode) == (180, 150, "walk")
     assert (c["z5d"].lo, c["z5d"].hi, c["z5d"].rest_s, c["z5d"].rest_mode) == (1.04, 1.08, 180, "jog")
@@ -173,7 +181,7 @@ def test_the_second_rung_stays_the_second_rung_under_any_cap(cap):
     from backend.engine import overview as O
     from backend.engine import quality_gate as QG
     gate = {"state": "none", "mode": "auto", "guard": {}, "dose": {"step": 1}, "lthr": {"default": False}}
-    dec = {"spec": QG.Z3[1], "advance": True}
+    dec = {"spec": QG.CRUISE[1], "advance": True}
     prefs = PP.Prefs(cap_weekday=cap) if cap else PP.Prefs()
     q_cap, alt = O.quality_caps(prefs, 6)
     s = O._gate_session(gate, dec, {"cp": 204.0, "lthr": 170.0, "aet": 150.0}, 5.0, prefs, [], False, q_cap, alt)
@@ -185,6 +193,35 @@ def test_the_second_rung_stays_the_second_rung_under_any_cap(cap):
     out = PP.shape([{**s, "day": None, "done": False, "done_by": None}], 300, PP.Prefs(cap_weekday=40, terrain_quality="flat"), c)
     q = next(x for x in out if x["kind"] == "quality")
     assert (q["title"], q["minutes"]) == (s["title"], s["minutes"])
+
+
+@pytest.mark.parametrize("cap, hours, key, rung, counts", [
+    (None, 6.0, "a1a", "a1", True),          # time enough, 10 % of 6 h = 36′ ≥ 30′: the standard 2×15′
+    (45, 6.0, "a1c", "a1", True),            # weekday cap 45: the equivalent 1×26′ continuous
+    (None, 4.0, "t1a", "a1", True),          # 10 % of 4 h = 24′ < 30′: 巡航版 T1 3×6′, still the A1 session
+    (40, 4.0, "t1a", "a1", True),
+])
+def test_the_zone3_track_under_the_cap_and_the_weekly_volume(cap, hours, key, rung, counts):
+    # SP-31: A1 2×15′ (30′ in zone) — the weekday cap picks an equivalent; over 10 % of the week
+    # (Daniels) the 巡航版 of the same position stands in and still counts (rung_key a1, equiv)
+    from backend.engine import overview as O
+    from backend.engine import quality_gate as QG
+    gate = {"state": "none", "mode": "auto", "guard": {}, "lthr": {"default": False}}
+    prefs = PP.Prefs(cap_weekday=cap) if cap else PP.Prefs()
+    q_cap, alt = O.quality_caps(prefs, 6)
+    notes = []
+    s = O._gate_session(gate, {"spec": QG.Z3[0], "track": "z3", "first": False}, {"cp": 250.0}, hours, prefs, [],
+                        False, q_cap, alt, notes)
+    assert (s["variant_key"], s["rung_key"], s["equiv"], s["progress"]) == (key, rung, counts, counts)
+    assert s["minutes"] <= (cap or 999)
+    if key.startswith("t"):
+        assert "巡航版" in s["detail"] and notes and notes[0]["src"] == "z3" and "10%" in notes[0]["text"]
+    else:
+        assert not notes
+    # the track's first session starts at 5 % (UA): 6 h → 18′ → T1 3×6′
+    s = O._gate_session(gate, {"spec": QG.Z3[0], "track": "z3", "first": True}, {"cp": 250.0}, 6.0, PP.Prefs())
+    assert s["variant_key"] == "t1a" and s["rung_key"] == "a1" and "5%" in s["detail"]
+    assert QG.cruise_for("a3", 30.0) == "z3c" and QG.cruise_for("a3", 20.0) == "z3a" and QG.cruise_for("a1", 1) == "z3a"
 
 
 def test_quality_caps_weekend_alternatives():
