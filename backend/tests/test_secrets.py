@@ -12,9 +12,10 @@ from backend.tests.test_sync_e2e import FakeCoros, FakeTP, make_session, run
 
 
 def test_roundtrip_and_legacy_plaintext():
-    sealed = S.seal("abc")
-    assert sealed.startswith(S.PREFIX) and "abc" not in sealed
-    assert S.unseal(sealed) == "abc"
+    # ":" is not in the base64 alphabet: a bare "abc" turns up in ~1 of 2500 sealed values
+    sealed = S.seal("pw:abc")
+    assert sealed.startswith(S.PREFIX) and "pw:abc" not in sealed
+    assert S.unseal(sealed) == "pw:abc"
     assert S.seal(sealed) == sealed                 # idempotent
     assert S.unseal("legacy-plain") == "legacy-plain"
     assert S.seal(None) is None and S.unseal(None) is None

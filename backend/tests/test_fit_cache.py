@@ -20,11 +20,7 @@ TODAY = dt.date(2026, 9, 30)
 
 
 def _run(coro):
-    # not asyncio.run(): it leaves no current loop behind, and older tests in
-    # the suite call asyncio.get_event_loop() (test_sync_e2e.run does the same)
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _folder(tmp_path, n=3):
