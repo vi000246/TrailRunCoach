@@ -454,6 +454,9 @@ class Session:
     variant_adj: Optional[dict] = None
     progress: Optional[bool] = None     # not stored: this week's pick moves the projected ladder
     prefer_days: Optional[list] = None  # not stored: weekdays the cap rule moved it to (plan_prefs.place)
+    # a generated structure (engine/workout_steps.py doc; SP-74 技術地形: time + climb + RPE) —
+    # reconcile stores it on the unedited auto row, the push uses it instead of the text
+    steps: Optional[dict] = None
 
 
 def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
@@ -1328,7 +1331,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 w = take(lambda w: session_of(ds, w).get("stimulus") == "z5")
             else:
                 w = take(lambda w: hard.get(w.idx, 0) >= need)
-        elif s.kind == "easy":
+        elif s.kind in ("easy", "hike"):        # hike = 越野跑 (the 專項期 技術地形 session, SP-74)
             w = take(lambda w: category(w) in ENDURANCE)
         if w is not None:
             s.done = True
@@ -1475,6 +1478,18 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     except Exception as e:                  # noqa: BLE001 — heat sessions never break the plan
         heat_info = {"active": False, "reason": f"熱適應資料讀取失敗（{type(e).__name__}）"}
 
+    # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
+    # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
+    from backend.engine import technical as TECH
+    tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b)
+    if tech.get("active"):
+        try:
+            dd = [asdict(s) for s in sessions]
+            TECH.apply(dd, tech, hours=hours, rates=tph, prefs=prefs, notes=notes, hard_done=hard_done)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+        except Exception as e:              # noqa: BLE001 — the plan must still build
+            tech = {**tech, "error": type(e).__name__}
+
     # ---- projection to Sunday -------------------------------------------
     planned_by_day = {}
     for s in sessions:
@@ -1580,4 +1595,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "specific": SP.public(sp),
         # the race simulation 4–3 weeks out, suggested (api/plan_sessions: the floating box)
         "race_sim_suggestion": race_sim,
+        # 技術地形課 (engine/technical.py, SP-74): this week's rule and the session it made
+        "technical": TECH.public(tech),
     }
