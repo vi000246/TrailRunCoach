@@ -124,9 +124,11 @@ def _mean(xs):
 class Status:
     """Compute everything once for `today`; `.to_dict()` is the API payload."""
 
-    def __init__(self, ds: Dataset, plan: Optional[Plan] = None, today: Optional[dt.date] = None, prefs=None):
+    def __init__(self, ds: Dataset, plan: Optional[Plan] = None, today: Optional[dt.date] = None, prefs=None,
+                 blackouts=None):
         self.ds = ds
         self.prefs = prefs                  # 課表偏好 (間歇門檻); None = plan_prefs.load()
+        self.blackouts = blackouts          # 不排課日期／休息日 (engine/blackouts.py); None = blackouts.load()
         self.plan = plan if plan is not None else ds.plan
         self.today = today or day_to_date(ds.today)
         self.tday = int(math.floor(date_to_day(self.today)))
@@ -374,6 +376,22 @@ class Status:
                 lvl, v, act = WATCH, "TSB > +25，體能在流失", "恢復規律訓練"
         return Indicator("form", "狀況 TSB", lvl, txt, v, why, act, SRC_TP_TSB, now, spark)
 
+    def _planned_off_days(self) -> list[int]:
+        """Day indices of the user's 不排課日期 and 休息日 (both blackout kinds) — a chosen rest,
+        not an unplanned break (load_guard.short_break)."""
+        bos = self.blackouts
+        if bos is None:
+            try:
+                from backend.engine import blackouts as BL
+                bos = BL.load()
+            except Exception:               # noqa: BLE001 — no settings: no planned days
+                bos = ()
+        out = []
+        for b in bos or ():
+            for d in b.days():
+                out.append(int(math.floor(date_to_day(d))))
+        return out
+
     def i_volume(self) -> Indicator:
         """Weekly moving hours (all sports: the headline, taper / recovery bands) and the
         volume step on RUNNING time only (engine/load_guard.py, SP-63): last week against
@@ -386,15 +404,18 @@ class Status:
         run = [h for _, h in self.weekly_hours(12, LG.STEP_SPORTS)]
         run_last = run[-2]
         step, run_base = LG.volume_step(run_last, run[-6:-2])
-        # the week after a short unplanned break (< 6 days, no re-entry block) is exempt (load_guard)
+        # the week after a short unplanned break (< 6 days, no re-entry block) is exempt (load_guard);
+        # the user's own 不排課日期／休息日 don't count as unplanned (owner 2026-10-05)
         exempt = ""
         if step is not None and step > LG.STEP_HOLD:
             lo = math.floor(date_to_day(wk[-3][0]))
             brk = LG.short_break([math.floor(w.day) for w in self.ds.workouts if w.sport in LG.STEP_SPORTS],
-                                 lo, lo + 6)
+                                 lo, lo + 6, self._planned_off_days())
             if brk is not None:
                 n = brk[1] - brk[0] + 1
-                exempt = (f"上週跑步時間比基準多 {step * 100:+.0f}%，但前一週停跑 {n} 天"
+                k = brk[2]
+                own = f"，另 {k} 天是自己排的不排課／休息日" if k else ""
+                exempt = (f"上週跑步時間比基準多 {step * 100:+.0f}%，但前一週非計畫停跑 {n - k} 天{own}"
                           f"（< {MIN_BREAK} 天、不進恢復期）把基準拉低了：這週不算增幅（推估）")
         base6 = _mean([h for _, h in wk[-8:-2]]) or 0
         txt = f"{last:.1f} h"

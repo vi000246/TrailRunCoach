@@ -651,13 +651,30 @@ def family_of_variant(v) -> Optional[dict]:
     return family_of(WS.main_set(v))
 
 
-def session_family(s: dict, th: Optional[dict] = None) -> Optional[dict]:
-    """A plan session's family (強度課 only): its own steps, else the derived ones (the
-    ladder variant / the 「N×M 分」 text). Computed on read, never stored."""
+def steps_family(s: dict, th: Optional[dict] = None) -> Optional[dict]:
+    """The family a 強度課's structure reads as: its own steps, else the derived ones (the
+    ladder variant / the 「N×M 分」 text). None for another kind or no interval work."""
     if s.get("kind") != "quality":
         return None
     steps = s.get("steps") or WS.derive(s, th)
     return family_of(steps["items"], th) if steps and steps.get("items") else None
+
+
+_DERIVE = object()
+
+
+def session_family(s: dict, th: Optional[dict] = None, derived=_DERIVE) -> Optional[dict]:
+    """A plan session's family (強度課 only, SP-79): the one the user picked in the 課表 editor
+    (stored `family`; the sub-type kept when the steps agree), else steps_family — so a session
+    stored before SP-79, or never given one, still shows its family. `derived`: steps_family's
+    result when the caller already has it."""
+    if s.get("kind") != "quality":
+        return None
+    own = s.get("family") if s.get("family") in FAMILY_IDS else None
+    got = steps_family(s, th) if derived is _DERIVE else derived
+    if own is None or (got and got["id"] == own):
+        return got
+    return label(own)
 
 
 BASIS_LABEL = {"power": "功率", "hr": "心率", "pace": "配速", "rpe": "RPE"}

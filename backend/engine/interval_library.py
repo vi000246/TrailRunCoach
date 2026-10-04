@@ -40,6 +40,7 @@ the riverside — that is the easy part of every warm-up and is never cut.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from typing import Optional
 
@@ -409,8 +410,96 @@ def structure(v: Variant) -> str:
     return f"{v.n}×{fmt_s(v.work_s)}"
 
 
+# 強度課's three families (SP-79, the user's decision 2026-10-04): a session's title starts with its
+# family — 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.FAMILIES; 巡航 = the cruise sub-type) —, not
+# the old class word (閾值 / 近閾值 / VO2max). Raw zh-TW msgids: a stored title is never translated.
+# The rule is workout_templates.classify's on a variant (Z3: 長 tempo when a rep is ≥ 15′ or one
+# continuous block, else 巡航; Z4: 超閾值 when a rep is > 5′, else VO2max) — a test holds it to
+# family_of_variant for every library row. 「N×M 分」 stays (five parsers read it off the title).
+FAMILY_TITLE = {"aerobic": "有氧間歇", "cruise": "有氧間歇（巡航）", "supra": "有氧間歇（超閾值）",
+                "vo2max": "VO2max 間歇", "speed": "速度"}
+TEMPO_MIN_REP_S = 900        # = workout_templates.TEMPO_MIN_S
+VO2_MAX_REP_S = 300          # = workout_templates.VO2_MAX_S
+
+
+def _median(xs) -> float:
+    xs = sorted(xs)
+    n = len(xs)
+    return float(xs[n // 2]) if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2.0
+
+
+def title_prefix(v: Variant) -> str:
+    rep = _median(v.works)
+    if v.cls == "Z5":
+        return FAMILY_TITLE["vo2max"]
+    if v.cls == "Z4":
+        return FAMILY_TITLE["supra" if rep > VO2_MAX_REP_S else "vo2max"]
+    return FAMILY_TITLE["aerobic" if v.continuous or rep >= TEMPO_MIN_REP_S else "cruise"]
+
+
+def _join(prefix: str, rest: str) -> str:
+    """「有氧間歇 2×15 分」 but 「有氧間歇（巡航）3×8 分」 (no space after a closing bracket)."""
+    return prefix + ("" if prefix.endswith("）") else " ") + rest
+
+
+def plain_title(v: Variant) -> str:
+    """「有氧間歇 2×15 分」 (the 插入範本 row: no 上坡)."""
+    return _join(title_prefix(v), structure(v))
+
+
 def title(v: Variant) -> str:
-    return f"{CLASS_LABEL[v.cls]} {structure(v)}" + ("上坡" if v.terrain == "hill" else "")
+    return plain_title(v) + ("上坡" if v.terrain == "hill" else "")
+
+
+def family_word(v: Variant) -> str:
+    """「有氧間歇・巡航」: the family in a label that is already in brackets."""
+    return title_prefix(v).replace("（", "・").replace("）", "")
+
+
+# the titles stored before SP-79 → today's (plan_store.display_title, quality_gate's title matchers):
+# 「閾值／近閾值 <structure>」 → 有氧間歇 or 有氧間歇（巡航） by the rep length, 「VO2max <structure>」 →
+# VO2max 間歇, the fixed sessions' 「閾值節奏」「節奏」 → by the rep length, 「爬坡間歇 N×M 分」 →
+# 「VO2max 間歇 N×M 分上坡」. The rest of the title (上坡, （平路）, （只排閾值）…) is kept; anything else
+# (the old ladder's 「閾值下 3×8 分」「VO2max 間歇 4×4 分」, a title of your own) is left as written.
+_OLD_Z3 = re.compile(r"^(?:閾值|近閾值|閾值節奏|節奏) (?=\S)")
+_OLD_Z5 = re.compile(r"^VO2max (?!間歇)(?=\S)")
+_OLD_HILL = re.compile(r"^爬坡間歇 ?(\d+\s*[×xX]\s*\d+\s*分)")
+_OLD_FLAT_HILL = re.compile(r"^間歇 ?(5\s*[×xX]\s*4\s*分)(?=（平路）)")     # the hill set on 平路 (plan_prefs)
+
+
+def _rep_s(rest: str) -> Optional[float]:
+    """The typical rep of a title's structure (seconds); None = one continuous block."""
+    if rest.startswith("連續"):
+        return None
+    m = re.match(r"(?:\d+\s*組\s*×\s*)?\d+\s*[×xX]\s*(\d+)(?::(\d+))?\s*(分|秒)?", rest)
+    if m:
+        a = int(m.group(1))
+        if m.group(2) is not None:
+            return a * 60 + int(m.group(2))
+        return a if m.group(3) == "秒" else a * 60
+    m = re.match(r"([\d.]+(?:-[\d.]+)+)\s*分", rest)           # a pyramid 「2-3-4-3-2 分」
+    if m:
+        return _median([float(x) * 60 for x in m.group(1).split("-")])
+    return None
+
+
+def renamed(title: Optional[str]) -> Optional[str]:
+    """A pre-SP-79 auto title in today's words (unchanged when it isn't one)."""
+    if not title:
+        return title
+    t = str(title)
+    m = _OLD_HILL.match(t) or _OLD_FLAT_HILL.match(t)
+    if m:
+        return _join(FAMILY_TITLE["vo2max"], m.group(1)) + ("上坡" if t.startswith("爬坡") else "") + t[m.end():]
+    m = _OLD_Z5.match(t)
+    if m:
+        return _join(FAMILY_TITLE["vo2max"], t[m.end():])
+    m = _OLD_Z3.match(t)
+    if m:
+        rest = t[m.end():]
+        rep = _rep_s(rest)
+        return _join(FAMILY_TITLE["aerobic" if rep is None or rep >= TEMPO_MIN_REP_S else "cruise"], rest)
+    return t
 
 
 def rest_text(v: Variant) -> str:
@@ -726,7 +815,7 @@ def templates(cp: Optional[float] = None, cap: Optional[float] = None, prefs=Non
     groups = []
     for rung in RUNG_ORDER + ("tp",):
         rows = [option_row(v, cp, cap, prefs, history) for v in LIBRARY[rung]]
-        groups.append({"rung": rung, "label": f"{RUNG_NAME[rung]}（{CLASS_LABEL[LIBRARY[rung][0].cls]}）", "rows": rows})
+        groups.append({"rung": rung, "label": f"{RUNG_NAME[rung]}（{family_word(canonical(rung))}）", "rows": rows})
     groups.append({"rung": "x", "label": "非同等（不算進階）",
                    "rows": [option_row(v, cp, cap, prefs, history, "每趟 < 2 分：算一堂 5 區，不算進階", False)
                             for v in NON_EQUIV]})

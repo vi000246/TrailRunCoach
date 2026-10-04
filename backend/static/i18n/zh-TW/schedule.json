@@ -253,5 +253,9 @@
   "legend.failed": "失敗",
   "legend.not_pushed": "未推送",
   "preset.not_found": "找不到課表範本「{key}」",
-  "preset.pick_day": "選日期後儲存"
+  "preset.pick_day": "選日期後儲存",
+  "family.aerobic": "有氧間歇",
+  "family.vo2max": "VO2max 間歇",
+  "family.speed": "速度",
+  "family.mismatch": "步驟看起來比較像「{fam}」；類型照你選的「{picked}」存（只是提醒）"
 }

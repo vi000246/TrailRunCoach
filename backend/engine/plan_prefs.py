@@ -453,9 +453,10 @@ def _quality_terrain(s: dict, p: Prefs) -> None:
     if s["title"].endswith(("（平路）", "（坡道）")):          # carried over from this week: already shaped
         s["terrain"] = "road" if s["title"].endswith("（平路）") else "trail"
         return
-    uphill = "爬坡" in s["title"]
+    # 「VO2max 間歇 5×4 分上坡」 (SP-79; a stored older row: 「爬坡間歇 5×4 分」)
+    uphill = "爬坡" in s["title"] or s["title"].endswith("上坡")
     if t == "flat" and uphill:
-        s["title"] = s["title"].replace("爬坡間歇", "間歇") + "（平路）"
+        s["title"] = re.sub(r"上坡$", "", s["title"]).replace("爬坡間歇", "間歇") + "（平路）"
         s["detail"] = re.sub(r"上坡 (\d+) 分鐘（[^）]*），慢跑或走下來恢復", r"平路 \1 分鐘，慢跑 \1 分鐘恢復",
                              s.get("detail") or "")
         s["terrain"] = "road"

@@ -15,6 +15,7 @@
   --accent: #2a78d6; --soft: #e8efff;
   --good: #1a7f37; --watch: #b45309; --bad: #c62828;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s7: #4a3aa7; --bar: #b9b8b1;
+  --qf2: #d32f2f; --qf3: #8e24aa;
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.04);
 }
 @media (prefers-color-scheme: dark) {
@@ -24,6 +25,7 @@
     --accent: #3987e5; --soft: #1c2a40;
     --good: #4ade80; --watch: #fbbf24; --bad: #f87171;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s7: #9085e9; --bar: #5a5954;
+    --qf2: #f0605d; --qf3: #c27ad6;
     --shadow: none;
   }
 }
@@ -33,6 +35,7 @@
   --accent: #3987e5; --soft: #1c2a40;
   --good: #4ade80; --watch: #fbbf24; --bad: #f87171;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s7: #9085e9; --bar: #5a5954;
+  --qf2: #f0605d; --qf3: #c27ad6;
   --shadow: none;
 }
 * { box-sizing: border-box; }
@@ -139,6 +142,8 @@ h2 .meta { font-weight: 400; }
 .kr .n b { color: var(--text); }
 .k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); } .k-test { --k: var(--s7); }
 .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive, .k-notice { --k: var(--bar); }
+/* 強度課 by family (SP-79), the 課表 page's colours */
+.k-quality.fam-aerobic { --k: var(--s2); } .k-quality.fam-vo2max { --k: var(--qf2); } .k-quality.fam-speed { --k: var(--qf3); }
 .kbar { display: flex; height: 12px; border-radius: 4px; overflow: hidden; gap: 2px; background: color-mix(in srgb, var(--line) 80%, transparent); }
 .kbar i { display: block; height: 100%; }
 
@@ -536,15 +541,18 @@ function renderTrend(ws, st) {
         lineStyle: { color: css("--faint"), type: [4, 4] }, data: [{ yAxis: th }] } }] }, true);
 }
 
+// a 強度課 row / session by its family (SP-79: 有氧間歇 / VO2max 間歇 / 速度; none = 強度課)
+const kindName = (k) => (k.kind === "quality" && k.family ? T("family." + k.family) : T("kind." + k.kind));
+const kindCls = (k) => `k-${esc(k.kind)}${k.kind === "quality" && k.family ? " fam-" + esc(k.family) : ""}`;
 function renderKinds(ks) {
   $("kd-q").innerHTML = q(T("kinds.tip"));
   if (!ks.length) { $("kinds").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("st-legend").innerHTML = ""; return; }
   $("kinds").innerHTML = ks.map((k) => {
     const segs = ["done", "partial", "off_plan", "missed"].filter((s) => k[s]).map((s) =>
       `<i class="bg-${s}" style="flex:${k[s]}" title="${esc(T("status." + s))} ${k[s]}"></i>`).join("");
-    return `<div class="kr k-${esc(k.kind)}"><span class="kl"><i></i>${esc(T("kind." + k.kind))}</span>
-      <div class="kbar" role="img" aria-label="${esc(T("kinds.aria", { kind: T("kind." + k.kind), done: k.completed, due: k.due }))}">${segs}</div>
-      <span class="n"><b>${k.due ? pc(k.rate) + "%" : "–"}</b> · ${k.completed}/${k.due}</span></div>`;
+    return `<div class="kr ${kindCls(k)}"><span class="kl" title="${esc(kindName(k))}"><i></i>${esc(kindName(k))}</span>
+      <div class="kbar" role="img" aria-label="${esc(T("kinds.aria", { kind: kindName(k), done: k.completed, due: k.due }))}">${segs}</div>
+      <span class="n" title="${esc(T("kinds.tss", { p: n0(k.planned_tss), a: n0(k.actual_tss) }))}"><b>${k.due ? pc(k.rate) + "%" : "–"}</b> · ${k.completed}/${k.due}</span></div>`;
   }).join("");
   $("st-legend").innerHTML = ["done", "partial", "off_plan", "missed"].map((s) => `<span><i class="bg-${s}"></i>${sw(s)}</span>`).join("");
 }
@@ -562,9 +570,9 @@ function renderList() {
     const act = r.actual_tss != null || r.actual_s ? `${r.actual_s ? hm(r.actual_s) : ""}${r.actual_tss != null ? ` · TSS ${n0(r.planned_tss)}→${n0(r.actual_tss)}` : ""}`
       : `${r.minutes ? r.minutes + "′" : ""} · TSS ${n0(r.planned_tss)}`;
     const tip = [r.title, r.off_text, r.duration_pct != null ? T("list.dur_pct", { pct: r.duration_pct }) : "", r.tss_pct != null ? T("list.tss_pct", { pct: r.tss_pct }) : ""].filter(Boolean).join("\n");
-    return `<a class="row k-${esc(r.kind)}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
+    return `<a class="row ${kindCls(r)}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
       <span class="d">${esc(md(r.day))}</span><span class="kd" aria-hidden="true"></span>
-      <span class="t">${esc(r.title)}<span class="meta">${esc(T("kind." + r.kind))}</span></span>
+      <span class="t">${esc(r.title)}<span class="meta">${esc(kindName(r))}</span></span>
       ${sw(r.status)}<span class="p">${r.pct != null ? r.pct + "%" : "–"}</span><span class="x">${esc(act)}</span></a>`;
   }).join("");
   $("more").innerHTML = rows.length > S.limit ? `<button class="btn" type="button" id="more-btn">${esc(T("list.more", { n: rows.length - S.limit }))}</button>` : "";

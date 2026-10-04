@@ -429,7 +429,7 @@ def test_parity_mode_is_untouched(tmp_path, no_plan_lthr):
 # status: the fitness / volume indicators carry the guardrail values
 # ---------------------------------------------------------------------------
 
-def _status(sessions, today=dt.date(2026, 9, 30)):
+def _status(sessions, today=dt.date(2026, 9, 30), blackouts=()):
     """sessions: [(date, sport, hours, tss)] → a Status on a FakeDataset (no channels)."""
     from backend.engine.planning import Plan
     from backend.engine.status import Status
@@ -439,7 +439,7 @@ def _status(sessions, today=dt.date(2026, 9, 30)):
           for d, sp, h, tss in sessions]
     ds = FakeDataset(ws, today)
     ds.plan = Plan()
-    return Status(ds, ds.plan, today)
+    return Status(ds, ds.plan, today, blackouts=blackouts)
 
 
 def _weekly(today, weeks, run_h, extra=()):
@@ -484,6 +484,38 @@ def test_short_break_exempts_the_next_weeks_volume_step():
     assert QG.guard(step=0.3)["block"] and not QG.guard(step=0.3)["step_note"]
 
 
+def test_planned_break_is_not_exempt_from_the_volume_step():
+    """SP-63 (owner 2026-10-05): a 3–5-day gap on the user's own 不排課日期 or 休息日 is a chosen
+    rest — the step check still runs; a partly planned gap is exempt only when its unplanned
+    part alone is ≥ 3 days."""
+    from backend.engine import blackouts as BL
+    today = dt.date(2026, 9, 30)
+    mon = today - dt.timedelta(days=today.weekday())
+    normal = {1: 5 / 3, 3: 5 / 3, 5: 5 / 3}
+    prev_mon = mon - dt.timedelta(weeks=2)
+
+    def status(prev, bos):
+        ss = []
+        for i, w in enumerate([normal] * 4 + [prev, normal]):
+            ss += _week(mon - dt.timedelta(weeks=6 - i), w)
+        return _status(ss, today, blackouts=bos)
+
+    def rng(a, b, kind=""):
+        return BL.Blackout(id=f"b{a}{kind}", start=(prev_mon + dt.timedelta(days=a)).isoformat(),
+                           end=(prev_mon + dt.timedelta(days=b)).isoformat(), kind=kind)
+    three = {1: 0.75, 5: 0.75}                                    # Wed–Fri off (3 days)
+    v = status(three, (rng(2, 4),)).i_volume()                    # all three are 不排課日期
+    assert v.extra["step"] > LG.STEP_BLOCK and not v.extra["step_exempt"] and v.level == "bad"
+    v = status(three, (rng(3, 3, "rest"),)).i_volume()            # one 休息日: 2 unplanned left
+    assert not v.extra["step_exempt"] and v.level == "bad"
+    five = {0: 0.75, 6: 0.75}                                     # Tue–Sat off (5 days)
+    v = status(five, (rng(1, 2),)).i_volume()                     # 2 planned, 3 unplanned: exempt
+    assert v.extra["step_exempt"] and v.level == "good"
+    assert "非計畫停跑 3 天" in v.verdict and "另 2 天是自己排的不排課／休息日" in v.verdict
+    v = status(three, (rng(10, 12),)).i_volume()                  # a blackout elsewhere: no effect
+    assert v.extra["step_exempt"] and "非計畫停跑 3 天" in v.verdict and "另" not in v.verdict
+
+
 def test_short_break_note_reaches_the_week_plan():
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
@@ -503,12 +535,18 @@ def test_short_break_note_reaches_the_week_plan():
 
 
 def test_short_break_window():
-    assert LG.short_break([0, 4, 5], 0, 6) == (1, 3)              # 3 days off inside the week
-    assert LG.short_break([0, 4, 8], 0, 6) == (5, 7)              # the latest one
-    assert LG.short_break([0, 3, 8], 0, 6) == (4, 7)              # 4 days, reaching into the next week
+    assert LG.short_break([0, 4, 5], 0, 6) == (1, 3, 0)           # 3 days off inside the week
+    assert LG.short_break([0, 4, 8], 0, 6) == (5, 7, 0)           # the latest one
+    assert LG.short_break([0, 3, 8], 0, 6) == (4, 7, 0)           # 4 days, reaching into the next week
     assert LG.short_break([0, 3], 0, 6) is None                   # 2 days: routine rest
     assert LG.short_break([0, 7], 0, 6) is None                   # 6 days: re-entry block
     assert LG.short_break([0, 4], 10, 16) is None                 # not in the week before
+    # owner 2026-10-05: the user's own 不排課日期／休息日 are not an unplanned break
+    assert LG.short_break([0, 4], 0, 6, planned=[1, 2, 3]) is None        # fully planned
+    assert LG.short_break([0, 4], 0, 6, planned=[2]) is None              # 2 unplanned left
+    assert LG.short_break([0, 6], 0, 6, planned=[1, 2]) == (1, 5, 2)      # 5 days, 3 unplanned: exempt
+    assert LG.short_break([0, 6], 0, 6, planned=[1, 2, 3]) is None        # 5 days, 2 unplanned
+    assert LG.short_break([0, 4, 8], 0, 6, planned=[5, 6, 7]) == (1, 3, 0)  # the latest unplanned one
 
 
 def test_status_startup_has_no_guardrail_ramp():

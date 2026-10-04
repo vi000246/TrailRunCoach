@@ -104,6 +104,9 @@ DONE_STATUSES = ("done", "partial", "off_plan")
 SKIP_KINDS = ("notice", "heat_passive")      # the 課表待確認 reminder; a bath / sauna is ticked, not matched
 STREAK_RATE = 0.80                           # a week "達標" = ≥ 80 % of its due sessions done (推估)
 KIND_ORDER = ("easy", "long", "quality", "test", "hike", "strength")
+# 強度課 split by family (SP-79; workout_templates.session_family — the stored one, else read from
+# the steps): 有氧間歇 / VO2max 間歇 / 速度, then one with no interval work (None) as 強度課
+FAMILY_ORDER = ("aerobic", "vo2max", "speed", None)
 
 
 def status_of(s: dict, comp: Optional[dict], today: str) -> Optional[str]:
@@ -136,7 +139,9 @@ def session_row(s: dict, today: str) -> Optional[dict]:
     if stt is None:
         return None
     a = s.get("done_by") if s.get("state") == "done" and isinstance(s.get("done_by"), dict) else {}
+    fam = (s.get("quality_family") or {}).get("id") if s.get("kind") == "quality" else None
     return {"uid": s["uid"], "day": s["day"], "week_start": s.get("week_start"), "kind": s.get("kind"),
+            "family": fam,
             "title": s.get("title") or "", "minutes": s.get("minutes") or 0,
             "planned_tss": round(_f(s.get("tss_est", s.get("tss"))), 1),
             "actual_tss": None if a.get("tss") is None else round(_f(a.get("tss")), 1),
@@ -210,11 +215,13 @@ def dashboard(sessions: list[dict], week_rows: list[dict], today: str, start: st
     days = [bucket(w) for w in (day_rows or [])]
     kinds = []
     for k in KIND_ORDER + tuple(sorted({r["kind"] for r in rows} - set(KIND_ORDER))):
-        kr = [r for r in rows if r["kind"] == k]
-        if kr:
-            c = _count(kr)
-            kinds.append({"kind": k, **{x: c[x] for x in ("due", "completed", "done", "partial", "off_plan", "missed",
-                                                          "rate", "tss_pct", "planned_tss", "actual_tss")}})
+        for fam in FAMILY_ORDER if k == "quality" else (None,):
+            kr = [r for r in rows if r["kind"] == k and r.get("family") == fam]
+            if kr:
+                c = _count(kr)
+                kinds.append({"kind": k, **({"family": fam} if k == "quality" else {}),
+                              **{x: c[x] for x in ("due", "completed", "done", "partial", "off_plan", "missed",
+                                                   "rate", "tss_pct", "planned_tss", "actual_tss")}})
     out = {"start": start, "end": end, "today": today, "totals": _count(rows), "sessions": rows,
            "weeks": weeks, "days": days, "streak": _streak(weeks, today), "by_kind": kinds, "phase": None,
            "levels": COMPLIANCE}
