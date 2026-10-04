@@ -131,7 +131,16 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). An accepted B2B's
    own TSB drop is exempt (`B2B.tsb_exempt`, `backend/engine/overview.py:903`).
 4. Taper: 50 % of the 6-week mean (40 % in the last 7 days to the A event); event week 30 %;
-   recovery 50 %; transition 65 %.
+   recovery 50 %. **Transition** (SP-73, `backend/engine/overview.py:1014`): 50 % of the race's
+   pre-race level (`TRANSITION_SHARE`, 推估 — the recovery share; Friel 「for fun rather than
+   fitness」): the mean of the 4 complete weeks before its taper (`planning.pre_race_mondays`,
+   `backend/engine/planning.py:411`; `transition_hours`, `backend/engine/overview.py:349`), not
+   of the last 4 weeks (they hold the taper, race and recovery and would shrink the phase week
+   after week); no race known (a manual 轉換期) → the old 65 % of the 4-week mean. Easy runs
+   only, each ≤ 60 min (`TRANSITION_RUN_MAX`, Canova's 4 weeks of easy running ≤ 1 h; enforced
+   after the 課表偏好 shaping too, `cap_transition_runs`, `backend/engine/overview.py:368`),
+   strength ×2, no long run, interval, strides or CP-test suggestion; a week note says so and
+   that cross-training may replace an easy run (`src: transition`).
 5. A custom weekly-hours preference only lowers the result (`backend/engine/overview.py:928`).
 6. A break ≥ 6 days without running — a 不排課日期 range or simply no runs — gives the re-entry
    block instead (`reentry.find`, `backend/engine/overview.py:936`; Daniels; plan-auto.spec.md);
@@ -368,6 +377,7 @@ defaults reproduce today's plan exactly.
 | AeT 飄移測試 | `plan.prefs.aet_test_days` | `weekday` / `any` (`weekday`: weekends are often trail days). **Not part of `active`** (`NOT_SHAPING`): every placement path reads it (`aet_test.test_days` / `pick_day`): weekday = Mon–Fri in Tue-first order, ≥ 2 days from the long run and other hard days where possible, never the day after the long run unless nothing else; the 80′ standard test may fall back to a weekend day that isn't the long run's, the 50′ short one never; `any` = the interval rule. The test's **length** follows `cap_weekday` (`aet_test.variant_for`): no cap or ≥ 80 → 15′ + 60′ + 5′; < 80 → UA's minimum 10′ + 40′ (never shorter, exempt below 50). Panel: `#pf-aet` chips + AeT 排在 |
 | 間歇暖身／緩和 | `plan.prefs.warmup_commute_min`, `plan.prefs.cooldown_min` | 0–30 (10) / 0–20 (5) min: the interval's easy warm-up run and cool-down (`engine/interval_library.py`). **Not part of `active`** |
 | 建議 B2B | `plan.prefs.b2b` | `true` / `false` (`true`): whether a due B2B weekend is suggested at all. **Not part of `active`** |
+| A 賽事後轉換期 | `plan.prefs.transition_weeks` | 0–4 weeks, 0 = off (3; `backend/settings/repository.py:137`). **Not part of `active`** (`NOT_SHAPING`, `backend/engine/plan_prefs.py:98`): it changes the season's phases (`planning.auto_phases`, `backend/engine/planning.py:321`: after each A race's recovery; Friel 3–4 weeks, Canova 4 — 3 is the low end, 推估), read by `planning.phases` (`transition_weeks_setting`, `backend/engine/planning.py:380`) so status, the week plan, the projection, the phase labels and the automatic run agree. Manual phases win (nothing is added). The next A race's backward-planned 專項期 wins: the 轉換期 ends the day before it with a phase `note` 「轉換期縮短為 N 天…」, or is skipped (< 7 days, `TRANSITION_MIN_DAYS`, 推估) with the note on the recovery phase; the note is a week note. Panel: select `#pf-trw` (`backend/static/schedule.html:782`) |
 | 熱適應 | `plan.prefs.heat`, `plan.prefs.heat_method` | `auto` / `off` (`auto`); `run` / `overdress` / `bath` / `sauna` / `mixed` (`run`). **Not part of `active`** (`NOT_SHAPING`): they only add heat sessions before a hot A/B race (`engine/heat_plan.py`). Panel: switch + select with the current S and the rules (`#pf-heat`) |
 
 **Panel** (⚙ 課表偏好, redesigned 2026-10-02, `backend/static/schedule.html:680`): sections 每週時間
@@ -589,7 +599,9 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:36`):
 - Hours per week (`week_hours`, `backend/engine/projection.py:77`): base / specific use the CTL
   ramp goal capped at +10 % (≥ +0.5 h) of max(4-week mean, last week), with a 65 % recovery
   week after 3 build weeks; taper 40–50 % of the 6-week mean; event 30 %; recovery 50 %;
-  transition 65 % of the 4-week mean. A weekly-hours preference caps it
+  transition 50 % of the pre-race level, the same number as week_plan (`O.transition_ref` over
+  the history, this week and the projected weeks by Monday, `backend/engine/projection.py:461`;
+  week_plan's `transition_ref` when its weeks are past), easy runs ≤ 60 min. A weekly-hours preference caps it
   (`backend/engine/projection.py:439`).
 - Sessions (`week_sessions`, `backend/engine/projection.py:104`): the same template (long, the
   week's intervals, strength, easy fill) placed by `_place` (`backend/engine/projection.py:253`), or
@@ -1424,6 +1436,7 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-39 | 3 區／5 區 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR ≤ 10 % or Friel) + the soft 「近 6 週 ≥ 2 堂 3 區」 (`z5_track`, shared by week_decision and the card); low-intensity share blocks Zone 5 only with a tested AeT; the card renamed 3 區／5 區解鎖流程 and redrawn as two parallel tracks with their own 「下一步」; 「安排課表」 links into the 課表 dialog (`schedule.html?add=` / `?test=`, `WorkoutEditor.applyKey`) |
 | 2026-10-04 | feature | SP-64 | Threshold confidence (`threshold_confidence.py`): 8 LTHR signals + max-HR plausibility (120-s sustained peak, spike / cadence-lock filter), diagnosis of the wrong value, `thr_check` test suggestions (max-HR / LTHR test) with 「安排課表」 links and test conditions, `extra.thr_check` on the 測試 card, `GET /plan/threshold-check`, 「套用」 on 設定 (`mhr_method`), HR-target warning badge in the editor, `maxhr_hill` test template |
 | 2026-10-04 | feature | SP-63 | Relative CTL ramp lines (`load_guard`), startup seed / 28-day skip, running-time volume step vs max(last week, 4-week mean), weekly CTL goal max(2, 5 %) / max(2.5, 7 %) in `week_plan` and the projection |
+| 2026-10-04 | feature | SP-73 | 轉換期 after each A race's recovery (`planning.auto_phases`; 課表偏好 `transition_weeks` 0–4, default 3): shortened / skipped before the next A race's 專項期 with a phase note, manual phases win; volume 50 % of the 4 weeks before the taper (week_plan and projection agree), easy runs ≤ 60 min (Canova), no CP-test suggestion |
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |
 | 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |
 | 2026-10-04 | sp-38-load-step | SP-38 | Step end conditions from the provider's capabilities (`end_conditions` / `end_labels` / `load_unit`); new 「負荷」 end condition (TSS, main-set only; COROS targetType 6 with the converted TL, else estimated time); 「按圈」 → 「直到按下計圈」 on the race-calculator export and template notes too |

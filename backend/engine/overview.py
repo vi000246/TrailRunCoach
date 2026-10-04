@@ -331,6 +331,71 @@ SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
 SRC_PALLADINO = "Palladino 功率區間"
 SRC_PFITZ = "Pfitzinger & Douglas《Advanced Marathoning》"
 SRC_DANIELS = "Daniels《Daniels' Running Formula》"
+SRC_TRANSITION = "Friel（Transition 3–4 週，for fun rather than fitness）；Canova（4 週輕鬆跑 ≤ 1 小時）"
+
+# ---- 轉換期 (SP-73; coach-schools-zones-periodization.md R5) ---------------------------------
+# The volume is a share of the training level before the race (the 4 complete weeks before its
+# taper, planning.pre_race_mondays) — not of the last 4 weeks, which hold the taper, the race and
+# the recovery and would shrink the 轉換期 week after week. 50 % = the 恢復期's share (推估: no
+# school gives a %; Friel 「for fun rather than fitness」). Each easy run ≤ 60 min: Canova's 轉換
+# 4 週「輕鬆跑 ≤ 1 小時」. No long run, no interval, no strides; strength ×2 (as before).
+TRANSITION_SHARE = 0.5
+TRANSITION_RUN_MAX = 60
+TRANSITION_OLD_SHARE = 0.65           # no pre-race weeks known (a manual 轉換期 with no race): 65 % of the 4-week mean
+TRANSITION_NOTE = ("轉換期：只排輕鬆跑（每次 ≤ 60 分）和肌力，沒有長跑、強度課；"
+                   "想做交叉訓練（騎車、游泳、健行）可以拿來取代輕鬆跑")
+
+
+def transition_hours(ref_h: Optional[float], base4: float) -> tuple[float, str]:
+    """(hours, why) of a 轉換期 week: TRANSITION_SHARE × the pre-race level `ref_h`, else
+    (no pre-race weeks) the old TRANSITION_OLD_SHARE × the 4-week mean."""
+    if ref_h and ref_h > 0:
+        return (TRANSITION_SHARE * ref_h,
+                f"轉換期：賽前 4 週平均 {ref_h:.1f} h × {TRANSITION_SHARE:.0%}（推估），每次輕鬆跑 ≤ {TRANSITION_RUN_MAX} 分")
+    return TRANSITION_OLD_SHARE * base4, f"轉換期：近 4 週的 {TRANSITION_OLD_SHARE:.0%}"
+
+
+def easy_count(left: float, kind: str) -> int:
+    """How many easy runs fill `left` minutes: ~50 min each (1–5); in the 轉換期 each ≤
+    TRANSITION_RUN_MAX (1–6)."""
+    if left < 25:
+        return 0
+    if kind == "transition":
+        return max(1, min(6, math.ceil(left / TRANSITION_RUN_MAX - 1e-9)))
+    return max(1, min(5, int(round(left / 50.0))))
+
+
+def cap_transition_runs(ss: list, notes: Optional[list] = None) -> int:
+    """The 轉換期's Canova cap after the 課表偏好 shaping (few runs a week make long easy runs):
+    every run > TRANSITION_RUN_MAX is cut to it (TSS pro rata); a note says how much went.
+    `ss`: Session objects or dicts. Returns the minutes cut."""
+    cut = 0
+    for s in ss:
+        get = (lambda k, s=s: s.get(k)) if isinstance(s, dict) else (lambda k, s=s: getattr(s, k))
+        if get("kind") not in ("easy", "long", "hike") or get("done") or (get("minutes") or 0) <= TRANSITION_RUN_MAX:
+            continue
+        m = int(get("minutes"))
+        tss = float(get("tss") or 0.0) * TRANSITION_RUN_MAX / m
+        if isinstance(s, dict):
+            s["minutes"], s["tss"] = TRANSITION_RUN_MAX, round(tss, 1)
+        else:
+            s.minutes, s.tss = TRANSITION_RUN_MAX, round(tss, 1)
+        cut += m - TRANSITION_RUN_MAX
+    if cut and notes is not None:
+        notes.append({"level": "info", "src": "transition",
+                      "text": f"轉換期每次跑步 ≤ {TRANSITION_RUN_MAX} 分（Canova）：本週少排 {cut} 分，不用補"})
+    return cut
+
+
+def transition_ref(phases: list, day: dt.date, hours_of) -> dict:
+    """The pre-race level of the 轉換期 around `day`: {"mondays": [ISO], "hours": mean or None}.
+    `hours_of(monday)` → the week's hours, None when not known (the week isn't past / projected)."""
+    from backend.engine.planning import pre_race_mondays
+    mons = pre_race_mondays(phases, day)
+    hs = [hours_of(m) for m in mons]
+    known = [h for h in hs if h is not None]
+    return {"mondays": [m.isoformat() for m in mons],
+            "hours": statistics.mean(known) if known and len(known) == len(hs) else None}
 # 主要訓練項目 = 路跑 (engine/primary_sport.py): the 專項期 long run carries a marathon-pace (MP)
 # segment — Pfitzinger's MP long runs (8–18 mi at MP) and Daniels' M runs. Its share of the
 # long run and its bounds are 推估 (no published single rule).
@@ -395,6 +460,24 @@ def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
     ws = workouts_between(ds, monday, monday + dt.timedelta(days=7))
     return (sum(moving_s(w) for w in ws) / 3600.0,
             sum(_n(w.metrics.get("tss")) or 0.0 for w in ws))
+
+
+def _transition_ref(ds: Dataset, status, today: dt.date, monday: dt.date) -> dict:
+    """transition_ref for the 轉換期 that holds `today` or comes next (within the planning
+    window): its race's pre-race weeks read from the activities when they are all past, else
+    hours None (the projection fills them from its projected weeks). {} without a 轉換期."""
+    plan = getattr(status, "plan", None)
+    if plan is None:
+        return {}
+    try:
+        from backend.engine import planning as P
+        phs = P.phases(plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        return {}
+    tr = next((p for p in phs if p.kind == "transition" and P._d(p.end) >= monday), None)
+    if tr is None:
+        return {}
+    return transition_ref(phs, P._d(tr.start), lambda m: _week_hours(ds, m)[0] if m < monday else None)
 
 
 def _tss_per_hour(ds: Dataset, today: dt.date) -> dict[str, float]:
@@ -867,6 +950,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     last_h = hist[-1][1] if hist else 0.0
     ref = max(base4, last_h)
     tph = _tss_per_hour(ds, today)
+    # 轉換期 (SP-73): the pre-race level of the current / next 轉換期 (projection reads it too)
+    tr_ref = _transition_ref(ds, status, today, monday)
     tot_h = sum(h for _, h, _ in hist[-6:])
     r_all = (sum(t for _, _, t in hist[-6:]) / tot_h) if tot_h > 1 else 50.0
     if not r_all > 0:
@@ -923,9 +1008,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     elif kind == "event":
         hours = 0.3 * base4
         why.append("比賽週：短、輕鬆")
-    elif kind in ("recovery", "transition"):
-        hours = (0.5 if kind == "recovery" else 0.65) * base4
-        why.append(f"{'恢復' if kind == 'recovery' else '轉換'}期：近 4 週的 {0.5 if kind == 'recovery' else 0.65:.0%}")
+    elif kind == "recovery":
+        hours = 0.5 * base4
+        why.append(f"恢復期：近 4 週的 {0.5:.0%}")
+    elif kind == "transition":
+        # 轉換期 (SP-73): a share of the level before the race, not of the taper / race / recovery weeks
+        hours, w = transition_hours(tr_ref.get("hours"), base4)
+        why.append(w)
     hours = max(hours, 0.0)
     if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
         hours = PR.weekly_hours
@@ -1055,7 +1144,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     tx = getattr(by.get("testing"), "extra", None) or {}
     cp_due = tx.get("cp_due", lvl("testing") in ("bad", "watch"))      # the CP test measures CP only
     test_due = cp_due and lvl("testing") in ("bad", "watch") and (days_to is None or days_to > 10) \
-        and not (in_reentry and not RE.quality_ok(rp, monday))
+        and not (in_reentry and not RE.quality_ok(rp, monday)) and kind != "transition"   # 轉換期: no hard session (SP-73)
     # 課表偏好 CP 測試方式 (engine/cp_protocols.py) — read even when the other
     # preferences are the defaults (it is not part of Prefs.active)
     from backend.engine import cp_protocols as CPP
@@ -1148,9 +1237,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             tss=35 / 60 * tph["strength"])
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)
-    n_easy = 0 if left < 25 else max(1, min(5, int(round(left / 50.0))))
+    n_easy = easy_count(left, kind)
     for i in range(n_easy):
-        m = left / n_easy
+        m = min(left / n_easy, TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
         strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
         st_t, st_d, st_s = ROAD_STRIDES if road else HILL_STRIDES
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
@@ -1168,6 +1257,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             flag = d.pop("long_day", False)
             sessions.append(Session(**d))
             sessions[-1]._long_day = flag          # soft cap: this easy run carries the excess
+    if kind == "transition":
+        # 轉換期 (SP-73): each run ≤ 60 min (Canova) — also after the 課表偏好 shaping
+        cap_transition_runs(sessions, notes)
+        notes.append({"level": "info", "src": "transition", "text": TRANSITION_NOTE})
+    ph_note = getattr(getattr(status, "phase", None), "note", "") or ""
+    if ph_note and kind in ("recovery", "transition"):
+        # a 轉換期 shortened / skipped for the next A race's 專項期 (planning.auto_phases)
+        notes.append({"level": "info", "src": "transition", "text": ph_note})
     if b2b.get("due"):
         # B2B texts / caps after the 課表偏好 shaping (it may rename, re-kind or cap the long run)
         flags = {s.id: getattr(s, "_long_day", False) for s in sessions}
@@ -1471,6 +1568,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "test_suggestions": test_suggestions,
         # 停訓後的恢復期 (engine/reentry.py): the block in effect / ahead, for projection and the log
         "reentry": rp,
+        # 轉換期 (SP-73): the pre-race level of the current / next 轉換期, for projection
+        "transition_ref": tr_ref,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card
         "b2b": B2B.public(b2b),
         # a due B2B, suggested (never scheduled until accepted: api/plan_sessions suggestions)

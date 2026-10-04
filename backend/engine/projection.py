@@ -11,7 +11,8 @@ rolls the same rules forward week by week:
     +0.5 h) of max(4-week mean, last week); after 3 build weeks a recovery
     week at 65 % of those 3 (3:1)
   * taper 40–50 % of the 6-week mean, event week 30 %, recovery 50 %,
-    transition 65 % of the 4-week mean
+    transition 50 % of the 4 weeks before the race's taper (SP-73;
+    overview.transition_hours), each easy run <= 60 min
   * the same session template: long, one quality session, strength, easy
     runs filling the rest
 
@@ -66,6 +67,15 @@ def phase_kind(phases: list, day: dt.date) -> str:
     return "base"
 
 
+def _phase_note(phases: list, day: dt.date) -> str:
+    """The `note` of the phase holding `day` (a shortened / skipped 轉換期, planning.auto_phases)."""
+    for p in phases:
+        s, e = _d(p["start"] if isinstance(p, dict) else p.start), _d(p["end"] if isinstance(p, dict) else p.end)
+        if s <= day <= e:
+            return (p.get("note") if isinstance(p, dict) else getattr(p, "note", "")) or ""
+    return ""
+
+
 def _next_event_start(phases: list, day: dt.date) -> Optional[dt.date]:
     for p in phases:
         kind = p["kind"] if isinstance(p, dict) else p.kind
@@ -76,8 +86,9 @@ def _next_event_start(phases: list, day: dt.date) -> Optional[dt.date]:
 
 
 def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: float,
-               cc: float, days_to_a: Optional[int]) -> tuple[float, str, list[str]]:
-    """(hours, mode, why) for one projected week; `hist` = weekly hours, oldest first."""
+               cc: float, days_to_a: Optional[int], tr_ref: Optional[float] = None) -> tuple[float, str, list[str]]:
+    """(hours, mode, why) for one projected week; `hist` = weekly hours, oldest first.
+    `tr_ref`: a 轉換期 week's pre-race level (overview.transition_ref; None = the old 65 % rule)."""
     base4 = statistics.mean(hist[-4:]) if hist else 0.0
     last = hist[-1] if hist else 0.0
     ref = max(base4, last)
@@ -99,6 +110,9 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
         return base6 * share, kind, [f"減量期：平常 {base6:.1f} h × {share:.0%}"]
     if kind == "event":
         return 0.3 * base4, kind, ["比賽週：短、輕鬆"]
+    if kind == "transition":
+        h, w = O.transition_hours(tr_ref, base4)
+        return h, kind, [w]
     share = 0.5 if kind == "recovery" else 0.65
     return share * base4, kind, [f"{MODE_LABELS.get(kind, kind)}：近 4 週的 {share:.0%}"]
 
@@ -190,9 +204,9 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
             detail="膝主導＋臀中肌；安排在輕鬆日或跑完後", source=O.SRC_UA, tss=strength_tss)
     used = sum(s["minutes"] for s in ss if s["kind"] != "strength")
     left = max(0.0, total - used)
-    n_easy = 0 if left < 25 else max(1, min(5, int(round(left / 50.0))))
+    n_easy = O.easy_count(left, kind)
     for i in range(n_easy):
-        m = left / n_easy
+        m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
         strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
         st_t, st_d, _st_s = O.ROAD_STRIDES if road else O.HILL_STRIDES
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
@@ -208,6 +222,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
                      quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
+        if kind == "transition":
+            O.cap_transition_runs(ss, ctx.notes)     # 轉換期: each run ≤ 60 min (Canova), as week_plan
         ctx.notes.extend(PP.blocked_pref_notes(prefs, monday, blocked))
         PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs, notes=ctx.notes)
         return _b2b_finish(ss, info, b2b, monday, aet, blocked, prefs, ctx.notes, aet_measured)
@@ -415,6 +431,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
     strength_tss = float(st["tss"]) if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]
+    # 轉換期 (SP-73): weekly hours by Monday — the past weeks, this week, then each projected week
+    hours_at = {str(h.get("start")): float(h["hours"]) for h in cur.get("history") or [] if h.get("start")}
+    hours_at[monday.isoformat()] = float(cur["target"]["hours"])
+    cur_tr = cur.get("transition_ref") or {}
     build = [False] * (len(hist) - 1) + [cur.get("mode") in ("base", "specific")]
     for i in range(1, len(hist) - 1):
         build[i] = hist[i] >= 0.95 * hist[i - 1] and hist[i] > 0.5
@@ -436,7 +456,12 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         kind = phase_kind(phases, week)
         ev = _next_event_start(phases, week)
         days_to = (ev - week).days if ev else None
-        hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to)
+        tr_h = None
+        if kind == "transition":
+            ref = O.transition_ref(phases, week, lambda m: hours_at.get(m.isoformat()))
+            tr_h = cur_tr.get("hours") if cur_tr.get("hours") and cur_tr.get("mondays") == ref["mondays"] \
+                else ref["hours"]
+        hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to, tr_h)
         notes: list = []
         if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
             hours = PR.weekly_hours
@@ -505,6 +530,11 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
                            long_min=sp_long, sport=sport, goal_pace=cur.get("mp_goal_pace_s"),
                            aet_measured=th_meas)
+        if kind == "transition":
+            notes.append({"level": "info", "src": "transition", "text": O.TRANSITION_NOTE})
+        ph_note = _phase_note(phases, week)
+        if ph_note and kind in ("recovery", "transition"):
+            notes.append({"level": "info", "src": "transition", "text": ph_note})
         if sp_info and sp_info.get("active"):
             try:
                 SP.decorate(ss, sp_info)
@@ -560,6 +590,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
+                       or kind == "transition" or ph_note
                        or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),
@@ -582,5 +613,6 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         h_hist = full_h if lost and mode != "reentry" else hours
         build.append(mode in ("base", "specific") and h_hist >= 0.95 * hist[-1] and h_hist > 0.5)
         hist.append(h_hist)
+        hours_at[week.isoformat()] = h_hist
         week += dt.timedelta(weeks=1)
     return out

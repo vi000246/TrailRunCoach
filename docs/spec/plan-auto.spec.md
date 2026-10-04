@@ -94,6 +94,14 @@ Other entry points:
 | `plan.auto.state` | — | internal: last data stamp, last phase, last CP, Zone 5 / re-entry keys, rejected fingerprints |
 | `plan.push.provider` | coros | the push target (`backend/sync/workout_targets/`); Garmin / intervals.icu are stubs, not enabled |
 
+**Phases** (SP-73): the automatic run reads the same phases as the page (`planning.phases`,
+`backend/engine/planning.py:393`), including the 轉換期 after an A race's recovery (課表偏好
+`plan.prefs.transition_weeks`, default 3, 0 = off; overview.spec.md 課表偏好). Entering and
+leaving the 轉換期 — and changing its length while in it — is a phase change, so it is held for
+approval like any other (Big changes below). Adapt and reconcile treat the 轉換期 as a rest
+phase (`reconcile.REST_MODES`, adapt's rest week); the re-entry block applies only in base /
+specific.
+
 The toggles are in 課表 › ⚙ 課表偏好 › 自動調整 (`backend/static/schedule.html`, saved through
 `PUT /settings`); `autoplan.js` no longer draws them.
 
@@ -507,6 +515,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
+| 2026-10-04 | feature | SP-73 | The automatic run sees the 轉換期 after an A race (`plan.prefs.transition_weeks`, `planning.phases`); entering / leaving it is a held phase change |
 | 2026-10-04 | feature | SP-63 | One shared ramp rule (`load_guard`): 注意 max(3, 10 %), 擋 min(10, max(5, 15 %)) of CTL₋₇; adapt E and B2B on the block line; startup seed + 28-day skip; volume step on running time vs max(last week, 4-week mean) |
 | 2026-10-04 | feature | SP-31 follow-up | 專項期 applies this week's CTL-ramp (5 sub / 8 block) and > 20 % volume-step guardrails to both tracks; taper / race / recovery / re-entry exempt |
 | 2026-10-04 | feature | SP-31 follow-up | 2 a week with only Zone 3 open: the second session is a 巡航版 sized to the first (within the 10 % / 20 % / day caps), not a copy |
