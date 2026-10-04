@@ -278,13 +278,22 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
      (`aet_tested`: the latest plan aethr row on or before the day whose method is not
      `estimate` — an estimate applied later doesn't undo it) **and** a measured LTHR (`lthr_info
      ["measured"]`: a plan row from a test / race / lab / by hand, or the athlete's own WKO5
-     setting — not the WKO5 default, not an applied estimate) **tested in the last 12 weeks**
-     (`LTHR_FRESH_DAYS` 84, `backend/engine/quality_gate.py:104`; owner 2026-10-04, 推估 — not
-     `threshold_confidence.TEST_AGE_DAYS` 56, which is Friel's retest hint; a dateless LTHR is not
-     aged) with LTHR ÷ AeT − 1 ≤ 10 % (`aet_ua_gap`, dated the later of the two rows;
-     `z5_ua_gap`). The paths are re-read every day, so a Zone 5 confirmed only through this path
-     goes back to 未確認 85 days after the LTHR test until it is retested (the flow item reads
-     「LTHR 是 N 天前測的，超過 12 週」 and offers the 30-min LTHR test); **or** ≥ 60 min near the
+     setting — not the WKO5 default, not an applied estimate) with LTHR ÷ AeT − 1 ≤ 10 %
+     (`aet_ua_gap`, dated the later of the two rows; `z5_ua_gap`). **No age limit** (owner
+     2026-10-05, replacing SP-39's 12-week `LTHR_FRESH_DAYS`: zones-and-thresholds.md §2.5 finds no
+     direct evidence for a fixed retest period; unsourced-rules.md B3 moved the AeT to event
+     triggers too) — the measured LTHR stays valid **unless an event invalidates it**
+     (`lthr_invalid`, `backend/engine/quality_gate.py:1378`, `gate["lthr"]["invalid"]`): (a) a
+     running break ≥ 4 weeks after the test (`reentry.find_all`, a block with `reconfirm`;
+     detraining.md); (b) evidence since the test (`threshold_confidence.lthr_evidence`, level weak
+     or above: a cool long effort above LTHR, a 40–60-min race < 95 % LTHR, the CP-band
+     cross-check, CP changed > 5 % since the LTHR date — never its age, never an accepted non-test
+     source; a hot long effort is a hint only); (c) the AeT aggregate reports `shift` or `moved`
+     (`_aet_shift`, the same rules as `aet_test_reason`). A dateless LTHR counts every event in
+     reach. The time since the test is only threshold_confidence's weak reminder (hint, no
+     re-lock). The paths are re-read every day; when an event invalidates the LTHR the flow item
+     names it (「重測 1 次 30 分鐘 LTHR（LTHR 測完後停跑 N 天…）」) and offers the 30-min LTHR test;
+     **or** ≥ 60 min near the
      tested AeT with first vs second half drift < 5 % (`aet_friel_drift`, Friel). **The 90-min
      test is not an AeT test** (it yields no AeT number) — it opens Zone 3 only. Modes: `auto`,
      `xu_drift`, `plateau`, `weeks` use both AeT paths (their own method opens Zone 3 only);
@@ -567,3 +576,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | feature | SP-39 follow-up | A 徐國峰 90-min test saved through `POST /sessions` (the 「安排課表」 deep link, or the dialog's 測試 › 徐國峰 / the `lib:xu_e_drift` row) replaces that day's long run — the 排入測試 code path (`_replace_long`) |
 | 2026-10-04 | change | SP-63 follow-up | The short-break exemption from the running-volume step counts unplanned days only: days of the user's 不排課日期 / 休息日 don't make a short break (a partly planned gap needs ≥ 3 unplanned days); the note says 非計畫停跑 N 天 (owner 2026-10-05) |
 | 2026-10-04 | change | SP-73 follow-up | 轉換期 days are not a running break: no re-entry block from a cross-training-only transition (`reentry.find_all` counts days outside it), and the Zone 3 gate's 7-day gap / 21-day re-lock skip them, its weeks see-through (`planning.transition_days`; owner 2026-10-05) |
+| 2026-10-04 | change | SP-39 follow-up | Zone 5's UA path: no LTHR age limit any more (`LTHR_FRESH_DAYS` removed) — a measured LTHR is invalidated only by an event (`lthr_invalid`: a ≥ 4-week running break after the test, evidence since the test from `threshold_confidence.lthr_evidence`, an AeT aggregate shift / moved); the flow names the event and offers the 30-min LTHR test (owner 2026-10-05) |

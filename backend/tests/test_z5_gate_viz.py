@@ -222,25 +222,86 @@ def test_card_without_a_measured_aet_and_in_a_forced_mode():
     assert f["here"]["action"]["href"].endswith("?add=lib%3Afriel_lthr30&proto=race")
 
 
-def test_a_measured_lthr_counts_for_zone5_only_within_12_weeks():
-    """SP-39 (owner 2026-10-04): the UA path needs an LTHR tested in the last 12 weeks
-    (LTHR_FRESH_DAYS = 84); an older one asks for a new 30-min LTHR test."""
+def _lthr_card(lthr_days_ago, runs=None, monkeypatch=None, evidence=()):
+    from backend.engine import threshold_confidence as TC
     from backend.engine.planning import Plan, Threshold
+    if monkeypatch is not None:
+        monkeypatch.setattr(TC, "lthr_evidence", lambda ds, plan, today, runs=None: list(evidence))
+    p = Plan()
+    p.thresholds += [Threshold((TODAY - dt.timedelta(days=lthr_days_ago)).isoformat(), lthr=160.0),
+                     Threshold((TODAY - dt.timedelta(days=10)).isoformat(), aethr=150.0)]
+    g = QG.evaluate(_ds(runs if runs is not None else _easy(range(2, 40, 2)), p), p, TODAY,
+                    PP.Prefs(quality_gate="ua_gap"), GOOD_BY, BASE)
+    return g, QG.z5_card(g, TODAY)
 
-    def card(lthr_days_ago):
-        p = Plan()
-        p.thresholds += [Threshold((TODAY - dt.timedelta(days=lthr_days_ago)).isoformat(), lthr=160.0),
-                         Threshold((TODAY - dt.timedelta(days=10)).isoformat(), aethr=150.0)]
-        g = QG.evaluate(_ds(_easy(range(2, 40, 2)), p), p, TODAY, PP.Prefs(quality_gate="ua_gap"), GOOD_BY, BASE)
-        return g, QG.z5_card(g, TODAY)
-    g, c = card(QG.LTHR_FRESH_DAYS)                                 # exactly 12 weeks: still counts
-    assert g["z5"]["state"] == "confirmed" and g["z5"]["path"] == "aet_ua_gap"
-    g, c = card(QG.LTHR_FRESH_DAYS + 1)
+
+def test_a_measured_lthr_has_no_age_limit_for_zone5(monkeypatch):
+    """Owner 2026-10-05 (replaces SP-39's 12-week LTHR_FRESH_DAYS): the time since the LTHR test
+    alone never drops it from the UA path — only an event does (lthr_invalid)."""
+    for ago in (30, 85, 200, 400):
+        g, c = _lthr_card(ago, monkeypatch=monkeypatch)
+        assert g["lthr"]["invalid"] is None
+        assert g["z5"]["state"] == "confirmed" and g["z5"]["path"] == "aet_ua_gap"
+    assert not hasattr(QG, "LTHR_FRESH_DAYS")
+    assert QG.z5_ua_gap({"value": 150.0, "date": "2026-09-01"}, {"value": 160.0, "measured": True,
+                                                                  "date": None})["ok"]
+
+
+def test_a_running_break_of_4_weeks_after_the_test_invalidates_the_lthr(monkeypatch):
+    # runs up to 50 days ago, then 39 days off (≥ 4 weeks: a 29–56-day block), back 10 days ago
+    runs = _easy(list(range(2, 11, 2)) + list(range(50, 80, 2)))
+    g, c = _lthr_card(80, runs, monkeypatch)
+    inv = g["lthr"]["invalid"]
+    assert inv["code"] == "break" and "停跑 39 天" in inv["text"]
+    assert "aet_ua_gap" not in g["z5"]["aet_paths"]
+    t = c["base"]["tests"][0]
+    assert t["missing"] == "lthr" and "停跑 39 天" in t["value"] and "要重測 30 分鐘 LTHR" in t["value"]
+    # a break before the test doesn't count: the test was done after it
+    g, _c = _lthr_card(8, runs, monkeypatch)
+    assert g["lthr"]["invalid"] is None
+
+
+def test_evidence_against_the_lthr_invalidates_it(monkeypatch):
+    from backend.engine import threshold_confidence as TC
+    sig = TC.signal("cp_change", "lthr", "weak", "LTHR 定下以後 CP 變了 +7%（250 → 268 W）", "up")
+    g, c = _lthr_card(60, monkeypatch=monkeypatch, evidence=[sig])
+    assert g["lthr"]["invalid"]["code"] == "evidence" and g["lthr"]["invalid"]["signals"] == ["cp_change"]
     assert g["z5"]["state"] == "unconfirmed" and "aet_ua_gap" not in g["z5"]["aet_paths"]
     t = c["base"]["tests"][0]
-    assert t["missing"] == "lthr" and "超過 12 週" in t["value"] and "LTHR 測試" in c["next"]["text"]
-    assert QG.z5_ua_gap({"value": 150.0, "date": "2026-09-01"}, {"value": 160.0, "measured": True,
-                                                                  "date": None}, TODAY)["ok"]   # dateless: not aged
+    assert t["missing"] == "lthr" and "CP 變了 +7%" in t["value"]
+    f = c["flow"]["tracks"][1]
+    assert "CP 變了 +7%" in c["next"]["text"]
+    assert f["here"]["next"].startswith("重測 1 次 30 分鐘 LTHR（") and f["here"]["action"]["href"].endswith("?add=lib%3Afriel_lthr30&proto=race")
+
+
+def test_an_aet_shift_or_move_invalidates_the_lthr(monkeypatch):
+    from backend.engine import threshold_confidence as TC
+    monkeypatch.setattr(TC, "lthr_evidence", lambda ds, plan, today, runs=None: [])
+    ds = _ds([])
+    lt = {"value": 160.0, "default": False, "measured": True, "date": "2026-08-01"}
+    ae = {"measured": True, "value": 150.0, "validity": {"value": 150.0, "se": 2.0, "shift_bpm": 6.0,
+                                                         "reason": "最近 6 次往上偏 6 bpm"}}
+    assert QG.lthr_invalid(ds, ds.plan, TODAY, lt, ae)["code"] == "aet_shift"
+    ae = {**ae, "validity": {"value": 156.0, "se": 2.0, "shift_bpm": None}}
+    assert QG.lthr_invalid(ds, ds.plan, TODAY, lt, ae)["code"] == "aet_moved"
+    ae = {**ae, "validity": {"value": 151.0, "se": 2.0, "shift_bpm": 1.0}}
+    assert QG.lthr_invalid(ds, ds.plan, TODAY, lt, ae) is None
+    assert QG.lthr_invalid(ds, ds.plan, TODAY, {**lt, "measured": False}, ae) is None
+
+
+def test_lthr_evidence_reads_only_runs_after_the_test_and_no_age():
+    from backend.engine import threshold_confidence as TC
+    from backend.engine.planning import Plan, Threshold
+    p = Plan()
+    p.thresholds.append(Threshold((TODAY - dt.timedelta(days=100)).isoformat(), lthr=160.0))
+    ds = _ds([], p)
+    d = lambda ago: (TODAY - dt.timedelta(days=ago)).isoformat()
+    hard = lambda ago, temp="cool": {"date": d(ago), "hr60": 165.0, "temp": temp}
+    assert TC.lthr_evidence(ds, p, TODAY, runs=[]) == []                          # 100 days: age alone is nothing
+    assert TC.lthr_evidence(ds, p, TODAY, runs=[hard(105)]) == []                 # before the test
+    assert TC.lthr_evidence(ds, p, TODAY, runs=[hard(20, "hot")]) == []           # hot: a hint only
+    ev = TC.lthr_evidence(ds, p, TODAY, runs=[hard(20)])
+    assert [s["id"] for s in ev] == ["long_effort"] and ev[0]["level"] == "strong"
 
 
 def test_card_next_line_when_paused_by_the_zone1_rule():
