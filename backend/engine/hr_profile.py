@@ -160,13 +160,18 @@ def ratios(model: str, acc: Optional[dict] = None) -> tuple:
 # ---------------------------------------------------------------------------
 
 def _plan_row(ds, name: str, day: dt.date) -> Optional[tuple]:
+    """(date, value, method) of the latest plan row with `name` on or before `day`."""
     plan = getattr(ds, "plan", None)
     rows = []
     for t in getattr(plan, "thresholds", None) or []:
         v = getattr(t, name, None)
         if v is not None and str(t.date)[:10] <= day.isoformat():
-            rows.append((str(t.date)[:10], float(v)))
-    return max(rows) if rows else None
+            rows.append((str(t.date)[:10], float(v), getattr(t, f"{name}_method", None)))
+    return max(rows, key=lambda r: r[0]) if rows else None
+
+
+# how a plan `mhr` row was obtained (planning.MHR_METHODS, SP-64) → the source text
+MHR_METHOD_LABEL = {"test": "最大心率測試", "race": "比賽", "lab": "實驗室測試", "estimate": "撐 120 秒的心率（推估）"}
 
 
 def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = True) -> dict:
@@ -174,7 +179,10 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
     r = _plan_row(ds, "mhr", day)
     est = None
     if r is not None:
-        return {"value": r[1], "kind": "manual", "source": f"你的設定 {r[0]}", "estimate": None}
+        # kind stays "manual" (the user's own value, 設定 → 心率 「改回自動」); `method` says how
+        lab = MHR_METHOD_LABEL.get(r[2] or "")
+        return {"value": r[1], "kind": "manual", "method": r[2] or "manual",
+                "source": f"{lab} {r[0]}" if lab else f"你的設定 {r[0]}", "estimate": None}
     try:
         from backend.engine.thresholds import estimate_mhr
         est = estimate_mhr(ds, day)

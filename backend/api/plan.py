@@ -278,6 +278,7 @@ class ThresholdIn(BaseModel):
     cp_method: Optional[str] = None
     lthr_method: Optional[str] = None    # carried through likewise (planning.LTHR_METHODS)
     aethr_method: Optional[str] = None
+    mhr_method: Optional[str] = None     # planning.MHR_METHODS (SP-64)
 
 
 @router.get("/thresholds")
@@ -305,8 +306,9 @@ def put_thresholds(body: list[ThresholdIn]):
     except ValueError as e:
         raise HTTPException(400, f"bad date: {e}")
     for t in body:
-        if t.lthr_method not in (None, *P.LTHR_METHODS) or t.aethr_method not in (None, *P.AETHR_METHODS):
-            raise HTTPException(400, "unknown lthr_method / aethr_method")
+        if t.lthr_method not in (None, *P.LTHR_METHODS) or t.aethr_method not in (None, *P.AETHR_METHODS) \
+                or t.mhr_method not in (None, *P.MHR_METHODS):
+            raise HTTPException(400, "unknown lthr_method / aethr_method / mhr_method")
     plan.thresholds = [P.Threshold(**t.model_dump()) for t in body
                        if any(v is not None for v in (t.lthr, t.aethr, t.mhr, t.rhr, t.cp))]
     plan.save()
@@ -560,6 +562,8 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
                 row = P.Threshold(date=today, note=HR_NOTE)
                 plan.thresholds.append(row)
             setattr(row, field_, round(float(val)))
+            if field_ == "mhr":
+                row.mhr_method = "manual"
             changed = True
     if changed:
         plan.thresholds = [t for t in plan.thresholds
@@ -598,15 +602,47 @@ class ApplyEstimate(BaseModel):
     # AeT」, aet_test.apply_body), else estimate. zones-and-thresholds.md §3.4 change 1.
     lthr_method: Optional[str] = None
     aethr_method: Optional[str] = None
+    # 最大心率 (SP-64, engine/threshold_confidence.py): a max-HR test's filtered peak (test) or
+    # the sustained-peak candidate (estimate) — only ever on the user's 「套用」
+    mhr: Optional[float] = None
+    mhr_method: Optional[str] = None
+
+
+@router.get("/threshold-check")
+def threshold_check():
+    """設定 → 閾值 (SP-64, engine/threshold_confidence.py): how believable the LTHR / max /
+    resting HR in effect are, which one is likely wrong, the suggested tests, the latest
+    LTHR 30-min / max-HR test results with their 「套用」 bodies. Nothing is saved."""
+    from backend.engine import threshold_confidence as TC
+    from backend.engine import zone_events as ZE
+    from backend.engine import reentry as RE
+    ds = _estimate_dataset()
+    today = today_local()
+    plan = P.Plan.load()
+    try:
+        brk = RE.find(ds, today)
+    except Exception:                       # noqa: BLE001
+        brk = None
+    try:
+        cool = ZE.suggestions(ds, plan, today, brk=brk)["checks"].get("cool_season")
+    except Exception:                       # noqa: BLE001
+        cool = None
+    g = P.goals(plan, today)
+    ph = P.phase_on(plan, today)
+    return TC.check(ds, plan, today, brk=brk, cool=cool, kind=getattr(ph, "kind", None),
+                    days_to_a=(g or {}).get("days_to_next_a"))
 
 
 @router.post("/thresholds/apply-estimate")
 def apply_estimate(body: ApplyEstimate):
     """The approval step: add a dated row (today, or the test's `date`) with the accepted estimate(s)."""
-    if body.lthr is None and body.aethr is None:
+    if body.lthr is None and body.aethr is None and body.mhr is None:
         raise HTTPException(400, "nothing to apply")
-    if body.lthr_method not in (None, *P.LTHR_METHODS) or body.aethr_method not in (None, *P.AETHR_METHODS):
-        raise HTTPException(400, "unknown lthr_method / aethr_method")
+    if body.lthr_method not in (None, *P.LTHR_METHODS) or body.aethr_method not in (None, *P.AETHR_METHODS) \
+            or body.mhr_method not in (None, *P.MHR_METHODS):
+        raise HTTPException(400, "unknown lthr_method / aethr_method / mhr_method")
+    if body.mhr is not None and not 120 <= body.mhr <= 240:
+        raise HTTPException(400, f"最大心率 {body.mhr:g} 不合理（120–240）")
     plan = P.Plan.load()
     today = today_local().isoformat()
     if body.date:
@@ -627,6 +663,9 @@ def apply_estimate(body: ApplyEstimate):
     if body.aethr is not None:
         row.aethr = round(body.aethr)
         row.aethr_method = body.aethr_method or ("test" if body.date else "estimate")
+    if body.mhr is not None:
+        row.mhr = round(body.mhr)
+        row.mhr_method = body.mhr_method or ("test" if body.date else "estimate")
     row.note = (row.note + "；" if row.note else "") + (body.note or "由活動資料自動估算")
     plan.save()
     _notify(True)

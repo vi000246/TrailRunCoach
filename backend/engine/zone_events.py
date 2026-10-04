@@ -139,12 +139,15 @@ SRC_LABEL = {"route_weather": "Open-Meteo 路線歷史天氣", "watch": "手錶�
 WRIST_NOTE = ("手腕光學心率在變速和低溫時誤差較大（推估）：用固定強度、穩定配速，"
               "每次變速後的前 1–2 分鐘心率不採用。腕式對胸帶 rc 0.67–0.92 vs 0.996（Gillinov 2017），"
               "光學 MAE 4.5–14 bpm（Gielen 2026），腕式反應較慢（徐國峰）")
-TEST_LABEL = {"tt30": "30 分鐘獨跑測試（LTHR＋CP 檢查）", "aet": "AeT 測試", "cp": "CP 測試"}
+TEST_LABEL = {"tt30": "30 分鐘獨跑測試（LTHR＋CP 檢查）", "aet": "AeT 測試", "cp": "CP 測試",
+              "hrmax": "最大心率測試"}          # hrmax: engine/threshold_confidence.py (SP-64)
 CONDITIONS = {
     "tt30": "< 25 °C、平路；暖身 15 分後 30 分鐘均勻用力（不要衝開頭），第 10 分按 lap；"
             "LTHR＝後 20 分平均心率，30 分平均功率和 CP 比對（Friel；Jones 2019）",
     "aet": "< 25 °C、平地；固定功率 40–60 分（Uphill Athlete）或固定 E 配速 90 分（徐國峰），不要調速",
     "cp": "< 25 °C；照課表偏好的 CP 測試方式，全力段要真的全力",
+    "hrmax": "戴胸帶、休息充足、沒生病；暖身 15 分後 3 趟 2–3 分鐘上坡，最後一趟全力（Polar）；"
+             "有心血管風險的人不要做，不舒服立刻停",
 }
 SRC = "門檻在事件後重測：CP 變化、停跑、季節轉換（Friel；推估）"
 
