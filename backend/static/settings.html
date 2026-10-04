@@ -174,6 +174,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
   <section id="hr">
     <h2>心率 <button type="button" class="q" aria-label="說明" title="最大心率：自動從近 365 天的跑步估（持續 5 秒以上的最高心率，濾掉光學心率的尖刺），沒有資料才用手錶（COROS 帳號）的值；你填的值優先。靜息心率：用手錶（COROS 帳號）的值，或你填的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
     <dl class="kv" id="hr-kv"><dt>最大心率</dt><dd class="meta">載入中…</dd></dl>
+    <div class="est" id="hr-check" hidden></div>
     <div class="row">
       <label>課表心率區間 <select id="hr-model"></select></label>
       <button type="button" class="q" aria-label="說明" id="hr-model-q" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。量過的 AeT（AeT 測試）一定當輕鬆跑上限。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
@@ -194,6 +195,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     <p class="meta" id="thr-now" role="status"></p>
     <p class="meta" id="thr-wko5"></p>
     <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
+    <div class="est" id="thr-check" hidden></div>
     <div class="tw"><table class="wt">
       <thead><tr><th data-i18n="settings.thr.date">測試日期</th><th data-i18n="settings.thr.lthr">LTHR 乳酸閾值心率</th>
         <th data-i18n="settings.thr.aethr">AeT 有氧閾值心率</th><th data-i18n="settings.thr.cp">CP 跑步臨界功率 W</th>
@@ -642,7 +644,7 @@ const thrShown = (r) => r._new || THR_SHOWN.some((k) => r[k] != null);
 async function loadThr() {
   try { TS = await j(THR); }
   catch (e) { $("thr-now").textContent = t("settings.thr.load_failed", { msg: e.message.slice(0, 100) }); return; }
-  renderThr(); loadThrEstimate();
+  renderThr(); loadThrEstimate(); loadThrCheck();
 }
 function renderThr() {
   const ef = TS.effective_thresholds, w = TS.wko5_settings.runthr, m = TS.wko5_settings.runmhr;
@@ -692,6 +694,51 @@ async function loadThrEstimate() {
     } catch (e) { toast(t("settings.thr.failed", { msg: e.message.slice(0, 80) })); }
   });
 }
+// ---- 門檻可信度 (SP-64; api/plan.py GET /threshold-check, engine/threshold_confidence.py) ----
+// LTHR here, 最大心率 in 心率 above: the confidence, why, which one is likely wrong, and the
+// latest LTHR 30-min / max-HR test (or the sustained-peak candidate) with 「套用」 — the app
+// never writes them by itself
+let TC = null;
+async function loadThrCheck() {
+  try { TC = await j("/api/v1/plan/threshold-check"); } catch { TC = null; }
+  renderThrCheck();
+}
+function renderThrCheck() {
+  const box = (id, html) => { $(id).innerHTML = html; $(id).hidden = !html; };
+  if (!TC) { box("thr-check", ""); box("hr-check", ""); return; }
+  const conf = (c) => ({ high: t("settings.thr.chk_conf_high"), medium: t("settings.thr.chk_conf_medium"),
+    low: t("settings.thr.chk_conf_low") })[c] || c;
+  const why = (v) => (v.signals || []).filter((s) => s.level !== "hint").map((s) => `<li>${esc(s.text)}</li>`).join("");
+  const res = (kind) => (TC.test_results || []).filter((r) => r.kind === kind);
+  const btn = (body, label) => `<button class="primary" data-tcapply='${esc(JSON.stringify(body))}'>${esc(label)}</button>`;
+  const card = (name, v, extra) => !v || v.value == null ? "" : `<div class="card"><div class="k">${esc(t("settings.thr.chk_k", { name }))}</div>
+    <div class="v">${esc(conf(v.confidence))} <small>${esc(t("settings.thr.chk_now", { v: Math.round(v.value), src: v.label || "" }))}</small></div>
+    ${why(v) ? `<ul class="s" style="margin:4px 0;padding-left:16px">${why(v)}</ul>` : ""}${extra || ""}</div>`;
+  const dg = TC.diagnosis && TC.diagnosis.text ? `<div class="s">${esc(TC.diagnosis.text)}</div>` : "";
+  const tests = (kind) => res(kind).map((r) => `<div class="s">${esc(t(kind === "tt30" ? "settings.thr.chk_tt30" : "settings.thr.chk_hrmax_test", {
+      date: r.date, v: r.result ? (r.result.lthr ?? r.result.value) : "–",
+      p: r.result && r.result.power != null ? `${r.result.power} W` : "–",
+      cp: r.result && r.result.vs_cp != null ? `${(r.result.vs_cp * 100).toFixed(1)}%` : "–" }))}${r.reason ? "：" + esc(r.reason) : ""}</div>
+      ${r.apply ? btn(r.apply, t("settings.thr.chk_apply", { v: r.result.lthr ?? r.result.value })) : r.applied ? `<div class="s">${esc(t("settings.thr.chk_applied"))}</div>` : ""}`).join("");
+  const cand = TC.hrmax && TC.hrmax.candidate && (TC.hrmax.signals || []).some((s) => s.id === "sustained") ? TC.hrmax.candidate : null;
+  const candHtml = cand ? `<div class="s">${esc(t("settings.thr.chk_cand", { v: cand.value, hold: cand.hold_s, date: cand.date }))}</div>`
+    + btn({ mhr: cand.value, mhr_method: "estimate", note: t("settings.thr.chk_cand_note", { hold: cand.hold_s, date: cand.date }) },
+      t("settings.thr.chk_apply", { v: cand.value })) : "";
+  box("thr-check", card("LTHR", TC.lthr, dg + tests("tt30")));
+  box("hr-check", card(t("settings.thr.chk_hrmax"), TC.hrmax, (TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? dg : "") + candHtml + tests("hrmax")));
+}
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest("[data-tcapply]");
+  if (!b) return;
+  const body = JSON.parse(b.dataset.tcapply);
+  const name = body.lthr != null ? "LTHR" : t("settings.thr.chk_hrmax"), v = body.lthr ?? body.mhr;
+  if (!confirm(t("settings.thr.chk_confirm", { name, v, date: body.date || TODAY() }))) return;
+  b.disabled = true;
+  try {
+    await j(`${THR}/apply-estimate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast(t("settings.thr.applied")); loadThr(); loadHr();
+  } catch (e) { b.disabled = false; toast(t("settings.thr.failed", { msg: e.message.slice(0, 80) })); }
+});
 const TODAY = () => (TS && TS.today) || new Date().toISOString().slice(0, 10);
 $("thr-add").onclick = () => { TS.thresholds.push({ date: TODAY(), lthr: null, aethr: null, cp: null, note: "", _new: true }); renderThr(); };
 $("thr").addEventListener("change", (ev) => {

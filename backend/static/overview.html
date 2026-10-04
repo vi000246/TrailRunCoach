@@ -463,7 +463,7 @@ async function loadStatus() {
       <div class="top"><span>${gl(i.title)}${i.extra && i.extra.tip ? q(i.extra.tip) : ""}</span>${stw(i.level)}</div>
       <div class="vr"><div class="v${i.extra && i.extra.verdict_level ? " vl-" + esc(i.extra.verdict_level) : ""}">${esc(i.text)}</div>${spark(i.spark, i.level)}</div>
       ${i.verdict ? `<div class="vd" title="${esc(i.verdict)}">${gl(i.verdict)}</div>` : ""}
-      ${applyCpBtn(i)}${aetApply(i)}
+      ${applyCpBtn(i)}${aetApply(i)}${thrCheck(i)}
       ${more ? `<details class="more"><summary>詳細</summary><div class="body">${more}</div></details>` : ""}</div>`;
   }).join("");
 }
@@ -514,6 +514,25 @@ document.addEventListener("click", async (ev) => {
     msg.textContent = `已套用：${a.date} AeT ${a.aethr} bpm`;
   } catch (e) { b.disabled = false; msg.textContent = `套用失敗：${e.message}`; }
 });
+
+// 測試 card (SP-64): how believable the LTHR / max HR are, which one is likely wrong, and the
+// suggested test with 「安排課表」 (status.i_testing extra.thr_check; engine/threshold_confidence.py)
+function thrCheck(i) {
+  const x = i.id === "testing" && i.extra && i.extra.thr_check;
+  if (!x) return "";
+  const conf = (c) => ({ high: tD("overview.thr.conf_high", "高"), medium: tD("overview.thr.conf_medium", "中"),
+    low: tD("overview.thr.conf_low", "低") })[c] || c;
+  const rows = [["LTHR", x.lthr], [tD("overview.thr.hrmax", "最大心率"), x.hrmax]]
+    .filter(([, v]) => v && v.value != null && v.confidence && v.confidence !== "high")
+    .map(([n, v]) => `<div>${esc(tD("overview.thr.line", "{name} {v} bpm：可信度{c}", { name: n, v: Math.round(v.value), c: conf(v.confidence) }))}${
+      q((v.signals || []).filter((s) => s.level !== "hint").map((s) => s.text).join("\n"))}</div>`);
+  const sugs = (i.extra.test_suggestions || []).filter((s) => String(s.id).startsWith("thr_check:"));
+  const links = sugs.flatMap((s) => s.links || []).map((l) => `<a class="btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ");
+  if (!rows.length && !links) return "";
+  const dg = x.diagnosis && x.diagnosis.text ? `<div class="meta">${esc(x.diagnosis.text)}</div>` : "";
+  const cool = sugs.some((s) => s.wait_cool) ? `<div class="meta">${esc(tD("overview.thr.wait_cool", "等天氣轉涼再做 LTHR 測試比較準（還是可以先排）"))}</div>` : "";
+  return `<div class="act">${rows.join("")}${dg}${cool}${links}</div>`;
+}
 
 // 測試 indicator: 「套用這次的 CP」 (status.i_testing extra.cp_test.apply -> POST /api/v1/plan/thresholds/apply-cp)
 function applyCpBtn(i) {

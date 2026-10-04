@@ -21,5 +21,6 @@
   "workout.no_tpace_badge": "No threshold pace",
   "workout.no_tpace_link": "How threshold pace is estimated",
   "autoplan.log_title": "Automatic adjustment log",
-  "autoplan.log_count": "({n})"
+  "autoplan.log_count": "({n})",
+  "workout.thr_low_badge": "HR threshold uncertain"
 }

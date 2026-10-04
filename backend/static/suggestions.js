@@ -1,7 +1,8 @@
 /* The floating suggestion box: what the planner suggests but never schedules
  * by itself (engine/suggestions.py; GET /api/v1/overview/plan/suggestions):
  * a B2B weekend (pick the day pair), a due CP / AeT test (pick the day), a
- * zone retest (pick the test and the day), a zone update (information).
+ * zone retest (pick the test and the day; the LTHR 30-min / max-HR test as a
+ * 「安排課表」 link, `links`), a zone update (information).
  *
  *   「排入」 POST …/suggestions/accept {id, day, test?}
  *   「不要」 POST …/suggestions/dismiss {id, action: "declined"}
@@ -66,6 +67,7 @@
     border: 1px solid var(--line, #e1e5ea); background: none; color: inherit; }
   .sugbox .sg-btn.pri { background: var(--sg-acc); border-color: var(--sg-acc); color: #fff; font-weight: 600; }
   .sugbox .sg-btn:disabled { opacity: .55; cursor: default; }
+  .sugbox a.sg-btn { text-decoration: none; display: inline-block; }
   .sugbox .sg-none { color: var(--muted, #667); font-size: 12px; }
   .sugbox .sg-ok { color: var(--good, #1a7f37); font-size: 12.5px; margin-top: 6px; }
   .sugbox .sg-err { color: var(--bad, #c62828); font-size: 12px; margin-top: 6px; }
@@ -118,6 +120,8 @@
       <div class="sg-title"><span class="sg-tag">${esc(KIND[r.type] || "建議")}</span>${esc(r.title)}</div>
       ${r.reason ? `<div class="sg-reason">${esc(r.reason)}</div>` : ""}
       ${r.help ? `<div class="sg-help" hidden>${esc(r.help)}</div>` : ""}
+      ${(r.links || []).length ? `<div class="sg-act">${r.wait_cool ? `<span class="sg-none" style="flex-basis:100%">等天氣轉涼再測比較準（還是可以先排）</span>` : ""}
+        ${r.links.map((l) => `<a class="sg-btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join("")}</div>` : ""}
       ${r.pick ? `<div class="sg-act">${picker(r)}
         ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">${esc(r.accept_label || "排入")}</button>` : ""}
         <button type="button" class="sg-btn" data-act="decline">不要</button></div>` : ""}

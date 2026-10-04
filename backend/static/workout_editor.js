@@ -143,6 +143,14 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   // i18n (static/i18n/i18n.js t(key, fallback)); the zh-TW text is the fallback
   const tr = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t(k, fb, p) : fb);
   const noTpaceText = () => tr("workout.no_tpace", "沒有閾值配速：這段推到手錶不會有配速目標");
+  // SP-64: the LTHR (or, under the %HRR / %HRmax 課表心率區間, the max HR) is not believable
+  // (engine/threshold_confidence.warn_of → context.thresholds.thr_warn): HR targets get a badge
+  const usesHr = (items) => (items || []).some((x) => x.kind === "repeat" ? usesHr(x.items) : ((x.target || {}).type === "hr"));
+  const hrWarn = (ctx) => {
+    const w = ((ctx || {}).thresholds || {}).thr_warn;
+    if (!w) return "";
+    return [w.lthr && w.lthr.low ? w.lthr.text : "", w.hrmax && w.hrmax.low ? w.hrmax.text : ""].filter(Boolean).join("；");
+  };
   // where threshold pace is estimated (GET /steps/context tpace_link: the Friel pace-zone chart)
   const tpaceLink = (ctx) => {
     const u = (ctx || {}).tpace_link;
@@ -435,7 +443,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const ic = { err: "✕", warn: "!", info: "i" };
       const nt = noTpaceText(), T = this.tpls || {};
       const isNt = (x) => x === nt || x === T.no_tpace_text;
-      this.$("we-issues").innerHTML = list.map((i) => `<li class="${i.level}"${i.id ? ` data-id="${esc(i.id)}"` : ""}><span class="ic">${ic[i.level] || "i"}</span><span>${esc(i.text)}${isNt(i.text) ? tpaceLink(this.ctx) : ""}</span></li>`).join("") +
+      const hw = this.doc && usesHr(this.doc.items) ? hrWarn(this.ctx) : "";
+      this.$("we-issues").innerHTML = (hw ? `<li class="warn"><span class="ic">!</span><span>${esc(hw)}</span></li>` : "") + list.map((i) => `<li class="${i.level}"${i.id ? ` data-id="${esc(i.id)}"` : ""}><span class="ic">${ic[i.level] || "i"}</span><span>${esc(i.text)}${isNt(i.text) ? tpaceLink(this.ctx) : ""}</span></li>`).join("") +
         (list.length ? `<li class="info"><span class="ic"></span><span class="faint">檢查規則 ${q(TIP.rules)}</span></li>` : "");
     }
     watch() {
@@ -701,8 +710,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const tab = (k, id, l, on, tip) => `<button type="button" data-${k}="${esc(id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${tip ? ` title="${esc(tip)}"` : ""}>${esc(l)}</button>`;
       // pace × threshold pace (Daniels / Canova / Billat …) with no threshold pace: badge it
       const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
-      const tpBadge = (r) => r.needs_tpace && noTp
-        ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge", "沒有閾值配速"))}</span>` : "";
+      const hw = hrWarn(this.ctx);
+      const tpBadge = (r) => (r.needs_tpace && noTp
+        ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge", "沒有閾值配速"))}</span>` : "") +
+        (hw && usesHr(r.full || r.items) ? ` <span class="we-tpb" title="${esc(hw)}">⚠ ${esc(tr("common.workout.thr_low_badge", "心率門檻可信度低"))}</span>` : "");
       // 技術地形／下坡 rows: how the scheduler counts them (workout_steps.rpe_role)
       const fsub = (r) => (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
         (r.role ? ` <span class="fam">${r.role === "quality" ? "算強度課" : "算輕鬆課"}</span>` : "");
