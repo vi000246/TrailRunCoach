@@ -9,18 +9,26 @@
 | 類型（課表對話框） | 範本分類 |
 |---|---|
 | 輕鬆跑、長時間 | 輕鬆跑 |
-| 強度課 | 強度課 → 三區／四區／五區 |
+| 強度課 | 強度課 → 有氧間歇／VO2max 間歇／速度 |
 | 測試 | 測試 |
 | 越野跑（舊的「健行／登山」，kind 仍是 `hike`） | 越野跑 |
 
-**三區／四區／五區**用的是 Palladino 的跑步功率區（專案規則：Palladino 的區間是跑步用的，Coggan／Friel 的功率區是自行車用的）：
+**強度課的三類**（2026-10-04 起，SP-32；依據 `coach-schools-zones-periodization.md` R1）。分類只有一個來源：
+`workout_templates.family_of`，範本分頁、推薦、間歇庫的階梯課表和課表上的強度課標籤都用它。先看主課強度，再看每趟長度：
 
-- 三區 = 88–101% CP，Palladino 3A＋3B
-- 四區 = 101–106% CP，Palladino 4（Supra-threshold）
-- 五區 = ≥ 106% CP，Palladino 5 以上
+- **有氧間歇**（閾值家族）：主課 ≤ 101% CP（心率 ≤ 102% LTHR、配速不快於閾值配速）。
+  每趟 ≥ 15 分或連續一段是「長 tempo」，較短的是「巡航間歇」（6–15 分；< 6 分也算巡航，推估）。
+- **VO2max 間歇**（原「無氧間歇」）：高於閾值、每趟 2–5 分、休息約 1:1。每趟 < 2 分、休息比趟短的（30/30、30/15）也在這類，標「短間歇」。
+- **速度**：每趟 ≤ 2 分、休息 ≥ 2 倍（R、加速跑、短坡衝刺），或功率 > 116% CP。
+- 高於閾值、每趟 > 5 分（Seiler 4×8′）歸巡航的上緣，標「巡航（超閾值）」。
 
-這三段也是編輯器區段圖的第 3／4／5 個顏色。每一份範本放在哪一區，是依它主課的強度在 `Template.sub` 裡指定的。
-來源不是用功率寫的課（心率、配速），先換算成約當的 % CP 再分區，所以這部分是推估。
+心率和配速的課直接用自己的倍數判斷（不換成 % CP）。距離段的時間用閾值配速 × 該段配速估（沒有閾值配速時 4:48/km，推估）。
+之前的三區（88–101% CP）／四區（101–106%）／五區（≥ 106%）分頁是 Palladino 的功率區，只看強度，
+所以 Palladino「最大有氧功率 4×2:40」被放在四區、Daniels R 和 Daniels I 都在五區；改成三類後這些都分開了。
+區段圖的顏色還是 Palladino 的 3／4／5 區。
+
+每份範本另有一行**訓練目的**（`purpose`），文字取自 `coach-schools-zones-periodization.md` Finding 7 的一句話目的表，
+括號裡是該表引用的教練；間歇庫的階梯課表沒有自己的範本，依所屬類別帶入目的。插入範本選單在每份的標題下面顯示。
 
 ## 2. 目標：每一步都用來源自己的依據
 
@@ -60,27 +68,27 @@ Friel 跑步心率區（% LTHR）：Z1 < 85、Z2 85–89、Z3 90–94、Z4 95–
 
 ### 強度課
 
-| key | 名稱 | 分區 | 出處 |
+| key | 名稱 | 類別（family_of） | 出處 |
 |---|---|---|---|
-| pal_hm_tempo | 半馬功率節奏 2×11′ @ 91–96% CP（3′） | 三區 | Palladino／Stryd（「95% ftp Power Tempo」Day 3） |
-| pal_near | 近閾值 3×7′ @ 96–102%（3′） | 三區 | Palladino／Stryd（Day 15 Near-Threshold） |
-| daniels_cruise | T 巡航 5×6′／1′ | 三區 | Daniels |
-| pfitz_lt | 乳酸閾值節奏 25′ | 三區 | Pfitzinger |
-| friel_cruise | 巡航 4×8′／2′（Friel 4–5a 區） | 三區 | Joe Friel《The Triathlete's Training Bible》 |
-| koop_tempo | TempoRun 3×12′／6′ | 三區 | Jason Koop《Training Essentials for Ultrarunning》；[TrainRight 2025](https://trainright.com/decoding-ultramarathon-interval-workouts/) |
-| canova_specific | 專項 5×3 km（1 km 浮動） | 三區 | Arcelli & Canova《Marathon Training – A Scientific Approach》1999；[書評](https://runningwritings.com/2023/06/canova-marathon-book.html) |
-| canova_1k | 10×1000 m／2′ | 三區 | 同上 |
-| pal_supra | 超閾值 4×4:30 @ 98–104%（2:45） | 四區 | Palladino／Stryd（Day 1 Supra-Threshold） |
-| pal_vo2 | 最大有氧功率 4×2:40 @ 101–106%（2:30） | 四區 | Palladino／Stryd（Day 10 VO2max） |
-| seiler_4x8 | 4×8′／2′ | 四區 | Seiler et al. 2013, Scand J Med Sci Sports 23:74–83（[PubMed](https://pubmed.ncbi.nlm.nih.gov/21812820/)） |
-| pfitz_vo2 | 5×1000 m（5K 配速，93–98% HRmax） | 四區 | Pfitzinger |
-| daniels_i | I 間歇 5×3′／3′ | 五區 | Daniels |
-| koop_vo2 | RunningIntervals 6×3′／3′ | 五區 | Koop |
-| billat_3030 | 30-30 ×16 | 五區 | Billat et al. 2000, Eur J Appl Physiol 81:188–196（[Springer](https://link.springer.com/article/10.1007/s004210050029)） |
-| ronnestad_3015 | 30/15 3×13（組間 3′） | 五區 | Rønnestad et al. 2020（[PubMed](https://pubmed.ncbi.nlm.nih.gov/31977120/)）。原研究是自行車，跑步版是推估 |
-| daniels_r | R 8×300 m | 五區 | Daniels |
+| pal_hm_tempo | 半馬功率節奏 2×11′ @ 91–96% CP（3′） | 有氧・巡航 | Palladino／Stryd（「95% ftp Power Tempo」Day 3） |
+| pal_near | 近閾值 3×7′ @ 96–102%（3′） | 有氧・巡航 | Palladino／Stryd（Day 15 Near-Threshold） |
+| daniels_cruise | T 巡航 5×6′／1′ | 有氧・巡航 | Daniels |
+| pfitz_lt | 乳酸閾值節奏 25′ | 有氧・長 tempo | Pfitzinger |
+| friel_cruise | 巡航 4×8′／2′（Friel 4–5a 區） | 有氧・巡航 | Joe Friel《The Triathlete's Training Bible》 |
+| koop_tempo | TempoRun 3×12′／6′ | 有氧・巡航 | Jason Koop《Training Essentials for Ultrarunning》；[TrainRight 2025](https://trainright.com/decoding-ultramarathon-interval-workouts/) |
+| canova_specific | 專項 5×3 km（1 km 浮動） | 有氧・長 tempo | Arcelli & Canova《Marathon Training – A Scientific Approach》1999；[書評](https://runningwritings.com/2023/06/canova-marathon-book.html) |
+| canova_1k | 10×1000 m／2′ | VO2max | 同上 |
+| pal_supra | 超閾值 4×4:30 @ 98–104%（2:45） | 有氧・巡航 | Palladino／Stryd（Day 1 Supra-Threshold） |
+| pal_vo2 | 最大有氧功率 4×2:40 @ 101–106%（2:30） | VO2max | Palladino／Stryd（Day 10 VO2max） |
+| seiler_4x8 | 4×8′／2′ | 有氧・巡航（超閾值） | Seiler et al. 2013, Scand J Med Sci Sports 23:74–83（[PubMed](https://pubmed.ncbi.nlm.nih.gov/21812820/)） |
+| pfitz_vo2 | 5×1000 m（5K 配速，93–98% HRmax） | VO2max | Pfitzinger |
+| daniels_i | I 間歇 5×3′／3′ | VO2max | Daniels |
+| koop_vo2 | RunningIntervals 6×3′／3′ | VO2max | Koop |
+| billat_3030 | 30-30 ×16 | VO2max・短間歇 | Billat et al. 2000, Eur J Appl Physiol 81:188–196（[Springer](https://link.springer.com/article/10.1007/s004210050029)） |
+| ronnestad_3015 | 30/15 3×13（組間 3′） | VO2max・短間歇 | Rønnestad et al. 2020（[PubMed](https://pubmed.ncbi.nlm.nih.gov/31977120/)）。原研究是自行車，跑步版是推估 |
+| daniels_r | R 8×300 m | 速度 | Daniels |
 
-間歇庫原本的階梯課表（T1–T3、T+、V1–V4、30/15）也列在同一區，標「間歇庫（進階階梯）」，
+間歇庫原本的階梯課表（T1–T3、T+、V1–V4、30/15）也用同一個函式分類，列在所屬的類別，標「間歇庫（進階階梯）」，
 用來判斷這堂算不算進階。
 
 5 區每趟 < 2 分鐘的課（30-30、30/15）在編輯器裡會出現「5 區每趟至少 2 分鐘（台灣教練）」的錯誤，
