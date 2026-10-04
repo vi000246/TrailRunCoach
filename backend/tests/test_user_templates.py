@@ -230,3 +230,17 @@ def test_free_mode_uphill_template_pushes_to_coros(monkeypatch):
         assert [k["targetType"] for k in kids] == [CW.TARGET_OPEN, CW.TARGET_OPEN]
         assert all(k["intensityType"] == CW.INT_NONE for k in kids)
         assert [k["name"] for k in kids] == ["上坡（直到按下計圈）", "走下坡"]
+
+
+def test_templates_page_is_the_third_tab(monkeypatch):
+    with Env(monkeypatch) as e:
+        p = e.c.get(f"{API}/templates/page")
+        assert p.status_code == 200 and 'id="tm-we"' in p.text and "workout_editor.js" in p.text
+        assert p.text.count('class="mcard"') == 3 and 'href="/api/v1/overview/plan/templates/page" aria-current="page"' in p.text
+        for page in ("schedule", "compliance"):
+            assert "/api/v1/overview/plan/templates/page" in e.c.get(f"{API}/{page}/page").text
+    from backend.i18n import use_locale
+    from backend.i18n.pages import render_page
+    with use_locale("en"):
+        en = render_page("templates").body.decode()
+    assert ">Workout templates</title>" in en and "Your own workout templates" in en

@@ -217,6 +217,8 @@
   "pf.e.push_days": "推送範圍要在 1–14 天",
   "tabs.calendar_sub": "每天排了什麼課",
   "tabs.compliance_sub": "計畫 vs 實際、負荷",
+  "tabs.templates": "範本",
+  "tabs.templates_sub": "自己的課表範本",
   "sync.label": "手錶與活動同步",
   "pull.btn": "從 {src} 抓活動",
   "pull.btn_short": "抓活動",

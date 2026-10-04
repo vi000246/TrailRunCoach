@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="templates.page_title">課表範本</title>
+<style>
+/* 範本 (SP-36; engine/user_templates.py, api/plan_sessions.py /steps/templates/user): the third tab of
+   課表. Left: every template (我的 + the built-in library) filtered by category; right: the chosen one
+   in the structured editor (static/workout_editor.js) with its name, categories (several, built-in and
+   the user's own), 目標用 and route GPX. Built-in templates are read-only: 複製成我的範本 to change one.
+   Tokens as schedule.html (light / dark / data-theme). */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff;
+  --good: #1a7f37; --watch: #b45309; --bad: #c62828; --bar: #b9b8b1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40;
+    --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --bar: #5a5954;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40;
+  --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --bar: #5a5954;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+h1 { margin: 0; font-size: 20px; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px;
+  padding: 5px 12px; cursor: pointer; font-size: 13px; line-height: 1.3; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn:hover { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn.danger { color: var(--bad); }
+.btn.danger.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
+/* page switch 日曆 | 課表統計 | 範本 (schedule.html .modesw) */
+.modesw { display: inline-flex; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px;
+  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; text-decoration: none; text-align: left;
+  padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
+.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
+.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
+.modesw .mcard[aria-current="page"] { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff; box-shadow: 0 3px 8px rgba(143,63,10,.35); }
+.modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
+.modesw .mcard[aria-current="page"] small { opacity: .85; }
+.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+
+.tm { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 860px) { .tm { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+.tm-list { display: grid; gap: 8px; position: sticky; top: 8px; max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 860px) { .tm-list { position: static; max-height: none; } }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips button, .chips label { border: 1px solid var(--line); background: none; color: var(--muted); border-radius: 12px; padding: 2px 10px; font-size: 12.5px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; }
+.chips button.on, .chips label:has(input:checked) { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
+.chips label input { width: auto; margin: 0; }
+.chips label.ro { cursor: default; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 3px 12px; font-size: 12.5px; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+input.text, select.text { font-size: 14px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; width: 100%; }
+ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+ul.items li button { width: 100%; text-align: left; border: 1px solid transparent; background: none; color: var(--text); border-radius: 8px; padding: 6px 8px; cursor: pointer;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; font-size: 13px; }
+ul.items li button:hover { background: var(--soft); }
+ul.items li button[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+ul.items .src { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ul.items .tag { font-size: 11px; border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; color: var(--muted); align-self: center; white-space: nowrap; }
+ul.items .tag.mine { border-color: var(--accent); color: var(--accent); }
+.grp { font-size: 11.5px; color: var(--faint); padding: 6px 4px 0; }
+.ed { display: grid; gap: 10px; }
+.ed .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ed .lbl { font-size: 12.5px; color: var(--muted); min-width: 4.5em; }
+.ed .name { flex: 1 1 260px; font-size: 16px; font-weight: 600; }
+.ed .srcl { font-size: 12.5px; color: var(--muted); }
+.ed .srcl a { color: var(--accent); }
+.gpx { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 8px; }
+.msg { font-size: 12.5px; } .msg.err { color: var(--bad); } .msg.ok { color: var(--good); } .msg:empty { display: none; }
+.empty { color: var(--muted); padding: 24px 8px; text-align: center; }
+details.cm > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+details.cm ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+details.cm li { display: flex; gap: 4px; align-items: center; }
+details.cm li input { flex: 1; min-width: 0; font-size: 13px; padding: 3px 6px; }
+/* the structured editor outside a dialog (workout_editor.js styles its fields under dialog.sd) */
+.ed .we select, .ed .we input { font-size: 13px; padding: 3px 6px; border-radius: 6px; width: auto; min-width: 0; color: var(--text);
+  background: var(--bg); border: 1px solid var(--line); }
+.ed .we input.dur { width: 4.6em; font-variant-numeric: tabular-nums; }
+.ed .we input.num { width: 4.8em; font-variant-numeric: tabular-nums; }
+.ed .we input.note { width: 100%; }
+.ed .we-rep-h input[type=checkbox] { width: auto; }
+.qtip { display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0; margin: 0 2px 0 3px; border-radius: 50%;
+  border: 1px solid var(--line); background: none; color: var(--muted); font: 600 11px/1 system-ui, sans-serif; cursor: help; flex: none; }
+.qtip-pop { position: fixed; z-index: 1000; max-width: min(360px, calc(100vw - 24px)); white-space: pre-line; text-align: left;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  font: 400 12px/1.55 system-ui, sans-serif; box-shadow: 0 6px 18px rgba(0,0,0,.18); pointer-events: none; }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="schedule"></script>
+<main>
+  <nav class="modesw" data-i18n-attr="aria-label:templates.tabs.label" aria-label="課表檢視">
+    <a class="mcard" href="/api/v1/overview/plan/schedule/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span><b data-i18n="templates.tabs.calendar">日曆</b><small data-i18n="templates.tabs.calendar_sub">每天排了什麼課</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/compliance/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
+      <span><b data-i18n="templates.tabs.compliance">課表統計</b><small data-i18n="templates.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/templates/page" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <span><b data-i18n="templates.tabs.templates">範本</b><small data-i18n="templates.tabs.templates_sub">自己的課表範本</small></span></a>
+  </nav>
+  <div class="bar">
+    <h1 data-i18n="templates.title">課表範本</h1>
+    <span class="meta" data-i18n="templates.lead">自己排的範本會出現在課表編輯器的「插入範本」裡（依分類）；內建的有出處、唯讀，可以複製成自己的再改。</span>
+    <span class="spacer"></span>
+    <button class="btn primary" type="button" id="tm-new" data-i18n="templates.new">＋ 新增範本</button>
+  </div>
+  <div class="tm">
+    <aside class="card tm-list" data-i18n-attr="aria-label:templates.list" aria-label="範本清單">
+      <div class="seg" role="group" id="tm-src">
+        <button type="button" data-src="all" aria-pressed="true" data-i18n="templates.src.all">全部</button><button type="button" data-src="mine" aria-pressed="false" data-i18n="templates.src.mine">我的</button><button type="button" data-src="lib" aria-pressed="false" data-i18n="templates.src.lib">內建</button>
+      </div>
+      <div class="chips" id="tm-cats" role="group" data-i18n-attr="aria-label:templates.cats" aria-label="分類"></div>
+      <input class="text" id="tm-q" type="search" data-i18n-attr="placeholder:templates.search;aria-label:templates.search" placeholder="搜尋名稱" aria-label="搜尋名稱">
+      <ul class="items" id="tm-items"></ul>
+      <details class="cm" id="tm-cm">
+        <summary data-i18n="templates.cat_manage">管理自訂分類</summary>
+        <ul id="tm-cm-list"></ul>
+        <div class="bar" style="margin-top:6px"><input class="text" id="tm-cat-new" maxlength="20" data-i18n-attr="placeholder:templates.cat_new_ph" placeholder="新分類名稱（例：上坡）"><button class="btn" type="button" id="tm-cat-add" data-i18n="templates.cat_add">新增</button></div>
+        <div class="msg" id="tm-cm-msg"></div>
+      </details>
+    </aside>
+    <section class="card">
+      <p class="empty" id="tm-empty" data-i18n="templates.empty">從左邊選一個範本，或按「新增範本」。</p>
+      <div class="ed" id="tm-ed" hidden>
+        <div class="row">
+          <input class="text name" id="tm-name" maxlength="40" data-i18n-attr="placeholder:templates.name;aria-label:templates.name" placeholder="範本名稱" aria-label="範本名稱">
+          <span class="tag" id="tm-kind"></span>
+        </div>
+        <div class="srcl" id="tm-srcl" hidden></div>
+        <div class="row"><span class="lbl" data-i18n="templates.cats_pick">分類</span><div class="chips" id="tm-pick" role="group" data-i18n-attr="aria-label:templates.cats_pick" aria-label="分類"></div></div>
+        <div class="row"><span class="lbl" data-i18n="templates.basis">目標用</span>
+          <div class="seg" role="radiogroup" id="tm-basis">
+            <button type="button" data-b="auto" aria-pressed="true" data-i18n="templates.basis_auto">自動</button><button type="button" data-b="hr" aria-pressed="false" data-i18n="templates.basis_hr">心率</button><button type="button" data-b="power" aria-pressed="false" data-i18n="templates.basis_power">功率</button>
+          </div>
+          <span class="meta" data-i18n="templates.basis_hint">套用時這堂課的「目標用」跟著範本；標「自動」的段依課表類型</span></div>
+        <div class="row"><span class="lbl" data-i18n="templates.note">備註</span><input class="text" id="tm-note" maxlength="200" style="flex:1" data-i18n-attr="aria-label:templates.note" aria-label="備註"></div>
+        <div class="gpx" id="tm-gpx"></div>
+        <div id="tm-we"></div>
+        <div class="row">
+          <button class="btn primary" type="button" id="tm-save" data-i18n="templates.save">儲存</button>
+          <button class="btn" type="button" id="tm-copy" data-i18n="templates.copy">複製成我的範本</button>
+          <button class="btn danger" type="button" id="tm-del" data-i18n="templates.del">刪除</button>
+          <span class="msg" id="tm-msg" aria-live="polite"></span>
+        </div>
+        <input type="file" id="tm-gpx-file" accept=".gpx,.fit,application/gpx+xml" hidden>
+      </div>
+    </section>
+  </div>
+</main>
+<script src="/api/v1/static/workout_editor.js"></script>
+<script>
+const T = (k, p) => (window.I18N ? I18N.t("templates." + k, p) : k);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const PAPI = "/api/v1/overview/plan";
+const UAPI = PAPI + "/steps/templates/user";
+const req = (m, u, b) => WorkoutEditor.request(m, u, b);
+const errText = (r) => { const d = r.body.detail || {}; return (d.errors || [typeof d === "string" ? d : (r.body.message || T("failed"))]).join("；"); };
+const KIND_OF = (cats) => cats.includes("quality") ? "quality" : cats.includes("test") ? "test" : cats.includes("trail") ? "hike" : "easy";
+
+const S = { src: "all", cat: "all", q: "", mine: [], lib: [], cats: [], sel: null, form: null };
+// the template being edited: {kind: "mine" | "lib" | "new", id?, key?, name, cats, basis, note, gpx}
+const WE = WorkoutEditor.mount($("tm-we"), { api: PAPI, saveTemplate: false, session: () => {
+  const f = S.form || { cats: [] };
+  return { kind: KIND_OF(f.cats || []), title: f.name || "", minutes: 0, target: "", detail: "",
+    target_basis: f.basis && f.basis !== "auto" ? f.basis : undefined,
+    terrain: (f.cats || []).includes("trail") || f.gpx ? "trail" : undefined };
+} });
+
+async function load() {
+  const [u, b] = await Promise.all([req("GET", UAPI), req("GET", PAPI + "/steps/templates")]);
+  S.mine = u.ok ? u.body.templates : [];
+  S.cats = u.ok ? u.body.cats : [];
+  // the built-in library, once per key (a row can be in several groups), with its category
+  const seen = new Set();
+  S.lib = [];
+  for (const g of (b.ok ? b.body.groups : [])) {
+    if (g.mine) continue;
+    for (const r of g.rows) if (!seen.has(r.key)) { seen.add(r.key); S.lib.push({ ...r, cat: g.cat }); }
+  }
+  renderCats(); renderList(); renderCatManage();
+}
+const catLabel = (id) => (S.cats.find((c) => c.id === id) || {}).label || id;
+function renderCats() {
+  const all = [{ id: "all", label: T("cat_all") }, ...S.cats];
+  if (!all.some((c) => c.id === S.cat)) S.cat = "all";
+  $("tm-cats").innerHTML = all.map((c) => `<button type="button" data-cat="${esc(c.id)}" class="${c.id === S.cat ? "on" : ""}" aria-pressed="${c.id === S.cat}">${esc(c.label)}</button>`).join("");
+}
+function rows() {
+  const q = S.q.trim().toLowerCase();
+  const hit = (name) => !q || String(name).toLowerCase().includes(q);
+  const mine = S.src === "lib" ? [] : S.mine.filter((t) => (S.cat === "all" || t.cats.includes(S.cat)) && hit(t.name));
+  const lib = S.src === "mine" ? [] : S.lib.filter((r) => (S.cat === "all" || r.cat === S.cat) && hit(r.label));
+  return { mine, lib };
+}
+function renderList() {
+  const { mine, lib } = rows();
+  const cur = S.sel || {};
+  const li = (attr, on, title, tag, mineTag, src) => `<li><button type="button" ${attr} aria-current="${on}"><span>${esc(title)}</span>` +
+    `${tag ? `<span class="tag${mineTag ? " mine" : ""}">${esc(tag)}</span>` : ""}<span class="src">${esc(src || "")}</span></button></li>`;
+  let h = "";
+  if (mine.length) h += `<li class="grp">${esc(T("group_mine"))}</li>` + mine.map((t) => li(`data-id="${t.id}"`, cur.kind === "mine" && cur.id === t.id, t.name,
+    t.gpx ? "▲ GPX" : T("tag_mine"), true, t.cats.map(catLabel).join("・"))).join("");
+  if (lib.length) h += `<li class="grp">${esc(T("group_lib"))}</li>` + lib.map((r) => li(`data-key="${esc(r.key)}"`, cur.kind === "lib" && cur.key === r.key, r.label,
+    catLabel(r.cat) + (r.family && r.family.label ? "・" + r.family.label : ""), false, r.src)).join("");
+  $("tm-items").innerHTML = h || `<li class="empty">${esc(S.src === "mine" && !S.mine.length ? T("none_mine") : T("none"))}</li>`;
+}
+function renderCatManage() {
+  const custom = S.cats.filter((c) => c.custom);
+  $("tm-cm-list").innerHTML = custom.length ? custom.map((c) => `<li data-cid="${esc(c.id)}"><input class="text" value="${esc(c.label)}" maxlength="20" aria-label="${esc(T("cat_rename"))}">` +
+    `<button class="btn" type="button" data-cat-ren>${esc(T("cat_rename"))}</button><button class="btn danger" type="button" data-cat-del>${esc(T("cat_del"))}</button></li>`).join("")
+    : `<li class="meta">${esc(T("cat_none"))}</li>`;
+}
+
+// ---- the editor side
+function setMsg(t, cls) { const m = $("tm-msg"); m.textContent = t || ""; m.className = "msg" + (cls ? " " + cls : ""); }
+function renderForm() {
+  const f = S.form, ro = f.kind === "lib";
+  $("tm-empty").hidden = true; $("tm-ed").hidden = false;
+  $("tm-name").value = f.name; $("tm-name").disabled = ro;
+  $("tm-note").value = f.note || ""; $("tm-note").disabled = ro;
+  $("tm-kind").textContent = f.kind === "lib" ? T("tag_lib") : f.kind === "new" ? T("tag_new") : T("tag_mine");
+  $("tm-kind").className = "tag" + (f.kind === "lib" ? "" : " mine");
+  const srcl = $("tm-srcl");
+  srcl.hidden = !ro;
+  if (ro) srcl.innerHTML = `${esc(T("src"))}${f.url ? `<a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.src)}</a>` : esc(f.src || "")}` +
+    (f.purpose ? `<br>${esc(f.purpose)}` : "") + (f.conv ? `<br><span class="faint">${esc(f.conv)}</span>` : "");
+  renderPick();
+  $("tm-basis").querySelectorAll("button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.b === (f.basis || "auto"))); b.disabled = ro; });
+  renderGpx();
+  $("tm-save").hidden = ro; $("tm-del").hidden = f.kind !== "mine"; $("tm-copy").hidden = f.kind !== "lib";
+  $("tm-del").classList.remove("armed"); $("tm-del").textContent = T("del");
+}
+function renderPick() {
+  const f = S.form, ro = f.kind === "lib";
+  $("tm-pick").innerHTML = S.cats.map((c) => `<label class="${ro ? "ro" : ""}"><input type="checkbox" value="${esc(c.id)}"${f.cats.includes(c.id) ? " checked" : ""}${ro ? " disabled" : ""}>${esc(c.label)}</label>`).join("");
+}
+function renderGpx() {
+  const f = S.form, g = f.gpx, box = $("tm-gpx");
+  box.hidden = f.kind === "lib";
+  if (f.kind === "lib") return;
+  if (f.kind === "new") { box.innerHTML = `<span class="meta">${esc(T("gpx_save_first"))}</span>`; return; }
+  box.innerHTML = `<b>${esc(T("gpx"))}</b>` + (g
+    ? `<span>${esc(g.filename || "")} · ${(+g.km || 0).toFixed(1)} km · +${Math.round(g.gain_m || 0)} m</span>` +
+      `<a class="btn" href="${UAPI}/${f.id}/gpx/file">${esc(T("gpx_download"))}</a><button class="btn" type="button" id="tm-gpx-up">${esc(T("gpx_replace"))}</button>` +
+      `<button class="btn danger" type="button" id="tm-gpx-del">${esc(T("gpx_remove"))}</button>`
+    : `<span class="meta">${esc(T("gpx_none"))}</span><button class="btn" type="button" id="tm-gpx-up">${esc(T("gpx_upload"))}</button>`);
+}
+async function select(sel) {
+  S.sel = sel;
+  setMsg("");
+  if (sel.kind === "mine") {
+    const t = S.mine.find((x) => x.id === sel.id);
+    if (!t) return;
+    S.form = { kind: "mine", id: t.id, name: t.name, cats: [...t.cats], basis: t.target_basis || "auto", note: t.note, gpx: t.gpx };
+    renderForm(); renderList();
+    await WE.load({ items: t.steps.items, tpl: t.gpx ? t.id : undefined });
+    history.replaceState(null, "", "#" + t.id);
+  } else if (sel.kind === "lib") {
+    const r = S.lib.find((x) => x.key === sel.key);
+    if (!r) return;
+    S.form = { kind: "lib", key: r.key, name: r.label, cats: [r.cat], basis: ["hr", "power"].includes(r.basis) ? r.basis : "auto",
+      src: r.src, url: r.url, purpose: r.purpose, conv: r.conv, note: "" };
+    renderForm(); renderList();
+    await WE.load({ items: r.full || r.items }, { ro: true });
+    history.replaceState(null, "", location.pathname);
+  } else {
+    S.form = { kind: "new", name: "", cats: S.cat !== "all" ? [S.cat] : [], basis: "auto", note: "" };
+    renderForm(); renderList();
+    await WE.load(null);
+    $("tm-name").focus();
+  }
+}
+
+// ---- events
+$("tm-src").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-src]"); if (!b) return;
+  S.src = b.dataset.src;
+  $("tm-src").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  renderList();
+});
+$("tm-cats").addEventListener("click", (e) => { const b = e.target.closest("button[data-cat]"); if (!b) return; S.cat = b.dataset.cat; renderCats(); renderList(); });
+$("tm-q").addEventListener("input", (e) => { S.q = e.target.value; renderList(); });
+$("tm-items").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.id) select({ kind: "mine", id: +b.dataset.id });
+  else if (b.dataset.key) select({ kind: "lib", key: b.dataset.key });
+});
+$("tm-new").addEventListener("click", () => select({ kind: "new" }));
+$("tm-name").addEventListener("input", (e) => { if (S.form) S.form.name = e.target.value; });
+$("tm-note").addEventListener("input", (e) => { if (S.form) S.form.note = e.target.value; });
+$("tm-pick").addEventListener("change", () => {
+  S.form.cats = [...$("tm-pick").querySelectorAll("input:checked")].map((x) => x.value);
+  WE.refreshSoon();                                   // the type (強度課／越野跑 …) changes what 自動 resolves to
+});
+$("tm-basis").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-b]"); if (!b || b.disabled) return;
+  S.form.basis = b.dataset.b;
+  $("tm-basis").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  WE.refreshSoon();
+});
+$("tm-save").addEventListener("click", async () => {
+  const f = S.form; if (!f || f.kind === "lib") return;
+  const body = { name: f.name.trim(), cats: f.cats, target_basis: f.basis, note: f.note || "",
+    steps: { items: WE.doc ? WE.doc.items : [] } };
+  $("tm-save").disabled = true;
+  try {
+    const r = f.kind === "new" ? await req("POST", UAPI, body) : await req("PATCH", `${UAPI}/${f.id}`, body);
+    if (!r.ok) { setMsg(errText(r), "err"); return; }
+    await load();
+    await select({ kind: "mine", id: r.body.id });
+    setMsg(T("saved", { name: r.body.name }), "ok");
+  } finally { $("tm-save").disabled = false; }
+});
+$("tm-copy").addEventListener("click", async () => {
+  const f = S.form; if (!f || f.kind !== "lib") return;
+  const r = await req("POST", `${UAPI}/copy`, { key: f.key });
+  if (!r.ok) { setMsg(errText(r), "err"); return; }
+  await load();
+  await select({ kind: "mine", id: r.body.id });
+  setMsg(T("copied"), "ok");
+});
+$("tm-del").addEventListener("click", async () => {
+  const b = $("tm-del"), f = S.form; if (!f || f.kind !== "mine") return;
+  if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = T("del_confirm"); return; }
+  const r = await req("DELETE", `${UAPI}/${f.id}`);
+  if (!r.ok) { setMsg(errText(r), "err"); return; }
+  S.form = null; S.sel = null;
+  $("tm-ed").hidden = true; $("tm-empty").hidden = false;
+  history.replaceState(null, "", location.pathname);
+  await load();
+});
+$("tm-gpx").addEventListener("click", async (e) => {
+  if (e.target.closest("#tm-gpx-up")) { $("tm-gpx-file").click(); return; }
+  if (e.target.closest("#tm-gpx-del")) {
+    const r = await req("DELETE", `${UAPI}/${S.form.id}/gpx`);
+    if (!r.ok) { setMsg(errText(r), "err"); return; }
+    await afterGpx(r.body);
+  }
+});
+$("tm-gpx-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file || !S.form || S.form.kind !== "mine") return;
+  setMsg(T("gpx_uploading"));
+  const fd = new FormData(); fd.append("file", file);
+  const resp = await fetch(`${UAPI}/${S.form.id}/gpx`, { method: "POST", body: fd });
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) { setMsg(errText({ body }), "err"); return; }
+  await afterGpx(body);
+  setMsg(T("gpx_done"), "ok");
+});
+// a new / removed GPX: the template's row, and the chart's elevation (the structure's tpl)
+async function afterGpx(t) {
+  const i = S.mine.findIndex((x) => x.id === t.id);
+  if (i >= 0) S.mine[i] = { ...S.mine[i], gpx: t.gpx };
+  S.form.gpx = t.gpx;
+  renderGpx(); renderList();
+  if (WE.doc) { if (t.gpx) WE.doc.tpl = t.id; else delete WE.doc.tpl; WE.refreshSoon(); }
+  setMsg("");
+}
+// custom categories: add / rename / delete
+$("tm-cat-add").addEventListener("click", async () => {
+  const v = $("tm-cat-new").value.trim(), m = $("tm-cm-msg");
+  const r = await req("POST", PAPI + "/steps/templates/cats", { label: v });
+  if (!r.ok) { m.className = "msg err"; m.textContent = errText(r); return; }
+  $("tm-cat-new").value = ""; m.textContent = "";
+  await load();
+  if (S.form) renderPick();
+});
+$("tm-cm-list").addEventListener("click", async (e) => {
+  const li = e.target.closest("li[data-cid]"); if (!li) return;
+  const m = $("tm-cm-msg"), cid = li.dataset.cid;
+  let r = null;
+  if (e.target.closest("[data-cat-ren]")) r = await req("PATCH", `${PAPI}/steps/templates/cats/${encodeURIComponent(cid)}`, { label: li.querySelector("input").value });
+  else if (e.target.closest("[data-cat-del]")) {
+    const b = e.target.closest("[data-cat-del]");
+    if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = T("del_confirm"); return; }
+    r = await req("DELETE", `${PAPI}/steps/templates/cats/${encodeURIComponent(cid)}`);
+    if (r.ok && S.form) S.form.cats = S.form.cats.filter((x) => x !== cid);
+  }
+  if (!r) return;
+  if (!r.ok) { m.className = "msg err"; m.textContent = errText(r); return; }
+  m.textContent = "";
+  await load();
+  if (S.form) renderPick();
+});
+
+// ? help popups (as schedule.html)
+const QTIP = { el: null, pinned: null };
+function qtipShow(btn) {
+  qtipHide();
+  const d = document.createElement("div");
+  d.className = "qtip-pop";
+  d.textContent = btn.dataset.tip;
+  document.body.appendChild(d);
+  const r = btn.getBoundingClientRect(), w = d.offsetWidth, h = d.offsetHeight;
+  d.style.left = `${Math.max(12, Math.min(r.left - 8, innerWidth - w - 12))}px`;
+  d.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6}px`;
+  QTIP.el = d;
+}
+function qtipHide() { QTIP.el?.remove(); QTIP.el = null; }
+document.addEventListener("mouseover", (e) => { const t = e.target.closest?.(".qtip"); if (t && !QTIP.pinned) qtipShow(t); });
+document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".qtip") && !QTIP.pinned) qtipHide(); });
+document.addEventListener("click", (e) => {
+  const t = e.target.closest(".qtip");
+  if (t && QTIP.pinned !== t) { QTIP.pinned = t; qtipShow(t); return; }
+  QTIP.pinned = null; qtipHide();
+}, true);
+
+load().then(() => {
+  const id = +location.hash.slice(1);
+  if (id && S.mine.some((t) => t.id === id)) select({ kind: "mine", id });
+});
+</script>
+</body>
+</html>

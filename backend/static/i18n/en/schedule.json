@@ -217,6 +217,8 @@
   "pf.e.push_days": "The push range must be 1–14 days",
   "tabs.calendar_sub": "What's on each day",
   "tabs.compliance_sub": "Planned vs actual, load",
+  "tabs.templates": "Templates",
+  "tabs.templates_sub": "Your own workout templates",
   "sync.label": "Watch and activity sync",
   "pull.btn": "Get activities from {src}",
   "pull.btn_short": "Get activities",
