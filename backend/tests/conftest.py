@@ -105,6 +105,18 @@ def _no_registered_dataset():
 
 
 @pytest.fixture(autouse=True)
+def _no_memoised_plan():
+    """Dataset.plan's memo (wko5expr/dataset.py tenant_plan) is per test: it is
+    keyed on the plan.json stamp, which is the same "missing" for every test
+    without a plan file, so a plan memoised by one test would otherwise be
+    served to the next one and bypass its Plan.load stub."""
+    from backend.engine.wko5expr import dataset
+    dataset._PLAN_MEMO.clear()
+    yield
+    dataset._PLAN_MEMO.clear()
+
+
+@pytest.fixture(autouse=True)
 def _no_real_tp_client(monkeypatch, tmp_path_factory):
     """Tests never read the real ~/.wko5coach/tp_client.json or TP_* env."""
     from backend.sync import tp_client
