@@ -107,7 +107,7 @@ The toggle and the cache themselves are `wko5-engine` features (see
   `backend/engine/wko5expr/viewids.py:41`; a `chart` title still works, and next to an id it is
   only a reminder), optionally `dashboard_id` / `dashboard`, and at most one target: `series`,
   `series_index` or `axis`. Actions: `set` (series / axis keys), `scale`, `drop`, plus `note`
-  (`backend/engine/wko5expr/chartfixes.py:55`).
+  (`backend/engine/wko5expr/chartfixes.py:143`).
 - `view` is optional and the repo file uses none: a fix without it applies to every imported
   view, so fixes follow the charts whatever the exported `.wko5chart` file is called
   (`backend/engine/wko5expr/chartfixes.py:127`).

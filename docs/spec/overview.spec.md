@@ -58,15 +58,15 @@ the nights too (a two-day trip can hold only a few hours of walking).
 | Categories / helpers | Workout → category, moving time, effort km | `backend/engine/overview.py:72` |
 | Periods | Week (Monday) / month / year buckets and totals | `backend/engine/overview.py:228` |
 | PMC | Same `tl()` recurrence as the chart expressions `ctl` / `atl` / `tsb` | `backend/engine/overview.py:290` |
-| Week plan | Volume target, session template, done-matching, day placement, projection | `backend/engine/overview.py:582` |
-| Plan preferences | 課表偏好: shape the template (counts, caps, terrain), place on allowed / preferred days | `backend/engine/plan_prefs.py:465`, `backend/engine/plan_prefs.py:662` |
+| Week plan | Volume target, session template, done-matching, day placement, projection | `backend/engine/overview.py:717` |
+| Plan preferences | 課表偏好: shape the template (counts, caps, terrain), place on allowed / preferred days | `backend/engine/plan_prefs.py:465`, `backend/engine/plan_prefs.py:674` |
 | Blackout days | 不排課日期 / 休息日: validation, blocked days, lost-day volume, move-to for stored sessions | `backend/engine/blackouts.py:77`, `backend/engine/blackouts.py:223` |
 | Same-load conversion | Easy-HR time model per terrain, design km / climb for a time, LOO backtest | `backend/engine/equivalence.py:249`, `backend/engine/equivalence.py:315` |
-| Multi-week projection | Rolls the week-plan rules forward to the horizon | `backend/engine/projection.py:328` |
-| Reconcile | Pure rules: stored plan vs regenerated weeks vs activities | `backend/engine/reconcile.py:89` |
-| Plan store | Table I/O, edits, tombstones, expired deletes, manual link, stored-plan summary | `backend/engine/plan_store.py:118` |
+| Multi-week projection | Rolls the week-plan rules forward to the horizon | `backend/engine/projection.py:348` |
+| Reconcile | Pure rules: stored plan vs regenerated weeks vs activities | `backend/engine/reconcile.py:91` |
+| Plan store | Table I/O, edits, tombstones, expired deletes, manual link, stored-plan summary | `backend/engine/plan_store.py:123` |
 | Workout-sync provider | The active push target (`plan.push.provider`, default COROS; Garmin / intervals.icu are disabled stubs) | `backend/sync/workout_targets/__init__.py:18` |
-| COROS push | Session → structured COROS workout, idempotent push / remove | `backend/sync/coros_workouts.py:939` |
+| COROS push | Session → structured COROS workout, idempotent push / remove | `backend/sync/coros_workouts.py:944` |
 | Compliance | Planned vs actual per session / week, the 課表統計 dashboard | `backend/engine/compliance.py:44`, `backend/engine/compliance.py:191` |
 | API | Memoised Status, the endpoints, the pages | `backend/api/overview.py:42`, `backend/api/plan_sessions.py:38` |
 
@@ -106,7 +106,7 @@ categorical palette in fixed slot order (`backend/engine/overview.py:36`).
 `project()` (`backend/engine/overview.py:306`) continues the recurrence with planned daily TSS.
 
 The stored-plan projection is `plan_store.plan_summary()`
-(`backend/engine/plan_store.py:542`): today's CTL / ATL continued with the TSS of the **stored**
+(`backend/engine/plan_store.py:643`): today's CTL / ATL continued with the TSS of the **stored**
 active sessions on each day after today, up to the horizon, so edits change it. It replaces
 `week_plan()`'s own week targets, Sunday CTL and next-Monday TSB once the stored plan has loaded
 (`paintPlanLoad`, `backend/static/overview.html:675`). The overview's PMC chart itself shows only
@@ -118,7 +118,7 @@ the last 90 days (CTL / ATL lines, TSB bars in the PMC's Form% colours; `loadPmc
 Inputs: the computed `Status` (phase kind, goals, indicators), the last 8 complete weeks of
 moving hours / TSS, today's CTL / ATL / TSB, the 課表偏好 `prefs`, the 不排課日期, the accepted
 B2B weekends, the race calculator (for the 專項期 target) and the 主要訓練項目 `sport`
-(`backend/engine/overview.py:582`). `prefs=None` or the defaults run exactly the rules below.
+(`backend/engine/overview.py:717`). `prefs=None` or the defaults run exactly the rules below.
 
 **Volume target**
 1. Base / specific: the weekly TSS that raises CTL by the phase goal (base +3, specific +4 per
@@ -128,15 +128,15 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    Floored at the 4-week mean (hold).
 3. Guards: TSB < −30 → recovery week (60 % of the 4-week mean); TSB < −20 → hold; three
    building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). An accepted B2B's
-   own TSB drop is exempt (`B2B.tsb_exempt`, `backend/engine/overview.py:664`).
+   own TSB drop is exempt (`B2B.tsb_exempt`, `backend/engine/overview.py:799`).
 4. Taper: 50 % of the 6-week mean (40 % in the last 7 days to the A event); event week 30 %;
    recovery 50 %; transition 65 %.
-5. A custom weekly-hours preference only lowers the result (`backend/engine/overview.py:689`).
+5. A custom weekly-hours preference only lowers the result (`backend/engine/overview.py:824`).
 6. A break ≥ 6 days without running — a 不排課日期 range or simply no runs — gives the re-entry
-   block instead (`reentry.find`, `backend/engine/overview.py:697`; Daniels; plan-auto.spec.md);
+   block instead (`reentry.find`, `backend/engine/overview.py:832`; Daniels; plan-auto.spec.md);
    the week after the block goes back to the pre-break volume. Open injuries add a week note
-   (`injuries.week_notes`, `backend/engine/overview.py:702`).
-7. 不排課日期 (`blackouts`, `backend/engine/overview.py:717`): this week's lost days scale the
+   (`injuries.week_notes`, `backend/engine/overview.py:837`).
+7. 不排課日期 (`blackouts`, `backend/engine/overview.py:852`): this week's lost days scale the
    target (see 不排課日期 below).
 
 **Sessions** (dataclass `Session`, `backend/engine/overview.py:360`; `terrain`, `distance_km`,
@@ -146,19 +146,19 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   長時間輕鬆; 30 % of the week, ≥ 60 min, ≤ 1.15 × the longest of the last 28 days; specific:
   toward 70 % of the goal event's hours, ≥ 90 min, or the 專項期 race target below), terrain from
   the goal's climb density (「LSD（山路）」 with a mountain goal); 路跑 uses `road_long_session`
-  (`backend/engine/overview.py:550`). Then one of (`backend/engine/overview.py:873`):
+  (`backend/engine/overview.py:674`). Then one of (`backend/engine/overview.py:1011`):
   1. specific, Zone 5 not confirmed → the **Zone 3 ladder** (uphill versions allowed) instead
      of the 5×4′ hill set (台灣教練: Zone 3 first);
   2. specific, 路跑 → 「閾值節奏 2×15 分（平路）」 (`ROAD_SPECIFIC_Q`,
-     `backend/engine/overview.py:573`); specific, trail → uphill intervals 5×4';
+     `backend/engine/overview.py:697`); specific, trail → uphill intervals 5×4';
   3. base → the **間歇門檻**'s dose step as an interval-library variant fitted to the weekday
-     cap (`_gate_session`, `backend/engine/overview.py:469`, `backend/engine/overview.py:888`;
+     cap (`_gate_session`, `backend/engine/overview.py:469`, `backend/engine/overview.py:1026`;
      see below).
   - Base **recovery week** (3:1): the gate's 「恢復週 fartlek 4×1 分」 instead of intervals
-    (Palladino, `backend/engine/overview.py:894`).
+    (Palladino, `backend/engine/overview.py:1019`).
 - **Tests are suggested, never planned** (2026-10-01/02): a due CP test (`testing` bad / watch,
   `extra.cp_due`, A event > 10 days away, not inside a re-entry block) and a due AeT test
-  (`aet_test.due`, for a reason only) become `test_suggestions` (`backend/engine/overview.py:1168`)
+  (`aet_test.due`, for a reason only) become `test_suggestions` (`backend/engine/overview.py:1299`)
   — the floating suggestion box and the 課表 context menu's 排入測試 let the athlete pick a day.
   The CP session comes from the 課表偏好 CP 測試方式 via `cp_protocols.session_for`
   (`backend/engine/cp_protocols.py:128`), read even when the other preferences are the defaults:
@@ -172,9 +172,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   `docs/research/aerobic-base-readiness.md` §4–§5). The old 「連續 3 次輕鬆路跑飄移 < 5%」
   rule had no source and is gone (`STREAK_NEED` is legacy only,
   `backend/engine/workout_review.py:168`). `week_plan` reads status `i_gate`'s dict
-  (`backend/engine/overview.py:797`) and asks `week_decision`
-  (`backend/engine/quality_gate.py:1507`) for this week:
-  - **Method** (`plan.prefs.quality_gate`, `evaluate`, `backend/engine/quality_gate.py:768`):
+  (`backend/engine/overview.py:932`) and asks `week_decision`
+  (`backend/engine/quality_gate.py:1910`) for this week:
+  - **Method** (`plan.prefs.quality_gate`, `evaluate`, `backend/engine/quality_gate.py:917`):
     `auto` → `ua_gap` + `friel_drift` when the plan has a measured AeT row that is **valid**
     (B3, `unsourced-rules.md`: the aggregated drift estimate's SE ≤ 3 bpm and no shift > 5 bpm
     over the last 6 points — `drift_agg.aet_validity`, 推估; no fixed 16-week expiry; stale after
@@ -183,7 +183,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     ≤ 10 %; `friel_drift`: one run in 8 weeks, avg HR AeT−5…AeT+3, ≥ 70 min, fair drift < 5 %
     (`friel_check`, `backend/engine/quality_gate.py:314`); `xu_drift`: flat ≥ 90-min run,
     (HR@90′ − HR@10′) / HR@10′ < 10 % (`xu_drift_of` / `xu_check`,
-    `backend/engine/quality_gate.py:343`, `backend/engine/quality_gate.py:362`); `plateau`: ≥ 8
+    `backend/engine/quality_gate.py:362`, `backend/engine/quality_gate.py:362`); `plateau`: ≥ 8
     base weeks and EF change < +2 %; `weeks`: > N base weeks (evaluated per projected Monday);
     `none`: guardrails only. States: unlocked / locked (data there, criterion not met) /
     missing. **Forced mode with missing data → `fallback`**: i_gate WATCH with the reason and
@@ -245,7 +245,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   formatted by `_targets` (`backend/engine/overview.py:435`). The easy-run cap is the
   **課表心率區間**'s Z2 top (設定 → 心率: COROS % LTHR / % HRR / % HRmax, `engine/hr_profile.py`)
   unless an AeT was measured; session texts call it 「輕鬆跑上限」, with 「（實測 AeT）」 only
-  when measured (2026-10-03, `backend/engine/overview.py:762`), and a week note says which model
+  when measured (2026-10-03, `backend/engine/overview.py:897`), and a week note says which model
   set it when it isn't LTHR.
 - A season-plan threshold row applies from its own date on, never to earlier days
   (`planning.Plan.threshold_on`, `backend/engine/planning.py:286`, fixed 2026-10-01). Before the
@@ -273,7 +273,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   date and count — with 「到設定修改」 (`/api/v1/wko5/settings#thresholds`); the status action for a
   default LTHR points to 設定 too (`backend/engine/status.py:907`). No data-model change.
 - With active preferences the template is then shaped by `plan_prefs.shape()`
-  (`backend/engine/overview.py:928`; see 課表偏好 below).
+  (`backend/engine/overview.py:1059`; see 課表偏好 below).
 
 **Session decorators** (2026-10-02/03; each a small hook module, also run per projected week):
 - **主要訓練項目** (`engine/primary_sport.py`, setting `athlete.primary_sport` auto / trail / road;
@@ -281,7 +281,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   no B2B, no steep-hill walk, no mountain long run / uphill interval versions; the 專項期 LSD
   carries a marathon-pace segment (Pfitzinger / Daniels; 40 % of the run within 20–75 min, 推估;
   the A road race's goal pace when ≥ 30 km, else threshold pace × 1.04–1.08), and base strides
-  are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:577`).
+  are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:712`).
 - **專項期** (`engine/specific_phase.py`): the LSD follows the next A race's コース定數 (the race
   calculator's single-day target; a 推估 share per week from week 10 to 3 before the race, still
   ≤ +15 % over the 4-week longest); the race GPX's longest climb becomes one 長爬坡反覆 easy run;
@@ -296,27 +296,27 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
 
 **Done-matching** (the generated week; stored sessions are matched by `plan_match`, reconcile
 rule 1): strength ← a strength workout; long (by id, so a long day of kind `hike` too,
-`backend/engine/overview.py:967`) ← an endurance session ≥ 80 % of the planned minutes; the AeT
-test ← a road run ≥ 55 min (`backend/engine/overview.py:972`); quality / test ← a session with
+`backend/engine/overview.py:1098`) ← an endurance session ≥ 80 % of the planned minutes; the AeT
+test ← a road run ≥ 55 min (`backend/engine/overview.py:1103`); quality / test ← a session with
 ≥ 10 min at ≥ LTHR or ≥ 0.95 CP run power, or 60 % of the planned work for short reps
-(`hard_need`, `backend/engine/quality_gate.py:1628`, `backend/engine/overview.py:983`); a Zone 3
+(`hard_need`, `backend/engine/quality_gate.py:2124`, `backend/engine/overview.py:1114`); a Zone 3
 library variant ← its own time at ≥ 85 % CP (it never reaches 95 % CP);
 a planned **Zone 5** session (library class Z5, or rung `z5*`; `quality_gate.is_z5_variant`)
 ← only a run classified 「Z5 間歇」 (`workout_review.classify` stimulus `z5`, owner 2026-10-02);
 easy ← any other endurance session. Week activities and `done_by` rows carry `session`
 (`overview.session_of`: type, label, stimulus, dashicon), shown on the 本週 tiles / 課表 chips.
 **Done hard days** (Z5 / Z3 / 高強度長跑 / CP test, planned or not; `workout_review.HARD_TYPES`)
-keep the remaining interval 48 h away (`plan_prefs.place(hard_done=…)` and the no-prefs path, `backend/engine/overview.py:1022`).
+keep the remaining interval 48 h away (`plan_prefs.place(hard_done=…)` and the no-prefs path, `backend/engine/overview.py:1153`).
 
 **Placement**: remaining days from today (tomorrow when something is already logged today)
 to Sunday. The long session goes on the athlete's usual long-day weekday (mode over 12 weeks,
 `backend/engine/overview.py:410`) or the last free day; quality ≥ 2 days from the long one;
 easy on the next free days; strength on easy or free days, never the day before the long one.
 Sessions that don't fit are reported as a note, not squeezed in. Active preferences place
-with `plan_prefs.place()` instead (`backend/engine/overview.py:1028`). Blocked days are removed
-from the candidate days first (`backend/engine/overview.py:1008`); when they leave a quality /
+with `plan_prefs.place()` instead (`backend/engine/overview.py:1159`). Blocked days are removed
+from the candidate days first (`backend/engine/overview.py:1139`); when they leave a quality /
 test session only a day next to the long one, it is dropped rather than stacked
-(`backend/engine/overview.py:1073`). An accepted B2B keeps its own two days and the rest moves
+(`backend/engine/overview.py:1204`). An accepted B2B keeps its own two days and the rest moves
 around them (`B2B.place`, fixed).
 
 **Output**: target / done / remaining (hours, TSS), the reasons (`why`), the rules cited,
@@ -326,7 +326,7 @@ testing to-dos from the indicators; preference notes tagged `src: prefs`), the p
 TSS / h (`tss_per_category`), the preferences applied and the week's lost days
 (`blackout_days`), and the 主要訓練項目, the easy-cap label / HR model, the `test_suggestions`,
 the re-entry block, the B2B state and suggestion, the steep-walk and 專項期 info and the race
-simulation suggestion (`backend/engine/overview.py:1191`). Blackout notes are tagged
+simulation suggestion (`backend/engine/overview.py:1322`). Blackout notes are tagged
 `src: blackout`.
 
 ## 課表偏好 — training-plan preferences (`plan_prefs.py`)
@@ -345,7 +345,7 @@ defaults reproduce today's plan exactly.
 |---|---|---|
 | 可練日 | `plan.prefs.days` | 7 bools Mon..Sun, unchecked = rest day (`null` = every day) |
 | 長跑日 | `plan.prefs.long_day` | any weekday `mon`…`sun` / `auto` = the athlete's most frequent long day over 12 weeks (`auto`) |
-| 偏好的星期 | `plan.prefs.pref_days`, `plan.prefs.pref_keep` | `{quality \| aet_test \| cp_test \| strides: [first, second]}` (`{}` = 自動, the planner picks); one type per weekday (the long run's is 長跑日). Breaks of the default rules (`day_conflicts`, `backend/engine/plan_prefs.py:593`: 48 h from the long run, the day after it, not an allowed day, the long-day cap, two Zone 5 days < 2 apart, AeT test on a weekend / next to a hard day) are shown live (`POST /prefs/conflicts`) and after saving; 照我的偏好 stores the code in `pref_keep` and the planner then keeps the day, else it moves the session with a note |
+| 偏好的星期 | `plan.prefs.pref_days`, `plan.prefs.pref_keep` | `{quality \| aet_test \| cp_test \| strides: [first, second]}` (`{}` = 自動, the planner picks); one type per weekday (the long run's is 長跑日). Breaks of the default rules (`day_conflicts`, `backend/engine/plan_prefs.py:605`: 48 h from the long run, the day after it, not an allowed day, the long-day cap, two Zone 5 days < 2 apart, AeT test on a weekend / next to a hard day) are shown live (`POST /prefs/conflicts`) and after saving; 照我的偏好 stores the code in `pref_keep` and the planner then keeps the day, else it moves the session with a note |
 | 單次時間上限（平日） | `plan.prefs.cap_weekday` | 20–300 min (`null` = none) |
 | 長跑日上限 | `plan.prefs.cap_long` | 20–600 min (`null` = 同平日) |
 | 上限模式 | `plan.prefs.cap_mode` | `soft` 盡量不超過 / `hard` 絕對不超過 (`soft`) |
@@ -355,8 +355,8 @@ defaults reproduce today's plan exactly.
 | 每週時數 | `plan.prefs.weekly_hours` | 1–40 h cap (`null` = CTL ramp rules) |
 | 地形偏好 | `plan.prefs.terrain_easy` / `_long` / `_quality` | easy `road`/`trail`/`any`; long `road`/`trail`/`auto` (a stored `hike` reads as `trail` — 登山 is not a workout type; kind `hike` is labelled 越野跑); quality `flat`/`hill`/`any` |
 | 目標依據 | `plan.prefs.target_basis` | `auto` (by session type: HR for easy / long / trail days, power for intervals and 3–8 % hill repeats) / `hr` / `power` (`auto`; `engine/target_policy.py`). The legacy 間歇目標 `plan.prefs.interval_target` = `hr` reads as `hr` |
-| 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:87`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:758`, `backend/static/schedule.html:1948`, `backend/static/schedule.html:1985`) |
-| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`). **Not part of `active`**: it only changes the test session (`NOT_SHAPING`, `backend/engine/plan_prefs.py:95`). Panel: three chips, the details behind `?` (`backend/static/schedule.html:767`, `backend/static/schedule.html:1962`) |
+| 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:87`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:758`, `backend/static/schedule.html:1950`, `backend/static/schedule.html:1987`) |
+| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`). **Not part of `active`**: it only changes the test session (`NOT_SHAPING`, `backend/engine/plan_prefs.py:95`). Panel: three chips, the details behind `?` (`backend/static/schedule.html:767`, `backend/static/schedule.html:1964`) |
 | AeT 測試方式 | `plan.prefs.aet_test_protocol` | `auto` (徐國峰 90′ on the weekend LSD, UA 40′ backup) / `xu90` / `ua60` / `ua40` / `evoke60` / `friel` (`auto`). **Not part of `active`**. Protocols in plan-auto.spec.md |
 | AeT 飄移測試 | `plan.prefs.aet_test_days` | `weekday` / `any` (`weekday`: weekends are often trail days). **Not part of `active`** (`NOT_SHAPING`): every placement path reads it (`aet_test.test_days` / `pick_day`): weekday = Mon–Fri in Tue-first order, ≥ 2 days from the long run and other hard days where possible, never the day after the long run unless nothing else; the 80′ standard test may fall back to a weekend day that isn't the long run's, the 50′ short one never; `any` = the interval rule. The test's **length** follows `cap_weekday` (`aet_test.variant_for`): no cap or ≥ 80 → 15′ + 60′ + 5′; < 80 → UA's minimum 10′ + 40′ (never shorter, exempt below 50). Panel: `#pf-aet` chips + AeT 排在 |
 | 間歇暖身／緩和 | `plan.prefs.warmup_commute_min`, `plan.prefs.cooldown_min` | 0–30 (10) / 0–20 (5) min: the interval's easy warm-up run and cool-down (`engine/interval_library.py`). **Not part of `active`** |
@@ -427,14 +427,14 @@ chips, `heat_passive` in the legend, no push button for it.
 
 The projection passes the same preferences (`week_sessions`, `backend/engine/projection.py:104`),
 rolls its history on the minutes actually planned, and returns each week's preference notes. The
-課表 page shows the notes of the weeks in view (`_plan_notes`, `backend/api/plan_sessions.py:1920`).
+課表 page shows the notes of the weeks in view (`_plan_notes`, `backend/api/plan_sessions.py:1934`).
 User-edited and custom sessions are never overwritten: preferences only change the
 generator's output and reconcile rule 3 keeps edited sessions.
 
-**Saving** (`PUT /plan/prefs`, `backend/api/plan_sessions.py:1561`) validates the whole set,
+**Saving** (`PUT /plan/prefs`, `backend/api/plan_sessions.py:1575`) validates the whole set,
 writes every key and commits; when a 偏好的星期 breaks a default rule the dialog first shows the
 conflicts once (照我的偏好), then the page opens the existing reconcile preview
-(`backend/static/schedule.html:2309`). Cancelling keeps the preferences
+(`backend/static/schedule.html:2311`). Cancelling keeps the preferences
 saved and the plan unchanged until the next reconcile. The generator inputs are memoised with
 the preference stamp in the key (`backend/api/plan_sessions.py:67`), so a saved change
 regenerates immediately. COROS pushes read the stored sessions, so they follow too; an HR
@@ -454,8 +454,8 @@ overlaps**. Ranges may be in the past (kept as a record; only days from today on
 plan). Read synchronously by `load()` (`backend/engine/blackouts.py:136`); bad data reads as none.
 
 **休息日** (2026-10-02): `kind: "rest"` is a one-day range the athlete sets from the 課表 calendar's
-context menu (`POST` / `DELETE /plan/rest-days`, `backend/api/plan_sessions.py:1666`,
-`backend/api/plan_sessions.py:1686`; label 休息日, never a past day). Nothing is planned there, but
+context menu (`POST` / `DELETE /plan/rest-days`, `backend/api/plan_sessions.py:1680`,
+`backend/api/plan_sessions.py:1700`; label 休息日, never a past day). Nothing is planned there, but
 it is **not a lost day**: the week keeps its volume on its other days (`lost_days`,
 `backend/engine/blackouts.py:178`). The athlete's own sessions on that day move to another day of
 the week (decision `move`).
@@ -463,11 +463,11 @@ the week (decision `move`).
 **Planning rules** (`week_plan`, `project_weeks`, `reconcile`):
 1. **Never on a blocked day**: blocked days are removed from the candidate days before placement
    (`week_plan` both paths, `plan_prefs.place()`, `projection._place`,
-   `backend/engine/projection.py:245`), so the existing placers keep their rules — long first
+   `backend/engine/projection.py:253`), so the existing placers keep their rules — long first
    (it gets the last free day before easy runs do), quality ≥ 2 days from the long and from each
    other, strength not the day before the long — and their 「排不進去」 drop path.
 2. **Volume**: target hours × (allowed days not blocked ÷ allowed days) (`lost_days` / `factor`,
-   `backend/engine/blackouts.py:178`, `backend/engine/blackouts.py:188`); allowed = the 可練日
+   `backend/engine/blackouts.py:188`, `backend/engine/blackouts.py:188`); allowed = the 可練日
    preference, else all 7. A past blocked day with a workout is not lost, nor is a 休息日. With preferences, the
    run slots shrink by the lost days too.
 3. **Week note** (`week_note`, `backend/engine/blackouts.py:193`):
@@ -480,23 +480,23 @@ the week (decision `move`).
    before, mode `reentry`, no quality inside); a shorter one is Daniels' category 1 — back to
    100 %, and the projection doesn't let that week lower the base it ramps from.
 5. **Stored sessions** on a blocked day from today on (reconcile rule 6,
-   `_clear_blackouts`, `backend/engine/reconcile.py:272`): unedited auto sessions follow the
+   `_clear_blackouts`, `backend/engine/reconcile.py:276`): unedited auto sessions follow the
    regenerated week (the change says 「在不排課日期內（label），移到 m/d」,
-   `backend/engine/reconcile.py:256`), or, in a week that wasn't regenerated, move to the
+   `backend/engine/reconcile.py:260`), or, in a week that wasn't regenerated, move to the
    nearest free day (`move_to`, `backend/engine/blackouts.py:223`: same week, ≥ today, allowed
    weekday, not blocked, no other main session, a hard session never next to another hard day;
    ties go earlier; long first) or are dropped. **Edited / custom sessions are never changed
    without the user**: they come back as a `conflict` change with `move_to`, and only
    `decisions[uid]` = `move` / `delete` changes them (an edited auto session deleted leaves a
    tombstone). Adding or moving a session onto a blocked day is a 400
-   (`_not_blocked`, `backend/engine/plan_store.py:301`).
+   (`_not_blocked`, `backend/engine/plan_store.py:322`).
 6. **COROS**: through the normal reconcile + push. Regenerated sessions are re-sent on their new
    day or removed as stale; an edited session still on a blocked day (no decision yet) is not
-   pushed and its pushed copy is removed (`_on_blocked`, `backend/api/plan_sessions.py:1451`,
-   used at `backend/api/plan_sessions.py:1477`). The push preview counts them
+   pushed and its pushed copy is removed (`_on_blocked`, `backend/api/plan_sessions.py:1462`,
+   used at `backend/api/plan_sessions.py:1488`). The push preview counts them
    (`blackout_to_remove`).
 
-**Flow** (`backend/api/plan_sessions.py:1605`): `POST /plan/blackouts/preview` regenerates with
+**Flow** (`backend/api/plan_sessions.py:1619`): `POST /plan/blackouts/preview` regenerates with
 the *candidate* list and returns the reconcile preview without saving anything (the generator
 inputs are memoised with the blackout stamp in the key, `backend/api/plan_sessions.py:67`, and
 `_compute_inputs` takes the candidate list); `PUT /plan/blackouts` saves the list, then
@@ -505,16 +505,16 @@ reconciles with the user's `decisions`. `POST /plan/reconcile` also takes `{deci
 **Page** (`backend/static/schedule.html`): blocked days get a faint 45° hatch (the provisional
 week hatch is 135°, so both read when stacked) and a small 🏖 label chip on the first day of the
 range in each week row (every blocked day in the phone agenda); no ＋, no add-on-click, no drop
-target (`boOf`, `backend/static/schedule.html:988`). Ranges are set by dragging across days
-(mouse / pen, 8 px threshold, never starting on a chip or button; `backend/static/schedule.html:2430`),
+target (`boOf`, `backend/static/schedule.html:989`). Ranges are set by dragging across days
+(mouse / pen, 8 px threshold, never starting on a chip or button; `backend/static/schedule.html:2432`),
 by clicking a day and Shift-clicking another, or from ⋯ → 「🏖 設定不排課日期」
 (`backend/static/schedule.html:563`), which also works on the phone. The dialog
-(`backend/static/schedule.html:799`, `openBo` `backend/static/schedule.html:2317`) takes start,
+(`backend/static/schedule.html:799`, `openBo` `backend/static/schedule.html:2319`) takes start,
 end and an optional label, checks overlap / length client-side, and shows how many sessions sit
 in the range; clicking the chip edits or removes the range. Creating, editing and removing all
-go through the reconcile preview first (`applyBlackouts`, `backend/static/schedule.html:2354`),
+go through the reconcile preview first (`applyBlackouts`, `backend/static/schedule.html:2356`),
 where each conflicting edited session gets 移到… / 刪除 / 先留著 (`changesHtml`,
-`backend/static/schedule.html:1199`). Blackout notes show above the calendar with a 🏖 mark.
+`backend/static/schedule.html:1200`). Blackout notes show above the calendar with a 🏖 mark.
 
 ## Same-load conversion (`equivalence.py`)
 
@@ -563,19 +563,19 @@ since 2026-10-03, the 結構 editor above it open): terrain 路跑 / 越野跑 (
 choosing 路跑 on it goes back to a road kind), a
 爬升比例 slider 0–150 m/km, a 套用目標賽事 button (the goal's climb per km), distance / climb /
 TSS fields, a lock (鎖時間 / 鎖 TSS / 鎖距離) and 完全自由調整; editing any unlocked field
-recomputes the rest with the same formula in JS (`eqH`, `backend/static/schedule.html:1393`;
-`eqRecalc`, `backend/static/schedule.html:1432`). An inline grade readout shows the average grade
+recomputes the rest with the same formula in JS (`eqH`, `backend/static/schedule.html:1394`;
+`eqRecalc`, `backend/static/schedule.html:1433`). An inline grade readout shows the average grade
 (on trail, climbing sections ≈ 2 × the average, 推估); for a 陡坡健走 the grade is given, so
 distance and climb fill each other. It shows the live TSS and its difference vs
 the original (「比原本多 15 %」), warns above the preference cap (`capFor`,
-`backend/static/schedule.html:1381`), when the typed distance / climb would take a different
+`backend/static/schedule.html:1382`), when the typed distance / climb would take a different
 time, and outside the data range; a trail / hike target becomes HR-only ≤ AeT. The session is
 saved with `terrain`, `distance_km`, `climb_m`.
 
 ## Multi-week projection (`projection.py`)
 
 `project_weeks(cur, phases, until, ctlconstant, atlconstant, prefs, blackouts, events, heat_acts,
-b2b_accepted)` (`backend/engine/projection.py:328`) starts
+b2b_accepted)` (`backend/engine/projection.py:348`) starts
 from this week's `week_plan()` output and rolls the same rules forward week by week, never
 more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:36`):
 
@@ -583,7 +583,7 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:36`):
   ramp goal capped at +10 % (≥ +0.5 h) of max(4-week mean, last week), with a 65 % recovery
   week after 3 build weeks; taper 40–50 % of the 6-week mean; event 30 %; recovery 50 %;
   transition 65 % of the 4-week mean. A weekly-hours preference caps it
-  (`backend/engine/projection.py:405`).
+  (`backend/engine/projection.py:425`).
 - Sessions (`week_sessions`, `backend/engine/projection.py:104`): the same template (long, the
   week's intervals, strength, easy fill) placed by `_place` (`backend/engine/projection.py:253`), or
   shaped and placed by the preferences. Base / 專項期 / 減量期 intervals come from the 間歇門檻
@@ -602,7 +602,7 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:36`):
   the old `{levels, streak_ok}` shape — becomes a no-method gate (intensity bad keeps Zone 5
   out) (`_gate_inputs`, `backend/engine/projection.py:304`).
 - CTL / ATL roll forward with the athlete's constants (`ds.athlete.ctlconstant` /
-  `atlconstant`, `backend/engine/projection.py:523`); a session `_place` left without a day is
+  `atlconstant`, `backend/engine/projection.py:536`); a session `_place` left without a day is
   kept out of the date filter.
 - Each projected week carries `mode`, hours, TSS, CTL start / end, `why`, `provisional`
   (true beyond next week) and, with preferences, `notes`.
@@ -617,42 +617,48 @@ The horizon is the current phase end, at least two weeks out, capped at `MAX_WEE
 `kind`, `title`, `minutes`, `target`, `detail`, `source`, `tss`, `origin` (auto / custom),
 `edited`, `provisional`, `state` (active / done / missed / deleted / superseded), `done_by`
 (JSON activity row), `note`, and `terrain` / `distance_km` / `climb_m`, `protocol`, the
-interval-library `variant_*` columns, `target_basis` (目標用 hr / power, None = 自動) and `steps`
-(the structure saved in the 課表 editor, JSON) (`backend/db/models.py:184`, added by
-`_migrate_schema`, `backend/db/database.py:101`).
+interval-library `variant_*` columns, `target_basis` (目標用 hr / power, None = 自動), `steps`
+(the structure saved in the 課表 editor, JSON) and `ext_key` / `ext_sig` (a session written from
+outside the generator — the 賽事計算機's 「匯出至課表」, `racecalc:<event id>` — and the fingerprint
+of what it wrote) (`backend/db/models.py:184`, added by `_migrate_schema`,
+`backend/db/database.py:101`). `updated_at` moves only when a row's content changes.
 
-**Kinds** (`backend/engine/plan_store.py:20`): easy 輕鬆跑, long **LSD** (was 長時間, 2026-10-03;
-the old auto titles are mapped at read time by `display_title`, `backend/engine/plan_store.py:37`,
+**Kinds** (`backend/engine/plan_store.py:21`): easy 輕鬆跑, long **LSD** (was 長時間, 2026-10-03;
+the old auto titles are mapped at read time by `display_title`, `backend/engine/plan_store.py:41`,
 the key stays `long`), quality 強度課, test 測試, hike **越野跑** (登山 is not a workout type),
-strength 肌力, heat_passive 被動熱適應, notice 課表待確認 (a reminder, never load or compliance).
-**Terrains** road / trail / hike (`backend/engine/plan_store.py:28`).
+strength 肌力, heat_passive 被動熱適應, notice 課表待確認 (a reminder, never load or compliance),
+race 比賽 (the generator's race-day row, minutes 0, or the 賽事計算機's export; never added by hand,
+and no other kind can be changed into it). **Terrains** road / trail / hike
+(`backend/engine/plan_store.py:32`).
 
-**Reconcile rules** (`reconcile()`, `backend/engine/reconcile.py:89`; documented at
+**Reconcile rules** (`reconcile()`, `backend/engine/reconcile.py:91`; documented at
 `backend/engine/reconcile.py:12`):
 1. Active (and previously missed) sessions up to today that match an activity become **done**
-   (`plan_match.assign`, `backend/engine/reconcile.py:112`: same day + the planned sport first,
+   (`plan_match.assign`, `backend/engine/reconcile.py:114`: same day + the planned sport first,
    one activity per session; long / quality / test also by the generator's week-wide match —
    details in plan-auto.spec.md); the rest on past days become **missed**, but only up to the day
    the synced data covers (`covered`), so a late sync can turn a missed session back into done.
    An activity the athlete unlinked is never auto-matched again.
 2. Per generated week, unedited auto sessions from today on are replaced by the regenerated
    ones: same `gen_key` → changed, gone → removed, new → added. Terrain, distance and climb
-   are regenerated fields (`FIELDS`, `backend/engine/reconcile.py:46`).
+   are regenerated fields (`FIELDS`, `backend/engine/reconcile.py:48`).
 3. Edited and custom sessions are kept. An edited long / quality / test is **superseded** when
    the regenerated week is a rest week (recovery / taper / event / transition) that no longer
-   has it (`backend/engine/reconcile.py:147`). Deleted auto sessions stay deleted: their
-   tombstone blocks the `gen_key` for that week.
+   has it (`backend/engine/reconcile.py:151`). Deleted auto sessions stay deleted: their
+   tombstone blocks the `gen_key` for that week. A kept race row (the calculator's export) blocks
+   the generator's own `race` of that week (`backend/engine/reconcile.py:126`), so the week never
+   has two races and the export is never moved.
 4. An auto session on the same day as a kept edited / custom session moves to a free day of
-   that week, or is dropped (`_resolve_collisions`, `backend/engine/reconcile.py:337`).
+   that week, or is dropped (`_resolve_collisions`, `backend/engine/reconcile.py:341`).
 5. Unedited auto sessions past the horizon are removed.
 6. 不排課日期: nothing active stays on a blocked day from today on; edited / custom sessions
    there are a `conflict` until the user decides (see 不排課日期 above; documented at
-   `backend/engine/reconcile.py:28`).
+   `backend/engine/reconcile.py:30`).
 
 Each change is returned as `{action, uid, day, title, kind, minutes, origin, edited, reason?,
 before?, conflict?}` (`conflict` = `{label, move_to, day, choice}`; `_change`,
-`backend/engine/reconcile.py:78`) and grouped by day for the preview
-(`backend/engine/reconcile.py:371`).
+`backend/engine/reconcile.py:80`) and grouped by day for the preview
+(`backend/engine/reconcile.py:375`).
 
 **Coverage** (`_covered`, `backend/api/plan_sessions.py:170`): the later of the latest activity
 day and the day before the latest successful COROS / generic sync.
@@ -662,7 +668,7 @@ a week, or while an earlier week still has active sessions, the plan is reconcil
 before anything else is returned — unless a 課表待確認 proposal is waiting (plan-auto.spec.md).
 `GET /sessions` also matches newly synced runs right away (`match_only`).
 
-**Edits** (`_clean`, `backend/engine/plan_store.py:230`; `edit`, `backend/engine/plan_store.py:307`):
+**Edits** (`_clean`, `backend/engine/plan_store.py:248`; `edit`, `backend/engine/plan_store.py:328`):
 editable fields are day, kind, title, minutes, target, detail, terrain, distance_km, climb_m,
 target_basis, steps. A day must be ISO and not in the past; kind and terrain must be known (not
 `notice`); minutes 0–1440; distance 0–500 km, climb 0–20000 m; an optional TSS estimate 0–2000;
@@ -671,25 +677,35 @@ marks the session `edited` and non-provisional; hand-editing a library variant's
 variant marked `swap = user`. Moving an auto session to another week leaves a tombstone in the
 old week and turns the session into a custom one. Only active sessions can be edited.
 
-**Add** (`backend/engine/plan_store.py:349`): a custom session needs a day; defaults kind easy,
-45 min, a title per kind (a new test follows the CP 測試方式); `notice` can't be added.
-**Delete** (`backend/engine/plan_store.py:430`): an auto session becomes a tombstone
+**Add** (`backend/engine/plan_store.py:372`): a custom session needs a day; defaults kind easy,
+45 min, a title per kind (a new test follows the CP 測試方式); `notice` and `race` can't be added.
+**Delete** (`backend/engine/plan_store.py:455`): an auto session becomes a tombstone
 (`state = deleted`), a custom one is removed; deleting either day of an accepted B2B cancels it.
 
+**External sessions — 賽事計算機「匯出至課表」** (2026-10-04, SP-43; `upsert_external`,
+`backend/engine/plan_store.py:498`): one row per `ext_key`, written as the user's own (`edited`).
+The row is this key's active row (updated), else its deleted / superseded row (restored), else the
+generator's own race row of that week (`gen_key` race, claimed), else a new custom row; a moved race
+date moves the row. An identical export is `unchanged` (no write, `updated_at` kept). `ext_sig`
+fingerprints day / kind / title / minutes / target / detail / steps (`ext_signature`,
+`backend/engine/plan_store.py:488`), so a later edit on the 課表 page shows as `user_edited` before an
+overwrite. The race's planned TSS counts in the week (`plan_summary`). See racepower.spec.md,
+Watch export.
+
 **Expired sessions** (2026-10-02): a past session that was never done (missed, or still open on a
-past day; `is_expired_open`, `backend/engine/plan_store.py:385`) can be deleted alone or all at
-once (「刪除所有過期未完成」, `delete_expired`, `backend/engine/plan_store.py:411`). It becomes a
+past day; `is_expired_open`, `backend/engine/plan_store.py:410`) can be deleted alone or all at
+once (「刪除所有過期未完成」, `delete_expired`, `backend/engine/plan_store.py:436`). It becomes a
 tombstone of any origin with note `user_deleted_expired` and no `gen_key`, so reconcile,
 plan_match and the auto-replan's 復原 never bring it back; a pushed copy comes off the watch
-through the workout-sync provider (`_unpush_expired`, `backend/api/plan_sessions.py:1289`), or
+through the workout-sync provider (`_unpush_expired`, `backend/api/plan_sessions.py:1291`), or
 on the next push when the login has expired.
 
-**Manual link** (`link` / `unlink`, `backend/engine/plan_store.py:491`,
-`backend/engine/plan_store.py:516`): the athlete pairs a session with an activity of the same
+**Manual link** (`link` / `unlink`, `backend/engine/plan_store.py:617`,
+`backend/engine/plan_store.py:604`): the athlete pairs a session with an activity of the same
 week (± 1 day; the calendar's `link_options`) or undoes it; an unlinked activity is stored in
 `plan.match.unlinked` (by start time) and becomes an unplanned run.
 
-**Stored-plan summary** (`plan_summary`, `backend/engine/plan_store.py:542`): the week's
+**Stored-plan summary** (`plan_summary`, `backend/engine/plan_store.py:643`): the week's
 target hours (active + done sessions, strength excluded) and TSS (`session_tss`: a done session
 counts its activity's actual TSS), plus the CTL / ATL projection described under PMC, ending
 CTL / ATL and next-Monday TSB.
@@ -742,16 +758,16 @@ logging in (`build`, `backend/engine/calendar_feed.py:189`; served by `feed`,
   actual minutes / TSS when done, distance / climb, the target text, the saved structure
   (`workout_steps.structure_text`), the detail and 「在課表打開這堂課」 (`description`,
   `backend/engine/calendar_feed.py:148`); `URL` = the same link: the 課表 page's existing deep
-  link `?day=&uid=` that opens the session's dialog (`backend/static/schedule.html:2710`).
+  link `?day=&uid=` that opens the session's dialog (`backend/static/schedule.html:2714`).
   Calendar properties: `X-WR-CALNAME`, `REFRESH-INTERVAL` / `X-PUBLISHED-TTL` PT1H (hints;
   Google ignores them). Lines are CRLF, folded at 75 octets without splitting a UTF-8 character,
-  TEXT escaped (`fold`, `escape`, `backend/engine/calendar_feed.py:100`).
+  TEXT escaped (`fold`, `escape`, `backend/engine/calendar_feed.py:94`).
 - **Edits follow**: UID = `<uid>@trailruncoach`. A session's `uid` lives as long as the session:
-  an edit or a move to another day / week keeps it (`edit`, `backend/engine/plan_store.py:320`),
+  an edit or a move to another day / week keeps it (`edit`, `backend/engine/plan_store.py:328`),
   and reconcile keeps it when it regenerates the same `gen_key` in a week; a newly generated
   session (a new `gen_key`, or a week generated again after its rows were removed) gets a new
   uid, and the old one simply leaves the feed. `LAST-MODIFIED` = the row's `updated_at`, which
-  `_fill` (`backend/engine/plan_store.py:106`) now moves only when the row's content changed
+  `_fill` (`backend/engine/plan_store.py:111`) now moves only when the row's content changed
   (save() rewrites every row) and always by ≥ 1 s; `SEQUENCE` = its whole seconds since
   2026-01-01 (`sequence`, `backend/engine/calendar_feed.py:125`), so every change raises it.
   Deleted sessions (one, 「刪除所有過期未完成」, reconcile removals, auto-plan replacements)
@@ -783,7 +799,7 @@ which one. The response keeps the `coros` field names.
   push and unpush instead of an empty range (`backend/api/plan_sessions.py:252`); a past `day`
   scope is not guarded.
 - **Every push reconciles first** and applies the result, then pushes the active sessions in
-  range (`backend/api/plan_sessions.py:1461`).
+  range (`backend/api/plan_sessions.py:1472`).
 - **Session → steps** (`session_steps`, `backend/sync/coros_workouts.py:400`): a structure the
   athlete saved in the 課表 editor (`steps`, `engine/workout_steps.py`) wins over the text; long /
   hike / easy are one time step at HR ≤ the easy cap; a 路跑 專項期 LSD with a marathon-pace segment
@@ -791,28 +807,32 @@ which one. The response keeps the `coros` field names.
   else threshold pace × 1.04–1.08) or an HR band without threshold pace; an easy session whose
   title has `N×S 秒` gets a strides repeat when ≥ 10 min remain; quality and test sessions get
   their own step builders — an HR basis gives HR work steps (`_work_hr`,
-  `backend/sync/coros_workouts.py:182`). Strength, race, rest and heat_passive are not pushed
-  (skipped, with a reason); a 課表待確認 notice is one 1-minute step. Done, unplaced and past-day
-  sessions are not pushed (`session_workout`, `backend/sync/coros_workouts.py:558`). The push
+  `backend/sync/coros_workouts.py:182`). Strength, rest, heat_passive and a race without steps
+  (the generator's 比賽) are not pushed (skipped, with a reason); a race with steps (the 賽事計算機's
+  「匯出至課表」) is pushed from them (`backend/sync/coros_workouts.py:404`); a 課表待確認 notice is one 1-minute step. Done, unplaced and past-day
+  sessions are not pushed (`session_workout`, `backend/sync/coros_workouts.py:560`). The push
   preview lists sessions whose % / zone pace steps have no threshold pace (`pace_notes`,
-  `backend/api/plan_sessions.py:1445`).
-- **Program** (`build_program`, `backend/sync/coros_workouts.py:504`): run sport; HR targets as
+  `backend/api/plan_sessions.py:1450`).
+- **Program** (`build_program`, `backend/sync/coros_workouts.py:506`): run sport; HR targets as
   absolute bpm with the LTHR zone scheme; names `TRC <title> <m>/<d>`, ≤ 30 chars
-  (`workout_name`, `backend/sync/coros_workouts.py:553`).
-- **Idempotency** (`_push_one`, `backend/sync/coros_workouts.py:880`): each push is recorded in
+  (`workout_name`, `backend/sync/coros_workouts.py:555`).
+- **Idempotency** (`_push_one`, `backend/sync/coros_workouts.py:885`): each push is recorded in
   `coros_plan_push` (`backend/db/models.py:130`) with the COROS program / plan / schedule ids
   and a SHA-256 fingerprint of day + payload. Same fingerprint → left alone; changed → the old
   COROS entry is removed and a new one created; an entry already executed on the watch is kept
   as done. The stored-plan push keys rows by session `uid` (`session_key`,
   `backend/db/models.py:142`).
-- **Clean-up** (`push_sessions`, `backend/sync/coros_workouts.py:939`): pushed sessions that
+- **Clean-up** (`push_sessions`, `backend/sync/coros_workouts.py:944`): pushed sessions that
   left the plan (deleted / superseded / regenerated away) are removed unless on a past day;
   missed sessions and expired ones the athlete deleted are removed from the calendar
   (`plan_store.off_watch`). Only entries recorded in `coros_plan_push` are
-  ever deleted (`_remove_row`, `backend/sync/coros_workouts.py:978`).
-- **Unpush** (`DELETE /push-coros`, `backend/api/plan_sessions.py:1487`) removes every recorded
-  entry whose day falls in the range (`remove_keys`, `backend/sync/coros_workouts.py:963`).
-- **Status per session** (`status_of`, `backend/sync/coros_workouts.py:771`): done / skipped /
+  ever deleted (`_remove_row`, `backend/sync/coros_workouts.py:983`). A pushed exported race also
+  takes off the workout the calculator's retired 「匯出到 COROS」 pushed under the same key
+  (`racecalc:<event id>`, not in `all_rows`; `_old_calc_keys`, `backend/api/plan_sessions.py:1456`);
+  the preview counts it as `calc_to_replace`.
+- **Unpush** (`DELETE /push-coros`, `backend/api/plan_sessions.py:1501`) removes every recorded
+  entry whose day falls in the range (`remove_keys`, `backend/sync/coros_workouts.py:968`).
+- **Status per session** (`status_of`, `backend/sync/coros_workouts.py:773`): done / skipped /
   not_pushed / pushed / outdated / failed; sessions no longer active but still recorded show
   `pushed_<state>` (`backend/api/plan_sessions.py:270`).
 - The old week-keyed helpers (`push_week` / `remove_week` / `week_status`, keys
@@ -821,7 +841,7 @@ which one. The response keeps the `coros` field names.
 - Pushes and removals are serialized by a module-level lock
   (`backend/sync/coros_workouts.py:79`). An expired COROS login returns 401
   `COROS_AUTH_REQUIRED` (`SYNC_AUTH_REQUIRED` for another provider) with a hint to log in again
-  on the settings page (`_auth`, `backend/api/plan_sessions.py:1455`).
+  on the settings page (`_auth`, `backend/api/plan_sessions.py:1466`).
 
 ## Page (`backend/static/overview.html`)
 
@@ -838,7 +858,7 @@ which one. The response keeps the `coros` field names.
   day-cards — one icon + colour per session type (輕鬆, 3 區, 5 區, LSD, B2B, 負重, 測試, 肌力 …),
   ✓ and the compliance colour when done, activities outside the plan with their session class,
   a click opens the 課表 page on that day (`dayHtml` / `renderPlan`,
-  `backend/static/overview.html:643`, `backend/static/overview.html:655`), the week notes and a 詳細
+  `backend/static/overview.html:655`, `backend/static/overview.html:655`), the week notes and a 詳細
   with the bars, the reasons, CTL → Sunday, next-Monday TSB and the thresholds line (incl. the
   輕鬆跑上限 and its `?`) (`loadWeek`, `backend/static/overview.html:688`); the bottom row holds the
   5 區 card (full width), 待辦與警示 and, left of it, the B2B card (shown only before a multi-day /
@@ -877,20 +897,20 @@ which one. The response keeps the `coros` field names.
   and test-session stamps.
 - Plan editing, drag-to-move, reconcile preview and COROS push by day / week / phase live on
   the 課表 page (`backend/static/schedule.html`: session dialog `openDlg`
-  `backend/static/schedule.html:1796`, reconcile `backend/static/schedule.html:1218`, push
-  `backend/static/schedule.html:1238`, unpush `backend/static/schedule.html:1269`), which also has
+  `backend/static/schedule.html:1797`, reconcile `backend/static/schedule.html:1219`, push
+  `backend/static/schedule.html:1239`, unpush `backend/static/schedule.html:1270`), which also has
   the ⚙ 課表偏好 panel (`backend/static/schedule.html:677`, `openPrefs`
-  `backend/static/schedule.html:2263`), its client-side checks (`pfError`,
-  `backend/static/schedule.html:2058`) and the preference notes above the calendar
-  (`backend/static/schedule.html:1054`). Since 2026-10-02/03 the 課表 page also has:
+  `backend/static/schedule.html:2265`), its client-side checks (`pfError`,
+  `backend/static/schedule.html:2060`) and the preference notes above the calendar
+  (`backend/static/schedule.html:1055`). Since 2026-10-02/03 the 課表 page also has:
   - **日曆 ｜ 課表統計** mode cards (`backend/static/schedule.html:520`);
   - a **context menu** (right-click, long-press on touch; `ctxItems`,
-    `backend/static/schedule.html:2496`): on a session 編輯 / 移到… / 刪除 (an expired one too);
+    `backend/static/schedule.html:2498`): on a session 編輯 / 移到… / 刪除 (an expired one too);
     on a free day 新增 / 排入測試 ▸ (the suggested tests with their templates and day rules) /
     設為休息日, on a 休息日 取消休息日;
   - ⋯ → 「刪除所有過期未完成」 (`backend/static/schedule.html:564`);
   - on a done session, planned vs actual (compliance, 「沒照課表」 ≠) and a manual link / unlink to
-    an activity (`backend/static/schedule.html:1758`);
+    an activity (`backend/static/schedule.html:1759`);
   - the session dialog's 結構 (step editor, `engine/workout_steps.py`) open by default and the
     地形與同負荷換算 fold collapsed; the push preview's pace-target warnings.
 - **課表統計** page (`backend/static/compliance.html`, a tab of 課表; `GET /plan/compliance` →
@@ -901,21 +921,21 @@ which one. The response keeps the `coros` field names.
   line at 1).
 - **課表 toolbar wording** (2026-10-04): 「抓活動／匯入」 = 資料來源 → here, 「推送」 = 課表 → 手錶.
   The push split button reads 推送到手錶 (was 「同步到 COROS」). Left of it, ⟳ 從 {COROS｜TrainingPeaks}
-  抓活動 (`#pull-btn`, `backend/static/schedule.html:545`; `pull` `backend/static/schedule.html:1314`)
+  抓活動 (`#pull-btn`, `backend/static/schedule.html:545`; `pull` `backend/static/schedule.html:1315`)
   runs the same manual sync as 設定 › 立即同步 for the 資料來源 in use only (`GET /api/v1/sync/primary`,
   then the SSE start endpoint through the shared `backend/static/syncrun.js:22`). Not logged in /
   login expired / source switched off → a 到設定頁 link instead (`renderPull`,
-  `backend/static/schedule.html:1300`; when COROS is the source the push side's login link covers
+  `backend/static/schedule.html:1301`; when COROS is the source the push side's login link covers
   it); hidden in the demo. Progress (已檢查 n · 新下載 m) and the result show in `#sync-msg`; 409
   `SYNC_BUSY` is a hint, not an error. When it ends the calendar reloads (new activities pair:
   ✓／未完成) and, if anything was downloaded, reloads once more ~5 s later together with the
   自動調整 box (`window.autoPlanRefresh`) for the background `plan_auto.after_sync`.
 - **Calendar status glyphs** (2026-10-04): 完成 = the chip itself (✓ before the title + compliance
   colour, ≠, 未完成, ● activity chips). 推送狀態 = a small watch at the chip's top right, only on
-  active sessions today or later (`SYNC` / `SY_SVG`, `backend/static/schedule.html:888`): 已推送
+  active sessions today or later (`SYNC` / `SY_SVG`, `backend/static/schedule.html:892`): 已推送
   neutral grey outline, 需更新 yellow, 失敗 red, 未推送 dashed; labels are provider-neutral
   (手錶). ✓ is never used for push. The legend has two titled groups, 完成 and 手錶
-  (`renderLegend`, `backend/static/schedule.html:1102`). 已推送 stays visible (subtle).
+  (`renderLegend`, `backend/static/schedule.html:1103`). 已推送 stays visible (subtle).
 - **強度課的家族** (2026-10-04, SP-32; `docs/research/coach-schools-zones-periodization.md` R1). One
   classifier, `workout_templates.family_of` (`backend/engine/workout_templates.py:553`, rule in
   `classify`, `backend/engine/workout_templates.py:529`), splits a structure's `work` steps by
@@ -927,7 +947,7 @@ which one. The response keeps the `coros` field names.
   Above threshold with reps > 5′ is 巡航（超閾值）. Distance reps use T pace (4:48/km without one,
   推估). Used by: the editor's 插入範本 強度課 tabs (有氧間歇 ／ VO2max 間歇 ／ 速度, labels and
   tips through `_()`, `cats`, `backend/engine/workout_templates.py:448`; groups in
-  `workout_steps.templates`, `backend/engine/workout_steps.py:1357`, for the published templates
+  `workout_steps.templates`, `backend/engine/workout_steps.py:1355`, for the published templates
   and the interval ladder's rows alike — Palladino 4×2:40 now files as VO2max, 4×4:30 @ 98–104 %
   as 巡航); the 推薦 block (`template_recs._score`, `backend/engine/template_recs.py:122`: Zone 5
   closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 強化期／專項期 巡航間歇; the
@@ -937,7 +957,7 @@ which one. The response keeps the `coros` field names.
   computed `quality_family` `{id, sub, label, sub_label, text}` (None for other kinds; never
   stored, no DB change). The calendar chip shows the family label before the minutes, the full
   text in its tooltip / aria-label, and the session dialog's sub-line adds it (`chipHtml`,
-  `backend/static/schedule.html:925`). The scheduler's ladders and gates are unchanged.
+  `backend/static/schedule.html:926`). The scheduler's ladders and gates are unchanged.
 - **訓練目的** (2026-10-04, SP-32): every built-in template has a one-line `purpose`
   (`PURPOSE`, `backend/engine/workout_templates.py:110`, from the report's Finding 7 with the
   coaches it cites, msgids through `_()`); the interval ladder's rows take the purpose of their
@@ -993,7 +1013,7 @@ which one. The response keeps the `coros` field names.
   (`heat.hr_cost` on steady flat stretches, 「觀測不支持模型」 when S rises and HRC does not fall),
   a, badge 推估. Without exposure data the verdict asks for a weather-enabled routes build.
 - **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:550`): `quality_gate.evaluate` +
-  `indicator` (`backend/engine/quality_gate.py:1663`) with the status' 課表偏好 (`Status(prefs=…)`;
+  `indicator` (`backend/engine/quality_gate.py:2159`) with the status' 課表偏好 (`Status(prefs=…)`;
   the API's status cache keys on `prefs.stamp()`, `backend/api/overview.py:53`). Second in
   `PHASE_PRIORITY["base"]` (`backend/engine/status.py:980`), so its WATCH action lands in 還缺什麼.
   Texts per the design doc §4.6: auto without AeT → info 「沒有 AeT 實測：照 80/20 原則每週 1
@@ -1002,7 +1022,7 @@ which one. The response keeps the `coros` field names.
   good 「差距 9% ≤ 10%：可以加 Zone 3」; forced + missing → watch 「沒有實測 AeT，差距法算不出來：先照
   護欄排（自訂…）」, action 「先做 AeT 飄移測試，或把間歇門檻改回自動」. `why` names the mode and
   the AeT source (「AeT 146（活動資料估算）」 / 「（{date} 飄移測試）」). `extra` is the gate dict incl.
-  `options` (per mode usable + why, `backend/engine/quality_gate.py:909`).
+  `options` (per mode usable + why, `backend/engine/quality_gate.py:1062`).
 - `PHASE_GOAL["base"]` no longer says 飄移 < 5 %; `PHASE_FOCUS["base"]` cites UA for the easy long
   run and Palladino for the 8–15 s hill sprints (`backend/engine/status.py:990`).
 - `i_data`'s action for a missing AeT is 「排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；
@@ -1069,33 +1089,33 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/overview/plan/sessions?start=&end=` | reconcile-if-needed, match new runs, then stored sessions (not deleted / superseded) with push status, week meta, projected weeks and `summary` (`backend/api/plan_sessions.py:282`) |
 | POST | `/api/v1/overview/plan/sessions` | add a custom session; 400 on a bad field (`backend/api/plan_sessions.py:357`) |
 | PATCH | `/api/v1/overview/plan/sessions/{uid}` | edit day / kind / minutes / title / target / detail / terrain / distance_km / climb_m / target_basis / steps; 400 on a bad field (`backend/api/plan_sessions.py:370`) |
-| DELETE | `/api/v1/overview/plan/sessions/{uid}` | tombstone (auto) or remove (custom); an expired one is tombstoned and taken off the watch; a B2B day cancels the pair; 404 when unknown (`backend/api/plan_sessions.py:1329`) |
-| POST | `/api/v1/overview/plan/sessions/expired/delete` | `{uids?}` → tombstone those (or all) expired open sessions, remove pushed copies; 400 for a uid that isn't one (`backend/api/plan_sessions.py:1310`) |
-| POST / DELETE | `/api/v1/overview/plan/sessions/{uid}/link` | `{index}` → pair the session with an activity / undo (the activity then stays unplanned) (`backend/api/plan_sessions.py:1352`, `backend/api/plan_sessions.py:1372`) |
-| GET | `/api/v1/overview/plan/reconcile` | preview: changes and changes by day (`backend/api/plan_sessions.py:1390`) |
-| POST | `/api/v1/overview/plan/reconcile` | apply the same; optional body `{decisions}` for sessions on a 不排課日期 (`backend/api/plan_sessions.py:1407`) |
-| GET | `/api/v1/overview/plan/push-coros/preview?scope=day\|week\|phase&day=` | sessions in range with push status, counts to send / unchanged / skipped, missed to remove, `pace_notes`, pending changes; 400 for a past week (`backend/api/plan_sessions.py:1424`) |
-| POST | `/api/v1/overview/plan/push-coros?scope=&day=` | reconcile, push the range through the active provider, clean up; 401 `COROS_AUTH_REQUIRED`; 400 for a past week (`backend/api/plan_sessions.py:1461`) |
-| DELETE | `/api/v1/overview/plan/push-coros?scope=&day=` | remove what was pushed in the range; 400 for a past week (`backend/api/plan_sessions.py:1487`) |
-| GET | `/api/v1/overview/plan/prefs` | `{prefs, defaults, active, day_conflicts, pref_dropped, gate_options, aet_options}` — `gate_options` = the 間歇門檻 hover texts (`quality_gate.option_texts`, `backend/engine/quality_gate.py:1766`) (`backend/api/plan_sessions.py:1542`) |
-| GET | `/api/v1/overview/plan/prefs/gate` | per mode `{usable, why}` on the athlete's data, plus the active mode / state / verdict (status `i_gate`, `backend/api/plan_sessions.py:1530`) |
-| POST | `/api/v1/overview/plan/prefs/conflicts` | an unsaved preference set → `{day_conflicts, overlaps}`; nothing stored (`backend/api/plan_sessions.py:1550`) |
+| DELETE | `/api/v1/overview/plan/sessions/{uid}` | tombstone (auto) or remove (custom); an expired one is tombstoned and taken off the watch; a B2B day cancels the pair; 404 when unknown (`backend/api/plan_sessions.py:1331`) |
+| POST | `/api/v1/overview/plan/sessions/expired/delete` | `{uids?}` → tombstone those (or all) expired open sessions, remove pushed copies; 400 for a uid that isn't one (`backend/api/plan_sessions.py:1312`) |
+| POST / DELETE | `/api/v1/overview/plan/sessions/{uid}/link` | `{index}` → pair the session with an activity / undo (the activity then stays unplanned) (`backend/api/plan_sessions.py:1354`, `backend/api/plan_sessions.py:1374`) |
+| GET | `/api/v1/overview/plan/reconcile` | preview: changes and changes by day (`backend/api/plan_sessions.py:1392`) |
+| POST | `/api/v1/overview/plan/reconcile` | apply the same; optional body `{decisions}` for sessions on a 不排課日期 (`backend/api/plan_sessions.py:1409`) |
+| GET | `/api/v1/overview/plan/push-coros/preview?scope=day\|week\|phase&day=` | sessions in range with push status, counts to send / unchanged / skipped, missed to remove, `pace_notes`, pending changes; 400 for a past week (`backend/api/plan_sessions.py:1426`) |
+| POST | `/api/v1/overview/plan/push-coros?scope=&day=` | reconcile, push the range through the active provider, clean up; 401 `COROS_AUTH_REQUIRED`; 400 for a past week (`backend/api/plan_sessions.py:1472`) |
+| DELETE | `/api/v1/overview/plan/push-coros?scope=&day=` | remove what was pushed in the range; 400 for a past week (`backend/api/plan_sessions.py:1501`) |
+| GET | `/api/v1/overview/plan/prefs` | `{prefs, defaults, active, day_conflicts, pref_dropped, gate_options, aet_options}` — `gate_options` = the 間歇門檻 hover texts (`quality_gate.option_texts`, `backend/engine/quality_gate.py:2281`) (`backend/api/plan_sessions.py:1556`) |
+| GET | `/api/v1/overview/plan/prefs/gate` | per mode `{usable, why}` on the athlete's data, plus the active mode / state / verdict (status `i_gate`, `backend/api/plan_sessions.py:1544`) |
+| POST | `/api/v1/overview/plan/prefs/conflicts` | an unsaved preference set → `{day_conflicts, overlaps}`; nothing stored (`backend/api/plan_sessions.py:1564`) |
 | GET | `/api/v1/plan/thresholds` | 設定 › 閾值測試紀錄 (SP-46): `{today, thresholds, effective_thresholds, power_zones, wko5_settings}` — the same rows and effective values as `GET /api/v1/plan`, without the rest of the season plan (`backend/api/plan.py:284`); saved with `PUT /api/v1/plan/thresholds` (whole table, `backend/api/plan.py:300`) |
 | POST | `/api/v1/plan/thresholds/apply-estimate` | now takes an optional `date` (the test day; not in the future) so 「套用這次的 AeT」 dates the row on the test (`backend/api/plan.py:603`) |
-| PUT | `/api/v1/overview/plan/prefs` | the whole preference set (Prefs field names, missing = default); 400 on a bad / unknown value or a cross-field rule (`backend/api/plan_sessions.py:1557`) |
-| GET | `/api/v1/overview/plan/blackouts` | `{blackouts}` — the stored 不排課日期 (`backend/api/plan_sessions.py:1594`) |
-| POST | `/api/v1/overview/plan/blackouts/preview` | `{blackouts}` → the reconcile preview with that list; nothing saved; 400 on a bad range (`backend/api/plan_sessions.py:1601`) |
-| PUT | `/api/v1/overview/plan/blackouts` | `{blackouts, decisions?}` → save, then reconcile applying `decisions` `{uid: move \| delete}`; 400 on a bad range / decision (`backend/api/plan_sessions.py:1612`) |
-| POST / DELETE | `/api/v1/overview/plan/rest-days`, `/rest-days/{day}` | `{day}` → add a 休息日 (400 for a past or already blocked day) / remove it (404 when not one); both reconcile (`backend/api/plan_sessions.py:1662`, `backend/api/plan_sessions.py:1682`) |
-| GET | `/api/v1/overview/plan/equivalence` | the time model, LOO backtest per terrain, 推估 flags, sources; memoised per dataset / day / AeT (`backend/api/plan_sessions.py:1744`, `backend/api/plan_sessions.py:1733`) |
-| POST | `/api/v1/overview/plan/equivalence/design` | `{mode, minutes, climb_per_km}` → km, climb, 推估 flag (`backend/api/plan_sessions.py:1749`) |
-| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's computed `quality_family`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state (`backend/api/plan_sessions.py:1978`, `backend/api/plan_sessions.py:1916`) |
-| GET | `/api/v1/overview/plan/schedule/page` | `backend/static/schedule.html` (`backend/api/plan_sessions.py:2017`) |
+| PUT | `/api/v1/overview/plan/prefs` | the whole preference set (Prefs field names, missing = default); 400 on a bad / unknown value or a cross-field rule (`backend/api/plan_sessions.py:1575`) |
+| GET | `/api/v1/overview/plan/blackouts` | `{blackouts}` — the stored 不排課日期 (`backend/api/plan_sessions.py:1612`) |
+| POST | `/api/v1/overview/plan/blackouts/preview` | `{blackouts}` → the reconcile preview with that list; nothing saved; 400 on a bad range (`backend/api/plan_sessions.py:1619`) |
+| PUT | `/api/v1/overview/plan/blackouts` | `{blackouts, decisions?}` → save, then reconcile applying `decisions` `{uid: move \| delete}`; 400 on a bad range / decision (`backend/api/plan_sessions.py:1630`) |
+| POST / DELETE | `/api/v1/overview/plan/rest-days`, `/rest-days/{day}` | `{day}` → add a 休息日 (400 for a past or already blocked day) / remove it (404 when not one); both reconcile (`backend/api/plan_sessions.py:1680`, `backend/api/plan_sessions.py:1700`) |
+| GET | `/api/v1/overview/plan/equivalence` | the time model, LOO backtest per terrain, 推估 flags, sources; memoised per dataset / day / AeT (`backend/api/plan_sessions.py:1762`, `backend/api/plan_sessions.py:1751`) |
+| POST | `/api/v1/overview/plan/equivalence/design` | `{mode, minutes, climb_per_km}` → km, climb, 推估 flag (`backend/api/plan_sessions.py:1767`) |
+| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's computed `quality_family`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state (`backend/api/plan_sessions.py:1996`, `backend/api/plan_sessions.py:1934`) |
+| GET | `/api/v1/overview/plan/schedule/page` | `backend/static/schedule.html` (`backend/api/plan_sessions.py:2035`) |
 | GET | `/api/v1/plan/calendar` | 課表訂閱: `{enabled, path, url, window}` of the feed address (`backend/api/calendar_feed.py:88`) |
 | POST / DELETE | `/api/v1/plan/calendar/token` | `{origin?}` → a new secret address (the old one is a 404 from now on) / turn the feed off (`backend/api/calendar_feed.py:93`, `backend/api/calendar_feed.py:104`) |
 | GET / HEAD | `/share/calendar/<token>.ics` | public, token-only: the stored plan as `text/calendar` (see 課表訂閱 above); 404 for any other token; not in the demo (`backend/api/calendar_feed.py:122`) |
-| GET | `/api/v1/overview/plan/compliance?start=&end=` | the 課表統計 dashboard (≤ 371 days): due sessions with status and %, totals, weeks and days planned vs actual, streak, per kind, the current phase's progress, `plan_phases` (`backend/api/plan_sessions.py:2034`) |
-| GET | `/api/v1/overview/plan/compliance/page` | `backend/static/compliance.html` (`backend/api/plan_sessions.py:2069`) |
+| GET | `/api/v1/overview/plan/compliance?start=&end=` | the 課表統計 dashboard (≤ 371 days): due sessions with status and %, totals, weeks and days planned vs actual, streak, per kind, the current phase's progress, `plan_phases` (`backend/api/plan_sessions.py:1816`) |
+| GET | `/api/v1/overview/plan/compliance/page` | `backend/static/compliance.html` (`backend/api/plan_sessions.py:2087`) |
 | GET | `/` | always redirects to the overview page (`backend/main.py:207`; the React SPA was removed 2026-10-04 — old SPA paths such as `/activities`, `/achievements`, `/sync`, `/config` redirect to their static pages, `backend/main.py:33`); in demo mode to `/demo` |
 
 The same router also serves the suggestion box (`/suggestions`, `/suggestions/accept`,
@@ -1225,7 +1245,7 @@ preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profi
 
 ### Domain Events
 None as explicit events. State transitions of a stored session (active → done / missed /
-deleted / superseded) are returned as reconcile `changes` (`backend/engine/reconcile.py:78`).
+deleted / superseded) are returned as reconcile `changes` (`backend/engine/reconcile.py:114`).
 
 ## Change History
 
@@ -1254,3 +1274,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-31 | Week plan / projection: two interval tracks (Zone 3 A1–A4 + 巡航版 fallback, Zone 5 V1–V4) with the Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap; 90-min test; UA gap; ≥ 21-day break re-locks); low-intensity share blocks Zone 5 only (warning note, 底線 75% / 目標 90% labels); Zone 3 ≤ 10 % and Zone 3 + Zone 5 ≤ 20 % of the week; 2 a week = one of each; 專項期 / 減量期 two-track sessions; z3 / intensity / quality_share notes |
 | 2026-10-04 | feat/sp-32-interval-families | SP-32, docs/research/coach-schools-zones-periodization.md R1 / Finding 7 | 強度課 families: one classifier (`workout_templates.family_of`: 有氧間歇 長 tempo／巡航, VO2max 間歇, 速度 — intensity first, then rep length) replaces the 三區／四區／五區 %CP tabs of 插入範本 (published templates and ladder rows; Palladino 4×2:40 → VO2max), drives the 推薦 block's Zone 5 / phase rules, and adds a computed `quality_family` to plan sessions (calendar chip, dialog); 「無氧間歇」 named 「VO2max 間歇」; templates get a one-line `purpose` (訓練目的) shown in the menu; family labels / tips / purposes through `_()` with en |
 | 2026-10-04 | feat/sp-46-thresholds-settings | SP-46 | 閾值測試紀錄 (LTHR / AeT / CP) edited on the settings page (table, 自動估算 cards, power zones; zh-TW + en), `GET /api/v1/plan/thresholds`; 賽事周期 page shows a read-only summary + link; 最大心率 only in 設定 → 心率 (no max-HR column; mhr / rhr rows kept on save); status / chart hints point to 設定. Same `plan.thresholds` data, no model change |
+| 2026-10-04 | feat/sp-43-calc-export | SP-43 | Stored plan: kind `race` in `KINDS` (not added by hand), `ext_key` / `ext_sig` columns and `plan_store.upsert_external` for the 賽事計算機's 「匯出至課表」 (one row per event, claims the generator's 比賽 row, restore / move, `user_edited` by fingerprint, `updated_at` kept on an identical export); reconcile: a kept race blocks the generator's race of that week; push: a race with steps is pushed, the old `racecalc:` watch workout is removed on that push (`calc_to_replace` in the preview); 課表 dialog keeps kind 比賽 |

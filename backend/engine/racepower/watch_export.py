@@ -1,5 +1,5 @@
 """
-The race calculator's plan as a watch workout (「匯出到 COROS」): one step per leg of
+The race calculator's plan as a watch workout (「匯出至課表」): one step per leg of
 the course, each with the target that leg is run by, in the workout editor's step
 format (engine/workout_steps.py), so the existing provider push (sync/workout_targets)
 sends it.
@@ -17,9 +17,14 @@ Two ways to end a step:
 
 Targets per leg (seg_targets.chart_rows): power ± 3 % where power is valid (road;
 trail flat / runnable 3–8 %), the HR cap on steep / walked climbs (and wherever there
-is no power), nothing on trail descents (控制、安全), pace on a road with no CP. When a
-leg merges segments of different kinds, the kind with the most time decides; merged
-power is time-weighted. Pure functions on the /plan payload.
+is no power), nothing on trail descents (控制、安全), pace on a road with no CP. A trail /
+百岳 leg that is mostly steep / walked climbing (seg_targets.kind_of steep_climb) never
+gets the estimated power or a pace: the HR cap, else no target (自由). When a leg merges
+segments of different kinds, the kind with the most time decides; merged power is
+time-weighted. Pure functions on the /plan payload.
+
+The steps go to the 課表 (api/racepower.py /export/plan → plan_store.upsert_external) and
+reach the watch with the plan's own push.
 """
 from __future__ import annotations
 
@@ -54,6 +59,7 @@ def _piece(r: dict) -> dict:
             "t": t, "gain_m": float(r.get("gain_m") or 0.0), "loss_m": float(r.get("loss_m") or 0.0),
             "group": _group(r), "day": r.get("day") or 1,
             "kt": {r.get("basis") or "pace": t},                 # time per basis (the dominant one wins)
+            "kd": {r.get("kind") or "": t},                      # time per segment kind (seg_targets.kind_of)
             "pt": (p * t) if p else 0.0, "ptime": t if p else 0.0,
             "hr": r.get("hr_cap"), "end": None}
 
@@ -64,20 +70,23 @@ def _split(pc: dict, km: float) -> tuple[dict, dict]:
     a["end_km"], b["start_km"] = km, km
     for k in ("dist_m", "t", "gain_m", "loss_m", "pt", "ptime"):
         a[k], b[k] = pc[k] * f, pc[k] * (1 - f)
-    a["kt"] = {k: v * f for k, v in pc["kt"].items()}
-    b["kt"] = {k: v * (1 - f) for k, v in pc["kt"].items()}
+    for key in ("kt", "kd"):
+        a[key] = {k: v * f for k, v in pc[key].items()}
+        b[key] = {k: v * (1 - f) for k, v in pc[key].items()}
     a["end"] = None
     return a, b
 
 
 def _merge(a: dict, b: dict) -> dict:
-    kt = dict(a["kt"])
+    kt, kd = dict(a["kt"]), dict(a["kd"])
     for k, v in b["kt"].items():
         kt[k] = kt.get(k, 0.0) + v
+    for k, v in b["kd"].items():
+        kd[k] = kd.get(k, 0.0) + v
     hr = [x for x in (a["hr"], b["hr"]) if x]
     return {"start_km": a["start_km"], "end_km": b["end_km"], "dist_m": a["dist_m"] + b["dist_m"],
             "t": a["t"] + b["t"], "gain_m": a["gain_m"] + b["gain_m"], "loss_m": a["loss_m"] + b["loss_m"],
-            "group": a["group"] if a["t"] >= b["t"] else b["group"], "day": a["day"], "kt": kt,
+            "group": a["group"] if a["t"] >= b["t"] else b["group"], "day": a["day"], "kt": kt, "kd": kd,
             "pt": a["pt"] + b["pt"], "ptime": a["ptime"] + b["ptime"], "hr": max(hr) if hr else None,
             "end": b["end"]}
 
@@ -135,6 +144,13 @@ def _hm(sec: float) -> str:
 def _target(pc: dict, plan_type: str) -> tuple[dict, str]:
     """(workout_steps target, basis) of one leg."""
     basis = max(pc["kt"].items(), key=lambda kv: kv[1])[0] if pc["kt"] else "pace"
+    kind = max(pc["kd"].items(), key=lambda kv: kv[1])[0] if pc.get("kd") else ""
+    if kind == "steep_climb" and plan_type != "road":
+        # a steep / walked climb: the HR cap only, never the estimated power or a pace —
+        # without a cap the step is open (自由)
+        if pc["hr"]:
+            return {"type": "hr", "mode": "abs", "lo": round(pc["hr"] * HR_LO_FRAC), "hi": round(pc["hr"])}, "hr"
+        return {"type": "none"}, "none"
     if basis == "power" and pc["ptime"] > 0:
         p = pc["pt"] / pc["ptime"]
         return {"type": "power", "mode": "abs", "lo": round(p * (1 - POWER_BAND)), "hi": round(p * (1 + POWER_BAND))}, "power"
@@ -218,3 +234,27 @@ def steps_for(plan: dict, rows: list[dict], *, mode: Optional[str] = None, stops
         notes.append("每段按圈（lap）結束：到步驟名稱寫的地點時按一下")
     return {"mode": mode, "doc": {"v": WS.V, "origin": "user", "items": items}, "legs": out_legs,
             "merged": merged, "limit": limit, "notes": notes}
+
+
+DEFAULT_IF = 0.75                # 推估: a leg with no power / HR target (descent, 自由, pace only)
+IF_RANGE = (0.5, 1.15)
+
+
+def tss_estimate(legs: list[dict], th: dict) -> Optional[float]:
+    """The race session's planned TSS (推估) from its legs: Σ hours × IF² × 100, IF = the
+    middle of the leg's power band ÷ CP, or of its HR band ÷ LTHR (hrTSS-like), else
+    DEFAULT_IF. None when the legs have no time."""
+    cp, lthr = th.get("cp"), th.get("lthr")
+    tot = 0.0
+    for lg in legs or []:
+        t, tg = float(lg.get("t") or 0.0), lg.get("target") or {}
+        mid = (float(tg["lo"]) + float(tg["hi"])) / 2.0 if tg.get("lo") and tg.get("hi") else None
+        if mid and tg.get("type") == "power" and cp:
+            f = mid / cp
+        elif mid and tg.get("type") == "hr" and lthr:
+            f = mid / lthr
+        else:
+            f = DEFAULT_IF
+        f = min(IF_RANGE[1], max(IF_RANGE[0], f))
+        tot += t / 3600.0 * f * f * 100.0
+    return round(min(2000.0, tot), 1) if tot > 0 else None

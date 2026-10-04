@@ -178,10 +178,12 @@ class PlanIn(PredictIn):
 class ExportIn(PlanIn):
     push: bool = False
     name: Optional[str] = None
-    event_id: Optional[str] = None          # the plan event: one workout per event (re-export updates it)
+    event_id: Optional[str] = None          # the plan event: one 課表 session per event (re-export overwrites it)
     # lap = open steps ended with the lap button (trail / 百岳 default: watch GPS drifts on trails);
     # distance = distance steps (road default)
     step_mode: Optional[Literal["lap", "distance"]] = None
+    # 匯出至課表: overwrite an earlier export the user changed on the 課表 page (after the page asked)
+    overwrite: bool = False
 
 
 # ---------------------------------------------------------------------------

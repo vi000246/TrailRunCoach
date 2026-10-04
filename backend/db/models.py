@@ -204,6 +204,11 @@ class PlanSession(Base):
     # the structure the user saved in the 課表 editor (engine/workout_steps.py, JSON);
     # None = derived from the kind / variant / text when opened or pushed
     steps: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # a session written from outside the generator (賽事計算機「匯出至課表」: racecalc:<event id>):
+    # one row per key, re-exporting updates it; ext_sig = the fingerprint of what was exported
+    # (plan_store.ext_signature), so a later edit on the 課表 page is noticed before overwriting
+    ext_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ext_sig: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

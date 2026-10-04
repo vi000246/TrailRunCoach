@@ -21,7 +21,9 @@ Rules:
   3. edited and custom sessions are kept. An edited long / quality / test is
      superseded when the regenerated week is a rest week (recovery / taper /
      event) that no longer has it. Deleted auto sessions stay deleted
-     (tombstones block their gen_key for that week).
+     (tombstones block their gen_key for that week). A kept race row (the 賽事計算機's
+     「匯出至課表」, plan_store.upsert_external) blocks the generator's own race of that
+     week, so it is never added beside it or moved to another day.
   4. an auto session that lands on the same day as a kept edited / custom
      session is moved to a free day of that week, or dropped.
   5. unedited auto sessions after the horizon are removed.
@@ -120,6 +122,8 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
         consumed: set[str] = set()
         block = {s["gen_key"] for s in olds if s.get("gen_key") and
                  (s["state"] in ("deleted", "superseded", "done") or (s["state"] == "active" and s["edited"]))}
+        if any(s["state"] == "active" and s["kind"] == "race" and (s["origin"] == "custom" or s["edited"]) for s in olds):
+            block.add("race")                      # the 賽事計算機's exported race is that week's race
         for s in olds:
             if s["state"] != "active" or s["origin"] != "auto" or s["edited"]:
                 continue
