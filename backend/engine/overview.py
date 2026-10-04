@@ -589,6 +589,9 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
             s = _second_z3(gate, built, it, th, hours, prefs, history, mountain, cap, left, notes)
             if s is None:
                 continue
+        elif kind == "specific" and it.get("spec") is QG.SUB:
+            # 專項期 under a CTL ramp ≥ 5 (week_decision): the threshold-only session, as in the base phase
+            s = _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
         elif kind == "specific" and t == "z3" and road:
             s = dict(ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
         elif kind == "specific" and t == "z5" and not road:

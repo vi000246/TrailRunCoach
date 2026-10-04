@@ -227,7 +227,12 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   the share is computed against that AeT and is noisy): then it is a warning for both tracks
   (「…AeT 是估計值、占比不準，只是提醒：3 區、5 區照排」, `guard(aet_tested=False)`); with a tested
   AeT the 75 % floor keeps blocking Zone 5. 75 % is the floor, the base phase's ≥ 90 % a target.
-  專項期: intensity bad keeps Zone 5 out (tested AeT; a warning otherwise), drift bad stops both.
+  專項期: intensity bad keeps Zone 5 out (tested AeT; a warning otherwise), drift bad stops both,
+  and this week's load guardrails apply to both tracks as in the base phase (owner 2026-10-04: no
+  school exempts the specific phase — Friel ramp 5–8, Nielsen 2014 / Damsted 2019; unsourced-rules.md
+  B2): CTL ramp ≥ `RAMP_BLOCK` or a > `STEP_BLOCK` volume step → no interval (note), ramp ≥
+  `RAMP_SUB` → the threshold-only `SUB` session. 減量期, race / recovery weeks, the re-entry block
+  (mode `reentry`) and projected weeks stay exempt (the accepted-B2B TSB exemption is unchanged).
 - **Why no Zone 3 this week**: `week_decision` returns `z3_note` (the gate, a guardrail, the
   1-a-week turn, the recovery week); `week_plan` shows it as a note (`src: z3`), the share
   warning as `src: intensity`, the volume / total caps as `src: z3` / `quality_share`.
@@ -497,6 +502,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
+| 2026-10-04 | feature | SP-31 follow-up | 專項期 applies this week's CTL-ramp (5 sub / 8 block) and > 20 % volume-step guardrails to both tracks; taper / race / recovery / re-entry exempt |
 | 2026-10-04 | feature | SP-31 follow-up | 2 a week with only Zone 3 open: the second session is a 巡航版 sized to the first (within the 10 % / 20 % / day caps), not a copy |
 | 2026-10-04 | feature | SP-31 follow-up | The weekday-cap 巡航版 fallback counts as the Zone 3 rung (same rule as the volume cap) |
 | 2026-10-04 | feature | SP-39 | Zone 3 and Zone 5 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR, gap ≤ 10 %, or Friel < 5 % at the tested AeT; the 90-min test and plateau / weeks open Zone 3 only) and the soft 「近 6 週 ≥ 2 堂 3 區」 (`Z5_Z3_NEED` / `Z5_Z3_DAYS`, 推估; replaces `Z3_MET_FOR_Z5`), one flag `z5_track` for week_decision / flow / 推薦 / change log; low-intensity share blocks Zone 5 only with a tested AeT; flow = two parallel tracks with 「安排課表」 actions (`?add=` / `?test=` deep links into the 課表 dialog); passive 90-min re-confirmation removed |
