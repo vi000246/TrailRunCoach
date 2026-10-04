@@ -222,7 +222,7 @@ def test_issues_z5_rep_cap_and_coros():
     assert any("5 區每趟至少 2 分鐘" in t for t in texts)
     assert any("超過這天上限 40 分" in t for t in texts)
     assert any("Buchheit" in i["text"] for i in iss if i["level"] == "warn")
-    assert any("按圈結束" in i["text"] for i in iss if i["level"] == "info")
+    assert any("直到按下計圈" in i["text"] for i in iss if i["level"] == "info")
     assert any("不等效" in i["text"] for i in iss if i["level"] == "info")
     soft = WS.issues(d, c, cap=40, cap_mode="soft")
     assert any(i["level"] == "warn" and "軟上限" in i["text"] for i in soft)

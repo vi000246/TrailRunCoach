@@ -18,7 +18,7 @@ class IntervalsProvider(WorkoutProvider):
     capabilities = Capabilities(
         targets=("power", "hr"), repeat_groups=True, nested_repeats=False, open_steps=False,
         distance_steps=False, distance_unit="m", max_steps=None,
-        notes=("心率送 % LTHR（intervals.icu 要有同一個 LTHR）", "按圈結束的步驟沒有驗證過的語法"))
+        notes=("心率送 % LTHR（intervals.icu 要有同一個 LTHR）", "「直到按下計圈」的步驟沒有驗證過的語法"))
 
     def build_payload(self, session: dict, thresholds: Optional[dict], power_targets: bool = True) -> dict:
         from backend.scripts.intervals_probe import session_event
