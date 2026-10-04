@@ -318,8 +318,17 @@
       const target = (t) => {
         if (!isDict(t)) return OPEN();
         const ty = t.type === undefined ? "auto" : t.type;
-        if (!["auto", "power", "hr", "pace", "none"].includes(ty)) { errs.push(`目標類型不對：${repr(ty)}`); return OPEN(); }
+        if (!["auto", "power", "hr", "pace", "rpe", "none"].includes(ty)) { errs.push(`目標類型不對：${repr(ty)}`); return OPEN(); }
         if (ty === "none") return { type: "none" };
+        if (ty === "rpe") {                         // 技術地形／下坡 (SP-62)
+          const P = W.rpe, lo = f(t.lo, "RPE 下限", P.min, P.max), hi = f(t.hi === undefined ? t.lo : t.hi, "RPE 上限", P.min, P.max);
+          const out = { type: "rpe", lo: pyRound(lo || P.min), hi: pyRound(hi || lo || P.min) };
+          if (out.lo > out.hi) errs.push("RPE 下限比上限高");
+          for (const [k, name] of [["up", "爬升"], ["down", "下降"]]) {
+            if (![undefined, null, "", 0].includes(t[k])) { const v = f(t[k], name, 0, P.max_climb); if (v) out[k] = pyRound(v); }
+          }
+          return out;
+        }
         if (ty === "auto") {
           const it = t.intent === undefined ? "open" : t.intent;
           if (!["easy", "band", "open"].includes(it)) { errs.push(`自動目標的類型不對：${repr(it)}`); return OPEN(); }
@@ -518,9 +527,33 @@
       const sub = c.aet && Math.abs(hi - c.aet) < 1 ? "≤ 輕鬆跑上限" : c.lthr ? `${fx(lo / c.lthr * 100)}–${fx(hi / c.lthr * 100)}% LTHR` : "";
       return R("hr", { lo, hi, frac: f, text: `${fx(lo)}–${fx(hi)} bpm`, sub, auto, warn, intensity: it });
     }
+    // RPE targets (workout_steps rpe_frac / rpe_text / climb_text / rpe_hint)
+    const rpeFrac = (lo, hi, D) => { const P = D.ws.rpe, k = (x) => Math.max(P.min, Math.min(P.max, pyRound(x))); return (P.frac[k(lo)] + P.frac[k(hi)]) / 2; };
+    const rpeText = (lo, hi) => (lo === hi ? fmtG(lo) : `${fmtG(lo)}–${fmtG(hi)}`);
+    const climbText = (tg) => [["up", "爬升"], ["down", "下降"]].filter(([k]) => tg[k]).map(([k, n]) => `${n} ${tg[k]} m`).join(" · ");
+    function rpeHint(lo, hi, c, D) {
+      const P = D.ws.rpe, m = (lo + hi) / 2;
+      let txt = "";
+      if (m <= P.easy_max) { const cap = c.aet || (c.lthr ? 0.88 * c.lthr : null); txt = cap ? `≤ ${fx(cap)} bpm` : ""; }
+      else if (m < P.hard_min - 0.5) { const a = c.aet || (c.lthr ? 0.88 * c.lthr : null), b = c.lthr ? 0.95 * c.lthr : null; txt = a && b ? `${fx(a)}–${fx(b)} bpm` : ""; }
+      else txt = c.lthr ? `≥ ${fx(0.95 * c.lthr)} bpm` : "";
+      return txt ? `參考心率 ${txt}（不當目標）` : "";
+    }
+    function resolveRpe(tg, c, D) {
+      const P = D.ws.rpe, lo = tg.lo || P.min, hi = tg.hi || tg.lo || P.min;
+      const a = P.word[pyRound(lo)] || "", b = P.word[pyRound(hi)] || "";
+      const sub = [climbText(tg), a === b ? a : `${a}～${b}`, rpeHint(lo, hi, c, D)].filter(Boolean).join(" · ");
+      return R("rpe", { lo, hi, frac: rpeFrac(lo, hi, D), text: rpeText(lo, hi), sub, auto: false, err: lo > hi ? "RPE 下限比上限高" : "" });
+    }
+    function rpeRole(items, D) {
+      const his = flat(items || []).map((r) => r.st).filter((st) => ["work", "other"].includes(st.kind) && (st.target || {}).type === "rpe")
+        .map((st) => +(st.target.hi || 0));
+      return his.length ? (Math.max(...his) >= D.ws.rpe.hard_min ? "quality" : "easy") : null;
+    }
     function resolve(st, c, D) {
       const tg = st.target || OPENT, ty = tg.type || "auto";
       if (ty === "none") return R("none", { text: "不設目標", auto: false });
+      if (ty === "rpe") return resolveRpe(tg, c, D);
       if (ty === "auto") {
         const it = tg.intent || "open";
         if (it === "open") return R("none", { text: "不設目標" });
@@ -725,6 +758,9 @@
         }
       }
       if (t.open) add("info", `${t.open} 段「直到按下計圈」不算進總時間`);
+      const role = rpeRole(steps.items, D);
+      if (role) add("info", "RPE 目標：心率、功率只當參考，負荷照手錶記錄算（不用 RPE 校正）；這堂依 RPE 算"
+        + (role === "quality" ? "強度課（RPE ≥ 7：和其他強度課隔 48 小時、算進每週強度預算）" : "輕鬆課"));
       for (const it of steps.items) if (it.kind === "repeat" && it.items.some((x) => x.kind === "repeat")) add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it.id);
       const n = corosCount(steps, c, D);
       if (n > W.coros_max_steps) add("warn", `推到手錶是 ${n} 段，超過 ${W.coros_max_steps} 段：COROS 的上限未驗證`);
@@ -827,8 +863,12 @@
     function stepsToCoros(steps, c, D) {
       const em = { n: 0 }, out = [];
       const name = (st, r, grouped) => {
-        if (st.note) return st.note;
         const tg = st.target || {};
+        if (tg.type === "rpe") {
+          const extra = [`RPE ${rpeText(tg.lo, tg.hi)}`, climbText(tg)].filter(Boolean).join(" · ");
+          return st.note ? `${st.note} · ${extra}` : extra;
+        }
+        if (st.note) return st.note;
         if (st.kind === "work" && tg.type === "auto" && tg.intent === "easy" && tg.plo != null) return r.type === "hr" ? "心率 ≤ 輕鬆跑上限" : r.type === "power" ? "功率區間" : "照感覺";
         if (st.kind === "work" && !grouped) { em.n++; return `第 ${em.n} 趟 ${fmtDur(st.dur)}`; }
         return "";
@@ -881,6 +921,7 @@
         { key: "one", hit: !!(c.hr_cap && hasPower), text: "每段只有一個目標：功率段的心率上限只寫在文字，手錶不會提醒" },
         { key: "ramp", hit: false, text: "沒有漸進（ramp）步驟：漸進只寫在步驟名稱" },
       ];
+      if (res.some(([, r]) => r.type === "rpe")) limits.push({ key: "rpe", hit: true, text: D.ws.rpe.limit });
       const lost = [];
       if (res.some(([, r]) => r.need === "tpace")) lost.push(D.ws.no_tpace);
       if (unrolled) lost.push("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段");
@@ -926,7 +967,7 @@
       }
       const eq = rung ? equivalence(steps, rung, c, D) : null;
       return { resolved: byId, order, totals: totals(steps, c, D), issues: issues(steps, c, D, cap, capMode, rung), watch: watchPreview(steps, c, D),
-        summary: stepsText(steps, c, D), structure: structureText(steps, D), equiv: eq ? { ok: eq.ok, why: eq.why, text: eq.text } : null };
+        summary: stepsText(steps, c, D), structure: structureText(steps, D), rpe_role: rpeRole(steps.items, D), equiv: eq ? { ok: eq.ok, why: eq.why, text: eq.text } : null };
     }
 
     // ---- derive (engine/workout_steps.derive): stored / exported (data.derive) / the easy and long kinds here

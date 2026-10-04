@@ -135,7 +135,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const mmss = (s) => { s = Math.round(s || 0); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
   const parseSec = (v) => { const m = String(v).trim().match(/^(\d+)(?:[:：](\d{1,2}))?$/); return m ? +m[1] * 60 + +(m[2] || 0) : null; };
   const KIND = { warm: "暖身", work: "主課", rest: "休息", cool: "緩和", other: "其他" };
-  const TYPE = { auto: "自動", power: "功率", hr: "心率", pace: "配速", none: "無" };
+  const TYPE = { auto: "自動", power: "功率", hr: "心率", pace: "配速", rpe: "RPE", none: "無" };
+  // ≈ % CP of RPE 1–10 (workout_steps.RPE_FRAC; the mini chart's height only, 推估)
+  const RPE_F = [0, 0.55, 0.62, 0.70, 0.76, 0.82, 0.88, 0.94, 1.00, 1.05, 1.10];
   const opt = (v, l, cur, extra = "") => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}${extra}>${esc(l)}</option>`;
   const q = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
   // i18n (static/i18n/i18n.js t(key, fallback)); the zh-TW text is the fallback
@@ -154,9 +156,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     rules: "即時檢查：5 區每趟至少 2 分鐘（台灣教練）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
     lastRest: "最後一趟做完不休息、直接接下一段。COROS 的間歇群組做不到，推送時會攤平成一段一段（每段一個 lap）。",
     watch: "COROS 手錶的限制：跑步的功率只收絕對瓦數（沒有 % CP）；每段只能設一個目標；沒有漸進（ramp）步驟。下面是實際會送出的步驟。",
-    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再分三類，先看主課強度、再看每趟長度：有氧間歇（≤ 101% CP；長 tempo 每趟 15–30 分、巡航間歇 6–15 分，更短的也算巡航）、VO2max 間歇（高於閾值、每趟 2–5 分、休息約 1:1；30/30 這種短趟短休也在這裡）、速度（每趟 ≤ 2 分、休息 ≥ 2 倍，例如 R、加速跑）。每一份下面有一行訓練目的。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。每一類最上面是這堂課的「推薦」前三名（強度課第一名＝間歇階梯的下一步），其他收在下面。",
+    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再分三類，先看主課強度、再看每趟長度：有氧間歇（≤ 101% CP；長 tempo 每趟 15–30 分、巡航間歇 6–15 分，更短的也算巡航）、VO2max 間歇（高於閾值、每趟 2–5 分、休息約 1:1；30/30 這種短趟短休也在這裡）、速度（每趟 ≤ 2 分、休息 ≥ 2 倍，例如 R、加速跑、短坡衝刺）。越野跑分三類：結構化爬升（階梯、坡度穩定的路線，心率／功率上下限照設）、技術地形（時間＋爬升＋RPE，不設心率、功率目標；RPE ≥ 7 算強度課）、下坡技術／離心（時間＋下降量）。每一份下面有一行訓練目的。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。每一類最上面是這堂課的「推薦」前三名（強度課第一名＝間歇階梯的下一步），其他收在下面。",
     total: "總時間由下面的步驟加總：要改時間就改步驟（點這格會打開結構）。",
     pacePct: "配速的 % 是閾值配速的倍數：數字大＝慢（例：114–129% 是 Friel 2 區）。",
+    rpe: "RPE 用 0–10 量表（Foster）：3 中等、5 吃力、7 很累、10 極限。技術地形、下坡的心率上不去、功率不準，所以只看 RPE 和爬升／下降；手錶上這段不設目標，RPE 和爬升寫在步驟名稱。最高到 7 以上這堂算強度課（和其他強度課隔 48 小時）。負荷照手錶記錄算。",
   };
 
   let styled = false;
@@ -307,6 +310,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         const hz = (((this.ctx || {}).zones || {}).hr || []).some((x) => x.id === "Z4") ? "Z4" : "4";
         return { type, mode: "zone", zone: st.kind === "work" ? hz : "aet" };
       }
+      if (type === "rpe") return { type, lo: st.kind === "work" ? 3 : 2, hi: st.kind === "work" ? 4 : 3 };
       if (type === "pace") {
         if (f && th.tpace) return { type, mode: "pct", lo: rd(1 / (f + 0.03)), hi: rd(1 / Math.max(0.3, f - 0.03)) };
         return { type, mode: "zone", zone: st.kind === "work" ? "4" : "2" };
@@ -381,7 +385,14 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const zones = (ctx.zones || {})[ty] || [];
       const miss = { power: !th.cp && "沒有 CP", hr: !(th.lthr || th.aet) && "沒有 LTHR／AeT", pace: !th.tpace && "沒有閾值配速" };
       let h = `<div class="we-tg" data-tg="${st.id}"><select data-f="ttype" aria-label="目標類型">` +
-        opt("auto", `自動（依課表類型）`, ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? `（${miss[k]}）` : ""), ty)).join("") + opt("none", "無", ty) + `</select>`;
+        opt("auto", `自動（依課表類型）`, ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? `（${miss[k]}）` : ""), ty)).join("") +
+        opt("rpe", "RPE＋爬升（技術地形／下坡）", ty) + opt("none", "無", ty) + `</select>`;
+      if (ty === "rpe") {
+        const n = (f, v, l, mx, stp) => `<input class="num" type="number" min="${f === "tlo" || f === "thi" ? 1 : 0}" max="${mx}" step="${stp}" data-f="${f}" value="${v ?? ""}" aria-label="${l}">`;
+        h += `${n("tlo", t.lo, "RPE 下限", 10, 1)}–${n("thi", t.hi, "RPE 上限", 10, 1)}<span class="faint">/ 10</span>` +
+          `<span class="faint">爬升</span>${n("tup", t.up, "爬升 m", 5000, 50)}<span class="faint">m</span>` +
+          `<span class="faint">下降</span>${n("tdown", t.down, "下降 m", 5000, 50)}<span class="faint">m</span>${q(TIP.rpe)}`;
+      }
       if (["power", "hr", "pace"].includes(ty)) {
         h += `<select data-f="tmode" aria-label="填法">${opt("zone", "區間", t.mode)}${opt("pct", ty === "power" ? "% CP" : ty === "hr" ? "% LTHR" : "% 閾值配速", t.mode)}${opt("abs", "自訂數字", t.mode)}</select>`;
         if (t.mode === "zone") h += `<select data-f="tzone" aria-label="區間">${zones.filter((z) => !z.legacy || z.id === t.zone).map((z) => opt(z.id, `${z.label}${z.text ? " · " + z.text : ""}`, t.zone)).join("")}</select>`;
@@ -597,8 +608,12 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       else if (k === "tzone") it.target = { ...it.target, zone: v };
       else if (k === "tlo" || k === "thi") {
         const key = k === "tlo" ? "lo" : "hi", t = it.target;
-        const n = t.mode === "pct" ? (+v || 0) / 100 : t.type === "pace" ? parseSec(v) : +v;
+        const n = t.type === "rpe" ? Math.max(1, Math.min(10, Math.round(+v) || 0)) : t.mode === "pct" ? (+v || 0) / 100 : t.type === "pace" ? parseSec(v) : +v;
         if (n) it.target = { ...t, [key]: n };
+      } else if (k === "tup" || k === "tdown") {
+        const key = k === "tup" ? "up" : "down", t = { ...it.target }, m = Math.round(+v);
+        if (m > 0) t[key] = Math.min(5000, m); else delete t[key];
+        it.target = t;
       } else return;
       if (!["note"].includes(k)) this.sel = it.id;
       this.touch();
@@ -688,7 +703,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
       const tpBadge = (r) => r.needs_tpace && noTp
         ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge", "沒有閾值配速"))}</span>` : "";
-      const fsub = (r) => r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "";
+      // 技術地形／下坡 rows: how the scheduler counts them (workout_steps.rpe_role)
+      const fsub = (r) => (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
+        (r.role ? ` <span class="fam">${r.role === "quality" ? "算強度課" : "算輕鬆課"}</span>` : "");
       const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span>` +
         `${r.purpose ? `<span class="pur">${esc(r.purpose)}</span>` : ""}<span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
       const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
@@ -727,6 +744,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         if (t.type === "hr" && t.mode === "pct") { const m = (t.lo + t.hi) / 2; return m < .85 ? .7 : m < .9 ? .8 : m < .95 ? .88 : m < 1 ? .96 : m < 1.03 ? 1.03 : 1.1; }  // Friel → Palladino (推估, height only)
         if (t.type === "hr" && t.mode === "zone") return 0.75;
         if (t.type === "pace" && t.mode === "pct") return 2 / (t.lo + t.hi);
+        if (t.type === "rpe") return (RPE_F[Math.round(t.lo)] + RPE_F[Math.round(t.hi)]) / 2 || null;
         return null;
       };
       const sec = (x) => x.dur.type === "time" ? x.dur.value : x.dur.type === "distance" ? x.dur.value * 0.36 : (x.dur.est || 60);
