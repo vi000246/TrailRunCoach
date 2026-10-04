@@ -349,14 +349,3 @@ class UserSetting(Base):
     key: Mapped[str] = mapped_column(String(100))
     value_json: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-
-class DashboardConfig(Base):
-    __tablename__ = "dashboard_configs"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
-    name: Mapped[str] = mapped_column(String(100))
-    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
-    layout_json: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

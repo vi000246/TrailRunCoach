@@ -97,6 +97,30 @@ def test_ensure_athlete_and_current_id(monkeypatch):
     assert CUR.current_athlete_id() == 1
 
 
+def test_startup_creates_the_athlete_row_also_with_wko5(tmp_path, monkeypatch):
+    """main._ensure_athlete (was POST /athletes/bootstrap): one row on first start,
+    pointing at the WKO5 athlete folder when there is one; idempotent."""
+    import backend.db.database as DB
+    from backend import main as M
+    from backend.db.models import Athlete
+    from sqlalchemy import select
+    monkeypatch.delenv("WKO5COACH_ATHLETE_ID", raising=False)
+    monkeypatch.setenv("WKO5_ATHLETE_DIR", str(_wko5_folder(tmp_path)))
+
+    async def go():
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Athlete.metadata.create_all)
+        monkeypatch.setattr(DB, "AsyncSessionLocal", async_sessionmaker(engine, expire_on_commit=False))
+        await M._ensure_athlete()
+        await M._ensure_athlete()
+        async with DB.AsyncSessionLocal() as s:
+            rows = (await s.execute(select(Athlete))).scalars().all()
+        assert [(a.id, a.data_dir) for a in rows] == [(1, str(tmp_path / "wko5"))]
+        await engine.dispose()
+    _run(go())
+
+
 # ---- W′ prior by sex --------------------------------------------------------------
 
 def _ds(sex=None, wko5_sex=None):

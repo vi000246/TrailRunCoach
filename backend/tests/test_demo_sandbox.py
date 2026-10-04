@@ -223,7 +223,7 @@ def test_every_write_route_is_classified(demo):
 
 
 @pytest.mark.parametrize("path", ["/api/v1/sync/auto", "/api/v1/auth/tp/callback", "/api/v1/ai/chat",
-                                  "/api/v1/athletes", "/api/v1/scan", "/api/v1/backup/list",
+                                  "/api/v1/backup/list",
                                   "/api/v1/wko5/injuries/meta", "/api/v1/static/compare.html",
                                   "/api/v1/static/settings.html", "/api/v1/wko5/settings", "/share/abc"])
 def test_owner_only_routes_are_not_mounted(demo, path):
