@@ -57,6 +57,7 @@ TYPE_LABEL = {"auto": "自動", "power": "功率", "hr": "心率", "pace": "配�
 MODES = ("pct", "zone", "abs")
 INTENTS = ("easy", "band", "open")
 DUR_TYPES = ("time", "distance", "open")
+OPEN_LABEL = "直到按下計圈"      # the "open" end condition (lap button; SP-38: was 「按圈」)
 MAX_TIMES = 99
 MAX_DEPTH = 2                    # a repeat may hold one more level of repeats
 MAX_ITEMS = 120                  # steps in the model (the editor's limit; COROS is checked apart)
@@ -613,7 +614,7 @@ def normalize(d) -> dict:
         dur = x.get("dur") or {}
         dt_ = dur.get("type") if isinstance(dur, dict) else None
         if dt_ not in DUR_TYPES:
-            errs.append("時長類型要是 時間／距離／按圈")
+            errs.append("時長類型要是 時間／距離／直到按下計圈")
             dur = {"type": "open"}
         elif dt_ == "time":
             v = _f(dur.get("value"), "時間", errs, 5, 6 * 3600)
@@ -623,7 +624,7 @@ def normalize(d) -> dict:
             dur = {"type": "distance", "value": int(round(v))} if v else {"type": "open"}
         else:
             est = dur.get("est") if isinstance(dur, dict) else None
-            v = _f(est, "按圈的預估時間", errs, 5, 6 * 3600) if est else None
+            v = _f(est, "直到按下計圈的預估時間", errs, 5, 6 * 3600) if est else None
             dur = {"type": "open", "est": int(round(v))} if v else {"type": "open"}
         return {"id": iid, "kind": k, "dur": dur, "target": _norm_target(x.get("target"), errs), "note": note}
 
@@ -655,7 +656,7 @@ def fmt_dur(d: dict) -> str:
     if d.get("type") == "distance":
         m = d["value"]
         return f"{m / 1000:g} km" if m >= 1000 else f"{m} m"
-    return "按圈結束"
+    return OPEN_LABEL
 
 
 def pzone(f: float) -> str:
@@ -917,7 +918,7 @@ def estimate_note(steps: dict, c: Ctx) -> str:
             parts.append(f"越野：努力距離 EP = km × (1 + 爬升 {c.climb_per_km:.0f} m/km ÷ 100)" +
                          (f"，用你的越野 EP 速度 {c.ep_kmh:.1f} km/h" if c.ep_kmh else "，你的越野紀錄不夠，先用路跑速度"))
     if lap:
-        parts.append("按圈段：用課表原本寫的最短時間")
+        parts.append("「直到按下計圈」段：用課表原本寫的最短時間")
     return "；".join(parts) + "（推估）" if parts else ""
 
 
@@ -1017,7 +1018,7 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
             hard = cap_mode == "hard"
             add("err" if hard else "warn", f"總時間 {mins:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{'硬上限' if hard else '軟上限，只提醒'}）")
     if t["open"]:
-        add("info", f"{t['open']} 段「按圈結束」不算進總時間")
+        add("info", f"{t['open']} 段「直到按下計圈」不算進總時間")
     for it in steps["items"]:
         if it.get("kind") == "repeat" and any(x.get("kind") == "repeat" for x in it["items"]):
             add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it["id"])
@@ -1245,7 +1246,7 @@ def _ex_line(ex: dict) -> dict:
     elif ex["targetType"] == 5:
         dur = f"{ex['targetValue'] / 100000:g} km"
     else:
-        dur = "按圈結束"
+        dur = OPEN_LABEL
     it = ex.get("intensityType")
     if it == 6:
         tgt = f"功率 {ex['intensityValue']}–{ex['intensityValueExtend']} W"

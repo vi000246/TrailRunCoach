@@ -147,7 +147,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const OPEN_W = 90;
   const TIP = {
     basis: "每一段自己決定用功率、心率還是配速：點那一段的目標就能改（標「指定」）。標「自動」的段依課表類型（路跑輕鬆／長跑看功率、心率以輕鬆跑上限為上限；越野看心率；間歇看功率）。數字依目前的 CP、LTHR、輕鬆跑上限、閾值配速帶入。",
-    chart: "橫軸是時間（按圈結束的段畫成固定寬度、斜線），高度和顏色都是強度（約當 % CP）。心率段換算成功率高度是推估，只影響這張圖。點一段可以選到下面那一步。",
+    chart: "橫軸是時間（「直到按下計圈」的段畫成固定寬度、斜線），高度和顏色都是強度（約當 % CP）。心率段換算成功率高度是推估，只影響這張圖。點一段可以選到下面那一步。",
     tss: "TSS 估＝Σ 秒 × IF² × 100 ÷ 3600，IF＝目標中點 ÷ CP；心率段用 Friel 心率區對到 Palladino 功率區，沒有目標的段依類型給固定值。都是推估，跑步 rTSS 和這個公式的差距未驗證。",
     rules: "即時檢查：5 區每趟至少 2 分鐘（台灣教練）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
     lastRest: "最後一趟做完不休息、直接接下一段。COROS 的間歇群組做不到，推送時會攤平成一段一段（每段一個 lap）。",
@@ -341,7 +341,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         return;
       }
       const t = (v && v.totals) || {};
-      this.$("we-sum").textContent = `${v ? v.structure : ""}${t.sec != null ? ` · ${t.est ? "約 " : ""}${mmss(t.sec)}${t.open ? "＋按圈" : ""}` : ""}` +
+      this.$("we-sum").textContent = `${v ? v.structure : ""}${t.sec != null ? ` · ${t.est ? "約 " : ""}${mmss(t.sec)}${t.open ? "＋「直到按下計圈」段" : ""}` : ""}` +
         (this.dirty ? " · 尚未儲存" : this.stored ? " · 你改過的結構" : "");
       this.$("we-list").innerHTML = d.items.map((it) => this.itemHtml(it, 0)).join("");
       this.legend();
@@ -360,14 +360,14 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const dt = st.dur.type;
       const durIn = dt === "time" ? `<input class="dur" data-f="sec" value="${mmss(st.dur.value)}" inputmode="numeric" aria-label="時間（分:秒）"${dis}>`
         : dt === "distance" ? `<input class="num" type="number" step="0.1" min="0.05" data-f="km" value="${st.dur.value / 1000}" aria-label="距離 km"${dis}><span class="faint">km</span>`
-        : st.dur.est ? `<span class="we-lap" title="按圈結束；總時間用課表寫的最短時間估">≈ ${mmss(st.dur.est)}</span>` : "";
+        : st.dur.est ? `<span class="we-lap" title="直到按下計圈；總時間用課表寫的最短時間估">≈ ${mmss(st.dur.est)}</span>` : "";
       const ov = st.target && st.target.type !== "auto";
       const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "指定" : "自動"}</span><b>${r.type === "none" ? "不設目標" : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
         (r.err ? `<span class="e">✕ ${esc(r.err)}</span>` : r.warn ? `<span class="w">⚠ ${esc(r.warn)}</span>` : "") : `<span class="s">…</span>`;
       return `<div class="we-row${this.sel === st.id ? " sel" : ""}" draggable="${!this.ro}" tabindex="0" data-id="${st.id}" style="--zc:${this.zc(r, st)}">
         <span class="grip" aria-hidden="true" title="拖曳排序">⋮⋮</span>
         <select class="kind" data-f="kind" aria-label="類型"${dis}>${Object.entries(KIND).map(([k, l]) => opt(k, l, st.kind)).join("")}</select>
-        <span class="we-dur"><select data-f="dtype" aria-label="時長類型"${dis}>${opt("time", "時間", dt)}${opt("distance", "距離", dt)}${opt("open", "按圈", dt)}</select>${durIn}</span>
+        <span class="we-dur"><select data-f="dtype" aria-label="時長類型"${dis}>${opt("time", "時間", dt)}${opt("distance", "距離", dt)}${opt("open", "直到按下計圈", dt)}</select>${durIn}</span>
         <button type="button" class="we-tbtn${this.openT === st.id ? " on" : ""}" data-a="tgt" aria-expanded="${this.openT === st.id}" aria-label="這一段的目標（點一下改這一段）"${dis}>${tb}</button>
         <input class="note nt" data-f="note" value="${esc(st.note || "")}" maxlength="60" placeholder="名稱（手錶顯示）" aria-label="名稱"${dis}>
         <span class="we-acts"><button type="button" data-a="up" title="上移" aria-label="上移">↑</button><button type="button" data-a="down" title="下移" aria-label="下移">↓</button><button type="button" data-a="dup" title="複製" aria-label="複製">⧉</button><button type="button" data-a="wrap" title="包成重複" aria-label="包成重複">⟳</button><button type="button" data-a="del" title="刪除" aria-label="刪除">✕</button></span>
@@ -407,13 +407,13 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     legend() {
       const z = [[1, "< 75% CP"], [2, "75–88%"], [3, "88–101%"], [4, "101–106%"], [5, "≥ 106%"]];
       this.$("we-legend").innerHTML = z.map(([c, l]) => `<span><i style="background:var(--wz${c})"></i>${l}</span>`).join("") +
-        `<span><i style="background:var(--bar)"></i>不設目標</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>按圈結束</span>${q(TIP.chart)}`;
+        `<span><i style="background:var(--bar)"></i>不設目標</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>直到按下計圈</span>${q(TIP.chart)}`;
     }
     stats() {
       const v = this.view || {}, t = v.totals || {}, c = this.ctx || {};
       const cap = c.cap ? `${Math.round(c.cap)} 分（${c.cap_mode === "hard" ? "硬上限" : "軟上限"}）` : "不限";
       this.$("we-stats").innerHTML = t.sec == null ? "" :
-        `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋按圈" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
+        `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋「直到按下計圈」段" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
         `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>≥ 106% CP（Palladino 5 區）<b>${mmss(t.z5_s)}</b></span>` : "") +
         `<span>TSS 估 <b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
     }
@@ -481,7 +481,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const t = this.$("we-tip"), box = this.$("we-chart").getBoundingClientRect(), f = this.find(o.id);
       const st = f ? f.it : { kind: o.kind, note: "" };
       const n = o.rep.length ? o.rep.map((x) => `第 ${x.i + 1}/${x.n} 趟`).join(" · ") + " · " : "";
-      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "按圈結束" : mmss(o.sec) + (o.est ? "（推估）" : "")}<br>` +
+      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : mmss(o.sec) + (o.est ? "（推估）" : "")}<br>` +
         (r ? `${r.type === "none" ? "不設目標" : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
         (st.note ? `<br><span class="meta">${esc(st.note)}</span>` : "");
       t.hidden = false;

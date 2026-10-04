@@ -1545,7 +1545,7 @@ function minLock(v) {
   F.minutes.classList.toggle("locked", lock);
   const est = lock && v.totals.est;
   $("sd-min-lbl").textContent = est ? "約（分鐘）" : "分鐘";
-  const tip = !lock ? "" : (est ? `總時間是估的：步驟裡有距離或按圈段。${v.totals.est_note || ""}` : "") +
+  const tip = !lock ? "" : (est ? `總時間是估的：步驟裡有距離或「直到按下計圈」段。${v.totals.est_note || ""}` : "") +
     (est ? "\n" : "") + "時間由下面的結構加總；要改時間就改步驟（點這格會打開結構）。" + (eqOn() ? "\n" + eqTip(terVal()) : "");
   $("sd-min-q").hidden = !lock;
   $("sd-min-q").dataset.tip = tip;
