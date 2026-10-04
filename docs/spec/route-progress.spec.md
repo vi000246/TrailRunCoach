@@ -1,6 +1,6 @@
 # Module Spec: route-progress
 
-> Last Updated: 2026-10-01 · Status: implemented (feat/route-progress, feat/routes-weather-hr, fix/routes-dedup-thumbs)
+> Last Updated: 2026-10-04 · Status: implemented (feat/route-progress, feat/routes-weather-hr, fix/routes-dedup-thumbs)
 
 ## Overview
 
@@ -27,7 +27,7 @@ User request: 「同一條路線的進步追蹤能自動產出嗎，例如判斷
 The existing `algorithms/routes.py` (100 m cell Jaccard, used by the
 achievements page) is unchanged.
 
-### Storage (the `routes/` folder in the app's home data folder; root injectable via `RouteStore(root)` or the `WKO5COACH_ROUTES_DIR` environment variable)
+### Storage (root: `RouteStore(root)`, else `routes.HOME` when set (tests), else the `WKO5COACH_ROUTES_DIR` environment variable, else the current tenant's shared `routes/` folder — `tenancy.shared_path("routes")`, resolved per call by `routes.home()`)
 
 | File | Content |
 |---|---|
@@ -36,6 +36,7 @@ achievements page) is unchanged.
 | `index.json` | tier B: segments, routes, pending references, efforts with metrics and weather, the build's weather call counts |
 | `names.json` | renames, keyed by segment / route id |
 | `weather/<lat>_<lon>_<date>.json` | one Open-Meteo archive day per 0.25° cell, every effort point in it (see Weather) |
+| `activity_weather.json` | per-activity heat exposure for the heat-acclimation index (see Weather) |
 
 `ALGO_VERSION` 3 (per-interval peaks) makes every tier-A stamp stale, so the
 first build after upgrading parses every file again; kept points, climbs and
@@ -51,7 +52,10 @@ would each find the other's version and rebuild it.
 
 From the raw `.wko4` channels (read with `read_wko4` directly, not through
 `Dataset.wko4`'s parse cache; approved data corrections applied to HR, power,
-speed):
+speed). Without a WKO5 folder (`datasource.wko5_available` false: a COROS /
+TrainingPeaks-only runner) the source is the synced FITs of the charts'
+Dataset instead: `read_track(…, parsed=ds.wko4(idx))` takes the already
+parsed file, which carries the same GPS channels:
 
 - **Kept points** are raw samples at ≥ 25 m spacing along the GPS path, plus the
   first / last valid fix and every climb / descent endpoint. (0, 0) and
@@ -301,6 +305,15 @@ without changing them.
   attribution}; the page shows the counts under the table.
 - `Builder(store, weather_get=None)` has no weather (tests); the API passes the
   archive client unless `WKO5COACH_ROUTES_WEATHER=0`.
+- **Per-activity heat exposure** (`activity_weather=True`, the app's builder):
+  after the effort weather (skipped when that pass had failures),
+  `route_weather.fill_activities` asks for one point per GPS activity (its mean
+  position and elevation, same batching and cache) and writes
+  `activity_weather.json`: moving minutes, `hot_min` (moving minutes ×
+  `heat.minute_weight` of each hour's Hadley sum), moving-weighted T / RH /
+  Hadley and the max. Read by the heat-acclimation index (`racepower.spec.md`)
+  and the workout review's activity temperature. A no-change build fills it
+  when the file is missing.
 
 ## Comparison (`GET /{id}/compare?a=&b=`)
 
@@ -322,11 +335,11 @@ reference backwards) and start within 200 m of the reference's start; else
 | GET | `/api/v1/routes` | `kind` (segment/route/climb/descent/stretch), `direction` (up/down/flat), `sport`, `limit`; rows sorted by effort count then recency, sub-routes right under their parent (`depth`); each row has `thumb` (below), `n_reversed`, `n_partials`, `parent`; `status`, `counts` (sub-routes as `sub_route`), `sports` |
 | GET | `/api/v1/routes/status` | build progress `{state, phase, done, total, …}` |
 | POST | `/api/v1/routes/rebuild` | `{"full": false}`; returns at once, builds in a thread |
-| GET | `/api/v1/routes/{id}` | detail with efforts (+ `workout` index, `phase`, `dir`), `parent`, `sub_routes`, `partials`; an id merged away (route alias, folded stretch, chain link) answers with the item holding it now |
+| GET | `/api/v1/routes/{id}` | detail with efforts (+ `workout` index — by the effort's file, else the current source's activity with the nearest start (`activity_key.ByStartDict`, ±3 min), `phase`, `dir`), `parent`, `sub_routes`, `partials`; an id merged away (route alias, folded stretch, chain link) answers with the item holding it now |
 | PATCH | `/api/v1/routes/{id}` | `{"name": ""}` clears the rename |
 | GET | `/api/v1/routes/{id}/compare?a=&b=` | effort ids from the detail |
-| GET | `/api/v1/routes/page` | the page |
-| GET | `/api/v1/wko5/workouts/{idx}/segments` | segments / routes this activity matched, rank, Δ best |
+| GET | `/api/v1/routes/page` | the page (`render_page("routes")`, localized) |
+| GET | `/api/v1/wko5/workouts/{idx}/segments` | segments / routes this activity matched, rank, Δ best; the activity's file in the route index is found by start when the current source names it otherwise |
 
 No request waits for a build: the first request (and any request a minute
 after the last check, when files changed) starts one in a daemon thread; every
@@ -486,3 +499,4 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | 2026-09-30 | feature | — | Initial: automatic segments / routes, effort metrics, 路線 page, viewer card |
 | 2026-09-30 | feature | — | Per-effort historical weather (Open-Meteo archive, batched per day × 0.25° cell, cached), Hadley heat flag, trend coloured by temperature; max HR and max 30 s power per effort (ALGO_VERSION 3); deterministic detection; ids carried over across a version bump; independent verification script |
 | 2026-10-01 | bugfix | — | One route per path: clustering by length share (start / direction free), canonical common part, partials / sub-routes, reversed runs ranked apart; stretches folded into routes, longer variants dropped, chains merged; real path thumbnails (the row graphic was a time sparkline); INDEX_VERSION 4 |
+| 2026-10-04 | code-sync | N/A | Store root per tenant (`routes.home()`); tracks from synced FITs without a WKO5 folder; effort → workout index matched by start across sources; per-activity heat exposure (`activity_weather.json`) documented; page via `render_page` |
