@@ -142,7 +142,7 @@ RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_r
 `detect_efforts`). A session judged by: the structure the user edited in the 課表 editor
 (`steps_spec`: its own reps / band, counted only when equivalent to the rung; a 「負荷」 main-set
 step counts by its estimated time TSS ÷ (IF² × 100) h at the band's middle — `load_work_s`,
-`backend/engine/workout_steps.py:1235`, SP-38, 推估), else the stored
+`backend/engine/workout_steps.py:1253`, SP-38, 推估), else the stored
 variant, else the planned title. An unplanned interval run is neutral.
 
 ### The ladder: two tracks, Zone 3 and Zone 5 (SP-31, 2026-10-04)

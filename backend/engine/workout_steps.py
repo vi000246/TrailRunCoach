@@ -67,6 +67,7 @@ OPEN_LABEL = "直到按下計圈"      # the "open" end condition (lap button; r
 LOAD_LABEL = "負荷"              # the "load" end condition (TSS here; COROS TL on the watch)
 LOAD_RANGE = (1, 500)            # TSS of one load step
 LOAD_KINDS = ("work",)           # 「負荷」 only on main-set steps (SP-38, the user 2026-10-04)
+TL_RESEND_MIN = 3                # 推估: a refit moving a load step's TL by less keeps the TL sent (no 需更新)
 MAX_TIMES = 99
 MAX_DEPTH = 2                    # a repeat may hold one more level of repeats
 MAX_ITEMS = 120                  # steps in the model (the editor's limit; COROS is checked apart)
@@ -166,6 +167,9 @@ class Ctx:
     end_conditions: tuple = ()
     provider_label: str = ""
     tl: Optional[object] = None             # engine/coros_tl.Model; None = the stored one
+    # the TL each 「負荷」 step was last pushed with {(tss, basis, if): tl} (sync/coros_workouts
+    # from engine/coros_tl's closed-loop record): sent_tl keeps it while a refit moves it < TL_RESEND_MIN
+    sent_tl: Optional[dict] = None
 
     def tl_model(self):
         from backend.engine import coros_tl
@@ -1009,6 +1013,20 @@ def load_tl(st: dict, r: Resolved, c: Ctx) -> dict:
     return c.tl_model().tl(st["dur"]["value"], "power" if r.type == "power" else "hr", load_if(st, r))
 
 
+def sent_key(tss: float, basis: str, f: float) -> tuple:
+    return float(tss), basis, round(float(f), 4)
+
+
+def sent_tl(st: dict, r: Resolved, c: Ctx) -> int:
+    """The TL a 「負荷」 step is pushed with: load_tl rounded, or the TL it was last pushed with
+    (c.sent_tl, same planned TSS / basis / IF) while the refit moved it by < TL_RESEND_MIN — so a
+    small refit doesn't mark the session 需更新 and re-push it (SP-38, owner 2026-10-04)."""
+    new = max(1, round(load_tl(st, r, c)["tl"]))
+    old = (c.sent_tl or {}).get(sent_key(st["dur"]["value"], "power" if r.type == "power" else "hr",
+                                         load_if(st, r)))
+    return int(old) if old is not None and abs(new - float(old)) < TL_RESEND_MIN else new
+
+
 def load_records(steps: dict, c: Ctx) -> list[dict]:
     """[{i (run-order index), n (steps run), tss, tl, basis, if, f (the closed-loop factor in
     effect)}] of the 「負荷」 steps (engine/coros_tl.py closed loop)."""
@@ -1020,7 +1038,7 @@ def load_records(steps: dict, c: Ctx) -> list[dict]:
         if st["dur"]["type"] == "load":
             r = resolve(st, c)
             out.append({"i": i, "n": len(rows), "tss": st["dur"]["value"],
-                        "tl": max(1, round(load_tl(st, r, c)["tl"])),
+                        "tl": sent_tl(st, r, c),
                         "basis": "power" if r.type == "power" else "hr", "if": round(load_if(st, r), 4),
                         "f": m.factor})
     return out
@@ -1349,7 +1367,7 @@ def _one(st: dict, em: _Emit, grouped: bool):
         # COROS: its TL end condition; `seconds` = the estimated time the others get (SP-38)
         s_, _e = _secs(st, r, em.c)
         return CW.Step(EX[st["kind"]], max(5, int(round(s_))), r.intensity, _name(st, r, em, grouped),
-                       load_tss=float(d["value"]), load_tl=float(max(1, round(load_tl(st, r, em.c)["tl"]))))
+                       load_tss=float(d["value"]), load_tl=float(sent_tl(st, r, em.c)))
     return CW.Step(EX[st["kind"]], int(secs), r.intensity, _name(st, r, em, grouped), int(meters))
 
 

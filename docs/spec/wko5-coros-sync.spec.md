@@ -31,6 +31,7 @@
 | 2026-10-04 | code-sync | N/A | 一次只用一個資料來源（COROS 或 TP，取代 10-02 的自動／合併 `synced`；`charts.data_source` = `source` / `wko5`）；登入有效性檢查 `session_check` + 「登入已過期」橫幅（`/auth/session-alerts`）；COROS 心率設定（`athlete.coros_profile`）登入與每次同步更新；跑步功率 TSS 改用 Stryd-only PD mFTP；`cached_series` 改磁碟快取；時區自動偵測；新端點（`/auth/{source}/remember`、`/sync/timezone/browser`、`/sync/dedup/rebuild` 等）；demo 模式不掛同步路由；`file:line` 指標全面更新；新增 Domain Model |
 | 2026-10-04 | feat/sp-34-35-schedule | SP-34 | `GET /sync/primary`（資料來源＋登入／啟用／忙碌）；SSE 讀取抽成 `static/syncrun.js`，設定頁立即同步與課表頁「從 COROS 抓活動」共用 |
 | 2026-10-04 | sp-38-load-step | SP-37／SP-38 | 活動列表的 `trainingLoad`（COROS TL）存進 `workout_files.coros_training_load`（新欄位，同步時新活動寫入、已匯入的補上，不多打 API）；同步後的每人校正一併重擬 TSS → TL 換算（`engine/coros_tl.py`：依 TSS 來源分組、收縮到預設、近期加權、門檻大改前的活動不用、最近 30 天時間序回測不比舊的差才換上）與「負荷」步驟的實跑校正；設定頁顯示換算模型（推估） |
+| 2026-10-04 | feature | SP-38 follow-up | 推送「負荷」步驟時，重新擬合讓 TL 變動 < 3（推估）就沿用上次送出的 TL，不標「需更新」、不重推；≥ 3 才換 |
 
 ---
 
@@ -332,6 +333,7 @@ SSE: complete {total_downloaded, total_checked, errors}
   - 收縮：換算 = w·本人 + (1 − w)·預設，w = n ÷ (n + 30)（`SHRINK_K`，`backend/engine/coros_tl.py:79`）；預設只是先驗（推估）。
   - 時間序回測：最近 30 天當 holdout（`HOLDOUT_DAYS`，`backend/engine/coros_tl.py:85`），新擬合在 holdout 上的 MAE 不比目前存的差才換上；存回測與 LOO 誤差（`refit_group`，`backend/engine/coros_tl.py:511`）。結果存設定 `coros.tl_model`。
   - 實跑校正：推上 COROS 的「負荷」步驟（計畫 TSS、送出的 TL、強度、當時的係數）記在 `coros.tl_load_calib`；那堂課完成且活動的圈數＝推送的步驟數時，那一圈累積的 TSS ÷「未校正模型對送出 TL 的 TSS」是一個樣本（沒有時用 計畫 TSS ÷ 推送時的係數；照計畫跑完不會把係數拉回 1），收縮後（w = n ÷ (n + 5)）的係數在換算前除掉（`refresh_load`／`load_factor`，`backend/engine/coros_tl.py:645`、`backend/engine/coros_tl.py:666`）。
+  - 重推門檻：重新擬合讓某個「負荷」步驟的 TL 變動 < 3（`TL_RESEND_MIN`，推估）時，推送沿用上次送出的 TL（同一計畫 TSS／依據／強度，從 `coros.tl_load_calib` 的紀錄讀，`_sent_tl`，`backend/sync/coros_workouts.py:613`；`sent_tl`，`backend/engine/workout_steps.py:1020`），指紋不變、不標「需更新」；≥ 3 才換新值重推（SP-38）。
 - **顯示**：`GET /sync/settings` 回 `coros_tl`（`describe`，`backend/api/sync.py:264`），設定頁「課表推送到」下方列出每組的模型、n、權重、回測誤差（推估）。
 
 主流程在 `sync_workouts`（`backend/sync/coros_client.py:472`）。所有同步入口（手動 SSE、`/sync/auto`、每日排程）都走 `runner.stream`；自動同步只跑「資料來源」那一個（`auto_plan`，`backend/sync/runner.py:187`），另一個來源回 `not_in_use`。
