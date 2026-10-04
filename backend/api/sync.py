@@ -259,6 +259,9 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     from backend.sync import workout_targets as WT
     out["push_provider"] = WT.resolve(out["push_provider"]).id
     out["push_providers"] = WT.available()
+    # 「負荷」 steps: the TSS → COROS TL conversion in effect (engine/coros_tl.py, 推估; refit after syncs)
+    from backend.engine import coros_tl as TL
+    out["coros_tl"] = TL.describe(await repo.get(TL.KEY), await repo.get(TL.LOAD_KEY))
     creds, source = lookup_client_creds()
     out["tp_client_credentials_configured"] = creds is not None      # never the values
     out["tp_client_credentials_source"] = source                     # env|file|none

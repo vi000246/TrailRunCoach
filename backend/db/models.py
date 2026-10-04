@@ -63,6 +63,10 @@ class WorkoutFile(Base):
     # workout_feel 0–100 (0 very weak … 100 very strong). NULL = not recorded
     rpe: Mapped[Optional[float]] = mapped_column(nullable=True)
     feel: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # COROS's own Training Load of the activity: `trainingLoad` of the activity list item the
+    # sync already reads (sync/coros_client.sync_workouts; NULL = not listed / not COROS).
+    # engine/coros_tl.py refits the TSS → TL conversion on it (SP-37 / SP-38)
+    coros_training_load: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     athlete: Mapped["Athlete"] = relationship(back_populates="workouts")
     metrics: Mapped[list["WorkoutMetric"]] = relationship(back_populates="workout", cascade="all, delete-orphan")
