@@ -1010,15 +1010,19 @@ def load_tl(st: dict, r: Resolved, c: Ctx) -> dict:
 
 
 def load_records(steps: dict, c: Ctx) -> list[dict]:
-    """[{i (run-order index), n (steps run), tss, tl}] of the 「負荷」 steps (closed loop)."""
+    """[{i (run-order index), n (steps run), tss, tl, basis, if, f (the closed-loop factor in
+    effect)}] of the 「負荷」 steps (engine/coros_tl.py closed loop)."""
     rows = flat(steps["items"])
     out = []
+    m = c.tl_model()
     for i, row in enumerate(rows):
         st = row["st"]
         if st["dur"]["type"] == "load":
             r = resolve(st, c)
             out.append({"i": i, "n": len(rows), "tss": st["dur"]["value"],
-                        "tl": max(1, round(load_tl(st, r, c)["tl"]))})
+                        "tl": max(1, round(load_tl(st, r, c)["tl"])),
+                        "basis": "power" if r.type == "power" else "hr", "if": round(load_if(st, r), 4),
+                        "f": m.factor})
     return out
 
 

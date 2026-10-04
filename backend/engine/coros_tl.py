@@ -38,9 +38,12 @@ the athlete's synced COROS activities with the list response's `trainingLoad`
 
 Closed loop (`LOAD_KEY`, like racepower/tss_calib.py): a pushed load step that was run
 (the session done, its activity's laps = the pushed steps one to one) gives one sample
-r = TSS accumulated in that step's lap ÷ the step's planned TSS; the correction factor
-exp(w·mean ln r), w = n / (n + LOAD_K), divides the TSS before the conversion (r > 1: the
-watch let more TSS pass than planned before reaching the TL, so send less TL). Samples
+r = TSS accumulated in that step's lap ÷ the raw TSS of the TL that was sent — the TSS the
+uncorrected model (the fit in effect when the sample is taken) maps to that TL; without it,
+the planned TSS ÷ the factor in effect at the push. Measured against the uncorrected
+conversion, a step run as planned under a factor keeps that factor (no oscillation back to
+1). The correction factor exp(w·mean ln r), w = n / (n + LOAD_K), divides the TSS before the
+conversion (r > 1: the watch let more TSS pass than the TL meant, so send less TL). Samples
 exist only for steps pushed with COROS's real load target (sync/coros_workouts
 COROS_TARGET_TYPE_LOAD known), never for the estimated-time fallback.
 
@@ -642,9 +645,11 @@ def step_actual(laps: list[dict], t, x, total_tss: float, i: int, n: int) -> Opt
     return None if sh is None else round(sh * float(total_tss), 1)
 
 
-def refresh_load(store, sessions: list[dict], actual_of: Callable[[dict, dict], Optional[list]]) -> tuple[dict, bool]:
+def refresh_load(store, sessions: list[dict], actual_of: Callable[[dict, dict], Optional[list]],
+                 raw_of: Optional[Callable[[dict], Optional[float]]] = None) -> tuple[dict, bool]:
     """Fill the recorded sessions that are now done: actual_of(session, record) → the actual
-    TSS per recorded step (None = can't tell). (store, changed)."""
+    TSS per recorded step (None = can't tell); raw_of(step) → the uncorrected model's TSS of
+    the TL sent (kept with the sample). (store, changed)."""
     ss = _sessions(store)
     changed = False
     by_uid = {s.get("uid"): s for s in sessions or []}
@@ -658,7 +663,8 @@ def refresh_load(store, sessions: list[dict], actual_of: Callable[[dict, dict], 
             log.warning("load step sample %s failed: %s", uid, type(e).__name__)
             act = None
         if act and len(act) == len(rec.get("steps") or []):
-            ss[uid] = {**rec, "actual": act}
+            raw = [raw_of(st) for st in rec["steps"]] if raw_of else None
+            ss[uid] = {**rec, "actual": act, "raw": raw}
             changed = True
     return {"sessions": ss}, changed
 
@@ -667,8 +673,12 @@ def load_factor(store) -> dict:
     """{factor, n, k, ratio (unshrunk, None without samples)}."""
     rs = []
     for rec in _sessions(store).values():
-        for st, a in zip(rec.get("steps") or [], rec.get("actual") or []):
-            p = num((st or {}).get("tss"))
+        steps = rec.get("steps") or []
+        raws = rec.get("raw") or [None] * len(steps)
+        for st, a, raw in zip(steps, rec.get("actual") or [], raws):
+            st = st or {}
+            # the raw TSS of the TL sent: the uncorrected model's, else planned ÷ the push's factor
+            p = num(raw) or ((num(st.get("tss")) or 0) / (num(st.get("f")) or 1.0))
             a = num(a)
             if p and a and p > 0 and a > 0:
                 rs.append(_clamp(a / p, *RATIO_RANGE))
@@ -761,7 +771,12 @@ async def refit_and_store(db, athlete_id: int, ds, today: Optional[dt.date] = No
     store = await repo.get(LOAD_KEY)
     if _sessions(store):
         sessions = await PS.load(db, athlete_id)
-        new_store, changed = await asyncio.to_thread(refresh_load, store, sessions, _actual_from_ds(ds))
+        raw_model = Model.of(await repo.get(KEY), None)          # uncorrected: no factor
+
+        def raw_of(st: dict) -> Optional[float]:
+            tl = num(st.get("tl"))
+            return raw_model.tss(tl, st.get("basis"), num(st.get("if"))) if tl else None
+        new_store, changed = await asyncio.to_thread(refresh_load, store, sessions, _actual_from_ds(ds), raw_of)
         if changed:
             await repo.set(LOAD_KEY, new_store)
         out["load"] = load_factor(new_store)
