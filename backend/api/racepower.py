@@ -590,10 +590,12 @@ TERRAIN = {"road": "road", "trail": "trail", "baiyue": "hike"}
 EXPORT_SOURCE = "賽事計算機匯出（分段目標推估）"
 
 
-def race_session(body: ExportIn, p: dict, ev) -> tuple[dict, dict]:
+def race_session(body: ExportIn, p: dict, ev, calib: Optional[dict] = None) -> tuple[dict, dict]:
     """(the 課表 session the export writes, the watch_export legs) for a plan: kind race on
     the event's date, named 「賽事 <name>」, the legs as its steps; minutes = the plan's
-    moving time, tss = watch_export.tss_estimate (推估)."""
+    moving time, tss = watch_export.tss_info (推估: the open legs at the calculator's own
+    predicted race HR, race_hr) × the post-race correction factor (`calib`, tss_calib.factor).
+    ex["tss"]: {raw, factor, n, k, tss, open_h, open_if, open_src, fallback}."""
     from backend.engine.racepower import planner as PL
     from backend.engine.racepower import watch_export as WE
     sm = p["summary"]
@@ -602,11 +604,23 @@ def race_session(body: ExportIn, p: dict, ev) -> tuple[dict, dict]:
                       day_splits_km=body.day_splits_km if p["type"] == "baiyue" else None)
     badge = "（推估）" if sm.get("badge") else ""
     hint = "每段按圈結束" if ex["mode"] == "lap" else "每段依距離"
-    detail = f"{hint}；{PL.HINT_30S}；分段目標{badge}" if p["type"] != "baiyue" else f"{hint}；心率 ≤ AeT；分段目標{badge}"
+    detail = f"{hint}；{PL.HINT_30S}；分段目標{badge}" if p["type"] != "baiyue" else f"{hint}；只看心率（≤ AeT）；分段目標{badge}"
+    th = _thresholds(p)
+    hr, hr_src = WE.race_hr(p, th)
+    ti = WE.tss_info(ex["legs"], th, hr, hr_src)
+    cf = calib or {"factor": 1.0, "n": 0, "k": None}
+    tss = round(min(2000.0, ti["tss"] * cf["factor"]), 1) if ti["tss"] else None
+    ex["tss"] = {**ti, "raw": ti["tss"], "tss": tss, "factor": cf["factor"], "n": cf["n"], "k": cf.get("k")}
+    if ti["open_h"] > 0:
+        # how the legs without a power / HR target were counted (the session note on the 課表)
+        detail += (f"；TSS 推估：無目標段 IF {ti['open_if']:.2f}（{ti['open_src']}）" if not ti["fallback"] else
+                   f"；TSS 推估：沒有心率預測，無目標段用預設 IF {WE.DEFAULT_IF:.2f}")
+    if cf["n"]:
+        detail += f"；賽後校正 ×{cf['factor']:.2f}（{cf['n']} 場）"
     km, gain = sm.get("km"), sm.get("gain_m")
     s = {"title": f"賽事 {name}"[:200], "day": str(ev.date)[:10], "steps": ex["doc"], "detail": detail,
          "minutes": max(1, min(1440, round(float(sm.get("time_s") or 0) / 60))),
-         "tss": WE.tss_estimate(ex["legs"], _thresholds(p)), "terrain": TERRAIN.get(p["type"]),
+         "tss": tss, "terrain": TERRAIN.get(p["type"]),
          "distance_km": min(500.0, float(km)) if km else None, "climb_m": min(20000.0, float(gain)) if gain else None,
          "target": "", "source": EXPORT_SOURCE}
     return s, ex
@@ -737,6 +751,9 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
     from backend.api.plan_sessions import _wlock
     from backend.engine import plan_store as PS
     from backend.engine import workout_steps as WS
+    from backend.engine.racepower import tss_calib as TC
+    from backend.engine.racepower import watch_export as WE
+    from backend.settings.repository import SettingsRepository
     from backend.sync import coros_workouts as CW
     from backend.sync import workout_targets as WT
     eid = body.event_id or (body.course.event_id if body.course else None)
@@ -746,7 +763,12 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
     if not ev.date:
         raise HTTPException(400, "這場賽事沒有日期")
     p = _py(await run_in_threadpool(make_plan, body))      # reads the Dataset: never on the event loop
-    s, ex = race_session(body, p, ev)
+    why = WE.multi_day(p, body.start_time, max(int(body.days or 1), int(getattr(ev, "days", None) or 1)))
+    if why:
+        raise HTTPException(400, why)
+    repo = SettingsRepository(db)
+    calib, calib_changed = TC.refresh(await repo.get(TC.KEY), await PS.load(db))
+    s, ex = race_session(body, p, ev, TC.factor(calib))
     th = _thresholds(p)
     try:
         s["steps"] = WS.normalize(s["steps"])
@@ -764,6 +786,11 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
                 raise HTTPException(409, {"error": "EDITED", "message": "這堂比賽課在課表上改過，確認後才會覆蓋"})
             if body.push:
                 r = await PS.upsert_external(db, key, s, today, blocked=blocked, write=True)
+                # the raw estimate of this race, for the factor once it is done (one entry per race)
+                new = TC.record(calib, key, ex["tss"]["raw"], s["day"])
+                if calib_changed or new != calib:
+                    await repo.set(TC.KEY, new)
+                    await db.commit()
         except PS.PlanError as e:
             raise HTTPException(400, str(e))
     old_watch = False
@@ -774,7 +801,7 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
         old_watch = False
     ss = r["session"]
     known = body.push or r["previous"] is not None or r["action"] == "claim"
-    return {"day": ss["day"], "title": ss["title"], "minutes": ss["minutes"], "tss": ss["tss"],
+    return {"day": ss["day"], "title": ss["title"], "minutes": ss["minutes"], "tss": ss["tss"], "tss_info": ex["tss"],
             "mode": ex["mode"], "legs": ex["legs"], "merged": ex["merged"], "limit": ex["limit"],
             "notes": ex["notes"] + pv["lost"], "lines": pv["lines"], "steps": pv["n"],
             "action": r["action"], "previous": r["previous"], "old_watch": old_watch, "written": bool(body.push),

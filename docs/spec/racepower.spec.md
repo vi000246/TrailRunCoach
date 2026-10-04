@@ -256,7 +256,7 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 | GET / POST | `/api/v1/racepower/solo-hikes` | the opted-in solo hikes (`{"files": [.wko4 names]}`); only these calibrate EP/h, the walking model, the hike back-test and the 登山 conversion (`backend/api/racepower.py:464`) |
 | GET / POST | `/api/v1/racepower/backtest`, `/backtest/run` | stored back-test + run state / start a background run (`backend/api/racepower.py:571`, `backend/api/racepower.py:577`) |
 | POST | `/api/v1/racepower/export/csv` | the /plan output as CSV, UTF-8 with BOM; same body as /plan plus `name`; `Content-Disposition` (RFC 5987) and a percent-encoded `X-Filename` (`backend/api/racepower.py:630`) |
-| POST | `/api/v1/racepower/export/plan` | 「匯出至課表」: the plan as the race-day session of the stored plan (kind `race`, `ext_key` `racecalc:<event id>`); `event_id` required (400 without, 404 unknown); `push: false` = preview, `push: true` writes it, `overwrite: true` needed when the earlier export was changed on the 課表 page (else 409 `EDITED`) (see Watch export) (`backend/api/racepower.py:726`) |
+| POST | `/api/v1/racepower/export/plan` | 「匯出至課表」: the plan as the race-day session of the stored plan (kind `race`, `ext_key` `racecalc:<event id>`); `event_id` required (400 without, 404 unknown; 400 for a multi-day 百岳 trip); `push: false` = preview, `push: true` writes it, `overwrite: true` needed when the earlier export was changed on the 課表 page (else 409 `EDITED`) (see Watch export) (`backend/api/racepower.py:741`) |
 | POST / GET / DELETE | `/api/v1/racepower/share`, `/shares`, `/shares/{sid}` | create a read-only share of the /plan result (`share_title`, `include_weight`, `expires_days`), list, delete (`backend/api/racepower.py:667`) |
 | GET | `/share/{sid}`, `/share/{sid}/data` | public share page and its frozen snapshot (own prefix, no-store / noindex / no-referrer; 410 after expiry) (`backend/api/racepower.py:705`) |
 | GET / PUT / DELETE | `/api/v1/racepower/saved/{eid}` | the page inputs + last result saved for a plan event (`race_calc_store`; PUT 404s for an unknown event) (`backend/api/racepower.py:794`) |
@@ -935,7 +935,7 @@ type + km. The date is the race date, else the day computed.
 - The header also carries the 補給 rows (kcal band and method, carbohydrate / water / sodium per hour
   and total, pre-race load) and typed stations.
 
-### Watch export — 匯出至課表 (`backend/engine/racepower/watch_export.py:186`)
+### Watch export — 匯出至課表 (`backend/engine/racepower/watch_export.py:197`)
 
 `POST /export/plan` runs the plan in the thread pool, builds the steps with `watch_export.steps_for`
 on `chart_rows` and writes them as one session of the stored plan (`race_session`,
@@ -946,16 +946,35 @@ pushed with the plan's own push (overview spec, Stored plan / COROS push).
   (「→ 補給站 2 · 約 1:35 · 爬 640 m」); legs end at aid stations, day ends and the top / bottom of long
   climbs / descents; ≤ 25 steps, legs < 300 m merged (推估). **distance** (default road): distance steps
   per segment, merged to the step limit.
-- Targets per leg (`_target`, `backend/engine/racepower/watch_export.py:144`): power ± 3 % where valid,
+- Targets per leg (`_target`, `backend/engine/racepower/watch_export.py:147`): power ± 3 % where valid,
   the HR cap (watch band 85–100 %) without power, nothing on trail descents, pace ± 2 % on a road
   without CP. A trail / 百岳 leg that is mostly steep / walked climbing (`kind_of` steep_climb, by time)
   gets the HR cap only and never the estimated power or a pace; without a cap it is open (自由).
-  `power_ref` / `hr_ref` are never used.
+  `power_ref` / `hr_ref` are never used. A 百岳 plan gets heart rate only on every leg (the HR cap =
+  AeT; never power or pace — no power meter for 百岳): descents 控制、安全, open without a cap.
+- 百岳: only a single-day trip (單攻) is exported. `multi_day`
+  (`backend/engine/racepower/watch_export.py:308`) blocks a multi-day one — the requested days, the
+  event's days, the plan's per-day rows, or start time + clock time past midnight (> 24 h without a
+  start time); `/plan` returns the reason as `export_block` (the page disables 「匯出至課表」 and shows
+  it) and `/export/plan` answers 400 with it. Road / trail are never blocked here.
 - The session: kind `race` on the event's date, title 「賽事 <name>」, minutes = the plan's moving
   time (≤ 1440), terrain / distance / climb from the course, source 「賽事計算機匯出（分段目標推估）」, and a
-  planned TSS (`tss_estimate`, `backend/engine/racepower/watch_export.py:243`: Σ h × IF² × 100, IF =
-  the middle of the power band ÷ CP or of the HR band ÷ LTHR, else 0.75; 推估) that counts toward the
+  planned TSS (`tss_info`, `backend/engine/racepower/watch_export.py:272`: Σ h × IF² × 100, IF =
+  the middle of the power band ÷ CP or of the HR band ÷ LTHR; a leg with neither (descent, 自由, pace
+  only) at the calculator's own predicted race HR ÷ LTHR (`race_hr`,
+  `backend/engine/racepower/watch_export.py:254`: trail = the trail HR model's x* × LTHR, the measured
+  level before the heat shift; 百岳 = the hiking band's AeT; one level for the whole race — the
+  model has no per-segment HR), 0.75 only without a prediction (road, no model / LTHR), which the
+  session's detail then says; 推估) × the post-race correction factor below; it counts toward the
   week's planned load.
+- Post-race calibration (`backend/engine/racepower/tss_calib.py:77`): the raw estimate of each
+  written export is kept per `ext_key` in the setting `racepower.race_tss_calib`; every export
+  re-reads the stored plan and takes the actual TSS of each exported race that is done (matched to an
+  activity, `done_by.tss`). r = actual ÷ raw (clipped 0.5–2), factor = exp(w · mean ln r), w =
+  n / (n + 3) (k = 3 推估, the drift_agg.py shrinkage pattern), so it stays near 1 with few races.
+  One entry per race: re-exporting or recomputing never counts a race twice; a race unlinked again
+  loses its sample. The dialog's TSS line shows the open-leg IF and its source, the factor and n
+  (`tss_info` in the response).
 - One session per event (`ext_key` `racecalc:<event id>`, whatever the calculator mode): exporting
   again overwrites it (same row; an identical export changes nothing, so `updated_at` stays). The
   first export takes over the generator's own 比賽 row of that week when there is one, else adds a
@@ -1042,7 +1061,9 @@ with weight, bad ids, expiry, 百岳 snapshot without body / REE.
 `backend/tests/test_race_calculator.py`: the `race_calc` store and `/saved`, course start, `chart_rows`
 per type, lap and distance steps, 匯出至課表 (preview writes nothing, write, identical re-export
 unchanged with `updated_at` kept, re-export overwrites the same row, edited on the 課表 → 409 until
-overwrite, no event → 400), steep legs keep only the HR cap (else open), the race TSS estimate,
+overwrite, no event → 400), steep legs keep only the HR cap (else open), the race TSS estimate (open
+legs at the predicted race HR, the 0.75 fallback), the post-race correction (shrinkage, one sample per
+race, applied to the next export), 百岳 HR-only targets and the multi-day block,
 weather from the event GPX start. `backend/tests/test_plan_store.py` covers the claim of the
 generator's race, reconcile keeping the export, restore, the moved race, the weekly TSS, and the
 plan push sending the race and removing the old calculator workout. `backend/tests/test_race_goal.py`: goal basis, levels,
@@ -1151,3 +1172,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-04 | code-sync | N/A | calc.py on an athlete Context (API + Pyodide static demo); new: fuelling (fuel.py), segment targets / chart rows, goals vs model, non-moving time, x*(T) + terrain-matched δ + heat β in the trail HR model, heatacc (a = 0 unless HRC test), trail technicality per downhill bin + p50 descent cap, trail pass 8 % / 6 % target with bootstrap bound, effort rules via x*(T) / RPE / per-athlete calibration, share links, saved inputs per event, event GPX, watch export (lap / distance); tenant paths, one data source, timezone / region; page redesign; pointers re-anchored, W′ curve and the GPX-to-event gap removed |
 | 2026-10-04 | feature | SP-41 | Course map on the calculator for GPX courses: profile `lat` / `lon` and waypoint `lat` / `lon` from `build_course`, Leaflet map (segment-kind colours, highlighted segments, aid stations / waypoints, synced hover with the profile chart) built on the shared `basemaps.js`; share snapshots stay coordinate-free. Fuel tiles (SP-44): the source moved from the tile's native title into its ? tip, so hover and click show one explanation |
 | 2026-10-04 | feature | SP-43 | 「匯出到 COROS」 → 「匯出至課表」: `POST /export/plan` writes the race-day session of the stored plan (kind race, `ext_key` racecalc:<event id>, one per event; upsert, claims the generator's 比賽 row, warns / 409 before overwriting an edit made on the 課表), pushed with the plan's own push; `/export/coros` retired and its old watch workout replaced on that push; steep / walked trail legs: HR cap only (no power / pace; open without a cap); planned race TSS 推估 |
+| 2026-10-04 | feature | SP-43 follow-up | Race TSS: legs without a target use the calculator's predicted race HR ÷ LTHR (trail HR model x*, 百岳 AeT; 0.75 only without one, noted in the session detail); post-race correction factor from done exports (`tss_calib.py`, setting `racepower.race_tss_calib`, w = n/(n+3) 推估, one sample per race) shown in the export dialog; 百岳: single-day only (`multi_day`, `export_block`, 400), HR-only targets |
