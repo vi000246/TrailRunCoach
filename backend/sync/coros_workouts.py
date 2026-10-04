@@ -407,8 +407,9 @@ def step_lines(steps: list[StepLike]) -> list[str]:
     return out
 
 
-def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
-    """Structured steps for one week-plan session, or Unsupported."""
+def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> list[StepLike]:
+    """Structured steps for one week-plan session, or Unsupported. `sent_tl`: the TL its
+    「負荷」 steps were last pushed with (session_workout / _sent_tl)."""
     kind = s.get("kind")
     secs = int(s.get("minutes") or 0) * 60
     if kind == "rest" or (kind == "race" and not s.get("steps")):
@@ -426,7 +427,8 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
             st = WS.normalize(s["steps"])
         except WS.StepsError as e:
             raise Unsupported(f"課表結構有誤：{e}")
-        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz)
+        c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
+                   sent_tl=sent_tl)
         return WS.steps_to_coros(st, c)
     if kind == "notice":
         # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is
@@ -596,17 +598,38 @@ def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = 
     if today and s["day"] < today:
         raise Unsupported("日期已過")
     th = Thresholds.of(thresholds)
-    steps = session_steps(s, th)
+    sent = _sent_tl(s)
+    steps = session_steps(s, th, sent)
     name = workout_name(s)
     payload = build_program(name, steps, th, s.get("detail") or "")
     # the payload is the fingerprint: a TSS → TL refit changes it only for sessions with a
-    # 「負荷」 step whose sent TL actually moved (no other field depends on the conversion)
+    # 「負荷」 step whose sent TL moved by ≥ WS.TL_RESEND_MIN (a smaller move keeps the TL last
+    # pushed, _sent_tl; no other field depends on the conversion)
     fp = hashlib.sha256(json.dumps({"day": s["day"], "program": payload}, sort_keys=True,
                                    ensure_ascii=False).encode()).hexdigest()
-    return WorkoutSpec(s["id"], s["day"], name, payload, fp, _load_records(s, th))
+    return WorkoutSpec(s["id"], s["day"], name, payload, fp, _load_records(s, th, sent))
 
 
-def _load_records(s: dict, th: Thresholds) -> list:
+def _sent_tl(s: dict) -> Optional[dict]:
+    """{(tss, basis, if): tl} of the session's 「負荷」 steps as last pushed (engine/coros_tl.py's
+    closed-loop record, LOAD_KEY → sessions[key].steps), None without one. Never raises."""
+    key = s.get("key")
+    if not key or not s.get("steps") or COROS_TARGET_TYPE_LOAD is None:
+        return None
+    try:
+        from backend.engine import coros_tl as TL
+        from backend.engine import workout_steps as WS
+        rec = ((TL._read(TL.LOAD_KEY) or {}).get("sessions") or {}).get(key) or {}
+        out = {}
+        for x in rec.get("steps") or []:
+            if x.get("tss") is not None and x.get("tl") is not None and x.get("if") is not None:
+                out[WS.sent_key(x["tss"], x.get("basis") or "hr", x["if"])] = x["tl"]
+        return out or None
+    except Exception:                        # noqa: BLE001 — no record: the TL as computed
+        return None
+
+
+def _load_records(s: dict, th: Thresholds, sent: Optional[dict] = None) -> list:
     """The session's 「負荷」 steps as sent natively (closed loop, engine/coros_tl.py)."""
     if COROS_TARGET_TYPE_LOAD is None or not s.get("steps") or s.get("kind") == "notice":
         return []
@@ -615,7 +638,7 @@ def _load_records(s: dict, th: Thresholds) -> list:
         st = WS.normalize(s["steps"])
     except WS.StepsError:
         return []
-    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz)
+    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, sent_tl=sent)
     return WS.load_records(st, c)
 
 
