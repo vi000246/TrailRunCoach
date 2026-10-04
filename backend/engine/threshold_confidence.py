@@ -886,6 +886,42 @@ def test_results(ds, plan, today: dt.date, days: int = RESULT_DAYS) -> list[dict
     return list(found.values())
 
 
+def _cp_now(ds, plan, today: dt.date) -> Optional[float]:
+    """The plan's CP on `today`, else the dataset's CP of the latest run."""
+    cp_now = plan.threshold_on("cp", today) if plan is not None else None
+    if cp_now is None:
+        rs = [w for w in ds.workouts if w.sport == "run"]
+        try:
+            cp_now = _f(ds.cp(rs[-1])) if rs else None
+        except Exception:                   # noqa: BLE001
+            cp_now = None
+    return cp_now
+
+
+# The signals that are EVIDENCE against the LTHR (not its source, its age, a break or the
+# season): they invalidate a measured LTHR for the Zone 5 gate's UA path (quality_gate.lthr_invalid;
+# owner 2026-10-05). A hot / unknown-temperature long effort is only a hint and doesn't count.
+EVIDENCE_IDS = ("long_effort", "race_low", "cp_band", "cp_change")
+
+
+def lthr_evidence(ds, plan, today: dt.date, runs: Optional[list] = None) -> list[dict]:
+    """The evidence signals (EVIDENCE_IDS, level weak or above) against the LTHR in effect from
+    the runs AFTER its date (within EFFORT_DAYS): 4 a long effort above it in a cool run, 5 a
+    40–60-min race < 95 % of it, 6 the CP-band cross-check; 7 the CP changed > 5 % since its
+    date. A dateless LTHR reads the whole window. `runs`: gather_runs' rows (default: gathered)."""
+    lt = lthr_info(ds, plan, today)
+    lv = _f(lt.get("value"))
+    if not lv or lt.get("source_kind") == "default":
+        return []
+    since = str(lt.get("date") or "")[:10]
+    lo = (today - dt.timedelta(days=EFFORT_DAYS)).isoformat()
+    rows = gather_runs(ds, today) if runs is None else runs
+    rs = [r for r in rows if r.get("date", "") >= lo and (not since or r.get("date", "") > since)]
+    sigs, _support = effort_signals(lv, rs)
+    sigs += [s for s in event_signals(lt, today, _cp_now(ds, plan, today)) if s["id"] == "cp_change"]
+    return [s for s in sigs if s["id"] in EVIDENCE_IDS and s["level"] in ("error", "strong", "weak")]
+
+
 def check(ds, plan, today: dt.date, brk: Optional[dict] = None, cool: Optional[dict] = None,
           kind: Optional[str] = None, days_to_a: Optional[int] = None, acts: Optional[list] = None) -> dict:
     """assess() on the dataset: the thresholds in effect, the runs, the test results."""
@@ -901,13 +937,7 @@ def check(ds, plan, today: dt.date, brk: Optional[dict] = None, cool: Optional[d
     lt = lthr_info(ds, plan, today)
     mh, rh = mhr_info(ds, today, acc), rhr_info(ds, today, acc)
     runs = gather_runs(ds, today, acts)
-    cp_now = plan.threshold_on("cp", today) if plan is not None else None
-    if cp_now is None:
-        rs = [w for w in ds.workouts if w.sport == "run"]
-        try:
-            cp_now = _f(ds.cp(rs[-1])) if rs else None
-        except Exception:                   # noqa: BLE001
-            cp_now = None
+    cp_now = _cp_now(ds, plan, today)
     aet = None
     from backend.engine.planning import threshold_row
     ar = threshold_row(plan, "aethr", today) if plan is not None else None

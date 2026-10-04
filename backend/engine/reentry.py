@@ -33,6 +33,14 @@ its neighbours (未驗證, to check against the book). Between rows: linear
 the break (推估). Planned breaks come from 不排課日期 (engine/blackouts.py)
 ≥ 6 days with no run inside; unplanned ones from the activity data (the
 current gap counts as a break returning today).
+
+轉換期 (SP-73, owner 2026-10-05): days inside a 轉換期 phase (auto or manual,
+planning.transition_days) are not break days — the transition is a planned
+easy / cross-training block, so weeks of only cross-training / strength there
+don't start a re-entry block when base resumes. A break counts its days outside
+the transition only (≥ 6 still makes a block, as long as those days, e.g. a
+transition + 10 more days off = a 10-day 6–13 block; the block text says how
+many transition days were left out).
 """
 from __future__ import annotations
 
@@ -87,15 +95,19 @@ STEP_UP_MIN = {"6-13": 14, "14-28": 29, "29-56": 57}   # 推估: an injury layof
 
 def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False,
          prev_hours: Optional[float] = None, prev_long_min: Optional[float] = None,
-         ongoing: bool = False, injury: Optional[dict] = None, step_up: bool = False) -> Optional[dict]:
+         ongoing: bool = False, injury: Optional[dict] = None, step_up: bool = False,
+         days: Optional[int] = None, transition_days: int = 0) -> Optional[dict]:
     """The re-entry block for a break from the day after `last` (the last run)
     to the day before `ret` (the first run back, or the day after a blackout).
     None for a break < 6 days. `injury` (engine/injuries.py): the 傷病紀錄 the
     break overlaps — the text says 傷停; `step_up` (injury.reentry_step_up,
     推估): the block of the next-longer break (停 10 天 → the 14–28-day rules
     and length) — after an injury the tissue, not only the fitness, has to
-    re-adapt. FVDOT stays the one of the real break (it is a fitness loss)."""
-    days = (ret - last).days - 1
+    re-adapt. FVDOT stays the one of the real break (it is a fitness loss). `days`: the break's
+    length when not every day between counts (find_all: the 轉換期 days, `transition_days` of
+    them, are left out); None = all of them."""
+    if days is None:
+        days = (ret - last).days - 1
     cat = category(days)
     if cat == "short":
         return None
@@ -137,15 +149,18 @@ def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False
             "drift_check": cat == "14-28", "reconfirm": cat in ("29-56", "long"),
             "aet_stale": cat in ("29-56", "long"), "cp_retest": cat == "long" or real_days >= 50,
             "restart_base": cat == "long", "injury": inj, "stepped_up": stepped, "days_effective": days,
-            "text": text_of(real_days, cat, ret, end, inj, stepped)}
+            "transition_days": int(transition_days),
+            "text": text_of(real_days, cat, ret, end, inj, stepped, transition_days)}
 
 
 def text_of(days: int, cat: str, ret: dt.date, end: dt.date, injury: Optional[dict] = None,
-            stepped: bool = False) -> str:
+            stepped: bool = False, transition_days: int = 0) -> str:
     how = {"6-13": "前半 50%、後半 75%", "14-28": "前半 50%、後半 75%，強度目標打折",
            "29-56": "三段 33／50／75%，5 區要重新確認有氧基礎", "long": "15 週重新打底（33→50→70→85→100%）"}[cat]
     head = f"傷停 {days} 天（{injury['label']}，傷病紀錄 #{injury['id']}）" if injury else f"停跑 {days} 天"
     up = "；傷後往上一級排（推估）" if stepped else ""
+    if transition_days:
+        head += f"（不含轉換期 {transition_days} 天）"
     return (f"{head}：{ret.isoformat()} 起恢復期到 {(end - dt.timedelta(days=1)).isoformat()}（{how}；"
             f"Daniels 表 9.2，恢復期＝停訓天數{up}）")
 
@@ -238,6 +253,20 @@ def _injuries(injuries, step_up) -> tuple[list, bool]:
     return list(injuries or []), bool(step_up)
 
 
+def _transition_set(ds, runs: list[dt.date], today: dt.date, horizon_days: int) -> set[dt.date]:
+    """The 轉換期 days (planning.transition_days) a break within reach can touch; empty without
+    a plan or on any error (re-entry must still work)."""
+    plan_ = getattr(ds, "plan", None)
+    if plan_ is None:
+        return set()
+    try:
+        from backend.engine.planning import transition_days
+        lo = min([today - dt.timedelta(days=horizon_days)] + runs[:1])
+        return transition_days(plan_, lo, today + dt.timedelta(weeks=27))
+    except Exception:                       # noqa: BLE001
+        return set()
+
+
 def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries=None,
              step_up: Optional[bool] = None) -> list[dict]:
     """Every re-entry block within reach, oldest first: breaks ≥ 6 days whose
@@ -248,12 +277,19 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries
     injuries, step_up = _injuries(injuries, step_up)
     from backend.engine import injuries as INJ
     runs = _run_days(ds)
+    tset = _transition_set(ds, runs, today, horizon_days)
+
+    def off(last: dt.date, ret: dt.date) -> tuple[int, int]:
+        """(break days outside a 轉換期, 轉換期 days) between `last` and `ret`."""
+        n = (ret - last).days - 1
+        t = sum(1 for k in range(1, n + 1) if last + dt.timedelta(days=k) in tset) if tset else 0
+        return n - t, t
     runs_past = [d for d in runs if d <= today]
     cands = []
     for a, b in zip(runs_past, runs_past[1:]):
-        if (b - a).days - 1 >= MIN_BREAK and (today - b).days <= horizon_days:
+        if (b - a).days - 1 >= MIN_BREAK and (today - b).days <= horizon_days and off(a, b)[0] >= MIN_BREAK:
             cands.append((a, b, False, False))
-    if runs_past and (today - runs_past[-1]).days - 1 >= MIN_BREAK:
+    if runs_past and (today - runs_past[-1]).days - 1 >= MIN_BREAK and off(runs_past[-1], today)[0] >= MIN_BREAK:
         cands.append((runs_past[-1], today, False, True))         # still off: as if back today
     from backend.engine import blackouts as BL
     for lo, hi in BL._runs(sorted(dt.date.fromisoformat(k) for k in BL.blocked(blackouts or ()))):
@@ -265,15 +301,16 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries
             last = lo - dt.timedelta(days=1)          # ahead: assume running up to the range
         else:
             last = max([d for d in runs if d < lo] or [lo - dt.timedelta(days=1)])
-        if (ret - today).days <= 7 * 26 and (today - ret).days <= horizon_days:
+        if (ret - today).days <= 7 * 26 and (today - ret).days <= horizon_days and off(last, ret)[0] >= MIN_BREAK:
             cands.append((last, ret, True, False))
     out = []
     for last, ret, planned, ongoing in sorted(set(cands), key=lambda c: c[1]):
         ph, pl = prev_volume(ds, last)
         inj = INJ.overlapping(injuries, last + dt.timedelta(days=1), ret - dt.timedelta(days=1), today) \
             if injuries else None
+        n, t = off(last, ret)
         p = plan(last, ret, _cross(ds, last + dt.timedelta(days=1), ret - dt.timedelta(days=1)), planned, ph, pl,
-                 ongoing, injury=inj, step_up=step_up)
+                 ongoing, injury=inj, step_up=step_up, days=n if t else None, transition_days=t)
         if p is not None:
             out.append(p)
     return out

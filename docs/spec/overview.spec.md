@@ -105,7 +105,7 @@ categorical palette in fixed slot order (`backend/engine/overview.py:36`).
 0 ≤ x ≤ 5000 (`backend/engine/overview.py:280`). TSB is yesterday's CTL − ATL.
 
 **Start values (SP-68).** CTL / ATL start from `load_guard.pmc_start()`
-(`backend/engine/load_guard.py:185`), one source order:
+(`backend/engine/load_guard.py:188`), one source order:
 1. **manual** — the user's CTL / ATL at the start of a date (設定 → 閾值 → 起始 CTL／ATL;
    user_settings `athlete.pmc_start` = {date, ctl, atl}, 0–300, date ≤ today). The series
    restarts on that date; the days before it keep the automatic start. A date after today is
@@ -146,7 +146,7 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
 **Volume target**
 1. Base / specific: the weekly TSS that raises CTL by the phase goal (base max(2, 5 % of CTL),
    specific max(2.5, 7 %) per week, 推估 — SP-63; `load_guard.ramp_goal`,
-   `backend/engine/load_guard.py:299`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
+   `backend/engine/load_guard.py:309`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
    converted to hours with the athlete's TSS per hour over 6 weeks.
 2. Capped at `max(1.10 × ref, ref + 0.5 h)`, ref = max(4-week mean, last week) (UA 10 %).
    Floored at the 4-week mean (hold).
@@ -208,7 +208,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   rule had no source and is gone (`STREAK_NEED` is legacy only,
   `backend/engine/workout_review.py:168`). `week_plan` reads status `i_gate`'s dict
   (`backend/engine/overview.py:1041`) and asks `week_decision`
-  (`backend/engine/quality_gate.py:2105`) for this week:
+  (`backend/engine/quality_gate.py:2175`) for this week:
   - **Method** (`plan.prefs.quality_gate`, `evaluate`, `backend/engine/quality_gate.py:985`):
     `auto` → `ua_gap` + `friel_drift` when the plan has a measured AeT row that is **valid**
     (B3, `unsourced-rules.md`: the aggregated drift estimate's SE ≤ 3 bpm and no shift > 5 bpm
@@ -229,14 +229,14 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     target; the AeT is often estimated, climbs inflate HR) — with an untested AeT in effect a
     warning for Zone 5 too (SP-39, `guard(aet_tested=False)`); CTL ramp ≥ max(3, 10 % CTL₋₇) →
     threshold only, ≥ min(10, max(5, 15 % CTL₋₇)) → none (Friel as a share of CTL, 推估; not in the
-    first 28 days of data — `backend/engine/load_guard.py:185`); last week's running-time step
+    first 28 days of data — `backend/engine/load_guard.py:188`); last week's running-time step
     against max(the week before, 4-week mean) > 20 % → none (Nielsen 2014, Damsted 2019), 10–20 % →
     hold the dose (推估) — not the week after a 3–5-day break without a run, which gets an info note
     instead (`src: "volume"`, plan-auto.spec.md); TSB −30…−20 → hold (Friel / TrainingPeaks). Projected weeks keep only the
     intensity block (Zone 5 only).
   - **Two gates, two tracks** (SP-31): Zone 3 once its gate is open (`z3_gate`,
-    `backend/engine/quality_gate.py:1225`: 4 complete weeks with ≥ 3 runs and no 7-day gap —
-    sticky, a ≥ 21-day break re-locks —, the 90-min test, or a measured UA gap; all 推估 but the
+    `backend/engine/quality_gate.py:1256`: 4 complete weeks with ≥ 3 runs and no 7-day gap —
+    sticky, a ≥ 21-day break re-locks; 轉換期 days are no gap, SP-73 —, the 90-min test, or a measured UA gap; all 推估 but the
     tests) and the guardrails pass; Zone 5 is an independent gate (SP-39, `quality_gate.z5_track`
     = `gate["z5_gate"]`, the flag week_decision and the card share): a measured AeT
     (`gate["z5"]`, `base_check.z5_status`: a tested AeT + a measured LTHR with the UA gap ≤ 10 %,
@@ -249,9 +249,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     A3 / A4 / T+; Zone 5 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4. Over 10 % of the week (5 % the
     first time) the Zone 3 rung becomes its 巡航版 T1–T3 (the old z3a–z3c), which still counts;
     Zone 3 + Zone 5 ≤ 20 % of the week (`quality_sessions`, `backend/engine/overview.py:659`).
-    Weekly: `week_decision(..., n)` (`backend/engine/quality_gate.py:2098`) — 課表偏好 2 a week =
+    Weekly: `week_decision(..., n)` (`backend/engine/quality_gate.py:2168`) — 課表偏好 2 a week =
     one of each (`quality_per_week`, `backend/engine/overview.py:841`), 1 a week with both open
-    alternates 1:1 (A race road ≤ 10 km) or 2:1 (`track_ratio`, `backend/engine/quality_gate.py:1332`).
+    alternates 1:1 (A race road ≤ 10 km) or 2:1 (`track_ratio`, `backend/engine/quality_gate.py:1364`).
     Rung details in plan-auto.spec.md.
     The step moves by the progression state machine (`interval_outcome` / `dose_step`,
     plan-auto.spec.md): 達標 forward, 邊界 / 無法判定 repeat, 未適應 rest +1 min then back one,
@@ -264,8 +264,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     for a reason (B3 / the Z5 lifecycle), its protocol from `plan.prefs.aet_test_protocol`
     (auto = 徐國峰 90′ on the weekend in place of the long run, UA 40′ backup); a suggestion, not
     a session (above). Gate session text keeps the COROS / trim tokens
-    (`session`, `backend/engine/quality_gate.py:2297`); the detail prefix names the rule
-    (`prefix`, `backend/engine/quality_gate.py:2333`). In guardrail mode `plan_prefs.shape`
+    (`session`, `backend/engine/quality_gate.py:2367`); the detail prefix names the rule
+    (`prefix`, `backend/engine/quality_gate.py:2403`). In guardrail mode `plan_prefs.shape`
     gets `quality_cap=1` (`backend/engine/overview.py:1167`).
   - 專項期: the same two-track pick; road Zone 3 = 閾值節奏 2×15′ (`ROAD_SPECIFIC_Q`), trail Zone 5 =
     爬坡間歇 5×4′, else the ladder; drift bad → none, intensity bad → no Zone 5; this week's CTL ramp
@@ -363,7 +363,7 @@ rule 1): strength ← a strength workout; long (by id, so a long day of kind `hi
 `backend/engine/overview.py:1207`) ← an endurance session ≥ 80 % of the planned minutes; the AeT
 test ← a road run ≥ 55 min (`backend/engine/overview.py:1212`); quality / test ← a session with
 ≥ 10 min at ≥ LTHR or ≥ 0.95 CP run power, or 60 % of the planned work for short reps
-(`hard_need`, `backend/engine/quality_gate.py:2355`, `backend/engine/overview.py:1223`); a Zone 3
+(`hard_need`, `backend/engine/quality_gate.py:2425`, `backend/engine/overview.py:1223`); a Zone 3
 library variant ← its own time at ≥ 85 % CP (it never reaches 95 % CP);
 a planned **Zone 5** session (library class Z5, or rung `z5*`; `quality_gate.is_z5_variant`)
 ← only a run classified 「Z5 間歇」 (`workout_review.classify` stimulus `z5`, owner 2026-10-02);
@@ -1200,10 +1200,11 @@ which one. The response keeps the `coros` field names.
   ramp at `load_guard`'s block line bad, watch line watch (SP-63: relative lines; SP-68: on the
   PMC's own started CTL, so the CTL shown and the guardrail's agree; 起算期 info in the first 28
   days of an automatic start, the first 7 after a manual one, with `ramp_week = None`; `extra`
-  adds `ramp_base`, `ramp_level`, `ramp_lines`, `ramp_startup`, `pmc_start` = the source). `i_volume` (`backend/engine/status.py:377`): the
+  adds `ramp_base`, `ramp_level`, `ramp_lines`, `ramp_startup`, `pmc_start` = the source). `i_volume` (`backend/engine/status.py:395`): the
   headline stays all-sport moving hours; the step is running time against max(the week before,
   4-week mean) — > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估), good with the reason
-  when the week before had a 3–5-day break without a run (`load_guard.short_break`); `extra` adds
+  when the week before had a 3–5-day break without a run, ≥ 3 of its days unplanned (not on the user's
+  不排課日期 / 休息日; `load_guard.short_break`, `Status(blackouts=)`); `extra` adds
   `run_last_week`, `run_base`, `step_exempt`.
 - **`i_gate`** hover adds the Zone 5 track (「Zone 5：已解鎖（…）／未解鎖（AeT 已通過，還差 3 區：…）」)
   or the AeT state (「Zone 5：未確認／已確認／暫停（原因）／恢復期」) and 「建議測試：…」; a locked method reads 「5 區未開」 and
@@ -1218,7 +1219,7 @@ which one. The response keeps the `coros` field names.
   (`heat.hr_cost` on steady flat stretches, 「觀測不支持模型」 when S rises and HRC does not fall),
   a, badge 推估. Without exposure data the verdict asks for a weather-enabled routes build.
 - **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:564`): `quality_gate.evaluate` +
-  `indicator` (`backend/engine/quality_gate.py:2390`) with the status' 課表偏好 (`Status(prefs=…)`;
+  `indicator` (`backend/engine/quality_gate.py:2460`) with the status' 課表偏好 (`Status(prefs=…)`;
   the API's status cache keys on `prefs.stamp()`, `backend/api/overview.py:53`). Second in
   `PHASE_PRIORITY["base"]` (`backend/engine/status.py:1013`), so its WATCH action lands in 還缺什麼.
   Texts per the design doc §4.6: auto without AeT → info 「沒有 AeT 實測：照 80/20 原則每週 1
@@ -1258,7 +1259,7 @@ which one. The response keeps the `coros` field names.
   check with no AeT to apply. The old 「AeT 已經 N 週沒測」 age rule is gone (B3: a reason, not a
   date).
   **Threshold confidence (SP-64)**: `i_testing` also runs `threshold_confidence.check`
-  (`backend/engine/threshold_confidence.py:889`, wired at `backend/engine/status.py:866`): LTHR /
+  (`backend/engine/threshold_confidence.py:925`, wired at `backend/engine/status.py:866`): LTHR /
   max HR / resting HR confidence (high / medium / low) from 8 LTHR signals (source, estimate
   premise, easy cap ≥ LTHR and % HRmax / % HRR, long efforts above LTHR, 40–60 min races < 95 %,
   the CP-band cross-check, events, age) and the max-HR plausibility check (highest HR held 120 s,
@@ -1320,7 +1321,7 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/overview/plan/push-coros/preview?scope=day\|week\|phase&day=` | sessions in range with push status, counts to send / unchanged / skipped, missed to remove, `pace_notes`, pending changes; 400 for a past week (`backend/api/plan_sessions.py:1624`) |
 | POST | `/api/v1/overview/plan/push-coros?scope=&day=` | reconcile, push the range through the active provider, clean up; 401 `COROS_AUTH_REQUIRED`; 400 for a past week (`backend/api/plan_sessions.py:1670`) |
 | DELETE | `/api/v1/overview/plan/push-coros?scope=&day=` | remove what was pushed in the range; 400 for a past week (`backend/api/plan_sessions.py:1699`) |
-| GET | `/api/v1/overview/plan/prefs` | `{prefs, defaults, active, day_conflicts, pref_dropped, gate_options, aet_options}` — `gate_options` = the 間歇門檻 hover texts (`quality_gate.option_texts`, `backend/engine/quality_gate.py:2517`) (`backend/api/plan_sessions.py:1754`) |
+| GET | `/api/v1/overview/plan/prefs` | `{prefs, defaults, active, day_conflicts, pref_dropped, gate_options, aet_options}` — `gate_options` = the 間歇門檻 hover texts (`quality_gate.option_texts`, `backend/engine/quality_gate.py:2587`) (`backend/api/plan_sessions.py:1754`) |
 | GET | `/api/v1/overview/plan/prefs/gate` | per mode `{usable, why}` on the athlete's data, plus the active mode / state / verdict (status `i_gate`, `backend/api/plan_sessions.py:1742`) |
 | POST | `/api/v1/overview/plan/prefs/conflicts` | an unsaved preference set → `{day_conflicts, overlaps}`; nothing stored (`backend/api/plan_sessions.py:1762`) |
 | GET | `/api/v1/plan/thresholds` | 設定 › 閾值測試紀錄 (SP-46): `{today, thresholds, effective_thresholds, power_zones, wko5_settings}` — the same rows and effective values as `GET /api/v1/plan`, without the rest of the season plan (`backend/api/plan.py:285`); saved with `PUT /api/v1/plan/thresholds` (whole table, `backend/api/plan.py:301`) |
@@ -1522,3 +1523,6 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-38 follow-up | A TL refit re-pushes a load step only when its TL moves by ≥ 3 (`TL_RESEND_MIN`); smaller moves keep the TL last sent |
 | 2026-10-04 | feature | SP-63 follow-up | `i_volume` / `guard`: no volume-step verdict the week after a 3–5-day break without a run (`step_exempt` / `step_note`); `week_plan` adds an info note (`src: "volume"`) |
 | 2026-10-04 | feature | SP-39 follow-up | 「安排課表」 for the 90-min test: `POST /sessions` replaces that day's long run like 排入測試 |
+| 2026-10-04 | change | SP-63 follow-up | `i_volume`: the short-break exemption counts unplanned days only (the user's 不排課日期 / 休息日 don't count; `Status(blackouts=)`) |
+| 2026-10-04 | change | SP-73 follow-up | Zone 3 gate / re-entry block: 轉換期 days are not a running break (no block, no 7-day gap, no 21-day re-lock; plan-auto.spec.md) |
+| 2026-10-04 | change | SP-39 follow-up | Zone 5 UA path: no LTHR age limit; `threshold_confidence.lthr_evidence` (evidence since the LTHR date) feeds `quality_gate.lthr_invalid` (plan-auto.spec.md) |
