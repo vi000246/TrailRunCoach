@@ -124,7 +124,8 @@ def test_token_cache_is_sealed(tmp_path, monkeypatch):
     tok = '{"di_token": "abc", "di_refresh_token": "def", "di_client_id": "x"}'
     GP.save_tokens(tok)
     raw = GP.SESSION_FILE.read_text("ascii")
-    assert raw.startswith(secrets.PREFIX) and "abc" not in raw and "def" not in raw
+    # quoted: a bare "abc" turns up in ~1 of 800 random base64 tokens; '"' never does
+    assert raw.startswith(secrets.PREFIX) and '"abc"' not in raw and '"def"' not in raw
     assert GP.load_cached_tokens() == tok
     GP.forget_tokens()
     assert not GP.SESSION_FILE.exists() and GP.load_cached_tokens() is None
