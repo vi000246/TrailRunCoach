@@ -7,5 +7,18 @@
   "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": "Not enough running in the last 12 weeks: trail running for now (the original setting)",
   "近 12 週越野＋登山佔跑步時間 {share:.0%}（≥ {min:.0%} 算越野跑，推估）": "Trail + hiking were {share:.0%} of running time in the last 12 weeks (≥ {min:.0%} counts as trail running, estimate)",
   "沒有閾值配速：這段推到手錶不會有配速目標": "No threshold pace: this step reaches the watch without a pace target",
-  "不設目標": "No target"
+  "不設目標": "No target",
+  "有氧間歇": "Aerobic intervals",
+  "有氧／閾值：主課 ≤ 101% CP（心率 ≤ 102% LTHR、配速不快於閾值配速）。長 tempo 每趟 15–30 分或連續一段，巡航間歇每趟 6–15 分（更短的也算巡航）": "Aerobic / threshold: main set ≤ 101% CP (heart rate ≤ 102% LTHR, pace no faster than threshold pace). Long tempo: reps of 15–30 min or one continuous block; cruise intervals: reps of 6–15 min (shorter ones count as cruise too)",
+  "VO2max 間歇": "VO2max intervals",
+  "主課高於閾值、每趟 2–5 分、休息約 1:1；30/30、30/15 這種短趟短休也算這類": "Main set above threshold, reps of 2–5 min, rest about 1:1; short-rest intervals such as 30/30 and 30/15 belong here too",
+  "速度": "Speed",
+  "每趟 ≤ 2 分、休息 ≥ 2 倍（R、加速跑、短坡衝刺），或功率 > 116% CP": "Reps ≤ 2 min with a rest ≥ 2× the rep (R, strides, short hill sprints), or power > 116% CP",
+  "長 tempo": "Long tempo",
+  "巡航間歇": "Cruise intervals",
+  "巡航（超閾值）": "Cruise (supra-threshold)",
+  "短間歇": "Short intervals",
+  "輕鬆跑": "Easy run",
+  "強度課": "Quality session",
+  "測試": "Test"
 }

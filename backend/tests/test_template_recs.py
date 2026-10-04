@@ -45,7 +45,8 @@ def test_the_ladder_pick_is_first_on_quality_even_over_the_cap(tpl):
 
 def test_zone5_closed_never_recommends_zone5(tpl):
     shut = TR.recommend(tpl, kind="quality", minutes=60, phase="specific", z5_open=False)
-    z5 = {r["key"] for g in tpl["groups"] if g["cat"] == "quality" and g["sub"] == "z5" for r in g["rows"]}
+    z5 = {r["key"] for g in tpl["groups"] if g["cat"] == "quality" and g["sub"] in ("vo2max", "speed")
+          for r in g["rows"]}
     assert not z5 & set(keys(shut, "quality"))
     opened = TR.recommend(tpl, kind="quality", minutes=60, phase="specific", z5_open=True, rung="z5c",
                           ladder_key="v3a", ladder_reason="間歇階梯的下一步（V3）")
@@ -100,3 +101,18 @@ def test_api_recs_first_is_the_old_dropdowns_pick(monkeypatch):
         assert b["inputs"]["phase"] == "base" and b["inputs"]["terrain"] in ("road", "trail")
         hike = e.c.get(f"{API}/steps/templates/recs", params={"kind": "hike", "day": q["day"]}).json()
         assert hike["inputs"]["terrain"] == "trail" and hike["cats"]["trail"]
+
+
+def test_family_drives_the_phase_rules(tpl):
+    # 基礎期: 有氧間歇 first (no Zone 5 yet); 專項期 with Zone 5 closed: still no VO2max / 速度,
+    # and the cruise intervals stay in (閾值課不停)
+    base = TR.recommend(tpl, kind="quality", minutes=50, phase="base", rung="z3b", terrain="road")
+    fam = {r["key"]: (r.get("family") or {}) for g in tpl["groups"] for r in g["rows"]}
+    assert all(fam[k].get("id") == "aerobic" for k in keys(base, "quality"))
+    spec = TR.recommend(tpl, kind="quality", minutes=60, phase="specific", z5_open=False)
+    assert all(fam[k].get("id") == "aerobic" for k in keys(spec, "quality"))
+    assert any(fam[k].get("sub") in ("cruise", "supra") for k in keys(spec, "quality"))
+    # a library row in the current rung's family gets the 同一類 reason
+    z5 = TR.recommend(tpl, kind="quality", minutes=60, phase="specific", z5_open=True, rung="z5c",
+                      ladder_key="v3a", ladder_reason="間歇階梯的下一步（V3）")
+    assert any("同一類（VO2max 間歇）" in x["reason"] for x in z5["cats"]["quality"])
