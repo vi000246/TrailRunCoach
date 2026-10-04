@@ -13,6 +13,7 @@ from backend.engine import adapt as A
 from backend.engine import b2b as B2B
 from backend.engine import load_guard as LG
 from backend.engine import quality_gate as QG
+from backend.engine.wko5expr.dataset import date_to_day
 
 # ---------------------------------------------------------------------------
 # the lines
@@ -52,7 +53,7 @@ def test_old_five_eight_no_longer_fire_at_high_ctl():
 
 
 # ---------------------------------------------------------------------------
-# startup seed
+# PMC start values (SP-68) and the startup window
 # ---------------------------------------------------------------------------
 
 def _pmc(x, c=42.0):
@@ -63,37 +64,192 @@ def _pmc(x, c=42.0):
     return np.array(out)
 
 
-def test_daily_load_inverts_the_pmc():
-    rng = np.random.default_rng(1)
-    x = np.concatenate([np.zeros(10), rng.uniform(0, 150, 200)])
-    assert LG.daily_load(_pmc(x), 42.0) == pytest.approx(x, abs=1e-6)
+def _started(x, today, manual=None, c=42.0, s=0):
+    st = LG.pmc_start(x, s, today, manual)
+    return LG.pmc_series(x, c, s, st, "ctl"), st
+
+
+def test_start_order_manual_then_auto_then_zero():
+    x = np.concatenate([np.zeros(5), np.full(40, 60.0), np.full(40, 30.0)])
+    st = LG.pmc_start(x, 100, 100 + 84)
+    assert st["source"] == LG.AUTO and st["day"] == 105                       # the first day with TSS
+    assert st["ctl"] == st["atl"] == pytest.approx(60.0)                      # mean of its first 28 days
+    assert st["auto"] == {"day": 105, "seed": pytest.approx(60.0), "days": 28}
+    early = LG.pmc_start(x, 100, 100 + 14)                                    # only days ≤ today count
+    assert early["ctl"] == pytest.approx(60.0) and early["auto"]["days"] == 10
+    man = {"date": "2026-09-01", "ctl": 55.0, "atl": 40.0}
+    md = int(date_to_day(dt.date(2026, 9, 1)))
+    st = LG.pmc_start(x, md - 50, md + 3, man)
+    assert (st["source"], st["day"], st["ctl"], st["atl"]) == (LG.MANUAL, md, 55.0, 40.0)
+    assert st["auto"]["seed"] > 0                                             # still shown on the settings card
+    assert LG.pmc_start(x, md - 50, md - 1, man)["source"] == LG.AUTO          # dated after today: ignored
+    assert LG.pmc_start(np.zeros(30), 0, 29, None)["source"] == LG.NONE
+    assert LG.pmc_start(np.zeros(30), md - 29, md, man)["source"] == LG.MANUAL  # a manual start needs no TSS
+
+
+@pytest.mark.parametrize("v, ok", [
+    ({"date": "2026-09-01", "ctl": 55, "atl": 40}, True),
+    ({"date": "2026-09-01", "ctl": 0, "atl": 0}, True),
+    ({"date": "2026-09-31", "ctl": 55, "atl": 40}, False),
+    ({"date": "2026-09-01", "ctl": -1, "atl": 40}, False),
+    ({"date": "2026-09-01", "ctl": 55, "atl": 400}, False),
+    ({"date": "2026-09-01", "ctl": "x", "atl": 40}, False),
+    (None, False), ([], False),
+])
+def test_parse_manual(v, ok):
+    assert (LG.parse_manual(v) is not None) == ok
+
+
+def test_recur_without_a_start_is_wko5_tl():
+    x = np.concatenate([np.zeros(10), np.random.default_rng(1).uniform(0, 150, 200)])
+    assert LG.recur(x, 42.0, 0, None, 0.0) == pytest.approx(_pmc(x))
+    # a start before the series decays over the rest days in between
+    assert LG.recur(np.zeros(3), 42.0, 10, 5, 42.0)[0] == pytest.approx(42.0 * (41 / 42) ** 6)
 
 
 def test_steady_training_has_no_startup_ramp_after_the_seed():
     x = np.concatenate([np.zeros(5), np.full(120, 60.0)])
-    ctl = _pmc(x)
+    ctl, st = _started(x, 124)
+    assert ctl[5:] == pytest.approx(60.0)                                     # no filling-up
     for day in (5 + 10, 5 + 27):
-        g = LG.guard_ramp(ctl, 0, day, 42.0)
-        assert g["startup"] and g["level"] is None
+        g = LG.guard_ramp(ctl, 0, day, st)
+        assert g["startup"] and g["level"] is None and g["source"] == LG.AUTO
     for n in (28, 42, 70):
-        g = LG.guard_ramp(ctl, 0, 5 + n, 42.0)
+        g = LG.guard_ramp(ctl, 0, 5 + n, st)
         assert not g["startup"] and g["ramp"] == pytest.approx(0.0, abs=1e-9) and g["level"] is None
-        raw = ctl[5 + n] - ctl[5 + n - 7]
+        raw = _pmc(x)
         if n == 42:
-            assert raw / ctl[5 + n - 7] > 0.10              # unseeded: the PMC filling up looks like a ramp
+            assert (raw[5 + n] - raw[5 + n - 7]) / raw[5 + n - 7] > 0.10      # from 0: the PMC filling up looks like a ramp
 
 
 def test_a_real_spike_after_startup_still_fires():
     x = np.concatenate([np.full(70, 50.0), np.full(7, 150.0)])     # a 3× week after 10 steady weeks
-    g = LG.guard_ramp(_pmc(x), 0, 76, 42.0)
+    ctl, st = _started(x, 76)
+    g = LG.guard_ramp(ctl, 0, 76, st)
     assert not g["startup"] and g["level"] == LG.BLOCK
     assert g["ctl_prev"] == pytest.approx(50.0) and g["ramp"] > LG.block_line(50.0)
 
 
-def test_no_data_and_out_of_range():
-    assert LG.guard_ramp(np.zeros(30), 0, 29, 42.0)["startup"]
-    assert LG.guard_ramp(np.zeros(30), 100, 10, 42.0)["ramp"] is None
+def test_manual_start_skips_only_its_first_week():
+    md = int(date_to_day(dt.date(2026, 9, 1)))
+    s = md - 20
+    x = np.full(60, 50.0)
+    man = {"date": "2026-09-01", "ctl": 50.0, "atl": 50.0}
+    ctl, st = _started(x, md + 30, man, s=s)
+    ctl0, _ = _started(x, md + 30, None, s=s)
+    assert ctl[19] == pytest.approx(ctl0[19]) and ctl[20] == pytest.approx(50.0)   # the seed, then its value
+    g = LG.guard_ramp(ctl, s, md + 6, st)
+    assert g["startup"] and g["source"] == LG.MANUAL and g["day_n"] == 6
+    g = LG.guard_ramp(ctl, s, md + 7, st)
+    assert not g["startup"] and g["ramp"] == pytest.approx(0.0, abs=1e-9)
 
+
+def test_no_data_and_out_of_range():
+    st = LG.pmc_start(np.zeros(30), 0, 29)
+    assert LG.guard_ramp(np.zeros(30), 0, 29, st)["startup"]
+    assert LG.guard_ramp(np.zeros(30), 100, 10, st)["ramp"] is None
+    assert LG.guard_ramp(np.zeros(30), 0, 29, None)["startup"]
+
+
+# ---- the PMC builtins read the same start (charts = status = week_plan / adapt TSB) ----
+
+def _ev_ds(days=70, tss=60.0):
+    from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
+    today = dt.date(2026, 9, 29)
+    ws = [FakeWorkout(datetime(2026, 9, 29, 8) - dt.timedelta(days=i), metrics={"tss": tss}) for i in range(days)]
+    return FakeDataset(ws, today)
+
+
+def test_builtins_start_from_the_seed_tl_stays_wko5(monkeypatch):
+    from backend.engine.wko5expr.evaluator import Evaluator
+    monkeypatch.setattr(LG, "manual_start", lambda user_id=1: None)
+    ds = _ev_ds()
+    ev = Evaluator(ds, ds.today - 60, ds.today)
+    ctl, atl, tsb = ev.evaluate("ctl"), ev.evaluate("atl"), ev.evaluate("tsb")
+    raw = ev.evaluate("tl(tss, ctlconstant)")
+    d0 = ds.first_day
+    assert ctl.at(d0) == pytest.approx(60.0) and atl.at(d0) == pytest.approx(60.0)
+    assert tsb.at(ds.today) == pytest.approx(0.0, abs=1e-9)                   # steady: no false −TSB
+    assert raw.at(d0) == pytest.approx(60.0 / 42)                             # tl() unchanged
+    c2, a2, st = ev.pmc()
+    assert st["source"] == LG.AUTO and c2.at(ds.today) == pytest.approx(ctl.at(ds.today))
+
+
+def test_builtins_take_the_manual_start(monkeypatch):
+    from backend.engine.wko5expr.evaluator import Evaluator
+    monkeypatch.setattr(LG, "manual_start", lambda user_id=1: {"date": "2026-09-01", "ctl": 30.0, "atl": 80.0})
+    ds = _ev_ds()
+    ev = Evaluator(ds, ds.today - 60, ds.today)
+    md = int(date_to_day(dt.date(2026, 9, 1)))
+    ctl, atl = ev.evaluate("ctl"), ev.evaluate("atl")
+    assert ctl.at(md) == pytest.approx(30.0 + (60.0 - 30.0) / 42)
+    assert atl.at(md) == pytest.approx(80.0 + (60.0 - 80.0) / 7)
+    assert ctl.at(md - 1) == pytest.approx(60.0)                              # before its date: the seed
+    # a sport-filtered evaluator is not the whole-athlete PMC: the automatic seed
+    ev_run = Evaluator(ds, ds.today - 60, ds.today, sports={"run"})
+    assert ev_run.evaluate("ctl").at(md) == pytest.approx(60.0)
+
+
+def test_new_user_no_false_recovery_week_in_the_startup_window(monkeypatch):
+    """SP-63 Q3: week_plan's TSB < −30 → recovery week (and so load.tsb_today for adapt rule
+    E) reads the started PMC. 2.5 weeks of steady data: TSB ≈ −12, not a recovery week; the
+    same weeks from a cold 0 start (set by hand) give TSB −40 and the recovery week."""
+    from backend.tests import test_b2b as TB
+    today = dt.date(2026, 8, 19)
+    monkeypatch.setattr(LG, "manual_start", lambda user_id=1: None)
+    _, _, st, wp = TB._week(today=today, last_week="b2b", tph=1.2, b2b_tph=1.2)
+    assert wp["load"]["tsb_today"] > -20 and wp["mode"] != "recovery_week"
+    assert not any("TSB" in w for w in wp["why"])
+    form = next(i for i in st.indicators if i.id == "form")
+    assert form.value > -30                                                   # status 狀況 TSB agrees
+    monkeypatch.setattr(LG, "manual_start", lambda user_id=1: {"date": "2026-08-03", "ctl": 0.0, "atl": 0.0})
+    _, _, _, cold = TB._week(today=today, last_week="b2b", tph=1.2, b2b_tph=1.2)
+    assert cold["load"]["tsb_today"] < -30 and cold["mode"] == "recovery_week"
+
+def test_settings_key_validates():
+    from backend.settings.repository import DEFAULTS, validate
+    assert DEFAULTS[LG.PMC_START_KEY] is None
+    validate(LG.PMC_START_KEY, None)
+    validate(LG.PMC_START_KEY, {"date": "2026-09-01", "ctl": 55.0, "atl": 40.0})
+    with pytest.raises(ValueError):
+        validate(LG.PMC_START_KEY, {"date": "2026-09-01", "ctl": 500.0, "atl": 40.0})
+
+
+def test_pmc_start_api(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api import plan as API
+    from backend.db.database import get_db
+    from backend.settings.repository import SettingsRepository
+    from backend.tests.test_coros_workouts import make_db, run
+    db = run(make_db(logged_in=False))
+
+    async def fake_db():
+        yield db
+    stored = {}
+    monkeypatch.setattr(LG, "manual_start", lambda user_id=1: LG.parse_manual(stored.get("v")))
+    monkeypatch.setattr(API, "_overview_dataset", lambda: _ev_ds())
+    monkeypatch.setattr(API, "today_local", lambda *a, **k: dt.date(2026, 9, 29))
+    app = FastAPI()
+    app.include_router(API.router)
+    app.dependency_overrides[get_db] = fake_db
+    c = TestClient(app)
+    r = c.get("/api/v1/plan/pmc-start").json()
+    assert r["source"] == LG.AUTO and r["effective"]["ctl"] == 60.0 and r["manual"] is None
+    assert r["auto"] == {"date": "2026-07-22", "seed": 60.0, "days": 28, "final": True}
+    assert r["now"]["tsb"] == pytest.approx(0.0, abs=0.05)
+    for bad in ({"date": "2026-09-01", "ctl": 400, "atl": 40}, {"date": "2026-09-01", "ctl": 50},
+                {"date": "2026-10-01", "ctl": 50, "atl": 40}):                    # after today
+        assert c.put("/api/v1/plan/pmc-start", json=bad).status_code == 400
+    assert c.put("/api/v1/plan/pmc-start", json={"date": "2026-09-01", "ctl": 30.04, "atl": 80}).status_code == 200
+    stored["v"] = run(SettingsRepository(db).get(LG.PMC_START_KEY))
+    assert stored["v"] == {"date": "2026-09-01", "ctl": 30.0, "atl": 80.0}
+    r = c.get("/api/v1/plan/pmc-start").json()
+    assert r["source"] == LG.MANUAL and r["effective"] == {"date": "2026-09-01", "ctl": 30.0, "atl": 80.0}
+    assert r["auto"]["seed"] == 60.0                                          # still shown
+    assert c.put("/api/v1/plan/pmc-start", json={"clear": True}).status_code == 200
+    assert run(SettingsRepository(db).get(LG.PMC_START_KEY)) is None
 
 # ---------------------------------------------------------------------------
 # weekly volume step

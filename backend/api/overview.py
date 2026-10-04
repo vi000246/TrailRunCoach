@@ -50,7 +50,10 @@ def _status(ds, today: dt.date) -> Status:
                   for s in test_sessions())
     from backend import tenancy
     from backend.engine import hr_profile as HRP          # 課表心率區間 (the week plan's HR targets)
-    key = (tenancy.current().id, id(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp())
+    from backend.engine import load_guard as LG             # 起始 CTL／ATL (SP-68): the PMC starts from it
+    pmc0 = LG.manual_start()
+    key = (tenancy.current().id, id(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp(),
+           None if pmc0 is None else tuple(sorted(pmc0.items())))
     with _lock:
         hit = _status_cache.get(key)
         if hit is not None:

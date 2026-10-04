@@ -87,6 +87,11 @@ DEFAULTS: dict[str, Any] = {
     # login / sync — {max_hr, rest_hr, lthr, ratios: {lthr, hrr, hrmax}, hr_zone_type, at};
     # None = never read. Max / rest HR the user enters are dated plan thresholds (mhr / rhr).
     "athlete.coros_profile": None,
+    # 起始 CTL／ATL (engine/load_guard.py PMC_START_KEY, SP-68): {date: ISO, ctl, atl} — the
+    # PMC's values at the start of that date (charts, status, guardrails); None = automatic
+    # (the first 4 weeks' mean daily TSS). Replaces athlete_settings.initial_ctl_run /
+    # initial_atl_run (React app, no longer read)
+    "athlete.pmc_start": None,
     # 課表心率區間 (engine/hr_profile.py): lthr (COROS % LTHR, default) | hrr | hrmax — the
     # 課表's HR targets only; the HR-zone charts keep their own selector
     "plan.hr_zone_model": "lthr",
@@ -351,6 +356,10 @@ def validate(key: str, value: Any) -> None:
             raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
     if key == "athlete.coros_profile" and value is not None and not isinstance(value, dict):
         raise ValueError("athlete.coros_profile must be an object or null")
+    if key == "athlete.pmc_start" and value is not None:
+        from backend.engine.load_guard import parse_manual
+        if parse_manual(value) is None:
+            raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
