@@ -178,33 +178,41 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     `auto` → `ua_gap` + `friel_drift` when the plan has a measured AeT row that is **valid**
     (B3, `unsourced-rules.md`: the aggregated drift estimate's SE ≤ 3 bpm and no shift > 5 bpm
     over the last 6 points — `drift_agg.aet_validity`, 推估; no fixed 16-week expiry; stale after
-    a break ≥ 4 weeks) (`aet_info`, `backend/engine/quality_gate.py:173`) and LTHR is not WKO5's default
-    (`lthr_info`, `backend/engine/quality_gate.py:185`), else `none`. `ua_gap`: LTHR / AeT − 1
+    a break ≥ 4 weeks) (`aet_info`, `backend/engine/quality_gate.py:233`) and LTHR is not WKO5's default
+    (`lthr_info`, `backend/engine/quality_gate.py:245`), else `none`. `ua_gap`: LTHR / AeT − 1
     ≤ 10 %; `friel_drift`: one run in 8 weeks, avg HR AeT−5…AeT+3, ≥ 70 min, fair drift < 5 %
-    (`friel_check`, `backend/engine/quality_gate.py:254`); `xu_drift`: flat ≥ 90-min run,
+    (`friel_check`, `backend/engine/quality_gate.py:314`); `xu_drift`: flat ≥ 90-min run,
     (HR@90′ − HR@10′) / HR@10′ < 10 % (`xu_drift_of` / `xu_check`,
-    `backend/engine/quality_gate.py:283`, `backend/engine/quality_gate.py:302`); `plateau`: ≥ 8
+    `backend/engine/quality_gate.py:343`, `backend/engine/quality_gate.py:362`); `plateau`: ≥ 8
     base weeks and EF change < +2 %; `weeks`: > N base weeks (evaluated per projected Monday);
     `none`: guardrails only. States: unlocked / locked (data there, criterion not met) /
     missing. **Forced mode with missing data → `fallback`**: i_gate WATCH with the reason and
     the guardrail plan (our own choice: never a permanent lock).
-  - **Guardrails** (`guard`, `backend/engine/quality_gate.py:499`), base phase, every mode:
-    low-intensity time share < 75 % (or run power < 80 % CP share < 75 %) → none; CTL ramp ≥ 5
-    → threshold only, ≥ 8 → none (Friel, coach); last week's step > 20 % → none (Nielsen 2014,
-    Damsted 2019), 10–20 % → hold the dose (推估); TSB −30…−20 → hold (Friel / TrainingPeaks).
-    Projected weeks keep only the intensity block.
-  - **Two gates** (台灣教練): Zone 3 whenever the guardrails pass — a locked
-    method no longer stops it; Zone 5 only while the base is confirmed (`gate["z5"]`,
+  - **Guardrails** (`guard`, `backend/engine/quality_gate.py:591`), base phase, every mode:
+    low-intensity time share < 75 % (or run power < 80 % CP share < 75 %) → no Zone 5, Zone 3 goes
+    on with a 「輕鬆跑心率偏高」 warning note (SP-31: 75 % is the floor, the base phase's ≥ 90 % a
+    target; the AeT is often estimated, climbs inflate HR); CTL ramp ≥ 5 → threshold only, ≥ 8 →
+    none (Friel, coach); last week's step > 20 % → none (Nielsen 2014, Damsted 2019), 10–20 % →
+    hold the dose (推估); TSB −30…−20 → hold (Friel / TrainingPeaks). Projected weeks keep only the
+    intensity block (Zone 5 only).
+  - **Two gates, two tracks** (SP-31): Zone 3 once its gate is open (`z3_gate`,
+    `backend/engine/quality_gate.py:1151`: 4 complete weeks with ≥ 3 runs and no 7-day gap —
+    sticky, a ≥ 21-day break re-locks —, the 90-min test, or a measured UA gap; all 推估 but the
+    tests) and the guardrails pass; Zone 5 only while the base is confirmed (`gate["z5"]`,
     `base_check.z5_status`: one of three tests done and passed — the 90-min test, a measured AeT
     passing the UA gap, or the Friel drift near a measured AeT; no stable-weekly-volume
     precondition since 2026-10-03 (no source);
-    maintenance and re-entry rules in plan-auto.spec.md).
-  - **Dose** (`Z3` / `Z5` / `LADDER`, `dose_spec(step, z5_open)`; `dose_step`): step = 達標
-    sessions in the last 8 weeks (`dose_history`, counting ≥ 4 short reps at ≥ 95 % CP with
-    `count_reps`): 閾值 3×6′ → 3×8′ → 2×12′ at 90–95 % CP (`interval_library` z3a–z3c), then
-    (Zone 5 open) 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 / T+ rotating with T+ (near-threshold)
-    every 3rd week (`backend/engine/quality_gate.py:39`); Zone 5 closed → the top Zone 3 rungs and
-    the step waits. Rung details in plan-auto.spec.md.
+    maintenance and re-entry rules in plan-auto.spec.md) and 3 Zone 3 sessions 達標.
+  - **Dose** (`Z3` / `CRUISE` / `Z5`, `z3_spec` / `z5_spec`; `dose_tracks` → `dose_step` per
+    track): each track's step = its 達標 sessions in the last 8 weeks (`dose_history` rows carry
+    `track`): Zone 3 2×15′ → 3×12′ → 2×20′ → 1×30′ at 88–95 % CP (`interval_library` a1–a4), then
+    A3 / A4 / T+; Zone 5 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4. Over 10 % of the week (5 % the
+    first time) the Zone 3 rung becomes its 巡航版 T1–T3 (the old z3a–z3c), which still counts;
+    Zone 3 + Zone 5 ≤ 20 % of the week (`quality_sessions`, `backend/engine/overview.py:538`).
+    Weekly: `week_decision(..., n)` (`backend/engine/quality_gate.py:1910`) — 課表偏好 2 a week =
+    one of each (`quality_per_week`, `backend/engine/overview.py:644`), 1 a week with both open
+    alternates 1:1 (A race road ≤ 10 km) or 2:1 (`track_ratio`, `backend/engine/quality_gate.py:1258`).
+    Rung details in plan-auto.spec.md.
     The step moves by the progression state machine (`interval_outcome` / `dose_step`,
     plan-auto.spec.md): 達標 forward, 邊界 / 無法判定 repeat, 未適應 rest +1 min then back one,
     first rep short = target −5 %.
@@ -216,13 +224,19 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     for a reason (B3 / the Z5 lifecycle), its protocol from `plan.prefs.aet_test_protocol`
     (auto = 徐國峰 90′ on the weekend in place of the long run, UA 40′ backup); a suggestion, not
     a session (above). Gate session text keeps the COROS / trim tokens
-    (`session`, `backend/engine/quality_gate.py:1570`); the detail prefix names the rule
-    (`prefix`, `backend/engine/quality_gate.py:1606`). In guardrail mode `plan_prefs.shape`
-    gets `quality_cap=1` (`backend/engine/overview.py:927`).
-  - Outside base: intensity and drift not bad (unchanged).
+    (`session`, `backend/engine/quality_gate.py:2066`); the detail prefix names the rule
+    (`prefix`, `backend/engine/quality_gate.py:2102`). In guardrail mode `plan_prefs.shape`
+    gets `quality_cap=1` (`backend/engine/overview.py:1058`).
+  - 專項期: the same two-track pick; road Zone 3 = 閾值節奏 2×15′ (`ROAD_SPECIFIC_Q`), trail Zone 5 =
+    爬坡間歇 5×4′, else the ladder; drift bad → none, intensity bad → no Zone 5.
+  - **Why no Zone 3** (SP-31): `week_decision`'s `z3_note` (the gate with its progress, a
+    guardrail's verdict, 「本週輪到 5 區」, the recovery week) is a week note (`src: z3`); the
+    low-share warning is `src: intensity`, the Zone 3 / week-total caps `src: z3` / `quality_share`.
   - Returned as `quality_gate` (the gate dict + `levels`, `allowed`, `this_week`,
-    `aet_test`) for the projection (`backend/engine/overview.py:1222`).
-- Taper: one short intensity 4×3'. Event week: the race.
+    `this_week_tracks`, `quality_n`, `aet_test`) for the projection
+    (`backend/engine/overview.py:1353`).
+- Taper: one session by the two-track pick — Zone 3 節奏 2×8′ (88–95 % CP), Zone 5 or no track
+  open the short intensity 4×3'. Event week: the race.
 - Strength ×2 in base / transition / recovery or when the `strength` indicator is bad / watch,
   else ×1 (not counted in the hours).
 - Easy runs fill the remaining minutes in 40–60 min sessions; in base the first one carries
@@ -363,14 +377,16 @@ cool-down 5 min, HR ≤ AeT, with the safety text in the description. 課表 pag
 chips, `heat_passive` in the legend, no push button for it.
 
 **Application order** (`shape()`, `backend/engine/plan_prefs.py:465`, then `place()`,
-`backend/engine/plan_prefs.py:662`), in `week_plan` and every projected week:
+`backend/engine/plan_prefs.py:674`), in `week_plan` and every projected week:
 1. The target hours are computed as before (CTL ramp, ≤ 10 % step, 3:1); `weekly_hours` only
    lowers them.
-2. Quality count: 0 removes quality and the CP test (with a note); 2 duplicates this week's
-   quality session as `quality2` — only when the caller's gate allows quality at all, and not
-   in the 間歇門檻's guardrail mode (`Ctx.quality_cap`, `backend/engine/plan_prefs.py:387`). Quality terrain
+2. Quality count: 0 removes quality and the CP test (with a note); 2 → `week_plan` already
+   planned one Zone 3 + one Zone 5 (`quality` / `quality2`) when both tracks are open; with one
+   track it duplicates that session as `quality2` — only when the caller's gate allows quality
+   at all, not in the 間歇門檻's guardrail mode (`Ctx.quality_cap`,
+   `backend/engine/plan_prefs.py:387`), and not when the two would pass 20 % of the week (a note). Quality terrain
    adds （平路）/（坡道） and rewrites the detail (a library variant carries its own terrain); the
-   目標依據 rewrites the target text (`target_policy`, `backend/engine/plan_prefs.py:490`).
+   目標依據 rewrites the target text (`target_policy`, `backend/engine/plan_prefs.py:503`).
 3. **Caps**: the long session is capped at the long-day cap (同平日 = weekday cap). A quality
    session over the weekday cap is shortened — warm-up 15 → 10, cool-down 10 → 5 min, then one
    rep fewer (never below 2) — with title / detail rewritten so the COROS step builder still
@@ -557,22 +573,23 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:36`):
   week after 3 build weeks; taper 40–50 % of the 6-week mean; event 30 %; recovery 50 %;
   transition 65 % of the 4-week mean. A weekly-hours preference caps it
   (`backend/engine/projection.py:405`).
-- Sessions (`week_sessions`, `backend/engine/projection.py:104`): the same template (long, one
-  quality, strength, easy fill) placed by `_place` (`backend/engine/projection.py:245`), or
-  shaped and placed by the preferences. Base sessions come from the 間歇門檻 per week
-  (`_bq`, `backend/engine/projection.py:234`), a base recovery week gets the fartlek
-  (`backend/engine/projection.py:172`), and a 專項期 week without a confirmed Zone 5 gets the
-  Zone 3 ladder (`backend/engine/projection.py:444`). Tests are never projected: a due AeT test
-  only moves the cadence's "last" date (`backend/engine/projection.py:440`). The 主要訓練項目,
+- Sessions (`week_sessions`, `backend/engine/projection.py:104`): the same template (long, the
+  week's intervals, strength, easy fill) placed by `_place` (`backend/engine/projection.py:253`), or
+  shaped and placed by the preferences. Base / 專項期 / 減量期 intervals come from the 間歇門檻
+  per week through the same two-track pick as `week_plan` (`overview.quality_sessions`,
+  `backend/engine/projection.py:468`; `_bq`, `backend/engine/projection.py:241`), a base recovery
+  week gets the fartlek (`backend/engine/projection.py:179`). Tests are never projected: a due
+  AeT test only moves the cadence's "last" date (`backend/engine/projection.py:464`). The 主要訓練項目,
   B2B, 專項期, 陡坡健走 and 熱適應 hooks run per week too.
 - Whether a projected week gets a quality session is decided per week, for that week's phase,
   mode and Monday (`allow_quality` → `quality_gate.week_decision`,
-  `backend/engine/projection.py:318`): the method state from this week (`weeks` mode
-  re-evaluated per Monday), only the intensity guardrail carried forward, and the dose step
-  advanced once per projected interval week (this week's own interval counts as a step).
+  `backend/engine/projection.py:326`): the method state from this week (`weeks` mode and the
+  Zone 3 gate's consistency streak re-evaluated per Monday), only the intensity guardrail
+  carried forward (Zone 5 only), and each track's step (`{"z3", "z5", "met"}`) advanced once per
+  projected interval of that track (this week's own intervals count).
   A CP-test week no longer carries into later weeks; a `cur` without the new gate — or with
-  the old `{levels, streak_ok}` shape — becomes a no-method gate (intensity bad blocks)
-  (`_gate_inputs`, `backend/engine/projection.py:296`).
+  the old `{levels, streak_ok}` shape — becomes a no-method gate (intensity bad keeps Zone 5
+  out) (`_gate_inputs`, `backend/engine/projection.py:304`).
 - CTL / ATL roll forward with the athlete's constants (`ds.athlete.ctlconstant` /
   `atlconstant`, `backend/engine/projection.py:523`); a session `_place` left without a day is
   kept out of the date filter.
@@ -1195,3 +1212,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | code-sync | N/A | Synced ~140 commits: dashboard 總覽 (KPI tiles, 90-day PMC without projection, day-cards, Z5 card renamed, 待辦 at the bottom, B2B card); tests / B2B / race sim are suggestions; 主要訓練項目, 專項期, B2B, 陡坡健走, 輕鬆跑上限 (課表心率區間) in week_plan; LSD label, kind hike = 越野跑, 登山 long terrain dropped; prefs redesign (偏好的星期, 目標依據, warm-up / cool-down, B2B switch); 休息日, expired-session delete, manual link, compliance + 課表統計 page, context menu; push via the workout-sync provider, MP / pace steps; i_drift plain words, i_testing event-driven; AeT test by reason (no cadence, not projected); new API rows; all file:line pointers refreshed |
 | 2026-10-04 | feat/sp-34-35-schedule | SP-34, SP-35 | 課表: ⟳ 從 COROS 抓活動 button (資料來源 only, shared `syncrun.js`, reload + one re-poll for 自動調整); push button renamed 推送到手錶; push status drawn as a watch (neutral when up to date, coloured only for 需更新／失敗), ✓ reserved for 完成, legend split into 完成 / 手錶 groups |
 | 2026-10-04 | feat/sp-54-ics-feed | SP-54 | 課表訂閱: `/share/calendar/<token>.ics` ICS feed of the stored plan (all-day events, ✓ / ✗, steps + deep link, −14 / +56 days), `plan.calendar` token with 重設 / 停用 and 404 on mismatch, owner only (not mounted in the demo); `plan_sessions.updated_at` moves only on a real change (LAST-MODIFIED / SEQUENCE); settings page section with Google / iPhone steps (zh-TW + en) |
+| 2026-10-04 | feature | SP-31 | Week plan / projection: two interval tracks (Zone 3 A1–A4 + 巡航版 fallback, Zone 5 V1–V4) with the Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap; 90-min test; UA gap; ≥ 21-day break re-locks); low-intensity share blocks Zone 5 only (warning note, 底線 75% / 目標 90% labels); Zone 3 ≤ 10 % and Zone 3 + Zone 5 ≤ 20 % of the week; 2 a week = one of each; 專項期 / 減量期 two-track sessions; z3 / intensity / quality_share notes |

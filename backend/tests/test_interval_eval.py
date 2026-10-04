@@ -86,7 +86,8 @@ def test_stopping_early_is_judged_against_the_chosen_variant():
 
 def test_the_verdict_moves_the_ladder_only_with_enough_time_in_zone():
     good = [{"power": 240.0}] * 3
-    h = {"bouts": good, "cp": CP, "variant_key": "t1a", "rung_key": "z3a", "equiv": True, "tiz_ratio": 0.7}
+    # the Zone 3 track's first rung (SP-31: A1 2×15′ — T1 3×6′ is the 巡航版 now)
+    h = {"bouts": good, "cp": CP, "variant_key": "a1a", "rung_key": "a1", "equiv": True, "tiz_ratio": 0.7}
     d = QG.dose_step([h])
     assert h["outcome"] == "border" and d["step"] == 0 and "目標區時間只有計畫的 70%" in d["note"]
     assert QG.dose_step([{**h, "tiz_ratio": 0.95}])["step"] == 1

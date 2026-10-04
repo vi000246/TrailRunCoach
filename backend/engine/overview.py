@@ -468,33 +468,62 @@ def _hard_seconds(ds: Dataset, ws: list[Workout], b: int, e: int, exprs=None) ->
 
 def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs=None,
                   history=None, mountain: bool = False, cap: Optional[float] = None,
-                  alt_caps: Optional[list] = None) -> dict:
-    """The base-phase interval for the gate's decision (engine/quality_gate.py).
-    A ladder step is a library variant (engine/interval_library.fit): the
-    standard full-length session when the day's `cap` (課表偏好 weekday cap;
-    None = no cap) allows it, else an equivalent shorter one / fewer reps / another
-    day / the step before (§C5.3). `history`: the stored variants done before this
-    week (rotation). Recovery fartlek / sub / Zone 3 keep the old builder."""
+                  alt_caps: Optional[list] = None, notes: Optional[list] = None) -> dict:
+    """The base-phase interval for one of the gate's decision items (engine/quality_gate.py
+    week_decision: {"track", "spec", "adjust", "first"}). A ladder step is a library variant
+    (engine/interval_library.fit): the standard full-length session when the day's `cap` (課表偏好
+    weekday cap; None = no cap) allows it, else an equivalent shorter one / fewer reps / another
+    day / the step before (§C5.3). A Zone 3 track rung whose time in zone is over the week's
+    Zone 3 budget (quality_gate.z3_budget_min: 10 % of `hours`, 5 % for the first session) becomes
+    the 巡航版 T1–T3 (quality_gate.cruise_for) — it still counts as the rung's session, and a note
+    says why (`notes`). `history`: the stored variants done before this week (rotation).
+    Recovery fartlek / sub / Zone 3 keep the old builder."""
     from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
     spec = dec["spec"]
+    track = dec.get("track")
     pre = "" if spec is QG.RECOVERY else QG.prefix(gate)
     dose = gate.get("dose") or {}
+    if isinstance(dose.get(track), dict):
+        dose = dose[track]                      # the track's own state machine (SP-31)
     if dose.get("faded") and spec not in (QG.RECOVERY, QG.SUB):
         # the progression state machine's verdict (quality_gate.dose_step)
         pre = (dose.get("note") or "上次間歇沒有達標：") + pre
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
     tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}
     if spec is QG.SUB:
-        # a ramp week (CTL ≥ +5): the first rung's content, never a ladder step (neutral)
+        # a ramp week (CTL ≥ +5): T1's content, never a ladder step (neutral)
         f = IL.fit("z3a", cap, (), prefs, mountain)
         s = IL.session_for({**f, "equiv": False, "progress": False, "rung": "sub",
                             "reason": "CTL 每週 ≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
         s["title"] = QG.SUB[1]
         s["source"] = QG.source(gate, spec)
         return s
-    if spec[0] in IL.LIBRARY:
-        f = IL.fit(spec[0], cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"))
+    rung = spec[0]
+    budget = QG.z3_budget_min(hours, bool(dec.get("first"))) if rung in IL.Z3_TRACK else None
+    what = f"週量的 {'5%，3 區第一堂' if dec.get('first') else '10%'}"
+    if budget is not None and dec.get("budget") is not None and dec["budget"] < budget:
+        # the week's interval total (quality_sessions: Zone 3 + Zone 5 ≤ 20 %) leaves less
+        budget, what = float(dec["budget"]), f"間歇總量 ≤ 週量 {QG.QUALITY_SHARE_MAX:.0%} 扣掉 5 區"
+    canon = IL.canonical(rung) if rung in IL.LIBRARY else None
+    if budget is not None and canon is not None and IL.tiz_s(canon) / 60.0 > budget + 1e-6:
+        # the week's Zone 3 cap (Daniels ≤ 10 %; UA ~5 % to start): the 巡航版 of the same position
+        cr = QG.cruise_for(rung, budget)
+        f = IL.fit(cr, cap, history or (), prefs, mountain, alt_caps)
+        counts = f["action"] in ("ok", "move") and bool(f["equiv"])
+        why = (f"本週 {hours:.1f} h：3 區上限 {budget:.0f} 分（{what}）"
+               f"< {IL.RUNG_NAME[rung]} {IL.structure(canon)} 的 {IL.tiz_s(canon) / 60:.0f} 分 → 巡航版 "
+               f"{IL.structure(f['variant'])}" + ("（算這一階）" if counts else ""))
+        s = IL.session_for({**f, "rung": rung if counts else f.get("rung"), "equiv": counts, "progress": counts,
+                            "reason": f"{why}；{f['reason']}"}, tth, pre, lthr_default, prefs, swap="cap")
+        if f["action"] == "move" and f.get("move_wd") is not None:
+            s["prefer_days"] = [f["move_wd"]]
+        s["source"] = QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",))
+        if notes is not None:
+            notes.append({"level": "info", "src": "z3", "text": why + "（Daniels：T ≤ 週量 10%；UA：起步約 5%）"})
+        return s
+    if rung in IL.LIBRARY:
+        f = IL.fit(rung, cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"))
         by_cap = f["level"] != "full" or f["action"] != "ok" or f.get("reps") is not None
         s = IL.session_for(f, tth, pre, lthr_default, prefs, swap="cap" if by_cap else "auto")
         if f["action"] == "move" and f.get("move_wd") is not None:
@@ -504,6 +533,92 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
     s = QG.session(spec, tth, pre, hours, lthr_default)
     s["source"] = QG.source(gate, spec)
     return s
+
+
+def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hours: Optional[float], prefs=None,
+                     history=None, mountain: bool = False, road: bool = False, cap: Optional[float] = None,
+                     alt_caps: Optional[list] = None, notes: Optional[list] = None) -> list[dict]:
+    """The week's interval sessions (Session kwargs, ids quality / quality2) for week_decision's
+    items (SP-31: one per track). Base: the track's ladder rung (_gate_session). 專項期: the
+    track's specific session — road Zone 3 = ROAD_SPECIFIC_Q 2×15′, trail Zone 5 = the 5×4′ hill
+    set; the other two are the ladder (trail Zone 3 uphill versions allowed). 減量期: Zone 3 =
+    TAPER_Z3, Zone 5 = the 4×3′ short intensity — which a taper week also keeps when neither
+    track is open (the session predates the gates). Shared by week_plan and projection."""
+    from backend.engine import quality_gate as QG
+    items = dec.get("items") or []
+    if kind == "taper" and not items:
+        items = [{"track": None}]
+    # the week's interval total (SP-31, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in zone ≤
+    # QUALITY_SHARE_MAX of the planned running time — Zone 5 first, Zone 3 gets what is left
+    total = QG.QUALITY_SHARE_MAX * hours * 60.0 if hours and kind in ("base", "specific") else None
+    built: dict = {}
+    for i in sorted(range(len(items)), key=lambda k: 0 if items[k].get("track") == "z5" else 1):
+        it = items[i]
+        t = it.get("track")
+        used = sum(session_tiz_min(x) for x in built.values())
+        left = None if total is None else max(0.0, total - used)
+        if kind == "specific" and t == "z3" and road:
+            s = dict(ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
+        elif kind == "specific" and t == "z5" and not road:
+            s = dict(TRAIL_SPECIFIC_Z5, target=tgt.get("supra", ""))
+        elif kind == "taper":
+            s = dict(TAPER_Z3 if t == "z3" else TAPER_Q, target=tgt.get("threshold", ""))
+        else:
+            s = _gate_session(gate, {**it, "budget": left} if t == "z3" else it, th, hours, prefs, history, mountain,
+                              cap, alt_caps, notes)
+        if left is not None and session_tiz_min(s) > left + 1e-6:
+            s = _shorten(s, left, total, hours, th, gate, prefs, notes)
+        built[i] = s
+    out = []
+    for i in range(len(items)):
+        s = built[i]
+        s["id"] = "quality" if i == 0 else f"quality{i + 1}"
+        out.append(s)
+    return out
+
+
+def session_tiz_min(s: dict) -> float:
+    """Planned time in zone (minutes) of an interval session: its library variant's Σ work, else
+    the title's 「N×M 分」 / 「連續 M 分」; 0 when unknown (the recovery fartlek, a test)."""
+    import re
+    from backend.engine import interval_library as IL
+    if s.get("variant_key"):
+        v = IL.resolve(s["variant_key"], s.get("variant_reps"), s.get("variant_adj"))
+        if v is not None:
+            return IL.tiz_s(v) / 60.0
+    m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*分", s.get("title") or "")
+    if m:
+        return int(m.group(1)) * int(m.group(2)) * 1.0
+    m = re.search(r"連續\s*(\d+)\s*分", s.get("title") or "")
+    return float(m.group(1)) if m else 0.0
+
+
+def _shorten(s: dict, left: float, total: float, hours: float, th: dict, gate: dict, prefs=None,
+             notes: Optional[list] = None) -> dict:
+    """An interval over the week's interval total (QUALITY_SHARE_MAX): fewer reps of its variant
+    (floor interval_library.MIN_REPS) as a 縮量版 — it doesn't move the rung — or, when it can't be
+    cut (a fixed / continuous session), kept as it is; a note says so either way (never dropped)."""
+    from backend.engine import interval_library as IL
+    from backend.engine import quality_gate as QG
+    v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj")) if s.get("variant_key") else None
+    head = (f"本週 {hours:.1f} h：間歇總量上限 {total:.0f} 分（週量 {QG.QUALITY_SHARE_MAX:.0%}，80/20；推估）"
+            f"，{s['title']} 的 {session_tiz_min(s):.0f} 分放不下")
+    if v is None or v.n <= 1 or v.sets > 1:
+        if notes is not None:
+            notes.append({"level": "info", "src": "quality_share", "text": head + "：照排，這週其他輕鬆跑別加速"})
+        return s
+    floor = IL.MIN_REPS.get(v.cls, 2)
+    n = max(floor, min(v.n - 1, int(left * 60 // max(1, max(v.works)))))
+    r = IL.with_reps(v, n)
+    why = f"{head} → 減成 {n} 趟（縮量版，不算進階）"
+    out = IL.session_for({"variant": r, "level": s.get("variant_blocks") or "std", "reps": n, "equiv": False,
+                          "progress": False, "reason": why, "rung": s.get("rung_key")},
+                         {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}, "",
+                         bool((gate.get("lthr") or {}).get("default")), prefs, swap="cap")
+    out["source"] = f"{s.get('source') or ''}；{QG.SRC_Z3['share']}"
+    if notes is not None:
+        notes.append({"level": "info", "src": "quality_share", "text": why})
+    return out
 
 
 def variant_history(before: dt.date, gate: Optional[dict] = None) -> list[dict]:
@@ -524,6 +639,15 @@ def variant_history(before: dt.date, gate: Optional[dict] = None) -> list[dict]:
         out.append({"day": r["day"], "rung_key": r.get("rung_key"), "variant_key": r.get("variant_key"),
                     "state": "done", "outcome": out_by_idx.get(idx), "swap": r.get("swap")})
     return out
+
+
+def quality_per_week(PR, kind: str, mode: str, gate: Optional[dict]) -> int:
+    """Intervals a week for week_decision: 2 when 課表偏好 每週品質課 = 2 (base / 專項期, not a recovery
+    week, not the base phase's guardrail mode — quality_gate.guardrail_mode caps it at 1), else 1."""
+    from backend.engine import quality_gate as QG
+    if PR is None or getattr(PR, "quality", None) != 2 or mode == "recovery_week" or kind not in ("base", "specific"):
+        return 1
+    return 1 if kind == "base" and QG.guardrail_mode(gate) else 2
 
 
 def quality_caps(prefs, long_wd: int) -> tuple[Optional[float], list]:
@@ -573,6 +697,17 @@ def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rat
 ROAD_SPECIFIC_Q = dict(id="quality", kind="quality", title="閾值節奏 2×15 分（平路）", minutes=60, terrain="road",
                        detail="平路或跑步機；休 3 分慢跑；暖身 15 分、緩和 10 分",
                        source=f"{SRC_PFITZ}（乳酸閾值跑）；{SRC_DANIELS}（T 配速）", tss=70.0)
+# the 專項期 Zone 5 session for 越野 (the Zone 5 track's trail variant, SP-31)
+TRAIL_SPECIFIC_Z5 = dict(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
+                         detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
+                         source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
+# 減量期: the old short-intensity session (the Zone 5 side / no track open) and a Zone 3 one — the
+# volume about halved, the intensity kept (Bosquet 2007; Daniels Phase IV keeps T running)
+TAPER_Q = dict(id="quality", kind="quality", title="短強度 4×3 分", minutes=45,
+               detail="保留強度、不累積疲勞（98–102% CP）", source=SRC_BOSQUET, tss=45 / 60 * 65)
+TAPER_Z3 = dict(id="quality", kind="quality", title="節奏 2×8 分", minutes=45,
+                detail="保留強度、量減半（88–95% CP）；休 2 分慢跑；暖身 15 分、緩和 10 分",
+                source=f"{SRC_BOSQUET}；{SRC_DANIELS}（Phase IV 保留 T）", tss=45 / 60 * 62)
 # the base-phase strides for 路跑 (instead of hill sprints): title, detail, source suffixes
 ROAD_STRIDES = ("＋加速跑 6×20 秒", "；最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來",
                 f"；{SRC_DANIELS} strides")
@@ -800,7 +935,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 "guard": QG.guard(), "dose": {"done": 0, "step": 0, "faded": False}}
     gate["levels"] = {i: lvl(i) for i in ("intensity", "drift")}
     gate_levels = gate["levels"]
-    dec = QG.week_decision(gate, kind, mode, monday)
+    # 課表偏好 每週品質課 2 → one Zone 3 + one Zone 5 when both tracks are open (SP-31); the
+    # guardrail mode keeps the base phase at one
+    q_n = quality_per_week(PR, kind, mode, gate)
+    dec = QG.week_decision(gate, kind, mode, monday, n=q_n)
     allow_quality = dec["allow"]
     in_reentry = mode == "reentry"
     # a week touching the block gets no quality (推估: the whole week after it, so nothing lands inside)
@@ -870,34 +1008,27 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             sessions[-1] = Session(**ls)
             for f in fol:
                 add(**f)
-        if allow_quality and kind == "specific" and not (gate.get("z5") or {}).get("open") \
-                and (gate.get("z5") or {}).get("state") != "open":
-            # 專項期 but Zone 5 not confirmed: the 5×4′ hill set is a Zone 5 load (台灣教練: Zone 3
-            # first, Zone 5 only on a confirmed base) — the Zone 3 ladder, uphill versions allowed
-            dz = QG.week_decision({**gate, "z5": {**(gate.get("z5") or {}), "open": False}}, "base", "base", monday)
-            if dz["allow"] and dz["spec"] is not None:
-                q_cap, q_alt = quality_caps(PR, PP.long_weekday(PR, _long_weekday(ds, today)) if PR is not None else 5)
-                add(**_gate_session(gate, dz, tt, hours, prefs, variant_history(monday, gate), not road, q_cap,
-                                    q_alt))
-        elif allow_quality and kind == "specific" and road:
-            add(**ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
-        elif allow_quality and kind == "specific":
-            add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
-                target=tgt.get("supra", ""), detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
-                source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
-        elif allow_quality and kind == "base" and dec["spec"] is not None:
-            # the gate's dose step (engine/quality_gate.py §4.5) as a library variant fitted
-            # into the weekday cap (engine/interval_library.py)
+        if allow_quality and kind in ("base", "specific") and dec.get("items"):
+            # two tracks (engine/quality_gate.py week_decision, SP-31): each item is a ladder rung as a
+            # library variant fitted into the weekday cap (engine/interval_library.py), or the 專項期's
+            # own session (road Zone 3 = 2×15′ flat, trail Zone 5 = 5×4′ uphill)
             q_cap, q_alt = quality_caps(PR, PP.long_weekday(PR, _long_weekday(ds, today)) if PR is not None else 5)
-            add(**_gate_session(gate, dec, tt, hours, prefs, variant_history(monday, gate), mountain_goal,
-                                q_cap, q_alt))
+            for q in quality_sessions(gate, dec, kind, tt, tgt, hours, prefs, variant_history(monday, gate),
+                                      mountain_goal if kind == "base" else not road, road, q_cap, q_alt, notes):
+                add(**q)
     elif kind == "base" and mode == "recovery_week" and allow_quality and dec["spec"] is not None:
         # 3:1 recovery week: a short fartlek instead of intervals (Palladino)
         add(**_gate_session(gate, dec, tt, hours))
     elif kind == "taper":
-        add(id="quality", kind="quality", title="短強度 4×3 分", minutes=45,
-            target=tgt.get("threshold", ""), detail="保留強度、不累積疲勞（98–102% CP）", source=SRC_BOSQUET,
-            tss=45 / 60 * 65)
+        # 減量期: one session, the two-track choice (SP-31) — Zone 3 節奏 2×8′ or the 4×3′ short intensity
+        for q in quality_sessions(gate, dec, kind, tt, tgt, hours):
+            add(**q)
+    if kind in ("base", "specific", "taper") and dec.get("z3_note") and not in_reentry:
+        # why there is no Zone 3 session this week (SP-31: the gate / a guardrail / the 1-a-week turn)
+        notes.append({"level": "info", "src": "z3", "text": dec["z3_note"]})
+    if dec.get("warn") and not in_reentry:
+        # the low-intensity share under its floor: a warning for Zone 3, Zone 5 waits (SP-31)
+        notes.append({"level": "watch", "src": "intensity", "text": dec["warn"]})
     elif kind == "event":
         add(id="race", kind="race", title="比賽", minutes=0, detail="賽前 2 天 20–30 分輕鬆跑＋幾趟加速",
             source="教練常見做法（推估）")
@@ -1221,6 +1352,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # re-evaluate it for each projected week instead of copying this week's answer
         "quality_gate": {**gate, "levels": gate_levels, "allowed": allow_quality,
                          "this_week": dec["spec"][1] if allow_quality and dec["spec"] and kind == "base" else None,
+                         "this_week_tracks": [it["track"] for it in dec.get("items") or []] if allow_quality else [],
+                         "quality_n": q_n,
                          # a suggested test counts as the last one, so the projection waits ≥ 4 weeks
                          "aet_test": {"due": aet_due, "last": today.isoformat() if aet_due else tx.get("aet_last_test")}},
         # per-category TSS / h (projection shapes projected weeks with the same rates)

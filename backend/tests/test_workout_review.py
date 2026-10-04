@@ -363,13 +363,14 @@ def test_streak_of(drifts, n):
     # no method (legacy bool / None): base is no longer held back by a drift streak
     ("base", {"intensity": "good", "drift": "good"}, False, True),
     ("base", {"intensity": "watch", "drift": "watch"}, None, True),
-    ("base", {"intensity": "bad", "drift": "good"}, None, False),
+    # intensity bad (SP-31): the low-intensity share blocks Zone 5 only — Zone 3 goes on
+    ("base", {"intensity": "bad", "drift": "good"}, None, True),
     (None, {"intensity": "good", "drift": "good"}, False, True),        # no phase = base
     # a locked method keeps Zone 5 closed only; Zone 3 still goes on (台灣教練, two gates)
     ("base", {"intensity": "good", "drift": "good"}, {"state": "locked", "verdict": "x"}, True),
     ("base", {"intensity": "good", "drift": "good"}, {"state": "unlocked", "dose": {"step": 0}}, True),
     ("specific", {"intensity": "good", "drift": "good"}, False, True),
-    ("specific", {"intensity": "bad", "drift": "good"}, False, False),
+    ("specific", {"intensity": "bad", "drift": "good"}, False, True),
     ("specific", {"intensity": "good", "drift": "bad"}, False, False),
 ])
 def test_quality_gate(kind, levels, gate, allowed):
