@@ -689,6 +689,56 @@ the plan runs on its own and pushes the next 7 days, and big changes wait for ap
 change log with 復原 and the kind `notice` (課表待確認) are part of it. See
 `docs/spec/plan-auto.spec.md`.
 
+### 課表訂閱 — calendar feed (`calendar_feed.py`, 2026-10-04, SP-54)
+
+The stored plan as an iCalendar (RFC 5545) subscription that Google Calendar (「從網址新增」) and
+the iPhone calendar (「新增訂閱的行事曆」, then its widget shows today's session) read without
+logging in (`build`, `backend/engine/calendar_feed.py:189`; served by `feed`,
+`backend/api/calendar_feed.py:122`).
+
+- **Address**: `/share/calendar/<token>.ics`. Under `/share/` because the tunnel's Basic-auth
+  proxy lets only that prefix through (like the race-power share links). The token
+  (`secrets.token_urlsafe(24)`) is stored with the origin the settings page was opened at in the
+  setting `plan.calendar` = `{token, origin}` (None = off; `backend/settings/repository.py:176`,
+  validated by `validate_setting`, `backend/engine/calendar_feed.py:67`). Compared in constant
+  time (`token_ok`, `backend/engine/calendar_feed.py:74`); a wrong, old or missing token is a
+  **404**, never a 401. 「重設網址」 makes a new token (the old address is a 404 at once);
+  「停用」 clears it.
+- **Events**: one all-day VEVENT per stored session from 14 days ago to 56 days ahead
+  (`in_window`, `backend/engine/calendar_feed.py:180`), states active / done / missed; deleted /
+  superseded rows and kind `notice` (課表待確認) are left out. Sessions have a day, no time, so
+  every event is `DTSTART;VALUE=DATE` + the next day, `TRANSP:TRANSPARENT`. Rest days and
+  不排課日期 have no session and get no event; an edited / custom session the user kept on a
+  blocked day is shown as stored. SUMMARY = the title, 「✓ 」 when done, 「✗ 」 when missed
+  (`summary`, `backend/engine/calendar_feed.py:133`). DESCRIPTION = planned minutes / TSS, the
+  actual minutes / TSS when done, distance / climb, the target text, the saved structure
+  (`workout_steps.structure_text`), the detail and 「在課表打開這堂課」 (`description`,
+  `backend/engine/calendar_feed.py:148`); `URL` = the same link: the 課表 page's existing deep
+  link `?day=&uid=` that opens the session's dialog (`backend/static/schedule.html:2710`).
+  Calendar properties: `X-WR-CALNAME`, `REFRESH-INTERVAL` / `X-PUBLISHED-TTL` PT1H (hints;
+  Google ignores them). Lines are CRLF, folded at 75 octets without splitting a UTF-8 character,
+  TEXT escaped (`fold`, `escape`, `backend/engine/calendar_feed.py:100`).
+- **Edits follow**: UID = `<uid>@trailruncoach`. A session's `uid` lives as long as the session:
+  an edit or a move to another day / week keeps it (`edit`, `backend/engine/plan_store.py:320`),
+  and reconcile keeps it when it regenerates the same `gen_key` in a week; a newly generated
+  session (a new `gen_key`, or a week generated again after its rows were removed) gets a new
+  uid, and the old one simply leaves the feed. `LAST-MODIFIED` = the row's `updated_at`, which
+  `_fill` (`backend/engine/plan_store.py:106`) now moves only when the row's content changed
+  (save() rewrites every row) and always by ≥ 1 s; `SEQUENCE` = its whole seconds since
+  2026-01-01 (`sequence`, `backend/engine/calendar_feed.py:125`), so every change raises it.
+  Deleted sessions (one, 「刪除所有過期未完成」, reconcile removals, auto-plan replacements)
+  disappear from the feed.
+- **Read-only and cheap**: the feed never reconciles; it shows the weeks the app has stored so
+  far. Links use `WKO5COACH_PUBLIC_URL`, else the stored origin, else the request's address
+  (X-Forwarded-Proto / -Host only from a trusted proxy; `public_base`,
+  `backend/api/calendar_feed.py:70`).
+- **Demo**: neither router is mounted in the demo instance (`owner_only`, `backend/main.py:142`):
+  no feed of the demo athlete and no way to the owner's.
+- **Refresh latency**: the iPhone fetches as often as 設定 › 行事曆 › 帳號 › 擷取新資料 allows
+  (every 15 min ⇒ about 5–15 min); Google Calendar refreshes subscribed URLs on its own schedule
+  (typically several hours, up to about a day) and can't be forced. The settings page says so
+  (`backend/static/settings.html:317`).
+
 ## COROS push (`coros_workouts.py`)
 
 Pushes stored sessions to COROS Training Hub as structured, scheduled workouts through the
@@ -985,6 +1035,9 @@ which one. The response keeps the `coros` field names.
 | POST | `/api/v1/overview/plan/equivalence/design` | `{mode, minutes, climb_per_km}` → km, climb, 推估 flag (`backend/api/plan_sessions.py:1749`) |
 | GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state (`backend/api/plan_sessions.py:1978`, `backend/api/plan_sessions.py:1916`) |
 | GET | `/api/v1/overview/plan/schedule/page` | `backend/static/schedule.html` (`backend/api/plan_sessions.py:2017`) |
+| GET | `/api/v1/plan/calendar` | 課表訂閱: `{enabled, path, url, window}` of the feed address (`backend/api/calendar_feed.py:88`) |
+| POST / DELETE | `/api/v1/plan/calendar/token` | `{origin?}` → a new secret address (the old one is a 404 from now on) / turn the feed off (`backend/api/calendar_feed.py:93`, `backend/api/calendar_feed.py:104`) |
+| GET / HEAD | `/share/calendar/<token>.ics` | public, token-only: the stored plan as `text/calendar` (see 課表訂閱 above); 404 for any other token; not in the demo (`backend/api/calendar_feed.py:122`) |
 | GET | `/api/v1/overview/plan/compliance?start=&end=` | the 課表統計 dashboard (≤ 371 days): due sessions with status and %, totals, weeks and days planned vs actual, streak, per kind, the current phase's progress, `plan_phases` (`backend/api/plan_sessions.py:2034`) |
 | GET | `/api/v1/overview/plan/compliance/page` | `backend/static/compliance.html` (`backend/api/plan_sessions.py:2069`) |
 | GET | `/` | always redirects to the overview page (`backend/main.py:207`; the React SPA was removed 2026-10-04 — old SPA paths such as `/activities`, `/achievements`, `/sync`, `/config` redirect to their static pages, `backend/main.py:33`); in demo mode to `/demo` |
@@ -1141,3 +1194,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-02 | feat/session-classifier | docs/research/vo2max-session-detection.md, user-approved | Weekly Zone 5 slot ticked only by a 「Z5 間歇」 run; done hard days (Z5 / Z3 / 高強度長跑 / CP test) keep the next interval 48 h away; activity rows carry `session` (label + dashicon). Power zones are Palladino everywhere: interval_library classes 3A 88–95 / 3B 95–101 / Z4 101–106 / Z5 ≥ 106 % CP by band middle (was Z5 ≥ 102 %), the editor's 5 區 time ≥ 106 %, time-in-zone charts / zone APIs Palladino 10 zones (Coggan / Stryd sets removed; iLevels kept as the WKO5 cross-check) |
 | 2026-10-04 | code-sync | N/A | Synced ~140 commits: dashboard 總覽 (KPI tiles, 90-day PMC without projection, day-cards, Z5 card renamed, 待辦 at the bottom, B2B card); tests / B2B / race sim are suggestions; 主要訓練項目, 專項期, B2B, 陡坡健走, 輕鬆跑上限 (課表心率區間) in week_plan; LSD label, kind hike = 越野跑, 登山 long terrain dropped; prefs redesign (偏好的星期, 目標依據, warm-up / cool-down, B2B switch); 休息日, expired-session delete, manual link, compliance + 課表統計 page, context menu; push via the workout-sync provider, MP / pace steps; i_drift plain words, i_testing event-driven; AeT test by reason (no cadence, not projected); new API rows; all file:line pointers refreshed |
 | 2026-10-04 | feat/sp-34-35-schedule | SP-34, SP-35 | 課表: ⟳ 從 COROS 抓活動 button (資料來源 only, shared `syncrun.js`, reload + one re-poll for 自動調整); push button renamed 推送到手錶; push status drawn as a watch (neutral when up to date, coloured only for 需更新／失敗), ✓ reserved for 完成, legend split into 完成 / 手錶 groups |
+| 2026-10-04 | feat/sp-54-ics-feed | SP-54 | 課表訂閱: `/share/calendar/<token>.ics` ICS feed of the stored plan (all-day events, ✓ / ✗, steps + deep link, −14 / +56 days), `plan.calendar` token with 重設 / 停用 and 404 on mismatch, owner only (not mounted in the demo); `plan_sessions.updated_at` moves only on a real change (LAST-MODIFIED / SEQUENCE); settings page section with Google / iPhone steps (zh-TW + en) |

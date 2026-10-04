@@ -24,6 +24,7 @@ from backend.api import injuries as injuries_api
 from backend.api import backup as backup_api
 from backend.api import calib as calib_api
 from backend.api import region as region_api
+from backend.api import calendar_feed as calendar_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings and the injury log
@@ -137,7 +138,8 @@ def build_app(demo: bool | None = None) -> FastAPI:
     app.add_exception_handler(UserError, _user_error)
 
     owner_only = {id(r) for r in (sync.router, auth.router,
-                                  plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router)}
+                                  plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router,
+                                  calendar_api.router, calendar_api.feed_router)}
     routers = [
         workouts.router, expr.router,
         sync.router, auth.router,        # owner only (sync, connect)
@@ -150,11 +152,13 @@ def build_app(demo: bool | None = None) -> FastAPI:
         backup_api.router,               # 備份 (settings page)
         calib_api.router,                # 每人校正 (settings page, 進階設定)
         region_api.router,               # 地區 tw | intl (static/region.js)
+        calendar_api.router,             # 課表訂閱 address (settings page; owner only)
+        calendar_api.feed_router,        # /share/calendar/<token>.ics: public, token-only (owner only)
         session_api.router,              # GET /api/v1/session (the shell), POST /api/v1/demo/reset
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
-        # nor the public share pages (it creates no shares)
+        # nor the public share pages or the 課表訂閱 feed (it creates no shares)
         if demo and (id(r) in owner_only or r is racepower_api.share_router):
             continue
         app.include_router(r)
