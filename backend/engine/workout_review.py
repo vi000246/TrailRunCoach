@@ -1965,7 +1965,9 @@ def scheduled_test(ds, w, m: dict) -> Optional[dict]:
        activity has a ≥ 3-min bout at ≥ 1.05 × the CP in effect."""
     from backend.engine.aet_test import is_aet_session
     iso = _wdate(w).isoformat()
-    ss = [s for s in _plan_test_sessions(ds) if not is_aet_session(s)]   # the AeT test: scheduled_aet_test
+    from backend.engine.threshold_confidence import HRMAX_TITLE
+    # the AeT test: scheduled_aet_test; a max-HR test (SP-64) is no CP test
+    ss = [s for s in _plan_test_sessions(ds) if not is_aet_session(s) and not HRMAX_TITLE.search(s.get("title") or "")]
     for s in ss:
         if _done_by_this(s, w, iso):
             return {**s, "match": "done_by"}
