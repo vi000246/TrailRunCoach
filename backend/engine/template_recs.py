@@ -7,7 +7,9 @@ Inputs (all of them already decided elsewhere):
   * the interval ladder: interval_library.fit() for the athlete's current rung and the
     day's cap — the old 間歇範本 dropdown's ★ 推薦 — is always #1 on 強度課; other
     equivalent variants of the same rung come next (they don't change progression)
-  * Zone 5 open or not (quality_gate z5.open): closed → no Zone 5 template is recommended
+  * Zone 5 open or not (quality_gate z5.open): closed → no Zone 5 template (a ladder Z5
+    variant, or a template whose family is VO2max 間歇 / 速度) is recommended
+  * the template's family (workout_templates.family_of: 有氧間歇 / VO2max 間歇 / 速度)
   * the training phase on that day (base / build / specific / taper / recovery)
   * the time available: the day's cap (課表偏好) and the session's own minutes
   * terrain (road / trail) and the session's own type (輕鬆 / 長跑 / 強度 / 測試 / 越野)
@@ -21,6 +23,7 @@ from __future__ import annotations
 from typing import Optional
 
 from backend.engine import interval_library as IL
+from backend.engine import workout_templates as WT
 
 N_RECS = 3
 LONG_MIN = 90                  # 推估: a 長跑 template is ≥ 90 min
@@ -34,7 +37,6 @@ DROP_BELOW = -40.0             # a row that ends below this is never recommended
 PHASE_OF = {"base": "base", "transition": "base", "build": "build", "specific": "specific",
             "taper": "taper", "event": "taper", "recovery": "recovery"}
 PHASE_LABEL = {"base": "基礎期", "build": "強化期", "specific": "專項期", "taper": "減量期", "recovery": "恢復期"}
-SUB_LABEL = {"z3": "三區", "z4": "四區", "z5": "五區"}
 
 # trail templates by what they train (phase rules below)
 TRAIL_SPECIFIC = {"lib:dsw_classic", "lib:koop_uphill", "lib:long_climb", "lib:downhill_ecc", "lib:steep_10",
@@ -50,8 +52,9 @@ FAMILY = {"lib:steep_5": "steep", "lib:steep_10": "steep", "lib:steep_15": "stee
           "lib:ua_hill_sprints": "hills", "hill_sprints": "hills", "cp_quick": "cp", "cp_standard": "cp"}
 
 EXPLAIN = ("推薦依這堂課排序（權重是推估）：① 強度課的第一名一定是間歇階梯的下一步（自動排課會選的那份，依你目前這一階和這天的時間上限）；"
-           "同一階的同等課表接在後面，換它們不影響進階。② 5 區還沒開放時不推薦 5 區課表（台灣教練：先練 3 區）。"
-           "③ 階段：基礎期偏 3 區和有氧、專項期偏賽道的爬升和下坡、減量期偏短的課（Koop；Uphill Athlete 由一般到專項）。"
+           "同一階的同等課表接在後面，換它們不影響進階。② 5 區還沒開放時不推薦 VO2max 間歇和速度課表（台灣教練：先練 3 區）。"
+           "③ 階段：基礎期偏有氧間歇、強化期和專項期偏巡航間歇（閾值課在 VO2max 開放後也不停）和賽道的爬升、下坡，"
+           "減量期偏短的課（Koop；Uphill Athlete 由一般到專項）。"
            "④ 時間：超過這天上限的往後排，接近這堂原本分鐘數的往前。⑤ 地形：越野日偏上坡版，路跑日不推需要找坡的課。"
            "⑥ 類型：長跑日偏 90 分以上的課。⑦ 主要訓練項目是路跑時：不推越野範本，專項期偏馬拉松專項課"
            "（Pfitzinger 乳酸閾值／馬拉松配速長跑、Daniels T、Canova）。其他範本收在下面，照原本的順序。")
@@ -97,7 +100,7 @@ def _is_hill(row: dict, cat: str) -> bool:
 
 def _is_z5(row: dict, sub: Optional[str]) -> bool:
     v = IL.get(row.get("key"))
-    return (v.cls == "Z5") if v is not None else sub == "z5"
+    return (v.cls == "Z5") if v is not None else sub in ("vo2max", "speed")
 
 
 class _Score:
@@ -123,6 +126,8 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
     mins = row_minutes(row)
     phase, kind, terrain = s["phase"], s["kind"], s["terrain"]
     cap, want = s["cap"], s["minutes"]
+    fam = row.get("family") or {}                 # workout_templates.family_of (the tab id = its id)
+    sub, fsub = fam.get("id") or sub, fam.get("sub")
 
     # ① the ladder: the generator's own pick (fit() already fitted it into the day's cap) is
     # always first, whatever the other rules say
@@ -136,8 +141,8 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
             sc.add(-25, "非同等：不算進階")
         elif v is not None and s["rung"] and v.rung != s["rung"]:
             sc.add(-10, f"是 {IL.RUNG_NAME.get(v.rung, v.rung)}，不是你目前這一階")
-        elif v is None and s["rung"] and sub == _rung_sub(s["rung"]):
-            sc.add(15, f"和你目前這一階同一區（{SUB_LABEL.get(sub, sub)}）")
+        elif v is None and s["rung"] and sub and sub == _rung_family(s["rung"]):
+            sc.add(15, f"和你目前這一階同一類（{WT.FAMILY_LABEL[sub]}）")
     # ② Zone 5
     if cat == "quality" and _is_z5(row, sub):
         if not s["z5_open"]:
@@ -146,10 +151,10 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
             sc.add(12, f"{PHASE_LABEL[phase]}：5 區已開放")
     # ③ phase
     if cat == "quality":
-        if phase == "base" and sub == "z3":
-            sc.add(15, "基礎期先練 3 區（台灣教練）")
-        elif phase in ("build", "specific") and sub == "z4":
-            sc.add(10, f"{PHASE_LABEL[phase]}：超閾值")
+        if phase == "base" and sub == "aerobic":
+            sc.add(15, "基礎期先練有氧間歇（台灣教練：先練 3 區）")
+        elif phase in ("build", "specific") and fsub in ("cruise", "supra"):
+            sc.add(10, f"{PHASE_LABEL[phase]}：巡航間歇，閾值課不停")
         elif phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:
             sc.add(10, f"{PHASE_LABEL[phase]}：量少")
     elif cat == "trail":
@@ -196,10 +201,10 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
     return sc
 
 
-def _rung_sub(rung: Optional[str]) -> Optional[str]:
+def _rung_family(rung: Optional[str]) -> Optional[str]:
     c = IL.canonical(rung) if rung else None
-    from backend.engine.workout_templates import sub_of
-    return sub_of(c.mid) if c is not None else None
+    f = WT.family_of_variant(c) if c is not None else None
+    return f["id"] if f else None
 
 
 def ladder_pick(rung: Optional[str], cap: Optional[float], history=(), prefs=None, gate: Optional[dict] = None,

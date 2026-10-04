@@ -1355,10 +1355,10 @@ def template_steps(key: str, level: str = "std") -> Optional[dict]:
 def templates(prefs=None) -> dict:
     """The editor's 插入範本 (static/workout_editor.js): {"cats": [{id, label, subs?}],
     "groups": [{"group", "cat", "sub", "title", "rows": [{key, label, title, src, url,
-    src_kind, items (main set), full, equiv}]}]}. Each category: the published library
-    (engine/workout_templates.py) first; 強度課 also the interval ladder's variants (by
-    their band middle: 三區 / 四區 / 五區); 測試 also the app's CP protocols; strides /
-    hill sprints."""
+    src_kind, items (main set), full, equiv, family, purpose}]}]}. Each category: the
+    published library (engine/workout_templates.py) first; 強度課 also the interval ladder's
+    variants — both split by workout_templates.family_of (有氧間歇 / VO2max 間歇 / 速度);
+    測試 also the app's CP protocols; strides / hill sprints."""
     from backend.engine import cp_protocols as CPP
     from backend.engine import workout_templates as WT
     lib = [(t, WT.row(t)) for t in WT.TEMPLATES]
@@ -1379,23 +1379,28 @@ def templates(prefs=None) -> dict:
                            True, "衝刺 8×10 秒")]}
     g("easy", "有出處的課表", [r for t, r in lib if t.cat == "easy"])
     g("easy", "附加（只換主課時插在中間）", [strides])
-    for sub in ("z3", "z4", "z5"):
+    fams = {v.key: WT.family_of_variant(v) for v in IL.ALL.values()}
+
+    def fam_fields(v):
+        f = fams[v.key]
+        return {"sub": f["id"] if f else None, "family": f, "purpose": WT.variant_purpose(f)}
+    for sub in WT.FAMILY_IDS:
         g("quality", "有出處的課表", [r for t, r in lib if t.cat == "quality" and r["sub"] == sub], sub)
         ladder = []
         for rung in IL.RUNG_ORDER + ("tp",):
             for v in IL.LIBRARY[rung]:
-                if WT.sub_of(v.mid) != sub:
+                if (fams[v.key] or {}).get("id") != sub:
                     continue
                 ok, _why = IL.equivalent(v)
                 ladder.append({"key": v.key, "label": f"{IL.RUNG_NAME[rung]} {IL.title(v)} · {IL.rest_text(v)}" + ("（標準）" if v.canonical else ""),
                                "title": f"{IL.CLASS_LABEL[v.cls]} {IL.structure(v)}", "src": f"間歇庫 {IL.RUNG_NAME[rung]}",
                                "items": main_set(v), "equiv": ok, "src_kind": v.src_kind, "full": from_variant(v, "std")["items"],
-                               "variant": True, "rung": v.rung})
+                               "variant": True, "rung": v.rung, **fam_fields(v)})
         for v in IL.NON_EQUIV:
-            if WT.sub_of(v.mid) == sub:
+            if (fams[v.key] or {}).get("id") == sub:
                 ladder.append({"key": v.key, "label": f"{IL.title(v)}（每趟 < 2 分，不算進階）", "title": IL.title(v),
                                "src": "間歇庫（非同等）", "items": main_set(v), "equiv": False, "src_kind": v.src_kind,
-                               "full": from_variant(v, "std")["items"], "variant": True, "rung": v.rung})
+                               "full": from_variant(v, "std")["items"], "variant": True, "rung": v.rung, **fam_fields(v)})
         g("quality", "間歇庫（進階階梯）", ladder, sub)
     g("test", "有出處的課表", [r for t, r in lib if t.cat == "test"])
     other = []
@@ -1410,12 +1415,11 @@ def templates(prefs=None) -> dict:
     g("test", "這個 app 的 CP 測試", other)
     g("trail", "有出處的課表", [r for t, r in lib if t.cat == "trail"])
     g("trail", "附加", [hills])
-    from backend.engine.workout_templates import CATS
     for gr in groups:
         for r in gr["rows"]:
             # the editor badges these when there is no threshold pace (their pace is × it)
             r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
-    return {"cats": CATS, "groups": groups, "no_tpace_text": no_tpace_text()}
+    return {"cats": WT.cats(), "groups": groups, "no_tpace_text": no_tpace_text()}
 
 
 def zones_table(c: Ctx) -> dict:

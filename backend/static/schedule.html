@@ -930,7 +930,9 @@ function chipHtml(s, big) {
   // "45′ · TSS 35" (planned) — "TSS 35 → 41" once done (planned → actual)
   const tss = `TSS ${n0(est)}${done && s.done_by.tss != null ? ` → ${n0(s.done_by.tss)}` : ""}`;
   const dist = s.distance_km ? `${(+s.distance_km).toFixed(1)} km${s.climb_m ? ` ↑${Math.round(s.climb_m)} m` : ""}` : "";
-  const meta = [s.minutes ? s.minutes + "′" : "", dist, tss].filter(Boolean).join(" · ");
+  // 強度課: its family (workout_templates.session_family: 有氧間歇 / VO2max 間歇 / 速度; full text in the tooltip)
+  const fam = s.quality_family || null;
+  const meta = [fam ? fam.label : "", s.minutes ? s.minutes + "′" : "", dist, tss].filter(Boolean).join(" · ");
   // done: what was actually run that day (the planned title stays the chip's title), with its
   // session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …)
   const sl = done && s.done_by.session && s.done_by.session.type_label ? ` · ${s.done_by.session.type_label}` : "";
@@ -939,9 +941,9 @@ function chipHtml(s, big) {
   const cp = s.compliance;
   const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : "");
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
-  const lbl = `${KINDS[s.kind] || ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
+  const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
   return `<button type="button" class="chip k-${esc(s.kind)} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
-      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
+      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : ""}${icon}</span>
     <span class="c-m">${meta}</span>
     ${line ? `<span class="c-x">${line}</span>` : ""}${big && off ? `<span class="c-x offp-i">≠ ${esc(s.vs.text.replace("沒照課表：", "沒照課表 · "))}</span>` : ""}${big && s.detail && s.state !== "done" ? `<span class="c-d">${esc(s.detail)}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
@@ -1799,7 +1801,7 @@ function openDlg(s, day) {
   $("sd-tkind").dispatchEvent(new Event("change"));
   $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
   const d = s ? s.day : day;
-  $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
+  $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.quality_family ? " · " + s.quality_family.text : ""}${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
   const db = $("sd-done");
   const pastOpen = s && s.state === "active" && s.day <= D.today && (s.link_options || []).length;
   db.hidden = !(s && (s.state === "done" || s.state === "missed" || pastOpen));
