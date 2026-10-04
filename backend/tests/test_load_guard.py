@@ -206,6 +206,51 @@ def test_new_user_no_false_recovery_week_in_the_startup_window(monkeypatch):
     _, _, _, cold = TB._week(today=today, last_week="b2b", tph=1.2, b2b_tph=1.2)
     assert cold["load"]["tsb_today"] < -30 and cold["mode"] == "recovery_week"
 
+def test_settings_key_validates():
+    from backend.settings.repository import DEFAULTS, validate
+    assert DEFAULTS[LG.PMC_START_KEY] is None
+    validate(LG.PMC_START_KEY, None)
+    validate(LG.PMC_START_KEY, {"date": "2026-09-01", "ctl": 55.0, "atl": 40.0})
+    with pytest.raises(ValueError):
+        validate(LG.PMC_START_KEY, {"date": "2026-09-01", "ctl": 500.0, "atl": 40.0})
+
+
+def test_pmc_start_api(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api import plan as API
+    from backend.db.database import get_db
+    from backend.settings.repository import SettingsRepository
+    from backend.tests.test_coros_workouts import make_db, run
+    db = run(make_db(logged_in=False))
+
+    async def fake_db():
+        yield db
+    stored = {}
+    monkeypatch.setattr(LG, "manual_start", lambda user_id=1: LG.parse_manual(stored.get("v")))
+    monkeypatch.setattr(API, "_overview_dataset", lambda: _ev_ds())
+    monkeypatch.setattr(API, "today_local", lambda *a, **k: dt.date(2026, 9, 29))
+    app = FastAPI()
+    app.include_router(API.router)
+    app.dependency_overrides[get_db] = fake_db
+    c = TestClient(app)
+    r = c.get("/api/v1/plan/pmc-start").json()
+    assert r["source"] == LG.AUTO and r["effective"]["ctl"] == 60.0 and r["manual"] is None
+    assert r["auto"] == {"date": "2026-07-22", "seed": 60.0, "days": 28, "final": True}
+    assert r["now"]["tsb"] == pytest.approx(0.0, abs=0.05)
+    for bad in ({"date": "2026-09-01", "ctl": 400, "atl": 40}, {"date": "2026-09-01", "ctl": 50},
+                {"date": "2026-10-01", "ctl": 50, "atl": 40}):                    # after today
+        assert c.put("/api/v1/plan/pmc-start", json=bad).status_code == 400
+    assert c.put("/api/v1/plan/pmc-start", json={"date": "2026-09-01", "ctl": 30.04, "atl": 80}).status_code == 200
+    stored["v"] = run(SettingsRepository(db).get(LG.PMC_START_KEY))
+    assert stored["v"] == {"date": "2026-09-01", "ctl": 30.0, "atl": 80.0}
+    r = c.get("/api/v1/plan/pmc-start").json()
+    assert r["source"] == LG.MANUAL and r["effective"] == {"date": "2026-09-01", "ctl": 30.0, "atl": 80.0}
+    assert r["auto"]["seed"] == 60.0                                          # still shown
+    assert c.put("/api/v1/plan/pmc-start", json={"clear": True}).status_code == 200
+    assert run(SettingsRepository(db).get(LG.PMC_START_KEY)) is None
+
 # ---------------------------------------------------------------------------
 # weekly volume step
 # ---------------------------------------------------------------------------
