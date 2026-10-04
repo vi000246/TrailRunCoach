@@ -31,9 +31,10 @@
   "workout.saved_tpl": "已存成範本「{name}」",
   "workout.to_templates": "到範本頁",
   "workout.mine": "我的",
-  "workout.elev_legend": "海拔（{name}，{km} km）",
+  "workout.elev_legend": "海拔（{name}，{km} km；橫軸是距離）",
   "workout.elev_partial": "依預估速度，這份課表跑不完整條路線：只畫到課表結束的位置",
-  "workout.elev_aria": "；背景是路線海拔 {lo}–{hi} m",
+  "workout.elev_km": "約 {a}–{b} km",
+  "workout.elev_aria": "；橫軸是距離（共 {km} km），背景是路線海拔 {lo}–{hi} m",
   "autoplan.log_title": "自動調整紀錄",
   "autoplan.log_count": "{n} 筆",
   "workout.thr_low_badge": "心率門檻可信度低"
