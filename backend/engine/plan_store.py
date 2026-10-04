@@ -7,6 +7,7 @@ state on demand and before every COROS push.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 from typing import Optional
 
@@ -21,7 +22,10 @@ KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "�
          "hike": "越野跑", "strength": "肌力", "heat_passive": "被動熱適應",
          # 課表待確認 (engine/plan_auto.py): a reminder pushed to the watch, not a
          # training session — never done / missed, no TSS, no compliance
-         "notice": "課表待確認"}
+         "notice": "課表待確認",
+         # 比賽: the generator's own race-day row (gen_key race, minutes 0) or the 賽事計算機's
+         # export (ext_key racecalc:<event id>, upsert_external) — never added by hand
+         "race": "比賽"}
 NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
             "target_basis", "steps")
@@ -79,7 +83,8 @@ def to_dict(r: PlanSession) -> dict:
             "variant_key": r.variant_key, "rung_key": r.rung_key,
             "equiv": None if r.equiv is None else bool(r.equiv), "swap": r.swap, "swap_reason": r.swap_reason,
             "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj,
-            "target_basis": getattr(r, "target_basis", None), "steps": _steps_of(getattr(r, "steps", None))}
+            "target_basis": getattr(r, "target_basis", None), "steps": _steps_of(getattr(r, "steps", None)),
+            "ext_key": getattr(r, "ext_key", None), "ext_sig": getattr(r, "ext_sig", None)}
 
 
 def _steps_of(raw) -> Optional[dict]:
@@ -100,7 +105,7 @@ VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "va
 
 FILL_FIELDS = ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
                "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
-               "protocol") + VARIANT_FIELDS + ("done_by", "variant_adj", "steps")
+               "protocol") + VARIANT_FIELDS + ("ext_key", "ext_sig") + ("done_by", "variant_adj", "steps")
 
 
 def _fill(r: PlanSession, d: dict) -> None:
@@ -311,6 +316,9 @@ def _clean(patch: dict, today: str) -> dict:
     return out
 
 
+NO_RACE_ADD = "比賽課由賽季計畫排入，或從賽事計算機「匯出至課表」，不能自己新增"
+
+
 def _not_blocked(day: str, blocked: Optional[dict]) -> None:
     if blocked and day in blocked:
         lb = blocked[day]
@@ -326,6 +334,8 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
         raise PlanError("找不到這堂課（或已經完成／錯過）")
     d = to_dict(r)
     ch = _clean(patch, today)
+    if ch.get("kind") == "race" and d["kind"] != "race":
+        raise PlanError(NO_RACE_ADD)
     # a library variant chosen in the swap drawer / the editor's templates (api/plan_sessions
     # builds it with interval_library.variant_patch): a user edit, kept by reconcile (rule 3)
     ch.update(patch.get("_variant") or {})
@@ -342,7 +352,7 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
     if new_week != d["week_start"] and d["origin"] == "auto":
         # moved to another week: leave a tombstone so that week isn't regenerated
         # into a duplicate, and carry the session over as the user's own
-        tomb = {**d, "uid": R.new_uid(), "state": "deleted", "note": "移到別週"}
+        tomb = {**d, "uid": R.new_uid(), "state": "deleted", "note": "移到別週", "ext_key": None, "ext_sig": None}
         t = PlanSession(athlete_id=athlete_id, uid=tomb["uid"])
         db.add(t)
         _fill(t, tomb)
@@ -365,6 +375,8 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     data.setdefault("kind", "easy")
     if data["kind"] in NOT_LOAD:
         raise PlanError("課表待確認是自動調整的提醒，不能自己新增")
+    if data["kind"] == "race":
+        raise PlanError(NO_RACE_ADD)
     if data["kind"] == "test":
         _test_default(data)
     data.setdefault("title", DEFAULT_TITLES.get(data.get("kind"), "自訂"))
@@ -459,6 +471,82 @@ async def delete(db: AsyncSession, uid: str, athlete_id: int = 1, today: Optiona
         d["state"] = "removed"
     await db.commit()
     return d
+
+
+# ---------------------------------------------------------------------------
+# a session written from outside the generator: the 賽事計算機's 「匯出至課表」
+# (api/racepower.py /export/plan), key racecalc:<event id>
+# ---------------------------------------------------------------------------
+
+EXT_FIELDS = ("day", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m", "steps")
+# what an export wrote, fingerprinted: tss is left out (the 課表 dialog re-estimates it on save)
+EXT_SIG_FIELDS = ("day", "kind", "title", "minutes", "target", "detail", "steps")
+COMPARE = ("day", "week_start", "kind", "title", "minutes", "target", "detail", "source", "tss", "terrain",
+           "distance_km", "climb_m", "steps", "origin", "gen_key", "edited", "state", "ext_key", "ext_sig")
+
+
+def ext_signature(d: dict) -> str:
+    body = json.dumps([d.get(k) or None for k in EXT_SIG_FIELDS], sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(body.encode()).hexdigest()[:16]
+
+
+def user_edited(d: dict) -> bool:
+    """An exported session changed since the export (on the 課表 page)."""
+    return bool(d.get("ext_key") and d.get("ext_sig")) and ext_signature(d) != d["ext_sig"]
+
+
+async def upsert_external(db: AsyncSession, ext_key: str, data: dict, today: str, *, kind: str = "race",
+                          athlete_id: int = 1, blocked: Optional[dict] = None, write: bool = True) -> dict:
+    """One stored session per `ext_key`, written as the user's own (edited: reconcile keeps it,
+    rule 3). The row found, in order: this key's active row (updated); its deleted /
+    superseded row (restored); the generator's own race row of that week (gen_key race, no
+    ext_key — claimed, so the week never shows two races and nothing is pushed to another
+    day); else a new custom row. A race moved to another week (the event's date changed)
+    takes the row along. `write`=False: the preview — nothing is stored.
+    Returns {session, action add | claim | update | restore | unchanged, previous}; previous
+    (an earlier export) carries user_edited: changed on the 課表 page since."""
+    if not ext_key or len(ext_key) > 64:
+        raise PlanError("外部 key 不對")
+    if "day" not in data or not data.get("day"):
+        raise PlanError("要選日期")
+    ch = _clean({k: data[k] for k in EXT_FIELDS if k in data} | {"tss": data.get("tss")}, today)
+    _not_blocked(ch["day"], blocked)
+    rows = await _rows(db, athlete_id)
+    mine = [r for r in rows.values() if getattr(r, "ext_key", None) == ext_key]
+    row = next((r for r in mine if r.state == "active"), None)
+    action = "update"
+    if row is None:
+        gone = sorted((r for r in mine if r.state in ("deleted", "superseded")),
+                      key=lambda r: r.updated_at or dt.datetime.min, reverse=True)
+        row, action = (gone[0], "restore") if gone else (None, None)
+    ws = R.monday_of(ch["day"])
+    if row is None and kind == "race":
+        own = sorted((r for r in rows.values() if r.state == "active" and r.origin == "auto" and r.gen_key == "race"
+                      and r.kind == "race" and r.week_start == ws and not getattr(r, "ext_key", None)),
+                     key=lambda r: r.day != ch["day"])
+        row = own[0] if own else None
+        action = "claim" if row is not None else "add"
+    base = to_dict(row) if row is not None else \
+        {"uid": R.new_uid(), "gen_key": None, "origin": "custom", "done_by": None, "note": None, "tss": 0.0}
+    prev = None
+    if row is not None and action in ("update", "restore"):
+        prev = {"uid": base["uid"], "day": base["day"], "title": base["title"], "state": base["state"],
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "user_edited": user_edited(base)}
+    new = {**base, **ch, "kind": kind, "week_start": ws, "source": str(data.get("source") or "")[:2000],
+           "edited": True, "provisional": False, "state": "active", "done_by": None, "note": None, "ext_key": ext_key}
+    if new["origin"] == "auto" and base.get("week_start") and base["week_start"] != ws:
+        new.update(origin="custom", gen_key=None)     # moved to another week: the user's own row now
+    new["ext_sig"] = ext_signature(new)
+    if action == "update" and all(new.get(k) == base.get(k) for k in COMPARE):
+        action = "unchanged"
+    if write and action != "unchanged":
+        if row is None:
+            row = PlanSession(athlete_id=athlete_id, uid=new["uid"])
+            db.add(row)
+        _fill(row, new)
+        await db.commit()
+    return {"session": new, "action": action, "previous": prev}
 
 
 # ---------------------------------------------------------------------------

@@ -140,6 +140,8 @@ async def _migrate_schema():
         ("plan_sessions", "variant_adj", "TEXT"),
         ("plan_sessions", "target_basis", "TEXT"),
         ("plan_sessions", "steps", "TEXT"),
+        ("plan_sessions", "ext_key", "TEXT"),          # 賽事計算機匯出至課表 (plan_store.upsert_external)
+        ("plan_sessions", "ext_sig", "TEXT"),
         ("activity_tags", "exclusion", "TEXT"),
         ("activity_tags", "name", "TEXT"),
         ("activity_tags", "tags_json", "TEXT"),
