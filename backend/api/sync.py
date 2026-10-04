@@ -122,6 +122,22 @@ async def sync_sources(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     return out
 
 
+@router.get("/primary")
+async def sync_primary(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The 資料來源 in use (sync/primary.py) and whether it can sync now — the
+    課表 page's 抓活動 button. Cheap: no disk stats, no chart Dataset."""
+    from backend.sync import primary as P
+    use = await P.current(db, athlete_id)
+    src = P.FOLDER[use]
+    return {
+        "source": src,                                   # coros | tp (the /sync/<src> start URL)
+        "label": P.LABELS[use],
+        "logged_in": await runner.logged_in(db, src, athlete_id),
+        "enabled": bool(await SettingsRepository(db, athlete_id).get(f"sync.{use}.enabled")),
+        "busy": runner.is_busy(src),
+    }
+
+
 @router.post("/auto")
 async def auto_sync(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     """Page-open trigger: starts a background sync for every enabled,

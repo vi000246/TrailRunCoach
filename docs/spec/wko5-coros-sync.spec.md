@@ -8,7 +8,7 @@
 - **Owner**: maintainer
 - **Status**: IMPLEMENTED（M3 delta 進行中）
 - **Generated**: 2026-05-15
-- **Last updated**: 2026-10-01
+- **Last updated**: 2026-10-04
 
 ## Change History
 
@@ -28,6 +28,7 @@
 | 2026-10-01 | perf/dataset-load | user request (login / token) | 登入一次：某 region 發了 token 後不再登入其他 region；同時兩個登入回 409 `COROS_LOGIN_BUSY`（COROS 只認最後一次登入）。資料 server 偵測順序：上次偵測到的 → US → 登入 server → 其餘；全部探測失敗（2026-10-01：dataset 建置卡住 event loop，探測全部逾時）時沿用上次的，否則 US。「記住密碼」（預設關）：密碼以 `secrets.seal` 存 `sync_state.coros_password_sealed`／`tp_password_sealed`，token 過期或 result 1019 時自動登入一次、重試一次，取消勾選或登出即刪除（`docs/secrets-and-keys.md`）。同步時 FIT 解析改在 thread，同步下載到新檔後背景重建圖表 Dataset |
 | 2026-10-01 | bugfix | user request (charts on COROS) | 圖表分析在 COROS 來源：FIT `vam` 與登山標籤、Stryd-only PD 擬合的圖表 CP（計畫測試之前）、閾值配速推估（CP × 速度／功率比）、區間表來源與日期、越野／爬坡課表看功率、訓練量週增幅改 4 週平均（見「圖表分析在 COROS 來源」） |
 | 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
+| 2026-10-04 | feat/sp-34-35-schedule | SP-34 | `GET /sync/primary`（資料來源＋登入／啟用／忙碌）；SSE 讀取抽成 `static/syncrun.js`，設定頁立即同步與課表頁「從 COROS 抓活動」共用 |
 
 ---
 
@@ -364,6 +365,7 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 | GET | `/api/v1/sync/sources` | 每個來源的登入狀態、是否啟用、是否同步中、上次同步時間與結果、檔案數 / 大小 / 活動期間 |
 | GET/PUT | `/api/v1/sync/settings` | 主要來源、各來源開關、時區、`daily_sync_time`（每日同步時間）、`auto_on_open`（開網站時自動同步）+ 門檻小時數、`chart_data_source`（圖表資料來源）、`map_basemap` / `map_overlays`（單次活動路線圖的預設底圖與疊加層）、TP OAuth 開關；另回傳 secret 來源與金鑰狀態，都只給標籤、不給值 |
 | POST | `/api/v1/sync/start`、`/api/v1/sync/coros/start` | 走共用 runner：同一來源已在同步時回 409 `SYNC_BUSY`，結果寫進 `sync.<src>.last_result` |
+| GET | `/api/v1/sync/primary` | 2026-10-04：目前資料來源（`source` coros／tp、`label`）、是否登入（含已知過期）、是否啟用、是否同步中；不算檔案統計、不載 Dataset。課表頁「從 COROS 抓活動」用（`backend/api/sync.py:126`） |
 | POST | `/api/v1/sync/auto` | 開網站時呼叫。對「已啟用、已登入、閒置、且超過 N 小時」的來源在背景啟動同步，立刻回傳；新鮮、忙碌或關閉時什麼都不做 |
 | DELETE | `/api/v1/sync/{coros\|tp}/files[?date_from&date_to]` | 刪掉該來源的 FIT 與 DB 紀錄，重建去重、重設 cursor，並拿該來源的鎖（同步中回 409）。若它正是圖表資料來源，會改回 WKO5 |
 | GET | `/api/v1/sync/compare?a=&b=&since=` | 兩個資料來源逐筆活動比對：時長、距離、爬升、NP、TSS。頁面是 `/api/v1/static/compare.html` |
@@ -376,6 +378,8 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
     (function(){var s=document.createElement("script");s.src="/api/v1/static/autosync.js";s.defer=true;document.head.appendChild(s);})();
 
 也可以在頁面裡放 `<script src="/api/v1/static/autosync.js" defer></script>`。它每個瀏覽器每 10 分鐘最多呼叫一次，狀態顯示在 `#nav-sync-status`（沒有這個元素就在右上角加一個小徽章）。
+
+**手動同步的前端共用**（2026-10-04）：`backend/static/syncrun.js` 的 `TRCSync.run(src, {since, onEvent})` 打 SSE start 端點並解析進度（`total`／`checked`／`downloaded`／`errors`／`fatal`／`finished`，409 → `busy`），`TRCSync.primary()` 讀 `/sync/primary`。設定頁「立即同步」（`backend/static/settings.html:799`）與課表頁「從 COROS 抓活動」共用，各自只負責顯示文字。
 
 **圖表資料來源**（`charts.data_source`）：`backend/engine/wko5expr/fitdataset.py` 用 FIT 資料夾建 `FitFolderDataset`，每筆活動的指標用本專案自己的公式計算。`datasource.current_source()` / `source_stamp()` 提供 Dataset 工廠。9 月 17 筆活動實測對照 WKO5（當時門檻取自 WKO5 athlete 檔）：時長、距離相同，NP ±0.5%，TSS ±0.2，爬升 1–4%。
 

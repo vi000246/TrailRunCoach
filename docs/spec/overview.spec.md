@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-02
+> **Last Updated**: 2026-10-04
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -653,6 +653,23 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
   (`backend/static/schedule.html:460`, `openPrefs` `backend/static/schedule.html:1308`), its
   client-side checks (`backend/static/schedule.html:1279`) and the preference notes above the
   calendar (`backend/static/schedule.html:730`).
+- **課表 toolbar wording** (2026-10-04): 「抓活動／匯入」 = 資料來源 → here, 「推送」 = 課表 → 手錶.
+  The push split button reads 推送到手錶 (was 「同步到 COROS」). Left of it, ⟳ 從 {COROS｜TrainingPeaks}
+  抓活動 (`#pull-btn`, `backend/static/schedule.html:545`; `pull` `backend/static/schedule.html:1312`)
+  runs the same manual sync as 設定 › 立即同步 for the 資料來源 in use only (`GET /api/v1/sync/primary`,
+  then the SSE start endpoint through the shared `backend/static/syncrun.js:22`). Not logged in /
+  login expired / source switched off → a 到設定頁 link instead (`renderPull`,
+  `backend/static/schedule.html:1298`; when COROS is the source the push side's login link covers
+  it); hidden in the demo. Progress (已檢查 n · 新下載 m) and the result show in `#sync-msg`; 409
+  `SYNC_BUSY` is a hint, not an error. When it ends the calendar reloads (new activities pair:
+  ✓／未完成) and, if anything was downloaded, reloads once more ~5 s later together with the
+  自動調整 box (`window.autoPlanRefresh`) for the background `plan_auto.after_sync`.
+- **Calendar status glyphs** (2026-10-04): 完成 = the chip itself (✓ before the title + compliance
+  colour, ≠, 未完成, ● activity chips). 推送狀態 = a small watch at the chip's top right, only on
+  active sessions today or later (`SYNC` / `SY_SVG`, `backend/static/schedule.html:888`): 已推送
+  neutral grey outline, 需更新 yellow, 失敗 red, 未推送 dashed; labels are provider-neutral
+  (手錶). ✓ is never used for push. The legend has two titled groups, 完成 and 手錶
+  (`renderLegend`, `backend/static/schedule.html:1100`). 已推送 stays visible (subtle).
 
 ## Status engine change
 
@@ -906,3 +923,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-01 | feat/drift-two-tier | N/A | `i_drift` shows the drift's 參考 tier (30–40 min after the warm-up, 推估), labelled with a hover, BAD only on strict runs; AeT test length by `cap_weekday` (80′ standard, or UA's 50′ minimum under a cap < 80) with the reason in the detail, new detail text (treadmill + fan, note the temperature, Evoke early abort), placed on a weekday by `aet_test.pick_day` in all three placement paths (`plan.prefs.aet_test_days` weekday / any), done only by a titled ≥ 48′ or untitled ≥ 55′ road run |
 | 2026-10-02 | feat/heat-bands | user-approved | `i_drift` compares within one temperature band (< 25 / 25–28 / > 28 °C / 溫度不明; `drift_agg.pick_band`), chip 「· 🌡 …」 in the text, `extra.bands`; never BAD in a heat band; Friel / 徐國峰 gate methods count heat runs (pass unlocks, fail 「可能是熱造成的」); AeT test text keeps 「氣溫 25 °C 以下時開始」 as advice |
 | 2026-10-02 | feat/session-classifier | docs/research/vo2max-session-detection.md, user-approved | Weekly Zone 5 slot ticked only by a 「Z5 間歇」 run; done hard days (Z5 / Z3 / 高強度長跑 / CP test) keep the next interval 48 h away; activity rows carry `session` (label + dashicon). Power zones are Palladino everywhere: interval_library classes 3A 88–95 / 3B 95–101 / Z4 101–106 / Z5 ≥ 106 % CP by band middle (was Z5 ≥ 102 %), the editor's 5 區 time ≥ 106 %, time-in-zone charts / zone APIs Palladino 10 zones (Coggan / Stryd sets removed; iLevels kept as the WKO5 cross-check) |
+| 2026-10-04 | feat/sp-34-35-schedule | SP-34, SP-35 | 課表: ⟳ 從 COROS 抓活動 button (資料來源 only, shared `syncrun.js`, reload + one re-poll for 自動調整); push button renamed 推送到手錶; push status drawn as a watch (neutral when up to date, coloured only for 需更新／失敗), ✓ reserved for 完成, legend split into 完成 / 手錶 groups |
