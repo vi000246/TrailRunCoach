@@ -367,10 +367,10 @@
         if (!["warm", "work", "rest", "cool", "other"].includes(k)) { errs.push(`步驟類型不對：${repr(k)}`); return null; }
         let dur = x.dur || {};
         const dt = isDict(dur) ? dur.type : undefined;
-        if (!["time", "distance", "open"].includes(dt)) { errs.push("時長類型要是 時間／距離／按圈"); dur = { type: "open" }; }
+        if (!["time", "distance", "open"].includes(dt)) { errs.push("時長類型要是 時間／距離／直到按下計圈"); dur = { type: "open" }; }
         else if (dt === "time") { const v = f(dur.value, "時間", 5, 6 * 3600); dur = v ? { type: "time", value: pyRound(v) } : { type: "open" }; }
         else if (dt === "distance") { const v = f(dur.value, "距離", 50, 100000); dur = v ? { type: "distance", value: pyRound(v) } : { type: "open" }; }
-        else { const v = dur.est ? f(dur.est, "按圈的預估時間", 5, 6 * 3600) : null; dur = v ? { type: "open", est: pyRound(v) } : { type: "open" }; }
+        else { const v = dur.est ? f(dur.est, "直到按下計圈的預估時間", 5, 6 * 3600) : null; dur = v ? { type: "open", est: pyRound(v) } : { type: "open" }; }
         return { id: iid, kind: k, dur, target: target(x.target), note };
       };
       const items = d.items.map((x) => item(x, 0)).filter(Boolean);
@@ -588,7 +588,6 @@
       }
       if (r.lo != null && r.hi != null && r.lo > r.hi && r.type !== "pace") r.err = "下限比上限高";
       if (r.type === "power" && c.cp && (r.lo < 0.4 * c.cp || r.hi > 2.0 * c.cp)) r.err = r.err || "功率不在 40–200% CP（推估的合理範圍）";
-      if (r.type === "hr" && c.lthr && r.hi > 1.1 * c.lthr) r.err = r.err || "心率超過 110% LTHR（推估的合理範圍）";
       return r;
     }
     const asDict = (r, D) => ({ type: r.type, lo: r.lo, hi: r.hi, frac: r.frac, text: r.text, sub: r.sub, auto: r.auto, warn: r.warn,
@@ -655,7 +654,7 @@
         if (c.terrain === "trail") parts.push(`越野：努力距離 EP = km × (1 + 爬升 ${fx(c.climb_per_km)} m/km ÷ 100)` +
           (c.ep_kmh ? `，用你的越野 EP 速度 ${fx(c.ep_kmh, 1)} km/h` : "，你的越野紀錄不夠，先用路跑速度"));
       }
-      if (lap) parts.push("按圈段：用課表原本寫的最短時間");
+      if (lap) parts.push("「直到按下計圈」段：用課表原本寫的最短時間");
       return parts.length ? parts.join("；") + "（推估）" : "";
     }
     function totals(steps, c, D) {
@@ -726,7 +725,7 @@
           add(hard ? "err" : "warn", `總時間 ${fx(mins)} 分超過這天上限 ${fx(cap)} 分（課表偏好：${hard ? "硬上限" : "軟上限，只提醒"}）`);
         }
       }
-      if (t.open) add("info", `${t.open} 段「按圈結束」不算進總時間`);
+      if (t.open) add("info", `${t.open} 段「直到按下計圈」不算進總時間`);
       for (const it of steps.items) if (it.kind === "repeat" && it.items.some((x) => x.kind === "repeat")) add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it.id);
       const n = corosCount(steps, c, D);
       if (n > W.coros_max_steps) add("warn", `推到手錶是 ${n} 段，超過 ${W.coros_max_steps} 段：COROS 的上限未驗證`);
@@ -825,7 +824,7 @@
     // ---- the watch (sync/coros_workouts.build_program as lines)
     const EX = { warm: 1, work: 2, other: 2, rest: 4, cool: 3 };
     const EX_LABEL = { 1: "暖身", 2: "訓練", 3: "緩和", 4: "休息" };
-    const fmtDur = (d) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`) : "按圈結束");
+    const fmtDur = (d) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`) : "直到按下計圈");
     function stepsToCoros(steps, c, D) {
       const em = { n: 0 }, out = [];
       const name = (st, r, grouped) => {
@@ -853,7 +852,7 @@
     }
     const corosCount = (steps, c, D) => sum(stepsToCoros(steps, c, D).map((x) => 1 + (x.steps ? x.steps.length : 0)));
     function exLine(st, D) {
-      const dur = st.meters ? `${fmtG(st.meters * 100 / 100000)} km` : st.seconds ? fmtS(st.seconds) : "按圈結束";
+      const dur = st.meters ? `${fmtG(st.meters * 100 / 100000)} km` : st.seconds ? fmtS(st.seconds) : "直到按下計圈";
       let tgt = "不設目標";
       if (st.intensity) {
         const [typ, lo, hi] = st.intensity;

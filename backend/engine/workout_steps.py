@@ -45,6 +45,7 @@ from typing import Optional
 
 from backend.engine import interval_library as IL
 from backend.engine.hr_profile import EASY_CAP
+from backend.engine.hr_profile import ZONE_IDS as HR_MODEL_ZONES
 from backend.i18n import N_, _
 from backend.engine.zones import FRIEL_HR, FRIEL_PACE, PALLADINO_POWER_ZONES
 
@@ -56,6 +57,7 @@ TYPE_LABEL = {"auto": "自動", "power": "功率", "hr": "心率", "pace": "配�
 MODES = ("pct", "zone", "abs")
 INTENTS = ("easy", "band", "open")
 DUR_TYPES = ("time", "distance", "open")
+OPEN_LABEL = "直到按下計圈"      # the "open" end condition (lap button; SP-38: was 「按圈」)
 MAX_TIMES = 99
 MAX_DEPTH = 2                    # a repeat may hold one more level of repeats
 MAX_ITEMS = 120                  # steps in the model (the editor's limit; COROS is checked apart)
@@ -71,6 +73,11 @@ HR_ZONES = [("aet", None, None)] + [(z, lo if lo else 0.70, hi if hi is not None
 PACE_ZONES = [(z, lo if lo is not None else 0.85, hi if hi is not None else 1.45)
               for z, _n, lo, hi in FRIEL_PACE]         # × threshold pace; bigger = slower
 ZONES = {"power": POWER_ZONES, "hr": HR_ZONES, "pace": PACE_ZONES}
+# The HR 區間 choice follows 設定 → 課表心率區間 (SP-30): ids Z1–Z6 of that model, in bpm
+# from Ctx.hrz (hr_profile.plan_hr_zones). The Friel ids above stay valid for steps saved
+# before (resolved as % LTHR, as then) and are the only choice without a 課表心率區間.
+HR_Z1_SPAN = 20                  # bpm under Z1's top: zone 1's open lower end (推估)
+HR_Z6_OPEN = 1.10                # × LTHR: zone 6's open top without a max HR (as Friel 5c)
 
 # Z5 / Z3 rules (interval_library §C2): 台灣教練 ≥ 2 min; Buchheit rest; Haugen ≥ 3 min
 Z5_MIN_REP_S, Z3_MIN_REP_S, Z5_MAX_REST_S = IL.Z5_MIN_REP_S, IL.Z3_MIN_REP_S, IL.Z5_MAX_REST_S
@@ -130,7 +137,7 @@ class Ctx:
     terrain: str = "road"                   # road | trail
     climb_per_km: float = 0.0               # m/km of the session (trail: EP = km + climb/100)
     # 課表心率區間 (engine/hr_profile.plan_hr_zones; the plan thresholds' "hr_model"): the
-    # automatic easy / interval HR targets; an explicit zone picked in the editor stays Friel
+    # automatic easy / interval HR targets and the editor's HR 區間 choice (hr_model_zones)
     hrz: Optional[dict] = None
 
     @classmethod
@@ -175,6 +182,31 @@ def easy_hr(c: Ctx) -> Optional[tuple]:
     lo = 0.75 * c.lthr if c.lthr else hi - 25
     lo = min(lo, hi - 10)
     return ("hr", round(lo), round(hi))
+
+
+def hr_model_zones(c: Optional[Ctx]) -> Optional[list]:
+    """The 課表心率區間's zones as [(id, name, lo, hi)] bpm with the open ends closed
+    (Z1 from HR_Z1_SPAN under its top; Z6 up to the max HR, else HR_Z6_OPEN × LTHR), or
+    None without one. Same edges as the HR-zone charts of that model (zones.zone_table)."""
+    rows = ((c.hrz or {}).get("rows") if c else None) or []
+    if len(rows) != len(HR_MODEL_ZONES):
+        return None
+    out = []
+    for r in rows:
+        lo, hi = r.get("lo"), r.get("hi")
+        if hi is not None and not lo:
+            lo = hi - HR_Z1_SPAN
+        if hi is None:
+            top = c.hrz.get("mhr") or (HR_Z6_OPEN * c.lthr if c.lthr else None)
+            hi = top if top and lo and top > lo else (lo + 10 if lo else None)
+        if lo is None or hi is None:
+            return None
+        out.append((r["id"], r.get("name") or "", round(lo), round(hi)))
+    return out
+
+
+def _hr_model_zone(c: Optional[Ctx], zid: str) -> Optional[tuple]:
+    return next(((lo, hi) for z, _n, lo, hi in hr_model_zones(c) or [] if z == zid), None)
 
 
 def _power(c: Ctx, lo: float, hi: float) -> Optional[tuple]:
@@ -517,7 +549,7 @@ def _norm_target(t, errs: list) -> dict:
     out = {"type": ty, "mode": mode}
     if mode == "zone":
         z = str(t.get("zone") or "")
-        if z not in {r[0] for r in ZONES[ty]}:
+        if z not in {r[0] for r in ZONES[ty]} | (set(HR_MODEL_ZONES) if ty == "hr" else set()):
             errs.append(f"沒有這個區間：{z!r}")
         out["zone"] = z
         return out
@@ -582,7 +614,7 @@ def normalize(d) -> dict:
         dur = x.get("dur") or {}
         dt_ = dur.get("type") if isinstance(dur, dict) else None
         if dt_ not in DUR_TYPES:
-            errs.append("時長類型要是 時間／距離／按圈")
+            errs.append("時長類型要是 時間／距離／直到按下計圈")
             dur = {"type": "open"}
         elif dt_ == "time":
             v = _f(dur.get("value"), "時間", errs, 5, 6 * 3600)
@@ -592,7 +624,7 @@ def normalize(d) -> dict:
             dur = {"type": "distance", "value": int(round(v))} if v else {"type": "open"}
         else:
             est = dur.get("est") if isinstance(dur, dict) else None
-            v = _f(est, "按圈的預估時間", errs, 5, 6 * 3600) if est else None
+            v = _f(est, "直到按下計圈的預估時間", errs, 5, 6 * 3600) if est else None
             dur = {"type": "open", "est": int(round(v))} if v else {"type": "open"}
         return {"id": iid, "kind": k, "dur": dur, "target": _norm_target(x.get("target"), errs), "note": note}
 
@@ -624,7 +656,7 @@ def fmt_dur(d: dict) -> str:
     if d.get("type") == "distance":
         m = d["value"]
         return f"{m / 1000:g} km" if m >= 1000 else f"{m} m"
-    return "按圈結束"
+    return OPEN_LABEL
 
 
 def pzone(f: float) -> str:
@@ -742,6 +774,11 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             if not e:
                 return Resolved("none", text="不設目標", auto=False, err="選了心率卻沒有 AeT／LTHR")
             r = _from_int(e, c, auto=False)
+        elif mode == "zone" and tg.get("zone") in HR_MODEL_ZONES:
+            b = _hr_model_zone(c, tg["zone"])
+            if not b:
+                return Resolved("none", text="不設目標", auto=False, err="選了心率區間卻沒有課表心率區間")
+            r = _from_int(("hr", *b), c, auto=False)
         else:
             if mode == "zone":
                 lo, hi = _zone_of("hr", tg.get("zone"))
@@ -775,8 +812,8 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         r.err = "下限比上限高"
     if r.type == "power" and c.cp and (r.lo < 0.4 * c.cp or r.hi > 2.0 * c.cp):
         r.err = r.err or "功率不在 40–200% CP（推估的合理範圍）"
-    if r.type == "hr" and c.lthr and r.hi > 1.1 * c.lthr:
-        r.err = r.err or "心率超過 110% LTHR（推估的合理範圍）"
+    # no plausible-range check on HR: derived targets stay under ~1.06 LTHR, so only a
+    # hand-entered value (abs / pct) could exceed it, and that is sent as entered (SP-33)
     return r
 
 
@@ -881,7 +918,7 @@ def estimate_note(steps: dict, c: Ctx) -> str:
             parts.append(f"越野：努力距離 EP = km × (1 + 爬升 {c.climb_per_km:.0f} m/km ÷ 100)" +
                          (f"，用你的越野 EP 速度 {c.ep_kmh:.1f} km/h" if c.ep_kmh else "，你的越野紀錄不夠，先用路跑速度"))
     if lap:
-        parts.append("按圈段：用課表原本寫的最短時間")
+        parts.append("「直到按下計圈」段：用課表原本寫的最短時間")
     return "；".join(parts) + "（推估）" if parts else ""
 
 
@@ -981,7 +1018,7 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
             hard = cap_mode == "hard"
             add("err" if hard else "warn", f"總時間 {mins:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{'硬上限' if hard else '軟上限，只提醒'}）")
     if t["open"]:
-        add("info", f"{t['open']} 段「按圈結束」不算進總時間")
+        add("info", f"{t['open']} 段「直到按下計圈」不算進總時間")
     for it in steps["items"]:
         if it.get("kind") == "repeat" and any(x.get("kind") == "repeat" for x in it["items"]):
             add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it["id"])
@@ -1027,6 +1064,11 @@ def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
     if ty == "hr":
         if tg.get("mode") == "pct":
             m = (tg["lo"] + tg["hi"]) / 2
+        elif tg.get("mode") == "zone" and tg.get("zone") in HR_MODEL_ZONES:
+            b = _hr_model_zone(c, tg["zone"])
+            if not (b and c.lthr):
+                return None
+            m = (b[0] + b[1]) / 2 / c.lthr
         elif tg.get("mode") == "zone" and tg.get("zone") != "aet":
             lo, hi = _zone_of("hr", tg.get("zone"))
             m = (lo + hi) / 2
@@ -1204,7 +1246,7 @@ def _ex_line(ex: dict) -> dict:
     elif ex["targetType"] == 5:
         dur = f"{ex['targetValue'] / 100000:g} km"
     else:
-        dur = "按圈結束"
+        dur = OPEN_LABEL
     it = ex.get("intensityType")
     if it == 6:
         tgt = f"功率 {ex['intensityValue']}–{ex['intensityValueExtend']} W"
@@ -1379,10 +1421,26 @@ def templates(prefs=None) -> dict:
 
 
 def zones_table(c: Ctx) -> dict:
-    """The 區間 dropdowns with today's numbers: {"power": [{id, label, lo, hi, text}], "hr", "pace"}."""
+    """The 區間 dropdowns with today's numbers: {"power": [{id, label, lo, hi, text}], "hr", "pace"}.
+    HR with a 課表心率區間: its Z1–Z6 (lo / hi × LTHR for the editor's 填法 switch, None
+    without LTHR), then the Friel rows marked `legacy` (shown only on a step that has one)."""
+    hz = hr_model_zones(c)
+
     def rows(ty):
         out = []
+        if ty == "hr" and hz:
+            e = easy_hr(c)
+            out.append({"id": "aet", "label": "≤ " + EASY_CAP, "text": f"{e[1]}–{e[2]} bpm" if e else ""})
+            for z, name, lo, hi in hz:
+                out.append({"id": z, "label": f"{z} {name}".strip(),
+                            "lo": lo / c.lthr if c.lthr else None, "hi": hi / c.lthr if c.lthr else None,
+                            "text": f"{lo}–{hi} bpm"})
         for z, lo, hi in ZONES[ty]:
+            if ty == "hr" and hz:
+                if z != "aet":
+                    out.append({"id": z, "label": f"Friel Z{z}（舊）", "lo": lo, "hi": hi, "legacy": True,
+                                "text": f"{lo * c.lthr:.0f}–{hi * c.lthr:.0f} bpm" if c.lthr else ""})
+                continue
             if ty == "hr" and z == "aet":
                 e = easy_hr(c)
                 out.append({"id": "aet", "label": "≤ " + EASY_CAP, "text": f"{e[1]}–{e[2]} bpm" if e else ""})
