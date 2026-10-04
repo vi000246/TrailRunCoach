@@ -1094,6 +1094,24 @@ which one. The response keeps the `coros` field names.
   band below / above → 「下次起始心率 +5／−5 bpm 再測一次」; a 徐國峰 90′ / Friel result is a base
   check with no AeT to apply. The old 「AeT 已經 N 週沒測」 age rule is gone (B3: a reason, not a
   date).
+  **Threshold confidence (SP-64)**: `i_testing` also runs `threshold_confidence.check`
+  (`backend/engine/threshold_confidence.py:889`, wired at `backend/engine/status.py:852`): LTHR /
+  max HR / resting HR confidence (high / medium / low) from 8 LTHR signals (source, estimate
+  premise, easy cap ≥ LTHR and % HRmax / % HRR, long efforts above LTHR, 40–60 min races < 95 %,
+  the CP-band cross-check, events, age) and the max-HR plausibility check (highest HR held 120 s,
+  spikes / cadence lock filtered, `hrmax_check`, `backend/engine/threshold_confidence.py:434`);
+  `diagnose` (`backend/engine/threshold_confidence.py:488`) names the likely wrong value. Its
+  suggestion (`thr_check:<tests>`, tests `hrmax` / `tt30`, `links` = 「安排課表」 deep links,
+  `schedule_link`, `backend/engine/threshold_confidence.py:619`; `wait_cool`, `earliest` after
+  the A race in taper / race week, `test_conditions`, `backend/engine/threshold_confidence.py:530`)
+  joins `test_suggestions` (a low source alone → `priority: low`); the why gets the diagnosis and
+  「LTHR 可信度低」; `extra.thr_check` carries the confidences, signals, diagnosis, the latest
+  LTHR 30-min / max-HR test results and `warn`. The 總覽 測試 card shows them with the links
+  (`thrCheck`, `backend/static/overview.html:520`); the floating box renders `links` for the
+  tests it doesn't schedule (`zone_rows`, `backend/engine/suggestions.py:105`). Nothing is applied
+  automatically: 設定 shows the results / candidate with 「套用」 (`renderThrCheck`,
+  `backend/static/settings.html:706`). HR-target templates and sessions get a warning badge in
+  the editor from `thresholds.thr_warn` (`_thr_warn`, `backend/api/plan_sessions.py:118`).
 - **AeT drift test** (`backend/engine/aet_test.py`): `due` (`backend/engine/aet_test.py:481`) —
   base phase, a reason (`quality_gate.aet_test_reason`: no data for ~6 weeks, the aggregate's SE
   too large, a shift, the estimate moved) and no test in the last 28 days (推估); no fixed
@@ -1143,7 +1161,8 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/overview/plan/prefs/gate` | per mode `{usable, why}` on the athlete's data, plus the active mode / state / verdict (status `i_gate`, `backend/api/plan_sessions.py:1544`) |
 | POST | `/api/v1/overview/plan/prefs/conflicts` | an unsaved preference set → `{day_conflicts, overlaps}`; nothing stored (`backend/api/plan_sessions.py:1564`) |
 | GET | `/api/v1/plan/thresholds` | 設定 › 閾值測試紀錄 (SP-46): `{today, thresholds, effective_thresholds, power_zones, wko5_settings}` — the same rows and effective values as `GET /api/v1/plan`, without the rest of the season plan (`backend/api/plan.py:284`); saved with `PUT /api/v1/plan/thresholds` (whole table, `backend/api/plan.py:300`) |
-| POST | `/api/v1/plan/thresholds/apply-estimate` | now takes an optional `date` (the test day; not in the future) so 「套用這次的 AeT」 dates the row on the test (`backend/api/plan.py:603`) |
+| POST | `/api/v1/plan/thresholds/apply-estimate` | now takes an optional `date` (the test day; not in the future) so 「套用這次的 AeT」 dates the row on the test; SP-64: also `mhr` + `mhr_method` (`planning.MHR_METHODS`; a max-HR test = test, the sustained-peak candidate = estimate) and `lthr_method: friel30` for a 30-min test (`backend/api/plan.py:637`) |
+| GET | `/api/v1/plan/threshold-check` | SP-64: `threshold_confidence.check` — LTHR / max / resting HR confidence and signals, diagnosis, suggestions, latest test results with `apply` bodies; nothing saved (`backend/api/plan.py:612`) |
 | PUT | `/api/v1/overview/plan/prefs` | the whole preference set (Prefs field names, missing = default); 400 on a bad / unknown value or a cross-field rule (`backend/api/plan_sessions.py:1575`) |
 | GET | `/api/v1/overview/plan/blackouts` | `{blackouts}` — the stored 不排課日期 (`backend/api/plan_sessions.py:1612`) |
 | POST | `/api/v1/overview/plan/blackouts/preview` | `{blackouts}` → the reconcile preview with that list; nothing saved; 400 on a bad range (`backend/api/plan_sessions.py:1619`) |
@@ -1320,4 +1339,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feat/sp-62-trail-types | SP-32 | 速度 tab of 插入範本 also lists strides and short hill sprints (they were 速度 by `family_of` but filed under 輕鬆跑 / 越野跑) |
 | 2026-10-04 | feat/sp-62-trail-types | SP-62 | 越野跑 templates in three kinds (結構化爬升 / 技術地形 / 下坡技術／離心; sub-tabs, `trail_type_of`); target type `rpe` (CR-10 + 爬升 / 下降, reference HR as text, pushed with no target and the RPE in the step name); two 技術地形 templates, `downhill_ecc` by RPE + descent; `rpe_role` (RPE ≥ 7 = 強度課) in /steps/check, the menu and the session dialog (type follows) |
 | 2026-10-04 | feature | SP-39 | 3 區／5 區 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR ≤ 10 % or Friel) + the soft 「近 6 週 ≥ 2 堂 3 區」 (`z5_track`, shared by week_decision and the card); low-intensity share blocks Zone 5 only with a tested AeT; the card renamed 3 區／5 區解鎖流程 and redrawn as two parallel tracks with their own 「下一步」; 「安排課表」 links into the 課表 dialog (`schedule.html?add=` / `?test=`, `WorkoutEditor.applyKey`) |
+| 2026-10-04 | feature | SP-64 | Threshold confidence (`threshold_confidence.py`): 8 LTHR signals + max-HR plausibility (120-s sustained peak, spike / cadence-lock filter), diagnosis of the wrong value, `thr_check` test suggestions (max-HR / LTHR test) with 「安排課表」 links and test conditions, `extra.thr_check` on the 測試 card, `GET /plan/threshold-check`, 「套用」 on 設定 (`mhr_method`), HR-target warning badge in the editor, `maxhr_hill` test template |
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |

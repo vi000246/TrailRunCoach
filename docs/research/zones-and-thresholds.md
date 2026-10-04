@@ -162,7 +162,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 | **%HRmax** | Iannetta 2020（*MSSE* 52:466–473，DOI 10.1249/MSS.0000000000002147，n = 100，摘要）：LT 落在 **60–90% HRmax**、MLSS 落在 **75–97% HRmax**。固定百分比 "conform poorly to exercise intensity domains"。<br>Kanniainen 2025（*Physiol Rep* 13:e70241，DOI 10.14814/phy2.70241，n = 58 跑步機，PMC 全文）：用**實測** HRmax × 70% 當 T1，比 LT1 平均低 **21 bpm**；× 85% 當 T2，比 LT2 低 **11 bpm**。用公式 HRmax 分別低 25／17 bpm | 系統性偏低，個人差異大。上面的範圍等於 ±15% HRmax | 入門、多數手錶的預設；Helgerud 4×4 用 90–95% HRmax（`docs/research/interval-prescription.md`） |
 | HRmax 本身 | Ausland, Kelemen & Seiler 2026（*Front Sports Act Living*，DOI 10.3389/fspor.2026.1806303，n = 4,375，摘要）：Tanaka 公式低估 4.8 bpm，一致性界限 **−18.5～+9.1 bpm** | 公式 ±約 14 bpm；實測要有真的全力 | — |
 | **%HRR（Karvonen）** | Mann, Lamberts & Lambert 2013（*Sports Med* 43:613–625，DOI 10.1007/s40279-013-0045-x，摘要）："a similar effect has been shown when relating exercise intensity to VO2R or HRR"。也就是說，同一個 %HRR 的乳酸反應個人差異一樣大。建議改用 AerT／AnT 這類閾值錨點 | 跟 %HRmax 差不多 | 徐國峰／RQ：閾值 84–88% HRR（`不同的心率區間模型比較.md:10-13`），教練 |
-| **%LTHR（Friel）** | Friel 原文（TrainingPeaks "Quick Guide to Setting Zones"，教練）：30 分鐘獨跑 TT，"look to see what your average heart rate was for the last 20 minutes. That number is an approximation of your LTHR"。跑步 Z1 < 85%、Z2 85–89%、Z3 90–94%、Z4 95–99%、5a 100–102%、5b 103–106%、5c > 106%。<br>30 分 TT 後 20 分心率對實驗室 LT／MLSS 的**驗證研究沒有找到**（Europe PMC 檢索，**未驗證**） | 錨點本身準度未驗證。百分比切出來的 Z2 上緣（89%）只是慣例，不等於 LT1（`aerobic-base-readiness.md:254`） | Friel、TrainingPeaks、WKO5、Stryd／COROS 的 LTHR 模式 |
+| **%LTHR（Friel）** | Friel 原文（TrainingPeaks "Quick Guide to Setting Zones"，教練）：30 分鐘獨跑 TT，"look to see what your average heart rate was for the last 20 minutes. That number is an approximation of your LTHR"。跑步 Z1 < 85%、Z2 85–89%、Z3 90–94%、Z4 95–99%、5a 100–102%、5b 103–106%、5c > 106%。<br>驗證研究（2026-10-04 補，SP-64）：McGehee, Tanner & Houmard 2005（*J Strength Cond Res* 19(3):553–558，PMID 16095403，n = 27 跑者／鐵人，摘要）：30 分鐘計時跑估的閾值心率和實驗室標準 "did not significantly differ (SEE 8.0 b.min-1)"。限制：對照是固定 4 mmol 乳酸、不是個人 MLSS；SEE 8 表示個人可能差到 ±16 bpm；該研究取**整段 30 分鐘**平均，不是 Friel 的後 20 分鐘 | 平均沒偏，個人 SEE 8 bpm（McGehee 2005）。百分比切出來的 Z2 上緣（89%）只是慣例，不等於 LT1（`aerobic-base-readiness.md:254`） | Friel、TrainingPeaks、WKO5、Stryd／COROS 的 LTHR 模式 |
 | **通氣／乳酸閾值（Seiler 三區）** | Seiler & Kjerland 2006（*Scand J Med Sci Sports* 16:49–56，見 `aerobic-base-readiness.md:214`）：區間邊界直接用 VT1／VT2（或 LT1／LT2）當下的心率 | 實驗室測量本身就是標準。誤差來自「測完之後會變」與「場地和實驗室不同」 | Seiler、Uphill Athlete（AeT／AnT）、挪威派 |
 | HRV DFA-α1 | Kanniainen 2025：DDFAT1 對 LT1 平均差 −2 bpm，一致性界限 **+23～−27 bpm**；DDFAT2 +5 bpm，界限較窄 | 平均沒偏，個人散 | 需要 RR 間期（胸帶） |
 
@@ -283,6 +283,28 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 - app 現有的 B3／aggregate 邏輯（`quality_gate.aet_test_reason`）已經是事件觸發。只需要把 LTHR 也接上同一套（§3.4 改動 4）。
 
+### 2.6 LTHR／最大心率可信度檢查（SP-64，`engine/threshold_confidence.py`）
+
+只提示、不自動改；建議接在 `status.i_testing` 的測試建議（`zone_events` 建議物件、浮動建議框、總覽測試卡），附「安排課表」深連結（SP-39 `quality_gate.schedule_action`）。訊號依可靠度：
+
+| # | 訊號 | 門檻（常數） | 等級 | 依據 |
+|---|---|---|---|---|
+| 1 | 來源不是測試（自動估算／手錶／WKO5 預設） | — | 一開始就低信心 | 手錶 LTHR 誤差 9–11 bpm（Lu 2025，SP-64 補充研究轉述） |
+| 2 | 自動估算當時的 CP 和現在差 | > 5 %（`CP_CHANGE`） | strong | 推估 |
+| 3 | 任一模型的輕鬆跑上限 ≥ LTHR；LTHR／最大心率、LTHR／儲備心率 | 80–98 %／73–95 % 外 strong，85–95 %／80–94 % 外 weak | error／strong／weak | Nuuttila 2025（LT2 90.6 ± 2.5 % HRmax、87.0 ± 3.4 % HRR）、Davis 90 % 範圍（SP-64 轉述）；內圈推估 |
+| 4 | 60 分鐘平均心率，或 0.95 × 20 分鐘峰值，高於 LTHR | 涼天 strong，熱天／不知道氣溫只提示 | strong／hint | TrainingPeaks 閾值通知（教練） |
+| 5 | 40–60 分鐘比賽平均心率 < 95 % LTHR | `RACE_LOW` | weak | 推估 |
+| 6 | 涼天、30 秒功率 97–103 % CP ≥ 10 分的段落，心率中位數和 LTHR 差 | > 5 bpm、≥ 3 段 | weak | Micheli 2025（只當交叉檢查）；門檻推估 |
+| 7 | 停跑 ≥ 4 週、第一波轉涼、CP 變動 > 5 % | — | weak | Coyle 1986、Houmard 1992；推估 |
+| 8 | 上次 LTHR 測試 > 8 週 | `TEST_AGE_DAYS` 56 | hint | Friel 每 4–8 週 |
+
+- **最大心率可信度**：365 天內每次跑步「撐 120 秒的最高心率」（1 秒格點；3 秒內升 ≥ 15 bpm 視為尖峰、30 秒內沒回落則當成真的升高；步頻鎖定用 `session_stimulus.cadence_lock` 濾掉）。設定值比它高 > 8 bpm → strong（偏高，候選值＝那個 120 秒值）；比撐 60 秒的最高心率低 > 3 bpm → strong（偏低）。來自手錶帳號或推估 → weak。全部推估。候選值只顯示在設定頁，按「套用」才寫入（`mhr_method = estimate`）。
+- **哪個值錯**：LTHR 有反證（4–6、2）而最大心率沒有 → 建議 LTHR 測試；最大心率有反證而 LTHR 沒有 → 最大心率測試；兩個都有 → 兩個都測；只有矛盾（3）沒有反證 → 看獨立證據（比賽 95–103 % LTHR、CP 附近心率 ±5 bpm、涼天 60 分鐘平均在 LTHR 下 5 bpm 內）支持哪邊，分不出來就兩個都測。
+- **信心**：低＝低來源或任何 error／strong；中＝手動輸入或 weak；高＝其他。LTHR 低（或在儲備心率／最大心率區間下、最大心率低）時，編輯器裡有心率目標的範本與課表顯示警告。
+- **測試條件**：LTHR 測試 < 25 °C（最近 14 天路跑多數熱 →「等天氣轉涼」但仍可排）、前 48 小時沒有硬課（條件文字）、不在減量期／比賽週（`earliest` = A 賽隔天）。
+- **測完**：課表的測試課（done_by）或活動標題認出「LTHR 30 分鐘測試」／「最大心率測試」→ 算候選值（LTHR＝最佳 30 分鐘段的第 10–30 分平均心率，並報 30 分平均功率對 CP；最大心率＝濾掉尖峰後撐 ≥ 5 秒的最高心率），設定頁按「套用」才寫入，測法記在該列（`lthr_method = friel30`、`mhr_method = test`）。
+- 做不到的：腕式換胸帶這個事件——FIT 檔讀不到心率感測器類型，沒有實作。
+
 ---
 
 ## 3. 這位選手「最正確」的設定
@@ -390,6 +412,8 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 ## 附錄 B：文獻（本次查證）
 
+- McGehee JC, Tanner CJ, Houmard JA (2005). A comparison of methods for estimating the lactate threshold. *J Strength Cond Res* 19(3):553–558. PMID 16095403（摘要，2026-10-04 SP-64 讀）
+
 - Ausland Å, Kelemen B, Seiler S (2026). *Front Sports Act Living* 8:1806303. DOI 10.3389/fspor.2026.1806303（摘要）
 - Galán-Rioja MÁ et al. (2020). Relative proximity of critical power and metabolic/ventilatory thresholds. *Sports Med* 50:1771–1783. DOI 10.1007/s40279-020-01314-8（摘要）
 - Gielen J et al. (2026). *JMIR Form Res* 10:e85186. DOI 10.2196/85186（摘要）
@@ -406,3 +430,15 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 - 教練：Friel, "Joe Friel's Quick Guide to Setting Zones"，TrainingPeaks（本次核對原文）。
 - 徐國峰：筆記 `跑者都該懂的跑步數據，讀書心得.md`、`不同的心率區間模型比較.md`。
 - 沿用既有文件、本次沒有重讀的：Seiler & Kjerland 2006、Coyle & González-Alonso 2001、Lafrenz 2008、Wingo 2020、Beiter 2025、Hunt 2015／2019、Coyle 1986、Houmard 1992（出處見文中引用的 `docs/research/*.md` 行號）。
+
+## 附錄 C：最大心率測試的來源（SP-64，2026-10-04）
+
+範本 `maxhr_hill`（`engine/workout_templates.py`）照 Polar 的上坡測試；讀法、條件與安全提醒如下。
+
+- **Polar,「How to determine your maximum heart rate」**（2016-07-06，2024-04-12 更新；https://www.polar.com/blog/calculate-maximum-heart-rate/ ，教練／廠商）：平路暖身 15 分加到平常訓練配速 → 上坡 ≥ 2 分、能撐 20 分鐘的強度 → 同一坡更快（約 3 km 比賽配速）→ 心率降 30–40 bpm → 最後 1 分鐘全力衝上半段坡，這時的心率當實用最大心率 → 緩和 ≥ 10 分。建議有人陪、先問醫師。
+- **Boudet G et al. (2002)**. Median maximal heart rate for heart rate calibration in different conditions: laboratory, field and competition. *Int J Sports Med* 23(4):290–297. PMID 12015631（摘要）：16 名耐力運動員，實驗室／現場／比賽的最高心率沒有顯著差異（194.3／193.8／192.3 bpm），個人差異約 ±6 bpm → **最近一場 5 K 比賽的最後衝刺也可以當最大心率測試**（範本 note）。
+- **Fellrnr「Maximum Heart Rate」**（https://fellrnr.com/wiki/Maximum_Heart_Rate ，跑者自編 wiki，弱來源）：暖身後由快漸進到全力，負荷再加心率不再升就是最大心率；建議在醫療監督下做，有疑慮就不要自己測。
+- **安全**：最大強度運動前的篩檢依 ACSM（Riebe D et al. 2015, Updating ACSM's recommendations for exercise preparticipation health screening, *Med Sci Sports Exerc* 47(11):2473–2479；本次沒有重讀原文）：有心血管疾病或症狀的人先經醫師同意。範本寫「有心血管疾病或風險、胸痛、頭暈的人不要做，不舒服立刻停」。
+- **感測器**：腕式對心電圖一致性 rc 0.67–0.92、胸帶 0.996（Gillinov 2017，附錄 B）→ 範本要求戴胸帶。
+- **app 讀法（推估）**：1 秒格點、濾掉尖峰（3 秒內升 ≥ 15 bpm）與步頻鎖定後，撐 ≥ 5 秒的最高心率（也報 10 秒值）；`thresholds.estimate_mhr` 用的也是 5 秒。沒有來源，標推估。
+- 限制：這次的網路搜尋額度用完，只讀到上面幾個頁面；Uphill Athlete／TrainingPeaks 的最大心率測試頁沒讀到（404），沒有引用。
