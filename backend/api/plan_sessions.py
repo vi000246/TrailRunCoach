@@ -375,9 +375,31 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
         data = await _with_steps(data, inp, {})
     try:
         async with _wlock():
+            if data.get("kind") == "test" and data.get("day") and _is_xu90(data):
+                # 徐國峰's 90′ is that day's LSD — the 「安排課表」 deep link / the 測試 dialog take the
+                # same path as 排入測試 (SP-39, owner 2026-10-04)
+                await _replace_long(db, data["day"])
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
+
+
+def _is_xu90(s: dict) -> bool:
+    """徐國峰's 90-min test: the 測試 dialog's xu90 protocol (aet_test.is_xu, by title) or the
+    template-library row lib:xu_e_drift (排入測試's template path)."""
+    from backend.engine import aet_test as AT
+    if AT.is_xu(s):
+        return True
+    row = _test_rows().get("lib:xu_e_drift") or {}
+    t = row.get("title") or row.get("label")
+    return bool(t) and (s.get("title") or "") == t
+
+
+async def _replace_long(db: AsyncSession, day: str) -> None:
+    """Delete the active long run of `day` (徐國峰's 90-min test is that day's LSD). Caller holds _wlock."""
+    for s in await PS.load(db):
+        if s["state"] == "active" and s["kind"] == "long" and s.get("day") == day:
+            await PS.delete(db, s["uid"])
 
 
 @router.patch("/sessions/{uid}")
@@ -616,9 +638,7 @@ async def _schedule_test(db: AsyncSession, inp: dict, sg: dict, day: Optional[st
     try:
         async with _wlock():
             if sg.get("replaces_long"):
-                for s in await PS.load(db):
-                    if s["state"] == "active" and s["kind"] == "long" and s.get("day") == day:
-                        await PS.delete(db, s["uid"])            # 徐國峰's test is that day's LSD
+                await _replace_long(db, day)                     # 徐國峰's test is that day's LSD
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
     except PS.PlanError as e:
         raise _err(e)
