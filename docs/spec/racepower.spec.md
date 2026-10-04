@@ -939,7 +939,7 @@ type + km. The date is the race date, else the day computed.
 
 `POST /export/plan` runs the plan in the thread pool, builds the steps with `watch_export.steps_for`
 on `chart_rows` and writes them as one session of the stored plan (`race_session`,
-`backend/api/racepower.py:593`; `plan_store.upsert_external`, `backend/engine/plan_store.py:498`).
+`backend/api/racepower.py:593`; `plan_store.upsert_external`, `backend/engine/plan_store.py:520`).
 The calculator no longer pushes to the watch itself: the session is edited on the 課表 page and
 pushed with the plan's own push (overview spec, Stored plan / COROS push).
 - **lap** (default trail / 百岳): open steps ended with the lap button, named by landmark

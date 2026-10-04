@@ -153,7 +153,7 @@ def _spec(ds, w, row: dict, m: dict):
         return None, spec, spec[1]
     if row and row.get("kind") == "quality":
         # a planned interval session without a library variant or a ladder title (the
-        # 專項期 「爬坡間歇 5×4 分」, the taper's 「短強度 4×3 分」, an edited structure): its
+        # 專項期 「VO2max 間歇 5×4 分上坡」, the taper's 「短強度 4×3 分」, an edited structure): its
         # structure — the one pushed to the watch (workout_steps.derive) — is the plan
         from backend.engine import workout_steps as WS
         try:

@@ -65,7 +65,7 @@ def test_every_listed_variant_is_equivalent_to_its_rungs_canonical_and_30_15_is_
 def test_tiz_main_blocks_and_text():
     v = IL.get("v3b")
     assert IL.tiz_s(v) == 840 and IL.main_s(v) == 840 + 4 * 120
-    assert IL.structure(v) == "2-3-4-3-2 分金字塔" and IL.title(IL.get("v1c")) == "VO2max 5×2 分上坡"
+    assert IL.structure(v) == "2-3-4-3-2 分金字塔" and IL.title(IL.get("v1c")) == "VO2max 間歇 5×2 分上坡"
     assert IL.structure(IL.get("v1b")) == "4×2:30" and IL.structure(IL.get("t1d")) == "連續 20 分"
     assert IL.structure(IL.get("x3015")) == "2 組 × 13×30 秒／15 秒"
     b = IL.blocks(IL.get("v4a"), "std")
@@ -101,7 +101,7 @@ def test_time_enough_means_the_standard_full_length_session():
     f = IL.fit("z5d", 60)                                             # a cap that fits the full session
     assert (f["variant"].key, f["level"]) == ("v4a", "full")
     s = IL.session_for(f, {"cp": 204.0, "lthr": 170.0, "aet": 150.0})
-    assert s["title"] == "VO2max 4×4 分" and s["minutes"] == 55 and s["variant_key"] == "v4a"
+    assert s["title"] == "VO2max 間歇 4×4 分" and s["minutes"] == 55 and s["variant_key"] == "v4a"
     assert s["detail"].startswith("時間足夠 → 標準版") and "暖身 20 分" in s["detail"] and "緩和 10 分" in s["detail"]
     assert "212–220 W" in s["target"] and "心率" in s["target"]
 

@@ -28,18 +28,31 @@ KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "�
          "race": "比賽"}
 NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
-            "target_basis", "steps")
+            "target_basis", "steps", "family")
 TERRAINS = ("road", "trail", "hike")
-DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "LSD", "quality": "閾值 3×10 分", "test": "CP 測試 20 分全力",
+DEFAULT_TITLES = {"easy": "輕鬆跑", "long": "LSD", "quality": "有氧間歇（巡航）3×10 分", "test": "CP 測試 20 分全力",
                   "hike": "越野跑", "strength": "肌力（下肢單腳＋核心）"}
 # 長時間 -> LSD (2026-10-03): the planner's old auto titles, mapped at read time so stored
 # rows show the new label; any other title (a user's own wording) is left as written
 LEGACY_TITLES = {"長時間輕鬆": "LSD", "長時間輕鬆（山路）": "LSD（山路）",
                  "長時間輕鬆（路跑）": "LSD（路跑）", "長時間輕鬆（山路越野）": "LSD（山路越野）"}
+# 強度課's family (SP-79): 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.FAMILIES), stored only when
+# the user picks one in the 課表 editor; None = derived from the steps (workout_templates.session_family)
+FAMILIES = ("aerobic", "vo2max", "speed")
+# a new 強度課's title by the family picked in the editor (until you type your own or insert a template)
+FAMILY_TITLES = {"aerobic": DEFAULT_TITLES["quality"], "vo2max": "VO2max 間歇", "speed": "速度"}
 
 
-def display_title(title):
-    return LEGACY_TITLES.get(title, title) if title else title
+def display_title(title, kind: Optional[str] = None):
+    """The stored title in today's words: 長時間 → LSD, and (a 強度課's, SP-79) the old
+    「閾值 3×8 分」 → 「有氧間歇（巡航）3×8 分」 (interval_library.renamed)."""
+    if not title:
+        return title
+    title = LEGACY_TITLES.get(title, title)
+    if kind in (None, "quality"):
+        from backend.engine import interval_library as IL
+        title = IL.renamed(title)
+    return title
 
 
 def _test_default(data: dict) -> None:
@@ -75,7 +88,7 @@ def to_dict(r: PlanSession) -> dict:
         except ValueError:
             adj = None
     return {"uid": r.uid, "week_start": r.week_start, "gen_key": r.gen_key, "day": r.day, "kind": r.kind,
-            "title": display_title(r.title), "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
+            "title": display_title(r.title, r.kind), "minutes": r.minutes or 0, "target": r.target or "", "detail": r.detail or "",
             "source": r.source or "", "tss": r.tss or 0.0, "origin": r.origin, "edited": bool(r.edited),
             "provisional": bool(r.provisional), "state": r.state, "done_by": done_by, "note": r.note,
             "terrain": r.terrain, "distance_km": r.distance_km, "climb_m": r.climb_m,
@@ -84,6 +97,7 @@ def to_dict(r: PlanSession) -> dict:
             "equiv": None if r.equiv is None else bool(r.equiv), "swap": r.swap, "swap_reason": r.swap_reason,
             "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj,
             "target_basis": getattr(r, "target_basis", None), "steps": _steps_of(getattr(r, "steps", None)),
+            "family": getattr(r, "family", None),
             "ext_key": getattr(r, "ext_key", None), "ext_sig": getattr(r, "ext_sig", None)}
 
 
@@ -105,7 +119,7 @@ VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "va
 
 FILL_FIELDS = ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
                "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
-               "protocol") + VARIANT_FIELDS + ("ext_key", "ext_sig") + ("done_by", "variant_adj", "steps")
+               "protocol") + VARIANT_FIELDS + ("ext_key", "ext_sig", "family") + ("done_by", "variant_adj", "steps")
 
 
 def _fill(r: PlanSession, d: dict) -> None:
@@ -286,6 +300,10 @@ def _clean(patch: dict, today: str) -> dict:
                     raise PlanError(f"課表結構有誤：{e}")
                 if v["origin"] == "derived":
                     v["origin"] = "user"
+        elif k == "family":
+            v = None if v in (None, "", "auto") else v       # 自動 = derived from the steps
+            if v is not None and v not in FAMILIES:
+                raise PlanError(f"強度課類型要是 有氧間歇／VO2max 間歇／速度：{v!r}")
         elif k == "target_basis":
             v = None if v in (None, "", "auto") else v       # 自動 = None
             if v is not None and v not in ("hr", "power"):
@@ -359,6 +377,8 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
         _fill(t, tomb)
         d.update(origin="custom", gen_key=None)
     d.update(ch)
+    if d["kind"] != "quality":
+        d["family"] = None                  # only a 強度課 has a family
     if d["kind"] == "test" and "title" in ch:
         from backend.engine import cp_protocols as CPP
         d["protocol"] = CPP.protocol_of({"title": ch["title"]}) or d.get("protocol")
@@ -389,6 +409,8 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     d = {"uid": R.new_uid(), "week_start": R.monday_of(ch["day"]), "gen_key": None, "origin": "custom",
          "edited": True, "provisional": False, "state": "active", "done_by": None, "note": None,
          "source": "", "tss": 0.0, "target": "", "detail": "", "minutes": 45, **ch}
+    if d["kind"] != "quality":
+        d["family"] = None
     if d["kind"] == "test":
         d["protocol"] = data.get("protocol")
         d["source"] = str(data.get("source") or "")
@@ -830,7 +852,7 @@ def done_by_index(db_path=None) -> dict:
         d = r.get("done_by")
         if r.get("state") != "done" or not isinstance(d, dict) or d.get("index") is None:
             continue
-        out[d["index"]] = {**session_tag(r), "title": display_title(r.get("title")), "day": r.get("day")}
+        out[d["index"]] = {**session_tag(r), "title": display_title(r.get("title"), r.get("kind")), "day": r.get("day")}
     return out
 
 
@@ -840,7 +862,7 @@ def done_session(index, db_path=None) -> Optional[dict]:
     for r in _plan_rows(db_path, LOAD_KINDS, _DONE_CACHE):
         d = r.get("done_by")
         if r.get("state") == "done" and isinstance(d, dict) and d.get("index") == index:
-            return {**r, "title": display_title(r.get("title"))}
+            return {**r, "title": display_title(r.get("title"), r.get("kind"))}
     return None
 
 

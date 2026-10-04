@@ -172,7 +172,7 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:2159`); `long` 
    activity and `done_by.date` its day — the same match as the CP test's done_by.
    `scheduled_test` skips AeT sessions, so a done AeT test is never read as a CP
    test (before, any done kind-`test` row matched and the activity became `test_cp`).
-   `plan_store.test_sessions` returns `gen_key` for this (`backend/engine/plan_store.py:870`);
+   `plan_store.test_sessions` returns `gen_key` for this (`backend/engine/plan_store.py:892`);
    generated AeT sessions now carry `protocol: "aet"` (`backend/engine/aet_test.py:570`,
    kept by `projection._bq`).
 2. `test_cp`: plan threshold record with a CP on that date, a title matching
@@ -184,7 +184,7 @@ easy is labelled 輕鬆健行 (`backend/engine/workout_review.py:2159`); `long` 
       the same day **and** a ≥ 3-min bout ≥ 1.05 × the CP in effect
       (`SAME_DAY_BOUT`, `backend/engine/workout_review.py:1917`). The sessions come from
       `plan_store.test_sessions` (read-only sqlite, cached on the DB mtime,
-      `backend/engine/plan_store.py:833`); a dataset may carry its own list.
+      `backend/engine/plan_store.py:855`); a dataset may carry its own list.
    2. a 5–10 K race or TT (protocol `race`): 15–90 min moving and a race / TT
       title or a plan race event that day of 4–11 km (`backend/engine/workout_review.py:1982`).
    3. the power pattern — `looks_like_cp_test` (standard), else a 20′ window
@@ -373,12 +373,12 @@ Unknown section or no samples → an `empty` card.
 
 | Function | Used by | Rule | Line |
 |---|---|---|---|
-| `drift_series` | `status.i_drift` (`backend/engine/status.py:505`, `ref=True`; text in plain words 「穩定 · 3.2%」 since 2026-10-02), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; each point has `tier` and `band` (temperature band; `i_drift` compares within one); strict by default (`drift_streak`), `ref=True` keeps reference-tier drifts; runs drift_of refuses (< 30 min after the warm-up, fast finish, …) are kept with drift None | `backend/engine/workout_review.py:2209` |
+| `drift_series` | `status.i_drift` (`backend/engine/status.py:526`, `ref=True`; text in plain words 「穩定 · 3.2%」 since 2026-10-02), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; each point has `tier` and `band` (temperature band; `i_drift` compares within one); strict by default (`drift_streak`), `ref=True` keeps reference-tier drifts; runs drift_of refuses (< 30 min after the warm-up, fast finish, …) are kept with drift None | `backend/engine/workout_review.py:2209` |
 | `drift_streak` / `STREAK_NEED` | legacy only (the removed 「連續 3 次」 rule) | consecutive most recent fair drifts < 5 % | `backend/engine/workout_review.py:2242`, `backend/engine/workout_review.py:168` |
 | `quality_gate` | thin wrapper over `quality_gate.week_decision`; a legacy bool / None gate = no method | outside base: intensity and drift not bad | `backend/engine/workout_review.py:1521` |
-| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:527`, `backend/engine/quality_gate.py:413`, `backend/engine/quality_gate.py:524`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (every temperature band counts; a pass in heat unlocks, a fail in heat says 「可能是熱造成的」 — `quality_gate.heat_suffix`); dose: a done 課表 quality session, the `quality` class, or a road run with ≥ 4 short reps or ≥ 2 Zone 3 reps (`interval_reps.find_reps`) | — |
-| `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:759`) | Latest run classified `test_aet` in 120 days: `analyze_workout` result (protocol, judge), `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:421`, `backend/engine/aet_test.py:453`, `backend/engine/aet_test.py:461` |
-| `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:759`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:2276`, `backend/engine/workout_review.py:2296` |
+| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:532`, `backend/engine/quality_gate.py:417`, `backend/engine/quality_gate.py:529`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (every temperature band counts; a pass in heat unlocks, a fail in heat says 「可能是熱造成的」 — `quality_gate.heat_suffix`); dose: a done 課表 quality session, the `quality` class, or a road run with ≥ 4 short reps or ≥ 2 Zone 3 reps (`interval_reps.find_reps`) | — |
+| `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:780`) | Latest run classified `test_aet` in 120 days: `analyze_workout` result (protocol, judge), `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:421`, `backend/engine/aet_test.py:453`, `backend/engine/aet_test.py:461` |
+| `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:780`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:2276`, `backend/engine/workout_review.py:2296` |
 
 ## CP-test protocols (`engine/cp_protocols.py`)
 

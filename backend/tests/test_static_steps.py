@@ -190,6 +190,10 @@ def test_js_port_matches_the_endpoints(scenario, monkeypatch, tmp_path):
     async def expected():
         return ([await py(PSAPI.steps_check, b) for b in cases], [await py(PSAPI.steps_derive, b) for b in DERIVE])
     want_check, want_derive = asyncio.run(expected())
+    for w in want_check:
+        # a 強度課's 「步驟看起來像…」 family (SP-79, workout_templates.family_of) isn't ported: the
+        # demo's editor just doesn't show that hint
+        (w.get("body") or {}).pop("family", None)
 
     (tmp_path / "d.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
     (tmp_path / "c.json").write_text(json.dumps({"check": cases, "derive": DERIVE}, ensure_ascii=False), "utf-8")

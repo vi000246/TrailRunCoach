@@ -103,11 +103,11 @@ def test_projection_ramp_31_and_cap():
     assert weeks[i]["hours"] == pytest.approx(0.65 * sum(w["hours"] for w in weeks[i - 3:i]) / 3)
     assert modes[-1] == "taper"
     taper = weeks[-1]
-    # 減量期: one interval by the two-track pick (SP-31) — Zone 5 not open here, so Zone 3's 節奏 2×8′
-    assert [s["title"] for s in taper["sessions"] if s["kind"] == "quality"] == ["節奏 2×8 分"]
+    # 減量期: one interval by the two-track pick (SP-31) — Zone 5 not open here, so Zone 3's 2×8′ (SP-79: 有氧間歇（巡航）)
+    assert [s["title"] for s in taper["sessions"] if s["kind"] == "quality"] == ["有氧間歇（巡航）2×8 分"]
     # 專項期 without a confirmed aerobic base: the Zone 3 ladder, not the 5×4′ hill set (台灣教練)
     assert weeks[6]["phase"] == "specific" and (weeks[6]["mode"] == "recovery_week" or any(
-        s["kind"] == "quality" and s["title"].startswith("閾值") for s in weeks[6]["sessions"]))
+        s["kind"] == "quality" and s["title"].startswith("有氧間歇") for s in weeks[6]["sessions"]))
 
 
 def test_projection_sessions_placed_like_week_plan():
@@ -398,12 +398,12 @@ def test_api_swap_a_variant_is_a_user_edit_and_pushes_its_steps(monkeypatch):
         r = e.c.patch(f"{API}/sessions/{q['uid']}", json={"variant_key": "v3c"})
         assert r.status_code == 200
         s = r.json()
-        assert s["edited"] and s["variant_key"] == "v3c" and s["swap"] == "user" and s["title"] == "VO2max 6×2:30"
+        assert s["edited"] and s["variant_key"] == "v3c" and s["swap"] == "user" and s["title"] == "VO2max 間歇 6×2:30"
         d = e.c.get(f"{API}/variants", params={"uid": q["uid"]}).json()
         assert d["drawer"]["rung"] == "z5c" and d["drawer"]["current_key"] == "v3c"
         e.c.post(f"{API}/reconcile")
         again = next(x for x in e.c.get(f"{API}/sessions").json()["sessions"] if x["uid"] == q["uid"])
-        assert again["variant_key"] == "v3c" and again["title"] == "VO2max 6×2:30"
+        assert again["variant_key"] == "v3c" and again["title"] == "VO2max 間歇 6×2:30"
         assert e.c.patch(f"{API}/sessions/{q['uid']}", json={"variant_key": "zz"}).status_code == 400
         e.c.post(f"{API}/push-coros?scope=day&day={q['day']}")
         prog = next(p for p in e.fake.programs.values() if "6×2:30" in p["name"])
@@ -763,9 +763,9 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     # 台灣教練: Zone 3 first; without a confirmed base (no z5) Zone 3 keeps going — each rung's
     # standard session (no cap: the full-length one, engine/interval_library.fit)
     assert [q[d][0] for d in base][:2] == [IL.title(IL.canonical("z3a")), IL.title(IL.canonical("z3b"))]
-    assert all(q[d][0].startswith("閾值") for d in base), {d: q[d] for d in base}
+    assert all(q[d][0].startswith("有氧間歇") for d in base), {d: q[d] for d in base}
     # 專項期 with Zone 5 not confirmed: the Zone 3 ladder carries on instead of the 5×4′ hill set
-    assert spec and all(q[d] and q[d][0].startswith("閾值") for d in spec), {d: q[d] for d in spec}
+    assert spec and all(q[d] and q[d][0].startswith("有氧間歇") for d in spec), {d: q[d] for d in spec}
     # Zone 5 open but Zone 3 not steady yet (0 of 3 達標): Zone 3 first (two tracks, SP-31) — the base
     # weeks' A rungs are over 10 % of a ~5 h week, so their 巡航版 3×6′ / 3×8′ / 2×12′ (still counted);
     # three of them make Zone 3 steady, and the 專項期 then takes its Zone 5 track (trail: the 5×4′
@@ -774,22 +774,22 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
              "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": True, "state": "confirmed"},
              "ratio": {"z3": 1, "z5": 1, "why": "A 賽 10 km 路跑"}}
     q5, base5, spec5 = split(P.project_weeks(_test_week(open5), PHASES, date(2027, 3, 1)))
-    assert [q5[d][0] for d in base5][:3] == ["閾值 3×6 分", "閾值 3×8 分", "閾值 2×12 分"]
-    assert len(spec5) == 2 and sorted(q5[d][0].startswith("閾值") for d in spec5) == [False, True]
-    assert any(q5[d] == ["爬坡間歇 5×4 分"] for d in spec5)
+    assert [q5[d][0] for d in base5][:3] == ["有氧間歇（巡航）3×6 分", "有氧間歇（巡航）3×8 分", "有氧間歇（巡航）2×12 分"]
+    assert len(spec5) == 2 and sorted(q5[d][0].startswith("有氧間歇") for d in spec5) == [False, True]
+    assert any(q5[d] == ["VO2max 間歇 5×4 分上坡"] for d in spec5)
     # a locked method (data there, criterion not met): Zone 3 still goes on, never Zone 5
     locked = {"state": "locked", "mode": "ua_gap", "resolved": "ua_gap", "verdict": "差距 16%", "levels": good,
               "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": False}}
     q, base, spec = split(P.project_weeks(_test_week(locked), PHASES, date(2027, 3, 1)))
-    assert base and all(q[d] and q[d][0].startswith("閾值") for d in base)
-    assert spec and all(q[d] and q[d][0].startswith("閾值") for d in spec)
+    assert base and all(q[d] and q[d][0].startswith("有氧間歇") for d in base)
+    assert spec and all(q[d] and q[d][0].startswith("有氧間歇") for d in spec)
     # intensity bad (SP-31): the low-intensity share keeps Zone 5 out but no longer stops Zone 3 —
     # base and specific weeks keep their Zone 3 session, never a Zone 5 one
     weeks = P.project_weeks(_test_week({"levels": {"intensity": "bad", "drift": "good"}, "streak_ok": True}),
                             PHASES, date(2027, 3, 1))
     q = {s: v for s, v in _quality_by_week(weeks).items()
          if next(w for w in weeks if w["start"] == s)["phase"] in ("base", "specific")}
-    assert q and all(v and v[0].startswith("閾值") for v in q.values()), q
+    assert q and all(v and v[0].startswith("有氧間歇") for v in q.values()), q
     # drift bad still stops the 專項期
     weeks = P.project_weeks(_test_week({"levels": {"intensity": "good", "drift": "bad"}, "streak_ok": True}),
                             PHASES, date(2027, 3, 1))

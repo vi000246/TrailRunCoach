@@ -223,6 +223,7 @@ def _prev_row(title: str) -> Optional[tuple]:
     its track; A1 / V1 → T3), None when there is none."""
     from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
+    title = IL.renamed(title)                  # a stored pre-SP-79 title (「閾值 3×8 分」)
     s = next((s for s in QG.LADDER if s[1] == title), None)
     prev = IL.PREV_RUNG.get(s[0]) if s is not None else None
     return next((r for r in QG.LADDER if r[0] == prev), None) if prev else None

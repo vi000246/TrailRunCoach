@@ -67,7 +67,7 @@ def test_cp_change_rescales_logs_and_repushes(monkeypatch):
         db = await make_db()
         assert (await PA.run(db))["status"] == "applied"
         assert (await PA.settings(db))["state"]["cp"] == 300.0
-        q = _by_title(await PS.load(db), "閾值 3×10 分")
+        q = _by_title(await PS.load(db), "有氧間歇（巡航）3×10 分")
         # the user's own target text on the quality day (kept by reconcile: edited)
         await PS.edit(db, q["uid"], {"target": "功率 285–303 W"}, "2026-09-30")
         n0 = len(b.push.calls)
@@ -78,7 +78,7 @@ def test_cp_change_rescales_logs_and_repushes(monkeypatch):
         r = await PA.run(db, trigger="cp_change")
         c = r["cp_change"]
         assert (c["old"], c["new"]) == (300.0, 330.0) and c["n"] >= 1 and c["pushed"]
-        q2 = _by_title(await PS.load(db), "閾值 3×10 分")
+        q2 = _by_title(await PS.load(db), "有氧間歇（巡航）3×10 分")
         assert q2["target"] == "功率 314–333 W"
         # re-pushed with the new CP, the quality session among them
         assert len(b.push.calls) == n0 + 1 and b.push.calls[-1]["cp"] == 330.0
