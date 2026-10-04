@@ -818,5 +818,5 @@ def test_T15_hike_plan_and_coros_preview(client):
     j = ex.json()
     # trail: lap-button steps with the leg's target (power on runnable legs, HR cap on the steep ones)
     assert j["pushed"] is None and j["mode"] == "lap" and len(j["lines"]) >= 1
-    assert all(ln["dur"] == "按圈結束" for ln in j["lines"])
+    assert all(ln["dur"] == "直到按下計圈" for ln in j["lines"])
     # (the full push / idempotency is test_race_calculator.py, against a faked COROS)

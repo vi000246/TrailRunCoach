@@ -213,6 +213,41 @@ def test_coros_push_and_editor_use_the_plan_zones():
     assert CW.easy_hr(CW.Thresholds.of({"lthr": 160})) == ("hr", 120, 142)
 
 
+def test_editor_hr_zone_choice_follows_the_plan_model():
+    """SP-30: with 課表心率區間 = 儲備心率 the editor's HR 區間 lists that model's Z1–Z6 in bpm
+    (the charts' edges), a picked zone pushes those bpm; Friel ids saved before still work."""
+    from backend.engine import workout_steps as WS
+    hrz = HP.plan_hr_zones(160.0, None, False, 202, 53, "hrr")
+    c = WS.Ctx.of({"lthr": 160, "aet": 163, "hr_model": hrz}, "hr")
+    hr = WS.zones_table(c)["hr"]
+    cur = [z for z in hr if not z.get("legacy")]
+    assert [z["id"] for z in cur] == ["aet", "Z1", "Z2", "Z3", "Z4", "Z5", "Z6"]
+    texts = {z["id"]: z["text"] for z in cur}
+    assert texts["Z2"] == "141–163 bpm" and texts["Z4"] == "178–184 bpm" and texts["Z5"] == "184–195 bpm"
+    assert texts["Z6"] == "195–202 bpm" and texts["Z1"] == "121–141 bpm"     # open ends: max HR / 20 bpm
+    assert all(z["id"] in {"1", "2", "3", "4", "5a", "5b", "5c"} for z in hr if z.get("legacy"))
+
+    def one(zone):
+        return WS.normalize({"items": [{"kind": "work", "dur": {"type": "time", "value": 300},
+                                        "target": {"type": "hr", "mode": "zone", "zone": zone}}]})
+    d = one("Z6")
+    r = WS.resolve(d["items"][0], c)
+    assert (r.lo, r.hi, r.intensity, r.err) == (195, 202, ("hr", 195, 202), "")
+    assert WS.steps_to_coros(d, c)                     # pushes
+    assert WS._work_band(one("Z4")["items"][0], c) is not None
+    # a step saved with a Friel id keeps resolving as % LTHR
+    r = WS.resolve(one("5b")["items"][0], c)
+    assert (r.lo, r.hi) == (round(1.03 * 160), round(1.06 * 160))
+    # the LTHR model (default): COROS % LTHR edges, Z6 open top 1.10 × LTHR
+    lz = WS.Ctx.of({"lthr": 160, "hr_model": HP.plan_hr_zones(160.0, None, False, None, None)}, "hr")
+    lt = {z["id"]: z["text"] for z in WS.zones_table(lz)["hr"] if not z.get("legacy")}
+    assert lt["Z4"] == "152–163 bpm" and lt["Z6"] == "170–176 bpm"
+    # no 課表心率區間: Friel only (as before), and a model zone id can't resolve
+    plain = WS.Ctx.of({"lthr": 160}, "hr")
+    assert [z["id"] for z in WS.zones_table(plain)["hr"]][:2] == ["aet", "1"]
+    assert WS.resolve(one("Z4")["items"][0], plain).err
+
+
 def test_training_targets_follow_the_setting_and_hint_the_drift_hr(monkeypatch):
     from backend.engine.zones import training_targets
     from backend.engine.wko5expr.dataset import date_to_day

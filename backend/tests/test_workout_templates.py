@@ -96,7 +96,7 @@ def test_lap_button_steps_with_an_estimate():
     lap = [r["st"] for r in WS.flat(d["items"]) if r["st"]["dur"]["type"] == "open"]
     assert lap and all(x["dur"].get("est") for x in lap)
     t = WS.totals(d, _ctx("power"))
-    assert t["est"] and t["open"] == 0 and t["sec"] > 50 * 60 and "按圈段" in t["est_note"]
+    assert t["est"] and t["open"] == 0 and t["sec"] > 50 * 60 and "直到按下計圈" in t["est_note"]
     # a lap step without an estimate still adds nothing
     bare = WS.normalize({"items": [{"kind": "warm", "dur": {"type": "time", "value": 600}},
                                    {"kind": "work", "dur": {"type": "open"}}]})
