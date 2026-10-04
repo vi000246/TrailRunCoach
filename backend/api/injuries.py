@@ -1,8 +1,7 @@
 """
 傷病紀錄 API (engine/injuries.py, engine/injury_exposure.py;
 docs/plans/injury-tracking.plan.md §3.6). Everything answers 404 in the demo
-mode (WKO5COACH_MODE=demo). Local only: nothing here is synced, shared or
-sent to the AI coach.
+mode (WKO5COACH_MODE=demo). Local only: nothing here is synced or shared.
 
   GET    /api/v1/wko5/injuries                    every event (+ auto days off, linked activities)
   GET    /api/v1/wko5/injuries/meta               areas (fixed + the user's), severities, settings

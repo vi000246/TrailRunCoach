@@ -17,7 +17,7 @@ plus the user's own (stored in user_settings `injury.custom_areas`, reused in
 the picker).
 
 Privacy (§5): local DB only; never in a share link, the demo mode
-(WKO5COACH_MODE=demo: the API answers 404, the UI hides it) or the AI coach.
+(WKO5COACH_MODE=demo: the API answers 404, the UI hides it).
 Not a diagnosis.
 """
 from __future__ import annotations
