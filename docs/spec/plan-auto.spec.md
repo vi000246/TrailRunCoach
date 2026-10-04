@@ -108,13 +108,18 @@ Only the current week is adjusted. Sessions that are done, edited, custom or del
 | B missed quality / test | stored quality / test `missed` | stays on the generator's day if it is ≥ 2 days from the long run and every other hard day (done or planned; a done hard run counts even when unplanned — Z5 / Z3 / 高強度長跑 / CP test from the activities, `hard_days`). Else it moves to a free day that keeps that gap. Else it is cancelled. Next week repeats the dose step (the step only counts sessions done) | ≥ 2 days between hard days: 台灣教練（5 區一週最多 2 次、間隔至少 2 天） |
 | C missed long | stored long `missed` | same week, on a free day not next to a quality / test day, else cancelled; never carried into next week | 2-day rule; no carry-over is 推估 |
 | D easy run too hard | done easy run with avg HR > AeT + 3 bpm **and** > 10 % of the time above AeT + 3 (both, `unsourced-rules.md` §B5), **or** avg power > 80 % CP, **or** TSS > planned + 20 % | (1) the done session counts its actual TSS (`plan_store.session_tss`); (2) a hard session < 2 days later moves later in the week if the gap allows, else it steps down one ladder step, else it becomes an easy run; (3) the remaining easy runs lose the excess TSS, each ≥ 20 min, else the last easy run is dropped (long and quality are never trimmed); (4) the note 「輕鬆跑偏強（…）：已調整之後的課表」 goes on that day | AeT + 3 / 10 %: `workout_review.AET_MARGIN` / `OVER_AET_SHARE`; 80 % CP: zones z2 (Palladino 1C); +20 %: TrainingPeaks compliance green band. HR needs both because summer easy runs in heat often sit high on HR alone; the combination, 20 min and the downgrade order are 推估 |
-| E fatigue guard | TSB < −30 (only when week_plan has not already made it a recovery week), CTL ramp ≥ `status.RAMP["short"]` (8/week; not in a re-entry block), or two red-compliance sessions in a row | TSB / ramp: the quality is removed. Two reds: the quality is downgraded to the recovery fartlek. Easy minutes × 0.8 (≥ 20 min) in all three cases | CTL ramp 5 warn / 8 block: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits most, 10 the ceiling); TSB −20 / −30: Friel / TrainingPeaks (coach); the 2-red trigger and the 20 % cut are 推估. Exception (`b2b.fatigue_exempt`): in an accepted B2B week and its easy days after, TSB < −30 alone only logs a note (expected drop, 推估); the ramp and the red streak still act |
+| E fatigue guard | TSB < −30 (only when week_plan has not already made it a recovery week), CTL ramp at `load_guard`'s **block** line min(10, max(5, 15 % × CTL₋₇)) (not in a re-entry block; SP-63 — this rule used 8 = the old block line, so it maps to the new block line, not the watch line), or two red-compliance sessions in a row | TSB / ramp: the quality is removed. Two reds: the quality is downgraded to the recovery fartlek. Easy minutes × 0.8 (≥ 20 min) in all three cases | CTL ramp lines: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits most, 10 the ceiling) as a share of CTL (推估, `docs/research/ctl-ramp-calibration.md` §4); TSB −20 / −30: Friel / TrainingPeaks (coach); the 2-red trigger and the 20 % cut are 推估. Exception (`b2b.fatigue_exempt`): in an accepted B2B week and its easy days after, TSB < −30 alone only logs a note (expected drop, 推估); the ramp and the red streak still act |
 
 The guardrails behind the gate (`quality_gate.guard`, `status`) use the same sources
-(`unsourced-rules.md` §B2): CTL ramp ≥ 5 → threshold only, ≥ 8 → no interval (Friel); last
-week's volume step > 20 % → no interval (Nielsen et al. 2014, JOSPT 44:739; Damsted et al.
-2019, JOSPT 49:230 — peer-reviewed; the 「10 % 法則」 itself has no evidence); 10–20 % → hold
-the dose (推估, conservative); TSB −30…−20 → hold (Friel / TrainingPeaks).
+(`unsourced-rules.md` §B2), one copy in `backend/engine/load_guard.py` (SP-63): CTL ramp
+(7-day ΔCTL against CTL₋₇) 注意 ≥ max(3, 10 % × CTL₋₇), 擋 ≥ min(10, max(5, 15 % × CTL₋₇)) — 注意 → threshold only, 擋 → no interval (Friel's 5–8 /
+10 as a share of CTL, 推估). The guardrail CTL is seeded with the mean daily TSS of the first 4
+weeks of data and the ramp is not checked in the first 28 days (推估; `status` passes
+`ramp_week = None` then); the volume step still runs. Last week's **running-time** step against
+max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen et al. 2014, JOSPT
+44:739; Damsted et al. 2019, JOSPT 49:230 — peer-reviewed, they measured running; the 「10 %
+法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative); TSB −30…−20 → hold
+(Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
 
@@ -219,7 +224,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   get the re-entry block only. No low-intensity-share condition. Until it opens the base phase
   has no interval (easy running + strides); a projected week opens once the streak would reach 4
   weeks. Zone 3 and Zone 5 are **independent gates** (SP-39): the Zone 5 gate is below.
-- **Guardrails per track** (`guard` → `guard_blocks`): CTL ramp ≥ 8, a > 20 % volume step and the
+- **Guardrails per track** (`guard` → `guard_blocks`): CTL ramp at the block line, a > 20 % running-time step and the
   injury pause block both tracks; the low-intensity share < 75 % blocks Zone 5 only — for Zone 3
   it is a warning note 「輕鬆跑心率偏高：…（底線 75%、基礎期目標 ≥ 90%）」 (the AeT is often
   estimated, climbs inflate HR). SP-39 applies the same reasoning to Zone 5 **only when the AeT
@@ -230,8 +235,8 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   專項期: intensity bad keeps Zone 5 out (tested AeT; a warning otherwise), drift bad stops both,
   and this week's load guardrails apply to both tracks as in the base phase (owner 2026-10-04: no
   school exempts the specific phase — Friel ramp 5–8, Nielsen 2014 / Damsted 2019; unsourced-rules.md
-  B2): CTL ramp ≥ `RAMP_BLOCK` or a > `STEP_BLOCK` volume step → no interval (note), ramp ≥
-  `RAMP_SUB` → the threshold-only `SUB` session. 減量期, race / recovery weeks, the re-entry block
+  B2): CTL ramp at `load_guard`'s block line or a > `STEP_BLOCK` volume step → no interval (note),
+  at the watch line → the threshold-only `SUB` session. 減量期, race / recovery weeks, the re-entry block
   (mode `reentry`) and projected weeks stay exempt (the accepted-B2B TSB exemption is unchanged).
 - **Why no Zone 3 this week**: `week_decision` returns `z3_note` (the gate, a guardrail, the
   1-a-week turn, the recovery week); `week_plan` shows it as a note (`src: z3`), the share
@@ -502,6 +507,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
+| 2026-10-04 | feature | SP-63 | One shared ramp rule (`load_guard`): 注意 max(3, 10 %), 擋 min(10, max(5, 15 %)) of CTL₋₇; adapt E and B2B on the block line; startup seed + 28-day skip; volume step on running time vs max(last week, 4-week mean) |
 | 2026-10-04 | feature | SP-31 follow-up | 專項期 applies this week's CTL-ramp (5 sub / 8 block) and > 20 % volume-step guardrails to both tracks; taper / race / recovery / re-entry exempt |
 | 2026-10-04 | feature | SP-31 follow-up | 2 a week with only Zone 3 open: the second session is a 巡航版 sized to the first (within the 10 % / 20 % / day caps), not a copy |
 | 2026-10-04 | feature | SP-31 follow-up | The weekday-cap 巡航版 fallback counts as the Zone 3 rung (same rule as the volume cap) |

@@ -42,10 +42,12 @@ Rules (thresholds: source or 推估):
   E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py)
      -> the quality steps down to the recovery fartlek and easy minutes × 0.8;
      TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
-     made it a recovery week) or a CTL ramp ≥ status.RAMP["short"] (8/week,
-     Friel 5–8, coach) -> the quality is removed and easy minutes × 0.8. The
-     20 % cut is 推估. TSB < −30 itself is
-     week_plan's existing recovery-week rule and ramp ≥ 8 is quality_gate's
+     made it a recovery week) or a CTL ramp at load_guard's BLOCK line
+     (min(10, max(5, 15 % of CTL 7 days ago)); SP-63) -> the quality is removed
+     and easy minutes × 0.8. The 20 % cut is 推估. Mapping (SP-63): this rule
+     used 8/week = the old block line (since 2026-10-01; 7 before that), so it
+     takes the new block line, not the watch line. TSB < −30 itself is
+     week_plan's existing recovery-week rule and the ramp block is quality_gate's
      existing block: those are not repeated when they already acted.
      Exception (engine/b2b.py, user-approved): during a planned B2B week and
      the easy days after one, TSB < −30 alone is the expected drop and does
@@ -58,6 +60,7 @@ import copy
 import datetime as dt
 from typing import Optional
 
+from backend.engine import load_guard as LG
 from backend.engine.hr_profile import easy_cap_label
 from backend.i18n import fmt
 
@@ -73,7 +76,6 @@ MIN_EASY_MIN = 20          # 推估: a trimmed easy run is never shorter than th
 SPACING_DAYS = 2           # plan_prefs.place(): 48 h between hard days / the long run
 # E. fatigue guard
 TSB_FLOOR = -30.0          # week_plan(): TSB < −30 -> recovery week
-RAMP_SHORT = 8.0           # status.RAMP["short"]: Friel 5–8, 10 the ceiling (coach; unsourced-rules.md §B2)
 FATIGUE_CUT = 0.80         # 推估: easy minutes × 0.8
 RED_STREAK = 2             # 推估: two red sessions in a row
 
@@ -81,7 +83,8 @@ SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
 SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）"
 SRC_OVER = ("平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
             "TrainingPeaks ±20%；組合方式推估")
-SRC_FATIGUE = "Friel CTL ramp ≥ 8（5–8 上限）；TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估"
+SRC_FATIGUE = ("CTL ramp 到擋線（min(10, max(5, CTL 的 15%))，Friel 5–8／10 換算，推估）；"
+               "TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估")
 SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估"
 
 
@@ -386,7 +389,7 @@ def _red_streak(stored: list[dict], today: str) -> bool:
 
 def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> None:
     load = ctx.get("load") or {}
-    tsb, ramp = load.get("tsb"), load.get("ramp")
+    tsb, ramp, base = load.get("tsb"), load.get("ramp"), load.get("ramp_base")
     rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "reentry")
     why, remove = None, False
     tsb_hit = tsb is not None and tsb < TSB_FLOOR and not rest_week
@@ -397,9 +400,9 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
              f"TSB {tsb:+.0f} < {TSB_FLOOR:.0f}，但{b2b_why}：這是預期中的下降，不減量（推估）", SRC_B2B)
     if tsb_hit and not b2b_why:
         why, remove = f"TSB {tsb:+.0f} < {TSB_FLOOR:.0f}", True
-    elif ramp is not None and ramp >= RAMP_SHORT and ctx.get("mode") != "reentry":
+    elif LG.ramp_level(ramp, base) == LG.BLOCK and ctx.get("mode") != "reentry":
         # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)
-        why, remove = f"CTL 每週 +{ramp:.1f}（≥ {RAMP_SHORT:.0f}）", True
+        why, remove = LG.ramp_text(ramp, base, LG.BLOCK), True
     elif _red_streak(stored, wk.today):
         why = f"連續 {RED_STREAK} 堂偏離計畫（紅色）"
     if not why:
@@ -426,7 +429,7 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
 def adapt(gen_weeks: list[dict], stored: list[dict], ctx: dict) -> tuple[list[dict], list[dict], dict]:
     """(adjusted gen_weeks, adjustments, notes). `ctx`: today, first_free (first
     day sessions can go on), blocked, allowed_days, thresholds, mode (this
-    week), load {tsb, ramp}, reviews {activity index: review metrics}.
+    week), load {tsb, ramp, ramp_base (CTL 7 days ago)}, reviews {activity index: review metrics}.
     `notes`: activity index -> the note for the done session it matched."""
     weeks = copy.deepcopy(gen_weeks)
     out: list[dict] = []
