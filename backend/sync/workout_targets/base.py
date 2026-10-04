@@ -20,6 +20,9 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 
+END_LABELS = {"time": "時間", "distance": "距離", "open": "直到按下計圈", "load": "負荷"}
+
+
 class SyncError(Exception):
     """The target answered with an error."""
 
@@ -46,6 +49,12 @@ class Capabilities:
     distance_unit: str = "m"                      # what the payload's distance is in
     max_steps: Optional[int] = None               # None = not known
     notes: tuple = field(default_factory=tuple)   # short limits shown with the provider
+    # the step end conditions the editor offers for this provider (時長類型, SP-38), in order,
+    # and their names on this platform. A stored step with a type not listed here is still
+    # pushed: "load" as the estimated time (workout_steps._secs), the rest as before
+    end_conditions: tuple = ("time", "distance", "open")
+    end_labels: dict = field(default_factory=lambda: dict(END_LABELS))
+    load_unit: Optional[str] = None               # what a 「負荷」 step is sent as ("TL"); None = time
 
 
 class WorkoutProvider:
@@ -98,4 +107,8 @@ class WorkoutProvider:
                 "capabilities": {"targets": list(c.targets), "repeat_groups": c.repeat_groups,
                                  "nested_repeats": c.nested_repeats, "open_steps": c.open_steps,
                                  "distance_steps": c.distance_steps, "distance_unit": c.distance_unit,
-                                 "max_steps": c.max_steps, "notes": list(c.notes)}}
+                                 "max_steps": c.max_steps, "notes": list(c.notes),
+                                 "end_conditions": list(c.end_conditions),
+                                 "end_labels": {k: c.end_labels.get(k, END_LABELS.get(k, k))
+                                                for k in c.end_conditions},
+                                 "load_unit": c.load_unit}}

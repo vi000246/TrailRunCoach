@@ -19,7 +19,9 @@ class GarminProvider(WorkoutProvider):
         targets=("hr",), repeat_groups=True, nested_repeats=False, open_steps=True,
         distance_steps=False, distance_unit="m", max_steps=50,
         notes=("功率：app 的 CP 不是 Garmin 的功率，只寫在說明", "配速、距離段：轉換器還沒做",
-               "一堂最多 50 步（Garmin 文件）"))
+               "一堂最多 50 步（Garmin 文件）", "沒有「負荷」結束條件：送預估時間"),
+        end_conditions=("time", "open"),
+        end_labels={"time": "時間", "open": "直到按下 Lap 鍵"})
 
     def build_payload(self, session: dict, thresholds: Optional[dict], power_targets: bool = False) -> dict:
         from backend.scripts.garmin_probe import garmin_workout

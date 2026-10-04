@@ -87,11 +87,20 @@ CUSTOM = {
         {"kind": "work", "dur": {"type": "time", "value": 1200}, "target": {"type": "power", "mode": "pct", "lo": 0.88, "hi": 0.92}},
         {"kind": "work", "dur": {"type": "time", "value": 600}, "target": {"type": "hr", "mode": "abs", "lo": 160, "hi": 172}},
         {"kind": "work", "dur": {"type": "time", "value": 600}, "target": {"type": "hr", "mode": "zone", "zone": "5b"}}],
+    # 「負荷」 (SP-38): TSS on main-set steps, COROS TL in the preview (default conversion, 推估)
+    "load": [
+        {"id": "w", "kind": "warm", "dur": {"type": "time", "value": 600}, "target": T(intent="easy")},
+        {"id": "p", "kind": "work", "dur": {"type": "load", "value": 60}, "target": {"type": "power", "mode": "pct", "lo": 0.88, "hi": 0.92}},
+        {"id": "r", "kind": "repeat", "times": 3, "items": [
+            {"id": "h", "kind": "work", "dur": {"type": "load", "value": "12.5"}, "target": {"type": "hr", "mode": "pct", "lo": 0.95, "hi": 1.0}},
+            {"id": "x", "kind": "rest", "dur": {"type": "time", "value": 120}, "target": T(intent="open")}]},
+        {"id": "n", "kind": "work", "dur": {"type": "load", "value": 20}, "target": {"type": "none"}}],
 }
 BAD = [{"items": [{"kind": "x"}]}, {"items": []}, {"nope": 1},
        {"items": [{"kind": "repeat", "times": 0, "items": [{"kind": "work", "dur": {"type": "time", "value": 2}}]}]},
        {"items": [{"kind": "work", "dur": {"type": "lap"}, "target": {"type": "power", "mode": "zone", "zone": "9"}}]},
-       {"items": [{"kind": "work", "dur": {"type": "time", "value": "abc"}, "target": {"type": "hr", "mode": "pct", "lo": 2, "hi": None}}]}]
+       {"items": [{"kind": "work", "dur": {"type": "time", "value": "abc"}, "target": {"type": "hr", "mode": "pct", "lo": 2, "hi": None}}]},
+       {"items": [{"kind": "warm", "dur": {"type": "load", "value": 40}}, {"kind": "work", "dur": {"type": "load", "value": 900}}]}]
 
 DERIVE = [
     {"kind": "easy", "title": "輕鬆跑", "minutes": 45},

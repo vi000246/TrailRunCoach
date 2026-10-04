@@ -1119,12 +1119,21 @@ async def _steps_env(s: dict, inp: dict) -> dict:
     sp["terrain"] = "trail" if s.get("kind") == "hike" or s.get("terrain") in ("trail", "hike") else "road"
     sp["climb_per_km"] = _climb_per_km(s)
     c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")), sp)
+    # the push target's end conditions (sync/workout_targets; 「負荷」 only where it has one)
+    prov = _provider()
+    c.end_conditions, c.provider_label = tuple(prov.capabilities.end_conditions), prov.label
     rung = None
     if s.get("kind") == "quality":
         rung = s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)
     cap = day_cap(prefs, s.get("day")) if s.get("kind") not in ("test",) else None
     return {"ctx": c, "th": th, "policy": pol, "cap": cap, "cap_mode": getattr(prefs, "cap_mode", "soft"),
-            "rung": rung if rung in IL.LIBRARY else None}
+            "rung": rung if rung in IL.LIBRARY else None, "provider": prov.describe()}
+
+
+def _provider():
+    """The active workout provider (setting plan.push.provider; sync read like the engine's)."""
+    from backend.engine.wko5expr.datasource import read_setting
+    return WT.resolve(read_setting(WT.SETTING_KEY, WT.DEFAULT))
 
 
 def _context(env: dict) -> dict:
@@ -1138,6 +1147,8 @@ def _context(env: dict) -> dict:
             "basis_label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）",
             "cap": env["cap"], "cap_mode": env["cap_mode"], "rung": env["rung"],
             "kinds": WS.KIND_LABEL, "types": WS.TYPE_LABEL,
+            # the editor's 時長類型 dropdown: the provider's end conditions + labels (SP-38)
+            "provider": env.get("provider"), "load_kinds": list(WS.LOAD_KINDS), "load_range": list(WS.LOAD_RANGE),
             "rules": {"z5_min_rep_s": WS.Z5_MIN_REP_S, "z3_min_rep_s": WS.Z3_MIN_REP_S,
                       "z5_max_rest_s": WS.Z5_MAX_REST_S, "coros_max_steps": WS.COROS_MAX_STEPS}}
 

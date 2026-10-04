@@ -808,7 +808,7 @@ KEY = "racecalc:ev1"
 
 
 def race_data(day="2026-10-10", minutes=90, title="賽事 測試越野"):
-    return {"day": day, "title": title, "minutes": minutes, "tss": 120.0, "detail": "每段按圈結束", "target": "",
+    return {"day": day, "title": title, "minutes": minutes, "tss": 120.0, "detail": "每段直到按下計圈", "target": "",
             "terrain": "trail", "distance_km": 21.0, "climb_m": 1200, "steps": RACE_STEPS, "source": "賽事計算機匯出"}
 
 

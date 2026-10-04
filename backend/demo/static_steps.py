@@ -31,6 +31,16 @@ DERIVE_SIG_FIELDS = ("kind", "title", "minutes", "target", "detail", "source", "
                      "variant_reps", "variant_blocks", "variant_adj", "heat", "gen_key")
 
 
+def _load_table() -> dict:
+    from backend.engine import coros_tl as TL
+    from backend.engine import workout_steps as WS
+    from backend.sync import workout_targets as WT
+    return {"kinds": list(WS.LOAD_KINDS), "range": list(WS.LOAD_RANGE), "label": WS.LOAD_LABEL,
+            "tl": {g: dict(TL.DEFAULTS[g][1]) for g in TL.GROUPS}, "err": TL.DEFAULT_ERR,
+            # the editor's 時長類型 dropdown (the demo pushes nowhere: COROS, the default provider)
+            "provider": WT.get(WT.DEFAULT).describe()}
+
+
 def _sig_val(k: str, v) -> str:
     if v is None or v is False:
         return ""
@@ -97,7 +107,9 @@ def constants() -> dict:
                "step_name": {str(k): v for k, v in CW.STEP_NAME.items()},
                "rpe": {"min": WS.RPE_MIN, "max": WS.RPE_MAX, "word": {str(k): v for k, v in WS.RPE_WORD.items()},
                        "frac": {str(k): v for k, v in WS.RPE_FRAC.items()}, "easy_max": WS.RPE_EASY_MAX,
-                       "hard_min": WS.RPE_HARD_MIN, "max_climb": WS.MAX_CLIMB_M, "limit": WS.RPE_LIMIT}},
+                       "hard_min": WS.RPE_HARD_MIN, "max_climb": WS.MAX_CLIMB_M, "limit": WS.RPE_LIMIT},
+               # 「負荷」 steps (SP-38): the default TSS → COROS TL conversion (engine/coros_tl.py, 推估)
+               "load": _load_table()},
         "il": {"class_range": {k: list(v) for k, v in IL.CLASS_RANGE.items()}, "rung_name": IL.RUNG_NAME,
                "canonical": {r: _variant(IL.canonical(r)) for r in IL.LIBRARY if IL.canonical(r)},
                "variant_rung": {k: v.rung for k, v in IL.ALL.items()},
