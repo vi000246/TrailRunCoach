@@ -279,6 +279,10 @@
         "title": null,
         "description": null
       },
+      "route-map": {
+        "title": null,
+        "description": null
+      },
       "route-difficulty": {
         "title": null,
         "description": null

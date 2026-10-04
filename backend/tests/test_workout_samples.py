@@ -16,6 +16,7 @@ from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
 TODAY = dt.date(2026, 9, 30)
 VIEWER = Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html"
 SETTINGS = Path(__file__).resolve().parents[1] / "static" / "settings.html"
+BASEMAPS = Path(__file__).resolve().parents[1] / "static" / "basemaps.js"
 
 
 def _trail(secs=10, gps=True):
@@ -82,11 +83,14 @@ def test_map_settings_validation():
 def test_viewer_and_settings_wire_the_map():
     html = VIEWER.read_text(encoding="utf-8")
     assert "leaflet/1.9.4/leaflet.min.js" in html
+    # the layers live in basemaps.js (one list for the viewer, the routes page and the race calculator)
+    assert "/api/v1/static/basemaps.js" in html and "MapLayers.attach(map" in html and "BASEMAPS = [" not in html
+    js = BASEMAPS.read_text(encoding="utf-8")
     for bid in MAP_BASEMAPS:
-        assert f'id: "{bid}"' in html
+        assert f'id: "{bid}"' in js
     # NLSC WMTS is z/y/x, Google terrain stops at 15
-    assert "GoogleMapsCompatible/{z}/{y}/{x}" in html and "lyrs=p&x={x}&y={y}&z={z}\", maxZoom: 15" in html
+    assert "GoogleMapsCompatible/{z}/{y}/{x}" in js and "lyrs=p&x={x}&y={y}&z={z}\", maxZoom: 15" in js
     assert "/samples?" in html and "requestAnimationFrame(hoverFlush)" in html
-    assert 'type: "showTip"' in html and "tileerror" in html
+    assert 'type: "showTip"' in html and "tileerror" in js
     s = SETTINGS.read_text(encoding="utf-8")
     assert 'id="m-base"' in s and 'name="m-ovl"' in s and "map_basemap" in s and "map_overlays" in s

@@ -88,10 +88,11 @@ def _chart(raw: dict, where: str) -> dict:
     # activity: a single-activity chart computed in panels/activity_charts.py ({"chart": "hrpower"})
     # periodzones: time in zone over a period (panels/period_zones.py, {"view": "total" | "weekly"})
     # climbvam: steady-climb VAM:HR per route, trail runs + hikes (panels/climb_vam.py)
+    # map: the workout's GPS route (render_map + the viewer's Leaflet map), same as WKO5's map panel
     if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity", "periodzones",
-                    "climbvam"):
+                    "climbvam", "map"):
         raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets', 'review', "
-                              "'z5gate', 'activity', 'periodzones' or 'climbvam'")
+                              "'z5gate', 'activity', 'periodzones', 'climbvam' or 'map'")
     out = {
         "id": raw.get("id"),            # stable id (viewids.py); filled in by parse_view when missing
         "title": raw["title"],
