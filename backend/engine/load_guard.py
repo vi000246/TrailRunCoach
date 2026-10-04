@@ -44,6 +44,9 @@ unplanned break — SHORT_BREAK_MIN–5 days without a run (shorter than a re-en
 block, reentry.MIN_BREAK) touching the week before it — since the break pulled
 that week and the 4-week mean down, coming back to normal reads as a spike
 (owner 2026-10-04; ≥ 6 days is reentry.py's block). The week note says so.
+Only UNPLANNED days count toward SHORT_BREAK_MIN (owner 2026-10-05): days of the user's
+own 不排課日期 or 休息日 (engine/blackouts.py, both kinds) are a chosen rest, so a gap that
+is planned, or whose unplanned part is < SHORT_BREAK_MIN days, is not exempt.
 
 Weekly CTL goal of the planner: base max(2, 5 % CTL), specific max(2.5, 7 % CTL)
 (推估: equal to the old +3 / +4 at CTL 55–60; Palladino writes 2–5 %).
@@ -281,16 +284,23 @@ def volume_step(last: float, prev_weeks: Sequence[float]) -> tuple[Optional[floa
     return (None, None) if b is None else ((float(last or 0.0) - b) / b, b)
 
 
-def short_break(run_days: Sequence[int], lo: int, hi: int) -> Optional[tuple[int, int]]:
-    """(first, last) day of the latest short break — SHORT_BREAK_MIN ≤ days without a run <
-    MIN_BREAK (no re-entry block), between two runs — with a day in [lo, hi] (day indices, the
-    week before the one measured); None without one."""
+def short_break(run_days: Sequence[int], lo: int, hi: int,
+                planned: Sequence[int] = ()) -> Optional[tuple[int, int, int]]:
+    """(first, last, planned) of the latest short unplanned break — fewer than MIN_BREAK days
+    without a run (no re-entry block), between two runs, with ≥ SHORT_BREAK_MIN of them NOT
+    `planned` (day indices of the user's own 不排課日期 / 休息日: a rest the user chose; owner
+    2026-10-05) — with a day in [lo, hi] (day indices, the week before the one measured);
+    `planned` in the result = how many of its days were planned. Counted, not contiguous:
+    2 planned days inside a 5-day gap leave 3 unplanned → exempt. None without one."""
     ds = sorted({int(d) for d in run_days})
+    pl = {int(d) for d in planned}
     out = None
     for a, b in zip(ds, ds[1:]):
         n = b - a - 1
-        if SHORT_BREAK_MIN <= n < MIN_BREAK and a + 1 <= hi and b - 1 >= lo:
-            out = (a + 1, b - 1)
+        if n < MIN_BREAK and a + 1 <= hi and b - 1 >= lo:
+            k = sum(1 for d in range(a + 1, b) if d in pl)
+            if n - k >= SHORT_BREAK_MIN:
+                out = (a + 1, b - 1, k)
     return out
 
 

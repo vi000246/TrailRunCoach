@@ -132,7 +132,11 @@ max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen 
 法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative). Exempt: the week after
 a short unplanned break — 3–5 days without a run (3 推估; ≥ 6 is a re-entry block, `reentry.MIN_BREAK`)
 touching the week before, which pulled the base down (`short_break`,
-`backend/engine/load_guard.py:284`; owner 2026-10-04): the status card says so and the week gets
+`backend/engine/load_guard.py:287`; owner 2026-10-04). Only unplanned days count (owner
+2026-10-05): days of the user's own 不排課日期 or 休息日 (both blackout kinds, `Status(blackouts=)`,
+default `blackouts.load()`) are a chosen rest, so a planned gap is still checked and a partly
+planned one is exempt only when its unplanned days alone are ≥ 3 (counted, not contiguous). The
+status card says so (「前一週非計畫停跑 N 天，另 M 天是自己排的不排課／休息日…」) and the week gets
 an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:914`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
@@ -552,3 +556,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | feature | SP-63 follow-up | The week after a short unplanned break (3–5 days without a run, no re-entry block) is exempt from the running-volume step check (`load_guard.short_break`); the week plan gets an info note |
 | 2026-10-04 | feature | SP-39 follow-up | Zone 5's UA path counts a measured LTHR only when tested in the last 12 weeks (`LTHR_FRESH_DAYS` 84, 推估); WKO5-sourced LTHRs carry their setting date; an older one re-locks that path until a retest |
 | 2026-10-04 | feature | SP-39 follow-up | A 徐國峰 90-min test saved through `POST /sessions` (the 「安排課表」 deep link, or the dialog's 測試 › 徐國峰 / the `lib:xu_e_drift` row) replaces that day's long run — the 排入測試 code path (`_replace_long`) |
+| 2026-10-04 | change | SP-63 follow-up | The short-break exemption from the running-volume step counts unplanned days only: days of the user's 不排課日期 / 休息日 don't make a short break (a partly planned gap needs ≥ 3 unplanned days); the note says 非計畫停跑 N 天 (owner 2026-10-05) |

@@ -105,7 +105,7 @@ categorical palette in fixed slot order (`backend/engine/overview.py:36`).
 0 ≤ x ≤ 5000 (`backend/engine/overview.py:280`). TSB is yesterday's CTL − ATL.
 
 **Start values (SP-68).** CTL / ATL start from `load_guard.pmc_start()`
-(`backend/engine/load_guard.py:185`), one source order:
+(`backend/engine/load_guard.py:188`), one source order:
 1. **manual** — the user's CTL / ATL at the start of a date (設定 → 閾值 → 起始 CTL／ATL;
    user_settings `athlete.pmc_start` = {date, ctl, atl}, 0–300, date ≤ today). The series
    restarts on that date; the days before it keep the automatic start. A date after today is
@@ -146,7 +146,7 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
 **Volume target**
 1. Base / specific: the weekly TSS that raises CTL by the phase goal (base max(2, 5 % of CTL),
    specific max(2.5, 7 %) per week, 推估 — SP-63; `load_guard.ramp_goal`,
-   `backend/engine/load_guard.py:299`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
+   `backend/engine/load_guard.py:309`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
    converted to hours with the athlete's TSS per hour over 6 weeks.
 2. Capped at `max(1.10 × ref, ref + 0.5 h)`, ref = max(4-week mean, last week) (UA 10 %).
    Floored at the 4-week mean (hold).
@@ -229,7 +229,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     target; the AeT is often estimated, climbs inflate HR) — with an untested AeT in effect a
     warning for Zone 5 too (SP-39, `guard(aet_tested=False)`); CTL ramp ≥ max(3, 10 % CTL₋₇) →
     threshold only, ≥ min(10, max(5, 15 % CTL₋₇)) → none (Friel as a share of CTL, 推估; not in the
-    first 28 days of data — `backend/engine/load_guard.py:185`); last week's running-time step
+    first 28 days of data — `backend/engine/load_guard.py:188`); last week's running-time step
     against max(the week before, 4-week mean) > 20 % → none (Nielsen 2014, Damsted 2019), 10–20 % →
     hold the dose (推估) — not the week after a 3–5-day break without a run, which gets an info note
     instead (`src: "volume"`, plan-auto.spec.md); TSB −30…−20 → hold (Friel / TrainingPeaks). Projected weeks keep only the
@@ -1200,10 +1200,11 @@ which one. The response keeps the `coros` field names.
   ramp at `load_guard`'s block line bad, watch line watch (SP-63: relative lines; SP-68: on the
   PMC's own started CTL, so the CTL shown and the guardrail's agree; 起算期 info in the first 28
   days of an automatic start, the first 7 after a manual one, with `ramp_week = None`; `extra`
-  adds `ramp_base`, `ramp_level`, `ramp_lines`, `ramp_startup`, `pmc_start` = the source). `i_volume` (`backend/engine/status.py:377`): the
+  adds `ramp_base`, `ramp_level`, `ramp_lines`, `ramp_startup`, `pmc_start` = the source). `i_volume` (`backend/engine/status.py:395`): the
   headline stays all-sport moving hours; the step is running time against max(the week before,
   4-week mean) — > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估), good with the reason
-  when the week before had a 3–5-day break without a run (`load_guard.short_break`); `extra` adds
+  when the week before had a 3–5-day break without a run, ≥ 3 of its days unplanned (not on the user's
+  不排課日期 / 休息日; `load_guard.short_break`, `Status(blackouts=)`); `extra` adds
   `run_last_week`, `run_base`, `step_exempt`.
 - **`i_gate`** hover adds the Zone 5 track (「Zone 5：已解鎖（…）／未解鎖（AeT 已通過，還差 3 區：…）」)
   or the AeT state (「Zone 5：未確認／已確認／暫停（原因）／恢復期」) and 「建議測試：…」; a locked method reads 「5 區未開」 and
@@ -1522,3 +1523,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-38 follow-up | A TL refit re-pushes a load step only when its TL moves by ≥ 3 (`TL_RESEND_MIN`); smaller moves keep the TL last sent |
 | 2026-10-04 | feature | SP-63 follow-up | `i_volume` / `guard`: no volume-step verdict the week after a 3–5-day break without a run (`step_exempt` / `step_note`); `week_plan` adds an info note (`src: "volume"`) |
 | 2026-10-04 | feature | SP-39 follow-up | 「安排課表」 for the 90-min test: `POST /sessions` replaces that day's long run like 排入測試 |
+| 2026-10-04 | change | SP-63 follow-up | `i_volume`: the short-break exemption counts unplanned days only (the user's 不排課日期 / 休息日 don't count; `Status(blackouts=)`) |
