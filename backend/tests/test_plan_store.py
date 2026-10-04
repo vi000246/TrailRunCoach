@@ -779,3 +779,132 @@ def test_past_week_scope_is_a_400(monkeypatch):
         assert e.c.post(f"{API}/push-coros?{q}").status_code == 400
         assert e.c.delete(f"{API}/push-coros?{q}").status_code == 400
         assert e.c.get(f"{API}/push-coros/preview?scope=week&day=2026-09-28").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# 賽事計算機「匯出至課表」 (plan_store.upsert_external, SP-43)
+# ---------------------------------------------------------------------------
+
+RACE_STEPS = {"v": 1, "origin": "user", "items": [
+    {"id": "r1", "kind": "work", "dur": {"type": "open", "est": 3600}, "target": {"type": "hr", "mode": "abs", "lo": 136, "hi": 160},
+     "note": "→ 補給站 1 · 約 1:00"},
+    {"id": "r2", "kind": "work", "dur": {"type": "open", "est": 1800}, "target": {"type": "none"}, "note": "→ 終點"}]}
+KEY = "racecalc:ev1"
+
+
+def race_data(day="2026-10-10", minutes=90, title="賽事 測試越野"):
+    return {"day": day, "title": title, "minutes": minutes, "tss": 120.0, "detail": "每段按圈結束", "target": "",
+            "terrain": "trail", "distance_km": 21.0, "climb_m": 1200, "steps": RACE_STEPS, "source": "賽事計算機匯出"}
+
+
+def race_week(with_race=True):
+    ss = [g("quality", "quality", "閾值 3×10 分", 60, "2026-10-06"), g("easy1", "easy", "輕鬆跑", 50, "2026-10-07")]
+    if with_race:
+        ss.append({**g("race", "race", "比賽", 0, "2026-10-10"), "tss": 0.0})
+    return next_week(ss)
+
+
+def races(ss, ws="2026-10-05"):
+    return [s for s in ss if s["kind"] == "race" and s["state"] == "active" and s["week_start"] == ws]
+
+
+def test_export_claims_the_generators_race_and_reexport_overwrites():
+    db = run(make_db())
+    inp = inputs(weeks=[race_week()])
+    run(PS.plan_reconcile(db, inp, apply=True))
+    gen = races(run(PS.load(db)))[0]
+    pv = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30", write=False))
+    assert pv["action"] == "claim" and pv["previous"] is None
+    assert races(run(PS.load(db)))[0]["minutes"] == 0                     # the preview wrote nothing
+    w = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
+    assert w["action"] == "claim"
+    rs = races(run(PS.load(db)))
+    assert len(rs) == 1 and rs[0]["uid"] == gen["uid"] and rs[0]["ext_key"] == KEY and rs[0]["edited"]
+    assert rs[0]["minutes"] == 90 and rs[0]["steps"]["items"][0]["note"].startswith("→ 補給站")
+    # reconcile keeps it where it is, adds no second race, moves nothing else onto race day
+    run(PS.plan_reconcile(db, inp, apply=True))
+    ss = run(PS.load(db))
+    rs = races(ss)
+    assert len(rs) == 1 and rs[0]["day"] == "2026-10-10" and rs[0]["minutes"] == 90
+    assert not [s for s in ss if s["state"] == "active" and s["day"] == "2026-10-10" and s["kind"] != "race"]
+    # the same export: unchanged (updated_at stays); another one: the same row, updated_at moves
+    row = lambda: run(db.execute(select(PlanSession).where(PlanSession.uid == gen["uid"]))).scalar_one()   # noqa: E731
+    t0 = row().updated_at
+    assert run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))["action"] == "unchanged"
+    assert row().updated_at == t0
+    up = run(PS.upsert_external(db, KEY, race_data(minutes=100), "2026-09-30"))
+    assert up["action"] == "update" and up["previous"]["user_edited"] is False
+    assert row().updated_at > t0 and len(races(run(PS.load(db)))) == 1
+
+
+def test_export_warns_about_an_edit_on_the_schedule_and_comes_back_after_delete():
+    db = run(make_db())
+    run(PS.plan_reconcile(db, inputs(weeks=[race_week()]), apply=True))
+    s = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))["session"]
+    e = run(PS.edit(db, s["uid"], {"kind": "race", "minutes": 80}, "2026-09-30"))     # the 課表 dialog sends its kind
+    assert e["kind"] == "race" and e["ext_key"] == KEY
+    pv = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30", write=False))
+    assert pv["action"] == "update" and pv["previous"]["user_edited"] is True
+    run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
+    assert run(PS.upsert_external(db, KEY, race_data(), "2026-09-30", write=False))["previous"]["user_edited"] is False
+    # deleted on the 課表 (the claimed generator row: a tombstone) → exporting again restores it
+    assert run(PS.delete(db, s["uid"]))["state"] == "deleted"
+    r = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
+    assert r["action"] == "restore" and len(races(run(PS.load(db)))) == 1
+
+
+def test_export_without_a_generated_race_blocks_the_later_one():
+    db = run(make_db())
+    run(PS.plan_reconcile(db, inputs(weeks=[race_week(with_race=False)]), apply=True))
+    r = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
+    assert r["action"] == "add" and r["session"]["origin"] == "custom"
+    # the season plan later puts its own race in that week: not added beside the export
+    run(PS.plan_reconcile(db, inputs(weeks=[race_week()]), apply=True))
+    rs = races(run(PS.load(db)))
+    assert [x["uid"] for x in rs] == [r["session"]["uid"]]
+    # the race moved (the event's date changed): the row follows
+    m = run(PS.upsert_external(db, KEY, race_data(day="2026-10-17"), "2026-09-30"))
+    assert m["action"] == "update" and m["session"]["week_start"] == "2026-10-12"
+    with pytest.raises(PS.PlanError):
+        run(PS.upsert_external(db, KEY, race_data(day="2026-09-01"), "2026-09-30"))   # past day
+
+
+def test_race_is_not_added_by_hand_and_counts_in_the_week():
+    db = run(make_db())
+    run(PS.plan_reconcile(db, inputs(weeks=[race_week()]), apply=True))
+    with pytest.raises(PS.PlanError):
+        run(PS.add(db, {"day": "2026-10-09", "kind": "race", "title": "比賽"}, "2026-09-30"))
+    easy = next(s for s in run(PS.load(db)) if s.get("gen_key") == "easy1" and s["week_start"] == "2026-10-05")
+    with pytest.raises(PS.PlanError):
+        run(PS.edit(db, easy["uid"], {"kind": "race"}, "2026-09-30"))
+    before = PS.plan_summary(run(PS.load(db)), "2026-10-05", "2026-09-30", 30.0, 32.0, 42.0, 7.0)["tss"]
+    run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
+    after = PS.plan_summary(run(PS.load(db)), "2026-10-05", "2026-09-30", 30.0, 32.0, 42.0, 7.0)
+    assert after["tss"] == pytest.approx(before + 120.0)
+
+
+def test_api_push_sends_the_exported_race_and_replaces_the_old_calculator_workout(monkeypatch):
+    with Env(monkeypatch) as e:
+        e.inp["weeks"][0] = race_week()
+        e.c.get(f"{API}/sessions")
+        # a workout the calculator pushed straight to the watch before (library only)
+        old = run(CW.push_workout(e.db, {"id": "ev1", "key": KEY, "kind": "race_plan", "title": "賽事 測試越野",
+                                         "steps": RACE_STEPS, "day": None, "detail": ""}, TH, "2026-09-30"))
+        assert old["status"] == "pushed" and len(e.fake.live()) == 1
+        s = run(PS.upsert_external(e.db, KEY, race_data(), "2026-09-30"))["session"]
+        pv = e.c.get(f"{API}/push-coros/preview", params={"scope": "week", "day": "2026-10-10"}).json()
+        race = next(x for x in pv["sessions"] if x["uid"] == s["uid"])
+        assert race["coros"]["status"] == "not_pushed" and pv["calc_to_replace"] == 1
+        r = e.c.post(f"{API}/push-coros", params={"scope": "week", "day": "2026-10-10"})
+        assert r.status_code == 200, r.text
+        res = r.json()
+        assert next(x for x in res["sessions"] if x["id"] == s["uid"])["status"] == "pushed"
+        assert any(x["status"] == "removed" for x in res["removed"])
+        assert old["coros_program_id"] not in e.fake.live()
+        names = [p["name"] for p in e.fake.live().values()]
+        assert sum("賽事 測試越野" in n for n in names) == 1
+        assert {x.session_key for x in e.pushed()} >= {s["uid"]} and KEY not in {x.session_key for x in e.pushed()}
+        # the generator's own race (no steps) is still not pushed
+    with pytest.raises(CW.Unsupported):
+        CW.session_steps({"kind": "race", "minutes": 0}, CW.Thresholds.of(TH))
+    assert len(CW.session_steps({"kind": "race", "minutes": 90, "steps": RACE_STEPS}, CW.Thresholds.of(TH))) == 2

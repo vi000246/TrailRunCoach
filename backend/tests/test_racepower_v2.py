@@ -814,7 +814,7 @@ def test_T15_course_upload_then_plan_and_410(client):
     assert bad.status_code == 400
 
 
-def test_T15_hike_plan_and_coros_preview(client):
+def test_T15_hike_plan_and_coros_preview(client, monkeypatch):
     tr = synthetic_track({"len": 16000, "z": lambda x: 2600 + (x * 0.1 if x < 8000 else (16000 - x) * 0.1)})
     cid = client.post("/api/v1/racepower/course",
                       files={"file": ("h.gpx", GPX.write_gpx(tr).encode(), "application/gpx+xml")}).json()["course_id"]
@@ -832,10 +832,13 @@ def test_T15_hike_plan_and_coros_preview(client):
     async def _dep():
         yield db
     client.app.dependency_overrides[RP._db] = _dep
-    ex = client.post("/api/v1/racepower/export/coros", json={"type": "trail", "course": {"course_id": cid}})
+    ev = type("E", (), {"id": "race1", "name": "測試越野", "date": "2099-05-01", "days": 1})()
+    monkeypatch.setattr(RP, "_event", lambda eid: ev)
+    ex = client.post("/api/v1/racepower/export/plan", json={"type": "trail", "course": {"course_id": cid},
+                                                             "event_id": "race1"})
     assert ex.status_code == 200, ex.text
     j = ex.json()
     # trail: lap-button steps with the leg's target (power on runnable legs, HR cap on the steep ones)
-    assert j["pushed"] is None and j["mode"] == "lap" and len(j["lines"]) >= 1
+    assert j["written"] is False and j["mode"] == "lap" and len(j["lines"]) >= 1
     assert all(ln["dur"] == "直到按下計圈" for ln in j["lines"])
-    # (the full push / idempotency is test_race_calculator.py, against a faked COROS)
+    # (writing it to the 課表 and re-exporting is test_race_calculator.py)

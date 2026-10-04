@@ -589,15 +589,19 @@ The horizon is the current phase end, at least two weeks out, capped at `MAX_WEE
 `kind`, `title`, `minutes`, `target`, `detail`, `source`, `tss`, `origin` (auto / custom),
 `edited`, `provisional`, `state` (active / done / missed / deleted / superseded), `done_by`
 (JSON activity row), `note`, and `terrain` / `distance_km` / `climb_m`, `protocol`, the
-interval-library `variant_*` columns, `target_basis` (目標用 hr / power, None = 自動) and `steps`
-(the structure saved in the 課表 editor, JSON) (`backend/db/models.py:184`, added by
-`_migrate_schema`, `backend/db/database.py:101`).
+interval-library `variant_*` columns, `target_basis` (目標用 hr / power, None = 自動), `steps`
+(the structure saved in the 課表 editor, JSON) and `ext_key` / `ext_sig` (a session written from
+outside the generator — the 賽事計算機's 「匯出至課表」, `racecalc:<event id>` — and the fingerprint
+of what it wrote) (`backend/db/models.py:184`, added by `_migrate_schema`,
+`backend/db/database.py:101`). `updated_at` moves only when a row's content changes.
 
-**Kinds** (`backend/engine/plan_store.py:20`): easy 輕鬆跑, long **LSD** (was 長時間, 2026-10-03;
-the old auto titles are mapped at read time by `display_title`, `backend/engine/plan_store.py:37`,
+**Kinds** (`backend/engine/plan_store.py:21`): easy 輕鬆跑, long **LSD** (was 長時間, 2026-10-03;
+the old auto titles are mapped at read time by `display_title`, `backend/engine/plan_store.py:41`,
 the key stays `long`), quality 強度課, test 測試, hike **越野跑** (登山 is not a workout type),
-strength 肌力, heat_passive 被動熱適應, notice 課表待確認 (a reminder, never load or compliance).
-**Terrains** road / trail / hike (`backend/engine/plan_store.py:28`).
+strength 肌力, heat_passive 被動熱適應, notice 課表待確認 (a reminder, never load or compliance),
+race 比賽 (the generator's race-day row, minutes 0, or the 賽事計算機's export; never added by hand,
+and no other kind can be changed into it). **Terrains** road / trail / hike
+(`backend/engine/plan_store.py:32`).
 
 **Reconcile rules** (`reconcile()`, `backend/engine/reconcile.py:89`; documented at
 `backend/engine/reconcile.py:12`):
@@ -613,7 +617,9 @@ strength 肌力, heat_passive 被動熱適應, notice 課表待確認 (a reminde
 3. Edited and custom sessions are kept. An edited long / quality / test is **superseded** when
    the regenerated week is a rest week (recovery / taper / event / transition) that no longer
    has it (`backend/engine/reconcile.py:147`). Deleted auto sessions stay deleted: their
-   tombstone blocks the `gen_key` for that week.
+   tombstone blocks the `gen_key` for that week. A kept race row (the calculator's export) blocks
+   the generator's own `race` of that week (`backend/engine/reconcile.py:126`), so the week never
+   has two races and the export is never moved.
 4. An auto session on the same day as a kept edited / custom session moves to a free day of
    that week, or is dropped (`_resolve_collisions`, `backend/engine/reconcile.py:337`).
 5. Unedited auto sessions past the horizon are removed.
@@ -634,7 +640,7 @@ a week, or while an earlier week still has active sessions, the plan is reconcil
 before anything else is returned — unless a 課表待確認 proposal is waiting (plan-auto.spec.md).
 `GET /sessions` also matches newly synced runs right away (`match_only`).
 
-**Edits** (`_clean`, `backend/engine/plan_store.py:230`; `edit`, `backend/engine/plan_store.py:307`):
+**Edits** (`_clean`, `backend/engine/plan_store.py:248`; `edit`, `backend/engine/plan_store.py:328`):
 editable fields are day, kind, title, minutes, target, detail, terrain, distance_km, climb_m,
 target_basis, steps. A day must be ISO and not in the past; kind and terrain must be known (not
 `notice`); minutes 0–1440; distance 0–500 km, climb 0–20000 m; an optional TSS estimate 0–2000;
@@ -643,10 +649,20 @@ marks the session `edited` and non-provisional; hand-editing a library variant's
 variant marked `swap = user`. Moving an auto session to another week leaves a tombstone in the
 old week and turns the session into a custom one. Only active sessions can be edited.
 
-**Add** (`backend/engine/plan_store.py:349`): a custom session needs a day; defaults kind easy,
-45 min, a title per kind (a new test follows the CP 測試方式); `notice` can't be added.
-**Delete** (`backend/engine/plan_store.py:430`): an auto session becomes a tombstone
+**Add** (`backend/engine/plan_store.py:372`): a custom session needs a day; defaults kind easy,
+45 min, a title per kind (a new test follows the CP 測試方式); `notice` and `race` can't be added.
+**Delete** (`backend/engine/plan_store.py:455`): an auto session becomes a tombstone
 (`state = deleted`), a custom one is removed; deleting either day of an accepted B2B cancels it.
+
+**External sessions — 賽事計算機「匯出至課表」** (2026-10-04, SP-43; `upsert_external`,
+`backend/engine/plan_store.py:498`): one row per `ext_key`, written as the user's own (`edited`).
+The row is this key's active row (updated), else its deleted / superseded row (restored), else the
+generator's own race row of that week (`gen_key` race, claimed), else a new custom row; a moved race
+date moves the row. An identical export is `unchanged` (no write, `updated_at` kept). `ext_sig`
+fingerprints day / kind / title / minutes / target / detail / steps (`ext_signature`,
+`backend/engine/plan_store.py:488`), so a later edit on the 課表 page shows as `user_edited` before an
+overwrite. The race's planned TSS counts in the week (`plan_summary`). See racepower.spec.md,
+Watch export.
 
 **Expired sessions** (2026-10-02): a past session that was never done (missed, or still open on a
 past day; `is_expired_open`, `backend/engine/plan_store.py:385`) can be deleted alone or all at
@@ -763,8 +779,9 @@ which one. The response keeps the `coros` field names.
   else threshold pace × 1.04–1.08) or an HR band without threshold pace; an easy session whose
   title has `N×S 秒` gets a strides repeat when ≥ 10 min remain; quality and test sessions get
   their own step builders — an HR basis gives HR work steps (`_work_hr`,
-  `backend/sync/coros_workouts.py:182`). Strength, race, rest and heat_passive are not pushed
-  (skipped, with a reason); a 課表待確認 notice is one 1-minute step. Done, unplaced and past-day
+  `backend/sync/coros_workouts.py:182`). Strength, rest, heat_passive and a race without steps
+  (the generator's 比賽) are not pushed (skipped, with a reason); a race with steps (the 賽事計算機's
+  「匯出至課表」) is pushed from them (`backend/sync/coros_workouts.py:404`); a 課表待確認 notice is one 1-minute step. Done, unplaced and past-day
   sessions are not pushed (`session_workout`, `backend/sync/coros_workouts.py:558`). The push
   preview lists sessions whose % / zone pace steps have no threshold pace (`pace_notes`,
   `backend/api/plan_sessions.py:1441`).
@@ -781,7 +798,10 @@ which one. The response keeps the `coros` field names.
   left the plan (deleted / superseded / regenerated away) are removed unless on a past day;
   missed sessions and expired ones the athlete deleted are removed from the calendar
   (`plan_store.off_watch`). Only entries recorded in `coros_plan_push` are
-  ever deleted (`_remove_row`, `backend/sync/coros_workouts.py:978`).
+  ever deleted (`_remove_row`, `backend/sync/coros_workouts.py:978`). A pushed exported race also
+  takes off the workout the calculator's retired 「匯出到 COROS」 pushed under the same key
+  (`racecalc:<event id>`, not in `all_rows`; `_old_calc_keys`, `backend/api/plan_sessions.py:1450`);
+  the preview counts it as `calc_to_replace`.
 - **Unpush** (`DELETE /push-coros`, `backend/api/plan_sessions.py:1483`) removes every recorded
   entry whose day falls in the range (`remove_keys`, `backend/sync/coros_workouts.py:963`).
 - **Status per session** (`status_of`, `backend/sync/coros_workouts.py:771`): done / skipped /
@@ -1195,3 +1215,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | code-sync | N/A | Synced ~140 commits: dashboard 總覽 (KPI tiles, 90-day PMC without projection, day-cards, Z5 card renamed, 待辦 at the bottom, B2B card); tests / B2B / race sim are suggestions; 主要訓練項目, 專項期, B2B, 陡坡健走, 輕鬆跑上限 (課表心率區間) in week_plan; LSD label, kind hike = 越野跑, 登山 long terrain dropped; prefs redesign (偏好的星期, 目標依據, warm-up / cool-down, B2B switch); 休息日, expired-session delete, manual link, compliance + 課表統計 page, context menu; push via the workout-sync provider, MP / pace steps; i_drift plain words, i_testing event-driven; AeT test by reason (no cadence, not projected); new API rows; all file:line pointers refreshed |
 | 2026-10-04 | feat/sp-34-35-schedule | SP-34, SP-35 | 課表: ⟳ 從 COROS 抓活動 button (資料來源 only, shared `syncrun.js`, reload + one re-poll for 自動調整); push button renamed 推送到手錶; push status drawn as a watch (neutral when up to date, coloured only for 需更新／失敗), ✓ reserved for 完成, legend split into 完成 / 手錶 groups |
 | 2026-10-04 | feat/sp-54-ics-feed | SP-54 | 課表訂閱: `/share/calendar/<token>.ics` ICS feed of the stored plan (all-day events, ✓ / ✗, steps + deep link, −14 / +56 days), `plan.calendar` token with 重設 / 停用 and 404 on mismatch, owner only (not mounted in the demo); `plan_sessions.updated_at` moves only on a real change (LAST-MODIFIED / SEQUENCE); settings page section with Google / iPhone steps (zh-TW + en) |
+| 2026-10-04 | feat/sp-43-calc-export | SP-43 | Stored plan: kind `race` in `KINDS` (not added by hand), `ext_key` / `ext_sig` columns and `plan_store.upsert_external` for the 賽事計算機's 「匯出至課表」 (one row per event, claims the generator's 比賽 row, restore / move, `user_edited` by fingerprint, `updated_at` kept on an identical export); reconcile: a kept race blocks the generator's race of that week; push: a race with steps is pushed, the old `racecalc:` watch workout is removed on that push (`calc_to_replace` in the preview); 課表 dialog keeps kind 比賽 |
