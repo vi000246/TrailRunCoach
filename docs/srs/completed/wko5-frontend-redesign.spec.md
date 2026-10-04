@@ -1,5 +1,7 @@
 # SRS: WKO5 Coach Frontend Redesign — Design System + Full Page Architecture
 
+> ⛔ **CANCELED（2026-10-04）**：React SPA（`frontend/`）已刪除，主要 UI 是 `backend/static/*.html`。本文是當時的設計紀錄。
+
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-frontend-redesign.prd.md`
 - **Owner**: maintainer

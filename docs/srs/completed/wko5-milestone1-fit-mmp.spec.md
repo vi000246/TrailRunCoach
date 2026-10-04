@@ -1,5 +1,7 @@
 # SRS: WKO5 Reverse — Milestone 1: FIT 解析 + MMP 計算引擎
 
+> ⛔ **CANCELED（2026-10-04）**：5 月的 `src/` CLI（FIT 解析、MMP、JSON 儲存）已刪除，演算法早已移植到 `backend/engine/algorithms/`、`backend/files/fit_reader.py`（見 `docs/spec/wko5-engine.spec.md`）。本文是當時的設計紀錄。
+
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`
 - **Source Linear Issue**: N/A — standalone

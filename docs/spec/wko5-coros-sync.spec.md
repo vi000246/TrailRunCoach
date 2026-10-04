@@ -231,23 +231,12 @@ backend/
 │   └── coros_client.py         # Coros API 客戶端（已實作）
 ├── api/
 │   ├── auth.py                 # /auth/coros/* endpoints（已實作）
-│   ├── sync.py                 # /sync/coros/start SSE endpoint（已實作）
-│   └── pmc.py                  # /pmc/recompute endpoint（已實作）
+│   └── sync.py                 # /sync/coros/start SSE endpoint（已實作）
 ├── db/
 │   ├── models.py               # 含 coros_* 欄位（已實作）
 │   └── database.py             # _migrate_schema() 自動 ALTER TABLE（已實作）
 └── files/
     └── file_service.py         # _import_one_file(coros_activity_id=...)（已更新）
-
-frontend/
-└── src/
-    ├── components/
-    │   └── PmcChart.tsx        # CTL/ATL/TSB Recharts LineChart（已實作）
-    ├── pages/
-    │   └── Dashboard.tsx       # CorosPanel + PmcChart（已實作）
-    └── api/
-        ├── client.ts           # CorosLoginRequest/Response/Status types（已實作）
-        └── hooks.ts            # useCorosStatus/Login/Sync hooks（已實作）
 ```
 
 ### FIT 儲存路徑
@@ -264,9 +253,9 @@ frontend/
 
 所有刪除都經過 `storage.confined()`：路徑先 resolve、拒絕 symlink，超出 `fit/<source>/` 一律拒絕。
 
-### 資料夾掃描（`POST /api/v1/scan`）
+### 資料夾掃描（`scan_and_import`）
 
-`backend/api/scan.py:13` 呼叫 `scan_and_import`（`backend/files/file_service.py:104`），對 athlete 的 `data_dir` 掃描：
+`scan_and_import`（`backend/files/file_service.py:104`）對 athlete 的 `data_dir` 掃描（示範資料建置在用；原本的 `POST /api/v1/scan` 端點隨 React SPA 於 2026-10-04 移除）：
 
 - `discover_tagged_files`（`backend/files/file_service.py:66`）：資料夾底下若有 `storage.SOURCES`（`backend/sync/storage.py:20`）列的 `coros/`、`tp/` 子資料夾，就逐一走 `<source>/<year>/`，檔案標上 DB source（`coros` / `trainingpeaks`）；同一資料夾的傳統 `<year>/*.wko4|.fit` 版面照舊標 `local`。symlink 跳過。
 - `_sync_ids`（`backend/files/file_service.py:49`）：從同步寫出的檔名反推 provider id——COROS `<labelId>_<日期>_<sport>.fit` → `coros_activity_id`，TP `tp_<日期>_<workoutId>.fit` → `tp_workout_id`。`source` 收 DB 名稱（`coros` / `trainingpeaks`）也收資料夾 / API 名稱（`tp`），經 `storage.SOURCES` 對應。
@@ -346,13 +335,11 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 | GET | `/api/v1/auth/coros/status` | 登入狀態 + email + 最後同步時間 |
 | POST | `/api/v1/auth/coros/logout` | 清除 token |
 | POST | `/api/v1/sync/coros/start` | 觸發同步（SSE stream） |
-| POST | `/api/v1/pmc/recompute` | 用當前 FTP 重新計算所有 TSS |
 
 ### M3 新增 Endpoints（2026-06-13，統一同步頁）
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/v1/sync/inventory` | 已載入資料盤點：依 source/sport 筆數、日期範圍、各來源 last-sync |
 | POST | `/api/v1/sync/tp/start` | 觸發 TrainingPeaks 下載同步（SSE stream，接既有 `tp_client.sync_workouts`） |
 | POST | `/api/v1/auth/tp/login` | TP 帳密登入取 OAuth token（`tp_client.login_password` 已驗證） |
 | GET | `/api/v1/auth/tp/status` | TP 連線狀態 |
@@ -450,12 +437,6 @@ event: sync_progress
 data: {"status": "complete", "total_downloaded": 2, "total_checked": 2}
 ```
 
-**POST /api/v1/pmc/recompute**
-```json
-// Response
-{ "updated": 59, "ftp_w": 230.0 }
-```
-
 ---
 
 ## TSS 計算
@@ -469,7 +450,7 @@ TSS = (NP / FTP)² × (duration_s / 3600) × 100
 - `NP` = normalized_power_w（已從 FIT 計算，或 fallback avg_power_w）
 - `FTP` = athlete_settings.ftp_w（從 Coros 登入自動匯入）
 
-此為 `POST /api/v1/pmc/recompute` 使用的公式，對既有無 TSS 的活動批次計算。
+（原本的批次重算端點 `POST /api/v1/pmc/recompute` 已隨 React SPA 於 2026-10-04 移除。）
 
 ### 已實作（2026-05-16 更新）
 
@@ -481,7 +462,7 @@ TSS = (duration × NP × IF) / (runFTP × 3600) × 100
 ```
 `get_run_ftp(db, athlete_id, as_of_date)` 在 `backend/files/file_service.py` 計算，先查 `athlete_settings.run_ftp_w`（手動設定），無則從 MMP 自動算。
 
-**重新計算端點**：`POST /api/v1/athletes/{id}/recalculate-running-metrics` — 重算所有跑步 FIT 活動的 TSS、intensity 指標。
+（原本的重算端點 `POST /api/v1/athletes/{id}/recalculate-running-metrics` 已隨 React SPA 於 2026-10-04 移除。）
 
 | 運動類型 | 目標公式 | 狀態 |
 |----------|----------|------|

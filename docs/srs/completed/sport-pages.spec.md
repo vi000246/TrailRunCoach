@@ -1,5 +1,7 @@
 # Spec: sport-pages（多運動分流頁面與越野跑分析）
 
+> ⛔ **CANCELED（2026-10-04）**：React SPA 的總體／跑步／越野跑三頁、Smart Dashboard、圖表白話化與越野負荷 API（`/api/v1/analytics/*`、`/api/v1/sports/facets`、`backend/engine/algorithms/trail.py`、`interpret.py`）已隨 `frontend/` 刪除。仍在的只有 trail 分類持久化（`PATCH /api/v1/workouts/{id}/classification`，見 `docs/spec/workouts.spec.md`）。本文是當時的設計紀錄。
+
 ## Metadata
 - **Module**: sport-pages
 - **Parent Module**: N/A

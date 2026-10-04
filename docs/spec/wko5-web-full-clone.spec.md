@@ -7,8 +7,10 @@
 - **Status**: DRAFT
 - **Generated**: 2026-05-14
 - **Updated**: 2026-05-15 — 改為 Coros-first，獨立 fits 資料夾，移除 WKO5 目錄依賴
-- **Supersedes**: `docs/spec/wko5-milestone1-fit-mmp.spec.md` (Milestone 1 becomes a sub-component)
+- **Supersedes**: `docs/srs/completed/wko5-milestone1-fit-mmp.spec.md` (Milestone 1 becomes a sub-component)
 - **See also**: `docs/spec/wko5-coros-sync.spec.md` (Coros sync 詳細 SRS)
+
+> ⚠ **部分已移除（2026-10-04）**：5 月的 `src/` CLI 與 React 前端（`frontend/`，含自訂 dashboard、`/api/v1/dashboard`、`/api/v1/workouts` 的 GET 端點、`/api/v1/pmc`、`/api/v1/scan`、`/api/v1/athletes`）已刪除；引擎與同步的現況見 [wko5-engine.spec.md](./wko5-engine.spec.md)、[wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)。本文其餘部分是當時的設計紀錄。
 
 ---
 
@@ -650,11 +652,9 @@ body: grant_type=refresh_token&refresh_token={t}&client_id=WKO5&client_secret=
 
 | Pattern | Where to Find | Why Follow |
 |---------|---------------|-----------|
-| MMP sliding window | `src/mmp.py:69-100` | Milestone 1 已驗證 ±1% |
-| NP calculation | `src/metrics.py:16-45` | 30s rolling^4，已測試 |
-| FIT parser + resample | `src/fit_parser.py:130-185` | 1s uniform grid，Coros 相容 |
-| JSON storage pattern | `src/storage.py` | 升級為 SQLite 時的介面參考 |
-| CLI pipeline | `src/importer.py` | background compute job 參考 |
+| MMP sliding window | `backend/engine/algorithms/mmp.py`（移植自已刪除的 `src/mmp.py`） | Milestone 1 已驗證 ±1% |
+| NP calculation | `backend/engine/algorithms/metrics.py`（移植自已刪除的 `src/metrics.py`） | 30s rolling^4，已測試 |
+| FIT parser + resample | `backend/files/fit_reader.py`（移植自已刪除的 `src/fit_parser.py`） | 1s uniform grid，Coros 相容 |
 
 ---
 

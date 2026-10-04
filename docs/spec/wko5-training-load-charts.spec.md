@@ -8,6 +8,8 @@
 - **Generated**: 2026-05-15
 - **Implementation Report**: `docs/reports/wko5-training-load-charts-feature-report.md`
 
+> ⛔ **API／UI 已移除（2026-10-04）**：`/api/v1/analytics/*`、`/api/v1/pmc` 與 React 圖表元件隨 React SPA（`frontend/`）一起刪除，這幾張圖目前沒有畫面。仍在的只有演算法（`backend/engine/algorithms/metrics.py` 的 `compute_run_pmc`、`compute_intensity_load_series`）與匯入時寫入的 intensity 指標。下面的架構、API、整合段落是當時的設計紀錄。
+
 ## Summary
 
 Implements five run-specific training load charts reverse-engineered from `WKO5 Season View.wko5chart`: Chronic/Acute TIS Load, Daily % of CTL, CTL Ramp Rate, Intensity Load Chart, and Running Volume Log (跑量日誌). All formulas were extracted verbatim from the `.wko5chart` binary; no estimation was required. New backend endpoints extend the existing FastAPI + SQLAlchemy async pattern; new frontend components extend the existing Recharts stack and are wired into `SeasonPage` as collapsible sections.
@@ -314,10 +316,7 @@ Path prefix `/api/v1/` inherited from existing routes. No deprecation needed —
 | Touchpoint | Type | Impact |
 |---|---|---|
 | `backend/engine/algorithms/metrics.py:compute_pmc` | Function import | `compute_run_pmc()` implements same EWMA logic independently; both coexist |
-| `backend/api/pmc.py` | Existing endpoint | Unchanged — still serves all-sport PMC for existing PmcChart |
 | `backend/files/file_service.py` | FIT importer | Extended in `_import_one_file()` to compute `elevation_gain_m` and intensity metrics |
-| `frontend/src/api/hooks.ts` | API hooks file | 3 new `useQuery` hooks: `useRunLoad`, `useIntensityLoad`, `useRunVolume` |
-| `frontend/src/pages/SeasonPage.tsx` | Parent page | 5 chart components added as collapsible sections (not SeasonTab.tsx) |
 
 ### Rollout Strategy
 Feature visible immediately after deploy; no feature flag needed. If intensity metrics backfill has not run, `IntensityLoadChart` shows empty state with a prompt: "Run `wko5 backfill-intensity` to enable this chart."
@@ -329,11 +328,7 @@ Feature visible immediately after deploy; no feature flag needed. If intensity m
 | Pattern | Where to Find | Why Follow |
 |---|---|---|
 | EWMA algorithm | `backend/engine/algorithms/metrics.py:151-165` | Canonical `ctl_factor = 1 - exp(-1/tau)` — must match exactly |
-| `WorkoutMetric` scalar storage | `backend/db/models.py:WorkoutMetric` + `backend/api/pmc.py:38-45` | All per-workout scalars live here |
-| FastAPI async router shape | `backend/api/pmc.py` and `backend/api/analytics.py` | `@router.get`, `Depends(get_db)`, `AsyncSession` |
-| `useQuery` hook pattern | `frontend/src/api/hooks.ts` (via `usePmc`) | Same TanStack Query shape for all new endpoints |
-| Recharts responsive wrapper | `frontend/src/components/PmcChart.tsx:51-95` | `<ResponsiveContainer>` + dark theme colors |
-| `SeasonPage` date range plumbing | `frontend/src/pages/SeasonPage.tsx` | Pass `dateFrom`/`dateTo` as props to all child charts |
+| `WorkoutMetric` scalar storage | `backend/db/models.py:WorkoutMetric` | All per-workout scalars live here |
 
 ---
 
@@ -345,7 +340,7 @@ Feature visible immediately after deploy; no feature flag needed. If intensity m
 | `sport` field null or inconsistently set for run workouts | M | M | Normalize on import: check Coros sport type code (mapped in `coros_sport_type`) and FIT sport field |
 | FIT file deleted after import → backfill impossible | L | L | Log warning; intensity chart uses 0 for that date |
 | `rampconstant` hard-coded to 7 | L | L | Expose as config param in `AthleteSettings` later; 7 is WKO5 default and matches community norm |
-| Daily %CTL bars overlap in high-density date ranges | M | L | Recharts `<BarChart>` with `barSize` auto; x-axis tick decimation mirrors `PmcChart.tsx:45-47` |
+| Daily %CTL bars overlap in high-density date ranges | M | L | Recharts `<BarChart>` with `barSize` auto; x-axis tick decimation |
 
 ---
 

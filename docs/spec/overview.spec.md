@@ -784,7 +784,7 @@ unofficial Training Hub API (same host and token as the COROS sync client; endpo
 | GET | `/api/v1/overview/plan/equivalence` | the time model, LOO backtest per terrain, 推估 flags, sources; memoised per dataset / day / AeT (`backend/api/plan_sessions.py:481`, `backend/api/plan_sessions.py:463`) |
 | POST | `/api/v1/overview/plan/equivalence/design` | `{mode, minutes, climb_per_km}` → km, climb, 推估 flag (`backend/api/plan_sessions.py:486`) |
 | GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload, now with `prefs`, `goal_climb_per_km` (`backend/api/plan_sessions.py:532`) and `plan_notes` (`backend/api/plan_sessions.py:643`) |
-| GET | `/` | redirects to the overview page when no `frontend/dist` build exists (`backend/main.py:81`) |
+| GET | `/` | redirects to the overview page (`backend/main.py:208`); the removed React SPA's `/overview`, `/activities`, `/achievements`, `/sync`, `/config` redirect to their static page (`backend/main.py:33`) |
 
 `Status` is memoised per (dataset, day, `plan.json` mtime, CP-test protocol, stored test
 sessions) (`backend/api/overview.py:40`); the

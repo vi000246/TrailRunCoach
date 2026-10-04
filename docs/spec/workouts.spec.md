@@ -100,8 +100,7 @@ index-keyed cache; features disk-cached per `.wko4` stamp in `~/.wko5coach/bad_a
 and `FitFolderDataset` (decided while loading). `ds.excluded` / `ds.exclusion_kept` list them.
 `cptest.curves` / `scan` (synced FIT files read beside the dataset) drop them via
 `cptest.bad_files` (`racepower_bad_activity.json`). `source_stamp` includes the setting and an
-overrides hash, so a change rebuilds the cached datasets. The legacy DB-row APIs
-(`/api/v1/pmc`, `/api/v1/analytics/*`, the unbuilt React `frontend/`) are not covered.
+overrides hash, so a change rebuilds the cached datasets.
 
 Review scan: `python -m backend.scripts.scan_bad_activities` (read-only; flagged files and the
 closest calls). On one runner's history (~680 WKO5, ~515 COROS, ~690 TP foot activities; ratio =
@@ -116,7 +115,6 @@ flagged.
 | Method | Path | Body / result |
 |---|---|---|
 | PATCH | `/api/v1/workouts/{id}/activity` | `{activity_type?, effort?, note?}`; a key present with null clears it (back to auto), absent = unchanged; 400 invalid value, 404, 422 no start time. Returns `{id, activity: …}` fields |
-| GET | `/api/v1/workouts`, `/api/v1/workouts/{id}` | each item now has `trail_classification`, `classification_overridden` and `activity` (the stored user values: `activity_type`, `effort`, labels, `*_overridden`, `note`, `key`) |
 | GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`) |
 | GET | `/api/v1/wko5/workouts` | each item also has `power_source` and `power_label` (「手錶推估功率（未採用）」 for unused watch power); `tss_source` is no longer `power` for a blocked watch run |
 | PATCH | `/api/v1/wko5/workouts/{idx}/activity` | as above; keyed by start minute + file, so it applies across sources; also `exclusion` (`keep` / `exclude` / null); the GET has `exclusion_state` {override, flagged, enabled} |
@@ -131,8 +129,7 @@ flagged.
 way as `segments_card.js`: a 「活動資訊」 card first in the grid with two selects (活動類型, 努力度;
 「自動（…）」 = back to auto), a note, and a 「自動」 / 「手動」 badge per field with the auto reason. Below them 「功率來源：Stryd」 or
 「功率來源：手錶推估功率（未採用）（功率模型、功率 TSS 不採用；心率／配速照常使用）」.
-No served static page edited the terrain classification (only the unbuilt React `frontend/` has a
-hook), so the single-activity view is where both live.
+The terrain classification is edited on the single-activity view as well.
 
 Bad activity files: the card's 「排除：」 line has 「手動排除」 (or, for a file the rule flags that the
 user kept, the rule's reason and 「恢復自動判定」); a change drops the selection and reloads the list
