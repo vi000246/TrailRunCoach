@@ -81,6 +81,7 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.pref_days": "pref_days",
     "plan.prefs.pref_keep": "pref_keep",
     "plan.prefs.b2b": "b2b",
+    "plan.prefs.transition_weeks": "transition_weeks",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
@@ -92,8 +93,9 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # warmup_commute_min / cooldown_min: the interval warm-up's city part and the cool-down
 # (engine/interval_library.py blocks) — read for every interval session, not shaping
 # b2b: whether a due B2B weekend is suggested at all (engine/b2b.py) — a suggestion, not shaping
+# transition_weeks: the 轉換期 after an A race (engine/planning.auto_phases) — a phase, not shaping
 NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
-               "warmup_commute_min", "cooldown_min", "b2b") + GATE_FIELDS
+               "warmup_commute_min", "cooldown_min", "b2b", "transition_weeks") + GATE_FIELDS
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
@@ -164,6 +166,9 @@ class Prefs:
     # 建議 B2B（連續兩天長天，engine/b2b.py）: on = a due B2B weekend is suggested (the user
     # picks the days, 排入 / 不要); off = never suggested. Not part of `active`.
     b2b: bool = True
+    # 轉換期 (SP-73; engine/planning.auto_phases): weeks of 轉換期 after an A race's 恢復期, 0 = off.
+    # Default 3 (Friel 一般 3–4 週, Canova 4 週; the low end, 推估). Not part of `active`.
+    transition_weeks: int = 3
 
     @property
     def active(self) -> bool:
@@ -295,6 +300,10 @@ def check(p: Prefs) -> None:
     from backend.engine.aet_test import PROTOCOL_CHOICES
     if p.aet_test_protocol not in PROTOCOL_CHOICES:
         raise ValueError(f"AeT 測試方式要是 {PROTOCOL_CHOICES} 其中之一")
+    from backend.engine.planning import TRANSITION_WEEKS_RANGE as TR
+    if isinstance(p.transition_weeks, bool) or not isinstance(p.transition_weeks, int) or \
+            not TR[0] <= p.transition_weeks <= TR[1]:
+        raise ValueError(f"轉換期週數要在 {TR[0]}–{TR[1]} 週（0 = 關閉）")
     if isinstance(p.quality_gate_weeks, bool) or not isinstance(p.quality_gate_weeks, int) or \
             not WEEKS_RANGE[0] <= p.quality_gate_weeks <= WEEKS_RANGE[1]:
         raise ValueError(f"週數法的週數要在 {WEEKS_RANGE[0]}–{WEEKS_RANGE[1]} 週")

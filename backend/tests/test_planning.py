@@ -18,7 +18,8 @@ def test_auto_phases_backwards_from_a_event():
     assert kinds[2] == ("taper", "2026-12-06", "2026-12-19")        # 14 days
     assert kinds[3] == ("event", "2026-12-20", "2026-12-20")
     assert kinds[4] == ("recovery", "2026-12-21", "2027-01-03")     # 50 km: long -> 14 d
-    assert kinds[5] == ("base", "2027-01-04", "2027-02-01")
+    assert kinds[5] == ("transition", "2027-01-04", "2027-01-24")   # SP-73: 3 weeks by default
+    assert kinds[6] == ("base", "2027-01-25", "2027-02-01")
 
 
 def test_phases_are_contiguous_and_non_overlapping():
