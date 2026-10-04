@@ -311,7 +311,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   (`WorkoutEditor.applyKey`, or the dialog's 測試 kind / 方式), the user picks the day and saves
   through `POST /sessions` (a variant keeps its `variant_key` → rung, so it counts on its ladder).
   A 徐國峰 90-min test saved there (by its title, or the template row `lib:xu_e_drift` — `_is_xu90`,
-  `backend/api/plan_sessions.py:387`) replaces that day's active long run, as 排入測試 does
+  `backend/api/plan_sessions.py:389`) replaces that day's active long run, as 排入測試 does
   (`_replace_long`, shared; owner 2026-10-04) — for the dialog's own 測試 › 徐國峰 too, which posts
   the same body.
   The 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).

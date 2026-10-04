@@ -450,6 +450,9 @@ def test_api_xu90_test_added_on_a_long_day_replaces_the_long_run(monkeypatch):
         assert r.status_code == 200
         live = e.c.get(f"{API}/sessions").json()["sessions"]
         assert any(s["uid"] == long["uid"] for s in live)                     # UA 60′: the long run stays
+        xu = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 150, "xu90")
+        bad = e.c.post(f"{API}/sessions", json={"day": "2020-01-04", "kind": "test", "title": xu["title"], "minutes": 90})
+        assert bad.status_code == 400                                          # a refused day deletes nothing
         e.c.delete(f"{API}/sessions/{r.json()['uid']}")
         xu = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 150, "xu90")
         r = e.c.post(f"{API}/sessions", json={"day": "2026-10-04", "kind": "test", "title": xu["title"],
