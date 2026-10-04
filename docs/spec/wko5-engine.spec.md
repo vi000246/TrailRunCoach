@@ -38,7 +38,7 @@ Five layers, each depending only on the ones below it:
 | File readers | Decode WKO5's tagged binary encoding; FIT → WKO5-equivalent channels | `backend/files/wko5chart_reader.py:127` |
 | Algorithms | Pure functions, one metric each, verified against WKO5 | `backend/engine/algorithms/wko5_power.py` and siblings |
 | Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections (`FitFolderDataset` for COROS / TP folders) | `backend/engine/wko5expr/dataset.py:312` |
-| Expression engine | Parse and evaluate WKO5's expression language | `backend/engine/wko5expr/evaluator.py:507` |
+| Expression engine | Parse and evaluate WKO5's expression language | `backend/engine/wko5expr/evaluator.py:508` |
 | API + viewer | Serve views, charts (through the render cache), workout samples, config, corrections; the viewer page | `backend/api/wko5views.py:304`, `backend/static/wko5_viewer.html` |
 
 ## File formats
@@ -108,7 +108,7 @@ compare):
 1. **Power:** `NP² × tssduration / (FTP² × 36)` when there is a power stream
    and an FTP in effect. Skipped for a file whose power is watch-estimated
    unless `power.accept_watch_power` is on (`power_tss_blocked`). The FTP
-   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:623`) is WKO5's rule: the
+   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:649`) is WKO5's rule: the
    FTP stored with the workout, else the sport's dated FTP setting. On a COROS
    / TP source a run instead divides by the CP in effect — the plan's CP test,
    else the athlete's `run_ftp_w`, else the Stryd-only PD-model mFTP as of
@@ -137,7 +137,18 @@ Parity mode is unchanged. History changes with it (TSS is computed on the fly):
 CTL rises in the weeks with hikes.
 
 `tl()` is linear: `v += (x − v) / constant`, daily sums, inputs outside 0–5000
-ignored (`backend/engine/wko5expr/evaluator.py:2426` `_tl`).
+ignored (`backend/engine/wko5expr/evaluator.py:2429` `_tl`).
+
+The builtins `ctl` / `atl` / `tsb` (`backend/engine/wko5expr/evaluator.py:760`) are not plain
+`tl(tss, ctl/atlconstant)` since SP-68: `Evaluator.pmc`
+(`backend/engine/wko5expr/evaluator.py:2443`) starts the same recurrence from
+`load_guard.pmc_start` — the manual CTL / ATL at a date (user_settings `athlete.pmc_start`,
+read once per evaluator), else CTL = ATL = the mean daily TSS of the first 28 days with TSS,
+else 0. With years of data the start has decayed away (WKO5 parity of today's CTL / ATL / TSB
+holds); in the first months, or with a manual start, they differ from WKO5. An expression's
+own `tl()` is unchanged (WKO5, v = 0 before the first input). A sport-filtered evaluator or a
+`sport(x)` context takes the automatic seed only. The chart render cache keys on the manual
+start (`backend/engine/wko5expr/render_cache.py`).
 
 ## Modes
 
@@ -201,12 +212,12 @@ Semantics chosen to match WKO5:
 Known gap: `startofweek` assumes Monday (WKO5 reads a user preference). The
 statistics (`stddev` / `variance` / `slr*`), `filter`, `bin` and `lookup` are
 implemented; an unknown function raises `unsupported function`
-(`backend/engine/wko5expr/evaluator.py:1068`).
+(`backend/engine/wko5expr/evaluator.py:1071`).
 
 Own functions beyond WKO5's: `drift("pace" | "power", tier)` returns the
 single-activity card's heart-rate drift of a run (warm-up excluded, fairness
 refusals → no point; not WKO5's stored `pahr` / `pwhr`) and `drift_avg`
-(`backend/engine/wko5expr/evaluator.py:1090`).
+(`backend/engine/wko5expr/evaluator.py:1093`).
 
 ## Views
 
@@ -273,7 +284,7 @@ keep their dashboard / chart indexes; `views/training.json:111-131`):
 formulas.md §6.10) as one dot per activity on a 0–10 axis, and 有氧／無氧刺激的長期與短期負荷
 plots `tl((tis…), ctlconstant)` / `tl((tis…), atlconstant)` — WKO5's Chronic /
 Acute TIS Load — as a PMC-like pair per energy system. Both need a power
-channel (`_builtin_workout`, `backend/engine/wko5expr/evaluator.py:876`), so
+channel (`_builtin_workout`, `backend/engine/wko5expr/evaluator.py:879`), so
 使用功率 off hides them (`tisaerobic` / `tisanaerobic` are power identifiers,
 `backend/engine/wko5expr/power_use.py:30-36`). Tests: `backend/tests/test_tis_charts.py`;
 parity with WKO5's cached per-workout scores (aerobic 359/361 equal, anaerobic
@@ -373,7 +384,7 @@ toggle.
 `backend/engine/wko5expr/render_cache.py`, used by the chart endpoint
 (`backend/api/wko5views.py:446`).
 
-- **Key** (`backend/engine/wko5expr/render_cache.py:139`): sha1 of the chart
+- **Key** (`backend/engine/wko5expr/render_cache.py:145`): sha1 of the chart
   definition (after fixes, translation, variant, basis and period rewrite), the
   request (view, dashboard, chart, begin/end after the floor, parity, the data
   source, every other query parameter, the workout's file, the variant), the
@@ -400,8 +411,8 @@ toggle.
 - **Storage**: in-memory LRU of 400 entries plus JSON files under the
   tenant's shared `cache/render/` (`backend/engine/wko5expr/render_cache.py:39`;
   demo sandboxes share their base's cache), pruned to 300 MB
-  least-recently-used every 50 writes (`backend/engine/wko5expr/render_cache.py:195`).
-- **Concurrency** (`backend/engine/wko5expr/render_cache.py:237`): identical
+  least-recently-used every 50 writes (`backend/engine/wko5expr/render_cache.py:201`).
+- **Concurrency** (`backend/engine/wko5expr/render_cache.py:243`): identical
   in-flight requests are coalesced; at most 2 renders run at once so other
   endpoints keep threadpool time. Errors are raised to every waiter and not
   cached.
@@ -547,7 +558,7 @@ unchanged files and unchanged code reads no FIT file at all.
   魯地圖, Google 地形, NLSC 電子地圖, 正射影像, OSM; overlays 等高線, Google 道路, NLSC 道路
   come from the shared `backend/static/basemaps.js:15` (also the routes page and the race
   calculator's course map). The defaults come from the settings keys `charts.map.basemap` /
-  `charts.map.overlays` (`backend/settings/repository.py:95`; basemap unset = by 地區: tw 魯地圖, intl OSM), read as `map_basemap` /
+  `charts.map.overlays` (`backend/settings/repository.py:100`; basemap unset = by 地區: tw 魯地圖, intl OSM), read as `map_basemap` /
   `map_overlays` from `GET /api/v1/sync/settings` (`backend/api/sync.py:203`,
   `backend/static/wko5_viewer.html:571`; storage side in
   [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)); a per-browser switch is kept only
@@ -705,6 +716,7 @@ source (synthetic FITs).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
+| 2026-10-04 | feature | SP-68 | Builtins `ctl` / `atl` / `tsb` start from `load_guard.pmc_start` (manual at a date → first-28-day mean → 0); `tl()` unchanged; render cache keys on the manual start |
 | 2026-10-04 | feature | SP-63 | Walks / hikes without their own LTHR score hrTSS on the run LTHR over moving time (own formulas only; strength stays 0; parity unchanged) |
 | 2026-10-04 | feature | SP-41 | Custom views accept `kind: "map"`; 單次活動判讀's first page has the route map; the viewer's basemap list, layer switch, tile-error hint, route drawing and nearest-point lookup moved to the shared `basemaps.js` (`MapLayers`) |
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |

@@ -218,6 +218,18 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
         <th>% CP</th><th>W</th></tr></thead>
       <tbody id="thr-pz"></tbody></table></div>
       <p class="meta" id="thr-pzsrc"></p></details>
+    <div class="sub" id="pmc">
+      <b data-i18n="settings.pmc.title">起始 CTL／ATL</b>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="CTL／ATL 要有一個起點。順序：你填的值（從那天開始）→ 自動（有 TSS 的前 28 天平均每日 TSS，CTL 和 ATL 都用它）→ 0。總覽、圖表、體能 CTL 的 ramp 護欄、TSB &lt; −30 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的 CTL／ATL 時才需要填。">?</button>
+      <div class="est" id="pmc-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
+      <div class="row">
+        <label><span data-i18n="settings.pmc.date">日期</span> <input type="date" id="pmc-date"></label>
+        <label>CTL <input type="number" id="pmc-ctl" min="0" max="300" step="0.1" style="width:72px"></label>
+        <label>ATL <input type="number" id="pmc-atl" min="0" max="300" step="0.1" style="width:72px"></label>
+        <button id="pmc-save" data-i18n="settings.pmc.save">儲存</button>
+        <button id="pmc-clear" data-i18n="settings.pmc.clear" hidden>改回自動</button>
+      </div>
+    </div>
   </section>
 
   <section id="sync">
@@ -769,6 +781,46 @@ $("thr-save").onclick = async () => {
     toast(t("settings.thr.saved")); loadThr(); loadHr();
   } catch (e) { toast(t("settings.thr.failed", { msg: e.message.slice(0, 80) })); }
 };
+
+// ---- 起始 CTL／ATL (SP-68; api/plan.py GET / PUT /pmc-start, engine/load_guard.py pmc_start) ----
+// manual (the user's value at a date) → auto (the first 28 days' mean daily TSS) → 0: the one
+// start the overview, the charts and the guardrails all read
+const PMC = "/api/v1/plan/pmc-start";
+const n1 = (v) => v == null ? "–" : (Math.round(v * 10) / 10).toLocaleString();
+function renderPmc(r) {
+  const ef = r.effective, a = r.auto, now = r.now;
+  const src = { manual: t("settings.pmc.src_manual"), auto: t("settings.pmc.src_auto"), none: t("settings.pmc.src_none") }[r.source] || r.source;
+  const autoTxt = a.date ? t("settings.pmc.auto", { n: a.days, seed: n1(a.seed), date: a.date })
+    + (a.final ? "" : t("settings.pmc.auto_open", { days: r.seed_days })) : t("settings.pmc.auto_none");
+  $("pmc-card").innerHTML = `<div class="card"><div class="k">${esc(t("settings.pmc.k", { src }))}</div>
+    <div class="v">CTL ${esc(n1(ef.ctl))} · ATL ${esc(n1(ef.atl))} <small>${ef.date ? esc(t("settings.pmc.from", { date: ef.date })) : ""}</small></div>
+    <div class="s">${esc(autoTxt)}</div>
+    <div class="s">${esc(t("settings.pmc.now", { date: now.date, ctl: n1(now.ctl), atl: n1(now.atl), tsb: now.tsb == null ? "–" : (now.tsb > 0 ? "+" : "") + Math.round(now.tsb) }))}</div>
+    ${r.manual_ignored ? `<div class="s err-text">${esc(t("settings.pmc.ignored", { date: r.manual.date }))}</div>` : ""}</div>`;
+  const m = r.manual;
+  $("pmc-date").value = m ? m.date : (a.date || now.date);
+  $("pmc-date").max = now.date;
+  $("pmc-ctl").value = m ? m.ctl : ""; $("pmc-atl").value = m ? m.atl : "";
+  $("pmc-ctl").placeholder = $("pmc-atl").placeholder = a.date ? n1(a.seed) : "0";
+  $("pmc-clear").hidden = !m;
+}
+async function loadPmc() {
+  try { renderPmc(await j(PMC)); }
+  catch (e) { $("pmc-card").innerHTML = `<span class="meta">${esc(t("settings.pmc.load_failed", { msg: e.message.slice(0, 100) }))}</span>`; }
+}
+async function putPmc(body, msg) {
+  try {
+    renderPmc(await j(PMC, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    toast(msg);
+  } catch (e) { toast(t("settings.pmc.failed", { msg: e.message.slice(0, 80) })); }
+}
+$("pmc-save").onclick = () => {
+  const date = $("pmc-date").value, ctl = $("pmc-ctl").value, atl = $("pmc-atl").value;
+  if (!date || ctl === "" || atl === "") { toast(t("settings.pmc.need")); return; }
+  putPmc({ date, ctl: Number(ctl), atl: Number(atl) }, t("settings.pmc.saved"));
+};
+$("pmc-clear").onclick = () => putPmc({ clear: true }, t("settings.pmc.cleared"));
+loadPmc();
 
 // ---- 資料同步 -------------------------------------------------------------
 const SYNC = "/api/v1/sync";

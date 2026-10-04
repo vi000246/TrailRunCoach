@@ -161,7 +161,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
   plan race is the one activity matched to a past season-plan event
   (`plan_race_runs`, `backend/engine/racepower/athlete.py:536`), not every run that day. Each
   class also carries `capacity`: whether the run is a capacity sample (see Back-tests).
-- **Thresholds on past dates**: `planning.Plan.threshold_on` (`backend/engine/planning.py:291`)
+- **Thresholds on past dates**: `planning.Plan.threshold_on` (`backend/engine/planning.py:301`)
   returns None before a row's date (fixed 2026-10-01). Before, the earliest row applied
   backwards, so the first row (CP 220, LTHR 160) leaked into every earlier date.
   `Dataset.setting` / `cp` / `aethr` then fall back to WKO5's dated settings (runthr, the

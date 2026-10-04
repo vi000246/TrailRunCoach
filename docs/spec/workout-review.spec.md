@@ -324,7 +324,7 @@ recording at half its length with the warm-up and stops kept
 minutes and uses moving-time halves (1.2–9.4 percentage points lower on
 three real runs with the warm-up-excluded definition). The season drift
 charts plot **the card's number**: the evaluator function `drift("pace" |
-"power")` (`backend/engine/wko5expr/evaluator.py:1090`) reads `measure()`'s drift
+"power")` (`backend/engine/wko5expr/evaluator.py:1093`) reads `measure()`'s drift
 through `basis_drift` — NaN (no point) for a refused run, a non-run, or power mode
 without power; runs too short for the tier on the clock are skipped before measuring.
 `drift(basis, tier, band)`: tier "test" (default, strict), "ref" (only the 參考 tier), "all";
@@ -373,12 +373,12 @@ Unknown section or no samples → an `empty` card.
 
 | Function | Used by | Rule | Line |
 |---|---|---|---|
-| `drift_series` | `status.i_drift` (`backend/engine/status.py:466`, `ref=True`; text in plain words 「穩定 · 3.2%」 since 2026-10-02), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; each point has `tier` and `band` (temperature band; `i_drift` compares within one); strict by default (`drift_streak`), `ref=True` keeps reference-tier drifts; runs drift_of refuses (< 30 min after the warm-up, fast finish, …) are kept with drift None | `backend/engine/workout_review.py:2209` |
+| `drift_series` | `status.i_drift` (`backend/engine/status.py:492`, `ref=True`; text in plain words 「穩定 · 3.2%」 since 2026-10-02), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; each point has `tier` and `band` (temperature band; `i_drift` compares within one); strict by default (`drift_streak`), `ref=True` keeps reference-tier drifts; runs drift_of refuses (< 30 min after the warm-up, fast finish, …) are kept with drift None | `backend/engine/workout_review.py:2209` |
 | `drift_streak` / `STREAK_NEED` | legacy only (the removed 「連續 3 次」 rule) | consecutive most recent fair drifts < 5 % | `backend/engine/workout_review.py:2242`, `backend/engine/workout_review.py:168` |
 | `quality_gate` | thin wrapper over `quality_gate.week_decision`; a legacy bool / None gate = no method | outside base: intensity and drift not bad | `backend/engine/workout_review.py:1521` |
-| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:517`, `backend/engine/quality_gate.py:406`, `backend/engine/quality_gate.py:517`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (every temperature band counts; a pass in heat unlocks, a fail in heat says 「可能是熱造成的」 — `quality_gate.heat_suffix`); dose: a done 課表 quality session, the `quality` class, or a road run with ≥ 4 short reps or ≥ 2 Zone 3 reps (`interval_reps.find_reps`) | — |
-| `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:720`) | Latest run classified `test_aet` in 120 days: `analyze_workout` result (protocol, judge), `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:421`, `backend/engine/aet_test.py:453`, `backend/engine/aet_test.py:461` |
-| `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:720`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:2276`, `backend/engine/workout_review.py:2296` |
+| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:520`, `backend/engine/quality_gate.py:406`, `backend/engine/quality_gate.py:517`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (every temperature band counts; a pass in heat unlocks, a fail in heat says 「可能是熱造成的」 — `quality_gate.heat_suffix`); dose: a done 課表 quality session, the `quality` class, or a road run with ≥ 4 short reps or ≥ 2 Zone 3 reps (`interval_reps.find_reps`) | — |
+| `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:746`) | Latest run classified `test_aet` in 120 days: `analyze_workout` result (protocol, judge), `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:421`, `backend/engine/aet_test.py:453`, `backend/engine/aet_test.py:461` |
+| `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:746`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:2276`, `backend/engine/workout_review.py:2296` |
 
 ## CP-test protocols (`engine/cp_protocols.py`)
 
@@ -452,7 +452,7 @@ needs a selected workout (`backend/api/wko5views.py:366-368`) and renders throug
 |---|---|---|---|
 | GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:672` | `basis` pace (default) or power, 400 otherwise. `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
 | GET | `/api/v1/wko5/views/{view}/dashboards/{d}/charts/{c}` | `backend/api/wko5views.py:350`, `backend/api/wko5views.py:528` | A review chart renders through the same branch (with the chart's chosen `basis`) |
-| POST | `/api/v1/plan/thresholds/apply-cp` | `backend/api/plan.py:684` | 「套用這次的 CP」: the card's `action.body`; writes / merges the test day's threshold row (cp, wprime, cp_method, note). 400 for a future date, unknown method, W′ without `2pt`, CP outside 50–700 W |
+| POST | `/api/v1/plan/thresholds/apply-cp` | `backend/api/plan.py:748` | 「套用這次的 CP」: the card's `action.body`; writes / merges the test day's threshold row (cp, wprime, cp_method, note). 400 for a future date, unknown method, W′ without `2pt`, CP outside 50–700 W |
 
 The viewer draws a card's `action` as a button (`drawAction`,
 `backend/static/wko5_viewer.html:1436`): confirm, POST (PATCH for 「當作間歇判讀」, then reload),

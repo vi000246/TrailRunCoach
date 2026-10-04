@@ -96,7 +96,7 @@ The toggle and the cache themselves are `wko5-engine` features (see
   (`backend/engine/wko5expr/render_cache.py:104`).
 - **Locale in the cache key.** Outside zh-TW the request locale is part of the cache key, so
   translated titles / legend names are never served to the other language
-  (`backend/engine/wko5expr/render_cache.py:141`).
+  (`backend/engine/wko5expr/render_cache.py:147`).
 - Timing footnotes for the cache (cold loads, `--reload` invalidating the code signature) are
   in `docs/reports/chart-sweep.md:101`.
 

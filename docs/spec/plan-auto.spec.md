@@ -121,9 +121,12 @@ Only the current week is adjusted. Sessions that are done, edited, custom or del
 The guardrails behind the gate (`quality_gate.guard`, `status`) use the same sources
 (`unsourced-rules.md` §B2), one copy in `backend/engine/load_guard.py` (SP-63): CTL ramp
 (7-day ΔCTL against CTL₋₇) 注意 ≥ max(3, 10 % × CTL₋₇), 擋 ≥ min(10, max(5, 15 % × CTL₋₇)) — 注意 → threshold only, 擋 → no interval (Friel's 5–8 /
-10 as a share of CTL, 推估). The guardrail CTL is seeded with the mean daily TSS of the first 4
-weeks of data and the ramp is not checked in the first 28 days (推估; `status` passes
-`ramp_week = None` then); the volume step still runs. Last week's **running-time** step against
+10 as a share of CTL, 推估). The guardrail CTL is the PMC's own (SP-68): it starts from the
+user's manual CTL / ATL at a date (設定 → 閾值), else the mean daily TSS of the first 4 weeks of
+data, else 0 (`load_guard.pmc_start`); the ramp is not checked in the first 28 days of an
+automatic start or the first 7 after a manual one (推估; `status` passes `ramp_week = None`
+then); the volume step still runs. Rule E's TSB < −30 reads `week_plan`'s `load.tsb_today` from
+the same started PMC (SP-63 Q3), so a new user's startup weeks give no false fatigue trigger. Last week's **running-time** step against
 max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen et al. 2014, JOSPT
 44:739; Damsted et al. 2019, JOSPT 49:230 — peer-reviewed, they measured running; the 「10 %
 法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative); TSB −30…−20 → hold
@@ -529,3 +532,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | feature | SP-31 follow-up | The weekday-cap 巡航版 fallback counts as the Zone 3 rung (same rule as the volume cap) |
 | 2026-10-04 | feature | SP-39 | Zone 3 and Zone 5 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR, gap ≤ 10 %, or Friel < 5 % at the tested AeT; the 90-min test and plateau / weeks open Zone 3 only) and the soft 「近 6 週 ≥ 2 堂 3 區」 (`Z5_Z3_NEED` / `Z5_Z3_DAYS`, 推估; replaces `Z3_MET_FOR_Z5`), one flag `z5_track` for week_decision / flow / 推薦 / change log; low-intensity share blocks Zone 5 only with a tested AeT; flow = two parallel tracks with 「安排課表」 actions (`?add=` / `?test=` deep links into the 課表 dialog); passive 90-min re-confirmation removed |
 | 2026-10-04 | feature | SP-31 | Two interval tracks: Zone 3 A1–A4 (2×15 → 3×12 → 2×20 → 1×30, 88–95 % CP) and Zone 5 V1–V4, own steps / 達標 counts; T1–T3 kept as 巡航版 and legacy; Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap, sticky, ≥ 21-day break re-locks / 90-min test / UA gap); low-intensity share blocks Zone 5 only; Zone 3 ≤ 10 % of the week, Zone 3 + Zone 5 ≤ 20 %; 2 a week = one of each, 1 a week 1:1 / 2:1 by the A race; 專項期 / 減量期 two-track sessions; z3_note / warn notes; flow stage 1 = the Zone 3 gate |
+| 2026-10-04 | feature | SP-68 | Guardrail CTL = the PMC's started CTL (manual at a date → first-4-week mean → 0); rule E's TSB < −30 reads the same PMC (SP-63 Q3); a manual start skips the ramp for 7 days |

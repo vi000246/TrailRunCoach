@@ -288,14 +288,13 @@ class Status:
 
     def i_fitness(self) -> Indicator:
         """CTL and its 7-day ramp. The ramp is the guardrail one (engine/load_guard.py):
-        CTL seeded with the first 4 weeks' mean daily TSS, not checked in the first
-        STARTUP_DAYS, judged against the relative watch / block lines. The CTL shown is
-        the PMC's (unseeded); the two differ only in the first months of data."""
-        ctl = self.ev.evaluate("ctl")
+        on the PMC CTL (SP-68: started from the manual CTL at a date, else the first 4
+        weeks' mean daily TSS), not checked in the startup window, judged against the
+        relative watch / block lines. The CTL shown and the guardrail's are the same series."""
+        ctl, _, start = self.ev.pmc()
         now = _n(ctl.at(self.tday))
         mo = _n(ctl.at(self.tday - 28))
-        g = (LG.guard_ramp(ctl.values, ctl.start, self.tday, self.ds.athlete.ctlconstant)
-             if hasattr(ctl, "values") else {"ramp": None, "ctl_prev": None, "startup": False, "day_n": None})
+        g = LG.guard_ramp(ctl.values, ctl.start, self.tday, start)
         ramp, base, startup = g["ramp"], g["ctl_prev"], g["startup"]
         spark = [[self._iso(d), _n(ctl.at(d))] for d in range(self.tday - 90, self.tday + 1, 3)]
         if now is None:
@@ -309,8 +308,10 @@ class Status:
         lv = None if startup else LG.ramp_level(ramp, base)
         if startup:
             d = g.get("day_n")
-            verdict = (f"起算期（有 TSS 的第 {d + 1} 天）：前 {LG.STARTUP_DAYS} 天 CTL 還在建立，不看 ramp"
-                       if d is not None else "還沒有 TSS：不看 ramp")
+            verdict = ("還沒有 TSS：不看 ramp" if d is None
+                       else f"起始 CTL 從 {start['date']} 起算（手動設定）：前 {LG.MANUAL_STARTUP_DAYS} 天不看 ramp"
+                       if start.get("source") == LG.MANUAL
+                       else f"起算期（有 TSS 的第 {d + 1} 天）：前 {LG.STARTUP_DAYS} 天 CTL 還在建立，不看 ramp")
         elif ramp is not None:
             if k in ("taper", "event", "recovery"):
                 level, verdict = GOOD, "減量／恢復期，體能小幅下降是正常的"
@@ -332,7 +333,7 @@ class Status:
                     level, verdict, action = WATCH, f"每週 {ramp:+.1f}，體能在下降", "補回訓練量，或確認是否在恢復"
         return Indicator("fitness", "體能 CTL", level, txt, verdict, why, action, SRC_RAMP_FRIEL, now, spark,
                          {"ramp_week": None if startup else ramp, "ramp_base": base, "ramp_level": lv,
-                          "ramp_startup": startup,
+                          "ramp_startup": startup, "pmc_start": start.get("source"),
                           "ramp_lines": None if startup else [LG.watch_line(base), LG.block_line(base)],
                           "delta_28d": None if mo is None else now - mo})
 
