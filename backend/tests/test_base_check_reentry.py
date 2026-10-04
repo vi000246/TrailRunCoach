@@ -255,7 +255,7 @@ def test_z5_pauses_on_a_maintenance_failure(xu_confirmed, monkeypatch):
     # Zone 3 continues while Zone 5 is paused
     gate = {"state": "none", "guard": {}, "dose": {"done": 3, "step": 4}, "z5": z}
     d = QG.week_decision(gate, "base", "base")
-    assert d["allow"] and d["spec"][1].startswith("閾值")
+    assert d["allow"] and d["spec"][1].startswith("有氧間歇")
 
 
 def test_z1_rule_is_two_thirds_for_three_weeks(monkeypatch):

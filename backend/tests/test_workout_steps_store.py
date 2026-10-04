@@ -78,7 +78,7 @@ def test_cp_change_rescales_structured_watts_and_repushes(monkeypatch):
     async def go():
         db = await make_db()
         assert (await PA.run(db))["status"] == "applied"
-        q = _by_title(await PS.load(db), "閾值 3×10 分")
+        q = _by_title(await PS.load(db), "有氧間歇（巡航）3×10 分")
         await PS.edit(db, q["uid"], {"steps": STEPS}, "2026-09-30")
         n0 = len(b.push.calls)
         b.inp = with_cp(base_inputs(), 330.0)

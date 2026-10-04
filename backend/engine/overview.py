@@ -891,18 +891,18 @@ def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rat
 
 
 # the 專項期 interval for 路跑 (instead of the 5×4′ hill set): a flat threshold run
-ROAD_SPECIFIC_Q = dict(id="quality", kind="quality", title="閾值節奏 2×15 分（平路）", minutes=60, terrain="road",
+ROAD_SPECIFIC_Q = dict(id="quality", kind="quality", title="有氧間歇 2×15 分（平路）", minutes=60, terrain="road",
                        detail="平路或跑步機；休 3 分慢跑；暖身 15 分、緩和 10 分",
                        source=f"{SRC_PFITZ}（乳酸閾值跑）；{SRC_DANIELS}（T 配速）", tss=70.0)
 # the 專項期 Zone 5 session for 越野 (the Zone 5 track's trail variant, SP-31)
-TRAIL_SPECIFIC_Z5 = dict(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60,
+TRAIL_SPECIFIC_Z5 = dict(id="quality", kind="quality", title="VO2max 間歇 5×4 分上坡", minutes=60,
                          detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                          source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
 # 減量期: the old short-intensity session (the Zone 5 side / no track open) and a Zone 3 one — the
 # volume about halved, the intensity kept (Bosquet 2007; Daniels Phase IV keeps T running)
 TAPER_Q = dict(id="quality", kind="quality", title="短強度 4×3 分", minutes=45,
                detail="保留強度、不累積疲勞（98–102% CP）", source=SRC_BOSQUET, tss=45 / 60 * 65)
-TAPER_Z3 = dict(id="quality", kind="quality", title="節奏 2×8 分", minutes=45,
+TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×8 分", minutes=45,
                 detail="保留強度、量減半（88–95% CP）；休 2 分慢跑；暖身 15 分、緩和 10 分",
                 source=f"{SRC_BOSQUET}；{SRC_DANIELS}（Phase IV 保留 T）", tss=45 / 60 * 62)
 # the base-phase strides for 路跑 (instead of hill sprints): title, detail, source suffixes

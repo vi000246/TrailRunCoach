@@ -134,7 +134,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `base_quality`: the session(s) the gate picked for this week — a list of the
     two-track intervals (overview.quality_sessions: base / 專項期 / 減量期), or one dict
     (the recovery-week fartlek, the AeT test, kind "test"); None in base with
-    `allow_quality` = 閾值 3×10, in 專項期 the old fixed session, in 減量期 4×3′.
+    `allow_quality` = 有氧間歇（巡航）3×10, in 專項期 the old fixed session, in 減量期 4×3′.
     `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
     `rates` = TSS / h per category for it, `notes` collects its notes.
@@ -181,14 +181,14 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         elif allow_quality and kind == "specific" and road:
             add(**O.ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
         elif allow_quality and kind == "specific":
-            add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60, target=tgt.get("supra", ""),
+            add(id="quality", kind="quality", title="VO2max 間歇 5×4 分上坡", minutes=60, target=tgt.get("supra", ""),
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=O.SRC_PALLADINO + "（Supra-threshold）", tss=75.0)
         elif allow_quality and kind == "base" and bqs:
             for b in bqs:
                 add(**_bq(b))
         elif allow_quality:
-            add(id="quality", kind="quality", title="閾值 3×10 分", minutes=60, target=tgt.get("threshold", ""),
+            add(id="quality", kind="quality", title="有氧間歇（巡航）3×10 分", minutes=60, target=tgt.get("threshold", ""),
                 detail="休 2–3 分鐘；暖身 15 分、緩和 10 分", source=O.SRC_PALLADINO + "（3B）", tss=70.0)
     elif kind == "base" and mode == "recovery_week" and allow_quality and bqs \
             and bqs[0].get("kind", "quality") == "quality":
