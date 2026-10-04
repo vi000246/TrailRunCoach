@@ -94,6 +94,12 @@ def test_static_calc_equals_the_api(demo, monkeypatch):
     assert any(r[1].startswith("course/event/") for r in reqs), "the demo has no event with a GPX"
     assert any(r[2].get("type") == "baiyue" and (r[2].get("days") or 1) > 1 for r in reqs)
     h = {"X-TRC-CSRF": F.csrf(c)}
+    # 10 fixed samples + 3 per demo event with a GPX is more than the demo's 20 heavy requests
+    # per IP per minute (tenancy_mw.HEAVY_IP, covered in test_demo_sandbox); this test is about
+    # parity, so lift that limit here instead of comparing 429s
+    from backend import tenancy_mw as MW
+    from backend.security import ratelimit as RL
+    monkeypatch.setattr(MW, "HEAVY_IP", RL.Buckets(rate=len(reqs) + 1, per=60))
     # the live answers first (the static run below patches the calibration reads)
     live = []
     for label, sub, body in reqs:
