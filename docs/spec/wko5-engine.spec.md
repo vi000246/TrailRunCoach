@@ -124,6 +124,18 @@ workout whose `tss_source` is not power or rTSS
 (`backend/engine/wko5expr/dataset.py:537` `_is_hr_sourced`), so a run with NP
 but no FTP in effect is treated like any hrTSS day.
 
+**Walks / hikes (SP-63, own formulas only):** a `walk` workout (walking,
+hiking, mountaineering) without a threshold of its own scores hrTSS on the run
+LTHR (`hr_lthr`, `backend/engine/wko5expr/dataset.py:574`), and always over
+moving time — whatever `hr_tss_moving_only` says (`moving_hrtss_on`,
+`backend/engine/wko5expr/dataset.py:566`): over recorded time a multi-day 百岳
+charges the nights. Runs follow the knob as before. Only the hrTSS path falls
+back — `aethr` and the low-intensity share still read the sport's own setting,
+so hike time does not enter the 80/20 share. Strength keeps no hrTSS (0 TSS
+unless a plan LTHR exists): resistance-training HR is not an endurance load.
+Parity mode is unchanged. History changes with it (TSS is computed on the fly):
+CTL rises in the weeks with hikes.
+
 `tl()` is linear: `v += (x − v) / constant`, daily sums, inputs outside 0–5000
 ignored (`backend/engine/wko5expr/evaluator.py:2426` `_tl`).
 
@@ -138,7 +150,7 @@ COROS / TP-only runner starts on own formulas.
 | Setting | Parity | Own formulas (`MOUNTAIN_PRESET`) | Why |
 |---|---|---|---|
 | Use TP's TSS | forced on | off | Independence from TrainingPeaks; a direct COROS import has no TP TSS |
-| hrTSS on moving time only | off | on | WKO5 charges every recorded second; a two-day trip with only ~7 h moving can score ~900 |
+| hrTSS on moving time only | off | on (walks / hikes: always, SP-63) | WKO5 charges every recorded second; a two-day trip with only ~7 h moving can score ~900 |
 | hrTSS zone-1 floor | off | 0.70 × LTHR (in the preset, but no TSS code reads `hr_tss_zone1_floor` yet) | WKO5's lowest band earns 20–30 TSS/h even while asleep |
 | Elevation bonus | off | 10 TSS / 1000 ft | Uphill Athlete: heart rate cannot see the muscular cost of climbing |
 | Data corrections | ignored | applied | Keeps WKO5 comparisons honest |
@@ -693,6 +705,7 @@ source (synthetic FITs).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
+| 2026-10-04 | feature | SP-63 | Walks / hikes without their own LTHR score hrTSS on the run LTHR over moving time (own formulas only; strength stays 0; parity unchanged) |
 | 2026-10-04 | feature | SP-41 | Custom views accept `kind: "map"`; 單次活動判讀's first page has the route map; the viewer's basemap list, layer switch, tile-error hint, route drawing and nearest-point lookup moved to the shared `basemaps.js` (`MapLayers`) |
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |
 | 2026-09-30 | code-sync | N/A | Period toggle (periods.py, `period` / `min_days`), render cache, viewer (flat custom tabs, &chart= deep link, enlarge overlay, 數值與公式 table removed, Leaflet route map with basemaps / overlays / tile-error hint, samples endpoint and synced hover), regrouped custom views, refreshed API table |
