@@ -1,0 +1,8 @@
+{
+  "thr.title": "Threshold tests (LTHR / AeT / CP)",
+  "thr.edit": "Edit in Settings",
+  "thr.now": "In use: AeT {aet} / LTHR {lthr} / CP {cp} W",
+  "thr.latest": "; latest test {date} ({n} in all). ",
+  "thr.none": "; no tests yet. ",
+  "thr.lthr_default": "⚠ LTHR is WKO5's default: enter a test result in Settings"
+}

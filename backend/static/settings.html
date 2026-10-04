@@ -48,6 +48,19 @@ label { font-size: 13px; }
 table.wt { border-collapse: collapse; margin-top: 10px; min-width: 280px; }
 table.wt th, table.wt td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; font-size: 13px; }
 table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
+/* 閾值測試紀錄: the table scrolls sideways on a phone; the estimate cards (LTHR / AeT 自動估算) */
+.tw { overflow-x: auto; }
+.tw table.wt { width: 100%; }
+.tw td { white-space: nowrap; }
+.est { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 10px; }
+.est .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.est .k, .est .s { color: var(--muted); font-size: 12px; }
+.est .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.est .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.est button { margin-top: 6px; }
+/* 「± N bpm」 on an estimated AeT; the why on hover / long-press (title) */
+.pm { display: inline-block; font-size: 11px; font-weight: 500; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line);
+  color: var(--muted); cursor: help; vertical-align: 2px; white-space: nowrap; }
 .list label { display: block; padding: 6px 0; border-top: 1px solid var(--line); }
 .list .x { float: right; }
 [hidden] { display: none !important; }
@@ -121,7 +134,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
           <li>hrTSS 只算實際移動的時間</li>
           <li>爬升加成 TSS</li>
           <li>套用你核准的資料校正</li>
-          <li>用「賽事周期」頁的心率 / CP 測試值</li>
+          <li>用下方「閾值測試紀錄」的 LTHR／AeT／CP 測試值</li>
         </ul>
       </button>
       <button class="mode" data-parity="true">
@@ -173,6 +186,36 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
         <button id="hr-rest-save">儲存</button><button id="hr-rest-auto" hidden>改回自動</button></div>
       <p class="meta" id="hr-est"></p>
     </details>
+  </section>
+
+  <section id="thresholds">
+    <h2><span data-i18n="settings.thr.title">閾值測試紀錄（LTHR／AeT／CP）</span>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。hrTSS、功率 TSS、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
+    <p class="meta" id="thr-now" role="status"></p>
+    <p class="meta" id="thr-wko5"></p>
+    <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
+    <div class="tw"><table class="wt">
+      <thead><tr><th data-i18n="settings.thr.date">測試日期</th><th data-i18n="settings.thr.lthr">LTHR 乳酸閾值心率</th>
+        <th data-i18n="settings.thr.aethr">AeT 有氧閾值心率</th><th data-i18n="settings.thr.cp">CP 跑步臨界功率 W</th>
+        <th data-i18n="settings.thr.note">備註（測試方式）</th><th></th></tr></thead>
+      <tbody id="thr"></tbody>
+    </table></div>
+    <div class="row">
+      <button id="thr-add" data-i18n="settings.thr.add">＋ 新增一次測試</button>
+      <button class="primary" id="thr-save" data-i18n="settings.thr.save">儲存閾值</button>
+    </div>
+    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.how_h">怎麼測</summary>
+      <ul class="meta" style="margin:4px 0;padding-left:18px">
+        <li data-i18n="settings.thr.how_aet">AeT 測試（Uphill Athlete）：暖身 10 分後在跑步機或平路用固定功率跑 40–60 分鐘（課表排 40 分；UA 不建議短於 40 分），前後半段的心率飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。</li>
+        <li data-i18n="settings.thr.how_lthr">LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。</li>
+        <li data-i18n="settings.thr.how_cp">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。測完在活動判讀卡按「套用這次的 CP」，會寫成測試那天的一列。沒填的話用 WKO5 的 mFTP（30–60 分鐘的功率，通常比兩點 CP 低 5–10%）。</li>
+      </ul>
+    </details>
+    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino 官方表，依目前 CP）</summary>
+      <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
+        <th>% CP</th><th>W</th></tr></thead>
+      <tbody id="thr-pz"></tbody></table></div>
+      <p class="meta" id="thr-pzsrc"></p></details>
   </section>
 
   <section id="sync">
@@ -578,6 +621,7 @@ async function putHr(body, msg) {
   try {
     renderHr(await j(HRP, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
     toast(msg);
+    loadThr();          // max / resting HR are rows of the same table: never PUT a stale copy over them
   } catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
 }
 $("hr-model").onchange = (e) => putHr({ model: e.target.value }, "已儲存，課表心率目標會重算");
@@ -585,6 +629,97 @@ $("hr-max-save").onclick = () => { const x = Number($("hr-max").value); if (x) p
 $("hr-rest-save").onclick = () => { const x = Number($("hr-rest").value); if (x) putHr({ rest_hr: x }, "已儲存靜息心率"); };
 $("hr-max-auto").onclick = () => putHr({ clear_max: true }, "最大心率改回自動");
 $("hr-rest-auto").onclick = () => putHr({ clear_rest: true }, "靜息心率改回自動");
+
+// ---- 閾值測試紀錄 (api/plan.py GET / PUT /thresholds; planning.Threshold) ------------
+// The season plan's dated rows: each applies from its date on. The table edits LTHR / AeT / CP;
+// 最大心率 / 靜息心率 live in the same rows but are edited only in 心率 above (SP-46), so
+// rows holding only those are kept (and PUT back) without being shown.
+const THR = "/api/v1/plan/thresholds";
+const THR_SHOWN = ["lthr", "aethr", "cp"];
+let TS = null;
+const pmBadge = (p) => p && p.pm ? ` <span class="pm" tabindex="0" title="${esc(p.tip)}" aria-label="${esc(t("settings.thr.pm_aria", { pm: p.pm, tip: p.tip }))}">±${p.pm} bpm</span>` : "";
+const thrShown = (r) => r._new || THR_SHOWN.some((k) => r[k] != null);
+async function loadThr() {
+  try { TS = await j(THR); }
+  catch (e) { $("thr-now").textContent = t("settings.thr.load_failed", { msg: e.message.slice(0, 100) }); return; }
+  renderThr(); loadThrEstimate();
+}
+function renderThr() {
+  const ef = TS.effective_thresholds, w = TS.wko5_settings.runthr, m = TS.wko5_settings.runmhr;
+  $("thr-now").innerHTML = esc(t("settings.thr.now", { aet: num(ef.aethr.value), lthr: num(ef.lthr.value), cp: num(ef.cp.value) }))
+    + pmBadge(ef.aethr.pm) + (ef.lthr.wko5_default ? ` <span class="err-text">${esc(t("settings.thr.lthr_default"))}</span>` : "");
+  $("thr-wko5").innerHTML = esc(t("settings.thr.wko5", { lthr: num(w && w.value), mhr: num(m && m.value) }))
+    + (w && w.is_default ? ` <span class="err-text">${esc(t("settings.thr.wko5_default", { date: w.date }))}</span>` : "");
+  const cell = (i, f, v) => `<td><input type="number" data-t="${i}" data-f="${f}" value="${v ?? ""}" style="width:76px"></td>`;
+  $("thr").innerHTML = TS.thresholds.map((r, i) => !thrShown(r) ? "" : `<tr>
+    <td><input type="date" data-t="${i}" data-f="date" value="${esc(r.date)}"></td>
+    ${cell(i, "lthr", r.lthr)}${cell(i, "aethr", r.aethr)}${cell(i, "cp", r.cp)}
+    <td><input data-t="${i}" data-f="note" value="${esc(r.note)}" style="width:220px"></td>
+    <td><button class="x" data-trm="${i}">${esc(t("settings.thr.remove"))}</button></td></tr>`).join("")
+    || `<tr><td colspan="6" class="meta">${esc(t("settings.thr.empty"))}</td></tr>`;
+  const pz = TS.power_zones;
+  $("thr-pz").innerHTML = pz.zones.map((z) => `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td>
+    <td>${Math.round(z.lo * 100)}${z.hi ? "–" + Math.round(z.hi * 100) : "+"}%</td>
+    <td>${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td></tr>`).join("");
+  $("thr-pzsrc").textContent = t("settings.thr.pz_src", { src: pz.source });
+}
+async function loadThrEstimate() {
+  let E;
+  try { E = await j("/api/v1/plan/threshold-estimate"); }
+  catch { $("thr-est").innerHTML = `<span class="meta">${esc(t("settings.thr.est_failed"))}</span>`; return; }
+  const cur = TS.effective_thresholds;
+  const card = (key, label, est, curV, help) => {
+    const ok = est && est.value != null;
+    const same = ok && curV != null && Math.abs(est.value - curV) < 1;
+    return `<div class="card"><div class="k">${esc(t("settings.thr.est_k", { name: label }))}</div>
+      <div class="v">${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? esc(t("settings.thr.est_cur", { v: num(curV) })) : ""}</small></div>
+      <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? esc(t("settings.thr.est_spread", { lo: est.spread[0], hi: est.spread[1] })) : ""}${est && est.days ? esc(t("settings.thr.est_days", { n: est.days })) : ""}</div>
+      ${help ? `<div class="s">${esc(help)}</div>` : ""}
+      ${ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">${esc(t("settings.thr.est_apply", { v: est.value }))}</button>`
+        : ok ? `<div class="s">${esc(t("settings.thr.est_same"))}</div>` : ""}</div>`;
+  };
+  $("thr-est").innerHTML = card("lthr", "LTHR", E.lthr, cur.lthr.value,
+      E.lthr && E.lthr.hr_at_cp ? t("settings.thr.est_cross", { hr: E.lthr.hr_at_cp, n: E.lthr.n_at_cp }) : "")
+    + card("aethr", "AeT", E.aethr, cur.aethr.source === "plan" ? cur.aethr.value : null,
+      E.aethr && E.aethr.value == null ? t("settings.thr.est_aet_none") : "");
+  $("thr-est").querySelectorAll("[data-apply]").forEach((b) => b.onclick = async () => {
+    const k = b.dataset.apply, v = Number(b.dataset.v), name = k === "lthr" ? "LTHR" : "AeT";
+    if (!confirm(t("settings.thr.est_confirm", { name, v }))) return;
+    try {
+      await j(`${THR}/apply-estimate`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [k]: v, note: t("settings.thr.est_note", { name, reason: (E[k] || {}).reason || "" }) }) });
+      toast(t("settings.thr.applied")); loadThr(); loadHr();
+    } catch (e) { toast(t("settings.thr.failed", { msg: e.message.slice(0, 80) })); }
+  });
+}
+const TODAY = () => (TS && TS.today) || new Date().toISOString().slice(0, 10);
+$("thr-add").onclick = () => { TS.thresholds.push({ date: TODAY(), lthr: null, aethr: null, cp: null, note: "", _new: true }); renderThr(); };
+$("thr").addEventListener("change", (ev) => {
+  const i = ev.target.dataset.t; if (i == null) return;
+  const f = ev.target.dataset.f, v = ev.target.value, r = TS.thresholds[i];
+  r[f] = THR_SHOWN.includes(f) ? (v === "" ? null : Number(v)) : v;
+  // a CP typed by hand is no longer the test's result (套用這次的 CP stores how it was measured)
+  if (f === "cp") { r.cp_method = null; r.wprime = null; }
+  // likewise an LTHR / AeT typed by hand is no longer the applied estimate / test
+  if (f === "lthr" || f === "aethr") r[`${f}_method`] = v === "" ? null : "manual";
+});
+$("thr").addEventListener("click", (ev) => {
+  const i = ev.target.dataset.trm; if (i == null) return;
+  const r = TS.thresholds[+i];
+  // a row that also holds 最大／靜息心率 (心率 above) keeps them: only its LTHR / AeT / CP go
+  if (r.mhr != null || r.rhr != null) {
+    for (const k of [...THR_SHOWN, "wprime", "cp_method", "lthr_method", "aethr_method"]) r[k] = null;
+    r._new = false;
+  } else TS.thresholds.splice(+i, 1);
+  renderThr();
+});
+$("thr-save").onclick = async () => {
+  const body = TS.thresholds.map(({ _new, ...r }) => r);
+  try {
+    await j(THR, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast(t("settings.thr.saved")); loadThr(); loadHr();
+  } catch (e) { toast(t("settings.thr.failed", { msg: e.message.slice(0, 80) })); }
+};
 
 // ---- 資料同步 -------------------------------------------------------------
 const SYNC = "/api/v1/sync";
@@ -1070,7 +1205,7 @@ document.querySelectorAll("[data-cal-copy]").forEach((b) => b.onclick = async ()
   try { await navigator.clipboard.writeText(inp.value); toast(t("settings.cal.copied")); }
   catch { inp.select(); toast(t("settings.cal.copy_fail")); }
 });
-loadMode(); loadApplied(); loadProfile(); loadHr(); loadExclusions(); loadBackup(); loadCalib(); loadCal();
+loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadExclusions(); loadBackup(); loadCalib(); loadCal();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>
