@@ -288,3 +288,35 @@ def test_zone_table_bpm_models(tmp_path, monkeypatch):
     z = zone_table(ds, "coroshrr", end)
     assert z["threshold"] == 149 and z["rows"][1]["from"] == 141 and z["rows"][1]["to"] == 163
     assert "來自手錶" in z["threshold_source"] and [c["id"] for c in z["choices"]][0] == "frielhr"
+
+
+def test_zones_card_title_follows_the_chosen_model(tmp_path):
+    """SP-40: 「區間與課表強度」's HR card switched with ?zsys= is titled after the chosen
+    model, not the view's fixed 「Friel 心率區間」; the default model and other tables keep it."""
+    from datetime import datetime, timezone
+    from backend.api.wko5views import _render
+    from backend.engine.wko5expr.config import EngineConfig
+    from backend.engine.wko5expr.customviews import REPO_VIEWS, load_custom_views
+    from backend.engine.wko5expr.dataset import date_to_day
+    from backend.engine.wko5expr.fitdataset import FitFolderDataset
+    from backend.engine.zones import SYSTEMS
+    from backend.tests.fit_builder import build_run
+    d = tmp_path / "fit" / "coros" / "2026"
+    d.mkdir(parents=True)
+    (d / "000.fit").write_bytes(build_run(start=datetime(2026, 9, 28, 0, tzinfo=timezone.utc), seconds=1800,
+                                          power=180, stryd=True))
+    ds = FitFolderDataset(tmp_path / "fit" / "coros", config=EngineConfig(parity=True), today=TODAY,
+                          estimate_thresholds=False, tz=timezone.utc)
+    ds.plan = Plan()
+    charts = {c.get("id"): c for v in load_custom_views([REPO_VIEWS]).values() if not v.get("error")
+              for dash in v["dashboards"] for c in dash["charts"]}
+    hr, power = charts["friel-hr-zones"], charts["palladino-power-zones"]
+    end = date_to_day(TODAY)
+    res = _render(hr, ds, end - 30, end, None, None, params={"zsys": "coroslthr"})
+    assert res["title"] == "COROS 乳酸閾心率區間（跑步）" == res["zones"]["title"]
+    assert "Friel" not in res["title"]
+    res = _render(hr, ds, end - 30, end, None, None, params={"zsys": "classichr"})
+    assert res["title"] == SYSTEMS["classichr"]["title"]
+    for params in ({}, {"zsys": "frielhr"}, {"zsys": "nope"}):      # default model: the view's title
+        assert _render(hr, ds, end - 30, end, None, None, params=params)["title"] == hr["title"]
+    assert _render(power, ds, end - 30, end, None, None, params={"zsys": "coroslthr"})["title"] == power["title"]
