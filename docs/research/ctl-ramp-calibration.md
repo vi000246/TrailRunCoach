@@ -1,6 +1,6 @@
 # CTL ramp 門檻校準：我們的 CTL 跟 Friel／TrainingPeaks 的是同一把尺嗎
 
-> 2026-10-04，SP-63。只做分析，不改程式碼。
+> 2026-10-04，SP-63。§1–§3 是分析；§4 已更新為使用者拍板的最終規則，並已實作（`backend/engine/load_guard.py`），§6 是實作後在範例資料上的回測。
 >
 > 標記沿用 `unsourced-rules.md`：**已驗證**（本次讀過原文）、**未驗證**、**未找到來源**、**推估**；外部說法標 **同儕審查** 或 **教練／平台**。已在 `unsourced-rules.md` §B2、`detraining.md`、`docs/wko5-internals/formulas.md`、`uphill-athlete-mountain-metrics.md` 查過的來源直接引用，不重查。
 >
@@ -13,7 +13,7 @@
 1. **公式一樣，尺不一樣。** 我們的 CTL／ATL 公式、時間常數、ramp 定義都和 TrainingPeaks／WKO5 相同（§1.1、§2.1）。問題出在**每筆活動的 TSS**：同一筆跑步，hrTSS 比功率 TSS 高約 25 %（路跑）到 70 %（越野）；健行、肌力在多數設定下記 0；設定（parity 或山岳預設）一換，同一份訓練的 CTL 水準差 30–50 %（§3）。
 2. **ramp 用絕對點數，會跟著 TSS 的尺一起放大縮小。** TSS 全部乘上 k，CTL 和 ramp 也都乘上 k；只有「ramp ÷ CTL」不變。範例跑者同一份訓練，5 注意／8 擋的觸發次數會因為 TSS 算法不同差 4–6 倍（§3.2）。
 3. **Friel 的 5–8 原本就不是警戒線**，是「多數人合適的加量速度」，10 以上才是「只能撐一週」（§2.2）。我們拿 5 當注意、8 當擋，比原意保守。對跑步來說保守有理由（機械負荷，§2.4），但數字要換成跟 TSS 尺度無關的寫法。
-4. **建議**：ramp 改成相對值：**注意 ΔCTL₇ ≥ max(3, 10 % × CTL₋₇)、擋 ≥ max(5, 15 % × CTL₋₇)**（推估，§4.1）；CTL 不滿 42 天的資料時不看 ramp；週量增幅改成「跑步時間對 max(上週, 前 4 週平均)」（§4.3）。需要改的程式列在 §5。
+4. **決定（已實作）**：ramp 改成相對值：**注意 ΔCTL₇ ≥ max(3, 10 % × CTL₋₇)、擋 ≥ min(10, max(5, 15 % × CTL₋₇))**（推估，§4.1）；護欄用的 CTL 以前 4 週的平均每日 TSS 當起始值，前 28 天不看 ramp（§4.2）；週量增幅改成「跑步時間對 max(上週, 前 4 週平均)」（§4.3）；健行／走路沒有自己的 LTHR 時沿用跑步 LTHR、只算移動時間，肌力維持 0（§4.2）；排課每週 CTL 目標 max(2, 5 %)／max(2.5, 7 %)。程式位置見 §5。
 
 ---
 
@@ -156,49 +156,67 @@ Stryd 和 intervals.icu 都指出跑步的負荷不只是代謝（機械、衝�
 
 ## 4. 建議
 
-### 4.1 CTL ramp：改成相對值（推估）
+### 4.1 CTL ramp：改成相對值（推估，已實作）
 
 ```
 Δ = CTL(d) − CTL(d−7)，c = CTL(d−7)
 注意（只排閾值下）：Δ ≥ max(3, 0.10 × c)
-擋（不排間歇）：    Δ ≥ max(5, 0.15 × c)
+擋（不排間歇）：    Δ ≥ min(10, max(5, 0.15 × c))
 ```
 
 - **為什麼用 %**：TSS 尺度一換（hrTSS↔功率 TSS、加不加健行、LTHR 推估偏差），CTL 和 ramp 會一起乘上同一個倍數，只有 ramp ÷ CTL 不變。這是唯一不用先校準 TSS 就能跨設定、跨使用者通用的寫法。Palladino 自己就用 2–5 %。
-- **10 %／15 % 怎麼來的**：Friel 5–8（建議）／10（上限）放在典型 CTL 60–80 上，約是 6–13 %／13–17 %。跑步取下緣（§2.4），注意設 10 %、擋設 15 %。CTL ≈ 50–55 時等於現在的 5／8，CTL 越高越寬、越低越嚴。
-- **下限 3／5**：CTL 低（< 30–35）時，% 的分母太小、雜訊大，退回點數。CTL 20 時擋線是 +5（25 %），避免輕易誤擋。
-- **不按 TSS 來源分門檻**：% 已經消掉尺度差。真正要處理的是**來源在中途切換**（例如開始用 Stryd，CTL 尺度跳 20–40 %），會在 6 週內造成假的負 ramp 或正 ramp。這要靠 §4.2 的一致性處理，不是調門檻。
-- **Coggan 的「連 4 週」**：目前是單週觸發。建議「注意」維持單週（只是降級成閾值下），「擋」也維持單週（Friel 的 > 10 本來就只容許一週），不加連續週數的條件（推估，保守）。
-- 排課目標 `RAMP_GOAL`（基礎 +3、專項 +4 點）也是絕對點數。CTL 30 的人 +4 已經是 13 %，接近擋線。建議一併改成 %（推估：基礎 5 %、專項 7 %，都低於注意線 10 %）。
+- **10 %／15 % 怎麼來的**：Friel 5–8（建議）／10（上限）放在典型 CTL 60–80 上，約是 6–13 %／13–17 %。跑步取下緣（§2.4），注意設 10 %、擋設 15 %。CTL ≈ 50–55 時等於原本的 5／8，CTL 越高越寬、越低越嚴。
+- **下限 3／5**：CTL 低（< 30–35）時，% 的分母太小、雜訊大，退回點數。
+- **擋線上限 10**：不加的話 CTL 100 時擋線是 15 點，超過 Friel 說的「10 以上最多撐一週」。上限讓 TSS 尺度偏大的設定比較容易被擋，方向是保守的。CTL > 66.7 時才會生效。
+- **不按 TSS 來源分門檻**：% 已經消掉尺度差。真正要處理的是**來源在中途切換**（例如開始用 Stryd，CTL 尺度跳 20–40 %），會在 6 週內造成假的負 ramp 或正 ramp。
+- **Coggan 的「連 4 週」**：「注意」和「擋」都維持單週觸發（Friel 的 > 10 本來就只容許一週；推估，保守）。
+- **誰用哪一條線**（合併原本四份常數時的對應）：狀態卡（注意 → 黃、擋 → 紅）、間歇護欄（注意 → 只排閾值、擋 → 不排間歇）、自動調整 E 規則用**擋線**（它原本是 ≥ 8，就是舊的擋線；2026-10-01 前是 7，那個 7 不沿用）、B2B 週末與 B2B 的 TSB 例外也用擋線（原本 ≥ 8）。
+- 排課目標 `RAMP_GOAL`（原本基礎 +3、專項 +4 點）改成 **max(2, 5 %)／max(2.5, 7 %)**（推估）。CTL 55–60 時等於原本的 +3／+4，所以是「維持現狀再換成比例」，不是依來源重訂；比 Palladino 寫的 2–5 % 高。實際上排課的時數上限（+10 %）通常會先卡住。
 
 ### 4.2 讓 CTL 的尺度穩定
 
-1. **資料不滿 42 天（從第一個有 TSS 的日子算）不看 ramp**，或依 Coggan 的方法給初始值。否則新使用者第 1–6 週一定被擋。
-2. **健行／肌力要有 TSS**：`otherthr`／`bikethr` 沒設定時，退回跑步 LTHR（目前只有計畫裡有 LTHR 時才會這樣）。多日百岳用移動 hrTSS（＋爬升加成）。現在這些活動算 0，最重的週反而 ramp 最低。
-3. **COROS／TP 來源預設用 MOUNTAIN_PRESET 的移動 hrTSS 和爬升加成**，或至少在 ramp 的說明裡標出現在用哪一種 TSS。
-4. `hr_tss_zone1_floor`：要嘛實作，要嘛從 MOUNTAIN_PRESET 拿掉，不要留一個沒作用的設定。
+1. **起算期**：CTL 從 0 起算、訓練量完全不變時，起算造成的假 ramp 佔 CTL 的比例是：第 42 天 11.7 %、第 56 天 6.9 %、第 84 天 2.9 %，所以「不滿 42 天不看」不夠（第 42 天還會踩到 10 % 注意線）。但全面跳過 84 天，多使用者時新人會有 12 週沒有保護。**決定**：護欄用的 CTL 以前 28 天的平均每日 TSS 當起始值（Coggan 的做法：給 CTL 初始值），只在前 28 天（起始值還在變）不看 ramp（推估）；起算期內週量增幅照常檢查。顯示用的 PMC 不變，兩者只在資料的頭幾個月不同。
+2. **健行要有 TSS**：走路／健行／登山沒有自己的 LTHR 時，沿用跑步 LTHR 算 hrTSS，而且**一律只算移動時間**（不管「只算移動時間」開關，否則一趟多日百岳約 900 TSS，CTL 一天跳 20 點以上，接著一定被擋）。只改 hrTSS 這條路：`aethr` 和低強度占比不變，健行時間不會進 80/20 的分母。parity 模式不動。
+3. **肌力維持 0 TSS**：阻力訓練的心率不是有意義的耐力負荷，算 hrTSS 會灌高 CTL（使用者可以翻轉的預設）。注意：賽季計畫有 dated LTHR 時，所有運動（含肌力）原本就會用它算 hrTSS，這條沒有改。
+4. `hr_tss_zone1_floor`：另案處理（SP-52）。
+5. **COROS／TP 來源預設用 MOUNTAIN_PRESET 的移動 hrTSS 和爬升加成**：未決，沒有實作。
 
-### 4.3 週量增幅：定義要改
+### 4.3 週量增幅：定義要改（已實作）
 
-- **單位**：Nielsen 2014、Damsted 2019 量的是**跑步距離**（`docs/research/unsourced-rules.md:363`）。app 用全運動時數，健行和肌力也算進去：一週有百岳，時數就會暴增，被擋的卻是下週的跑步間歇。建議改成**跑步（路跑＋越野）時間**。越野的距離受坡度影響太大，用時間比較公平（推估）；路跑為主的人用距離也可以。
-- **基準**：改成 `上週 ÷ max(上上週, 前 4 週平均) − 1`。這樣從減量週回到正常量不會被當成「暴增」，但真正超過最近常態量 20 % 的週照樣會擋。也可以直接排除計畫內的恢復週、re-entry 週。
-- 20 %／10–20 % 的數字維持（§B2 已查過來源）。
+- **單位**：Nielsen 2014、Damsted 2019 量的是**跑步距離**（`docs/research/unsourced-rules.md:363`）。改成**跑步（路跑＋越野）的移動時間**。越野的距離受坡度影響太大，用時間比較公平（推估）。週時數的顯示（狀態卡的主數字、減量帶、恢復期）仍是全運動時數。
+- **基準**：`上週 ÷ max(上上週, 前 4 週平均) − 1`。排課的加量上限本來就用 `max(前 4 週平均, 上週)`，這樣排課和護欄用同一種基準；app 自己 3:1 排出來的恢復週（65 %）之後回到正常量，增幅約 +10 %，不再被擋。
+- 20 %（擋）／10–20 %（維持）的數字與等級不變（§B2 已查過來源）。
+
+### 4.4 證據補充（第二輪複查）
+
+- TrainingPeaks 的馬拉松規劃文章：多數跑者每週 CTL +4–6 不會太吃力（範例 CTL 68–75，約 5–9 %）；Couzens（三鐵）給一般上班族選手 +3–5／週。兩者都比 Friel 低，也都在 10 % 注意線以下（教練／平台，沒有說用哪一種 TSS）。
+- 週量增幅這條護欄的證據比想像中弱：2025 年 BJSM 的大型研究（5,205 位跑者）發現「這週對上週」的比例跟受傷沒有關係，有關係的是**單次跑步距離超過過去 30 天最長那次的 10 % 以上**（同儕審查，只讀了摘要）。這條 app 目前沒有，建議另開一張單。
+
+## 5. 程式位置（SP-63 已實作）
+
+| # | 檔案 | 改了什麼 |
+|---|---|---|
+| 1 | `backend/engine/load_guard.py` | 唯一一份規則：注意／擋線、起算期的起始值與跳過、週量增幅基準、排課每週 CTL 目標 |
+| 2 | `backend/engine/status.py`（`i_fitness`、`i_volume`） | ramp 用起始值後的 CTL 與相對門檻，起算期 `ramp_week = None`；`extra` 加 `ramp_base` 等；週量增幅改跑步時間對新基準 |
+| 3 | `backend/engine/quality_gate.py`（`guard`） | 讀 `ramp_base`，用共用函式判斷注意／擋 |
+| 4 | `backend/engine/adapt.py`（E 規則）、`backend/api/plan_sessions.py`、`backend/engine/plan_store.py` | E 規則用擋線；ctx 帶 `ramp_base` |
+| 5 | `backend/engine/b2b.py` | B2B 週末與 TSB 例外用擋線 |
+| 6 | `backend/engine/overview.py`、`backend/engine/projection.py` | `RAMP_GOAL` 改成 `load_guard.ramp_goal` |
+| 7 | `backend/engine/wko5expr/dataset.py`、`backend/engine/wko5expr/fitdataset.py` | `hr_lthr`：走路／健行退回跑步 LTHR；`moving_hrtss_on`：走路／健行一律移動時間（非 parity） |
+
+文案已改成「CTL 每週 +x（≥ 線＝CTL c 的 10 %／15 %、下限、上限）」。
 
 ---
 
-## 5. 需要改的程式（本文不實作）
+## 6. 回測（實作後，範例跑者，只列方向與比例）
 
-| # | 檔案 | 改什麼 |
-|---|---|---|
-| 1 | `backend/engine/status.py:46`、`:288-320` | ramp 改成相對值（Δ 和 Δ/c 都放進 `extra`），等級判斷用 §4.1；資料不滿 42 天就回 INFO |
-| 2 | `backend/engine/quality_gate.py:102`、`:621-624`、`:1034` | `guard()` 接 ramp 和 CTL₋₇，用同一組相對門檻；最好跟 status 共用同一個函式，不要三處各寫常數 |
-| 3 | `backend/engine/adapt.py:76`、`:400`；`backend/api/plan_sessions.py:162` | E 規則改用同一個判斷（擋線）；ctx 傳 CTL₋₇ 或直接傳判斷結果 |
-| 4 | `backend/engine/overview.py:355`；`backend/engine/projection.py:88-89` | `RAMP_GOAL` 改成 % 或加 % 上限 |
-| 5 | `backend/engine/wko5expr/dataset.py:620`（`sport_setting`） | `walk`／`strength` 沒有自己的 LTHR 時退回 `runthr` |
-| 6 | `backend/engine/wko5expr/config.py:82`、`:136` | `hr_tss_zone1_floor` 實作或刪除；評估 COROS／TP 預設是否改用 MOUNTAIN_PRESET |
-| 7 | `backend/engine/status.py:180`、`:364`；`backend/engine/quality_gate.py:103` | 週量增幅改成跑步時間、基準改成 max(上上週, 前 4 週平均) |
+用同一位範例跑者約兩年的 COROS 資料（唯讀副本），比較舊規則（5／8 絕對點數、全運動時數對上週）和新規則：
 
-文案也要改：「Friel 5–8」改成「每週 CTL +10 %／+15 %（Friel 5–8、上限 10 換算，推估）」。
+- **ramp**：範例跑者 CTL 一直在 20–40 之間。舊的 5／8 在這個 CTL 水準幾乎不會觸發；新的相對線在低 CTL 比 5／8 嚴（CTL 35 時注意 3.5、擋 5.3），注意的週數從 0 變成數週，擋從 0 變成 1 週。
+- **擋線上限 10**：CTL 沒超過 66.7，所以從沒生效。這條要等高 CTL 的使用者才看得到效果。
+- **起算期**：起始值讓頭幾週的 CTL 不再從 0 爬升，舊算法在資料開頭那幾週的假注意都消失；前 28 天不看 ramp。
+- **週量增幅**：「擋」的週數少了約四分之一；真正的跑量暴增（> 1.3 × 基準）全部仍會觸發（舊規則因為分母混了健行時數，反而漏掉約四分之一）。但**資料裡的減量週大多不是計畫的 65 % 恢復週**，而是停跑、生病、旅行（跌到平常的 20–60 %，或連兩週偏低）；這種情況前 4 週平均也被拉低，回到正常量時新基準一樣會擋，數量跟舊規則差不多。也就是說新基準修好的是「app 自己排的恢復週之後」，不是「非計畫的停跑之後」——後者的大段停跑由停訓恢復期（`reentry.py`）處理，短的停跑仍會擋一週（未決，見任務單）。
+- **健行算 TSS 之後**：有長時間健行的週，週末的 CTL 比原本高約三成到四成，那幾週的 ramp 高出好幾點；範例資料唯一一次新規則的「擋」就是在一個長健行週之後（舊算法健行是 0，那週的 ramp 反而是負的）。跑步的 TSS 完全沒變；肌力仍是 0。
 
 ---
 
@@ -216,3 +234,6 @@ Stryd 和 intervals.icu 都指出跑步的負荷不只是代謝（機械、衝�
 - Palladino 基礎期 ramp：`docs/research/detraining.md:192`（教練，課程筆記）
 - Uphill Athlete 爬升加成：`docs/research/uphill-athlete-mountain-metrics.md:32`（教練）
 - Nielsen 2014、Damsted 2019（週量）：`docs/research/unsourced-rules.md:363`（同儕審查）
+- TrainingPeaks, *Planning for a marathon PR with CTL and the ATP tool* — https://www.trainingpeaks.com/blog/planning-for-a-marathon-pr-with-fitness-ctl-and-the-atp-tool/ （平台，第二輪讀過）
+- Couzens, *CTL ramp rates, TSB floors & loading patterns* — https://www.alancouzens.com/blog/CTLramp.html （教練，第二輪讀過）
+- Frandsen 等 2025, *How much running is too much?*（BJSM）— https://portal.findresearcher.sdu.dk/en/publications/how-much-running-is-too-much-identifying-high-risk-running-sessio/ （同儕審查，只讀了摘要）
