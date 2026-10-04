@@ -37,7 +37,7 @@ Five layers, each depending only on the ones below it:
 |---|---|---|
 | File readers | Decode WKO5's tagged binary encoding; FIT → WKO5-equivalent channels | `backend/files/wko5chart_reader.py:127` |
 | Algorithms | Pure functions, one metric each, verified against WKO5 | `backend/engine/algorithms/wko5_power.py` and siblings |
-| Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections (`FitFolderDataset` for COROS / TP folders) | `backend/engine/wko5expr/dataset.py:312` |
+| Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections (`FitFolderDataset` for COROS / TP folders) | `backend/engine/wko5expr/dataset.py:314` |
 | Expression engine | Parse and evaluate WKO5's expression language | `backend/engine/wko5expr/evaluator.py:507` |
 | API + viewer | Serve views, charts (through the render cache), workout samples, config, corrections; the viewer page | `backend/api/wko5views.py:304`, `backend/static/wko5_viewer.html` |
 
@@ -61,7 +61,7 @@ Every WKO5 file is `b"wko" + kind + 0x1a` followed by one tagged record
 | `.wko5chart` | View → dashboards → charts → series expressions | `backend/files/wko5chart_reader.py:330` `read_view` |
 | `.wko4` | One activity: info, ranges with WKO5's stats, sample channels, the original FIT | `backend/files/wko4_file.py:114` `read_wko4` |
 | `.wko5athlete` | Settings history, workout index with per-workout metrics, PMC snapshot | `backend/files/wko5_athlete.py:167` `read_athlete` |
-| `.wko5cache` | WKO5's per-workout expression results (e.g. `meanmax(power)`) | `backend/engine/wko5expr/dataset.py:226` `load_wko5_curve_cache` |
+| `.wko5cache` | WKO5's per-workout expression results (e.g. `meanmax(power)`) | `backend/engine/wko5expr/dataset.py:228` `load_wko5_curve_cache` |
 
 Sample channels (`backend/files/wko4_file.py:91`) are zigzag int32 delta varints divided by a
 scale, or a raw float64 array when packed field 111 = 1. `0x7fffffff` and
@@ -99,7 +99,7 @@ data-less indoor activities, and swims.
 
 ## TSS policy
 
-`backend/engine/wko5expr/dataset.py:636` `_metrics` follows WKO5's branch
+`backend/engine/wko5expr/dataset.py:641` `_metrics` follows WKO5's branch
 order, reconstructed from disassembly, and records which branch won
 (`tss_source`: power / rtss / trainingpeaks / hrtss) plus, for a power TSS,
 `ftp_used` / `ftp_source` (shown on hover in the activity list and the source
@@ -108,7 +108,7 @@ compare):
 1. **Power:** `NP² × tssduration / (FTP² × 36)` when there is a power stream
    and an FTP in effect. Skipped for a file whose power is watch-estimated
    unless `power.accept_watch_power` is on (`power_tss_blocked`). The FTP
-   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:623`) is WKO5's rule: the
+   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:628`) is WKO5's rule: the
    FTP stored with the workout, else the sport's dated FTP setting. On a COROS
    / TP source a run instead divides by the CP in effect — the plan's CP test,
    else the athlete's `run_ftp_w`, else the Stryd-only PD-model mFTP as of
@@ -121,7 +121,7 @@ compare):
 
 Moving-time hrTSS and the elevation bonus (own formulas) apply to every
 workout whose `tss_source` is not power or rTSS
-(`backend/engine/wko5expr/dataset.py:537` `_is_hr_sourced`), so a run with NP
+(`backend/engine/wko5expr/dataset.py:539` `_is_hr_sourced`), so a run with NP
 but no FTP in effect is treated like any hrTSS day.
 
 **Walks / hikes (SP-63, own formulas only):** a `walk` workout (walking,
@@ -175,7 +175,7 @@ the individual knobs are a fixed, researched preset.
 3. **Approve** (`POST /corrections/approve`): only the proposals sent are stored.
 4. **Apply**: an overlay at `corrections.json` in the tenant's base folder
    (`corrections_path()`), applied when channels are read
-   (`backend/engine/wko5expr/dataset.py:832`).
+   (`backend/engine/wko5expr/dataset.py:839`).
    The `.wko4` files are never modified (WKO5 rewrites them on sync, and they
    are the only copy).
 5. **Undo** (`DELETE /corrections/{id}`).
@@ -355,7 +355,7 @@ toggle.
   The two 心率飄移 season charts plot the card's `drift(basis, "all")` as
   verdict-coloured bars (`drift_bars`: < 5 % / 5–10 % / > 10 %, one 5 % line);
   the 耐久度 charts plot WKO5's stored `pahr` / `pwhr`
-  (`backend/engine/wko5expr/dataset.py:681-682`).
+  (`backend/engine/wko5expr/dataset.py:686-682`).
 - **Trail caveat**: the trail drift charts' `power_note` says Pw:HR is only a
   reference off-road because Stryd power is validated only up to about 8 %
   grade (user-supplied figure; not checked against a Stryd source here).

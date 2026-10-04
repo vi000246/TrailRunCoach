@@ -84,7 +84,7 @@ form drift, `form_bins` and `cad_windows`.
   `pw_drift_se`, `noisy`, `ramps`; `drift_of` also gets `dist` / `elev`; v13: climb profile
   fields and `grade_bins`; v14/v15: interval-library reps, `form_bins` with `impact_km`;
   v16: `cad_windows`; v17: the heat bands; v18: `stim`) (`backend/engine/workout_review.py:67-88`,
-  `backend/engine/wko5expr/dataset.py:713`). The key holds the file and thresholds, not the
+  `backend/engine/wko5expr/dataset.py:720`). The key holds the file and thresholds, not the
   code, so the version is bumped whenever `_measure` changes. Phase, classification,
   baselines and verdicts are recomputed on each call.
 - **Per-athlete drift windows** (generalize B7, `engine/drift_calib.py`): `apply_calibration`
