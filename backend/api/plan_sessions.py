@@ -269,11 +269,14 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
 
 def _view(s: dict, inp: dict, rows: dict, today: str, prov=None) -> dict:
     """`coros` keeps its name in the API: the push status at the active provider.
-    `quality_family`: a 強度課's 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.session_family,
-    computed here, never stored)."""
+    `quality_family`: a 強度課's 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.session_family: the
+    stored `family` the user picked, else read from the steps); `steps_family` = what the steps
+    read as (the editor's 「步驟看起來像…」 hint when it differs, SP-79)."""
     prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
-    v["quality_family"] = WTPL.session_family(s, inp["thresholds"])
+    got = WTPL.steps_family(s, inp["thresholds"])
+    v["quality_family"] = WTPL.session_family(s, inp["thresholds"], derived=got)
+    v["steps_family"] = got
     if s["state"] == "active":
         v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
         note = pace_note(s, inp["thresholds"])
@@ -1210,6 +1213,9 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     env = await _steps_env(s, inp)
     out = {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
+    if s.get("kind") == "quality":
+        # the family these steps read as (SP-79: the 類型's 「步驟看起來像…」 hint)
+        out["family"] = WTPL.family_of(st.get("items") or [], env["th"])
     if st.get("route") or st.get("tpl"):
         # made from a user template with a route GPX: the chart on the route's distance axis, the
         # session's own copy of the profile first (it outlives the template), else the template's
@@ -2255,7 +2261,7 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
             "compliance_levels": C.COMPLIANCE,
             "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
             "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
-            "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES,
+            "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES, "family_titles": PS.FAMILY_TITLES,
             "prefs": inp.get("prefs"), "goal_climb_per_km": extras.get("goal_climb_per_km"),
             "plan_notes": _plan_notes(inp, start, end),
             "test_suggestions": await _suggestions(db, inp),

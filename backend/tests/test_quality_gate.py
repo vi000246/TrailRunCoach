@@ -102,7 +102,7 @@ def test_auto_without_aet_is_no_method_and_the_guardrails():
     t = QG.indicator(g)
     assert t["level"] == "info" and "沒有 AeT 實測：照 80/20 原則每週 1 次間歇" in t["verdict"]
     # 台灣教練: Zone 3 first — the Zone 3 track's first rung is 2×15′ (SP-31), not 5×1′
-    assert "3 區第 1 步：閾值 2×15 分" in t["verdict"]
+    assert "3 區第 1 步：有氧間歇 2×15 分" in t["verdict"]
     assert QG.guardrail_mode(g)
     assert QG.week_decision(g, "base", "base")["spec"] is QG.Z3[0]
     assert g["z5"]["state"] == "unconfirmed" and not g["z5"]["open"]
@@ -289,14 +289,14 @@ def test_guardrails_block_the_week_and_say_so():
 def test_two_tracks_each_with_its_own_ladder():
     # SP-31: the Zone 3 track (有氧間歇, reps 15–30 min) and the Zone 5 track, each with its own step
     z3 = [QG.z3_spec(i)[1] for i in range(8)]
-    assert z3 == ["閾值 2×15 分", "閾值 3×12 分", "閾值 2×20 分", "閾值 連續 30 分",
-                  "閾值 2×20 分", "閾值 連續 30 分", "近閾值 3×7 分", "閾值 2×20 分"]        # then A3 / A4 / T+
+    assert z3 == ["有氧間歇 2×15 分", "有氧間歇（巡航）3×12 分", "有氧間歇 2×20 分", "有氧間歇 連續 30 分",
+                  "有氧間歇 2×20 分", "有氧間歇 連續 30 分", "有氧間歇（巡航）3×7 分", "有氧間歇 2×20 分"]        # then A3 / A4 / T+
     assert all(min(IL_.canonical(s[0]).works) >= 12 * 60 for s in QG.Z3)        # long reps (old: 6–12′)
     assert [(s[5], s[6]) for s in QG.Z3] == [(0.88, 0.95)] * 3 + [(0.88, 0.92)]
     assert [(s[5], s[6]) for s in QG.CRUISE] == [(0.90, 0.95)] * 3                # 巡航版 T1–T3 kept
     z5 = [QG.z5_spec(i)[1] for i in range(7)]
-    assert z5 == ["VO2max 5×2 分", "VO2max 4×3 分", "VO2max 5×3 分", "VO2max 4×4 分",
-                  "VO2max 5×3 分", "VO2max 4×4 分", "VO2max 5×3 分"]
+    assert z5 == ["VO2max 間歇 5×2 分", "VO2max 間歇 4×3 分", "VO2max 間歇 5×3 分", "VO2max 間歇 4×4 分",
+                  "VO2max 間歇 5×3 分", "VO2max 間歇 4×4 分", "VO2max 間歇 5×3 分"]
     assert all(s[3] >= 2 for s in QG.Z5)                                  # reps ≥ 2 min
     assert [s[4] for s in QG.Z5] == [2, 3, 2.5, 3] and (QG.Z5[3][5], QG.Z5[3][6]) == (1.04, 1.08)
     # the legacy single-ladder reading still resolves
@@ -309,7 +309,7 @@ def test_two_tracks_each_with_its_own_ladder():
     gate = {"state": "none", "guard": {}, "z3": {"open": True},
             "dose": {"z3": {"step": 1, "met": 1, "done": 1}, "z5": {"step": 0, "done": 0}}}
     held = {**gate, "guard": {"hold": True}}
-    assert QG.week_decision(held, "base", "base")["spec"][1] == "閾值 2×15 分"   # held: repeat the last step
+    assert QG.week_decision(held, "base", "base")["spec"][1] == "有氧間歇 2×15 分"   # held: repeat the last step
     assert not QG.week_decision(held, "base", "base")["advance"]
     rec = QG.week_decision(gate, "base", "recovery_week")
     assert rec["spec"] is QG.RECOVERY and not rec["advance"] and "恢復週" in rec["z3_note"]
@@ -371,7 +371,7 @@ def test_dose_sessions_parse_for_coros_and_the_cap():
     # the legacy text builder (recovery fartlek, Zone 3 HR, adapt's old rows) on a ladder row:
     # no rest after the last rep (§A5.2-3)
     s = QG.session(QG.CRUISE[1], th, "沒有 AeT 實測：照 80/20 原則每週 1 次間歇，")
-    assert s["title"] == "閾值 3×8 分" and s["minutes"] == 15 + 3 * 8 + 2 * 2 + 10
+    assert s["title"] == "有氧間歇（巡航）3×8 分" and s["minutes"] == 15 + 3 * 8 + 2 * 2 + 10
     assert s["detail"].startswith("沒有 AeT 實測：照 80/20 原則每週 1 次間歇，") and "休 2 分" in s["detail"]
     steps = CW.session_steps(s, CW.Thresholds.of(th))
     rep = steps[1]
@@ -713,7 +713,7 @@ def test_projection_advances_the_dose_and_evaluates_weeks_per_week():
          and next(w for w in weeks if w["start"] == k)["mode"] != "recovery_week"]
     assert all(k >= "2026-10-12" for k, _ in q)
     assert not [x for _, x in q if x.startswith("VO2max")]
-    assert [x for _, x in q][:3] == ["閾值 3×8 分", "閾值 2×12 分", "閾值 連續 30 分"]
+    assert [x for _, x in q][:3] == ["有氧間歇（巡航）3×8 分", "有氧間歇（巡航）2×12 分", "有氧間歇 連續 30 分"]
     # the measured-AeT gate passed but no Zone 3 session yet: the projection counts its own Zone 3
     # weeks for the soft 「近 6 週 ≥ 2 堂 3 區」 (z5_track via steps["z3_dates"]) — Zone 5 from then on
     cur = cur_plan(sessions=[])

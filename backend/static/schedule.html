@@ -12,6 +12,7 @@
   --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
   --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
   --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
+  --qf2: #d32f2f; --qf3: #8e24aa;
   --cell: #ffffff; --out: #f7f7f5;
 }
 @media (prefers-color-scheme: dark) {
@@ -22,6 +23,7 @@
     --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
     --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+    --qf2: #f0605d; --qf3: #c27ad6;
     --cell: #1a1a19; --out: #151514;
   }
 }
@@ -32,6 +34,7 @@
   --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
   --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
+  --qf2: #f0605d; --qf3: #c27ad6;
   --cell: #1a1a19; --out: #151514;
 }
 * { box-sizing: border-box; }
@@ -48,6 +51,9 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 
 /* kind + phase palettes */
 .k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); }
+/* 強度課 by family (SP-79): 有氧間歇 keeps the 強度課 orange, VO2max 間歇 red, 速度 purple
+   (≥ 3:1 against --cell in both themes); one with no interval work stays orange */
+.k-quality.fam-aerobic { --k: var(--s2); } .k-quality.fam-vo2max { --k: var(--qf2); } .k-quality.fam-speed { --k: var(--qf3); }
 .k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); } .k-race { --k: var(--hi); }
 .heat-tag { display: inline-block; margin-right: 3px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px;
   background: color-mix(in srgb, var(--hi) 25%, transparent); color: var(--hi); font-weight: 700; }
@@ -624,6 +630,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </div>
     <div class="hint" id="sd-tss" aria-live="polite"></div>
     <div class="hint" id="sd-rpe" aria-live="polite" hidden></div>
+    <div class="hint" id="sd-fam" aria-live="polite" hidden></div>
     <fieldset class="eq" id="sd-eq" hidden>
       <details class="eq-fold" id="sd-eq-fold"><summary>地形與同負荷換算</summary>
       <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形">
@@ -888,6 +895,11 @@ async function sj(method, url, body) {
 const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
 const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
   notice: "課表待確認", race: "比賽" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
+// 強度課's three families (SP-79; workout_templates.FAMILIES) — never 「無氧間歇」. tt is defined further
+// down (and the dialog's radios are built before it), so the catalog is read directly
+const FAMILIES = ["aerobic", "vo2max", "speed"];
+const FAM_ZH = { aerobic: "有氧間歇", vo2max: "VO2max 間歇", speed: "速度" };
+const famLabel = (f) => (window.I18N ? I18N.t("schedule.family." + f, FAM_ZH[f] || f) : FAM_ZH[f] || f);
 // race: the season plan's race day, or the 賽事計算機's 「匯出至課表」 (its steps are editable here); never added by hand
 // 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
 const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
@@ -951,7 +963,7 @@ function chipHtml(s, big) {
   const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : "");
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
   const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
-  return `<button type="button" class="chip k-${esc(s.kind)} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
+  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
       ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : ""}${icon}</span>
     <span class="c-m">${meta}</span>
@@ -1111,7 +1123,10 @@ function agendaHtml(a, ss, acts) {
 function renderLegend() {
   // 完成狀態 (chip colour + ✓) and 推送狀態 (the watch at the top right) are separate groups
   const grp = (h, items, tip) => `<span class="lg-g" role="group" aria-label="${esc(h)}"><b class="lg-h">${esc(h)}${tip ? ` <button type="button" class="qtip" aria-label="${esc(h)}" data-tip="${esc(tip)}">?</button>` : ""}</b>${items}</span>`;
-  $("legend").innerHTML = KIND_ORDER.map((k) => `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
+  // 強度課 as its three families (SP-79), each with its own colour
+  $("legend").innerHTML = KIND_ORDER.map((k) => k === "quality"
+    ? FAMILIES.map((f) => `<span class="k-quality fam-${f}"><i class="sw"></i>${esc(famLabel(f))}</span>`).join("")
+    : `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
     `<span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span><i class="rest-sw"></i>${esc(tt("rest.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("rest.legend"))}" data-tip="${esc(tt("rest.legend_tip"))}">?</button></span>` +
     grp(tt("legend.done_h"), `<span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ <b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><b class="offp-i">≠</b> 沒照課表 <button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP)}">?</button></span><span><s class="faint">未完成</s></span><span>● 沒排課的活動 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></span>`) +
     grp(tt("legend.watch_h"), ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${esc(tt("legend." + k))}</span>`).join(""), tt("legend.watch_tip"));
@@ -1345,10 +1360,28 @@ async function pull() {
 
 // ---------------- session dialog ----------------
 let dlg = { uid: null, targetTouched: false };
-$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive", "race"].map((k) =>
-  `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
+// 強度課 is offered as its three families (SP-79): each radio is kind quality + data-fam; the
+// family is saved only when you pick one (else it is read from the steps, session_family)
+$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive", "race"].map((k) => k === "quality"
+  ? FAMILIES.map((f) => `<label class="k-quality fam-${f}"><input type="radio" name="kind" value="quality" data-fam="${f}">${esc(famLabel(f))}</label>`).join("")
+  : `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
 const F = $("sd-form");
 const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).value || "easy";
+const famVal = () => { const r = F.querySelector('input[name="kind"]:checked'); return r && r.value === "quality" ? r.dataset.fam || null : null; };
+// check a kind's radio; a 強度課 by `fam`, else the family its steps read as, else 有氧間歇
+function setKind(k, fam) {
+  if (k === "quality") fam = FAMILIES.includes(fam) ? fam : ((dlg.stepsFam || {}).id || "aerobic");
+  const r = F.querySelector(k === "quality" ? `input[name="kind"][data-fam="${fam}"]` : `input[name="kind"][value="${k}"]`);
+  if (r) r.checked = true;
+  return r;
+}
+// 「步驟看起來像…」: the family you picked vs the one the steps read as (POST /steps/check family) — a hint, never a block
+function famHint() {
+  const el = $("sd-fam"), f = famVal(), got = dlg.stepsFam;
+  const show = !!(f && got && got.id && got.id !== f && !dlg.ro);
+  el.hidden = !show;
+  if (show) el.textContent = tt("family.mismatch", { fam: famLabel(got.id), picked: famLabel(f) });
+}
 // estimated TSS: an existing session keeps its own rate (the generator's) while the
 // kind is unchanged; otherwise minutes × the kind's TSS per hour (tss_rates, same
 // per-category medians / fixed hard-session rates week_plan() uses)
@@ -1636,6 +1669,7 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   if (v && v.totals && we.dirty && v.summary) F.target.value = v.summary;
   if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
   rpeKind(v && mine ? v.rpe_role : null, we.dirty && !dlg.ro);
+  if (v && "family" in v) { dlg.stepsFam = v.family; famHint(); }
 }, onTemplate: (row) => {
   // an interval-ladder session (what the old 間歇範本 dropdown set): saved with its variant_key, so
   // it keeps its rung and counts for progression; a library template is a structure of your own
@@ -1663,7 +1697,7 @@ function rpeKind(role, change) {
   else if (role === "quality" && easyK.includes(k)) to = "quality";
   else if (role === "easy" && k === "quality") to = dlg.orig && easyK.includes(dlg.orig.kind) ? dlg.orig.kind : "hike";
   if (to) {
-    F.querySelector(`input[name="kind"][value="${to}"]`).checked = true;
+    setKind(to);
     onKind();
     tgtHint();
   }
@@ -1773,7 +1807,7 @@ function linkSelect(s, ph) {
 const linkSel = (s, ph) => { const h = linkSelect(s, ph); return h ? `<div class="vs-act">${h}</div>` : ""; };
 function vsHtml(s) {
   const a = s.done_by || {}, vs = s.vs || {}, cp = s.compliance;
-  const plan = [KINDS[s.kind] || "", s.minutes ? `${s.minutes}′` : "", `TSS ${n0(s.tss_est ?? s.tss)}`, vs.planned ? INT_LB[vs.planned] : ""].filter(Boolean).join(" · ");
+  const plan = [(s.kind === "quality" && s.quality_family ? s.quality_family.label : KINDS[s.kind]) || "", s.minutes ? `${s.minutes}′` : "", `TSS ${n0(s.tss_est ?? s.tss)}`, vs.planned ? INT_LB[vs.planned] : ""].filter(Boolean).join(" · ");
   const real = [a.category_label || "", hm(a.moving_s), a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "", a.climbing_m ? `↑${Math.round(a.climbing_m)} m` : "",
     a.tss != null ? `TSS ${n0(a.tss)}` : "", vs.actual ? INT_LB[vs.actual] : ""].filter(Boolean).join(" · ");
   const hard = vs.hard_min != null ? `閾值以上 ${vs.hard_min} 分${vs.need_min ? `（強度課門檻 ${vs.need_min} 分）` : ""}` : "";
@@ -1831,7 +1865,8 @@ $("ad").addEventListener("change", (e) => { if (e.target.id === "ad-link" && e.t
 function openDlg(s, day) {
   closeMenus();
   const ro = s && !editable(s);
-  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null, test: null };
+  dlg = { uid: s ? s.uid : null, targetTouched: !!s, ro, orig: s || null, variant: null, varFor: null, vars: null, test: null,
+    famTouched: false, stepsFam: null };
   $("sd-tkind").value = s && s.kind === "test" ? (s.protocol === "aet" || /AeT|飄移/.test(s.title || "") ? "aet" : "cp") : "";
   $("sd-tkind").dispatchEvent(new Event("change"));
   $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
@@ -1846,7 +1881,9 @@ function openDlg(s, day) {
   else if (pastOpen) db.innerHTML = `<span class="meta">還沒配到活動</span>${linkSel(s, "配對活動…")}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
   F.day.value = d;
-  (F.querySelector(`input[name="kind"][value="${s ? s.kind : "easy"}"]`) || {}).checked = true;
+  dlg.stepsFam = s ? s.steps_family || null : null;
+  setKind(s ? s.kind : "easy", s && s.quality_family ? s.quality_family.id : null);
+  famHint();
   F.querySelector('#sd-kinds label.k-heat_passive').hidden = !(s && s.kind === "heat_passive");
   F.querySelector('#sd-kinds label.k-race').hidden = !(s && s.kind === "race");
   F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
@@ -1870,11 +1907,12 @@ function openDlg(s, day) {
 }
 F.addEventListener("change", (e) => {
   if (e.target.name === "terrain") return onTerrain();
-  if (e.target.name === "kind") onKind();
+  if (e.target.name === "kind") { onKind(); dlg.famTouched = !!e.target.dataset.fam; famHint(); }
   if (e.target.name !== "kind" || dlg.uid) return tgtHint();
-  const k = kindVal();
-  const defs = D.default_titles || {};
-  if (!F.title.value || Object.values(defs).includes(F.title.value)) F.title.value = defs[k] || KINDS[k];
+  const k = kindVal(), fam = famVal();
+  const defs = D.default_titles || {}, ftitles = D.family_titles || {};
+  if (!F.title.value || [...Object.values(defs), ...Object.values(ftitles)].includes(F.title.value))
+    F.title.value = (fam && ftitles[fam]) || defs[k] || KINDS[k];
   if (!dlg.targetTouched) F.target.value = (D.targets || {})[k] || "";
   if (k === "strength" && +F.minutes.value === 45) F.minutes.value = 35;
   if (eqOn()) autoText();
@@ -1897,6 +1935,8 @@ F.addEventListener("submit", async (e) => {
   const body = { day: F.day.value, kind: kindVal(), title: F.title.value.trim(), minutes: +F.minutes.value || 0, target: F.target.value, detail: F.detail.value,
     tss: Math.round(estDialog().tss * 10) / 10 };
   if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
+  // 強度課's family: saved when you picked one (a new 強度課 always has one); untouched = read from the steps
+  if (body.kind === "quality" && (dlg.famTouched || !dlg.uid)) body.family = famVal();
   if (dlg.test && body.kind === "test") body.protocol = dlg.test.protocol;          // 測試 → which protocol
   // no session-level 目標用: each step picks its own basis in the structure (a stored
   // target_basis from before stays as it was) — except a user template's, applied with it (SP-36)
@@ -2757,21 +2797,22 @@ loadPrimary();
 })();
 async function openPreset(add, test, proto, day) {
   const d = day && /^\d{4}-\d\d-\d\d$/.test(day) && day >= D.today ? day : D.today;
-  const setKind = (k) => {
-    const r = F.querySelector(`input[name="kind"][value="${k}"]`);
-    if (r) { r.checked = true; r.dispatchEvent(new Event("change", { bubbles: true })); }
+  const pickKind = (k, fam) => {
+    const r = setKind(k, fam);
+    if (r) r.dispatchEvent(new Event("change", { bubbles: true }));
   };
   S.sel = d; render();
   openDlg(null, d);
   try {
     if (test) {
-      setKind("test");
+      pickKind("test");
       $("sd-tkind").value = test; $("sd-tkind").dispatchEvent(new Event("change"));
       if (proto) { $("sd-tproto").value = proto; $("sd-tproto").dispatchEvent(new Event("change")); }
     } else {
       const f = await WE.findKey(add);
       if (!f) { $("sd-err").textContent = tt("preset.not_found", { key: add }); return; }
-      setKind({ test: "test", quality: "quality", trail: "hike" }[f.cat] || "easy");
+      // a 強度課 template: the family it is listed under (workout_templates.row sub)
+      pickKind({ test: "test", quality: "quality", trail: "hike" }[f.cat] || "easy", f.cat === "quality" ? (f.row || {}).sub : null);
       await WE.applyKey(add);
       if (f.cat === "test" && proto) dlg.test = { protocol: proto };
     }
