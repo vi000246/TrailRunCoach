@@ -1,5 +1,7 @@
 # Plan: AI Coach — 訓練分析與圖表理解
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+
 > **For agentic workers:** `/prp-implement` will route this plan to `implementing-features` skill based on `Metadata.Type = feature`.
 
 ## Summary

@@ -70,6 +70,6 @@ Implemented CTL/ATL seeding from WKO5 values, pace-based rTSS for GPS-only runs,
 | `test_wko4_extractor.py` | 4 | missing file, invalid, metrics, propagation |
 
 ## Next Steps
-- [ ] Update Source SRS at `docs/spec/wko5-data-accuracy-date-presets.spec.md` to reflect WKO4 record-size deviation
+- [ ] Update Source SRS at `docs/srs/completed/wko5-data-accuracy-date-presets.srs.md` to reflect WKO4 record-size deviation
 - [ ] Manually verify ConfigPage Run Load Settings in browser after dev server start
 - [ ] Manual smoke test: set threshold pace, run backfill, check run-load chart reflects CTL seed

@@ -269,7 +269,7 @@
 - **只存在本機**：`injury_events` 和 `activity_tags.pain*` 在 `~/.wko5coach/wko5coach.db`，不同步到 COROS／TP，不推到手錶。
 - **分享連結**（`engine/racepower/share.py`）：已經是白名單快照，而且丟掉計畫的警示文字；加一個測試確定任何 `injury` / `pain` 欄位不會出現在快照裡（白名單之後被改時也會擋下來）。
 - **示範模式**（`auth-and-demo.plan.md`）：示範資料不放任何傷病；傷病紀錄頁和活動頁的疼痛列在示範模式**隱藏**（API 回 404）。要不要放一組虛構事件展示功能，由擁有者決定（§9）。
-- **AI 教練**（`todo-ai-coach-ai-coach-training-analysis.plan.md`、`api/ai.py`）：送出的內容預設不含傷病；設定裡另一個開關「讓 AI 教練看傷病紀錄」，預設關。
+- **AI 教練**（`canceled-ai-coach-ai-coach-training-analysis.plan.md`、`api/ai.py`）：送出的內容預設不含傷病；設定裡另一個開關「讓 AI 教練看傷病紀錄」，預設關。
 - **匯出／備份**：DB 備份照舊包含（是擁有者自己的資料）；之後若做「匯出給別人看」的功能，傷病預設不勾。
 - 頁面固定一行小字：「這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。」
 

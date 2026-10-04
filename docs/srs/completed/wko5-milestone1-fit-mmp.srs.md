@@ -1,10 +1,12 @@
 # SRS: WKO5 Reverse — Milestone 1: FIT 解析 + MMP 計算引擎
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`
 - **Source Linear Issue**: N/A — standalone
 - **Owner**: maintainer
-- **Status**: DRAFT
+- **Status**: CANCELED (2026-10-04)
 - **Generated**: 2026-05-14
 - **Scope**: Milestone 1 only — FIT parsing + MMP curve + JSON storage; no AI, no FTP/iLevels
 
@@ -410,7 +412,7 @@ Comparing against WKO5...
 ## Next Step
 
 ```
-/prp-plan docs/spec/wko5-milestone1-fit-mmp.spec.md
+/prp-plan docs/srs/completed/wko5-milestone1-fit-mmp.srs.md
 ```
 
 計劃層將繼承上述算法規格，分解為：

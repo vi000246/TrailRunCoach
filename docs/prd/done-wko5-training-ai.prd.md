@@ -1,5 +1,7 @@
 # Personal Training AI — Coros-First, WKO5-Independent
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+
 ## Problem Statement
 
 作為個人運動員，訓練資料被鎖在 Coros app 的雲端，只能用 Coros 或 TrainingPeaks 的介面查看，無法自行分析或用自然語言問答。
@@ -117,14 +119,14 @@ Coros 手錶完成訓練 → 上傳 Coros 雲端 → 本系統手動觸發 sync
 
 | # | Milestone | User-Visible Value | Status | Depends | SRS | Plan |
 |---|-----------|--------------------|--------|---------|-----|------|
-| 1 | FIT 解析 + MMP 計算 | 匯入 FIT 並看到 MMP 曲線數值 | complete | - | wko5-milestone1-fit-mmp.spec.md | - |
+| 1 | FIT 解析 + MMP 計算 | 匯入 FIT 並看到 MMP 曲線數值 | complete | - | wko5-milestone1-fit-mmp.srs.md | - |
 | 2 | AI 對話介面 | 用中文問「本週訓練強度」獲得數據驅動回答 | pending | 1 | - | - |
 | 3 | FTP 估算 + CTL/ATL/TSB | 自動算出訓練區間 + 疲勞狀態 | complete | 1 | - | - |
 | 4 | Coros 自動同步 + PMC Web UI | 訓練後手動 sync，FIT 自動下載，PMC 圖表顯示 | **complete** | 1,3 | wko5-coros-sync.spec.md | coros-sync-pmc-mvp.plan.md |
-| 4.5 | FTP/LTHR 設定頁面 | 手動設定或覆蓋 FTP、LTHR | **complete** | 4 | wko5-frontend-redesign.spec.md | wko5-mvp-tab-nav-config-season.plan.md |
+| 4.5 | FTP/LTHR 設定頁面 | 手動設定或覆蓋 FTP、LTHR | **complete** | 4 | wko5-frontend-redesign.srs.md | wko5-mvp-tab-nav-config-season.plan.md |
 | 4.6 | Run 跑步訓練負荷圖表 | Season 頁面新增 5 個跑步圖表（Run PMC、Daily %CTL、Ramp Rate、Intensity Load、Volume Log）| **complete** | 4,4.5 | wko5-training-load-charts.spec.md | docs/plans/completed/wko5-training-load-charts.plan.md |
-| 4.7 | 資料準確度修正 + 日期範圍 Presets | 圖表資料修正（CTL 種子值、歷史 rTSS 回填）+ DateRangePicker 行事曆 Preset | **complete** | 4.6 | wko5-data-accuracy-date-presets.spec.md | docs/plans/completed/wko5-data-accuracy-date-presets.plan.md |
-| 5 | Activity Detail 頁面 | 點開單次活動，看到功率曲線、心率、區間分佈等圖表 | complete | 1,3 | wko5-web-full-clone.spec.md | - |
+| 4.7 | 資料準確度修正 + 日期範圍 Presets | 圖表資料修正（CTL 種子值、歷史 rTSS 回填）+ DateRangePicker 行事曆 Preset | **complete** | 4.6 | wko5-data-accuracy-date-presets.srs.md | docs/plans/completed/wko5-data-accuracy-date-presets.plan.md |
+| 5 | Activity Detail 頁面 | 點開單次活動，看到功率曲線、心率、區間分佈等圖表 | complete | 1,3 | wko5-web-full-clone.srs.md | - |
 | 6 | iLevels / Training Levels | 個人化功率區間（對標 WKO5 iLevels） | pending | 3 | - | - |
 | 7 | TrainingPeaks 整合（可選） | 從 TP 帳號補充歷史資料 | pending | 1 | - | - |
 

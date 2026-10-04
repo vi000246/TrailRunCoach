@@ -1,13 +1,15 @@
 # SRS: Personal Training AI — Full Algorithm Engine + Custom Dashboard + Coros Sync
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md` (partial context)
 - **Source Linear Issue**: N/A — standalone
 - **Owner**: maintainer
-- **Status**: DRAFT
+- **Status**: CANCELED (2026-10-04)
 - **Generated**: 2026-05-14
 - **Updated**: 2026-05-15 — 改為 Coros-first，獨立 fits 資料夾，移除 WKO5 目錄依賴
-- **Supersedes**: `docs/spec/wko5-milestone1-fit-mmp.spec.md` (Milestone 1 becomes a sub-component)
+- **Supersedes**: `docs/srs/completed/wko5-milestone1-fit-mmp.srs.md` (Milestone 1 becomes a sub-component)
 - **See also**: `docs/spec/wko5-coros-sync.spec.md` (Coros sync 詳細 SRS)
 
 ---

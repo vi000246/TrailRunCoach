@@ -1,5 +1,7 @@
 # WKO5 Coach Frontend Redesign — WKO5-Inspired Training Analysis UI
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+
 ## Problem Statement
 
 現有的 Web UI 視覺上幾乎是無樣式狀態：元件全部使用 Tailwind utility class，但 **Tailwind CSS 根本沒有安裝**，導致所有 `bg-gray-900`、`text-gray-400` 等 class 完全不生效，呈現出原生 HTML 的醜陋外觀。
@@ -117,7 +119,7 @@ Config Tab（FTP/LTHR 設定 → 儲存 → PMC 重算）
 
 | # | Milestone | User-Visible Value | Status | Depends | SRS | Plan |
 |---|-----------|--------------------|--------|---------|-----|------|
-| 1 | 樣式基礎（Tailwind + Design System） | UI 從無樣式變為 WKO5 風格深色外觀 | complete | - | wko5-frontend-redesign.spec.md | wko5-mvp-tab-nav-config-season.plan.md |
+| 1 | 樣式基礎（Tailwind + Design System） | UI 從無樣式變為 WKO5 風格深色外觀 | complete | - | wko5-frontend-redesign.srs.md | wko5-mvp-tab-nav-config-season.plan.md |
 | 2 | 路由 + Shell | 瀏覽器 URL 對應頁面，有一致的 Header/Nav | complete | 1 | same | same |
 | 3 | Activity List 頁面 | 可看到所有訓練列表，可篩選 sport / 日期 | complete | 2 | same | same |
 | 4 | Activity Detail 頁面 | 點開單次訓練可看功率曲線、MMP、指標 | complete | 3 | same | same |

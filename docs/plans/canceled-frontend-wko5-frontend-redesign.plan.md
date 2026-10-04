@@ -1,5 +1,7 @@
 # Plan: WKO5 Coach Frontend Redesign
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+
 ## Metadata
 ```yaml
 Module: frontend
@@ -7,8 +9,8 @@ ParentPlan: N/A
 Type: feature
 Size: Large
 Source PRD: docs/prd/wko5-frontend-redesign.prd.md
-Source SRS: docs/spec/wko5-frontend-redesign.spec.md
-Status: pending
+Source SRS: docs/spec/wko5-frontend-redesign.srs.md
+Status: CANCELED (2026-10-04)
 Created: 2026-05-15
 ```
 

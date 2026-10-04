@@ -1,5 +1,7 @@
 # Plan: WKO5 Web Full Clone — Backend + Dashboard + TrainingPeaks Sync
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+
 > **For agentic workers:** `/prp-implement` → `implementing-features` skill.
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -17,7 +19,7 @@ So that 我可以不用開啟 WKO5 桌面版、直接用網頁查詢訓練狀況
 - **Module**: core
 - **Parent Plan**: N/A
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`
-- **Source SRS**: `docs/spec/wko5-web-full-clone.spec.md`
+- **Source SRS**: `docs/srs/completed/wko5-web-full-clone.srs.md`
 - **Source Linear Issue**: N/A
 - **Type**: feature
 - **Size**: XL
@@ -58,7 +60,7 @@ User → Opens browser http://localhost:8000
 | P0 | `src/fit_parser.py` | 1-273 | Port to backend/files/fit_reader.py |
 | P1 | `src/storage.py` | 1-148 | Replace with SQLite; use as interface reference |
 | P1 | `src/importer.py` | 1-139 | Port pipeline logic to backend/files/file_service.py |
-| P2 | `docs/spec/wko5-web-full-clone.spec.md` | all | Authoritative DB schema + API contracts |
+| P2 | `docs/srs/completed/wko5-web-full-clone.srs.md` | all | Authoritative DB schema + API contracts |
 
 ## External Documentation
 

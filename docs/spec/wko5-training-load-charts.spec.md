@@ -6,11 +6,12 @@
 - **Owner**: maintainer
 - **Status**: IMPLEMENTED — 2026-05-15
 - **Generated**: 2026-05-15
+- **Last Updated**: 2026-10-04
 - **Implementation Report**: `docs/reports/wko5-training-load-charts-feature-report.md`
 
 ## Summary
 
-Implements five run-specific training load charts reverse-engineered from `WKO5 Season View.wko5chart`: Chronic/Acute TIS Load, Daily % of CTL, CTL Ramp Rate, Intensity Load Chart, and Running Volume Log (跑量日誌). All formulas were extracted verbatim from the `.wko5chart` binary; no estimation was required. New backend endpoints extend the existing FastAPI + SQLAlchemy async pattern; new frontend components extend the existing Recharts stack and are wired into `SeasonPage` as collapsible sections.
+Implements five run-specific training load charts reverse-engineered from `WKO5 Season View.wko5chart`: Chronic/Acute TIS Load, Daily % of CTL, CTL Ramp Rate, Intensity Load Chart, and Running Volume Log (跑量日誌). All formulas were extracted verbatim from the `.wko5chart` binary; no estimation was required. New backend endpoints extend the existing FastAPI + SQLAlchemy async pattern; new frontend components extend the existing Recharts stack. They were first wired into `SeasonPage` as collapsible sections; since `SeasonPage` was retired (2026-06-13) they live on the 跑步訓練 page `RunningPage` (`/running`) as three `ChartCard`s.
 
 ---
 
@@ -25,7 +26,7 @@ ATL_run = tl(if(sport="run", tss), atlconstant)   // EWMA, tau=7 days
 TSB_run = shift(CTL_run - ATL_run, 1)             // yesterday's form
 ACWR    = ATL_run / CTL_run
 ```
-Math: same as `compute_pmc()` in `backend/engine/algorithms/metrics.py:137` — only the TSS input must be filtered to `sport="run"` workouts.
+Math: same as `compute_pmc()` in `backend/engine/algorithms/metrics.py:160` — only the TSS input must be filtered to `sport="run"` workouts.
 
 ### Daily % of CTL
 ```
@@ -79,20 +80,20 @@ Uses `WorkoutFile.total_distance_m`, `WorkoutFile.duration_s`, `WorkoutFile.spor
 ## System Context
 
 ### Scope & Boundaries
-- **In scope**: 5 new chart components in collapsible sections of `SeasonPage`; 3 new API endpoints; 2 new algorithm functions; 2 new `WorkoutMetric` keys; 1 new `WorkoutFile` column; idempotent migration for `elevation_gain_m`
+- **In scope**: 5 new chart components on `RunningPage` (originally collapsible sections of `SeasonPage`); 3 new API endpoints; 2 new algorithm functions; 2 new `WorkoutMetric` keys; 1 new `WorkoutFile` column; idempotent migration for `elevation_gain_m`
 - **Out of scope**: Planned TSS input (no planning feature), multi-sport intensity charts, HR-based TIS, re-implementing TP sync, mobile layout
 
 ### Actors
 | Actor | Type | Interaction |
 |---|---|---|
-| Athlete | Human | Views load charts on Load tab; selects date range |
+| Athlete | Human | Views load charts on the 跑步訓練 page (`/running`); selects date range |
 | FIT Importer | Internal service | Computes and stores `high_intensity_95pct_s`, `high_intensity_103pct_s`, `elevation_gain_m` per workout at import time |
 | FastAPI backend | Service | Serves aggregated time series to frontend |
 
 ### External Dependencies
 | Dependency | Purpose | Failure Mode |
 |---|---|---|
-| SQLite `~/.wko5coach/wko5coach.db` | All training data | Charts show empty state |
+| SQLite app DB (the current tenant's file, `backend/db/database.py:29`) | All training data | Charts show empty state |
 | FIT file on disk | Intensity metric computation at import | Metric skipped; intensity chart empty for that workout |
 | `numpy` | EWMA and rolling calculations | Already a hard dependency |
 
@@ -103,14 +104,14 @@ Uses `WorkoutFile.total_distance_m`, `WorkoutFile.duration_s`, `WorkoutFile.spor
 ### High-Level Diagram
 ```
 Browser (React + Recharts)
-  └── SeasonPage  (frontend/src/pages/SeasonPage.tsx)
-        ├── [existing] PmcChart           ← Overall PMC section
-        ├── [existing] WeeklyLoadChart    ← Weekly Load section
-        └── [new] collapsible sections
-              ├── RunLoadChart          ← CTL/ATL/TSB/ACWR (run-only)
-              ├── DailyPctCtlChart      ← colored bar chart
-              ├── RampRateChart         ← bar + reference lines
-              ├── IntensityLoadChart    ← 4 series (chronic/acute × 95%/103%)
+  └── RunningPage  (frontend/src/pages/RunningPage.tsx, route /running; SeasonPage retired)
+        ├── ChartCard 跑步訓練負荷
+        │     ├── RunLoadChart          ← CTL/ATL/TSB/ACWR (run-only)
+        │     ├── DailyPctCtlChart      ← colored bar chart
+        │     └── RampRateChart         ← bar + reference lines
+        ├── ChartCard 強度負荷
+        │     └── IntensityLoadChart    ← 4 series (chronic/acute × 95%/103%)
+        └── ChartCard 跑量日誌
               └── RunVolumeLog          ← weekly bar + monthly table
 
 FastAPI
@@ -129,7 +130,7 @@ backend/engine/algorithms/metrics.py
 |---|---|---|
 | `compute_run_pmc()` | Filter TSS to run workouts, call `compute_pmc()`, append `daily_pct_ctl` and `ramp_rate` fields | `(tss_series, run_tss_series, ctl_tau, atl_tau, ramp_days) → list[dict]` |
 | `compute_intensity_load_series()` | EWMA of per-workout high-intensity seconds | `(intensity_series: list[(date, float)], tau) → list[dict]` |
-| `GET /api/v1/analytics/run-load` | Query run TSS, return run PMC + daily %CTL + ramp | JSON (see API Contracts) |
+| `GET /api/v1/analytics/run-load` | Query run TSS (optional `sports[]`, default running), seed CTL/ATL from `AthleteSettings.initial_ctl_run` / `initial_atl_run`, return run PMC + daily %CTL + ramp | JSON (see API Contracts) |
 | `GET /api/v1/analytics/intensity-load` | Query `high_intensity_95pct_s` and `_103pct_s` metrics, return 4-series EWMA | JSON |
 | `GET /api/v1/analytics/run-volume` | GROUP BY week/month on run workouts | JSON |
 | `RunLoadChart` | Recharts LineChart with CTL/ATL/TSB/ACWR | Props: `dateFrom`, `dateTo` |
@@ -143,10 +144,11 @@ backend/engine/algorithms/metrics.py
 FIT import path (write):
   FitParser → parse power channel → sum(if power ≥ 0.95*ftp, dt) → WorkoutMetric(high_intensity_95pct_s)
                                   → sum(if power ≥ 1.03*ftp, dt) → WorkoutMetric(high_intensity_103pct_s)
-  FitParser → read total_ascent field → WorkoutFile.elevation_gain_m
+  FitParser → device total_ascent (fallback: positive altitude diffs) → WorkoutFile.elevation_gain_m
 
 Read path:
-  Browser GET /run-load → FastAPI queries WorkoutFile+WorkoutMetric (sport="run", metric="tss")
+  Browser GET /run-load → FastAPI queries WorkoutFile+WorkoutMetric (sports, default "running"; metric="tss";
+                          only rows in use for the active data source, backend/sync/dedup.py)
                        → compute_run_pmc() → JSON
   Browser GET /intensity-load → query metric_key IN (high_intensity_95pct_s, high_intensity_103pct_s)
                              → compute_intensity_load_series() × 4 → JSON
@@ -185,8 +187,8 @@ ALTER TABLE workout_files ADD COLUMN elevation_gain_m REAL;
 
 ## Algorithm Contracts
 
-### `compute_run_pmc(run_tss_series, ctl_tau=42, atl_tau=7, ramp_days=7)`
-Extend output of `compute_pmc()` (same EWMA logic at `backend/engine/algorithms/metrics.py:137`) with:
+### `compute_run_pmc(run_tss_series, ctl_tau=42, atl_tau=7, ramp_days=7, initial_ctl=0, initial_atl=0)`
+Extend output of `compute_pmc()` (same EWMA logic at `backend/engine/algorithms/metrics.py:160`; implemented at `backend/engine/algorithms/metrics.py:200`) with the fields below. `initial_ctl` / `initial_atl` seed the EWMA (0 = the original unseeded behaviour); for the first `ramp_days` days `ramp_rate` is the CTL itself.
 
 ```python
 # Additional fields per day:
@@ -205,6 +207,8 @@ Returns `[{"date": "...", "value": float}, ...]` in minutes (divide seconds by 6
 ## API Contracts
 
 ### Endpoints
+All three endpoints take an optional repeated `sports` query param (default `["running"]`) and count only the workout rows in use for the active data source (`backend/api/analytics.py:16`).
+
 | Method | Path | Purpose | Auth |
 |---|---|---|---|
 | GET | `/api/v1/analytics/run-load` | Run-specific PMC: CTL, ATL, TSB, ACWR, daily %CTL, ramp rate | None (single athlete) |
@@ -230,7 +234,9 @@ Returns `[{"date": "...", "value": float}, ...]` in minutes (divide seconds by 6
       "ramp_pct_ctl": 0.009
     }
   ],
-  "athlete_id": 1
+  "athlete_id": 1,
+  "seeded": false,
+  "initial_ctl_used": null
 }
 
 // GET /api/v1/analytics/intensity-load?athlete_id=1&date_from=2025-01-01&date_to=2026-05-15
@@ -255,7 +261,7 @@ Returns `[{"date": "...", "value": float}, ...]` in minutes (divide seconds by 6
     {
       "week_start": "2025-01-06",
       "distance_km": 52.3,
-      "duration_h": 4.8,
+      "hours": 4.8,
       "elevation_m": 340.0,
       "count": 5,
       "tss": 380.0
@@ -265,7 +271,7 @@ Returns `[{"date": "...", "value": float}, ...]` in minutes (divide seconds by 6
     {
       "month": "2025-01",
       "distance_km": 215.4,
-      "duration_h": 19.2,
+      "hours": 19.2,
       "elevation_m": 1240.0,
       "count": 18
     }
@@ -316,8 +322,8 @@ Path prefix `/api/v1/` inherited from existing routes. No deprecation needed —
 | `backend/engine/algorithms/metrics.py:compute_pmc` | Function import | `compute_run_pmc()` implements same EWMA logic independently; both coexist |
 | `backend/api/pmc.py` | Existing endpoint | Unchanged — still serves all-sport PMC for existing PmcChart |
 | `backend/files/file_service.py` | FIT importer | Extended in `_import_one_file()` to compute `elevation_gain_m` and intensity metrics |
-| `frontend/src/api/hooks.ts` | API hooks file | 3 new `useQuery` hooks: `useRunLoad`, `useIntensityLoad`, `useRunVolume` |
-| `frontend/src/pages/SeasonPage.tsx` | Parent page | 5 chart components added as collapsible sections (not SeasonTab.tsx) |
+| `frontend/src/api/hooks.ts` | API hooks file | 3 new `useQuery` hooks: `useRunLoad`, `useIntensityLoad`, `useRunVolume` (`LoadParams` = `date_from`, `date_to`, `sports`) |
+| `frontend/src/pages/RunningPage.tsx` | Parent page | 5 chart components in three `ChartCard`s (was `SeasonPage.tsx`, retired 2026-06-13; `/season` now redirects to `/overview`) |
 
 ### Rollout Strategy
 Feature visible immediately after deploy; no feature flag needed. If intensity metrics backfill has not run, `IntensityLoadChart` shows empty state with a prompt: "Run `wko5 backfill-intensity` to enable this chart."
@@ -328,12 +334,12 @@ Feature visible immediately after deploy; no feature flag needed. If intensity m
 
 | Pattern | Where to Find | Why Follow |
 |---|---|---|
-| EWMA algorithm | `backend/engine/algorithms/metrics.py:151-165` | Canonical `ctl_factor = 1 - exp(-1/tau)` — must match exactly |
-| `WorkoutMetric` scalar storage | `backend/db/models.py:WorkoutMetric` + `backend/api/pmc.py:38-45` | All per-workout scalars live here |
+| EWMA algorithm | `backend/engine/algorithms/metrics.py:174-196` | Canonical `ctl_factor = 1 - exp(-1/tau)` — must match exactly |
+| `WorkoutMetric` scalar storage | `backend/db/models.py:75` + `backend/api/pmc.py:30-41` | All per-workout scalars live here |
 | FastAPI async router shape | `backend/api/pmc.py` and `backend/api/analytics.py` | `@router.get`, `Depends(get_db)`, `AsyncSession` |
 | `useQuery` hook pattern | `frontend/src/api/hooks.ts` (via `usePmc`) | Same TanStack Query shape for all new endpoints |
-| Recharts responsive wrapper | `frontend/src/components/PmcChart.tsx:51-95` | `<ResponsiveContainer>` + dark theme colors |
-| `SeasonPage` date range plumbing | `frontend/src/pages/SeasonPage.tsx` | Pass `dateFrom`/`dateTo` as props to all child charts |
+| Recharts responsive wrapper | `frontend/src/components/charts/PmcChart.tsx:56-70` | `<ResponsiveContainer>` + dark theme colors |
+| Page date range plumbing | `frontend/src/pages/RunningPage.tsx:13` | Pass `dateFrom`/`dateTo` as props to all child charts |
 
 ---
 
@@ -345,7 +351,7 @@ Feature visible immediately after deploy; no feature flag needed. If intensity m
 | `sport` field null or inconsistently set for run workouts | M | M | Normalize on import: check Coros sport type code (mapped in `coros_sport_type`) and FIT sport field |
 | FIT file deleted after import → backfill impossible | L | L | Log warning; intensity chart uses 0 for that date |
 | `rampconstant` hard-coded to 7 | L | L | Expose as config param in `AthleteSettings` later; 7 is WKO5 default and matches community norm |
-| Daily %CTL bars overlap in high-density date ranges | M | L | Recharts `<BarChart>` with `barSize` auto; x-axis tick decimation mirrors `PmcChart.tsx:45-47` |
+| Daily %CTL bars overlap in high-density date ranges | M | L | Recharts `<BarChart>` with `barSize` auto; x-axis tick decimation mirrors `frontend/src/components/charts/PmcChart.tsx:46-48` |
 
 ---
 
@@ -391,7 +397,7 @@ This is the FTP derived from the running power MMP curve over a rolling 90-day w
 
 **Fix**:
 1. Added `compute_run_ftp_from_mmp(mmp_points)` in `backend/engine/algorithms/metrics.py` — fits a 2-parameter Critical Power model (P = CP + W'/t) to the 3–30 min MMP curve; returns CP as runFTP estimate.
-2. Added `get_run_ftp(db, athlete_id, as_of_date)` in `backend/files/file_service.py` — queries 90-day running MMP window, computes runFTP dynamically. Falls back to manually set `run_ftp_w` in `AthleteSettings`.
+2. Added `get_run_ftp(db, athlete_id, as_of_date)` in `backend/files/file_service.py` — a manually set `run_ftp_w` in `AthleteSettings` takes precedence; otherwise queries the 90-day running MMP window and computes runFTP dynamically (`backend/files/file_service.py:137`).
 3. Added `run_ftp_w: Optional[float]` column to `AthleteSettings` (via `_migrate_schema()`) for manual override.
 4. Fixed `_import_one_file()` — running FIT workouts now use `get_run_ftp()` instead of `settings.ftp_w`.
 5. Added `POST /api/v1/athletes/{id}/recalculate-running-metrics` — recalculates TSS, NP, IF, variability_index, high_intensity_95pct_s, high_intensity_103pct_s for all existing running FIT workouts using the correct runFTP.
@@ -415,7 +421,7 @@ During investigation of a runFTP discrepancy (WKO5 shows a runFTP ≈ 1.34 × ou
 
 **Workout B** — contains 4 power spike samples: 1 isolated sample at ~2 × CP (surrounded by zeros and normal values) and 3 consecutive samples at a similar level, then a drop back to an easy value. These are GPS/accelerometer sensor artifacts. The 3-30 min MMP for this workout is unaffected (normal endurance values). These spikes do not change the runFTP calculation.
 
-**Coros sync improvement**: `coros_client.py` updated to create a stub `WorkoutFile(file_format="corrupt")` when `_import_one_file` returns `None` for an unparseable FIT file. Previously the failure was silent and the file would be re-downloaded on every sync.
+**Coros sync improvement**: `coros_client.py` updated to create a stub `WorkoutFile(file_format="corrupt")` when `_import_one_file` returns `None` for an unparseable FIT file. Previously the failure was silent and the file would be re-downloaded on every sync. The stub is now written by `record_corrupt()` (`backend/files/file_service.py:235`), shared by the COROS and TrainingPeaks sync.
 
 ### Why WKO5 Shows a Higher runFTP
 
@@ -445,12 +451,40 @@ Leading hypothesis: WKO5's ATL includes TSS from historical wko4 running workout
 ## Open Questions (Resolved)
 
 - [x] **`WorkoutFile.sport` for runs** → Normalized to `"running"` by `_normalize_sport()` in `fit_reader.py`; reliable for all Coros-synced workouts.
-- [x] **Where should charts live?** → Collapsible sections in `SeasonPage.tsx`, below existing PmcChart and WeeklyLoadChart.
+- [x] **Where should charts live?** → Originally collapsible sections in `SeasonPage.tsx`; now the 跑步訓練 page `RunningPage.tsx` (`/running`).
 - [x] **runFTP vs cycling FTP** → `get_run_ftp()` in `file_service.py` computes dynamically from running MMP (90-day rolling window). Manual override via `athlete_settings.run_ftp_w`.
 - [x] **Intensity backfill** → `POST /api/v1/athletes/{id}/recalculate-running-metrics` recalculates all existing running metrics with correct runFTP.
 
 ## Open Questions (Still Pending)
 
-- [ ] Is `total_ascent` reliable in all Coros FIT files? Outdoor GPS runs: yes. Indoor workouts: falls back to altitude channel diff (`np.diff(altitude)`).
+- [ ] Is `total_ascent` reliable in all Coros FIT files? Outdoor GPS runs: yes. `elevation_gain()` uses the device `total_ascent` when present and only then sums positive altitude diffs, which overcount GPS / baro jitter (`backend/files/file_service.py:219`).
 - [ ] Historical wko4 data: running workouts with no metrics. Requires reverse-engineering the wko4 binary channel format to extract power/HR/distance series. This is also why WKO5's ATL doesn't match ours — WKO5 can read the wko4 power data.
 - [ ] Power spike filtering: Coros running power (estimated from accelerometer/GPS) occasionally produces brief spikes (e.g., one run had 4 samples at ~2 × CP). These don't affect the CP model but pollute the 1–3s MMP. Consider adding a cap (e.g., 5×runFTP) before MMP computation.
+
+---
+
+## Domain Model
+
+### Bounded Context
+- **Context Name**: TrainingLoad（訓練負荷）
+- **Domain Layer**: Core Domain
+- **Parent Module**: N/A (React analytics endpoints alongside `wko5-engine`)
+
+### Ubiquitous Language
+| Term | Definition |
+|------|-----------|
+| CTL / ATL / TSB | 42-day / 7-day EWMA of daily run TSS; TSB = yesterday's CTL − ATL |
+| ACWR | ATL / CTL (acute:chronic workload ratio); 0.8–1.3 shaded as safe |
+| daily %CTL | today's run TSS / today's CTL; green ≤ 1.5, yellow < 3, red ≥ 3 |
+| ramp rate | CTL today − CTL `ramp_days` (7) ago, in TSS/day per week |
+| runFTP | running FTP: manual `run_ftp_w`, else a CP fit on the 90-day running MMP (3–30 min) |
+| high-intensity time | per-workout seconds at ≥ 95 % / ≥ 103 % of runFTP (`high_intensity_*pct_s`) |
+| intensity load | chronic / acute EWMA of high-intensity time, in minutes |
+| seed (initial CTL/ATL) | `initial_ctl_run` / `initial_atl_run` starting the run PMC instead of 0 |
+| corrupt stub | `WorkoutFile(file_format="corrupt")` row that stops re-downloading an unreadable file |
+
+## Change History
+
+| Date | Type | Feature SRS | Summary |
+|------|------|-------------|---------|
+| 2026-10-04 | code-sync | N/A | SeasonPage retired → charts on RunningPage (/running); `sports[]` param + active-source rows; run PMC seeding (initial CTL/ATL, `seeded` / `initial_ctl_used`); run-volume `hours` field; manual run_ftp_w takes precedence; elevation from device total_ascent; `record_corrupt()`; DB path per tenant; Domain Model added; anchors refreshed |

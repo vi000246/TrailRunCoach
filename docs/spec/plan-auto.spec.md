@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-01
+> **Last Updated**: 2026-10-04
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -15,6 +15,35 @@ automation (the reconcile rules in `backend/engine/reconcile.py`).
 
 An easy run done too fast or too hard is **never voided**. It stays done, counts its real
 TSS, and the following days adapt.
+
+## Domain Model
+
+**Bounded Context**
+- Context Name: 自動調整課表 (Plan Automation)
+- Domain Layer: Core Domain
+- Parent Module: the training plan (課表; `backend/engine/plan_store.py`, `backend/engine/reconcile.py`,
+  `backend/api/plan_sessions.py`)
+
+**Ubiquitous Language**
+
+| Term | Meaning | Code |
+|---|---|---|
+| 自動調整 run | one pass: done / missed → adapt → regenerate → push the window | `plan_auto.run` |
+| data stamp | hash of today + the activities; same stamp as last run = noop | `plan_auto.stamp` |
+| adapt rule | an outcome-based change to the current week (A–E) applied before reconcile | `engine/adapt.py` |
+| locked session | done / edited / custom / deleted: automation never touches it | `adapt._Week.locked` |
+| big change / proposal (課表待確認) | a change held for approval; the stored plan takes only done / missed / notes | `plan_auto.classify`, status `pending` |
+| notice workout | the 1-minute 「⚠ 課表待確認」 reminder on the watch, never load | kind `notice` |
+| push window | today … today + `push_days` − 1, pushed through the push provider | `plan_auto.push_window` |
+| change log / 復原 | `plan_change_log` rows; undo restores the before-state as the user's own | `PlanChangeLog`, `plan_auto.undo` |
+| dose step / rung | the interval ladder position, moved only by 達標 | `quality_gate.dose_step`, `interval_library` |
+| Zone 5 gate | Zone 5 opens after an aerobic-base confirmation + Zone 3 達標 | `base_check`, `quality_gate.z5_card` |
+| 恢復期 (re-entry block) | the reduced block after a break ≥ 6 days (傷停 when it overlaps a 傷病紀錄) | `engine/reentry.py` |
+
+**Domain Events** (each writes a change-log row): 課表已自動調整 (`applied`), 課表待確認
+(`pending`), 同意／拒絕／被取代 (`approved` / `rejected` / `superseded`), 復原 (`undone` +
+`restore`), CP 變更 (`cp_change`: power targets re-zoned), Zone 5 狀態變更 and 新恢復期
+(`plan_auto.state_changes`), 自動調整失敗 (`failed`).
 
 ## Flow
 
@@ -43,18 +72,30 @@ reconcile reports no change. Every reconcile path applies it: the page's first v
 reconcile preview, a manual push and the automatic run. They all show the same plan.
 `plan.auto.enabled = false` gives the plain generator.
 
+Other entry points:
+- **CP change**: `api/plan.py` calls `plan_auto.after_thresholds()` after a threshold edit; that
+  run (trigger `cp_change`) also starts when the stamp is unchanged (see 「CP change」 below).
+- **Done / missed matching** (reconcile rule 1) is `backend/engine/plan_match.py`: same day + the
+  planned sport first, one activity per session (long / quality / test also by the generator's
+  week-wide match). The user can link / unlink by hand; an unlinked activity is never
+  auto-matched again (`plan.match.unlinked`). The 課表 page's `GET /overview/plan/sessions` runs
+  the match-only part on every load (`plan_store.match_only`: nothing becomes missed), so a synced
+  run shows on its session at once, also while a proposal waits.
+
 ## Settings (`user_settings`, `backend/settings/repository.py`)
 
 | key | default | meaning |
 |---|---|---|
 | `plan.auto.enabled` | true | run after a sync, and apply the adapt rules |
-| `plan.auto.push` | true | push the window to COROS automatically |
+| `plan.auto.push` | null = auto | push the window automatically; auto = on when the push provider is connected (today only COROS can be) |
 | `plan.auto.push_days` | 7 | days pushed from today (1–14); later sessions update in the app only |
 | `plan.auto.confirm_big` | true | hold big changes for approval |
-| `plan.auto.notify` | watch | `watch`: also push a 1-minute 「⚠ 課表待確認」 workout; `overview`: banner only |
-| `plan.auto.state` | — | internal: last data stamp, last phase, rejected fingerprints |
+| `plan.auto.notify` | null = auto | `watch`: also push a 1-minute 「⚠ 課表待確認」 workout; `overview`: banner only; auto = `watch` when connected, else `overview` |
+| `plan.auto.state` | — | internal: last data stamp, last phase, last CP, Zone 5 / re-entry keys, rejected fingerprints |
+| `plan.push.provider` | coros | the push target (`backend/sync/workout_targets/`); Garmin / intervals.icu are stubs, not enabled |
 
-The toggles are in 「自動調整設定」 on the 課表 page (`backend/static/autoplan.js`).
+The toggles are in 課表 › ⚙ 課表偏好 › 自動調整 (`backend/static/schedule.html`, saved through
+`PUT /settings`); `autoplan.js` no longer draws them.
 
 ## Adapt rules (`backend/engine/adapt.py`)
 
@@ -64,10 +105,10 @@ Only the current week is adjusted. Sessions that are done, edited, custom or del
 | rule | trigger | action | source |
 |---|---|---|---|
 | A missed easy | stored easy session `missed` | its make-up (same gen_key, re-placed by week_plan) is dropped | Seiler「easy days easy」; not making it up is 推估 |
-| B missed quality / test | stored quality / test `missed` | stays on the generator's day if it is ≥ 2 days from the long run and every other hard day (done or planned). Else it moves to a free day that keeps that gap. Else it is cancelled. Next week repeats the dose step (the step only counts sessions done) | ≥ 2 days between hard days: 台灣教練（5 區一週最多 2 次、間隔至少 2 天） |
+| B missed quality / test | stored quality / test `missed` | stays on the generator's day if it is ≥ 2 days from the long run and every other hard day (done or planned; a done hard run counts even when unplanned — Z5 / Z3 / 高強度長跑 / CP test from the activities, `hard_days`). Else it moves to a free day that keeps that gap. Else it is cancelled. Next week repeats the dose step (the step only counts sessions done) | ≥ 2 days between hard days: 台灣教練（5 區一週最多 2 次、間隔至少 2 天） |
 | C missed long | stored long `missed` | same week, on a free day not next to a quality / test day, else cancelled; never carried into next week | 2-day rule; no carry-over is 推估 |
 | D easy run too hard | done easy run with avg HR > AeT + 3 bpm **and** > 10 % of the time above AeT + 3 (both, `unsourced-rules.md` §B5), **or** avg power > 80 % CP, **or** TSS > planned + 20 % | (1) the done session counts its actual TSS (`plan_store.session_tss`); (2) a hard session < 2 days later moves later in the week if the gap allows, else it steps down one ladder step, else it becomes an easy run; (3) the remaining easy runs lose the excess TSS, each ≥ 20 min, else the last easy run is dropped (long and quality are never trimmed); (4) the note 「輕鬆跑偏強（…）：已調整之後的課表」 goes on that day | AeT + 3 / 10 %: `workout_review.AET_MARGIN` / `OVER_AET_SHARE`; 80 % CP: zones z2 (Palladino 1C); +20 %: TrainingPeaks compliance green band. HR needs both because summer easy runs in heat often sit high on HR alone; the combination, 20 min and the downgrade order are 推估 |
-| E fatigue guard | TSB < −30 (only when week_plan has not already made it a recovery week), CTL ramp ≥ `status.RAMP["short"]` (8/week; not in a re-entry block), or two red-compliance sessions in a row | TSB / ramp: the quality is removed. Two reds: the quality is downgraded to the recovery fartlek. Easy minutes × 0.8 (≥ 20 min) in all three cases | CTL ramp 5 warn / 8 block: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits most, 10 the ceiling); TSB −20 / −30: Friel / TrainingPeaks (coach); the 2-red trigger and the 20 % cut are 推估 |
+| E fatigue guard | TSB < −30 (only when week_plan has not already made it a recovery week), CTL ramp ≥ `status.RAMP["short"]` (8/week; not in a re-entry block), or two red-compliance sessions in a row | TSB / ramp: the quality is removed. Two reds: the quality is downgraded to the recovery fartlek. Easy minutes × 0.8 (≥ 20 min) in all three cases | CTL ramp 5 warn / 8 block: Friel (coach, https://joefrieltraining.com/the-ctl-ramp-rate/ — 5–8 suits most, 10 the ceiling); TSB −20 / −30: Friel / TrainingPeaks (coach); the 2-red trigger and the 20 % cut are 推估. Exception (`b2b.fatigue_exempt`): in an accepted B2B week and its easy days after, TSB < −30 alone only logs a note (expected drop, 推估); the ramp and the red streak still act |
 
 The guardrails behind the gate (`quality_gate.guard`, `status`) use the same sources
 (`unsourced-rules.md` §B2): CTL ramp ≥ 5 → threshold only, ≥ 8 → no interval (Friel); last
@@ -87,33 +128,41 @@ planned at.
 | 未適應（目標太高） | rep 1 below 98 % of the band's lower bound | same step, target −5 % (ROLE:499) |
 | 未適應 | fewer reps done than planned, or the first miss is rep 2 … second-to-last | same step with rest + 1 min; a second one in a row steps back one |
 | 邊界 | HR back under AeT 60 s into the rest on < 50 % of the reps (brake only), or only the last rep missed and it fell > 5 % | the same step again |
+| 邊界 | every rep in band but time in the target zone < 85 % of the plan (`TIZ_GOAL`, 推估; interval_eval's verdict) | the same step again |
 | 達標 | otherwise | the next ladder step |
 | 無法判定 | no bouts or no CP (the old rule counted it as 達標) | the same step again — progress only on 達標 (`unsourced-rules.md` §B4) |
 
 Thresholds: 98 % in-band, 50 % AeT-at-60 s and the 5 % last-rep fade are 推估 (doc §4.2–4.3).
 RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_reps`, or
-`detect_efforts`).
+`detect_efforts`). A session judged by: the structure the user edited in the 課表 editor
+(`steps_spec`: its own reps / band, counted only when equivalent to the rung), else the stored
+variant, else the planned title. An unplanned interval run is neutral.
 
 ### The ladder: Zone 3 first, then Zone 5 (台灣教練)
 
 The first quality session is Zone 3; Zone 5 once Zone 3 is steady and recovery keeps up.
 The old first rungs (5×1′ @ 98–101 % CP) were too short to train VO2max yet a
-Zone 5 load; they are gone (`LEGACY_TITLES` are neutral in the history).
+Zone 5 load; they are gone (`LEGACY_TITLES` are neutral in the history). Each rung is the
+canonical variant of `backend/engine/interval_library.py` (corrected ladder, interval-prescription.md
+§A5.3); rests < 2–3 min are walks (Buchheit & Laursen 2013).
 
-| step | session | target | source |
-|---|---|---|---|
-| 0 | 閾值 3×8 分, rest 2 | 88–95 % CP | 台灣教練 Z3 first; Palladino 3A |
-| 1 | 閾值 4×8 分 | 88–95 % CP | Seiler 2013 4×8 |
-| 2 | 閾值 3×10 分, rest 3 | 95–101 % CP | Palladino 3B |
-| 3 | VO2max 5×2 分 | 106–112 % CP (推估: Palladino Z5's lower part) | 台灣教練: reps ≥ 2 min |
-| 4–6 | 4×3, 5×3, 4×4 分 | 105–110 / 103–107 % CP | Koop; Helgerud 2007 |
-| after | 4×4 and 3×10 alternating | | |
+| step | rung | standard session | target | source |
+|---|---|---|---|---|
+| 0 | T1 `z3a` | 3×6 分, rest 1.5 jog | 90–95 % CP | Haugen 2022; Palladino near-threshold; 台灣教練 Z3 first |
+| 1 | T2 `z3b` | 3×8 分, rest 2 jog | 90–95 % CP | Haugen 2022; Daniels T |
+| 2 | T3 `z3c` | 2×12 分, rest 2 jog | 90–95 % CP | WKO 研討會; CTS tempo (coach) |
+| 3 | V1 `z5a` | 5×2 分, rest 2 walk | 106–112 % CP | 台灣教練: reps ≥ 2 min; Buchheit & Laursen 2013 |
+| 4 | V2 `z5b` | 4×3 分, rest 3 jog | 105–110 % CP | Koop / CTS; Palladino MAP |
+| 5 | V3 `z5c` | 5×3 分, rest 2.5 walk | 105–110 % CP | Palladino; Wen 2019 |
+| 6 | V4 `z5d` | 4×4 分, rest 3 jog | 104–108 % CP | Helgerud 2007 |
+| after | V3, V4, T+ rotating (T+ `tp` 3×7 分 at 97–100 % CP every 3rd, 推估) | | | Palladino near-threshold |
 
+Seiler 2013's 4×8′ is no longer a Zone 3 rung (it ran at ~90 % HRpeak: severe, not Zone 3).
 Zone 5 rungs (step ≥ 3 = three Zone 3 sessions 達標 — the count is 推估) are scheduled only while
-Zone 5 is open (below); otherwise the top Zone 3 rungs alternate and the Zone 5 step waits
+Zone 5 is open (below); otherwise T2 / T3 alternate (`dose_spec`) and the Zone 5 step waits
 (those Zone 3 sessions are neutral). At most 2 Zone 5 sessions a week, ≥ 2 days apart
 (台灣教練; base phase plans one, `plan.prefs.quality_per_week = 2` places the second ≥ 2 days
-away). A ramp-week session (`SUB`, 「閾值 3×8 分（只排閾值）」) and the recovery fartlek are
+away). A ramp-week session (`SUB`, 「閾值 3×6 分（只排閾值）」) and the recovery fartlek are
 neutral.
 
 ### Two gates and the Zone 5 lifecycle (`backend/engine/base_check.py`)
@@ -127,10 +176,16 @@ neutral.
   `friel_drift`; `plateau` / `weeks` by their own unlock; `none` = no gate). The old `xu_signals` path and its
   mode `xu_signals` were removed (aerobic-base-readiness.md); a stored `xu_signals` reads as
   `auto` (`plan_prefs.from_settings`), new writes are rejected.
-- **徐國峰's 90-min test** (`xu_run`): ≥ 90 min, flat (not trail, < 20 m/km), ≤ 25 °C (台灣教練), every
+- **徐國峰's 90-min test** (`xu_run`): ≥ 90 min, flat (not trail, < 20 m/km), every
   stop ≤ 30 s, HR in Zone 1 (the app's easy rule: avg ≤ AeT + 3, ≤ 10 % above — mapping his
   E zone to "below AeT" is 推估), (HR@90′ − HR@10′) / HR@10′ < 10 % — his own comparison, not
   drift_of's halves (blog 2016-12). Any qualifying run counts (it can be the weekend long run).
+  **Heat bands** (2026-10-02): ≤ 25 °C (台灣教練) is advice in the session text, no longer a
+  refusal. The run carries its temperature band; a pass in heat counts (heat only inflates the
+  drift — conservative), a fail in heat is marked 「熱環境，結果可能偏高」 (`quality_gate.heat_suffix`;
+  the same for the Friel drift path and the AeT test).
+- **Injury pause**: an open 傷病紀錄 with 「受傷期間暫停強度課」 (`injuries.pause_reason`) blocks
+  intervals in `guard` first, every phase, until it is resolved.
 - **Maintenance** (weekly, no expiry): Zone 1 time < 2/3 of the level at confirmation (mean of
   the 4 weeks up to it) for 3 complete weeks in a row → pause Zone 5 until the next
   confirmation (Hickson 1982; 3 weeks 推估; recovery / taper / event / transition weeks and weeks
@@ -153,6 +208,9 @@ neutral.
   from the plan's AeT ("moved": UA — AeT rises toward AnT as the base improves), or after a
   break ≥ 4 weeks. A passive confirmation in the last 6 weeks stands in for no_data / se.
   ≥ 28 days between tests (推估). No fixed cadence any more (16 weeks, 4–6 weeks: no source).
+  An AeT that is only a temporary lower bound never fires shift / moved. There is no
+  stable-weekly-volume precondition before a test (a 3-weeks-within-±15 % rule was added and
+  removed 2026-10-03: no source).
 - **Faster at the same HR**: the easy targets show pace / power at the AeT HR from the median
   EF of the last 6 easy road runs (`base_check.easy_targets`, 推估); the AeT HR is unchanged and
   needs no retest. CP drives the Zone 3 / 5 power targets (the CP-test track is unchanged).
@@ -179,7 +237,8 @@ The protocol drives the session text (「氣溫 25 °C 以下時開始（熱會�
 台灣教練 + Lafrenz 2008), the COROS steps (xu90 / friel: an HR-capped main block; UA / Evoke:
 a power range), the placement (xu90 on the weekend; the others by `aet_test_days`) and the
 analysis (`analyze_workout`: warm-up cut, window and judging rule by the title's protocol).
-The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Every protocol is ≥ 40
+The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Heat is a band on the
+result, not a refusal (`aet_test._tag_heat`, `heat_line`): a pass in heat still counts. Every protocol is ≥ 40
 min of test, so all are the strict tier. MAF is not a drift test and is not offered.
 
 ### 停訓後的恢復期 (`backend/engine/reentry.py`; `docs/research/detraining.md`)
@@ -205,6 +264,11 @@ week clear). The old `blackouts.step_cap` (+10 %, at least +0.5 h after a blocke
 replaced by the block; a break < 6 days doesn't lower the base the next weeks ramp from.
 The block's planned step-ups are exempt from the 「+20 % TSS」 big-change rule (推估); adapt's
 ramp guard skips it.
+
+**傷停** (2026-10-02, `backend/engine/injuries.py`): a break that overlaps a 傷病紀錄 event is a
+傷停 (the text names the area and the event). With `injury.reentry_step_up` (default on) the block
+is the next category's (6–13 → 14, 14–28 → 29, 29–56 → 57 days; `reentry.STEP_UP_MIN`, 推估:
+the tissue has to re-adapt too); FVDOT stays the real break's.
 
 ## Big changes (held for approval; thresholds 推估)
 
@@ -255,7 +319,20 @@ state keys `z5` / `reentry` in `plan.auto.state`): every Zone 5 state change
 
 **復原** restores the before-state of the affected sessions as the athlete's own
 (`edited = true`), so the next run does not redo the change. Sessions the run added are
-tombstoned. The window is then re-pushed.
+tombstoned. The window is then re-pushed. A session the user deleted as expired
+(`plan_store.USER_DELETED`) stays deleted.
+
+## CP change (2026-10-02)
+
+Power targets are % CP, but COROS running workouts take absolute watts. A run also starts when
+the CP in effect (`week_plan` thresholds) differs from `plan.auto.state.cp` (`cp_of`); the first
+run only stores the baseline. The upcoming active sessions' watt numbers in target / detail (and
+the absolute watt overrides of an editor-saved structure, `workout_steps.rescale_abs_power`) are
+rescaled new ÷ old (`rescale_sessions`); the pushed ones go out of date and are re-sent through
+`push_window`, also those already on the watch beyond the window. One `applied` row (trigger
+`cp_change`) says 「CP old → new W：未來 N 堂課的功率目標已更新並重新推送」 or 「…，待推送」 (push off,
+held or failed); each item is 已重新推送 / 待推送 / 只在 app (`_log_cp`). `plan.auto.enabled`
+off: nothing (the next enabled run catches up).
 
 API (`backend/api/plan_auto.py`, prefix `/api/v1/overview/plan/auto`):
 - `GET ""`: settings, the pending proposal, the last entries and the thresholds
@@ -265,8 +342,10 @@ API (`backend/api/plan_auto.py`, prefix `/api/v1/overview/plan/auto`):
 - `POST /proposal/{id}/reject`
 - `POST /log/{id}/undo`
 
-UI: `backend/static/autoplan.js` puts the proposal banner (同意 / 拒絕) and the last entries
-(each with 復原) on the overview and on the 課表 page. The 課表 page also gets the settings.
+UI: `backend/static/autoplan.js` puts the proposal banner (同意 / 拒絕) on the overview and on the
+課表 page. The change log (each entry with 復原) shows only on the 課表 page, as a collapsible
+「自動調整紀錄」 (`data-log="collapsible"`, collapsed by default, open state per browser); the
+overview has `data-log="none"`. The settings are in 課表偏好 (above).
 
 ## Safety
 
@@ -276,16 +355,17 @@ UI: `backend/static/autoplan.js` puts the proposal banner (同意 / 拒絕) and 
   A crashed run writes a `failed` row.
 - The push sends nothing when every session in the window is already up to date on COROS.
 - Tests never start a run on the real DB: `conftest._no_auto_plan_after_sync`. COROS is
-  mocked in `backend/tests/test_plan_auto.py`, either with a stubbed `push_sessions` or with
-  the scripted FakeHub.
+  mocked in `backend/tests/test_plan_auto.py` (and `backend/tests/test_plan_auto_cp.py` for the
+  CP change), either with a stubbed `push_sessions` or with the scripted FakeHub.
 
 ## Known limits
 
 - A 3:1 recovery week inside the Zone 1 maintenance run is not detected from the data (only
   phase-level recovery / taper weeks and break weeks are skipped); three low weeks are needed,
   so one recovery week alone never pauses Zone 5.
-- Illness / injury marks (detraining.md §6.2) are not built: a break is only "days without a
-  run"; the doc's symptom-free start and the injury hand-off are left to the user.
+- Illness marks (detraining.md §6.2) are not built: an illness break is only "days without a
+  run". Injuries are (傷病紀錄: the 傷停 re-entry step-up and the interval pause above); the
+  symptom-free start and the injury hand-off are left to the user.
 - Cross-training detection for FVDOT-2 counts non-run endurance sessions ≥ 45 min (推估); the
   doc's FVDOT-2 definition is 未驗證.
 
@@ -312,7 +392,17 @@ UI: `backend/static/autoplan.js` puts the proposal banner (同意 / 拒絕) and 
   non-equivalent swap is stored with `equiv = false` and doesn't move the ladder.
 - Due CP / AeT tests are never generated: `week_plan.test_suggestions` → the overview /
   課表 suggestion with a day picker; the automatic run can't add them either.
-- 目標依據 / 目標用: `engine/target_policy.py` decides HR vs power for the push.
+- 目標依據 / 目標用: `engine/target_policy.py` decides HR vs power for the push. Auto
+  (2026-10-02): road easy / long runs by power (% CP) with the easy-run HR cap (「輕鬆跑上限」,
+  「（實測 AeT）」 only when measured); trail easy, trail long days and hikes by HR; intervals and
+  3–8 % hill repeats by power. Auto power only when the 一般設定 power source is Stryd (watch
+  power only when accepted), else HR.
 - The 「休息 60 秒心率降幅 < 20」 line and the fade line in the workout review card
   (`workout_review.interval_lines`) are unchanged. They are display only and no longer drive
   the dose.
+
+## Change History
+
+| Date | Type | Feature SRS | Summary |
+|------|------|-------------|---------|
+| 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
