@@ -578,6 +578,70 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
     return await run_in_threadpool(lambda: hr_profile_view(_estimate_dataset(), today_local()))
 
 
+# ---- 起始 CTL／ATL (SP-68; engine/load_guard.py pmc_start) ---------------------------------
+
+def pmc_start_view(ds) -> dict:
+    """The PMC's start in effect (manual | auto | none) with the automatic seed, the stored
+    manual value and today's CTL / ATL / TSB — the numbers the overview / charts and the
+    guardrails read (same dataset as the overview)."""
+    from backend.engine import load_guard as LG
+    from backend.engine.wko5expr.dataset import day_to_date
+    from backend.engine.wko5expr.evaluator import Evaluator
+    t = int(ds.today)
+    ev = Evaluator(ds, t - 1, t)
+    ctl, atl, st = ev.pmc()
+    iso = lambda d: None if d is None else day_to_date(d).isoformat()      # noqa: E731
+    num = lambda v: None if v is None or v != v else round(float(v), 1)    # noqa: E731
+    manual = LG.manual_start()
+    a = st["auto"]
+    return {"source": st["source"],
+            "effective": {"date": iso(st["day"]), "ctl": num(st["ctl"]), "atl": num(st["atl"])},
+            "manual": manual,
+            "manual_ignored": manual is not None and st["source"] != LG.MANUAL,   # dated after today
+            "auto": {"date": iso(a["day"]), "seed": num(a["seed"]), "days": a["days"],
+                     "final": a["days"] >= LG.SEED_DAYS},
+            "now": {"date": iso(t), "ctl": num(ctl.at(t)), "atl": num(atl.at(t)),
+                    "tsb": num(ctl.at(t - 1) - atl.at(t - 1)) if ctl.at(t - 1) is not None else None},
+            "seed_days": LG.SEED_DAYS, "startup_days": LG.STARTUP_DAYS,
+            "manual_startup_days": LG.MANUAL_STARTUP_DAYS, "max": LG.START_MAX}
+
+
+class PmcStartIn(BaseModel):
+    date: Optional[str] = None
+    ctl: Optional[float] = None
+    atl: Optional[float] = None
+    clear: bool = False
+
+
+def _overview_dataset():
+    from backend.api.wko5views import _dataset
+    return _dataset()
+
+
+@router.get("/pmc-start")
+def get_pmc_start():
+    return pmc_start_view(_overview_dataset())
+
+
+@router.put("/pmc-start")
+async def put_pmc_start(body: PmcStartIn, db: AsyncSession = Depends(get_db)):
+    """Save (or with clear: remove) the manual CTL / ATL at the start of `date` (≤ today)."""
+    from fastapi.concurrency import run_in_threadpool
+    from backend.engine import load_guard as LG
+    from backend.settings.repository import SettingsRepository
+    value = None
+    if not body.clear:
+        value = LG.parse_manual({"date": body.date, "ctl": body.ctl, "atl": body.atl})
+        if value is None:
+            raise HTTPException(400, f"date (YYYY-MM-DD), ctl and atl (0–{LG.START_MAX:g}) are required")
+        if value["date"] > today_local().isoformat():
+            raise HTTPException(400, "date must not be after today")
+        value["ctl"], value["atl"] = round(value["ctl"], 1), round(value["atl"], 1)
+    await SettingsRepository(db, current_athlete_id()).set(LG.PMC_START_KEY, value)
+    await db.commit()
+    return await run_in_threadpool(lambda: pmc_start_view(_overview_dataset()))
+
+
 def _estimate_dataset():
     # the estimate reads samples; use the athlete's own-formula dataset so
     # approved data corrections apply

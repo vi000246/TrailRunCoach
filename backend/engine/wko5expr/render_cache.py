@@ -132,7 +132,13 @@ def data_fingerprint(ds) -> str:
         wx = _stamp(routes_home() / RW.ACTIVITY_WX_FILE)
     except Exception:                          # noqa: BLE001 — no routes module: no archive
         wx = None
-    parts = [athlete, _stamp(plan_path()), _stamp(corrections_path()), cfg, wl, ds.today, src, tests, wx]
+    # the manual PMC start (SP-68, 設定 → 閾值): the builtins ctl / atl / tsb start from it
+    try:
+        from backend.engine.load_guard import manual_start
+        pmc0 = manual_start()
+    except Exception:                          # noqa: BLE001 — no settings store: none
+        pmc0 = None
+    parts = [athlete, _stamp(plan_path()), _stamp(corrections_path()), cfg, wl, ds.today, src, tests, wx, pmc0]
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
