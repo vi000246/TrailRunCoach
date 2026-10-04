@@ -42,7 +42,8 @@ Power, Threshold, Anaerobic Endurance, Anaerobic Power):
 Two independent uses (owner 2026-10-03):
   A. 設定 → 課表心率區間 (`plan.hr_zone_model`: lthr default | hrr | hrmax) sets the
      HR targets of the 課表 only (plan_hr_zones below; zones.training_targets,
-     coros_workouts / workout_steps easy_hr + _work_hr).
+     coros_workouts / workout_steps easy_hr + _work_hr) and the structure editor's
+     HR 區間 choice (workout_steps.hr_model_zones; SP-30).
   B. the HR-zone charts keep their own selector (default Friel, as WKO5);
      the COROS models are extra choices there (activity_charts, period_zones,
      zones.SYSTEMS). Not linked to A.
@@ -258,7 +259,7 @@ def plan_hr_zones(lthr: Optional[float], aet: Optional[float], aet_measured: boo
     with the reason. A MEASURED AeT still caps easy runs in every model (a
     measured threshold beats a % formula); an estimated / 0.89 × LTHR AeT does not.
 
-    {"model", "requested", "label", "fallback", "basis_text", "rows": [{id, name, lo, hi}],
+    {"model", "requested", "label", "fallback", "basis_text", "rows": [{id, name, lo, hi}], "mhr",
      "easy": [lo, hi], "easy_source", "work": {class: [lo, hi]}, "targets": {target id: [lo, hi]}}"""
     want = model if model in PLAN_MODELS else DEFAULT_PLAN_MODEL
     use, fallback = want, None
@@ -283,6 +284,7 @@ def plan_hr_zones(lthr: Optional[float], aet: Optional[float], aet_measured: boo
     return {"model": use, "requested": want, "label": MODEL_LABEL[use], "short": MODEL_SHORT[use],
             "fallback": fallback, "basis_text": basis, "source": SOURCE[use],
             "rows": [{"id": i, "name": n, "lo": lo, "hi": hi} for i, n, lo, hi in rows],
+            "mhr": float(mhr) if mhr and use in ("hrr", "hrmax") else None,    # Z6's top (workout_steps)
             "easy": [round(e_lo), round(e_hi)], "easy_source": e_src, "aet_measured": bool(aet and aet_measured),
             "work": {k: list(band(rows, *v)) for k, v in CLASS_ZONES.items()},
             "targets": {k: list(band(rows, *v)) for k, v in TARGET_ZONES.items()}}
