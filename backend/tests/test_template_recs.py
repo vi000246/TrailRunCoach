@@ -124,3 +124,90 @@ def test_technical_terrain_by_phase(tpl):
     assert "lib:tech_easy" in keys(base, "trail")
     spec = TR.recommend(tpl, kind="hike", minutes=115, phase="specific", terrain="trail")
     assert "lib:tech_hard" in keys(spec, "trail")
+
+
+# 我的範本 in the 推薦 block (SP-36): ranked with the built-ins by the same rules, tagged mine
+def _st(kind, sec, tg=None):
+    return {"kind": kind, "dur": {"type": "time", "value": sec}, "target": tg or {"type": "auto", "intent": "easy"},
+            "note": ""}
+
+
+def _mine(tid, name, cats, items):
+    return {"id": tid, "name": name, "cats": cats, "steps": WS.normalize({"items": items})}
+
+
+MY_CRUISE = _mine(1, "我的巡航", ["quality"], [_st("warm", 900), {"kind": "repeat", "times": 3, "items": [
+    _st("work", 600, {"type": "power", "mode": "pct", "lo": 0.95, "hi": 0.99}), _st("rest", 120)]}, _st("cool", 600)])
+MY_DOWN = _mine(2, "我的下坡", ["trail"], [_st("warm", 900), _st("work", 1200, {"type": "rpe", "lo": 4, "hi": 5, "down": 300}),
+                                         _st("cool", 600)])
+MY_TECH = _mine(3, "我的技術路", ["trail"], [_st("warm", 900), _st("work", 1800, {"type": "rpe", "lo": 7, "hi": 8, "up": 300}),
+                                          _st("cool", 600)])
+MY_UP = _mine(4, "我的上坡", ["trail", "c1"], [_st("warm", 900), {"kind": "repeat", "times": 5, "items": [
+    _st("work", 300, {"type": "hr", "mode": "pct", "lo": 0.9, "hi": 0.95}), _st("rest", 180)]}, _st("cool", 600)])
+
+
+@pytest.fixture(scope="module")
+def mine_tpl():
+    return WS.templates(user={"templates": [MY_CRUISE, MY_DOWN, MY_TECH, MY_UP],
+                              "cats": [{"id": "c1", "label": "上坡", "custom": True}]})
+
+
+def _row(tpl, key):
+    return next((g, r) for g in tpl["groups"] for r in g["rows"] if r["key"] == key)
+
+
+def _s(**kw):
+    s = {"kind": "quality", "cap": None, "minutes": 60.0, "terrain": "road", "phase": "base", "z5_open": False,
+         "rung": None, "ladder_key": None, "ladder_reason": "", "sport": "trail"}
+    return {**s, **kw}
+
+
+def test_my_templates_score_by_the_same_rules(mine_tpl):
+    g, r = _row(mine_tpl, "user:1")
+    assert r["mine"] and r["family"]["id"] == "aerobic"
+    sc = TR._score(r, "quality", g["sub"], _s())
+    assert any("基礎期先練有氧間歇" in w for _p, w in sc.plus)
+    # the ladder's rung family: the same 同一類 bonus as a library row
+    sc = TR._score(r, "quality", g["sub"], _s(rung="z3b"))
+    assert any("同一類（有氧間歇）" in w for _p, w in sc.plus)
+    # trail phase rules by the row's kind: downhill / hard technical are race-specific, a downhill
+    # one is out in the taper; a climb one is base work
+    _g, d = _row(mine_tpl, "user:2")
+    assert d["trail_sub"] == "downhill"
+    assert any("練賽道的爬升／下坡" in w for _p, w in TR._score(d, "trail", "downhill", _s(kind="hike", phase="specific")).plus)
+    assert TR._score(d, "trail", "downhill", _s(kind="hike", phase="taper")).v <= TR.DROP_BELOW
+    _g, t = _row(mine_tpl, "user:3")
+    assert t["trail_sub"] == "technical" and t["role"] == "quality"
+    assert any("接近比賽的路況" in w for _p, w in TR._score(t, "trail", "technical", _s(kind="hike", phase="build")).plus)
+    _g, u = _row(mine_tpl, "user:4")
+    assert any("有氧爬坡" in w for _p, w in TR._score(u, "trail", "climb", _s(kind="hike", phase="base")).plus)
+
+
+def test_my_templates_are_recommended_and_tagged(mine_tpl):
+    r = TR.recommend(mine_tpl, kind="hike", minutes=50, phase="specific", terrain="trail")
+    assert all(p["mine"] == p["key"].startswith("user:") for c in r["cats"].values() for p in c)
+    # a custom tab holds only 我的範本: its 推薦 is them
+    assert [p["key"] for p in r["cats"]["c1"]] == ["user:4"] and r["cats"]["c1"][0]["mine"] is True
+    taper = TR.recommend(mine_tpl, kind="hike", minutes=45, phase="taper", terrain="trail")
+    assert "user:2" not in keys(taper, "trail")
+    road = TR.recommend(mine_tpl, kind="hike", minutes=50, phase="specific", terrain="trail", sport="road")
+    assert road["cats"]["trail"] == []
+    assert "我的範本" in r["tip"]
+
+
+def test_api_recs_include_my_templates(monkeypatch):
+    from backend.api import plan_sessions
+    from backend.sync import coros_workouts as CW
+    from backend.tests.test_plan_store import API, Env
+    monkeypatch.setattr(CW, "real_today", lambda: date(2026, 9, 30))
+    monkeypatch.setattr(plan_sessions, "_tpace", lambda: 280.0)
+    monkeypatch.setattr(plan_sessions, "_speeds", lambda: {"v_easy": 10.0, "v_easy_src": "t", "ep_kmh": 7.0})
+    with Env(monkeypatch) as e:
+        c = e.c.post(f"{API}/steps/templates/cats", json={"label": "上坡"}).json()
+        t = e.c.post(f"{API}/steps/templates/user", json={"name": "我的上坡", "cats": ["trail", c["id"]],
+                                                          "steps": {"items": MY_UP["steps"]["items"]}}).json()
+        b = e.c.get(f"{API}/steps/templates/recs", params={"kind": "hike", "minutes": 50}).json()
+        assert b["cats"][c["id"]] == [{"key": f"user:{t['id']}", "reason": b["cats"][c["id"]][0]["reason"], "mine": True}]
+        # the 插入範本 menu has the row the pick points at
+        menu = e.c.get(f"{API}/steps/templates").json()
+        assert any(r["key"] == f"user:{t['id']}" for g in menu["groups"] if g["cat"] == c["id"] for r in g["rows"])

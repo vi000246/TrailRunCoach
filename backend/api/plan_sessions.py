@@ -373,6 +373,7 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
     data = _with_variant(data, inp, None, data.get("day"))
     if data.get("steps"):
         data = await _with_steps(data, inp, {})
+        await _with_route(db, data["steps"], None)
     try:
         async with _wlock():
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
@@ -389,6 +390,7 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
     if patch.get("steps"):
         cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
         patch = await _with_steps(patch, inp, cur or {})
+        await _with_route(db, patch["steps"], (cur or {}).get("steps"))
     try:
         async with _wlock():
             out = await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
@@ -1186,10 +1188,11 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     env = await _steps_env(s, inp)
     out = {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
-    if st.get("tpl"):
-        # made from a user template with a route GPX: its elevation on the chart's time axis
+    if st.get("route") or st.get("tpl"):
+        # made from a user template with a route GPX: the chart on the route's distance axis, the
+        # session's own copy of the profile first (it outlives the template), else the template's
         from backend.engine import user_templates as UT
-        prof = await UT.profile_of(db, st["tpl"])
+        prof = st.get("route") or await UT.profile_of(db, st["tpl"])
         out["elev"] = UT.route_elevation(st, env["ctx"], prof) if prof else None
     return out
 
@@ -1375,10 +1378,12 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
                               minutes: Optional[float] = None, terrain: Optional[str] = None,
                               db: AsyncSession = Depends(get_db)):
     """插入範本's 「推薦」 block for one session (engine/template_recs.py): per category, the
-    3 best templates with a reason; 強度課's first is the interval ladder's next step (the
-    old 間歇範本 ★ 推薦: interval_library.fit for the current rung and the day's cap)."""
+    3 best templates with a reason, 我的範本 included (`mine`); 強度課's first is the interval
+    ladder's next step (the old 間歇範本 ★ 推薦: interval_library.fit for the current rung
+    and the day's cap)."""
     from backend.engine import quality_gate as QG
     from backend.engine import template_recs as TR
+    from backend.engine import user_templates as UT
     from backend.engine import workout_steps as WS
     inp = await _inputs()
     s = next((x for x in await PS.load(db) if x["uid"] == uid), None) if uid else None
@@ -1392,7 +1397,9 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
     key, why = TR.ladder_pick(rung_now, ctx["cap"], ctx["history"], ctx["prefs"])
     ter = terrain or (s or {}).get("terrain")
     ter = "trail" if kind == "hike" or ter in ("trail", "hike") else "road"
-    return TR.recommend(WS.templates(), kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
+    # 我的範本 ranked with the built-ins (SP-36), the same menu /steps/templates gives
+    tpl = WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)})
+    return TR.recommend(tpl, kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
                         phase=_phase_on(inp, day), z5_open=bool(QG.z5_track(gate)["open"]) if gate else False,
                         rung=rung_now, ladder_key=key, ladder_reason=why,
                         sport=(inp.get("cur") or {}).get("primary_sport") or "trail")
@@ -1450,6 +1457,22 @@ async def _with_steps(patch: dict, inp: dict, cur: dict) -> dict:
         out["target"] = v["summary"]
     out.setdefault("tss", v["totals"]["tss"])
     return out
+
+
+async def _with_route(db: AsyncSession, st: dict, was: Optional[dict]) -> None:
+    """A structure made from a user template with a route GPX keeps its own copy of the
+    profile (`route`, user_templates.route_copy), so deleting the template or its GPX later
+    doesn't take it off the session: the stored copy carried over while the template is the
+    same (a re-save from the editor), else taken from the template now."""
+    if not st.get("tpl") or st.get("route"):
+        return
+    if was and was.get("tpl") == st["tpl"] and was.get("route"):
+        st["route"] = was["route"]
+        return
+    from backend.engine import user_templates as UT
+    r = UT.route_copy(await UT.profile_of(db, st["tpl"]))
+    if r:
+        st["route"] = r
 
 
 @router.get("/variants")
