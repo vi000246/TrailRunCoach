@@ -259,8 +259,10 @@ def test_guardrails_block_the_week_and_say_so():
     d = QG.week_decision(g, "base", "base")
     assert d["allow"] and d["track"] == "z3" and d["warn"].startswith("輕鬆跑心率偏高：低強度只有 68%")
     both = {**g, "z5": {"open": True}, "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 0, "done": 0}}}
-    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2)["items"]] == ["z3"]
-    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2, first=False)["items"]] == ["z3"]
+    # (2 a week with Zone 5 held: the second session is a 巡航版, not Zone 5)
+    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2)["items"]] == ["z3", "z3"]
+    assert [it.get("cruise", False) for it in QG.week_decision(both, "base", "base", n=2, first=False)["items"]] == [
+        False, True]
     # an estimated AeT (no plan row, or an applied estimate): the share is noisy — a warning for Zone 5 too
     for plan in (None, _plan(aethr=150, lthr=160, day="2026-09-01", note="AeT 自動估算")):
         ge = _gate(by=by, plan=plan)
@@ -315,7 +317,7 @@ def test_two_tracks_each_with_its_own_ladder():
     g1 = {**g3, "dose": {"z3": {"step": 1, "met": 1, "done": 1}, "z5": {}}, "z5": {"open": True},
           "z3_recent": {"done": 1, "need": 2}}
     d = QG.week_decision(g1, "base", "base", n=2)
-    assert [it["track"] for it in d["items"]] == ["z3"] and "1/2 堂 3 區" in d["note"]
+    assert [it["track"] for it in d["items"]] == ["z3", "z3"] and "1/2 堂 3 區" in d["note"]
     g2 = {**g1, "z3_recent": {"done": 2, "need": 2}}
     assert [it["track"] for it in QG.week_decision(g2, "base", "base", n=2)["items"]] == ["z3", "z5"]
     # not tied to 達標: two Zone 3 sessions done at the first rung count

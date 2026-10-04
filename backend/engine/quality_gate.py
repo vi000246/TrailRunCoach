@@ -2190,6 +2190,15 @@ def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3:
             spec = adjusted_spec(spec, adj)             # the state machine's tweak, this week only
         out.append({"track": t, "spec": spec, "advance": True, "adjust": adj,
                     "first": t == "z3" and s == 0 and met == 0})
+    if n >= 2 and tracks == ["z3"]:
+        # 2 a week with only Zone 3 open (owner 2026-10-04): the second session is a different Zone 3
+        # session — the 巡航版 of the rung's position (overview.quality_sessions sizes it to the first
+        # one's time in zone, within the Zone 3 ≤ 10 % and the week's ≤ 20 % caps), not a copy; it
+        # doesn't move the rung (its 達標 counts in `met`)
+        rung = out[0]["spec"][0]
+        out.append({"track": "z3", "spec": next(r for r in CRUISE if r[0] == cruise_for(rung, None))
+                    if rung in _IL.Z3_TRACK else CRUISE[0], "advance": False, "adjust": None, "first": False,
+                    "cruise": True})
     return out
 
 
@@ -2209,7 +2218,7 @@ def _decision(items: list, avail: list, gate: dict, n: int, monday: Optional[dt.
         z3_note = ""
     note = ""
     zt = zt or z5_track(gate)
-    if tracks == ["z3"] and not zt["open"]:
+    if tracks and set(tracks) == {"z3"} and not zt["open"]:
         # SP-39: the soft 「3 區先」 is met but the AeT isn't (or the other way round): say what Zone 5 waits for
         if zt["z3_ok"] and not zt["aet_ok"]:
             note = z5.get("text") or "Zone 5 還沒開：先排 3 區"
@@ -2360,6 +2369,8 @@ def indicator(gate: dict) -> dict:
         for it in dec["items"]:
             if it["spec"] in (SUB, ZONE3, RECOVERY) or it["track"] is None:
                 parts.append(it["spec"][1])
+            elif it.get("cruise"):
+                parts.append(f"3 區第二堂（巡航版）：{it['spec'][1]}")
             else:
                 dt_ = d3 if it["track"] == "z3" else d5
                 parts.append(f"{TRACK_LABEL[it['track']].split('（')[0]}第 {int(dt_.get('step') or 0) + 1} 步：{it['spec'][1]}")
