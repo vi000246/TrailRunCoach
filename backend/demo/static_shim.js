@@ -376,7 +376,13 @@
         if (!["warm", "work", "rest", "cool", "other"].includes(k)) { errs.push(`步驟類型不對：${repr(k)}`); return null; }
         let dur = x.dur || {};
         const dt = isDict(dur) ? dur.type : undefined;
-        if (!["time", "distance", "open"].includes(dt)) { errs.push("時長類型要是 時間／距離／直到按下計圈"); dur = { type: "open" }; }
+        if (!["time", "distance", "open", "load"].includes(dt)) { errs.push("時長類型要是 時間／距離／直到按下計圈／負荷"); dur = { type: "open" }; }
+        else if (dt === "load") {
+          const L = W.load;
+          if (!L.kinds.includes(k)) errs.push(`「${L.label}」只能用在主課`);
+          const v = f(dur.value, "負荷（TSS）", L.range[0], L.range[1]);
+          dur = v ? { type: "load", value: pyRound(v, 1) } : { type: "open" };
+        }
         else if (dt === "time") { const v = f(dur.value, "時間", 5, 6 * 3600); dur = v ? { type: "time", value: pyRound(v) } : { type: "open" }; }
         else if (dt === "distance") { const v = f(dur.value, "距離", 50, 100000); dur = v ? { type: "distance", value: pyRound(v) } : { type: "open" }; }
         else { const v = dur.est ? f(dur.est, "直到按下計圈的預估時間", 5, 6 * 3600) : null; dur = v ? { type: "open", est: pyRound(v) } : { type: "open" }; }
@@ -478,7 +484,8 @@
       for (const k of ["cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source", "thr_warn"]) thresholds[k] = th[k] ?? null;
       return { thresholds, tpace_link: D.tpace_link ?? null, zones: zonesTable(e.ctx, D), policy: pol,
         basis_label: `目標用：${D.tp.label[pol.basis]}（${pol.why}）`, cap: e.cap, cap_mode: e.cap_mode, rung: e.rung,
-        kinds: W.kind_label, types: W.type_label, rules: W.rules };
+        kinds: W.kind_label, types: W.type_label, provider: W.load.provider, load_kinds: W.load.kinds, load_range: W.load.range,
+        rules: W.rules };
     }
 
     // ---- resolving one step's target
@@ -654,9 +661,30 @@
       else return [3600 / W.dist_pace_default, "default"];
       return [Math.max(v, 0.55 * (vE || vT)), how];
     }
+    // 「負荷」 steps (workout_steps.load_if / load_tl; engine/coros_tl.py defaults, 推估)
+    const loadIf = (st, r, D) => (r.frac ? r.frac : (D.ws.none_if[st.kind] ?? 0.7));
+    function tlConv(tss, basis, ifv, D) {
+      const T = D.ws.load.tl, x = Math.max(0, tss);
+      const fam = (g) => {
+        if (g === "power") return x > 0 ? T.power.a * x ** T.power.k : 0;
+        if (g === "hr") {
+          if (!ifv || ifv <= 0) return null;
+          if (x <= 0) return 0;
+          const h = x / (100 * ifv * ifv), q = Math.max(T.hr.if_lo, Math.min(T.hr.if_hi, ifv));
+          const rate = T.hr.c0 + T.hr.c1 * q + T.hr.c2 * q * q;
+          return rate > 0 ? h * rate : null;
+        }
+        return T.linear.a * x;
+      };
+      let g = basis === "power" ? "power" : ifv ? "hr" : "linear", v = fam(g);
+      if (v == null && g === "hr") { g = "linear"; v = fam(g); }
+      return { tl: pyRound(v, 1), err: pyRound(v * D.ws.load.err, 1), group: g, fitted: false };
+    }
+    const loadTl = (st, r, D) => tlConv(st.dur.value, r.type === "power" ? "power" : "hr", loadIf(st, r, D), D);
     function secs(st, r, c, D) {
       const d = st.dur, W = D.ws;
       if (d.type === "time") return [d.value, false];
+      if (d.type === "load") { const q = loadIf(st, r, D); return [d.value * 3600 / (q * q * 100), true]; }
       if (d.type === "distance") {
         const km = d.value / 1000;
         if (r.type === "pace" && r.lo) return [km * (r.lo + r.hi) / 2, true];
@@ -687,6 +715,7 @@
           (c.ep_kmh ? `，用你的越野 EP 速度 ${fx(c.ep_kmh, 1)} km/h` : "，你的越野紀錄不夠，先用路跑速度"));
       }
       if (lap) parts.push("「直到按下計圈」段：用課表原本寫的最短時間");
+      if (rows.some((s) => s.dur.type === "load")) parts.push(`「${D.ws.load.label}」段：TSS ÷（該段強度 IF² × 100）換成時間`);
       return parts.length ? parts.join("；") + "（推估）" : "";
     }
     function totals(steps, c, D) {
@@ -758,6 +787,11 @@
         }
       }
       if (t.open) add("info", `${t.open} 段「直到按下計圈」不算進總時間`);
+      for (const row of rows) {
+        const st = row.st;
+        if (st.dur.type === "load" && c.end_conditions && c.end_conditions.length && !c.end_conditions.includes("load"))
+          add("warn", `${c.provider_label || "這個平台"}沒有「${D.ws.load.label}」結束條件：推送時換成預估時間 ${mmss(secs(st, resolve(st, c, D), c, D)[0])}（推估）`, st.id);
+      }
       const role = rpeRole(steps.items, D);
       if (role) add("info", "RPE 目標：心率、功率只當參考，負荷照手錶記錄算（不用 RPE 校正）；這堂依 RPE 算"
         + (role === "quality" ? "強度課（RPE ≥ 7：和其他強度課隔 48 小時、算進每週強度預算）" : "輕鬆課"));
@@ -859,7 +893,8 @@
     // ---- the watch (sync/coros_workouts.build_program as lines)
     const EX = { warm: 1, work: 2, other: 2, rest: 4, cool: 3 };
     const EX_LABEL = { 1: "暖身", 2: "訓練", 3: "緩和", 4: "休息" };
-    const fmtDur = (d) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`) : "直到按下計圈");
+    const fmtDur = (d) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`)
+      : d.type === "load" ? `負荷 ${fmtG(d.value)} TSS` : "直到按下計圈");
     function stepsToCoros(steps, c, D) {
       const em = { n: 0 }, out = [];
       const name = (st, r, grouped) => {
@@ -875,6 +910,9 @@
       };
       const one = (st, grouped) => {
         const r = resolve(st, c, D), d = st.dur;
+        if (d.type === "load")      // COROS: its TL end condition (targetType 6); seconds = the estimate
+          return { kind: EX[st.kind], seconds: Math.max(5, pyRound(secs(st, r, c, D)[0])), intensity: r.intensity, name: name(st, r, grouped),
+            meters: 0, load_tl: Math.max(1, pyRound(loadTl(st, r, D).tl)) };
         return { kind: EX[st.kind], seconds: Math.trunc(d.type === "time" ? d.value : 0), intensity: r.intensity, name: name(st, r, grouped),
           meters: Math.trunc(d.type === "distance" ? d.value : 0) };
       };
@@ -891,7 +929,7 @@
     }
     const corosCount = (steps, c, D) => sum(stepsToCoros(steps, c, D).map((x) => 1 + (x.steps ? x.steps.length : 0)));
     function exLine(st, D) {
-      const dur = st.meters ? `${fmtG(st.meters * 100 / 100000)} km` : st.seconds ? fmtS(st.seconds) : "直到按下計圈";
+      const dur = st.load_tl ? `負荷 ${st.load_tl} TL` : st.meters ? `${fmtG(st.meters * 100 / 100000)} km` : st.seconds ? fmtS(st.seconds) : "直到按下計圈";
       let tgt = "不設目標";
       if (st.intensity) {
         const [typ, lo, hi] = st.intensity;
@@ -926,6 +964,7 @@
       if (res.some(([, r]) => r.need === "tpace")) lost.push(D.ws.no_tpace);
       if (unrolled) lost.push("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段");
       if (dist) lost.push("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）");
+      if (res.some(([st]) => st.dur.type === "load")) lost.push(`「${D.ws.load.label}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）`);
       if (n > D.ws.coros_max_steps) lost.push(`${n} 段超過 ${D.ws.coros_max_steps} 段：COROS 的上限未驗證`);
       return { lines, n, limits, lost, seconds: total };
     }
@@ -962,8 +1001,13 @@
       for (const row of flat(steps.items)) {
         const st = row.st, r = resolve(st, c, D), [s, e] = secs(st, r, c, D);
         if (!(st.id in byId)) byId[st.id] = asDict(r, D);
-        order.push({ id: st.id, kind: st.kind, sec: pyRound(s), est: e, open: st.dur.type === "open", frac: r.frac, level: level(r.frac),
-          type: r.type, rep: row.rep.map(([a, i, n]) => ({ id: a, i, n })) });
+        const o = { id: st.id, kind: st.kind, sec: pyRound(s), est: e, open: st.dur.type === "open", frac: r.frac, level: level(r.frac),
+          type: r.type, rep: row.rep.map(([a, i, n]) => ({ id: a, i, n })) };
+        if (st.dur.type === "load") {
+          const lt = loadTl(st, r, D);
+          o.load = byId[st.id].load = { tss: st.dur.value, tl: pyRound(lt.tl), err: pyRound(lt.err), fitted: lt.fitted, sec: pyRound(s), if: pyRound(loadIf(st, r, D), 3) };
+        }
+        order.push(o);
       }
       const eq = rung ? equivalence(steps, rung, c, D) : null;
       return { resolved: byId, order, totals: totals(steps, c, D), issues: issues(steps, c, D, cap, capMode, rung), watch: watchPreview(steps, c, D),

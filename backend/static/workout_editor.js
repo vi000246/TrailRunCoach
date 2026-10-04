@@ -182,6 +182,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     return u ? ` <a class="we-tpl" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(tr("workout.no_tpace_link", "看閾值配速怎麼估"))}</a>` : "";
   };
   const OPEN_W = 90;
+  // 時長類型 (SP-38): the options come from the push target's capabilities (context.provider:
+  // sync/workout_targets describe() — end_conditions + end_labels); these only without one
+  const END_DEFAULT = ["time", "distance", "open"];
+  const END_LABEL = { time: "時間", distance: "距離", open: "直到按下計圈", load: "負荷" };
+  const provCaps = (ctx) => (((ctx || {}).provider || {}).capabilities) || null;
   const TIP = {
     basis: "每一段自己決定用功率、心率還是配速：點那一段的目標就能改（標「指定」）。標「自動」的段依課表類型（路跑輕鬆／長跑看功率、心率以輕鬆跑上限為上限；越野看心率；間歇看功率）。數字依目前的 CP、LTHR、輕鬆跑上限、閾值配速帶入。",
     chart: "橫軸是時間（「直到按下計圈」的段畫成固定寬度、斜線），高度和顏色都是強度（約當 % CP）。心率段換算成功率高度是推估，只影響這張圖。點一段可以選到下面那一步。",
@@ -418,6 +423,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const dt = st.dur.type;
       const durIn = dt === "time" ? `<input class="dur" data-f="sec" value="${mmss(st.dur.value)}" inputmode="numeric" aria-label="時間（分:秒）"${dis}>`
         : dt === "distance" ? `<input class="num" type="number" step="0.1" min="0.05" data-f="km" value="${st.dur.value / 1000}" aria-label="距離 km"${dis}><span class="faint">km</span>`
+        : dt === "load" ? this.loadIn(st, r, dis)
         : st.dur.est ? `<span class="we-lap" title="直到按下計圈；總時間用課表寫的最短時間估">≈ ${mmss(st.dur.est)}</span>` : "";
       const ov = st.target && st.target.type !== "auto";
       const tb = r ? `<span class="src${ov ? " ov" : ""}">${ov ? "指定" : "自動"}</span><b>${r.type === "none" ? "不設目標" : `${esc(r.label)} ${esc(r.text)}`}</b>${r.sub ? `<span class="s">${esc(r.sub)}</span>` : ""}` +
@@ -425,12 +431,32 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       return `<div class="we-row${this.sel === st.id ? " sel" : ""}" draggable="${!this.ro}" tabindex="0" data-id="${st.id}" style="--zc:${this.zc(r, st)}">
         <span class="grip" aria-hidden="true" title="拖曳排序">⋮⋮</span>
         <select class="kind" data-f="kind" aria-label="類型"${dis}>${Object.entries(KIND).map(([k, l]) => opt(k, l, st.kind)).join("")}</select>
-        <span class="we-dur"><select data-f="dtype" aria-label="時長類型"${dis}>${opt("time", "時間", dt)}${opt("distance", "距離", dt)}${opt("open", "直到按下計圈", dt)}</select>${durIn}</span>
+        <span class="we-dur"><select data-f="dtype" aria-label="時長類型"${dis}>${this.endOpts(st)}</select>${durIn}</span>
         <button type="button" class="we-tbtn${this.openT === st.id ? " on" : ""}" data-a="tgt" aria-expanded="${this.openT === st.id}" aria-label="這一段的目標（點一下改這一段）"${dis}>${tb}</button>
         <input class="note nt" data-f="note" value="${esc(st.note || "")}" maxlength="60" placeholder="名稱（手錶顯示）" aria-label="名稱"${dis}>
         <span class="we-acts"><button type="button" data-a="up" title="上移" aria-label="上移">↑</button><button type="button" data-a="down" title="下移" aria-label="下移">↓</button><button type="button" data-a="dup" title="複製" aria-label="複製">⧉</button><button type="button" data-a="wrap" title="包成重複" aria-label="包成重複">⟳</button><button type="button" data-a="del" title="刪除" aria-label="刪除">✕</button></span>
         ${this.openT === st.id && !this.ro ? this.tgHtml(st, r) : ""}
       </div>`;
+    }
+    // the 時長類型 options for one step: the provider's end conditions (「負荷」 on main-set steps
+    // only); a stored type the provider lacks stays listed, marked
+    endOpts(st) {
+      const caps = provCaps(this.ctx), ends = (caps && caps.end_conditions) || END_DEFAULT;
+      const labels = { ...END_LABEL, ...((caps && caps.end_labels) || {}) };
+      const lk = (this.ctx || {}).load_kinds || ["work"], dt = st.dur.type;
+      const list = ends.filter((k) => k !== "load" || lk.includes(st.kind));
+      let h = list.map((k) => opt(k, labels[k] || k, dt)).join("");
+      if (!list.includes(dt)) h += opt(dt, `${labels[dt] || dt}（${esc(((this.ctx || {}).provider || {}).label || "這個平台")}不支援）`, dt);
+      return h;
+    }
+    // a 「負荷」 step: TSS in, the provider's conversion next to it (COROS TL ± error, else the time; 推估)
+    loadIn(st, r, dis) {
+      const caps = provCaps(this.ctx), unit = caps ? caps.load_unit : "TL", L = r && r.load;
+      const conv = !L ? "" : unit ? `≈ ${L.tl} ${esc(unit)}（推估 ±${L.err}）` : `≈ ${mmss(L.sec)}（推估）`;
+      const tip = unit ? `這裡填 TSS；推到手錶換算成 ${unit}（用你同步的活動擬合，誤差約 ±20%）。圖表和總時間用 TSS ÷（這段強度 IF² × 100）換成時間：約 ${L ? mmss(L.sec) : "?"}`
+        : "這個平台沒有負荷結束條件：推送時換成預估時間 TSS ÷（這段強度 IF² × 100）";
+      return `<input class="num" type="number" step="1" min="1" max="500" data-f="tss" value="${st.dur.value}" aria-label="負荷 TSS"${dis}><span class="faint">TSS</span>` +
+        (conv ? `<span class="we-lap" title="${esc(tip)}">${conv}</span>` : "");
     }
     tgHtml(st, r) {
       const t = st.target || { type: "auto" }, ty = t.type, ctx = this.ctx || {}, th = ctx.thresholds || {};
@@ -572,7 +598,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const t = this.$("we-tip"), box = this.$("we-chart").getBoundingClientRect(), f = this.find(o.id);
       const st = f ? f.it : { kind: o.kind, note: "" };
       const n = o.rep.length ? o.rep.map((x) => `第 ${x.i + 1}/${x.n} 趟`).join(" · ") + " · " : "";
-      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : mmss(o.sec) + (o.est ? "（推估）" : "")}<br>` +
+      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} TSS · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}<br>` +
         (r ? `${r.type === "none" ? "不設目標" : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
         (st.note ? `<br><span class="meta">${esc(st.note)}</span>` : "");
       t.hidden = false;
@@ -674,7 +700,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       else if (k === "kind") {
         const was = it.kind; it.kind = v;
         if (it.target && it.target.type === "auto" && was !== v) it.target = this.autoFor({ ...it, target: {} });
-      } else if (k === "dtype") it.dur = v === "open" ? { type: "open" } : v === "distance" ? { type: "distance", value: 1000 } : { type: "time", value: it.dur.value && it.dur.type === "time" ? it.dur.value : 300 };
+        if (it.dur && it.dur.type === "load" && !((this.ctx || {}).load_kinds || ["work"]).includes(v)) it.dur = { type: "time", value: this.estSec(it) };
+      } else if (k === "dtype") it.dur = v === "open" ? { type: "open" } : v === "distance" ? { type: "distance", value: 1000 }
+        : v === "load" ? { type: "load", value: this.estTss(it) }
+        : { type: "time", value: it.dur.value && it.dur.type === "time" ? it.dur.value : it.dur.type === "load" ? this.estSec(it) : 300 };
+      else if (k === "tss") { const x = +v; if (x >= 1 && x <= 500) it.dur = { type: "load", value: Math.round(x * 10) / 10 }; else { e.target.value = it.dur.value; return; } }
       else if (k === "sec") { const s = parseSec(v); if (s && s >= 5) it.dur = { type: "time", value: s }; else { e.target.value = mmss(it.dur.value); return; } }
       else if (k === "km") { const m = Math.round(+v * 1000); if (m >= 50) it.dur = { type: "distance", value: m }; }
       else if (k === "note") it.note = v.slice(0, 60);
@@ -696,6 +726,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (!["note"].includes(k)) this.sel = it.id;
       this.touch();
     }
+    // the step's run-order entry of the last check (seconds, ≈ % CP)
+    orderOf(it) { return ((this.view || {}).order || []).find((o) => o.id === it.id) || null; }
+    estTss(it) { const o = this.orderOf(it), f = (o && o.frac) || 1, s = (o && o.sec) || 300; return Math.max(1, Math.min(500, Math.round(s * f * f * 100 / 3600))); }
+    estSec(it) { const o = this.orderOf(it); return Math.max(5, Math.round((o && o.sec) || 300)); }
     onClick(e) {
       const b = e.target.closest("button[data-a]");
       const host = e.target.closest("[data-id]");
@@ -830,7 +864,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         if (t.type === "rpe") return (RPE_F[Math.round(t.lo)] + RPE_F[Math.round(t.hi)]) / 2 || null;
         return null;
       };
-      const sec = (x) => x.dur.type === "time" ? x.dur.value : x.dur.type === "distance" ? x.dur.value * 0.36 : (x.dur.est || 60);
+      const sec = (x) => x.dur.type === "time" ? x.dur.value : x.dur.type === "distance" ? x.dur.value * 0.36 : x.dur.type === "load" ? x.dur.value * 36 : (x.dur.est || 60);
       const tot = rows.reduce((a, x) => a + sec(x), 0) || 1, W = 96, H = 26;
       let xx = 0;
       const lv = (v) => v == null ? 0 : v < .75 ? 1 : v < .88 ? 2 : v < 1.01 ? 3 : v < 1.06 ? 4 : 5;
@@ -956,5 +990,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     openBox() { this.$("we-box").open = true; const t = this.root.querySelector(".we-row input.dur"); if (t && !this.ro) t.focus(); }
   }
 
-  window.WorkoutEditor = { mount: (root, opts) => new Editor(root, opts), request: req };
+  // endOptions: the 時長類型 <option>s of one step for a context (pure; tests/test_static_steps.py)
+  window.WorkoutEditor = { mount: (root, opts) => new Editor(root, opts), request: req,
+    endOptions: (ctx, st) => Editor.prototype.endOpts.call({ ctx }, st) };
 })();

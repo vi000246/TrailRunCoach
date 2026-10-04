@@ -998,6 +998,27 @@ which one. The response keeps the `coros` field names.
   the session's type to match when the structure changes (`rpeKind`,
   `backend/static/schedule.html:1652`: 輕鬆跑 / LSD / 越野跑 → 強度課 at ≥ 7, back otherwise), so
   the existing 48 h spacing and hard-day rules apply through the kind.
+- **End conditions follow the push target; 「負荷」 (SP-38, 2026-10-04)**. Each workout provider
+  declares its step end conditions and their names (`Capabilities.end_conditions` / `end_labels` /
+  `load_unit`, `backend/sync/workout_targets/base.py:55`): COROS 時間／距離／直到按下計圈／負荷 (TL),
+  Garmin 時間／直到按下 Lap 鍵, intervals.icu 時間. `/steps/derive` returns the active one
+  (`context.provider`, read from `plan.push.provider`, `backend/api/plan_sessions.py:1133`) and the
+  editor builds the 時長類型 dropdown from it (`endOpts`, `backend/static/workout_editor.js:443`); a
+  stored type the provider lacks stays listed as 「（… 不支援）」. 「按圈」 is now 「直到按下計圈」
+  everywhere (editor, chart legend, watch preview, issues, race-calculator export switch and hint,
+  template step notes). **`load`** = `{"type": "load", "value": TSS}` (1–500), **main-set (work)
+  steps only** (`normalize`, `backend/engine/workout_steps.py:662`). Its time is estimated
+  TSS ÷ (IF² × 100) h at the step's ≈ % CP (`load_if`, `backend/engine/workout_steps.py:1002`; 推估),
+  so the chart, the total and TSS 估 include it. The editor shows the provider's conversion next to
+  the TSS: COROS 「≈ N TL（推估 ±E）」 (`load_tl` → `engine/coros_tl.py`, refit per athlete after
+  each sync — wko5-coros-sync.spec.md). **Push**: COROS gets its training-load end condition,
+  `targetType 6`, `targetValue` = the TL (integer; read back from a Training Hub workout with a
+  「TL 100」 end condition), the step's intensity target unchanged (`COROS_TARGET_TYPE_LOAD`,
+  `backend/sync/coros_workouts.py:67`); with that constant unset, and on every provider without a
+  load end condition, the step goes as the estimated time (COROS: 「負荷 X TSS（約 Y TL）」 in the
+  name) and the editor lists an issue. The fingerprint is the payload, so a TL refit marks only
+  sessions whose load step's sent TL moved as 需更新. Pushed load steps are recorded
+  (`load_records`, `backend/engine/workout_steps.py:1012`) for the closed-loop correction.
   `workout_templates.session_role` (`backend/engine/workout_templates.py:689`) gives the same
   answer for a stored session. The editor's target menu adds 「RPE＋爬升」 with RPE / 爬升 / 下降
   fields (`tgHtml`, `backend/static/workout_editor.js:435`); the static demo's JS port follows.
@@ -1395,3 +1416,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-64 | Threshold confidence (`threshold_confidence.py`): 8 LTHR signals + max-HR plausibility (120-s sustained peak, spike / cadence-lock filter), diagnosis of the wrong value, `thr_check` test suggestions (max-HR / LTHR test) with 「安排課表」 links and test conditions, `extra.thr_check` on the 測試 card, `GET /plan/threshold-check`, 「套用」 on 設定 (`mhr_method`), HR-target warning badge in the editor, `maxhr_hill` test template |
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |
 | 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |
+| 2026-10-04 | sp-38-load-step | SP-38 | Step end conditions from the provider's capabilities (`end_conditions` / `end_labels` / `load_unit`); new 「負荷」 end condition (TSS, main-set only; COROS targetType 6 with the converted TL, else estimated time); 「按圈」 → 「直到按下計圈」 on the race-calculator export and template notes too |
