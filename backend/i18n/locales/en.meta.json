@@ -26,5 +26,57 @@
   "近 12 週越野＋登山佔跑步時間 {share:.0%}（≥ {min:.0%} 算越野跑，推估）": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:79"
+  },
+  "有氧間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:431"
+  },
+  "有氧／閾值：主課 ≤ 101% CP（心率 ≤ 102% LTHR、配速不快於閾值配速）。長 tempo 每趟 15–30 分或連續一段，巡航間歇每趟 6–15 分（更短的也算巡航）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:432"
+  },
+  "VO2max 間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:434"
+  },
+  "主課高於閾值、每趟 2–5 分、休息約 1:1；30/30、30/15 這種短趟短休也算這類": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:435"
+  },
+  "速度": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:436"
+  },
+  "每趟 ≤ 2 分、休息 ≥ 2 倍（R、加速跑、短坡衝刺），或功率 > 116% CP": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:437"
+  },
+  "長 tempo": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:441"
+  },
+  "巡航間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:441"
+  },
+  "巡航（超閾值）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:441"
+  },
+  "短間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:442"
+  },
+  "輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:443"
+  },
+  "強度課": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:443"
+  },
+  "測試": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:444"
   }
 }
