@@ -11,7 +11,7 @@
 | 輕鬆跑、長時間 | 輕鬆跑 |
 | 強度課 | 強度課 → 有氧間歇／VO2max 間歇／速度 |
 | 測試 | 測試 |
-| 越野跑（舊的「健行／登山」，kind 仍是 `hike`） | 越野跑 |
+| 越野跑（舊的「健行／登山」，kind 仍是 `hike`） | 越野跑 → 結構化爬升／技術地形／下坡技術／離心 |
 
 **強度課的三類**（2026-10-04 起，SP-32；依據 `coach-schools-zones-periodization.md` R1）。分類只有一個來源：
 `workout_templates.family_of`，範本分頁、推薦、間歇庫的階梯課表和課表上的強度課標籤都用它。先看主課強度，再看每趟長度：
@@ -21,6 +21,28 @@
 - **VO2max 間歇**（原「無氧間歇」）：高於閾值、每趟 2–5 分、休息約 1:1。每趟 < 2 分、休息比趟短的（30/30、30/15）也在這類，標「短間歇」。
 - **速度**：每趟 ≤ 2 分、休息 ≥ 2 倍（R、加速跑、短坡衝刺），或功率 > 116% CP。
 - 高於閾值、每趟 > 5 分（Seiler 4×8′）歸巡航的上緣，標「巡航（超閾值）」。
+
+加速跑（快步跑 4×20″）和短坡衝刺（上坡衝刺 8×10″、UA 陡坡衝刺 8×10″）照這個規則是速度，
+但它們放在輕鬆跑／越野跑，原本只有強度課有分頁，所以速度分頁只看得到 Daniels R。
+現在強度課 → 速度也列出它們（「加速跑與短坡衝刺」），原本的位置也保留。
+
+**越野跑的三類**（2026-10-04 起，SP-62，使用者決定）。依地形和目的分：
+
+| 類型 | 用在哪 | 目標 | 心率／功率 |
+|---|---|---|---|
+| 結構化爬升 | 階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走、長爬坡、陡坡衝刺） | 每組時間＋強度 | 上下限都設（地形穩定；SP-61 已取消） |
+| 技術地形 | 路況差的技術路段 | 時間＋爬升（D+）＋RPE；結束用時間或「直到按下計圈」 | 不設，只顯示參考心率 |
+| 下坡技術／離心 | 練下坡 | 時間＋下降量 | 不設（下坡功率不準） |
+
+- 技術地形的瓶頸是腳步和判斷，心率常常上不去（hrTSS 會低估）、功率也不準，所以不用 TSS 當目標。
+  **負荷一律照手錶記錄算**，PMC 不用 RPE 校正；RPE 只用在排課的目標和事後紀錄。
+- RPE 用 Borg CR-10（Foster 2001 的 session RPE）：3 中等、5 吃力、7 很累、10 極限。
+  參考心率（只顯示、不推到手錶，推估）：RPE ≤ 4 在輕鬆跑上限以下，5–6 到 95% LTHR，≥ 7 從 95% LTHR 起。
+- 排課：最高 RPE 到 7（很累）以上算強度課（和其他強度課隔 48 小時、算進每週強度預算），
+  以下算輕鬆課（可以放在長跑的位置）。課表對話框會跟著把類型改成強度課或改回來。
+- 推到手錶：這些段不設目標，時間／距離／直到按下計圈照寫，RPE 和爬升寫在步驟名稱（例：「RPE 6–7 · 爬升 600 m」）。
+- 自己排的結構也能用：目標選「RPE＋爬升」，填 RPE 範圍、爬升、下降。分到哪一類看目標：
+  只有下降量的 RPE 段是下坡，其他 RPE 段是技術地形，其餘是結構化爬升。
 
 心率和配速的課直接用自己的倍數判斷（不換成 % CP）。距離段的時間用閾值配速 × 該段配速估（沒有閾值配速時 4:48/km，推估）。
 之前的三區（88–101% CP）／四區（101–106%）／五區（≥ 106%）分頁是 Palladino 的功率區，只看強度，
@@ -37,7 +59,8 @@
 | 依據 | 範本 | 寫法 |
 |---|---|---|
 | 功率（% CP） | Palladino、Stryd 測試、Rønnestad（原研究是自行車功率，跑步的 % CP 是推估） | `pw(lo, hi)` |
-| 心率 | Friel（% LTHR，原生）；Uphill Athlete（≤ AeT，原生）；Pfitzinger、Seiler、Daniels E、徐國峰 E（% HRmax ÷ 0.9 → % LTHR，推估）；Koop、登山王（RPE → % LTHR，推估）；越野跑的課 | `hr(lo, hi)`、`AET` |
+| 心率 | Friel（% LTHR，原生）；Uphill Athlete（≤ AeT，原生）；Pfitzinger、Seiler、Daniels E、徐國峰 E（% HRmax ÷ 0.9 → % LTHR，推估）；Koop、登山王（RPE → % LTHR，推估）；結構化爬升的越野課 | `hr(lo, hi)`、`AET` |
+| RPE＋爬升／下降 | 技術地形、下坡離心（心率、功率都不設） | `rpe(lo, hi, up, down)` |
 | 配速（× 閾值配速） | Daniels T／I／R、Canova、Billat、Pfitzinger 5K 配速、徐國峰 E 配速飄移 | `pace(lo, hi)` |
 
 - 用心率或配速的課，暖身和緩和是 ≤ AeT。
@@ -120,7 +143,11 @@ Uphill Athlete 要求用胸帶測，但 app 假設多數人只有手腕光學心
 | koop_uphill | 上坡 TempoRun 3×12′ | Koop（間歇盡量在上坡做） |
 | long_climb | 長爬坡有氧 90′（≤ AeT） | Uphill Athlete Zone 2；結構是推估 |
 | steep_5／10／15 | 陡坡健走 30′，不背包（坡度約 13／13.5／14.5%、3.5 km/h，心率 ≤ AeT），模擬背 5／10／15% 體重 | Pandolf 1977 同代謝率坡度（[DOI](https://doi.org/10.1152/jappl.1977.43.4.577)）；UA trekking 用跑步機坡度替代背包；`loaded-carry-training.md` §1.1、§3.2。坡度是換算的（推估）；取代原本的負重爬坡（負重課已從排課拿掉） |
-| downhill_ecc | 下坡離心預適應 25′（−10～−15%） | Assumpção et al. 2020 Sci Rep（[PMC7606541](https://pmc.ncbi.nlm.nih.gov/articles/PMC7606541/)）；Bontemps et al. 2020 Sports Med（[PMC7674385](https://pmc.ncbi.nlm.nih.gov/articles/PMC7674385/)）；Koop〈[downhill](https://trainright.com/downhill-running-training-go-faster-hurt-less/)〉 |
+| downhill_ecc | 下坡離心預適應 25′（−10～−15%，RPE 3–5、下降約 350 m：25′ × 約 7 km/h × 12%，推估；下坡技術／離心） | Assumpção et al. 2020 Sci Rep（[PMC7606541](https://pmc.ncbi.nlm.nih.gov/articles/PMC7606541/)）；Bontemps et al. 2020 Sports Med（[PMC7674385](https://pmc.ncbi.nlm.nih.gov/articles/PMC7674385/)）；Koop〈[downhill](https://trainright.com/downhill-running-training-go-faster-hurt-less/)〉 |
+| tech_easy | 技術地形 60′（RPE 3–4、爬升 300 m；暖身 10′、收操 5′）：基礎期，算輕鬆課 | Koop《Training Essentials for Ultrarunning》（賽道專項：練和比賽相同的地形）；Uphill Athlete。結構和爬升量是推估 |
+| tech_hard | 技術地形 90′（RPE 6–7、爬升 600 m；暖身 15′、收操 10′）：專項期每週 1 堂，算強度課 | 同上 |
+
+上表 dsw_*、ua_hill_sprints、koop_uphill、long_climb、steep_* 是結構化爬升，tech_* 是技術地形，downhill_ecc 是下坡技術／離心。
 
 ## 4. Stryd 課表庫能不能直接用
 

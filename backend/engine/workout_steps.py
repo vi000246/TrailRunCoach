@@ -28,6 +28,10 @@ target    auto — what 「目標用：自動／心率／功率」 (engine/targe
              mode pct (× CP / × LTHR / × threshold pace), zone (Palladino / Friel id,
              hr also "aet"), abs (W / bpm / s per km — never rescaled by a threshold
              change, except watts on a CP change: engine/plan_auto.rescale_sessions)
+          rpe — 技術地形／下坡 (SP-62): lo–hi on Borg CR-10 (1–10), optional `up` / `down`
+             (m of climb / descent to cover). No HR / power target: COROS gets the step
+             with no intensity and the RPE + climb in its name; the editor shows a
+             reference HR only as text (rpe_hint, 推估)
           none
 Relative targets are stored and resolved with today's thresholds, so a CP update
 changes the watts (and the COROS fingerprint: the session shows 「已過期」).
@@ -52,8 +56,8 @@ from backend.engine.zones import FRIEL_HR, FRIEL_PACE, PALLADINO_POWER_ZONES
 V = 1
 KINDS = ("warm", "work", "rest", "cool", "other")
 KIND_LABEL = {"warm": "暖身", "work": "主課", "rest": "休息", "cool": "緩和", "other": "其他", "repeat": "重複"}
-TYPES = ("auto", "power", "hr", "pace", "none")
-TYPE_LABEL = {"auto": "自動", "power": "功率", "hr": "心率", "pace": "配速", "none": "無"}
+TYPES = ("auto", "power", "hr", "pace", "rpe", "none")
+TYPE_LABEL = {"auto": "自動", "power": "功率", "hr": "心率", "pace": "配速", "rpe": "RPE", "none": "無"}
 MODES = ("pct", "zone", "abs")
 INTENTS = ("easy", "band", "open")
 DUR_TYPES = ("time", "distance", "open")
@@ -86,6 +90,19 @@ HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "
 
 WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
 REST_NAME = {"walk": "走路或極慢跑", "jog": "慢跑恢復", "jog_down": "慢跑／走下坡", "none": "恢復"}
+
+# RPE targets (技術地形／下坡, SP-62): Borg CR-10 as Foster's session RPE uses it (Foster et al.
+# 2001, J Strength Cond Res 15:109–115) — 3 中等, 5 吃力, 7 很累, 10 極限. The ≈ % CP of each value
+# only sizes the chart bar and the TSS estimate (推估: the load itself is always the watch's
+# record, never corrected by RPE — the user, 2026-10-04).
+RPE_MIN, RPE_MAX = 1, 10
+RPE_WORD = {1: "很輕鬆", 2: "輕鬆", 3: "中等", 4: "有點吃力", 5: "吃力", 6: "吃力", 7: "很累", 8: "很累", 9: "很累",
+            10: "極限"}
+RPE_FRAC = {1: 0.55, 2: 0.62, 3: 0.70, 4: 0.76, 5: 0.82, 6: 0.88, 7: 0.94, 8: 1.00, 9: 1.05, 10: 1.10}   # 推估
+RPE_EASY_MAX = 4                 # ≤ 4: below LT1 (Seiler's zone 1 by session RPE, 推估)
+RPE_HARD_MIN = 7                 # ≥ 7 很累: a hard session (workout_templates.technical_role)
+MAX_CLIMB_M = 5000
+RPE_LIMIT = "RPE、爬升／下降手錶沒有這種目標：這些段不設目標，RPE 和爬升寫在步驟名稱"
 
 
 NO_TPACE = N_("沒有閾值配速：這段推到手錶不會有配速目標")
@@ -522,6 +539,18 @@ def _norm_target(t, errs: list) -> dict:
         return dict(OPEN)
     if ty == "none":
         return {"type": "none"}
+    if ty == "rpe":
+        lo = _f(t.get("lo"), "RPE 下限", errs, RPE_MIN, RPE_MAX)
+        hi = _f(t.get("hi", t.get("lo")), "RPE 上限", errs, RPE_MIN, RPE_MAX)
+        out = {"type": "rpe", "lo": round(lo or RPE_MIN), "hi": round(hi or lo or RPE_MIN)}
+        if out["lo"] > out["hi"]:
+            errs.append("RPE 下限比上限高")
+        for k, name in (("up", "爬升"), ("down", "下降")):
+            if t.get(k) not in (None, "", 0):
+                v = _f(t.get(k), name, errs, 0, MAX_CLIMB_M)
+                if v:
+                    out[k] = int(round(v))
+        return out
     if ty == "auto":
         it = t.get("intent", "open")
         if it not in INTENTS:
@@ -725,11 +754,53 @@ def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") ->
     return Resolved("hr", lo, hi, f, f"{lo:.0f}–{hi:.0f} bpm", sub, auto, warn, intensity=it)
 
 
+def rpe_frac(lo: float, hi: float) -> float:
+    """≈ % CP of an RPE band (the chart and the TSS estimate only; 推估)."""
+    a, b = (max(RPE_MIN, min(RPE_MAX, int(round(x)))) for x in (lo, hi))
+    return (RPE_FRAC[a] + RPE_FRAC[b]) / 2.0
+
+
+def rpe_text(lo, hi) -> str:
+    return f"{lo:g}" if lo == hi else f"{lo:g}–{hi:g}"
+
+
+def climb_text(tg: dict) -> str:
+    """「爬升 400 m · 下降 350 m」 of an RPE target (empty without either)."""
+    return " · ".join(f"{name} {tg[k]} m" for k, name in (("up", "爬升"), ("down", "下降")) if tg.get(k))
+
+
+def rpe_hint(lo: float, hi: float, c: Ctx) -> str:
+    """The reference HR of an RPE band — text only, never a target (技術地形 HR often stays
+    low: the limit is footing, not the heart). ≤ 4 = under the easy cap, 5–6 = between it and
+    95 % LTHR, ≥ 7 = from 95 % LTHR up (Seiler's 3 zones by session RPE; 推估)."""
+    m = (lo + hi) / 2.0
+    if m <= RPE_EASY_MAX:
+        cap = c.aet or (0.88 * c.lthr if c.lthr else None)
+        txt = f"≤ {cap:.0f} bpm" if cap else ""
+    elif m < RPE_HARD_MIN - 0.5:
+        a, b = c.aet or (0.88 * c.lthr if c.lthr else None), (0.95 * c.lthr if c.lthr else None)
+        txt = f"{a:.0f}–{b:.0f} bpm" if a and b else ""
+    else:
+        txt = f"≥ {0.95 * c.lthr:.0f} bpm" if c.lthr else ""
+    return f"參考心率 {txt}（不當目標）" if txt else ""
+
+
+def _rpe(tg: dict, c: Ctx) -> Resolved:
+    lo, hi = tg.get("lo") or RPE_MIN, tg.get("hi") or tg.get("lo") or RPE_MIN
+    a, b = RPE_WORD.get(int(round(lo)), ""), RPE_WORD.get(int(round(hi)), "")
+    word = a if a == b else f"{a}～{b}"
+    sub = " · ".join(x for x in (climb_text(tg), word, rpe_hint(lo, hi, c)) if x)
+    return Resolved("rpe", lo, hi, rpe_frac(lo, hi), rpe_text(lo, hi), sub, auto=False,
+                    err="RPE 下限比上限高" if lo > hi else "")
+
+
 def resolve(st: dict, c: Ctx) -> Resolved:
     tg = st.get("target") or OPEN
     ty = tg.get("type", "auto")
     if ty == "none":
         return Resolved("none", text="不設目標", auto=False)
+    if ty == "rpe":
+        return _rpe(tg, c)
     if ty == "auto":
         it = tg.get("intent", "open")
         if it == "open":
@@ -1017,6 +1088,10 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
             add("err" if hard else "warn", f"總時間 {mins:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{'硬上限' if hard else '軟上限，只提醒'}）")
     if t["open"]:
         add("info", f"{t['open']} 段「直到按下計圈」不算進總時間")
+    role = rpe_role(steps["items"])
+    if role:
+        add("info", ("RPE 目標：心率、功率只當參考，負荷照手錶記錄算（不用 RPE 校正）；這堂依 RPE 算"
+                     + ("強度課（RPE ≥ 7：和其他強度課隔 48 小時、算進每週強度預算）" if role == "quality" else "輕鬆課")))
     for it in steps["items"]:
         if it.get("kind") == "repeat" and any(x.get("kind") == "repeat" for x in it["items"]):
             add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it["id"])
@@ -1028,6 +1103,17 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
         if eq:
             add("info", eq["text"])
     return out
+
+
+def rpe_role(items: list) -> Optional[str]:
+    """A structure whose work is set by RPE (技術地形／下坡, SP-62): "quality" when a work step's
+    RPE reaches RPE_HARD_MIN (很累 / 極限 — a hard session: 48 h from the next, counted in the
+    week's quality budget), else "easy" (the long-run slot, aerobic). None: no RPE work step."""
+    his = [float((row["st"].get("target") or {}).get("hi") or 0) for row in flat(items or [])
+           if row["st"].get("kind") in ("work", "other") and (row["st"].get("target") or {}).get("type") == "rpe"]
+    if not his:
+        return None
+    return "quality" if max(his) >= RPE_HARD_MIN else "easy"
 
 
 def _has_rest_after(rows: list, st: dict) -> bool:
@@ -1153,10 +1239,19 @@ def _cw():
 EX = {"warm": 1, "work": 2, "other": 2, "rest": 4, "cool": 3}
 
 
+def rpe_name(st: dict) -> str:
+    """A step with an RPE target on the watch: its name + 「RPE 3–4 · 爬升 400 m」 (no target)."""
+    tg = st.get("target") or {}
+    extra = " · ".join(x for x in (f"RPE {rpe_text(tg.get('lo'), tg.get('hi'))}", climb_text(tg)) if x)
+    return f"{st['note']} · {extra}" if st.get("note") else extra
+
+
 def _name(st: dict, r: Resolved, em: _Emit, grouped: bool) -> str:
+    tg = st.get("target") or {}
+    if tg.get("type") == "rpe":
+        return rpe_name(st)
     if st.get("note"):
         return st["note"]
-    tg = st.get("target") or {}
     if st["kind"] == "work" and tg.get("type") == "auto" and tg.get("intent") == "easy" and tg.get("plo") is not None:
         return CAP_NAME if r.type == "hr" else "功率區間" if r.type == "power" else "照感覺"
     if st["kind"] == "work" and not grouped:
@@ -1287,6 +1382,8 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
          "text": "每段只有一個目標：功率段的心率上限只寫在文字，手錶不會提醒"},
         {"key": "ramp", "hit": False, "text": "沒有漸進（ramp）步驟：漸進只寫在步驟名稱"},
     ]
+    if any(r.type == "rpe" for _st, r in res):
+        limits.append({"key": "rpe", "hit": True, "text": RPE_LIMIT})
     lost = []
     if any(r.need == "tpace" for _st, r in res):
         lost.append(no_tpace_text())
@@ -1321,7 +1418,7 @@ def view(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft
     eq = equivalence(steps, rung, c) if rung else None
     return {"resolved": by_id, "order": order, "totals": totals(steps, c),
             "issues": issues(steps, c, cap, cap_mode, rung), "watch": watch_preview(steps, c),
-            "summary": steps_text(steps, c), "structure": structure_text(steps),
+            "summary": steps_text(steps, c), "structure": structure_text(steps), "rpe_role": rpe_role(steps["items"]),
             "equiv": {k: eq[k] for k in ("ok", "why", "text")} if eq else None}
 
 
@@ -1359,7 +1456,8 @@ def templates(prefs=None) -> dict:
     published library (engine/workout_templates.py) first; 強度課 also the interval ladder's
     variants — both split by workout_templates.family_of (有氧間歇 / VO2max 間歇 / 速度), 速度 also
     strides and short hill sprints (SP-32 follow-up: they are 速度 by family_of, but live in
-    other categories); 測試 also the app's CP protocols; strides / hill sprints."""
+    other categories); 測試 also the app's CP protocols; 越野跑 split by its kind (結構化爬升 /
+    技術地形 / 下坡, SP-62)."""
     from backend.engine import cp_protocols as CPP
     from backend.engine import workout_templates as WT
     lib = [(t, WT.row(t)) for t in WT.TEMPLATES]
@@ -1422,8 +1520,9 @@ def templates(prefs=None) -> dict:
             other.append({"key": f"cp_{p}", "label": f"CP 測試：{s['title']}", "title": s["title"], "items": main,
                           "full": d["items"], "equiv": None, "src_kind": "peer", "src": "這個 app 的 CP 測試"})
     g("test", "這個 app 的 CP 測試", other)
-    g("trail", "有出處的課表", [r for t, r in lib if t.cat == "trail"])
-    g("trail", "附加", [hills])
+    for sub in WT.TRAIL_IDS:
+        g("trail", "有出處的課表", [r for t, r in lib if t.cat == "trail" and r["sub"] == sub], sub)
+    g("trail", "附加", [hills], "climb")
     for gr in groups:
         for r in gr["rows"]:
             # the editor badges these when there is no threshold pace (their pace is × it)
