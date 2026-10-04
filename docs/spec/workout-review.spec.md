@@ -290,7 +290,7 @@ on the clock), "all". Both charts carry a second series per basis, 「參考 Pa:
 （暖身後 30–40 分，未達 UA 測試標準）」, markers only (`line_style` none, lighter colour),
 and the description explains the tier (推估, Coyle & González-Alonso 2001).
 Switched: 我的訓練 能力「心率飄移 Pa:HR（暖身後 ≥ 40 分鐘的路跑，30–40 分為參考）」
-(`views/training.json:247`, the 越野跑 series removed: drift_of refuses every trail
+(`views/training.json:298`, the 越野跑 series removed: drift_of refuses every trail
 run) and 周期化訓練 ②「長時間輕鬆跑的心率飄移」 (`views/periodization.json:53`); the
 basis toggle is unchanged (series tagged pace / power), and the descriptions say
 which definition is used and that it differs from WKO5's stored Pa:HR. **Not

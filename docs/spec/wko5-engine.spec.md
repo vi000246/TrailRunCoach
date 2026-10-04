@@ -1,6 +1,6 @@
 # Module Spec: wko5-engine
 
-> **Last Updated**: 2026-09-30
+> **Last Updated**: 2026-10-04
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -192,12 +192,25 @@ dashboard was dropped in favour of the period toggle):
 
 | File | View | Dashboards |
 |---|---|---|
-| `views/training.json` | 我的訓練 | 負荷 PMC (PMC with TSB bars coloured by Form% zone, 每日 TSS, TSS 合計, Ramp rate, Form% and 負荷比 as `zoned` charts); 訓練量 (每週移動時間 stacked by category, 每週跑量 stacked 路跑 / 越野跑 / 登山健行, 每週爬升／下降 in one chart, 每週下坡衝擊負荷, 肌力訓練日曆 as a day calendar); 強度 (periodzones total + weekly — HR red ramp, power orange ramp — and 極化指數); 能力 (EF, Pa:HR, 上坡腳程, VAM:HR, 下坡腳程, コース定数, 每公里爬升, per-session moving time, durability, power curve) |
+| `views/training.json` | 我的訓練 | 負荷 PMC (PMC with TSB bars coloured by Form% zone, 每日 TSS, TSS 合計, Ramp rate, Form% and 負荷比 as `zoned` charts, then 有氧／無氧刺激 TIS per activity and the Chronic / Acute TIS load — see below); 訓練量 (每週移動時間 stacked by category, 每週跑量 stacked 路跑 / 越野跑 / 登山健行, 每週爬升／下降 in one chart, 每週下坡衝擊負荷, 肌力訓練日曆 as a day calendar); 強度 (periodzones total + weekly — HR red ramp, power orange ramp — and 極化指數); 能力 (EF, Pa:HR, 上坡腳程, VAM:HR, 下坡腳程, コース定数, 每公里爬升, per-session moving time, durability, power curve) |
 | `views/periodization.json` | 周期化訓練 | ① 轉換期, ② 基礎期, ③ 專項期, ④ 減量期, 區間與課表強度 (zone / target tables last) |
 | `views/workout.json` | 單次活動判讀 | 本次重點, 有氧／心率飄移, 間歇, 爬坡與地形, 配速與耐久, 跑姿與膝蓋負荷（參考） — see [workout-review.spec.md](./workout-review.spec.md) |
 
 Most season charts in 訓練量 / 強度 and the phase dashboards carry a `period`
 key; no bundled chart sets `min_days` at present.
+
+**TIS charts** (我的訓練 › 負荷 PMC, appended after 負荷比 so the earlier charts
+keep their dashboard / chart indexes; `views/training.json:111-131`):
+有氧／無氧刺激 TIS（每次活動） plots the built-ins `tisaerobic` / `tisanaerobic`
+(WKO5's own expressions, `backend/engine/wko5expr/evaluator.py:235-260`;
+formulas.md §6.10) as one dot per activity on a 0–10 axis, and 有氧／無氧刺激的長期與短期負荷
+plots `tl((tis…), ctlconstant)` / `tl((tis…), atlconstant)` — WKO5's Chronic /
+Acute TIS Load — as a PMC-like pair per energy system. Both need a power
+channel (`_builtin_workout`, `backend/engine/wko5expr/evaluator.py:876`), so
+使用功率 off hides them (`tisaerobic` / `tisanaerobic` are power identifiers,
+`backend/engine/wko5expr/power_use.py:30-36`). Tests: `backend/tests/test_tis_charts.py`;
+parity with WKO5's cached per-workout scores (aerobic 359/361 equal, anaerobic
+345/361; 15 of the 16 anaerobic misses are one level off, one is two): `backend/tests/realdata/test_real_wko5_tis.py`.
 
 **Sport identification trap.** Tags are FIT sport + subsport concatenated:
 trail runs carry both `running` and `runningtrail`, road cycling carries
@@ -265,7 +278,7 @@ toggle.
   `basis_choices`, `basis_labels` and `basis_toggle`. Review cards receive the
   basis through `_render` (`backend/api/wko5views.py:271`).
 - **Charts using it**: 心率飄移 Pa:HR and 耐久度 in 我的訓練 › 能力
-  (`views/training.json:253-256`, `views/training.json:325-326`), 長時間輕鬆跑的心率飄移
+  (`views/training.json:302-310`, `views/training.json:374-379`), 長時間輕鬆跑的心率飄移
   and 耐久度 in 周期化訓練 (`views/periodization.json:58-59`,
   `views/periodization.json:151-152`), and the 有氧／心率飄移 dashboard of
   單次活動判讀: 飄移判讀 (`views/workout.json`). 滾動有氧效率 EF and 每公里心率與速度 were
@@ -581,6 +594,7 @@ mode (`backend/tests/test_drift_basis.py:340`).
 | 2026-09-30 | feat/competitor-charts | N/A | `chart_metrics.py` reference implementations + charts (Form% bands, ATL/CTL, monotony/strain, PI, downhill impact load and 7:28 ratio, up/downhill m/h, コース定数 / ITRA); 總覽 `descent` indicator |
 | 2026-10-01 | perf/dataset-load | user request (site frozen during a COROS build) | Persistent per-file FIT cache with per-field versions, lazy channels, disk `cached_series` / as-of estimates / PD refits for `FitFolderDataset`; process-pool parsing; single-flight `_dataset`; `GET /dataset/status` + shell.js progress; warm-up at startup and after a sync |
 | 2026-09-30 | feat/drift-basis | N/A | 配速／功率 basis toggle (`basis.py`, chart `basis` spec, tagged series, `?basis=`, viewer control, 這次沒有功率) on the drift charts; rolling EF skips the first 10 min |
+| 2026-10-04 | SP-45 | N/A | 我的訓練 › 負荷 PMC gains the aerobic / anaerobic TIS charts (per activity + Chronic / Acute TIS load); TIS built-ins count as power for 使用功率; real-data TIS golden test |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)

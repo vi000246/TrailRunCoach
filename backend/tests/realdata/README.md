@@ -39,6 +39,7 @@ WKO5COACH_REALDATA=1 pytest backend/tests/realdata
 | test_real_wko4_file.py | test_wko4_file.py (whole file) | .wko4 channel stats vs WKO5's |
 | test_real_wko5_{elevation,hr,meanmax,pace,power,time,perf}.py | test_wko5_*.py | each metric vs WKO5's stored value |
 | test_real_wko5_pipeline.py | test_wko5_pipeline_golden.py (whole file) | FIT → NP / hrTSS / PMC vs WKO5 |
+| test_real_wko5_tis.py | (new) | `tisaerobic` / `tisanaerobic` vs WKO5's cached per-workout TIS (Cache5); the bundled TIS charts render |
 
 The 3′/12′ CP-test check (`test_cp_protocols.py::test_3_12_test_with_a_soft_3min_falls_back_to_one_bout`)
 uses a synthetic 1-s power + HR session, `fixtures/cp_test_synthetic.json.gz`,

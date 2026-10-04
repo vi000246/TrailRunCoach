@@ -31,6 +31,8 @@ POWER_IDENTS = frozenset({
     "power", "runpower", "bikepower", "_rapower", "_rapower4", "ecpower", "xpower",
     "cp", "ftp", "mftp", "runftp", "bikeftp", "sftp", "wprime", "frc", "pmax",
     "np", "if", "pwhr", "vi", "work",
+    # built-ins that read power (evaluator.BUILTIN_EXPRS): TIS is na without a power channel
+    "tisaerobic", "tisanaerobic", "stamina",
 })
 POWER_CALLS = frozenset({
     "pdcurve", "ftp", "frc", "pmax", "vo2max", "tte", "stamina", "pdprofile",
