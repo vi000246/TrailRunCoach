@@ -69,6 +69,7 @@ OPEN_LABEL = "直到按下計圈"      # the "open" end condition (lap button; r
 LOAD_LABEL = "負荷"              # the "load" end condition (TSS here; COROS TL on the watch)
 LOAD_RANGE = (1, 500)            # TSS of one load step
 LOAD_KINDS = ("work",)           # 「負荷」 only on main-set steps (SP-38, the user 2026-10-04)
+TL_RESEND_MIN = 3                # 推估: a refit moving a load step's TL by less keeps the TL sent (no 需更新)
 MAX_TIMES = 99
 MAX_DEPTH = 2                    # a repeat may hold one more level of repeats
 MAX_ITEMS = 120                  # steps in the model (the editor's limit; COROS is checked apart)
@@ -169,6 +170,9 @@ class Ctx:
     end_conditions: tuple = ()
     provider_label: str = ""
     tl: Optional[object] = None             # engine/coros_tl.Model; None = the stored one
+    # the TL each 「負荷」 step was last pushed with {(tss, basis, if): tl} (sync/coros_workouts
+    # from engine/coros_tl's closed-loop record): sent_tl keeps it while a refit moves it < TL_RESEND_MIN
+    sent_tl: Optional[dict] = None
 
     def tl_model(self):
         from backend.engine import coros_tl
@@ -1045,6 +1049,20 @@ def load_tl(st: dict, r: Resolved, c: Ctx) -> dict:
     return c.tl_model().tl(st["dur"]["value"], "power" if r.type == "power" else "hr", load_if(st, r))
 
 
+def sent_key(tss: float, basis: str, f: float) -> tuple:
+    return float(tss), basis, round(float(f), 4)
+
+
+def sent_tl(st: dict, r: Resolved, c: Ctx) -> int:
+    """The TL a 「負荷」 step is pushed with: load_tl rounded, or the TL it was last pushed with
+    (c.sent_tl, same planned TSS / basis / IF) while the refit moved it by < TL_RESEND_MIN — so a
+    small refit doesn't mark the session 需更新 and re-push it (SP-38, owner 2026-10-04)."""
+    new = max(1, round(load_tl(st, r, c)["tl"]))
+    old = (c.sent_tl or {}).get(sent_key(st["dur"]["value"], "power" if r.type == "power" else "hr",
+                                         load_if(st, r)))
+    return int(old) if old is not None and abs(new - float(old)) < TL_RESEND_MIN else new
+
+
 def load_records(steps: dict, c: Ctx) -> list[dict]:
     """[{i (run-order index), n (steps run), tss, tl, basis, if, f (the closed-loop factor in
     effect)}] of the 「負荷」 steps (engine/coros_tl.py closed loop)."""
@@ -1056,7 +1074,7 @@ def load_records(steps: dict, c: Ctx) -> list[dict]:
         if st["dur"]["type"] == "load":
             r = resolve(st, c)
             out.append({"i": i, "n": len(rows), "tss": st["dur"]["value"],
-                        "tl": max(1, round(load_tl(st, r, c)["tl"])),
+                        "tl": sent_tl(st, r, c),
                         "basis": "power" if r.type == "power" else "hr", "if": round(load_if(st, r), 4),
                         "f": m.factor})
     return out
@@ -1268,11 +1286,21 @@ def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
     return None
 
 
+def load_work_s(tss: float, band: tuple) -> int:
+    """A 「負荷」 work step's time for the ladder (SP-38, owner 2026-10-04): TSS ÷ (IF² × 100) h
+    at IF = the band's middle (≈ % CP; HR-only steps: HR_CLASS_BAND) — the editor's _secs
+    formula, but on the band so the callers without a Ctx (dose_history, interval_eval) get the
+    same number. 推估."""
+    f = (band[0] + band[1]) / 2.0
+    return int(round(float(tss) * 3600.0 / (f * f * 100.0))) if f > 0 else 0
+
+
 def variant_from_steps(steps: dict, rung: Optional[str] = None, c: Optional[Ctx] = None) -> Optional[IL.Variant]:
     """A temporary library Variant of the structure (reps, rep lengths, rests, band),
     so interval_library.equivalent judges a user-edited session like a swap. None
     without timed work steps that have an intensity. An HR-only structure gets the
-    class's band (推估: src_kind)."""
+    class's band (推估: src_kind). A 「負荷」 work step counts by its estimated time at
+    the band's middle (load_work_s, SP-38) — 推估 too."""
     rows = flat(steps.get("items") or [])
     works, rests, bands, est = [], [], [], False
     last_work = None
@@ -1280,9 +1308,13 @@ def variant_from_steps(steps: dict, rung: Optional[str] = None, c: Optional[Ctx]
         st = row["st"]
         if st["kind"] == "work":
             b = _work_band(st, c)
-            if b is None or st["dur"]["type"] != "time":
+            if b is None or st["dur"]["type"] not in ("time", "load"):
                 continue
-            works.append(st["dur"]["value"])
+            if st["dur"]["type"] == "load":
+                works.append(load_work_s(st["dur"]["value"], b))
+                est = True
+            else:
+                works.append(st["dur"]["value"])
             bands.append(b[:2])
             est = est or b[2]
             last_work = i
@@ -1314,7 +1346,8 @@ def equivalence(steps: dict, rung: Optional[str], c: Optional[Ctx] = None) -> Op
         return {"ok": False, "why": ["找不到有強度的主課段"], "variant": None,
                 "text": f"{IL.RUNG_NAME.get(rung, rung)}：找不到有功率／心率目標的主課段，這堂不算進階"}
     ok, why = IL.equivalent(v, canon)
-    est = "（心率結構換算強度，推估）" if v.src_kind == "推估" else ""
+    load = any(r["st"]["kind"] == "work" and r["st"]["dur"]["type"] == "load" for r in flat(steps.get("items") or []))
+    est = ("（「負荷」段用 TSS 換算時間，推估）" if load else "（心率結構換算強度，推估）") if v.src_kind == "推估" else ""
     return {"ok": ok, "why": why, "variant": v,
             "text": f"和 {IL.RUNG_NAME.get(rung, rung)} 標準課表 {IL.structure(canon)} " +
                     ("等效：這堂算進階" if ok else "不等效：這堂不算進階（" + "；".join(why) + "）") + est}
@@ -1370,7 +1403,7 @@ def _one(st: dict, em: _Emit, grouped: bool):
         # COROS: its TL end condition; `seconds` = the estimated time the others get (SP-38)
         s_, _e = _secs(st, r, em.c)
         return CW.Step(EX[st["kind"]], max(5, int(round(s_))), r.intensity, _name(st, r, em, grouped),
-                       load_tss=float(d["value"]), load_tl=float(max(1, round(load_tl(st, r, em.c)["tl"]))))
+                       load_tss=float(d["value"]), load_tl=float(sent_tl(st, r, em.c)))
     return CW.Step(EX[st["kind"]], int(secs), r.intensity, _name(st, r, em, grouped), int(meters))
 
 

@@ -84,7 +84,7 @@ form drift, `form_bins` and `cad_windows`.
   `pw_drift_se`, `noisy`, `ramps`; `drift_of` also gets `dist` / `elev`; v13: climb profile
   fields and `grade_bins`; v14/v15: interval-library reps, `form_bins` with `impact_km`;
   v16: `cad_windows`; v17: the heat bands; v18: `stim`) (`backend/engine/workout_review.py:67-88`,
-  `backend/engine/wko5expr/dataset.py:713`). The key holds the file and thresholds, not the
+  `backend/engine/wko5expr/dataset.py:720`). The key holds the file and thresholds, not the
   code, so the version is bumped whenever `_measure` changes. Phase, classification,
   baselines and verdicts are recomputed on each call.
 - **Per-athlete drift windows** (generalize B7, `engine/drift_calib.py`): `apply_calibration`
@@ -373,12 +373,12 @@ Unknown section or no samples → an `empty` card.
 
 | Function | Used by | Rule | Line |
 |---|---|---|---|
-| `drift_series` | `status.i_drift` (`backend/engine/status.py:492`, `ref=True`; text in plain words 「穩定 · 3.2%」 since 2026-10-02), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; each point has `tier` and `band` (temperature band; `i_drift` compares within one); strict by default (`drift_streak`), `ref=True` keeps reference-tier drifts; runs drift_of refuses (< 30 min after the warm-up, fast finish, …) are kept with drift None | `backend/engine/workout_review.py:2209` |
+| `drift_series` | `status.i_drift` (`backend/engine/status.py:505`, `ref=True`; text in plain words 「穩定 · 3.2%」 since 2026-10-02), informational | Road runs (not `runningtrail`), duration ≥ 40 min, avg HR ≤ AeT+3, last 56 days; each point has `tier` and `band` (temperature band; `i_drift` compares within one); strict by default (`drift_streak`), `ref=True` keeps reference-tier drifts; runs drift_of refuses (< 30 min after the warm-up, fast finish, …) are kept with drift None | `backend/engine/workout_review.py:2209` |
 | `drift_streak` / `STREAK_NEED` | legacy only (the removed 「連續 3 次」 rule) | consecutive most recent fair drifts < 5 % | `backend/engine/workout_review.py:2242`, `backend/engine/workout_review.py:168` |
 | `quality_gate` | thin wrapper over `quality_gate.week_decision`; a legacy bool / None gate = no method | outside base: intensity and drift not bad | `backend/engine/workout_review.py:1521` |
-| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:520`, `backend/engine/quality_gate.py:406`, `backend/engine/quality_gate.py:517`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (every temperature band counts; a pass in heat unlocks, a fail in heat says 「可能是熱造成的」 — `quality_gate.heat_suffix`); dose: a done 課表 quality session, the `quality` class, or a road run with ≥ 4 short reps or ≥ 2 Zone 3 reps (`interval_reps.find_reps`) | — |
-| `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:746`) | Latest run classified `test_aet` in 120 days: `analyze_workout` result (protocol, judge), `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:421`, `backend/engine/aet_test.py:453`, `backend/engine/aet_test.py:461` |
-| `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:746`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:2276`, `backend/engine/workout_review.py:2296` |
+| `measure` / `classify` / `_samples` | `quality_gate.friel_check`, `xu_check`, `dose_history` (`backend/engine/quality_gate.py:527`, `backend/engine/quality_gate.py:413`, `backend/engine/quality_gate.py:524`) | Friel: avg HR AeT−5…AeT+3, ≥ 70 min, fair drift; 徐國峰: fair ≥ 90-min run, HR@10′ vs HR@90′ (every temperature band counts; a pass in heat unlocks, a fail in heat says 「可能是熱造成的」 — `quality_gate.heat_suffix`); dose: a done 課表 quality session, the `quality` class, or a road run with ≥ 4 short reps or ≥ 2 Zone 3 reps (`interval_reps.find_reps`) | — |
+| `latest_aet_test` | `status.i_testing` (`backend/engine/status.py:759`) | Latest run classified `test_aet` in 120 days: `analyze_workout` result (protocol, judge), `aethr_suggest` (band "at" only), `apply_body` with the test date, `applied` once a plan AeT row is dated on / after it | `backend/engine/aet_test.py:421`, `backend/engine/aet_test.py:453`, `backend/engine/aet_test.py:461` |
+| `cp_eval` / `latest_cp_test` | `status.i_testing` (`backend/engine/status.py:759`) | Latest run classified `test_cp` in 120 days, by date; its protocol's result, `ref` / `delta` vs the previous result of the same method, `apply` payload | `backend/engine/workout_review.py:2276`, `backend/engine/workout_review.py:2296` |
 
 ## CP-test protocols (`engine/cp_protocols.py`)
 

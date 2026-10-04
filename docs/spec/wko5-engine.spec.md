@@ -37,7 +37,7 @@ Five layers, each depending only on the ones below it:
 |---|---|---|
 | File readers | Decode WKO5's tagged binary encoding; FIT → WKO5-equivalent channels | `backend/files/wko5chart_reader.py:127` |
 | Algorithms | Pure functions, one metric each, verified against WKO5 | `backend/engine/algorithms/wko5_power.py` and siblings |
-| Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections (`FitFolderDataset` for COROS / TP folders) | `backend/engine/wko5expr/dataset.py:312` |
+| Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections (`FitFolderDataset` for COROS / TP folders) | `backend/engine/wko5expr/dataset.py:314` |
 | Expression engine | Parse and evaluate WKO5's expression language | `backend/engine/wko5expr/evaluator.py:508` |
 | API + viewer | Serve views, charts (through the render cache), workout samples, config, corrections; the viewer page | `backend/api/wko5views.py:304`, `backend/static/wko5_viewer.html` |
 
@@ -61,7 +61,7 @@ Every WKO5 file is `b"wko" + kind + 0x1a` followed by one tagged record
 | `.wko5chart` | View → dashboards → charts → series expressions | `backend/files/wko5chart_reader.py:330` `read_view` |
 | `.wko4` | One activity: info, ranges with WKO5's stats, sample channels, the original FIT | `backend/files/wko4_file.py:114` `read_wko4` |
 | `.wko5athlete` | Settings history, workout index with per-workout metrics, PMC snapshot | `backend/files/wko5_athlete.py:167` `read_athlete` |
-| `.wko5cache` | WKO5's per-workout expression results (e.g. `meanmax(power)`) | `backend/engine/wko5expr/dataset.py:226` `load_wko5_curve_cache` |
+| `.wko5cache` | WKO5's per-workout expression results (e.g. `meanmax(power)`) | `backend/engine/wko5expr/dataset.py:228` `load_wko5_curve_cache` |
 
 Sample channels (`backend/files/wko4_file.py:91`) are zigzag int32 delta varints divided by a
 scale, or a raw float64 array when packed field 111 = 1. `0x7fffffff` and
@@ -99,7 +99,7 @@ data-less indoor activities, and swims.
 
 ## TSS policy
 
-`backend/engine/wko5expr/dataset.py:636` `_metrics` follows WKO5's branch
+`backend/engine/wko5expr/dataset.py:641` `_metrics` follows WKO5's branch
 order, reconstructed from disassembly, and records which branch won
 (`tss_source`: power / rtss / trainingpeaks / hrtss) plus, for a power TSS,
 `ftp_used` / `ftp_source` (shown on hover in the activity list and the source
@@ -108,7 +108,7 @@ compare):
 1. **Power:** `NP² × tssduration / (FTP² × 36)` when there is a power stream
    and an FTP in effect. Skipped for a file whose power is watch-estimated
    unless `power.accept_watch_power` is on (`power_tss_blocked`). The FTP
-   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:649`) is WKO5's rule: the
+   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:654`) is WKO5's rule: the
    FTP stored with the workout, else the sport's dated FTP setting. On a COROS
    / TP source a run instead divides by the CP in effect — the plan's CP test,
    else the athlete's `run_ftp_w`, else the Stryd-only PD-model mFTP as of
@@ -121,18 +121,20 @@ compare):
 
 Moving-time hrTSS and the elevation bonus (own formulas) apply to every
 workout whose `tss_source` is not power or rTSS
-(`backend/engine/wko5expr/dataset.py:537` `_is_hr_sourced`), so a run with NP
+(`backend/engine/wko5expr/dataset.py:539` `_is_hr_sourced`), so a run with NP
 but no FTP in effect is treated like any hrTSS day.
 
 **Walks / hikes (SP-63, own formulas only):** a `walk` workout (walking,
 hiking, mountaineering) without a threshold of its own scores hrTSS on the run
-LTHR (`hr_lthr`, `backend/engine/wko5expr/dataset.py:574`), and always over
+LTHR (`hr_lthr`, `backend/engine/wko5expr/dataset.py:576`), and always over
 moving time — whatever `hr_tss_moving_only` says (`moving_hrtss_on`,
-`backend/engine/wko5expr/dataset.py:566`): over recorded time a multi-day 百岳
+`backend/engine/wko5expr/dataset.py:568`): over recorded time a multi-day 百岳
 charges the nights. Runs follow the knob as before. Only the hrTSS path falls
 back — `aethr` and the low-intensity share still read the sport's own setting,
-so hike time does not enter the 80/20 share. Strength keeps no hrTSS (0 TSS
-unless a plan LTHR exists): resistance-training HR is not an endurance load.
+so hike time does not enter the 80/20 share. Strength always scores 0 TSS,
+a dated plan LTHR or not (`NO_TSS_SPORTS`: `hr_lthr` returns None and `_metrics`
+drops a file / TP TSS for it — the plan row used to reach it through
+`otherthr`): resistance-training HR is not an endurance load.
 Parity mode is unchanged. History changes with it (TSS is computed on the fly):
 CTL rises in the weeks with hikes.
 
@@ -162,7 +164,6 @@ COROS / TP-only runner starts on own formulas.
 |---|---|---|---|
 | Use TP's TSS | forced on | off | Independence from TrainingPeaks; a direct COROS import has no TP TSS |
 | hrTSS on moving time only | off | on (walks / hikes: always, SP-63) | WKO5 charges every recorded second; a two-day trip with only ~7 h moving can score ~900 |
-| hrTSS zone-1 floor | off | 0.70 × LTHR (in the preset, but no TSS code reads `hr_tss_zone1_floor` yet) | WKO5's lowest band earns 20–30 TSS/h even while asleep |
 | Elevation bonus | off | 10 TSS / 1000 ft | Uphill Athlete: heart rate cannot see the muscular cost of climbing |
 | Data corrections | ignored | applied | Keeps WKO5 comparisons honest |
 
@@ -185,7 +186,7 @@ the individual knobs are a fixed, researched preset.
 3. **Approve** (`POST /corrections/approve`): only the proposals sent are stored.
 4. **Apply**: an overlay at `corrections.json` in the tenant's base folder
    (`corrections_path()`), applied when channels are read
-   (`backend/engine/wko5expr/dataset.py:832`).
+   (`backend/engine/wko5expr/dataset.py:839`).
    The `.wko4` files are never modified (WKO5 rewrites them on sync, and they
    are the only copy).
 5. **Undo** (`DELETE /corrections/{id}`).
@@ -365,7 +366,7 @@ toggle.
   The two 心率飄移 season charts plot the card's `drift(basis, "all")` as
   verdict-coloured bars (`drift_bars`: < 5 % / 5–10 % / > 10 %, one 5 % line);
   the 耐久度 charts plot WKO5's stored `pahr` / `pwhr`
-  (`backend/engine/wko5expr/dataset.py:681-682`).
+  (`backend/engine/wko5expr/dataset.py:686-686`).
 - **Trail caveat**: the trail drift charts' `power_note` says Pw:HR is only a
   reference off-road because Stryd power is validated only up to about 8 %
   grade (user-supplied figure; not checked against a Stryd source here).
@@ -717,6 +718,8 @@ source (synthetic FITs).
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
 | 2026-10-04 | feature | SP-68 | Builtins `ctl` / `atl` / `tsb` start from `load_guard.pmc_start` (manual at a date → first-28-day mean → 0); `tl()` unchanged; render cache keys on the manual start |
+| 2026-10-04 | feature | SP-63 | Strength scores 0 TSS in own-formula mode even with a dated plan LTHR (`NO_TSS_SPORTS`); parity unchanged |
+| 2026-10-04 | bugfix | SP-52 | `hr_tss_zone1_floor` removed from `EngineConfig` and `MOUNTAIN_PRESET` (nothing read it; moving-time hrTSS already drops the camp / sleep hours); an old `engine.json` with the key still loads |
 | 2026-10-04 | feature | SP-63 | Walks / hikes without their own LTHR score hrTSS on the run LTHR over moving time (own formulas only; strength stays 0; parity unchanged) |
 | 2026-10-04 | feature | SP-41 | Custom views accept `kind: "map"`; 單次活動判讀's first page has the route map; the viewer's basemap list, layer switch, tile-error hint, route drawing and nearest-point lookup moved to the shared `basemaps.js` (`MapLayers`) |
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |

@@ -38,9 +38,11 @@ SPORT_SETTING_PREFIX = {"run": "run", "bike": "bike", "road bike": "bike",
                         "swim": "swim", "row": "row", "ski": "ski"}
 # SP-63 (outside parity mode only): walks / hikes / mountaineering without a threshold of their
 # own score hrTSS on the run LTHR, over moving time only (whatever hr_tss_moving_only says: a
-# multi-day 百岳 over recorded time charges the nights). Strength stays without hrTSS (0 TSS
-# unless a plan LTHR exists): resistance-training HR is not an endurance load.
+# multi-day 百岳 over recorded time charges the nights). Strength always scores 0 TSS outside
+# parity mode, a dated plan LTHR or not (NO_TSS_SPORTS; the plan row used to reach it through
+# setting("otherthr")): resistance-training HR is not an endurance load (SP-63, owner 2026-10-04).
 HR_FALLBACK_SPORTS = ("walk",)
+NO_TSS_SPORTS = ("strength",)
 
 
 F_TP_TSS = 4038          # .wko4 info: TSS synced from TrainingPeaks
@@ -575,7 +577,10 @@ class Dataset:
         """The LTHR an hrTSS of `w` is scored on: sport_setting("thr"); a walk / hike
         without its own threshold falls back to the run LTHR outside parity mode (SP-63).
         The hrTSS path only — aethr and the low-intensity share keep sport_setting, so
-        hike time does not enter the 80/20 share."""
+        hike time does not enter the 80/20 share. Strength: None outside parity mode
+        (NO_TSS_SPORTS), even with a dated plan LTHR."""
+        if w.sport in NO_TSS_SPORTS and not self.config.parity:
+            return None                                   # strength: no hrTSS (SP-63)
         v = self.sport_setting("thr", w)
         if v is None and w.sport in HR_FALLBACK_SPORTS and not self.config.parity:
             v = self.setting("runthr", w.day)
@@ -695,6 +700,8 @@ class Dataset:
             tss = tp if tp is not None else m.get(F_HRTSS)
             src = "trainingpeaks" if tp is not None else "hrtss" if tss is not None else None
             iff = m.get(F_HRIF) if iff is None else iff
+        if w.sport in NO_TSS_SPORTS and not self.config.parity:
+            tss = src = None              # strength: 0 TSS whatever the file / TP says (SP-63)
         dur = m.get(F_DURATION)
         return {
             "duration": dur,

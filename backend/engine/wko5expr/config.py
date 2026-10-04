@@ -79,13 +79,6 @@ class EngineConfig:
             bonus += thousands * 10.0 * (self.pack_weight_pct / 10.0)
         return bonus
 
-    hr_tss_zone1_floor: float = 0.0
-    """Score heart rates below this fraction of LTHR as 0 TSS/h instead of
-    WKO5's flat 20-30 TSS/h. WKO5's lowest band has no floor, so a sleeping
-    heart rate still earns ~30 TSS/h — which is most of why a 51 h trip scored
-    906. Uphill Athlete's Zone 1 starts at AeT-20%; ~0.70 x LTHR is a
-    reasonable floor. 0 disables."""
-
     @property
     def tp_tss(self) -> bool:
         return True if self.parity else self.use_tp_tss
@@ -135,5 +128,5 @@ class EngineConfig:
 # TrainingPeaks, moving-time hrTSS, and Uphill Athlete's vertical bonus.
 MOUNTAIN_PRESET = EngineConfig(
     parity=False, use_tp_tss=False, hr_tss_moving_only=True,
-    elevation_tss_per_1000ft=10.0, hr_tss_zone1_floor=0.70,
+    elevation_tss_per_1000ft=10.0,
 )
