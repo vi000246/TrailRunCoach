@@ -222,6 +222,27 @@ def test_card_without_a_measured_aet_and_in_a_forced_mode():
     assert f["here"]["action"]["href"].endswith("?add=lib%3Afriel_lthr30&proto=race")
 
 
+def test_a_measured_lthr_counts_for_zone5_only_within_12_weeks():
+    """SP-39 (owner 2026-10-04): the UA path needs an LTHR tested in the last 12 weeks
+    (LTHR_FRESH_DAYS = 84); an older one asks for a new 30-min LTHR test."""
+    from backend.engine.planning import Plan, Threshold
+
+    def card(lthr_days_ago):
+        p = Plan()
+        p.thresholds += [Threshold((TODAY - dt.timedelta(days=lthr_days_ago)).isoformat(), lthr=160.0),
+                         Threshold((TODAY - dt.timedelta(days=10)).isoformat(), aethr=150.0)]
+        g = QG.evaluate(_ds(_easy(range(2, 40, 2)), p), p, TODAY, PP.Prefs(quality_gate="ua_gap"), GOOD_BY, BASE)
+        return g, QG.z5_card(g, TODAY)
+    g, c = card(QG.LTHR_FRESH_DAYS)                                 # exactly 12 weeks: still counts
+    assert g["z5"]["state"] == "confirmed" and g["z5"]["path"] == "aet_ua_gap"
+    g, c = card(QG.LTHR_FRESH_DAYS + 1)
+    assert g["z5"]["state"] == "unconfirmed" and "aet_ua_gap" not in g["z5"]["aet_paths"]
+    t = c["base"]["tests"][0]
+    assert t["missing"] == "lthr" and "超過 12 週" in t["value"] and "LTHR 測試" in c["next"]["text"]
+    assert QG.z5_ua_gap({"value": 150.0, "date": "2026-09-01"}, {"value": 160.0, "measured": True,
+                                                                  "date": None}, TODAY)["ok"]   # dateless: not aged
+
+
 def test_card_next_line_when_paused_by_the_zone1_rule():
     gate = {"mode": "auto", "dose": {"step": 0}, "aet": {}, "lthr": {},
             "z5": {"state": "paused", "label": "暫停", "open": False, "since": "2026-08-01", "path": "aet_ua_gap",
