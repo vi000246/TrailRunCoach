@@ -220,10 +220,10 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   deterministic by the week's Monday.
 - **專項期 / 減量期** run the same pick (`overview.quality_sessions`): 專項期 road Zone 3 =
   `ROAD_SPECIFIC_Q` 2×15′ flat, trail Zone 5 = the 5×4′ hill set (`TRAIL_SPECIFIC_Z5`), the other two
-  the ladder (trail Zone 3 uphill versions allowed); 減量期 Zone 3 = 節奏 2×8′ (`TAPER_Z3`,
+  the ladder (trail Zone 3 uphill versions allowed); 減量期 Zone 3 = 有氧間歇（巡航）2×8′ (`TAPER_Z3`,
   88–95 % CP; Bosquet 2007, Daniels Phase IV), Zone 5 or no track open = the 4×3′ short intensity.
 - At most 2 Zone 5 sessions a week, ≥ 2 days apart (台灣教練). A ramp-week session (`SUB`,
-  「閾值 3×6 分（只排閾值）」, only when Zone 3 is open) and the recovery fartlek are neutral.
+  「有氧間歇（巡航）3×6 分（只排閾值）」, only when Zone 3 is open) and the recovery fartlek are neutral.
 - `dose_spec(step, z5_open)` stays as the legacy single-ladder reading; the plan reads
   `z3_spec` / `z5_spec`. `ladder_pick` / `rung_now` pick the rung of the session's own track.
 
@@ -413,7 +413,12 @@ the proposal superseded. Only an `applied` entry can be undone.
 Interval sessions the plan prescribed outside the ladder (recovery fartlek, Zone 3, a
 sub-threshold 3×8′ in a ramp week before the ladder reached it) are neutral in `dose_step`:
 `dose_history` reads the planned title of the done session (`plan_store.done_titles`), and
-`planned_spec` resolves it.
+`planned_spec` resolves it. Since SP-79 a title may come in either spelling — the raw stored one
+(「閾值 3×8 分」) or today's (「有氧間歇（巡航）3×8 分」, `plan_store.to_dict`): `planned_spec`
+(`backend/engine/quality_gate.py:935`), `spec_by_title` (`backend/engine/quality_gate.py:493`) and
+`adapt._prev_row` match through `interval_library.renamed`; the old ladder's titles stay neutral in
+both spellings (`LEGACY_ANY`, `backend/engine/quality_gate.py:170`), and `spec_by_title` keeps
+returning None for a raw old-ladder title (「VO2max 間歇 4×4 分」 is V4's title today).
 
 While a proposal is held, the stored plan only takes the done / missed / note part, and the
 watch keeps what was pushed. When the same proposal comes up again, nothing new is logged
@@ -520,6 +525,20 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   shorter variant, fewer reps (縮量版 doesn't progress), another day, the rung before. The
   stored row carries `variant_key / rung_key / equiv / swap / swap_reason / variant_reps /
   variant_blocks / variant_adj`; `dose_step` judges by the variant, not the title.
+- **Titles name the family** (SP-79, 2026-10-04): a library session is titled
+  `<family> <structure>` (`title` / `title_prefix`, `backend/engine/interval_library.py:450`,
+  `backend/engine/interval_library.py:431`) — 「有氧間歇 2×15 分」 (A rungs, reps ≥ 15′ or continuous),
+  「有氧間歇（巡航）3×8 分」 (T rungs, T+), 「VO2max 間歇 4×3 分」 (V rungs, 30/15), with 上坡 for a hill
+  variant — instead of 「閾值／近閾值／VO2max …」; a test holds the prefix to
+  `workout_templates.family_of_variant`. Raw zh-TW msgids (a stored title is never translated);
+  「N×M 分」 stays for the text parsers. The fixed sessions follow (「有氧間歇 2×15 分（平路）」,
+  「VO2max 間歇 5×4 分上坡」, 「有氧間歇（巡航）2×8 分」, the projection's 「有氧間歇（巡航）3×10 分」;
+  `plan_prefs._quality_terrain` turns the new hill title flat too). Rung / ladder semantics are
+  unchanged. A stored pre-SP-79 title is read in today's words (`interval_library.renamed`,
+  `backend/engine/interval_library.py:486`, through `plan_store.display_title`), and reconcile
+  renames a generated old title the same way (`_titled`, `backend/engine/reconcile.py:67`), so
+  renaming alone is never a 「changed」 session or a change-log entry. Titles that were not the
+  generator's (「閾值下 3×8 分」, 「短強度 4×3 分」, your own) are left as written.
 - A swap from the 換一個 drawer or an editor template is a user edit (`swap = user`,
   `edited`): reconcile rule 3 keeps it, so the automatic run never overrides it. A
   non-equivalent swap is stored with `equiv = false` and doesn't move the ladder.
@@ -552,3 +571,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | feature | SP-63 follow-up | The week after a short unplanned break (3–5 days without a run, no re-entry block) is exempt from the running-volume step check (`load_guard.short_break`); the week plan gets an info note |
 | 2026-10-04 | feature | SP-39 follow-up | Zone 5's UA path counts a measured LTHR only when tested in the last 12 weeks (`LTHR_FRESH_DAYS` 84, 推估); WKO5-sourced LTHRs carry their setting date; an older one re-locks that path until a retest |
 | 2026-10-04 | feature | SP-39 follow-up | A 徐國峰 90-min test saved through `POST /sessions` (the 「安排課表」 deep link, or the dialog's 測試 › 徐國峰 / the `lib:xu_e_drift` row) replaces that day's long run — the 排入測試 code path (`_replace_long`) |
+| 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
