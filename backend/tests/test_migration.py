@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def test_migrate_schema_adds_new_columns():

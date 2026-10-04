@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 
 def _run(c):
-    return asyncio.get_event_loop().run_until_complete(c)
+    return asyncio.run(c)
 
 
 async def _session(expires):
