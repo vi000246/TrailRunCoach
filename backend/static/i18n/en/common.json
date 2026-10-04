@@ -1,5 +1,5 @@
 {
-  "z5flow.aria": "Zone 5 unlock path",
+  "z5flow.aria": "Zone 3 / Zone 5 unlock paths",
   "z5flow.here": "You are here",
   "z5flow.next": "Next",
   "z5flow.also": "Can do alongside ({stage})",
@@ -13,6 +13,10 @@
   "z5flow.tag.current": "Now",
   "z5flow.tag.parallel": "In parallel",
   "z5flow.tag.locked": "Locked",
+  "z5flow.schedule": "Schedule it",
+  "z5flow.also_track": "Or",
+  "z5flow.track_open": "Unlocked",
+  "z5flow.track_locked": "Locked",
   "workout.no_tpace": "No threshold pace: this step reaches the watch without a pace target",
   "workout.no_tpace_badge": "No threshold pace",
   "workout.no_tpace_link": "How threshold pace is estimated",

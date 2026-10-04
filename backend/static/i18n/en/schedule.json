@@ -246,5 +246,7 @@
   "legend.pushed": "Pushed",
   "legend.outdated": "Needs update",
   "legend.failed": "Failed",
-  "legend.not_pushed": "Not pushed"
+  "legend.not_pushed": "Not pushed",
+  "preset.not_found": "No workout template \"{key}\"",
+  "preset.pick_day": "pick a day, then save"
 }

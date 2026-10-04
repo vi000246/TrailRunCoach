@@ -248,17 +248,29 @@ def test_guardrails(kw, flag, words):
 
 def test_guardrails_block_the_week_and_say_so():
     by = {**GOOD_BY, "intensity": _ind("watch", extra={"low_share": 0.68})}
-    g = _gate(by=by)
+    # SP-39: the share blocks Zone 5 only with a tested AeT in effect
+    g = _gate(by=by, plan=_plan(aethr=150, lthr=160, day="2026-09-01"))
+    assert g["aet"]["tested"]
     t = QG.indicator(g)
     assert t["level"] == "watch" and t["verdict"] == "低強度只有 68%（< 75%，底線）：本週 5 區先不排，3 區照排"
     assert t["action"] == "輕鬆跑壓在 AeT 以下，下週再看" or "bpm 以下" in t["action"]
     # SP-31 (owner 2026-10-04): the low-intensity share no longer blocks Zone 3 — a warning only;
-    # Zone 5 keeps the guardrail (SP-39 will revisit)
+    # Zone 5 keeps the guardrail when the AeT is tested (SP-39)
     d = QG.week_decision(g, "base", "base")
     assert d["allow"] and d["track"] == "z3" and d["warn"].startswith("輕鬆跑心率偏高：低強度只有 68%")
     both = {**g, "z5": {"open": True}, "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 0, "done": 0}}}
-    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2)["items"]] == ["z3"]
-    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2, first=False)["items"]] == ["z3"]
+    # (2 a week with Zone 5 held: the second session is a 巡航版, not Zone 5)
+    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2)["items"]] == ["z3", "z3"]
+    assert [it.get("cruise", False) for it in QG.week_decision(both, "base", "base", n=2, first=False)["items"]] == [
+        False, True]
+    # an estimated AeT (no plan row, or an applied estimate): the share is noisy — a warning for Zone 5 too
+    for plan in (None, _plan(aethr=150, lthr=160, day="2026-09-01", note="AeT 自動估算")):
+        ge = _gate(by=by, plan=plan)
+        assert not ge["aet"]["tested"] and not ge["guard"]["block"] and "AeT 是估計值" in ge["guard"]["warn"]
+        both = {**ge, "z5": {"open": True}, "z3_recent": {"done": 2},
+                "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 0, "done": 0}}}
+        d = QG.week_decision(both, "base", "base", n=2)
+        assert [it["track"] for it in d["items"]] == ["z3", "z5"] and "AeT 是估計值" in d["warn"]
     # the other guardrails still block Zone 3 too
     vol = _gate(by={**by, "volume": _ind(extra={"step": 0.3, "last_week": 5.0})})
     d = QG.week_decision(vol, "base", "base")
@@ -300,9 +312,16 @@ def test_two_tracks_each_with_its_own_ladder():
           "z5": {"open": False, "text": "Zone 5：未確認"}}
     d = QG.week_decision(g3, "base", "base")
     assert d["spec"] is QG.Z3[3] and d["advance"] and d["track"] == "z3" and "未確認" in d["note"]
-    # Zone 5 open but Zone 3 not steady yet (2 of 3): still Zone 3 only
-    g2 = {**g3, "dose": {"z3": {"step": 2, "met": 2, "done": 2}, "z5": {}}, "z5": {"open": True}}
-    assert [it["track"] for it in QG.week_decision(g2, "base", "base", n=2)["items"]] == ["z3"]
+    # SP-39: Zone 5's AeT passed but the soft 「3 區先」 not met (1 of 2 in 6 weeks): still Zone 3 only,
+    # the note says what Zone 5 waits for; 2 Zone 3 sessions done → both tracks
+    g1 = {**g3, "dose": {"z3": {"step": 1, "met": 1, "done": 1}, "z5": {}}, "z5": {"open": True},
+          "z3_recent": {"done": 1, "need": 2}}
+    d = QG.week_decision(g1, "base", "base", n=2)
+    assert [it["track"] for it in d["items"]] == ["z3", "z3"] and "1/2 堂 3 區" in d["note"]
+    g2 = {**g1, "z3_recent": {"done": 2, "need": 2}}
+    assert [it["track"] for it in QG.week_decision(g2, "base", "base", n=2)["items"]] == ["z3", "z5"]
+    # not tied to 達標: two Zone 3 sessions done at the first rung count
+    assert QG.z5_track(g2)["open"] and not QG.z5_track(g1)["open"]
 
 
 def test_zone3_continues_after_zone5_opens_and_the_week_split():
@@ -672,7 +691,7 @@ def test_projection_advances_the_dose_and_evaluates_weeks_per_week():
     from backend.tests.test_plan_store import cur_plan
     cur = cur_plan(sessions=[])
     cur["history"] = [{"start": "x", "hours": 5.0, "tss": 250} for _ in range(8)]    # flat: no 3:1 yet
-    cur["quality_gate"] = {"state": "locked", "mode": "weeks", "resolved": "weeks", "verdict": "基礎期第 7 週 / 8 週",
+    cur["quality_gate"] = cur_g = {"state": "locked", "mode": "weeks", "resolved": "weeks", "verdict": "基礎期第 7 週 / 8 週",
                            "base_start": "2026-08-17", "weeks_need": 8, "levels": {"intensity": "good"},
                            "guard": {}, "dose": {"step": 3, "done": 3, "faded": False,
                                                  "z3": {"step": 1, "met": 3, "done": 3}, "z5": {"step": 0, "done": 0}},
@@ -681,18 +700,25 @@ def test_projection_advances_the_dose_and_evaluates_weeks_per_week():
     phases = [{"kind": "base", "start": "2026-08-17", "end": "2026-12-31"}]
     weeks = P.project_weeks(cur, phases, date(2026, 11, 22))
     first_q = {w["start"]: [s["title"] for s in w["sessions"] if s["kind"] == "quality"] for w in weeks}
-    # from week 9 (10/12) the weeks method opens Zone 5: its own ladder 5×2′ → 4×3′, and Zone 3
-    # stays in the plan (1 a week: 3 區 : 5 區 = 2:1 — SP-31), one rung per Zone 3 week. A rung
-    # over 10 % of the week (Daniels) is its 巡航版: A2 3×12′ = 36′ > 30′ of 5.1 h → T2 3×8′;
-    # A3 2×20′ = 40′ > 37′ → T3 2×12′; A4 1×30′ fits
+    # SP-39: the weeks method opens Zone 3 only — Zone 5 needs a measured AeT, so no Zone 5 week.
+    # One rung per Zone 3 week; a rung over 10 % of the week (Daniels) is its 巡航版: A2 3×12′ =
+    # 36′ > 30′ of 5.1 h → T2 3×8′; A3 2×20′ = 40′ > 37′ → T3 2×12′; A4 1×30′ fits
     q = [(k, v[0]) for k, v in sorted(first_q.items()) if v
          and next(w for w in weeks if w["start"] == k)["mode"] != "recovery_week"]
     assert all(k >= "2026-10-12" for k, _ in q)
-    z5 = [x for _, x in q if x.startswith("VO2max")]
-    z3 = [x for _, x in q if not x.startswith("VO2max")]
-    assert z5[:2] == ["VO2max 5×2 分", "VO2max 4×3 分"]
-    assert z3[:3] == ["閾值 3×8 分", "閾值 2×12 分", "閾值 連續 30 分"]          # Zone 3 doesn't disappear
-    assert [x for _, x in q][:3] in (["閾值 3×8 分", "VO2max 5×2 分", "閾值 2×12 分"],)
+    assert not [x for _, x in q if x.startswith("VO2max")]
+    assert [x for _, x in q][:3] == ["閾值 3×8 分", "閾值 2×12 分", "閾值 連續 30 分"]
+    # the measured-AeT gate passed but no Zone 3 session yet: the projection counts its own Zone 3
+    # weeks for the soft 「近 6 週 ≥ 2 堂 3 區」 (z5_track via steps["z3_dates"]) — Zone 5 from then on
+    cur = cur_plan(sessions=[])
+    cur["history"] = [{"start": "x", "hours": 5.0, "tss": 250} for _ in range(8)]
+    cur["quality_gate"] = {**cur_g, "z5": {"open": True}, "z3_recent": {"done": 0, "dates": []},
+                           "dose": {"step": 0, "done": 0, "z3": {"step": 0, "met": 0, "done": 0},
+                                    "z5": {"step": 0, "done": 0}}}
+    weeks = P.project_weeks(cur, phases, date(2026, 11, 22))
+    order = [s["title"] for w in weeks if w["mode"] != "recovery_week" for s in w["sessions"] if s["kind"] == "quality"]
+    i5 = next(i for i, t in enumerate(order) if t.startswith("VO2max"))
+    assert i5 >= QG.Z5_Z3_NEED and not any(t.startswith("VO2max") for t in order[:QG.Z5_Z3_NEED])
 
 
 # ---------------------------------------------------------------------------
@@ -1031,3 +1057,30 @@ def test_ladder_pick_and_the_change_log_follow_the_tracks():
     opened = {"cur": {"quality_gate": {"z3": {"open": True, "path": "weeks", "text": "Zone 3：已解鎖（連續 4 週規律訓練）"}}}}
     assert PA.state_changes(opened, state) == ["Zone 3：已解鎖（連續 4 週規律訓練）"]
     assert PA.state_changes(opened, state) == []
+
+
+def test_specific_phase_applies_the_ramp_and_volume_guardrails_to_both_tracks():
+    # owner 2026-10-04: no school exempts 專項期 from load-progression caution (Friel ramp 5–8; Nielsen
+    # 2014 / Damsted 2019 > 20 %); 減量期 and projected weeks stay exempt (re-checked when they come)
+    spec = types.SimpleNamespace(kind="specific", start="2026-09-01", end="2026-12-31")
+    both = {"z5": {"open": True, "state": "confirmed"}, "z3_recent": {"done": 2},
+            "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 1, "done": 1}}}
+    ok = {**_gate(phase=spec), **both}
+    assert [it["track"] for it in QG.week_decision(ok, "specific", "specific", n=2)["items"]] == ["z3", "z5"]
+    ramp8 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": QG.RAMP_BLOCK + 0.2})}), **both}
+    d = QG.week_decision(ramp8, "specific", "specific", n=2)
+    assert not d["allow"] and not d["items"] and "Friel" in d["z3_note"] and "本週不排間歇" in d["z3_note"]
+    vol = {**_gate(phase=spec, by={**GOOD_BY, "volume": _ind(extra={"step": 0.3, "last_week": 5.0})}), **both}
+    d = QG.week_decision(vol, "specific", "specific", n=2)
+    assert not d["allow"] and "上週量增 +30%" in d["z3_note"]
+    ramp5 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": QG.RAMP_SUB + 0.5})}), **both}
+    d = QG.week_decision(ramp5, "specific", "specific", n=2)
+    assert d["spec"] is QG.SUB and [it["track"] for it in d["items"]] == ["z3"] and "只排閾值下" in d["note"]
+    from backend.engine import overview as O
+    q = O.quality_sessions(ramp5, d, "specific", {"cp": 250.0}, {"threshold": "x"}, 6.0, None, [], road=True)
+    assert [s["title"] for s in q] == [QG.SUB[1]]
+    # 減量期 and a projected week: not blocked by this week's load
+    for g in (ramp8, vol):
+        assert QG.week_decision(g, "taper", "taper")["allow"]
+        assert QG.week_decision(g, "specific", "reentry", n=2)["items"]     # the re-entry block has its own rules
+        assert QG.week_decision(g, "specific", "specific", first=False, n=2)["items"]

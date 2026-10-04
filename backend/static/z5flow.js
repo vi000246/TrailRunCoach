@@ -1,9 +1,12 @@
-// 5 區開放流程 as a quest-style step flow (quality_gate.z5_flow = z5_card()["flow"]). Shared by the
-// 總覽 card (overview.html) and the 基礎期 panel (wko5_viewer.html, kind "z5gate"); no chart, no time axis.
-// Stages run top-to-bottom in a narrow box (phone, the overview card) and left-to-right once the box is
-// wide (container query). Each stage: a badge (✓ / its number), a tag word (state is never colour alone),
-// a checklist ☑ / ☐ with one short 「what to do」 line, and what finishing it unlocks. Done and locked
-// stages fold to their header in the narrow layout (tap to open). Sources / details behind ? buttons.
+// 3 區／5 區解鎖流程 (quality_gate.z5_flow = z5_card()["flow"]): two independent, parallel tracks
+// (SP-39) — 3 區 (its gate, then the A1–A4 ladder) and 5 區 (its gate: a measured AeT + the soft
+// 「近 6 週 ≥ 2 堂 3 區」, then V1–V4) — each with its own 「你現在在這裡，下一步」 and checklist.
+// Shared by the 總覽 card (overview.html) and the 基礎期 panel (wko5_viewer.html, kind "z5gate").
+// The tracks sit side by side once the box is wide (container query), stacked on a phone. Each stage:
+// a badge (✓ / its number), a tag word (state is never colour alone), a checklist ☑ / ☐ with one short
+// 「what to do」 line and, on an unticked session / test, a 「安排課表」 link (item.action.href: the
+// 課表 page opens its new-session dialog with that session preselected; the user picks the day).
+// Done and locked stages fold to their header in the narrow layout (tap to open).
 //   Z5Flow.html(flow, { q: "q" | "qtip" })  -> HTML string
 //   Z5Flow.bind(root)                         -> the fold toggles (once per page; delegated)
 (function () {
@@ -68,20 +71,27 @@
 .zf-unl { margin: 0; color: var(--muted); font-size: 11.5px; }
 .zf-unl b { color: var(--text); font-weight: 600; }
 .zf .q, .zf .qtip { margin: 0; }
-@container (min-width: 860px) {
-  .zf-path { grid-template-columns: repeat(var(--zf-n, 5), minmax(0, 1fr)); gap: 14px; align-items: stretch; }
-  .zf-st + .zf-st::before { left: -13px; top: 22px; height: 0; width: 11px; border-left: 0; border-top: 2px solid var(--line); }
-  .zf-st.done + .zf-st::before { border-top-color: color-mix(in srgb, var(--zf-good) 70%, var(--line)); }
+.zf-act { justify-self: start; display: inline-block; margin-top: 3px; padding: 2px 9px; border-radius: 6px; font-size: 12px;
+  font-weight: 650; text-decoration: none; color: var(--accent); border: 1px solid var(--accent); background: var(--panel); }
+.zf-act:hover, .zf-act:focus-visible { background: var(--accent); color: #fff; }
+.zf-tracks { display: grid; gap: 14px; min-width: 0; }
+.zf-tr { display: grid; gap: 8px; min-width: 0; }
+.zf-trh { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.zf-trh .zf-tag { font-size: 11px; }
+.zf-trh .zf-tag.on { color: var(--zf-good); } .zf-trh .zf-tag.off { color: var(--muted); }
+@container (min-width: 700px) {
+  .zf-tracks { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .zf-hd { cursor: default; grid-template-columns: 28px minmax(0, 1fr) auto; }
   .zf-hd .cv { display: none; }
-  .zf-hd .zf-tag { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
   .zf-st:not(.open) .zf-body { display: grid; }
-  .zf-body { padding: 0 10px 10px; }
 }`;
     document.head.appendChild(st);
   }
 
   const qb = (cls, s) => s ? `<button type="button" class="${cls}" aria-label="${esc(T("help"))}" data-tip="${esc(s)}">?</button>` : "";
+
+  // 「安排課表」: a plain link to the 課表 page (?add= / ?test=), which opens the new-session dialog
+  const act = (a, locked) => a && a.href && !locked ? `<a class="zf-act" href="${esc(a.href)}">${esc(T("schedule"))}</a>` : "";
 
   function items(list, cls, locked) {
     return `<ul class="zf-list">${list.map((i) => {
@@ -93,15 +103,12 @@
       const tip = [inline ? "" : i.value, i.tip].filter(Boolean).join("\n");
       return `<li class="${k}"><span class="zf-ck" role="img" aria-label="${esc(word)}">${i.ok === true ? "✓" : ""}</span>
         <span class="tx"><span>${esc(i.text)}</span>${inline ? `<span class="vl">${esc(i.value)}</span>` : ""}
-        ${i.todo && !locked ? `<span class="td">→ ${esc(i.todo)}</span>` : ""}</span>${qb(cls, tip)}</li>`;
+        ${i.todo && !locked ? `<span class="td">→ ${esc(i.todo)}</span>` : ""}${act(i.action, locked)}</span>${qb(cls, tip)}</li>`;
     }).join("")}</ul>`;
   }
 
-  function html(flow, opt = {}) {
-    style();
-    if (!flow || !flow.stages) return "";
-    const cls = opt.q || "q", H = flow.here || {};
-    const st = flow.stages.map((s, i) => {
+  function stages(list, cls) {
+    return `<ol class="zf-path">${list.map((s, i) => {
       const locked = s.status === "locked";
       const open = s.status === "current" || s.status === "parallel";
       const any = (s.any || []).length ? `<div class="zf-any">${s.any_label ? `<small>${esc(s.any_label)}</small>` : ""}${items(s.any, cls, locked)}</div>` : "";
@@ -115,11 +122,24 @@
           ${s.note ? `<p class="zf-note">${esc(s.note)}${qb(cls, s.note_tip)}</p>` : ""}
           <p class="zf-unl">${esc(T(s.status === "done" ? "unlocked" : "unlocks"))} <b>${esc(s.unlocks)}</b>${qb(cls, s.tip)}</p>
         </div></li>`;
-    }).join("");
-    const here = `<p class="zf-here" role="status"><span class="w">${esc(T("here"))}：${esc(H.title || "")}</span>
-      <span class="nx">${esc(T("next"))}：${esc(H.next || "")}${H.full && H.full !== H.next ? " " + qb(cls, H.full) : ""}</span>
-      ${H.also ? `<span class="al">${esc(T("also", { stage: H.also_title }))}：${esc(H.also)}</span>` : ""}</p>`;
-    return `<div class="zf" aria-label="${esc(T("aria"))}">${here}<ol class="zf-path" style="--zf-n:${flow.stages.length}">${st}</ol></div>`;
+    }).join("")}</ol>`;
+  }
+
+  function here(H, cls, full) {
+    return `<p class="zf-here" role="status"><span class="w">${esc(T("here"))}：${esc(H.title || "")}</span>
+      <span class="nx">${esc(T("next"))}：${esc(H.next || "")}${full && full !== H.next ? " " + qb(cls, full) : ""}</span>
+      ${act(H.action, false)}
+      ${H.also ? `<span class="al">${esc(T("also_track"))}：${esc(H.also)}</span>` : ""}</p>`;
+  }
+
+  function html(flow, opt = {}) {
+    style();
+    if (!flow || !flow.tracks) return "";
+    const cls = opt.q || "q";
+    const tr = flow.tracks.map((t) => `<section class="zf-tr" data-track="${esc(t.key)}" aria-label="${esc(t.title)}">
+      <h4 class="zf-trh">${esc(t.title)}<span class="zf-tag ${t.open ? "on" : "off"}">${esc(T(t.open ? "track_open" : "track_locked"))}</span></h4>
+      ${here(t.here || {}, cls, t.key === "z5" ? flow.full : "")}${stages(t.stages || [], cls)}</section>`).join("");
+    return `<div class="zf" aria-label="${esc(T("aria"))}"><div class="zf-tracks">${tr}</div></div>`;
   }
 
   let bound = false;
