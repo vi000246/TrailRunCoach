@@ -7,7 +7,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
-COPY src/ ./src/
 
 ENV PYTHONPATH=/app
 EXPOSE 8000
