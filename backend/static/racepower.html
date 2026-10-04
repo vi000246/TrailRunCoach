@@ -1299,8 +1299,10 @@ function f2(x) { return ok(x) ? Number(x).toFixed(2) : "–"; }
 const rng = (v, fmt = n0, unit = "") => !v ? "–" : (fmt(v[0]) === fmt(v[1]) ? fmt(v[0]) : `${fmt(v[0])}–${fmt(v[1])}`) + (unit ? ` <span class="u">${unit}</span>` : "");
 const L1 = (ml) => ok(ml) ? (ml / 1000).toFixed(1) : "–";
 const FUEL_METHOD = { power: "功率法", minetti: "Minetti × Fletcher", minetti_walk: "Minetti 走路", keytel: "心率 Keytel", pandolf: "Pandolf", yamamoto: "Yamamoto" };
+// 方法說明和來源併成同一個 ?（外層不再放原生 title，否則 hover 會疊出第二個提示框）
 function ftile(icon, k, v, s, tip, src, cls = "") {
-  return `<div class="tile ${cls}" title="${esc(src || "")}"><div class="k"><span class="ic">${icon}</span>${k}${tip ? help(tip) : ""}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
+  const t = [tip, src ? `來源：${esc(src)}` : ""].filter(Boolean).join("<br><br>");
+  return `<div class="tile ${cls}"><div class="k"><span class="ic">${icon}</span>${k}${t ? help(t) : ""}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
 }
 function renderFuel() {
   const F = PLAN?.fuel, sec = $("fuel-sec");
@@ -1308,7 +1310,7 @@ function renderFuel() {
   sec.classList.toggle("hidden", ls.get("tab", "calc") !== "calc");
   const hike = F.category === "hike", c = F.cho, w = F.water, na = F.sodium, ld = F.loading;
   const meth = Object.keys(F.methods || {}).map((k) => FUEL_METHOD[k] || k).join("、");
-  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。滑過每個數字看來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2><div class="tiles">`;
+  let h = `<h2>🍽 補給 <span class="meta">${esc(F.label)} · 建議值，自己準備</span>${help("熱量用預估的分段功率與時間算，碳水、水、鈉照賽事類型、預估時間和各段氣溫給範圍。每個數字旁的 ? 有算法和來源。沒有個人的流汗率和腸胃訓練紀錄，所以水量是一般範圍、碳水不超過 90 g/h。")}</h2><div class="tiles">`;
   const kTip = hike
     ? "行動熱量 = Pandolf 公式（體重、當天背負、每段速度和坡度）逐段加總；下坡 Pandolf 不適用，改用 Minetti 走路曲線推估。範圍包含 Yamamoto（app 原本的百岳熱量）：Pandolf 對重背負常低估。"
     : "功率法：每段 Stryd 功率 × 時間 ÷ (22.1 % × 4.184)，坡度 > 4 % 用 21.6 %。坡度 > 8 %、走路段和下坡改用 1.07 kcal/kg/km × Minetti 坡度比例。Stryd 自己的「kJ ≈ kcal」會少算約 8 %：跑步不能直接把 kJ 當 kcal。範圍 ±10–15 %：個人差異、疲勞、陡坡低估加起來。";
