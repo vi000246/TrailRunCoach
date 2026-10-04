@@ -551,6 +551,11 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
             want = (params or {}).get("zsys")
             if want in HR_SYSTEMS and SYSTEMS[system]["unit"] == "bpm":
                 system = want
+            if system != ch["system"]:
+                # the card's title names the model: a switched table shows its own title, not the
+                # view's (fixed / translated) one; the view keeps it for the default model
+                from backend.i18n import _
+                base["title"] = _(SYSTEMS[system]["title"])
             return {**base, "zones": zone_table(ds, system, end_day, ch.get("days", 30))}
         from backend.engine.thresholds import estimate
         est = estimate(ds, today_local()) if not ds.config.parity else {}
