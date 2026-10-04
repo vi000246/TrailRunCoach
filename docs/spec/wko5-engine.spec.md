@@ -126,13 +126,15 @@ but no FTP in effect is treated like any hrTSS day.
 
 **Walks / hikes (SP-63, own formulas only):** a `walk` workout (walking,
 hiking, mountaineering) without a threshold of its own scores hrTSS on the run
-LTHR (`hr_lthr`, `backend/engine/wko5expr/dataset.py:574`), and always over
+LTHR (`hr_lthr`, `backend/engine/wko5expr/dataset.py:576`), and always over
 moving time — whatever `hr_tss_moving_only` says (`moving_hrtss_on`,
-`backend/engine/wko5expr/dataset.py:566`): over recorded time a multi-day 百岳
+`backend/engine/wko5expr/dataset.py:568`): over recorded time a multi-day 百岳
 charges the nights. Runs follow the knob as before. Only the hrTSS path falls
 back — `aethr` and the low-intensity share still read the sport's own setting,
-so hike time does not enter the 80/20 share. Strength keeps no hrTSS (0 TSS
-unless a plan LTHR exists): resistance-training HR is not an endurance load.
+so hike time does not enter the 80/20 share. Strength always scores 0 TSS,
+a dated plan LTHR or not (`NO_TSS_SPORTS`: `hr_lthr` returns None and `_metrics`
+drops a file / TP TSS for it — the plan row used to reach it through
+`otherthr`): resistance-training HR is not an endurance load.
 Parity mode is unchanged. History changes with it (TSS is computed on the fly):
 CTL rises in the weeks with hikes.
 
@@ -704,6 +706,7 @@ source (synthetic FITs).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
+| 2026-10-04 | feature | SP-63 | Strength scores 0 TSS in own-formula mode even with a dated plan LTHR (`NO_TSS_SPORTS`); parity unchanged |
 | 2026-10-04 | bugfix | SP-52 | `hr_tss_zone1_floor` removed from `EngineConfig` and `MOUNTAIN_PRESET` (nothing read it; moving-time hrTSS already drops the camp / sleep hours); an old `engine.json` with the key still loads |
 | 2026-10-04 | feature | SP-63 | Walks / hikes without their own LTHR score hrTSS on the run LTHR over moving time (own formulas only; strength stays 0; parity unchanged) |
 | 2026-10-04 | feature | SP-41 | Custom views accept `kind: "map"`; 單次活動判讀's first page has the route map; the viewer's basemap list, layer switch, tile-error hint, route drawing and nearest-point lookup moved to the shared `basemaps.js` (`MapLayers`) |

@@ -245,6 +245,22 @@ def test_moving_knob_on_still_covers_runs(tmp_path, no_plan_lthr):
     assert w["hike"].metrics["hrtss_moving"] == w["hike"].metrics["tss"]
 
 
+def test_strength_is_zero_tss_even_with_a_plan_lthr(tmp_path, no_plan_lthr, monkeypatch):
+    """SP-63 (owner 2026-10-04): a dated plan LTHR used to reach strength through
+    setting("otherthr") and give it hrTSS; own formulas now keep it at 0. Parity unchanged."""
+    from backend.engine import planning
+    from backend.engine.wko5expr.config import EngineConfig
+    plan = planning.Plan(thresholds=[planning.Threshold(date="2026-08-15", lthr=165.0)])
+    monkeypatch.setattr(planning.Plan, "load", classmethod(lambda cls, *a, **k: plan))
+    w, ds = _ds(tmp_path, EngineConfig(parity=False))
+    assert ds.sport_setting("thr", w["strength"]) == 165.0       # the plan row still reaches otherthr
+    assert ds.hr_lthr(w["strength"]) is None
+    assert w["strength"].metrics["tss"] is None and w["strength"].metrics.get("tss_source") is None
+    assert w["run"].metrics["tss"] is not None                    # runs keep their hrTSS
+    w, ds = _ds(tmp_path, EngineConfig(parity=True))
+    assert ds.hr_lthr(w["strength"]) == ds.sport_setting("thr", w["strength"])   # parity: WKO5's own rule
+
+
 def test_parity_mode_is_untouched(tmp_path, no_plan_lthr):
     from backend.engine.wko5expr.config import EngineConfig
     w, ds = _ds(tmp_path, EngineConfig(parity=True))
