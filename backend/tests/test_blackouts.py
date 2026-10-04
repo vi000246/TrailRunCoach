@@ -15,8 +15,16 @@ from backend.engine import plan_store as PS
 from backend.engine import projection as P
 from backend.engine import reconcile as R
 from backend.settings import repository as SR
+from backend.sync import coros_workouts as CW
 from backend.tests.test_plan_prefs import RATES, TGT
 from backend.tests.test_plan_store import API, PHASES, Env, cur_plan, g, inputs, next_week
+
+
+@pytest.fixture(autouse=True)
+def _pin_real_today(monkeypatch):
+    # the API tests reuse test_plan_store's Env (today 9/30); its autouse pin of the wall clock
+    # does not carry over to this module, and removals / moves never touch a day before the real today
+    monkeypatch.setattr(CW, "real_today", lambda: date(2026, 9, 30))
 
 
 def bo(start, end, label="連假出遊", id=None):

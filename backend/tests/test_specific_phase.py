@@ -182,8 +182,12 @@ def test_api_race_sim_accept_replaces_the_weeks_long_day(monkeypatch):
     """The floating box: 排入 stores the simulation as the user's session on the chosen day
     and tombstones the generator's long day of that week; then it's gone from the box."""
     from backend.engine import plan_prefs as PP
+    from backend.sync import coros_workouts as CW
     from backend.tests.test_plan_store import API, Env
     monkeypatch.setattr(PP, "load", lambda user_id=1: PP.Prefs())
+    # the fixture's week is 9/28-10/4 with today 9/30; pin the wall clock too, or the options
+    # (which never offer a past day) shift with the real date
+    monkeypatch.setattr(CW, "real_today", lambda: date(2026, 9, 30))
     race = {"id": "e1", "name": "合歡山越野", "start": "2026-10-24", "days": 1, "kind": "race", "hours": 5.0, "km": 20.0,
             "goal": 31.0, "day": {"hours": 5.0, "km": 20.0, "climb_m": 1500.0, "descent_m": 1500.0}}
     sg = SP.sim_suggestion({"active": True, "race": race}, date(2026, 9, 28), 200, aet=150.0)
