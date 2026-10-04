@@ -426,6 +426,7 @@ def lift2(op: Callable, a, b):
 
 
 _CUR_CTX: list[Ctx] = []
+_UNSET = object()                      # Evaluator._manual_start not read yet
 
 
 def _at_workout(v, idx):
@@ -514,6 +515,8 @@ class Evaluator:
         self.full_span = (min(ds.first_day, self.begin),
                           max(ds.last_day, int(ds.today), self.end) + 1)
         self.wlist = [w for w in ds.workouts if sports is None or w.sport in sports]
+        self.sports = sports
+        self._manual_start: Any = _UNSET       # load_guard.manual_start(), read once (pmc())
         # settings a chart read from an estimate (推估) instead of a dated
         # setting: name -> {"value", "date", "reason"} of the latest use
         self.estimates: dict[str, dict] = {}
@@ -757,9 +760,9 @@ class Evaluator:
         if name in ("ctl", "atl", "tsb"):
             # inside a workout chart these are the athlete's values on that day,
             # not a load built from the single workout
+            # (SP-68: started from load_guard.pmc_start, see pmc())
             base = ctx.child(workout=None) if ctx.workout is not None else ctx
-            ctl = self._tl(self._ws_metric("tss", base), ds.athlete.ctlconstant)
-            atl = self._tl(self._ws_metric("tss", base), ds.athlete.atlconstant)
+            ctl, atl, _ = self.pmc(base)
             if name == "ctl":
                 r = ctl
             elif name == "atl":
@@ -2428,6 +2431,43 @@ class Evaluator:
         per calendar day x_d = sum of that day's valid inputs with
         0 <= x <= 5000 (others ignored); v = v + (x_d - v) / const, v = 0
         before the first input."""
+        s, _ = self.full_span
+        daily = self._tl_daily(x)
+        out = np.empty_like(daily)
+        v = 0.0
+        for i, xv in enumerate(daily):
+            v = v + (xv - v) / const
+            out[i] = v
+        return Daily(s, out)
+
+    def pmc(self, ctx: Optional[Ctx] = None) -> tuple[Daily, Daily, dict]:
+        """The builtins `ctl` / `atl` (SP-68): tl(tss, ctl / atlconstant) started from
+        load_guard.pmc_start() — the user's manual CTL / ATL at a date, else the mean daily
+        TSS of the first 4 weeks (SP-63), else 0 (= WKO5 tl()). `tl()` in an expression
+        stays WKO5's (v = 0 before the first input). A manual start is the whole-athlete
+        PMC's: a sport-filtered evaluator / sport(x) context uses the automatic seed.
+        Returns (ctl, atl, start)."""
+        from backend.engine import load_guard as LG
+        if ctx is None:
+            ctx = Ctx(self.ds, self.begin, self.end, None, {})
+        s, _ = self.full_span
+        daily = self._tl_daily(self._ws_metric("tss", ctx))
+        manual = None
+        if self.sports is None and ctx.sportf is None:
+            if self._manual_start is _UNSET:
+                try:
+                    self._manual_start = LG.manual_start()
+                except Exception:               # noqa: BLE001 — the charts must still draw
+                    self._manual_start = None
+            manual = self._manual_start
+        st = LG.pmc_start(daily, s, int(math.floor(self.ds.today)), manual)
+        ath = self.ds.athlete
+        ctl = LG.pmc_series(daily, ath.ctlconstant, s, st, "ctl")
+        atl = LG.pmc_series(daily, ath.atlconstant, s, st, "atl")
+        return Daily(s, ctl), Daily(s, atl), st
+
+    def _tl_daily(self, x) -> np.ndarray:
+        """tl()'s per-calendar-day input over full_span (see _tl)."""
         s, e = self.full_span
         daily = np.zeros(e - s, dtype=float)
 
@@ -2447,12 +2487,7 @@ class Evaluator:
         else:
             fv = _num(x)
             daily[:] = 0 if math.isnan(fv) else fv
-        out = np.empty_like(daily)
-        v = 0.0
-        for i, xv in enumerate(daily):
-            v = v + (xv - v) / const
-            out[i] = v
-        return Daily(s, out)
+        return daily
 
     def _shift(self, v, k: int):
         v = _unwrap(v)

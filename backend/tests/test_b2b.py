@@ -268,7 +268,7 @@ def test_adapt_fatigue_guard_skips_the_expected_b2b_drop_and_logs_why():
 # the generator end to end (synthetic athlete, synthetic 嘉明湖)
 # ---------------------------------------------------------------------------
 
-def _history(today, last_week="recovery"):
+def _history(today, last_week="recovery", b2b_tph=1.3, tph=0.8):
     """Build weeks (Tue 50 / Wed 60 / Thu 50 / Sat 150 / Sun 60), then last
     week a 3:1 recovery week or a B2B week (Sat 180 / Sun 120) after one."""
     import types
@@ -291,7 +291,7 @@ def _history(today, last_week="recovery"):
         if m:
             w = _run(d, minutes=m, power=180.0)
             hard_b2b = last_week == "b2b" and last <= d < monday and d.weekday() >= 5
-            w.metrics["tss"] = m * (1.3 if hard_b2b else 0.8)       # mountain B2B days: a higher TSS / h
+            w.metrics["tss"] = m * (b2b_tph if hard_b2b else tph)    # mountain B2B days: a higher TSS / h
             ws.append(w)
         d += dt.timedelta(days=1)
     ds = FakeDataset(ws, today, settings=SETTINGS)
@@ -311,8 +311,9 @@ def _plan_with(event_start, days, today):
     return plan
 
 
-def _week(event_start="2026-12-05", days=2, today=TODAY, last_week="recovery", prefs=None, accepted=None):
-    ds = _history(today, last_week)
+def _week(event_start="2026-12-05", days=2, today=TODAY, last_week="recovery", prefs=None, accepted=None,
+          b2b_tph=1.3, tph=0.8):
+    ds = _history(today, last_week, b2b_tph, tph)
     plan = _plan_with(event_start, days, today)
     ds.plan = plan
     st = Status(ds, plan, today, prefs=PP.Prefs()).compute()
@@ -375,7 +376,11 @@ def test_week_plan_accepted_b2b_on_the_users_days_volume_unchanged():
 def test_week_after_an_accepted_b2b_easy_days_no_recovery_week():
     today = date(2026, 10, 7)
     last = {"week": "2026-09-28", "days": ["2026-10-03", "2026-10-04"], "minutes": [180, 120]}
-    _, _, _, wp = _week(today=today, last_week="b2b", accepted=[last])
+    # SP-68: the PMC starts from the first 4 weeks' mean, so the 9-week fixture's CTL is no
+    # longer still filling up — a heavier fixture (1.2 TSS/min) and B2B (2.2 TSS/min) make
+    # TSB < −20 with the ramp under the block line (a block-level ramp is no exception)
+    heavy = {"tph": 1.2, "b2b_tph": 2.2}
+    _, _, _, wp = _week(today=today, last_week="b2b", accepted=[last], **heavy)
     assert wp["b2b"]["post"]["until"] == "2026-10-08"
     assert wp["load"]["tsb_today"] < -20                           # the planned drop
     assert wp["mode"] == "specific"                                # not converted to a recovery week
@@ -383,7 +388,7 @@ def test_week_after_an_accepted_b2b_easy_days_no_recovery_week():
     assert not any(s["kind"] in ("quality", "test") for s in wp["sessions"])
     assert any(n.get("src") == "b2b" for n in wp["notes"])
     # the same two long days done without accepting a B2B: no exception (accepted B2B only)
-    _, _, _, wp = _week(today=today, last_week="b2b")
+    _, _, _, wp = _week(today=today, last_week="b2b", **heavy)
     assert not (wp.get("b2b") or {}).get("post")
 
 
