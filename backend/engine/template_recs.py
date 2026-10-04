@@ -14,6 +14,12 @@ Inputs (all of them already decided elsewhere):
   * the time available: the day's cap (課表偏好) and the session's own minutes
   * terrain (road / trail) and the session's own type (輕鬆 / 長跑 / 強度 / 測試 / 越野)
 
+「我的範本」 (engine/user_templates.py, SP-36) are ranked with the built-ins by the same rules
+— their interval family (the same-family bonus of the ladder's rung, Zone 5, the phase),
+their length, terrain and type; the key-listed trail rules by the row's 越野跑 kind
+(_trail_key: climb as the long climb, downhill as 下坡離心, technical hard / easy by RPE).
+A pick says `mine` (the editor tags it 我的).
+
 The weights are 推估 (no published ranking); the phase rules follow the general →
 specific progression (Koop; Uphill Athlete) and 台灣教練's Zone 3 before Zone 5. EXPLAIN
 is the ? text.
@@ -59,7 +65,8 @@ EXPLAIN = ("推薦依這堂課排序（權重是推估）：① 強度課的第�
            "減量期偏短的課（Koop；Uphill Athlete 由一般到專項）。"
            "④ 時間：超過這天上限的往後排，接近這堂原本分鐘數的往前。⑤ 地形：越野日偏上坡版，路跑日不推需要找坡的課。"
            "⑥ 類型：長跑日偏 90 分以上的課。⑦ 主要訓練項目是路跑時：不推越野範本，專項期偏馬拉松專項課"
-           "（Pfitzinger 乳酸閾值／馬拉松配速長跑、Daniels T、Canova）。其他範本收在下面，照原本的順序。")
+           "（Pfitzinger 乳酸閾值／馬拉松配速長跑、Daniels T、Canova）。「我的範本」用同樣的規則一起排，標「我的」。"
+           "其他範本收在下面，照原本的順序。")
 
 
 def row_minutes(row: dict) -> float:
@@ -160,11 +167,12 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
         elif phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:
             sc.add(10, f"{PHASE_LABEL[phase]}：量少")
     elif cat == "trail":
-        if phase in ("specific", "build") and key in TRAIL_SPECIFIC:
-            sc.add(20, f"{PHASE_LABEL[phase]}：" + ("接近比賽的路況" if key == "lib:tech_hard" else "練賽道的爬升／下坡"))
-        elif phase == "base" and key in TRAIL_BASE:
-            sc.add(15, "基礎期：低 RPE 技術地形，可取代部分長跑" if key == "lib:tech_easy" else "基礎期：有氧爬坡、腿力")
-        if phase == "taper" and key == "lib:downhill_ecc":
+        tk = _trail_key(row)                      # a 我的範本 row: the built-in list it falls in by its kind
+        if phase in ("specific", "build") and tk in TRAIL_SPECIFIC:
+            sc.add(20, f"{PHASE_LABEL[phase]}：" + ("接近比賽的路況" if tk == "lib:tech_hard" else "練賽道的爬升／下坡"))
+        elif phase == "base" and tk in TRAIL_BASE:
+            sc.add(15, "基礎期：低 RPE 技術地形，可取代部分長跑" if tk == "lib:tech_easy" else "基礎期：有氧爬坡、腿力")
+        if phase == "taper" and tk == "lib:downhill_ecc":
             sc.add(-80, "賽前 2 週內不做下坡離心")
     elif cat in ("easy",) and phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:
         sc.add(12, f"{PHASE_LABEL[phase]}：短一點")
@@ -201,6 +209,23 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
         if kind == "long" and key in ROAD_LONG:
             sc.add(10, "馬拉松的長跑")
     return sc
+
+
+def _trail_key(row: dict) -> Optional[str]:
+    """The key the trail phase rules look up: a built-in's own; a 我的範本 row's by its 越野跑
+    kind (workout_templates.trail_type_of) — the lists hold every built-in kind the same way:
+    結構化爬升 → a long climb (specific and base), 下坡 → 下坡離心 (specific; not in the taper),
+    技術地形 → hard (RPE ≥ 7: specific) or easy (base) by workout_steps.rpe_role."""
+    if not row.get("mine"):
+        return row.get("key")
+    sub = row.get("trail_sub")
+    if sub == "climb":
+        return "lib:long_climb"
+    if sub == "downhill":
+        return "lib:downhill_ecc"
+    if sub == "technical":
+        return "lib:tech_hard" if row.get("role") == "quality" else "lib:tech_easy"
+    return None
 
 
 def _rung_family(rung: Optional[str]) -> Optional[str]:
@@ -266,7 +291,7 @@ def recommend(tpl: dict, *, kind: str, cap: Optional[float] = None, minutes: Opt
                 if per_rung.get(v.rung, 0) >= 2:
                     continue
                 per_rung[v.rung] = per_rung.get(v.rung, 0) + 1
-            picks.append({"key": r["key"], "reason": sc.reason(f"{row_minutes(r):.0f} 分")})
+            picks.append({"key": r["key"], "reason": sc.reason(f"{row_minutes(r):.0f} 分"), "mine": bool(r.get("mine"))})
         out[cid] = picks
     return {"cats": out, "tip": EXPLAIN,
             "inputs": {"phase": ph, "phase_label": PHASE_LABEL[ph], "z5_open": s["z5_open"], "cap": cap,

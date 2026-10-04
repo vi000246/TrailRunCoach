@@ -1378,10 +1378,12 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
                               minutes: Optional[float] = None, terrain: Optional[str] = None,
                               db: AsyncSession = Depends(get_db)):
     """插入範本's 「推薦」 block for one session (engine/template_recs.py): per category, the
-    3 best templates with a reason; 強度課's first is the interval ladder's next step (the
-    old 間歇範本 ★ 推薦: interval_library.fit for the current rung and the day's cap)."""
+    3 best templates with a reason, 我的範本 included (`mine`); 強度課's first is the interval
+    ladder's next step (the old 間歇範本 ★ 推薦: interval_library.fit for the current rung
+    and the day's cap)."""
     from backend.engine import quality_gate as QG
     from backend.engine import template_recs as TR
+    from backend.engine import user_templates as UT
     from backend.engine import workout_steps as WS
     inp = await _inputs()
     s = next((x for x in await PS.load(db) if x["uid"] == uid), None) if uid else None
@@ -1395,7 +1397,9 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
     key, why = TR.ladder_pick(rung_now, ctx["cap"], ctx["history"], ctx["prefs"])
     ter = terrain or (s or {}).get("terrain")
     ter = "trail" if kind == "hike" or ter in ("trail", "hike") else "road"
-    return TR.recommend(WS.templates(), kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
+    # 我的範本 ranked with the built-ins (SP-36), the same menu /steps/templates gives
+    tpl = WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)})
+    return TR.recommend(tpl, kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
                         phase=_phase_on(inp, day), z5_open=bool(QG.z5_track(gate)["open"]) if gate else False,
                         rung=rung_now, ladder_key=key, ladder_reason=why,
                         sport=(inp.get("cur") or {}).get("primary_sport") or "trail")
