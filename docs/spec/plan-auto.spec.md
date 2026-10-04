@@ -118,7 +118,11 @@ weeks of data and the ramp is not checked in the first 28 days (推估; `status`
 `ramp_week = None` then); the volume step still runs. Last week's **running-time** step against
 max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen et al. 2014, JOSPT
 44:739; Damsted et al. 2019, JOSPT 49:230 — peer-reviewed, they measured running; the 「10 %
-法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative); TSB −30…−20 → hold
+法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative). Exempt: the week after
+a short unplanned break — 3–5 days without a run (3 推估; ≥ 6 is a re-entry block, `reentry.MIN_BREAK`)
+touching the week before, which pulled the base down (`short_break`,
+`backend/engine/load_guard.py:207`; owner 2026-10-04): the status card says so and the week gets
+an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:1143`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
@@ -516,3 +520,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | feature | SP-39 | Zone 3 and Zone 5 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR, gap ≤ 10 %, or Friel < 5 % at the tested AeT; the 90-min test and plateau / weeks open Zone 3 only) and the soft 「近 6 週 ≥ 2 堂 3 區」 (`Z5_Z3_NEED` / `Z5_Z3_DAYS`, 推估; replaces `Z3_MET_FOR_Z5`), one flag `z5_track` for week_decision / flow / 推薦 / change log; low-intensity share blocks Zone 5 only with a tested AeT; flow = two parallel tracks with 「安排課表」 actions (`?add=` / `?test=` deep links into the 課表 dialog); passive 90-min re-confirmation removed |
 | 2026-10-04 | feature | SP-31 | Two interval tracks: Zone 3 A1–A4 (2×15 → 3×12 → 2×20 → 1×30, 88–95 % CP) and Zone 5 V1–V4, own steps / 達標 counts; T1–T3 kept as 巡航版 and legacy; Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap, sticky, ≥ 21-day break re-locks / 90-min test / UA gap); low-intensity share blocks Zone 5 only; Zone 3 ≤ 10 % of the week, Zone 3 + Zone 5 ≤ 20 %; 2 a week = one of each, 1 a week 1:1 / 2:1 by the A race; 專項期 / 減量期 two-track sessions; z3_note / warn notes; flow stage 1 = the Zone 3 gate |
 | 2026-10-04 | feature | SP-38 follow-up | A main set ended by 「負荷」 counts toward the Zone 3 / Zone 5 ladder: `variant_from_steps` times each load step at TSS ÷ (IF² × 100) h, IF = the band's middle (`load_work_s`, 推估) |
+| 2026-10-04 | feature | SP-63 follow-up | The week after a short unplanned break (3–5 days without a run, no re-entry block) is exempt from the running-volume step check (`load_guard.short_break`); the week plan gets an info note |

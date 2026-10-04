@@ -19,6 +19,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Optional
 
 from backend.engine import load_guard as LG
+from backend.engine.reentry import MIN_BREAK
 from backend.engine.planning import KINDS, PHASES, Plan, goals, phase_on
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day
 from backend.engine.wko5expr.evaluator import WS, Evaluator
@@ -384,6 +385,16 @@ class Status:
         run = [h for _, h in self.weekly_hours(12, LG.STEP_SPORTS)]
         run_last = run[-2]
         step, run_base = LG.volume_step(run_last, run[-6:-2])
+        # the week after a short unplanned break (< 6 days, no re-entry block) is exempt (load_guard)
+        exempt = ""
+        if step is not None and step > LG.STEP_HOLD:
+            lo = math.floor(date_to_day(wk[-3][0]))
+            brk = LG.short_break([math.floor(w.day) for w in self.ds.workouts if w.sport in LG.STEP_SPORTS],
+                                 lo, lo + 6)
+            if brk is not None:
+                n = brk[1] - brk[0] + 1
+                exempt = (f"上週跑步時間比基準多 {step * 100:+.0f}%，但前一週停跑 {n} 天"
+                          f"（< {MIN_BREAK} 天、不進恢復期）把基準拉低了：這週不算增幅（推估）")
         base6 = _mean([h for _, h in wk[-8:-2]]) or 0
         txt = f"{last:.1f} h"
         why = f"上週 {last:.1f} h，本週到目前 {this:.1f} h，前 4 週平均 {avg4:.1f} h"
@@ -402,7 +413,9 @@ class Status:
         elif k in ("recovery", "transition"):
             lvl, v, act = (GOOD, "量降下來了", "") if last <= base6 * 0.7 else (WATCH, "恢復期量還太多", "本週再降")
         else:
-            if step is not None and step > LG.STEP_BLOCK:
+            if exempt:
+                lvl, v, act = GOOD, exempt, ""
+            elif step is not None and step > LG.STEP_BLOCK:
                 lvl, v, act = (BAD, f"上週跑步時間比基準多 {step * 100:+.0f}%（> 20%：Nielsen 2014、Damsted 2019 的受傷風險線）",
                                "本週維持上週的量，不要再加")
             elif step is not None and step > LG.STEP_HOLD:
@@ -413,7 +426,7 @@ class Status:
                 lvl, v, act = GOOD, "量穩定" if step is None or abs(step) < 0.1 else f"跑步週增幅 {step * 100:+.0f}%，在範圍內", ""
         return Indicator("volume", "每週時數", lvl, txt, v, why, act, SRC_VOLUME if k not in ("taper",) else SRC_BOSQUET,
                          last, spark, {"this_week": this, "last_week": last, "avg4": avg4, "step": step,
-                                       "run_last_week": run_last, "run_base": run_base})
+                                       "run_last_week": run_last, "run_base": run_base, "step_exempt": exempt})
 
     def i_intensity(self) -> Indicator:
         low = self.ws("athleterange(today-27, today, sum(if(heartrate < aethr, deltatime)))")

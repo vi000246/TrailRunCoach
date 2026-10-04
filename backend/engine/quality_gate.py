@@ -638,16 +638,20 @@ def planned_variant_spec(row: dict):
 def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = None,
           ramp: Optional[float] = None, step: Optional[float] = None, tsb: Optional[float] = None,
           aet: Optional[float] = None, injury: Optional[str] = None, aet_tested: bool = True,
-          ramp_base: Optional[float] = None) -> dict:
+          ramp_base: Optional[float] = None, step_exempt: str = "") -> dict:
     """This week's check: {"block", "sub", "hold", "verdict", "action"} — the
     first failing rule speaks. Missing numbers don't block. `injury`: an open
     傷病紀錄 with 「受傷期間暫停強度課」 ticked (engine/injuries.pause_reason)
     blocks intervals until it is resolved — the user's own choice, so it
     speaks first. `aet_tested`: the AeT in effect is a tested one (aet_info["tested"]) — without
     it the low-intensity share is only a warning for Zone 5 too (SP-39). `ramp_base`: CTL 7 days
-    ago, for the relative ramp lines (load_guard; None = the floors 3 / 5)."""
+    ago, for the relative ramp lines (load_guard; None = the floors 3 / 5). `step_exempt`: the
+    volume step comes right after a short break (status.i_volume, load_guard.short_break) — the
+    volume rule is skipped and the text goes to "step_note" (the week note)."""
     out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": "", "blocks": [],
-           "verdicts": {}, "warn": ""}
+           "verdicts": {}, "warn": "", "step_note": step_exempt or ""}
+    if step_exempt:
+        step = None
     aet_t = f"{aet:.0f} bpm" if aet else "AeT"
 
     def say(rule, verdict, action, **flags):
@@ -1089,7 +1093,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     ie = _extra(by, "intensity")
     g = guard(low_share=ie.get("low_share"), power_low_share=ie.get("power_low_share"),
               ramp=_extra(by, "fitness").get("ramp_week"), ramp_base=_extra(by, "fitness").get("ramp_base"),
-              step=_extra(by, "volume").get("step"),
+              step=_extra(by, "volume").get("step"), step_exempt=_extra(by, "volume").get("step_exempt") or "",
               tsb=_value(by, "form"), aet=ae["value"] if ae["measured"] else None,
               injury=_injury_pause(today), aet_tested=bool(ae.get("tested")))
     hist = []
