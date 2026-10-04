@@ -128,6 +128,14 @@ def test_resolve_overrides():
     assert (r.type, r.hi) == ("hr", 150)
     r = WS.resolve(_one({"type": "hr", "mode": "abs", "lo": 150, "hi": 160})["items"][0], c)
     assert (r.lo, r.hi, r.intensity) == (150, 160, ("hr", 150, 160))
+    # hand-entered HR above 110 % LTHR is taken as entered (SP-33); lo > hi is still an error
+    lt = WS.Ctx.of({**FULL, "lthr": 155}, "hr")
+    for tg in ({"type": "hr", "mode": "abs", "lo": 165, "hi": 175}, {"type": "hr", "mode": "pct", "lo": 1.08, "hi": 1.15}):
+        d = WS.normalize(_one(tg))
+        assert not WS.resolve(d["items"][0], lt).err
+        assert not [i for i in WS.issues(d, lt) if i["level"] == "err"]
+    r = WS.resolve(_one({"type": "hr", "mode": "abs", "lo": 175, "hi": 165})["items"][0], lt)
+    assert r.err == "下限比上限高"
     r = WS.resolve(_one({"type": "pace", "mode": "zone", "zone": "4"})["items"][0], c)
     assert r.type == "pace" and r.intensity == ("pace", round(r.lo), round(r.hi)) and not r.warn
     assert r.text == "4:40–4:57 /km"
