@@ -274,3 +274,34 @@ def test_steps_carry_the_blocks_and_the_walk_rests():
     assert sum(s["s"] for s in st) == IL.total_min(IL.get("v1a"), "std") * 60
     x = IL.steps(IL.get("x3015"), "std")
     assert sum(1 for s in x if s["kind"] == "rest" and s["s"] == 180) == 1
+
+
+@pytest.mark.parametrize("rung, cap, key", [("a1", 40, "t1a"), ("a2", 45, "t2a"), ("a3", 45, "t3a")])
+def test_the_weekday_cap_cruise_fallback_counts_like_the_volume_one(rung, cap, key):
+    # owner 2026-10-04 (SP-31 follow-up): a Zone 3 rung the weekday cap can't fit becomes the 巡航版 of
+    # the same position that fits, stored under the A rung (equiv) — its 達標 moves the ladder, the
+    # same rule as the 10 %-volume fallback
+    from backend.engine import overview as O
+    from backend.engine import quality_gate as QG
+    gate = {"state": "none", "mode": "auto", "guard": {}, "lthr": {"default": False}}
+    prefs = PP.Prefs(cap_weekday=cap)
+    q_cap, alt = O.quality_caps(prefs, 6)
+    notes = []
+    spec = next(r for r in QG.Z3 if r[0] == rung)
+    s = O._gate_session(gate, {"spec": spec, "track": "z3", "first": False}, {"cp": 250.0}, 8.0, prefs, [],
+                        False, q_cap, alt, notes)
+    assert (s["variant_key"], s["rung_key"], s["equiv"], s["progress"]) == (key, rung, True, True)
+    assert s["minutes"] <= cap and "巡航版" in s["detail"] and notes[0]["src"] == "z3" and "算這一階" in notes[0]["text"]
+    # done and 達標 → the Zone 3 step moves (dose_step reads the stored row like the volume fallback's)
+    v = IL.get(key)
+    cp = 250.0
+    bouts = [{"power": cp * (v.lo + v.hi) / 2, "duration_s": w, "hr_at60": None} for w in v.works]
+    at = [r[0] for r in QG.Z3].index(rung)
+    prior = [{"date": f"2026-09-0{i + 1}", "variant_key": IL.canonical(QG.Z3[i][0]).key, "rung_key": QG.Z3[i][0],
+              "equiv": True, "track": "z3", "cp": cp,
+              "bouts": [{"power": cp * 0.92, "duration_s": w, "hr_at60": None} for w in IL.canonical(QG.Z3[i][0]).works]}
+             for i in range(at)]
+    row = {"date": "2026-09-20", "variant_key": key, "rung_key": rung, "equiv": True, "track": "z3", "cp": cp,
+           "bouts": bouts}
+    d = QG.dose_step(prior + [row], None, "z3")
+    assert d["step"] == at + 1 and d["met"] == at + 1

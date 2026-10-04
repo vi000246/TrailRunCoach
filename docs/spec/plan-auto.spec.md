@@ -171,6 +171,12 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   starts at ~5 %). Over it, `cruise_for` picks the 巡航版 of the same position (A1 → T1, A2 → T2,
   A3 / A4 → T3, stepping down to fit; T1 the floor); it is stored under the A rung (equiv) and
   counts, with a 「本週 x h：3 區上限 …→ 巡航版」 note.
+- **Weekday cap** (owner 2026-10-04, symmetric with the volume cap): a Zone 3 rung the day's cap
+  can't fit as the standard or an equivalent (and no other day takes it) becomes the 巡航版 of
+  the same position that fits (`overview._cruise_for_cap`: A1 → T1, A2 → T2, A3 / A4 → T3,
+  stepping down), stored under the A rung (equiv) — 達標 moves the ladder; note 「平日上限 N 分放不下
+  … → 巡航版 …（算這一階）」. Only when no 巡航版 fits does fit's own fallback (縮量版 / the step
+  before, not counted) apply.
 - **Week total** (`QUALITY_SHARE_MAX = 0.20`, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in
   zone ≤ 20 % of the planned running time. `overview.quality_sessions` builds Zone 5 first and
   gives Zone 3 what is left (a smaller 巡航版); a session still over is cut to fewer reps as a
@@ -484,5 +490,6 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
+| 2026-10-04 | feature | SP-31 follow-up | The weekday-cap 巡航版 fallback counts as the Zone 3 rung (same rule as the volume cap) |
 | 2026-10-04 | feature | SP-39 | Zone 3 and Zone 5 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR, gap ≤ 10 %, or Friel < 5 % at the tested AeT; the 90-min test and plateau / weeks open Zone 3 only) and the soft 「近 6 週 ≥ 2 堂 3 區」 (`Z5_Z3_NEED` / `Z5_Z3_DAYS`, 推估; replaces `Z3_MET_FOR_Z5`), one flag `z5_track` for week_decision / flow / 推薦 / change log; low-intensity share blocks Zone 5 only with a tested AeT; flow = two parallel tracks with 「安排課表」 actions (`?add=` / `?test=` deep links into the 課表 dialog); passive 90-min re-confirmation removed |
 | 2026-10-04 | feature | SP-31 | Two interval tracks: Zone 3 A1–A4 (2×15 → 3×12 → 2×20 → 1×30, 88–95 % CP) and Zone 5 V1–V4, own steps / 達標 counts; T1–T3 kept as 巡航版 and legacy; Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap, sticky, ≥ 21-day break re-locks / 90-min test / UA gap); low-intensity share blocks Zone 5 only; Zone 3 ≤ 10 % of the week, Zone 3 + Zone 5 ≤ 20 %; 2 a week = one of each, 1 a week 1:1 / 2:1 by the A race; 專項期 / 減量期 two-track sessions; z3_note / warn notes; flow stage 1 = the Zone 3 gate |

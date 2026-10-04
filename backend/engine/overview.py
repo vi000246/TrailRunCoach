@@ -524,6 +524,20 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         return s
     if rung in IL.LIBRARY:
         f = IL.fit(rung, cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"))
+        if rung in IL.Z3_TRACK and cap is not None and (f["action"] == "back" or not f["equiv"]):
+            # the day's cap can't fit the Zone 3 rung (no equivalent, no other day): the 巡航版 of the
+            # same position that fits — it counts as the rung when 達標, the same rule as the volume
+            # cap above (owner 2026-10-04: symmetric); else fit's own fallback (縮量版 / the step before)
+            fc = _cruise_for_cap(rung, cap, history, prefs, mountain)
+            if fc is not None:
+                why = (f"平日上限 {cap:.0f} 分放不下 {IL.RUNG_NAME[rung]} {IL.structure(canon)}"
+                       f"（需要 {f.get('need_min') or 0:.0f} 分）→ 巡航版 {IL.structure(fc['variant'])}（算這一階）")
+                s = IL.session_for({**fc, "rung": rung, "equiv": True, "progress": True, "action": "ok",
+                                    "reason": f"{why}；{fc['reason']}"}, tth, pre, lthr_default, prefs, swap="cap")
+                s["source"] = QG.source(gate, (s["source"],))
+                if notes is not None:
+                    notes.append({"level": "info", "src": "z3", "text": why})
+                return s
         by_cap = f["level"] != "full" or f["action"] != "ok" or f.get("reps") is not None
         s = IL.session_for(f, tth, pre, lthr_default, prefs, swap="cap" if by_cap else "auto")
         if f["action"] == "move" and f.get("move_wd") is not None:
@@ -533,6 +547,20 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
     s = QG.session(spec, tth, pre, hours, lthr_default)
     s["source"] = QG.source(gate, spec)
     return s
+
+
+def _cruise_for_cap(rung: str, cap: Optional[float], history=None, prefs=None, mountain: bool = False) -> Optional[dict]:
+    """The 巡航版 for a Zone 3 track rung the day's cap can't fit: the cruise rung of the same position
+    (quality_gate.cruise_for's order: A1 → T1, A2 → T2, A3 / A4 → T3), stepping down until
+    interval_library.fit gives a standard or equivalent session within `cap`; None when none fits."""
+    from backend.engine import interval_library as IL
+    from backend.engine import quality_gate as QG
+    i = min(IL.Z3_TRACK.index(rung) if rung in IL.Z3_TRACK else 0, len(QG.CRUISE) - 1)
+    for j in range(i, -1, -1):
+        f = IL.fit(QG.CRUISE[j][0], cap, history or (), prefs, mountain)
+        if f["action"] == "ok" and f["equiv"]:
+            return f
+    return None
 
 
 def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hours: Optional[float], prefs=None,
