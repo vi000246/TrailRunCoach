@@ -326,11 +326,11 @@ TEMPLATES: list[Template] = [
         b.t("warm", 12 * 60, pw(0.70, 0.80), "EZ ≤ 80% CP"),
         b.rep(2, [b.t("warm", 60, pw(0.99, 1.01), "1′ 99–101% CP"), b.t("warm", 120, pw(0.70, 0.80), "輕鬆跑")], True, "2×1′"),
         b.t("warm", 30, pw(1.03, 1.08), "30″ 103–108% CP"), b.t("warm", 90, pw(0.70, 0.80), "輕鬆跑"),
-        b.lap("rest", 120, "走路到呼吸恢復（≥ 2′），按圈開始"),
+        b.lap("rest", 120, "走路到呼吸恢復（≥ 2′），直到按下計圈"),
         b.t("work", 3 * 60, OPEN, "3′ 全力、均勻"),
-        b.lap("rest", 30 * 60, "走→輕鬆跑 5–10′→走，≥ 30′；按圈開始"),
+        b.lap("rest", 30 * 60, "走→輕鬆跑 5–10′→走，≥ 30′；直到按下計圈"),
         b.t("work", 12 * 60, OPEN, "12′ 全力、均勻"),
-        b.lap("cool", 10 * 60, "走路恢復後輕鬆跑到總量；按圈結束", pw(0.65, 0.80))], basis="power",
+        b.lap("cool", 10 * 60, "走路恢復後輕鬆跑到總量；直到按下計圈", pw(0.65, 0.80))], basis="power",
         note="全力段不設目標（Stryd 留給你填：模型功率 −1%～+5%）", purpose=PURPOSE["test"]),
     Template("pal_test3", "test", "Palladino 3′ 測試", PAL + "：3 minute max effort", PAL_URL, lambda b: [
         *b.pal_test_warm(), b.t("work", 3 * 60, OPEN, "3′ 全力：穩穩開始，最後才到極限"),
@@ -350,7 +350,7 @@ TEMPLATES: list[Template] = [
         b.t("work", 3 * 60, OPEN, "3′ 全力、均勻"), b.t("cool", 10 * 60, pw(0.55, 0.70), "緩和")],
         basis="power", src_kind="peer", purpose=PURPOSE["test"]),
     Template("friel_lthr30", "test", "Friel 30′ 閾值心率測試", "Joe Friel「Quick Guide to Setting Zones」TrainingPeaks", FRIEL_URL, lambda b: [
-        b.warm(15), b.t("work", 10 * 60, OPEN, "獨自全力 30′ 的前 10′：第 10′ 按圈"),
+        b.warm(15), b.t("work", 10 * 60, OPEN, "獨自全力 30′ 的前 10′：第 10′ 按下計圈"),
         b.t("work", 20 * 60, OPEN, "後 20′：平均心率＝LTHR"), b.cool(10)],
         note=("只看全力，不設目標；手腕光學心率的平均誤差比胸帶大。條件：< 25 °C、平路環線或田徑場、戴胸帶、"
               "前 48 小時沒有硬課、不在減量期／比賽週；自己一個人跑，不要跟人跑、不要在比賽中測"),

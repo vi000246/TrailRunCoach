@@ -30,6 +30,7 @@
 | 2026-09-30 | bugfix | N/A | `charts.data_source` 接上圖表 / 總覽 / 功率計算機的 Dataset 工廠與圖表頁資料來源切換；掃描去重的 COROS id 也限定 athlete；`_sync_ids` 接受 `tp` |
 | 2026-10-04 | code-sync | N/A | 一次只用一個資料來源（COROS 或 TP，取代 10-02 的自動／合併 `synced`；`charts.data_source` = `source` / `wko5`）；登入有效性檢查 `session_check` + 「登入已過期」橫幅（`/auth/session-alerts`）；COROS 心率設定（`athlete.coros_profile`）登入與每次同步更新；跑步功率 TSS 改用 Stryd-only PD mFTP；`cached_series` 改磁碟快取；時區自動偵測；新端點（`/auth/{source}/remember`、`/sync/timezone/browser`、`/sync/dedup/rebuild` 等）；demo 模式不掛同步路由；`file:line` 指標全面更新；新增 Domain Model |
 | 2026-10-04 | feat/sp-34-35-schedule | SP-34 | `GET /sync/primary`（資料來源＋登入／啟用／忙碌）；SSE 讀取抽成 `static/syncrun.js`，設定頁立即同步與課表頁「從 COROS 抓活動」共用 |
+| 2026-10-04 | sp-38-load-step | SP-37／SP-38 | 活動列表的 `trainingLoad`（COROS TL）存進 `workout_files.coros_training_load`（新欄位，同步時新活動寫入、已匯入的補上，不多打 API）；同步後的每人校正一併重擬 TSS → TL 換算（`engine/coros_tl.py`：依 TSS 來源分組、收縮到預設、近期加權、門檻大改前的活動不用、最近 30 天時間序回測不比舊的差才換上）與「負荷」步驟的實跑校正；設定頁顯示換算模型（推估） |
 
 ---
 
@@ -142,6 +143,7 @@ Headers: accessToken + yfheader + User-Agent
         "date":      20260514,   // YYYYMMDD 8位整數，不是 Unix timestamp
         "startTime": 1747282306, // Unix timestamp（不用於日期解析）
         "totalTime": 4691,       // seconds
+        "trainingLoad": 87,      // COROS 的訓練負荷 TL（多數活動有；SP-37 探測）→ workout_files.coros_training_load
         "fitUrl":    null        // 多數活動為 null，需用 detail/download
       }
     ]
@@ -301,7 +303,7 @@ _get_token_and_base(db) → (token, base_url, user_id)
 _list_page(token, base, user_id, since, end, page) → activities[]
   ↓
 for each activity:
-  if coros_activity_id in DB → SSE: skipped
+  if coros_activity_id in DB → 列表的 trainingLoad 補進 coros_training_load（有變才寫）→ SSE: skipped
   _download_fit(token, base, user_id, activity):
     1. try fitUrl (presigned S3, if present)
     2. POST /activity/detail/download?labelId=...&sportType=...&fileType=4
@@ -318,8 +320,19 @@ refresh_hr_profile（GET /account/query，失敗不影響）
 SSE: complete {total_downloaded, total_checked, errors}
   ↓（runner.stream finally，backend/sync/runner.py:67）
 寫 sync.<src>.last_result → plan_auto.after_sync → 有新檔時 localtime.refresh_from_fits
-→ calibrate.after_sync（每人校正）→ 有新檔時 wko5views.warm_up（背景重建圖表 Dataset）
+→ calibrate.after_sync（每人校正，含 COROS TL 換算重擬）→ 有新檔時 wko5views.warm_up（背景重建圖表 Dataset）
 ```
+
+#### COROS Training Load（SP-37／SP-38，2026-10-04）
+
+- **儲存**：列表項目的 `trainingLoad`（`list_training_load`，`backend/sync/coros_client.py:472`）在匯入時寫進新活動，已匯入的在下次列表掃到時補上或更新（`backend/sync/coros_client.py:569`）；只用同步本來就抓的列表，不多打任何 COROS API。欄位 `workout_files.coros_training_load`（`backend/db/models.py:69`，加法遷移 `backend/db/database.py:115`）。
+- **重擬**：同步有新活動、或只補了已匯入活動的 TL（`complete` 事件的 `tl_filled`，經 `runner` 的 `last_result`）都會觸發每人校正；`calibrate.calibrate` 跑完 Item 後呼叫 `coros_tl.refit_and_store`（`backend/engine/calibrate.py:246`，`backend/engine/coros_tl.py:743`）：有 TL 的 COROS 活動（以檔名的 labelId 對到圖表 Dataset）× app 的 TSS → 三組（功率 TSS、hrTSS 依 IF、hrTSS 比例，`group_samples`，`backend/engine/coros_tl.py:436`）。
+  - 只用最後一次門檻（FTP／LTHR）變動 > 5 % 之後的活動（`since_threshold_change`，`backend/engine/coros_tl.py:459`），近期權重較高（半衰期 120 天，`recency`，`backend/engine/coros_tl.py:473`）。
+  - 模型族用 LOO MAE 選；樣本 < 60 時只比 A（比例）／C（冪次），避免二次式在小樣本爆掉（`choose_family`，`backend/engine/coros_tl.py:484`）。
+  - 收縮：換算 = w·本人 + (1 − w)·預設，w = n ÷ (n + 30)（`SHRINK_K`，`backend/engine/coros_tl.py:79`）；預設只是先驗（推估）。
+  - 時間序回測：最近 30 天當 holdout（`HOLDOUT_DAYS`，`backend/engine/coros_tl.py:85`），新擬合在 holdout 上的 MAE 不比目前存的差才換上；存回測與 LOO 誤差（`refit_group`，`backend/engine/coros_tl.py:511`）。結果存設定 `coros.tl_model`。
+  - 實跑校正：推上 COROS 的「負荷」步驟（計畫 TSS、送出的 TL、強度、當時的係數）記在 `coros.tl_load_calib`；那堂課完成且活動的圈數＝推送的步驟數時，那一圈累積的 TSS ÷「未校正模型對送出 TL 的 TSS」是一個樣本（沒有時用 計畫 TSS ÷ 推送時的係數；照計畫跑完不會把係數拉回 1），收縮後（w = n ÷ (n + 5)）的係數在換算前除掉（`refresh_load`／`load_factor`，`backend/engine/coros_tl.py:645`、`backend/engine/coros_tl.py:666`）。
+- **顯示**：`GET /sync/settings` 回 `coros_tl`（`describe`，`backend/api/sync.py:264`），設定頁「課表推送到」下方列出每組的模型、n、權重、回測誤差（推估）。
 
 主流程在 `sync_workouts`（`backend/sync/coros_client.py:472`）。所有同步入口（手動 SSE、`/sync/auto`、每日排程）都走 `runner.stream`；自動同步只跑「資料來源」那一個（`auto_plan`，`backend/sync/runner.py:187`），另一個來源回 `not_in_use`。
 
@@ -332,6 +345,7 @@ SSE: complete {total_downloaded, total_checked, errors}
 ```sql
 ALTER TABLE workout_files ADD COLUMN coros_activity_id TEXT;  -- index, unique per activity
 ALTER TABLE workout_files ADD COLUMN coros_sport_type INTEGER;
+ALTER TABLE workout_files ADD COLUMN coros_training_load REAL;  -- 列表的 trainingLoad（SP-38），NULL = 沒有
 -- source 欄位新增值: 'coros'（原有 'local' | 'trainingpeaks'）
 ```
 

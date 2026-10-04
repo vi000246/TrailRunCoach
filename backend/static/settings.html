@@ -250,6 +250,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
         <span class="meta" id="s-tz-eff"></span></div>
       <div class="row"><label>課表推送到 <select id="s-push"></select></label>
         <button type="button" class="q" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
+      <div class="row"><span class="meta" id="s-tl"></span>
+        <button type="button" class="q" aria-label="說明" title="課表的「負荷」結束條件在這裡填 TSS，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
         （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
@@ -778,6 +780,19 @@ const box = (src) => $(`src-${src}`);
 const f = (src, name) => box(src).querySelector(`[data-f="${name}"]`);
 let SS = null, SOURCES = null;
 
+// 「負荷」 TSS → COROS TL (engine/coros_tl.describe): the model per TSS source, n, weight, backtest error (推估)
+function showTl(t) {
+  const el = $("s-tl");
+  if (!el) return;
+  if (!t || !t.groups) { el.textContent = ""; return; }
+  const pct = (x) => x == null ? "–" : `${Math.round(x * 100)}%`;
+  const g = t.groups.map((r) => `${r.label}：${r.text}` + (r.fitted
+    ? `（本人 n=${r.n}，權重 ${Math.round(r.w * 100)}%` + (r.backtest ? `，近 ${r.backtest.holdout_days} 天回測誤差 ${pct(r.backtest.mape)}` : r.loo ? `，誤差 ${pct(r.loo.mape)}` : "") + "）"
+    : `（預設，±${r.err_pct}%）`));
+  const lf = t.load && t.load.n ? `；負荷段實測校正 ×${(1 / t.load.factor).toFixed(2)}（n=${t.load.n}）` : "";
+  el.textContent = `「負荷」換算 TSS → COROS TL（推估）— ${g.join("；")}${lf}`;
+}
+
 async function loadSyncSettings() {
   SS = await j(`${SYNC}/settings`);
   $("s-daily").value = SS.daily_sync_time || "06:00";
@@ -794,6 +809,7 @@ async function loadSyncSettings() {
   $("s-push").innerHTML = (SS.push_providers || [{ id: "coros", label: "COROS", enabled: true }])
     .map((p) => `<option value="${esc(p.id)}"${p.enabled ? "" : " disabled"}>${esc(p.label)}</option>`).join("");
   $("s-push").value = SS.push_provider || "coros";
+  showTl(SS.coros_tl);
   $("m-base").value = SS.map_basemap || "rudy";
   $("u-power").checked = SS.use_power !== false;
   const PSL = { stryd: "Stryd", watch: "手錶推估功率", none: "沒有功率計" };

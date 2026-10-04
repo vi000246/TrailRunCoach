@@ -33,23 +33,14 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
+import numpy as np  # noqa: F401  (tests build arrays through this module)
 
-MODELS = ("A", "B", "C", "D", "E")
-MIN_N = {"A": 3, "B": 4, "C": 4, "D": 5, "E": 8}
+
+# the fitting core lives in the engine (the app refits per athlete after each sync with it)
+from backend.engine.coros_tl import (MIN_N, MODEL_TEXT, MODELS, _nnls, best_model, errors,  # noqa: E402,F401
+                                     evaluate, fit, loo, num, predict, predict_inputs_ok)
+
 ZONES = ("z1_s", "z2_s", "z3_s", "z4_s", "z5_s", "z6_s")
-MODEL_TEXT = {"A": "TL = a·TSS", "B": "TL = a·TSS + b", "C": "TL = a·TSS^k",
-              "D": "TL = h·(c0 + c1·IF + c2·IF²)", "E": "TL = Σ w_i·zone-minutes"}
-
-
-def num(v) -> Optional[float]:
-    if v is None or v == "":
-        return None
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    return f if math.isfinite(f) else None
 
 
 def read_csv(path: Path) -> list[dict]:
@@ -86,141 +77,6 @@ def sample(r: dict, tl_col: str, x_col: str, if_col: str) -> Optional[dict]:
     zones = [num(r.get(z)) for z in ZONES]
     return {"y": y, "x": x, "h": secs / 3600.0 if secs else None, "if": num(r.get(if_col)),
             "zmin": [z / 60.0 for z in zones] if all(z is not None for z in zones) else None}
-
-
-def _nnls(A: np.ndarray, y: np.ndarray, iters: int = 20) -> np.ndarray:
-    """Least squares with non-negative coefficients (drop the negative ones and refit)."""
-    active = np.ones(A.shape[1], dtype=bool)
-    w = np.zeros(A.shape[1])
-    for _ in range(iters):
-        if not active.any():
-            break
-        sol, *_ = np.linalg.lstsq(A[:, active], y, rcond=None)
-        w[:] = 0.0
-        w[active] = sol
-        if (sol >= 0).all():
-            break
-        active[np.where(active)[0][sol < 0]] = False
-    return w
-
-
-def fit(model: str, s: list[dict]) -> Optional[dict]:
-    """Fitted parameters, or None when the samples cannot carry the model."""
-    if model == "A":
-        x = np.array([d["x"] for d in s]); y = np.array([d["y"] for d in s])
-        sxx = float((x * x).sum())
-        return None if sxx <= 0 else {"a": float((x * y).sum()) / sxx}
-    if model == "B":
-        x = np.array([d["x"] for d in s]); y = np.array([d["y"] for d in s])
-        if np.ptp(x) <= 0:
-            return None
-        a, b = np.polyfit(x, y, 1)
-        return {"a": float(a), "b": float(b)}
-    if model == "C":
-        pts = [(d["x"], d["y"]) for d in s if d["x"] > 0 and d["y"] > 0]
-        if len(pts) < MIN_N["C"]:
-            return None
-        lx = np.log([p[0] for p in pts]); ly = np.log([p[1] for p in pts])
-        if np.ptp(lx) <= 0:
-            return None
-        k, la = np.polyfit(lx, ly, 1)
-        return {"a": float(math.exp(la)), "k": float(k)}
-    if model == "D":
-        pts = [d for d in s if d["h"] and d["if"] is not None]
-        if len(pts) < MIN_N["D"]:
-            return None
-        A = np.array([[d["h"], d["h"] * d["if"], d["h"] * d["if"] ** 2] for d in pts])
-        y = np.array([d["y"] for d in pts])
-        if np.linalg.matrix_rank(A) < 3:
-            return None
-        c, *_ = np.linalg.lstsq(A, y, rcond=None)
-        return {"c0": float(c[0]), "c1": float(c[1]), "c2": float(c[2])}
-    if model == "E":
-        pts = [d for d in s if d["zmin"] is not None]
-        if len(pts) < MIN_N["E"]:
-            return None
-        A = np.array([d["zmin"] for d in pts]); y = np.array([d["y"] for d in pts])
-        used = A.sum(axis=0) > 0
-        if used.sum() == 0:
-            return None
-        w = np.zeros(6)
-        w[used] = _nnls(A[:, used], y)
-        return {f"w{i + 1}": float(v) for i, v in enumerate(w)}
-    raise ValueError(model)
-
-
-def predict(model: str, p: dict, d: dict) -> Optional[float]:
-    if model == "A":
-        return p["a"] * d["x"]
-    if model == "B":
-        return p["a"] * d["x"] + p["b"]
-    if model == "C":
-        return p["a"] * d["x"] ** p["k"] if d["x"] > 0 else None
-    if model == "D":
-        if not d.get("h") or d.get("if") is None:
-            return None
-        return d["h"] * (p["c0"] + p["c1"] * d["if"] + p["c2"] * d["if"] ** 2)
-    if model == "E":
-        if d.get("zmin") is None:
-            return None
-        return sum(p[f"w{i + 1}"] * m for i, m in enumerate(d["zmin"]))
-    raise ValueError(model)
-
-
-def errors(pairs: list[tuple[float, float]]) -> dict:
-    """{n, mae, mape (y > 0 only), bias} of (prediction, truth) pairs."""
-    if not pairs:
-        return {"n": 0, "mae": None, "mape": None, "bias": None}
-    e = [p - y for p, y in pairs]
-    pct = [abs(p - y) / y for p, y in pairs if y > 0]
-    return {"n": len(pairs), "mae": sum(abs(v) for v in e) / len(e),
-            "mape": (sum(pct) / len(pct)) if pct else None, "bias": sum(e) / len(e)}
-
-
-def loo(model: str, s: list[dict]) -> dict:
-    """Leave-one-out: fit on all but one, predict that one."""
-    pairs = []
-    for i in range(len(s)):
-        p = fit(model, s[:i] + s[i + 1:])
-        if p is None:
-            continue
-        v = predict(model, p, s[i])
-        if v is not None and math.isfinite(v):
-            pairs.append((v, s[i]["y"]))
-    return errors(pairs)
-
-
-def evaluate(s: list[dict]) -> dict:
-    """Per model: the full-sample parameters and the LOO error."""
-    out = {}
-    for m in MODELS:
-        usable = [d for d in s if predict_inputs_ok(m, d)]
-        if len(usable) < MIN_N[m]:
-            out[m] = {"n": len(usable), "params": None, "loo": None}
-            continue
-        out[m] = {"n": len(usable), "params": fit(m, usable), "loo": loo(m, usable)}
-    return out
-
-
-def predict_inputs_ok(model: str, d: dict) -> bool:
-    if model == "C":
-        return d["x"] > 0 and d["y"] > 0
-    if model == "D":
-        return bool(d.get("h")) and d.get("if") is not None
-    if model == "E":
-        return d.get("zmin") is not None
-    return True
-
-
-def best_model(res: dict) -> Optional[str]:
-    """Lowest LOO MAE; a model only competes on ≥ 80 % of the group's largest n
-    (so a model fitted on a small subset does not win by being easy)."""
-    ok = {m: r for m, r in res.items() if r.get("loo") and r["loo"]["mae"] is not None}
-    if not ok:
-        return None
-    nmax = max(r["loo"]["n"] for r in ok.values())
-    ok = {m: r for m, r in ok.items() if r["loo"]["n"] >= 0.8 * nmax}
-    return min(ok, key=lambda m: ok[m]["loo"]["mae"])
 
 
 # ---------------------------------------------------------------------------
