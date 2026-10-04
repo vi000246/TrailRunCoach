@@ -520,6 +520,7 @@ async def sync_workouts(
     page = 1
     total_checked = 0
     total_downloaded = 0
+    tl_filled = 0                 # already-imported activities whose list trainingLoad was stored
     errors: list[str] = []
 
     relogged = False
@@ -569,6 +570,7 @@ async def sync_workouts(
                 if act_tl is not None and known.coros_training_load != act_tl:
                     known.coros_training_load = act_tl
                     await db.commit()
+                    tl_filled += 1
                 yield {"status": "skipped", "activity_id": label_id, "reason": "already_imported"}
                 continue
 
@@ -643,4 +645,4 @@ async def sync_workouts(
     await refresh_hr_profile(db, athlete_id, token, base, user_id)
 
     yield {"status": "complete", "total_downloaded": total_downloaded,
-           "total_checked": total_checked, "errors": errors}
+           "total_checked": total_checked, "errors": errors, "tl_filled": tl_filled}

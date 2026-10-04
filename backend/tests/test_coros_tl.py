@@ -183,7 +183,9 @@ def test_backtest_gate_keeps_a_better_stored_fit():
     assert rep["power"]["kept"].startswith("the stored fit")
     # nothing stored: the same data is accepted (the defaults are only a prior)
     new2, rep2 = TL.refit(old + recent, None, TODAY)
-    assert rep2["power"].get("accepted") or rep2["power"]["kept"]
+    # nothing stored: the candidate still has to beat the defaults on the same holdout (it doesn't here)
+    assert rep2["power"]["kept"] and "power" not in new2["groups"]
+    assert rep2["power"]["backtest_result"]["n"] == len(recent)
     assert TL.validate(new) is None and TL.validate(new2) is None
 
 
@@ -200,6 +202,43 @@ def test_describe_for_the_settings_page():
 # ---------------------------------------------------------------------------
 # closed loop
 # ---------------------------------------------------------------------------
+
+def test_factor_does_not_oscillate_once_applied():
+    """Steps pushed under a factor of 1.2 that then run exactly as planned keep the factor
+    (≈ 1.2 after shrinkage), they don't pull it back toward 1."""
+    m12 = TL.Model.of()
+    m12.factor = 1.2
+    store = None
+    for i in range(20):
+        tl = m12.tl(50, "power")["tl"]
+        store = TL.record_push(store, f"u{i}", "2026-09-01",
+                               [{"i": 1, "n": 3, "tss": 50, "tl": tl, "basis": "power", "if": 0.9, "f": 1.2}])
+    sessions = [{"uid": f"u{i}", "state": "done"} for i in range(20)]
+    raw = TL.Model.of()                                            # the uncorrected model
+    with_raw, _ = TL.refresh_load(store, sessions, lambda s, r: [50.0],
+                                  lambda st: raw.tss(st["tl"], st["basis"], st["if"]))
+    without_raw, _ = TL.refresh_load(store, sessions, lambda s, r: [50.0])
+    want = math.exp(20 / 25 * math.log(1.2))
+    assert TL.load_factor(with_raw)["factor"] == pytest.approx(want, abs=0.01)
+    assert TL.load_factor(without_raw)["factor"] == pytest.approx(want, abs=1e-3)
+    assert TL.load_factor(with_raw)["ratio"] == pytest.approx(1.2, abs=0.01)
+
+
+def test_tl_backfill_alone_triggers_the_refit(monkeypatch):
+    from backend.engine import calibrate
+    started = []
+
+    async def fake_run(athlete_id=1):
+        started.append(athlete_id)
+    monkeypatch.setattr(calibrate, "run_safe", fake_run)
+
+    async def go():
+        assert calibrate._after_sync("coros", {"status": "ok", "downloaded": 0}) is None
+        t = calibrate._after_sync("coros", {"status": "ok", "downloaded": 0, "tl_filled": 3})
+        await t
+    run(go())
+    assert started == [1]
+
 
 def test_window_share_and_step_actual():
     t = list(range(0, 1200))
@@ -273,7 +312,8 @@ def test_load_step_time_tss_view_and_preview():
     line = v["watch"]["lines"][1]
     assert line["dur"] == f"負荷 {round(want['tl'])} TL" and line["target"] == "功率 255–285 W"
     assert any("「負荷」段" in x for x in v["watch"]["lost"])
-    assert WS.load_records(d, c) == [{"i": 1, "n": 2, "tss": 75, "tl": round(want["tl"])}]
+    assert WS.load_records(d, c) == [{"i": 1, "n": 2, "tss": 75, "tl": round(want["tl"]), "basis": "power",
+                                      "if": round(f, 4), "f": 1.0}]
 
 
 def test_issue_when_the_provider_has_no_load_end_condition():
@@ -361,7 +401,7 @@ def test_session_push_sends_targettype_6_and_records_load_steps():
     f = WS.hr_to_p(143 / 170)
     want = round(TL.Model.of().tl(75, "hr", f)["tl"])
     assert ex["targetType"] == 6 and ex["targetValue"] == want and ex["intensityType"] == 2
-    assert spec.load_steps == [{"i": 1, "n": 2, "tss": 75, "tl": want}]
+    assert spec.load_steps == [{"i": 1, "n": 2, "tss": 75, "tl": want, "basis": "hr", "if": round(f, 4), "f": 1.0}]
 
 
 def test_fallback_without_the_code_and_on_other_providers(monkeypatch):
@@ -435,7 +475,8 @@ def test_sync_stores_and_backfills_training_load(tmp_path, _fit_root_in_tmp):
             assert rows["111"].coros_training_load == 64 and rows["222"].coros_training_load is None
             n_calls = len(fake.list_params)
             fake.activities[1]["trainingLoad"] = 41          # COROS lists it now: filled, no download
-            await collect(coros_client.sync_workouts(s, 1, since="2026-08-30"))
+            ev = await collect(coros_client.sync_workouts(s, 1, since="2026-08-30"))
+            assert next(e for e in ev if e["status"] == "complete")["tl_filled"] == 1
             rows = {r.coros_activity_id: r for r in (await s.execute(select(WorkoutFile))).scalars()}
             assert rows["222"].coros_training_load == 41 and len(fake.list_params) == n_calls + 1
     run(go())
@@ -509,7 +550,7 @@ def test_refit_and_store_after_sync():
     ch = {(45, "power"): [150.0] * 300 + [300.0] * 600 + [150.0] * 300, (45, "deltatime"): [0.0] + [1.0] * 1199}
     run(db.commit())
     repo = SettingsRepository(db)
-    run(repo.set(TL.LOAD_KEY, TL.record_push(None, "uid-9", TODAY.isoformat(), [{"i": 1, "n": 3, "tss": 60, "tl": 70}])))
+    run(repo.set(TL.LOAD_KEY, TL.record_push(None, "uid-9", TODAY.isoformat(), [{"i": 1, "n": 3, "tss": 60, "tl": 70, "basis": "power", "f": 1.0}])))
     run(db.commit())
     sess = {"uid": "uid-9", "state": "done", "done_by": {"index": 45}}
 
@@ -523,4 +564,17 @@ def test_refit_and_store_after_sync():
     assert stored["groups"]["power"]["n"] == 45 and stored["groups"]["power"]["w"] == pytest.approx(45 / 75, abs=1e-3)
     act = run(repo.get(TL.LOAD_KEY))["sessions"]["uid-9"]["actual"]
     assert act and act[0] == pytest.approx(100 * 2400 / 3000, abs=1.0)          # 80 TSS in the load lap
-    assert out["load"]["n"] == 1 and out["load"]["ratio"] == pytest.approx(80 / 60, abs=0.02)
+    # the sample is measured against the uncorrected (just refit) model's TSS for the TL sent
+    raw = TL.Model.of(stored).tss(70, "power")
+    assert run(repo.get(TL.LOAD_KEY))["sessions"]["uid-9"]["raw"] == [raw]
+    assert out["load"]["n"] == 1 and out["load"]["ratio"] == pytest.approx(act[0] / raw, abs=0.01)
+
+
+def test_user_template_round_trips_a_load_step():
+    from backend.engine import user_templates as UT
+    from backend.tests.test_coros_workouts import make_db
+    db = run(make_db())
+    cat = next(iter(UT.BUILTIN))
+    t = run(UT.create(db, {"name": "負荷主課", "cats": [cat], "steps": LOAD_DOC}))
+    got = run(UT.get(db, t["id"]))
+    assert got["steps"]["items"][1]["dur"] == {"type": "load", "value": 75}

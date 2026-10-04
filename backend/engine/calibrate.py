@@ -268,8 +268,11 @@ async def run_safe(athlete_id: int = 1) -> dict:
 
 
 def _after_sync(source: str, result: dict, athlete_id: int = 1) -> Optional[asyncio.Task]:
-    """sync/runner.py calls this when a run ends: ≥ 1 new activity -> a background fit."""
-    if (result or {}).get("status") not in ("ok", "partial") or int((result or {}).get("downloaded") or 0) < 1:
+    """sync/runner.py calls this when a run ends: ≥ 1 new activity, or COROS TL stored on
+    already-imported ones (`tl_filled`, for the TL refit) -> a background fit."""
+    r = result or {}
+    if r.get("status") not in ("ok", "partial") or (int(r.get("downloaded") or 0) < 1
+                                                    and int(r.get("tl_filled") or 0) < 1):
         return None
     try:
         t = asyncio.get_running_loop().create_task(run_safe(athlete_id))
