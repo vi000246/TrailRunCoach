@@ -16,7 +16,7 @@ from backend.engine import activity_tags as AT
 
 
 def _run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ---- auto rules ---------------------------------------------------------------

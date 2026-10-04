@@ -30,11 +30,7 @@ START = datetime(2026, 9, 1, 22, 30, tzinfo=timezone.utc)   # 06:30 next day in 
 
 
 def run(coro):
-    # not asyncio.run(): it leaves no current loop behind, and older tests in
-    # this suite call asyncio.get_event_loop()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 async def make_session(tmp_path, tz="Asia/Taipei", **settings):
