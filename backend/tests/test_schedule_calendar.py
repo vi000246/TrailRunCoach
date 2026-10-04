@@ -176,3 +176,25 @@ def test_schedule_page_served(monkeypatch):
     with Env(monkeypatch) as e:
         r = e.c.get(f"{API}/schedule/page")
         assert r.status_code == 200 and 'data-page="schedule"' in r.text
+
+
+def test_schedule_page_pull_button_and_status_legend(monkeypatch):
+    """抓活動 (資料來源 → 這裡, shared syncrun.js) is a separate button from 推送到手錶;
+    推送狀態 is a watch glyph, ✓ stays 完成, the legend has both groups."""
+    import json
+    from pathlib import Path
+    static = Path(__file__).resolve().parents[1] / "static"
+    with Env(monkeypatch) as e:
+        page = e.c.get(f"{API}/schedule/page").text
+    assert 'id="pull-btn"' in page and 'id="pull-login"' in page and "syncrun.js" in page
+    assert "TRCSync.run(PRI.source" in page and "TRCSync.primary()" in page and "autoPlanRefresh" in page
+    assert 'data-i18n="schedule.push.btn">推送到手錶<' in page and "同步到 COROS" not in page
+    assert 'tt("legend.done_h")' in page and 'tt("legend.watch_h")' in page
+    assert 'ok: "已推送到 COROS"' not in page and "<circle cx=\"8\" cy=\"8\" r=\"7\"" not in page   # no green ✓ disc
+    settings = (static / "settings.html").read_text("utf-8")
+    assert "syncrun.js" in settings and "TRCSync.run(src" in settings and "getReader" not in settings
+    js = (static / "syncrun.js").read_text("utf-8")
+    assert "window.TRCSync" in js and "/primary" in js and "r.status === 409" in js
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((static / "i18n" / loc / "schedule.json").read_text("utf-8"))
+        assert all(cat.get(k) for k in ("pull.btn", "push.btn", "legend.done_h", "legend.watch_h", "sy.pushed"))

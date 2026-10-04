@@ -369,3 +369,23 @@ def test_migrate_fit_folders_dry_run_apply_idempotent(tmp_path, _fit_root_in_tmp
         assert again["tp"]["already"] == 1 and again["coros"]["already"] == 1
         assert again["tp"]["moved"] == 0 and again["coros"]["moved"] == 0
     run(go())
+
+
+def test_primary_endpoint_reports_the_source_in_use(tmp_path, _fit_root_in_tmp):
+    """GET /sync/primary (課表 › 從 COROS 抓活動): source in use, login, enabled, busy."""
+    from backend.api.sync import sync_primary
+
+    async def go():
+        s = await make_session(tmp_path)
+        out = await sync_primary(1, s)
+        assert out == {"source": "coros", "label": "COROS", "logged_in": False, "enabled": True, "busy": False}
+        await _coros_synced(s, [_coros_act("A1", START)])
+        with runner.hold("coros"):
+            out = await sync_primary(1, s)
+        assert out["logged_in"] and out["busy"]
+        repo = SettingsRepository(s, 1)
+        await repo.set("sync.primary_source", "trainingpeaks")
+        await repo.set("sync.trainingpeaks.enabled", False)
+        out = await sync_primary(1, s)
+        assert out == {"source": "tp", "label": "TrainingPeaks", "logged_in": False, "enabled": False, "busy": False}
+    run(go())
