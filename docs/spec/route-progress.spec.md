@@ -1,6 +1,6 @@
 # Module Spec: route-progress
 
-> Last Updated: 2026-10-01 · Status: implemented (feat/route-progress, feat/routes-weather-hr, fix/routes-dedup-thumbs)
+> Last Updated: 2026-10-04 · Status: implemented (feat/route-progress, feat/routes-weather-hr, fix/routes-dedup-thumbs)
 
 ## Overview
 
@@ -22,7 +22,7 @@ User request: 「同一條路線的進步追蹤能自動產出嗎，例如判斷
 | API | `backend/api/routes.py` | `/api/v1/routes…`, `/api/v1/wko5/workouts/{idx}/segments` |
 | Page | `backend/static/routes.html` | 路線 page: list, detail (map, trend, comparison, effort table) |
 | Card | `backend/static/segments_card.js` | single-activity card in the viewer (one `<script>` tag in `wko5_viewer.html`) |
-| Map layers | `backend/static/basemaps.js` | the viewer's basemaps / overlays + the settings default, shared |
+| Map layers | `backend/static/basemaps.js` | basemaps / overlays + the settings default, the tile-error hint and the route drawing (halo, line, start / finish), shared by the viewer, this page and the race calculator |
 
 The existing `algorithms/routes.py` (100 m cell Jaccard, used by the
 achievements page) is unchanged.
@@ -351,7 +351,7 @@ new file: none; full recompute from cached tracks: ~40 s.
   like a small track but is a time series — the "thumbnail that does not match
   the GPX".
 - Detail: rename (click the title); Leaflet map with the settings-page basemap
-  default and the viewer's layers (`basemaps.js`); trend (time / VAM / pace over
+  default and the viewer's layers, the route drawn by `MapLayers.track` (`basemaps.js`); trend (time / VAM / pace over
   date, below it HR ÷ VAM for climbs, avg HR otherwise; click a point to make
   it B); comparison (pace / HR / power / elevation vs distance, gap chart,
   hover moves A's and B's markers on the map — B's marker is where B was at
@@ -486,3 +486,4 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | 2026-09-30 | feature | — | Initial: automatic segments / routes, effort metrics, 路線 page, viewer card |
 | 2026-09-30 | feature | — | Per-effort historical weather (Open-Meteo archive, batched per day × 0.25° cell, cached), Hadley heat flag, trend coloured by temperature; max HR and max 30 s power per effort (ALGO_VERSION 3); deterministic detection; ids carried over across a version bump; independent verification script |
 | 2026-10-01 | bugfix | — | One route per path: clustering by length share (start / direction free), canonical common part, partials / sub-routes, reversed runs ranked apart; stretches folded into routes, longer variants dropped, chains merged; real path thumbnails (the row graphic was a time sparkline); INDEX_VERSION 4 |
+| 2026-10-04 | feature | SP-41 | The route on the detail map is drawn by the shared `MapLayers.track` (`basemaps.js`), the same as the activity map and the race calculator's course map |

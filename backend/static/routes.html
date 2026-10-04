@@ -362,10 +362,7 @@ async function drawMap() {
   const map = S.map = L.map("map", { zoomControl: true });
   MapLayers.attach(map, await MapLayers.defaults(), "routes.map");
   const ll = d.lat.map((a, i) => [a, d.lon[i]]);
-  L.polyline(ll, { color: "#fff", weight: 8, opacity: .7, interactive: false }).addTo(map);
-  L.polyline(ll, { color: css("--accent") || "#2563eb", weight: 5, interactive: false }).addTo(map);
-  L.circleMarker(ll[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1 }).addTo(map).bindTooltip("起點");
-  L.circleMarker(ll[ll.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#dc2626", fillOpacity: 1 }).addTo(map).bindTooltip("終點");
+  MapLayers.track(L.layerGroup().addTo(map), ll, { color: css("--accent") || "#2563eb" });
   S.hoverA = L.circleMarker(ll[0], { radius: 7, color: "#fff", weight: 2, fillColor: css("--a"), fillOpacity: 1 });
   S.hoverB = L.circleMarker(ll[0], { radius: 5, color: "#fff", weight: 2, fillColor: css("--b"), fillOpacity: 1 });
   map.fitBounds(L.latLngBounds(ll), { padding: [18, 18] });

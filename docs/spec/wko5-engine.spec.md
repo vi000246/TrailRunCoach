@@ -1,6 +1,6 @@
 # Module Spec: wko5-engine
 
-> **Last Updated**: 2026-09-30
+> **Last Updated**: 2026-10-04
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -179,8 +179,9 @@ Two kinds, one renderer:
 Custom views use the same shape as parsed WKO5 views (`customviews.py`); a
 later file with the same `name` overrides an earlier one
 (`backend/engine/wko5expr/customviews.py:133`). A chart's `kind` is `athlete`
-(default), `workout`, `zones`, `targets` or `review`
-(`backend/engine/wko5expr/customviews.py:75`); `review` needs a `section`
+(default), `workout`, `zones`, `targets`, `review`, `map` (the workout's
+GPS route, same as WKO5's map panel) and a few panel kinds
+(`backend/engine/wko5expr/customviews.py:93`); `review` needs a `section`
 and renders a single-activity card — see
 [workout-review.spec.md](./workout-review.spec.md). Two optional chart keys
 drive the period toggle: `period` (day / week / month / quarter / year, the
@@ -432,22 +433,24 @@ unchanged files and unchanged code reads no FIT file at all.
   percent shares (`backend/static/wko5_viewer.html:1520`). Its unit, like every
   tooltip row's, comes from the source series of the ECharts series
   (`srcOf[seriesIndex]`, `backend/static/wko5_viewer.html:1399`).
-- **Route map** (`backend/static/wko5_viewer.html:1087`): WKO5's map panel
-  (`PKMapPanelConfig`, `backend/api/wko5views.py:148`) is drawn with Leaflet
-  from the workout samples; the panel JSON (`render_map`,
-  `backend/engine/wko5expr/render.py:372`) only says which workout and whether it
-  has GPS (`empty`), no track of its own. Basemaps 魯地圖 (default), Google 地形, NLSC 電子地圖,
-  正射影像, OSM; overlays 等高線, Google 道路, NLSC 道路
-  (`backend/static/wko5_viewer.html:1041`). The defaults come from the settings
-  keys `charts.map.basemap` / `charts.map.overlays`
-  (`backend/settings/repository.py:53`), read as `map_basemap` / `map_overlays`
-  from `GET /api/v1/sync/settings` (`backend/api/sync.py:215`,
-  `backend/static/wko5_viewer.html:410`; storage side in
+- **Route map** (`backend/static/wko5_viewer.html:1953`): WKO5's map panel
+  (`PKMapPanelConfig`, `backend/api/wko5views.py:292`) or a custom view's `kind: "map"` chart
+  is drawn with Leaflet from the workout samples; the panel JSON (`render_map`,
+  `backend/engine/wko5expr/render.py:445`) only says which workout and whether it
+  has GPS (`empty`, shown as 「沒有 GPS 資料」), no track of its own. The bundled
+  單次活動判讀 view has it on its first page (`route-map`, `views/workout.json`). Basemaps
+  魯地圖, Google 地形, NLSC 電子地圖, 正射影像, OSM; overlays 等高線, Google 道路, NLSC 道路
+  come from the shared `backend/static/basemaps.js:15` (also the routes page and the race
+  calculator's course map). The defaults come from the settings keys `charts.map.basemap` /
+  `charts.map.overlays` (`backend/settings/repository.py:95`), read as `map_basemap` /
+  `map_overlays` from `GET /api/v1/sync/settings` (`backend/api/sync.py:224`,
+  `backend/static/wko5_viewer.html:571`; storage side in
   [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)); a per-browser switch is kept only
-  while that default is unchanged (`backend/static/wko5_viewer.html:1065`).
+  while that default is unchanged (`backend/static/basemaps.js:52`; the viewer keeps its
+  route colour in the same entry, `backend/static/wko5_viewer.html:1941`).
   The route is coloured by 心率 / 功率 / 坡度 / 單色 (5–95th percentile ramp,
-  12 bins) with start / end markers.
-- **Tile-error hint** (`backend/static/wko5_viewer.html:1115`): if the active
+  12 bins) with start / end markers (`MapLayers.track`, `backend/static/basemaps.js:111`).
+- **Tile-error hint** (`backend/static/basemaps.js:66`): if the active
   basemap has 3 tile errors and no tile loaded, a hint offers up to three other
   basemaps (not Google 地形) as buttons.
 - **Synced hover** (`backend/static/wko5_viewer.html:986`): the map and every
@@ -575,6 +578,7 @@ mode (`backend/tests/test_drift_basis.py:340`).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
+| 2026-10-04 | feature | SP-41 | Custom views accept `kind: "map"`; 單次活動判讀's first page has the route map; the viewer's basemap list, layer switch, tile-error hint, route drawing and nearest-point lookup moved to the shared `basemaps.js` (`MapLayers`) |
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |
 | 2026-09-30 | code-sync | N/A | Period toggle (periods.py, `period` / `min_days`), render cache, viewer (flat custom tabs, &chart= deep link, enlarge overlay, 數值與公式 table removed, Leaflet route map with basemaps / overlays / tile-error hint, samples endpoint and synced hover), regrouped custom views, refreshed API table |
 | 2026-09-30 | bugfix | N/A | Chart dataset follows `charts.data_source` (header chip); code signature also covers panels/, files/ and api/wko5views.py; render_map drops the unused track; tooltip units from the drawn series; no lttb on distance-x hover charts; WKO5 folder from env or found under the home directory's WKO5 folder; refreshed anchors |

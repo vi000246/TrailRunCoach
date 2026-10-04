@@ -87,3 +87,19 @@ def test_baiyue_snapshot_drops_body_and_ree(client):
     snap = client.get(f"/share/{r.json()['id']}/data").json()
     assert snap["cp"] is None and all("ree" not in d for d in snap["fuel"]["daily"])
     assert not any("基礎代謝" in w for w in snap["fuel"]["warnings"])
+
+
+def test_share_snapshot_carries_no_coordinates():
+    """SP-41: the course profile and waypoints now carry lat / lon for the map;
+    a share link keeps only km / z (an uploaded FIT may start at home)."""
+    from backend.engine.racepower import course as CO
+    from backend.tests.test_racepower_v2 import synthetic_track
+    tr = synthetic_track({"len": 4000, "z": lambda x: 300 + 0.05 * x})
+    tr.wpts = [{"name": "CP1", "lat": tr.lat[100], "lon": tr.lon[100]}]
+    c = CO.build_course(tr)
+    assert c["profile"]["lat"] and c["wpts"][0]["lat"]
+    plan = {"type": "trail", "summary": {"km": 4.0}, "profile": c["profile"], "wpts": c["wpts"], "start": c["start"]}
+    snap = SH.snapshot(plan, title="t")
+    assert set(snap["profile"]) == {"km", "z"} and snap["profile"]["km"] == c["profile"]["km"]
+    text = json.dumps(snap)
+    assert '"lat"' not in text and '"lon"' not in text and "wpts" not in text

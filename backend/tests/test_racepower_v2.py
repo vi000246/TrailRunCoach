@@ -627,6 +627,25 @@ def test_gpx_write_round_trip_and_camp_waypoint():
     assert c["wpts"][0]["camp"] and c["wpts"][0]["km"] == approx(1.5, abs=0.02)
 
 
+def test_profile_and_waypoints_carry_coordinates_for_the_map():
+    """SP-41: the course map (racepower.html) draws the profile's own points, so
+    profile.lat / lon run alongside km / z and waypoints keep their position."""
+    tr = synthetic_track({"len": 5000, "z": lambda x: 500 + 0.05 * x})
+    tr.wpts = [{"name": "CP1 補給站", "lat": tr.lat[200], "lon": tr.lon[200]}]
+    c = CO.build_course(tr)
+    p = c["profile"]
+    assert len(p["lat"]) == len(p["lon"]) == len(p["km"]) == len(p["z"])
+    assert p["lat"][0] == approx(tr.lat[0], abs=1e-5) and p["lat"][-1] == approx(tr.lat[-1], abs=1e-5)
+    assert set(p["lon"]) == {121.0}
+    # straight north: each point's latitude is its km along the track
+    k = len(p["km"]) // 2
+    assert p["lat"][k] == approx(tr.lat[0] + p["km"][k] * 1000 / (math.pi / 180 * CO.EARTH_R), abs=2e-5)
+    assert all(len(str(x).split(".")[-1]) <= 5 for x in p["lat"])          # rounded to 5 decimals (~1 m)
+    w = c["wpts"][0]
+    assert w["km"] == approx(2.0, abs=0.02) and w["lat"] == approx(tr.lat[200], abs=1e-5) and w["lon"] == 121.0
+    assert CO.manual_course(10.0)["profile"] is None                      # a manual course has no map
+
+
 def test_device_distance_is_the_ruler_when_given():
     tr = synthetic_track({"len": 2000, "z": lambda x: 100.0})
     tr.dist = [i * 11.0 for i in range(len(tr))]          # the footpod says 10 % longer
