@@ -7,5 +7,11 @@
   "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": "Not enough running in the last 12 weeks: trail running for now (the original setting)",
   "近 12 週越野＋登山佔跑步時間 {share:.0%}（≥ {min:.0%} 算越野跑，推估）": "Trail + hiking were {share:.0%} of running time in the last 12 weeks (≥ {min:.0%} counts as trail running, estimate)",
   "沒有閾值配速：這段推到手錶不會有配速目標": "No threshold pace: this step reaches the watch without a pace target",
-  "不設目標": "No target"
+  "不設目標": "No target",
+  "{m} 分": "{m} min",
+  "計畫：{text}": "Planned: {text}",
+  "實際：{text}": "Actual: {text}",
+  "爬升 {m} m": "climb {m} m",
+  "在課表打開這堂課：{url}": "Open this session in the plan: {url}",
+  "課表（TrailRunCoach）": "Training plan (TrailRunCoach)"
 }
