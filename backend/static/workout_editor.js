@@ -301,7 +301,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (type === "hr") {
         if (r.type === "hr" && /輕鬆跑上限|AeT/.test(r.sub || "")) return { type, mode: "zone", zone: "aet" };
         if (r.type === "hr" && th.lthr) return { type, mode: "pct", lo: rd(r.lo / th.lthr), hi: rd(r.hi / th.lthr) };
-        return { type, mode: "zone", zone: st.kind === "work" ? "4" : "aet" };
+        // 課表心率區間 (Z1–Z6) when the context has it, else the Friel ids
+        const hz = (((this.ctx || {}).zones || {}).hr || []).some((x) => x.id === "Z4") ? "Z4" : "4";
+        return { type, mode: "zone", zone: st.kind === "work" ? hz : "aet" };
       }
       if (type === "pace") {
         if (f && th.tpace) return { type, mode: "pct", lo: rd(1 / (f + 0.03)), hi: rd(1 / Math.max(0.3, f - 0.03)) };
@@ -323,7 +325,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         return { type: t.type, mode, lo: z ? z.lo : 0.9, hi: z ? z.hi : 0.95 };
       }
       const mid = r.lo != null && base ? (r.lo + r.hi) / 2 / base : null;
-      const z = zones.find((x) => x.lo != null && mid != null && mid >= x.lo && mid < x.hi) || zones.find((x) => x.lo != null) || { id: "aet" };
+      const cur = zones.filter((x) => !x.legacy);
+      const z = cur.find((x) => x.lo != null && mid != null && mid >= x.lo && mid < x.hi) || cur.find((x) => x.lo != null) || { id: "aet" };
       return { type: t.type, mode: "zone", zone: z.id };
     }
 
@@ -379,7 +382,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         opt("auto", `自動（依課表類型）`, ty) + ["power", "hr", "pace"].map((k) => opt(k, TYPE[k] + (miss[k] ? `（${miss[k]}）` : ""), ty)).join("") + opt("none", "無", ty) + `</select>`;
       if (["power", "hr", "pace"].includes(ty)) {
         h += `<select data-f="tmode" aria-label="填法">${opt("zone", "區間", t.mode)}${opt("pct", ty === "power" ? "% CP" : ty === "hr" ? "% LTHR" : "% 閾值配速", t.mode)}${opt("abs", "自訂數字", t.mode)}</select>`;
-        if (t.mode === "zone") h += `<select data-f="tzone" aria-label="區間">${zones.map((z) => opt(z.id, `${z.label}${z.text ? " · " + z.text : ""}`, t.zone)).join("")}</select>`;
+        if (t.mode === "zone") h += `<select data-f="tzone" aria-label="區間">${zones.filter((z) => !z.legacy || z.id === t.zone).map((z) => opt(z.id, `${z.label}${z.text ? " · " + z.text : ""}`, t.zone)).join("")}</select>`;
         else if (t.mode === "pct") h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo * 100)}" aria-label="下限 %">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi * 100)}" aria-label="上限 %"><span class="faint">%</span>${ty === "pace" ? q(TIP.pacePct) : ""}`;
         else if (ty === "pace") h += `<input class="dur" data-f="tlo" value="${mmss(t.lo)}" aria-label="快的一端 分:秒/km">–<input class="dur" data-f="thi" value="${mmss(t.hi)}" aria-label="慢的一端 分:秒/km"><span class="faint">/km</span>`;
         else h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo)}" aria-label="下限">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi)}" aria-label="上限"><span class="faint">${ty === "power" ? "W" : "bpm"}</span>`;
