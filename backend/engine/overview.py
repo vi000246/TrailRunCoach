@@ -524,6 +524,20 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         return s
     if rung in IL.LIBRARY:
         f = IL.fit(rung, cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"))
+        if rung in IL.Z3_TRACK and cap is not None and (f["action"] == "back" or not f["equiv"]):
+            # the day's cap can't fit the Zone 3 rung (no equivalent, no other day): the 巡航版 of the
+            # same position that fits — it counts as the rung when 達標, the same rule as the volume
+            # cap above (owner 2026-10-04: symmetric); else fit's own fallback (縮量版 / the step before)
+            fc = _cruise_for_cap(rung, cap, history, prefs, mountain)
+            if fc is not None:
+                why = (f"平日上限 {cap:.0f} 分放不下 {IL.RUNG_NAME[rung]} {IL.structure(canon)}"
+                       f"（需要 {f.get('need_min') or 0:.0f} 分）→ 巡航版 {IL.structure(fc['variant'])}（算這一階）")
+                s = IL.session_for({**fc, "rung": rung, "equiv": True, "progress": True, "action": "ok",
+                                    "reason": f"{why}；{fc['reason']}"}, tth, pre, lthr_default, prefs, swap="cap")
+                s["source"] = QG.source(gate, (s["source"],))
+                if notes is not None:
+                    notes.append({"level": "info", "src": "z3", "text": why})
+                return s
         by_cap = f["level"] != "full" or f["action"] != "ok" or f.get("reps") is not None
         s = IL.session_for(f, tth, pre, lthr_default, prefs, swap="cap" if by_cap else "auto")
         if f["action"] == "move" and f.get("move_wd") is not None:
@@ -533,6 +547,20 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
     s = QG.session(spec, tth, pre, hours, lthr_default)
     s["source"] = QG.source(gate, spec)
     return s
+
+
+def _cruise_for_cap(rung: str, cap: Optional[float], history=None, prefs=None, mountain: bool = False) -> Optional[dict]:
+    """The 巡航版 for a Zone 3 track rung the day's cap can't fit: the cruise rung of the same position
+    (quality_gate.cruise_for's order: A1 → T1, A2 → T2, A3 / A4 → T3), stepping down until
+    interval_library.fit gives a standard or equivalent session within `cap`; None when none fits."""
+    from backend.engine import interval_library as IL
+    from backend.engine import quality_gate as QG
+    i = min(IL.Z3_TRACK.index(rung) if rung in IL.Z3_TRACK else 0, len(QG.CRUISE) - 1)
+    for j in range(i, -1, -1):
+        f = IL.fit(QG.CRUISE[j][0], cap, history or (), prefs, mountain)
+        if f["action"] == "ok" and f["equiv"]:
+            return f
+    return None
 
 
 def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hours: Optional[float], prefs=None,
@@ -557,7 +585,14 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
         t = it.get("track")
         used = sum(session_tiz_min(x) for x in built.values())
         left = None if total is None else max(0.0, total - used)
-        if kind == "specific" and t == "z3" and road:
+        if it.get("cruise"):
+            s = _second_z3(gate, built, it, th, hours, prefs, history, mountain, cap, left, notes)
+            if s is None:
+                continue
+        elif kind == "specific" and it.get("spec") is QG.SUB:
+            # 專項期 under a CTL ramp ≥ 5 (week_decision): the threshold-only session, as in the base phase
+            s = _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
+        elif kind == "specific" and t == "z3" and road:
             s = dict(ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
         elif kind == "specific" and t == "z5" and not road:
             s = dict(TRAIL_SPECIFIC_Z5, target=tgt.get("supra", ""))
@@ -571,10 +606,79 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
         built[i] = s
     out = []
     for i in range(len(items)):
+        if i not in built:
+            continue                            # the second Zone 3 session didn't fit (a note says so)
         s = built[i]
-        s["id"] = "quality" if i == 0 else f"quality{i + 1}"
+        s["id"] = "quality" if not out else f"quality{len(out) + 1}"
         out.append(s)
     return out
+
+
+CRUISE_REP_MIN_S = 6 * 60   # 巡航 = reps of 6–15 min (coach-schools-zones-periodization.md R1: Friel 6–12′, Daniels
+                            # cruise 3–15′, the Norwegian 5×6′) — shorter reps aren't the second Zone 3 session
+
+
+def _second_z3(gate: dict, built: dict, it: dict, th: dict, hours: Optional[float], prefs=None, history=None,
+               mountain: bool = False, cap: Optional[float] = None, left: Optional[float] = None,
+               notes: Optional[list] = None) -> Optional[dict]:
+    """The week's second Zone 3 session while Zone 5 is closed (課表偏好 2 a week; owner 2026-10-04):
+    a 巡航版 interval (a T1–T3 library row or fewer of its reps, floor interval_library.MIN_REPS;
+    quality_gate.week_decision's `cruise` item) as close to the first one's time in zone as the
+    Zone 3 cap (quality_gate.z3_budget_min: 10 % of the week for both, Daniels), the week's
+    interval total (`left`) and the day's cap allow, never the first one's structure. None — with
+    a note — when nothing fits. It doesn't move the rung (its 達標 counts in `met`)."""
+    from backend.engine import interval_library as IL
+    from backend.engine import quality_gate as QG
+    first = next((x for x in built.values()), None)
+    want = session_tiz_min(first) if first else IL.tiz_s(IL.canonical(it["spec"][0])) / 60.0
+    room = [want]
+    z3cap = QG.z3_budget_min(hours)
+    if z3cap is not None:
+        room.append(z3cap - sum(session_tiz_min(x) for x in built.values()))
+    if left is not None:
+        room.append(left)
+    budget = min(room)
+    # the 巡航版 intervals (T1–T3 rows of the library with ≥ 2 reps of ≥ 6 min, and fewer of their reps down to
+    # MIN_REPS): the largest time in zone within the budget and the day's cap, not the first session's
+    # structure; on a tie the rung of the first one's position (quality_gate.cruise_for)
+    pos = QG.cruise_for(first.get("rung_key") if first and first.get("rung_key") in IL.Z3_TRACK else "a1", None)
+    mine = (IL.structure(IL.resolve(first["variant_key"], first.get("variant_reps"))) if first and
+            first.get("variant_key") else None)
+    best = None
+    for r in IL.CRUISE_RUNGS:
+        for base in IL.LIBRARY.get(r, ()):
+            if base.n < 2 or base.sets > 1 or min(base.works) < CRUISE_REP_MIN_S:
+                continue
+            for n in range(base.n, IL.MIN_REPS.get(base.cls, 2) - 1, -1):
+                v = IL.with_reps(base, n)
+                t = IL.tiz_s(v) / 60.0
+                if t > budget + 1e-6 or IL.structure(v) == mine or \
+                        (cap is not None and IL.total_min(v, "min", prefs) > cap + 1e-6):
+                    continue
+                key = (t, r == pos, base.canonical, n == base.n)
+                if best is None or key > best[0]:
+                    best = (key, r, base, n, v)
+    fits = best is not None
+    if fits:
+        _, rung, canon, n, v = best
+    head = f"每週 2 堂、5 區還沒開：第二堂排不同的 3 區課（巡航版），不重複「{first['title']}」" if first else ""
+    if not fits:
+        if notes is not None:
+            notes.append({"level": "info", "src": "z3",
+                          "text": f"{head}——但 3 區每週上限（週量 10%，Daniels）／間歇總量（20%）或平日上限放不下"
+                                  f"（剩 {max(0.0, budget):.0f} 分）：本週排 1 堂"})
+        return None
+    why = (f"{head}：{IL.RUNG_NAME[rung]} {IL.structure(v)}，目標區 {IL.tiz_s(v) / 60:.0f} 分"
+           f"（第一堂 {want:.0f} 分；3 區合計 ≤ 週量 10%）")
+    f = {"variant": v, "level": "min" if cap is not None else "std", "reps": n if n != canon.n else None,
+         "equiv": True, "progress": False, "reason": why, "action": "ok", "rung": rung, "base": canon}
+    lthr_default = bool((gate.get("lthr") or {}).get("default"))
+    s = IL.session_for(f, {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}, QG.prefix(gate),
+                       lthr_default, prefs, swap="cap")
+    s["source"] = QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",))
+    if notes is not None:
+        notes.append({"level": "info", "src": "z3", "text": why})
+    return s
 
 
 def session_tiz_min(s: dict) -> float:

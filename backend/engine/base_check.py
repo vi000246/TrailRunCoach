@@ -17,10 +17,12 @@ xu_run(ds, w)
     heat counts (heat only inflates the drift — conservative), a fail in
     heat is marked 「熱環境，結果可能偏高」.
 z5_status(ds, today, …)
-    Zone 5 opens only once the base is confirmed (台灣教練: Zone 3 first, then
-    Zone 5) by ONE of three tests, done and passed (2026-10-01 使用者決定):
-    the 90-min test, a measured AeT with LTHR ÷ AeT − 1 ≤ 10 % (UA gap), or
-    ≥ 60 min near a measured AeT with drift < 5 % (Friel). Once confirmed it stays open with no expiry
+    Zone 5 opens only once the base is confirmed by a MEASURED AeT (SP-39, 2026-10-04;
+    coach-schools-zones-periodization.md R3): a measured AeT and a measured LTHR with
+    LTHR ÷ AeT − 1 ≤ 10 % (UA gap), or ≥ 60 min near a measured AeT with drift < 5 %
+    (Friel). The 90-min test is NOT an AeT test (it yields no AeT number): it belongs to
+    the Zone 3 gate (quality_gate.z3_gate) and no longer confirms Zone 5; neither do the
+    plateau / weeks methods (they open Zone 3). Once confirmed it stays open with no expiry
     while (docs/research/detraining.md §6.1) weekly Z1 time is not < 2/3 of
     the level at confirmation for 3 weeks in a row (Hickson 1982; 3 weeks
     推估; recovery / taper weeks don't count). A break ≥ 6 days without
@@ -399,9 +401,12 @@ def easy_targets(ds, today: dt.date, aet: Optional[float]) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 def _paths_for(mode: str) -> tuple:
-    """The confirmation tests a 間歇門檻 mode uses (auto: any one of the three)."""
-    return {"auto": ("xu90", "aet_ua_gap", "aet_friel_drift"), "xu_drift": ("xu90",), "ua_gap": ("aet_ua_gap",),
-            "friel_drift": ("aet_friel_drift",)}.get(mode, ())
+    """The Zone 5 confirmation tests a 間歇門檻 mode uses (SP-39): both measured-AeT tests, a
+    forced ua_gap / friel_drift only its own. The 90-min test (xu_drift) and plateau / weeks open
+    Zone 3 only — Zone 5 still needs a measured AeT; none = no gate."""
+    return {"auto": ("aet_ua_gap", "aet_friel_drift"), "xu_drift": ("aet_ua_gap", "aet_friel_drift"),
+            "plateau": ("aet_ua_gap", "aet_friel_drift"), "weeks": ("aet_ua_gap", "aet_friel_drift"),
+            "ua_gap": ("aet_ua_gap",), "friel_drift": ("aet_friel_drift",)}.get(mode, ())
 
 
 def _skip_week(ds, mon: dt.date, brk: Optional[dict]) -> bool:
@@ -476,7 +481,7 @@ def z5_status(ds, today: dt.date, mode: str = "auto", method_state: Optional[str
     st["reentry"] = brk
     if not st["open"]:
         if brk.get("reconfirm") and st["state"] == "unconfirmed":
-            st["reason"] = f"停跑 {brk['days']} 天（≥ 4 週）：要在 {ret} 之後重新確認有氧基礎（三種測試選一）"
+            st["reason"] = f"停跑 {brk['days']} 天（≥ 4 週）：要在 {ret} 之後重新做 AeT 測試（UA 差距或 Friel 飄移）"
             st["text"] = f"Zone 5：未確認（{st['reason']}；Mujika & Padilla 2000）"
         return st
     n = sum(1 for d in (quality_dates or []) if d >= qf)
@@ -504,8 +509,8 @@ def z5_status_base(ds, today: dt.date, mode: str = "auto", method_state: Optiona
     paused / open), "label", "open", "since", "path", "path_label",
     "reason", "maintenance", "xu_last", "pause"}. `aet_paths`:
     {"aet_ua_gap": date, "aet_friel_drift": date} from quality_gate's methods
-    (a measured AeT passing the UA gap / Friel drift). Modes plateau / weeks
-    use the method's own unlock (dated today); none = no gate (Seiler).
+    (a measured AeT passing the UA gap with a measured LTHR / the Friel drift — the only
+    confirmations since SP-39; `method_state` is no longer a path); none = no gate (Seiler).
     `pause`: why a paused state is paused ({"kind": "z1" | "reentry_z3" |
     "drift_check", …}), None otherwise."""
     if mode == "none":
@@ -514,26 +519,20 @@ def z5_status_base(ds, today: dt.date, mode: str = "auto", method_state: Optiona
                 "maintenance": None, "xu_last": None, "text": "Zone 5：不設門檻（Seiler）"}
     paths = _paths_for(mode)
     events: list[tuple[str, str, str]] = []
-    xs = xu_runs(ds, today) if "xu90" in paths else []
-    for r in xs:
-        if r["ok"]:
-            events.append((r["date"], "xu90", xu_text(r)))
     for k, d in (aet_paths or {}).items():
         if d and k in paths:
             events.append((str(d)[:10], k, PATH_LABEL[k]))
-    if mode in ("plateau", "weeks") and method_state == "unlocked":
-        events.append((today.isoformat(), "method", PATH_LABEL["method"]))
     if after:
         # a break ≥ 4 weeks: confirmations from before it no longer count (Mujika & Padilla 2000)
         events = [e for e in events if e[0] >= after]
-    base = {"xu_last": xs[-1] if xs else None, "maintenance": None, "pause": None}
+    base = {"xu_last": None, "maintenance": None, "pause": None}
     if not events:
-        why = ("三種確認測試都還沒做到" if len(paths) > 1 else "這個測試還沒做到" if paths
-               else "還沒解鎖" if mode in ("plateau", "weeks") else "這個間歇門檻不開 5 區")
+        why = ("還沒有實測 AeT 通過：實測 AeT＋實測 LTHR 差距 ≤ 10%，或在 AeT 附近 Friel 飄移 < 5%"
+               if len(paths) > 1 else "這個測試還沒做到" if paths else "這個間歇門檻不開 5 區")
         return {**base, "state": "unconfirmed", "label": STATE_LABEL["unconfirmed"], "open": False, "since": None,
                 "path": None, "path_label": "", "reason": why,
                 "text": f"Zone 5：未確認（{why}）"}
-    # the latest confirmation; on a tie the first listed (the 90-min test, then UA, then Friel)
+    # the latest confirmation; on a tie the first listed (UA, then Friel)
     since_s, path, detail = max(events, key=lambda e: e[0])
     since = dt.date.fromisoformat(since_s)
     mt = maintenance(ds, today, since, brk)

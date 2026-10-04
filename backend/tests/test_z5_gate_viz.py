@@ -8,6 +8,7 @@ from datetime import date
 import pytest
 
 from backend.engine import base_check as BC
+from backend.engine import interval_library as IL
 from backend.engine import plan_prefs as PP
 from backend.engine import quality_gate as QG
 from backend.engine.wko5expr.customviews import CustomViewError, parse_view
@@ -49,37 +50,57 @@ def _no_plan_db(monkeypatch):
 # the replay agrees with the planner
 # ---------------------------------------------------------------------------
 
-def test_replay_opens_on_the_qualifying_90_min_run_and_ends_where_the_gate_is():
-    xu_day = TODAY - dt.timedelta(days=10)
-    ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(xu_day)])
-    h = QG.z5_history(ds, ds.plan, TODAY - dt.timedelta(days=20), TODAY, PP.Prefs())
+def _aet_plan(day, aethr=150, lthr=160, note=""):
+    """A tested AeT + a measured LTHR on `day` (gap 6.7 % ≤ 10 %: the Zone 5 gate's UA path)."""
+    from backend.tests.test_quality_gate import _plan
+    return _plan(aethr=aethr, lthr=lthr, day=day.isoformat(), note=note)
+
+
+def test_replay_opens_on_the_measured_aet_not_on_the_90_min_run():
+    # SP-39: the 90-min run passes (a Zone 3 test) but Zone 5 opens only on the measured AeT + LTHR
+    xu_day, aet_day = TODAY - dt.timedelta(days=15), TODAY - dt.timedelta(days=6)
+    plan = _aet_plan(aet_day)
+    ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(xu_day)], plan)
+    h = QG.z5_history(ds, plan, TODAY - dt.timedelta(days=20), TODAY, PP.Prefs())
     by = {r["date"]: r for r in h["days"]}
-    assert by[(xu_day - dt.timedelta(days=1)).isoformat()]["state"] == "unconfirmed"
-    on = by[xu_day.isoformat()]
-    # one of the three tests (the 90-min test) done and passed
-    assert on["state"] == "confirmed" and on["path"] == "xu90" and on["since"] == xu_day.isoformat()
+    assert by[xu_day.isoformat()]["state"] == "unconfirmed"
+    assert by[(aet_day - dt.timedelta(days=1)).isoformat()]["state"] == "unconfirmed"
+    on = by[aet_day.isoformat()]
+    assert on["state"] == "confirmed" and on["path"] == "aet_ua_gap" and on["since"] == aet_day.isoformat()
     assert _states(h) == ["unconfirmed", "confirmed"]
     # the last replayed day is exactly what evaluate() (the planner) says today
     g = _gate_z5(ds)
     assert h["current"]["state"] == g["state"] and h["current"]["since"] == g["since"]
     assert h["current"]["text"] == g["text"] and h["days"][-1]["date"] == TODAY.isoformat()
-    # segments cover the range without gaps
     segs = h["segments"]
     assert segs[0]["start"] == h["begin"] and segs[-1]["end"] == (TODAY + dt.timedelta(days=1)).isoformat()
     assert all(a["end"] == b["start"] for a, b in zip(segs, segs[1:]))
-    # events: the confirmation (path) and the 90-min run with its drift
     conf = [e for e in h["events"] if e["kind"] == "confirm"]
-    assert conf == [{"date": xu_day.isoformat(), "kind": "confirm", "path": "xu90",
-                     "label": "確認有氧基礎（徐國峰 90 分鐘飄移）"}]
-    assert not [e for e in h["events"] if "三訊號" in e.get("label", "")]
+    assert conf == [{"date": aet_day.isoformat(), "kind": "confirm", "path": "aet_ua_gap",
+                     "label": "確認有氧基礎（實測 AeT（UA 差距法））"}]
     xu = [e for e in h["events"] if e["kind"] == "xu_run"]
-    assert len(xu) == 1 and xu[0]["ok"] and xu[0]["drift"] == pytest.approx(0.06, abs=0.003)
-    # weekly Zone 1 minutes, the 150–210 band and the pause line after the confirmation
+    assert len(xu) == 1 and xu[0]["ok"]                     # still listed (it opens Zone 3)
     assert h["target"] == [150.0, 210.0]
     wk = {w["monday"]: w for w in h["weeks"]}
-    xu_mon = BC.monday(xu_day).isoformat()
-    assert wk[xu_mon]["z1_min"] >= 95 and wk[xu_mon]["keep_min"] == pytest.approx(wk[xu_mon]["level_min"] * 2 / 3)
-    assert wk[min(wk)]["keep_min"] is None                         # before the confirmation: no line
+    m = BC.monday(aet_day).isoformat()
+    assert wk[m]["keep_min"] == pytest.approx(wk[m]["level_min"] * 2 / 3)
+    assert wk[min(wk)]["keep_min"] is None
+
+
+def test_an_estimated_aet_or_lthr_does_not_open_zone5():
+    day = TODAY - dt.timedelta(days=6)
+    for plan in (_aet_plan(day, note="AeT 自動估算"),                       # an applied AeT estimate
+                 _aet_plan(day, note="LTHR 自動估算")):                     # an applied LTHR estimate
+        ds = _ds(_easy(range(2, 40, 2)), plan)
+        g = QG.evaluate(ds, plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
+        assert g["z5"]["state"] == "unconfirmed" and not g["z5_gate"]["open"]
+    # a tested AeT stays the gate's AeT when an estimate is applied after it
+    plan = _aet_plan(TODAY - dt.timedelta(days=20))
+    from backend.engine.planning import Threshold
+    plan.thresholds.append(Threshold((TODAY - dt.timedelta(days=3)).isoformat(), aethr=148.0, note="AeT 自動估算"))
+    g = QG.evaluate(_ds(_easy(range(2, 40, 2)), plan), plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
+    assert g["z5"]["state"] == "confirmed" and not g["aet"]["tested"]
+    assert g["z5"]["aet_tested"]["value"] == 150.0
 
 
 def test_replay_is_the_same_as_calling_the_gate_each_day():
@@ -103,10 +124,11 @@ def test_replay_step_days_keeps_the_last_day():
 # ---------------------------------------------------------------------------
 
 def test_replay_through_a_break_shows_the_block_and_the_zone3_wait():
-    # runs every 2 days, a 90-min pass on 8/30, nothing 9/6–9/15 (10 days), back 9/16
+    # runs every 2 days, a measured AeT on 8/30, nothing 9/6–9/15 (10 days), back 9/16
     last, back = date(2026, 9, 5), date(2026, 9, 16)
-    ds = _ds(_with_break(last, back) + [_xu_workout(date(2026, 8, 30))])
-    h = QG.z5_history(ds, ds.plan, date(2026, 9, 1), TODAY, PP.Prefs())
+    plan = _aet_plan(date(2026, 8, 30))
+    ds = _ds(_with_break(last, back), plan)
+    h = QG.z5_history(ds, plan, date(2026, 9, 1), TODAY, PP.Prefs())
     assert _states(h) == ["confirmed", "reentry", "paused"]
     by = {r["date"]: r for r in h["days"]}
     assert by["2026-09-20"]["state"] == "reentry" and "Daniels" in by["2026-09-20"]["reason"]
@@ -116,16 +138,12 @@ def test_replay_through_a_break_shows_the_block_and_the_zone3_wait():
     assert any(e["kind"] == "pause" and "3 區" in e["label"] for e in h["events"])
     g = _gate_z5(ds)
     assert (h["current"]["state"], h["current"]["reason"]) == (g["state"], g["reason"])
-    # the week of the break carries no pause line once the state is not confirmed / paused-by-the-rule
     wk = {w["monday"]: w for w in h["weeks"]}
     assert wk["2026-09-14"]["keep_min"] is None
 
 
 def test_replay_pause_by_the_zone1_rule(monkeypatch):
     since = TODAY - dt.timedelta(days=40)
-    monkeypatch.setattr(BC, "xu_runs", lambda ds, today, days=182: [
-        {"idx": 0, "date": since.isoformat(), "ok": True, "drift": 0.05, "hr10": 128.0, "hr90": 134.4, "why": []}]
-        if today >= since else [])
     cut = TODAY - dt.timedelta(days=9)
 
     def mt(ds, today, since, brk=None):
@@ -133,13 +151,13 @@ def test_replay_pause_by_the_zone1_rule(monkeypatch):
         return {"ok": ok, "why": "" if ok else "連續 3 週 1 區時間 < 確認時的 2/3（Hickson 1982）",
                 "z1_level_min": 180.0, "weeks": []}
     monkeypatch.setattr(BC, "maintenance", mt)
-    ds = _ds(_easy(range(1, 60, 2)))
-    h = QG.z5_history(ds, ds.plan, TODAY - dt.timedelta(days=30), TODAY, PP.Prefs())
+    plan = _aet_plan(since)
+    ds = _ds(_easy(range(1, 60, 2)), plan)
+    h = QG.z5_history(ds, plan, TODAY - dt.timedelta(days=30), TODAY, PP.Prefs())
     assert _states(h) == ["confirmed", "paused"]
     p = [e for e in h["events"] if e["kind"] == "pause"]
     assert p[0]["date"] == cut.isoformat() and "Hickson" in p[0]["label"]
     assert all(w["keep_min"] == pytest.approx(120.0) for w in h["weeks"])
-    # a confirmation dated before the range is a state, not an event
     assert not [e for e in h["events"] if e["kind"] == "confirm"]
 
 
@@ -158,64 +176,62 @@ def test_measured_aet_rows_are_events():
 # the overview card
 # ---------------------------------------------------------------------------
 
-def test_card_one_step_three_tests_from_the_gate():
+def test_card_two_aet_tests_and_the_soft_zone3_condition():
+    plan = _aet_plan(TODAY - dt.timedelta(days=10))
+    ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(TODAY - dt.timedelta(days=12))], plan)
+    g = QG.evaluate(ds, plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
+    c = QG.z5_card(g, TODAY)
+    assert c["state"] == "confirmed" and c["aet_ok"] and not c["open"]       # AeT passed, 0 Zone 3 yet
+    assert c["headline"].startswith("AeT 已通過（") and "UA 差距法" in c["headline"]
+    b = c["base"]
+    assert b["label"] == "實測 AeT（二選一，做了且達標）" and b["ok"]
+    assert [t["key"] for t in b["tests"]] == ["aet_ua_gap", "aet_friel_drift"]      # no 90-min test
+    ua = b["tests"][0]
+    assert ua["ok"] and "150" in ua["value"] and "160" in ua["value"] and "7%" in ua["value"]
+    assert c["z3"]["done"] == 0 and c["z3"]["need"] == QG.Z5_Z3_NEED == 2 and not c["z3"]["ok"]
+    # the Zone 3 gate (SP-31): consistency and the 90-min test
+    assert c["z3_gate"]["open"] and [t["ok"] for t in c["z3_gate"]["tests"]][:2] == [True, True]
+    assert [(s["key"], s["status"]) for s in c["steps"]] == [("base", "done"), ("z3", "active"), ("z5", "todo")]
+    assert c["next"]["kind"] == "missing" and "近 6 週再 2 堂 3 區" in c["next"]["text"]
+    # two Zone 3 sessions in the last 6 weeks (done, 達標 or not) → the Zone 5 track opens
+    g2 = {**g, "z3_recent": {"done": 2, "need": 2}}
+    g2["z5_gate"] = QG.z5_track(g2)
+    c2 = QG.z5_card(g2, TODAY)
+    assert c2["open"] and c2["headline"] == "已解鎖" and c2["next"]["kind"] == "done"
+    assert g2["z5_gate"]["text"].startswith("Zone 5：已解鎖（實測 AeT（UA 差距法）")
+
+
+def test_card_without_a_measured_aet_and_in_a_forced_mode():
     ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(TODAY - dt.timedelta(days=10))])
     g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
     c = QG.z5_card(g, TODAY)
-    assert c["state"] == "confirmed" and c["headline"].startswith("已確認（") and "90 分鐘" in c["headline"]
-    assert "paths" not in c and "三訊號" not in str(c)
-    b = c["base"]
-    assert b["label"] == "確認有氧基礎（三選一，做了且達標）" and b["ok"]
-    # auto: the three tests, the 90-min test exactly once
-    assert [t["key"] for t in b["tests"]] == ["xu90", "aet_ua_gap", "aet_friel_drift"]
-    xu, ua, fr = b["tests"]
-    assert xu["ok"] and "6.0%" in xu["value"] and "徐國峰" in xu["src"]
-    assert ua["ok"] is None and "沒有實測 AeT" in ua["value"]
-    assert fr["ok"] is None
-    assert c["z3"] == {"done": 0, "need": 3, "ok": False, "src": QG.SRC_Z5["z3"], "step": 0, "z5_step": 0}
-    # the Zone 3 gate (SP-31): 5+ weeks of running every other day is the consistency path; the
-    # 90-min test passes too
-    assert c["z3_gate"]["open"] and c["z3_gate"]["path"] == "weeks"
-    assert [t["ok"] for t in c["z3_gate"]["tests"]][:2] == [True, True]
-    assert c["keep"] and c["keep"]["line_min"] == pytest.approx(c["keep"]["level_min"] * 2 / 3)
-    # the tracker and the 「還缺什麼」 line
-    assert [(s["key"], s["status"]) for s in c["steps"]] == [("base", "done"), ("z3", "active"), ("z5", "todo")]
-    assert c["next"] == {"kind": "missing", "text": "還缺：再 3 堂 3 區達標（0/3；3 區解鎖後、護欄通過就照排）"}
-
-
-def test_card_without_any_long_run_and_in_a_forced_mode():
-    ds = _ds(_easy(range(2, 40, 2)))
-    g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
-    c = QG.z5_card(g, TODAY)
-    assert c["state"] == "unconfirmed" and c["headline"] == "未確認"
-    xu = c["base"]["tests"][0]
-    assert xu["ok"] is None and xu["value"].startswith("—（還沒做過")
-    assert c["steps"][0]["status"] == "active" and c["steps"][1]["status"] == "todo"
+    # the 90-min pass opens Zone 3 but not Zone 5
+    assert g["z3"]["open"] and c["state"] == "unconfirmed" and c["headline"] == "未解鎖" and not c["open"]
+    ua, fr = c["base"]["tests"]
+    assert ua["ok"] is None and ua["value"].startswith("—（還沒做過") and ua["missing"] == "aet"
+    assert fr["ok"] is None and fr["missing"] == "aet"
     n = c["next"]["text"]
-    assert n.startswith("還缺：做一次 90 分鐘平路 1 區測試") and "25 °C" in n and "AeT 測試" in n
-    g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(quality_gate="ua_gap"), GOOD_BY, BASE)
+    assert n.startswith("還缺：做一次 AeT 測試") and "90 分鐘測試不算" in n and "2 堂 3 區" in n
+    # a measured AeT but the LTHR is the WKO5 default / an estimate: the UA path asks for an LTHR test
+    plan = _aet_plan(TODAY - dt.timedelta(days=10), note="LTHR 自動估算")
+    g = QG.evaluate(_ds(_easy(range(2, 40, 2)), plan), plan, TODAY, PP.Prefs(quality_gate="ua_gap"), GOOD_BY, BASE)
     c = QG.z5_card(g, TODAY)
-    assert [t["key"] for t in c["base"]["tests"]] == ["aet_ua_gap"]
-    assert c["base"]["label"] == "確認有氧基礎（UA 差距法）" and "AeT 測試" in c["next"]["text"]
-
-
-def test_card_next_line_for_a_failed_90_min_test():
-    ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(TODAY - dt.timedelta(days=10), rise=0.12)])
-    c = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)
-    assert c["base"]["tests"][0]["ok"] is False
-    assert "上次" in c["next"]["text"] and "飄移" in c["next"]["text"]
+    assert [t["key"] for t in c["base"]["tests"]] == ["aet_ua_gap"] and c["base"]["tests"][0]["missing"] == "lthr"
+    assert c["base"]["label"] == "實測 AeT（實測 AeT＋實測 LTHR）" and "LTHR 測試" in c["next"]["text"]
+    f = c["flow"]["tracks"][1]
+    assert f["here"]["action"]["href"].endswith("?add=lib%3Afriel_lthr30&proto=race")
 
 
 def test_card_next_line_when_paused_by_the_zone1_rule():
     gate = {"mode": "auto", "dose": {"step": 0}, "aet": {}, "lthr": {},
-            "z5": {"state": "paused", "label": "暫停", "open": False, "since": "2026-08-01", "path": "xu90",
-                   "path_label": "徐國峰 90 分鐘飄移", "reason": "連續 3 週…", "pause": {"kind": "z1", "at": "2026-09-14"},
-                   "xu_last": {"date": "2026-08-01", "ok": True, "drift": 0.05, "hr10": 128, "hr90": 134, "why": []},
+            "z5": {"state": "paused", "label": "暫停", "open": False, "since": "2026-08-01", "path": "aet_ua_gap",
+                   "path_label": "實測 AeT（UA 差距法）", "reason": "連續 3 週…", "pause": {"kind": "z1", "at": "2026-09-14"},
+                   "aet_paths": {"aet_ua_gap": "2026-08-01"}, "aet_tested": {"value": 150.0, "date": "2026-08-01"},
                    "maintenance": {"z1_level_min": 210.0, "weeks": [], "ok": False}}}
     c = QG.z5_card(gate, TODAY)
-    assert not c["base"]["ok"] and c["base"]["tests"][0]["ok"] is False   # the old pass is before the pause
-    assert c["next"]["kind"] == "paused" and "重新確認" in c["next"]["text"] and "140 分" in c["next"]["text"]
-    assert [s["status"] for s in c["steps"]] == ["active", "todo", "paused"]
+    assert not c["base"]["ok"]
+    assert c["next"]["kind"] == "paused" and "重新做 AeT 測試" in c["next"]["text"] and "140 分" in c["next"]["text"]
+    assert [s["status"] for s in c["steps"]] == ["active", "active", "paused"]
 
 
 def test_card_in_a_reentry_block_counts_the_days_left():
@@ -235,24 +251,38 @@ def test_card_in_a_reentry_block_counts_the_days_left():
 # the stage flow (z5_card["flow"]): presentation of the same flags
 # ---------------------------------------------------------------------------
 
-def _st(f):
-    return {s["key"]: s["status"] for s in f["stages"]}
+def _tr(f, key):
+    return next(t for t in f["tracks"] if t["key"] == key)
+
+
+def _st(t):
+    return {s["key"]: s["status"] for s in t["stages"]}
 
 
 def test_flow_zone3_gate_locked_is_the_first_stage(monkeypatch):
-    # SP-31: the first stage is the real Zone 3 gate — a run every 4th day is < 3 runs a week:
-    # no consistency yet, no 90-min test, no AeT: Zone 3 not open, three ways in
+    # SP-31: the Zone 3 gate — a run every 4th day is < 3 runs a week: no consistency yet, no
+    # 90-min test, no AeT: Zone 3 not open, three ways in; the Zone 5 track is its own gate
     ds = _ds(_easy(range(2, 40, 4)))
     g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
     assert not g["z3"]["open"] and g["z3"]["weeks"] < QG.Z3_WEEKS_NEED and "3 區還沒解鎖" in g["z3"]["reason"]
     f = QG.z5_card(g, TODAY)["flow"]
-    assert _st(f)["base"] == "current" and _st(f)["z3"] == "locked" and f["here"]["stage"] == "base"
-    base = f["stages"][0]
-    assert [i["text"].split("：")[0] for i in base["any"]] == [
+    assert [t["key"] for t in f["tracks"]] == ["z3", "z5"]
+    t3 = _tr(f, "z3")
+    assert _st(t3) == {"z3_gate": "current", "z3": "locked"} and t3["here"]["stage"] == "z3_gate" and not t3["open"]
+    gate3 = t3["stages"][0]
+    assert [i["text"].split("：")[0] for i in gate3["any"]] == [
         "連續 4 週，每週跑 ≥ 3 次、沒有 ≥ 7 天沒跑（推估）", "徐國峰 90 分鐘測試", "UA 差距法"]
-    assert base["any_label"] and all(i["todo"] for i in base["any"]) and "推估" in base["any"][0]["tip"]
-    assert "每週 ≥ 3 次" in f["here"]["next"]
-    # the week: no interval, and the note says why
+    assert gate3["any_label"] and all(i["todo"] for i in gate3["any"]) and "推估" in gate3["any"][0]["tip"]
+    # 安排課表: the tests carry an action (the consistency path doesn't — it isn't a session)
+    acts = [i["action"] for i in gate3["any"]]
+    assert acts[0] is None and acts[1]["href"].endswith("?test=aet&proto=xu90")
+    assert acts[2]["href"].endswith("?test=aet&proto=ua60")
+    assert "每週 ≥ 3 次" in t3["here"]["next"]
+    t5 = _tr(f, "z5")
+    assert _st(t5) == {"z5_gate": "current", "z5": "locked"}
+    soft = next(i for i in t5["stages"][0]["items"] if i["text"].startswith("近 6 週"))
+    assert soft["ok"] is False and soft["todo"] == "先解鎖 3 區" and soft["action"] is None
+    assert t5["here"]["action"]["href"].endswith("?test=aet&proto=ua60")      # the AeT test first
     d = QG.week_decision(g, "base", "base")
     assert not d["allow"] and d["z3_note"].startswith("本週沒排 3 區（還沒解鎖）：連續")
     t = QG.indicator(g)
@@ -287,65 +317,92 @@ def test_zone3_consistency_path_and_the_21_day_relock():
     assert not c["open"] and c["break"]["days"] >= QG.Z3_RELOCK_DAYS
 
 
-def test_flow_unconfirmed_z3_is_current_and_the_test_runs_alongside(monkeypatch):
+def test_flow_two_parallel_tracks_with_their_own_next_step(monkeypatch):
     from backend.tests.test_quality_gate import _weeks_ok
     monkeypatch.setattr(QG, "run_days", lambda ds, today, days=QG.Z3_HISTORY_DAYS: _weeks_ok(4))
     ds = _ds(_easy(range(2, 40, 2)))
     f = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)["flow"]
-    last = f["stages"][0]["items"][-1]
+    t3, t5 = _tr(f, "z3"), _tr(f, "z5")
+    last = t3["stages"][0]["items"][-1]
     assert last["text"] == "3 區已解鎖" and last["ok"] and last["value"].startswith("連續 4 週規律訓練")
-    assert [s["key"] for s in f["stages"]] == ["base", "z3", "confirm", "unlock", "z5"]
-    assert _st(f) == {"base": "done", "z3": "current", "confirm": "parallel", "unlock": "locked", "z5": "locked"}
-    z3 = f["stages"][1]
-    assert [i["text"] for i in z3["items"]] == [r[1] for r in QG.Z3] and not any(i["ok"] for i in z3["items"])
-    assert f["here"]["stage"] == "z3" and QG.Z3[0][1] in f["here"]["next"]
-    conf = f["stages"][2]
-    assert [i["text"] for i in conf["any"]][0] == "90 分鐘飄移測試" and conf["any_label"]
-    assert all(i["todo"] for i in conf["any"])                   # each untried test says what to do
-    assert "AeT 測試" in f["here"]["also"] and f["here"]["also_title"] == "有氧基礎確認"
-    assert f["here"]["full"].startswith("還缺：")
+    assert _st(t3) == {"z3_gate": "done", "z3": "current"} and t3["open"]
+    lad = t3["stages"][1]["items"]
+    assert [i["text"] for i in lad] == [r[1] for r in QG.Z3] and not any(i["ok"] for i in lad)
+    # only the current rung gets 安排課表 (its canonical variant), the later rungs don't
+    assert lad[0]["action"]["type"] == "variant" and lad[0]["action"]["href"].endswith("?add=a1a")
+    assert all(i["action"] is None for i in lad[1:])
+    assert t3["here"]["stage"] == "z3" and QG.Z3[0][1] in t3["here"]["next"] and t3["here"]["action"]
+    # the Zone 5 track: its own gate is current — two AeT tests (二選一) and the soft Zone 3 line
+    assert _st(t5) == {"z5_gate": "current", "z5": "locked"} and not t5["open"]
+    g5 = t5["stages"][0]
+    assert [i["text"] for i in g5["any"]] == ["AeT＋LTHR 實測：差距 ≤ 10%", "AeT 附近 Friel 飄移 < 5%"]
+    assert all(i["todo"] and i["action"] for i in g5["any"]) and g5["any_label"]
+    soft = next(i for i in g5["items"] if i["text"].startswith("近 6 週"))
+    assert soft["action"]["href"].endswith("?add=a1a")                 # a Zone 3 session ticks it
+    assert t5["here"]["stage"] == "z5_gate" and "AeT 測試" in t5["here"]["next"]
+    assert "3 區" in t5["here"]["also"]
+    assert f["full"].startswith("還缺：")
 
 
-def test_flow_confirmed_ticks_the_confirmation_and_shows_the_keep_line():
-    ds = _ds(_easy(range(2, 40, 2)) + [_xu_workout(TODAY - dt.timedelta(days=10))])
-    c = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)
-    f = c["flow"]
-    assert _st(f) == {"base": "done", "z3": "current", "confirm": "done", "unlock": "locked", "z5": "locked"}
-    conf = f["stages"][2]
-    assert conf["items"][0]["ok"] is True and conf["any"] == []
-    assert any(i["text"].startswith("維持：每週 1 區 ≥") for i in conf["items"])
-    assert f["here"]["also"] == "" and [i["ok"] for i in f["stages"][3]["items"]] == [True, False]
+def test_flow_confirmed_ticks_the_aet_and_shows_the_keep_line():
+    plan = _aet_plan(TODAY - dt.timedelta(days=10))
+    ds = _ds(_easy(range(2, 40, 2)), plan)
+    c = QG.z5_card(QG.evaluate(ds, plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)
+    t5 = _tr(c["flow"], "z5")
+    g5 = t5["stages"][0]
+    assert g5["items"][0]["ok"] is True and g5["any"] == [] and g5["status"] == "current"
+    assert any(i["text"].startswith("維持：每週 1 區 ≥") for i in g5["items"])
+    assert t5["here"]["next"].startswith("完成 1 堂 3 區")
 
 
 def test_flow_open_zone5_moves_to_the_z5_ladder():
-    gate = {"mode": "auto", "dose": {"step": 4}, "aet": {}, "lthr": {},
-            "z5": {"state": "confirmed", "label": "已確認", "open": True, "since": "2026-08-01", "path": "xu90",
-                   "path_label": "徐國峰 90 分鐘飄移", "xu_last": {"date": "2026-08-01", "ok": True, "drift": 0.05,
-                                                            "hr10": 128, "hr90": 134, "why": []}}}
+    gate = {"mode": "auto", "dose": {"z3": {"step": 4, "met": 4, "done": 4}, "z5": {"step": 1, "done": 1}},
+            "aet": {}, "lthr": {}, "z3_recent": {"done": 3, "need": 2},
+            "z5": {"state": "confirmed", "label": "已確認", "open": True, "since": "2026-08-01", "path": "aet_ua_gap",
+                   "path_label": "實測 AeT（UA 差距法）"}}
     f = QG.z5_card(gate, TODAY)["flow"]
-    assert _st(f) == {"base": "done", "z3": "done", "confirm": "done", "unlock": "done", "z5": "current"}
-    z5 = f["stages"][4]["items"]
+    t5 = _tr(f, "z5")
+    assert _st(t5) == {"z5_gate": "done", "z5": "current"} and t5["open"]
+    z5 = t5["stages"][1]["items"]
     assert [i["ok"] for i in z5] == [True, False, False, False] and QG.Z5[1][1] in z5[1]["todo"]
-    assert f["here"]["stage"] == "z5" and QG.Z5[1][1] in f["here"]["next"]
+    assert z5[1]["action"]["type"] == "variant" and z5[1]["action"]["key"] == IL.canonical("z5b").key
+    assert t5["here"]["stage"] == "z5" and QG.Z5[1][1] in t5["here"]["next"]
+    # the flow and week_decision read the same flag
+    d = QG.week_decision({**gate, "z3": {"open": True}, "guard": {}, "state": "none"}, "base", "base", n=2)
+    assert [it["track"] for it in d["items"]] == ["z3", "z5"]
 
 
 def test_flow_paused_and_reentry():
     gate = {"mode": "auto", "dose": {"step": 0}, "aet": {}, "lthr": {},
-            "z5": {"state": "paused", "label": "暫停", "open": False, "since": "2026-08-01", "path": "xu90",
-                   "path_label": "徐國峰 90 分鐘飄移", "reason": "連續 3 週…", "pause": {"kind": "z1", "at": "2026-09-14"},
-                   "xu_last": {"date": "2026-08-01", "ok": True, "drift": 0.05, "hr10": 128, "hr90": 134, "why": []},
+            "z5": {"state": "paused", "label": "暫停", "open": False, "since": "2026-08-01", "path": "aet_ua_gap",
+                   "path_label": "實測 AeT（UA 差距法）", "reason": "連續 3 週…", "pause": {"kind": "z1", "at": "2026-09-14"},
+                   "aet_tested": {"value": 150.0, "date": "2026-08-01"},
                    "maintenance": {"z1_level_min": 210.0, "weeks": [], "ok": False}}}
-    f = QG.z5_card(gate, TODAY)["flow"]
-    conf = f["stages"][2]
-    assert conf["status"] == "parallel" and "140 分" in conf["note"] and conf["any"][0]["ok"] is False
-    assert "再做 1 次 90 分鐘測試" in conf["any"][0]["todo"]
+    t5 = _tr(QG.z5_card(gate, TODAY)["flow"], "z5")
+    g5 = t5["stages"][0]
+    assert g5["status"] == "current" and "140 分" in g5["note"] and "重新做 AeT 測試" in g5["note"]
+    assert g5["any"][0]["ok"] is None or g5["any"][0]["ok"] is False
     last, back = date(2026, 9, 18), date(2026, 9, 29)
     ds = _ds(_with_break(last, back))
     c = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)
-    f = c["flow"]
-    assert f["stages"][0]["status"] == "current" and f["here"]["stage"] == "base"
-    assert f"還剩 {c['reentry']['days_left']} 天" in f["here"]["next"]
-    assert all(s["status"] in ("locked", "done") for s in f["stages"][1:])
+    for t in c["flow"]["tracks"]:
+        assert t["stages"][0]["status"] == "current" and t["here"]["stage"].endswith("_gate")
+        assert all(s["status"] == "locked" for s in t["stages"][1:])
+    assert f"還剩 {c['reentry']['days_left']} 天" in _tr(c["flow"], "z3")["here"]["next"]
+
+
+def test_plan_auto_logs_the_zone5_track_unlock_and_relock():
+    from backend.engine import plan_auto as PA
+    shut = {"open": False, "aet_ok": False, "reason": "還沒有實測 AeT 通過", "text": "Zone 5：未解鎖（還沒有實測 AeT 通過）"}
+    on = {"open": True, "aet_ok": True, "reason": "", "text": "Zone 5：已解鎖（實測 AeT（UA 差距法）；近 6 週 2/2 堂 3 區）"}
+    state: dict = {}
+    inp = {"cur": {"quality_gate": {"z5_gate": shut}}}
+    assert PA.state_changes(inp, state) == []                          # the first closed record: nothing new
+    inp["cur"]["quality_gate"]["z5_gate"] = on
+    assert PA.state_changes(inp, state) == [on["text"]]
+    assert PA.state_changes(inp, state) == []
+    inp["cur"]["quality_gate"]["z5_gate"] = {**shut, "aet_ok": True, "reason": "還差 3 區：近 6 週 1/2 堂 3 區（推估）"}
+    assert PA.state_changes(inp, state) == ["Zone 5：重新上鎖（還差 3 區：近 6 週 1/2 堂 3 區（推估））"]
 
 
 # ---------------------------------------------------------------------------
@@ -367,3 +424,59 @@ def test_the_periodization_view_has_the_panel_in_the_base_dashboard():
     v = parse_view(json.loads((REPO_VIEWS / "periodization.json").read_text(encoding="utf-8")))
     base = next(d for d in v["dashboards"] if "基礎期" in d["title"])
     assert any(c["kind"] == "z5gate" for c in base["charts"])
+
+
+# ---------------------------------------------------------------------------
+# 「安排課表」 (SP-39): every action deep-links to a session the 課表 page can preselect
+# ---------------------------------------------------------------------------
+
+def _actions(flow):
+    for t in flow["tracks"]:
+        yield t["here"].get("action")
+        for s in t["stages"]:
+            for i in s["items"] + (s.get("any") or []):
+                yield i.get("action")
+
+
+def test_every_action_points_at_a_template_or_a_test_protocol_the_page_knows():
+    from pathlib import Path
+    from urllib.parse import parse_qs, urlparse
+    from backend.engine import aet_test as AT
+    from backend.engine import cp_protocols as CPP
+    from backend.engine import workout_steps as WS
+    keys = {r["key"]: g["cat"] for g in WS.templates()["groups"] for r in g["rows"]}
+    flows = []
+    ds = _ds(_easy(range(2, 40, 4)))                                        # Zone 3 locked
+    flows.append(QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)["flow"])
+    plan = _aet_plan(TODAY - dt.timedelta(days=10), note="LTHR 自動估算")    # the LTHR test
+    ds = _ds(_easy(range(2, 40, 2)), plan)
+    flows.append(QG.z5_card(QG.evaluate(ds, plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)["flow"])
+    seen = set()
+    for f in flows:
+        for a in filter(None, _actions(f)):
+            u = urlparse(a["href"])
+            assert u.path == QG.SCHEDULE_PAGE
+            q = {k: v[0] for k, v in parse_qs(u.query).items()}
+            if "test" in q:
+                assert q["test"] in ("aet", "cp") and q["proto"] in (AT.PROTOCOLS if q["test"] == "aet" else CPP.PROTOCOLS)
+            else:
+                assert q["add"] in keys, q
+                assert keys[q["add"]] == ("quality" if a["type"] == "variant" else "test")
+            seen.add(a["type"])
+    assert seen == {"variant", "test", "template"}
+    # the page handles the deep link: the new-session dialog with the session preselected
+    static = Path(QG.__file__).resolve().parents[1] / "static"
+    page = (static / "schedule.html").read_text(encoding="utf-8")
+    assert 'qp.get("add")' in page and 'qp.get("test")' in page and "openPreset(" in page
+    assert "WE.applyKey(" in page and "async applyKey(" in (static / "workout_editor.js").read_text(encoding="utf-8")
+    assert "zf-act" in (static / "z5flow.js").read_text(encoding="utf-8")
+
+
+def test_a_variant_action_saves_with_its_rung():
+    # POST /sessions with the action's variant_key → interval_library.variant_patch stores the rung,
+    # so the session counts on its ladder (dose_history → row_track)
+    a = QG._rung_action("z5a")
+    v = IL.get(a["key"])
+    assert v is not None and v.rung == "z5a" and IL.track_of(v.rung) == "z5"
+    assert QG.row_track({"variant_key": a["key"]}) == "z5"
+    assert QG.row_track({"variant_key": QG._rung_action("a1")["key"]}) == "z3"

@@ -334,6 +334,16 @@ def allow_quality(kind: str, gate: dict, monday: Optional[dt.date] = None, step=
     return QG.week_decision(gate, kind, mode or kind, monday, step, first=False, n=n)
 
 
+def IL_track(q: dict) -> Optional[str]:
+    """The track of a planned quality session (its rung, else its variant's class): z3 / z5 / None."""
+    from backend.engine import interval_library as IL
+    from backend.engine import quality_gate as QG
+    t = IL.track_of(q.get("rung_key"))
+    if t is None and q.get("variant_key"):
+        t = "z5" if QG.is_z5_variant(q["variant_key"]) else "z3" if QG.is_z3_variant(q["variant_key"]) else None
+    return t
+
+
 def _advance(steps: dict, rung: Optional[str]) -> None:
     """One step of the track `rung` serves (a projected session assumed 達標)."""
     from backend.engine import interval_library as IL
@@ -383,9 +393,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     # each track's step (SP-31): the gate's, plus this week's intervals — a 縮量版 / the step before
     # under a tight cap is maintenance and moves nothing (§C5.3)
     d3, d5 = QG._track_doses(gate)
-    steps = {"z3": int(d3.get("step") or 0), "z5": int(d5.get("step") or 0), "met": int(d3.get("met") or 0)}
+    steps = {"z3": int(d3.get("step") or 0), "z5": int(d5.get("step") or 0), "met": int(d3.get("met") or 0),
+             # the Zone 3 session dates Zone 5's soft 「3 區先」 counts per projected week (SP-39, z5_track)
+             "z3_dates": list((gate.get("z3_recent") or {}).get("dates") or [])}
     if cur.get("phase") in ("base", "specific"):
         for q in cur_s:
+            if q.get("kind") == "quality" and IL_track(q) == "z3":
+                steps["z3_dates"].append(monday.isoformat())
             if q.get("kind") == "quality" and q.get("rung_key") in QG.ladder_keys() and q.get("progress") is not False:
                 _advance(steps, q.get("rung_key"))
     last_aet = (gate.get("aet_test") or {}).get("last")
@@ -468,6 +482,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             base_q = O.quality_sessions(gate, dec, kind, th, tgt, hours, prefs, vhist,
                                         mountain if kind == "base" else not road, road, q_cap, q_alt)
             for q, it in zip(base_q, dec["items"]):
+                if it.get("track") == "z3":
+                    steps["z3_dates"].append(week.isoformat())
                 if q.get("variant_key"):
                     # this week's pick joins the rotation history of the weeks after it
                     vhist.append({"day": week.isoformat(), "rung_key": q.get("rung_key"),

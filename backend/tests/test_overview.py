@@ -149,7 +149,9 @@ def test_zone3_locked_means_no_interval_and_a_note():
     from backend.engine import plan_prefs as PP
     wp = _two_track_week(low, PP.Prefs(quality=2))
     q = _q(wp)
-    assert q and all(s["rung_key"] == "a3" for s in q)        # only Zone 3 open: 課表偏好 2 repeats it if it fits
+    # only Zone 3 available: 課表偏好 2 = the rung + a different Zone 3 session (巡航版), not a copy
+    assert [s["rung_key"] for s in q][:1] == ["a3"] and len(q) == 2 and q[1]["rung_key"] in ("z3a", "z3b", "z3c")
+    assert q[1]["title"] != q[0]["title"] and q[1]["progress"] is False
     assert any(n.get("src") == "intensity" and n["level"] == "watch" and "60%" in n["text"] for n in wp["notes"])
 
 
@@ -186,3 +188,35 @@ def test_the_weeks_interval_total_stays_under_20_percent():
     notes = []
     qs = O.quality_sessions(gate, dec, "base", {"cp": 250.0}, {}, 8.0, notes=notes)
     assert [s["variant_key"] for s in qs] == ["a1a", "v4a"] and not notes
+
+
+def test_two_a_week_with_zone5_closed_is_a_long_tempo_and_a_cruise_session():
+    # owner 2026-10-04 (SP-31 follow-up): 課表偏好 2 a week, only the Zone 3 track open → the rung
+    # (long tempo) + a different Zone 3 session (巡航版 of about the same time in zone), not a copy;
+    # both within Zone 3 ≤ 10 % of the week and the week's interval total; notes say so
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine import quality_gate as QG
+    gate = {"state": "none", "guard": {}, "z3": {"open": True}, "z5": {"open": False},
+            "dose": {"z3": {"step": 0, "met": 1, "done": 1}, "z5": {}}}
+    d = QG.week_decision(gate, "base", "base", n=2)
+    assert [(it["track"], bool(it.get("cruise")), it["advance"]) for it in d["items"]] == [
+        ("z3", False, True), ("z3", True, False)]
+    notes = []
+    q = O.quality_sessions(gate, d, "base", {"cp": 250.0}, {}, 10.0, PP.Prefs(), [], notes=notes)
+    assert [(s["id"], s["title"], s["rung_key"], s["progress"]) for s in q] == [
+        ("quality", "閾值 2×15 分", "a1", True), ("quality2", "閾值 3×8 分", "z3b", False)]
+    assert sum(O.session_tiz_min(s) for s in q) <= QG.z3_budget_min(10.0) + 1e-6
+    assert any(n["src"] == "z3" and "第二堂排不同的 3 區課（巡航版）" in n["text"] for n in notes)
+    # 5 h: 10 % = 30′ is all A1's 2×15′ → no room for a second one, a note says why
+    notes = []
+    q = O.quality_sessions(gate, d, "base", {"cp": 250.0}, {}, 5.0, PP.Prefs(), [], notes=notes)
+    assert [s["title"] for s in q] == ["閾值 2×15 分"] and any("本週排 1 堂" in n["text"] for n in notes)
+    # the first session itself a 巡航版 (the first Zone 3 week, 5 %): the second is a different structure
+    g0 = {**gate, "dose": {"z3": {"step": 0, "met": 0, "done": 0}, "z5": {}}}
+    q = O.quality_sessions(g0, QG.week_decision(g0, "base", "base", n=2), "base", {"cp": 250.0}, {}, 8.0,
+                           PP.Prefs(), [])
+    assert len(q) == 2 and q[0]["title"] != q[1]["title"] and q[0]["rung_key"] == "a1"
+    # both tracks open: one Zone 3 + one Zone 5 as before (no 巡航版 item)
+    both = {**gate, "z5": {"open": True}, "z3_recent": {"done": 2}}
+    assert [it["track"] for it in QG.week_decision(both, "base", "base", n=2)["items"]] == ["z3", "z5"]

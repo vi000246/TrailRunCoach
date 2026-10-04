@@ -165,12 +165,18 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
 - **巡航版 T1–T3** (`z3a` 3×6′ / `z3b` 3×8′ / `z3c` 2×12′, 90–95 % CP): the old Zone 3 rungs, kept
   as the Zone 3 track's weekday-cap / low-volume fallback (`interval_library.PREV_RUNG`: A1 → T3)
   and for stored sessions. A stored row of an old rung still resolves: it is judged against its
-  own variant and its 達標 counts in `met` (Zone 5's 「3 區達標」), but it doesn't move the A rung.
+  own variant and its 達標 counts in `met`, but it doesn't move the A rung.
 - **Zone 3 volume** (`z3_budget_min`): the session's time in zone ≤ 10 % of the week's planned
   hours (Daniels: T ≤ 10 % of the weekly volume), 5 % for the track's first session (UA: Zone 3
   starts at ~5 %). Over it, `cruise_for` picks the 巡航版 of the same position (A1 → T1, A2 → T2,
   A3 / A4 → T3, stepping down to fit; T1 the floor); it is stored under the A rung (equiv) and
   counts, with a 「本週 x h：3 區上限 …→ 巡航版」 note.
+- **Weekday cap** (owner 2026-10-04, symmetric with the volume cap): a Zone 3 rung the day's cap
+  can't fit as the standard or an equivalent (and no other day takes it) becomes the 巡航版 of
+  the same position that fits (`overview._cruise_for_cap`: A1 → T1, A2 → T2, A3 / A4 → T3,
+  stepping down), stored under the A rung (equiv) — 達標 moves the ladder; note 「平日上限 N 分放不下
+  … → 巡航版 …（算這一階）」. Only when no 巡航版 fits does fit's own fallback (縮量版 / the step
+  before, not counted) apply.
 - **Week total** (`QUALITY_SHARE_MAX = 0.20`, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in
   zone ≤ 20 % of the planned running time. `overview.quality_sessions` builds Zone 5 first and
   gives Zone 3 what is left (a smaller 巡航版); a session still over is cut to fewer reps as a
@@ -179,7 +185,14 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   the two would pass it.
 - **How many a week**: 課表偏好 `quality_per_week = 2` → one Zone 3 + one Zone 5 when both are
   open (`week_decision(n=2)`; the base phase's guardrail mode still caps it at 1); only one track
-  open → that one, repeated by `plan_prefs.shape` as before. One a week with both open → by the
+  open → for Zone 3 (Zone 5 closed or held by a guardrail; owner 2026-10-04) a **different second
+  Zone 3 session**, not a copy: `week_decision` adds a `cruise` item and
+  `overview._second_z3` builds a 巡航版 interval (T1–T3 rows with reps ≥ 6 min,
+  `CRUISE_REP_MIN_S`; research R1 巡航 6–15′) as close to the first session's time in zone as
+  the Zone 3 cap (both sessions ≤ 10 % of the week), the week's interval total and the day's cap
+  allow, never the first one's structure; it doesn't move the rung (its 達標 counts in `met`);
+  a `z3` note says so, or that it didn't fit (本週排 1 堂). A lone Zone 5 track is still repeated
+  by `plan_prefs.shape`. One a week with both open → by the
   A race (`track_ratio`, 推估): the next A race a road race ≤ 10 km → 3 區 : 5 區 = 1:1, else
   (half marathon or longer, trail / 百岳, no A race) 2:1 — Zone 3 the first weeks of each cycle,
   deterministic by the week's Monday.
@@ -205,23 +218,47 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   detraining.md §1) re-locks it — only what comes after the break counts. Breaks of 6–20 days
   get the re-entry block only. No low-intensity-share condition. Until it opens the base phase
   has no interval (easy running + strides); a projected week opens once the streak would reach 4
-  weeks. Zone 5 also needs 3 Zone 3 sessions 達標 (`Z3_MET_FOR_Z5`, 推估; SP-39 decides) or its
-  track already under way.
+  weeks. Zone 3 and Zone 5 are **independent gates** (SP-39): the Zone 5 gate is below.
 - **Guardrails per track** (`guard` → `guard_blocks`): CTL ramp ≥ 8, a > 20 % volume step and the
   injury pause block both tracks; the low-intensity share < 75 % blocks Zone 5 only — for Zone 3
   it is a warning note 「輕鬆跑心率偏高：…（底線 75%、基礎期目標 ≥ 90%）」 (the AeT is often
-  estimated, climbs inflate HR). 75 % is the floor, the base phase's ≥ 90 % a target. 專項期:
-  intensity bad keeps Zone 5 out, drift bad stops both.
+  estimated, climbs inflate HR). SP-39 applies the same reasoning to Zone 5 **only when the AeT
+  in effect is not tested** (`aet_info["tested"]` false: no plan row, or an applied estimate —
+  the share is computed against that AeT and is noisy): then it is a warning for both tracks
+  (「…AeT 是估計值、占比不準，只是提醒：3 區、5 區照排」, `guard(aet_tested=False)`); with a tested
+  AeT the 75 % floor keeps blocking Zone 5. 75 % is the floor, the base phase's ≥ 90 % a target.
+  專項期: intensity bad keeps Zone 5 out (tested AeT; a warning otherwise), drift bad stops both,
+  and this week's load guardrails apply to both tracks as in the base phase (owner 2026-10-04: no
+  school exempts the specific phase — Friel ramp 5–8, Nielsen 2014 / Damsted 2019; unsourced-rules.md
+  B2): CTL ramp ≥ `RAMP_BLOCK` or a > `STEP_BLOCK` volume step → no interval (note), ramp ≥
+  `RAMP_SUB` → the threshold-only `SUB` session. 減量期, race / recovery weeks, the re-entry block
+  (mode `reentry`) and projected weeks stay exempt (the accepted-B2B TSB exemption is unchanged).
 - **Why no Zone 3 this week**: `week_decision` returns `z3_note` (the gate, a guardrail, the
   1-a-week turn, the recovery week); `week_plan` shows it as a note (`src: z3`), the share
   warning as `src: intensity`, the volume / total caps as `src: z3` / `quality_share`.
-- **Zone 5** opens only when ONE of three tests has been done and passed (auto; 2026-10-01
-  使用者決定): 徐國峰's 90-min test (`xu90`: minute 10 vs minute 90, < 10 %); a measured AeT with
-  LTHR ÷ AeT − 1 ≤ 10 % (`aet_ua_gap`); ≥ 60 min near a measured AeT, first vs second half
-  drift < 5 % (`aet_friel_drift`). Forced modes use their own test (`xu_drift`, `ua_gap`,
-  `friel_drift`; `plateau` / `weeks` by their own unlock; `none` = no gate). The old `xu_signals` path and its
-  mode `xu_signals` were removed (aerobic-base-readiness.md); a stored `xu_signals` reads as
-  `auto` (`plan_prefs.from_settings`), new writes are rejected.
+- **Zone 5** (SP-39, 2026-10-04; coach-schools-zones-periodization.md R3) — its own gate, the one
+  flag (`quality_gate.z5_track` → `gate["z5_gate"]`) that `week_decision`, the flow, the template
+  推薦 and the change log all read:
+  1. **a measured AeT** (`base_check.z5_status`, through `quality_gate._z5`): a tested AeT
+     (`aet_tested`: the latest plan aethr row on or before the day whose method is not
+     `estimate` — an estimate applied later doesn't undo it) **and** a measured LTHR (`lthr_info
+     ["measured"]`: a plan row from a test / race / lab / by hand, or the athlete's own WKO5
+     setting — not the WKO5 default, not an applied estimate) with LTHR ÷ AeT − 1 ≤ 10 %
+     (`aet_ua_gap`, dated the later of the two rows; `z5_ua_gap`); **or** ≥ 60 min near the
+     tested AeT with first vs second half drift < 5 % (`aet_friel_drift`, Friel). **The 90-min
+     test is not an AeT test** (it yields no AeT number) — it opens Zone 3 only. Modes: `auto`,
+     `xu_drift`, `plateau`, `weeks` use both AeT paths (their own method opens Zone 3 only);
+     `ua_gap` / `friel_drift` their own; `none` = no gate (Seiler).
+  2. **the soft 「3 區先」** (推估: UA 「Start with Zone 3」, Pfitzinger LT before VO2max; Daniels /
+     CTS the other way, no RCT): ≥ `Z5_Z3_NEED` = 2 Zone 3 sessions done (達標 or not; ladder,
+     巡航版, T+, the ramp week's 閾值 — not the recovery fartlek nor an unplanned hard run) in the
+     last `Z5_Z3_DAYS` = 42 days (`z3_recent`, `gate["z3_recent"]`), **or** the Zone 5 track
+     already under way (a step or a session done in the 8 weeks). It replaces the hard 「3 堂 3
+     區達標」 (`Z3_MET_FOR_Z5`, removed). A projected week counts its own 6-week window
+     (`steps["z3_dates"]`: the gate's dates plus each planned / projected Zone 3 week). A gate
+     stored before SP-39 (no `z3_recent`) counts its Zone 3 達標.
+  The old `xu_signals` path and its mode were removed (aerobic-base-readiness.md); a stored
+  `xu_signals` reads as `auto` (`plan_prefs.from_settings`), new writes are rejected.
 - **徐國峰's 90-min test** (`xu_run`): ≥ 90 min, flat (not trail, < 20 m/km), every
   stop ≤ 30 s, HR in Zone 1 (the app's easy rule: avg ≤ AeT + 3, ≤ 10 % above — mapping his
   E zone to "below AeT" is 推估), (HR@90′ − HR@10′) / HR@10′ < 10 % — his own comparison, not
@@ -239,21 +276,32 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   survives only as the re-entry rule's post-break drift check (`long_check`, 14–28 days off). A
   break ≥ 6 days is the re-entry rule below. A paused state says why in `z5["pause"]`
   (`kind`: `z1` / `reentry_z3` with done / need / `drift_check`).
-- **Tracker** (`quality_gate.z5_card`): `base` = one step 「確認有氧基礎（三選一，做了且達標）」 with
-  the mode's tests (✓ / ✕ / – and the current value; after a Z1 pause or a ≥ 4-week break only
-  results dated after it count); `steps` = ① base ② 3 區達標 n/3 ③ 5 區開放, each done / active /
-  todo / paused / wait; `next` = the one 「還缺：…」 line (or 恢復期還剩 n 天 / 都做到了), computed
-  once. `flow` (`quality_gate.z5_flow`, presentation only) = the same flags as five quest
-  stages 有氧基礎 (the Zone 3 gate: its three tests until one passes) → 3 區階梯 (A1–A4) →
-  有氧基礎確認 → 5 區解鎖 → 5 區階梯 (status done / current /
-  parallel / locked, checklist items with a short `todo`) + `here` (「你現在在這裡，下一步」);
-  the 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
-- **Re-confirmation**: passive first — any qualifying run re-confirms. The AeT test is
+- **Tracker** (`quality_gate.z5_card`, SP-39): `base` = the Zone 5 AeT tests 「實測 AeT（二選一，
+  做了且達標）」 (✓ / ✕ / – with the current value and what is `missing`: aet / lthr / gap; after a Z1
+  pause or a ≥ 4-week break only results dated after it count); `z3` = the soft condition
+  (done / need / under_way); `z5_gate` = `z5_track`; `open` = the Zone 5 track; `steps` = ① 實測
+  AeT ② 近 6 週 3 區 n/2 ③ 5 區開放; `next` = the one 「還缺：…」 line. `flow`
+  (`quality_gate.z5_flow`, presentation only) = **two independent, parallel tracks** `tracks:
+  [z3, z5]`, each `{title, open, here, stages}`: 三區軌 = 3 區解鎖 (the Zone 3 gate: its three
+  tests until one passes) → 3 區階梯 A1–A4; 五區軌 = 5 區解鎖 (the AeT tests as any-of, the soft
+  Zone 3 line, re-entry / maintenance items, notes) → 5 區階梯 V1–V4. Stage status done /
+  current / locked; each track its own `here` 「你現在在這裡，下一步」 (`next`, `action`, `also`).
+  **安排課表**: every unticked item that is a session or a test carries `action` =
+  `schedule_action` → `{type, key, proto, href}`: `variant` (the current rung's canonical variant;
+  `?add=<variant key>`), `test` (`?test=aet&proto=ua60|xu90|friel` — the Zone 5 AeT test is
+  `AET_TEST_PROTOCOL` = UA 60′, one that yields an AeT number), `template` (the LTHR test
+  `?add=lib:friel_lthr30&proto=race`); only the current rung of a ladder gets one. The 課表 page
+  (`schedule.html` `openPreset`) opens its new-session dialog with that session preselected
+  (`WorkoutEditor.applyKey`, or the dialog's 測試 kind / 方式), the user picks the day and saves
+  through `POST /sessions` (a variant keeps its `variant_key` → rung, so it counts on its ladder).
+  The 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
+- **Re-confirmation**: a new measured AeT (UA gap or Friel) re-confirms. The AeT test is
   scheduled only for a reason (`quality_gate.aet_test_reason`): no interpretable run for ~6
   weeks (UA's 4–6-week retest, coach; wording 未驗證), the aggregated AeT estimate missing or
   SE > 3 bpm, a shift > 5 bpm in the last 6 points (B3), the estimate more than max(SE, 3 bpm)
   from the plan's AeT ("moved": UA — AeT rises toward AnT as the base improves), or after a
-  break ≥ 4 weeks. A passive confirmation in the last 6 weeks stands in for no_data / se.
+  break ≥ 4 weeks. (The passive 90-min re-confirmation that stood in for no_data / se is gone
+  with SP-39: the 90-min run no longer confirms Zone 5.)
   ≥ 28 days between tests (推估). No fixed cadence any more (16 weeks, 4–6 weeks: no source).
   An AeT that is only a temporary lower bound never fires shift / moved. There is no
   stable-weekly-volume precondition before a test (a 3-weeks-within-±15 % rule was added and
@@ -264,10 +312,10 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
 - **History** (`quality_gate.z5_history`): the lifecycle replayed on every day of a range with
   the inputs evaluate() would have had that day (the plan's AeT / LTHR in effect, `reentry.find`
   on that day, the interval sessions of the 8 weeks before it) through the same `_z5`, so the
-  last day equals the gate. plateau / weeks unlock by their own method and are not replayed
-  (noted). Shown in 基礎期 (view kind `z5gate`) as the collapsed 歷程 list under the stage flow.
-- **Visibility**: the gate hover and the overview show 「Zone 5：未確認／已確認（日期、路徑）／
-  暫停（原因）／恢復期」 and 「建議測試：…」.
+  last day equals the gate. Shown in 基礎期 (view kind `z5gate`) as the collapsed 歷程 list under the stage flow.
+- **Visibility**: the gate hover shows the Zone 5 track (`z5_track` text: 「Zone 5：已解鎖（…）／未解鎖
+  （AeT 已通過，還差 3 區：…）」) or the AeT state 「Zone 5：未確認／已確認／暫停／恢復期」, and
+  「建議測試：…」.
 
 ### The AeT test protocol (`plan.prefs.aet_test_protocol`, `backend/engine/aet_test.py`)
 
@@ -360,8 +408,9 @@ path for new tables. Each row holds:
 - the push outcome, or the push error
 
 Plan-rule changes get their own `applied` rows without sessions (`plan_auto.state_changes`,
-state keys `z5` / `reentry` in `plan.auto.state`): every Zone 5 state change
-(「Zone 5：未確認 → Zone 5：已確認（…）」) and every new re-entry block
+state keys `z3` / `z5` / `z5_track` / `reentry` in `plan.auto.state`): the Zone 3 gate opening,
+every Zone 5 state change (「Zone 5：未確認 → Zone 5：已確認（…）」), the Zone 5 track unlocking
+(`z5_track` text 「Zone 5：已解鎖（…）」) or re-locking (「Zone 5：重新上鎖（…）」; SP-39) and every new re-entry block
 (「恢復期：停跑 N 天…（不排課日期，事前排好／從活動資料偵測）」).
 
 **復原** restores the before-state of the affected sessions as the athlete's own
@@ -453,4 +502,8 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
+| 2026-10-04 | feature | SP-31 follow-up | 專項期 applies this week's CTL-ramp (5 sub / 8 block) and > 20 % volume-step guardrails to both tracks; taper / race / recovery / re-entry exempt |
+| 2026-10-04 | feature | SP-31 follow-up | 2 a week with only Zone 3 open: the second session is a 巡航版 sized to the first (within the 10 % / 20 % / day caps), not a copy |
+| 2026-10-04 | feature | SP-31 follow-up | The weekday-cap 巡航版 fallback counts as the Zone 3 rung (same rule as the volume cap) |
+| 2026-10-04 | feature | SP-39 | Zone 3 and Zone 5 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR, gap ≤ 10 %, or Friel < 5 % at the tested AeT; the 90-min test and plateau / weeks open Zone 3 only) and the soft 「近 6 週 ≥ 2 堂 3 區」 (`Z5_Z3_NEED` / `Z5_Z3_DAYS`, 推估; replaces `Z3_MET_FOR_Z5`), one flag `z5_track` for week_decision / flow / 推薦 / change log; low-intensity share blocks Zone 5 only with a tested AeT; flow = two parallel tracks with 「安排課表」 actions (`?add=` / `?test=` deep links into the 課表 dialog); passive 90-min re-confirmation removed |
 | 2026-10-04 | feature | SP-31 | Two interval tracks: Zone 3 A1–A4 (2×15 → 3×12 → 2×20 → 1×30, 88–95 % CP) and Zone 5 V1–V4, own steps / 達標 counts; T1–T3 kept as 巡航版 and legacy; Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap, sticky, ≥ 21-day break re-locks / 90-min test / UA gap); low-intensity share blocks Zone 5 only; Zone 3 ≤ 10 % of the week, Zone 3 + Zone 5 ≤ 20 %; 2 a week = one of each, 1 a week 1:1 / 2:1 by the A race; 專項期 / 減量期 two-track sessions; z3_note / warn notes; flow stage 1 = the Zone 3 gate |
