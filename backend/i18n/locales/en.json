@@ -26,5 +26,11 @@
   "短間歇": "Short intervals",
   "輕鬆跑": "Easy run",
   "強度課": "Quality session",
-  "測試": "Test"
+  "測試": "Test",
+  "結構化爬升": "Structured climbing",
+  "階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設": "Stair trails and steady-grade routes (stair-climb sets, Koop uphill tempo, steep power hiking): time + intensity per set, heart-rate / power floors and caps as usual",
+  "技術地形": "Technical terrain",
+  "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": "Rough technical trail: time + climb + RPE, no heart-rate or power target (reference only); RPE ≥ 7 counts as a quality session",
+  "下坡技術／離心": "Downhill skill / eccentric",
+  "練下坡：時間＋下降量，不設心率、功率目標（下坡功率不準）": "Downhill practice: time + descent, no heart-rate or power target (power is unreliable downhill)"
 }

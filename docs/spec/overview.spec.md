@@ -937,8 +937,8 @@ which one. The response keeps the `coros` field names.
   (手錶). ✓ is never used for push. The legend has two titled groups, 完成 and 手錶
   (`renderLegend`, `backend/static/schedule.html:1103`). 已推送 stays visible (subtle).
 - **強度課的家族** (2026-10-04, SP-32; `docs/research/coach-schools-zones-periodization.md` R1). One
-  classifier, `workout_templates.family_of` (`backend/engine/workout_templates.py:553`, rule in
-  `classify`, `backend/engine/workout_templates.py:529`), splits a structure's `work` steps by
+  classifier, `workout_templates.family_of` (`backend/engine/workout_templates.py:598`, rule in
+  `classify`, `backend/engine/workout_templates.py:574`), splits a structure's `work` steps by
   intensity first, then the median rep length and the median rest between reps:
   **有氧間歇** (≤ 101 % CP, ≤ 102 % LTHR, or a pace not faster than T; sub 長 tempo = reps ≥ 15′ or
   one continuous block, 巡航間歇 = shorter reps, reps < 6′ included, 推估), **VO2max 間歇** (above
@@ -946,23 +946,58 @@ which one. The response keeps the `coros` field names.
   **速度** (reps ≤ 2′ with a rest ≥ 2× the rep, power > 116 % CP, or untargeted short sprints).
   Above threshold with reps > 5′ is 巡航（超閾值）. Distance reps use T pace (4:48/km without one,
   推估). Used by: the editor's 插入範本 強度課 tabs (有氧間歇 ／ VO2max 間歇 ／ 速度, labels and
-  tips through `_()`, `cats`, `backend/engine/workout_templates.py:448`; groups in
-  `workout_steps.templates`, `backend/engine/workout_steps.py:1355`, for the published templates
+  tips through `_()`, `cats`, `backend/engine/workout_templates.py:492`; groups in
+  `workout_steps.templates`, `backend/engine/workout_steps.py:1452`, for the published templates
   and the interval ladder's rows alike — Palladino 4×2:40 now files as VO2max, 4×4:30 @ 98–104 %
-  as 巡航); the 推薦 block (`template_recs._score`, `backend/engine/template_recs.py:122`: Zone 5
+  as 巡航); the 推薦 block (`template_recs._score`, `backend/engine/template_recs.py:124`: Zone 5
   closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 強化期／專項期 巡航間歇; the
   「同一類」 bonus by `_rung_family`, `backend/engine/template_recs.py:204`); and the plan's
-  強度課: `session_family` (`backend/engine/workout_templates.py:590`, the stored steps, else the
+  強度課: `session_family` (`backend/engine/workout_templates.py:635`, the stored steps, else the
   derived ones) gives every session read through `_view` (`backend/api/plan_sessions.py:257`) a
   computed `quality_family` `{id, sub, label, sub_label, text}` (None for other kinds; never
   stored, no DB change). The calendar chip shows the family label before the minutes, the full
   text in its tooltip / aria-label, and the session dialog's sub-line adds it (`chipHtml`,
   `backend/static/schedule.html:926`). The scheduler's ladders and gates are unchanged.
 - **訓練目的** (2026-10-04, SP-32): every built-in template has a one-line `purpose`
-  (`PURPOSE`, `backend/engine/workout_templates.py:110`, from the report's Finding 7 with the
+  (`PURPOSE`, `backend/engine/workout_templates.py:123`, from the report's Finding 7 with the
   coaches it cites, msgids through `_()`); the interval ladder's rows take the purpose of their
   family. The 插入範本 menu shows it under each row's title, and a 強度課 row also shows its sub
-  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:677`).
+  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:692`).
+- **速度 tab add-ons** (2026-10-04, SP-32 follow-up): strides (快步跑 4×20″) and short hill sprints
+  (上坡衝刺 8×10″, UA 陡坡衝刺 8×10″) are 速度 by `family_of`, but the menu only gave family tabs to
+  the `quality` category, so only Daniels R showed there. `workout_steps.templates`
+  (`backend/engine/workout_steps.py:1452`) now also lists them in 強度課 › 速度 (group
+  「加速跑與短坡衝刺」, family 速度, their own purpose); they stay under 輕鬆跑 / 越野跑 too.
+- **越野跑 in three kinds** (2026-10-04, SP-62, the user's decision). 插入範本 › 越野跑 gets sub-tabs
+  (`TRAIL_TYPES`, `backend/engine/workout_templates.py:478`; labels / tips through `_()` with en):
+  **結構化爬升** (stairs, steady grades — 登山王, Koop uphill tempo, 陡坡健走, 長爬坡有氧, 陡坡衝刺:
+  the HR / power bands keep floor and cap; SP-61 cancelled), **技術地形** (time + climb + RPE, no
+  HR / power target) and **下坡技術／離心** (time + descent; `downhill_ecc` no longer targets HR).
+  A template says its kind (`Template.trail`); a structure of your own by `trail_type_of`
+  (`backend/engine/workout_templates.py:647`: an RPE work step with only a descent → 下坡, any
+  other RPE work step → 技術地形, else 結構化爬升). Two technical templates: 技術地形 60′（低 RPE
+  3–4, 爬升 300 m） and 90′（RPE 6–7, 爬升 600 m）, `backend/engine/workout_templates.py:403`
+  (structure 推估, source / purpose as the others). The step model has a new target type **`rpe`**
+  `{lo, hi (Borg CR-10 1–10), up?, down? (m)}` (`_norm_target`, `backend/engine/workout_steps.py:533`):
+  it resolves to RPE with the climb, the CR-10 word and a **reference HR as text only**
+  (`rpe_hint`, `backend/engine/workout_steps.py:772`: ≤ 4 under the easy cap, 5–6 up to 95 %
+  LTHR, ≥ 7 from 95 % LTHR, 推估); its ≈ % CP sizes only the chart and the TSS estimate.
+  **Push**: no intensity — the step keeps its time / distance / 直到按下計圈 end and its name
+  carries 「RPE 6–7 · 爬升 600 m」 (`rpe_name`, `backend/engine/workout_steps.py:1242`); the watch
+  preview lists that limit. **Load / PMC stay the watch's record** (no RPE correction).
+  **Easy or quality by RPE**: `rpe_role` (`backend/engine/workout_steps.py:1108`) — a work step
+  reaching RPE 7 (很累) = 強度課, else 輕鬆課; POST /steps/check returns it (`rpe_role`), the menu
+  tags each row 算強度課 / 算輕鬆課, the editor adds an info line, and the session dialog switches
+  the session's type to match when the structure changes (`rpeKind`,
+  `backend/static/schedule.html:1645`: 輕鬆跑 / LSD / 越野跑 → 強度課 at ≥ 7, back otherwise), so
+  the existing 48 h spacing and hard-day rules apply through the kind.
+  `workout_templates.session_role` (`backend/engine/workout_templates.py:670`) gives the same
+  answer for a stored session. The editor's target menu adds 「RPE＋爬升」 with RPE / 爬升 / 下降
+  fields (`tgHtml`, `backend/static/workout_editor.js:383`); the static demo's JS port follows.
+  The 推薦 block: 基礎期 favours the low-RPE technical session, 專項期 the race-like one
+  (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:43`). Not done: week_plan does not generate
+  技術地形 sessions itself, and a user's own quality-kind session is not counted into the
+  generator's 20 % interval budget.
 
 ## Status engine change
 
@@ -1275,3 +1310,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feat/sp-32-interval-families | SP-32, docs/research/coach-schools-zones-periodization.md R1 / Finding 7 | 強度課 families: one classifier (`workout_templates.family_of`: 有氧間歇 長 tempo／巡航, VO2max 間歇, 速度 — intensity first, then rep length) replaces the 三區／四區／五區 %CP tabs of 插入範本 (published templates and ladder rows; Palladino 4×2:40 → VO2max), drives the 推薦 block's Zone 5 / phase rules, and adds a computed `quality_family` to plan sessions (calendar chip, dialog); 「無氧間歇」 named 「VO2max 間歇」; templates get a one-line `purpose` (訓練目的) shown in the menu; family labels / tips / purposes through `_()` with en |
 | 2026-10-04 | feat/sp-46-thresholds-settings | SP-46 | 閾值測試紀錄 (LTHR / AeT / CP) edited on the settings page (table, 自動估算 cards, power zones; zh-TW + en), `GET /api/v1/plan/thresholds`; 賽事周期 page shows a read-only summary + link; 最大心率 only in 設定 → 心率 (no max-HR column; mhr / rhr rows kept on save); status / chart hints point to 設定. Same `plan.thresholds` data, no model change |
 | 2026-10-04 | feat/sp-43-calc-export | SP-43 | Stored plan: kind `race` in `KINDS` (not added by hand), `ext_key` / `ext_sig` columns and `plan_store.upsert_external` for the 賽事計算機's 「匯出至課表」 (one row per event, claims the generator's 比賽 row, restore / move, `user_edited` by fingerprint, `updated_at` kept on an identical export); reconcile: a kept race blocks the generator's race of that week; push: a race with steps is pushed, the old `racecalc:` watch workout is removed on that push (`calc_to_replace` in the preview); 課表 dialog keeps kind 比賽 |
+| 2026-10-04 | feat/sp-62-trail-types | SP-32 | 速度 tab of 插入範本 also lists strides and short hill sprints (they were 速度 by `family_of` but filed under 輕鬆跑 / 越野跑) |
+| 2026-10-04 | feat/sp-62-trail-types | SP-62 | 越野跑 templates in three kinds (結構化爬升 / 技術地形 / 下坡技術／離心; sub-tabs, `trail_type_of`); target type `rpe` (CR-10 + 爬升 / 下降, reference HR as text, pushed with no target and the RPE in the step name); two 技術地形 templates, `downhill_ecc` by RPE + descent; `rpe_role` (RPE ≥ 7 = 強度課) in /steps/check, the menu and the session dialog (type follows) |
