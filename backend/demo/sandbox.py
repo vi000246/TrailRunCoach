@@ -32,7 +32,7 @@ MAX_SANDBOXES = 300
 MAX_TOTAL_BYTES = 1024 ** 3
 # the private files a sandbox copies from its base (§2.3); the rest is read from the base
 PRIVATE_FILES = ("plan.json", "racepower_hike_meta.json", "racepower_solo_hikes.json")
-PRIVATE_DIRS = ("event_gpx",)
+PRIVATE_DIRS = ("event_gpx", "template_gpx")
 _NAME = re.compile(r"^[A-Za-z0-9_.\-]{1,64}$")
 _HEX = re.compile(r"^[0-9a-f]{32}$")
 

@@ -524,6 +524,9 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <a class="mcard" href="/api/v1/overview/plan/compliance/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
       <span><b data-i18n="schedule.tabs.compliance">課表統計</b><small data-i18n="schedule.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/templates/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <span><b data-i18n="schedule.tabs.templates">範本</b><small data-i18n="schedule.tabs.templates_sub">自己的課表範本</small></span></a>
   </nav>
   <div class="bar calnav">
     <h1 id="cal-label">課表</h1>
@@ -1598,6 +1601,8 @@ function weSession() {
     day: F.day.value, terrain: eqOn() ? terVal() : (dlg.orig || {}).terrain,
     // trail: the climb per km for the effort distance of distance steps (the panel's, else the goal race's)
     climb_per_km: eqOn() && terVal() === "trail" ? EQS.d : kindVal() === "hike" ? (D.goal_climb_per_km ?? null) : null,
+    // 目標用: a user template's (SP-36) once one is applied, else the session's stored one
+    target_basis: dlg.tplBasis !== undefined ? dlg.tplBasis : (dlg.orig || {}).target_basis,
     protocol: (dlg.test || {}).protocol || (dlg.orig || {}).protocol,
     ...(dlg.variant ? { variant_key: dlg.variant.key } : dlg.orig && dlg.orig.variant_key ? {
       variant_key: dlg.orig.variant_key, variant_reps: dlg.orig.variant_reps, variant_blocks: dlg.orig.variant_blocks,
@@ -1631,6 +1636,8 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   // an interval-ladder session (what the old 間歇範本 dropdown set): saved with its variant_key, so
   // it keeps its rung and counts for progression; a library template is a structure of your own
   if (kindVal() === "quality") dlg.variant = row.variant ? { key: row.key } : null;
+  // 我的範本 remembers 心率／功率 (SP-36): the session takes it (null = 自動)
+  if (row.mine) dlg.tplBasis = row.target_basis || null;
   // a template names the session while the title is still the default one
   const defs = Object.values(D.default_titles || {});
   if (!dlg.titleTouched && (!F.title.value || defs.includes(F.title.value) || AUTO_TITLE_RE.test(F.title.value.trim()) || dlg.tplTitle === F.title.value))
@@ -1888,7 +1895,8 @@ F.addEventListener("submit", async (e) => {
   if (dlg.variant && body.kind === "quality") body.variant_key = dlg.variant.key;   // an editor template
   if (dlg.test && body.kind === "test") body.protocol = dlg.test.protocol;          // 測試 → which protocol
   // no session-level 目標用: each step picks its own basis in the structure (a stored
-  // target_basis from before stays as it was)
+  // target_basis from before stays as it was) — except a user template's, applied with it (SP-36)
+  if (dlg.tplBasis !== undefined) body.target_basis = dlg.tplBasis || "auto";
   if (eqOn()) {
     const f = eqF();
     Object.assign(body, { terrain: terVal(), distance_km: f.km > 0 ? f.km : null, climb_m: f.km > 0 ? Math.round(f.gain) : null });

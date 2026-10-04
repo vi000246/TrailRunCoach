@@ -61,6 +61,7 @@ PAGES: dict[str, str] = {
     "/api/v1/overview/page": "overview.html",
     "/api/v1/overview/plan/schedule/page": "schedule.html",
     "/api/v1/overview/plan/compliance/page": "compliance.html",
+    "/api/v1/overview/plan/templates/page": "templates.html",
     "/api/v1/wko5/viewer": "charts.html",
     "/api/v1/plan/page": "plan.html",
     "/api/v1/wko5/activities/page": "activities.html",
@@ -101,6 +102,8 @@ STATIC_LOCKS = ", ".join([
     "#gpxpick, #evsubmit, #addphase, #savephases, #tomanual, #toauto, [data-del-event], [data-edit-event]",
     # 課表: 依實際進度重排, 課表偏好 / 不排課日期 save, 換一個 (library variants), expired delete
     "#rec-btn, #pf-save, #pf-reset, #bo-save, #bo-del, #sd-swap, #vd button[data-vk]",
+    # 範本 (SP-36): the user's own templates, categories and route GPX; 儲存成範本 in the editor
+    "#tm-new, #tm-save, #tm-copy, #tm-del, #tm-gpx-up, #tm-gpx-del, #tm-cat-add, [data-cat-ren], [data-cat-del], #we-savetpl",
     # 賽事計算機: GPX upload / attach, CSV import of aid stations
     "#gpxfile, #gpx-attach, #stop-import, input[type=file][accept*='.gpx' i]",
 ])
@@ -763,7 +766,8 @@ def pass_schedule(app: DemoApp, rec: Recorder, today: dt.date, log) -> None:
         d = (today + dt.timedelta(days=k)).isoformat()
         _get_json(app, rec, f"/api/v1/overview/plan/test-options?day={d}")
     for u in ("/api/v1/overview/plan/test-suggestions", "/api/v1/overview/plan/test-templates",
-              "/api/v1/overview/plan/steps/templates", "/api/v1/overview/plan/prefs",
+              "/api/v1/overview/plan/steps/templates", "/api/v1/overview/plan/steps/templates/user",
+              "/api/v1/overview/plan/prefs",
               "/api/v1/overview/plan/prefs/gate", "/api/v1/overview/plan/blackouts",
               "/api/v1/overview/plan/equivalence", "/api/v1/overview/plan/reconcile",
               "/api/v1/overview/plan/suggestions"):
