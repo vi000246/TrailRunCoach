@@ -289,11 +289,14 @@ def daily_tss(ds: Dataset) -> dict[int, float]:
 
 
 def pmc(ds: Dataset, begin: dt.date, end: dt.date) -> dict:
-    """CTL / ATL / TSB per day over [begin, end] — the same tl() recurrence and
-    TSB = yesterday's CTL − ATL as the chart expressions `ctl`, `atl`, `tsb`."""
+    """CTL / ATL / TSB per day over [begin, end] — the chart expressions `ctl`, `atl`,
+    `tsb` (TSB = yesterday's CTL − ATL), so the same started PMC (SP-68: manual start,
+    else the first 4 weeks' mean, else 0; load_guard.pmc_start) as status / week_plan.
+    `start`: where it started {source, date (ISO), ctl, atl}."""
     b, e = int(date_to_day(begin)), int(date_to_day(end))
     ev = Evaluator(ds, b, e)
-    ctl, atl, tsb = ev.evaluate("ctl"), ev.evaluate("atl"), ev.evaluate("tsb")
+    ctl, atl, st = ev.pmc()
+    tsb = ev.evaluate("tsb")
     tss = daily_tss(ds)
     rows = []
     for d in range(b, e + 1):
@@ -301,6 +304,8 @@ def pmc(ds: Dataset, begin: dt.date, end: dt.date) -> dict:
                      "ctl": _n(ctl.at(d)), "atl": _n(atl.at(d)), "tsb": _n(tsb.at(d))})
     return {"begin": begin.isoformat(), "end": end.isoformat(),
             "ctlconstant": ds.athlete.ctlconstant, "atlconstant": ds.athlete.atlconstant,
+            "start": {"source": st["source"], "ctl": st["ctl"], "atl": st["atl"],
+                      "date": None if st["day"] is None else day_to_date(st["day"]).isoformat()},
             "series": rows}
 
 

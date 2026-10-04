@@ -24,12 +24,15 @@ Who reads which line:
     2026-10-01; before that 7 — the 7 is not carried over)
   * b2b (no B2B weekend, no TSB exemption): the block line (was 8, the old block)
 
-Startup: CTL starts at 0 on the first day with TSS, so the first weeks show a
+Startup: a CTL that starts at 0 on the first day with TSS shows, for weeks, a
 ramp that is only the PMC filling up (≈ 12 % of CTL still at day 42 with steady
-training). The guardrail CTL is seeded with the mean daily TSS of the first
-SEED_DAYS (Coggan gives CTL / ATL a starting value instead of 0) and the ramp is
-not checked during the first STARTUP_DAYS (both 推估: the seed is final once its
-4 weeks are in). The weekly volume step still runs in that window.
+training). The PMC itself (SP-68: the Evaluator builtins ctl / atl / tsb, so the
+charts and this guardrail read the same numbers) starts from pmc_start(): the
+user's manual CTL / ATL at a date, else CTL = ATL = the mean daily TSS of the first
+SEED_DAYS (Coggan gives CTL / ATL a starting value instead of 0), else 0. The ramp
+is not checked during the first STARTUP_DAYS of an automatic start (both 推估: the
+seed is final once its 4 weeks are in), nor in the first MANUAL_STARTUP_DAYS after
+a manual one. The weekly volume step still runs in that window.
 
 Weekly volume step: RUNNING time only (road + trail, sport "run"; Nielsen 2014
 and Damsted 2019 measured running), last week against
@@ -43,6 +46,7 @@ Weekly CTL goal of the planner: base max(2, 5 % CTL), specific max(2.5, 7 % CTL)
 """
 from __future__ import annotations
 
+import datetime as dt
 import statistics
 from typing import Optional, Sequence
 
@@ -116,16 +120,40 @@ def ramp_text(ramp: float, ctl_prev: Optional[float], level: str) -> str:
     return f"CTL 每週 +{ramp:.1f}（≥ {line:.1f}＝{how}）"
 
 
-# ---- startup seed ----------------------------------------------------------------
+# ---- PMC start values (SP-68) ---------------------------------------------------------
+# One source order for the starting CTL / ATL, read by the PMC itself (Evaluator builtins
+# ctl / atl / tsb: charts, overview, status, week_plan's TSB < −30, adapt rule E, b2b,
+# projection) and so by this guardrail:
+#   1. manual — the user's CTL / ATL at the start of a date (設定 → 閾值, user_settings
+#      PMC_START_KEY). The series restarts there; days before it keep 2. / 3.
+#   2. auto   — SP-63: CTL = ATL = the mean daily TSS of the first SEED_DAYS from the first
+#      day with TSS (only days ≤ today count, so it is final once its 4 weeks are in)
+#   3. none   — no TSS yet: 0 (WKO5 tl())
+PMC_START_KEY = "athlete.pmc_start"     # user_settings: {date: ISO, ctl, atl} | None
+MANUAL, AUTO, NONE = "manual", "auto", "none"
+START_MAX = 300.0                       # a CTL / ATL above this is a typo, not a start value
+MANUAL_STARTUP_DAYS = 7                 # a manual start: no ramp until CTL₋₇ is on / after its date
 
-def daily_load(ctl_values: Sequence[float], const: float) -> np.ndarray:
-    """The daily TSS behind a CTL series that starts at 0 (Evaluator._tl: v += (x − v)/c,
-    v = 0 before the first day): x_d = c·v_d − (c − 1)·v_{d−1}."""
-    v = np.nan_to_num(np.asarray(ctl_values, dtype=float))
-    prev = np.concatenate(([0.0], v[:-1]))
-    x = const * v - (const - 1.0) * prev
-    x[np.abs(x) < 1e-6] = 0.0
-    return x
+
+def parse_manual(v) -> Optional[dict]:
+    """{date, ctl, atl} from the stored setting; None when unset or malformed."""
+    if not isinstance(v, dict):
+        return None
+    try:
+        d = str(v.get("date") or "")
+        dt.date.fromisoformat(d)
+        c, a = float(v.get("ctl")), float(v.get("atl"))
+    except (TypeError, ValueError):
+        return None
+    if not (0.0 <= c <= START_MAX and 0.0 <= a <= START_MAX):
+        return None
+    return {"date": d, "ctl": c, "atl": a}
+
+
+def manual_start(user_id: int = 1) -> Optional[dict]:
+    """The stored manual start (a synchronous read like plan_prefs.load); None = not set."""
+    from backend.engine.wko5expr.datasource import read_setting
+    return parse_manual(read_setting(PMC_START_KEY, None, user_id))
 
 
 def first_load_index(x: Sequence[float]) -> Optional[int]:
@@ -133,47 +161,96 @@ def first_load_index(x: Sequence[float]) -> Optional[int]:
     return int(nz[0]) if len(nz) else None
 
 
-def seeded(x: Sequence[float], const: float, upto: Optional[int] = None) -> tuple[np.ndarray, Optional[int], float]:
-    """(load series seeded at the first day with TSS, that index, the seed). The seed
-    is the mean daily TSS of the first SEED_DAYS from that day (only days ≤ `upto`,
-    the series index of today, count). Before that day the series is 0."""
+def auto_seed(x: Sequence[float], upto: Optional[int] = None) -> tuple[Optional[int], float, int]:
+    """(index of the first day with TSS, the seed, days in it): the mean daily TSS of the
+    first SEED_DAYS from that day, only days ≤ `upto` (the index of today) counting."""
     x = np.asarray(x, dtype=float)
-    out = np.zeros(len(x))
     d0 = first_load_index(x)
-    if d0 is None:
-        return out, None, 0.0
+    if d0 is None or (upto is not None and d0 > upto):
+        return None, 0.0, 0
     hi = d0 + SEED_DAYS
     if upto is not None:
         hi = min(hi, upto + 1)
-    seed = float(np.mean(x[d0:max(hi, d0 + 1)]))
-    v = seed
-    for i in range(d0, len(x)):
-        v = v + (x[i] - v) / const
+    hi = max(hi, d0 + 1)
+    return d0, float(np.mean(x[d0:hi])), hi - d0
+
+
+def pmc_start(x: Sequence[float], start_day: int, today: int, manual: Optional[dict] = None) -> dict:
+    """The start values for a daily TSS series `x` whose index 0 is day `start_day`
+    (`today`: day number). {"source": manual | auto | none, "day" (day number the values
+    apply at, the start of that day; None for none), "ctl", "atl", "auto": {"day", "seed",
+    "days"} (the automatic seed, also when a manual start wins — the settings card shows it)}.
+    A manual start dated after today is ignored."""
+    from backend.engine.wko5expr.dataset import date_to_day
+    i_today = int(today) - int(start_day)
+    d0, seed, n = auto_seed(x, upto=i_today)
+    auto = {"day": None if d0 is None else int(start_day) + d0, "seed": seed, "days": n}
+    m = parse_manual(manual)
+    if m is not None:
+        md = int(date_to_day(dt.date.fromisoformat(m["date"])))
+        if md <= int(today):
+            return {"source": MANUAL, "day": md, "ctl": m["ctl"], "atl": m["atl"], "date": m["date"], "auto": auto}
+    if d0 is None:
+        return {"source": NONE, "day": None, "ctl": 0.0, "atl": 0.0, "date": None, "auto": auto}
+    return {"source": AUTO, "day": auto["day"], "ctl": seed, "atl": seed, "date": None, "auto": auto}
+
+
+def recur(x: Sequence[float], const: float, start_day: int, at_day: Optional[int], v0: float,
+          before: Optional[tuple[int, float]] = None) -> np.ndarray:
+    """tl()'s v += (x − v)/const over `x` (index 0 = day `start_day`), with v = v0 at the
+    start of day `at_day` (None = WKO5's v = 0 before the first input). `before`: an earlier
+    (day, v0) start the series runs from until `at_day` (a manual start keeps the automatic
+    seed before its date). A start before the series decays over the rest days in between."""
+    x = np.asarray(x, dtype=float)
+    out = np.empty(len(x))
+    resets = {}
+    v = 0.0
+    for st in ([before] if before and before[0] is not None else []) + ([(at_day, v0)] if at_day is not None else []):
+        k = int(st[0]) - int(start_day)
+        if k < 0:
+            v = st[1] * (1.0 - 1.0 / const) ** (-k)
+        else:
+            resets[k] = st[1]
+    for i, xv in enumerate(x):
+        if i in resets:
+            v = resets[i]
+        v = v + (xv - v) / const
         out[i] = v
-    return out, d0, seed
+    return out
 
 
-def guard_ramp(ctl_values: Sequence[float], start_day: int, today: int, const: float) -> dict:
-    """The guardrail ramp on `today` from a PMC CTL series (Evaluator "ctl": Daily
-    starting at `start_day` with v = 0 before it). {"ramp", "ctl_prev", "ctl_now"
-    (seeded CTL), "startup" (True = in the first STARTUP_DAYS: no ramp check),
-    "day_n" (days since the first TSS), "seed", "level"}."""
-    x = daily_load(ctl_values, const)
+def pmc_series(x: Sequence[float], const: float, start_day: int, start: dict, which: str) -> np.ndarray:
+    """The PMC's CTL (`which` = "ctl") or ATL ("atl") from pmc_start()'s `start`: the
+    automatic seed before a manual start's date, then the manual value."""
+    a = start.get("auto") or {}
+    before = (a.get("day"), a.get("seed", 0.0)) if start.get("source") == MANUAL else None
+    if before is not None and (before[0] is None or before[0] >= (start.get("day") or 0)):
+        before = None
+    return recur(x, const, start_day, start.get("day"), start.get(which, 0.0), before)
+
+
+def guard_ramp(ctl_values: Sequence[float], start_day: int, today: int, start: Optional[dict]) -> dict:
+    """The guardrail ramp on `today` from the PMC CTL series (Evaluator "ctl": Daily starting
+    at `start_day`, already started at `start` = pmc_start()). {"ramp", "ctl_prev", "ctl_now",
+    "startup" (True = no ramp check: the first STARTUP_DAYS of an automatic start, the first
+    MANUAL_STARTUP_DAYS after a manual one), "day_n" (days since the start), "seed", "source",
+    "level"}."""
+    s = np.nan_to_num(np.asarray(ctl_values, dtype=float))
+    st = start or {"source": NONE, "day": None}
     i = int(today) - int(start_day)
-    out = {"ramp": None, "ctl_prev": None, "ctl_now": None, "startup": False, "day_n": None, "seed": 0.0,
-           "level": None}
-    if i < 0 or i >= len(x):
+    out = {"ramp": None, "ctl_prev": None, "ctl_now": None, "startup": False, "day_n": None,
+           "seed": st.get("ctl", 0.0) if st.get("source") == AUTO else 0.0, "source": st.get("source"), "level": None}
+    if i < 0 or i >= len(s):
         return out
-    s, d0, seed = seeded(x, const, upto=i)
-    if d0 is None or d0 > i:
+    if st.get("day") is None or int(st["day"]) > int(today):
         out["startup"] = True
         return out
-    n = i - d0
-    out.update(day_n=n, seed=seed, ctl_now=float(s[i]))
+    n = int(today) - int(st["day"])
+    out.update(day_n=n, ctl_now=float(s[i]))
     if i - 7 >= 0:
         out["ctl_prev"] = float(s[i - 7])
         out["ramp"] = float(s[i] - s[i - 7])
-    if n < STARTUP_DAYS:
+    if n < (MANUAL_STARTUP_DAYS if st.get("source") == MANUAL else STARTUP_DAYS):
         out["startup"] = True
         return out
     out["level"] = ramp_level(out["ramp"], out["ctl_prev"])
