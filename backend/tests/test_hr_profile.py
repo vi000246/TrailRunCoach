@@ -327,7 +327,8 @@ def test_zone_table_bpm_models(tmp_path, monkeypatch):
 
 def test_zones_card_title_follows_the_chosen_model(tmp_path):
     """SP-40: 「區間與課表強度」's HR card switched with ?zsys= is titled after the chosen
-    model, not the view's fixed 「Friel 心率區間」; the default model and other tables keep it."""
+    model; the default model and other tables keep the view's title, which is model-neutral
+    (「心率區間（跑步）」, not 「Friel …」) — the description still names Friel as the default."""
     from datetime import datetime, timezone
     from backend.api.wko5views import _render
     from backend.engine.wko5expr.config import EngineConfig
@@ -346,6 +347,7 @@ def test_zones_card_title_follows_the_chosen_model(tmp_path):
     charts = {c.get("id"): c for v in load_custom_views([REPO_VIEWS]).values() if not v.get("error")
               for dash in v["dashboards"] for c in dash["charts"]}
     hr, power = charts["friel-hr-zones"], charts["palladino-power-zones"]
+    assert hr["title"] == "心率區間（跑步）" and "預設 Friel" in hr["description"]
     end = date_to_day(TODAY)
     res = _render(hr, ds, end - 30, end, None, None, params={"zsys": "coroslthr"})
     assert res["title"] == "COROS 乳酸閾心率區間（跑步）" == res["zones"]["title"]

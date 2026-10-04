@@ -269,7 +269,7 @@
       "charts": [
         {"id": "workout-targets", "title": "課表建議強度", "kind": "targets", "description": "每種課表該跑的功率、心率。\n看什麼：路上的輕鬆跑、長跑看心率（≤ AeT）；山路、爬坡、間歇看功率（心率約慢 1 分鐘才反應），心率當第二個數字；陡的技術下坡不看功率。\n方法：LTHR 還是 WKO5 預設值時，先用自動估算的值。"},
         {"id": "palladino-power-zones", "title": "Palladino 功率區間（跑步）", "kind": "zones", "system": "palladino", "days": 30, "description": "跑步功率區間（% CP）。\n方法：Palladino 官方表。"},
-        {"id": "friel-hr-zones", "title": "Friel 心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30, "description": "跑步心率區間，可在卡片上切換區間模型（Friel／Classic／COROS）。\n方法：卡片上選的區間模型；預設 Friel 心率區間（% LTHR，同 WKO5）。"},
+        {"id": "friel-hr-zones", "title": "心率區間（跑步）", "kind": "zones", "system": "frielhr", "days": 30, "description": "跑步心率區間，可在卡片上切換區間模型（Friel／Classic／COROS）。\n方法：卡片上選的區間模型；預設 Friel 心率區間（% LTHR，同 WKO5）。"},
         {"id": "friel-pace-zones", "title": "Friel 配速區間（跑步）", "kind": "zones", "system": "frielpace", "days": 30, "description": "跑步配速區間，依閾值配速。\n看什麼：山路配速不準，只有路跑有參考價值。\n方法：Friel 配速區間。"}
       ]
     }

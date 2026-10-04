@@ -136,6 +136,14 @@ def test_resolve_overrides():
         assert not [i for i in WS.issues(d, lt) if i["level"] == "err"]
     r = WS.resolve(_one({"type": "hr", "mode": "abs", "lo": 175, "hi": 165})["items"][0], lt)
     assert r.err == "下限比上限高"
+    # hand-entered power outside 40–200 % CP is taken as entered too; lo > hi still errors
+    for tg in ({"type": "power", "mode": "abs", "lo": 60, "hi": 80}, {"type": "power", "mode": "abs", "lo": 520, "hi": 560},
+               {"type": "power", "mode": "pct", "lo": 2.1, "hi": 2.4}):
+        d = WS.normalize(_one(tg))
+        assert not WS.resolve(d["items"][0], c).err
+        assert not [i for i in WS.issues(d, c) if i["level"] == "err"]
+    r = WS.resolve(_one({"type": "power", "mode": "abs", "lo": 300, "hi": 280})["items"][0], c)
+    assert r.err == "下限比上限高"
     r = WS.resolve(_one({"type": "pace", "mode": "zone", "zone": "4"})["items"][0], c)
     assert r.type == "pace" and r.intensity == ("pace", round(r.lo), round(r.hi)) and not r.warn
     assert r.text == "4:40–4:57 /km"
