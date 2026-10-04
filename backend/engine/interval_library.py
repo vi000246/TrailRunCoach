@@ -3,8 +3,11 @@ The interval session library — every ladder step with 2–4 equivalent
 variants, the warm-up / cool-down blocks, the time-cap fitting and the
 rotation (docs/research/interval-prescription.md Part C, §A5.3).
 
-Ladder (§A5.3, corrected 2026-10-01):
-  Zone 3 (Z3sub, 90–95 % CP): T1 3×6′ → T2 3×8′ → T3 2×12′
+Ladder (§A5.3, corrected 2026-10-01; two tracks since SP-31, 2026-10-04):
+  Zone 3 track (Z3sub, 88–95 % CP; 有氧間歇／節奏, every rep 15–30 min): A1 2×15′ → A2 3×12′
+               → A3 2×20′ → A4 1×30′ (UA Zone 3, Friel, Koop, Pfitzinger)
+  巡航版 (Z3sub, 90–95 % CP): T1 3×6′ → T2 3×8′ → T3 2×12′ — the Zone 3 track's weekday-cap /
+               low-volume fallback and the old Zone 3 rungs (stored rung keys z3a / z3b / z3c)
   Zone 5 (Z5): V1 5×2′ (106–112 %, 2′ walk) → V2 4×3′ (3′ jog) → V3 5×3′ (2.5′ walk)
                → V4 4×4′ (104–108 %, 3′ jog; Helgerud 2007)
   T+ (Z3near, 97–100 %): a maintenance family once Zone 5 is open
@@ -104,8 +107,53 @@ def _v(key, rung, cls, reps, work_s, rest_s, rest_mode, lo, hi, terrain="flat", 
 
 HAUGEN = "Haugen 2022（threshold intervals 3–15 分、休 1–2 分）"
 PALLADINO_NT = "Palladino near-threshold（工休比 3:1–4:1）"
+UA_Z3 = "Uphill Athlete Zone 3（每趟 15–60 分、工休 4:1–5:1）"
+FRIEL_ME = "Friel Base 2：2×20 分 Zone 3 肌耐力"
+DANIELS_TEMPO = "Daniels：連續節奏跑約 20 分起"
+KOOP_SSR = "Koop／CTS SteadyStateRun（20–60 分，可上坡）"
 LIBRARY: dict[str, tuple[Variant, ...]] = {
-    # ---- Zone 3 (Z3sub 90–95 % CP) -------------------------------------------
+    # ---- the Zone 3 track (有氧間歇／節奏, Z3sub 88–95 % CP; SP-31): A1 2×15′ → A2 3×12′ → A3 2×20′ → A4 1×30′
+    # — every rep 15–30 min (the user's 有氧間歇). Order 總量 → 每趟長度 (interval-prescription.md §A4.1); the
+    # rests and the shorter / continuous equivalents are 推估 within the §C2 rules (continuous: ≥ 85 % of the TIZ)
+    "a1": (
+        _v("a1a", "a1", "Z3sub", 2, 900, 180, "jog", 0.88, 0.95, canonical=True,
+           src=f"{UA_Z3}；起步約週有氧量 5%（UA）", src_kind="coach"),
+        _v("a1b", "a1", "Z3sub", 3, 600, 120, "jog", 0.88, 0.95, src=f"{UA_Z3}；Daniels 巡航間歇延長版",
+           src_kind="coach"),
+        _v("a1c", "a1", "Z3sub", 1, 1560, 0, "none", 0.88, 0.92, src=f"{DANIELS_TEMPO}（平日上限的較短版：推估）",
+           src_kind="coach"),
+        _v("a1d", "a1", "Z3sub", 2, 900, 180, "jog_down", 0.88, 0.95, "hill", grade="4–6%", src=KOOP_SSR,
+           src_kind="coach"),
+    ),
+    "a2": (
+        _v("a2a", "a2", "Z3sub", 3, 720, 180, "jog", 0.88, 0.95, canonical=True,
+           src=f"{UA_Z3}；Pfitzinger LT 每次 20 → 35–45 分", src_kind="coach"),
+        _v("a2b", "a2", "Z3sub", 2, 1080, 180, "jog", 0.88, 0.95, src=f"{UA_Z3}（每趟加長）", src_kind="coach"),
+        _v("a2c", "a2", "Z3sub", 1, 1920, 0, "none", 0.88, 0.92, src=f"{DANIELS_TEMPO}；Pfitzinger 連續 LT 跑",
+           src_kind="coach"),
+        _v("a2d", "a2", "Z3sub", 3, 720, 180, "jog_down", 0.88, 0.95, "hill", grade="4–6%", src=KOOP_SSR,
+           src_kind="coach"),
+    ),
+    "a3": (
+        _v("a3a", "a3", "Z3sub", 2, 1200, 240, "jog", 0.88, 0.95, canonical=True,
+           src=f"{FRIEL_ME}；{UA_Z3}", src_kind="coach"),
+        _v("a3b", "a3", "Z3sub", 4, 600, 120, "jog", 0.88, 0.95, src="Daniels 巡航間歇（延長到 2×3 英里前的形式）",
+           src_kind="coach"),
+        _v("a3c", "a3", "Z3sub", 1, 2100, 0, "none", 0.88, 0.92, src=f"Pfitzinger 連續 LT 跑 35–45 分；{DANIELS_TEMPO}",
+           src_kind="coach"),
+        _v("a3d", "a3", "Z3sub", 2, 1200, 240, "jog_down", 0.88, 0.95, "hill", grade="長坡 4–6%", src=KOOP_SSR,
+           src_kind="coach"),
+    ),
+    "a4": (
+        _v("a4a", "a4", "Z3sub", 1, 1800, 0, "none", 0.88, 0.92, canonical=True,
+           src=f"{KOOP_SSR}；Pfitzinger 連續 LT 跑", src_kind="coach"),
+        _v("a4b", "a4", "Z3sub", 1, 1800, 0, "none", 0.88, 0.92, "hill", grade="長坡 4–6%",
+           src="Koop／CTS：長上坡穩定爬升（越野專項）", src_kind="coach"),
+        _v("a4c", "a4", "Z3sub", 1, 1560, 0, "none", 0.88, 0.92, src=f"{DANIELS_TEMPO}（平日上限的較短版：推估）",
+           src_kind="coach"),
+    ),
+    # ---- Zone 3 巡航版 T1–T3 (Z3sub 90–95 % CP): the old Zone 3 rungs, kept for the weekday cap and
+    # low-volume weeks (the Zone 3 track's fallback) and for the stored sessions (rung_key z3a / z3b / z3c)
     "z3a": (
         _v("t1a", "z3a", "Z3sub", 3, 360, 90, "jog", 0.90, 0.95, canonical=True,
            src=f"{HAUGEN}；{PALLADINO_NT}；台灣教練：先練 3 區"),
@@ -182,8 +230,27 @@ NON_EQUIV = (
     _v("x3015", "x", "Z5", 13, 30, 15, "jog", 1.10, 1.20, sets=2, set_rest_s=180, listed_equiv=False,
        src="Rønnestad 2015／2020 30/15（騎車）；每趟 < 2 分不符合 5 區每趟 ≥ 2 分（台灣教練）"),
 )
-RUNG_NAME = {"z3a": "T1", "z3b": "T2", "z3c": "T3", "tp": "T+", "z5a": "V1", "z5b": "V2", "z5c": "V3", "z5d": "V4"}
-RUNG_ORDER = ("z3a", "z3b", "z3c", "z5a", "z5b", "z5c", "z5d")
+RUNG_NAME = {"a1": "A1", "a2": "A2", "a3": "A3", "a4": "A4", "z3a": "T1", "z3b": "T2", "z3c": "T3", "tp": "T+",
+             "z5a": "V1", "z5b": "V2", "z5c": "V3", "z5d": "V4"}
+# two tracks (SP-31): the Zone 3 track A1–A4 (巡航版 T1–T3 its weekday / low-volume fallback) and the
+# Zone 5 track V1–V4. RUNG_ORDER lists every rung (the editor's groups); PREV_RUNG is the rung a tight
+# cap falls back to (fit's 「上一階」): an A rung → the one before, A1 → T3 (巡航版, 「平日用巡航版」),
+# V1 → T3 as before (Zone 3 maintenance)
+Z3_TRACK = ("a1", "a2", "a3", "a4")
+CRUISE_RUNGS = ("z3a", "z3b", "z3c")
+Z5_TRACK = ("z5a", "z5b", "z5c", "z5d")
+RUNG_ORDER = Z3_TRACK + CRUISE_RUNGS + Z5_TRACK
+PREV_RUNG = {"a2": "a1", "a3": "a2", "a4": "a3", "a1": "z3c", "z3b": "z3a", "z3c": "z3b",
+             "z5a": "z3c", "z5b": "z5a", "z5c": "z5b", "z5d": "z5c"}
+
+
+def track_of(rung: Optional[str]) -> Optional[str]:
+    """"z3" (A1–A4, T1–T3, T+), "z5" (V1–V4, 30/15) or None for a rung key."""
+    if rung in Z3_TRACK or rung in CRUISE_RUNGS or rung == "tp":
+        return "z3"
+    if rung in Z5_TRACK or rung == "x":
+        return "z5"
+    return None
 ALL: dict[str, Variant] = {v.key: v for vs in LIBRARY.values() for v in vs} | {v.key: v for v in NON_EQUIV}
 
 
@@ -508,9 +575,8 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
             if r["action"] == "ok" and r["equiv"]:
                 return {**r, "action": "move", "move_to": label, "move_wd": wd[0] if wd else None,
                         "reason": f"{cl} 放不下 {RUNG_NAME.get(rung, rung)} → 改到{label}（{r['reason']}）"}
-    i = RUNG_ORDER.index(rung) if rung in RUNG_ORDER else 0
-    if i > 0:
-        prev = RUNG_ORDER[i - 1]
+    prev = PREV_RUNG.get(rung)
+    if prev:
         r = fit(prev, cap, history, prefs, mountain, None, None, cap_label)
         what = f"{RUNG_NAME.get(rung, rung)} 的 {structure(canon)}"
         return {**r, "action": "back", "equiv": False, "progress": False, "rung": prev, "need_min": need,
@@ -631,9 +697,8 @@ def drawer(rung: str, cp: Optional[float] = None, cap: Optional[float] = None, p
     vs = _order(list(LIBRARY[rung]), rung, history, hill)
     eq = [option_row(v, cp, cap, prefs, history) for v in vs]
     other = []
-    i = RUNG_ORDER.index(rung) if rung in RUNG_ORDER else -1
-    if i > 0:
-        p = canonical(RUNG_ORDER[i - 1])
+    if PREV_RUNG.get(rung):
+        p = canonical(PREV_RUNG[rung])
         other.append(option_row(p, cp, cap, prefs, history, f"上一階（{RUNG_NAME[p.rung]}）：維持，不算進階", False))
     c = canonical(rung)
     if c.n > MIN_REPS.get(c.cls, 2):
