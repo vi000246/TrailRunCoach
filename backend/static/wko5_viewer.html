@@ -1483,7 +1483,7 @@ function drawZones(card, res) {
   card.insertAdjacentHTML("beforeend", `<p class="meta" style="margin:0 0 6px">
     ${basis} ${Z.threshold == null ? "未設定" : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · W′ ${(Z.wprime / 1000).toFixed(1)} kJ（${esc(Z.wprime_source || "")}）` : ""} · 最近 ${Z.days} 天 ${Z.runs} 次跑步</p>
     ${Z.no_data_reason ? `<p class="badge" style="margin:0 0 6px">沒有資料：${esc(Z.no_data_reason)}</p>` : ""}
-    ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${basis} 是 WKO5 出廠預設值，這張表的區間不準${Z.basis === "lthr" ? "——到「賽事周期」頁套用自動估算的 LTHR" : "——山路配速本來就不準，建議看功率區間"}</p>` : ""}
+    ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${basis} 是 WKO5 出廠預設值，這張表的區間不準${Z.basis === "lthr" ? "——到「設定」頁的閾值測試紀錄套用自動估算的 LTHR" : "——山路配速本來就不準，建議看功率區間"}</p>` : ""}
     <table class="zt"><thead><tr><th>區間</th><th>名稱</th><th class="num">${esc(Z.unit)}</th><th class="num">% ${basis}</th>
       <th style="width:34%">時間</th></tr></thead><tbody>${Z.rows.map((r, i) => `<tr>
       <td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="num">${range(r)}</td><td class="num meta">${pct(r)}</td>

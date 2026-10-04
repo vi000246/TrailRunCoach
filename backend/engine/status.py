@@ -904,7 +904,7 @@ class Status:
         why = "；".join(issues) if issues else f"CP 來源：{cp_src}；4 週 {with_hr}/{len(recent)} 筆有心率"
         acts = []
         if thr_default:
-            acts.append("到「賽事周期」頁填 LTHR 測試結果")
+            acts.append("到「設定」頁的閾值測試紀錄填 LTHR 測試結果")
         if aet_missing:
             acts.append("排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；測了可以改用有氧基礎門檻")
         act = "；".join(acts)

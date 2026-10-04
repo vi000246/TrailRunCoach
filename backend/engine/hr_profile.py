@@ -6,7 +6,7 @@ that every chart and the workout targets read (user request 2026-10-03:
 Where the numbers come from (resolution order, per date):
 
   max HR   1. the user's own value: plan thresholds `mhr` dated on or before the
-              day (設定 → 心率, or the 賽事周期 page's table)        「你的設定 YYYY-MM-DD」
+              day (設定 → 心率; the same dated plan.thresholds rows)        「你的設定 YYYY-MM-DD」
            2. the watch account (COROS zoneData.maxHr, stored at login / sync,
               「來自手錶」; a future Garmin source goes here too) — owner
               2026-10-03: 「就用手錶的資料」
