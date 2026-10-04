@@ -234,10 +234,10 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .chip.act .c-t { font-weight: 500; }
 .chip.act .c-t::before { content: "● "; color: var(--k); }
 
-/* COROS sync state icon on a chip */
-.sy { display: inline-grid; place-items: center; width: 13px; height: 13px; border-radius: 50%; flex: none; }
+/* 推送狀態 on a chip: a small watch (✓ is 完成 only). Up to date = neutral, 需更新 / 失敗 coloured */
+.sy { display: inline-grid; place-items: center; width: 13px; height: 13px; flex: none; }
 .sy svg { width: 13px; height: 13px; }
-.sy-ok { color: var(--good); } .sy-warn { color: var(--watch); } .sy-bad { color: var(--bad); } .sy-none { color: var(--faint); }
+.sy-ok { color: var(--faint); } .sy-warn { color: var(--watch); } .sy-bad { color: var(--bad); } .sy-none { color: var(--faint); opacity: .8; }
 
 /* week summary column */
 .sum { border-left: 1px solid var(--line); padding: 6px 9px; display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; background: color-mix(in srgb, var(--ph) 5%, var(--panel)); min-width: 0; }
@@ -277,6 +277,8 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
 .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--k); margin-right: 5px; vertical-align: -1px; }
 .legend .sy { vertical-align: -2px; margin-right: 3px; }
+.legend .lg-g { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 12px; border-left: 1px solid var(--line); }
+.legend .lg-h { color: var(--text); font-weight: 600; }
 
 /* glossary hover (AeT / CP) */
 .term { position: relative; border-bottom: 1px dotted currentColor; cursor: help; }
@@ -496,19 +498,19 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   .sync { padding: 8px 10px; }
   #phase-now { display: none; }
   .calnav .navbtns { margin-left: auto; }
-  .split, #login-link { flex: 1 1 auto; min-width: 0; }
+  .split, #login-link, #pull-login { flex: 1 1 auto; min-width: 0; }
   .split > .btn:first-child { flex: 1; justify-content: center; min-width: 0; overflow: hidden; }
-  #login-link { justify-content: center; white-space: normal; }
+  #login-link, #pull-login { justify-content: center; white-space: normal; }
   .status { flex-basis: 100%; }
   .calwrap, .sync { max-width: 100%; }
-  #rec-btn .lbl-long, #pf-btn .lbl-long { display: none; }
+  #rec-btn .lbl-long, #pf-btn .lbl-long, #pull-btn .lbl-long { display: none; }
   dialog.sd form { max-height: 92vh; }
   dialog.sd .row3 { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
   .menu { min-width: min(260px, 88vw); }
   .legend { font-size: 11.5px; }
   dialog.sd { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 14px 14px 0 0; max-height: 92vh; }
 }
-@media (min-width: 700px) { #rec-btn .lbl-short { display: none; } }
+@media (min-width: 700px) { #rec-btn .lbl-short, #pull-btn .lbl-short { display: none; } }
 @media (max-width: 1000px) and (min-width: 700px) { .cal { --sumw: 112px; } .cell { min-height: 104px; } .chip .c-x { display: none; } }
 </style>
 </head>
@@ -537,12 +539,15 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     </div>
   </div>
 
-  <section class="sync" aria-label="同步到 COROS">
+  <section class="sync" aria-label="手錶與活動同步" data-i18n-attr="aria-label:schedule.sync.label">
     <div class="bar main">
+      <!-- 抓活動 = 資料來源 → 這裡 (syncrun.js, same run as 設定 › 立即同步); 推送 = 課表 → 手錶 -->
+      <button class="btn" id="pull-btn" type="button" hidden><span aria-hidden="true">⟳</span><span class="lbl-long" id="pull-lbl"></span><span class="lbl-short" data-i18n="schedule.pull.btn_short">抓活動</span></button>
+      <a class="btn login" id="pull-login" href="/api/v1/wko5/settings" hidden></a>
       <div class="split" id="push-split">
-        <button class="btn primary" id="push-main" type="button">同步到 COROS <small id="push-main-sub"></small></button>
-        <button class="btn primary caret" id="push-caret" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="push-menu" aria-label="選擇同步範圍">▾</button>
-        <div class="menu" id="push-menu" role="menu" aria-label="同步範圍" hidden>
+        <button class="btn primary" id="push-main" type="button"><span data-i18n="schedule.push.btn">推送到手錶</span> <small id="push-main-sub"></small></button>
+        <button class="btn primary caret" id="push-caret" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="push-menu" aria-label="選擇推送範圍" data-i18n-attr="aria-label:schedule.push.scope">▾</button>
+        <div class="menu" id="push-menu" role="menu" aria-label="推送範圍" data-i18n-attr="aria-label:schedule.push.scope_menu" hidden>
           <button type="button" role="menuitem" data-scope="day">這一天 <span class="meta" id="pm-day">先點選日曆上的一天</span></button>
           <button type="button" role="menuitem" data-scope="week">這一週 <span class="meta" id="pm-week"></span></button>
           <button type="button" role="menuitem" data-scope="phase">整個周期 <span class="meta" id="pm-phase"></span></button>
@@ -655,6 +660,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   </form>
 </dialog>
 <script src="/api/v1/static/workout_editor.js"></script>
+<script src="/api/v1/static/syncrun.js"></script>
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
 <dialog class="sd wide" id="vd" aria-labelledby="vd-h">
@@ -876,18 +882,22 @@ const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測
   notice: "課表待確認" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
 // 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
 const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
-const SYNC = { pushed: ["ok", "已推送到 COROS"], updated: ["ok", "已推送到 COROS"], outdated: ["warn", "需更新：課表改過，再同步一次會更新 COROS"],
-  failed: ["bad", "推送失敗"], not_pushed: ["none", "未推送"] };
+// 推送狀態 (coros_workouts.status_of) on a future / today's chip: a small watch, kept apart from
+// 完成 (✓ + the chip's compliance colour). Up to date = neutral grey; only 需更新 / 失敗 are coloured.
+// Labels are provider-neutral (手錶), looked up when drawn (tt is defined further down).
+const SYNC = { pushed: "ok", updated: "ok", outdated: "warn", failed: "bad", not_pushed: "none" };
+const syLabel = (st) => (SYNC[st] ? tt("sy." + (st === "updated" ? "pushed" : st)) : "");
+const SY_BAND = '<path d="M5.6 1h4.8l.7 2.3H4.9zM5.6 15h4.8l.7-2.3H4.9z" fill="currentColor"/>';
 const SY_SVG = {
-  ok: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="m4.8 8.2 2.2 2.2 4.2-4.6" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  warn: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M11 6.2A3.3 3.3 0 0 0 5 7M5 9.8A3.3 3.3 0 0 0 11 9" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M11.4 4.2v2.3H9.1M4.6 11.8V9.5h2.3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  bad: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 4.3v4.6" stroke="#fff" stroke-width="1.9" stroke-linecap="round"/><circle cx="8" cy="11.6" r="1.1" fill="#fff"/></svg>',
-  none: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2.4 2"/></svg>',
+  ok: `<svg viewBox="0 0 16 16">${SY_BAND}<rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.6V8l1.6 1.1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  warn: `<svg viewBox="0 0 16 16">${SY_BAND}<rect x="2.6" y="2.6" width="10.8" height="10.8" rx="3" fill="currentColor"/><path d="M10.4 7.1A2.5 2.5 0 1 0 10.1 9.4" fill="none" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/><path d="M10.9 5.3v2.1H8.8" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  bad: `<svg viewBox="0 0 16 16">${SY_BAND}<rect x="2.6" y="2.6" width="10.8" height="10.8" rx="3" fill="currentColor"/><path d="M8 5.2v3.3" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><circle cx="8" cy="10.6" r="1" fill="#fff"/></svg>`,
+  none: `<svg viewBox="0 0 16 16">${SY_BAND}<rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2.2 1.8"/></svg>`,
 };
-const syIcon = (st, extra = "") => { const [cls, label] = SYNC[st] || []; if (!cls) return "";
+const syIcon = (st, extra = "") => { const cls = SYNC[st]; if (!cls) return ""; const label = syLabel(st);
   return `<span class="sy sy-${cls}" role="img" aria-label="${esc(label)}" title="${esc(label + (extra ? "\n" + extra : ""))}">${SY_SVG[cls]}</span>`; };
 
-const S = { view: ls.get("view", "month"), anchor: null, sel: null, data: null, narrow: matchMedia("(max-width: 699px)").matches, busy: false };
+const S = { view: ls.get("view", "month"), anchor: null, sel: null, data: null, narrow: matchMedia("(max-width: 699px)").matches, busy: false, pulling: false };
 let D = null;                                      // last /calendar payload
 
 // ---------------- range + load ----------------
@@ -929,7 +939,7 @@ function chipHtml(s, big) {
   const cp = s.compliance;
   const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : "");
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
-  const lbl = `${KINDS[s.kind] || ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + (SYNC[c.status] || [])[1] : ""}`;
+  const lbl = `${KINDS[s.kind] || ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
   return `<button type="button" class="chip k-${esc(s.kind)} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
       ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : ""}${icon}</span>
@@ -1088,9 +1098,12 @@ function agendaHtml(a, ss, acts) {
       ${w.provisional ? `<span class="faint">暫定</span>` : ""}</div>${days.join("")}</div>`;
 }
 function renderLegend() {
+  // 完成狀態 (chip colour + ✓) and 推送狀態 (the watch at the top right) are separate groups
+  const grp = (h, items, tip) => `<span class="lg-g" role="group" aria-label="${esc(h)}"><b class="lg-h">${esc(h)}${tip ? ` <button type="button" class="qtip" aria-label="${esc(h)}" data-tip="${esc(tip)}">?</button>` : ""}</b>${items}</span>`;
   $("legend").innerHTML = KIND_ORDER.map((k) => `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
-    `<span class="faint">｜</span><span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ 完成：<b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><b class="offp-i">≠</b> 沒照課表 <button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP)}">?</button></span><span>● 沒排課的活動 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></span><span><s class="faint">未完成</s></span><span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span><i class="rest-sw"></i>${esc(tt("rest.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("rest.legend"))}" data-tip="${esc(tt("rest.legend_tip"))}">?</button></span><span class="faint">｜</span>` +
-    ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${({ pushed: "已推送", outdated: "需更新", failed: "失敗", not_pushed: "未推送" })[k]}</span>`).join("");
+    `<span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span><i class="rest-sw"></i>${esc(tt("rest.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("rest.legend"))}" data-tip="${esc(tt("rest.legend_tip"))}">?</button></span>` +
+    grp(tt("legend.done_h"), `<span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ <b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><b class="offp-i">≠</b> 沒照課表 <button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP)}">?</button></span><span><s class="faint">未完成</s></span><span>● 沒排課的活動 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></span>`) +
+    grp(tt("legend.watch_h"), ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${esc(tt("legend." + k))}</span>`).join(""), tt("legend.watch_tip"));
 }
 
 // ---------------- toolbar ----------------
@@ -1135,6 +1148,7 @@ function renderToolbar() {
     if (C.pushed) parts.push(`<span>已推送 <b>${C.pushed}</b> 堂</span>`);
   } else parts.push(DEMO ? `<span>示範模式不推送到手錶</span>` : `<span>登入 COROS 後才能把課表送到手錶</span>`);
   $("sync-status").innerHTML = parts.join("");
+  renderPull();
 }
 function msg(html, cls = "") { $("sync-msg").innerHTML = html ? `<span class="${cls}">${html}</span>` : ""; }
 function errMsg(what, e) {
@@ -1238,7 +1252,7 @@ async function push(scope, day) {
       ${(p.pace_notes || []).length ? `<p class="meta" style="margin:0;color:var(--watch)">⚠ ${esc(p.pace_notes[0].text)}：${p.pace_notes.map((n) => esc(`${md(n.day)} ${n.title || ""}`)).join("、")}${p.tpace_link ? ` <a href="${esc(p.tpace_link)}" target="_blank" rel="noopener">${esc((window.I18N ? I18N.t("workout.no_tpace_link", "看閾值配速怎麼估") : "看閾值配速怎麼估"))}</a>` : ""}</p>` : ""}
       ${scope === "phase" ? `<p class="meta" style="margin:0">最遠排到 ${md(p.end)}（最多 ${p.max_weeks} 週）。</p>` : ""}
       ${recN ? `<div><b style="font-size:13px">推送前會先依實際進度重排（${recN} 項）</b>${changesHtml(p.by_day)}</div>` : ""}`;
-    if (!(await ask(`同步到 COROS · ${SCOPE_NAME[scope]}`, html, `推送 ${p.count} 堂`))) return;
+    if (!(await ask(`推送到手錶 · ${SCOPE_NAME[scope]}`, html, `推送 ${p.count} 堂`))) return;
     msg(`<span class="spin"></span> 推送 ${esc(rng)} 的 ${p.to_send} 堂課到 COROS…`);
     const res = await sj("POST", `${PAPI}/push-coros?${scopeQs(scope, day)}`);
     const k = (st) => res.sessions.filter((r) => r.status === st);
@@ -1267,6 +1281,55 @@ async function unpush(scope) {
     msg(`已從 COROS 移除 ${r.removed.filter((x) => x.status === "removed").length} 堂（${esc(rangeTxt(r.start, r.end))}）`, "ok");
   } catch (e) { errMsg("移除", e); }
   finally { S.busy = false; if (D) renderToolbar(); }
+}
+
+// ---- 抓活動: 資料來源 (COROS／TP) → 這裡 ----
+// The same run as 設定 › 立即同步 (syncrun.js, POST /sync/<src>/start): only the 資料來源 in use
+// (GET /sync/primary). The sync router isn't mounted in the demo — the button stays hidden.
+// Done: reload (new activities pair with sessions: ✓／未完成), then once more a few seconds later
+// for the background 自動調整 (plan_auto.after_sync: proposal banner / log, re-push).
+let PRI = null;                                    // { source, label, logged_in, enabled, busy }
+const PULL_REPOLL_MS = 5000;
+async function loadPrimary() {
+  if ((window.TRC_SESSION || {}).mode === "demo") return;
+  try { PRI = await TRCSync.primary(); } catch (_) { PRI = null; }
+  renderPull();
+}
+function renderPull() {
+  const ok = !!PRI && (window.TRC_SESSION || {}).mode !== "demo";
+  const ready = ok && PRI.logged_in && PRI.enabled;
+  $("pull-btn").hidden = !ready;
+  // not logged in / switched off: a link to 設定 instead of a request. COROS not logged in is
+  // already said by the push side's #login-link — one link is enough
+  $("pull-login").hidden = !ok || ready || (!PRI.logged_in && PRI.source === "coros" && !$("login-link").hidden);
+  if (!ok) return;
+  const src = PRI.label;
+  $("pull-lbl").textContent = " " + tt("pull.btn", { src });
+  $("pull-btn").title = tt("pull.tip", { src });
+  $("pull-btn").disabled = !!S.pulling;
+  $("pull-login").textContent = tt(PRI.logged_in ? "pull.off_link" : "pull.login_link", { src });
+}
+async function pull() {
+  if (S.pulling || !PRI) return;
+  const src = PRI.label, spin = '<span class="spin"></span> ';
+  S.pulling = true; renderPull(); $("pull-btn").setAttribute("aria-busy", "true");
+  msg(spin + esc(tt("pull.connecting", { src })));
+  try {
+    const st = await TRCSync.run(PRI.source, { onEvent(_ev, st) {
+      msg(spin + esc(tt("pull.progress", { src, checked: st.total ? `${st.checked} / ${st.total}` : st.checked, down: st.downloaded })));
+    } });
+    if (st.busy && !st.checked) { msg(esc(tt("pull.busy", { src }))); return; }
+    if (st.fatal && st.fatal.auth) {
+      PRI.logged_in = false;
+      msg(`${esc(tt("pull.auth", { src }))} · <a href="/api/v1/wko5/settings">${esc(tt("pull.relogin"))}</a>`, "err");
+    } else if (st.fatal) msg(esc(tt("pull.failed", { why: st.fatal.detail || st.fatal.code })), "err");
+    else if (!st.finished) msg(esc(tt("pull.cut", { checked: st.checked, down: st.downloaded })), "err");
+    else if (!st.downloaded) msg(esc(tt("pull.none", { src, checked: st.checked })) + (st.errors ? ` · <b class="err">${esc(tt("pull.errors", { n: st.errors }))}</b>` : ""), st.errors ? "" : "ok");
+    else msg(esc(tt("pull.done", { down: st.downloaded, checked: st.checked })) + (st.errors ? ` · <b class="err">${esc(tt("pull.errors", { n: st.errors }))}</b>` : ""), st.errors ? "" : "ok");
+    await load();
+    if (st.downloaded) setTimeout(() => { load(); if (window.autoPlanRefresh) window.autoPlanRefresh(); }, PULL_REPOLL_MS);
+  } catch (e) { msg(esc(tt("pull.failed", { why: e.message })), "err"); }
+  finally { S.pulling = false; $("pull-btn").removeAttribute("aria-busy"); renderPull(); }
 }
 
 // ---------------- session dialog ----------------
@@ -2620,6 +2683,7 @@ document.querySelectorAll("#view-seg button").forEach((b) => b.onclick = () => {
 menu("push-caret", "push-menu");
 menu("more-btn", "more-menu");
 $("push-main").onclick = () => push("week");
+$("pull-btn").onclick = pull;
 $("push-menu").addEventListener("click", (e) => { const b = e.target.closest("[data-scope]:not([disabled])"); if (b) push(b.dataset.scope); });
 $("more-menu").addEventListener("click", (e) => {
   const b = e.target.closest("button:not([disabled])"); if (!b) return;
@@ -2637,6 +2701,7 @@ document.addEventListener("click", (e) => {
   if (t) t.classList.toggle("open");
 });
 renderLegend();
+loadPrimary();
 (async () => {
   const q = new URLSearchParams(location.search).get("day");
   S.anchor = q && /^\d{4}-\d\d-\d\d$/.test(q) ? q : isoOf(new Date());
