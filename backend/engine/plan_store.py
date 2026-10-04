@@ -98,16 +98,29 @@ VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "va
                   "target_basis")
 
 
+FILL_FIELDS = ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
+               "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
+               "protocol") + VARIANT_FIELDS + ("done_by", "variant_adj", "steps")
+
+
 def _fill(r: PlanSession, d: dict) -> None:
-    for k in ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
-              "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
-              "protocol") + VARIANT_FIELDS:
+    """Write `d` into the row. `updated_at` moves only when something changed (save()
+    rewrites every row): the 課表訂閱 feed (engine/calendar_feed.py) turns it into
+    LAST-MODIFIED / SEQUENCE, and each change is at least one second later than the
+    previous one so SEQUENCE (whole seconds) always goes up."""
+    before = tuple(getattr(r, k, None) for k in FILL_FIELDS)
+    for k in FILL_FIELDS[:-3]:
         setattr(r, k, d.get(k))
     r.minutes = int(d.get("minutes") or 0)
     r.done_by = json.dumps(d["done_by"], ensure_ascii=False) if d.get("done_by") else None
     r.variant_adj = json.dumps(d["variant_adj"]) if d.get("variant_adj") else None
     r.steps = json.dumps(d["steps"], ensure_ascii=False) if d.get("steps") else None
-    r.updated_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    if r.updated_at is not None and tuple(getattr(r, k, None) for k in FILL_FIELDS) == before:
+        return
+    now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+    if r.updated_at is not None and now < r.updated_at + dt.timedelta(seconds=1):
+        now = r.updated_at + dt.timedelta(seconds=1)
+    r.updated_at = now
 
 
 async def _rows(db: AsyncSession, athlete_id: int) -> dict[str, PlanSession]:
