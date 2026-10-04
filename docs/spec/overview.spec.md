@@ -57,7 +57,7 @@ the nights too (a two-day trip can hold only a few hours of walking).
 |---|---|---|
 | Categories / helpers | Workout → category, moving time, effort km | `backend/engine/overview.py:72` |
 | Periods | Week (Monday) / month / year buckets and totals | `backend/engine/overview.py:228` |
-| PMC | Same `tl()` recurrence as the chart expressions `ctl` / `atl` / `tsb` | `backend/engine/overview.py:290` |
+| PMC | The chart expressions `ctl` / `atl` / `tsb`: the `tl()` recurrence from the shared start (SP-68) | `backend/engine/overview.py:291` |
 | Week plan | Volume target, session template, done-matching, day placement, projection | `backend/engine/overview.py:821` |
 | Plan preferences | 課表偏好: shape the template (counts, caps, terrain), place on allowed / preferred days | `backend/engine/plan_prefs.py:465`, `backend/engine/plan_prefs.py:674` |
 | Blackout days | 不排課日期 / 休息日: validation, blocked days, lost-day volume, move-to for stored sessions | `backend/engine/blackouts.py:77`, `backend/engine/blackouts.py:223` |
@@ -100,9 +100,32 @@ categorical palette in fixed slot order (`backend/engine/overview.py:36`).
 
 ## PMC
 
-`pmc()` (`backend/engine/overview.py:290`) evaluates `ctl`, `atl`, `tsb` with the evaluator
+`pmc()` (`backend/engine/overview.py:291`) evaluates `ctl`, `atl`, `tsb` with the evaluator
 (full history, constants from the athlete: 42 / 7) and daily TSS with the `tl()` input rule
 0 ≤ x ≤ 5000 (`backend/engine/overview.py:280`). TSB is yesterday's CTL − ATL.
+
+**Start values (SP-68).** CTL / ATL start from `load_guard.pmc_start()`
+(`backend/engine/load_guard.py:178`), one source order:
+1. **manual** — the user's CTL / ATL at the start of a date (設定 → 閾值 → 起始 CTL／ATL;
+   user_settings `athlete.pmc_start` = {date, ctl, atl}, 0–300, date ≤ today). The series
+   restarts on that date; the days before it keep the automatic start. A date after today is
+   ignored.
+2. **auto** — SP-63's seed, now on both lines: CTL = ATL = the mean daily TSS of the first 28 days
+   from the first day with TSS (days ≤ today only, so it is final after 4 weeks; 推估, Coggan
+   gives CTL / ATL a starting value instead of 0).
+3. **none** — no TSS yet: 0.
+
+The start lives in the evaluator builtins (`Evaluator.pmc`,
+`backend/engine/wko5expr/evaluator.py:2443`), so this PMC, the PMC charts, `status`
+(體能 CTL ramp, 狀況 TSB), `week_plan`'s TSB guards (below), `b2b`, the projection and
+`plan_store.plan_summary` read the same numbers; the guardrail ramp (`load_guard.guard_ramp`) reads
+the same CTL series. The response carries `start` {source, date, ctl, atl}. Where they still
+differ on purpose: an expression's own `tl(tss, ctlconstant)` stays WKO5's (0 before the first
+input); a sport-filtered evaluator / `sport(x)` PMC uses the automatic seed, not the manual
+value (that one is the whole athlete's); the injury-exposure model keeps its own run-TSS PMC
+from 0 (`backend/engine/injury_exposure.py:295`). `GET / PUT /api/v1/plan/pmc-start`
+(`backend/api/plan.py:621`) serve the settings card: the start in effect, the automatic seed,
+today's CTL / ATL / TSB. The status and chart render caches key on the manual value.
 `project()` (`backend/engine/overview.py:306`) continues the recurrence with planned daily TSS.
 
 The stored-plan projection is `plan_store.plan_summary()`
@@ -127,7 +150,9 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    converted to hours with the athlete's TSS per hour over 6 weeks.
 2. Capped at `max(1.10 × ref, ref + 0.5 h)`, ref = max(4-week mean, last week) (UA 10 %).
    Floored at the 4-week mean (hold).
-3. Guards: TSB < −30 → recovery week (60 % of the 4-week mean); TSB < −20 → hold; three
+3. Guards: TSB < −30 → recovery week (60 % of the 4-week mean); TSB < −20 → hold (TSB from the
+   started PMC above — SP-63 Q3: a new user's first weeks no longer read a CTL still filling up
+   from 0 as a false TSB < −30, `backend/engine/overview.py:913`); three
    building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). An accepted B2B's
    own TSB drop is exempt (`B2B.tsb_exempt`, `backend/engine/overview.py:903`).
 4. Taper: 50 % of the 6-week mean (40 % in the last 7 days to the A event); event week 30 %;
@@ -1112,9 +1137,10 @@ which one. The response keeps the `coros` field names.
 - **`i_testing`**: AeT age no longer sets the level (B3); 「建議 AeT 測試：…」 comes from
   `gate["aet_test_reason"]`; after a break ≥ ~8 weeks (re-entry `cp_retest`) the CP test is due
   once the block ends (WKO5 seminar notes). `i_fitness` (`backend/engine/status.py:289`): CTL
-  ramp at `load_guard`'s block line bad, watch line watch (SP-63: relative lines, seeded guardrail
-  CTL, 起算期 info in the first 28 days with `ramp_week = None`; `extra` adds `ramp_base`,
-  `ramp_level`, `ramp_lines`, `ramp_startup`). `i_volume` (`backend/engine/status.py:375`): the
+  ramp at `load_guard`'s block line bad, watch line watch (SP-63: relative lines; SP-68: on the
+  PMC's own started CTL, so the CTL shown and the guardrail's agree; 起算期 info in the first 28
+  days of an automatic start, the first 7 after a manual one, with `ramp_week = None`; `extra`
+  adds `ramp_base`, `ramp_level`, `ramp_lines`, `ramp_startup`, `pmc_start` = the source). `i_volume` (`backend/engine/status.py:375`): the
   headline stays all-sport moving hours; the step is running time against max(the week before,
   4-week mean) — > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估); `extra` adds
   `run_last_week`, `run_base`.
@@ -1427,3 +1453,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |
 | 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |
 | 2026-10-04 | sp-38-load-step | SP-38 | Step end conditions from the provider's capabilities (`end_conditions` / `end_labels` / `load_unit`); new 「負荷」 end condition (TSS, main-set only; COROS targetType 6 with the converted TL, else estimated time); 「按圈」 → 「直到按下計圈」 on the race-calculator export and template notes too |
+| 2026-10-04 | feature | SP-68 | One start for the PMC and the guardrails: manual CTL / ATL at a date → first-28-day mean (CTL and ATL) → 0, in the evaluator builtins; week_plan's TSB < −30 / −20 read it (SP-63 Q3); `pmc()` returns `start`; 起始 CTL／ATL card and `/plan/pmc-start` |
