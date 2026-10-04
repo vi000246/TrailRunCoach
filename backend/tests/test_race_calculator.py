@@ -1,7 +1,7 @@
 """
 賽事計算機 (the race calculator page): saved inputs per event (engine/race_calc_store.py,
 /saved/{id}), the main chart's per-segment targets (seg_targets.chart_rows), the watch
-export (racepower/watch_export.py → the workout provider, COROS faked) and the race-day
+export (racepower/watch_export.py → 匯出至課表, plan_store.upsert_external) and the race-day
 weather falling back to the event GPX's start. Synthetic data only; no network
 (Open-Meteo and COROS are faked).
 """
@@ -179,55 +179,103 @@ def _app_with_db(client, db):   # noqa: F811
     client.app.dependency_overrides[RP._db] = _dep
 
 
-def test_export_preview_then_push_is_idempotent_per_event(client, monkeypatch):   # noqa: F811
+def _export_env(client, monkeypatch):   # noqa: F811
     from backend.api import racepower as RP
-    from backend.sync import coros_workouts as CW
-    from backend.sync import http
-    from backend.tests.test_coros_workouts import FakeHub, make_db, run
+    from backend.tests.test_coros_workouts import make_db, run
     db = run(make_db())
     _app_with_db(client, db)
     ev = type("E", (), {"id": "race1", "name": "測試越野", "date": "2099-05-01", "days": 1})()
-    monkeypatch.setattr(RP, "_event", lambda eid: ev)
+    monkeypatch.setattr(RP, "_event", lambda eid: ev if eid == "race1" else (_ for _ in ()).throw(RP.HTTPException(404, "x")))
+    monkeypatch.setattr(RP, "_blocked", lambda: {})
     cid = _upload(client)["course_id"]
     body = {"type": "trail", "course": {"course_id": cid}, "date": "2099-05-01", "event_id": "race1",
             "stops": [{"km": 5.0, "type": "aid"}]}
-    pv = client.post("/api/v1/racepower/export/coros", json=body)
+    return db, run, body
+
+
+def test_export_to_plan_preview_write_and_overwrite(client, monkeypatch):   # noqa: F811
+    from sqlalchemy import text
+
+    from backend.engine import plan_store as PS
+    db, run, body = _export_env(client, monkeypatch)
+    url = "/api/v1/racepower/export/plan"
+    stamp_of = lambda: run(db.execute(text("SELECT updated_at FROM plan_sessions"))).scalar()   # noqa: E731
+    pv = client.post(url, json=body)
     assert pv.status_code == 200, pv.text
     j = pv.json()
-    assert j["mode"] == "lap" and j["scheduled"] and j["pushed"] is None and j["previous"] is None
-    assert j["name"].startswith("TRC 賽事 測試越野") and len(j["legs"]) <= WE.LAP_MAX
+    assert j["mode"] == "lap" and j["day"] == "2099-05-01" and j["action"] == "add" and j["previous"] is None
+    assert j["written"] is False and j["title"] == "賽事 測試越野" and len(j["legs"]) <= WE.LAP_MAX
     assert any("補給站" in lg["name"] for lg in j["legs"])
-    fake = FakeHub()
-    with http.use_transport(httpx.MockTransport(fake)):
-        r1 = client.post("/api/v1/racepower/export/coros", json={**body, "push": True}).json()
-        assert r1["pushed"]["status"] == "pushed" and r1["pushed"]["scheduled"]
-        assert [e["happenDay"] for e in fake.entities] == [20990501] and fake.adds() == 1
-        ex = list(fake.live().values())[0]["exercises"]
-        assert all(e["targetType"] == CW.TARGET_OPEN for e in ex)
-        r2 = client.post("/api/v1/racepower/export/coros", json={**body, "push": True}).json()
-        assert r2["pushed"]["changed"] is False and fake.adds() == 1          # same plan: nothing re-sent
-        r3 = client.post("/api/v1/racepower/export/coros", json={**body, "push": True, "step_mode": "distance"}).json()
-        assert r3["pushed"]["status"] == "updated" and len(fake.live()) == 1 and len(fake.entities) == 1
-        assert r3["previous"]["coros_program_id"]
-    # the race workout is not the week plan's: the plan's push never sees it as stale
-    assert run(CW.all_rows(db)) == {}
+    assert run(PS.load(db)) == []                                          # a preview writes nothing
+    w = client.post(url, json={**body, "push": True}).json()
+    assert w["written"] and w["action"] == "add" and "uid=" + w["uid"] in w["plan_url"]
+    ss = run(PS.load(db))
+    assert len(ss) == 1
+    s = ss[0]
+    assert s["kind"] == "race" and s["day"] == "2099-05-01" and s["ext_key"] == "racecalc:race1"
+    assert s["edited"] and s["origin"] == "custom" and s["minutes"] > 0 and s["tss"] > 0
+    assert len(s["steps"]["items"]) == len(j["legs"])                      # editable step by step on the 課表
+    stamp = stamp_of()
+    # the same export again: nothing changes (updated_at too: the 課表 feed's LAST-MODIFIED)
+    again = client.post(url, json={**body, "push": True}).json()
+    assert again["action"] == "unchanged" and not again["previous"]["user_edited"]
+    assert stamp_of() == stamp
+    # a different export of the same event overwrites the same session
+    dist = client.post(url, json={**body, "push": True, "step_mode": "distance"}).json()
+    assert dist["action"] == "update"
+    ss = run(PS.load(db))
+    assert len(ss) == 1 and ss[0]["uid"] == s["uid"] and ss[0]["steps"]["items"][0]["dur"]["type"] == "distance"
+    assert stamp_of() > stamp
+    # changed on the 課表 page: the preview says so, writing needs overwrite=true (the page asks first)
+    run(PS.edit(db, s["uid"], {"title": "我的比賽"}, "2026-10-04"))
+    p2 = client.post(url, json=body).json()
+    assert p2["previous"]["user_edited"] is True
+    refused = client.post(url, json={**body, "push": True})
+    assert refused.status_code == 409 and refused.json()["detail"]["error"] == "EDITED"
+    assert run(PS.load(db))[0]["title"] == "我的比賽"
+    ok = client.post(url, json={**body, "push": True, "overwrite": True})
+    assert ok.status_code == 200 and run(PS.load(db))[0]["title"] == "賽事 測試越野"
+    assert client.post(url, json=body).json()["previous"]["user_edited"] is False
 
 
-def test_export_without_a_future_date_goes_to_the_library(client, monkeypatch):   # noqa: F811
-    from backend.sync import http
-    from backend.tests.test_coros_workouts import FakeHub, make_db, run
-    db = run(make_db())
-    _app_with_db(client, db)
-    body = {"type": "road", "distance_km": 10, "mode": "auto", "date": "2000-01-01", "push": True}
-    fake = FakeHub()
-    with http.use_transport(httpx.MockTransport(fake)):
-        r = client.post("/api/v1/racepower/export/coros", json=body)
-        assert r.status_code == 200, r.text
-        j = r.json()
-        assert j["mode"] == "distance" and not j["scheduled"] and j["pushed"]["scheduled"] is False
-        assert fake.entities == [] and fake.adds() == 1
-        again = client.post("/api/v1/racepower/export/coros", json={**body, "date": None}).json()
-        assert again["pushed"]["changed"] is False and len(fake.live()) == 1
+def test_export_to_plan_needs_a_race(client, monkeypatch):   # noqa: F811
+    from backend.engine import plan_store as PS
+    db, run, body = _export_env(client, monkeypatch)
+    r = client.post("/api/v1/racepower/export/plan", json={**body, "event_id": None, "push": True})
+    assert r.status_code == 400 and "賽事" in r.json()["detail"]
+    assert client.post("/api/v1/racepower/export/plan", json={**body, "event_id": "nope"}).status_code == 404
+    assert run(PS.load(db)) == []
+    assert client.post("/api/v1/racepower/export/coros", json=body).status_code in (404, 405)   # retired
+
+
+def test_steep_legs_keep_only_the_hr_cap():
+    steep = [dict(r, kind="steep_climb", basis="hr") for r in _rows(3, grade=0.15, basis="hr")]
+    out = WE.steps_for({"type": "trail"}, steep)
+    assert all(lg["target"]["type"] == "hr" and lg["target"]["hi"] == 160 for lg in out["legs"])
+    # no cap: open (自由), never the pace or an estimated power
+    bare = [dict(r, hr_cap=None) for r in steep]
+    assert all(lg["target"] == {"type": "none"} for lg in WE.steps_for({"type": "trail"}, bare)["legs"])
+    powered = [dict(r, kind="steep_climb", hr_cap=None) for r in _rows(3, grade=0.15)]       # basis power
+    assert all(lg["target"] == {"type": "none"} for lg in WE.steps_for({"type": "trail"}, powered)["legs"])
+    hike = WE.steps_for({"type": "baiyue"}, bare)
+    assert all(lg["target"] == {"type": "none"} for lg in hike["legs"])
+    # a road plan keeps its power on any grade
+    road = WE.steps_for({"type": "road"}, [dict(r, kind="steep_climb") for r in _rows(3, grade=0.09)])
+    assert all(lg["target"]["type"] == "power" for lg in road["legs"])
+    # a leg mostly runnable keeps its power
+    mixed = _rows(4, grade=0.05) + [dict(r, start_km=r["start_km"] + 4, end_km=r["end_km"] + 4, kind="steep_climb",
+                                          basis="hr") for r in _rows(1, grade=0.12, basis="hr")]
+    legs = WE.steps_for({"type": "trail"}, mixed)["legs"]
+    assert legs[0]["target"]["type"] == "power"
+
+
+def test_race_tss_estimate():
+    legs = [{"t": 3600, "target": {"type": "power", "lo": 240, "hi": 260}},
+            {"t": 3600, "target": {"type": "hr", "lo": 136, "hi": 160}},
+            {"t": 1800, "target": {"type": "none"}}]
+    tss = WE.tss_estimate(legs, {"cp": 300.0, "lthr": 170.0})
+    assert tss == approx(round((250 / 300) ** 2 * 100 + (148 / 170) ** 2 * 100 + 0.5 * WE.DEFAULT_IF ** 2 * 100, 1))
+    assert WE.tss_estimate([], {}) is None
 
 
 # ---- race-day weather location ----------------------------------------------------------

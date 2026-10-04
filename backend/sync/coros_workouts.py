@@ -401,7 +401,9 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
     """Structured steps for one week-plan session, or Unsupported."""
     kind = s.get("kind")
     secs = int(s.get("minutes") or 0) * 60
-    if kind in ("race", "rest"):
+    if kind == "rest" or (kind == "race" and not s.get("steps")):
+        # a race goes to the watch only with steps: the 賽事計算機's 「匯出至課表」 (its legs);
+        # the generator's own 比賽 row has none
         raise Unsupported("比賽 / 休息不推")
     if kind == "strength":
         raise Unsupported("COROS 肌力課要從動作庫挑動作，先不推")
@@ -813,14 +815,17 @@ async def rows_by_key(db: AsyncSession, athlete_id: int, keys) -> dict[str, Coro
 
 async def all_rows(db: AsyncSession, athlete_id: int = 1) -> dict[str, CorosPlanPush]:
     """The week plan's pushed sessions. Workouts pushed from outside the plan (the race
-    calculator, RACE_KEY_PREFIX) are not the plan's: never listed here, so the plan's
-    push never takes them as stale and removes them."""
+    calculator's old 「匯出到 COROS」, RACE_KEY_PREFIX) are not the plan's: never listed
+    here. Since the calculator exports to the 課表 instead (plan_sessions.ext_key = the same
+    racecalc:<event id>), the plan's push removes such a workout when it pushes the
+    exported session (api/plan_sessions.push), so the watch never has both."""
     res = await db.execute(select(CorosPlanPush).where(CorosPlanPush.athlete_id == athlete_id, _mine(),
                                                        CorosPlanPush.session_key.notlike(RACE_KEY_PREFIX + "%")))
     return {r.session_key: r for r in res.scalars().all()}
 
 
-RACE_KEY_PREFIX = "racecalc:"     # coros_plan_push.session_key of a race-calculator workout (one per event)
+RACE_KEY_PREFIX = "racecalc:"     # a race-calculator export's key (one per event): coros_plan_push.session_key of
+                                  # the old direct push; plan_sessions.ext_key of the 「匯出至課表」 row
 
 
 def library_name(s: dict) -> str:

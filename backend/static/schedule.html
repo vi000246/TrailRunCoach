@@ -48,7 +48,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 
 /* kind + phase palettes */
 .k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); }
-.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); }
+.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); } .k-race { --k: var(--hi); }
 .heat-tag { display: inline-block; margin-right: 3px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px;
   background: color-mix(in srgb, var(--hi) 25%, transparent); color: var(--hi); font-weight: 700; }
 .ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); }
@@ -879,7 +879,8 @@ async function sj(method, url, body) {
 // still opens with its own radio)
 const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
 const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
-  notice: "課表待確認" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
+  notice: "課表待確認", race: "比賽" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
+// race: the season plan's race day, or the 賽事計算機's 「匯出至課表」 (its steps are editable here); never added by hand
 // 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
 const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
 // 推送狀態 (coros_workouts.status_of) on a future / today's chip: a small watch, kept apart from
@@ -1336,7 +1337,7 @@ async function pull() {
 
 // ---------------- session dialog ----------------
 let dlg = { uid: null, targetTouched: false };
-$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive"].map((k) =>
+$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive", "race"].map((k) =>
   `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
 const F = $("sd-form");
 const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).value || "easy";
@@ -1813,6 +1814,7 @@ function openDlg(s, day) {
   F.day.value = d;
   (F.querySelector(`input[name="kind"][value="${s ? s.kind : "easy"}"]`) || {}).checked = true;
   F.querySelector('#sd-kinds label.k-heat_passive').hidden = !(s && s.kind === "heat_passive");
+  F.querySelector('#sd-kinds label.k-race').hidden = !(s && s.kind === "race");
   F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
   F.minutes.value = s ? s.minutes : 45;
   F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";

@@ -394,12 +394,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="toolbar" id="daysplit-bar" style="margin-top:8px"><label class="meta bf"><input type="checkbox" id="splitmode"> 在剖面上點選分日點</label>
       <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
-      <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">⌚ 匯出到 COROS</button>
+      <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button>
       <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span>
       <button class="btn" id="share">🔗 分享</button></div>
     <dialog id="coros-dlg" class="dlg">
-      <h2><span data-i18n="racepower.coros.title">匯出到手錶</span> <span class="meta" id="cx-prov"></span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「按圈結束」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %、陡坡和走路段看心率上限、越野下坡不設目標。同一場賽事再匯出會更新同一個課表，不會多一份。</span></span></h2>
+      <h2><span data-i18n="racepower.coros.title">匯出至課表</span> <span class="meta" id="cx-prov"></span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「按圈結束」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
       <div class="toolbar"><span class="meta" data-i18n="racepower.coros.end">每段結束</span>
         <div class="seg" id="cx-mode"><button data-x="lap" data-i18n="racepower.coros.lap">按圈</button><button data-x="distance" data-i18n="racepower.coros.dist">距離</button></div>
         <span class="meta" id="cx-where"></span></div>
@@ -1690,35 +1690,50 @@ function renderSegments() {
   });
   if ($("segtable")) $("segtable").onmouseleave = () => hoverSeg(null);
 }
-// ---------------- export to the watch (the workout provider, default COROS) ----------------
+// ---------------- 匯出至課表 (the race-day session of the stored plan; pushed from the 課表 page) ----------------
 // trail / 百岳 default to lap-button steps (watch GPS distance drifts on trails), road to distance steps
-let CX_MODE = null;
+let CX_MODE = null, CX_LAST = null;
 const cxMode = () => CX_MODE || (type === "road" ? "distance" : "lap");
-function cxBody(push) { return { ...planBody(), push, name: null, event_id: $("event").value || null, step_mode: cxMode() }; }
+function cxBody(push, overwrite = false) { return { ...planBody(), push, overwrite, name: null, event_id: $("event").value || null, step_mode: cxMode() }; }
+const cxLink = (r) => `<a href="${esc(r.plan_url)}">${esc(T("coros.open"))}</a>`;
 function renderCx(r) {
+  CX_LAST = r;
   segOn("cx-mode", "x", r.mode);
-  $("cx-prov").textContent = r.provider_label || "";
-  $("cx-where").textContent = r.scheduled ? T("coros.on_day", { day: r.day }) : T("coros.library");
-  const legs = r.legs || [], lines = r.lines || [];
-  let h = `<div class="note">${esc(r.name)} · ${T("coros.n_steps", { n: lines.length })}${r.previous?.coros_program_id ? " · " + esc(T("coros.again", { at: (r.previous.pushed_at || "").slice(0, 16).replace("T", " ") })) : ""}</div>`;
+  $("cx-prov").textContent = "";
+  $("cx-where").textContent = T("coros.on_day", { day: r.day });
+  const legs = r.legs || [], lines = r.lines || [], pv = r.previous;
+  const what = r.action === "claim" ? T("coros.claim") : r.action === "restore" ? T("coros.restored")
+    : pv ? T("coros.again", { at: (pv.updated_at || "").slice(0, 16).replace("T", " ") }) : T("coros.new");
+  let h = `<div class="note">${esc(r.title)} · ${T("coros.n_steps", { n: lines.length })} · ${esc(what)}${pv ? " · " + cxLink(r) : ""}</div>`;
+  if (pv && pv.user_edited) h += `<div class="err">⚠ ${esc(T("coros.edited"))}</div>`;
   h += `<div class="tablewrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>#</th><th>${esc(T("coros.step"))}</th><th>${esc(T("coros.end_col"))}</th><th>${esc(T("coros.target"))}</th></tr></thead><tbody>` +
     lines.map((ln, i) => `<tr><td>${i + 1}</td><td class="wrap">${esc(ln.name || legs[i]?.name || "")}</td><td class="num">${esc(ln.dur)}</td><td class="num">${esc(ln.target)}</td></tr>`).join("") +
     `</tbody></table></div>`;
-  if ((r.notes || []).length) h += warnList(r.notes);
+  const notes = [...(r.notes || []), T("coros.push_hint")];
+  if (r.old_watch) notes.push(T("coros.old_watch"));
+  h += warnList(notes);
   $("cx-body").innerHTML = h;
 }
 async function corosPreview() {
-  $("cx-msg").textContent = T("coros.preparing"); $("cx-go").disabled = true;
-  try { const r = await post(`${API}/export/coros`, cxBody(false)); renderCx(r); $("cx-msg").textContent = ""; $("cx-go").disabled = false; }
+  $("cx-msg").textContent = T("coros.preparing"); $("cx-go").disabled = true; CX_LAST = null;
+  if (!$("event").value) { $("cx-body").innerHTML = `<div class="err">${esc(T("coros.need_event"))}</div>`; $("cx-msg").textContent = ""; return; }
+  try { const r = await post(`${API}/export/plan`, cxBody(false)); renderCx(r); $("cx-msg").textContent = ""; $("cx-go").disabled = false; }
   catch (e) { $("cx-body").innerHTML = `<div class="err">${esc(e.message)}</div>`; $("cx-msg").textContent = ""; }
 }
 async function corosPush() {
+  // an earlier export changed on the 課表 page: ask before overwriting it
+  let over = false;
+  if (CX_LAST?.previous?.user_edited) { if (!confirm(T("coros.confirm_overwrite"))) return; over = true; }
   $("cx-msg").textContent = T("coros.sending"); $("cx-go").disabled = true;
   try {
-    const r = await post(`${API}/export/coros`, cxBody(true)); renderCx(r);
-    const p = r.pushed || {};
-    $("cx-msg").innerHTML = p.status === "failed" ? `<span class="err">${esc(p.error || "")}</span>` :
-      `<span class="ok">${esc(p.changed === false ? T("coros.same") : p.scheduled ? T("coros.done_day") : T("coros.done_lib"))} ✓</span>`;
+    let r;
+    try { r = await post(`${API}/export/plan`, cxBody(true, over)); }
+    catch (e) {
+      if (e.status !== 409 || !confirm(T("coros.confirm_overwrite"))) throw e;   // edited since the preview
+      r = await post(`${API}/export/plan`, cxBody(true, true));
+    }
+    await corosPreview();                      // the dialog now shows the stored state (an earlier export)
+    $("cx-msg").innerHTML = `<span class="ok">${esc(r.action === "unchanged" ? T("coros.same") : T("coros.done"))} ✓</span> ${cxLink(r)}`;
   } catch (e) { $("cx-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
   $("cx-go").disabled = false;
 }

@@ -13,7 +13,7 @@ v2 (docs/research/racepower-v2.md §10.2):
     POST /plan          three modes on a course; segments, effort bar, cross-checks
     GET  /grade-model   personal RE(g), v_max(g), v_h(g)
     GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
-    POST /export/coros  plan → COROS structured workout (preview, or push=true)
+    POST /export/plan   plan → the race-day session in the 課表 (preview, or push=true writes it)
     POST /export/csv    plan → CSV (UTF-8 BOM), header block + one row per segment
     GET/PUT/DELETE /saved/{event_id}   the page's inputs + last result per plan event
 """
@@ -586,30 +586,39 @@ def _thresholds(p: dict) -> dict:
             "aet": (p["used"].get("aet") or {}).get("value") or a.get("aet")}
 
 
-def race_session(body: ExportIn, p: dict) -> tuple[dict, dict]:
-    """(the session dict the workout provider pushes, the watch_export legs) for a plan:
-    key racecalc:<event id> (or :manual), named 「賽事 <name>」, on the race date."""
+TERRAIN = {"road": "road", "trail": "trail", "baiyue": "hike"}
+EXPORT_SOURCE = "賽事計算機匯出（分段目標推估）"
+
+
+def race_session(body: ExportIn, p: dict, ev) -> tuple[dict, dict]:
+    """(the 課表 session the export writes, the watch_export legs) for a plan: kind race on
+    the event's date, named 「賽事 <name>」, the legs as its steps; minutes = the plan's
+    moving time, tss = watch_export.tss_estimate (推估)."""
     from backend.engine.racepower import planner as PL
     from backend.engine.racepower import watch_export as WE
-    from backend.sync import coros_workouts as CW
-    eid = body.event_id or (body.course.event_id if body.course else None)
-    if eid:
-        try:
-            ev = _event(eid)
-        except HTTPException:
-            ev = None
-    else:
-        ev = None
-    name = body.name or (ev.name if ev else None) or p.get("course_name") or f"{p['summary']['km']:.0f} km"
+    sm = p["summary"]
+    name = body.name or ev.name or p.get("course_name") or f"{sm['km']:.0f} km"
     ex = WE.steps_for(p, p.get("chart_rows") or [], mode=body.step_mode, stops=[x.model_dump() for x in body.stops],
                       day_splits_km=body.day_splits_km if p["type"] == "baiyue" else None)
-    badge = "（推估）" if p["summary"].get("badge") else ""
+    badge = "（推估）" if sm.get("badge") else ""
     hint = "每段按圈結束" if ex["mode"] == "lap" else "每段依距離"
     detail = f"{hint}；{PL.HINT_30S}；分段目標{badge}" if p["type"] != "baiyue" else f"{hint}；心率 ≤ AeT；分段目標{badge}"
-    sid = (eid or "manual")[:40]
-    s = {"id": sid, "key": CW.RACE_KEY_PREFIX + (eid or "manual"), "kind": "race_plan", "title": f"賽事 {name}",
-         "day": (body.date or "")[:10] or None, "steps": ex["doc"], "detail": detail}
+    km, gain = sm.get("km"), sm.get("gain_m")
+    s = {"title": f"賽事 {name}"[:200], "day": str(ev.date)[:10], "steps": ex["doc"], "detail": detail,
+         "minutes": max(1, min(1440, round(float(sm.get("time_s") or 0) / 60))),
+         "tss": WE.tss_estimate(ex["legs"], _thresholds(p)), "terrain": TERRAIN.get(p["type"]),
+         "distance_km": min(500.0, float(km)) if km else None, "climb_m": min(20000.0, float(gain)) if gain else None,
+         "target": "", "source": EXPORT_SOURCE}
     return s, ex
+
+
+def _blocked() -> dict:
+    """ISO day -> label of the 不排課日期 (engine/blackouts.py)."""
+    from backend.engine import blackouts as BL
+    try:
+        return {d: b.label for d, b in BL.blocked(BL.load()).items()}
+    except Exception:                       # noqa: BLE001 — no stored blackouts: none
+        return {}
 
 
 async def _db():
@@ -714,52 +723,63 @@ def share_data(sid: str):
     return JSONResponse(snap, headers=SHARE_HEADERS)
 
 
-@router.post("/export/coros")
-async def export_coros(body: ExportIn, db=Depends(_db)):
-    """The plan as a watch workout through the active workout provider (sync/workout_targets,
-    default COROS). push=false: the preview (steps as the watch gets them, where it goes,
-    whether this event was exported before). push=true: send it — on the race date when
-    that is today or later, else into the library; one workout per event, so exporting
-    again replaces it."""
+@router.post("/export/plan")
+async def export_plan(body: ExportIn, db=Depends(_db)):
+    """「匯出至課表」: the plan as the race-day session of the stored plan (plan_sessions,
+    kind race, ext_key racecalc:<event id>), editable on the 課表 page and pushed to the watch
+    with the plan's own push. A target event is required (one session per event: exporting
+    again overwrites it — plan_store.upsert_external, which also takes over the generator's
+    own 比賽 row of that week). push=false: the preview (the steps as the watch gets them, the
+    day, whether an earlier export is overwritten and whether it was changed on the 課表 page
+    since). push=true: write it; an earlier export changed on the 課表 page is only
+    overwritten with overwrite=true (else 409 EDITED)."""
     from starlette.concurrency import run_in_threadpool
+    from backend.api.plan_sessions import _wlock
+    from backend.engine import plan_store as PS
     from backend.engine import workout_steps as WS
     from backend.sync import coros_workouts as CW
     from backend.sync import workout_targets as WT
+    eid = body.event_id or (body.course.event_id if body.course else None)
+    if not eid:
+        raise HTTPException(400, "先選目標賽事：匯出至課表會放在那場比賽的日子")
+    ev = _event(eid)                        # 404 for an event that is not in the plan
+    if not ev.date:
+        raise HTTPException(400, "這場賽事沒有日期")
     p = _py(await run_in_threadpool(make_plan, body))      # reads the Dataset: never on the event loop
-    s, ex = race_session(body, p)
+    s, ex = race_session(body, p, ev)
     th = _thresholds(p)
     try:
-        steps = WS.normalize(s["steps"])
+        s["steps"] = WS.normalize(s["steps"])
     except WS.StepsError as e:
-        raise HTTPException(400, f"分段轉成手錶步驟失敗：{e}")
-    c = WS.Ctx(cp=th["cp"], lthr=th["lthr"], aet=th["aet"])
+        raise HTTPException(400, f"分段轉成課表步驟失敗：{e}")
+    pv = WS.watch_preview(s["steps"], WS.Ctx(cp=th["cp"], lthr=th["lthr"], aet=th["aet"]), CW.workout_name(s),
+                          s["detail"])
+    key = CW.RACE_KEY_PREFIX + eid
     today = today_local().isoformat()
-    scheduled = bool(s["day"] and s["day"] >= today)
-    name = CW.workout_name(s) if scheduled else CW.library_name(s)
-    pv = WS.watch_preview(steps, c, name, s["detail"])
-    prov = await WT.active(db)
-    prev = None
-    try:
-        row = (await prov.rows_by_key(db, [s["key"]])).get(s["key"])
-        if row is not None:
-            prev = prov.row_view(row)
-    except Exception:                       # noqa: BLE001 — a preview never fails on the record lookup
-        prev = None
-    out = {"provider": prov.id, "provider_label": prov.label, "name": name, "day": s["day"] if scheduled else None,
-           "scheduled": scheduled, "mode": ex["mode"], "legs": ex["legs"], "merged": ex["merged"], "limit": ex["limit"],
-           "notes": ex["notes"] + pv["lost"], "lines": pv["lines"], "steps": pv["n"], "previous": prev, "pushed": None}
-    if body.push:
+    blocked = _blocked()
+    async with _wlock():
         try:
-            out["pushed"] = _py(await prov.push_workout(db, s, th, today))
-        except WT.SyncAuthError as e:
-            raise HTTPException(401, f"{prov.label} 未登入：{e}")
-        except WT.ProviderDisabled as e:
+            r = await PS.upsert_external(db, key, s, today, blocked=blocked, write=False)
+            if body.push and (r["previous"] or {}).get("user_edited") and not body.overwrite:
+                raise HTTPException(409, {"error": "EDITED", "message": "這堂比賽課在課表上改過，確認後才會覆蓋"})
+            if body.push:
+                r = await PS.upsert_external(db, key, s, today, blocked=blocked, write=True)
+        except PS.PlanError as e:
             raise HTTPException(400, str(e))
-        except WT.Unsupported as e:
-            raise HTTPException(400, str(e))
-        except WT.SyncError as e:
-            raise HTTPException(502, f"{prov.label} 回應錯誤：{e}")
-    return out
+    old_watch = False
+    try:                                    # the calculator's old direct push (replaced by the plan's push)
+        prov = await WT.active(db)
+        old_watch = (await prov.rows_by_key(db, [key])).get(key) is not None
+    except Exception:                       # noqa: BLE001 — a preview never fails on the record lookup
+        old_watch = False
+    ss = r["session"]
+    known = body.push or r["previous"] is not None or r["action"] == "claim"
+    return {"day": ss["day"], "title": ss["title"], "minutes": ss["minutes"], "tss": ss["tss"],
+            "mode": ex["mode"], "legs": ex["legs"], "merged": ex["merged"], "limit": ex["limit"],
+            "notes": ex["notes"] + pv["lost"], "lines": pv["lines"], "steps": pv["n"],
+            "action": r["action"], "previous": r["previous"], "old_watch": old_watch, "written": bool(body.push),
+            "uid": ss["uid"] if known else None,
+            "plan_url": f"/api/v1/overview/plan/schedule/page?day={ss['day']}" + (f"&uid={ss['uid']}" if known else "")}
 
 
 # ---------------------------------------------------------------------------

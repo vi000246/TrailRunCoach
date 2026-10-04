@@ -1439,15 +1439,24 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
     will = [s for s in pushable if s["coros"]["status"] != "pushed"]
     missed = [s for s in new if PS.off_watch(s) and s["uid"] in rows]
     on_bl = [s for s in _on_blocked(new, bl, today) if s["uid"] in rows]
+    old_calc = await prov.rows_by_key(db, _old_calc_keys(pushable))
     return {**_meta(inp), "scope": scope, "start": a, "end": b, "sessions": todo,
             "count": len(pushable), "to_send": len(will), "unchanged": len(pushable) - len(will),
             "skipped": [s for s in todo if s["coros"]["status"] == "skipped"],
             "missed_to_remove": len(missed), "blackout_to_remove": len(on_bl),
+            # the calculator's old direct push of an exported race (removed by this push)
+            "calc_to_replace": len(old_calc),
             # sessions whose % / zone pace steps go out with no pace target (no threshold pace)
             "pace_notes": [{"uid": s["uid"], "title": s.get("title"), "day": s.get("day"), "text": s["coros"]["pace_note"]}
                            for s in pushable if s["coros"].get("pace_note")],
             "tpace_link": tpace_link(),
             "changes": changes, "by_day": R.by_day(changes)}
+
+
+def _old_calc_keys(ss: list[dict]) -> list[str]:
+    """The 賽事計算機's exported sessions among `ss` (ext_key racecalc:<event id>): a workout
+    the calculator once pushed straight to the watch under that key is replaced by them."""
+    return [s["ext_key"] for s in ss if str(s.get("ext_key") or "").startswith(CW.RACE_KEY_PREFIX)]
 
 
 def _on_blocked(ss: list[dict], blocked: dict, today: str) -> list[dict]:
@@ -1477,6 +1486,9 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         bl = PS.blocked_map(inp)
         # an edited session still on a 不排課日期 (no decision yet) comes off COROS
         stale += [s["uid"] for s in _on_blocked(new, bl, today) if s["uid"] in rows]
+        # a race exported from the 賽事計算機 replaces the workout the calculator once pushed
+        # straight to the watch (same key, racecalc:<event id>; not in all_rows)
+        stale += _old_calc_keys(_in_range(new, a, b, bl))
         missed = [s["uid"] for s in new if PS.off_watch(s) and s["uid"] in rows]
         try:
             res = await prov.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
