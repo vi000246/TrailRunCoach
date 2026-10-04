@@ -4,7 +4,7 @@
     {
       "id": "load-pmc",
       "title": "負荷 PMC",
-      "description": "所有運動合在一起的訓練負荷：體能 CTL、疲勞 ATL、狀況 TSB，以及每天的 TSS。",
+      "description": "所有運動合在一起的訓練負荷：體能 CTL、疲勞 ATL、狀況 TSB，以及每天的 TSS；有功率時再把刺激分成有氧、無氧（TIS）。",
       "charts": [
         {
           "id": "pmc-all",
@@ -106,6 +106,28 @@
             {"name": "偏多 1.3–1.5", "type": "line", "y_axis": "NONE", "color": "#eda100", "expression": "{1.3:1.5}"},
             {"name": "暴增 > 1.5", "type": "line", "y_axis": "NONE", "color": "#e34948", "expression": "{1.5:2.5}"},
             {"name": "ATL ÷ CTL", "type": "line", "y_axis": "NONE", "color": "#1d232b", "line_width": "thick", "expression": "atl / ctl"}
+          ]
+        },
+        {
+          "id": "tis-per-workout",
+          "title": "有氧／無氧刺激 TIS（每次活動）",
+          "description": "每次有功率活動的有氧、無氧刺激分數 TIS（Training Impact Score）。\n怎麼看：藍點 = 有氧 TIS、紅點 = 無氧 TIS，1–10 的整數，越高 = 這次對那個能量系統的刺激越大；兩點同分時會疊在一起，數字看 hover。\n看什麼：長時間、接近門檻的課有氧分數高；超過門檻的間歇、比賽無氧分數才會高。無氧分數天天都高 = 高強度排太密。\n方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，把平滑後的功率逐秒加權累加。需要功率（Stryd、手錶功率），沒有功率的活動不畫。",
+          "axes": [{"id": "NONE", "min": 0, "max": 10}],
+          "series": [
+            {"name": "有氧 TIS", "type": "line", "y_axis": "NONE", "color": "#2a78d6", "expression": "tisaerobic"},
+            {"name": "無氧 TIS", "type": "line", "y_axis": "NONE", "color": "#e34948", "expression": "tisanaerobic"}
+          ]
+        },
+        {
+          "id": "tis-load",
+          "title": "有氧／無氧刺激的長期與短期負荷（TIS）",
+          "description": "像 PMC，但把每天的刺激分成有氧、無氧兩組線。\n怎麼看：藍 = 有氧、紅 = 無氧；粗實線 = 長期（同 CTL 的 42 天）、細虛線 = 短期（同 ATL 的 7 天）。\n看什麼：長期線往上 = 那類刺激在累積：基礎期有氧線往上、無氧線低，專項期加了間歇無氧線才升；短期線高出長期線很多 = 最近那類刺激練得比平常多。\n方法：WKO5 的 Chronic／Acute TIS Load：每天的 TIS 加總，用和 CTL、ATL 一樣的指數平均（時間常數同設定）。只算有功率的活動。",
+          "axes": [{"id": "NONE", "min": 0}],
+          "series": [
+            {"name": "有氧 長期", "type": "line", "y_axis": "NONE", "color": "#2a78d6", "line_width": "thick", "expression": "tl((tisaerobic), ctlconstant)"},
+            {"name": "有氧 短期", "type": "line", "y_axis": "NONE", "color": "#2a78d6", "line_style": "dash", "expression": "tl((tisaerobic), atlconstant)"},
+            {"name": "無氧 長期", "type": "line", "y_axis": "NONE", "color": "#e34948", "line_width": "thick", "expression": "tl((tisanaerobic), ctlconstant)"},
+            {"name": "無氧 短期", "type": "line", "y_axis": "NONE", "color": "#e34948", "line_style": "dash", "expression": "tl((tisanaerobic), atlconstant)"}
           ]
         }
       ]

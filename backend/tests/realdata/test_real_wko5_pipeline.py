@@ -130,7 +130,8 @@ def test_tss_source_follows_wko5_branch_order(ds):
 @needs_data
 @pytest.mark.skipif(not SEASON.exists(), reason="season view export not present")
 def test_load_and_recovery_dashboard_renders(ds):
-    """負荷與恢復: every series evaluates except the known PD-model gap (TIS)."""
+    """負荷與恢復: every series evaluates, the Chronic / Acute TIS Load lines included
+    (their per-workout scores: test_real_wko5_tis.py)."""
     from backend.files.wko5chart_reader import read_view
     from backend.engine.wko5expr.render import render_chart
     d = next(x for x in read_view(SEASON)["dashboards"] if x["title"] == "負荷與恢復")
@@ -140,5 +141,4 @@ def test_load_and_recovery_dashboard_renders(ds):
         for s in res["series"]:
             if s["data"]["kind"] == "error":
                 errors.append((c["title"], s["name"], s["data"]["message"]))
-    unexpected = [e for e in errors if "tisaerobic" not in e[2] and "tisanaerobic" not in e[2]]
-    assert not unexpected, unexpected
+    assert not errors, errors

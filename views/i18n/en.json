@@ -45,6 +45,17 @@
         "title": null,
         "description": null
       },
+      "tis-per-workout": {
+        "title": "Aerobic / anaerobic TIS (per activity)",
+        "description": "Aerobic and anaerobic Training Impact Score (TIS) of every activity with power.\nHow to read: blue dot = aerobic TIS, red dot = anaerobic TIS, a whole number from 1 to 10; higher = a bigger stimulus to that energy system. Equal scores overlap; hover for the numbers.\nLook for: long sessions near threshold score high aerobically; only intervals and races above threshold score high anaerobically. A high anaerobic score every day = hard sessions packed too close.\nMethod: WKO5's TIS: smoothed power, weighted second by second against the mFTP (aerobic) and FRC (anaerobic) of the PD model over the 90 days up to the activity. Needs power (Stryd, watch power); activities without power are not drawn.",
+        "series": {"有氧 TIS": "Aerobic TIS", "無氧 TIS": "Anaerobic TIS"}
+      },
+      "tis-load": {
+        "title": "Aerobic / anaerobic long- and short-term load (TIS)",
+        "description": "Like the PMC, but the daily stimulus split into an aerobic and an anaerobic pair of lines.\nHow to read: blue = aerobic, red = anaerobic; thick solid line = long-term (42 days, as CTL), thin dashed line = short-term (7 days, as ATL).\nLook for: a rising long-term line = that kind of stimulus is building up: in the base phase the aerobic line rises and the anaerobic one stays low; it rises once the specific phase adds intervals. A short-term line far above its long-term line = more of that stimulus lately than usual.\nMethod: WKO5's Chronic / Acute TIS Load: the day's TIS summed, then the same exponential average as CTL and ATL (time constants from the settings). Only activities with power count.",
+        "series": {"有氧 長期": "Aerobic long-term", "有氧 短期": "Aerobic short-term",
+                   "無氧 長期": "Anaerobic long-term", "無氧 短期": "Anaerobic short-term"}
+      },
       "weekly-moving-time": {
         "title": null,
         "description": null
