@@ -1357,8 +1357,9 @@ def templates(prefs=None) -> dict:
     "groups": [{"group", "cat", "sub", "title", "rows": [{key, label, title, src, url,
     src_kind, items (main set), full, equiv, family, purpose}]}]}. Each category: the
     published library (engine/workout_templates.py) first; 強度課 also the interval ladder's
-    variants — both split by workout_templates.family_of (有氧間歇 / VO2max 間歇 / 速度);
-    測試 also the app's CP protocols; strides / hill sprints."""
+    variants — both split by workout_templates.family_of (有氧間歇 / VO2max 間歇 / 速度), 速度 also
+    strides and short hill sprints (SP-32 follow-up: they are 速度 by family_of, but live in
+    other categories); 測試 also the app's CP protocols; strides / hill sprints."""
     from backend.engine import cp_protocols as CPP
     from backend.engine import workout_templates as WT
     lib = [(t, WT.row(t)) for t in WT.TEMPLATES]
@@ -1402,6 +1403,14 @@ def templates(prefs=None) -> dict:
                                "src": "間歇庫（非同等）", "items": main_set(v), "equiv": False, "src_kind": v.src_kind,
                                "full": from_variant(v, "std")["items"], "variant": True, "rung": v.rung, **fam_fields(v)})
         g("quality", "間歇庫（進階階梯）", ladder, sub)
+        if sub == "speed":
+            # strides / short hill sprints: 速度 by family_of (≤ 2′, rest ≥ 2 ×) but filed under
+            # 輕鬆跑 / 越野跑 — listed here too, with the family the tab needs
+            fam = WT.label("speed")
+            sp = [{**strides, "family": fam, "sub": "speed", "purpose": _(WT.PURPOSE["strides"])},
+                  {**hills, "family": fam, "sub": "speed", "purpose": _(WT.PURPOSE["hill_sprint"])}]
+            sp += [{**r, "family": fam, "sub": "speed"} for t, r in lib if t.key == "ua_hill_sprints"]
+            g("quality", "加速跑與短坡衝刺", sp, sub)
     g("test", "有出處的課表", [r for t, r in lib if t.cat == "test"])
     other = []
     for p in ("quick", "standard"):

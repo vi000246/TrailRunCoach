@@ -221,3 +221,14 @@ def test_session_family_is_computed_for_quality_sessions_only():
     own = WT.session_family({"kind": "quality", "steps": {"items": _reps(16, 30, 30, WT.pace(0.86, 0.90))}})
     assert own["id"] == "vo2max"
     assert WT.session_family({"kind": "easy", "minutes": 40}) is None
+
+
+def test_speed_tab_lists_strides_and_short_hill_sprints():
+    T = WS.templates()
+    speed = [r for g in T["groups"] if g["cat"] == "quality" and g["sub"] == "speed" for r in g["rows"]]
+    keys = {r["key"] for r in speed}
+    assert {"lib:daniels_r", "strides", "hill_sprints", "lib:ua_hill_sprints"} <= keys
+    assert all(r["family"]["id"] == "speed" and r["purpose"] for r in speed)
+    # still where they were too
+    easy = {r["key"] for g in T["groups"] if g["cat"] == "easy" for r in g["rows"]}
+    assert "strides" in easy
