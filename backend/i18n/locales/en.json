@@ -35,7 +35,7 @@
   "練下坡：時間＋下降量，不設心率、功率目標（下坡功率不準）": "Downhill practice: time + descent, no heart-rate or power target (power is unreliable downhill)",
   "我的範本": "My templates",
   "我的範本（自己排的）": "My template (made by you)",
-  "海拔依你每段的預估速度換算成時間對齊（越野用努力距離：km＋爬升÷100），是推估": "Elevation is placed on the time axis with your estimated speed for each step (trail effort distance: km + climb ÷ 100); an estimate",
+  "有 GPX 時橫軸是路線距離（km）：距離段照它的距離放，時間、直到按下計圈、負荷、RPE 段依你每段的預估速度換算成距離（越野用努力距離：km＋爬升÷100），是推估": "With a GPX the axis is the route's distance (km): distance steps are placed by their distance; time, lap-button, load and RPE steps are converted to distance with your estimated speed for each step (trail effort distance: km + climb ÷ 100); an estimate",
   "分類名稱不能空白": "The category name can't be empty",
   "分類名稱最多 {n} 字": "A category name has at most {n} characters",
   "自訂分類最多 {n} 個": "At most {n} custom categories",

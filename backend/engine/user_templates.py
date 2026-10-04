@@ -14,12 +14,15 @@ they are. It also keeps
   * an optional training-route GPX: parsed with the race calculator's reader and builder
     (racepower/gpx.parse, racepower/course.build_course — the same smoothing as an event's
     GPX, engine/event_gpx.py), the file gzipped to <HOME>/template_gpx/<id>.gz (per
-    tenant), the elevation profile cached in the row. The editor draws it as a light
-    background behind the step chart: route_elevation() maps the profile onto the chart's
-    time axis with the athlete's estimated speed per step (推估).
+    tenant), the elevation profile cached in the row. With one the step chart switches to
+    the route's distance axis (km, as the race calculator's course profile) with the profile
+    drawn as a light background: route_elevation() places each step by its distance, a time /
+    直到按下計圈 / 負荷 / RPE step by the athlete's estimated speed for it (推估).
 
-A session made from a template carries the template's id in its steps (`tpl`, kept by
-workout_steps.normalize), so its chart shows the same profile.
+A session made from a template carries the template's id in its steps (`tpl`) and, once
+saved, its own copy of the profile (`route`, route_copy(): the ≤ PROFILE_OUT-point
+downsample; both kept by workout_steps.normalize), so its chart keeps the profile when the
+template or its GPX is deleted later.
 """
 from __future__ import annotations
 
@@ -52,7 +55,7 @@ ROOT = None                      # fixed folder (tests); None = the tenant's tem
 
 MINE = N_("我的範本")
 SRC = N_("我的範本（自己排的）")
-ELEV_NOTE = N_("海拔依你每段的預估速度換算成時間對齊（越野用努力距離：km＋爬升÷100），是推估")
+ELEV_NOTE = N_("有 GPX 時橫軸是路線距離（km）：距離段照它的距離放，時間、直到按下計圈、負荷、RPE 段依你每段的預估速度換算成距離（越野用努力距離：km＋爬升÷100），是推估")
 
 
 class TemplateError(ValueError):
@@ -198,6 +201,7 @@ def clean(data: dict, custom_ids: set, partial: bool = False) -> dict:
         try:
             st = WS.normalize(data.get("steps"))
             st.pop("tpl", None)
+            st.pop("route", None)
             st["origin"] = "user"
             out["steps"] = st
         except WS.StepsError as e:
@@ -378,6 +382,26 @@ async def profile_of(db: AsyncSession, tid) -> Optional[dict]:
             "filename": t.gpx_filename, "id": t.id}
 
 
+def route_copy(prof: Optional[dict]) -> Optional[dict]:
+    """A session's own copy of a template's route profile (steps `route`): the profile
+    downsampled to ≤ PROFILE_OUT points (the ends kept), its length, climb and file name."""
+    if not prof:
+        return None
+    km, z = list(prof.get("km") or []), list(prof.get("z") or [])
+    if len(km) < 2 or len(km) != len(z):
+        return None
+    step = max(1, -(-len(km) // PROFILE_OUT))
+    idx = list(range(0, len(km), step))
+    if idx[-1] != len(km) - 1:
+        if len(idx) < PROFILE_OUT:
+            idx.append(len(km) - 1)
+        else:
+            idx[-1] = len(km) - 1
+    return {"km": [round(float(km[i]), 3) for i in idx], "z": [round(float(z[i]), 1) for i in idx],
+            "route_km": prof.get("route_km"), "gain_m": prof.get("gain_m"),
+            "name": prof.get("filename") or prof.get("name") or ""}
+
+
 def _interp(x: float, xs: list, ys: list) -> float:
     """Linear interpolation on increasing xs (held flat outside)."""
     if x <= xs[0]:
@@ -396,38 +420,45 @@ def _interp(x: float, xs: list, ys: list) -> float:
 
 
 def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
-    """The route's elevation on the step chart's time axis (the editor's chart: a
-    lap-button step without an estimate is OPEN_CHART_S wide), {"t": [s], "z": [m],
-    "z_min", "z_max", "route_km", "km" (covered), "complete", "note"} or None.
+    """The step chart on the route's distance axis (the race calculator's course profile:
+    real km along the route vs elevation), {"x": [km] — where each step of view()["order"]
+    starts, plus the end (len(order) + 1) —, "d": [km], "z": [m] (the profile up to where
+    the workout ends), "z_min", "z_max", "route_km", "km" (covered), "total_km", "complete",
+    "gain_m", "name", "note"} or None.
 
-    Distance along the route from the time: each step covers its effort distance (EP =
-    km + climb / 100) at the athlete's speed for the step's intensity (workout_steps.speed_kmh,
-    scaled to the trail EP speed when known; a rest without a target walks, WALK_KMH); a
-    distance step covers its own km of the route. The route's EP comes from the profile's
-    climb. All 推估: the real pace on a climb isn't known before the run."""
+    A distance step covers its own km of the route; a time / 直到按下計圈 / 負荷 / RPE step
+    covers its effort distance (EP = km + climb / 100) at the athlete's speed for the step's
+    intensity (workout_steps.speed_kmh, scaled to the trail EP speed when known; a rest
+    without a target walks, WALK_KMH; a lap-button step without an estimate the chart's
+    OPEN_CHART_S), turned back into km through the route's climb. Past the route's end the
+    axis goes on 1 : 1 (flat). All 推估: the real pace on a climb isn't known before the run."""
     from backend.engine import workout_steps as WS
     km, z = list(prof.get("km") or []), list(prof.get("z") or [])
     if len(km) < 2 or len(km) != len(z):
         return None
+    k0 = km[0]
+    km = [k - k0 for k in km]
     ep, climb = [km[0]], 0.0
     for i in range(1, len(km)):
         climb += max(0.0, z[i] - z[i - 1])
         ep.append(km[i] + climb / EP_CLIMB_M)
-    kt, ke = [0.0], [ep[0]]
-    T, E = 0.0, ep[0]
+
+    def to_km(e: float) -> float:
+        return _interp(e, ep, km) if e <= ep[-1] else km[-1] + (e - ep[-1])
+
+    def to_ep(k: float) -> float:
+        return _interp(k, km, ep) if k <= km[-1] else ep[-1] + (k - km[-1])
+
+    xs, K = [0.0], 0.0
     for row in WS.flat(steps["items"]):
         st = row["st"]
         r = WS.resolve(st, c)
         s, _e = WS._secs(st, r, c)
         if st["dur"]["type"] == "open" and not s:
             s = float(WS.OPEN_CHART_S)
-        if s <= 0:
-            continue
         if st["dur"]["type"] == "distance":
-            k0 = _interp(E, ep, km) if E <= ep[-1] else km[-1] + (E - ep[-1])
-            k1 = k0 + st["dur"]["value"] / 1000.0
-            e1 = _interp(k1, km, ep) if k1 <= km[-1] else ep[-1] + (k1 - km[-1])
-        else:
+            K += st["dur"]["value"] / 1000.0
+        elif s > 0:
             if r.frac is None and st["kind"] == "rest":
                 v = WS.WALK_KMH
             else:
@@ -435,34 +466,30 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
                 v, _how = WS.speed_kmh(f, c)
                 if c.ep_kmh and c.v_easy:
                     v = c.ep_kmh * v / c.v_easy
-            e1 = E + v * s / 3600.0
-        T += s
-        E = e1
-        kt.append(T)
-        ke.append(E)
-    if T <= 0:
+            K = to_km(to_ep(K) + v * s / 3600.0)
+        xs.append(round(K, 3))                # one bound per step, a zero-length one included
+    if K <= 0:
         return None
-    pts_t, pts_z = [], []
+    pts_d, pts_z = [], []
     for i in range(len(km)):
-        if ep[i] > E:
+        if km[i] > K:
             break
-        pts_t.append(_interp(ep[i], ke, kt))
+        pts_d.append(km[i])
         pts_z.append(z[i])
-    complete = E >= ep[-1]
+    complete = K >= km[-1]
     if not complete:                          # the workout ends mid-route: the last point at its end
-        pts_t.append(T)
-        pts_z.append(round(_interp(E, ep, z), 1))
-    if len(pts_t) < 2:
+        pts_d.append(K)
+        pts_z.append(round(_interp(K, km, z), 1))
+    if len(pts_d) < 2:
         return None
-    step = max(1, -(-len(pts_t) // PROFILE_OUT))
-    idx = list(range(0, len(pts_t), step))
-    if idx[-1] != len(pts_t) - 1:
-        idx.append(len(pts_t) - 1)
-    covered = _interp(min(E, ep[-1]), ep, km) - km[0]
-    return {"t": [round(pts_t[i], 1) for i in idx], "z": [pts_z[i] for i in idx],
-            "z_min": min(z), "z_max": max(z), "route_km": prof.get("route_km") or km[-1] - km[0],
-            "km": round(covered, 2), "complete": complete, "gain_m": prof.get("gain_m"),
-            "name": prof.get("filename") or prof.get("name") or "", "note": _(ELEV_NOTE)}
+    step = max(1, -(-len(pts_d) // PROFILE_OUT))
+    idx = list(range(0, len(pts_d), step))
+    if idx[-1] != len(pts_d) - 1:
+        idx.append(len(pts_d) - 1)
+    return {"x": xs, "d": [round(pts_d[i], 3) for i in idx], "z": [pts_z[i] for i in idx],
+            "z_min": min(z), "z_max": max(z), "route_km": prof.get("route_km") or km[-1],
+            "km": round(min(K, km[-1]), 2), "total_km": round(K, 2), "complete": complete,
+            "gain_m": prof.get("gain_m"), "name": prof.get("filename") or prof.get("name") or "", "note": _(ELEV_NOTE)}
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,9 @@ work, rest, cool-down and other steps, ×N repeat blocks (one level of nesting),
 each step with a duration and a target. The 課表 page's editor shows and edits
 it; sync/coros_workouts pushes it.
 
-    {"v": 1, "origin": "derived" | "template:<variant key>" | "user", ["tpl": <user template id>,]
+    {"v": 1, "origin": "derived" | "template:<variant key>" | "user", ["tpl": <user template id>,
+     "route": {"km", "z", "route_km", "gain_m", "name"} (that template's route profile, the
+     session's own copy: user_templates.route_copy),]
      "items": [
        {"id": "a1", "kind": "warm", "dur": {"type": "time", "value": 600},
         "target": {"type": "auto", "intent": "easy"}, "note": "輕鬆跑暖身（跑到間歇地點）"},
@@ -73,6 +75,7 @@ MAX_ITEMS = 120                  # steps in the model (the editor's limit; COROS
 COROS_MAX_STEPS = 50             # Garmin's documented limit; COROS: 未驗證 (plan §3.4)
 MAX_NOTE = 60
 OPEN_CHART_S = 90                # the chart width of a lap-button step
+ROUTE_MAX = 400                  # points of a session's route profile copy (user_templates.PROFILE_OUT)
 DIST_PACE_DEFAULT = 360.0        # s/km for a distance step with no pace at all (推估)
 
 # Zone tables for the editor's 區間 choice: (id, lo, hi) fractions; open ends closed (推估)
@@ -691,6 +694,39 @@ def normalize(d) -> dict:
     tpl = d.get("tpl")
     if isinstance(tpl, (int, str)) and not isinstance(tpl, bool) and str(tpl).isdigit() and 0 < int(tpl) < 10 ** 9:
         out["tpl"] = int(tpl)
+    # the session's own copy of that template's route profile (user_templates.route_copy): the
+    # chart keeps it when the template or its GPX is gone; anything malformed is dropped
+    route = _norm_route(d.get("route"))
+    if route:
+        out["route"] = route
+    return out
+
+
+def _norm_route(r) -> Optional[dict]:
+    """A route profile copy {"km": [...], "z": [...], "route_km", "gain_m", "name"}: 2–ROUTE_MAX
+    finite points, km not decreasing; None when it isn't one."""
+    import math
+    if not isinstance(r, dict):
+        return None
+    km, z = r.get("km"), r.get("z")
+    if not isinstance(km, list) or not isinstance(z, list) or len(km) != len(z) or not 2 <= len(km) <= ROUTE_MAX:
+        return None
+    try:
+        km = [round(float(x), 3) for x in km]
+        z = [round(float(x), 1) for x in z]
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(x) for x in km + z) or any(b < a for a, b in zip(km, km[1:])) or km[-1] <= km[0]:
+        return None
+    out = {"km": km, "z": z}
+    for k in ("route_km", "gain_m"):
+        try:
+            v = float(r.get(k))
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(v) and 0 <= v < 1e6:
+            out[k] = round(v, 2)
+    out["name"] = str(r.get("name") or "")[:200]
     return out
 
 

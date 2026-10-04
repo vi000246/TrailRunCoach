@@ -10,10 +10,12 @@
  *   we.load(doc, {ro})              show a given structure (the 範本 page: a template, not a session)
  *
  * Options: saveTemplate (default true): the 「儲存成範本」 button (POST /sessions/{uid}/save-as-template,
- * else /steps/templates/user; SP-36). A structure made from a user template keeps its id (`tpl`):
- * when that template has a route GPX, POST /steps/check returns its elevation on the chart's time
- * axis (`elev`, engine/user_templates.route_elevation), drawn as a light background like the
- * chart viewer's elevation (wko5_viewer.html drawClimbProfile).
+ * else /steps/templates/user; SP-36). A structure made from a user template keeps its id (`tpl`)
+ * and, once saved as a session, its own copy of the route profile (`route`, carried through as is):
+ * when there is a route GPX, POST /steps/check returns `elev` (engine/user_templates.route_elevation)
+ * and the chart switches to the route's distance axis (km; each step from `elev.x`), the elevation
+ * drawn as a light background like the chart viewer's (wko5_viewer.html drawClimbProfile).
+ * Without one the chart stays on the time axis.
  *
  * Every number shown (targets, totals, issues, the watch preview) comes from
  * POST /steps/check — the server resolves; this file only edits the structure.
@@ -182,6 +184,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     return u ? ` <a class="we-tpl" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(tr("workout.no_tpace_link", "看閾值配速怎麼估"))}</a>` : "";
   };
   const OPEN_W = 90;
+  const kmTxt = (x) => (Math.round((x || 0) * 10) / 10).toString();
   // 時長類型 (SP-38): the options come from the push target's capabilities (context.provider:
   // sync/workout_targets describe() — end_conditions + end_labels); these only without one
   const END_DEFAULT = ["time", "distance", "open"];
@@ -272,7 +275,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (my !== this.seq) return;
       if (!r.ok) { this.doc = null; this.$("we-sum").textContent = "結構讀取失敗"; return; }
       this.ctx = r.body.context; this.stored = !r.body.derived && !extra.rederive;
-      this.doc = r.body.steps ? { origin: r.body.steps.origin, items: r.body.steps.items, tpl: r.body.steps.tpl } : null;
+      this.doc = r.body.steps ? { origin: r.body.steps.origin, items: r.body.steps.items, tpl: r.body.steps.tpl, route: r.body.steps.route } : null;
       this.reason = r.body.reason || "";
       if (this.stored) this.$("we-box").open = true;
       this.$("we-reset").hidden = !this.stored || this.ro;
@@ -294,8 +297,14 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (!this.dirty || !this.doc) return null;
       return { steps: this.stepsDoc() };
     }
-    // the structure as sent: origin user, plus the user template it came from (its route GPX)
-    stepsDoc() { const d = { origin: "user", items: this.doc.items }; if (this.doc.tpl) d.tpl = this.doc.tpl; return d; }
+    // the structure as sent: origin user, plus the user template it came from (its route GPX) and
+    // the session's own copy of that route's profile
+    stepsDoc() {
+      const d = { origin: "user", items: this.doc.items };
+      if (this.doc.tpl) d.tpl = this.doc.tpl;
+      if (this.doc.route) d.route = this.doc.route;
+      return d;
+    }
     // the 範本 page: show a given structure (a template), with the context of a derive for the session fields
     async load(doc, { ro } = {}) {
       this.dirty = false; this.cleared = false; this.sel = null; this.openT = null; this.auto = {};
@@ -307,7 +316,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (my !== this.seq) return;
       this.ctx = r.ok ? r.body.context : null;
       this.stored = false; this.reason = "";
-      this.doc = doc && (doc.items || []).length ? { origin: "user", items: JSON.parse(JSON.stringify(doc.items)), tpl: doc.tpl } : null;
+      this.doc = doc && (doc.items || []).length ? { origin: "user", items: JSON.parse(JSON.stringify(doc.items)), tpl: doc.tpl, route: doc.route } : null;
       this.$("we-reset").hidden = true;
       await this.check();
     }
@@ -546,59 +555,67 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const pat = el("pattern", { id: "we-hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
       el("rect", { width: 6, height: 6, fill: "var(--bar)" }, pat);
       el("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: "var(--panel)", "stroke-width": 2 }, pat);
-      const total = v.order.reduce((a, o) => a + (o.open && !o.sec ? OPEN_W : o.sec), 0) || 1;
+      // a route GPX: the distance axis (km, each step from elev.x); else time (a lap-button step OPEN_W s)
+      const ev = v.elev && Array.isArray(v.elev.x) && v.elev.x.length === v.order.length + 1 ? v.elev : null;
+      const span = (o, i) => ev ? ev.x[i + 1] - ev.x[i] : (o.open && !o.sec ? OPEN_W : o.sec);
+      const total = (ev ? ev.x[ev.x.length - 1] : v.order.reduce((a, o, i) => a + span(o, i), 0)) || 1;
       const sx = (W - 2) / total, maxF = 1.3;
       const yCP = base - (1 / maxF) * (base - top);
-      this.elev(el, v.elev, sx, base, top);
+      this.elev(el, ev, sx, base, top);
       el("line", { x1: 0, x2: W, y1: yCP, y2: yCP, stroke: "var(--faint)", "stroke-dasharray": "3 3", "stroke-width": 1 });
       el("text", { x: W - 2, y: yCP - 3, "text-anchor": "end", "font-size": 10.5, fill: "var(--muted)" }).textContent = "CP";
       el("line", { x1: 0, x2: W, y1: base, y2: base, stroke: "var(--line)" });
       const res = v.resolved || {}, spans = new Map();
       let x = 1, tAcc = 0;
       const ticks = [];
-      const step = total > 5400 ? 1800 : total > 2400 ? 600 : 300;
-      for (const o of v.order) {
-        const w = (o.open && !o.sec ? OPEN_W : o.sec) * sx;
+      const step = ev ? (total > 40 ? 10 : total > 15 ? 5 : total > 6 ? 2 : total > 2.5 ? 1 : 0.5)
+        : total > 5400 ? 1800 : total > 2400 ? 600 : 300;
+      v.order.forEach((o, i) => {
+        const w = span(o, i) * sx;
         const f = Math.min(maxF, o.frac == null ? (o.kind === "rest" ? 0.5 : 0.6) : o.frac);
         const h = Math.max(6, (f / maxF) * (base - top));
         const fill = o.open ? "url(#we-hatch)" : o.frac == null || !o.level ? "var(--bar)" : `var(--wz${o.level})`;
         const rr = el("rect", { x: x + 1, y: base - h, width: Math.max(1, w - 2), height: h, rx: 2, fill, class: "blk", "data-id": o.id });
         if (this.sel === o.id) { rr.setAttribute("stroke", "var(--text)"); rr.setAttribute("stroke-width", 1.5); }
-        rr.addEventListener("mousemove", (e) => this.tip(e, o, res[o.id]));
+        const km = ev ? [ev.x[i], ev.x[i + 1]] : null;
+        rr.addEventListener("mousemove", (e) => this.tip(e, o, res[o.id], km));
         rr.addEventListener("mouseleave", () => (this.$("we-tip").hidden = true));
         rr.addEventListener("click", () => this.select(o.id));
         for (const rp of o.rep) { const sp = spans.get(rp.id) || { a: x, b: x + w, n: rp.n, d: o.rep.indexOf(rp) }; sp.b = x + w; spans.set(rp.id, sp); }
-        if (!o.open || o.sec) { const before = tAcc; tAcc += o.sec; for (let m = Math.ceil(before / step) * step || step; m <= tAcc; m += step) if (m > before) ticks.push(x + (m - before) * sx); }
+        if (!ev && (!o.open || o.sec)) { const before = tAcc; tAcc += o.sec; for (let m = Math.ceil(before / step) * step || step; m <= tAcc; m += step) if (m > before) ticks.push(x + (m - before) * sx); }
         x += w;
-      }
-      ticks.forEach((px, i) => { if (px < W - 18) el("text", { x: px, y: H - 3, "text-anchor": "middle", "font-size": 10.5, fill: "var(--faint)" }).textContent = `${(i + 1) * step / 60}′`; });
+      });
+      if (ev) for (let m = step; m < total; m += step) ticks.push(1 + m * sx);
+      const tick = (i) => ev ? `${+((i + 1) * step).toFixed(1)} km` : `${(i + 1) * step / 60}′`;
+      ticks.forEach((px, i) => { if (px < W - 18) el("text", { x: px, y: H - 3, "text-anchor": "middle", "font-size": 10.5, fill: "var(--faint)" }).textContent = tick(i); });
       for (const { a, b, n, d } of spans.values()) {
         const y = 10 + d * 8;                     // a nested repeat's bracket sits under its parent's
         el("path", { d: `M${a + 2} ${y + 6} V${y} H${b - 2} V${y + 6}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1 });
         if (b - a > 18) el("text", { x: (a + b) / 2, y: y - 2, "text-anchor": "middle", "font-size": 11, fill: "var(--text)", "font-weight": 600 }).textContent = `×${n}`;
       }
       svg.setAttribute("aria-label", `區段圖：${v.structure || ""}，總長 ${mmss((v.totals || {}).sec || 0)}` +
-        (v.elev ? tr("workout.elev_aria", { lo: Math.round(v.elev.z_min), hi: Math.round(v.elev.z_max) }) : ""));
+        (ev ? tr("workout.elev_aria", { lo: Math.round(ev.z_min), hi: Math.round(ev.z_max), km: kmTxt(ev.total_km) }) : ""));
     }
-    // the route GPX's elevation (POST /steps/check elev, already on the chart's time axis): a light
-    // area + thin line behind the bars, its own scale (min–max of the route), labelled at the left
+    // the route GPX's elevation (POST /steps/check elev: d = km on the chart's distance axis, z = m):
+    // a light area + thin line behind the bars, its own scale (min–max of the route), labelled at the left
     elev(el, ev, sx, base, top) {
-      if (!ev || !ev.t || ev.t.length < 2) return;
+      if (!ev || !ev.d || ev.d.length < 2) return;
       const lo = ev.z_min, hi = Math.max(ev.z_max, lo + 10);
       const ey = (z) => base - 2 - ((z - lo) / (hi - lo)) * (base - top - 8);
       const ex = (t) => 1 + t * sx;
-      const pts = ev.t.map((t, i) => `${ex(t).toFixed(1)},${ey(ev.z[i]).toFixed(1)}`);
-      const a = ex(ev.t[0]).toFixed(1), b = ex(ev.t[ev.t.length - 1]).toFixed(1);
+      const pts = ev.d.map((t, i) => `${ex(t).toFixed(1)},${ey(ev.z[i]).toFixed(1)}`);
+      const a = ex(ev.d[0]).toFixed(1), b = ex(ev.d[ev.d.length - 1]).toFixed(1);
       el("path", { d: `M${a},${base} L${pts.join(" L")} L${b},${base} Z`, fill: "var(--we-elev)", "fill-opacity": 0.16, stroke: "none", "pointer-events": "none" });
       el("path", { d: `M${pts.join(" L")}`, fill: "none", stroke: "var(--we-elev)", "stroke-opacity": 0.6, "stroke-width": 1, "pointer-events": "none" });
       el("text", { x: 3, y: ey(hi) - 3, "font-size": 10, fill: "var(--muted)" }).textContent = `${Math.round(hi)} m`;
       el("text", { x: 3, y: base - 4, "font-size": 10, fill: "var(--muted)" }).textContent = `${Math.round(lo)} m`;
     }
-    tip(e, o, r) {
+    tip(e, o, r, km) {
       const t = this.$("we-tip"), box = this.$("we-chart").getBoundingClientRect(), f = this.find(o.id);
       const st = f ? f.it : { kind: o.kind, note: "" };
       const n = o.rep.length ? o.rep.map((x) => `第 ${x.i + 1}/${x.n} 趟`).join(" · ") + " · " : "";
-      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} TSS · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}<br>` +
+      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} TSS · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}` +
+        (km ? ` · ${esc(tr("workout.elev_km", { a: kmTxt(km[0]), b: kmTxt(km[1]) }))}` : "") + `<br>` +
         (r ? `${r.type === "none" ? "不設目標" : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
         (st.note ? `<br><span class="meta">${esc(st.note)}</span>` : "");
       t.hidden = false;
@@ -903,10 +920,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         while (z > a && items[z - 1].kind === "cool") z--;
         items.splice(a, z - a, ...fresh(row.items));
       }
-      // a user template with a route GPX: the structure keeps its id (the chart's elevation); another
-      // template replacing the whole structure drops it
-      if (row.mine && row.gpx) this.doc.tpl = row.id;
-      else if (this.tplFull || !items.length) delete this.doc.tpl;
+      // a user template with a route GPX: the structure keeps its id (the chart's elevation; the
+      // session's own copy of the profile is taken from it on save); another template replacing
+      // the whole structure drops both
+      if (row.mine && row.gpx) { this.doc.tpl = row.id; delete this.doc.route; }
+      else if (this.tplFull || !items.length) { delete this.doc.tpl; delete this.doc.route; }
       this.$("we-pop").hidden = true;
       this.touch();
       this.o.onTemplate && this.o.onTemplate(row, this.tplFull);
