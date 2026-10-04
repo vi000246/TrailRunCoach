@@ -197,10 +197,13 @@ def test_rq_points_are_daniels_intensity_points_and_the_tss_conversion():
     assert BC.tss_of_points(30) == pytest.approx(150 / 60 * 0.7 ** 2 * 100)   # ≈ 122 (推估 IF 0.70)
 
 
-def test_three_signals_are_gone_three_tests_remain():
-    # 2026-10-01: Zone 5 opens on ONE of three tests; the old xu_signals path is gone
+def test_three_signals_are_gone_only_the_measured_aet_tests_remain():
+    # SP-39: Zone 5 opens on a measured AeT only (UA gap or Friel); the 90-min test and the
+    # plateau / weeks methods open Zone 3 only; the old xu_signals path is gone
     assert not hasattr(BC, "three_signals") and not hasattr(BC, "signal2")
-    assert BC._paths_for("auto") == ("xu90", "aet_ua_gap", "aet_friel_drift")
+    for m in ("auto", "xu_drift", "plateau", "weeks"):
+        assert BC._paths_for(m) == ("aet_ua_gap", "aet_friel_drift")
+    assert BC._paths_for("ua_gap") == ("aet_ua_gap",) and BC._paths_for("none") == ()
     assert BC._paths_for("xu_signals") == ()
     assert "xu_signals" not in BC.PATH_LABEL
 
@@ -218,28 +221,36 @@ def test_long_run_late_vs_early():
 # the Zone 5 lifecycle
 # ---------------------------------------------------------------------------
 
+AP = {"aet_ua_gap": "2026-08-01"}           # a measured AeT + LTHR within 10 % on 2026-08-01
+
+
 @pytest.fixture
 def xu_confirmed(monkeypatch):
-    """A passing 徐國峰 run on 2026-08-01; the other paths off; maintenance ok."""
+    """A passing 徐國峰 run on 2026-08-01 (not a Zone 5 path any more); maintenance ok."""
     monkeypatch.setattr(BC, "xu_runs", lambda ds, today, days=182: [
         {"idx": 0, "date": "2026-08-01", "ok": True, "drift": 0.06, "hr10": 128.0, "hr90": 135.7, "why": []}])
     monkeypatch.setattr(BC, "maintenance", lambda ds, today, since, brk=None: {"ok": True, "why": ""})
     monkeypatch.setattr(BC, "long_check", lambda ds, today, days=28: {"state": "ok", "why": "穩"})
 
 
-def test_z5_confirmed_by_the_90_min_test(xu_confirmed):
+def test_z5_confirmed_by_a_measured_aet_not_by_the_90_min_test(xu_confirmed):
+    # SP-39: the 90-min pass alone doesn't confirm Zone 5
     z = BC.z5_status(_ds([]), TODAY, "auto")
-    assert z["state"] == "confirmed" and z["open"] and z["path"] == "xu90" and z["since"] == "2026-08-01"
+    assert z["state"] == "unconfirmed" and not z["open"] and "實測 AeT" in z["reason"]
+    assert BC.z5_status(_ds([]), TODAY, "xu_drift")["state"] == "unconfirmed"
+    assert BC.z5_status(_ds([]), TODAY, "weeks", "unlocked")["state"] == "unconfirmed"
+    z = BC.z5_status(_ds([]), TODAY, "auto", aet_paths=AP)
+    assert z["state"] == "confirmed" and z["open"] and z["path"] == "aet_ua_gap" and z["since"] == "2026-08-01"
     assert "已確認" in z["text"]
     # forced modes only take their own path; none = no gate
-    assert BC.z5_status(_ds([]), TODAY, "ua_gap")["state"] == "unconfirmed"
+    assert BC.z5_status(_ds([]), TODAY, "friel_drift", aet_paths=AP)["state"] == "unconfirmed"
     assert BC.z5_status(_ds([]), TODAY, "none")["open"]
 
 
 def test_z5_pauses_on_a_maintenance_failure(xu_confirmed, monkeypatch):
     monkeypatch.setattr(BC, "maintenance", lambda ds, today, since, brk=None: {
         "ok": False, "why": "連續 3 週 1 區時間 < 確認時的 2/3"})
-    z = BC.z5_status(_ds([]), TODAY, "auto")
+    z = BC.z5_status(_ds([]), TODAY, "auto", aet_paths=AP)
     assert z["state"] == "paused" and not z["open"] and "2/3" in z["reason"]
     # Zone 3 continues while Zone 5 is paused
     gate = {"state": "none", "guard": {}, "dose": {"done": 3, "step": 4}, "z5": z}
@@ -281,28 +292,28 @@ def test_inside_the_block_no_z3_no_z5(xu_confirmed):
 
 def test_after_a_short_break_zone3_first_then_zone5(xu_confirmed):
     brk = _brk(10, "2026-09-05")                                  # block 9/5–9/14
-    z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=[])
+    z = BC.z5_status(_ds([]), TODAY, "auto", None, AP, brk, [])
     assert z["state"] == "paused" and "先完成 1 堂 3 區" in z["reason"]
-    z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-20"])
+    z = BC.z5_status(_ds([]), TODAY, "auto", None, AP, brk, ["2026-09-20"])
     assert z["state"] == "confirmed" and z["open"]               # the pre-break confirmation still counts
 
 
 def test_after_14_to_28_days_two_z3_and_the_drift_check(xu_confirmed, monkeypatch):
     brk = _brk(20, "2026-09-01")                                  # block 9/1–9/20
-    z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-22"])
+    z = BC.z5_status(_ds([]), TODAY, "auto", None, AP, brk, ["2026-09-22"])
     assert z["state"] == "paused" and "2 堂" in z["reason"]
     assert z["pause"] == {"kind": "reentry_z3", "done": 1, "need": 2}
     # the post-break long-run drift check (a re-entry rule, kept when xu_signals went)
     monkeypatch.setattr(BC, "long_check", lambda ds, today, days=28: {"state": "fail", "why": "後段心率 +8%"})
-    z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-22", "2026-09-26"])
+    z = BC.z5_status(_ds([]), TODAY, "auto", None, AP, brk, ["2026-09-22", "2026-09-26"])
     assert z["state"] == "paused" and "飄移檢查" in z["reason"] and z["pause"]["kind"] == "drift_check"
 
 
 def test_a_long_break_invalidates_the_earlier_confirmation(xu_confirmed):
     # conflict fix: the 8-week look-back kept a pre-break pass; ≥ 29 days → only confirmations after it
     brk = _brk(30, "2026-08-25")                                  # block 8/25–9/24
-    z = BC.z5_status(_ds([]), TODAY, "auto", brk=brk, quality_dates=["2026-09-26", "2026-09-28"])
-    assert z["state"] == "unconfirmed" and "重新確認" in z["reason"] and "Mujika" in z["text"]
+    z = BC.z5_status(_ds([]), TODAY, "auto", None, AP, brk, ["2026-09-26", "2026-09-28"])
+    assert z["state"] == "unconfirmed" and "重新做 AeT 測試" in z["reason"] and "Mujika" in z["text"]
 
 
 def test_a_long_break_makes_the_aet_stale_and_asks_for_a_test(xu_confirmed, monkeypatch):

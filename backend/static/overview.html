@@ -296,9 +296,9 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
 
   <div class="cards" data-sec id="s-todo">
-    <!-- Zone 5 opening process (quality_gate.z5_card); the season history is the 基礎期 chart -->
+    <!-- the Zone 3 / Zone 5 unlock tracks (quality_gate.z5_card, SP-39); the season history is the 基礎期 chart -->
     <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
-      <h2 id="z5-h">5 區（最大攝氧量間歇）開放流程 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">歷程 →</a></h2>
+      <h2 id="z5-h">3 區／5 區解鎖流程 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">歷程 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
     </section>
     <!-- 待辦與警示 at the bottom, left of B2B (full width while B2B is hidden) -->
@@ -546,9 +546,11 @@ const Z5_ICON = { confirmed: "good", open: "good", paused: "watch", reentry: "ba
 async function loadZ5() {
   const c = await j(`${API}/z5`);
   if (c.history_href) $("z5-hist").href = c.history_href;
-  const sub = c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}`
-    : c.state === "paused" || c.state === "reentry" ? (c.reason || "") : (c.reason || "還沒確認有氧基礎");
-  $("z5-st").innerHTML = `<span class="z5st ${esc(c.state)}" title="${esc(sub)}">${I(Z5_ICON[c.state] || "na")}${esc(c.label)}</span>`;
+  // the pill: the Zone 5 track (z5_gate = quality_gate.z5_track, the flag week_decision reads)
+  const zg = c.z5_gate || {};
+  const sub = zg.text || (c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}` : (c.reason || ""));
+  const st = c.open ? "confirmed" : c.state;
+  $("z5-st").innerHTML = `<span class="z5st ${esc(st)}" title="${esc(sub)}">${I(Z5_ICON[st] || "na")}5 區：${esc(c.open ? "已解鎖" : c.aet_ok ? "AeT 已通過" : c.label)}</span>`;
   // the quest-style stage flow (static/z5flow.js, shared with the 基礎期 panel)
   Z5Flow.bind();
   $("z5").innerHTML = Z5Flow.html(c.flow, { q: "q" });

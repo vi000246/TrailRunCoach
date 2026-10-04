@@ -1205,7 +1205,7 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
     ter = terrain or (s or {}).get("terrain")
     ter = "trail" if kind == "hike" or ter in ("trail", "hike") else "road"
     return TR.recommend(WS.templates(), kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
-                        phase=_phase_on(inp, day), z5_open=bool((gate.get("z5") or {}).get("open")),
+                        phase=_phase_on(inp, day), z5_open=bool(QG.z5_track(gate)["open"]) if gate else False,
                         rung=rung_now, ladder_key=key, ladder_reason=why,
                         sport=(inp.get("cur") or {}).get("primary_sport") or "trail")
 

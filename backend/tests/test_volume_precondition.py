@@ -16,7 +16,7 @@ def test_a_test_confirms_without_a_volume_check(monkeypatch):
     monkeypatch.setattr(BC, "xu_runs", lambda ds, today, days=182: [
         {"idx": 0, "date": "2026-08-01", "ok": True, "drift": 0.06, "hr10": 128.0, "hr90": 135.7, "why": []}])
     monkeypatch.setattr(BC, "maintenance", lambda ds, today, since, brk=None: {"ok": True, "why": ""})
-    z = BC.z5_status(_ds([]), TODAY, "auto")
+    z = BC.z5_status(_ds([]), TODAY, "auto", aet_paths={"aet_ua_gap": "2026-08-01"})   # SP-39: a measured AeT
     assert z["state"] == "confirmed" and z["since"] == "2026-08-01" and "vol_skipped" not in z
 
 

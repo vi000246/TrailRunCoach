@@ -191,18 +191,20 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   - **Guardrails** (`guard`, `backend/engine/quality_gate.py:591`), base phase, every mode:
     low-intensity time share < 75 % (or run power < 80 % CP share < 75 %) → no Zone 5, Zone 3 goes
     on with a 「輕鬆跑心率偏高」 warning note (SP-31: 75 % is the floor, the base phase's ≥ 90 % a
-    target; the AeT is often estimated, climbs inflate HR); CTL ramp ≥ 5 → threshold only, ≥ 8 →
+    target; the AeT is often estimated, climbs inflate HR) — with an untested AeT in effect a
+    warning for Zone 5 too (SP-39, `guard(aet_tested=False)`); CTL ramp ≥ 5 → threshold only, ≥ 8 →
     none (Friel, coach); last week's step > 20 % → none (Nielsen 2014, Damsted 2019), 10–20 % →
     hold the dose (推估); TSB −30…−20 → hold (Friel / TrainingPeaks). Projected weeks keep only the
     intensity block (Zone 5 only).
   - **Two gates, two tracks** (SP-31): Zone 3 once its gate is open (`z3_gate`,
     `backend/engine/quality_gate.py:1151`: 4 complete weeks with ≥ 3 runs and no 7-day gap —
     sticky, a ≥ 21-day break re-locks —, the 90-min test, or a measured UA gap; all 推估 but the
-    tests) and the guardrails pass; Zone 5 only while the base is confirmed (`gate["z5"]`,
-    `base_check.z5_status`: one of three tests done and passed — the 90-min test, a measured AeT
-    passing the UA gap, or the Friel drift near a measured AeT; no stable-weekly-volume
-    precondition since 2026-10-03 (no source);
-    maintenance and re-entry rules in plan-auto.spec.md) and 3 Zone 3 sessions 達標.
+    tests) and the guardrails pass; Zone 5 is an independent gate (SP-39, `quality_gate.z5_track`
+    = `gate["z5_gate"]`, the flag week_decision and the card share): a measured AeT
+    (`gate["z5"]`, `base_check.z5_status`: a tested AeT + a measured LTHR with the UA gap ≤ 10 %,
+    or the Friel drift < 5 % near the tested AeT — the 90-min test is not an AeT test; no
+    stable-weekly-volume precondition since 2026-10-03; maintenance and re-entry rules in
+    plan-auto.spec.md) and the soft 「近 6 週 ≥ 2 堂 3 區」 (推估) or the Zone 5 track under way.
   - **Dose** (`Z3` / `CRUISE` / `Z5`, `z3_spec` / `z5_spec`; `dose_tracks` → `dose_step` per
     track): each track's step = its 達標 sessions in the last 8 weeks (`dose_history` rows carry
     `track`): Zone 3 2×15′ → 3×12′ → 2×20′ → 1×30′ at 88–95 % CP (`interval_library` a1–a4), then
@@ -876,19 +878,23 @@ which one. The response keeps the `coros` field names.
 - The day list (`GET /plan/calendar` for this week: sessions, TSS estimates, compliance;
   `loadPlan`, `backend/static/overview.html:821`), the week's progress-bar targets, the Sunday CTL
   and next-Monday TSB come from the stored plan (`backend/static/overview.html:675`).
-- **5 區（最大攝氧量間歇）開放流程** card (`#z5card`, title as in the charts since 2026-10-03,
-  `backend/static/overview.html:301`; full width of the bottom row because it decides whether the
-  week's interval is Zone 3 or Zone 5): the state pill (icon + text:
-  未確認 / 已確認（日期、路徑）/ 暫停（原因）/ 恢復期 / 不設門檻), then the quest-style stage
-  flow (`z5_card.flow` = `quality_gate.z5_flow`, drawn by `static/z5flow.js`; full width of the
-  cards row): one 「你現在在這裡：<stage> · 下一步：…」 line (+「同時可以做」 for the parallel
-  stage; the full 「還缺：…」 `next` text behind ?) and five stage cards — 有氧基礎 → 3 區階梯
-  (the Z3 rungs) → 有氧基礎確認 (三選一 tests; the 2/3 維持 line once confirmed;
-  can run alongside the Z3 ladder) → 5 區解鎖 → 5 區階梯 (the Z5 rungs). Each card: badge (✓ /
-  number), tag word (已完成 / 現在 / 可同時做 / 未解鎖), checklist ☑ / ☐ with one short 「→ 下一步」
-  line, 「完成後：」 what it unlocks; sources behind ?. Vertical in a narrow box (done / locked
-  stages fold to their header, tap to open), horizontal from 860 px (container query).
-  Presentation only: every flag comes from `z5_card`. 「歷程 →」 opens the 基礎期 panel.
+- **3 區／5 區解鎖流程** card (`#z5card`, renamed by SP-39, `backend/static/overview.html:301`; full
+  width of the bottom row because it decides whether the week's interval is Zone 3 or Zone 5):
+  the pill 「5 區：已解鎖／AeT 已通過／未確認／暫停／恢復期／不設門檻」 (the Zone 5 track; its
+  `z5_gate.text` on hover), then the flow (`z5_card.flow` = `quality_gate.z5_flow`, drawn by
+  `static/z5flow.js`): **two independent, parallel tracks**, side by side from 700 px (container
+  query), stacked on a phone — 3 區 (3 區解鎖: consistency / 90-min test / UA gap, any one → 3 區階梯
+  A1–A4) and 5 區 (5 區解鎖: 實測 AeT 二選一 — AeT＋LTHR gap ≤ 10 % or Friel < 5 % — plus 「近 6 週
+  做過 ≥ 2 堂 3 區」, re-entry / 維持 items → 5 區階梯 V1–V4). Each track: a header with 已解鎖 /
+  未解鎖, its own 「你現在在這裡：<stage> · 下一步：…」 (+「也可以」; the full 「還缺：…」 `next`
+  behind ? on the 5 區 track) and stage cards: badge (✓ / number), tag word (已完成 / 現在 /
+  未解鎖), checklist ☑ / ☐ with one short 「→ 下一步」 line, 「完成後：」 what it unlocks; sources
+  behind ?. **安排課表**: an unticked session / test (the current ladder rung, the 90-min / AeT /
+  Friel / LTHR test, the soft Zone 3 line) shows a 「安排課表」 link (`item.action.href`) to the 課表
+  page — `?add=<variant or template key>[&proto=]` / `?test=aet&proto=<protocol>` — which opens
+  the new-session dialog with that session preselected; the user picks the day and saves through
+  `POST /sessions`. Presentation only: every flag comes from `z5_card`. 「歷程 →」 opens the 基礎期
+  panel.
 - **5 區開放流程 panel** (viewer, 周期化訓練 → ② 基礎期, custom view `kind: "z5gate"`,
   `wko5views.z5gate_panel`): the same stage flow as the card (`z5.progress.flow` =
   `wko5views.z5_progress` = `z5_card` on the status gate) — no chart, no time axis — and a
@@ -1000,8 +1006,8 @@ which one. The response keeps the `coros` field names.
   `gate["aet_test_reason"]`; after a break ≥ ~8 weeks (re-entry `cp_retest`) the CP test is due
   once the block ends (WKO5 seminar notes). `i_fitness`: CTL ramp ≥ 8 bad, 5–8 watch (Friel).
   `i_volume`: > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估).
-- **`i_gate`** hover adds the Zone 5 state (「Zone 5：未確認／已確認（日期、路徑）／暫停（原因）／
-  恢復期」, 台灣教練: 3 區先、5 區後) and 「建議測試：…」; a locked method reads 「5 區未開」 and
+- **`i_gate`** hover adds the Zone 5 track (「Zone 5：已解鎖（…）／未解鎖（AeT 已通過，還差 3 區：…）」)
+  or the AeT state (「Zone 5：未確認／已確認／暫停（原因）／恢復期」) and 「建議測試：…」; a locked method reads 「5 區未開」 and
   still names this week's Zone 3 session.
 - **`i_heat`** 「熱適應」 (`Status.i_heat`; design `docs/research/heat-acclimation.md` §5.3): the
   heat-acclimation index S (`engine/heat.py`) from the per-activity exposure
@@ -1275,3 +1281,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feat/sp-32-interval-families | SP-32, docs/research/coach-schools-zones-periodization.md R1 / Finding 7 | 強度課 families: one classifier (`workout_templates.family_of`: 有氧間歇 長 tempo／巡航, VO2max 間歇, 速度 — intensity first, then rep length) replaces the 三區／四區／五區 %CP tabs of 插入範本 (published templates and ladder rows; Palladino 4×2:40 → VO2max), drives the 推薦 block's Zone 5 / phase rules, and adds a computed `quality_family` to plan sessions (calendar chip, dialog); 「無氧間歇」 named 「VO2max 間歇」; templates get a one-line `purpose` (訓練目的) shown in the menu; family labels / tips / purposes through `_()` with en |
 | 2026-10-04 | feat/sp-46-thresholds-settings | SP-46 | 閾值測試紀錄 (LTHR / AeT / CP) edited on the settings page (table, 自動估算 cards, power zones; zh-TW + en), `GET /api/v1/plan/thresholds`; 賽事周期 page shows a read-only summary + link; 最大心率 only in 設定 → 心率 (no max-HR column; mhr / rhr rows kept on save); status / chart hints point to 設定. Same `plan.thresholds` data, no model change |
 | 2026-10-04 | feat/sp-43-calc-export | SP-43 | Stored plan: kind `race` in `KINDS` (not added by hand), `ext_key` / `ext_sig` columns and `plan_store.upsert_external` for the 賽事計算機's 「匯出至課表」 (one row per event, claims the generator's 比賽 row, restore / move, `user_edited` by fingerprint, `updated_at` kept on an identical export); reconcile: a kept race blocks the generator's race of that week; push: a race with steps is pushed, the old `racecalc:` watch workout is removed on that push (`calc_to_replace` in the preview); 課表 dialog keeps kind 比賽 |
+| 2026-10-04 | feature | SP-39 | 3 區／5 區 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR ≤ 10 % or Friel) + the soft 「近 6 週 ≥ 2 堂 3 區」 (`z5_track`, shared by week_decision and the card); low-intensity share blocks Zone 5 only with a tested AeT; the card renamed 3 區／5 區解鎖流程 and redrawn as two parallel tracks with their own 「下一步」; 「安排課表」 links into the 課表 dialog (`schedule.html?add=` / `?test=`, `WorkoutEditor.applyKey`) |
