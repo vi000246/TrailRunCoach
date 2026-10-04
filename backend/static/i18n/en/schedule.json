@@ -253,5 +253,9 @@
   "legend.failed": "Failed",
   "legend.not_pushed": "Not pushed",
   "preset.not_found": "No workout template \"{key}\"",
-  "preset.pick_day": "pick a day, then save"
+  "preset.pick_day": "pick a day, then save",
+  "family.aerobic": "Aerobic intervals",
+  "family.vo2max": "VO2max intervals",
+  "family.speed": "Speed",
+  "family.mismatch": "The steps look more like “{fam}”; the type is saved as your “{picked}” (just a hint)"
 }
