@@ -963,6 +963,11 @@ which one. The response keeps the `coros` field names.
   coaches it cites, msgids through `_()`); the interval ladder's rows take the purpose of their
   family. The 插入範本 menu shows it under each row's title, and a 強度課 row also shows its sub
   (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:677`).
+- **速度 tab add-ons** (2026-10-04, SP-32 follow-up): strides (快步跑 4×20″) and short hill sprints
+  (上坡衝刺 8×10″, UA 陡坡衝刺 8×10″) are 速度 by `family_of`, but the menu only gave family tabs to
+  the `quality` category, so only Daniels R showed there. `workout_steps.templates`
+  (`backend/engine/workout_steps.py:1355`) now also lists them in 強度課 › 速度 (group
+  「加速跑與短坡衝刺」, family 速度, their own purpose); they stay under 輕鬆跑 / 越野跑 too.
 
 ## Status engine change
 
@@ -1275,3 +1280,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feat/sp-32-interval-families | SP-32, docs/research/coach-schools-zones-periodization.md R1 / Finding 7 | 強度課 families: one classifier (`workout_templates.family_of`: 有氧間歇 長 tempo／巡航, VO2max 間歇, 速度 — intensity first, then rep length) replaces the 三區／四區／五區 %CP tabs of 插入範本 (published templates and ladder rows; Palladino 4×2:40 → VO2max), drives the 推薦 block's Zone 5 / phase rules, and adds a computed `quality_family` to plan sessions (calendar chip, dialog); 「無氧間歇」 named 「VO2max 間歇」; templates get a one-line `purpose` (訓練目的) shown in the menu; family labels / tips / purposes through `_()` with en |
 | 2026-10-04 | feat/sp-46-thresholds-settings | SP-46 | 閾值測試紀錄 (LTHR / AeT / CP) edited on the settings page (table, 自動估算 cards, power zones; zh-TW + en), `GET /api/v1/plan/thresholds`; 賽事周期 page shows a read-only summary + link; 最大心率 only in 設定 → 心率 (no max-HR column; mhr / rhr rows kept on save); status / chart hints point to 設定. Same `plan.thresholds` data, no model change |
 | 2026-10-04 | feat/sp-43-calc-export | SP-43 | Stored plan: kind `race` in `KINDS` (not added by hand), `ext_key` / `ext_sig` columns and `plan_store.upsert_external` for the 賽事計算機's 「匯出至課表」 (one row per event, claims the generator's 比賽 row, restore / move, `user_edited` by fingerprint, `updated_at` kept on an identical export); reconcile: a kept race blocks the generator's race of that week; push: a race with steps is pushed, the old `racecalc:` watch workout is removed on that push (`calc_to_replace` in the preview); 課表 dialog keeps kind 比賽 |
+| 2026-10-04 | feat/sp-62-trail-types | SP-32 | 速度 tab of 插入範本 also lists strides and short hill sprints (they were 速度 by `family_of` but filed under 輕鬆跑 / 越野跑) |
