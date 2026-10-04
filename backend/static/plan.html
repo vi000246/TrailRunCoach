@@ -84,10 +84,6 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 .guide div { border-left: 4px solid var(--line); padding: 4px 10px; }
 .guide b { display: block; margin-bottom: 2px; }
 .guide ul { margin: 2px 0 0; padding-left: 18px; font-size: 13px; }
-.est { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin: 8px 0 12px; }
-.est .card { position: relative; }
-.est .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
-.est button { margin-top: 6px; }
 .toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
 .toast.on { opacity: .92; }
@@ -160,28 +156,10 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
     </div>
   </section>
 
-  <section>
-    <h2>心率門檻</h2>
-    <div id="thrstatus"></div>
-    <div class="est" id="est"><span class="meta">正在從你的跑步資料估算 LTHR / AeT…</span></div>
-    <div class="tablewrap"><table>
-      <thead><tr><th>測試日期</th><th class="num">LTHR 乳酸閾值心率</th><th class="num">AeT 有氧閾值心率</th>
-        <th class="num" title="選填。判斷一趟跑步有沒有刺激到 VO2max 時，手腕心率的門檻 = 93% × 最大心率（推估）。沒填時用 365 天內每趟 60 秒最高心率的第 3 高（最高的幾個常是光學錯誤）。">最大心率（選填）</th><th class="num">CP 跑步臨界功率 W</th><th>備註（測試方式）</th><th></th></tr></thead>
-      <tbody id="thr"></tbody>
-    </table></div>
-    <div class="form">
-      <button id="addthr">＋ 新增一次測試</button>
-      <button class="primary" id="savethr">儲存心率門檻</button>
-    </div>
-    <p class="meta">每次測試記一筆，圖表會依日期套用當時的數值（跟 WKO5 的做法一樣）。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。
-      <br>AeT 測試（Uphill Athlete）：暖身 10 分後在跑步機或平路用固定功率跑 40–60 分鐘（課表排 40 分；UA 不建議短於 40 分），前後半段的心率飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。
-      <br>LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。
-    </p>
-    <details style="margin-top:8px"><summary class="meta">功率區間（Palladino 官方表，依目前 CP）</summary>
-      <div class="tablewrap"><table><thead><tr><th>區間</th><th>名稱</th><th class="num">% CP</th><th class="num">W</th></tr></thead>
-      <tbody id="pzones"></tbody></table></div>
-      <p class="meta" id="pzsrc"></p></details>
-    <p class="meta">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。測完在活動判讀卡按「套用這次的 CP」，會寫成測試那天的一列。沒填的話用 WKO5 的 mFTP（30–60 分鐘的功率，通常比兩點 CP 低 5–10%）。</p>
+  <section id="thresholds">
+    <h2 data-i18n="plan.thr.title">閾值測試紀錄（LTHR／AeT／CP）</h2>
+    <p class="meta"><span id="thrsum"></span>
+      <a href="/api/v1/wko5/settings#thresholds" data-i18n="plan.thr.edit">到設定修改</a></p>
   </section>
 
   <section>
@@ -210,34 +188,7 @@ async function call(method, path, body) {
   if (!r.ok) { const t = await r.text(); toast("失敗：" + t.slice(0, 120)); throw new Error(t); }
   return r.json();
 }
-async function load() { S = await call("GET", ""); manual = null; render(); loadEstimate(); }
-
-async function loadEstimate() {
-  let E;
-  try { E = await call("GET", "/threshold-estimate"); }
-  catch { $("#est").innerHTML = `<span class="meta">估算失敗</span>`; return; }
-  const cur = S.effective_thresholds;
-  const card = (key, label, est, curV, help) => {
-    const ok = est && est.value != null;
-    const same = ok && curV != null && Math.abs(est.value - curV) < 1;
-    return `<div class="card"><div class="k">${label}（自動估算）</div>
-      <div class="v">${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? `目前用 ${fmt(curV)}` : ""}</small></div>
-      <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? `；中間一半落在 ${est.spread[0]}–${est.spread[1]}` : ""}${est && est.days ? `（近 ${est.days} 天）` : ""}</div>
-      ${help ? `<div class="s">${help}</div>` : ""}
-      ${ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">套用 ${est.value}</button>` : ok ? `<div class="s">✓ 已經在用</div>` : ""}</div>`;
-  };
-  const aetHelp = E.aethr && E.aethr.value == null
-    ? "你很少有「穩定、輕鬆、45 分鐘以上」的跑步，所以資料推不出來。做一次 Uphill Athlete 的 AeT 測試最準（下方說明）。" : "";
-  $("#est").innerHTML = card("lthr", "LTHR", E.lthr, cur.lthr.value,
-      E.lthr && E.lthr.hr_at_cp ? `交叉檢查：功率在 CP ±3% 時心率 ${E.lthr.hr_at_cp}（${E.lthr.n_at_cp} 次）` : "")
-    + card("aethr", "AeT", E.aethr, cur.aethr.source === "plan" ? cur.aethr.value : null, aetHelp);
-  $("#est").querySelectorAll("[data-apply]").forEach((b) => b.onclick = async () => {
-    const k = b.dataset.apply, v = Number(b.dataset.v);
-    if (!confirm(`把 ${k === "lthr" ? "LTHR" : "AeT"} 設成 ${v}？會新增一筆今天日期的紀錄，之後的區間、hrTSS 都會用它重算。`)) return;
-    await call("POST", "/thresholds/apply-estimate", { [k]: v, note: `${k === "lthr" ? "LTHR" : "AeT"} 自動估算（${(E[k] || {}).reason || ""}）` });
-    toast("已套用，圖表會重新計算"); load();
-  });
-}
+async function load() { S = await call("GET", ""); manual = null; render(); }
 
 const GUIDE = {
   recovery: ["轉換 / 恢復期", ["ATL 下降、TSB 回正", "每週時數低而穩定", "每週 2 次肌力"]],
@@ -260,9 +211,9 @@ function renderNow() {
     <div class="s">${next ? `${next.date}，倒數 ${next.days_to} 天` : ""}</div></div>`);
   if (c && c.dashboard) cards.push(`<div class="card"><div class="k">現在該看的圖</div><div class="v" style="font-size:16px">${esc(c.dashboard)}</div>
     <div class="s"><a href="/api/v1/wko5/viewer?view=${encodeURIComponent("周期化訓練")}&dash=${encodeURIComponent(c.dashboard)}">圖表分析 → 我的圖表 → 周期化訓練</a></div></div>`);
-  const t = S.effective_thresholds;
-  cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(t.aethr.value)}${pmBadge(t.aethr.pm)} / LTHR ${fmt(t.lthr.value)} / CP ${fmt(t.cp.value)} W</div>
-    <div class="s ${t.lthr.wko5_default ? "warn" : ""}">${t.lthr.wko5_default ? "⚠ LTHR 是 WKO5 預設值，請到下方填測試結果" : t.lthr.source === "plan" ? `LTHR：${esc(t.lthr.label || "季計畫")}` : "心率來自 WKO5 設定"}；AeT：${esc(t.aethr.label || "")}；CP ${t.cp.source === "plan" ? "來自你的測試" : "＝WKO5 的 mFTP"}</div></div>`);
+  const th = S.effective_thresholds;   // not `t`: that is the i18n t()
+  cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(th.aethr.value)}${pmBadge(th.aethr.pm)} / LTHR ${fmt(th.lthr.value)} / CP ${fmt(th.cp.value)} W</div>
+    <div class="s ${th.lthr.wko5_default ? "warn" : ""}">${th.lthr.wko5_default ? t("plan.thr.lthr_default") : th.lthr.source === "plan" ? `LTHR：${esc(th.lthr.label || "季計畫")}` : "心率來自 WKO5 設定"}；AeT：${esc(th.aethr.label || "")}；CP ${th.cp.source === "plan" ? "來自你的測試" : "＝WKO5 的 mFTP"}</div></div>`);
   $("#now").innerHTML = cards.join("");
 }
 
@@ -392,29 +343,13 @@ function renderPhases() {
   $("#toauto").hidden = !(S.manual_phases || manual);
 }
 
-function renderZones() {
-  const pz = S.power_zones;
-  $("#pzones").innerHTML = pz.zones.map((z) => `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td>
-    <td class="num">${Math.round(z.lo * 100)}${z.hi ? "–" + Math.round(z.hi * 100) : "+"}%</td>
-    <td class="num">${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td></tr>`).join("");
-  $("#pzsrc").textContent = `來源：${pz.source}。Palladino：區間用來「描述」訓練，不是拿來開課表。Near threshold 不是正式區間名稱，落在 3B 上段。`;
-}
-
+// 閾值測試紀錄 is edited in 設定 (settings.html #thresholds, SP-46); here only what is in effect
 function renderThr() {
-  renderZones();
-  const w = S.wko5_settings.runthr, m = S.wko5_settings.runmhr;
-  $("#thrstatus").innerHTML = `<p class="meta">WKO5 裡的設定：跑步 LTHR ${fmt(w && w.value)}、最大心率 ${fmt(m && m.value)}
-    ${w && w.is_default ? `<span class="warn">— 這是 WKO5 的出廠預設值（日期 ${w.date}，代表從沒填過）。WKO5 的心率區間 = 區間表 × LTHR，所以用預設值算出來的區間也不準。</span>` : ""}</p>`;
-  const rows = S.thresholds.length ? S.thresholds : [];
-  $("#thr").innerHTML = rows.map((t, i) => `<tr>
-    <td><input type="date" data-t="${i}" data-f="date" value="${t.date}"></td>
-    <td class="num"><input type="number" data-t="${i}" data-f="lthr" value="${t.lthr ?? ""}"></td>
-    <td class="num"><input type="number" data-t="${i}" data-f="aethr" value="${t.aethr ?? ""}"></td>
-    <td class="num"><input type="number" data-t="${i}" data-f="mhr" value="${t.mhr ?? ""}"></td>
-    <td class="num"><input type="number" data-t="${i}" data-f="cp" value="${t.cp ?? ""}"></td>
-    <td><input data-t="${i}" data-f="note" value="${esc(t.note)}" style="width:260px"></td>
-    <td><button class="link" data-trm="${i}">移除</button></td></tr>`).join("")
-    || `<tr><td colspan="7" class="meta">還沒有測試紀錄。</td></tr>`;
+  const rows = S.thresholds.filter((r) => r.lthr != null || r.aethr != null || r.cp != null);
+  const last = rows.length ? rows[rows.length - 1] : null;
+  const ef = S.effective_thresholds;
+  $("#thrsum").textContent = t("plan.thr.now", { aet: fmt(ef.aethr.value), lthr: fmt(ef.lthr.value), cp: fmt(ef.cp.value) })
+    + (last ? t("plan.thr.latest", { date: last.date, n: rows.length }) : t("plan.thr.none"));
 }
 
 function renderGuide() {
@@ -464,23 +399,6 @@ $("#phases").addEventListener("click", (ev) => {
 });
 $("#savephases").onclick = async () => { await call("PUT", "/phases", manual); toast("周期已儲存"); load(); };
 $("#toauto").onclick = async () => { if (!confirm("清掉手動周期，改回自動排程？")) return; await call("PUT", "/phases", []); toast("已恢復自動"); load(); };
-
-// ---- thresholds ----
-$("#addthr").onclick = () => { S.thresholds.push({ date: S.today, lthr: null, aethr: null, mhr: null, cp: null, note: "" }); renderThr(); };
-$("#thr").addEventListener("change", (ev) => {
-  const i = ev.target.dataset.t; if (i == null) return;
-  const f = ev.target.dataset.f, v = ev.target.value;
-  S.thresholds[i][f] = ["lthr", "aethr", "mhr", "cp"].includes(f) ? (v === "" ? null : Number(v)) : v;
-  // a CP typed by hand is no longer the test's result (套用這次的 CP stores how it was measured)
-  if (f === "cp") { S.thresholds[i].cp_method = null; S.thresholds[i].wprime = null; }
-  // likewise an LTHR / AeT typed by hand is no longer the applied estimate / test
-  if (f === "lthr" || f === "aethr") S.thresholds[i][`${f}_method`] = v === "" ? null : "manual";
-});
-$("#thr").addEventListener("click", (ev) => { const i = ev.target.dataset.trm; if (i == null) return; S.thresholds.splice(Number(i), 1); renderThr(); });
-$("#savethr").onclick = async () => {
-  await call("PUT", "/thresholds", S.thresholds);
-  toast("心率門檻已儲存，圖表會重新計算"); load();
-};
 
 load();
 </script>

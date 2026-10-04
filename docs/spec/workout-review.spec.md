@@ -452,7 +452,7 @@ needs a selected workout (`backend/api/wko5views.py:366-368`) and renders throug
 |---|---|---|---|
 | GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:672` | `basis` pace (default) or power, 400 otherwise. `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
 | GET | `/api/v1/wko5/views/{view}/dashboards/{d}/charts/{c}` | `backend/api/wko5views.py:350`, `backend/api/wko5views.py:528` | A review chart renders through the same branch (with the chart's chosen `basis`) |
-| POST | `/api/v1/plan/thresholds/apply-cp` | `backend/api/plan.py:629` | 「套用這次的 CP」: the card's `action.body`; writes / merges the test day's threshold row (cp, wprime, cp_method, note). 400 for a future date, unknown method, W′ without `2pt`, CP outside 50–700 W |
+| POST | `/api/v1/plan/thresholds/apply-cp` | `backend/api/plan.py:645` | 「套用這次的 CP」: the card's `action.body`; writes / merges the test day's threshold row (cp, wprime, cp_method, note). 400 for a future date, unknown method, W′ without `2pt`, CP outside 50–700 W |
 
 The viewer draws a card's `action` as a button (`drawAction`,
 `backend/static/wko5_viewer.html:1436`): confirm, POST (PATCH for 「當作間歇判讀」, then reload),
