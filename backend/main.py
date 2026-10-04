@@ -12,7 +12,7 @@ from backend.i18n import UserError
 from backend.i18n.pages import STATIC as PAGES_DIR, render_page
 from backend.request_context import RequestContextMiddleware
 from backend.api import workouts, expr, sync, auth
-from backend.api import ai, wko5views
+from backend.api import wko5views
 from backend.api import achievements as achievements_api
 from backend.api import overview as overview_api
 from backend.api import plan as plan_api
@@ -110,7 +110,7 @@ async def _user_error(request, exc: UserError):
 
 def build_app(demo: bool | None = None) -> FastAPI:
     """The app. demo=True: the demo instance (auth-and-demo plan §3): no sync /
-    connect / upload / AI / backup routers, the demo landing at /demo, and the
+    connect / upload / backup routers, the demo landing at /demo, and the
     tenant middleware enforcing the demo rules. Default: WKO5COACH_MODE."""
     from backend import tenancy
     from backend.tenancy_mw import TenancyMiddleware
@@ -136,12 +136,12 @@ def build_app(demo: bool | None = None) -> FastAPI:
 
     app.add_exception_handler(UserError, _user_error)
 
-    owner_only = {id(r) for r in (sync.router, auth.router, ai.router,
+    owner_only = {id(r) for r in (sync.router, auth.router,
                                   plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router)}
     routers = [
         workouts.router, expr.router,
         sync.router, auth.router,        # owner only (sync, connect)
-        ai.router, wko5views.router, achievements_api.router,
+        wko5views.router, achievements_api.router,
         plan_api.router, plan_auto_api.router, plan_sessions_api.router, overview_api.router,
         racepower_api.router,
         racepower_api.share_router,      # /share/<id>: the only path meant to skip the tunnel's password
@@ -153,7 +153,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
         session_api.router,              # GET /api/v1/session (the shell), POST /api/v1/demo/reset
     ]
     for r in routers:
-        # the demo never mounts sync / connect / AI / auto-plan / backup / injuries (§3.1 item 4),
+        # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
         # nor the public share pages (it creates no shares)
         if demo and (id(r) in owner_only or r is racepower_api.share_router):
             continue

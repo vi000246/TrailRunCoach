@@ -565,23 +565,3 @@ def test_share_snapshot_never_carries_injury_or_pain():
     snap = SH.snapshot(plan, title="t")
     blob = json.dumps(snap, ensure_ascii=False)
     assert "injur" not in blob and "pain" not in blob and snap["summary"]["time_s"] == 3600
-
-
-def test_ai_context_has_no_injuries(tmp_path, monkeypatch):
-    from backend.db.models import Athlete, Base, InjuryEvent
-    from backend.engine.ai.context import build_context
-    monkeypatch.setattr(AT, "_default_db", lambda: tmp_path / "ai.db")
-    eng = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'ai.db'}")
-
-    async def _inner():
-        async with eng.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-        async with async_sessionmaker(eng, expire_on_commit=False)() as s:
-            s.add(Athlete(id=1, name="a", data_dir="/tmp"))
-            s.add(InjuryEvent(athlete_id=1, area="knee", severity="severe", onset_date="2026-09-01", status="active",
-                              note="右膝外側 SECRET"))
-            await s.commit()
-            ctx = await build_context(s, 1)
-        assert "SECRET" not in ctx and "傷" not in ctx and "膝" not in ctx
-        await eng.dispose()
-    _run(_inner())

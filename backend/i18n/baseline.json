@@ -8,7 +8,6 @@
   ],
   "files": {
     "backend/api/achievements.py": 16,
-    "backend/api/ai.py": 1,
     "backend/api/backup.py": 5,
     "backend/api/calib.py": 1,
     "backend/api/injuries.py": 1,
@@ -22,8 +21,6 @@
     "backend/engine/activity_tags.py": 40,
     "backend/engine/adapt.py": 35,
     "backend/engine/aet_test.py": 105,
-    "backend/engine/ai/context.py": 12,
-    "backend/engine/ai/knowledge.py": 11,
     "backend/engine/algorithms/threshold_estimate.py": 17,
     "backend/engine/athlete_profile.py": 5,
     "backend/engine/b2b.py": 68,

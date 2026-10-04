@@ -222,7 +222,7 @@ def test_every_write_route_is_classified(demo):
     assert not bad, "\n".join(bad)
 
 
-@pytest.mark.parametrize("path", ["/api/v1/sync/auto", "/api/v1/auth/tp/callback", "/api/v1/ai/chat",
+@pytest.mark.parametrize("path", ["/api/v1/sync/auto", "/api/v1/auth/tp/callback",
                                   "/api/v1/backup/list",
                                   "/api/v1/wko5/injuries/meta", "/api/v1/static/compare.html",
                                   "/api/v1/static/settings.html", "/api/v1/wko5/settings", "/share/abc"])
