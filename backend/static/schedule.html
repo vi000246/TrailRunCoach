@@ -620,6 +620,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <label><span><span id="sd-min-lbl">分鐘</span><button type="button" class="qtip" id="sd-min-q" aria-label="說明" data-tip="" hidden>?</button></span><input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
     </div>
     <div class="hint" id="sd-tss" aria-live="polite"></div>
+    <div class="hint" id="sd-rpe" aria-live="polite" hidden></div>
     <fieldset class="eq" id="sd-eq" hidden>
       <details class="eq-fold" id="sd-eq-fold"><summary>地形與同負荷換算</summary>
       <div class="tseg" id="sd-ter" role="radiogroup" aria-label="地形">
@@ -1625,6 +1626,7 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   // a structure of your own: the target text and the TSS estimate come from it
   if (v && v.totals && we.dirty && v.summary) F.target.value = v.summary;
   if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估 TSS <b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+  rpeKind(v && mine ? v.rpe_role : null, we.dirty && !dlg.ro);
 }, onTemplate: (row) => {
   // an interval-ladder session (what the old 間歇範本 dropdown set): saved with its variant_key, so
   // it keeps its rung and counts for progression; a library template is a structure of your own
@@ -1637,6 +1639,27 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   else if (eqOn()) gradeRender();
 } });
 F.minutes.addEventListener("click", () => { if (dlg.minLock) WE.openBox(); });
+// 技術地形／下坡 (SP-62): a structure set by RPE counts by its RPE (POST /steps/check rpe_role,
+// workout_steps.rpe_role) — ≥ 7 (很累) is a 強度課 (48 h from the next, the week's quality budget),
+// lower an easy session (the long-run slot): the session's type follows when the structure changes
+function rpeKind(role, change) {
+  const el = $("sd-rpe");
+  el.hidden = !role;
+  if (!role) return;
+  const k = kindVal(), easyK = ["easy", "long", "hike"];
+  let to = null;
+  if (!change) to = null;
+  else if (role === "quality" && easyK.includes(k)) to = "quality";
+  else if (role === "easy" && k === "quality") to = dlg.orig && easyK.includes(dlg.orig.kind) ? dlg.orig.kind : "hike";
+  if (to) {
+    F.querySelector(`input[name="kind"][value="${to}"]`).checked = true;
+    onKind();
+    tgtHint();
+  }
+  el.textContent = role === "quality"
+    ? "RPE 最高到 7 以上：這堂算強度課（和其他強度課隔 48 小時、算進每週強度預算）" + (to ? "，類型已改成強度課" : "")
+    : "RPE 在 7 以下：這堂算輕鬆課（可以放在長跑的位置）" + (to ? `，類型已改成${KINDS[to]}` : "");
+}
 function stepsPreview() {
   const k = kindVal();
   if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }

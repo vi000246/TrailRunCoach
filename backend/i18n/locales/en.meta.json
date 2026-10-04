@@ -102,5 +102,29 @@
   "測試": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:444"
+  },
+  "結構化爬升": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:479"
+  },
+  "階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:480"
+  },
+  "技術地形": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:481"
+  },
+  "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:482"
+  },
+  "下坡技術／離心": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:483"
+  },
+  "練下坡：時間＋下降量，不設心率、功率目標（下坡功率不準）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:484"
   }
 }

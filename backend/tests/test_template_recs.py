@@ -116,3 +116,11 @@ def test_family_drives_the_phase_rules(tpl):
     z5 = TR.recommend(tpl, kind="quality", minutes=60, phase="specific", z5_open=True, rung="z5c",
                       ladder_key="v3a", ladder_reason="間歇階梯的下一步（V3）")
     assert any("同一類（VO2max 間歇）" in x["reason"] for x in z5["cats"]["quality"])
+
+
+def test_technical_terrain_by_phase(tpl):
+    # SP-62: the base phase favours the low-RPE technical session, the 專項期 the race-like one
+    base = TR.recommend(tpl, kind="hike", minutes=75, phase="base", terrain="trail")
+    assert "lib:tech_easy" in keys(base, "trail")
+    spec = TR.recommend(tpl, kind="hike", minutes=115, phase="specific", terrain="trail")
+    assert "lib:tech_hard" in keys(spec, "trail")

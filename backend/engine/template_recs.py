@@ -38,10 +38,12 @@ PHASE_OF = {"base": "base", "transition": "base", "build": "build", "specific": 
             "taper": "taper", "event": "taper", "recovery": "recovery"}
 PHASE_LABEL = {"base": "基礎期", "build": "強化期", "specific": "專項期", "taper": "減量期", "recovery": "恢復期"}
 
-# trail templates by what they train (phase rules below)
+# trail templates by what they train (phase rules below). 技術地形 (SP-62): the base phase mostly
+# low RPE (may replace part of the long run), the 專項期 one a week close to the race's terrain
 TRAIL_SPECIFIC = {"lib:dsw_classic", "lib:koop_uphill", "lib:long_climb", "lib:downhill_ecc", "lib:steep_10",
-                  "lib:steep_15"}
-TRAIL_BASE = {"lib:long_climb", "lib:ua_hill_sprints", "lib:steep_5", "lib:dsw_endurance", "hill_sprints"}
+                  "lib:steep_15", "lib:tech_hard"}
+TRAIL_BASE = {"lib:long_climb", "lib:ua_hill_sprints", "lib:steep_5", "lib:dsw_endurance", "hill_sprints",
+              "lib:tech_easy"}
 # 主要訓練項目 = 路跑 (engine/primary_sport.py): marathon-specific sessions for the 專項期 (Pfitzinger's
 # LT and MP runs, Daniels' T, Canova's specific block) and the long runs of a marathon plan
 ROAD_SPECIFIC = {"lib:pfitz_lt", "lib:daniels_cruise", "lib:canova_specific", "lib:pfitz_mp_long"}
@@ -53,7 +55,7 @@ FAMILY = {"lib:steep_5": "steep", "lib:steep_10": "steep", "lib:steep_15": "stee
 
 EXPLAIN = ("推薦依這堂課排序（權重是推估）：① 強度課的第一名一定是間歇階梯的下一步（自動排課會選的那份，依你目前這一階和這天的時間上限）；"
            "同一階的同等課表接在後面，換它們不影響進階。② 5 區還沒開放時不推薦 VO2max 間歇和速度課表（台灣教練：先練 3 區）。"
-           "③ 階段：基礎期偏有氧間歇、強化期和專項期偏巡航間歇（閾值課在 VO2max 開放後也不停）和賽道的爬升、下坡，"
+           "③ 階段：基礎期偏有氧間歇和低 RPE 的技術地形、強化期和專項期偏巡航間歇（閾值課在 VO2max 開放後也不停）和賽道的爬升、下坡、技術地形，"
            "減量期偏短的課（Koop；Uphill Athlete 由一般到專項）。"
            "④ 時間：超過這天上限的往後排，接近這堂原本分鐘數的往前。⑤ 地形：越野日偏上坡版，路跑日不推需要找坡的課。"
            "⑥ 類型：長跑日偏 90 分以上的課。⑦ 主要訓練項目是路跑時：不推越野範本，專項期偏馬拉松專項課"
@@ -159,9 +161,9 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
             sc.add(10, f"{PHASE_LABEL[phase]}：量少")
     elif cat == "trail":
         if phase in ("specific", "build") and key in TRAIL_SPECIFIC:
-            sc.add(20, f"{PHASE_LABEL[phase]}：練賽道的爬升／下坡")
+            sc.add(20, f"{PHASE_LABEL[phase]}：" + ("接近比賽的路況" if key == "lib:tech_hard" else "練賽道的爬升／下坡"))
         elif phase == "base" and key in TRAIL_BASE:
-            sc.add(15, "基礎期：有氧爬坡、腿力")
+            sc.add(15, "基礎期：低 RPE 技術地形，可取代部分長跑" if key == "lib:tech_easy" else "基礎期：有氧爬坡、腿力")
         if phase == "taper" and key == "lib:downhill_ecc":
             sc.add(-80, "賽前 2 週內不做下坡離心")
     elif cat in ("easy",) and phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:

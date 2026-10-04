@@ -223,6 +223,101 @@ def test_session_family_is_computed_for_quality_sessions_only():
     assert WT.session_family({"kind": "easy", "minutes": 40}) is None
 
 
+# ---------------------------------------------------------------------------
+# 越野跑 split into 結構化爬升 / 技術地形 / 下坡 (SP-62); 速度 tab add-ons (SP-32 follow-up)
+# ---------------------------------------------------------------------------
+
+def _work_targets(key):
+    return [r["st"]["target"] for r in WS.flat(WT.items_of(WT.BY_KEY[key])) if r["st"]["kind"] == "work"]
+
+
+def test_trail_templates_split_into_three_kinds():
+    T = WS.templates()
+    trail = next(c for c in T["cats"] if c["id"] == "trail")
+    assert [s["id"] for s in trail["subs"]] == ["climb", "technical", "downhill"]
+    assert [s["label"] for s in trail["subs"]] == ["結構化爬升", "技術地形", "下坡技術／離心"]
+    subs = {r["key"]: g["sub"] for g in T["groups"] if g["cat"] == "trail" for r in g["rows"]}
+    for k in ("dsw_classic", "dsw_endurance", "koop_uphill", "long_climb", "steep_5", "ua_hill_sprints"):
+        assert subs[f"lib:{k}"] == "climb", k
+    assert subs["lib:tech_easy"] == subs["lib:tech_hard"] == "technical"
+    assert subs["lib:downhill_ecc"] == "downhill" and subs["hill_sprints"] == "climb"
+    assert all(g["sub"] in WT.TRAIL_IDS for g in T["groups"] if g["cat"] == "trail")
+    assert sum(1 for t in WT.TEMPLATES if t.trail == "technical") >= 2
+    # a structure of your own: by its targets
+    b = WT.B()
+    assert WT.trail_type_of([b.t("work", 1800, WT.rpe(3, 4, up=200))]) == "technical"
+    assert WT.trail_type_of([b.t("work", 1800, WT.rpe(3, 4))]) == "technical"
+    assert WT.trail_type_of([b.t("work", 1800, WT.rpe(3, 5, down=300))]) == "downhill"
+    assert WT.trail_type_of([b.rep(4, [b.t("work", 420, WT.hr(0.95, 1.02)), b.t("rest", 420)])]) == "climb"
+
+
+def test_structured_climbs_keep_both_bounds():
+    for k in ("dsw_classic", "koop_uphill", "dsw_endurance"):
+        for t in _work_targets(k):
+            assert t["type"] == "hr" and t["lo"] < t["hi"], k          # SP-61 cancelled: floor and cap
+
+
+def test_technical_and_downhill_have_no_hr_or_power_target():
+    for k in ("tech_easy", "tech_hard", "downhill_ecc"):
+        t = WT.BY_KEY[k]
+        assert t.basis == "rpe" and t.purpose and t.src, k
+        ws = _work_targets(k)
+        assert ws and all(x["type"] == "rpe" for x in ws), k
+        for st in (r["st"] for r in WS.flat(WT.items_of(t))):
+            assert st["target"]["type"] not in ("power", "pace"), k
+    assert _work_targets("tech_hard")[0]["up"] == 600 and _work_targets("downhill_ecc")[0]["down"] > 0
+    st = {"id": "a", "kind": "work", "dur": {"type": "time", "value": 3600}, "target": WT.rpe(3, 4, up=300),
+          "note": "技術路段"}
+    for basis in ("power", "hr"):
+        r = WS.resolve(st, _ctx(basis))
+        assert (r.type, r.text, r.intensity) == ("rpe", "3–4", None)
+        assert "爬升 300 m" in r.sub and "參考心率 ≤ 150 bpm（不當目標）" in r.sub
+    hard = WS.resolve({**st, "target": WT.rpe(7, 8)}, _ctx("hr"))
+    assert "≥ 160 bpm" in hard.sub and hard.frac > WS.resolve(st, _ctx("hr")).frac
+
+
+def test_technical_pushes_as_time_with_no_target_and_the_rpe_in_the_name():
+    full = WS.normalize({"items": WT.items_of(WT.BY_KEY["tech_hard"])})
+    c = _ctx("power")
+    work = [x for x in WS.steps_to_coros(full, c) if getattr(x, "seconds", 0) == 90 * 60][0]
+    assert work.intensity is None and work.meters == 0
+    assert work.name == "接近比賽路況的技術路段 · RPE 6–7 · 爬升 600 m"
+    prog = WS.watch_preview(full, c)
+    main = [ln for ln in prog["lines"] if ln.get("name", "").startswith("接近比賽")][0]
+    assert main["target"] == "不設目標" and main["dur"] == "90 分"
+    assert any(x["key"] == "rpe" and x["hit"] for x in prog["limits"])
+    # a lap-button step: ends with the button, still no target
+    lap = WS.normalize({"items": [{"kind": "work", "dur": {"type": "open"}, "target": WT.rpe(4, 5, up=400)}]})
+    s0 = WS.steps_to_coros(lap, c)[0]
+    assert (s0.seconds, s0.intensity, s0.name) == (0, None, "RPE 4–5 · 爬升 400 m")
+
+
+def test_rpe_target_is_validated_and_stored():
+    ok = WS.normalize({"items": [{"kind": "work", "dur": {"type": "time", "value": 600},
+                                  "target": {"type": "rpe", "lo": "3", "hi": 4, "up": 250.4, "down": 0}}]})
+    assert ok["items"][0]["target"] == {"type": "rpe", "lo": 3, "hi": 4, "up": 250}
+    for bad, msg in (({"lo": 5, "hi": 3}, "RPE 下限比上限高"), ({"lo": 0, "hi": 3}, "RPE 下限 超出範圍"),
+                     ({"lo": 3, "hi": 4, "up": 9000}, "爬升 超出範圍")):
+        with pytest.raises(WS.StepsError) as e:
+            WS.normalize({"items": [{"kind": "work", "dur": {"type": "time", "value": 600}, "target": {"type": "rpe", **bad}}]})
+        assert msg in e.value.errors
+
+
+def test_rpe_decides_easy_or_quality():
+    assert WS.rpe_role(WT.items_of(WT.BY_KEY["tech_easy"])) == "easy"
+    assert WS.rpe_role(WT.items_of(WT.BY_KEY["tech_hard"])) == "quality"        # RPE 6–7: reaches 很累
+    assert WS.rpe_role(WT.items_of(WT.BY_KEY["dsw_classic"])) is None            # HR-set: by its kind
+    rows = {r["key"]: r for g in WS.templates()["groups"] for r in g["rows"]}
+    assert rows["lib:tech_easy"]["role"] == "easy" and rows["lib:tech_hard"]["role"] == "quality"
+    steps = {"items": WT.items_of(WT.BY_KEY["tech_hard"])}
+    assert WT.session_role({"kind": "hike", "steps": steps}) == "quality"
+    assert WT.session_role({"kind": "long", "steps": {"items": WT.items_of(WT.BY_KEY["tech_easy"])}}) == "easy"
+    assert WT.session_role({"kind": "quality"}) == "quality" and WT.session_role({"kind": "easy"}) is None
+    v = WS.view(WS.normalize(steps), _ctx("hr"))
+    assert v["rpe_role"] == "quality"
+    assert any("算強度課" in i["text"] and "手錶記錄" in i["text"] for i in v["issues"])
+
+
 def test_speed_tab_lists_strides_and_short_hill_sprints():
     T = WS.templates()
     speed = [r for g in T["groups"] if g["cat"] == "quality" and g["sub"] == "speed" for r in g["rows"]]
