@@ -70,7 +70,18 @@
   const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return isoOf(d); };
   const mondayOf = (iso) => addDays(iso, -((new Date(iso + "T00:00:00Z").getUTCDay() + 6) % 7));
   const contrib = (s) => (s && s.state !== "missed" ? { h: (+s.minutes || 0) / 60, t: +(s.tss_est ?? s.tss ?? 0) || 0 } : { h: 0, t: 0 });
-  const EDIT_FIELDS = ["day", "kind", "title", "minutes", "target", "detail", "protocol", "terrain", "distance_km", "climb_m", "steps"];
+  const EDIT_FIELDS = ["day", "kind", "title", "minutes", "target", "detail", "protocol", "terrain", "distance_km", "climb_m", "steps",
+    "family"];
+  // 強度課's family picked in the editor (SP-79; the server: workout_templates.session_family)
+  const FAMILY_TEXT = { aerobic: "有氧間歇", vo2max: "VO2max 間歇", speed: "速度" };
+  function withFamily(s) {
+    if (s.kind !== "quality") { s.family = null; if (s.quality_family) s.quality_family = null; return s; }
+    if (s.family && FAMILY_TEXT[s.family] && (!s.quality_family || s.quality_family.id !== s.family)) {
+      const t = FAMILY_TEXT[s.family];
+      s.quality_family = { id: s.family, sub: null, label: t, sub_label: "", text: t };
+    }
+    return s;
+  }
 
   // the planned hours / TSS each week gains or loses from the overlay
   function weekDeltas(ov) {
@@ -154,6 +165,7 @@
     if (body.steps === null) delete next.steps;
     if (body.tss != null && isFinite(+body.tss)) { next.tss = +body.tss; next.tss_est = +body.tss; }
     next.edited = true;
+    withFamily(next);
     if (next.coros && next.coros.status && next.coros.status !== "not_pushed") next.coros = { ...next.coros, status: "outdated" };
     ov.ses[uid] = { orig, cur: next };
     return clone(next);
@@ -177,7 +189,8 @@
       minutes: +body.minutes || 0, target: body.target || "", detail: body.detail || "", tss, tss_est: tss,
       state: "active", origin: "custom", edited: true, provisional: false, coros: { status: "not_pushed" }, link_options: [],
     };
-    for (const k of ["protocol", "terrain", "distance_km", "climb_m", "steps"]) if (body[k] !== undefined) s[k] = body[k];
+    for (const k of ["protocol", "terrain", "distance_km", "climb_m", "steps", "family"]) if (body[k] !== undefined) s[k] = body[k];
+    withFamily(s);
     ov.ses[s.uid] = { orig: null, cur: s };
     return clone(s);
   }

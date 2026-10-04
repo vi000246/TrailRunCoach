@@ -163,10 +163,10 @@ def test_specific_phase_runs_the_two_tracks_with_its_own_sessions():
         if wp["mode"] == "recovery_week":
             pytest.skip("synthetic history made this a 3:1 recovery week")
     # road: Zone 3 = the flat 2×15′ threshold run, Zone 5 = the Zone 5 ladder (flat)
-    assert [s["title"] for s in _q(road)] == [O.ROAD_SPECIFIC_Q["title"], "VO2max 4×3 分"]
+    assert [s["title"] for s in _q(road)] == [O.ROAD_SPECIFIC_Q["title"], "VO2max 間歇 4×3 分"]
     # trail: Zone 3 = the ladder (uphill versions allowed), Zone 5 = the 5×4′ hill set
     tq = _q(trail)
-    assert tq[0]["rung_key"] == "a3" and tq[1]["title"] == "爬坡間歇 5×4 分"
+    assert tq[0]["rung_key"] == "a3" and tq[1]["title"] == "VO2max 間歇 5×4 分上坡"
 
 
 def test_the_weeks_interval_total_stays_under_20_percent():
@@ -205,13 +205,13 @@ def test_two_a_week_with_zone5_closed_is_a_long_tempo_and_a_cruise_session():
     notes = []
     q = O.quality_sessions(gate, d, "base", {"cp": 250.0}, {}, 10.0, PP.Prefs(), [], notes=notes)
     assert [(s["id"], s["title"], s["rung_key"], s["progress"]) for s in q] == [
-        ("quality", "閾值 2×15 分", "a1", True), ("quality2", "閾值 3×8 分", "z3b", False)]
+        ("quality", "有氧間歇 2×15 分", "a1", True), ("quality2", "有氧間歇（巡航）3×8 分", "z3b", False)]
     assert sum(O.session_tiz_min(s) for s in q) <= QG.z3_budget_min(10.0) + 1e-6
     assert any(n["src"] == "z3" and "第二堂排不同的 3 區課（巡航版）" in n["text"] for n in notes)
     # 5 h: 10 % = 30′ is all A1's 2×15′ → no room for a second one, a note says why
     notes = []
     q = O.quality_sessions(gate, d, "base", {"cp": 250.0}, {}, 5.0, PP.Prefs(), [], notes=notes)
-    assert [s["title"] for s in q] == ["閾值 2×15 分"] and any("本週排 1 堂" in n["text"] for n in notes)
+    assert [s["title"] for s in q] == ["有氧間歇 2×15 分"] and any("本週排 1 堂" in n["text"] for n in notes)
     # the first session itself a 巡航版 (the first Zone 3 week, 5 %): the second is a different structure
     g0 = {**gate, "dose": {"z3": {"step": 0, "met": 0, "done": 0}, "z5": {}}}
     q = O.quality_sessions(g0, QG.week_decision(g0, "base", "base", n=2), "base", {"cp": 250.0}, {}, 8.0,

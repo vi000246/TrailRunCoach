@@ -64,6 +64,16 @@ def monday_of(day: str) -> str:
     return (d - dt.timedelta(days=d.weekday())).isoformat()
 
 
+def _titled(g: dict) -> dict:
+    """A generated 強度課 with a pre-SP-79 title (「閾值 3×8 分」) in today's words, as the stored
+    rows read (plan_store.display_title): renaming alone is never a change."""
+    if g.get("kind") != "quality" or not g.get("title"):
+        return g
+    from backend.engine.interval_library import renamed
+    t = renamed(g["title"])
+    return g if t == g["title"] else {**g, "title": t}
+
+
 def session_from_gen(g: dict, week_start: str, provisional: bool, uid: Optional[str] = None) -> dict:
     return {"uid": uid or new_uid(), "week_start": week_start, "gen_key": g["id"], "origin": "auto",
             "edited": False, "provisional": provisional, "state": "done" if g.get("done") else "active",
@@ -118,7 +128,7 @@ def reconcile(stored: list[dict], gen_weeks: list[dict], activities: list[dict],
     for w in gen_weeks:
         ws, prov = w["start"], bool(w.get("provisional"))
         olds = [s for s in out if s["week_start"] == ws]
-        gens = _align(w["sessions"], olds, held)
+        gens = {k: _titled(g) for k, g in _align(w["sessions"], olds, held).items()}
         consumed: set[str] = set()
         block = {s["gen_key"] for s in olds if s.get("gen_key") and
                  (s["state"] in ("deleted", "superseded", "done") or (s["state"] == "active" and s["edited"]))}
