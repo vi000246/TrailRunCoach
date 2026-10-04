@@ -775,8 +775,8 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         r.err = "下限比上限高"
     if r.type == "power" and c.cp and (r.lo < 0.4 * c.cp or r.hi > 2.0 * c.cp):
         r.err = r.err or "功率不在 40–200% CP（推估的合理範圍）"
-    if r.type == "hr" and c.lthr and r.hi > 1.1 * c.lthr:
-        r.err = r.err or "心率超過 110% LTHR（推估的合理範圍）"
+    # no plausible-range check on HR: derived targets stay under ~1.06 LTHR, so only a
+    # hand-entered value (abs / pct) could exceed it, and that is sent as entered (SP-33)
     return r
 
 
