@@ -60,7 +60,9 @@ dialog.sd.we-wide { width: min(880px, 96vw); }
 .we-pop .g { font-size: 11.5px; color: var(--faint); padding: 6px 8px 2px; }
 .we-pop button.t { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 2px 10px; align-items: center; width: 100%; text-align: left; border: 0; background: none; color: var(--text);
   font-size: 13px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
-.we-pop button.t svg { grid-row: span 2; width: 96px; height: 26px; display: block; }
+.we-pop button.t svg { grid-row: span 3; width: 96px; height: 26px; display: block; }
+.we-pop button.t .pur { font-size: 11.5px; color: var(--text); overflow-wrap: anywhere; }
+.we-pop button.t .fam { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 0 5px; white-space: nowrap; }
 .we-pop button.t .src { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
 .we-pop button.t:hover, .we-pop button.t:focus-visible { background: var(--soft); }
 .we-pop .mode { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 8px 6px; font-size: 12.5px; border-top: 1px solid var(--line); margin-top: 4px; }
@@ -152,7 +154,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     rules: "即時檢查：5 區每趟至少 2 分鐘（台灣教練）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
     lastRest: "最後一趟做完不休息、直接接下一段。COROS 的間歇群組做不到，推送時會攤平成一段一段（每段一個 lap）。",
     watch: "COROS 手錶的限制：跑步的功率只收絕對瓦數（沒有 % CP）；每段只能設一個目標；沒有漸進（ramp）步驟。下面是實際會送出的步驟。",
-    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再依主課目標的中點分：三區 88–101% CP、四區 101–106%、五區 ≥ 106%（Palladino 功率區 3／4／5，也是區段圖的顏色）。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。每一類最上面是這堂課的「推薦」前三名（強度課第一名＝間歇階梯的下一步），其他收在下面。",
+    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再分三類，先看主課強度、再看每趟長度：有氧間歇（≤ 101% CP；長 tempo 每趟 15–30 分、巡航間歇 6–15 分，更短的也算巡航）、VO2max 間歇（高於閾值、每趟 2–5 分、休息約 1:1；30/30 這種短趟短休也在這裡）、速度（每趟 ≤ 2 分、休息 ≥ 2 倍，例如 R、加速跑）。每一份下面有一行訓練目的。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。每一類最上面是這堂課的「推薦」前三名（強度課第一名＝間歇階梯的下一步），其他收在下面。",
     total: "總時間由下面的步驟加總：要改時間就改步驟（點這格會打開結構）。",
     pacePct: "配速的 % 是閾值配速的倍數：數字大＝慢（例：114–129% 是 Friel 2 區）。",
   };
@@ -641,8 +643,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       else if (a === "add-rep") { this.doc.items.splice(this.insertAt(), 0, this.newRep()); this.touch(); }
       else if (a === "reset") { this.cleared = true; this.dirty = false; this.stored = false; this.$("we-reset").hidden = true; this.derive({ rederive: true }).then(() => { this.cleared = true; this.render(); this.o.onView && this.o.onView(this.view, this); }); }
     }
-    // 插入範本: category tabs (default: this session's kind), 強度課 split 三區／四區／五區,
-    // one row per template with a mini chart of its structure and its source
+    // 插入範本: category tabs (default: this session's kind), 強度課 split 有氧間歇／VO2max 間歇／速度
+    // (workout_templates.family_of), one row per template with a mini chart, its 訓練目的 and its source
     catOf(kind) { return { easy: "easy", long: "easy", quality: "quality", test: "test", hike: "trail" }[kind] || "easy"; }
     async menu(btn) {
       const pop = this.$("we-pop");
@@ -686,7 +688,9 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
       const tpBadge = (r) => r.needs_tpace && noTp
         ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge", "沒有閾值配速"))}</span>` : "";
-      const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span><span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
+      const fsub = (r) => r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "";
+      const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span>` +
+        `${r.purpose ? `<span class="pur">${esc(r.purpose)}</span>` : ""}<span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
       const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
       const rec = recs.length ? `<div class="g rec">推薦 ${q((this.recs || {}).tip || "")}</div>` +
         recs.map((x, n) => btn(rowAt(where[x.key]), where[x.key], `${n + 1}. ${x.reason}`)).join("") : "";
@@ -694,7 +698,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         const rows = g.rows.map((r, i) => [r, i]).filter(([r]) => !recKeys.has(r.key));
         return rows.length ? (gs.length > 1 || g.title ? `<div class="g">${esc(g.title || g.group)}</div>` : "") + rows.map(([r, i]) => btn(r, `${gi}.${i}`)).join("") : "";
       }).join("");
-      const subTabs = subs.length ? `<div class="tabs sub" role="group" aria-label="強度">${subs.map((s) => tab("sub", s.id, s.label, s.id === this.tplSub, s.tip)).join("")}</div>` : "";
+      const subTabs = subs.length ? `<div class="tabs sub" role="group" aria-label="類別">${subs.map((s) => tab("sub", s.id, s.label, s.id === this.tplSub, s.tip)).join("")}</div>` : "";
       const list = subTabs + (others || `<p class="empty">${gs.length ? "都在上面的推薦裡" : "這一類還沒有範本"}</p>`);
       const n = (T.groups || []).filter((g) => g.cat === cat).reduce((a, g) => a + g.rows.filter((r) => !recKeys.has(r.key)).length, 0);
       this.$("we-pop").innerHTML = `<div class="tabs" role="group" aria-label="類型">${cats.map((c) => tab("cat", c.id, c.label, c.id === cat)).join("")}</div>` +

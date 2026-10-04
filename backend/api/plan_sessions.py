@@ -31,6 +31,7 @@ from backend.engine import plan_match as PM
 from backend.engine import plan_store as PS
 from backend.engine import projection as P
 from backend.engine import reconcile as R
+from backend.engine import workout_templates as WTPL
 from backend.sync import coros_workouts as CW
 from backend.sync import workout_targets as WT
 
@@ -254,9 +255,12 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
 
 
 def _view(s: dict, inp: dict, rows: dict, today: str, prov=None) -> dict:
-    """`coros` keeps its name in the API: the push status at the active provider."""
+    """`coros` keeps its name in the API: the push status at the active provider.
+    `quality_family`: a 強度課's 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.session_family,
+    computed here, never stored)."""
     prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
+    v["quality_family"] = WTPL.session_family(s, inp["thresholds"])
     if s["state"] == "active":
         v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
         note = pace_note(s, inp["thresholds"])
