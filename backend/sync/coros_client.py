@@ -469,6 +469,19 @@ async def _download_fit(token: str, base: str, user_id: str, activity: dict) -> 
     return resp.content
 
 
+def list_training_load(act: dict) -> Optional[float]:
+    """COROS's Training Load of one activity-list item (`trainingLoad`, SP-37: present on
+    most items); None when missing, zero or not a number."""
+    v = act.get("trainingLoad") if isinstance(act, dict) else None
+    if isinstance(v, bool) or v is None:
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f > 0 and f == f and f != float("inf") else None
+
+
 async def sync_workouts(
     db: AsyncSession,
     athlete_id: int = 1,
@@ -545,10 +558,17 @@ async def sync_workouts(
                 "date": act_date.isoformat() if act_date else None,
             }
 
+            act_tl = list_training_load(act)
             dup = await db.execute(
                 select(WorkoutFile).where(WorkoutFile.coros_activity_id == label_id)
             )
-            if dup.scalar_one_or_none():
+            known = dup.scalars().first()
+            if known is not None:
+                # the list's trainingLoad on rows imported before it was stored (or changed by
+                # COROS since): no extra call, the list item is already here
+                if act_tl is not None and known.coros_training_load != act_tl:
+                    known.coros_training_load = act_tl
+                    await db.commit()
                 yield {"status": "skipped", "activity_id": label_id, "reason": "already_imported"}
                 continue
 
@@ -585,6 +605,7 @@ async def sync_workouts(
                         wf.coros_sport_type = int(sport_type)
                     except (TypeError, ValueError):
                         pass
+                    wf.coros_training_load = act_tl
                 if wf is None:
                     # FIT file is corrupt/unreadable — store a stub so we don't
                     # re-download it on the next sync (coros_activity_id dup check).
