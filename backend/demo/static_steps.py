@@ -127,7 +127,7 @@ def build(th: dict, prefs, speeds: dict, auto_power_ok: bool, tpace_link: Option
     p = prefs
     return {
         "v": 1,
-        "th": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source")},
+        "th": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source", "thr_warn")},
         "tpace_link": tpace_link,
         "speeds": {k: (speeds or {}).get(k) for k in ("v_easy", "v_easy_src", "ep_kmh")},
         "prefs": {"active": bool(p is not None and p.active),

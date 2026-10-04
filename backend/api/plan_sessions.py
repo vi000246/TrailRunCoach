@@ -93,7 +93,10 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
            "horizon_end": horizon.isoformat(),
            # + threshold pace (s/km, 推估): % / zone pace targets reach the watch (COROS intensityType 3)
-           "thresholds": {**(cur.get("thresholds") or {}), "tpace": _tpace()},
+           "thresholds": {**(cur.get("thresholds") or {}), "tpace": _tpace(),
+                          # SP-64 (engine/threshold_confidence.py): LTHR / HRmax not believable →
+                          # the editor badges HR-target templates and sessions
+                          "thr_warn": _thr_warn(st)},
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
            "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
@@ -110,6 +113,15 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
             _cache.pop(next(iter(_cache)))
         _cache[key] = out
     return out
+
+
+def _thr_warn(st) -> Optional[dict]:
+    """status.i_testing's threshold check (engine/threshold_confidence.warn_of), or None."""
+    try:
+        from backend.engine import threshold_confidence as TC
+        return TC.warn_of(getattr(st, "thr_check", None))
+    except Exception:                       # noqa: BLE001 — no badge
+        return None
 
 
 def activity_rows(ds, a: dt.date, b: dt.date) -> list[dict]:
@@ -1119,7 +1131,8 @@ def _context(env: dict) -> dict:
     from backend.engine import target_policy as TP
     from backend.engine import workout_steps as WS
     th, pol = env["th"], env["policy"]
-    return {"thresholds": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source")},
+    return {"thresholds": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source",
+                                                  "thr_warn")},
             "tpace_link": tpace_link(),
             "zones": WS.zones_table(env["ctx"]), "policy": pol,
             "basis_label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）",

@@ -849,6 +849,25 @@ class Status:
                                 aet_validity=((gate.get("aet") or {}).get("validity")))
         except Exception:                   # noqa: BLE001 — no detector, no suggestion
             ze = {"suggestions": [], "events": [], "checks": {}}
+        # SP-64 (engine/threshold_confidence.py): is the LTHR / max HR believable, which is wrong —
+        # its test suggestion (LTHR 30-min / max-HR test, with a 安排課表 link) joins the box
+        try:
+            from backend.engine import threshold_confidence as TC
+            tc = TC.check(self.ds, self.plan, self.today, brk=brk, cool=(ze.get("checks") or {}).get("cool_season"),
+                          kind=getattr(self, "kind", None), days_to_a=days_to)
+        except Exception:                   # noqa: BLE001 — no check, no suggestion
+            tc = None
+        self.thr_check = tc
+        if tc:
+            ze = {**ze, "suggestions": list(ze["suggestions"]) + tc["suggestions"]}
+            extra["thr_check"] = {k: tc.get(k) for k in ("lthr", "hrmax", "rhr", "diagnosis", "test_results", "warn")}
+            dg = tc["diagnosis"]
+            if dg.get("text"):
+                why += "；" + dg["text"]
+            for name, key in (("LTHR", "lthr"), (_("最大心率"), "hrmax")):
+                c = (tc.get(key) or {}).get("confidence")
+                if c and c != "high":
+                    why += "；" + _("{name} 可信度{c}", name=name, c=_(TC.CONF_LABEL[c]))
         self.test_suggestions = ze["suggestions"]
         extra["test_suggestions"] = ze["suggestions"]
         extra["zone_events"] = ze["events"]

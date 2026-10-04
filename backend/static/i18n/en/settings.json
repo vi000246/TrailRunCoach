@@ -64,5 +64,18 @@
   "thr.empty": "No tests yet.",
   "thr.remove": "Remove",
   "thr.failed": "Failed: {msg}",
-  "thr.load_failed": "Couldn't load: {msg}"
+  "thr.load_failed": "Couldn't load: {msg}",
+  "thr.chk_k": "{name} confidence (estimate)",
+  "thr.chk_conf_high": "High",
+  "thr.chk_conf_medium": "Medium",
+  "thr.chk_conf_low": "Low",
+  "thr.chk_now": "now {v} bpm · {src}",
+  "thr.chk_hrmax": "Max HR",
+  "thr.chk_tt30": "30-min test on {date}: mean HR of minutes 10–30 {v} bpm; 30-min mean power {p} (vs CP {cp})",
+  "thr.chk_hrmax_test": "Max-HR test on {date}: highest HR held ≥ 5 s {v} bpm (spikes filtered)",
+  "thr.chk_apply": "Apply {v} bpm",
+  "thr.chk_applied": "Applied",
+  "thr.chk_cand": "Candidate: highest HR held {hold} s {v} bpm ({date}, estimate)",
+  "thr.chk_cand_note": "Highest HR held {hold} s ({date}, estimate)",
+  "thr.chk_confirm": "Set {name} to {v} bpm (from {date})? Zones and workout HR targets will be recalculated"
 }
