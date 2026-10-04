@@ -413,14 +413,22 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
             continue
         name = w.get("name") or ""
         wpts.append({"name": name, "km": float(td["d"][j]) / 1000.0,
-                     "camp": any(k in name.lower() for k in CAMP_WORDS)})
+                     "camp": any(k in name.lower() for k in CAMP_WORDS),
+                     "lat": round(float(w["lat"]), 5), "lon": round(float(w["lon"]), 5)})
+    # the route map (racepower.html): the profile's points on the track, by distance along it.
+    # A share snapshot (share.py) keeps only km / z: no coordinates leave with a share link.
+    profile = {"km": [float(xs[i]) / 1000.0 for i in idx], "z": [round(float(zs[i]), 1) for i in idx]}
+    if len(lat):
+        xi = xs[idx]
+        profile["lat"] = [round(float(v), 5) for v in np.interp(xi, td["d"], lat)]
+        profile["lon"] = [round(float(v), 5) for v in np.interp(xi, td["d"], lon)]
     return {
         "totals": {"km": total / 1000.0, "gain_m": gain, "loss_m": loss, "raw_gain_m": raw_gain,
                    "z_min": float(zs.min()), "z_max": float(zs.max()), "z_start": float(zs[0]),
                    "points": len(track.lat), "spacing_m": spacing, "segments": len(segs),
                    "gain_scale": scale},
         "segments": segs,
-        "profile": {"km": [float(xs[i]) / 1000.0 for i in idx], "z": [round(float(zs[i]), 1) for i in idx]},
+        "profile": profile,
         "climbs": climbs,
         "wpts": wpts,
         "warnings": warnings,

@@ -1,6 +1,6 @@
 # Module Spec: racepower
 
-> **Last Updated**: 2026-10-01
+> **Last Updated**: 2026-10-04
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -243,6 +243,11 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   flats > 3 km split per km; walk labels 走跑皆可 ≥ 15 %, 建議快走 ≥ 28 %. Also per-km or one
   segment. Manual courses are one segment or per-km with no grade information.
 - **Multi-day** (百岳): split points clicked on the profile (camp / hut waypoints pre-fill them).
+- **Coordinates** (`backend/engine/racepower/course.py:418`): a GPX / FIT course's profile carries
+  `lat` / `lon` beside `km` / `z` (the same ≤ 1500 points, interpolated along the track by
+  distance, 5 decimals) and each waypoint keeps its `lat` / `lon`, for the course map. A share
+  snapshot keeps only `km` / `z` and no waypoints (`backend/engine/racepower/share.py:115`), so a
+  share link carries no coordinates.
 
 ### Models
 
@@ -755,6 +760,17 @@ the forecast temperature (labelled with the hour) and dew point at the km reache
 table has a 熱 column (temperature used and the Hadley penalty; the tooltip shows dew point and the
 hour). References stay out of the page.
 
+**Course map** (`backend/static/racepower.html:1558`): a GPX course whose profile has coordinates
+gets a Leaflet map above the profile chart (`#course-map-wrap`,
+`backend/static/racepower.html:387`); a manual course has none. The route is coloured by the
+segment kind of the targets (平路／可跑, 可跑的爬坡, 陡坡, 下坡; `KIND_COLOR`,
+`backend/static/racepower.html:1526`), the hovered / selected segments are highlighted, the aid
+stations of the editor and the GPX waypoints are marked. Hovering the map moves the profile
+chart's tooltip to the nearest point, and the chart's axis pointer moves a marker on the map.
+Basemaps, overlays, the settings-page default, the tile-error hint and the route drawing come from
+`backend/static/basemaps.js` (shared with the activity map and the routes page); the per-browser
+layer switch is kept under `racepower.map`.
+
 ### CSV export
 
 `POST /export/csv` runs `make_plan` and formats it with `csvplan.plan_csv`, so no maths is
@@ -918,3 +934,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-01 | bugfix | user request (COROS vs TP back-test) | Cause of the COROS / TP difference (one TP-only junk watch-power file); power models use Stryd power only by default (`power.accept_watch_power`), watch-power runs are no-power back-test cases, `power_source` in derive / back-test rows; cp_as_of prefers usable power (推估) |
 | 2026-10-01 | feature | user request (bad activity files) | Bad activity files (car / bike speed, impossible power) are no run, envelope point, capacity sample or back-test case (not in `ds.workouts`); the synced FIT curves / CP-test scan drop them (`cptest.bad_files`) |
 | 2026-09-30 | feature | user request | CSV export (`POST /export/csv`, `csvplan.py`, UTF-8 BOM, header block + one row per segment, 「匯出 CSV」 button); per-segment, time-of-day heat (road / trail): /weather returns hourly rows, the plan maps each segment's ETA to the forecast hour and applies Hadley there (推估), iterating to max |Δ cumulative time| < 1 s; falls back to the single value with a warning; °C axis on the profile, 熱 column in the table |
+| 2026-10-04 | feature | SP-41 | Course map on the calculator for GPX courses: profile `lat` / `lon` and waypoint `lat` / `lon` from `build_course`, Leaflet map (segment-kind colours, highlighted segments, aid stations / waypoints, synced hover with the profile chart) built on the shared `basemaps.js`; share snapshots stay coordinate-free. Fuel tiles (SP-44): the source moved from the tile's native title into its ? tip, so hover and click show one explanation |

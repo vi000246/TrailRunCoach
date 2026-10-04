@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="racepower.title">賽事計算機</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/api/v1/static/basemaps.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -131,6 +134,15 @@ tr.hl td { background: var(--soft); }
 .ok { color: var(--good); } .no { color: var(--bad); } .wn { color: var(--watch); }
 .plot { width: 100%; height: 300px; }
 .profile { width: 100%; height: 320px; }
+/* course map (GPX courses only): Leaflet + basemaps.js */
+.cmap { width: 100%; height: 340px; border-radius: 8px; overflow: hidden; background: var(--line); z-index: 0; margin: 2px 0 4px; }
+.cmap .leaflet-tooltip.hovtip { font-size: 11px; line-height: 1.35; padding: 3px 6px; }
+.maphint { margin: 4px 0; padding: 6px 10px; border-radius: 6px; font-size: 11.5px; color: var(--watch);
+  border: 1px solid var(--watch); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.maphint[hidden] { display: none; }
+.maphint button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  border-radius: 4px; padding: 1px 8px; cursor: pointer; }
+#course-map-wrap .legend { margin-bottom: 8px; }
 .envgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 @media (max-width: 700px) { .envgrid { grid-template-columns: 1fr; } }
 .envbox { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
@@ -372,6 +384,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   <section id="profile-sec" class="tab-calc hidden">
     <h2><span data-i18n="racepower.chart.title">分段目標</span> <span class="meta" id="profile-sub"></span>
       <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.chart.tip">橫軸是距離（公里），縱軸一次看一種：配速、功率或心率。淺色底是海拔剖面。每段的目標由模型依坡度算：可跑的坡（3–8 %）和平路看功率；陡坡（> 8 %）或要走的段看心率上限；越野的下坡不看功率也不看心率，求控制、安全，所以那幾段在功率／心率圖上是空的。長距離（> 3 小時）的心率上限壓在 AeT。滑過圖或點表格看每段的細節。</span></span></h2>
+    <div id="course-map-wrap" class="hidden"><div class="cmap" id="course-map"></div><div class="maphint" id="course-map-hint" hidden></div>
+      <div class="legend" id="course-map-legend"></div></div>
     <div class="chead"><div class="seg" id="measure"><button data-m="pace" data-i18n="racepower.m.pace">配速</button><button data-m="power" class="rf" data-i18n="racepower.m.power">功率</button><button data-m="hr" data-i18n="racepower.m.hr">心率</button></div>
       <div class="legend" id="chart-legend"></div></div>
     <div class="profile" id="profile"></div>
@@ -1497,6 +1511,111 @@ function renderProfile() {
     if (hike && $("splitmode").checked) { SPLITS = [...SPLITS, +k.toFixed(2)].sort((a, b) => a - b); saveEventSplits(); schedule(); return; }
     const r = rowAt(k); if (r) { pickSeg(r.i, !!ev.event?.shiftKey); const row = document.querySelector(`#segcmp [data-row="${r.i}"]`); if (row) row.scrollIntoView({ block: "nearest" }); }
   });
+  // synced hover with the course map: the chart's axis pointer moves the map marker
+  c.off("updateAxisPointer");
+  c.on("updateAxisPointer", (e) => { const k = e.axesInfo?.[0]?.value; if (ok(k)) mapShowKm(+k); });
+  if (!c._mapOut) { c._mapOut = () => mapShowKm(null); c.getZr().on("globalout", c._mapOut); }   // once: echarts' own globalout stays
+  renderCourseMap();
+}
+
+// ---------------- course map: the GPX route on Leaflet (basemaps.js, shared with the activity map) ----------------
+// Only for a GPX course whose profile carries lat / lon (course.py); a manual course has no map.
+// The route is coloured by the segment kind of the targets (seg_targets.kind_of), the hovered /
+// selected segments are highlighted, aid stations and GPX waypoints are marked, and hovering the
+// map or the elevation chart shows the same point on both.
+const KIND_COLOR = { flat: "--c-f", run_climb: "--c-u", steep_climb: "--c-su", descent: "--c-sd" };
+let CMAP = null;                          // { map, key, ll, km, z, route, rkey, hl, marks, marker, near }
+let MAP_DEF = null;                       // settings-page basemap default (MapLayers.defaults)
+function courseLatLngs(pr) {
+  return pr && Array.isArray(pr.lat) && Array.isArray(pr.lon) && pr.lat.length === pr.km.length && pr.km.length > 1
+    ? pr.km.map((_, i) => [pr.lat[i], pr.lon[i]]) : null;
+}
+// km along the course -> [lat, lon] (linear between profile points)
+function kmLatLng(k) {
+  const K = CMAP.km, n = K.length;
+  if (k <= K[0]) return CMAP.ll[0];
+  if (k >= K[n - 1]) return CMAP.ll[n - 1];
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (K[m] <= k) lo = m; else hi = m; }
+  const f = (k - K[lo]) / ((K[hi] - K[lo]) || 1), a = CMAP.ll[lo], b = CMAP.ll[hi];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+}
+function kmPath(a, b) {           // the route between two km marks
+  const out = [kmLatLng(a)];
+  CMAP.km.forEach((x, i) => { if (x > a && x < b) out.push(CMAP.ll[i]); });
+  out.push(kmLatLng(b));
+  return out;
+}
+function mapShowKm(k) {
+  if (!CMAP) return;
+  const { map, marker } = CMAP;
+  if (k == null || !ok(k)) { if (map.hasLayer(marker)) map.removeLayer(marker); return; }
+  marker.setLatLng(kmLatLng(k));
+  if (!map.hasLayer(marker)) marker.addTo(map);
+  const r = rowAt(k), i = CMAP.km.findIndex((x) => x >= k);
+  marker.setTooltipContent([`${f1(k)} km`, i >= 0 ? `${n0(CMAP.z[i])} m` : null, r ? `${r.mark} ${esc(r.label)}` : null].filter(Boolean).join(" · "));
+}
+function renderCourseMap() {
+  const P = PLAN, pr = P?.profile, wrap = $("course-map-wrap");
+  const ll = P && P.course_source === "gpx" ? courseLatLngs(pr) : null;
+  if (!ll || typeof L === "undefined" || !window.MapLayers) {
+    wrap.classList.add("hidden");
+    if (CMAP) { CMAP.map.remove(); CMAP = null; }
+    return;
+  }
+  if (!MAP_DEF) { MapLayers.defaults().then((d) => { MAP_DEF = d; renderCourseMap(); }); return; }
+  wrap.classList.remove("hidden");
+  const el = $("course-map");
+  const key = `${ll.length}|${ll[0]}|${ll[ll.length - 1]}|${pr.km[pr.km.length - 1]}`;
+  if (!CMAP || CMAP.key !== key) {
+    if (CMAP) CMAP.map.remove();
+    const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5 });
+    MapLayers.attach(map, MAP_DEF, "racepower.map", { hint: $("course-map-hint") });
+    L.control.scale({ imperial: false }).addTo(map);
+    CMAP = { map, key, ll, km: pr.km, z: pr.z, rkey: null, fitted: false,
+      route: L.layerGroup().addTo(map), hl: L.layerGroup().addTo(map), marks: L.layerGroup().addTo(map),
+      marker: MapLayers.marker(), near: MapLayers.picker(map, ll) };
+    const fit = () => { if (!CMAP.fitted && el.clientWidth) { map.fitBounds(L.latLngBounds(ll), { padding: [16, 16] }); CMAP.fitted = true; } };
+    fit();
+    if (!el._ro) { el._ro = new ResizeObserver(() => { if (CMAP) { CMAP.map.invalidateSize(); if (!CMAP.fitted && el.clientWidth) { CMAP.map.fitBounds(L.latLngBounds(CMAP.ll), { padding: [16, 16] }); CMAP.fitted = true; } } }); el._ro.observe(el); }
+    // map -> chart: the nearest profile point drives the elevation chart's tooltip (and its own marker)
+    map.on("mousemove", (e) => {
+      const i = CMAP.near(e.layerPoint), c = charts.profile;
+      if (i < 0) { mapShowKm(null); c?.dispatchAction({ type: "hideTip" }); return; }
+      mapShowKm(CMAP.km[i]);
+      if (c && PLAN?.profile) c.dispatchAction({ type: "showTip", seriesIndex: 0, dataIndex: i });
+    });
+    map.on("mouseout", () => { mapShowKm(null); charts.profile?.dispatchAction({ type: "hideTip" }); });
+  }
+  const { map } = CMAP, R = rowsOf(P);
+  // route colour by segment kind; redrawn only when the segments change
+  const rkey = R.map((r) => `${r.kind}:${r.start_km}`).join(",");
+  if (CMAP.rkey !== rkey) {
+    CMAP.rkey = rkey;
+    const by = {};
+    for (let i = 1; i < ll.length; i++) {
+      const r = rowAt((CMAP.km[i - 1] + CMAP.km[i]) / 2), k = r?.kind in KIND_COLOR ? r.kind : "flat";
+      (by[k] ||= []).push([ll[i - 1], ll[i]]);
+    }
+    MapLayers.track(CMAP.route, ll, { pieces: Object.entries(by).map(([k, segs]) => ({ segs, color: css(KIND_COLOR[k]) })),
+      start: T("map.start"), end: T("map.finish") });
+    $("course-map-legend").innerHTML = Object.keys(KIND_COLOR).filter((k) => by[k])
+      .map((k) => `<span><i style="background:${css(KIND_COLOR[k])}"></i>${esc(T("map.kind." + k))}</span>`).join("")
+      + `<span>${esc(T("map.hint"))}</span>`;
+  }
+  // the hovered / selected segments
+  CMAP.hl.clearLayers();
+  for (const r of R.filter((x) => SEL.has(x.i) || x.i === HOVER))
+    L.polyline(kmPath(r.start_km, r.end_km), { color: css("--accent"), weight: 9, opacity: SEL.has(r.i) ? 0.45 : 0.6, interactive: false }).addTo(CMAP.hl);
+  CMAP.route.eachLayer((l) => l.bringToFront?.());
+  // aid stations (the editor's rows) and the GPX's own waypoints
+  CMAP.marks.clearLayers();
+  for (const w of P.wpts || []) if (ok(w.lat) && ok(w.lon))
+    L.circleMarker([w.lat, w.lon], { radius: 4, color: "#fff", weight: 1.5, fillColor: "#6b7280", fillOpacity: 1 })
+      .bindTooltip(`${esc(w.name || "")} · ${f1(w.km)} km`).addTo(CMAP.marks);
+  for (const st of stopsOf())
+    L.circleMarker(kmLatLng(st.km), { radius: 7, color: "#fff", weight: 2, fillColor: css("--s3"), fillOpacity: 1 })
+      .bindTooltip(`${stopIcon(st.type)} ${esc(stopName(st.type))}${st.name ? " " + esc(st.name) : ""} · ${f1(st.km)} km`).addTo(CMAP.marks);
 }
 // the compact table under the chart: each segment's target pace / power / HR, split and fuelling
 function renderSegCompact() {

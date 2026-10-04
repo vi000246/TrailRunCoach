@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.6.0/echarts.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/api/v1/static/basemaps.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
 <script src="/api/v1/static/painpicker.js"></script>
 <style>
@@ -567,8 +568,7 @@ async function init() {
   S.views = views; S.sports = sports;
   S.sport = ps.sport || "trail";       // 主要訓練項目 (設定): which charts show (visCharts)
   // workout map defaults (settings page); the map's own switch overrides them per browser
-  S.mapDefault = { base: BASE_BY_ID[us.map_basemap] ? us.map_basemap : "rudy",
-    overlays: (us.map_overlays || []).filter((id) => OVL_BY_ID[id]) };
+  S.mapDefault = window.MapLayers ? MapLayers.fromSettings(us) : null;
   S.parity = !!cfg.config.parity;   // switched on the settings page
   // 使用功率 (settings, charts.power.enabled): off = power-only charts hidden, 配速／功率 toggles on pace
   S.usePower = us.use_power !== false;
@@ -1932,44 +1932,14 @@ function hoverChart(chart, s, axis, f = 1) {
 // distance units a value x-axis can carry -> factor from km
 const DIST_X = { KM: 1, MI: 1 / 1.609344, METERS: 1000 };
 
-// ---- route map: Leaflet, switchable basemaps / overlays (settings page picks the defaults)
-const NLSC_ATTR = '© <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>';
-const BASEMAPS = [
-  { id: "rudy", name: "魯地圖", url: "https://tile.happyman.idv.tw/map/rudy/{z}/{x}/{y}.png", maxZoom: 18,
-    attr: '<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
-  { id: "google-terrain", name: "Google 地形", url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", maxZoom: 15,
-    attr: "地圖資料 © Google" },
-  { id: "nlsc-emap", name: "NLSC 電子地圖", url: "https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}",
-    maxZoom: 19, attr: NLSC_ATTR },
-  { id: "nlsc-photo", name: "正射影像", url: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}",
-    maxZoom: 19, attr: NLSC_ATTR },
-  { id: "osm", name: "OSM", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19,
-    attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
-];
-const OVERLAYS = [
-  { id: "contour", name: "等高線", url: "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png", opacity: 0.8, maxZoom: 18,
-    attr: '等高線：<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a>' },
-  { id: "google-roads", name: "Google 道路", url: "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}", opacity: 0.9, maxZoom: 19,
-    attr: "道路 © Google" },
-  { id: "nlsc-roads", name: "NLSC 道路", url: "https://wmts.nlsc.gov.tw/wmts/EMAP2/default/GoogleMapsCompatible/{z}/{y}/{x}",
-    opacity: 0.9, maxZoom: 19, attr: NLSC_ATTR },
-];
-const BASE_BY_ID = Object.fromEntries(BASEMAPS.map((b) => [b.id, b]));
-const OVL_BY_ID = Object.fromEntries(OVERLAYS.map((o) => [o.id, o]));
+// ---- route map: Leaflet, switchable basemaps / overlays (settings page picks the defaults).
+// The layers, the route drawing and the hover lookup are basemaps.js (MapLayers), shared with
+// the routes page and the race calculator's course map.
 // per-browser switch, kept only while the settings-page default it was made against is unchanged
 const MAP_KEY = "wko5viewer.map";
-function mapPrefs() {
-  const d = S.mapDefault || { base: "rudy", overlays: [] };
-  let o = null;
-  try { o = JSON.parse(localStorage.getItem(MAP_KEY) || "null"); } catch {}
-  const same = o && o.against === JSON.stringify(d);
-  return { base: same && BASE_BY_ID[o.base] ? o.base : d.base,
-    overlays: same && Array.isArray(o.overlays) ? o.overlays.filter((id) => OVL_BY_ID[id]) : d.overlays,
-    color: o?.color || "hr" };
-}
-function saveMapPrefs(patch) {
-  try { localStorage.setItem(MAP_KEY, JSON.stringify({ ...mapPrefs(), ...patch, against: JSON.stringify(S.mapDefault || { base: "rudy", overlays: [] }) })); } catch {}
-}
+const mapDefault = () => S.mapDefault || { base: "rudy", overlays: [] };
+function mapPrefs() { const p = MapLayers.prefs(MAP_KEY, mapDefault()); return { ...p, color: p.color || "hr" }; }
+function saveMapPrefs(patch) { MapLayers.savePrefs(MAP_KEY, mapDefault(), patch); }
 const ROUTE_COLOR = [["hr", "心率", "bpm"], ["power", "功率", "W"], ["grade", "坡度", "%"], ["none", "單色", ""]];
 const RAMP = ["#2c7bb6", "#abd9e9", "#ffffbf", "#fdae61", "#d7191c"];
 function rampAt(f) {
@@ -1984,7 +1954,7 @@ async function drawMap(card, res) {
   card.querySelector(".loading")?.remove();
   const nodata = (t) => card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(t)}</p>`);
   if (res.empty) return nodata(res.empty);
-  if (typeof L === "undefined") return nodata("地圖元件（Leaflet）載入失敗，無法顯示路線。");
+  if (typeof L === "undefined" || !window.MapLayers) return nodata("地圖元件（Leaflet）載入失敗，無法顯示路線。");
   const tb = document.createElement("div");
   tb.className = "maptb";
   const el = document.createElement("div");
@@ -1999,42 +1969,11 @@ async function drawMap(card, res) {
   const pref = mapPrefs();
   const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5 });
   el._lmap = map;
-  const bases = {}, ovls = {};
-  let active = null;
   const hint = document.createElement("div");
   hint.className = "maphint"; hint.hidden = true;
   card.appendChild(hint);
-  for (const b of BASEMAPS) {
-    const layer = L.tileLayer(b.url, { maxZoom: b.maxZoom, attribution: b.attr });
-    layer._def = b; layer._err = 0; layer._ok = 0;
-    layer.on("tileload", () => { layer._ok++; if (layer === active) hint.hidden = true; });
-    layer.on("tileerror", () => {
-      layer._err++;
-      if (layer !== active || layer._ok > 0 || layer._err < 3 || !hint.hidden) return;
-      // the host isn't answering (魯地圖's own host often doesn't): offer another basemap
-      const alt = BASEMAPS.filter((x) => x.id !== b.id && x.id !== "google-terrain").slice(0, 3);
-      hint.innerHTML = `「${esc(b.name)}」的圖磚載入失敗（主機可能沒有回應），換個底圖：`
-        + alt.map((x) => `<button data-b="${x.id}">${esc(x.name)}</button>`).join("");
-      hint.hidden = false;
-    });
-    bases[b.name] = layer;
-  }
-  hint.onclick = (e) => {
-    const id = e.target.closest("button[data-b]")?.dataset.b; if (!id) return;
-    const next = bases[BASE_BY_ID[id].name];
-    if (active) map.removeLayer(active);
-    next.addTo(map);          // fires baselayerchange through the layer control
-  };
-  for (const o of OVERLAYS) ovls[o.name] = L.tileLayer(o.url, { maxZoom: o.maxZoom, opacity: o.opacity, attribution: o.attr, zIndex: 5 });
-  const setBase = (layer) => { active = layer; map.setMaxZoom(layer._def.maxZoom); hint.hidden = true; layer._err = layer._ok = 0; };
-  const first = bases[BASE_BY_ID[pref.base].name];
-  first.addTo(map); setBase(first);
-  for (const id of pref.overlays) ovls[OVL_BY_ID[id].name].addTo(map);
-  L.control.layers(bases, ovls, { collapsed: true }).addTo(map);
+  MapLayers.attach(map, mapDefault(), MAP_KEY, { hint });
   L.control.scale({ imperial: false }).addTo(map);
-  map.on("baselayerchange", (e) => { setBase(e.layer); saveMapPrefs({ base: e.layer._def.id }); });
-  const saveOvl = () => saveMapPrefs({ overlays: OVERLAYS.filter((o) => map.hasLayer(ovls[o.name])).map((o) => o.id) });
-  map.on("overlayadd overlayremove", saveOvl);
 
   const ll = (i) => [s.lat[i], s.lng[i]];
   const latlngs = s.gps.map(ll);
@@ -2043,33 +1982,26 @@ async function drawMap(card, res) {
   const legend = document.createElement("span");
   legend.className = "maplegend";
   function drawRoute(color) {
-    route.clearLayers();
-    L.polyline(latlngs, { color: "#fff", weight: 7, opacity: 0.75, interactive: false }).addTo(route);
     const vals = color === "none" ? null : s[color];
     const good = vals ? s.gps.map((i) => vals[i]).filter((v) => v != null) : [];
     if (good.length < 2) {
-      L.polyline(latlngs, { color: css("--accent") || "#2563eb", weight: 4, interactive: false }).addTo(route);
+      MapLayers.track(route, latlngs, { color: css("--accent") || "#2563eb" });
       legend.innerHTML = "";
-    } else {
-      let lo = pctl(good, 0.05), hi = pctl(good, 0.95);
-      if (color === "grade") { const m = Math.min(40, Math.max(Math.abs(lo), Math.abs(hi), 1)); lo = -m; hi = m; }
-      if (hi <= lo) hi = lo + 1;
-      // ~12 colour bins, each one multi-segment polyline (cheap to draw, cheap to hover over)
-      const NB = 12, bins = Array.from({ length: NB + 1 }, () => []);
-      for (let k = 1; k < s.gps.length; k++) {
-        const a = s.gps[k - 1], b = s.gps[k], v = vals[b] ?? vals[a];
-        const bi = v == null ? NB : Math.max(0, Math.min(NB - 1, Math.floor((v - lo) / (hi - lo) * NB)));
-        bins[bi].push([ll(a), ll(b)]);
-      }
-      bins.forEach((segs, bi) => segs.length && L.polyline(segs, { color: bi === NB ? "#9aa3ad" : rampAt((bi + 0.5) / NB),
-        weight: 4, opacity: 0.95, interactive: false }).addTo(route));
-      const unit = ROUTE_COLOR.find((r) => r[0] === color)[2];
-      legend.innerHTML = `${Math.round(lo)}<i style="background:linear-gradient(90deg,${RAMP.join(",")})"></i>${Math.round(hi)} ${esc(unit)}`;
+      return;
     }
-    L.circleMarker(latlngs[0], { radius: 6, color: "#fff", weight: 2, fillColor: "#16a34a", fillOpacity: 1, interactive: false })
-      .bindTooltip("起點").addTo(route);
-    L.circleMarker(latlngs[latlngs.length - 1], { radius: 6, color: "#fff", weight: 2, fillColor: "#dc2626", fillOpacity: 1, interactive: false })
-      .bindTooltip("終點").addTo(route);
+    let lo = pctl(good, 0.05), hi = pctl(good, 0.95);
+    if (color === "grade") { const m = Math.min(40, Math.max(Math.abs(lo), Math.abs(hi), 1)); lo = -m; hi = m; }
+    if (hi <= lo) hi = lo + 1;
+    // ~12 colour bins, each one multi-segment polyline (cheap to draw, cheap to hover over)
+    const NB = 12, bins = Array.from({ length: NB + 1 }, () => []);
+    for (let k = 1; k < s.gps.length; k++) {
+      const a = s.gps[k - 1], b = s.gps[k], v = vals[b] ?? vals[a];
+      const bi = v == null ? NB : Math.max(0, Math.min(NB - 1, Math.floor((v - lo) / (hi - lo) * NB)));
+      bins[bi].push([ll(a), ll(b)]);
+    }
+    MapLayers.track(route, latlngs, { pieces: bins.map((segs, bi) => ({ segs, color: bi === NB ? "#9aa3ad" : rampAt((bi + 0.5) / NB) })) });
+    const unit = ROUTE_COLOR.find((r) => r[0] === color)[2];
+    legend.innerHTML = `${Math.round(lo)}<i style="background:linear-gradient(90deg,${RAMP.join(",")})"></i>${Math.round(hi)} ${esc(unit)}`;
   }
   // colour toggle: 心率 / 功率 / 坡度 / 單色 (remembered per browser)
   const has = (k) => k === "none" || (s[k] && s.gps.some((i) => s[k][i] != null));
@@ -2086,8 +2018,7 @@ async function drawMap(card, res) {
   drawRoute(color);
 
   // hover: a marker at the shared sample; hovering the route drives the charts
-  const marker = L.circleMarker([0, 0], { radius: 7, color: "#fff", weight: 2.5, fillColor: "#111827", fillOpacity: 0.9, interactive: false });
-  marker.bindTooltip("", { permanent: true, direction: "top", offset: [0, -8], className: "hovtip" });
+  const marker = MapLayers.marker();
   const readout = (i) => [s.t[i] != null ? fmtDur(s.t[i]) : null, s.d?.[i] != null ? s.d[i].toFixed(2) + " km" : null,
     s.hr?.[i] != null ? s.hr[i] + " bpm" : null, s.power?.[i] != null ? s.power[i] + " W" : null,
     s.elev?.[i] != null ? Math.round(s.elev[i]) + " m" : null, s.grade?.[i] != null ? s.grade[i].toFixed(1) + "%" : null]
@@ -2102,19 +2033,13 @@ async function drawMap(card, res) {
     },
     hide() { if (map.hasLayer(marker)) map.removeLayer(marker); },
   };
-  let pts = null;   // route points in layer pixels, recomputed after zoom
-  map.on("zoomend viewreset", () => { pts = null; });
+  const near = MapLayers.picker(map, latlngs);     // within 24 px of the route
   map.on("mousemove", (e) => {
     const p = e.layerPoint;
     hoverEmit(m, () => {
       if (!el._lmap) return null;
-      pts ||= s.gps.map((i) => map.latLngToLayerPoint(ll(i)));
-      let best = -1, bd = 24 * 24;           // within 24 px of the route
-      for (let k = 0; k < pts.length; k++) {
-        const dx = pts[k].x - p.x, dy = pts[k].y - p.y, d2 = dx * dx + dy * dy;
-        if (d2 < bd) { bd = d2; best = k; }
-      }
-      return best < 0 ? null : s.gps[best];
+      const k = near(p);
+      return k < 0 ? null : s.gps[k];
     });
   });
   map.on("mouseout", () => hoverEmit(m, null));
