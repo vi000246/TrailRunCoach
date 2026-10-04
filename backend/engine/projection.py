@@ -7,7 +7,7 @@ from samples. It starts from this week's week_plan() output (target hours,
 TSS per hour, CTL, the 8-week history, long-session weekday, thresholds) and
 rolls the same rules forward week by week:
 
-  * base / specific: CTL ramp goal (RAMP_GOAL) capped at +10 % (at least
+  * base / specific: CTL ramp goal (load_guard.ramp_goal) capped at +10 % (at least
     +0.5 h) of max(4-week mean, last week); after 3 build weeks a recovery
     week at 65 % of those 3 (3:1)
   * taper 40–50 % of the 6-week mean, event week 30 %, recovery 50 %,
@@ -26,6 +26,7 @@ from typing import Optional
 
 from backend.engine import aet_test as AT
 from backend.engine import b2b as B2B
+from backend.engine import load_guard as LG
 from backend.engine import specific_phase as SP
 from backend.engine import steep_hill as SH
 from backend.engine import overview as O
@@ -86,10 +87,11 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
             h = 0.65 * statistics.mean(hist[-3:])
             return h, "recovery_week", ["連續 3 週加量後的恢復週（前 3 週平均的 65%）"]
         f7 = 1.0 - (1.0 - 1.0 / cc) ** 7
-        need_h = 7.0 * (ctl0 + O.RAMP_GOAL[kind] / f7) / max(r, 1.0)
+        goal = LG.ramp_goal(kind, ctl0)
+        need_h = 7.0 * (ctl0 + goal / f7) / max(r, 1.0)
         cap = max(1.10 * ref, ref + 0.5)
         h = min(max(need_h, base4), cap)
-        why.append(f"CTL {ctl0:.0f} 每週 +{O.RAMP_GOAL[kind]:.0f}，上限 +10%（至少 +0.5 h）→ {h:.1f} h")
+        why.append(f"CTL {ctl0:.0f} 每週 +{goal:.1f}，上限 +10%（至少 +0.5 h）→ {h:.1f} h")
         return h, kind, why
     if kind == "taper":
         base6 = statistics.mean(hist[-6:]) if hist else 0.0

@@ -29,8 +29,11 @@ Two questions, answered separately:
      low-intensity time share ≥ 75 % (and run power < 80 % CP ≥ 75 % when known) — Zone 5 only since
        SP-31: for Zone 3 a warning (the AeT is often estimated, climbs inflate HR); since SP-39 it
        blocks Zone 5 only with a tested AeT in effect — with an estimated AeT a warning for both
-     CTL ramp: ≥ 5 /week → sub-threshold only; ≥ 8 → none (Friel 5–8, coach)
-     last week's volume step: > 20 % → none (Nielsen 2014, Damsted 2019); 10–20 % → hold the dose (推估)
+     CTL ramp (engine/load_guard.py, SP-63): ≥ max(3, 10 % CTL₋₇) /week → sub-threshold only;
+       ≥ min(10, max(5, 15 % CTL₋₇)) → none (Friel 5–8 / 10 as a share of CTL, 推估); not in the
+       first 4 weeks of data (status: ramp_week None)
+     last week's running-time step against max(the week before, 4-week mean): > 20 % → none
+       (Nielsen 2014, Damsted 2019); 10–20 % → hold the dose (推估)
      TSB −30…−20 → hold the dose (Friel / TrainingPeaks; < −30 is already a recovery week)
      3:1 recovery week → a 4×1′ fartlek instead of intervals (Palladino)
      48 h from the long run / other hard days → plan_prefs.place() / week_plan
@@ -61,7 +64,7 @@ gone (the WKO5 speakers oppose it).
 
 專項期 / 減量期 run the same two-track choice with their own sessions (overview.quality_sessions);
 their guard: intensity and drift not bad, and in 專項期 (owner 2026-10-04) this week's CTL ramp
-(RAMP_SUB threshold only / RAMP_BLOCK none) and > STEP_BLOCK volume step on both tracks, as in the
+(load_guard watch line: threshold only / block line: none) and > STEP_BLOCK volume step on both tracks, as in the
 base phase — 減量期, race / recovery weeks and the re-entry block stay exempt.
 """
 from __future__ import annotations
@@ -72,6 +75,7 @@ from typing import Optional
 
 import numpy as np
 
+from backend.engine import load_guard as LG
 from backend.i18n import _
 
 # "xu_signals" (an old unlock path) was dropped 2026-10-01: stored prefs that still say it fall back to
@@ -104,8 +108,7 @@ XU_HEAT_C = 25.0               # 台灣教練's condition: advice in the session
 PLATEAU_WEEKS = 8              # 自訂
 EF_PLATEAU = 0.02              # status.EF_TREND
 LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD (Seiler, by time)
-RAMP_SUB, RAMP_BLOCK = 5.0, 8.0            # status.RAMP elite / short: Friel 5–8, 10 the ceiling (coach; B2)
-STEP_HOLD, STEP_BLOCK = 0.10, 0.20         # > 20 % block: Nielsen 2014, Damsted 2019 (peer-reviewed); 10–20 % hold 推估
+STEP_HOLD, STEP_BLOCK = LG.STEP_HOLD, LG.STEP_BLOCK   # > 20 % block: Nielsen 2014, Damsted 2019; 10–20 % hold 推估
 TSB_HOLD = -20.0                           # Friel / TrainingPeaks TSB bands (coach)
 ZONE3_SESSIONS = 3             # 自訂: ua_gap unlock → this many Zone 3 sessions, then the dose table
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
@@ -159,9 +162,9 @@ LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 
                  "閾值下 3×8 分", "閾值下 4×8 分", "閾值 4×8 分", "閾值 3×10 分")
 DOSE = Z3                      # kept for callers that read the first rungs
 RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
-# the ramp-week session (CTL ramp ≥ 5: threshold only) — T1's content under its own key / title so
+# the ramp-week session (CTL ramp at the watch line: threshold only) — T1's content under its own key / title so
 # it is never mistaken for a ladder rung (planned_spec: neutral)
-SUB = ("sub", "閾值 3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp ≥ 5（Friel）：只排閾值；90–95% CP")
+SUB = ("sub", "閾值 3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp 到注意線（CTL 的 10%，Friel 換算）：只排閾值；90–95% CP")
 ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
 TRACK_LABEL = {"z3": "3 區（有氧間歇）", "z5": "5 區（VO2max 間歇）"}
 
@@ -634,13 +637,15 @@ def planned_variant_spec(row: dict):
 
 def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = None,
           ramp: Optional[float] = None, step: Optional[float] = None, tsb: Optional[float] = None,
-          aet: Optional[float] = None, injury: Optional[str] = None, aet_tested: bool = True) -> dict:
+          aet: Optional[float] = None, injury: Optional[str] = None, aet_tested: bool = True,
+          ramp_base: Optional[float] = None) -> dict:
     """This week's check: {"block", "sub", "hold", "verdict", "action"} — the
     first failing rule speaks. Missing numbers don't block. `injury`: an open
     傷病紀錄 with 「受傷期間暫停強度課」 ticked (engine/injuries.pause_reason)
     blocks intervals until it is resolved — the user's own choice, so it
     speaks first. `aet_tested`: the AeT in effect is a tested one (aet_info["tested"]) — without
-    it the low-intensity share is only a warning for Zone 5 too (SP-39)."""
+    it the low-intensity share is only a warning for Zone 5 too (SP-39). `ramp_base`: CTL 7 days
+    ago, for the relative ramp lines (load_guard; None = the floors 3 / 5)."""
     out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": "", "blocks": [],
            "verdicts": {}, "warn": ""}
     aet_t = f"{aet:.0f} bpm" if aet else "AeT"
@@ -669,15 +674,16 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
                 f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
             out["warn"] = out["warn"] or (f"輕鬆跑心率偏高：{what} {share * 100:.0f}%（底線 75%、基礎期目標 ≥ 90%）"
                                           "——只是提醒，3 區照排；5 區先不排")
-    if ramp is not None and ramp >= RAMP_BLOCK:
-        say("ramp", f"CTL 每週 +{ramp:.1f}（≥ {RAMP_BLOCK:.0f}，Friel）：本週不排間歇", "先穩住量", block=True)
-    elif ramp is not None and ramp >= RAMP_SUB:
-        say("ramp", f"CTL 每週 +{ramp:.1f}（≥ {RAMP_SUB:.0f}，Friel）：本週只排閾值下", "先穩住量", sub=True)
+    lv = LG.ramp_level(ramp, ramp_base)
+    if lv == LG.BLOCK:
+        say("ramp", f"{LG.ramp_text(ramp, ramp_base, lv)}：本週不排間歇", "先穩住量", block=True)
+    elif lv == LG.WATCH:
+        say("ramp", f"{LG.ramp_text(ramp, ramp_base, lv)}：本週只排閾值下", "先穩住量", sub=True)
     if step is not None and step > STEP_BLOCK:
-        say("volume", f"上週量增 {step * 100:+.0f}%（> 20%，Nielsen 2014／Damsted 2019）：本週不排間歇",
+        say("volume", f"上週跑步量增 {step * 100:+.0f}%（> 20%，Nielsen 2014／Damsted 2019）：本週不排間歇",
             "本週維持上週的量", block=True)
     elif step is not None and step > STEP_HOLD:
-        say("volume", f"上週量增 {step * 100:+.0f}%（10–20%，推估）：間歇維持上次的量，不往上加", "", hold=True)
+        say("volume", f"上週跑步量增 {step * 100:+.0f}%（10–20%，推估）：間歇維持上次的量，不往上加", "", hold=True)
     if tsb is not None and -30.0 <= tsb < TSB_HOLD:
         say("tsb", f"TSB {tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
     return out
@@ -1082,7 +1088,8 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     # ---- this week's guardrails (base phase) ------------------------------
     ie = _extra(by, "intensity")
     g = guard(low_share=ie.get("low_share"), power_low_share=ie.get("power_low_share"),
-              ramp=_extra(by, "fitness").get("ramp_week"), step=_extra(by, "volume").get("step"),
+              ramp=_extra(by, "fitness").get("ramp_week"), ramp_base=_extra(by, "fitness").get("ramp_base"),
+              step=_extra(by, "volume").get("step"),
               tsb=_value(by, "form"), aet=ae["value"] if ae["measured"] else None,
               injury=_injury_pause(today), aet_tested=bool(ae.get("tested")))
     hist = []
@@ -2116,8 +2123,8 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
         if kind == "specific" and first and mode != "reentry":
             # this week's load-progression guardrails apply in 專項期 too, to both tracks, as in the base
             # phase (owner 2026-10-04: no school exempts it — Friel ramp 5–8, Nielsen 2014 / Damsted 2019
-            # > 20 % steps; unsourced-rules.md B2): CTL ramp ≥ RAMP_BLOCK or a > STEP_BLOCK volume step →
-            # no interval, ramp ≥ RAMP_SUB → threshold only. 減量期, race / recovery weeks and the re-entry
+            # > 20 % steps; unsourced-rules.md B2): CTL ramp at load_guard's block line or a > STEP_BLOCK
+            # volume step → no interval, at the watch line → threshold only. 減量期, race / recovery weeks and the re-entry
             # block stay exempt; projected weeks are re-checked when they come
             g = gate.get("guard") or {}
             blocks = g.get("blocks") if g.get("blocks") is not None else ([g.get("rule")] if g.get("block") else [])
