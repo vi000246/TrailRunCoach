@@ -1644,7 +1644,7 @@ def templates(prefs=None, user: Optional[dict] = None) -> dict:
                     continue
                 ok, _why = IL.equivalent(v)
                 ladder.append({"key": v.key, "label": f"{IL.RUNG_NAME[rung]} {IL.title(v)} · {IL.rest_text(v)}" + ("（標準）" if v.canonical else ""),
-                               "title": f"{IL.CLASS_LABEL[v.cls]} {IL.structure(v)}", "src": f"間歇庫 {IL.RUNG_NAME[rung]}",
+                               "title": IL.plain_title(v), "src": f"間歇庫 {IL.RUNG_NAME[rung]}",
                                "items": main_set(v), "equiv": ok, "src_kind": v.src_kind, "full": from_variant(v, "std")["items"],
                                "variant": True, "rung": v.rung, **fam_fields(v)})
         for v in IL.NON_EQUIV:

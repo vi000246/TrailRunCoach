@@ -2058,7 +2058,7 @@ def _stimulus(ds, w, m: dict, cat: str) -> dict:
         # the 課表's interval session was done by this run: the plan says intervals, so a
         # low whole-run average (long warm-up, cool-down and rests) doesn't make it easy —
         # the Zone 3 / Zone 5 time still decides (the same reason as vo2max-session-detection
-        # §3.2's power exception). Before, the planner's own 「爬坡間歇 5×4 分」 run as planned
+        # §3.2's power exception). Before, the planner's own 5×4′ hill set run as planned
         # read 「輕鬆跑」 and the 課表 said 「沒照課表：排強度課，實際跑輕鬆」.
         easy_hr = False
     hp, src = None, None

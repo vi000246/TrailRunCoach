@@ -208,6 +208,9 @@ class PlanSession(Base):
     # the structure the user saved in the 課表 editor (engine/workout_steps.py, JSON);
     # None = derived from the kind / variant / text when opened or pushed
     steps: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # a 強度課's family (SP-79): aerobic / vo2max / speed (有氧間歇 / VO2max 間歇 / 速度) when the user
+    # picked one in the 課表 editor; None = derived from the steps (workout_templates.session_family)
+    family: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
     # a session written from outside the generator (賽事計算機「匯出至課表」: racecalc:<event id>):
     # one row per key, re-exporting updates it; ext_sig = the fingerprint of what was exported
     # (plan_store.ext_signature), so a later edit on the 課表 page is noticed before overwriting

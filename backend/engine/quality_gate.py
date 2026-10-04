@@ -164,11 +164,15 @@ Z3_SHARE_MAX = 0.10            # Daniels: T running ≤ 10 % of the weekly volum
 # The old z3a 「閾值 3×8 分」 is T2's title: a title-only row reads as z3b now.
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
                  "閾值下 3×8 分", "閾值下 4×8 分", "閾值 4×8 分", "閾值 3×10 分")
+# SP-79: a stored title in today's words (interval_library.renamed: 「閾值 3×8 分」 → 「有氧間歇（巡航）3×8 分」)
+# before it is matched — rows read through plan_store.to_dict arrive renamed, the raw sqlite ones
+# (plan_store._plan_rows) don't; both must match the same. The legacy set holds both spellings.
+LEGACY_ANY = frozenset(LEGACY_TITLES) | frozenset(_IL.renamed(t) for t in LEGACY_TITLES)
 DOSE = Z3                      # kept for callers that read the first rungs
 RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
 # the ramp-week session (CTL ramp at the watch line: threshold only) — T1's content under its own key / title so
 # it is never mistaken for a ladder rung (planned_spec: neutral)
-SUB = ("sub", "閾值 3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp 到注意線（CTL 的 10%，Friel 換算）：只排閾值；90–95% CP")
+SUB = ("sub", "有氧間歇（巡航）3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp 到注意線（CTL 的 10%，Friel 換算）：只排閾值；90–95% CP")
 ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
 TRACK_LABEL = {"z3": "3 區（有氧間歇）", "z5": "5 區（VO2max 間歇）"}
 
@@ -488,9 +492,10 @@ def _with_hr_at60(reps: list[dict], s: Optional[dict]) -> list[dict]:
 
 def spec_by_title(title: Optional[str]) -> Optional[tuple]:
     """The ladder / recovery / sub row whose title is `title` (None when unknown)."""
-    if not title:
-        return None
-    return next((s for s in LADDER + (TP, RECOVERY, SUB) if s[1] == str(title)), None)
+    if not title or str(title) in LEGACY_TITLES:
+        return None                     # the old ladder's (「VO2max 間歇 4×4 分」 is V4's title today)
+    t = _IL.renamed(str(title))
+    return next((s for s in LADDER + (TP, RECOVERY, SUB) if s[1] == t), None)
 
 
 def row_track(h: dict) -> Optional[str]:
@@ -797,7 +802,7 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
             spec, neutral = planned_spec(h.get("title"), step, track)
             counted = True
         off_rung = neutral and track == "z3" and spec not in (RECOVERY, SUB, ZONE3) and \
-            str(h.get("title") or "") not in LEGACY_TITLES and _IL.track_of(_row_rung(h, spec)) == "z3"
+            str(h.get("title") or "") not in LEGACY_ANY and _IL.track_of(_row_rung(h, spec)) == "z3"
         if neutral and not off_rung:
             # a recovery fartlek / sub-threshold (ramp week) / a session the plan
             # prescribed outside the ladder: not a step, never judged against it
@@ -938,8 +943,11 @@ def planned_spec(title: Optional[str], step: int, track: str = "z3") -> tuple[tu
         t = str(title)
         if t == RECOVERY[1] or t.startswith("Zone 3"):
             return RECOVERY if t == RECOVERY[1] else ZONE3, True
-        if t in LEGACY_TITLES or t == SUB[1]:
-            return (SUB if t == SUB[1] else want), True
+        if t in LEGACY_ANY:
+            return want, True
+        t = _IL.renamed(t)
+        if t == SUB[1]:
+            return SUB, True
         for s in LADDER + (TP,):
             if s[1] == t:
                 return s, s[1] != want[1]
