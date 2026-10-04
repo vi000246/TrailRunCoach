@@ -36,6 +36,11 @@ F_HRTSS, F_HRIF = 4235, 4236
 # sport group -> prefix of the threshold settings (runftp, bikeftp, ...)
 SPORT_SETTING_PREFIX = {"run": "run", "bike": "bike", "road bike": "bike",
                         "swim": "swim", "row": "row", "ski": "ski"}
+# SP-63 (outside parity mode only): walks / hikes / mountaineering without a threshold of their
+# own score hrTSS on the run LTHR, over moving time only (whatever hr_tss_moving_only says: a
+# multi-day 百岳 over recorded time charges the nights). Strength stays without hrTSS (0 TSS
+# unless a plan LTHR exists): resistance-training HR is not an endurance load.
+HR_FALLBACK_SPORTS = ("walk",)
 
 
 F_TP_TSS = 4038          # .wko4 info: TSS synced from TrainingPeaks
@@ -179,8 +184,9 @@ def _load_tp_tss(athlete_dir: Path) -> dict[str, float]:
     return out
 
 
-def _load_moving_hrtss(ds) -> dict[str, float]:
-    """{relative .wko4 path -> hrTSS charged only while moving}, disk-cached."""
+def _load_moving_hrtss(ds, only=None) -> dict[str, float]:
+    """{relative .wko4 path -> hrTSS charged only while moving}, disk-cached.
+    `only`: a workout filter (None = every workout)."""
     import json
     from backend.engine.algorithms.wko5_hr import hr_tss
     from backend.engine.algorithms.wko5_time import MOVING_SPEED_KMH
@@ -193,10 +199,12 @@ def _load_moving_hrtss(ds) -> dict[str, float]:
     entries = cache.get("files", {})
     out, dirty = {}, False
     for w in ds.workouts:
+        if only is not None and not only(w):
+            continue
         p = ds.dir / w.entry.file
         if not p.exists():
             continue
-        lthr = ds.sport_setting("thr", w)
+        lthr = ds.hr_lthr(w)
         st = p.stat()
         stamp = [st.st_size, int(st.st_mtime), lthr]
         hit = entries.get(w.entry.file)
@@ -366,7 +374,7 @@ class Dataset:
         self.first_day = int(np.floor(self.workouts[0].day)) if self.workouts else int(self.today)
         self.last_day = int(np.floor(self.workouts[-1].day)) if self.workouts else int(self.today)
         self._apply_power_policy()
-        if self.config.moving_hr_tss:
+        if not self.config.parity:
             self._apply_moving_hrtss()
         self._apply_elevation_bonus()
 
@@ -555,12 +563,30 @@ class Dataset:
                 w.metrics["tss"] += bonus
                 w.metrics["elevation_tss"] = bonus
 
+    def moving_hrtss_on(self, w: Workout) -> bool:
+        """Does `w` get the moving-time hrTSS? hr_tss_moving_only for every sport; walks /
+        hikes always outside parity mode (SP-63, HR_FALLBACK_SPORTS) — so turning the
+        moving-time knob off leaves trail runs on recorded time, never the hikes."""
+        if self.config.parity:
+            return False
+        return self.config.hr_tss_moving_only or w.sport in HR_FALLBACK_SPORTS
+
+    def hr_lthr(self, w: Workout) -> Optional[float]:
+        """The LTHR an hrTSS of `w` is scored on: sport_setting("thr"); a walk / hike
+        without its own threshold falls back to the run LTHR outside parity mode (SP-63).
+        The hrTSS path only — aethr and the low-intensity share keep sport_setting, so
+        hike time does not enter the 80/20 share."""
+        v = self.sport_setting("thr", w)
+        if v is None and w.sport in HR_FALLBACK_SPORTS and not self.config.parity:
+            v = self.setting("runthr", w.day)
+        return v
+
     def _apply_moving_hrtss(self) -> None:
-        """Replace hrTSS-sourced TSS with a moving-time-only hrTSS."""
-        self._moving_hrtss = _load_moving_hrtss(self)
+        """Replace hrTSS-sourced TSS with a moving-time-only hrTSS (moving_hrtss_on)."""
+        self._moving_hrtss = _load_moving_hrtss(self, self.moving_hrtss_on)
         for w in self.workouts:
             m = w.metrics
-            if not self._is_hr_sourced(w):
+            if not self._is_hr_sourced(w) or not self.moving_hrtss_on(w):
                 continue                                  # power / pace TSS unaffected
             v = self._moving_hrtss.get(w.entry.file)
             if v is not None:

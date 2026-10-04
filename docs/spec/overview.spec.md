@@ -121,8 +121,9 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
 (`backend/engine/overview.py:821`). `prefs=None` or the defaults run exactly the rules below.
 
 **Volume target**
-1. Base / specific: the weekly TSS that raises CTL by the phase goal (base +3, specific +4 per
-   week; `RAMP_GOAL`, `backend/engine/overview.py:355`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
+1. Base / specific: the weekly TSS that raises CTL by the phase goal (base max(2, 5 % of CTL),
+   specific max(2.5, 7 %) per week, 推估 — SP-63; `load_guard.ramp_goal`,
+   `backend/engine/load_guard.py:202`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
    converted to hours with the athlete's TSS per hour over 6 weeks.
 2. Capped at `max(1.10 × ref, ref + 0.5 h)`, ref = max(4-week mean, last week) (UA 10 %).
    Floored at the 4-week mean (hold).
@@ -192,8 +193,10 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     low-intensity time share < 75 % (or run power < 80 % CP share < 75 %) → no Zone 5, Zone 3 goes
     on with a 「輕鬆跑心率偏高」 warning note (SP-31: 75 % is the floor, the base phase's ≥ 90 % a
     target; the AeT is often estimated, climbs inflate HR) — with an untested AeT in effect a
-    warning for Zone 5 too (SP-39, `guard(aet_tested=False)`); CTL ramp ≥ 5 → threshold only, ≥ 8 →
-    none (Friel, coach); last week's step > 20 % → none (Nielsen 2014, Damsted 2019), 10–20 % →
+    warning for Zone 5 too (SP-39, `guard(aet_tested=False)`); CTL ramp ≥ max(3, 10 % CTL₋₇) →
+    threshold only, ≥ min(10, max(5, 15 % CTL₋₇)) → none (Friel as a share of CTL, 推估; not in the
+    first 28 days of data — `backend/engine/load_guard.py:156`); last week's running-time step
+    against max(the week before, 4-week mean) > 20 % → none (Nielsen 2014, Damsted 2019), 10–20 % →
     hold the dose (推估); TSB −30…−20 → hold (Friel / TrainingPeaks). Projected weeks keep only the
     intensity block (Zone 5 only).
   - **Two gates, two tracks** (SP-31): Zone 3 once its gate is open (`z3_gate`,
@@ -230,8 +233,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     (`prefix`, `backend/engine/quality_gate.py:2298`). In guardrail mode `plan_prefs.shape`
     gets `quality_cap=1` (`backend/engine/overview.py:1162`).
   - 專項期: the same two-track pick; road Zone 3 = 閾值節奏 2×15′ (`ROAD_SPECIFIC_Q`), trail Zone 5 =
-    爬坡間歇 5×4′, else the ladder; drift bad → none, intensity bad → no Zone 5; this week's CTL ramp ≥ 8
-    / volume step > 20 % → none and ramp ≥ 5 → threshold only, on both tracks (owner 2026-10-04).
+    爬坡間歇 5×4′, else the ladder; drift bad → none, intensity bad → no Zone 5; this week's CTL ramp
+    at the block line / volume step > 20 % → none and at the watch line → threshold only, on both
+    tracks (owner 2026-10-04).
   - **Why no Zone 3** (SP-31): `week_decision`'s `z3_note` (the gate with its progress, a
     guardrail's verdict, 「本週輪到 5 區」, the recovery week) is a week note (`src: z3`); the
     low-share warning is `src: intensity`, the Zone 3 / week-total caps `src: z3` / `quality_share`.
@@ -1107,8 +1111,13 @@ which one. The response keeps the `coros` field names.
   gate methods count heat runs: a pass unlocks (conservative), a fail says 「可能是熱造成的」.
 - **`i_testing`**: AeT age no longer sets the level (B3); 「建議 AeT 測試：…」 comes from
   `gate["aet_test_reason"]`; after a break ≥ ~8 weeks (re-entry `cp_retest`) the CP test is due
-  once the block ends (WKO5 seminar notes). `i_fitness`: CTL ramp ≥ 8 bad, 5–8 watch (Friel).
-  `i_volume`: > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估).
+  once the block ends (WKO5 seminar notes). `i_fitness` (`backend/engine/status.py:289`): CTL
+  ramp at `load_guard`'s block line bad, watch line watch (SP-63: relative lines, seeded guardrail
+  CTL, 起算期 info in the first 28 days with `ramp_week = None`; `extra` adds `ramp_base`,
+  `ramp_level`, `ramp_lines`, `ramp_startup`). `i_volume` (`backend/engine/status.py:375`): the
+  headline stays all-sport moving hours; the step is running time against max(the week before,
+  4-week mean) — > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估); `extra` adds
+  `run_last_week`, `run_base`.
 - **`i_gate`** hover adds the Zone 5 track (「Zone 5：已解鎖（…）／未解鎖（AeT 已通過，還差 3 區：…）」)
   or the AeT state (「Zone 5：未確認／已確認／暫停（原因）／恢復期」) and 「建議測試：…」; a locked method reads 「5 區未開」 and
   still names this week's Zone 3 session.
@@ -1302,7 +1311,7 @@ preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profi
 - `backend/tests/test_quality_gate.py`: the gate prefs (round trip, validation, not `active`);
   every mode with and without a measured AeT (auto → none / ua_gap + friel, stale AeT, default
   LTHR, forced ua_gap / friel / xu / plateau / weeks / none); forced mode with missing data
-  (watch, fallback, never locked); guardrails (intensity, power share, ramp 5 / 7, step 10 / 20 %,
+  (watch, fallback, never locked); guardrails (intensity, power share, relative ramp lines, step 10 / 20 %,
   TSB); the dose table, hold, fade and the recovery fartlek; dose sessions through the COROS
   step builder; 1-minute rep counting and the dose history; `Status.i_gate` + `week_plan` on a
   fake dataset; the projection's per-week `weeks` unlock and dose advance; the AeT analysis
@@ -1343,7 +1352,7 @@ preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profi
 | recovery week | reduced week triggered by fatigue (TSB) or three building weeks |
 | quality session | ≥ 10 min at ≥ LTHR or ≥ 0.95 CP |
 | 間歇門檻 / quality gate | base phase: the method (`plan.prefs.quality_gate`) unlocks, locks or is missing data (→ guardrails); guardrails decide this week; outside base: intensity and drift not bad |
-| guardrails | low-intensity ≥ 75 %, CTL ramp < 5 (5–7 sub-threshold only), volume step ≤ 10 % (≤ 20 % holds), 3:1 fartlek, TSB, 48 h spacing |
+| guardrails | low-intensity ≥ 75 %, CTL ramp under max(3, 10 % CTL₋₇) (to min(10, max(5, 15 %)) sub-threshold only), running-time step ≤ 10 % of max(last week, 4-week mean) (≤ 20 % holds), 3:1 fartlek, TSB, 48 h spacing |
 | dose step | the next row of the 6-week table (5×1′ … 4×4′, then 3×8′ / 4×8′), one per interval session done in 8 weeks |
 | drift streak | legacy only: the removed, unsourced 「連續 3 次 < 5%」 rule |
 | 閾值下 N×8 | base-phase sub-threshold interval (88–95 % CP), 3×8 first, one rep fewer after a faded one |
@@ -1414,6 +1423,7 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feat/sp-62-trail-types | SP-62 | 越野跑 templates in three kinds (結構化爬升 / 技術地形 / 下坡技術／離心; sub-tabs, `trail_type_of`); target type `rpe` (CR-10 + 爬升 / 下降, reference HR as text, pushed with no target and the RPE in the step name); two 技術地形 templates, `downhill_ecc` by RPE + descent; `rpe_role` (RPE ≥ 7 = 強度課) in /steps/check, the menu and the session dialog (type follows) |
 | 2026-10-04 | feature | SP-39 | 3 區／5 區 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR ≤ 10 % or Friel) + the soft 「近 6 週 ≥ 2 堂 3 區」 (`z5_track`, shared by week_decision and the card); low-intensity share blocks Zone 5 only with a tested AeT; the card renamed 3 區／5 區解鎖流程 and redrawn as two parallel tracks with their own 「下一步」; 「安排課表」 links into the 課表 dialog (`schedule.html?add=` / `?test=`, `WorkoutEditor.applyKey`) |
 | 2026-10-04 | feature | SP-64 | Threshold confidence (`threshold_confidence.py`): 8 LTHR signals + max-HR plausibility (120-s sustained peak, spike / cadence-lock filter), diagnosis of the wrong value, `thr_check` test suggestions (max-HR / LTHR test) with 「安排課表」 links and test conditions, `extra.thr_check` on the 測試 card, `GET /plan/threshold-check`, 「套用」 on 設定 (`mhr_method`), HR-target warning badge in the editor, `maxhr_hill` test template |
+| 2026-10-04 | feature | SP-63 | Relative CTL ramp lines (`load_guard`), startup seed / 28-day skip, running-time volume step vs max(last week, 4-week mean), weekly CTL goal max(2, 5 %) / max(2.5, 7 %) in `week_plan` and the projection |
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |
 | 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |
 | 2026-10-04 | sp-38-load-step | SP-38 | Step end conditions from the provider's capabilities (`end_conditions` / `end_labels` / `load_unit`); new 「負荷」 end condition (TSS, main-set only; COROS targetType 6 with the converted TL, else estimated time); 「按圈」 → 「直到按下計圈」 on the race-calculator export and template notes too |

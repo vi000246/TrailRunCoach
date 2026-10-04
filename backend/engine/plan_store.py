@@ -203,7 +203,8 @@ def reconcile_with_adapt(stored: list[dict], inputs: dict, decisions: Optional[d
         gw, adj, notes = A.adapt(gw, stored, {
             "today": inputs["today"], "first_free": ctx.get("first_free"), "blocked": blocked,
             "allowed_days": days, "thresholds": inputs.get("thresholds") or {}, "mode": cur.get("mode"),
-            "load": {"tsb": ctx.get("tsb", load.get("tsb_today")), "ramp": ctx.get("ramp")},
+            "load": {"tsb": ctx.get("tsb", load.get("tsb_today")), "ramp": ctx.get("ramp"),
+                     "ramp_base": ctx.get("ramp_base")},
             "reviews": ctx.get("reviews") or {}, "b2b": cur.get("b2b"),
             "hard_days": ctx.get("hard_days") or []})     # done hard days, planned or not (48 h)
     new, changes = R.reconcile(stored, gw, inputs.get("activities") or [],

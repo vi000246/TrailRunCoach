@@ -23,6 +23,7 @@ from typing import Optional
 
 import numpy as np
 
+from backend.engine import load_guard as LG
 from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
 from backend.engine.wko5expr.evaluator import WS, Evaluator
@@ -319,7 +320,8 @@ def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float
 # this week's plan
 # ---------------------------------------------------------------------------
 
-SRC_RAMP = "Palladino CTL ramp（每週 +1～3 可長期維持，3～5 菁英）"
+SRC_RAMP = ("每週 CTL 目標：基礎期 max(2, CTL 的 5%)、專項期 max(2.5, CTL 的 7%)（推估；"
+            "Palladino 每週 +1～3、約 2～5% 可長期維持）")
 SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；「10% 法則」本身沒有證據）；受傷風險線 > 20–30%："
            "Nielsen 2014、Damsted 2019（同儕審查）")
 SRC_31 = "3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法）"
@@ -352,7 +354,7 @@ def _mmss(sec: float) -> str:
     s = int(round(sec))
     return f"{s // 60}:{s % 60:02d}"
 
-RAMP_GOAL = {"base": 3.0, "specific": 4.0}            # CTL points per week
+# the weekly CTL goal: load_guard.ramp_goal(kind, CTL) = base max(2, 5 %), specific max(2.5, 7 %) (SP-63, 推估)
 WEEKDAYS = "一二三四五六日"
 
 
@@ -492,7 +494,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
     lthr_default = bool((gate.get("lthr") or {}).get("default"))
     tth = {"cp": th.get("cp"), "lthr": th.get("lthr"), "aet": th.get("aet")}
     if spec is QG.SUB:
-        # a ramp week (CTL ≥ +5): T1's content, never a ladder step (neutral)
+        # a ramp week (CTL ramp at load_guard's watch line): T1's content, never a ladder step (neutral)
         f = IL.fit("z3a", cap, (), prefs, mountain)
         s = IL.session_for({**f, "equiv": False, "progress": False, "rung": "sub",
                             "reason": "CTL 每週 ≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
@@ -590,7 +592,7 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
             if s is None:
                 continue
         elif kind == "specific" and it.get("spec") is QG.SUB:
-            # 專項期 under a CTL ramp ≥ 5 (week_decision): the threshold-only session, as in the base phase
+            # 專項期 under a CTL ramp at the watch line (week_decision): the threshold-only session, as in the base phase
             s = _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
         elif kind == "specific" and t == "z3" and road:
             s = dict(ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
@@ -884,7 +886,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     mode = kind
     hours = ref
     why: list[str] = []
-    ramp_goal = RAMP_GOAL.get(kind)
+    ramp_goal = LG.ramp_goal(kind, ctl0)
     build3 = len(hist) >= 4 and all(hist[i][1] >= 0.95 * hist[i - 1][1] and hist[i][1] > 0.5
                                     for i in range(len(hist) - 3, len(hist)))
     if kind in ("base", "specific"):
@@ -892,7 +894,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         need_h = need_tss / r_all
         cap = max(1.10 * ref, ref + 0.5)
         hours = min(max(need_h, base4), cap)
-        why.append(f"CTL {ctl0:.0f} 要每週 +{ramp_goal:.0f}，需要約 {need_tss:.0f} TSS（≈ {need_h:.1f} h）")
+        why.append(f"CTL {ctl0:.0f} 要每週 +{ramp_goal:.1f}，需要約 {need_tss:.0f} TSS（≈ {need_h:.1f} h）")
         if need_h > cap:
             why.append(f"但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last_h:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h")
         # B2B (engine/b2b.py): a planned B2B's TSB drop doesn't make this / next week a recovery week
@@ -900,7 +902,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         b2b = {} if road else B2B.plan_context(ds, status, today, monday, [h for _, h, _ in hist], ctl_s, atl_s,
                                                d_prev_sun, by, "recovery_week" if build3 else kind,
                                                accepted=b2b_accepted)
-        b2b_exempt = B2B.tsb_exempt(b2b, tsb_today, b2b.get("ramp"))
+        b2b_exempt = B2B.tsb_exempt(b2b, tsb_today, b2b.get("ramp"), b2b.get("ramp_base"))
         if b2b_exempt:
             why.append(b2b_exempt)
         if tsb_today < -30 and not b2b_exempt:

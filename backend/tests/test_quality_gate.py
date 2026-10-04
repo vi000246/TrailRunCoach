@@ -15,6 +15,7 @@ from backend.engine import overview as O
 from backend.engine import plan_prefs as PP
 from backend.engine import projection as P
 from backend.engine import interval_library as IL_
+from backend.engine import load_guard as LG
 from backend.engine import quality_gate as QG
 from backend.engine.planning import Plan, Threshold
 from backend.engine.status import Status
@@ -233,9 +234,14 @@ def test_options_say_what_the_data_allows():
 @pytest.mark.parametrize("kw, flag, words", [
     (dict(low_share=0.68), "block", "低強度只有 68%（< 75%，底線）"),
     (dict(low_share=0.9, power_low_share=0.7), "block", "功率 < 80% CP 只有 70%"),
-    (dict(ramp=5.6), "sub", "CTL 每週 +5.6（≥ 5，Friel）：本週只排閾值下"),
-    (dict(ramp=7.2), "sub", "≥ 5，Friel"),                 # B2: 7 is no longer a block
-    (dict(ramp=8.2), "block", "≥ 8，Friel"),
+    # SP-63: relative lines — CTL₋₇ 60: watch 6, block 9; CTL₋₇ 80: block capped at 10
+    (dict(ramp=6.2, ramp_base=60.0), "sub", "CTL 每週 +6.2（≥ 6.0＝CTL 60 的 10%）：本週只排閾值下"),
+    (dict(ramp=8.2, ramp_base=60.0), "sub", "≥ 6.0"),
+    (dict(ramp=9.1, ramp_base=60.0), "block", "≥ 9.0＝CTL 60 的 15%"),
+    (dict(ramp=9.1, ramp_base=80.0), "sub", "≥ 8.0＝CTL 80 的 10%"),
+    (dict(ramp=10.0, ramp_base=80.0), "block", "≥ 10.0＝上限 10"),
+    (dict(ramp=5.2, ramp_base=20.0), "block", "≥ 5.0＝下限 5"),
+    (dict(ramp=3.1), "sub", "≥ 3.0＝下限 3"),            # no CTL₋₇: the floors
     (dict(step=0.25), "block", "> 20%"),
     (dict(step=0.15), "hold", "10–20%"),
     (dict(tsb=-25.0), "hold", "TSB −25"),
@@ -243,7 +249,7 @@ def test_options_say_what_the_data_allows():
 def test_guardrails(kw, flag, words):
     g = QG.guard(aet=142.0, **kw)
     assert g[flag] and words in g["verdict"].replace("-", "−")
-    assert QG.guard(low_share=0.8, ramp=3, step=0.05, tsb=-10)["rule"] == ""
+    assert QG.guard(low_share=0.8, ramp=3, ramp_base=40.0, step=0.05, tsb=-10)["rule"] == ""
 
 
 def test_guardrails_block_the_week_and_say_so():
@@ -274,8 +280,8 @@ def test_guardrails_block_the_week_and_say_so():
     # the other guardrails still block Zone 3 too
     vol = _gate(by={**by, "volume": _ind(extra={"step": 0.3, "last_week": 5.0})})
     d = QG.week_decision(vol, "base", "base")
-    assert not d["allow"] and "上週量增 +30%" in d["z3_note"]
-    ramp = _gate(by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": 5.6})})
+    assert not d["allow"] and "上週跑步量增 +30%" in d["z3_note"]
+    ramp = _gate(by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": 5.6, "ramp_base": 50.0})})
     assert QG.week_decision(ramp, "base", "base")["spec"] is QG.SUB
     assert QG.indicator(ramp)["action"] == "先穩住量"
 
@@ -1067,13 +1073,15 @@ def test_specific_phase_applies_the_ramp_and_volume_guardrails_to_both_tracks():
             "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 1, "done": 1}}}
     ok = {**_gate(phase=spec), **both}
     assert [it["track"] for it in QG.week_decision(ok, "specific", "specific", n=2)["items"]] == ["z3", "z5"]
-    ramp8 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": QG.RAMP_BLOCK + 0.2})}), **both}
+    ramp8 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": LG.block_line(60.0) + 0.2,
+                                                                         "ramp_base": 60.0})}), **both}
     d = QG.week_decision(ramp8, "specific", "specific", n=2)
-    assert not d["allow"] and not d["items"] and "Friel" in d["z3_note"] and "本週不排間歇" in d["z3_note"]
+    assert not d["allow"] and not d["items"] and "CTL 60 的 15%" in d["z3_note"] and "本週不排間歇" in d["z3_note"]
     vol = {**_gate(phase=spec, by={**GOOD_BY, "volume": _ind(extra={"step": 0.3, "last_week": 5.0})}), **both}
     d = QG.week_decision(vol, "specific", "specific", n=2)
-    assert not d["allow"] and "上週量增 +30%" in d["z3_note"]
-    ramp5 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": QG.RAMP_SUB + 0.5})}), **both}
+    assert not d["allow"] and "上週跑步量增 +30%" in d["z3_note"]
+    ramp5 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": LG.watch_line(60.0) + 0.5,
+                                                                         "ramp_base": 60.0})}), **both}
     d = QG.week_decision(ramp5, "specific", "specific", n=2)
     assert d["spec"] is QG.SUB and [it["track"] for it in d["items"]] == ["z3"] and "只排閾值下" in d["note"]
     from backend.engine import overview as O

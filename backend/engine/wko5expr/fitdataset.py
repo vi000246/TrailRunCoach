@@ -582,7 +582,7 @@ class FitFolderDataset(Dataset):
             if not self.accept_watch_power and self._power_src[idx] == "watch":
                 self._power_blocked.add(rel)            # no power TSS from watch power
             entry.metrics = self._fit_fields(w, group)
-            self._add_hr_fields(w, self.sport_setting("thr", w))
+            self._add_hr_fields(w, self.hr_lthr(w))
             w.metrics = self._metrics(w)
         self.first_day = int(np.floor(self.workouts[0].day)) if self.workouts else int(self.today)
         self.last_day = int(np.floor(self.workouts[-1].day)) if self.workouts else int(self.today)
@@ -601,8 +601,8 @@ class FitFolderDataset(Dataset):
                     self._refresh_hr_fields(w)
                     w.metrics = self._metrics(w)
         prog.phase("finish")
-        if self.config.moving_hr_tss:
-            self._apply_moving_hrtss()
+        if not self.config.parity:
+            self._apply_moving_hrtss()          # moving_hrtss_on: the knob, and walks / hikes always
         self._apply_elevation_bonus()
         self._store.save()
 
@@ -711,9 +711,9 @@ class FitFolderDataset(Dataset):
     def _apply_moving_hrtss(self) -> None:
         from backend.engine.algorithms.wko5_time import MOVING_SPEED_KMH
         for w in self.workouts:
-            if not self._is_hr_sourced(w):
+            if not self._is_hr_sourced(w) or not self.moving_hrtss_on(w):
                 continue
-            lthr = self.sport_setting("thr", w)
+            lthr = self.hr_lthr(w)
             if not lthr or "heartrate" not in self._store_channels(w):
                 continue
             v = self._hr_tss(w, float(lthr), moving_kmh=MOVING_SPEED_KMH.get(w.sport, 0.0))[0]
@@ -1013,7 +1013,7 @@ class FitFolderDataset(Dataset):
 
     def _refresh_hr_fields(self, w: Workout) -> None:
         """Recompute the LTHR-dependent hrTSS / hrIF after the estimates."""
-        self._add_hr_fields(w, self.sport_setting("thr", w))
+        self._add_hr_fields(w, self.hr_lthr(w))
 
     def setting_label(self, name: str, default: str = "WKO5 設定") -> str:
         """Where a dated setting (runthr / runftp / weight ...) came from."""
