@@ -1232,11 +1232,21 @@ def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
     return None
 
 
+def load_work_s(tss: float, band: tuple) -> int:
+    """A 「負荷」 work step's time for the ladder (SP-38, owner 2026-10-04): TSS ÷ (IF² × 100) h
+    at IF = the band's middle (≈ % CP; HR-only steps: HR_CLASS_BAND) — the editor's _secs
+    formula, but on the band so the callers without a Ctx (dose_history, interval_eval) get the
+    same number. 推估."""
+    f = (band[0] + band[1]) / 2.0
+    return int(round(float(tss) * 3600.0 / (f * f * 100.0))) if f > 0 else 0
+
+
 def variant_from_steps(steps: dict, rung: Optional[str] = None, c: Optional[Ctx] = None) -> Optional[IL.Variant]:
     """A temporary library Variant of the structure (reps, rep lengths, rests, band),
     so interval_library.equivalent judges a user-edited session like a swap. None
     without timed work steps that have an intensity. An HR-only structure gets the
-    class's band (推估: src_kind)."""
+    class's band (推估: src_kind). A 「負荷」 work step counts by its estimated time at
+    the band's middle (load_work_s, SP-38) — 推估 too."""
     rows = flat(steps.get("items") or [])
     works, rests, bands, est = [], [], [], False
     last_work = None
@@ -1244,9 +1254,13 @@ def variant_from_steps(steps: dict, rung: Optional[str] = None, c: Optional[Ctx]
         st = row["st"]
         if st["kind"] == "work":
             b = _work_band(st, c)
-            if b is None or st["dur"]["type"] != "time":
+            if b is None or st["dur"]["type"] not in ("time", "load"):
                 continue
-            works.append(st["dur"]["value"])
+            if st["dur"]["type"] == "load":
+                works.append(load_work_s(st["dur"]["value"], b))
+                est = True
+            else:
+                works.append(st["dur"]["value"])
             bands.append(b[:2])
             est = est or b[2]
             last_work = i
@@ -1278,7 +1292,8 @@ def equivalence(steps: dict, rung: Optional[str], c: Optional[Ctx] = None) -> Op
         return {"ok": False, "why": ["找不到有強度的主課段"], "variant": None,
                 "text": f"{IL.RUNG_NAME.get(rung, rung)}：找不到有功率／心率目標的主課段，這堂不算進階"}
     ok, why = IL.equivalent(v, canon)
-    est = "（心率結構換算強度，推估）" if v.src_kind == "推估" else ""
+    load = any(r["st"]["kind"] == "work" and r["st"]["dur"]["type"] == "load" for r in flat(steps.get("items") or []))
+    est = ("（「負荷」段用 TSS 換算時間，推估）" if load else "（心率結構換算強度，推估）") if v.src_kind == "推估" else ""
     return {"ok": ok, "why": why, "variant": v,
             "text": f"和 {IL.RUNG_NAME.get(rung, rung)} 標準課表 {IL.structure(canon)} " +
                     ("等效：這堂算進階" if ok else "不等效：這堂不算進階（" + "；".join(why) + "）") + est}
