@@ -306,7 +306,8 @@ def lthr_info(ds, plan, today: dt.date) -> dict:
         val = None
     default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
     # the dated WKO5 setting in effect (its age: LTHR_FRESH_DAYS); WKO5's 1980 placeholder has none
-    dated = [d for d, _ in hist if isinstance(d, dt.date) and dt.date(1980, 1, 1) < d <= today]
+    dated = [d.date() if isinstance(d, dt.datetime) else d for d, v in hist if v is not None and isinstance(d, dt.date)]
+    dated = [d for d in dated if dt.date(1980, 1, 1) < d <= today]
     return {"value": val, "default": default, "source": "wko5", "measured": val is not None and not default,
             "date": max(dated).isoformat() if dated and val is not None and not default else None}
 

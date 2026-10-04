@@ -375,11 +375,13 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
         data = await _with_steps(data, inp, {})
     try:
         async with _wlock():
-            if data.get("kind") == "test" and data.get("day") and _is_xu90(data):
+            out = await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
+            if data.get("kind") == "test" and out.get("day") and _is_xu90(data):
                 # 徐國峰's 90′ is that day's LSD — the 「安排課表」 deep link / the 測試 dialog take the
-                # same path as 排入測試 (SP-39, owner 2026-10-04)
-                await _replace_long(db, data["day"])
-            return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
+                # same path as 排入測試 (SP-39, owner 2026-10-04); after the add, so a refused day
+                # keeps its long run
+                await _replace_long(db, out["day"])
+            return out
     except PS.PlanError as e:
         raise _err(e)
 
