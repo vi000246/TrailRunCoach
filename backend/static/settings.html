@@ -88,6 +88,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 <body>
 <script src="/api/v1/static/shell.js" data-page="settings"></script>
 <script src="/api/v1/static/calib_chip.js"></script>
+<script src="/api/v1/static/syncrun.js"></script>
 <header>
   <h1>設定</h1>
 </header>
@@ -797,50 +798,30 @@ function logLine(src, text, cls) {
 }
 async function syncNow(src) {
   const since = f(src, "since").value;
-  const url = `${SYNC}/${src === "coros" ? "coros/start" : "start"}` + (since ? `?since=${since}` : "");
   const prog = f(src, "prog"), txt = f(src, "progtxt"), btn = box(src).querySelector('[data-act="sync"]');
   f(src, "log").innerHTML = ""; prog.hidden = false; prog.removeAttribute("value");
   const label = btn.textContent;
   btn.disabled = true; btn.textContent = "同步中…"; btn.setAttribute("aria-busy", "true");
   txt.textContent = "同步中…（連線到 " + SRC_NAME[src] + "）";
-  let total = 0, checked = 0, down = 0, errs = 0, fatal = null, finished = false;
   try {
-    const r = await fetch(url, { method: "POST" });
-    if (r.status === 409) { txt.textContent = "這個來源正在同步中"; toast("這個來源正在同步中"); return; }
-    if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { value, done } = await reader.read(); if (done) break;
-      buf += dec.decode(value, { stream: true });
-      let i;
-      while ((i = buf.indexOf("\n\n")) >= 0 || (i = buf.indexOf("\r\n\r\n")) >= 0) {
-        const chunk = buf.slice(0, i); buf = buf.slice(i + (buf[i] === "\r" ? 4 : 2));
-        const data = chunk.split(/\r?\n/).filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
-        if (!data) continue;
-        let ev; try { ev = JSON.parse(data); } catch { continue; }
-        if (ev.status === "range_list") total += ev.count || 0;
-        if (ev.status === "changed_list") total += ev.modified || 0;
-        if (ev.status === "checking") checked++;
-        const id = ev.workout_id || ev.activity_id || "";
-        const day = ev.workout_date || ev.date || "";
-        if (ev.status === "downloaded") { down++; logLine(src, `✓ ${day} ${id} 已下載`, "d"); }
-        else if (ev.status === "skipped") logLine(src, `· ${day} ${id} 已存在`);
-        else if (ev.status === "no_file") logLine(src, `· ${day} ${id} 沒有 FIT 檔`);
-        else if (ev.status === "relogin") logLine(src, "· 登入已失效，已用記住的密碼自動重新登入", "d");
-        else if (ev.status === "error" || ev.error) {
-          errs++; logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e");
-          if (!id) fatal = ev.error === "COROS_AUTH_REQUIRED" || ev.error === "TP_AUTH_REQUIRED"
-            ? "登入已失效，請重新登入" : (ev.detail || ev.error || "失敗");
-        }
-        else if (ev.status === "complete") { finished = true; logLine(src, `完成：下載 ${ev.total_downloaded}、檢查 ${ev.total_checked}、錯誤 ${(ev.errors || []).length}`, "d"); }
-        if (total) { prog.max = total; prog.value = Math.min(checked, total); }
-        txt.textContent = `同步中… 檢查 ${checked}${total ? " / " + total : ""} · 下載 ${down} · 錯誤 ${errs}`;
-      }
-    }
+    // the SSE stream is read by syncrun.js (shared with 課表 › 從 COROS 抓活動)
+    const st = await TRCSync.run(src, { since, onEvent(ev, st) {
+      const id = ev.workout_id || ev.activity_id || "";
+      const day = ev.workout_date || ev.date || "";
+      if (ev.status === "downloaded") logLine(src, `✓ ${day} ${id} 已下載`, "d");
+      else if (ev.status === "skipped") logLine(src, `· ${day} ${id} 已存在`);
+      else if (ev.status === "no_file") logLine(src, `· ${day} ${id} 沒有 FIT 檔`);
+      else if (ev.status === "relogin") logLine(src, "· 登入已失效，已用記住的密碼自動重新登入", "d");
+      else if (ev.status === "error" || ev.error) logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e");
+      else if (ev.status === "complete") logLine(src, `完成：下載 ${ev.total_downloaded}、檢查 ${ev.total_checked}、錯誤 ${(ev.errors || []).length}`, "d");
+      if (st.total) { prog.max = st.total; prog.value = Math.min(st.checked, st.total); }
+      txt.textContent = `同步中… 檢查 ${st.checked}${st.total ? " / " + st.total : ""} · 下載 ${st.downloaded} · 錯誤 ${st.errors}`;
+    } });
+    if (st.busy && !st.checked) { txt.textContent = "這個來源正在同步中"; toast("這個來源正在同步中"); return; }
+    const fatal = st.fatal && (st.fatal.auth ? "登入已失效，請重新登入" : (st.fatal.detail || st.fatal.code || "失敗"));
     txt.textContent = fatal ? `同步失敗：${fatal}`
-      : finished ? `同步完成：下載 ${down}、檢查 ${checked}、錯誤 ${errs}` : `同步中斷：檢查 ${checked}、下載 ${down}`;
-    toast(fatal ? "同步失敗" : finished ? "同步完成" : "同步中斷");
+      : st.finished ? `同步完成：下載 ${st.downloaded}、檢查 ${st.checked}、錯誤 ${st.errors}` : `同步中斷：檢查 ${st.checked}、下載 ${st.downloaded}`;
+    toast(fatal ? "同步失敗" : st.finished ? "同步完成" : "同步中斷");
   } catch (e) { logLine(src, "連線失敗：" + e.message, "e"); txt.textContent = "同步失敗：" + reason(e); }
   finally {
     btn.disabled = false; btn.textContent = label; btn.removeAttribute("aria-busy");
