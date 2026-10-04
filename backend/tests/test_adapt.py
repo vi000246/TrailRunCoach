@@ -174,8 +174,12 @@ def test_overhard_downgrades_when_no_spaced_day():
     q = ids(out)["quality"]
     assert q["title"] == QG.DOSE[0][1] and q["day"] == "2026-10-03"
     assert any(a["action"] == "downgraded" for a in adj)
-    # first dose step -> an easy run
+    # the Zone 3 track's first rung (A1) -> the 巡航版 T3 (interval_library.PREV_RUNG, SP-31) …
     gw[0]["sessions"][1]["title"] = QG.DOSE[0][1]
+    out, adj, _ = A.adapt(gw, [], ctx(today="2026-10-03", reviews={7: {"avg_power": 260, "cp": 300}}))
+    assert ids(out)["quality"]["title"] == QG.CRUISE[2][1]
+    # … and the first 巡航版 rung -> an easy run
+    gw[0]["sessions"][1]["title"] = QG.CRUISE[0][1]
     out, adj, _ = A.adapt(gw, [], ctx(today="2026-10-03", reviews={7: {"avg_power": 260, "cp": 300}}))
     assert ids(out)["quality"]["kind"] == "easy"
 

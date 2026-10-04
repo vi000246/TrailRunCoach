@@ -172,11 +172,15 @@ def test_card_one_step_three_tests_from_the_gate():
     assert xu["ok"] and "6.0%" in xu["value"] and "徐國峰" in xu["src"]
     assert ua["ok"] is None and "沒有實測 AeT" in ua["value"]
     assert fr["ok"] is None
-    assert c["z3"] == {"done": 0, "need": 3, "ok": False, "src": QG.SRC_Z5["z3"]}
+    assert c["z3"] == {"done": 0, "need": 3, "ok": False, "src": QG.SRC_Z5["z3"], "step": 0, "z5_step": 0}
+    # the Zone 3 gate (SP-31): 5+ weeks of running every other day is the consistency path; the
+    # 90-min test passes too
+    assert c["z3_gate"]["open"] and c["z3_gate"]["path"] == "weeks"
+    assert [t["ok"] for t in c["z3_gate"]["tests"]][:2] == [True, True]
     assert c["keep"] and c["keep"]["line_min"] == pytest.approx(c["keep"]["level_min"] * 2 / 3)
     # the tracker and the 「還缺什麼」 line
     assert [(s["key"], s["status"]) for s in c["steps"]] == [("base", "done"), ("z3", "active"), ("z5", "todo")]
-    assert c["next"] == {"kind": "missing", "text": "還缺：再 3 堂 3 區達標（0/3；3 區只要護欄通過就照排）"}
+    assert c["next"] == {"kind": "missing", "text": "還缺：再 3 堂 3 區達標（0/3；3 區解鎖後、護欄通過就照排）"}
 
 
 def test_card_without_any_long_run_and_in_a_forced_mode():
@@ -235,9 +239,61 @@ def _st(f):
     return {s["key"]: s["status"] for s in f["stages"]}
 
 
-def test_flow_unconfirmed_z3_is_current_and_the_test_runs_alongside():
+def test_flow_zone3_gate_locked_is_the_first_stage(monkeypatch):
+    # SP-31: the first stage is the real Zone 3 gate — a run every 4th day is < 3 runs a week:
+    # no consistency yet, no 90-min test, no AeT: Zone 3 not open, three ways in
+    ds = _ds(_easy(range(2, 40, 4)))
+    g = QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE)
+    assert not g["z3"]["open"] and g["z3"]["weeks"] < QG.Z3_WEEKS_NEED and "3 區還沒解鎖" in g["z3"]["reason"]
+    f = QG.z5_card(g, TODAY)["flow"]
+    assert _st(f)["base"] == "current" and _st(f)["z3"] == "locked" and f["here"]["stage"] == "base"
+    base = f["stages"][0]
+    assert [i["text"].split("：")[0] for i in base["any"]] == [
+        "連續 4 週，每週跑 ≥ 3 次、沒有 ≥ 7 天沒跑（推估）", "徐國峰 90 分鐘測試", "UA 差距法"]
+    assert base["any_label"] and all(i["todo"] for i in base["any"]) and "推估" in base["any"][0]["tip"]
+    assert "每週 ≥ 3 次" in f["here"]["next"]
+    # the week: no interval, and the note says why
+    d = QG.week_decision(g, "base", "base")
+    assert not d["allow"] and d["z3_note"].startswith("本週沒排 3 區（還沒解鎖）：連續")
+    t = QG.indicator(g)
+    assert t["text"] == "3 區未開" and t["verdict"] == d["z3_note"]
+
+
+def test_zone3_consistency_path_and_the_21_day_relock():
+    # SP-31 (owner 2026-10-04): 4 complete weeks of ≥ 3 runs and no 7-day gap — sticky; a break of
+    # ≥ 21 days without running re-locks, 6–20 days doesn't (the re-entry block handles those)
+    mon = TODAY - dt.timedelta(days=TODAY.weekday())
+    wk = lambda i, ks=(0, 2, 4): [mon - dt.timedelta(weeks=i) + dt.timedelta(days=k) for k in ks]
+    four = sorted(d for i in range(1, 5) for d in wk(i))
+    c = QG.z3_consistency(four, TODAY)
+    assert c["open"] and c["since"] == mon.isoformat() and c["weeks"] == 4 and c["break"] is None
+    assert not QG.z3_consistency(four[3:], TODAY)["open"]                       # 3 weeks
+    two_a_week = sorted(d for i in range(1, 6) for d in wk(i, (1, 5)))
+    assert not QG.z3_consistency(two_a_week, TODAY)["open"]
+    # a 7-day stretch without running inside the window (Sun → the next Mon week later)
+    gap = sorted(d for i in range(1, 5) for d in (wk(i, (0, 1, 2)) if i != 2 else wk(i, (4, 5, 6))))
+    gap = [d for d in gap if not (mon - dt.timedelta(weeks=3) < d < mon - dt.timedelta(weeks=2) + dt.timedelta(days=4))] \
+        + wk(3, (0,))
+    assert not QG.z3_consistency(sorted(gap), TODAY)["open"]
+    # sticky: met weeks ago, then a 16-day break → still open (the re-entry block handles it)
+    c = QG.z3_consistency(sorted(d for i in range(4, 8) for d in wk(i)) + wk(1), TODAY)
+    assert c["open"] and c["break"] is None and c["weeks"] == 1
+    old = sorted(d for i in range(6, 10) for d in wk(i))
+    # ≥ 21 days off → re-locked until 4 new weeks after the return
+    c = QG.z3_consistency(old, TODAY)                                         # off since 5 weeks
+    assert not c["open"] and c["break"] and c["break"]["return"] is None
+    back = old + sorted(d for i in range(1, 3) for d in wk(i))
+    c = QG.z3_consistency(back, TODAY)
+    assert not c["open"] and c["break"]["days"] >= QG.Z3_RELOCK_DAYS
+
+
+def test_flow_unconfirmed_z3_is_current_and_the_test_runs_alongside(monkeypatch):
+    from backend.tests.test_quality_gate import _weeks_ok
+    monkeypatch.setattr(QG, "run_days", lambda ds, today, days=QG.Z3_HISTORY_DAYS: _weeks_ok(4))
     ds = _ds(_easy(range(2, 40, 2)))
     f = QG.z5_card(QG.evaluate(ds, ds.plan, TODAY, PP.Prefs(), GOOD_BY, BASE), TODAY)["flow"]
+    last = f["stages"][0]["items"][-1]
+    assert last["text"] == "3 區已解鎖" and last["ok"] and last["value"].startswith("連續 4 週規律訓練")
     assert [s["key"] for s in f["stages"]] == ["base", "z3", "confirm", "unlock", "z5"]
     assert _st(f) == {"base": "done", "z3": "current", "confirm": "parallel", "unlock": "locked", "z5": "locked"}
     z3 = f["stages"][1]

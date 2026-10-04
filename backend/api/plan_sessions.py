@@ -1193,8 +1193,10 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
     day = day or (s or {}).get("day")
     ctx = _variant_ctx(inp, day)
     gate = ctx["gate"]
-    dec = QG.week_decision(gate, "base", "base") if gate.get("state") else {"spec": None}
-    rung_now = (dec.get("spec") or (None,))[0]
+    # two tracks (SP-31): the session's own track picks the ladder (a Zone 5 session → the Zone 5 rung)
+    from backend.engine import interval_library as IL
+    track = IL.track_of((s or {}).get("rung_key") or getattr(IL.get((s or {}).get("variant_key")), "rung", None))
+    rung_now = QG.rung_now(gate, track)
     key, why = TR.ladder_pick(rung_now, ctx["cap"], ctx["history"], ctx["prefs"])
     ter = terrain or (s or {}).get("terrain")
     ter = "trail" if kind == "hike" or ter in ("trail", "hike") else "road"
@@ -1270,8 +1272,8 @@ async def variants(uid: Optional[str] = None, day: Optional[str] = None, db: Asy
     ctx = _variant_ctx(inp, day)
     cp = (ctx["th"] or {}).get("cp")
     gate = ctx["gate"]
-    dec = QG.week_decision(gate, "base", "base") if gate.get("state") else {"spec": None}
-    rung_now = (dec.get("spec") or (None,))[0]
+    track = IL.track_of((s or {}).get("rung_key") or getattr(IL.get((s or {}).get("variant_key")), "rung", None))
+    rung_now = QG.rung_now(gate, track)
     out = {"day": day, "cap": ctx["cap"], "cp": cp,
            "templates": IL.templates(cp, ctx["cap"], ctx["prefs"], ctx["history"], rung_now)}
     rung = (s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)) if s and s.get("variant_key") \

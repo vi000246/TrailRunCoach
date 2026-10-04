@@ -20,15 +20,20 @@ def _row(steps, n, lo=0.92, cp=250.0, rung="z3a", title="自己改的"):
             "bouts": [{"power": lo * cp} for _ in range(n)], "date": "2026-10-01"}
 
 
-def test_dose_spec_starts_at_z3a():
-    assert QG.dose_spec(0, True)[0] == "z3a"
+def test_dose_spec_starts_at_the_zone3_track():
+    assert QG.dose_spec(0, True)[0] == "a1" and QG.z3_spec(0)[0] == "a1"     # SP-31: A1 2×15′
 
 
 def test_equivalent_user_structure_moves_the_ladder():
+    st = _user("a1b")                    # 3×10′: an equivalent of A1 (2×15′)
+    h = [_row(st, 3, lo=0.90, rung="a1")]
+    out = QG.dose_step(h)
+    assert out["step"] == 1 and h[0]["outcome"] == "met" and h[0]["steps_equiv"] is True
+    # an equivalent of the old first rung T1 (now the 巡航版): a Zone 3 達標 that doesn't move A1
     st = _user("t1b")                    # 6×3′ at 92–97 %: an equivalent of T1 (3×6′)
     h = [_row(st, 6, lo=0.93)]
     out = QG.dose_step(h)
-    assert out["step"] == 1 and h[0]["outcome"] == "met" and h[0]["steps_equiv"] is True
+    assert out["step"] == 0 and out["met"] == 1 and h[0]["outcome"] == "met" and h[0]["steps_equiv"] is True
 
 
 def test_non_equivalent_user_structure_is_judged_but_does_not_move():

@@ -26,18 +26,29 @@ Two questions, answered separately:
    fallback is our own choice (a missing test shouldn't stop intervals forever).
 
 2. Can this week take one (the *guardrails*, §4.4; base phase, every mode)?
-     low-intensity time share ≥ 75 % (and run power < 80 % CP ≥ 75 % when known)
+     low-intensity time share ≥ 75 % (and run power < 80 % CP ≥ 75 % when known) — Zone 5 only since
+       SP-31: for Zone 3 a warning (the AeT is often estimated, climbs inflate HR)
      CTL ramp: ≥ 5 /week → sub-threshold only; ≥ 8 → none (Friel 5–8, coach)
      last week's volume step: > 20 % → none (Nielsen 2014, Damsted 2019); 10–20 % → hold the dose (推估)
      TSB −30…−20 → hold the dose (Friel / TrainingPeaks; < −30 is already a recovery week)
      3:1 recovery week → a 4×1′ fartlek instead of intervals (Palladino)
      48 h from the long run / other hard days → plan_prefs.place() / week_plan
-   Base phase gets at most one interval session a week.
+   Base phase gets at most one interval session a week without a measured AeT (guardrail_mode).
 
-The dose steps through the ladder (interval-prescription.md §A5.3), one step
-per planned interval session 達標 in the last 8 weeks: Zone 3 3×6′ → 3×8′ →
-2×12′, then (Zone 5 open) 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 / T+
-maintenance. Each step is a library variant fitted to the day
+Two tracks (SP-31, 2026-10-04; coach-schools-zones-periodization.md R2/R3), each with its own
+ladder, dose step and 達標 count (dose_tracks):
+  Zone 3 (有氧間歇／節奏, 88–95 % CP, reps 15–30 min): A1 2×15′ → A2 3×12′ → A3 2×20′ → A4 1×30′,
+     then A3 / A4 / T+ maintenance. Opens on the Zone 3 gate (z3_gate, any one): 4 complete weeks
+     of actual training with ≥ 3 runs a week and no 7-day gap (推估; sticky, a ≥ 21-day break
+     re-locks), the 90-min drift test < 10 %, or a measured UA gap ≤ 10 %. Its time in zone ≤ 10 %
+     of the week (Daniels; 5 % for the first session, UA): over that the 巡航版 T1–T3 (3×6′ / 3×8′
+     / 2×12′, the old Zone 3 rungs) stands in and still counts. Zone 3 + Zone 5 ≤ 20 % of the
+     week's running time (QUALITY_SHARE_MAX, 推估; overview.quality_sessions shortens and notes).
+  Zone 5: 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 maintenance — once the aerobic base is
+     confirmed (base_check.z5_status) and Zone 3 is steady (Z3_MET_FOR_Z5 達標).
+Zone 3 keeps going after Zone 5 opens. 課表偏好 2 a week → one of each; 1 a week with both open →
+alternate by the A race (track_ratio: ≤ 10 km road 1:1, else 2:1; 推估). A step moves one rung per
+planned session 達標 in the last 8 weeks. Each step is a library variant fitted to the day
 (engine/interval_library.py). The recovery-week fartlek is not a step. A held week repeats
 the last step. The step moves by the progression state machine of
 docs/research/interval-adaptation.md §4.3 (interval_outcome / dose_step):
@@ -45,7 +56,8 @@ docs/research/interval-adaptation.md §4.3 (interval_outcome / dose_step):
 short = target −5 %. The old "last rep 5 % below the first -> back one" rule is
 gone (the WKO5 speakers oppose it).
 
-Other phases keep the old rule: intensity and drift not bad.
+專項期 / 減量期 run the same two-track choice with their own sessions (overview.quality_sessions);
+their guard stays the old rule: intensity and drift not bad.
 """
 from __future__ import annotations
 
@@ -113,37 +125,85 @@ def _rung_row(rung: str) -> tuple:
     return (rung, _IL.title(v), v.n, v.work_s / 60.0, v.rest_s / 60.0, v.lo, v.hi, v.terrain == "hill", v.src)
 
 
-Z3 = tuple(_rung_row(r) for r in ("z3a", "z3b", "z3c"))
-Z5 = tuple(_rung_row(r) for r in ("z5a", "z5b", "z5c", "z5d"))
-TP = _rung_row("tp")             # T+ near-threshold: maintenance once the Z5 rungs are done (§A5.3)
-LADDER = Z3 + Z5
-Z3_MET_FOR_Z5 = len(Z3)        # 推估: 3 sessions 達標 at Zone 3 (the Z3 rungs) = Zone 3 is steady
+# ---- two tracks (SP-31, 2026-10-04; coach-schools-zones-periodization.md R2) -------------------
+# Zone 3 (有氧間歇／節奏) and Zone 5 each have their own ladder, dose step and 達標 count. Zone 3 keeps
+# being scheduled after Zone 5 opens (UA 專項期 1 堂 Z3 + 1 堂 Z4; Daniels 主課 + T 次課 — Finding 6:
+# no school's norm is two sessions of one intensity).
+Z3 = tuple(_rung_row(r) for r in _IL.Z3_TRACK)        # A1 2×15′ → A2 3×12′ → A3 2×20′ → A4 1×30′
+CRUISE = tuple(_rung_row(r) for r in _IL.CRUISE_RUNGS)  # T1 3×6′ / T2 3×8′ / T3 2×12′: weekday / low-volume fallback
+Z5 = tuple(_rung_row(r) for r in _IL.Z5_TRACK)
+TP = _rung_row("tp")             # T+ near-threshold: a Zone 3 track maintenance variant (§A5.3)
+LADDER = Z3 + CRUISE + Z5        # every rung row (spec_by_title / ladder_keys)
+Z3_MET_FOR_Z5 = 3              # 推估: 3 sessions 達標 on the Zone 3 track = Zone 3 is steady (SP-39 decides)
+Z3_WEEKS_NEED = 4              # 推估: the Zone 3 gate's consistency path — 4 complete weeks of actual training
+Z3_RUNS_PER_WEEK = 3           # 推估: … with ≥ 3 runs every week
+Z3_MAX_GAP_DAYS = 7            # 推估: … and no stretch of ≥ 7 days without running inside them
+Z3_RELOCK_DAYS = 21            # 推估: ≥ 21 days without running re-locks Zone 3 (Coyle 1984: VO2max −7 % at
+                               # 21 days; detraining.md §1 「3–8 週開始傷到有氧基礎」). 6–20 days: the re-entry block only
+Z3_HISTORY_DAYS = 365          # 自訂: how far back the run dates are read
+QUALITY_SHARE_MAX = 0.20       # 推估 (Seiler 80/20, Koop): the week's interval work (Zone 3 + Zone 5 time in zone)
+                               # ≤ 20 % of the planned running time — a planning rule, not a gate
+Z3_SHARE_START = 0.05          # UA: Zone 3 starts at about 5 % of the weekly aerobic volume (the track's first session)
+Z3_SHARE_MAX = 0.10            # Daniels: T running ≤ 10 % of the weekly volume — the per-week Zone 3 cap
 # legacy titles of the old ladders: not counted as steps any more (neutral in planned_spec).
-# The old z3a 「閾值 3×8 分」 is the new second rung's title: a title-only row reads as z3b now.
+# The old z3a 「閾值 3×8 分」 is T2's title: a title-only row reads as z3b now.
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
                  "閾值下 3×8 分", "閾值下 4×8 分", "閾值 4×8 分", "閾值 3×10 分")
-DOSE = Z3                      # kept for callers that read the first rungs (adapt._downgrade)
+DOSE = Z3                      # kept for callers that read the first rungs
 RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
-# the ramp-week session (CTL ramp ≥ 5: threshold only) — Z3[0]'s content under its own key / title so
-# it is never mistaken for the ladder's first rung (planned_spec: neutral)
+# the ramp-week session (CTL ramp ≥ 5: threshold only) — T1's content under its own key / title so
+# it is never mistaken for a ladder rung (planned_spec: neutral)
 SUB = ("sub", "閾值 3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp ≥ 5（Friel）：只排閾值；90–95% CP")
 ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
+TRACK_LABEL = {"z3": "3 區（有氧間歇）", "z5": "5 區（VO2max 間歇）"}
 
 
-def dose_spec(step: int, z5_open: bool = True) -> tuple:
-    """The ladder rung for `step` (達標 count): Z3 rungs first; from step 3
-    Z5 rungs only while Zone 5 is open — else the top Z3 rungs alternating
-    (Zone 3 continues; 台灣教練). After the Z5 rungs: maintenance rotating V3, V4
-    and T+ (near-threshold) — T+ every 3rd week (interval-prescription.md §C5.2-4, 推估)."""
+def z3_spec(step: int) -> tuple:
+    """The Zone 3 track's rung for `step` (its 達標 count): A1–A4, then maintenance rotating
+    A3, A4 and T+ (near-threshold; T+ every 3rd session — interval-prescription.md §C5.2-4, 推估)."""
     step = max(0, int(step))
     if step < len(Z3):
         return Z3[step]
-    if not z5_open:
-        return Z3[1 + step % 2]
-    k = step - len(Z3)
-    if k < len(Z5):
-        return Z5[k]
-    return (Z5[2], Z5[3], TP)[(k - len(Z5)) % 3]
+    return (Z3[2], Z3[3], TP)[(step - len(Z3)) % 3]
+
+
+def z5_spec(step: int) -> tuple:
+    """The Zone 5 track's rung for `step`: V1–V4, then maintenance rotating V3 / V4 (推估)."""
+    step = max(0, int(step))
+    if step < len(Z5):
+        return Z5[step]
+    return (Z5[2], Z5[3])[(step - len(Z5)) % 2]
+
+
+def track_spec(track: str, step: int) -> tuple:
+    return z5_spec(step) if track == "z5" else z3_spec(step)
+
+
+def dose_spec(step: int, z5_open: bool = True) -> tuple:
+    """Legacy single-ladder reading (Zone 3 rungs, then Zone 5 while open): kept for old callers.
+    The plan reads the two tracks (z3_spec / z5_spec)."""
+    step = max(0, int(step))
+    if step < len(CRUISE) or not z5_open:
+        return z3_spec(step)
+    return z5_spec(step - len(CRUISE))
+
+
+def z3_budget_min(hours: Optional[float], first: bool = False) -> Optional[float]:
+    """The week's Zone 3 time in zone budget (minutes): 10 % of the planned week (Daniels), 5 % for
+    the track's first session (UA). None without a week volume."""
+    if not hours or hours <= 0:
+        return None
+    return (Z3_SHARE_START if first else Z3_SHARE_MAX) * float(hours) * 60.0
+
+
+def cruise_for(rung: str, budget_min: Optional[float]) -> str:
+    """The 巡航版 rung a Zone 3 track rung falls back to when its time in zone is over the
+    week's budget: T1 / T2 / T3 by the rung's position (A1 → T1, A2 → T2, A3 / A4 → T3), stepping
+    down while it is still over the budget (T1 is the floor)."""
+    i = min(_IL.Z3_TRACK.index(rung) if rung in _IL.Z3_TRACK else 0, len(CRUISE) - 1)
+    while i > 0 and budget_min is not None and _IL.tiz_s(_IL.canonical(CRUISE[i][0])) / 60.0 > budget_min + 1e-6:
+        i -= 1
+    return CRUISE[i][0]
 
 
 def _f(v) -> Optional[float]:
@@ -376,7 +436,38 @@ def spec_by_title(title: Optional[str]) -> Optional[tuple]:
     """The ladder / recovery / sub row whose title is `title` (None when unknown)."""
     if not title:
         return None
-    return next((s for s in LADDER + (RECOVERY, SUB) if s[1] == str(title)), None)
+    return next((s for s in LADDER + (TP, RECOVERY, SUB) if s[1] == str(title)), None)
+
+
+def row_track(h: dict) -> Optional[str]:
+    """The track a dose_history row belongs to: "z3" / "z5", None for an unplanned run of a
+    stored plan (neutral on both). By the stored rung / variant / edited structure / title; a
+    run without a plan row by its stimulus (a Zone 5 run or ≥ 4 short reps → Zone 5, else Zone 3)."""
+    if h.get("unplanned"):
+        return None
+    rung = h.get("rung_key")
+    v = _IL.get(h.get("variant_key"))
+    if not rung and v is not None:
+        rung = v.rung
+    t = _IL.track_of(rung)
+    if t is None and v is not None:
+        t = "z5" if v.cls == "Z5" else "z3"
+    if t is None and user_steps(h):
+        try:
+            from backend.engine import workout_steps as WS
+            sv = WS.variant_from_steps(h["steps"], None)
+            if sv is not None:
+                t = "z5" if sv.cls == "Z5" else "z3"
+        except Exception:                       # noqa: BLE001
+            t = None
+    if t is None and h.get("title"):
+        sp = spec_by_title(h.get("title"))
+        t = _IL.track_of(sp[0]) if sp is not None else None
+        if t is None and sp is not None:
+            t = "z3"                            # RECOVERY / SUB: neutral rows on the Zone 3 side
+    if t is None:
+        t = "z5" if h.get("stimulus") == "z5" or h.get("rep_source") == "short" else "z3"
+    return t
 
 
 def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
@@ -462,6 +553,7 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
                     # a hard run, not a ladder session (real data 2026-10-01: steady runs at
                     # ~95 % CP were judged 「目標太高」 against 3×8′ and moved the ladder)
                     **({"unplanned": True} if in_use and not row else {})})
+        out[-1]["track"] = row_track(out[-1])
     WR._flush(ds)
     return out
 
@@ -504,21 +596,28 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
     傷病紀錄 with 「受傷期間暫停強度課」 ticked (engine/injuries.pause_reason)
     blocks intervals until it is resolved — the user's own choice, so it
     speaks first."""
-    out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": ""}
+    out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": "", "blocks": [],
+           "verdicts": {}, "warn": ""}
     aet_t = f"{aet:.0f} bpm" if aet else "AeT"
 
     def say(rule, verdict, action, **flags):
         if not out["rule"]:
             out.update(rule=rule, verdict=verdict, action=action)
+        out["verdicts"].setdefault(rule, verdict)
+        if flags.get("block") and rule not in out["blocks"]:
+            out["blocks"].append(rule)
         out.update(flags)
     if injury:
         say("injury", injury, "傷病紀錄按「好了」後恢復", block=True)
-    if low_share is not None and low_share < LOW_SHARE_MIN:
-        say("intensity", f"本週不排間歇：低強度只有 {low_share * 100:.0f}%（< 75%）",
-            f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
-    if power_low_share is not None and power_low_share < LOW_SHARE_MIN:
-        say("intensity", f"本週不排間歇：跑步功率 < 80% CP 只有 {power_low_share * 100:.0f}%（< 75%）",
-            f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
+    # the low-intensity share (SP-31, owner 2026-10-04): blocks Zone 5 only — for Zone 3 it is a
+    # warning (the AeT is often estimated, trail climbs inflate HR); 75 % is the floor, the base
+    # phase's ≥ 90 % a target (engine/panels/period_zones.py)
+    for share, what in ((low_share, "低強度只有"), (power_low_share, "跑步功率 < 80% CP 只有")):
+        if share is not None and share < LOW_SHARE_MIN:
+            say("intensity", f"{what} {share * 100:.0f}%（< 75%，底線）：本週 5 區先不排，3 區照排",
+                f"輕鬆跑壓在 {aet_t} 以下，下週再看", block=True)
+            out["warn"] = out["warn"] or (f"輕鬆跑心率偏高：{what} {share * 100:.0f}%（底線 75%、基礎期目標 ≥ 90%）"
+                                          "——只是提醒，3 區照排；5 區先不排")
     if ramp is not None and ramp >= RAMP_BLOCK:
         say("ramp", f"CTL 每週 +{ramp:.1f}（≥ {RAMP_BLOCK:.0f}，Friel）：本週不排間歇", "先穩住量", block=True)
     elif ramp is not None and ramp >= RAMP_SUB:
@@ -531,6 +630,23 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
     if tsb is not None and -30.0 <= tsb < TSB_HOLD:
         say("tsb", f"TSB {tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
     return out
+
+
+def guard_blocks(g: dict) -> tuple[Optional[str], Optional[str]]:
+    """(why Zone 3 is blocked, why Zone 5 is blocked) — None when it isn't. The low-intensity share
+    blocks Zone 5 only (SP-31). A guard without "blocks" (older gates) blocks both by its rule."""
+    if not g.get("block"):
+        return None, None
+    blocks = g.get("blocks")
+    if blocks is None:
+        blocks = [g.get("rule") or ""]
+    vs = g.get("verdicts") or {}
+    other = [r for r in blocks if r != "intensity"]
+    z3 = (vs.get(other[0]) or g.get("verdict") or "") if other else None
+    if other and not z3:
+        z3 = g.get("verdict", "")
+    z5 = g.get("verdict", "") if blocks else None
+    return z3, z5
 
 
 # ---- the progression state machine (docs/research/interval-adaptation.md §4.3) --
@@ -579,9 +695,10 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else "只有最後一趟略掉（≤ 5%）"}
 
 
-def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
-    """Next DOSE step by replaying the interval sessions done (oldest first),
-    each judged against the step it was planned at (interval_outcome):
+def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3") -> dict:
+    """Next step of one track (`track` "z3" / "z5"; SP-31: each track has its own ladder and
+    達標 count) by replaying that track's interval sessions done (oldest first; row_track), each
+    judged against the step it was planned at (interval_outcome):
       達標 -> next step (the ladder adds reps, then rep length, then power)
       邊界 -> the same step again
       未適應 -> same step, rest + 1 min; a second 未適應 in a row -> back one step
@@ -590,13 +707,16 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
     repeats the step — progress only on 達標 (unsourced-rules.md §B4; the
     old rule counted it as 達標 unless it `faded`). A missed session isn't in
     the history: the next week repeats the step (engine/adapt.py rule B).
+    Zone 3 track: a Zone 3 session off the rung (巡航版 T1–T3 — the old rungs —, T+) is still
+    judged and its 達標 counts in `met` (Zone 5's 「3 區達標」), but it doesn't move the rung.
     `faded` stays for the week card."""
-    step, streak, adjust, last = 0, 0, {}, None
-    for h in history:
+    step, streak, adjust, last, met = 0, 0, {}, None, 0
+    rows = [h for h in history if (h.get("track") or row_track(h)) == track or h.get("unplanned")]
+    for h in rows:
         if h.get("unplanned"):
             h["outcome"] = "neutral"           # not one of the plan's quality sessions
             continue
-        by_steps = steps_spec(h, step)
+        by_steps = steps_spec(h, step, track)
         if by_steps is not None:
             # a structure the user edited in the 課表 editor (engine/workout_steps.py): judged by
             # its own reps / band, counted only when it is an equivalent of the rung (§C2)
@@ -604,12 +724,14 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
         elif h.get("variant_key"):
             # judged by the stored variant (interval-prescription.md §C5.4) — not by the title,
             # which a shortened session changed (bug a: the 4×8′ / 3×10′ steps never moved)
-            spec, neutral, counted = variant_spec(h, step)
+            spec, neutral, counted = variant_spec(h, step, track)
         else:
-            spec, neutral = planned_spec(h.get("title"), step)
+            spec, neutral = planned_spec(h.get("title"), step, track)
             counted = True
-        if neutral:
-            # a recovery fartlek / sub-threshold (ramp week) / Zone 3 session the plan
+        off_rung = neutral and track == "z3" and spec not in (RECOVERY, SUB, ZONE3) and \
+            str(h.get("title") or "") not in LEGACY_TITLES and _IL.track_of(_row_rung(h, spec)) == "z3"
+        if neutral and not off_rung:
+            # a recovery fartlek / sub-threshold (ramp week) / a session the plan
             # prescribed outside the ladder: not a step, never judged against it
             h["outcome"] = "neutral"
             continue
@@ -625,6 +747,12 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
             oc = "border"
             o = {**o, "outcome": oc, "why": f"目標區時間只有計畫的 {r * 100:.0f}%（< 85%）"}
         h["outcome"] = oc
+        if off_rung:
+            # a Zone 3 session off the track's rung (巡航版 / T+ / the old Zone 3 rungs): judged, its
+            # 達標 counts for Zone 5's 「3 區達標」, the rung doesn't move (backward compatible)
+            h["counted"] = False
+            met += 1 if oc == "met" and counted else 0
+            continue
         if not counted:
             # a 縮量版 / non-equivalent swap / the step before under a tight cap: shown, but the
             # rung doesn't move (§C5.4 「判定結果只顯示，不影響階數」)
@@ -632,7 +760,7 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
             continue
         last = {**o, "outcome": oc, "date": h.get("date"), "step": step}
         if oc == "met":
-            step, streak, adjust = step + 1, 0, {}
+            step, streak, adjust, met = step + 1, 0, {}, met + 1
         elif oc in ("border", "unknown"):
             streak, adjust = 0, {}
         elif oc == "too_high":
@@ -643,12 +771,34 @@ def dose_step(history: list[dict], aet: Optional[float] = None) -> dict:
             else:
                 adjust = {"rest_add": 1}
             streak += 1
-    out = {"done": sum(1 for h in history if not h.get("unplanned")),
-           "faded": bool(last and last["outcome"] != "met"), "step": step}
+    out = {"track": track, "done": sum(1 for h in rows if not h.get("unplanned")),
+           "faded": bool(last and last["outcome"] != "met"), "step": step, "met": met}
     if last is not None:
         out.update(outcome=last["outcome"], adjust=adjust,
-                   note="" if last["outcome"] == "met" else f"上次間歇{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
+                   note="" if last["outcome"] == "met" else f"上次 {TRACK_LABEL[track].split('（')[0]}間歇"
+                                                            f"{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
     return out
+
+
+def _row_rung(h: dict, spec: tuple) -> Optional[str]:
+    """The rung a history row was planned at: its rung_key, its variant's rung, else the spec's."""
+    if h.get("rung_key"):
+        return h["rung_key"]
+    v = _IL.get(h.get("variant_key"))
+    if v is not None:
+        return v.rung
+    if spec[0] in _IL.LIBRARY:
+        return spec[0]
+    return getattr(_IL.get(spec[0]), "rung", None)
+
+
+def dose_tracks(history: list[dict], aet: Optional[float] = None) -> dict:
+    """gate["dose"]: {"z3": dose_step(z3), "z5": dose_step(z5), "history"} plus the legacy
+    top-level keys (the Zone 3 track's step / adjust / note; done = every session) for older readers."""
+    d3 = dose_step(history, aet, "z3")
+    d5 = dose_step(history, aet, "z5")
+    return {**{k: v for k, v in d3.items() if k != "track"}, "done": sum(1 for h in history if not h.get("unplanned")),
+            "z3": d3, "z5": d5}
 
 
 def ladder_keys() -> tuple:
@@ -661,14 +811,14 @@ def variant_tuple(v) -> tuple:
     return (v.key, IL.title(v), v.n, v.works[0] / 60.0, v.rest_s / 60.0, v.lo, v.hi, v.terrain == "hill", v.src)
 
 
-def variant_spec(h: dict, step: int) -> tuple[tuple, bool, bool]:
+def variant_spec(h: dict, step: int, track: str = "z3") -> tuple[tuple, bool, bool]:
     """(spec, neutral, counted) of a history row that carries a variant_key:
-    neutral when its rung isn't where the ladder stands (or it isn't a ladder
-    rung: T+ maintenance, 30/15); counted = equiv (a 縮量版 / non-equivalent swap is
+    neutral when its rung isn't where the track's ladder stands (or it isn't a ladder
+    rung: 30/15); counted = equiv (a 縮量版 / non-equivalent swap is
     judged but doesn't move the rung)."""
     from backend.engine import interval_library as IL
     v = IL.resolve(h.get("variant_key"), h.get("variant_reps"), h.get("variant_adj"))
-    want = dose_spec(step, True)
+    want = track_spec(track, step)
     if v is None:
         return want, True, False
     rung = h.get("rung_key") or v.rung
@@ -681,12 +831,12 @@ def user_steps(h: dict) -> Optional[dict]:
     return st if isinstance(st, dict) and st.get("origin") == "user" and st.get("items") else None
 
 
-def steps_spec(h: dict, step: int) -> Optional[tuple[tuple, bool, bool]]:
+def steps_spec(h: dict, step: int, track: str = "z3") -> Optional[tuple[tuple, bool, bool]]:
     """(spec, neutral, counted) of a row whose structure the user edited
     (workout_steps.variant_from_steps), or None (no such structure / no timed work
     step with an intensity: the variant / title path decides). The rung is the
     session's own (rung_key / its variant's); a structure without one is judged at
-    the ladder's current rung when it is the same class, else neutral. An HR-only
+    the track's current rung when it is the same class, else neutral. An HR-only
     structure's band is the class's (推估: h["steps_estimated"])."""
     st = user_steps(h)
     if st is None:
@@ -697,7 +847,7 @@ def steps_spec(h: dict, step: int) -> Optional[tuple[tuple, bool, bool]]:
     v = WS.variant_from_steps(st, rung)
     if v is None:
         return None
-    want = dose_spec(step, True)
+    want = track_spec(track, step)
     if not rung or rung not in IL.LIBRARY:
         c = IL.canonical(want[0])
         if c is None or c.cls != v.cls:
@@ -709,21 +859,20 @@ def steps_spec(h: dict, step: int) -> Optional[tuple[tuple, bool, bool]]:
     return variant_tuple(v), rung != want[0], ok
 
 
-def planned_spec(title: Optional[str], step: int) -> tuple[tuple, bool]:
+def planned_spec(title: Optional[str], step: int, track: str = "z3") -> tuple[tuple, bool]:
     """(the spec the session was planned at, neutral). By the stored plan's
-    title when there is one (dose_history reads it), else the ladder's step.
-    Judged only when the title is the rung the ladder stands at (with Zone 5
-    open); neutral = a session outside that position: RECOVERY, ZONE3, a SUB
-    (ramp week) or Zone 3 maintenance while Zone 5 is paused, and the old
-    ladder's titles (LEGACY_TITLES)."""
-    want = dose_spec(step, True)
+    title when there is one (dose_history reads it), else the track's step.
+    Judged only when the title is the rung the track stands at; neutral = a
+    session outside that position: RECOVERY, ZONE3, a SUB (ramp week), another
+    rung, and the old ladder's titles (LEGACY_TITLES)."""
+    want = track_spec(track, step)
     if title:
         t = str(title)
         if t == RECOVERY[1] or t.startswith("Zone 3"):
             return RECOVERY if t == RECOVERY[1] else ZONE3, True
         if t in LEGACY_TITLES or t == SUB[1]:
             return (SUB if t == SUB[1] else want), True
-        for s in LADDER:
+        for s in LADDER + (TP,):
             if s[1] == t:
                 return s, s[1] != want[1]
     return want, False
@@ -890,10 +1039,12 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         hist = dose_history(ds, today)
     except Exception:
         hist = []
-    dose = dose_step(hist, ae.get("value"))
+    dose = dose_tracks(hist, ae.get("value"))
     # ---- Zone 5 (engine/base_check.py) and the AeT test's reason -----------
     z5 = _z5(ds, today, mode, state, ae, lt, brk, [h.get("date") for h in hist], friel)
     test_reason = aet_test_reason(ds, today, ae, z5, brk)
+    # ---- the Zone 3 gate (SP-31) and the 1-a-week track ratio ---------------
+    z3 = z3_gate(ds, today, mode, state, ae, lt, z5, dose)
     out = {
         "mode": mode, "mode_label": LABEL[mode], "resolved": resolved, "state": state,
         "via": r.get("via"), "verdict": r.get("verdict", ""), "action": r.get("action", ""),
@@ -905,6 +1056,8 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         "dose": {**dose, "history": hist[-8:]},
         "kind": kind, "week_hours": _extra(by, "volume").get("last_week"),
         "z5": z5, "aet_test_reason": test_reason, "reentry": brk,
+        "z3": z3, "ratio": track_ratio(getattr(plan, "events", None) or (), today),
+        "monday": (today - dt.timedelta(days=today.weekday())).isoformat(),
     }
     out["options"] = options(out, ae, lt, cache, friel, xu, base_weeks, ef, need_weeks)
     return out
@@ -916,6 +1069,204 @@ def _injury_pause(today: dt.date) -> Optional[str]:
         return INJ.pause_reason(INJ.load_events(), today)
     except Exception:                       # noqa: BLE001 — the gate must still evaluate
         return None
+
+
+# ---------------------------------------------------------------------------
+# the Zone 3 gate (SP-31; coach-schools-zones-periodization.md R3) and the track ratio
+# ---------------------------------------------------------------------------
+
+SRC_Z3 = {
+    "weeks": "推估：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑）——UA 登山計畫 4 週基礎後才出現第一堂 Z3；"
+             "Pfitzinger 第一個週期 5 週耐力；停跑 ≥ 21 天重新累積（Coyle 1984：21 天 VO2max −7%）",
+    "xu90": "徐國峰部落格（2016-12）：90 分鐘平路 1 區，飄移 < 10%",
+    "ua_gap": SRC_UA,
+    "ratio": "推估（研究 Finding 6 的週內配置：UA 專項期 1 堂 Z3＋1 堂 Z4、Daniels 主課＋T 次課）："
+             "每週 1 堂時，目標 ≤ 10 km 路跑 3 區：5 區 = 1:1，半馬以上／越野／沒有 A 賽 2:1",
+    "volume": "Daniels：T 每週不超過週量 10%；Uphill Athlete：Zone 3 起步約週有氧量 5%",
+    "share": "推估：一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%（Seiler 80/20；Koop）",
+}
+
+
+def run_days(ds, today: dt.date, days: int = Z3_HISTORY_DAYS) -> list[dt.date]:
+    """The dates with a run, up to `today`, oldest first (imported history counts)."""
+    from backend.engine.wko5expr.dataset import date_to_day, day_to_date
+    tday = math.floor(date_to_day(today))
+    return sorted({day_to_date(math.floor(w.day)) for w in ds.workouts
+                   if w.sport == "run" and tday - days < math.floor(w.day) <= tday})
+
+
+def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED) -> dict:
+    """The Zone 3 gate's consistency path on the run dates (SP-31): a window of `need` complete
+    weeks, each with ≥ Z3_RUNS_PER_WEEK runs and no Z3_MAX_GAP_DAYS-day stretch without running,
+    after the last break of ≥ Z3_RELOCK_DAYS days (which re-locks; a break still going on too).
+    Once such a window exists the path stays open (sticky — a 6–20-day break only gets the
+    re-entry block). {"open", "since", "weeks" (the trailing complete weeks that pass, for
+    the progress line), "rows" (the last `need` weeks: monday, runs, ok), "break"}."""
+    mon = today - dt.timedelta(days=today.weekday())
+    brk = None
+    prev = None
+    for d in list(days) + [today + dt.timedelta(days=1)]:
+        if prev is not None and (d - prev).days - 1 >= Z3_RELOCK_DAYS:
+            brk = {"last_run": prev.isoformat(), "days": (d - prev).days - 1,
+                   "return": d.isoformat() if d <= today else None}
+        prev = d
+    if not days:
+        brk = None
+    start = dt.date.fromisoformat(brk["return"]) if brk and brk["return"] else (days[0] if days else today)
+    first_mon = start - dt.timedelta(days=start.weekday())
+    if brk and brk["return"] and start != first_mon:
+        first_mon += dt.timedelta(weeks=1)              # the return week isn't complete training
+    weeks = []
+    m = first_mon
+    while m < mon:
+        weeks.append(m)
+        m += dt.timedelta(weeks=1)
+    runs = {w: sum(1 for d in days if w <= d < w + dt.timedelta(weeks=1)) for w in weeks}
+
+    def gap_ok(w0: dt.date, w1: dt.date) -> bool:
+        ds_ = [d for d in days if w0 <= d < w1]
+        return all((b - a).days - 1 < Z3_MAX_GAP_DAYS for a, b in zip(ds_, ds_[1:]))
+    since = None
+    if not (brk and brk["return"] is None):
+        for i in range(len(weeks) - need + 1):
+            win = weeks[i:i + need]
+            if all(runs[w] >= Z3_RUNS_PER_WEEK for w in win) and gap_ok(win[0], win[-1] + dt.timedelta(weeks=1)):
+                since = (win[-1] + dt.timedelta(weeks=1)).isoformat()
+                break
+    trail = 0
+    for k in range(len(weeks), 0, -1):
+        win = weeks[k - 1:]
+        if runs[weeks[k - 1]] >= Z3_RUNS_PER_WEEK and gap_ok(win[0], mon):
+            trail += 1
+        else:
+            break
+    rows = []
+    for k in range(need, 0, -1):
+        w = mon - dt.timedelta(weeks=k)
+        n = sum(1 for d in days if w <= d < w + dt.timedelta(weeks=1))
+        rows.append({"monday": w.isoformat(), "runs": n, "ok": n >= Z3_RUNS_PER_WEEK and w >= first_mon})
+    return {"open": since is not None, "since": since, "weeks": trail, "rows": rows, "break": brk}
+
+
+def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict, z5: dict,
+            dose: dict) -> dict:
+    """Is the Zone 3 track open (SP-31, the owner's rule 2026-10-04)? Any one of:
+      weeks   consistency: Z3_WEEKS_NEED complete weeks of actual training (imported history counts,
+              whatever the phase label) with ≥ Z3_RUNS_PER_WEEK runs every week and no
+              Z3_MAX_GAP_DAYS-day stretch without running (z3_consistency; 推估) — sticky once met
+      xu90    a 徐國峰 90-min test with drift < 10 % (base_check.xu_runs)
+      ua_gap  a measured AeT with LTHR / AeT − 1 ≤ 10 % (Uphill Athlete)
+    plus what already shows the base is there: mode none (no gate, Seiler), the chosen 間歇門檻
+    method unlocked, an aerobic-base confirmation of the Zone 5 process, the re-entry rule asking
+    for Zone 3, or a Zone 3 session 達標 in the last 8 weeks. No low-intensity-share condition
+    (the AeT is often estimated and climbs inflate HR). A break of ≥ Z3_RELOCK_DAYS days without
+    running re-locks it: only what comes after the break counts (and a break still going on
+    locks). This week's guardrails apply on top (week_decision).
+    {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break"}."""
+    need = Z3_WEEKS_NEED
+    try:
+        cons = z3_consistency(run_days(ds, today), today, need)
+    except Exception:                       # noqa: BLE001 — the gate must still evaluate
+        cons = {"open": False, "since": None, "weeks": 0, "rows": [], "break": None}
+    brk = cons.get("break")
+    after = brk.get("return") if brk else None          # evidence before a ≥ 21-day break doesn't count
+    resting = bool(brk) and not brk.get("return")
+    ok_after = lambda d: not brk or (after is not None and bool(d) and str(d)[:10] >= after)
+    try:
+        from backend.engine import base_check as BC
+        xs = BC.xu_runs(ds, today)
+    except Exception:                       # noqa: BLE001
+        xs = []
+    xu_ok = next((x for x in reversed(xs) if x.get("ok") and ok_after(x.get("date"))), None)
+    ua = ua_gap_method(ae, lt)
+    ua_ok = ua["state"] == "unlocked" and ok_after(ae.get("date"))
+    d3 = dose.get("z3") or {}
+    pause = z5.get("pause") or {}
+    short = [r for r in cons.get("rows") or [] if not r["ok"]]
+    tests = [
+        {"key": "weeks", "label": f"連續 {need} 週，每週跑 ≥ {Z3_RUNS_PER_WEEK} 次、沒有 ≥ {Z3_MAX_GAP_DAYS} 天沒跑（推估）",
+         "ok": bool(cons["open"]),
+         "value": (f"{cons['since']} 起達成" if cons["open"] else f"{min(cons['weeks'], need)}/{need} 週"
+                   + (f"（{short[-1]['monday'][5:]} 那週跑 {short[-1]['runs']} 次）" if short else "")),
+         "need": f"{need} 週", "src": SRC_Z3["weeks"]},
+        {"key": "xu90", "label": "徐國峰 90 分鐘測試：飄移 < 10%", "ok": True if xu_ok else (False if xs else None),
+         "value": _xu_value(xu_ok or (xs[-1] if xs else None)), "need": "< 10%", "src": SRC_Z3["xu90"]},
+        {"key": "ua_gap", "label": "UA 差距法：實測 AeT，LTHR ÷ AeT − 1 ≤ 10%",
+         "ok": True if ua_ok else (False if ua["state"] == "locked" else None),
+         "value": ua.get("verdict") or "", "need": "≤ 10%", "src": SRC_Z3["ua_gap"]},
+    ]
+    path, label = None, ""
+    if mode == "none":
+        path, label = "none", "不設門檻（Seiler）"
+    elif resting:
+        path = None
+    elif cons["open"]:
+        path, label = "weeks", f"連續 {need} 週規律訓練（{cons['since']} 起）"
+    elif xu_ok:
+        path, label = "xu90", f"90 分鐘飄移 {xu_ok['drift'] * 100:.1f}% < 10%（{xu_ok['date']}）"
+    elif ua_ok:
+        path, label = "ua_gap", f"UA 差距 {ua['gap'] * 100:.0f}% ≤ 10%"
+    elif state == "unlocked" and not brk:
+        path, label = "method", f"間歇門檻已解鎖（{LABEL.get(mode, mode)}）"
+    elif (z5.get("since") and ok_after(z5.get("since"))) or z5.get("open"):
+        path, label = "z5", "有氧基礎已確認（5 區流程）"
+    elif pause.get("kind") == "reentry_z3":
+        path, label = "reentry", "恢復期後先排 3 區"
+    elif not brk and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:
+        path, label = "track", "8 週內有 3 區達標，繼續階梯"
+    if resting:
+        reason = f"3 區還沒解鎖：已經 {brk['days']} 天沒跑（≥ {Z3_RELOCK_DAYS} 天要重新累積；推估）"
+    elif path:
+        reason = ""
+    else:
+        reason = (f"3 區還沒解鎖：連續 {min(cons['weeks'], need)}/{need} 週每週跑 ≥ {Z3_RUNS_PER_WEEK} 次（推估）"
+                  + (f"——{short[-1]['monday'][5:]} 那週跑 {short[-1]['runs']} 次" if short else "")
+                  + (f"；停跑 {brk['days']} 天（≥ {Z3_RELOCK_DAYS} 天）後重新累積" if brk else "")
+                  + "；或做一次 90 分鐘平路 1 區測試（飄移 < 10%）；或實測 AeT 且 UA 差距 ≤ 10%")
+    return {"open": path is not None, "path": path, "path_label": label, "weeks": cons["weeks"],
+            "weeks_need": need, "weekly": cons.get("rows") or [], "tests": tests, "reason": reason,
+            "since": cons.get("since"), "break": brk,
+            "text": f"Zone 3：已解鎖（{label}）" if path else f"Zone 3：未解鎖（{reason.split('：', 1)[-1]}）",
+            "src": SRC_Z3["weeks"]}
+
+
+def _xu_value(x: Optional[dict]) -> str:
+    if not x:
+        return "—（還沒做過：半年內沒有 ≥ 90 分鐘的跑步）"
+    from backend.engine import base_check as BC
+    try:
+        return BC.xu_text(x)
+    except Exception:                       # noqa: BLE001
+        return x.get("date") or ""
+
+
+def z3_open_on(z3: Optional[dict], monday: Optional[dt.date], gate_monday: Optional[str]) -> bool:
+    """The Zone 3 gate on the week of `monday`: open as evaluated; locked only by the time path
+    opens in a projected week once the streak would reach Z3_WEEKS_NEED (each projected week is
+    assumed to pass its guardrails — they are re-checked when it comes; 推估). A gate without a
+    Zone 3 part (older stored gates, legacy callers) is open."""
+    if not isinstance(z3, dict):
+        return True
+    if z3.get("open"):
+        return True
+    if monday is None or not gate_monday:
+        return False
+    ahead = (monday - dt.date.fromisoformat(str(gate_monday)[:10])).days // 7
+    return ahead > 0 and int(z3.get("weeks") or 0) + ahead >= int(z3.get("weeks_need") or Z3_WEEKS_NEED)
+
+
+def track_ratio(events, today: dt.date) -> dict:
+    """The 1-a-week alternation (推估): the next A race a road race ≤ 10 km → Zone 3 : Zone 5 = 1:1;
+    a half marathon or longer, a trail race / 百岳, or no A race → 2:1. {"z3", "z5", "why"}."""
+    ahead = sorted((e for e in events or () if getattr(e, "priority", "A") == "A" and getattr(e, "kind", "") in
+                    ("race", "road", "baiyue") and e.start >= today), key=lambda e: e.start)
+    e = ahead[0] if ahead else None
+    if e is not None and e.kind == "road" and e.distance_km and e.distance_km <= 10.0:
+        return {"z3": 1, "z5": 1, "why": f"A 賽 {e.distance_km:g} km 路跑（≤ 10 km）"}
+    if e is None:
+        return {"z3": 2, "z5": 1, "why": "沒有 A 賽"}
+    what = "越野" if e.kind != "road" else f"{e.distance_km:g} km 路跑" if e.distance_km else "路跑"
+    return {"z3": 2, "z5": 1, "why": f"A 賽{what}"}
 
 
 def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
@@ -1204,10 +1555,14 @@ def z5_card(gate: dict, today: dt.date) -> dict:
                    "ok": bool(base_done), "tests": tests,
                    "empty": ("恢復期內不判斷" if state == "reentry" else
                              "不設門檻（Seiler）" if state == "open" else "" if tests else "這個間歇門檻不開 5 區")}
-    d = gate.get("dose") or {}
-    step = int(d.get("step") or 0)
-    z3 = out["z3"] = {"done": min(step, Z3_MET_FOR_Z5), "need": Z3_MET_FOR_Z5, "ok": step >= Z3_MET_FOR_Z5,
-                      "src": SRC_Z5["z3"]}
+    d3, d5 = _track_doses(gate)
+    met = int(d3.get("met") or 0)
+    on5 = int(d5.get("step") or 0) > 0 or int(d5.get("done") or 0) > 0
+    z3 = out["z3"] = {"done": min(met, Z3_MET_FOR_Z5), "need": Z3_MET_FOR_Z5, "ok": met >= Z3_MET_FOR_Z5 or on5,
+                      "src": SRC_Z5["z3"], "step": int(d3.get("step") or 0), "z5_step": int(d5.get("step") or 0)}
+    z3g = gate.get("z3")
+    out["z3_gate"] = z3g if isinstance(z3g, dict) else {"open": True, "path": None, "path_label": "", "tests": [],
+                                                       "reason": "", "text": ""}
     mt = z.get("maintenance") or {}
     if state in ("confirmed", "paused") and mt.get("z1_level_min"):
         wk = mt.get("weeks") or []
@@ -1229,7 +1584,7 @@ def z5_card(gate: dict, today: dt.date) -> dict:
         "confirmed": f"已確認（{z.get('since')}，{out['path_label']}）",
         "paused": "暫停", "reentry": "恢復期", "open": "不設門檻",
     }.get(state, "未確認")
-    out["flow"] = z5_flow(out, z, gate, tests, step)
+    out["flow"] = z5_flow(out, z, gate, tests, z3["step"])
     return out
 
 
@@ -1267,7 +1622,9 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
                 "note", "unlocks", "tip"}]
     Every item: {"text", "ok" (True / False / None = unknown), "value", "todo", "tip"}.
     Stage order (owner): 有氧基礎 → 3 區階梯 → 有氧基礎確認 → 5 區解鎖 → 5 區階梯;
-    the confirmation can be done alongside the Zone 3 ladder ("parallel")."""
+    the confirmation can be done alongside the Zone 3 ladder ("parallel"). The first stage is the
+    real Zone 3 gate (z3_gate, SP-31): its tests are the stage's "any" until one passes. `step` is
+    the Zone 3 track's step; the Zone 5 track's comes from card["z3"]["z5_step"]."""
     from backend.i18n import _
     state, B, z3, R, K = card["state"], card["base"], card["z3"], card.get("reentry"), card.get("keep")
     pause = z.get("pause") or {}
@@ -1297,9 +1654,22 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         "\n" + _("來源：") + SRC_Z5["week"]
     if K and K.get("last_week"):
         tip1 += "\n" + _("上週 1 區 {m} 分", m=f"{K['last_week']['z1_min']:.0f}")
-    done1 = state != "reentry" and pk != "drift_check"
+    # the Zone 3 gate (SP-31): any one of its tests opens Zone 3 (z3_gate); already open → one done line
+    G = card.get("z3_gate") or {"open": True}
+    any1, note1 = [], ""
+    if G.get("open"):
+        if G.get("path_label"):
+            s1.append(item(_("3 區已解鎖"), True, G["path_label"]))
+    else:
+        todo1 = {"weeks": _("規律跑：每週 ≥ {n} 次、別連續 {g} 天沒跑", n=Z3_RUNS_PER_WEEK, g=Z3_MAX_GAP_DAYS),
+                 "xu90": _("做 1 次 90 分鐘平路 1 區測試"), "ua_gap": _("做 1 次 AeT 測試（LTHR ÷ AeT − 1 ≤ 10% 就算）")}
+        for t in G.get("tests") or []:
+            any1.append(item(t["label"], t.get("ok"), t.get("value"), todo1.get(t["key"], ""),
+                             need_src(t["label"], t.get("need"), t.get("src"))))
+        note1 = _("3 區解鎖：三選一")
+    done1 = state != "reentry" and pk != "drift_check" and bool(G.get("open"))
 
-    # 2 3 區階梯: the Zone 3 rungs (dose step = 達標 count); a break adds its own Zone 3 sessions
+    # 2 3 區階梯: the Zone 3 track's rungs (its own step); a break adds its own Zone 3 sessions
     s2 = [item(r[1], step > i, "", _("完成 1 堂「{t}」，達標就往上一階", t=r[1]) if step == i else "")
           for i, r in enumerate(Z3)]
     if pk == "reentry_z3":
@@ -1307,7 +1677,9 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         s2.append(item(_("恢復期後的 3 區"), False, f"{pause.get('done', 0)}/{pause.get('need', 1)}",
                        _("再 {n} 堂 3 區", n=left)))
     done2 = bool(z3["ok"]) and pk != "reentry_z3"
-    tip2 = _("3 區只要護欄通過就照排；達標 {n} 堂才進 5 區", n=z3["need"]) + "\n" + _("來源：") + z3["src"]
+    tip2 = (_("3 區解鎖後、護欄通過就照排，5 區開放後也照排；3 區達標 {n} 堂才進 5 區", n=z3["need"])
+            + "\n" + _("每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12") + "\n"
+            + _("來源：") + z3["src"])
 
     # 3 有氧基礎確認: one of the tests
     s3, any3, note3 = [], [], ""
@@ -1336,7 +1708,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     note4 = card.get("reason") if state == "paused" else ""
 
     # 5 5 區階梯: the Zone 5 rungs, then maintenance; only while Zone 5 is open
-    k5 = step - len(Z3) if z5ok else -1
+    k5 = int(z3.get("z5_step") or 0) if z5ok else -1
     s5 = [item(r[1], k5 > i, "", _("完成 1 堂「{t}」，達標就往上一階", t=r[1]) if k5 == i else "")
           for i, r in enumerate(Z5)]
     if K:  # keeping the confirmation: part of stage 3
@@ -1347,6 +1719,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
 
     stages = [
         {"key": "base", "title": _("有氧基礎"), "sub": _("輕鬆跑打底"), "items": s1, "done": done1,
+         "any": any1, "any_label": note1,
          "unlocks": _("可以開始排 3 區"), "tip": tip1, "note": ""},
         {"key": "z3", "title": _("3 區階梯"), "sub": _("{d}/{n} 堂達標", d=z3["done"], n=z3["need"]), "items": s2,
          "done": done2, "unlocks": _("3 區達標：5 區的條件之一"), "tip": tip2, "note": ""},
@@ -1358,7 +1731,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
          "unlocks": _("5 區間歇可以排：每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天"),
          "tip": _("來源：{x}", x=SRC_Z5["z3"].split("：")[0]), "note": note4},
         {"key": "z5", "title": _("5 區階梯"), "sub": "", "items": s5, "done": False,
-         "unlocks": _("之後維持：V3／V4／T+ 輪替"), "tip": _("每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天"), "note": ""},
+         "unlocks": _("之後維持：V3／V4 輪替；3 區照排（A3／A4／T+ 輪替）"), "tip": _("每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天"), "note": ""},
     ]
     cur = next(i for i, s in enumerate(stages) if not s["done"])
     for i, s in enumerate(stages):
@@ -1415,7 +1788,7 @@ def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
         if z3["ok"]:
             return {"kind": "done", "text": "都做到了：5 區可以排（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天）"}
         left = z3["need"] - z3["done"]
-        return {"kind": "missing", "text": f"還缺：再 {left} 堂 3 區達標（{z3['done']}/{z3['need']}；3 區只要護欄通過就照排）"}
+        return {"kind": "missing", "text": f"還缺：再 {left} 堂 3 區達標（{z3['done']}/{z3['need']}；3 區解鎖後、護欄通過就照排）"}
     # unconfirmed: what to do for the cheapest test the mode uses
     mode = gate.get("mode") or "auto"
     by = {t["key"]: t for t in tests}
@@ -1504,57 +1877,180 @@ def legacy(g: Optional[dict]) -> bool:
     return g is not None and "state" not in g
 
 
+def _track_doses(gate: dict) -> tuple[dict, dict]:
+    """(Zone 3 dose, Zone 5 dose) of a gate. A gate from before the two tracks (one ladder:
+    Zone 3 rungs, then Zone 5 from step 3) reads as its Zone 3 count and its Zone 5 position."""
+    d = gate.get("dose") or {}
+    if isinstance(d.get("z3"), dict):
+        return d["z3"], d.get("z5") or {"step": 0, "done": 0, "met": 0}
+    s = int(d.get("step") or 0)
+    return ({"step": min(s, len(CRUISE)), "met": min(s, len(CRUISE)), "done": d.get("done", 0),
+             "adjust": d.get("adjust"), "faded": d.get("faded"), "note": d.get("note")},
+            {"step": max(0, s - len(CRUISE)), "met": 0, "done": max(0, s - len(CRUISE))})
+
+
+def rung_now(gate: Optional[dict], track: Optional[str] = None) -> Optional[str]:
+    """The ladder rung a track stands at (SP-31: each track has its own). `track` None: this
+    week's first ladder session (week_decision), else the Zone 3 track's. None without a gate."""
+    if not gate or not gate.get("state"):
+        return None
+    if track is None:
+        spec = week_decision(gate, "base", "base").get("spec")
+        if spec is not None and spec[0] in _IL.LIBRARY:
+            return spec[0]
+        track = "z3"
+    d3, d5 = _track_doses(gate)
+    return track_spec(track, int((d5 if track == "z5" else d3).get("step") or 0))[0]
+
+
+def _week_index(monday: Optional[dt.date]) -> int:
+    return 0 if monday is None else (monday.toordinal() - 1) // 7
+
+
 def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = None,
-                  step: Optional[int] = None, first: bool = True) -> dict:
-    """{"allow", "spec", "advance", "note"} for one week. `first` = this week
-    (today's guardrails apply); projected weeks only keep the slow-moving
-    intensity guard — ramp, volume and TSB are re-checked when the week comes."""
+                  step=None, first: bool = True, n: int = 1) -> dict:
+    """One week's interval sessions (SP-31: two tracks). {"allow", "items", "spec",
+    "advance", "adjust", "track", "note", "z3_note"}; `items` = [{"track" z3 | z5 | None,
+    "spec", "advance", "adjust", "first"}] in schedule order and `spec` / `advance` /
+    `adjust` / `track` are the first item's (older callers). `first` = this week (today's
+    guardrails apply); projected weeks only keep the slow-moving intensity guard — ramp,
+    volume and TSB are re-checked when the week comes. `step`: the track steps reached by a
+    projected week ({"z3", "z5", "met"}; an int = the Zone 3 step). `n`: intervals wanted
+    this week (課表偏好 每週品質課 2 → one Zone 3 + one Zone 5 when both are open).
+    Tracks: Zone 3 when its gate is open (z3_gate); Zone 5 when the aerobic base is confirmed
+    (gate["z5"]) and Zone 3 is steady (Z3_MET_FOR_Z5 sessions 達標, or the Zone 5 track already
+    under way). One a week with both open: alternate by gate["ratio"] (track_ratio), by week.
+    `z3_note`: why this week has no Zone 3 session (the 總覽／課表 note), "" when it has one."""
     kind = kind or "base"
     levels = gate.get("levels") or {}
     gi = gate.get("guard") or {}
+
+    def none(note: str, z3_note: Optional[str] = None, allow: bool = False) -> dict:
+        return {"allow": allow, "spec": None, "advance": False, "adjust": None, "track": None, "items": [],
+                "note": note, "z3_note": z3_note if z3_note is not None else (f"本週沒排 3 區：{note}" if note else "")}
     if gi.get("rule") == "injury" and gi.get("block"):
         # 傷病紀錄「受傷期間暫停強度課」: every phase, every week until the event is resolved
-        return {"allow": False, "spec": None, "advance": False, "note": gi.get("verdict", "")}
-    if kind != "base":
-        ok = levels.get("intensity") != "bad" and levels.get("drift") != "bad"
-        return {"allow": ok, "spec": None, "advance": False, "note": ""}
-    # two gates (台灣教練): Zone 3 whenever the guardrails pass; Zone 5 only
-    # while the aerobic base is confirmed (gate["z5"], engine/base_check.z5_status). A locked
-    # method no longer stops Zone 3 — it only keeps Zone 5 closed.
+        return none(gi.get("verdict", ""))
     z5 = gate.get("z5") or {}
+    d3, d5 = _track_doses(gate)
+    steps = step if isinstance(step, dict) else ({"z3": int(step)} if step is not None else {})
+    s3 = int(steps.get("z3", d3.get("step") or 0))
+    s5 = int(steps.get("z5", d5.get("step") or 0))
+    met = int(steps.get("met", d3.get("met") or 0))
     z5_open = bool(z5.get("open"))
-    if first and z5.get("state") == "reentry":
-        # inside a re-entry block: E days only (Daniels table 9.2; engine/reentry.py)
-        return {"allow": False, "spec": None, "advance": False, "note": z5.get("text", "")}
     if gate.get("resolved") == "weeks" and monday is not None and gate.get("base_start") and \
             gate.get("mode") == "weeks":
         wk = (monday - dt.date.fromisoformat(gate["base_start"])).days // 7 + 1
         z5_open = wk > int(gate.get("weeks_need") or 8)
+    z3g = gate.get("z3")
+    z3_open = z3_open_on(z3g, monday, gate.get("monday"))
+    z5_ok = z5_open and (met >= Z3_MET_FOR_Z5 or s5 > 0 or int(d5.get("done") or 0) > 0)
+    avail = [t for t, ok in (("z3", z3_open), ("z5", z5_ok)) if ok]
+    lock = "" if z3_open else \
+        "本週沒排 3 區（還沒解鎖）：" + ((z3g or {}).get("reason") or "").removeprefix("3 區還沒解鎖：")
+    if kind != "base":
+        ok = levels.get("intensity") != "bad" and levels.get("drift") != "bad"
+        if kind not in ("specific", "taper"):
+            return {**none(""), "allow": ok, "z3_note": ""}
+        if levels.get("drift") == "bad":
+            return none("", "本週沒排 3 區：心率飄移是 bad，先不排強度課")
+        warn = ""
+        if levels.get("intensity") == "bad":
+            # the low-intensity share keeps Zone 5 out, Zone 3 goes on with a warning (SP-31)
+            avail = [t for t in avail if t != "z5"]
+            warn = "輕鬆跑心率偏高（強度分配是 bad）——只是提醒，3 區照排；5 區先不排"
+        items = _pick_tracks(avail, n, monday, gate, s3, s5, d3, first and step is None, met)
+        out = _decision(items, avail, gate, n, monday, lock)
+        return {**out, "allow": True if kind == "taper" else bool(items), "warn": warn if items else ""}
+    if first and z5.get("state") == "reentry":
+        # inside a re-entry block: E days only (Daniels table 9.2; engine/reentry.py)
+        return none(z5.get("text", ""))
     g = gate.get("guard") or {}
     if not first:
-        g = {"block": g.get("block") and g.get("rule") == "intensity", "sub": False, "hold": False}
-    if g.get("block"):
-        return {"allow": False, "spec": None, "advance": False, "note": g.get("verdict", "")}
+        # a projected week keeps only the slow-moving intensity guard (Zone 5 only, SP-31)
+        keep = bool(g.get("block")) and "intensity" in (g.get("blocks") if g.get("blocks") is not None
+                                                          else [g.get("rule")])
+        g = {"block": keep, "blocks": ["intensity"] if keep else [], "rule": "intensity" if keep else "",
+             "verdict": (g.get("verdicts") or {}).get("intensity") or g.get("verdict", "") if keep else "",
+             "sub": False, "hold": False, "warn": g.get("warn", "") if keep else ""}
+    b3, b5 = guard_blocks(g)
+    if b3 is not None:
+        return none(b3)                                    # ramp / volume / … : no interval at all
+    if b5 is not None:
+        avail = [t for t in avail if t != "z5"]            # the low-intensity share: Zone 5 waits
     if mode == "recovery_week":
-        return {"allow": True, "spec": RECOVERY, "advance": False, "note": ""}
+        return {"allow": True, "spec": RECOVERY, "advance": False, "adjust": None, "track": None, "note": "",
+                "items": [{"track": None, "spec": RECOVERY, "advance": False, "adjust": None, "first": False}],
+                "z3_note": "恢復週：只排 4×1 分 fartlek，3 區下週再排"}
+    if not avail:
+        return none("", lock)
     if g.get("sub"):
-        return {"allow": True, "spec": SUB, "advance": False, "note": g.get("verdict", "")}
-    d = gate.get("dose") or {}
-    s = d.get("step", 0) if step is None else step
-    if first and g.get("hold") and d.get("done"):
-        s = min(s, max(0, d["done"] - 1))              # repeat the last step, never go up
-        adv = False
+        if "z3" not in avail:
+            return none(g.get("verdict", ""))
+        return {"allow": True, "spec": SUB, "advance": False, "adjust": None, "track": "z3", "note": g.get("verdict", ""),
+                "items": [{"track": "z3", "spec": SUB, "advance": False, "adjust": None, "first": False}], "z3_note": ""}
+    hold = first and g.get("hold")
+    if hold:
+        # repeat the last step of each track, never go up
+        if d3.get("done"):
+            s3 = min(s3, max(0, int(d3["done"]) - 1))
+        if d5.get("done"):
+            s5 = min(s5, max(0, int(d5["done"]) - 1))
+    items = _pick_tracks(avail, n, monday, gate, s3, s5, d3, first and step is None and not hold, met, d5)
+    if hold:
+        items = [{**it, "advance": False} for it in items]
+    out = _decision(items, avail, gate, n, monday, lock)
+    out["warn"] = g.get("warn", "") if b5 is not None and items else ""
+    return out
+
+
+def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3: int, s5: int, d3: dict,
+                 tweak: bool, met: int, d5: Optional[dict] = None) -> list[dict]:
+    """The week's items: n ≥ 2 → every open track (Zone 3 first); one a week with both open →
+    the track gate["ratio"] gives this week (Zone 3 the first `z3` weeks of each cycle); else the
+    open one. `tweak`: this week's state-machine tweak (d3 / d5 "adjust") applies."""
+    if not avail:
+        return []
+    if n >= 2 or len(avail) == 1:
+        tracks = list(avail)
     else:
-        adv = True
-    spec = dose_spec(s, z5_open)
-    if s >= len(Z3) and not z5_open:
-        adv = False                                       # Zone 3 maintenance: the Z5 step waits
-    adj = None
-    if first and step is None and s == d.get("step", 0):
-        adj = d.get("adjust") or None
-        spec = adjusted_spec(spec, adj)                   # the state machine's tweak, this week only
-    note = "" if z5_open or s < len(Z3) else (z5.get("text") or "Zone 5 還沒開：先排 3 區")
-    return {"allow": True, "spec": spec, "advance": adv, "note": note, "adjust": adj}
+        r = gate.get("ratio") or {"z3": 2, "z5": 1}
+        a, b = max(1, int(r.get("z3") or 1)), max(0, int(r.get("z5") or 0))
+        mon = monday or (dt.date.fromisoformat(gate["monday"]) if gate.get("monday") else None)
+        tracks = ["z5"] if b and _week_index(mon) % (a + b) >= a else ["z3"]
+    out = []
+    for t in tracks:
+        d = d3 if t == "z3" else (d5 or {})
+        s = s3 if t == "z3" else s5
+        spec = track_spec(t, s)
+        adj = None
+        if tweak and s == int(d.get("step") or 0):
+            adj = d.get("adjust") or None
+            spec = adjusted_spec(spec, adj)             # the state machine's tweak, this week only
+        out.append({"track": t, "spec": spec, "advance": True, "adjust": adj,
+                    "first": t == "z3" and s == 0 and met == 0})
+    return out
+
+
+def _decision(items: list, avail: list, gate: dict, n: int, monday: Optional[dt.date], lock: str) -> dict:
+    tracks = [it["track"] for it in items]
+    z5 = gate.get("z5") or {}
+    if "z3" in tracks:
+        z3_note = ""
+    elif lock:
+        z3_note = lock
+    elif "z3" in avail:
+        r = gate.get("ratio") or {"z3": 2, "z5": 1, "why": ""}
+        z3_note = (f"本週輪到 5 區（每週 1 堂時 3 區：5 區 = {r.get('z3')}:{r.get('z5')}，{r.get('why') or ''}；推估），"
+                   "3 區下週排")
+    else:
+        z3_note = ""
+    note = ""
+    if tracks == ["z3"] and not z5.get("open") and (_track_doses(gate)[0].get("met") or 0) >= Z3_MET_FOR_Z5:
+        note = z5.get("text") or "Zone 5 還沒開：先排 3 區"
+    first = items[0] if items else {}
+    return {"allow": bool(items), "items": items, "spec": first.get("spec"), "advance": bool(first.get("advance")),
+            "adjust": first.get("adjust"), "track": first.get("track"), "note": note, "z3_note": z3_note}
 
 
 def zone3_work(hours: Optional[float], reps: int = 3) -> int:
@@ -1674,7 +2170,11 @@ def indicator(gate: dict) -> dict:
         why_parts.append(f"AeT 目前不算有效：{(ae.get('validity') or {}).get('reason') or '推估的 AeT 還不夠準'}"
                          + _("（推估的 AeT 要夠準、最近幾次沒有往同一邊偏才算；推估），改用不設門檻"))
     d = gate.get("dose") or {}
-    why_parts.append(f"8 週內 {d.get('done', 0)} 次間歇")
+    d3, d5 = _track_doses(gate)
+    why_parts.append(f"8 週內 {d.get('done', 0)} 次間歇（3 區達標 {d3.get('met') or 0} 次、5 區 {d5.get('done') or 0} 次）")
+    z3g = gate.get("z3") or {}
+    if z3g.get("text"):
+        why_parts.append(z3g["text"])
     z5 = gate.get("z5") or {}
     if z5.get("text"):
         why_parts.append(z5["text"] + "（3 區先、5 區後：台灣教練）")
@@ -1688,14 +2188,23 @@ def indicator(gate: dict) -> dict:
     dec = week_decision(gate, "base", "base")
     step_txt = ""
     if dec["spec"] is not None:
-        step_txt = f"（第 {d.get('step', 0) + 1} 步：{dec['spec'][1]}）" if dec["spec"] not in (SUB, ZONE3, RECOVERY) \
-            else f"（{dec['spec'][1]}）"
+        parts = []
+        for it in dec["items"]:
+            if it["spec"] in (SUB, ZONE3, RECOVERY) or it["track"] is None:
+                parts.append(it["spec"][1])
+            else:
+                dt_ = d3 if it["track"] == "z3" else d5
+                parts.append(f"{TRACK_LABEL[it['track']].split('（')[0]}第 {int(dt_.get('step') or 0) + 1} 步：{it['spec'][1]}")
+        step_txt = f"（{'；'.join(parts)}）"
+    if dec.get("z3_note") and "z3" not in [it["track"] for it in dec["items"]]:
+        step_txt += f"（{dec['z3_note']}）"
     g = gate.get("guard") or {}
     state = gate.get("state")
     src = {"ua_gap": SRC_UA, "friel_drift": SRC_FRIEL, "xu_drift": SRC_XU}.get(gate.get("via") or gate["mode"], SRC_SEILER)
     if state == "locked":
         # the method keeps Zone 5 closed; Zone 3 still goes on when the guardrails pass (台灣教練)
-        v = gate["verdict"] + (f"；本週 3 區{step_txt}" if dec["allow"] and dec["spec"] is not None else "")
+        v = gate["verdict"] + (f"；本週{step_txt}" if dec["allow"] and dec["spec"] is not None else
+                               f"；{dec['z3_note']}" if dec.get("z3_note") else "")
         if g.get("block"):
             v += "；" + g["verdict"]
         return {"level": "info" if gate.get("info") else "watch", "text": "5 區未開", "verdict": v,
@@ -1710,6 +2219,11 @@ def indicator(gate: dict) -> dict:
     if g.get("block") or g.get("sub") or g.get("hold"):
         return {"level": "watch" if (g.get("block") or g.get("sub")) else "info", "text": "護欄",
                 "verdict": g["verdict"], "why": why, "action": g.get("action", ""), "source": SRC_SEILER}
+    if not dec["allow"] and z3g and not z3g.get("open"):
+        # the Zone 3 gate (SP-31): easy running until the base is there
+        return {"level": "info", "text": "3 區未開", "verdict": dec.get("z3_note") or z3g.get("reason") or "",
+                "why": why, "action": f"規律跑（每週 ≥ {Z3_RUNS_PER_WEEK} 次、別連續 {Z3_MAX_GAP_DAYS} 天沒跑）；或做一次 90 分鐘平路 1 區測試（飄移 < 10% 就解鎖）",
+                "source": z3g.get("src") or SRC_Z3["weeks"]}
     if state == "unlocked":
         spec = dec["spec"]
         act = ""
@@ -1729,7 +2243,7 @@ def indicator(gate: dict) -> dict:
 
 OPTION_INFO = {
     "auto": {"source": "台灣教練、徐國峰部落格、Uphill Athlete、Friel、Seiler",
-             "rule": "3 區（閾值）只要護欄通過就排；5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）要先確認有氧基礎："
+             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑；推估，停跑 ≥ 21 天要重新累積）、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（Daniels），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；一週間歇總量 ≤ 跑步時間 20%（推估）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）要先確認有氧基礎："
                      "三種測試做了其中一種而且達標——① 徐國峰 90 分鐘測試（平路 1 區，第 90 分 vs 第 10 分心率飄移 < 10%）、"
                      "② 實測 AeT 的 UA 差距法（LTHR ÷ AeT − 1 ≤ 10%）、③ 實測 AeT 的 Friel 飄移（AeT 附近 ≥ 60 分鐘，前後半 < 5%）。"
                      "確認後沒有到期日，每週檢查：1 區時間連 3 週 < 確認時的 2/3 就暫停，到下次確認為止（Hickson 1982；3 週推估）；"
@@ -1755,9 +2269,10 @@ OPTION_INFO = {
               "rule": "基礎期開始後滿 N 週（預設 8，範圍 2–16）才排間歇。8 週取中間值，屬推估。",
               "todo": "不用測試；只要基礎期有起點（賽事周期）。"},
     "none": {"source": "Seiler 2010、Seiler & Tønnessen 2009、Koop／CTS",
-             "rule": "不設門檻：整個週期都有少量高強度。基礎期每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5（≥ 5 只排閾值下）、"
+             "rule": "不設門檻：整個週期都有少量高強度，3 區、5 區都不用先解鎖。基礎期每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5（≥ 5 只排閾值下）、"
                      "週增量 ≤ 20%（10–20% 維持）、3:1 恢復週改 4×1 分 fartlek、TSB、離長跑 ≥ 2 天。"
-                     "劑量 3 區 3×6 → 3×8 → 2×12（90–95% CP），5 區 5×2 → 4×3 → 5×3 → 4×4（台灣教練：3 區先）；"
+                     "兩條階梯各自進階：3 區 2×15 → 3×12 → 2×20 → 1×30（88–95% CP；量 ≤ 週量 10%，放不下排巡航版 3×6／3×8／2×12），"
+                     "5 區 5×2 → 4×3 → 5×3 → 4×4（3 區達標 3 堂後；台灣教練：3 區先）；"
                      "時間足夠排標準版，平日上限放不下時換同等較短版。",
              "todo": "不用測試。"},
 }
