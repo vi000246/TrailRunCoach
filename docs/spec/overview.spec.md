@@ -1013,7 +1013,9 @@ which one. The response keeps the `coros` field names.
   template step notes). **`load`** = `{"type": "load", "value": TSS}` (1–500), **main-set (work)
   steps only** (`normalize`, `backend/engine/workout_steps.py:662`). Its time is estimated
   TSS ÷ (IF² × 100) h at the step's ≈ % CP (`load_if`, `backend/engine/workout_steps.py:1002`; 推估),
-  so the chart, the total and TSS 估 include it. The editor shows the provider's conversion next to
+  so the chart, the total and TSS 估 include it; the ladder counts such a main set by the same
+  formula at the band's middle (`load_work_s`, `backend/engine/workout_steps.py:1235` — see
+  plan-auto.spec.md). The editor shows the provider's conversion next to
   the TSS: COROS 「≈ N TL（推估 ±E）」 (`load_tl` → `engine/coros_tl.py`, refit per athlete after
   each sync — wko5-coros-sync.spec.md). **Push**: COROS gets its training-load end condition,
   `targetType 6`, `targetValue` = the TL (integer; read back from a Training Hub workout with a
@@ -1427,3 +1429,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |
 | 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |
 | 2026-10-04 | sp-38-load-step | SP-38 | Step end conditions from the provider's capabilities (`end_conditions` / `end_labels` / `load_unit`); new 「負荷」 end condition (TSS, main-set only; COROS targetType 6 with the converted TL, else estimated time); 「按圈」 → 「直到按下計圈」 on the race-calculator export and template notes too |
+| 2026-10-04 | feature | SP-38 follow-up | 「負荷」 main sets count on the ladder (`load_work_s`) |
