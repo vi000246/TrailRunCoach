@@ -104,10 +104,14 @@ def _get_routes():
 def test_new_user_every_page_and_data_route(client):
     from backend.engine.wko5expr.datasource import current_source
     assert current_source() == "coros"            # no WKO5 folder: charts read the 資料來源 (COROS by default)
-    r = client.post("/api/v1/athletes/bootstrap")
-    assert r.status_code == 200, r.text
-    athletes = client.get("/api/v1/athletes").json()
-    assert len(athletes) == 1                       # an empty athlete to hang settings on
+    import sqlite3
+    from backend.db.database import db_path
+    con = sqlite3.connect(db_path())
+    try:
+        athletes = con.execute("SELECT id, data_dir FROM athletes").fetchall()
+    finally:
+        con.close()
+    assert athletes == [(1, "")]                    # an empty athlete to hang settings on (main._ensure_athlete)
 
     failed = []
     routes = _get_routes()

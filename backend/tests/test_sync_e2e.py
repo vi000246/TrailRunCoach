@@ -335,7 +335,6 @@ def test_coros_expired_token_is_a_clear_event(tmp_path):
 
 def test_same_activity_from_both_sources_counts_once(tmp_path, monkeypatch):
     pass  # FIT folders are redirected to a temp dir by conftest
-    from backend.api.pmc import get_pmc
 
     async def go():
         s = await make_session(tmp_path)
@@ -354,11 +353,8 @@ def test_same_activity_from_both_sources_counts_once(tmp_path, monkeypatch):
         assert [r.source for r in rows] == ["coros", "trainingpeaks"]
         assert rows[0].duplicate_of is None and rows[1].duplicate_of == rows[0].id
 
-        pmc = await get_pmc(athlete_id=1, date_from=date(2026, 9, 1), date_to=date(2026, 9, 3),
-                            sports=None, db=s)
-        day = next(p for p in pmc["series"] if p["date"] == "2026-09-02")
-        single = (250 / 250) ** 2 * (599 / 3600) * 100
-        assert day["tss"] == pytest.approx(single, rel=0.05)
+        counted = (await s.execute(select(WorkoutFile.id).where(await dedup.in_use(s, 1)))).scalars().all()
+        assert counted == [rows[0].id]                  # every total reads the COROS row only
 
         # user makes TP primary: the TP row becomes canonical
         await SettingsRepository(s, 1).set("sync.primary_source", "trainingpeaks")
