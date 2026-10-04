@@ -54,7 +54,7 @@ hrTSS 是 WKO5 的分段表：每個心率樣本依 LTHR 比例給每小時 20�
 - 賽季計畫裡有 dated LTHR 時，所有運動的 `*thr` 都用它（`backend/engine/wko5expr/dataset.py:584`），健行和肌力就有 hrTSS。
 - 只有 FIT 推估時，推估只寫 `runthr`（`backend/engine/wko5expr/fitdataset.py:817`）。這時**健行、肌力、單車都是 0 TSS**。範例跑者兩年的百岳和健行完全不進 CTL；多日百岳就算只算移動時間，一趟也有好幾百 TSS。
 
-另外，`hr_tss_zone1_floor`（低於 0.70 × LTHR 記 0）有設定、有寫進 MOUNTAIN_PRESET，但**程式沒有讀它**（`backend/engine/wko5expr/config.py:82`）。
+另外，`hr_tss_zone1_floor`（低於 0.70 × LTHR 記 0）有設定、有寫進 MOUNTAIN_PRESET，但**程式沒有讀它**（`backend/engine/wko5expr/config.py:82`）。（後來 SP-52 把這個設定移除了。）
 
 **哪個模式是預設？** 沒有 engine.json 時，`parity = wko5_available()`（`backend/engine/wko5expr/config.py:125`）。有 WKO5 資料夾的人預設是 parity（沒有移動 hrTSS、沒有爬升加成）；只有 COROS／TP 的人預設 `parity = False`，但用的是 dataclass 預設值，**不是** MOUNTAIN_PRESET（移動 hrTSS 和爬升加成預設都關）。
 
@@ -178,7 +178,7 @@ Stryd 和 intervals.icu 都指出跑步的負荷不只是代謝（機械、衝�
 1. **起算期**：CTL 從 0 起算、訓練量完全不變時，起算造成的假 ramp 佔 CTL 的比例是：第 42 天 11.7 %、第 56 天 6.9 %、第 84 天 2.9 %，所以「不滿 42 天不看」不夠（第 42 天還會踩到 10 % 注意線）。但全面跳過 84 天，多使用者時新人會有 12 週沒有保護。**決定**：護欄用的 CTL 以前 28 天的平均每日 TSS 當起始值（Coggan 的做法：給 CTL 初始值），只在前 28 天（起始值還在變）不看 ramp（推估）；起算期內週量增幅照常檢查。顯示用的 PMC 不變，兩者只在資料的頭幾個月不同。
 2. **健行要有 TSS**：走路／健行／登山沒有自己的 LTHR 時，沿用跑步 LTHR 算 hrTSS，而且**一律只算移動時間**（不管「只算移動時間」開關，否則一趟多日百岳約 900 TSS，CTL 一天跳 20 點以上，接著一定被擋）。只改 hrTSS 這條路：`aethr` 和低強度占比不變，健行時間不會進 80/20 的分母。parity 模式不動。
 3. **肌力維持 0 TSS**：阻力訓練的心率不是有意義的耐力負荷，算 hrTSS 會灌高 CTL（使用者可以翻轉的預設）。注意：賽季計畫有 dated LTHR 時，所有運動（含肌力）原本就會用它算 hrTSS，這條沒有改。
-4. `hr_tss_zone1_floor`：另案處理（SP-52）。
+4. `hr_tss_zone1_floor`：SP-52 決定從設定與 MOUNTAIN_PRESET 移除（只算移動時間已處理掉紮營、睡覺的心率）。
 5. **COROS／TP 來源預設用 MOUNTAIN_PRESET 的移動 hrTSS 和爬升加成**：未決，沒有實作。
 
 ### 4.3 週量增幅：定義要改（已實作）

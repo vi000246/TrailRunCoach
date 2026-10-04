@@ -151,7 +151,6 @@ COROS / TP-only runner starts on own formulas.
 |---|---|---|---|
 | Use TP's TSS | forced on | off | Independence from TrainingPeaks; a direct COROS import has no TP TSS |
 | hrTSS on moving time only | off | on (walks / hikes: always, SP-63) | WKO5 charges every recorded second; a two-day trip with only ~7 h moving can score ~900 |
-| hrTSS zone-1 floor | off | 0.70 × LTHR (in the preset, but no TSS code reads `hr_tss_zone1_floor` yet) | WKO5's lowest band earns 20–30 TSS/h even while asleep |
 | Elevation bonus | off | 10 TSS / 1000 ft | Uphill Athlete: heart rate cannot see the muscular cost of climbing |
 | Data corrections | ignored | applied | Keeps WKO5 comparisons honest |
 
@@ -705,6 +704,7 @@ source (synthetic FITs).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
+| 2026-10-04 | bugfix | SP-52 | `hr_tss_zone1_floor` removed from `EngineConfig` and `MOUNTAIN_PRESET` (nothing read it; moving-time hrTSS already drops the camp / sleep hours); an old `engine.json` with the key still loads |
 | 2026-10-04 | feature | SP-63 | Walks / hikes without their own LTHR score hrTSS on the run LTHR over moving time (own formulas only; strength stays 0; parity unchanged) |
 | 2026-10-04 | feature | SP-41 | Custom views accept `kind: "map"`; 單次活動判讀's first page has the route map; the viewer's basemap list, layer switch, tile-error hint, route drawing and nearest-point lookup moved to the shared `basemaps.js` (`MapLayers`) |
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |
