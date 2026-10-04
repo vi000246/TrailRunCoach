@@ -7,6 +7,7 @@ import datetime as dt
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from backend.api.wko5views import _panel_kind
 from backend.engine.wko5expr.evaluator import Evaluator
@@ -184,6 +185,24 @@ def test_map_panel_kind_and_gps_check():
     zero.channels.update(latitude=[0.0] * 5, longitude=[0.0] * 5)
     ds2 = FakeDataset([zero], TODAY)
     assert "GPS" in render_map({"kind": "other"}, ds2, ds2.workouts[0])["empty"]
+
+
+def test_bundled_workout_view_has_the_route_map_first_page():
+    """SP-41: 單次活動判讀's first page carries the route map (kind "map" in a custom
+    view = WKO5's map panel); no GPS -> the 沒有 GPS 資料 message, not a blank card."""
+    from backend.api.wko5views import _render
+    from backend.engine.wko5expr.customviews import CustomViewError, REPO_VIEWS, load_custom_views, parse_view
+    v = load_custom_views([REPO_VIEWS])["單次活動判讀"]
+    c = next(c for c in v["dashboards"][0]["charts"] if c["id"] == "route-map")
+    assert c["kind"] == "map" and _panel_kind(c) == "map" and not c.get("sports")
+    fw = _run(TODAY, secs=10)
+    fw.channels.update(latitude=[25.0 + i * 1e-4 for i in range(10)], longitude=[121.5] * 10)
+    ds = FakeDataset([fw, _run(TODAY - dt.timedelta(days=1))], TODAY)
+    got = _render(c, ds, ds.today, ds.today, None, ds.workouts[1])
+    assert got["kind"] == "map" and got["empty"] is None and got["title"] == "路線地圖"
+    assert "GPS" in _render(c, ds, ds.today, ds.today, None, ds.workouts[0])["empty"]
+    with pytest.raises(CustomViewError):
+        parse_view({"name": "x", "dashboards": [{"title": "d", "charts": [{"title": "a", "kind": "mapx"}]}]})
 
 
 # ---- viewer --------------------------------------------------------------------
